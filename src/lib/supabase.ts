@@ -9,7 +9,6 @@ const url = import.meta.env.SUPABASE_URL;
 const key = import.meta.env.SUPABASE_ANON_KEY;
 
 if (!url || !key) {
-  // eslint-disable-next-line no-console
   console.warn('[supabase] SUPABASE_URL / SUPABASE_ANON_KEY manquants — vérifie ton .env');
 }
 

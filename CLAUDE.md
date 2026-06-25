@@ -72,7 +72,13 @@ Décisions prises en Phase 0, contraintes par le poste. À respecter dans les ph
   - `vite-plugin-checker` retiré de `quasar.config.ts` (il spawnait vue-tsc/eslint en sous-process bloqués). Type-check = `npm run typecheck`, lint = `npm run lint`.
 - **Env client (app-vite v3)** : les variables d'env sont exposées via **`import.meta.env.X`**, PAS `process.env.X` (la doc historique du repo est dépassée sur ce point). `quasar.config.ts > build.env.clientPrefix = ['QCLI_','SUPABASE_']` expose les `SUPABASE_*`. `supabase.ts` lit `import.meta.env`. Toute nouvelle var client doit être préfixée et typée dans `env.d.ts`.
 - **tsconfig** : `exactOptionalPropertyTypes` désactivé dans `tsconfig.json` racine pour intégrer `src/lib` sans le réécrire. `strict: true` conservé.
-- **Supabase** : projet « Muscu », ref `wzbxbntqlheelgqswzew` (eu-west-1). Géré par l'agent via la **Management API REST** (`api.supabase.com/v1/projects/<ref>/database/query`) appelée en `node` + PAT dans `.supabase-token` (gitignoré). Schéma `0001_init.sql` + `seed.sql` (29 exercices) déjà appliqués.
+- **Supabase** : projet « Muscu », ref `wzbxbntqlheelgqswzew` (eu-west-1). Géré par l'agent via la **Management API REST** (`api.supabase.com/v1/projects/<ref>/database/query`) appelée en `node` + PAT dans `.supabase-token` (gitignoré). Schéma `0001_init.sql` + `seed.sql` (29 exercices) déjà appliqués. **Auth email** : `mailer_autoconfirm = true` (signup → session immédiate, pas de lien email à confirmer).
+
+## Couche app (depuis Phase 1)
+- `src/stores/` : `auth` (session/user Supabase), `profile` (ligne profiles + level_config), `sessions` (plans). Tout accès Supabase passe par les stores.
+- `src/boot/auth.ts` : init session avant rendu + garde de navigation (non connecté→/login, connecté sans profil→/onboarding, sinon app).
+- `src/pages/` : `LoginPage` (email/mdp), `OnboardingPage` (7 étapes + bifurcation programme selon `program_mode`), `HomePage` (liste séances). `src/layouts/MainLayout` (header brand + logout) enveloppe l'app authentifiée ; login/onboarding sont plein écran.
+- Plugin Quasar `Notify` activé pour les retours d'erreur.
 
 ## Garde-fous
 - Toujours s'appuyer sur les types de `src/lib`. Si un champ manque, l'ajouter au contrat (types.ts + SQL) plutôt que bricoler dans un composant.
