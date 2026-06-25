@@ -1,0 +1,8 @@
+{
+  "extends": "./.quasar/tsconfig.json",
+  "compilerOptions": {
+    // Désactivé pour intégrer src/lib (contrat JSON v1.0) sans le réécrire.
+    // On conserve `strict: true` ; seul ce flag ultra-strict est relâché.
+    "exactOptionalPropertyTypes": false
+  }
+}

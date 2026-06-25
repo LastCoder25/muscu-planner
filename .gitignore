@@ -1,0 +1,34 @@
+# dépendances
+node_modules/
+
+# build
+/dist
+.quasar/
+/.quasar
+/quasar.config.*.temporary.compiled*
+
+# scaffold temporaire
+/.scaffold
+
+# Cordova / Capacitor (si ajoutés plus tard)
+/src-cordova/node_modules
+/src-capacitor/node_modules
+/src-capacitor/www
+
+# env / secrets — ne jamais committer .env
+.env
+.env.*
+!.env.example
+
+# token Supabase (Personal Access Token) — jamais committé
+.supabase-token
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# éditeur / OS
+.DS_Store
+Thumbs.db
+*.log

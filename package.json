@@ -1,0 +1,54 @@
+{
+  "name": "muscu-planner",
+  "version": "0.0.1",
+  "description": "A Quasar Project",
+  "productName": "Muscu Planner",
+  "author": "Alban Martinez",
+  "type": "module",
+  "private": true,
+  "comment-scripts": "Scripts routés via 'node ...bin.js' plutôt que les shims .cmd de node_modules/.bin : la group policy AppLocker (poste Orange) bloque l'exécution de .cmd hors Program Files.",
+  "scripts": {
+    "lint": "node node_modules/prettier/bin/prettier.cjs --write \"**/*.{js,ts,vue,css,scss,html,md,json}\" --ignore-path .gitignore && node node_modules/eslint/bin/eslint.js --fix -c ./eslint.config.js \"./src*/**/*.{ts,js,cjs,mjs,vue}\"",
+    "lint:check": "node node_modules/prettier/bin/prettier.cjs \"**/*.{js,ts,vue,css,scss,html,md,json}\" --ignore-path .gitignore && node node_modules/eslint/bin/eslint.js -c ./eslint.config.js \"./src*/**/*.{ts,js,cjs,mjs,vue}\"",
+    "dev": "node node_modules/@quasar/app-vite/bin/quasar.js dev",
+    "build": "node node_modules/@quasar/app-vite/bin/quasar.js build",
+    "typecheck": "node node_modules/vue-tsc/bin/vue-tsc.js --noEmit",
+    "postinstall": "node node_modules/@quasar/app-vite/bin/quasar.js prepare --silent"
+  },
+  "dependencies": {
+    "@quasar/extras": "^2.0.0",
+    "@supabase/supabase-js": "^2.108.2",
+    "pinia": "^3.0.1",
+    "quasar": "^2.20.0",
+    "vue": "^3.5.22",
+    "vue-router": "^5.0.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@quasar/app-vite": "^3.0.0-rc.3",
+    "@types/node": "^22.19.11",
+    "@vue/eslint-config-prettier": "^10.2.0",
+    "@vue/eslint-config-typescript": "^14.7.0",
+    "autoprefixer": "^10.4.27",
+    "eslint": "^9.39.4",
+    "eslint-plugin-vue": "^10.8.0",
+    "globals": "^17.4.0",
+    "prettier": "^3.8.1",
+    "typescript": "^6.0.0",
+    "vite-plugin-checker": "^0.12.0",
+    "vue-eslint-parser": "^10.4.0",
+    "vue-tsc": "^3.3.3"
+  },
+  "keywords": [
+    "quasar",
+    "quasar-app",
+    "quasar-cli",
+    "quasar-app-vite",
+    "vite",
+    "vue",
+    "vuejs"
+  ],
+  "engines": {
+    "node": ">= 26 || ^24 || ^22.12"
+  }
+}

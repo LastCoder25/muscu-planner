@@ -1,0 +1,30 @@
+// Quasar Sass (& SCSS) Variables
+// --------------------------------------------------
+// To customize the look and feel of this app, you can override
+// the Sass/SCSS variables found in Quasar's source Sass/SCSS files.
+
+// Check documentation for full list of Quasar variables
+
+// Your own variables (that are declared here) and Quasar's own
+// ones will be available out of the box in your .vue/.scss/.sass files
+
+// It's highly recommended to change the default colors
+// to match your app's branding.
+// Tip: Use the "Theme Builder" on Quasar's documentation website.
+
+// Direction « panneau de contrôle d'équipement ».
+// Source : docs/design-system.md + docs/seance-live-mockup.html.
+$primary   : #FFD23F; // jaune voltage — unique accent fort (action / actif)
+$secondary : #9A8F7E; // texte secondaire / dim
+$accent    : #FFD23F;
+
+$dark      : #15120E; // fond graphite chaud
+$dark-page : #15120E;
+
+$positive  : #7BC86C; // validé (série faite)
+$negative  : #FF6A45; // note d'effort 4 (max)
+$info      : #C6D24A;
+$warning   : #FFB23F; // note d'effort 3 (dur)
+
+// Typographie : Oswald (chiffres/titres/timer) + Inter (UI).
+$typography-font-family : 'Inter', '-apple-system', 'Helvetica Neue', sans-serif;

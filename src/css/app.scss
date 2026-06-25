@@ -1,0 +1,42 @@
+// app global css
+// Tokens du design system (docs/design-system.md). Direction « panneau de contrôle ».
+
+:root {
+  // Palette
+  --bg: #15120E; // fond graphite chaud
+  --surface: #211C16; // cartes
+  --surface-2: #2C261E; // cartes actives
+  --line: #3A332A; // bordures
+  --text: #F3EEE6; // texte principal
+  --dim: #9A8F7E; // texte secondaire
+  --accent: #FFD23F; // jaune voltage — unique accent fort
+  --accent-ink: #1A1605; // texte sur accent
+
+  // Notes d'effort 1–4 (du vert au rouge)
+  --d1: #7BC86C; // facile
+  --d2: #C6D24A; // modéré
+  --d3: #FFB23F; // dur
+  --d4: #FF6A45; // max
+
+  // Validé (série faite)
+  --done: #7BC86C;
+
+  // Polices
+  --font-display: 'Oswald', system-ui, sans-serif; // chiffres, titres, timer, valeurs
+  --font-ui: 'Inter', system-ui, sans-serif; // libellés, texte UI
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+// Oswald pour chiffres/titres/timer/valeurs : tabular nums.
+.font-display,
+.q-timer,
+.metric {
+  font-family: var(--font-display);
+  font-feature-settings: 'tnum' 1;
+  font-variant-numeric: tabular-nums;
+}
