@@ -1,9 +1,17 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 const routes: RouteRecordRaw[] = [
-  // Écrans plein écran (sans layout app)
-  { path: '/login', component: () => import('@/pages/LoginPage.vue') },
-  { path: '/onboarding', component: () => import('@/pages/OnboardingPage.vue') },
+  // Écrans plein écran : layout minimal (QLayout requis par QPage)
+  {
+    path: '/login',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/LoginPage.vue') }],
+  },
+  {
+    path: '/onboarding',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/OnboardingPage.vue') }],
+  },
 
   // App authentifiée
   {
