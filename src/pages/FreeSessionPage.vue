@@ -82,10 +82,10 @@
 
         <!-- Vue tuiles -->
         <div v-else-if="pickerView === 'tiles'" class="tiles">
-          <button v-for="e in filteredLib" :key="e.id" class="tile" @click="pick(e)">
-            <q-icon :name="exIcon(e)" size="28px" class="tile-ic" />
+          <button v-for="e in filteredLib" :key="e.id" class="tile" :style="{ borderTopColor: exColor(e) }" @click="pick(e)">
+            <span class="tile-badge" :style="{ background: exColor(e) + '22', color: exColor(e) }"><q-icon :name="exIcon(e)" size="26px" /></span>
             <div class="tile-name">{{ e.name }}</div>
-            <div v-if="e.muscle_primary" class="tile-mus">{{ e.muscle_primary }}</div>
+            <div v-if="e.muscle_primary" class="tile-mus" :style="{ color: exColor(e) }">{{ e.muscle_primary }}</div>
             <q-icon name="info_outline" size="18px" class="tile-info" role="button" aria-label="Fiche" @click.stop="openExercise(e.id)" />
           </button>
         </div>
@@ -93,7 +93,7 @@
         <!-- Vue liste -->
         <template v-else>
           <button v-for="e in filteredLib" :key="e.id" class="alt" @click="pick(e)">
-            <q-icon :name="exIcon(e)" size="22px" color="grey-6" class="alt-ic" />
+            <span class="alt-badge" :style="{ background: exColor(e) + '22', color: exColor(e) }"><q-icon :name="exIcon(e)" size="20px" /></span>
             <div class="alt-main">
               <div class="alt-name">{{ e.name }}</div>
               <div class="alt-meta">{{ e.muscle_primary }}<template v-if="e.equipment"> · {{ e.equipment }}</template></div>
@@ -190,17 +190,31 @@ function setView(v: 'list' | 'tiles') {
   pickerView.value = v;
   localStorage.setItem(VIEW_KEY, v);
 }
-// Icône représentant l'exercice, dérivée du muscle principal (faute de logos dédiés).
+// Icône = matériel (MDI fitness), couleur = groupe musculaire → tuile explicite.
 function exIcon(e: ExerciseRow): string {
-  const m = (e.muscle_primary ?? '').toLowerCase();
-  if (/jambe|quadri|ischio|fessier|mollet|cuisse/.test(m)) return 'directions_run';
-  if (/dos|lombaire|trap/.test(m)) return 'rowing';
-  if (/pec|poitrine/.test(m)) return 'fitness_center';
-  if (/epaule|épaule|delto/.test(m)) return 'sports_gymnastics';
-  if (/biceps|triceps|bras/.test(m)) return 'sports_martial_arts';
-  if (/abdo|gainage|core|oblique/.test(m)) return 'self_improvement';
-  if (/cardio/.test(m)) return 'directions_bike';
-  return 'fitness_center';
+  const q = (e.equipment ?? '').toLowerCase();
+  if (/barre|barbell/.test(q)) return 'mdi-weight-lifter';
+  if (/halter|dumbbell/.test(q)) return 'mdi-dumbbell';
+  if (/kettlebell/.test(q)) return 'mdi-kettlebell';
+  if (/machine/.test(q)) return 'mdi-cog';
+  if (/poulie|cable|câble/.test(q)) return 'mdi-vector-line';
+  if (/élast|elast|band/.test(q)) return 'mdi-arrow-expand-horizontal';
+  if (/corps|poids du corps|bodyweight/.test(q)) return 'mdi-human-handsup';
+  return 'mdi-dumbbell';
+}
+const MUSCLE_COLORS: Record<string, string> = {
+  pectoraux: '#FF6A45',
+  épaules: '#FFB23F',
+  triceps: '#C6D24A',
+  biceps: '#7BC86C',
+  dos: '#46C7F0',
+  quadriceps: '#B388FF',
+  'ischio-jambiers': '#8E5CF0',
+  mollets: '#57D996',
+  abdominaux: '#FF4D6D',
+};
+function exColor(e: ExerciseRow): string {
+  return MUSCLE_COLORS[(e.muscle_primary ?? '').toLowerCase()] ?? '#9A8F7E';
 }
 const lib = ref<ExerciseRow[]>([]);
 const loadingLib = ref(false);
@@ -320,14 +334,14 @@ onBeforeUnmount(() => clearInterval(clockInt));
 .view-toggle button { width: 34px; height: 30px; border: none; border-radius: 8px; background: transparent; color: var(--dim); display: grid; place-items: center; cursor: pointer; &.on { background: var(--accent); color: var(--accent-ink); } }
 
 .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 8px 10px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); cursor: pointer; }
-.tile-ic { color: var(--accent); }
+.tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 12px 8px 10px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); border-top: 3px solid var(--line); cursor: pointer; }
+.tile-badge { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; }
 .tile-name { font-size: 12px; font-weight: 600; color: var(--text); text-align: center; line-height: 1.15; }
-.tile-mus { font-size: 10px; color: var(--dim); text-align: center; }
+.tile-mus { font-size: 10px; text-align: center; text-transform: capitalize; }
 .tile-info { position: absolute; top: 5px; right: 5px; color: var(--dim-2); }
 
-.alt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 13px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); margin-bottom: 8px; cursor: pointer; }
-.alt-ic { flex: none; }
+.alt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 11px 13px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); margin-bottom: 8px; cursor: pointer; }
+.alt-badge { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; flex: none; }
 .alt-main { flex: 1; min-width: 0; }
 .alt-name { font-weight: 600; font-size: 14.5px; color: var(--text); }
 .alt-meta { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
