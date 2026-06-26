@@ -10,7 +10,6 @@
           type="email"
           label="Email"
           filled
-          dark
           autocomplete="email"
           :rules="[(v) => !!v || 'Email requis']"
           lazy-rules
@@ -20,7 +19,6 @@
           type="password"
           label="Mot de passe"
           filled
-          dark
           :autocomplete="mode === 'signin' ? 'current-password' : 'new-password'"
           :rules="[(v) => (v && v.length >= 6) || '6 caractères minimum']"
           lazy-rules

@@ -4,7 +4,7 @@
 
     <section class="block">
       <div class="block-h">Identité</div>
-      <q-input v-model="form.name" label="Prénom" filled dark />
+      <q-input v-model="form.name" label="Prénom" filled />
     </section>
 
     <section class="block">
@@ -123,7 +123,7 @@
       <q-select
         v-model="form.favorite_exercises"
         :options="exerciseOptions"
-        filled dark multiple use-chips use-input emit-value map-options
+        filled multiple use-chips use-input emit-value map-options
         input-debounce="0" label="Rechercher un exercice…"
         @filter="filterExercises"
       />
@@ -242,7 +242,6 @@ function confirmRegenerate() {
     message: 'Tes séances actuelles seront remplacées par un nouveau programme. Continuer ?',
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Régénérer', color: 'primary', textColor: 'dark' },
-    dark: true,
   }).onOk(() => {
     regenerate().catch(() => undefined);
   });

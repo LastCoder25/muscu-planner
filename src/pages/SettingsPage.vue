@@ -19,6 +19,7 @@
             <span :style="{ background: t.vars['--accent'] }" />
           </div>
           <div class="theme-name">{{ t.name }}</div>
+          <div class="theme-mode">{{ t.dark ? 'Sombre' : 'Clair' }}</div>
           <q-icon v-if="current === t.id" name="check_circle" color="primary" size="18px" class="theme-check" />
         </button>
       </div>
@@ -37,6 +38,7 @@
     <section class="block">
       <div class="block-h">Retour</div>
       <q-btn no-caps outline color="primary" icon="feedback" label="Envoyer un retour" class="full-width" @click="openFeedback" />
+      <q-btn no-caps flat color="primary" icon="inbox" label="Gérer le backlog" class="full-width q-mt-xs" @click="goBacklog" />
 
       <div v-if="feedback.mine.length" class="tickets">
         <div v-for="t in feedback.mine" :key="t.id" class="ticket">
@@ -149,6 +151,9 @@ function statusLabel(s: string) {
   return s === 'open' ? 'ouvert' : s === 'in_progress' ? 'en cours' : 'traité';
 }
 
+async function goBacklog() {
+  await router.push('/backlog');
+}
 async function logout() {
   await auth.signOut();
   profileStore.reset();
@@ -178,6 +183,7 @@ onMounted(async () => {
 }
 .swatches { display: flex; gap: 4px; margin-bottom: 8px; span { width: 22px; height: 22px; border-radius: 6px; border: 1px solid #0003; } }
 .theme-name { color: var(--text); font-weight: 600; font-size: 14px; }
+.theme-mode { color: var(--dim); font-size: 10.5px; letter-spacing: 0.4px; text-transform: uppercase; margin-top: 1px; }
 .theme-check { position: absolute; top: 10px; right: 10px; }
 
 .row-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }

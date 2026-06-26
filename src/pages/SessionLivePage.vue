@@ -114,7 +114,7 @@
           <div v-if="showRir" class="rir-row">
             <span class="rir-lbl">RIR (reps en réserve)</span>
             <q-input
-              v-model.number="curSet.rir" type="number" dense filled dark
+              v-model.number="curSet.rir" type="number" dense filled
               class="rir-input" @update:model-value="live.persist()"
             />
           </div>
@@ -404,11 +404,11 @@ onBeforeUnmount(() => {
 
 .set { display: grid; grid-template-columns: 34px 1fr 1fr 28px; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line-soft); margin-bottom: 9px; }
 .set.done { opacity: 0.66; }
-.set.cur { border-color: var(--accent); background: linear-gradient(180deg, #2b2517, var(--surface-2)); box-shadow: 0 0 0 1px var(--accent), 0 8px 22px -12px #000; }
+.set.cur { border-color: var(--accent); background: var(--surface-2); box-shadow: 0 0 0 1px var(--accent); }
 .set.up { opacity: 0.5; }
 .set-idx { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-weight: 600; font-size: 17px; background: var(--surface-2); color: var(--dim); }
 .set.cur .set-idx { background: var(--accent); color: var(--accent-ink); }
-.set.done .set-idx { background: #243a20; color: var(--d1); }
+.set.done .set-idx { background: var(--surface-2); color: var(--d1); }
 .cell-lbl { font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim-2); margin-bottom: 1px; }
 .val-line { display: flex; align-items: center; gap: 7px; }
 .stepper { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); font-size: 16px; display: grid; place-items: center; cursor: pointer; flex: none; }

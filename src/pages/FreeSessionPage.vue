@@ -53,7 +53,7 @@
         </div>
         <div v-if="showRir" class="rir-row">
           <span class="rir-lbl">RIR (dernière série)</span>
-          <q-input v-model.number="lastSet(ex).rir" type="number" dense filled dark class="rir-input" @update:model-value="live.persist()" />
+          <q-input v-model.number="lastSet(ex).rir" type="number" dense filled class="rir-input" @update:model-value="live.persist()" />
         </div>
 
         <button class="addset" @click="addSet(ex)">+ Ajouter une série</button>
@@ -71,7 +71,7 @@
       <div class="sheet">
         <div class="grab" />
         <h3 class="font-display">Ajouter un exercice</h3>
-        <q-input v-model="search" filled dark dense placeholder="Rechercher…" class="q-mb-sm" clearable />
+        <q-input v-model="search" filled dense placeholder="Rechercher…" class="q-mb-sm" clearable />
         <div v-if="loadingLib" class="row flex-center q-pa-md"><q-spinner color="primary" /></div>
         <button v-for="e in filteredLib" :key="e.id" class="alt" @click="pick(e)">
           <div class="alt-main">

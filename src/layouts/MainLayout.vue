@@ -10,6 +10,10 @@
                 <q-item-section avatar><q-icon name="history" /></q-item-section>
                 <q-item-section>Historique</q-item-section>
               </q-item>
+              <q-item v-close-popup clickable @click="goBacklog">
+                <q-item-section avatar><q-icon name="inbox" /></q-item-section>
+                <q-item-section>Backlog</q-item-section>
+              </q-item>
               <q-item v-close-popup clickable @click="goProfile">
                 <q-item-section avatar><q-icon name="fitness_center" /></q-item-section>
                 <q-item-section>Profil / Réglages</q-item-section>
@@ -18,7 +22,7 @@
                 <q-item-section avatar><q-icon name="tune" /></q-item-section>
                 <q-item-section>Paramètres</q-item-section>
               </q-item>
-              <q-separator dark />
+              <q-separator />
               <q-item v-close-popup clickable @click="logout">
                 <q-item-section avatar><q-icon name="logout" /></q-item-section>
                 <q-item-section>Déconnexion</q-item-section>
@@ -55,6 +59,9 @@ async function goSettings() {
 }
 async function goHistory() {
   await router.push('/history');
+}
+async function goBacklog() {
+  await router.push('/backlog');
 }
 async function logout() {
   await auth.signOut();

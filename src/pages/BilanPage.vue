@@ -54,7 +54,7 @@
         <q-expansion-item
           v-model="iaOpen"
           icon="smart_toy" label="Coach IA (export / import)"
-          dark class="ia-box"
+          class="ia-box"
         >
           <div class="q-pa-sm">
             <q-btn flat no-caps color="primary" icon="content_copy" label="Copier la requête pour ChatGPT" class="full-width" @click="copyCoach" />

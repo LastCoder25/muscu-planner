@@ -13,12 +13,12 @@
       <!-- 0. Identité -->
       <section v-if="step === 0">
         <h2 class="onb-h">Qui es-tu ?</h2>
-        <q-input v-model="form.name" label="Prénom *" filled dark class="q-mb-md" />
+        <q-input v-model="form.name" label="Prénom *" filled class="q-mb-md" />
         <div class="text-dim text-caption q-mb-sm">Optionnel</div>
         <div class="row q-col-gutter-sm">
-          <q-input v-model.number="form.birth_year" type="number" label="Année de naissance" filled dark class="col-6" />
-          <q-input v-model.number="form.height_cm" type="number" label="Taille (cm)" filled dark class="col-6" />
-          <q-input v-model.number="form.weight_kg" type="number" label="Poids (kg)" filled dark class="col-6" />
+          <q-input v-model.number="form.birth_year" type="number" label="Année de naissance" filled class="col-6" />
+          <q-input v-model.number="form.height_cm" type="number" label="Taille (cm)" filled class="col-6" />
+          <q-input v-model.number="form.weight_kg" type="number" label="Poids (kg)" filled class="col-6" />
         </div>
         <div class="q-mt-md">
           <div class="text-dim text-caption q-mb-sm">Sexe</div>
@@ -51,7 +51,7 @@
           v-model.number="form.training_months"
           type="number"
           label="Ancienneté en musculation (mois) — optionnel"
-          filled dark class="q-mt-md"
+          filled class="q-mt-md"
         />
       </section>
 
@@ -173,14 +173,14 @@
         <q-select
           v-model="form.injuries"
           label="Blessures / zones sensibles"
-          filled dark use-input use-chips multiple new-value-mode="add-unique"
+          filled use-input use-chips multiple new-value-mode="add-unique"
           hide-dropdown-icon input-debounce="0" class="q-mb-md"
           hint="Tape puis Entrée pour ajouter"
         />
         <q-select
           v-model="form.avoid_exercises"
           label="Exercices à éviter"
-          filled dark use-input use-chips multiple new-value-mode="add-unique"
+          filled use-input use-chips multiple new-value-mode="add-unique"
           hide-dropdown-icon input-debounce="0"
           hint="Tape puis Entrée pour ajouter"
         />
@@ -240,13 +240,13 @@
             v-if="programMode === 'free'"
             icon="content_paste"
             label="Importer une séance (JSON)"
-            dark class="import-box q-mt-md"
+            class="import-box q-mt-md"
           >
             <div class="q-pa-sm">
               <q-input
                 v-model="importText"
                 type="textarea"
-                filled dark autogrow
+                filled autogrow
                 label="Colle ici le JSON d'une séance"
                 :rows="5"
               />

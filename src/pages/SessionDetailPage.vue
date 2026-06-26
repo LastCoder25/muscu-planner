@@ -109,7 +109,6 @@ function confirmDelete() {
     message: 'Cette séance sera supprimée définitivement. Continuer ?',
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Supprimer', color: 'negative' },
-    dark: true,
   }).onOk(() => {
     sessionsStore.remove(id)
       .then(() => {

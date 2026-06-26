@@ -1,6 +1,6 @@
 // useTheme — applique un thème (variables CSS + accent Quasar), le persiste.
 import { ref } from 'vue';
-import { setCssVar } from 'quasar';
+import { Dark, setCssVar } from 'quasar';
 import { THEMES, DEFAULT_THEME_ID, type Theme } from '@/data/themes';
 
 const STORAGE_KEY = 'muscu:theme';
@@ -12,6 +12,8 @@ function findTheme(id: string | null): Theme {
 
 export function applyTheme(id: string) {
   const t = findTheme(id);
+  // Bascule le mode Quasar (inputs, menus, dialogs, sheets… suivent).
+  Dark.set(t.dark);
   const root = document.documentElement;
   for (const [k, v] of Object.entries(t.vars)) root.style.setProperty(k, v);
   // Accent Quasar (composants color="primary") aligné sur le thème.

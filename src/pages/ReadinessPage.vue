@@ -122,7 +122,7 @@ onMounted(async () => {
 
 .suggestion { display: flex; align-items: center; gap: 8px; padding: 14px; border-radius: 14px; font-size: 14px; margin-top: 8px; }
 .suggestion.ok { background: var(--surface); border: 1px solid var(--line-soft); color: var(--dim); }
-.suggestion.warn { background: #2b2517; border: 1px solid var(--accent); color: var(--text); }
+.suggestion.warn { background: var(--surface-2); border: 1px solid var(--accent); color: var(--text); }
 
 .cta-wrap { position: fixed; left: 0; right: 0; bottom: 0; max-width: 600px; margin: 0 auto; padding: 14px 16px 24px; background: linear-gradient(180deg, #15120e00, var(--bg) 30%); display: flex; flex-direction: column; gap: 10px; }
 .cta { width: 100%; height: 54px; border: none; border-radius: 16px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; }
