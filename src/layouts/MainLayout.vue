@@ -11,6 +11,10 @@
                 <q-item-section avatar><q-icon name="history" /></q-item-section>
                 <q-item-section>Historique</q-item-section>
               </q-item>
+              <q-item v-close-popup clickable @click="goBody">
+                <q-item-section avatar><q-icon name="monitor_weight" /></q-item-section>
+                <q-item-section>Suivi corporel</q-item-section>
+              </q-item>
               <q-item v-close-popup clickable @click="goBacklog">
                 <q-item-section avatar><q-icon name="inbox" /></q-item-section>
                 <q-item-section>Backlog</q-item-section>
@@ -68,6 +72,9 @@ async function goSettings() {
 }
 async function goHistory() {
   await router.push('/history');
+}
+async function goBody() {
+  await router.push('/body');
 }
 async function goBacklog() {
   await router.push('/backlog');

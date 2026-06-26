@@ -40,7 +40,7 @@ export interface Profile {
   sports?: SportPractice[];           // pratiques sportives en parallèle
   favorite_exercises?: string[];      // ids d'exos à prioriser si pertinents
   constraints?: { injuries?: string[]; avoid_exercises?: string[] };
-  preferences?: { priority_muscles?: string[]; units?: 'kg' | 'lb' };
+  preferences?: { priority_muscles?: string[]; units?: 'kg' | 'lb'; tracking_frequency?: 'day' | 'week' | 'month' };
 }
 
 export interface LevelConfig {
