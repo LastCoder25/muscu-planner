@@ -27,6 +27,8 @@
         @click="form.objective = opt.value"
       >
         <div class="choice-title">{{ opt.label }}</div>
+        <div class="choice-desc">{{ opt.desc }}</div>
+        <div class="choice-hint">{{ opt.reps }}</div>
       </button>
     </section>
 
@@ -311,6 +313,7 @@ onMounted(async () => {
 .choice-row { display: block; margin-bottom: 10px; }
 .choice-title { font-weight: 600; font-size: 17px; }
 .choice-desc { color: var(--dim); font-size: 13px; margin-top: 4px; }
+.choice-hint { color: var(--accent); font-family: var(--font-display); font-size: 12px; margin-top: 6px; letter-spacing: 0.3px; }
 .sport-cfg { padding: 4px 6px 14px; margin: -4px 0 10px; }
 
 .actions { margin-top: 12px; }

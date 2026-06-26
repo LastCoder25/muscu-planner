@@ -75,14 +75,25 @@ watch(
 
 async function loadSuggestions() {
   const ex = props.exercise;
-  if (!ex?.muscle_primary) {
+  if (!ex) {
     suggestions.value = [];
     return;
   }
   loadingSugg.value = true;
   try {
-    const rows = await library.fetchByMuscle(ex.muscle_primary);
-    suggestions.value = rows.filter((r) => r.id !== ex.id);
+    // Alternatives pré-câblées de l'exo (en tête) + mêmes muscles.
+    const [alts, byMuscle] = await Promise.all([
+      ex.alternatives.length ? library.fetchByIds(ex.alternatives) : Promise.resolve([]),
+      ex.muscle_primary ? library.fetchByMuscle(ex.muscle_primary) : Promise.resolve([]),
+    ]);
+    const seen = new Set<string>([ex.id]);
+    const merged: ExerciseRow[] = [];
+    for (const r of [...alts, ...byMuscle]) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      merged.push(r);
+    }
+    suggestions.value = merged;
   } finally {
     loadingSugg.value = false;
   }

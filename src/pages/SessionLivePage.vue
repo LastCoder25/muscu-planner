@@ -94,6 +94,7 @@
             <button v-else-if="i === curSetIndex && ex.sets.length > 1" class="rm" @click="live.removeSet(i)">✕</button>
           </div>
           <div v-if="s.done && s.comment" class="comment-mini">{{ s.comment }}</div>
+          <div v-if="s.done && isDense" class="set-tonnage font-display">{{ s.load_kg * s.reps }} kg</div>
         </div>
 
         <button class="addset" @click="live.addSet()">+ Ajouter une série</button>
@@ -208,6 +209,7 @@ const volume = computed(() =>
   ex.value ? ex.value.sets.filter((s) => s.done).reduce((a, s) => a + s.load_kg * s.reps, 0) : 0,
 );
 const showRir = computed(() => profileStore.levelConfig?.effort_signal === 'rir');
+const isDense = computed(() => profileStore.levelConfig?.ui_density === 'dense');
 
 const swapOpen = ref(false);
 const scrollEl = ref<HTMLElement | null>(null);
@@ -415,6 +417,7 @@ onBeforeUnmount(() => {
 .dpill.d1 { background: var(--d1); } .dpill.d2 { background: var(--d2); } .dpill.d3 { background: var(--d3); } .dpill.d4 { background: var(--d4); color: #fff; }
 .rm { justify-self: end; width: 28px; height: 28px; border-radius: 9px; border: 1px solid var(--line); background: transparent; color: var(--dim-2); cursor: pointer; }
 .comment-mini { grid-column: 2/5; font-size: 11.5px; color: var(--dim); font-style: italic; }
+.set-tonnage { grid-column: 2/5; font-size: 11px; color: var(--dim-2); letter-spacing: 0.3px; }
 .addset { width: 100%; height: 44px; border-radius: 13px; border: 1px dashed var(--line); background: transparent; color: var(--dim); font-weight: 600; font-size: 13px; cursor: pointer; margin-top: 2px; }
 
 .comment { margin-top: 22px; }

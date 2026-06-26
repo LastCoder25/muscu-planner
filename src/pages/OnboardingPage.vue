@@ -55,7 +55,7 @@
         />
       </section>
 
-      <!-- 2. Objectif -->
+      <!-- 2. Objectif (guidé) -->
       <section v-else-if="step === 2">
         <h2 class="onb-h">Ton objectif</h2>
         <button
@@ -66,6 +66,8 @@
           @click="form.objective = opt.value"
         >
           <div class="choice-title">{{ opt.label }}</div>
+          <div class="choice-desc">{{ opt.desc }}</div>
+          <div class="choice-hint">{{ opt.reps }}</div>
         </button>
       </section>
 
@@ -495,6 +497,7 @@ onMounted(async () => {
 .choice-row { display: block; margin-bottom: 10px; }
 .choice-title { font-weight: 600; font-size: 17px; }
 .choice-desc { color: var(--dim); font-size: 13px; margin-top: 4px; }
+.choice-hint { color: var(--accent); font-family: var(--font-display); font-size: 12px; margin-top: 6px; letter-spacing: 0.3px; }
 .grp-label { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--dim-2); margin: 14px 2px 8px; }
 
 .import-box {

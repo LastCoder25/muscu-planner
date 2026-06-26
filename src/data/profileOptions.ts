@@ -1,7 +1,10 @@
 // profileOptions.ts — listes d'options partagées par l'onboarding et le profil.
 // Source unique pour rester synchrones (notamment SPORTS, dont les libellés
 // sont mappés en muscles par le générateur, cf. programBuilder.ts).
-import type { Level, Objective, EquipmentItem, SportPractice } from '@/lib/types';
+import type { Level, EquipmentItem, SportPractice } from '@/lib/types';
+
+// Objectifs guidés : source unique dans objectives.ts, ré-exportée ici.
+export { OBJECTIVES, type ObjectiveOption } from './objectives';
 
 export const SEXES: { value: 'homme' | 'femme' | 'autre'; label: string }[] = [
   { value: 'homme', label: 'Homme' },
@@ -13,14 +16,6 @@ export const LEVELS: { value: Level; label: string; desc: string }[] = [
   { value: 'debutant', label: 'Débutant', desc: 'Progression linéaire guidée, programme généré, note d’effort simple.' },
   { value: 'intermediaire', label: 'Intermédiaire', desc: 'Double progression assistée, RIR optionnel, template éditable.' },
   { value: 'avance', label: 'Avancé', desc: 'Double progression + RIR, import/construction libre, UI dense.' },
-];
-
-export const OBJECTIVES: { value: Objective; label: string }[] = [
-  { value: 'force', label: 'Force' },
-  { value: 'hypertrophie', label: 'Hypertrophie (prise de muscle)' },
-  { value: 'endurance', label: 'Endurance' },
-  { value: 'remise_en_forme', label: 'Remise en forme' },
-  { value: 'perte_de_gras', label: 'Perte de gras' },
 ];
 
 export interface EquipmentOption { value: EquipmentItem; label: string; desc?: string }

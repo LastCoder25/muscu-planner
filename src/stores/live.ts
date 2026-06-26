@@ -23,6 +23,7 @@ export interface LiveExercise {
   muscle_primary: string | undefined;
   equipment: string | undefined;
   swapped_from: string | null;
+  alternatives: string[];
   rest_seconds: number;
   planned: ExerciseTarget;
   bodyweight: boolean;
@@ -84,6 +85,7 @@ export const useLiveStore = defineStore('live', () => {
           muscle_primary: ex.muscle_primary,
           equipment: ex.equipment,
           swapped_from: null,
+          alternatives: ex.alternatives ?? [],
           rest_seconds: ex.rest_seconds,
           planned: ex.target,
           bodyweight,
@@ -137,6 +139,7 @@ export const useLiveStore = defineStore('live', () => {
     ex.name = target.name;
     ex.muscle_primary = target.muscle_primary;
     ex.equipment = target.equipment;
+    ex.alternatives = [];
     persist();
   }
 
