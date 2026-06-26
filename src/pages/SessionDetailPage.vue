@@ -18,7 +18,7 @@
       </div>
 
       <div class="scroll">
-        <div v-for="(ex, i) in session.exercises" :key="i" class="ex-card">
+        <div v-for="(ex, i) in session.exercises" :key="i" class="ex-card" @click="openExercise(ex.id)">
           <div class="ex-top">
             <div class="ex-idx font-display">{{ i + 1 }}</div>
             <div class="ex-main">
@@ -83,6 +83,9 @@ async function goHome() {
 async function start() {
   await router.push(`/session/${id}`);
 }
+async function openExercise(exId: string) {
+  await router.push(`/exercise/${exId}`);
+}
 
 onMounted(async () => {
   try {
@@ -116,7 +119,8 @@ onMounted(async () => {
 .chip { font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--dim); background: var(--surface); border: 1px solid var(--line-soft); padding: 5px 10px; border-radius: 8px; }
 
 .scroll { flex: 1; overflow-y: auto; padding: 10px 16px 120px; }
-.ex-card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+.ex-card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 14px; margin-bottom: 10px; cursor: pointer; }
+.ex-card:active { border-color: var(--accent); }
 .ex-top { display: flex; align-items: flex-start; gap: 12px; }
 .ex-idx { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 600; font-size: 15px; background: var(--surface-2); color: var(--accent); flex: none; }
 .ex-main { flex: 1; min-width: 0; }

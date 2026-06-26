@@ -12,7 +12,26 @@ export interface ExerciseRow {
   difficulty?: number | null;
 }
 
+export interface ExerciseFull extends ExerciseRow {
+  payload?: {
+    alternatives?: string[];
+    notes?: string;
+    instructions?: string;
+    media_url?: string;
+  } | null;
+}
+
 export const useLibraryStore = defineStore('library', () => {
+  async function fetchOne(id: string) {
+    const { data, error } = await supabase
+      .from('exercises')
+      .select('id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, payload')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as ExerciseFull) ?? null;
+  }
+
   async function fetchAll() {
     const { data, error } = await supabase
       .from('exercises')
@@ -40,7 +59,7 @@ export const useLibraryStore = defineStore('library', () => {
     return (data as ExerciseRow[]) ?? [];
   }
 
-  return { fetchAll, fetchByMuscle, fetchByIds };
+  return { fetchOne, fetchAll, fetchByMuscle, fetchByIds };
 });
 
 if (import.meta.hot) {

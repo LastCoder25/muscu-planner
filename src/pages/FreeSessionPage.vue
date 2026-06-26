@@ -74,10 +74,11 @@
         <q-input v-model="search" filled dark dense placeholder="Rechercher…" class="q-mb-sm" clearable />
         <div v-if="loadingLib" class="row flex-center q-pa-md"><q-spinner color="primary" /></div>
         <button v-for="e in filteredLib" :key="e.id" class="alt" @click="pick(e)">
-          <div>
+          <div class="alt-main">
             <div class="alt-name">{{ e.name }}</div>
             <div class="alt-meta">{{ e.muscle_primary }}<template v-if="e.equipment"> · {{ e.equipment }}</template></div>
           </div>
+          <q-icon name="info_outline" size="20px" color="grey-6" class="alt-info" role="button" aria-label="Fiche" @click.stop="openExercise(e.id)" />
           <div class="alt-go">+</div>
         </button>
       </div>
@@ -178,6 +179,10 @@ function pick(e: ExerciseRow) {
   pickerOpen.value = false;
   search.value = '';
 }
+async function openExercise(id: string) {
+  pickerOpen.value = false;
+  await router.push(`/exercise/${id}`);
+}
 
 // ── Fin ─────────────────────────────────────────────────
 const finishOpen = ref(false);
@@ -270,8 +275,10 @@ onBeforeUnmount(() => clearInterval(clockInt));
 .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 6px auto 16px; }
 .muted { color: var(--dim); font-size: 12.5px; margin: 4px 0 14px; }
 .alt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 13px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); margin-bottom: 8px; cursor: pointer; }
+.alt-main { flex: 1; min-width: 0; }
 .alt-name { font-weight: 600; font-size: 14.5px; color: var(--text); }
 .alt-meta { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
-.alt-go { margin-left: auto; color: var(--accent); font-size: 22px; }
+.alt-info { cursor: pointer; }
+.alt-go { color: var(--accent); font-size: 22px; }
 .cfield { width: 100%; min-height: 70px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 12px; color: var(--text); font-family: var(--font-ui); font-size: 14px; resize: none; outline: none; &:focus { border-color: var(--accent); } }
 </style>
