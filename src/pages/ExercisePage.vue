@@ -35,6 +35,18 @@
       </div>
       <div v-else class="required dim">Aucun matériel requis (poids du corps).</div>
 
+      <!-- Progression -->
+      <template v-if="series.length">
+        <div class="sec-h">Progression (1RM estimé)</div>
+        <div v-if="chart" class="chart">
+          <svg :viewBox="`0 0 ${chart.W} ${chart.H}`" preserveAspectRatio="none" class="chart-svg">
+            <polyline :points="chart.pts" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" />
+          </svg>
+          <div class="chart-meta">max <b>{{ chart.max }}</b> kg · actuel <b>{{ chart.last }}</b> kg · {{ series.length }} séances</div>
+        </div>
+        <div v-else class="no-instr">Pas encore assez de données (1 séance).</div>
+      </template>
+
       <!-- Instructions -->
       <div class="sec-h">Instructions</div>
       <p v-if="ex.payload?.instructions" class="instructions">{{ ex.payload.instructions }}</p>
@@ -63,6 +75,8 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLibraryStore, type ExerciseFull, type ExerciseRow } from '@/stores/library';
+import { useLogsStore } from '@/stores/logs';
+import { bestE1RM } from '@/lib/estimates';
 import { EQUIPMENT_ITEMS } from '@/data/profileOptions';
 
 const route = useRoute();
@@ -70,9 +84,30 @@ const router = useRouter();
 const $q = useQuasar();
 const library = useLibraryStore();
 
+const logs = useLogsStore();
 const loading = ref(true);
 const ex = ref<ExerciseFull | null>(null);
 const alts = ref<ExerciseRow[]>([]);
+const series = ref<number[]>([]); // 1RM estimé chronologique (historique de l'exo)
+
+const chart = computed(() => {
+  const s = series.value;
+  if (s.length < 2) return null;
+  const min = Math.min(...s);
+  const max = Math.max(...s);
+  const range = max - min || 1;
+  const W = 300;
+  const H = 90;
+  const pad = 6;
+  const pts = s
+    .map((v, i) => {
+      const x = (i / (s.length - 1)) * (W - 2 * pad) + pad;
+      const y = H - pad - ((v - min) / range) * (H - 2 * pad);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  return { pts, min, max, last: s[s.length - 1], W, H };
+});
 
 const EQUIP_LABELS: Record<string, string> = Object.fromEntries(EQUIPMENT_ITEMS.map((e) => [e.value, e.label]));
 
@@ -87,6 +122,7 @@ function levelLabel(d: number | null | undefined) {
 async function load(id: string) {
   loading.value = true;
   alts.value = [];
+  series.value = [];
   try {
     ex.value = await library.fetchOne(id);
     if (!ex.value) {
@@ -96,6 +132,18 @@ async function load(id: string) {
     }
     const altIds = ex.value.payload?.alternatives ?? [];
     if (altIds.length) alts.value = await library.fetchByIds(altIds);
+
+    // Historique de progression (1RM estimé) pour cet exo.
+    const recent = await logs.fetchRecent(50);
+    const pts: { date: string; val: number }[] = [];
+    for (const row of recent) {
+      const le = row.payload.exercises.find((x) => x.id === id || x.swapped_from === id);
+      if (!le) continue;
+      const v = bestE1RM(le.performed);
+      if (v > 0) pts.push({ date: row.performed_at, val: v });
+    }
+    pts.sort((a, b) => a.date.localeCompare(b.date));
+    series.value = pts.map((p) => p.val);
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Chargement impossible.' });
   } finally {
@@ -143,6 +191,9 @@ watch(() => route.params.id, async (id) => {
 
 .instructions { font-size: 14px; color: var(--text); line-height: 1.5; white-space: pre-wrap; }
 .no-instr { font-size: 13px; color: var(--dim); }
+.chart { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px; }
+.chart-svg { width: 100%; height: 90px; display: block; }
+.chart-meta { font-size: 12px; color: var(--dim); margin-top: 8px; b { color: var(--text); font-family: var(--font-display); } }
 .link { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; margin-left: 4px; font-size: 13px; text-decoration: underline; }
 
 .alt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line-soft); margin-bottom: 8px; cursor: pointer; }

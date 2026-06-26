@@ -40,7 +40,7 @@
         </div>
 
         <!-- Progression proposée (moteur) -->
-        <template v-if="source && deltas.length">
+        <template v-if="source && deltas.length && !readOnly">
           <div class="sec-h">Progression proposée</div>
           <div class="prog-card">
             <div v-for="d in deltas" :key="d.id" class="prog-row">
@@ -71,10 +71,10 @@
       </div>
 
       <div class="cta-wrap">
-        <button v-if="source && nextPlan" class="cta" :disabled="applying" @click="applyProgression">
+        <button v-if="source && nextPlan && !readOnly" class="cta" :disabled="applying" @click="applyProgression">
           {{ applying ? 'Application…' : 'Appliquer la progression' }}
         </button>
-        <button v-else class="cta ghost" @click="goHome">Retour à l'accueil</button>
+        <button v-else class="cta ghost" @click="goHome">Retour</button>
       </div>
     </template>
   </q-page>
@@ -101,6 +101,7 @@ const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const logs = useLogsStore();
 
+const readOnly = computed(() => !!route.query.h);
 const loading = ref(true);
 const log = ref<SessionLog | null>(null);
 const source = ref<Session | null>(null);

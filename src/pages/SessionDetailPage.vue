@@ -6,6 +6,8 @@
         <div class="top-title font-display">{{ session?.name || 'Séance' }}</div>
         <div class="top-sub" v-if="session">{{ session.exercises.length }} exercices<template v-if="session.estimated_duration_min"> · ~{{ session.estimated_duration_min }} min</template></div>
       </div>
+      <q-btn flat round dense icon="content_copy" aria-label="Dupliquer" @click="duplicate" />
+      <q-btn flat round dense icon="delete_outline" color="negative" aria-label="Supprimer" @click="confirmDelete" />
     </header>
 
     <div v-if="loading" class="column flex-center" style="min-height: 50vh"><q-spinner color="primary" size="32px" /></div>
@@ -50,11 +52,13 @@ import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import type { Session, ExerciseTarget, Objective } from '@/lib/types';
 import { useSessionsStore } from '@/stores/sessions';
+import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
 const router = useRouter();
 const $q = useQuasar();
 const sessionsStore = useSessionsStore();
+const auth = useAuthStore();
 
 const id = String(route.params.id);
 const loading = ref(true);
@@ -83,6 +87,37 @@ function loadLabel(t: ExerciseTarget): string {
 
 async function goHome() {
   await router.push('/');
+}
+
+async function duplicate() {
+  const userId = auth.user?.id;
+  const s = session.value;
+  if (!userId || !s) return;
+  try {
+    const copy: Session = { ...s, id: crypto.randomUUID(), name: `${s.name} (copie)`, source: 'user' };
+    await sessionsStore.insert(userId, copy);
+    $q.notify({ type: 'positive', message: 'Séance dupliquée.' });
+    await router.push('/');
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
+  }
+}
+
+function confirmDelete() {
+  $q.dialog({
+    title: 'Supprimer la séance',
+    message: 'Cette séance sera supprimée définitivement. Continuer ?',
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Supprimer', color: 'negative' },
+    dark: true,
+  }).onOk(() => {
+    sessionsStore.remove(id)
+      .then(() => {
+        $q.notify({ type: 'positive', message: 'Séance supprimée.' });
+        return router.push('/');
+      })
+      .catch((e: unknown) => $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' }));
+  });
 }
 async function start() {
   await router.push(`/session/${id}/ready`);

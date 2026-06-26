@@ -62,6 +62,12 @@ export const useSessionsStore = defineStore('sessions', () => {
     if (error) throw error;
   }
 
+  async function remove(id: string) {
+    const { error } = await supabase.from('sessions').delete().eq('id', id);
+    if (error) throw error;
+    list.value = list.value.filter((s) => s.id !== id);
+  }
+
   async function deleteAll(userId: string) {
     const { error } = await supabase.from('sessions').delete().eq('user_id', userId);
     if (error) throw error;
@@ -75,7 +81,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     await fetchMine();
   }
 
-  return { list, fetchMine, insert, updatePlan, deleteAll, replaceAll };
+  return { list, fetchMine, insert, updatePlan, remove, deleteAll, replaceAll };
 });
 
 if (import.meta.hot) {

@@ -10,6 +10,14 @@
     </div>
 
     <template v-else>
+      <div v-if="lastLog" class="last-card" @click="goHistory">
+        <div class="last-lbl">Dernière séance · {{ fmtDate(lastLog.performed_at) }}</div>
+        <div class="last-row">
+          <span class="last-name">{{ lastLog.payload.name || 'Séance' }}</span>
+          <span class="last-stat">{{ lastVolume }} kg<template v-if="lastLog.payload.global_difficulty"> · {{ lastLog.payload.global_difficulty }}/4</template></span>
+        </div>
+      </div>
+
       <div class="row items-center justify-between q-mb-sm">
         <h2 class="section-h">Tes séances</h2>
         <span class="text-dim text-caption">{{ sessionsStore.list.length }}</span>
@@ -52,27 +60,45 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
+import { useLogsStore, type LogRow } from '@/stores/logs';
 
 const $q = useQuasar();
 const router = useRouter();
 const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
+const logs = useLogsStore();
 const loading = ref(true);
+const lastLog = ref<LogRow | null>(null);
+
+const lastVolume = computed(() =>
+  lastLog.value
+    ? lastLog.value.payload.exercises.reduce((a, ex) => a + ex.performed.reduce((b, s) => b + s.load_kg * s.reps, 0), 0)
+    : 0,
+);
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
 
 onMounted(async () => {
   try {
     await sessionsStore.fetchMine();
+    const recent = await logs.fetchRecent(1);
+    lastLog.value = recent[0] ?? null;
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Chargement impossible.' });
   } finally {
     loading.value = false;
   }
 });
+
+async function goHistory() {
+  await router.push('/history');
+}
 
 async function openDetail(id: string) {
   await router.push(`/session/${id}/detail`);
@@ -99,6 +125,11 @@ async function startSession(id: string) {
   margin: 2px 0 0;
 }
 .text-dim { color: var(--dim); }
+.last-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 20px; cursor: pointer; }
+.last-lbl { font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--dim); }
+.last-row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 6px; }
+.last-name { font-weight: 600; font-size: 16px; color: var(--text); }
+.last-stat { font-family: var(--font-display); font-size: 14px; color: var(--accent); }
 .section-h {
   font-family: var(--font-display);
   font-size: 18px;
