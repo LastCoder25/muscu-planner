@@ -22,7 +22,21 @@
         <button v-for="k in KINDS" :key="k.value" class="kind" :class="{ on: kind === k.value }" @click="kind = k.value">{{ k.label }}</button>
       </div>
       <textarea v-model="message" class="fb-field" aria-label="Message" placeholder="Décris le bug ou l'idée…" />
-      <q-btn no-caps color="primary" text-color="dark" label="Envoyer" class="full-width q-mt-md" :loading="sending" :disable="!message.trim()" @click="send" />
+
+      <div class="shots">
+        <div v-if="previews.length" class="shot-grid">
+          <div v-for="(src, i) in previews" :key="i" class="shot">
+            <img :src="src" alt="capture" />
+            <button class="shot-rm" aria-label="Retirer" @click="removeFile(i)">✕</button>
+          </div>
+        </div>
+        <button v-if="files.length < MAX" class="shot-add" @click="pickFiles">
+          <q-icon name="add_photo_alternate" size="18px" /> Joindre une capture
+        </button>
+        <input ref="fileInput" type="file" accept="image/*" multiple class="hidden-input" @change="onFiles" />
+      </div>
+
+      <q-btn no-caps color="primary" text-color="dark" :label="sending ? 'Envoi…' : 'Envoyer'" class="full-width q-mt-md" :loading="sending" :disable="!message.trim()" @click="send" />
     </div>
   </q-dialog>
 </template>
@@ -54,20 +68,52 @@ const kind = ref<FeedbackKind>('bug');
 const message = ref('');
 const sending = ref(false);
 
+const MAX = 4;
+const fileInput = ref<HTMLInputElement | null>(null);
+const files = ref<File[]>([]);
+const previews = ref<string[]>([]);
+
+function pickFiles() {
+  fileInput.value?.click();
+}
+function onFiles(e: Event) {
+  const picked = Array.from((e.target as HTMLInputElement).files ?? []);
+  for (const f of picked) {
+    if (files.value.length >= MAX) break;
+    files.value.push(f);
+    previews.value.push(URL.createObjectURL(f));
+  }
+  if (fileInput.value) fileInput.value.value = '';
+}
+function removeFile(i: number) {
+  URL.revokeObjectURL(previews.value[i]!);
+  files.value.splice(i, 1);
+  previews.value.splice(i, 1);
+}
+function resetFiles() {
+  previews.value.forEach((u) => URL.revokeObjectURL(u));
+  files.value = [];
+  previews.value = [];
+}
+
 function open() {
   kind.value = 'bug';
   message.value = '';
+  resetFiles();
   dialog.value = true;
 }
 async function send() {
   sending.value = true;
   try {
+    const screenshots = files.value.length ? await feedback.uploadScreenshots(files.value) : undefined;
     await feedback.submit({
       kind: kind.value,
       message: message.value.trim(),
       page: route.fullPath,
       app_version: __APP_VERSION__,
+      screenshots,
     });
+    resetFiles();
     dialog.value = false;
     $q.notify({ type: 'positive', message: 'Merci pour ton retour 🙏' });
   } catch (e) {
@@ -92,4 +138,10 @@ async function send() {
 .kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
 .kind { min-height: 44px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; color: var(--text); font-family: var(--font-ui); font-size: 14px; cursor: pointer; &.on { border-color: var(--accent); background: var(--surface-2); } }
 .fb-field { width: 100%; min-height: 90px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; color: var(--text); font-family: var(--font-ui); font-size: 14px; resize: none; outline: none; &:focus { border-color: var(--accent); } }
+.shots { margin-top: 10px; }
+.shot-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.shot { position: relative; width: 64px; height: 64px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); img { width: 100%; height: 100%; object-fit: cover; } }
+.shot-rm { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 6px; border: none; background: #000a; color: #fff; font-size: 12px; line-height: 1; cursor: pointer; }
+.shot-add { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--line); background: transparent; color: var(--dim); font-size: 13px; cursor: pointer; }
+.hidden-input { display: none; }
 </style>

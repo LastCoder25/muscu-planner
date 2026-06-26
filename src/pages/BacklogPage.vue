@@ -22,6 +22,9 @@
           <span class="tk-status" :class="t.status">{{ statusLabel(t.status) }}</span>
         </div>
         <div class="tk-msg">{{ t.message }}</div>
+        <div v-if="t.screenshots?.length" class="tk-shots">
+          <a v-for="(u, i) in t.screenshots" :key="i" :href="u" target="_blank" rel="noopener" class="tk-shot"><img :src="u" alt="capture" /></a>
+        </div>
         <div class="tk-meta">{{ fmtDate(t.created_at) }}<template v-if="t.app_version"> · v{{ t.app_version }}</template><template v-if="t.page"> · {{ t.page }}</template></div>
         <div class="tk-actions">
           <button v-if="t.status !== 'in_progress'" class="act" @click="set(t, 'in_progress')">En cours</button>
@@ -40,7 +43,21 @@
           <button v-for="k in KINDS" :key="k.value" class="kind" :class="{ on: newKind === k.value }" @click="newKind = k.value">{{ k.label }}</button>
         </div>
         <textarea v-model="newMessage" class="nt-field" aria-label="Message" placeholder="Décris le bug ou l'idée…" />
-        <q-btn no-caps color="primary" text-color="dark" label="Envoyer" class="full-width q-mt-md" :loading="sending" :disable="!newMessage.trim()" @click="sendNew" />
+
+        <div class="shots">
+          <div v-if="previews.length" class="shot-grid">
+            <div v-for="(src, i) in previews" :key="i" class="shot">
+              <img :src="src" alt="capture" />
+              <button class="shot-rm" aria-label="Retirer" @click="removeFile(i)">✕</button>
+            </div>
+          </div>
+          <button v-if="files.length < MAX" class="shot-add" @click="pickFiles">
+            <q-icon name="add_photo_alternate" size="18px" /> Joindre une capture
+          </button>
+          <input ref="fileInput" type="file" accept="image/*" multiple class="hidden-input" @change="onFiles" />
+        </div>
+
+        <q-btn no-caps color="primary" text-color="dark" :label="sending ? 'Envoi…' : 'Envoyer'" class="full-width q-mt-md" :loading="sending" :disable="!newMessage.trim()" @click="sendNew" />
       </div>
     </q-dialog>
   </q-page>
@@ -67,21 +84,52 @@ const newKind = ref<FeedbackKind>('bug');
 const newMessage = ref('');
 const sending = ref(false);
 
+const MAX = 4;
+const fileInput = ref<HTMLInputElement | null>(null);
+const files = ref<File[]>([]);
+const previews = ref<string[]>([]);
+function pickFiles() {
+  fileInput.value?.click();
+}
+function onFiles(e: Event) {
+  const picked = Array.from((e.target as HTMLInputElement).files ?? []);
+  for (const f of picked) {
+    if (files.value.length >= MAX) break;
+    files.value.push(f);
+    previews.value.push(URL.createObjectURL(f));
+  }
+  if (fileInput.value) fileInput.value.value = '';
+}
+function removeFile(i: number) {
+  URL.revokeObjectURL(previews.value[i]!);
+  files.value.splice(i, 1);
+  previews.value.splice(i, 1);
+}
+function resetFiles() {
+  previews.value.forEach((u) => URL.revokeObjectURL(u));
+  files.value = [];
+  previews.value = [];
+}
+
 function openNew() {
   newKind.value = 'bug';
   newMessage.value = '';
+  resetFiles();
   newOpen.value = true;
 }
 async function sendNew() {
   sending.value = true;
   try {
+    const screenshots = files.value.length ? await feedback.uploadScreenshots(files.value) : undefined;
     await feedback.submit({
       kind: newKind.value,
       message: newMessage.value.trim(),
       page: route.fullPath,
       app_version: __APP_VERSION__,
+      screenshots,
     });
     await feedback.fetchAll();
+    resetFiles();
     newOpen.value = false;
     $q.notify({ type: 'positive', message: 'Ticket ajouté 🙏' });
   } catch (e) {
@@ -157,6 +205,8 @@ onMounted(async () => {
 .tk-status.in_progress { color: var(--accent-ink); background: var(--d3); }
 .tk-status.done { color: var(--accent-ink); background: var(--d1); }
 .tk-msg { color: var(--text); font-size: 14px; margin-top: 8px; white-space: pre-wrap; }
+.tk-shots { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.tk-shot { width: 72px; height: 72px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); img { width: 100%; height: 100%; object-fit: cover; display: block; } }
 .tk-meta { color: var(--dim-2); font-size: 11.5px; margin-top: 6px; }
 .tk-actions { display: flex; gap: 8px; margin-top: 12px; }
 .act { padding: 6px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); font-size: 12.5px; font-weight: 600; cursor: pointer; }
@@ -167,4 +217,10 @@ onMounted(async () => {
 .kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
 .kind { min-height: 44px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; color: var(--text); font-family: var(--font-ui); font-size: 14px; cursor: pointer; &.on { border-color: var(--accent); background: var(--surface-2); } }
 .nt-field { width: 100%; min-height: 90px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; color: var(--text); font-family: var(--font-ui); font-size: 14px; resize: none; outline: none; &:focus { border-color: var(--accent); } }
+.shots { margin-top: 10px; }
+.shot-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.shot { position: relative; width: 64px; height: 64px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); img { width: 100%; height: 100%; object-fit: cover; } }
+.shot-rm { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 6px; border: none; background: #000a; color: #fff; font-size: 12px; line-height: 1; cursor: pointer; }
+.shot-add { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--line); background: transparent; color: var(--dim); font-size: 13px; cursor: pointer; }
+.hidden-input { display: none; }
 </style>

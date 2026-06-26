@@ -14,20 +14,37 @@ export interface FeedbackRow {
   status: FeedbackStatus;
   page: string | null;
   app_version: string | null;
+  screenshots: string[] | null;
   created_at: string;
 }
+
+const COLS = 'id, kind, message, status, page, app_version, screenshots, created_at';
 
 export const useFeedbackStore = defineStore('feedback', () => {
   const mine = ref<FeedbackRow[]>([]);
   const all = ref<FeedbackRow[]>([]);
 
+  // Upload des captures dans le bucket public `feedback` → URLs publiques.
+  async function uploadScreenshots(files: File[]): Promise<string[]> {
+    const urls: string[] = [];
+    for (const file of files) {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const path = `${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from('feedback').upload(path, file, { contentType: file.type });
+      if (error) throw error;
+      urls.push(supabase.storage.from('feedback').getPublicUrl(path).data.publicUrl);
+    }
+    return urls;
+  }
+
   // user_id est rempli par défaut (auth.uid()) côté DB.
-  async function submit(input: { kind: FeedbackKind; message: string; page: string; app_version: string }) {
+  async function submit(input: { kind: FeedbackKind; message: string; page: string; app_version: string; screenshots?: string[] }) {
     const { error } = await supabase.from('feedback').insert({
       kind: input.kind,
       message: input.message,
       page: input.page,
       app_version: input.app_version,
+      screenshots: input.screenshots?.length ? input.screenshots : null,
     });
     if (error) throw error;
   }
@@ -35,7 +52,7 @@ export const useFeedbackStore = defineStore('feedback', () => {
   async function fetchMine() {
     const { data, error } = await supabase
       .from('feedback')
-      .select('id, kind, message, status, page, app_version, created_at')
+      .select(COLS)
       .order('created_at', { ascending: false });
     if (error) throw error;
     mine.value = data ?? [];
@@ -46,7 +63,7 @@ export const useFeedbackStore = defineStore('feedback', () => {
   async function fetchAll() {
     const { data, error } = await supabase
       .from('feedback')
-      .select('id, kind, message, status, page, app_version, created_at')
+      .select(COLS)
       .order('created_at', { ascending: false });
     if (error) throw error;
     all.value = data ?? [];
@@ -60,7 +77,7 @@ export const useFeedbackStore = defineStore('feedback', () => {
     if (t) t.status = status;
   }
 
-  return { mine, all, submit, fetchMine, fetchAll, setStatus };
+  return { mine, all, uploadScreenshots, submit, fetchMine, fetchAll, setStatus };
 });
 
 if (import.meta.hot) {
