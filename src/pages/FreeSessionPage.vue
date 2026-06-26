@@ -6,6 +6,7 @@
         <div class="top-title font-display">Séance libre</div>
         <div class="top-sub">{{ clock }}<template v-if="run"> · {{ run.exercises.length }} exos</template></div>
       </div>
+      <q-btn flat round dense icon="delete_outline" color="negative" aria-label="Annuler la séance" @click="cancelFree" />
     </header>
 
     <div class="scroll">
@@ -269,6 +270,18 @@ async function finish() {
 async function quit() {
   // L'état libre reste sauvegardé : reprise possible.
   await router.push('/');
+}
+
+function cancelFree() {
+  $q.dialog({
+    title: 'Annuler la séance',
+    message: 'La séance libre en cours sera supprimée (rien ne sera enregistré). Continuer ?',
+    cancel: { label: 'Retour', flat: true },
+    ok: { label: 'Annuler la séance', color: 'negative' },
+  }).onOk(() => {
+    live.clear();
+    router.push('/').catch(() => undefined);
+  });
 }
 
 onMounted(async () => {

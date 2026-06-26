@@ -107,6 +107,12 @@ export const useLiveStore = defineStore('live', () => {
     run.value = null;
   }
 
+  // Abandonne une séance sauvegardée sans la charger (ex. depuis la Home).
+  function discardSaved(sessionId: string) {
+    localStorage.removeItem(keyFor(sessionId));
+    if (run.value?.session_id === sessionId) run.value = null;
+  }
+
   // ── Séance libre (sans plan source) ───────────────────
   function startFree(resume = true) {
     if (resume) {
@@ -238,7 +244,7 @@ export const useLiveStore = defineStore('live', () => {
   }
 
   return {
-    run, current, persist, hasSaved, start, clear,
+    run, current, persist, hasSaved, start, clear, discardSaved,
     startFree, addExercise, removeExercise,
     goToExercise, addSet, removeSet, swapCurrent, buildLog,
   };

@@ -10,6 +10,17 @@
     </div>
 
     <template v-else>
+      <div v-if="hasFree" class="free-ongoing">
+        <div class="fo-main">
+          <q-icon name="bolt" size="20px" />
+          <span>Séance libre en cours</span>
+        </div>
+        <div class="fo-actions">
+          <button class="fo-resume" @click="resumeFree">Reprendre</button>
+          <button class="fo-cancel" aria-label="Abandonner" @click="discardFree">Abandonner</button>
+        </div>
+      </div>
+
       <div v-if="lastLog" class="last-card" @click="goHistory">
         <div class="last-lbl">Dernière séance · {{ fmtDate(lastLog.performed_at) }}</div>
         <div class="last-row">
@@ -71,14 +82,17 @@ import { useQuasar } from 'quasar';
 import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLogsStore, type LogRow } from '@/stores/logs';
+import { useLiveStore } from '@/stores/live';
 
 const $q = useQuasar();
 const router = useRouter();
 const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const logs = useLogsStore();
+const live = useLiveStore();
 const loading = ref(true);
 const lastLog = ref<LogRow | null>(null);
+const hasFree = ref(false);
 
 const lastVolume = computed(() =>
   lastLog.value
@@ -90,6 +104,7 @@ function fmtDate(iso: string): string {
 }
 
 onMounted(async () => {
+  hasFree.value = live.hasSaved('free');
   try {
     await sessionsStore.fetchMine();
     const recent = await logs.fetchRecent(1);
@@ -110,6 +125,21 @@ async function openDetail(id: string) {
 }
 async function startFree() {
   await router.push('/free');
+}
+async function resumeFree() {
+  await router.push('/free');
+}
+function discardFree() {
+  $q.dialog({
+    title: 'Abandonner la séance libre',
+    message: 'La séance libre en cours sera supprimée (rien ne sera enregistré). Continuer ?',
+    cancel: { label: 'Retour', flat: true },
+    ok: { label: 'Abandonner', color: 'negative' },
+  }).onOk(() => {
+    live.discardSaved('free');
+    hasFree.value = false;
+    $q.notify({ type: 'positive', message: 'Séance libre supprimée.' });
+  });
 }
 async function startImport() {
   await router.push('/import');
@@ -133,6 +163,11 @@ async function startSession(id: string) {
   margin: 2px 0 0;
 }
 .text-dim { color: var(--dim); }
+.free-ongoing { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--surface-2); border: 1px solid var(--accent); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; }
+.fo-main { display: flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; font-size: 14px; }
+.fo-actions { display: flex; gap: 8px; }
+.fo-resume { padding: 7px 14px; border-radius: 10px; border: none; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 13px; cursor: pointer; }
+.fo-cancel { padding: 7px 12px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--d4); font-weight: 600; font-size: 13px; cursor: pointer; }
 .last-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 20px; cursor: pointer; }
 .last-lbl { font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--dim); }
 .last-row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 6px; }
