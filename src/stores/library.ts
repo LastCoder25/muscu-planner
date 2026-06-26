@@ -8,13 +8,14 @@ export interface ExerciseRow {
   muscle_primary: string | null;
   muscle_secondary?: string[] | null;
   equipment: string | null;
+  equipment_required?: string[] | null;
 }
 
 export const useLibraryStore = defineStore('library', () => {
   async function fetchAll() {
     const { data, error } = await supabase
       .from('exercises')
-      .select('id, name, muscle_primary, muscle_secondary, equipment');
+      .select('id, name, muscle_primary, muscle_secondary, equipment, equipment_required');
     if (error) throw error;
     return (data as ExerciseRow[]) ?? [];
   }

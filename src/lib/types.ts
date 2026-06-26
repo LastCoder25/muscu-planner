@@ -7,9 +7,13 @@ export type Equipment = 'salle_complete' | 'home_gym' | 'halteres' | 'poids_du_c
 export type Progression = 'double' | 'linear' | 'rir' | 'fixed';
 export type Difficulty = 1 | 2 | 3 | 4;
 
-// Matériel détaillé : valeurs alignées sur le champ `equipment` de la
-// bibliothèque (supabase/seed.sql) pour permettre le filtrage des exos.
-export type EquipmentItem = 'barre' | 'halteres' | 'machine' | 'poulie' | 'poids_du_corps';
+// Matériel détaillé (atomes). Un exercice requiert un ENSEMBLE de ces atomes
+// (cf. exercises.equipment_required) ; le poids du corps = ensemble vide.
+export type EquipmentItem =
+  | 'barbell' | 'rack' | 'bench'
+  | 'dumbbells' | 'kettlebell' | 'bands'
+  | 'cable' | 'machine'
+  | 'pullup_bar' | 'dip_station';
 
 // Sport pratiqué en parallèle (sert à l'équilibrage du volume musculaire).
 export interface SportPractice {

@@ -52,17 +52,20 @@
 
     <section class="block">
       <div class="block-h">Matériel</div>
-      <button
-        v-for="opt in EQUIPMENT_ITEMS" :key="opt.value"
-        class="choice choice-row" :class="{ active: form.available_equipment.includes(opt.value) }"
-        @click="toggleArr(form.available_equipment, opt.value)"
-      >
-        <div class="row items-center justify-between">
-          <div class="choice-title">{{ opt.label }}</div>
-          <q-icon v-if="form.available_equipment.includes(opt.value)" name="check_circle" color="primary" size="20px" />
-        </div>
-        <div class="choice-desc">{{ opt.desc }}</div>
-      </button>
+      <div v-for="grp in EQUIPMENT_GROUPS" :key="grp.group">
+        <div class="grp-label">{{ grp.group }}</div>
+        <button
+          v-for="opt in grp.items" :key="opt.value"
+          class="choice choice-row" :class="{ active: form.available_equipment.includes(opt.value) }"
+          @click="toggleArr(form.available_equipment, opt.value)"
+        >
+          <div class="row items-center justify-between">
+            <div class="choice-title">{{ opt.label }}</div>
+            <q-icon v-if="form.available_equipment.includes(opt.value)" name="check_circle" color="primary" size="20px" />
+          </div>
+          <div v-if="opt.desc" class="choice-desc">{{ opt.desc }}</div>
+        </button>
+      </div>
     </section>
 
     <section class="block">
@@ -134,7 +137,7 @@ import type { SportPractice } from '@/lib/types';
 import { buildProgram, type ExerciseDef } from '@/lib/programBuilder';
 import { type ProfileForm, emptyProfileForm, profileToForm, formToProfile } from '@/lib/profileForm';
 import {
-  LEVELS, OBJECTIVES, EQUIPMENT_ITEMS,
+  LEVELS, OBJECTIVES, EQUIPMENT_GROUPS,
   PRIORITY_MUSCLES as MUSCLES, SPORTS, INTENSITIES,
 } from '@/data/profileOptions';
 import { useAuthStore } from '@/stores/auth';
@@ -259,6 +262,7 @@ onMounted(async () => {
 .block { margin-bottom: 26px; }
 .block-h { font-family: var(--font-display); font-size: 16px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
 .lbl { font-size: 12px; color: var(--dim); margin-bottom: 8px; }
+.grp-label { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--dim-2); margin: 14px 2px 8px; }
 
 .choice-grid { display: grid; gap: 10px; }
 .cols-2 { grid-template-columns: repeat(2, 1fr); }

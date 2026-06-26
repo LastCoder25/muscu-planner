@@ -23,13 +23,45 @@ export const OBJECTIVES: { value: Objective; label: string }[] = [
   { value: 'perte_de_gras', label: 'Perte de gras' },
 ];
 
-export const EQUIPMENT_ITEMS: { value: EquipmentItem; label: string; desc: string }[] = [
-  { value: 'barre', label: 'Barre + disques', desc: 'Squat, développé couché, soulevé de terre…' },
-  { value: 'halteres', label: 'Haltères', desc: 'Développés, curls, fentes…' },
-  { value: 'machine', label: 'Machines guidées', desc: 'Presse, leg curl, pec deck…' },
-  { value: 'poulie', label: 'Poulie / câble', desc: 'Tirages, extensions, écartés…' },
-  { value: 'poids_du_corps', label: 'Poids du corps', desc: 'Pompes, gainage, tractions… (toujours dispo)' },
+export interface EquipmentOption { value: EquipmentItem; label: string; desc?: string }
+export interface EquipmentGroup { group: string; items: EquipmentOption[] }
+
+// Matériel détaillé groupé. Le poids du corps est toujours dispo (implicite).
+export const EQUIPMENT_GROUPS: EquipmentGroup[] = [
+  {
+    group: 'Barres & racks',
+    items: [
+      { value: 'barbell', label: 'Barre + disques', desc: 'Squat, développé, soulevé de terre…' },
+      { value: 'rack', label: 'Rack / cage à squat' },
+      { value: 'bench', label: 'Banc', desc: 'Plat ou inclinable' },
+    ],
+  },
+  {
+    group: 'Charges libres',
+    items: [
+      { value: 'dumbbells', label: 'Haltères' },
+      { value: 'kettlebell', label: 'Kettlebell' },
+      { value: 'bands', label: 'Élastiques / bandes' },
+    ],
+  },
+  {
+    group: 'Machines & câbles',
+    items: [
+      { value: 'cable', label: 'Poulie / station à câbles' },
+      { value: 'machine', label: 'Machines guidées', desc: 'Presse, leg curl, pec deck…' },
+    ],
+  },
+  {
+    group: 'Au poids du corps',
+    items: [
+      { value: 'pullup_bar', label: 'Barre de traction' },
+      { value: 'dip_station', label: 'Barre à dips / station' },
+    ],
+  },
 ];
+
+// Liste plate (toutes options confondues).
+export const EQUIPMENT_ITEMS: EquipmentOption[] = EQUIPMENT_GROUPS.flatMap((g) => g.items);
 
 export const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 export const PRIORITY_MUSCLES = ['Pectoraux', 'Dos', 'Épaules', 'Bras', 'Jambes', 'Fessiers', 'Abdos'];

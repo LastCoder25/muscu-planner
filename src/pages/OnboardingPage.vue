@@ -104,23 +104,26 @@
         </div>
       </section>
 
-      <!-- 4. Matériel (checklist) -->
+      <!-- 4. Matériel (checklist détaillée groupée) -->
       <section v-else-if="step === 4">
         <h2 class="onb-h">Ton matériel</h2>
-        <p class="text-dim q-mb-md">Coche tout ce à quoi tu as accès. On filtre les exercices en conséquence.</p>
-        <button
-          v-for="opt in EQUIPMENT_ITEMS"
-          :key="opt.value"
-          class="choice choice-row"
-          :class="{ active: form.available_equipment.includes(opt.value) }"
-          @click="toggleArr(form.available_equipment, opt.value)"
-        >
-          <div class="row items-center justify-between">
-            <div class="choice-title">{{ opt.label }}</div>
-            <q-icon v-if="form.available_equipment.includes(opt.value)" name="check_circle" color="primary" size="22px" />
-          </div>
-          <div class="choice-desc">{{ opt.desc }}</div>
-        </button>
+        <p class="text-dim q-mb-md">Coche tout ce à quoi tu as accès. On ne propose que des exos réalisables. (Le poids du corps est toujours inclus.)</p>
+        <div v-for="grp in EQUIPMENT_GROUPS" :key="grp.group">
+          <div class="grp-label">{{ grp.group }}</div>
+          <button
+            v-for="opt in grp.items"
+            :key="opt.value"
+            class="choice choice-row"
+            :class="{ active: form.available_equipment.includes(opt.value) }"
+            @click="toggleArr(form.available_equipment, opt.value)"
+          >
+            <div class="row items-center justify-between">
+              <div class="choice-title">{{ opt.label }}</div>
+              <q-icon v-if="form.available_equipment.includes(opt.value)" name="check_circle" color="primary" size="22px" />
+            </div>
+            <div v-if="opt.desc" class="choice-desc">{{ opt.desc }}</div>
+          </button>
+        </div>
       </section>
 
       <!-- 5. Sports pratiqués -->
@@ -290,7 +293,7 @@ import { buildProgram, type ExerciseDef } from '@/lib/programBuilder';
 import { validateImportedSession } from '@/lib/coach';
 import { type ProfileForm, emptyProfileForm, formToProfile } from '@/lib/profileForm';
 import {
-  SEXES, LEVELS, OBJECTIVES, EQUIPMENT_ITEMS, DAYS,
+  SEXES, LEVELS, OBJECTIVES, EQUIPMENT_GROUPS, DAYS,
   PRIORITY_MUSCLES as MUSCLES, SPORTS, INTENSITIES,
 } from '@/data/profileOptions';
 import { useAuthStore } from '@/stores/auth';
@@ -492,6 +495,7 @@ onMounted(async () => {
 .choice-row { display: block; margin-bottom: 10px; }
 .choice-title { font-weight: 600; font-size: 17px; }
 .choice-desc { color: var(--dim); font-size: 13px; margin-top: 4px; }
+.grp-label { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--dim-2); margin: 14px 2px 8px; }
 
 .import-box {
   background: var(--surface);

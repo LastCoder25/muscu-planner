@@ -27,7 +27,7 @@ src/lib/
   supabase.ts      client unique (process.env.SUPABASE_URL / _ANON_KEY)
   levelConfig.ts   deriveLevelConfig(level)
   progression.ts   nextSessionDeterministic(plan, lastLog, cfg, history?)
-  programBuilder.ts buildProgram(profile, library) — génère N séances : volume/muscle (objectif+niveau), ajusté par les sports (équilibrage) et priorités, exos filtrés par matériel détaillé
+  programBuilder.ts buildProgram(profile, library) — génère N séances : volume/muscle (objectif+niveau), ajusté par les sports (équilibrage) et priorités, exos filtrés par matériel. Filtrage = l'exo est retenu si TOUS ses atomes `equipment_required` sont possédés (poids du corps = ensemble vide). Atomes : barbell, rack, bench, dumbbells, kettlebell, bands, cable, machine, pullup_bar, dip_station (cf. EquipmentItem + migration 0003). Biblio enrichie à 45 exos. Anciens profils migrés via `migrateEquipment` (profileForm).
   coach.ts         buildCoachRequest(...) + validateImportedSession(raw)
 src/data/
   templates.ts     programmes débutant (Full-Body A/B/C) + suggestTemplates()

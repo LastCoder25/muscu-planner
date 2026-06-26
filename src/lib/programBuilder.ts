@@ -15,6 +15,7 @@ export interface ExerciseDef {
   muscle_primary: string | null;
   muscle_secondary?: string[] | null;
   equipment: string | null;
+  equipment_required?: string[] | null; // atomes requis (tous nécessaires)
 }
 
 // Groupes musculaires primaires présents dans la bibliothèque.
@@ -153,7 +154,12 @@ function pickForMuscle(
   objective: Objective,
 ): PlannedExercise[] {
   const candidates = library
-    .filter((e) => e.muscle_primary === muscle && !avoidIds.has(e.id) && e.equipment !== null && available.has(e.equipment))
+    .filter(
+      (e) =>
+        e.muscle_primary === muscle &&
+        !avoidIds.has(e.id) &&
+        (e.equipment_required ?? []).every((req) => available.has(req)),
+    )
     .sort((a, b) => (b.muscle_secondary?.length ?? 0) - (a.muscle_secondary?.length ?? 0));
 
   if (candidates.length === 0 || targetSets <= 0) return [];
@@ -192,9 +198,9 @@ function pickForMuscle(
 export function buildProgram(profile: Profile, library: ExerciseDef[]): Session[] {
   if (library.length === 0) return [];
 
+  // Atomes de matériel possédés. Le poids du corps est toujours dispo :
+  // les exos sans matériel ont equipment_required = [] et passent toujours.
   const available = new Set<string>(profile.available_equipment ?? []);
-  // Le poids du corps est toujours disponible.
-  available.add('poids_du_corps');
 
   const avoidIds = new Set(profile.constraints?.avoid_exercises ?? []);
   const targets = computeMuscleTargets(profile);

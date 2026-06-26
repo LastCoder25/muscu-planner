@@ -59,7 +59,7 @@ export function profileToForm(p: Profile): ProfileForm {
     sessions_per_week: p.availability.sessions_per_week,
     session_duration_min: p.availability.session_duration_min ?? 60,
     preferred_days: [...(p.availability.preferred_days ?? [])],
-    available_equipment: [...(p.available_equipment ?? [])],
+    available_equipment: migrateEquipment(p.available_equipment ?? []),
     sports: (p.sports ?? []).map((s) => ({ ...s })),
     injuries: [...(p.constraints?.injuries ?? [])],
     avoid_exercises: [...(p.constraints?.avoid_exercises ?? [])],
@@ -71,10 +71,34 @@ export function profileToForm(p: Profile): ProfileForm {
 // Résumé grossier du matériel (rétro-compat avec le champ `equipment`).
 export function deriveCoarseEquipment(items: EquipmentItem[]): Equipment {
   const has = (x: EquipmentItem) => items.includes(x);
-  if (has('machine') && has('poulie') && has('barre')) return 'salle_complete';
-  if (has('barre') || has('machine') || has('poulie')) return 'home_gym';
-  if (has('halteres')) return 'halteres';
+  if (has('machine') && has('cable') && has('barbell')) return 'salle_complete';
+  if (has('barbell') || has('machine') || has('cable') || has('rack')) return 'home_gym';
+  if (has('dumbbells') || has('kettlebell') || has('bands')) return 'halteres';
   return 'poids_du_corps';
+}
+
+// Migration des anciens atomes (avant 0003) vers les nouveaux atomes détaillés.
+const LEGACY_EQUIPMENT: Record<string, EquipmentItem[]> = {
+  barre: ['barbell'],
+  halteres: ['dumbbells'],
+  machine: ['machine'],
+  poulie: ['cable'],
+  poids_du_corps: [],
+};
+const VALID_EQUIPMENT: EquipmentItem[] = [
+  'barbell', 'rack', 'bench', 'dumbbells', 'kettlebell', 'bands', 'cable', 'machine', 'pullup_bar', 'dip_station',
+];
+
+export function migrateEquipment(items: readonly string[]): EquipmentItem[] {
+  const out = new Set<EquipmentItem>();
+  for (const it of items) {
+    if ((VALID_EQUIPMENT as string[]).includes(it)) {
+      out.add(it as EquipmentItem);
+    } else if (LEGACY_EQUIPMENT[it]) {
+      for (const m of LEGACY_EQUIPMENT[it]) out.add(m);
+    }
+  }
+  return [...out];
 }
 
 // Construit l'objet Profile (contrat v1.0) depuis le formulaire.
