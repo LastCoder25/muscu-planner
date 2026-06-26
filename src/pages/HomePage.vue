@@ -23,6 +23,7 @@
         v-for="s in sessionsStore.list"
         :key="s.id"
         class="session-card"
+        @click="openDetail(s.id)"
       >
         <div class="row items-center justify-between">
           <div>
@@ -32,10 +33,14 @@
               <template v-if="s.payload.estimated_duration_min"> · ~{{ s.payload.estimated_duration_min }} min</template>
             </div>
           </div>
-          <q-btn
-            round color="primary" text-color="dark" icon="play_arrow"
-            @click="startSession(s.id)"
-          />
+          <div class="row items-center no-wrap" style="gap: 4px">
+            <q-icon name="chevron_right" color="grey-6" size="20px" />
+            <q-btn
+              round color="primary" text-color="dark" icon="play_arrow"
+              aria-label="Démarrer"
+              @click.stop="startSession(s.id)"
+            />
+          </div>
         </div>
       </div>
     </template>
@@ -65,6 +70,9 @@ onMounted(async () => {
   }
 });
 
+async function openDetail(id: string) {
+  await router.push(`/session/${id}/detail`);
+}
 async function startSession(id: string) {
   await router.push(`/session/${id}`);
 }
@@ -101,7 +109,11 @@ async function startSession(id: string) {
   border-radius: 14px;
   padding: 16px;
   margin-bottom: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s;
 }
+.session-card:hover { border-color: var(--line); }
+.session-card:active { border-color: var(--accent); }
 .session-name {
   font-weight: 600;
   font-size: 17px;
