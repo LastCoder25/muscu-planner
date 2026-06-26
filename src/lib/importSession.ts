@@ -1,7 +1,7 @@
 // importSession.ts — import tolérant d'une séance générée par une IA (ChatGPT…).
 // 1) tente le schéma strict (coach.validateImportedSession) ; 2) sinon, normalise
 // un JSON « lâche » (clés/format variables) vers une Session. Pur, sans dépendance Vue/Supabase.
-import type { Session, PlannedExercise, ExerciseTarget } from './types';
+import type { Session, PlannedExercise, ExerciseTarget, PrescribedSet } from './types';
 import { SCHEMA_VERSION } from './types';
 import { validateImportedSession } from './coach';
 
@@ -68,15 +68,25 @@ function parseReps(v: unknown): { min: number; max: number; time: boolean } {
   return { min: 8, max: 12, time: false };
 }
 
-// Recherche d'un exo dans la bibliothèque par nom (exact puis « contient »).
+// Recherche d'un exo par nom, avec score : exact > commence par > contient,
+// le plus proche en longueur l'emporte (« Squat » → « Squat barre », pas « Goblet squat »).
 function findLib(name: string, library: LibEntry[]): LibEntry | undefined {
   const n = normalize(name);
-  const exact = library.find((e) => normalize(e.name) === n);
-  if (exact) return exact;
-  return library.find((e) => {
+  if (n.length < 3) return undefined;
+  let best: LibEntry | undefined;
+  let bestScore = 0;
+  for (const e of library) {
     const ln = normalize(e.name);
-    return ln.length >= 4 && (ln.includes(n) || n.includes(ln));
-  });
+    let score = 0;
+    if (ln === n) score = 100;
+    else if (ln.startsWith(n) || n.startsWith(ln)) score = 70 - Math.abs(ln.length - n.length);
+    else if (ln.length >= 4 && (ln.includes(n) || n.includes(ln))) score = 30 - Math.abs(ln.length - n.length) * 0.1;
+    if (score > bestScore) {
+      bestScore = score;
+      best = e;
+    }
+  }
+  return bestScore > 0 ? best : undefined;
 }
 
 function buildSession(name: string, exercises: PlannedExercise[], objective?: unknown, level?: unknown): Session {
@@ -194,8 +204,8 @@ function buildFromText(cur: TextEx, library: LibEntry[]): PlannedExercise {
   const loads = cur.sets.map((s) => s.load);
   const topLoad = Math.max(0, ...loads);
   const maxRest = Math.max(0, ...cur.sets.map((s) => s.rest ?? 0));
-  const breakdown = cur.sets.map((s) => `${s.load > 0 ? s.load : 'bar'}×${s.reps}`).join(', ');
-  const notes = [breakdown, ...cur.notes].filter(Boolean).join(' · ');
+  // Prescription = chaque série telle qu'écrite (préserve la pyramide).
+  const prescription: PrescribedSet[] = cur.sets.map((s) => (s.load > 0 ? { reps: s.reps, load_kg: s.load } : { reps: s.reps }));
 
   const target: ExerciseTarget = topLoad > 0
     ? { sets: cur.sets.length, reps_min: Math.min(...repsArr), reps_max: Math.max(...repsArr), load_kg: topLoad }
@@ -210,7 +220,8 @@ function buildFromText(cur: TextEx, library: LibEntry[]): PlannedExercise {
     progression: 'double',
     rest_seconds: maxRest || 90,
     target,
-    notes,
+    prescription,
+    notes: cur.notes.join(' · '),
   };
 }
 

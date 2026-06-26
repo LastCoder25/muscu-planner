@@ -76,15 +76,14 @@ export const useLiveStore = defineStore('live', () => {
       exercises: session.exercises.map((ex) => {
         const bodyweight = ex.target.load === 'bodyweight';
         const base = bodyweight ? (ex.target.added_kg ?? 0) : (ex.target.load_kg ?? 0);
-        const nbSets = light ? Math.max(2, ex.target.sets - 1) : ex.target.sets;
-        const sets: LiveSet[] = Array.from({ length: nbSets }, () => ({
-          load_kg: base,
-          reps: ex.target.reps_min,
-          done: false,
-          difficulty: 0,
-          rir: null,
-          comment: '',
-        }));
+        const blank = (load: number, reps: number): LiveSet => ({
+          load_kg: load, reps, done: false, difficulty: 0, rir: null, comment: '',
+        });
+        // Séries détaillées (pyramide importée) si présentes, sinon dérivées de la cible.
+        let sets: LiveSet[] = ex.prescription?.length
+          ? ex.prescription.map((p) => blank(p.load_kg ?? base, p.reps))
+          : Array.from({ length: ex.target.sets }, () => blank(base, ex.target.reps_min));
+        if (light && sets.length > 2) sets = sets.slice(0, sets.length - 1);
         return {
           id: ex.id,
           name: ex.name,

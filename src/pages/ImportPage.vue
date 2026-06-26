@@ -26,7 +26,7 @@
           <div class="prev-sub">{{ preview.exercises.length }} exercices</div>
           <div v-for="(ex, i) in preview.exercises" :key="i" class="prev-ex">
             <span class="pe-name">{{ ex.name }}</span>
-            <span class="pe-tgt">{{ repsLabel(ex.target) }} · {{ loadLabel(ex.target) }}</span>
+            <span class="pe-tgt">{{ exSummary(ex) }}</span>
           </div>
         </div>
         <q-btn no-caps color="primary" text-color="dark" label="Ajouter à mes séances" size="lg" class="full-width q-mt-md" :loading="saving" @click="add" />
@@ -39,7 +39,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar, copyToClipboard } from 'quasar';
-import type { Session, ExerciseTarget } from '@/lib/types';
+import type { Session, ExerciseTarget, PlannedExercise } from '@/lib/types';
 import { parseImportedSession, type LibEntry } from '@/lib/importSession';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
@@ -75,6 +75,16 @@ function repsLabel(t: ExerciseTarget): string {
 function loadLabel(t: ExerciseTarget): string {
   if (t.load === 'bodyweight') return t.added_kg ? `+${t.added_kg} kg` : 'poids du corps';
   return t.load_kg ? `${t.load_kg} kg` : 'charge à définir';
+}
+// Résumé d'un exo : reflète la prescription détaillée si présente (pyramide importée).
+function exSummary(ex: PlannedExercise): string {
+  const p = ex.prescription;
+  if (p?.length) {
+    const loads = p.map((s) => s.load_kg ?? 0).filter((x) => x > 0);
+    const loadPart = loads.length ? `${Math.min(...loads)}–${Math.max(...loads)} kg` : 'PdC';
+    return `${p.length} séries · ${loadPart}`;
+  }
+  return `${repsLabel(ex.target)} · ${loadLabel(ex.target)}`;
 }
 
 async function copyPrompt() {

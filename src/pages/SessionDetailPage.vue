@@ -31,8 +31,13 @@
             </div>
           </div>
           <div class="ex-meta">
-            <span class="tag accent">{{ repsLabel(ex.target) }}</span>
-            <span class="tag">{{ loadLabel(ex.target) }}</span>
+            <template v-if="ex.prescription?.length">
+              <span v-for="(p, k) in ex.prescription" :key="k" class="tag">{{ setLabel(p) }}</span>
+            </template>
+            <template v-else>
+              <span class="tag accent">{{ repsLabel(ex.target) }}</span>
+              <span class="tag">{{ loadLabel(ex.target) }}</span>
+            </template>
             <span class="tag">repos {{ ex.rest_seconds }}s</span>
             <span v-if="ex.equipment" class="tag">{{ ex.equipment }}</span>
           </div>
@@ -50,7 +55,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
-import type { Session, ExerciseTarget, Objective } from '@/lib/types';
+import type { Session, ExerciseTarget, Objective, PrescribedSet } from '@/lib/types';
 import { useSessionsStore } from '@/stores/sessions';
 import { useAuthStore } from '@/stores/auth';
 
@@ -83,6 +88,9 @@ function loadLabel(t: ExerciseTarget): string {
   if (t.load === 'bodyweight') return t.added_kg ? `+${t.added_kg} kg` : 'poids du corps';
   if (t.load_kg) return `${t.load_kg} kg`;
   return 'charge à définir';
+}
+function setLabel(p: PrescribedSet): string {
+  return p.load_kg ? `${p.load_kg} kg × ${p.reps}` : `PdC × ${p.reps}`;
 }
 
 async function goHome() {

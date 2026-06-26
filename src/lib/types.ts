@@ -67,6 +67,12 @@ export interface ExerciseTarget {
   rir_target?: number;
 }
 
+// Série prescrite (charge/reps fixées par série) — ex. pyramide importée.
+export interface PrescribedSet {
+  reps: number;
+  load_kg?: number;
+}
+
 export interface PlannedExercise {
   id: string;              // slug stable
   name: string;
@@ -76,6 +82,7 @@ export interface PlannedExercise {
   progression: Progression;
   rest_seconds: number;
   target: ExerciseTarget;
+  prescription?: PrescribedSet[]; // séries détaillées (sinon dérivées de target)
   alternatives?: string[];
   notes?: string;
 }

@@ -1,6 +1,9 @@
 <template>
   <q-page class="backlog-page">
-    <h1 class="p-title font-display">Backlog</h1>
+    <div class="head">
+      <h1 class="p-title font-display">Backlog</h1>
+      <q-btn no-caps unelevated color="primary" text-color="dark" icon="add" label="Nouveau" @click="openNew" />
+    </div>
 
     <div class="filters">
       <button v-for="f in FILTERS" :key="f.value" class="filt" :class="{ on: filter === f.value }" @click="filter = f.value">
@@ -27,17 +30,66 @@
         </div>
       </div>
     </template>
+
+    <!-- Saisie d'un nouveau ticket -->
+    <q-dialog v-model="newOpen" position="bottom">
+      <div class="nt-sheet">
+        <div class="grab" />
+        <h3 class="font-display">Nouveau ticket</h3>
+        <div class="kinds">
+          <button v-for="k in KINDS" :key="k.value" class="kind" :class="{ on: newKind === k.value }" @click="newKind = k.value">{{ k.label }}</button>
+        </div>
+        <textarea v-model="newMessage" class="nt-field" aria-label="Message" placeholder="Décris le bug ou l'idée…" />
+        <q-btn no-caps color="primary" text-color="dark" label="Envoyer" class="full-width q-mt-md" :loading="sending" :disable="!newMessage.trim()" @click="sendNew" />
+      </div>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
-import { useFeedbackStore, type FeedbackRow, type FeedbackStatus } from '@/stores/feedback';
+import { useFeedbackStore, type FeedbackRow, type FeedbackStatus, type FeedbackKind } from '@/stores/feedback';
 
 const $q = useQuasar();
+const route = useRoute();
 const feedback = useFeedbackStore();
 const loading = ref(true);
+
+const KINDS: { value: FeedbackKind; label: string }[] = [
+  { value: 'bug', label: 'Bug' },
+  { value: 'idea', label: 'Idée' },
+  { value: 'other', label: 'Autre' },
+];
+const newOpen = ref(false);
+const newKind = ref<FeedbackKind>('bug');
+const newMessage = ref('');
+const sending = ref(false);
+
+function openNew() {
+  newKind.value = 'bug';
+  newMessage.value = '';
+  newOpen.value = true;
+}
+async function sendNew() {
+  sending.value = true;
+  try {
+    await feedback.submit({
+      kind: newKind.value,
+      message: newMessage.value.trim(),
+      page: route.fullPath,
+      app_version: __APP_VERSION__,
+    });
+    await feedback.fetchAll();
+    newOpen.value = false;
+    $q.notify({ type: 'positive', message: 'Ticket ajouté 🙏' });
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec de l’envoi.' });
+  } finally {
+    sending.value = false;
+  }
+}
 
 type Filter = FeedbackStatus | 'all';
 const FILTERS: { value: Filter; label: string }[] = [
@@ -89,7 +141,8 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 .backlog-page { background: var(--bg); min-height: 100vh; padding: 20px 16px 32px; }
-.p-title { font-size: 28px; font-weight: 700; color: var(--text); margin: 4px 0 16px; }
+.head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 16px; }
+.p-title { font-size: 28px; font-weight: 700; color: var(--text); margin: 0; }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .filt { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); color: var(--dim); font-size: 13px; cursor: pointer; &.on { border-color: var(--accent); color: var(--text); background: var(--surface-2); } }
 .cnt { font-family: var(--font-display); font-size: 11px; background: var(--accent); color: var(--accent-ink); border-radius: 6px; padding: 0 5px; }
@@ -108,4 +161,10 @@ onMounted(async () => {
 .tk-actions { display: flex; gap: 8px; margin-top: 12px; }
 .act { padding: 6px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .act.done { border-color: var(--d1); color: var(--d1); }
+
+.nt-sheet { width: 100%; background: var(--surface); border-radius: 26px 26px 0 0; border-top: 1px solid var(--line); padding: 10px 18px 26px; h3 { font-size: 20px; text-transform: uppercase; } }
+.grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 6px auto 16px; }
+.kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.kind { min-height: 44px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; color: var(--text); font-family: var(--font-ui); font-size: 14px; cursor: pointer; &.on { border-color: var(--accent); background: var(--surface-2); } }
+.nt-field { width: 100%; min-height: 90px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; color: var(--text); font-family: var(--font-ui); font-size: 14px; resize: none; outline: none; &:focus { border-color: var(--accent); } }
 </style>
