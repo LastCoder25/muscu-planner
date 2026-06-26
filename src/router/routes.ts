@@ -32,6 +32,11 @@ const routes: RouteRecordRaw[] = [
     children: [{ path: '', component: () => import('@/pages/FreeSessionPage.vue') }],
   },
   {
+    path: '/import',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/ImportPage.vue') }],
+  },
+  {
     path: '/exercise/:id',
     component: () => import('@/layouts/BlankLayout.vue'),
     children: [{ path: '', component: () => import('@/pages/ExercisePage.vue') }],

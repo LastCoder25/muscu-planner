@@ -52,9 +52,14 @@
         </div>
       </div>
 
-      <button class="free-btn" @click="startFree">
-        <q-icon name="bolt" size="20px" /> Séance libre
-      </button>
+      <div class="row q-col-gutter-sm q-mt-xs">
+        <button class="free-btn col" @click="startFree">
+          <q-icon name="bolt" size="20px" /> Séance libre
+        </button>
+        <button class="free-btn col" @click="startImport">
+          <q-icon name="smart_toy" size="20px" /> Importer (IA)
+        </button>
+      </div>
     </template>
   </q-page>
 </template>
@@ -105,6 +110,9 @@ async function openDetail(id: string) {
 }
 async function startFree() {
   await router.push('/free');
+}
+async function startImport() {
+  await router.push('/import');
 }
 async function startSession(id: string) {
   await router.push(`/session/${id}/ready`);
