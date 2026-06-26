@@ -16,6 +16,7 @@ export interface ExerciseDef {
   muscle_secondary?: string[] | null;
   equipment: string | null;
   equipment_required?: string[] | null; // atomes requis (tous nécessaires)
+  difficulty?: number | null;           // 1=débutant, 2=intermédiaire, 3=avancé
 }
 
 // Groupes musculaires primaires présents dans la bibliothèque.
@@ -152,15 +153,25 @@ function pickForMuscle(
   avoidIds: Set<string>,
   setsPerExercise: number,
   objective: Objective,
+  maxDifficulty: number,
+  favorites: Set<string>,
 ): PlannedExercise[] {
-  const candidates = library
-    .filter(
-      (e) =>
-        e.muscle_primary === muscle &&
-        !avoidIds.has(e.id) &&
-        (e.equipment_required ?? []).every((req) => available.has(req)),
-    )
-    .sort((a, b) => (b.muscle_secondary?.length ?? 0) - (a.muscle_secondary?.length ?? 0));
+  const base = library.filter(
+    (e) =>
+      e.muscle_primary === muscle &&
+      !avoidIds.has(e.id) &&
+      (e.equipment_required ?? []).every((req) => available.has(req)),
+  );
+  // Respecte le niveau (ex. pas de tractions strictes pour un débutant) ;
+  // si rien d'assez accessible, on relâche — mieux qu'aucun exo.
+  const byLevel = base.filter((e) => (e.difficulty ?? 1) <= maxDifficulty);
+  const pool = byLevel.length ? byLevel : base;
+
+  // Favoris d'abord, puis polyarticulaires (plus de muscles secondaires).
+  const rank = (e: ExerciseDef) => (favorites.has(e.id) ? 0 : 1);
+  const candidates = [...pool].sort(
+    (a, b) => rank(a) - rank(b) || (b.muscle_secondary?.length ?? 0) - (a.muscle_secondary?.length ?? 0),
+  );
 
   if (candidates.length === 0 || targetSets <= 0) return [];
 
@@ -203,13 +214,18 @@ export function buildProgram(profile: Profile, library: ExerciseDef[]): Session[
   const available = new Set<string>(profile.available_equipment ?? []);
 
   const avoidIds = new Set(profile.constraints?.avoid_exercises ?? []);
+  const favorites = new Set(profile.favorite_exercises ?? []);
   const targets = computeMuscleTargets(profile);
   const setsPerExercise = profile.experience.level === 'debutant' ? 3 : 4;
+  // Débutant : on plafonne la difficulté à 2 (assisté/accessible) ; sinon tout.
+  const maxDifficulty = profile.experience.level === 'debutant' ? 2 : 3;
 
   // 1) Sélection des exercices par muscle.
   const allExercises: PlannedExercise[] = [];
   for (const m of MUSCLES) {
-    allExercises.push(...pickForMuscle(m, targets[m], library, available, avoidIds, setsPerExercise, profile.objective));
+    allExercises.push(
+      ...pickForMuscle(m, targets[m], library, available, avoidIds, setsPerExercise, profile.objective, maxDifficulty, favorites),
+    );
   }
   if (allExercises.length === 0) return [];
 

@@ -17,6 +17,7 @@ export interface ProfileForm {
   preferred_days: string[];
   available_equipment: EquipmentItem[];
   sports: SportPractice[];
+  favorite_exercises: string[];
   injuries: string[];
   avoid_exercises: string[];
   priority_muscles: string[];
@@ -38,6 +39,7 @@ export function emptyProfileForm(): ProfileForm {
     preferred_days: [],
     available_equipment: [],
     sports: [],
+    favorite_exercises: [],
     injuries: [],
     avoid_exercises: [],
     priority_muscles: [],
@@ -61,6 +63,7 @@ export function profileToForm(p: Profile): ProfileForm {
     preferred_days: [...(p.availability.preferred_days ?? [])],
     available_equipment: migrateEquipment(p.available_equipment ?? []),
     sports: (p.sports ?? []).map((s) => ({ ...s })),
+    favorite_exercises: [...(p.favorite_exercises ?? [])],
     injuries: [...(p.constraints?.injuries ?? [])],
     avoid_exercises: [...(p.constraints?.avoid_exercises ?? [])],
     priority_muscles: [...(p.preferences?.priority_muscles ?? [])],
@@ -132,6 +135,7 @@ export function formToProfile(form: ProfileForm): Profile {
 
   if (form.available_equipment.length) profile.available_equipment = [...form.available_equipment];
   if (form.sports.length) profile.sports = form.sports.map((s) => ({ ...s }));
+  if (form.favorite_exercises.length) profile.favorite_exercises = [...form.favorite_exercises];
 
   const constraints: NonNullable<Profile['constraints']> = {};
   if (form.injuries.length) constraints.injuries = [...form.injuries];

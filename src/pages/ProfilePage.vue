@@ -115,6 +115,18 @@
       </div>
     </section>
 
+    <section class="block">
+      <div class="block-h">Exercices favoris</div>
+      <div class="lbl">Priorisés dans la génération quand ils collent à ton matériel et ton niveau.</div>
+      <q-select
+        v-model="form.favorite_exercises"
+        :options="exerciseOptions"
+        filled dark multiple use-chips use-input emit-value map-options
+        input-debounce="0" label="Rechercher un exercice…"
+        @filter="filterExercises"
+      />
+    </section>
+
     <div class="actions">
       <q-btn
         no-caps color="primary" text-color="dark" label="Enregistrer" size="lg"
@@ -130,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import type { SportPractice } from '@/lib/types';
@@ -156,6 +168,23 @@ const form = reactive<ProfileForm>(emptyProfileForm());
 const library = ref<ExerciseDef[]>([]);
 const saving = ref(false);
 const regenerating = ref(false);
+
+// Options du sélecteur d'exos favoris (recherchable).
+interface ExOption { label: string; value: string }
+const allExerciseOptions = computed<ExOption[]>(() =>
+  [...library.value]
+    .map((e) => ({ label: e.name, value: e.id }))
+    .sort((a, b) => a.label.localeCompare(b.label)),
+);
+const exerciseOptions = ref<ExOption[]>([]);
+function filterExercises(val: string, update: (cb: () => void) => void) {
+  update(() => {
+    const n = val.toLowerCase();
+    exerciseOptions.value = n
+      ? allExerciseOptions.value.filter((o) => o.label.toLowerCase().includes(n))
+      : allExerciseOptions.value;
+  });
+}
 
 function toggleArr<T>(arr: T[], v: T) {
   const i = arr.indexOf(v);
@@ -246,6 +275,7 @@ onMounted(async () => {
     const current = profileStore.profile ?? (await profileStore.fetch(userId));
     if (current) Object.assign(form, profileToForm(current));
     library.value = await libraryStore.fetchAll();
+    exerciseOptions.value = allExerciseOptions.value;
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Chargement impossible.' });
   }
