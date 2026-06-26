@@ -84,6 +84,8 @@ Décisions prises en Phase 0, contraintes par le poste. À respecter dans les ph
 - `src/components/SwapSheet.vue` : sheet bas onglets Suggestions (library par muscle) / Séances passées (logs).
 - Layouts : `MainLayout` (header brand + logout) enveloppe l'app ; `BlankLayout` (plein écran) pour login/onboarding/session. Routes `/login`, `/onboarding`, `/session/:id`, `/` (home).
 - Plugin Quasar `Notify` activé.
+- **Thèmes** : `src/data/themes.ts` (10 thèmes sombres) appliqués au runtime par `src/composables/useTheme.ts` (variables CSS sur `:root` + `setCssVar('primary')`), persistés `localStorage muscu:theme`, init au boot `src/boot/theme.ts` (avant rendu). Notes d'effort `--d1..d4` constantes (sémantique).
+- **Backlog** : table `feedback` (migration 0005, RLS own), store `src/stores/feedback.ts` (submit + fetchMine), UI dans `SettingsPage` (`/settings`). Traitement hors-app : `node scripts/backlog.mjs` (service_role via Management API ; `--all`/`--wip <id>`/`--done <id>`).
 - **Versionning** : `package.json` `version` (semver) = source de vérité. Injectée au build via `quasar.config > build.define` (`__APP_VERSION__`, + `__APP_COMMIT__` = `VERCEL_GIT_COMMIT_SHA`, `__APP_BUILD__` = date), typée dans `env.d.ts`, affichée par `src/components/VersionBadge.vue` (bas-gauche, monté dans `App.vue`). Bumper la version à chaque feature/phase.
 - **Lint** : eslint est le gate du projet. SonarLint (IDE) génère des faux positifs sur l'archi Pinia setup-store (S7721 « move async to outer scope ») — ignorer ; se fier à `npm run lint`/`typecheck`.
 

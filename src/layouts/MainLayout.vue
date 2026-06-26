@@ -3,8 +3,25 @@
     <q-header class="app-header">
       <q-toolbar>
         <q-toolbar-title class="brand font-display" @click="goHome">MUSCU</q-toolbar-title>
-        <q-btn flat round dense icon="tune" aria-label="Réglages" @click="goProfile" />
-        <q-btn flat round dense icon="logout" aria-label="Déconnexion" @click="logout" />
+        <q-btn flat round dense icon="more_vert" aria-label="Menu">
+          <q-menu anchor="bottom right" self="top right">
+            <q-list class="app-menu" style="min-width: 180px">
+              <q-item v-close-popup clickable @click="goProfile">
+                <q-item-section avatar><q-icon name="fitness_center" /></q-item-section>
+                <q-item-section>Profil / Réglages</q-item-section>
+              </q-item>
+              <q-item v-close-popup clickable @click="goSettings">
+                <q-item-section avatar><q-icon name="tune" /></q-item-section>
+                <q-item-section>Paramètres</q-item-section>
+              </q-item>
+              <q-separator dark />
+              <q-item v-close-popup clickable @click="logout">
+                <q-item-section avatar><q-icon name="logout" /></q-item-section>
+                <q-item-section>Déconnexion</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+        </q-btn>
       </q-toolbar>
     </q-header>
 
@@ -28,6 +45,9 @@ async function goHome() {
 }
 async function goProfile() {
   await router.push('/profile');
+}
+async function goSettings() {
+  await router.push('/settings');
 }
 async function logout() {
   await auth.signOut();
