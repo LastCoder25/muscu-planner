@@ -2,132 +2,171 @@
   <q-page class="profile-page">
     <h1 class="p-title font-display">Réglages</h1>
 
-    <section class="block">
-      <div class="block-h">Identité</div>
-      <q-input v-model="form.name" label="Prénom" filled />
-    </section>
-
-    <section class="block">
-      <div class="block-h">Niveau</div>
-      <button
-        v-for="opt in LEVELS" :key="opt.value"
-        class="choice choice-row" :class="{ active: form.level === opt.value }"
-        @click="form.level = opt.value"
-      >
-        <div class="choice-title">{{ opt.label }}</div>
-        <div class="choice-desc">{{ opt.desc }}</div>
+    <!-- Groupe : Profil & objectif -->
+    <div class="grp">
+      <button class="grp-head" :class="{ open: open.profil }" @click="toggle('profil')">
+        <q-icon name="badge" size="20px" />
+        <span class="grp-title">Profil &amp; objectif</span>
+        <q-icon class="chev" name="expand_more" size="22px" />
       </button>
-    </section>
+      <div v-show="open.profil" class="grp-body">
+        <section class="block">
+          <div class="block-h">Identité</div>
+          <q-input v-model="form.name" label="Prénom" filled />
+        </section>
 
-    <section class="block">
-      <div class="block-h">Objectif</div>
-      <button
-        v-for="opt in OBJECTIVES" :key="opt.value"
-        class="choice choice-row" :class="{ active: form.objective === opt.value }"
-        @click="form.objective = opt.value"
-      >
-        <div class="choice-title">{{ opt.label }}</div>
-        <div class="choice-desc">{{ opt.desc }}</div>
-        <div class="choice-hint">{{ opt.reps }}</div>
-      </button>
-    </section>
-
-    <section class="block">
-      <div class="block-h">Disponibilités</div>
-      <div class="lbl">Séances / semaine</div>
-      <div class="choice-grid cols-5 q-mb-md">
-        <button
-          v-for="n in [2, 3, 4, 5, 6]" :key="n"
-          class="choice metric" :class="{ active: form.sessions_per_week === n }"
-          @click="form.sessions_per_week = n"
-        >{{ n }}</button>
-      </div>
-      <div class="lbl">Durée (min)</div>
-      <div class="choice-grid cols-4">
-        <button
-          v-for="d in [30, 45, 60, 90]" :key="d"
-          class="choice metric" :class="{ active: form.session_duration_min === d }"
-          @click="form.session_duration_min = d"
-        >{{ d }}</button>
-      </div>
-    </section>
-
-    <section class="block">
-      <div class="block-h">Matériel</div>
-      <div v-for="grp in EQUIPMENT_GROUPS" :key="grp.group">
-        <div class="grp-label">{{ grp.group }}</div>
-        <button
-          v-for="opt in grp.items" :key="opt.value"
-          class="choice choice-row" :class="{ active: form.available_equipment.includes(opt.value) }"
-          @click="toggleArr(form.available_equipment, opt.value)"
-        >
-          <div class="row items-center justify-between">
+        <section class="block">
+          <div class="block-h">Niveau</div>
+          <button
+            v-for="opt in LEVELS" :key="opt.value"
+            class="choice choice-row" :class="{ active: form.level === opt.value }"
+            @click="form.level = opt.value"
+          >
             <div class="choice-title">{{ opt.label }}</div>
-            <q-icon v-if="form.available_equipment.includes(opt.value)" name="check_circle" color="primary" size="20px" />
-          </div>
-          <div v-if="opt.desc" class="choice-desc">{{ opt.desc }}</div>
-        </button>
-      </div>
-    </section>
+            <div class="choice-desc">{{ opt.desc }}</div>
+          </button>
+        </section>
 
-    <section class="block">
-      <div class="block-h">Sports pratiqués</div>
-      <div v-for="sp in SPORTS" :key="sp">
-        <button class="choice choice-row" :class="{ active: hasSport(sp) }" @click="toggleSport(sp)">
-          <div class="row items-center justify-between">
-            <div class="choice-title">{{ sp }}</div>
-            <q-icon v-if="hasSport(sp)" name="check_circle" color="primary" size="20px" />
-          </div>
-        </button>
-        <div v-if="hasSport(sp)" class="sport-cfg">
-          <div class="lbl">Séances / sem</div>
-          <div class="choice-grid cols-5 q-mb-sm">
+        <section class="block">
+          <div class="block-h">Objectif</div>
+          <button
+            v-for="opt in OBJECTIVES" :key="opt.value"
+            class="choice choice-row" :class="{ active: form.objective === opt.value }"
+            @click="form.objective = opt.value"
+          >
+            <div class="choice-title">{{ opt.label }}</div>
+            <div class="choice-desc">{{ opt.desc }}</div>
+            <div class="choice-hint">{{ opt.reps }}</div>
+          </button>
+        </section>
+      </div>
+    </div>
+
+    <!-- Groupe : Musculation -->
+    <div class="grp">
+      <button class="grp-head" :class="{ open: open.muscu }" @click="toggle('muscu')">
+        <q-icon name="fitness_center" size="20px" />
+        <span class="grp-title">Musculation</span>
+        <q-icon class="chev" name="expand_more" size="22px" />
+      </button>
+      <div v-show="open.muscu" class="grp-body">
+        <section class="block">
+          <div class="block-h">Disponibilités</div>
+          <div class="lbl">Séances / semaine</div>
+          <div class="choice-grid cols-5 q-mb-md">
             <button
-              v-for="n in [1, 2, 3, 4, 5]" :key="n"
-              class="choice small metric" :class="{ active: sportFreq(sp) === n }"
-              @click="setSportFreq(sp, n)"
+              v-for="n in [2, 3, 4, 5, 6]" :key="n"
+              class="choice metric" :class="{ active: form.sessions_per_week === n }"
+              @click="form.sessions_per_week = n"
             >{{ n }}</button>
           </div>
-          <div class="lbl">Intensité</div>
-          <div class="choice-grid cols-3">
+          <div class="lbl">Durée (min)</div>
+          <div class="choice-grid cols-4">
             <button
-              v-for="it in INTENSITIES" :key="it.value"
-              class="choice small" :class="{ active: sportIntensity(sp) === it.value }"
-              @click="setSportIntensity(sp, it.value)"
-            >{{ it.label }}</button>
+              v-for="d in [30, 45, 60, 90]" :key="d"
+              class="choice metric" :class="{ active: form.session_duration_min === d }"
+              @click="form.session_duration_min = d"
+            >{{ d }}</button>
           </div>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <section class="block">
-      <div class="block-h">Préférences</div>
-      <div class="lbl">Muscles à prioriser</div>
-      <div class="choice-grid cols-3 q-mb-md">
-        <button
-          v-for="m in MUSCLES" :key="m"
-          class="choice small" :class="{ active: form.priority_muscles.includes(m) }"
-          @click="toggleArr(form.priority_muscles, m)"
-        >{{ m }}</button>
-      </div>
-      <div class="lbl">Unités</div>
-      <div class="choice-grid cols-2">
-        <button class="choice" :class="{ active: form.units === 'kg' }" @click="form.units = 'kg'">kg</button>
-        <button class="choice" :class="{ active: form.units === 'lb' }" @click="form.units = 'lb'">lb</button>
-      </div>
-    </section>
+        <section class="block">
+          <div class="block-h">Préférences</div>
+          <div class="lbl">Muscles à prioriser</div>
+          <div class="choice-grid cols-3 q-mb-md">
+            <button
+              v-for="m in MUSCLES" :key="m"
+              class="choice small" :class="{ active: form.priority_muscles.includes(m) }"
+              @click="toggleArr(form.priority_muscles, m)"
+            >{{ m }}</button>
+          </div>
+          <div class="lbl">Unités</div>
+          <div class="choice-grid cols-2">
+            <button class="choice" :class="{ active: form.units === 'kg' }" @click="form.units = 'kg'">kg</button>
+            <button class="choice" :class="{ active: form.units === 'lb' }" @click="form.units = 'lb'">lb</button>
+          </div>
+        </section>
 
-    <section class="block">
-      <div class="block-h">Exercices favoris</div>
-      <div class="lbl">Priorisés dans la génération quand ils collent à ton matériel et ton niveau.</div>
-      <q-select
-        v-model="form.favorite_exercises"
-        :options="exerciseOptions"
-        filled multiple use-chips use-input emit-value map-options
-        input-debounce="0" label="Rechercher un exercice…"
-        @filter="filterExercises"
-      />
-    </section>
+        <section class="block">
+          <div class="block-h">Exercices favoris</div>
+          <div class="lbl">Priorisés dans la génération quand ils collent à ton matériel et ton niveau.</div>
+          <q-select
+            v-model="form.favorite_exercises"
+            :options="exerciseOptions"
+            filled multiple use-chips use-input emit-value map-options
+            input-debounce="0" label="Rechercher un exercice…"
+            @filter="filterExercises"
+          />
+        </section>
+      </div>
+    </div>
+
+    <!-- Groupe : Matériel -->
+    <div class="grp">
+      <button class="grp-head" :class="{ open: open.materiel }" @click="toggle('materiel')">
+        <q-icon name="inventory_2" size="20px" />
+        <span class="grp-title">Matériel</span>
+        <q-icon class="chev" name="expand_more" size="22px" />
+      </button>
+      <div v-show="open.materiel" class="grp-body">
+        <section class="block">
+          <div v-for="grp in EQUIPMENT_GROUPS" :key="grp.group">
+            <div class="grp-label">{{ grp.group }}</div>
+            <button
+              v-for="opt in grp.items" :key="opt.value"
+              class="choice choice-row" :class="{ active: form.available_equipment.includes(opt.value) }"
+              @click="toggleArr(form.available_equipment, opt.value)"
+            >
+              <div class="row items-center justify-between">
+                <div class="choice-title">{{ opt.label }}</div>
+                <q-icon v-if="form.available_equipment.includes(opt.value)" name="check_circle" color="primary" size="20px" />
+              </div>
+              <div v-if="opt.desc" class="choice-desc">{{ opt.desc }}</div>
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Groupe : Autres sports -->
+    <div class="grp">
+      <button class="grp-head" :class="{ open: open.sports }" @click="toggle('sports')">
+        <q-icon name="directions_run" size="20px" />
+        <span class="grp-title">Autres sports</span>
+        <q-icon class="chev" name="expand_more" size="22px" />
+      </button>
+      <div v-show="open.sports" class="grp-body">
+        <section class="block">
+          <div class="lbl">On équilibre ta muscu selon ce que tu pratiques à côté.</div>
+          <div v-for="sp in SPORTS" :key="sp">
+            <button class="choice choice-row" :class="{ active: hasSport(sp) }" @click="toggleSport(sp)">
+              <div class="row items-center justify-between">
+                <div class="choice-title">{{ sp }}</div>
+                <q-icon v-if="hasSport(sp)" name="check_circle" color="primary" size="20px" />
+              </div>
+            </button>
+            <div v-if="hasSport(sp)" class="sport-cfg">
+              <div class="lbl">Séances / sem</div>
+              <div class="choice-grid cols-5 q-mb-sm">
+                <button
+                  v-for="n in [1, 2, 3, 4, 5]" :key="n"
+                  class="choice small metric" :class="{ active: sportFreq(sp) === n }"
+                  @click="setSportFreq(sp, n)"
+                >{{ n }}</button>
+              </div>
+              <div class="lbl">Intensité</div>
+              <div class="choice-grid cols-3">
+                <button
+                  v-for="it in INTENSITIES" :key="it.value"
+                  class="choice small" :class="{ active: sportIntensity(sp) === it.value }"
+                  @click="setSportIntensity(sp, it.value)"
+                >{{ it.label }}</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
 
     <div class="actions">
       <q-btn
@@ -170,6 +209,12 @@ const form = reactive<ProfileForm>(emptyProfileForm());
 const library = ref<ExerciseDef[]>([]);
 const saving = ref(false);
 const regenerating = ref(false);
+
+// Panneaux repliables (Profil ouvert par défaut).
+const open = reactive<Record<string, boolean>>({ profil: true, muscu: false, materiel: false, sports: false });
+function toggle(k: string) {
+  open[k] = !open[k];
+}
 
 // Options du sélecteur d'exos favoris (recherchable).
 interface ExOption { label: string; value: string }
@@ -290,6 +335,19 @@ onMounted(async () => {
   padding: 20px 16px 40px;
 }
 .p-title { font-size: 28px; font-weight: 700; color: var(--text); margin: 4px 0 20px; }
+
+.grp { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); margin-bottom: 12px; overflow: hidden; }
+.grp-head {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 16px; cursor: pointer;
+  background: none; border: none; color: var(--text); font-family: var(--font-display);
+  font-size: 17px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+}
+.grp-title { flex: 1; text-align: left; }
+.chev { color: var(--dim); transition: transform 0.18s; }
+.grp-head.open .chev { transform: rotate(180deg); }
+.grp-body { padding: 6px 14px; }
+.grp-body .block:last-child { margin-bottom: 12px; }
+
 .block { margin-bottom: 26px; }
 .block-h { font-family: var(--font-display); font-size: 16px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
 .lbl { font-size: 12px; color: var(--dim); margin-bottom: 8px; }
