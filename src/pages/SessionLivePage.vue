@@ -320,7 +320,7 @@ async function finish() {
     await logs.insert(userId, log);
     live.clear();
     $q.notify({ type: 'positive', message: 'Séance enregistrée 💪' });
-    await router.push('/');
+    await router.push(`/bilan/${log.id}`);
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec de l’enregistrement.' });
   } finally {

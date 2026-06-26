@@ -38,6 +38,17 @@ export const useLogsStore = defineStore('logs', () => {
     return recent.value;
   }
 
+  // Un bilan par son id (écran Bilan).
+  async function fetchById(id: string): Promise<SessionLog | null> {
+    const { data, error } = await supabase
+      .from('session_logs')
+      .select('payload')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    return (data?.payload as SessionLog) ?? null;
+  }
+
   // Dernier bilan d'une séance donnée → entrée de nextSessionDeterministic.
   async function lastForSession(sessionId: string): Promise<SessionLog | null> {
     const { data, error } = await supabase
@@ -63,7 +74,7 @@ export const useLogsStore = defineStore('logs', () => {
     return ((data ?? []) as { payload: SessionLog }[]).map((r) => r.payload);
   }
 
-  return { recent, insert, fetchRecent, lastForSession, fetchHistory };
+  return { recent, insert, fetchRecent, fetchById, lastForSession, fetchHistory };
 });
 
 if (import.meta.hot) {

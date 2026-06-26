@@ -48,6 +48,20 @@ export const useSessionsStore = defineStore('sessions', () => {
     return id;
   }
 
+  // Met à jour une séance existante en place (report des poids / progression).
+  async function updatePlan(session: Session) {
+    const row = {
+      name: session.name,
+      split: session.split ?? null,
+      objective: session.objective ?? null,
+      level: session.level ?? null,
+      source: session.source ?? 'engine',
+      payload: session,
+    };
+    const { error } = await supabase.from('sessions').update(row).eq('id', session.id);
+    if (error) throw error;
+  }
+
   async function deleteAll(userId: string) {
     const { error } = await supabase.from('sessions').delete().eq('user_id', userId);
     if (error) throw error;
@@ -61,7 +75,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     await fetchMine();
   }
 
-  return { list, fetchMine, insert, deleteAll, replaceAll };
+  return { list, fetchMine, insert, updatePlan, deleteAll, replaceAll };
 });
 
 if (import.meta.hot) {

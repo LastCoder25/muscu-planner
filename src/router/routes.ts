@@ -20,6 +20,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'detail', component: () => import('@/pages/SessionDetailPage.vue') },
     ],
   },
+  {
+    path: '/bilan/:id',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/BilanPage.vue') }],
+  },
 
   // App authentifiée
   {
