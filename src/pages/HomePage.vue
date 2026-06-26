@@ -43,6 +43,10 @@
           </div>
         </div>
       </div>
+
+      <button class="free-btn" @click="startFree">
+        <q-icon name="bolt" size="20px" /> Séance libre
+      </button>
     </template>
   </q-page>
 </template>
@@ -72,6 +76,9 @@ onMounted(async () => {
 
 async function openDetail(id: string) {
   await router.push(`/session/${id}/detail`);
+}
+async function startFree() {
+  await router.push('/free');
 }
 async function startSession(id: string) {
   await router.push(`/session/${id}`);
@@ -124,4 +131,23 @@ async function startSession(id: string) {
   font-size: 13px;
   margin-top: 4px;
 }
+.free-btn {
+  width: 100%;
+  margin-top: 12px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1.5px dashed var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.free-btn:active { color: var(--text); border-color: var(--accent); }
 </style>

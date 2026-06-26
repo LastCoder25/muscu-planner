@@ -25,6 +25,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/layouts/BlankLayout.vue'),
     children: [{ path: '', component: () => import('@/pages/BilanPage.vue') }],
   },
+  {
+    path: '/free',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/FreeSessionPage.vue') }],
+  },
 
   // App authentifiée
   {

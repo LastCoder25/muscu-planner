@@ -37,6 +37,7 @@ export interface LiveRun {
   started_at: string;
   exIndex: number;
   exercises: LiveExercise[];
+  free?: boolean; // séance libre (sans plan source) → session_id null au log
 }
 
 const keyFor = (sid: string) => `muscu:live:${sid}`;
@@ -102,6 +103,51 @@ export const useLiveStore = defineStore('live', () => {
     run.value = null;
   }
 
+  // ── Séance libre (sans plan source) ───────────────────
+  function startFree(resume = true) {
+    if (resume) {
+      const saved = localStorage.getItem(keyFor('free'));
+      if (saved) {
+        run.value = JSON.parse(saved) as LiveRun;
+        return;
+      }
+    }
+    run.value = {
+      session_id: 'free',
+      free: true,
+      name: 'Séance libre',
+      started_at: new Date().toISOString(),
+      exIndex: 0,
+      exercises: [],
+    };
+    persist();
+  }
+
+  function addExercise(def: { id: string; name: string; muscle_primary?: string; equipment?: string }) {
+    if (!run.value) return;
+    const bodyweight = def.equipment === 'poids_du_corps';
+    run.value.exercises.push({
+      id: def.id,
+      name: def.name,
+      muscle_primary: def.muscle_primary,
+      equipment: def.equipment,
+      swapped_from: null,
+      alternatives: [],
+      rest_seconds: 90,
+      planned: { sets: 0, reps_min: 0, reps_max: 0 },
+      bodyweight,
+      sets: [{ load_kg: 0, reps: 8, done: true, difficulty: 0, rir: null, comment: '' }],
+      exercise_comment: '',
+    });
+    persist();
+  }
+
+  function removeExercise(i: number) {
+    if (!run.value) return;
+    run.value.exercises.splice(i, 1);
+    persist();
+  }
+
   function goToExercise(i: number) {
     if (!run.value) return;
     run.value.exIndex = Math.min(Math.max(0, i), run.value.exercises.length - 1);
@@ -154,7 +200,7 @@ export const useLiveStore = defineStore('live', () => {
       schema_version: SCHEMA_VERSION,
       type: 'session_log',
       id: crypto.randomUUID(),
-      session_id: r.session_id,
+      session_id: r.free ? undefined : r.session_id,
       name: r.name,
       started_at: r.started_at,
       ended_at: ended.toISOString(),
@@ -187,6 +233,7 @@ export const useLiveStore = defineStore('live', () => {
 
   return {
     run, current, persist, hasSaved, start, clear,
+    startFree, addExercise, removeExercise,
     goToExercise, addSet, removeSet, swapCurrent, buildLog,
   };
 });
