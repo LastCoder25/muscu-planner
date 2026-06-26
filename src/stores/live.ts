@@ -1,0 +1,193 @@
+// Store live — la séance en cours d'exécution.
+// État persisté en localStorage (reprise après fermeture) ; sync Supabase
+// uniquement à la fin via le store logs (insert session_log).
+import { defineStore, acceptHMRUpdate } from 'pinia';
+import { ref, computed } from 'vue';
+import type {
+  Session, SessionLog, ExerciseTarget, PerformedSet, LoggedExercise, Difficulty,
+} from '@/lib/types';
+import { SCHEMA_VERSION } from '@/lib/types';
+
+export interface LiveSet {
+  load_kg: number;
+  reps: number;
+  done: boolean;
+  difficulty: number; // 0 = pas encore noté
+  rir: number | null;
+  comment: string;
+}
+
+export interface LiveExercise {
+  id: string;
+  name: string;
+  muscle_primary: string | undefined;
+  equipment: string | undefined;
+  swapped_from: string | null;
+  rest_seconds: number;
+  planned: ExerciseTarget;
+  bodyweight: boolean;
+  sets: LiveSet[];
+  exercise_comment: string;
+}
+
+export interface LiveRun {
+  session_id: string;
+  name: string;
+  started_at: string;
+  exIndex: number;
+  exercises: LiveExercise[];
+}
+
+const keyFor = (sid: string) => `muscu:live:${sid}`;
+
+export const useLiveStore = defineStore('live', () => {
+  const run = ref<LiveRun | null>(null);
+
+  const current = computed(() => run.value?.exercises[run.value.exIndex] ?? null);
+
+  function persist() {
+    if (run.value) localStorage.setItem(keyFor(run.value.session_id), JSON.stringify(run.value));
+  }
+
+  function hasSaved(sessionId: string) {
+    return localStorage.getItem(keyFor(sessionId)) !== null;
+  }
+
+  // Démarre (ou reprend) l'exécution d'une session.
+  function start(session: Session, resume = true) {
+    if (resume) {
+      const saved = localStorage.getItem(keyFor(session.id));
+      if (saved) {
+        run.value = JSON.parse(saved) as LiveRun;
+        return;
+      }
+    }
+    run.value = {
+      session_id: session.id,
+      name: session.name,
+      started_at: new Date().toISOString(),
+      exIndex: 0,
+      exercises: session.exercises.map((ex) => {
+        const bodyweight = ex.target.load === 'bodyweight';
+        const base = bodyweight ? (ex.target.added_kg ?? 0) : (ex.target.load_kg ?? 0);
+        const sets: LiveSet[] = Array.from({ length: ex.target.sets }, () => ({
+          load_kg: base,
+          reps: ex.target.reps_min,
+          done: false,
+          difficulty: 0,
+          rir: null,
+          comment: '',
+        }));
+        return {
+          id: ex.id,
+          name: ex.name,
+          muscle_primary: ex.muscle_primary,
+          equipment: ex.equipment,
+          swapped_from: null,
+          rest_seconds: ex.rest_seconds,
+          planned: ex.target,
+          bodyweight,
+          sets,
+          exercise_comment: '',
+        };
+      }),
+    };
+    persist();
+  }
+
+  function clear() {
+    if (run.value) localStorage.removeItem(keyFor(run.value.session_id));
+    run.value = null;
+  }
+
+  function goToExercise(i: number) {
+    if (!run.value) return;
+    run.value.exIndex = Math.min(Math.max(0, i), run.value.exercises.length - 1);
+    persist();
+  }
+
+  function addSet() {
+    const ex = current.value;
+    if (!ex) return;
+    const last = ex.sets[ex.sets.length - 1];
+    ex.sets.push({
+      load_kg: last?.load_kg ?? 0,
+      reps: last?.reps ?? 8,
+      done: false,
+      difficulty: 0,
+      rir: null,
+      comment: '',
+    });
+    persist();
+  }
+
+  function removeSet(i: number) {
+    const ex = current.value;
+    if (!ex || ex.sets.length <= 1) return;
+    ex.sets.splice(i, 1);
+    persist();
+  }
+
+  // Remplace l'exo courant en conservant la charge des séries (trace swapped_from).
+  function swapCurrent(target: { id: string; name: string; muscle_primary?: string; equipment?: string }) {
+    const ex = current.value;
+    if (!ex) return;
+    ex.swapped_from = ex.id;
+    ex.id = target.id;
+    ex.name = target.name;
+    ex.muscle_primary = target.muscle_primary;
+    ex.equipment = target.equipment;
+    persist();
+  }
+
+  // Construit le SessionLog final (réimportable par progression.ts).
+  function buildLog(global: { difficulty: number; comment: string }): SessionLog {
+    const r = run.value;
+    if (!r) throw new Error('Aucune séance en cours.');
+    const ended = new Date();
+    const duration = Math.max(1, Math.round((ended.getTime() - new Date(r.started_at).getTime()) / 60000));
+
+    const log: SessionLog = {
+      schema_version: SCHEMA_VERSION,
+      type: 'session_log',
+      id: crypto.randomUUID(),
+      session_id: r.session_id,
+      name: r.name,
+      started_at: r.started_at,
+      ended_at: ended.toISOString(),
+      duration_min: duration,
+      exercises: r.exercises.map<LoggedExercise>((ex) => ({
+        id: ex.id,
+        name: ex.name,
+        swapped_from: ex.swapped_from,
+        planned: ex.planned,
+        performed: ex.sets
+          .filter((s) => s.done)
+          .map<PerformedSet>((s, i) => {
+            const ps: PerformedSet = {
+              set: i + 1,
+              load_kg: s.load_kg,
+              reps: s.reps,
+              difficulty: (s.difficulty || 2) as Difficulty,
+            };
+            if (s.rir != null) ps.rir = s.rir;
+            if (s.comment) ps.comment = s.comment;
+            return ps;
+          }),
+        exercise_comment: ex.exercise_comment || '',
+      })),
+    };
+    if (global.difficulty) log.global_difficulty = global.difficulty as Difficulty;
+    if (global.comment) log.global_comment = global.comment;
+    return log;
+  }
+
+  return {
+    run, current, persist, hasSaved, start, clear,
+    goToExercise, addSet, removeSet, swapCurrent, buildLog,
+  };
+});
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useLiveStore, import.meta.hot));
+}

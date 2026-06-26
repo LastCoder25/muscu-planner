@@ -44,11 +44,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 
 const $q = useQuasar();
+const router = useRouter();
 const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const loading = ref(true);
@@ -63,9 +65,8 @@ onMounted(async () => {
   }
 });
 
-function startSession(id: string) {
-  // Branché en Phase 2 (séance live).
-  $q.notify({ message: 'La séance live arrive en Phase 2.', caption: id });
+async function startSession(id: string) {
+  await router.push(`/session/${id}`);
 }
 </script>
 

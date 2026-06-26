@@ -74,11 +74,14 @@ Décisions prises en Phase 0, contraintes par le poste. À respecter dans les ph
 - **tsconfig** : `exactOptionalPropertyTypes` désactivé dans `tsconfig.json` racine pour intégrer `src/lib` sans le réécrire. `strict: true` conservé.
 - **Supabase** : projet « Muscu », ref `wzbxbntqlheelgqswzew` (eu-west-1). Géré par l'agent via la **Management API REST** (`api.supabase.com/v1/projects/<ref>/database/query`) appelée en `node` + PAT dans `.supabase-token` (gitignoré). Schéma `0001_init.sql` + `seed.sql` (29 exercices) déjà appliqués. **Auth email** : `mailer_autoconfirm = true` (signup → session immédiate, pas de lien email à confirmer).
 
-## Couche app (depuis Phase 1)
-- `src/stores/` : `auth` (session/user Supabase), `profile` (ligne profiles + level_config), `sessions` (plans). Tout accès Supabase passe par les stores.
+## Couche app
+- `src/stores/` : `auth` (session/user Supabase), `profile` (ligne profiles + level_config), `sessions` (plans), `live` (séance en cours, persistée localStorage `muscu:live:<id>`, construit le SessionLog), `logs` (session_logs : insert + fetchRecent), `library` (exercises : fetchByMuscle/fetchByIds). Tout accès Supabase passe par les stores.
 - `src/boot/auth.ts` : init session avant rendu + garde de navigation (non connecté→/login, connecté sans profil→/onboarding, sinon app).
-- `src/pages/` : `LoginPage` (email/mdp), `OnboardingPage` (7 étapes + bifurcation programme selon `program_mode`), `HomePage` (liste séances). `src/layouts/MainLayout` (header brand + logout) enveloppe l'app authentifiée ; login/onboarding sont plein écran.
-- Plugin Quasar `Notify` activé pour les retours d'erreur.
+- `src/pages/` : `LoginPage` (email/mdp), `OnboardingPage` (7 étapes + bifurcation selon `program_mode`), `HomePage` (liste séances, ▶ → /session/:id), `SessionLivePage` (exécution : timer radial, steppers, note 1–4, RIR si `effort_signal=rir`, dictée Web Speech, switch d'exo, reprise, → insert session_log).
+- `src/components/SwapSheet.vue` : sheet bas onglets Suggestions (library par muscle) / Séances passées (logs).
+- Layouts : `MainLayout` (header brand + logout) enveloppe l'app ; `BlankLayout` (plein écran) pour login/onboarding/session. Routes `/login`, `/onboarding`, `/session/:id`, `/` (home).
+- Plugin Quasar `Notify` activé.
+- **Lint** : eslint est le gate du projet. SonarLint (IDE) génère des faux positifs sur l'archi Pinia setup-store (S7721 « move async to outer scope ») — ignorer ; se fier à `npm run lint`/`typecheck`.
 
 ## Garde-fous
 - Toujours s'appuyer sur les types de `src/lib`. Si un champ manque, l'ajouter au contrat (types.ts + SQL) plutôt que bricoler dans un composant.
