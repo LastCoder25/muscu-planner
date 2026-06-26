@@ -2,6 +2,7 @@
   <q-layout view="lHh lpr lFf">
     <q-header class="app-header">
       <q-toolbar>
+        <q-btn v-if="showBack" flat round dense icon="arrow_back_ios_new" aria-label="Retour" class="q-mr-xs" @click="goBack" />
         <q-toolbar-title class="brand font-display" @click="goHome">MUSCU</q-toolbar-title>
         <q-btn flat round dense icon="more_vert" aria-label="Menu">
           <q-menu anchor="bottom right" self="top right">
@@ -40,13 +41,21 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
+import { computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 
+const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const profileStore = useProfileStore();
+
+// Bouton retour visible partout sauf sur l'accueil.
+const showBack = computed(() => route.path !== '/');
+function goBack() {
+  router.back();
+}
 
 async function goHome() {
   await router.push('/');
