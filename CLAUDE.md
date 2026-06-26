@@ -33,6 +33,7 @@ src/lib/
   estimates.ts     estimate1RM(load,reps) (Epley) + bestE1RM(performed) — prépare le Bilan (Étape 4.1)
 src/data/
   templates.ts     programmes débutant (Full-Body A/B/C) + suggestTemplates()
+  exerciseImages.ts  illustrations d'exercices (free-exercise-db, domaine public) mappées sur nos 47 exos, bundlées dans `public/exercises/<id>.jpg` ; `exerciseImage(id)`. Affichées sur les tuiles de séance libre (fallback icône MDI matériel + couleur muscle si absente).
 supabase/
   migrations/0001_init.sql   4 tables + RLS (à appliquer dans Supabase)
   seed.sql                   bibliothèque d'exercices globale

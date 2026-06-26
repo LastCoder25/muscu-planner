@@ -83,7 +83,8 @@
         <!-- Vue tuiles -->
         <div v-else-if="pickerView === 'tiles'" class="tiles">
           <button v-for="e in filteredLib" :key="e.id" class="tile" :style="{ borderTopColor: exColor(e) }" @click="pick(e)">
-            <span class="tile-badge" :style="{ background: exColor(e) + '22', color: exColor(e) }"><q-icon :name="exIcon(e)" size="26px" /></span>
+            <img v-if="exerciseImage(e.id)" :src="exerciseImage(e.id)" :alt="e.name" class="tile-img" loading="lazy" />
+            <span v-else class="tile-badge" :style="{ background: exColor(e) + '22', color: exColor(e) }"><q-icon :name="exIcon(e)" size="26px" /></span>
             <div class="tile-name">{{ e.name }}</div>
             <div v-if="e.muscle_primary" class="tile-mus" :style="{ color: exColor(e) }">{{ e.muscle_primary }}</div>
             <q-icon name="info_outline" size="18px" class="tile-info" role="button" aria-label="Fiche" @click.stop="openExercise(e.id)" />
@@ -130,6 +131,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useLiveStore, type LiveSet, type LiveExercise } from '@/stores/live';
 import { useLogsStore } from '@/stores/logs';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
+import { exerciseImage } from '@/data/exerciseImages';
 
 const router = useRouter();
 const $q = useQuasar();
@@ -336,6 +338,7 @@ onBeforeUnmount(() => clearInterval(clockInt));
 .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 12px 8px 10px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); border-top: 3px solid var(--line); cursor: pointer; }
 .tile-badge { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; }
+.tile-img { width: 100%; height: 76px; object-fit: contain; background: #fff; border-radius: 8px; }
 .tile-name { font-size: 12px; font-weight: 600; color: var(--text); text-align: center; line-height: 1.15; }
 .tile-mus { font-size: 10px; text-align: center; text-transform: capitalize; }
 .tile-info { position: absolute; top: 5px; right: 5px; color: var(--dim-2); }
