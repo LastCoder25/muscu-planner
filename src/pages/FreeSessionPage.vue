@@ -7,7 +7,6 @@
         <div class="top-sub">{{ clock }}<template v-if="run"> · {{ run.exercises.length }} exos · vol {{ totalVolume }} kg</template></div>
       </div>
       <q-btn flat round dense icon="stop" aria-label="Terminer" :disable="!canFinish" @click="openFinish" />
-      <q-btn flat round dense icon="delete_outline" color="negative" aria-label="Annuler la séance" @click="cancelFree" />
     </header>
 
     <!-- État vide -->
@@ -86,34 +85,35 @@
           </div>
 
           <!-- Ressenti de la série courante (après l'avoir faite) -->
-          <div v-if="curSet" class="comment">
-            <div class="comment-head"><span>Ressenti de la série</span><em>noter puis valider</em></div>
+          <!-- Ressenti de la série VALIDÉE (pendant le repos / une fois faite) -->
+          <div v-if="rateTarget" class="comment">
+            <div class="comment-head"><span>Ressenti de la série faite</span><em>optionnel</em></div>
             <div class="diff-row">
               <button
                 v-for="d in DIFFS" :key="d.n"
-                class="diff-btn" :class="['d' + d.n, { sel: curSet.difficulty === d.n }]"
-                @click="curSet.difficulty = d.n; live.persist()"
+                class="diff-btn" :class="['d' + d.n, { sel: rateTarget.difficulty === d.n }]"
+                @click="rateTarget.difficulty = d.n; live.persist()"
               ><b>{{ d.n }}</b><span>{{ d.label }}</span></button>
             </div>
             <div v-if="showRir" class="rir-row">
               <span class="rir-lbl">RIR (reps en réserve)</span>
-              <q-input v-model.number="curSet.rir" type="number" dense filled class="rir-input" @update:model-value="live.persist()" />
+              <q-input v-model.number="rateTarget.rir" type="number" dense filled class="rir-input" @update:model-value="live.persist()" />
             </div>
             <div class="cbox">
-              <textarea v-model="curSet.comment" class="cfield" aria-label="Commentaire de la série" placeholder="Note libre (optionnel)…" @change="live.persist()" />
+              <textarea v-model="rateTarget.comment" class="cfield" aria-label="Commentaire de la série" placeholder="Note libre (optionnel)…" @change="live.persist()" />
               <button class="mic" :class="{ rec: recording }" aria-label="Dictée" @click="toggleMic">🎤</button>
             </div>
           </div>
 
-          <button v-if="!curSet && !resting" class="addset" @click="live.addSet()">+ Ajouter une série</button>
+          <button v-if="!curSet" class="addset" @click="addSeries">+ Ajouter une série</button>
         </div>
       </div>
 
       <!-- CTA collant -->
       <div class="cta-wrap">
-        <button v-if="resting" class="cta ghost" @click="skipRest">Passer le repos</button>
-        <button v-else-if="curSet" class="cta" :disabled="!curSet.difficulty" @click="validateSet">Valider la série</button>
+        <button v-if="curSet" class="cta" @click="validateSet">Valider la série</button>
         <template v-else>
+          <button v-if="resting" class="cta ghost" @click="skipRest">Passer le repos</button>
           <button class="cta" @click="pickerOpen = true">Exercice suivant</button>
         </template>
       </div>
@@ -201,6 +201,13 @@ const ex = computed(() => live.current);
 const exImg = computed(() => (ex.value ? exerciseImage(ex.value.id) : undefined));
 const curSetIndex = computed(() => ex.value?.sets.findIndex((s) => !s.done) ?? -1);
 const curSet = computed(() => (curSetIndex.value >= 0 ? ex.value!.sets[curSetIndex.value]! : null));
+// Série la plus récemment validée — c'est elle qu'on note (pendant le repos / une fois faite).
+const lastDone = computed(() => {
+  const done = ex.value?.sets.filter((s) => s.done) ?? [];
+  return done.length ? done[done.length - 1]! : null;
+});
+// Bloc « ressenti » visible quand une série vient d'être validée (repos) ou quand tout est fait.
+const rateTarget = computed(() => (resting.value || !curSet.value ? lastDone.value : null));
 const volume = computed(() => (ex.value ? ex.value.sets.filter((s) => s.done).reduce((a, s) => a + s.load_kg * s.reps, 0) : 0));
 const totalVolume = computed(() =>
   run.value ? run.value.exercises.reduce((a, e) => a + e.sets.filter((s) => s.done).reduce((b, s) => b + s.load_kg * s.reps, 0), 0) : 0,
@@ -260,10 +267,15 @@ function adj(s: LiveSet, key: 'load_kg' | 'reps', d: number) {
 }
 function validateSet() {
   const s = curSet.value;
-  if (!s || !s.difficulty) return;
-  s.done = true;
+  if (!s) return;
+  s.done = true; // pas de note requise : on note pendant le repos
   live.persist();
   startRest();
+}
+function addSeries() {
+  skipRest();
+  live.addSet();
+  scrollTop();
 }
 function goTo(i: number) {
   skipRest();
@@ -388,6 +400,11 @@ function cancelFree() {
   });
 }
 async function quit() {
+  // Retour : si une séance est en cours, demander d'annuler (sinon on reste).
+  if (run.value && run.value.exercises.length > 0) {
+    cancelFree();
+    return;
+  }
   await router.push('/');
 }
 
