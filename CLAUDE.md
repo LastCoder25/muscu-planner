@@ -29,6 +29,7 @@ src/lib/
   progression.ts   nextSessionDeterministic(plan, lastLog, cfg, history?)
   programBuilder.ts buildProgram(profile, library) — génère N séances : volume/muscle (objectif+niveau), ajusté par les sports (équilibrage) et priorités, exos filtrés par matériel. Filtrage = l'exo est retenu si TOUS ses atomes `equipment_required` sont possédés (poids du corps = ensemble vide). Atomes : barbell, rack, bench, dumbbells, kettlebell, bands, cable, machine, pullup_bar, dip_station (cf. EquipmentItem + migration 0003). Biblio enrichie à 45 exos. Anciens profils migrés via `migrateEquipment` (profileForm). **Niveau** : `exercises.difficulty` (1/2/3) ; débutant plafonné à 2 (fallback si rien), d'où variantes assistées élastique (tractions/dips assistés, migration 0004). **Favoris** : `Profile.favorite_exercises` (ids) priorisés dans le tri des candidats (s'ils passent matériel+niveau).
   coach.ts         buildCoachRequest(...) + validateImportedSession(raw)
+  estimates.ts     estimate1RM(load,reps) (Epley) + bestE1RM(performed) — prépare le Bilan (Étape 4.1)
 src/data/
   templates.ts     programmes débutant (Full-Body A/B/C) + suggestTemplates()
 supabase/

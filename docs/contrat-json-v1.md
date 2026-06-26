@@ -276,10 +276,28 @@ Dérivé mais surchargeable : un débutant motivé peut activer le RIR, un avanc
 
 ---
 
-## Notes d'implémentation (Laravel + Vue/Quasar)
+## Extensions v1.0 (additives, rétro-compatibles)
 
-- **Stockage** : colonnes JSON canoniques (`sessions.payload`, `session_logs.payload`) + colonnes indexées extraites (`user_id`, `type`, `performed_at`, `session_id`) pour les requêtes. On garde le JSON brut pour le round-trip parfait.
-- **Validation d'import** : JSON Schema (`opis/json-schema`) ou Form Request dédié. On rejette si `type` inattendu ou `schema_version` non géré. Message d'erreur clair côté UI (« JSON non reconnu — attendu : une séance »).
+Champs ajoutés à `profile` depuis la première rédaction. **Tous optionnels** → `schema_version`
+reste `1.0` (un profil sans ces champs est valide). Présents dans `src/lib/types.ts`, stockés dans
+`profiles.payload` (JSONB), sans nouvelle colonne extraite.
+
+- `available_equipment` : `EquipmentItem[]` — matériel détaillé réellement possédé (atomes :
+  `barbell`, `rack`, `bench`, `dumbbells`, `kettlebell`, `bands`, `cable`, `machine`, `pullup_bar`,
+  `dip_station` ; le poids du corps est implicite). Le champ `equipment` (enum grossier) en est dérivé.
+- `sports` : `SportPractice[]` (`{ name, sessions_per_week, intensity? }`) — pratiques en parallèle,
+  utilisées par le générateur pour équilibrer le volume musculaire.
+- `favorite_exercises` : `string[]` — ids d'exos à prioriser à la génération s'ils sont pertinents.
+
+**Hors contrat d'échange** : la bibliothèque d'exercices (`exercises`) n'est **pas** un des 4 documents.
+C'est une donnée de référence interne. Ses colonnes `equipment_required` (`text[]`, atomes requis) et
+`difficulty` (`1|2|3`) pilotent la sélection du générateur (matériel + niveau) mais ne transitent pas
+vers l'IA.
+
+## Notes d'implémentation (Supabase + Vue/Quasar)
+
+- **Stockage** : colonnes JSON canoniques (`sessions.payload`, `session_logs.payload`, `profiles.payload`) + colonnes indexées extraites (`user_id`, `performed_at`, `session_id`…) pour les requêtes. On garde le JSON brut pour le round-trip parfait. Sécurité par **RLS Postgres** (scoping `auth.uid()`).
+- **Validation d'import** : `validateImportedSession` (`src/lib/coach.ts`) — whitelist stricte côté client. On rejette si `type` inattendu ou `schema_version` non géré. Message d'erreur clair côté UI (« JSON non reconnu — attendu : une séance »).
 - **Versioning** : `schema_version` lu en premier ; pipeline d'upgraders `1.0 → 1.1 → …` pour migrer les vieux payloads à la lecture.
 - **Sécurité du collage IA** : on parse en sandbox, on valide le schéma, on ne fait jamais confiance aux champs en trop (on ignore les clés inconnues).
 - **Pont avec la maquette** : l'objet `state.sets` de l'écran live = un exo de `session` à l'aller, un bloc `exercises[].performed` au retour. Mapping direct.

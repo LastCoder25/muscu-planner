@@ -38,7 +38,32 @@ export const useLogsStore = defineStore('logs', () => {
     return recent.value;
   }
 
-  return { recent, insert, fetchRecent };
+  // Dernier bilan d'une séance donnée → entrée de nextSessionDeterministic.
+  async function lastForSession(sessionId: string): Promise<SessionLog | null> {
+    const { data, error } = await supabase
+      .from('session_logs')
+      .select('payload')
+      .eq('session_id', sessionId)
+      .order('performed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return (data?.payload as SessionLog) ?? null;
+  }
+
+  // Les `depth` derniers bilans (depth = level_config.coach_history_depth)
+  // → paramètre `history` du moteur et de coach.buildCoachRequest.
+  async function fetchHistory(depth: number): Promise<SessionLog[]> {
+    const { data, error } = await supabase
+      .from('session_logs')
+      .select('payload')
+      .order('performed_at', { ascending: false })
+      .limit(Math.max(1, depth));
+    if (error) throw error;
+    return ((data ?? []) as { payload: SessionLog }[]).map((r) => r.payload);
+  }
+
+  return { recent, insert, fetchRecent, lastForSession, fetchHistory };
 });
 
 if (import.meta.hot) {
