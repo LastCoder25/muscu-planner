@@ -1,7 +1,15 @@
 // Configuration for your app
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
+import { readFileSync } from 'node:fs';
 import { defineConfig } from '#q-app';
+
+// Versionning : package.json = source de vérité. Injecté au build, + date et
+// commit (sur Vercel) pour identifier quel déploiement est en ligne.
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+const APP_VERSION = pkg.version;
+const APP_COMMIT = (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7) || 'local';
+const APP_BUILD = new Date().toISOString().slice(0, 10);
 
 export default defineConfig((/* ctx */) => {
   return {
@@ -62,7 +70,11 @@ export default defineConfig((/* ctx */) => {
       },
 
       // publicPath: '/',
-      // define: {},
+      define: {
+        __APP_VERSION__: JSON.stringify(APP_VERSION),
+        __APP_COMMIT__: JSON.stringify(APP_COMMIT),
+        __APP_BUILD__: JSON.stringify(APP_BUILD),
+      },
       // defineEnv: {}
       // ignorePublicFolder: true,
       // minify: false,
