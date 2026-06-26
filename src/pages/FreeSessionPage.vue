@@ -70,17 +70,38 @@
     <q-dialog v-model="pickerOpen" position="bottom">
       <div class="sheet">
         <div class="grab" />
-        <h3 class="font-display">Ajouter un exercice</h3>
+        <div class="picker-head">
+          <h3 class="font-display">Ajouter un exercice</h3>
+          <div class="view-toggle">
+            <button :class="{ on: pickerView === 'list' }" aria-label="Liste" @click="setView('list')"><q-icon name="view_list" size="18px" /></button>
+            <button :class="{ on: pickerView === 'tiles' }" aria-label="Tuiles" @click="setView('tiles')"><q-icon name="grid_view" size="18px" /></button>
+          </div>
+        </div>
         <q-input v-model="search" filled dense placeholder="Rechercher…" class="q-mb-sm" clearable />
         <div v-if="loadingLib" class="row flex-center q-pa-md"><q-spinner color="primary" /></div>
-        <button v-for="e in filteredLib" :key="e.id" class="alt" @click="pick(e)">
-          <div class="alt-main">
-            <div class="alt-name">{{ e.name }}</div>
-            <div class="alt-meta">{{ e.muscle_primary }}<template v-if="e.equipment"> · {{ e.equipment }}</template></div>
-          </div>
-          <q-icon name="info_outline" size="20px" color="grey-6" class="alt-info" role="button" aria-label="Fiche" @click.stop="openExercise(e.id)" />
-          <div class="alt-go">+</div>
-        </button>
+
+        <!-- Vue tuiles -->
+        <div v-else-if="pickerView === 'tiles'" class="tiles">
+          <button v-for="e in filteredLib" :key="e.id" class="tile" @click="pick(e)">
+            <q-icon :name="exIcon(e)" size="28px" class="tile-ic" />
+            <div class="tile-name">{{ e.name }}</div>
+            <div v-if="e.muscle_primary" class="tile-mus">{{ e.muscle_primary }}</div>
+            <q-icon name="info_outline" size="18px" class="tile-info" role="button" aria-label="Fiche" @click.stop="openExercise(e.id)" />
+          </button>
+        </div>
+
+        <!-- Vue liste -->
+        <template v-else>
+          <button v-for="e in filteredLib" :key="e.id" class="alt" @click="pick(e)">
+            <q-icon :name="exIcon(e)" size="22px" color="grey-6" class="alt-ic" />
+            <div class="alt-main">
+              <div class="alt-name">{{ e.name }}</div>
+              <div class="alt-meta">{{ e.muscle_primary }}<template v-if="e.equipment"> · {{ e.equipment }}</template></div>
+            </div>
+            <q-icon name="info_outline" size="20px" color="grey-6" class="alt-info" role="button" aria-label="Fiche" @click.stop="openExercise(e.id)" />
+            <div class="alt-go">+</div>
+          </button>
+        </template>
       </div>
     </q-dialog>
 
@@ -162,6 +183,25 @@ const canFinish = computed(() => {
 // ── Picker bibliothèque ─────────────────────────────────
 const pickerOpen = ref(false);
 const search = ref('');
+// Vue liste / tuiles (persistée).
+const VIEW_KEY = 'muscu:free:pickerView';
+const pickerView = ref<'list' | 'tiles'>(localStorage.getItem(VIEW_KEY) === 'tiles' ? 'tiles' : 'list');
+function setView(v: 'list' | 'tiles') {
+  pickerView.value = v;
+  localStorage.setItem(VIEW_KEY, v);
+}
+// Icône représentant l'exercice, dérivée du muscle principal (faute de logos dédiés).
+function exIcon(e: ExerciseRow): string {
+  const m = (e.muscle_primary ?? '').toLowerCase();
+  if (/jambe|quadri|ischio|fessier|mollet|cuisse/.test(m)) return 'directions_run';
+  if (/dos|lombaire|trap/.test(m)) return 'rowing';
+  if (/pec|poitrine/.test(m)) return 'fitness_center';
+  if (/epaule|épaule|delto/.test(m)) return 'sports_gymnastics';
+  if (/biceps|triceps|bras/.test(m)) return 'sports_martial_arts';
+  if (/abdo|gainage|core|oblique/.test(m)) return 'self_improvement';
+  if (/cardio/.test(m)) return 'directions_bike';
+  return 'fitness_center';
+}
 const lib = ref<ExerciseRow[]>([]);
 const loadingLib = ref(false);
 const filteredLib = computed(() => {
@@ -275,7 +315,19 @@ onBeforeUnmount(() => clearInterval(clockInt));
 .sheet { width: 100%; background: var(--surface); border-radius: 26px 26px 0 0; border-top: 1px solid var(--line); padding: 10px 18px 26px; max-height: 80vh; overflow-y: auto; h3 { font-size: 20px; text-transform: uppercase; } }
 .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 6px auto 16px; }
 .muted { color: var(--dim); font-size: 12.5px; margin: 4px 0 14px; }
+.picker-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.view-toggle { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 3px; flex: none; }
+.view-toggle button { width: 34px; height: 30px; border: none; border-radius: 8px; background: transparent; color: var(--dim); display: grid; place-items: center; cursor: pointer; &.on { background: var(--accent); color: var(--accent-ink); } }
+
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 8px 10px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); cursor: pointer; }
+.tile-ic { color: var(--accent); }
+.tile-name { font-size: 12px; font-weight: 600; color: var(--text); text-align: center; line-height: 1.15; }
+.tile-mus { font-size: 10px; color: var(--dim); text-align: center; }
+.tile-info { position: absolute; top: 5px; right: 5px; color: var(--dim-2); }
+
 .alt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 13px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); margin-bottom: 8px; cursor: pointer; }
+.alt-ic { flex: none; }
 .alt-main { flex: 1; min-width: 0; }
 .alt-name { font-weight: 600; font-size: 14.5px; color: var(--text); }
 .alt-meta { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
