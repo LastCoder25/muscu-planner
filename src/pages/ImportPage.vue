@@ -14,7 +14,8 @@
 
       <!-- Étape 2 : coller -->
       <div class="sec-h">2 · Colle la réponse</div>
-      <textarea v-model="raw" class="paste" aria-label="Réponse IA" placeholder="Colle ici le JSON renvoyé par l'IA…" />
+      <p class="muted">JSON <b>ou</b> texte de séance (ex. « Squat / 40 kg ×8 — 1 min »). L'app reconnaît les deux.</p>
+      <textarea v-model="raw" class="paste" aria-label="Réponse IA" placeholder="Colle ici la séance (JSON ou texte)…" />
       <q-btn no-caps color="primary" text-color="dark" label="Convertir" class="full-width q-mt-sm" :disable="!raw.trim()" @click="convert" />
 
       <!-- Aperçu -->
