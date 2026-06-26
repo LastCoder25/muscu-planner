@@ -147,7 +147,8 @@ export const useLiveStore = defineStore('live', () => {
       rest_seconds: isTime ? 60 : 90,
       planned: isTime ? { sets: 0, reps_min: 0, reps_max: 0, unit: 'time' } : { sets: 0, reps_min: 0, reps_max: 0 },
       bodyweight,
-      sets: [{ load_kg: 0, reps: isTime ? 30 : 8, done: true, difficulty: 0, rir: null, comment: '' }],
+      // Série créée NON validée : on note la difficulté après l'avoir faite (flux « valider »).
+      sets: [{ load_kg: 0, reps: isTime ? 30 : 8, done: false, difficulty: 0, rir: null, comment: '' }],
       exercise_comment: '',
     });
     persist();
