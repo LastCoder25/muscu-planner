@@ -104,23 +104,65 @@
         </div>
       </section>
 
-      <!-- 4. Matériel -->
+      <!-- 4. Matériel (checklist) -->
       <section v-else-if="step === 4">
         <h2 class="onb-h">Ton matériel</h2>
+        <p class="text-dim q-mb-md">Coche tout ce à quoi tu as accès. On filtre les exercices en conséquence.</p>
         <button
-          v-for="opt in EQUIPMENTS"
+          v-for="opt in EQUIPMENT_ITEMS"
           :key="opt.value"
           class="choice choice-row"
-          :class="{ active: form.equipment === opt.value }"
-          @click="form.equipment = opt.value"
+          :class="{ active: form.available_equipment.includes(opt.value) }"
+          @click="toggleArr(form.available_equipment, opt.value)"
         >
-          <div class="choice-title">{{ opt.label }}</div>
+          <div class="row items-center justify-between">
+            <div class="choice-title">{{ opt.label }}</div>
+            <q-icon v-if="form.available_equipment.includes(opt.value)" name="check_circle" color="primary" size="22px" />
+          </div>
           <div class="choice-desc">{{ opt.desc }}</div>
         </button>
       </section>
 
-      <!-- 5. Contraintes -->
+      <!-- 5. Sports pratiqués -->
       <section v-else-if="step === 5">
+        <h2 class="onb-h">Tes autres sports</h2>
+        <p class="text-dim q-mb-md">On allège la muscu sur les muscles déjà sollicités et on renforce l'équilibre. Optionnel.</p>
+        <div v-for="sp in SPORTS" :key="sp">
+          <button
+            class="choice choice-row"
+            :class="{ active: hasSport(sp) }"
+            @click="toggleSport(sp)"
+          >
+            <div class="row items-center justify-between">
+              <div class="choice-title">{{ sp }}</div>
+              <q-icon v-if="hasSport(sp)" name="check_circle" color="primary" size="22px" />
+            </div>
+          </button>
+          <div v-if="hasSport(sp)" class="sport-cfg">
+            <div class="text-dim text-caption q-mb-xs">Séances / semaine</div>
+            <div class="choice-grid cols-5 q-mb-sm">
+              <button
+                v-for="n in [1, 2, 3, 4, 5]" :key="n"
+                class="choice small metric"
+                :class="{ active: sportFreq(sp) === n }"
+                @click="setSportFreq(sp, n)"
+              >{{ n }}</button>
+            </div>
+            <div class="text-dim text-caption q-mb-xs">Intensité</div>
+            <div class="choice-grid cols-3">
+              <button
+                v-for="it in INTENSITIES" :key="it.value"
+                class="choice small"
+                :class="{ active: sportIntensity(sp) === it.value }"
+                @click="setSportIntensity(sp, it.value)"
+              >{{ it.label }}</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Contraintes -->
+      <section v-else-if="step === 6">
         <h2 class="onb-h">Contraintes</h2>
         <p class="text-dim q-mb-md">Blessures, zones sensibles, exos à éviter. Tout est optionnel.</p>
         <q-select
@@ -139,8 +181,8 @@
         />
       </section>
 
-      <!-- 6. Préférences -->
-      <section v-else-if="step === 6">
+      <!-- 7. Préférences -->
+      <section v-else-if="step === 7">
         <h2 class="onb-h">Préférences</h2>
         <div class="text-dim text-caption q-mb-sm">Muscles à prioriser — optionnel</div>
         <div class="choice-grid cols-3 q-mb-lg">
@@ -159,52 +201,61 @@
         </div>
       </section>
 
-      <!-- 7. Programme (bifurcation) -->
-      <section v-else-if="step === 7">
-        <h2 class="onb-h">{{ programTitle }}</h2>
-        <p class="text-dim q-mb-md">{{ programSubtitle }}</p>
+      <!-- 8. Programme généré -->
+      <section v-else-if="step === 8">
+        <h2 class="onb-h">Ton programme</h2>
+        <p class="text-dim q-mb-md">Généré selon ton objectif, ton matériel et tes sports. Tu pourras tout ajuster ensuite.</p>
 
-        <button
-          v-for="t in pool"
-          :key="t.template_id"
-          class="choice choice-row"
-          :class="{ active: selected.has(t.template_id) }"
-          @click="toggleTemplate(t.template_id)"
-        >
-          <div class="row items-center justify-between">
-            <div class="choice-title">{{ t.name }}</div>
-            <q-icon v-if="selected.has(t.template_id)" name="check_circle" color="primary" size="22px" />
+        <div v-if="generating" class="row flex-center q-pa-lg"><q-spinner color="primary" size="28px" /></div>
+        <template v-else>
+          <div v-if="generated.length === 0" class="empty-prog">
+            Aucun exercice ne correspond à ton matériel. Reviens à l'étape Matériel pour en ajouter.
           </div>
-          <div class="choice-desc">
-            {{ t.exercises.length }} exercices · ~{{ t.estimated_duration_min }} min
-          </div>
-        </button>
-
-        <!-- Import IA (mode free / avancé) -->
-        <q-expansion-item
-          v-if="programMode === 'free'"
-          icon="content_paste"
-          label="Importer une séance (JSON)"
-          dark class="import-box q-mt-md"
-        >
-          <div class="q-pa-sm">
-            <q-input
-              v-model="importText"
-              type="textarea"
-              filled dark autogrow
-              label="Colle ici le JSON d'une séance"
-              :rows="5"
-            />
-            <q-btn
-              flat no-caps color="primary" label="Valider le JSON" class="q-mt-sm"
-              :disable="!importText.trim()"
-              @click="tryImport"
-            />
-            <div v-if="imported" class="imported-ok q-mt-sm">
-              <q-icon name="check_circle" color="positive" /> « {{ imported.name }} » prête ({{ imported.exercises.length }} exos)
+          <button
+            v-for="(s, i) in generated"
+            :key="i"
+            class="choice choice-row"
+            :class="{ active: selectedSessions.has(i) }"
+            @click="toggleSession(i)"
+          >
+            <div class="row items-center justify-between">
+              <div class="choice-title">{{ s.name }}</div>
+              <q-icon v-if="selectedSessions.has(i)" name="check_circle" color="primary" size="22px" />
             </div>
-          </div>
-        </q-expansion-item>
+            <div class="choice-desc">{{ s.exercises.length }} exercices · ~{{ s.estimated_duration_min }} min · {{ muscleSummary(s) }}</div>
+          </button>
+          <q-btn
+            v-if="generated.length"
+            flat no-caps color="primary" icon="refresh" label="Régénérer" class="q-mt-xs"
+            @click="regenerate"
+          />
+
+          <!-- Import IA (mode free / avancé) -->
+          <q-expansion-item
+            v-if="programMode === 'free'"
+            icon="content_paste"
+            label="Importer une séance (JSON)"
+            dark class="import-box q-mt-md"
+          >
+            <div class="q-pa-sm">
+              <q-input
+                v-model="importText"
+                type="textarea"
+                filled dark autogrow
+                label="Colle ici le JSON d'une séance"
+                :rows="5"
+              />
+              <q-btn
+                flat no-caps color="primary" label="Valider le JSON" class="q-mt-sm"
+                :disable="!importText.trim()"
+                @click="tryImport"
+              />
+              <div v-if="imported" class="imported-ok q-mt-sm">
+                <q-icon name="check_circle" color="positive" /> « {{ imported.name }} » prête ({{ imported.exercises.length }} exos)
+              </div>
+            </div>
+          </q-expansion-item>
+        </template>
       </section>
     </div>
 
@@ -230,28 +281,28 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
-import type { Level, Objective, Equipment, Profile, Session } from '@/lib/types';
+import type { Level, Objective, Equipment, EquipmentItem, SportPractice, Profile, Session } from '@/lib/types';
 import { SCHEMA_VERSION } from '@/lib/types';
 import { deriveLevelConfig } from '@/lib/levelConfig';
-import { TEMPLATES, suggestTemplates } from '@/data/templates';
+import { buildProgram, type ExerciseDef } from '@/lib/programBuilder';
 import { validateImportedSession } from '@/lib/coach';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
-
-type Template = (typeof TEMPLATES)[number];
+import { useLibraryStore } from '@/stores/library';
 
 const $q = useQuasar();
 const router = useRouter();
 const auth = useAuthStore();
 const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
+const libraryStore = useLibraryStore();
 
-const TOTAL = 8;
-const STEP_TITLES = ['Identité', 'Niveau', 'Objectif', 'Dispos', 'Matériel', 'Contraintes', 'Préférences', 'Programme'];
+const TOTAL = 9;
+const STEP_TITLES = ['Identité', 'Niveau', 'Objectif', 'Dispos', 'Matériel', 'Sports', 'Contraintes', 'Préférences', 'Programme'];
 
 const SEXES = [
   { value: 'homme' as const, label: 'Homme' },
@@ -270,14 +321,21 @@ const OBJECTIVES = [
   { value: 'remise_en_forme' as Objective, label: 'Remise en forme' },
   { value: 'perte_de_gras' as Objective, label: 'Perte de gras' },
 ];
-const EQUIPMENTS = [
-  { value: 'salle_complete' as Equipment, label: 'Salle complète', desc: 'Machines, barres, haltères, poulies.' },
-  { value: 'home_gym' as Equipment, label: 'Home gym', desc: 'Rack, barre, quelques machines.' },
-  { value: 'halteres' as Equipment, label: 'Haltères', desc: 'Une paire d’haltères / élastiques.' },
-  { value: 'poids_du_corps' as Equipment, label: 'Poids du corps', desc: 'Aucun matériel.' },
+const EQUIPMENT_ITEMS: { value: EquipmentItem; label: string; desc: string }[] = [
+  { value: 'barre', label: 'Barre + disques', desc: 'Squat, développé couché, soulevé de terre…' },
+  { value: 'halteres', label: 'Haltères', desc: 'Développés, curls, fentes…' },
+  { value: 'machine', label: 'Machines guidées', desc: 'Presse, leg curl, pec deck…' },
+  { value: 'poulie', label: 'Poulie / câble', desc: 'Tirages, extensions, écartés…' },
+  { value: 'poids_du_corps', label: 'Poids du corps', desc: 'Pompes, gainage, tractions… (toujours dispo)' },
 ];
 const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const MUSCLES = ['Pectoraux', 'Dos', 'Épaules', 'Bras', 'Jambes', 'Fessiers', 'Abdos'];
+const SPORTS = ['Course', 'Vélo', 'Natation', 'Escalade', 'Football', 'Basket', 'Tennis', 'Boxe', 'Rugby', 'Yoga'];
+const INTENSITIES: { value: NonNullable<SportPractice['intensity']>; label: string }[] = [
+  { value: 'faible', label: 'Faible' },
+  { value: 'moderee', label: 'Modérée' },
+  { value: 'elevee', label: 'Élevée' },
+];
 
 const step = ref(0);
 const saving = ref(false);
@@ -294,7 +352,8 @@ interface FormState {
   sessions_per_week: number;
   session_duration_min: number;
   preferred_days: string[];
-  equipment: Equipment;
+  available_equipment: EquipmentItem[];
+  sports: SportPractice[];
   injuries: string[];
   avoid_exercises: string[];
   priority_muscles: string[];
@@ -313,41 +372,67 @@ const form = reactive<FormState>({
   sessions_per_week: 3,
   session_duration_min: 60,
   preferred_days: [],
-  equipment: 'salle_complete',
+  available_equipment: [],
+  sports: [],
   injuries: [],
   avoid_exercises: [],
   priority_muscles: [],
   units: 'kg',
 });
 
-// ── Bifurcation programme ───────────────────────────────
+// programMode : pilote l'affichage de l'import IA (mode 'free' = avancé).
 const programMode = computed(() => deriveLevelConfig(form.level).program_mode);
-const pool = computed<Template[]>(() => {
-  const suggested = suggestTemplates(form.level, form.sessions_per_week);
-  if (suggested.length) return suggested;
-  // Niveaux non-débutant : on propose tout de même des bases éditables.
-  return TEMPLATES.filter((t) => t.min_sessions_per_week <= form.sessions_per_week);
-});
-const programTitle = computed(() =>
-  programMode.value === 'guided'
-    ? 'On te prépare ton premier programme'
-    : programMode.value === 'assisted'
-      ? 'Choisis une base de programme'
-      : 'Importe ou choisis une base',
-);
-const programSubtitle = computed(() =>
-  programMode.value === 'free'
-    ? 'Colle un JSON de séance (export coach IA) ou pars d’un template, tu pourras tout éditer ensuite.'
-    : 'Sélectionne la ou les séances à ajouter à ta semaine.',
-);
 
-const selected = reactive(new Set<string>());
+// ── Sports pratiqués ────────────────────────────────────
+function hasSport(name: string) {
+  return form.sports.some((s) => s.name === name);
+}
+function sportOf(name: string) {
+  return form.sports.find((s) => s.name === name);
+}
+function toggleSport(name: string) {
+  const i = form.sports.findIndex((s) => s.name === name);
+  if (i >= 0) form.sports.splice(i, 1);
+  else form.sports.push({ name, sessions_per_week: 2, intensity: 'moderee' });
+}
+function sportFreq(name: string) {
+  return sportOf(name)?.sessions_per_week;
+}
+function setSportFreq(name: string, n: number) {
+  const s = sportOf(name);
+  if (s) s.sessions_per_week = n;
+}
+function sportIntensity(name: string) {
+  return sportOf(name)?.intensity;
+}
+function setSportIntensity(name: string, v: NonNullable<SportPractice['intensity']>) {
+  const s = sportOf(name);
+  if (s) s.intensity = v;
+}
+
+// ── Génération du programme ─────────────────────────────
+const library = ref<ExerciseDef[]>([]);
+const generated = ref<Session[]>([]);
+const selectedSessions = reactive(new Set<number>());
+const generating = ref(false);
 const importText = ref('');
 const imported = ref<Session | null>(null);
 
-function toggleTemplate(id: string) {
-  if (selected.has(id)) selected.delete(id);
-  else selected.add(id);
+function regenerate() {
+  generating.value = true;
+  generated.value = buildProgram(buildProfile(), library.value);
+  selectedSessions.clear();
+  generated.value.forEach((_, i) => selectedSessions.add(i));
+  generating.value = false;
+}
+function toggleSession(i: number) {
+  if (selectedSessions.has(i)) selectedSessions.delete(i);
+  else selectedSessions.add(i);
+}
+function muscleSummary(s: Session): string {
+  const set = new Set<string>();
+  for (const e of s.exercises) if (e.muscle_primary) set.add(e.muscle_primary);
+  return [...set].slice(0, 4).join(', ');
 }
 function tryImport() {
   try {
@@ -363,23 +448,35 @@ function tryImport() {
 const canProceed = computed(() => {
   if (step.value === 0) return form.name.trim().length > 0;
   if (step.value === 3) return form.sessions_per_week >= 2 && form.sessions_per_week <= 6;
+  if (step.value === 4) return form.available_equipment.length > 0;
   return true;
 });
-const canFinish = computed(() => selected.size > 0 || imported.value !== null);
+const canFinish = computed(() => selectedSessions.size > 0 || imported.value !== null);
 
 function next() {
-  if (canProceed.value && step.value < TOTAL - 1) step.value++;
+  if (!canProceed.value || step.value >= TOTAL - 1) return;
+  step.value++;
+  if (step.value === 8) regenerate(); // entrée sur l'étape Programme
 }
 function prev() {
   if (step.value > 0) step.value--;
 }
-function toggleArr(arr: string[], v: string) {
+function toggleArr<T>(arr: T[], v: T) {
   const i = arr.indexOf(v);
   if (i >= 0) arr.splice(i, 1);
   else arr.push(v);
 }
 
 // ── Construction du Profile (contrat v1.0) ──────────────
+// Résumé grossier du matériel (rétro-compat avec le champ `equipment`).
+function deriveCoarseEquipment(items: EquipmentItem[]): Equipment {
+  const has = (x: EquipmentItem) => items.includes(x);
+  if (has('machine') && has('poulie') && has('barre')) return 'salle_complete';
+  if (has('barre') || has('machine') || has('poulie')) return 'home_gym';
+  if (has('halteres')) return 'halteres';
+  return 'poids_du_corps';
+}
+
 function buildProfile(): Profile {
   const identity: Profile['identity'] = { name: form.name.trim() };
   if (form.sex) identity.sex = form.sex;
@@ -404,9 +501,12 @@ function buildProfile(): Profile {
     experience,
     objective: form.objective,
     availability,
-    equipment: form.equipment,
+    equipment: deriveCoarseEquipment(form.available_equipment),
     preferences,
   };
+
+  if (form.available_equipment.length) profile.available_equipment = [...form.available_equipment];
+  if (form.sports.length) profile.sports = form.sports.map((s) => ({ ...s }));
 
   const constraints: NonNullable<Profile['constraints']> = {};
   if (form.injuries.length) constraints.injuries = [...form.injuries];
@@ -414,21 +514,6 @@ function buildProfile(): Profile {
   if (Object.keys(constraints).length) profile.constraints = constraints;
 
   return profile;
-}
-
-function templateToSession(t: Template): Session {
-  return {
-    schema_version: t.schema_version,
-    type: 'session',
-    id: crypto.randomUUID(),
-    name: t.name,
-    split: t.split,
-    objective: t.objective,
-    level: t.level,
-    estimated_duration_min: t.estimated_duration_min,
-    source: 'template',
-    exercises: t.exercises,
-  };
 }
 
 async function finish() {
@@ -441,9 +526,9 @@ async function finish() {
   try {
     await profileStore.save(userId, buildProfile());
 
-    const chosen = pool.value.filter((t) => selected.has(t.template_id));
-    for (const t of chosen) {
-      await sessionsStore.insert(userId, templateToSession(t));
+    const chosen = generated.value.filter((_, i) => selectedSessions.has(i));
+    for (const s of chosen) {
+      await sessionsStore.insert(userId, s);
     }
     if (imported.value) {
       await sessionsStore.insert(userId, imported.value);
@@ -456,6 +541,14 @@ async function finish() {
     saving.value = false;
   }
 }
+
+onMounted(async () => {
+  try {
+    library.value = await libraryStore.fetchAll();
+  } catch {
+    $q.notify({ type: 'negative', message: 'Bibliothèque d’exercices indisponible.' });
+  }
+});
 </script>
 
 <style scoped lang="scss">
@@ -522,6 +615,8 @@ async function finish() {
   border-radius: 12px;
 }
 .imported-ok { color: var(--done); font-size: 14px; }
+.sport-cfg { padding: 4px 6px 14px; margin: -4px 0 10px; }
+.empty-prog { color: var(--dim); padding: 20px 4px; font-size: 14px; }
 
 .onb-nav {
   position: sticky;

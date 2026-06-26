@@ -7,6 +7,17 @@ export type Equipment = 'salle_complete' | 'home_gym' | 'halteres' | 'poids_du_c
 export type Progression = 'double' | 'linear' | 'rir' | 'fixed';
 export type Difficulty = 1 | 2 | 3 | 4;
 
+// Matériel détaillé : valeurs alignées sur le champ `equipment` de la
+// bibliothèque (supabase/seed.sql) pour permettre le filtrage des exos.
+export type EquipmentItem = 'barre' | 'halteres' | 'machine' | 'poulie' | 'poids_du_corps';
+
+// Sport pratiqué en parallèle (sert à l'équilibrage du volume musculaire).
+export interface SportPractice {
+  name: string;
+  sessions_per_week: number;
+  intensity?: 'faible' | 'moderee' | 'elevee';
+}
+
 export interface Profile {
   schema_version: string;
   type: 'profile';
@@ -20,7 +31,9 @@ export interface Profile {
   experience: { level: Level; training_months?: number; known_1rm_kg?: Record<string, number> };
   objective: Objective;
   availability: { sessions_per_week: number; session_duration_min?: number; preferred_days?: string[] };
-  equipment: Equipment;
+  equipment: Equipment;               // résumé grossier (dérivé de available_equipment)
+  available_equipment?: EquipmentItem[]; // matériel détaillé réellement dispo
+  sports?: SportPractice[];           // pratiques sportives en parallèle
   constraints?: { injuries?: string[]; avoid_exercises?: string[] };
   preferences?: { priority_muscles?: string[]; units?: 'kg' | 'lb' };
 }

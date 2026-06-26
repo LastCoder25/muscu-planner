@@ -41,7 +41,8 @@ export function validateImportedSession(raw: string): Session {
   }
 
   if (obj.type !== 'session') {
-    throw new Error(`Type inattendu (« ${String(obj.type ?? '?')} ») — attendu : une séance.`);
+    const seen = typeof obj.type === 'string' ? obj.type : '?';
+    throw new Error(`Type inattendu (« ${seen} ») — attendu : une séance.`);
   }
   if (!SUPPORTED.includes(String(obj.schema_version))) {
     throw new Error(`Version de schéma non gérée : ${String(obj.schema_version)}.`);
@@ -56,7 +57,7 @@ export function validateImportedSession(raw: string): Session {
     schema_version: String(obj.schema_version),
     type: 'session',
     id: typeof obj.id === 'string' ? obj.id : crypto.randomUUID(),
-    name: String(obj.name ?? 'Séance importée'),
+    name: typeof obj.name === 'string' ? obj.name : 'Séance importée',
     split: obj.split as string | undefined,
     objective: obj.objective as Session['objective'],
     level: obj.level as Session['level'],

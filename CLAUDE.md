@@ -27,6 +27,7 @@ src/lib/
   supabase.ts      client unique (process.env.SUPABASE_URL / _ANON_KEY)
   levelConfig.ts   deriveLevelConfig(level)
   progression.ts   nextSessionDeterministic(plan, lastLog, cfg, history?)
+  programBuilder.ts buildProgram(profile, library) — génère N séances : volume/muscle (objectif+niveau), ajusté par les sports (équilibrage) et priorités, exos filtrés par matériel détaillé
   coach.ts         buildCoachRequest(...) + validateImportedSession(raw)
 src/data/
   templates.ts     programmes débutant (Full-Body A/B/C) + suggestTemplates()
@@ -77,7 +78,7 @@ Décisions prises en Phase 0, contraintes par le poste. À respecter dans les ph
 ## Couche app
 - `src/stores/` : `auth` (session/user Supabase), `profile` (ligne profiles + level_config), `sessions` (plans), `live` (séance en cours, persistée localStorage `muscu:live:<id>`, construit le SessionLog), `logs` (session_logs : insert + fetchRecent), `library` (exercises : fetchByMuscle/fetchByIds). Tout accès Supabase passe par les stores.
 - `src/boot/auth.ts` : init session avant rendu + garde de navigation (non connecté→/login, connecté sans profil→/onboarding, sinon app).
-- `src/pages/` : `LoginPage` (email/mdp), `OnboardingPage` (7 étapes + bifurcation selon `program_mode`), `HomePage` (liste séances, ▶ → /session/:id), `SessionLivePage` (exécution : timer radial, steppers, note 1–4, RIR si `effort_signal=rir`, dictée Web Speech, switch d'exo, reprise, → insert session_log).
+- `src/pages/` : `LoginPage` (email/mdp), `OnboardingPage` (8 étapes : + Matériel en checklist détaillée `EquipmentItem[]`, + étape Sports `SportPractice[]` ; l'étape finale **génère** le programme via `buildProgram` ; import IA en mode `free`), `HomePage` (liste séances, ▶ → /session/:id), `SessionLivePage` (exécution : timer radial, steppers, note 1–4, RIR si `effort_signal=rir`, dictée Web Speech, switch d'exo, reprise, → insert session_log).
 - `src/components/SwapSheet.vue` : sheet bas onglets Suggestions (library par muscle) / Séances passées (logs).
 - Layouts : `MainLayout` (header brand + logout) enveloppe l'app ; `BlankLayout` (plein écran) pour login/onboarding/session. Routes `/login`, `/onboarding`, `/session/:id`, `/` (home).
 - Plugin Quasar `Notify` activé.

@@ -6,10 +6,19 @@ export interface ExerciseRow {
   id: string;
   name: string;
   muscle_primary: string | null;
+  muscle_secondary?: string[] | null;
   equipment: string | null;
 }
 
 export const useLibraryStore = defineStore('library', () => {
+  async function fetchAll() {
+    const { data, error } = await supabase
+      .from('exercises')
+      .select('id, name, muscle_primary, muscle_secondary, equipment');
+    if (error) throw error;
+    return (data as ExerciseRow[]) ?? [];
+  }
+
   async function fetchByMuscle(muscle: string) {
     const { data, error } = await supabase
       .from('exercises')
@@ -29,7 +38,7 @@ export const useLibraryStore = defineStore('library', () => {
     return (data as ExerciseRow[]) ?? [];
   }
 
-  return { fetchByMuscle, fetchByIds };
+  return { fetchAll, fetchByMuscle, fetchByIds };
 });
 
 if (import.meta.hot) {
