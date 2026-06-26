@@ -30,7 +30,8 @@
           <div class="ex-planned">Prévu : {{ plannedLabel(ex.planned) }}</div>
           <div class="sets">
             <span v-for="(s, j) in ex.performed" :key="j" class="setpill">
-              {{ s.load_kg }}×{{ s.reps }}
+              <template v-if="ex.planned.unit === 'time'">{{ s.reps }} s</template>
+              <template v-else>{{ s.load_kg }}×{{ s.reps }}</template>
               <span class="dot" :class="'d' + s.difficulty" />
             </span>
           </div>
@@ -123,6 +124,7 @@ function loadOf(t: Partial<ExerciseTarget> | undefined): number {
 }
 function plannedLabel(t: Partial<ExerciseTarget>): string {
   const range = `${t.sets ?? '?'} × ${t.reps_min ?? '?'}–${t.reps_max ?? '?'}`;
+  if (t.unit === 'time') return `${range} s`;
   if (t.load === 'bodyweight') return `${range} · ${t.added_kg ? '+' + t.added_kg + ' kg' : 'poids du corps'}`;
   return t.load_kg ? `${range} · ${t.load_kg} kg` : range;
 }

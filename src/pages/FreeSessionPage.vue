@@ -33,11 +33,11 @@
             </div>
           </div>
           <div>
-            <div class="cell-lbl">Reps</div>
+            <div class="cell-lbl">{{ ex.planned.unit === 'time' ? 'Sec' : 'Reps' }}</div>
             <div class="val-line">
-              <button class="stepper" @click="adj(s, 'reps', -1)">−</button>
+              <button class="stepper" @click="adj(s, 'reps', ex.planned.unit === 'time' ? -5 : -1)">−</button>
               <div class="val font-display">{{ s.reps }}</div>
-              <button class="stepper" @click="adj(s, 'reps', 1)">+</button>
+              <button class="stepper" @click="adj(s, 'reps', ex.planned.unit === 'time' ? 5 : 1)">+</button>
             </div>
           </div>
           <button v-if="ex.sets.length > 1" class="rm-set" aria-label="Retirer la série" @click="removeSet(ex, si)">✕</button>
@@ -175,6 +175,7 @@ function pick(e: ExerciseRow) {
     name: e.name,
     muscle_primary: e.muscle_primary ?? undefined,
     equipment: e.equipment ?? undefined,
+    unit: e.unit ?? undefined,
   });
   pickerOpen.value = false;
   search.value = '';

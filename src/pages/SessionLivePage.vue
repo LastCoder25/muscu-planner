@@ -34,7 +34,7 @@
           <div class="exo-meta">
             <span v-if="ex.equipment" class="chip">{{ ex.equipment }}</span>
             <span v-if="ex.muscle_primary" class="chip">{{ ex.muscle_primary }}</span>
-            <span class="chip tgt">Cible {{ ex.planned.sets }} × {{ ex.planned.reps_min }}–{{ ex.planned.reps_max }}</span>
+            <span class="chip tgt">Cible {{ ex.planned.sets }} × {{ ex.planned.reps_min }}–{{ ex.planned.reps_max }}{{ ex.planned.unit === 'time' ? ' s' : '' }}</span>
           </div>
         </div>
 
@@ -82,11 +82,11 @@
             </div>
           </div>
           <div>
-            <div class="cell-lbl">Reps</div>
+            <div class="cell-lbl">{{ isTimeEx ? 'Sec' : 'Reps' }}</div>
             <div class="val-line">
-              <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'reps', -1)">−</button>
+              <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'reps', isTimeEx ? -5 : -1)">−</button>
               <div class="val font-display">{{ s.reps }}</div>
-              <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'reps', 1)">+</button>
+              <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'reps', isTimeEx ? 5 : 1)">+</button>
             </div>
           </div>
           <div>
@@ -210,6 +210,7 @@ const volume = computed(() =>
 );
 const showRir = computed(() => profileStore.levelConfig?.effort_signal === 'rir');
 const isDense = computed(() => profileStore.levelConfig?.ui_density === 'dense');
+const isTimeEx = computed(() => ex.value?.planned.unit === 'time');
 
 const swapOpen = ref(false);
 const scrollEl = ref<HTMLElement | null>(null);

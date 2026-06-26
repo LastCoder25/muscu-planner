@@ -10,6 +10,7 @@ export interface ExerciseRow {
   equipment: string | null;
   equipment_required?: string[] | null;
   difficulty?: number | null;
+  unit?: string | null; // 'reps' (défaut) ou 'time'
 }
 
 export interface ExerciseFull extends ExerciseRow {
@@ -25,7 +26,7 @@ export const useLibraryStore = defineStore('library', () => {
   async function fetchOne(id: string) {
     const { data, error } = await supabase
       .from('exercises')
-      .select('id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, payload')
+      .select('id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, payload')
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
@@ -35,7 +36,7 @@ export const useLibraryStore = defineStore('library', () => {
   async function fetchAll() {
     const { data, error } = await supabase
       .from('exercises')
-      .select('id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty');
+      .select('id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit');
     if (error) throw error;
     return (data as ExerciseRow[]) ?? [];
   }

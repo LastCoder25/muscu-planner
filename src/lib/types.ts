@@ -58,8 +58,9 @@ export interface LevelConfig {
 
 export interface ExerciseTarget {
   sets: number;
-  reps_min: number;
-  reps_max: number;
+  reps_min: number;        // si unit='time', exprimé en SECONDES
+  reps_max: number;        // idem
+  unit?: 'reps' | 'time';  // défaut 'reps' ; 'time' = gainage & co (secondes)
   load_kg?: number;        // charge classique
   load?: 'bodyweight';     // poids du corps
   added_kg?: number;       // lest éventuel

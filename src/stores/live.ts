@@ -123,9 +123,10 @@ export const useLiveStore = defineStore('live', () => {
     persist();
   }
 
-  function addExercise(def: { id: string; name: string; muscle_primary?: string; equipment?: string }) {
+  function addExercise(def: { id: string; name: string; muscle_primary?: string; equipment?: string; unit?: string | null }) {
     if (!run.value) return;
     const bodyweight = def.equipment === 'poids_du_corps';
+    const isTime = def.unit === 'time';
     run.value.exercises.push({
       id: def.id,
       name: def.name,
@@ -133,10 +134,10 @@ export const useLiveStore = defineStore('live', () => {
       equipment: def.equipment,
       swapped_from: null,
       alternatives: [],
-      rest_seconds: 90,
-      planned: { sets: 0, reps_min: 0, reps_max: 0 },
+      rest_seconds: isTime ? 60 : 90,
+      planned: isTime ? { sets: 0, reps_min: 0, reps_max: 0, unit: 'time' } : { sets: 0, reps_min: 0, reps_max: 0 },
       bodyweight,
-      sets: [{ load_kg: 0, reps: 8, done: true, difficulty: 0, rir: null, comment: '' }],
+      sets: [{ load_kg: 0, reps: isTime ? 30 : 8, done: true, difficulty: 0, rir: null, comment: '' }],
       exercise_comment: '',
     });
     persist();

@@ -17,6 +17,7 @@ export interface ExerciseDef {
   equipment: string | null;
   equipment_required?: string[] | null; // atomes requis (tous nécessaires)
   difficulty?: number | null;           // 1=débutant, 2=intermédiaire, 3=avancé
+  unit?: string | null;                 // 'reps' (défaut) ou 'time' (secondes)
 }
 
 // Groupes musculaires primaires présents dans la bibliothèque.
@@ -185,17 +186,24 @@ function pickForMuscle(
     const sets = clamp(Math.min(setsPerExercise, remaining), 2, setsPerExercise);
     remaining -= sets;
     const bodyweight = e.equipment === 'poids_du_corps';
+    // Exercices au temps (gainage…) : cible en secondes, pas en reps.
+    let target: PlannedExercise['target'];
+    if (e.unit === 'time') {
+      target = { sets, reps_min: 30, reps_max: 60, unit: 'time', load: 'bodyweight' };
+    } else if (bodyweight) {
+      target = { sets, reps_min, reps_max, load: 'bodyweight' };
+    } else {
+      target = { sets, reps_min, reps_max, load_kg: 0 };
+    }
     const ex: PlannedExercise = {
       id: e.id,
       name: e.name,
       muscle_primary: e.muscle_primary ?? muscle,
       muscle_secondary: e.muscle_secondary ?? [],
       equipment: e.equipment ?? undefined,
-      progression: 'linear',
+      progression: e.unit === 'time' ? 'fixed' : 'linear',
       rest_seconds: rest,
-      target: bodyweight
-        ? { sets, reps_min, reps_max, load: 'bodyweight' }
-        : { sets, reps_min, reps_max, load_kg: 0 },
+      target,
     };
     chosen.push(ex);
   }

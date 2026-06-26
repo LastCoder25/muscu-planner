@@ -29,7 +29,7 @@
             </div>
           </div>
           <div class="ex-meta">
-            <span class="tag accent">{{ ex.target.sets }} × {{ ex.target.reps_min }}–{{ ex.target.reps_max }}</span>
+            <span class="tag accent">{{ repsLabel(ex.target) }}</span>
             <span class="tag">{{ loadLabel(ex.target) }}</span>
             <span class="tag">repos {{ ex.rest_seconds }}s</span>
             <span v-if="ex.equipment" class="tag">{{ ex.equipment }}</span>
@@ -71,6 +71,10 @@ function objectiveLabel(o: Objective) {
   return OBJECTIVE_LABELS[o] ?? o;
 }
 
+function repsLabel(t: ExerciseTarget): string {
+  const range = `${t.sets} × ${t.reps_min}–${t.reps_max}`;
+  return t.unit === 'time' ? `${range} s` : range;
+}
 function loadLabel(t: ExerciseTarget): string {
   if (t.load === 'bodyweight') return t.added_kg ? `+${t.added_kg} kg` : 'poids du corps';
   if (t.load_kg) return `${t.load_kg} kg`;
