@@ -85,7 +85,7 @@ async function goHome() {
   await router.push('/');
 }
 async function start() {
-  await router.push(`/session/${id}`);
+  await router.push(`/session/${id}/ready`);
 }
 async function openExercise(exId: string) {
   await router.push(`/exercise/${exId}`);

@@ -81,7 +81,7 @@ async function startFree() {
   await router.push('/free');
 }
 async function startSession(id: string) {
-  await router.push(`/session/${id}`);
+  await router.push(`/session/${id}/ready`);
 }
 </script>
 

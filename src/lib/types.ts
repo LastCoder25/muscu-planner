@@ -123,6 +123,7 @@ export interface SessionLog {
   duration_min?: number;
   global_difficulty?: Difficulty;
   global_comment?: string;
+  readiness?: number;        // forme du jour 1–5 (5 = top) — check pré-séance
   exercises: LoggedExercise[];
 }
 

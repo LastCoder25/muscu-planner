@@ -346,7 +346,7 @@ onMounted(async () => {
     await router.push('/');
     return;
   }
-  live.start(row.payload, true);
+  live.start(row.payload, { resume: true });
   clockInt = setInterval(() => { now.value = Date.now(); }, 1000);
 });
 

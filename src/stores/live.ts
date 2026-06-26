@@ -38,6 +38,7 @@ export interface LiveRun {
   exIndex: number;
   exercises: LiveExercise[];
   free?: boolean; // séance libre (sans plan source) → session_id null au log
+  readiness?: number; // forme du jour 1–5 (check pré-séance)
 }
 
 const keyFor = (sid: string) => `muscu:live:${sid}`;
@@ -56,7 +57,9 @@ export const useLiveStore = defineStore('live', () => {
   }
 
   // Démarre (ou reprend) l'exécution d'une session.
-  function start(session: Session, resume = true) {
+  // opts.light = séance allégée (−1 série/exo, plancher 2) ; opts.readiness = forme du jour.
+  function start(session: Session, opts: { resume?: boolean; light?: boolean; readiness?: number } = {}) {
+    const { resume = true, light = false, readiness } = opts;
     if (resume) {
       const saved = localStorage.getItem(keyFor(session.id));
       if (saved) {
@@ -69,10 +72,12 @@ export const useLiveStore = defineStore('live', () => {
       name: session.name,
       started_at: new Date().toISOString(),
       exIndex: 0,
+      readiness,
       exercises: session.exercises.map((ex) => {
         const bodyweight = ex.target.load === 'bodyweight';
         const base = bodyweight ? (ex.target.added_kg ?? 0) : (ex.target.load_kg ?? 0);
-        const sets: LiveSet[] = Array.from({ length: ex.target.sets }, () => ({
+        const nbSets = light ? Math.max(2, ex.target.sets - 1) : ex.target.sets;
+        const sets: LiveSet[] = Array.from({ length: nbSets }, () => ({
           load_kg: base,
           reps: ex.target.reps_min,
           done: false,
@@ -229,6 +234,7 @@ export const useLiveStore = defineStore('live', () => {
     };
     if (global.difficulty) log.global_difficulty = global.difficulty as Difficulty;
     if (global.comment) log.global_comment = global.comment;
+    if (r.readiness != null) log.readiness = r.readiness;
     return log;
   }
 
