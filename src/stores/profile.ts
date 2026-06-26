@@ -43,13 +43,31 @@ export const useProfileStore = defineStore('profile', () => {
     loaded.value = true;
   }
 
+  // Met à jour la ligne profiles existante (édition depuis l'écran Profil).
+  async function update(userId: string, p: Profile) {
+    const cfg = deriveLevelConfig(p.experience.level);
+    const row = {
+      level: p.experience.level,
+      objective: p.objective,
+      sessions_per_week: p.availability.sessions_per_week,
+      units: p.preferences?.units ?? 'kg',
+      payload: p,
+      level_config: cfg,
+    };
+    const { error } = await supabase.from('profiles').update(row).eq('user_id', userId);
+    if (error) throw error;
+    profile.value = p;
+    levelConfig.value = cfg;
+    loaded.value = true;
+  }
+
   function reset() {
     profile.value = null;
     levelConfig.value = null;
     loaded.value = false;
   }
 
-  return { profile, levelConfig, loaded, fetch, save, reset };
+  return { profile, levelConfig, loaded, fetch, save, update, reset };
 });
 
 if (import.meta.hot) {

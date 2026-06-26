@@ -48,7 +48,20 @@ export const useSessionsStore = defineStore('sessions', () => {
     return id;
   }
 
-  return { list, fetchMine, insert };
+  async function deleteAll(userId: string) {
+    const { error } = await supabase.from('sessions').delete().eq('user_id', userId);
+    if (error) throw error;
+    list.value = [];
+  }
+
+  // Remplace toutes les séances de l'utilisateur (régénération de programme).
+  async function replaceAll(userId: string, newSessions: Session[]) {
+    await deleteAll(userId);
+    for (const s of newSessions) await insert(userId, s);
+    await fetchMine();
+  }
+
+  return { list, fetchMine, insert, deleteAll, replaceAll };
 });
 
 if (import.meta.hot) {

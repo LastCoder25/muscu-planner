@@ -284,11 +284,15 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
-import type { Level, Objective, Equipment, EquipmentItem, SportPractice, Profile, Session } from '@/lib/types';
-import { SCHEMA_VERSION } from '@/lib/types';
+import type { Session, SportPractice } from '@/lib/types';
 import { deriveLevelConfig } from '@/lib/levelConfig';
 import { buildProgram, type ExerciseDef } from '@/lib/programBuilder';
 import { validateImportedSession } from '@/lib/coach';
+import { type ProfileForm, emptyProfileForm, formToProfile } from '@/lib/profileForm';
+import {
+  SEXES, LEVELS, OBJECTIVES, EQUIPMENT_ITEMS, DAYS,
+  PRIORITY_MUSCLES as MUSCLES, SPORTS, INTENSITIES,
+} from '@/data/profileOptions';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
@@ -304,81 +308,10 @@ const libraryStore = useLibraryStore();
 const TOTAL = 9;
 const STEP_TITLES = ['Identité', 'Niveau', 'Objectif', 'Dispos', 'Matériel', 'Sports', 'Contraintes', 'Préférences', 'Programme'];
 
-const SEXES = [
-  { value: 'homme' as const, label: 'Homme' },
-  { value: 'femme' as const, label: 'Femme' },
-  { value: 'autre' as const, label: 'Autre' },
-];
-const LEVELS = [
-  { value: 'debutant' as Level, label: 'Débutant', desc: 'Progression linéaire guidée, programme généré, note d’effort simple.' },
-  { value: 'intermediaire' as Level, label: 'Intermédiaire', desc: 'Double progression assistée, RIR optionnel, template éditable.' },
-  { value: 'avance' as Level, label: 'Avancé', desc: 'Double progression + RIR, import/construction libre, UI dense.' },
-];
-const OBJECTIVES = [
-  { value: 'force' as Objective, label: 'Force' },
-  { value: 'hypertrophie' as Objective, label: 'Hypertrophie (prise de muscle)' },
-  { value: 'endurance' as Objective, label: 'Endurance' },
-  { value: 'remise_en_forme' as Objective, label: 'Remise en forme' },
-  { value: 'perte_de_gras' as Objective, label: 'Perte de gras' },
-];
-const EQUIPMENT_ITEMS: { value: EquipmentItem; label: string; desc: string }[] = [
-  { value: 'barre', label: 'Barre + disques', desc: 'Squat, développé couché, soulevé de terre…' },
-  { value: 'halteres', label: 'Haltères', desc: 'Développés, curls, fentes…' },
-  { value: 'machine', label: 'Machines guidées', desc: 'Presse, leg curl, pec deck…' },
-  { value: 'poulie', label: 'Poulie / câble', desc: 'Tirages, extensions, écartés…' },
-  { value: 'poids_du_corps', label: 'Poids du corps', desc: 'Pompes, gainage, tractions… (toujours dispo)' },
-];
-const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-const MUSCLES = ['Pectoraux', 'Dos', 'Épaules', 'Bras', 'Jambes', 'Fessiers', 'Abdos'];
-const SPORTS = ['Course', 'Vélo', 'Natation', 'Escalade', 'Football', 'Basket', 'Tennis', 'Boxe', 'Rugby', 'Yoga'];
-const INTENSITIES: { value: NonNullable<SportPractice['intensity']>; label: string }[] = [
-  { value: 'faible', label: 'Faible' },
-  { value: 'moderee', label: 'Modérée' },
-  { value: 'elevee', label: 'Élevée' },
-];
-
 const step = ref(0);
 const saving = ref(false);
 
-interface FormState {
-  name: string;
-  sex: 'homme' | 'femme' | 'autre' | undefined;
-  birth_year: number | undefined;
-  height_cm: number | undefined;
-  weight_kg: number | undefined;
-  level: Level;
-  training_months: number | undefined;
-  objective: Objective;
-  sessions_per_week: number;
-  session_duration_min: number;
-  preferred_days: string[];
-  available_equipment: EquipmentItem[];
-  sports: SportPractice[];
-  injuries: string[];
-  avoid_exercises: string[];
-  priority_muscles: string[];
-  units: 'kg' | 'lb';
-}
-
-const form = reactive<FormState>({
-  name: '',
-  sex: undefined,
-  birth_year: undefined,
-  height_cm: undefined,
-  weight_kg: undefined,
-  level: 'debutant',
-  training_months: undefined,
-  objective: 'remise_en_forme',
-  sessions_per_week: 3,
-  session_duration_min: 60,
-  preferred_days: [],
-  available_equipment: [],
-  sports: [],
-  injuries: [],
-  avoid_exercises: [],
-  priority_muscles: [],
-  units: 'kg',
-});
+const form = reactive<ProfileForm>(emptyProfileForm());
 
 // programMode : pilote l'affichage de l'import IA (mode 'free' = avancé).
 const programMode = computed(() => deriveLevelConfig(form.level).program_mode);
@@ -420,7 +353,7 @@ const imported = ref<Session | null>(null);
 
 function regenerate() {
   generating.value = true;
-  generated.value = buildProgram(buildProfile(), library.value);
+  generated.value = buildProgram(formToProfile(form), library.value);
   selectedSessions.clear();
   generated.value.forEach((_, i) => selectedSessions.add(i));
   generating.value = false;
@@ -467,55 +400,6 @@ function toggleArr<T>(arr: T[], v: T) {
   else arr.push(v);
 }
 
-// ── Construction du Profile (contrat v1.0) ──────────────
-// Résumé grossier du matériel (rétro-compat avec le champ `equipment`).
-function deriveCoarseEquipment(items: EquipmentItem[]): Equipment {
-  const has = (x: EquipmentItem) => items.includes(x);
-  if (has('machine') && has('poulie') && has('barre')) return 'salle_complete';
-  if (has('barre') || has('machine') || has('poulie')) return 'home_gym';
-  if (has('halteres')) return 'halteres';
-  return 'poids_du_corps';
-}
-
-function buildProfile(): Profile {
-  const identity: Profile['identity'] = { name: form.name.trim() };
-  if (form.sex) identity.sex = form.sex;
-  if (form.birth_year) identity.birth_year = form.birth_year;
-  if (form.height_cm) identity.height_cm = form.height_cm;
-  if (form.weight_kg) identity.weight_kg = form.weight_kg;
-
-  const experience: Profile['experience'] = { level: form.level };
-  if (form.training_months != null) experience.training_months = form.training_months;
-
-  const availability: Profile['availability'] = { sessions_per_week: form.sessions_per_week };
-  if (form.session_duration_min) availability.session_duration_min = form.session_duration_min;
-  if (form.preferred_days.length) availability.preferred_days = [...form.preferred_days];
-
-  const preferences: NonNullable<Profile['preferences']> = { units: form.units };
-  if (form.priority_muscles.length) preferences.priority_muscles = [...form.priority_muscles];
-
-  const profile: Profile = {
-    schema_version: SCHEMA_VERSION,
-    type: 'profile',
-    identity,
-    experience,
-    objective: form.objective,
-    availability,
-    equipment: deriveCoarseEquipment(form.available_equipment),
-    preferences,
-  };
-
-  if (form.available_equipment.length) profile.available_equipment = [...form.available_equipment];
-  if (form.sports.length) profile.sports = form.sports.map((s) => ({ ...s }));
-
-  const constraints: NonNullable<Profile['constraints']> = {};
-  if (form.injuries.length) constraints.injuries = [...form.injuries];
-  if (form.avoid_exercises.length) constraints.avoid_exercises = [...form.avoid_exercises];
-  if (Object.keys(constraints).length) profile.constraints = constraints;
-
-  return profile;
-}
-
 async function finish() {
   const userId = auth.user?.id;
   if (!userId) {
@@ -524,7 +408,7 @@ async function finish() {
   }
   saving.value = true;
   try {
-    await profileStore.save(userId, buildProfile());
+    await profileStore.save(userId, formToProfile(form));
 
     const chosen = generated.value.filter((_, i) => selectedSessions.has(i));
     for (const s of chosen) {
