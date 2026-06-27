@@ -25,20 +25,25 @@ export function bestE1RM(performed: PerformedSet[]): number {
 }
 
 /**
- * Durée estimée d'une séance (minutes) : pour chaque série, temps de repos
- * + temps d'exécution. Exécution ≈ secondes pour le gainage (`unit:'time'`),
- * sinon ~3 s/rep (plancher 30 s). Compte les séries réelles (prescription si
- * présente, sinon `target.sets`). Inclut donc bien l'exécution, pas que les pauses.
+ * Durée estimée d'une séance (minutes). Pour chaque série : repos + exécution
+ * (≈ secondes pour le gainage `unit:'time'`, sinon ~4 s/rep, plancher 30 s).
+ * + ~1 min de mise en place par exercice (installation / réglage de la charge)
+ * + ~5 min d'échauffement général. Compte les séries réelles (prescription si
+ * présente). Bien plus réaliste qu'un simple cumul des pauses.
  */
+const WARMUP_SEC = 5 * 60;
+const SETUP_PER_EXERCISE_SEC = 60;
+
 export function estimateDurationMin(session: Session): number {
-  let sec = 0;
+  if (session.exercises.length === 0) return 1;
+  let sec = WARMUP_SEC;
   for (const ex of session.exercises) {
     const nSets = ex.prescription?.length || ex.target.sets || 0;
     const rest = ex.rest_seconds ?? 90;
     const isTime = ex.target.unit === 'time';
     const repsAvg = ((ex.target.reps_min ?? 0) + (ex.target.reps_max ?? 0)) / 2 || 10;
-    const exec = isTime ? repsAvg : Math.max(30, repsAvg * 3);
-    sec += nSets * (rest + exec);
+    const exec = isTime ? repsAvg : Math.max(30, repsAvg * 4);
+    sec += SETUP_PER_EXERCISE_SEC + nSets * (rest + exec);
   }
   return Math.max(1, Math.round(sec / 60));
 }
