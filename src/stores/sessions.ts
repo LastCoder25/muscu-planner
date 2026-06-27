@@ -45,6 +45,9 @@ export const useSessionsStore = defineStore('sessions', () => {
     };
     const { error } = await supabase.from('sessions').insert(row);
     if (error) throw error;
+    // Reflète immédiatement la séance dans le store (sinon le détail juste après
+    // l'import ne la trouve pas → « Séance introuvable »).
+    list.value.unshift({ id, name: payload.name, payload, created_at: payload.created_at! });
     return id;
   }
 

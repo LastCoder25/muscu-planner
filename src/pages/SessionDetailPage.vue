@@ -136,6 +136,8 @@ async function openExercise(exId: string) {
 onMounted(async () => {
   try {
     if (sessionsStore.list.length === 0) await sessionsStore.fetchMine();
+    // Liste potentiellement périmée (ex. séance importée à l'instant) → on resynchronise.
+    if (!session.value) await sessionsStore.fetchMine();
     if (!session.value) {
       $q.notify({ type: 'negative', message: 'Séance introuvable.' });
       await router.push('/');
