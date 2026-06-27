@@ -50,6 +50,12 @@
       <!-- Instructions -->
       <div class="sec-h">Instructions</div>
       <p v-if="ex.payload?.instructions" class="instructions">{{ ex.payload.instructions }}</p>
+      <template v-else-if="guide">
+        <ol class="steps">
+          <li v-for="(st, i) in guide.steps" :key="i">{{ st }}</li>
+        </ol>
+        <div v-if="guide.tip" class="tip"><q-icon name="lightbulb" size="16px" /> {{ guide.tip }}</div>
+      </template>
       <div v-else class="no-instr">
         Pas encore d'instructions pour cet exercice.
         <button class="link" @click="goSettings">Envoyer un retour</button>
@@ -78,6 +84,7 @@ import { useLibraryStore, type ExerciseFull, type ExerciseRow } from '@/stores/l
 import { useLogsStore } from '@/stores/logs';
 import { bestE1RM } from '@/lib/estimates';
 import { EQUIPMENT_ITEMS } from '@/data/profileOptions';
+import { exerciseInstructions } from '@/data/exerciseInstructions';
 
 const route = useRoute();
 const router = useRouter();
@@ -89,6 +96,7 @@ const loading = ref(true);
 const ex = ref<ExerciseFull | null>(null);
 const alts = ref<ExerciseRow[]>([]);
 const series = ref<number[]>([]); // 1RM estimé chronologique (historique de l'exo)
+const guide = computed(() => (ex.value ? exerciseInstructions(ex.value.id) : undefined));
 
 const chart = computed(() => {
   const s = series.value;
@@ -190,6 +198,8 @@ watch(() => route.params.id, async (id) => {
 .required { font-size: 13px; color: var(--text); margin-top: 10px; &.dim { color: var(--dim); } }
 
 .instructions { font-size: 14px; color: var(--text); line-height: 1.5; white-space: pre-wrap; }
+.steps { margin: 0; padding-left: 20px; color: var(--text); font-size: 14px; line-height: 1.5; li { margin-bottom: 7px; } }
+.tip { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 10px; color: var(--dim); font-size: 13px; }
 .no-instr { font-size: 13px; color: var(--dim); }
 .chart { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px; }
 .chart-svg { width: 100%; height: 90px; display: block; }
