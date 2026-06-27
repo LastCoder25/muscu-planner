@@ -4,7 +4,7 @@
       <button class="iconbtn" aria-label="Retour" @click="goHome">‹</button>
       <div class="top-mid">
         <div class="top-title font-display">{{ session?.name || 'Séance' }}</div>
-        <div class="top-sub" v-if="session">{{ session.exercises.length }} exercices<template v-if="session.estimated_duration_min"> · ~{{ session.estimated_duration_min }} min</template></div>
+        <div class="top-sub" v-if="session">{{ session.exercises.length }} exercices · ~{{ estimateDurationMin(session) }} min</div>
       </div>
       <q-btn flat round dense icon="content_copy" aria-label="Dupliquer" @click="duplicate" />
       <q-btn flat round dense icon="delete_outline" color="negative" aria-label="Supprimer" @click="confirmDelete" />
@@ -56,6 +56,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import type { Session, ExerciseTarget, Objective, PrescribedSet } from '@/lib/types';
+import { estimateDurationMin } from '@/lib/estimates';
 import { useSessionsStore } from '@/stores/sessions';
 import { useAuthStore } from '@/stores/auth';
 

@@ -66,7 +66,8 @@
               <div class="cell-lbl">{{ ex.bodyweight ? 'Lest' : 'Charge' }}</div>
               <div class="val-line">
                 <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'load_kg', -2.5)">−</button>
-                <div class="val font-display">{{ s.load_kg }}<small>kg</small></div>
+                <input v-if="i === curSetIndex" v-model.number="s.load_kg" type="number" inputmode="decimal" min="0" step="0.5" class="valin font-display" aria-label="Charge en kg" @change="live.persist()" />
+                <div v-else class="val font-display">{{ s.load_kg }}<small>kg</small></div>
                 <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'load_kg', 2.5)">+</button>
               </div>
             </div>
@@ -74,7 +75,8 @@
               <div class="cell-lbl">{{ isTimeEx ? 'Sec' : 'Reps' }}</div>
               <div class="val-line">
                 <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'reps', isTimeEx ? -5 : -1)">−</button>
-                <div class="val font-display">{{ s.reps }}</div>
+                <input v-if="i === curSetIndex" v-model.number="s.reps" type="number" inputmode="numeric" min="0" class="valin font-display" :aria-label="isTimeEx ? 'Secondes' : 'Répétitions'" @change="live.persist()" />
+                <div v-else class="val font-display">{{ s.reps }}</div>
                 <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'reps', isTimeEx ? 5 : 1)">+</button>
               </div>
             </div>
@@ -469,6 +471,7 @@ onBeforeUnmount(() => { clearInterval(clockInt); clearInterval(restInt); });
 .val-line { display: flex; align-items: center; gap: 7px; }
 .stepper { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 16px; display: grid; place-items: center; cursor: pointer; flex: none; }
 .val { font-weight: 600; font-size: 19px; font-variant-numeric: tabular-nums; min-width: 28px; text-align: center; color: var(--accent); small { font-size: 11px; color: var(--dim); font-weight: 400; } }
+.valin { width: 64px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; color: var(--accent); font-weight: 600; font-size: 18px; text-align: center; padding: 5px 2px; outline: none; -moz-appearance: textfield; appearance: textfield; &:focus { border-color: var(--accent); } &::-webkit-outer-spin-button, &::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } }
 .rm { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--dim-2); cursor: pointer; }
 .dpill { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; color: var(--accent-ink); }
 .dpill.d1 { background: var(--d1); } .dpill.d2 { background: var(--d2); } .dpill.d3 { background: var(--d3); } .dpill.d4 { background: var(--d4); }

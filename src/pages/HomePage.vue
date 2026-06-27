@@ -48,8 +48,7 @@
           <div>
             <div class="session-name">{{ s.name }}</div>
             <div class="session-meta">
-              {{ s.payload.exercises.length }} exercices
-              <template v-if="s.payload.estimated_duration_min"> · ~{{ s.payload.estimated_duration_min }} min</template>
+              {{ s.payload.exercises.length }} exercices · ~{{ estimateDurationMin(s.payload) }} min
             </div>
           </div>
           <div class="row items-center no-wrap" style="gap: 4px">
@@ -83,6 +82,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useLiveStore } from '@/stores/live';
+import { estimateDurationMin } from '@/lib/estimates';
 
 const $q = useQuasar();
 const router = useRouter();
