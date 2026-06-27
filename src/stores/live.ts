@@ -15,6 +15,7 @@ export interface LiveSet {
   difficulty: number; // 0 = pas encore noté
   rir: number | null;
   comment: string;
+  rest_seconds?: number; // repos propre à cette série (sinon repos de l'exo)
 }
 
 export interface LiveExercise {
@@ -77,12 +78,14 @@ export const useLiveStore = defineStore('live', () => {
       exercises: session.exercises.map((ex) => {
         const bodyweight = ex.target.load === 'bodyweight';
         const base = bodyweight ? (ex.target.added_kg ?? 0) : (ex.target.load_kg ?? 0);
-        const blank = (load: number, reps: number): LiveSet => ({
-          load_kg: load, reps, done: false, difficulty: 0, rir: null, comment: '',
-        });
+        const blank = (load: number, reps: number, rest?: number): LiveSet => {
+          const set: LiveSet = { load_kg: load, reps, done: false, difficulty: 0, rir: null, comment: '' };
+          if (rest) set.rest_seconds = rest;
+          return set;
+        };
         // Séries détaillées (pyramide importée) si présentes, sinon dérivées de la cible.
         let sets: LiveSet[] = ex.prescription?.length
-          ? ex.prescription.map((p) => blank(p.load_kg ?? base, p.reps))
+          ? ex.prescription.map((p) => blank(p.load_kg ?? base, p.reps, p.rest_seconds))
           : Array.from({ length: ex.target.sets }, () => blank(base, ex.target.reps_min));
         if (light && sets.length > 2) sets = sets.slice(0, sets.length - 1);
         return {

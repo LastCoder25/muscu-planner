@@ -212,8 +212,13 @@ function buildFromText(cur: TextEx, library: LibEntry[]): PlannedExercise {
   const loads = cur.sets.map((s) => s.load);
   const topLoad = Math.max(0, ...loads);
   const maxRest = Math.max(0, ...cur.sets.map((s) => s.rest ?? 0));
-  // Prescription = chaque série telle qu'écrite (préserve la pyramide).
-  const prescription: PrescribedSet[] = cur.sets.map((s) => (s.load > 0 ? { reps: s.reps, load_kg: s.load } : { reps: s.reps }));
+  // Prescription = chaque série telle qu'écrite (préserve la pyramide + son repos).
+  const prescription: PrescribedSet[] = cur.sets.map((s) => {
+    const p: PrescribedSet = { reps: s.reps };
+    if (s.load > 0) p.load_kg = s.load;
+    if (s.rest) p.rest_seconds = s.rest;
+    return p;
+  });
 
   const target: ExerciseTarget = topLoad > 0
     ? { sets: cur.sets.length, reps_min: Math.min(...repsArr), reps_max: Math.max(...repsArr), load_kg: topLoad }

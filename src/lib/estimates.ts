@@ -38,13 +38,18 @@ export function estimateDurationMin(session: Session): number {
   if (session.exercises.length === 0) return 1;
   let sec = WARMUP_SEC;
   for (const ex of session.exercises) {
-    const nSets = ex.prescription?.length || ex.target.sets || 0;
-    const rest = ex.rest_seconds ?? 90;
+    const exRest = ex.rest_seconds ?? 90;
     const isTime = ex.target.unit === 'time';
     const repsAvg = ((ex.target.reps_min ?? 0) + (ex.target.reps_max ?? 0)) / 2 || 10;
     const exec = isTime ? repsAvg : Math.max(30, repsAvg * 4);
     const sides = ex.unilateral ? 2 : 1; // unilatéral : exécution des deux côtés
-    sec += SETUP_PER_EXERCISE_SEC + nSets * (rest + exec * sides);
+    sec += SETUP_PER_EXERCISE_SEC;
+    if (ex.prescription?.length) {
+      // Repos propre à chaque série (pyramide importée : repos croissant).
+      for (const p of ex.prescription) sec += (p.rest_seconds ?? exRest) + exec * sides;
+    } else {
+      sec += (ex.target.sets || 0) * (exRest + exec * sides);
+    }
   }
   return Math.max(1, Math.round(sec / 60));
 }

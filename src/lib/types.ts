@@ -72,6 +72,7 @@ export interface ExerciseTarget {
 export interface PrescribedSet {
   reps: number;
   load_kg?: number;
+  rest_seconds?: number; // repos propre à cette série (pyramide importée : repos croissant)
 }
 
 export interface PlannedExercise {

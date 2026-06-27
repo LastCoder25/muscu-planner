@@ -38,7 +38,7 @@
               <span class="tag accent">{{ repsLabel(ex.target) }}</span>
               <span class="tag">{{ loadLabel(ex.target) }}</span>
             </template>
-            <span class="tag">repos {{ ex.rest_seconds }}s</span>
+            <span class="tag">{{ restLabel(ex) }}</span>
             <span v-if="ex.unilateral" class="tag uni">par côté</span>
             <span v-if="ex.equipment" class="tag">{{ ex.equipment }}</span>
           </div>
@@ -93,6 +93,19 @@ function loadLabel(t: ExerciseTarget): string {
 }
 function setLabel(p: PrescribedSet): string {
   return p.load_kg ? `${p.load_kg} kg × ${p.reps}` : `PdC × ${p.reps}`;
+}
+function fmtRest(s: number): string {
+  return s >= 60 ? `${Math.round(s / 30) / 2} min` : `${s} s`;
+}
+// Repos par série si la prescription en a (pyramide importée), sinon repos de l'exo.
+function restLabel(ex: { rest_seconds: number; prescription?: PrescribedSet[] }): string {
+  const rests = (ex.prescription ?? []).map((p) => p.rest_seconds).filter((r): r is number => r != null);
+  if (rests.length) {
+    const lo = Math.min(...rests);
+    const hi = Math.max(...rests);
+    return lo === hi ? `repos ${fmtRest(lo)}` : `repos ${fmtRest(lo)}–${fmtRest(hi)}`;
+  }
+  return `repos ${fmtRest(ex.rest_seconds)}`;
 }
 
 async function goHome() {

@@ -248,9 +248,9 @@ let restInt: ReturnType<typeof setInterval> | undefined;
 const restDisplay = computed(() =>
   restLeft.value >= 60 ? `${Math.floor(restLeft.value / 60)}:${String(restLeft.value % 60).padStart(2, '0')}` : String(restLeft.value),
 );
-function startRest() {
+function startRest(seconds?: number) {
   resting.value = true;
-  restTotal.value = restLeft.value = ex.value?.rest_seconds ?? 90;
+  restTotal.value = restLeft.value = seconds ?? ex.value?.rest_seconds ?? 90;
   clearInterval(restInt);
   restInt = setInterval(() => {
     restLeft.value--;
@@ -275,10 +275,11 @@ function adj(s: LiveSet, key: 'load_kg' | 'reps', d: number) {
 function validateSet() {
   const s = curSet.value;
   if (!s || !s.difficulty) return;
+  const restSec = s.rest_seconds ?? ex.value?.rest_seconds; // repos propre à la série
   s.done = true;
   editIdx.value = -1;
   live.persist();
-  if (curSetIndex.value >= 0) startRest(); // il reste des séries
+  if (curSetIndex.value >= 0) startRest(restSec); // il reste des séries
 }
 function nextExercise() {
   skipRest();
