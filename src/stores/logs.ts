@@ -74,7 +74,14 @@ export const useLogsStore = defineStore('logs', () => {
     return ((data ?? []) as { payload: SessionLog }[]).map((r) => r.payload);
   }
 
-  return { recent, insert, fetchRecent, fetchById, lastForSession, fetchHistory };
+  // Supprime un bilan (séance passée). RLS : own.
+  async function remove(id: string) {
+    const { error } = await supabase.from('session_logs').delete().eq('id', id);
+    if (error) throw error;
+    recent.value = recent.value.filter((r) => r.id !== id);
+  }
+
+  return { recent, insert, fetchRecent, fetchById, lastForSession, fetchHistory, remove };
 });
 
 if (import.meta.hot) {

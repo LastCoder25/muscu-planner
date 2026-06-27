@@ -169,6 +169,7 @@
         <button class="cta q-mt-md" :disabled="saving" @click="finish">
           {{ saving ? 'Enregistrement…' : 'Enregistrer le bilan' }}
         </button>
+        <button class="abandon" :disabled="saving" @click="stopSession">Arrêter sans enregistrer</button>
       </div>
     </q-dialog>
   </q-page>
@@ -334,6 +335,20 @@ async function quit() {
   await router.push('/');
 }
 
+// Arrêter la séance sans rien enregistrer (abandon).
+function stopSession() {
+  $q.dialog({
+    title: 'Arrêter la séance',
+    message: 'La séance en cours sera abandonnée et rien ne sera enregistré. Continuer ?',
+    cancel: { label: 'Retour', flat: true },
+    ok: { label: 'Arrêter', color: 'negative' },
+  }).onOk(() => {
+    live.clear();
+    finishOpen.value = false;
+    router.push('/').catch(() => undefined);
+  });
+}
+
 // ── Init ────────────────────────────────────────────────
 onMounted(async () => {
   const id = String(route.params.id);
@@ -444,4 +459,5 @@ onBeforeUnmount(() => {
 
 .finish-sheet { width: 100%; background: var(--surface); border-radius: 26px 26px 0 0; border-top: 1px solid var(--line); padding: 10px 18px 26px; h3 { font-size: 20px; text-transform: uppercase; } p { font-size: 12.5px; color: var(--dim); margin: 4px 0 14px; } }
 .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 6px auto 16px; }
+.abandon { width: 100%; margin-top: 10px; background: none; border: none; color: var(--d4); font-size: 13px; font-weight: 600; cursor: pointer; padding: 8px; &:disabled { opacity: 0.5; } }
 </style>
