@@ -11,6 +11,7 @@ export interface LibEntry {
   muscle_primary?: string | null;
   muscle_secondary?: string[] | null;
   equipment?: string | null;
+  unilateral?: boolean | null;
 }
 
 type Raw = Record<string, unknown>;
@@ -229,6 +230,7 @@ function buildFromText(cur: TextEx, library: LibEntry[]): PlannedExercise {
     target,
     prescription,
     notes: cur.notes.join(' · '),
+    ...(match?.unilateral ? { unilateral: true } : {}),
   };
 }
 

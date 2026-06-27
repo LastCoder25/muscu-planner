@@ -39,6 +39,7 @@
               <span class="tag">{{ loadLabel(ex.target) }}</span>
             </template>
             <span class="tag">repos {{ ex.rest_seconds }}s</span>
+            <span v-if="ex.unilateral" class="tag uni">par côté</span>
             <span v-if="ex.equipment" class="tag">{{ ex.equipment }}</span>
           </div>
         </div>
@@ -178,6 +179,7 @@ onMounted(async () => {
 .ex-meta { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 11px; }
 .tag { font-family: var(--font-display); font-size: 13px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line-soft); padding: 4px 9px; border-radius: 8px; }
 .tag.accent { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.tag.uni { color: var(--accent); border-color: var(--accent); }
 
 .cta-wrap { position: fixed; left: 0; right: 0; bottom: 0; max-width: 600px; margin: 0 auto; padding: 16px 16px 26px; background: linear-gradient(180deg, #15120e00, var(--bg) 30%); }
 .cta { width: 100%; height: 58px; border: none; border-radius: 18px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; box-shadow: 0 10px 30px -8px #ffd23f55; }

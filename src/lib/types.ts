@@ -86,6 +86,7 @@ export interface PlannedExercise {
   prescription?: PrescribedSet[]; // séries détaillées (sinon dérivées de target)
   alternatives?: string[];
   notes?: string;
+  unilateral?: boolean;    // travaillé un côté à la fois → « / côté », durée ×2
 }
 
 export interface Session {
@@ -118,6 +119,7 @@ export interface LoggedExercise {
   planned: Partial<ExerciseTarget>;
   performed: PerformedSet[];
   exercise_comment?: string;
+  unilateral?: boolean;
 }
 
 export interface SessionLog {

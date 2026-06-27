@@ -19,6 +19,7 @@ export interface ExerciseDef {
   equipment_required?: string[] | null; // atomes requis (tous nécessaires)
   difficulty?: number | null;           // 1=débutant, 2=intermédiaire, 3=avancé
   unit?: string | null;                 // 'reps' (défaut) ou 'time' (secondes)
+  unilateral?: boolean | null;          // travaillé un côté à la fois (fentes, rowing 1 bras…)
 }
 
 // Groupes musculaires primaires présents dans la bibliothèque.
@@ -238,6 +239,7 @@ function pickForMuscle(
       rest_seconds: rest,
       target,
     };
+    if (e.unilateral) ex.unilateral = true;
     chosen.push(ex);
   }
   return chosen;

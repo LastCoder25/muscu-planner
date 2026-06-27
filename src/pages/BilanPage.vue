@@ -25,6 +25,7 @@
         <div v-for="(ex, i) in log.exercises" :key="i" class="ex-card">
           <div class="ex-name">
             {{ ex.name }}
+            <span v-if="ex.unilateral" class="uni-badge">par côté</span>
             <span v-if="ex.swapped_from" class="swap-badge">remplacé</span>
           </div>
           <div class="ex-planned">Prévu : {{ plannedLabel(ex.planned) }}</div>
@@ -255,6 +256,7 @@ onMounted(async () => {
 .ex-card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
 .ex-name { font-weight: 600; font-size: 16px; color: var(--text); }
 .swap-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--accent-ink); background: var(--accent); padding: 2px 7px; border-radius: 6px; margin-left: 8px; }
+.uni-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--accent); border: 1px solid var(--accent); padding: 2px 7px; border-radius: 6px; margin-left: 8px; }
 .ex-planned { font-size: 12.5px; color: var(--dim); margin-top: 4px; }
 .sets { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
 .setpill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-display); font-size: 14px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line-soft); padding: 5px 9px; border-radius: 8px; }

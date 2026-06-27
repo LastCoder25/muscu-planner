@@ -34,6 +34,7 @@
           <div class="exo-meta">
             <span v-if="ex.equipment" class="chip">{{ ex.equipment }}</span>
             <span v-if="ex.muscle_primary" class="chip">{{ ex.muscle_primary }}</span>
+            <span v-if="ex.unilateral" class="chip uni">par côté</span>
             <span class="chip tgt">Cible {{ ex.planned.sets }} × {{ ex.planned.reps_min }}–{{ ex.planned.reps_max }}{{ ex.planned.unit === 'time' ? ' s' : '' }}</span>
           </div>
         </div>
@@ -402,6 +403,7 @@ onBeforeUnmount(() => {
 .exo-meta { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
 .chip { font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--dim); background: var(--surface); border: 1px solid var(--line-soft); padding: 5px 10px; border-radius: 8px; }
 .chip.tgt { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.chip.uni { color: var(--accent); border-color: var(--accent); }
 
 .timer { margin: 16px 0 4px; border: 1px solid var(--line); border-radius: 22px; background: linear-gradient(180deg, var(--surface-2), var(--surface)); padding: 22px; }
 .timer-label { font-size: 11px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--accent); text-align: center; }

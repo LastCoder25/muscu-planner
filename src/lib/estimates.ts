@@ -43,7 +43,8 @@ export function estimateDurationMin(session: Session): number {
     const isTime = ex.target.unit === 'time';
     const repsAvg = ((ex.target.reps_min ?? 0) + (ex.target.reps_max ?? 0)) / 2 || 10;
     const exec = isTime ? repsAvg : Math.max(30, repsAvg * 4);
-    sec += SETUP_PER_EXERCISE_SEC + nSets * (rest + exec);
+    const sides = ex.unilateral ? 2 : 1; // unilatéral : exécution des deux côtés
+    sec += SETUP_PER_EXERCISE_SEC + nSets * (rest + exec * sides);
   }
   return Math.max(1, Math.round(sec / 60));
 }

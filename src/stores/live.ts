@@ -27,6 +27,7 @@ export interface LiveExercise {
   rest_seconds: number;
   planned: ExerciseTarget;
   bodyweight: boolean;
+  unilateral: boolean;
   sets: LiveSet[];
   exercise_comment: string;
 }
@@ -94,6 +95,7 @@ export const useLiveStore = defineStore('live', () => {
           rest_seconds: ex.rest_seconds,
           planned: ex.target,
           bodyweight,
+          unilateral: ex.unilateral ?? false,
           sets,
           exercise_comment: '',
         };
@@ -133,7 +135,7 @@ export const useLiveStore = defineStore('live', () => {
     persist();
   }
 
-  function addExercise(def: { id: string; name: string; muscle_primary?: string; equipment?: string; unit?: string | null }) {
+  function addExercise(def: { id: string; name: string; muscle_primary?: string; equipment?: string; unit?: string | null; unilateral?: boolean | null }) {
     if (!run.value) return;
     const bodyweight = def.equipment === 'poids_du_corps';
     const isTime = def.unit === 'time';
@@ -147,6 +149,7 @@ export const useLiveStore = defineStore('live', () => {
       rest_seconds: isTime ? 60 : 90,
       planned: isTime ? { sets: 0, reps_min: 0, reps_max: 0, unit: 'time' } : { sets: 0, reps_min: 0, reps_max: 0 },
       bodyweight,
+      unilateral: def.unilateral ?? false,
       // Série créée NON validée : on note la difficulté après l'avoir faite (flux « valider »).
       sets: [{ load_kg: 0, reps: isTime ? 30 : 8, done: false, difficulty: 0, rir: null, comment: '' }],
       exercise_comment: '',
@@ -236,6 +239,7 @@ export const useLiveStore = defineStore('live', () => {
             return ps;
           }),
         exercise_comment: ex.exercise_comment || '',
+        ...(ex.unilateral ? { unilateral: true } : {}),
       })),
     };
     if (global.difficulty) log.global_difficulty = global.difficulty as Difficulty;
