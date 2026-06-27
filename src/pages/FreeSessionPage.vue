@@ -66,24 +66,30 @@
             <div>
               <div class="cell-lbl">{{ ex.bodyweight ? 'Lest' : 'Charge' }}</div>
               <div class="val-line">
-                <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'load_kg', -2.5)">−</button>
-                <input v-if="i === curSetIndex" v-model.number="s.load_kg" type="number" inputmode="decimal" min="0" step="0.5" class="valin font-display" aria-label="Charge en kg" @change="live.persist()" />
+                <button v-if="i === curSetIndex || i === editIdx" class="stepper" @click="adj(s, 'load_kg', -2.5)">−</button>
+                <input v-if="i === curSetIndex || i === editIdx" v-model.number="s.load_kg" type="number" inputmode="decimal" min="0" step="0.5" class="valin font-display" aria-label="Charge en kg" @change="live.persist()" />
                 <div v-else class="val font-display">{{ s.load_kg }}<small>kg</small></div>
-                <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'load_kg', 2.5)">+</button>
+                <button v-if="i === curSetIndex || i === editIdx" class="stepper" @click="adj(s, 'load_kg', 2.5)">+</button>
               </div>
             </div>
             <div>
               <div class="cell-lbl">{{ isTimeEx ? 'Sec' : 'Reps' }}</div>
               <div class="val-line">
-                <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'reps', isTimeEx ? -5 : -1)">−</button>
-                <input v-if="i === curSetIndex" v-model.number="s.reps" type="number" inputmode="numeric" min="0" class="valin font-display" :aria-label="isTimeEx ? 'Secondes' : 'Répétitions'" @change="live.persist()" />
+                <button v-if="i === curSetIndex || i === editIdx" class="stepper" @click="adj(s, 'reps', isTimeEx ? -5 : -1)">−</button>
+                <input v-if="i === curSetIndex || i === editIdx" v-model.number="s.reps" type="number" inputmode="numeric" min="0" class="valin font-display" :aria-label="isTimeEx ? 'Secondes' : 'Répétitions'" @change="live.persist()" />
                 <div v-else class="val font-display">{{ s.reps }}</div>
-                <button v-if="i === curSetIndex" class="stepper" @click="adj(s, 'reps', isTimeEx ? 5 : 1)">+</button>
+                <button v-if="i === curSetIndex || i === editIdx" class="stepper" @click="adj(s, 'reps', isTimeEx ? 5 : 1)">+</button>
               </div>
             </div>
             <div>
-              <div v-if="s.done && s.difficulty" class="dpill" :class="'d' + s.difficulty">{{ s.difficulty }}</div>
+              <button v-if="i === editIdx" class="okedit" aria-label="Terminer la modification" @click="editIdx = -1">✓</button>
+              <button v-else-if="s.done" class="dpill editable" :class="'d' + (s.difficulty || 2)" aria-label="Modifier la série" @click="editIdx = i">{{ s.difficulty || '✎' }}</button>
               <button v-else-if="i === curSetIndex && ex.sets.length > 1" class="rm" aria-label="Retirer la série" @click="live.removeSet(i)">✕</button>
+            </div>
+            <div v-if="i === editIdx" class="edit-diff">
+              <span class="edit-lbl">Difficulté</span>
+              <button v-for="d in DIFFS" :key="d.n" class="ediff" :class="['d' + d.n, { sel: s.difficulty === d.n }]" @click="s.difficulty = d.n; live.persist()">{{ d.n }}</button>
+              <button v-if="ex.sets.length > 1" class="ediff rm" aria-label="Supprimer la série" @click="removeAt(i)">✕</button>
             </div>
           </div>
 
@@ -223,6 +229,12 @@ function exDone(e: LiveExercise) {
 }
 
 const scrollEl = ref<HTMLElement | null>(null);
+// Série en cours de modification (corriger une série déjà faite).
+const editIdx = ref(-1);
+function removeAt(i: number) {
+  live.removeSet(i);
+  editIdx.value = -1;
+}
 function scrollTop() {
   nextTick(() => scrollEl.value?.scrollTo({ top: 0, behavior: 'smooth' })).catch(() => undefined);
 }
@@ -272,16 +284,19 @@ function validateSet() {
   const s = curSet.value;
   if (!s) return;
   s.done = true; // pas de note requise : on note pendant le repos
+  editIdx.value = -1;
   live.persist();
   startRest();
 }
 function addSeries() {
   skipRest();
+  editIdx.value = -1;
   live.addSet();
   scrollTop();
 }
 function goTo(i: number) {
   skipRest();
+  editIdx.value = -1;
   live.goToExercise(i);
   scrollTop();
 }
@@ -329,6 +344,7 @@ function pick(e: ExerciseRow) {
     unit: e.unit ?? undefined,
   });
   skipRest();
+  editIdx.value = -1;
   live.goToExercise(run.value!.exercises.length - 1);
   pickerOpen.value = false;
   search.value = '';
@@ -477,6 +493,16 @@ onBeforeUnmount(() => { clearInterval(clockInt); clearInterval(restInt); });
 .rm { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--dim-2); cursor: pointer; }
 .dpill { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; color: var(--accent-ink); }
 .dpill.d1 { background: var(--d1); } .dpill.d2 { background: var(--d2); } .dpill.d3 { background: var(--d3); } .dpill.d4 { background: var(--d4); }
+.dpill.editable { cursor: pointer; border: none; }
+.okedit { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 700; cursor: pointer; }
+.edit-diff { grid-column: 1/5; display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.edit-lbl { font-size: 11px; color: var(--dim); margin-right: 2px; }
+.ediff { width: 34px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); color: var(--dim); font-family: var(--font-display); font-weight: 600; cursor: pointer; }
+.ediff.d1.sel { background: var(--d1); border-color: var(--d1); color: var(--accent-ink); }
+.ediff.d2.sel { background: var(--d2); border-color: var(--d2); color: var(--accent-ink); }
+.ediff.d3.sel { background: var(--d3); border-color: var(--d3); color: var(--accent-ink); }
+.ediff.d4.sel { background: var(--d4); border-color: var(--d4); color: #fff; }
+.ediff.rm { color: var(--d4); border-color: var(--line); margin-left: auto; }
 
 .comment { margin-top: 14px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px; }
 .comment-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; span { font-weight: 600; color: var(--text); font-size: 14px; } em { color: var(--dim); font-size: 11px; font-style: normal; } }
