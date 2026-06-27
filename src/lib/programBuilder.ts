@@ -147,6 +147,19 @@ function repsAndRest(objective: Objective) {
 }
 
 /** Sélectionne les exos d'un muscle, filtrés par matériel, polyarticulaires d'abord. */
+// Clé de mouvement : regroupe les variantes d'un même exercice (toutes les sortes
+// de « squat », de « curl », de « développé »…) pour éviter les quasi-doublons.
+const MOVEMENT_KEYWORDS = [
+  'squat', 'fente', 'presse', 'souleve', 'pont', 'swing', 'mollet',
+  'developpe', 'pompe', 'dips', 'ecarte', 'butterfly', 'pec deck',
+  'curl', 'pushdown', 'barre au front', 'extension', 'elevation', 'face pull',
+  'rowing', 'tirage', 'traction', 'superman', 'gainage', 'releve', 'crunch', 'pull apart',
+];
+function movementKey(name: string): string {
+  const n = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return MOVEMENT_KEYWORDS.find((k) => n.includes(k)) ?? n;
+}
+
 function pickForMuscle(
   muscle: Muscle,
   targetSets: number,
@@ -180,13 +193,30 @@ function pickForMuscle(
   if (candidates.length === 0 || targetSets <= 0) return [];
 
   const nExercises = clamp(Math.round(targetSets / setsPerExercise), 1, 2);
+
+  // Évite deux variantes du MÊME mouvement pour un muscle (ex. squat kettlebell +
+  // squat poids du corps, ou curl barre + curl haltères) : on garde des mouvements
+  // distincts. À défaut (un seul mouvement dispo), on se rabat dessus.
+  const selected: ExerciseDef[] = [];
+  const usedKeys = new Set<string>();
+  for (const e of candidates) {
+    if (selected.length >= nExercises) break;
+    const k = movementKey(e.name);
+    if (usedKeys.has(k)) continue;
+    usedKeys.add(k);
+    selected.push(e);
+  }
+  if (selected.length === 0) selected.push(candidates[0]!);
+
   const { reps_min, reps_max, rest } = repsAndRest(objective);
 
   const chosen: PlannedExercise[] = [];
   let remaining = targetSets;
-  for (let i = 0; i < nExercises && i < candidates.length; i++) {
-    const e = candidates[i]!;
-    const sets = clamp(Math.min(setsPerExercise, remaining), 2, setsPerExercise);
+  for (let i = 0; i < selected.length; i++) {
+    const e = selected[i]!;
+    // Répartit les séries cibles sur les exos retenus (min 2, plafond setsPerExercise).
+    const left = selected.length - i;
+    const sets = clamp(Math.round(remaining / left), 2, setsPerExercise);
     remaining -= sets;
     const bodyweight = e.equipment === 'poids_du_corps';
     // Exercices au temps (gainage…) : cible en secondes, pas en reps.
