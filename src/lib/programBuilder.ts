@@ -8,6 +8,7 @@ import type {
   Profile, Session, PlannedExercise, Objective, Level,
 } from './types';
 import { SCHEMA_VERSION } from './types';
+import { defaultSplit, type SplitOption, type MuscleKey } from '@/data/splits';
 
 export interface ExerciseDef {
   id: string;
@@ -214,7 +215,7 @@ function pickForMuscle(
  * Construit un programme complet : N séances full-body équilibrées.
  * @returns une à quatre `Session` prêtes à insérer (source 'engine').
  */
-export function buildProgram(profile: Profile, library: ExerciseDef[]): Session[] {
+export function buildProgram(profile: Profile, library: ExerciseDef[], split?: SplitOption): Session[] {
   if (library.length === 0) return [];
 
   // Atomes de matériel possédés. Le poids du corps est toujours dispo :
@@ -237,17 +238,32 @@ export function buildProgram(profile: Profile, library: ExerciseDef[]): Session[
   }
   if (allExercises.length === 0) return [];
 
-  // 2) Répartition round-robin sur N séances (équilibre les muscles).
-  const nSessions = clamp(profile.availability.sessions_per_week, 1, 4);
-  const buckets: PlannedExercise[][] = Array.from({ length: nSessions }, () => []);
-  allExercises.forEach((ex, i) => {
-    buckets[i % nSessions]!.push(ex);
-  });
+  // 2) Répartition selon la découpe (split) choisie : chaque exo va dans le(s) jour(s)
+  //    qui ciblent son muscle ; round-robin entre les jours équivalents (ex. full-body,
+  //    ou « Haut » ×2). Sans jour correspondant → jour le moins rempli (filet de sécurité).
+  const nSessions = clamp(profile.availability.sessions_per_week, 2, 6);
+  const chosen = split ?? defaultSplit(nSessions, profile.experience.level);
+  const days = chosen.days;
+  const buckets: PlannedExercise[][] = days.map(() => []);
+  const rr = new Map<string, number>();
+  for (const ex of allExercises) {
+    const m = (ex.muscle_primary ?? '') as MuscleKey;
+    const matching = days.map((d, i) => ({ i, d })).filter(({ d }) => d.muscles.includes(m));
+    let idx: number;
+    if (matching.length > 0) {
+      const c = rr.get(m) ?? 0;
+      rr.set(m, c + 1);
+      idx = matching[c % matching.length]!.i;
+    } else {
+      idx = buckets.reduce((min, b, i) => (b.length < buckets[min]!.length ? i : min), 0);
+    }
+    buckets[idx]!.push(ex);
+  }
 
-  const letters = ['A', 'B', 'C', 'D'];
   return buckets
-    .filter((b) => b.length > 0)
-    .map((exercises, i) => {
+    .map((exercises, i) => ({ exercises, name: days[i]!.name }))
+    .filter((b) => b.exercises.length > 0)
+    .map(({ exercises, name }) => {
       const estDuration = exercises.reduce(
         (a, e) => a + e.target.sets * ((e.rest_seconds + 40) / 60),
         0,
@@ -256,8 +272,8 @@ export function buildProgram(profile: Profile, library: ExerciseDef[]): Session[
         schema_version: SCHEMA_VERSION,
         type: 'session',
         id: crypto.randomUUID(),
-        name: `Full-Body ${letters[i] ?? i + 1}`,
-        split: 'full_body',
+        name,
+        split: chosen.id,
         objective: profile.objective,
         level: profile.experience.level,
         estimated_duration_min: Math.round(estDuration),

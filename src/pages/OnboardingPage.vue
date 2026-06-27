@@ -211,6 +211,18 @@
         <h2 class="onb-h">Ton programme</h2>
         <p class="text-dim q-mb-md">Généré selon ton objectif, ton matériel et tes sports. Tu pourras tout ajuster ensuite.</p>
 
+        <div v-if="splitOptions.length > 1" class="text-dim text-caption q-mb-xs">Découpe ({{ form.sessions_per_week }} séances/sem)</div>
+        <div v-if="splitOptions.length > 1" class="q-mb-md">
+          <button
+            v-for="o in splitOptions" :key="o.id"
+            class="choice choice-row" :class="{ active: splitId === o.id }"
+            @click="selectSplit(o.id)"
+          >
+            <div class="choice-title">{{ o.name }}</div>
+            <div class="choice-desc">{{ o.subtitle }}</div>
+          </button>
+        </div>
+
         <div v-if="generating" class="row flex-center q-pa-lg"><q-spinner color="primary" size="28px" /></div>
         <template v-else>
           <div v-if="generated.length === 0" class="empty-prog">
@@ -292,6 +304,7 @@ import { useQuasar } from 'quasar';
 import type { Session, SportPractice } from '@/lib/types';
 import { deriveLevelConfig } from '@/lib/levelConfig';
 import { buildProgram, type ExerciseDef } from '@/lib/programBuilder';
+import { splitsFor, defaultSplit, type SplitOption } from '@/data/splits';
 import { validateImportedSession } from '@/lib/coach';
 import { type ProfileForm, emptyProfileForm, formToProfile } from '@/lib/profileForm';
 import {
@@ -356,9 +369,24 @@ const generating = ref(false);
 const importText = ref('');
 const imported = ref<Session | null>(null);
 
+// Découpe (split) selon le nombre de séances.
+const splitOptions = computed(() => splitsFor(form.sessions_per_week));
+const splitId = ref('');
+function currentSplit(): SplitOption {
+  return splitOptions.value.find((o) => o.id === splitId.value) ?? defaultSplit(form.sessions_per_week, form.level);
+}
+function selectSplit(id: string) {
+  splitId.value = id;
+  regenerate();
+}
+
 function regenerate() {
   generating.value = true;
-  generated.value = buildProgram(formToProfile(form), library.value);
+  // Découpe par défaut si non choisie / incompatible avec le nombre de séances.
+  if (!splitOptions.value.some((o) => o.id === splitId.value)) {
+    splitId.value = defaultSplit(form.sessions_per_week, form.level).id;
+  }
+  generated.value = buildProgram(formToProfile(form), library.value, currentSplit());
   selectedSessions.clear();
   generated.value.forEach((_, i) => selectedSessions.add(i));
   generating.value = false;

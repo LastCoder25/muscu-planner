@@ -175,10 +175,32 @@
       />
       <q-btn
         no-caps outline color="primary" icon="auto_awesome" label="Régénérer mon programme"
-        :loading="regenerating" class="full-width q-mt-sm" @click="confirmRegenerate"
+        :loading="regenerating" class="full-width q-mt-sm" @click="openRegen"
       />
       <div class="hint">La régénération remplace tes séances actuelles par un nouveau programme calculé depuis ces réglages.</div>
     </div>
+
+    <!-- Choix de la découpe avant régénération -->
+    <q-dialog v-model="regenOpen" position="bottom">
+      <div class="regen-sheet">
+        <div class="grab" />
+        <h3 class="font-display">Découpe du programme</h3>
+        <p class="regen-sub">{{ form.sessions_per_week }} séances/semaine — choisis la répartition.</p>
+        <button
+          v-for="o in splitOptions" :key="o.id"
+          class="choice choice-row" :class="{ active: splitId === o.id }"
+          @click="splitId = o.id"
+        >
+          <div class="row items-center justify-between">
+            <div class="choice-title">{{ o.name }}</div>
+            <q-icon v-if="splitId === o.id" name="check_circle" color="primary" size="20px" />
+          </div>
+          <div class="choice-desc">{{ o.subtitle }}</div>
+        </button>
+        <q-btn no-caps color="primary" text-color="dark" label="Régénérer" class="full-width q-mt-md" :loading="regenerating" @click="doRegenerate" />
+        <div class="hint">Tes séances actuelles seront remplacées.</div>
+      </div>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -188,6 +210,7 @@ import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import type { SportPractice } from '@/lib/types';
 import { buildProgram, type ExerciseDef } from '@/lib/programBuilder';
+import { splitsFor, defaultSplit, type SplitOption } from '@/data/splits';
 import { type ProfileForm, emptyProfileForm, profileToForm, formToProfile } from '@/lib/profileForm';
 import {
   LEVELS, OBJECTIVES, EQUIPMENT_GROUPS,
@@ -281,25 +304,28 @@ async function save() {
   }
 }
 
-function confirmRegenerate() {
-  $q.dialog({
-    title: 'Régénérer le programme',
-    message: 'Tes séances actuelles seront remplacées par un nouveau programme. Continuer ?',
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Régénérer', color: 'primary', textColor: 'dark' },
-  }).onOk(() => {
-    regenerate().catch(() => undefined);
-  });
+// Découpe (split) selon le nombre de séances.
+const splitOptions = computed(() => splitsFor(form.sessions_per_week));
+const splitId = ref('');
+const regenOpen = ref(false);
+function openRegen() {
+  splitId.value = defaultSplit(form.sessions_per_week, form.level).id;
+  regenOpen.value = true;
+}
+function doRegenerate() {
+  regenOpen.value = false;
+  const split = splitOptions.value.find((o) => o.id === splitId.value);
+  regenerate(split).catch(() => undefined);
 }
 
-async function regenerate() {
+async function regenerate(split?: SplitOption) {
   const userId = auth.user?.id;
   if (!userId) return;
   regenerating.value = true;
   try {
     const profile = formToProfile(form);
     await profileStore.update(userId, profile);
-    const sessions = buildProgram(profile, library.value);
+    const sessions = buildProgram(profile, library.value, split);
     if (sessions.length === 0) {
       $q.notify({ type: 'warning', message: 'Aucun exercice ne correspond à ton matériel.' });
       return;
@@ -375,5 +401,9 @@ onMounted(async () => {
 
 .actions { margin-top: 12px; }
 .hint { color: var(--dim); font-size: 12px; margin-top: 10px; text-align: center; }
+.regen-sheet { width: 100%; background: var(--surface); border-radius: 26px 26px 0 0; border-top: 1px solid var(--line); padding: 10px 18px 26px; max-height: 82vh; overflow-y: auto; h3 { font-size: 20px; text-transform: uppercase; } }
+.regen-sheet .choice-row { margin-bottom: 10px; }
+.grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 6px auto 14px; }
+.regen-sub { color: var(--dim); font-size: 13px; margin-bottom: 14px; }
 </style>
 
