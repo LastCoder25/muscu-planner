@@ -97,6 +97,16 @@
             input-debounce="0" label="Rechercher un exercice…"
             @filter="filterExercises"
           />
+
+          <div class="block-h q-mt-md">Exercices que tu aimes moins</div>
+          <div class="lbl">Évités quand une alternative existe (pas exclus : utilisés s’il n’y a pas mieux).</div>
+          <q-select
+            v-model="form.disliked_exercises"
+            :options="exerciseOptions"
+            filled multiple use-chips use-input emit-value map-options
+            input-debounce="0" label="Rechercher un exercice…"
+            @filter="filterExercises"
+          />
         </section>
       </div>
     </div>

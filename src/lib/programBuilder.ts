@@ -157,6 +157,7 @@ function pickForMuscle(
   objective: Objective,
   maxDifficulty: number,
   favorites: Set<string>,
+  disliked: Set<string>,
 ): PlannedExercise[] {
   const base = library.filter(
     (e) =>
@@ -169,8 +170,9 @@ function pickForMuscle(
   const byLevel = base.filter((e) => (e.difficulty ?? 1) <= maxDifficulty);
   const pool = byLevel.length ? byLevel : base;
 
-  // Favoris d'abord, puis polyarticulaires (plus de muscles secondaires).
-  const rank = (e: ExerciseDef) => (favorites.has(e.id) ? 0 : 1);
+  // Favoris d'abord, « aimés moins » en dernier (utilisés seulement faute
+  // d'alternative), puis polyarticulaires (plus de muscles secondaires).
+  const rank = (e: ExerciseDef) => (favorites.has(e.id) ? 0 : disliked.has(e.id) ? 2 : 1);
   const candidates = [...pool].sort(
     (a, b) => rank(a) - rank(b) || (b.muscle_secondary?.length ?? 0) - (a.muscle_secondary?.length ?? 0),
   );
@@ -224,6 +226,7 @@ export function buildProgram(profile: Profile, library: ExerciseDef[], split?: S
 
   const avoidIds = new Set(profile.constraints?.avoid_exercises ?? []);
   const favorites = new Set(profile.favorite_exercises ?? []);
+  const disliked = new Set(profile.disliked_exercises ?? []);
   const targets = computeMuscleTargets(profile);
   const setsPerExercise = profile.experience.level === 'debutant' ? 3 : 4;
   // Débutant : on plafonne la difficulté à 2 (assisté/accessible) ; sinon tout.
@@ -233,7 +236,7 @@ export function buildProgram(profile: Profile, library: ExerciseDef[], split?: S
   const allExercises: PlannedExercise[] = [];
   for (const m of MUSCLES) {
     allExercises.push(
-      ...pickForMuscle(m, targets[m], library, available, avoidIds, setsPerExercise, profile.objective, maxDifficulty, favorites),
+      ...pickForMuscle(m, targets[m], library, available, avoidIds, setsPerExercise, profile.objective, maxDifficulty, favorites, disliked),
     );
   }
   if (allExercises.length === 0) return [];

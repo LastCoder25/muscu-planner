@@ -39,6 +39,7 @@ export interface Profile {
   available_equipment?: EquipmentItem[]; // matériel détaillé réellement dispo
   sports?: SportPractice[];           // pratiques sportives en parallèle
   favorite_exercises?: string[];      // ids d'exos à prioriser si pertinents
+  disliked_exercises?: string[];      // ids d'exos « aimés moins » : évités si une alternative existe (pas exclus)
   constraints?: { injuries?: string[]; avoid_exercises?: string[] };
   preferences?: { priority_muscles?: string[]; units?: 'kg' | 'lb'; tracking_frequency?: 'day' | 'week' | 'month' };
 }
