@@ -195,6 +195,13 @@ function isNote(line: string): boolean {
   if (/^\s*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]*\s*(objectif|priorit|focus|semaine|s[ée]ance|but)\b/iu.test(line)) return true;
   return /^\s*(👉|🎯|✅|⚠️|⚠|📅|🔥|💡)/u.test(line);
 }
+// Sous-bloc « modificateur » d'un exo (mêmes séries, autre protocole) :
+// back-off (pyramidal descendant), pause, drop-set, rest-pause, tempo… → rattaché à l'exo précédent.
+function isModifierBlock(header: string): boolean {
+  return /^(back[-\s]?off|drop[-\s]?set|rest[-\s]?pause|myo[-\s]?reps?|cluster|pause|tempo|partiels?|negatifs?|isometrie|iso)\b/.test(
+    normalize(header),
+  );
+}
 
 interface TextEx { name: string; sets: { load: number; reps: number; rest: number | undefined }[]; notes: string[] }
 
@@ -249,9 +256,14 @@ export function parseWorkoutText(raw: string, library: LibEntry[] = []): Session
       if (cur) cur.notes.push(stripLead(line));
       continue;
     }
-    // En-tête d'un nouvel exercice.
+    // En-tête : soit un sous-bloc de l'exo courant (back-off, pause…), soit un nouvel exo.
+    const header = stripLead(line);
+    if (cur && cur.sets.length > 0 && isModifierBlock(header)) {
+      cur.notes.push(header); // les séries suivantes s'ajoutent à l'exo courant
+      continue;
+    }
     commit();
-    cur = { name: stripLead(line), sets: [], notes: [] };
+    cur = { name: header, sets: [], notes: [] };
   }
   commit();
 
