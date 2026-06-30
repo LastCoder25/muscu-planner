@@ -23,6 +23,18 @@ const COLS = 'id, kind, message, status, page, app_version, screenshots, created
 export const useFeedbackStore = defineStore('feedback', () => {
   const mine = ref<FeedbackRow[]>([]);
   const all = ref<FeedbackRow[]>([]);
+  const openCount = ref(0);
+
+  // Nombre de tickets ouverts (badge header).
+  async function fetchOpenCount() {
+    const { count, error } = await supabase
+      .from('feedback')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'open');
+    if (error) throw error;
+    openCount.value = count ?? 0;
+    return openCount.value;
+  }
 
   // Upload des captures dans le bucket public `feedback` → URLs publiques.
   async function uploadScreenshots(files: File[]): Promise<string[]> {
@@ -77,7 +89,7 @@ export const useFeedbackStore = defineStore('feedback', () => {
     if (t) t.status = status;
   }
 
-  return { mine, all, uploadScreenshots, submit, fetchMine, fetchAll, setStatus };
+  return { mine, all, openCount, fetchOpenCount, uploadScreenshots, submit, fetchMine, fetchAll, setStatus };
 });
 
 if (import.meta.hot) {

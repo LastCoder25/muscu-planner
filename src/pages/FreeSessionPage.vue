@@ -172,6 +172,19 @@
       </div>
     </q-dialog>
 
+    <!-- Quitter la séance libre : pause / terminer / annuler -->
+    <q-dialog v-model="quitOpen" position="bottom">
+      <div class="sheet">
+        <div class="grab" />
+        <h3 class="font-display">Quitter la séance</h3>
+        <p class="muted">Que veux-tu faire ?</p>
+        <button class="cta ghost q-mb-sm" @click="pauseSession">Mettre en pause<small> (reprendre plus tard)</small></button>
+        <button v-if="canFinish" class="cta q-mb-sm" @click="finishFromQuit">Terminer et enregistrer</button>
+        <button class="cta danger" @click="quitOpen = false; cancelFree()">Annuler la séance</button>
+        <button class="skip" @click="quitOpen = false">Continuer la séance</button>
+      </div>
+    </q-dialog>
+
     <!-- Fin de séance -->
     <q-dialog v-model="finishOpen" position="bottom">
       <div class="sheet">
@@ -427,13 +440,23 @@ function cancelFree() {
     router.push('/').catch(() => undefined);
   });
 }
+const quitOpen = ref(false);
 async function quit() {
-  // Retour : si une séance est en cours, demander d'annuler (sinon on reste).
+  // Retour : si une séance est en cours, proposer pause / terminer / annuler.
   if (run.value && run.value.exercises.length > 0) {
-    cancelFree();
+    quitOpen.value = true;
     return;
   }
   await router.push('/');
+}
+async function pauseSession() {
+  // Met en pause : l'état reste sauvegardé (reprise via la bannière d'accueil).
+  quitOpen.value = false;
+  await router.push('/');
+}
+function finishFromQuit() {
+  quitOpen.value = false;
+  openFinish();
 }
 
 onMounted(async () => {
@@ -531,7 +554,8 @@ onBeforeUnmount(() => { clearInterval(clockInt); clearInterval(restInt); });
 .addset { width: 100%; height: 44px; margin-top: 14px; border-radius: 12px; border: 1px dashed var(--line); background: transparent; color: var(--dim); font-weight: 600; font-size: 13px; cursor: pointer; }
 
 .cta-wrap { position: fixed; left: 0; right: 0; bottom: 0; max-width: 600px; margin: 0 auto; padding: 14px 16px 24px; background: linear-gradient(180deg, transparent, var(--bg) 30%); display: flex; flex-direction: column; gap: 10px; }
-.cta { width: 100%; height: 56px; border: none; border-radius: 16px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; &:disabled { opacity: 0.5; } &.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); } }
+.cta { width: 100%; height: 56px; border: none; border-radius: 16px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; &:disabled { opacity: 0.5; } &.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); } &.danger { background: var(--d4); color: #fff; } small { font-family: var(--font-ui); font-weight: 400; font-size: 11px; text-transform: none; opacity: 0.85; } }
+.skip { width: 100%; background: none; border: none; color: var(--dim); font-size: 13px; cursor: pointer; padding: 10px; margin-top: 4px; }
 
 .sheet { width: 100%; background: var(--surface); border-radius: 26px 26px 0 0; border-top: 1px solid var(--line); padding: 10px 18px 26px; max-height: 80vh; overflow-y: auto; h3 { font-size: 20px; text-transform: uppercase; } }
 .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 6px auto 14px; }

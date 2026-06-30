@@ -4,7 +4,9 @@
       <q-toolbar>
         <q-btn v-if="showBack" flat round dense icon="arrow_back_ios_new" aria-label="Retour" class="q-mr-xs" @click="goBack" />
         <q-toolbar-title class="brand font-display" @click="goHome">MUSCU</q-toolbar-title>
-        <q-btn flat round dense icon="inbox" aria-label="Backlog" @click="goBacklog" />
+        <q-btn flat round dense icon="inbox" aria-label="Backlog" @click="goBacklog">
+          <q-badge v-if="feedback.openCount > 0" color="primary" text-color="dark" floating>{{ feedback.openCount }}</q-badge>
+        </q-btn>
         <q-btn flat round dense icon="more_vert" aria-label="Menu">
           <q-menu anchor="bottom right" self="top right">
             <q-list class="app-menu" style="min-width: 180px">
@@ -42,15 +44,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
+import { useFeedbackStore } from '@/stores/feedback';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const profileStore = useProfileStore();
+const feedback = useFeedbackStore();
+
+onMounted(() => {
+  feedback.fetchOpenCount().catch(() => undefined);
+});
 
 // Bouton retour visible partout sauf sur l'accueil.
 const showBack = computed(() => route.path !== '/');
