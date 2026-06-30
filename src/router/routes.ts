@@ -51,6 +51,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'profile', component: () => import('@/pages/ProfilePage.vue') },
       { path: 'settings', component: () => import('@/pages/SettingsPage.vue') },
       { path: 'history', component: () => import('@/pages/HistoryPage.vue') },
+      { path: 'stats', component: () => import('@/pages/StatsPage.vue') },
       { path: 'body', component: () => import('@/pages/BodyPage.vue') },
       { path: 'backlog', component: () => import('@/pages/BacklogPage.vue') },
     ],

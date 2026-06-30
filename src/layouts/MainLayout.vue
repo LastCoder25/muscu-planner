@@ -18,6 +18,10 @@
                 <q-item-section avatar><q-icon name="monitor_weight" /></q-item-section>
                 <q-item-section>Suivi corporel</q-item-section>
               </q-item>
+              <q-item v-close-popup clickable @click="goStats">
+                <q-item-section avatar><q-icon name="bar_chart" /></q-item-section>
+                <q-item-section>Statistiques</q-item-section>
+              </q-item>
               <q-item v-close-popup clickable @click="goProfile">
                 <q-item-section avatar><q-icon name="fitness_center" /></q-item-section>
                 <q-item-section>Profil / Réglages</q-item-section>
@@ -80,6 +84,9 @@ async function goHistory() {
 }
 async function goBody() {
   await router.push('/body');
+}
+async function goStats() {
+  await router.push('/stats');
 }
 async function goBacklog() {
   await router.push('/backlog');
