@@ -37,11 +37,12 @@
     <!-- Nouvelle saisie -->
     <div class="grp">
       <button class="grp-head" :class="{ open: formOpen }" @click="formOpen = !formOpen">
-        <q-icon name="add_circle_outline" size="20px" />
-        <span class="grp-title">Nouvelle saisie</span>
+        <q-icon :name="todayEntry ? 'edit' : 'add_circle_outline'" size="20px" />
+        <span class="grp-title">{{ todayEntry ? 'Modifier la saisie du jour' : 'Nouvelle saisie' }}</span>
         <q-icon class="chev" name="expand_more" size="22px" />
       </button>
       <div v-show="formOpen" class="grp-body">
+        <div class="lbl opt-note">Tous les champs sont optionnels — remplis seulement ce que tu veux suivre.</div>
         <div class="row-2">
           <q-input v-model.number="f.weight" type="number" inputmode="decimal" filled label="Poids (kg)" />
           <div class="sleep-row">
@@ -61,7 +62,7 @@
           <q-input v-for="m in MEASURES" :key="m.key" v-model.number="f.measures[m.key]" type="number" inputmode="decimal" filled dense :label="m.label" />
         </div>
         <q-input v-model="f.note" filled autogrow label="Note (optionnel)" class="q-mt-md" />
-        <q-btn no-caps color="primary" text-color="dark" label="Enregistrer la saisie" class="full-width q-mt-md" :loading="saving" :disable="!hasInput" @click="save" />
+        <q-btn no-caps color="primary" text-color="dark" :label="todayEntry ? 'Mettre à jour' : 'Enregistrer la saisie'" class="full-width q-mt-md" :loading="saving" :disable="!hasInput" @click="save" />
       </div>
     </div>
 
@@ -278,31 +279,58 @@ function fmtSleep(h: number | null) {
   return mm ? `${hh}h${String(mm).padStart(2, '0')}` : `${hh}h`;
 }
 
+// ── Saisie du jour : on modifie celle du jour si elle existe ─────
+const todayEntry = computed(() => {
+  const today = new Date().toISOString().slice(0, 10);
+  return entries.value.find((e) => e.measured_at === today) ?? null;
+});
+function prefillFromEntry(e: BodyEntry) {
+  f.weight = e.weight_kg;
+  if (e.sleep_hours != null) {
+    f.sleepH = Math.floor(e.sleep_hours);
+    f.sleepMin = Math.round((e.sleep_hours - f.sleepH) * 60);
+  } else {
+    f.sleepH = null;
+    f.sleepMin = null;
+  }
+  for (const m of MEASURES) f.measures[m.key] = e.measurements?.[m.key] ?? null;
+  f.note = e.note ?? '';
+}
+function clearForm() {
+  f.weight = null;
+  f.sleepH = null;
+  f.sleepMin = null;
+  for (const m of MEASURES) f.measures[m.key] = null;
+  f.note = '';
+}
+function syncForm() {
+  if (todayEntry.value) prefillFromEntry(todayEntry.value);
+  else clearForm();
+}
+
 // ── Actions ─────────────────────────────────────────────
 async function save() {
   if (!hasInput.value) return;
   saving.value = true;
+  const wasEdit = !!todayEntry.value;
   try {
     const measurements: Record<string, number> = {};
     for (const m of MEASURES) {
       const v = f.measures[m.key];
       if (v != null) measurements[m.key] = v;
     }
-    await body.add({
-      measured_at: new Date().toISOString().slice(0, 10),
+    const input = {
       weight_kg: f.weight,
       sleep_hours: sleepToHours(),
       measurements: Object.keys(measurements).length ? measurements : null,
       note: f.note.trim() || null,
-    });
+    };
+    if (todayEntry.value) await body.update(todayEntry.value.id, input);
+    else await body.add({ measured_at: new Date().toISOString().slice(0, 10), ...input });
     markBodyEntrySaved(new Date().toISOString().slice(0, 10)); // coupe le rappel du jour
-    f.weight = null;
-    f.sleepH = null;
-    f.sleepMin = null;
-    f.note = '';
-    for (const m of MEASURES) f.measures[m.key] = null;
+    syncForm(); // garde les valeurs de la saisie du jour
     formOpen.value = false;
-    $q.notify({ type: 'positive', message: 'Saisie enregistrée 💪' });
+    $q.notify({ type: 'positive', message: wasEdit ? 'Saisie du jour mise à jour ✅' : 'Saisie enregistrée 💪' });
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec de l’enregistrement.' });
   } finally {
@@ -326,7 +354,8 @@ onMounted(async () => {
   try {
     if (userId && !profileStore.profile) await profileStore.fetch(userId);
     await body.fetchRecent();
-    formOpen.value = due.value || entries.value.length === 0;
+    syncForm(); // pré-remplit si une saisie existe déjà aujourd'hui
+    formOpen.value = todayEntry.value ? false : (due.value || entries.value.length === 0);
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Chargement impossible.' });
   } finally {
@@ -359,6 +388,7 @@ onMounted(async () => {
 
 .row-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .sleep-row { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 8px; }
+.opt-note { margin-bottom: 12px; font-style: italic; }
 .howto-toggle { background: none; border: none; color: var(--accent); font-size: 12px; cursor: pointer; }
 .howto { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 12px; margin-top: 8px; }
 .howto-row { font-size: 12.5px; color: var(--dim); margin-bottom: 6px; b { color: var(--text); } }

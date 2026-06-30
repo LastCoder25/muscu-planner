@@ -55,13 +55,31 @@ export const useBodyStore = defineStore('body', () => {
     return data;
   }
 
+  async function update(id: string, input: BodyEntryInput) {
+    const { data, error } = await supabase
+      .from('body_entries')
+      .update({
+        weight_kg: input.weight_kg ?? null,
+        sleep_hours: input.sleep_hours ?? null,
+        measurements: input.measurements ?? null,
+        note: input.note ?? null,
+      })
+      .eq('id', id)
+      .select('id, measured_at, weight_kg, sleep_hours, measurements, note, created_at')
+      .single();
+    if (error) throw error;
+    const i = entries.value.findIndex((e) => e.id === id);
+    if (i >= 0) entries.value[i] = data;
+    return data;
+  }
+
   async function remove(id: string) {
     const { error } = await supabase.from('body_entries').delete().eq('id', id);
     if (error) throw error;
     entries.value = entries.value.filter((e) => e.id !== id);
   }
 
-  return { entries, fetchRecent, add, remove };
+  return { entries, fetchRecent, add, update, remove };
 });
 
 if (import.meta.hot) {
