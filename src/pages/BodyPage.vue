@@ -31,8 +31,15 @@
             <q-input v-model.number="f.sleepMin" type="number" inputmode="numeric" min="0" max="59" filled label="min" />
           </div>
         </div>
-        <div class="lbl q-mt-md">Circonférences (cm)</div>
-        <div class="meas-grid">
+        <div class="row items-center justify-between q-mt-md">
+          <div class="lbl" style="margin: 0">Circonférences (cm)</div>
+          <button class="howto-toggle" @click="howtoOpen = !howtoOpen">{{ howtoOpen ? 'Masquer' : 'Comment mesurer ?' }}</button>
+        </div>
+        <div v-if="howtoOpen" class="howto">
+          <div v-for="m in MEASURES" :key="m.key" class="howto-row"><b>{{ m.label }}</b> — {{ m.howto }}</div>
+          <div class="howto-tip">Mesure toujours au même moment (le matin), du même côté, sans serrer le mètre.</div>
+        </div>
+        <div class="meas-grid q-mt-sm">
           <q-input v-for="m in MEASURES" :key="m.key" v-model.number="f.measures[m.key]" type="number" inputmode="decimal" filled dense :label="m.label" />
         </div>
         <q-input v-model="f.note" filled autogrow label="Note (optionnel)" class="q-mt-md" />
@@ -107,13 +114,13 @@ const profileStore = useProfileStore();
 const body = useBodyStore();
 
 const MEASURES = [
-  { key: 'biceps', label: 'Biceps' },
-  { key: 'cuisse', label: 'Cuisse' },
-  { key: 'taille', label: 'Taille' },
-  { key: 'hanches', label: 'Hanches' },
-  { key: 'poitrine', label: 'Poitrine' },
-  { key: 'mollet', label: 'Mollet' },
-  { key: 'avant_bras', label: 'Avant-bras' },
+  { key: 'biceps', label: 'Biceps', howto: 'Bras fléchi et contracté, au point le plus large.' },
+  { key: 'cuisse', label: 'Cuisse', howto: 'Debout, juste sous le pli fessier, au point le plus large.' },
+  { key: 'taille', label: 'Taille', howto: 'Au plus étroit (niveau nombril), sans rentrer le ventre, fin d’expiration.' },
+  { key: 'hanches', label: 'Hanches', howto: 'Au point le plus large des fesses/hanches, pieds joints.' },
+  { key: 'poitrine', label: 'Poitrine', howto: 'À hauteur des mamelons, bras le long du corps, fin d’expiration.' },
+  { key: 'mollet', label: 'Mollet', howto: 'Debout, poids réparti, au point le plus large du mollet.' },
+  { key: 'avant_bras', label: 'Avant-bras', howto: 'Bras tendu et détendu, au point le plus large près du coude.' },
 ] as const;
 type MeasureKey = (typeof MEASURES)[number]['key'];
 
@@ -127,6 +134,7 @@ type Freq = (typeof FREQ)[number]['value'];
 const loading = ref(true);
 const saving = ref(false);
 const formOpen = ref(true);
+const howtoOpen = ref(false);
 const entries = computed(() => body.entries);
 const reversed = computed(() => entries.value.slice().reverse());
 
@@ -302,6 +310,10 @@ onMounted(async () => {
 
 .row-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .sleep-row { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 8px; }
+.howto-toggle { background: none; border: none; color: var(--accent); font-size: 12px; cursor: pointer; }
+.howto { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 12px; margin-top: 8px; }
+.howto-row { font-size: 12.5px; color: var(--dim); margin-bottom: 6px; b { color: var(--text); } }
+.howto-tip { font-size: 12px; color: var(--accent); margin-top: 4px; }
 .meas-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
