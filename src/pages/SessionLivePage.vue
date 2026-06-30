@@ -29,7 +29,10 @@
         <div class="exo">
           <div class="exo-top">
             <div class="exo-name font-display">{{ ex.name }}</div>
-            <button class="swap" @click="swapOpen = true">⇄ Changer</button>
+            <div class="exo-actions">
+              <button class="swap" @click="swapOpen = true">⇄ Changer</button>
+              <button class="swap" @click="skipExercise">⤼ Passer</button>
+            </div>
           </div>
           <div class="exo-meta">
             <span v-if="ex.equipment" class="chip">{{ ex.equipment }}</span>
@@ -78,7 +81,7 @@
             <div class="cell-lbl">{{ ex.bodyweight ? 'Lest' : 'Charge' }}</div>
             <div class="val-line">
               <button v-if="i === curSetIndex || i === editIdx" class="stepper" @click="adj(s, 'load_kg', -2.5)">−</button>
-              <input v-if="i === curSetIndex || i === editIdx" v-model.number="s.load_kg" type="number" inputmode="decimal" min="0" step="0.5" class="valin font-display" aria-label="Charge en kg" @change="live.persist()" />
+              <input v-if="i === curSetIndex || i === editIdx" v-model.number="s.load_kg" type="number" inputmode="decimal" min="0" step="0.5" class="valin font-display" aria-label="Charge en kg" @change="i === curSetIndex ? onCurLoadInput() : live.persist()" />
               <div v-else class="val font-display">{{ s.load_kg }}<small>kg</small></div>
               <button v-if="i === curSetIndex || i === editIdx" class="stepper" @click="adj(s, 'load_kg', 2.5)">+</button>
             </div>
@@ -270,7 +273,29 @@ function skipRest() {
 // ── Actions séries ──────────────────────────────────────
 function adj(s: LiveSet, key: 'load_kg' | 'reps', d: number) {
   s[key] = Math.max(0, Math.round((s[key] + d) * 10) / 10);
+  if (key === 'load_kg' && s === curSet.value) propagateLoad();
   live.persist();
+}
+// Reporte la charge de la série courante sur les séries suivantes non faites
+// (les charges d'un exo se ressemblent ; pratique après un changement d'exo).
+function propagateLoad() {
+  const e = ex.value;
+  const i = curSetIndex.value;
+  if (!e || i < 0) return;
+  const load = e.sets[i]!.load_kg;
+  for (let j = i + 1; j < e.sets.length; j++) {
+    if (!e.sets[j]!.done) e.sets[j]!.load_kg = load;
+  }
+}
+function onCurLoadInput() {
+  propagateLoad();
+  live.persist();
+}
+function skipExercise() {
+  skipRest();
+  editIdx.value = -1;
+  if (run.value && run.value.exIndex < run.value.exercises.length - 1) nextExercise();
+  else openFinish();
 }
 function validateSet() {
   const s = curSet.value;
@@ -414,7 +439,8 @@ onBeforeUnmount(() => {
 .exo { padding: 14px 2px 4px; }
 .exo-top { display: flex; align-items: flex-start; gap: 10px; }
 .exo-name { font-weight: 700; font-size: 30px; line-height: 0.98; text-transform: uppercase; flex: 1; }
-.swap { flex: none; height: 38px; padding: 0 13px; border-radius: 11px; background: var(--surface); border: 1px solid var(--line); color: var(--text); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.exo-actions { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.swap { flex: none; height: 34px; padding: 0 13px; border-radius: 11px; background: var(--surface); border: 1px solid var(--line); color: var(--text); font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .exo-meta { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
 .chip { font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--dim); background: var(--surface); border: 1px solid var(--line-soft); padding: 5px 10px; border-radius: 8px; }
 .chip.tgt { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }

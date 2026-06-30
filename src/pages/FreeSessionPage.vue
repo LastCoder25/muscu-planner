@@ -14,7 +14,7 @@
       <div class="empty">
         <q-icon name="fitness_center" size="40px" class="text-dim" />
         <p>Choisis un exercice, fais-le, note ton ressenti, repos… puis l'exercice suivant.</p>
-        <button class="cta" @click="pickerOpen = true">Choisir un exercice</button>
+        <button class="cta" @click="openPicker">Choisir un exercice</button>
       </div>
     </div>
 
@@ -122,7 +122,7 @@
         <button v-if="curSet" class="cta" @click="validateSet">Valider la série</button>
         <template v-else>
           <button v-if="resting" class="cta ghost" @click="skipRest">Terminer le repos</button>
-          <button class="cta" @click="pickerOpen = true">Exercice suivant</button>
+          <button class="cta" @click="openPicker">Exercice suivant</button>
         </template>
       </div>
     </template>
@@ -139,6 +139,11 @@
           </div>
         </div>
         <q-input v-model="search" filled dense placeholder="Rechercher…" class="q-mb-sm" clearable />
+        <div class="mus-filter">
+          <button class="mchip" :class="{ on: muscleFilter === '' }" @click="muscleFilter = ''">Tous</button>
+          <button v-for="m in MUSCLE_GROUPS" :key="m" class="mchip" :class="{ on: muscleFilter === m }" @click="muscleFilter = m">{{ m }}</button>
+        </div>
+        <div v-if="picked.length" class="picked-note">{{ picked.length }} exo{{ picked.length > 1 ? 's' : '' }} ajouté{{ picked.length > 1 ? 's' : '' }}</div>
         <div v-if="loadingLib" class="row flex-center q-pa-md"><q-spinner color="primary" /></div>
 
         <div v-else-if="pickerView === 'tiles'" class="tiles">
@@ -162,6 +167,8 @@
             <div class="alt-go">+</div>
           </button>
         </template>
+
+        <button v-if="picked.length" class="cta q-mt-sm" @click="pickerOpen = false">Terminé ({{ picked.length }})</button>
       </div>
     </q-dialog>
 
@@ -299,6 +306,13 @@ const pickerOpen = ref(false);
 const search = ref('');
 const lib = ref<ExerciseRow[]>([]);
 const loadingLib = ref(false);
+const MUSCLE_GROUPS = ['pectoraux', 'dos', 'épaules', 'biceps', 'triceps', 'quadriceps', 'ischio-jambiers', 'mollets', 'abdominaux'];
+const muscleFilter = ref('');
+const picked = ref<string[]>([]); // exos ajoutés pendant l'ouverture du picker
+function openPicker() {
+  picked.value = [];
+  pickerOpen.value = true;
+}
 const VIEW_KEY = 'muscu:free:pickerView';
 const pickerView = ref<'list' | 'tiles'>(localStorage.getItem(VIEW_KEY) === 'tiles' ? 'tiles' : 'list');
 function setView(v: 'list' | 'tiles') {
@@ -307,7 +321,9 @@ function setView(v: 'list' | 'tiles') {
 }
 const filteredLib = computed(() => {
   const n = search.value.trim().toLowerCase();
-  const base = n ? lib.value.filter((e) => e.name.toLowerCase().includes(n) || (e.muscle_primary ?? '').toLowerCase().includes(n)) : lib.value;
+  let base = lib.value;
+  if (muscleFilter.value) base = base.filter((e) => e.muscle_primary === muscleFilter.value);
+  if (n) base = base.filter((e) => e.name.toLowerCase().includes(n) || (e.muscle_primary ?? '').toLowerCase().includes(n));
   return base.slice(0, 60);
 });
 function exIcon(e: ExerciseRow): string {
@@ -335,13 +351,13 @@ function pick(e: ExerciseRow) {
     muscle_primary: e.muscle_primary ?? undefined,
     equipment: e.equipment ?? undefined,
     unit: e.unit ?? undefined,
+    unilateral: e.unilateral ?? undefined,
   });
   skipRest();
   editIdx.value = -1;
   live.goToExercise(run.value!.exercises.length - 1);
-  pickerOpen.value = false;
-  search.value = '';
-  scrollTop();
+  picked.value.push(e.id); // multi-ajout : le picker reste ouvert, « Terminé » ferme
+  $q.notify({ type: 'positive', message: `${e.name} ajouté`, timeout: 800 });
 }
 async function openExercise(id: string) {
   pickerOpen.value = false;
@@ -523,6 +539,9 @@ onBeforeUnmount(() => { clearInterval(clockInt); clearInterval(restInt); });
 .picker-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .view-toggle { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 3px; flex: none; }
 .view-toggle button { width: 34px; height: 30px; border: none; border-radius: 8px; background: transparent; color: var(--dim); display: grid; place-items: center; cursor: pointer; &.on { background: var(--accent); color: var(--accent-ink); } }
+.mus-filter { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; }
+.mchip { flex: none; padding: 6px 11px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--dim); font-size: 12px; text-transform: capitalize; cursor: pointer; &.on { border-color: var(--accent); color: var(--accent-ink); background: var(--accent); } }
+.picked-note { font-size: 12px; color: var(--accent); margin-bottom: 8px; }
 .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 12px 8px 10px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); border-top: 3px solid var(--line); cursor: pointer; }
 .tile-badge { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; }
