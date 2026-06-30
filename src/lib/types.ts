@@ -41,7 +41,13 @@ export interface Profile {
   favorite_exercises?: string[];      // ids d'exos à prioriser si pertinents
   disliked_exercises?: string[];      // ids d'exos « aimés moins » : évités si une alternative existe (pas exclus)
   constraints?: { injuries?: string[]; avoid_exercises?: string[] };
-  preferences?: { priority_muscles?: string[]; units?: 'kg' | 'lb'; tracking_frequency?: 'day' | 'week' | 'month' };
+  preferences?: {
+    priority_muscles?: string[];
+    units?: 'kg' | 'lb';
+    tracking_frequency?: 'day' | 'week' | 'month';
+    tracking_day?: number;   // semaine : 0=dim..6=sam ; mois : 1..28
+    tracking_time?: string;  // « HH:MM » pour le rappel
+  };
 }
 
 export interface LevelConfig {

@@ -8,6 +8,24 @@
       <div class="freq">
         <button v-for="f in FREQ" :key="f.value" class="choice small" :class="{ active: frequency === f.value }" @click="setFrequency(f.value)">{{ f.label }}</button>
       </div>
+
+      <template v-if="frequency === 'week'">
+        <div class="lbl q-mt-md">Jour de la semaine</div>
+        <div class="days">
+          <button v-for="d in WEEKDAYS" :key="d.value" class="choice small" :class="{ active: trackingDay === d.value }" @click="setTrackingDay(d.value)">{{ d.label }}</button>
+        </div>
+      </template>
+      <template v-else-if="frequency === 'month'">
+        <div class="lbl q-mt-md">Jour du mois</div>
+        <q-input :model-value="trackingDay ?? 1" type="number" min="1" max="28" filled dense @update:model-value="setTrackingDay(Math.min(28, Math.max(1, Number($event) || 1)))" />
+      </template>
+
+      <div class="lbl q-mt-md">Heure du rappel</div>
+      <div class="row items-center" style="gap: 10px">
+        <q-input :model-value="trackingTime" type="time" filled dense style="max-width: 140px" @update:model-value="setTrackingTime(String($event))" />
+        <button v-if="!notifGranted" class="choice small" style="flex: 1" @click="enableNotif">Activer les rappels</button>
+        <span v-else class="notif-ok"><q-icon name="check_circle" size="16px" /> Rappels activés</span>
+      </div>
     </section>
 
     <!-- Rappel -->
@@ -107,6 +125,7 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useBodyStore, type BodyEntry } from '@/stores/body';
+import { markBodyEntrySaved } from '@/composables/useBodyReminder';
 
 const $q = useQuasar();
 const auth = useAuthStore();
@@ -157,16 +176,42 @@ function sleepToHours(): number | null {
 }
 
 // ── Fréquence + rappel ──────────────────────────────────
+const WEEKDAYS = [
+  { value: 1, label: 'Lun' }, { value: 2, label: 'Mar' }, { value: 3, label: 'Mer' },
+  { value: 4, label: 'Jeu' }, { value: 5, label: 'Ven' }, { value: 6, label: 'Sam' }, { value: 0, label: 'Dim' },
+];
 const frequency = computed<Freq>(() => profileStore.profile?.preferences?.tracking_frequency ?? 'week');
-async function setFrequency(value: Freq) {
+const trackingDay = computed(() => profileStore.profile?.preferences?.tracking_day);
+const trackingTime = computed(() => profileStore.profile?.preferences?.tracking_time ?? '');
+const notifGranted = ref('Notification' in window && Notification.permission === 'granted');
+
+async function setPref(patch: Record<string, unknown>) {
   const p = profileStore.profile;
   const userId = auth.user?.id;
-  if (!p || !userId || frequency.value === value) return;
+  if (!p || !userId) return;
   try {
-    await profileStore.update(userId, { ...p, preferences: { ...(p.preferences ?? {}), tracking_frequency: value } });
+    await profileStore.update(userId, { ...p, preferences: { ...(p.preferences ?? {}), ...patch } });
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
   }
+}
+function setFrequency(value: Freq) {
+  if (frequency.value !== value) void setPref({ tracking_frequency: value });
+}
+function setTrackingDay(value: number) {
+  void setPref({ tracking_day: value });
+}
+function setTrackingTime(value: string) {
+  void setPref({ tracking_time: value });
+}
+async function enableNotif() {
+  if (!('Notification' in window)) {
+    $q.notify({ type: 'warning', message: 'Notifications non supportées par ce navigateur.' });
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  notifGranted.value = perm === 'granted';
+  if (notifGranted.value) $q.notify({ type: 'positive', message: 'Rappels activés (quand l’app est ouverte).' });
 }
 const due = computed(() => {
   const last = entries.value[entries.value.length - 1];
@@ -250,6 +295,7 @@ async function save() {
       measurements: Object.keys(measurements).length ? measurements : null,
       note: f.note.trim() || null,
     });
+    markBodyEntrySaved(new Date().toISOString().slice(0, 10)); // coupe le rappel du jour
     f.weight = null;
     f.sleepH = null;
     f.sleepMin = null;
@@ -297,6 +343,9 @@ onMounted(async () => {
 .lbl { font-size: 12px; color: var(--dim); margin-bottom: 8px; }
 
 .freq { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.days .choice { padding: 8px 2px; font-size: 12px; }
+.notif-ok { display: inline-flex; align-items: center; gap: 5px; color: var(--d1); font-size: 13px; flex: 1; }
 .choice { width: 100%; min-height: 48px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; color: var(--text); font-family: var(--font-ui); font-size: 15px; cursor: pointer; &.active { border-color: var(--accent); background: var(--surface-2); } &.small { min-height: 44px; font-size: 14px; } }
 
 .due { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid var(--accent); color: var(--text); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; font-size: 14px; }
