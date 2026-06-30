@@ -111,18 +111,9 @@
 
         <button class="addset" @click="live.addSet()">+ Ajouter une série</button>
 
-        <!-- Ressenti de la série courante -->
+        <!-- Commentaire / RIR de la série courante (la note de difficulté est dans la barre du bas) -->
         <div v-if="curSet" class="comment">
-          <div class="comment-head"><span>Ressenti de la série</span><em>noter puis valider</em></div>
-          <div class="diff-row">
-            <button
-              v-for="d in DIFFS" :key="d.n"
-              class="diff-btn" :class="['d' + d.n, { sel: curSet.difficulty === d.n }]"
-              @click="curSet.difficulty = d.n; live.persist()"
-            >
-              <b>{{ d.n }}</b><span>{{ d.label }}</span>
-            </button>
-          </div>
+          <div class="comment-head"><span>Note libre (optionnel)</span></div>
           <div v-if="showRir" class="rir-row">
             <span class="rir-lbl">RIR (reps en réserve)</span>
             <q-input
@@ -144,6 +135,14 @@
       <!-- CTA collant -->
       <div class="cta-wrap">
         <button v-if="!resting && curSet" class="cta-mini" @click="openFinish">Terminer ▸</button>
+        <!-- Note de difficulté toujours visible (pas besoin de scroller) -->
+        <div v-if="curSet && !resting" class="cta-diff">
+          <button
+            v-for="d in DIFFS" :key="d.n"
+            class="diff-btn" :class="['d' + d.n, { sel: curSet.difficulty === d.n }]"
+            @click="curSet.difficulty = d.n; live.persist()"
+          ><b>{{ d.n }}</b><span>{{ d.label }}</span></button>
+        </div>
         <button v-if="resting" class="cta ghost" @click="skipRest">Passer le repos</button>
         <button v-else-if="curSet" class="cta" :disabled="!curSet.difficulty" @click="validateSet">
           Valider la série
@@ -434,7 +433,7 @@ onBeforeUnmount(() => {
 .dot { flex: 1; height: 5px; border-radius: 3px; background: var(--surface-2); }
 .dot.done { background: var(--d1); }
 .dot.cur { background: var(--accent); box-shadow: 0 0 0 3px #ffd23f22; }
-.scroll { flex: 1; overflow-y: auto; padding: 6px 18px 160px; }
+.scroll { flex: 1; overflow-y: auto; padding: 6px 18px 210px; }
 
 .exo { padding: 14px 2px 4px; }
 .exo-top { display: flex; align-items: flex-start; gap: 10px; }
@@ -462,7 +461,7 @@ onBeforeUnmount(() => {
 .sec-h { display: flex; align-items: center; justify-content: space-between; margin: 22px 2px 10px; span { font-size: 12px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: var(--dim); } }
 .vol { font-family: var(--font-display); font-size: 13px; color: var(--dim); b { color: var(--accent); } }
 
-.set { display: grid; grid-template-columns: 34px 1fr 1fr 28px; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line-soft); margin-bottom: 9px; }
+.set { display: grid; grid-template-columns: 30px 1fr 1fr 28px; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line-soft); margin-bottom: 6px; }
 .set.done { opacity: 0.66; }
 .set.cur { border-color: var(--accent); background: var(--surface-2); box-shadow: 0 0 0 1px var(--accent); }
 .set.up { opacity: 0.5; }
@@ -508,7 +507,9 @@ onBeforeUnmount(() => {
 .mic { width: 52px; flex: none; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--accent); font-size: 22px; cursor: pointer; display: grid; place-items: center; }
 .mic.rec { background: var(--accent); color: var(--accent-ink); }
 
-.cta-wrap { position: fixed; left: 0; right: 0; bottom: 0; max-width: 600px; margin: 0 auto; padding: 16px 18px 26px; background: linear-gradient(180deg, #15120e00, var(--bg) 30%); }
+.cta-wrap { position: fixed; left: 0; right: 0; bottom: 0; max-width: 600px; margin: 0 auto; padding: 12px 18px 22px; background: linear-gradient(180deg, #15120e00, var(--bg) 22%); }
+.cta-diff { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+.cta-diff .diff-btn { padding: 7px 4px 6px; border-radius: 11px; background: var(--surface); b { font-size: 19px; } span { font-size: 9px; } }
 .cta { width: 100%; height: 60px; border: none; border-radius: 18px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-weight: 700; font-size: 19px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; box-shadow: 0 10px 30px -8px #ffd23f55; &:disabled { opacity: 0.5; box-shadow: none; } }
 .cta.ghost { background: var(--surface); color: var(--text); border: 1px solid var(--line); box-shadow: none; }
 .cta-mini { position: absolute; right: 18px; top: -42px; height: 38px; padding: 0 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); color: var(--dim); font-size: 12px; font-weight: 600; cursor: pointer; }
