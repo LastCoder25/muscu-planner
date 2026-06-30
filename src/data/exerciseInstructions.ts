@@ -357,6 +357,30 @@ export const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
     ],
     tip: 'Mieux vaut 20 s parfaites que 1 min dos creusé.',
   },
+  ex_glute_machine: {
+    steps: [
+      'Installe-toi sur la machine à fessiers (hip thrust), dos calé, barre/coussin sur les hanches.',
+      'Pousse dans les talons pour monter le bassin jusqu’à l’extension complète des hanches.',
+      'Serre les fessiers en haut, puis redescends en contrôlant.',
+    ],
+    tip: 'Cible les fessiers ; ne cambre pas le bas du dos en haut.',
+  },
+  ex_adductors: {
+    steps: [
+      'Assis sur la machine, genoux écartés contre les coussins (faces internes des cuisses).',
+      'Resserre les cuisses en contractant l’intérieur des cuisses.',
+      'Reviens lentement en contrôlant l’écartement.',
+    ],
+    tip: 'Travaille les adducteurs (intérieur de cuisse).',
+  },
+  ex_abductors: {
+    steps: [
+      'Assis sur la machine, genoux joints contre les coussins (faces externes).',
+      'Écarte les cuisses en contractant l’extérieur des hanches/fessiers.',
+      'Reviens lentement.',
+    ],
+    tip: 'Travaille les abducteurs (extérieur de hanche/fessiers).',
+  },
   ex_hanging_leg_raise: {
     steps: [
       'Suspendu à la barre, corps gainé.',
