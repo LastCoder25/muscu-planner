@@ -18,11 +18,14 @@
         <section class="block">
           <div class="block-h">Niveau</div>
           <button
-            v-for="opt in LEVELS" :key="opt.value"
+            v-for="opt in shownLevels" :key="opt.value"
             class="choice choice-row" :class="{ active: form.level === opt.value }"
-            @click="form.level = opt.value"
+            @click="pickLevel(opt.value)"
           >
-            <div class="choice-title">{{ opt.label }}</div>
+            <div class="row items-center justify-between">
+              <div class="choice-title">{{ opt.label }}</div>
+              <q-icon v-if="form.level === opt.value && !expand.level" name="expand_more" color="primary" size="20px" />
+            </div>
             <div class="choice-desc">{{ opt.desc }}</div>
           </button>
         </section>
@@ -30,11 +33,14 @@
         <section class="block">
           <div class="block-h">Objectif</div>
           <button
-            v-for="opt in OBJECTIVES" :key="opt.value"
+            v-for="opt in shownObjectives" :key="opt.value"
             class="choice choice-row" :class="{ active: form.objective === opt.value }"
-            @click="form.objective = opt.value"
+            @click="pickObjective(opt.value)"
           >
-            <div class="choice-title">{{ opt.label }}</div>
+            <div class="row items-center justify-between">
+              <div class="choice-title">{{ opt.label }}</div>
+              <q-icon v-if="form.objective === opt.value && !expand.objective" name="expand_more" color="primary" size="20px" />
+            </div>
             <div class="choice-desc">{{ opt.desc }}</div>
             <div class="choice-hint">{{ opt.reps }}</div>
           </button>
@@ -247,6 +253,19 @@ const regenerating = ref(false);
 const open = reactive<Record<string, boolean>>({ profil: true, muscu: false, materiel: false, sports: false });
 function toggle(k: string) {
   open[k] = !open[k];
+}
+
+// Niveau & objectif : on n'affiche que l'option choisie ; toucher l'option ré-affiche tout.
+const expand = reactive({ level: false, objective: false });
+const shownLevels = computed(() => (expand.level || !form.level ? LEVELS : LEVELS.filter((o) => o.value === form.level)));
+const shownObjectives = computed(() => (expand.objective || !form.objective ? OBJECTIVES : OBJECTIVES.filter((o) => o.value === form.objective)));
+function pickLevel(v: typeof form.level) {
+  if (form.level === v) expand.level = !expand.level;
+  else { form.level = v; expand.level = false; }
+}
+function pickObjective(v: typeof form.objective) {
+  if (form.objective === v) expand.objective = !expand.objective;
+  else { form.objective = v; expand.objective = false; }
 }
 
 // Options du sélecteur d'exos favoris (recherchable).

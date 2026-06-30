@@ -45,17 +45,16 @@
 
           <!-- Timer de repos -->
           <div v-if="resting" class="timer">
-            <div class="timer-label">Repos</div>
+            <div class="timer-label">Repos en cours</div>
             <div class="ring-wrap">
               <svg width="170" height="170" viewBox="0 0 184 184">
                 <circle class="ring-bg" cx="92" cy="92" r="82" />
-                <circle class="ring-fg" cx="92" cy="92" r="82" stroke-dasharray="515" :stroke-dashoffset="515 * (1 - restLeft / restTotal)" />
+                <circle class="ring-fg" cx="92" cy="92" r="82" stroke-dasharray="515" :stroke-dashoffset="515 * (1 - ringFrac)" />
               </svg>
               <div class="ring-num"><div class="ring-time font-display">{{ restDisplay }}</div></div>
             </div>
             <div class="timer-btns">
-              <button class="tbtn" @click="addTime(15)">+15 s</button>
-              <button class="tbtn skip" @click="skipRest">Passer le repos</button>
+              <button class="tbtn skip" @click="skipRest">Terminer le repos</button>
             </div>
           </div>
 
@@ -122,7 +121,7 @@
       <div class="cta-wrap">
         <button v-if="curSet" class="cta" @click="validateSet">Valider la série</button>
         <template v-else>
-          <button v-if="resting" class="cta ghost" @click="skipRest">Passer le repos</button>
+          <button v-if="resting" class="cta ghost" @click="skipRest">Terminer le repos</button>
           <button class="cta" @click="pickerOpen = true">Exercice suivant</button>
         </template>
       </div>
@@ -248,27 +247,21 @@ const clock = computed(() => {
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 });
 
-// ── Timer de repos ──────────────────────────────────────
+// ── Chrono de repos (compte à la hausse : on ne fixe pas la durée à l'avance) ──
 const resting = ref(false);
-const restLeft = ref(0);
-const restTotal = ref(0);
+const restElapsed = ref(0);
 let restInt: ReturnType<typeof setInterval> | undefined;
 const restDisplay = computed(() =>
-  restLeft.value >= 60 ? `${Math.floor(restLeft.value / 60)}:${String(restLeft.value % 60).padStart(2, '0')}` : String(restLeft.value),
+  `${Math.floor(restElapsed.value / 60)}:${String(restElapsed.value % 60).padStart(2, '0')}`,
 );
+// Anneau indicatif : se remplit sur ~3 min puis reste plein.
+const ringFrac = computed(() => Math.min(restElapsed.value / 180, 1));
 function startRest() {
   resting.value = true;
-  restTotal.value = restLeft.value = ex.value?.rest_seconds ?? 90;
+  restElapsed.value = 0;
   clearInterval(restInt);
-  restInt = setInterval(() => {
-    restLeft.value--;
-    if (restLeft.value <= 0) skipRest();
-  }, 1000);
+  restInt = setInterval(() => { restElapsed.value++; }, 1000);
   scrollTop();
-}
-function addTime(n: number) {
-  restLeft.value += n;
-  restTotal.value = Math.max(restTotal.value, restLeft.value);
 }
 function skipRest() {
   clearInterval(restInt);

@@ -26,7 +26,10 @@
       <div v-show="formOpen" class="grp-body">
         <div class="row-2">
           <q-input v-model.number="f.weight" type="number" inputmode="decimal" filled label="Poids (kg)" />
-          <q-input v-model.number="f.sleep" type="number" inputmode="decimal" filled label="Sommeil (h)" />
+          <div class="sleep-row">
+            <q-input v-model.number="f.sleepH" type="number" inputmode="numeric" min="0" filled label="Sommeil (h)" />
+            <q-input v-model.number="f.sleepMin" type="number" inputmode="numeric" min="0" max="59" filled label="min" />
+          </div>
         </div>
         <div class="lbl q-mt-md">Circonférences (cm)</div>
         <div class="meas-grid">
@@ -51,8 +54,7 @@
           </div>
           <div class="mcard">
             <div class="mc-k">Sommeil</div>
-            <div class="mc-v">{{ fmt(sleepStat.val) }}<small v-if="sleepStat.val != null"> h</small></div>
-            <div v-if="sleepStat.delta != null" class="mc-d" :class="deltaCls(sleepStat.delta)">{{ signed(sleepStat.delta) }} h</div>
+            <div class="mc-v">{{ fmtSleep(sleepStat.val) }}</div>
           </div>
           <div v-for="m in MEASURES" :key="m.key" class="mcard">
             <div class="mc-k">{{ m.label }}</div>
@@ -80,7 +82,7 @@
           <div class="h-date">{{ fmtDate(e.measured_at) }}</div>
           <div class="h-vals">
             <span v-if="e.weight_kg != null">{{ e.weight_kg }} kg</span>
-            <span v-if="e.sleep_hours != null">{{ e.sleep_hours }} h</span>
+            <span v-if="e.sleep_hours != null">{{ fmtSleep(e.sleep_hours) }}</span>
             <span v-if="measCount(e)" class="dim">{{ measCount(e) }} mesure{{ measCount(e) > 1 ? 's' : '' }}</span>
           </div>
           <q-btn flat round dense size="sm" icon="delete_outline" color="negative" aria-label="Supprimer" @click="del(e.id)" />
@@ -129,16 +131,22 @@ const entries = computed(() => body.entries);
 const reversed = computed(() => entries.value.slice().reverse());
 
 // ── Formulaire ──────────────────────────────────────────
-interface FormState { weight: number | null; sleep: number | null; measures: Record<string, number | null>; note: string }
+interface FormState { weight: number | null; sleepH: number | null; sleepMin: number | null; measures: Record<string, number | null>; note: string }
 const f = reactive<FormState>({
   weight: null,
-  sleep: null,
+  sleepH: null,
+  sleepMin: null,
   measures: Object.fromEntries(MEASURES.map((m) => [m.key, null])),
   note: '',
 });
 const hasInput = computed(
-  () => f.weight != null || f.sleep != null || f.note.trim() !== '' || MEASURES.some((m) => f.measures[m.key] != null),
+  () => f.weight != null || f.sleepH != null || f.sleepMin != null || f.note.trim() !== '' || MEASURES.some((m) => f.measures[m.key] != null),
 );
+// Sommeil en heures décimales (h + min/60) pour le stockage.
+function sleepToHours(): number | null {
+  if (f.sleepH == null && f.sleepMin == null) return null;
+  return +((f.sleepH ?? 0) + (f.sleepMin ?? 0) / 60).toFixed(2);
+}
 
 // ── Fréquence + rappel ──────────────────────────────────
 const frequency = computed<Freq>(() => profileStore.profile?.preferences?.tracking_frequency ?? 'week');
@@ -209,6 +217,13 @@ function fmtDate(iso: string) {
 function measCount(e: BodyEntry) {
   return e.measurements ? Object.keys(e.measurements).length : 0;
 }
+// Heures décimales → « 7h30 ».
+function fmtSleep(h: number | null) {
+  if (h == null) return '—';
+  const hh = Math.floor(h);
+  const mm = Math.round((h - hh) * 60);
+  return mm ? `${hh}h${String(mm).padStart(2, '0')}` : `${hh}h`;
+}
 
 // ── Actions ─────────────────────────────────────────────
 async function save() {
@@ -223,12 +238,13 @@ async function save() {
     await body.add({
       measured_at: new Date().toISOString().slice(0, 10),
       weight_kg: f.weight,
-      sleep_hours: f.sleep,
+      sleep_hours: sleepToHours(),
       measurements: Object.keys(measurements).length ? measurements : null,
       note: f.note.trim() || null,
     });
     f.weight = null;
-    f.sleep = null;
+    f.sleepH = null;
+    f.sleepMin = null;
     f.note = '';
     for (const m of MEASURES) f.measures[m.key] = null;
     formOpen.value = false;
@@ -285,6 +301,7 @@ onMounted(async () => {
 .grp-body { padding: 6px 14px 14px; }
 
 .row-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.sleep-row { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 8px; }
 .meas-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
