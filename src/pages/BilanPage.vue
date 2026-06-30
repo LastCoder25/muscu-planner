@@ -20,6 +20,17 @@
         </div>
         <div v-if="log.global_comment" class="global-comment">« {{ log.global_comment }} »</div>
 
+        <!-- Séries par groupe musculaire (prévu / réalisé) -->
+        <template v-if="muscleVolume.length">
+          <div class="sec-h">Séries par groupe</div>
+          <div class="grp-card">
+            <div v-for="g in muscleVolume" :key="g.muscle" class="grp-row">
+              <span class="grp-name"><span class="grp-dot" :style="{ background: muscleColor(g.muscle) }" />{{ g.muscle }}</span>
+              <span class="grp-val"><b>{{ g.done }}</b><template v-if="g.planned"> / {{ g.planned }}</template> séries</span>
+            </div>
+          </div>
+        </template>
+
         <!-- Prévu vs réalisé -->
         <div class="sec-h">Prévu vs réalisé</div>
         <div v-for="(ex, i) in log.exercises" :key="i" class="ex-card">
@@ -89,6 +100,7 @@ import type { Session, SessionLog, ExerciseTarget } from '@/lib/types';
 import { nextSessionDeterministic } from '@/lib/progression';
 import { buildCoachRequest, validateImportedSession } from '@/lib/coach';
 import { bestE1RM } from '@/lib/estimates';
+import { setsByMuscleFromLog, muscleColor } from '@/lib/volume';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
@@ -114,6 +126,8 @@ const iaOpen = ref(false);
 const importText = ref('');
 const imported = ref<Session | null>(null);
 const importing = ref(false);
+
+const muscleVolume = computed(() => (log.value ? setsByMuscleFromLog(log.value) : []));
 
 const totalVolume = computed(() =>
   log.value
@@ -265,6 +279,11 @@ onMounted(async () => {
 .ex-e1rm { font-size: 12px; color: var(--dim); margin-top: 8px; b { color: var(--text); } }
 .ex-comment { font-size: 12.5px; color: var(--dim); font-style: italic; margin-top: 6px; }
 
+.grp-card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 6px 14px; }
+.grp-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 14px; color: var(--text); &:last-child { border-bottom: none; } }
+.grp-name { display: inline-flex; align-items: center; gap: 8px; text-transform: capitalize; }
+.grp-dot { width: 9px; height: 9px; border-radius: 50%; }
+.grp-val { font-family: var(--font-display); color: var(--dim); b { color: var(--accent); } }
 .prog-card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 6px 14px; }
 .prog-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 14px; color: var(--text); &:last-child { border-bottom: none; } }
 .prog-delta { font-family: var(--font-display); font-size: 14px; }

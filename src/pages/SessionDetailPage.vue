@@ -20,6 +20,12 @@
       </div>
 
       <div class="scroll">
+        <div class="vol-groups">
+          <span v-for="g in muscleVolume" :key="g.muscle" class="vol-chip" :style="{ borderColor: muscleColor(g.muscle) }">
+            <span class="vol-dot" :style="{ background: muscleColor(g.muscle) }" />{{ g.muscle }} · <b>{{ g.sets }}</b>
+          </span>
+        </div>
+
         <div v-for="(ex, i) in session.exercises" :key="i" class="ex-card" @click="openExercise(ex.id)">
           <div class="ex-top">
             <div class="ex-idx font-display">{{ i + 1 }}</div>
@@ -58,6 +64,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import type { Session, ExerciseTarget, Objective, PrescribedSet } from '@/lib/types';
 import { estimateDurationMin } from '@/lib/estimates';
+import { plannedSetsByMuscle, muscleColor } from '@/lib/volume';
 import { useSessionsStore } from '@/stores/sessions';
 import { useAuthStore } from '@/stores/auth';
 
@@ -70,6 +77,7 @@ const auth = useAuthStore();
 const id = String(route.params.id);
 const loading = ref(true);
 const session = computed<Session | null>(() => sessionsStore.list.find((s) => s.id === id)?.payload ?? null);
+const muscleVolume = computed(() => (session.value ? plannedSetsByMuscle(session.value) : []));
 
 const OBJECTIVE_LABELS: Record<Objective, string> = {
   force: 'Force',
@@ -182,6 +190,9 @@ onMounted(async () => {
 .chip { font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--dim); background: var(--surface); border: 1px solid var(--line-soft); padding: 5px 10px; border-radius: 8px; }
 
 .scroll { flex: 1; overflow-y: auto; padding: 10px 16px 120px; }
+.vol-groups { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.vol-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--dim); background: var(--surface); border: 1px solid var(--line-soft); border-left-width: 3px; padding: 4px 9px; border-radius: 8px; text-transform: capitalize; b { color: var(--text); } }
+.vol-dot { width: 8px; height: 8px; border-radius: 50%; }
 .ex-card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 14px; margin-bottom: 10px; cursor: pointer; }
 .ex-card:active { border-color: var(--accent); }
 .ex-top { display: flex; align-items: flex-start; gap: 12px; }

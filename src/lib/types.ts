@@ -123,6 +123,7 @@ export interface LoggedExercise {
   id: string;
   name: string;
   swapped_from?: string | null;
+  muscle_primary?: string;
   planned: Partial<ExerciseTarget>;
   performed: PerformedSet[];
   exercise_comment?: string;

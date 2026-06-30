@@ -226,6 +226,7 @@ export const useLiveStore = defineStore('live', () => {
       exercises: r.exercises.map<LoggedExercise>((ex) => ({
         id: ex.id,
         name: ex.name,
+        muscle_primary: ex.muscle_primary,
         swapped_from: ex.swapped_from,
         planned: ex.planned,
         performed: ex.sets
