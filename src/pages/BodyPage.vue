@@ -90,14 +90,15 @@
         </div>
       </section>
 
-      <!-- Courbe du poids -->
-      <section v-if="weightChart" class="block">
-        <div class="block-h">Évolution du poids</div>
-        <div class="chart">
-          <svg :viewBox="`0 0 ${weightChart.W} ${weightChart.H}`" preserveAspectRatio="none" class="chart-svg">
-            <polyline :points="weightChart.pts" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" />
+      <!-- Courbes d'évolution (poids, sommeil, circonférences) -->
+      <section v-if="charts.length" class="block">
+        <div class="block-h">Évolution</div>
+        <div v-for="c in charts" :key="c.key" class="chart">
+          <div class="chart-title">{{ c.label }}</div>
+          <svg :viewBox="`0 0 ${c.W} ${c.H}`" preserveAspectRatio="none" class="chart-svg">
+            <polyline :points="c.pts" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" />
           </svg>
-          <div class="chart-meta">min <b>{{ weightChart.min }}</b> · max <b>{{ weightChart.max }}</b> · actuel <b>{{ weightChart.last }}</b> kg</div>
+          <div class="chart-meta">min <b>{{ c.fmt(c.min) }}</b> · max <b>{{ c.fmt(c.max) }}</b> · actuel <b>{{ c.fmt(c.last) }}</b></div>
         </div>
       </section>
 
@@ -235,24 +236,45 @@ function measStat(key: MeasureKey) {
   return statFrom(entries.value.map((e) => e.measurements?.[key]).filter((v): v is number => v != null));
 }
 
-// ── Courbe du poids ─────────────────────────────────────
-const weightChart = computed(() => {
-  const s = entries.value.map((e) => e.weight_kg).filter((v): v is number => v != null);
-  if (s.length < 2) return null;
-  const min = Math.min(...s);
-  const max = Math.max(...s);
+// ── Courbes (poids, sommeil, chaque circonférence) ──────
+type Fmt = (v: number | null) => string;
+interface Chart { key: string; label: string; pts: string; min: number; max: number; last: number; fmt: Fmt; W: number; H: number }
+function buildChart(vals: number[]): Omit<Chart, 'key' | 'label' | 'fmt'> | null {
+  if (vals.length < 2) return null;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
   const range = max - min || 1;
   const W = 300;
   const H = 90;
   const pad = 6;
-  const pts = s
+  const pts = vals
     .map((v, i) => {
-      const x = (i / (s.length - 1)) * (W - 2 * pad) + pad;
+      const x = (i / (vals.length - 1)) * (W - 2 * pad) + pad;
       const y = H - pad - ((v - min) / range) * (H - 2 * pad);
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(' ');
-  return { pts, min, max, last: s[s.length - 1], W, H };
+  return { pts, min, max, last: vals[vals.length - 1]!, W, H };
+}
+const fmtKg: Fmt = (v) => (v == null ? '—' : `${v} kg`);
+const fmtCm: Fmt = (v) => (v == null ? '—' : `${v} cm`);
+const charts = computed<Chart[]>(() => {
+  const metrics: { key: string; label: string; fmt: Fmt; vals: number[] }[] = [
+    { key: 'weight', label: 'Poids', fmt: fmtKg, vals: entries.value.map((e) => e.weight_kg).filter((v): v is number => v != null) },
+    { key: 'sleep', label: 'Sommeil', fmt: fmtSleep, vals: entries.value.map((e) => e.sleep_hours).filter((v): v is number => v != null) },
+    ...MEASURES.map((m) => ({
+      key: m.key,
+      label: m.label,
+      fmt: fmtCm,
+      vals: entries.value.map((e) => e.measurements?.[m.key]).filter((v): v is number => v != null),
+    })),
+  ];
+  const out: Chart[] = [];
+  for (const m of metrics) {
+    const c = buildChart(m.vals);
+    if (c) out.push({ key: m.key, label: m.label, fmt: m.fmt, ...c });
+  }
+  return out;
 });
 
 // ── Helpers d'affichage ─────────────────────────────────
@@ -401,7 +423,8 @@ onMounted(async () => {
 .mc-v { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--text); margin-top: 2px; small { font-size: 12px; color: var(--dim); } }
 .mc-d { font-size: 12px; margin-top: 2px; color: var(--dim); &.up { color: var(--d3); } &.down { color: var(--d1); } }
 
-.chart { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px; }
+.chart { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+.chart-title { font-size: 12px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
 .chart-svg { width: 100%; height: 90px; display: block; }
 .chart-meta { color: var(--dim); font-size: 12px; margin-top: 8px; b { color: var(--text); } }
 
