@@ -191,11 +191,17 @@ function restToSec(t: string | undefined): number | undefined {
   }
   return s || undefined;
 }
+// Série au poids du corps / sans charge : « 8 reps → 2 min », « ×8 — 1 min ».
+const REP_RE = /^(?:[x×]\s*(\d+)|(\d+)\s*(?:reps?|r[ée]p[ée]?titions?|r[ée]ps?)\b)\s*(?:[—–\-→>:·•|/]+\s*(.+))?$/i;
 function parseSetLine(line: string): { load: number; reps: number; rest: number | undefined } | null {
   const m = SET_RE.exec(line);
-  if (!m) return null;
-  const load = m[1] ? Number(m[1].replace(',', '.')) : 0; // « Bar » → 0
-  return { load, reps: Number(m[2]), rest: restToSec(m[3]) };
+  if (m) {
+    const load = m[1] ? Number(m[1].replace(',', '.')) : 0; // « Bar » → 0
+    return { load, reps: Number(m[2]), rest: restToSec(m[3]) };
+  }
+  const r = REP_RE.exec(line);
+  if (r) return { load: 0, reps: Number(r[1] ?? r[2]), rest: restToSec(r[3]) };
+  return null;
 }
 function isNote(line: string): boolean {
   if (/^\s*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]*\s*(objectif|priorit|focus|semaine|s[ée]ance|but)\b/iu.test(line)) return true;
@@ -207,6 +213,13 @@ function isModifierBlock(header: string): boolean {
   return /^(back[-\s]?off|drop[-\s]?set|rest[-\s]?pause|myo[-\s]?reps?|cluster|pause|tempo|partiels?|negatifs?|isometrie|iso)\b/.test(
     normalize(header),
   );
+}
+// Libellé de section (pas un exercice) : « Travail principal », « Échauffement »,
+// « Mobilité »… → ignoré (les séries suivantes gardent le vrai nom d'exo).
+function isSectionLabel(header: string): boolean {
+  const n = normalize(header);
+  return /^(travail principal|travail|series? de travail|principal|top set|working ?sets?|montee en charge|activation)$/.test(n)
+    || /^(echauffement|warm.?up|mobilite)\b/.test(n);
 }
 
 interface TextEx { name: string; sets: { load: number; reps: number; rest: number | undefined }[]; notes: string[] }
@@ -251,6 +264,7 @@ export function parseWorkoutText(raw: string, library: LibEntry[] = []): Session
 
   const exercises: PlannedExercise[] = [];
   let cur: TextEx | null = null;
+  let pending: string | null = null; // dernier en-tête vu, en attente d'une série
   const commit = () => {
     if (cur && cur.sets.length > 0) exercises.push(buildFromText(cur, library));
     cur = null;
@@ -260,7 +274,9 @@ export function parseWorkoutText(raw: string, library: LibEntry[] = []): Session
     const line = lines[i]!;
     const set = parseSetLine(line);
     if (set) {
-      cur ??= { name: 'Exercice', sets: [], notes: [] };
+      // Une série démarre (ou continue) l'exo, nommé par le dernier en-tête vu.
+      cur ??= { name: pending ?? 'Exercice', sets: [], notes: [] };
+      pending = null;
       cur.sets.push(set);
       continue;
     }
@@ -268,14 +284,22 @@ export function parseWorkoutText(raw: string, library: LibEntry[] = []): Session
       if (cur) cur.notes.push(stripLead(line));
       continue;
     }
-    // En-tête : soit un sous-bloc de l'exo courant (back-off, pause…), soit un nouvel exo.
     const header = stripLead(line);
+    if (!header) continue;
+    // Sous-bloc modificateur de l'exo courant (back-off, pause…) → mêmes séries.
     if (cur && cur.sets.length > 0 && isModifierBlock(header)) {
-      cur.notes.push(header); // les séries suivantes s'ajoutent à l'exo courant
+      cur.notes.push(header);
       continue;
     }
+    // Libellé de section (Travail principal, Échauffement…) → pas un exo.
+    if (isSectionLabel(header)) {
+      if (cur) cur.notes.push(header);
+      continue;
+    }
+    // Nouvel en-tête : on clôt l'exo courant et on retient l'en-tête (le dernier
+    // avant une série gagne → « 1️⃣ Deadlift » puis « Travail principal » → Deadlift).
     commit();
-    cur = { name: header, sets: [], notes: [] };
+    pending = header;
   }
   commit();
 
