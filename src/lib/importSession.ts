@@ -167,11 +167,16 @@ export function parseImportedSession(raw: string, library: LibEntry[] = []): Ses
 
 // ── Parseur de texte libre (format ChatGPT) ─────────────
 // Reconnaît les en-têtes d'exo (« 🏋️ Squat »), les lignes de série
-// (« 40 kg ×8 — 1 min », « Bar ×10 », « 117,5 kg ×1 — 3 min 30 ») et les notes (👉 / 🎯…).
-const SET_RE = /^(?:(\d+(?:[.,]\d+)?)\s*kg|bar\b|barre\b)\s*[x×]\s*(\d+)\s*(?:[—–-]\s*(.+))?$/i;
+// (« 40 kg ×8 — 1 min », « 46 kg ×12 → 1 min 30 », « Bar ×10 ») et les notes (👉 / 🎯…).
+// Séparateur repos tolérant : — – - → > : · • | / (les IA varient beaucoup).
+const SET_RE = /^(?:(\d+(?:[.,]\d+)?)\s*kg|bar\b|barre\b)\s*[x×]\s*(\d+)\s*(?:[—–\-→>:·•|/]+\s*(.+))?$/i;
 
 function stripLead(line: string): string {
-  return line.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+  return line
+    .replace(/^[^\p{L}\p{N}]+/u, '')            // emojis/symboles en tête (🏋️, •, -…)
+    .replace(/^\d+[️⃣.)°]+\s*/u, '')  // énumération « 1️⃣ », « 1. », « 2) »
+    .replace(/^[^\p{L}\p{N}]+/u, '')            // re-nettoyage après l'énumération
+    .trim();
 }
 function restToSec(t: string | undefined): number | undefined {
   if (!t) return undefined;
