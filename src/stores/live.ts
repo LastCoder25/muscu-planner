@@ -9,6 +9,7 @@ import type {
 import { SCHEMA_VERSION } from '@/lib/types';
 
 export interface LiveSet {
+  uid: string;        // clé stable (évite les décalages de liste à la suppression)
   load_kg: number;
   reps: number;
   done: boolean;
@@ -79,7 +80,7 @@ export const useLiveStore = defineStore('live', () => {
         const bodyweight = ex.target.load === 'bodyweight';
         const base = bodyweight ? (ex.target.added_kg ?? 0) : (ex.target.load_kg ?? 0);
         const blank = (load: number, reps: number, rest?: number): LiveSet => {
-          const set: LiveSet = { load_kg: load, reps, done: false, difficulty: 0, rir: null, comment: '' };
+          const set: LiveSet = { uid: crypto.randomUUID(), load_kg: load, reps, done: false, difficulty: 0, rir: null, comment: '' };
           if (rest) set.rest_seconds = rest;
           return set;
         };
@@ -154,7 +155,7 @@ export const useLiveStore = defineStore('live', () => {
       bodyweight,
       unilateral: def.unilateral ?? false,
       // Série créée NON validée : on note la difficulté après l'avoir faite (flux « valider »).
-      sets: [{ load_kg: 0, reps: isTime ? 30 : 8, done: false, difficulty: 0, rir: null, comment: '' }],
+      sets: [{ uid: crypto.randomUUID(), load_kg: 0, reps: isTime ? 30 : 8, done: false, difficulty: 0, rir: null, comment: '' }],
       exercise_comment: '',
     });
     persist();
@@ -177,6 +178,7 @@ export const useLiveStore = defineStore('live', () => {
     if (!ex) return;
     const last = ex.sets[ex.sets.length - 1];
     ex.sets.push({
+      uid: crypto.randomUUID(),
       load_kg: last?.load_kg ?? 0,
       reps: last?.reps ?? 8,
       done: false,

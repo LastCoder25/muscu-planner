@@ -72,7 +72,7 @@
 
         <div
           v-for="(s, i) in ex.sets"
-          :key="i"
+          :key="s.uid ?? i"
           class="set"
           :class="{ done: s.done, cur: i === curSetIndex && !s.done, up: i > curSetIndex && !s.done }"
         >
@@ -272,22 +272,21 @@ function skipRest() {
 // ── Actions séries ──────────────────────────────────────
 function adj(s: LiveSet, key: 'load_kg' | 'reps', d: number) {
   s[key] = Math.max(0, Math.round((s[key] + d) * 10) / 10);
-  if (key === 'load_kg' && s === curSet.value) propagateLoad();
+  if (key === 'load_kg' && s === curSet.value && curSetIndex.value === 0) propagateLoad();
   live.persist();
 }
-// Reporte la charge de la série courante sur les séries suivantes non faites
-// (les charges d'un exo se ressemblent ; pratique après un changement d'exo).
+// Reporte la charge de la 1re série sur les séries suivantes non faites (pré-remplissage
+// après un changement d'exo). Les séries suivantes restent ensuite indépendantes.
 function propagateLoad() {
   const e = ex.value;
-  const i = curSetIndex.value;
-  if (!e || i < 0) return;
-  const load = e.sets[i]!.load_kg;
-  for (let j = i + 1; j < e.sets.length; j++) {
+  if (!e || e.sets.length === 0) return;
+  const load = e.sets[0]!.load_kg;
+  for (let j = 1; j < e.sets.length; j++) {
     if (!e.sets[j]!.done) e.sets[j]!.load_kg = load;
   }
 }
 function onCurLoadInput() {
-  propagateLoad();
+  if (curSetIndex.value === 0) propagateLoad();
   live.persist();
 }
 function skipExercise() {

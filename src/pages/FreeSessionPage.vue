@@ -60,7 +60,7 @@
 
           <!-- Séries -->
           <div class="sec-h"><span>Séries</span><div class="vol">Volume <b>{{ volume }}</b> kg</div></div>
-          <div v-for="(s, i) in ex.sets" :key="i" class="set" :class="{ done: s.done, cur: i === curSetIndex }">
+          <div v-for="(s, i) in ex.sets" :key="s.uid ?? i" class="set" :class="{ done: s.done, cur: i === curSetIndex }">
             <div class="set-idx font-display">{{ i + 1 }}</div>
             <div>
               <div class="cell-lbl">{{ ex.bodyweight ? 'Lest' : 'Charge' }}</div>
