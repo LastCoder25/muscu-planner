@@ -36,17 +36,15 @@
               </div>
             </div>
           </div>
-          <div class="ex-meta">
-            <template v-if="ex.prescription?.length">
-              <span v-for="(p, k) in ex.prescription" :key="k" class="tag">{{ setLabel(p) }}</span>
-            </template>
-            <template v-else>
-              <span class="tag accent">{{ repsLabel(ex.target) }}</span>
-              <span class="tag">{{ loadLabel(ex.target) }}</span>
-            </template>
-            <span class="tag">{{ restLabel(ex) }}</span>
-            <span v-if="ex.unilateral" class="tag uni">par côté</span>
-            <span v-if="ex.equipment" class="tag">{{ ex.equipment }}</span>
+          <div class="ex-sub">
+            {{ restLabel(ex) }}<template v-if="ex.unilateral"> · par côté</template><template v-if="ex.equipment"> · {{ ex.equipment }}</template>
+          </div>
+          <div class="series-grid">
+            <div v-for="(c, k) in seriesOf(ex)" :key="k" class="s-tile">
+              <span class="s-n">S{{ k + 1 }}</span>
+              <span class="s-top font-display">{{ c.top }}</span>
+              <span class="s-bot">{{ c.bottom }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -62,7 +60,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
-import type { Session, ExerciseTarget, Objective, PrescribedSet } from '@/lib/types';
+import type { Session, Objective, PrescribedSet, PlannedExercise } from '@/lib/types';
 import { estimateDurationMin } from '@/lib/estimates';
 import { plannedSetsByMuscle, muscleColor } from '@/lib/volume';
 import { useSessionsStore } from '@/stores/sessions';
@@ -90,17 +88,16 @@ function objectiveLabel(o: Objective) {
   return OBJECTIVE_LABELS[o] ?? o;
 }
 
-function repsLabel(t: ExerciseTarget): string {
-  const range = `${t.sets} × ${t.reps_min}–${t.reps_max}`;
-  return t.unit === 'time' ? `${range} s` : range;
-}
-function loadLabel(t: ExerciseTarget): string {
-  if (t.load === 'bodyweight') return t.added_kg ? `+${t.added_kg} kg` : 'poids du corps';
-  if (t.load_kg) return `${t.load_kg} kg`;
-  return 'charge à définir';
-}
-function setLabel(p: PrescribedSet): string {
-  return p.load_kg ? `${p.load_kg} kg × ${p.reps}` : `PdC × ${p.reps}`;
+// Séries à afficher en tuiles : { top: charge, bottom: reps }.
+function seriesOf(ex: PlannedExercise): { top: string; bottom: string }[] {
+  if (ex.prescription?.length) {
+    return ex.prescription.map((p) => ({ top: p.load_kg ? `${p.load_kg}` : 'PdC', bottom: `× ${p.reps}` }));
+  }
+  const t = ex.target;
+  const n = Math.max(0, t.sets || 0);
+  const bottom = t.unit === 'time' ? `${t.reps_min}–${t.reps_max}s` : `× ${t.reps_min}–${t.reps_max}`;
+  const top = t.load === 'bodyweight' ? (t.added_kg ? `+${t.added_kg}` : 'PdC') : (t.load_kg ? `${t.load_kg}` : '—');
+  return Array.from({ length: n }, () => ({ top, bottom }));
 }
 function fmtRest(s: number): string {
   return s >= 60 ? `${Math.round(s / 30) / 2} min` : `${s} s`;
@@ -200,10 +197,12 @@ onMounted(async () => {
 .ex-main { flex: 1; min-width: 0; }
 .ex-name { font-weight: 600; font-size: 16px; color: var(--text); }
 .ex-muscles { font-size: 12.5px; color: var(--dim); margin-top: 3px; .dim { color: var(--dim-2); } }
-.ex-meta { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 11px; }
-.tag { font-family: var(--font-display); font-size: 13px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line-soft); padding: 4px 9px; border-radius: 8px; }
-.tag.accent { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-.tag.uni { color: var(--accent); border-color: var(--accent); }
+.ex-sub { font-size: 11.5px; color: var(--dim); margin-top: 8px; text-transform: capitalize; }
+.series-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 7px; margin-top: 10px; }
+.s-tile { background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 10px; padding: 7px 4px 6px; text-align: center; display: flex; flex-direction: column; gap: 1px; }
+.s-n { font-size: 9px; color: var(--dim-2); letter-spacing: 0.5px; text-transform: uppercase; }
+.s-top { font-size: 17px; font-weight: 600; color: var(--accent); line-height: 1; }
+.s-bot { font-size: 11px; color: var(--dim); }
 
 .cta-wrap { position: fixed; left: 0; right: 0; bottom: 0; max-width: 600px; margin: 0 auto; padding: 16px 16px 26px; background: linear-gradient(180deg, #15120e00, var(--bg) 30%); }
 .cta { width: 100%; height: 58px; border: none; border-radius: 18px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; box-shadow: 0 10px 30px -8px #ffd23f55; }
