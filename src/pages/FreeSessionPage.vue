@@ -19,11 +19,11 @@
     </div>
 
     <template v-else>
-      <!-- Exos ajoutés (navigation) -->
+      <!-- Exos ajoutés (🟩 fait · 🟨 en cours · 🟥 à faire) -->
       <div class="dots">
         <button
           v-for="(e, i) in run.exercises" :key="i"
-          class="dot" :class="{ cur: i === run.exIndex, done: exDone(e) }"
+          class="dot" :class="{ cur: i === run.exIndex, done: exDone(e), todo: i !== run.exIndex && !exDone(e) }"
           :aria-label="`Exercice ${i + 1}`"
           @click="goTo(i)"
         >{{ i + 1 }}</button>
@@ -41,6 +41,16 @@
                 <span v-if="ex.equipment" class="chip">{{ ex.equipment }}</span>
               </div>
             </div>
+          </div>
+
+          <!-- Progression des séries (🟩 faite · 🟨 en cours · 🟥 à faire) -->
+          <div v-if="ex.sets.length" class="set-tiles">
+            <div
+              v-for="(s, i) in ex.sets"
+              :key="s.uid ?? i"
+              class="stile"
+              :class="s.done ? 'done' : (i === curSetIndex ? 'cur' : 'todo')"
+            >{{ i + 1 }}</div>
           </div>
 
           <!-- Timer de repos -->
@@ -485,8 +495,14 @@ onBeforeUnmount(() => { clearInterval(clockInt); clearInterval(restInt); });
 
 .dots { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 16px 0; }
 .dot { min-width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--dim); font-family: var(--font-display); font-size: 12px; cursor: pointer; padding: 0 6px; }
-.dot.done { color: var(--d1); border-color: var(--d1); }
+.dot.done { background: var(--d1); color: var(--accent-ink); border-color: var(--d1); }
 .dot.cur { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.dot.todo { color: #e5544b; border-color: #e5544b55; background: #e5544b22; }
+.set-tiles { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 12px; }
+.stile { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; font-family: var(--font-display); font-weight: 600; font-size: 12px; }
+.stile.done { background: var(--d1); color: var(--accent-ink); }
+.stile.cur { background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 2px #ffd23f44; }
+.stile.todo { background: #e5544b22; color: #e5544b; border: 1px solid #e5544b55; }
 
 .scroll { flex: 1; overflow-y: auto; padding: 14px 16px 120px; }
 .empty-wrap { display: flex; }
