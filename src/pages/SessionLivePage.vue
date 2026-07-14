@@ -40,15 +40,6 @@
             <span v-if="ex.unilateral" class="chip uni">par côté</span>
             <span class="chip tgt">Cible {{ ex.planned.sets }} × {{ ex.planned.reps_min }}–{{ ex.planned.reps_max }}{{ ex.planned.unit === 'time' ? ' s' : '' }}</span>
           </div>
-          <!-- Progression des séries de cet exo (🟩 faite · 🟨 en cours · 🟥 à faire) -->
-          <div class="set-tiles">
-            <div
-              v-for="(s, i) in ex.sets"
-              :key="s.uid ?? i"
-              class="stile"
-              :class="s.done ? 'done' : (i === curSetIndex ? 'cur' : 'todo')"
-            >{{ i + 1 }}</div>
-          </div>
         </div>
 
         <!-- Timer de repos -->
@@ -73,79 +64,66 @@
           </div>
         </div>
 
-        <!-- Séries -->
-        <div class="sec-h">
-          <span>Séries</span>
-          <div class="vol">Volume <b>{{ volume }}</b> kg</div>
+        <!-- Séries en grandes tuiles (🟩 faite · 🟨 en cours · 🟥 à faire) -->
+        <div class="sec-h"><span>Séries</span><div class="vol">Vol <b>{{ volume }}</b> kg</div></div>
+        <div class="big-tiles">
+          <button
+            v-for="(s, i) in ex.sets" :key="s.uid ?? i"
+            class="btile"
+            :class="[s.done ? 'done' : (i === curSetIndex ? 'cur' : 'todo'), { sel: i === activeIdx }]"
+            @click="selectTile(i, s)"
+          >
+            <span class="bt-n">S{{ i + 1 }}</span>
+            <span class="bt-v font-display">{{ s.load_kg }}<small v-if="!ex.bodyweight"> kg</small></span>
+            <span class="bt-r">×{{ s.reps }}{{ isTimeEx ? 's' : '' }}</span>
+            <span v-if="s.done && s.difficulty" class="bt-d" :class="'d' + s.difficulty">{{ s.difficulty }}</span>
+          </button>
+          <button class="btile add" aria-label="Ajouter une série" @click="live.addSet()">+</button>
         </div>
 
-        <div
-          v-for="(s, i) in ex.sets"
-          :key="s.uid ?? i"
-          class="set"
-          :class="{ done: s.done, cur: i === curSetIndex && !s.done, up: i > curSetIndex && !s.done }"
-        >
-          <div class="set-idx font-display">{{ i + 1 }}</div>
-          <div>
-            <div class="cell-lbl">{{ ex.bodyweight ? 'Lest' : 'Charge' }}</div>
-            <div class="val-line">
-              <button v-if="i === curSetIndex || i === editIdx" class="stepper" @click="adj(s, 'load_kg', -2.5)">−</button>
-              <input v-if="i === curSetIndex || i === editIdx" v-model.number="s.load_kg" type="number" inputmode="decimal" min="0" step="0.5" class="valin font-display" aria-label="Charge en kg" @change="i === curSetIndex ? onCurLoadInput() : live.persist()" />
-              <div v-else class="val font-display">{{ s.load_kg }}<small>kg</small></div>
-              <button v-if="i === curSetIndex || i === editIdx" class="stepper" @click="adj(s, 'load_kg', 2.5)">+</button>
+        <!-- Éditeur de la série active (courante ou tuile touchée) -->
+        <div v-if="activeSet" class="editor">
+          <div class="editor-h">{{ editIdx >= 0 ? `Modifier la série ${activeIdx + 1}` : `Série ${activeIdx + 1}` }}</div>
+          <div class="editor-row">
+            <div class="ed-cell">
+              <div class="cell-lbl">{{ ex.bodyweight ? 'Lest' : 'Charge' }}</div>
+              <div class="val-line">
+                <button class="stepper" @click="adj(activeSet, 'load_kg', -2.5)">−</button>
+                <input v-model.number="activeSet.load_kg" type="number" inputmode="decimal" min="0" step="0.5" class="valin font-display" aria-label="Charge en kg" @change="onActiveLoad()" />
+                <button class="stepper" @click="adj(activeSet, 'load_kg', 2.5)">+</button>
+              </div>
+            </div>
+            <div class="ed-cell">
+              <div class="cell-lbl">{{ isTimeEx ? 'Sec' : 'Reps' }}</div>
+              <div class="val-line">
+                <button class="stepper" @click="adj(activeSet, 'reps', isTimeEx ? -5 : -1)">−</button>
+                <input v-model.number="activeSet.reps" type="number" inputmode="numeric" min="0" class="valin font-display" :aria-label="isTimeEx ? 'Secondes' : 'Répétitions'" @change="live.persist()" />
+                <button class="stepper" @click="adj(activeSet, 'reps', isTimeEx ? 5 : 1)">+</button>
+              </div>
             </div>
           </div>
-          <div>
-            <div class="cell-lbl">{{ isTimeEx ? 'Sec' : 'Reps' }}</div>
-            <div class="val-line">
-              <button v-if="i === curSetIndex || i === editIdx" class="stepper" @click="adj(s, 'reps', isTimeEx ? -5 : -1)">−</button>
-              <input v-if="i === curSetIndex || i === editIdx" v-model.number="s.reps" type="number" inputmode="numeric" min="0" class="valin font-display" :aria-label="isTimeEx ? 'Secondes' : 'Répétitions'" @change="live.persist()" />
-              <div v-else class="val font-display">{{ s.reps }}</div>
-              <button v-if="i === curSetIndex || i === editIdx" class="stepper" @click="adj(s, 'reps', isTimeEx ? 5 : 1)">+</button>
-            </div>
-          </div>
-          <div>
-            <button v-if="i === editIdx" class="okedit" aria-label="Terminer la modification" @click="editIdx = -1">✓</button>
-            <button v-else-if="s.done" class="dpill editable" :class="'d' + (s.difficulty || 2)" aria-label="Modifier la série" @click="editIdx = i">{{ s.difficulty || '✎' }}</button>
-            <button v-else-if="i === curSetIndex && ex.sets.length > 1" class="rm" @click="live.removeSet(i)">✕</button>
-          </div>
-          <div v-if="i === editIdx" class="edit-diff">
+          <div v-if="editIdx >= 0" class="edit-diff">
             <span class="edit-lbl">Difficulté</span>
-            <button v-for="d in DIFFS" :key="d.n" class="ediff" :class="['d' + d.n, { sel: s.difficulty === d.n }]" @click="s.difficulty = d.n; live.persist()">{{ d.n }}</button>
-            <button v-if="ex.sets.length > 1" class="ediff rm" aria-label="Supprimer la série" @click="removeAt(i)">✕</button>
+            <button v-for="d in DIFFS" :key="d.n" class="ediff" :class="['d' + d.n, { sel: activeSet.difficulty === d.n }]" @click="activeSet.difficulty = d.n; live.persist()">{{ d.n }}</button>
+            <button v-if="ex.sets.length > 1" class="ediff rm" aria-label="Supprimer la série" @click="removeAt(activeIdx)">✕</button>
           </div>
-          <div v-if="s.done && s.comment && i !== editIdx" class="comment-mini">{{ s.comment }}</div>
-          <div v-if="s.done && isDense && i !== editIdx" class="set-tonnage font-display">{{ s.load_kg * s.reps }} kg</div>
-        </div>
-
-        <button class="addset" @click="live.addSet()">+ Ajouter une série</button>
-
-        <!-- Commentaire / RIR de la série courante (la note de difficulté est dans la barre du bas) -->
-        <div v-if="curSet" class="comment">
-          <div class="comment-head"><span>Note libre (optionnel)</span></div>
-          <div v-if="showRir" class="rir-row">
+          <button class="note-toggle" @click="noteOpen = !noteOpen">{{ noteOpen ? 'Masquer la note' : '+ Note / ressenti' }}</button>
+          <div v-if="noteOpen" class="cbox">
+            <textarea v-model="activeSet.comment" class="cfield" aria-label="Commentaire de la série" placeholder="Note libre (optionnel)…" @change="live.persist()" />
+            <button class="mic" :class="{ rec: recording }" aria-label="Dictée" @click="toggleMic">🎤</button>
+          </div>
+          <div v-if="noteOpen && showRir" class="rir-row">
             <span class="rir-lbl">RIR (reps en réserve)</span>
-            <q-input
-              v-model.number="curSet.rir" type="number" dense filled
-              class="rir-input" @update:model-value="live.persist()"
-            />
-          </div>
-          <div class="cbox">
-            <textarea
-              v-model="curSet.comment" class="cfield" aria-label="Commentaire de la série"
-              placeholder="Note libre : « épaule droite tire un peu »… (optionnel)"
-              @change="live.persist()"
-            />
-            <button class="mic" :class="{ rec: recording }" @click="toggleMic">🎤</button>
+            <q-input v-model.number="activeSet.rir" type="number" dense filled class="rir-input" @update:model-value="live.persist()" />
           </div>
         </div>
       </div>
 
       <!-- CTA collant -->
       <div class="cta-wrap">
-        <button v-if="!resting && curSet" class="cta-mini" @click="openFinish">Terminer ▸</button>
-        <!-- Note de difficulté toujours visible (pas besoin de scroller) -->
-        <div v-if="curSet && !resting" class="cta-diff">
+        <button v-if="!resting && curSet && editIdx < 0" class="cta-mini" @click="openFinish">Terminer ▸</button>
+        <!-- Note de difficulté de la série courante (visible sans scroller) -->
+        <div v-if="curSet && !resting && editIdx < 0" class="cta-diff">
           <button
             v-for="d in DIFFS" :key="d.n"
             class="diff-btn" :class="['d' + d.n, { sel: curSet.difficulty === d.n }]"
@@ -153,6 +131,7 @@
           ><b>{{ d.n }}</b><span>{{ d.label }}</span></button>
         </div>
         <button v-if="resting" class="cta ghost" @click="skipRest">Passer le repos</button>
+        <button v-else-if="editIdx >= 0" class="cta" @click="editIdx = -1">Terminer la modification</button>
         <button v-else-if="curSet" class="cta" :disabled="!curSet.difficulty" @click="validateSet">
           Valider la série
         </button>
@@ -230,7 +209,6 @@ const volume = computed(() =>
   ex.value ? ex.value.sets.filter((s) => s.done).reduce((a, s) => a + s.load_kg * s.reps, 0) : 0,
 );
 const showRir = computed(() => profileStore.levelConfig?.effort_signal === 'rir');
-const isDense = computed(() => profileStore.levelConfig?.ui_density === 'dense');
 const isTimeEx = computed(() => ex.value?.planned.unit === 'time');
 function exDone(e: LiveExercise): boolean {
   return e.sets.length > 0 && e.sets.every((s) => s.done);
@@ -238,8 +216,17 @@ function exDone(e: LiveExercise): boolean {
 
 const swapOpen = ref(false);
 const scrollEl = ref<HTMLElement | null>(null);
-// Index de la série en cours de modification (corriger poids/reps/difficulté d'une série déjà faite).
+const noteOpen = ref(false);
+// Index de la série en cours de modification (corriger une série déjà faite).
 const editIdx = ref(-1);
+// Série « active » = celle qu'on édite (tuile touchée) sinon la série courante.
+const activeIdx = computed(() => (editIdx.value >= 0 ? editIdx.value : curSetIndex.value));
+const activeSet = computed(() => (activeIdx.value >= 0 ? ex.value?.sets[activeIdx.value] ?? null : null));
+function selectTile(i: number, s: LiveSet) {
+  if (s.done) editIdx.value = editIdx.value === i ? -1 : i; // (dé)sélectionne une série faite
+  else if (i === curSetIndex.value) editIdx.value = -1;      // revient à la série courante
+  // série future non faite : on ne saute pas dessus
+}
 function removeAt(i: number) {
   live.removeSet(i);
   editIdx.value = -1;
@@ -297,8 +284,9 @@ function propagateLoad() {
     if (!e.sets[j]!.done) e.sets[j]!.load_kg = load;
   }
 }
-function onCurLoadInput() {
-  if (curSetIndex.value === 0) propagateLoad();
+function onActiveLoad() {
+  // Report de la charge uniquement depuis la 1re série de la série courante.
+  if (editIdx.value < 0 && activeIdx.value === 0) propagateLoad();
   live.persist();
 }
 function skipExercise() {
@@ -347,8 +335,9 @@ function toggleMic() {
   rec.interimResults = false;
   rec.onresult = (e) => {
     const txt = e.results[e.results.length - 1]?.[0]?.transcript ?? '';
-    if (curSet.value) {
-      curSet.value.comment = (curSet.value.comment ? curSet.value.comment + ' ' : '') + txt.trim();
+    const target = activeSet.value;
+    if (target) {
+      target.comment = (target.comment ? target.comment + ' ' : '') + txt.trim();
       live.persist();
     }
   };
@@ -477,6 +466,29 @@ onBeforeUnmount(() => {
 
 .sec-h { display: flex; align-items: center; justify-content: space-between; margin: 22px 2px 10px; span { font-size: 12px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: var(--dim); } }
 .vol { font-family: var(--font-display); font-size: 13px; color: var(--dim); b { color: var(--accent); } }
+
+.big-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+.btile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px 10px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface); cursor: pointer; }
+.btile.done { border-color: var(--d1); background: #7bc86c14; }
+.btile.cur { border-color: var(--accent); background: var(--surface-2); box-shadow: 0 0 0 1px var(--accent); }
+.btile.todo { border-color: #e5544b55; background: #e5544b10; }
+.btile.sel { box-shadow: 0 0 0 2px var(--accent); }
+.bt-n { font-size: 10px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--dim-2); }
+.bt-v { font-size: 22px; font-weight: 600; color: var(--text); line-height: 1; small { font-size: 11px; color: var(--dim); font-weight: 400; } }
+.btile.cur .bt-v { color: var(--accent); }
+.bt-r { font-size: 12px; color: var(--dim); }
+.bt-d { position: absolute; top: 5px; right: 5px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 5px; font-size: 10px; font-weight: 700; display: grid; place-items: center; color: var(--accent-ink); }
+.bt-d.d1 { background: var(--d1); } .bt-d.d2 { background: var(--d2); } .bt-d.d3 { background: var(--d3); } .bt-d.d4 { background: var(--d4); color: #fff; }
+.btile.add { justify-content: center; color: var(--dim); font-size: 26px; border-style: dashed; }
+
+.editor { margin-top: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+.editor-h { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+.editor-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ed-cell { text-align: center; }
+.ed-cell .val-line { justify-content: center; margin-top: 4px; }
+.editor .edit-diff { margin-top: 12px; }
+.editor .cbox { margin-top: 10px; }
+.note-toggle { margin-top: 12px; background: none; border: none; color: var(--accent); font-size: 12.5px; cursor: pointer; padding: 0; }
 
 .set { display: grid; grid-template-columns: 30px 1fr 1fr 28px; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line-soft); margin-bottom: 6px; }
 .set.done { opacity: 0.66; }
