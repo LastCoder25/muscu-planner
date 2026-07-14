@@ -77,7 +77,10 @@ export const useLiveStore = defineStore('live', () => {
       exIndex: 0,
       readiness,
       exercises: session.exercises.map((ex) => {
-        const bodyweight = ex.target.load === 'bodyweight';
+        // Poids du corps si la cible le dit, ou si l'exo n'utilise pas de charge en kg
+        // (poids du corps, élastique/assisté) → charge affichée « PdC », lest optionnel.
+        const bodyweight = ex.target.load === 'bodyweight'
+          || ex.equipment === 'poids_du_corps' || ex.equipment === 'élastique';
         const base = bodyweight ? (ex.target.added_kg ?? 0) : (ex.target.load_kg ?? 0);
         const blank = (load: number, reps: number, rest?: number): LiveSet => {
           const set: LiveSet = { uid: crypto.randomUUID(), load_kg: load, reps, done: false, difficulty: 0, rir: null, comment: '' };
@@ -141,7 +144,7 @@ export const useLiveStore = defineStore('live', () => {
 
   function addExercise(def: { id: string; name: string; muscle_primary?: string; equipment?: string; unit?: string | null; unilateral?: boolean | null }) {
     if (!run.value) return;
-    const bodyweight = def.equipment === 'poids_du_corps';
+    const bodyweight = def.equipment === 'poids_du_corps' || def.equipment === 'élastique';
     const isTime = def.unit === 'time';
     run.value.exercises.push({
       id: def.id,

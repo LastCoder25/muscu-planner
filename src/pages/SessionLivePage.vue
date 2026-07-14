@@ -74,7 +74,10 @@
             @click="selectTile(i, s)"
           >
             <span class="bt-n">S{{ i + 1 }}</span>
-            <span class="bt-v font-display">{{ s.load_kg }}<small v-if="!ex.bodyweight"> kg</small></span>
+            <span class="bt-v font-display">
+              <template v-if="ex.bodyweight && !s.load_kg">PdC</template>
+              <template v-else>{{ ex.bodyweight ? '+' : '' }}{{ s.load_kg }}<small> kg</small></template>
+            </span>
             <span class="bt-r">×{{ s.reps }}{{ isTimeEx ? 's' : '' }}</span>
             <span v-if="s.done && s.difficulty" class="bt-d" :class="'d' + s.difficulty">{{ s.difficulty }}</span>
           </button>
