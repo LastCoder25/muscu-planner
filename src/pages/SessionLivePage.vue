@@ -14,14 +14,14 @@
         <button class="iconbtn" aria-label="Terminer" @click="openFinish">⏹</button>
       </header>
 
-      <!-- Progression par exo -->
-      <div class="dots">
+      <!-- Progression des exercices (🟩 fait · 🟨 en cours · 🟥 à faire) -->
+      <div class="ex-tiles">
         <div
           v-for="(e, i) in run!.exercises"
           :key="i"
-          class="dot"
-          :class="{ done: i < run!.exIndex, cur: i === run!.exIndex }"
-        />
+          class="ptile"
+          :class="i === run!.exIndex ? 'cur' : (exDone(e) ? 'done' : 'todo')"
+        >{{ i + 1 }}</div>
       </div>
 
       <div class="scroll" ref="scrollEl">
@@ -39,6 +39,15 @@
             <span v-if="ex.muscle_primary" class="chip">{{ ex.muscle_primary }}</span>
             <span v-if="ex.unilateral" class="chip uni">par côté</span>
             <span class="chip tgt">Cible {{ ex.planned.sets }} × {{ ex.planned.reps_min }}–{{ ex.planned.reps_max }}{{ ex.planned.unit === 'time' ? ' s' : '' }}</span>
+          </div>
+          <!-- Progression des séries de cet exo (🟩 faite · 🟨 en cours · 🟥 à faire) -->
+          <div class="set-tiles">
+            <div
+              v-for="(s, i) in ex.sets"
+              :key="s.uid ?? i"
+              class="stile"
+              :class="s.done ? 'done' : (i === curSetIndex ? 'cur' : 'todo')"
+            >{{ i + 1 }}</div>
           </div>
         </div>
 
@@ -193,7 +202,7 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
-import { useLiveStore, type LiveSet } from '@/stores/live';
+import { useLiveStore, type LiveSet, type LiveExercise } from '@/stores/live';
 import { useLogsStore } from '@/stores/logs';
 import SwapSheet from '@/components/SwapSheet.vue';
 
@@ -223,6 +232,9 @@ const volume = computed(() =>
 const showRir = computed(() => profileStore.levelConfig?.effort_signal === 'rir');
 const isDense = computed(() => profileStore.levelConfig?.ui_density === 'dense');
 const isTimeEx = computed(() => ex.value?.planned.unit === 'time');
+function exDone(e: LiveExercise): boolean {
+  return e.sets.length > 0 && e.sets.every((s) => s.done);
+}
 
 const swapOpen = ref(false);
 const scrollEl = ref<HTMLElement | null>(null);
@@ -428,10 +440,16 @@ onBeforeUnmount(() => {
 .top-mid { flex: 1; min-width: 0; }
 .top-title { font-weight: 600; font-size: 18px; letter-spacing: 0.3px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .top-sub { font-size: 11.5px; color: var(--dim); margin-top: 2px; font-variant-numeric: tabular-nums; b { color: var(--accent); font-weight: 600; } }
-.dots { display: flex; gap: 6px; padding: 14px 18px 4px; }
-.dot { flex: 1; height: 5px; border-radius: 3px; background: var(--surface-2); }
-.dot.done { background: var(--d1); }
-.dot.cur { background: var(--accent); box-shadow: 0 0 0 3px #ffd23f22; }
+.ex-tiles { display: flex; gap: 5px; flex-wrap: wrap; padding: 14px 18px 4px; }
+.ptile { min-width: 26px; height: 24px; padding: 0 6px; border-radius: 7px; display: grid; place-items: center; font-family: var(--font-display); font-weight: 600; font-size: 12px; }
+.ptile.done { background: var(--d1); color: var(--accent-ink); }
+.ptile.cur { background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 2px #ffd23f44; }
+.ptile.todo { background: #e5544b22; color: #e5544b; border: 1px solid #e5544b55; }
+.set-tiles { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 11px; }
+.stile { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; font-family: var(--font-display); font-weight: 600; font-size: 12px; }
+.stile.done { background: var(--d1); color: var(--accent-ink); }
+.stile.cur { background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 2px #ffd23f44; }
+.stile.todo { background: #e5544b22; color: #e5544b; border: 1px solid #e5544b55; }
 .scroll { flex: 1; overflow-y: auto; padding: 6px 18px 210px; }
 
 .exo { padding: 14px 2px 4px; }
