@@ -74,6 +74,9 @@
             <div v-if="guide.tip" class="exd-tip">💡 {{ guide.tip }}</div>
           </template>
           <div v-else class="exd-none">Pas de descriptif pour cet exercice.</div>
+          <a class="exd-demo" :href="demoUrl" target="_blank" rel="noopener">
+            <q-icon name="smart_display" size="18px" /> Voir une démo vidéo
+          </a>
         </div>
       </template>
 
@@ -330,6 +333,10 @@ const guide = computed(() =>
   exercise.value ? exerciseInstructions(exercise.value.id) : undefined,
 );
 const exoImg = computed(() => (exercise.value ? exerciseImage(exercise.value.id) : undefined));
+const demoUrl = computed(
+  () =>
+    `https://www.youtube.com/results?search_query=${encodeURIComponent((exercise.value?.name ?? '') + ' exécution technique musculation')}`,
+);
 
 const canNext = computed(() => (step.value === 1 ? !!exercise.value : true));
 
@@ -690,6 +697,20 @@ onMounted(async () => {
   margin-top: 10px;
   font-size: 13px;
   color: var(--dim);
+}
+.exd-demo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .fmt-grid {

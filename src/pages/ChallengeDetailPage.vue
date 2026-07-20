@@ -4,7 +4,10 @@
       <button class="iconbtn" aria-label="Retour" @click="back">‹</button>
       <div class="top-mid">
         <div class="top-title font-display">{{ ch?.exercise_name || 'Challenge' }}</div>
-        <div class="top-sub" v-if="ch">{{ formatName }} · {{ ch.duration_days }} j</div>
+        <div class="top-sub" v-if="ch">
+          {{ formatName }} · {{ ch.duration_days }} j ·
+          <a class="demo-link" :href="demoUrl" target="_blank" rel="noopener">▶ démo</a>
+        </div>
       </div>
       <q-btn
         flat
@@ -22,7 +25,7 @@
     </div>
 
     <template v-else-if="ch">
-      <div class="scroll">
+      <div ref="scrollBox" class="scroll">
         <!-- Stats -->
         <div class="stats">
           <div class="stat">
@@ -88,7 +91,7 @@
                 <q-icon name="check_circle" color="positive" /> Objectif du jour atteint ✅
               </template>
               <template v-else>
-                <q-icon name="bedtime" color="primary" /> Journée clôturée · {{ chronoDisplay }}
+                <q-icon name="bedtime" color="primary" /> Journée validée · {{ chronoDisplay }}
               </template>
               <button v-if="todayClosed" class="corr-link" @click="reopenDay">Reprendre</button>
             </div>
@@ -98,7 +101,7 @@
                 {{ running ? 'Pause' : doneToday > 0 ? 'Reprendre' : 'Démarrer' }}
                 <span class="cc-time">{{ chronoDisplay }}</span>
               </button>
-              <button class="close-day" @click="closeDay">Clôturer la journée</button>
+              <button class="close-day" @click="closeDay">Valider la journée</button>
             </div>
           </template>
 
@@ -109,7 +112,7 @@
                 <q-icon name="check_circle" color="positive" /> Objectif atteint ✅
               </template>
               <template v-else>
-                <q-icon name="bedtime" color="primary" /> Journée clôturée · {{ doneToday }}
+                <q-icon name="bedtime" color="primary" /> Journée validée · {{ doneToday }}
                 {{ unitLabel }}
               </template>
               <button class="corr-link" @click="correcting = true">Corriger</button>
@@ -159,7 +162,7 @@
               </div>
 
               <button v-if="!editMode" class="close-day" @click="closeDay">
-                Clôturer la journée
+                Valider la journée
               </button>
             </div>
           </template>
@@ -207,7 +210,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import {
@@ -234,6 +237,7 @@ const loading = ref(true);
 const ch = ref<Challenge | null>(null);
 const running = ref(false);
 let tick: ReturnType<typeof setInterval> | undefined;
+const scrollBox = ref<HTMLElement | null>(null);
 const celebrate = ref(false); // animation de fin de challenge
 const celebrateCodes = ref<string[]>([]);
 
@@ -285,6 +289,10 @@ const isTime = computed(() => ch.value?.unit === 'time');
 const unitLabel = computed(() => (isTime.value ? 'sec' : 'reps'));
 const formatName = computed(() =>
   ch.value ? (formatOption(ch.value.format)?.name ?? ch.value.format) : '',
+);
+const demoUrl = computed(
+  () =>
+    `https://www.youtube.com/results?search_query=${encodeURIComponent((ch.value?.exercise_name ?? '') + ' exécution technique musculation')}`,
 );
 const stats = computed(() =>
   ch.value
@@ -446,7 +454,8 @@ function toggleChrono() {
     void afterChange(); // sauvegarde à la pause
   }
 }
-// Clôture la « journée » : stoppe le chrono et fige la session (même après minuit).
+// Valide la « journée » : stoppe le chrono, fige la session (même après minuit)
+// et remonte sur l'avancement (stats + graphe + calendrier).
 function closeDay() {
   if (!inToday.value) return;
   running.value = false;
@@ -454,6 +463,7 @@ function closeDay() {
   const e = ensureToday();
   e.closed = true;
   void afterChange();
+  void nextTick(() => scrollBox.value?.scrollTo({ top: 0, behavior: 'smooth' }));
 }
 function reopenDay() {
   const e = ensureToday();
@@ -649,6 +659,11 @@ onBeforeUnmount(() => {
   border-radius: 18px;
   padding: 18px;
   text-align: center;
+}
+.demo-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
 }
 .today-h {
   font-size: 13px;
