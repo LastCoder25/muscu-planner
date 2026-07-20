@@ -1,51 +1,85 @@
 <template>
   <q-page class="cn-page">
     <header class="top">
-      <button class="iconbtn" aria-label="Retour" @click="back">‹</button>
-      <div class="top-title font-display">Nouveau challenge</div>
+      <button class="iconbtn" aria-label="Retour" @click="prev">‹</button>
+      <div class="top-mid">
+        <div class="top-title font-display">Nouveau challenge</div>
+        <div class="top-step">
+          Étape {{ step }}/{{ STEP_TITLES.length }} · {{ STEP_TITLES[step - 1] }}
+        </div>
+      </div>
+      <div class="top-spacer" />
     </header>
 
+    <div class="progress">
+      <div class="progress-fill" :style="{ width: (step / STEP_TITLES.length) * 100 + '%' }" />
+    </div>
+
     <div class="scroll">
-      <!-- 1. Exercice -->
-      <div class="sec-h">1 · Exercice</div>
-      <q-input
-        v-model="search"
-        filled
-        dense
-        placeholder="Rechercher un exercice…"
-        class="q-mb-sm"
-        clearable
-      />
-      <div v-if="loadingLib" class="row flex-center q-pa-md"><q-spinner color="primary" /></div>
-      <div v-else class="ex-list">
-        <button
-          v-for="e in filteredLib"
-          :key="e.id"
-          class="ex-row"
-          :class="{ sel: exercise?.id === e.id }"
-          @click="pickExercise(e)"
-        >
-          <q-icon v-if="favSet.has(e.id)" name="star" size="16px" color="primary" class="fav" />
-          <q-icon
-            v-else-if="sugIndex.has(e.id)"
-            name="local_fire_department"
-            size="15px"
-            color="primary"
-            class="fav"
-          />
-          <div class="ex-main">
-            <div class="ex-name">{{ e.name }}</div>
-            <div class="ex-meta">
-              {{ e.muscle_primary }} · {{ e.unit === 'time' ? 'temps' : 'reps' }}
+      <!-- ÉTAPE 1 · Exercice -->
+      <template v-if="step === 1">
+        <div class="step-h">Choisis un exercice</div>
+        <q-input
+          v-model="search"
+          filled
+          dense
+          placeholder="Rechercher un exercice…"
+          class="q-mb-sm"
+          clearable
+        />
+        <div v-if="loadingLib" class="row flex-center q-pa-md"><q-spinner color="primary" /></div>
+        <div v-else class="ex-list">
+          <button
+            v-for="e in filteredLib"
+            :key="e.id"
+            class="ex-row"
+            :class="{ sel: exercise?.id === e.id }"
+            @click="pickExercise(e)"
+          >
+            <q-icon v-if="favSet.has(e.id)" name="star" size="16px" color="primary" class="fav" />
+            <q-icon
+              v-else-if="sugIndex.has(e.id)"
+              name="local_fire_department"
+              size="15px"
+              color="primary"
+              class="fav"
+            />
+            <div class="ex-main">
+              <div class="ex-name">{{ e.name }}</div>
+              <div class="ex-meta">
+                {{ e.muscle_primary }} · {{ e.unit === 'time' ? 'temps' : 'reps' }}
+              </div>
+            </div>
+            <q-icon v-if="exercise?.id === e.id" name="check_circle" color="primary" size="20px" />
+          </button>
+        </div>
+
+        <!-- Exécution + descriptif de l'exo sélectionné -->
+        <div v-if="exercise" class="ex-detail">
+          <div class="exd-head">
+            <img v-if="exoImg" :src="exoImg" :alt="exercise.name" class="exd-img" />
+            <div>
+              <div class="exd-name font-display">{{ exercise.name }}</div>
+              <div class="exd-meta">
+                {{ exercise.muscle_primary }} ·
+                {{ unit === 'time' ? 'gainage (temps)' : 'répétitions' }}
+              </div>
             </div>
           </div>
-          <q-icon v-if="exercise?.id === e.id" name="check_circle" color="primary" size="20px" />
-        </button>
-      </div>
+          <template v-if="guide">
+            <div class="exd-sec">Exécution</div>
+            <ol class="exd-steps">
+              <li v-for="(s, i) in guide.steps" :key="i">{{ s }}</li>
+            </ol>
+            <div v-if="guide.tip" class="exd-tip">💡 {{ guide.tip }}</div>
+          </template>
+          <div v-else class="exd-none">Pas de descriptif pour cet exercice.</div>
+        </div>
+      </template>
 
-      <template v-if="exercise">
-        <!-- 2. Format -->
-        <div class="sec-h">2 · Format</div>
+      <!-- ÉTAPE 2 · Format -->
+      <template v-else-if="step === 2">
+        <div class="step-h">Quel format ?</div>
         <div class="fmt-grid">
           <button
             v-for="f in CHALLENGE_FORMATS"
@@ -59,32 +93,40 @@
             <div class="fmt-desc">{{ f.desc }}</div>
           </button>
         </div>
+      </template>
 
-        <!-- 3. Réglages -->
-        <div class="sec-h">3 · Réglages</div>
-        <div class="lbl">Durée</div>
-        <div class="dur-grid q-mb-md">
+      <!-- ÉTAPE 3 · Durée -->
+      <template v-else-if="step === 3">
+        <div class="step-h">Sur combien de temps ?</div>
+        <div class="dur-grid">
           <button
             v-for="d in DURATIONS"
             :key="d"
             class="choice"
-            :class="{ active: durationDays === d }"
-            @click="setDuration(d)"
+            :class="{ active: !customOn && durationDays === d }"
+            @click="setPresetDuration(d)"
           >
-            {{
-              d === 100
-                ? '100 j'
-                : d === 30
-                  ? '1 mois'
-                  : d === 21
-                    ? '3 sem'
-                    : d === 14
-                      ? '2 sem'
-                      : '1 sem'
-            }}
+            {{ durationLabel(d) }}
           </button>
+          <button class="choice" :class="{ active: customOn }" @click="enableCustom">Perso</button>
         </div>
+        <div v-if="customOn" class="custom-dur">
+          <q-input
+            v-model.number="customDays"
+            type="number"
+            inputmode="numeric"
+            filled
+            dense
+            style="max-width: 120px"
+            @update:model-value="applyCustom"
+          />
+          <span class="lbl" style="margin: 0">jours (1–365)</span>
+        </div>
+      </template>
 
+      <!-- ÉTAPE 4 · Réglages -->
+      <template v-else-if="step === 4">
+        <div class="step-h">Difficulté & options</div>
         <div class="lbl">Difficulté ({{ levelLabel }})</div>
         <div class="cfg-grid q-mb-md">
           <template v-for="field in fields" :key="field">
@@ -155,8 +197,32 @@
             les jours suivants, ton retard s’y ajoute.
           </div>
         </div>
+      </template>
 
-        <!-- Aperçu -->
+      <!-- ÉTAPE 5 · Récap -->
+      <template v-else>
+        <div class="step-h">Récapitulatif</div>
+        <div class="recap">
+          <div class="recap-row">
+            <span>Exercice</span><b>{{ exercise?.name }}</b>
+          </div>
+          <div class="recap-row">
+            <span>Format</span><b>{{ formatOption(format)?.name }}</b>
+          </div>
+          <div class="recap-row">
+            <span>Durée</span><b>{{ durationDays }} jours</b>
+          </div>
+          <div class="recap-row" v-if="restDays.length">
+            <span>Repos</span><b>{{ restDays.length }} j/sem</b>
+          </div>
+          <div class="recap-row" v-if="reminderOn">
+            <span>Rappel</span><b>{{ reminderTime }}</b>
+          </div>
+          <div class="recap-row" v-if="carryOver && format !== 'cumulative'">
+            <span>Report</span><b>activé</b>
+          </div>
+        </div>
+
         <div class="preview">
           <div class="prev-h">Aperçu ({{ unitLabel }})</div>
           <div class="prev-bars">
@@ -181,8 +247,11 @@
       </template>
     </div>
 
-    <div v-if="exercise" class="cta-wrap">
-      <button class="cta" :disabled="creating" @click="createChallenge">
+    <div class="cta-wrap">
+      <button v-if="step < STEP_TITLES.length" class="cta" :disabled="!canNext" @click="next">
+        Suivant
+      </button>
+      <button v-else class="cta" :disabled="creating" @click="createChallenge">
         {{ creating ? 'Création…' : 'Lancer le challenge' }}
       </button>
     </div>
@@ -207,6 +276,8 @@ import {
   type ChallengeFormat,
   type ChallengeConfig,
 } from '@/lib/challenges';
+import { exerciseInstructions } from '@/data/exerciseInstructions';
+import { exerciseImage } from '@/data/exerciseImages';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useProfileStore } from '@/stores/profile';
 import { useChallengesStore } from '@/stores/challenges';
@@ -219,6 +290,9 @@ const libraryStore = useLibraryStore();
 const profileStore = useProfileStore();
 const challenges = useChallengesStore();
 const auth = useAuthStore();
+
+const STEP_TITLES = ['Exercice', 'Format', 'Durée', 'Réglages', 'Récap'];
+const step = ref(1);
 
 const WEEKDAYS = [
   { value: 1, label: 'Lun' },
@@ -236,6 +310,8 @@ const search = ref('');
 const exercise = ref<ExerciseRow | null>(null);
 const format = ref<ChallengeFormat>('fixed');
 const durationDays = ref(30);
+const customOn = ref(false);
+const customDays = ref(45);
 const config = ref<ChallengeConfig>({ start: 50 });
 const restDays = ref<number[]>([]);
 const reminderOn = ref(false);
@@ -250,6 +326,13 @@ const unit = computed<'reps' | 'time'>(() => (exercise.value?.unit === 'time' ? 
 const unitLabel = computed(() => (unit.value === 'time' ? 'sec' : 'reps'));
 const fields = computed(() => formatOption(format.value)?.fields ?? ['start']);
 
+const guide = computed(() =>
+  exercise.value ? exerciseInstructions(exercise.value.id) : undefined,
+);
+const exoImg = computed(() => (exercise.value ? exerciseImage(exercise.value.id) : undefined));
+
+const canNext = computed(() => (step.value === 1 ? !!exercise.value : true));
+
 const sugIndex = new Map(CHALLENGE_SUGGESTIONS.map((id, i) => [id, i]));
 function exRank(id: string): number {
   return (favSet.value.has(id) ? 100 : 0) + (sugIndex.has(id) ? 50 - (sugIndex.get(id) ?? 0) : 0);
@@ -262,9 +345,28 @@ const filteredLib = computed(() => {
           e.name.toLowerCase().includes(n) || (e.muscle_primary ?? '').toLowerCase().includes(n),
       )
     : lib.value;
-  // Favoris puis suggestions (poids du corps / cardio) en tête.
   return [...base].sort((a, b) => exRank(b.id) - exRank(a.id)).slice(0, 60);
 });
+
+function next() {
+  if (canNext.value && step.value < STEP_TITLES.length) step.value++;
+}
+async function prev() {
+  if (step.value > 1) step.value--;
+  else await router.push('/challenges');
+}
+
+function durationLabel(d: number) {
+  return d === 100
+    ? '100 j'
+    : d === 30
+      ? '1 mois'
+      : d === 21
+        ? '3 sem'
+        : d === 14
+          ? '2 sem'
+          : '1 sem';
+}
 
 function fieldLabel(f: string) {
   if (format.value === 'ramp') {
@@ -286,7 +388,6 @@ function fieldLabel(f: string) {
     }[f] ?? f
   );
 }
-// Champs pilotés par un stepper borné (pas de clavier).
 const stepBounds: Record<string, { min: number; max: number; step: number }> = {
   inc_pct: { min: 3, max: 15, step: 1 },
   variation: { min: 0, max: 40, step: 5 },
@@ -294,14 +395,13 @@ const stepBounds: Record<string, { min: number; max: number; step: number }> = {
 function stepField(f: string, delta: number) {
   const b = stepBounds[f];
   if (!b) return;
-  const next = Math.min(b.max, Math.max(b.min, cfgDisplay(f) + delta));
-  setField(f, next);
+  const nextVal = Math.min(b.max, Math.max(b.min, cfgDisplay(f) + delta));
+  setField(f, nextVal);
 }
 function cfgDisplay(f: string): number {
   if (f === 'deload_pct') return Math.round((config.value.deload_pct ?? 0.5) * 100);
   return Number((config.value as unknown as Record<string, unknown>)[f] ?? 0);
 }
-// Recalcule départ + incrément du progressif à partir de MAX × coefficients.
 function applyProgressive() {
   const c = config.value;
   const { start, increment } = progressiveApply(c.max ?? 0, c.start_coef ?? 2, c.inc_pct ?? 8);
@@ -334,7 +434,18 @@ function selectFormat(f: ChallengeFormat) {
   format.value = f;
   reset();
 }
-function setDuration(d: number) {
+function setPresetDuration(d: number) {
+  customOn.value = false;
+  durationDays.value = d;
+  reset();
+}
+function enableCustom() {
+  customOn.value = true;
+  applyCustom();
+}
+function applyCustom() {
+  const d = Math.min(365, Math.max(1, Math.round(customDays.value || 0)));
+  customDays.value = d;
   durationDays.value = d;
   reset();
 }
@@ -388,10 +499,6 @@ async function createChallenge() {
   }
 }
 
-async function back() {
-  await router.push('/challenges');
-}
-
 onMounted(async () => {
   const userId = auth.user?.id;
   try {
@@ -435,25 +542,45 @@ onMounted(async () => {
   cursor: pointer;
   flex: none;
 }
+.top-mid {
+  flex: 1;
+  min-width: 0;
+}
 .top-title {
   font-weight: 600;
   font-size: 18px;
   text-transform: uppercase;
   color: var(--text);
 }
+.top-step {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 1px;
+}
+.top-spacer {
+  width: 40px;
+  flex: none;
+}
+.progress {
+  height: 3px;
+  background: var(--line-soft);
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
 .scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 14px 16px 110px;
+  padding: 16px 16px 110px;
 }
-.sec-h {
+.step-h {
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--dim);
-  margin: 22px 2px 10px;
+  color: var(--text);
+  margin: 4px 2px 16px;
 }
 .lbl {
   font-size: 12px;
@@ -462,8 +589,6 @@ onMounted(async () => {
 }
 
 .ex-list {
-  max-height: 260px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -502,6 +627,69 @@ onMounted(async () => {
   flex: none;
 }
 
+.ex-detail {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--accent);
+  background: var(--surface-2);
+}
+.exd-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.exd-img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex: none;
+  background: var(--surface);
+}
+.exd-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.exd-meta {
+  font-size: 12px;
+  color: var(--dim);
+  text-transform: capitalize;
+  margin-top: 2px;
+}
+.exd-sec {
+  margin-top: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.exd-steps {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  li {
+    font-size: 13.5px;
+    color: var(--text);
+    line-height: 1.4;
+    margin-bottom: 6px;
+  }
+}
+.exd-tip {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.exd-none {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--dim);
+}
+
 .fmt-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -534,8 +722,14 @@ onMounted(async () => {
 
 .dur-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+}
+.custom-dur {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
 }
 .cfg-grid {
   display: grid;
@@ -615,12 +809,36 @@ onMounted(async () => {
   line-height: 1.35;
   margin-top: 6px;
 }
+
+.recap {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 6px 14px;
+  margin-bottom: 14px;
+}
+.recap-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 14px;
+  &:last-child {
+    border-bottom: none;
+  }
+  span {
+    color: var(--dim);
+  }
+  b {
+    color: var(--text);
+  }
+}
 .preview {
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: 14px;
   padding: 12px;
-  margin-top: 8px;
 }
 .prev-h {
   font-size: 11px;

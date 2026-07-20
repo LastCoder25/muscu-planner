@@ -60,6 +60,72 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     desc: 'Finir un défi malgré des jours ratés.',
     icon: 'replay',
   },
+  {
+    code: 'ten_done',
+    title: 'Machine',
+    desc: 'Terminer 10 challenges.',
+    icon: 'workspace_premium',
+  },
+  {
+    code: 'streak_100',
+    title: 'Inarrêtable',
+    desc: 'Une série de 100 jours consécutifs.',
+    icon: 'local_fire_department',
+  },
+  {
+    code: 'reps_50000',
+    title: '50 000 reps',
+    desc: '50 000 répétitions cumulées.',
+    icon: 'rocket_launch',
+  },
+  {
+    code: 'variety_5',
+    title: 'Polyvalent',
+    desc: 'Des défis sur 5 exercices différents.',
+    icon: 'diversity_3',
+  },
+  {
+    code: 'ramp_done',
+    title: 'Ascension',
+    desc: 'Terminer un défi en rampe min→max.',
+    icon: 'trending_up',
+  },
+  {
+    code: 'pyramid_progressive_done',
+    title: 'Architecte',
+    desc: 'Terminer un défi pyramidal progressif.',
+    icon: 'stacked_line_chart',
+  },
+  {
+    code: 'cumulative_done',
+    title: 'Fourmi',
+    desc: 'Terminer un défi à objectif cumulé.',
+    icon: 'functions',
+  },
+  {
+    code: 'carry_master',
+    title: 'Bon gestionnaire',
+    desc: 'Terminer un défi avec report réserve/dette.',
+    icon: 'account_balance',
+  },
+  {
+    code: 'marathon',
+    title: 'Marathonien',
+    desc: 'Terminer un défi de 60 jours ou plus.',
+    icon: 'directions_run',
+  },
+  {
+    code: 'multi_active',
+    title: 'Multitâche',
+    desc: '3 challenges menés en parallèle.',
+    icon: 'dashboard',
+  },
+  {
+    code: 'perfectionist',
+    title: 'Perfectionniste',
+    desc: 'Terminer un défi à 100 % (aucun jour raté).',
+    icon: 'verified',
+  },
 ];
 
 export function achievementDef(code: string): AchievementDef | undefined {

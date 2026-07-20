@@ -345,19 +345,32 @@ export function evaluateAchievements(challenges: Challenge[]): string[] {
   const distinctExos = new Set(challenges.map((c) => c.exercise_id)).size;
   const maxStreak = Math.max(0, ...challenges.map((c) => challengeStats(c).streak));
 
+  const activeCount = challenges.filter((c) => c.status === 'active').length;
+
   if (done.length >= 1) codes.add('first_done');
   if (done.length >= 5) codes.add('five_done');
+  if (done.length >= 10) codes.add('ten_done');
   if (maxStreak >= 7) codes.add('streak_7');
   if (maxStreak >= 30) codes.add('streak_30');
+  if (maxStreak >= 100) codes.add('streak_100');
   if (totalReps >= 5000) codes.add('reps_5000');
   if (totalReps >= 20000) codes.add('reps_20000');
+  if (totalReps >= 50000) codes.add('reps_50000');
   if (distinctExos >= 3) codes.add('variety_3');
+  if (distinctExos >= 5) codes.add('variety_5');
+  if (activeCount >= 3) codes.add('multi_active');
   for (const c of done) {
+    const perfect = c.progress.every((p) => p.target === 0 || p.completed);
     if (c.duration_days >= 100) codes.add('century');
-    if (c.duration_days >= 30 && c.progress.every((p) => p.target === 0 || p.completed))
-      codes.add('perfect_month');
+    if (c.duration_days >= 60) codes.add('marathon');
+    if (c.duration_days >= 30 && perfect) codes.add('perfect_month');
+    if (perfect) codes.add('perfectionist');
     if (c.format === 'pyramid') codes.add('pyramid_done');
+    if (c.format === 'pyramid_progressive') codes.add('pyramid_progressive_done');
     if (c.format === 'wave') codes.add('wave_done');
+    if (c.format === 'ramp') codes.add('ramp_done');
+    if (c.format === 'cumulative') codes.add('cumulative_done');
+    if (c.config.carry_over) codes.add('carry_master');
     if (c.progress.some((p) => p.target > 0 && !p.completed)) codes.add('comeback');
   }
   return [...codes];
