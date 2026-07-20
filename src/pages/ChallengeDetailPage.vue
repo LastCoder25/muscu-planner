@@ -267,6 +267,7 @@ function addQuickButton() {
     if (!n || n <= 0 || quickAdds.value.includes(n)) return;
     quickAdds.value = [...quickAdds.value, n].sort((a, b) => a - b).slice(0, 8);
     persistQuick();
+    editMode.value = false; // on ressort de la gestion → le bouton est utilisable de suite
   });
 }
 function removeQuick(n: number) {
