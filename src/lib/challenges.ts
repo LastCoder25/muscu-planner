@@ -23,6 +23,7 @@ export interface ChallengeConfig {
   max?: number; // perf max de l'utilisateur (base du progressif)
   start_coef?: number; // J1 = start_coef × MAX (plage 1 → 3.5)
   inc_pct?: number; // + inc_pct % de MAX par jour (plage 3 → 15)
+  variation?: number; // pyramidal progressif : % d'amplitude alternée entre pyramides (anti-monotonie)
   rest_weekdays?: number[]; // 0=dim … 6=sam
   reminder_time?: string; // « HH:MM »
   carry_over?: boolean; // report du surplus/déficit d'un jour sur les suivants
@@ -43,7 +44,8 @@ export function progressiveApply(
 ): { start: number; increment: number } {
   return {
     start: Math.max(1, Math.round(startCoef * max)),
-    increment: Math.max(1, Math.round((incPct / 100) * max)),
+    // + inc_pct % du MAX par jour, arrondi à la rep SUPÉRIEURE (min +1).
+    increment: Math.max(1, Math.ceil((incPct / 100) * max)),
   };
 }
 
@@ -92,11 +94,16 @@ function pyramidTarget(d: number, D: number, start: number, peak: number): numbe
 }
 
 // Pyramides répétées dont le pic monte à chaque cycle (creux = décharge).
+// `variation` (%) alterne l'amplitude d'une pyramide à l'autre pour casser la monotonie :
+// un cycle plus haut, le suivant plus bas, tout en gardant la tendance montante.
 function pyramidProgressiveTarget(d: number, cfg: ChallengeConfig): number {
   const cycle = cfg.cycle_days || 7;
   const c = Math.floor(d / cycle);
   const p = d % cycle;
-  const peak = (cfg.peak ?? cfg.start * 1.5) + (cfg.increment ?? 0) * c;
+  const v = (cfg.variation ?? 0) / 100;
+  const sign = c % 2 === 0 ? 1 : -1;
+  const basePeak = (cfg.peak ?? cfg.start * 1.5) + (cfg.increment ?? 0) * c;
+  const peak = Math.max(cfg.start, basePeak * (1 + sign * v));
   const mid = (cycle - 1) / 2;
   if (mid <= 0) return cfg.start;
   if (p <= mid) return cfg.start + (peak - cfg.start) * (p / mid);
@@ -207,7 +214,8 @@ export function suggestConfig(
     return { ...common, start: Math.max(1, Math.round(max * 0.4)), peak: max };
   }
   const increment = unit === 'time' ? 5 : Math.max(1, Math.round(incBase(level)));
-  return { ...common, start: max, increment, peak: Math.round(max * 1.8) };
+  const variation = format === 'pyramid_progressive' ? 15 : 0;
+  return { ...common, start: max, increment, peak: Math.round(max * 1.8), variation };
 }
 
 // ── Report réserve/dette ────────────────────────────────

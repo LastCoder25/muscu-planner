@@ -90,7 +90,25 @@
           <template v-for="field in fields" :key="field">
             <div class="cfg-cell">
               <div class="cfg-lbl">{{ fieldLabel(field) }}</div>
+              <div v-if="stepBounds[field]" class="stepper">
+                <button
+                  class="st-btn"
+                  aria-label="Diminuer"
+                  @click="stepField(field, -stepBounds[field].step)"
+                >
+                  −
+                </button>
+                <span class="st-val">{{ cfgDisplay(field) }} %</span>
+                <button
+                  class="st-btn"
+                  aria-label="Augmenter"
+                  @click="stepField(field, stepBounds[field].step)"
+                >
+                  +
+                </button>
+              </div>
               <q-input
+                v-else
                 :model-value="cfgDisplay(field)"
                 type="number"
                 filled
@@ -263,8 +281,20 @@ function fieldLabel(f: string) {
       max: 'Ta perf max',
       start_coef: 'Départ (×MAX)',
       inc_pct: '+ %/jour',
+      variation: 'Variation %',
     }[f] ?? f
   );
+}
+// Champs pilotés par un stepper borné (pas de clavier).
+const stepBounds: Record<string, { min: number; max: number; step: number }> = {
+  inc_pct: { min: 3, max: 15, step: 1 },
+  variation: { min: 0, max: 40, step: 5 },
+};
+function stepField(f: string, delta: number) {
+  const b = stepBounds[f];
+  if (!b) return;
+  const next = Math.min(b.max, Math.max(b.min, cfgDisplay(f) + delta));
+  setField(f, next);
 }
 function cfgDisplay(f: string): number {
   if (f === 'deload_pct') return Math.round((config.value.deload_pct ?? 0.5) * 100);
@@ -515,6 +545,38 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--dim);
   margin-bottom: 3px;
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 4px;
+}
+.st-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.st-btn:active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.st-val {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text);
 }
 .days {
   display: grid;

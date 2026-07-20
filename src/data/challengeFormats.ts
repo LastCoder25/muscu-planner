@@ -41,9 +41,9 @@ export const CHALLENGE_FORMATS: FormatOption[] = [
   {
     id: 'pyramid_progressive',
     name: 'Pyramidal progressif',
-    desc: 'Pyramides répétées dont le pic monte à chaque cycle.',
+    desc: 'Pyramides répétées dont le pic monte à chaque cycle (variation anti-monotonie).',
     icon: 'stacked_line_chart',
-    fields: ['start', 'peak', 'increment', 'cycle_days'],
+    fields: ['start', 'peak', 'increment', 'cycle_days', 'variation'],
   },
   {
     id: 'wave',
