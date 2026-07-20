@@ -8,7 +8,9 @@
       </div>
     </header>
 
-    <div v-if="loading" class="column flex-center" style="min-height: 50vh"><q-spinner color="primary" size="32px" /></div>
+    <div v-if="loading" class="column flex-center" style="min-height: 50vh">
+      <q-spinner color="primary" size="32px" />
+    </div>
 
     <template v-else-if="session">
       <div class="scroll">
@@ -18,22 +20,32 @@
           <div class="q-label">{{ q.label }}</div>
           <div class="scale">
             <button
-              v-for="(opt, i) in q.options" :key="i"
-              class="scale-btn" :class="{ sel: answers[q.key] === i + 1 }"
+              v-for="(opt, i) in q.options"
+              :key="i"
+              class="scale-btn"
+              :class="{ sel: answers[q.key] === i + 1 }"
               @click="answers[q.key] = i + 1"
-            >{{ opt }}</button>
+            >
+              {{ opt }}
+            </button>
           </div>
         </div>
 
         <div class="suggestion" :class="suggestLight ? 'warn' : 'ok'">
           <q-icon :name="suggestLight ? 'bedtime' : 'bolt'" size="20px" />
-          {{ suggestLight ? 'Journée fatiguée — une séance allégée est conseillée.' : 'En forme — séance normale.' }}
+          {{
+            suggestLight
+              ? 'Journée fatiguée — une séance allégée est conseillée.'
+              : 'En forme — séance normale.'
+          }}
         </div>
       </div>
 
       <div class="cta-wrap">
         <button class="cta" @click="go(false, true)">Séance normale</button>
-        <button class="cta light" @click="go(true, true)">Séance allégée<small>−1 série/exo</small></button>
+        <button class="cta light" @click="go(true, true)">
+          Séance allégée<small>−1 série/exo</small>
+        </button>
         <button class="skip" @click="go(false, false)">Passer</button>
       </div>
     </template>
@@ -64,7 +76,11 @@ const QUESTIONS = [
   { key: 'courbatures', label: 'Courbatures', options: ['Fortes', 'Légères', 'Aucune'] },
 ] as const;
 
-interface Answers { forme: number; sommeil: number; courbatures: number }
+interface Answers {
+  forme: number;
+  sommeil: number;
+  courbatures: number;
+}
 const answers = reactive<Answers>({ forme: 2, sommeil: 2, courbatures: 2 });
 
 // readiness 1–5 : somme (3..9) ramenée à 1..5.
@@ -80,7 +96,11 @@ async function back() {
 
 async function go(light: boolean, note: boolean) {
   if (!session.value) return;
-  live.start(session.value, { resume: false, light, readiness: note ? readiness.value : undefined });
+  live.start(session.value, {
+    resume: false,
+    light,
+    readiness: note ? readiness.value : undefined,
+  });
   await router.replace(`/session/${id}`);
 }
 
@@ -98,7 +118,10 @@ onMounted(async () => {
       await router.push('/');
     }
   } catch (e) {
-    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Chargement impossible.' });
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Chargement impossible.',
+    });
   } finally {
     loading.value = false;
   }
@@ -106,26 +129,155 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-.ready-page { background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }
-.top { padding: 14px 16px 12px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line-soft); }
-.iconbtn { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 18px; display: grid; place-items: center; cursor: pointer; flex: none; }
-.top-mid { flex: 1; min-width: 0; }
-.top-title { font-weight: 600; font-size: 18px; text-transform: uppercase; }
-.top-sub { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
+.ready-page {
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.top {
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.iconbtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 18px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+}
+.top-mid {
+  flex: 1;
+  min-width: 0;
+}
+.top-title {
+  font-weight: 600;
+  font-size: 18px;
+  text-transform: uppercase;
+}
+.top-sub {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-top: 2px;
+}
 
-.scroll { flex: 1; overflow-y: auto; padding: 18px 16px 160px; }
-.intro { color: var(--dim); font-size: 14px; margin-bottom: 18px; }
-.q-block { margin-bottom: 18px; }
-.q-label { font-size: 13px; color: var(--text); font-weight: 600; margin-bottom: 8px; }
-.scale { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.scale-btn { min-height: 50px; border-radius: 12px; background: var(--surface); border: 1.5px solid var(--line); color: var(--text); font-family: var(--font-ui); font-size: 14px; cursor: pointer; &.sel { border-color: var(--accent); background: var(--surface-2); } }
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 16px 160px;
+}
+.intro {
+  color: var(--dim);
+  font-size: 14px;
+  margin-bottom: 18px;
+}
+.q-block {
+  margin-bottom: 18px;
+}
+.q-label {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.scale {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.scale-btn {
+  min-height: 50px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  cursor: pointer;
+  &.sel {
+    border-color: var(--accent);
+    background: var(--surface-2);
+  }
+}
 
-.suggestion { display: flex; align-items: center; gap: 8px; padding: 14px; border-radius: 14px; font-size: 14px; margin-top: 8px; }
-.suggestion.ok { background: var(--surface); border: 1px solid var(--line-soft); color: var(--dim); }
-.suggestion.warn { background: var(--surface-2); border: 1px solid var(--accent); color: var(--text); }
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  margin-top: 8px;
+}
+.suggestion.ok {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  color: var(--dim);
+}
+.suggestion.warn {
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  color: var(--text);
+}
 
-.cta-wrap { position: fixed; left: 0; right: 0; bottom: 0; max-width: 600px; margin: 0 auto; padding: 14px 16px 24px; background: linear-gradient(180deg, #15120e00, var(--bg) 30%); display: flex; flex-direction: column; gap: 10px; }
-.cta { width: 100%; height: 54px; border: none; border-radius: 16px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; }
-.cta.light { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 8px; small { font-family: var(--font-ui); font-weight: 400; font-size: 11px; color: var(--dim); text-transform: none; } }
-.skip { background: none; border: none; color: var(--dim); font-size: 13px; cursor: pointer; padding: 4px; }
+.cta-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 14px 16px 24px;
+  background: linear-gradient(180deg, #15120e00, var(--bg) 30%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cta {
+  width: 100%;
+  height: 54px;
+  border: none;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.cta.light {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  small {
+    font-family: var(--font-ui);
+    font-weight: 400;
+    font-size: 11px;
+    color: var(--dim);
+    text-transform: none;
+  }
+}
+.skip {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px;
+}
 </style>

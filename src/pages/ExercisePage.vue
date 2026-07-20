@@ -5,7 +5,9 @@
       <div class="top-title font-display">{{ ex?.name || 'Exercice' }}</div>
     </header>
 
-    <div v-if="loading" class="column flex-center" style="min-height: 50vh"><q-spinner color="primary" size="32px" /></div>
+    <div v-if="loading" class="column flex-center" style="min-height: 50vh">
+      <q-spinner color="primary" size="32px" />
+    </div>
 
     <div v-else-if="ex" class="scroll">
       <!-- Média -->
@@ -15,7 +17,9 @@
       </div>
 
       <div class="badges">
-        <span class="chip lvl" :class="'l' + (ex.difficulty ?? 1)">{{ levelLabel(ex.difficulty) }}</span>
+        <span class="chip lvl" :class="'l' + (ex.difficulty ?? 1)">{{
+          levelLabel(ex.difficulty)
+        }}</span>
       </div>
 
       <!-- Muscles -->
@@ -40,9 +44,18 @@
         <div class="sec-h">Progression (1RM estimé)</div>
         <div v-if="chart" class="chart">
           <svg :viewBox="`0 0 ${chart.W} ${chart.H}`" preserveAspectRatio="none" class="chart-svg">
-            <polyline :points="chart.pts" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" />
+            <polyline
+              :points="chart.pts"
+              fill="none"
+              stroke="var(--accent)"
+              stroke-width="2"
+              stroke-linejoin="round"
+            />
           </svg>
-          <div class="chart-meta">max <b>{{ chart.max }}</b> kg · actuel <b>{{ chart.last }}</b> kg · {{ series.length }} séances</div>
+          <div class="chart-meta">
+            max <b>{{ chart.max }}</b> kg · actuel <b>{{ chart.last }}</b> kg ·
+            {{ series.length }} séances
+          </div>
         </div>
         <div v-else class="no-instr">Pas encore assez de données (1 séance).</div>
       </template>
@@ -54,7 +67,9 @@
         <ol class="steps">
           <li v-for="(st, i) in guide.steps" :key="i">{{ st }}</li>
         </ol>
-        <div v-if="guide.tip" class="tip"><q-icon name="lightbulb" size="16px" /> {{ guide.tip }}</div>
+        <div v-if="guide.tip" class="tip">
+          <q-icon name="lightbulb" size="16px" /> {{ guide.tip }}
+        </div>
       </template>
       <div v-else class="no-instr">
         Pas encore d'instructions pour cet exercice.
@@ -67,7 +82,9 @@
         <button v-for="a in alts" :key="a.id" class="alt" @click="goExercise(a.id)">
           <div>
             <div class="alt-name">{{ a.name }}</div>
-            <div class="alt-meta">{{ a.muscle_primary }}<template v-if="a.equipment"> · {{ a.equipment }}</template></div>
+            <div class="alt-meta">
+              {{ a.muscle_primary }}<template v-if="a.equipment"> · {{ a.equipment }}</template>
+            </div>
           </div>
           <div class="alt-go">›</div>
         </button>
@@ -117,7 +134,9 @@ const chart = computed(() => {
   return { pts, min, max, last: s[s.length - 1], W, H };
 });
 
-const EQUIP_LABELS: Record<string, string> = Object.fromEntries(EQUIPMENT_ITEMS.map((e) => [e.value, e.label]));
+const EQUIP_LABELS: Record<string, string> = Object.fromEntries(
+  EQUIPMENT_ITEMS.map((e) => [e.value, e.label]),
+);
 
 const requiredLabels = computed(() =>
   (ex.value?.equipment_required ?? []).map((a) => EQUIP_LABELS[a] ?? a),
@@ -153,7 +172,10 @@ async function load(id: string) {
     pts.sort((a, b) => a.date.localeCompare(b.date));
     series.value = pts.map((p) => p.val);
   } catch (e) {
-    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Chargement impossible.' });
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Chargement impossible.',
+    });
   } finally {
     loading.value = false;
   }
@@ -172,42 +194,218 @@ async function goSettings() {
 onMounted(async () => {
   await load(String(route.params.id));
 });
-watch(() => route.params.id, async (id) => {
-  if (id) await load(String(id));
-});
+watch(
+  () => route.params.id,
+  async (id) => {
+    if (id) await load(String(id));
+  },
+);
 </script>
 
 <style scoped lang="scss">
-.ex-page { background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }
-.top { padding: 14px 16px 12px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line-soft); }
-.iconbtn { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 18px; display: grid; place-items: center; cursor: pointer; flex: none; }
-.top-title { font-weight: 600; font-size: 18px; text-transform: uppercase; color: var(--text); }
+.ex-page {
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.top {
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.iconbtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 18px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+}
+.top-title {
+  font-weight: 600;
+  font-size: 18px;
+  text-transform: uppercase;
+  color: var(--text);
+}
 
-.scroll { flex: 1; overflow-y: auto; padding: 16px; }
-.media { height: 160px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line-soft); display: grid; place-items: center; overflow: hidden; margin-bottom: 14px; img { width: 100%; height: 100%; object-fit: cover; } }
-.badges { margin-bottom: 8px; }
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+.media {
+  height: 160px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  margin-bottom: 14px;
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+.badges {
+  margin-bottom: 8px;
+}
 
-.sec-h { font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); margin: 20px 2px 10px; }
-.chips { display: flex; gap: 8px; flex-wrap: wrap; }
-.chip { font-size: 12px; font-weight: 600; letter-spacing: 0.3px; color: var(--dim); background: var(--surface); border: 1px solid var(--line-soft); padding: 6px 11px; border-radius: 8px; }
-.chip.accent { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
-.chip.lvl { text-transform: uppercase; font-size: 11px; }
-.chip.lvl.l1 { color: var(--accent-ink); background: var(--d1); border-color: var(--d1); }
-.chip.lvl.l2 { color: var(--accent-ink); background: var(--d3); border-color: var(--d3); }
-.chip.lvl.l3 { color: #fff; background: var(--d4); border-color: var(--d4); }
-.required { font-size: 13px; color: var(--text); margin-top: 10px; &.dim { color: var(--dim); } }
+.sec-h {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 20px 2px 10px;
+}
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chip {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--dim);
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  padding: 6px 11px;
+  border-radius: 8px;
+}
+.chip.accent {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.chip.lvl {
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.chip.lvl.l1 {
+  color: var(--accent-ink);
+  background: var(--d1);
+  border-color: var(--d1);
+}
+.chip.lvl.l2 {
+  color: var(--accent-ink);
+  background: var(--d3);
+  border-color: var(--d3);
+}
+.chip.lvl.l3 {
+  color: #fff;
+  background: var(--d4);
+  border-color: var(--d4);
+}
+.required {
+  font-size: 13px;
+  color: var(--text);
+  margin-top: 10px;
+  &.dim {
+    color: var(--dim);
+  }
+}
 
-.instructions { font-size: 14px; color: var(--text); line-height: 1.5; white-space: pre-wrap; }
-.steps { margin: 0; padding-left: 20px; color: var(--text); font-size: 14px; line-height: 1.5; li { margin-bottom: 7px; } }
-.tip { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 10px; color: var(--dim); font-size: 13px; }
-.no-instr { font-size: 13px; color: var(--dim); }
-.chart { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px; }
-.chart-svg { width: 100%; height: 90px; display: block; }
-.chart-meta { font-size: 12px; color: var(--dim); margin-top: 8px; b { color: var(--text); font-family: var(--font-display); } }
-.link { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; margin-left: 4px; font-size: 13px; text-decoration: underline; }
+.instructions {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.steps {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  li {
+    margin-bottom: 7px;
+  }
+}
+.tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  color: var(--dim);
+  font-size: 13px;
+}
+.no-instr {
+  font-size: 13px;
+  color: var(--dim);
+}
+.chart {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 12px;
+}
+.chart-svg {
+  width: 100%;
+  height: 90px;
+  display: block;
+}
+.chart-meta {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 8px;
+  b {
+    color: var(--text);
+    font-family: var(--font-display);
+  }
+}
+.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  margin-left: 4px;
+  font-size: 13px;
+  text-decoration: underline;
+}
 
-.alt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line-soft); margin-bottom: 8px; cursor: pointer; }
-.alt-name { font-weight: 600; font-size: 14.5px; color: var(--text); }
-.alt-meta { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
-.alt-go { margin-left: auto; color: var(--accent); font-size: 20px; }
+.alt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.alt-name {
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--text);
+}
+.alt-meta {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+.alt-go {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 20px;
+}
 </style>

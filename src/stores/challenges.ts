@@ -2,9 +2,16 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import type { Challenge, ChallengeStatus, DayProgress, ChallengeConfig, ChallengeFormat } from '@/lib/challenges';
+import type {
+  Challenge,
+  ChallengeStatus,
+  DayProgress,
+  ChallengeConfig,
+  ChallengeFormat,
+} from '@/lib/challenges';
 
-const COLS = 'id, exercise_id, exercise_name, unit, format, duration_days, start_date, config, daily_targets, progress, status';
+const COLS =
+  'id, exercise_id, exercise_name, unit, format, duration_days, start_date, config, daily_targets, progress, status';
 
 export interface NewChallenge {
   exercise_id: string;
@@ -23,7 +30,9 @@ export const useChallengesStore = defineStore('challenges', () => {
 
   async function fetchMine() {
     const { data, error } = await supabase
-      .from('challenges').select(COLS).order('created_at', { ascending: false });
+      .from('challenges')
+      .select(COLS)
+      .order('created_at', { ascending: false });
     if (error) throw error;
     list.value = data ?? [];
     return list.value;
@@ -46,7 +55,10 @@ export const useChallengesStore = defineStore('challenges', () => {
     const { error } = await supabase.from('challenges').update(patch).eq('id', id);
     if (error) throw error;
     const c = list.value.find((x) => x.id === id);
-    if (c) { c.progress = progress; if (status) c.status = status; }
+    if (c) {
+      c.progress = progress;
+      if (status) c.status = status;
+    }
   }
 
   async function setStatus(id: string, status: ChallengeStatus) {
@@ -73,15 +85,26 @@ export const useChallengesStore = defineStore('challenges', () => {
   async function unlock(codes: string[]): Promise<string[]> {
     const fresh = codes.filter((c) => !unlocked.value.includes(c));
     if (fresh.length === 0) return [];
-    const { error } = await supabase
-      .from('achievements')
-      .upsert(fresh.map((code) => ({ code })), { onConflict: 'user_id,code', ignoreDuplicates: true });
+    const { error } = await supabase.from('achievements').upsert(
+      fresh.map((code) => ({ code })),
+      { onConflict: 'user_id,code', ignoreDuplicates: true },
+    );
     if (error) throw error;
     unlocked.value.push(...fresh);
     return fresh;
   }
 
-  return { list, unlocked, fetchMine, create, updateProgress, setStatus, remove, fetchAchievements, unlock };
+  return {
+    list,
+    unlocked,
+    fetchMine,
+    create,
+    updateProgress,
+    setStatus,
+    remove,
+    fetchAchievements,
+    unlock,
+  };
 });
 
 if (import.meta.hot) {

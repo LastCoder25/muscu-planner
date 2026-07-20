@@ -8,15 +8,40 @@
     <div class="scroll">
       <!-- Étape 1 : prompt -->
       <div class="sec-h">1 · Demande à ChatGPT</div>
-      <p class="muted">Copie ce prompt, colle-le dans ChatGPT (ou une autre IA), puis reviens avec sa réponse.</p>
+      <p class="muted">
+        Copie ce prompt, colle-le dans ChatGPT (ou une autre IA), puis reviens avec sa réponse.
+      </p>
       <div class="prompt-box">{{ prompt }}</div>
-      <q-btn no-caps outline color="primary" icon="content_copy" label="Copier le prompt" class="full-width q-mt-sm" @click="copyPrompt" />
+      <q-btn
+        no-caps
+        outline
+        color="primary"
+        icon="content_copy"
+        label="Copier le prompt"
+        class="full-width q-mt-sm"
+        @click="copyPrompt"
+      />
 
       <!-- Étape 2 : coller -->
       <div class="sec-h">2 · Colle la réponse</div>
-      <p class="muted">JSON <b>ou</b> texte de séance (ex. « Squat / 40 kg ×8 — 1 min »). L'app reconnaît les deux.</p>
-      <textarea v-model="raw" class="paste" aria-label="Réponse IA" placeholder="Colle ici la séance (JSON ou texte)…" />
-      <q-btn no-caps color="primary" text-color="dark" label="Convertir" class="full-width q-mt-sm" :disable="!raw.trim()" @click="convert" />
+      <p class="muted">
+        JSON <b>ou</b> texte de séance (ex. « Squat / 40 kg ×8 — 1 min »). L'app reconnaît les deux.
+      </p>
+      <textarea
+        v-model="raw"
+        class="paste"
+        aria-label="Réponse IA"
+        placeholder="Colle ici la séance (JSON ou texte)…"
+      />
+      <q-btn
+        no-caps
+        color="primary"
+        text-color="dark"
+        label="Convertir"
+        class="full-width q-mt-sm"
+        :disable="!raw.trim()"
+        @click="convert"
+      />
 
       <!-- Aperçu -->
       <template v-if="preview">
@@ -29,7 +54,16 @@
             <span class="pe-tgt">{{ exSummary(ex) }}</span>
           </div>
         </div>
-        <q-btn no-caps color="primary" text-color="dark" label="Ajouter à mes séances" size="lg" class="full-width q-mt-md" :loading="saving" @click="add" />
+        <q-btn
+          no-caps
+          color="primary"
+          text-color="dark"
+          label="Ajouter à mes séances"
+          size="lg"
+          class="full-width q-mt-md"
+          :loading="saving"
+          @click="add"
+        />
       </template>
     </div>
   </q-page>
@@ -102,7 +136,10 @@ function convert() {
     $q.notify({ type: 'positive', message: 'Séance reconnue ✅' });
   } catch (e) {
     preview.value = null;
-    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Conversion impossible.' });
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Conversion impossible.',
+    });
   }
 }
 
@@ -135,21 +172,120 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-.import-page { background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }
-.top { padding: 14px 16px 12px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line-soft); }
-.iconbtn { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 18px; display: grid; place-items: center; cursor: pointer; flex: none; }
-.top-title { font-weight: 600; font-size: 18px; text-transform: uppercase; color: var(--text); }
+.import-page {
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.top {
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.iconbtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 18px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+}
+.top-title {
+  font-weight: 600;
+  font-size: 18px;
+  text-transform: uppercase;
+  color: var(--text);
+}
 
-.scroll { flex: 1; overflow-y: auto; padding: 16px 16px 40px; }
-.sec-h { font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); margin: 22px 2px 8px; }
-.muted { color: var(--dim); font-size: 13px; margin-bottom: 10px; }
-.prompt-box { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 12px; font-size: 11.5px; color: var(--dim); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto; }
-.paste { width: 100%; min-height: 140px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px; color: var(--text); font-family: monospace; font-size: 12px; resize: vertical; outline: none; &:focus { border-color: var(--accent); } }
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 16px 40px;
+}
+.sec-h {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 22px 2px 8px;
+}
+.muted {
+  color: var(--dim);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.prompt-box {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 11.5px;
+  color: var(--dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow: auto;
+}
+.paste {
+  width: 100%;
+  min-height: 140px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  color: var(--text);
+  font-family: monospace;
+  font-size: 12px;
+  resize: vertical;
+  outline: none;
+  &:focus {
+    border-color: var(--accent);
+  }
+}
 
-.prev-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
-.prev-name { font-weight: 600; font-size: 17px; color: var(--text); }
-.prev-sub { font-size: 12px; color: var(--dim); margin: 2px 0 10px; }
-.prev-ex { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line-soft); gap: 10px; }
-.pe-name { font-size: 14px; color: var(--text); }
-.pe-tgt { font-family: var(--font-display); font-size: 12.5px; color: var(--dim); text-align: right; flex: none; }
+.prev-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+}
+.prev-name {
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--text);
+}
+.prev-sub {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 2px 0 10px;
+}
+.prev-ex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-top: 1px solid var(--line-soft);
+  gap: 10px;
+}
+.pe-name {
+  font-size: 14px;
+  color: var(--text);
+}
+.pe-tgt {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  color: var(--dim);
+  text-align: right;
+  flex: none;
+}
 </style>

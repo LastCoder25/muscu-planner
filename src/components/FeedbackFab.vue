@@ -17,11 +17,26 @@
     <div class="fb-sheet">
       <div class="grab" />
       <h3 class="font-display">Faire un retour</h3>
-      <div class="fb-page">sur <b>{{ pageLabel }}</b></div>
-      <div class="kinds">
-        <button v-for="k in KINDS" :key="k.value" class="kind" :class="{ on: kind === k.value }" @click="kind = k.value">{{ k.label }}</button>
+      <div class="fb-page">
+        sur <b>{{ pageLabel }}</b>
       </div>
-      <textarea v-model="message" class="fb-field" aria-label="Message" placeholder="Décris le bug ou l'idée…" />
+      <div class="kinds">
+        <button
+          v-for="k in KINDS"
+          :key="k.value"
+          class="kind"
+          :class="{ on: kind === k.value }"
+          @click="kind = k.value"
+        >
+          {{ k.label }}
+        </button>
+      </div>
+      <textarea
+        v-model="message"
+        class="fb-field"
+        aria-label="Message"
+        placeholder="Décris le bug ou l'idée…"
+      />
 
       <div class="shots">
         <div v-if="previews.length" class="shot-grid">
@@ -33,10 +48,26 @@
         <button v-if="files.length < MAX" class="shot-add" @click="pickFiles">
           <q-icon name="add_photo_alternate" size="18px" /> Joindre une capture
         </button>
-        <input ref="fileInput" type="file" accept="image/*" multiple class="hidden-input" @change="onFiles" />
+        <input
+          ref="fileInput"
+          type="file"
+          accept="image/*"
+          multiple
+          class="hidden-input"
+          @change="onFiles"
+        />
       </div>
 
-      <q-btn no-caps color="primary" text-color="dark" :label="sending ? 'Envoi…' : 'Envoyer'" class="full-width q-mt-md" :loading="sending" :disable="!message.trim()" @click="send" />
+      <q-btn
+        no-caps
+        color="primary"
+        text-color="dark"
+        :label="sending ? 'Envoi…' : 'Envoyer'"
+        class="full-width q-mt-md"
+        :loading="sending"
+        :disable="!message.trim()"
+        @click="send"
+      />
     </div>
   </q-dialog>
 </template>
@@ -105,7 +136,9 @@ function open() {
 async function send() {
   sending.value = true;
   try {
-    const screenshots = files.value.length ? await feedback.uploadScreenshots(files.value) : undefined;
+    const screenshots = files.value.length
+      ? await feedback.uploadScreenshots(files.value)
+      : undefined;
     await feedback.submit({
       kind: kind.value,
       message: message.value.trim(),
@@ -132,16 +165,117 @@ async function send() {
   z-index: 3000;
   box-shadow: 0 8px 24px -6px #0007;
 }
-.fb-sheet { width: 100%; background: var(--surface); border-radius: 26px 26px 0 0; border-top: 1px solid var(--line); padding: 10px 18px 26px; h3 { font-size: 20px; text-transform: uppercase; } }
-.fb-page { color: var(--dim); font-size: 12.5px; margin: -2px 0 14px; b { color: var(--text); } }
-.grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 6px auto 14px; }
-.kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
-.kind { min-height: 44px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; color: var(--text); font-family: var(--font-ui); font-size: 14px; cursor: pointer; &.on { border-color: var(--accent); background: var(--surface-2); } }
-.fb-field { width: 100%; min-height: 90px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; color: var(--text); font-family: var(--font-ui); font-size: 14px; resize: none; outline: none; &:focus { border-color: var(--accent); } }
-.shots { margin-top: 10px; }
-.shot-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-.shot { position: relative; width: 64px; height: 64px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); img { width: 100%; height: 100%; object-fit: cover; } }
-.shot-rm { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 6px; border: none; background: #000a; color: #fff; font-size: 12px; line-height: 1; cursor: pointer; }
-.shot-add { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--line); background: transparent; color: var(--dim); font-size: 13px; cursor: pointer; }
-.hidden-input { display: none; }
+.fb-sheet {
+  width: 100%;
+  background: var(--surface);
+  border-radius: 26px 26px 0 0;
+  border-top: 1px solid var(--line);
+  padding: 10px 18px 26px;
+  h3 {
+    font-size: 20px;
+    text-transform: uppercase;
+  }
+}
+.fb-page {
+  color: var(--dim);
+  font-size: 12.5px;
+  margin: -2px 0 14px;
+  b {
+    color: var(--text);
+  }
+}
+.grab {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line);
+  margin: 6px auto 14px;
+}
+.kinds {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.kind {
+  min-height: 44px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  cursor: pointer;
+  &.on {
+    border-color: var(--accent);
+    background: var(--surface-2);
+  }
+}
+.fb-field {
+  width: 100%;
+  min-height: 90px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  resize: none;
+  outline: none;
+  &:focus {
+    border-color: var(--accent);
+  }
+}
+.shots {
+  margin-top: 10px;
+}
+.shot-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.shot {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+.shot-rm {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: none;
+  background: #000a;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.shot-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-size: 13px;
+  cursor: pointer;
+}
+.hidden-input {
+  display: none;
+}
 </style>

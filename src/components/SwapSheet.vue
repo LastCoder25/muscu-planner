@@ -1,5 +1,9 @@
 <template>
-  <q-dialog :model-value="modelValue" position="bottom" @update:model-value="emit('update:modelValue', $event)">
+  <q-dialog
+    :model-value="modelValue"
+    position="bottom"
+    @update:model-value="emit('update:modelValue', $event)"
+  >
     <div class="sheet">
       <div class="grab" />
       <h3 class="font-display">Changer d'exercice</h3>
@@ -18,7 +22,10 @@
           <div class="alt-ic">🏋️</div>
           <div>
             <div class="alt-name">{{ alt.name }}</div>
-            <div class="alt-meta">{{ alt.muscle_primary }}<template v-if="alt.equipment"> · {{ alt.equipment }}</template></div>
+            <div class="alt-meta">
+              {{ alt.muscle_primary
+              }}<template v-if="alt.equipment"> · {{ alt.equipment }}</template>
+            </div>
           </div>
           <div class="alt-go">›</div>
         </button>
@@ -32,7 +39,9 @@
           <div class="alt-ic">🕑</div>
           <div>
             <div class="alt-name">{{ p.name }}</div>
-            <div class="alt-meta">Dernière fois : <b>{{ p.lastLoad }} kg × {{ p.lastReps }}</b> · note {{ p.lastDiff }}</div>
+            <div class="alt-meta">
+              Dernière fois : <b>{{ p.lastLoad }} kg × {{ p.lastReps }}</b> · note {{ p.lastDiff }}
+            </div>
           </div>
           <div class="alt-go">›</div>
         </button>
@@ -60,7 +69,13 @@ const tab = ref(0);
 const suggestions = ref<ExerciseRow[]>([]);
 const loadingSugg = ref(false);
 
-interface PastItem { id: string; name: string; lastLoad: number; lastReps: number; lastDiff: number }
+interface PastItem {
+  id: string;
+  name: string;
+  lastLoad: number;
+  lastReps: number;
+  lastDiff: number;
+}
 const past = ref<PastItem[]>([]);
 const loadingPast = ref(false);
 
@@ -111,7 +126,13 @@ async function loadPast() {
         const last = le.performed[le.performed.length - 1];
         if (!last) continue;
         seen.add(le.id);
-        items.push({ id: le.id, name: le.name, lastLoad: last.load_kg, lastReps: last.reps, lastDiff: last.difficulty });
+        items.push({
+          id: le.id,
+          name: le.name,
+          lastLoad: last.load_kg,
+          lastReps: last.reps,
+          lastDiff: last.difficulty,
+        });
       }
     }
     past.value = items;
@@ -153,23 +174,93 @@ async function choosePast(p: PastItem) {
   max-height: 80vh;
   overflow-y: auto;
 }
-.grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 6px auto 16px; }
-h3 { font-size: 20px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; }
-p { font-size: 12.5px; color: var(--dim); margin: 4px 0 14px; }
-.empty { color: var(--dim); padding: 16px 2px; font-size: 13px; }
-.swtabs { display: flex; gap: 6px; background: var(--surface-2); padding: 4px; border-radius: 12px; margin-bottom: 14px; }
+.grab {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line);
+  margin: 6px auto 16px;
+}
+h3 {
+  font-size: 20px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+p {
+  font-size: 12.5px;
+  color: var(--dim);
+  margin: 4px 0 14px;
+}
+.empty {
+  color: var(--dim);
+  padding: 16px 2px;
+  font-size: 13px;
+}
+.swtabs {
+  display: flex;
+  gap: 6px;
+  background: var(--surface-2);
+  padding: 4px;
+  border-radius: 12px;
+  margin-bottom: 14px;
+}
 .swtab {
-  flex: 1; height: 36px; border: none; background: transparent; color: var(--dim);
-  font-family: var(--font-ui); font-weight: 600; font-size: 13px; border-radius: 9px; cursor: pointer;
-  &.on { background: var(--accent); color: var(--accent-ink); }
+  flex: 1;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: 9px;
+  cursor: pointer;
+  &.on {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
 }
 .alt {
-  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
-  padding: 14px; border-radius: 14px; background: var(--surface-2);
-  border: 1px solid var(--line-soft); margin-bottom: 9px; cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  margin-bottom: 9px;
+  cursor: pointer;
 }
-.alt-ic { width: 42px; height: 42px; border-radius: 11px; background: var(--bg); display: grid; place-items: center; font-size: 20px; flex: none; }
-.alt-name { font-weight: 600; font-size: 14.5px; color: var(--text); }
-.alt-meta { font-size: 11.5px; color: var(--dim); margin-top: 2px; b { color: var(--accent); font-weight: 600; } }
-.alt-go { margin-left: auto; color: var(--accent); font-size: 20px; }
+.alt-ic {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  flex: none;
+}
+.alt-name {
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--text);
+}
+.alt-meta {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-top: 2px;
+  b {
+    color: var(--accent);
+    font-weight: 600;
+  }
+}
+.alt-go {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 20px;
+}
 </style>

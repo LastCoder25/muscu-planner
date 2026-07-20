@@ -44,7 +44,16 @@ export const TEMPLATES: Template[] = [
       ex('ex_incline_machine', 'Développé incliné machine', 'pectoraux', 'machine', 3, 8, 10, 20),
       ex('ex_lat_pulldown', 'Tirage vertical', 'dos', 'machine', 3, 10, 12, 30),
       ex('ex_lateral_raise', 'Élévations latérales', 'épaules', 'halteres', 3, 12, 15, 6),
-      ex('ex_romanian_deadlift', 'Soulevé de terre roumain', 'ischio-jambiers', 'barre', 3, 8, 10, 30),
+      ex(
+        'ex_romanian_deadlift',
+        'Soulevé de terre roumain',
+        'ischio-jambiers',
+        'barre',
+        3,
+        8,
+        10,
+        30,
+      ),
       core('ex_hanging_leg_raise', 'Relevé de jambes suspendu'),
     ],
   },
@@ -78,19 +87,33 @@ export function suggestTemplates(level: Level, sessionsPerWeek: number): Templat
 
 // helpers ──────────────────────────────────────────────
 function ex(
-  id: string, name: string, muscle: string, equipment: string,
-  sets: number, repsMin: number, repsMax: number, loadKg: number,
+  id: string,
+  name: string,
+  muscle: string,
+  equipment: string,
+  sets: number,
+  repsMin: number,
+  repsMax: number,
+  loadKg: number,
 ) {
   return {
-    id, name, muscle_primary: muscle, equipment,
-    progression: 'linear' as const, rest_seconds: 120,
+    id,
+    name,
+    muscle_primary: muscle,
+    equipment,
+    progression: 'linear' as const,
+    rest_seconds: 120,
     target: { sets, reps_min: repsMin, reps_max: repsMax, load_kg: loadKg },
   };
 }
 function core(id: string, name: string) {
   return {
-    id, name, muscle_primary: 'abdominaux', equipment: 'poids_du_corps',
-    progression: 'fixed' as const, rest_seconds: 60,
+    id,
+    name,
+    muscle_primary: 'abdominaux',
+    equipment: 'poids_du_corps',
+    progression: 'fixed' as const,
+    rest_seconds: 60,
     target: { sets: 3, reps_min: 30, reps_max: 60, load: 'bodyweight' as const },
   };
 }

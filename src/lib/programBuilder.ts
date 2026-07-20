@@ -4,9 +4,7 @@
 // qu'une séance IA). Logique : volume cible par muscle → ajusté par les sports
 // (équilibrage) et les priorités → exos filtrés par matériel → répartis en
 // séances. Pur et testable, aucune dépendance Supabase/Vue.
-import type {
-  Profile, Session, PlannedExercise, Objective, Level,
-} from './types';
+import type { Profile, Session, PlannedExercise, Objective, Level } from './types';
 import { SCHEMA_VERSION } from './types';
 import { defaultSplit, type SplitOption, type MuscleKey } from '@/data/splits';
 
@@ -17,26 +15,43 @@ export interface ExerciseDef {
   muscle_secondary?: string[] | null;
   equipment: string | null;
   equipment_required?: string[] | null; // atomes requis (tous nécessaires)
-  difficulty?: number | null;           // 1=débutant, 2=intermédiaire, 3=avancé
-  unit?: string | null;                 // 'reps' (défaut) ou 'time' (secondes)
-  unilateral?: boolean | null;          // travaillé un côté à la fois (fentes, rowing 1 bras…)
-  challenge_only?: boolean | null;      // réservé aux défis → jamais dans un programme généré
+  difficulty?: number | null; // 1=débutant, 2=intermédiaire, 3=avancé
+  unit?: string | null; // 'reps' (défaut) ou 'time' (secondes)
+  unilateral?: boolean | null; // travaillé un côté à la fois (fentes, rowing 1 bras…)
+  challenge_only?: boolean | null; // réservé aux défis → jamais dans un programme généré
 }
 
 // Groupes musculaires primaires présents dans la bibliothèque.
 const MUSCLES = [
-  'pectoraux', 'dos', 'épaules', 'biceps', 'triceps',
-  'quadriceps', 'ischio-jambiers', 'mollets', 'abdominaux',
+  'pectoraux',
+  'dos',
+  'épaules',
+  'biceps',
+  'triceps',
+  'quadriceps',
+  'ischio-jambiers',
+  'mollets',
+  'abdominaux',
 ] as const;
 type Muscle = (typeof MUSCLES)[number];
 
 // Pondération par taille de muscle (gros groupes = plus de volume).
 const MUSCLE_WEIGHT: Record<Muscle, number> = {
-  pectoraux: 1, dos: 1, quadriceps: 1, 'ischio-jambiers': 0.8,
-  épaules: 0.7, biceps: 0.6, triceps: 0.6, mollets: 0.5, abdominaux: 0.6,
+  pectoraux: 1,
+  dos: 1,
+  quadriceps: 1,
+  'ischio-jambiers': 0.8,
+  épaules: 0.7,
+  biceps: 0.6,
+  triceps: 0.6,
+  mollets: 0.5,
+  abdominaux: 0.6,
 };
 
-const OBJECTIVE_CFG: Record<Objective, { reps_min: number; reps_max: number; rest: number; volume: number }> = {
+const OBJECTIVE_CFG: Record<
+  Objective,
+  { reps_min: number; reps_max: number; rest: number; volume: number }
+> = {
   force: { reps_min: 4, reps_max: 6, rest: 180, volume: 0.85 },
   hypertrophie: { reps_min: 8, reps_max: 12, rest: 90, volume: 1 },
   endurance: { reps_min: 15, reps_max: 20, rest: 45, volume: 0.9 },
@@ -75,7 +90,9 @@ const SPORT_PREVENTION: Record<string, Partial<Record<Muscle, number>>> = {
 };
 
 const INTENSITY_FACTOR: Record<NonNullable<SportIntensity>, number> = {
-  faible: 0.6, moderee: 1, elevee: 1.3,
+  faible: 0.6,
+  moderee: 1,
+  elevee: 1.3,
 };
 type SportIntensity = 'faible' | 'moderee' | 'elevee';
 
@@ -152,10 +169,33 @@ function repsAndRest(objective: Objective) {
 // Clé de mouvement : regroupe les variantes d'un même exercice (toutes les sortes
 // de « squat », de « curl », de « développé »…) pour éviter les quasi-doublons.
 const MOVEMENT_KEYWORDS = [
-  'squat', 'fente', 'presse', 'souleve', 'pont', 'swing', 'mollet',
-  'developpe', 'pompe', 'dips', 'ecarte', 'butterfly', 'pec deck',
-  'curl', 'pushdown', 'barre au front', 'extension', 'elevation', 'face pull',
-  'rowing', 'tirage', 'traction', 'superman', 'gainage', 'releve', 'crunch', 'pull apart',
+  'squat',
+  'fente',
+  'presse',
+  'souleve',
+  'pont',
+  'swing',
+  'mollet',
+  'developpe',
+  'pompe',
+  'dips',
+  'ecarte',
+  'butterfly',
+  'pec deck',
+  'curl',
+  'pushdown',
+  'barre au front',
+  'extension',
+  'elevation',
+  'face pull',
+  'rowing',
+  'tirage',
+  'traction',
+  'superman',
+  'gainage',
+  'releve',
+  'crunch',
+  'pull apart',
 ];
 function movementKey(name: string): string {
   const n = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -190,7 +230,8 @@ function pickForMuscle(
   // d'alternative), puis polyarticulaires (plus de muscles secondaires).
   const rank = (e: ExerciseDef) => (favorites.has(e.id) ? 0 : disliked.has(e.id) ? 2 : 1);
   const candidates = [...pool].sort(
-    (a, b) => rank(a) - rank(b) || (b.muscle_secondary?.length ?? 0) - (a.muscle_secondary?.length ?? 0),
+    (a, b) =>
+      rank(a) - rank(b) || (b.muscle_secondary?.length ?? 0) - (a.muscle_secondary?.length ?? 0),
   );
 
   if (candidates.length === 0 || targetSets <= 0) return [];
@@ -251,7 +292,11 @@ function pickForMuscle(
  * Construit un programme complet : N séances full-body équilibrées.
  * @returns une à quatre `Session` prêtes à insérer (source 'engine').
  */
-export function buildProgram(profile: Profile, library: ExerciseDef[], split?: SplitOption): Session[] {
+export function buildProgram(
+  profile: Profile,
+  library: ExerciseDef[],
+  split?: SplitOption,
+): Session[] {
   if (library.length === 0) return [];
 
   // Atomes de matériel possédés. Le poids du corps est toujours dispo :
@@ -270,7 +315,18 @@ export function buildProgram(profile: Profile, library: ExerciseDef[], split?: S
   const allExercises: PlannedExercise[] = [];
   for (const m of MUSCLES) {
     allExercises.push(
-      ...pickForMuscle(m, targets[m], library, available, avoidIds, setsPerExercise, profile.objective, maxDifficulty, favorites, disliked),
+      ...pickForMuscle(
+        m,
+        targets[m],
+        library,
+        available,
+        avoidIds,
+        setsPerExercise,
+        profile.objective,
+        maxDifficulty,
+        favorites,
+        disliked,
+      ),
     );
   }
   if (allExercises.length === 0) return [];

@@ -28,12 +28,12 @@ L'appli ne voit aucune différence : elle importe une `session`, point.
 
 ## Quatre types de documents
 
-| `type` | Rôle | Produit par | Consommé par |
-|---|---|---|---|
-| `profile` | Qui est l'utilisateur | onboarding | moteur, IA |
-| `session` | Le plan d'une séance | moteur, IA, user, templates | appli (séance live), import |
-| `session_log` | Le bilan d'une séance réalisée | appli (fin de séance) | moteur, IA |
-| `coach_request` | Enveloppe d'export vers le moteur ou l'IA | appli | moteur, IA |
+| `type`          | Rôle                                      | Produit par                 | Consommé par                |
+| --------------- | ----------------------------------------- | --------------------------- | --------------------------- |
+| `profile`       | Qui est l'utilisateur                     | onboarding                  | moteur, IA                  |
+| `session`       | Le plan d'une séance                      | moteur, IA, user, templates | appli (séance live), import |
+| `session_log`   | Le bilan d'une séance réalisée            | appli (fin de séance)       | moteur, IA                  |
+| `coach_request` | Enveloppe d'export vers le moteur ou l'IA | appli                       | moteur, IA                  |
 
 ---
 
@@ -74,6 +74,7 @@ L'appli ne voit aucune différence : elle importe une `session`, point.
 ```
 
 Valeurs cadrées (enums) :
+
 - `level` : `debutant` · `intermediaire` · `avance`
 - `objective` : `force` · `hypertrophie` · `endurance` · `remise_en_forme` · `perte_de_gras`
 - `equipment` : `salle_complete` · `home_gym` · `halteres` · `poids_du_corps`
@@ -140,6 +141,7 @@ C'est le bloc qui **pilote** la génération : `objective` → fourchettes de re
 ```
 
 Notes de modèle :
+
 - `id` d'exo **stable** entre les séances → c'est la clé qui relie l'historique et permet la progression.
 - `progression` par exo : `double` · `linear` · `rir` · `fixed`. Un exo isolé peut être en `double` pendant qu'un de base est en `linear`.
 - Fourchette de reps via `reps_min`/`reps_max` (pour un objectif fixe, `min == max`).
@@ -173,8 +175,8 @@ Produit en fin de séance. Contient **prévu vs réalisé** + les notes 1–4 + 
       "performed": [
         { "set": 1, "load_kg": 40, "reps": 10, "difficulty": 1, "comment": "propre" },
         { "set": 2, "load_kg": 40, "reps": 10, "difficulty": 2, "comment": "" },
-        { "set": 3, "load_kg": 40, "reps": 9,  "difficulty": 3, "comment": "dur sur la fin" },
-        { "set": 4, "load_kg": 40, "reps": 8,  "difficulty": 4, "comment": "échec rep 8" }
+        { "set": 3, "load_kg": 40, "reps": 9, "difficulty": 3, "comment": "dur sur la fin" },
+        { "set": 4, "load_kg": 40, "reps": 8, "difficulty": 4, "comment": "échec rep 8" }
       ],
       "exercise_comment": ""
     },
@@ -185,8 +187,8 @@ Produit en fin de séance. Contient **prévu vs réalisé** + les notes 1–4 + 
       "planned": { "sets": 3, "reps_min": 6, "reps_max": 10, "added_kg": 10 },
       "performed": [
         { "set": 1, "load_kg": 35, "reps": 10, "difficulty": 2, "comment": "dips occupés" },
-        { "set": 2, "load_kg": 35, "reps": 9,  "difficulty": 3, "comment": "" },
-        { "set": 3, "load_kg": 35, "reps": 8,  "difficulty": 3, "comment": "" }
+        { "set": 2, "load_kg": 35, "reps": 9, "difficulty": 3, "comment": "" },
+        { "set": 3, "load_kg": 35, "reps": 8, "difficulty": 3, "comment": "" }
       ],
       "exercise_comment": "Dips occupés, basculé sur machine."
     }
@@ -210,7 +212,7 @@ Ce que l'appli sérialise pour le moteur **ou** pour l'IA. Pour l'IA, l'utilisat
   "schema_version": "1.0",
   "type": "coach_request",
   "profile": { "...": "objet profile" },
-  "history": [ "... 1 à N session_log récents" ],
+  "history": ["... 1 à N session_log récents"],
   "last_session": { "...": "session planifiée précédente (optionnel)" },
   "instruction": "Génère la prochaine séance Push. Respecte la double progression et l'objectif hypertrophie. Tiens compte de l'échec sur le développé couché et de l'épaule droite sensible. Réponds uniquement avec un objet JSON de type session, sans texte autour."
 }
@@ -224,13 +226,13 @@ L'`instruction` est générée par l'appli (l'utilisateur n'a rien à rédiger).
 
 Lecture du dernier `session_log`, application par exo, émission d'une `session` :
 
-| Condition sur le dernier passage de l'exo | Action séance suivante |
-|---|---|
+| Condition sur le dernier passage de l'exo                                          | Action séance suivante                                                                          |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | Haut de fourchette atteint sur **toutes** les séries **et** difficulté moyenne ≤ 2 | **+charge** (+2,5 kg, ou +1,25 kg en isolation / +added_kg en lesté), reps remises à `reps_min` |
-| Reps dans la fourchette, difficulté 2–3 | charge maintenue, **+1 rep** vers `reps_max` |
-| Difficulté 4 sur ≥ moitié des séries, ou échec sous `reps_min` | charge **maintenue** |
-| Échec sous `reps_min` **2 séances de suite** | **−5 %** de charge (deload léger) |
-| Exo `swapped_from` non nul | historique suivi sous l'exo réellement réalisé |
+| Reps dans la fourchette, difficulté 2–3                                            | charge maintenue, **+1 rep** vers `reps_max`                                                    |
+| Difficulté 4 sur ≥ moitié des séries, ou échec sous `reps_min`                     | charge **maintenue**                                                                            |
+| Échec sous `reps_min` **2 séances de suite**                                       | **−5 %** de charge (deload léger)                                                               |
+| Exo `swapped_from` non nul                                                         | historique suivi sous l'exo réellement réalisé                                                  |
 
 Pour `progression: linear` (défaut débutant), la règle se simplifie : **reps cibles atteintes → +charge à la séance suivante**, sans attendre le haut de fourchette. Échec deux séances de suite → deload −10 %. C'est ce qui colle aux gains rapides de début de pratique.
 
@@ -242,14 +244,14 @@ Le moteur couvre la routine. L'IA reprend la main pour : casser un plateau, chan
 
 Le même contrat sert un grand débutant **et** un pratiquant de 15 ans. Tout le comportement variable est centralisé dans un objet `level_config`, **dérivé** de `experience.level` et **surchargeable** par l'utilisateur.
 
-| Axe | `debutant` | `intermediaire` | `avance` |
-|---|---|---|---|
-| Progression par défaut | `linear` (+charge souvent) | `double` | `double` + autorégulation RIR |
-| Signal d'effort | note 1–4 seule | 1–4 (RIR optionnel) | 1–4 **+ RIR affiché** |
-| Historique envoyé au coach | 1 séance | 2 séances | 3–4 séances |
-| Création de séance | templates proposés, charges auto | templates + édition | import / construction libre |
-| Deload | rare, au besoin | périodique léger | surveillé par le moteur (fatigue) |
-| Densité UI | guidée (conseils, charges suggérées) | standard | dense (tonnage, tendances, saisie rapide) |
+| Axe                        | `debutant`                           | `intermediaire`     | `avance`                                  |
+| -------------------------- | ------------------------------------ | ------------------- | ----------------------------------------- |
+| Progression par défaut     | `linear` (+charge souvent)           | `double`            | `double` + autorégulation RIR             |
+| Signal d'effort            | note 1–4 seule                       | 1–4 (RIR optionnel) | 1–4 **+ RIR affiché**                     |
+| Historique envoyé au coach | 1 séance                             | 2 séances           | 3–4 séances                               |
+| Création de séance         | templates proposés, charges auto     | templates + édition | import / construction libre               |
+| Deload                     | rare, au besoin                      | périodique léger    | surveillé par le moteur (fatigue)         |
+| Densité UI                 | guidée (conseils, charges suggérées) | standard            | dense (tonnage, tendances, saisie rapide) |
 
 ```json
 {
@@ -269,6 +271,7 @@ Le même contrat sert un grand débutant **et** un pratiquant de 15 ans. Tout le
 Valeurs cadrées : `effort_signal` ∈ `simple` · `rir_optional` · `rir` ; `program_mode` ∈ `guided` · `assisted` · `free` ; `ui_density` ∈ `comfortable` · `standard` · `dense`.
 
 Concrètement pour les deux cas réels de l'app :
+
 - **Quasi débutant** : progression linéaire, +2,5 kg dès les reps bouclées, l'appli génère un Full-Body et suggère les charges de départ, UI qui explique. Le moteur seul suffit longtemps, sans jamais toucher à une IA.
 - **15 ans de pratique** : double progression + RIR, import/construction libre des séances, tonnage et tendances affichés, le moteur surveille la fatigue et propose un deload — et c'est typiquement ce profil qui exporte le bilan vers une IA pour franchir un plateau.
 

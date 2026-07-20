@@ -13,13 +13,32 @@ export const SEXES: { value: 'homme' | 'femme' | 'autre'; label: string }[] = [
 ];
 
 export const LEVELS: { value: Level; label: string; desc: string }[] = [
-  { value: 'debutant', label: 'Débutant', desc: 'Progression linéaire guidée, programme généré, note d’effort simple.' },
-  { value: 'intermediaire', label: 'Intermédiaire', desc: 'Double progression assistée, RIR optionnel, template éditable.' },
-  { value: 'avance', label: 'Avancé', desc: 'Double progression + RIR, import/construction libre, UI dense.' },
+  {
+    value: 'debutant',
+    label: 'Débutant',
+    desc: 'Progression linéaire guidée, programme généré, note d’effort simple.',
+  },
+  {
+    value: 'intermediaire',
+    label: 'Intermédiaire',
+    desc: 'Double progression assistée, RIR optionnel, template éditable.',
+  },
+  {
+    value: 'avance',
+    label: 'Avancé',
+    desc: 'Double progression + RIR, import/construction libre, UI dense.',
+  },
 ];
 
-export interface EquipmentOption { value: EquipmentItem; label: string; desc?: string }
-export interface EquipmentGroup { group: string; items: EquipmentOption[] }
+export interface EquipmentOption {
+  value: EquipmentItem;
+  label: string;
+  desc?: string;
+}
+export interface EquipmentGroup {
+  group: string;
+  items: EquipmentOption[];
+}
 
 // Matériel détaillé groupé. Le poids du corps est toujours dispo (implicite).
 export const EQUIPMENT_GROUPS: EquipmentGroup[] = [
@@ -59,8 +78,27 @@ export const EQUIPMENT_GROUPS: EquipmentGroup[] = [
 export const EQUIPMENT_ITEMS: EquipmentOption[] = EQUIPMENT_GROUPS.flatMap((g) => g.items);
 
 export const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-export const PRIORITY_MUSCLES = ['Pectoraux', 'Dos', 'Épaules', 'Bras', 'Jambes', 'Fessiers', 'Abdos'];
-export const SPORTS = ['Course', 'Vélo', 'Natation', 'Escalade', 'Football', 'Basket', 'Tennis', 'Boxe', 'Rugby', 'Yoga'];
+export const PRIORITY_MUSCLES = [
+  'Pectoraux',
+  'Dos',
+  'Épaules',
+  'Bras',
+  'Jambes',
+  'Fessiers',
+  'Abdos',
+];
+export const SPORTS = [
+  'Course',
+  'Vélo',
+  'Natation',
+  'Escalade',
+  'Football',
+  'Basket',
+  'Tennis',
+  'Boxe',
+  'Rugby',
+  'Yoga',
+];
 
 export const INTENSITIES: { value: NonNullable<SportPractice['intensity']>; label: string }[] = [
   { value: 'faible', label: 'Faible' },

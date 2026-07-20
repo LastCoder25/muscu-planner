@@ -2,10 +2,21 @@
   <q-layout view="lHh lpr lFf">
     <q-header class="app-header">
       <q-toolbar>
-        <q-btn v-if="showBack" flat round dense icon="arrow_back_ios_new" aria-label="Retour" class="q-mr-xs" @click="goBack" />
+        <q-btn
+          v-if="showBack"
+          flat
+          round
+          dense
+          icon="arrow_back_ios_new"
+          aria-label="Retour"
+          class="q-mr-xs"
+          @click="goBack"
+        />
         <q-toolbar-title class="brand font-display" @click="goHome">MUSCU</q-toolbar-title>
         <q-btn flat round dense icon="inbox" aria-label="Backlog" @click="goBacklog">
-          <q-badge v-if="feedback.openCount > 0" color="primary" text-color="dark" floating>{{ feedback.openCount }}</q-badge>
+          <q-badge v-if="feedback.openCount > 0" color="primary" text-color="dark" floating>{{
+            feedback.openCount
+          }}</q-badge>
         </q-btn>
         <q-btn flat round dense icon="more_vert" aria-label="Menu">
           <q-menu anchor="bottom right" self="top right">

@@ -6,67 +6,157 @@
     <section class="block">
       <div class="lbl">Fréquence de saisie</div>
       <div class="freq">
-        <button v-for="f in FREQ" :key="f.value" class="choice small" :class="{ active: frequency === f.value }" @click="setFrequency(f.value)">{{ f.label }}</button>
+        <button
+          v-for="f in FREQ"
+          :key="f.value"
+          class="choice small"
+          :class="{ active: frequency === f.value }"
+          @click="setFrequency(f.value)"
+        >
+          {{ f.label }}
+        </button>
       </div>
 
       <template v-if="frequency === 'week'">
         <div class="lbl q-mt-md">Jour de la semaine</div>
         <div class="days">
-          <button v-for="d in WEEKDAYS" :key="d.value" class="choice small" :class="{ active: trackingDay === d.value }" @click="setTrackingDay(d.value)">{{ d.label }}</button>
+          <button
+            v-for="d in WEEKDAYS"
+            :key="d.value"
+            class="choice small"
+            :class="{ active: trackingDay === d.value }"
+            @click="setTrackingDay(d.value)"
+          >
+            {{ d.label }}
+          </button>
         </div>
       </template>
       <template v-else-if="frequency === 'month'">
         <div class="lbl q-mt-md">Jour du mois</div>
-        <q-input :model-value="trackingDay ?? 1" type="number" min="1" max="28" filled dense @update:model-value="setTrackingDay(Math.min(28, Math.max(1, Number($event) || 1)))" />
+        <q-input
+          :model-value="trackingDay ?? 1"
+          type="number"
+          min="1"
+          max="28"
+          filled
+          dense
+          @update:model-value="setTrackingDay(Math.min(28, Math.max(1, Number($event) || 1)))"
+        />
       </template>
 
       <div class="lbl q-mt-md">Heure du rappel</div>
       <div class="row items-center" style="gap: 10px">
-        <q-input :model-value="trackingTime" type="time" filled dense style="max-width: 140px" @update:model-value="setTrackingTime(String($event))" />
-        <button v-if="!notifGranted" class="choice small" style="flex: 1" @click="enableNotif">Activer les rappels</button>
-        <span v-else class="notif-ok"><q-icon name="check_circle" size="16px" /> Rappels activés</span>
+        <q-input
+          :model-value="trackingTime"
+          type="time"
+          filled
+          dense
+          style="max-width: 140px"
+          @update:model-value="setTrackingTime(String($event))"
+        />
+        <button v-if="!notifGranted" class="choice small" style="flex: 1" @click="enableNotif">
+          Activer les rappels
+        </button>
+        <span v-else class="notif-ok"
+          ><q-icon name="check_circle" size="16px" /> Rappels activés</span
+        >
       </div>
     </section>
 
     <!-- Rappel -->
     <div v-if="due" class="due">
       <q-icon name="event_available" size="20px" />
-      <span>{{ entries.length ? 'C’est l’heure de ta saisie.' : 'Première saisie : note tes mesures de départ.' }}</span>
+      <span>{{
+        entries.length
+          ? 'C’est l’heure de ta saisie.'
+          : 'Première saisie : note tes mesures de départ.'
+      }}</span>
     </div>
 
     <!-- Nouvelle saisie -->
     <div class="grp">
       <button class="grp-head" :class="{ open: formOpen }" @click="formOpen = !formOpen">
         <q-icon :name="todayEntry ? 'edit' : 'add_circle_outline'" size="20px" />
-        <span class="grp-title">{{ todayEntry ? 'Modifier la saisie du jour' : 'Nouvelle saisie' }}</span>
+        <span class="grp-title">{{
+          todayEntry ? 'Modifier la saisie du jour' : 'Nouvelle saisie'
+        }}</span>
         <q-icon class="chev" name="expand_more" size="22px" />
       </button>
       <div v-show="formOpen" class="grp-body">
-        <div class="lbl opt-note">Tous les champs sont optionnels — remplis seulement ce que tu veux suivre.</div>
+        <div class="lbl opt-note">
+          Tous les champs sont optionnels — remplis seulement ce que tu veux suivre.
+        </div>
         <div class="row-2">
-          <q-input v-model.number="f.weight" type="number" inputmode="decimal" filled label="Poids (kg)" />
+          <q-input
+            v-model.number="f.weight"
+            type="number"
+            inputmode="decimal"
+            filled
+            label="Poids (kg)"
+          />
           <div class="sleep-row">
-            <q-input v-model.number="f.sleepH" type="number" inputmode="numeric" min="0" filled label="Sommeil (h)" />
-            <q-input v-model.number="f.sleepMin" type="number" inputmode="numeric" min="0" max="59" filled label="min" />
+            <q-input
+              v-model.number="f.sleepH"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              filled
+              label="Sommeil (h)"
+            />
+            <q-input
+              v-model.number="f.sleepMin"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              max="59"
+              filled
+              label="min"
+            />
           </div>
         </div>
         <div class="row items-center justify-between q-mt-md">
           <div class="lbl" style="margin: 0">Circonférences (cm)</div>
-          <button class="howto-toggle" @click="howtoOpen = !howtoOpen">{{ howtoOpen ? 'Masquer' : 'Comment mesurer ?' }}</button>
+          <button class="howto-toggle" @click="howtoOpen = !howtoOpen">
+            {{ howtoOpen ? 'Masquer' : 'Comment mesurer ?' }}
+          </button>
         </div>
         <div v-if="howtoOpen" class="howto">
-          <div v-for="m in MEASURES" :key="m.key" class="howto-row"><b>{{ m.label }}</b> — {{ m.howto }}</div>
-          <div class="howto-tip">Mesure toujours au même moment (le matin), du même côté, sans serrer le mètre.</div>
+          <div v-for="m in MEASURES" :key="m.key" class="howto-row">
+            <b>{{ m.label }}</b> — {{ m.howto }}
+          </div>
+          <div class="howto-tip">
+            Mesure toujours au même moment (le matin), du même côté, sans serrer le mètre.
+          </div>
         </div>
         <div class="meas-grid q-mt-sm">
-          <q-input v-for="m in MEASURES" :key="m.key" v-model.number="f.measures[m.key]" type="number" inputmode="decimal" filled dense :label="m.label" />
+          <q-input
+            v-for="m in MEASURES"
+            :key="m.key"
+            v-model.number="f.measures[m.key]"
+            type="number"
+            inputmode="decimal"
+            filled
+            dense
+            :label="m.label"
+          />
         </div>
         <q-input v-model="f.note" filled autogrow label="Note (optionnel)" class="q-mt-md" />
-        <q-btn no-caps color="primary" text-color="dark" :label="todayEntry ? 'Mettre à jour' : 'Enregistrer la saisie'" class="full-width q-mt-md" :loading="saving" :disable="!hasInput" @click="save" />
+        <q-btn
+          no-caps
+          color="primary"
+          text-color="dark"
+          :label="todayEntry ? 'Mettre à jour' : 'Enregistrer la saisie'"
+          class="full-width q-mt-md"
+          :loading="saving"
+          :disable="!hasInput"
+          @click="save"
+        />
       </div>
     </div>
 
-    <div v-if="loading" class="column items-center q-mt-xl"><q-spinner color="primary" size="32px" /></div>
+    <div v-if="loading" class="column items-center q-mt-xl">
+      <q-spinner color="primary" size="32px" />
+    </div>
 
     <template v-else-if="entries.length">
       <!-- Dernières valeurs -->
@@ -75,8 +165,12 @@
         <div class="cards">
           <div class="mcard">
             <div class="mc-k">Poids</div>
-            <div class="mc-v">{{ fmt(weightStat.val) }}<small v-if="weightStat.val != null"> kg</small></div>
-            <div v-if="weightStat.delta != null" class="mc-d" :class="deltaCls(weightStat.delta)">{{ signed(weightStat.delta) }} kg</div>
+            <div class="mc-v">
+              {{ fmt(weightStat.val) }}<small v-if="weightStat.val != null"> kg</small>
+            </div>
+            <div v-if="weightStat.delta != null" class="mc-d" :class="deltaCls(weightStat.delta)">
+              {{ signed(weightStat.delta) }} kg
+            </div>
           </div>
           <div class="mcard">
             <div class="mc-k">Sommeil</div>
@@ -84,8 +178,16 @@
           </div>
           <div v-for="m in MEASURES" :key="m.key" class="mcard">
             <div class="mc-k">{{ m.label }}</div>
-            <div class="mc-v">{{ fmt(measStat(m.key).val) }}<small v-if="measStat(m.key).val != null"> cm</small></div>
-            <div v-if="measStat(m.key).delta != null" class="mc-d" :class="deltaCls(measStat(m.key).delta!)">{{ signed(measStat(m.key).delta!) }} cm</div>
+            <div class="mc-v">
+              {{ fmt(measStat(m.key).val) }}<small v-if="measStat(m.key).val != null"> cm</small>
+            </div>
+            <div
+              v-if="measStat(m.key).delta != null"
+              class="mc-d"
+              :class="deltaCls(measStat(m.key).delta!)"
+            >
+              {{ signed(measStat(m.key).delta!) }} cm
+            </div>
           </div>
         </div>
       </section>
@@ -96,9 +198,18 @@
         <div v-for="c in charts" :key="c.key" class="chart">
           <div class="chart-title">{{ c.label }}</div>
           <svg :viewBox="`0 0 ${c.W} ${c.H}`" preserveAspectRatio="none" class="chart-svg">
-            <polyline :points="c.pts" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" />
+            <polyline
+              :points="c.pts"
+              fill="none"
+              stroke="var(--accent)"
+              stroke-width="2"
+              stroke-linejoin="round"
+            />
           </svg>
-          <div class="chart-meta">min <b>{{ c.fmt(c.min) }}</b> · max <b>{{ c.fmt(c.max) }}</b> · actuel <b>{{ c.fmt(c.last) }}</b></div>
+          <div class="chart-meta">
+            min <b>{{ c.fmt(c.min) }}</b> · max <b>{{ c.fmt(c.max) }}</b> · actuel
+            <b>{{ c.fmt(c.last) }}</b>
+          </div>
         </div>
       </section>
 
@@ -110,14 +221,27 @@
           <div class="h-vals">
             <span v-if="e.weight_kg != null">{{ e.weight_kg }} kg</span>
             <span v-if="e.sleep_hours != null">{{ fmtSleep(e.sleep_hours) }}</span>
-            <span v-if="measCount(e)" class="dim">{{ measCount(e) }} mesure{{ measCount(e) > 1 ? 's' : '' }}</span>
+            <span v-if="measCount(e)" class="dim"
+              >{{ measCount(e) }} mesure{{ measCount(e) > 1 ? 's' : '' }}</span
+            >
           </div>
-          <q-btn flat round dense size="sm" icon="delete_outline" color="negative" aria-label="Supprimer" @click="del(e.id)" />
+          <q-btn
+            flat
+            round
+            dense
+            size="sm"
+            icon="delete_outline"
+            color="negative"
+            aria-label="Supprimer"
+            @click="del(e.id)"
+          />
         </div>
       </section>
     </template>
 
-    <div v-else-if="!loading" class="empty">Aucune saisie pour l’instant. Note ta première mesure ci-dessus.</div>
+    <div v-else-if="!loading" class="empty">
+      Aucune saisie pour l’instant. Note ta première mesure ci-dessus.
+    </div>
   </q-page>
 </template>
 
@@ -136,12 +260,36 @@ const body = useBodyStore();
 
 const MEASURES = [
   { key: 'biceps', label: 'Biceps', howto: 'Bras fléchi et contracté, au point le plus large.' },
-  { key: 'cuisse', label: 'Cuisse', howto: 'Debout, juste sous le pli fessier, au point le plus large.' },
-  { key: 'taille', label: 'Taille', howto: 'Au plus étroit (niveau nombril), sans rentrer le ventre, fin d’expiration.' },
-  { key: 'hanches', label: 'Hanches', howto: 'Au point le plus large des fesses/hanches, pieds joints.' },
-  { key: 'poitrine', label: 'Poitrine', howto: 'À hauteur des mamelons, bras le long du corps, fin d’expiration.' },
-  { key: 'mollet', label: 'Mollet', howto: 'Debout, poids réparti, au point le plus large du mollet.' },
-  { key: 'avant_bras', label: 'Avant-bras', howto: 'Bras tendu et détendu, au point le plus large près du coude.' },
+  {
+    key: 'cuisse',
+    label: 'Cuisse',
+    howto: 'Debout, juste sous le pli fessier, au point le plus large.',
+  },
+  {
+    key: 'taille',
+    label: 'Taille',
+    howto: 'Au plus étroit (niveau nombril), sans rentrer le ventre, fin d’expiration.',
+  },
+  {
+    key: 'hanches',
+    label: 'Hanches',
+    howto: 'Au point le plus large des fesses/hanches, pieds joints.',
+  },
+  {
+    key: 'poitrine',
+    label: 'Poitrine',
+    howto: 'À hauteur des mamelons, bras le long du corps, fin d’expiration.',
+  },
+  {
+    key: 'mollet',
+    label: 'Mollet',
+    howto: 'Debout, poids réparti, au point le plus large du mollet.',
+  },
+  {
+    key: 'avant_bras',
+    label: 'Avant-bras',
+    howto: 'Bras tendu et détendu, au point le plus large près du coude.',
+  },
 ] as const;
 type MeasureKey = (typeof MEASURES)[number]['key'];
 
@@ -160,7 +308,13 @@ const entries = computed(() => body.entries);
 const reversed = computed(() => entries.value.slice().reverse());
 
 // ── Formulaire ──────────────────────────────────────────
-interface FormState { weight: number | null; sleepH: number | null; sleepMin: number | null; measures: Record<string, number | null>; note: string }
+interface FormState {
+  weight: number | null;
+  sleepH: number | null;
+  sleepMin: number | null;
+  measures: Record<string, number | null>;
+  note: string;
+}
 const f = reactive<FormState>({
   weight: null,
   sleepH: null,
@@ -169,7 +323,12 @@ const f = reactive<FormState>({
   note: '',
 });
 const hasInput = computed(
-  () => f.weight != null || f.sleepH != null || f.sleepMin != null || f.note.trim() !== '' || MEASURES.some((m) => f.measures[m.key] != null),
+  () =>
+    f.weight != null ||
+    f.sleepH != null ||
+    f.sleepMin != null ||
+    f.note.trim() !== '' ||
+    MEASURES.some((m) => f.measures[m.key] != null),
 );
 // Sommeil en heures décimales (h + min/60) pour le stockage.
 function sleepToHours(): number | null {
@@ -179,10 +338,17 @@ function sleepToHours(): number | null {
 
 // ── Fréquence + rappel ──────────────────────────────────
 const WEEKDAYS = [
-  { value: 1, label: 'Lun' }, { value: 2, label: 'Mar' }, { value: 3, label: 'Mer' },
-  { value: 4, label: 'Jeu' }, { value: 5, label: 'Ven' }, { value: 6, label: 'Sam' }, { value: 0, label: 'Dim' },
+  { value: 1, label: 'Lun' },
+  { value: 2, label: 'Mar' },
+  { value: 3, label: 'Mer' },
+  { value: 4, label: 'Jeu' },
+  { value: 5, label: 'Ven' },
+  { value: 6, label: 'Sam' },
+  { value: 0, label: 'Dim' },
 ];
-const frequency = computed<Freq>(() => profileStore.profile?.preferences?.tracking_frequency ?? 'week');
+const frequency = computed<Freq>(
+  () => profileStore.profile?.preferences?.tracking_frequency ?? 'week',
+);
 const trackingDay = computed(() => profileStore.profile?.preferences?.tracking_day);
 const trackingTime = computed(() => profileStore.profile?.preferences?.tracking_time ?? '');
 const notifGranted = ref('Notification' in window && Notification.permission === 'granted');
@@ -192,7 +358,10 @@ async function setPref(patch: Record<string, unknown>) {
   const userId = auth.user?.id;
   if (!p || !userId) return;
   try {
-    await profileStore.update(userId, { ...p, preferences: { ...(p.preferences ?? {}), ...patch } });
+    await profileStore.update(userId, {
+      ...p,
+      preferences: { ...(p.preferences ?? {}), ...patch },
+    });
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
   }
@@ -213,7 +382,8 @@ async function enableNotif() {
   }
   const perm = await Notification.requestPermission();
   notifGranted.value = perm === 'granted';
-  if (notifGranted.value) $q.notify({ type: 'positive', message: 'Rappels activés (quand l’app est ouverte).' });
+  if (notifGranted.value)
+    $q.notify({ type: 'positive', message: 'Rappels activés (quand l’app est ouverte).' });
 }
 const due = computed(() => {
   const last = entries.value[entries.value.length - 1];
@@ -230,15 +400,31 @@ function statFrom(vals: number[]): { val: number | null; delta: number | null } 
   const delta = vals.length >= 2 ? +(val - vals[vals.length - 2]!).toFixed(1) : null;
   return { val, delta };
 }
-const weightStat = computed(() => statFrom(entries.value.map((e) => e.weight_kg).filter((v): v is number => v != null)));
-const sleepStat = computed(() => statFrom(entries.value.map((e) => e.sleep_hours).filter((v): v is number => v != null)));
+const weightStat = computed(() =>
+  statFrom(entries.value.map((e) => e.weight_kg).filter((v): v is number => v != null)),
+);
+const sleepStat = computed(() =>
+  statFrom(entries.value.map((e) => e.sleep_hours).filter((v): v is number => v != null)),
+);
 function measStat(key: MeasureKey) {
-  return statFrom(entries.value.map((e) => e.measurements?.[key]).filter((v): v is number => v != null));
+  return statFrom(
+    entries.value.map((e) => e.measurements?.[key]).filter((v): v is number => v != null),
+  );
 }
 
 // ── Courbes (poids, sommeil, chaque circonférence) ──────
 type Fmt = (v: number | null) => string;
-interface Chart { key: string; label: string; pts: string; min: number; max: number; last: number; fmt: Fmt; W: number; H: number }
+interface Chart {
+  key: string;
+  label: string;
+  pts: string;
+  min: number;
+  max: number;
+  last: number;
+  fmt: Fmt;
+  W: number;
+  H: number;
+}
 function buildChart(vals: number[]): Omit<Chart, 'key' | 'label' | 'fmt'> | null {
   if (vals.length < 2) return null;
   const min = Math.min(...vals);
@@ -260,8 +446,18 @@ const fmtKg: Fmt = (v) => (v == null ? '—' : `${v} kg`);
 const fmtCm: Fmt = (v) => (v == null ? '—' : `${v} cm`);
 const charts = computed<Chart[]>(() => {
   const metrics: { key: string; label: string; fmt: Fmt; vals: number[] }[] = [
-    { key: 'weight', label: 'Poids', fmt: fmtKg, vals: entries.value.map((e) => e.weight_kg).filter((v): v is number => v != null) },
-    { key: 'sleep', label: 'Sommeil', fmt: fmtSleep, vals: entries.value.map((e) => e.sleep_hours).filter((v): v is number => v != null) },
+    {
+      key: 'weight',
+      label: 'Poids',
+      fmt: fmtKg,
+      vals: entries.value.map((e) => e.weight_kg).filter((v): v is number => v != null),
+    },
+    {
+      key: 'sleep',
+      label: 'Sommeil',
+      fmt: fmtSleep,
+      vals: entries.value.map((e) => e.sleep_hours).filter((v): v is number => v != null),
+    },
     ...MEASURES.map((m) => ({
       key: m.key,
       label: m.label,
@@ -288,7 +484,11 @@ function deltaCls(v: number) {
   return v > 0 ? 'up' : v < 0 ? 'down' : '';
 }
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: '2-digit' });
+  return new Date(iso).toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: 'short',
+    year: '2-digit',
+  });
 }
 function measCount(e: BodyEntry) {
   return e.measurements ? Object.keys(e.measurements).length : 0;
@@ -352,9 +552,15 @@ async function save() {
     markBodyEntrySaved(new Date().toISOString().slice(0, 10)); // coupe le rappel du jour
     syncForm(); // garde les valeurs de la saisie du jour
     formOpen.value = false;
-    $q.notify({ type: 'positive', message: wasEdit ? 'Saisie du jour mise à jour ✅' : 'Saisie enregistrée 💪' });
+    $q.notify({
+      type: 'positive',
+      message: wasEdit ? 'Saisie du jour mise à jour ✅' : 'Saisie enregistrée 💪',
+    });
   } catch (e) {
-    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec de l’enregistrement.' });
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Échec de l’enregistrement.',
+    });
   } finally {
     saving.value = false;
   }
@@ -367,7 +573,11 @@ function del(id: string) {
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Supprimer', color: 'negative' },
   }).onOk(() => {
-    body.remove(id).catch((e: unknown) => $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' }));
+    body
+      .remove(id)
+      .catch((e: unknown) =>
+        $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' }),
+      );
   });
 }
 
@@ -377,9 +587,12 @@ onMounted(async () => {
     if (userId && !profileStore.profile) await profileStore.fetch(userId);
     await body.fetchRecent();
     syncForm(); // pré-remplit si une saisie existe déjà aujourd'hui
-    formOpen.value = todayEntry.value ? false : (due.value || entries.value.length === 0);
+    formOpen.value = todayEntry.value ? false : due.value || entries.value.length === 0;
   } catch (e) {
-    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Chargement impossible.' });
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Chargement impossible.',
+    });
   } finally {
     loading.value = false;
   }
@@ -387,50 +600,272 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-.body-page { background: var(--bg); min-height: 100vh; padding: 20px 16px 40px; }
-.p-title { font-size: 28px; font-weight: 700; color: var(--text); margin: 4px 0 18px; }
-.block { margin-bottom: 24px; }
-.block-h { font-family: var(--font-display); font-size: 16px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
-.lbl { font-size: 12px; color: var(--dim); margin-bottom: 8px; }
+.body-page {
+  background: var(--bg);
+  min-height: 100vh;
+  padding: 20px 16px 40px;
+}
+.p-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 4px 0 18px;
+}
+.block {
+  margin-bottom: 24px;
+}
+.block-h {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 12px;
+}
+.lbl {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
 
-.freq { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.days .choice { padding: 8px 2px; font-size: 12px; }
-.notif-ok { display: inline-flex; align-items: center; gap: 5px; color: var(--d1); font-size: 13px; flex: 1; }
-.choice { width: 100%; min-height: 48px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; color: var(--text); font-family: var(--font-ui); font-size: 15px; cursor: pointer; &.active { border-color: var(--accent); background: var(--surface-2); } &.small { min-height: 44px; font-size: 14px; } }
+.freq {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.days .choice {
+  padding: 8px 2px;
+  font-size: 12px;
+}
+.notif-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--d1);
+  font-size: 13px;
+  flex: 1;
+}
+.choice {
+  width: 100%;
+  min-height: 48px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  cursor: pointer;
+  &.active {
+    border-color: var(--accent);
+    background: var(--surface-2);
+  }
+  &.small {
+    min-height: 44px;
+    font-size: 14px;
+  }
+}
 
-.due { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid var(--accent); color: var(--text); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; font-size: 14px; }
+.due {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
 
-.grp { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); margin-bottom: 18px; overflow: hidden; }
-.grp-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 16px; cursor: pointer; background: none; border: none; color: var(--text); font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
-.grp-title { flex: 1; text-align: left; }
-.chev { color: var(--dim); transition: transform 0.18s; }
-.grp-head.open .chev { transform: rotate(180deg); }
-.grp-body { padding: 6px 14px 14px; }
+.grp {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+.grp-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.grp-title {
+  flex: 1;
+  text-align: left;
+}
+.chev {
+  color: var(--dim);
+  transition: transform 0.18s;
+}
+.grp-head.open .chev {
+  transform: rotate(180deg);
+}
+.grp-body {
+  padding: 6px 14px 14px;
+}
 
-.row-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.sleep-row { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 8px; }
-.opt-note { margin-bottom: 12px; font-style: italic; }
-.howto-toggle { background: none; border: none; color: var(--accent); font-size: 12px; cursor: pointer; }
-.howto { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 12px; margin-top: 8px; }
-.howto-row { font-size: 12.5px; color: var(--dim); margin-bottom: 6px; b { color: var(--text); } }
-.howto-tip { font-size: 12px; color: var(--accent); margin-top: 4px; }
-.meas-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.row-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.sleep-row {
+  display: grid;
+  grid-template-columns: 1.3fr 0.7fr;
+  gap: 8px;
+}
+.opt-note {
+  margin-bottom: 12px;
+  font-style: italic;
+}
+.howto-toggle {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+.howto {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 12px;
+  margin-top: 8px;
+}
+.howto-row {
+  font-size: 12.5px;
+  color: var(--dim);
+  margin-bottom: 6px;
+  b {
+    color: var(--text);
+  }
+}
+.howto-tip {
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: 4px;
+}
+.meas-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
 
-.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.mcard { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 10px 12px; }
-.mc-k { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.4px; }
-.mc-v { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--text); margin-top: 2px; small { font-size: 12px; color: var(--dim); } }
-.mc-d { font-size: 12px; margin-top: 2px; color: var(--dim); &.up { color: var(--d3); } &.down { color: var(--d1); } }
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.mcard {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.mc-k {
+  font-size: 11px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.mc-v {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 2px;
+  small {
+    font-size: 12px;
+    color: var(--dim);
+  }
+}
+.mc-d {
+  font-size: 12px;
+  margin-top: 2px;
+  color: var(--dim);
+  &.up {
+    color: var(--d3);
+  }
+  &.down {
+    color: var(--d1);
+  }
+}
 
-.chart { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
-.chart-title { font-size: 12px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
-.chart-svg { width: 100%; height: 90px; display: block; }
-.chart-meta { color: var(--dim); font-size: 12px; margin-top: 8px; b { color: var(--text); } }
+.chart {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.chart-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 6px;
+}
+.chart-svg {
+  width: 100%;
+  height: 90px;
+  display: block;
+}
+.chart-meta {
+  color: var(--dim);
+  font-size: 12px;
+  margin-top: 8px;
+  b {
+    color: var(--text);
+  }
+}
 
-.hrow { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
-.h-date { font-family: var(--font-display); font-size: 13px; color: var(--text); width: 90px; flex: none; }
-.h-vals { flex: 1; display: flex; gap: 10px; flex-wrap: wrap; font-size: 13.5px; color: var(--text); .dim { color: var(--dim); } }
+.hrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.h-date {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--text);
+  width: 90px;
+  flex: none;
+}
+.h-vals {
+  flex: 1;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+  color: var(--text);
+  .dim {
+    color: var(--dim);
+  }
+}
 
-.empty { color: var(--dim); padding: 24px 0; }
+.empty {
+  color: var(--dim);
+  padding: 24px 0;
+}
 </style>

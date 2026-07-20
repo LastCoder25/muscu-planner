@@ -25,8 +25,31 @@
         <div class="last-lbl">Dernière séance · {{ fmtDate(lastLog.performed_at) }}</div>
         <div class="last-row">
           <span class="last-name">{{ lastLog.payload.name || 'Séance' }}</span>
-          <span class="last-stat">{{ lastVolume }} kg<template v-if="lastLog.payload.global_difficulty"> · {{ lastLog.payload.global_difficulty }}/4</template></span>
+          <span class="last-stat"
+            >{{ lastVolume }} kg<template v-if="lastLog.payload.global_difficulty">
+              · {{ lastLog.payload.global_difficulty }}/4</template
+            ></span
+          >
         </div>
+      </div>
+
+      <div class="tiles">
+        <button class="tile" @click="startFree">
+          <q-icon name="bolt" size="26px" />
+          <span>Séance libre</span>
+        </button>
+        <button class="tile" @click="startImport">
+          <q-icon name="smart_toy" size="26px" />
+          <span>Séance IA</span>
+        </button>
+        <button class="tile" @click="goGenerated">
+          <q-icon name="fitness_center" size="26px" />
+          <span>Séance générée</span>
+        </button>
+        <button class="tile tile-accent" @click="goChallenges">
+          <q-icon name="emoji_events" size="26px" />
+          <span>Challenges</span>
+        </button>
       </div>
 
       <div class="row items-center justify-between q-mb-sm">
@@ -34,9 +57,7 @@
         <span class="text-dim text-caption">{{ sessionsStore.list.length }}</span>
       </div>
 
-      <div v-if="sessionsStore.list.length === 0" class="empty">
-        Aucune séance pour l’instant.
-      </div>
+      <div v-if="sessionsStore.list.length === 0" class="empty">Aucune séance pour l’instant.</div>
 
       <div
         v-for="s in sessionsStore.list"
@@ -54,21 +75,15 @@
           <div class="row items-center no-wrap" style="gap: 4px">
             <q-icon name="chevron_right" color="grey-6" size="20px" />
             <q-btn
-              round color="primary" text-color="dark" icon="play_arrow"
+              round
+              color="primary"
+              text-color="dark"
+              icon="play_arrow"
               aria-label="Démarrer"
               @click.stop="startSession(s.id)"
             />
           </div>
         </div>
-      </div>
-
-      <div class="row q-col-gutter-sm q-mt-xs">
-        <button class="free-btn col" @click="startFree">
-          <q-icon name="bolt" size="20px" /> Séance libre
-        </button>
-        <button class="free-btn col" @click="startImport">
-          <q-icon name="smart_toy" size="20px" /> Importer (IA)
-        </button>
       </div>
     </template>
   </q-page>
@@ -96,7 +111,10 @@ const hasFree = ref(false);
 
 const lastVolume = computed(() =>
   lastLog.value
-    ? lastLog.value.payload.exercises.reduce((a, ex) => a + ex.performed.reduce((b, s) => b + s.load_kg * s.reps, 0), 0)
+    ? lastLog.value.payload.exercises.reduce(
+        (a, ex) => a + ex.performed.reduce((b, s) => b + s.load_kg * s.reps, 0),
+        0,
+      )
     : 0,
 );
 function fmtDate(iso: string): string {
@@ -110,7 +128,10 @@ onMounted(async () => {
     const recent = await logs.fetchRecent(1);
     lastLog.value = recent[0] ?? null;
   } catch (e) {
-    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Chargement impossible.' });
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Chargement impossible.',
+    });
   } finally {
     loading.value = false;
   }
@@ -144,6 +165,13 @@ function discardFree() {
 async function startImport() {
   await router.push('/import');
 }
+async function goGenerated() {
+  const first = sessionsStore.list[0];
+  await router.push(first ? `/session/${first.id}/detail` : '/profile');
+}
+async function goChallenges() {
+  await router.push('/challenges');
+}
 async function startSession(id: string) {
   await router.push(`/session/${id}/ready`);
 }
@@ -155,24 +183,92 @@ async function startSession(id: string) {
   min-height: 100vh;
   padding: 20px 16px 32px;
 }
-.home-head { margin-bottom: 24px; }
+.home-head {
+  margin-bottom: 24px;
+}
 .home-name {
   font-size: 32px;
   font-weight: 700;
   color: var(--text);
   margin: 2px 0 0;
 }
-.text-dim { color: var(--dim); }
-.free-ongoing { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--surface-2); border: 1px solid var(--accent); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; }
-.fo-main { display: flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; font-size: 14px; }
-.fo-actions { display: flex; gap: 8px; }
-.fo-resume { padding: 7px 14px; border-radius: 10px; border: none; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 13px; cursor: pointer; }
-.fo-cancel { padding: 7px 12px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--d4); font-weight: 600; font-size: 13px; cursor: pointer; }
-.last-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 20px; cursor: pointer; }
-.last-lbl { font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--dim); }
-.last-row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 6px; }
-.last-name { font-weight: 600; font-size: 16px; color: var(--text); }
-.last-stat { font-family: var(--font-display); font-size: 14px; color: var(--accent); }
+.text-dim {
+  color: var(--dim);
+}
+.free-ongoing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.fo-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+}
+.fo-actions {
+  display: flex;
+  gap: 8px;
+}
+.fo-resume {
+  padding: 7px 14px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.fo-cancel {
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--d4);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.last-card {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  cursor: pointer;
+}
+.last-lbl {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.last-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+.last-name {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text);
+}
+.last-stat {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--accent);
+}
 .section-h {
   font-family: var(--font-display);
   font-size: 18px;
@@ -193,8 +289,12 @@ async function startSession(id: string) {
   cursor: pointer;
   transition: border-color 0.12s;
 }
-.session-card:hover { border-color: var(--line); }
-.session-card:active { border-color: var(--accent); }
+.session-card:hover {
+  border-color: var(--line);
+}
+.session-card:active {
+  border-color: var(--accent);
+}
 .session-name {
   font-weight: 600;
   font-size: 17px;
@@ -205,23 +305,42 @@ async function startSession(id: string) {
   font-size: 13px;
   margin-top: 4px;
 }
-.free-btn {
-  width: 100%;
-  margin-top: 12px;
-  height: 52px;
-  border-radius: 14px;
-  border: 1.5px dashed var(--line);
-  background: transparent;
-  color: var(--dim);
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: 0.5px;
-  cursor: pointer;
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.tile {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-height: 88px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition:
+    border-color 0.12s,
+    transform 0.08s;
 }
-.free-btn:active { color: var(--text); border-color: var(--accent); }
+.tile .q-icon {
+  color: var(--accent);
+}
+.tile:active {
+  transform: scale(0.97);
+  border-color: var(--accent);
+}
+.tile-accent {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
 </style>

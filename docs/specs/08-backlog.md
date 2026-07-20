@@ -3,6 +3,7 @@
 > **Statut : proposition à valider.** Adaptée à la stack réelle (Supabase, pas Laravel).
 
 ## But
+
 Permettre au testeur (toi / ton pote) de **remonter un ticket** (bug, idée, amélioration) **depuis l'app**,
 en un geste, avec le contexte utile (page courante, version). Les tickets sont **traités hors-app** par
 Claude Code via un futur `docs/BACKLOG-RUN.md` qui s'appuie sur `scripts/backlog.mjs`.
@@ -10,6 +11,7 @@ Claude Code via un futur `docs/BACKLOG-RUN.md` qui s'appuie sur `scripts/backlog
 C'est l'outil de **développement courant** une fois la roadmap posée (cf. fin de `ROADMAP-RUN.md`).
 
 ## Données
+
 - **Table `feedback`** (migration **0005**, additive) :
   | colonne | type | notes |
   |---|---|---|
@@ -26,6 +28,7 @@ C'est l'outil de **développement courant** une fois la roadmap posée (cf. fin 
 - **Hors contrat JSON** : donnée d'app, ce n'est pas un des 4 documents (`profile`/`session`/`session_log`/`coach_request`).
 
 ## Écran (intégré aux Paramètres, cf. spec 09)
+
 - Bouton **« Envoyer un retour »** → dialog :
   - **Type** : Bug / Idée / Autre (3 boutons).
   - **Message** : textarea (requis).
@@ -36,6 +39,7 @@ C'est l'outil de **développement courant** une fois la roadmap posée (cf. fin 
   Mobile-first, « proposer jamais imposer ».
 
 ## Script — `scripts/backlog.mjs` (Node, comme les smokes)
+
 - Récupère la **clé service_role** via la Management API (`.supabase-token`) — même mécanisme que les vérifs.
 - **Par défaut** : liste les tickets `status = open` (id court, kind, message, page, version, date), triés récents d'abord.
 - `--all` : inclut `in_progress` / `done`. `--done <id>` : passe un ticket à `done`. `--wip <id>` : `in_progress`.
@@ -43,5 +47,6 @@ C'est l'outil de **développement courant** une fois la roadmap posée (cf. fin 
 - **Aucun secret en dur** ; n'écrit rien d'autre que le statut.
 
 ## Done
+
 - Un ticket s'insère depuis les Paramètres (RLS OK), avec `page` + `app_version` corrects.
 - `node scripts/backlog.mjs` liste les tickets ouverts ; `--done <id>` les clôture.

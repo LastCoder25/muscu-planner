@@ -3,24 +3,30 @@
 Brief lu à chaque session. Source de vérité du projet. À tenir à jour quand l'archi évolue.
 
 ## Le projet en une phrase
+
 Appli mobile-first de suivi de musculation : créer/importer des séances selon le profil, les exécuter en live (timer, switch d'exo, note d'effort 1–4, commentaires dictés), et générer la séance suivante soit par un moteur déterministe interne, soit via une IA externe — les deux partageant le même contrat JSON.
 
 ## Stack
+
 - **Front** : Quasar (Vue 3, `<script setup>`, Vite, TypeScript strict, Pinia).
 - **Back + BDD + Auth** : Supabase (Postgres + RLS + Auth email).
 - **Hébergement** : front statique sur Vercel (Hobby, build `quasar build`, sortie `dist/spa`). Pas de serveur applicatif.
 - Cible : mobile d'abord (usage en salle, grosses cibles tactiles, mains moites).
 
 ## Règle d'or
+
 `src/lib/types.ts` est la traduction du **contrat JSON v1.0** et fait autorité. Quatre types de documents : `profile`, `session` (le plan), `session_log` (le bilan), `coach_request` (l'enveloppe d'export IA). Ne jamais diverger de ces structures sans mettre à jour types.ts ET le schéma SQL ensemble. Tout est versionné par `schema_version`.
 
 ## Architecture mentale
+
 Le moteur déterministe et l'IA externe prennent la **même entrée** (`coach_request` = profil + historique) et rendent la **même sortie** (`session`). L'app importe une `session` sans savoir d'où elle vient. On démarre 100 % moteur déterministe ; l'IA n'est qu'un fallback pour casser un plateau.
 
 ## Couche d'adaptation par niveau (essentiel)
+
 `profile.experience.level` → `level_config` (`src/lib/levelConfig.ts`) → pilote progression, signal d'effort, profondeur d'historique, mode de création, densité UI. C'est le point UNIQUE où un débutant (progression linéaire, note 1–4 seule, programme généré, UI guidée) et un avancé (double progression + RIR affiché, import libre, UI dense) divergent. **Jamais de code dupliqué par niveau** : on lit `level_config`. Dérivé mais surchargeable.
 
 ## Ce qui existe déjà
+
 ```
 src/lib/
   types.ts         contrat JSON en TS — NE PAS contourner
@@ -46,11 +52,13 @@ docs/
   specs/01..04               specs détaillées par écran
   PROMPTS.md                 prompts à coller, phase par phase
 ```
+
 Stratégie de stockage : **JSONB canonique + colonnes indexées extraites**. On garde le payload JSON brut pour le round-trip parfait avec l'IA.
 
 **Pour construire** : suivre `docs/PROMPTS.md` (phase 0 → 4), chaque phase s'appuyant sur la spec correspondante dans `docs/specs/`.
 
 ## Conventions de code
+
 - TypeScript strict. Named exports. Composition API `<script setup lang="ts">`.
 - Toute la logique métier vit dans `src/lib/` (pur, testable), jamais dans les composants.
 - State partagé via Pinia stores (`src/stores/`). Accès Supabase centralisé (pas d'appels bruts éparpillés).
@@ -58,19 +66,24 @@ Stratégie de stockage : **JSONB canonique + colonnes indexées extraites**. On 
 - Migrations Supabase **additives** et numérotées (`0002_...`). Ne jamais éditer une migration déjà appliquée.
 
 ## Design system (depuis la maquette validée)
+
 Direction « panneau de contrôle d'équipement ». Voir `seance-live-mockup.html` (fourni) comme référence visuelle.
+
 - **Palette** : `--bg #15120E`, `--surface #211C16`, `--line #3A332A`, `--text #F3EEE6`, `--dim #9A8F7E`, accent **jaune voltage `#FFD23F`**. Notes d'effort : d1 `#7BC86C`, d2 `#C6D24A`, d3 `#FFB23F`, d4 `#FF6A45`.
 - **Typo** : Oswald (chiffres, titres, timer) + Inter (UI).
 - **Écran live — comportements clés** : timer de repos radial qui prend le dessus après validation ; steppers ±2,5 kg / ±1 rep (pas de clavier) ; sélecteur de note **1–4** dans le bloc « ressenti » ; switch d'exo avec onglets **Suggestions** / **Séances passées** (charge conservée) ; dictée micro pour les commentaires ; CTA collant « Valider la série ».
 
 ## Feuille de route (construire dans cet ordre)
+
 1. **Auth + onboarding** : login Supabase (email) ; formulaire profil (identité, niveau, objectif, dispos, matériel, contraintes, préférences) → écrit `profiles`, dérive `level_config`, puis bifurque : débutant → « on génère ton premier programme » ; avancé → « importe ou construis ton programme ».
 2. **Séance live** : la maquette branchée sur Supabase, écrit un `session_log` à la fin (note 1–4 par série, `swapped_from`, commentaires).
 3. **Bilan** : prévu vs réalisé + bouton export `coach_request` (copier vers ChatGPT) + import du JSON renvoyé via `validateImportedSession`.
 4. **Historique + génération** : liste des séances, déclencher `nextSessionDeterministic`.
 
 ## Spécificités d'environnement (poste Windows/Orange) — IMPORTANT
+
 Décisions prises en Phase 0, contraintes par le poste. À respecter dans les phases suivantes.
+
 - **Registre npm** : le global pointe sur l'Artifactory Orange (`repos.tech.orange`), injoignable hors réseau pro. Un `.npmrc` **local au projet** force `registry.npmjs.org`. Ne pas le supprimer. Hors du dossier projet, passer `--registry=https://registry.npmjs.org/`.
 - **AppLocker** : la group policy bloque l'exécution de tout `.cmd`/`.exe` hors `Program Files` (donc les shims de `node_modules/.bin` et le cache npx). Conséquences :
   - Les scripts `package.json` sont routés via `node node_modules/<pkg>/bin/...` (jamais `quasar`/`eslint`/`vue-tsc` directement). Garder ce pattern pour tout nouveau script.
@@ -81,6 +94,7 @@ Décisions prises en Phase 0, contraintes par le poste. À respecter dans les ph
 - **Supabase** : projet « Muscu », ref `wzbxbntqlheelgqswzew` (eu-west-1). Géré par l'agent via la **Management API REST** (`api.supabase.com/v1/projects/<ref>/database/query`) appelée en `node` + PAT dans `.supabase-token` (gitignoré). Schéma `0001_init.sql` + `seed.sql` (29 exercices) déjà appliqués. **Auth email** : `mailer_autoconfirm = true` (signup → session immédiate, pas de lien email à confirmer).
 
 ## Couche app
+
 - `src/stores/` : `auth` (session/user Supabase), `profile` (ligne profiles + level_config), `sessions` (plans), `live` (séance en cours, persistée localStorage `muscu:live:<id>`, construit le SessionLog), `logs` (session_logs : insert + fetchRecent), `library` (exercises : fetchByMuscle/fetchByIds). Tout accès Supabase passe par les stores.
 - `src/boot/auth.ts` : init session avant rendu + garde de navigation (non connecté→/login, connecté sans profil→/onboarding, sinon app).
 - Options/form profil **factorisés** : `src/data/profileOptions.ts` (listes) + `src/lib/profileForm.ts` (`ProfileForm`, `emptyProfileForm`, `profileToForm`, `formToProfile`, `deriveCoarseEquipment`) — partagés par onboarding ET profil pour rester synchrones.
@@ -98,6 +112,7 @@ Décisions prises en Phase 0, contraintes par le poste. À respecter dans les ph
 - **Lint** : eslint est le gate du projet. SonarLint (IDE) génère des faux positifs sur l'archi Pinia setup-store (S7721 « move async to outer scope ») — ignorer ; se fier à `npm run lint`/`typecheck`.
 
 ## Garde-fous
+
 - Toujours s'appuyer sur les types de `src/lib`. Si un champ manque, l'ajouter au contrat (types.ts + SQL) plutôt que bricoler dans un composant.
 - Respecter les RLS : toute requête est scoping `auth.uid()`.
 - Mobile d'abord : tester en largeur ~390 px, cibles tactiles ≥ 44 px.

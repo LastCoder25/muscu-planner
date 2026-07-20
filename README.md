@@ -40,7 +40,7 @@ npm i @supabase/supabase-js
 ```ts
 import { supabase } from 'src/lib/supabase';
 const { data, error } = await supabase.from('sessions').select('*');
-console.log(data, error);   // [] sans erreur = connexion + RLS OK
+console.log(data, error); // [] sans erreur = connexion + RLS OK
 ```
 
 ## Étape 3 — Déploiement Vercel (gratuit)

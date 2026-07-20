@@ -92,7 +92,16 @@ const LEGACY_EQUIPMENT: Record<string, EquipmentItem[]> = {
   poids_du_corps: [],
 };
 const VALID_EQUIPMENT: EquipmentItem[] = [
-  'barbell', 'rack', 'bench', 'dumbbells', 'kettlebell', 'bands', 'cable', 'machine', 'pullup_bar', 'dip_station',
+  'barbell',
+  'rack',
+  'bench',
+  'dumbbells',
+  'kettlebell',
+  'bands',
+  'cable',
+  'machine',
+  'pullup_bar',
+  'dip_station',
 ];
 
 export function migrateEquipment(items: readonly string[]): EquipmentItem[] {

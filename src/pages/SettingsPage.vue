@@ -20,7 +20,13 @@
           </div>
           <div class="theme-name">{{ t.name }}</div>
           <div class="theme-mode">{{ t.dark ? 'Sombre' : 'Clair' }}</div>
-          <q-icon v-if="current === t.id" name="check_circle" color="primary" size="18px" class="theme-check" />
+          <q-icon
+            v-if="current === t.id"
+            name="check_circle"
+            color="primary"
+            size="18px"
+            class="theme-check"
+          />
         </button>
       </div>
     </section>
@@ -29,8 +35,12 @@
     <section class="block">
       <div class="block-h">Unités</div>
       <div class="row-2">
-        <button class="choice" :class="{ active: units === 'kg' }" @click="setUnits('kg')">kg</button>
-        <button class="choice" :class="{ active: units === 'lb' }" @click="setUnits('lb')">lb</button>
+        <button class="choice" :class="{ active: units === 'kg' }" @click="setUnits('kg')">
+          kg
+        </button>
+        <button class="choice" :class="{ active: units === 'lb' }" @click="setUnits('lb')">
+          lb
+        </button>
       </div>
     </section>
 
@@ -41,7 +51,15 @@
       <div class="about dim">build {{ build }} · {{ commit }}</div>
     </section>
 
-    <q-btn flat no-caps color="negative" icon="logout" label="Déconnexion" class="full-width q-mt-md" @click="logout" />
+    <q-btn
+      flat
+      no-caps
+      color="negative"
+      icon="logout"
+      label="Déconnexion"
+      class="full-width q-mt-md"
+      @click="logout"
+    />
   </q-page>
 </template>
 
@@ -70,7 +88,10 @@ async function setUnits(u: 'kg' | 'lb') {
   const userId = auth.user?.id;
   if (!p || !userId || units.value === u) return;
   try {
-    await profileStore.update(userId, { ...p, preferences: { ...(p.preferences ?? {}), units: u } });
+    await profileStore.update(userId, {
+      ...p,
+      preferences: { ...(p.preferences ?? {}), units: u },
+    });
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
   }
@@ -84,28 +105,104 @@ async function logout() {
 </script>
 
 <style scoped lang="scss">
-.settings-page { background: var(--bg); min-height: 100vh; padding: 20px 16px 40px; }
-.p-title { font-size: 28px; font-weight: 700; color: var(--text); margin: 4px 0 20px; }
-.block { margin-bottom: 26px; }
-.block-h { font-family: var(--font-display); font-size: 16px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
+.settings-page {
+  background: var(--bg);
+  min-height: 100vh;
+  padding: 20px 16px 40px;
+}
+.p-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 4px 0 20px;
+}
+.block {
+  margin-bottom: 26px;
+}
+.block-h {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 12px;
+}
 
-.theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
 .theme-card {
-  position: relative; text-align: left; background: var(--surface); border: 1.5px solid var(--line);
-  border-radius: 14px; padding: 12px; cursor: pointer; transition: border-color 0.12s;
-  &.active { border-color: var(--accent); }
+  position: relative;
+  text-align: left;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+  &.active {
+    border-color: var(--accent);
+  }
 }
-.swatches { display: flex; gap: 4px; margin-bottom: 8px; span { width: 22px; height: 22px; border-radius: 6px; border: 1px solid #0003; } }
-.theme-name { color: var(--text); font-weight: 600; font-size: 14px; }
-.theme-mode { color: var(--dim); font-size: 10.5px; letter-spacing: 0.4px; text-transform: uppercase; margin-top: 1px; }
-.theme-check { position: absolute; top: 10px; right: 10px; }
+.swatches {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  span {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    border: 1px solid #0003;
+  }
+}
+.theme-name {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+}
+.theme-mode {
+  color: var(--dim);
+  font-size: 10.5px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+.theme-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
 
-.row-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.row-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
 .choice {
-  min-height: 48px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px;
-  color: var(--text); font-family: var(--font-ui); font-size: 15px; cursor: pointer;
-  &.active { border-color: var(--accent); background: var(--surface-2); }
+  min-height: 48px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  cursor: pointer;
+  &.active {
+    border-color: var(--accent);
+    background: var(--surface-2);
+  }
 }
 
-.about { color: var(--text); font-size: 14px; &.dim { color: var(--dim); font-size: 12px; margin-top: 2px; } }
+.about {
+  color: var(--text);
+  font-size: 14px;
+  &.dim {
+    color: var(--dim);
+    font-size: 12px;
+    margin-top: 2px;
+  }
+}
 </style>

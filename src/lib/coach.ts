@@ -28,7 +28,9 @@ function defaultInstruction(p: Profile): string {
     `Respecte la progression et tiens compte des notes de difficulté (1 = facile, 4 = échec).`,
     p.constraints?.injuries?.length ? `Contraintes : ${p.constraints.injuries.join(', ')}.` : '',
     `Réponds UNIQUEMENT avec un objet JSON de type "session" conforme au schéma, sans aucun texte autour.`,
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /** Valide un JSON collé (IA ou fichier) et le normalise en Session. Lève une erreur lisible sinon. */

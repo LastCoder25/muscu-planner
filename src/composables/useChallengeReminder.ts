@@ -31,7 +31,11 @@ export function useChallengeReminder() {
   }
 
   onMounted(async () => {
-    try { if (store.list.length === 0) await store.fetchMine(); } catch { /* pas connecté / silencieux */ }
+    try {
+      if (store.list.length === 0) await store.fetchMine();
+    } catch {
+      /* pas connecté / silencieux */
+    }
     check();
     timer = setInterval(check, 60_000);
   });

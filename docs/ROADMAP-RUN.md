@@ -4,6 +4,7 @@ Le projet a déjà : **auth, onboarding, écran de séance** (en partie). Ce pro
 pour **compléter** la roadmap sans jamais reconstruire ce qui marche déjà.
 
 ## Règle d'or (s'applique à CHAQUE étape)
+
 1. **Inventorier avant de créer.** Cherche dans le code si la fonctionnalité / le fichier existe déjà.
 2. **Si ça existe → adapter / étendre, jamais réécrire de zéro.** Si ça manque → créer.
 3. **Une seule source de vérité** : le contrat `types.ts`. Tout s'y aligne.
@@ -17,6 +18,7 @@ Construire dans l'ordre ci-dessous. Coller une étape, valider le plan, exécute
 ---
 
 ### Étape 0 — État des lieux & alignement du contrat (PRIORITÉ ABSOLUE)
+
 ```
 Fais l'inventaire du projet existant (auth, onboarding, séance) et compare les structures de
 données réellement écrites/lues (profil, sessions, session_logs) avec le contrat src/lib/types.ts
@@ -26,6 +28,7 @@ et migrations ADDITIVES pour la base. Ne modifie rien : donne l'état des lieux 
 ```
 
 ### Étape 1 — Brancher l'intelligence sur l'existant (src/lib)
+
 ```
 Sans refaire les écrans existants, branche les modules src/lib sur ce qui est déjà là :
 - onboarding → dérive et stocke level_config (levelConfig.ts) ;
@@ -35,6 +38,7 @@ Vérifie d'abord ce qui est déjà câblé pour ne pas dupliquer. Plan d'abord.
 ```
 
 ### Étape 2 — Compléter onboarding & séance (specs 01 & 02) — seulement les manques
+
 ```
 Compare l'onboarding et l'écran de séance existants avec docs/specs/01-onboarding.md et
 02-seance-live.md. Ajoute UNIQUEMENT ce qui manque : objectif guidé (src/data/objectives.ts),
@@ -43,6 +47,7 @@ dictée, steppers, timer de repos. Ne reconstruis pas ce qui fonctionne déjà. 
 ```
 
 ### Étape 3 — Quick wins indépendants
+
 ```
 Implémente, en vérifiant qu'ils n'existent pas déjà :
 - le Backlog (docs/specs/08-backlog.md, migration 0002, scripts/backlog.mjs) — strictement tester/admin ;
@@ -51,6 +56,7 @@ Ces deux blocs sont indépendants du reste. Plan d'abord.
 ```
 
 ### Étape 4 — Écrans manquants, dans cet ordre
+
 ```
 Pour chacun : vérifie s'il existe déjà, sinon construis-le selon sa spec. Un écran = un commit.
 1. Bilan + coach (03)         — prévu vs réalisé, génération moteur/IA, max estimé (estimates.ts)
@@ -62,6 +68,7 @@ Plan d'abord pour chaque écran.
 ```
 
 ### Étape 5 — Mise en ligne (quand prêt)
+
 ```
 Déploie le front sur Vercel depuis GitHub (build quasar build, sortie dist/spa, 2 variables d'env),
 vérifie le vercel.json (routing SPA) et teste la version prod.
@@ -70,5 +77,6 @@ vérifie le vercel.json (routing SPA) et teste la version prod.
 ---
 
 ## Après la roadmap
+
 Le développement courant passe par le **backlog** : tu remontes des tickets depuis l'app, puis tu lances
 `docs/BACKLOG-RUN.md` pour que Claude Code les traite un par un. La roadmap pose le socle ; le backlog fait vivre l'app.

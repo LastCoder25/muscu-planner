@@ -3,27 +3,27 @@
 
 :root {
   // Palette
-  --bg: #15120E; // fond graphite chaud
-  --surface: #211C16; // cartes
-  --surface-2: #2C261E; // cartes actives
+  --bg: #15120e; // fond graphite chaud
+  --surface: #211c16; // cartes
+  --surface-2: #2c261e; // cartes actives
   --surface-3: #373026; // éléments surélevés (anneau timer)
-  --line: #3A332A; // bordures
-  --line-soft: #2A241D; // bordures discrètes
-  --text: #F3EEE6; // texte principal
-  --dim: #9A8F7E; // texte secondaire
-  --dim-2: #6F665A; // texte tertiaire
-  --accent: #FFD23F; // jaune voltage — unique accent fort
-  --accent-deep: #E6B400; // accent foncé
-  --accent-ink: #1A1605; // texte sur accent
+  --line: #3a332a; // bordures
+  --line-soft: #2a241d; // bordures discrètes
+  --text: #f3eee6; // texte principal
+  --dim: #9a8f7e; // texte secondaire
+  --dim-2: #6f665a; // texte tertiaire
+  --accent: #ffd23f; // jaune voltage — unique accent fort
+  --accent-deep: #e6b400; // accent foncé
+  --accent-ink: #1a1605; // texte sur accent
 
   // Notes d'effort 1–4 (du vert au rouge)
-  --d1: #7BC86C; // facile
-  --d2: #C6D24A; // modéré
-  --d3: #FFB23F; // dur
-  --d4: #FF6A45; // max
+  --d1: #7bc86c; // facile
+  --d2: #c6d24a; // modéré
+  --d3: #ffb23f; // dur
+  --d4: #ff6a45; // max
 
   // Validé (série faite)
-  --done: #7BC86C;
+  --done: #7bc86c;
 
   // Polices
   --font-display: 'Oswald', system-ui, sans-serif; // chiffres, titres, timer, valeurs

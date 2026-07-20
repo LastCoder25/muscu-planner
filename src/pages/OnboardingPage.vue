@@ -2,7 +2,13 @@
   <q-page class="onb-page column">
     <!-- Progression -->
     <div class="onb-top">
-      <q-linear-progress :value="(step + 1) / TOTAL" color="primary" track-color="line" size="6px" rounded />
+      <q-linear-progress
+        :value="(step + 1) / TOTAL"
+        color="primary"
+        track-color="line"
+        size="6px"
+        rounded
+      />
       <div class="row items-center justify-between q-mt-sm">
         <span class="text-dim text-caption">Étape {{ step + 1 }} / {{ TOTAL }}</span>
         <span class="text-dim text-caption">{{ STEP_TITLES[step] }}</span>
@@ -16,9 +22,27 @@
         <q-input v-model="form.name" label="Prénom *" filled class="q-mb-md" />
         <div class="text-dim text-caption q-mb-sm">Optionnel</div>
         <div class="row q-col-gutter-sm">
-          <q-input v-model.number="form.birth_year" type="number" label="Année de naissance" filled class="col-6" />
-          <q-input v-model.number="form.height_cm" type="number" label="Taille (cm)" filled class="col-6" />
-          <q-input v-model.number="form.weight_kg" type="number" label="Poids (kg)" filled class="col-6" />
+          <q-input
+            v-model.number="form.birth_year"
+            type="number"
+            label="Année de naissance"
+            filled
+            class="col-6"
+          />
+          <q-input
+            v-model.number="form.height_cm"
+            type="number"
+            label="Taille (cm)"
+            filled
+            class="col-6"
+          />
+          <q-input
+            v-model.number="form.weight_kg"
+            type="number"
+            label="Poids (kg)"
+            filled
+            class="col-6"
+          />
         </div>
         <div class="q-mt-md">
           <div class="text-dim text-caption q-mb-sm">Sexe</div>
@@ -29,7 +53,9 @@
               class="choice"
               :class="{ active: form.sex === opt.value }"
               @click="form.sex = form.sex === opt.value ? undefined : opt.value"
-            >{{ opt.label }}</button>
+            >
+              {{ opt.label }}
+            </button>
           </div>
         </div>
       </section>
@@ -51,7 +77,8 @@
           v-model.number="form.training_months"
           type="number"
           label="Ancienneté en musculation (mois) — optionnel"
-          filled class="q-mt-md"
+          filled
+          class="q-mt-md"
         />
       </section>
 
@@ -82,7 +109,9 @@
             class="choice metric"
             :class="{ active: form.sessions_per_week === n }"
             @click="form.sessions_per_week = n"
-          >{{ n }}</button>
+          >
+            {{ n }}
+          </button>
         </div>
         <div class="text-dim text-caption q-mb-sm">Durée par séance (min)</div>
         <div class="choice-grid cols-4 q-mb-lg">
@@ -92,7 +121,9 @@
             class="choice metric"
             :class="{ active: form.session_duration_min === d }"
             @click="form.session_duration_min = d"
-          >{{ d }}</button>
+          >
+            {{ d }}
+          </button>
         </div>
         <div class="text-dim text-caption q-mb-sm">Jours préférés — optionnel</div>
         <div class="choice-grid cols-7">
@@ -102,14 +133,19 @@
             class="choice small"
             :class="{ active: form.preferred_days.includes(day) }"
             @click="toggleArr(form.preferred_days, day)"
-          >{{ day }}</button>
+          >
+            {{ day }}
+          </button>
         </div>
       </section>
 
       <!-- 4. Matériel (checklist détaillée groupée) -->
       <section v-else-if="step === 4">
         <h2 class="onb-h">Ton matériel</h2>
-        <p class="text-dim q-mb-md">Coche tout ce à quoi tu as accès. On ne propose que des exos réalisables. (Le poids du corps est toujours inclus.)</p>
+        <p class="text-dim q-mb-md">
+          Coche tout ce à quoi tu as accès. On ne propose que des exos réalisables. (Le poids du
+          corps est toujours inclus.)
+        </p>
         <div v-for="grp in EQUIPMENT_GROUPS" :key="grp.group">
           <div class="grp-label">{{ grp.group }}</div>
           <button
@@ -121,7 +157,12 @@
           >
             <div class="row items-center justify-between">
               <div class="choice-title">{{ opt.label }}</div>
-              <q-icon v-if="form.available_equipment.includes(opt.value)" name="check_circle" color="primary" size="22px" />
+              <q-icon
+                v-if="form.available_equipment.includes(opt.value)"
+                name="check_circle"
+                color="primary"
+                size="22px"
+              />
             </div>
             <div v-if="opt.desc" class="choice-desc">{{ opt.desc }}</div>
           </button>
@@ -131,7 +172,9 @@
       <!-- 5. Sports pratiqués -->
       <section v-else-if="step === 5">
         <h2 class="onb-h">Tes autres sports</h2>
-        <p class="text-dim q-mb-md">On allège la muscu sur les muscles déjà sollicités et on renforce l'équilibre. Optionnel.</p>
+        <p class="text-dim q-mb-md">
+          On allège la muscu sur les muscles déjà sollicités et on renforce l'équilibre. Optionnel.
+        </p>
         <div v-for="sp in SPORTS" :key="sp">
           <button
             class="choice choice-row"
@@ -147,20 +190,26 @@
             <div class="text-dim text-caption q-mb-xs">Séances / semaine</div>
             <div class="choice-grid cols-5 q-mb-sm">
               <button
-                v-for="n in [1, 2, 3, 4, 5]" :key="n"
+                v-for="n in [1, 2, 3, 4, 5]"
+                :key="n"
                 class="choice small metric"
                 :class="{ active: sportFreq(sp) === n }"
                 @click="setSportFreq(sp, n)"
-              >{{ n }}</button>
+              >
+                {{ n }}
+              </button>
             </div>
             <div class="text-dim text-caption q-mb-xs">Intensité</div>
             <div class="choice-grid cols-3">
               <button
-                v-for="it in INTENSITIES" :key="it.value"
+                v-for="it in INTENSITIES"
+                :key="it.value"
                 class="choice small"
                 :class="{ active: sportIntensity(sp) === it.value }"
                 @click="setSportIntensity(sp, it.value)"
-              >{{ it.label }}</button>
+              >
+                {{ it.label }}
+              </button>
             </div>
           </div>
         </div>
@@ -169,19 +218,32 @@
       <!-- 6. Contraintes -->
       <section v-else-if="step === 6">
         <h2 class="onb-h">Contraintes</h2>
-        <p class="text-dim q-mb-md">Blessures, zones sensibles, exos à éviter. Tout est optionnel.</p>
+        <p class="text-dim q-mb-md">
+          Blessures, zones sensibles, exos à éviter. Tout est optionnel.
+        </p>
         <q-select
           v-model="form.injuries"
           label="Blessures / zones sensibles"
-          filled use-input use-chips multiple new-value-mode="add-unique"
-          hide-dropdown-icon input-debounce="0" class="q-mb-md"
+          filled
+          use-input
+          use-chips
+          multiple
+          new-value-mode="add-unique"
+          hide-dropdown-icon
+          input-debounce="0"
+          class="q-mb-md"
           hint="Tape puis Entrée pour ajouter"
         />
         <q-select
           v-model="form.avoid_exercises"
           label="Exercices à éviter"
-          filled use-input use-chips multiple new-value-mode="add-unique"
-          hide-dropdown-icon input-debounce="0"
+          filled
+          use-input
+          use-chips
+          multiple
+          new-value-mode="add-unique"
+          hide-dropdown-icon
+          input-debounce="0"
           hint="Tape puis Entrée pour ajouter"
         />
       </section>
@@ -197,25 +259,45 @@
             class="choice small"
             :class="{ active: form.priority_muscles.includes(m) }"
             @click="toggleArr(form.priority_muscles, m)"
-          >{{ m }}</button>
+          >
+            {{ m }}
+          </button>
         </div>
         <div class="text-dim text-caption q-mb-sm">Unités</div>
         <div class="choice-grid cols-2">
-          <button class="choice" :class="{ active: form.units === 'kg' }" @click="form.units = 'kg'">kg</button>
-          <button class="choice" :class="{ active: form.units === 'lb' }" @click="form.units = 'lb'">lb</button>
+          <button
+            class="choice"
+            :class="{ active: form.units === 'kg' }"
+            @click="form.units = 'kg'"
+          >
+            kg
+          </button>
+          <button
+            class="choice"
+            :class="{ active: form.units === 'lb' }"
+            @click="form.units = 'lb'"
+          >
+            lb
+          </button>
         </div>
       </section>
 
       <!-- 8. Programme généré -->
       <section v-else-if="step === 8">
         <h2 class="onb-h">Ton programme</h2>
-        <p class="text-dim q-mb-md">Généré selon ton objectif, ton matériel et tes sports. Tu pourras tout ajuster ensuite.</p>
+        <p class="text-dim q-mb-md">
+          Généré selon ton objectif, ton matériel et tes sports. Tu pourras tout ajuster ensuite.
+        </p>
 
-        <div v-if="splitOptions.length > 1" class="text-dim text-caption q-mb-xs">Découpe ({{ form.sessions_per_week }} séances/sem)</div>
+        <div v-if="splitOptions.length > 1" class="text-dim text-caption q-mb-xs">
+          Découpe ({{ form.sessions_per_week }} séances/sem)
+        </div>
         <div v-if="splitOptions.length > 1" class="q-mb-md">
           <button
-            v-for="o in splitOptions" :key="o.id"
-            class="choice choice-row" :class="{ active: splitId === o.id }"
+            v-for="o in splitOptions"
+            :key="o.id"
+            class="choice choice-row"
+            :class="{ active: splitId === o.id }"
             @click="selectSplit(o.id)"
           >
             <div class="choice-title">{{ o.name }}</div>
@@ -223,7 +305,9 @@
           </button>
         </div>
 
-        <div v-if="generating" class="row flex-center q-pa-lg"><q-spinner color="primary" size="28px" /></div>
+        <div v-if="generating" class="row flex-center q-pa-lg">
+          <q-spinner color="primary" size="28px" />
+        </div>
         <template v-else>
           <div v-if="generated.length === 0" class="empty-prog">
             Aucun exercice ne correspond à ton matériel. Reviens à l'étape Matériel pour en ajouter.
@@ -237,13 +321,26 @@
           >
             <div class="row items-center justify-between">
               <div class="choice-title">{{ s.name }}</div>
-              <q-icon v-if="selectedSessions.has(i)" name="check_circle" color="primary" size="22px" />
+              <q-icon
+                v-if="selectedSessions.has(i)"
+                name="check_circle"
+                color="primary"
+                size="22px"
+              />
             </div>
-            <div class="choice-desc">{{ s.exercises.length }} exercices · ~{{ s.estimated_duration_min }} min · {{ muscleSummary(s) }}</div>
+            <div class="choice-desc">
+              {{ s.exercises.length }} exercices · ~{{ s.estimated_duration_min }} min ·
+              {{ muscleSummary(s) }}
+            </div>
           </button>
           <q-btn
             v-if="generated.length"
-            flat no-caps color="primary" icon="refresh" label="Régénérer" class="q-mt-xs"
+            flat
+            no-caps
+            color="primary"
+            icon="refresh"
+            label="Régénérer"
+            class="q-mt-xs"
             @click="regenerate"
           />
 
@@ -258,17 +355,25 @@
               <q-input
                 v-model="importText"
                 type="textarea"
-                filled autogrow
+                filled
+                autogrow
                 label="Colle ici le JSON d'une séance"
                 :rows="5"
               />
               <q-btn
-                flat no-caps color="primary" label="Valider le JSON" class="q-mt-sm"
+                flat
+                no-caps
+                color="primary"
+                label="Valider le JSON"
+                class="q-mt-sm"
                 :disable="!importText.trim()"
                 @click="tryImport"
               />
               <div v-if="imported" class="imported-ok q-mt-sm">
-                <q-icon name="check_circle" color="positive" /> « {{ imported.name }} » prête ({{ imported.exercises.length }} exos)
+                <q-icon name="check_circle" color="positive" /> « {{ imported.name }} » prête ({{
+                  imported.exercises.length
+                }}
+                exos)
               </div>
             </div>
           </q-expansion-item>
@@ -282,13 +387,21 @@
       <q-space />
       <q-btn
         v-if="step < TOTAL - 1"
-        no-caps color="primary" text-color="dark" label="Continuer" size="lg"
+        no-caps
+        color="primary"
+        text-color="dark"
+        label="Continuer"
+        size="lg"
         :disable="!canProceed"
         @click="next"
       />
       <q-btn
         v-else
-        no-caps color="primary" text-color="dark" label="Démarrer" size="lg"
+        no-caps
+        color="primary"
+        text-color="dark"
+        label="Démarrer"
+        size="lg"
         :loading="saving"
         :disable="!canFinish"
         @click="finish"
@@ -308,8 +421,14 @@ import { splitsFor, defaultSplit, type SplitOption } from '@/data/splits';
 import { validateImportedSession } from '@/lib/coach';
 import { type ProfileForm, emptyProfileForm, formToProfile } from '@/lib/profileForm';
 import {
-  SEXES, LEVELS, OBJECTIVES, EQUIPMENT_GROUPS, DAYS,
-  PRIORITY_MUSCLES as MUSCLES, SPORTS, INTENSITIES,
+  SEXES,
+  LEVELS,
+  OBJECTIVES,
+  EQUIPMENT_GROUPS,
+  DAYS,
+  PRIORITY_MUSCLES as MUSCLES,
+  SPORTS,
+  INTENSITIES,
 } from '@/data/profileOptions';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
@@ -324,7 +443,17 @@ const sessionsStore = useSessionsStore();
 const libraryStore = useLibraryStore();
 
 const TOTAL = 9;
-const STEP_TITLES = ['Identité', 'Niveau', 'Objectif', 'Dispos', 'Matériel', 'Sports', 'Contraintes', 'Préférences', 'Programme'];
+const STEP_TITLES = [
+  'Identité',
+  'Niveau',
+  'Objectif',
+  'Dispos',
+  'Matériel',
+  'Sports',
+  'Contraintes',
+  'Préférences',
+  'Programme',
+];
 
 const step = ref(0);
 const saving = ref(false);
@@ -373,7 +502,10 @@ const imported = ref<Session | null>(null);
 const splitOptions = computed(() => splitsFor(form.sessions_per_week));
 const splitId = ref('');
 function currentSplit(): SplitOption {
-  return splitOptions.value.find((o) => o.id === splitId.value) ?? defaultSplit(form.sessions_per_week, form.level);
+  return (
+    splitOptions.value.find((o) => o.id === splitId.value) ??
+    defaultSplit(form.sessions_per_week, form.level)
+  );
 }
 function selectSplit(id: string) {
   splitId.value = id;
@@ -453,7 +585,10 @@ async function finish() {
 
     await router.push('/');
   } catch (e) {
-    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec de l’enregistrement.' });
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Échec de l’enregistrement.',
+    });
   } finally {
     saving.value = false;
   }
@@ -496,11 +631,21 @@ onMounted(async () => {
   display: grid;
   gap: 10px;
 }
-.cols-2 { grid-template-columns: repeat(2, 1fr); }
-.cols-3 { grid-template-columns: repeat(3, 1fr); }
-.cols-4 { grid-template-columns: repeat(4, 1fr); }
-.cols-5 { grid-template-columns: repeat(5, 1fr); }
-.cols-7 { grid-template-columns: repeat(7, 1fr); }
+.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+.cols-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+.cols-7 {
+  grid-template-columns: repeat(7, 1fr);
+}
 
 .choice {
   width: 100%;
@@ -514,28 +659,73 @@ onMounted(async () => {
   padding: 14px 16px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.12s, background 0.12s;
+  transition:
+    border-color 0.12s,
+    background 0.12s;
   &.active {
     border-color: var(--accent);
     background: var(--surface-2);
   }
-  &.small { min-height: 44px; padding: 10px; text-align: center; font-size: 14px; }
-  &.metric { text-align: center; font-family: var(--font-display); font-size: 20px; font-weight: 600; }
+  &.small {
+    min-height: 44px;
+    padding: 10px;
+    text-align: center;
+    font-size: 14px;
+  }
+  &.metric {
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+  }
 }
-.choice-row { display: block; margin-bottom: 10px; }
-.choice-title { font-weight: 600; font-size: 17px; }
-.choice-desc { color: var(--dim); font-size: 13px; margin-top: 4px; }
-.choice-hint { color: var(--accent); font-family: var(--font-display); font-size: 12px; margin-top: 6px; letter-spacing: 0.3px; }
-.grp-label { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--dim-2); margin: 14px 2px 8px; }
+.choice-row {
+  display: block;
+  margin-bottom: 10px;
+}
+.choice-title {
+  font-weight: 600;
+  font-size: 17px;
+}
+.choice-desc {
+  color: var(--dim);
+  font-size: 13px;
+  margin-top: 4px;
+}
+.choice-hint {
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: 12px;
+  margin-top: 6px;
+  letter-spacing: 0.3px;
+}
+.grp-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--dim-2);
+  margin: 14px 2px 8px;
+}
 
 .import-box {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
 }
-.imported-ok { color: var(--done); font-size: 14px; }
-.sport-cfg { padding: 4px 6px 14px; margin: -4px 0 10px; }
-.empty-prog { color: var(--dim); padding: 20px 4px; font-size: 14px; }
+.imported-ok {
+  color: var(--done);
+  font-size: 14px;
+}
+.sport-cfg {
+  padding: 4px 6px 14px;
+  margin: -4px 0 10px;
+}
+.empty-prog {
+  color: var(--dim);
+  padding: 20px 4px;
+  font-size: 14px;
+}
 
 .onb-nav {
   position: sticky;

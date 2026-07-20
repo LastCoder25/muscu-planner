@@ -4,12 +4,17 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref, computed } from 'vue';
 import type {
-  Session, SessionLog, ExerciseTarget, PerformedSet, LoggedExercise, Difficulty,
+  Session,
+  SessionLog,
+  ExerciseTarget,
+  PerformedSet,
+  LoggedExercise,
+  Difficulty,
 } from '@/lib/types';
 import { SCHEMA_VERSION } from '@/lib/types';
 
 export interface LiveSet {
-  uid: string;        // clé stable (évite les décalages de liste à la suppression)
+  uid: string; // clé stable (évite les décalages de liste à la suppression)
   load_kg: number;
   reps: number;
   done: boolean;
@@ -61,7 +66,10 @@ export const useLiveStore = defineStore('live', () => {
 
   // Démarre (ou reprend) l'exécution d'une session.
   // opts.light = séance allégée (−1 série/exo, plancher 2) ; opts.readiness = forme du jour.
-  function start(session: Session, opts: { resume?: boolean; light?: boolean; readiness?: number } = {}) {
+  function start(
+    session: Session,
+    opts: { resume?: boolean; light?: boolean; readiness?: number } = {},
+  ) {
     const { resume = true, light = false, readiness } = opts;
     if (resume) {
       const saved = localStorage.getItem(keyFor(session.id));
@@ -79,11 +87,21 @@ export const useLiveStore = defineStore('live', () => {
       exercises: session.exercises.map((ex) => {
         // Poids du corps si la cible le dit, ou si l'exo n'utilise pas de charge en kg
         // (poids du corps, élastique/assisté) → charge affichée « PdC », lest optionnel.
-        const bodyweight = ex.target.load === 'bodyweight'
-          || ex.equipment === 'poids_du_corps' || ex.equipment === 'élastique';
+        const bodyweight =
+          ex.target.load === 'bodyweight' ||
+          ex.equipment === 'poids_du_corps' ||
+          ex.equipment === 'élastique';
         const base = bodyweight ? (ex.target.added_kg ?? 0) : (ex.target.load_kg ?? 0);
         const blank = (load: number, reps: number, rest?: number): LiveSet => {
-          const set: LiveSet = { uid: crypto.randomUUID(), load_kg: load, reps, done: false, difficulty: 0, rir: null, comment: '' };
+          const set: LiveSet = {
+            uid: crypto.randomUUID(),
+            load_kg: load,
+            reps,
+            done: false,
+            difficulty: 0,
+            rir: null,
+            comment: '',
+          };
           if (rest) set.rest_seconds = rest;
           return set;
         };
@@ -142,7 +160,14 @@ export const useLiveStore = defineStore('live', () => {
     persist();
   }
 
-  function addExercise(def: { id: string; name: string; muscle_primary?: string; equipment?: string; unit?: string | null; unilateral?: boolean | null }) {
+  function addExercise(def: {
+    id: string;
+    name: string;
+    muscle_primary?: string;
+    equipment?: string;
+    unit?: string | null;
+    unilateral?: boolean | null;
+  }) {
     if (!run.value) return;
     const bodyweight = def.equipment === 'poids_du_corps' || def.equipment === 'élastique';
     const isTime = def.unit === 'time';
@@ -154,11 +179,23 @@ export const useLiveStore = defineStore('live', () => {
       swapped_from: null,
       alternatives: [],
       rest_seconds: isTime ? 60 : 90,
-      planned: isTime ? { sets: 0, reps_min: 0, reps_max: 0, unit: 'time' } : { sets: 0, reps_min: 0, reps_max: 0 },
+      planned: isTime
+        ? { sets: 0, reps_min: 0, reps_max: 0, unit: 'time' }
+        : { sets: 0, reps_min: 0, reps_max: 0 },
       bodyweight,
       unilateral: def.unilateral ?? false,
       // Série créée NON validée : on note la difficulté après l'avoir faite (flux « valider »).
-      sets: [{ uid: crypto.randomUUID(), load_kg: 0, reps: isTime ? 30 : 8, done: false, difficulty: 0, rir: null, comment: '' }],
+      sets: [
+        {
+          uid: crypto.randomUUID(),
+          load_kg: 0,
+          reps: isTime ? 30 : 8,
+          done: false,
+          difficulty: 0,
+          rir: null,
+          comment: '',
+        },
+      ],
       exercise_comment: '',
     });
     persist();
@@ -200,7 +237,12 @@ export const useLiveStore = defineStore('live', () => {
   }
 
   // Remplace l'exo courant en conservant la charge des séries (trace swapped_from).
-  function swapCurrent(target: { id: string; name: string; muscle_primary?: string; equipment?: string }) {
+  function swapCurrent(target: {
+    id: string;
+    name: string;
+    muscle_primary?: string;
+    equipment?: string;
+  }) {
     const ex = current.value;
     if (!ex) return;
     ex.swapped_from = ex.id;
@@ -217,7 +259,10 @@ export const useLiveStore = defineStore('live', () => {
     const r = run.value;
     if (!r) throw new Error('Aucune séance en cours.');
     const ended = new Date();
-    const duration = Math.max(1, Math.round((ended.getTime() - new Date(r.started_at).getTime()) / 60000));
+    const duration = Math.max(
+      1,
+      Math.round((ended.getTime() - new Date(r.started_at).getTime()) / 60000),
+    );
 
     const log: SessionLog = {
       schema_version: SCHEMA_VERSION,
@@ -258,9 +303,21 @@ export const useLiveStore = defineStore('live', () => {
   }
 
   return {
-    run, current, persist, hasSaved, start, clear, discardSaved,
-    startFree, addExercise, removeExercise,
-    goToExercise, addSet, removeSet, swapCurrent, buildLog,
+    run,
+    current,
+    persist,
+    hasSaved,
+    start,
+    clear,
+    discardSaved,
+    startFree,
+    addExercise,
+    removeExercise,
+    goToExercise,
+    addSet,
+    removeSet,
+    swapCurrent,
+    buildLog,
   };
 });
 

@@ -42,7 +42,9 @@ export const useFeedbackStore = defineStore('feedback', () => {
     for (const file of files) {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
       const path = `${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from('feedback').upload(path, file, { contentType: file.type });
+      const { error } = await supabase.storage
+        .from('feedback')
+        .upload(path, file, { contentType: file.type });
       if (error) throw error;
       urls.push(supabase.storage.from('feedback').getPublicUrl(path).data.publicUrl);
     }
@@ -50,7 +52,13 @@ export const useFeedbackStore = defineStore('feedback', () => {
   }
 
   // user_id est rempli par défaut (auth.uid()) côté DB.
-  async function submit(input: { kind: FeedbackKind; message: string; page: string; app_version: string; screenshots?: string[] }) {
+  async function submit(input: {
+    kind: FeedbackKind;
+    message: string;
+    page: string;
+    app_version: string;
+    screenshots?: string[];
+  }) {
     const { error } = await supabase.from('feedback').insert({
       kind: input.kind,
       message: input.message,
@@ -89,7 +97,17 @@ export const useFeedbackStore = defineStore('feedback', () => {
     if (t) t.status = status;
   }
 
-  return { mine, all, openCount, fetchOpenCount, uploadScreenshots, submit, fetchMine, fetchAll, setStatus };
+  return {
+    mine,
+    all,
+    openCount,
+    fetchOpenCount,
+    uploadScreenshots,
+    submit,
+    fetchMine,
+    fetchAll,
+    setStatus,
+  };
 });
 
 if (import.meta.hot) {

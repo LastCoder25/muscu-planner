@@ -2,7 +2,12 @@
 export const SCHEMA_VERSION = '1.0';
 
 export type Level = 'debutant' | 'intermediaire' | 'avance';
-export type Objective = 'force' | 'hypertrophie' | 'endurance' | 'remise_en_forme' | 'perte_de_gras';
+export type Objective =
+  | 'force'
+  | 'hypertrophie'
+  | 'endurance'
+  | 'remise_en_forme'
+  | 'perte_de_gras';
 export type Equipment = 'salle_complete' | 'home_gym' | 'halteres' | 'poids_du_corps';
 export type Progression = 'double' | 'linear' | 'rir' | 'fixed';
 export type Difficulty = 1 | 2 | 3 | 4;
@@ -10,10 +15,16 @@ export type Difficulty = 1 | 2 | 3 | 4;
 // Matériel détaillé (atomes). Un exercice requiert un ENSEMBLE de ces atomes
 // (cf. exercises.equipment_required) ; le poids du corps = ensemble vide.
 export type EquipmentItem =
-  | 'barbell' | 'rack' | 'bench'
-  | 'dumbbells' | 'kettlebell' | 'bands'
-  | 'cable' | 'machine'
-  | 'pullup_bar' | 'dip_station';
+  | 'barbell'
+  | 'rack'
+  | 'bench'
+  | 'dumbbells'
+  | 'kettlebell'
+  | 'bands'
+  | 'cable'
+  | 'machine'
+  | 'pullup_bar'
+  | 'dip_station';
 
 // Sport pratiqué en parallèle (sert à l'équilibrage du volume musculaire).
 export interface SportPractice {
@@ -34,19 +45,23 @@ export interface Profile {
   };
   experience: { level: Level; training_months?: number; known_1rm_kg?: Record<string, number> };
   objective: Objective;
-  availability: { sessions_per_week: number; session_duration_min?: number; preferred_days?: string[] };
-  equipment: Equipment;               // résumé grossier (dérivé de available_equipment)
+  availability: {
+    sessions_per_week: number;
+    session_duration_min?: number;
+    preferred_days?: string[];
+  };
+  equipment: Equipment; // résumé grossier (dérivé de available_equipment)
   available_equipment?: EquipmentItem[]; // matériel détaillé réellement dispo
-  sports?: SportPractice[];           // pratiques sportives en parallèle
-  favorite_exercises?: string[];      // ids d'exos à prioriser si pertinents
-  disliked_exercises?: string[];      // ids d'exos « aimés moins » : évités si une alternative existe (pas exclus)
+  sports?: SportPractice[]; // pratiques sportives en parallèle
+  favorite_exercises?: string[]; // ids d'exos à prioriser si pertinents
+  disliked_exercises?: string[]; // ids d'exos « aimés moins » : évités si une alternative existe (pas exclus)
   constraints?: { injuries?: string[]; avoid_exercises?: string[] };
   preferences?: {
     priority_muscles?: string[];
     units?: 'kg' | 'lb';
     tracking_frequency?: 'day' | 'week' | 'month';
-    tracking_day?: number;   // semaine : 0=dim..6=sam ; mois : 1..28
-    tracking_time?: string;  // « HH:MM » pour le rappel
+    tracking_day?: number; // semaine : 0=dim..6=sam ; mois : 1..28
+    tracking_time?: string; // « HH:MM » pour le rappel
   };
 }
 
@@ -65,12 +80,12 @@ export interface LevelConfig {
 
 export interface ExerciseTarget {
   sets: number;
-  reps_min: number;        // si unit='time', exprimé en SECONDES
-  reps_max: number;        // idem
-  unit?: 'reps' | 'time';  // défaut 'reps' ; 'time' = gainage & co (secondes)
-  load_kg?: number;        // charge classique
-  load?: 'bodyweight';     // poids du corps
-  added_kg?: number;       // lest éventuel
+  reps_min: number; // si unit='time', exprimé en SECONDES
+  reps_max: number; // idem
+  unit?: 'reps' | 'time'; // défaut 'reps' ; 'time' = gainage & co (secondes)
+  load_kg?: number; // charge classique
+  load?: 'bodyweight'; // poids du corps
+  added_kg?: number; // lest éventuel
   rir_target?: number;
 }
 
@@ -84,7 +99,7 @@ export interface PrescribedSet {
 }
 
 export interface PlannedExercise {
-  id: string;              // slug stable
+  id: string; // slug stable
   name: string;
   muscle_primary?: string;
   muscle_secondary?: string[];
@@ -95,7 +110,7 @@ export interface PlannedExercise {
   prescription?: PrescribedSet[]; // séries détaillées (sinon dérivées de target)
   alternatives?: string[];
   notes?: string;
-  unilateral?: boolean;    // travaillé un côté à la fois → « / côté », durée ×2
+  unilateral?: boolean; // travaillé un côté à la fois → « / côté », durée ×2
 }
 
 export interface Session {
@@ -116,8 +131,8 @@ export interface PerformedSet {
   set: number;
   load_kg: number;
   reps: number;
-  difficulty: Difficulty;  // la note 1–4
-  rir?: number;            // optionnel, niveau avancé
+  difficulty: Difficulty; // la note 1–4
+  rir?: number; // optionnel, niveau avancé
   comment?: string;
 }
 
@@ -143,7 +158,7 @@ export interface SessionLog {
   duration_min?: number;
   global_difficulty?: Difficulty;
   global_comment?: string;
-  readiness?: number;        // forme du jour 1–5 (5 = top) — check pré-séance
+  readiness?: number; // forme du jour 1–5 (5 = top) — check pré-séance
   exercises: LoggedExercise[];
 }
 

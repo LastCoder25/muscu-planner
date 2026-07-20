@@ -2,7 +2,9 @@
   <q-page class="login-page flex flex-center">
     <div class="login-card">
       <div class="brand font-display">MUSCU</div>
-      <p class="text-dim q-mb-lg">{{ mode === 'signin' ? 'Connecte-toi pour reprendre.' : 'Crée ton compte pour commencer.' }}</p>
+      <p class="text-dim q-mb-lg">
+        {{ mode === 'signin' ? 'Connecte-toi pour reprendre.' : 'Crée ton compte pour commencer.' }}
+      </p>
 
       <q-form @submit.prevent="submit" class="column q-gutter-md">
         <q-input
@@ -40,7 +42,9 @@
         flat
         no-caps
         class="q-mt-md text-dim"
-        :label="mode === 'signin' ? 'Pas encore de compte ? Inscris-toi' : 'Déjà un compte ? Connecte-toi'"
+        :label="
+          mode === 'signin' ? 'Pas encore de compte ? Inscris-toi' : 'Déjà un compte ? Connecte-toi'
+        "
         @click="toggleMode"
       />
     </div>

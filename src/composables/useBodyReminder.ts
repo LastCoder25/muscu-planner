@@ -4,8 +4,8 @@
 import { onMounted, onBeforeUnmount } from 'vue';
 import { useProfileStore } from '@/stores/profile';
 
-const LAST_ENTRY_KEY = 'muscu:body:lastEntry';   // 'YYYY-MM-DD' de la dernière saisie
-const NOTIFIED_KEY = 'muscu:body:notified';      // 'YYYY-MM-DD' du dernier rappel envoyé
+const LAST_ENTRY_KEY = 'muscu:body:lastEntry'; // 'YYYY-MM-DD' de la dernière saisie
+const NOTIFIED_KEY = 'muscu:body:notified'; // 'YYYY-MM-DD' du dernier rappel envoyé
 
 export function markBodyEntrySaved(date: string) {
   localStorage.setItem(LAST_ENTRY_KEY, date);
@@ -40,8 +40,8 @@ export function useBodyReminder() {
     if (now.getHours() * 60 + now.getMinutes() < (hh ?? 0) * 60 + (mm ?? 0)) return;
 
     const today = todayStr();
-    if (localStorage.getItem(LAST_ENTRY_KEY) === today) return;   // déjà saisi
-    if (localStorage.getItem(NOTIFIED_KEY) === today) return;      // déjà rappelé
+    if (localStorage.getItem(LAST_ENTRY_KEY) === today) return; // déjà saisi
+    if (localStorage.getItem(NOTIFIED_KEY) === today) return; // déjà rappelé
     localStorage.setItem(NOTIFIED_KEY, today);
     new Notification('Suivi corporel', { body: 'C’est l’heure de ta saisie 💪' });
   }

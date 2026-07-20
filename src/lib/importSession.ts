@@ -54,7 +54,13 @@ function normalize(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
 function slugify(name: string): string {
-  return 'ex_' + normalize(name).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'ex_import';
+  return (
+    'ex_' +
+      normalize(name)
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 40) || 'ex_import'
+  );
 }
 
 // "8-12", "8 à 12", "10", "30s", "30 sec" → { min, max, time }
@@ -81,7 +87,8 @@ function findLib(name: string, library: LibEntry[]): LibEntry | undefined {
     let score = 0;
     if (ln === n) score = 100;
     else if (ln.startsWith(n) || n.startsWith(ln)) score = 70 - Math.abs(ln.length - n.length);
-    else if (ln.length >= 4 && (ln.includes(n) || n.includes(ln))) score = 30 - Math.abs(ln.length - n.length) * 0.1;
+    else if (ln.length >= 4 && (ln.includes(n) || n.includes(ln)))
+      score = 30 - Math.abs(ln.length - n.length) * 0.1;
     if (score > bestScore) {
       bestScore = score;
       best = e;
@@ -90,7 +97,12 @@ function findLib(name: string, library: LibEntry[]): LibEntry | undefined {
   return bestScore > 0 ? best : undefined;
 }
 
-function buildSession(name: string, exercises: PlannedExercise[], objective?: unknown, level?: unknown): Session {
+function buildSession(
+  name: string,
+  exercises: PlannedExercise[],
+  objective?: unknown,
+  level?: unknown,
+): Session {
   return {
     schema_version: SCHEMA_VERSION,
     type: 'session',
@@ -124,19 +136,34 @@ export function parseImportedSession(raw: string, library: LibEntry[] = []): Ses
   }
 
   const obj = asRecord(parsed);
-  const exercisesRaw = firstArray(obj, ['exercises', 'exercices', 'workout', 'items', 'mouvements']);
+  const exercisesRaw = firstArray(obj, [
+    'exercises',
+    'exercices',
+    'workout',
+    'items',
+    'mouvements',
+  ]);
   if (exercisesRaw.length === 0) return parseWorkoutText(raw, library);
 
   const exercises: PlannedExercise[] = exercisesRaw.map((rawEx) => {
     const ex = asRecord(rawEx);
-    const name = firstString(ex, ['name', 'exercise', 'exercice', 'nom', 'mouvement']) ?? 'Exercice';
+    const name =
+      firstString(ex, ['name', 'exercise', 'exercice', 'nom', 'mouvement']) ?? 'Exercice';
     const match = findLib(name, library);
 
-    const sets = Math.max(1, Math.round(firstNumber(ex, ['sets', 'series', 'séries', 'nb_series']) ?? 3));
-    const reps = parseReps(ex['reps'] ?? ex['repetitions'] ?? ex['répétitions'] ?? ex['rep_range'] ?? ex['reps_min']);
+    const sets = Math.max(
+      1,
+      Math.round(firstNumber(ex, ['sets', 'series', 'séries', 'nb_series']) ?? 3),
+    );
+    const reps = parseReps(
+      ex['reps'] ?? ex['repetitions'] ?? ex['répétitions'] ?? ex['rep_range'] ?? ex['reps_min'],
+    );
     const loadKg = firstNumber(ex, ['load_kg', 'charge', 'weight', 'kg', 'poids']);
-    const equipStr = firstString(ex, ['equipment', 'materiel', 'matériel']) ?? match?.equipment ?? undefined;
-    const isBodyweight = /poids du corps|bodyweight|pdc|au poids/i.test(`${name} ${equipStr ?? ''}`) || (loadKg === undefined && reps.time);
+    const equipStr =
+      firstString(ex, ['equipment', 'materiel', 'matériel']) ?? match?.equipment ?? undefined;
+    const isBodyweight =
+      /poids du corps|bodyweight|pdc|au poids/i.test(`${name} ${equipStr ?? ''}`) ||
+      (loadKg === undefined && reps.time);
 
     const target: ExerciseTarget = reps.time
       ? { sets, reps_min: reps.min, reps_max: reps.max, unit: 'time', load: 'bodyweight' }
@@ -147,11 +174,14 @@ export function parseImportedSession(raw: string, library: LibEntry[] = []): Ses
     return {
       id: match?.id ?? slugify(name),
       name: match?.name ?? name,
-      muscle_primary: match?.muscle_primary ?? firstString(ex, ['muscle', 'muscle_primary', 'muscle_principal']),
+      muscle_primary:
+        match?.muscle_primary ?? firstString(ex, ['muscle', 'muscle_primary', 'muscle_principal']),
       muscle_secondary: match?.muscle_secondary ?? [],
       equipment: equipStr,
       progression: 'double',
-      rest_seconds: Math.round(firstNumber(ex, ['rest_seconds', 'rest', 'repos']) ?? (reps.time ? 60 : 90)),
+      rest_seconds: Math.round(
+        firstNumber(ex, ['rest_seconds', 'rest', 'repos']) ?? (reps.time ? 60 : 90),
+      ),
       target,
       notes: firstString(ex, ['notes', 'note']) ?? '',
     };
@@ -169,13 +199,14 @@ export function parseImportedSession(raw: string, library: LibEntry[] = []): Ses
 // Reconnaît les en-têtes d'exo (« 🏋️ Squat »), les lignes de série
 // (« 40 kg ×8 — 1 min », « 46 kg ×12 → 1 min 30 », « Bar ×10 ») et les notes (👉 / 🎯…).
 // Séparateur repos tolérant : — – - → > : · • | / (les IA varient beaucoup).
-const SET_RE = /^(?:(\d+(?:[.,]\d+)?)\s*kg|bar\b|barre\b)\s*[x×]\s*(\d+)\s*(?:[—–\-→>:·•|/]+\s*(.+))?$/i;
+const SET_RE =
+  /^(?:(\d+(?:[.,]\d+)?)\s*kg|bar\b|barre\b)\s*[x×]\s*(\d+)\s*(?:[—–\-→>:·•|/]+\s*(.+))?$/i;
 
 function stripLead(line: string): string {
   return line
-    .replace(/^[^\p{L}\p{N}]+/u, '')            // emojis/symboles en tête (🏋️, •, -…)
-    .replace(/^\d+[️⃣.)°]+\s*/u, '')  // énumération « 1️⃣ », « 1. », « 2) »
-    .replace(/^[^\p{L}\p{N}]+/u, '')            // re-nettoyage après l'énumération
+    .replace(/^[^\p{L}\p{N}]+/u, '') // emojis/symboles en tête (🏋️, •, -…)
+    .replace(/^\d+[️⃣.)°]+\s*/u, '') // énumération « 1️⃣ », « 1. », « 2) »
+    .replace(/^[^\p{L}\p{N}]+/u, '') // re-nettoyage après l'énumération
     .trim();
 }
 function restToSec(t: string | undefined): number | undefined {
@@ -192,8 +223,11 @@ function restToSec(t: string | undefined): number | undefined {
   return s || undefined;
 }
 // Série au poids du corps / sans charge : « 8 reps → 2 min », « ×8 — 1 min ».
-const REP_RE = /^(?:[x×]\s*(\d+)|(\d+)\s*(?:reps?|r[ée]p[ée]?titions?|r[ée]ps?)\b)\s*(?:[—–\-→>:·•|/]+\s*(.+))?$/i;
-function parseSetLine(line: string): { load: number; reps: number; rest: number | undefined } | null {
+const REP_RE =
+  /^(?:[x×]\s*(\d+)|(\d+)\s*(?:reps?|r[ée]p[ée]?titions?|r[ée]ps?)\b)\s*(?:[—–\-→>:·•|/]+\s*(.+))?$/i;
+function parseSetLine(
+  line: string,
+): { load: number; reps: number; rest: number | undefined } | null {
   const m = SET_RE.exec(line);
   if (m) {
     const load = m[1] ? Number(m[1].replace(',', '.')) : 0; // « Bar » → 0
@@ -204,7 +238,12 @@ function parseSetLine(line: string): { load: number; reps: number; rest: number 
   return null;
 }
 function isNote(line: string): boolean {
-  if (/^\s*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]*\s*(objectif|priorit|focus|semaine|s[ée]ance|but)\b/iu.test(line)) return true;
+  if (
+    /^\s*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]*\s*(objectif|priorit|focus|semaine|s[ée]ance|but)\b/iu.test(
+      line,
+    )
+  )
+    return true;
   return /^\s*(👉|🎯|✅|⚠️|⚠|📅|🔥|💡)/u.test(line);
 }
 // Sous-bloc « modificateur » d'un exo (mêmes séries, autre protocole) :
@@ -218,11 +257,18 @@ function isModifierBlock(header: string): boolean {
 // « Mobilité »… → ignoré (les séries suivantes gardent le vrai nom d'exo).
 function isSectionLabel(header: string): boolean {
   const n = normalize(header);
-  return /^(travail principal|travail|series? de travail|principal|top set|working ?sets?|montee en charge|activation)$/.test(n)
-    || /^(echauffement|warm.?up|mobilite)\b/.test(n);
+  return (
+    /^(travail principal|travail|series? de travail|principal|top set|working ?sets?|montee en charge|activation)$/.test(
+      n,
+    ) || /^(echauffement|warm.?up|mobilite)\b/.test(n)
+  );
 }
 
-interface TextEx { name: string; sets: { load: number; reps: number; rest: number | undefined }[]; notes: string[] }
+interface TextEx {
+  name: string;
+  sets: { load: number; reps: number; rest: number | undefined }[];
+  notes: string[];
+}
 
 function buildFromText(cur: TextEx, library: LibEntry[]): PlannedExercise {
   const match = findLib(cur.name, library);
@@ -238,9 +284,20 @@ function buildFromText(cur: TextEx, library: LibEntry[]): PlannedExercise {
     return p;
   });
 
-  const target: ExerciseTarget = topLoad > 0
-    ? { sets: cur.sets.length, reps_min: Math.min(...repsArr), reps_max: Math.max(...repsArr), load_kg: topLoad }
-    : { sets: cur.sets.length, reps_min: Math.min(...repsArr), reps_max: Math.max(...repsArr), load: 'bodyweight' };
+  const target: ExerciseTarget =
+    topLoad > 0
+      ? {
+          sets: cur.sets.length,
+          reps_min: Math.min(...repsArr),
+          reps_max: Math.max(...repsArr),
+          load_kg: topLoad,
+        }
+      : {
+          sets: cur.sets.length,
+          reps_min: Math.min(...repsArr),
+          reps_max: Math.max(...repsArr),
+          load: 'bodyweight',
+        };
 
   return {
     id: match?.id ?? slugify(cur.name),
@@ -258,7 +315,10 @@ function buildFromText(cur: TextEx, library: LibEntry[]): PlannedExercise {
 }
 
 export function parseWorkoutText(raw: string, library: LibEntry[] = []): Session {
-  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = raw
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
   if (lines.length === 0) throw new Error('Contenu vide.');
   const title = stripLead(lines[0]!) || 'Séance importée';
 

@@ -21,7 +21,7 @@ export const useSessionsStore = defineStore('sessions', () => {
       .select('id, name, payload, created_at')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    list.value = (data) ?? [];
+    list.value = data ?? [];
     return list.value;
   }
 

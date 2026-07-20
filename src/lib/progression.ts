@@ -2,10 +2,15 @@
 // Entrée : le plan + le dernier bilan (+ historique pour les déloads) + level_config.
 // Sortie : une nouvelle session, mêmes types qu'une séance générée par IA.
 import type {
-  Session, SessionLog, PlannedExercise, LevelConfig, Progression, ExerciseTarget,
+  Session,
+  SessionLog,
+  PlannedExercise,
+  LevelConfig,
+  Progression,
+  ExerciseTarget,
 } from './types';
 
-const COMPOUND_INC = 2.5;   // kg, exos polyarticulaires
+const COMPOUND_INC = 2.5; // kg, exos polyarticulaires
 const ISOLATION_INC = 1.25; // kg, exos d'isolation
 const ISOLATION_HINTS = ['biceps', 'triceps', 'épaule', 'deltoïde', 'mollet', 'avant-bras'];
 
@@ -61,16 +66,17 @@ export function nextSessionDeterministic(
     const failedTwice = failedBelowMin && !!prev && prev.performed.some((s) => s.reps < t.reps_min);
 
     if (scheme === 'linear') {
-      if (failedTwice) applyLoad(t, (l) => round(l * 0.9));        // deload −10 %
-      else if (allHitMin) applyLoad(t, (l) => round(l + inc));     // +charge
+      if (failedTwice)
+        applyLoad(t, (l) => round(l * 0.9)); // deload −10 %
+      else if (allHitMin) applyLoad(t, (l) => round(l + inc)); // +charge
       continue;
     }
 
     // double / rir (autorégulation via la note 1–4)
     if (allHitMax && meanDiff <= 2) {
-      applyLoad(t, (l) => round(l + inc));   // +charge (on repart bas de fourchette à l'exécution)
+      applyLoad(t, (l) => round(l + inc)); // +charge (on repart bas de fourchette à l'exécution)
     } else if (failedTwice) {
-      applyLoad(t, (l) => round(l * 0.95));  // deload léger −5 %
+      applyLoad(t, (l) => round(l * 0.95)); // deload léger −5 %
     }
     // sinon : charge maintenue, la progression se fait en répétitions
   }

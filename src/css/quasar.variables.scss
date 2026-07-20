@@ -14,17 +14,17 @@
 
 // Direction « panneau de contrôle d'équipement ».
 // Source : docs/design-system.md + docs/seance-live-mockup.html.
-$primary   : #FFD23F; // jaune voltage — unique accent fort (action / actif)
-$secondary : #9A8F7E; // texte secondaire / dim
-$accent    : #FFD23F;
+$primary: #ffd23f; // jaune voltage — unique accent fort (action / actif)
+$secondary: #9a8f7e; // texte secondaire / dim
+$accent: #ffd23f;
 
-$dark      : #15120E; // fond graphite chaud
-$dark-page : #15120E;
+$dark: #15120e; // fond graphite chaud
+$dark-page: #15120e;
 
-$positive  : #7BC86C; // validé (série faite)
-$negative  : #FF6A45; // note d'effort 4 (max)
-$info      : #C6D24A;
-$warning   : #FFB23F; // note d'effort 3 (dur)
+$positive: #7bc86c; // validé (série faite)
+$negative: #ff6a45; // note d'effort 4 (max)
+$info: #c6d24a;
+$warning: #ffb23f; // note d'effort 3 (dur)
 
 // Typographie : Oswald (chiffres/titres/timer) + Inter (UI).
-$typography-font-family : 'Inter', '-apple-system', 'Helvetica Neue', sans-serif;
+$typography-font-family: 'Inter', '-apple-system', 'Helvetica Neue', sans-serif;

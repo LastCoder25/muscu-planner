@@ -28,7 +28,9 @@ export const useLibraryStore = defineStore('library', () => {
   async function fetchOne(id: string) {
     const { data, error } = await supabase
       .from('exercises')
-      .select('id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, unilateral, payload')
+      .select(
+        'id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, unilateral, payload',
+      )
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
@@ -38,7 +40,9 @@ export const useLibraryStore = defineStore('library', () => {
   async function fetchAll() {
     const { data, error } = await supabase
       .from('exercises')
-      .select('id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, unilateral, challenge_only');
+      .select(
+        'id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, unilateral, challenge_only',
+      );
     if (error) throw error;
     return (data as ExerciseRow[]) ?? [];
   }
