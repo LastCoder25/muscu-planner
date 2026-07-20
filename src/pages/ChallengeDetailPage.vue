@@ -131,37 +131,12 @@
                 </button>
               </div>
 
-              <div class="custom-row">
-                <q-input
-                  v-model.number="addInput"
-                  type="number"
-                  inputmode="numeric"
-                  filled
-                  dense
-                  :placeholder="correcting ? 'Nb à retirer' : 'Nb'"
-                  class="add-in"
-                />
-                <button
-                  class="add-c"
-                  :class="{ minus: correcting }"
-                  :disabled="!addInput"
-                  @click="addCustom"
-                >
-                  {{ correcting ? 'Retirer' : 'Ajouter' }}
-                </button>
-                <button
-                  class="edit-q"
-                  :class="{ on: editMode }"
-                  aria-label="Gérer les boutons"
-                  @click="editMode = !editMode"
-                >
-                  ⚙
-                </button>
-              </div>
-
               <div class="opts-row">
                 <button class="opt" :class="{ on: correcting }" @click="correcting = !correcting">
                   <q-icon name="backspace" size="15px" /> Correction (−)
+                </button>
+                <button class="opt" :class="{ on: editMode }" @click="editMode = !editMode">
+                  <q-icon name="tune" size="15px" /> Gérer
                 </button>
                 <button v-if="editMode" class="opt" @click="resetQuick">Réinitialiser</button>
               </div>
@@ -242,17 +217,11 @@ function loadQuick(): number[] {
   return [1, 5, 10];
 }
 const quickAdds = ref<number[]>(loadQuick());
-const addInput = ref<number | null>(null);
 const editMode = ref(false); // gérer (ajouter/retirer) les boutons
 const correcting = ref(false); // mode correction : les ajouts deviennent des retraits
 
 function persistQuick() {
   localStorage.setItem(QUICK_KEY, JSON.stringify(quickAdds.value));
-}
-function addCustom() {
-  if (addInput.value && addInput.value > 0)
-    addReps(correcting.value ? -addInput.value : addInput.value);
-  addInput.value = null;
 }
 // Ajoute un bouton « nombre favori » SANS écraser les autres (dédupliqué, trié).
 function addQuickButton() {
