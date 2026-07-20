@@ -486,9 +486,11 @@ function confirmAbandon() {
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Abandonner', color: 'negative' },
   }).onOk(() => {
+    // replace (pas push) : le détail abandonné sort de l'historique → le
+    // retour arrière ne retombe pas dessus.
     store
       .setStatus(id, 'abandoned')
-      .then(() => router.push('/challenges'))
+      .then(() => router.replace('/challenges'))
       .catch(() => undefined);
   });
 }
@@ -499,9 +501,11 @@ function confirmDelete() {
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Supprimer', color: 'negative' },
   }).onOk(() => {
+    // replace (pas push) : le détail supprimé sort de l'historique → pas de
+    // retour arrière vers un challenge inexistant (« Challenge introuvable »).
     store
       .remove(id)
-      .then(() => router.push('/challenges'))
+      .then(() => router.replace('/challenges'))
       .catch(() => undefined);
   });
 }
@@ -518,8 +522,8 @@ onMounted(async () => {
       ch.value = store.list.find((c) => c.id === id) ?? null;
     }
     if (!ch.value) {
-      $q.notify({ type: 'negative', message: 'Challenge introuvable.' });
-      await router.push('/challenges');
+      // Cas normal après suppression : on repart sur la liste sans erreur bruyante.
+      await router.replace('/challenges');
       return;
     }
     maybeCoverByReserve();
