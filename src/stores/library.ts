@@ -12,6 +12,7 @@ export interface ExerciseRow {
   difficulty?: number | null;
   unit?: string | null; // 'reps' (défaut) ou 'time'
   unilateral?: boolean | null; // un côté à la fois
+  challenge_only?: boolean | null; // exo réservé aux défis (exclu du générateur)
 }
 
 export interface ExerciseFull extends ExerciseRow {
@@ -37,7 +38,7 @@ export const useLibraryStore = defineStore('library', () => {
   async function fetchAll() {
     const { data, error } = await supabase
       .from('exercises')
-      .select('id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, unilateral');
+      .select('id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, unilateral, challenge_only');
     if (error) throw error;
     return (data as ExerciseRow[]) ?? [];
   }

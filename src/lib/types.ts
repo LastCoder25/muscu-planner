@@ -75,6 +75,8 @@ export interface ExerciseTarget {
 }
 
 // Série prescrite (charge/reps fixées par série) — ex. pyramide importée.
+/* Challenges : voir src/lib/challenges.ts (tables challenges/achievements, migr. 0012/0013). */
+
 export interface PrescribedSet {
   reps: number;
   load_kg?: number;

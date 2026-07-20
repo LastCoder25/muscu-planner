@@ -22,6 +22,10 @@
                 <q-item-section avatar><q-icon name="bar_chart" /></q-item-section>
                 <q-item-section>Statistiques</q-item-section>
               </q-item>
+              <q-item v-close-popup clickable @click="goChallenges">
+                <q-item-section avatar><q-icon name="emoji_events" /></q-item-section>
+                <q-item-section>Challenges</q-item-section>
+              </q-item>
               <q-item v-close-popup clickable @click="goProfile">
                 <q-item-section avatar><q-icon name="fitness_center" /></q-item-section>
                 <q-item-section>Profil / Réglages</q-item-section>
@@ -87,6 +91,9 @@ async function goBody() {
 }
 async function goStats() {
   await router.push('/stats');
+}
+async function goChallenges() {
+  await router.push('/challenges');
 }
 async function goBacklog() {
   await router.push('/backlog');

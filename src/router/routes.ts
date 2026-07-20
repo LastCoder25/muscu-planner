@@ -41,6 +41,16 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/layouts/BlankLayout.vue'),
     children: [{ path: '', component: () => import('@/pages/ExercisePage.vue') }],
   },
+  {
+    path: '/challenges/new',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/ChallengeNewPage.vue') }],
+  },
+  {
+    path: '/challenges/:id',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/ChallengeDetailPage.vue') }],
+  },
 
   // App authentifiée
   {

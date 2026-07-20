@@ -1,0 +1,259 @@
+// challenges.ts — logique pure des défis (aucune dépendance Vue/Supabase).
+// Calcul des objectifs par jour selon le format, suggestion de difficulté,
+// statistiques (streak/complétion) et évaluation des succès.
+import type { Level } from './types';
+
+export type ChallengeFormat = 'fixed' | 'progressive' | 'pyramid' | 'pyramid_progressive' | 'wave' | 'cumulative';
+export type ChallengeStatus = 'active' | 'done' | 'abandoned';
+
+export interface ChallengeConfig {
+  start: number;
+  increment?: number;
+  peak?: number;
+  cycle_days?: number;
+  deload_pct?: number;   // part gardée le jour de décharge (0.5 = moitié)
+  total?: number;        // objectif cumulé (format 'cumulative')
+  max?: number;          // perf max de l'utilisateur (base du progressif)
+  start_coef?: number;   // J1 = start_coef × MAX (plage 1 → 3.5)
+  inc_pct?: number;      // + inc_pct % de MAX par jour (plage 3 → 15)
+  rest_weekdays?: number[]; // 0=dim … 6=sam
+  reminder_time?: string;   // « HH:MM »
+}
+
+// Progressif basé sur le MAX (cf. formule) : J1 = start_coef × MAX,
+// puis chaque jour + (inc_pct % de MAX), minimum +1.
+export function progressiveDefaults(level: Level): { start_coef: number; inc_pct: number } {
+  return {
+    start_coef: level === 'debutant' ? 1 : level === 'avance' ? 3.5 : 2,
+    inc_pct: level === 'debutant' ? 3 : level === 'avance' ? 15 : 8,
+  };
+}
+export function progressiveApply(max: number, startCoef: number, incPct: number): { start: number; increment: number } {
+  return {
+    start: Math.max(1, Math.round(startCoef * max)),
+    increment: Math.max(1, Math.round((incPct / 100) * max)),
+  };
+}
+
+export interface DayProgress {
+  day: number;       // index 0-based
+  date: string;      // YYYY-MM-DD
+  target: number;    // 0 = jour de repos
+  done: number;
+  elapsed_sec: number;
+  completed: boolean;
+}
+
+export interface Challenge {
+  id: string;
+  exercise_id: string;
+  exercise_name: string;
+  unit: 'reps' | 'time';
+  format: ChallengeFormat;
+  duration_days: number;
+  start_date: string;
+  config: ChallengeConfig;
+  daily_targets: number[];
+  progress: DayProgress[];
+  status: ChallengeStatus;
+}
+
+// ── Dates (sans fuseau : dates « locales » à minuit) ────
+function dayFromIso(iso: string): Date {
+  return new Date(`${iso}T00:00:00`);
+}
+export function addDaysIso(iso: string, d: number): string {
+  const dt = dayFromIso(iso);
+  dt.setDate(dt.getDate() + d);
+  return dt.toISOString().slice(0, 10);
+}
+function diffDays(fromIso: string, toIso: string): number {
+  return Math.round((dayFromIso(toIso).getTime() - dayFromIso(fromIso).getTime()) / 86400000);
+}
+
+function pyramidTarget(d: number, D: number, start: number, peak: number): number {
+  if (D <= 1) return start;
+  const mid = (D - 1) / 2;
+  if (mid <= 0) return start;
+  if (d <= mid) return start + (peak - start) * (d / mid);
+  return peak - (peak - start) * ((d - mid) / (D - 1 - mid));
+}
+
+// Pyramides répétées dont le pic monte à chaque cycle (creux = décharge).
+function pyramidProgressiveTarget(d: number, cfg: ChallengeConfig): number {
+  const cycle = cfg.cycle_days || 7;
+  const c = Math.floor(d / cycle);
+  const p = d % cycle;
+  const peak = (cfg.peak ?? cfg.start * 1.5) + (cfg.increment ?? 0) * c;
+  const mid = (cycle - 1) / 2;
+  if (mid <= 0) return cfg.start;
+  if (p <= mid) return cfg.start + (peak - cfg.start) * (p / mid);
+  return peak - (peak - cfg.start) * ((p - mid) / (cycle - 1 - mid));
+}
+
+function waveTarget(d: number, cfg: ChallengeConfig): number {
+  const cycle = cfg.cycle_days || 7;
+  const deload = cfg.deload_pct ?? 0.5;
+  const inc = cfg.increment || 0;
+  const c = Math.floor(d / cycle);
+  const p = d % cycle;
+  const floor = cfg.start + inc * c;
+  return p === cycle - 1 ? floor * deload : floor;
+}
+
+/** Objectif de chaque jour du défi (0 = repos). Le format « cumulative » n'a pas d'objectif par jour. */
+export function computeDailyTargets(
+  format: ChallengeFormat,
+  cfg: ChallengeConfig,
+  durationDays: number,
+  startDate: string,
+): number[] {
+  const rest = cfg.rest_weekdays ?? [];
+  const out: number[] = [];
+  for (let d = 0; d < durationDays; d++) {
+    if (rest.includes(dayFromIso(addDaysIso(startDate, d)).getDay())) { out.push(0); continue; }
+    let t: number;
+    switch (format) {
+      case 'fixed': t = cfg.start; break;
+      case 'progressive': t = cfg.start + (cfg.increment ?? 0) * d; break;
+      case 'pyramid': t = pyramidTarget(d, durationDays, cfg.start, cfg.peak ?? cfg.start * 2); break;
+      case 'pyramid_progressive': t = pyramidProgressiveTarget(d, cfg); break;
+      case 'wave': t = waveTarget(d, cfg); break;
+      case 'cumulative': t = 0; break;
+      default: t = cfg.start;
+    }
+    out.push(Math.max(0, Math.round(t)));
+  }
+  return out;
+}
+
+// ── Suggestion de difficulté (départ / incrément / pic) ──
+function repsBase(level: Level): number {
+  return level === 'debutant' ? 25 : level === 'avance' ? 70 : 45;
+}
+function secBase(level: Level): number {
+  return level === 'debutant' ? 20 : level === 'avance' ? 60 : 40;
+}
+function incBase(level: Level): number {
+  return level === 'debutant' ? 2 : level === 'avance' ? 5 : 3;
+}
+function exerciseFactor(exerciseId: string): number {
+  const id = exerciseId.toLowerCase();
+  if (/pullup|traction|dips|muscle.?up/.test(id)) return 0.16;           // dur
+  if (/squat|mollet|calf|lunge|fente|crunch|leg_raise|releve|superman|glute|bridge|band/.test(id)) return 1.6; // facile/haut volume
+  return 1;                                                               // moyen (pompes…)
+}
+
+export function suggestConfig(
+  unit: 'reps' | 'time',
+  level: Level,
+  format: ChallengeFormat,
+  durationDays: number,
+  exerciseId: string,
+): ChallengeConfig {
+  const max = unit === 'time'
+    ? secBase(level)
+    : Math.max(3, Math.round(repsBase(level) * exerciseFactor(exerciseId)));
+  const common = {
+    max, cycle_days: 7, deload_pct: 0.5, total: Math.round(max * durationDays * 0.9), rest_weekdays: [] as number[],
+  };
+  if (format === 'progressive') {
+    const { start_coef, inc_pct } = progressiveDefaults(level);
+    const { start, increment } = progressiveApply(max, start_coef, inc_pct);
+    return { ...common, start_coef, inc_pct, start, increment, peak: Math.round(start * 1.8) };
+  }
+  const increment = unit === 'time' ? 5 : Math.max(1, Math.round(incBase(level)));
+  return { ...common, start: max, increment, peak: Math.round(max * 1.8) };
+}
+
+// ── Statistiques d'un défi ──────────────────────────────
+export interface ChallengeStats {
+  dayIndex: number;      // -1 = pas commencé ; >= durationDays = fini
+  todayTarget: number;   // objectif du jour (0 = repos/hors période)
+  todayDone: number;
+  isDoneToday: boolean;
+  streak: number;
+  completionPct: number; // 0..100
+  totalDone: number;
+  activeDays: number;
+  completedDays: number;
+  daysLeft: number;
+}
+
+function progByDay(ch: Challenge): Map<number, DayProgress> {
+  const m = new Map<number, DayProgress>();
+  for (const p of ch.progress) m.set(p.day, p);
+  return m;
+}
+
+export function challengeStats(ch: Challenge, todayIso = new Date().toISOString().slice(0, 10)): ChallengeStats {
+  const D = ch.duration_days;
+  const dayIndex = diffDays(ch.start_date, todayIso);
+  const map = progByDay(ch);
+  const totalDone = ch.progress.reduce((a, p) => a + (p.done || 0), 0);
+  const activeDays = ch.format === 'cumulative' ? D : ch.daily_targets.filter((t) => t > 0).length;
+  const completedDays = ch.progress.filter((p) => p.completed).length;
+
+  const inRange = dayIndex >= 0 && dayIndex < D;
+  const todayTarget = inRange ? (ch.daily_targets[dayIndex] ?? 0) : 0;
+  const todayDone = map.get(dayIndex)?.done ?? 0;
+
+  let isDoneToday: boolean;
+  let completionPct: number;
+  if (ch.format === 'cumulative') {
+    const total = ch.config.total || 1;
+    completionPct = Math.min(100, Math.round((totalDone / total) * 100));
+    isDoneToday = todayDone > 0;
+  } else {
+    completionPct = activeDays ? Math.round((completedDays / activeDays) * 100) : 0;
+    isDoneToday = inRange && (todayTarget === 0 || (map.get(dayIndex)?.completed ?? false));
+  }
+
+  // Streak : jours actifs consécutifs complétés jusqu'à aujourd'hui (les repos ne cassent pas).
+  let streak = 0;
+  for (let d = Math.min(dayIndex, D - 1); d >= 0; d--) {
+    const tgt = ch.daily_targets[d] ?? 0;
+    if (ch.format !== 'cumulative' && tgt === 0) continue; // repos : neutre
+    const p = map.get(d);
+    if (ch.format === 'cumulative') { if ((p?.done ?? 0) > 0) streak++; else break; }
+    else if (p?.completed) streak++;
+    else break;
+  }
+
+  return {
+    dayIndex, todayTarget, todayDone, isDoneToday, streak, completionPct,
+    totalDone, activeDays, completedDays, daysLeft: Math.max(0, D - Math.max(0, dayIndex)),
+  };
+}
+
+/** Un défi est-il terminé (à marquer 'done') ? */
+export function isChallengeComplete(ch: Challenge, todayIso = new Date().toISOString().slice(0, 10)): boolean {
+  if (ch.format === 'cumulative') return ch.progress.reduce((a, p) => a + p.done, 0) >= (ch.config.total || Infinity);
+  return diffDays(ch.start_date, todayIso) >= ch.duration_days - 1
+    && ch.daily_targets.every((t, d) => t === 0 || (ch.progress.find((p) => p.day === d)?.completed ?? false));
+}
+
+// ── Succès (codes ; catalogue statique côté front) ──────
+export function evaluateAchievements(challenges: Challenge[]): string[] {
+  const codes = new Set<string>();
+  const done = challenges.filter((c) => c.status === 'done');
+  const totalReps = challenges.reduce((a, c) => a + c.progress.reduce((b, p) => b + (p.done || 0), 0), 0);
+  const distinctExos = new Set(challenges.map((c) => c.exercise_id)).size;
+  const maxStreak = Math.max(0, ...challenges.map((c) => challengeStats(c).streak));
+
+  if (done.length >= 1) codes.add('first_done');
+  if (done.length >= 5) codes.add('five_done');
+  if (maxStreak >= 7) codes.add('streak_7');
+  if (maxStreak >= 30) codes.add('streak_30');
+  if (totalReps >= 5000) codes.add('reps_5000');
+  if (totalReps >= 20000) codes.add('reps_20000');
+  if (distinctExos >= 3) codes.add('variety_3');
+  for (const c of done) {
+    if (c.duration_days >= 100) codes.add('century');
+    if (c.duration_days >= 30 && c.progress.every((p) => p.target === 0 || p.completed)) codes.add('perfect_month');
+    if (c.format === 'pyramid') codes.add('pyramid_done');
+    if (c.format === 'wave') codes.add('wave_done');
+    if (c.progress.some((p) => p.target > 0 && !p.completed)) codes.add('comeback');
+  }
+  return [...codes];
+}

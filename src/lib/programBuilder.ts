@@ -20,6 +20,7 @@ export interface ExerciseDef {
   difficulty?: number | null;           // 1=débutant, 2=intermédiaire, 3=avancé
   unit?: string | null;                 // 'reps' (défaut) ou 'time' (secondes)
   unilateral?: boolean | null;          // travaillé un côté à la fois (fentes, rowing 1 bras…)
+  challenge_only?: boolean | null;      // réservé aux défis → jamais dans un programme généré
 }
 
 // Groupes musculaires primaires présents dans la bibliothèque.
@@ -176,6 +177,7 @@ function pickForMuscle(
   const base = library.filter(
     (e) =>
       e.muscle_primary === muscle &&
+      !e.challenge_only &&
       !avoidIds.has(e.id) &&
       (e.equipment_required ?? []).every((req) => available.has(req)),
   );
