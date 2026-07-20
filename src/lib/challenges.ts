@@ -6,6 +6,7 @@ import type { Level } from './types';
 export type ChallengeFormat =
   | 'fixed'
   | 'progressive'
+  | 'ramp'
   | 'pyramid'
   | 'pyramid_progressive'
   | 'wave'
@@ -24,6 +25,7 @@ export interface ChallengeConfig {
   inc_pct?: number; // + inc_pct % de MAX par jour (plage 3 → 15)
   rest_weekdays?: number[]; // 0=dim … 6=sam
   reminder_time?: string; // « HH:MM »
+  carry_over?: boolean; // report du surplus/déficit d'un jour sur les suivants
 }
 
 // Progressif basé sur le MAX (cf. formule) : J1 = start_coef × MAX,
@@ -133,6 +135,12 @@ export function computeDailyTargets(
       case 'progressive':
         t = cfg.start + (cfg.increment ?? 0) * d;
         break;
+      case 'ramp': {
+        // Rampe linéaire de min (start) à max (peak) sur la durée.
+        const peak = cfg.peak ?? cfg.start;
+        t = durationDays <= 1 ? peak : cfg.start + (peak - cfg.start) * (d / (durationDays - 1));
+        break;
+      }
       case 'pyramid':
         t = pyramidTarget(d, durationDays, cfg.start, cfg.peak ?? cfg.start * 2);
         break;
@@ -194,8 +202,34 @@ export function suggestConfig(
     const { start, increment } = progressiveApply(max, start_coef, inc_pct);
     return { ...common, start_coef, inc_pct, start, increment, peak: Math.round(start * 1.8) };
   }
+  if (format === 'ramp') {
+    // min ~ 40 % du max, max = perf ; l'utilisateur ajuste ensuite.
+    return { ...common, start: Math.max(1, Math.round(max * 0.4)), peak: max };
+  }
   const increment = unit === 'time' ? 5 : Math.max(1, Math.round(incBase(level)));
   return { ...common, start: max, increment, peak: Math.round(max * 1.8) };
+}
+
+// ── Report réserve/dette ────────────────────────────────
+/** Solde de report avant un jour : Σ (réalisé − objectif de base) sur les jours actifs passés.
+ *  > 0 = réserve (avance), < 0 = dette (retard). */
+export function carryBalance(ch: Challenge, beforeDay: number): number {
+  if (ch.format === 'cumulative' || !ch.config.carry_over) return 0;
+  const map = progByDay(ch);
+  let bal = 0;
+  const end = Math.min(beforeDay, ch.duration_days);
+  for (let d = 0; d < end; d++) {
+    const base = ch.daily_targets[d] ?? 0;
+    if (base === 0) continue;
+    bal += (map.get(d)?.done ?? 0) - base;
+  }
+  return bal;
+}
+/** Objectif effectif d'un jour quand le report est activé (sinon = objectif de base). */
+export function effectiveTarget(ch: Challenge, day: number): number {
+  const base = ch.daily_targets[day] ?? 0;
+  if (base === 0 || ch.format === 'cumulative' || !ch.config.carry_over) return base;
+  return Math.max(0, base - carryBalance(ch, day));
 }
 
 // ── Statistiques d'un défi ──────────────────────────────

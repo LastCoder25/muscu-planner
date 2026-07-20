@@ -127,6 +127,17 @@
           />
         </div>
 
+        <div v-if="format !== 'cumulative'" class="carry q-mb-md">
+          <div class="row items-center" style="gap: 10px">
+            <q-toggle v-model="carryOver" />
+            <span class="lbl" style="margin: 0">Report réserve / dette</span>
+          </div>
+          <div class="carry-note">
+            Si tu fais plus ou moins que l’objectif un jour, l’écart est reporté : ton avance allège
+            les jours suivants, ton retard s’y ajoute.
+          </div>
+        </div>
+
         <!-- Aperçu -->
         <div class="preview">
           <div class="prev-h">Aperçu ({{ unitLabel }})</div>
@@ -210,6 +221,7 @@ const config = ref<ChallengeConfig>({ start: 50 });
 const restDays = ref<number[]>([]);
 const reminderOn = ref(false);
 const reminderTime = ref('18:00');
+const carryOver = ref(false);
 const creating = ref(false);
 
 const level = computed<Level>(() => profileStore.profile?.experience?.level ?? 'intermediaire');
@@ -236,6 +248,10 @@ const filteredLib = computed(() => {
 });
 
 function fieldLabel(f: string) {
+  if (format.value === 'ramp') {
+    if (f === 'start') return 'Min (jour 1)';
+    if (f === 'peak') return 'Max (dernier jour)';
+  }
   return (
     {
       start: 'Départ',
@@ -320,6 +336,7 @@ async function createChallenge() {
   try {
     const cfg: ChallengeConfig = { ...config.value, rest_weekdays: restDays.value };
     if (reminderOn.value) cfg.reminder_time = reminderTime.value;
+    if (carryOver.value && format.value !== 'cumulative') cfg.carry_over = true;
     const daily = computeDailyTargets(format.value, cfg, durationDays.value, startDate);
     const ch = await challenges.create({
       exercise_id: exercise.value.id,
@@ -523,6 +540,18 @@ onMounted(async () => {
   }
 }
 
+.carry {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.carry-note {
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.35;
+  margin-top: 6px;
+}
 .preview {
   background: var(--surface);
   border: 1px solid var(--line-soft);

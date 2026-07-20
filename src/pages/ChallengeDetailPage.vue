@@ -57,6 +57,13 @@
           <div class="today-h">
             Objectif du jour · <b>{{ todayTarget }} {{ unitLabel }}</b>
           </div>
+          <div
+            v-if="carryOn && balance !== 0"
+            class="carry-badge"
+            :class="balance > 0 ? 'ahead' : 'behind'"
+          >
+            {{ balance > 0 ? `Réserve +${balance}` : `Retard −${-balance}` }} {{ unitLabel }}
+          </div>
           <div class="ring-wrap">
             <svg viewBox="0 0 120 120" class="ring">
               <circle class="rbg" cx="60" cy="60" r="52" />
@@ -159,6 +166,8 @@ import {
   challengeStats,
   isChallengeComplete,
   evaluateAchievements,
+  carryBalance,
+  effectiveTarget,
   type Challenge,
   type DayProgress,
 } from '@/lib/challenges';
@@ -244,9 +253,15 @@ const inToday = computed(() => {
   if (d < 0 || d >= ch.value.duration_days) return false;
   return ch.value.format === 'cumulative' || (ch.value.daily_targets[d] ?? 0) > 0;
 });
-const todayTarget = computed(() =>
-  ch.value?.format === 'cumulative' ? (ch.value.config.total ?? 0) : stats.value.todayTarget,
+const carryOn = computed(() => !!ch.value?.config.carry_over && ch.value.format !== 'cumulative');
+const balance = computed(() =>
+  carryOn.value && ch.value ? carryBalance(ch.value, dayIndex.value) : 0,
 );
+const todayTarget = computed(() => {
+  if (!ch.value) return 0;
+  if (ch.value.format === 'cumulative') return ch.value.config.total ?? 0;
+  return carryOn.value ? effectiveTarget(ch.value, dayIndex.value) : stats.value.todayTarget;
+});
 function entryOf(d: number): DayProgress | undefined {
   return ch.value?.progress.find((p) => p.day === d);
 }
@@ -303,9 +318,21 @@ async function persist(status?: 'done') {
   }
 }
 function checkComplete(e: DayProgress) {
-  if (!e.completed && ch.value!.format !== 'cumulative' && e.target > 0 && e.done >= e.target) {
+  // On valide sur l'objectif de BASE > 0 (l'effectif peut tomber à 0 via la réserve).
+  const base = ch.value!.daily_targets[e.day] ?? 0;
+  if (!e.completed && ch.value!.format !== 'cumulative' && base > 0 && e.done >= e.target) {
     e.completed = true;
     $q.notify({ type: 'positive', message: 'Jour validé ✅' });
+  }
+}
+// Report activé : si la réserve couvre déjà le jour (objectif effectif 0), on le valide d'office.
+function maybeCoverByReserve() {
+  if (!carryOn.value || !inToday.value || todayTarget.value !== 0) return;
+  const e = ensureToday();
+  e.target = 0;
+  if (!e.completed) {
+    e.completed = true;
+    void afterChange();
   }
 }
 async function afterChange() {
@@ -422,6 +449,7 @@ onMounted(async () => {
       await router.push('/challenges');
       return;
     }
+    maybeCoverByReserve();
     await store.fetchAchievements();
   } catch (e) {
     $q.notify({
@@ -552,6 +580,23 @@ onBeforeUnmount(() => {
     color: var(--accent);
     font-family: var(--font-display);
   }
+}
+.carry-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-display);
+}
+.carry-badge.ahead {
+  color: var(--d1);
+  background: color-mix(in srgb, var(--d1) 18%, transparent);
+}
+.carry-badge.behind {
+  color: var(--d4);
+  background: color-mix(in srgb, var(--d4) 18%, transparent);
 }
 .ring-wrap {
   position: relative;

@@ -25,6 +25,13 @@ export const CHALLENGE_FORMATS: FormatOption[] = [
     fields: ['max', 'start_coef', 'inc_pct'],
   },
   {
+    id: 'ramp',
+    name: 'Rampe min→max',
+    desc: 'Monte régulièrement de ton min au max sur la durée.',
+    icon: 'north_east',
+    fields: ['start', 'peak'],
+  },
+  {
     id: 'pyramid',
     name: 'Pyramide',
     desc: "Montée jusqu'à un pic au milieu puis redescente.",
