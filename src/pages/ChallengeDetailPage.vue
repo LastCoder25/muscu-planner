@@ -195,6 +195,14 @@
         </button>
       </div>
     </template>
+
+    <ChallengeCelebration
+      :show="celebrate"
+      :challenge="ch"
+      :achievement-codes="celebrateCodes"
+      @close="celebrate = false"
+      @see-success="goSuccess"
+    />
   </q-page>
 </template>
 
@@ -213,8 +221,8 @@ import {
   type DayProgress,
 } from '@/lib/challenges';
 import { formatOption } from '@/data/challengeFormats';
-import { achievementDef } from '@/data/achievements';
 import { useChallengesStore } from '@/stores/challenges';
+import ChallengeCelebration from '@/components/ChallengeCelebration.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -226,6 +234,8 @@ const loading = ref(true);
 const ch = ref<Challenge | null>(null);
 const running = ref(false);
 let tick: ReturnType<typeof setInterval> | undefined;
+const celebrate = ref(false); // animation de fin de challenge
+const celebrateCodes = ref<string[]>([]);
 
 // Boutons d'ajout personnalisables (« nombres favoris ») + saisie directe.
 const QUICK_KEY = 'muscu:challenge:quickadds';
@@ -394,23 +404,21 @@ async function afterChange() {
     status = 'done';
     running.value = false;
     clearInterval(tick);
-    $q.notify({ type: 'positive', message: 'Challenge terminé 🎉' });
   }
   await persist(status);
-  if (status) await unlockAchievements();
-}
-async function unlockAchievements() {
-  try {
-    const fresh = await store.unlock(evaluateAchievements(store.list));
-    for (const code of fresh)
-      $q.notify({
-        type: 'positive',
-        message: `Succès débloqué : ${achievementDef(code)?.title ?? code} 🏆`,
-        timeout: 2500,
-      });
-  } catch {
-    /* silencieux */
+  if (status) {
+    // Succès débloqués → affichés en badges dans l'animation de fin.
+    try {
+      celebrateCodes.value = await store.unlock(evaluateAchievements(store.list));
+    } catch {
+      celebrateCodes.value = [];
+    }
+    celebrate.value = true;
   }
+}
+async function goSuccess() {
+  celebrate.value = false;
+  await router.push('/challenges?tab=ach');
 }
 
 function addReps(n: number) {

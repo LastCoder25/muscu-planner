@@ -42,48 +42,14 @@
           <q-icon name="smart_toy" size="26px" />
           <span>Séance IA</span>
         </button>
-        <button class="tile" @click="goGenerated">
+        <button class="tile" @click="goProgram">
           <q-icon name="fitness_center" size="26px" />
-          <span>Séance générée</span>
+          <span>Mon programme</span>
         </button>
         <button class="tile tile-accent" @click="goChallenges">
           <q-icon name="emoji_events" size="26px" />
           <span>Challenges</span>
         </button>
-      </div>
-
-      <div class="row items-center justify-between q-mb-sm">
-        <h2 class="section-h">Tes séances</h2>
-        <span class="text-dim text-caption">{{ sessionsStore.list.length }}</span>
-      </div>
-
-      <div v-if="sessionsStore.list.length === 0" class="empty">Aucune séance pour l’instant.</div>
-
-      <div
-        v-for="s in sessionsStore.list"
-        :key="s.id"
-        class="session-card"
-        @click="openDetail(s.id)"
-      >
-        <div class="row items-center justify-between">
-          <div>
-            <div class="session-name">{{ s.name }}</div>
-            <div class="session-meta">
-              {{ s.payload.exercises.length }} exercices · ~{{ estimateDurationMin(s.payload) }} min
-            </div>
-          </div>
-          <div class="row items-center no-wrap" style="gap: 4px">
-            <q-icon name="chevron_right" color="grey-6" size="20px" />
-            <q-btn
-              round
-              color="primary"
-              text-color="dark"
-              icon="play_arrow"
-              aria-label="Démarrer"
-              @click.stop="startSession(s.id)"
-            />
-          </div>
-        </div>
       </div>
     </template>
   </q-page>
@@ -97,7 +63,6 @@ import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useLiveStore } from '@/stores/live';
-import { estimateDurationMin } from '@/lib/estimates';
 
 const $q = useQuasar();
 const router = useRouter();
@@ -141,9 +106,6 @@ async function goHistory() {
   await router.push('/history');
 }
 
-async function openDetail(id: string) {
-  await router.push(`/session/${id}/detail`);
-}
 async function startFree() {
   await router.push('/free');
 }
@@ -165,15 +127,11 @@ function discardFree() {
 async function startImport() {
   await router.push('/import');
 }
-async function goGenerated() {
-  const first = sessionsStore.list[0];
-  await router.push(first ? `/session/${first.id}/detail` : '/profile');
+async function goProgram() {
+  await router.push('/program');
 }
 async function goChallenges() {
   await router.push('/challenges');
-}
-async function startSession(id: string) {
-  await router.push(`/session/${id}/ready`);
 }
 </script>
 

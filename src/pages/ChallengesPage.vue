@@ -93,7 +93,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { challengeStats, evaluateAchievements, type Challenge } from '@/lib/challenges';
 import { formatOption } from '@/data/challengeFormats';
@@ -101,6 +101,7 @@ import { ACHIEVEMENTS } from '@/data/achievements';
 import { useChallengesStore } from '@/stores/challenges';
 
 const router = useRouter();
+const route = useRoute();
 const $q = useQuasar();
 const store = useChallengesStore();
 const loading = ref(true);
@@ -111,7 +112,7 @@ const TABS = [
   { value: 'exos', label: 'Exercices' },
   { value: 'ach', label: 'Succès' },
 ];
-const tab = ref('active');
+const tab = ref(TABS.some((t) => t.value === route.query.tab) ? String(route.query.tab) : 'active');
 
 const shown = computed(() =>
   tab.value === 'active'
