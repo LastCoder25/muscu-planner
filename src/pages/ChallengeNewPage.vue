@@ -373,6 +373,7 @@ function fieldLabel(f: string) {
     if (f === 'start') return 'Min (jour 1)';
     if (f === 'peak') return 'Max (dernier jour)';
   }
+  if (format.value === 'progressive' && f === 'start') return 'Départ (reps)';
   return (
     {
       start: 'Départ',
@@ -402,18 +403,19 @@ function cfgDisplay(f: string): number {
   if (f === 'deload_pct') return Math.round((config.value.deload_pct ?? 0.5) * 100);
   return Number((config.value as unknown as Record<string, unknown>)[f] ?? 0);
 }
-function applyProgressive() {
+// Le départ est saisi en reps absolues ; seul l'incrément dérive du % de MAX.
+function applyProgressiveIncrement() {
   const c = config.value;
-  const { start, increment } = progressiveApply(c.max ?? 0, c.start_coef ?? 2, c.inc_pct ?? 8);
-  config.value = { ...c, start, increment };
+  const { increment } = progressiveApply(c.max ?? 0, c.start_coef ?? 1, c.inc_pct ?? 3);
+  config.value = { ...c, increment };
 }
 function setField(f: string, v: unknown) {
   const n = Number(v) || 0;
   if (f === 'deload_pct')
     config.value = { ...config.value, deload_pct: Math.min(1, Math.max(0, n / 100)) };
   else config.value = { ...config.value, [f]: n };
-  if (format.value === 'progressive' && (f === 'max' || f === 'start_coef' || f === 'inc_pct'))
-    applyProgressive();
+  if (format.value === 'progressive' && (f === 'max' || f === 'inc_pct'))
+    applyProgressiveIncrement();
 }
 function reset() {
   if (!exercise.value) return;

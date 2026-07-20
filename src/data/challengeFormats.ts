@@ -20,9 +20,9 @@ export const CHALLENGE_FORMATS: FormatOption[] = [
   {
     id: 'progressive',
     name: 'Progressif',
-    desc: 'Basé sur ton MAX : +3 à 15 % par jour.',
+    desc: 'Départ choisi, +3 à 15 % du MAX par jour.',
     icon: 'trending_up',
-    fields: ['max', 'start_coef', 'inc_pct'],
+    fields: ['max', 'start', 'inc_pct'],
   },
   {
     id: 'ramp',
