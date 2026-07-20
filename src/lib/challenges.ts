@@ -56,6 +56,18 @@ export interface DayProgress {
   done: number;
   elapsed_sec: number;
   completed: boolean;
+  closed?: boolean; // « journée » clôturée par l'utilisateur (session finie)
+}
+
+// « Jour d'entraînement » : bascule à 4 h du matin (local). Les reps faites
+// après minuit (jusqu'à 4 h) comptent encore pour la veille — cf. clôture manuelle.
+export function logicalToday(cutoffHour = 4): string {
+  const now = new Date();
+  now.setHours(now.getHours() - cutoffHour);
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 export interface Challenge {
@@ -260,10 +272,7 @@ function progByDay(ch: Challenge): Map<number, DayProgress> {
   return m;
 }
 
-export function challengeStats(
-  ch: Challenge,
-  todayIso = new Date().toISOString().slice(0, 10),
-): ChallengeStats {
+export function challengeStats(ch: Challenge, todayIso = logicalToday()): ChallengeStats {
   const D = ch.duration_days;
   const dayIndex = diffDays(ch.start_date, todayIso);
   const map = progByDay(ch);
@@ -314,10 +323,7 @@ export function challengeStats(
 }
 
 /** Un défi est-il terminé (à marquer 'done') ? */
-export function isChallengeComplete(
-  ch: Challenge,
-  todayIso = new Date().toISOString().slice(0, 10),
-): boolean {
+export function isChallengeComplete(ch: Challenge, todayIso = logicalToday()): boolean {
   if (ch.format === 'cumulative')
     return ch.progress.reduce((a, p) => a + p.done, 0) >= (ch.config.total || Infinity);
   return (

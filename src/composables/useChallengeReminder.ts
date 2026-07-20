@@ -3,7 +3,7 @@
 // encore validé et que l'heure est passée (une fois/jour/défi).
 import { onMounted, onBeforeUnmount } from 'vue';
 import { useChallengesStore } from '@/stores/challenges';
-import { challengeStats } from '@/lib/challenges';
+import { challengeStats, logicalToday } from '@/lib/challenges';
 
 const NOTIFIED_PREFIX = 'muscu:challenge:notified:'; // + id → 'YYYY-MM-DD'
 
@@ -13,7 +13,7 @@ export function useChallengeReminder() {
 
   function check() {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = logicalToday();
     const now = new Date();
     for (const c of store.list) {
       if (c.status !== 'active') continue;

@@ -81,26 +81,52 @@
               <div class="rn-t">/ {{ todayTarget }}</div>
             </div>
           </div>
-          <div class="chrono">⏱ {{ chronoDisplay }}</div>
-
           <!-- Temps : chrono -->
           <template v-if="isTime">
-            <div v-if="!todayCompleted" class="exec">
-              <button class="cta" @click="toggleChrono">
-                {{ running ? 'Pause' : doneToday > 0 ? 'Reprendre' : 'Démarrer' }}
-              </button>
-            </div>
-            <div v-else class="today-ok">
-              <q-icon name="check_circle" color="positive" /> Objectif du jour atteint ✅
-            </div>
-          </template>
-          <!-- Reps : boutons d'ajout + correction -->
-          <template v-else>
-            <div v-if="todayCompleted && !correcting && !editMode" class="today-ok">
-              <q-icon name="check_circle" color="positive" /> Objectif atteint ✅
-              <button class="corr-link" @click="correcting = true">Corriger</button>
+            <div v-if="dayFinished" class="today-ok">
+              <template v-if="todayCompleted">
+                <q-icon name="check_circle" color="positive" /> Objectif du jour atteint ✅
+              </template>
+              <template v-else>
+                <q-icon name="bedtime" color="primary" /> Journée clôturée · {{ chronoDisplay }}
+              </template>
+              <button v-if="todayClosed" class="corr-link" @click="reopenDay">Reprendre</button>
             </div>
             <div v-else class="exec">
+              <button class="chrono-cta" :class="{ running }" @click="toggleChrono">
+                <q-icon :name="running ? 'pause' : 'play_arrow'" size="20px" />
+                {{ running ? 'Pause' : doneToday > 0 ? 'Reprendre' : 'Démarrer' }}
+                <span class="cc-time">{{ chronoDisplay }}</span>
+              </button>
+              <button class="close-day" @click="closeDay">Clôturer la journée</button>
+            </div>
+          </template>
+
+          <!-- Reps : chrono + boutons + correction -->
+          <template v-else>
+            <div v-if="dayFinished && !correcting && !editMode" class="today-ok">
+              <template v-if="todayCompleted">
+                <q-icon name="check_circle" color="positive" /> Objectif atteint ✅
+              </template>
+              <template v-else>
+                <q-icon name="bedtime" color="primary" /> Journée clôturée · {{ doneToday }}
+                {{ unitLabel }}
+              </template>
+              <button class="corr-link" @click="correcting = true">Corriger</button>
+              <button v-if="todayClosed" class="corr-link" @click="reopenDay">Reprendre</button>
+            </div>
+            <div v-else class="exec">
+              <button
+                v-if="!editMode"
+                class="chrono-cta"
+                :class="{ running }"
+                @click="toggleChrono"
+              >
+                <q-icon :name="running ? 'pause' : 'play_arrow'" size="20px" />
+                {{ running ? 'Pause' : chronoSec > 0 ? 'Reprendre' : 'Démarrer le chrono' }}
+                <span class="cc-time">{{ chronoDisplay }}</span>
+              </button>
+
               <div class="quick-row">
                 <button
                   v-for="q in quickAdds"
@@ -120,15 +146,6 @@
                 >
                   ＋
                 </button>
-                <button
-                  v-else
-                  class="chrono-btn"
-                  :class="{ on: running }"
-                  aria-label="Chrono"
-                  @click="toggleChrono"
-                >
-                  ⏱
-                </button>
               </div>
 
               <div class="opts-row">
@@ -140,6 +157,10 @@
                 </button>
                 <button v-if="editMode" class="opt" @click="resetQuick">Réinitialiser</button>
               </div>
+
+              <button v-if="!editMode" class="close-day" @click="closeDay">
+                Clôturer la journée
+              </button>
             </div>
           </template>
         </div>
@@ -187,6 +208,7 @@ import {
   evaluateAchievements,
   carryBalance,
   effectiveTarget,
+  logicalToday,
   type Challenge,
   type DayProgress,
 } from '@/lib/challenges';
@@ -248,7 +270,7 @@ function resetQuick() {
   persistQuick();
 }
 
-const today = new Date().toISOString().slice(0, 10);
+const today = logicalToday(); // « jour d'entraînement » (bascule à 4 h)
 const isTime = computed(() => ch.value?.unit === 'time');
 const unitLabel = computed(() => (isTime.value ? 'sec' : 'reps'));
 const formatName = computed(() =>
@@ -298,6 +320,8 @@ const todayCompleted = computed(() =>
     ? doneToday.value >= todayTarget.value
     : (entryOf(dayIndex.value)?.completed ?? false),
 );
+const todayClosed = computed(() => entryOf(dayIndex.value)?.closed ?? false);
+const dayFinished = computed(() => todayCompleted.value || todayClosed.value);
 const pct = computed(() =>
   todayTarget.value ? Math.min(1, doneToday.value / todayTarget.value) : 0,
 );
@@ -413,6 +437,20 @@ function toggleChrono() {
     clearInterval(tick);
     void afterChange(); // sauvegarde à la pause
   }
+}
+// Clôture la « journée » : stoppe le chrono et fige la session (même après minuit).
+function closeDay() {
+  if (!inToday.value) return;
+  running.value = false;
+  clearInterval(tick);
+  const e = ensureToday();
+  e.closed = true;
+  void afterChange();
+}
+function reopenDay() {
+  const e = ensureToday();
+  e.closed = false;
+  void persist();
 }
 
 function dayState(d: number): string {
@@ -673,6 +711,50 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.chrono-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  &.running {
+    border-color: var(--accent);
+    background: var(--surface-2);
+    color: var(--accent);
+  }
+  .cc-time {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: var(--dim);
+    font-size: 15px;
+  }
+  &.running .cc-time {
+    color: var(--accent);
+  }
+}
+.close-day {
+  margin-top: 4px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.close-day:active {
+  border-color: var(--accent);
+  color: var(--text);
 }
 .quick-row {
   display: flex;

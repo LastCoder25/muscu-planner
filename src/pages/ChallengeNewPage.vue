@@ -203,6 +203,7 @@ import {
   computeDailyTargets,
   suggestConfig,
   progressiveApply,
+  logicalToday,
   type ChallengeFormat,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -343,7 +344,7 @@ function toggleRest(w: number) {
   else restDays.value.push(w);
 }
 
-const startDate = new Date().toISOString().slice(0, 10);
+const startDate = logicalToday();
 const previewTargets = computed(() =>
   computeDailyTargets(
     format.value,
