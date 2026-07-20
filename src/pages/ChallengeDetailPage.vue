@@ -83,18 +83,45 @@
           </div>
           <div class="chrono">⏱ {{ chronoDisplay }}</div>
 
-          <div v-if="!todayCompleted" class="exec">
-            <template v-if="isTime">
+          <!-- Temps : chrono -->
+          <template v-if="isTime">
+            <div v-if="!todayCompleted" class="exec">
               <button class="cta" @click="toggleChrono">
                 {{ running ? 'Pause' : doneToday > 0 ? 'Reprendre' : 'Démarrer' }}
               </button>
-            </template>
-            <template v-else>
+            </div>
+            <div v-else class="today-ok">
+              <q-icon name="check_circle" color="positive" /> Objectif du jour atteint ✅
+            </div>
+          </template>
+          <!-- Reps : boutons d'ajout + correction -->
+          <template v-else>
+            <div v-if="todayCompleted && !correcting && !editMode" class="today-ok">
+              <q-icon name="check_circle" color="positive" /> Objectif atteint ✅
+              <button class="corr-link" @click="correcting = true">Corriger</button>
+            </div>
+            <div v-else class="exec">
               <div class="quick-row">
-                <button v-for="q in quickAdds" :key="q" class="add" @click="addReps(q)">
-                  +{{ q }}
+                <button
+                  v-for="q in quickAdds"
+                  :key="q"
+                  class="add"
+                  :class="{ editing: editMode, minus: correcting && !editMode }"
+                  @click="editMode ? removeQuick(q) : addReps(correcting ? -q : q)"
+                >
+                  <span v-if="editMode" class="rm">✕ {{ q }}</span>
+                  <template v-else>{{ correcting ? '−' : '+' }}{{ q }}</template>
                 </button>
                 <button
+                  v-if="editMode"
+                  class="add ghost"
+                  aria-label="Ajouter un bouton"
+                  @click="addQuickButton"
+                >
+                  ＋
+                </button>
+                <button
+                  v-else
                   class="chrono-btn"
                   :class="{ on: running }"
                   aria-label="Chrono"
@@ -103,6 +130,7 @@
                   ⏱
                 </button>
               </div>
+
               <div class="custom-row">
                 <q-input
                   v-model.number="addInput"
@@ -110,19 +138,35 @@
                   inputmode="numeric"
                   filled
                   dense
-                  placeholder="Nb"
+                  :placeholder="correcting ? 'Nb à retirer' : 'Nb'"
                   class="add-in"
                 />
-                <button class="add-c" :disabled="!addInput" @click="addCustom">Ajouter</button>
-                <button class="edit-q" aria-label="Personnaliser les boutons" @click="editQuick">
+                <button
+                  class="add-c"
+                  :class="{ minus: correcting }"
+                  :disabled="!addInput"
+                  @click="addCustom"
+                >
+                  {{ correcting ? 'Retirer' : 'Ajouter' }}
+                </button>
+                <button
+                  class="edit-q"
+                  :class="{ on: editMode }"
+                  aria-label="Gérer les boutons"
+                  @click="editMode = !editMode"
+                >
                   ⚙
                 </button>
               </div>
-            </template>
-          </div>
-          <div v-else class="today-ok">
-            <q-icon name="check_circle" color="positive" /> Objectif du jour atteint ✅
-          </div>
+
+              <div class="opts-row">
+                <button class="opt" :class="{ on: correcting }" @click="correcting = !correcting">
+                  <q-icon name="backspace" size="15px" /> Correction (−)
+                </button>
+                <button v-if="editMode" class="opt" @click="resetQuick">Réinitialiser</button>
+              </div>
+            </div>
+          </template>
         </div>
 
         <!-- Graphique cible vs réalisé -->
@@ -199,28 +243,39 @@ function loadQuick(): number[] {
 }
 const quickAdds = ref<number[]>(loadQuick());
 const addInput = ref<number | null>(null);
+const editMode = ref(false); // gérer (ajouter/retirer) les boutons
+const correcting = ref(false); // mode correction : les ajouts deviennent des retraits
+
+function persistQuick() {
+  localStorage.setItem(QUICK_KEY, JSON.stringify(quickAdds.value));
+}
 function addCustom() {
-  if (addInput.value && addInput.value > 0) addReps(addInput.value);
+  if (addInput.value && addInput.value > 0)
+    addReps(correcting.value ? -addInput.value : addInput.value);
   addInput.value = null;
 }
-function editQuick() {
+// Ajoute un bouton « nombre favori » SANS écraser les autres (dédupliqué, trié).
+function addQuickButton() {
   $q.dialog({
-    title: 'Boutons d’ajout',
-    message: 'Nombres séparés par des virgules (ex. 5, 10, 25).',
-    prompt: { model: quickAdds.value.join(', '), type: 'text' },
+    title: 'Nouveau bouton',
+    message: 'Nombre à ajouter d’un tap (ex. 25).',
+    prompt: { model: '', type: 'number' },
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Enregistrer', color: 'primary', textColor: 'dark' },
+    ok: { label: 'Ajouter', color: 'primary', textColor: 'dark' },
   }).onOk((val: string) => {
-    const nums = String(val)
-      .split(/[,\s]+/)
-      .map(Number)
-      .filter((n) => n > 0)
-      .slice(0, 6);
-    if (nums.length) {
-      quickAdds.value = nums;
-      localStorage.setItem(QUICK_KEY, JSON.stringify(nums));
-    }
+    const n = Math.round(Number(val));
+    if (!n || n <= 0 || quickAdds.value.includes(n)) return;
+    quickAdds.value = [...quickAdds.value, n].sort((a, b) => a - b).slice(0, 8);
+    persistQuick();
   });
+}
+function removeQuick(n: number) {
+  quickAdds.value = quickAdds.value.filter((x) => x !== n);
+  persistQuick();
+}
+function resetQuick() {
+  quickAdds.value = [1, 5, 10];
+  persistQuick();
 }
 
 const today = new Date().toISOString().slice(0, 10);
@@ -317,13 +372,15 @@ async function persist(status?: 'done') {
     /* silencieux */
   }
 }
-function checkComplete(e: DayProgress) {
-  // On valide sur l'objectif de BASE > 0 (l'effectif peut tomber à 0 via la réserve).
+// Synchronise l'état « validé » du jour (réversible : une correction peut le repasser à faux).
+// On valide sur l'objectif de BASE > 0 (l'effectif peut tomber à 0 via la réserve).
+function syncComplete(e: DayProgress) {
+  if (ch.value!.format === 'cumulative') return;
   const base = ch.value!.daily_targets[e.day] ?? 0;
-  if (!e.completed && ch.value!.format !== 'cumulative' && base > 0 && e.done >= e.target) {
-    e.completed = true;
-    $q.notify({ type: 'positive', message: 'Jour validé ✅' });
-  }
+  if (base <= 0) return;
+  const was = e.completed;
+  e.completed = e.done >= e.target;
+  if (e.completed && !was) $q.notify({ type: 'positive', message: 'Jour validé ✅' });
 }
 // Report activé : si la réserve couvre déjà le jour (objectif effectif 0), on le valide d'office.
 function maybeCoverByReserve() {
@@ -366,7 +423,7 @@ function addReps(n: number) {
   if (!inToday.value) return;
   const e = ensureToday();
   e.done = Math.max(0, e.done + n);
-  checkComplete(e);
+  syncComplete(e);
   void afterChange();
 }
 function toggleChrono() {
@@ -379,7 +436,7 @@ function toggleChrono() {
       e.elapsed_sec++;
       if (isTime.value) {
         e.done = e.elapsed_sec;
-        checkComplete(e);
+        syncComplete(e);
       }
     }, 1000);
   } else {
@@ -663,6 +720,26 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-size: 18px;
   cursor: pointer;
+  &.minus {
+    border-color: var(--d4);
+    color: var(--d4);
+  }
+  &.editing {
+    border-color: var(--d4);
+    color: var(--d4);
+    border-style: dashed;
+  }
+  &.ghost {
+    border-style: dashed;
+    border-color: var(--dim);
+    color: var(--dim);
+    background: transparent;
+    flex: none;
+    width: 52px;
+  }
+}
+.rm {
+  font-size: 15px;
 }
 .chrono-btn {
   width: 52px;
@@ -696,6 +773,9 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
+  &.minus {
+    background: var(--d4);
+  }
   &:disabled {
     opacity: 0.5;
   }
@@ -710,6 +790,34 @@ onBeforeUnmount(() => {
   font-size: 16px;
   cursor: pointer;
   flex: none;
+  &.on {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+}
+.opts-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  &.on {
+    border-color: var(--d4);
+    color: var(--d4);
+    background: color-mix(in srgb, var(--d4) 14%, transparent);
+  }
 }
 .cta {
   width: 100%;
@@ -722,6 +830,17 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-size: 17px;
   text-transform: uppercase;
+  cursor: pointer;
+}
+.corr-link {
+  margin-left: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
 }
 .today-ok {
