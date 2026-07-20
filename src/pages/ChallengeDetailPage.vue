@@ -84,18 +84,19 @@
               <div class="rn-t">/ {{ todayTarget }}</div>
             </div>
           </div>
-          <!-- Temps : chrono -->
+          <!-- Temps : chrono. Se replie seulement une fois la journée VALIDÉE
+               (todayClosed), pas à l'atteinte de l'objectif → excès possible. -->
           <template v-if="isTime">
-            <div v-if="dayFinished" class="today-ok">
-              <template v-if="todayCompleted">
-                <q-icon name="check_circle" color="positive" /> Objectif du jour atteint ✅
-              </template>
-              <template v-else>
-                <q-icon name="bedtime" color="primary" /> Journée validée · {{ chronoDisplay }}
-              </template>
-              <button v-if="todayClosed" class="corr-link" @click="reopenDay">Reprendre</button>
+            <div v-if="todayClosed" class="today-ok">
+              <q-icon v-if="todayCompleted" name="check_circle" color="positive" />
+              <q-icon v-else name="bedtime" color="primary" />
+              Journée validée · {{ chronoDisplay }}
+              <button class="corr-link" @click="reopenDay">Reprendre</button>
             </div>
             <div v-else class="exec">
+              <div v-if="todayCompleted" class="done-badge">
+                <q-icon name="check_circle" color="positive" size="18px" /> Objectif atteint ✅
+              </div>
               <button class="chrono-cta" :class="{ running }" @click="toggleChrono">
                 <q-icon :name="running ? 'pause' : 'play_arrow'" size="20px" />
                 {{ running ? 'Pause' : doneToday > 0 ? 'Reprendre' : 'Démarrer' }}
@@ -107,18 +108,18 @@
 
           <!-- Reps : chrono + boutons + correction -->
           <template v-else>
-            <div v-if="dayFinished && !correcting && !editMode" class="today-ok">
-              <template v-if="todayCompleted">
-                <q-icon name="check_circle" color="positive" /> Objectif atteint ✅
-              </template>
-              <template v-else>
-                <q-icon name="bedtime" color="primary" /> Journée validée · {{ doneToday }}
-                {{ unitLabel }}
-              </template>
+            <div v-if="todayClosed && !correcting && !editMode" class="today-ok">
+              <q-icon v-if="todayCompleted" name="check_circle" color="positive" />
+              <q-icon v-else name="bedtime" color="primary" />
+              Journée validée · {{ doneToday }} {{ unitLabel }}
               <button class="corr-link" @click="correcting = true">Corriger</button>
-              <button v-if="todayClosed" class="corr-link" @click="reopenDay">Reprendre</button>
+              <button class="corr-link" @click="reopenDay">Reprendre</button>
             </div>
             <div v-else class="exec">
+              <div v-if="todayCompleted && !correcting && !editMode" class="done-badge">
+                <q-icon name="check_circle" color="positive" size="18px" /> Objectif atteint ✅ —
+                continue pour un excès
+              </div>
               <button
                 v-if="!editMode"
                 class="chrono-cta"
@@ -339,7 +340,6 @@ const todayCompleted = computed(() =>
     : (entryOf(dayIndex.value)?.completed ?? false),
 );
 const todayClosed = computed(() => entryOf(dayIndex.value)?.closed ?? false);
-const dayFinished = computed(() => todayCompleted.value || todayClosed.value);
 const pct = computed(() =>
   todayTarget.value ? Math.min(1, doneToday.value / todayTarget.value) : 0,
 );
@@ -769,19 +769,35 @@ onBeforeUnmount(() => {
   }
 }
 .close-day {
-  margin-top: 4px;
-  height: 42px;
-  border-radius: 12px;
-  border: 1px dashed var(--line);
-  background: transparent;
-  color: var(--dim);
-  font-weight: 600;
-  font-size: 13px;
+  margin-top: 8px;
+  height: 50px;
+  border-radius: 14px;
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   cursor: pointer;
 }
 .close-day:active {
-  border-color: var(--accent);
-  color: var(--text);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.done-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--d1) 14%, transparent);
+  color: var(--d1);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
 }
 .quick-row {
   display: flex;
