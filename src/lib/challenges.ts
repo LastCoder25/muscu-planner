@@ -281,20 +281,21 @@ export function challengeRefValue(ch: Challenge): number {
   return Math.max(1, ...ch.daily_targets);
 }
 
-export interface OverSuggestion {
-  streak: number; // nb de jours d'affilée de dépassement
+export interface RecalSuggestion {
+  dir: 'up' | 'down'; // up = trop facile (monter) ; down = trop dur (alléger)
+  streak: number; // nb de jours d'affilée dans le même sens
   refCur: number; // pic actuel
   refNew: number; // pic suggéré
   fromDay: number; // 1er jour à régénérer (demain)
 }
 
-/** Suggère un recalibrage si l'utilisateur dépasse régulièrement l'objectif.
- *  Conditions : défi actif, non cumulé, PAS de report (l'excès y sert de réserve),
- *  ≥ 3 jours actifs consécutifs terminés avec ≥ 15 % de dépassement, et des jours restants. */
-export function overachievementSuggestion(
+/** Suggère un recalibrage si l'utilisateur dépasse OU rate régulièrement l'objectif.
+ *  Conditions : défi actif, non cumulé, PAS de report, ≥ 3 jours actifs consécutifs
+ *  de même sens (≥ 15 % au-dessus = monter, ≤ 15 % en-dessous = alléger), jours restants. */
+export function recalibrationSuggestion(
   ch: Challenge,
   todayIso = logicalToday(),
-): OverSuggestion | null {
+): RecalSuggestion | null {
   if (ch.status !== 'active' || ch.format === 'cumulative' || ch.config.carry_over) return null;
   const dayIndex = diffDays(ch.start_date, todayIso);
   const fromDay = dayIndex + 1; // on régénère demain → aujourd'hui inchangé
@@ -302,6 +303,7 @@ export function overachievementSuggestion(
 
   const map = progByDay(ch);
   const margin = 0.15;
+  let dir: 'up' | 'down' | null = null;
   let streak = 0;
   const ratios: number[] = [];
   for (let d = Math.min(dayIndex, ch.duration_days) - 1; d >= 0; d--) {
@@ -309,18 +311,28 @@ export function overachievementSuggestion(
     if (t === 0) continue; // repos : neutre
     const p = map.get(d);
     const doneD = p?.done ?? 0;
-    if (p?.completed && doneD >= t * (1 + margin)) {
-      streak++;
-      ratios.push(doneD / t);
-    } else break;
+    const over = !!p?.completed && doneD >= t * (1 + margin);
+    const under = doneD <= t * (1 - margin); // inclut les jours non faits (0)
+    const dayDir = over ? 'up' : under ? 'down' : null;
+    if (dayDir === null) break; // dans la cible → fin de série
+    if (dir === null) dir = dayDir;
+    else if (dir !== dayDir) break;
+    streak++;
+    ratios.push(doneD / t);
   }
-  if (streak < 3) return null;
+  if (!dir || streak < 3) return null;
 
   const refCur = challengeRefValue(ch);
-  const avgRatio = ratios.reduce((a, b) => a + b, 0) / ratios.length;
-  const bump = Math.min(1.5, Math.max(1.1, avgRatio)); // +10 % à +50 %
-  const refNew = Math.max(refCur + 1, Math.round(refCur * bump));
-  return { streak, refCur, refNew, fromDay };
+  const avg = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+  let refNew: number;
+  if (dir === 'up') {
+    const bump = Math.min(1.5, Math.max(1.1, avg)); // +10 % à +50 %
+    refNew = Math.max(refCur + 1, Math.round(refCur * bump));
+  } else {
+    const cut = Math.min(0.9, Math.max(0.5, avg)); // −10 % à −50 %
+    refNew = Math.max(1, Math.min(refCur - 1, Math.round(refCur * cut)));
+  }
+  return { dir, streak, refCur, refNew, fromDay };
 }
 
 /** Régénère les objectifs à partir de `fromDay` en visant un nouveau pic `refNew`.

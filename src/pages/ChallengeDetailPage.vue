@@ -42,17 +42,23 @@
           </div>
         </div>
 
-        <!-- Suggestion de recalibrage (dépassement répété) -->
-        <div v-if="showRecal && overSuggest" class="recal">
+        <!-- Suggestion de recalibrage (dépassement OU sous-performance répétés) -->
+        <div v-if="showRecal && recalSuggest" class="recal" :class="recalSuggest.dir">
           <div class="recal-txt">
-            <b>Tu dépasses ton objectif depuis {{ overSuggest.streak }} jours 💪</b>
-            <span
-              >Passer le max de {{ overSuggest.refCur }} à
-              <b>{{ overSuggest.refNew }} {{ unitLabel }}</b> pour les jours restants ?</span
-            >
+            <b v-if="recalSuggest.dir === 'up'">
+              Tu dépasses ton objectif depuis {{ recalSuggest.streak }} jours 💪
+            </b>
+            <b v-else>Tu n’atteins pas ton objectif depuis {{ recalSuggest.streak }} jours</b>
+            <span>
+              {{ recalSuggest.dir === 'up' ? 'Monter' : 'Alléger' }} le max de
+              {{ recalSuggest.refCur }} à <b>{{ recalSuggest.refNew }} {{ unitLabel }}</b> pour les
+              jours restants ?
+            </span>
           </div>
           <div class="recal-actions">
-            <button class="recal-ok" @click="applyRecal(overSuggest.refNew)">Augmenter</button>
+            <button class="recal-ok" @click="applyRecal(recalSuggest.refNew)">
+              {{ recalSuggest.dir === 'up' ? 'Augmenter' : 'Alléger' }}
+            </button>
             <button class="recal-no" @click="dismissRecal">Garder</button>
           </div>
         </div>
@@ -243,7 +249,7 @@ import {
   effectiveTarget,
   logicalToday,
   challengeRefValue,
-  overachievementSuggestion,
+  recalibrationSuggestion,
   rescaleRemaining,
   type Challenge,
   type DayProgress,
@@ -553,14 +559,17 @@ function confirmDelete() {
 // ── Recalibrage de difficulté ──────────────────────────
 const RECAL_KEY = `muscu:challenge:recal-dismiss:${id}`;
 const recalDismissedRef = ref(localStorage.getItem(RECAL_KEY) ?? '');
-const overSuggest = computed(() => (ch.value ? overachievementSuggestion(ch.value, today) : null));
-// Refusé mémorisé par pic courant : si on repart plus haut, on re-propose.
+const recalSuggest = computed(() => (ch.value ? recalibrationSuggestion(ch.value, today) : null));
+// Refusé mémorisé par sens+pic courant : si la situation change, on re-propose.
+function recalKey(s: { dir: string; refCur: number }) {
+  return `${s.dir}:${s.refCur}`;
+}
 const showRecal = computed(
-  () => !!overSuggest.value && recalDismissedRef.value !== String(overSuggest.value.refCur),
+  () => !!recalSuggest.value && recalDismissedRef.value !== recalKey(recalSuggest.value),
 );
 function dismissRecal() {
-  if (!overSuggest.value) return;
-  recalDismissedRef.value = String(overSuggest.value.refCur);
+  if (!recalSuggest.value) return;
+  recalDismissedRef.value = recalKey(recalSuggest.value);
   localStorage.setItem(RECAL_KEY, recalDismissedRef.value);
 }
 async function applyRecal(refNew: number) {
@@ -589,7 +598,7 @@ function editDifficulty() {
   $q.dialog({
     title: 'Ajuster la difficulté',
     message: `${label} — les jours restants sont recalculés à cette échelle.`,
-    prompt: { model: String(overSuggest.value?.refNew ?? cur), type: 'number' },
+    prompt: { model: String(recalSuggest.value?.refNew ?? cur), type: 'number' },
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Appliquer', color: 'primary', textColor: 'dark' },
   }).onOk((val: string) => {
