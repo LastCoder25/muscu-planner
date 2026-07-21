@@ -60,12 +60,11 @@
           <div class="today-h">
             Objectif du jour · <b>{{ todayTarget }} {{ unitLabel }}</b>
           </div>
-          <div
-            v-if="carryOn && balance !== 0"
-            class="carry-badge"
-            :class="balance > 0 ? 'ahead' : 'behind'"
-          >
-            {{ balance > 0 ? `Réserve +${balance}` : `Retard −${-balance}` }} {{ unitLabel }}
+          <div v-if="balance !== 0" class="carry-badge" :class="balance > 0 ? 'ahead' : 'behind'">
+            {{
+              balance > 0 ? `${carryOn ? 'Réserve' : 'Avance'} +${balance}` : `Retard −${-balance}`
+            }}
+            {{ unitLabel }}
           </div>
           <div class="ring-wrap">
             <svg viewBox="0 0 120 120" class="ring">
@@ -218,7 +217,7 @@ import {
   challengeStats,
   isChallengeComplete,
   evaluateAchievements,
-  carryBalance,
+  challengeBalance,
   effectiveTarget,
   logicalToday,
   type Challenge,
@@ -320,9 +319,8 @@ const inToday = computed(() => {
   return ch.value.format === 'cumulative' || (ch.value.daily_targets[d] ?? 0) > 0;
 });
 const carryOn = computed(() => !!ch.value?.config.carry_over && ch.value.format !== 'cumulative');
-const balance = computed(() =>
-  carryOn.value && ch.value ? carryBalance(ch.value, dayIndex.value) : 0,
-);
+// Avance/retard courant (tous défis, pas seulement report activé).
+const balance = computed(() => (ch.value ? challengeBalance(ch.value, today) : 0));
 const todayTarget = computed(() => {
   if (!ch.value) return 0;
   if (ch.value.format === 'cumulative') return ch.value.config.total ?? 0;

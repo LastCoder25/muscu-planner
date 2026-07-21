@@ -55,6 +55,15 @@
             {{ st(c).completionPct }}% · série {{ st(c).streak }} · {{ st(c).totalDone }}
             {{ c.unit === 'time' ? 'sec' : 'reps' }}
           </div>
+          <div
+            v-if="c.status === 'active' && bal(c) !== 0"
+            class="cc-bal"
+            :class="bal(c) > 0 ? 'ahead' : 'behind'"
+          >
+            {{ bal(c) > 0 ? `▲ +${bal(c)}` : `▼ −${-bal(c)}` }}
+            {{ c.unit === 'time' ? 'sec' : 'reps' }}
+            {{ bal(c) > 0 ? "d'avance" : 'de retard' }}
+          </div>
         </button>
       </template>
 
@@ -123,6 +132,7 @@ import { useQuasar } from 'quasar';
 import {
   challengeStats,
   challengeXp,
+  challengeBalance,
   evaluateAchievements,
   type Challenge,
 } from '@/lib/challenges';
@@ -153,6 +163,9 @@ const xpInfo = computed(() => challengeXp(store.list));
 
 function st(c: Challenge) {
   return challengeStats(c);
+}
+function bal(c: Challenge) {
+  return challengeBalance(c);
 }
 function fmtName(f: string) {
   return formatOption(f)?.name ?? f;
@@ -309,6 +322,22 @@ onMounted(async () => {
 .cc-sub {
   font-size: 11.5px;
   color: var(--dim);
+}
+.cc-bal {
+  margin-top: 6px;
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.cc-bal.ahead {
+  color: var(--d1);
+  background: color-mix(in srgb, var(--d1) 16%, transparent);
+}
+.cc-bal.behind {
+  color: var(--d4);
+  background: color-mix(in srgb, var(--d4) 16%, transparent);
 }
 
 .exo-card {

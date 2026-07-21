@@ -252,6 +252,28 @@ export function effectiveTarget(ch: Challenge, day: number): number {
   return Math.max(0, base - carryBalance(ch, day));
 }
 
+/** Avance (>0) / retard (<0) courant vs le plan, TOUS défis (indépendant du report).
+ *  Solde à l'entrée d'aujourd'hui = Σ (réalisé − objectif) sur les jours passés.
+ *  Cumulé : réalisé − part attendue au prorata des jours écoulés. Unité = ch.unit. */
+export function challengeBalance(ch: Challenge, todayIso = logicalToday()): number {
+  const dayIndex = diffDays(ch.start_date, todayIso);
+  if (ch.format === 'cumulative') {
+    const elapsed = Math.min(Math.max(0, dayIndex), ch.duration_days);
+    const expected = Math.round(((ch.config.total || 0) * elapsed) / (ch.duration_days || 1));
+    const doneTotal = ch.progress.reduce((a, p) => a + (p.done || 0), 0);
+    return doneTotal - expected;
+  }
+  const map = progByDay(ch);
+  let bal = 0;
+  const end = Math.min(Math.max(0, dayIndex), ch.duration_days);
+  for (let d = 0; d < end; d++) {
+    const base = ch.daily_targets[d] ?? 0;
+    if (base === 0) continue;
+    bal += (map.get(d)?.done ?? 0) - base;
+  }
+  return bal;
+}
+
 // ── Statistiques d'un défi ──────────────────────────────
 export interface ChallengeStats {
   dayIndex: number; // -1 = pas commencé ; >= durationDays = fini
