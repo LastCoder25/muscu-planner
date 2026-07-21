@@ -75,13 +75,36 @@
 
       <!-- Mur de succès -->
       <template v-else>
+        <!-- Niveau global / XP -->
+        <div class="level-card">
+          <div class="lvl-top">
+            <div class="lvl-badge font-display">Niv. {{ xpInfo.level }}</div>
+            <div class="lvl-title font-display">{{ xpInfo.title }}</div>
+            <div class="lvl-xp">{{ xpInfo.xp.toLocaleString('fr-FR') }} XP</div>
+          </div>
+          <div class="lvl-bar">
+            <div class="lvl-fill" :style="{ width: xpInfo.progressPct + '%' }" />
+          </div>
+          <div class="lvl-next">
+            <template v-if="xpInfo.nextLevelXp !== null">
+              Encore {{ (xpInfo.nextLevelXp - xpInfo.xp).toLocaleString('fr-FR') }} XP → niveau
+              {{ xpInfo.level + 1 }}
+            </template>
+            <template v-else>Niveau max atteint 🏆</template>
+          </div>
+        </div>
+
+        <div class="ach-count">
+          {{ unlockedCount }} / {{ ACHIEVEMENTS.length }} succès débloqués
+        </div>
         <div class="ach-grid">
           <div
             v-for="a in ACHIEVEMENTS"
             :key="a.code"
             class="ach"
-            :class="{ on: unlocked.has(a.code) }"
+            :class="['r-' + a.rarity, { on: unlocked.has(a.code) }]"
           >
+            <span class="ach-rarity">{{ RARITY_LABEL[a.rarity] }}</span>
             <q-icon :name="a.icon" size="26px" />
             <div class="ach-t">{{ a.title }}</div>
             <div class="ach-d">{{ a.desc }}</div>
@@ -97,9 +120,14 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
-import { challengeStats, evaluateAchievements, type Challenge } from '@/lib/challenges';
+import {
+  challengeStats,
+  challengeXp,
+  evaluateAchievements,
+  type Challenge,
+} from '@/lib/challenges';
 import { formatOption } from '@/data/challengeFormats';
-import { ACHIEVEMENTS } from '@/data/achievements';
+import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { useChallengesStore } from '@/stores/challenges';
 
 const router = useRouter();
@@ -120,6 +148,8 @@ const tab = ref(TABS.some((t) => t.value === route.query.tab) ? String(route.que
 const LIST_TABS = ['active', 'done', 'abandoned'];
 const shown = computed(() => store.list.filter((c) => c.status === tab.value));
 const unlocked = computed(() => new Set(store.unlocked));
+const unlockedCount = computed(() => ACHIEVEMENTS.filter((a) => unlocked.value.has(a.code)).length);
+const xpInfo = computed(() => challengeXp(store.list));
 
 function st(c: Challenge) {
   return challengeStats(c);
@@ -322,22 +352,52 @@ onMounted(async () => {
   gap: 10px;
 }
 .ach {
+  --rar: var(--dim);
   position: relative;
   text-align: center;
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: 14px;
-  padding: 16px 10px;
+  padding: 22px 10px 16px;
   color: var(--dim-2);
   opacity: 0.6;
+}
+.ach.r-common {
+  --rar: var(--dim);
+}
+.ach.r-rare {
+  --rar: #5aa9e6;
+}
+.ach.r-epic {
+  --rar: #b57bff;
+}
+.ach.r-legendary {
+  --rar: var(--accent);
 }
 .ach.on {
   opacity: 1;
   color: var(--text);
-  border-color: var(--accent);
+  border-color: var(--rar);
+}
+.ach.on.r-legendary {
+  box-shadow: 0 0 18px rgba(255, 210, 63, 0.22);
 }
 .ach.on .q-icon {
-  color: var(--accent);
+  color: var(--rar);
+}
+.ach-rarity {
+  position: absolute;
+  top: 7px;
+  left: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--rar);
+  opacity: 0.9;
+}
+.ach:not(.on) .ach-rarity {
+  opacity: 0.5;
 }
 .ach-t {
   font-weight: 700;
@@ -355,5 +415,60 @@ onMounted(async () => {
   top: 8px;
   right: 8px;
   color: var(--dim-2);
+}
+.ach-count {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 4px 2px 10px;
+}
+
+/* Niveau global / XP */
+.level-card {
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.lvl-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.lvl-badge {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.lvl-title {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.lvl-xp {
+  font-size: 13px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.lvl-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  margin: 10px 0 6px;
+}
+.lvl-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.lvl-next {
+  font-size: 11.5px;
+  color: var(--dim);
 }
 </style>

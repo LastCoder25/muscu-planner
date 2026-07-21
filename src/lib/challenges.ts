@@ -335,30 +335,101 @@ export function isChallengeComplete(ch: Challenge, todayIso = logicalToday()): b
 }
 
 // ── Succès (codes ; catalogue statique côté front) ──────
+const ALL_FORMATS: ChallengeFormat[] = [
+  'fixed',
+  'progressive',
+  'ramp',
+  'pyramid',
+  'pyramid_progressive',
+  'wave',
+  'cumulative',
+];
+
 export function evaluateAchievements(challenges: Challenge[]): string[] {
   const codes = new Set<string>();
   const done = challenges.filter((c) => c.status === 'done');
+  const abandoned = challenges.filter((c) => c.status === 'abandoned');
   const totalReps = challenges.reduce(
     (a, c) => a + c.progress.reduce((b, p) => b + (p.done || 0), 0),
     0,
   );
   const distinctExos = new Set(challenges.map((c) => c.exercise_id)).size;
   const maxStreak = Math.max(0, ...challenges.map((c) => challengeStats(c).streak));
-
   const activeCount = challenges.filter((c) => c.status === 'active').length;
 
-  if (done.length >= 1) codes.add('first_done');
-  if (done.length >= 5) codes.add('five_done');
-  if (done.length >= 10) codes.add('ten_done');
-  if (maxStreak >= 7) codes.add('streak_7');
-  if (maxStreak >= 30) codes.add('streak_30');
-  if (maxStreak >= 100) codes.add('streak_100');
+  // Refaire : nb max de défis TERMINÉS sur un même exercice.
+  const doneByExo = new Map<string, number>();
+  for (const c of done) doneByExo.set(c.exercise_id, (doneByExo.get(c.exercise_id) ?? 0) + 1);
+  const maxRepeatExo = Math.max(0, ...doneByExo.values());
+
+  // Dépassement : record perso battu (défi terminé plus dur qu'un précédent, même exo).
+  const peaksByExo = new Map<string, { date: string; peak: number }[]>();
+  for (const c of done) {
+    const peak = Math.max(0, ...c.daily_targets);
+    const arr = peaksByExo.get(c.exercise_id) ?? [];
+    arr.push({ date: c.start_date, peak });
+    peaksByExo.set(c.exercise_id, arr);
+  }
+  let beatRecord = false;
+  for (const arr of peaksByExo.values()) {
+    arr.sort((a, b) => a.date.localeCompare(b.date));
+    let maxBefore = 0;
+    for (const { peak } of arr) {
+      if (maxBefore > 0 && peak > maxBefore) beatRecord = true;
+      maxBefore = Math.max(maxBefore, peak);
+    }
+  }
+
+  const doneFormats = new Set(done.map((c) => c.format));
+  const allFormatsDone = ALL_FORMATS.every((f) => doneFormats.has(f));
+
+  // Dépassement / cachés : au niveau d'un jour réalisé.
+  let bullseye = false; // done === cible exactement
+  let surrégime = false; // ≥ 2× la cible
+  let bigDay = false; // ≥ 200 sur une journée
+  for (const c of challenges) {
+    for (const p of c.progress) {
+      if (p.target > 0 && p.completed && p.done === p.target) bullseye = true;
+      if (p.target > 0 && p.done >= p.target * 2) surrégime = true;
+      if ((p.done || 0) >= 200) bigDay = true;
+    }
+  }
+
+  // Paliers reps
+  if (totalReps >= 1000) codes.add('reps_1000');
   if (totalReps >= 5000) codes.add('reps_5000');
   if (totalReps >= 20000) codes.add('reps_20000');
   if (totalReps >= 50000) codes.add('reps_50000');
+  if (totalReps >= 100000) codes.add('reps_100000');
+  // Paliers série
+  if (maxStreak >= 3) codes.add('streak_3');
+  if (maxStreak >= 7) codes.add('streak_7');
+  if (maxStreak >= 30) codes.add('streak_30');
+  if (maxStreak >= 100) codes.add('streak_100');
+  if (maxStreak >= 365) codes.add('streak_365');
+  // Paliers défis terminés
+  if (done.length >= 1) codes.add('first_done');
+  if (done.length >= 5) codes.add('five_done');
+  if (done.length >= 10) codes.add('ten_done');
+  if (done.length >= 25) codes.add('done_25');
+  if (done.length >= 50) codes.add('done_50');
+  // Refaire / régularité
+  if (maxRepeatExo >= 3) codes.add('repeat_3');
+  if (maxRepeatExo >= 5) codes.add('repeat_5');
+  if (maxRepeatExo >= 10) codes.add('repeat_10');
+  if (done.length >= 1 && abandoned.length >= 1) codes.add('phoenix');
+  // Variété
   if (distinctExos >= 3) codes.add('variety_3');
   if (distinctExos >= 5) codes.add('variety_5');
+  if (distinctExos >= 8) codes.add('variety_8');
+  if (allFormatsDone) codes.add('all_formats');
   if (activeCount >= 3) codes.add('multi_active');
+  // Dépassement / cachés
+  if (beatRecord) codes.add('beat_record');
+  if (bullseye) codes.add('bullseye');
+  if (surrégime) codes.add('surregime');
+  if (bigDay) codes.add('big_day');
+
   for (const c of done) {
     const perfect = c.progress.every((p) => p.target === 0 || p.completed);
     if (c.duration_days >= 100) codes.add('century');
@@ -374,4 +445,59 @@ export function evaluateAchievements(challenges: Challenge[]): string[] {
     if (c.progress.some((p) => p.target > 0 && !p.completed)) codes.add('comeback');
   }
   return [...codes];
+}
+
+// ── Niveau global / XP (moteur « la barre avance toujours ») ──
+export interface ChallengeLevel {
+  xp: number;
+  level: number; // 1-based
+  title: string;
+  levelBaseXp: number; // XP au début du niveau courant
+  nextLevelXp: number | null; // XP requis pour le niveau suivant (null = max)
+  progressPct: number; // 0..100 dans le niveau courant
+}
+
+const LEVEL_BANDS: { min: number; title: string }[] = [
+  { min: 0, title: 'Débutant' },
+  { min: 500, title: 'Initié' },
+  { min: 1500, title: 'Habitué' },
+  { min: 3500, title: 'Confirmé' },
+  { min: 7000, title: 'Athlète' },
+  { min: 12000, title: 'Vétéran' },
+  { min: 20000, title: 'Élite' },
+  { min: 35000, title: 'Maître' },
+  { min: 60000, title: 'Champion' },
+  { min: 100000, title: 'Légende' },
+];
+
+/** XP = reps cumulées + 25/jour validé + 250/défi terminé. */
+export function challengeXp(challenges: Challenge[]): ChallengeLevel {
+  const totalReps = challenges.reduce(
+    (a, c) => a + c.progress.reduce((b, p) => b + (p.done || 0), 0),
+    0,
+  );
+  const completedDays = challenges.reduce(
+    (a, c) => a + c.progress.filter((p) => p.completed).length,
+    0,
+  );
+  const doneChallenges = challenges.filter((c) => c.status === 'done').length;
+  const xp = Math.round(totalReps + completedDays * 25 + doneChallenges * 250);
+
+  let idx = 0;
+  for (let i = 0; i < LEVEL_BANDS.length; i++) {
+    if (xp >= LEVEL_BANDS[i]!.min) idx = i;
+  }
+  const band = LEVEL_BANDS[idx]!;
+  const next = LEVEL_BANDS[idx + 1] ?? null;
+  const progressPct = next
+    ? Math.min(100, Math.round(((xp - band.min) / (next.min - band.min)) * 100))
+    : 100;
+  return {
+    xp,
+    level: idx + 1,
+    title: band.title,
+    levelBaseXp: band.min,
+    nextLevelXp: next ? next.min : null,
+    progressPct,
+  };
 }

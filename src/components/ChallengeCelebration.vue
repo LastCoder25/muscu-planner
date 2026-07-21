@@ -41,10 +41,12 @@
             v-for="(b, i) in badges"
             :key="b.code"
             class="cc-badge"
+            :class="'r-' + b.rarity"
             :style="{ animationDelay: 1 + i * 0.18 + 's' }"
           >
-            <span class="cc-badge-ic">{{ b.icon }}</span>
+            <q-icon :name="b.icon" size="20px" class="cc-badge-ic" />
             <span class="cc-badge-tx">{{ b.title }}</span>
+            <span class="cc-badge-rar">{{ RARITY_LABEL[b.rarity] }}</span>
           </div>
         </div>
 
@@ -60,7 +62,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { challengeStats, type Challenge } from '@/lib/challenges';
-import { achievementDef } from '@/data/achievements';
+import { achievementDef, RARITY_LABEL } from '@/data/achievements';
 
 const props = defineProps<{
   show: boolean;
@@ -317,16 +319,40 @@ watch(
   gap: 8px;
 }
 .cc-badge {
+  --rar: var(--accent);
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
   border-radius: 12px;
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid var(--rar);
+  background: color-mix(in srgb, var(--rar) 12%, transparent);
   opacity: 0;
   transform: translateY(8px);
   animation: cc-badge 0.45s ease-out both;
+}
+.cc-badge.r-common {
+  --rar: var(--dim);
+}
+.cc-badge.r-rare {
+  --rar: #5aa9e6;
+}
+.cc-badge.r-epic {
+  --rar: #b57bff;
+}
+.cc-badge.r-legendary {
+  --rar: var(--accent);
+}
+.cc-badge .cc-badge-ic {
+  color: var(--rar);
+}
+.cc-badge-rar {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--rar);
 }
 @keyframes cc-badge {
   0% {
