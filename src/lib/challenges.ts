@@ -560,23 +560,25 @@ export function evaluateAchievements(challenges: Challenge[]): string[] {
 export interface ChallengeLevel {
   xp: number;
   level: number; // 1-based
-  title: string;
+  title: string; // rang courant (F … SSS)
+  nextTitle: string | null; // rang suivant (null = max)
   levelBaseXp: number; // XP au début du niveau courant
   nextLevelXp: number | null; // XP requis pour le niveau suivant (null = max)
   progressPct: number; // 0..100 dans le niveau courant
 }
 
+// Rangs façon manga (F → SSS) sur une courbe ~géométrique : début rapide
+// (accroche), sommet (SSS) réservé au très long terme.
 const LEVEL_BANDS: { min: number; title: string }[] = [
-  { min: 0, title: 'Débutant' },
-  { min: 500, title: 'Initié' },
-  { min: 1500, title: 'Habitué' },
-  { min: 3500, title: 'Confirmé' },
-  { min: 7000, title: 'Athlète' },
-  { min: 12000, title: 'Vétéran' },
-  { min: 20000, title: 'Élite' },
-  { min: 35000, title: 'Maître' },
-  { min: 60000, title: 'Champion' },
-  { min: 100000, title: 'Légende' },
+  { min: 0, title: 'F' },
+  { min: 500, title: 'E' },
+  { min: 1500, title: 'D' },
+  { min: 4000, title: 'C' },
+  { min: 10000, title: 'B' },
+  { min: 25000, title: 'A' },
+  { min: 60000, title: 'S' },
+  { min: 150000, title: 'SS' },
+  { min: 400000, title: 'SSS' },
 ];
 
 /** « Effort planifié » d'un défi (unité-neutre) : total des objectifs, le TEMPS
@@ -621,6 +623,7 @@ export function challengeXp(challenges: Challenge[]): ChallengeLevel {
     xp,
     level: idx + 1,
     title: band.title,
+    nextTitle: next ? next.title : null,
     levelBaseXp: band.min,
     nextLevelXp: next ? next.min : null,
     progressPct,

@@ -84,22 +84,24 @@
 
       <!-- Mur de succès -->
       <template v-else>
-        <!-- Niveau global / XP -->
-        <div class="level-card">
+        <!-- Rang global / XP -->
+        <div class="level-card" :class="'rank-' + xpInfo.title.toLowerCase()">
           <div class="lvl-top">
-            <div class="lvl-badge font-display">Niv. {{ xpInfo.level }}</div>
-            <div class="lvl-title font-display">{{ xpInfo.title }}</div>
-            <div class="lvl-xp">{{ xpInfo.xp.toLocaleString('fr-FR') }} XP</div>
+            <div class="rank-badge font-display">{{ xpInfo.title }}</div>
+            <div class="rank-info">
+              <div class="rank-label font-display">Rang {{ xpInfo.title }}</div>
+              <div class="lvl-xp">{{ xpInfo.xp.toLocaleString('fr-FR') }} XP</div>
+            </div>
           </div>
           <div class="lvl-bar">
             <div class="lvl-fill" :style="{ width: xpInfo.progressPct + '%' }" />
           </div>
           <div class="lvl-next">
-            <template v-if="xpInfo.nextLevelXp !== null">
-              Encore {{ (xpInfo.nextLevelXp - xpInfo.xp).toLocaleString('fr-FR') }} XP → niveau
-              {{ xpInfo.level + 1 }}
+            <template v-if="xpInfo.nextTitle">
+              Encore {{ ((xpInfo.nextLevelXp || 0) - xpInfo.xp).toLocaleString('fr-FR') }} XP → rang
+              <b>{{ xpInfo.nextTitle }}</b>
             </template>
-            <template v-else>Niveau max atteint 🏆</template>
+            <template v-else>Rang maximum atteint 🏆</template>
           </div>
         </div>
 
@@ -451,26 +453,67 @@ onMounted(async () => {
   margin: 4px 2px 10px;
 }
 
-/* Niveau global / XP */
+/* Rang global / XP (F → SSS) */
 .level-card {
+  --rank: var(--dim);
   background: var(--surface-2);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--rank);
   border-radius: 16px;
   padding: 14px 16px;
   margin-bottom: 14px;
 }
+.level-card.rank-f {
+  --rank: #8a8a8a;
+}
+.level-card.rank-e {
+  --rank: #7bc86c;
+}
+.level-card.rank-d {
+  --rank: #4db6ac;
+}
+.level-card.rank-c {
+  --rank: #5aa9e6;
+}
+.level-card.rank-b {
+  --rank: #b57bff;
+}
+.level-card.rank-a {
+  --rank: #ffb23f;
+}
+.level-card.rank-s {
+  --rank: #ff6a45;
+}
+.level-card.rank-ss {
+  --rank: #ffd23f;
+}
+.level-card.rank-sss {
+  --rank: #ffd23f;
+  box-shadow: 0 0 24px rgba(255, 210, 63, 0.3);
+}
 .lvl-top {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
 }
-.lvl-badge {
-  font-size: 16px;
+.rank-badge {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 2px solid var(--rank);
+  background: color-mix(in srgb, var(--rank) 18%, transparent);
+  color: var(--rank);
+  font-size: 24px;
   font-weight: 700;
-  color: var(--accent);
+  letter-spacing: 0.5px;
 }
-.lvl-title {
+.rank-info {
   flex: 1;
+  min-width: 0;
+}
+.rank-label {
   font-size: 18px;
   font-weight: 700;
   color: var(--text);
@@ -481,6 +524,7 @@ onMounted(async () => {
   font-size: 13px;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
+  margin-top: 2px;
 }
 .lvl-bar {
   height: 8px;
@@ -488,16 +532,19 @@ onMounted(async () => {
   background: var(--surface);
   border: 1px solid var(--line);
   overflow: hidden;
-  margin: 10px 0 6px;
+  margin: 12px 0 6px;
 }
 .lvl-fill {
   height: 100%;
-  background: var(--accent);
+  background: var(--rank);
   border-radius: 999px;
   transition: width 0.4s ease;
 }
 .lvl-next {
   font-size: 11.5px;
   color: var(--dim);
+  b {
+    color: var(--rank);
+  }
 }
 </style>
