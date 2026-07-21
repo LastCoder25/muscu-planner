@@ -15,18 +15,28 @@ export const useLogsStore = defineStore('logs', () => {
   const recent = ref<LogRow[]>([]);
   const all = ref<LogRow[]>([]); // tous les bilans (pour l'XP / niveau d'athlète)
   const allLoaded = ref(false);
+  let allPromise: Promise<LogRow[]> | null = null;
 
-  // Tous les bilans de l'utilisateur (RLS own). Chargé à la demande, mis en cache.
+  // Tous les bilans de l'utilisateur (RLS own). Chargé à la demande, mis en cache
+  // + dédup des appels concurrents (deux composables l'appellent au démarrage).
   async function fetchAll(force = false) {
     if (allLoaded.value && !force) return all.value;
-    const { data, error } = await supabase
-      .from('session_logs')
-      .select('id, name, performed_at, payload')
-      .order('performed_at', { ascending: false });
-    if (error) throw error;
-    all.value = data ?? [];
-    allLoaded.value = true;
-    return all.value;
+    if (allPromise && !force) return allPromise;
+    allPromise = (async () => {
+      const { data, error } = await supabase
+        .from('session_logs')
+        .select('id, name, performed_at, payload')
+        .order('performed_at', { ascending: false });
+      if (error) throw error;
+      all.value = data ?? [];
+      allLoaded.value = true;
+      return all.value;
+    })();
+    try {
+      return await allPromise;
+    } finally {
+      allPromise = null;
+    }
   }
 
   async function insert(userId: string, log: SessionLog) {
@@ -40,6 +50,14 @@ export const useLogsStore = defineStore('logs', () => {
       payload: log,
     });
     if (error) throw error;
+    // Cache tenu à jour → le niveau d'athlète (XP) réagit + montée de niveau détectée.
+    const row: LogRow = {
+      id: log.id,
+      name: log.name ?? null,
+      performed_at: log.ended_at ?? new Date().toISOString(),
+      payload: log,
+    };
+    if (allLoaded.value) all.value.unshift(row);
   }
 
   async function fetchRecent(limit = 12) {

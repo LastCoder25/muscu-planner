@@ -7,14 +7,17 @@
           {{ profileStore.profile?.identity.name || 'Athlète' }}
         </h1>
       </div>
-      <AthleteBadge
-        :level="athLevel.level"
-        :color="athLevel.tierColor"
-        :tier="athLevel.tier"
-        :size="46"
-        style="cursor: pointer"
-        @click="goStats"
-      />
+      <button class="ath-home" aria-label="Niveau d'athlète" @click="goStats">
+        <AthleteBadge
+          :level="athLevel.level"
+          :color="athLevel.tierColor"
+          :tier="athLevel.tier"
+          :size="46"
+        />
+        <span class="ath-home-tier font-display" :style="{ color: athLevel.tierColor }">
+          {{ athLevel.tier }}
+        </span>
+      </button>
     </header>
 
     <div v-if="loading" class="column items-center q-mt-xl">
@@ -166,6 +169,22 @@ async function goStats() {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+.ath-home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.ath-home-tier {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 .home-name {
   font-size: 32px;
