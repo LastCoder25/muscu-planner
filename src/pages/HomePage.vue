@@ -7,27 +7,33 @@
           {{ profileStore.profile?.identity.name || 'Athlète' }}
         </h1>
       </div>
-      <button class="ath-home" aria-label="Niveau d'athlète" @click="goStats">
-        <AthleteBadge
-          :level="athLevel.level"
-          :color="athLevel.tierColor"
-          :tier="athLevel.tier"
-          :size="46"
-        />
-        <span class="ath-home-tier font-display" :style="{ color: athLevel.tierColor }">
-          {{ athLevel.tier }}
-        </span>
-      </button>
+      <div class="home-badges">
+        <button class="ath-home" aria-label="Niveau d'athlète" @click="goStats">
+          <AthleteBadge
+            :level="athLevel.level"
+            :color="athLevel.tierColor"
+            :tier="athLevel.tier"
+            :size="46"
+          />
+          <span class="ath-home-tier font-display" :style="{ color: athLevel.tierColor }">
+            {{ athLevel.tier }}
+          </span>
+        </button>
+        <button class="ath-home" aria-label="Rang des défis" @click="goChallenges">
+          <RankCrest :rank="challengeRank" :size="44" />
+          <span class="ath-home-tier font-display">Défis</span>
+        </button>
+      </div>
     </header>
 
     <button class="xp-strip" :style="{ '--tier': athLevel.tierColor }" @click="goStats">
-      <div class="xp-row">
-        <span class="xp-cur font-display">{{ athLevel.xp.toLocaleString('fr-FR') }} XP</span>
-        <span class="xp-next"
-          >Niv. {{ athLevel.level + 1 }} à
-          {{ (athLevel.xp + (athLevel.xpForLevel - athLevel.xpIntoLevel)).toLocaleString('fr-FR') }}
-          XP</span
+      <div class="xp-top">
+        <span class="xp-lvl font-display">Niv. {{ athLevel.level }}</span>
+        <span class="xp-frac"
+          >{{ athLevel.xpIntoLevel.toLocaleString('fr-FR') }} /
+          {{ athLevel.xpForLevel.toLocaleString('fr-FR') }} XP</span
         >
+        <span class="xp-lvl next font-display">Niv. {{ athLevel.level + 1 }}</span>
       </div>
       <div class="xp-bar">
         <div class="xp-fill" :style="{ width: athLevel.progressPct + '%' }" />
@@ -93,7 +99,10 @@ import { useSessionsStore } from '@/stores/sessions';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useLiveStore } from '@/stores/live';
 import AthleteBadge from '@/components/AthleteBadge.vue';
+import RankCrest from '@/components/RankCrest.vue';
 import { useAthlete } from '@/composables/useAthlete';
+import { useChallengesStore } from '@/stores/challenges';
+import { challengeXp } from '@/lib/challenges';
 
 const $q = useQuasar();
 const router = useRouter();
@@ -102,6 +111,8 @@ const sessionsStore = useSessionsStore();
 const logs = useLogsStore();
 const live = useLiveStore();
 const { level: athLevel } = useAthlete();
+const challengesStore = useChallengesStore();
+const challengeRank = computed(() => challengeXp(challengesStore.list).title);
 const loading = ref(true);
 
 const lastLog = ref<LogRow | null>(null);
@@ -184,6 +195,11 @@ async function goStats() {
   justify-content: space-between;
   gap: 12px;
 }
+.home-badges {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
 .ath-home {
   display: flex;
   flex-direction: column;
@@ -212,20 +228,22 @@ async function goStats() {
   margin-bottom: 16px;
   cursor: pointer;
 }
-.xp-row {
+.xp-top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
 }
-.xp-cur {
-  font-size: 15px;
+.xp-lvl {
+  font-size: 14px;
   font-weight: 700;
   color: var(--tier);
-  font-variant-numeric: tabular-nums;
 }
-.xp-next {
-  font-size: 11.5px;
+.xp-lvl.next {
+  color: var(--dim);
+}
+.xp-frac {
+  font-size: 12px;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
 }
