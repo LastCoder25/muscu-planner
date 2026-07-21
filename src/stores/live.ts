@@ -35,6 +35,7 @@ export interface LiveExercise {
   planned: ExerciseTarget;
   bodyweight: boolean;
   unilateral: boolean;
+  prescribed?: boolean; // charges propres à chaque série (import pyramide) → pas de report
   sets: LiveSet[];
   exercise_comment: string;
 }
@@ -106,8 +107,9 @@ export const useLiveStore = defineStore('live', () => {
           return set;
         };
         // Séries détaillées (pyramide importée) si présentes, sinon dérivées de la cible.
-        let sets: LiveSet[] = ex.prescription?.length
-          ? ex.prescription.map((p) => blank(p.load_kg ?? base, p.reps, p.rest_seconds))
+        const prescribed = !!ex.prescription?.length;
+        let sets: LiveSet[] = prescribed
+          ? ex.prescription!.map((p) => blank(p.load_kg ?? base, p.reps, p.rest_seconds))
           : Array.from({ length: ex.target.sets }, () => blank(base, ex.target.reps_min));
         if (light && sets.length > 2) sets = sets.slice(0, sets.length - 1);
         return {
@@ -121,6 +123,7 @@ export const useLiveStore = defineStore('live', () => {
           planned: ex.target,
           bodyweight,
           unilateral: ex.unilateral ?? false,
+          prescribed,
           sets,
           exercise_comment: '',
         };

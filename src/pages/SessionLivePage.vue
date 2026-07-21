@@ -393,10 +393,11 @@ function adj(s: LiveSet, key: 'load_kg' | 'reps', d: number) {
   live.persist();
 }
 // Reporte la charge de la 1re série sur les séries suivantes non faites (pré-remplissage
-// après un changement d'exo). Les séries suivantes restent ensuite indépendantes.
+// après un changement d'exo). PAS pour un exo à charges par série (import pyramide) :
+// chaque série garde sa charge propre. Les séries restent ensuite indépendantes.
 function propagateLoad() {
   const e = ex.value;
-  if (!e || e.sets.length === 0) return;
+  if (!e || e.prescribed || e.sets.length === 0) return;
   const load = e.sets[0]!.load_kg;
   for (let j = 1; j < e.sets.length; j++) {
     if (!e.sets[j]!.done) e.sets[j]!.load_kg = load;
