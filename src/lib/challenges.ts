@@ -406,6 +406,42 @@ export function scaleRemaining(
   return { daily_targets, config };
 }
 
+/** Prolonge un défi de `addDays` jours : le passé est intact, on ajoute des jours
+ *  au niveau courant (respecte les jours de repos). Cumulé : total au prorata.
+ *  La prime de complétion se recalcule d'elle-même sur la durée totale finale. */
+export function extendChallenge(
+  ch: Challenge,
+  addDays: number,
+): { duration_days: number; daily_targets: number[]; config: ChallengeConfig } {
+  const add = Math.max(1, Math.round(addDays));
+  const newDuration = ch.duration_days + add;
+  if (ch.format === 'cumulative') {
+    const total = Math.round(((ch.config.total ?? 0) * newDuration) / (ch.duration_days || 1));
+    return {
+      duration_days: newDuration,
+      daily_targets: ch.daily_targets,
+      config: { ...ch.config, total },
+    };
+  }
+  // Niveau courant = dernier objectif non nul (ou capacité/départ).
+  const lastTarget =
+    [...ch.daily_targets].reverse().find((t) => t > 0) ??
+    ch.config.capacity ??
+    ch.config.start ??
+    1;
+  const rest = ch.config.rest_weekdays ?? [];
+  const extra: number[] = [];
+  for (let d = ch.duration_days; d < newDuration; d++) {
+    const isRest = rest.includes(dayFromIso(addDaysIso(ch.start_date, d)).getDay());
+    extra.push(isRest ? 0 : Math.max(1, Math.round(lastTarget)));
+  }
+  return {
+    duration_days: newDuration,
+    daily_targets: [...ch.daily_targets, ...extra],
+    config: { ...ch.config },
+  };
+}
+
 // ── Statistiques d'un défi ──────────────────────────────
 export interface ChallengeStats {
   dayIndex: number; // -1 = pas commencé ; >= durationDays = fini
@@ -640,9 +676,16 @@ function plannedEffort(ch: Challenge): number {
   return ch.unit === 'time' ? raw / 4 : raw;
 }
 
+/** Multiplicateur de durée sur la prime : plus le défi est long, plus la prime
+ *  croît vite (super-linéaire) → aller au bout d'un long défi est nettement plus
+ *  rentable que de découper en petits. Plafonné (×5 à 120 j). */
+export function durationMultiplier(days: number): number {
+  return 1 + Math.min(Math.max(0, days), 120) / 30;
+}
+
 /** Points d'XP issus des CHALLENGES : reps cumulées (défis reps only, anti-farm
  *  chrono) + 25/jour validé + prime de complétion proportionnelle (25 % de l'effort
- *  planifié du défi terminé → finir un gros défi rapporte plus, alléger réduit). */
+ *  planifié × multiplicateur de durée → un long défi terminé rapporte bien plus). */
 export function challengeXpPoints(challenges: Challenge[]): number {
   const totalReps = challenges.reduce(
     (a, c) => a + (c.unit === 'reps' ? c.progress.reduce((b, p) => b + (p.done || 0), 0) : 0),
@@ -654,7 +697,10 @@ export function challengeXpPoints(challenges: Challenge[]): number {
   );
   const completionBonus = challenges
     .filter((c) => c.status === 'done')
-    .reduce((a, c) => a + Math.round(0.25 * plannedEffort(c)), 0);
+    .reduce(
+      (a, c) => a + Math.round(0.25 * plannedEffort(c) * durationMultiplier(c.duration_days)),
+      0,
+    );
   return Math.round(totalReps + completedDays * 25 + completionBonus);
 }
 

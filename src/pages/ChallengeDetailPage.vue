@@ -225,6 +225,9 @@
           </div>
         </div>
 
+        <button v-if="ch.status !== 'abandoned'" class="adjust" @click="extendDialog">
+          <q-icon name="add" size="16px" /> Prolonger le défi
+        </button>
         <button
           v-if="!statusDone && ch.format !== 'cumulative'"
           class="adjust"
@@ -264,6 +267,7 @@ import {
   rescaleRemaining,
   adaptiveDayAdjustment,
   scaleRemaining,
+  extendChallenge,
   type Challenge,
   type DayProgress,
 } from '@/lib/challenges';
@@ -653,6 +657,42 @@ function editDifficulty() {
   }).onOk((val: string) => {
     const n = Math.round(Number(val));
     if (n > 0) void applyRecal(n);
+  });
+}
+
+// Prolonger le défi : ajoute des jours ; la prime se recalcule sur la durée totale.
+async function applyExtend(add: number) {
+  const c = ch.value;
+  if (!c || add <= 0) return;
+  const { duration_days, daily_targets, config } = extendChallenge(c, add);
+  $q.loading.show({ message: 'Prolongation…' });
+  try {
+    await store.updateDuration(id, duration_days, daily_targets, config);
+    c.duration_days = duration_days;
+    c.daily_targets = daily_targets;
+    c.config = config;
+    if (c.status === 'done') {
+      c.status = 'active'; // on rouvre : il reste des jours à faire
+      await store.setStatus(id, 'active');
+    }
+    $q.notify({ type: 'positive', message: `Défi prolongé de ${add} j 💪` });
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
+  } finally {
+    $q.loading.hide();
+  }
+}
+function extendDialog() {
+  const c = ch.value;
+  if (!c) return;
+  $q.dialog({
+    title: 'Prolonger le défi',
+    message: `Ajouter combien de jours ? (actuellement ${c.duration_days} j). La prime de fin augmentera avec la durée totale.`,
+    prompt: { model: '7', type: 'number' },
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Prolonger', color: 'primary', textColor: 'dark' },
+  }).onOk((val: string) => {
+    void applyExtend(Math.round(Number(val)));
   });
 }
 

@@ -77,6 +77,26 @@ export const useChallengesStore = defineStore('challenges', () => {
     }
   }
 
+  // Prolongation : met à jour la durée + le plan.
+  async function updateDuration(
+    id: string,
+    duration_days: number,
+    daily_targets: number[],
+    config: ChallengeConfig,
+  ) {
+    const { error } = await supabase
+      .from('challenges')
+      .update({ duration_days, daily_targets, config, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+    const c = list.value.find((x) => x.id === id);
+    if (c) {
+      c.duration_days = duration_days;
+      c.daily_targets = daily_targets;
+      c.config = config;
+    }
+  }
+
   async function setStatus(id: string, status: ChallengeStatus) {
     const { error } = await supabase.from('challenges').update({ status }).eq('id', id);
     if (error) throw error;
@@ -118,6 +138,7 @@ export const useChallengesStore = defineStore('challenges', () => {
     create,
     updateProgress,
     updatePlan,
+    updateDuration,
     setStatus,
     remove,
     fetchAchievements,
