@@ -1,7 +1,12 @@
 <template>
   <q-page class="ch-page">
     <div class="head">
-      <h1 class="p-title font-display">Challenges</h1>
+      <div class="head-left">
+        <h1 class="p-title font-display">Challenges</h1>
+        <button class="head-rank" aria-label="Voir mes succès" @click="tab = 'ach'">
+          <RankBadge :rank="xpInfo.title" :size="34" />
+        </button>
+      </div>
       <q-btn
         no-caps
         unelevated
@@ -141,6 +146,7 @@ import {
 import { formatOption } from '@/data/challengeFormats';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { useChallengesStore } from '@/stores/challenges';
+import RankBadge from '@/components/RankBadge.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -233,6 +239,19 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 12px;
   margin: 4px 0 14px;
+}
+.head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.head-rank {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  flex: none;
 }
 .p-title {
   font-size: 28px;
