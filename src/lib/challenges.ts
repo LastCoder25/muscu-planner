@@ -678,9 +678,23 @@ function plannedEffort(ch: Challenge): number {
 
 /** Multiplicateur de durée sur la prime : plus le défi est long, plus la prime
  *  croît vite (super-linéaire) → aller au bout d'un long défi est nettement plus
- *  rentable que de découper en petits. Plafonné (×5 à 120 j). */
-export function durationMultiplier(days: number): number {
-  return 1 + Math.min(Math.max(0, days), 120) / 30;
+ *  rentable que de découper en petits. Plafonné (×5 à 120 j).
+ *  Basé sur les JOURS ACTIFS (non repos), pas le calendrier : bourrer de jours de
+ *  repos ne gonfle pas le multiplicateur pour un même travail réel (anti-faille). */
+export function durationMultiplier(activeDays: number): number {
+  return 1 + Math.min(Math.max(0, activeDays), 120) / 30;
+}
+
+/** Nombre de jours actifs (non repos) d'un défi. */
+export function activeDaysOf(ch: Challenge): number {
+  if (ch.format !== 'cumulative') return ch.daily_targets.filter((t) => t > 0).length;
+  const rest = ch.config.rest_weekdays ?? [];
+  if (!rest.length) return ch.duration_days;
+  let n = 0;
+  for (let d = 0; d < ch.duration_days; d++) {
+    if (!rest.includes(dayFromIso(addDaysIso(ch.start_date, d)).getDay())) n++;
+  }
+  return n;
 }
 
 /** Points d'XP issus des CHALLENGES : reps cumulées (défis reps only, anti-farm
@@ -698,7 +712,7 @@ export function challengeXpPoints(challenges: Challenge[]): number {
   const completionBonus = challenges
     .filter((c) => c.status === 'done')
     .reduce(
-      (a, c) => a + Math.round(0.25 * plannedEffort(c) * durationMultiplier(c.duration_days)),
+      (a, c) => a + Math.round(0.25 * plannedEffort(c) * durationMultiplier(activeDaysOf(c))),
       0,
     );
   return Math.round(totalReps + completedDays * 25 + completionBonus);

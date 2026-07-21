@@ -50,6 +50,11 @@
           </div>
         </div>
 
+        <div v-if="(challenge?.duration_days ?? 0) >= 30" class="cc-nudge">
+          💡 Beau marathon ! Pour la suite, pense à <b>varier l'exercice</b> — ton corps et ta
+          motivation te diront merci.
+        </div>
+
         <div class="cc-actions">
           <button class="cc-btn ghost" @click="$emit('see-success')">Mes succès</button>
           <button class="cc-btn" @click="$emit('close')">Continuer</button>
@@ -371,6 +376,20 @@ watch(
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
+}
+.cc-nudge {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--dim);
+  line-height: 1.4;
+  text-align: left;
+  b {
+    color: var(--text);
+  }
 }
 .cc-actions {
   display: flex;

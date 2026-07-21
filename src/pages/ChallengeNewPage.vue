@@ -110,8 +110,13 @@
             @click="setPresetDuration(d)"
           >
             {{ durationLabel(d) }}
+            <span v-if="d === 30" class="reco">conseillé</span>
           </button>
           <button class="choice" :class="{ active: customOn }" @click="enableCustom">Perso</button>
+        </div>
+        <div class="dur-note">
+          ~30 jours = idéal pour ancrer une habitude sans forcer. Plus court pour tester, plus long
+          pour les confirmés.
         </div>
         <div v-if="customOn" class="custom-dur">
           <q-input
@@ -180,7 +185,7 @@
         </template>
 
         <div class="lbl">Jours de repos (optionnel)</div>
-        <div class="days q-mb-md">
+        <div class="days q-mb-xs">
           <button
             v-for="w in WEEKDAYS"
             :key="w.value"
@@ -190,6 +195,10 @@
           >
             {{ w.label }}
           </button>
+        </div>
+        <div v-if="durationDays >= 30 && restDays.length === 0" class="rest-reco">
+          💡 Défi long : garder <b>1 jour de repos/semaine</b> aide à tenir sans se blesser.
+          <button class="rest-add" @click="toggleRest(0)">Ajouter dimanche</button>
         </div>
 
         <div class="row items-center q-mb-md" style="gap: 10px">
@@ -768,6 +777,42 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+}
+.reco {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-top: 2px;
+}
+.dur-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.4;
+}
+.rest-reco {
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.4;
+  margin-bottom: 14px;
+  b {
+    color: var(--text);
+  }
+}
+.rest-add {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
 }
 .custom-dur {
   display: flex;
