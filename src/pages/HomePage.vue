@@ -1,8 +1,13 @@
 <template>
   <q-page class="home-page">
     <header class="home-head">
-      <div class="text-dim text-caption">Salut</div>
-      <h1 class="home-name font-display">{{ profileStore.profile?.identity.name || 'Athlète' }}</h1>
+      <div>
+        <div class="text-dim text-caption">Salut</div>
+        <h1 class="home-name font-display">
+          {{ profileStore.profile?.identity.name || 'Athlète' }}
+        </h1>
+      </div>
+      <RankBadge v-if="hasChallenges" :rank="rank" :size="44" @click="goChallenges" />
     </header>
 
     <div v-if="loading" class="column items-center q-mt-xl">
@@ -63,6 +68,9 @@ import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useLiveStore } from '@/stores/live';
+import { useChallengesStore } from '@/stores/challenges';
+import { challengeXp } from '@/lib/challenges';
+import RankBadge from '@/components/RankBadge.vue';
 
 const $q = useQuasar();
 const router = useRouter();
@@ -70,7 +78,11 @@ const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const logs = useLogsStore();
 const live = useLiveStore();
+const challengesStore = useChallengesStore();
 const loading = ref(true);
+
+const hasChallenges = computed(() => challengesStore.list.length > 0);
+const rank = computed(() => challengeXp(challengesStore.list).title);
 const lastLog = ref<LogRow | null>(null);
 const hasFree = ref(false);
 
@@ -143,6 +155,10 @@ async function goChallenges() {
 }
 .home-head {
   margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .home-name {
   font-size: 32px;

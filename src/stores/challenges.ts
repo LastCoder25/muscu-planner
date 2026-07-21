@@ -27,6 +27,7 @@ export interface NewChallenge {
 export const useChallengesStore = defineStore('challenges', () => {
   const list = ref<Challenge[]>([]);
   const unlocked = ref<string[]>([]);
+  const loaded = ref(false); // vrai après le 1er fetchMine (base pour la montée de rang)
 
   async function fetchMine() {
     const { data, error } = await supabase
@@ -35,6 +36,7 @@ export const useChallengesStore = defineStore('challenges', () => {
       .order('created_at', { ascending: false });
     if (error) throw error;
     list.value = data ?? [];
+    loaded.value = true;
     return list.value;
   }
 
@@ -111,6 +113,7 @@ export const useChallengesStore = defineStore('challenges', () => {
   return {
     list,
     unlocked,
+    loaded,
     fetchMine,
     create,
     updateProgress,
