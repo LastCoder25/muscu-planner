@@ -42,6 +42,21 @@
           </div>
         </div>
 
+        <!-- Suggestion de recalibrage (dépassement répété) -->
+        <div v-if="showRecal && overSuggest" class="recal">
+          <div class="recal-txt">
+            <b>Tu dépasses ton objectif depuis {{ overSuggest.streak }} jours 💪</b>
+            <span
+              >Passer le max de {{ overSuggest.refCur }} à
+              <b>{{ overSuggest.refNew }} {{ unitLabel }}</b> pour les jours restants ?</span
+            >
+          </div>
+          <div class="recal-actions">
+            <button class="recal-ok" @click="applyRecal(overSuggest.refNew)">Augmenter</button>
+            <button class="recal-no" @click="dismissRecal">Garder</button>
+          </div>
+        </div>
+
         <!-- Exécution du jour -->
         <div v-if="statusDone" class="done-banner">
           <q-icon name="emoji_events" size="20px" /> Challenge terminé — bravo !
@@ -193,6 +208,13 @@
           </div>
         </div>
 
+        <button
+          v-if="!statusDone && ch.format !== 'cumulative'"
+          class="adjust"
+          @click="editDifficulty"
+        >
+          <q-icon name="tune" size="16px" /> Ajuster la difficulté
+        </button>
         <button v-if="!statusDone" class="abandon" @click="confirmAbandon">
           Abandonner le challenge
         </button>
@@ -220,6 +242,9 @@ import {
   challengeBalance,
   effectiveTarget,
   logicalToday,
+  challengeRefValue,
+  overachievementSuggestion,
+  rescaleRemaining,
   type Challenge,
   type DayProgress,
 } from '@/lib/challenges';
@@ -525,6 +550,54 @@ function confirmDelete() {
       .finally(() => $q.loading.hide());
   });
 }
+// ── Recalibrage de difficulté ──────────────────────────
+const RECAL_KEY = `muscu:challenge:recal-dismiss:${id}`;
+const recalDismissedRef = ref(localStorage.getItem(RECAL_KEY) ?? '');
+const overSuggest = computed(() => (ch.value ? overachievementSuggestion(ch.value, today) : null));
+// Refusé mémorisé par pic courant : si on repart plus haut, on re-propose.
+const showRecal = computed(
+  () => !!overSuggest.value && recalDismissedRef.value !== String(overSuggest.value.refCur),
+);
+function dismissRecal() {
+  if (!overSuggest.value) return;
+  recalDismissedRef.value = String(overSuggest.value.refCur);
+  localStorage.setItem(RECAL_KEY, recalDismissedRef.value);
+}
+async function applyRecal(refNew: number) {
+  const c = ch.value;
+  if (!c) return;
+  const fromDay = Math.max(0, dayIndex.value + 1); // demain → aujourd'hui inchangé
+  const { daily_targets, config } = rescaleRemaining(c, fromDay, refNew);
+  $q.loading.show({ message: 'Recalcul…' });
+  try {
+    await store.updatePlan(id, daily_targets, config);
+    c.daily_targets = daily_targets;
+    c.config = config;
+    dismissRecal();
+    $q.notify({ type: 'positive', message: 'Difficulté ajustée pour les jours restants 💪' });
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
+  } finally {
+    $q.loading.hide();
+  }
+}
+function editDifficulty() {
+  const c = ch.value;
+  if (!c) return;
+  const cur = challengeRefValue(c);
+  const label = c.format === 'cumulative' ? 'Nouveau total' : 'Nouvel objectif max (pic)';
+  $q.dialog({
+    title: 'Ajuster la difficulté',
+    message: `${label} — les jours restants sont recalculés à cette échelle.`,
+    prompt: { model: String(overSuggest.value?.refNew ?? cur), type: 'number' },
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Appliquer', color: 'primary', textColor: 'dark' },
+  }).onOk((val: string) => {
+    const n = Math.round(Number(val));
+    if (n > 0) void applyRecal(n);
+  });
+}
+
 async function back() {
   await router.push('/challenges');
 }
@@ -1051,9 +1124,28 @@ onBeforeUnmount(() => {
   opacity: 0.8;
 }
 
+.adjust {
+  width: 100%;
+  margin-top: 20px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.adjust:active {
+  border-color: var(--accent);
+}
 .abandon {
   width: 100%;
-  margin-top: 22px;
+  margin-top: 10px;
   background: none;
   border: none;
   color: var(--d4);
@@ -1061,5 +1153,52 @@ onBeforeUnmount(() => {
   font-weight: 600;
   cursor: pointer;
   padding: 8px;
+}
+.recal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.recal-txt {
+  flex: 1;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  color: var(--text);
+  b {
+    color: var(--accent);
+  }
+}
+.recal-actions {
+  display: flex;
+  gap: 8px;
+}
+.recal-ok {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.recal-no {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
 }
 </style>

@@ -274,6 +274,78 @@ export function challengeBalance(ch: Challenge, todayIso = logicalToday()): numb
   return bal;
 }
 
+// ── Recalibrage de difficulté en cours ──────────────────
+/** Valeur de référence (« max ») d'un défi : total pour cumulé, sinon le pic. */
+export function challengeRefValue(ch: Challenge): number {
+  if (ch.format === 'cumulative') return ch.config.total ?? 0;
+  return Math.max(1, ...ch.daily_targets);
+}
+
+export interface OverSuggestion {
+  streak: number; // nb de jours d'affilée de dépassement
+  refCur: number; // pic actuel
+  refNew: number; // pic suggéré
+  fromDay: number; // 1er jour à régénérer (demain)
+}
+
+/** Suggère un recalibrage si l'utilisateur dépasse régulièrement l'objectif.
+ *  Conditions : défi actif, non cumulé, PAS de report (l'excès y sert de réserve),
+ *  ≥ 3 jours actifs consécutifs terminés avec ≥ 15 % de dépassement, et des jours restants. */
+export function overachievementSuggestion(
+  ch: Challenge,
+  todayIso = logicalToday(),
+): OverSuggestion | null {
+  if (ch.status !== 'active' || ch.format === 'cumulative' || ch.config.carry_over) return null;
+  const dayIndex = diffDays(ch.start_date, todayIso);
+  const fromDay = dayIndex + 1; // on régénère demain → aujourd'hui inchangé
+  if (dayIndex < 3 || fromDay >= ch.duration_days) return null;
+
+  const map = progByDay(ch);
+  const margin = 0.15;
+  let streak = 0;
+  const ratios: number[] = [];
+  for (let d = Math.min(dayIndex, ch.duration_days) - 1; d >= 0; d--) {
+    const t = ch.daily_targets[d] ?? 0;
+    if (t === 0) continue; // repos : neutre
+    const p = map.get(d);
+    const doneD = p?.done ?? 0;
+    if (p?.completed && doneD >= t * (1 + margin)) {
+      streak++;
+      ratios.push(doneD / t);
+    } else break;
+  }
+  if (streak < 3) return null;
+
+  const refCur = challengeRefValue(ch);
+  const avgRatio = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+  const bump = Math.min(1.5, Math.max(1.1, avgRatio)); // +10 % à +50 %
+  const refNew = Math.max(refCur + 1, Math.round(refCur * bump));
+  return { streak, refCur, refNew, fromDay };
+}
+
+/** Régénère les objectifs à partir de `fromDay` en visant un nouveau pic `refNew`.
+ *  Le passé (jours < fromDay) est figé ; les jours restants sont mis à l'échelle. */
+export function rescaleRemaining(
+  ch: Challenge,
+  fromDay: number,
+  refNew: number,
+): { daily_targets: number[]; config: ChallengeConfig } {
+  const refCur = challengeRefValue(ch);
+  const factor = refCur > 0 ? refNew / refCur : 1;
+  if (ch.format === 'cumulative') {
+    return { daily_targets: ch.daily_targets, config: { ...ch.config, total: Math.round(refNew) } };
+  }
+  const daily_targets = ch.daily_targets.map((t, d) => {
+    if (d < fromDay || t === 0) return t;
+    return Math.max(1, Math.round(t * factor));
+  });
+  const config = { ...ch.config };
+  if (config.max) config.max = Math.round(config.max * factor);
+  if (config.peak) config.peak = Math.round(config.peak * factor);
+  if (config.start && ch.format !== 'ramp') config.start = Math.round(config.start * factor);
+  return { daily_targets, config };
+}
+
 // ── Statistiques d'un défi ──────────────────────────────
 export interface ChallengeStats {
   dayIndex: number; // -1 = pas commencé ; >= durationDays = fini
