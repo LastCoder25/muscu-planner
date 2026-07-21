@@ -27,6 +27,8 @@ export interface ChallengeConfig {
   rest_weekdays?: number[]; // 0=dim … 6=sam
   reminder_time?: string; // « HH:MM »
   carry_over?: boolean; // report du surplus/déficit d'un jour sur les suivants
+  adaptive?: boolean; // difficulté auto : s'ajuste au ressenti + résultat (calibration implicite)
+  capacity?: number; // échelle courante (pic) pilotée par l'autorégulation
 }
 
 // Progressif basé sur le MAX (cf. formule) : J1 = start_coef × MAX,
@@ -57,6 +59,7 @@ export interface DayProgress {
   elapsed_sec: number;
   completed: boolean;
   closed?: boolean; // « journée » clôturée par l'utilisateur (session finie)
+  rpe?: 1 | 2 | 3; // ressenti à la clôture : 1=facile, 2=bien dosé, 3=très dur
 }
 
 // « Jour d'entraînement » : bascule à 4 h du matin (local). Les reps faites
@@ -296,7 +299,14 @@ export function recalibrationSuggestion(
   ch: Challenge,
   todayIso = logicalToday(),
 ): RecalSuggestion | null {
-  if (ch.status !== 'active' || ch.format === 'cumulative' || ch.config.carry_over) return null;
+  // Adaptatif : l'autorégulation quotidienne s'en charge → pas de bannière manuelle.
+  if (
+    ch.status !== 'active' ||
+    ch.format === 'cumulative' ||
+    ch.config.carry_over ||
+    ch.config.adaptive
+  )
+    return null;
   const dayIndex = diffDays(ch.start_date, todayIso);
   const fromDay = dayIndex + 1; // on régénère demain → aujourd'hui inchangé
   if (dayIndex < 3 || fromDay >= ch.duration_days) return null;
@@ -355,6 +365,44 @@ export function rescaleRemaining(
   if (config.max) config.max = Math.round(config.max * factor);
   if (config.peak) config.peak = Math.round(config.peak * factor);
   if (config.start && ch.format !== 'ramp') config.start = Math.round(config.start * factor);
+  return { daily_targets, config };
+}
+
+// ── Autorégulation (mode adaptatif) ─────────────────────
+/** Ajustement d'échelle d'UN jour, à partir du résultat (réalisé/cible) et du
+ *  ressenti (1=facile, 2=bien, 3=très dur). > 0 = monter, < 0 = alléger.
+ *  Overload doux par défaut (bien dosé + réussi → +2 %). Borné, appliqué aux
+ *  jours restants à la clôture. Le ressenti prime, le résultat corrige. */
+export function adaptiveDayAdjustment(ratio: number, rpe?: 1 | 2 | 3): number {
+  const hit = ratio >= 1;
+  if (rpe === 3 || ratio < 0.8) return -0.08; // très dur ou raté → alléger
+  if (rpe === 1 && hit) return 0.06; // trop facile → monter
+  if (hit) return 0.02; // bien dosé + réussi → overload doux
+  return -0.02; // proche mais pas atteint → léger repli
+}
+
+/** Met à l'échelle les jours restants (≥ fromDay) par `factor` (1 = inchangé).
+ *  Passé + aujourd'hui figés ; met à jour capacity/max/peak/start pour cohérence. */
+export function scaleRemaining(
+  ch: Challenge,
+  fromDay: number,
+  factor: number,
+): { daily_targets: number[]; config: ChallengeConfig } {
+  const f = Math.max(0.5, Math.min(1.5, factor));
+  const config = { ...ch.config };
+  if (config.capacity) config.capacity = Math.max(1, Math.round(config.capacity * f));
+  if (config.max) config.max = Math.max(1, Math.round(config.max * f));
+  if (config.peak) config.peak = Math.max(1, Math.round(config.peak * f));
+  if (config.start && ch.format !== 'ramp')
+    config.start = Math.max(1, Math.round(config.start * f));
+  if (ch.format === 'cumulative') {
+    if (config.total) config.total = Math.max(1, Math.round(config.total * f));
+    return { daily_targets: ch.daily_targets, config };
+  }
+  const daily_targets = ch.daily_targets.map((t, d) => {
+    if (d < fromDay || t === 0) return t;
+    return Math.max(1, Math.round(t * f));
+  });
   return { daily_targets, config };
 }
 

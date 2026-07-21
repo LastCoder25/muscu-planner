@@ -130,39 +130,54 @@
       <!-- ÉTAPE 4 · Réglages -->
       <template v-else-if="step === 4">
         <div class="step-h">Difficulté & options</div>
-        <div class="lbl">Difficulté ({{ levelLabel }})</div>
-        <div class="cfg-grid q-mb-md">
-          <template v-for="field in fields" :key="field">
-            <div class="cfg-cell">
-              <div class="cfg-lbl">{{ fieldLabel(field) }}</div>
-              <div v-if="stepBounds[field]" class="stepper">
-                <button
-                  class="st-btn"
-                  aria-label="Diminuer"
-                  @click="stepField(field, -stepBounds[field].step)"
-                >
-                  −
-                </button>
-                <span class="st-val">{{ cfgDisplay(field) }} %</span>
-                <button
-                  class="st-btn"
-                  aria-label="Augmenter"
-                  @click="stepField(field, stepBounds[field].step)"
-                >
-                  +
-                </button>
-              </div>
-              <q-input
-                v-else
-                :model-value="cfgDisplay(field)"
-                type="number"
-                filled
-                dense
-                @update:model-value="setField(field, $event)"
-              />
-            </div>
-          </template>
+
+        <div class="auto-card">
+          <div class="row items-center" style="gap: 10px">
+            <q-toggle v-model="adaptiveMode" />
+            <span class="lbl" style="margin: 0">Difficulté automatique</span>
+          </div>
+          <div class="carry-note">
+            On part d'une estimation pour ton niveau ({{ levelLabel }}). Après chaque journée
+            validée, tu donnes ton ressenti et la suite s'ajuste toute seule — pas de chiffres à
+            saisir.
+          </div>
         </div>
+
+        <template v-if="!adaptiveMode">
+          <div class="lbl">Difficulté ({{ levelLabel }})</div>
+          <div class="cfg-grid q-mb-md">
+            <template v-for="field in fields" :key="field">
+              <div class="cfg-cell">
+                <div class="cfg-lbl">{{ fieldLabel(field) }}</div>
+                <div v-if="stepBounds[field]" class="stepper">
+                  <button
+                    class="st-btn"
+                    aria-label="Diminuer"
+                    @click="stepField(field, -stepBounds[field].step)"
+                  >
+                    −
+                  </button>
+                  <span class="st-val">{{ cfgDisplay(field) }} %</span>
+                  <button
+                    class="st-btn"
+                    aria-label="Augmenter"
+                    @click="stepField(field, stepBounds[field].step)"
+                  >
+                    +
+                  </button>
+                </div>
+                <q-input
+                  v-else
+                  :model-value="cfgDisplay(field)"
+                  type="number"
+                  filled
+                  dense
+                  @update:model-value="setField(field, $event)"
+                />
+              </div>
+            </template>
+          </div>
+        </template>
 
         <div class="lbl">Jours de repos (optionnel)</div>
         <div class="days q-mb-md">
@@ -320,6 +335,7 @@ const restDays = ref<number[]>([]);
 const reminderOn = ref(false);
 const reminderTime = ref('18:00');
 const carryOver = ref(false);
+const adaptiveMode = ref(true); // difficulté auto (calibration implicite + ressenti)
 const creating = ref(false);
 
 const level = computed<Level>(() => profileStore.profile?.experience?.level ?? 'intermediaire');
@@ -490,6 +506,10 @@ async function createChallenge() {
     if (reminderOn.value) cfg.reminder_time = reminderTime.value;
     if (carryOver.value && format.value !== 'cumulative') cfg.carry_over = true;
     const daily = computeDailyTargets(format.value, cfg, durationDays.value, startDate);
+    if (adaptiveMode.value) {
+      cfg.adaptive = true;
+      cfg.capacity = format.value === 'cumulative' ? (cfg.total ?? 0) : Math.max(1, ...daily);
+    }
     const ch = await challenges.create({
       exercise_id: exercise.value.id,
       exercise_name: exercise.value.name,
@@ -821,11 +841,16 @@ onMounted(async () => {
   }
 }
 
-.carry {
+.carry,
+.auto-card {
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: 12px;
   padding: 10px 12px;
+}
+.auto-card {
+  border-color: var(--accent);
+  margin-bottom: 14px;
 }
 .carry-note {
   font-size: 11.5px;

@@ -104,6 +104,17 @@
               <div class="rn-t">/ {{ todayTarget }}</div>
             </div>
           </div>
+          <!-- Ressenti à la clôture (mode adaptatif) → ajuste la suite -->
+          <div v-if="awaitingRpe" class="rpe">
+            <div class="rpe-h">C'était comment aujourd'hui ?</div>
+            <div class="rpe-row">
+              <button class="rpe-btn easy" @click="rateAndAdapt(1)">🙂 Facile</button>
+              <button class="rpe-btn ok" @click="rateAndAdapt(2)">💪 Bien dosé</button>
+              <button class="rpe-btn hard" @click="rateAndAdapt(3)">🥵 Très dur</button>
+            </div>
+            <button class="rpe-skip" @click="rateAndAdapt(null)">Passer</button>
+          </div>
+
           <!-- Temps : chrono. Se replie seulement une fois la journée VALIDÉE
                (todayClosed), pas à l'atteinte de l'objectif → excès possible. -->
           <template v-if="isTime">
@@ -251,6 +262,8 @@ import {
   challengeRefValue,
   recalibrationSuggestion,
   rescaleRemaining,
+  adaptiveDayAdjustment,
+  scaleRemaining,
   type Challenge,
   type DayProgress,
 } from '@/lib/challenges';
@@ -269,6 +282,7 @@ const ch = ref<Challenge | null>(null);
 const running = ref(false);
 let tick: ReturnType<typeof setInterval> | undefined;
 const scrollBox = ref<HTMLElement | null>(null);
+const awaitingRpe = ref(false); // ressenti à demander après clôture (mode adaptatif)
 const celebrate = ref(false); // animation de fin de challenge
 const celebrateCodes = ref<string[]>([]);
 
@@ -350,6 +364,7 @@ const inToday = computed(() => {
   return ch.value.format === 'cumulative' || (ch.value.daily_targets[d] ?? 0) > 0;
 });
 const carryOn = computed(() => !!ch.value?.config.carry_over && ch.value.format !== 'cumulative');
+const adaptiveOn = computed(() => !!ch.value?.config.adaptive);
 // Avance/retard courant (tous défis, pas seulement report activé).
 const balance = computed(() => (ch.value ? challengeBalance(ch.value, today) : 0));
 const todayTarget = computed(() => {
@@ -491,13 +506,47 @@ function closeDay() {
   clearInterval(tick);
   const e = ensureToday();
   e.closed = true;
+  // Adaptatif : on demande le ressenti (une fois) pour ajuster la suite.
+  if (adaptiveOn.value && !e.rpe) awaitingRpe.value = true;
   void afterChange();
   void nextTick(() => scrollBox.value?.scrollTo({ top: 0, behavior: 'smooth' }));
 }
 function reopenDay() {
   const e = ensureToday();
   e.closed = false;
+  awaitingRpe.value = false;
   void persist();
+}
+
+// Ressenti à la clôture → autorégule les jours restants (silencieux mais visible).
+async function rateAndAdapt(rpe: 1 | 2 | 3 | null) {
+  const c = ch.value;
+  if (!c) return;
+  const e = ensureToday();
+  if (rpe) e.rpe = rpe;
+  awaitingRpe.value = false;
+
+  const base = c.daily_targets[dayIndex.value] ?? 0;
+  const ratio = base > 0 ? (e.done || 0) / base : 1;
+  const adj = adaptiveDayAdjustment(ratio, rpe ?? undefined);
+  const fromDay = dayIndex.value + 1;
+
+  if (fromDay < c.duration_days && adj !== 0) {
+    const { daily_targets, config } = scaleRemaining(c, fromDay, 1 + adj);
+    c.daily_targets = daily_targets;
+    c.config = config;
+    try {
+      await store.updatePlan(id, daily_targets, config);
+      $q.notify({
+        type: 'info',
+        message: adj > 0 ? 'Suite un peu relevée 💪' : 'Suite un peu allégée 👍',
+        timeout: 1800,
+      });
+    } catch {
+      /* silencieux */
+    }
+  }
+  await persist(); // enregistre le rpe
 }
 
 function dayState(d: number): string {
@@ -1027,6 +1076,55 @@ onBeforeUnmount(() => {
   color: var(--dim);
   font-size: 12px;
   font-weight: 600;
+  cursor: pointer;
+}
+.rpe {
+  margin: 6px 0 4px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--accent);
+  background: var(--surface-2);
+  text-align: center;
+}
+.rpe-h {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.rpe-row {
+  display: flex;
+  gap: 8px;
+}
+.rpe-btn {
+  flex: 1;
+  min-height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rpe-btn.easy:active {
+  border-color: var(--d1);
+  color: var(--d1);
+}
+.rpe-btn.ok:active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.rpe-btn.hard:active {
+  border-color: var(--d4);
+  color: var(--d4);
+}
+.rpe-skip {
+  margin-top: 8px;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 12px;
   cursor: pointer;
 }
 .today-ok {
