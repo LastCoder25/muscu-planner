@@ -223,27 +223,32 @@
           Terminer ▸
         </button>
         <!-- Note de difficulté de la série courante (visible sans scroller) -->
-        <div v-if="curSet && !resting && editIdx < 0" class="cta-diff">
-          <button
-            v-for="d in DIFFS"
-            :key="d.n"
-            class="diff-btn"
-            :class="['d' + d.n, { sel: curSet.difficulty === d.n }]"
-            @click="
-              curSet.difficulty = d.n;
-              live.persist();
-            "
-          >
-            <b>{{ d.n }}</b
-            ><span>{{ d.label }}</span>
-          </button>
+        <div v-if="curSet && !resting && editIdx < 0" class="diff-zone">
+          <div v-if="!curSet.difficulty" class="diff-hint">
+            👇 Note ton ressenti pour valider la série
+          </div>
+          <div class="cta-diff" :class="{ pulse: !curSet.difficulty }">
+            <button
+              v-for="d in DIFFS"
+              :key="d.n"
+              class="diff-btn"
+              :class="['d' + d.n, { sel: curSet.difficulty === d.n }]"
+              @click="
+                curSet.difficulty = d.n;
+                live.persist();
+              "
+            >
+              <b>{{ d.n }}</b
+              ><span>{{ d.label }}</span>
+            </button>
+          </div>
         </div>
         <button v-if="resting" class="cta ghost" @click="skipRest">Passer le repos</button>
         <button v-else-if="editIdx >= 0" class="cta" @click="editIdx = -1">
           Terminer la modification
         </button>
         <button v-else-if="curSet" class="cta" :disabled="!curSet.difficulty" @click="validateSet">
-          Valider la série
+          {{ curSet.difficulty ? 'Valider la série' : 'Note ton ressenti ↑' }}
         </button>
         <button
           v-else-if="run!.exIndex < run!.exercises.length - 1"
@@ -1385,11 +1390,38 @@ onBeforeUnmount(() => {
   padding: 12px 18px 22px;
   background: linear-gradient(180deg, #15120e00, var(--bg) 22%);
 }
+.diff-hint {
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
 .cta-diff {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
   margin-bottom: 10px;
+  border-radius: 13px;
+}
+.cta-diff.pulse {
+  padding: 3px;
+  border: 1.5px solid var(--accent);
+  animation: diff-pulse 1.5s ease-in-out infinite;
+}
+@keyframes diff-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cta-diff.pulse {
+    animation: none;
+  }
 }
 .cta-diff .diff-btn {
   padding: 7px 4px 6px;
