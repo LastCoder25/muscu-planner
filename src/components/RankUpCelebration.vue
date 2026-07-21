@@ -12,9 +12,9 @@
         <div class="ru-kicker font-display">Rang supérieur</div>
 
         <div class="ru-ranks">
-          <RankBadge :rank="fromRank" :size="52" class="ru-from" />
+          <RankCrest :rank="fromRank" :size="52" class="ru-from" />
           <q-icon name="arrow_forward" size="24px" class="ru-arrow" />
-          <RankBadge :rank="toRank" :size="76" class="ru-to" />
+          <RankCrest :rank="toRank" :size="82" class="ru-to" />
         </div>
 
         <div class="ru-title font-display">Rang {{ toRank }} atteint !</div>
@@ -26,7 +26,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import RankBadge from '@/components/RankBadge.vue';
+import RankCrest from '@/components/RankCrest.vue';
 import { rankColor } from '@/data/ranks';
 
 const props = defineProps<{ show: boolean; fromRank: string; toRank: string }>();

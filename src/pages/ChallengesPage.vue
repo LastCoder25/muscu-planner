@@ -4,7 +4,7 @@
       <div class="head-left">
         <h1 class="p-title font-display">Challenges</h1>
         <button class="head-rank" aria-label="Voir mes succès" @click="tab = 'ach'">
-          <RankBadge :rank="xpInfo.title" :size="34" />
+          <RankCrest :rank="xpInfo.title" :size="40" />
         </button>
       </div>
       <q-btn
@@ -92,7 +92,7 @@
         <!-- Rang global / XP -->
         <div class="level-card" :class="'rank-' + xpInfo.title.toLowerCase()">
           <div class="lvl-top">
-            <div class="rank-badge font-display">{{ xpInfo.title }}</div>
+            <RankCrest :rank="xpInfo.title" :size="56" />
             <div class="rank-info">
               <div class="rank-label font-display">Rang {{ xpInfo.title }}</div>
               <div class="lvl-xp">{{ xpInfo.xp.toLocaleString('fr-FR') }} XP</div>
@@ -146,7 +146,7 @@ import {
 import { formatOption } from '@/data/challengeFormats';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { useChallengesStore } from '@/stores/challenges';
-import RankBadge from '@/components/RankBadge.vue';
+import RankCrest from '@/components/RankCrest.vue';
 
 const router = useRouter();
 const route = useRoute();
