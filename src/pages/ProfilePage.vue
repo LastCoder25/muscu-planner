@@ -483,6 +483,7 @@ async function regenerate(split?: SplitOption) {
   const userId = auth.user?.id;
   if (!userId) return;
   regenerating.value = true;
+  $q.loading.show({ message: 'Génération du programme…' });
   try {
     const profile = formToProfile(form);
     await profileStore.update(userId, profile);
@@ -501,6 +502,7 @@ async function regenerate(split?: SplitOption) {
     });
   } finally {
     regenerating.value = false;
+    $q.loading.hide();
   }
 }
 

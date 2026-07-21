@@ -77,6 +77,7 @@ function confirmDelete(r: LogRow) {
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Supprimer', color: 'negative' },
   }).onOk(() => {
+    $q.loading.show({ message: 'Suppression…' });
     logs
       .remove(r.id)
       .then(() => {
@@ -85,7 +86,8 @@ function confirmDelete(r: LogRow) {
       })
       .catch((e: unknown) =>
         $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' }),
-      );
+      )
+      .finally(() => $q.loading.hide());
   });
 }
 

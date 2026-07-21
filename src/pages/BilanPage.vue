@@ -145,6 +145,7 @@
           :disabled="applying"
           @click="applyProgression"
         >
+          <q-spinner v-if="applying" size="18px" class="q-mr-sm" />
           {{ applying ? 'Application…' : 'Appliquer la progression' }}
         </button>
         <button v-else class="cta ghost" @click="goHome">Retour</button>
