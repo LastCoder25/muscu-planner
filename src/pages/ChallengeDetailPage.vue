@@ -496,10 +496,14 @@ function confirmAbandon() {
   }).onOk(() => {
     // replace (pas push) : le détail abandonné sort de l'historique → le
     // retour arrière ne retombe pas dessus.
+    $q.loading.show({ message: 'Abandon…' });
     store
       .setStatus(id, 'abandoned')
       .then(() => router.replace('/challenges'))
-      .catch(() => undefined);
+      .catch((e) =>
+        $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' }),
+      )
+      .finally(() => $q.loading.hide());
   });
 }
 function confirmDelete() {
@@ -511,10 +515,14 @@ function confirmDelete() {
   }).onOk(() => {
     // replace (pas push) : le détail supprimé sort de l'historique → pas de
     // retour arrière vers un challenge inexistant (« Challenge introuvable »).
+    $q.loading.show({ message: 'Suppression…' });
     store
       .remove(id)
       .then(() => router.replace('/challenges'))
-      .catch(() => undefined);
+      .catch((e) =>
+        $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' }),
+      )
+      .finally(() => $q.loading.hide());
   });
 }
 async function back() {
