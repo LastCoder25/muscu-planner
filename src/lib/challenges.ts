@@ -579,9 +579,21 @@ const LEVEL_BANDS: { min: number; title: string }[] = [
   { min: 100000, title: 'Légende' },
 ];
 
-/** XP = reps cumulées + 25/jour validé + 250/défi terminé.
- *  Le TEMPS (défis en 'time') ne génère PAS d'XP proportionnelle (anti-triche
- *  chrono) : ces défis ne rapportent que via les jours validés et la complétion. */
+/** « Effort planifié » d'un défi (unité-neutre) : total des objectifs, le TEMPS
+ *  ramené à ~1 point / 4 s pour comparer reps et gainage. Basé sur le PLAN (pas
+ *  l'écoulé) → non farmable au chrono, et réduit si on allège le défi. */
+function plannedEffort(ch: Challenge): number {
+  const raw =
+    ch.format === 'cumulative'
+      ? (ch.config.total ?? 0)
+      : ch.daily_targets.reduce((a, t) => a + t, 0);
+  return ch.unit === 'time' ? raw / 4 : raw;
+}
+
+/** XP = reps cumulées + 25/jour validé + prime de complétion PROPORTIONNELLE
+ *  (25 % de l'effort planifié du défi terminé → finir un gros défi rapporte plus,
+ *  et alléger un défi réduit la prime). Le TEMPS ne génère pas d'XP au prorata des
+ *  secondes écoulées (anti-triche chrono) : seuls les jours validés + le plan comptent. */
 export function challengeXp(challenges: Challenge[]): ChallengeLevel {
   const totalReps = challenges.reduce(
     (a, c) => a + (c.unit === 'reps' ? c.progress.reduce((b, p) => b + (p.done || 0), 0) : 0),
@@ -591,8 +603,10 @@ export function challengeXp(challenges: Challenge[]): ChallengeLevel {
     (a, c) => a + c.progress.filter((p) => p.completed).length,
     0,
   );
-  const doneChallenges = challenges.filter((c) => c.status === 'done').length;
-  const xp = Math.round(totalReps + completedDays * 25 + doneChallenges * 250);
+  const completionBonus = challenges
+    .filter((c) => c.status === 'done')
+    .reduce((a, c) => a + Math.round(0.25 * plannedEffort(c)), 0);
+  const xp = Math.round(totalReps + completedDays * 25 + completionBonus);
 
   let idx = 0;
   for (let i = 0; i < LEVEL_BANDS.length; i++) {
