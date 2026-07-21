@@ -20,6 +20,20 @@
       </button>
     </header>
 
+    <button class="xp-strip" :style="{ '--tier': athLevel.tierColor }" @click="goStats">
+      <div class="xp-row">
+        <span class="xp-cur font-display">{{ athLevel.xp.toLocaleString('fr-FR') }} XP</span>
+        <span class="xp-next"
+          >Niv. {{ athLevel.level + 1 }} à
+          {{ (athLevel.xp + (athLevel.xpForLevel - athLevel.xpIntoLevel)).toLocaleString('fr-FR') }}
+          XP</span
+        >
+      </div>
+      <div class="xp-bar">
+        <div class="xp-fill" :style="{ width: athLevel.progressPct + '%' }" />
+      </div>
+    </button>
+
     <div v-if="loading" class="column items-center q-mt-xl">
       <q-spinner color="primary" size="32px" />
     </div>
@@ -185,6 +199,49 @@ async function goStats() {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+.xp-strip {
+  --tier: var(--accent);
+  width: 100%;
+  display: block;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+.xp-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.xp-cur {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tier);
+  font-variant-numeric: tabular-nums;
+}
+.xp-next {
+  font-size: 11.5px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.xp-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  margin-top: 7px;
+}
+.xp-fill {
+  height: 100%;
+  background: var(--tier);
+  border-radius: 999px;
+  transition: width 0.4s ease;
 }
 .home-name {
   font-size: 32px;

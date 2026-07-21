@@ -1,6 +1,6 @@
 // Niveau d'athlète — progression tirée des SÉANCES loggées (session_logs).
 // Séparé du rang F→SSS des challenges. Pur/testable, aucune dépendance Vue.
-import type { SessionLog } from './types';
+import type { SessionLog, Session } from './types';
 import { tierForLevel } from '@/data/athlete';
 
 /** XP d'une séance : présence + volume (reps) + charge + intensité (note 1–4). */
@@ -20,6 +20,28 @@ export function sessionXp(log: SessionLog): number {
 /** XP totale d'athlète = somme de l'XP de toutes les séances loggées. */
 export function athleteXpPoints(logs: SessionLog[]): number {
   return logs.reduce((a, l) => a + sessionXp(l), 0);
+}
+
+/** Estimation d'XP d'une séance PRÉVUE (avant de la faire) : même barème que
+ *  `sessionXp` mais sur les objectifs planifiés (note d'effort supposée = 2). */
+export function estimateSessionXp(session: Session): number {
+  let reps = 0;
+  let tonnage = 0;
+  for (const ex of session.exercises ?? []) {
+    if (ex.prescription?.length) {
+      for (const p of ex.prescription) {
+        reps += p.reps || 0;
+        tonnage += (p.load_kg || 0) * (p.reps || 0);
+      }
+    } else {
+      const t = ex.target;
+      const avgReps = Math.round(((t.reps_min || 0) + (t.reps_max || 0)) / 2);
+      const sets = t.sets || 0;
+      reps += sets * avgReps;
+      tonnage += sets * avgReps * (t.load_kg || 0);
+    }
+  }
+  return Math.round(50 + reps + tonnage / 100 + 20);
 }
 
 export interface AthleteLevel {

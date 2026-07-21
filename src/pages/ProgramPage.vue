@@ -28,6 +28,7 @@
             <div class="session-name">{{ s.name }}</div>
             <div class="session-meta">
               {{ s.payload.exercises.length }} exercices · ~{{ estimateDurationMin(s.payload) }} min
+              · <span class="xp-gain">+{{ estimateSessionXp(s.payload) }} XP</span>
             </div>
           </div>
           <div class="row items-center no-wrap" style="gap: 4px">
@@ -57,6 +58,7 @@ import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useSessionsStore } from '@/stores/sessions';
 import { estimateDurationMin } from '@/lib/estimates';
+import { estimateSessionXp } from '@/lib/athlete';
 
 const $q = useQuasar();
 const router = useRouter();
@@ -131,6 +133,10 @@ async function goProfile() {
   color: var(--dim);
   font-size: 13px;
   margin-top: 4px;
+}
+.xp-gain {
+  color: var(--accent);
+  font-weight: 700;
 }
 .regen {
   margin-top: 8px;
