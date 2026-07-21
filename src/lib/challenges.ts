@@ -349,8 +349,10 @@ export function evaluateAchievements(challenges: Challenge[]): string[] {
   const codes = new Set<string>();
   const done = challenges.filter((c) => c.status === 'done');
   const abandoned = challenges.filter((c) => c.status === 'abandoned');
+  // Seuls les défis en REPS comptent pour les paliers de reps : le temps (gainage)
+  // ne doit pas gonfler les compteurs (anti-triche « laisser traîner le chrono »).
   const totalReps = challenges.reduce(
-    (a, c) => a + c.progress.reduce((b, p) => b + (p.done || 0), 0),
+    (a, c) => a + (c.unit === 'reps' ? c.progress.reduce((b, p) => b + (p.done || 0), 0) : 0),
     0,
   );
   const distinctExos = new Set(challenges.map((c) => c.exercise_id)).size;
@@ -385,13 +387,14 @@ export function evaluateAchievements(challenges: Challenge[]): string[] {
 
   // Dépassement / cachés : au niveau d'un jour réalisé.
   let bullseye = false; // done === cible exactement
-  let surrégime = false; // ≥ 2× la cible
-  let bigDay = false; // ≥ 200 sur une journée
+  let surrégime = false; // ≥ 2× la cible (reps uniquement)
+  let bigDay = false; // ≥ 200 reps sur une journée (reps uniquement)
   for (const c of challenges) {
+    const isReps = c.unit === 'reps';
     for (const p of c.progress) {
       if (p.target > 0 && p.completed && p.done === p.target) bullseye = true;
-      if (p.target > 0 && p.done >= p.target * 2) surrégime = true;
-      if ((p.done || 0) >= 200) bigDay = true;
+      if (isReps && p.target > 0 && p.done >= p.target * 2) surrégime = true;
+      if (isReps && (p.done || 0) >= 200) bigDay = true;
     }
   }
 
@@ -470,10 +473,12 @@ const LEVEL_BANDS: { min: number; title: string }[] = [
   { min: 100000, title: 'Légende' },
 ];
 
-/** XP = reps cumulées + 25/jour validé + 250/défi terminé. */
+/** XP = reps cumulées + 25/jour validé + 250/défi terminé.
+ *  Le TEMPS (défis en 'time') ne génère PAS d'XP proportionnelle (anti-triche
+ *  chrono) : ces défis ne rapportent que via les jours validés et la complétion. */
 export function challengeXp(challenges: Challenge[]): ChallengeLevel {
   const totalReps = challenges.reduce(
-    (a, c) => a + c.progress.reduce((b, p) => b + (p.done || 0), 0),
+    (a, c) => a + (c.unit === 'reps' ? c.progress.reduce((b, p) => b + (p.done || 0), 0) : 0),
     0,
   );
   const completedDays = challenges.reduce(
