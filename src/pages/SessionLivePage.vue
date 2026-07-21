@@ -118,7 +118,7 @@
             <div class="ed-cell">
               <div class="cell-lbl">{{ ex.bodyweight ? 'Lest' : 'Charge' }}</div>
               <div class="val-line">
-                <button class="stepper" @click="adj(activeSet, 'load_kg', -2.5)">−</button>
+                <button class="stepper" @click="adj(activeSet, 'load_kg', -loadStep)">−</button>
                 <input
                   v-model.number="activeSet.load_kg"
                   type="number"
@@ -129,7 +129,7 @@
                   aria-label="Charge en kg"
                   @change="onActiveLoad()"
                 />
-                <button class="stepper" @click="adj(activeSet, 'load_kg', 2.5)">+</button>
+                <button class="stepper" @click="adj(activeSet, 'load_kg', loadStep)">+</button>
               </div>
             </div>
             <div class="ed-cell">
@@ -149,6 +149,20 @@
                 />
                 <button class="stepper" @click="adj(activeSet, 'reps', isTimeEx ? 5 : 1)">+</button>
               </div>
+            </div>
+          </div>
+          <div class="load-step">
+            <span class="ls-lbl">Pas charge</span>
+            <div class="ls-chips">
+              <button
+                v-for="s in LOAD_STEPS"
+                :key="s"
+                class="ls-chip"
+                :class="{ on: loadStep === s }"
+                @click="setLoadStep(s)"
+              >
+                {{ s }}
+              </button>
             </div>
           </div>
           <div v-if="editIdx >= 0" class="edit-diff">
@@ -327,6 +341,14 @@ function exDone(e: LiveExercise): boolean {
 const swapOpen = ref(false);
 const scrollEl = ref<HTMLElement | null>(null);
 const noteOpen = ref(false);
+// Pas d'incrément de charge, choisi par l'utilisateur (persisté).
+const LOAD_STEPS = [0.5, 1, 2.5, 5];
+const LOAD_STEP_KEY = 'muscu:live:loadstep';
+const loadStep = ref(Number(localStorage.getItem(LOAD_STEP_KEY)) || 2.5);
+function setLoadStep(s: number) {
+  loadStep.value = s;
+  localStorage.setItem(LOAD_STEP_KEY, String(s));
+}
 // Index de la série en cours de modification (corriger une série déjà faite).
 const editIdx = ref(-1);
 // Série « active » = celle qu'on édite (tuile touchée) sinon la série courante.
@@ -1123,6 +1145,37 @@ onBeforeUnmount(() => {
   color: var(--accent-ink);
   font-weight: 700;
   cursor: pointer;
+}
+.load-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ls-lbl {
+  font-size: 11px;
+  color: var(--dim);
+}
+.ls-chips {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+}
+.ls-chip {
+  flex: 1;
+  min-height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ls-chip.on {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  color: var(--accent);
 }
 .edit-diff {
   grid-column: 1/5;
