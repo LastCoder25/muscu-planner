@@ -278,8 +278,8 @@ async function goChallenges() {
   min-height: 88px;
   padding: 14px;
   border-radius: 16px;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  border: 1px solid var(--accent);
+  background: var(--surface-2);
   color: var(--text);
   font-family: var(--font-display);
   font-weight: 600;

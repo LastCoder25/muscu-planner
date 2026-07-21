@@ -30,13 +30,15 @@
     </div>
 
     <template v-else>
-      <!-- En cours / Terminés -->
-      <template v-if="tab === 'active' || tab === 'done'">
+      <!-- En cours / Terminés / Abandonnés -->
+      <template v-if="LIST_TABS.includes(tab)">
         <div v-if="shown.length === 0" class="empty">
           {{
             tab === 'active'
               ? 'Aucun challenge en cours. Lance-en un !'
-              : 'Aucun challenge terminé pour l’instant.'
+              : tab === 'done'
+                ? 'Aucun challenge terminé pour l’instant.'
+                : 'Aucun challenge abandonné.'
           }}
         </div>
         <button v-for="c in shown" :key="c.id" class="ch-card" @click="goDetail(c.id)">
@@ -109,16 +111,14 @@ const loading = ref(true);
 const TABS = [
   { value: 'active', label: 'En cours' },
   { value: 'done', label: 'Terminés' },
+  { value: 'abandoned', label: 'Abandonnés' },
   { value: 'exos', label: 'Exercices' },
   { value: 'ach', label: 'Succès' },
 ];
 const tab = ref(TABS.some((t) => t.value === route.query.tab) ? String(route.query.tab) : 'active');
 
-const shown = computed(() =>
-  tab.value === 'active'
-    ? store.list.filter((c) => c.status === 'active')
-    : store.list.filter((c) => c.status !== 'active'),
-);
+const LIST_TABS = ['active', 'done', 'abandoned'];
+const shown = computed(() => store.list.filter((c) => c.status === tab.value));
 const unlocked = computed(() => new Set(store.unlocked));
 
 function st(c: Challenge) {

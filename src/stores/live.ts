@@ -149,6 +149,9 @@ export const useLiveStore = defineStore('live', () => {
         return;
       }
     }
+    // Séance vide NON persistée : tant que rien n'est ajouté, revenir en arrière
+    // ne laisse aucune séance « en cours » (pas de bannière à annuler sur l'accueil).
+    // La persistance démarre à la première action (addExercise/persist sur change).
     run.value = {
       session_id: 'free',
       free: true,
@@ -157,7 +160,6 @@ export const useLiveStore = defineStore('live', () => {
       exIndex: 0,
       exercises: [],
     };
-    persist();
   }
 
   function addExercise(def: {
