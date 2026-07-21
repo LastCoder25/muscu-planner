@@ -13,6 +13,21 @@ export interface LogRow {
 
 export const useLogsStore = defineStore('logs', () => {
   const recent = ref<LogRow[]>([]);
+  const all = ref<LogRow[]>([]); // tous les bilans (pour l'XP / niveau d'athlète)
+  const allLoaded = ref(false);
+
+  // Tous les bilans de l'utilisateur (RLS own). Chargé à la demande, mis en cache.
+  async function fetchAll(force = false) {
+    if (allLoaded.value && !force) return all.value;
+    const { data, error } = await supabase
+      .from('session_logs')
+      .select('id, name, performed_at, payload')
+      .order('performed_at', { ascending: false });
+    if (error) throw error;
+    all.value = data ?? [];
+    allLoaded.value = true;
+    return all.value;
+  }
 
   async function insert(userId: string, log: SessionLog) {
     const { error } = await supabase.from('session_logs').insert({
@@ -81,7 +96,18 @@ export const useLogsStore = defineStore('logs', () => {
     recent.value = recent.value.filter((r) => r.id !== id);
   }
 
-  return { recent, insert, fetchRecent, fetchById, lastForSession, fetchHistory, remove };
+  return {
+    recent,
+    all,
+    allLoaded,
+    insert,
+    fetchRecent,
+    fetchAll,
+    fetchById,
+    lastForSession,
+    fetchHistory,
+    remove,
+  };
 });
 
 if (import.meta.hot) {

@@ -7,7 +7,14 @@
           {{ profileStore.profile?.identity.name || 'Athlète' }}
         </h1>
       </div>
-      <RankBadge v-if="hasChallenges" :rank="rank" :size="44" @click="goChallenges" />
+      <AthleteBadge
+        :level="athLevel.level"
+        :color="athLevel.tierColor"
+        :tier="athLevel.tier"
+        :size="46"
+        style="cursor: pointer"
+        @click="goStats"
+      />
     </header>
 
     <div v-if="loading" class="column items-center q-mt-xl">
@@ -68,9 +75,8 @@ import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useLiveStore } from '@/stores/live';
-import { useChallengesStore } from '@/stores/challenges';
-import { challengeXp } from '@/lib/challenges';
-import RankBadge from '@/components/RankBadge.vue';
+import AthleteBadge from '@/components/AthleteBadge.vue';
+import { useAthlete } from '@/composables/useAthlete';
 
 const $q = useQuasar();
 const router = useRouter();
@@ -78,11 +84,9 @@ const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const logs = useLogsStore();
 const live = useLiveStore();
-const challengesStore = useChallengesStore();
+const { level: athLevel } = useAthlete();
 const loading = ref(true);
 
-const hasChallenges = computed(() => challengesStore.list.length > 0);
-const rank = computed(() => challengeXp(challengesStore.list).title);
 const lastLog = ref<LogRow | null>(null);
 const hasFree = ref(false);
 
@@ -144,6 +148,9 @@ async function goProgram() {
 }
 async function goChallenges() {
   await router.push('/challenges');
+}
+async function goStats() {
+  await router.push('/stats');
 }
 </script>
 

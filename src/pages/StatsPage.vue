@@ -7,6 +7,24 @@
     </div>
 
     <template v-else>
+      <!-- Niveau d'athlète (progression des séances) -->
+      <div class="ath-card" :style="{ '--tier': athlete.tierColor }">
+        <div class="ath-top">
+          <div class="ath-circle font-display">{{ athlete.level }}</div>
+          <div class="ath-info">
+            <div class="ath-tier font-display">Niveau {{ athlete.level }} · {{ athlete.tier }}</div>
+            <div class="ath-xp">{{ athlete.xp.toLocaleString('fr-FR') }} XP</div>
+          </div>
+        </div>
+        <div class="ath-bar">
+          <div class="ath-fill" :style="{ width: athlete.progressPct + '%' }" />
+        </div>
+        <div class="ath-next">
+          Encore {{ (athlete.xpForLevel - athlete.xpIntoLevel).toLocaleString('fr-FR') }} XP →
+          niveau {{ athlete.level + 1 }}
+        </div>
+      </div>
+
       <div v-if="logs.length === 0" class="empty">Aucune séance enregistrée pour l’instant.</div>
 
       <template v-else>
@@ -87,6 +105,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
+import { athleteXpPoints, athleteLevel } from '@/lib/athlete';
 import { muscleColor } from '@/lib/volume';
 
 const router = useRouter();
@@ -94,6 +113,7 @@ const $q = useQuasar();
 const logsStore = useLogsStore();
 const loading = ref(true);
 const logs = ref<LogRow[]>([]);
+const athlete = computed(() => athleteLevel(athleteXpPoints(logs.value.map((r) => r.payload))));
 
 function median(arr: number[]): number {
   if (arr.length === 0) return 0;
@@ -202,6 +222,69 @@ onMounted(async () => {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 32px;
+}
+/* Niveau d'athlète */
+.ath-card {
+  --tier: var(--accent);
+  background: var(--surface-2);
+  border: 1px solid var(--tier);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.ath-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ath-circle {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid var(--tier);
+  background: color-mix(in srgb, var(--tier) 18%, transparent);
+  color: var(--tier);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ath-info {
+  flex: 1;
+  min-width: 0;
+}
+.ath-tier {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ath-xp {
+  font-size: 13px;
+  color: var(--dim);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.ath-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  margin: 12px 0 6px;
+}
+.ath-fill {
+  height: 100%;
+  background: var(--tier);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.ath-next {
+  font-size: 11.5px;
+  color: var(--dim);
 }
 .p-title {
   font-size: 28px;

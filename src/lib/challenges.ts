@@ -592,11 +592,10 @@ function plannedEffort(ch: Challenge): number {
   return ch.unit === 'time' ? raw / 4 : raw;
 }
 
-/** XP = reps cumulées + 25/jour validé + prime de complétion PROPORTIONNELLE
- *  (25 % de l'effort planifié du défi terminé → finir un gros défi rapporte plus,
- *  et alléger un défi réduit la prime). Le TEMPS ne génère pas d'XP au prorata des
- *  secondes écoulées (anti-triche chrono) : seuls les jours validés + le plan comptent. */
-export function challengeXp(challenges: Challenge[]): ChallengeLevel {
+/** Points d'XP issus des CHALLENGES : reps cumulées (défis reps only, anti-farm
+ *  chrono) + 25/jour validé + prime de complétion proportionnelle (25 % de l'effort
+ *  planifié du défi terminé → finir un gros défi rapporte plus, alléger réduit). */
+export function challengeXpPoints(challenges: Challenge[]): number {
   const totalReps = challenges.reduce(
     (a, c) => a + (c.unit === 'reps' ? c.progress.reduce((b, p) => b + (p.done || 0), 0) : 0),
     0,
@@ -608,8 +607,11 @@ export function challengeXp(challenges: Challenge[]): ChallengeLevel {
   const completionBonus = challenges
     .filter((c) => c.status === 'done')
     .reduce((a, c) => a + Math.round(0.25 * plannedEffort(c)), 0);
-  const xp = Math.round(totalReps + completedDays * 25 + completionBonus);
+  return Math.round(totalReps + completedDays * 25 + completionBonus);
+}
 
+/** Mappe une XP totale sur un rang (F … SSS) + progression vers le suivant. */
+export function levelFromXp(xp: number): ChallengeLevel {
   let idx = 0;
   for (let i = 0; i < LEVEL_BANDS.length; i++) {
     if (xp >= LEVEL_BANDS[i]!.min) idx = i;
@@ -628,4 +630,9 @@ export function challengeXp(challenges: Challenge[]): ChallengeLevel {
     nextLevelXp: next ? next.min : null,
     progressPct,
   };
+}
+
+/** Rang basé sur les seuls challenges (compat) — préférer le rang global via useRank. */
+export function challengeXp(challenges: Challenge[]): ChallengeLevel {
+  return levelFromXp(challengeXpPoints(challenges));
 }
