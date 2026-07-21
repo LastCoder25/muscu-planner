@@ -608,7 +608,10 @@ function editDifficulty() {
 }
 
 async function back() {
-  await router.push('/challenges');
+  // router.back() pour ne pas empiler un doublon /challenges dans l'historique
+  // (sinon il faut appuyer « retour » plusieurs fois pour revenir à l'accueil).
+  if (window.history.state?.back) router.back();
+  else await router.push('/challenges');
 }
 
 onMounted(async () => {

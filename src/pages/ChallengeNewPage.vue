@@ -360,6 +360,7 @@ function next() {
 }
 async function prev() {
   if (step.value > 1) step.value--;
+  else if (window.history.state?.back) router.back();
   else await router.push('/challenges');
 }
 
