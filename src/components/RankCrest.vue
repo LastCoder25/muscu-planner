@@ -35,8 +35,9 @@
       <!-- lettre -->
       <text
         x="50"
-        y="70"
+        y="58"
         text-anchor="middle"
+        dominant-baseline="central"
         class="crest-letter"
         :font-size="letterSize"
         fill="#fff"
