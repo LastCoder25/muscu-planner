@@ -38,7 +38,9 @@ export function nextSessionDeterministic(
   cfg: LevelConfig,
   history: SessionLog[] = [],
 ): Session {
-  const next: Session = structuredClone(plan);
+  // Clone JSON (la Session est de la donnée pure) : robuste face à un proxy
+  // réactif Vue, que structuredClone refuse (« could not be cloned »).
+  const next: Session = JSON.parse(JSON.stringify(plan));
   next.id = crypto.randomUUID();
   next.source = 'engine';
   next.created_at = new Date().toISOString();
