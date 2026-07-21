@@ -230,7 +230,8 @@ function parseSetLine(
 ): { load: number; reps: number; rest: number | undefined } | null {
   const m = SET_RE.exec(line);
   if (m) {
-    const load = m[1] ? Number(m[1].replace(',', '.')) : 0; // « Bar » → 0
+    // « Barre » (sans chiffre) = barre olympique à vide → 20 kg (échauffement).
+    const load = m[1] ? Number(m[1].replace(',', '.')) : 20;
     return { load, reps: Number(m[2]), rest: restToSec(m[3]) };
   }
   const r = REP_RE.exec(line);
@@ -320,7 +321,10 @@ export function parseWorkoutText(raw: string, library: LibEntry[] = []): Session
     .map((l) => l.trim())
     .filter(Boolean);
   if (lines.length === 0) throw new Error('Contenu vide.');
-  const title = stripLead(lines[0]!) || 'Séance importée';
+  // La 1re ligne sert de titre — sauf si c'est un libellé de section (« Échauffement »,
+  // « Mobilité »…) : on évite de nommer la séance d'après son bloc d'échauffement.
+  const rawTitle = stripLead(lines[0]!);
+  const title = !rawTitle || isSectionLabel(rawTitle) ? 'Séance importée' : rawTitle;
 
   const exercises: PlannedExercise[] = [];
   let cur: TextEx | null = null;
