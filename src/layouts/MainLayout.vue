@@ -13,7 +13,15 @@
           @click="goBack"
         />
         <q-toolbar-title class="brand font-display" @click="goHome">MUSCU</q-toolbar-title>
-        <q-btn flat round dense icon="inbox" aria-label="Backlog" @click="goBacklog">
+        <q-btn
+          v-if="auth.isAdmin"
+          flat
+          round
+          dense
+          icon="inbox"
+          aria-label="Backlog"
+          @click="goBacklog"
+        >
           <q-badge v-if="feedback.openCount > 0" color="primary" text-color="dark" floating>{{
             feedback.openCount
           }}</q-badge>
@@ -45,6 +53,10 @@
                 <q-item-section avatar><q-icon name="tune" /></q-item-section>
                 <q-item-section>Paramètres</q-item-section>
               </q-item>
+              <q-item v-if="showInstall" v-close-popup clickable @click="installApp">
+                <q-item-section avatar><q-icon name="install_mobile" /></q-item-section>
+                <q-item-section>Installer l'application</q-item-section>
+              </q-item>
               <q-separator />
               <q-item v-close-popup clickable @click="logout">
                 <q-item-section avatar><q-icon name="logout" /></q-item-section>
@@ -65,18 +77,40 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useFeedbackStore } from '@/stores/feedback';
+import { useInstallPrompt } from '@/composables/useInstallPrompt';
 
+const $q = useQuasar();
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const profileStore = useProfileStore();
 const feedback = useFeedbackStore();
+const { isIOS, isStandalone, hasNativePrompt, promptInstall } = useInstallPrompt();
+
+// Proposer l'installation tant que l'app n'est pas déjà lancée en standalone.
+const showInstall = computed(() => !isStandalone.value);
+
+async function installApp() {
+  if (hasNativePrompt.value) {
+    const outcome = await promptInstall();
+    if (outcome === 'accepted') {
+      $q.notify({ type: 'positive', message: 'Application installée.' });
+    }
+    return;
+  }
+  // Pas d'invite native (iOS Safari, ou critères non réunis) → instructions.
+  const message = isIOS
+    ? "Dans Safari : appuie sur le bouton Partager (carré avec une flèche), puis « Sur l'écran d'accueil »."
+    : "Ouvre le menu de ton navigateur (⋮), puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».";
+  $q.dialog({ title: "Installer l'application", message, ok: { label: 'Compris', flat: true } });
+}
 
 onMounted(() => {
-  feedback.fetchOpenCount().catch(() => undefined);
+  if (auth.isAdmin) feedback.fetchOpenCount().catch(() => undefined);
 });
 
 // Bouton retour visible partout sauf sur l'accueil.
