@@ -6,24 +6,8 @@
     </header>
 
     <div class="scroll">
-      <!-- Étape 1 : prompt -->
-      <div class="sec-h">1 · Demande à ChatGPT</div>
-      <p class="muted">
-        Copie ce prompt, colle-le dans ChatGPT (ou une autre IA), puis reviens avec sa réponse.
-      </p>
-      <div class="prompt-box">{{ prompt }}</div>
-      <q-btn
-        no-caps
-        outline
-        color="primary"
-        icon="content_copy"
-        label="Copier le prompt"
-        class="full-width q-mt-sm"
-        @click="copyPrompt"
-      />
-
-      <!-- Étape 2 : coller -->
-      <div class="sec-h">2 · Colle la réponse</div>
+      <!-- Colle la réponse de ton IA -->
+      <div class="sec-h">Colle la réponse de ton IA</div>
       <p class="muted">
         JSON <b>ou</b> texte de séance (ex. « Squat / 40 kg ×8 — 1 min »). L'app reconnaît les deux.
       </p>
@@ -70,20 +54,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useQuasar, copyToClipboard } from 'quasar';
+import { useQuasar } from 'quasar';
 import type { Session, ExerciseTarget, PlannedExercise } from '@/lib/types';
 import { parseImportedSession, type LibEntry } from '@/lib/importSession';
 import { useAuthStore } from '@/stores/auth';
-import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLibraryStore } from '@/stores/library';
 
 const router = useRouter();
 const $q = useQuasar();
 const auth = useAuthStore();
-const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const libraryStore = useLibraryStore();
 
@@ -91,16 +73,6 @@ const raw = ref('');
 const preview = ref<Session | null>(null);
 const saving = ref(false);
 const library = ref<LibEntry[]>([]);
-
-const prompt = computed(() => {
-  const p = profileStore.profile;
-  const ctx = p
-    ? `Contexte : objectif ${p.objective}, niveau ${p.experience.level}, matériel ${p.equipment}.`
-    : '';
-  return `Crée-moi une séance de musculation. ${ctx}
-Réponds UNIQUEMENT avec un objet JSON valide (aucun texte autour), exactement à ce format :
-{"schema_version":"1.0","type":"session","name":"Nom de la séance","objective":"hypertrophie","exercises":[{"id":"ex_developpe_couche","name":"Développé couché","muscle_primary":"pectoraux","equipment":"barre","progression":"double","rest_seconds":90,"target":{"sets":4,"reps_min":8,"reps_max":12,"load_kg":40}}]}`;
-});
 
 function repsLabel(t: ExerciseTarget): string {
   const range = `${t.sets} × ${t.reps_min}–${t.reps_max}`;
@@ -119,15 +91,6 @@ function exSummary(ex: PlannedExercise): string {
     return `${p.length} séries · ${loadPart}`;
   }
   return `${repsLabel(ex.target)} · ${loadLabel(ex.target)}`;
-}
-
-async function copyPrompt() {
-  try {
-    await copyToClipboard(prompt.value);
-    $q.notify({ type: 'positive', message: 'Prompt copié — colle-le dans ChatGPT.' });
-  } catch {
-    $q.notify({ type: 'negative', message: 'Copie impossible.' });
-  }
 }
 
 function convert() {

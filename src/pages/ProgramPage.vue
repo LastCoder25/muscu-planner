@@ -3,7 +3,7 @@
     <header class="row items-center justify-between q-mb-md">
       <h1 class="prog-title font-display">Mon programme</h1>
       <span class="text-dim text-caption"
-        >{{ sessionsStore.list.length }} séance{{ sessionsStore.list.length > 1 ? 's' : '' }}</span
+        >{{ genList.length }} séance{{ genList.length > 1 ? 's' : '' }}</span
       >
     </header>
 
@@ -12,17 +12,12 @@
     </div>
 
     <template v-else>
-      <div v-if="sessionsStore.list.length === 0" class="empty">
+      <div v-if="genList.length === 0" class="empty">
         Aucune séance générée pour l’instant.
         <button class="regen" @click="goProfile">Générer mon programme</button>
       </div>
 
-      <div
-        v-for="s in sessionsStore.list"
-        :key="s.id"
-        class="session-card"
-        @click="openDetail(s.id)"
-      >
+      <div v-for="s in genList" :key="s.id" class="session-card" @click="openDetail(s.id)">
         <div class="row items-center justify-between">
           <div>
             <div class="session-name">{{ s.name }}</div>
@@ -45,7 +40,7 @@
         </div>
       </div>
 
-      <button v-if="sessionsStore.list.length" class="regen ghost" @click="goProfile">
+      <button v-if="genList.length" class="regen ghost" @click="goProfile">
         Régénérer mon programme
       </button>
     </template>
@@ -53,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useSessionsStore } from '@/stores/sessions';
@@ -64,6 +59,9 @@ const $q = useQuasar();
 const router = useRouter();
 const sessionsStore = useSessionsStore();
 const loading = ref(true);
+
+// « Mon programme » = uniquement les séances générées par l'appli, pas les imports IA.
+const genList = computed(() => sessionsStore.list.filter((s) => s.payload.source !== 'ai'));
 
 onMounted(async () => {
   try {

@@ -20,8 +20,10 @@
           </span>
         </button>
         <button class="ath-home" aria-label="Rang des défis" @click="goChallenges">
-          <RankCrest :rank="challengeRank" :size="44" />
-          <span class="ath-home-tier font-display">Défis</span>
+          <RankCrest :rank="challengeLevel.title" :size="44" />
+          <span class="ath-home-tier font-display" :style="{ color: challengeRankColor }"
+            >Défis</span
+          >
         </button>
       </div>
     </header>
@@ -37,6 +39,28 @@
       </div>
       <div class="xp-bar">
         <div class="xp-fill" :style="{ width: athLevel.progressPct + '%' }" />
+      </div>
+    </button>
+
+    <button class="xp-strip" :style="{ '--tier': challengeRankColor }" @click="goChallenges">
+      <div class="xp-top">
+        <span class="xp-lvl font-display">Rang {{ challengeLevel.title }}</span>
+        <span class="xp-frac"
+          >{{ (challengeLevel.xp - challengeLevel.levelBaseXp).toLocaleString('fr-FR') }} /
+          {{
+            challengeLevel.nextLevelXp !== null
+              ? (challengeLevel.nextLevelXp - challengeLevel.levelBaseXp).toLocaleString('fr-FR') +
+                ' XP défis'
+              : 'max'
+          }}</span
+        >
+        <span v-if="challengeLevel.nextTitle" class="xp-lvl next font-display"
+          >Rang {{ challengeLevel.nextTitle }}</span
+        >
+        <span v-else class="xp-lvl next font-display">🏆</span>
+      </div>
+      <div class="xp-bar">
+        <div class="xp-fill" :style="{ width: challengeLevel.progressPct + '%' }" />
       </div>
     </button>
 
@@ -103,6 +127,7 @@ import RankCrest from '@/components/RankCrest.vue';
 import { useAthlete } from '@/composables/useAthlete';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeXp } from '@/lib/challenges';
+import { rankColor } from '@/data/ranks';
 
 const $q = useQuasar();
 const router = useRouter();
@@ -112,7 +137,8 @@ const logs = useLogsStore();
 const live = useLiveStore();
 const { level: athLevel } = useAthlete();
 const challengesStore = useChallengesStore();
-const challengeRank = computed(() => challengeXp(challengesStore.list).title);
+const challengeLevel = computed(() => challengeXp(challengesStore.list));
+const challengeRankColor = computed(() => rankColor(challengeLevel.value.title));
 const loading = ref(true);
 
 const lastLog = ref<LogRow | null>(null);

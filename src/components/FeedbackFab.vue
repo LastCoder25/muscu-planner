@@ -136,9 +136,16 @@ function open() {
 async function send() {
   sending.value = true;
   try {
-    const screenshots = files.value.length
-      ? await feedback.uploadScreenshots(files.value)
-      : undefined;
+    // Captures NON bloquantes : si l'upload échoue, on envoie quand même le texte.
+    let screenshots: string[] | undefined;
+    let shotFailed = false;
+    if (files.value.length) {
+      try {
+        screenshots = await feedback.uploadScreenshots(files.value);
+      } catch {
+        shotFailed = true;
+      }
+    }
     await feedback.submit({
       kind: kind.value,
       message: message.value.trim(),
@@ -148,7 +155,11 @@ async function send() {
     });
     resetFiles();
     dialog.value = false;
-    $q.notify({ type: 'positive', message: 'Merci pour ton retour 🙏' });
+    $q.notify(
+      shotFailed
+        ? { type: 'warning', message: 'Retour envoyé (captures non jointes).' }
+        : { type: 'positive', message: 'Merci pour ton retour 🙏' },
+    );
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec de l’envoi.' });
   } finally {
