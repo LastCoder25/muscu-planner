@@ -35,7 +35,22 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null;
   }
 
-  return { user, initialized, init, signIn, signUp, signOut };
+  // Envoie l'email de réinitialisation ; le lien ramène sur l'app (session de
+  // recovery) → boot/auth route vers /reset-password.
+  async function resetPassword(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (error) throw error;
+  }
+
+  // Définit le nouveau mot de passe (nécessite une session de recovery active).
+  async function updatePassword(password: string) {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+  }
+
+  return { user, initialized, init, signIn, signUp, signOut, resetPassword, updatePassword };
 });
 
 if (import.meta.hot) {

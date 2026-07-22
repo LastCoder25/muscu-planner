@@ -4,14 +4,24 @@
 import { defineBoot } from '#q-app';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
+import { supabase } from '@/lib/supabase';
 
 export default defineBoot(async ({ router, store }) => {
   const auth = useAuthStore(store);
   const profile = useProfileStore(store);
 
+  // Lien de réinitialisation cliqué : Supabase ouvre une session de recovery et
+  // émet PASSWORD_RECOVERY → on route vers l'écran de nouveau mot de passe.
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === 'PASSWORD_RECOVERY') void router.push('/reset-password');
+  });
+
   await auth.init();
 
   router.beforeEach(async (to) => {
+    // Écran de nouveau mot de passe : toujours accessible (session de recovery).
+    if (to.path === '/reset-password') return true;
+
     // Non connecté : seul /login est accessible.
     if (!auth.user) {
       profile.reset();
