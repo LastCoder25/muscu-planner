@@ -3,6 +3,17 @@
     <h1 class="page-title font-display">Tennis</h1>
     <p class="page-sub text-dim">Prépa physique et drills sur le court.</p>
 
+    <div v-if="resume" class="resume">
+      <div class="resume-main">
+        <q-icon name="sports_tennis" size="20px" />
+        <span>Séance en cours · {{ resume.done }}/{{ resume.total }} drills</span>
+      </div>
+      <div class="resume-actions">
+        <button class="r-go" @click="resumeCourt">Reprendre</button>
+        <button class="r-cancel" aria-label="Abandonner" @click="discardCourt">Abandonner</button>
+      </div>
+    </div>
+
     <!-- Prépa physique -->
     <section class="card">
       <div class="card-head">
@@ -97,6 +108,29 @@
         </div>
       </div>
     </section>
+
+    <!-- Historique tennis -->
+    <section v-if="tennis.logs.length" class="card">
+      <div class="card-head">
+        <q-icon name="history" size="22px" />
+        <div>
+          <div class="card-title">Historique tennis</div>
+          <div class="card-desc">Tes dernières séances jouées sur le court.</div>
+        </div>
+      </div>
+      <div v-for="l in tennis.logs" :key="l.id" class="saved-row" @click="openLog(l.id)">
+        <div class="saved-main">
+          <div class="saved-name">{{ l.payload.name || 'Séance tennis' }}</div>
+          <div class="saved-meta">
+            {{ fmtDate(l.performed_at) }} · {{ l.payload.drills.filter((d) => d.done).length }}/{{
+              l.payload.drills.length
+            }}
+            drills · {{ l.payload.duration_min ?? '?' }} min
+          </div>
+        </div>
+        <q-icon name="chevron_right" color="grey-6" size="20px" />
+      </div>
+    </section>
   </q-page>
 </template>
 
@@ -109,6 +143,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLibraryStore } from '@/stores/library';
 import { useTennisStore } from '@/stores/tennis';
+import { useLiveCourtStore } from '@/stores/liveCourt';
 import { buildPrepaSession } from '@/lib/prepaBuilder';
 
 const DURATIONS = [20, 30, 45] as const;
@@ -120,6 +155,7 @@ const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const library = useLibraryStore();
 const tennis = useTennisStore();
+const live = useLiveCourtStore();
 
 const duration = ref<number>(30);
 const generating = ref(false);
@@ -127,10 +163,34 @@ const generating = ref(false);
 const prepaSessions = computed(() =>
   sessionsStore.list.filter((s) => s.payload.discipline === 'prepa_physique'),
 );
+const resume = computed(() => live.savedMeta());
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
+
+async function resumeCourt() {
+  if (resume.value) await router.push(`/court/${resume.value.sessionId}`);
+}
+function discardCourt() {
+  $q.dialog({
+    title: 'Abandonner la séance',
+    message: 'La séance de tennis en cours sera effacée. Continuer ?',
+    cancel: { label: 'Retour', flat: true },
+    ok: { label: 'Abandonner', color: 'negative' },
+  }).onOk(() => {
+    live.discardSaved();
+    $q.notify({ type: 'positive', message: 'Séance abandonnée.' });
+  });
+}
+async function openLog(id: string) {
+  await router.push(`/court/bilan/${id}?h=1`);
+}
 
 onMounted(() => {
   sessionsStore.fetchMine().catch(() => undefined);
   tennis.fetchMine().catch(() => undefined);
+  tennis.fetchLogs().catch(() => undefined);
 });
 
 async function newCourt() {
@@ -217,6 +277,53 @@ function remove(id: string) {
 }
 .text-dim {
   color: var(--dim);
+}
+.resume {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.resume-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+}
+.resume-main .q-icon {
+  color: var(--accent);
+}
+.resume-actions {
+  display: flex;
+  gap: 8px;
+}
+.r-go {
+  padding: 7px 14px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.r-cancel {
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--d4);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
 }
 .card {
   background: var(--surface);

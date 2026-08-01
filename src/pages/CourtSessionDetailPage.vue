@@ -56,6 +56,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useTennisStore } from '@/stores/tennis';
+import { useLiveCourtStore } from '@/stores/liveCourt';
 import {
   DRILL_CATEGORY_LABELS,
   DRILL_SHOT_LABELS,
@@ -68,6 +69,7 @@ const $q = useQuasar();
 const route = useRoute();
 const router = useRouter();
 const tennis = useTennisStore();
+const live = useLiveCourtStore();
 const loading = ref(true);
 
 const id = computed(() => String(route.params.id));
@@ -91,9 +93,10 @@ onMounted(async () => {
   }
 });
 
-function start() {
-  // Runner d'exécution : Phase 3.
-  $q.notify({ type: 'info', message: 'Le mode « jouer la séance » arrive très bientôt.' });
+async function start() {
+  if (!session.value) return;
+  live.start(session.value);
+  await router.push(`/court/${id.value}`);
 }
 
 function remove() {

@@ -80,6 +80,19 @@
         </div>
       </div>
 
+      <div v-if="courtResume" class="free-ongoing">
+        <div class="fo-main">
+          <q-icon name="sports_tennis" size="20px" />
+          <span>Séance tennis · {{ courtResume.done }}/{{ courtResume.total }} drills</span>
+        </div>
+        <div class="fo-actions">
+          <button class="fo-resume" @click="resumeCourt">Reprendre</button>
+          <button class="fo-cancel" aria-label="Abandonner" @click="discardCourt">
+            Abandonner
+          </button>
+        </div>
+      </div>
+
       <div v-if="lastLog" class="last-card" @click="goHistory">
         <div class="last-lbl">Dernière séance · {{ fmtDate(lastLog.performed_at) }}</div>
         <div class="last-row">
@@ -126,6 +139,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useLiveStore } from '@/stores/live';
+import { useLiveCourtStore } from '@/stores/liveCourt';
 import AthleteBadge from '@/components/AthleteBadge.vue';
 import RankCrest from '@/components/RankCrest.vue';
 import { useAthlete } from '@/composables/useAthlete';
@@ -139,6 +153,8 @@ const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const logs = useLogsStore();
 const live = useLiveStore();
+const liveCourt = useLiveCourtStore();
+const courtResume = computed(() => liveCourt.savedMeta());
 const { level: athLevel } = useAthlete();
 const challengesStore = useChallengesStore();
 const challengeLevel = computed(() => challengeXp(challengesStore.list));
@@ -196,6 +212,20 @@ function discardFree() {
     live.discardSaved('free');
     hasFree.value = false;
     $q.notify({ type: 'positive', message: 'Séance libre supprimée.' });
+  });
+}
+async function resumeCourt() {
+  if (courtResume.value) await router.push(`/court/${courtResume.value.sessionId}`);
+}
+function discardCourt() {
+  $q.dialog({
+    title: 'Abandonner la séance tennis',
+    message: 'La séance de tennis en cours sera effacée. Continuer ?',
+    cancel: { label: 'Retour', flat: true },
+    ok: { label: 'Abandonner', color: 'negative' },
+  }).onOk(() => {
+    liveCourt.discardSaved();
+    $q.notify({ type: 'positive', message: 'Séance tennis abandonnée.' });
   });
 }
 async function startImport() {

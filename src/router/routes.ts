@@ -57,9 +57,17 @@ const routes: RouteRecordRaw[] = [
     children: [{ path: '', component: () => import('@/pages/CourtNewPage.vue') }],
   },
   {
+    path: '/court/bilan/:id',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/CourtBilanPage.vue') }],
+  },
+  {
     path: '/court/:id',
     component: () => import('@/layouts/BlankLayout.vue'),
-    children: [{ path: 'detail', component: () => import('@/pages/CourtSessionDetailPage.vue') }],
+    children: [
+      { path: '', component: () => import('@/pages/CourtLivePage.vue') },
+      { path: 'detail', component: () => import('@/pages/CourtSessionDetailPage.vue') },
+    ],
   },
   {
     path: '/challenges/:id',
