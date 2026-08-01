@@ -57,8 +57,8 @@
       </div>
     </section>
 
-    <!-- Drills court (Phase 2) -->
-    <section class="card soon">
+    <!-- Drills court -->
+    <section class="card">
       <div class="card-head">
         <q-icon name="sports_tennis" size="22px" />
         <div>
@@ -68,7 +68,34 @@
           </div>
         </div>
       </div>
-      <div class="soon-badge">Bientôt</div>
+
+      <q-btn
+        class="gen-btn full-width"
+        color="primary"
+        text-color="dark"
+        no-caps
+        size="lg"
+        icon="add"
+        label="Créer une séance"
+        @click="newCourt"
+      />
+
+      <div v-if="tennis.sessions.length" class="saved">
+        <div class="saved-lbl">Mes séances de court</div>
+        <div v-for="s in tennis.sessions" :key="s.id" class="saved-row" @click="openCourt(s.id)">
+          <div class="saved-main">
+            <div class="saved-name">{{ s.payload.name }}</div>
+            <div class="saved-meta">
+              {{ s.payload.drills.length }} drills ·
+              {{ s.payload.estimated_duration_min ?? '?' }} min ·
+              {{ s.payload.with_partner ? 'avec partenaire' : 'seul(e)' }}
+            </div>
+          </div>
+          <button class="saved-del" aria-label="Supprimer" @click.stop="removeCourt(s.id)">
+            <q-icon name="delete_outline" size="20px" />
+          </button>
+        </div>
+      </div>
     </section>
   </q-page>
 </template>
@@ -81,6 +108,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLibraryStore } from '@/stores/library';
+import { useTennisStore } from '@/stores/tennis';
 import { buildPrepaSession } from '@/lib/prepaBuilder';
 
 const DURATIONS = [20, 30, 45] as const;
@@ -91,6 +119,7 @@ const auth = useAuthStore();
 const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const library = useLibraryStore();
+const tennis = useTennisStore();
 
 const duration = ref<number>(30);
 const generating = ref(false);
@@ -101,7 +130,27 @@ const prepaSessions = computed(() =>
 
 onMounted(() => {
   sessionsStore.fetchMine().catch(() => undefined);
+  tennis.fetchMine().catch(() => undefined);
 });
+
+async function newCourt() {
+  await router.push('/court/new');
+}
+async function openCourt(id: string) {
+  await router.push(`/court/${id}/detail`);
+}
+function removeCourt(id: string) {
+  $q.dialog({
+    title: 'Supprimer la séance',
+    message: 'Cette séance de tennis sera supprimée. Continuer ?',
+    cancel: { label: 'Retour', flat: true },
+    ok: { label: 'Supprimer', color: 'negative' },
+  }).onOk(() => {
+    void tennis
+      .remove(id)
+      .then(() => $q.notify({ type: 'positive', message: 'Séance supprimée.' }));
+  });
+}
 
 async function generate() {
   const profile = profileStore.profile;

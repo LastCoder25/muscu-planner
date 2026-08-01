@@ -173,3 +173,102 @@ export interface CoachRequest {
   last_session?: Session;
   instruction: string;
 }
+
+// ————————————————————————————————————————————————————————————————
+// Drills sportifs sur le court (tennis) — extension additive du contrat (v1.1).
+// Domaine distinct de la musculation : on raisonne par coup/figure/partenaire et
+// non par muscle/charge. D'où des types dédiés (jamais réutiliser PlannedExercise).
+// ————————————————————————————————————————————————————————————————
+
+export type DrillCategory =
+  | 'echauffement'
+  | 'fond_de_court'
+  | 'service_retour'
+  | 'volee'
+  | 'deplacement'
+  | 'jeu'
+  | 'retour_au_calme';
+
+export type DrillShot = 'coup_droit' | 'revers' | 'service' | 'volee' | 'smash' | 'mixte';
+export type DrillPlayers = 'solo' | 'duo' | 'groupe';
+export type DrillFormatMode = 'reps' | 'time' | 'balls'; // time = secondes
+
+export interface DrillFormat {
+  mode: DrillFormatMode;
+  value: number; // reps, secondes (time), ou nombre de balles
+  sets: number;
+}
+
+// Entrée du catalogue global de drills (table `drills`).
+export interface Drill {
+  id: string;
+  sport: string; // 'tennis' pour l'instant
+  name: string;
+  category: DrillCategory;
+  shot?: DrillShot | null;
+  pattern?: string | null; // diagonale, longue_ligne, croise, decroise, montee_volee…
+  partner_required: boolean;
+  players: DrillPlayers;
+  equipment?: string[]; // raquette, balles, panier, cible, plots, mur, filet
+  intensity?: 'faible' | 'moderee' | 'elevee';
+  focus?: string[]; // technique, tactique, physique, regularite, puissance
+  level?: number; // 1/2/3
+  default_format: DrillFormat;
+  description?: string;
+  instructions?: string[];
+  tips?: string;
+}
+
+// Drill prescrit dans une séance de court.
+export interface PlannedDrill {
+  id: string;
+  name: string;
+  category: DrillCategory;
+  shot?: DrillShot | null;
+  pattern?: string | null;
+  partner_required: boolean;
+  format: DrillFormat;
+  rest_seconds: number;
+  notes?: string;
+}
+
+export interface DrillSession {
+  schema_version: string;
+  type: 'drill_session';
+  id: string;
+  name: string;
+  sport: string;
+  theme?: string; // coup_droit, revers, service, volee, jeu, physique, complet
+  with_partner: boolean;
+  level?: Level;
+  estimated_duration_min?: number;
+  source?: 'app' | 'user' | 'ai' | 'engine';
+  created_at?: string;
+  drills: PlannedDrill[];
+}
+
+export interface LoggedDrill {
+  id: string;
+  name: string;
+  done: boolean;
+  sets_done?: number;
+  elapsed_sec?: number;
+  difficulty?: Difficulty; // note de ressenti 1–4
+  comment?: string;
+}
+
+export interface DrillLog {
+  schema_version: string;
+  type: 'drill_log';
+  id: string;
+  drill_session_id?: string;
+  name?: string;
+  sport: string;
+  with_partner: boolean;
+  started_at?: string;
+  ended_at?: string;
+  duration_min?: number;
+  global_difficulty?: Difficulty;
+  global_comment?: string;
+  drills: LoggedDrill[];
+}
