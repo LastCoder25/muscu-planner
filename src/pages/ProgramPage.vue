@@ -60,8 +60,13 @@ const router = useRouter();
 const sessionsStore = useSessionsStore();
 const loading = ref(true);
 
-// « Mon programme » = uniquement les séances générées par l'appli, pas les imports IA.
-const genList = computed(() => sessionsStore.list.filter((s) => s.payload.source !== 'ai'));
+// « Mon programme » = séances de MUSCULATION générées par l'appli (pas les
+// imports IA, pas la prépa physique — celle-ci vit dans le hub Tennis).
+const genList = computed(() =>
+  sessionsStore.list.filter(
+    (s) => s.payload.source !== 'ai' && s.payload.discipline !== 'prepa_physique',
+  ),
+);
 
 onMounted(async () => {
   try {

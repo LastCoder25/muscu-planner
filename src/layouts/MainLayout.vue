@@ -45,6 +45,10 @@
                 <q-item-section avatar><q-icon name="emoji_events" /></q-item-section>
                 <q-item-section>Challenges</q-item-section>
               </q-item>
+              <q-item v-close-popup clickable @click="goTennis">
+                <q-item-section avatar><q-icon name="sports_tennis" /></q-item-section>
+                <q-item-section>Tennis</q-item-section>
+              </q-item>
               <q-item v-close-popup clickable @click="goProfile">
                 <q-item-section avatar><q-icon name="fitness_center" /></q-item-section>
                 <q-item-section>Profil / Réglages</q-item-section>
@@ -139,6 +143,9 @@ async function goStats() {
 }
 async function goChallenges() {
   await router.push('/challenges');
+}
+async function goTennis() {
+  await router.push('/tennis');
 }
 async function goBacklog() {
   await router.push('/backlog');

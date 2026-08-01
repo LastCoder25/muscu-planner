@@ -105,6 +105,10 @@
           <q-icon name="fitness_center" size="26px" />
           <span>Mon programme</span>
         </button>
+        <button class="tile" @click="goTennis">
+          <q-icon name="sports_tennis" size="26px" />
+          <span>Tennis</span>
+        </button>
         <button class="tile tile-accent" @click="goChallenges">
           <q-icon name="emoji_events" size="26px" />
           <span>Challenges</span>
@@ -202,6 +206,9 @@ async function goProgram() {
 }
 async function goChallenges() {
   await router.push('/challenges');
+}
+async function goTennis() {
+  await router.push('/tennis');
 }
 async function goStats() {
   await router.push('/stats');

@@ -121,6 +121,9 @@ export interface Session {
   split?: string;
   objective?: Objective;
   level?: Level;
+  // Nature de la séance : musculation (défaut) ou prépa physique. La prépa
+  // réutilise tout le moteur muscu (runner/bilan/stats) mais est listée à part.
+  discipline?: 'musculation' | 'prepa_physique';
   estimated_duration_min?: number;
   source?: 'app' | 'user' | 'template' | 'ai' | 'engine';
   created_at?: string;

@@ -13,6 +13,8 @@ export interface ExerciseRow {
   unit?: string | null; // 'reps' (défaut) ou 'time'
   unilateral?: boolean | null; // un côté à la fois
   challenge_only?: boolean | null; // exo réservé aux défis (exclu du générateur)
+  category?: string | null; // 'musculation' (défaut) ou 'prepa_physique'
+  tags?: string[] | null; // tags libres (tennis, agilite, pliometrie…)
 }
 
 export interface ExerciseFull extends ExerciseRow {
@@ -41,8 +43,23 @@ export const useLibraryStore = defineStore('library', () => {
     const { data, error } = await supabase
       .from('exercises')
       .select(
-        'id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, unilateral, challenge_only',
+        'id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, unilateral, challenge_only, category, tags',
       );
+    if (error) throw error;
+    return (data as ExerciseRow[]) ?? [];
+  }
+
+  // Exercices de prépa physique (category = 'prepa_physique'), pour le générateur
+  // de séance de prépa. Optionnellement filtrés par tag (ex. 'tennis').
+  async function fetchPrepa(tag?: string) {
+    let q = supabase
+      .from('exercises')
+      .select(
+        'id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, unilateral, category, tags',
+      )
+      .eq('category', 'prepa_physique');
+    if (tag) q = q.contains('tags', [tag]);
+    const { data, error } = await q;
     if (error) throw error;
     return (data as ExerciseRow[]) ?? [];
   }
@@ -66,7 +83,7 @@ export const useLibraryStore = defineStore('library', () => {
     return (data as ExerciseRow[]) ?? [];
   }
 
-  return { fetchOne, fetchAll, fetchByMuscle, fetchByIds };
+  return { fetchOne, fetchAll, fetchPrepa, fetchByMuscle, fetchByIds };
 });
 
 if (import.meta.hot) {
