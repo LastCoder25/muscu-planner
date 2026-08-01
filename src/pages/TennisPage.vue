@@ -51,6 +51,36 @@
         @click="generate"
       />
 
+      <button class="ia-link" @click="prepaIa = !prepaIa">
+        {{ prepaIa ? 'Masquer l’IA' : 'Générer par IA' }}
+      </button>
+      <div v-if="prepaIa" class="ai-block">
+        <q-btn
+          outline
+          color="primary"
+          no-caps
+          icon="content_copy"
+          label="Copier le prompt"
+          @click="copyPrepaPrompt"
+        />
+        <q-input
+          v-model="prepaRaw"
+          type="textarea"
+          filled
+          autogrow
+          label="Colle la réponse JSON de l'IA"
+        />
+        <q-btn
+          color="primary"
+          text-color="dark"
+          no-caps
+          icon="auto_awesome"
+          label="Analyser"
+          :loading="analyzing"
+          @click="analyzePrepa"
+        />
+      </div>
+
       <div v-if="prepaSessions.length" class="saved">
         <div class="saved-lbl">Mes séances de prépa</div>
         <div v-for="s in prepaSessions" :key="s.id" class="saved-row" @click="openDetail(s.id)">
@@ -145,6 +175,8 @@ import { useLibraryStore } from '@/stores/library';
 import { useTennisStore } from '@/stores/tennis';
 import { useLiveCourtStore } from '@/stores/liveCourt';
 import { buildPrepaSession } from '@/lib/prepaBuilder';
+import { buildPrepaPrompt } from '@/lib/tennisCoach';
+import { parseImportedSession } from '@/lib/importSession';
 
 const DURATIONS = [20, 30, 45] as const;
 
@@ -159,6 +191,9 @@ const live = useLiveCourtStore();
 
 const duration = ref<number>(30);
 const generating = ref(false);
+const prepaIa = ref(false);
+const prepaRaw = ref('');
+const analyzing = ref(false);
 
 const prepaSessions = computed(() =>
   sessionsStore.list.filter((s) => s.payload.discipline === 'prepa_physique'),
@@ -239,6 +274,46 @@ async function generate() {
     });
   } finally {
     generating.value = false;
+  }
+}
+
+async function copyPrepaPrompt() {
+  const prompt = buildPrepaPrompt({ duration_min: duration.value });
+  try {
+    await navigator.clipboard.writeText(prompt);
+    $q.notify({ type: 'positive', message: 'Prompt copié — colle-le dans ton IA.' });
+  } catch {
+    $q.notify({
+      type: 'warning',
+      message: 'Copie impossible : sélectionne le texte manuellement.',
+    });
+  }
+}
+
+async function analyzePrepa() {
+  const userId = auth.user?.id;
+  if (!userId) return;
+  if (!prepaRaw.value.trim()) {
+    $q.notify({ type: 'warning', message: 'Colle d’abord la réponse de l’IA.' });
+    return;
+  }
+  analyzing.value = true;
+  try {
+    const lib = await library.fetchAll();
+    const session = parseImportedSession(prepaRaw.value, lib);
+    session.discipline = 'prepa_physique';
+    if (!session.name || session.name === 'Séance importée') {
+      session.name = 'Prépa physique tennis (IA)';
+    }
+    const id = await sessionsStore.insert(userId, session);
+    await router.push(`/session/${id}/detail`);
+  } catch (e) {
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Lecture impossible.',
+    });
+  } finally {
+    analyzing.value = false;
   }
 }
 
@@ -385,6 +460,22 @@ function remove(id: string) {
 }
 .gen-btn {
   border-radius: 12px;
+}
+.ia-link {
+  display: block;
+  margin: 10px auto 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ai-block {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .saved {
   margin-top: 18px;

@@ -8,6 +8,14 @@
     </header>
 
     <div class="body">
+      <!-- Méthode -->
+      <div class="chips method">
+        <button class="chip" :class="{ on: mode === 'engine' }" @click="mode = 'engine'">
+          Générateur
+        </button>
+        <button class="chip" :class="{ on: mode === 'ai' }" @click="mode = 'ai'">Par IA</button>
+      </div>
+
       <!-- Thème -->
       <div class="section-lbl">Thème</div>
       <div class="themes">
@@ -64,6 +72,7 @@
       </div>
 
       <q-btn
+        v-if="mode === 'engine'"
         class="gen full-width"
         color="primary"
         text-color="dark"
@@ -74,6 +83,38 @@
         :loading="loading"
         @click="generate"
       />
+
+      <!-- Mode IA : copier le prompt puis coller la réponse -->
+      <div v-else class="ai-block">
+        <q-btn
+          class="full-width"
+          outline
+          color="primary"
+          no-caps
+          size="lg"
+          icon="content_copy"
+          label="Copier le prompt pour l'IA"
+          @click="copyPrompt"
+        />
+        <q-input
+          v-model="rawInput"
+          type="textarea"
+          filled
+          autogrow
+          label="Colle ici la réponse JSON de l'IA"
+          class="ai-paste"
+        />
+        <q-btn
+          class="full-width"
+          color="primary"
+          text-color="dark"
+          no-caps
+          size="lg"
+          icon="auto_awesome"
+          label="Analyser la réponse"
+          @click="analyze"
+        />
+      </div>
 
       <!-- Aperçu -->
       <div v-if="preview" class="preview">
@@ -123,6 +164,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useTennisStore } from '@/stores/tennis';
 import { buildCourtSession } from '@/lib/drills';
+import { buildCourtPrompt, parseDrillSession } from '@/lib/tennisCoach';
 import type { DrillSession, DrillShot, DrillCategory, DrillFormat, Level } from '@/lib/types';
 import {
   TENNIS_THEMES,
@@ -148,6 +190,8 @@ const theme = ref('complet');
 const withPartner = ref(true);
 const duration = ref<number>(60);
 const level = ref<Level>(profileStore.profile?.experience.level ?? 'intermediaire');
+const mode = ref<'engine' | 'ai'>('engine');
+const rawInput = ref('');
 const loading = ref(false);
 const saving = ref(false);
 const preview = ref<DrillSession | null>(null);
@@ -186,6 +230,45 @@ async function generate() {
     preview.value = session;
   } finally {
     loading.value = false;
+  }
+}
+
+async function copyPrompt() {
+  const catalog = await tennis.fetchCatalog();
+  const prompt = buildCourtPrompt(
+    {
+      theme: theme.value,
+      duration_min: duration.value,
+      withPartner: withPartner.value,
+      level: level.value,
+    },
+    catalog,
+  );
+  try {
+    await navigator.clipboard.writeText(prompt);
+    $q.notify({ type: 'positive', message: 'Prompt copié — colle-le dans ton IA.' });
+  } catch {
+    $q.notify({
+      type: 'warning',
+      message: 'Copie impossible : sélectionne le texte manuellement.',
+    });
+  }
+}
+
+async function analyze() {
+  if (!rawInput.value.trim()) {
+    $q.notify({ type: 'warning', message: 'Colle d’abord la réponse de l’IA.' });
+    return;
+  }
+  try {
+    const catalog = await tennis.fetchCatalog();
+    preview.value = parseDrillSession(rawInput.value, catalog);
+    $q.notify({ type: 'positive', message: 'Séance analysée.' });
+  } catch (e) {
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Lecture impossible.',
+    });
   }
 }
 
@@ -305,6 +388,15 @@ function goBack() {
 .gen {
   border-radius: 12px;
   margin-top: 24px;
+}
+.method {
+  margin-bottom: 6px;
+}
+.ai-block {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .preview {
   margin-top: 24px;
