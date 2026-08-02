@@ -64,7 +64,7 @@ export interface Profile {
     tracking_time?: string; // « HH:MM » pour le rappel
     court_equipment?: string[]; // matériel de tennis possédé (panier, machine, mur…)
     vma?: number; // Vitesse Maximale Aérobie (km/h) — base des allures cardio
-    hills?: { length_m: number; grade_pct?: number }[]; // côtes dispo (séances trail)
+    hills?: { length_m: number; grade_pct?: number; elevation_m?: number }[]; // côtes dispo (trail)
   };
 }
 

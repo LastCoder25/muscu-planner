@@ -44,13 +44,50 @@
 
         <template v-if="raceType === 'trail'">
           <div class="section-lbl">Côtes disponibles (séances de côtes)</div>
-          <div v-for="(h, i) in hills" :key="i" class="hill-row">
-            <q-input v-model.number="h.length_m" type="number" filled dense label="Longueur (m)" />
-            <q-input v-model.number="h.grade_pct" type="number" filled dense label="Pente (%)" />
-            <button class="hill-del" aria-label="Supprimer" @click="hills.splice(i, 1)">✕</button>
+          <div v-for="(h, i) in hills" :key="i" class="hill">
+            <div class="hill-top">
+              <q-input
+                v-model.number="h.length_m"
+                type="number"
+                filled
+                dense
+                label="Longueur (m)"
+                class="hill-len"
+              />
+              <button class="hill-del" aria-label="Supprimer" @click="hills.splice(i, 1)">✕</button>
+            </div>
+            <div class="hill-grade">
+              <span class="hg-lbl">Pente en</span>
+              <q-input
+                v-if="h._mode === 'pct'"
+                v-model.number="h.grade_pct"
+                type="number"
+                filled
+                dense
+                label="%"
+                class="hg-val"
+              />
+              <q-input
+                v-else
+                v-model.number="h.elevation_m"
+                type="number"
+                filled
+                dense
+                label="D+ (m)"
+                class="hg-val"
+              />
+              <button class="hg-b" :class="{ on: h._mode === 'pct' }" @click="h._mode = 'pct'">
+                %
+              </button>
+              <button class="hg-b" :class="{ on: h._mode === 'dplus' }" @click="h._mode = 'dplus'">
+                D+
+              </button>
+            </div>
           </div>
           <button class="hill-add" @click="addHill">+ Ajouter une côte</button>
-          <p class="hill-note">Sans côte, les séances de côtes se font en durée (40 s).</p>
+          <p class="hill-note">
+            Renseigne la pente en % ou le D+. Sans côte : séances en durée (40 s).
+          </p>
         </template>
 
         <div class="section-lbl">Date de la course</div>
@@ -173,17 +210,33 @@ const distanceKm = ref<number | null>(null);
 const elevationM = ref<number | null>(null);
 const raceDate = ref('');
 const spw = ref(3);
-const hills = ref<{ length_m: number; grade_pct?: number }[]>([
-  ...(profileStore.profile?.preferences?.hills ?? []),
-]);
+
+interface EditHill {
+  length_m: number | null;
+  grade_pct: number | null;
+  elevation_m: number | null;
+  _mode: 'pct' | 'dplus';
+}
+const hills = ref<EditHill[]>(
+  (profileStore.profile?.preferences?.hills ?? []).map((h) => ({
+    length_m: h.length_m,
+    grade_pct: h.grade_pct ?? null,
+    elevation_m: h.elevation_m ?? null,
+    _mode: h.elevation_m && !h.grade_pct ? 'dplus' : 'pct',
+  })),
+);
 
 function addHill() {
-  hills.value.push({ length_m: 200, grade_pct: 8 });
+  hills.value.push({ length_m: 200, grade_pct: 8, elevation_m: null, _mode: 'pct' });
 }
 const validHills = computed(() =>
   hills.value
     .filter((h) => h.length_m && h.length_m > 0)
-    .map((h) => ({ length_m: h.length_m, ...(h.grade_pct ? { grade_pct: h.grade_pct } : {}) })),
+    .map((h) => ({
+      length_m: h.length_m as number,
+      ...(h._mode === 'pct' && h.grade_pct ? { grade_pct: h.grade_pct } : {}),
+      ...(h._mode === 'dplus' && h.elevation_m ? { elevation_m: h.elevation_m } : {}),
+    })),
 );
 // Mémorise les côtes au profil pour pré-remplir les prochains plans.
 async function persistHills() {
@@ -202,6 +255,16 @@ async function persistHills() {
 
 const vma = computed(() => profileStore.profile?.preferences?.vma ?? null);
 const plan = computed<CardioPlan | null>(() => cardio.plans[0]?.payload ?? null);
+
+// Calibrage sur les sorties récentes (8 dernières semaines) : plus longue sortie
+// enregistrée → point de départ de la sortie longue du plan.
+const baselineLongMin = computed<number | null>(() => {
+  const cutoff = Date.now() - 56 * 86400000;
+  const durs = cardio.logs
+    .filter((r) => Date.parse(r.performed_at) >= cutoff && r.payload.duration_min)
+    .map((r) => r.payload.duration_min as number);
+  return durs.length ? Math.max(...durs) : null;
+});
 
 function isoToday(): string {
   const d = new Date();
@@ -227,6 +290,7 @@ function fmtDate(iso: string): string {
 
 onMounted(async () => {
   try {
+    cardio.fetchLogs().catch(() => undefined); // pour le calibrage (baseline)
     await cardio.fetchPlans();
   } catch (e) {
     $q.notify({
@@ -255,6 +319,7 @@ async function generate() {
       ...(raceType.value === 'trail' && distanceKm.value ? { distanceKm: distanceKm.value } : {}),
       ...(raceType.value === 'trail' && elevationM.value ? { elevationM: elevationM.value } : {}),
       ...(raceType.value === 'trail' && validHills.value.length ? { hills: validHills.value } : {}),
+      ...(baselineLongMin.value ? { baselineLongMin: baselineLongMin.value } : {}),
       newId: () => crypto.randomUUID(),
     });
     await cardio.createPlan(userId, built);
@@ -399,14 +464,49 @@ async function goCardio() {
   gap: 10px;
   margin-top: 12px;
 }
-.hill-row {
+.hill {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: var(--surface-2);
+}
+.hill-top {
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-bottom: 8px;
 }
-.hill-row .q-input {
+.hill-len {
   flex: 1;
+}
+.hill-grade {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+.hg-lbl {
+  font-size: 12px;
+  color: var(--dim);
+}
+.hg-val {
+  flex: 1;
+}
+.hg-b {
+  min-width: 40px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.hg-b.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 .hill-del {
   background: none;

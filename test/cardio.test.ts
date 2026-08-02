@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { sumPhases, paceLabel, phaseSummary } from '@/data/cardio';
 import { cardioSessionXp } from '@/lib/athlete';
-import { buildRunSession, paceFromVma, vmaFromDemiCooper, buildRunPlan } from '@/lib/cardio';
+import {
+  buildRunSession,
+  paceFromVma,
+  vmaFromDemiCooper,
+  buildRunPlan,
+  hillGrade,
+} from '@/lib/cardio';
 import type { CardioPhase, CardioLog } from '@/lib/types';
 
 describe('sumPhases', () => {
@@ -162,5 +168,42 @@ describe('buildRunPlan — trail (spécifique + côtes)', () => {
   });
   it('varié : au moins 3 types de séances différents', () => {
     expect(types.size).toBeGreaterThanOrEqual(3);
+  });
+  it('contient une semaine de récupération (anti-blessure)', () => {
+    expect(plan.weeks.some((w) => w.label === 'Récup')).toBe(true);
+  });
+});
+
+describe('côtes en % ou en D+', () => {
+  it('hillGrade : direct depuis le %', () => {
+    expect(hillGrade({ length_m: 200, grade_pct: 9 })).toBe(9);
+  });
+  it('hillGrade : dérivé du D+ / longueur', () => {
+    expect(hillGrade({ length_m: 200, elevation_m: 20 })).toBe(10);
+  });
+  it('cotes avec côte en D+ : work_m = longueur, note avec D+', () => {
+    const s = buildRunSession('cotes', 14, { hill: { length_m: 250, elevation_m: 25 } });
+    const iv = s.phases.find((p) => p.kind === 'intervalle')!;
+    expect(iv.work_m).toBe(250);
+    expect(iv.note).toContain('D+');
+  });
+});
+
+describe('calibrage sur le niveau (baselineLongMin)', () => {
+  it('la sortie longue démarre près du niveau actuel', () => {
+    let n = 0;
+    const plan = buildRunPlan({
+      raceType: 'marathon',
+      startDate: '2026-01-05',
+      raceDate: '2026-04-06', // ~13 semaines
+      sessionsPerWeek: 3,
+      vma: 15,
+      baselineLongMin: 90,
+      newId: () => `b${n++}`,
+    });
+    const firstLong =
+      plan.weeks[0]!.sessions.find((s) => s.session_type === 'sortie_longue')?.duration_min ?? 0;
+    // démarre autour de la baseline (90), pas à ~50 % du max (65).
+    expect(firstLong).toBeGreaterThanOrEqual(80);
   });
 });

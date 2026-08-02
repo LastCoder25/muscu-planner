@@ -45,13 +45,22 @@ function repsFor(level: Level | undefined, base: number): number {
 
 export interface HillDef {
   length_m: number;
-  grade_pct?: number;
+  grade_pct?: number; // pente en %
+  elevation_m?: number; // OU dénivelé de la côte (D+ en m)
+}
+
+// Pente en % d'une côte (depuis grade_pct, sinon dérivée du D+ / longueur).
+export function hillGrade(h: HillDef): number | undefined {
+  if (h.grade_pct) return Math.round(h.grade_pct);
+  if (h.elevation_m && h.length_m) return Math.round((h.elevation_m / h.length_m) * 100);
+  return undefined;
 }
 
 export interface RunSessionOptions {
   level?: Level;
   duration_min?: number; // pour endurance / tempo / sortie longue
   hill?: HillDef; // côte disponible (séance 'cotes')
+  reps?: number; // override du nb de répétitions (progressivité du plan)
   elevationTargetM?: number; // D+ visé (sortie_trail) — informatif
 }
 
@@ -120,7 +129,7 @@ export function buildRunSession(
       phases.push({
         kind: 'intervalle',
         intensity: 'max',
-        reps: repsFor(opts.level, 10),
+        reps: opts.reps ?? repsFor(opts.level, 10),
         work_m: 400,
         rest_sec: 60,
         pace: p(1.0), // ~100 % VMA
@@ -133,7 +142,7 @@ export function buildRunSession(
       phases.push({
         kind: 'intervalle',
         intensity: 'soutenu',
-        reps: repsFor(opts.level, 5),
+        reps: opts.reps ?? repsFor(opts.level, 5),
         work_m: 1000,
         rest_sec: 120,
         pace: p(0.95),
@@ -167,9 +176,10 @@ export function buildRunSession(
     }
     case 'cotes': {
       phases.push(warmup(15));
-      const reps = repsFor(opts.level, 8);
+      const reps = opts.reps ?? repsFor(opts.level, 8);
       const hill = opts.hill;
       if (hill?.length_m) {
+        const grade = hillGrade(hill);
         phases.push({
           kind: 'intervalle',
           intensity: 'max',
@@ -177,7 +187,7 @@ export function buildRunSession(
           work_m: Math.round(hill.length_m),
           rest_sec: Math.max(45, Math.round(hill.length_m / 2)), // retour en récup
           pace: p(1.0),
-          note: `en côte${hill.grade_pct ? ` ~${hill.grade_pct} %` : ''} — récup en descente`,
+          note: `en côte${grade ? ` ~${grade} %` : ''}${hill.elevation_m ? ` (${hill.elevation_m} m D+)` : ''} — récup en descente`,
         });
       } else {
         phases.push({
@@ -297,6 +307,7 @@ export interface RunPlanOptions {
   distanceKm?: number;
   elevationM?: number;
   hills?: HillDef[]; // côtes disponibles (séances de côtes du plan trail)
+  baselineLongMin?: number; // sortie longue actuelle (calibrage sur le niveau réel)
   newId: () => string; // fournisseur d'id (crypto.randomUUID côté app)
 }
 
@@ -319,17 +330,35 @@ export function buildRunPlan(opts: RunPlanOptions): CardioPlan {
 
   const isLong = (t: RunSessionType) => t === 'sortie_longue' || t === 'sortie_trail';
   const isBlockType = (t: RunSessionType) => t === 'tempo' || t === 'seuil_vallonne';
+  const isQuality = (t: RunSessionType) =>
+    t === 'cotes' || t === 'fractionne_court' || t === 'fractionne_long';
+
+  // Calibrage : la sortie longue démarre là où l'utilisateur en est (sinon 50 %),
+  // borné pour éviter un écart trop grand avec l'objectif → progression sûre.
+  const longStart = Math.round(
+    Math.min(longMax * 0.85, Math.max(longMax * 0.4, opts.baselineLongMin ?? longMax * 0.5)),
+  );
 
   const weeks: CardioPlanWeek[] = [];
   for (let w = 0; w < totalWeeks; w++) {
     const isTaper = w > buildEnd;
-    const isBuild = !isTaper && w > Math.floor(buildEnd / 2);
-    const label = isTaper ? 'Affûtage' : isBuild ? 'Développement' : 'Base';
+    // Semaine de récupération toutes les ~4 semaines (allègement anti-blessure).
+    const isDown = !isTaper && w > 0 && (w + 1) % 4 === 0;
+    const isBuild = !isTaper && !isDown && w > Math.floor(buildEnd / 2);
+    const label = isTaper ? 'Affûtage' : isDown ? 'Récup' : isBuild ? 'Développement' : 'Base';
 
-    // Sortie longue : ~50 % du max en début, 100 % en fin de charge, réduite à l'affûtage.
-    let longDur: number;
+    // Sortie longue : progression linéaire longStart → longMax sur la charge,
+    // réduite à l'affûtage (55 %) et les semaines de récup (−30 %).
+    const rampFrac = buildEnd > 0 ? Math.min(1, w / buildEnd) : 1;
+    let longDur = Math.round(longStart + (longMax - longStart) * rampFrac);
     if (isTaper) longDur = Math.round(longMax * 0.55);
-    else longDur = Math.round(longMax * (0.5 + 0.5 * (buildEnd > 0 ? w / buildEnd : 1)));
+    if (isDown) longDur = Math.round(longDur * 0.7);
+
+    // Volume de qualité progressif (reps), réduit en récup/affûtage.
+    let qualityReps = 6 + Math.round(rampFrac * 6); // 6 → 12
+    if (isDown || isTaper) qualityReps = Math.max(4, qualityReps - 3);
+    if (opts.level === 'debutant') qualityReps = Math.max(4, qualityReps - 2);
+    if (opts.level === 'avance') qualityReps += 1;
 
     const slots = weekSlots(spw, w, opts.raceType);
     const sessions: CardioPlanSession[] = [];
@@ -340,8 +369,8 @@ export function buildRunPlan(opts: RunPlanOptions): CardioPlan {
 
       let durOpt: number | undefined;
       if (isLong(type)) durOpt = longDur;
-      else if (isBlockType(type)) durOpt = isTaper ? 15 : 20;
-      else if (type === 'endurance') durOpt = 45;
+      else if (isBlockType(type)) durOpt = isTaper || isDown ? 15 : 20;
+      else if (type === 'endurance') durOpt = isDown ? 35 : 45;
 
       // Côte tournante (variété) + D+ visé sur la sortie trail.
       const hill = type === 'cotes' && hills.length ? hills[w % hills.length] : undefined;
@@ -349,6 +378,7 @@ export function buildRunPlan(opts: RunPlanOptions): CardioPlan {
         ...(opts.level ? { level: opts.level } : {}),
         ...(durOpt ? { duration_min: durOpt } : {}),
         ...(hill ? { hill } : {}),
+        ...(isQuality(type) ? { reps: qualityReps } : {}),
         ...(type === 'sortie_trail' ? { elevationTargetM: Math.round(longDur * 7) } : {}),
       });
       sessions.push({
