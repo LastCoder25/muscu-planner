@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 
 export interface CardioLogRow {
   id: string;
-  run_type: string;
+  activity: string;
   performed_at: string;
   payload: CardioLog;
 }
@@ -17,11 +17,11 @@ export const useCardioStore = defineStore('cardio', () => {
   async function fetchLogs(limit = 100) {
     const { data, error } = await supabase
       .from('cardio_logs')
-      .select('id, run_type, performed_at, payload')
+      .select('id, activity, performed_at, payload')
       .order('performed_at', { ascending: false })
       .limit(limit);
     if (error) throw error;
-    logs.value = (data) ?? [];
+    logs.value = data ?? [];
     return logs.value;
   }
 
@@ -33,7 +33,7 @@ export const useCardioStore = defineStore('cardio', () => {
       id,
       user_id: userId,
       cardio_session_id: payload.cardio_session_id ?? null,
-      run_type: payload.run_type,
+      activity: payload.activity,
       distance_km: payload.distance_km ?? null,
       duration_min: payload.duration_min ?? null,
       elevation_m: payload.elevation_m ?? null,
@@ -44,7 +44,7 @@ export const useCardioStore = defineStore('cardio', () => {
     };
     const { error } = await supabase.from('cardio_logs').insert(row);
     if (error) throw error;
-    logs.value.unshift({ id, run_type: payload.run_type, performed_at, payload });
+    logs.value.unshift({ id, activity: payload.activity, performed_at, payload });
     return id;
   }
 

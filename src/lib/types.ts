@@ -280,20 +280,57 @@ export interface DrillLog {
 // Effort continu : distance / durée / allure / dénivelé (D+) / ressenti.
 // ————————————————————————————————————————————————————————————————
 
-export type RunType = 'footing' | 'fractionne' | 'tempo' | 'sortie_longue' | 'trail' | 'recup';
+export type CardioActivity =
+  | 'marche'
+  | 'rando'
+  | 'course'
+  | 'trail'
+  | 'velo'
+  | 'velo_appart'
+  | 'marche_tapis'
+  | 'course_tapis';
 
-// Bilan d'une sortie (saisie manuelle).
+export type CardioIntensity = 'facile' | 'modere' | 'soutenu' | 'max';
+
+// Phase composable d'une séance structurée (échauffement, effort, récup…).
+// On peut en enchaîner autant qu'on veut, dans l'ordre voulu.
+export type CardioPhaseKind =
+  | 'echauffement'
+  | 'endurance'
+  | 'tempo'
+  | 'effort'
+  | 'recup'
+  | 'retour_calme'
+  | 'intervalle';
+
+export interface CardioPhase {
+  kind: CardioPhaseKind;
+  intensity?: CardioIntensity;
+  note?: string;
+  // Phases simples : durée et/ou distance.
+  duration_sec?: number;
+  distance_m?: number;
+  // Phase 'intervalle' (fractionné) : reps × (effort + repos éventuel).
+  reps?: number;
+  work_sec?: number;
+  work_m?: number;
+  rest_sec?: number;
+  rest_m?: number;
+}
+
+// Bilan d'une sortie (saisie manuelle) : basique (durée/km) ou structurée (phases).
 export interface CardioLog {
   schema_version: string;
   type: 'cardio_log';
   id: string;
   cardio_session_id?: string;
-  run_type: RunType;
+  activity: CardioActivity;
+  mode?: 'basique' | 'structuree';
   distance_km?: number;
   duration_min?: number;
   elevation_m?: number; // D+ (dénivelé positif)
   rpe?: Difficulty; // ressenti 1–4
+  phases?: CardioPhase[]; // séance structurée
   performed_at?: string;
   comment?: string;
-  intervals?: string; // structure du fractionné saisie (ex. « 10×400 m / 1 min »)
 }
