@@ -164,10 +164,28 @@
           </div>
           <div class="carry-note">
             On part d'une estimation pour ton niveau ({{ levelLabel }}). Après chaque journée
-            validée, tu donnes ton ressenti et la suite s'ajuste toute seule — pas de chiffres à
-            saisir.
+            validée, tu donnes ton ressenti et la suite s'ajuste toute seule.
           </div>
         </div>
+
+        <!-- Objectif de départ (le « min ») réglable même en mode auto. -->
+        <template v-if="adaptiveMode">
+          <div class="lbl">
+            {{ format === 'cumulative' ? 'Objectif total' : 'Objectif de départ' }} ({{
+              unitLabel
+            }})
+          </div>
+          <q-input
+            :model-value="cfgDisplay(format === 'cumulative' ? 'total' : 'start')"
+            type="number"
+            inputmode="numeric"
+            filled
+            dense
+            :suffix="unitLabel"
+            class="q-mb-md"
+            @update:model-value="setField(format === 'cumulative' ? 'total' : 'start', $event)"
+          />
+        </template>
 
         <template v-if="!adaptiveMode">
           <div class="lbl">Difficulté ({{ levelLabel }})</div>
@@ -198,6 +216,7 @@
                   type="number"
                   filled
                   dense
+                  :suffix="fieldUnit(field)"
                   @update:model-value="setField(field, $event)"
                 />
               </div>
@@ -449,6 +468,12 @@ function fieldLabel(f: string) {
       variation: 'Variation %',
     }[f] ?? f
   );
+}
+// Unité affichée à côté d'un champ de difficulté (km/reps/sec selon l'exo).
+function fieldUnit(f: string): string {
+  if (f === 'start' || f === 'peak' || f === 'total' || f === 'increment') return unitLabel.value;
+  if (f === 'cycle_days') return 'j';
+  return '';
 }
 const stepBounds: Record<string, { min: number; max: number; step: number }> = {
   inc_pct: { min: 3, max: 15, step: 1 },
