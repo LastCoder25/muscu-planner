@@ -4,7 +4,7 @@
       <div class="head-left">
         <h1 class="p-title font-display">Challenges</h1>
         <button class="head-rank" aria-label="Voir mes succès" @click="tab = 'ach'">
-          <RankCrest :rank="xpInfo.title" :size="40" />
+          <span class="head-lvl font-display">Niv. {{ xpInfo.level }}</span>
         </button>
       </div>
       <q-btn
@@ -89,12 +89,11 @@
 
       <!-- Mur de succès -->
       <template v-else>
-        <!-- Rang global / XP -->
-        <div class="level-card" :class="'rank-' + xpInfo.title.toLowerCase()">
+        <!-- Niveau des challenges / XP -->
+        <div class="level-card">
           <div class="lvl-top">
-            <RankCrest :rank="xpInfo.title" :size="56" />
             <div class="rank-info">
-              <div class="rank-label font-display">Rang {{ xpInfo.title }}</div>
+              <div class="rank-label font-display">Niveau {{ xpInfo.level }}</div>
               <div class="lvl-xp">{{ xpInfo.xp.toLocaleString('fr-FR') }} XP</div>
             </div>
           </div>
@@ -102,11 +101,8 @@
             <div class="lvl-fill" :style="{ width: xpInfo.progressPct + '%' }" />
           </div>
           <div class="lvl-next">
-            <template v-if="xpInfo.nextTitle">
-              Encore {{ ((xpInfo.nextLevelXp || 0) - xpInfo.xp).toLocaleString('fr-FR') }} XP → rang
-              <b>{{ xpInfo.nextTitle }}</b>
-            </template>
-            <template v-else>Rang maximum atteint 🏆</template>
+            Encore {{ (xpInfo.xpForLevel - xpInfo.xpIntoLevel).toLocaleString('fr-FR') }} XP →
+            niveau <b>{{ xpInfo.level + 1 }}</b>
           </div>
         </div>
 
@@ -138,15 +134,15 @@ import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import {
   challengeStats,
-  challengeXp,
+  challengeXpPoints,
   challengeBalance,
   evaluateAchievements,
   type Challenge,
 } from '@/lib/challenges';
+import { computeLevel } from '@/lib/levels';
 import { formatOption } from '@/data/challengeFormats';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { useChallengesStore } from '@/stores/challenges';
-import RankCrest from '@/components/RankCrest.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -167,7 +163,7 @@ const LIST_TABS = ['active', 'done', 'abandoned'];
 const shown = computed(() => store.list.filter((c) => c.status === tab.value));
 const unlocked = computed(() => new Set(store.unlocked));
 const unlockedCount = computed(() => ACHIEVEMENTS.filter((a) => unlocked.value.has(a.code)).length);
-const xpInfo = computed(() => challengeXp(store.list));
+const xpInfo = computed(() => computeLevel(challengeXpPoints(store.list)));
 
 function st(c: Challenge) {
   return challengeStats(c);

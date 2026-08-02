@@ -7,62 +7,36 @@
           {{ profileStore.profile?.identity.name || 'Athlète' }}
         </h1>
       </div>
-      <div class="home-badges">
-        <button class="ath-home" aria-label="Niveau d'athlète" @click="goStats">
-          <AthleteBadge
-            :level="athLevel.level"
-            :color="athLevel.tierColor"
-            :tier="athLevel.tier"
-            :size="46"
-          />
-          <span class="ath-home-tier font-display" :style="{ color: athLevel.tierColor }">
-            {{ athLevel.tier }}
-          </span>
-        </button>
-        <button class="ath-home" aria-label="Rang des défis" @click="goChallenges">
-          <RankCrest :rank="challengeLevel.title" :size="44" />
-          <span class="ath-home-tier font-display" :style="{ color: challengeRankColor }"
-            >Défis</span
-          >
-        </button>
-      </div>
+      <button class="glvl" aria-label="Niveau global" @click="goStats">
+        <span class="glvl-n font-display">{{ progress.global.value.level }}</span>
+        <span class="glvl-l">Global</span>
+      </button>
     </header>
 
-    <button class="xp-strip" :style="{ '--tier': athLevel.tierColor }" @click="goStats">
+    <button class="xp-strip" @click="goStats">
       <div class="xp-top">
-        <span class="xp-lvl font-display">Niv. {{ athLevel.level }}</span>
+        <span class="xp-lvl font-display">Niveau global {{ progress.global.value.level }}</span>
         <span class="xp-frac"
-          >{{ athLevel.xpIntoLevel.toLocaleString('fr-FR') }} /
-          {{ athLevel.xpForLevel.toLocaleString('fr-FR') }} XP</span
+          >{{ progress.global.value.xpIntoLevel.toLocaleString('fr-FR') }} /
+          {{ progress.global.value.xpForLevel.toLocaleString('fr-FR') }} XP</span
         >
-        <span class="xp-lvl next font-display">Niv. {{ athLevel.level + 1 }}</span>
       </div>
       <div class="xp-bar">
-        <div class="xp-fill" :style="{ width: athLevel.progressPct + '%' }" />
+        <div class="xp-fill" :style="{ width: progress.global.value.progressPct + '%' }" />
       </div>
     </button>
 
-    <button class="xp-strip" :style="{ '--tier': challengeRankColor }" @click="goChallenges">
-      <div class="xp-top">
-        <span class="xp-lvl font-display">Rang {{ challengeLevel.title }}</span>
-        <span class="xp-frac"
-          >{{ (challengeLevel.xp - challengeLevel.levelBaseXp).toLocaleString('fr-FR') }} /
-          {{
-            challengeLevel.nextLevelXp !== null
-              ? (challengeLevel.nextLevelXp - challengeLevel.levelBaseXp).toLocaleString('fr-FR') +
-                ' XP défis'
-              : 'max'
-          }}</span
-        >
-        <span v-if="challengeLevel.nextTitle" class="xp-lvl next font-display"
-          >Rang {{ challengeLevel.nextTitle }}</span
-        >
-        <span v-else class="xp-lvl next font-display">🏆</span>
-      </div>
-      <div class="xp-bar">
-        <div class="xp-fill" :style="{ width: challengeLevel.progressPct + '%' }" />
-      </div>
-    </button>
+    <div class="tracks">
+      <button v-for="t in tracks" :key="t.key" class="track" @click="t.go">
+        <div class="track-top">
+          <span class="track-name">{{ t.label }}</span>
+          <span class="track-lvl font-display">Niv. {{ t.info.level }}</span>
+        </div>
+        <div class="track-bar">
+          <div class="track-fill" :style="{ width: t.info.progressPct + '%' }" />
+        </div>
+      </button>
+    </div>
 
     <div v-if="loading" class="column items-center q-mt-xl">
       <q-spinner color="primary" size="32px" />
@@ -140,12 +114,7 @@ import { useSessionsStore } from '@/stores/sessions';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useLiveStore } from '@/stores/live';
 import { useLiveCourtStore } from '@/stores/liveCourt';
-import AthleteBadge from '@/components/AthleteBadge.vue';
-import RankCrest from '@/components/RankCrest.vue';
-import { useAthlete } from '@/composables/useAthlete';
-import { useChallengesStore } from '@/stores/challenges';
-import { challengeXp } from '@/lib/challenges';
-import { rankColor } from '@/data/ranks';
+import { useProgress } from '@/composables/useProgress';
 
 const $q = useQuasar();
 const router = useRouter();
@@ -155,10 +124,13 @@ const logs = useLogsStore();
 const live = useLiveStore();
 const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
-const { level: athLevel } = useAthlete();
-const challengesStore = useChallengesStore();
-const challengeLevel = computed(() => challengeXp(challengesStore.list));
-const challengeRankColor = computed(() => rankColor(challengeLevel.value.title));
+const progress = useProgress();
+const tracks = computed(() => [
+  { key: 'muscu', label: 'Muscu', info: progress.muscu.value, go: goProgram },
+  { key: 'tennis', label: 'Tennis', info: progress.tennis.value, go: goTennis },
+  { key: 'cardio', label: 'Cardio', info: progress.cardio.value, go: goStats },
+  { key: 'challenges', label: 'Défis', info: progress.challenges.value, go: goChallenges },
+]);
 const loading = ref(true);
 
 const lastLog = ref<LogRow | null>(null);
@@ -321,6 +293,73 @@ async function goStats() {
 .xp-fill {
   height: 100%;
   background: var(--tier);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.glvl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.glvl-n {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+.glvl-l {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--dim);
+}
+.tracks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.track {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.track-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.track-name {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+}
+.track-lvl {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.track-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.track-fill {
+  height: 100%;
+  background: var(--accent);
   border-radius: 999px;
   transition: width 0.4s ease;
 }

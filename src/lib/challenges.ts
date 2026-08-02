@@ -640,30 +640,7 @@ export function evaluateAchievements(challenges: Challenge[]): string[] {
   return [...codes];
 }
 
-// ── Niveau global / XP (moteur « la barre avance toujours ») ──
-export interface ChallengeLevel {
-  xp: number;
-  level: number; // 1-based
-  title: string; // rang courant (F … SSS)
-  nextTitle: string | null; // rang suivant (null = max)
-  levelBaseXp: number; // XP au début du niveau courant
-  nextLevelXp: number | null; // XP requis pour le niveau suivant (null = max)
-  progressPct: number; // 0..100 dans le niveau courant
-}
-
-// Rangs façon manga (F → SSS) sur une courbe ~géométrique : début rapide
-// (accroche), sommet (SSS) réservé au très long terme.
-const LEVEL_BANDS: { min: number; title: string }[] = [
-  { min: 0, title: 'F' },
-  { min: 500, title: 'E' },
-  { min: 1500, title: 'D' },
-  { min: 4000, title: 'C' },
-  { min: 10000, title: 'B' },
-  { min: 25000, title: 'A' },
-  { min: 60000, title: 'S' },
-  { min: 150000, title: 'SS' },
-  { min: 400000, title: 'SSS' },
-];
+// ── XP des challenges (le niveau numérique est calculé via src/lib/levels.ts) ──
 
 /** « Effort planifié » d'un défi (unité-neutre) : total des objectifs, le TEMPS
  *  ramené à ~1 point / 4 s pour comparer reps et gainage. Basé sur le PLAN (pas
@@ -716,31 +693,4 @@ export function challengeXpPoints(challenges: Challenge[]): number {
       0,
     );
   return Math.round(totalReps + completedDays * 25 + completionBonus);
-}
-
-/** Mappe une XP totale sur un rang (F … SSS) + progression vers le suivant. */
-export function levelFromXp(xp: number): ChallengeLevel {
-  let idx = 0;
-  for (let i = 0; i < LEVEL_BANDS.length; i++) {
-    if (xp >= LEVEL_BANDS[i]!.min) idx = i;
-  }
-  const band = LEVEL_BANDS[idx]!;
-  const next = LEVEL_BANDS[idx + 1] ?? null;
-  const progressPct = next
-    ? Math.min(100, Math.round(((xp - band.min) / (next.min - band.min)) * 100))
-    : 100;
-  return {
-    xp,
-    level: idx + 1,
-    title: band.title,
-    nextTitle: next ? next.title : null,
-    levelBaseXp: band.min,
-    nextLevelXp: next ? next.min : null,
-    progressPct,
-  };
-}
-
-/** Rang basé sur les seuls challenges (compat) — préférer le rang global via useRank. */
-export function challengeXp(challenges: Challenge[]): ChallengeLevel {
-  return levelFromXp(challengeXpPoints(challenges));
 }

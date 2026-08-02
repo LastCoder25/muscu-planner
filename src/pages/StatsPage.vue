@@ -7,21 +7,25 @@
     </div>
 
     <template v-else>
-      <!-- Niveau d'athlète (progression des séances) -->
-      <div class="ath-card" :style="{ '--tier': athlete.tierColor }">
-        <div class="ath-top">
-          <div class="ath-circle font-display">{{ athlete.level }}</div>
-          <div class="ath-info">
-            <div class="ath-tier font-display">Niveau {{ athlete.level }} · {{ athlete.tier }}</div>
-            <div class="ath-xp">{{ athlete.xp.toLocaleString('fr-FR') }} XP</div>
+      <!-- Niveaux (global + pistes) -->
+      <div class="lvl-list">
+        <div
+          v-for="c in levelCards"
+          :key="c.key"
+          class="lvl-card"
+          :class="{ big: c.key === 'global' }"
+        >
+          <div class="lvl-head">
+            <span class="lvl-name">{{ c.label }}</span>
+            <span class="lvl-n font-display">Niv. {{ c.info.level }}</span>
           </div>
-        </div>
-        <div class="ath-bar">
-          <div class="ath-fill" :style="{ width: athlete.progressPct + '%' }" />
-        </div>
-        <div class="ath-next">
-          Encore {{ (athlete.xpForLevel - athlete.xpIntoLevel).toLocaleString('fr-FR') }} XP →
-          niveau {{ athlete.level + 1 }}
+          <div class="lvl-bar">
+            <div class="lvl-fill" :style="{ width: c.info.progressPct + '%' }" />
+          </div>
+          <div class="lvl-xp">
+            {{ c.info.xpIntoLevel.toLocaleString('fr-FR') }} /
+            {{ c.info.xpForLevel.toLocaleString('fr-FR') }} XP
+          </div>
         </div>
       </div>
 
@@ -96,6 +100,41 @@
         </button>
         <p class="hint">Touche un exercice pour voir la courbe d’évolution (1RM estimé).</p>
       </template>
+
+      <!-- Tennis -->
+      <template v-if="drillLogs.length">
+        <div class="sec-h sec-tennis">🎾 Tennis</div>
+        <div class="kpis">
+          <div class="kpi">
+            <span class="kpi-v font-display">{{ tennisKpis.sessions }}</span
+            ><span class="kpi-l">séances</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-v font-display">{{ tennisKpis.minutes }}</span
+            ><span class="kpi-l">minutes</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-v font-display">{{ tennisLast30 }}</span
+            ><span class="kpi-l">sur 30 j</span>
+          </div>
+        </div>
+
+        <div v-if="shotBreakdown.length" class="sec-h">Coups travaillés</div>
+        <div v-if="shotBreakdown.length" class="grp-card">
+          <div v-for="s in shotBreakdown" :key="s.shot" class="grp-row">
+            <span class="grp-name">{{ shotLabel(s.shot) }}</span>
+            <div class="grp-bar">
+              <div
+                class="grp-fill"
+                :style="{ width: (s.n / maxShot) * 100 + '%', background: 'var(--accent)' }"
+              />
+            </div>
+            <span class="grp-val"
+              ><b>{{ s.n }}</b></span
+            >
+          </div>
+        </div>
+      </template>
     </template>
   </q-page>
 </template>
@@ -105,15 +144,27 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
-import { athleteXpPoints, athleteLevel } from '@/lib/athlete';
+import { useTennisStore, type DrillLogRow } from '@/stores/tennis';
 import { muscleColor } from '@/lib/volume';
+import { DRILL_SHOT_LABELS } from '@/data/tennis';
+import { useProgress } from '@/composables/useProgress';
+import type { DrillShot, Difficulty } from '@/lib/types';
 
 const router = useRouter();
 const $q = useQuasar();
 const logsStore = useLogsStore();
+const tennis = useTennisStore();
 const loading = ref(true);
 const logs = ref<LogRow[]>([]);
-const athlete = computed(() => athleteLevel(athleteXpPoints(logs.value.map((r) => r.payload))));
+const drillLogs = ref<DrillLogRow[]>([]);
+const progress = useProgress();
+const levelCards = computed(() => [
+  { key: 'global', label: 'Global', info: progress.global.value },
+  { key: 'muscu', label: 'Muscu', info: progress.muscu.value },
+  { key: 'tennis', label: 'Tennis', info: progress.tennis.value },
+  { key: 'cardio', label: 'Cardio', info: progress.cardio.value },
+  { key: 'challenges', label: 'Défis', info: progress.challenges.value },
+]);
 
 function median(arr: number[]): number {
   if (arr.length === 0) return 0;
@@ -203,8 +254,46 @@ async function openExercise(id: string) {
   await router.push(`/exercise/${id}`);
 }
 
+// ————— Stats tennis (drill_logs) —————
+const tennisKpis = computed(() => {
+  const rows = drillLogs.value;
+  const minutes = rows.reduce((a, r) => a + (r.payload.duration_min ?? 0), 0);
+  const rated = rows
+    .map((r) => r.payload.global_difficulty)
+    .filter((d): d is Difficulty => d != null);
+  const avg = rated.length
+    ? Math.round((rated.reduce((a, b) => a + b, 0) / rated.length) * 10) / 10
+    : null;
+  return { sessions: rows.length, minutes, avg };
+});
+
+// Répartition des drills réalisés par coup travaillé.
+const shotBreakdown = computed(() => {
+  const map = new Map<DrillShot, number>();
+  for (const r of drillLogs.value) {
+    for (const d of r.payload.drills) {
+      if (!d.done) continue;
+      const shot = (d as { shot?: DrillShot }).shot;
+      if (shot) map.set(shot, (map.get(shot) ?? 0) + 1);
+    }
+  }
+  return [...map.entries()].map(([shot, n]) => ({ shot, n })).sort((a, b) => b.n - a.n);
+});
+const maxShot = computed(() => Math.max(1, ...shotBreakdown.value.map((s) => s.n)));
+const shotLabel = (s: DrillShot) => DRILL_SHOT_LABELS[s];
+
+// Régularité : nombre de séances tennis sur les 30 derniers jours.
+const tennisLast30 = computed(() => {
+  const cutoff = Date.now() - 30 * 86400000;
+  return drillLogs.value.filter((r) => Date.parse(r.performed_at) >= cutoff).length;
+});
+
 onMounted(async () => {
   try {
+    tennis
+      .fetchLogs(300)
+      .then((l) => (drillLogs.value = l))
+      .catch(() => undefined);
     logs.value = await logsStore.fetchRecent(300);
   } catch (e) {
     $q.notify({
@@ -222,6 +311,59 @@ onMounted(async () => {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 32px;
+}
+/* Niveaux (global + pistes) */
+.lvl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.lvl-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.lvl-card.big {
+  border-color: var(--accent);
+}
+.lvl-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lvl-name {
+  font-weight: 600;
+  color: var(--text);
+}
+.lvl-card.big .lvl-name {
+  color: var(--accent);
+}
+.lvl-n {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 15px;
+}
+.lvl-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  margin: 8px 0 4px;
+}
+.lvl-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.lvl-xp {
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
 }
 /* Niveau d'athlète */
 .ath-card {
