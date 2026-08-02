@@ -3,6 +3,81 @@
     <h1 class="page-title font-display">Cardio</h1>
     <p class="page-sub text-dim">Marche, rando, course, trail, vélo…</p>
 
+    <!-- Générateur de séance de course (VMA) -->
+    <section class="card">
+      <div class="card-head">
+        <q-icon name="bolt" size="22px" />
+        <div class="card-title">Générer une séance (course)</div>
+      </div>
+
+      <div class="vma-row">
+        <q-input
+          v-model.number="vma"
+          type="number"
+          filled
+          dense
+          label="VMA (km/h)"
+          step="0.1"
+          class="vma-input"
+          @blur="saveVma"
+        />
+        <button class="vma-test" @click="showTest = !showTest">Je ne connais pas ma VMA</button>
+      </div>
+
+      <div v-if="showTest" class="test-box">
+        <div class="test-title">Test demi-Cooper</div>
+        <p class="test-desc">
+          Cours <b>le plus loin possible en 6 minutes</b> (piste, boucle plate ou tapis), puis
+          saisis la distance parcourue.
+        </p>
+        <div class="pair">
+          <q-input
+            v-model.number="testDistance"
+            type="number"
+            filled
+            dense
+            label="Distance en 6 min (m)"
+          />
+          <q-btn no-caps color="primary" text-color="dark" label="Calculer" @click="runTest" />
+        </div>
+      </div>
+
+      <template v-if="vma && vma > 0">
+        <div class="section-lbl">Type de séance</div>
+        <div class="chips">
+          <button
+            v-for="t in RUN_SESSION_TYPES"
+            :key="t.id"
+            class="chip"
+            :class="{ on: genType === t.id }"
+            @click="genType = t.id"
+          >
+            {{ t.label }}
+          </button>
+        </div>
+        <p class="gen-desc">{{ genDesc }}</p>
+        <q-input
+          v-if="genNeedsDuration"
+          v-model.number="genDuration"
+          type="number"
+          filled
+          dense
+          label="Durée (min)"
+          class="q-mt-sm"
+        />
+        <q-btn
+          class="full-width q-mt-sm"
+          color="primary"
+          text-color="dark"
+          no-caps
+          icon="auto_awesome"
+          label="Générer → remplit les phases"
+          @click="generate"
+        />
+      </template>
+      <p v-else class="gen-hint">Renseigne ta VMA pour générer des séances aux bonnes allures.</p>
+    </section>
+
     <section class="card">
       <div class="card-head">
         <q-icon name="directions_run" size="22px" />
@@ -124,6 +199,7 @@
               {{ INTENSITY_LABELS[it] }}
             </button>
           </div>
+          <div v-if="p.pace" class="phase-pace">🎯 allure {{ p.pace }}</div>
         </div>
 
         <div class="add-lbl">Ajouter une phase</div>
@@ -223,6 +299,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
+import { useProfileStore } from '@/stores/profile';
 import { useCardioStore } from '@/stores/cardio';
 import {
   CARDIO_ACTIVITIES,
@@ -233,10 +310,12 @@ import {
   PHASE_LABELS,
   INTENSITIES,
   INTENSITY_LABELS,
+  RUN_SESSION_TYPES,
   paceLabel,
   sumPhases,
   phaseSummary,
 } from '@/data/cardio';
+import { buildRunSession, vmaFromDemiCooper, type RunSessionType } from '@/lib/cardio';
 import type {
   CardioActivity,
   CardioIntensity,
@@ -257,11 +336,94 @@ interface EditPhase {
   workUnit: 's' | 'm';
   restVal: number | null;
   restUnit: 's' | 'm';
+  pace?: string;
 }
 
 const $q = useQuasar();
 const auth = useAuthStore();
+const profileStore = useProfileStore();
 const cardio = useCardioStore();
+
+// ————— Générateur VMA —————
+const vma = ref<number | null>(profileStore.profile?.preferences?.vma ?? null);
+const showTest = ref(false);
+const testDistance = ref<number | null>(null);
+const genType = ref<RunSessionType>('fractionne_court');
+const genDuration = ref<number>(45);
+
+const genDef = computed(() => RUN_SESSION_TYPES.find((t) => t.id === genType.value));
+const genDesc = computed(() => genDef.value?.desc ?? '');
+const genNeedsDuration = computed(() => !!genDef.value?.duration);
+
+async function saveVma() {
+  const p = profileStore.profile;
+  const userId = auth.user?.id;
+  if (!p || !userId || !vma.value || vma.value <= 0) return;
+  if (p.preferences?.vma === vma.value) return;
+  try {
+    await profileStore.update(userId, {
+      ...p,
+      preferences: { ...p.preferences, vma: vma.value },
+    });
+  } catch {
+    /* non bloquant */
+  }
+}
+
+function runTest() {
+  if (!testDistance.value || testDistance.value <= 0) return;
+  vma.value = vmaFromDemiCooper(testDistance.value);
+  showTest.value = false;
+  $q.notify({ type: 'positive', message: `VMA estimée : ${vma.value} km/h` });
+  void saveVma();
+}
+
+function generate() {
+  if (!vma.value || vma.value <= 0) return;
+  const { phases: gen } = buildRunSession(genType.value, vma.value, {
+    ...(genNeedsDuration.value ? { duration_min: genDuration.value } : {}),
+    ...(profileStore.profile?.experience.level
+      ? { level: profileStore.profile.experience.level }
+      : {}),
+  });
+  mode.value = 'structuree';
+  phases.value = gen.map(fromPhase);
+  if (activity.value === 'velo_appart' || activity.value.includes('tapis')) {
+    // ok, on garde l'activité choisie
+  } else {
+    activity.value = 'course';
+  }
+  $q.notify({ type: 'positive', message: 'Séance générée dans les phases ci-dessous.' });
+}
+
+function fromPhase(cp: CardioPhase): EditPhase {
+  if (cp.kind === 'intervalle') {
+    return {
+      kind: 'intervalle',
+      intensity: cp.intensity ?? 'soutenu',
+      durationMin: null,
+      distanceKm: null,
+      reps: cp.reps ?? 1,
+      workVal: cp.work_m ?? cp.work_sec ?? null,
+      workUnit: cp.work_m ? 'm' : 's',
+      restVal: cp.rest_sec ?? cp.rest_m ?? null,
+      restUnit: cp.rest_m ? 'm' : 's',
+      ...(cp.pace ? { pace: cp.pace } : {}),
+    };
+  }
+  return {
+    kind: cp.kind,
+    intensity: cp.intensity ?? 'modere',
+    durationMin: cp.duration_sec ? Math.round(cp.duration_sec / 60) : null,
+    distanceKm: cp.distance_m ? Math.round((cp.distance_m / 1000) * 100) / 100 : null,
+    reps: null,
+    workVal: null,
+    workUnit: 'm',
+    restVal: null,
+    restUnit: 's',
+    ...(cp.pace ? { pace: cp.pace } : {}),
+  };
+}
 
 const activity = ref<CardioActivity>('course');
 const mode = ref<'basique' | 'structuree'>('basique');
@@ -316,11 +478,13 @@ function toPhase(ep: EditPhase): CardioPhase {
       if (ep.restUnit === 's') p.rest_sec = ep.restVal;
       else p.rest_m = ep.restVal;
     }
+    if (ep.pace) p.pace = ep.pace;
     return p;
   }
   const p: CardioPhase = { kind: ep.kind, intensity: ep.intensity };
   if (ep.durationMin) p.duration_sec = Math.round(ep.durationMin * 60);
   if (ep.distanceKm) p.distance_m = Math.round(ep.distanceKm * 1000);
+  if (ep.pace) p.pace = ep.pace;
   return p;
 }
 
@@ -493,6 +657,57 @@ function remove(id: string) {
   color: var(--dim);
   font-size: 13px;
   padding: 8px 0;
+}
+.vma-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.vma-input {
+  flex: 1;
+}
+.vma-test {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.test-box {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.test-title {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.test-desc {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+.gen-desc {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 8px 0 0;
+}
+.gen-hint {
+  font-size: 13px;
+  color: var(--dim);
+  margin: 12px 0 0;
+}
+.phase-pace {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
 }
 .phase {
   border: 1px solid var(--line);

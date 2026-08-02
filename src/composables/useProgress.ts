@@ -1,5 +1,5 @@
 // useProgress — les 5 niveaux de l'utilisateur, réactifs.
-// Muscu / Tennis (spécifique) / Cardio (course-trail, à venir) / Challenges / Global.
+// Muscu / Tennis (drills + prépa) / Cardio (course/vélo/marche) / Challenges / Global.
 // Niveaux numériques purs (computeLevel), sans rang ni palier.
 import { computed, onMounted } from 'vue';
 import { useLogsStore } from '@/stores/logs';

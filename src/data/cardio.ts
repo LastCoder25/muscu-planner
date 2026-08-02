@@ -1,5 +1,22 @@
 // cardio.ts — libellés et helpers pour le cardio (course/vélo/marche…).
 import type { CardioActivity, CardioIntensity, CardioPhaseKind, CardioPhase } from '@/lib/types';
+import type { RunSessionType } from '@/lib/cardio';
+
+// Types de séance générables (VMA). `duration` = durée réglable proposée.
+export interface RunSessionDef {
+  id: RunSessionType;
+  label: string;
+  desc: string;
+  duration?: boolean;
+}
+export const RUN_SESSION_TYPES: RunSessionDef[] = [
+  { id: 'endurance', label: 'Endurance', desc: 'Footing en aisance (~70 % VMA)', duration: true },
+  { id: 'footing_recup', label: 'Récupération', desc: 'Très facile (~60 % VMA)', duration: true },
+  { id: 'fractionne_court', label: 'Fractionné court', desc: '10 × 400 m à ~100 % VMA' },
+  { id: 'fractionne_long', label: 'Fractionné long', desc: '5 × 1000 m à ~95 % VMA' },
+  { id: 'tempo', label: 'Tempo / seuil', desc: 'Bloc au seuil (~85 % VMA)', duration: true },
+  { id: 'sortie_longue', label: 'Sortie longue', desc: 'Endurance prolongée', duration: true },
+];
 
 export interface ActivityDef {
   id: CardioActivity;

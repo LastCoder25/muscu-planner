@@ -63,6 +63,7 @@ export interface Profile {
     tracking_day?: number; // semaine : 0=dim..6=sam ; mois : 1..28
     tracking_time?: string; // « HH:MM » pour le rappel
     court_equipment?: string[]; // matériel de tennis possédé (panier, machine, mur…)
+    vma?: number; // Vitesse Maximale Aérobie (km/h) — base des allures cardio
   };
 }
 
@@ -307,6 +308,7 @@ export interface CardioPhase {
   kind: CardioPhaseKind;
   intensity?: CardioIntensity;
   note?: string;
+  pace?: string; // allure cible « m:ss/km » (séance générée depuis la VMA)
   // Phases simples : durée et/ou distance.
   duration_sec?: number;
   distance_m?: number;
