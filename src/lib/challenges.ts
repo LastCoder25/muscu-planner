@@ -77,7 +77,7 @@ export interface Challenge {
   id: string;
   exercise_id: string;
   exercise_name: string;
-  unit: 'reps' | 'time';
+  unit: 'reps' | 'time' | 'distance'; // distance = km (marche/course/vélo)
   format: ChallengeFormat;
   duration_days: number;
   start_date: string;
@@ -201,17 +201,25 @@ function exerciseFactor(exerciseId: string): number {
   return 1; // moyen (pompes…)
 }
 
+// Distance de base par jour (km) selon l'activité et le niveau.
+function distanceBase(level: Level, exerciseId: string): number {
+  const id = exerciseId.toLowerCase();
+  const per = id.includes('velo') ? 20 : id.includes('marche') ? 5 : 7; // course ~7
+  const f = level === 'debutant' ? 0.7 : level === 'avance' ? 1.3 : 1;
+  return Math.max(2, Math.round(per * f));
+}
+
 export function suggestConfig(
-  unit: 'reps' | 'time',
+  unit: 'reps' | 'time' | 'distance',
   level: Level,
   format: ChallengeFormat,
   durationDays: number,
   exerciseId: string,
 ): ChallengeConfig {
-  const max =
-    unit === 'time'
-      ? secBase(level)
-      : Math.max(3, Math.round(repsBase(level) * exerciseFactor(exerciseId)));
+  let max: number;
+  if (unit === 'time') max = secBase(level);
+  else if (unit === 'distance') max = distanceBase(level, exerciseId);
+  else max = Math.max(3, Math.round(repsBase(level) * exerciseFactor(exerciseId)));
   const common = {
     max,
     cycle_days: 7,
@@ -228,7 +236,10 @@ export function suggestConfig(
     // min ~ 40 % du max, max = perf ; l'utilisateur ajuste ensuite.
     return { ...common, start: Math.max(1, Math.round(max * 0.4)), peak: max };
   }
-  const increment = unit === 'time' ? 5 : Math.max(1, Math.round(incBase(level)));
+  let increment: number;
+  if (unit === 'time') increment = 5;
+  else if (unit === 'distance') increment = Math.max(1, Math.round(max * 0.12));
+  else increment = Math.max(1, Math.round(incBase(level)));
   const variation = format === 'pyramid_progressive' ? 15 : 0;
   return { ...common, start: max, increment, peak: Math.round(max * 1.8), variation };
 }

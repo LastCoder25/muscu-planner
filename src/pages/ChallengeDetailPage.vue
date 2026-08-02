@@ -335,7 +335,9 @@ function resetQuick() {
 
 const today = logicalToday(); // « jour d'entraînement » (bascule à 4 h)
 const isTime = computed(() => ch.value?.unit === 'time');
-const unitLabel = computed(() => (isTime.value ? 'sec' : 'reps'));
+const unitLabel = computed(() =>
+  ch.value?.unit === 'time' ? 'sec' : ch.value?.unit === 'distance' ? 'km' : 'reps',
+);
 const formatName = computed(() =>
   ch.value ? (formatOption(ch.value.format)?.name ?? ch.value.format) : '',
 );

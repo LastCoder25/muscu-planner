@@ -16,7 +16,7 @@ const COLS =
 export interface NewChallenge {
   exercise_id: string;
   exercise_name: string;
-  unit: 'reps' | 'time';
+  unit: 'reps' | 'time' | 'distance';
   format: ChallengeFormat;
   duration_days: number;
   start_date: string;

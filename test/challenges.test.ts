@@ -3,6 +3,7 @@ import {
   computeDailyTargets,
   challengeXpPoints,
   challengeStats,
+  suggestConfig,
   type Challenge,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -87,6 +88,23 @@ describe('challengeXpPoints', () => {
     });
     // reps = 0 (time) ; 1 jour validé → 25
     expect(challengeXpPoints([c])).toBe(25);
+  });
+});
+
+describe('suggestConfig (distance / cardio)', () => {
+  it('vélo : base ~20 km/j (intermédiaire)', () => {
+    const c = suggestConfig('distance', 'intermediaire', 'fixed', 30, 'ex_ch_velo');
+    expect(c.start).toBe(20);
+    expect(c.max).toBe(20);
+  });
+  it('marche : base plus faible que le vélo', () => {
+    const velo = suggestConfig('distance', 'intermediaire', 'fixed', 30, 'ex_ch_velo');
+    const marche = suggestConfig('distance', 'intermediaire', 'fixed', 30, 'ex_ch_marche');
+    expect(marche.start!).toBeLessThan(velo.start!);
+  });
+  it('progressif distance : increment ≥ 1', () => {
+    const c = suggestConfig('distance', 'debutant', 'progressive', 30, 'ex_ch_course');
+    expect(c.increment!).toBeGreaterThanOrEqual(1);
   });
 });
 

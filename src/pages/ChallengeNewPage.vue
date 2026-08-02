@@ -62,9 +62,30 @@
               <div class="exd-name font-display">{{ exercise.name }}</div>
               <div class="exd-meta">
                 {{ exercise.muscle_primary }} ·
-                {{ unit === 'time' ? 'gainage (temps)' : 'répétitions' }}
+                {{
+                  unit === 'distance' ? 'distance (km)' : unit === 'time' ? 'temps' : 'répétitions'
+                }}
               </div>
             </div>
+          </div>
+
+          <!-- Cardio : choix km / durée -->
+          <div v-if="isCardio" class="cardio-unit">
+            <span class="cu-lbl">Objectif en</span>
+            <button
+              class="cu-b"
+              :class="{ on: cardioUnit === 'distance' }"
+              @click="cardioUnit = 'distance'"
+            >
+              km
+            </button>
+            <button
+              class="cu-b"
+              :class="{ on: cardioUnit === 'time' }"
+              @click="cardioUnit = 'time'"
+            >
+              durée
+            </button>
           </div>
           <template v-if="guide">
             <div class="exd-sec">Exécution</div>
@@ -286,7 +307,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import {
@@ -350,8 +371,15 @@ const creating = ref(false);
 const level = computed<Level>(() => profileStore.profile?.experience?.level ?? 'intermediaire');
 const levelLabel = computed(() => level.value);
 const favSet = computed(() => new Set(profileStore.profile?.favorite_exercises ?? []));
-const unit = computed<'reps' | 'time'>(() => (exercise.value?.unit === 'time' ? 'time' : 'reps'));
-const unitLabel = computed(() => (unit.value === 'time' ? 'sec' : 'reps'));
+const isCardio = computed(() => !!exercise.value?.tags?.includes('cardio'));
+const cardioUnit = ref<'distance' | 'time'>('distance');
+const unit = computed<'reps' | 'time' | 'distance'>(() => {
+  if (isCardio.value) return cardioUnit.value;
+  return exercise.value?.unit === 'time' ? 'time' : 'reps';
+});
+const unitLabel = computed(() =>
+  unit.value === 'distance' ? 'km' : unit.value === 'time' ? 'sec' : 'reps',
+);
 const fields = computed(() => formatOption(format.value)?.fields ?? ['start']);
 
 const guide = computed(() =>
@@ -465,6 +493,10 @@ function pickExercise(e: ExerciseRow) {
   exercise.value = e;
   reset();
 }
+// Recalcule les objectifs quand on bascule km ↔ durée (défauts différents).
+watch(cardioUnit, () => {
+  if (exercise.value && isCardio.value) reset();
+});
 function selectFormat(f: ChallengeFormat) {
   format.value = f;
   reset();
@@ -722,6 +754,31 @@ onMounted(async () => {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-radius: 10px;
   padding: 8px 10px;
+}
+.cardio-unit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.cu-lbl {
+  font-size: 13px;
+  color: var(--dim);
+}
+.cu-b {
+  padding: 6px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cu-b.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 .exd-none {
   margin-top: 10px;
