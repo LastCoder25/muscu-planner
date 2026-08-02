@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { sumPhases, paceLabel, phaseSummary } from '@/data/cardio';
 import { cardioSessionXp } from '@/lib/athlete';
-import { buildRunSession, paceFromVma, vmaFromDemiCooper } from '@/lib/cardio';
+import { buildRunSession, paceFromVma, vmaFromDemiCooper, buildRunPlan } from '@/lib/cardio';
 import type { CardioPhase, CardioLog } from '@/lib/types';
 
 describe('sumPhases', () => {
@@ -93,5 +93,43 @@ describe('buildRunSession', () => {
     const s = buildRunSession('endurance', 15, { duration_min: 45 });
     const endu = s.phases.find((p) => p.kind === 'endurance')!;
     expect(endu.duration_sec).toBe(30 * 60); // 45 - 15
+  });
+});
+
+describe('buildRunPlan', () => {
+  let n = 0;
+  const newId = () => `id${n++}`;
+  const plan = buildRunPlan({
+    raceType: '10k',
+    startDate: '2026-01-05',
+    raceDate: '2026-03-02', // 8 semaines plus tard
+    sessionsPerWeek: 3,
+    vma: 15,
+    level: 'intermediaire',
+    newId,
+  });
+
+  it('génère les bonnes semaines et se termine en affûtage', () => {
+    expect(plan.type).toBe('cardio_plan');
+    expect(plan.weeks.length).toBe(9); // 8 semaines pleines + la semaine de course
+    expect(plan.weeks.at(-1)!.label).toBe('Affûtage');
+  });
+
+  it('contient une séance de course le jour J', () => {
+    const all = plan.weeks.flatMap((w) => w.sessions);
+    const race = all.find((s) => s.is_race);
+    expect(race).toBeTruthy();
+    expect(race!.date).toBe('2026-03-02');
+  });
+
+  it('les séances non-course ont des phases', () => {
+    const all = plan.weeks.flatMap((w) => w.sessions).filter((s) => !s.is_race);
+    expect(all.every((s) => s.phases.length > 0)).toBe(true);
+  });
+
+  it('la sortie longue monte en charge (base < développement)', () => {
+    const longOf = (w: number) =>
+      plan.weeks[w]!.sessions.find((s) => s.session_type === 'sortie_longue')?.duration_min ?? 0;
+    expect(longOf(0)).toBeLessThan(longOf(5));
   });
 });

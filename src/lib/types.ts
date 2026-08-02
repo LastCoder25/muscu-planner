@@ -320,6 +320,46 @@ export interface CardioPhase {
   rest_m?: number;
 }
 
+export type RaceType = '5k' | '10k' | 'semi' | 'marathon' | 'trail';
+
+// Séance planifiée d'un plan d'entraînement (datée).
+export interface CardioPlanSession {
+  id: string;
+  date: string; // YYYY-MM-DD
+  session_type: string; // RunSessionType (src/lib/cardio.ts) ou 'course' (jour J)
+  name: string;
+  phases: CardioPhase[];
+  duration_min?: number;
+  done?: boolean;
+  cardio_log_id?: string;
+  is_race?: boolean; // le jour de la course
+}
+
+export interface CardioPlanWeek {
+  index: number; // 0-based
+  label: string; // « Base », « Développement », « Affûtage »
+  sessions: CardioPlanSession[];
+}
+
+export interface CardioPlan {
+  schema_version: string;
+  type: 'cardio_plan';
+  id: string;
+  name: string;
+  goal: {
+    race_type: RaceType;
+    distance_km?: number;
+    elevation_m?: number;
+    race_date: string; // YYYY-MM-DD
+  };
+  start_date: string;
+  sessions_per_week: number;
+  level?: Level;
+  vma?: number;
+  weeks: CardioPlanWeek[];
+  created_at?: string;
+}
+
 // Bilan d'une sortie (saisie manuelle) : basique (durée/km) ou structurée (phases).
 export interface CardioLog {
   schema_version: string;

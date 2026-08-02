@@ -3,6 +3,18 @@
     <h1 class="page-title font-display">Cardio</h1>
     <p class="page-sub text-dim">Marche, rando, course, trail, vélo…</p>
 
+    <!-- Plan d'entraînement vers une course -->
+    <button class="plan-cta" @click="goPlan">
+      <q-icon name="event" size="22px" />
+      <div class="plan-main">
+        <div class="plan-title">Plan vers une course</div>
+        <div class="plan-sub">
+          {{ hasPlan ? planLabel : 'Prépare un 5/10 km, semi, marathon ou trail' }}
+        </div>
+      </div>
+      <q-icon name="chevron_right" size="20px" />
+    </button>
+
     <!-- Générateur de séance de course (VMA) -->
     <section class="card">
       <div class="card-head">
@@ -297,6 +309,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
@@ -340,9 +353,22 @@ interface EditPhase {
 }
 
 const $q = useQuasar();
+const router = useRouter();
 const auth = useAuthStore();
 const profileStore = useProfileStore();
 const cardio = useCardioStore();
+
+const hasPlan = computed(() => cardio.plans.length > 0);
+const planLabel = computed(() => {
+  const p = cardio.plans[0]?.payload;
+  if (!p) return '';
+  const done = p.weeks.flatMap((w) => w.sessions).filter((s) => s.done).length;
+  const total = p.weeks.flatMap((w) => w.sessions).length;
+  return `${p.name} · ${done}/${total} séances`;
+});
+async function goPlan() {
+  await router.push('/cardio/plan');
+}
 
 // ————— Générateur VMA —————
 const vma = ref<number | null>(profileStore.profile?.preferences?.vma ?? null);
@@ -496,6 +522,7 @@ function fmtDate(iso: string): string {
 
 onMounted(() => {
   cardio.fetchLogs().catch(() => undefined);
+  cardio.fetchPlans().catch(() => undefined);
 });
 
 async function save() {
@@ -592,6 +619,35 @@ function remove(id: string) {
   border-radius: 16px;
   padding: 16px;
   margin-bottom: 16px;
+}
+.plan-cta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  color: var(--text);
+}
+.plan-cta .q-icon {
+  color: var(--accent);
+}
+.plan-main {
+  flex: 1;
+}
+.plan-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+.plan-sub {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 2px;
 }
 .card-head {
   display: flex;
