@@ -36,6 +36,9 @@
           <div v-if="d.description" class="d-desc">{{ d.description }}</div>
           <div v-if="d.notes" class="d-notes">💡 {{ d.notes }}</div>
         </div>
+        <div v-if="hasCourtDiagram(d)" class="d-diagram">
+          <CourtDiagram :pattern="d.pattern" :shot="d.shot" :category="d.category" />
+        </div>
       </div>
 
       <q-btn
@@ -64,7 +67,9 @@ import {
   DRILL_SHOT_LABELS,
   DRILL_PATTERN_LABELS,
   formatDrillTarget,
+  hasCourtDiagram,
 } from '@/data/tennis';
+import CourtDiagram from '@/components/CourtDiagram.vue';
 import type { DrillCategory, DrillShot, DrillFormat } from '@/lib/types';
 
 const $q = useQuasar();
@@ -206,6 +211,11 @@ function goBack() {
 }
 .d-shot {
   color: var(--dim);
+}
+.d-diagram {
+  width: 64px;
+  flex: 0 0 64px;
+  align-self: flex-start;
 }
 .d-desc {
   font-size: 12px;

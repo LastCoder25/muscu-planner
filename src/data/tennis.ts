@@ -100,6 +100,26 @@ export const COURT_EQUIPMENT: { id: string; label: string }[] = [
   { id: 'cible', label: 'Cibles' },
 ];
 
+// Vrai si un schéma de trajectoire (CourtDiagram) est pertinent pour ce drill.
+export function hasCourtDiagram(d: {
+  pattern?: string | null;
+  shot?: string | null;
+  category?: string | null;
+}): boolean {
+  const p = d.pattern;
+  if (
+    p === 'diagonale' ||
+    p === 'croise' ||
+    p === 'longue_ligne' ||
+    p === 'decroise' ||
+    p === 'montee_volee'
+  )
+    return true;
+  if (d.category === 'service_retour' || d.shot === 'service') return true;
+  if (d.category === 'volee' || d.shot === 'volee') return true;
+  return d.category === 'fond_de_court';
+}
+
 export function formatDrillTarget(mode: string, value: number, sets: number): string {
   if (mode === 'balls') return `${value} balles${sets > 1 ? ` × ${sets}` : ''}`;
   if (mode === 'time') {

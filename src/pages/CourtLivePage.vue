@@ -31,6 +31,9 @@
           <span v-if="cur.shot" class="sub">· {{ shotLabel(cur.shot) }}</span>
           <span v-if="cur.pattern" class="sub">· {{ patternLabel(cur.pattern) }}</span>
         </div>
+        <div v-if="showDiagram" class="diagram">
+          <CourtDiagram :pattern="cur.pattern" :shot="cur.shot" :category="cur.category" />
+        </div>
         <p v-if="cur.description" class="desc">{{ cur.description }}</p>
         <p v-if="cur.notes" class="notes">💡 {{ cur.notes }}</p>
 
@@ -113,7 +116,9 @@ import {
   DRILL_SHOT_LABELS,
   DRILL_PATTERN_LABELS,
   formatDrillTarget,
+  hasCourtDiagram,
 } from '@/data/tennis';
+import CourtDiagram from '@/components/CourtDiagram.vue';
 import type { DrillCategory, DrillShot, DrillFormat, Difficulty } from '@/lib/types';
 
 const $q = useQuasar();
@@ -126,6 +131,7 @@ const tennis = useTennisStore();
 const run = computed(() => live.run);
 const idx = computed(() => live.run?.index ?? 0);
 const cur = computed(() => live.run?.drills[idx.value] ?? null);
+const showDiagram = computed(() => (cur.value ? hasCourtDiagram(cur.value) : false));
 
 const chrono = ref(0);
 const running = ref(false);
@@ -323,6 +329,10 @@ onBeforeUnmount(() => {
 .sub {
   color: var(--dim);
   font-weight: 400;
+}
+.diagram {
+  width: 150px;
+  margin: 14px auto 0;
 }
 .desc {
   color: var(--text);
