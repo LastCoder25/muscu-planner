@@ -26,7 +26,20 @@ export interface DrillDef {
   focus?: string[] | null;
   level?: number | null;
   default_format: DrillFormat;
+  description?: string | null;
+  instructions?: string[] | null;
   tips?: string | null;
+}
+
+// Matériel toujours supposé disponible sur un court (non filtrant).
+const ASSUMED_EQUIPMENT = new Set(['raquette', 'balles', 'filet']);
+
+// Un drill est réalisable si tout son matériel optionnel est possédé. Une machine
+// à balles remplace le panier (elle alimente comme un panier).
+function drillEquipmentOk(d: DrillDef, owned: Set<string>): boolean {
+  const eff = new Set(owned);
+  if (eff.has('machine')) eff.add('panier');
+  return (d.equipment ?? []).every((e) => ASSUMED_EQUIPMENT.has(e) || eff.has(e));
 }
 
 function clamp(n: number, lo: number, hi: number) {
@@ -92,6 +105,7 @@ function toPlanned(d: DrillDef): PlannedDrill {
   };
   if (d.shot) pd.shot = d.shot;
   if (d.pattern) pd.pattern = d.pattern;
+  if (d.description) pd.description = d.description;
   if (d.tips) pd.notes = d.tips;
   return pd;
 }
@@ -101,6 +115,7 @@ export interface CourtOptions {
   duration_min?: number; // défaut 60
   withPartner?: boolean; // défaut true
   level?: Level;
+  equipment?: string[]; // matériel de court possédé (panier, machine, mur, cible, plots)
   name?: string;
 }
 
@@ -119,24 +134,34 @@ export function buildCourtSession(
   const maxLevel = levelToInt(opts.level);
   const duration = clamp(opts.duration_min ?? 60, 20, 120);
   const spec = THEME_SPECS[opts.theme ?? 'complet'] ?? THEME_SPECS.complet!;
+  const owned = new Set(opts.equipment ?? []);
 
-  // Éligibilité : sport tennis, partenaire dispo, niveau (avec repli si le niveau
-  // ne laisse rien dans une catégorie).
+  // Éligibilité : sport tennis, partenaire dispo, matériel possédé, niveau (avec
+  // repli si le niveau ne laisse rien dans une catégorie).
   const base = catalog.filter(
-    (d) => (d.sport ?? 'tennis') === 'tennis' && (withPartner || !d.partner_required),
+    (d) =>
+      (d.sport ?? 'tennis') === 'tennis' &&
+      (withPartner || !d.partner_required) &&
+      drillEquipmentOk(d, owned),
   );
   if (base.length === 0) return null;
 
   const used = new Set<string>();
 
-  // Pioche le meilleur drill non utilisé dans des catégories données, en préférant
-  // le coup du thème, puis le niveau adapté, puis l'intensité plus faible d'abord.
+  // Pioche le meilleur drill non utilisé dans des catégories données. Avec
+  // partenaire, on privilégie les drills qui NÉCESSITENT un partenaire (autant en
+  // profiter), puis le coup du thème, puis le niveau adapté.
   function pick(cats: DrillCategory[], shot?: DrillShot): DrillDef | null {
     const pool = base.filter((d) => cats.includes(d.category) && !used.has(d.id));
     if (pool.length === 0) return null;
     const byLevel = pool.filter((d) => (d.level ?? 1) <= maxLevel);
     const usable = byLevel.length ? byLevel : pool;
     const scored = [...usable].sort((a, b) => {
+      if (withPartner) {
+        const pa = a.partner_required ? 0 : 1;
+        const pb = b.partner_required ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+      }
       const sa = shot && a.shot === shot ? 0 : 1;
       const sb = shot && b.shot === shot ? 0 : 1;
       if (sa !== sb) return sa - sb;

@@ -31,7 +31,8 @@
           <span v-if="cur.shot" class="sub">· {{ shotLabel(cur.shot) }}</span>
           <span v-if="cur.pattern" class="sub">· {{ patternLabel(cur.pattern) }}</span>
         </div>
-        <p v-if="cur.notes" class="notes">{{ cur.notes }}</p>
+        <p v-if="cur.description" class="desc">{{ cur.description }}</p>
+        <p v-if="cur.notes" class="notes">💡 {{ cur.notes }}</p>
 
         <!-- Chrono pour les drills au temps -->
         <div v-if="cur.format.mode === 'time'" class="chrono-wrap">
@@ -323,11 +324,17 @@ onBeforeUnmount(() => {
   color: var(--dim);
   font-weight: 400;
 }
+.desc {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 12px 0 0;
+}
 .notes {
   color: var(--dim);
   font-size: 13px;
   line-height: 1.4;
-  margin: 10px 0 0;
+  margin: 8px 0 0;
 }
 .chrono-wrap {
   text-align: center;

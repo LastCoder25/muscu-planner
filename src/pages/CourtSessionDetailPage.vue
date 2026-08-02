@@ -31,8 +31,10 @@
             {{ fmtTarget(d.format) }}
             <span v-if="d.shot" class="d-shot">· {{ shotLabel(d.shot) }}</span>
             <span v-if="d.pattern" class="d-shot">· {{ patternLabel(d.pattern) }}</span>
+            <span v-if="d.partner_required" class="d-shot">· 👥 partenaire</span>
           </div>
-          <div v-if="d.notes" class="d-notes">{{ d.notes }}</div>
+          <div v-if="d.description" class="d-desc">{{ d.description }}</div>
+          <div v-if="d.notes" class="d-notes">💡 {{ d.notes }}</div>
         </div>
       </div>
 
@@ -204,6 +206,12 @@ function goBack() {
 }
 .d-shot {
   color: var(--dim);
+}
+.d-desc {
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 4px;
+  line-height: 1.4;
 }
 .d-notes {
   font-size: 12px;

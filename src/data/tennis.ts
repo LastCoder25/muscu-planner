@@ -91,6 +91,15 @@ export const TENNIS_THEMES: ThemeOption[] = [
   },
 ];
 
+// Matériel de court sélectionnable au wizard (raquette/balles/filet sont supposés).
+export const COURT_EQUIPMENT: { id: string; label: string }[] = [
+  { id: 'plots', label: 'Cônes / plots' },
+  { id: 'panier', label: 'Panier de balles' },
+  { id: 'machine', label: 'Machine à balles' },
+  { id: 'mur', label: 'Mur' },
+  { id: 'cible', label: 'Cibles' },
+];
+
 export function formatDrillTarget(mode: string, value: number, sets: number): string {
   if (mode === 'balls') return `${value} balles${sets > 1 ? ` × ${sets}` : ''}`;
   if (mode === 'time') {

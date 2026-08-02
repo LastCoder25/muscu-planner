@@ -71,6 +71,21 @@
         </button>
       </div>
 
+      <!-- Matériel -->
+      <div class="section-lbl">Matériel de court</div>
+      <div class="chips">
+        <button
+          v-for="e in COURT_EQUIPMENT"
+          :key="e.id"
+          class="chip"
+          :class="{ on: equipment.includes(e.id) }"
+          @click="toggleEquip(e.id)"
+        >
+          {{ e.label }}
+        </button>
+      </div>
+      <p class="equip-note">Raquette, balles et filet sont supposés. Rien coché = sans matériel.</p>
+
       <q-btn
         v-if="mode === 'engine'"
         class="gen full-width"
@@ -135,8 +150,10 @@
             <div class="pv-target">
               {{ fmtTarget(d.format) }}
               <span v-if="d.shot" class="pv-shot">· {{ shotLabel(d.shot) }}</span>
+              <span v-if="d.partner_required" class="pv-shot">· 👥 partenaire</span>
             </div>
-            <div v-if="d.notes" class="pv-notes">{{ d.notes }}</div>
+            <div v-if="d.description" class="pv-desc">{{ d.description }}</div>
+            <div v-if="d.notes" class="pv-notes">💡 {{ d.notes }}</div>
           </div>
         </div>
 
@@ -168,6 +185,7 @@ import { buildCourtPrompt, parseDrillSession } from '@/lib/tennisCoach';
 import type { DrillSession, DrillShot, DrillCategory, DrillFormat, Level } from '@/lib/types';
 import {
   TENNIS_THEMES,
+  COURT_EQUIPMENT,
   DRILL_CATEGORY_LABELS,
   DRILL_SHOT_LABELS,
   formatDrillTarget,
@@ -190,6 +208,7 @@ const theme = ref('complet');
 const withPartner = ref(true);
 const duration = ref<number>(60);
 const level = ref<Level>(profileStore.profile?.experience.level ?? 'intermediaire');
+const equipment = ref<string[]>([...(profileStore.profile?.preferences?.court_equipment ?? [])]);
 const mode = ref<'engine' | 'ai'>('engine');
 const rawInput = ref('');
 const loading = ref(false);
@@ -199,6 +218,31 @@ const preview = ref<DrillSession | null>(null);
 const catLabel = (c: DrillCategory) => DRILL_CATEGORY_LABELS[c];
 const shotLabel = (s: DrillShot) => DRILL_SHOT_LABELS[s];
 const fmtTarget = (f: DrillFormat) => formatDrillTarget(f.mode, f.value, f.sets);
+
+function toggleEquip(id: string) {
+  const i = equipment.value.indexOf(id);
+  if (i >= 0) equipment.value.splice(i, 1);
+  else equipment.value.push(id);
+}
+
+// Mémorise le matériel choisi dans le profil (pré-remplit les prochains wizards).
+async function persistEquipment() {
+  const p = profileStore.profile;
+  const userId = auth.user?.id;
+  if (!p || !userId) return;
+  const cur = p.preferences?.court_equipment ?? [];
+  const next = equipment.value;
+  const same = cur.length === next.length && cur.every((x) => next.includes(x));
+  if (same) return;
+  try {
+    await profileStore.update(userId, {
+      ...p,
+      preferences: { ...p.preferences, court_equipment: [...next] },
+    });
+  } catch {
+    /* non bloquant */
+  }
+}
 
 onMounted(async () => {
   try {
@@ -221,6 +265,7 @@ async function generate() {
       duration_min: duration.value,
       withPartner: withPartner.value,
       level: level.value,
+      equipment: equipment.value,
       name: `Tennis — ${themeLabel.value}`,
     });
     if (!session) {
@@ -228,6 +273,7 @@ async function generate() {
       return;
     }
     preview.value = session;
+    void persistEquipment();
   } finally {
     loading.value = false;
   }
@@ -241,9 +287,11 @@ async function copyPrompt() {
       duration_min: duration.value,
       withPartner: withPartner.value,
       level: level.value,
+      equipment: equipment.value,
     },
     catalog,
   );
+  void persistEquipment();
   try {
     await navigator.clipboard.writeText(prompt);
     $q.notify({ type: 'positive', message: 'Prompt copié — colle-le dans ton IA.' });
@@ -455,11 +503,22 @@ function goBack() {
 .pv-shot {
   color: var(--dim);
 }
+.pv-desc {
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 4px;
+  line-height: 1.4;
+}
 .pv-notes {
   font-size: 12px;
   color: var(--dim);
   margin-top: 4px;
   line-height: 1.35;
+}
+.equip-note {
+  font-size: 11px;
+  color: var(--dim);
+  margin: 8px 0 0;
 }
 .save {
   border-radius: 12px;

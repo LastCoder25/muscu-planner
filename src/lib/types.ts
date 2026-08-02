@@ -62,6 +62,7 @@ export interface Profile {
     tracking_frequency?: 'day' | 'week' | 'month';
     tracking_day?: number; // semaine : 0=dim..6=sam ; mois : 1..28
     tracking_time?: string; // « HH:MM » pour le rappel
+    court_equipment?: string[]; // matériel de tennis possédé (panier, machine, mur…)
   };
 }
 
@@ -229,7 +230,8 @@ export interface PlannedDrill {
   partner_required: boolean;
   format: DrillFormat;
   rest_seconds: number;
-  notes?: string;
+  description?: string; // descriptif du drill (repris du catalogue)
+  notes?: string; // conseil d'exécution (tips)
 }
 
 export interface DrillSession {

@@ -23,6 +23,7 @@ export interface CourtPromptOptions {
   duration_min?: number;
   withPartner?: boolean;
   level?: string;
+  equipment?: string[];
 }
 
 /** Prompt à coller dans une IA pour obtenir une séance de tennis (JSON drill_session). */
@@ -33,7 +34,8 @@ export function buildCourtPrompt(opts: CourtPromptOptions = {}, catalog: DrillDe
     .join('\n');
   return [
     `Tu es entraîneur de tennis. Compose une séance sur le court.`,
-    `Paramètres : thème = ${opts.theme ?? 'complet'} ; durée ≈ ${opts.duration_min ?? 60} min ; ${opts.withPartner === false ? 'SANS partenaire (drills solo : panier, mur, service, physique)' : 'avec partenaire'} ; niveau = ${opts.level ?? 'intermédiaire'}.`,
+    `Paramètres : thème = ${opts.theme ?? 'complet'} ; durée ≈ ${opts.duration_min ?? 60} min ; ${opts.withPartner === false ? 'SANS partenaire (drills solo : panier, mur, service, physique)' : 'avec partenaire (privilégie les drills qui nécessitent un partenaire)'} ; niveau = ${opts.level ?? 'intermédiaire'}.`,
+    `Matériel disponible (hors raquette/balles/filet) : ${opts.equipment?.length ? opts.equipment.join(', ') : 'aucun'}. N'utilise QUE ce matériel.`,
     `Structure logique : échauffement → travail du thème → complément → déplacement/physique → jeu (si partenaire) → retour au calme.`,
     ``,
     `Réponds UNIQUEMENT avec un objet JSON, sans texte autour, de la forme :`,
@@ -187,6 +189,8 @@ export function parseDrillSession(raw: string, catalog: DrillDef[] = []): DrillS
       };
       if (shot) pd.shot = shot;
       if (pattern) pd.pattern = pattern;
+      const desc = typeof d.description === 'string' ? d.description.trim() : match?.description;
+      if (desc) pd.description = desc;
       if (typeof d.notes === 'string' && d.notes.trim()) pd.notes = d.notes.trim();
       else if (match?.tips) pd.notes = match.tips;
       return pd;
