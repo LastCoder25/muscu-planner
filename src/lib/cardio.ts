@@ -17,7 +17,10 @@ export type RunSessionType =
   | 'fractionne_court'
   | 'fractionne_long'
   | 'tempo'
-  | 'sortie_longue';
+  | 'sortie_longue'
+  | 'cotes' // répétitions en côte (spécifique trail / puissance)
+  | 'seuil_vallonne' // tempo sur parcours vallonné (trail)
+  | 'sortie_trail'; // sortie longue nature avec dénivelé (D+)
 
 /** VMA estimée par le test demi-Cooper (distance max en 6 min) : VMA = d(m) / 100. */
 export function vmaFromDemiCooper(distanceM: number): number {
@@ -40,9 +43,16 @@ function repsFor(level: Level | undefined, base: number): number {
   return base;
 }
 
+export interface HillDef {
+  length_m: number;
+  grade_pct?: number;
+}
+
 export interface RunSessionOptions {
   level?: Level;
   duration_min?: number; // pour endurance / tempo / sortie longue
+  hill?: HillDef; // côte disponible (séance 'cotes')
+  elevationTargetM?: number; // D+ visé (sortie_trail) — informatif
 }
 
 const NAMES: Record<RunSessionType, string> = {
@@ -52,6 +62,9 @@ const NAMES: Record<RunSessionType, string> = {
   fractionne_long: 'Fractionné long',
   tempo: 'Tempo / seuil',
   sortie_longue: 'Sortie longue',
+  cotes: 'Côtes (puissance)',
+  seuil_vallonne: 'Seuil vallonné',
+  sortie_trail: 'Sortie trail (D+)',
 };
 
 /**
@@ -152,6 +165,62 @@ export function buildRunSession(
       phases.push(cooldown(5));
       break;
     }
+    case 'cotes': {
+      phases.push(warmup(15));
+      const reps = repsFor(opts.level, 8);
+      const hill = opts.hill;
+      if (hill?.length_m) {
+        phases.push({
+          kind: 'intervalle',
+          intensity: 'max',
+          reps,
+          work_m: Math.round(hill.length_m),
+          rest_sec: Math.max(45, Math.round(hill.length_m / 2)), // retour en récup
+          pace: p(1.0),
+          note: `en côte${hill.grade_pct ? ` ~${hill.grade_pct} %` : ''} — récup en descente`,
+        });
+      } else {
+        phases.push({
+          kind: 'intervalle',
+          intensity: 'max',
+          reps,
+          work_sec: 40,
+          rest_sec: 90,
+          pace: p(1.05),
+          note: 'en côte — récup en descente',
+        });
+      }
+      phases.push(cooldown(10));
+      break;
+    }
+    case 'seuil_vallonne': {
+      const block = opts.duration_min ?? 20;
+      phases.push(warmup(15));
+      phases.push({
+        kind: 'tempo',
+        intensity: 'soutenu',
+        duration_sec: block * 60,
+        pace: p(0.85),
+        note: 'sur parcours vallonné',
+      });
+      phases.push(cooldown(10));
+      break;
+    }
+    case 'sortie_trail': {
+      const total = opts.duration_min ?? 90;
+      phases.push(warmup(5));
+      phases.push({
+        kind: 'endurance',
+        intensity: 'modere',
+        duration_sec: Math.max(20, total - 10) * 60,
+        pace: p(0.6), // plus lent : terrain + D+
+        note: opts.elevationTargetM
+          ? `terrain vallonné (~${opts.elevationTargetM} m D+)`
+          : 'terrain vallonné (D+)',
+      });
+      phases.push(cooldown(5));
+      break;
+    }
   }
 
   return { name: NAMES[type], phases };
@@ -188,19 +257,35 @@ const LONG_MAX_MIN: Record<RaceType, number> = {
   marathon: 130,
   trail: 150,
 };
-// Trame hebdo selon le nombre de séances/semaine.
-const WEEK_TEMPLATE: Record<number, RunSessionType[]> = {
-  2: ['fractionne_court', 'sortie_longue'],
-  3: ['endurance', 'fractionne_court', 'sortie_longue'],
-  4: ['endurance', 'fractionne_court', 'tempo', 'sortie_longue'],
-  5: ['endurance', 'fractionne_court', 'tempo', 'endurance', 'sortie_longue'],
-};
 const DAY_OFFSETS: Record<number, number[]> = {
   2: [1, 5],
   3: [0, 2, 5],
   4: [0, 2, 4, 6],
   5: [0, 1, 3, 4, 6],
 };
+
+// Séances de « qualité » qui tournent semaine après semaine (variété) + type de
+// sortie longue, selon l'objectif. Le trail privilégie côtes / vallonné / D+.
+function qualityRotation(raceType: RaceType): RunSessionType[] {
+  if (raceType === 'trail') return ['cotes', 'fractionne_long', 'seuil_vallonne'];
+  if (raceType === 'marathon' || raceType === 'semi')
+    return ['fractionne_long', 'tempo', 'fractionne_court'];
+  return ['fractionne_court', 'fractionne_long', 'tempo']; // 5k / 10k
+}
+function longType(raceType: RaceType): RunSessionType {
+  return raceType === 'trail' ? 'sortie_trail' : 'sortie_longue';
+}
+// Trame de la semaine w : endurance(s) + qualité(s) tournantes + sortie longue.
+function weekSlots(spw: number, w: number, raceType: RaceType): RunSessionType[] {
+  const rot = qualityRotation(raceType);
+  const q1 = rot[w % rot.length]!;
+  const q2 = rot[(w + 1) % rot.length]!;
+  const lng = longType(raceType);
+  if (spw <= 2) return [q1, lng];
+  if (spw === 3) return ['endurance', q1, lng];
+  if (spw === 4) return ['endurance', q1, q2, lng];
+  return ['endurance', q1, 'endurance', q2, lng];
+}
 
 export interface RunPlanOptions {
   raceType: RaceType;
@@ -211,6 +296,7 @@ export interface RunPlanOptions {
   level?: Level;
   distanceKm?: number;
   elevationM?: number;
+  hills?: HillDef[]; // côtes disponibles (séances de côtes du plan trail)
   newId: () => string; // fournisseur d'id (crypto.randomUUID côté app)
 }
 
@@ -221,15 +307,18 @@ export interface RunPlanOptions {
  */
 export function buildRunPlan(opts: RunPlanOptions): CardioPlan {
   const spw = Math.min(5, Math.max(2, Math.round(opts.sessionsPerWeek)));
-  const template = WEEK_TEMPLATE[spw]!;
   const offsets = DAY_OFFSETS[spw]!;
   const longMax = LONG_MAX_MIN[opts.raceType];
+  const hills = opts.hills ?? [];
 
   const days = Math.max(7, isoDiffDays(opts.startDate, opts.raceDate));
   const raceWeek = Math.floor(days / 7);
   const totalWeeks = Math.min(24, raceWeek + 1);
   const taperWeeks = totalWeeks >= 8 ? 2 : 1;
   const buildEnd = totalWeeks - 1 - taperWeeks; // dernier index « charge »
+
+  const isLong = (t: RunSessionType) => t === 'sortie_longue' || t === 'sortie_trail';
+  const isBlockType = (t: RunSessionType) => t === 'tempo' || t === 'seuil_vallonne';
 
   const weeks: CardioPlanWeek[] = [];
   for (let w = 0; w < totalWeeks; w++) {
@@ -242,27 +331,25 @@ export function buildRunPlan(opts: RunPlanOptions): CardioPlan {
     if (isTaper) longDur = Math.round(longMax * 0.55);
     else longDur = Math.round(longMax * (0.5 + 0.5 * (buildEnd > 0 ? w / buildEnd : 1)));
 
+    const slots = weekSlots(spw, w, opts.raceType);
     const sessions: CardioPlanSession[] = [];
-    for (let i = 0; i < template.length; i++) {
-      let type = template[i]!;
-      // Fractionné : court en base, long en développement.
-      if (type === 'fractionne_court' && isBuild) type = 'fractionne_long';
+    for (let i = 0; i < slots.length; i++) {
+      const type = slots[i]!;
       const date = isoAddDays(opts.startDate, w * 7 + (offsets[i] ?? 0));
       if (isoDiffDays(date, opts.raceDate) < 0) continue; // après la course → ignoré
 
-      const durOpt =
-        type === 'sortie_longue'
-          ? longDur
-          : type === 'tempo'
-            ? isTaper
-              ? 15
-              : 20
-            : type === 'endurance'
-              ? 45
-              : undefined;
+      let durOpt: number | undefined;
+      if (isLong(type)) durOpt = longDur;
+      else if (isBlockType(type)) durOpt = isTaper ? 15 : 20;
+      else if (type === 'endurance') durOpt = 45;
+
+      // Côte tournante (variété) + D+ visé sur la sortie trail.
+      const hill = type === 'cotes' && hills.length ? hills[w % hills.length] : undefined;
       const built = buildRunSession(type, opts.vma, {
         ...(opts.level ? { level: opts.level } : {}),
         ...(durOpt ? { duration_min: durOpt } : {}),
+        ...(hill ? { hill } : {}),
+        ...(type === 'sortie_trail' ? { elevationTargetM: Math.round(longDur * 7) } : {}),
       });
       sessions.push({
         id: opts.newId(),

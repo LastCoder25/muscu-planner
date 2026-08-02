@@ -133,3 +133,34 @@ describe('buildRunPlan', () => {
     expect(longOf(0)).toBeLessThan(longOf(5));
   });
 });
+
+describe('buildRunPlan — trail (spécifique + côtes)', () => {
+  let n = 0;
+  const plan = buildRunPlan({
+    raceType: 'trail',
+    startDate: '2026-01-05',
+    raceDate: '2026-03-16', // ~10 semaines
+    sessionsPerWeek: 4,
+    vma: 14,
+    level: 'intermediaire',
+    hills: [{ length_m: 300, grade_pct: 10 }],
+    newId: () => `t${n++}`,
+  });
+  const types = new Set(plan.weeks.flatMap((w) => w.sessions).map((s) => s.session_type));
+
+  it('contient des séances spécifiques trail (côtes + sortie trail)', () => {
+    expect(types.has('cotes')).toBe(true);
+    expect(types.has('sortie_trail')).toBe(true);
+  });
+  it('la sortie longue est une sortie trail (D+), pas une sortie plate', () => {
+    expect(types.has('sortie_longue')).toBe(false);
+  });
+  it('les côtes utilisent la côte renseignée (300 m)', () => {
+    const cotes = plan.weeks.flatMap((w) => w.sessions).find((s) => s.session_type === 'cotes');
+    const interval = cotes?.phases.find((p) => p.kind === 'intervalle');
+    expect(interval?.work_m).toBe(300);
+  });
+  it('varié : au moins 3 types de séances différents', () => {
+    expect(types.size).toBeGreaterThanOrEqual(3);
+  });
+});

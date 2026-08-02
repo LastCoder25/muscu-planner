@@ -42,6 +42,17 @@
           <q-input v-model.number="elevationM" type="number" filled label="Dénivelé D+ (m)" />
         </div>
 
+        <template v-if="raceType === 'trail'">
+          <div class="section-lbl">Côtes disponibles (séances de côtes)</div>
+          <div v-for="(h, i) in hills" :key="i" class="hill-row">
+            <q-input v-model.number="h.length_m" type="number" filled dense label="Longueur (m)" />
+            <q-input v-model.number="h.grade_pct" type="number" filled dense label="Pente (%)" />
+            <button class="hill-del" aria-label="Supprimer" @click="hills.splice(i, 1)">✕</button>
+          </div>
+          <button class="hill-add" @click="addHill">+ Ajouter une côte</button>
+          <p class="hill-note">Sans côte, les séances de côtes se font en durée (40 s).</p>
+        </template>
+
         <div class="section-lbl">Date de la course</div>
         <q-input v-model="raceDate" type="date" filled />
 
@@ -162,6 +173,32 @@ const distanceKm = ref<number | null>(null);
 const elevationM = ref<number | null>(null);
 const raceDate = ref('');
 const spw = ref(3);
+const hills = ref<{ length_m: number; grade_pct?: number }[]>([
+  ...(profileStore.profile?.preferences?.hills ?? []),
+]);
+
+function addHill() {
+  hills.value.push({ length_m: 200, grade_pct: 8 });
+}
+const validHills = computed(() =>
+  hills.value
+    .filter((h) => h.length_m && h.length_m > 0)
+    .map((h) => ({ length_m: h.length_m, ...(h.grade_pct ? { grade_pct: h.grade_pct } : {}) })),
+);
+// Mémorise les côtes au profil pour pré-remplir les prochains plans.
+async function persistHills() {
+  const p = profileStore.profile;
+  const userId = auth.user?.id;
+  if (!p || !userId) return;
+  try {
+    await profileStore.update(userId, {
+      ...p,
+      preferences: { ...p.preferences, hills: validHills.value },
+    });
+  } catch {
+    /* non bloquant */
+  }
+}
 
 const vma = computed(() => profileStore.profile?.preferences?.vma ?? null);
 const plan = computed<CardioPlan | null>(() => cardio.plans[0]?.payload ?? null);
@@ -217,9 +254,11 @@ async function generate() {
         : {}),
       ...(raceType.value === 'trail' && distanceKm.value ? { distanceKm: distanceKm.value } : {}),
       ...(raceType.value === 'trail' && elevationM.value ? { elevationM: elevationM.value } : {}),
+      ...(raceType.value === 'trail' && validHills.value.length ? { hills: validHills.value } : {}),
       newId: () => crypto.randomUUID(),
     });
     await cardio.createPlan(userId, built);
+    await persistHills();
     $q.notify({ type: 'positive', message: 'Plan créé 💪' });
   } catch (e) {
     $q.notify({
@@ -359,6 +398,39 @@ async function goCardio() {
   flex-direction: column;
   gap: 10px;
   margin-top: 12px;
+}
+.hill-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.hill-row .q-input {
+  flex: 1;
+}
+.hill-del {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--d4);
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+}
+.hill-add {
+  background: none;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.hill-note {
+  font-size: 11px;
+  color: var(--dim);
+  margin: 8px 0 0;
 }
 .gen {
   border-radius: 12px;
