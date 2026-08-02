@@ -6,7 +6,8 @@ import { useLogsStore } from '@/stores/logs';
 import { useTennisStore } from '@/stores/tennis';
 import { useChallengesStore } from '@/stores/challenges';
 import { useSessionsStore } from '@/stores/sessions';
-import { sessionXp, drillSessionXp } from '@/lib/athlete';
+import { useCardioStore } from '@/stores/cardio';
+import { sessionXp, drillSessionXp, cardioSessionXp } from '@/lib/athlete';
 import { challengeXpPoints } from '@/lib/challenges';
 import { computeLevel } from '@/lib/levels';
 
@@ -15,12 +16,14 @@ export function useProgress() {
   const tennis = useTennisStore();
   const challenges = useChallengesStore();
   const sessions = useSessionsStore();
+  const cardio = useCardioStore();
 
   onMounted(() => {
     logs.fetchAll().catch(() => undefined);
     tennis.fetchLogs().catch(() => undefined);
     challenges.fetchMine().catch(() => undefined);
     sessions.fetchMine().catch(() => undefined);
+    cardio.fetchLogs().catch(() => undefined);
   });
 
   // Ids des séances de prépa physique → leurs bilans comptent dans le Tennis.
@@ -46,7 +49,7 @@ export function useProgress() {
   const tennisXp = computed(
     () => prepaXp.value + tennis.logs.reduce((a, r) => a + drillSessionXp(r.payload), 0),
   );
-  const cardioXp = computed(() => 0); // course à pied / trail — à venir
+  const cardioXp = computed(() => cardio.logs.reduce((a, r) => a + cardioSessionXp(r.payload), 0));
   const challengesXp = computed(() => challengeXpPoints(challenges.list));
   const globalXp = computed(
     () => muscuXp.value + tennisXp.value + cardioXp.value + challengesXp.value,

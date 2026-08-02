@@ -96,6 +96,10 @@
           <q-icon name="sports_tennis" size="26px" />
           <span>Tennis</span>
         </button>
+        <button class="tile" @click="goCardio">
+          <q-icon name="directions_run" size="26px" />
+          <span>Cardio</span>
+        </button>
         <button class="tile tile-accent" @click="goChallenges">
           <q-icon name="emoji_events" size="26px" />
           <span>Challenges</span>
@@ -128,7 +132,7 @@ const progress = useProgress();
 const tracks = computed(() => [
   { key: 'muscu', label: 'Muscu', info: progress.muscu.value, go: goProgram },
   { key: 'tennis', label: 'Tennis', info: progress.tennis.value, go: goTennis },
-  { key: 'cardio', label: 'Cardio', info: progress.cardio.value, go: goStats },
+  { key: 'cardio', label: 'Cardio', info: progress.cardio.value, go: goCardio },
   { key: 'challenges', label: 'Défis', info: progress.challenges.value, go: goChallenges },
 ]);
 const loading = ref(true);
@@ -211,6 +215,9 @@ async function goChallenges() {
 }
 async function goTennis() {
   await router.push('/tennis');
+}
+async function goCardio() {
+  await router.push('/cardio');
 }
 async function goStats() {
   await router.push('/stats');

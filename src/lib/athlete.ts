@@ -1,7 +1,7 @@
 // athlete.ts — barèmes d'XP par séance. Le calcul de NIVEAU est unifié dans
 // src/lib/levels.ts (computeLevel). Ici : combien rapporte une séance.
 // Pur/testable, aucune dépendance Vue.
-import type { SessionLog, Session, DrillLog } from './types';
+import type { SessionLog, Session, DrillLog, CardioLog } from './types';
 
 /** XP d'une séance de muscu : présence + volume (reps) + charge + intensité (note 1–4). */
 export function sessionXp(log: SessionLog): number {
@@ -23,6 +23,17 @@ export function drillSessionXp(log: DrillLog): number {
   const minutes = log.duration_min ?? 0;
   const intensity = (log.global_difficulty ?? 2) * 10;
   return Math.round(40 + minutes + done * 8 + intensity);
+}
+
+/** XP d'une sortie course/trail : distance + dénivelé (D+) + intensité.
+ *  Le D+ (trail) est valorisé ; à défaut de distance, on compte la durée. */
+export function cardioSessionXp(log: CardioLog): number {
+  const km = log.distance_km ?? 0;
+  const dplus = log.elevation_m ?? 0;
+  const dur = log.duration_min ?? 0;
+  const intensity = (log.rpe ?? 2) * 10;
+  const distancePart = km > 0 ? km * 10 : dur * 0.8;
+  return Math.round(40 + distancePart + dplus / 10 + intensity);
 }
 
 /** Estimation d'XP d'une séance PRÉVUE (avant de la faire) : même barème que

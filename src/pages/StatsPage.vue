@@ -135,6 +135,29 @@
           </div>
         </div>
       </template>
+
+      <!-- Cardio -->
+      <template v-if="cardio.logs.length">
+        <div class="sec-h sec-tennis">🏃 Cardio</div>
+        <div class="kpis">
+          <div class="kpi">
+            <span class="kpi-v font-display">{{ cardioKpis.km }}</span
+            ><span class="kpi-l">km</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-v font-display">{{ cardioKpis.dplus }}</span
+            ><span class="kpi-l">m D+</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-v font-display">{{ cardioKpis.sessions }}</span
+            ><span class="kpi-l">sorties</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-v font-display">{{ cardioKpis.last30 }}</span
+            ><span class="kpi-l">sur 30 j</span>
+          </div>
+        </div>
+      </template>
     </template>
   </q-page>
 </template>
@@ -145,6 +168,7 @@ import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useTennisStore, type DrillLogRow } from '@/stores/tennis';
+import { useCardioStore } from '@/stores/cardio';
 import { muscleColor } from '@/lib/volume';
 import { DRILL_SHOT_LABELS } from '@/data/tennis';
 import { useProgress } from '@/composables/useProgress';
@@ -154,6 +178,7 @@ const router = useRouter();
 const $q = useQuasar();
 const logsStore = useLogsStore();
 const tennis = useTennisStore();
+const cardio = useCardioStore();
 const loading = ref(true);
 const logs = ref<LogRow[]>([]);
 const drillLogs = ref<DrillLogRow[]>([]);
@@ -288,8 +313,19 @@ const tennisLast30 = computed(() => {
   return drillLogs.value.filter((r) => Date.parse(r.performed_at) >= cutoff).length;
 });
 
+// ————— Stats cardio (cardio_logs) —————
+const cardioKpis = computed(() => {
+  const rows = cardio.logs;
+  const km = Math.round(rows.reduce((a, r) => a + (r.payload.distance_km ?? 0), 0) * 10) / 10;
+  const dplus = rows.reduce((a, r) => a + (r.payload.elevation_m ?? 0), 0);
+  const cutoff = Date.now() - 30 * 86400000;
+  const last30 = rows.filter((r) => Date.parse(r.performed_at) >= cutoff).length;
+  return { sessions: rows.length, km, dplus, last30 };
+});
+
 onMounted(async () => {
   try {
+    cardio.fetchLogs(300).catch(() => undefined);
     tennis
       .fetchLogs(300)
       .then((l) => (drillLogs.value = l))

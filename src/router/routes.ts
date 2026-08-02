@@ -88,6 +88,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'stats', component: () => import('@/pages/StatsPage.vue') },
       { path: 'challenges', component: () => import('@/pages/ChallengesPage.vue') },
       { path: 'tennis', component: () => import('@/pages/TennisPage.vue') },
+      { path: 'cardio', component: () => import('@/pages/CardioPage.vue') },
       { path: 'body', component: () => import('@/pages/BodyPage.vue') },
       { path: 'backlog', component: () => import('@/pages/BacklogPage.vue') },
     ],

@@ -274,3 +274,26 @@ export interface DrillLog {
   global_comment?: string;
   drills: LoggedDrill[];
 }
+
+// ————————————————————————————————————————————————————————————————
+// Cardio — course à pied / trail (extension additive, v1.2).
+// Effort continu : distance / durée / allure / dénivelé (D+) / ressenti.
+// ————————————————————————————————————————————————————————————————
+
+export type RunType = 'footing' | 'fractionne' | 'tempo' | 'sortie_longue' | 'trail' | 'recup';
+
+// Bilan d'une sortie (saisie manuelle).
+export interface CardioLog {
+  schema_version: string;
+  type: 'cardio_log';
+  id: string;
+  cardio_session_id?: string;
+  run_type: RunType;
+  distance_km?: number;
+  duration_min?: number;
+  elevation_m?: number; // D+ (dénivelé positif)
+  rpe?: Difficulty; // ressenti 1–4
+  performed_at?: string;
+  comment?: string;
+  intervals?: string; // structure du fractionné saisie (ex. « 10×400 m / 1 min »)
+}
