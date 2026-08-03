@@ -1,7 +1,7 @@
 <template>
   <q-page class="tennis-page">
     <h1 class="page-title font-display">Tennis</h1>
-    <p class="page-sub text-dim">Prépa physique et drills sur le court.</p>
+    <p class="page-sub text-dim">Enregistre tes séances, tes drills et ta prépa physique.</p>
 
     <div v-if="resume" class="resume">
       <div class="resume-main">
@@ -13,6 +13,73 @@
         <button class="r-cancel" aria-label="Abandonner" @click="discardCourt">Abandonner</button>
       </div>
     </div>
+
+    <!-- Enregistrer une séance jouée (log à la durée) -->
+    <section class="card">
+      <div class="card-head">
+        <q-icon name="edit_note" size="22px" />
+        <div>
+          <div class="card-title">Enregistrer une séance</div>
+          <div class="card-desc">Une séance jouée, à la durée → XP tennis.</div>
+        </div>
+      </div>
+
+      <div class="opt-row">
+        <span class="opt-lbl">Durée</span>
+        <q-input
+          v-model.number="logDuration"
+          type="number"
+          filled
+          dense
+          suffix="min"
+          style="max-width: 130px"
+        />
+      </div>
+
+      <div class="chips">
+        <button class="chip" :class="{ on: logPartner }" @click="logPartner = true">
+          Avec partenaire
+        </button>
+        <button class="chip" :class="{ on: !logPartner }" @click="logPartner = false">
+          Seul(e)
+        </button>
+      </div>
+
+      <div class="opt-lbl" style="margin-top: 12px">Ressenti</div>
+      <div class="rate-btns">
+        <button
+          v-for="n in 4"
+          :key="n"
+          class="rate-b"
+          :class="{ on: logRpe === n }"
+          :style="{ '--c': `var(--d${n})` }"
+          @click="logRpe = n as Difficulty"
+        >
+          {{ n }}
+        </button>
+      </div>
+
+      <q-input
+        v-model="logComment"
+        type="textarea"
+        autogrow
+        filled
+        label="Commentaire"
+        class="q-mt-sm"
+      />
+
+      <q-btn
+        class="gen-btn full-width q-mt-sm"
+        color="primary"
+        text-color="dark"
+        no-caps
+        size="lg"
+        icon="check"
+        label="Enregistrer la séance"
+        :loading="savingLog"
+        @click="saveSession"
+      />
+    </section>
 
     <!-- Prépa physique -->
     <section class="card">
@@ -137,73 +204,6 @@
           </button>
         </div>
       </div>
-    </section>
-
-    <!-- Enregistrer une séance jouée (log à la durée) -->
-    <section class="card">
-      <div class="card-head">
-        <q-icon name="edit_note" size="22px" />
-        <div>
-          <div class="card-title">Enregistrer une séance</div>
-          <div class="card-desc">Une séance jouée, à la durée → XP tennis.</div>
-        </div>
-      </div>
-
-      <div class="opt-row">
-        <span class="opt-lbl">Durée</span>
-        <q-input
-          v-model.number="logDuration"
-          type="number"
-          filled
-          dense
-          suffix="min"
-          style="max-width: 130px"
-        />
-      </div>
-
-      <div class="chips">
-        <button class="chip" :class="{ on: logPartner }" @click="logPartner = true">
-          Avec partenaire
-        </button>
-        <button class="chip" :class="{ on: !logPartner }" @click="logPartner = false">
-          Seul(e)
-        </button>
-      </div>
-
-      <div class="opt-lbl" style="margin-top: 12px">Ressenti</div>
-      <div class="rate-btns">
-        <button
-          v-for="n in 4"
-          :key="n"
-          class="rate-b"
-          :class="{ on: logRpe === n }"
-          :style="{ '--c': `var(--d${n})` }"
-          @click="logRpe = n as Difficulty"
-        >
-          {{ n }}
-        </button>
-      </div>
-
-      <q-input
-        v-model="logComment"
-        type="textarea"
-        autogrow
-        filled
-        label="Commentaire"
-        class="q-mt-sm"
-      />
-
-      <q-btn
-        class="gen-btn full-width q-mt-sm"
-        color="primary"
-        text-color="dark"
-        no-caps
-        size="lg"
-        icon="check"
-        label="Enregistrer la séance"
-        :loading="savingLog"
-        @click="saveSession"
-      />
     </section>
 
     <!-- Historique tennis -->
