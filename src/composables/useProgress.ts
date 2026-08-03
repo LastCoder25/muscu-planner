@@ -49,15 +49,31 @@ export function useProgress() {
   const tennisXp = computed(
     () => prepaXp.value + tennis.logs.reduce((a, r) => a + drillSessionXp(r.payload), 0),
   );
-  const cardioXp = computed(() => cardio.logs.reduce((a, r) => a + cardioSessionXp(r.payload), 0));
-  const challengesXp = computed(() => challengeXpPoints(challenges.list));
-  const globalXp = computed(
-    () => muscuXp.value + tennisXp.value + cardioXp.value + challengesXp.value,
+
+  // Un challenge alimente la DISCIPLINE de son exercice : marche/course/vélo →
+  // cardio ; tout le reste (pompes, gainage…) → muscu.
+  const CARDIO_CH_IDS = new Set(['ex_ch_marche', 'ex_ch_course', 'ex_ch_velo']);
+  const isCardioChallenge = (c: (typeof challenges.list)[number]) =>
+    c.unit === 'distance' || CARDIO_CH_IDS.has(c.exercise_id);
+  const muscuChallengeXp = computed(() =>
+    challengeXpPoints(challenges.list.filter((c) => !isCardioChallenge(c))),
   );
+  const cardioChallengeXp = computed(() =>
+    challengeXpPoints(challenges.list.filter((c) => isCardioChallenge(c))),
+  );
+
+  const muscuTotal = computed(() => muscuXp.value + muscuChallengeXp.value);
+  const cardioXp = computed(
+    () => cardio.logs.reduce((a, r) => a + cardioSessionXp(r.payload), 0) + cardioChallengeXp.value,
+  );
+  // Piste Challenges = niveau « méta » (tous les défis) — affiché à part, PAS
+  // ajouté au Global (l'effort est déjà compté dans muscu / cardio).
+  const challengesXp = computed(() => challengeXpPoints(challenges.list));
+  const globalXp = computed(() => muscuTotal.value + tennisXp.value + cardioXp.value);
 
   return {
     global: computed(() => computeLevel(globalXp.value)),
-    muscu: computed(() => computeLevel(muscuXp.value)),
+    muscu: computed(() => computeLevel(muscuTotal.value)),
     tennis: computed(() => computeLevel(tennisXp.value)),
     cardio: computed(() => computeLevel(cardioXp.value)),
     challenges: computed(() => computeLevel(challengesXp.value)),
