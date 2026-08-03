@@ -27,12 +27,20 @@
       <div class="opt-row">
         <span class="opt-lbl">Durée</span>
         <q-input
-          v-model.number="logDuration"
+          v-model.number="logHours"
+          type="number"
+          filled
+          dense
+          suffix="h"
+          style="max-width: 90px"
+        />
+        <q-input
+          v-model.number="logMinutes"
           type="number"
           filled
           dense
           suffix="min"
-          style="max-width: 130px"
+          style="max-width: 100px"
         />
       </div>
 
@@ -224,7 +232,9 @@
               · {{ l.payload.drills.filter((d) => d.done).length }}/{{ l.payload.drills.length }}
               drills
             </template>
-            <template v-if="l.payload.duration_min"> · {{ l.payload.duration_min }} min</template>
+            <template v-if="l.payload.duration_min">
+              · {{ fmtDur(l.payload.duration_min) }}</template
+            >
           </div>
         </div>
         <q-icon name="chevron_right" color="grey-6" size="20px" />
@@ -266,8 +276,9 @@ const prepaIa = ref(false);
 const prepaRaw = ref('');
 const analyzing = ref(false);
 
-// Log manuel d'une séance jouée (à la durée)
-const logDuration = ref<number>(60);
+// Log manuel d'une séance jouée (à la durée : heures + minutes)
+const logHours = ref<number>(1);
+const logMinutes = ref<number>(0);
 const logPartner = ref(true);
 const logRpe = ref<Difficulty | null>(null);
 const logComment = ref('');
@@ -276,7 +287,8 @@ const savingLog = ref(false);
 async function saveSession() {
   const userId = auth.user?.id;
   if (!userId) return;
-  if (!logDuration.value || logDuration.value <= 0) {
+  const totalMin = (logHours.value || 0) * 60 + (logMinutes.value || 0);
+  if (totalMin <= 0) {
     $q.notify({ type: 'warning', message: 'Renseigne une durée.' });
     return;
   }
@@ -290,7 +302,7 @@ async function saveSession() {
       name: 'Séance de tennis',
       sport: 'tennis',
       with_partner: logPartner.value,
-      duration_min: logDuration.value,
+      duration_min: totalMin,
       ended_at: now,
       ...(logRpe.value ? { global_difficulty: logRpe.value } : {}),
       ...(logComment.value.trim() ? { global_comment: logComment.value.trim() } : {}),
@@ -298,6 +310,8 @@ async function saveSession() {
     };
     await tennis.addLog(userId, log);
     $q.notify({ type: 'positive', message: 'Séance enregistrée — XP tennis gagné.' });
+    logHours.value = 1;
+    logMinutes.value = 0;
     logRpe.value = null;
     logComment.value = '';
   } catch (e) {
@@ -314,6 +328,13 @@ const resume = computed(() => live.savedMeta());
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
+function fmtDur(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h && m) return `${h} h ${m}`;
+  if (h) return `${h} h`;
+  return `${m} min`;
 }
 
 async function resumeCourt() {

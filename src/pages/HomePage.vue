@@ -80,6 +80,10 @@
       </div>
 
       <div class="tiles">
+        <button class="tile" @click="goAgenda">
+          <q-icon name="calendar_month" size="26px" />
+          <span>Agenda</span>
+        </button>
         <button class="tile" @click="goMuscu">
           <q-icon name="fitness_center" size="26px" />
           <span>Muscu</span>
@@ -166,6 +170,9 @@ async function goHistory() {
 
 async function goMuscu() {
   await router.push('/muscu');
+}
+async function goAgenda() {
+  await router.push('/agenda');
 }
 async function resumeFree() {
   await router.push('/free');

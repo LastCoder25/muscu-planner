@@ -29,6 +29,10 @@
         <q-btn flat round dense icon="more_vert" aria-label="Menu">
           <q-menu anchor="bottom right" self="top right">
             <q-list class="app-menu" style="min-width: 180px">
+              <q-item v-close-popup clickable @click="goAgenda">
+                <q-item-section avatar><q-icon name="calendar_month" /></q-item-section>
+                <q-item-section>Agenda</q-item-section>
+              </q-item>
               <q-item v-close-popup clickable @click="goHistory">
                 <q-item-section avatar><q-icon name="history" /></q-item-section>
                 <q-item-section>Historique</q-item-section>
@@ -135,6 +139,9 @@ async function goProfile() {
 }
 async function goSettings() {
   await router.push('/settings');
+}
+async function goAgenda() {
+  await router.push('/agenda');
 }
 async function goHistory() {
   await router.push('/history');
