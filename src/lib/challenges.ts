@@ -99,6 +99,10 @@ export function addDaysIso(iso: string, d: number): string {
 function diffDays(fromIso: string, toIso: string): number {
   return Math.round((dayFromIso(toIso).getTime() - dayFromIso(fromIso).getTime()) / 86400000);
 }
+// Arrondi à 2 décimales pour éviter le bruit flottant (km : 0.4000000000036 → 0.4).
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
 
 function pyramidTarget(d: number, D: number, start: number, peak: number): number {
   if (D <= 1) return start;
@@ -282,7 +286,7 @@ export function challengeBalance(ch: Challenge, todayIso = logicalToday()): numb
     const elapsed = Math.min(Math.max(0, dayIndex), ch.duration_days);
     const expected = Math.round(((ch.config.total || 0) * elapsed) / (ch.duration_days || 1));
     const doneTotal = ch.progress.reduce((a, p) => a + (p.done || 0), 0);
-    return doneTotal - expected;
+    return round2(doneTotal - expected);
   }
   const map = progByDay(ch);
   let bal = 0;
@@ -292,7 +296,7 @@ export function challengeBalance(ch: Challenge, todayIso = logicalToday()): numb
     if (base === 0) continue;
     bal += (map.get(d)?.done ?? 0) - base;
   }
-  return bal;
+  return round2(bal);
 }
 
 // Avance/retard « en direct » : le solde des jours passés (challengeBalance) +
@@ -307,7 +311,7 @@ export function challengeLiveBalance(ch: Challenge, todayIso = logicalToday()): 
   if (dayIndex < 0 || dayIndex >= ch.duration_days) return base;
   const target = ch.daily_targets[dayIndex] ?? 0;
   const done = progByDay(ch).get(dayIndex)?.done ?? 0;
-  return base + Math.max(0, done - target);
+  return round2(base + Math.max(0, done - target));
 }
 
 // ── Recalibrage de difficulté en cours ──────────────────
@@ -499,7 +503,7 @@ export function challengeStats(ch: Challenge, todayIso = logicalToday()): Challe
   const D = ch.duration_days;
   const dayIndex = diffDays(ch.start_date, todayIso);
   const map = progByDay(ch);
-  const totalDone = ch.progress.reduce((a, p) => a + (p.done || 0), 0);
+  const totalDone = round2(ch.progress.reduce((a, p) => a + (p.done || 0), 0));
   const activeDays = ch.format === 'cumulative' ? D : ch.daily_targets.filter((t) => t > 0).length;
   const completedDays = ch.progress.filter((p) => p.completed).length;
 
