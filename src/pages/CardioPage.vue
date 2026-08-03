@@ -3,20 +3,25 @@
     <h1 class="page-title font-display">Cardio</h1>
     <p class="page-sub text-dim">Marche, rando, course, trail, vélo…</p>
 
-    <!-- Plan d'entraînement vers une course -->
-    <button class="plan-cta" @click="goPlan">
-      <q-icon name="event" size="22px" />
-      <div class="plan-main">
-        <div class="plan-title">Plan vers une course</div>
-        <div class="plan-sub">
-          {{ hasPlan ? planLabel : 'Prépare un 5/10 km, semi, marathon ou trail' }}
-        </div>
-      </div>
-      <q-icon name="chevron_right" size="20px" />
-    </button>
+    <!-- Tuiles : les entraînements cardio -->
+    <div class="tiles">
+      <button class="tile" :class="{ on: section === 'log' }" @click="section = 'log'">
+        <q-icon name="edit_note" size="26px" />
+        <span>Enregistrer</span>
+      </button>
+      <button class="tile" :class="{ on: section === 'gen' }" @click="section = 'gen'">
+        <q-icon name="bolt" size="26px" />
+        <span>Générer (VMA)</span>
+      </button>
+      <button class="tile" @click="goPlan">
+        <q-icon name="event" size="26px" />
+        <span>Plan course</span>
+        <small v-if="hasPlan" class="tile-sub">{{ planLabel }}</small>
+      </button>
+    </div>
 
     <!-- Générateur de séance de course (VMA) -->
-    <section class="card">
+    <section v-if="section === 'gen'" class="card">
       <div class="card-head">
         <q-icon name="bolt" size="22px" />
         <div class="card-title">Générer une séance (course)</div>
@@ -90,7 +95,7 @@
       <p v-else class="gen-hint">Renseigne ta VMA pour générer des séances aux bonnes allures.</p>
     </section>
 
-    <section class="card">
+    <section v-if="section === 'log'" class="card">
       <div class="card-head">
         <q-icon name="directions_run" size="22px" />
         <div class="card-title">Enregistrer une séance</div>
@@ -358,6 +363,7 @@ const auth = useAuthStore();
 const profileStore = useProfileStore();
 const cardio = useCardioStore();
 
+const section = ref<'log' | 'gen'>('log');
 const hasPlan = computed(() => cardio.plans.length > 0);
 const planLabel = computed(() => {
   const p = cardio.plans[0]?.payload;
@@ -414,6 +420,7 @@ function generate() {
   });
   mode.value = 'structuree';
   phases.value = gen.map(fromPhase);
+  section.value = 'log'; // affiche le constructeur rempli
   if (activity.value === 'velo_appart' || activity.value.includes('tapis')) {
     // ok, on garde l'activité choisie
   } else {
@@ -620,34 +627,48 @@ function remove(id: string) {
   padding: 16px;
   margin-bottom: 16px;
 }
-.plan-cta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  text-align: left;
-  background: var(--surface-2);
-  border: 1px solid var(--accent);
-  border-radius: 14px;
-  padding: 14px;
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
   margin-bottom: 16px;
-  cursor: pointer;
-  color: var(--text);
 }
-.plan-cta .q-icon {
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 84px;
+  padding: 12px 8px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.12s,
+    transform 0.08s;
+}
+.tile .q-icon {
   color: var(--accent);
 }
-.plan-main {
-  flex: 1;
+.tile.on {
+  border-color: var(--accent);
+  background: var(--surface);
 }
-.plan-title {
-  font-weight: 600;
-  font-size: 15px;
+.tile:active {
+  transform: scale(0.97);
 }
-.plan-sub {
-  font-size: 12px;
+.tile-sub {
+  font-size: 10px;
+  font-weight: 400;
   color: var(--dim);
-  margin-top: 2px;
+  line-height: 1.2;
 }
 .card-head {
   display: flex;
