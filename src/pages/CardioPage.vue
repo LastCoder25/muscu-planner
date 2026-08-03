@@ -151,7 +151,7 @@
         <div v-for="(p, i) in phases" :key="i" class="phase" :class="'k-' + p.kind">
           <div class="phase-top">
             <span class="phase-name">{{ PHASE_LABELS[p.kind] }}</span>
-            <div class="phase-actions">
+            <div class="phase-mid">
               <button aria-label="Monter" :disabled="i === 0" @click="move(i, -1)">↑</button>
               <button
                 aria-label="Descendre"
@@ -163,8 +163,8 @@
               <button aria-label="Dupliquer" @click="duplicate(i)">
                 <q-icon name="content_copy" size="14px" />
               </button>
-              <button aria-label="Supprimer" class="del" @click="phases.splice(i, 1)">✕</button>
             </div>
+            <button aria-label="Supprimer" class="del" @click="phases.splice(i, 1)">✕</button>
           </div>
 
           <!-- Fractionné -->
@@ -813,11 +813,13 @@ function remove(id: string) {
   font-weight: 600;
   color: var(--text);
 }
-.phase-actions {
+.phase-mid {
+  flex: 1;
   display: flex;
+  justify-content: center;
   gap: 4px;
 }
-.phase-actions button {
+.phase-top button {
   width: 26px;
   height: 26px;
   border-radius: 7px;
@@ -826,10 +828,10 @@ function remove(id: string) {
   color: var(--text);
   cursor: pointer;
 }
-.phase-actions button:disabled {
+.phase-top button:disabled {
   opacity: 0.35;
 }
-.phase-actions .del {
+.phase-top .del {
   color: var(--d4);
 }
 .phase-fields {
