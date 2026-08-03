@@ -10,6 +10,7 @@ import { useCardioStore } from '@/stores/cardio';
 import { sessionXp, drillSessionXp, cardioSessionXp } from '@/lib/athlete';
 import { challengeXpPoints } from '@/lib/challenges';
 import { computeLevel } from '@/lib/levels';
+import { CARDIO_CHALLENGE_IDS } from '@/data/cardio';
 
 export function useProgress() {
   const logs = useLogsStore();
@@ -52,14 +53,8 @@ export function useProgress() {
 
   // Un challenge alimente la DISCIPLINE de son exercice : marche/course/vélo →
   // cardio ; tout le reste (pompes, gainage…) → muscu.
-  const CARDIO_CH_IDS = new Set([
-    'ex_ch_marche',
-    'ex_ch_course',
-    'ex_ch_marche_course',
-    'ex_ch_velo',
-  ]);
   const isCardioChallenge = (c: (typeof challenges.list)[number]) =>
-    c.unit === 'distance' || CARDIO_CH_IDS.has(c.exercise_id);
+    c.unit === 'distance' || CARDIO_CHALLENGE_IDS.has(c.exercise_id);
   const muscuChallengeXp = computed(() =>
     challengeXpPoints(challenges.list.filter((c) => !isCardioChallenge(c))),
   );
@@ -68,8 +63,14 @@ export function useProgress() {
   );
 
   const muscuTotal = computed(() => muscuXp.value + muscuChallengeXp.value);
+  // Les sorties « miroir » d'un défi (challenge_id) apparaissent dans l'historique
+  // mais ne comptent PAS d'XP : l'effort est déjà compté via cardioChallengeXp
+  // (sinon double compte). Les sorties manuelles, elles, comptent normalement.
   const cardioXp = computed(
-    () => cardio.logs.reduce((a, r) => a + cardioSessionXp(r.payload), 0) + cardioChallengeXp.value,
+    () =>
+      cardio.logs
+        .filter((r) => !r.payload.challenge_id)
+        .reduce((a, r) => a + cardioSessionXp(r.payload), 0) + cardioChallengeXp.value,
   );
   // Piste Challenges = niveau « méta » (tous les défis) — affiché à part, PAS
   // ajouté au Global (l'effort est déjà compté dans muscu / cardio).

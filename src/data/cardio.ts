@@ -42,6 +42,23 @@ export function challengeIdsForActivity(a: CardioActivity): string[] {
   return ['ex_ch_velo']; // velo, velo_appart
 }
 
+// Exercices « défi » qui sont du cardio (⇄ discipline Cardio, miroir de sortie).
+export const CARDIO_CHALLENGE_IDS = new Set([
+  'ex_ch_marche',
+  'ex_ch_course',
+  'ex_ch_marche_course',
+  'ex_ch_velo',
+]);
+export function isCardioChallengeExercise(id: string): boolean {
+  return CARDIO_CHALLENGE_IDS.has(id);
+}
+// Activité par défaut d'une sortie « miroir » créée depuis un défi cardio.
+export function defaultActivityForChallenge(exerciseId: string): CardioActivity {
+  if (exerciseId === 'ex_ch_velo') return 'velo';
+  if (exerciseId === 'ex_ch_course') return 'course';
+  return 'marche'; // marche + « marche ou course »
+}
+
 function fmtPace(secPerKm: number): string {
   const m = Math.floor(secPerKm / 60);
   const s = Math.round(secPerKm % 60);

@@ -268,17 +268,23 @@ import {
   adaptiveDayAdjustment,
   scaleRemaining,
   extendChallenge,
+  addDaysIso,
   type Challenge,
   type DayProgress,
 } from '@/lib/challenges';
 import { formatOption } from '@/data/challengeFormats';
+import { isCardioChallengeExercise, defaultActivityForChallenge } from '@/data/cardio';
 import { useChallengesStore } from '@/stores/challenges';
+import { useCardioStore } from '@/stores/cardio';
+import { useAuthStore } from '@/stores/auth';
 import ChallengeCelebration from '@/components/ChallengeCelebration.vue';
 
 const route = useRoute();
 const router = useRouter();
 const $q = useQuasar();
 const store = useChallengesStore();
+const cardio = useCardioStore();
+const auth = useAuthStore();
 
 const id = String(route.params.id);
 const loading = ref(true);
@@ -464,6 +470,7 @@ async function afterChange() {
     clearInterval(tick);
   }
   await persist(status);
+  await mirrorCardio();
   if (status) {
     // Succès débloqués → affichés en badges dans l'animation de fin.
     try {
@@ -472,6 +479,32 @@ async function afterChange() {
       celebrateCodes.value = [];
     }
     celebrate.value = true;
+  }
+}
+
+// Miroir défi cardio → Cardio : reflète le jour courant (validé, ou entamé pour
+// le cumulé) dans l'historique Cardio. Déduplication gérée par le store
+// (au plus une sortie par défi+jour ; ignoré si une sortie manuelle couvre déjà).
+async function mirrorCardio() {
+  const c = ch.value;
+  const uid = auth.user?.id;
+  if (!c || !uid || !isCardioChallengeExercise(c.exercise_id)) return;
+  const e = entryOf(dayIndex.value);
+  const worth = c.format === 'cumulative' ? (e?.done ?? 0) > 0 : (e?.completed ?? false);
+  if (!e || !worth) return;
+  const dateIso = e.date || addDaysIso(c.start_date, dayIndex.value);
+  try {
+    await cardio.upsertFromChallenge(uid, {
+      challengeId: c.id,
+      day: dayIndex.value,
+      dateIso,
+      exerciseId: c.exercise_id,
+      activity: defaultActivityForChallenge(c.exercise_id),
+      ...(c.unit === 'distance' ? { distanceKm: e.done } : {}),
+      ...(c.unit === 'time' ? { durationMin: Math.round(e.done / 60) } : {}),
+    });
+  } catch {
+    /* silencieux : le défi est déjà enregistré */
   }
 }
 async function goSuccess() {

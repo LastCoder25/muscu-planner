@@ -305,4 +305,8 @@ export interface CardioLog {
   rpe?: Difficulty; // ressenti 1–4
   performed_at?: string;
   comment?: string;
+  // Lien vers un défi cardio : la sortie « reflète » un jour de défi (miroir).
+  // Sert à dédupliquer (au plus une sortie par défi+jour) — voir cardio store.
+  challenge_id?: string;
+  challenge_day?: number;
 }
