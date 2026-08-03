@@ -25,15 +25,15 @@ export function drillSessionXp(log: DrillLog): number {
   return Math.round(40 + minutes + done * 8 + intensity);
 }
 
-/** XP d'une sortie course/trail : distance + dénivelé (D+) + intensité.
- *  Le D+ (trail) est valorisé ; à défaut de distance, on compte la durée. */
+/** XP d'une sortie cardio : durée + distance + dénivelé (D+ ET D-, même poids —
+ *  la descente sollicite d'autres muscles) + intensité (ressenti). */
 export function cardioSessionXp(log: CardioLog): number {
   const km = log.distance_km ?? 0;
   const dplus = log.elevation_m ?? 0;
+  const dminus = log.descent_m ?? 0;
   const dur = log.duration_min ?? 0;
   const intensity = (log.rpe ?? 2) * 10;
-  const distancePart = km > 0 ? km * 10 : dur * 0.8;
-  return Math.round(40 + distancePart + dplus / 10 + intensity);
+  return Math.round(40 + km * 10 + dur * 1.5 + (dplus + dminus) / 10 + intensity);
 }
 
 /** Estimation d'XP d'une séance PRÉVUE (avant de la faire) : même barème que

@@ -278,8 +278,8 @@ export interface DrillLog {
 }
 
 // ————————————————————————————————————————————————————————————————
-// Cardio — course à pied / trail (extension additive, v1.2).
-// Effort continu : distance / durée / allure / dénivelé (D+) / ressenti.
+// Cardio — course/marche/vélo… (extension additive, v1.2).
+// Log global d'une sortie : durée / distance / D+ / D- / ressenti.
 // ————————————————————————————————————————————————————————————————
 
 export type CardioActivity =
@@ -292,88 +292,17 @@ export type CardioActivity =
   | 'marche_tapis'
   | 'course_tapis';
 
-export type CardioIntensity = 'facile' | 'modere' | 'soutenu' | 'max';
-
-// Phase composable d'une séance structurée (échauffement, effort, récup…).
-// On peut en enchaîner autant qu'on veut, dans l'ordre voulu.
-export type CardioPhaseKind =
-  | 'echauffement'
-  | 'endurance'
-  | 'tempo'
-  | 'effort'
-  | 'recup'
-  | 'retour_calme'
-  | 'intervalle';
-
-export interface CardioPhase {
-  kind: CardioPhaseKind;
-  intensity?: CardioIntensity;
-  note?: string;
-  pace?: string; // allure cible « m:ss/km » (séance générée depuis la VMA)
-  // Phases simples : durée et/ou distance.
-  duration_sec?: number;
-  distance_m?: number;
-  // Phase 'intervalle' (fractionné) : reps × (effort + repos éventuel).
-  reps?: number;
-  work_sec?: number;
-  work_m?: number;
-  rest_sec?: number;
-  rest_m?: number;
-}
-
-export type RaceType = '5k' | '10k' | 'semi' | 'marathon' | 'trail';
-
-// Séance planifiée d'un plan d'entraînement (datée).
-export interface CardioPlanSession {
-  id: string;
-  date: string; // YYYY-MM-DD
-  session_type: string; // RunSessionType (src/lib/cardio.ts) ou 'course' (jour J)
-  name: string;
-  phases: CardioPhase[];
-  duration_min?: number;
-  done?: boolean;
-  cardio_log_id?: string;
-  is_race?: boolean; // le jour de la course
-}
-
-export interface CardioPlanWeek {
-  index: number; // 0-based
-  label: string; // « Base », « Développement », « Affûtage »
-  sessions: CardioPlanSession[];
-}
-
-export interface CardioPlan {
-  schema_version: string;
-  type: 'cardio_plan';
-  id: string;
-  name: string;
-  goal: {
-    race_type: RaceType;
-    distance_km?: number;
-    elevation_m?: number;
-    race_date: string; // YYYY-MM-DD
-  };
-  start_date: string;
-  sessions_per_week: number;
-  level?: Level;
-  vma?: number;
-  weeks: CardioPlanWeek[];
-  created_at?: string;
-}
-
-// Bilan d'une sortie (saisie manuelle) : basique (durée/km) ou structurée (phases).
+// Bilan d'une sortie (saisie manuelle, log global).
 export interface CardioLog {
   schema_version: string;
   type: 'cardio_log';
   id: string;
-  cardio_session_id?: string;
   activity: CardioActivity;
-  mode?: 'basique' | 'structuree';
   distance_km?: number;
   duration_min?: number;
   elevation_m?: number; // D+ (dénivelé positif)
+  descent_m?: number; // D- (dénivelé négatif)
   rpe?: Difficulty; // ressenti 1–4
-  phases?: CardioPhase[]; // séance structurée
   performed_at?: string;
   comment?: string;
 }

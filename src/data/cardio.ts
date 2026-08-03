@@ -1,28 +1,11 @@
-// cardio.ts — libellés et helpers pour le cardio (course/vélo/marche…).
-import type { CardioActivity, CardioIntensity, CardioPhaseKind, CardioPhase } from '@/lib/types';
-import type { RunSessionType } from '@/lib/cardio';
-
-// Types de séance générables (VMA). `duration` = durée réglable proposée.
-export interface RunSessionDef {
-  id: RunSessionType;
-  label: string;
-  desc: string;
-  duration?: boolean;
-}
-export const RUN_SESSION_TYPES: RunSessionDef[] = [
-  { id: 'endurance', label: 'Endurance', desc: 'Footing en aisance (~70 % VMA)', duration: true },
-  { id: 'footing_recup', label: 'Récupération', desc: 'Très facile (~60 % VMA)', duration: true },
-  { id: 'fractionne_court', label: 'Fractionné court', desc: '10 × 400 m à ~100 % VMA' },
-  { id: 'fractionne_long', label: 'Fractionné long', desc: '5 × 1000 m à ~95 % VMA' },
-  { id: 'tempo', label: 'Tempo / seuil', desc: 'Bloc au seuil (~85 % VMA)', duration: true },
-  { id: 'sortie_longue', label: 'Sortie longue', desc: 'Endurance prolongée', duration: true },
-];
+// cardio.ts — libellés et calculs pour le cardio (log global).
+import type { CardioActivity } from '@/lib/types';
 
 export interface ActivityDef {
   id: CardioActivity;
   label: string;
   icon: string;
-  hasElevation: boolean; // D+ pertinent (extérieur)
+  hasElevation: boolean; // D+/D- pertinents (extérieur)
 }
 
 export const CARDIO_ACTIVITIES: ActivityDef[] = [
@@ -47,70 +30,51 @@ export function activityHasElevation(a: CardioActivity): boolean {
   return CARDIO_ACTIVITIES.find((x) => x.id === a)?.hasElevation ?? false;
 }
 
-export interface PhaseKindDef {
-  id: CardioPhaseKind;
-  label: string;
-  icon: string;
-  interval?: boolean;
-}
-export const PHASE_KINDS: PhaseKindDef[] = [
-  { id: 'echauffement', label: 'Échauffement', icon: 'wb_sunny' },
-  { id: 'endurance', label: 'Endurance', icon: 'directions_run' },
-  { id: 'tempo', label: 'Tempo / seuil', icon: 'trending_up' },
-  { id: 'effort', label: 'Effort', icon: 'bolt' },
-  { id: 'intervalle', label: 'Fractionné', icon: 'repeat', interval: true },
-  { id: 'recup', label: 'Récup', icon: 'pause' },
-  { id: 'retour_calme', label: 'Retour au calme', icon: 'self_improvement' },
-];
-export const PHASE_LABELS = Object.fromEntries(PHASE_KINDS.map((p) => [p.id, p.label])) as Record<
-  CardioPhaseKind,
-  string
->;
-
-export const INTENSITY_LABELS: Record<CardioIntensity, string> = {
-  facile: 'Facile',
-  modere: 'Modéré',
-  soutenu: 'Soutenu',
-  max: 'Max',
-};
-export const INTENSITIES: CardioIntensity[] = ['facile', 'modere', 'soutenu', 'max'];
-
-/** Allure moyenne « min/km » depuis distance (km) et durée (min). */
-export function paceLabel(distanceKm?: number, durationMin?: number): string | null {
-  if (!distanceKm || distanceKm <= 0 || !durationMin || durationMin <= 0) return null;
-  const secPerKm = Math.round((durationMin * 60) / distanceKm);
+function fmtPace(secPerKm: number): string {
   const m = Math.floor(secPerKm / 60);
-  const s = secPerKm % 60;
+  const s = Math.round(secPerKm % 60);
   return `${m}:${String(s).padStart(2, '0')}/km`;
 }
 
-/** Totaux (durée min + distance km) d'une séance structurée. */
-export function sumPhases(phases: CardioPhase[]): { duration_min: number; distance_km: number } {
-  let sec = 0;
-  let m = 0;
-  for (const p of phases) {
-    if (p.kind === 'intervalle') {
-      const reps = p.reps ?? 1;
-      sec += reps * ((p.work_sec ?? 0) + (p.rest_sec ?? 0));
-      m += reps * ((p.work_m ?? 0) + (p.rest_m ?? 0));
-    } else {
-      sec += p.duration_sec ?? 0;
-      m += p.distance_m ?? 0;
-    }
-  }
-  return { duration_min: Math.round(sec / 60), distance_km: Math.round((m / 1000) * 100) / 100 };
+/** Allure « m:ss/km » depuis distance (km) et durée (min). */
+export function paceLabel(distanceKm?: number, durationMin?: number): string | null {
+  if (!distanceKm || distanceKm <= 0 || !durationMin || durationMin <= 0) return null;
+  return fmtPace((durationMin * 60) / distanceKm);
 }
 
-/** Résumé texte court d'une phase (pour l'affichage). */
-export function phaseSummary(p: CardioPhase): string {
-  if (p.kind === 'intervalle') {
-    const reps = p.reps ?? 1;
-    const work = p.work_m ? `${p.work_m} m` : p.work_sec ? `${Math.round(p.work_sec)} s` : '?';
-    const rest = p.rest_m ? `${p.rest_m} m` : p.rest_sec ? `${Math.round(p.rest_sec)} s` : null;
-    return `${reps} × ${work}${rest ? ` / ${rest} récup` : ' (sans repos)'}`;
-  }
-  const parts: string[] = [];
-  if (p.duration_sec) parts.push(`${Math.round(p.duration_sec / 60)} min`);
-  if (p.distance_m) parts.push(`${Math.round((p.distance_m / 1000) * 100) / 100} km`);
-  return parts.join(' · ') || '—';
+/** Vitesse km/h depuis distance (km) et durée (min). */
+export function speedKmh(distanceKm?: number, durationMin?: number): number | null {
+  if (!distanceKm || distanceKm <= 0 || !durationMin || durationMin <= 0) return null;
+  return Math.round((distanceKm / (durationMin / 60)) * 10) / 10;
+}
+
+/** Distance-effort (km-effort) : distance + (D+ + D-)/100.
+ *  Chaque 100 m de dénivelé (montée OU descente) ≈ 1 km à plat. */
+export function effortKm(distanceKm?: number, dplus?: number, dminus?: number): number | null {
+  if (!distanceKm || distanceKm <= 0) return null;
+  return Math.round((distanceKm + ((dplus ?? 0) + (dminus ?? 0)) / 100) * 100) / 100;
+}
+
+/** Allure d'effort (ramenée à du plat) « m:ss/km ». */
+export function effortPace(
+  distanceKm?: number,
+  durationMin?: number,
+  dplus?: number,
+  dminus?: number,
+): string | null {
+  const ek = effortKm(distanceKm, dplus, dminus);
+  if (!ek || !durationMin || durationMin <= 0) return null;
+  return fmtPace((durationMin * 60) / ek);
+}
+
+/** Vitesse d'effort km/h. */
+export function effortSpeedKmh(
+  distanceKm?: number,
+  durationMin?: number,
+  dplus?: number,
+  dminus?: number,
+): number | null {
+  const ek = effortKm(distanceKm, dplus, dminus);
+  if (!ek || !durationMin || durationMin <= 0) return null;
+  return Math.round((ek / (durationMin / 60)) * 10) / 10;
 }
