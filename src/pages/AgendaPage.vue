@@ -77,12 +77,13 @@ const entries = computed<Entry[]>(() => {
   const out: Entry[] = [];
   for (const r of logs.all) {
     const exos = r.payload.exercises?.length ?? 0;
+    const bits = [fmtDur(r.payload.duration_min), exos ? `${exos} exos` : ''].filter(Boolean);
     out.push({
       ts: Date.parse(r.performed_at),
       kind: 'muscu',
       icon: 'fitness_center',
       title: r.payload.name || 'Séance',
-      meta: r.payload.duration_min ? fmtDur(r.payload.duration_min) : `${exos} exos`,
+      meta: bits.join(' · '),
     });
   }
   for (const r of tennis.logs) {
