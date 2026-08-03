@@ -5,6 +5,7 @@ import {
   challengeStats,
   suggestConfig,
   addContribution,
+  challengeLiveBalance,
   type Challenge,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -108,6 +109,54 @@ describe('addContribution (report cardio → défi)', () => {
     expect(ch.progress).toEqual([]);
   });
 });
+
+describe('challengeLiveBalance (avance/retard en direct)', () => {
+  const day = (d: number, done: number, target = 10): DayProgressLite => ({
+    day: d,
+    date: `2026-01-0${5 + d}`,
+    target,
+    done,
+    elapsed_sec: 0,
+    completed: done >= target,
+  });
+  const fiveDay = (progress: DayProgressLite[]) =>
+    challenge({ duration_days: 5, daily_targets: [10, 10, 10, 10, 10], progress });
+
+  it('jours passés à l’objectif + surplus du jour → avance', () => {
+    const ch = fiveDay([day(0, 10), day(1, 10), day(2, 15)]);
+    expect(challengeLiveBalance(ch, '2026-01-07')).toBe(5); // +5 aujourd’hui
+  });
+
+  it('le jour en cours non fini ne crée pas de retard', () => {
+    const ch = fiveDay([day(0, 10), day(1, 10), day(2, 4)]); // 4/10 en cours
+    expect(challengeLiveBalance(ch, '2026-01-07')).toBe(0);
+  });
+
+  it('un jour passé manqué compte en retard', () => {
+    const ch = fiveDay([day(0, 7), day(1, 10)]); // −3 la veille
+    expect(challengeLiveBalance(ch, '2026-01-07')).toBe(-3);
+  });
+
+  it('cumulé : renvoie le solde global (réalisé − attendu au prorata)', () => {
+    const ch = challenge({
+      format: 'cumulative',
+      duration_days: 5,
+      daily_targets: [0, 0, 0, 0, 0],
+      config: cfg({ total: 100 }),
+      progress: [day(0, 30, 0), day(1, 20, 0)], // 50 réalisés ; attendu j2 = 40
+    });
+    expect(challengeLiveBalance(ch, '2026-01-07')).toBe(10);
+  });
+});
+
+type DayProgressLite = {
+  day: number;
+  date: string;
+  target: number;
+  done: number;
+  elapsed_sec: number;
+  completed: boolean;
+};
 
 describe('challengeXpPoints', () => {
   it('reps cumulées + 25 par jour validé (défi actif)', () => {

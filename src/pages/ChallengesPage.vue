@@ -58,16 +58,16 @@
           <div class="bar"><div class="fill" :style="{ width: st(c).completionPct + '%' }" /></div>
           <div class="cc-sub">
             {{ st(c).completionPct }}% · série {{ st(c).streak }} · {{ st(c).totalDone }}
-            {{ c.unit === 'time' ? 'sec' : 'reps' }}
+            {{ unitOf(c) }}
           </div>
           <div
-            v-if="c.status === 'active' && bal(c) !== 0"
+            v-if="c.status === 'active'"
             class="cc-bal"
-            :class="bal(c) > 0 ? 'ahead' : 'behind'"
+            :class="bal(c) > 0 ? 'ahead' : bal(c) < 0 ? 'behind' : 'even'"
           >
-            {{ bal(c) > 0 ? `▲ +${bal(c)}` : `▼ −${-bal(c)}` }}
-            {{ c.unit === 'time' ? 'sec' : 'reps' }}
-            {{ bal(c) > 0 ? "d'avance" : 'de retard' }}
+            <template v-if="bal(c) > 0">▲ +{{ bal(c) }} {{ unitOf(c) }} d'avance</template>
+            <template v-else-if="bal(c) < 0">▼ −{{ -bal(c) }} {{ unitOf(c) }} de retard</template>
+            <template v-else>● dans les temps</template>
           </div>
         </button>
       </template>
@@ -135,7 +135,7 @@ import { useQuasar } from 'quasar';
 import {
   challengeStats,
   challengeXpPoints,
-  challengeBalance,
+  challengeLiveBalance,
   evaluateAchievements,
   type Challenge,
 } from '@/lib/challenges';
@@ -169,7 +169,10 @@ function st(c: Challenge) {
   return challengeStats(c);
 }
 function bal(c: Challenge) {
-  return challengeBalance(c);
+  return challengeLiveBalance(c);
+}
+function unitOf(c: Challenge) {
+  return c.unit === 'time' ? 'sec' : c.unit === 'distance' ? 'km' : 'reps';
 }
 function fmtName(f: string) {
   return formatOption(f)?.name ?? f;
@@ -355,6 +358,10 @@ onMounted(async () => {
 .cc-bal.behind {
   color: var(--d4);
   background: color-mix(in srgb, var(--d4) 16%, transparent);
+}
+.cc-bal.even {
+  color: var(--dim);
+  background: color-mix(in srgb, var(--dim) 14%, transparent);
 }
 
 .exo-card {

@@ -295,6 +295,21 @@ export function challengeBalance(ch: Challenge, todayIso = logicalToday()): numb
   return bal;
 }
 
+// Avance/retard « en direct » : le solde des jours passés (challengeBalance) +
+// le SURPLUS du jour courant (au-delà de l'objectif). Le jour en cours n'est
+// jamais compté en retard tant qu'il n'est pas fini (pas de « retard » le matin) ;
+// dépasser l'objectif du jour fait grimper l'avance tout de suite. Pour le cumulé,
+// challengeBalance inclut déjà tout le réalisé → on le renvoie tel quel.
+export function challengeLiveBalance(ch: Challenge, todayIso = logicalToday()): number {
+  const base = challengeBalance(ch, todayIso);
+  if (ch.format === 'cumulative') return base;
+  const dayIndex = diffDays(ch.start_date, todayIso);
+  if (dayIndex < 0 || dayIndex >= ch.duration_days) return base;
+  const target = ch.daily_targets[dayIndex] ?? 0;
+  const done = progByDay(ch).get(dayIndex)?.done ?? 0;
+  return base + Math.max(0, done - target);
+}
+
 // ── Recalibrage de difficulté en cours ──────────────────
 /** Valeur de référence (« max ») d'un défi : total pour cumulé, sinon le pic. */
 export function challengeRefValue(ch: Challenge): number {

@@ -81,11 +81,17 @@
           <div class="today-h">
             Objectif du jour · <b>{{ todayTarget }} {{ unitLabel }}</b>
           </div>
-          <div v-if="balance !== 0" class="carry-badge" :class="balance > 0 ? 'ahead' : 'behind'">
-            {{
-              balance > 0 ? `${carryOn ? 'Réserve' : 'Avance'} +${balance}` : `Retard −${-balance}`
-            }}
-            {{ unitLabel }}
+          <div
+            class="carry-badge"
+            :class="liveBalance > 0 ? 'ahead' : liveBalance < 0 ? 'behind' : 'even'"
+          >
+            <template v-if="liveBalance > 0"
+              >{{ carryOn ? 'Réserve' : 'Avance' }} +{{ liveBalance }} {{ unitLabel }}</template
+            >
+            <template v-else-if="liveBalance < 0"
+              >{{ carryOn ? 'Dette' : 'Retard' }} −{{ -liveBalance }} {{ unitLabel }}</template
+            >
+            <template v-else>Dans les temps</template>
           </div>
           <div class="ring-wrap">
             <svg viewBox="0 0 120 120" class="ring">
@@ -259,7 +265,7 @@ import {
   challengeStats,
   isChallengeComplete,
   evaluateAchievements,
-  challengeBalance,
+  challengeLiveBalance,
   effectiveTarget,
   logicalToday,
   challengeRefValue,
@@ -377,8 +383,8 @@ const inToday = computed(() => {
 });
 const carryOn = computed(() => !!ch.value?.config.carry_over && ch.value.format !== 'cumulative');
 const adaptiveOn = computed(() => !!ch.value?.config.adaptive);
-// Avance/retard courant (tous défis, pas seulement report activé).
-const balance = computed(() => (ch.value ? challengeBalance(ch.value, today) : 0));
+// Avance/retard « en direct » (inclut le surplus du jour) → affiché à l'utilisateur.
+const liveBalance = computed(() => (ch.value ? challengeLiveBalance(ch.value, today) : 0));
 const todayTarget = computed(() => {
   if (!ch.value) return 0;
   if (ch.value.format === 'cumulative') return ch.value.config.total ?? 0;
@@ -904,6 +910,10 @@ onBeforeUnmount(() => {
 .carry-badge.behind {
   color: var(--d4);
   background: color-mix(in srgb, var(--d4) 18%, transparent);
+}
+.carry-badge.even {
+  color: var(--dim);
+  background: color-mix(in srgb, var(--dim) 15%, transparent);
 }
 .ring-wrap {
   position: relative;
