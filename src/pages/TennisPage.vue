@@ -139,6 +139,73 @@
       </div>
     </section>
 
+    <!-- Enregistrer une séance jouée (log à la durée) -->
+    <section class="card">
+      <div class="card-head">
+        <q-icon name="edit_note" size="22px" />
+        <div>
+          <div class="card-title">Enregistrer une séance</div>
+          <div class="card-desc">Une séance jouée, à la durée → XP tennis.</div>
+        </div>
+      </div>
+
+      <div class="opt-row">
+        <span class="opt-lbl">Durée</span>
+        <q-input
+          v-model.number="logDuration"
+          type="number"
+          filled
+          dense
+          suffix="min"
+          style="max-width: 130px"
+        />
+      </div>
+
+      <div class="chips">
+        <button class="chip" :class="{ on: logPartner }" @click="logPartner = true">
+          Avec partenaire
+        </button>
+        <button class="chip" :class="{ on: !logPartner }" @click="logPartner = false">
+          Seul(e)
+        </button>
+      </div>
+
+      <div class="opt-lbl" style="margin-top: 12px">Ressenti</div>
+      <div class="rate-btns">
+        <button
+          v-for="n in 4"
+          :key="n"
+          class="rate-b"
+          :class="{ on: logRpe === n }"
+          :style="{ '--c': `var(--d${n})` }"
+          @click="logRpe = n as Difficulty"
+        >
+          {{ n }}
+        </button>
+      </div>
+
+      <q-input
+        v-model="logComment"
+        type="textarea"
+        autogrow
+        filled
+        label="Commentaire"
+        class="q-mt-sm"
+      />
+
+      <q-btn
+        class="gen-btn full-width q-mt-sm"
+        color="primary"
+        text-color="dark"
+        no-caps
+        size="lg"
+        icon="check"
+        label="Enregistrer la séance"
+        :loading="savingLog"
+        @click="saveSession"
+      />
+    </section>
+
     <!-- Historique tennis -->
     <section v-if="tennis.logs.length" class="card">
       <div class="card-head">
@@ -152,10 +219,12 @@
         <div class="saved-main">
           <div class="saved-name">{{ l.payload.name || 'Séance tennis' }}</div>
           <div class="saved-meta">
-            {{ fmtDate(l.performed_at) }} · {{ l.payload.drills.filter((d) => d.done).length }}/{{
-              l.payload.drills.length
-            }}
-            drills · {{ l.payload.duration_min ?? '?' }} min
+            {{ fmtDate(l.performed_at) }}
+            <template v-if="l.payload.drills.length">
+              · {{ l.payload.drills.filter((d) => d.done).length }}/{{ l.payload.drills.length }}
+              drills
+            </template>
+            <template v-if="l.payload.duration_min"> · {{ l.payload.duration_min }} min</template>
           </div>
         </div>
         <q-icon name="chevron_right" color="grey-6" size="20px" />
@@ -177,6 +246,8 @@ import { useLiveCourtStore } from '@/stores/liveCourt';
 import { buildPrepaSession } from '@/lib/prepaBuilder';
 import { buildPrepaPrompt } from '@/lib/tennisCoach';
 import { parseImportedSession } from '@/lib/importSession';
+import type { DrillLog, Difficulty } from '@/lib/types';
+import { SCHEMA_VERSION } from '@/lib/types';
 
 const DURATIONS = [20, 30, 45] as const;
 
@@ -194,6 +265,47 @@ const generating = ref(false);
 const prepaIa = ref(false);
 const prepaRaw = ref('');
 const analyzing = ref(false);
+
+// Log manuel d'une séance jouée (à la durée)
+const logDuration = ref<number>(60);
+const logPartner = ref(true);
+const logRpe = ref<Difficulty | null>(null);
+const logComment = ref('');
+const savingLog = ref(false);
+
+async function saveSession() {
+  const userId = auth.user?.id;
+  if (!userId) return;
+  if (!logDuration.value || logDuration.value <= 0) {
+    $q.notify({ type: 'warning', message: 'Renseigne une durée.' });
+    return;
+  }
+  savingLog.value = true;
+  try {
+    const now = new Date().toISOString();
+    const log: DrillLog = {
+      schema_version: SCHEMA_VERSION,
+      type: 'drill_log',
+      id: crypto.randomUUID(),
+      name: 'Séance de tennis',
+      sport: 'tennis',
+      with_partner: logPartner.value,
+      duration_min: logDuration.value,
+      ended_at: now,
+      ...(logRpe.value ? { global_difficulty: logRpe.value } : {}),
+      ...(logComment.value.trim() ? { global_comment: logComment.value.trim() } : {}),
+      drills: [],
+    };
+    await tennis.addLog(userId, log);
+    $q.notify({ type: 'positive', message: 'Séance enregistrée — XP tennis gagné.' });
+    logRpe.value = null;
+    logComment.value = '';
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
+  } finally {
+    savingLog.value = false;
+  }
+}
 
 const prepaSessions = computed(() =>
   sessionsStore.list.filter((s) => s.payload.discipline === 'prepa_physique'),
@@ -437,6 +549,27 @@ function remove(id: string) {
 .opt-lbl {
   color: var(--dim);
   font-size: 13px;
+}
+.rate-btns {
+  display: flex;
+  gap: 10px;
+}
+.rate-b {
+  flex: 1;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rate-b.on {
+  border-color: var(--c);
+  background: var(--c);
+  color: #15120e;
 }
 .chips {
   display: flex;

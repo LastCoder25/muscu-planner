@@ -21,7 +21,7 @@ export const useCardioStore = defineStore('cardio', () => {
       .order('performed_at', { ascending: false })
       .limit(limit);
     if (error) throw error;
-    logs.value = (data) ?? [];
+    logs.value = data ?? [];
     return logs.value;
   }
 
