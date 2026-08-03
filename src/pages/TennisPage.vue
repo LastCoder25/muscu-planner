@@ -25,6 +25,11 @@
       </div>
 
       <div class="opt-row">
+        <span class="opt-lbl">Date</span>
+        <q-input v-model="logDate" type="date" filled dense style="max-width: 180px" />
+      </div>
+
+      <div class="opt-row">
         <span class="opt-lbl">Durée</span>
         <q-input
           v-model.number="logHours"
@@ -277,6 +282,18 @@ const prepaRaw = ref('');
 const analyzing = ref(false);
 
 // Log manuel d'une séance jouée (à la durée : heures + minutes)
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function performedAtIso(dateIso: string): string {
+  const [y, m, d] = dateIso.split('-').map((n) => Number(n) || 0);
+  const now = new Date();
+  const dt = new Date(y!, (m ?? 1) - 1, d ?? 1, now.getHours(), now.getMinutes(), now.getSeconds());
+  return dt.toISOString();
+}
+
+const logDate = ref(todayIso());
 const logHours = ref<number>(1);
 const logMinutes = ref<number>(0);
 const logPartner = ref(true);
@@ -294,7 +311,6 @@ async function saveSession() {
   }
   savingLog.value = true;
   try {
-    const now = new Date().toISOString();
     const log: DrillLog = {
       schema_version: SCHEMA_VERSION,
       type: 'drill_log',
@@ -303,13 +319,14 @@ async function saveSession() {
       sport: 'tennis',
       with_partner: logPartner.value,
       duration_min: totalMin,
-      ended_at: now,
+      ended_at: performedAtIso(logDate.value),
       ...(logRpe.value ? { global_difficulty: logRpe.value } : {}),
       ...(logComment.value.trim() ? { global_comment: logComment.value.trim() } : {}),
       drills: [],
     };
     await tennis.addLog(userId, log);
     $q.notify({ type: 'positive', message: 'Séance enregistrée — XP tennis gagné.' });
+    logDate.value = todayIso();
     logHours.value = 1;
     logMinutes.value = 0;
     logRpe.value = null;

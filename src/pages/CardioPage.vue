@@ -24,6 +24,7 @@
       </div>
 
       <div class="fields">
+        <q-input v-model="date" type="date" filled label="Date" />
         <q-input v-model.number="distance" type="number" filled label="Distance (km)" step="0.1" />
         <q-input v-model.number="duration" type="number" filled label="Durée (min)" />
         <div v-if="hasElevation" class="fields-row">
@@ -145,7 +146,20 @@ const $q = useQuasar();
 const auth = useAuthStore();
 const cardio = useCardioStore();
 
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// performed_at = date choisie + heure courante (ordre correct dans la journée).
+function performedAtIso(dateIso: string): string {
+  const [y, m, d] = dateIso.split('-').map((n) => Number(n) || 0);
+  const now = new Date();
+  const dt = new Date(y!, (m ?? 1) - 1, d ?? 1, now.getHours(), now.getMinutes(), now.getSeconds());
+  return dt.toISOString();
+}
+
 const activity = ref<CardioActivity>('course');
+const date = ref(todayIso());
 const distance = ref<number | null>(null);
 const duration = ref<number | null>(null);
 const dplus = ref<number | null>(null);
@@ -204,7 +218,7 @@ async function save() {
       type: 'cardio_log',
       id: crypto.randomUUID(),
       activity: activity.value,
-      performed_at: new Date().toISOString(),
+      performed_at: performedAtIso(date.value),
       ...(distance.value ? { distance_km: distance.value } : {}),
       ...(duration.value ? { duration_min: duration.value } : {}),
       ...(dplus.value && hasElevation.value ? { elevation_m: dplus.value } : {}),
@@ -214,6 +228,7 @@ async function save() {
     };
     await cardio.addLog(userId, log);
     $q.notify({ type: 'positive', message: 'Sortie enregistrée.' });
+    date.value = todayIso();
     distance.value = null;
     duration.value = null;
     dplus.value = null;
