@@ -7,10 +7,18 @@
           {{ profileStore.profile?.identity.name || 'Athlète' }}
         </h1>
       </div>
-      <button class="glvl" aria-label="Niveau global" @click="goStats">
-        <span class="glvl-n font-display">{{ progress.global.value.level }}</span>
-        <span class="glvl-l">Global</span>
-      </button>
+      <div class="head-actions">
+        <button class="head-ic" aria-label="Agenda" @click="goAgenda">
+          <q-icon name="calendar_month" size="22px" />
+        </button>
+        <button class="head-ic" aria-label="Challenges" @click="goChallenges">
+          <q-icon name="emoji_events" size="22px" />
+        </button>
+        <button class="glvl" aria-label="Niveau global" @click="goStats">
+          <span class="glvl-n font-display">{{ progress.global.value.level }}</span>
+          <span class="glvl-l">Global</span>
+        </button>
+      </div>
     </header>
 
     <button class="xp-strip" @click="goStats">
@@ -80,10 +88,6 @@
       </div>
 
       <div class="tiles">
-        <button class="tile" @click="goAgenda">
-          <q-icon name="calendar_month" size="26px" />
-          <span>Agenda</span>
-        </button>
         <button class="tile" @click="goMuscu">
           <q-icon name="fitness_center" size="26px" />
           <span>Muscu</span>
@@ -95,10 +99,6 @@
         <button class="tile" @click="goCardio">
           <q-icon name="directions_run" size="26px" />
           <span>Cardio</span>
-        </button>
-        <button class="tile tile-accent" @click="goChallenges">
-          <q-icon name="emoji_events" size="26px" />
-          <span>Challenges</span>
         </button>
       </div>
     </template>
@@ -295,6 +295,23 @@ async function goStats() {
   background: var(--tier);
   border-radius: 999px;
   transition: width 0.4s ease;
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.head-ic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  color: var(--text);
+  cursor: pointer;
 }
 .glvl {
   display: flex;
