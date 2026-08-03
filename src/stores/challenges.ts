@@ -2,13 +2,18 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import type {
-  Challenge,
-  ChallengeStatus,
-  DayProgress,
-  ChallengeConfig,
-  ChallengeFormat,
+import {
+  addContribution,
+  isChallengeComplete,
+  evaluateAchievements,
+  type Challenge,
+  type ChallengeStatus,
+  type DayProgress,
+  type ChallengeConfig,
+  type ChallengeFormat,
 } from '@/lib/challenges';
+import { challengeIdsForActivity } from '@/data/cardio';
+import type { CardioActivity } from '@/lib/types';
 
 const COLS =
   'id, exercise_id, exercise_name, unit, format, duration_days, start_date, config, daily_targets, progress, status';
@@ -97,6 +102,55 @@ export const useChallengesStore = defineStore('challenges', () => {
     }
   }
 
+  // Reporte une sortie cardio sur les défis cardio actifs correspondants :
+  // ajoute la distance (défi en km) ou la durée (défi en sec) au jour de la sortie.
+  // Renvoie les noms des défis alimentés. Ne soustrait pas à la suppression d'une
+  // sortie (correction manuelle possible dans le détail du défi).
+  async function applyCardioLog(input: {
+    date: string; // YYYY-MM-DD (date de la sortie)
+    activity: CardioActivity;
+    distanceKm?: number;
+    durationMin?: number;
+  }): Promise<string[]> {
+    if (!loaded.value) {
+      try {
+        await fetchMine();
+      } catch {
+        return [];
+      }
+    }
+    const ids = challengeIdsForActivity(input.activity);
+    const fed: string[] = [];
+    for (const c of list.value) {
+      if (c.status !== 'active' || !ids.includes(c.exercise_id)) continue;
+      const amount =
+        c.unit === 'distance'
+          ? (input.distanceKm ?? 0)
+          : c.unit === 'time'
+            ? (input.durationMin ?? 0) * 60
+            : 0;
+      if (amount <= 0) continue;
+      const progress = addContribution(c, input.date, amount);
+      if (!progress) continue; // date hors plage du défi
+      const next: Challenge = { ...c, progress };
+      const status = isChallengeComplete(next) ? 'done' : undefined;
+      try {
+        await updateProgress(c.id, progress, status);
+        fed.push(c.exercise_name);
+      } catch {
+        /* silencieux : la sortie cardio est déjà enregistrée */
+      }
+    }
+    if (fed.length) {
+      try {
+        await unlock(evaluateAchievements(list.value));
+      } catch {
+        /* silencieux */
+      }
+    }
+    return fed;
+  }
+
   async function setStatus(id: string, status: ChallengeStatus) {
     const { error } = await supabase.from('challenges').update({ status }).eq('id', id);
     if (error) throw error;
@@ -139,6 +193,7 @@ export const useChallengesStore = defineStore('challenges', () => {
     updateProgress,
     updatePlan,
     updateDuration,
+    applyCardioLog,
     setStatus,
     remove,
     fetchAchievements,

@@ -542,6 +542,37 @@ export function isChallengeComplete(ch: Challenge, todayIso = logicalToday()): b
   );
 }
 
+// Ajoute une contribution externe (ex. une sortie cardio) au jour du défi
+// correspondant à `dateIso`. `amount` est dans l'unité du défi : km (distance),
+// secondes (time) ou reps. Renvoie la nouvelle liste de progression (le jour est
+// créé au besoin, `done` cumulé, `completed` recalculé), ou null si la date tombe
+// hors de la plage du défi ou si `amount` <= 0. Pur/testable.
+export function addContribution(
+  ch: Challenge,
+  dateIso: string,
+  amount: number,
+): DayProgress[] | null {
+  const day = diffDays(ch.start_date, dateIso);
+  if (day < 0 || day >= ch.duration_days || amount <= 0) return null;
+  const progress = ch.progress.map((p) => ({ ...p }));
+  let e = progress.find((p) => p.day === day);
+  if (!e) {
+    e = {
+      day,
+      date: dateIso,
+      target: ch.daily_targets[day] ?? 0,
+      done: 0,
+      elapsed_sec: 0,
+      completed: false,
+    };
+    progress.push(e);
+  }
+  e.done = Math.round((e.done + amount) * 100) / 100;
+  const base = ch.daily_targets[day] ?? 0;
+  if (ch.format !== 'cumulative' && base > 0) e.completed = e.done >= e.target;
+  return progress;
+}
+
 // ── Succès (codes ; catalogue statique côté front) ──────
 const ALL_FORMATS: ChallengeFormat[] = [
   'fixed',

@@ -30,6 +30,18 @@ export function activityHasElevation(a: CardioActivity): boolean {
   return CARDIO_ACTIVITIES.find((x) => x.id === a)?.hasElevation ?? false;
 }
 
+// Défis cardio alimentés par une sortie de cette activité. Marche/rando/tapis
+// = « à pied », course/trail/tapis = « courue » → les deux nourrissent le défi
+// combiné « Marche ou course » (+ l'ancien défi séparé s'il existe encore).
+// Vélo (route/appart) → défi vélo.
+const WALK: CardioActivity[] = ['marche', 'rando', 'marche_tapis'];
+const RUN: CardioActivity[] = ['course', 'trail', 'course_tapis'];
+export function challengeIdsForActivity(a: CardioActivity): string[] {
+  if (WALK.includes(a)) return ['ex_ch_marche_course', 'ex_ch_marche'];
+  if (RUN.includes(a)) return ['ex_ch_marche_course', 'ex_ch_course'];
+  return ['ex_ch_velo']; // velo, velo_appart
+}
+
 function fmtPace(secPerKm: number): string {
   const m = Math.floor(secPerKm / 60);
   const s = Math.round(secPerKm % 60);

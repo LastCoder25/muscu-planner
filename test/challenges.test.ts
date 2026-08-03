@@ -4,6 +4,7 @@ import {
   challengeXpPoints,
   challengeStats,
   suggestConfig,
+  addContribution,
   type Challenge,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -66,6 +67,47 @@ function challenge(over: Partial<Challenge> = {}): Challenge {
     ...over,
   };
 }
+
+describe('addContribution (report cardio → défi)', () => {
+  const distanceCh = () =>
+    challenge({
+      unit: 'distance',
+      duration_days: 5,
+      daily_targets: [5, 5, 5, 5, 5],
+      config: cfg({ start: 5 }),
+    });
+
+  it('crée le jour et cumule la distance sur le bon index', () => {
+    const p = addContribution(distanceCh(), '2026-01-07', 3); // jour 2
+    expect(p).not.toBeNull();
+    const e = p!.find((x) => x.day === 2)!;
+    expect(e.done).toBe(3);
+    expect(e.completed).toBe(false);
+  });
+
+  it("cumule sur un jour déjà entamé et valide dès l'objectif atteint", () => {
+    const ch = distanceCh();
+    ch.progress = [
+      { day: 2, date: '2026-01-07', target: 5, done: 3, elapsed_sec: 0, completed: false },
+    ];
+    const p = addContribution(ch, '2026-01-07', 3);
+    const e = p!.find((x) => x.day === 2)!;
+    expect(e.done).toBe(6);
+    expect(e.completed).toBe(true);
+  });
+
+  it('renvoie null hors plage ou pour une contribution nulle', () => {
+    expect(addContribution(distanceCh(), '2026-01-04', 3)).toBeNull(); // avant le début
+    expect(addContribution(distanceCh(), '2026-01-11', 3)).toBeNull(); // après la fin
+    expect(addContribution(distanceCh(), '2026-01-06', 0)).toBeNull();
+  });
+
+  it('ne mute pas la progression d’origine', () => {
+    const ch = distanceCh();
+    addContribution(ch, '2026-01-05', 4);
+    expect(ch.progress).toEqual([]);
+  });
+});
 
 describe('challengeXpPoints', () => {
   it('reps cumulées + 25 par jour validé (défi actif)', () => {

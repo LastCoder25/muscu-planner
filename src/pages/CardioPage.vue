@@ -129,6 +129,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCardioStore } from '@/stores/cardio';
+import { useChallengesStore } from '@/stores/challenges';
 import {
   CARDIO_ACTIVITIES,
   ACTIVITY_LABELS,
@@ -145,6 +146,7 @@ import { SCHEMA_VERSION } from '@/lib/types';
 const $q = useQuasar();
 const auth = useAuthStore();
 const cardio = useCardioStore();
+const challenges = useChallengesStore();
 
 function todayIso(): string {
   const d = new Date();
@@ -228,6 +230,20 @@ async function save() {
     };
     await cardio.addLog(userId, log);
     $q.notify({ type: 'positive', message: 'Sortie enregistrée.' });
+    // Reporte la sortie sur les défis cardio actifs (marche/course/vélo).
+    try {
+      const fed = await challenges.applyCardioLog({
+        date: date.value,
+        activity: activity.value,
+        ...(distance.value ? { distanceKm: distance.value } : {}),
+        ...(duration.value ? { durationMin: duration.value } : {}),
+      });
+      if (fed.length) {
+        $q.notify({ type: 'positive', message: `Compté pour ton défi : ${fed.join(', ')}.` });
+      }
+    } catch {
+      /* silencieux : la sortie est déjà enregistrée */
+    }
     date.value = todayIso();
     distance.value = null;
     duration.value = null;
