@@ -204,7 +204,14 @@ function exerciseFactor(exerciseId: string): number {
 // Distance de base par jour (km) selon l'activité et le niveau.
 function distanceBase(level: Level, exerciseId: string): number {
   const id = exerciseId.toLowerCase();
-  const per = id.includes('velo') ? 20 : id.includes('marche') ? 5 : 7; // course ~7
+  // vélo ~20 ; marche ~5 ; marche ou course ~6 ; course ~7 (km/jour, avant niveau).
+  const per = id.includes('velo')
+    ? 20
+    : id.includes('marche_course')
+      ? 6
+      : id.includes('marche')
+        ? 5
+        : 7;
   const f = level === 'debutant' ? 0.7 : level === 'avance' ? 1.3 : 1;
   return Math.max(2, Math.round(per * f));
 }

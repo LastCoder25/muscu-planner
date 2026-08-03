@@ -52,7 +52,12 @@ export function useProgress() {
 
   // Un challenge alimente la DISCIPLINE de son exercice : marche/course/vélo →
   // cardio ; tout le reste (pompes, gainage…) → muscu.
-  const CARDIO_CH_IDS = new Set(['ex_ch_marche', 'ex_ch_course', 'ex_ch_velo']);
+  const CARDIO_CH_IDS = new Set([
+    'ex_ch_marche',
+    'ex_ch_course',
+    'ex_ch_marche_course',
+    'ex_ch_velo',
+  ]);
   const isCardioChallenge = (c: (typeof challenges.list)[number]) =>
     c.unit === 'distance' || CARDIO_CH_IDS.has(c.exercise_id);
   const muscuChallengeXp = computed(() =>

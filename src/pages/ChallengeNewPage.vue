@@ -416,14 +416,18 @@ const sugIndex = new Map(CHALLENGE_SUGGESTIONS.map((id, i) => [id, i]));
 function exRank(id: string): number {
   return (favSet.value.has(id) ? 100 : 0) + (sugIndex.has(id) ? 50 - (sugIndex.get(id) ?? 0) : 0);
 }
+// Marche/course séparées masquées : on ne propose plus que « Marche ou course »
+// (une seule piste → une sortie course compte aussi, pas de doublon).
+const HIDDEN_EX_IDS = new Set(['ex_ch_marche', 'ex_ch_course']);
 const filteredLib = computed(() => {
   const n = search.value.trim().toLowerCase();
+  const visible = lib.value.filter((e) => !HIDDEN_EX_IDS.has(e.id));
   const base = n
-    ? lib.value.filter(
+    ? visible.filter(
         (e) =>
           e.name.toLowerCase().includes(n) || (e.muscle_primary ?? '').toLowerCase().includes(n),
       )
-    : lib.value;
+    : visible;
   return [...base].sort((a, b) => exRank(b.id) - exRank(a.id)).slice(0, 60);
 });
 
