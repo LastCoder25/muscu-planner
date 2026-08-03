@@ -80,17 +80,9 @@
       </div>
 
       <div class="tiles">
-        <button class="tile" @click="startFree">
-          <q-icon name="bolt" size="26px" />
-          <span>Séance libre</span>
-        </button>
-        <button class="tile" @click="startImport">
-          <q-icon name="smart_toy" size="26px" />
-          <span>Séance IA</span>
-        </button>
-        <button class="tile" @click="goProgram">
+        <button class="tile" @click="goMuscu">
           <q-icon name="fitness_center" size="26px" />
-          <span>Mon programme</span>
+          <span>Muscu</span>
         </button>
         <button class="tile" @click="goTennis">
           <q-icon name="sports_tennis" size="26px" />
@@ -130,7 +122,7 @@ const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
 const progress = useProgress();
 const tracks = computed(() => [
-  { key: 'muscu', label: 'Muscu', info: progress.muscu.value, go: goProgram },
+  { key: 'muscu', label: 'Muscu', info: progress.muscu.value, go: goMuscu },
   { key: 'tennis', label: 'Tennis', info: progress.tennis.value, go: goTennis },
   { key: 'cardio', label: 'Cardio', info: progress.cardio.value, go: goCardio },
   { key: 'challenges', label: 'Défis', info: progress.challenges.value, go: goChallenges },
@@ -172,8 +164,8 @@ async function goHistory() {
   await router.push('/history');
 }
 
-async function startFree() {
-  await router.push('/free');
+async function goMuscu() {
+  await router.push('/muscu');
 }
 async function resumeFree() {
   await router.push('/free');
@@ -203,12 +195,6 @@ function discardCourt() {
     liveCourt.discardSaved();
     $q.notify({ type: 'positive', message: 'Séance tennis abandonnée.' });
   });
-}
-async function startImport() {
-  await router.push('/import');
-}
-async function goProgram() {
-  await router.push('/program');
 }
 async function goChallenges() {
   await router.push('/challenges');
