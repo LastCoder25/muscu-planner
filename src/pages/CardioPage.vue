@@ -160,6 +160,9 @@
               >
                 ↓
               </button>
+              <button aria-label="Dupliquer" @click="duplicate(i)">
+                <q-icon name="content_copy" size="14px" />
+              </button>
               <button aria-label="Supprimer" class="del" @click="phases.splice(i, 1)">✕</button>
             </div>
           </div>
@@ -500,6 +503,12 @@ function move(i: number, dir: number) {
   if (j < 0 || j >= phases.value.length) return;
   const arr = phases.value;
   [arr[i], arr[j]] = [arr[j]!, arr[i]!];
+}
+// Duplique la phase (copie indépendante) à la fin de la séance.
+function duplicate(i: number) {
+  const src = phases.value[i];
+  if (!src) return;
+  phases.value.push({ ...src });
 }
 
 function toPhase(ep: EditPhase): CardioPhase {
