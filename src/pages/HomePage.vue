@@ -98,17 +98,19 @@
 
       <div class="tile-group">
         <div class="group-lbl">Spécifique</div>
-        <button class="mtile wide t-tennis" @click="goTennis">
-          <span class="mt-strip" />
-          <span class="mt-ic-wrap"><q-icon name="sports_tennis" size="26px" class="mt-ic" /></span>
-          <div class="mt-wide-main">
+        <div class="main-tiles">
+          <button class="mtile t-tennis" @click="goTennis">
+            <span class="mt-strip" />
+            <span class="mt-ic-wrap"
+              ><q-icon name="sports_tennis" size="26px" class="mt-ic"
+            /></span>
             <span class="mt-name font-display">Tennis</span>
             <span class="mt-lvl">Niv. {{ progress.tennis.value.level }}</span>
             <span class="mt-bar"
               ><span class="mt-fill" :style="{ width: progress.tennis.value.progressPct + '%' }"
             /></span>
-          </div>
-        </button>
+          </button>
+        </div>
       </div>
     </template>
   </q-page>
@@ -505,29 +507,6 @@ async function goStats() {
 .mtile:active {
   transform: scale(0.97);
   border-color: var(--c);
-}
-/* Carte spécifique (Tennis) : pleine largeur, horizontale. */
-.mtile.wide {
-  flex-direction: row;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  width: 100%;
-}
-.mtile.wide .mt-ic-wrap {
-  margin-top: 0;
-  flex-shrink: 0;
-}
-.mt-wide-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-.mtile.wide .mt-bar {
-  width: 100%;
 }
 .t-muscu {
   --c: var(--accent);
