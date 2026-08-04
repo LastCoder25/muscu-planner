@@ -55,4 +55,12 @@ describe('cardioSessionXp (log global)', () => {
     // 40 + 0 + 30*1.5(=45) + 0 + 2*10(=20) = 105
     expect(cardioSessionXp(log({ duration_min: 30 }))).toBe(105);
   });
+  it('la marche vaut moins que la course (pondération)', () => {
+    const base = { distance_km: 10, duration_min: 50, rpe: 2 as const };
+    const course = cardioSessionXp(log({ ...base, activity: 'course' }));
+    const marche = cardioSessionXp(log({ ...base, activity: 'marche' }));
+    expect(marche).toBeLessThan(course);
+    // marche : 40 + (10*10 + 50*1.5)*0.4(=70) + 20 = 130
+    expect(marche).toBe(130);
+  });
 });

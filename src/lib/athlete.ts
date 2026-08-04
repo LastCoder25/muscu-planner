@@ -1,7 +1,20 @@
 // athlete.ts — barèmes d'XP par séance. Le calcul de NIVEAU est unifié dans
 // src/lib/levels.ts (computeLevel). Ici : combien rapporte une séance.
 // Pur/testable, aucune dépendance Vue.
-import type { SessionLog, Session, DrillLog, CardioLog } from './types';
+import type { SessionLog, Session, DrillLog, CardioLog, CardioActivity } from './types';
+
+// Poids d'une activité cardio : la marche vaut nettement moins que la course
+// (à distance/durée égale). Le dénivelé et le ressenti restent à plein (effort réel).
+const ACTIVITY_XP_FACTOR: Record<CardioActivity, number> = {
+  course: 1,
+  trail: 1,
+  course_tapis: 1,
+  velo: 0.7,
+  velo_appart: 0.6,
+  rando: 0.55,
+  marche: 0.4,
+  marche_tapis: 0.4,
+};
 
 /** XP d'une séance de muscu : présence + volume (reps) + charge + intensité (note 1–4). */
 export function sessionXp(log: SessionLog): number {
@@ -25,15 +38,17 @@ export function drillSessionXp(log: DrillLog): number {
   return Math.round(40 + minutes + done * 8 + intensity);
 }
 
-/** XP d'une sortie cardio : durée + distance + dénivelé (D+ ET D-, même poids —
- *  la descente sollicite d'autres muscles) + intensité (ressenti). */
+/** XP d'une sortie cardio : durée + distance (pondérées par l'activité — marche <
+ *  vélo < course) + dénivelé (D+ ET D-, même poids, la descente sollicite d'autres
+ *  muscles) + intensité (ressenti). Présence, dénivelé et ressenti restent à plein. */
 export function cardioSessionXp(log: CardioLog): number {
   const km = log.distance_km ?? 0;
   const dplus = log.elevation_m ?? 0;
   const dminus = log.descent_m ?? 0;
   const dur = log.duration_min ?? 0;
   const intensity = (log.rpe ?? 2) * 10;
-  return Math.round(40 + km * 10 + dur * 1.5 + (dplus + dminus) / 10 + intensity);
+  const factor = ACTIVITY_XP_FACTOR[log.activity] ?? 1;
+  return Math.round(40 + (km * 10 + dur * 1.5) * factor + (dplus + dminus) / 10 + intensity);
 }
 
 /** Estimation d'XP d'une séance PRÉVUE (avant de la faire) : même barème que
