@@ -34,18 +34,6 @@
       </div>
     </button>
 
-    <div class="tracks">
-      <button v-for="t in tracks" :key="t.key" class="track" @click="t.go">
-        <div class="track-top">
-          <span class="track-name">{{ t.label }}</span>
-          <span class="track-lvl font-display">Niv. {{ t.info.level }}</span>
-        </div>
-        <div class="track-bar">
-          <div class="track-fill" :style="{ width: t.info.progressPct + '%' }" />
-        </div>
-      </button>
-    </div>
-
     <div v-if="loading" class="column items-center q-mt-xl">
       <q-spinner color="primary" size="32px" />
     </div>
@@ -87,18 +75,21 @@
         </div>
       </div>
 
-      <div class="tiles">
-        <button class="tile" @click="goMuscu">
-          <q-icon name="fitness_center" size="26px" />
-          <span>Muscu</span>
-        </button>
-        <button class="tile" @click="goTennis">
-          <q-icon name="sports_tennis" size="26px" />
-          <span>Tennis</span>
-        </button>
-        <button class="tile" @click="goCardio">
-          <q-icon name="directions_run" size="26px" />
-          <span>Cardio</span>
+      <div class="main-tiles">
+        <button
+          v-for="t in mainTiles"
+          :key="t.key"
+          class="mtile"
+          :class="'t-' + t.key"
+          @click="t.go"
+        >
+          <span class="mt-strip" />
+          <span class="mt-ic-wrap"><q-icon :name="t.icon" size="26px" class="mt-ic" /></span>
+          <span class="mt-name font-display">{{ t.label }}</span>
+          <span class="mt-lvl">Niv. {{ t.info.level }}</span>
+          <span class="mt-bar"
+            ><span class="mt-fill" :style="{ width: t.info.progressPct + '%' }"
+          /></span>
         </button>
       </div>
     </template>
@@ -125,11 +116,23 @@ const live = useLiveStore();
 const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
 const progress = useProgress();
-const tracks = computed(() => [
-  { key: 'muscu', label: 'Muscu', info: progress.muscu.value, go: goMuscu },
-  { key: 'tennis', label: 'Tennis', info: progress.tennis.value, go: goTennis },
-  { key: 'cardio', label: 'Cardio', info: progress.cardio.value, go: goCardio },
-  { key: 'challenges', label: 'Défis', info: progress.challenges.value, go: goChallenges },
+// Les 3 disciplines principales, en cartes couleur/discipline sur l'accueil.
+const mainTiles = computed(() => [
+  { key: 'muscu', label: 'Muscu', icon: 'fitness_center', info: progress.muscu.value, go: goMuscu },
+  {
+    key: 'cardio',
+    label: 'Cardio',
+    icon: 'directions_run',
+    info: progress.cardio.value,
+    go: goCardio,
+  },
+  {
+    key: 'tennis',
+    label: 'Tennis',
+    icon: 'sports_tennis',
+    info: progress.tennis.value,
+    go: goTennis,
+  },
 ]);
 const loading = ref(true);
 
@@ -336,50 +339,6 @@ async function goStats() {
   letter-spacing: 0.5px;
   color: var(--dim);
 }
-.tracks {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-.track {
-  background: var(--surface);
-  border: 1px solid var(--line-soft);
-  border-radius: 12px;
-  padding: 10px 12px;
-  text-align: left;
-  cursor: pointer;
-}
-.track-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 7px;
-}
-.track-name {
-  font-size: 13px;
-  color: var(--text);
-  font-weight: 600;
-}
-.track-lvl {
-  font-size: 13px;
-  color: var(--accent);
-  font-weight: 700;
-}
-.track-bar {
-  height: 5px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  overflow: hidden;
-}
-.track-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 999px;
-  transition: width 0.4s ease;
-}
 .home-name {
   font-size: 32px;
   font-weight: 700;
@@ -499,42 +458,86 @@ async function goStats() {
   font-size: 13px;
   margin-top: 4px;
 }
-.tiles {
+.main-tiles {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   margin-bottom: 24px;
 }
-.tile {
+.mtile {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 88px;
-  padding: 14px;
+  gap: 6px;
+  padding: 16px 10px 13px;
   border-radius: 16px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--text);
-  font-family: var(--font-display);
-  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    transform 0.12s,
+    border-color 0.12s;
+}
+.mtile:active {
+  transform: scale(0.97);
+  border-color: var(--c);
+}
+.t-muscu {
+  --c: var(--accent);
+}
+.t-cardio {
+  --c: var(--d3);
+}
+.t-tennis {
+  --c: var(--d1);
+}
+.mt-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--c);
+}
+.mt-ic-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  margin-top: 4px;
+  background: color-mix(in srgb, var(--c) 16%, transparent);
+}
+.mt-ic {
+  color: var(--c);
+}
+.mt-name {
+  font-weight: 700;
   font-size: 14px;
   letter-spacing: 0.3px;
-  cursor: pointer;
-  transition:
-    border-color 0.12s,
-    transform 0.08s;
 }
-.tile .q-icon {
-  color: var(--accent);
+.mt-lvl {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--dim);
 }
-.tile:active {
-  transform: scale(0.97);
-  border-color: var(--accent);
+.mt-bar {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+  margin-top: 3px;
 }
-.tile-accent {
-  background: var(--surface-2);
-  border-color: var(--accent);
+.mt-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--c);
 }
 </style>
