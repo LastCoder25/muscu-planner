@@ -63,6 +63,21 @@
           </div>
         </div>
 
+        <!-- Avance/retard — visible même les jours de repos -->
+        <div
+          v-if="showBalance"
+          class="carry-badge"
+          :class="liveBalance > 0 ? 'ahead' : liveBalance < 0 ? 'behind' : 'even'"
+        >
+          <template v-if="liveBalance > 0"
+            >{{ carryOn ? 'Réserve' : 'Avance' }} +{{ liveBalance }} {{ unitLabel }}</template
+          >
+          <template v-else-if="liveBalance < 0"
+            >{{ carryOn ? 'Dette' : 'Retard' }} −{{ -liveBalance }} {{ unitLabel }}</template
+          >
+          <template v-else>Dans les temps</template>
+        </div>
+
         <!-- Exécution du jour -->
         <div v-if="statusDone" class="done-banner">
           <q-icon name="emoji_events" size="20px" /> Challenge terminé — bravo !
@@ -80,18 +95,6 @@
         <div v-else class="today">
           <div class="today-h">
             Objectif du jour · <b>{{ todayTarget }} {{ unitLabel }}</b>
-          </div>
-          <div
-            class="carry-badge"
-            :class="liveBalance > 0 ? 'ahead' : liveBalance < 0 ? 'behind' : 'even'"
-          >
-            <template v-if="liveBalance > 0"
-              >{{ carryOn ? 'Réserve' : 'Avance' }} +{{ liveBalance }} {{ unitLabel }}</template
-            >
-            <template v-else-if="liveBalance < 0"
-              >{{ carryOn ? 'Dette' : 'Retard' }} −{{ -liveBalance }} {{ unitLabel }}</template
-            >
-            <template v-else>Dans les temps</template>
           </div>
           <div class="ring-wrap">
             <svg viewBox="0 0 120 120" class="ring">
@@ -385,6 +388,9 @@ const carryOn = computed(() => !!ch.value?.config.carry_over && ch.value.format 
 const adaptiveOn = computed(() => !!ch.value?.config.adaptive);
 // Avance/retard « en direct » (inclut le surplus du jour) → affiché à l'utilisateur.
 const liveBalance = computed(() => (ch.value ? challengeLiveBalance(ch.value, today) : 0));
+// Visible dès que le défi a commencé (y compris les jours de repos, où l'on peut
+// prendre de l'avance sans que le panneau « objectif du jour » s'affiche).
+const showBalance = computed(() => !!ch.value && dayIndex.value >= 0);
 const todayTarget = computed(() => {
   if (!ch.value) return 0;
   if (ch.value.format === 'cumulative') return ch.value.config.total ?? 0;
