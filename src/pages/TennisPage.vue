@@ -23,8 +23,31 @@
       </button>
     </div>
 
+    <!-- Tuiles d'activité (comme Muscu) -->
+    <div v-if="tab === 'act' && !action" class="tiles">
+      <button class="tile" @click="action = 'log'">
+        <q-icon name="edit_note" size="30px" />
+        <span>Enregistrer une séance</span>
+        <small>Séance jouée, à la durée</small>
+      </button>
+      <button class="tile" @click="action = 'prepa'">
+        <q-icon name="directions_run" size="30px" />
+        <span>Prépa physique</span>
+        <small>Pliométrie, agilité, gainage</small>
+      </button>
+      <button class="tile" @click="action = 'court'">
+        <q-icon name="sports_tennis" size="30px" />
+        <span>Drills sur le court</span>
+        <small>Avec ou sans partenaire</small>
+      </button>
+    </div>
+
+    <button v-if="tab === 'act' && action" class="back-b" @click="action = null">
+      <q-icon name="arrow_back" size="18px" /> Retour
+    </button>
+
     <!-- Enregistrer une séance jouée (log à la durée) -->
-    <section v-show="tab === 'act'" class="card">
+    <section v-show="tab === 'act' && action === 'log'" class="card">
       <div class="card-head">
         <q-icon name="edit_note" size="22px" />
         <div>
@@ -104,7 +127,7 @@
     </section>
 
     <!-- Prépa physique -->
-    <section v-show="tab === 'act'" class="card">
+    <section v-show="tab === 'act' && action === 'prepa'" class="card">
       <div class="card-head">
         <q-icon name="directions_run" size="22px" />
         <div>
@@ -188,7 +211,7 @@
     </section>
 
     <!-- Drills court -->
-    <section v-show="tab === 'act'" class="card">
+    <section v-show="tab === 'act' && action === 'court'" class="card">
       <div class="card-head">
         <q-icon name="sports_tennis" size="22px" />
         <div>
@@ -280,6 +303,7 @@ const DURATIONS = [20, 30, 45] as const;
 
 const $q = useQuasar();
 const tab = ref<'act' | 'hist'>('act');
+const action = ref<'log' | 'prepa' | 'court' | null>(null);
 const router = useRouter();
 const auth = useAuthStore();
 const profileStore = useProfileStore();
@@ -547,6 +571,55 @@ function remove(id: string) {
 .seg-b.on {
   background: var(--accent);
   color: var(--accent-ink, #15120e);
+}
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 96px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--accent);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.08s;
+}
+.tile .q-icon {
+  color: var(--accent);
+}
+.tile small {
+  font-family: var(--font-body, inherit);
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--dim);
+}
+.tile:active {
+  transform: scale(0.98);
+}
+.back-b {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 0;
+  margin-bottom: 12px;
 }
 .empty {
   color: var(--dim);
