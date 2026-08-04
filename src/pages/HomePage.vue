@@ -75,21 +75,39 @@
         </div>
       </div>
 
-      <div class="main-tiles">
-        <button
-          v-for="t in mainTiles"
-          :key="t.key"
-          class="mtile"
-          :class="'t-' + t.key"
-          @click="t.go"
-        >
+      <div class="tile-group">
+        <div class="group-lbl">Général</div>
+        <div class="main-tiles">
+          <button
+            v-for="t in generalTiles"
+            :key="t.key"
+            class="mtile"
+            :class="'t-' + t.key"
+            @click="t.go"
+          >
+            <span class="mt-strip" />
+            <span class="mt-ic-wrap"><q-icon :name="t.icon" size="26px" class="mt-ic" /></span>
+            <span class="mt-name font-display">{{ t.label }}</span>
+            <span class="mt-lvl">Niv. {{ t.info.level }}</span>
+            <span class="mt-bar"
+              ><span class="mt-fill" :style="{ width: t.info.progressPct + '%' }"
+            /></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="tile-group">
+        <div class="group-lbl">Spécifique</div>
+        <button class="mtile wide t-tennis" @click="goTennis">
           <span class="mt-strip" />
-          <span class="mt-ic-wrap"><q-icon :name="t.icon" size="26px" class="mt-ic" /></span>
-          <span class="mt-name font-display">{{ t.label }}</span>
-          <span class="mt-lvl">Niv. {{ t.info.level }}</span>
-          <span class="mt-bar"
-            ><span class="mt-fill" :style="{ width: t.info.progressPct + '%' }"
-          /></span>
+          <span class="mt-ic-wrap"><q-icon name="sports_tennis" size="26px" class="mt-ic" /></span>
+          <div class="mt-wide-main">
+            <span class="mt-name font-display">Tennis</span>
+            <span class="mt-lvl">Niv. {{ progress.tennis.value.level }}</span>
+            <span class="mt-bar"
+              ><span class="mt-fill" :style="{ width: progress.tennis.value.progressPct + '%' }"
+            /></span>
+          </div>
         </button>
       </div>
     </template>
@@ -116,8 +134,8 @@ const live = useLiveStore();
 const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
 const progress = useProgress();
-// Les 3 disciplines principales, en cartes couleur/discipline sur l'accueil.
-const mainTiles = computed(() => [
+// Général : renforcement + cardio (cartes couleur/discipline). Tennis = spécifique, à part.
+const generalTiles = computed(() => [
   { key: 'muscu', label: 'Muscu', icon: 'fitness_center', info: progress.muscu.value, go: goMuscu },
   {
     key: 'cardio',
@@ -125,13 +143,6 @@ const mainTiles = computed(() => [
     icon: 'directions_run',
     info: progress.cardio.value,
     go: goCardio,
-  },
-  {
-    key: 'tennis',
-    label: 'Tennis',
-    icon: 'sports_tennis',
-    info: progress.tennis.value,
-    go: goTennis,
   },
 ]);
 const loading = ref(true);
@@ -458,11 +469,21 @@ async function goStats() {
   font-size: 13px;
   margin-top: 4px;
 }
+.tile-group {
+  margin-bottom: 18px;
+}
+.group-lbl {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--dim);
+  margin: 0 2px 8px;
+  font-weight: 600;
+}
 .main-tiles {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
-  margin-bottom: 24px;
 }
 .mtile {
   position: relative;
@@ -484,6 +505,29 @@ async function goStats() {
 .mtile:active {
   transform: scale(0.97);
   border-color: var(--c);
+}
+/* Carte spécifique (Tennis) : pleine largeur, horizontale. */
+.mtile.wide {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  width: 100%;
+}
+.mtile.wide .mt-ic-wrap {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+.mt-wide-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.mtile.wide .mt-bar {
+  width: 100%;
 }
 .t-muscu {
   --c: var(--accent);
