@@ -14,8 +14,17 @@
       </div>
     </div>
 
+    <div class="seg">
+      <button class="seg-b" :class="{ on: tab === 'act' }" @click="tab = 'act'">
+        <q-icon name="sports_tennis" size="18px" /> Activité
+      </button>
+      <button class="seg-b" :class="{ on: tab === 'hist' }" @click="tab = 'hist'">
+        <q-icon name="history" size="18px" /> Historique
+      </button>
+    </div>
+
     <!-- Enregistrer une séance jouée (log à la durée) -->
-    <section class="card">
+    <section v-show="tab === 'act'" class="card">
       <div class="card-head">
         <q-icon name="edit_note" size="22px" />
         <div>
@@ -95,7 +104,7 @@
     </section>
 
     <!-- Prépa physique -->
-    <section class="card">
+    <section v-show="tab === 'act'" class="card">
       <div class="card-head">
         <q-icon name="directions_run" size="22px" />
         <div>
@@ -179,7 +188,7 @@
     </section>
 
     <!-- Drills court -->
-    <section class="card">
+    <section v-show="tab === 'act'" class="card">
       <div class="card-head">
         <q-icon name="sports_tennis" size="22px" />
         <div>
@@ -220,7 +229,10 @@
     </section>
 
     <!-- Historique tennis -->
-    <section v-if="tennis.logs.length" class="card">
+    <div v-if="tab === 'hist' && !tennis.logs.length" class="empty">
+      Aucune séance de tennis enregistrée pour l'instant.
+    </div>
+    <section v-if="tab === 'hist' && tennis.logs.length" class="card">
       <div class="card-head">
         <q-icon name="history" size="22px" />
         <div>
@@ -267,6 +279,7 @@ import { SCHEMA_VERSION } from '@/lib/types';
 const DURATIONS = [20, 30, 45] as const;
 
 const $q = useQuasar();
+const tab = ref<'act' | 'hist'>('act');
 const router = useRouter();
 const auth = useAuthStore();
 const profileStore = useProfileStore();
@@ -502,6 +515,42 @@ function remove(id: string) {
 }
 .text-dim {
   color: var(--dim);
+}
+.seg {
+  display: flex;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 16px;
+}
+.seg-b {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 8px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.seg-b.on {
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+}
+.empty {
+  color: var(--dim);
+  padding: 24px 4px;
 }
 .resume {
   display: flex;

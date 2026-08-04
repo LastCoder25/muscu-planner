@@ -3,8 +3,17 @@
     <h1 class="page-title font-display">Cardio</h1>
     <p class="page-sub text-dim">Marche, rando, course, trail, vélo…</p>
 
+    <div class="seg">
+      <button class="seg-b" :class="{ on: tab === 'log' }" @click="tab = 'log'">
+        <q-icon name="edit_note" size="18px" /> Enregistrer
+      </button>
+      <button class="seg-b" :class="{ on: tab === 'hist' }" @click="tab = 'hist'">
+        <q-icon name="history" size="18px" /> Historique
+      </button>
+    </div>
+
     <!-- Enregistrer une sortie -->
-    <section class="card">
+    <section v-show="tab === 'log'" class="card">
       <div class="card-head">
         <q-icon name="edit_note" size="22px" />
         <div class="card-title">Enregistrer une sortie</div>
@@ -95,7 +104,10 @@
     </section>
 
     <!-- Historique -->
-    <section v-if="cardio.logs.length" class="card">
+    <div v-if="tab === 'hist' && !cardio.logs.length" class="empty">
+      Aucune sortie enregistrée pour l'instant.
+    </div>
+    <section v-if="tab === 'hist' && cardio.logs.length" class="card">
       <div class="card-head">
         <q-icon name="history" size="22px" />
         <div class="card-title">Mes sorties</div>
@@ -147,6 +159,8 @@ const $q = useQuasar();
 const auth = useAuthStore();
 const cardio = useCardioStore();
 const challenges = useChallengesStore();
+
+const tab = ref<'log' | 'hist'>('log');
 
 function todayIso(): string {
   const d = new Date();
@@ -292,6 +306,42 @@ function remove(id: string) {
 }
 .text-dim {
   color: var(--dim);
+}
+.seg {
+  display: flex;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 16px;
+}
+.seg-b {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 8px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.seg-b.on {
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+}
+.empty {
+  color: var(--dim);
+  padding: 24px 4px;
 }
 .card {
   background: var(--surface);
