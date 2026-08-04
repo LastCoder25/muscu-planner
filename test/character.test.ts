@@ -8,9 +8,9 @@ import {
 } from '@/lib/character';
 
 describe('statFromXp', () => {
-  it('racine carrée arrondie, jamais négatif', () => {
-    expect(statFromXp(900)).toBe(30);
-    expect(statFromXp(3600)).toBe(60);
+  it('linéaire (÷15) arrondi, jamais négatif', () => {
+    expect(statFromXp(900)).toBe(60);
+    expect(statFromXp(150)).toBe(10);
     expect(statFromXp(0)).toBe(0);
     expect(statFromXp(-50)).toBe(0);
   });
@@ -18,10 +18,10 @@ describe('statFromXp', () => {
 
 describe('computeCharacter', () => {
   it('Puissance←muscu, Agilité←cardio, Endurance←moyenne', () => {
-    const c = computeCharacter(900, 400, 120);
-    expect(c.puissance).toBe(30); // √900
-    expect(c.agilite).toBe(20); // √400
-    expect(c.endurance).toBe(statFromXp(650)); // √((900+400)/2)
+    const c = computeCharacter(900, 300, 120);
+    expect(c.puissance).toBe(60); // 900/15
+    expect(c.agilite).toBe(20); // 300/15
+    expect(c.endurance).toBe(statFromXp(600)); // (900+300)/2 = 600 → 40
     expect(c.pv).toBe(100 + c.endurance * 10);
     expect(c.energy).toBe(120);
     expect(c.level.level).toBeGreaterThanOrEqual(1);

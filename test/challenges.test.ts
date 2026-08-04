@@ -132,6 +132,20 @@ describe('challengeLiveBalance (avance/retard en direct)', () => {
     expect(challengeLiveBalance(ch, '2026-01-07')).toBe(0);
   });
 
+  it('un jour CLÔTURÉ en déficit compte tout de suite', () => {
+    const closed = {
+      day: 2,
+      date: '2026-01-07',
+      target: 10,
+      done: 4,
+      elapsed_sec: 0,
+      completed: false,
+      closed: true,
+    };
+    const ch = fiveDay([day(0, 10), day(1, 10), closed]); // clôturé à 4/10 → −6
+    expect(challengeLiveBalance(ch, '2026-01-07')).toBe(-6);
+  });
+
   it('un jour passé manqué compte en retard', () => {
     const ch = fiveDay([day(0, 7), day(1, 10)]); // −3 la veille
     expect(challengeLiveBalance(ch, '2026-01-07')).toBe(-3);

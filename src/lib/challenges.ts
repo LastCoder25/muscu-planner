@@ -310,8 +310,12 @@ export function challengeLiveBalance(ch: Challenge, todayIso = logicalToday()): 
   const dayIndex = diffDays(ch.start_date, todayIso);
   if (dayIndex < 0 || dayIndex >= ch.duration_days) return base;
   const target = ch.daily_targets[dayIndex] ?? 0;
-  const done = progByDay(ch).get(dayIndex)?.done ?? 0;
-  return round2(base + Math.max(0, done - target));
+  const entry = progByDay(ch).get(dayIndex);
+  const done = entry?.done ?? 0;
+  // Jour CLÔTURÉ → on fige son delta complet (déficit inclus) tout de suite.
+  // Jour en cours → on ne compte que le surplus (pas de retard tant qu'il tourne).
+  const delta = entry?.closed ? done - target : Math.max(0, done - target);
+  return round2(base + delta);
 }
 
 // ── Recalibrage de difficulté en cours ──────────────────

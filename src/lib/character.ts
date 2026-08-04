@@ -3,9 +3,11 @@
 // Pur/testable, aucune dépendance Vue/Supabase.
 import { computeLevel, type LevelInfo } from './levels';
 
-// Courbe des stats : racine carrée de l'XP → croissance qui ralentit (pas d'explosion).
+// Courbe des stats : LINÉAIRE (stat = XP / 15) → la stat reflète fidèlement
+// l'effort (2× d'XP = 2× de stat) ; un exo à peine commencé reste bas.
+const XP_PER_STAT = 15;
 export function statFromXp(xp: number): number {
-  return Math.round(Math.sqrt(Math.max(0, xp)));
+  return Math.round(Math.max(0, xp) / XP_PER_STAT);
 }
 
 export type CharacterProfile = 'puissant' | 'agile' | 'polyvalent';
