@@ -76,7 +76,9 @@
       </div>
 
       <div class="tile-group">
-        <div class="group-lbl">Général</div>
+        <div class="group-lbl">
+          Général <span class="group-lvl">Niv. {{ progress.general.value.level }}</span>
+        </div>
         <div class="main-tiles">
           <button
             v-for="t in generalTiles"
@@ -97,7 +99,9 @@
       </div>
 
       <div class="tile-group">
-        <div class="group-lbl">Spécifique</div>
+        <div class="group-lbl">
+          Spécifique <span class="group-lvl">Niv. {{ progress.specifique.value.level }}</span>
+        </div>
         <div class="main-tiles">
           <button class="mtile t-tennis" @click="goTennis">
             <span class="mt-strip" />
@@ -475,12 +479,19 @@ async function goStats() {
   margin-bottom: 18px;
 }
 .group-lbl {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   color: var(--dim);
   margin: 0 2px 8px;
   font-weight: 600;
+}
+.group-lvl {
+  color: var(--accent);
+  font-weight: 700;
 }
 .main-tiles {
   display: grid;

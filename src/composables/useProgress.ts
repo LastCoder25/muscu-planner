@@ -75,10 +75,14 @@ export function useProgress() {
   // Piste Challenges = niveau « méta » (tous les défis) — affiché à part, PAS
   // ajouté au Global (l'effort est déjà compté dans muscu / cardio).
   const challengesXp = computed(() => challengeXpPoints(challenges.list));
+  // Général = sport de fond (muscu + cardio). Spécifique = tennis. Global = tout.
+  const generalXp = computed(() => muscuTotal.value + cardioXp.value);
   const globalXp = computed(() => muscuTotal.value + tennisXp.value + cardioXp.value);
 
   return {
     global: computed(() => computeLevel(globalXp.value)),
+    general: computed(() => computeLevel(generalXp.value)),
+    specifique: computed(() => computeLevel(tennisXp.value)),
     muscu: computed(() => computeLevel(muscuTotal.value)),
     tennis: computed(() => computeLevel(tennisXp.value)),
     cardio: computed(() => computeLevel(cardioXp.value)),
