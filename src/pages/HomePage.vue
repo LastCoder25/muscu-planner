@@ -76,9 +76,7 @@
       </div>
 
       <div class="tile-group">
-        <div class="group-lbl">
-          Général <span class="group-lvl">Niv. {{ progress.general.value.level }}</span>
-        </div>
+        <div class="group-lbl">Général</div>
         <div class="main-tiles">
           <button
             v-for="t in generalTiles"
