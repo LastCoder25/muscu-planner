@@ -116,6 +116,18 @@
           </button>
         </div>
       </div>
+
+      <div class="tile-group">
+        <div class="group-lbl">Aventure</div>
+        <button class="adv-tile" @click="goAventure">
+          <span class="adv-ic">⚔️</span>
+          <span class="adv-main">
+            <span class="adv-name font-display">Mon aventurier</span>
+            <span class="adv-sub">RPG · niveau {{ progress.general.value.level }}</span>
+          </span>
+          <q-icon name="chevron_right" size="22px" />
+        </button>
+      </div>
     </template>
   </q-page>
 </template>
@@ -193,6 +205,9 @@ async function goMuscu() {
 }
 async function goAgenda() {
   await router.push('/agenda');
+}
+async function goAventure() {
+  await router.push('/aventure');
 }
 async function resumeFree() {
   await router.push('/free');
@@ -492,6 +507,45 @@ async function goStats() {
 .group-lvl {
   color: var(--accent);
   font-weight: 700;
+}
+.adv-tile {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--accent);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+.adv-tile:active {
+  transform: scale(0.98);
+}
+.adv-ic {
+  font-size: 26px;
+  line-height: 1;
+}
+.adv-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.adv-name {
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.3px;
+}
+.adv-sub {
+  font-size: 12px;
+  color: var(--dim);
+}
+.adv-tile .q-icon {
+  color: var(--accent);
 }
 .main-tiles {
   display: grid;

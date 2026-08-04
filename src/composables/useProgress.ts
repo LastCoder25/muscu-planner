@@ -72,6 +72,18 @@ export function useProgress() {
         .filter((r) => !r.payload.challenge_id)
         .reduce((a, r) => a + cardioSessionXp(r.payload), 0) + cardioChallengeXp.value,
   );
+  // Minutes de sport de fond (muscu + cardio) → énergie du RPG. Les sorties
+  // « miroir » d'un défi ne comptent pas (leur durée est déjà celle du défi).
+  const fondMinutes = computed(
+    () =>
+      logs.all
+        .filter((r) => !isPrepaLog(r.payload.session_id))
+        .reduce((a, r) => a + (r.payload.duration_min ?? 0), 0) +
+      cardio.logs
+        .filter((r) => !r.payload.challenge_id)
+        .reduce((a, r) => a + (r.payload.duration_min ?? 0), 0),
+  );
+
   // Piste Challenges = niveau « méta » (tous les défis) — affiché à part, PAS
   // ajouté au Global (l'effort est déjà compté dans muscu / cardio).
   const challengesXp = computed(() => challengeXpPoints(challenges.list));
@@ -87,5 +99,9 @@ export function useProgress() {
     tennis: computed(() => computeLevel(tennisXp.value)),
     cardio: computed(() => computeLevel(cardioXp.value)),
     challenges: computed(() => computeLevel(challengesXp.value)),
+    // Données brutes pour le RPG (fond uniquement).
+    muscuXp: computed(() => muscuTotal.value),
+    cardioXp: computed(() => cardioXp.value),
+    fondMinutes,
   };
 }
