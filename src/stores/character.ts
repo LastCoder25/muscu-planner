@@ -7,6 +7,8 @@ import { normalizePseudo } from '@/lib/character';
 export interface CharacterRow {
   user_id: string;
   pseudo: string;
+  gold: number;
+  energy_spent: number;
 }
 
 export class PseudoTakenError extends Error {
@@ -20,11 +22,10 @@ export const useCharacterStore = defineStore('character', () => {
   const row = ref<CharacterRow | null>(null);
   const loaded = ref(false);
 
+  const COLS = 'user_id, pseudo, gold, energy_spent';
+
   async function fetchMine() {
-    const { data, error } = await supabase
-      .from('characters')
-      .select('user_id, pseudo')
-      .maybeSingle();
+    const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
     if (error) throw error;
     row.value = data ?? null;
     loaded.value = true;
@@ -38,7 +39,7 @@ export const useCharacterStore = defineStore('character', () => {
     const { data, error } = await supabase
       .from('characters')
       .upsert({ user_id: userId, pseudo, updated_at: new Date().toISOString() })
-      .select('user_id, pseudo')
+      .select(COLS)
       .single();
     if (error) {
       if (error.code === '23505') throw new PseudoTakenError();
@@ -48,7 +49,24 @@ export const useCharacterStore = defineStore('character', () => {
     return data;
   }
 
-  return { row, loaded, fetchMine, setPseudo };
+  // Applique le résultat d'un combat : dépense l'énergie, encaisse l'or gagné.
+  async function applyCombat(userId: string, energyCost: number, goldWon: number) {
+    const cur = row.value;
+    if (!cur) return;
+    const gold = cur.gold + goldWon;
+    const energy_spent = cur.energy_spent + energyCost;
+    const { data, error } = await supabase
+      .from('characters')
+      .update({ gold, energy_spent, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .select(COLS)
+      .single();
+    if (error) throw error;
+    row.value = data;
+    return data;
+  }
+
+  return { row, loaded, fetchMine, setPseudo, applyCombat };
 });
 
 if (import.meta.hot) {

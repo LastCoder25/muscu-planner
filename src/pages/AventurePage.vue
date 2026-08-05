@@ -68,7 +68,7 @@
             </button>
           </div>
           <div class="sub">
-            Profil : <b>{{ profileLabel }}</b> · plafond équipement Niv. {{ c.level.level }}
+            Profil : <b>{{ profileLabel }}</b> · 🪙 {{ char.row.gold }} or
           </div>
         </div>
       </div>
@@ -117,9 +117,44 @@
         Points de vie : <b class="font-display">{{ c.pv }} PV</b>
       </div>
 
-      <div class="cta">
-        ⚔️ Partir à l'aventure
-        <small>Donjons & combats — bientôt</small>
+      <!-- Combat d'essai (Phase 2a) -->
+      <div class="sec-title">Combat d'essai</div>
+
+      <div v-if="result" class="result" :class="result.win ? 'win' : 'lose'">
+        <div class="result-head">
+          <span>{{ result.win ? '🏆 Victoire' : '💀 Défaite' }} — {{ result.monster.name }}</span>
+          <span v-if="result.win" class="result-gold">+{{ result.gold }} 🪙</span>
+        </div>
+        <div class="result-sub">
+          {{ result.rounds }} tours · {{ result.win ? 'monstre vaincu' : 'tu es tombé' }}
+        </div>
+        <div class="log">
+          <div v-for="(e, i) in result.log" :key="i" class="log-line" :class="'lg-' + e.type">
+            <span class="lg-who">{{ e.who === 'player' ? 'Toi' : result.monster.name }}</span>
+            <span v-if="e.type === 'dodge'">esquive !</span>
+            <span v-else>{{ e.type === 'crit' ? 'CRIT' : 'frappe' }} −{{ e.damage }}</span>
+            <span class="lg-pv">❤️ {{ e.playerPv }} · 👹 {{ e.monsterPv }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="monsters">
+        <div v-for="m in MONSTERS" :key="m.id" class="mon">
+          <span class="mon-emo">{{ m.emoji }}</span>
+          <div class="mon-main">
+            <div class="mon-top">
+              <span class="mon-name font-display">{{ m.name }}</span>
+              <span class="mon-gold">+{{ m.gold }} 🪙</span>
+            </div>
+            <div class="mon-stats">
+              ❤️ {{ m.pv }} · 🗡️ {{ m.damage }} · coûte {{ m.energyCost }} ⚡
+            </div>
+            <div class="mon-hint">{{ m.hint }}</div>
+          </div>
+          <button class="fight" :disabled="c.energy < m.energyCost || busy" @click="fight(m)">
+            Combattre
+          </button>
+        </div>
       </div>
 
       <div class="foot">
@@ -138,6 +173,8 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
+import { playerCombatant, simulateCombat, type CombatResult } from '@/lib/combat';
+import { MONSTERS, type Monster } from '@/data/monsters';
 
 const $q = useQuasar();
 const auth = useAuthStore();
@@ -150,9 +187,34 @@ const pseudoInput = ref('');
 const pseudoError = ref('');
 
 const c = computed(() =>
-  computeCharacter(progress.muscuXp.value, progress.cardioXp.value, progress.fondMinutes.value),
+  computeCharacter(
+    progress.muscuXp.value,
+    progress.cardioXp.value,
+    progress.fondMinutes.value,
+    char.row?.energy_spent ?? 0,
+  ),
 );
 const profileLabel = computed(() => PROFILE_LABEL[c.value.profile]);
+
+const busy = ref(false);
+const result = ref<(CombatResult & { monster: Monster }) | null>(null);
+
+async function fight(m: Monster) {
+  const uid = auth.user?.id;
+  if (!uid || busy.value || c.value.energy < m.energyCost) return;
+  busy.value = true;
+  try {
+    const seed = Math.floor(Math.random() * 1e9);
+    const player = playerCombatant(char.row?.pseudo ?? 'Toi', c.value);
+    const r = simulateCombat(player, m, { seed, goldOnWin: m.gold });
+    await char.applyCombat(uid, m.energyCost, r.gold);
+    result.value = { ...r, monster: m };
+  } catch {
+    $q.notify({ type: 'negative', message: 'Échec du combat.' });
+  } finally {
+    busy.value = false;
+  }
+}
 
 // Barres relatives : montrent la FORME du build (stat / plus haute des trois).
 function barW(v: number): string {
@@ -442,27 +504,140 @@ onMounted(async () => {
   font-size: 20px;
   color: var(--d1);
 }
-.cta {
-  width: 100%;
-  border: 1px dashed var(--line);
-  background: var(--surface);
-  color: var(--dim);
-  border-radius: 14px;
-  padding: 16px;
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-align: center;
+.monsters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin-bottom: 22px;
 }
-.cta small {
-  display: block;
-  font-weight: 400;
+.mon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.mon-emo {
+  font-size: 28px;
+  line-height: 1;
+}
+.mon-main {
+  flex: 1;
+  min-width: 0;
+}
+.mon-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mon-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+.mon-gold {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.mon-stats {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.mon-hint {
   font-size: 11px;
+  color: var(--dim);
+  opacity: 0.85;
   margin-top: 4px;
-  text-transform: none;
-  letter-spacing: 0;
+}
+.fight {
+  flex-shrink: 0;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.fight:disabled {
+  background: transparent;
+  color: var(--dim);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+.result {
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+}
+.result.win {
+  border-left-color: var(--d1);
+}
+.result.lose {
+  border-left-color: var(--d4);
+}
+.result-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+}
+.result.win .result-head {
+  color: var(--d1);
+}
+.result.lose .result-head {
+  color: var(--d4);
+}
+.result-gold {
+  color: var(--accent);
+}
+.result-sub {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 2px 0 8px;
+}
+.log {
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.log-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.lg-who {
+  color: var(--text);
+  font-weight: 600;
+  min-width: 34px;
+}
+.log-line.lg-crit {
+  color: var(--accent);
+}
+.log-line.lg-dodge {
+  font-style: italic;
+}
+.lg-pv {
+  margin-left: auto;
+  opacity: 0.8;
 }
 .foot {
   font-size: 11.5px;
