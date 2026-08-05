@@ -21,6 +21,8 @@ export interface Combatant {
   crit: number; // proba de critique (0..1, ×2 dégâts)
   dodge: number; // proba d'esquive (0..1)
   initiative: number; // qui commence (plus haut = d'abord)
+  dmgReduction?: number; // 0..1 : dégâts reçus réduits (effet d'armure)
+  lifesteal?: number; // 0..1 : PV rendus = part des dégâts infligés (effet d'arme)
 }
 
 // Coefficients d'équilibrage (ajustables en un endroit).
@@ -92,9 +94,15 @@ export function simulateCombat(
     } else {
       const crit = rng() < atk.crit;
       const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
-      const dmg = Math.max(1, Math.round(atk.damage * (crit ? 2 : 1) * variance));
-      if (turn === 'player') mPv = Math.max(0, mPv - dmg);
-      else pPv = Math.max(0, pPv - dmg);
+      let dmg = Math.max(1, Math.round(atk.damage * (crit ? 2 : 1) * variance));
+      if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
+      if (turn === 'player') {
+        mPv = Math.max(0, mPv - dmg);
+        if (atk.lifesteal) pPv = Math.min(player.pv, pPv + Math.round(dmg * atk.lifesteal));
+      } else {
+        pPv = Math.max(0, pPv - dmg);
+        if (atk.lifesteal) mPv = Math.min(monster.pv, mPv + Math.round(dmg * atk.lifesteal));
+      }
       log.push({
         round,
         who: turn,

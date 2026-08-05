@@ -20,7 +20,7 @@
         />
         <div class="hint">3 à 20 caractères · lettres, chiffres, espace, - et _</div>
         <q-btn
-          class="save full-width q-mt-md"
+          class="full-width q-mt-md"
           color="primary"
           text-color="dark"
           no-caps
@@ -34,135 +34,179 @@
       </section>
     </template>
 
-    <!-- Fiche personnage -->
     <template v-else>
-      <div class="eyebrow">Ton aventurier</div>
-
-      <div class="hero">
-        <div class="lvl-ring">
-          <svg viewBox="0 0 84 84" aria-hidden="true">
-            <circle cx="42" cy="42" r="38" fill="none" stroke="#000" stroke-width="5" />
-            <circle
-              cx="42"
-              cy="42"
-              r="38"
-              fill="none"
-              stroke="var(--accent)"
-              stroke-width="5"
-              stroke-linecap="round"
-              stroke-dasharray="239"
-              :stroke-dashoffset="239 * (1 - c.level.progressPct / 100)"
-              transform="rotate(-90 42 42)"
-            />
-          </svg>
-          <div class="ring-txt">
-            <div class="num font-display">{{ c.level.level }}</div>
-            <div class="cap">Niveau</div>
-          </div>
-        </div>
-        <div class="who">
-          <div class="name font-display">
-            {{ char.row.pseudo }}
-            <button class="edit" aria-label="Renommer" @click="renamePseudo">
-              <q-icon name="edit" size="15px" />
-            </button>
-          </div>
-          <div class="sub">
-            Profil : <b>{{ profileLabel }}</b> · 🪙 {{ char.row.gold }} or
-          </div>
-        </div>
-      </div>
-
-      <div class="energy">
-        <div>
-          <div class="lab">Énergie</div>
-          <div class="ehint">gagnée en faisant du sport · sert aux aventures</div>
-        </div>
-        <div class="eval font-display">{{ c.energy }}<small> ⚡</small></div>
-      </div>
-
-      <div class="sec-title">Caractéristiques — issues de ton sport</div>
-      <div class="stats">
-        <div class="stat s-pui">
-          <div class="top">
-            <span class="emo">💪</span><span class="nm font-display">Puissance</span
-            ><span class="n font-display">{{ c.puissance }}</span>
-          </div>
-          <div class="bar"><span :style="{ width: barW(c.puissance) }" /></div>
-          <div class="lines"><b>Musculation</b> · <span class="infl">dégâts</span></div>
-        </div>
-        <div class="stat s-end">
-          <div class="top">
-            <span class="emo">❤️</span><span class="nm font-display">Endurance</span
-            ><span class="n font-display">{{ c.endurance }}</span>
-          </div>
-          <div class="bar"><span :style="{ width: barW(c.endurance) }" /></div>
-          <div class="lines">
-            <b>Muscu + Cardio</b> · <span class="infl">PV · résistance · énergie max</span>
-          </div>
-        </div>
-        <div class="stat s-agi">
-          <div class="top">
-            <span class="emo">⚡</span><span class="nm font-display">Agilité</span
-            ><span class="n font-display">{{ c.agilite }}</span>
-          </div>
-          <div class="bar"><span :style="{ width: barW(c.agilite) }" /></div>
-          <div class="lines">
-            <b>Cardio</b> · <span class="infl">esquive · vitesse · critiques · initiative</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="pv-line">
-        Points de vie : <b class="font-display">{{ c.pv }} PV</b>
-      </div>
-
-      <!-- Donjons (Phase 2b) -->
-      <div class="sec-title">Donjons</div>
-
-      <div v-if="run" class="result" :class="run.cleared ? 'win' : 'lose'">
-        <div class="result-head">
-          <span>{{ run.cleared ? '🏆 Donjon nettoyé' : '💀 Échec' }} — {{ run.name }}</span>
-          <span class="result-gold">+{{ run.gold }} 🪙</span>
-        </div>
-        <div class="result-sub">
-          {{ run.defeated }}/{{ run.total }} monstres vaincus · PV restants {{ run.finalPv }}
-        </div>
-        <div class="log">
-          <div v-for="(f, i) in run.fights" :key="i" class="fight-row" :class="f.win ? 'fw' : 'fl'">
-            <span class="fr-emo">{{ f.emoji }}</span>
-            <span class="fr-name">{{ f.monster }}</span>
-            <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
-            <span class="fr-rounds">{{ f.rounds }} tours</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="dungeons">
-        <div v-for="d in DUNGEONS" :key="d.id" class="dgn">
-          <span class="dgn-emo">{{ d.emoji }}</span>
-          <div class="dgn-main">
-            <div class="dgn-top">
-              <span class="dgn-name font-display">{{ d.name }}</span>
-              <span class="dgn-gold">+{{ dungeonGold(d) }} 🪙</span>
-            </div>
-            <div class="dgn-stats">
-              {{ d.monsterIds.length }} monstres · coûte {{ d.energyCost }} ⚡ · conseillé niv.
-              {{ d.recoLevel }}
-            </div>
-            <div class="dgn-hint">{{ d.hint }}</div>
-          </div>
-          <button class="fight" :disabled="c.energy < d.energyCost || busy" @click="explore(d)">
-            Explorer
+      <!-- Bandeau compact toujours visible -->
+      <div class="topbar">
+        <div class="tb-left">
+          <span class="tb-lvl font-display">Niv. {{ c.level.level }}</span>
+          <span class="tb-name font-display">{{ char.row.pseudo }}</span>
+          <button class="edit" aria-label="Renommer" @click="renamePseudo">
+            <q-icon name="edit" size="14px" />
           </button>
         </div>
+        <div class="tb-right">
+          <span class="tb-chip">⚡ {{ c.energy }}</span>
+          <span class="tb-chip gold">🪙 {{ char.row.gold }}</span>
+        </div>
       </div>
 
-      <div class="foot">
-        <b>Chaque séance fait progresser ton aventurier.</b> Tu ne répartis jamais de points : la
-        muscu nourrit la Puissance, le cardio l'Agilité, les deux l'Endurance. Ton sport génère
-        aussi l'énergie des donjons. Le tennis (spécifique) n'entre pas dans le personnage.
+      <div class="seg">
+        <button class="seg-b" :class="{ on: tab === 'perso' }" @click="tab = 'perso'">
+          <q-icon name="person" size="18px" /> Personnage
+        </button>
+        <button class="seg-b" :class="{ on: tab === 'donjons' }" @click="tab = 'donjons'">
+          <q-icon name="castle" size="18px" /> Donjons
+        </button>
       </div>
+
+      <!-- ONGLET PERSONNAGE -->
+      <template v-if="tab === 'perso'">
+        <div class="stats">
+          <div class="stat s-pui">
+            <div class="top">
+              <span class="emo">💪</span><span class="nm font-display">Puissance</span
+              ><span class="n font-display">{{ c.puissance }}</span>
+            </div>
+            <div class="bar"><span :style="{ width: barW(c.puissance) }" /></div>
+            <div class="lines"><b>Musculation</b> · <span class="infl">dégâts</span></div>
+          </div>
+          <div class="stat s-end">
+            <div class="top">
+              <span class="emo">❤️</span><span class="nm font-display">Endurance</span
+              ><span class="n font-display">{{ c.endurance }}</span>
+            </div>
+            <div class="bar"><span :style="{ width: barW(c.endurance) }" /></div>
+            <div class="lines">
+              <b>Muscu + Cardio</b> · <span class="infl">PV · résistance</span>
+            </div>
+          </div>
+          <div class="stat s-agi">
+            <div class="top">
+              <span class="emo">⚡</span><span class="nm font-display">Agilité</span
+              ><span class="n font-display">{{ c.agilite }}</span>
+            </div>
+            <div class="bar"><span :style="{ width: barW(c.agilite) }" /></div>
+            <div class="lines">
+              <b>Cardio</b> · <span class="infl">esquive · critiques · initiative</span>
+            </div>
+          </div>
+        </div>
+        <div class="pv-line">
+          ❤️ <b class="font-display">{{ c.pv + bonusPv }} PV</b>
+          <span v-if="bonusPv" class="pv-bonus">(+{{ bonusPv }} équipement)</span>
+        </div>
+
+        <div class="sec-title">Équipement</div>
+        <div class="gear">
+          <div
+            v-for="slot in SLOTS"
+            :key="slot"
+            class="slot"
+            :class="char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty'"
+          >
+            <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
+            <div class="slot-main">
+              <div class="slot-lbl">{{ SLOT_LABEL[slot] }}</div>
+              <template v-if="char.row.equipped[slot]">
+                <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
+                <div class="slot-eff">{{ effectLabel(char.row.equipped[slot]!.effect) }}</div>
+              </template>
+              <div v-else class="slot-vide">vide</div>
+            </div>
+            <button
+              v-if="char.row.equipped[slot]"
+              class="slot-x"
+              aria-label="Déséquiper"
+              @click="doUnequip(slot)"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <template v-if="char.row.inventory.length">
+          <div class="sec-title">Sac ({{ char.row.inventory.length }})</div>
+          <div class="inv">
+            <div
+              v-for="it in char.row.inventory"
+              :key="it.id"
+              class="inv-item"
+              :class="'r-' + it.rarity"
+            >
+              <span class="inv-emo">{{ it.emoji }}</span>
+              <div class="inv-main">
+                <div class="inv-name">{{ it.name }}</div>
+                <div class="inv-eff">{{ SLOT_LABEL[it.slot] }} · {{ effectLabel(it.effect) }}</div>
+              </div>
+              <button class="equip-btn" @click="doEquip(it.id)">Équiper</button>
+            </div>
+          </div>
+        </template>
+
+        <div class="foot">
+          <b>Chaque séance fait progresser ton aventurier.</b> Les stats viennent du sport ;
+          l'énergie aussi. L'équipement, lui, ne donne pas de stats mais des <b>effets</b> (vol de
+          vie, réduction de dégâts, or…) → à toi de composer ton style.
+        </div>
+      </template>
+
+      <!-- ONGLET DONJONS -->
+      <template v-else>
+        <div v-if="run" class="result" :class="run.cleared ? 'win' : 'lose'">
+          <div class="result-head">
+            <span>{{ run.cleared ? '🏆 Donjon nettoyé' : '💀 Échec' }} — {{ run.name }}</span>
+            <span class="result-gold">+{{ run.gold }} 🪙</span>
+          </div>
+          <div class="result-sub">
+            {{ run.defeated }}/{{ run.total }} monstres vaincus · PV restants {{ run.finalPv }}
+          </div>
+          <div class="log">
+            <div
+              v-for="(f, i) in run.fights"
+              :key="i"
+              class="fight-row"
+              :class="f.win ? 'fw' : 'fl'"
+            >
+              <span class="fr-emo">{{ f.emoji }}</span>
+              <span class="fr-name">{{ f.monster }}</span>
+              <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
+              <span class="fr-rounds">{{ f.rounds }} tours</span>
+            </div>
+          </div>
+          <div v-if="run.drops.length" class="drops">
+            <div class="drops-lbl">✨ Butin</div>
+            <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
+              <span class="inv-emo">{{ d.emoji }}</span>
+              <div class="inv-main">
+                <div class="inv-name">
+                  {{ d.name }} <span class="rarity">{{ RARITY_LABEL[d.rarity] }}</span>
+                </div>
+                <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ effectLabel(d.effect) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dungeons">
+          <div v-for="d in DUNGEONS" :key="d.id" class="dgn">
+            <span class="dgn-emo">{{ d.emoji }}</span>
+            <div class="dgn-main">
+              <div class="dgn-top">
+                <span class="dgn-name font-display">{{ d.name }}</span>
+                <span class="dgn-gold">+{{ dungeonGold(d) }} 🪙</span>
+              </div>
+              <div class="dgn-stats">
+                {{ d.monsterIds.length }} monstres · coûte {{ d.energyCost }} ⚡ · conseillé niv.
+                {{ d.recoLevel }}
+              </div>
+              <div class="dgn-hint">{{ d.hint }}</div>
+            </div>
+            <button class="fight" :disabled="c.energy < d.energyCost || busy" @click="explore(d)">
+              Explorer
+            </button>
+          </div>
+        </div>
+      </template>
     </template>
   </q-page>
 </template>
@@ -173,10 +217,22 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
-import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
-import { playerCombatant, simulateDungeon } from '@/lib/combat';
+import { computeCharacter, isValidPseudo } from '@/lib/character';
+import { simulateDungeon, mulberry32 } from '@/lib/combat';
 import { MONSTERS } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
+import {
+  playerWithGear,
+  aggregateEffects,
+  rollDrop,
+  effectLabel,
+  SLOTS,
+  SLOT_LABEL,
+  SLOT_EMOJI,
+  RARITY_LABEL,
+  type Item,
+  type ItemSlot,
+} from '@/lib/items';
 
 interface RunFight {
   monster: string;
@@ -192,6 +248,7 @@ interface RunView {
   gold: number;
   finalPv: number;
   fights: RunFight[];
+  drops: Item[];
 }
 
 const $q = useQuasar();
@@ -203,6 +260,7 @@ const loading = ref(true);
 const saving = ref(false);
 const pseudoInput = ref('');
 const pseudoError = ref('');
+const tab = ref<'perso' | 'donjons'>('perso');
 
 const c = computed(() =>
   computeCharacter(
@@ -212,26 +270,47 @@ const c = computed(() =>
     char.row?.energy_spent ?? 0,
   ),
 );
-const profileLabel = computed(() => PROFILE_LABEL[c.value.profile]);
+// PV bonus apporté par l'équipement (max_pv_pct) — affiché à titre indicatif.
+const bonusPv = computed(() => {
+  if (!char.row) return 0;
+  const pct = aggregateEffects(char.row.equipped).maxPvPct;
+  return Math.round(c.value.pv * pct);
+});
+
+function barW(v: number): string {
+  const max = Math.max(c.value.puissance, c.value.endurance, c.value.agilite, 1);
+  return `${Math.round((v / max) * 100)}%`;
+}
 
 const busy = ref(false);
 const run = ref<RunView | null>(null);
 
 async function explore(d: Dungeon) {
   const uid = auth.user?.id;
-  if (!uid || busy.value || c.value.energy < d.energyCost) return;
+  if (!uid || !char.row || busy.value || c.value.energy < d.energyCost) return;
   busy.value = true;
   try {
     const seed = Math.floor(Math.random() * 1e9);
-    const player = playerCombatant(char.row?.pseudo ?? 'Toi', c.value);
+    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped);
     const r = simulateDungeon(player, dungeonFoes(d), { seed });
-    await char.applyCombat(uid, d.energyCost, r.gold);
+    const goldPct = aggregateEffects(char.row.equipped).goldPct;
+    const gold = Math.round(r.gold * (1 + goldPct));
+    // Butin (RNG dérivé du seed du run).
+    const dropRng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+    const drops: Item[] = [];
+    const rolled = rollDrop(dropRng, {
+      playerLevel: c.value.level.level,
+      cleared: r.cleared,
+      defeated: r.defeated,
+    });
+    if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
+    await char.applyRun(uid, { energyCost: d.energyCost, gold, drops });
     run.value = {
       name: d.name,
       cleared: r.cleared,
       defeated: r.defeated,
       total: r.total,
-      gold: r.gold,
+      gold,
       finalPv: r.finalPv,
       fights: r.fights.map((f) => ({
         monster: f.monster,
@@ -239,8 +318,9 @@ async function explore(d: Dungeon) {
         win: f.win,
         rounds: f.result.rounds,
       })),
+      drops,
     };
-    if (r.cleared) $q.notify({ type: 'positive', message: `Donjon nettoyé — +${r.gold} 🪙` });
+    if (r.cleared) $q.notify({ type: 'positive', message: `Donjon nettoyé — +${gold} 🪙` });
   } catch {
     $q.notify({ type: 'negative', message: 'Échec de l’exploration.' });
   } finally {
@@ -248,10 +328,23 @@ async function explore(d: Dungeon) {
   }
 }
 
-// Barres relatives : montrent la FORME du build (stat / plus haute des trois).
-function barW(v: number): string {
-  const max = Math.max(c.value.puissance, c.value.endurance, c.value.agilite, 1);
-  return `${Math.round((v / max) * 100)}%`;
+async function doEquip(itemId: string) {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  try {
+    await char.equip(uid, itemId);
+  } catch {
+    $q.notify({ type: 'negative', message: 'Impossible d’équiper.' });
+  }
+}
+async function doUnequip(slot: ItemSlot) {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  try {
+    await char.unequip(uid, slot);
+  } catch {
+    $q.notify({ type: 'negative', message: 'Impossible de déséquiper.' });
+  }
 }
 
 async function savePseudo() {
@@ -314,7 +407,7 @@ onMounted(async () => {
 .adv-page {
   background: var(--bg);
   min-height: 100vh;
-  padding: 20px 16px 40px;
+  padding: 18px 16px 40px;
 }
 .page-title {
   font-size: 30px;
@@ -339,109 +432,96 @@ onMounted(async () => {
   color: var(--dim);
   margin-top: 6px;
 }
-.eyebrow {
-  font-family: var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: 3px;
-  font-size: 11px;
-  color: var(--dim);
-  font-weight: 600;
-}
-.hero {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 16px;
-  align-items: center;
-  margin: 6px 0 18px;
-}
-.lvl-ring {
-  position: relative;
-  width: 84px;
-  height: 84px;
-  display: grid;
-  place-items: center;
-}
-.lvl-ring svg {
-  position: absolute;
-  inset: 0;
-}
-.ring-txt {
-  text-align: center;
-}
-.lvl-ring .num {
-  font-size: 40px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--accent);
-}
-.lvl-ring .cap {
-  font-size: 9px;
-  letter-spacing: 2px;
-  color: var(--dim);
-  text-transform: uppercase;
-}
-.who .name {
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1;
-  margin: 4px 0 4px;
-  color: var(--text);
+
+/* Topbar compacte */
+.topbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.tb-left {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
+  min-width: 0;
+}
+.tb-lvl {
+  background: var(--surface-2, #2b241b);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.tb-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .edit {
   background: none;
   border: none;
   color: var(--dim);
   cursor: pointer;
-  padding: 2px;
+  padding: 0;
+  flex-shrink: 0;
 }
-.who .sub {
-  font-size: 13px;
-  color: var(--dim);
-}
-.who .sub b {
-  color: var(--d1);
-  font-weight: 600;
-  text-transform: capitalize;
-}
-.energy {
-  background: linear-gradient(180deg, var(--surface-2, #2b241b), var(--surface));
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
-  border-radius: 14px;
-  padding: 14px 16px;
-  margin-bottom: 22px;
+.tb-right {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 6px;
+  flex-shrink: 0;
 }
-.energy .lab {
-  font-family: var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  font-size: 12px;
-  color: var(--dim);
-}
-.energy .ehint {
-  font-size: 11px;
-  color: var(--dim);
-  margin-top: 3px;
-}
-.energy .eval {
-  font-size: 40px;
-  font-weight: 700;
-  color: var(--accent);
-  line-height: 1;
+.tb-chip {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.energy .eval small {
-  font-size: 15px;
-  color: var(--dim);
-  font-weight: 400;
+.tb-chip.gold {
+  color: var(--accent);
 }
+
+/* Onglets */
+.seg {
+  display: flex;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 18px;
+}
+.seg-b {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 8px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.seg-b.on {
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+}
+
 .sec-title {
   font-family: var(--font-display);
   text-transform: uppercase;
@@ -451,17 +531,19 @@ onMounted(async () => {
   margin: 0 2px 10px;
   font-weight: 600;
 }
+
+/* Stats */
 .stats {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 18px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 .stat {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: 11px 14px;
 }
 .stat .top {
   display: flex;
@@ -469,28 +551,27 @@ onMounted(async () => {
   gap: 10px;
 }
 .stat .emo {
-  font-size: 22px;
-  width: 26px;
+  font-size: 20px;
+  width: 24px;
   text-align: center;
 }
 .stat .nm {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
-  letter-spacing: 0.5px;
   flex: 1;
 }
 .stat .n {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .bar {
-  height: 7px;
+  height: 6px;
   border-radius: 999px;
   background: #000;
   border: 1px solid var(--line);
   overflow: hidden;
-  margin: 9px 0 6px;
+  margin: 8px 0 5px;
 }
 .bar > span {
   display: block;
@@ -530,12 +611,154 @@ onMounted(async () => {
   text-align: center;
   font-size: 13px;
   color: var(--dim);
-  margin-bottom: 22px;
+  margin-bottom: 20px;
 }
 .pv-line b {
   font-size: 20px;
   color: var(--d1);
 }
+.pv-bonus {
+  color: var(--d1);
+  font-size: 11px;
+}
+
+/* Équipement */
+.gear {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-height: 62px;
+}
+.slot.empty {
+  border-style: dashed;
+  border-left-color: var(--line);
+}
+.slot-emo {
+  font-size: 20px;
+}
+.slot-main {
+  flex: 1;
+  min-width: 0;
+}
+.slot-lbl {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--dim);
+}
+.slot-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.slot-eff {
+  font-size: 11px;
+  color: var(--dim);
+}
+.slot-vide {
+  font-size: 12px;
+  color: var(--dim);
+  opacity: 0.7;
+}
+.slot-x {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+/* Sac / inventaire */
+.inv {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.inv-item,
+.drop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.inv-emo {
+  font-size: 20px;
+}
+.inv-main {
+  flex: 1;
+  min-width: 0;
+}
+.inv-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.inv-eff {
+  font-size: 11px;
+  color: var(--dim);
+}
+.rarity {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+.equip-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Raretés */
+.r-common {
+  border-left-color: var(--dim);
+}
+.r-rare {
+  border-left-color: #4ec6d6;
+}
+.r-rare .rarity {
+  color: #4ec6d6;
+}
+.r-epic {
+  border-left-color: #b07cff;
+}
+.r-epic .rarity {
+  color: #b07cff;
+}
+.r-legendary {
+  border-left-color: var(--accent);
+}
+.r-legendary .rarity {
+  color: var(--accent);
+}
+
+/* Donjons */
 .dungeons {
   display: flex;
   flex-direction: column;
@@ -553,7 +776,6 @@ onMounted(async () => {
 }
 .dgn-emo {
   font-size: 28px;
-  line-height: 1;
 }
 .dgn-main {
   flex: 1;
@@ -587,34 +809,6 @@ onMounted(async () => {
   opacity: 0.85;
   margin-top: 4px;
 }
-.fight-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--dim);
-}
-.fight-row .fr-emo {
-  font-size: 16px;
-}
-.fight-row .fr-name {
-  color: var(--text);
-  font-weight: 600;
-}
-.fight-row .fr-out {
-  font-weight: 600;
-}
-.fight-row.fw .fr-out {
-  color: var(--d1);
-}
-.fight-row.fl .fr-out {
-  color: var(--d4);
-}
-.fight-row .fr-rounds {
-  margin-left: auto;
-  opacity: 0.8;
-  font-variant-numeric: tabular-nums;
-}
 .fight {
   flex-shrink: 0;
   border: 1px solid var(--accent);
@@ -633,6 +827,8 @@ onMounted(async () => {
   border-color: var(--line);
   cursor: not-allowed;
 }
+
+/* Résultat de run */
 .result {
   border-radius: 14px;
   padding: 14px;
@@ -670,35 +866,53 @@ onMounted(async () => {
   margin: 2px 0 8px;
 }
 .log {
-  max-height: 180px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-.log-line {
+.fight-row {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 11.5px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
   color: var(--dim);
-  font-variant-numeric: tabular-nums;
 }
-.lg-who {
+.fight-row .fr-emo {
+  font-size: 16px;
+}
+.fight-row .fr-name {
   color: var(--text);
   font-weight: 600;
-  min-width: 34px;
 }
-.log-line.lg-crit {
-  color: var(--accent);
+.fight-row .fr-out {
+  font-weight: 600;
 }
-.log-line.lg-dodge {
-  font-style: italic;
+.fight-row.fw .fr-out {
+  color: var(--d1);
 }
-.lg-pv {
+.fight-row.fl .fr-out {
+  color: var(--d4);
+}
+.fight-row .fr-rounds {
   margin-left: auto;
   opacity: 0.8;
+  font-variant-numeric: tabular-nums;
 }
+.drops {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.drops-lbl {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--accent);
+}
+
 .foot {
   font-size: 11.5px;
   color: var(--dim);
