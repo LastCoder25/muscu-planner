@@ -147,6 +147,13 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
+  // Dépense de l'énergie (ex. frappe du boss communautaire) sans autre effet local.
+  async function spendEnergy(userId: string, amount: number) {
+    const cur = row.value;
+    if (!cur || amount <= 0) return;
+    return persist(userId, { energy_spent: cur.energy_spent + amount });
+  }
+
   // Réinitialise les talents (respec) contre de l'or → on les rechoisit ensuite.
   async function resetTalents(userId: string, cost: number) {
     const cur = row.value;
@@ -197,6 +204,7 @@ export const useCharacterStore = defineStore('character', () => {
     sell,
     upgradeItem,
     resetTalents,
+    spendEnergy,
   };
 });
 
