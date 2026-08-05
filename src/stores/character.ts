@@ -11,6 +11,7 @@ import {
   type ItemSlot,
   type Equipped,
 } from '@/lib/items';
+import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 
 export interface CharacterRow {
   user_id: string;
@@ -22,6 +23,10 @@ export interface CharacterRow {
   inventory: Item[];
   talents: string[];
   cleared_dungeons: string[];
+  login_streak: number;
+  login_grace_used: boolean;
+  last_login_date: string | null;
+  login_energy: number;
 }
 
 export class PseudoTakenError extends Error {
@@ -36,7 +41,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, login_streak, login_grace_used, last_login_date, login_energy';
 
   async function fetchMine() {
     const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
@@ -161,6 +166,28 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
+  // Récompense de connexion du jour (une fois par jour logique). Renvoie le gain
+  // (énergie + streak) pour l'animation, ou null si déjà réclamée aujourd'hui.
+  async function claimDailyLogin(userId: string, todayIso: string, level: number) {
+    const cur = row.value;
+    if (!cur) return null;
+    if (cur.last_login_date && daysBetweenIso(cur.last_login_date, todayIso) <= 0) return null;
+    const gap = cur.last_login_date ? daysBetweenIso(cur.last_login_date, todayIso) : 999;
+    const prev = cur.last_login_date
+      ? { streak: cur.login_streak, graceUsed: cur.login_grace_used }
+      : null;
+    const next = advanceStreak(prev, gap);
+    const energy = dailyLoginEnergy(next.streak, level);
+    const usedGrace = gap === 2 && !!prev && !prev.graceUsed;
+    await persist(userId, {
+      login_streak: next.streak,
+      login_grace_used: next.graceUsed,
+      last_login_date: todayIso,
+      login_energy: cur.login_energy + energy,
+    });
+    return { streak: next.streak, energy, usedGrace };
+  }
+
   // Dépense de l'énergie (ex. frappe du boss communautaire) sans autre effet local.
   async function spendEnergy(userId: string, amount: number) {
     const cur = row.value;
@@ -219,6 +246,7 @@ export const useCharacterStore = defineStore('character', () => {
     upgradeItem,
     resetTalents,
     spendEnergy,
+    claimDailyLogin,
   };
 });
 

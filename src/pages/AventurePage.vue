@@ -51,9 +51,29 @@
         </div>
       </div>
 
+      <button
+        v-if="loginClaimable"
+        class="login-card"
+        :disabled="claimingLogin"
+        @click="claimLogin"
+      >
+        <span class="lc-emo">🎁</span>
+        <div class="lc-main">
+          <div class="lc-title font-display">Récompense du jour</div>
+          <div class="lc-sub">
+            🔥 {{ loginPreview.streak }} j de suite · gagne
+            <b>+{{ loginPreview.energy }} ⚡</b>
+          </div>
+        </div>
+        <span class="lc-cta font-display">Récupérer</span>
+      </button>
+
       <div class="seg">
         <button class="seg-b" :class="{ on: tab === 'perso' }" @click="tab = 'perso'">
           <q-icon name="person" size="18px" /> Perso
+        </button>
+        <button class="seg-b" :class="{ on: tab === 'equip' }" @click="tab = 'equip'">
+          <q-icon name="checkroom" size="18px" /> Équip.
         </button>
         <button class="seg-b" :class="{ on: tab === 'donjons' }" @click="tab = 'donjons'">
           <q-icon name="castle" size="18px" /> Donjons
@@ -167,6 +187,14 @@
           Prochain talent au niveau {{ nextTalentLevel }}.
         </div>
 
+        <div class="foot">
+          <b>Chaque séance fait progresser ton aventurier.</b> Les stats et le niveau viennent du
+          sport. La connexion quotidienne, elle, ne donne qu'un peu d'énergie pour jouer.
+        </div>
+      </template>
+
+      <!-- ONGLET ÉQUIPEMENT -->
+      <template v-else-if="tab === 'equip'">
         <div class="sec-title">Équipement</div>
         <div class="gear">
           <div
@@ -237,11 +265,13 @@
             </div>
           </div>
         </template>
+        <div v-else class="empty-inv">
+          Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
+        </div>
 
         <div class="foot">
-          <b>Chaque séance fait progresser ton aventurier.</b> Les stats viennent du sport ;
-          l'énergie aussi. L'équipement, lui, ne donne pas de stats mais des <b>effets</b> (vol de
-          vie, réduction de dégâts, or…) → à toi de composer ton style.
+          L'équipement ne donne pas de stats (elles viennent du sport) mais des <b>effets</b> — vol
+          de vie, réduction de dégâts, or… → à toi de composer ton style.
         </div>
       </template>
 
@@ -426,6 +456,22 @@
         </div>
       </div>
     </transition>
+
+    <!-- Animation : récompense de connexion -->
+    <transition name="lb-fade">
+      <div v-if="loginBurst" class="lb-backdrop" @click="loginBurst = null">
+        <div class="lb-card">
+          <span class="lb-wave" aria-hidden="true" />
+          <span class="lb-bolt">⚡</span>
+          <div class="lb-energy font-display">+{{ loginBurst.energy }}</div>
+          <div class="lb-lbl">énergie de connexion</div>
+          <div class="lb-streak">
+            🔥 {{ loginBurst.streak }} jour{{ loginBurst.streak > 1 ? 's' : '' }} d'affilée
+          </div>
+          <div v-if="loginBurst.usedGrace" class="lb-grace">🛟 jour manqué rattrapé (grâce)</div>
+        </div>
+      </div>
+    </transition>
   </q-page>
 </template>
 
@@ -456,6 +502,8 @@ import {
   type ItemSlot,
 } from '@/lib/items';
 import { talentsEarned, talentEffects, talentChoices, talentByCode } from '@/lib/talents';
+import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
+import { logicalToday } from '@/lib/challenges';
 import { useWorldBossStore } from '@/stores/worldBoss';
 import { BOSS_HIT_ENERGY } from '@/data/worldBoss';
 
@@ -487,7 +535,7 @@ const loading = ref(true);
 const saving = ref(false);
 const pseudoInput = ref('');
 const pseudoError = ref('');
-const tab = ref<'perso' | 'donjons' | 'boss'>('perso');
+const tab = ref<'perso' | 'equip' | 'donjons' | 'boss'>('perso');
 
 const myUid = computed(() => auth.user?.id);
 const myContribution = computed(() => wboss.contributions.find((ct) => ct.user_id === myUid.value));
@@ -541,7 +589,8 @@ const c = computed(() =>
   computeCharacter(
     progress.muscuXp.value,
     progress.cardioXp.value,
-    progress.energyEarned.value,
+    // énergie = sport de fond + bonus de connexion cumulé.
+    progress.energyEarned.value + (char.row?.login_energy ?? 0),
     char.row?.energy_spent ?? 0,
   ),
 );
@@ -553,6 +602,42 @@ const fighter = computed(() =>
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
 const profileLabel = computed(() => PROFILE_LABEL[c.value.profile]);
+
+// ── Récompense de connexion quotidienne ──
+const today = logicalToday();
+const loginClaimable = computed(() => {
+  const r = char.row;
+  if (!r) return false;
+  return !r.last_login_date || daysBetweenIso(r.last_login_date, today) >= 1;
+});
+// Aperçu de ce que rapportera le claim du jour (streak + énergie).
+const loginPreview = computed(() => {
+  const r = char.row;
+  const gap = r?.last_login_date ? daysBetweenIso(r.last_login_date, today) : 999;
+  const prev = r?.last_login_date
+    ? { streak: r.login_streak, graceUsed: r.login_grace_used }
+    : null;
+  const next = advanceStreak(prev, gap);
+  return { streak: next.streak, energy: dailyLoginEnergy(next.streak, c.value.level.level) };
+});
+const claimingLogin = ref(false);
+const loginBurst = ref<{ streak: number; energy: number; usedGrace: boolean } | null>(null);
+async function claimLogin() {
+  const uid = auth.user?.id;
+  if (!uid || claimingLogin.value || !loginClaimable.value) return;
+  claimingLogin.value = true;
+  try {
+    const r = await char.claimDailyLogin(uid, today, c.value.level.level);
+    if (r) {
+      loginBurst.value = r;
+      setTimeout(() => (loginBurst.value = null), 2600);
+    }
+  } catch {
+    $q.notify({ type: 'negative', message: 'Récompense indisponible.' });
+  } finally {
+    claimingLogin.value = false;
+  }
+}
 // PV bonus (équipement + talents) — affiché à titre indicatif.
 const bonusPv = computed(() => {
   if (!char.row) return 0;
@@ -876,7 +961,7 @@ onMounted(async () => {
 /* Onglets */
 .seg {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -885,19 +970,24 @@ onMounted(async () => {
 }
 .seg-b {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 9px 8px;
+  gap: 4px;
+  padding: 9px 5px;
   border: none;
   border-radius: 9px;
   background: transparent;
   color: var(--dim);
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12px;
+  white-space: nowrap;
   cursor: pointer;
+}
+.seg-b .q-icon {
+  flex: none;
 }
 .seg-b.on {
   background: var(--accent);
@@ -1622,6 +1712,153 @@ onMounted(async () => {
 }
 .foot b {
   color: var(--text);
+}
+
+/* Sac vide (onglet Équipement) */
+.empty-inv {
+  margin-top: 6px;
+  padding: 18px 14px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+
+/* Carte de récompense de connexion */
+.login-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--accent);
+  background: var(--surface-2, var(--surface));
+  cursor: pointer;
+}
+.login-card:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.login-card:active {
+  transform: scale(0.99);
+}
+.lc-emo {
+  font-size: 26px;
+  flex: none;
+}
+.lc-main {
+  flex: 1;
+  min-width: 0;
+}
+.lc-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+}
+.lc-sub {
+  font-size: 12px;
+  color: var(--dim);
+}
+.lc-sub b {
+  color: var(--accent);
+}
+.lc-cta {
+  flex: none;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* Animation de récompense de connexion */
+.lb-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+}
+.lb-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 30px 40px;
+}
+.lb-wave {
+  position: absolute;
+  top: 44px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  animation: lb-pulse 1.1s ease-out 2;
+}
+@keyframes lb-pulse {
+  from {
+    opacity: 0.9;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 0;
+    transform: scale(9);
+  }
+}
+.lb-bolt {
+  font-size: 46px;
+  animation: lb-pop 0.5s ease-out both;
+}
+.lb-energy {
+  font-size: 52px;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1;
+  animation: lb-pop 0.5s ease-out 0.08s both;
+}
+.lb-lbl {
+  font-size: 12px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.lb-streak {
+  margin-top: 8px;
+  font-size: 15px;
+  color: var(--text);
+  font-weight: 600;
+}
+.lb-grace {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--dim);
+}
+@keyframes lb-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.lb-fade-enter-active,
+.lb-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.lb-fade-enter-from,
+.lb-fade-leave-to {
+  opacity: 0;
 }
 
 /* Modale de cassage d'objet */
