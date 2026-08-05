@@ -34,8 +34,234 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Muscu" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+
+    <!-- Écran de lancement (splash) : peint instantanément, retiré au montage de l'app -->
+    <style>
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: #15120e;
+        overflow: hidden;
+        font-family: 'Oswald', 'Arial Narrow', system-ui, sans-serif;
+        opacity: 1;
+        transition: opacity 0.5s ease;
+      }
+      #app-splash.hide {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #app-splash .half {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        padding: 26px;
+      }
+      #app-splash .sport {
+        clip-path: polygon(0 0, 100% 0, 0 100%);
+        background: radial-gradient(120% 120% at 0% 0%, #241f17, #15120e 70%);
+        align-items: flex-start;
+        justify-content: flex-start;
+      }
+      #app-splash .game {
+        clip-path: polygon(100% 0, 100% 100%, 0 100%);
+        background: radial-gradient(120% 120% at 100% 100%, #191327, #120f16 70%);
+        align-items: flex-end;
+        justify-content: flex-end;
+      }
+      #app-splash .panel {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        max-width: 48%;
+      }
+      #app-splash .game .panel {
+        align-items: flex-end;
+        text-align: right;
+      }
+      #app-splash .eyebrow {
+        font-size: clamp(10px, 3vw, 14px);
+        letter-spacing: 4px;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+      #app-splash .sport .eyebrow {
+        color: #ffd23f;
+      }
+      #app-splash .game .eyebrow {
+        color: #b07cff;
+      }
+      #app-splash .title {
+        font-size: clamp(24px, 8vw, 48px);
+        font-weight: 700;
+        line-height: 0.95;
+        color: #f3eee6;
+      }
+      #app-splash .sub {
+        font-size: clamp(10px, 2.8vw, 13px);
+        color: #9a8f7e;
+        letter-spacing: 1px;
+      }
+      #app-splash .icons {
+        display: flex;
+        gap: 12px;
+      }
+      #app-splash .icons svg {
+        width: clamp(28px, 8vw, 42px);
+        height: clamp(28px, 8vw, 42px);
+      }
+      #app-splash .sport .icons svg {
+        color: #ffd23f;
+      }
+      #app-splash .game .icons svg {
+        color: #b07cff;
+      }
+      #app-splash .seam {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      #app-splash .seam line {
+        stroke: #ffd23f;
+        stroke-width: 0.55;
+        filter: drop-shadow(0 0 6px #ffd23f);
+        opacity: 0.9;
+      }
+      #app-splash .brand {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        text-align: center;
+        z-index: 3;
+      }
+      #app-splash .brand-mark {
+        font-size: clamp(28px, 10vw, 50px);
+        font-weight: 700;
+        letter-spacing: 6px;
+        color: #ffd23f;
+        text-shadow: 0 0 22px rgba(255, 210, 63, 0.35);
+      }
+      #app-splash .brand-tag {
+        font-size: clamp(9px, 2.6vw, 12px);
+        color: #9a8f7e;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+      }
+      #app-splash .loader {
+        width: 40px;
+        height: 40px;
+        margin-top: 4px;
+      }
+      #app-splash .loader circle {
+        fill: none;
+        stroke-width: 5;
+      }
+      #app-splash .loader .bg {
+        stroke: #000;
+      }
+      #app-splash .loader .run {
+        stroke: #ffd23f;
+        stroke-linecap: round;
+        stroke-dasharray: 150;
+        stroke-dashoffset: 40;
+        transform-origin: center;
+        animation: splashspin 1s linear infinite;
+      }
+      @keyframes splashspin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #app-splash .loader .run {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="app-splash" role="img" aria-label="Chargement — Muscu Planner">
+      <div class="half sport">
+        <div class="panel">
+          <div class="eyebrow">Ton effort</div>
+          <div class="title">MUSCU<br />&amp; CARDIO</div>
+          <div class="sub">Chaque séance compte</div>
+          <div class="icons">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M2 9v6M5 7v10M19 7v10M22 9v6M5 12h14" />
+            </svg>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 12h4l2-5 3 10 2-5h4" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="half game">
+        <div class="panel">
+          <div class="eyebrow">Ta récompense</div>
+          <div class="title">L'AVENTURE</div>
+          <div class="sub">Donjons · butin · boss</div>
+          <div class="icons">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M14.5 3.5 20 9 9.5 19.5 6 20l.5-3.5L17 6M15 8l1 1M4 20l3-3" />
+            </svg>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3l7 3v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6z" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <svg class="seam" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="100" y1="0" x2="0" y2="100" />
+      </svg>
+      <div class="brand">
+        <div class="brand-mark">MUSCU</div>
+        <div class="brand-tag">entraîne-toi · deviens plus fort</div>
+        <svg class="loader" viewBox="0 0 50 50" aria-hidden="true">
+          <circle class="bg" cx="25" cy="25" r="20" />
+          <circle class="run" cx="25" cy="25" r="20" />
+        </svg>
+      </div>
+    </div>
     <!-- quasar:entry-point -->
   </body>
 </html>
