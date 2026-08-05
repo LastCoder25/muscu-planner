@@ -61,6 +61,43 @@
 
       <!-- ONGLET PERSONNAGE -->
       <template v-if="tab === 'perso'">
+        <div class="hero">
+          <div class="lvl-ring">
+            <svg viewBox="0 0 84 84" aria-hidden="true">
+              <circle cx="42" cy="42" r="38" fill="none" stroke="#000" stroke-width="5" />
+              <circle
+                cx="42"
+                cy="42"
+                r="38"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="5"
+                stroke-linecap="round"
+                stroke-dasharray="239"
+                :stroke-dashoffset="239 * (1 - c.level.progressPct / 100)"
+                transform="rotate(-90 42 42)"
+              />
+            </svg>
+            <div class="ring-txt">
+              <div class="num font-display">{{ c.level.level }}</div>
+              <div class="cap">Niveau</div>
+            </div>
+          </div>
+          <div class="hero-info">
+            <div class="hero-arch">
+              Profil : <b>{{ profileLabel }}</b>
+            </div>
+            <div class="hero-power">
+              <span class="hp-lbl">⚔️ Puissance de combat</span>
+              <span class="hp-val font-display">{{ combatPowerVal }}</span>
+            </div>
+            <div class="hero-xp">
+              {{ c.level.xpIntoLevel.toLocaleString('fr-FR') }} /
+              {{ c.level.xpForLevel.toLocaleString('fr-FR') }} XP
+            </div>
+          </div>
+        </div>
+
         <div class="stats">
           <div class="stat s-pui">
             <div class="top">
@@ -133,10 +170,24 @@
           >
             <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
             <div class="slot-main">
-              <div class="slot-lbl">{{ SLOT_LABEL[slot] }}</div>
+              <div class="slot-lbl">
+                {{ SLOT_LABEL[slot] }}
+                <span v-if="char.row.equipped[slot]" class="slot-nv"
+                  >Nv {{ char.row.equipped[slot]!.level }}</span
+                >
+              </div>
               <template v-if="char.row.equipped[slot]">
                 <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
-                <div class="slot-eff">{{ effectLabel(char.row.equipped[slot]!.effect) }}</div>
+                <div class="slot-eff">
+                  {{ effectLabel(char.row.equipped[slot]!.effect, char.row.equipped[slot]!.level) }}
+                </div>
+                <div class="ixp">
+                  <span
+                    :style="{
+                      width: itemXpPct(char.row.equipped[slot]!, c.level.level) * 100 + '%',
+                    }"
+                  />
+                </div>
               </template>
               <div v-else class="slot-vide">vide</div>
             </div>
@@ -162,8 +213,12 @@
             >
               <span class="inv-emo">{{ it.emoji }}</span>
               <div class="inv-main">
-                <div class="inv-name">{{ it.name }}</div>
-                <div class="inv-eff">{{ SLOT_LABEL[it.slot] }} · {{ effectLabel(it.effect) }}</div>
+                <div class="inv-name">
+                  {{ it.name }} <span class="inv-nv">Nv {{ it.level }}</span>
+                </div>
+                <div class="inv-eff">
+                  {{ SLOT_LABEL[it.slot] }} · {{ effectLabel(it.effect, it.level) }}
+                </div>
               </div>
               <button class="equip-btn" @click="doEquip(it.id)">Équiper</button>
             </div>
@@ -244,8 +299,8 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
-import { computeCharacter, isValidPseudo } from '@/lib/character';
-import { simulateDungeon, mulberry32 } from '@/lib/combat';
+import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
+import { simulateDungeon, mulberry32, combatPower } from '@/lib/combat';
 import { MONSTERS } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
 import {
@@ -253,6 +308,7 @@ import {
   aggregateEffects,
   rollDrop,
   effectLabel,
+  itemXpPct,
   SLOTS,
   SLOT_LABEL,
   SLOT_EMOJI,
@@ -300,6 +356,12 @@ const c = computed(() =>
 );
 // Effets cumulés des talents choisis.
 const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
+// Combattant complet (stats + équipement + talents) → puissance de combat affichée.
+const fighter = computed(() =>
+  playerWithGear(char.row?.pseudo ?? 'Toi', c.value, char.row?.equipped ?? {}, talentFx.value),
+);
+const combatPowerVal = computed(() => combatPower(fighter.value));
+const profileLabel = computed(() => PROFILE_LABEL[c.value.profile]);
 // PV bonus (équipement + talents) — affiché à titre indicatif.
 const bonusPv = computed(() => {
   if (!char.row) return 0;
@@ -352,7 +414,14 @@ async function explore(d: Dungeon) {
       defeated: r.defeated,
     });
     if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
-    await char.applyRun(uid, { energyCost: d.energyCost, gold, drops });
+    const itemXp = r.defeated * 8 + (r.cleared ? 20 : 0);
+    await char.applyRun(uid, {
+      energyCost: d.energyCost,
+      gold,
+      drops,
+      itemXp,
+      playerLevel: c.value.level.level,
+    });
     run.value = {
       name: d.name,
       cleared: r.cleared,
@@ -670,6 +739,74 @@ onMounted(async () => {
   font-size: 11px;
 }
 
+/* Héro (anneau + archétype + puissance) */
+.hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.lvl-ring {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+}
+.lvl-ring svg {
+  position: absolute;
+  inset: 0;
+}
+.ring-txt {
+  text-align: center;
+}
+.lvl-ring .num {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+}
+.lvl-ring .cap {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.hero-info {
+  min-width: 0;
+}
+.hero-arch {
+  font-size: 13px;
+  color: var(--dim);
+}
+.hero-arch b {
+  color: var(--d1);
+  text-transform: capitalize;
+  font-weight: 600;
+}
+.hero-power {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 6px 0 2px;
+}
+.hp-lbl {
+  font-size: 12px;
+  color: var(--dim);
+}
+.hp-val {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.hero-xp {
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Talents */
 .talent-choice {
   background: var(--surface);
@@ -772,6 +909,31 @@ onMounted(async () => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--dim);
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.slot-nv {
+  color: var(--accent);
+  font-weight: 700;
+}
+.ixp {
+  height: 3px;
+  border-radius: 999px;
+  background: #000;
+  overflow: hidden;
+  margin-top: 5px;
+}
+.ixp > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+.inv-nv {
+  font-size: 10px;
+  color: var(--accent);
+  font-weight: 700;
 }
 .slot-name {
   font-size: 13px;

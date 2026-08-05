@@ -4,6 +4,9 @@ import {
   playerWithGear,
   rollDrop,
   itemScore,
+  effectiveValue,
+  grantItemXp,
+  itemXpForLevel,
   type Item,
   type Equipped,
 } from '@/lib/items';
@@ -14,7 +17,24 @@ const item = (over: Partial<Item> & Pick<Item, 'slot' | 'effect'>): Item => ({
   emoji: '❔',
   rarity: over.rarity ?? 'common',
   level: over.level ?? 1,
+  xp: over.xp ?? 0,
   ...over,
+});
+
+describe('niveaux d’objet', () => {
+  it('effectiveValue grandit avec le niveau (+8 %/niv)', () => {
+    const eff = { type: 'damage_pct' as const, value: 10 };
+    expect(effectiveValue(eff, 1)).toBe(10);
+    expect(effectiveValue(eff, 6)).toBe(Math.round(10 * (1 + 5 * 0.08))); // 14
+  });
+  it('grantItemXp monte de niveau et plafonne au niveau du joueur', () => {
+    const it = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, level: 1, xp: 0 });
+    const up = grantItemXp(it, itemXpForLevel(1) + itemXpForLevel(2), 10);
+    expect(up.level).toBe(3);
+    const capped = grantItemXp(it, 99999, 4);
+    expect(capped.level).toBe(4); // plafonné au joueur (4)
+    expect(capped.xp).toBe(0);
+  });
 });
 
 describe('aggregateEffects', () => {
@@ -59,11 +79,12 @@ describe('rollDrop', () => {
   it('rng haut → pas de drop', () => {
     expect(rollDrop(() => 0.99, { playerLevel: 5, cleared: true, defeated: 3 })).toBeNull();
   });
-  it('rng bas → drop légendaire, niveau plafonné au joueur', () => {
+  it('rng bas → drop légendaire, démarre au niveau 1', () => {
     const d = rollDrop(() => 0, { playerLevel: 4, cleared: true, defeated: 3 });
     expect(d).not.toBeNull();
     expect(d!.rarity).toBe('legendary');
-    expect(d!.level).toBe(4);
+    expect(d!.level).toBe(1); // les objets montent ensuite en donjon
+    expect(d!.xp).toBe(0);
     expect(d!.slot).toBe('weapon');
   });
 });

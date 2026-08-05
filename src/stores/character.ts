@@ -3,7 +3,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { normalizePseudo } from '@/lib/character';
-import { itemScore, type Item, type ItemSlot, type Equipped } from '@/lib/items';
+import { itemScore, grantItemXp, type Item, type ItemSlot, type Equipped } from '@/lib/items';
 
 export interface CharacterRow {
   user_id: string;
@@ -69,11 +69,11 @@ export const useCharacterStore = defineStore('character', () => {
   // (auto-équipe si le slot est vide ou si l'objet est meilleur ; l'ancien va au sac).
   async function applyRun(
     userId: string,
-    input: { energyCost: number; gold: number; drops: Item[] },
+    input: { energyCost: number; gold: number; drops: Item[]; itemXp: number; playerLevel: number },
   ) {
     const cur = row.value;
     if (!cur) return;
-    const equipped: Equipped = { ...cur.equipped };
+    let equipped: Equipped = { ...cur.equipped };
     const inventory: Item[] = [...cur.inventory];
     for (const drop of input.drops) {
       const current = equipped[drop.slot];
@@ -83,6 +83,15 @@ export const useCharacterStore = defineStore('character', () => {
       } else {
         inventory.push(drop);
       }
+    }
+    // Les objets ÉQUIPÉS gagnent de l'XP et montent de niveau (plafonné au joueur).
+    if (input.itemXp > 0) {
+      const leveled: Equipped = {};
+      for (const slot of Object.keys(equipped) as ItemSlot[]) {
+        const it = equipped[slot];
+        if (it) leveled[slot] = grantItemXp(it, input.itemXp, input.playerLevel);
+      }
+      equipped = leveled;
     }
     return persist(userId, {
       gold: cur.gold + input.gold,

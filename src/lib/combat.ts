@@ -55,6 +55,13 @@ export function playerCombatant(
   };
 }
 
+/** Indice synthétique de puissance de combat (offense × survie) — pour l'UI. */
+export function combatPower(c: Combatant): number {
+  const offense = c.damage * (1 + c.crit) * (1 + (c.lifesteal ?? 0));
+  const survie = (c.pv / 100) * (1 + c.dodge + (c.dmgReduction ?? 0));
+  return Math.round(offense * survie);
+}
+
 export type CombatActor = 'player' | 'monster';
 export type CombatEventType = 'hit' | 'crit' | 'dodge';
 export interface CombatEvent {

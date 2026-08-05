@@ -26,8 +26,39 @@ export interface Item {
   name: string;
   emoji: string;
   rarity: Rarity;
-  level: number; // ≤ niveau du joueur
-  effect: ItemEffect;
+  level: number; // niveau ACTUEL de l'objet (grandit en donjon, ≤ niveau du joueur)
+  xp: number; // XP accumulée vers le niveau suivant
+  effect: ItemEffect; // value = magnitude de BASE (niveau 1) ; l'effet réel grandit avec le niveau
+}
+
+// L'effet grandit de +8 % de la base par niveau au-dessus de 1.
+export function itemLevelMult(level: number): number {
+  return 1 + Math.max(0, level - 1) * 0.08;
+}
+/** Valeur réelle d'un effet au niveau de l'objet (les flags restent à 1). */
+export function effectiveValue(effect: ItemEffect, level: number): number {
+  if (effect.type === 'first_strike') return 1;
+  return Math.max(1, Math.round(effect.value * itemLevelMult(level)));
+}
+/** XP nécessaire pour passer du niveau `level` au suivant. */
+export function itemXpForLevel(level: number): number {
+  return 60 + level * 30;
+}
+/** Progression (0..1) de l'objet vers son niveau suivant (0 si au plafond). */
+export function itemXpPct(item: Item, playerLevel: number): number {
+  if (item.level >= playerLevel) return 1;
+  return Math.min(1, (item.xp ?? 0) / itemXpForLevel(item.level));
+}
+/** Ajoute de l'XP à un objet ; monte de niveau, plafonné au niveau du joueur. Pur. */
+export function grantItemXp(item: Item, xp: number, playerLevel: number): Item {
+  let level = item.level;
+  let x = (item.xp ?? 0) + Math.max(0, xp);
+  while (level < playerLevel && x >= itemXpForLevel(level)) {
+    x -= itemXpForLevel(level);
+    level++;
+  }
+  if (level >= playerLevel) x = 0; // au plafond : pas d'accumulation
+  return { ...item, level, xp: x };
 }
 
 export type Equipped = Partial<Record<ItemSlot, Item>>;
@@ -86,28 +117,32 @@ const RARITY_ADJ: Record<Rarity, string> = {
   legendary: 'mythique',
 };
 
-export function effectLabel(e: ItemEffect): string {
+/** Libellé de l'effet à un niveau d'objet donné (valeur réelle). */
+export function effectLabel(e: ItemEffect, level = 1): string {
+  const v = effectiveValue(e, level);
   switch (e.type) {
     case 'damage_pct':
-      return `+${e.value}% dégâts`;
+      return `+${v}% dégâts`;
     case 'crit_pct':
-      return `+${e.value}% critique`;
+      return `+${v}% critique`;
     case 'lifesteal_pct':
-      return `+${e.value}% vol de vie`;
+      return `+${v}% vol de vie`;
     case 'dmg_reduction_pct':
-      return `−${e.value}% dégâts reçus`;
+      return `−${v}% dégâts reçus`;
     case 'max_pv_pct':
-      return `+${e.value}% PV`;
+      return `+${v}% PV`;
     case 'gold_pct':
-      return `+${e.value}% or`;
+      return `+${v}% or`;
     case 'first_strike':
       return 'Frappe en premier';
   }
 }
 
-/** Puissance indicative d'un objet (pour comparer / auto-équiper le meilleur). */
+/** Puissance indicative d'un objet (valeur réelle au niveau courant) → auto-équipe le meilleur. */
 export function itemScore(it: Item): number {
-  return it.effect.type === 'first_strike' ? RARITY_MULT[it.rarity] * 10 : it.effect.value;
+  return it.effect.type === 'first_strike'
+    ? RARITY_MULT[it.rarity] * 10
+    : effectiveValue(it.effect, it.level);
 }
 
 function pick<T>(rng: () => number, arr: T[]): T {
@@ -136,20 +171,19 @@ export function rollDrop(
 
   const slot = pick(rng, SLOTS);
   const rarity = rollRarity(rng);
-  const level = Math.max(1, opts.playerLevel);
   const choices = SLOT_EFFECTS[slot];
   const chosen = pick(rng, choices);
+  // value = magnitude de BASE (niveau 1) : pilotée par la rareté ; l'objet grandira ensuite.
   const value =
-    chosen.type === 'first_strike'
-      ? 1
-      : Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity] * (1 + level * 0.03)));
+    chosen.type === 'first_strike' ? 1 : Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
   const noun = pick(rng, NAMES[slot]);
   return {
     slot,
     name: `${noun} ${RARITY_ADJ[rarity]}`,
     emoji: SLOT_EMOJI[slot],
     rarity,
-    level,
+    level: 1, // les objets démarrent au niveau 1 et montent en donjon
+    xp: 0,
     effect: { type: chosen.type, value },
   };
 }
@@ -183,7 +217,7 @@ export function aggregateEffects(equipped: Equipped): AggregatedEffects {
   for (const slot of SLOTS) {
     const it = equipped[slot];
     if (!it) continue;
-    const v = it.effect.value / 100;
+    const v = effectiveValue(it.effect, it.level) / 100; // effet réel au niveau de l'objet
     switch (it.effect.type) {
       case 'damage_pct':
         a.damagePct += v;
