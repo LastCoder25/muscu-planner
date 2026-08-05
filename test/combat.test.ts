@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { playerCombatant, simulateCombat, mulberry32 } from '@/lib/combat';
+import { playerCombatant, simulateCombat, simulateDungeon, mulberry32 } from '@/lib/combat';
 
 const strong = playerCombatant('Fort', { puissance: 80, endurance: 60, agilite: 40 });
 const weak = playerCombatant('Faible', { puissance: 3, endurance: 1, agilite: 1 });
@@ -51,6 +51,40 @@ describe('simulateCombat', () => {
     const r = simulateCombat(strong, dummy, { seed: 1, goldOnWin: 10 });
     const last = r.log[r.log.length - 1]!;
     expect(last.playerPv === 0 || last.monsterPv === 0).toBe(true);
+  });
+});
+
+describe('simulateDungeon', () => {
+  const foes = [
+    { combatant: { ...dummy, name: 'M1' }, gold: 10 },
+    { combatant: { ...dummy, name: 'M2' }, gold: 15 },
+  ];
+  it('un perso fort nettoie le donjon et cumule l’or', () => {
+    const r = simulateDungeon(strong, foes, { seed: 3 });
+    expect(r.cleared).toBe(true);
+    expect(r.defeated).toBe(2);
+    expect(r.gold).toBe(25);
+    expect(r.fights).toHaveLength(2);
+  });
+  it('un perso faible échoue et ne garde que l’or des monstres vaincus', () => {
+    const tough = [
+      {
+        combatant: { name: 'B1', pv: 5000, damage: 300, crit: 0.3, dodge: 0.3, initiative: 99 },
+        gold: 50,
+      },
+      {
+        combatant: { name: 'B2', pv: 5000, damage: 300, crit: 0.3, dodge: 0.3, initiative: 99 },
+        gold: 50,
+      },
+    ];
+    const r = simulateDungeon(weak, tough, { seed: 3 });
+    expect(r.cleared).toBe(false);
+    expect(r.gold).toBeLessThan(100);
+  });
+  it('les PV se reportent : PV final ≤ PV max', () => {
+    const r = simulateDungeon(strong, foes, { seed: 9 });
+    expect(r.finalPv).toBeLessThanOrEqual(strong.pv);
+    expect(r.finalPv).toBeGreaterThan(0);
   });
 });
 

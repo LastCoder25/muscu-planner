@@ -117,42 +117,43 @@
         Points de vie : <b class="font-display">{{ c.pv }} PV</b>
       </div>
 
-      <!-- Combat d'essai (Phase 2a) -->
-      <div class="sec-title">Combat d'essai</div>
+      <!-- Donjons (Phase 2b) -->
+      <div class="sec-title">Donjons</div>
 
-      <div v-if="result" class="result" :class="result.win ? 'win' : 'lose'">
+      <div v-if="run" class="result" :class="run.cleared ? 'win' : 'lose'">
         <div class="result-head">
-          <span>{{ result.win ? '🏆 Victoire' : '💀 Défaite' }} — {{ result.monster.name }}</span>
-          <span v-if="result.win" class="result-gold">+{{ result.gold }} 🪙</span>
+          <span>{{ run.cleared ? '🏆 Donjon nettoyé' : '💀 Échec' }} — {{ run.name }}</span>
+          <span class="result-gold">+{{ run.gold }} 🪙</span>
         </div>
         <div class="result-sub">
-          {{ result.rounds }} tours · {{ result.win ? 'monstre vaincu' : 'tu es tombé' }}
+          {{ run.defeated }}/{{ run.total }} monstres vaincus · PV restants {{ run.finalPv }}
         </div>
         <div class="log">
-          <div v-for="(e, i) in result.log" :key="i" class="log-line" :class="'lg-' + e.type">
-            <span class="lg-who">{{ e.who === 'player' ? 'Toi' : result.monster.name }}</span>
-            <span v-if="e.type === 'dodge'">esquive !</span>
-            <span v-else>{{ e.type === 'crit' ? 'CRIT' : 'frappe' }} −{{ e.damage }}</span>
-            <span class="lg-pv">❤️ {{ e.playerPv }} · 👹 {{ e.monsterPv }}</span>
+          <div v-for="(f, i) in run.fights" :key="i" class="fight-row" :class="f.win ? 'fw' : 'fl'">
+            <span class="fr-emo">{{ f.emoji }}</span>
+            <span class="fr-name">{{ f.monster }}</span>
+            <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
+            <span class="fr-rounds">{{ f.rounds }} tours</span>
           </div>
         </div>
       </div>
 
-      <div class="monsters">
-        <div v-for="m in MONSTERS" :key="m.id" class="mon">
-          <span class="mon-emo">{{ m.emoji }}</span>
-          <div class="mon-main">
-            <div class="mon-top">
-              <span class="mon-name font-display">{{ m.name }}</span>
-              <span class="mon-gold">+{{ m.gold }} 🪙</span>
+      <div class="dungeons">
+        <div v-for="d in DUNGEONS" :key="d.id" class="dgn">
+          <span class="dgn-emo">{{ d.emoji }}</span>
+          <div class="dgn-main">
+            <div class="dgn-top">
+              <span class="dgn-name font-display">{{ d.name }}</span>
+              <span class="dgn-gold">+{{ dungeonGold(d) }} 🪙</span>
             </div>
-            <div class="mon-stats">
-              ❤️ {{ m.pv }} · 🗡️ {{ m.damage }} · coûte {{ m.energyCost }} ⚡
+            <div class="dgn-stats">
+              {{ d.monsterIds.length }} monstres · coûte {{ d.energyCost }} ⚡ · conseillé niv.
+              {{ d.recoLevel }}
             </div>
-            <div class="mon-hint">{{ m.hint }}</div>
+            <div class="dgn-hint">{{ d.hint }}</div>
           </div>
-          <button class="fight" :disabled="c.energy < m.energyCost || busy" @click="fight(m)">
-            Combattre
+          <button class="fight" :disabled="c.energy < d.energyCost || busy" @click="explore(d)">
+            Explorer
           </button>
         </div>
       </div>
@@ -173,8 +174,25 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
-import { playerCombatant, simulateCombat, type CombatResult } from '@/lib/combat';
-import { MONSTERS, type Monster } from '@/data/monsters';
+import { playerCombatant, simulateDungeon } from '@/lib/combat';
+import { MONSTERS } from '@/data/monsters';
+import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
+
+interface RunFight {
+  monster: string;
+  emoji: string;
+  win: boolean;
+  rounds: number;
+}
+interface RunView {
+  name: string;
+  cleared: boolean;
+  defeated: number;
+  total: number;
+  gold: number;
+  finalPv: number;
+  fights: RunFight[];
+}
 
 const $q = useQuasar();
 const auth = useAuthStore();
@@ -197,20 +215,34 @@ const c = computed(() =>
 const profileLabel = computed(() => PROFILE_LABEL[c.value.profile]);
 
 const busy = ref(false);
-const result = ref<(CombatResult & { monster: Monster }) | null>(null);
+const run = ref<RunView | null>(null);
 
-async function fight(m: Monster) {
+async function explore(d: Dungeon) {
   const uid = auth.user?.id;
-  if (!uid || busy.value || c.value.energy < m.energyCost) return;
+  if (!uid || busy.value || c.value.energy < d.energyCost) return;
   busy.value = true;
   try {
     const seed = Math.floor(Math.random() * 1e9);
     const player = playerCombatant(char.row?.pseudo ?? 'Toi', c.value);
-    const r = simulateCombat(player, m, { seed, goldOnWin: m.gold });
-    await char.applyCombat(uid, m.energyCost, r.gold);
-    result.value = { ...r, monster: m };
+    const r = simulateDungeon(player, dungeonFoes(d), { seed });
+    await char.applyCombat(uid, d.energyCost, r.gold);
+    run.value = {
+      name: d.name,
+      cleared: r.cleared,
+      defeated: r.defeated,
+      total: r.total,
+      gold: r.gold,
+      finalPv: r.finalPv,
+      fights: r.fights.map((f) => ({
+        monster: f.monster,
+        emoji: MONSTERS.find((m) => m.name === f.monster)?.emoji ?? '👾',
+        win: f.win,
+        rounds: f.result.rounds,
+      })),
+    };
+    if (r.cleared) $q.notify({ type: 'positive', message: `Donjon nettoyé — +${r.gold} 🪙` });
   } catch {
-    $q.notify({ type: 'negative', message: 'Échec du combat.' });
+    $q.notify({ type: 'negative', message: 'Échec de l’exploration.' });
   } finally {
     busy.value = false;
   }
@@ -504,13 +536,13 @@ onMounted(async () => {
   font-size: 20px;
   color: var(--d1);
 }
-.monsters {
+.dungeons {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-bottom: 22px;
 }
-.mon {
+.dgn {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -519,41 +551,69 @@ onMounted(async () => {
   border-radius: 12px;
   padding: 12px 14px;
 }
-.mon-emo {
+.dgn-emo {
   font-size: 28px;
   line-height: 1;
 }
-.mon-main {
+.dgn-main {
   flex: 1;
   min-width: 0;
 }
-.mon-top {
+.dgn-top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
 }
-.mon-name {
+.dgn-name {
   font-size: 16px;
   font-weight: 600;
   color: var(--text);
 }
-.mon-gold {
+.dgn-gold {
   font-size: 12px;
   color: var(--accent);
   font-weight: 600;
 }
-.mon-stats {
+.dgn-stats {
   font-size: 12px;
   color: var(--dim);
   margin-top: 2px;
   font-variant-numeric: tabular-nums;
 }
-.mon-hint {
+.dgn-hint {
   font-size: 11px;
   color: var(--dim);
   opacity: 0.85;
   margin-top: 4px;
+}
+.fight-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--dim);
+}
+.fight-row .fr-emo {
+  font-size: 16px;
+}
+.fight-row .fr-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.fight-row .fr-out {
+  font-weight: 600;
+}
+.fight-row.fw .fr-out {
+  color: var(--d1);
+}
+.fight-row.fl .fr-out {
+  color: var(--d4);
+}
+.fight-row .fr-rounds {
+  margin-left: auto;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
 }
 .fight {
   flex-shrink: 0;
