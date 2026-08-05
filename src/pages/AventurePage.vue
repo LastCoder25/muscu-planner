@@ -175,44 +175,42 @@
             class="slot"
             :class="char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty'"
           >
-            <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
-            <div class="slot-main">
-              <div class="slot-lbl">
-                {{ SLOT_LABEL[slot] }}
-                <span v-if="char.row.equipped[slot]" class="slot-nv"
-                  >Nv {{ char.row.equipped[slot]!.level }}</span
-                >
-              </div>
-              <template v-if="char.row.equipped[slot]">
-                <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
-                <div class="slot-eff">
-                  {{ effectLabel(char.row.equipped[slot]!.effect, char.row.equipped[slot]!.level) }}
-                </div>
-                <div class="slot-actions">
-                  <button
-                    class="up-btn"
-                    :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
-                    @click="doUpgrade(char.row.equipped[slot]!.id)"
-                  >
-                    <template v-if="char.row.equipped[slot]!.level >= c.level.level">max</template>
-                    <template v-else
-                      >⬆
-                      {{
-                        upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity)
-                      }}
-                      ✨</template
-                    >
-                  </button>
-                  <button class="link-btn" @click="doUnequip(slot)">retirer</button>
-                </div>
-              </template>
-              <div v-else class="slot-vide">vide</div>
+            <div class="slot-head">
+              <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
+              <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
+              <span v-if="char.row.equipped[slot]" class="slot-nv"
+                >Nv {{ char.row.equipped[slot]!.level }}</span
+              >
             </div>
+            <template v-if="char.row.equipped[slot]">
+              <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
+              <div class="slot-eff">
+                {{ effectLabel(char.row.equipped[slot]!.effect, char.row.equipped[slot]!.level) }}
+              </div>
+              <div class="slot-actions">
+                <button
+                  class="up-btn"
+                  :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
+                  @click="doUpgrade(char.row.equipped[slot]!.id)"
+                >
+                  <template v-if="char.row.equipped[slot]!.level >= c.level.level">max</template>
+                  <template v-else
+                    >⬆
+                    {{
+                      upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity)
+                    }}
+                    ✨</template
+                  >
+                </button>
+                <button class="link-btn" @click="doUnequip(slot)">retirer</button>
+              </div>
+            </template>
+            <div v-else class="slot-vide">vide</div>
           </div>
         </div>
 
         <template v-if="char.row.inventory.length">
-          <div class="sec-title">Sac ({{ char.row.inventory.length }})</div>
+          <div ref="sacTitle" class="sec-title">Sac ({{ char.row.inventory.length }})</div>
           <div class="inv">
             <div
               v-for="it in char.row.inventory"
@@ -271,8 +269,14 @@
             </div>
           </div>
           <div v-if="run.drops.length" class="drops">
-            <div class="drops-lbl">✨ Butin</div>
-            <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
+            <div class="drops-lbl">✨ Butin — clique pour l'ouvrir dans le sac</div>
+            <button
+              v-for="d in run.drops"
+              :key="d.id"
+              class="drop"
+              :class="'r-' + d.rarity"
+              @click="goToInventory"
+            >
               <span class="inv-emo">{{ d.emoji }}</span>
               <div class="inv-main">
                 <div class="inv-name">
@@ -280,7 +284,8 @@
                 </div>
                 <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ effectLabel(d.effect) }}</div>
               </div>
-            </div>
+              <q-icon name="chevron_right" size="20px" />
+            </button>
           </div>
         </div>
 
@@ -370,7 +375,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
@@ -525,6 +530,15 @@ function barW(v: number): string {
 
 const busy = ref(false);
 const run = ref<RunView | null>(null);
+const sacTitle = ref<HTMLElement | null>(null);
+
+// Cliquer un objet lâché → onglet Personnage, défile jusqu'au sac.
+function goToInventory() {
+  tab.value = 'perso';
+  void nextTick(() => {
+    setTimeout(() => sacTitle.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  });
+}
 
 async function explore(d: Dungeon) {
   const uid = auth.user?.id;
@@ -1039,45 +1053,45 @@ onMounted(async () => {
 
 /* Équipement */
 .gear {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-bottom: 18px;
 }
 .slot {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 3px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-left-width: 3px;
   border-radius: 12px;
   padding: 10px 12px;
-  min-height: 62px;
+  min-height: 92px;
 }
 .slot.empty {
   border-style: dashed;
   border-left-color: var(--line);
 }
-.slot-emo {
-  font-size: 20px;
+.slot-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.slot-main {
-  flex: 1;
-  min-width: 0;
+.slot-emo {
+  font-size: 18px;
 }
 .slot-lbl {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--dim);
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
+  flex: 1;
 }
 .slot-nv {
   color: var(--accent);
   font-weight: 700;
+  font-size: 11px;
 }
 .slot-actions,
 .inv-actions {
@@ -1385,6 +1399,20 @@ onMounted(async () => {
   font-weight: 700;
   font-size: 13px;
   color: var(--accent);
+}
+.drop {
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.drop:active {
+  transform: scale(0.99);
+}
+.drop .q-icon {
+  color: var(--dim);
+  flex-shrink: 0;
 }
 
 /* Boss communautaire */
