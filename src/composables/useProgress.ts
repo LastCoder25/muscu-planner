@@ -12,6 +12,9 @@ import { challengeXpPoints } from '@/lib/challenges';
 import { computeLevel } from '@/lib/levels';
 import { CARDIO_CHALLENGE_IDS } from '@/data/cardio';
 
+// Part de l'XP de fond convertie en énergie d'aventure (réglable).
+const ENERGY_PER_XP = 0.15;
+
 export function useProgress() {
   const logs = useLogsStore();
   const tennis = useTennisStore();
@@ -72,18 +75,6 @@ export function useProgress() {
         .filter((r) => !r.payload.challenge_id)
         .reduce((a, r) => a + cardioSessionXp(r.payload), 0) + cardioChallengeXp.value,
   );
-  // Minutes de sport de fond (muscu + cardio) → énergie du RPG. Les sorties
-  // « miroir » d'un défi ne comptent pas (leur durée est déjà celle du défi).
-  const fondMinutes = computed(
-    () =>
-      logs.all
-        .filter((r) => !isPrepaLog(r.payload.session_id))
-        .reduce((a, r) => a + (r.payload.duration_min ?? 0), 0) +
-      cardio.logs
-        .filter((r) => !r.payload.challenge_id)
-        .reduce((a, r) => a + (r.payload.duration_min ?? 0), 0),
-  );
-
   // Piste Challenges = niveau « méta » (tous les défis) — affiché à part, PAS
   // ajouté au Global (l'effort est déjà compté dans muscu / cardio).
   const challengesXp = computed(() => challengeXpPoints(challenges.list));
@@ -103,6 +94,8 @@ export function useProgress() {
     // Données brutes pour le RPG (fond uniquement).
     muscuXp: computed(() => muscuTotal.value),
     cardioXp: computed(() => cardioXp.value),
-    fondMinutes,
+    // Énergie RPG = fraction de l'XP de fond gagnée (l'XP encode déjà l'effort :
+    // reps des challenges, durée/distance/charge des séances). Tennis exclu.
+    energyEarned: computed(() => Math.round(generalXp.value * ENERGY_PER_XP)),
   };
 }

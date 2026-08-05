@@ -366,7 +366,7 @@ const c = computed(() =>
   computeCharacter(
     progress.muscuXp.value,
     progress.cardioXp.value,
-    progress.fondMinutes.value,
+    progress.energyEarned.value,
     char.row?.energy_spent ?? 0,
   ),
 );
