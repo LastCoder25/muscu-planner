@@ -5,19 +5,20 @@ import { playerCombatant, type Combatant } from './combat';
 export type ItemSlot = 'weapon' | 'armor' | 'accessory' | 'relic';
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
 
-// Effets « signature » (un par objet). value en points de % (ou 1 = flag).
+// Effets « signature » (un par objet). value en points de %. RÈGLE : tous les
+// effets doivent GRANDIR avec le niveau de l'objet (pas d'effet « drapeau »
+// binaire — ils ne récompenseraient pas la montée en niveau).
 export type EffectType =
   | 'damage_pct' // arme : + dégâts
   | 'crit_pct' // arme/relique : + chance de critique
   | 'lifesteal_pct' // arme : vol de vie
   | 'dmg_reduction_pct' // armure : dégâts reçus réduits
   | 'max_pv_pct' // armure : + PV max
-  | 'gold_pct' // accessoire : + or gagné
-  | 'first_strike'; // relique : frappe toujours en premier
+  | 'gold_pct'; // accessoire : + or gagné
 
 export interface ItemEffect {
   type: EffectType;
-  value: number; // % (ou 1 pour un flag)
+  value: number; // %
 }
 
 export interface Item {
@@ -35,18 +36,9 @@ export interface Item {
 export function itemLevelMult(level: number): number {
   return 1 + Math.max(0, level - 1) * 0.1;
 }
-/** Valeur réelle d'un effet au niveau de l'objet (les flags restent à 1). */
+/** Valeur réelle d'un effet au niveau de l'objet. */
 export function effectiveValue(effect: ItemEffect, level: number): number {
-  if (effect.type === 'first_strike') return 1;
   return Math.max(1, Math.round(effect.value * itemLevelMult(level)));
-}
-/**
- * L'effet grandit-il avec le niveau ? Les effets « drapeau » (frappe en premier)
- * sont binaires : les monter ne change rien → on interdit leur amélioration
- * (sinon on gaspille de la poussière pour zéro gain).
- */
-export function effectScales(effect: ItemEffect): boolean {
-  return effect.type !== 'first_strike';
 }
 
 // ── Économie d'objets : Poussière (évolution) & or (vente) ──
@@ -73,11 +65,9 @@ export function salvageValue(it: Item): number {
 export function sellValue(it: Item): number {
   return GOLD_BY_RARITY[it.rarity] + (it.level - 1) * 8;
 }
-/** Peut-on améliorer cet objet ? (effet évolutif + poussière suffisante + pas au plafond). */
+/** Peut-on améliorer cet objet ? (poussière suffisante + pas au plafond). */
 export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean {
-  return (
-    effectScales(it.effect) && it.level < playerLevel && dust >= upgradeCost(it.level, it.rarity)
-  );
+  return it.level < playerLevel && dust >= upgradeCost(it.level, it.rarity);
 }
 
 export type Equipped = Partial<Record<ItemSlot, Item>>;
@@ -117,8 +107,8 @@ const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
   ],
   accessory: [{ type: 'gold_pct', base: 15 }],
   relic: [
-    { type: 'first_strike', base: 1 },
     { type: 'crit_pct', base: 6 },
+    { type: 'max_pv_pct', base: 8 },
   ],
 };
 
@@ -152,16 +142,12 @@ export function effectLabel(e: ItemEffect, level = 1): string {
       return `+${v}% PV`;
     case 'gold_pct':
       return `+${v}% or`;
-    case 'first_strike':
-      return 'Frappe en premier';
   }
 }
 
-/** Puissance indicative d'un objet (valeur réelle au niveau courant) → auto-équipe le meilleur. */
+/** Puissance indicative d'un objet (valeur réelle au niveau courant) → compare deux objets. */
 export function itemScore(it: Item): number {
-  return it.effect.type === 'first_strike'
-    ? RARITY_MULT[it.rarity] * 10
-    : effectiveValue(it.effect, it.level);
+  return effectiveValue(it.effect, it.level);
 }
 
 function pick<T>(rng: () => number, arr: T[]): T {
@@ -193,8 +179,7 @@ export function rollDrop(
   const choices = SLOT_EFFECTS[slot];
   const chosen = pick(rng, choices);
   // value = magnitude de BASE (niveau 1) : pilotée par la rareté ; l'objet grandira ensuite.
-  const value =
-    chosen.type === 'first_strike' ? 1 : Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
+  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
   const noun = pick(rng, NAMES[slot]);
   return {
     slot,
@@ -215,7 +200,6 @@ export interface AggregatedEffects {
   dmgReduction: number; // fraction, plafonnée
   maxPvPct: number; // fraction
   goldPct: number; // fraction
-  firstStrike: boolean;
 }
 
 export function emptyEffects(): AggregatedEffects {
@@ -227,7 +211,6 @@ export function emptyEffects(): AggregatedEffects {
     dmgReduction: 0,
     maxPvPct: 0,
     goldPct: 0,
-    firstStrike: false,
   };
 }
 
@@ -256,9 +239,6 @@ export function aggregateEffects(equipped: Equipped): AggregatedEffects {
       case 'gold_pct':
         a.goldPct += v;
         break;
-      case 'first_strike':
-        a.firstStrike = true;
-        break;
     }
   }
   a.dmgReduction = Math.min(0.5, a.dmgReduction); // plafond 50 %
@@ -280,14 +260,13 @@ export function playerWithGear(
   const dodgeAdd = e.dodgeAdd + (extra.dodgeAdd ?? 0);
   const dmgReduction = Math.min(0.5, e.dmgReduction + (extra.dmgReduction ?? 0));
   const lifesteal = e.lifesteal + (extra.lifesteal ?? 0);
-  const firstStrike = e.firstStrike || !!extra.firstStrike;
   return {
     name,
     pv: Math.round(base.pv * (1 + maxPvPct)),
     damage: Math.max(1, Math.round(base.damage * (1 + damagePct))),
     crit: Math.min(0.6, base.crit + critAdd),
     dodge: Math.min(0.4, base.dodge + dodgeAdd),
-    initiative: firstStrike ? 9999 : base.initiative,
+    initiative: base.initiative,
     dmgReduction,
     lifesteal,
   };

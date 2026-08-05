@@ -65,7 +65,6 @@ export function talentEffects(codes: string[]): AggregatedEffects {
     a.dmgReduction += e.dmgReduction ?? 0;
     a.maxPvPct += e.maxPvPct ?? 0;
     a.goldPct += e.goldPct ?? 0;
-    a.firstStrike = a.firstStrike || !!e.firstStrike;
   }
   return a;
 }

@@ -193,10 +193,7 @@
                   :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
                   @click="doUpgrade(char.row.equipped[slot]!.id)"
                 >
-                  <template v-if="!effectScales(char.row.equipped[slot]!.effect)">fixe</template>
-                  <template v-else-if="char.row.equipped[slot]!.level >= c.level.level"
-                    >max</template
-                  >
+                  <template v-if="char.row.equipped[slot]!.level >= c.level.level">max</template>
                   <template v-else
                     >⬆
                     {{
@@ -447,7 +444,6 @@ import {
   aggregateEffects,
   rollDrop,
   effectLabel,
-  effectScales,
   canUpgrade,
   upgradeCost,
   salvageValue,

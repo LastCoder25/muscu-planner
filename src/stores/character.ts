@@ -7,7 +7,6 @@ import {
   salvageValue,
   sellValue,
   upgradeCost,
-  effectScales,
   type Item,
   type ItemSlot,
   type Equipped,
@@ -148,7 +147,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!found) return;
     const { item, slot } = found;
     const cost = upgradeCost(item.level, item.rarity);
-    if (!effectScales(item.effect) || item.level >= playerLevel || cur.dust < cost) return;
+    if (item.level >= playerLevel || cur.dust < cost) return;
     const upgraded: Item = { ...item, level: item.level + 1 };
     if (slot) {
       return persist(userId, {

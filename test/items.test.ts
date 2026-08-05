@@ -9,7 +9,6 @@ import {
   sellValue,
   upgradeCost,
   canUpgrade,
-  effectScales,
   investedDust,
   type Item,
   type Equipped,
@@ -40,16 +39,6 @@ describe('niveaux d’objet', () => {
     expect(canUpgrade(it, upgradeCost(2, 'common'), 10)).toBe(true);
     expect(canUpgrade(it, upgradeCost(2, 'common') - 1, 10)).toBe(false);
     expect(canUpgrade({ ...it, level: 5 }, 9999, 5)).toBe(false); // au plafond
-  });
-  it('effet drapeau (first_strike) : n’évolue pas → non améliorable', () => {
-    const fs = { type: 'first_strike' as const, value: 1 };
-    expect(effectScales(fs)).toBe(false);
-    expect(effectScales({ type: 'damage_pct', value: 10 })).toBe(true);
-    // la valeur réelle ne bouge pas avec le niveau
-    expect(effectiveValue(fs, 1)).toBe(effectiveValue(fs, 8));
-    // même avec plein de poussière et loin du plafond, on n’améliore pas
-    const relic = item({ slot: 'relic', effect: fs, level: 1 });
-    expect(canUpgrade(relic, 9999, 10)).toBe(false);
   });
 });
 
@@ -89,12 +78,12 @@ describe('aggregateEffects', () => {
     const eq: Equipped = {
       weapon: item({ slot: 'weapon', effect: { type: 'lifesteal_pct', value: 10 } }),
       armor: item({ slot: 'armor', effect: { type: 'dmg_reduction_pct', value: 80 } }),
-      relic: item({ slot: 'relic', effect: { type: 'first_strike', value: 1 } }),
+      relic: item({ slot: 'relic', effect: { type: 'crit_pct', value: 6 } }),
     };
     const a = aggregateEffects(eq);
     expect(a.lifesteal).toBeCloseTo(0.1);
     expect(a.dmgReduction).toBe(0.5); // plafonné
-    expect(a.firstStrike).toBe(true);
+    expect(a.critAdd).toBeCloseTo(0.06);
   });
 });
 
@@ -105,17 +94,16 @@ describe('playerWithGear', () => {
     expect(c.pv).toBe(100 + 30 * 10);
     expect(c.damage).toBe(Math.round(20 * 1.5));
   });
-  it('applique +PV, +dégâts, premier coup, vol de vie, réduction', () => {
+  it('applique +PV, +dégâts, vol de vie, réduction', () => {
     const eq: Equipped = {
       weapon: item({ slot: 'weapon', effect: { type: 'damage_pct', value: 50 } }),
       armor: item({ slot: 'armor', effect: { type: 'max_pv_pct', value: 20 } }),
-      relic: item({ slot: 'relic', effect: { type: 'first_strike', value: 1 } }),
+      relic: item({ slot: 'relic', effect: { type: 'crit_pct', value: 6 } }),
       accessory: item({ slot: 'accessory', effect: { type: 'gold_pct', value: 15 } }),
     };
     const c = playerWithGear('X', stats, eq);
     expect(c.pv).toBe(Math.round(400 * 1.2)); // 480
     expect(c.damage).toBe(Math.round(30 * 1.5)); // base 30 × 1.5
-    expect(c.initiative).toBe(9999); // first strike
   });
 });
 
