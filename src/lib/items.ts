@@ -157,6 +157,7 @@ export function rollDrop(
 export interface AggregatedEffects {
   damagePct: number;
   critAdd: number; // fraction 0..1
+  dodgeAdd: number; // fraction 0..1
   lifesteal: number; // fraction
   dmgReduction: number; // fraction, plafonnée
   maxPvPct: number; // fraction
@@ -164,16 +165,21 @@ export interface AggregatedEffects {
   firstStrike: boolean;
 }
 
-export function aggregateEffects(equipped: Equipped): AggregatedEffects {
-  const a: AggregatedEffects = {
+export function emptyEffects(): AggregatedEffects {
+  return {
     damagePct: 0,
     critAdd: 0,
+    dodgeAdd: 0,
     lifesteal: 0,
     dmgReduction: 0,
     maxPvPct: 0,
     goldPct: 0,
     firstStrike: false,
   };
+}
+
+export function aggregateEffects(equipped: Equipped): AggregatedEffects {
+  const a = emptyEffects();
   for (const slot of SLOTS) {
     const it = equipped[slot];
     if (!it) continue;
@@ -206,22 +212,30 @@ export function aggregateEffects(equipped: Equipped): AggregatedEffects {
   return a;
 }
 
-/** Combattant du joueur = stats (sport) + effets de l'équipement. */
+/** Combattant du joueur = stats (sport) + effets de l'équipement + `extra` (talents). */
 export function playerWithGear(
   name: string,
   stats: { puissance: number; endurance: number; agilite: number },
   equipped: Equipped,
+  extra: Partial<AggregatedEffects> = {},
 ): Combatant {
   const base = playerCombatant(name, stats);
   const e = aggregateEffects(equipped);
+  const damagePct = e.damagePct + (extra.damagePct ?? 0);
+  const maxPvPct = e.maxPvPct + (extra.maxPvPct ?? 0);
+  const critAdd = e.critAdd + (extra.critAdd ?? 0);
+  const dodgeAdd = e.dodgeAdd + (extra.dodgeAdd ?? 0);
+  const dmgReduction = Math.min(0.5, e.dmgReduction + (extra.dmgReduction ?? 0));
+  const lifesteal = e.lifesteal + (extra.lifesteal ?? 0);
+  const firstStrike = e.firstStrike || !!extra.firstStrike;
   return {
     name,
-    pv: Math.round(base.pv * (1 + e.maxPvPct)),
-    damage: Math.max(1, Math.round(base.damage * (1 + e.damagePct))),
-    crit: Math.min(0.6, base.crit + e.critAdd),
-    dodge: base.dodge,
-    initiative: e.firstStrike ? 9999 : base.initiative,
-    dmgReduction: e.dmgReduction,
-    lifesteal: e.lifesteal,
+    pv: Math.round(base.pv * (1 + maxPvPct)),
+    damage: Math.max(1, Math.round(base.damage * (1 + damagePct))),
+    crit: Math.min(0.6, base.crit + critAdd),
+    dodge: Math.min(0.4, base.dodge + dodgeAdd),
+    initiative: firstStrike ? 9999 : base.initiative,
+    dmgReduction,
+    lifesteal,
   };
 }

@@ -12,6 +12,7 @@ export interface CharacterRow {
   energy_spent: number;
   equipped: Equipped;
   inventory: Item[];
+  talents: string[];
 }
 
 export class PseudoTakenError extends Error {
@@ -25,7 +26,7 @@ export const useCharacterStore = defineStore('character', () => {
   const row = ref<CharacterRow | null>(null);
   const loaded = ref(false);
 
-  const COLS = 'user_id, pseudo, gold, energy_spent, equipped, inventory';
+  const COLS = 'user_id, pseudo, gold, energy_spent, equipped, inventory, talents';
 
   async function fetchMine() {
     const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
@@ -114,7 +115,14 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { equipped, inventory: [...cur.inventory, item] });
   }
 
-  return { row, loaded, fetchMine, setPseudo, applyRun, equip, unequip };
+  // Choisit un talent (validation du quota côté appelant via talentsEarned).
+  async function chooseTalent(userId: string, code: string, maxAllowed: number) {
+    const cur = row.value;
+    if (!cur || cur.talents.length >= maxAllowed) return;
+    return persist(userId, { talents: [...cur.talents, code] });
+  }
+
+  return { row, loaded, fetchMine, setPseudo, applyRun, equip, unequip, chooseTalent };
 });
 
 if (import.meta.hot) {

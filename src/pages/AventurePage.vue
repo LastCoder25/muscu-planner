@@ -93,7 +93,34 @@
         </div>
         <div class="pv-line">
           ❤️ <b class="font-display">{{ c.pv + bonusPv }} PV</b>
-          <span v-if="bonusPv" class="pv-bonus">(+{{ bonusPv }} équipement)</span>
+          <span v-if="bonusPv" class="pv-bonus">(+{{ bonusPv }} bonus)</span>
+        </div>
+
+        <div class="sec-title">Talents</div>
+        <div v-if="talentPoints > 0" class="talent-choice">
+          <div class="tc-head">
+            🎓 {{ talentPoints }} talent{{ talentPoints > 1 ? 's' : '' }} à choisir
+          </div>
+          <div class="tc-opts">
+            <button
+              v-for="t in offered"
+              :key="t.code"
+              class="tc-opt"
+              @click="doChooseTalent(t.code)"
+            >
+              <span class="tc-emo">{{ t.icon }}</span>
+              <span class="tc-name font-display">{{ t.name }}</span>
+              <span class="tc-desc">{{ t.desc }}</span>
+            </button>
+          </div>
+        </div>
+        <div v-if="char.row.talents.length" class="talents-list">
+          <span v-for="(code, i) in char.row.talents" :key="i" class="talent-badge">
+            {{ talentByCode(code)?.icon }} {{ talentByCode(code)?.name }}
+          </span>
+        </div>
+        <div v-else-if="talentPoints === 0" class="talents-empty">
+          Prochain talent au niveau {{ nextTalentLevel }}.
         </div>
 
         <div class="sec-title">Équipement</div>
@@ -233,6 +260,7 @@ import {
   type Item,
   type ItemSlot,
 } from '@/lib/items';
+import { talentsEarned, talentEffects, talentChoices, talentByCode } from '@/lib/talents';
 
 interface RunFight {
   monster: string;
@@ -270,12 +298,32 @@ const c = computed(() =>
     char.row?.energy_spent ?? 0,
   ),
 );
-// PV bonus apporté par l'équipement (max_pv_pct) — affiché à titre indicatif.
+// Effets cumulés des talents choisis.
+const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
+// PV bonus (équipement + talents) — affiché à titre indicatif.
 const bonusPv = computed(() => {
   if (!char.row) return 0;
-  const pct = aggregateEffects(char.row.equipped).maxPvPct;
+  const pct = aggregateEffects(char.row.equipped).maxPvPct + talentFx.value.maxPvPct;
   return Math.round(c.value.pv * pct);
 });
+
+// Talents : combien à choisir, et les 3 proposés pour le prochain choix.
+const talentPoints = computed(() =>
+  char.row ? talentsEarned(c.value.level.level) - char.row.talents.length : 0,
+);
+const offered = computed(() => talentChoices(char.row?.talents.length ?? 0));
+const nextTalentLevel = computed(() => (talentsEarned(c.value.level.level) + 1) * 5);
+
+async function doChooseTalent(code: string) {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  try {
+    await char.chooseTalent(uid, code, talentsEarned(c.value.level.level));
+    $q.notify({ type: 'positive', message: 'Talent acquis !' });
+  } catch {
+    $q.notify({ type: 'negative', message: 'Impossible de choisir ce talent.' });
+  }
+}
 
 function barW(v: number): string {
   const max = Math.max(c.value.puissance, c.value.endurance, c.value.agilite, 1);
@@ -291,9 +339,9 @@ async function explore(d: Dungeon) {
   busy.value = true;
   try {
     const seed = Math.floor(Math.random() * 1e9);
-    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped);
+    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, talentFx.value);
     const r = simulateDungeon(player, dungeonFoes(d), { seed });
-    const goldPct = aggregateEffects(char.row.equipped).goldPct;
+    const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
     const gold = Math.round(r.gold * (1 + goldPct));
     // Butin (RNG dérivé du seed du run).
     const dropRng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
@@ -620,6 +668,74 @@ onMounted(async () => {
 .pv-bonus {
   color: var(--d1);
   font-size: 11px;
+}
+
+/* Talents */
+.talent-choice {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.tc-head {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.tc-opts {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.tc-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-2, #2b241b);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 6px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+}
+.tc-opt:active {
+  transform: scale(0.97);
+  border-color: var(--accent);
+}
+.tc-emo {
+  font-size: 22px;
+}
+.tc-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+.tc-desc {
+  font-size: 10.5px;
+  color: var(--dim);
+}
+.talents-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.talent-badge {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text);
+}
+.talents-empty {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 18px;
 }
 
 /* Équipement */
