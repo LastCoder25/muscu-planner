@@ -555,15 +555,15 @@ export function challengeStats(ch: Challenge, todayIso = logicalToday()): Challe
 }
 
 /** Un défi est-il terminé (à marquer 'done') ? */
-export function isChallengeComplete(ch: Challenge, todayIso = logicalToday()): boolean {
-  if (ch.format === 'cumulative')
-    return ch.progress.reduce((a, p) => a + p.done, 0) >= (ch.config.total || Infinity);
-  return (
-    diffDays(ch.start_date, todayIso) >= ch.duration_days - 1 &&
-    ch.daily_targets.every(
-      (t, d) => t === 0 || (ch.progress.find((p) => p.day === d)?.completed ?? false),
-    )
-  );
+// Modèle TOTAL : le défi est « terminé » dès que le TOTAL prévu est atteint
+// (peu importe la répartition par jour → avance/rattrapage/jours de repos OK).
+// Peut donc se déclencher avant le dernier jour si on a tout fait en avance.
+export function isChallengeComplete(ch: Challenge): boolean {
+  const total = plannedEffort(ch);
+  if (total <= 0) return false;
+  const done = ch.progress.reduce((a, p) => a + (p.done || 0), 0);
+  const doneEffort = ch.unit === 'time' ? done / 4 : done;
+  return doneEffort >= total;
 }
 
 // Ajoute une contribution externe (ex. une sortie cardio) au jour du défi

@@ -475,7 +475,7 @@ function maybeCoverByReserve() {
 async function afterChange() {
   const c = ch.value!;
   let status: 'done' | undefined;
-  if (c.status !== 'done' && isChallengeComplete(c, today)) {
+  if (c.status !== 'done' && isChallengeComplete(c)) {
     c.status = 'done';
     status = 'done';
     running.value = false;

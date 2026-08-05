@@ -6,6 +6,7 @@ import {
   suggestConfig,
   addContribution,
   challengeLiveBalance,
+  isChallengeComplete,
   type Challenge,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -171,6 +172,26 @@ type DayProgressLite = {
   elapsed_sec: number;
   completed: boolean;
 };
+
+describe('isChallengeComplete (basé sur le total)', () => {
+  it('terminé dès que le TOTAL est atteint, même réparti n’importe comment', () => {
+    // total prévu 30 ; tout fait le 1er jour → terminé (jours 2/3 non requis)
+    const done = challenge({
+      progress: [
+        { day: 0, date: '2026-01-05', target: 10, done: 30, elapsed_sec: 0, completed: true },
+      ],
+    });
+    expect(isChallengeComplete(done)).toBe(true);
+  });
+  it('pas terminé si le total n’est pas atteint', () => {
+    const partial = challenge({
+      progress: [
+        { day: 0, date: '2026-01-05', target: 10, done: 25, elapsed_sec: 0, completed: true },
+      ],
+    });
+    expect(isChallengeComplete(partial)).toBe(false);
+  });
+});
 
 describe('challengeXpPoints', () => {
   it('total NON atteint : reps×0,2 seulement, pas de prime', () => {
