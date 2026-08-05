@@ -82,7 +82,9 @@
           </div>
           <div class="exo-reps">
             <span class="er-v font-display">{{ e.total }}</span
-            ><span class="er-l">{{ e.unit === 'time' ? 'sec' : 'reps' }}</span>
+            ><span class="er-l">{{
+              e.unit === 'time' ? 'sec' : e.unit === 'distance' ? 'km' : 'reps'
+            }}</span>
           </div>
         </div>
       </template>

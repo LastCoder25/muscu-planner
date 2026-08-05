@@ -19,6 +19,20 @@
       <!-- ÉTAPE 1 · Exercice -->
       <template v-if="step === 1">
         <div class="step-h">Choisis un exercice</div>
+        <div v-if="activeMuscu && activeCardio" class="limit-note">
+          <q-icon name="info" size="18px" />
+          <span
+            >Tu as déjà un challenge muscu <b>et</b> un cardio en cours. Termine-en un pour en créer
+            un nouveau.</span
+          >
+        </div>
+        <div v-else-if="activeMuscu || activeCardio" class="limit-note">
+          <q-icon name="info" size="18px" />
+          <span
+            >Un challenge {{ activeCardio ? 'cardio' : 'muscu' }} est déjà en cours. Les exercices
+            {{ activeCardio ? 'cardio' : 'de muscu' }} sont indisponibles jusqu'à sa fin.</span
+          >
+        </div>
         <q-input
           v-model="search"
           filled
@@ -33,7 +47,8 @@
             v-for="e in filteredLib"
             :key="e.id"
             class="ex-row"
-            :class="{ sel: exercise?.id === e.id }"
+            :class="{ sel: exercise?.id === e.id, full: catFull(e) }"
+            :disabled="catFull(e)"
             @click="pickExercise(e)"
           >
             <q-icon v-if="favSet.has(e.id)" name="star" size="16px" color="primary" class="fav" />
@@ -50,7 +65,13 @@
                 {{ e.muscle_primary }} · {{ e.unit === 'time' ? 'temps' : 'reps' }}
               </div>
             </div>
-            <q-icon v-if="exercise?.id === e.id" name="check_circle" color="primary" size="20px" />
+            <span v-if="catFull(e)" class="ex-lock">déjà en cours</span>
+            <q-icon
+              v-else-if="exercise?.id === e.id"
+              name="check_circle"
+              color="primary"
+              size="20px"
+            />
           </button>
         </div>
 
@@ -349,6 +370,7 @@ import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useProfileStore } from '@/stores/profile';
 import { useChallengesStore } from '@/stores/challenges';
 import { useAuthStore } from '@/stores/auth';
+import { CARDIO_CHALLENGE_IDS } from '@/data/cardio';
 import type { Level } from '@/lib/types';
 
 const router = useRouter();
@@ -391,6 +413,25 @@ const level = computed<Level>(() => profileStore.profile?.experience?.level ?? '
 const levelLabel = computed(() => level.value);
 const favSet = computed(() => new Set(profileStore.profile?.favorite_exercises ?? []));
 const isCardio = computed(() => !!exercise.value?.tags?.includes('cardio'));
+
+// Limite : un seul challenge actif par catégorie (muscu / cardio). On reflète
+// la règle du store (ChallengeLimitError) dès la sélection de l'exercice.
+function rowIsCardio(c: { unit: string; exercise_id: string }): boolean {
+  return c.unit === 'distance' || CARDIO_CHALLENGE_IDS.has(c.exercise_id);
+}
+const activeMuscu = computed(() =>
+  challenges.list.some((c) => c.status === 'active' && !rowIsCardio(c)),
+);
+const activeCardio = computed(() =>
+  challenges.list.some((c) => c.status === 'active' && rowIsCardio(c)),
+);
+function exIsCardio(e: ExerciseRow): boolean {
+  return !!e.tags?.includes('cardio');
+}
+function catFull(e: ExerciseRow): boolean {
+  return exIsCardio(e) ? activeCardio.value : activeMuscu.value;
+}
+const selectedFull = computed(() => (exercise.value ? catFull(exercise.value) : false));
 const cardioUnit = ref<'distance' | 'time'>('distance');
 const unit = computed<'reps' | 'time' | 'distance'>(() => {
   if (isCardio.value) return cardioUnit.value;
@@ -410,7 +451,7 @@ const demoUrl = computed(
     `https://www.youtube.com/results?search_query=${encodeURIComponent((exercise.value?.name ?? '') + ' exécution technique musculation')}`,
 );
 
-const canNext = computed(() => (step.value === 1 ? !!exercise.value : true));
+const canNext = computed(() => (step.value === 1 ? !!exercise.value && !selectedFull.value : true));
 
 const sugIndex = new Map(CHALLENGE_SUGGESTIONS.map((id, i) => [id, i]));
 function exRank(id: string): number {
@@ -519,6 +560,15 @@ function reset() {
   restDays.value = config.value.rest_weekdays ?? [];
 }
 function pickExercise(e: ExerciseRow) {
+  if (catFull(e)) {
+    $q.notify({
+      type: 'warning',
+      message: exIsCardio(e)
+        ? 'Tu as déjà un challenge cardio en cours. Termine-le pour en lancer un autre.'
+        : 'Tu as déjà un challenge muscu en cours. Termine-le pour en lancer un autre.',
+    });
+    return;
+  }
   exercise.value = e;
   reset();
 }
@@ -603,6 +653,7 @@ onMounted(async () => {
   const userId = auth.user?.id;
   try {
     if (userId && !profileStore.profile) await profileStore.fetch(userId);
+    if (challenges.list.length === 0) await challenges.fetchMine();
     lib.value = await libraryStore.fetchAll();
   } catch (e) {
     $q.notify({
@@ -707,6 +758,36 @@ onMounted(async () => {
   &.sel {
     border-color: var(--accent);
     background: var(--surface-2);
+  }
+  &.full {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+.ex-lock {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.limit-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--dim);
+  .q-icon {
+    color: var(--accent);
+    flex: none;
+    margin-top: 1px;
   }
 }
 .ex-main {
