@@ -26,39 +26,39 @@ export interface Item {
   name: string;
   emoji: string;
   rarity: Rarity;
-  level: number; // niveau ACTUEL de l'objet (grandit en donjon, ≤ niveau du joueur)
-  xp: number; // XP accumulée vers le niveau suivant
+  level: number; // niveau ACTUEL (monté via la Poussière d'évolution, ≤ niveau du joueur)
   effect: ItemEffect; // value = magnitude de BASE (niveau 1) ; l'effet réel grandit avec le niveau
 }
 
-// L'effet grandit de +8 % de la base par niveau au-dessus de 1.
+// L'effet grandit de +10 % de la base par niveau au-dessus de 1.
 export function itemLevelMult(level: number): number {
-  return 1 + Math.max(0, level - 1) * 0.08;
+  return 1 + Math.max(0, level - 1) * 0.1;
 }
 /** Valeur réelle d'un effet au niveau de l'objet (les flags restent à 1). */
 export function effectiveValue(effect: ItemEffect, level: number): number {
   if (effect.type === 'first_strike') return 1;
   return Math.max(1, Math.round(effect.value * itemLevelMult(level)));
 }
-/** XP nécessaire pour passer du niveau `level` au suivant. */
-export function itemXpForLevel(level: number): number {
-  return 60 + level * 30;
+
+// ── Économie d'objets : Poussière (évolution) & or (vente) ──
+const DUST_BY_RARITY: Record<Rarity, number> = { common: 5, rare: 12, epic: 25, legendary: 50 };
+const GOLD_BY_RARITY: Record<Rarity, number> = { common: 10, rare: 25, epic: 60, legendary: 140 };
+
+/** Poussière obtenue en cassant un objet (rareté + un peu par niveau investi). */
+export function salvageValue(it: Item): number {
+  return DUST_BY_RARITY[it.rarity] + (it.level - 1) * 3;
 }
-/** Progression (0..1) de l'objet vers son niveau suivant (0 si au plafond). */
-export function itemXpPct(item: Item, playerLevel: number): number {
-  if (item.level >= playerLevel) return 1;
-  return Math.min(1, (item.xp ?? 0) / itemXpForLevel(item.level));
+/** Or obtenu en vendant un objet. */
+export function sellValue(it: Item): number {
+  return GOLD_BY_RARITY[it.rarity] + (it.level - 1) * 8;
 }
-/** Ajoute de l'XP à un objet ; monte de niveau, plafonné au niveau du joueur. Pur. */
-export function grantItemXp(item: Item, xp: number, playerLevel: number): Item {
-  let level = item.level;
-  let x = (item.xp ?? 0) + Math.max(0, xp);
-  while (level < playerLevel && x >= itemXpForLevel(level)) {
-    x -= itemXpForLevel(level);
-    level++;
-  }
-  if (level >= playerLevel) x = 0; // au plafond : pas d'accumulation
-  return { ...item, level, xp: x };
+/** Coût en poussière pour passer un objet du niveau `level` au suivant (croissant). */
+export function upgradeCost(level: number): number {
+  return 10 + level * 6;
+}
+/** Peut-on améliorer cet objet ? (poussière suffisante + pas au plafond). */
+export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean {
+  return it.level < playerLevel && dust >= upgradeCost(it.level);
 }
 
 export type Equipped = Partial<Record<ItemSlot, Item>>;
@@ -182,8 +182,7 @@ export function rollDrop(
     name: `${noun} ${RARITY_ADJ[rarity]}`,
     emoji: SLOT_EMOJI[slot],
     rarity,
-    level: 1, // les objets démarrent au niveau 1 et montent en donjon
-    xp: 0,
+    level: 1, // les objets démarrent au niveau 1 ; on les monte avec la Poussière
     effect: { type: chosen.type, value },
   };
 }

@@ -47,6 +47,7 @@
         <div class="tb-right">
           <span class="tb-chip">⚡ {{ c.energy }}</span>
           <span class="tb-chip gold">🪙 {{ char.row.gold }}</span>
+          <span class="tb-chip dust">✨ {{ char.row.dust }}</span>
         </div>
       </div>
 
@@ -155,8 +156,11 @@
           <span v-for="(code, i) in char.row.talents" :key="i" class="talent-badge">
             {{ talentByCode(code)?.icon }} {{ talentByCode(code)?.name }}
           </span>
+          <button class="reset-btn" :disabled="char.row.gold < resetCost" @click="doResetTalents">
+            ↺ Réinitialiser 🪙{{ resetCost }}
+          </button>
         </div>
-        <div v-else-if="talentPoints === 0" class="talents-empty">
+        <div v-if="!char.row.talents.length && talentPoints === 0" class="talents-empty">
           Prochain talent au niveau {{ nextTalentLevel }}.
         </div>
 
@@ -181,24 +185,22 @@
                 <div class="slot-eff">
                   {{ effectLabel(char.row.equipped[slot]!.effect, char.row.equipped[slot]!.level) }}
                 </div>
-                <div class="ixp">
-                  <span
-                    :style="{
-                      width: itemXpPct(char.row.equipped[slot]!, c.level.level) * 100 + '%',
-                    }"
-                  />
+                <div class="slot-actions">
+                  <button
+                    class="up-btn"
+                    :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
+                    @click="doUpgrade(char.row.equipped[slot]!.id)"
+                  >
+                    <template v-if="char.row.equipped[slot]!.level >= c.level.level">max</template>
+                    <template v-else
+                      >⬆ {{ upgradeCost(char.row.equipped[slot]!.level) }} ✨</template
+                    >
+                  </button>
+                  <button class="link-btn" @click="doUnequip(slot)">retirer</button>
                 </div>
               </template>
               <div v-else class="slot-vide">vide</div>
             </div>
-            <button
-              v-if="char.row.equipped[slot]"
-              class="slot-x"
-              aria-label="Déséquiper"
-              @click="doUnequip(slot)"
-            >
-              ✕
-            </button>
           </div>
         </div>
 
@@ -219,8 +221,14 @@
                 <div class="inv-eff">
                   {{ SLOT_LABEL[it.slot] }} · {{ effectLabel(it.effect, it.level) }}
                 </div>
+                <div class="inv-actions">
+                  <button class="equip-btn" @click="doEquip(it.id)">Équiper</button>
+                  <button class="link-btn" @click="doSalvage(it)">
+                    Casser ✨{{ salvageValue(it) }}
+                  </button>
+                  <button class="link-btn" @click="doSell(it)">Vendre 🪙{{ sellValue(it) }}</button>
+                </div>
               </div>
-              <button class="equip-btn" @click="doEquip(it.id)">Équiper</button>
             </div>
           </div>
         </template>
@@ -237,7 +245,7 @@
         <div v-if="run" class="result" :class="run.cleared ? 'win' : 'lose'">
           <div class="result-head">
             <span>{{ run.cleared ? '🏆 Donjon nettoyé' : '💀 Échec' }} — {{ run.name }}</span>
-            <span class="result-gold">+{{ run.gold }} 🪙</span>
+            <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
           </div>
           <div class="result-sub">
             {{ run.defeated }}/{{ run.total }} monstres vaincus · PV restants {{ run.finalPv }}
@@ -308,7 +316,10 @@ import {
   aggregateEffects,
   rollDrop,
   effectLabel,
-  itemXpPct,
+  canUpgrade,
+  upgradeCost,
+  salvageValue,
+  sellValue,
   SLOTS,
   SLOT_LABEL,
   SLOT_EMOJI,
@@ -330,6 +341,7 @@ interface RunView {
   defeated: number;
   total: number;
   gold: number;
+  dust: number;
   finalPv: number;
   fights: RunFight[];
   drops: Item[];
@@ -414,20 +426,15 @@ async function explore(d: Dungeon) {
       defeated: r.defeated,
     });
     if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
-    const itemXp = r.defeated * 8 + (r.cleared ? 20 : 0);
-    await char.applyRun(uid, {
-      energyCost: d.energyCost,
-      gold,
-      drops,
-      itemXp,
-      playerLevel: c.value.level.level,
-    });
+    const dust = r.defeated * 2; // petit filet de poussière par run
+    await char.applyRun(uid, { energyCost: d.energyCost, gold, dust, drops });
     run.value = {
       name: d.name,
       cleared: r.cleared,
       defeated: r.defeated,
       total: r.total,
       gold,
+      dust,
       finalPv: r.finalPv,
       fights: r.fights.map((f) => ({
         monster: f.monster,
@@ -445,23 +452,55 @@ async function explore(d: Dungeon) {
   }
 }
 
-async function doEquip(itemId: string) {
+const resetCost = computed(() => 80 + 40 * (char.row?.talents.length ?? 0));
+
+function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
   const uid = auth.user?.id;
   if (!uid) return;
-  try {
-    await char.equip(uid, itemId);
-  } catch {
-    $q.notify({ type: 'negative', message: 'Impossible d’équiper.' });
-  }
+  fn(uid).catch(() => $q.notify({ type: 'negative', message: errMsg }));
 }
-async function doUnequip(slot: ItemSlot) {
-  const uid = auth.user?.id;
-  if (!uid) return;
-  try {
-    await char.unequip(uid, slot);
-  } catch {
-    $q.notify({ type: 'negative', message: 'Impossible de déséquiper.' });
-  }
+
+function doEquip(itemId: string) {
+  withUid((uid) => char.equip(uid, itemId), 'Impossible d’équiper.');
+}
+function doUnequip(slot: ItemSlot) {
+  withUid((uid) => char.unequip(uid, slot), 'Impossible de déséquiper.');
+}
+function doUpgrade(itemId: string) {
+  withUid((uid) => char.upgradeItem(uid, itemId, c.value.level.level), 'Amélioration impossible.');
+}
+function doSell(it: Item) {
+  withUid(
+    (uid) =>
+      char
+        .sell(uid, it.id)
+        .then(() => $q.notify({ type: 'positive', message: `+${sellValue(it)} 🪙` })),
+    'Vente impossible.',
+  );
+}
+function doSalvage(it: Item) {
+  $q.dialog({
+    title: 'Casser l’objet',
+    message: `« ${it.name} » sera détruit contre ${salvageValue(it)} ✨ de poussière. Continuer ?`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Casser', color: 'negative' },
+  }).onOk(() => withUid((uid) => char.salvage(uid, it.id), 'Recyclage impossible.'));
+}
+function doResetTalents() {
+  $q.dialog({
+    title: 'Réinitialiser les talents',
+    message: `Tous tes talents seront remis à zéro (tu les rechoisiras) contre ${resetCost.value} 🪙. Continuer ?`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Réinitialiser', color: 'primary', textColor: 'dark' },
+  }).onOk(() =>
+    withUid(
+      (uid) =>
+        char
+          .resetTalents(uid, resetCost.value)
+          .then(() => $q.notify({ type: 'positive', message: 'Talents réinitialisés.' })),
+      'Réinitialisation impossible.',
+    ),
+  );
 }
 
 async function savePseudo() {
@@ -606,6 +645,9 @@ onMounted(async () => {
 }
 .tb-chip.gold {
   color: var(--accent);
+}
+.tb-chip.dust {
+  color: #b07cff;
 }
 
 /* Onglets */
@@ -877,8 +919,8 @@ onMounted(async () => {
 
 /* Équipement */
 .gear {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   margin-bottom: 18px;
 }
@@ -917,18 +959,52 @@ onMounted(async () => {
   color: var(--accent);
   font-weight: 700;
 }
-.ixp {
-  height: 3px;
-  border-radius: 999px;
-  background: #000;
-  overflow: hidden;
-  margin-top: 5px;
+.slot-actions,
+.inv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
 }
-.ixp > span {
-  display: block;
-  height: 100%;
-  background: var(--accent);
+.up-btn {
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+}
+.up-btn:disabled {
+  border-color: var(--line);
+  color: var(--dim);
+  cursor: not-allowed;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 4px 2px;
+}
+.link-btn:active {
+  color: var(--text);
+}
+.reset-btn {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--dim);
   border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.reset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .inv-nv {
   font-size: 10px;

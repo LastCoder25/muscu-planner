@@ -5,8 +5,10 @@ import {
   rollDrop,
   itemScore,
   effectiveValue,
-  grantItemXp,
-  itemXpForLevel,
+  salvageValue,
+  sellValue,
+  upgradeCost,
+  canUpgrade,
   type Item,
   type Equipped,
 } from '@/lib/items';
@@ -17,23 +19,40 @@ const item = (over: Partial<Item> & Pick<Item, 'slot' | 'effect'>): Item => ({
   emoji: '❔',
   rarity: over.rarity ?? 'common',
   level: over.level ?? 1,
-  xp: over.xp ?? 0,
   ...over,
 });
 
 describe('niveaux d’objet', () => {
-  it('effectiveValue grandit avec le niveau (+8 %/niv)', () => {
+  it('effectiveValue grandit avec le niveau (+10 %/niv)', () => {
     const eff = { type: 'damage_pct' as const, value: 10 };
     expect(effectiveValue(eff, 1)).toBe(10);
-    expect(effectiveValue(eff, 6)).toBe(Math.round(10 * (1 + 5 * 0.08))); // 14
+    expect(effectiveValue(eff, 6)).toBe(Math.round(10 * (1 + 5 * 0.1))); // 15
   });
-  it('grantItemXp monte de niveau et plafonne au niveau du joueur', () => {
-    const it = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, level: 1, xp: 0 });
-    const up = grantItemXp(it, itemXpForLevel(1) + itemXpForLevel(2), 10);
-    expect(up.level).toBe(3);
-    const capped = grantItemXp(it, 99999, 4);
-    expect(capped.level).toBe(4); // plafonné au joueur (4)
-    expect(capped.xp).toBe(0);
+  it('upgradeCost croît avec le niveau', () => {
+    expect(upgradeCost(1)).toBeLessThan(upgradeCost(5));
+  });
+  it('canUpgrade : faux si poussière insuffisante ou au plafond', () => {
+    const it = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, level: 2 });
+    expect(canUpgrade(it, upgradeCost(2), 10)).toBe(true);
+    expect(canUpgrade(it, upgradeCost(2) - 1, 10)).toBe(false); // pas assez de poussière
+    expect(canUpgrade({ ...it, level: 5 }, 9999, 5)).toBe(false); // au plafond
+  });
+});
+
+describe('recyclage / vente', () => {
+  it('poussière et or croissent avec la rareté', () => {
+    const common = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 8 },
+      rarity: 'common',
+    });
+    const legendary = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 28 },
+      rarity: 'legendary',
+    });
+    expect(salvageValue(legendary)).toBeGreaterThan(salvageValue(common));
+    expect(sellValue(legendary)).toBeGreaterThan(sellValue(common));
   });
 });
 
@@ -83,8 +102,7 @@ describe('rollDrop', () => {
     const d = rollDrop(() => 0, { playerLevel: 4, cleared: true, defeated: 3 });
     expect(d).not.toBeNull();
     expect(d!.rarity).toBe('legendary');
-    expect(d!.level).toBe(1); // les objets montent ensuite en donjon
-    expect(d!.xp).toBe(0);
+    expect(d!.level).toBe(1); // les objets montent ensuite via la Poussière
     expect(d!.slot).toBe('weapon');
   });
 });

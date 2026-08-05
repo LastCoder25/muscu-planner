@@ -3,12 +3,20 @@ import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { normalizePseudo } from '@/lib/character';
-import { itemScore, grantItemXp, type Item, type ItemSlot, type Equipped } from '@/lib/items';
+import {
+  salvageValue,
+  sellValue,
+  upgradeCost,
+  type Item,
+  type ItemSlot,
+  type Equipped,
+} from '@/lib/items';
 
 export interface CharacterRow {
   user_id: string;
   pseudo: string;
   gold: number;
+  dust: number;
   energy_spent: number;
   equipped: Equipped;
   inventory: Item[];
@@ -26,7 +34,7 @@ export const useCharacterStore = defineStore('character', () => {
   const row = ref<CharacterRow | null>(null);
   const loaded = ref(false);
 
-  const COLS = 'user_id, pseudo, gold, energy_spent, equipped, inventory, talents';
+  const COLS = 'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents';
 
   async function fetchMine() {
     const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
@@ -67,38 +75,83 @@ export const useCharacterStore = defineStore('character', () => {
 
   // Applique un run de donjon : dépense l'énergie, encaisse l'or, range le butin
   // (auto-équipe si le slot est vide ou si l'objet est meilleur ; l'ancien va au sac).
+  // Applique un run : dépense l'énergie, encaisse or + poussière, range le butin
+  // au SAC (équipement 100 % manuel). Les objets ne montent plus tout seuls.
   async function applyRun(
     userId: string,
-    input: { energyCost: number; gold: number; drops: Item[]; itemXp: number; playerLevel: number },
+    input: { energyCost: number; gold: number; dust: number; drops: Item[] },
   ) {
     const cur = row.value;
     if (!cur) return;
-    let equipped: Equipped = { ...cur.equipped };
-    const inventory: Item[] = [...cur.inventory];
-    for (const drop of input.drops) {
-      const current = equipped[drop.slot];
-      if (!current || itemScore(drop) > itemScore(current)) {
-        if (current) inventory.push(current);
-        equipped[drop.slot] = drop;
-      } else {
-        inventory.push(drop);
-      }
-    }
-    // Les objets ÉQUIPÉS gagnent de l'XP et montent de niveau (plafonné au joueur).
-    if (input.itemXp > 0) {
-      const leveled: Equipped = {};
-      for (const slot of Object.keys(equipped) as ItemSlot[]) {
-        const it = equipped[slot];
-        if (it) leveled[slot] = grantItemXp(it, input.itemXp, input.playerLevel);
-      }
-      equipped = leveled;
-    }
     return persist(userId, {
       gold: cur.gold + input.gold,
+      dust: cur.dust + input.dust,
       energy_spent: cur.energy_spent + input.energyCost,
-      equipped,
-      inventory,
+      inventory: [...cur.inventory, ...input.drops],
     });
+  }
+
+  function findOwned(cur: CharacterRow, itemId: string): { item: Item; slot?: ItemSlot } | null {
+    const inv = cur.inventory.find((i) => i.id === itemId);
+    if (inv) return { item: inv };
+    for (const slot of Object.keys(cur.equipped) as ItemSlot[]) {
+      const it = cur.equipped[slot];
+      if (it?.id === itemId) return { item: it, slot };
+    }
+    return null;
+  }
+
+  // Casse un objet du sac → Poussière d'évolution.
+  async function salvage(userId: string, itemId: string) {
+    const cur = row.value;
+    if (!cur) return;
+    const item = cur.inventory.find((i) => i.id === itemId);
+    if (!item) return;
+    return persist(userId, {
+      dust: cur.dust + salvageValue(item),
+      inventory: cur.inventory.filter((i) => i.id !== itemId),
+    });
+  }
+
+  // Vend un objet du sac → or.
+  async function sell(userId: string, itemId: string) {
+    const cur = row.value;
+    if (!cur) return;
+    const item = cur.inventory.find((i) => i.id === itemId);
+    if (!item) return;
+    return persist(userId, {
+      gold: cur.gold + sellValue(item),
+      inventory: cur.inventory.filter((i) => i.id !== itemId),
+    });
+  }
+
+  // Améliore un objet (équipé ou au sac) en dépensant de la poussière ; cap = niveau joueur.
+  async function upgradeItem(userId: string, itemId: string, playerLevel: number) {
+    const cur = row.value;
+    if (!cur) return;
+    const found = findOwned(cur, itemId);
+    if (!found) return;
+    const { item, slot } = found;
+    const cost = upgradeCost(item.level);
+    if (item.level >= playerLevel || cur.dust < cost) return;
+    const upgraded: Item = { ...item, level: item.level + 1 };
+    if (slot) {
+      return persist(userId, {
+        dust: cur.dust - cost,
+        equipped: { ...cur.equipped, [slot]: upgraded },
+      });
+    }
+    return persist(userId, {
+      dust: cur.dust - cost,
+      inventory: cur.inventory.map((i) => (i.id === itemId ? upgraded : i)),
+    });
+  }
+
+  // Réinitialise les talents (respec) contre de l'or → on les rechoisit ensuite.
+  async function resetTalents(userId: string, cost: number) {
+    const cur = row.value;
+    if (!cur || cur.talents.length === 0 || cur.gold < cost) return;
+    return persist(userId, { gold: cur.gold - cost, talents: [] });
   }
 
   async function equip(userId: string, itemId: string) {
@@ -131,7 +184,20 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { talents: [...cur.talents, code] });
   }
 
-  return { row, loaded, fetchMine, setPseudo, applyRun, equip, unequip, chooseTalent };
+  return {
+    row,
+    loaded,
+    fetchMine,
+    setPseudo,
+    applyRun,
+    equip,
+    unequip,
+    chooseTalent,
+    salvage,
+    sell,
+    upgradeItem,
+    resetTalents,
+  };
 });
 
 if (import.meta.hot) {
