@@ -40,6 +40,14 @@ export function effectiveValue(effect: ItemEffect, level: number): number {
   if (effect.type === 'first_strike') return 1;
   return Math.max(1, Math.round(effect.value * itemLevelMult(level)));
 }
+/**
+ * L'effet grandit-il avec le niveau ? Les effets « drapeau » (frappe en premier)
+ * sont binaires : les monter ne change rien → on interdit leur amélioration
+ * (sinon on gaspille de la poussière pour zéro gain).
+ */
+export function effectScales(effect: ItemEffect): boolean {
+  return effect.type !== 'first_strike';
+}
 
 // ── Économie d'objets : Poussière (évolution) & or (vente) ──
 const DUST_BY_RARITY: Record<Rarity, number> = { common: 5, rare: 12, epic: 25, legendary: 50 };
@@ -65,9 +73,11 @@ export function salvageValue(it: Item): number {
 export function sellValue(it: Item): number {
   return GOLD_BY_RARITY[it.rarity] + (it.level - 1) * 8;
 }
-/** Peut-on améliorer cet objet ? (poussière suffisante + pas au plafond). */
+/** Peut-on améliorer cet objet ? (effet évolutif + poussière suffisante + pas au plafond). */
 export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean {
-  return it.level < playerLevel && dust >= upgradeCost(it.level, it.rarity);
+  return (
+    effectScales(it.effect) && it.level < playerLevel && dust >= upgradeCost(it.level, it.rarity)
+  );
 }
 
 export type Equipped = Partial<Record<ItemSlot, Item>>;

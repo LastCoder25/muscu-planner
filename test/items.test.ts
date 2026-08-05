@@ -9,6 +9,7 @@ import {
   sellValue,
   upgradeCost,
   canUpgrade,
+  effectScales,
   investedDust,
   type Item,
   type Equipped,
@@ -39,6 +40,16 @@ describe('niveaux d’objet', () => {
     expect(canUpgrade(it, upgradeCost(2, 'common'), 10)).toBe(true);
     expect(canUpgrade(it, upgradeCost(2, 'common') - 1, 10)).toBe(false);
     expect(canUpgrade({ ...it, level: 5 }, 9999, 5)).toBe(false); // au plafond
+  });
+  it('effet drapeau (first_strike) : n’évolue pas → non améliorable', () => {
+    const fs = { type: 'first_strike' as const, value: 1 };
+    expect(effectScales(fs)).toBe(false);
+    expect(effectScales({ type: 'damage_pct', value: 10 })).toBe(true);
+    // la valeur réelle ne bouge pas avec le niveau
+    expect(effectiveValue(fs, 1)).toBe(effectiveValue(fs, 8));
+    // même avec plein de poussière et loin du plafond, on n’améliore pas
+    const relic = item({ slot: 'relic', effect: fs, level: 1 });
+    expect(canUpgrade(relic, 9999, 10)).toBe(false);
   });
 });
 

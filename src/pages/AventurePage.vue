@@ -193,7 +193,10 @@
                   :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
                   @click="doUpgrade(char.row.equipped[slot]!.id)"
                 >
-                  <template v-if="char.row.equipped[slot]!.level >= c.level.level">max</template>
+                  <template v-if="!effectScales(char.row.equipped[slot]!.effect)">fixe</template>
+                  <template v-else-if="char.row.equipped[slot]!.level >= c.level.level"
+                    >max</template
+                  >
                   <template v-else
                     >⬆
                     {{
@@ -269,23 +272,31 @@
             </div>
           </div>
           <div v-if="run.drops.length" class="drops">
-            <div class="drops-lbl">✨ Butin — clique pour l'ouvrir dans le sac</div>
-            <button
-              v-for="d in run.drops"
-              :key="d.id"
-              class="drop"
-              :class="'r-' + d.rarity"
-              @click="goToInventory"
-            >
+            <div class="drops-lbl">✨ Butin</div>
+            <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
               <span class="inv-emo">{{ d.emoji }}</span>
               <div class="inv-main">
                 <div class="inv-name">
                   {{ d.name }} <span class="rarity">{{ RARITY_LABEL[d.rarity] }}</span>
                 </div>
-                <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ effectLabel(d.effect) }}</div>
+                <div class="inv-eff">
+                  {{ SLOT_LABEL[d.slot] }} · {{ effectLabel(d.effect, d.level) }}
+                </div>
+                <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
+                  équipé :
+                  {{ effectLabel(equippedInSlot(d.slot)!.effect, equippedInSlot(d.slot)!.level) }}
+                </div>
+                <div v-if="dropState(d) === 'equipped'" class="drop-done">⚔️ Équipé</div>
+                <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
+                <div v-else class="inv-actions">
+                  <button class="equip-btn" @click="doEquip(d.id)">Équiper</button>
+                  <button class="link-btn" @click="doSalvage(d)">
+                    Casser ✨{{ salvageValue(d) }}
+                  </button>
+                  <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
+                </div>
               </div>
-              <q-icon name="chevron_right" size="20px" />
-            </button>
+            </div>
           </div>
         </div>
 
@@ -422,7 +433,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
@@ -436,6 +447,7 @@ import {
   aggregateEffects,
   rollDrop,
   effectLabel,
+  effectScales,
   canUpgrade,
   upgradeCost,
   salvageValue,
@@ -579,12 +591,18 @@ const busy = ref(false);
 const run = ref<RunView | null>(null);
 const sacTitle = ref<HTMLElement | null>(null);
 
-// Cliquer un objet lâché → onglet Personnage, défile jusqu'au sac.
-function goToInventory() {
-  tab.value = 'perso';
-  void nextTick(() => {
-    setTimeout(() => sacTitle.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
-  });
+// Butin géré directement dans la carte de résultat (pas de va-et-vient vers le sac).
+// État d'un objet lâché, calculé en direct depuis le perso (source de vérité).
+function dropState(it: Item): 'bag' | 'equipped' | 'gone' {
+  const r = char.row;
+  if (!r) return 'gone';
+  if (r.inventory.some((i) => i.id === it.id)) return 'bag';
+  if (SLOTS.some((s) => r.equipped[s]?.id === it.id)) return 'equipped';
+  return 'gone';
+}
+// Objet actuellement équipé dans le slot d'un drop → comparaison sur place.
+function equippedInSlot(slot: ItemSlot): Item | undefined {
+  return char.row?.equipped[slot];
 }
 
 // Progression séquentielle : un donjon n'est déblocable qu'après avoir nettoyé
@@ -1485,19 +1503,20 @@ onMounted(async () => {
   font-size: 13px;
   color: var(--accent);
 }
-.drop {
-  width: 100%;
-  text-align: left;
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
+.drops .drop {
+  align-items: flex-start;
 }
-.drop:active {
-  transform: scale(0.99);
-}
-.drop .q-icon {
+.drop-cmp {
+  font-size: 10.5px;
   color: var(--dim);
-  flex-shrink: 0;
+  font-style: italic;
+  margin-top: 1px;
+}
+.drop-done {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
 }
 
 /* Boss communautaire */
