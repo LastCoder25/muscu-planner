@@ -12,8 +12,8 @@ const ACTIVITY_XP_FACTOR: Record<CardioActivity, number> = {
   velo: 0.7,
   velo_appart: 0.6,
   rando: 0.55,
-  marche: 0.4,
-  marche_tapis: 0.4,
+  marche: 0.45,
+  marche_tapis: 0.45,
 };
 
 // Valeur d'une répétition (partagée séance ↔ challenge → parité). Réglable.
@@ -53,7 +53,11 @@ export function cardioSessionXp(log: CardioLog): number {
   const dminus = log.descent_m ?? 0;
   const dur = log.duration_min ?? 0;
   const factor = ACTIVITY_XP_FACTOR[log.activity] ?? 1;
-  return Math.round((km * 10 + dur * 1.5) * factor + (dplus + dminus) / 10);
+  // Dosage distance/temps porté davantage sur le TEMPS (min×2.4 > km×4) : le
+  // temps est le meilleur proxy d'effort, colle mieux aux calories par activité
+  // (le vélo « distance facile » redescend, la marche/rando longues montent) et
+  // s'auto-corrige selon l'allure de chacun. Footing ≈ inchangé (référence).
+  return Math.round((km * 4 + dur * 2.4) * factor + (dplus + dminus) / 10);
 }
 
 /** Estimation d'XP d'une séance PRÉVUE (avant de la faire) : même barème que

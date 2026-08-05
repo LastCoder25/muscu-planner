@@ -21,6 +21,7 @@ export interface CharacterRow {
   equipped: Equipped;
   inventory: Item[];
   talents: string[];
+  cleared_dungeons: string[];
 }
 
 export class PseudoTakenError extends Error {
@@ -34,7 +35,8 @@ export const useCharacterStore = defineStore('character', () => {
   const row = ref<CharacterRow | null>(null);
   const loaded = ref(false);
 
-  const COLS = 'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents';
+  const COLS =
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons';
 
   async function fetchMine() {
     const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
@@ -79,15 +81,27 @@ export const useCharacterStore = defineStore('character', () => {
   // au SAC (équipement 100 % manuel). Les objets ne montent plus tout seuls.
   async function applyRun(
     userId: string,
-    input: { energyCost: number; gold: number; dust: number; drops: Item[] },
+    input: {
+      energyCost: number;
+      gold: number;
+      dust: number;
+      drops: Item[];
+      clearedDungeonId?: string;
+    },
   ) {
     const cur = row.value;
     if (!cur) return;
+    // Un donjon nettoyé débloque le suivant : on mémorise son id (dédup).
+    const cleared =
+      input.clearedDungeonId && !cur.cleared_dungeons.includes(input.clearedDungeonId)
+        ? [...cur.cleared_dungeons, input.clearedDungeonId]
+        : cur.cleared_dungeons;
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
       energy_spent: cur.energy_spent + input.energyCost,
       inventory: [...cur.inventory, ...input.drops],
+      cleared_dungeons: cleared,
     });
   }
 

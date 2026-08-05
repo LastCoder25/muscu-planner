@@ -290,8 +290,13 @@
         </div>
 
         <div class="dungeons">
-          <div v-for="d in DUNGEONS" :key="d.id" class="dgn">
-            <span class="dgn-emo">{{ d.emoji }}</span>
+          <div
+            v-for="d in DUNGEONS"
+            :key="d.id"
+            class="dgn"
+            :class="{ locked: !dungeonUnlocked(d) }"
+          >
+            <span class="dgn-emo">{{ dungeonUnlocked(d) ? d.emoji : '🔒' }}</span>
             <div class="dgn-main">
               <div class="dgn-top">
                 <span class="dgn-name font-display">{{ d.name }}</span>
@@ -301,11 +306,20 @@
                 {{ d.monsterIds.length }} monstres · coûte {{ d.energyCost }} ⚡ · conseillé niv.
                 {{ d.recoLevel }}
               </div>
-              <div class="dgn-hint">{{ d.hint }}</div>
+              <div v-if="dungeonUnlocked(d)" class="dgn-hint">{{ d.hint }}</div>
+              <div v-else class="dgn-hint dgn-lock">
+                🔒 Nettoie d’abord « {{ prevDungeonName(d) }} » pour débloquer ce donjon.
+              </div>
             </div>
-            <button class="fight" :disabled="c.energy < d.energyCost || busy" @click="explore(d)">
+            <button
+              v-if="dungeonUnlocked(d)"
+              class="fight"
+              :disabled="c.energy < d.energyCost || busy"
+              @click="explore(d)"
+            >
               Explorer
             </button>
+            <button v-else class="fight" disabled>Verrouillé</button>
           </div>
         </div>
       </template>
@@ -573,9 +587,23 @@ function goToInventory() {
   });
 }
 
+// Progression séquentielle : un donjon n'est déblocable qu'après avoir nettoyé
+// le précédent. Le premier est toujours ouvert.
+const clearedSet = computed(() => new Set(char.row?.cleared_dungeons ?? []));
+function dungeonUnlocked(d: Dungeon): boolean {
+  const i = DUNGEONS.findIndex((x) => x.id === d.id);
+  const prev = i > 0 ? DUNGEONS[i - 1] : undefined;
+  return !prev || clearedSet.value.has(prev.id);
+}
+function prevDungeonName(d: Dungeon): string {
+  const i = DUNGEONS.findIndex((x) => x.id === d.id);
+  return (i > 0 ? DUNGEONS[i - 1]?.name : '') ?? '';
+}
+
 async function explore(d: Dungeon) {
   const uid = auth.user?.id;
   if (!uid || !char.row || busy.value || c.value.energy < d.energyCost) return;
+  if (!dungeonUnlocked(d)) return;
   busy.value = true;
   try {
     const seed = Math.floor(Math.random() * 1e9);
@@ -593,7 +621,13 @@ async function explore(d: Dungeon) {
     });
     if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
     const dust = r.defeated * 2; // petit filet de poussière par run
-    await char.applyRun(uid, { energyCost: d.energyCost, gold, dust, drops });
+    await char.applyRun(uid, {
+      energyCost: d.energyCost,
+      gold,
+      dust,
+      drops,
+      ...(r.cleared ? { clearedDungeonId: d.id } : {}),
+    });
     run.value = {
       name: d.name,
       cleared: r.cleared,
@@ -1302,6 +1336,16 @@ onMounted(async () => {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 12px 14px;
+}
+.dgn.locked {
+  opacity: 0.6;
+}
+.dgn.locked .dgn-name {
+  color: var(--dim);
+}
+.dgn-lock {
+  color: var(--dim);
+  font-style: italic;
 }
 .dgn-emo {
   font-size: 28px;
