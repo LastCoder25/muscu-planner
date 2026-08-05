@@ -132,7 +132,7 @@ export const useCharacterStore = defineStore('character', () => {
     const found = findOwned(cur, itemId);
     if (!found) return;
     const { item, slot } = found;
-    const cost = upgradeCost(item.level);
+    const cost = upgradeCost(item.level, item.rarity);
     if (item.level >= playerLevel || cur.dust < cost) return;
     const upgraded: Item = { ...item, level: item.level + 1 };
     if (slot) {

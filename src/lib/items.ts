@@ -27,6 +27,7 @@ export interface Item {
   emoji: string;
   rarity: Rarity;
   level: number; // niveau ACTUEL (monté via la Poussière d'évolution, ≤ niveau du joueur)
+  baseLevel: number; // niveau à l'obtention (drop) → sert au remboursement au recyclage
   effect: ItemEffect; // value = magnitude de BASE (niveau 1) ; l'effet réel grandit avec le niveau
 }
 
@@ -43,22 +44,30 @@ export function effectiveValue(effect: ItemEffect, level: number): number {
 // ── Économie d'objets : Poussière (évolution) & or (vente) ──
 const DUST_BY_RARITY: Record<Rarity, number> = { common: 5, rare: 12, epic: 25, legendary: 50 };
 const GOLD_BY_RARITY: Record<Rarity, number> = { common: 10, rare: 25, epic: 60, legendary: 140 };
+// Le coût d'amélioration monte avec la rareté (un légendaire = plus gros puits).
+const RARITY_COST_MULT: Record<Rarity, number> = { common: 1, rare: 1.5, epic: 2, legendary: 3 };
 
-/** Poussière obtenue en cassant un objet (rareté + un peu par niveau investi). */
+/** Coût en poussière pour passer du niveau `level` au suivant, selon la rareté. */
+export function upgradeCost(level: number, rarity: Rarity): number {
+  return Math.round((10 + level * 6) * RARITY_COST_MULT[rarity]);
+}
+/** Poussière déjà investie dans un objet (des niveaux payés : baseLevel → level). */
+export function investedDust(it: Item): number {
+  let sum = 0;
+  for (let k = it.baseLevel ?? 1; k < it.level; k++) sum += upgradeCost(k, it.rarity);
+  return sum;
+}
+/** Casser un objet → base de rareté + TOUTE la poussière investie (remboursée). */
 export function salvageValue(it: Item): number {
-  return DUST_BY_RARITY[it.rarity] + (it.level - 1) * 3;
+  return DUST_BY_RARITY[it.rarity] + investedDust(it);
 }
 /** Or obtenu en vendant un objet. */
 export function sellValue(it: Item): number {
   return GOLD_BY_RARITY[it.rarity] + (it.level - 1) * 8;
 }
-/** Coût en poussière pour passer un objet du niveau `level` au suivant (croissant). */
-export function upgradeCost(level: number): number {
-  return 10 + level * 6;
-}
 /** Peut-on améliorer cet objet ? (poussière suffisante + pas au plafond). */
 export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean {
-  return it.level < playerLevel && dust >= upgradeCost(it.level);
+  return it.level < playerLevel && dust >= upgradeCost(it.level, it.rarity);
 }
 
 export type Equipped = Partial<Record<ItemSlot, Item>>;
@@ -183,6 +192,7 @@ export function rollDrop(
     emoji: SLOT_EMOJI[slot],
     rarity,
     level: 1, // les objets démarrent au niveau 1 ; on les monte avec la Poussière
+    baseLevel: 1,
     effect: { type: chosen.type, value },
   };
 }

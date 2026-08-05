@@ -193,7 +193,11 @@
                   >
                     <template v-if="char.row.equipped[slot]!.level >= c.level.level">max</template>
                     <template v-else
-                      >⬆ {{ upgradeCost(char.row.equipped[slot]!.level) }} ✨</template
+                      >⬆
+                      {{
+                        upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity)
+                      }}
+                      ✨</template
                     >
                   </button>
                   <button class="link-btn" @click="doUnequip(slot)">retirer</button>

@@ -9,6 +9,7 @@ import {
   sellValue,
   upgradeCost,
   canUpgrade,
+  investedDust,
   type Item,
   type Equipped,
 } from '@/lib/items';
@@ -19,6 +20,7 @@ const item = (over: Partial<Item> & Pick<Item, 'slot' | 'effect'>): Item => ({
   emoji: '❔',
   rarity: over.rarity ?? 'common',
   level: over.level ?? 1,
+  baseLevel: over.baseLevel ?? 1,
   ...over,
 });
 
@@ -28,13 +30,14 @@ describe('niveaux d’objet', () => {
     expect(effectiveValue(eff, 1)).toBe(10);
     expect(effectiveValue(eff, 6)).toBe(Math.round(10 * (1 + 5 * 0.1))); // 15
   });
-  it('upgradeCost croît avec le niveau', () => {
-    expect(upgradeCost(1)).toBeLessThan(upgradeCost(5));
+  it('upgradeCost croît avec le niveau ET la rareté', () => {
+    expect(upgradeCost(1, 'common')).toBeLessThan(upgradeCost(5, 'common'));
+    expect(upgradeCost(3, 'legendary')).toBeGreaterThan(upgradeCost(3, 'common'));
   });
   it('canUpgrade : faux si poussière insuffisante ou au plafond', () => {
     const it = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, level: 2 });
-    expect(canUpgrade(it, upgradeCost(2), 10)).toBe(true);
-    expect(canUpgrade(it, upgradeCost(2) - 1, 10)).toBe(false); // pas assez de poussière
+    expect(canUpgrade(it, upgradeCost(2, 'common'), 10)).toBe(true);
+    expect(canUpgrade(it, upgradeCost(2, 'common') - 1, 10)).toBe(false);
     expect(canUpgrade({ ...it, level: 5 }, 9999, 5)).toBe(false); // au plafond
   });
 });
@@ -53,6 +56,20 @@ describe('recyclage / vente', () => {
     });
     expect(salvageValue(legendary)).toBeGreaterThan(salvageValue(common));
     expect(sellValue(legendary)).toBeGreaterThan(sellValue(common));
+  });
+  it('le recyclage rembourse la poussière investie (niveaux payés)', () => {
+    const rarity = 'rare' as const;
+    const invested = upgradeCost(3, rarity) + upgradeCost(4, rarity); // 3→4 et 4→5
+    const it = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 10 },
+      rarity,
+      baseLevel: 3, // obtenu niveau 3
+      level: 5, // monté à 5
+    });
+    expect(investedDust(it)).toBe(invested);
+    // salvage = base rareté + investi ; on ne rembourse PAS les niveaux non payés (1→3)
+    expect(salvageValue(it)).toBe(salvageValue(item({ ...it, level: 3 })) + invested);
   });
 });
 
