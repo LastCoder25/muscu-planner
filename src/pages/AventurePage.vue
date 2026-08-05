@@ -371,6 +371,39 @@
         </template>
       </template>
     </template>
+
+    <!-- Modale : casser un objet → poussière -->
+    <transition name="salv-fade">
+      <div v-if="salvageTarget" class="salv-backdrop" @click.self="salvageTarget = null">
+        <div class="salv-card" :class="'r-' + salvageTarget.rarity">
+          <div class="salv-title font-display">Casser cet objet ?</div>
+          <div class="salv-item">
+            <span class="salv-emo">{{ salvageTarget.emoji }}</span>
+            <div class="salv-main">
+              <div class="salv-name">
+                {{ salvageTarget.name }}
+                <span class="rarity"
+                  >{{ RARITY_LABEL[salvageTarget.rarity] }} · Nv {{ salvageTarget.level }}</span
+                >
+              </div>
+              <div class="salv-eff">
+                {{ SLOT_LABEL[salvageTarget.slot] }} ·
+                {{ effectLabel(salvageTarget.effect, salvageTarget.level) }}
+              </div>
+            </div>
+          </div>
+          <div class="salv-reward">
+            <span class="salv-plus font-display">+{{ salvageValue(salvageTarget) }}</span>
+            <span class="salv-dust">✨ poussière d'évolution</span>
+          </div>
+          <div class="salv-warn">Objet détruit définitivement (poussière investie remboursée).</div>
+          <div class="salv-actions">
+            <button class="salv-cancel" @click="salvageTarget = null">Annuler</button>
+            <button class="salv-break" @click="confirmSalvage">Casser</button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </q-page>
 </template>
 
@@ -611,13 +644,21 @@ function doSell(it: Item) {
     'Vente impossible.',
   );
 }
+const salvageTarget = ref<Item | null>(null);
 function doSalvage(it: Item) {
-  $q.dialog({
-    title: 'Casser l’objet',
-    message: `« ${it.name} » sera détruit contre ${salvageValue(it)} ✨ de poussière. Continuer ?`,
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Casser', color: 'negative' },
-  }).onOk(() => withUid((uid) => char.salvage(uid, it.id), 'Recyclage impossible.'));
+  salvageTarget.value = it;
+}
+function confirmSalvage() {
+  const it = salvageTarget.value;
+  if (!it) return;
+  salvageTarget.value = null;
+  withUid(
+    (uid) =>
+      char
+        .salvage(uid, it.id)
+        .then(() => $q.notify({ type: 'positive', message: `+${salvageValue(it)} ✨ poussière` })),
+    'Recyclage impossible.',
+  );
 }
 function doResetTalents() {
   $q.dialog({
@@ -1522,5 +1563,139 @@ onMounted(async () => {
 }
 .foot b {
   color: var(--text);
+}
+
+/* Modale de cassage d'objet */
+.salv-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.salv-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.salv-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  margin-bottom: 14px;
+}
+.salv-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-2, #2b241b);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+.salv-emo {
+  font-size: 30px;
+}
+.salv-main {
+  min-width: 0;
+}
+.salv-name {
+  font-weight: 600;
+  color: var(--text);
+}
+.salv-name .rarity {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+  margin-left: 4px;
+}
+.salv-eff {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+.salv-reward {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 16px 0 6px;
+}
+.salv-plus {
+  font-size: 34px;
+  font-weight: 700;
+  color: #b07cff;
+  line-height: 1;
+  text-shadow: 0 0 20px rgba(176, 124, 255, 0.4);
+}
+.salv-dust {
+  font-size: 12px;
+  color: var(--dim);
+}
+.salv-warn {
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+  margin-bottom: 16px;
+}
+.salv-actions {
+  display: flex;
+  gap: 10px;
+}
+.salv-cancel,
+.salv-break {
+  flex: 1;
+  border-radius: 12px;
+  padding: 12px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+}
+.salv-cancel {
+  background: transparent;
+  color: var(--dim);
+}
+.salv-break {
+  background: var(--d4);
+  border-color: var(--d4);
+  color: #15120e;
+}
+.salv-break:active,
+.salv-cancel:active {
+  transform: scale(0.97);
+}
+/* Rareté = liseré gauche de la carte */
+.salv-card.r-common {
+  border-left-color: var(--dim);
+}
+.salv-card.r-rare {
+  border-left-color: #4ec6d6;
+}
+.salv-card.r-epic {
+  border-left-color: #b07cff;
+}
+.salv-card.r-legendary {
+  border-left-color: var(--accent);
+}
+.salv-fade-enter-active,
+.salv-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+.salv-fade-enter-from,
+.salv-fade-leave-to {
+  opacity: 0;
 }
 </style>
