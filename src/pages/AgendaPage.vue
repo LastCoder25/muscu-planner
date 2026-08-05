@@ -14,11 +14,13 @@
           <span v-if="d.iso === todayIso" class="day-today">aujourd'hui</span>
         </div>
         <div v-if="!d.entries.length" class="day-empty">—</div>
-        <div v-for="(e, i) in d.entries" :key="i" class="entry" :class="'k-' + e.kind">
-          <q-icon :name="e.icon" size="20px" class="entry-ic" />
-          <div class="entry-main">
-            <div class="entry-title">{{ e.title }}</div>
-            <div v-if="e.meta" class="entry-meta">{{ e.meta }}</div>
+        <div v-else class="day-entries">
+          <div v-for="(e, i) in d.entries" :key="i" class="entry" :class="'k-' + e.kind">
+            <q-icon :name="e.icon" size="20px" class="entry-ic" />
+            <div class="entry-main">
+              <div class="entry-title">{{ e.title }}</div>
+              <div v-if="e.meta" class="entry-meta">{{ e.meta }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -193,6 +195,11 @@ onMounted(async () => {
   font-size: 13px;
   padding-left: 2px;
 }
+.day-entries {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 6px;
+}
 .entry {
   display: flex;
   align-items: center;
@@ -201,7 +208,6 @@ onMounted(async () => {
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
   border-radius: 12px;
-  margin-bottom: 6px;
   background: var(--surface);
 }
 .entry-ic {

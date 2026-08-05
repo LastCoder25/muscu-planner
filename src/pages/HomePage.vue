@@ -13,6 +13,7 @@
         </button>
         <button class="head-ic" aria-label="Challenges" @click="goChallenges">
           <q-icon name="emoji_events" size="22px" />
+          <span v-if="challengesDueToday > 0" class="ic-badge">{{ challengesDueToday }}</span>
         </button>
         <button class="glvl" aria-label="Niveau global" @click="goStats">
           <span class="glvl-n font-display">{{ progress.global.value.level }}</span>
@@ -140,6 +141,8 @@ import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useLiveStore } from '@/stores/live';
 import { useLiveCourtStore } from '@/stores/liveCourt';
 import { useProgress } from '@/composables/useProgress';
+import { useChallengesStore } from '@/stores/challenges';
+import { challengeStats, logicalToday } from '@/lib/challenges';
 
 const $q = useQuasar();
 const router = useRouter();
@@ -150,6 +153,16 @@ const live = useLiveStore();
 const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
 const progress = useProgress();
+const challenges = useChallengesStore();
+// Défis actifs dont l'objectif du jour reste à faire (badge sur l'icône Challenges).
+const challengesDueToday = computed(() => {
+  const today = logicalToday();
+  return challenges.list.filter((ch) => {
+    if (ch.status !== 'active') return false;
+    const s = challengeStats(ch, today);
+    return s.dayIndex >= 0 && s.dayIndex < ch.duration_days && s.todayTarget > 0 && !s.isDoneToday;
+  }).length;
+});
 // Général : renforcement + cardio (cartes couleur/discipline). Tennis = spécifique, à part.
 const generalTiles = computed(() => [
   { key: 'muscu', label: 'Muscu', icon: 'fitness_center', info: progress.muscu.value, go: goMuscu },
@@ -335,6 +348,7 @@ async function goStats() {
   gap: 8px;
 }
 .head-ic {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -345,6 +359,24 @@ async function goStats() {
   border-radius: 14px;
   color: var(--text);
   cursor: pointer;
+}
+.ic-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+  border-radius: 9px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1;
 }
 .glvl {
   display: flex;

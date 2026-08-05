@@ -49,7 +49,13 @@
         <button v-for="c in shown" :key="c.id" class="ch-card" @click="goDetail(c.id)">
           <div class="cc-top">
             <div class="cc-name">{{ c.exercise_name }}</div>
-            <span class="cc-badge" :class="c.status">{{ statusLabel(c) }}</span>
+            <span
+              v-if="c.status === 'active'"
+              class="cc-today"
+              :class="st(c).isDoneToday ? 'done' : 'todo'"
+              >{{ st(c).isDoneToday ? '✓ À jour' : '● À faire' }}</span
+            >
+            <span v-else class="cc-badge" :class="c.status">{{ statusLabel(c) }}</span>
           </div>
           <div class="cc-meta">
             {{ fmtName(c.format) }} · {{ c.duration_days }} j · jour
@@ -322,6 +328,23 @@ onMounted(async () => {
 .cc-badge.done {
   background: var(--d1);
   color: var(--accent-ink);
+}
+.cc-today {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.cc-today.done {
+  color: var(--d1);
+  background: color-mix(in srgb, var(--d1) 18%, transparent);
+}
+.cc-today.todo {
+  color: var(--d3);
+  background: color-mix(in srgb, var(--d3) 18%, transparent);
 }
 .cc-meta {
   font-size: 12px;
