@@ -12,8 +12,24 @@ import {
   type ChallengeConfig,
   type ChallengeFormat,
 } from '@/lib/challenges';
-import { challengeIdsForActivity } from '@/data/cardio';
+import { challengeIdsForActivity, CARDIO_CHALLENGE_IDS } from '@/data/cardio';
 import type { CardioActivity } from '@/lib/types';
+
+// Catégorie d'un défi pour la limite « 1 muscu + 1 cardio actifs ».
+function isCardioChallengeRow(c: { unit: string; exercise_id: string }): boolean {
+  return c.unit === 'distance' || CARDIO_CHALLENGE_IDS.has(c.exercise_id);
+}
+
+export class ChallengeLimitError extends Error {
+  constructor(cardio: boolean) {
+    super(
+      cardio
+        ? 'Tu as déjà un challenge cardio en cours (1 max).'
+        : 'Tu as déjà un challenge muscu en cours (1 max).',
+    );
+    this.name = 'ChallengeLimitError';
+  }
+}
 
 const COLS =
   'id, exercise_id, exercise_name, unit, format, duration_days, start_date, config, daily_targets, progress, status';
@@ -46,6 +62,11 @@ export const useChallengesStore = defineStore('challenges', () => {
   }
 
   async function create(input: NewChallenge): Promise<Challenge> {
+    // Limite : 1 challenge muscu + 1 cardio actifs à la fois.
+    const cardio = isCardioChallengeRow(input);
+    if (list.value.some((c) => c.status === 'active' && isCardioChallengeRow(c) === cardio)) {
+      throw new ChallengeLimitError(cardio);
+    }
     const { data, error } = await supabase
       .from('challenges')
       .insert({ ...input, progress: [], status: 'active' })

@@ -13,13 +13,14 @@ function log(over: Partial<SessionLog> = {}): SessionLog {
 }
 
 describe('sessionXp', () => {
-  it('séance vide = 50 base + intensité par défaut (note 2 → 20)', () => {
-    expect(sessionXp(log())).toBe(70);
+  it('durée seule = base (durée×3), même sans détail', () => {
+    expect(sessionXp(log({ duration_min: 45 }))).toBe(135);
+    expect(sessionXp(log())).toBe(0);
   });
 
-  it('compte reps, tonnage/100 et intensité', () => {
+  it('durée + reps×0,2 + tonnage/500 (bonus détail)', () => {
     const l = log({
-      global_difficulty: 4,
+      duration_min: 40,
       exercises: [
         {
           id: 'x',
@@ -32,8 +33,8 @@ describe('sessionXp', () => {
         },
       ],
     });
-    // 50 + 20 reps + 2000 tonnage/100(=20) + 40 (note 4) = 130
-    expect(sessionXp(l)).toBe(130);
+    // 40×3(=120) + 20 reps×0,2(=4) + 2000 tonnage/500(=4) = 128
+    expect(sessionXp(l)).toBe(128);
   });
 });
 
@@ -81,7 +82,7 @@ describe('estimateSessionXp', () => {
         },
       ],
     };
-    // reps = 3 * 10 = 30 ; tonnage = 30*50=1500 →/100=15 ; 50 + 30 + 15 + 20 = 115
-    expect(estimateSessionXp(s)).toBe(115);
+    // reps = 3*10 = 30 → ×0,2 = 6 ; tonnage 1500/500 = 3 ; total 9
+    expect(estimateSessionXp(s)).toBe(9);
   });
 });

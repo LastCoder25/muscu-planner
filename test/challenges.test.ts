@@ -173,26 +173,38 @@ type DayProgressLite = {
 };
 
 describe('challengeXpPoints', () => {
-  it('reps cumulées + 25 par jour validé (défi actif)', () => {
+  it('total NON atteint : reps×0,2 seulement, pas de prime', () => {
     const c = challenge({
       progress: [
         { day: 0, date: '2026-01-05', target: 10, done: 10, elapsed_sec: 0, completed: true },
         { day: 1, date: '2026-01-06', target: 10, done: 7, elapsed_sec: 0, completed: false },
       ],
     });
-    // reps = 17 ; jours validés = 1 → 25 ; actif → pas de prime. total = 42
-    expect(challengeXpPoints([c])).toBe(42);
+    // total prévu 30, réalisé 17 < 30 → pas de prime. reps 17×0,2 = 3,4 → 3
+    expect(challengeXpPoints([c])).toBe(3);
   });
 
-  it('un défi au temps ne compte pas les reps (anti-farm chrono)', () => {
+  it('total ATTEINT : reps×0,2 + prime de complétion', () => {
+    const c = challenge({
+      progress: [
+        { day: 0, date: '2026-01-05', target: 10, done: 10, elapsed_sec: 0, completed: true },
+        { day: 1, date: '2026-01-06', target: 10, done: 10, elapsed_sec: 0, completed: true },
+        { day: 2, date: '2026-01-07', target: 10, done: 10, elapsed_sec: 0, completed: true },
+      ],
+    });
+    // reps 30×0,2 = 6 ; prime 0,25×30×(1+3/30=1,1) = 8,25 → total round(14,25) = 14
+    expect(challengeXpPoints([c])).toBe(14);
+  });
+
+  it('un défi en temps ne compte pas les reps', () => {
     const c = challenge({
       unit: 'time',
       progress: [
-        { day: 0, date: '2026-01-05', target: 60, done: 60, elapsed_sec: 60, completed: true },
+        { day: 0, date: '2026-01-05', target: 10, done: 5, elapsed_sec: 5, completed: false },
       ],
     });
-    // reps = 0 (time) ; 1 jour validé → 25
-    expect(challengeXpPoints([c])).toBe(25);
+    // unit time → reps 0 ; total non atteint → 0
+    expect(challengeXpPoints([c])).toBe(0);
   });
 });
 

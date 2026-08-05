@@ -16,7 +16,13 @@ const ACTIVITY_XP_FACTOR: Record<CardioActivity, number> = {
   marche_tapis: 0.4,
 };
 
-/** XP d'une séance de muscu : présence + volume (reps) + charge + intensité (note 1–4). */
+// Valeur d'une répétition (partagée séance ↔ challenge → parité). Réglable.
+export const REP_XP = 0.2;
+// Valeur d'une minute de séance muscu (la DURÉE porte l'essentiel de l'XP,
+// pour que « durée seule » reste gratifiant ; reps/tonnage = petit bonus détail).
+export const MUSCU_MIN_XP = 3;
+
+/** XP d'une séance de muscu : durée (base, même sans détail) + reps + charge (bonus). */
 export function sessionXp(log: SessionLog): number {
   let reps = 0;
   let tonnage = 0;
@@ -26,8 +32,8 @@ export function sessionXp(log: SessionLog): number {
       tonnage += (s.load_kg || 0) * (s.reps || 0);
     }
   }
-  const intensity = (log.global_difficulty ?? 2) * 10; // 10 … 40
-  return Math.round(50 + reps + tonnage / 100 + intensity);
+  const dur = log.duration_min ?? 0;
+  return Math.round(dur * MUSCU_MIN_XP + reps * REP_XP + tonnage / 500);
 }
 
 /** XP d'une séance de tennis : présence + durée + drills réalisés + intensité. */
@@ -46,9 +52,8 @@ export function cardioSessionXp(log: CardioLog): number {
   const dplus = log.elevation_m ?? 0;
   const dminus = log.descent_m ?? 0;
   const dur = log.duration_min ?? 0;
-  const intensity = (log.rpe ?? 2) * 10;
   const factor = ACTIVITY_XP_FACTOR[log.activity] ?? 1;
-  return Math.round(40 + (km * 10 + dur * 1.5) * factor + (dplus + dminus) / 10 + intensity);
+  return Math.round((km * 10 + dur * 1.5) * factor + (dplus + dminus) / 10);
 }
 
 /** Estimation d'XP d'une séance PRÉVUE (avant de la faire) : même barème que
@@ -70,5 +75,5 @@ export function estimateSessionXp(session: Session): number {
       tonnage += sets * avgReps * (t.load_kg || 0);
     }
   }
-  return Math.round(50 + reps + tonnage / 100 + 20);
+  return Math.round(reps * REP_XP + tonnage / 500);
 }

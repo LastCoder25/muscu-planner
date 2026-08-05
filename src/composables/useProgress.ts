@@ -13,7 +13,7 @@ import { computeLevel } from '@/lib/levels';
 import { CARDIO_CHALLENGE_IDS } from '@/data/cardio';
 
 // Part de l'XP de fond convertie en énergie d'aventure (réglable).
-const ENERGY_PER_XP = 0.15;
+const ENERGY_PER_XP = 0.25;
 
 export function useProgress() {
   const logs = useLogsStore();

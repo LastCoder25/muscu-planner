@@ -30,6 +30,51 @@
       </button>
     </div>
 
+    <section v-if="tab === 'act'" class="quick">
+      <div class="quick-head">
+        <q-icon name="timer" size="20px" />
+        <div>
+          <div class="quick-title font-display">Séance rapide</div>
+          <div class="quick-desc">
+            Juste la durée → XP muscu. Saisir les exos/poids en donne plus.
+          </div>
+        </div>
+      </div>
+      <div class="quick-row">
+        <span class="quick-lbl">Date</span>
+        <q-input v-model="qDate" type="date" filled dense style="max-width: 180px" />
+      </div>
+      <div class="quick-row">
+        <span class="quick-lbl">Durée</span>
+        <q-input
+          v-model.number="qHours"
+          type="number"
+          filled
+          dense
+          suffix="h"
+          style="max-width: 90px"
+        />
+        <q-input
+          v-model.number="qMinutes"
+          type="number"
+          filled
+          dense
+          suffix="min"
+          style="max-width: 100px"
+        />
+      </div>
+      <q-btn
+        class="full-width q-mt-sm"
+        color="primary"
+        text-color="dark"
+        no-caps
+        icon="check"
+        label="Enregistrer la séance"
+        :loading="saving"
+        @click="saveQuick"
+      />
+    </section>
+
     <template v-else>
       <div v-if="loading" class="column items-center q-mt-lg">
         <q-spinner color="primary" size="28px" />
@@ -60,15 +105,75 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
+import { useAuthStore } from '@/stores/auth';
+import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
 
 const router = useRouter();
 const $q = useQuasar();
 const logs = useLogsStore();
+const auth = useAuthStore();
 
 const tab = ref<'act' | 'hist'>('act');
 const loading = ref(false);
 const rows = ref<LogRow[]>([]);
 let fetched = false;
+
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function performedAtIso(dateIso: string): string {
+  const [y, m, dd] = dateIso.split('-').map((n) => Number(n) || 0);
+  const now = new Date();
+  const dt = new Date(
+    y!,
+    (m ?? 1) - 1,
+    dd ?? 1,
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+  );
+  return dt.toISOString();
+}
+
+const qDate = ref(todayIso());
+const qHours = ref<number>(1);
+const qMinutes = ref<number>(0);
+const saving = ref(false);
+
+async function saveQuick() {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  const totalMin = (qHours.value || 0) * 60 + (qMinutes.value || 0);
+  if (totalMin <= 0) {
+    $q.notify({ type: 'warning', message: 'Renseigne une durée.' });
+    return;
+  }
+  saving.value = true;
+  try {
+    const iso = performedAtIso(qDate.value);
+    const log: SessionLog = {
+      schema_version: SCHEMA_VERSION,
+      type: 'session_log',
+      id: crypto.randomUUID(),
+      name: 'Séance muscu',
+      started_at: iso,
+      ended_at: iso,
+      duration_min: totalMin,
+      exercises: [],
+    };
+    await logs.insert(uid, log);
+    $q.notify({ type: 'positive', message: 'Séance enregistrée — XP muscu gagné.' });
+    qDate.value = todayIso();
+    qHours.value = 1;
+    qMinutes.value = 0;
+    fetched = false; // l'historique se rechargera à la prochaine ouverture
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
+  } finally {
+    saving.value = false;
+  }
+}
 
 async function go(path: string) {
   await router.push(path);
@@ -191,6 +296,41 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 1fr;
   gap: 12px;
+}
+.quick {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  margin-top: 12px;
+}
+.quick-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.quick-head .q-icon {
+  color: var(--accent);
+}
+.quick-title {
+  font-weight: 600;
+  color: var(--text);
+}
+.quick-desc {
+  font-size: 12px;
+  color: var(--dim);
+}
+.quick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.quick-lbl {
+  font-size: 13px;
+  color: var(--dim);
+  min-width: 48px;
 }
 .tile {
   display: flex;

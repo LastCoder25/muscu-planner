@@ -2,6 +2,7 @@
 // Calcul des objectifs par jour selon le format, suggestion de difficulté,
 // statistiques (streak/complétion) et évaluation des succès.
 import type { Level } from './types';
+import { REP_XP } from './athlete';
 
 export type ChallengeFormat =
   | 'fixed'
@@ -746,23 +747,23 @@ export function activeDaysOf(ch: Challenge): number {
   return n;
 }
 
-/** Points d'XP issus des CHALLENGES : reps cumulées (défis reps only, anti-farm
- *  chrono) + 25/jour validé + prime de complétion proportionnelle (25 % de l'effort
- *  planifié × multiplicateur de durée → un long défi terminé rapporte bien plus). */
+/** Points d'XP issus des CHALLENGES (modèle « total ») :
+ *  - reps réalisées × REP_XP (défis en reps ; le cardio est compté via les sorties) ;
+ *  - PRIME de complétion versée UNIQUEMENT quand le TOTAL est atteint (souple : jours
+ *    de repos/rattrapage OK) = 25 % de l'effort planifié × multiplicateur de durée.
+ *  Pas de bonus « par jour » (parité avec le sport libre). */
 export function challengeXpPoints(challenges: Challenge[]): number {
-  const totalReps = challenges.reduce(
-    (a, c) => a + (c.unit === 'reps' ? c.progress.reduce((b, p) => b + (p.done || 0), 0) : 0),
+  const repsXp = challenges.reduce(
+    (a, c) =>
+      a + (c.unit === 'reps' ? c.progress.reduce((b, p) => b + (p.done || 0), 0) * REP_XP : 0),
     0,
   );
-  const completedDays = challenges.reduce(
-    (a, c) => a + c.progress.filter((p) => p.completed).length,
-    0,
-  );
-  const completionBonus = challenges
-    .filter((c) => c.status === 'done')
-    .reduce(
-      (a, c) => a + Math.round(0.25 * plannedEffort(c) * durationMultiplier(activeDaysOf(c))),
-      0,
-    );
-  return Math.round(totalReps + completedDays * 25 + completionBonus);
+  const completionBonus = challenges.reduce((a, c) => {
+    const total = plannedEffort(c);
+    const done = c.progress.reduce((b, p) => b + (p.done || 0), 0);
+    const doneEffort = c.unit === 'time' ? done / 4 : done;
+    if (total <= 0 || doneEffort < total) return a; // prime seulement si le total est atteint
+    return a + Math.round(0.25 * total * durationMultiplier(activeDaysOf(c)));
+  }, 0);
+  return Math.round(repsXp + completionBonus);
 }
