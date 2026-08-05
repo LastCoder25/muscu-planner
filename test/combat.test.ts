@@ -22,6 +22,10 @@ describe('playerCombatant', () => {
     expect(c.crit).toBeCloseTo(0.25); // 50 × 0.005
     expect(c.dodge).toBeCloseTo(0.15); // 50 × 0.003
   });
+  it('un profil sans Puissance frappe quand même (base de dégâts > 1)', () => {
+    const cardio = playerCombatant('Cardio', { puissance: 0, endurance: 40, agilite: 60 });
+    expect(cardio.damage).toBeGreaterThan(1); // plancher : jamais bloqué à 1
+  });
   it('crit et esquive sont plafonnés', () => {
     const c = playerCombatant('X', { puissance: 1, endurance: 1, agilite: 100000 });
     expect(c.crit).toBeLessThanOrEqual(0.6);

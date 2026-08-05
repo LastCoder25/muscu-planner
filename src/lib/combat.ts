@@ -29,7 +29,8 @@ export interface Combatant {
 export const COMBAT = {
   pvBase: 100,
   pvPerEndurance: 10,
-  damagePerPuissance: 1.5,
+  baseDamage: 6, // plancher : même sans Puissance, on frappe (cardio gagne par crit/esquive)
+  damagePerPuissance: 1.2,
   critPerAgilite: 0.005, // +0,5 %/pt
   critCap: 0.6,
   dodgePerAgilite: 0.003,
@@ -48,7 +49,10 @@ export function playerCombatant(
   return {
     name,
     pv: COMBAT.pvBase + stats.endurance * COMBAT.pvPerEndurance,
-    damage: Math.max(1, Math.round(stats.puissance * COMBAT.damagePerPuissance)),
+    damage: Math.max(
+      1,
+      Math.round(COMBAT.baseDamage + stats.puissance * COMBAT.damagePerPuissance),
+    ),
     crit: Math.min(COMBAT.critCap, stats.agilite * COMBAT.critPerAgilite),
     dodge: Math.min(COMBAT.dodgeCap, stats.agilite * COMBAT.dodgePerAgilite),
     initiative: stats.agilite,
