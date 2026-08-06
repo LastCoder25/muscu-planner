@@ -768,6 +768,28 @@ export function repWeightFromExercise(
   return Math.round(muscleFactor * (loaded ? 1.25 : 1) * 100) / 100;
 }
 
+/** Jour (index 0-based) où un défi CUMULÉ atteint son total ; -1 si pas atteint. */
+export function cumulativeCompletionDay(ch: Challenge): number {
+  const total = ch.config.total ?? 0;
+  if (total <= 0) return -1;
+  const sorted = [...ch.progress].filter((p) => p.day >= 0).sort((a, b) => a.day - b.day);
+  let sum = 0;
+  for (const p of sorted) {
+    sum += p.done || 0;
+    if (sum >= total) return p.day;
+  }
+  return -1;
+}
+
+/** Fraction d'avance d'un défi cumulé terminé : jours gagnés / durée (0..~1). */
+export function earlyFinishFraction(ch: Challenge): number {
+  if (ch.format !== 'cumulative' || ch.duration_days <= 0) return 0;
+  const cd = cumulativeCompletionDay(ch);
+  if (cd < 0) return 0;
+  const daysSaved = Math.max(0, ch.duration_days - (cd + 1));
+  return daysSaved / ch.duration_days;
+}
+
 /** Points d'XP issus des CHALLENGES (modèle « total ») :
  *  - reps réalisées × REP_XP (défis en reps ; le cardio est compté via les sorties) ;
  *  - PRIME de complétion versée UNIQUEMENT quand le TOTAL est atteint (souple : jours
@@ -789,11 +811,13 @@ export function challengeXpPoints(challenges: Challenge[]): number {
     const done = c.progress.reduce((b, p) => b + (p.done || 0), 0);
     const doneEffort = c.unit === 'time' ? done / 4 : done;
     if (total <= 0 || doneEffort < total) return a; // prime seulement si le total est atteint
-    // Prime adaptée au format : le CUMULÉ (reps globales) = objectif de volume →
-    // prime sur les reps seules (pas de durée) ; les formats X/jour = objectif de
-    // régularité → multiplicateur sur les jours RÉELLEMENT tenus. Le poids de rep
-    // pondère la magnitude (pas la condition de complétion).
-    const mult = c.format === 'cumulative' ? 1 : durationMultiplier(activeDaysOf(c));
+    // Prime adaptée au format. Le poids de rep pondère la magnitude (pas la complétion).
+    // - CUMULÉ (reps globales) = objectif de VOLUME → prime ∝ reps × (1 + avance),
+    //   où avance = jours gagnés / durée (finir tôt récompense, mais tout est
+    //   multiplié par les reps → un petit total reste petit, pas d'abus).
+    // - X/jour = objectif de RÉGULARITÉ → × multiplicateur des jours réellement tenus.
+    const mult =
+      c.format === 'cumulative' ? 1 + earlyFinishFraction(c) : durationMultiplier(activeDaysOf(c));
     return a + Math.round(0.25 * total * weightOf(c) * mult);
   }, 0);
   return Math.round(repsXp + completionBonus);

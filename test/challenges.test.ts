@@ -270,26 +270,32 @@ describe('prime par format (anti-abus durée)', () => {
     expect(activeDaysOf(spread)).toBe(10);
   });
 
-  it('CUMULÉ : prime = volume (bourrer ou étaler = pareil à reps égales)', () => {
+  it('CUMULÉ : finir en avance récompense (∝ reps × avance), petit total reste petit', () => {
     const base = { format: 'cumulative' as const, duration_days: 30, config: cfg({ total: 100 }) };
-    const crammed = challenge({
+    const early = challenge({
       ...base,
       progress: [
         { day: 0, date: '2026-01-05', target: 0, done: 100, elapsed_sec: 0, completed: true },
       ],
     });
-    const spread = challenge({
+    const late = challenge({
       ...base,
-      progress: Array.from({ length: 10 }, (_, i) => ({
-        day: i,
-        date: '2026-01-05',
-        target: 0,
-        done: 10,
-        elapsed_sec: 0,
-        completed: false,
-      })),
+      progress: [
+        { day: 29, date: '2026-02-03', target: 0, done: 100, elapsed_sec: 0, completed: true },
+      ],
     });
-    expect(challengeXpPoints([spread])).toBe(challengeXpPoints([crammed]));
+    // même total (100) → finir jour 0 rapporte PLUS que finir le dernier jour
+    expect(challengeXpPoints([early])).toBeGreaterThan(challengeXpPoints([late]));
+    // petit total (5) fini jour 0 → prime minuscule (indexée sur les reps, pas d'abus)
+    const tiny = challenge({
+      format: 'cumulative',
+      duration_days: 30,
+      config: cfg({ total: 5 }),
+      progress: [
+        { day: 0, date: '2026-01-05', target: 0, done: 5, elapsed_sec: 0, completed: true },
+      ],
+    });
+    expect(challengeXpPoints([tiny])).toBeLessThan(challengeXpPoints([early]));
   });
 
   it('X/JOUR : prime récompense les jours tenus (étaler > bourrer)', () => {
