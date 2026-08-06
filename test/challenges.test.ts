@@ -247,21 +247,18 @@ describe('challengeXpPoints', () => {
   });
 });
 
-describe('activeDaysOf (anti-abus multiplicateur de durée)', () => {
-  const cum = (progress: Challenge['progress']) =>
-    challenge({
-      format: 'cumulative',
+describe('prime par format (anti-abus durée)', () => {
+  it('activeDaysOf compte les jours réellement faits, pas la durée planifiée', () => {
+    const crammed = challenge({
       duration_days: 30,
-      daily_targets: Array(30).fill(0),
-      config: cfg({ total: 100 }),
-      progress,
+      progress: [
+        { day: 0, date: '2026-01-05', target: 0, done: 100, elapsed_sec: 0, completed: true },
+      ],
     });
-  it('compte les jours réellement faits, pas la durée planifiée', () => {
-    const crammed = cum([
-      { day: 0, date: '2026-01-05', target: 0, done: 100, elapsed_sec: 0, completed: true },
-    ]);
-    const spread = cum(
-      Array.from({ length: 10 }, (_, i) => ({
+    expect(activeDaysOf(crammed)).toBe(1);
+    const spread = challenge({
+      duration_days: 30,
+      progress: Array.from({ length: 10 }, (_, i) => ({
         day: i,
         date: '2026-01-05',
         target: 0,
@@ -269,10 +266,48 @@ describe('activeDaysOf (anti-abus multiplicateur de durée)', () => {
         elapsed_sec: 0,
         completed: false,
       })),
-    );
-    expect(activeDaysOf(crammed)).toBe(1);
+    });
     expect(activeDaysOf(spread)).toBe(10);
-    // même total (100 reps) → étaler rapporte PLUS que bourrer en 1 jour
+  });
+
+  it('CUMULÉ : prime = volume (bourrer ou étaler = pareil à reps égales)', () => {
+    const base = { format: 'cumulative' as const, duration_days: 30, config: cfg({ total: 100 }) };
+    const crammed = challenge({
+      ...base,
+      progress: [
+        { day: 0, date: '2026-01-05', target: 0, done: 100, elapsed_sec: 0, completed: true },
+      ],
+    });
+    const spread = challenge({
+      ...base,
+      progress: Array.from({ length: 10 }, (_, i) => ({
+        day: i,
+        date: '2026-01-05',
+        target: 0,
+        done: 10,
+        elapsed_sec: 0,
+        completed: false,
+      })),
+    });
+    expect(challengeXpPoints([spread])).toBe(challengeXpPoints([crammed]));
+  });
+
+  it('X/JOUR : prime récompense les jours tenus (étaler > bourrer)', () => {
+    const base = { format: 'fixed' as const, duration_days: 3, daily_targets: [100, 100, 100] };
+    const crammed = challenge({
+      ...base,
+      progress: [
+        { day: 0, date: '2026-01-05', target: 100, done: 300, elapsed_sec: 0, completed: true },
+      ],
+    });
+    const spread = challenge({
+      ...base,
+      progress: [
+        { day: 0, date: '2026-01-05', target: 100, done: 100, elapsed_sec: 0, completed: true },
+        { day: 1, date: '2026-01-06', target: 100, done: 100, elapsed_sec: 0, completed: true },
+        { day: 2, date: '2026-01-07', target: 100, done: 100, elapsed_sec: 0, completed: true },
+      ],
+    });
     expect(challengeXpPoints([spread])).toBeGreaterThan(challengeXpPoints([crammed]));
   });
 });

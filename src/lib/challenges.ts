@@ -789,8 +789,12 @@ export function challengeXpPoints(challenges: Challenge[]): number {
     const done = c.progress.reduce((b, p) => b + (p.done || 0), 0);
     const doneEffort = c.unit === 'time' ? done / 4 : done;
     if (total <= 0 || doneEffort < total) return a; // prime seulement si le total est atteint
-    // Le poids pondère la MAGNITUDE de la prime, pas la condition de complétion.
-    return a + Math.round(0.25 * total * weightOf(c) * durationMultiplier(activeDaysOf(c)));
+    // Prime adaptée au format : le CUMULÉ (reps globales) = objectif de volume →
+    // prime sur les reps seules (pas de durée) ; les formats X/jour = objectif de
+    // régularité → multiplicateur sur les jours RÉELLEMENT tenus. Le poids de rep
+    // pondère la magnitude (pas la condition de complétion).
+    const mult = c.format === 'cumulative' ? 1 : durationMultiplier(activeDaysOf(c));
+    return a + Math.round(0.25 * total * weightOf(c) * mult);
   }, 0);
   return Math.round(repsXp + completionBonus);
 }
