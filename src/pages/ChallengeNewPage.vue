@@ -50,6 +50,17 @@
             comptent pas — 1 « accessoire » gratuit en plus.
           </div>
         </div>
+        <div class="ex-filter">
+          <button class="exf" :class="{ on: exFilter === 'all' }" @click="exFilter = 'all'">
+            Tous
+          </button>
+          <button class="exf" :class="{ on: exFilter === 'muscu' }" @click="exFilter = 'muscu'">
+            💪 Muscu
+          </button>
+          <button class="exf" :class="{ on: exFilter === 'cardio' }" @click="exFilter = 'cardio'">
+            🏃 Cardio
+          </button>
+        </div>
         <q-input
           v-model="search"
           filled
@@ -545,12 +556,18 @@ const HIDDEN_EX_IDS = new Set(['ex_ch_marche', 'ex_ch_course']);
 const activeExoIds = computed(
   () => new Set(challenges.list.filter((c) => c.status === 'active').map((c) => c.exercise_id)),
 );
+const exFilter = ref<'all' | 'muscu' | 'cardio'>('all');
 const filteredLib = computed(() => {
   const n = search.value.trim().toLowerCase();
   // On retire : les exos masqués, ceux déjà en défi actif, et ceux qui ne
   // rentrent plus dans le quota de leur voie (jetons pleins / accessoire pris).
+  // Filtre voie (Tous / Muscu / Cardio) pour accélérer la recherche.
   const visible = lib.value.filter(
-    (e) => !HIDDEN_EX_IDS.has(e.id) && !activeExoIds.value.has(e.id) && !exFull(e),
+    (e) =>
+      !HIDDEN_EX_IDS.has(e.id) &&
+      !activeExoIds.value.has(e.id) &&
+      !exFull(e) &&
+      (exFilter.value === 'all' || exIsCardio(e) === (exFilter.value === 'cardio')),
   );
   const base = n
     ? visible.filter(
@@ -933,6 +950,28 @@ onMounted(async () => {
   line-height: 1.4;
   color: var(--dim);
   margin-top: 4px;
+}
+/* Filtre de voie (Tous / Muscu / Cardio) */
+.ex-filter {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.exf {
+  flex: 1;
+  padding: 8px 6px;
+  border-radius: 9px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.exf.on {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  color: var(--text);
 }
 /* Note de coût en jetons (étape Durée) */
 .tok-note {

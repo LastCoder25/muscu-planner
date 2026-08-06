@@ -35,71 +35,81 @@
     </div>
 
     <template v-else>
-      <!-- En cours / Terminés / Abandonnés -->
-      <template v-if="LIST_TABS.includes(tab)">
-        <div v-if="tab === 'active'" class="cap-card">
+      <!-- EN COURS : en-tête capacité (jetons) + tuiles groupées par voie -->
+      <template v-if="tab === 'active'">
+        <div class="cap-card">
           <div class="cap-row">
             <span class="cap-lane">💪 Muscu</span>
             <span class="pips">
-              <span
-                v-for="n in BUDGET"
-                :key="n"
-                class="pip"
-                :class="{ on: n <= muscuUsed }"
-              /> </span
-            ><span class="cap-acc" :class="{ used: muscuAccUsed }"
-              >+1 accessoire {{ muscuAccUsed ? '✓' : '' }}</span
-            >
+              <span v-for="n in BUDGET" :key="n" class="pip" :class="{ on: n <= muscuUsed }" />
+            </span>
+            <span class="cap-num font-display">{{ muscuUsed }}/{{ BUDGET }}</span>
+            <span class="cap-acc" :class="{ used: muscuAccUsed }">+1 access.</span>
           </div>
           <div class="cap-row">
             <span class="cap-lane">🏃 Cardio</span>
             <span class="pips">
               <span v-for="n in BUDGET" :key="n" class="pip" :class="{ on: n <= cardioUsed }" />
             </span>
+            <span class="cap-num font-display">{{ cardioUsed }}/{{ BUDGET }}</span>
+            <span class="cap-acc" :class="{ used: cardioAccUsed }">+1 access.</span>
           </div>
           <div class="cap-hint">
-            Places occupées par tes défis. Un défi coûte 1–3 places selon sa durée ; les petits exos
-            (mollets, abdos, bras) sont « accessoires » et gratuits.
+            Un défi occupe 1 à 3 places selon sa durée ; les petits exos (mollets, abdos, bras) sont
+            « accessoires » et gratuits.
           </div>
         </div>
+
+        <div v-if="shown.length === 0" class="empty">Aucun challenge en cours. Lance-en un !</div>
+
+        <template v-for="grp in activeGroups" :key="grp.key">
+          <div v-if="grp.list.length" class="lane-group">
+            <div class="lane-title">{{ grp.label }}</div>
+            <div class="ch-tiles">
+              <button v-for="c in grp.list" :key="c.id" class="ch-tile" @click="goDetail(c.id)">
+                <div class="ct-top">
+                  <span class="ct-name">{{ c.exercise_name }}</span>
+                  <span class="ct-cost">{{ cardCostLabel(c) }}</span>
+                </div>
+                <span class="cc-today" :class="st(c).isDoneToday ? 'done' : 'todo'">{{
+                  st(c).isDoneToday ? '✓ À jour' : '● À faire'
+                }}</span>
+                <div class="bar">
+                  <div class="fill" :style="{ width: st(c).completionPct + '%' }" />
+                </div>
+                <div class="ct-sub">
+                  {{ st(c).completionPct }}% · j{{
+                    Math.min(Math.max(1, st(c).dayIndex + 1), c.duration_days)
+                  }}/{{ c.duration_days }}
+                </div>
+                <div v-if="bal(c) !== 0" class="cc-bal" :class="bal(c) > 0 ? 'ahead' : 'behind'">
+                  <template v-if="bal(c) > 0">▲ +{{ bal(c) }} {{ unitOf(c) }}</template>
+                  <template v-else>▼ −{{ -bal(c) }} {{ unitOf(c) }}</template>
+                </div>
+              </button>
+            </div>
+          </div>
+        </template>
+      </template>
+
+      <!-- TERMINÉS / ABANDONNÉS : liste classique -->
+      <template v-else-if="LIST_TABS.includes(tab)">
         <div v-if="shown.length === 0" class="empty">
           {{
-            tab === 'active'
-              ? 'Aucun challenge en cours. Lance-en un !'
-              : tab === 'done'
-                ? 'Aucun challenge terminé pour l’instant.'
-                : 'Aucun challenge abandonné.'
+            tab === 'done'
+              ? 'Aucun challenge terminé pour l’instant.'
+              : 'Aucun challenge abandonné.'
           }}
         </div>
         <button v-for="c in shown" :key="c.id" class="ch-card" @click="goDetail(c.id)">
           <div class="cc-top">
             <div class="cc-name">{{ c.exercise_name }}</div>
-            <span
-              v-if="c.status === 'active'"
-              class="cc-today"
-              :class="st(c).isDoneToday ? 'done' : 'todo'"
-              >{{ st(c).isDoneToday ? '✓ À jour' : '● À faire' }}</span
-            >
-            <span v-else class="cc-badge" :class="c.status">{{ statusLabel(c) }}</span>
+            <span class="cc-badge" :class="c.status">{{ statusLabel(c) }}</span>
           </div>
-          <div class="cc-meta">
-            {{ fmtName(c.format) }} · {{ c.duration_days }} j · jour
-            {{ Math.min(Math.max(1, st(c).dayIndex + 1), c.duration_days) }}/{{ c.duration_days }}
-            <span v-if="c.status === 'active'" class="cc-cost">· {{ cardCostLabel(c) }}</span>
-          </div>
+          <div class="cc-meta">{{ fmtName(c.format) }} · {{ c.duration_days }} j</div>
           <div class="bar"><div class="fill" :style="{ width: st(c).completionPct + '%' }" /></div>
           <div class="cc-sub">
-            {{ st(c).completionPct }}% · série {{ st(c).streak }} · {{ st(c).totalDone }}
-            {{ unitOf(c) }}
-          </div>
-          <div
-            v-if="c.status === 'active'"
-            class="cc-bal"
-            :class="bal(c) > 0 ? 'ahead' : bal(c) < 0 ? 'behind' : 'even'"
-          >
-            <template v-if="bal(c) > 0">▲ +{{ bal(c) }} {{ unitOf(c) }} d'avance</template>
-            <template v-else-if="bal(c) < 0">▼ −{{ -bal(c) }} {{ unitOf(c) }} de retard</template>
-            <template v-else>● dans les temps</template>
+            {{ st(c).completionPct }}% · {{ st(c).totalDone }} {{ unitOf(c) }}
           </div>
         </button>
       </template>
@@ -225,7 +235,19 @@ function laneChallenges(cardio: boolean): LaneChallenge[] {
 const muscuUsed = computed(() => usedTokens(laneChallenges(false)));
 const cardioUsed = computed(() => usedTokens(laneChallenges(true)));
 const muscuAccUsed = computed(() => accessoryCount(laneChallenges(false)) >= 1);
+const cardioAccUsed = computed(() => accessoryCount(laneChallenges(true)) >= 1);
 const BUDGET = CHALLENGE_TOKEN_BUDGET;
+// Défis actifs groupés par voie (affichage en tuiles).
+const activeMuscuCh = computed(() =>
+  store.list.filter((c) => c.status === 'active' && !isCardioChallengeRow(c)),
+);
+const activeCardioCh = computed(() =>
+  store.list.filter((c) => c.status === 'active' && isCardioChallengeRow(c)),
+);
+const activeGroups = computed(() => [
+  { key: 'muscu', label: '💪 Musculation', list: activeMuscuCh.value },
+  { key: 'cardio', label: '🏃 Cardio', list: activeCardioCh.value },
+]);
 // Coût d'un défi (badge sur la carte).
 function cardCostLabel(c: Challenge): string {
   if (isAccessoryMuscle(c.muscle_primary)) return 'accessoire';
@@ -401,6 +423,68 @@ onMounted(async () => {
 }
 .cc-cost {
   color: var(--accent);
+}
+.cap-num {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 30px;
+}
+
+/* Tuiles de défis (En cours), groupées par voie */
+.lane-group {
+  margin-bottom: 16px;
+}
+.lane-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+.ch-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+.ch-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  text-align: left;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+.ch-tile:active {
+  transform: scale(0.99);
+}
+.ct-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+.ct-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.2;
+}
+.ct-cost {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.ct-sub {
+  font-size: 11px;
+  color: var(--dim);
 }
 
 .ch-card {
