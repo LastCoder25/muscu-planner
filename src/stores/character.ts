@@ -94,6 +94,7 @@ export const useCharacterStore = defineStore('character', () => {
       drops: Item[];
       clearedDungeonId?: string;
       consumed?: string[]; // consommables dépensés pour ce run
+      gained?: string[]; // consommables gagnés en butin
     },
   ) {
     const cur = row.value;
@@ -103,8 +104,9 @@ export const useCharacterStore = defineStore('character', () => {
       input.clearedDungeonId && !cur.cleared_dungeons.includes(input.clearedDungeonId)
         ? [...cur.cleared_dungeons, input.clearedDungeonId]
         : cur.cleared_dungeons;
-    // Décrémente les consommables utilisés (retire l'entrée si elle tombe à 0).
+    // Consommables : +1 par gain (butin), −1 par dépense (retire l'entrée à 0).
     const consumables = { ...cur.consumables };
+    for (const id of input.gained ?? []) consumables[id] = (consumables[id] ?? 0) + 1;
     for (const id of input.consumed ?? []) {
       const left = (consumables[id] ?? 0) - 1;
       if (left > 0) consumables[id] = left;

@@ -67,6 +67,15 @@ export const SHOP_ITEMS: ShopItem[] = [
 
 export const CONSUMABLE_ITEMS = SHOP_ITEMS.filter((i) => i.kind === 'consumable');
 
+// Consommables pouvant tomber en butin de donjon.
+export const DROPPABLE_CONSUMABLES: ShopItemId[] = ['potion_heal', 'vial_luck', 'elixir_force'];
+
+/** Tire un éventuel consommable en butin d'un run (en plus de l'équipement). */
+export function rollConsumableDrop(rng: () => number, cleared: boolean): ShopItemId | null {
+  if (rng() >= (cleared ? 0.28 : 0.1)) return null;
+  return DROPPABLE_CONSUMABLES[Math.floor(rng() * DROPPABLE_CONSUMABLES.length)] ?? null;
+}
+
 export function shopItem(id: string): ShopItem | undefined {
   return SHOP_ITEMS.find((i) => i.id === id);
 }

@@ -327,6 +327,10 @@
               </div>
             </div>
           </div>
+          <div v-if="run.consumable" class="cons-drop">
+            {{ run.consumable.emoji }} <b>{{ run.consumable.name }}</b> ajouté à ton sac de
+            consommables 🎒
+          </div>
         </div>
 
         <!-- Consommables à utiliser pour le prochain run -->
@@ -555,7 +559,13 @@ import {
   type ItemSlot,
   type AggregatedEffects,
 } from '@/lib/items';
-import { SHOP_ITEMS, CONSUMABLE_ITEMS, consumableEffect } from '@/data/shop';
+import {
+  SHOP_ITEMS,
+  CONSUMABLE_ITEMS,
+  consumableEffect,
+  rollConsumableDrop,
+  shopItem,
+} from '@/data/shop';
 import { talentsEarned, talentEffects, talentChoices, talentByCode } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { logicalToday } from '@/lib/challenges';
@@ -578,6 +588,7 @@ interface RunView {
   finalPv: number;
   fights: RunFight[];
   drops: Item[];
+  consumable?: { emoji: string; name: string };
 }
 
 const $q = useQuasar();
@@ -823,6 +834,9 @@ async function explore(d: Dungeon) {
       lucky,
     });
     if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
+    // Butin consommable (en plus de l'équipement).
+    const consDropId = rollConsumableDrop(dropRng, r.cleared);
+    const consDrop = consDropId ? shopItem(consDropId) : undefined;
     const dust = r.defeated * 2; // petit filet de poussière par run
     await char.applyRun(uid, {
       energyCost: d.energyCost,
@@ -831,6 +845,7 @@ async function explore(d: Dungeon) {
       drops,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(consumed.length ? { consumed } : {}),
+      ...(consDropId ? { gained: [consDropId] } : {}),
     });
     selectedConsumables.value = []; // consommés
     run.value = {
@@ -848,6 +863,7 @@ async function explore(d: Dungeon) {
         rounds: f.result.rounds,
       })),
       drops,
+      ...(consDrop ? { consumable: { emoji: consDrop.emoji, name: consDrop.name } } : {}),
     };
     if (r.cleared) $q.notify({ type: 'positive', message: `Donjon nettoyé — +${gold} 🪙` });
   } catch {
@@ -1850,6 +1866,18 @@ onMounted(async () => {
   margin-top: 6px;
   font-size: 12px;
   font-weight: 600;
+  color: var(--accent);
+}
+.cons-drop {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  font-size: 12.5px;
+  color: var(--text);
+}
+.cons-drop b {
   color: var(--accent);
 }
 
