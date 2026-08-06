@@ -214,6 +214,9 @@
             </div>
             <template v-if="char.row.equipped[slot]">
               <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
+              <div class="rarity slot-rarity">
+                {{ RARITY_LABEL[char.row.equipped[slot]!.rarity] }}
+              </div>
               <div class="slot-eff">
                 {{ effectLabel(char.row.equipped[slot]!.effect, char.row.equipped[slot]!.level) }}
               </div>
@@ -251,7 +254,8 @@
               <span class="inv-emo">{{ it.emoji }}</span>
               <div class="inv-main">
                 <div class="inv-name">
-                  {{ it.name }} <span class="inv-nv">Nv {{ it.level }}</span>
+                  {{ it.name }} <span class="rarity">{{ RARITY_LABEL[it.rarity] }}</span>
+                  <span class="inv-nv">Nv {{ it.level }}</span>
                 </div>
                 <div class="inv-eff">
                   {{ SLOT_LABEL[it.slot] }} · {{ effectLabel(it.effect, it.level) }}
@@ -1595,6 +1599,10 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.slot-rarity {
+  margin-top: 1px;
+  margin-bottom: 2px;
 }
 .slot-eff {
   font-size: 11px;
