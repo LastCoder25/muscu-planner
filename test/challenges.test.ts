@@ -7,6 +7,7 @@ import {
   addContribution,
   challengeLiveBalance,
   isChallengeComplete,
+  repWeightFromExercise,
   type Challenge,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -226,6 +227,34 @@ describe('challengeXpPoints', () => {
     });
     // unit time → reps 0 ; total non atteint → 0
     expect(challengeXpPoints([c])).toBe(0);
+  });
+
+  it('le poids de rep pondère reps ET prime', () => {
+    // même défi complété (30 reps) : poids 0,6 (mollets) vs 1,3 (composé)
+    const base = {
+      progress: [
+        { day: 0, date: '2026-01-05', target: 10, done: 10, elapsed_sec: 0, completed: true },
+        { day: 1, date: '2026-01-06', target: 10, done: 10, elapsed_sec: 0, completed: true },
+        { day: 2, date: '2026-01-07', target: 10, done: 10, elapsed_sec: 0, completed: true },
+      ],
+    };
+    const light = challengeXpPoints([challenge({ ...base, rep_weight: 0.6 })]);
+    const heavy = challengeXpPoints([challenge({ ...base, rep_weight: 1.3 })]);
+    const neutral = challengeXpPoints([challenge({ ...base })]); // défaut 1
+    expect(light).toBeLessThan(neutral);
+    expect(heavy).toBeGreaterThan(neutral);
+  });
+});
+
+describe('repWeightFromExercise', () => {
+  it('isolation poids du corps = 0,6 ; composé = 1,0 ; composé chargé ≈ 1,63', () => {
+    expect(repWeightFromExercise([], [])).toBe(0.6); // mollets (1 muscle, BW)
+    expect(repWeightFromExercise(['triceps'], [])).toBe(1); // pompes (2, BW)
+    // squat barre : 3 muscles (1,3) × chargé (1,25) = 1,625 → 1,63
+    expect(repWeightFromExercise(['fessiers', 'ischio-jambiers'], ['barbell', 'rack'])).toBe(1.63);
+  });
+  it('isolation chargé (leg extension machine) = 0,75', () => {
+    expect(repWeightFromExercise([], ['machine'])).toBe(0.75);
   });
 });
 

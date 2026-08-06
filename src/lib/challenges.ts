@@ -79,6 +79,7 @@ export interface Challenge {
   exercise_id: string;
   exercise_name: string;
   muscle_primary?: string | null; // groupe musculaire (pour la limite « accessoire »)
+  rep_weight?: number | null; // valeur d'une rep selon l'exo (isolation vs composé × charge)
   unit: 'reps' | 'time' | 'distance'; // distance = km (marche/course/vélo)
   format: ChallengeFormat;
   duration_days: number;
@@ -748,15 +749,40 @@ export function activeDaysOf(ch: Challenge): number {
   return n;
 }
 
+// Matériel qui ajoute une CHARGE externe (≠ structurel : pullup_bar, dip_station,
+// bench, rack ne portent pas de charge → poids du corps).
+const LOADED_EQUIPMENT = ['barbell', 'dumbbells', 'kettlebell', 'machine', 'cable'];
+
+/**
+ * Poids d'une rep selon l'exo (XP juste) : facteur muscles (isolation vs composé,
+ * via le nb de muscles travaillés) × facteur charge (résisté ou poids du corps).
+ * Dérivé automatiquement de la biblio, figé sur le défi à la création.
+ *  - 1 muscle → 0,6 · 2 → 1,0 · 3+ → 1,3 ; chargé → ×1,25.
+ */
+export function repWeightFromExercise(
+  muscleSecondary?: string[] | null,
+  equipmentRequired?: string[] | null,
+): number {
+  const muscles = 1 + (muscleSecondary?.length ?? 0);
+  const muscleFactor = muscles <= 1 ? 0.6 : muscles === 2 ? 1 : 1.3;
+  const loaded = (equipmentRequired ?? []).some((e) => LOADED_EQUIPMENT.includes(e));
+  return Math.round(muscleFactor * (loaded ? 1.25 : 1) * 100) / 100;
+}
+
 /** Points d'XP issus des CHALLENGES (modèle « total ») :
  *  - reps réalisées × REP_XP (défis en reps ; le cardio est compté via les sorties) ;
  *  - PRIME de complétion versée UNIQUEMENT quand le TOTAL est atteint (souple : jours
  *    de repos/rattrapage OK) = 25 % de l'effort planifié × multiplicateur de durée.
  *  Pas de bonus « par jour » (parité avec le sport libre). */
 export function challengeXpPoints(challenges: Challenge[]): number {
+  // Le poids de rep (isolation vs composé × charge) ne s'applique qu'aux défis en reps.
+  const weightOf = (c: Challenge) => (c.unit === 'reps' ? (c.rep_weight ?? 1) : 1);
   const repsXp = challenges.reduce(
     (a, c) =>
-      a + (c.unit === 'reps' ? c.progress.reduce((b, p) => b + (p.done || 0), 0) * REP_XP : 0),
+      a +
+      (c.unit === 'reps'
+        ? c.progress.reduce((b, p) => b + (p.done || 0), 0) * REP_XP * weightOf(c)
+        : 0),
     0,
   );
   const completionBonus = challenges.reduce((a, c) => {
@@ -764,7 +790,8 @@ export function challengeXpPoints(challenges: Challenge[]): number {
     const done = c.progress.reduce((b, p) => b + (p.done || 0), 0);
     const doneEffort = c.unit === 'time' ? done / 4 : done;
     if (total <= 0 || doneEffort < total) return a; // prime seulement si le total est atteint
-    return a + Math.round(0.25 * total * durationMultiplier(activeDaysOf(c)));
+    // Le poids pondère la MAGNITUDE de la prime, pas la condition de complétion.
+    return a + Math.round(0.25 * total * weightOf(c) * durationMultiplier(activeDaysOf(c)));
   }, 0);
   return Math.round(repsXp + completionBonus);
 }

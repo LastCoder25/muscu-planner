@@ -398,6 +398,7 @@ import {
   suggestConfig,
   progressiveApply,
   logicalToday,
+  repWeightFromExercise,
   type ChallengeFormat,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -728,6 +729,10 @@ async function createChallenge() {
       exercise_id: exercise.value.id,
       exercise_name: exercise.value.name,
       muscle_primary: exercise.value.muscle_primary,
+      rep_weight: repWeightFromExercise(
+        exercise.value.muscle_secondary,
+        exercise.value.equipment_required,
+      ),
       unit: unit.value,
       format: format.value,
       duration_days: durationDays.value,

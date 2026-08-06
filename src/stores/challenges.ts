@@ -39,12 +39,13 @@ export class ChallengeLimitError extends Error {
 }
 
 const COLS =
-  'id, exercise_id, exercise_name, muscle_primary, unit, format, duration_days, start_date, config, daily_targets, progress, status';
+  'id, exercise_id, exercise_name, muscle_primary, rep_weight, unit, format, duration_days, start_date, config, daily_targets, progress, status';
 
 export interface NewChallenge {
   exercise_id: string;
   exercise_name: string;
   muscle_primary?: string | null;
+  rep_weight?: number | null;
   unit: 'reps' | 'time' | 'distance';
   format: ChallengeFormat;
   duration_days: number;
