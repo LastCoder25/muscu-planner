@@ -27,6 +27,7 @@ export interface CharacterRow {
   login_grace_used: boolean;
   last_login_date: string | null;
   login_energy: number;
+  consumables: Record<string, number>;
 }
 
 export class PseudoTakenError extends Error {
@@ -41,7 +42,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, login_streak, login_grace_used, last_login_date, login_energy';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, login_streak, login_grace_used, last_login_date, login_energy, consumables';
 
   async function fetchMine() {
     const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
@@ -92,6 +93,7 @@ export const useCharacterStore = defineStore('character', () => {
       dust: number;
       drops: Item[];
       clearedDungeonId?: string;
+      consumed?: string[]; // consommables dépensés pour ce run
     },
   ) {
     const cur = row.value;
@@ -101,13 +103,39 @@ export const useCharacterStore = defineStore('character', () => {
       input.clearedDungeonId && !cur.cleared_dungeons.includes(input.clearedDungeonId)
         ? [...cur.cleared_dungeons, input.clearedDungeonId]
         : cur.cleared_dungeons;
+    // Décrémente les consommables utilisés (retire l'entrée si elle tombe à 0).
+    const consumables = { ...cur.consumables };
+    for (const id of input.consumed ?? []) {
+      const left = (consumables[id] ?? 0) - 1;
+      if (left > 0) consumables[id] = left;
+      else delete consumables[id];
+    }
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
       energy_spent: cur.energy_spent + input.energyCost,
       inventory: [...cur.inventory, ...input.drops],
       cleared_dungeons: cleared,
+      consumables,
     });
+  }
+
+  // Achat en boutique : débite l'or, applique l'effet (énergie instantanée →
+  // login_energy = pool d'énergie bonus ; consommable → +1 au compteur).
+  async function buyItem(
+    userId: string,
+    item: { id: string; cost: number; kind: string; energy?: number },
+  ) {
+    const cur = row.value;
+    if (!cur || cur.gold < item.cost) return false;
+    const patch: Record<string, unknown> = { gold: cur.gold - item.cost };
+    if (item.kind === 'energy') {
+      patch.login_energy = cur.login_energy + (item.energy ?? 0);
+    } else {
+      patch.consumables = { ...cur.consumables, [item.id]: (cur.consumables[item.id] ?? 0) + 1 };
+    }
+    await persist(userId, patch);
+    return true;
   }
 
   function findOwned(cur: CharacterRow, itemId: string): { item: Item; slot?: ItemSlot } | null {
@@ -247,6 +275,7 @@ export const useCharacterStore = defineStore('character', () => {
     resetTalents,
     spendEnergy,
     claimDailyLogin,
+    buyItem,
   };
 });
 

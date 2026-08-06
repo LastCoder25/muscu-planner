@@ -46,7 +46,9 @@
         </div>
         <div class="tb-right">
           <span class="tb-chip">⚡ {{ c.energy }}</span>
-          <span class="tb-chip gold">🪙 {{ char.row.gold }}</span>
+          <button class="tb-chip gold shop-btn" aria-label="Boutique" @click="shopOpen = true">
+            🪙 {{ char.row.gold }} <q-icon name="storefront" size="14px" />
+          </button>
           <span class="tb-chip dust">✨ {{ char.row.dust }}</span>
         </div>
       </div>
@@ -327,6 +329,22 @@
           </div>
         </div>
 
+        <!-- Consommables à utiliser pour le prochain run -->
+        <div v-if="ownedConsumables.length" class="consum">
+          <div class="consum-lbl">Utiliser pour ce donjon</div>
+          <div class="consum-row">
+            <button
+              v-for="ic in ownedConsumables"
+              :key="ic.id"
+              class="consum-chip"
+              :class="{ on: selectedConsumables.includes(ic.id) }"
+              @click="toggleConsumable(ic.id)"
+            >
+              {{ ic.emoji }} {{ ic.name }} ×{{ char.row.consumables[ic.id] }}
+            </button>
+          </div>
+        </div>
+
         <div class="dungeons">
           <div
             v-for="d in DUNGEONS"
@@ -472,6 +490,41 @@
         </div>
       </div>
     </transition>
+
+    <!-- Boutique : dépenser l'or -->
+    <transition name="salv-fade">
+      <div v-if="shopOpen && char.row" class="shop-backdrop" @click.self="shopOpen = false">
+        <div class="shop-card">
+          <div class="shop-head">
+            <div class="shop-title font-display">Boutique</div>
+            <span class="shop-gold">🪙 {{ char.row.gold }}</span>
+            <button class="shop-x" aria-label="Fermer" @click="shopOpen = false">✕</button>
+          </div>
+          <div class="shop-list">
+            <div v-for="it in SHOP_ITEMS" :key="it.id" class="shop-item">
+              <span class="si-emo">{{ it.emoji }}</span>
+              <div class="si-main">
+                <div class="si-name">
+                  {{ it.name }}
+                  <span
+                    v-if="it.kind === 'consumable' && (char.row.consumables[it.id] ?? 0) > 0"
+                    class="si-own"
+                    >×{{ char.row.consumables[it.id] }}</span
+                  >
+                </div>
+                <div class="si-desc">{{ it.desc }}</div>
+              </div>
+              <button class="si-buy" :disabled="char.row.gold < it.cost" @click="buy(it)">
+                🪙 {{ it.cost }}
+              </button>
+            </div>
+          </div>
+          <div class="shop-hint">
+            Les consommables s'utilisent au lancement d'un donjon (onglet Donjons).
+          </div>
+        </div>
+      </div>
+    </transition>
   </q-page>
 </template>
 
@@ -500,7 +553,9 @@ import {
   RARITY_LABEL,
   type Item,
   type ItemSlot,
+  type AggregatedEffects,
 } from '@/lib/items';
+import { SHOP_ITEMS, CONSUMABLE_ITEMS, consumableEffect } from '@/data/shop';
 import { talentsEarned, talentEffects, talentChoices, talentByCode } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { logicalToday } from '@/lib/challenges';
@@ -672,6 +727,51 @@ const busy = ref(false);
 const run = ref<RunView | null>(null);
 const sacTitle = ref<HTMLElement | null>(null);
 
+// ── Boutique & consommables ──
+const shopOpen = ref(false);
+const selectedConsumables = ref<string[]>([]);
+const ownedConsumables = computed(() =>
+  CONSUMABLE_ITEMS.filter((i) => (char.row?.consumables[i.id] ?? 0) > 0),
+);
+function toggleConsumable(id: string) {
+  const i = selectedConsumables.value.indexOf(id);
+  if (i >= 0) selectedConsumables.value.splice(i, 1);
+  else selectedConsumables.value.push(id);
+}
+// Effets cumulés (talents + consommables sélectionnés) + chance de butin pour le run.
+function runExtra(): { extra: AggregatedEffects; lucky: boolean } {
+  const extra = { ...talentFx.value };
+  let lucky = false;
+  for (const id of selectedConsumables.value) {
+    const e = consumableEffect(id);
+    if (e.lucky) lucky = true;
+    if (e.extra) {
+      extra.damagePct += e.extra.damagePct ?? 0;
+      extra.maxPvPct += e.extra.maxPvPct ?? 0;
+      extra.critAdd += e.extra.critAdd ?? 0;
+      extra.dodgeAdd += e.extra.dodgeAdd ?? 0;
+      extra.dmgReduction += e.extra.dmgReduction ?? 0;
+      extra.lifesteal += e.extra.lifesteal ?? 0;
+      extra.goldPct += e.extra.goldPct ?? 0;
+    }
+  }
+  return { extra, lucky };
+}
+async function buy(item: (typeof SHOP_ITEMS)[number]) {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  if ((char.row?.gold ?? 0) < item.cost) {
+    $q.notify({ type: 'warning', message: "Pas assez d'or." });
+    return;
+  }
+  try {
+    const ok = await char.buyItem(uid, item);
+    if (ok) $q.notify({ type: 'positive', message: `${item.emoji} ${item.name} acheté !` });
+  } catch {
+    $q.notify({ type: 'negative', message: 'Achat impossible.' });
+  }
+}
+
 // Butin géré directement dans la carte de résultat (pas de va-et-vient vers le sac).
 // État d'un objet lâché, calculé en direct depuis le perso (source de vérité).
 function dropState(it: Item): 'bag' | 'equipped' | 'gone' {
@@ -705,8 +805,11 @@ async function explore(d: Dungeon) {
   if (!dungeonUnlocked(d)) return;
   busy.value = true;
   try {
+    // Consommables sélectionnés pour ce run (buffs + chance de butin).
+    const consumed = [...selectedConsumables.value];
+    const { extra, lucky } = runExtra();
     const seed = Math.floor(Math.random() * 1e9);
-    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, talentFx.value);
+    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra);
     const r = simulateDungeon(player, dungeonFoes(d), { seed });
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
     const gold = Math.round(r.gold * (1 + goldPct));
@@ -717,6 +820,7 @@ async function explore(d: Dungeon) {
       playerLevel: c.value.level.level,
       cleared: r.cleared,
       defeated: r.defeated,
+      lucky,
     });
     if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
     const dust = r.defeated * 2; // petit filet de poussière par run
@@ -726,7 +830,9 @@ async function explore(d: Dungeon) {
       dust,
       drops,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
+      ...(consumed.length ? { consumed } : {}),
     });
+    selectedConsumables.value = []; // consommés
     run.value = {
       name: d.name,
       cleared: r.cleared,
@@ -956,6 +1062,148 @@ onMounted(async () => {
 }
 .tb-chip.dust {
   color: #b07cff;
+}
+.shop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+/* Consommables (onglet Donjons) */
+.consum {
+  margin-bottom: 14px;
+}
+.consum-lbl {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.consum-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.consum-chip {
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.consum-chip.on {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+/* Boutique */
+.shop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3100;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.shop-card {
+  width: 100%;
+  max-width: 440px;
+  max-height: 84vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+}
+.shop-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.shop-title {
+  font-size: 20px;
+  font-weight: 700;
+  flex: 1;
+}
+.shop-gold {
+  color: var(--accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.shop-x {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 18px;
+  cursor: pointer;
+}
+.shop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shop-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+}
+.si-emo {
+  font-size: 24px;
+  flex: none;
+}
+.si-main {
+  flex: 1;
+  min-width: 0;
+}
+.si-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+.si-own {
+  color: var(--accent);
+  font-size: 12px;
+  margin-left: 4px;
+}
+.si-desc {
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.35;
+}
+.si-buy {
+  flex: none;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+  font-weight: 700;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.si-buy:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--dim);
+}
+.shop-hint {
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.4;
 }
 
 /* Onglets */

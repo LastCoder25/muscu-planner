@@ -154,8 +154,15 @@ function pick<T>(rng: () => number, arr: T[]): T {
   return arr[Math.floor(rng() * arr.length)]!;
 }
 
-function rollRarity(rng: () => number): Rarity {
+function rollRarity(rng: () => number, lucky = false): Rarity {
   const r = rng();
+  // Fiole de chance : décale nettement les seuils vers le haut.
+  if (lucky) {
+    if (r < 0.08) return 'legendary';
+    if (r < 0.3) return 'epic';
+    if (r < 0.7) return 'rare';
+    return 'common';
+  }
   if (r < 0.02) return 'legendary';
   if (r < 0.12) return 'epic';
   if (r < 0.4) return 'rare';
@@ -165,17 +172,18 @@ function rollRarity(rng: () => number): Rarity {
 /**
  * Tire un butin après un run. Renvoie l'objet SANS id (l'appelant en pose un),
  * ou null si pas de drop. `level` est plafonné au niveau du joueur.
+ * `lucky` (fiole de chance) améliore la rareté.
  */
 export function rollDrop(
   rng: () => number,
-  opts: { playerLevel: number; cleared: boolean; defeated: number },
+  opts: { playerLevel: number; cleared: boolean; defeated: number; lucky?: boolean },
 ): Omit<Item, 'id'> | null {
   if (opts.defeated <= 0) return null;
   const chance = opts.cleared ? 0.6 : 0.3;
   if (rng() >= chance) return null;
 
   const slot = pick(rng, SLOTS);
-  const rarity = rollRarity(rng);
+  const rarity = rollRarity(rng, opts.lucky);
   const choices = SLOT_EFFECTS[slot];
   const chosen = pick(rng, choices);
   // value = magnitude de BASE (niveau 1) : pilotée par la rareté ; l'objet grandira ensuite.
