@@ -66,14 +66,7 @@
           <div v-if="grp.list.length" class="lane-group">
             <div class="lane-title">{{ grp.label }}</div>
             <div class="ch-tiles">
-              <div
-                v-for="c in grp.list"
-                :key="c.id"
-                class="ch-tile"
-                role="button"
-                tabindex="0"
-                @click="goDetail(c.id)"
-              >
+              <button v-for="c in grp.list" :key="c.id" class="ch-tile" @click="goDetail(c.id)">
                 <div class="ct-top">
                   <span class="ct-name">{{ c.exercise_name }}</span>
                   <span class="ct-cost">{{ cardCostLabel(c) }}</span>
@@ -93,15 +86,7 @@
                   <template v-if="bal(c) > 0">▲ +{{ bal(c) }} {{ unitOf(c) }}</template>
                   <template v-else>▼ −{{ -bal(c) }} {{ unitOf(c) }}</template>
                 </div>
-                <button
-                  v-if="c.unit === 'reps'"
-                  class="ct-add"
-                  aria-label="Ajouter une répétition"
-                  @click.stop="quickAddRep(c)"
-                >
-                  +1
-                </button>
-              </div>
+              </button>
             </div>
           </div>
         </template>
@@ -202,10 +187,7 @@ import {
   challengeXpPoints,
   challengeLiveBalance,
   evaluateAchievements,
-  isChallengeComplete,
-  logicalToday,
   type Challenge,
-  type DayProgress,
 } from '@/lib/challenges';
 import { computeLevel } from '@/lib/levels';
 import { formatOption } from '@/data/challengeFormats';
@@ -278,42 +260,6 @@ function st(c: Challenge) {
 }
 function bal(c: Challenge) {
   return challengeLiveBalance(c);
-}
-
-// Incrément rapide « +1 » depuis la liste (exos en reps seulement). Ajoute 1 rep
-// au jour courant, valide le jour/le défi si l'objectif/total est atteint.
-async function quickAddRep(c: Challenge) {
-  if (c.unit !== 'reps' || c.status !== 'active') return;
-  const dayIndex = st(c).dayIndex;
-  if (dayIndex < 0 || dayIndex >= c.duration_days) {
-    $q.notify({ type: 'warning', message: 'Défi hors période.' });
-    return;
-  }
-  const progress: DayProgress[] = c.progress.map((p) => ({ ...p }));
-  let e = progress.find((p) => p.day === dayIndex);
-  if (!e) {
-    e = {
-      day: dayIndex,
-      date: logicalToday(),
-      target: c.daily_targets[dayIndex] ?? 0,
-      done: 0,
-      elapsed_sec: 0,
-      completed: false,
-    };
-    progress.push(e);
-  }
-  e.done += 1;
-  if (c.format !== 'cumulative') {
-    const base = c.daily_targets[e.day] ?? 0;
-    e.completed = base > 0 && e.done >= base;
-  }
-  const status = isChallengeComplete({ ...c, progress }) ? 'done' : undefined;
-  try {
-    await store.updateProgress(c.id, progress, status);
-    if (status === 'done') $q.notify({ type: 'positive', message: 'Défi terminé 🎉' });
-  } catch {
-    $q.notify({ type: 'negative', message: 'Échec de la mise à jour.' });
-  }
 }
 function unitOf(c: Challenge) {
   // cardio en temps = minutes ; gainage en temps = secondes.
@@ -504,7 +450,6 @@ onMounted(async () => {
   gap: 8px;
 }
 .ch-tile {
-  position: relative;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -517,29 +462,6 @@ onMounted(async () => {
 }
 .ch-tile:active {
   transform: scale(0.99);
-}
-.ct-add {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  min-width: 40px;
-  height: 34px;
-  padding: 0 10px;
-  border-radius: 10px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink, #15120e);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 15px;
-  cursor: pointer;
-}
-.ct-add:active {
-  transform: scale(0.94);
-}
-.ch-tile .ct-sub,
-.ch-tile .cc-bal {
-  padding-right: 48px;
 }
 .ct-top {
   display: flex;
