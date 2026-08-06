@@ -641,6 +641,13 @@ function reset() {
   );
   restDays.value = config.value.rest_weekdays ?? [];
 }
+// Durée par défaut à la sélection : le conseillé (30 j) s'il rentre dans la place
+// restante de la voie, sinon 1 semaine → on ne tombe jamais sur une durée refusée.
+function defaultDurationFor(e: ExerciseRow): number {
+  if (isAccessoryMuscle(e.muscle_primary)) return 30; // accessoire = pas de coût
+  const rem = remainingTokens(laneChallenges(exIsCardio(e)));
+  return tokenCost(30) <= rem ? 30 : 7;
+}
 function pickExercise(e: ExerciseRow) {
   if (exFull(e)) {
     const lane = exIsCardio(e) ? 'cardio' : 'muscu';
@@ -653,6 +660,8 @@ function pickExercise(e: ExerciseRow) {
     return;
   }
   exercise.value = e;
+  customOn.value = false;
+  durationDays.value = defaultDurationFor(e);
   reset();
 }
 // Recalcule les objectifs quand on bascule km ↔ durée (défauts différents).
