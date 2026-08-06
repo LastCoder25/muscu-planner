@@ -835,7 +835,8 @@ async function explore(d: Dungeon) {
       playerLevel: c.value.level.level,
       cleared: r.cleared,
       defeated: r.defeated,
-      lucky,
+      level: d.dropLevel,
+      luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
     });
     if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
     // Butin consommable (en plus de l'équipement).

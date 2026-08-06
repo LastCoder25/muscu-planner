@@ -1,6 +1,8 @@
 // dungeons.ts — donjons (données statiques front). Un donjon = une suite de
-// monstres (du bestiaire) pour un coût d'énergie fixe. Le `hint` oriente vers
-// la stat à travailler (« coach »).
+// monstres pour un coût d'énergie fixe. recoLevel CALIBRÉ par simulation (le
+// donjon devient nettoyable ~systématiquement à ce niveau). Le loot SCALE avec
+// le donjon : `dropLevel` (niveau de base des objets) et `dropLuck` (biais de
+// rareté 0..1) → les donjons durs récompensent mieux.
 import type { DungeonFoe } from '@/lib/combat';
 import { MONSTERS } from '@/data/monsters';
 
@@ -13,9 +15,11 @@ export interface Dungeon {
   tier: number;
   energyCost: number;
   monsterIds: string[];
-  recoLevel: number; // niveau conseillé
+  recoLevel: number; // niveau conseillé (calibré par simulation)
   hintStat: StatKey; // stat clé pour ce donjon
   hint: string; // conseil « coach »
+  dropLevel: number; // niveau de base des objets lâchés (plafonné au niveau du joueur)
+  dropLuck: number; // biais de rareté du butin (0 = normal … 1 = très généreux)
 }
 
 export const DUNGEONS: Dungeon[] = [
@@ -26,9 +30,11 @@ export const DUNGEONS: Dungeon[] = [
     tier: 1,
     energyCost: 25,
     monsterIds: ['slime', 'slime', 'wolf'],
-    recoLevel: 3,
+    recoLevel: 2,
     hintStat: 'endurance',
     hint: 'Idéal pour débuter. Un peu d’Endurance suffit à tenir la distance.',
+    dropLevel: 1,
+    dropLuck: 0,
   },
   {
     id: 'caverne',
@@ -36,10 +42,12 @@ export const DUNGEONS: Dungeon[] = [
     emoji: '🕳️',
     tier: 2,
     energyCost: 40,
-    monsterIds: ['wolf', 'wolf', 'golem'],
-    recoLevel: 6,
+    monsterIds: ['wolf', 'boar', 'golem'],
+    recoLevel: 4,
     hintStat: 'puissance',
     hint: 'Le golem du fond encaisse beaucoup → pousse ta Puissance (muscu).',
+    dropLevel: 3,
+    dropLuck: 0.1,
   },
   {
     id: 'repaire',
@@ -48,9 +56,63 @@ export const DUNGEONS: Dungeon[] = [
     tier: 3,
     energyCost: 55,
     monsterIds: ['golem', 'ogre'],
-    recoLevel: 10,
+    recoLevel: 5,
     hintStat: 'endurance',
     hint: 'Ça frappe très fort → il te faut des PV, donc de l’Endurance.',
+    dropLevel: 4,
+    dropLuck: 0.2,
+  },
+  {
+    id: 'cryptes',
+    name: 'Cryptes hantées',
+    emoji: '⚰️',
+    tier: 4,
+    energyCost: 75,
+    monsterIds: ['ogre', 'spectre', 'golem'],
+    recoLevel: 6,
+    hintStat: 'agilite',
+    hint: 'Le spectre esquive beaucoup → Agilité pour toucher, PV pour durer.',
+    dropLevel: 5,
+    dropLuck: 0.35,
+  },
+  {
+    id: 'fournaise',
+    name: 'Fournaise du troll',
+    emoji: '🌋',
+    tier: 5,
+    energyCost: 95,
+    monsterIds: ['troll', 'ogre', 'spectre'],
+    recoLevel: 7,
+    hintStat: 'puissance',
+    hint: 'Le troll est une montagne de PV → grosse Puissance (muscu) requise.',
+    dropLevel: 6,
+    dropLuck: 0.5,
+  },
+  {
+    id: 'abime',
+    name: 'Abîme du dragon',
+    emoji: '🐉',
+    tier: 6,
+    energyCost: 120,
+    monsterIds: ['dragon', 'troll'],
+    recoLevel: 8,
+    hintStat: 'endurance',
+    hint: 'Le dragon frappe et crit fort → build complet, beaucoup de PV.',
+    dropLevel: 7,
+    dropLuck: 0.7,
+  },
+  {
+    id: 'neant',
+    name: 'Néant primordial',
+    emoji: '🌌',
+    tier: 7,
+    energyCost: 150,
+    monsterIds: ['titan', 'dragon'],
+    recoLevel: 9,
+    hintStat: 'puissance',
+    hint: 'Le défi ultime : le titan est un mur. Tout à fond, surtout la Puissance.',
+    dropLevel: 8,
+    dropLuck: 0.9,
   },
 ];
 

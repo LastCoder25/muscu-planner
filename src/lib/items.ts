@@ -154,48 +154,53 @@ function pick<T>(rng: () => number, arr: T[]): T {
   return arr[Math.floor(rng() * arr.length)]!;
 }
 
-function rollRarity(rng: () => number, lucky = false): Rarity {
+// `luck` 0..1 décale progressivement les seuils vers le haut (donjons durs +
+// fiole de chance). 0 = odds de base, 1 = très généreux.
+function rollRarity(rng: () => number, luck = 0): Rarity {
+  const l = Math.min(1, Math.max(0, luck));
   const r = rng();
-  // Fiole de chance : décale nettement les seuils vers le haut.
-  if (lucky) {
-    if (r < 0.08) return 'legendary';
-    if (r < 0.3) return 'epic';
-    if (r < 0.7) return 'rare';
-    return 'common';
-  }
-  if (r < 0.02) return 'legendary';
-  if (r < 0.12) return 'epic';
-  if (r < 0.4) return 'rare';
+  if (r < 0.02 + l * 0.08) return 'legendary';
+  if (r < 0.12 + l * 0.2) return 'epic';
+  if (r < 0.4 + l * 0.32) return 'rare';
   return 'common';
 }
 
 /**
  * Tire un butin après un run. Renvoie l'objet SANS id (l'appelant en pose un),
- * ou null si pas de drop. `level` est plafonné au niveau du joueur.
- * `lucky` (fiole de chance) améliore la rareté.
+ * ou null si pas de drop.
+ *  - `level` : niveau de base de l'objet (selon le donjon), plafonné au niveau du joueur ;
+ *  - `luck` : biais de rareté (donjon + fiole de chance), 0..1.
  */
 export function rollDrop(
   rng: () => number,
-  opts: { playerLevel: number; cleared: boolean; defeated: number; lucky?: boolean },
+  opts: {
+    playerLevel: number;
+    cleared: boolean;
+    defeated: number;
+    level?: number;
+    luck?: number;
+  },
 ): Omit<Item, 'id'> | null {
   if (opts.defeated <= 0) return null;
   const chance = opts.cleared ? 0.6 : 0.3;
   if (rng() >= chance) return null;
 
   const slot = pick(rng, SLOTS);
-  const rarity = rollRarity(rng, opts.lucky);
+  const rarity = rollRarity(rng, opts.luck ?? 0);
   const choices = SLOT_EFFECTS[slot];
   const chosen = pick(rng, choices);
-  // value = magnitude de BASE (niveau 1) : pilotée par la rareté ; l'objet grandira ensuite.
+  // value = magnitude de BASE (niveau 1) : pilotée par la rareté ; grandit avec le niveau.
   const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
   const noun = pick(rng, NAMES[slot]);
+  // Niveau de l'objet = niveau de base du donjon, borné [1, niveau joueur].
+  const level = Math.min(Math.max(1, opts.playerLevel), Math.max(1, Math.round(opts.level ?? 1)));
   return {
     slot,
     name: `${noun} ${RARITY_ADJ[rarity]}`,
     emoji: SLOT_EMOJI[slot],
     rarity,
-    level: 1, // les objets démarrent au niveau 1 ; on les monte avec la Poussière
-    baseLevel: 1,
+    level,
+    baseLevel: level,
     effect: { type: chosen.type, value },
   };
 }
