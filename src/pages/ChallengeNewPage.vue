@@ -741,7 +741,9 @@ async function createChallenge() {
   const userId = auth.user?.id;
   if (!userId || !exercise.value) return;
   // Exclusivité : pas de défi MUSCU si un Défi 360 (programme full-body) est actif.
-  if (!isCardio.value && comboStore.list.some((c) => c.status === 'active')) {
+  // TODO(cleanup avant release) : retirer le bypass `!auth.isAdmin` — débridage
+  // TEMPORAIRE pour tester Défi 360 + défis muscu en parallèle (compte admin).
+  if (!isCardio.value && !auth.isAdmin && comboStore.list.some((c) => c.status === 'active')) {
     $q.notify({
       type: 'warning',
       message:

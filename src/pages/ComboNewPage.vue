@@ -151,10 +151,12 @@ async function createCombo() {
   const uid = auth.user?.id;
   if (!uid) return;
   // Exclusivité : pas de Défi 360 si un défi MUSCU est déjà actif.
+  // TODO(cleanup avant release) : retirer le bypass `!auth.isAdmin` — débridage
+  // TEMPORAIRE pour tester le Défi 360 en parallèle des défis muscu (compte admin).
   const activeMuscu = challenges.list.some(
     (c) => c.status === 'active' && !isCardioChallengeRow(c),
   );
-  if (activeMuscu) {
+  if (activeMuscu && !auth.isAdmin) {
     $q.notify({
       type: 'warning',
       message: 'Termine tes défis muscu en cours : le Défi 360 les remplace (1 seul programme).',
