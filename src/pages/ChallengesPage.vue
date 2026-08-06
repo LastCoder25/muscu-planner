@@ -37,6 +37,31 @@
     <template v-else>
       <!-- En cours / Terminés / Abandonnés -->
       <template v-if="LIST_TABS.includes(tab)">
+        <div v-if="tab === 'active'" class="cap-card">
+          <div class="cap-row">
+            <span class="cap-lane">💪 Muscu</span>
+            <span class="pips">
+              <span
+                v-for="n in BUDGET"
+                :key="n"
+                class="pip"
+                :class="{ on: n <= muscuUsed }"
+              /> </span
+            ><span class="cap-acc" :class="{ used: muscuAccUsed }"
+              >+1 accessoire {{ muscuAccUsed ? '✓' : '' }}</span
+            >
+          </div>
+          <div class="cap-row">
+            <span class="cap-lane">🏃 Cardio</span>
+            <span class="pips">
+              <span v-for="n in BUDGET" :key="n" class="pip" :class="{ on: n <= cardioUsed }" />
+            </span>
+          </div>
+          <div class="cap-hint">
+            Places occupées par tes défis. Un défi coûte 1–3 places selon sa durée ; les petits exos
+            (mollets, abdos, bras) sont « accessoires » et gratuits.
+          </div>
+        </div>
         <div v-if="shown.length === 0" class="empty">
           {{
             tab === 'active'
@@ -60,6 +85,7 @@
           <div class="cc-meta">
             {{ fmtName(c.format) }} · {{ c.duration_days }} j · jour
             {{ Math.min(Math.max(1, st(c).dayIndex + 1), c.duration_days) }}/{{ c.duration_days }}
+            <span v-if="c.status === 'active'" class="cc-cost">· {{ cardCostLabel(c) }}</span>
           </div>
           <div class="bar"><div class="fill" :style="{ width: st(c).completionPct + '%' }" /></div>
           <div class="cc-sub">
@@ -150,7 +176,15 @@ import {
 import { computeLevel } from '@/lib/levels';
 import { formatOption } from '@/data/challengeFormats';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
-import { useChallengesStore } from '@/stores/challenges';
+import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
+import {
+  tokenCost,
+  isAccessoryMuscle,
+  usedTokens,
+  accessoryCount,
+  CHALLENGE_TOKEN_BUDGET,
+  type LaneChallenge,
+} from '@/lib/challengeLimits';
 
 const router = useRouter();
 const route = useRoute();
@@ -172,6 +206,26 @@ const shown = computed(() => store.list.filter((c) => c.status === tab.value));
 const unlocked = computed(() => new Set(store.unlocked));
 const unlockedCount = computed(() => ACHIEVEMENTS.filter((a) => unlocked.value.has(a.code)).length);
 const xpInfo = computed(() => computeLevel(challengeXpPoints(store.list)));
+
+// Capacité (jetons) par voie, pour que l'utilisateur s'organise.
+function laneChallenges(cardio: boolean): LaneChallenge[] {
+  return store.list
+    .filter((c) => c.status === 'active' && isCardioChallengeRow(c) === cardio)
+    .map((c) => ({
+      accessory: isAccessoryMuscle(c.muscle_primary),
+      durationDays: c.duration_days,
+    }));
+}
+const muscuUsed = computed(() => usedTokens(laneChallenges(false)));
+const cardioUsed = computed(() => usedTokens(laneChallenges(true)));
+const muscuAccUsed = computed(() => accessoryCount(laneChallenges(false)) >= 1);
+const BUDGET = CHALLENGE_TOKEN_BUDGET;
+// Coût d'un défi (badge sur la carte).
+function cardCostLabel(c: Challenge): string {
+  if (isAccessoryMuscle(c.muscle_primary)) return 'accessoire';
+  const n = tokenCost(c.duration_days);
+  return `${n} jeton${n > 1 ? 's' : ''}`;
+}
 
 function st(c: Challenge) {
   return challengeStats(c);
@@ -289,6 +343,56 @@ onMounted(async () => {
 .empty {
   color: var(--dim);
   padding: 24px 0;
+}
+
+/* Bandeau de capacité (jetons) */
+.cap-card {
+  margin-bottom: 12px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+}
+.cap-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.cap-lane {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 74px;
+}
+.pips {
+  display: flex;
+  gap: 4px;
+}
+.pip {
+  width: 14px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.pip.on {
+  background: var(--accent);
+}
+.cap-acc {
+  font-size: 11px;
+  color: var(--dim);
+}
+.cap-acc.used {
+  color: var(--accent);
+}
+.cap-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--dim);
+  margin-top: 4px;
+}
+.cc-cost {
+  color: var(--accent);
 }
 
 .ch-card {
