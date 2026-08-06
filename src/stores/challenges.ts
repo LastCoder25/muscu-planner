@@ -13,30 +13,38 @@ import {
   type ChallengeFormat,
 } from '@/lib/challenges';
 import { challengeIdsForActivity, CARDIO_CHALLENGE_IDS } from '@/data/cardio';
+import {
+  canAddChallenge,
+  isAccessoryMuscle,
+  type AddDenyReason,
+  type LaneChallenge,
+} from '@/lib/challengeLimits';
 import type { CardioActivity } from '@/lib/types';
 
-// Catégorie d'un défi pour la limite « 1 muscu + 1 cardio actifs ».
-function isCardioChallengeRow(c: { unit: string; exercise_id: string }): boolean {
+// Voie d'un défi (budget séparé) : cardio vs muscu.
+export function isCardioChallengeRow(c: { unit: string; exercise_id: string }): boolean {
   return c.unit === 'distance' || CARDIO_CHALLENGE_IDS.has(c.exercise_id);
 }
 
 export class ChallengeLimitError extends Error {
-  constructor(cardio: boolean) {
+  constructor(cardio: boolean, reason: AddDenyReason) {
+    const lane = cardio ? 'cardio' : 'muscu';
     super(
-      cardio
-        ? 'Tu as déjà un challenge cardio en cours (1 max).'
-        : 'Tu as déjà un challenge muscu en cours (1 max).',
+      reason === 'accessory'
+        ? `Tu as déjà un défi accessoire ${lane} en cours (1 max).`
+        : `Plus assez de place pour un défi ${lane} : termine-en un ou choisis une durée plus courte.`,
     );
     this.name = 'ChallengeLimitError';
   }
 }
 
 const COLS =
-  'id, exercise_id, exercise_name, unit, format, duration_days, start_date, config, daily_targets, progress, status';
+  'id, exercise_id, exercise_name, muscle_primary, unit, format, duration_days, start_date, config, daily_targets, progress, status';
 
 export interface NewChallenge {
   exercise_id: string;
   exercise_name: string;
+  muscle_primary?: string | null;
   unit: 'reps' | 'time' | 'distance';
   format: ChallengeFormat;
   duration_days: number;
@@ -62,11 +70,19 @@ export const useChallengesStore = defineStore('challenges', () => {
   }
 
   async function create(input: NewChallenge): Promise<Challenge> {
-    // Limite : 1 challenge muscu + 1 cardio actifs à la fois.
+    // Limite « jetons par durée » + slot accessoire, par voie (muscu / cardio).
     const cardio = isCardioChallengeRow(input);
-    if (list.value.some((c) => c.status === 'active' && isCardioChallengeRow(c) === cardio)) {
-      throw new ChallengeLimitError(cardio);
-    }
+    const sameLane: LaneChallenge[] = list.value
+      .filter((c) => c.status === 'active' && isCardioChallengeRow(c) === cardio)
+      .map((c) => ({
+        accessory: isAccessoryMuscle(c.muscle_primary),
+        durationDays: c.duration_days,
+      }));
+    const res = canAddChallenge(sameLane, {
+      accessory: isAccessoryMuscle(input.muscle_primary),
+      durationDays: input.duration_days,
+    });
+    if (!res.ok) throw new ChallengeLimitError(cardio, res.reason);
     const { data, error } = await supabase
       .from('challenges')
       .insert({ ...input, progress: [], status: 'active' })

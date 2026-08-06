@@ -78,6 +78,7 @@ export interface Challenge {
   id: string;
   exercise_id: string;
   exercise_name: string;
+  muscle_primary?: string | null; // groupe musculaire (pour la limite « accessoire »)
   unit: 'reps' | 'time' | 'distance'; // distance = km (marche/course/vélo)
   format: ChallengeFormat;
   duration_days: number;

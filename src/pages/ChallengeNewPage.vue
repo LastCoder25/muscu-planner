@@ -19,19 +19,36 @@
       <!-- ÉTAPE 1 · Exercice -->
       <template v-if="step === 1">
         <div class="step-h">Choisis un exercice</div>
-        <div v-if="activeMuscu && activeCardio" class="limit-note">
-          <q-icon name="info" size="18px" />
-          <span
-            >Tu as déjà un challenge muscu <b>et</b> un cardio en cours. Termine-en un pour en créer
-            un nouveau.</span
-          >
-        </div>
-        <div v-else-if="activeMuscu || activeCardio" class="limit-note">
-          <q-icon name="info" size="18px" />
-          <span
-            >Un challenge {{ activeCardio ? 'cardio' : 'muscu' }} est déjà en cours. Les exercices
-            {{ activeCardio ? 'cardio' : 'de muscu' }} sont indisponibles jusqu'à sa fin.</span
-          >
+        <div class="cap-card">
+          <div class="cap-row">
+            <span class="cap-lane">💪 Muscu</span>
+            <span class="pips">
+              <span
+                v-for="n in CHALLENGE_TOKEN_BUDGET"
+                :key="n"
+                class="pip"
+                :class="{ on: n <= muscuUsed }"
+              />
+            </span>
+            <span class="cap-acc" :class="{ used: muscuAccUsed }"
+              >+1 accessoire {{ muscuAccUsed ? '✓' : '' }}</span
+            >
+          </div>
+          <div class="cap-row">
+            <span class="cap-lane">🏃 Cardio</span>
+            <span class="pips">
+              <span
+                v-for="n in CHALLENGE_TOKEN_BUDGET"
+                :key="n"
+                class="pip"
+                :class="{ on: n <= cardioUsed }"
+              />
+            </span>
+          </div>
+          <div class="cap-hint">
+            Un défi occupe 1 à 3 places selon sa durée. Les petits exos (mollets, abdos, bras) ne
+            comptent pas — 1 « accessoire » gratuit en plus.
+          </div>
         </div>
         <q-input
           v-model="search"
@@ -47,8 +64,8 @@
             v-for="e in filteredLib"
             :key="e.id"
             class="ex-row"
-            :class="{ sel: exercise?.id === e.id, full: catFull(e) }"
-            :disabled="catFull(e)"
+            :class="{ sel: exercise?.id === e.id, full: exFull(e) }"
+            :disabled="exFull(e)"
             @click="pickExercise(e)"
           >
             <q-icon v-if="favSet.has(e.id)" name="star" size="16px" color="primary" class="fav" />
@@ -65,7 +82,7 @@
                 {{ e.muscle_primary }} · {{ e.unit === 'time' ? 'temps' : 'reps' }}
               </div>
             </div>
-            <span v-if="catFull(e)" class="ex-lock">déjà en cours</span>
+            <span v-if="exFull(e)" class="ex-lock">complet</span>
             <q-icon
               v-else-if="exercise?.id === e.id"
               name="check_circle"
@@ -149,12 +166,29 @@
             :key="d"
             class="choice"
             :class="{ active: !customOn && durationDays === d }"
+            :disabled="!presetFits(d)"
             @click="setPresetDuration(d)"
           >
             {{ durationLabel(d) }}
             <span v-if="d === 30" class="reco">conseillé</span>
           </button>
           <button class="choice" :class="{ active: customOn }" @click="enableCustom">Perso</button>
+        </div>
+        <div class="tok-note" :class="{ warn: !candidateFits }">
+          <template v-if="selAccessory">
+            ✨ Exercice accessoire : ne prend pas de place ({{ laneLabel }}, 1 accessoire à la
+            fois).
+          </template>
+          <template v-else-if="candidateFits">
+            Ce défi occupe <b>{{ candidateCost }}</b> place{{ candidateCost > 1 ? 's' : '' }} en
+            {{ laneLabel }} — il t'en restera {{ laneRemaining - candidateCost }} après.
+          </template>
+          <template v-else>
+            ⚠️ Pas assez de place en {{ laneLabel }} ({{ laneRemaining }} restante{{
+              laneRemaining > 1 ? 's' : ''
+            }}, ce défi en demande {{ candidateCost }}). Choisis une durée plus courte ou termine un
+            défi en cours.
+          </template>
         </div>
         <div class="dur-note">
           ~30 jours = idéal pour ancrer une habitude sans forcer. Plus court pour tester, plus long
@@ -368,9 +402,17 @@ import { exerciseInstructions } from '@/data/exerciseInstructions';
 import { exerciseImage } from '@/data/exerciseImages';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useProfileStore } from '@/stores/profile';
-import { useChallengesStore } from '@/stores/challenges';
+import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { useAuthStore } from '@/stores/auth';
-import { CARDIO_CHALLENGE_IDS } from '@/data/cardio';
+import {
+  tokenCost,
+  isAccessoryMuscle,
+  usedTokens,
+  accessoryCount,
+  remainingTokens,
+  CHALLENGE_TOKEN_BUDGET,
+  type LaneChallenge,
+} from '@/lib/challengeLimits';
 import type { Level } from '@/lib/types';
 
 const router = useRouter();
@@ -414,24 +456,27 @@ const levelLabel = computed(() => level.value);
 const favSet = computed(() => new Set(profileStore.profile?.favorite_exercises ?? []));
 const isCardio = computed(() => !!exercise.value?.tags?.includes('cardio'));
 
-// Limite : un seul challenge actif par catégorie (muscu / cardio). On reflète
-// la règle du store (ChallengeLimitError) dès la sélection de l'exercice.
-function rowIsCardio(c: { unit: string; exercise_id: string }): boolean {
-  return c.unit === 'distance' || CARDIO_CHALLENGE_IDS.has(c.exercise_id);
-}
-const activeMuscu = computed(() =>
-  challenges.list.some((c) => c.status === 'active' && !rowIsCardio(c)),
-);
-const activeCardio = computed(() =>
-  challenges.list.some((c) => c.status === 'active' && rowIsCardio(c)),
-);
+// Limite « jetons par durée » + slot accessoire (par voie muscu / cardio),
+// reflétée dès le wizard. On lit les défis actifs de la voie concernée.
 function exIsCardio(e: ExerciseRow): boolean {
   return !!e.tags?.includes('cardio');
 }
-function catFull(e: ExerciseRow): boolean {
-  return exIsCardio(e) ? activeCardio.value : activeMuscu.value;
+function laneChallenges(cardio: boolean): LaneChallenge[] {
+  return challenges.list
+    .filter((c) => c.status === 'active' && isCardioChallengeRow(c) === cardio)
+    .map((c) => ({
+      accessory: isAccessoryMuscle(c.muscle_primary),
+      durationDays: c.duration_days,
+    }));
 }
-const selectedFull = computed(() => (exercise.value ? catFull(exercise.value) : false));
+// Exercice « bloquant » dès la sélection : accessoire dont le slot est pris, ou
+// exo normal dont la voie n'a plus aucun jeton (même un court ne rentrerait pas).
+function exFull(e: ExerciseRow): boolean {
+  const lane = laneChallenges(exIsCardio(e));
+  if (isAccessoryMuscle(e.muscle_primary)) return accessoryCount(lane) >= 1;
+  return remainingTokens(lane) <= 0;
+}
+const selectedFull = computed(() => (exercise.value ? exFull(exercise.value) : false));
 const cardioUnit = ref<'distance' | 'time'>('distance');
 const unit = computed<'reps' | 'time' | 'distance'>(() => {
   if (isCardio.value) return cardioUnit.value;
@@ -442,6 +487,28 @@ const unitLabel = computed(() =>
 );
 const fields = computed(() => formatOption(format.value)?.fields ?? ['start']);
 
+// Jetons : voie de l'exo choisi, coût du défi (selon durée), place restante.
+const selAccessory = computed(() => isAccessoryMuscle(exercise.value?.muscle_primary));
+const laneActive = computed(() => laneChallenges(isCardio.value));
+const laneUsed = computed(() => usedTokens(laneActive.value));
+const laneRemaining = computed(() => remainingTokens(laneActive.value));
+const candidateCost = computed(() => (selAccessory.value ? 0 : tokenCost(durationDays.value)));
+const candidateFits = computed(() =>
+  selAccessory.value
+    ? accessoryCount(laneActive.value) < 1
+    : laneUsed.value + candidateCost.value <= CHALLENGE_TOKEN_BUDGET,
+);
+const laneLabel = computed(() => (isCardio.value ? 'cardio' : 'muscu'));
+// Une durée preset rentre-t-elle dans la place restante de la voie ?
+function presetFits(d: number): boolean {
+  if (selAccessory.value) return true;
+  return laneUsed.value + tokenCost(d) <= CHALLENGE_TOKEN_BUDGET;
+}
+// Jauge d'espace (bannière) : usage des deux voies.
+const muscuUsed = computed(() => usedTokens(laneChallenges(false)));
+const cardioUsed = computed(() => usedTokens(laneChallenges(true)));
+const muscuAccUsed = computed(() => accessoryCount(laneChallenges(false)) >= 1);
+
 const guide = computed(() =>
   exercise.value ? exerciseInstructions(exercise.value.id) : undefined,
 );
@@ -451,7 +518,11 @@ const demoUrl = computed(
     `https://www.youtube.com/results?search_query=${encodeURIComponent((exercise.value?.name ?? '') + ' exécution technique musculation')}`,
 );
 
-const canNext = computed(() => (step.value === 1 ? !!exercise.value && !selectedFull.value : true));
+const canNext = computed(() => {
+  if (step.value === 1) return !!exercise.value && !selectedFull.value;
+  if (step.value === 3) return candidateFits.value; // étape Durée : le défi doit rentrer
+  return true;
+});
 
 const sugIndex = new Map(CHALLENGE_SUGGESTIONS.map((id, i) => [id, i]));
 function exRank(id: string): number {
@@ -560,12 +631,13 @@ function reset() {
   restDays.value = config.value.rest_weekdays ?? [];
 }
 function pickExercise(e: ExerciseRow) {
-  if (catFull(e)) {
+  if (exFull(e)) {
+    const lane = exIsCardio(e) ? 'cardio' : 'muscu';
     $q.notify({
       type: 'warning',
-      message: exIsCardio(e)
-        ? 'Tu as déjà un challenge cardio en cours. Termine-le pour en lancer un autre.'
-        : 'Tu as déjà un challenge muscu en cours. Termine-le pour en lancer un autre.',
+      message: isAccessoryMuscle(e.muscle_primary)
+        ? `Tu as déjà un défi accessoire ${lane} en cours. Termine-le d'abord.`
+        : `Plus de place pour un défi ${lane}. Termine un défi en cours pour en lancer un autre.`,
     });
     return;
   }
@@ -633,6 +705,7 @@ async function createChallenge() {
     const ch = await challenges.create({
       exercise_id: exercise.value.id,
       exercise_name: exercise.value.name,
+      muscle_primary: exercise.value.muscle_primary,
       unit: unit.value,
       format: format.value,
       duration_days: durationDays.value,
@@ -772,23 +845,69 @@ onMounted(async () => {
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-.limit-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding: 10px 12px;
+/* Jauge d'espace des défis (bannière étape 1) */
+.cap-card {
+  margin-bottom: 12px;
+  padding: 11px 12px;
   border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+}
+.cap-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.cap-lane {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 74px;
+}
+.pips {
+  display: flex;
+  gap: 4px;
+}
+.pip {
+  width: 14px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.pip.on {
+  background: var(--accent);
+}
+.cap-acc {
+  font-size: 11px;
+  color: var(--dim);
+}
+.cap-acc.used {
+  color: var(--accent);
+}
+.cap-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--dim);
+  margin-top: 4px;
+}
+/* Note de coût en jetons (étape Durée) */
+.tok-note {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
   background: var(--surface-2);
   border: 1px solid var(--line-soft);
   font-size: 12.5px;
   line-height: 1.4;
   color: var(--dim);
-  .q-icon {
-    color: var(--accent);
-    flex: none;
-    margin-top: 1px;
-  }
+}
+.tok-note b {
+  color: var(--text);
+}
+.tok-note.warn {
+  border-color: var(--d4);
+  color: var(--d4);
 }
 .ex-main {
   flex: 1;
