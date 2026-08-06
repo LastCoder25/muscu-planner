@@ -737,16 +737,15 @@ export function durationMultiplier(activeDays: number): number {
   return 1 + Math.min(Math.max(0, activeDays), 120) / 30;
 }
 
-/** Nombre de jours actifs (non repos) d'un défi. */
+/**
+ * Nombre de jours RÉELLEMENT actifs (où l'on a progressé), plafonné à la durée.
+ * Anti-abus : on ne se base PAS sur la durée planifiée — sinon choisir une longue
+ * durée puis finir en 1 jour donnerait le gros multiplicateur sans l'engagement.
+ * La prime récompense donc l'assiduité réelle (jours travaillés), pas la durée affichée.
+ */
 export function activeDaysOf(ch: Challenge): number {
-  if (ch.format !== 'cumulative') return ch.daily_targets.filter((t) => t > 0).length;
-  const rest = ch.config.rest_weekdays ?? [];
-  if (!rest.length) return ch.duration_days;
-  let n = 0;
-  for (let d = 0; d < ch.duration_days; d++) {
-    if (!rest.includes(dayFromIso(addDaysIso(ch.start_date, d)).getDay())) n++;
-  }
-  return n;
+  const worked = ch.progress.filter((p) => (p.done || 0) > 0).length;
+  return Math.min(worked, ch.duration_days);
 }
 
 // Matériel qui ajoute une CHARGE externe (≠ structurel : pullup_bar, dip_station,

@@ -8,6 +8,7 @@ import {
   challengeLiveBalance,
   isChallengeComplete,
   repWeightFromExercise,
+  activeDaysOf,
   type Challenge,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -243,6 +244,36 @@ describe('challengeXpPoints', () => {
     const neutral = challengeXpPoints([challenge({ ...base })]); // défaut 1
     expect(light).toBeLessThan(neutral);
     expect(heavy).toBeGreaterThan(neutral);
+  });
+});
+
+describe('activeDaysOf (anti-abus multiplicateur de durée)', () => {
+  const cum = (progress: Challenge['progress']) =>
+    challenge({
+      format: 'cumulative',
+      duration_days: 30,
+      daily_targets: Array(30).fill(0),
+      config: cfg({ total: 100 }),
+      progress,
+    });
+  it('compte les jours réellement faits, pas la durée planifiée', () => {
+    const crammed = cum([
+      { day: 0, date: '2026-01-05', target: 0, done: 100, elapsed_sec: 0, completed: true },
+    ]);
+    const spread = cum(
+      Array.from({ length: 10 }, (_, i) => ({
+        day: i,
+        date: '2026-01-05',
+        target: 0,
+        done: 10,
+        elapsed_sec: 0,
+        completed: false,
+      })),
+    );
+    expect(activeDaysOf(crammed)).toBe(1);
+    expect(activeDaysOf(spread)).toBe(10);
+    // même total (100 reps) → étaler rapporte PLUS que bourrer en 1 jour
+    expect(challengeXpPoints([spread])).toBeGreaterThan(challengeXpPoints([crammed]));
   });
 });
 
