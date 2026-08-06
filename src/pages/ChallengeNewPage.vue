@@ -59,13 +59,20 @@
           clearable
         />
         <div v-if="loadingLib" class="row flex-center q-pa-md"><q-spinner color="primary" /></div>
+        <div v-else-if="!filteredLib.length" class="ex-empty">
+          <template v-if="search">Aucun exercice ne correspond à ta recherche.</template>
+          <template v-else
+            >Plus d'exercice disponible : tes voies sont pleines ou déjà prises. Termine un défi en
+            cours pour en lancer un nouveau.</template
+          >
+        </div>
         <div v-else class="ex-list">
           <button
             v-for="e in filteredLib"
             :key="e.id"
+            type="button"
             class="ex-row"
-            :class="{ sel: exercise?.id === e.id, full: exFull(e) }"
-            :disabled="exFull(e)"
+            :class="{ sel: exercise?.id === e.id }"
             @click="pickExercise(e)"
           >
             <q-icon v-if="favSet.has(e.id)" name="star" size="16px" color="primary" class="fav" />
@@ -82,13 +89,7 @@
                 {{ e.muscle_primary }} · {{ e.unit === 'time' ? 'temps' : 'reps' }}
               </div>
             </div>
-            <span v-if="exFull(e)" class="ex-lock">complet</span>
-            <q-icon
-              v-else-if="exercise?.id === e.id"
-              name="check_circle"
-              color="primary"
-              size="20px"
-            />
+            <q-icon v-if="exercise?.id === e.id" name="check_circle" color="primary" size="20px" />
           </button>
         </div>
 
@@ -199,12 +200,14 @@
             v-model.number="customDays"
             type="number"
             inputmode="numeric"
+            :min="3"
+            :max="365"
             filled
             dense
             style="max-width: 120px"
             @update:model-value="applyCustom"
           />
-          <span class="lbl" style="margin: 0">jours (1–365)</span>
+          <span class="lbl" style="margin: 0">jours (3–365)</span>
         </div>
       </template>
 
@@ -531,9 +534,17 @@ function exRank(id: string): number {
 // Marche/course séparées masquées : on ne propose plus que « Marche ou course »
 // (une seule piste → une sortie course compte aussi, pas de doublon).
 const HIDDEN_EX_IDS = new Set(['ex_ch_marche', 'ex_ch_course']);
+// Exos déjà utilisés par un défi ACTIF → on ne les propose pas (pas de doublon).
+const activeExoIds = computed(
+  () => new Set(challenges.list.filter((c) => c.status === 'active').map((c) => c.exercise_id)),
+);
 const filteredLib = computed(() => {
   const n = search.value.trim().toLowerCase();
-  const visible = lib.value.filter((e) => !HIDDEN_EX_IDS.has(e.id));
+  // On retire : les exos masqués, ceux déjà en défi actif, et ceux qui ne
+  // rentrent plus dans le quota de leur voie (jetons pleins / accessoire pris).
+  const visible = lib.value.filter(
+    (e) => !HIDDEN_EX_IDS.has(e.id) && !activeExoIds.value.has(e.id) && !exFull(e),
+  );
   const base = n
     ? visible.filter(
         (e) =>
@@ -661,8 +672,10 @@ function enableCustom() {
   customOn.value = true;
   applyCustom();
 }
+// Un défi implique une répétition sur plusieurs jours : durée mini = 3 j.
+const MIN_CUSTOM_DAYS = 3;
 function applyCustom() {
-  const d = Math.min(365, Math.max(1, Math.round(customDays.value || 0)));
+  const d = Math.min(365, Math.max(MIN_CUSTOM_DAYS, Math.round(customDays.value || 0)));
   customDays.value = d;
   durationDays.value = d;
   reset();
@@ -816,6 +829,16 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.ex-empty {
+  padding: 18px 14px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--dim);
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
 }
 .ex-row {
   display: flex;
