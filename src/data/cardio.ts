@@ -52,6 +52,25 @@ export const CARDIO_CHALLENGE_IDS = new Set([
 export function isCardioChallengeExercise(id: string): boolean {
   return CARDIO_CHALLENGE_IDS.has(id);
 }
+// Exos de CONDITIONNEMENT (métaboliques) : comptent comme CARDIO pour l'XP/le
+// niveau (→ Agilité côté RPG), MAIS ce ne sont PAS des « sorties cardio »
+// (pas de miroir ni de report auto : on ne les déduit pas d'une marche/vélo).
+export const CONDITIONING_CHALLENGE_IDS = new Set([
+  'ex_jump_rope',
+  'ex_jumping_jacks',
+  'ex_high_knees',
+  'ex_mountain_climbers',
+  'ex_squat_jump',
+  'ex_burpees',
+]);
+/** L'XP de ce défi va-t-elle à la piste CARDIO ? (vrai cardio OU conditionnement) */
+export function isCardioTrackChallenge(c: { unit: string; exercise_id: string }): boolean {
+  return (
+    c.unit === 'distance' ||
+    CARDIO_CHALLENGE_IDS.has(c.exercise_id) ||
+    CONDITIONING_CHALLENGE_IDS.has(c.exercise_id)
+  );
+}
 // Activité par défaut d'une sortie « miroir » créée depuis un défi cardio.
 export function defaultActivityForChallenge(exerciseId: string): CardioActivity {
   if (exerciseId === 'ex_ch_velo') return 'velo';

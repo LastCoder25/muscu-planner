@@ -40,6 +40,11 @@
         <span>Drills sur le court</span>
         <small>Avec ou sans partenaire</small>
       </button>
+      <button class="tile" @click="action = 'cross'">
+        <q-icon name="fitness_center" size="30px" />
+        <span>Cross-training</span>
+        <small>Crossfit / Hyrox, à la durée</small>
+      </button>
     </div>
 
     <button v-if="tab === 'act' && action" class="back-b" @click="action = null">
@@ -123,6 +128,76 @@
         label="Enregistrer la séance"
         :loading="savingLog"
         @click="saveSession"
+      />
+    </section>
+
+    <!-- Cross-training (Crossfit / Hyrox) : log rapide à la durée -->
+    <section v-show="tab === 'act' && action === 'cross'" class="card">
+      <div class="card-head">
+        <q-icon name="fitness_center" size="22px" />
+        <div>
+          <div class="card-title">Cross-training</div>
+          <div class="card-desc">Crossfit / Hyrox, à la durée → XP spécifique.</div>
+        </div>
+      </div>
+
+      <div class="chips">
+        <button
+          class="chip"
+          :class="{ on: crossType === 'crossfit' }"
+          @click="crossType = 'crossfit'"
+        >
+          Crossfit
+        </button>
+        <button class="chip" :class="{ on: crossType === 'hyrox' }" @click="crossType = 'hyrox'">
+          Hyrox
+        </button>
+      </div>
+
+      <div class="opt-row">
+        <span class="opt-lbl">Date</span>
+        <q-input v-model="crossDate" type="date" filled dense style="max-width: 180px" />
+      </div>
+
+      <div class="opt-row">
+        <span class="opt-lbl">Durée</span>
+        <q-input
+          v-model.number="crossHours"
+          type="number"
+          filled
+          dense
+          suffix="h"
+          style="max-width: 90px"
+        />
+        <q-input
+          v-model.number="crossMinutes"
+          type="number"
+          filled
+          dense
+          suffix="min"
+          style="max-width: 100px"
+        />
+      </div>
+
+      <q-input
+        v-model="crossComment"
+        type="textarea"
+        autogrow
+        filled
+        label="Commentaire"
+        class="q-mt-sm"
+      />
+
+      <q-btn
+        class="gen-btn full-width q-mt-sm"
+        color="primary"
+        text-color="dark"
+        no-caps
+        size="lg"
+        icon="check"
+        label="Enregistrer la séance"
+        :loading="savingCross"
+        @click="saveCross"
       />
     </section>
 
@@ -296,14 +371,15 @@ import { useLiveCourtStore } from '@/stores/liveCourt';
 import { buildPrepaSession } from '@/lib/prepaBuilder';
 import { buildPrepaPrompt } from '@/lib/tennisCoach';
 import { parseImportedSession } from '@/lib/importSession';
-import type { DrillLog, Difficulty } from '@/lib/types';
+import { useLogsStore } from '@/stores/logs';
+import type { DrillLog, SessionLog, Difficulty } from '@/lib/types';
 import { SCHEMA_VERSION } from '@/lib/types';
 
 const DURATIONS = [20, 30, 45] as const;
 
 const $q = useQuasar();
 const tab = ref<'act' | 'hist'>('act');
-const action = ref<'log' | 'prepa' | 'court' | null>(null);
+const action = ref<'log' | 'prepa' | 'court' | 'cross' | null>(null);
 const router = useRouter();
 const auth = useAuthStore();
 const profileStore = useProfileStore();
@@ -311,6 +387,7 @@ const sessionsStore = useSessionsStore();
 const library = useLibraryStore();
 const tennis = useTennisStore();
 const live = useLiveCourtStore();
+const logs = useLogsStore();
 
 const duration = ref<number>(30);
 const generating = ref(false);
@@ -336,6 +413,50 @@ const logMinutes = ref<number>(0);
 const logPartner = ref(true);
 const logRpe = ref<Difficulty | null>(null);
 const logComment = ref('');
+
+// Cross-training (Crossfit / Hyrox) — log rapide à la durée → XP Spécifique.
+const crossType = ref<'crossfit' | 'hyrox'>('crossfit');
+const crossDate = ref(todayIso());
+const crossHours = ref<number>(1);
+const crossMinutes = ref<number>(0);
+const crossComment = ref('');
+const savingCross = ref(false);
+async function saveCross() {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  const totalMin = (crossHours.value || 0) * 60 + (crossMinutes.value || 0);
+  if (totalMin <= 0) {
+    $q.notify({ type: 'warning', message: 'Renseigne une durée.' });
+    return;
+  }
+  savingCross.value = true;
+  try {
+    const iso = performedAtIso(crossDate.value);
+    const log: SessionLog = {
+      schema_version: SCHEMA_VERSION,
+      type: 'session_log',
+      id: crypto.randomUUID(),
+      name: crossType.value === 'hyrox' ? 'Séance Hyrox' : 'Séance Crossfit',
+      discipline: crossType.value,
+      started_at: iso,
+      ended_at: iso,
+      duration_min: totalMin,
+      ...(crossComment.value.trim() ? { global_comment: crossComment.value.trim() } : {}),
+      exercises: [],
+    };
+    await logs.insert(uid, log);
+    $q.notify({ type: 'positive', message: 'Séance enregistrée — XP spécifique gagné.' });
+    crossDate.value = todayIso();
+    crossHours.value = 1;
+    crossMinutes.value = 0;
+    crossComment.value = '';
+    action.value = null;
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
+  } finally {
+    savingCross.value = false;
+  }
+}
 const savingLog = ref(false);
 
 async function saveSession() {

@@ -10,7 +10,7 @@ import { useCardioStore } from '@/stores/cardio';
 import { sessionXp, drillSessionXp, cardioSessionXp } from '@/lib/athlete';
 import { challengeXpPoints } from '@/lib/challenges';
 import { computeLevel } from '@/lib/levels';
-import { CARDIO_CHALLENGE_IDS } from '@/data/cardio';
+import { isCardioTrackChallenge } from '@/data/cardio';
 
 // Part de l'XP de fond convertie en énergie d'aventure (réglable).
 // 1 = « ton énergie = ton XP de fond » (généreux : le sport finance une vraie session de jeu).
@@ -31,34 +31,37 @@ export function useProgress() {
     cardio.fetchLogs().catch(() => undefined);
   });
 
-  // Ids des séances de prépa physique → leurs bilans comptent dans le Tennis.
-  const prepaIds = computed(
+  // Séances « spécifiques » (hors muscu de fond) → comptent dans le Tennis/Spécifique :
+  // prépa physique, crossfit, hyrox. Tag porté par la séance OU directement par le log
+  // (log rapide crossfit/hyrox sans séance).
+  const specifiqueSessionIds = computed(
     () =>
       new Set(
-        sessions.list.filter((s) => s.payload.discipline === 'prepa_physique').map((s) => s.id),
+        sessions.list
+          .filter((s) => (s.payload.discipline ?? 'musculation') !== 'musculation')
+          .map((s) => s.id),
       ),
   );
-
-  const isPrepaLog = (sessionId?: string) => !!sessionId && prepaIds.value.has(sessionId);
+  const isSpecifiqueLog = (r: (typeof logs.all)[number]) => {
+    const d = r.payload.discipline;
+    if (d && d !== 'musculation') return true;
+    return !!r.payload.session_id && specifiqueSessionIds.value.has(r.payload.session_id);
+  };
 
   const muscuXp = computed(() =>
-    logs.all
-      .filter((r) => !isPrepaLog(r.payload.session_id))
-      .reduce((a, r) => a + sessionXp(r.payload), 0),
+    logs.all.filter((r) => !isSpecifiqueLog(r)).reduce((a, r) => a + sessionXp(r.payload), 0),
   );
-  const prepaXp = computed(() =>
-    logs.all
-      .filter((r) => isPrepaLog(r.payload.session_id))
-      .reduce((a, r) => a + sessionXp(r.payload), 0),
+  const specifiqueSessionXp = computed(() =>
+    logs.all.filter((r) => isSpecifiqueLog(r)).reduce((a, r) => a + sessionXp(r.payload), 0),
   );
   const tennisXp = computed(
-    () => prepaXp.value + tennis.logs.reduce((a, r) => a + drillSessionXp(r.payload), 0),
+    () =>
+      specifiqueSessionXp.value + tennis.logs.reduce((a, r) => a + drillSessionXp(r.payload), 0),
   );
 
   // Un challenge alimente la DISCIPLINE de son exercice : marche/course/vélo →
   // cardio ; tout le reste (pompes, gainage…) → muscu.
-  const isCardioChallenge = (c: (typeof challenges.list)[number]) =>
-    c.unit === 'distance' || CARDIO_CHALLENGE_IDS.has(c.exercise_id);
+  const isCardioChallenge = (c: (typeof challenges.list)[number]) => isCardioTrackChallenge(c);
   const muscuChallengeXp = computed(() =>
     challengeXpPoints(challenges.list.filter((c) => !isCardioChallenge(c))),
   );
