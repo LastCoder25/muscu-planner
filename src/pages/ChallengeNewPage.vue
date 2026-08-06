@@ -418,6 +418,7 @@ import { exerciseImage } from '@/data/exerciseImages';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useProfileStore } from '@/stores/profile';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
+import { useComboStore } from '@/stores/combo';
 import { useAuthStore } from '@/stores/auth';
 import {
   tokenCost,
@@ -435,6 +436,7 @@ const $q = useQuasar();
 const libraryStore = useLibraryStore();
 const profileStore = useProfileStore();
 const challenges = useChallengesStore();
+const comboStore = useComboStore();
 const auth = useAuthStore();
 
 const STEP_TITLES = ['Exercice', 'Format', 'Durée', 'Réglages', 'Récap'];
@@ -738,6 +740,15 @@ const totalPlanned = computed(() => previewTargets.value.reduce((a, t) => a + t,
 async function createChallenge() {
   const userId = auth.user?.id;
   if (!userId || !exercise.value) return;
+  // Exclusivité : pas de défi MUSCU si un Défi 360 (programme full-body) est actif.
+  if (!isCardio.value && comboStore.list.some((c) => c.status === 'active')) {
+    $q.notify({
+      type: 'warning',
+      message:
+        'Un Défi 360 est en cours (il couvre déjà ta muscu). Termine-le pour des défis muscu.',
+    });
+    return;
+  }
   creating.value = true;
   try {
     const cfg: ChallengeConfig = { ...config.value, rest_weekdays: restDays.value };
@@ -777,6 +788,7 @@ onMounted(async () => {
   try {
     if (userId && !profileStore.profile) await profileStore.fetch(userId);
     if (challenges.list.length === 0) await challenges.fetchMine();
+    if (comboStore.list.length === 0) await comboStore.fetchMine().catch(() => undefined);
     lib.value = await libraryStore.fetchAll();
   } catch (e) {
     $q.notify({

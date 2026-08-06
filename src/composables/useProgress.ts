@@ -7,8 +7,10 @@ import { useTennisStore } from '@/stores/tennis';
 import { useChallengesStore } from '@/stores/challenges';
 import { useSessionsStore } from '@/stores/sessions';
 import { useCardioStore } from '@/stores/cardio';
+import { useComboStore } from '@/stores/combo';
 import { sessionXp, drillSessionXp, cardioSessionXp } from '@/lib/athlete';
 import { challengeXpPoints } from '@/lib/challenges';
+import { comboXpPoints } from '@/lib/combo';
 import { computeLevel } from '@/lib/levels';
 import { isCardioTrackChallenge } from '@/data/cardio';
 
@@ -22,6 +24,7 @@ export function useProgress() {
   const challenges = useChallengesStore();
   const sessions = useSessionsStore();
   const cardio = useCardioStore();
+  const combo = useComboStore();
 
   onMounted(() => {
     logs.fetchAll().catch(() => undefined);
@@ -29,6 +32,7 @@ export function useProgress() {
     challenges.fetchMine().catch(() => undefined);
     sessions.fetchMine().catch(() => undefined);
     cardio.fetchLogs().catch(() => undefined);
+    combo.fetchMine().catch(() => undefined);
   });
 
   // Séances « spécifiques » (hors muscu de fond) → comptent dans le Tennis/Spécifique :
@@ -69,7 +73,9 @@ export function useProgress() {
     challengeXpPoints(challenges.list.filter((c) => isCardioChallenge(c))),
   );
 
-  const muscuTotal = computed(() => muscuXp.value + muscuChallengeXp.value);
+  // Défi 360 (défi combiné) → piste Muscu (XP façon séance : reps + tonnage + prime).
+  const comboXp = computed(() => comboXpPoints(combo.list));
+  const muscuTotal = computed(() => muscuXp.value + muscuChallengeXp.value + comboXp.value);
   // Les sorties « miroir » d'un défi (challenge_id) apparaissent dans l'historique
   // mais ne comptent PAS d'XP : l'effort est déjà compté via cardioChallengeXp
   // (sinon double compte). Les sorties manuelles, elles, comptent normalement.

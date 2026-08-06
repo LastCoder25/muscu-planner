@@ -18,6 +18,27 @@
       />
     </div>
 
+    <button
+      v-if="activeCombo"
+      class="combo-banner"
+      @click="router.push(`/combo/${activeCombo.id}`)"
+    >
+      <span class="cb-emo">🎯</span>
+      <div class="cb-main">
+        <div class="cb-title font-display">Défi 360 en cours</div>
+        <div class="cb-sub">{{ comboPct }}% · full-body de la semaine</div>
+      </div>
+      <q-icon name="chevron_right" size="22px" />
+    </button>
+    <button v-else class="combo-banner ghost" @click="router.push('/combo/new')">
+      <span class="cb-emo">🎯</span>
+      <div class="cb-main">
+        <div class="cb-title font-display">Lancer un Défi 360</div>
+        <div class="cb-sub">Défi full-body sur 7 jours (tous tes exos, réparti)</div>
+      </div>
+      <q-icon name="add" size="22px" />
+    </button>
+
     <div class="tabs">
       <button
         v-for="t in TABS"
@@ -192,6 +213,8 @@ import { computeLevel } from '@/lib/levels';
 import { formatOption } from '@/data/challengeFormats';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
+import { useComboStore } from '@/stores/combo';
+import { comboProgressPct } from '@/lib/combo';
 import {
   tokenCost,
   isAccessoryMuscle,
@@ -205,7 +228,11 @@ const router = useRouter();
 const route = useRoute();
 const $q = useQuasar();
 const store = useChallengesStore();
+const comboStore = useComboStore();
 const loading = ref(true);
+
+const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
+const comboPct = computed(() => (activeCombo.value ? comboProgressPct(activeCombo.value) : 0));
 
 const TABS = [
   { value: 'active', label: 'En cours' },
@@ -302,6 +329,7 @@ async function goDetail(id: string) {
 onMounted(async () => {
   try {
     await store.fetchMine();
+    await comboStore.fetchMine().catch(() => undefined);
     await store.fetchAchievements();
     // Rattrapage : débloque les succès mérités mais pas encore enregistrés.
     await store.unlock(evaluateAchievements(store.list));
@@ -427,6 +455,41 @@ onMounted(async () => {
   font-weight: 700;
   color: var(--text);
   min-width: 30px;
+}
+/* Bannière Défi 360 */
+.combo-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--accent);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.combo-banner.ghost {
+  border-style: dashed;
+  border-color: var(--line);
+  background: var(--surface);
+}
+.cb-emo {
+  font-size: 24px;
+}
+.cb-main {
+  flex: 1;
+  min-width: 0;
+}
+.cb-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+.cb-sub {
+  font-size: 12px;
+  color: var(--dim);
 }
 
 /* Tuiles de défis (En cours), groupées par voie */

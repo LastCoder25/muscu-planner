@@ -52,6 +52,16 @@ const routes: RouteRecordRaw[] = [
     children: [{ path: '', component: () => import('@/pages/ChallengeNewPage.vue') }],
   },
   {
+    path: '/combo/new',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/ComboNewPage.vue') }],
+  },
+  {
+    path: '/combo/:id',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/ComboDetailPage.vue') }],
+  },
+  {
     path: '/court/new',
     component: () => import('@/layouts/BlankLayout.vue'),
     children: [{ path: '', component: () => import('@/pages/CourtNewPage.vue') }],
