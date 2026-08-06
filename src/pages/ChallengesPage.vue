@@ -52,11 +52,10 @@
               <span v-for="n in BUDGET" :key="n" class="pip" :class="{ on: n <= cardioUsed }" />
             </span>
             <span class="cap-num font-display">{{ cardioUsed }}/{{ BUDGET }}</span>
-            <span class="cap-acc" :class="{ used: cardioAccUsed }">+1 access.</span>
           </div>
           <div class="cap-hint">
-            Un défi occupe 1 à 3 places selon sa durée ; les petits exos (mollets, abdos, bras) sont
-            « accessoires » et gratuits.
+            Un défi occupe 1 à 3 places selon sa durée. Côté muscu, les petits exos (mollets, abdos,
+            bras) sont « accessoires » et gratuits.
           </div>
         </div>
 
@@ -235,7 +234,6 @@ function laneChallenges(cardio: boolean): LaneChallenge[] {
 const muscuUsed = computed(() => usedTokens(laneChallenges(false)));
 const cardioUsed = computed(() => usedTokens(laneChallenges(true)));
 const muscuAccUsed = computed(() => accessoryCount(laneChallenges(false)) >= 1);
-const cardioAccUsed = computed(() => accessoryCount(laneChallenges(true)) >= 1);
 const BUDGET = CHALLENGE_TOKEN_BUDGET;
 // Défis actifs groupés par voie (affichage en tuiles).
 const activeMuscuCh = computed(() =>
