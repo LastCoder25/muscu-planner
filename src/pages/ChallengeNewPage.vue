@@ -487,7 +487,13 @@ const unit = computed<'reps' | 'time' | 'distance'>(() => {
   return exercise.value?.unit === 'time' ? 'time' : 'reps';
 });
 const unitLabel = computed(() =>
-  unit.value === 'distance' ? 'km' : unit.value === 'time' ? 'sec' : 'reps',
+  unit.value === 'distance'
+    ? 'km'
+    : unit.value === 'time'
+      ? isCardio.value
+        ? 'min' // cardio en temps = minutes ; gainage = secondes
+        : 'sec'
+      : 'reps',
 );
 const fields = computed(() => formatOption(format.value)?.fields ?? ['start']);
 

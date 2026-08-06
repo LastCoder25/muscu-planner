@@ -115,7 +115,13 @@
           <div class="exo-reps">
             <span class="er-v font-display">{{ e.total }}</span
             ><span class="er-l">{{
-              e.unit === 'time' ? 'sec' : e.unit === 'distance' ? 'km' : 'reps'
+              e.unit === 'time'
+                ? isCardioChallengeRow({ unit: e.unit, exercise_id: e.id })
+                  ? 'min'
+                  : 'sec'
+                : e.unit === 'distance'
+                  ? 'km'
+                  : 'reps'
             }}</span>
           </div>
         </div>
@@ -234,7 +240,9 @@ function bal(c: Challenge) {
   return challengeLiveBalance(c);
 }
 function unitOf(c: Challenge) {
-  return c.unit === 'time' ? 'sec' : c.unit === 'distance' ? 'km' : 'reps';
+  // cardio en temps = minutes ; gainage en temps = secondes.
+  if (c.unit === 'time') return isCardioChallengeRow(c) ? 'min' : 'sec';
+  return c.unit === 'distance' ? 'km' : 'reps';
 }
 function fmtName(f: string) {
   return formatOption(f)?.name ?? f;

@@ -124,9 +124,10 @@
             <button class="rpe-skip" @click="rateAndAdapt(null)">Passer</button>
           </div>
 
-          <!-- Temps : chrono. Se replie seulement une fois la journée VALIDÉE
-               (todayClosed), pas à l'atteinte de l'objectif → excès possible. -->
-          <template v-if="isTime">
+          <!-- Gainage (temps en secondes) : chrono. Se replie seulement une fois la
+               journée VALIDÉE (todayClosed), pas à l'atteinte → excès possible.
+               Le cardio-temps (minutes) passe par les boutons « +N min » ci-dessous. -->
+          <template v-if="isGainageTime">
             <div v-if="todayClosed" class="today-ok">
               <q-icon v-if="todayCompleted" name="check_circle" color="positive" />
               <q-icon v-else name="bedtime" color="primary" />
@@ -161,7 +162,7 @@
                 continue pour un excès
               </div>
               <button
-                v-if="!editMode"
+                v-if="!editMode && !isCardioTime"
                 class="chrono-cta"
                 :class="{ running }"
                 @click="toggleChrono"
@@ -350,8 +351,19 @@ function resetQuick() {
 
 const today = logicalToday(); // « jour d'entraînement » (bascule à 4 h)
 const isTime = computed(() => ch.value?.unit === 'time');
+// Cardio en temps = MINUTES (vélo/course/marche) ; gainage en temps = SECONDES.
+const isCardioTime = computed(
+  () => !!ch.value && ch.value.unit === 'time' && isCardioChallengeExercise(ch.value.exercise_id),
+);
+const isGainageTime = computed(() => isTime.value && !isCardioTime.value);
 const unitLabel = computed(() =>
-  ch.value?.unit === 'time' ? 'sec' : ch.value?.unit === 'distance' ? 'km' : 'reps',
+  ch.value?.unit === 'time'
+    ? isCardioTime.value
+      ? 'min'
+      : 'sec'
+    : ch.value?.unit === 'distance'
+      ? 'km'
+      : 'reps',
 );
 const formatName = computed(() =>
   ch.value ? (formatOption(ch.value.format)?.name ?? ch.value.format) : '',
@@ -513,7 +525,8 @@ async function mirrorCardio() {
       exerciseId: c.exercise_id,
       activity: defaultActivityForChallenge(c.exercise_id),
       ...(c.unit === 'distance' ? { distanceKm: e.done } : {}),
-      ...(c.unit === 'time' ? { durationMin: Math.round(e.done / 60) } : {}),
+      // cardio-temps = minutes → durationMin = done directement (plus de /60).
+      ...(c.unit === 'time' ? { durationMin: e.done } : {}),
     });
   } catch {
     /* silencieux : le défi est déjà enregistré */
@@ -539,7 +552,7 @@ function toggleChrono() {
     tick = setInterval(() => {
       const e = ensureToday();
       e.elapsed_sec++;
-      if (isTime.value) {
+      if (isGainageTime.value) {
         e.done = e.elapsed_sec;
         syncComplete(e);
       }

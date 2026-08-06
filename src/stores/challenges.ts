@@ -161,11 +161,13 @@ export const useChallengesStore = defineStore('challenges', () => {
     const fed: string[] = [];
     for (const c of list.value) {
       if (c.status !== 'active' || !ids.includes(c.exercise_id)) continue;
+      // Défis cardio en temps = MINUTES (vélo/course/marche) → on ajoute les
+      // minutes directement (plus de conversion en secondes).
       const amount =
         c.unit === 'distance'
           ? (input.distanceKm ?? 0)
           : c.unit === 'time'
-            ? (input.durationMin ?? 0) * 60
+            ? (input.durationMin ?? 0)
             : 0;
       if (amount <= 0) continue;
       const progress = addContribution(c, input.date, amount);
