@@ -20,24 +20,27 @@ export interface ShopItem {
   energy?: number; // pour kind 'energy'
 }
 
+// ÉQUILIBRAGE ÉNERGIE : l'énergie doit coûter PLUS que le meilleur ratio de farm
+// (Repaire = 240 or / 55 ⚡ ≈ 4,4 or/⚡) pour que racheter l'énergie d'un run avec
+// son or soit toujours NET-NÉGATIF → pas de mouvement perpétuel. Ici ~8 or/⚡.
 export const SHOP_ITEMS: ShopItem[] = [
   {
     id: 'energy_small',
     name: 'Boule d’énergie',
     emoji: '⚡',
-    desc: '+30 énergie pour explorer les donjons.',
-    cost: 60,
+    desc: '+25 énergie (dépannage — coûteux exprès).',
+    cost: 200,
     kind: 'energy',
-    energy: 30,
+    energy: 25,
   },
   {
     id: 'energy_big',
     name: 'Sphère d’énergie',
     emoji: '🔆',
-    desc: '+100 énergie (plus avantageux).',
-    cost: 180,
+    desc: '+80 énergie (léger rabais au volume).',
+    cost: 560,
     kind: 'energy',
-    energy: 100,
+    energy: 80,
   },
   {
     id: 'potion_heal',
