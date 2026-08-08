@@ -64,49 +64,46 @@
         </div>
       </div>
 
+      <q-btn
+        class="add-session full-width"
+        color="primary"
+        text-color="dark"
+        no-caps
+        unelevated
+        icon="add"
+        label="Enregistrer une séance"
+        @click="pickerOpen = true"
+      />
+
+      <button class="challenge-row" @click="goChallenges">
+        <span class="cr-ic">🏆</span>
+        <div class="cr-main">
+          <div class="cr-title font-display">Challenges</div>
+          <div class="cr-sub">Niv. {{ progress.challenges.value.level }} · défis & Défi 360</div>
+        </div>
+        <span v-if="challengesDueToday > 0" class="cr-badge">{{ challengesDueToday }} à faire</span>
+        <q-icon v-else name="chevron_right" size="22px" />
+      </button>
+
       <div class="tile-group">
-        <div class="group-lbl">Général</div>
-        <button class="challenge-row" @click="goChallenges">
-          <span class="cr-ic">🏆</span>
-          <div class="cr-main">
-            <div class="cr-title font-display">Challenges</div>
-            <div class="cr-sub">Niv. {{ progress.challenges.value.level }} · défis & Défi 360</div>
-          </div>
-          <span v-if="challengesDueToday > 0" class="cr-badge"
-            >{{ challengesDueToday }} à faire</span
-          >
-          <q-icon v-else name="chevron_right" size="22px" />
-        </button>
+        <div class="group-lbl">Mes sports</div>
+        <div v-if="!progress.sportTiles.value.length" class="empty-sports">
+          Aucune séance encore. Appuie sur « Enregistrer une séance » pour commencer 💪
+        </div>
         <div class="main-tiles">
           <button
-            v-for="t in generalTiles"
+            v-for="t in progress.sportTiles.value"
             :key="t.key"
             class="mtile"
-            :class="'t-' + t.key"
-            @click="t.go"
+            @click="goSport(t.key)"
           >
             <span class="mt-strip" />
             <span class="mt-ic-wrap"><q-icon :name="t.icon" size="26px" class="mt-ic" /></span>
             <span class="mt-name font-display">{{ t.label }}</span>
-            <span class="mt-lvl">Niv. {{ t.info.level }}</span>
+            <span class="mt-lvl">Niv. {{ t.level.level }}</span>
             <span class="mt-bar"
-              ><span class="mt-fill" :style="{ width: t.info.progressPct + '%' }"
+              ><span class="mt-fill" :style="{ width: t.level.progressPct + '%' }"
             /></span>
-          </button>
-        </div>
-      </div>
-
-      <div class="tile-group">
-        <div class="group-lbl">
-          Spécifique <span class="group-lvl">Niv. {{ progress.specifique.value.level }}</span>
-        </div>
-        <div class="main-tiles">
-          <button class="mtile t-autre" @click="openAutre">
-            <span class="mt-strip" />
-            <span class="mt-ic-wrap"><q-icon name="sports" size="26px" class="mt-ic" /></span>
-            <span class="mt-name font-display">Autre sport</span>
-            <span class="mt-lvl">+ séance</span>
-            <span class="mt-bar"><span class="mt-fill" style="width: 0%" /></span>
           </button>
         </div>
       </div>
@@ -123,6 +120,37 @@
         </button>
       </div>
     </template>
+
+    <!-- Sélecteur de saisie : route vers le bon logger selon le type de sport -->
+    <q-dialog v-model="pickerOpen" position="bottom">
+      <q-card class="picker-card">
+        <div class="picker-title font-display">Enregistrer une séance</div>
+        <button class="picker-row" @click="pickMuscu">
+          <q-icon name="fitness_center" size="24px" />
+          <div class="picker-main">
+            <div class="picker-name">Muscu</div>
+            <div class="picker-sub">Séance détaillée (reps/poids) ou rapide</div>
+          </div>
+          <q-icon name="chevron_right" size="20px" />
+        </button>
+        <button class="picker-row" @click="pickCardio">
+          <q-icon name="directions_run" size="24px" />
+          <div class="picker-main">
+            <div class="picker-name">Cardio</div>
+            <div class="picker-sub">Course, vélo, marche… (durée / distance)</div>
+          </div>
+          <q-icon name="chevron_right" size="20px" />
+        </button>
+        <button class="picker-row" @click="pickAutre">
+          <q-icon name="sports" size="24px" />
+          <div class="picker-main">
+            <div class="picker-name">Autre sport</div>
+            <div class="picker-sub">Tennis, foot, escalade… (durée)</div>
+          </div>
+          <q-icon name="chevron_right" size="20px" />
+        </button>
+      </q-card>
+    </q-dialog>
 
     <!-- Ajout rapide d'une séance « autre sport » (durée) → XP globale + énergie -->
     <q-dialog v-model="autreOpen">
@@ -204,17 +232,6 @@ const challengesDueToday = computed(() => {
     return s.dayIndex >= 0 && s.dayIndex < ch.duration_days && s.todayTarget > 0 && !s.isDoneToday;
   }).length;
 });
-// Général : renforcement + cardio (cartes couleur/discipline). Tennis = spécifique, à part.
-const generalTiles = computed(() => [
-  { key: 'muscu', label: 'Muscu', icon: 'fitness_center', info: progress.muscu.value, go: goMuscu },
-  {
-    key: 'cardio',
-    label: 'Cardio',
-    icon: 'directions_run',
-    info: progress.cardio.value,
-    go: goCardio,
-  },
-]);
 const loading = ref(true);
 
 const hasFree = ref(false);
@@ -233,9 +250,6 @@ onMounted(async () => {
   }
 });
 
-async function goMuscu() {
-  await router.push('/muscu');
-}
 async function goAgenda() {
   await router.push('/agenda');
 }
@@ -274,9 +288,6 @@ function discardCourt() {
 async function goChallenges() {
   await router.push('/challenges');
 }
-async function goCardio() {
-  await router.push('/cardio');
-}
 async function goStats() {
   await router.push('/stats');
 }
@@ -304,6 +315,26 @@ const SPORT_OPTIONS = [
   'Danse',
   'Autre',
 ];
+const pickerOpen = ref(false);
+async function pickMuscu() {
+  pickerOpen.value = false;
+  await router.push('/muscu');
+}
+async function pickCardio() {
+  pickerOpen.value = false;
+  await router.push('/cardio');
+}
+function pickAutre() {
+  pickerOpen.value = false;
+  openAutre();
+}
+// Tap sur une tuile de sport → son logger / son historique.
+async function goSport(key: string) {
+  if (key.startsWith('cardio:')) await router.push('/cardio');
+  else if (key === 'disc:musculation') await router.push('/muscu');
+  else if (key.startsWith('sport:')) openAutre(key.slice('sport:'.length));
+  else await router.push('/muscu'); // crossfit/hyrox/mobilité/prépa → log via Muscu
+}
 const autreOpen = ref(false);
 const autreSport = ref<string>('Tennis');
 const autreCustom = ref('');
@@ -311,9 +342,17 @@ const autreDate = ref(todayIsoLocal());
 const autreHours = ref<number>(1);
 const autreMinutes = ref<number>(0);
 const autreSaving = ref(false);
-function openAutre() {
-  autreSport.value = 'Tennis';
-  autreCustom.value = '';
+function openAutre(preset?: string) {
+  if (preset && SPORT_OPTIONS.includes(preset)) {
+    autreSport.value = preset;
+    autreCustom.value = '';
+  } else if (preset) {
+    autreSport.value = 'Autre';
+    autreCustom.value = preset;
+  } else {
+    autreSport.value = 'Tennis';
+    autreCustom.value = '';
+  }
   autreDate.value = todayIsoLocal();
   autreHours.value = 1;
   autreMinutes.value = 0;
@@ -728,6 +767,7 @@ async function saveAutre() {
   gap: 10px;
 }
 .mtile {
+  --c: var(--accent); /* couleur par défaut (tuiles dynamiques par sport) */
   position: relative;
   display: flex;
   flex-direction: column;
@@ -759,6 +799,58 @@ async function saveAutre() {
 }
 .t-autre {
   --c: var(--d2, #c6d24a);
+}
+.add-session {
+  margin-bottom: 14px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+.empty-sports {
+  color: var(--dim);
+  font-size: 13px;
+  padding: 10px 2px 4px;
+}
+.picker-card {
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+  max-width: 520px;
+  border-radius: 16px 16px 0 0;
+  padding: 16px 14px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+.picker-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.picker-row:active {
+  border-color: var(--accent);
+}
+.picker-main {
+  flex: 1;
+  min-width: 0;
+}
+.picker-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+.picker-sub {
+  font-size: 12px;
+  color: var(--dim);
 }
 .autre-card {
   background: var(--surface);

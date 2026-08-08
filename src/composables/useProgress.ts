@@ -12,7 +12,7 @@ import { sessionXp, drillSessionXp, cardioSessionXp } from '@/lib/athlete';
 import { challengeXpPoints } from '@/lib/challenges';
 import { comboXpPoints } from '@/lib/combo';
 import { computeLevel } from '@/lib/levels';
-import { isCardioTrackChallenge } from '@/data/cardio';
+import { isCardioTrackChallenge, ACTIVITY_LABELS, ACTIVITY_ICONS } from '@/data/cardio';
 import {
   emptyBuckets,
   addXp,
@@ -131,7 +131,75 @@ export function useProgress() {
     return acc;
   });
 
+  // ── Tuiles par SPORT (une par activité réellement pratiquée) ──
+  // = séances loggées uniquement (les challenges/Défi 360 ont leur propre entrée).
+  const SPORT_ICON: Record<string, string> = {
+    Tennis: 'sports_tennis',
+    Padel: 'sports_tennis',
+    Football: 'sports_soccer',
+    Basket: 'sports_basketball',
+    Natation: 'pool',
+    Course: 'directions_run',
+    Vélo: 'directions_bike',
+    Escalade: 'terrain',
+    Boxe: 'sports_mma',
+    Rugby: 'sports_rugby',
+    Yoga: 'self_improvement',
+    Randonnée: 'hiking',
+    Ski: 'downhill_skiing',
+    Golf: 'sports_golf',
+    Danse: 'music_note',
+  };
+  const DISC_TILE: Record<string, { label: string; icon: string }> = {
+    musculation: { label: 'Muscu', icon: 'fitness_center' },
+    crossfit: { label: 'Crossfit', icon: 'sports_gymnastics' },
+    hyrox: { label: 'Hyrox', icon: 'sports_score' },
+    mobilite: { label: 'Mobilité', icon: 'self_improvement' },
+    prepa_physique: { label: 'Prépa physique', icon: 'directions_run' },
+  };
+  const sportTiles = computed(() => {
+    const map = new Map<
+      string,
+      { key: string; label: string; icon: string; xp: number; ts: number }
+    >();
+    const bump = (key: string, label: string, icon: string, xp: number, ts: number) => {
+      const e = map.get(key);
+      if (e) {
+        e.xp += xp;
+        e.ts = Math.max(e.ts, ts);
+      } else {
+        map.set(key, { key, label, icon, xp, ts });
+      }
+    };
+    for (const r of logs.all) {
+      const d = r.payload.discipline ?? 'musculation';
+      const ts = Date.parse(r.performed_at) || 0;
+      if (d === 'autre_sport') {
+        const name = r.payload.name || 'Autre';
+        bump(`sport:${name}`, name, SPORT_ICON[name] ?? 'sports', sessionXp(r.payload), ts);
+      } else {
+        const t = DISC_TILE[d] ?? DISC_TILE.musculation!;
+        bump(`disc:${d}`, t.label, t.icon, sessionXp(r.payload), ts);
+      }
+    }
+    for (const r of cardio.logs) {
+      if (r.payload.challenge_id) continue; // sorties miroir = pas d'XP
+      const a = r.payload.activity;
+      bump(
+        `cardio:${a}`,
+        ACTIVITY_LABELS[a] ?? 'Cardio',
+        ACTIVITY_ICONS[a] ?? 'directions_run',
+        cardioSessionXp(r.payload),
+        Date.parse(r.performed_at) || 0,
+      );
+    }
+    return [...map.values()]
+      .map((t) => ({ ...t, level: computeLevel(t.xp) }))
+      .sort((a, b) => b.ts - a.ts);
+  });
+
   return {
+    sportTiles,
     global: computed(() => computeLevel(globalXp.value)),
     general: computed(() => computeLevel(generalXp.value)),
     specifique: computed(() => computeLevel(tennisXp.value)),
