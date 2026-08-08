@@ -65,7 +65,7 @@ describe('cardioSessionXp (log global)', () => {
     const course = cardioSessionXp(log({ ...base, activity: 'course' }));
     const marche = cardioSessionXp(log({ ...base, activity: 'marche' }));
     expect(marche).toBeLessThan(course);
-    // marche : ((10*2 + 50*3=150)=170)*0.45=76.5 × XP_MULT(2) = 153
-    expect(marche).toBe(153);
+    // marche : ((10*2 + 50*3=150)=170)*0.50=85 × XP_MULT(2) = 170 (intensité 50/100)
+    expect(marche).toBe(170);
   });
 });

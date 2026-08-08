@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sessionXp, drillSessionXp, estimateSessionXp } from '@/lib/athlete';
+import { sessionXp, drillSessionXp, estimateSessionXp, otherSportXp } from '@/lib/athlete';
 import type { SessionLog, DrillLog, Session } from '@/lib/types';
 
 function log(over: Partial<SessionLog> = {}): SessionLog {
@@ -62,6 +62,19 @@ describe('drillSessionXp', () => {
     });
     // (40 + 60 + 2*8=16 + 30) = 146 × XP_MULT(2) = 292
     expect(drillSessionXp(l)).toBe(292);
+  });
+});
+
+describe('otherSportXp (autre sport, intensité-scalé)', () => {
+  it('course (intensité 100) = dur × 3 × XP_MULT', () => {
+    // 60 × 3 × (100/100) × 2 = 360
+    expect(otherSportXp(60, 'Course')).toBe(360);
+  });
+  it('un sport chill (yoga) rapporte moins qu’un sport intense (tennis)', () => {
+    expect(otherSportXp(60, 'Yoga')).toBeLessThan(otherSportXp(60, 'Tennis'));
+  });
+  it('sport inconnu → intensité par défaut (non nulle)', () => {
+    expect(otherSportXp(30, 'Curling')).toBeGreaterThan(0);
   });
 });
 

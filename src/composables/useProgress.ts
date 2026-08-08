@@ -8,7 +8,7 @@ import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { useSessionsStore } from '@/stores/sessions';
 import { useCardioStore } from '@/stores/cardio';
 import { useComboStore } from '@/stores/combo';
-import { sessionXp, drillSessionXp, cardioSessionXp } from '@/lib/athlete';
+import { sessionXp, drillSessionXp, cardioSessionXp, otherSportXp } from '@/lib/athlete';
 import { challengeXpPoints } from '@/lib/challenges';
 import { comboXpPoints } from '@/lib/combo';
 import { computeLevel } from '@/lib/levels';
@@ -82,9 +82,12 @@ export function useProgress() {
       .filter((r) => !isSpecifiqueLog(r) && !isAutreLog(r))
       .reduce((a, r) => a + sessionXp(r.payload), 0),
   );
-  // XP « autre sport » (durée) → n'alimente QUE le global et l'énergie.
+  // XP « autre sport » (durée) → n'alimente QUE le global et l'énergie. INTENSITÉ-
+  // scalé par le sport (yoga < tennis < course), plus un barème plat.
   const autreXp = computed(() =>
-    logs.all.filter((r) => isAutreLog(r)).reduce((a, r) => a + sessionXp(r.payload), 0),
+    logs.all
+      .filter((r) => isAutreLog(r))
+      .reduce((a, r) => a + otherSportXp(r.payload.duration_min ?? 0, r.payload.name), 0),
   );
   const specifiqueSessionXp = computed(() =>
     logs.all.filter((r) => isSpecifiqueLog(r)).reduce((a, r) => a + sessionXp(r.payload), 0),
@@ -137,9 +140,14 @@ export function useProgress() {
     }
     // Défis cardio → signature cardio générique.
     addXp(acc, cardioChallengeXp.value, CARDIO_CHALLENGE_SIG);
-    // « Autre sport » → signature du sport choisi (nom du log).
+    // « Autre sport » → intensité-scalé, réparti selon la direction du sport.
     for (const r of logs.all) {
-      if (isAutreLog(r)) addXp(acc, sessionXp(r.payload), sportSignature(r.payload.name));
+      if (isAutreLog(r))
+        addXp(
+          acc,
+          otherSportXp(r.payload.duration_min ?? 0, r.payload.name),
+          sportSignature(r.payload.name),
+        );
     }
     return acc;
   });

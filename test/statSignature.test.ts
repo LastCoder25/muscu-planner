@@ -6,9 +6,12 @@ import {
   cardioSignature,
   sportSignature,
   DEFAULT_SPORT_SIG,
+  activityIntensity,
+  sportIntensity,
+  activityBenefit,
 } from '@/lib/statSignature';
 
-describe('statSignature', () => {
+describe('statSignature — direction (répartition)', () => {
   it('addXp répartit selon la signature et conserve le total', () => {
     const acc = emptyBuckets();
     addXp(acc, 100, MUSCU_SIG);
@@ -18,15 +21,14 @@ describe('statSignature', () => {
     expect(acc.power + acc.endurance + acc.agility).toBeCloseTo(100);
   });
 
-  it('les poids de chaque signature somment à 1', () => {
+  it('les directions somment à 1', () => {
     const sigs = [
       MUSCU_SIG,
       cardioSignature('course'),
       cardioSignature('velo'),
-      cardioSignature('trail'),
+      cardioSignature('marche'),
       sportSignature('Tennis'),
       sportSignature('Escalade'),
-      sportSignature('Boxe'),
       DEFAULT_SPORT_SIG,
     ];
     for (const s of sigs) {
@@ -34,20 +36,35 @@ describe('statSignature', () => {
     }
   });
 
-  it('course = endurance/agilité, escalade = puissance dominante', () => {
+  it('course = endurance/agilité, escalade = puissance, tennis = agilité', () => {
     expect(cardioSignature('course').endurance).toBeGreaterThan(cardioSignature('course').power);
     expect(sportSignature('Escalade').power).toBeGreaterThan(sportSignature('Escalade').endurance);
     expect(sportSignature('Tennis').agility).toBeGreaterThan(sportSignature('Tennis').power);
   });
 
-  it('sport inconnu → signature par défaut', () => {
-    expect(sportSignature('Curling')).toBe(DEFAULT_SPORT_SIG);
-    expect(sportSignature(null)).toBe(DEFAULT_SPORT_SIG);
+  it('sport inconnu → direction par défaut (mêmes valeurs)', () => {
+    expect(sportSignature('Curling')).toEqual(DEFAULT_SPORT_SIG);
+    expect(sportSignature(null)).toEqual(DEFAULT_SPORT_SIG);
   });
+});
 
-  it('activité cardio inconnue → repli endurance', () => {
-    // @ts-expect-error test d'un fallback runtime
-    const w = cardioSignature('inconnu');
-    expect(w.endurance).toBeGreaterThan(0);
+describe('statSignature — intensité (MET adouci, course = 100)', () => {
+  it('course = 100, marche adoucie (50), vélo 75', () => {
+    expect(activityIntensity('course')).toBe(100);
+    expect(activityIntensity('marche')).toBe(50);
+    expect(activityIntensity('velo')).toBe(75);
+  });
+  it('marche < vélo < course (fini l’illusion de la normalisation)', () => {
+    expect(activityIntensity('marche')).toBeLessThan(activityIntensity('velo'));
+    expect(activityIntensity('velo')).toBeLessThan(activityIntensity('course'));
+  });
+  it('l’endurance ABSOLUE de la course dépasse celle de la marche', () => {
+    expect(activityBenefit('course').endurance).toBeGreaterThan(
+      activityBenefit('marche').endurance,
+    );
+  });
+  it('intensité « autre sport » : yoga (chill) < tennis < course', () => {
+    expect(sportIntensity('Yoga')).toBeLessThan(sportIntensity('Tennis'));
+    expect(sportIntensity('Tennis')).toBeLessThan(sportIntensity('Course'));
   });
 });

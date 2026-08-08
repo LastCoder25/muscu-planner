@@ -214,7 +214,14 @@ import { computed } from 'vue';
 import { REP_XP, MUSCU_MIN_XP, XP_MULT } from '@/lib/athlete';
 import { LOGIN, streakBaseEnergy } from '@/lib/loginStreak';
 import { COMBAT } from '@/lib/combat';
-import { MUSCU_SIG, cardioSignature, SPORT_SIGNATURES } from '@/lib/statSignature';
+import {
+  MUSCU_SIG,
+  cardioSignature,
+  directionOf,
+  activityIntensity,
+  SPORT_BENEFITS,
+} from '@/lib/statSignature';
+import type { CardioActivity } from '@/lib/types';
 
 const pctTriplet = (w: { power: number; endurance: number; agility: number }) =>
   `${Math.round(w.power * 100)} / ${Math.round(w.endurance * 100)} / ${Math.round(w.agility * 100)}`;
@@ -223,22 +230,27 @@ const signatures = [
   { k: 'Course', v: pctTriplet(cardioSignature('course')) },
   { k: 'Vélo', v: pctTriplet(cardioSignature('velo')) },
   { k: 'Trail', v: pctTriplet(cardioSignature('trail')) },
-  ...Object.entries(SPORT_SIGNATURES).map(([k, w]) => ({ k, v: pctTriplet(w) })),
+  // Les « autre sport » sont stockés en vecteurs de bénéfices → on affiche leur direction.
+  ...Object.entries(SPORT_BENEFITS).map(([k, w]) => ({ k, v: pctTriplet(directionOf(w)) })),
 ];
 
 // Reproduit les constantes NON exportées (documentaires ; à garder alignées).
 const ENERGY_PER_XP = 1;
-const ACTIVITY_XP_FACTOR: Record<string, number> = {
-  course: 1,
-  trail: 1,
-  course_tapis: 1,
-  velo: 0.7,
-  velo_appart: 0.6,
-  rando: 0.55,
-  marche: 0.45,
-  marche_tapis: 0.45,
-};
-const activityFactors = Object.entries(ACTIVITY_XP_FACTOR).map(([k, v]) => ({ k, v }));
+// Facteur d'XP cardio = intensité (MET adouci) ÷ 100 (course = 1). Dérivé, plus arbitraire.
+const CARDIO_ACTIVITIES: CardioActivity[] = [
+  'course',
+  'trail',
+  'course_tapis',
+  'velo',
+  'velo_appart',
+  'rando',
+  'marche',
+  'marche_tapis',
+];
+const activityFactors = CARDIO_ACTIVITIES.map((k) => ({
+  k,
+  v: Math.round((activityIntensity(k) / 100) * 100) / 100,
+}));
 
 const levelTable = computed(() => {
   const rows: { lvl: number; cost: number; cum: number }[] = [];

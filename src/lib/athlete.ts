@@ -1,20 +1,13 @@
 // athlete.ts — barèmes d'XP par séance. Le calcul de NIVEAU est unifié dans
 // src/lib/levels.ts (computeLevel). Ici : combien rapporte une séance.
 // Pur/testable, aucune dépendance Vue.
-import type { SessionLog, Session, DrillLog, CardioLog, CardioActivity } from './types';
+import type { SessionLog, Session, DrillLog, CardioLog } from './types';
+import { activityIntensity, sportIntensity } from './statSignature';
 
-// Poids d'une activité cardio : la marche vaut nettement moins que la course
-// (à distance/durée égale). Le dénivelé et le ressenti restent à plein (effort réel).
-const ACTIVITY_XP_FACTOR: Record<CardioActivity, number> = {
-  course: 1,
-  trail: 1,
-  course_tapis: 1,
-  velo: 0.7,
-  velo_appart: 0.6,
-  rando: 0.55,
-  marche: 0.45,
-  marche_tapis: 0.45,
-};
+// Le poids d'une activité cardio n'est PLUS un facteur arbitraire : il dérive de
+// son INTENSITÉ (somme du vecteur de bénéfices, adossée au MET), normalisée par
+// la course (intensité 100 → facteur 1). Cf. statSignature.ts. Marche 50→0.50,
+// vélo 75→0.75, etc. → magnitudes préservées, ratios justifiés.
 
 // Multiplicateur GLOBAL d'XP : accélère la progression (niveaux + énergie) pour
 // tous. Appliqué à la SOURCE de chaque XP → niveaux, énergie et stats scalent
@@ -63,13 +56,21 @@ export function cardioSessionXp(log: CardioLog): number {
   const dplus = log.elevation_m ?? 0;
   const dminus = log.descent_m ?? 0;
   const dur = log.duration_min ?? 0;
-  const factor = ACTIVITY_XP_FACTOR[log.activity] ?? 1;
+  const factor = activityIntensity(log.activity) / 100;
   // Dosage DOMINÉ PAR LA DURÉE (min×3 > km×2) : pro-endurance-fondamentale. Le
   // temps en zone est la vraie monnaie de la progression aérobie → une longue
   // sortie facile rapporte PLUS qu'une courte sortie rapide (on ne récompense
   // JAMAIS la vitesse, qui pousserait à sortir de la zone EF). La distance reste
   // un petit bonus ; le dénivelé (D+ ET D-) compte à plein.
   return Math.round(((km * 2 + dur * 3) * factor + (dplus + dminus) / 10) * XP_MULT);
+}
+
+/** XP d'un « autre sport » (log durée seule) : INTENSITÉ-scalé par le sport
+ *  (course = 100 → dur×MUSCU_MIN_XP ; tennis 70 → ×0.7 ; yoga 30 → ×0.3…). Corrige
+ *  l'ancien barème plat (toute activité = même XP/min quel que soit l'effort). */
+export function otherSportXp(durationMin: number, sportName?: string | null): number {
+  const dur = durationMin || 0;
+  return Math.round(dur * MUSCU_MIN_XP * (sportIntensity(sportName) / 100) * XP_MULT);
 }
 
 /** Estimation d'XP d'une séance PRÉVUE (avant de la faire) : même barème que
