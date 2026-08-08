@@ -21,6 +21,7 @@ import {
   cardioSignature,
   sportSignature,
 } from '@/lib/statSignature';
+import type { SportEntry } from '@/lib/sportAchievements';
 
 // Part de l'XP de fond convertie en énergie d'aventure (réglable).
 // 1 = « ton énergie = ton XP de fond » (généreux : le sport finance une vraie session de jeu).
@@ -198,8 +199,57 @@ export function useProgress() {
       .sort((a, b) => b.ts - a.ts);
   });
 
+  // Séances normalisées (pour les Trophées : records + paliers par sport).
+  const CAT: Record<string, SportEntry['category']> = {
+    musculation: 'muscu',
+    crossfit: 'specifique',
+    hyrox: 'specifique',
+    mobilite: 'specifique',
+    prepa_physique: 'specifique',
+    autre_sport: 'autre',
+  };
+  const sportEntries = computed<SportEntry[]>(() => {
+    const out: SportEntry[] = [];
+    for (const r of logs.all) {
+      const d = r.payload.discipline ?? 'musculation';
+      const sport =
+        d === 'autre_sport' ? r.payload.name || 'Autre' : (DISC_TILE[d]?.label ?? 'Muscu');
+      const tonnage = (r.payload.exercises ?? []).reduce(
+        (a, ex) =>
+          a + (ex.performed ?? []).reduce((b, s) => b + (s.load_kg || 0) * (s.reps || 0), 0),
+        0,
+      );
+      out.push({
+        sport,
+        category: CAT[d] ?? 'autre',
+        hasDistance: false,
+        date: (r.performed_at || '').slice(0, 10),
+        durationMin: r.payload.duration_min || 0,
+        distanceKm: 0,
+        dPlus: 0,
+        tonnage,
+      });
+    }
+    for (const r of cardio.logs) {
+      if (r.payload.challenge_id) continue;
+      const a = r.payload.activity;
+      out.push({
+        sport: ACTIVITY_LABELS[a] ?? 'Cardio',
+        category: 'cardio',
+        hasDistance: true,
+        date: (r.performed_at || '').slice(0, 10),
+        durationMin: r.payload.duration_min || 0,
+        distanceKm: r.payload.distance_km || 0,
+        dPlus: r.payload.elevation_m || 0,
+        tonnage: 0,
+      });
+    }
+    return out;
+  });
+
   return {
     sportTiles,
+    sportEntries,
     global: computed(() => computeLevel(globalXp.value)),
     general: computed(() => computeLevel(generalXp.value)),
     specifique: computed(() => computeLevel(tennisXp.value)),

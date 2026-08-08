@@ -45,6 +45,10 @@
                 <q-item-section avatar><q-icon name="bar_chart" /></q-item-section>
                 <q-item-section>Statistiques</q-item-section>
               </q-item>
+              <q-item v-close-popup clickable @click="goTrophies">
+                <q-item-section avatar><q-icon name="emoji_events" /></q-item-section>
+                <q-item-section>Trophées</q-item-section>
+              </q-item>
               <q-item v-close-popup clickable @click="goChallenges">
                 <q-item-section avatar><q-icon name="emoji_events" /></q-item-section>
                 <q-item-section>Challenges</q-item-section>
@@ -159,6 +163,9 @@ async function goBody() {
 }
 async function goStats() {
   await router.push('/stats');
+}
+async function goTrophies() {
+  await router.push('/trophies');
 }
 async function goChallenges() {
   await router.push('/challenges');

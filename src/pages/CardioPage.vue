@@ -153,6 +153,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCardioStore } from '@/stores/cardio';
@@ -170,8 +171,10 @@ import {
 import type { CardioActivity, Difficulty, CardioLog } from '@/lib/types';
 import { SCHEMA_VERSION } from '@/lib/types';
 import { cardioSessionXp } from '@/lib/athlete';
+import { recordsBeaten, type SportEntry } from '@/lib/sportAchievements';
 
 const $q = useQuasar();
+const router = useRouter();
 const auth = useAuthStore();
 const cardio = useCardioStore();
 const challenges = useChallengesStore();
@@ -260,8 +263,36 @@ async function save() {
       ...(rpe.value ? { rpe: rpe.value } : {}),
       ...(comment.value.trim() ? { comment: comment.value.trim() } : {}),
     };
+    // Détection de RECORD (avant ajout : on compare aux sorties précédentes de l'activité).
+    const toEntry = (l: CardioLog): SportEntry => ({
+      sport: l.activity,
+      category: 'cardio',
+      hasDistance: true,
+      date: (l.performed_at || '').slice(0, 10),
+      durationMin: l.duration_min || 0,
+      distanceKm: l.distance_km || 0,
+      dPlus: l.elevation_m || 0,
+      tonnage: 0,
+    });
+    const prevSame = cardio.logs
+      .filter((r) => r.payload.activity === activity.value && !r.payload.challenge_id)
+      .map((r) => toEntry(r.payload));
+    const records = recordsBeaten(prevSame, toEntry(log));
+
     await cardio.addLog(userId, log);
     $q.notify({ type: 'positive', message: 'Sortie enregistrée.' });
+    if (records.length) {
+      const lbl = { duration: 'durée', distance: 'distance', dplus: 'D+' };
+      $q.notify({
+        type: 'positive',
+        icon: 'emoji_events',
+        message: `🏅 Nouveau record ${records.map((r) => lbl[r]).join(' & ')} ! Voir les trophées`,
+        actions: [
+          { label: 'Trophées', color: 'white', handler: () => void router.push('/trophies') },
+        ],
+        timeout: 4000,
+      });
+    }
     // Reporte la sortie sur les défis cardio actifs (marche/course/vélo).
     try {
       const fed = await challenges.applyCardioLog({

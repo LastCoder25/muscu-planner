@@ -102,6 +102,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'program', component: () => import('@/pages/ProgramPage.vue') },
       { path: 'history', component: () => import('@/pages/HistoryPage.vue') },
       { path: 'stats', component: () => import('@/pages/StatsPage.vue') },
+      { path: 'trophies', component: () => import('@/pages/TrophiesPage.vue') },
       { path: 'challenges', component: () => import('@/pages/ChallengesPage.vue') },
       { path: 'tennis', component: () => import('@/pages/TennisPage.vue') },
       { path: 'cardio', component: () => import('@/pages/CardioPage.vue') },
