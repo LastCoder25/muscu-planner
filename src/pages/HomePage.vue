@@ -8,8 +8,9 @@
         </h1>
       </div>
       <div class="head-actions">
-        <button class="head-ic" aria-label="Agenda" @click="goAgenda">
-          <q-icon name="calendar_month" size="22px" />
+        <button class="hsq" aria-label="Agenda" @click="goAgenda">
+          <span class="hsq-ic"><q-icon name="calendar_month" size="20px" /></span>
+          <span class="hsq-l">Agenda</span>
         </button>
         <button class="hsq" aria-label="Mon aventurier" @click="goAventure">
           <span class="hsq-ic">⚔️</span>
@@ -501,7 +502,8 @@ async function saveAutre() {
 .head-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 .head-ic {
   position: relative;
@@ -543,11 +545,11 @@ async function saveAutre() {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  width: 56px;
-  height: 56px;
+  width: 50px;
+  height: 50px;
   background: var(--surface);
   border: 1px solid var(--line-soft);
-  border-radius: 14px;
+  border-radius: 13px;
   color: var(--text);
   cursor: pointer;
   overflow: hidden;
@@ -586,11 +588,17 @@ async function saveAutre() {
   height: 100%;
   background: var(--accent);
 }
+.home-head > div:first-child {
+  min-width: 0;
+}
 .home-name {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--text);
   margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .text-dim {
   color: var(--dim);
