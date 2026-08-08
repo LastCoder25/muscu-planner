@@ -125,11 +125,11 @@ describe('rollDrop', () => {
     expect(d!.level).toBe(6); // fixé par le donjon, pas par le joueur
     expect(d!.slot).toBe('weapon');
   });
-  it('tout objet de donjon a 2 stats (primaire + secondaire de type différent)', () => {
+  it('un objet de donjon a UNE seule stat (le set fait la différence)', () => {
     const d = rollDrop(() => 0.2, { cleared: true, defeated: 1, level: 5 });
     expect(d).not.toBeNull();
-    expect(d!.effect2).toBeDefined();
-    expect(d!.effect2!.type).not.toBe(d!.effect.type);
+    expect(d!.effect).toBeDefined();
+    expect(d!.effect2).toBeUndefined();
   });
   it('spread → le drop peut tomber SOUS le niveau du donjon, jamais au-dessus', () => {
     // rng=0.9 pour le tirage de niveau → base - floor(0.9*(spread+1))
@@ -217,7 +217,7 @@ describe('sets d’équipement', () => {
     expect(piece.level).toBe(10); // niveau plein du palier (boss)
     expect(piece.baseLevel).toBe(10);
     expect(piece.name).toContain('Dragon');
-    expect(piece.effect2).toBeDefined(); // pièce de set = 2 stats + synergie
+    expect(piece.effect2).toBeUndefined(); // 1 stat + synergie de set (pas de 2e stat)
     expect(ITEM_SETS.some((s) => s.id === 'dragon')).toBe(true);
   });
 });

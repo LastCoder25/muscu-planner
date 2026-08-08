@@ -29,8 +29,8 @@ export interface Item {
   rarity: Rarity;
   level: number; // niveau ACTUEL (monté via la Poussière d'évolution, ≤ niveau du joueur)
   baseLevel: number; // niveau à l'obtention (drop) → sert au remboursement au recyclage
-  effect: ItemEffect; // effet PRIMAIRE. value = magnitude de BASE (niv.1) ; grandit avec le niveau
-  effect2?: ItemEffect; // effet SECONDAIRE (~50 % du primaire). Tous les drops récents en ont un.
+  effect: ItemEffect; // effet UNIQUE. value = magnitude de BASE (niv.1) ; grandit avec le niveau
+  effect2?: ItemEffect; // LEGACY : anciens objets 2-stats (les nouveaux n'en ont plus) — encore appliqué
   setId?: string; // appartenance à un SET (bonus à 2/3/4 pièces) — cf. ITEM_SETS
 }
 
@@ -117,7 +117,13 @@ const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
     { type: 'dmg_reduction_pct', base: 6 },
     { type: 'max_pv_pct', base: 10 },
   ],
-  accessory: [{ type: 'gold_pct', base: 15 }],
+  // L'accessoire peut rouler de l'or OU un effet de combat (crit / vol de vie) :
+  // en modèle 1-stat, éviter qu'un slot soit « mort » au combat.
+  accessory: [
+    { type: 'gold_pct', base: 15 },
+    { type: 'crit_pct', base: 5 },
+    { type: 'lifesteal_pct', base: 5 },
+  ],
   relic: [
     { type: 'crit_pct', base: 6 },
     { type: 'max_pv_pct', base: 8 },
@@ -137,25 +143,6 @@ const RARITY_ADJ: Record<Rarity, string> = {
   epic: 'runique',
   legendary: 'mythique',
 };
-
-// Pool d'effets SECONDAIRES (tous types) — la 2e stat de CHAQUE objet (set ou
-// donjon). Base ~50 % d'une primaire. Tous les objets ont 2 stats (2026‑08‑08) :
-// les pièces de set ne sont donc jamais « pires » qu'un objet de donjon (mêmes 2
-// stats + la synergie de set en prime) → le set reste toujours désirable.
-const SECONDARY_EFFECTS: { type: EffectType; base: number }[] = [
-  { type: 'damage_pct', base: 4 },
-  { type: 'crit_pct', base: 3 },
-  { type: 'lifesteal_pct', base: 3 },
-  { type: 'dmg_reduction_pct', base: 3 },
-  { type: 'max_pv_pct', base: 5 },
-  { type: 'gold_pct', base: 8 },
-];
-/** Tire un effet secondaire (type différent du primaire), magnitude selon rareté. */
-function rollSecondary(rng: () => number, rarity: Rarity, excludeType: EffectType): ItemEffect {
-  const pool = SECONDARY_EFFECTS.filter((e) => e.type !== excludeType);
-  const c = pick(rng, pool);
-  return { type: c.type, value: Math.max(1, Math.round(c.base * RARITY_MULT[rarity])) };
-}
 
 /** Libellé de l'effet à un niveau d'objet donné (valeur réelle). */
 export function effectLabel(e: ItemEffect, level = 1): string {
@@ -242,8 +229,7 @@ export function rollDrop(
     rarity,
     level,
     baseLevel: level,
-    effect: { type: chosen.type, value },
-    effect2: rollSecondary(rng, rarity, chosen.type), // 2e stat (tous les objets en ont)
+    effect: { type: chosen.type, value }, // 1 seule stat (le set fait la différence par sa synergie)
   };
 }
 
@@ -272,8 +258,7 @@ export function rollSetPiece(
     rarity,
     level,
     baseLevel: level,
-    effect: { type: chosen.type, value },
-    effect2: rollSecondary(rng, rarity, chosen.type), // 2e stat + la synergie de set
+    effect: { type: chosen.type, value }, // 1 stat + la synergie de set (bonus 2/3/4 pièces)
     ...(set ? { setId: opts.setId } : {}),
   };
 }
@@ -342,9 +327,10 @@ export interface ItemSet {
 
 // Un set PAR boss de palier (cf. src/data/bosses.ts). Chaque set a un pouvoir
 // spécifique. Les pièces ne droppent QUE sur le boss correspondant.
-// Bonus MODESTES (2026‑08‑08) : les pièces de set portent déjà 2 stats comme les
-// objets de donjon → le bonus de set est la CERISE (identité + petit plus), pas
-// un multiplicateur qui trivialise. Full set > mix > objets 2-stats, mais de peu.
+// Modèle 1-STAT (2026‑08‑08) : chaque objet (donjon ou set) porte UNE stat ; le
+// BONUS de set RENFORCE le thème → un set = un build focalisé et désirable. Assez
+// fort pour valoir le coup, assez modéré pour qu'un légendaire de donjon (stat
+// unique très élevée) puisse tenter de casser le set → vraie chasse ARPG.
 export const ITEM_SETS: ItemSet[] = [
   {
     id: 'golem',
@@ -352,9 +338,9 @@ export const ITEM_SETS: ItemSet[] = [
     emoji: '🗿',
     theme: 'Le mur increvable : encaisse tout, ne tombe jamais.',
     tiers: [
-      { pieces: 2, type: 'max_pv_pct', base: 5 },
-      { pieces: 3, type: 'dmg_reduction_pct', base: 4 },
-      { pieces: 4, type: 'max_pv_pct', base: 6 },
+      { pieces: 2, type: 'max_pv_pct', base: 8 },
+      { pieces: 3, type: 'dmg_reduction_pct', base: 6 },
+      { pieces: 4, type: 'max_pv_pct', base: 10 },
     ],
   },
   {
@@ -363,9 +349,9 @@ export const ITEM_SETS: ItemSet[] = [
     emoji: '🐲',
     theme: 'Offensif : frappe fort et se soigne en tapant.',
     tiers: [
-      { pieces: 2, type: 'damage_pct', base: 5 },
-      { pieces: 3, type: 'crit_pct', base: 4 },
-      { pieces: 4, type: 'lifesteal_pct', base: 5 },
+      { pieces: 2, type: 'damage_pct', base: 8 },
+      { pieces: 3, type: 'crit_pct', base: 6 },
+      { pieces: 4, type: 'lifesteal_pct', base: 8 },
     ],
   },
   {
@@ -374,9 +360,9 @@ export const ITEM_SETS: ItemSet[] = [
     emoji: '💀',
     theme: 'Vampirique : vole la vie à chaque coup critique.',
     tiers: [
-      { pieces: 2, type: 'lifesteal_pct', base: 5 },
-      { pieces: 3, type: 'crit_pct', base: 4 },
-      { pieces: 4, type: 'damage_pct', base: 6 },
+      { pieces: 2, type: 'lifesteal_pct', base: 8 },
+      { pieces: 3, type: 'crit_pct', base: 6 },
+      { pieces: 4, type: 'damage_pct', base: 10 },
     ],
   },
   {
@@ -385,9 +371,9 @@ export const ITEM_SETS: ItemSet[] = [
     emoji: '🌌',
     theme: 'Défensif-punisseur : encaisse, dure, puis frappe juste.',
     tiers: [
-      { pieces: 2, type: 'max_pv_pct', base: 5 },
-      { pieces: 3, type: 'dmg_reduction_pct', base: 4 },
-      { pieces: 4, type: 'crit_pct', base: 6 },
+      { pieces: 2, type: 'max_pv_pct', base: 8 },
+      { pieces: 3, type: 'dmg_reduction_pct', base: 6 },
+      { pieces: 4, type: 'crit_pct', base: 10 },
     ],
   },
   {
@@ -396,8 +382,8 @@ export const ITEM_SETS: ItemSet[] = [
     emoji: '🔥',
     theme: 'Hybride cupide : dégâts, survie et montagnes d’or.',
     tiers: [
-      { pieces: 2, type: 'damage_pct', base: 6 },
-      { pieces: 3, type: 'max_pv_pct', base: 6 },
+      { pieces: 2, type: 'damage_pct', base: 8 },
+      { pieces: 3, type: 'max_pv_pct', base: 10 },
       { pieces: 4, type: 'gold_pct', base: 40 },
     ],
   },
