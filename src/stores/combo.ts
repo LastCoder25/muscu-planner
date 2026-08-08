@@ -65,26 +65,28 @@ export const useComboStore = defineStore('combo', () => {
     }
   }
 
-  // Ajoute des reps sur un exo (cumulées sur la date donnée). Passe à « done »
-  // dès que tous les exos atteignent leur cible.
-  async function addReps(id: string, exerciseId: string, date: string, reps: number) {
+  // Ajoute des reps sur un exo (cumulées sur la date donnée). OPTIMISTE : la
+  // liste locale est mise à jour tout de suite (réponse instantanée), la
+  // persistance Supabase part en arrière-plan. Passe à « done » dès que tous les
+  // exos atteignent leur cible (rouvre si on corrige en dessous).
+  function addReps(id: string, exerciseId: string, date: string, reps: number) {
     const c = list.value.find((x) => x.id === id);
     if (!c || reps === 0) return;
-    const legs: ComboLeg[] = c.legs.map((l) => ({
-      ...l,
-      progress: l.progress.map((p) => ({ ...p })),
-    }));
-    const leg = legs.find((l) => l.exercise_id === exerciseId);
+    const leg = c.legs.find((l) => l.exercise_id === exerciseId);
     if (!leg) return;
     const entry = leg.progress.find((p) => p.date === date);
     if (entry) entry.reps = Math.max(0, entry.reps + reps);
     else leg.progress.push({ date, reps: Math.max(0, reps) });
-    const status = comboComplete({ ...c, legs })
-      ? 'done'
-      : c.status === 'done'
-        ? 'active'
-        : undefined;
-    await persistLegs(id, legs, status);
+    if (comboComplete(c)) c.status = 'done';
+    else if (c.status === 'done') c.status = 'active';
+    // Persistance en arrière-plan (ne bloque pas l'UI).
+    void supabase
+      .from('combo_challenges')
+      .update({ legs: c.legs, status: c.status, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .then(({ error }) => {
+        if (error) console.error('combo addReps persist', error);
+      });
   }
 
   // Met à jour la charge (kg) d'un exo.

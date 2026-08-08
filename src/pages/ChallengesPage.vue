@@ -3,11 +3,17 @@
     <div class="head">
       <div class="head-left">
         <h1 class="p-title font-display">Challenges</h1>
-        <button class="head-rank" aria-label="Voir mes succès" @click="tab = 'ach'">
+        <button
+          v-if="mode === 'solo'"
+          class="head-rank"
+          aria-label="Voir mes succès"
+          @click="tab = 'ach'"
+        >
           <span class="head-lvl font-display">Niv. {{ xpInfo.level }}</span>
         </button>
       </div>
       <q-btn
+        v-if="mode === 'solo'"
         no-caps
         unelevated
         color="primary"
@@ -18,28 +24,14 @@
       />
     </div>
 
-    <button
-      v-if="activeCombo"
-      class="combo-banner"
-      @click="router.push(`/combo/${activeCombo.id}`)"
-    >
-      <span class="cb-emo">🎯</span>
-      <div class="cb-main">
-        <div class="cb-title font-display">Défi 360 en cours</div>
-        <div class="cb-sub">{{ comboPct }}% · full-body de la semaine</div>
-      </div>
-      <q-icon name="chevron_right" size="22px" />
-    </button>
-    <button v-else class="combo-banner ghost" @click="router.push('/combo/new')">
-      <span class="cb-emo">🎯</span>
-      <div class="cb-main">
-        <div class="cb-title font-display">Lancer un Défi 360</div>
-        <div class="cb-sub">Défi full-body sur 7 jours (tous tes exos, réparti)</div>
-      </div>
-      <q-icon name="add" size="22px" />
-    </button>
+    <div class="seg2">
+      <button class="seg2-b" :class="{ on: mode === 'solo' }" @click="mode = 'solo'">Solo</button>
+      <button class="seg2-b" :class="{ on: mode === 'combo' }" @click="mode = 'combo'">
+        🎯 Défi 360
+      </button>
+    </div>
 
-    <div class="tabs">
+    <div v-if="mode === 'solo'" class="tabs">
       <button
         v-for="t in TABS"
         :key="t.value"
@@ -55,7 +47,7 @@
       <q-spinner color="primary" size="32px" />
     </div>
 
-    <template v-else>
+    <template v-else-if="mode === 'solo'">
       <!-- EN COURS : en-tête capacité (jetons) + tuiles groupées par voie -->
       <template v-if="tab === 'active'">
         <div class="cap-card">
@@ -195,6 +187,58 @@
         </div>
       </template>
     </template>
+
+    <!-- DÉFI 360 -->
+    <template v-else>
+      <div v-if="!activeCombo" class="combo-empty">
+        <p>
+          Un défi <b>full-body sur 7 jours</b> : un exo par groupe, reps réparties dans la semaine.
+        </p>
+        <q-btn
+          color="primary"
+          text-color="dark"
+          no-caps
+          size="lg"
+          icon="add"
+          label="Lancer un Défi 360"
+          @click="router.push('/combo/new')"
+        />
+      </div>
+      <template v-else>
+        <div class="combo360-head">
+          <div class="c3-top">
+            <span class="c3-pct font-display">{{ comboPct }}%</span>
+            <button class="link-btn" @click="router.push(`/combo/${activeCombo.id}`)">
+              détails ›
+            </button>
+          </div>
+          <div class="bar"><div class="fill" :style="{ width: comboPct + '%' }" /></div>
+        </div>
+        <q-btn
+          class="full-width q-mb-sm"
+          outline
+          color="primary"
+          no-caps
+          icon="fitness_center"
+          label="Générer une séance"
+          @click="router.push(`/combo/${activeCombo.id}/session`)"
+        />
+        <div v-for="leg in activeCombo.legs" :key="leg.exercise_id" class="combo-leg">
+          <div class="cl-top">
+            <span class="cl-name">{{ leg.exercise_name }}</span>
+            <span class="cl-sub" :class="{ ok: legDone(leg) >= leg.target }">
+              {{ legDone(leg) }}/{{ leg.target }}
+            </span>
+          </div>
+          <div class="bar"><div class="fill" :style="{ width: legPct(leg) + '%' }" /></div>
+          <div class="cl-actions">
+            <button v-for="n in [5, 10, 20]" :key="n" class="cl-add" @click="addComboRep(leg, n)">
+              +{{ n }}
+            </button>
+          </div>
+        </div>
+      </template>
+    </template>
   </q-page>
 </template>
 
@@ -214,7 +258,8 @@ import { formatOption } from '@/data/challengeFormats';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
-import { comboProgressPct } from '@/lib/combo';
+import { comboProgressPct, legDone, type ComboLeg } from '@/lib/combo';
+import { logicalToday } from '@/lib/challenges';
 import {
   tokenCost,
   isAccessoryMuscle,
@@ -231,8 +276,16 @@ const store = useChallengesStore();
 const comboStore = useComboStore();
 const loading = ref(true);
 
+const mode = ref<'solo' | 'combo'>('solo');
 const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
 const comboPct = computed(() => (activeCombo.value ? comboProgressPct(activeCombo.value) : 0));
+function legPct(leg: ComboLeg) {
+  return leg.target > 0 ? Math.min(100, Math.round((legDone(leg) / leg.target) * 100)) : 0;
+}
+function addComboRep(leg: ComboLeg, n: number) {
+  if (activeCombo.value)
+    comboStore.addReps(activeCombo.value.id, leg.exercise_id, logicalToday(), n);
+}
 
 const TABS = [
   { value: 'active', label: 'En cours' },
@@ -490,6 +543,111 @@ onMounted(async () => {
 .cb-sub {
   font-size: 12px;
   color: var(--dim);
+}
+
+/* Segmenté Solo / Défi 360 */
+.seg2 {
+  display: flex;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 14px;
+}
+.seg2-b {
+  flex: 1;
+  padding: 9px 8px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.seg2-b.on {
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+}
+
+/* Défi 360 (onglet) */
+.combo-empty {
+  text-align: center;
+  color: var(--dim);
+  padding: 20px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+}
+.combo360-head {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.c3-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.c3-pct {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.combo-leg {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+}
+.cl-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.cl-name {
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--text);
+}
+.cl-sub {
+  font-size: 12.5px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.cl-sub.ok {
+  color: var(--d1);
+}
+.cl-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.cl-add {
+  flex: 1;
+  padding: 9px 0;
+  border-radius: 9px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
 }
 
 /* Tuiles de défis (En cours), groupées par voie */

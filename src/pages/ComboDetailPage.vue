@@ -55,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -74,7 +74,6 @@ const id = String(route.params.id);
 const QUICK = [5, 10, 20];
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 const pct = computed(() => (c.value ? comboProgressPct(c.value) : 0));
-const busy = ref(false);
 
 const daysLeftLabel = computed(() => {
   if (!c.value) return '';
@@ -99,20 +98,12 @@ function slotEmoji(key: string) {
   return comboSlot(key)?.emoji ?? '💪';
 }
 
-async function add(leg: ComboLeg, n: number) {
-  const uid = auth.user?.id;
-  if (!uid || !c.value || busy.value) return;
-  busy.value = true;
-  try {
-    const before = c.value.status;
-    await combo.addReps(id, leg.exercise_id, logicalToday(), n);
-    if (before !== 'done' && c.value.status === 'done') {
-      $q.notify({ type: 'positive', message: 'Défi 360 bouclé 🎉' });
-    }
-  } catch {
-    $q.notify({ type: 'negative', message: 'Échec de la mise à jour.' });
-  } finally {
-    busy.value = false;
+function add(leg: ComboLeg, n: number) {
+  if (!auth.user?.id || !c.value) return;
+  const before = c.value.status;
+  combo.addReps(id, leg.exercise_id, logicalToday(), n); // optimiste (instantané)
+  if (before !== 'done' && c.value.status === 'done') {
+    $q.notify({ type: 'positive', message: 'Défi 360 bouclé 🎉' });
   }
 }
 function abandon() {

@@ -78,6 +78,17 @@
 
       <div class="tile-group">
         <div class="group-lbl">Général</div>
+        <button class="challenge-row" @click="goChallenges">
+          <span class="cr-ic">🏆</span>
+          <div class="cr-main">
+            <div class="cr-title font-display">Challenges</div>
+            <div class="cr-sub">Niv. {{ progress.challenges.value.level }} · défis & Défi 360</div>
+          </div>
+          <span v-if="challengesDueToday > 0" class="cr-badge"
+            >{{ challengesDueToday }} à faire</span
+          >
+          <q-icon v-else name="chevron_right" size="22px" />
+        </button>
         <div class="main-tiles">
           <button
             v-for="t in generalTiles"
@@ -537,6 +548,49 @@ async function goStats() {
 .group-lvl {
   color: var(--accent);
   font-weight: 700;
+}
+/* Grande ligne Challenges (au-dessus des sports) */
+.challenge-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.challenge-row:active {
+  transform: scale(0.99);
+}
+.cr-ic {
+  font-size: 30px;
+}
+.cr-main {
+  flex: 1;
+  min-width: 0;
+}
+.cr-title {
+  font-weight: 800;
+  font-size: 18px;
+}
+.cr-sub {
+  font-size: 12px;
+  color: var(--dim);
+}
+.cr-badge {
+  flex: none;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
 }
 .adv-tile {
   width: 100%;
