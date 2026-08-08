@@ -176,8 +176,9 @@
       <div class="sub-h">Bénéfices par sport (💪 / ❤️ / ⚡ · somme = intensité)</div>
       <ul class="notes">
         <li>
-          Vecteurs <b>non normalisés</b> : la <b>somme</b> = l'intensité (≈ MET adouci) → pilote
-          l'XP/énergie ; course = 100 (repère). Ex. marche = <b>50</b> ≠ course = <b>100</b>.
+          Vecteurs <b>non normalisés</b> : la <b>somme</b> = l'intensité (≈ MET) → pilote
+          l'XP/énergie. Course = 100 est un <b>repère, pas un plafond</b> : marche <b>50</b>, mais
+          corde à sauter <b>120</b>, squash/MMA <b>110</b> dépassent la course.
         </li>
       </ul>
       <div class="tbl small sig3">

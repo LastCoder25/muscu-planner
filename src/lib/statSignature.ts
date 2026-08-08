@@ -82,42 +82,45 @@ export function cardioSignature(a: CardioActivity): StatWeights {
 export const CARDIO_CHALLENGE_SIG: StatWeights = { power: 0, endurance: 0.7, agility: 0.3 };
 
 // ── Bénéfices « autre sport » (vecteurs non normalisés, somme = intensité MET×10) ──
-// Basé sur ce que chaque sport travaille × son intensité typique (MET adouci).
+// La somme reflète l'intensité RÉELLE du sport (Compendium of Physical Activities) :
+// course = 100 est un REPÈRE, PAS un plafond → les sports plus intenses le dépassent
+// (corde à sauter ~120, squash/MMA ~110, boxe/hyrox ~105…), les doux sont bas
+// (yoga 30, pilates 35). La direction = ce que le sport travaille.
 const SPORT_BENEFIT: Record<string, StatBuckets> = {
-  Tennis: { power: 0, endurance: 28, agility: 42 }, // 70
+  Tennis: { power: 0, endurance: 30, agility: 45 }, // 75
   Padel: { power: 0, endurance: 28, agility: 42 }, // 70
-  Football: { power: 8, endurance: 32, agility: 40 }, // 80
+  Football: { power: 8, endurance: 34, agility: 43 }, // 85
   Basket: { power: 11, endurance: 26, agility: 38 }, // 75
-  Natation: { power: 28, endurance: 42, agility: 0 }, // 70
+  Natation: { power: 36, endurance: 54, agility: 0 }, // 90
   Course: { power: 0, endurance: 70, agility: 30 }, // 100
   Vélo: { power: 8, endurance: 60, agility: 7 }, // 75
-  Escalade: { power: 48, endurance: 8, agility: 24 }, // 80
-  Boxe: { power: 27, endurance: 27, agility: 36 }, // 90
-  Rugby: { power: 32, endurance: 24, agility: 24 }, // 80
+  Escalade: { power: 54, endurance: 9, agility: 27 }, // 90
+  Boxe: { power: 31, endurance: 32, agility: 42 }, // 105
+  Rugby: { power: 34, endurance: 25, agility: 26 }, // 85
   Yoga: { power: 9, endurance: 9, agility: 12 }, // 30
   Randonnée: { power: 13, endurance: 46, agility: 6 }, // 65
   Ski: { power: 28, endurance: 14, agility: 28 }, // 70
   Golf: { power: 13, endurance: 9, agility: 23 }, // 45
-  Danse: { power: 6, endurance: 22, agility: 27 }, // 55
-  Crossfit: { power: 36, endurance: 32, agility: 22 }, // 90
-  Hyrox: { power: 28, endurance: 52, agility: 15 }, // 95
-  Badminton: { power: 0, endurance: 26, agility: 39 }, // 65
-  Squash: { power: 0, endurance: 40, agility: 40 }, // 80
+  Danse: { power: 6, endurance: 24, agility: 30 }, // 60
+  Crossfit: { power: 40, endurance: 35, agility: 25 }, // 100
+  Hyrox: { power: 31, endurance: 58, agility: 16 }, // 105
+  Badminton: { power: 0, endurance: 28, agility: 42 }, // 70
+  Squash: { power: 0, endurance: 55, agility: 55 }, // 110
   'Tennis de table': { power: 0, endurance: 14, agility: 31 }, // 45
-  Volley: { power: 18, endurance: 12, agility: 30 }, // 60
-  Handball: { power: 16, endurance: 32, agility: 32 }, // 80
-  Judo: { power: 40, endurance: 16, agility: 24 }, // 80
-  'Arts martiaux': { power: 22, endurance: 15, agility: 38 }, // 75
-  MMA: { power: 32, endurance: 27, agility: 31 }, // 90
-  Aviron: { power: 32, endurance: 48, agility: 0 }, // 80
-  Surf: { power: 12, endurance: 18, agility: 30 }, // 60
-  Paddle: { power: 16, endurance: 28, agility: 11 }, // 55
+  Volley: { power: 16, endurance: 11, agility: 28 }, // 55
+  Handball: { power: 17, endurance: 34, agility: 34 }, // 85
+  Judo: { power: 50, endurance: 20, agility: 30 }, // 100
+  'Arts martiaux': { power: 28, endurance: 19, agility: 48 }, // 95
+  MMA: { power: 38, endurance: 33, agility: 39 }, // 110
+  Aviron: { power: 38, endurance: 57, agility: 0 }, // 95
+  Surf: { power: 10, endurance: 15, agility: 25 }, // 50
+  Paddle: { power: 18, endurance: 30, agility: 12 }, // 60
   Snowboard: { power: 20, endurance: 13, agility: 32 }, // 65
-  Roller: { power: 6, endurance: 20, agility: 39 }, // 65
-  'Corde à sauter': { power: 0, endurance: 60, agility: 40 }, // 100
-  Gymnastique: { power: 35, endurance: 7, agility: 28 }, // 70
+  Roller: { power: 8, endurance: 22, agility: 45 }, // 75
+  'Corde à sauter': { power: 0, endurance: 72, agility: 48 }, // 120
+  Gymnastique: { power: 32, endurance: 7, agility: 26 }, // 65
   Pilates: { power: 10, endurance: 10, agility: 15 }, // 35
-  Équitation: { power: 9, endurance: 18, agility: 18 }, // 45
+  Équitation: { power: 10, endurance: 20, agility: 20 }, // 50
 };
 // Sport inconnu / « Autre » libre : équilibré, intensité moyenne (~65).
 export const DEFAULT_SPORT_BENEFIT: StatBuckets = { power: 20, endurance: 25, agility: 20 };
