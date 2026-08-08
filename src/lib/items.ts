@@ -92,6 +92,14 @@ export const RARITY_LABEL: Record<Rarity, string> = {
   legendary: 'Légendaire',
 };
 
+// Rang de rareté (0..3) pour comparer deux objets (potentiel à niveau égal).
+export const RARITY_RANK: Record<Rarity, number> = {
+  common: 0,
+  rare: 1,
+  epic: 2,
+  legendary: 3,
+};
+
 const RARITY_MULT: Record<Rarity, number> = { common: 1, rare: 1.6, epic: 2.4, legendary: 3.5 };
 
 // Effet possible par slot + valeur de base (avant rareté/niveau).

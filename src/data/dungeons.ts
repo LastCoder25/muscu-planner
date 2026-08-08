@@ -114,6 +114,19 @@ export const DUNGEONS: Dungeon[] = [
     dropLevel: 8,
     dropLuck: 0.9,
   },
+  {
+    id: 'apocalypse',
+    name: 'Trône de l’Apocalypse',
+    emoji: '🔥',
+    tier: 8,
+    energyCost: 190,
+    monsterIds: ['archdemon', 'titan'],
+    recoLevel: 10,
+    hintStat: 'endurance',
+    hint: 'End-game absolu : l’Archidémon frappe et crit très fort → build complet, PV au max.',
+    dropLevel: 9,
+    dropLuck: 1,
+  },
 ];
 
 /** Convertit les ids de monstres d'un donjon en adversaires pour le moteur. */

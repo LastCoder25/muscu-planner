@@ -283,60 +283,6 @@
 
       <!-- ONGLET DONJONS -->
       <template v-else-if="tab === 'donjons'">
-        <div v-if="run" class="result" :class="run.cleared ? 'win' : 'lose'">
-          <div class="result-head">
-            <span>{{ run.cleared ? '🏆 Donjon nettoyé' : '💀 Échec' }} — {{ run.name }}</span>
-            <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
-          </div>
-          <div class="result-sub">
-            {{ run.defeated }}/{{ run.total }} monstres vaincus · PV restants {{ run.finalPv }}
-          </div>
-          <div class="log">
-            <div
-              v-for="(f, i) in run.fights"
-              :key="i"
-              class="fight-row"
-              :class="f.win ? 'fw' : 'fl'"
-            >
-              <span class="fr-emo">{{ f.emoji }}</span>
-              <span class="fr-name">{{ f.monster }}</span>
-              <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
-              <span class="fr-rounds">{{ f.rounds }} tours</span>
-            </div>
-          </div>
-          <div v-if="run.drops.length" class="drops">
-            <div class="drops-lbl">✨ Butin</div>
-            <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
-              <span class="inv-emo">{{ d.emoji }}</span>
-              <div class="inv-main">
-                <div class="inv-name">
-                  {{ d.name }} <span class="rarity">{{ RARITY_LABEL[d.rarity] }}</span>
-                </div>
-                <div class="inv-eff">
-                  {{ SLOT_LABEL[d.slot] }} · {{ effectLabel(d.effect, d.level) }}
-                </div>
-                <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
-                  équipé :
-                  {{ effectLabel(equippedInSlot(d.slot)!.effect, equippedInSlot(d.slot)!.level) }}
-                </div>
-                <div v-if="dropState(d) === 'equipped'" class="drop-done">⚔️ Équipé</div>
-                <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
-                <div v-else class="inv-actions">
-                  <button class="equip-btn" @click="doEquip(d.id)">Équiper</button>
-                  <button class="link-btn" @click="doSalvage(d)">
-                    Casser ✨{{ salvageValue(d) }}
-                  </button>
-                  <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-if="run.consumable" class="cons-drop">
-            {{ run.consumable.emoji }} <b>{{ run.consumable.name }}</b> ajouté à ton sac de
-            consommables 🎒
-          </div>
-        </div>
-
         <!-- Consommables à utiliser pour le prochain run -->
         <div v-if="ownedConsumables.length" class="consum">
           <div class="consum-lbl">Utiliser pour ce donjon</div>
@@ -384,6 +330,75 @@
               Explorer
             </button>
             <button v-else class="fight" disabled>Verrouillé</button>
+          </div>
+        </div>
+
+        <!-- Résultat du run : placé SOUS la liste pour ne jamais décaler les
+             boutons de donjon (on peut réenchaîner le même donjon sans que ça bouge). -->
+        <div v-if="run" class="result" :class="run.cleared ? 'win' : 'lose'">
+          <div class="result-head">
+            <span>{{ run.cleared ? '🏆 Donjon nettoyé' : '💀 Échec' }} — {{ run.name }}</span>
+            <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
+          </div>
+          <div class="result-sub">
+            {{ run.defeated }}/{{ run.total }} monstres vaincus · PV restants {{ run.finalPv }}
+          </div>
+          <div class="log">
+            <div
+              v-for="(f, i) in run.fights"
+              :key="i"
+              class="fight-row"
+              :class="f.win ? 'fw' : 'fl'"
+            >
+              <span class="fr-emo">{{ f.emoji }}</span>
+              <span class="fr-name">{{ f.monster }}</span>
+              <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
+              <span class="fr-rounds">{{ f.rounds }} tours</span>
+            </div>
+          </div>
+          <div v-if="run.drops.length" class="drops">
+            <div class="drops-lbl">✨ Butin</div>
+            <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
+              <span class="inv-emo">{{ d.emoji }}</span>
+              <div class="inv-main">
+                <div class="inv-name">
+                  {{ d.name }} <span class="rarity">{{ RARITY_LABEL[d.rarity] }}</span>
+                </div>
+                <div class="inv-eff">
+                  {{ SLOT_LABEL[d.slot] }} · {{ effectLabel(d.effect, d.level) }}
+                </div>
+                <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
+                  <span
+                    >équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv{{
+                      equippedInSlot(d.slot)!.level
+                    }}
+                    ·
+                    {{
+                      effectLabel(equippedInSlot(d.slot)!.effect, equippedInSlot(d.slot)!.level)
+                    }}</span
+                  >
+                  <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
+                    rarityVerdict(d).label
+                  }}</span>
+                </div>
+                <div v-else class="drop-cmp">
+                  <span class="rarity-verdict up">slot libre</span>
+                </div>
+                <div v-if="dropState(d) === 'equipped'" class="drop-done">⚔️ Équipé</div>
+                <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
+                <div v-else class="inv-actions">
+                  <button class="equip-btn" @click="doEquip(d.id)">Équiper</button>
+                  <button class="link-btn" @click="doSalvage(d)">
+                    Casser ✨{{ salvageValue(d) }}
+                  </button>
+                  <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="run.consumable" class="cons-drop">
+            {{ run.consumable.emoji }} <b>{{ run.consumable.name }}</b> ajouté à ton sac de
+            consommables 🎒
           </div>
         </div>
       </template>
@@ -559,6 +574,7 @@ import {
   SLOT_LABEL,
   SLOT_EMOJI,
   RARITY_LABEL,
+  RARITY_RANK,
   type Item,
   type ItemSlot,
   type AggregatedEffects,
@@ -799,6 +815,16 @@ function dropState(it: Item): 'bag' | 'equipped' | 'gone' {
 // Objet actuellement équipé dans le slot d'un drop → comparaison sur place.
 function equippedInSlot(slot: ItemSlot): Item | undefined {
   return char.row?.equipped[slot];
+}
+// Verdict de rareté du drop vs l'objet équipé (potentiel long terme : la rareté
+// fixe la magnitude de base, la poussière fait ensuite monter le niveau).
+function rarityVerdict(d: Item): { label: string; cls: string } {
+  const eq = equippedInSlot(d.slot);
+  if (!eq) return { label: 'slot libre', cls: 'up' };
+  const diff = RARITY_RANK[d.rarity] - RARITY_RANK[eq.rarity];
+  if (diff > 0) return { label: '↑ rareté supérieure', cls: 'up' };
+  if (diff < 0) return { label: '↓ rareté inférieure', cls: 'down' };
+  return { label: '≈ même rareté', cls: 'same' };
 }
 
 // Progression séquentielle : un donjon n'est déblocable qu'après avoir nettoyé
@@ -1869,7 +1895,30 @@ onMounted(async () => {
   font-size: 10.5px;
   color: var(--dim);
   font-style: italic;
-  margin-top: 1px;
+  margin-top: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.rarity-verdict {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.rarity-verdict.up {
+  color: var(--d1);
+  background: color-mix(in srgb, var(--d1) 18%, transparent);
+}
+.rarity-verdict.down {
+  color: var(--d4);
+  background: color-mix(in srgb, var(--d4) 18%, transparent);
+}
+.rarity-verdict.same {
+  color: var(--dim);
+  background: color-mix(in srgb, var(--dim) 18%, transparent);
 }
 .drop-done {
   margin-top: 6px;

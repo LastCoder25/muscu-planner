@@ -139,4 +139,18 @@ export const MONSTERS: Monster[] = [
     gold: 700,
     hint: 'Le mur ultime → tout à fond, surtout la Puissance.',
   },
+  {
+    id: 'archdemon',
+    name: 'Archidémon',
+    emoji: '😈',
+    tier: 10,
+    pv: 2800,
+    damage: 210,
+    crit: 0.12,
+    dodge: 0.05,
+    initiative: 24,
+    energyCost: 85,
+    gold: 900,
+    hint: 'Au-delà du titan : frappe énorme + crits. Build complet, PV et Puissance au max.',
+  },
 ];
