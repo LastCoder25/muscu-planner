@@ -7,7 +7,8 @@
     </div>
 
     <template v-else>
-      <!-- Niveaux (global + pistes) -->
+      <!-- Niveaux : Global/Défis = effort (XP) ; par sport = pratique (temps). -->
+      <div class="lvl-note">Global &amp; Défis = effort · par sport = temps de pratique</div>
       <div class="lvl-list">
         <div
           v-for="c in levelCards"
@@ -24,7 +25,7 @@
           </div>
           <div class="lvl-xp">
             {{ c.info.xpIntoLevel.toLocaleString('fr-FR') }} /
-            {{ c.info.xpForLevel.toLocaleString('fr-FR') }} XP
+            {{ c.info.xpForLevel.toLocaleString('fr-FR') }} {{ c.unit }}
           </div>
         </div>
       </div>
@@ -185,9 +186,14 @@ const drillLogs = ref<DrillLogRow[]>([]);
 const progress = useProgress();
 // Global + un niveau par SPORT réellement pratiqué (cohérent avec l'accueil) + Défis.
 const levelCards = computed(() => [
-  { key: 'global', label: 'Global', info: progress.global.value },
-  ...progress.sportTiles.value.map((t) => ({ key: t.key, label: t.label, info: t.level })),
-  { key: 'challenges', label: 'Défis', info: progress.challenges.value },
+  { key: 'global', label: 'Global', info: progress.global.value, unit: 'XP' },
+  ...progress.sportTiles.value.map((t) => ({
+    key: t.key,
+    label: t.label,
+    info: t.level,
+    unit: 'min',
+  })),
+  { key: 'challenges', label: 'Défis', info: progress.challenges.value, unit: 'XP' },
 ]);
 
 function median(arr: number[]): number {
@@ -348,6 +354,11 @@ onMounted(async () => {
   padding: 20px 16px 32px;
 }
 /* Niveaux (global + pistes) */
+.lvl-note {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
 .lvl-list {
   display: flex;
   flex-direction: column;

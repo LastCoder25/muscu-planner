@@ -86,7 +86,7 @@
             <span class="mt-strip" />
             <span class="mt-ic-wrap"><q-icon :name="t.icon" size="26px" class="mt-ic" /></span>
             <span class="mt-name font-display">{{ t.label }}</span>
-            <span class="mt-lvl">Niv. {{ t.level.level }}</span>
+            <span class="mt-lvl">Niv. {{ t.level.level }} · {{ fmtDur(t.minutes) }}</span>
             <span v-if="t.sig" class="mt-sig">{{ sigLabel(t.sig) }}</span>
             <span class="mt-bar"
               ><span class="mt-fill" :style="{ width: t.level.progressPct + '%' }"
@@ -377,6 +377,14 @@ async function pickCardio() {
 function pickAutre() {
   pickerOpen.value = false;
   openAutre();
+}
+// Temps total pratiqué → « 8 h 20 » / « 45 min ».
+function fmtDur(min: number): string {
+  const m = Math.round(min || 0);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? `${h} h ${r}` : `${h} h`;
 }
 // Répartition stats du sport (signature) → « 💪60 ❤️30 ⚡10 » (parts non nulles).
 function sigLabel(sig: { power: number; endurance: number; agility: number }): string {

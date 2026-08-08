@@ -186,26 +186,37 @@ export function useProgress() {
   const sportTiles = computed(() => {
     const map = new Map<
       string,
-      { key: string; label: string; icon: string; xp: number; ts: number }
+      { key: string; label: string; icon: string; xp: number; minutes: number; ts: number }
     >();
-    const bump = (key: string, label: string, icon: string, xp: number, ts: number) => {
+    // Le NIVEAU d'une tuile suit le TEMPS pratiqué (minutes) → reflète ce qu'on
+    // pratique le plus. L'XP (pondérée par difficulté) reste pour le personnage.
+    const bump = (
+      key: string,
+      label: string,
+      icon: string,
+      xp: number,
+      minutes: number,
+      ts: number,
+    ) => {
       const e = map.get(key);
       if (e) {
         e.xp += xp;
+        e.minutes += minutes;
         e.ts = Math.max(e.ts, ts);
       } else {
-        map.set(key, { key, label, icon, xp, ts });
+        map.set(key, { key, label, icon, xp, minutes, ts });
       }
     };
     for (const r of logs.all) {
       const d = r.payload.discipline ?? 'musculation';
       const ts = Date.parse(r.performed_at) || 0;
+      const min = r.payload.duration_min || 0;
       if (d === 'autre_sport') {
         const name = r.payload.name || 'Autre';
-        bump(`sport:${name}`, name, SPORT_ICON[name] ?? 'sports', sessionXp(r.payload), ts);
+        bump(`sport:${name}`, name, SPORT_ICON[name] ?? 'sports', sessionXp(r.payload), min, ts);
       } else {
         const t = DISC_TILE[d] ?? DISC_TILE.musculation!;
-        bump(`disc:${d}`, t.label, t.icon, sessionXp(r.payload), ts);
+        bump(`disc:${d}`, t.label, t.icon, sessionXp(r.payload), min, ts);
       }
     }
     for (const r of cardio.logs) {
@@ -216,11 +227,12 @@ export function useProgress() {
         ACTIVITY_LABELS[a] ?? 'Cardio',
         ACTIVITY_ICONS[a] ?? 'directions_run',
         cardioSessionXp(r.payload),
+        r.payload.duration_min || 0,
         Date.parse(r.performed_at) || 0,
       );
     }
-    // Les DÉFIS alimentent aussi la tuile de leur sport → un défi muscu fait
-    // apparaître la tuile Muscu même sans séance loggée (défi cardio → activité).
+    // Les DÉFIS alimentent l'XP de la tuile (pour qu'elle apparaisse) mais PAS le
+    // temps (pas de durée) → n'influencent pas le niveau « pratique ».
     const challengeTs = (c: (typeof challenges.list)[number]) => {
       const last = (c.progress ?? []).reduce((m, p) => (p.date > m ? p.date : m), '');
       return last ? Date.parse(last) || 0 : 0;
@@ -235,14 +247,15 @@ export function useProgress() {
           ACTIVITY_LABELS[a] ?? 'Cardio',
           ACTIVITY_ICONS[a] ?? 'directions_run',
           xp,
+          0,
           challengeTs(c),
         );
       } else {
-        bump('disc:musculation', 'Muscu', 'fitness_center', xp, challengeTs(c));
+        bump('disc:musculation', 'Muscu', 'fitness_center', xp, 0, challengeTs(c));
       }
     }
-    // Défi 360 → Muscu.
-    if (comboXp.value > 0) bump('disc:musculation', 'Muscu', 'fitness_center', comboXp.value, 0);
+    // Défi 360 → Muscu (XP seulement).
+    if (comboXp.value > 0) bump('disc:musculation', 'Muscu', 'fitness_center', comboXp.value, 0, 0);
 
     // Signature du sport (répartition stats) → affichée sur la tuile.
     const tileSig = (key: string) => {
@@ -253,7 +266,7 @@ export function useProgress() {
       return null; // crossfit/hyrox/mobilité/prépa → n'alimentent pas les stats du perso
     };
     return [...map.values()]
-      .map((t) => ({ ...t, level: computeLevel(t.xp), sig: tileSig(t.key) }))
+      .map((t) => ({ ...t, level: computeLevel(t.minutes), sig: tileSig(t.key) }))
       .sort((a, b) => b.ts - a.ts);
   });
 
