@@ -72,10 +72,10 @@ export const BOSSES: MilestoneBoss[] = [
     hint: 'Esquive beaucoup → Agilité pour la toucher, et des PV pour encaisser ses sorts.',
     combatant: {
       name: 'Liche couronnée',
-      pv: 4750,
+      pv: 4400,
       damage: 491,
       crit: 0.15,
-      dodge: 0.18,
+      dodge: 0.12,
       initiative: 28,
     },
   },
