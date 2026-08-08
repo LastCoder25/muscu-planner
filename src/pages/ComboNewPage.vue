@@ -7,9 +7,9 @@
     </header>
 
     <p class="intro">
-      Un défi <b>full-body sur 7 jours</b> : choisis un exo par groupe, fais toutes tes reps quand
-      tu veux dans la semaine. Vise des reps <b>exigeantes</b> (proches de l'échec) — c'est ce qui
-      fait progresser.
+      Un défi <b>full-body sur 7 jours</b> : choisis un exo par groupe, fais tes <b>séries</b> quand
+      tu veux dans la semaine. Chaque série (reps + poids) proche de l'échec — c'est ce qui fait
+      progresser.
     </p>
 
     <div v-if="loading" class="row flex-center q-pa-lg"><q-spinner color="primary" /></div>
@@ -54,15 +54,15 @@
             </div>
             <div class="leg-cfg">
               <div class="cfg-row">
-                <span class="cfg-lbl">Reps / semaine</span>
+                <span class="cfg-lbl">Séries / semaine</span>
                 <div class="stepper">
-                  <button type="button" @click="bumpTarget(slot.key, -5)">−</button>
+                  <button type="button" @click="bumpTarget(slot.key, -1)">−</button>
                   <span class="stp-v font-display">{{ picks[slot.key]?.target ?? 0 }}</span>
-                  <button type="button" @click="bumpTarget(slot.key, 5)">+</button>
+                  <button type="button" @click="bumpTarget(slot.key, 1)">+</button>
                 </div>
               </div>
               <div class="cfg-row">
-                <span class="cfg-lbl">Charge (kg, option)</span>
+                <span class="cfg-lbl">Charge départ (kg, option)</span>
                 <q-input
                   v-model.number="picks[slot.key]!.weight_kg"
                   type="number"
@@ -141,7 +141,7 @@ function pickExo(slotKey: string, exId: string) {
 }
 function bumpTarget(slotKey: string, d: number) {
   const p = picks[slotKey];
-  if (p) p.target = Math.max(5, p.target + d);
+  if (p) p.target = Math.max(3, p.target + d);
 }
 const legCount = computed(
   () => COMBO_SLOTS.filter((s) => enabled[s.key] && picks[s.key]?.exercise_id).length,
@@ -178,7 +178,7 @@ async function createCombo() {
       rep_weight: repWeightFromExercise(e.muscle_secondary, e.equipment_required),
       target: p.target,
       weight_kg: p.weight_kg || null,
-      progress: [],
+      sets: [],
     });
   }
   if (!legs.length) return;

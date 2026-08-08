@@ -33,7 +33,7 @@
         v-for="leg in c.legs"
         :key="leg.exercise_id"
         class="leg"
-        :class="{ ok: done(leg) >= leg.target }"
+        :class="{ ok: legSetsDone(leg) >= leg.target }"
       >
         <div class="leg-top">
           <span class="leg-emo">{{ slotEmoji(leg.slot) }}</span>
@@ -43,41 +43,64 @@
               <span v-if="leg.weight_kg" class="leg-kg">{{ leg.weight_kg }} kg</span>
             </div>
             <div class="leg-sub">
-              {{ done(leg) }}/{{ leg.target }} reps
-              <span v-if="done(leg) >= leg.target" class="leg-ok">✓</span>
+              {{ legSetsDone(leg) }}/{{ leg.target }} séries
+              <span v-if="legSetsDone(leg) >= leg.target" class="leg-ok">✓</span>
             </div>
           </div>
         </div>
         <div class="bar"><span :style="{ width: legPct(leg) + '%' }" /></div>
         <div class="leg-actions">
-          <button
-            v-for="n in QUICK"
-            :key="n"
-            class="add"
-            :class="{ neg: correct }"
-            @click="add(leg, correct ? -n : n)"
-          >
-            {{ correct ? '−' : '+' }}{{ n }}
+          <button v-for="n in [1, 2, 3, 4]" :key="n" class="add" @click="openSet(leg, n)">
+            +{{ n }}
           </button>
-          <button
-            class="add corr"
-            :class="{ on: correct }"
-            :aria-pressed="correct"
-            title="Mode correction (retirer des reps)"
-            @click="correct = !correct"
-          >
-            ±
-          </button>
+          <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
         </div>
       </div>
 
       <div class="foot">
-        Fais tes reps quand tu veux dans la semaine. Le total atteint pour <b>tous</b> les exos =
-        Défi 360 bouclé. Chaque rep alimente ta piste Muscu (façon séance).
+        Fais tes séries quand tu veux dans la semaine. Toutes les séries prévues pour
+        <b>tous</b> les exos = Défi 360 bouclé. Chaque série alimente ta piste Muscu (reps + poids).
       </div>
 
       <button v-if="c.status !== 'abandoned'" class="abandon" @click="abandon">Abandonner</button>
     </template>
+
+    <!-- Saisie d'une série (reps + poids), préremplie -->
+    <q-dialog v-model="setOpen">
+      <q-card class="set-card">
+        <div class="set-title font-display">{{ setLeg?.exercise_name }}</div>
+        <div class="set-desc">
+          {{ setCount > 1 ? `${setCount} séries` : '1 série' }} · reps &amp; poids
+        </div>
+        <div class="set-row">
+          <span class="set-lbl">Reps</span>
+          <q-input v-model.number="setReps" type="number" filled dense style="max-width: 110px" />
+        </div>
+        <div class="set-row">
+          <span class="set-lbl">Poids</span>
+          <q-input
+            v-model.number="setWeight"
+            type="number"
+            filled
+            dense
+            suffix="kg"
+            style="max-width: 130px"
+          />
+          <span class="set-hint">vide = PdC</span>
+        </div>
+        <div class="set-actions">
+          <q-btn flat no-caps label="Annuler" @click="setOpen = false" />
+          <q-btn
+            unelevated
+            color="primary"
+            text-color="dark"
+            no-caps
+            label="Valider"
+            @click="saveSet"
+          />
+        </div>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -87,7 +110,13 @@ import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useComboStore } from '@/stores/combo';
-import { comboProgressPct, legDone, type ComboLeg } from '@/lib/combo';
+import {
+  comboProgressPct,
+  legSetsDone,
+  legLastReps,
+  legLastWeight,
+  type ComboLeg,
+} from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
 import { logicalToday, addDaysIso } from '@/lib/challenges';
 
@@ -98,8 +127,6 @@ const auth = useAuthStore();
 const combo = useComboStore();
 
 const id = String(route.params.id);
-const QUICK = [1, 5, 10];
-const correct = ref(false); // mode correction : les incréments retirent des reps
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 const pct = computed(() => (c.value ? comboProgressPct(c.value) : 0));
 
@@ -116,23 +143,42 @@ const daysLeftLabel = computed(() => {
   return `${n} j restant${n > 1 ? 's' : ''}`;
 });
 
-function done(leg: ComboLeg) {
-  return legDone(leg);
-}
 function legPct(leg: ComboLeg) {
-  return leg.target > 0 ? Math.min(100, Math.round((legDone(leg) / leg.target) * 100)) : 0;
+  return leg.target > 0 ? Math.min(100, Math.round((legSetsDone(leg) / leg.target) * 100)) : 0;
 }
 function slotEmoji(key: string) {
   return comboSlot(key)?.emoji ?? '💪';
 }
 
-function add(leg: ComboLeg, n: number) {
-  if (!auth.user?.id || !c.value) return;
+// Saisie d'une série (reps + poids), préremplie avec la dernière série.
+const setOpen = ref(false);
+const setLeg = ref<ComboLeg | null>(null);
+const setCount = ref(1);
+const setReps = ref<number>(10);
+const setWeight = ref<number | null>(null);
+function openSet(leg: ComboLeg, count: number) {
+  setLeg.value = leg;
+  setCount.value = count;
+  setReps.value = legLastReps(leg);
+  setWeight.value = legLastWeight(leg);
+  setOpen.value = true;
+}
+function saveSet() {
+  const leg = setLeg.value;
+  const reps = Math.max(1, Math.round(setReps.value || 0));
+  if (!auth.user?.id || !c.value || !leg) return;
   const before = c.value.status;
-  combo.addReps(id, leg.exercise_id, logicalToday(), n); // optimiste (instantané)
+  const w = setWeight.value != null && setWeight.value > 0 ? setWeight.value : null;
+  for (let i = 0; i < setCount.value; i++) {
+    combo.addSet(id, leg.exercise_id, logicalToday(), reps, w);
+  }
+  setOpen.value = false;
   if (before !== 'done' && c.value.status === 'done') {
     $q.notify({ type: 'positive', message: 'Défi 360 bouclé 🎉' });
   }
+}
+function undoSet(leg: ComboLeg) {
+  combo.removeLastSet(id, leg.exercise_id);
 }
 function abandon() {
   $q.dialog({
@@ -309,10 +355,47 @@ onMounted(async () => {
   color: var(--dim);
   font-size: 16px;
 }
-.add.corr.on {
-  border-color: var(--d4);
-  color: var(--d4);
-  background: color-mix(in srgb, var(--d4) 14%, transparent);
+.add.corr:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.set-card {
+  background: var(--surface);
+  color: var(--text);
+  padding: 18px 16px;
+  border-radius: 16px;
+  width: 320px;
+  max-width: 92vw;
+}
+.set-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+.set-desc {
+  font-size: 12.5px;
+  color: var(--dim);
+  margin: 4px 0 14px;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.set-lbl {
+  font-size: 13px;
+  color: var(--dim);
+  min-width: 46px;
+}
+.set-hint {
+  font-size: 11px;
+  color: var(--dim);
+}
+.set-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 .foot {
   font-size: 11.5px;

@@ -1,12 +1,19 @@
 // combo.ts — logique pure du Défi 360 (défi combiné hebdo full-body). Pur/testable.
-// Métrique = reps ; XP façon séance : reps×REP_XP×poids-de-rep + tonnage/500
-// (tonnage = reps × charge si renseignée) + prime de bouclage (volume × avance).
+// Modèle SÉRIES : l'objectif d'un exo = un nombre de SÉRIES/semaine (repère
+// hypertrophie), chaque série enregistrée porte ses reps + son poids. XP façon
+// séance : Σ reps×REP_XP×poids-de-rep + tonnage/500 + prime de bouclage.
 import { REP_XP } from './athlete';
 import { daysBetweenIso } from './loginStreak';
 import type { Level } from './types';
 
-export interface ComboLegEntry {
+export interface ComboSet {
   date: string; // YYYY-MM-DD
+  reps: number;
+  weight?: number | null; // charge de la série (kg) — poids du corps = vide
+}
+// Ancien format (reps cumulées/jour) — lu pour migration des défis existants.
+export interface ComboLegEntry {
+  date: string;
   reps: number;
 }
 export interface ComboLeg {
@@ -15,9 +22,10 @@ export interface ComboLeg {
   exercise_name: string;
   muscle_primary?: string | null;
   rep_weight: number; // poids de rep de l'exo (pour l'XP)
-  target: number; // objectif de reps sur la semaine
-  weight_kg?: number | null; // charge optionnelle → tonnage
-  progress: ComboLegEntry[];
+  target: number; // objectif de SÉRIES sur la semaine
+  weight_kg?: number | null; // dernier poids utilisé → préremplissage de la prochaine série
+  sets?: ComboSet[]; // séries réalisées (modèle courant)
+  progress?: ComboLegEntry[]; // legacy (migration)
 }
 export interface ComboChallenge {
   id: string;
@@ -28,23 +36,47 @@ export interface ComboChallenge {
   legs: ComboLeg[];
 }
 
-/** Reps réalisées sur un exo (leg). */
-export function legDone(leg: ComboLeg): number {
-  return leg.progress.reduce((a, p) => a + (p.reps || 0), 0);
+// Reps supposées par série pour l'estimation du volume planifié (prime de bouclage).
+export const COMBO_PLAN_REPS = 10;
+
+/** Séries réalisées (avec repli : convertit l'ancien `progress` en séries). */
+export function legSets(leg: ComboLeg): ComboSet[] {
+  if (leg.sets) return leg.sets;
+  if (leg.progress)
+    return leg.progress.map((p) => ({ date: p.date, reps: p.reps, weight: leg.weight_kg ?? null }));
+  return [];
 }
-/** Reps restantes sur un exo. */
+/** Nombre de séries faites. */
+export function legSetsDone(leg: ComboLeg): number {
+  return legSets(leg).length;
+}
+/** Reps totales réalisées (pour l'XP / la séance générée). */
+export function legReps(leg: ComboLeg): number {
+  return legSets(leg).reduce((a, s) => a + (s.reps || 0), 0);
+}
+/** Séries restantes avant l'objectif. */
 export function legRemaining(leg: ComboLeg): number {
-  return Math.max(0, leg.target - legDone(leg));
+  return Math.max(0, leg.target - legSetsDone(leg));
 }
 export function legComplete(leg: ComboLeg): boolean {
-  return legDone(leg) >= leg.target && leg.target > 0;
+  return leg.target > 0 && legSetsDone(leg) >= leg.target;
+}
+/** Poids de préremplissage : dernier poids saisi (sinon poids de l'exo). */
+export function legLastWeight(leg: ComboLeg): number | null {
+  const s = legSets(leg);
+  return s.length ? (s[s.length - 1]!.weight ?? null) : (leg.weight_kg ?? null);
+}
+/** Reps de préremplissage : reps de la dernière série (sinon défaut). */
+export function legLastReps(leg: ComboLeg, fallback = COMBO_PLAN_REPS): number {
+  const s = legSets(leg);
+  return s.length ? s[s.length - 1]!.reps : fallback;
 }
 
 export function comboTargetTotal(c: ComboChallenge): number {
   return c.legs.reduce((a, l) => a + l.target, 0);
 }
 export function comboDoneTotal(c: ComboChallenge): number {
-  return c.legs.reduce((a, l) => a + Math.min(legDone(l), l.target), 0);
+  return c.legs.reduce((a, l) => a + Math.min(legSetsDone(l), l.target), 0);
 }
 export function comboProgressPct(c: ComboChallenge): number {
   const tgt = comboTargetTotal(c);
@@ -57,7 +89,7 @@ export function comboComplete(c: ComboChallenge): boolean {
 /** Fraction d'avance d'un Défi 360 terminé : jours gagnés / durée (0..~1). */
 export function comboEarlyFraction(c: ComboChallenge): number {
   if (!comboComplete(c) || c.duration_days <= 0) return 0;
-  const dates = c.legs.flatMap((l) => l.progress.map((p) => p.date)).filter(Boolean);
+  const dates = c.legs.flatMap((l) => legSets(l).map((s) => s.date)).filter(Boolean);
   if (!dates.length) return 0;
   const last = dates.reduce((m, d) => (d > m ? d : m), dates[0]!);
   const daysUsed = daysBetweenIso(c.start_date, last) + 1;
@@ -72,10 +104,12 @@ export function comboXpPoints(combos: ComboChallenge[]): number {
     let tonnage = 0;
     let targetEffort = 0;
     for (const l of c.legs) {
-      const d = legDone(l);
-      reps += d * REP_XP * (l.rep_weight ?? 1);
-      tonnage += d * (l.weight_kg ?? 0);
-      targetEffort += l.target * (l.rep_weight ?? 1);
+      for (const s of legSets(l)) {
+        reps += (s.reps || 0) * REP_XP * (l.rep_weight ?? 1);
+        tonnage += (s.reps || 0) * (s.weight ?? l.weight_kg ?? 0);
+      }
+      // Volume planifié ≈ séries × reps supposées × poids-de-rep.
+      targetEffort += l.target * COMBO_PLAN_REPS * (l.rep_weight ?? 1);
     }
     const bonus = comboComplete(c) ? 0.25 * targetEffort * (1 + comboEarlyFraction(c)) : 0;
     return a + Math.round(reps + tonnage / 500 + bonus);
@@ -98,10 +132,10 @@ export function comboSessionSetBudget(minutes: number, restSec: number): number 
 }
 
 /**
- * Génère une SÉANCE TIME-BOXÉE à partir des reps RESTANTES : on ne prend PAS
- * toutes les reps manquantes — on remplit une séance de `minutes` (chaque série
- * = ~40 s d'exécution + `restSec` de repos), réparties en round-robin sur les
- * exos non finis (plus de temps → plus d'exos/séries). Pur/testable.
+ * Génère une SÉANCE TIME-BOXÉE à partir des SÉRIES restantes : on ne dump pas
+ * tout — on remplit une séance de `minutes` (chaque série = ~40 s + repos),
+ * répartie en round-robin sur les exos dont il reste des séries. Chaque série
+ * reprend les reps de la dernière série faite (ou un défaut). Pur/testable.
  */
 export function buildComboSession(
   c: ComboChallenge,
@@ -111,8 +145,8 @@ export function buildComboSession(
   const exos = c.legs
     .map((l) => ({
       leg: l,
-      remaining: legRemaining(l),
-      perSet: Math.min(25, Math.max(8, Math.round(l.target / 4))),
+      remaining: legRemaining(l), // séries restantes
+      reps: legLastReps(l),
       sets: [] as number[],
     }))
     .filter((e) => e.remaining > 0);
@@ -121,9 +155,8 @@ export function buildComboSession(
     for (const e of exos) {
       if (placed >= budget) break;
       if (e.remaining <= 0) continue;
-      const s = Math.min(e.perSet, e.remaining);
-      e.sets.push(s);
-      e.remaining -= s;
+      e.sets.push(e.reps);
+      e.remaining -= 1;
       placed++;
     }
   }
@@ -132,16 +165,15 @@ export function buildComboSession(
     .map((e) => ({
       exercise_id: e.leg.exercise_id,
       exercise_name: e.leg.exercise_name,
-      weight_kg: e.leg.weight_kg ?? null,
+      weight_kg: legLastWeight(e.leg),
       sets: e.sets,
     }));
 }
 
-/** Objectif de reps/semaine suggéré pour un emplacement (calibré « stimulant »).
- *  ~12-15 séries/semaine par groupe (hypertrophie) → volume relevé pour que la
- *  barre ne monte pas trop vite (essentiel 180, optionnel 120, avant niveau). */
+/** Objectif de SÉRIES/semaine suggéré pour un emplacement (repère hypertrophie
+ *  ~10-15 séries/muscle/sem). Essentiel ~12, optionnel ~9, ajusté au niveau. */
 export function suggestComboTarget(level: Level, essential: boolean): number {
-  const base = essential ? 180 : 120;
-  const f = level === 'debutant' ? 0.7 : level === 'avance' ? 1.4 : 1;
-  return Math.round((base * f) / 5) * 5; // arrondi à 5
+  const base = essential ? 12 : 9;
+  const f = level === 'debutant' ? 0.75 : level === 'avance' ? 1.3 : 1;
+  return Math.max(4, Math.round(base * f));
 }

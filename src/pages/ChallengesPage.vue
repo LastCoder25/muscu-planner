@@ -192,7 +192,8 @@
     <template v-else>
       <div v-if="!activeCombo" class="combo-empty">
         <p>
-          Un défi <b>full-body sur 7 jours</b> : un exo par groupe, reps réparties dans la semaine.
+          Un défi <b>full-body sur 7 jours</b> : un exo par groupe, tes séries réparties dans la
+          semaine.
         </p>
         <q-btn
           color="primary"
@@ -222,35 +223,68 @@
         />
         <div v-for="leg in activeCombo.legs" :key="leg.exercise_id" class="combo-leg">
           <div class="cl-top">
-            <span class="cl-name">{{ leg.exercise_name }}</span>
-            <span class="cl-sub" :class="{ ok: legDone(leg) >= leg.target }">
-              {{ legDone(leg) }}/{{ leg.target }}
+            <span class="cl-name">
+              {{ leg.exercise_name }}
+              <span v-if="leg.weight_kg" class="cl-kg">{{ leg.weight_kg }} kg</span>
+            </span>
+            <span class="cl-sub" :class="{ ok: legSetsDone(leg) >= leg.target }">
+              {{ legSetsDone(leg) }}/{{ leg.target }} séries
             </span>
           </div>
           <div class="bar"><div class="fill" :style="{ width: legPct(leg) + '%' }" /></div>
           <div class="cl-actions">
-            <button
-              v-for="n in [1, 5, 10]"
-              :key="n"
-              class="cl-add"
-              :class="{ neg: comboCorrect }"
-              @click="addComboRep(leg, comboCorrect ? -n : n)"
-            >
-              {{ comboCorrect ? '−' : '+' }}{{ n }}
+            <button v-for="n in [1, 2, 3, 4]" :key="n" class="cl-add" @click="openSet(leg, n)">
+              +{{ n }}
             </button>
             <button
               class="cl-corr"
-              :class="{ on: comboCorrect }"
-              :aria-pressed="comboCorrect"
-              title="Mode correction (retirer des reps)"
-              @click="comboCorrect = !comboCorrect"
+              :disabled="!legSetsDone(leg)"
+              title="Retirer la dernière série"
+              @click="undoSet(leg)"
             >
-              ±
+              ↩
             </button>
           </div>
         </div>
       </template>
     </template>
+
+    <!-- Saisie d'une série : reps + poids, préremplis avec la dernière série -->
+    <q-dialog v-model="setOpen">
+      <q-card class="set-card">
+        <div class="set-title font-display">{{ setLeg?.exercise_name }}</div>
+        <div class="set-desc">
+          {{ setCount > 1 ? `${setCount} séries` : '1 série' }} · reps &amp; poids
+        </div>
+        <div class="set-row">
+          <span class="set-lbl">Reps</span>
+          <q-input v-model.number="setReps" type="number" filled dense style="max-width: 110px" />
+        </div>
+        <div class="set-row">
+          <span class="set-lbl">Poids</span>
+          <q-input
+            v-model.number="setWeight"
+            type="number"
+            filled
+            dense
+            suffix="kg"
+            style="max-width: 130px"
+          />
+          <span class="set-hint">vide = poids du corps</span>
+        </div>
+        <div class="set-actions">
+          <q-btn flat no-caps label="Annuler" @click="setOpen = false" />
+          <q-btn
+            unelevated
+            color="primary"
+            text-color="dark"
+            no-caps
+            label="Valider"
+            @click="saveSet"
+          />
+        </div>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -270,7 +304,13 @@ import { formatOption } from '@/data/challengeFormats';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
-import { comboProgressPct, legDone, type ComboLeg } from '@/lib/combo';
+import {
+  comboProgressPct,
+  legSetsDone,
+  legLastReps,
+  legLastWeight,
+  type ComboLeg,
+} from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
 import {
   tokenCost,
@@ -289,15 +329,37 @@ const comboStore = useComboStore();
 const loading = ref(true);
 
 const mode = ref<'solo' | 'combo'>('solo');
-const comboCorrect = ref(false); // mode correction : les incréments retirent des reps
 const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
 const comboPct = computed(() => (activeCombo.value ? comboProgressPct(activeCombo.value) : 0));
 function legPct(leg: ComboLeg) {
-  return leg.target > 0 ? Math.min(100, Math.round((legDone(leg) / leg.target) * 100)) : 0;
+  return leg.target > 0 ? Math.min(100, Math.round((legSetsDone(leg) / leg.target) * 100)) : 0;
 }
-function addComboRep(leg: ComboLeg, n: number) {
-  if (activeCombo.value)
-    comboStore.addReps(activeCombo.value.id, leg.exercise_id, logicalToday(), n);
+
+// Saisie d'une série (reps + poids), préremplie avec la dernière série de l'exo.
+const setOpen = ref(false);
+const setLeg = ref<ComboLeg | null>(null);
+const setCount = ref(1); // nb de séries identiques à ajouter (+1..+4)
+const setReps = ref<number>(10);
+const setWeight = ref<number | null>(null);
+function openSet(leg: ComboLeg, count: number) {
+  setLeg.value = leg;
+  setCount.value = count;
+  setReps.value = legLastReps(leg);
+  setWeight.value = legLastWeight(leg);
+  setOpen.value = true;
+}
+function saveSet() {
+  const leg = setLeg.value;
+  const reps = Math.max(1, Math.round(setReps.value || 0));
+  if (!activeCombo.value || !leg) return;
+  const w = setWeight.value != null && setWeight.value > 0 ? setWeight.value : null;
+  for (let i = 0; i < setCount.value; i++) {
+    comboStore.addSet(activeCombo.value.id, leg.exercise_id, logicalToday(), reps, w);
+  }
+  setOpen.value = false;
+}
+function undoSet(leg: ComboLeg) {
+  if (activeCombo.value) comboStore.removeLastSet(activeCombo.value.id, leg.exercise_id);
 }
 
 const TABS = [
@@ -691,10 +753,52 @@ onMounted(async () => {
   font-size: 16px;
   cursor: pointer;
 }
-.cl-corr.on {
-  border-color: var(--d4);
-  color: var(--d4);
-  background: color-mix(in srgb, var(--d4) 14%, transparent);
+.cl-corr:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.cl-kg {
+  font-size: 11px;
+  color: var(--dim);
+  margin-left: 4px;
+}
+.set-card {
+  background: var(--surface);
+  color: var(--text);
+  padding: 18px 16px;
+  border-radius: 16px;
+  width: 320px;
+  max-width: 92vw;
+}
+.set-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+.set-desc {
+  font-size: 12.5px;
+  color: var(--dim);
+  margin: 4px 0 14px;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.set-lbl {
+  font-size: 13px;
+  color: var(--dim);
+  min-width: 46px;
+}
+.set-hint {
+  font-size: 11px;
+  color: var(--dim);
+}
+.set-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 /* Tuiles de défis (En cours), groupées par voie */

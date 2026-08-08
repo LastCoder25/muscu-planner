@@ -168,7 +168,8 @@ function validate(i: number, j: number, reps: number) {
   if (isDone(i, j) || !c.value) return;
   const exo = session.value[i];
   if (!exo) return;
-  combo.addReps(id, exo.exercise_id, logicalToday(), reps); // optimiste → alimente le défi
+  // Chaque série validée alimente le défi (reps + poids de l'exo). Optimiste.
+  combo.addSet(id, exo.exercise_id, logicalToday(), reps, exo.weight_kg ?? null);
   done.value = new Set(done.value).add(`${i}-${j}`);
   restLeft.value = restSec.value;
   if (validatedCount.value >= totalSets.value) {
