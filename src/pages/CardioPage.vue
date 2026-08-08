@@ -153,7 +153,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCardioStore } from '@/stores/cardio';
@@ -175,11 +175,12 @@ import { recordsBeaten, type SportEntry } from '@/lib/sportAchievements';
 
 const $q = useQuasar();
 const router = useRouter();
+const route = useRoute();
 const auth = useAuthStore();
 const cardio = useCardioStore();
 const challenges = useChallengesStore();
 
-const tab = ref<'act' | 'hist'>('act');
+const tab = ref<'act' | 'hist'>(route.query.tab === 'hist' ? 'hist' : 'act');
 const action = ref<'log' | null>(null);
 
 function todayIso(): string {

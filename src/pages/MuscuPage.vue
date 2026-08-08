@@ -137,7 +137,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useAuthStore } from '@/stores/auth';
@@ -147,6 +147,7 @@ import { sessionXp } from '@/lib/athlete';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
 
 const router = useRouter();
+const route = useRoute();
 const $q = useQuasar();
 const logs = useLogsStore();
 const auth = useAuthStore();
@@ -316,6 +317,7 @@ async function loadHistory() {
 }
 
 onMounted(() => {
+  if (route.query.tab === 'hist') tab.value = 'hist';
   if (tab.value === 'hist') void loadHistory();
 });
 </script>

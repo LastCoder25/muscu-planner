@@ -4,7 +4,7 @@
 import { computed, onMounted } from 'vue';
 import { useLogsStore } from '@/stores/logs';
 import { useTennisStore } from '@/stores/tennis';
-import { useChallengesStore } from '@/stores/challenges';
+import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { useSessionsStore } from '@/stores/sessions';
 import { useCardioStore } from '@/stores/cardio';
 import { useComboStore } from '@/stores/combo';
@@ -12,7 +12,12 @@ import { sessionXp, drillSessionXp, cardioSessionXp } from '@/lib/athlete';
 import { challengeXpPoints } from '@/lib/challenges';
 import { comboXpPoints } from '@/lib/combo';
 import { computeLevel } from '@/lib/levels';
-import { isCardioTrackChallenge, ACTIVITY_LABELS, ACTIVITY_ICONS } from '@/data/cardio';
+import {
+  isCardioTrackChallenge,
+  ACTIVITY_LABELS,
+  ACTIVITY_ICONS,
+  defaultActivityForChallenge,
+} from '@/data/cardio';
 import {
   emptyBuckets,
   addXp,
@@ -194,6 +199,31 @@ export function useProgress() {
         Date.parse(r.performed_at) || 0,
       );
     }
+    // Les DÉFIS alimentent aussi la tuile de leur sport → un défi muscu fait
+    // apparaître la tuile Muscu même sans séance loggée (défi cardio → activité).
+    const challengeTs = (c: (typeof challenges.list)[number]) => {
+      const last = (c.progress ?? []).reduce((m, p) => (p.date > m ? p.date : m), '');
+      return last ? Date.parse(last) || 0 : 0;
+    };
+    for (const c of challenges.list) {
+      const xp = challengeXpPoints([c]);
+      if (xp <= 0) continue;
+      if (isCardioChallengeRow(c)) {
+        const a = defaultActivityForChallenge(c.exercise_id);
+        bump(
+          `cardio:${a}`,
+          ACTIVITY_LABELS[a] ?? 'Cardio',
+          ACTIVITY_ICONS[a] ?? 'directions_run',
+          xp,
+          challengeTs(c),
+        );
+      } else {
+        bump('disc:musculation', 'Muscu', 'fitness_center', xp, challengeTs(c));
+      }
+    }
+    // Défi 360 → Muscu.
+    if (comboXp.value > 0) bump('disc:musculation', 'Muscu', 'fitness_center', comboXp.value, 0);
+
     return [...map.values()]
       .map((t) => ({ ...t, level: computeLevel(t.xp) }))
       .sort((a, b) => b.ts - a.ts);

@@ -326,12 +326,10 @@ function pickAutre() {
   pickerOpen.value = false;
   openAutre();
 }
-// Tap sur une tuile de sport → son logger / son historique.
+// Tap sur une tuile de sport → son HISTORIQUE (la saisie se fait via « + Séance »).
 async function goSport(key: string) {
-  if (key.startsWith('cardio:')) await router.push('/cardio');
-  else if (key === 'disc:musculation') await router.push('/muscu');
-  else if (key.startsWith('sport:')) openAutre(key.slice('sport:'.length));
-  else await router.push('/muscu'); // crossfit/hyrox/mobilité/prépa → log via Muscu
+  if (key.startsWith('cardio:')) await router.push('/cardio?tab=hist');
+  else await router.push('/muscu?tab=hist'); // muscu / autre sport / spécifique → historique séances
 }
 const autreOpen = ref(false);
 const autreSport = ref<string>('Tennis');
