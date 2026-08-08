@@ -139,6 +139,8 @@
           <div class="log-pace">
             <span v-if="paceOf(l.payload)">🏃 {{ paceOf(l.payload) }}</span>
             <span v-if="effortPaceOf(l.payload)">⛰ {{ effortPaceOf(l.payload) }} (effort)</span>
+            <span v-if="l.payload.challenge_id" class="log-mirror">↔ défi (0 XP)</span>
+            <span v-else class="log-xp">⚡ +{{ xpOf(l.payload) }} XP</span>
           </div>
         </div>
         <button class="log-del" aria-label="Supprimer" @click="remove(l.id)">
@@ -167,6 +169,7 @@ import {
 } from '@/data/cardio';
 import type { CardioActivity, Difficulty, CardioLog } from '@/lib/types';
 import { SCHEMA_VERSION } from '@/lib/types';
+import { cardioSessionXp } from '@/lib/athlete';
 
 const $q = useQuasar();
 const auth = useAuthStore();
@@ -225,6 +228,7 @@ const effortPaceOf = (l: CardioLog) =>
   l.elevation_m || l.descent_m
     ? effortPace(l.distance_km, l.duration_min, l.elevation_m, l.descent_m)
     : null;
+const xpOf = (l: CardioLog) => cardioSessionXp(l);
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
@@ -557,6 +561,12 @@ function remove(id: string) {
   font-size: 12px;
   color: var(--accent);
   margin-top: 3px;
+}
+.log-xp {
+  font-weight: 700;
+}
+.log-mirror {
+  color: var(--dim);
 }
 .log-del {
   background: none;

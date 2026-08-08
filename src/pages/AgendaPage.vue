@@ -1,7 +1,9 @@
 <template>
   <q-page class="agenda-page">
     <h1 class="page-title font-display">Agenda</h1>
-    <p class="page-sub text-dim">{{ weekLabel }} · {{ total }} séance{{ total > 1 ? 's' : '' }}</p>
+    <p class="page-sub text-dim">
+      {{ weekLabel }} · {{ total }} activité{{ total > 1 ? 's' : '' }}
+    </p>
 
     <div v-if="loading" class="column items-center q-mt-xl">
       <q-spinner color="primary" size="32px" />
@@ -33,16 +35,19 @@ import { ref, computed, onMounted } from 'vue';
 import { useLogsStore } from '@/stores/logs';
 import { useTennisStore } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
+import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
+import { challengeDayXp } from '@/lib/challenges';
 import { ACTIVITY_LABELS, ACTIVITY_ICONS, paceLabel } from '@/data/cardio';
 
 const logs = useLogsStore();
 const tennis = useTennisStore();
 const cardio = useCardioStore();
+const challenges = useChallengesStore();
 const loading = ref(true);
 
 interface Entry {
   ts: number;
-  kind: 'muscu' | 'tennis' | 'cardio';
+  kind: 'muscu' | 'tennis' | 'cardio' | 'challenge';
   icon: string;
   title: string;
   meta: string;
@@ -112,6 +117,24 @@ const entries = computed<Entry[]>(() => {
       meta: bits.join(' · '),
     });
   }
+  // Reps de défis MUSCU jour par jour (le cardio est déjà couvert par les sorties miroir).
+  for (const c of challenges.list) {
+    if (isCardioChallengeRow(c)) continue;
+    const uLabel = c.unit === 'time' ? 'sec' : c.unit === 'distance' ? 'km' : 'reps';
+    for (const p of c.progress) {
+      if (!(p.done > 0)) continue;
+      const [y, m, dd] = p.date.split('-').map(Number);
+      const ts = new Date(y!, (m ?? 1) - 1, dd ?? 1, 12).getTime();
+      const xp = challengeDayXp(c, p.done);
+      out.push({
+        ts,
+        kind: 'challenge',
+        icon: 'emoji_events',
+        title: c.exercise_name,
+        meta: [`${p.done} ${uLabel}`, xp > 0 ? `⚡ +${xp} XP` : ''].filter(Boolean).join(' · '),
+      });
+    }
+  }
   return out.filter((e) => e.ts >= weekStart && e.ts < weekEnd);
 });
 
@@ -138,6 +161,7 @@ onMounted(async () => {
       logs.fetchAll().catch(() => undefined),
       tennis.fetchLogs().catch(() => undefined),
       cardio.fetchLogs().catch(() => undefined),
+      challenges.list.length ? Promise.resolve() : challenges.fetchMine().catch(() => undefined),
     ]);
   } finally {
     loading.value = false;
@@ -209,6 +233,9 @@ onMounted(async () => {
   border-left: 3px solid var(--accent);
   border-radius: 12px;
   background: var(--surface);
+}
+.entry.k-challenge {
+  border-left-color: var(--d2, #c6d24a);
 }
 .entry-ic {
   color: var(--accent);

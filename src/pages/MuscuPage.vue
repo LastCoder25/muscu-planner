@@ -79,7 +79,11 @@
       <div v-if="loading" class="column items-center q-mt-lg">
         <q-spinner color="primary" size="28px" />
       </div>
-      <div v-else-if="!rows.length" class="empty">Aucune séance enregistrée pour l'instant.</div>
+      <div v-else-if="!rows.length && !challengeDays.length" class="empty">
+        Aucune séance enregistrée pour l'instant.
+      </div>
+
+      <div v-if="rows.length" class="hist-sub">Séances</div>
       <div v-for="r in rows" :key="r.id" class="log-card" @click="open(r.id)">
         <div class="log-main">
           <div class="log-name">{{ r.payload.name || 'Séance' }}</div>
@@ -89,6 +93,7 @@
             >
               · note {{ r.payload.global_difficulty }}/4</template
             >
+            · <span class="log-xp">⚡ +{{ sessXp(r) }} XP</span>
           </div>
         </div>
         <button class="log-del" aria-label="Supprimer" @click.stop="confirmDelete(r)">
@@ -96,22 +101,42 @@
         </button>
         <q-icon name="chevron_right" color="grey-6" size="20px" />
       </div>
+
+      <!-- Reps de défis muscu, jour par jour, avec l'XP gagnée -->
+      <template v-if="challengeDays.length">
+        <div class="hist-sub">Défis (reps par jour)</div>
+        <div v-for="d in challengeDays" :key="d.key" class="log-card static">
+          <div class="log-main">
+            <div class="log-name">{{ d.name }}</div>
+            <div class="log-meta">
+              {{ fmtDate(d.date) }} · {{ d.done }} {{ d.unit
+              }}<template v-if="d.xp > 0">
+                · <span class="log-xp">⚡ +{{ d.xp }} XP</span></template
+              >
+            </div>
+          </div>
+        </div>
+      </template>
     </template>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useAuthStore } from '@/stores/auth';
+import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
+import { challengeDayXp } from '@/lib/challenges';
+import { sessionXp } from '@/lib/athlete';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
 
 const router = useRouter();
 const $q = useQuasar();
 const logs = useLogsStore();
 const auth = useAuthStore();
+const challenges = useChallengesStore();
 
 const tab = ref<'act' | 'hist'>('act');
 const loading = ref(false);
@@ -189,6 +214,28 @@ function volume(r: LogRow): number {
     0,
   );
 }
+const sessXp = (r: LogRow) => sessionXp(r.payload);
+// Reps de défis muscu, jour par jour, avec l'XP d'effort gagnée ce jour-là.
+const challengeDays = computed(() => {
+  const out: { key: string; date: string; name: string; done: number; unit: string; xp: number }[] =
+    [];
+  for (const c of challenges.list) {
+    if (isCardioChallengeRow(c)) continue; // muscu uniquement (le cardio a son propre historique)
+    const uLabel = c.unit === 'time' ? 'sec' : c.unit === 'distance' ? 'km' : 'reps';
+    for (const p of c.progress) {
+      if (!(p.done > 0)) continue;
+      out.push({
+        key: `${c.id}:${p.day}`,
+        date: p.date,
+        name: c.exercise_name,
+        done: p.done,
+        unit: uLabel,
+        xp: challengeDayXp(c, p.done),
+      });
+    }
+  }
+  return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 60);
+});
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', {
     day: '2-digit',
@@ -227,6 +274,7 @@ async function loadHistory() {
   loading.value = true;
   try {
     rows.value = await logs.fetchRecent(50);
+    if (!challenges.list.length) await challenges.fetchMine().catch(() => undefined);
   } catch (e) {
     $q.notify({
       type: 'negative',
@@ -379,6 +427,23 @@ onMounted(() => {
 }
 .log-card:active {
   border-color: var(--accent);
+}
+.log-card.static {
+  cursor: default;
+}
+.log-card.static:active {
+  border-color: var(--line);
+}
+.hist-sub {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+  margin: 6px 2px 8px;
+}
+.log-xp {
+  color: var(--accent);
+  font-weight: 700;
 }
 .log-main {
   flex: 1;

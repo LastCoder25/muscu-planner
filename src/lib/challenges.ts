@@ -804,6 +804,16 @@ export function earlyFinishFraction(ch: Challenge): number {
   return daysSaved / ch.duration_days;
 }
 
+/** XP « d'effort » d'une journée de défi (reps du jour) — sert à afficher l'XP
+ *  gagnée jour par jour dans les historiques. La prime de complétion (bonus versé
+ *  une fois le total atteint) n'est PAS répartie par jour : elle s'ajoute au total
+ *  du défi via `challengeXpPoints`. Les défis en temps (gainage) ne comptent leur
+ *  effort qu'à la complétion → 0 par jour ici. */
+export function challengeDayXp(ch: Challenge, done: number): number {
+  if (ch.unit !== 'reps' || done <= 0) return 0;
+  return Math.round(done * REP_XP * (ch.rep_weight ?? 1));
+}
+
 /** Points d'XP issus des CHALLENGES (modèle « total ») :
  *  - reps réalisées × REP_XP (défis en reps ; le cardio est compté via les sorties) ;
  *  - PRIME de complétion versée UNIQUEMENT quand le TOTAL est atteint (souple : jours
