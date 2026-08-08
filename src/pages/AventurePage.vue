@@ -328,7 +328,10 @@
           <div class="result-sub">
             {{ run.defeated }}/{{ run.total }} monstres vaincus · PV restants {{ run.finalPv }}
           </div>
-          <div class="log">
+          <button class="report-toggle" @click="reportOpen = !reportOpen">
+            {{ reportOpen ? '▴ Masquer le détail' : '▾ Voir le détail du combat' }}
+          </button>
+          <div v-if="reportOpen" class="log">
             <div
               v-for="(f, i) in run.fights"
               :key="i"
@@ -354,9 +357,8 @@
                 </div>
                 <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
                   <span
-                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv{{
-                      equippedInSlot(d.slot)!.level
-                    }}
+                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
+                    {{ equippedInSlot(d.slot)!.level }}
                     ·
                     {{
                       effectLabel(equippedInSlot(d.slot)!.effect, equippedInSlot(d.slot)!.level)
@@ -797,6 +799,7 @@ function barW(v: number): string {
 const busy = ref(false);
 const run = ref<RunView | null>(null);
 const lastDungeon = ref<Dungeon | null>(null); // pour « Réattaquer » depuis le rapport
+const reportOpen = ref(false); // détail du combat repliable (bouton)
 const sacTitle = ref<HTMLElement | null>(null);
 
 // ── Boutique & consommables ──
@@ -1944,6 +1947,15 @@ onMounted(async () => {
   color: var(--dim);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+.report-toggle {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 0;
 }
 .reattack {
   border: 1px solid var(--accent);
