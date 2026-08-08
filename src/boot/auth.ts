@@ -31,8 +31,8 @@ export default defineBoot(async ({ router, store }) => {
     // Connecté : pas besoin de revoir le login.
     if (to.path === '/login') return { path: '/' };
 
-    // Backlog réservé aux admins (la RLS Postgres fait aussi autorité).
-    if (to.path === '/backlog' && !auth.isAdmin) return { path: '/' };
+    // Pages réservées aux admins (la RLS Postgres fait aussi autorité).
+    if ((to.path === '/backlog' || to.path === '/formulas') && !auth.isAdmin) return { path: '/' };
 
     // S'assure d'avoir tenté de charger le profil au moins une fois.
     if (!profile.loaded) {

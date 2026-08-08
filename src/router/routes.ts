@@ -107,6 +107,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'cardio', component: () => import('@/pages/CardioPage.vue') },
       { path: 'body', component: () => import('@/pages/BodyPage.vue') },
       { path: 'backlog', component: () => import('@/pages/BacklogPage.vue') },
+      { path: 'formulas', component: () => import('@/pages/FormulasPage.vue') },
     ],
   },
 

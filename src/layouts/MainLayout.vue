@@ -73,6 +73,10 @@
                 <q-item-section avatar><q-icon name="install_mobile" /></q-item-section>
                 <q-item-section>Installer l'application</q-item-section>
               </q-item>
+              <q-item v-if="auth.isAdmin" v-close-popup clickable @click="goFormulas">
+                <q-item-section avatar><q-icon name="functions" /></q-item-section>
+                <q-item-section>Calculs XP (admin)</q-item-section>
+              </q-item>
               <q-separator />
               <q-item v-close-popup clickable @click="logout">
                 <q-item-section avatar><q-icon name="logout" /></q-item-section>
@@ -170,6 +174,9 @@ async function goCardio() {
 }
 async function goBacklog() {
   await router.push('/backlog');
+}
+async function goFormulas() {
+  await router.push('/formulas');
 }
 async function logout() {
   await auth.signOut();
