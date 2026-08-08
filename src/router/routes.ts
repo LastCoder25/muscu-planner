@@ -59,7 +59,10 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/combo/:id',
     component: () => import('@/layouts/BlankLayout.vue'),
-    children: [{ path: '', component: () => import('@/pages/ComboDetailPage.vue') }],
+    children: [
+      { path: '', component: () => import('@/pages/ComboDetailPage.vue') },
+      { path: 'session', component: () => import('@/pages/ComboSessionPage.vue') },
+    ],
   },
   {
     path: '/court/new',
