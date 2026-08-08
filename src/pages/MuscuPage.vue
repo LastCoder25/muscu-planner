@@ -102,9 +102,9 @@
         <div class="log-main">
           <div class="log-name">{{ r.payload.name || 'Séance' }}</div>
           <div class="log-meta">
-            {{ fmtDate(r.performed_at) }} · {{ volume(r) }} kg<template
-              v-if="r.payload.global_difficulty"
-            >
+            {{ fmtDate(r.performed_at) }} ·
+            {{ volume(r) > 0 ? volume(r) + ' kg' : (r.payload.duration_min || 0) + ' min'
+            }}<template v-if="r.payload.global_difficulty">
               · note {{ r.payload.global_difficulty }}/4</template
             >
             · <span class="log-xp">⚡ +{{ sessXp(r) }} XP</span>

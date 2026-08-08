@@ -1,9 +1,21 @@
 <template>
   <q-page class="agenda-page">
     <h1 class="page-title font-display">Agenda</h1>
-    <p class="page-sub text-dim">
-      {{ weekLabel }} · {{ total }} activité{{ total > 1 ? 's' : '' }}
-    </p>
+    <div class="week-nav">
+      <button class="wk-btn" aria-label="Semaine précédente" @click="weekOffset--">‹</button>
+      <div class="wk-mid">
+        <div class="wk-label">{{ weekOffset === 0 ? 'Cette semaine' : weekLabel }}</div>
+        <div class="wk-sub text-dim">{{ total }} activité{{ total > 1 ? 's' : '' }}</div>
+      </div>
+      <button
+        class="wk-btn"
+        aria-label="Semaine suivante"
+        :disabled="weekOffset >= 0"
+        @click="weekOffset++"
+      >
+        ›
+      </button>
+    </div>
 
     <div v-if="loading" class="column items-center q-mt-xl">
       <q-spinner color="primary" size="32px" />
@@ -68,16 +80,19 @@ function isoDay(d: Date): string {
 const now = new Date();
 const todayIso = isoDay(now);
 // Lundi de la semaine courante (00:00).
-const monday = new Date(now);
-monday.setHours(0, 0, 0, 0);
-monday.setDate(monday.getDate() - ((now.getDay() + 6) % 7));
-const weekStart = monday.getTime();
-const weekEnd = weekStart + 7 * 86400000;
+const baseMonday = new Date(now);
+baseMonday.setHours(0, 0, 0, 0);
+baseMonday.setDate(baseMonday.getDate() - ((now.getDay() + 6) % 7));
+
+// Navigation d'historique : 0 = semaine en cours, négatif = semaines passées.
+const weekOffset = ref(0);
+const weekStart = computed(() => baseMonday.getTime() + weekOffset.value * 7 * 86400000);
+const weekEnd = computed(() => weekStart.value + 7 * 86400000);
 
 const weekLabel = computed(() => {
-  const end = new Date(weekStart + 6 * 86400000);
-  const f = (d: Date) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-  return `${f(monday)} – ${f(end)}`;
+  const f = (t: number) =>
+    new Date(t).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+  return `${f(weekStart.value)} – ${f(weekStart.value + 6 * 86400000)}`;
 });
 
 const entries = computed<Entry[]>(() => {
@@ -135,14 +150,14 @@ const entries = computed<Entry[]>(() => {
       });
     }
   }
-  return out.filter((e) => e.ts >= weekStart && e.ts < weekEnd);
+  return out.filter((e) => e.ts >= weekStart.value && e.ts < weekEnd.value);
 });
 
 const total = computed(() => entries.value.length);
 
 const days = computed(() => {
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart + i * 86400000);
+    const d = new Date(weekStart.value + i * 86400000);
     const iso = isoDay(d);
     const dayEntries = entries.value
       .filter((e) => isoDay(new Date(e.ts)) === iso)
@@ -186,6 +201,40 @@ onMounted(async () => {
 }
 .text-dim {
   color: var(--dim);
+}
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 20px;
+}
+.wk-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 22px;
+  cursor: pointer;
+}
+.wk-btn:disabled {
+  color: var(--dim);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.wk-mid {
+  flex: 1;
+  text-align: center;
+}
+.wk-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+}
+.wk-sub {
+  font-size: 12px;
 }
 .day {
   margin-bottom: 16px;

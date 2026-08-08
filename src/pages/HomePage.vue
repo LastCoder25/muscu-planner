@@ -64,18 +64,6 @@
         </div>
       </div>
 
-      <div v-if="lastLog" class="last-card" @click="goHistory">
-        <div class="last-lbl">Dernière séance · {{ fmtDate(lastLog.performed_at) }}</div>
-        <div class="last-row">
-          <span class="last-name">{{ lastLog.payload.name || 'Séance' }}</span>
-          <span class="last-stat"
-            >{{ lastVolume }} kg<template v-if="lastLog.payload.global_difficulty">
-              · {{ lastLog.payload.global_difficulty }}/4</template
-            ></span
-          >
-        </div>
-      </div>
-
       <div class="tile-group">
         <div class="group-lbl">Général</div>
         <button class="challenge-row" @click="goChallenges">
@@ -187,7 +175,7 @@ import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
-import { useLogsStore, type LogRow } from '@/stores/logs';
+import { useLogsStore } from '@/stores/logs';
 import { useLiveStore } from '@/stores/live';
 import { useLiveCourtStore } from '@/stores/liveCourt';
 import { useAuthStore } from '@/stores/auth';
@@ -229,27 +217,12 @@ const generalTiles = computed(() => [
 ]);
 const loading = ref(true);
 
-const lastLog = ref<LogRow | null>(null);
 const hasFree = ref(false);
-
-const lastVolume = computed(() =>
-  lastLog.value
-    ? lastLog.value.payload.exercises.reduce(
-        (a, ex) => a + ex.performed.reduce((b, s) => b + s.load_kg * s.reps, 0),
-        0,
-      )
-    : 0,
-);
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-}
 
 onMounted(async () => {
   hasFree.value = live.hasSaved('free');
   try {
     await sessionsStore.fetchMine();
-    const recent = await logs.fetchRecent(1);
-    lastLog.value = recent[0] ?? null;
   } catch (e) {
     $q.notify({
       type: 'negative',
@@ -259,10 +232,6 @@ onMounted(async () => {
     loading.value = false;
   }
 });
-
-async function goHistory() {
-  await router.push('/history');
-}
 
 async function goMuscu() {
   await router.push('/muscu');
