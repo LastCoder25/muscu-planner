@@ -90,6 +90,13 @@ describe('comboXpPoints', () => {
     const loaded = combo([leg({ target: 3, sets: [set(10, 40), set(10, 40), set(10, 40)] })]);
     expect(comboXpPoints([loaded])).toBeGreaterThan(comboXpPoints([light]));
   });
+  it('une série assistée vaut moins qu’une série stricte', () => {
+    const strict = combo([leg({ target: 1, sets: [{ date: '2026-01-05', reps: 10 }] })]);
+    const assisted = combo([
+      leg({ target: 1, sets: [{ date: '2026-01-05', reps: 10, assisted: true }] }),
+    ]);
+    expect(comboXpPoints([assisted])).toBeLessThan(comboXpPoints([strict]));
+  });
   it('bouclé en avance rapporte plus que bouclé tard (même volume)', () => {
     const early = combo([
       leg({ target: 2, sets: [set(10, 0, '2026-01-05'), set(10, 0, '2026-01-05')] }),

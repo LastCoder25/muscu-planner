@@ -106,7 +106,7 @@ import { useComboStore } from '@/stores/combo';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { COMBO_SLOTS, type ComboSlot } from '@/data/combo';
 import { suggestComboTarget, type ComboLeg } from '@/lib/combo';
-import { repWeightFromExercise, logicalToday } from '@/lib/challenges';
+import { repWeightFromExercise, isBodyweightExercise, logicalToday } from '@/lib/challenges';
 import type { Level } from '@/lib/types';
 
 const router = useRouter();
@@ -178,6 +178,7 @@ async function createCombo() {
       rep_weight: repWeightFromExercise(e.muscle_secondary, e.equipment_required),
       target: p.target,
       weight_kg: p.weight_kg || null,
+      assistable: isBodyweightExercise(e.equipment_required),
       sets: [],
     });
   }

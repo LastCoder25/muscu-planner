@@ -88,6 +88,11 @@
           />
           <span class="set-hint">vide = PdC</span>
         </div>
+        <div v-if="setLeg?.assistable" class="set-row">
+          <span class="set-lbl">Assisté</span>
+          <q-toggle v-model="setAssisted" />
+          <span class="set-hint">élastique → ×0,6</span>
+        </div>
         <div class="set-actions">
           <q-btn flat no-caps label="Annuler" @click="setOpen = false" />
           <q-btn
@@ -115,6 +120,7 @@ import {
   legSetsDone,
   legLastReps,
   legLastWeight,
+  legLastAssisted,
   type ComboLeg,
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
@@ -156,11 +162,13 @@ const setLeg = ref<ComboLeg | null>(null);
 const setCount = ref(1);
 const setReps = ref<number>(10);
 const setWeight = ref<number | null>(null);
+const setAssisted = ref(false);
 function openSet(leg: ComboLeg, count: number) {
   setLeg.value = leg;
   setCount.value = count;
   setReps.value = legLastReps(leg);
   setWeight.value = legLastWeight(leg);
+  setAssisted.value = legLastAssisted(leg);
   setOpen.value = true;
 }
 function saveSet() {
@@ -169,8 +177,9 @@ function saveSet() {
   if (!auth.user?.id || !c.value || !leg) return;
   const before = c.value.status;
   const w = setWeight.value != null && setWeight.value > 0 ? setWeight.value : null;
+  const asst = !!leg.assistable && setAssisted.value;
   for (let i = 0; i < setCount.value; i++) {
-    combo.addSet(id, leg.exercise_id, logicalToday(), reps, w);
+    combo.addSet(id, leg.exercise_id, logicalToday(), reps, w, asst);
   }
   setOpen.value = false;
   if (before !== 'done' && c.value.status === 'done') {

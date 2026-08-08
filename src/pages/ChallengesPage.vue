@@ -272,6 +272,11 @@
           />
           <span class="set-hint">vide = poids du corps</span>
         </div>
+        <div v-if="setLeg?.assistable" class="set-row">
+          <span class="set-lbl">Assisté</span>
+          <q-toggle v-model="setAssisted" />
+          <span class="set-hint">élastique / machine → ×0,6</span>
+        </div>
         <div class="set-actions">
           <q-btn flat no-caps label="Annuler" @click="setOpen = false" />
           <q-btn
@@ -309,6 +314,7 @@ import {
   legSetsDone,
   legLastReps,
   legLastWeight,
+  legLastAssisted,
   type ComboLeg,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
@@ -341,11 +347,13 @@ const setLeg = ref<ComboLeg | null>(null);
 const setCount = ref(1); // nb de séries identiques à ajouter (+1..+4)
 const setReps = ref<number>(10);
 const setWeight = ref<number | null>(null);
+const setAssisted = ref(false);
 function openSet(leg: ComboLeg, count: number) {
   setLeg.value = leg;
   setCount.value = count;
   setReps.value = legLastReps(leg);
   setWeight.value = legLastWeight(leg);
+  setAssisted.value = legLastAssisted(leg);
   setOpen.value = true;
 }
 function saveSet() {
@@ -353,8 +361,9 @@ function saveSet() {
   const reps = Math.max(1, Math.round(setReps.value || 0));
   if (!activeCombo.value || !leg) return;
   const w = setWeight.value != null && setWeight.value > 0 ? setWeight.value : null;
+  const asst = !!leg.assistable && setAssisted.value;
   for (let i = 0; i < setCount.value; i++) {
-    comboStore.addSet(activeCombo.value.id, leg.exercise_id, logicalToday(), reps, w);
+    comboStore.addSet(activeCombo.value.id, leg.exercise_id, logicalToday(), reps, w, asst);
   }
   setOpen.value = false;
 }

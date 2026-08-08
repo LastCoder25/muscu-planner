@@ -2,7 +2,7 @@
 // Modèle SÉRIES : l'objectif d'un exo = un nombre de SÉRIES/semaine (repère
 // hypertrophie), chaque série enregistrée porte ses reps + son poids. XP façon
 // séance : Σ reps×REP_XP×poids-de-rep + tonnage/500 + prime de bouclage.
-import { REP_XP } from './athlete';
+import { REP_XP, assistMult } from './athlete';
 import { daysBetweenIso } from './loginStreak';
 import type { Level } from './types';
 
@@ -10,6 +10,7 @@ export interface ComboSet {
   date: string; // YYYY-MM-DD
   reps: number;
   weight?: number | null; // charge de la série (kg) — poids du corps = vide
+  assisted?: boolean; // exo poids du corps fait assisté (élastique/machine) → XP ×0,6
 }
 // Ancien format (reps cumulées/jour) — lu pour migration des défis existants.
 export interface ComboLegEntry {
@@ -24,6 +25,7 @@ export interface ComboLeg {
   rep_weight: number; // poids de rep de l'exo (pour l'XP)
   target: number; // objectif de SÉRIES sur la semaine
   weight_kg?: number | null; // dernier poids utilisé → préremplissage de la prochaine série
+  assistable?: boolean; // exo au poids du corps → propose l'option « assisté »
   sets?: ComboSet[]; // séries réalisées (modèle courant)
   progress?: ComboLegEntry[]; // legacy (migration)
 }
@@ -71,6 +73,11 @@ export function legLastReps(leg: ComboLeg, fallback = COMBO_PLAN_REPS): number {
   const s = legSets(leg);
   return s.length ? s[s.length - 1]!.reps : fallback;
 }
+/** État « assisté » de préremplissage : celui de la dernière série. */
+export function legLastAssisted(leg: ComboLeg): boolean {
+  const s = legSets(leg);
+  return s.length ? !!s[s.length - 1]!.assisted : false;
+}
 
 export function comboTargetTotal(c: ComboChallenge): number {
   return c.legs.reduce((a, l) => a + l.target, 0);
@@ -105,7 +112,7 @@ export function comboXpPoints(combos: ComboChallenge[]): number {
     let targetEffort = 0;
     for (const l of c.legs) {
       for (const s of legSets(l)) {
-        reps += (s.reps || 0) * REP_XP * (l.rep_weight ?? 1);
+        reps += (s.reps || 0) * REP_XP * (l.rep_weight ?? 1) * assistMult(s.assisted);
         tonnage += (s.reps || 0) * (s.weight ?? l.weight_kg ?? 0);
       }
       // Volume planifié ≈ séries × reps supposées × poids-de-rep.

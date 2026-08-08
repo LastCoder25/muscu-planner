@@ -341,6 +341,17 @@
           />
         </div>
 
+        <div v-if="showAssist" class="assist q-mb-md">
+          <div class="row items-center" style="gap: 10px">
+            <q-toggle v-model="assistedMode" />
+            <span class="lbl" style="margin: 0">Assisté (élastique / machine)</span>
+          </div>
+          <div class="assist-note">
+            Pour un exo au poids du corps fait en assisté, chaque rep vaut moins (×0,6). Le refaire
+            en strict rapportera plus → ta progression.
+          </div>
+        </div>
+
         <div v-if="format !== 'cumulative'" class="carry q-mb-md">
           <div class="row items-center" style="gap: 10px">
             <q-toggle v-model="carryOver" />
@@ -428,6 +439,7 @@ import {
   progressiveApply,
   logicalToday,
   repWeightFromExercise,
+  isBodyweightExercise,
   type ChallengeFormat,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -520,6 +532,14 @@ const unit = computed<'reps' | 'time' | 'distance'>(() => {
 // Gainage en temps (hors cardio) → propose secondes ou min:sec.
 const isGainageTime = computed(() => unit.value === 'time' && !isCardio.value);
 const timeDisplay = ref<'sec' | 'mmss'>('sec');
+// Option « assisté » : exos poids du corps en reps (tractions, dips…).
+const showAssist = computed(
+  () =>
+    unit.value === 'reps' &&
+    !isCardio.value &&
+    isBodyweightExercise(exercise.value?.equipment_required),
+);
+const assistedMode = ref(false);
 const unitLabel = computed(() =>
   unit.value === 'distance'
     ? 'km'
@@ -778,6 +798,7 @@ async function createChallenge() {
     if (reminderOn.value) cfg.reminder_time = reminderTime.value;
     if (carryOver.value && format.value !== 'cumulative') cfg.carry_over = true;
     if (isGainageTime.value && timeDisplay.value === 'mmss') cfg.time_display = 'mmss';
+    if (showAssist.value && assistedMode.value) cfg.assisted = true;
     const daily = computeDailyTargets(format.value, cfg, durationDays.value, startDate);
     if (adaptiveMode.value) {
       cfg.adaptive = true;
@@ -1291,6 +1312,7 @@ onMounted(async () => {
 }
 
 .carry,
+.assist,
 .auto-card {
   background: var(--surface);
   border: 1px solid var(--line-soft);
@@ -1301,7 +1323,8 @@ onMounted(async () => {
   border-color: var(--accent);
   margin-bottom: 14px;
 }
-.carry-note {
+.carry-note,
+.assist-note {
   font-size: 11.5px;
   color: var(--dim);
   line-height: 1.35;

@@ -2,7 +2,7 @@
 // Calcul des objectifs par jour selon le format, suggestion de difficulté,
 // statistiques (streak/complétion) et évaluation des succès.
 import type { Level } from './types';
-import { REP_XP } from './athlete';
+import { REP_XP, assistMult } from './athlete';
 import { isCardioChallengeExercise } from '@/data/cardio';
 
 export type ChallengeFormat =
@@ -32,6 +32,7 @@ export interface ChallengeConfig {
   adaptive?: boolean; // difficulté auto : s'ajuste au ressenti + résultat (calibration implicite)
   capacity?: number; // échelle courante (pic) pilotée par l'autorégulation
   time_display?: 'sec' | 'mmss'; // gainage (unit='time', non-cardio) : affichage secondes ou min:sec
+  assisted?: boolean; // exo poids du corps fait ASSISTÉ (élastique/machine) → XP pondérée ×0,6
 }
 
 // Progressif basé sur le MAX (cf. formule) : J1 = start_coef × MAX,
@@ -766,6 +767,11 @@ export function activeDaysOf(ch: Challenge): number {
 // bench, rack ne portent pas de charge → poids du corps).
 const LOADED_EQUIPMENT = ['barbell', 'dumbbells', 'kettlebell', 'machine', 'cable'];
 
+/** Exo au poids du corps (aucune charge externe) → l'option « assisté » a du sens. */
+export function isBodyweightExercise(equipmentRequired?: string[] | null): boolean {
+  return !(equipmentRequired ?? []).some((e) => LOADED_EQUIPMENT.includes(e));
+}
+
 /**
  * Poids d'une rep selon l'exo (XP juste) : facteur muscles (isolation vs composé,
  * via le nb de muscles travaillés) × facteur charge (résisté ou poids du corps).
@@ -820,8 +826,10 @@ export function challengeDayXp(ch: Challenge, done: number): number {
  *    de repos/rattrapage OK) = 25 % de l'effort planifié × multiplicateur de durée.
  *  Pas de bonus « par jour » (parité avec le sport libre). */
 export function challengeXpPoints(challenges: Challenge[]): number {
-  // Le poids de rep (isolation vs composé × charge) ne s'applique qu'aux défis en reps.
-  const weightOf = (c: Challenge) => (c.unit === 'reps' ? (c.rep_weight ?? 1) : 1);
+  // Poids de rep (isolation vs composé × charge) — reps uniquement — × facteur
+  // d'assistance (une rep assistée vaut moins).
+  const weightOf = (c: Challenge) =>
+    (c.unit === 'reps' ? (c.rep_weight ?? 1) : 1) * assistMult(c.config.assisted);
   const repsXp = challenges.reduce(
     (a, c) =>
       a +

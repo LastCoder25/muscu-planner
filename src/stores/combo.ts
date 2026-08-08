@@ -75,13 +75,14 @@ export const useComboStore = defineStore('combo', () => {
     date: string,
     reps: number,
     weight: number | null,
+    assisted = false,
   ) {
     const c = list.value.find((x) => x.id === id);
     if (!c || reps <= 0) return;
     const leg = c.legs.find((l) => l.exercise_id === exerciseId);
     if (!leg) return;
     if (!leg.sets) leg.sets = []; // migration : ancien format sans `sets`
-    leg.sets.push({ date, reps, weight: weight ?? null });
+    leg.sets.push({ date, reps, weight: weight ?? null, assisted });
     if (weight != null) leg.weight_kg = weight; // dernier poids → préremplissage
     if (comboComplete(c)) c.status = 'done';
     else if (c.status === 'done') c.status = 'active';

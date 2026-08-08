@@ -18,6 +18,12 @@ const ACTIVITY_XP_FACTOR: Record<CardioActivity, number> = {
 
 // Valeur d'une répétition (partagée séance ↔ challenge → parité). Réglable.
 export const REP_XP = 0.2;
+// Facteur d'assistance (poids du corps) : une rep ASSISTÉE (élastique/machine)
+// vaut moins qu'une rep STRICTE → passer en strict = progression récompensée.
+export const ASSIST_MULT = 0.6;
+export function assistMult(assisted?: boolean | null): number {
+  return assisted ? ASSIST_MULT : 1;
+}
 // Valeur d'une minute de séance muscu (la DURÉE porte l'essentiel de l'XP,
 // pour que « durée seule » reste gratifiant ; reps/tonnage = petit bonus détail).
 export const MUSCU_MIN_XP = 3;

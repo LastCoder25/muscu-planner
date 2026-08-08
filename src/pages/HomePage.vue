@@ -520,20 +520,20 @@ async function saveAutre() {
 }
 .ic-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--accent);
   color: var(--accent-ink, #15120e);
-  border-radius: 9px;
+  border-radius: 8px;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
 }
 /* Carrés du header : Aventure / Défis / Niveau (même taille) */
