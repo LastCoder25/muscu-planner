@@ -113,17 +113,6 @@
           Spécifique <span class="group-lvl">Niv. {{ progress.specifique.value.level }}</span>
         </div>
         <div class="main-tiles">
-          <button class="mtile t-tennis" @click="goTennis">
-            <span class="mt-strip" />
-            <span class="mt-ic-wrap"
-              ><q-icon name="sports_tennis" size="26px" class="mt-ic"
-            /></span>
-            <span class="mt-name font-display">Tennis</span>
-            <span class="mt-lvl">Niv. {{ progress.tennis.value.level }}</span>
-            <span class="mt-bar"
-              ><span class="mt-fill" :style="{ width: progress.tennis.value.progressPct + '%' }"
-            /></span>
-          </button>
           <button class="mtile t-autre" @click="openAutre">
             <span class="mt-strip" />
             <span class="mt-ic-wrap"><q-icon name="sports" size="26px" class="mt-ic" /></span>
@@ -152,7 +141,24 @@
       <q-card class="autre-card">
         <div class="autre-title font-display">Autre sport</div>
         <div class="autre-desc">Compte dans ton niveau global et ton énergie d'aventure.</div>
-        <q-input v-model="autreName" label="Sport (optionnel)" filled dense class="q-mb-sm" />
+        <q-select
+          v-model="autreSport"
+          :options="SPORT_OPTIONS"
+          label="Sport"
+          filled
+          dense
+          emit-value
+          map-options
+          class="q-mb-sm"
+        />
+        <q-input
+          v-if="autreSport === 'Autre'"
+          v-model="autreCustom"
+          label="Précise le sport"
+          filled
+          dense
+          class="q-mb-sm"
+        />
         <q-input v-model="autreDate" type="date" label="Date" filled dense class="q-mb-sm" />
         <div class="autre-dur">
           <q-input v-model.number="autreHours" type="number" filled dense suffix="h" />
@@ -299,9 +305,6 @@ function discardCourt() {
 async function goChallenges() {
   await router.push('/challenges');
 }
-async function goTennis() {
-  await router.push('/tennis');
-}
 async function goCardio() {
   await router.push('/cardio');
 }
@@ -314,14 +317,34 @@ function todayIsoLocal(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+const SPORT_OPTIONS = [
+  'Tennis',
+  'Padel',
+  'Football',
+  'Basket',
+  'Natation',
+  'Course',
+  'Vélo',
+  'Escalade',
+  'Boxe',
+  'Rugby',
+  'Yoga',
+  'Randonnée',
+  'Ski',
+  'Golf',
+  'Danse',
+  'Autre',
+];
 const autreOpen = ref(false);
-const autreName = ref('');
+const autreSport = ref<string>('Tennis');
+const autreCustom = ref('');
 const autreDate = ref(todayIsoLocal());
 const autreHours = ref<number>(1);
 const autreMinutes = ref<number>(0);
 const autreSaving = ref(false);
 function openAutre() {
-  autreName.value = '';
+  autreSport.value = 'Tennis';
+  autreCustom.value = '';
   autreDate.value = todayIsoLocal();
   autreHours.value = 1;
   autreMinutes.value = 0;
@@ -347,11 +370,13 @@ async function saveAutre() {
       now.getMinutes(),
       now.getSeconds(),
     ).toISOString();
+    const sport =
+      autreSport.value === 'Autre' ? autreCustom.value.trim() || 'Autre sport' : autreSport.value;
     const log: SessionLog = {
       schema_version: SCHEMA_VERSION,
       type: 'session_log',
       id: crypto.randomUUID(),
-      name: autreName.value.trim() || 'Autre sport',
+      name: sport,
       started_at: iso,
       ended_at: iso,
       duration_min: totalMin,
