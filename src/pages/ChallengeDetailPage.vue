@@ -37,8 +37,8 @@
             ><span class="sl">série</span>
           </div>
           <div class="stat">
-            <span class="sv font-display">{{ stats.totalDone }}</span
-            ><span class="sl">{{ unitLabel }} au total</span>
+            <span class="sv font-display">{{ fmtV(stats.totalDone) }}</span
+            ><span class="sl">{{ unitWord }} au total</span>
           </div>
         </div>
 
@@ -51,7 +51,7 @@
             <b v-else>Tu n’atteins pas ton objectif depuis {{ recalSuggest.streak }} jours</b>
             <span>
               {{ recalSuggest.dir === 'up' ? 'Monter' : 'Alléger' }} le max de
-              {{ recalSuggest.refCur }} à <b>{{ recalSuggest.refNew }} {{ unitLabel }}</b> pour les
+              {{ fmtV(recalSuggest.refCur) }} à <b>{{ show(recalSuggest.refNew) }}</b> pour les
               jours restants ?
             </span>
           </div>
@@ -70,10 +70,10 @@
           :class="liveBalance > 0 ? 'ahead' : liveBalance < 0 ? 'behind' : 'even'"
         >
           <template v-if="liveBalance > 0"
-            >{{ carryOn ? 'Réserve' : 'Avance' }} +{{ liveBalance }} {{ unitLabel }}</template
+            >{{ carryOn ? 'Réserve' : 'Avance' }} +{{ show(liveBalance) }}</template
           >
           <template v-else-if="liveBalance < 0"
-            >{{ carryOn ? 'Dette' : 'Retard' }} −{{ -liveBalance }} {{ unitLabel }}</template
+            >{{ carryOn ? 'Dette' : 'Retard' }} −{{ show(-liveBalance) }}</template
           >
           <template v-else>Dans les temps</template>
         </div>
@@ -94,7 +94,7 @@
         </div>
         <div v-else class="today">
           <div class="today-h">
-            Objectif du jour · <b>{{ todayTarget }} {{ unitLabel }}</b>
+            Objectif du jour · <b>{{ show(todayTarget) }}</b>
           </div>
           <div class="ring-wrap">
             <svg viewBox="0 0 120 120" class="ring">
@@ -109,8 +109,8 @@
               />
             </svg>
             <div class="ring-num">
-              <div class="rn-v font-display">{{ doneToday }}</div>
-              <div class="rn-t">/ {{ todayTarget }}</div>
+              <div class="rn-v font-display">{{ fmtV(doneToday) }}</div>
+              <div class="rn-t">/ {{ fmtV(todayTarget) }}</div>
             </div>
           </div>
           <!-- Ressenti à la clôture (mode adaptatif) → ajuste la suite -->
@@ -152,7 +152,7 @@
             <div v-if="todayClosed && !correcting && !editMode" class="today-ok">
               <q-icon v-if="todayCompleted" name="check_circle" color="positive" />
               <q-icon v-else name="bedtime" color="primary" />
-              Journée validée · {{ doneToday }} {{ unitLabel }}
+              Journée validée · {{ show(doneToday) }}
               <button class="corr-link" @click="correcting = true">Corriger</button>
               <button class="corr-link" @click="reopenDay">Reprendre</button>
             </div>
@@ -210,6 +210,20 @@
           </template>
         </div>
 
+        <!-- Projection segmentée : 1 segment par jour pour visualiser l'avancement -->
+        <div v-if="ch.format !== 'cumulative'" class="sec-h">
+          Projection · {{ ch.duration_days }} jours
+        </div>
+        <div v-if="ch.format !== 'cumulative'" class="seg-strip">
+          <div
+            v-for="(t, d) in ch.daily_targets"
+            :key="d"
+            class="seg"
+            :class="segState(d)"
+            :title="`J${d + 1} : ${fmtV(doneOf(d))} / ${fmtV(t)}`"
+          />
+        </div>
+
         <!-- Graphique cible vs réalisé -->
         <div v-if="ch.format !== 'cumulative'" class="sec-h">
           Cible <span class="lg-t">▬</span> · réalisé <span class="lg-d">▬</span>
@@ -231,7 +245,9 @@
         <div class="cal">
           <div v-for="(t, d) in ch.daily_targets" :key="d" class="cell" :class="dayState(d)">
             <span class="c-d">J{{ d + 1 }}</span>
-            <span class="c-t">{{ ch.format === 'cumulative' ? doneOf(d) || '·' : t || '💤' }}</span>
+            <span class="c-t">{{
+              ch.format === 'cumulative' ? (doneOf(d) ? fmtV(doneOf(d)) : '·') : t ? fmtV(t) : '💤'
+            }}</span>
           </div>
         </div>
 
@@ -365,6 +381,20 @@ const unitLabel = computed(() =>
       ? 'km'
       : 'reps',
 );
+// Gainage en temps : affichage secondes brutes OU min:sec (config.time_display).
+const mmss = computed(() => isGainageTime.value && ch.value?.config.time_display === 'mmss');
+function fmtV(n: number): string {
+  if (mmss.value) {
+    const s = Math.max(0, Math.round(n));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+  return String(Math.round(n));
+}
+// Nombre + unité, sauf en min:sec où la valeur est déjà auto-descriptive.
+function show(n: number): string {
+  return mmss.value ? fmtV(n) : `${Math.round(n)} ${unitLabel.value}`;
+}
+const unitWord = computed(() => (mmss.value ? '' : unitLabel.value));
 const formatName = computed(() =>
   ch.value ? (formatOption(ch.value.format)?.name ?? ch.value.format) : '',
 );
@@ -629,6 +659,17 @@ function dayState(d: number): string {
   if (d === dayIndex.value) return 'today';
   if (d < dayIndex.value) return 'miss';
   return 'up';
+}
+// État d'un segment de la barre de projection (1 par jour).
+function segState(d: number): string {
+  const c = ch.value!;
+  const t = c.daily_targets[d] ?? 0;
+  if (t === 0) return 'rest';
+  const done = doneOf(d);
+  if (done >= t) return 'done';
+  if (d === dayIndex.value) return 'today';
+  if (done > 0) return 'partial';
+  return d < dayIndex.value ? 'miss' : 'up';
 }
 
 function confirmAbandon() {
@@ -1250,6 +1291,39 @@ onBeforeUnmount(() => {
 }
 .lg-d {
   color: var(--accent);
+}
+.seg-strip {
+  display: flex;
+  gap: 2px;
+  height: 16px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.seg {
+  flex: 1;
+  min-width: 2px;
+  background: var(--surface-3);
+  border-radius: 2px;
+}
+.seg.done {
+  background: var(--accent);
+}
+.seg.partial {
+  background: color-mix(in srgb, var(--accent) 45%, var(--surface-3));
+}
+.seg.today {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.seg.miss {
+  background: color-mix(in srgb, var(--d4, #ff6a45) 40%, var(--surface-3));
+}
+.seg.rest {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+.seg.up {
+  background: var(--surface-3);
 }
 .graph {
   display: flex;

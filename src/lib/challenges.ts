@@ -31,6 +31,7 @@ export interface ChallengeConfig {
   carry_over?: boolean; // report du surplus/déficit d'un jour sur les suivants
   adaptive?: boolean; // difficulté auto : s'ajuste au ressenti + résultat (calibration implicite)
   capacity?: number; // échelle courante (pic) pilotée par l'autorégulation
+  time_display?: 'sec' | 'mmss'; // gainage (unit='time', non-cardio) : affichage secondes ou min:sec
 }
 
 // Progressif basé sur le MAX (cf. formule) : J1 = start_coef × MAX,

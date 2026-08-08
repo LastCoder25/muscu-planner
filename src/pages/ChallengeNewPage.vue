@@ -323,6 +323,24 @@
           />
         </div>
 
+        <div v-if="isGainageTime" class="row items-center q-mb-md" style="gap: 10px">
+          <span class="lbl" style="margin: 0">Affichage durée</span>
+          <q-btn-toggle
+            v-model="timeDisplay"
+            no-caps
+            dense
+            unelevated
+            :options="[
+              { label: 'secondes', value: 'sec' },
+              { label: 'min:sec', value: 'mmss' },
+            ]"
+            color="grey-9"
+            text-color="grey-5"
+            toggle-color="primary"
+            toggle-text-color="dark"
+          />
+        </div>
+
         <div v-if="format !== 'cumulative'" class="carry q-mb-md">
           <div class="row items-center" style="gap: 10px">
             <q-toggle v-model="carryOver" />
@@ -499,6 +517,9 @@ const unit = computed<'reps' | 'time' | 'distance'>(() => {
   if (isCardio.value) return cardioUnit.value;
   return exercise.value?.unit === 'time' ? 'time' : 'reps';
 });
+// Gainage en temps (hors cardio) → propose secondes ou min:sec.
+const isGainageTime = computed(() => unit.value === 'time' && !isCardio.value);
+const timeDisplay = ref<'sec' | 'mmss'>('sec');
 const unitLabel = computed(() =>
   unit.value === 'distance'
     ? 'km'
@@ -756,6 +777,7 @@ async function createChallenge() {
     const cfg: ChallengeConfig = { ...config.value, rest_weekdays: restDays.value };
     if (reminderOn.value) cfg.reminder_time = reminderTime.value;
     if (carryOver.value && format.value !== 'cumulative') cfg.carry_over = true;
+    if (isGainageTime.value && timeDisplay.value === 'mmss') cfg.time_display = 'mmss';
     const daily = computeDailyTargets(format.value, cfg, durationDays.value, startDate);
     if (adaptiveMode.value) {
       cfg.adaptive = true;
