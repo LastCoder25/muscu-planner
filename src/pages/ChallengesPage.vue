@@ -221,7 +221,7 @@
           no-caps
           icon="fitness_center"
           label="Générer une séance"
-          @click="router.push(`/combo/${activeCombo.id}/session`)"
+          :to="`/combo/${activeCombo.id}/session`"
         />
         <div v-for="leg in activeCombo.legs" :key="leg.exercise_id" class="combo-leg">
           <div class="cl-top">
@@ -233,12 +233,22 @@
           <div class="bar"><div class="fill" :style="{ width: legPct(leg) + '%' }" /></div>
           <div class="cl-actions">
             <button
-              v-for="n in [1, 5, 10, 20]"
+              v-for="n in [1, 5, 10]"
               :key="n"
               class="cl-add"
-              @click="addComboRep(leg, n)"
+              :class="{ neg: comboCorrect }"
+              @click="addComboRep(leg, comboCorrect ? -n : n)"
             >
-              +{{ n }}
+              {{ comboCorrect ? '−' : '+' }}{{ n }}
+            </button>
+            <button
+              class="cl-corr"
+              :class="{ on: comboCorrect }"
+              :aria-pressed="comboCorrect"
+              title="Mode correction (retirer des reps)"
+              @click="comboCorrect = !comboCorrect"
+            >
+              ±
             </button>
           </div>
         </div>
@@ -282,6 +292,7 @@ const comboStore = useComboStore();
 const loading = ref(true);
 
 const mode = ref<'solo' | 'combo'>('solo');
+const comboCorrect = ref(false); // mode correction : les incréments retirent des reps
 const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
 const comboPct = computed(() => (activeCombo.value ? comboProgressPct(activeCombo.value) : 0));
 function legPct(leg: ComboLeg) {
@@ -667,6 +678,26 @@ onMounted(async () => {
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
+}
+.cl-add.neg {
+  border-color: var(--d4);
+  color: var(--d4);
+}
+.cl-corr {
+  flex: none;
+  width: 44px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+}
+.cl-corr.on {
+  border-color: var(--d4);
+  color: var(--d4);
+  background: color-mix(in srgb, var(--d4) 14%, transparent);
 }
 
 /* Tuiles de défis (En cours), groupées par voie */

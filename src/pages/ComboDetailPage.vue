@@ -18,6 +18,17 @@
         <div v-if="c.status === 'done'" class="hc-done">🎉 Défi 360 bouclé — bravo !</div>
       </div>
 
+      <q-btn
+        v-if="c.status === 'active'"
+        class="full-width q-mb-md"
+        outline
+        color="primary"
+        no-caps
+        icon="fitness_center"
+        label="Générer une séance"
+        :to="`/combo/${c.id}/session`"
+      />
+
       <div
         v-for="leg in c.legs"
         :key="leg.exercise_id"
@@ -39,8 +50,24 @@
         </div>
         <div class="bar"><span :style="{ width: legPct(leg) + '%' }" /></div>
         <div class="leg-actions">
-          <button v-for="n in QUICK" :key="n" class="add" @click="add(leg, n)">+{{ n }}</button>
-          <button class="add minus" aria-label="Corriger" @click="add(leg, -5)">−5</button>
+          <button
+            v-for="n in QUICK"
+            :key="n"
+            class="add"
+            :class="{ neg: correct }"
+            @click="add(leg, correct ? -n : n)"
+          >
+            {{ correct ? '−' : '+' }}{{ n }}
+          </button>
+          <button
+            class="add corr"
+            :class="{ on: correct }"
+            :aria-pressed="correct"
+            title="Mode correction (retirer des reps)"
+            @click="correct = !correct"
+          >
+            ±
+          </button>
         </div>
       </div>
 
@@ -55,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -71,7 +98,8 @@ const auth = useAuthStore();
 const combo = useComboStore();
 
 const id = String(route.params.id);
-const QUICK = [1, 5, 10, 20];
+const QUICK = [1, 5, 10];
+const correct = ref(false); // mode correction : les incréments retirent des reps
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 const pct = computed(() => (c.value ? comboProgressPct(c.value) : 0));
 
@@ -270,11 +298,21 @@ onMounted(async () => {
   font-size: 14px;
   cursor: pointer;
 }
-.add.minus {
+.add.neg {
+  border-color: var(--d4);
+  color: var(--d4);
+}
+.add.corr {
   flex: none;
-  width: 52px;
+  width: 48px;
   border-color: var(--line);
   color: var(--dim);
+  font-size: 16px;
+}
+.add.corr.on {
+  border-color: var(--d4);
+  color: var(--d4);
+  background: color-mix(in srgb, var(--d4) 14%, transparent);
 }
 .foot {
   font-size: 11.5px;
