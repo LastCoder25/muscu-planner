@@ -69,6 +69,12 @@ export function computeCharacter(
   };
 }
 
+// Bonus d'énergie versé en atteignant un niveau (croissant avec le niveau) →
+// les niveaux hauts sont rares mais plus juteux, ce qui compense l'écart croissant.
+export function levelUpEnergy(level: number): number {
+  return 30 + Math.max(0, level) * 12;
+}
+
 // Validation d'un pseudo d'aventurier (unicité gérée en base par contrainte).
 export function normalizePseudo(raw: string): string {
   return raw.trim().replace(/\s+/g, ' ');

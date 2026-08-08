@@ -2,7 +2,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import { normalizePseudo } from '@/lib/character';
+import { normalizePseudo, levelUpEnergy } from '@/lib/character';
 import {
   salvageValue,
   sellValue,
@@ -28,6 +28,7 @@ export interface CharacterRow {
   last_login_date: string | null;
   login_energy: number;
   consumables: Record<string, number>;
+  reward_level: number;
 }
 
 export class PseudoTakenError extends Error {
@@ -42,7 +43,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, login_streak, login_grace_used, last_login_date, login_energy, consumables';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level';
 
   async function fetchMine() {
     const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
@@ -225,6 +226,29 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { energy_spent: cur.energy_spent + amount });
   }
 
+  // Bonus de passage de niveau (global). Verse l'énergie de chaque niveau franchi
+  // depuis le dernier récompensé (croissant). reward_level=0 = jamais initialisé →
+  // on cale la base au niveau actuel SANS bonus rétroactif. Renvoie l'événement à
+  // célébrer, ou null. Idempotent (basé sur reward_level persisté).
+  async function claimLevelUps(userId: string, currentLevel: number) {
+    const cur = row.value;
+    if (!cur) return null;
+    const prev = cur.reward_level ?? 0;
+    if (prev === 0) {
+      // Première fois : on mémorise le niveau actuel, pas de flot rétroactif.
+      await persist(userId, { reward_level: currentLevel });
+      return null;
+    }
+    if (currentLevel <= prev) return null;
+    let energy = 0;
+    for (let l = prev + 1; l <= currentLevel; l++) energy += levelUpEnergy(l);
+    await persist(userId, {
+      reward_level: currentLevel,
+      login_energy: cur.login_energy + energy,
+    });
+    return { from: prev, to: currentLevel, energy };
+  }
+
   // Réinitialise les talents (respec) contre de l'or → on les rechoisit ensuite.
   async function resetTalents(userId: string, cost: number) {
     const cur = row.value;
@@ -277,6 +301,7 @@ export const useCharacterStore = defineStore('character', () => {
     resetTalents,
     spendEnergy,
     claimDailyLogin,
+    claimLevelUps,
     buyItem,
   };
 });

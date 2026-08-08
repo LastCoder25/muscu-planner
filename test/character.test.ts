@@ -3,6 +3,7 @@ import {
   statFromXp,
   computeCharacter,
   characterProfile,
+  levelUpEnergy,
   isValidPseudo,
   normalizePseudo,
 } from '@/lib/character';
@@ -30,6 +31,14 @@ describe('computeCharacter', () => {
   it('énergie = dispo − dépensée (déficit possible, négatif)', () => {
     expect(computeCharacter(0, 0, 0, 30, 10).energy).toBe(20);
     expect(computeCharacter(0, 0, 0, 10, 50).energy).toBe(-40); // déficit
+  });
+});
+
+describe('levelUpEnergy', () => {
+  it('croît avec le niveau', () => {
+    expect(levelUpEnergy(5)).toBeGreaterThan(levelUpEnergy(2));
+    expect(levelUpEnergy(20)).toBeGreaterThan(levelUpEnergy(10));
+    expect(levelUpEnergy(1)).toBeGreaterThan(0);
   });
 });
 

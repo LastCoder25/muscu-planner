@@ -542,6 +542,19 @@
       </div>
     </transition>
 
+    <!-- Animation : passage de niveau -->
+    <transition name="lb-fade">
+      <div v-if="levelBurst" class="lb-backdrop" @click="levelBurst = null">
+        <div class="lb-card">
+          <span class="lb-wave" aria-hidden="true" />
+          <span class="lb-bolt">🎉</span>
+          <div class="lb-energy font-display">Niveau {{ levelBurst.to }} !</div>
+          <div class="lb-lbl">bravo, tu montes en puissance</div>
+          <div class="lb-streak">+{{ levelBurst.energy }} ⚡ de bonus</div>
+        </div>
+      </div>
+    </transition>
+
     <!-- Animation : récompense de connexion -->
     <transition name="lb-fade">
       <div v-if="loginBurst" class="lb-backdrop" @click="loginBurst = null">
@@ -596,7 +609,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
@@ -755,6 +768,7 @@ const loginPreview = computed(() => {
 });
 const claimingLogin = ref(false);
 const loginBurst = ref<{ streak: number; energy: number; usedGrace: boolean } | null>(null);
+const levelBurst = ref<{ from: number; to: number; energy: number } | null>(null);
 async function claimLogin() {
   const uid = auth.user?.id;
   if (!uid || claimingLogin.value || !loginClaimable.value) return;
@@ -1080,6 +1094,28 @@ function renamePseudo() {
       );
   });
 }
+
+// Bonus de passage de niveau : réclamé dès que les données de fond sont prêtes
+// (niveau réel) et qu'un perso existe. Idempotent (reward_level persisté).
+let claimingLevel = false;
+watch(
+  () => [progress.ready.value, char.row ? c.value.level.level : 0] as [boolean, number],
+  async ([rdy, lvl]: [boolean, number]) => {
+    const uid = auth.user?.id;
+    if (!rdy || !char.row || lvl < 1 || claimingLevel || !uid) return;
+    claimingLevel = true;
+    try {
+      const r = await char.claimLevelUps(uid, lvl);
+      if (r) {
+        levelBurst.value = r;
+        setTimeout(() => (levelBurst.value = null), 3200);
+      }
+    } finally {
+      claimingLevel = false;
+    }
+  },
+  { immediate: true },
+);
 
 onMounted(async () => {
   try {

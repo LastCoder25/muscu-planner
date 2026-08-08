@@ -1,7 +1,7 @@
 // useProgress — les 5 niveaux de l'utilisateur, réactifs.
 // Muscu / Tennis (drills + prépa) / Cardio (course/vélo/marche) / Challenges / Global.
 // Niveaux numériques purs (computeLevel), sans rang ni palier.
-import { computed, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useLogsStore } from '@/stores/logs';
 import { useTennisStore } from '@/stores/tennis';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
@@ -41,13 +41,19 @@ export function useProgress() {
   const cardio = useCardioStore();
   const combo = useComboStore();
 
+  // Vrai une fois les données de fond chargées (évite d'agir sur un niveau « stale »).
+  const ready = ref(false);
   onMounted(() => {
-    logs.fetchAll().catch(() => undefined);
-    tennis.fetchLogs().catch(() => undefined);
-    challenges.fetchMine().catch(() => undefined);
-    sessions.fetchMine().catch(() => undefined);
-    cardio.fetchLogs().catch(() => undefined);
-    combo.fetchMine().catch(() => undefined);
+    void Promise.allSettled([
+      logs.fetchAll(),
+      tennis.fetchLogs(),
+      challenges.fetchMine(),
+      sessions.fetchMine(),
+      cardio.fetchLogs(),
+      combo.fetchMine(),
+    ]).finally(() => {
+      ready.value = true;
+    });
   });
 
   // Séances « spécifiques » (hors muscu de fond) → comptent dans le Tennis/Spécifique :
@@ -319,6 +325,7 @@ export function useProgress() {
   });
 
   return {
+    ready,
     sportTiles,
     sportEntries,
     global: computed(() => computeLevel(globalXp.value)),
