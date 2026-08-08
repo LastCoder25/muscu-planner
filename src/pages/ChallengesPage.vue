@@ -208,9 +208,6 @@
         <div class="combo360-head">
           <div class="c3-top">
             <span class="c3-pct font-display">{{ comboPct }}%</span>
-            <button class="link-btn" @click="router.push(`/combo/${activeCombo.id}`)">
-              détails ›
-            </button>
           </div>
           <div class="bar"><div class="fill" :style="{ width: comboPct + '%' }" /></div>
         </div>

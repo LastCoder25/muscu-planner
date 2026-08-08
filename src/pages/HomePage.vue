@@ -40,6 +40,16 @@
     </div>
 
     <template v-else>
+      <!-- Accès Aventure en HAUT (visible sans scroller) -->
+      <button class="adv-tile" @click="goAventure">
+        <span class="adv-ic">⚔️</span>
+        <span class="adv-main">
+          <span class="adv-name font-display">Mon aventurier</span>
+          <span class="adv-sub">RPG · niveau {{ progress.general.value.level }}</span>
+        </span>
+        <q-icon name="chevron_right" size="22px" />
+      </button>
+
       <div v-if="hasFree" class="free-ongoing">
         <div class="fo-main">
           <q-icon name="bolt" size="20px" />
@@ -106,18 +116,6 @@
             /></span>
           </button>
         </div>
-      </div>
-
-      <div class="tile-group">
-        <div class="group-lbl">Aventure</div>
-        <button class="adv-tile" @click="goAventure">
-          <span class="adv-ic">⚔️</span>
-          <span class="adv-main">
-            <span class="adv-name font-display">Mon aventurier</span>
-            <span class="adv-sub">RPG · niveau {{ progress.general.value.level }}</span>
-          </span>
-          <q-icon name="chevron_right" size="22px" />
-        </button>
       </div>
     </template>
 
@@ -728,6 +726,7 @@ async function saveAutre() {
   align-items: center;
   gap: 14px;
   padding: 14px 16px;
+  margin-bottom: 14px;
   border-radius: 16px;
   border: 1px solid var(--accent);
   background: linear-gradient(180deg, var(--surface-2), var(--surface));
