@@ -173,12 +173,19 @@
         <li>Total des 3 réservoirs = XP de fond → niveau global inchangé.</li>
         <li>PV = {{ COMBAT.pvBase }} + Endurance × {{ COMBAT.pvPerEndurance }}</li>
       </ul>
-      <div class="sub-h">Signatures (répartition Puiss / End / Agi)</div>
-      <div class="tbl small">
-        <div class="tr th"><span>Source</span><span>💪 / ❤️ / ⚡</span></div>
+      <div class="sub-h">Bénéfices par sport (💪 / ❤️ / ⚡ · somme = intensité)</div>
+      <ul class="notes">
+        <li>
+          Vecteurs <b>non normalisés</b> : la <b>somme</b> = l'intensité (≈ MET adouci) → pilote
+          l'XP/énergie ; course = 100 (repère). Ex. marche = <b>50</b> ≠ course = <b>100</b>.
+        </li>
+      </ul>
+      <div class="tbl small sig3">
+        <div class="tr th"><span>Source</span><span>💪 / ❤️ / ⚡</span><span>Σ</span></div>
         <div v-for="s in signatures" :key="s.k" class="tr">
           <span>{{ s.k }}</span
-          ><span>{{ s.v }}</span>
+          ><span>{{ s.v }}</span
+          ><span class="sig-sum">{{ s.sum }}</span>
         </div>
       </div>
       <div class="sub-h">Combat</div>
@@ -216,22 +223,35 @@ import { LOGIN, streakBaseEnergy } from '@/lib/loginStreak';
 import { COMBAT } from '@/lib/combat';
 import {
   MUSCU_SIG,
-  cardioSignature,
-  directionOf,
+  activityBenefit,
+  intensityOf,
   activityIntensity,
   SPORT_BENEFITS,
 } from '@/lib/statSignature';
+import type { StatBuckets } from '@/lib/statSignature';
 import type { CardioActivity } from '@/lib/types';
 
-const pctTriplet = (w: { power: number; endurance: number; agility: number }) =>
-  `${Math.round(w.power * 100)} / ${Math.round(w.endurance * 100)} / ${Math.round(w.agility * 100)}`;
+// Affiche le vecteur de bénéfices BRUT (non normalisé) : composantes + somme = intensité.
+const vecTriplet = (w: StatBuckets) =>
+  `${Math.round(w.power)} / ${Math.round(w.endurance)} / ${Math.round(w.agility)}`;
 const signatures = [
-  { k: 'Muscu', v: pctTriplet(MUSCU_SIG) },
-  { k: 'Course', v: pctTriplet(cardioSignature('course')) },
-  { k: 'Vélo', v: pctTriplet(cardioSignature('velo')) },
-  { k: 'Trail', v: pctTriplet(cardioSignature('trail')) },
-  // Les « autre sport » sont stockés en vecteurs de bénéfices → on affiche leur direction.
-  ...Object.entries(SPORT_BENEFITS).map(([k, w]) => ({ k, v: pctTriplet(directionOf(w)) })),
+  // Muscu : XP volume-based (pas d'intensité MET) → on montre juste sa direction ×100.
+  {
+    k: 'Muscu (direction)',
+    v: `${Math.round(MUSCU_SIG.power * 100)} / ${Math.round(MUSCU_SIG.endurance * 100)} / ${Math.round(MUSCU_SIG.agility * 100)}`,
+    sum: '—',
+  },
+  { k: 'Marche', v: vecTriplet(activityBenefit('marche')), sum: activityIntensity('marche') },
+  { k: 'Course', v: vecTriplet(activityBenefit('course')), sum: activityIntensity('course') },
+  { k: 'Vélo', v: vecTriplet(activityBenefit('velo')), sum: activityIntensity('velo') },
+  { k: 'Trail', v: vecTriplet(activityBenefit('trail')), sum: activityIntensity('trail') },
+  { k: 'Rando', v: vecTriplet(activityBenefit('rando')), sum: activityIntensity('rando') },
+  // « Autre sport » : vecteurs de bénéfices non normalisés (somme = intensité).
+  ...Object.entries(SPORT_BENEFITS).map(([k, w]) => ({
+    k,
+    v: vecTriplet(w),
+    sum: intensityOf(w),
+  })),
 ];
 
 // Reproduit les constantes NON exportées (documentaires ; à garder alignées).
@@ -367,6 +387,16 @@ const streakTable = computed(() =>
 }
 .tbl.small .tr {
   grid-template-columns: 1fr 1fr;
+}
+.tbl.sig3 {
+  max-width: 340px;
+}
+.tbl.sig3 .tr {
+  grid-template-columns: 1.3fr 1.2fr 0.5fr;
+}
+.sig-sum {
+  font-weight: 700;
+  color: var(--accent);
 }
 .tr > span {
   padding: 8px 10px;

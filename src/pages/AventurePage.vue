@@ -418,84 +418,89 @@
           </div>
         </div>
 
-        <div class="sec-title mboss-title">👑 Boss de palier — chacun son set</div>
+        <div class="sec-title mboss-title">🗺️ Donjons & boss de palier</div>
         <div class="dungeons">
-          <div
-            v-for="b in BOSSES"
-            :key="b.id"
-            class="dgn mboss"
-            :class="{ locked: !bossUnlocked(b), beaten: isBossBeaten(b) }"
-          >
-            <span class="mboss-emo">{{ bossUnlocked(b) ? b.emoji : '🔒' }}</span>
-            <div class="dgn-main">
-              <div class="mboss-eyebrow">👑 Boss · palier niv. {{ b.unlockLevel }}</div>
-              <div class="dgn-top">
-                <span class="dgn-name mboss-name font-display">
-                  {{ b.name }}
-                  <span v-if="isBossBeaten(b)" class="mboss-badge">⭐</span>
-                </span>
-                <span class="dgn-gold">+{{ b.gold }} 🪙</span>
-              </div>
-              <div class="mboss-set">
-                {{ bossSet(b).emoji }} {{ bossSet(b).name }} · <b>{{ bossSetCount(b) }}/4</b> pièces
-              </div>
-              <div class="dgn-stats">coûte {{ b.energyCost }} ⚡</div>
-              <div v-if="bossUnlocked(b)" class="dgn-hint">{{ b.hint }}</div>
-              <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(b) }}</div>
-              <button
-                v-if="bossUnlocked(b)"
-                class="fight mboss-fight"
-                :disabled="c.energy < b.energyCost || busy"
-                @click="fightBoss(b)"
-              >
-                ⚔️ {{ isBossBeaten(b) ? 'Réaffronter' : 'Combattre' }} ({{ b.energyCost }} ⚡)
-              </button>
-              <button v-else class="fight mboss-fight" disabled>🔒 Verrouillé</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="sec-title mboss-title">🗺️ Donjons</div>
-        <div class="dungeons">
-          <div
-            v-for="d in DUNGEONS"
-            :key="d.id"
-            class="dgn"
-            :class="{ locked: !dungeonUnlocked(d) }"
-          >
-            <span class="dgn-emo">{{ dungeonUnlocked(d) ? d.emoji : '🔒' }}</span>
-            <div class="dgn-main">
-              <div class="dgn-top">
-                <span class="dgn-name font-display">{{ d.name }}</span>
-                <span class="dgn-gold">+{{ dungeonGold(d) }} 🪙</span>
-                <button
-                  v-if="dungeonUnlocked(d)"
-                  class="dgn-loot"
-                  aria-label="Butin possible"
-                  @click.stop="openDrops(d)"
-                >
-                  🎁
-                </button>
-              </div>
-              <div class="dgn-stats">
-                {{ d.monsterIds.length }} monstres · coûte {{ d.energyCost }} ⚡ · conseillé niv.
-                {{ d.recoLevel }}
-              </div>
-              <div v-if="dungeonUnlocked(d)" class="dgn-hint">{{ d.hint }}</div>
-              <div v-else class="dgn-hint dgn-lock">
-                🔒 Nettoie d’abord « {{ prevDungeonName(d) }} » pour débloquer ce donjon.
-              </div>
-            </div>
-            <button
-              v-if="dungeonUnlocked(d)"
-              class="fight"
-              :disabled="c.energy < d.energyCost || busy"
-              @click="explore(d)"
+          <template v-for="it in adventureItems" :key="it.key">
+            <!-- BOSS DE PALIER : design distinct, ressort dans la liste -->
+            <div
+              v-if="it.boss"
+              class="dgn mboss"
+              :class="{ locked: !bossUnlocked(it.boss), beaten: isBossBeaten(it.boss) }"
             >
-              Explorer
-            </button>
-            <button v-else class="fight" disabled>Verrouillé</button>
-          </div>
+              <span class="mboss-emo">{{ bossUnlocked(it.boss) ? it.boss.emoji : '🔒' }}</span>
+              <div class="dgn-main">
+                <div class="mboss-eyebrow">👑 Boss · palier niv. {{ it.boss.unlockLevel }}</div>
+                <div class="dgn-top">
+                  <span class="dgn-name mboss-name font-display">
+                    {{ it.boss.name }}
+                    <span v-if="isBossBeaten(it.boss)" class="mboss-badge">⭐</span>
+                  </span>
+                  <span class="dgn-gold">+{{ it.boss.gold }} 🪙</span>
+                </div>
+                <div class="mboss-set">
+                  {{ bossSet(it.boss).emoji }} {{ bossSet(it.boss).name }} ·
+                  <b>{{ bossSetCount(it.boss) }}/4</b> pièces
+                </div>
+                <div class="dgn-stats">coûte {{ it.boss.energyCost }} ⚡</div>
+                <div v-if="bossUnlocked(it.boss)" class="dgn-hint">{{ it.boss.hint }}</div>
+                <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(it.boss) }}</div>
+                <button
+                  v-if="bossUnlocked(it.boss)"
+                  class="fight mboss-fight"
+                  :disabled="c.energy < it.boss.energyCost || busy"
+                  @click="fightBoss(it.boss)"
+                >
+                  ⚔️ {{ isBossBeaten(it.boss) ? 'Réaffronter' : 'Combattre' }} ({{
+                    it.boss.energyCost
+                  }}
+                  ⚡)
+                </button>
+                <button v-else class="fight mboss-fight" disabled>🔒 Verrouillé</button>
+              </div>
+            </div>
+
+            <!-- DONJON -->
+            <div
+              v-else-if="it.dungeon"
+              class="dgn"
+              :class="{ locked: !dungeonUnlocked(it.dungeon) }"
+            >
+              <span class="dgn-emo">{{
+                dungeonUnlocked(it.dungeon) ? it.dungeon.emoji : '🔒'
+              }}</span>
+              <div class="dgn-main">
+                <div class="dgn-top">
+                  <span class="dgn-name font-display">{{ it.dungeon.name }}</span>
+                  <span class="dgn-gold">+{{ dungeonGold(it.dungeon) }} 🪙</span>
+                  <button
+                    v-if="dungeonUnlocked(it.dungeon)"
+                    class="dgn-loot"
+                    aria-label="Butin possible"
+                    @click.stop="openDrops(it.dungeon)"
+                  >
+                    🎁
+                  </button>
+                </div>
+                <div class="dgn-stats">
+                  {{ it.dungeon.monsterIds.length }} monstres · coûte {{ it.dungeon.energyCost }} ⚡
+                  · conseillé niv. {{ it.dungeon.recoLevel }}
+                </div>
+                <div v-if="dungeonUnlocked(it.dungeon)" class="dgn-hint">{{ it.dungeon.hint }}</div>
+                <div v-else class="dgn-hint dgn-lock">
+                  🔒 Nettoie d’abord « {{ prevDungeonName(it.dungeon) }} » pour débloquer ce donjon.
+                </div>
+              </div>
+              <button
+                v-if="dungeonUnlocked(it.dungeon)"
+                class="fight"
+                :disabled="c.energy < it.dungeon.energyCost || busy"
+                @click="explore(it.dungeon)"
+              >
+                Explorer
+              </button>
+              <button v-else class="fight" disabled>Verrouillé</button>
+            </div>
+          </template>
         </div>
       </template>
 
@@ -924,6 +929,17 @@ function rarityOdds(luck: number) {
     { label: 'Légendaire', pct: Math.round(leg * 100), cls: 'r-legendary' },
   ];
 }
+
+// Liste UNIFIÉE donjons + boss de palier, ordonnée par niveau. Le boss d'un
+// palier (+0.5) apparaît juste après le donjon du même niveau → progression
+// naturelle, boss intégrés dans la liste mais au design distinct.
+const adventureItems = computed(() => {
+  const items: { key: string; lvl: number; dungeon?: Dungeon; boss?: MilestoneBoss }[] = [
+    ...DUNGEONS.map((d) => ({ key: 'd:' + d.id, lvl: d.recoLevel, dungeon: d })),
+    ...BOSSES.map((b) => ({ key: 'b:' + b.id, lvl: b.unlockLevel + 0.5, boss: b })),
+  ];
+  return items.sort((a, b) => a.lvl - b.lvl);
+});
 const reportOpen = ref(false); // détail du combat repliable (bouton)
 
 // « Réattaquer » unifié : boss (prioritaire) ou donjon selon le dernier run.
