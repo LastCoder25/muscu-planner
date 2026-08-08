@@ -82,9 +82,66 @@ export function comboXpPoints(combos: ComboChallenge[]): number {
   }, 0);
 }
 
-/** Objectif de reps/semaine suggéré pour un emplacement (calibré « stimulant »). */
+export interface ComboSessionExo {
+  exercise_id: string;
+  exercise_name: string;
+  weight_kg?: number | null;
+  sets: number[]; // reps par série
+}
+
+export const COMBO_EXEC_SEC = 40; // durée d'exécution moyenne d'une série
+
+/** Nb de séries qui tiennent dans une séance de `minutes` (exécution + repos). */
+export function comboSessionSetBudget(minutes: number, restSec: number): number {
+  const perSet = COMBO_EXEC_SEC + Math.max(0, restSec);
+  return Math.max(1, Math.floor((minutes * 60) / perSet));
+}
+
+/**
+ * Génère une SÉANCE TIME-BOXÉE à partir des reps RESTANTES : on ne prend PAS
+ * toutes les reps manquantes — on remplit une séance de `minutes` (chaque série
+ * = ~40 s d'exécution + `restSec` de repos), réparties en round-robin sur les
+ * exos non finis (plus de temps → plus d'exos/séries). Pur/testable.
+ */
+export function buildComboSession(
+  c: ComboChallenge,
+  opts: { minutes: number; restSec: number },
+): ComboSessionExo[] {
+  const budget = comboSessionSetBudget(opts.minutes, opts.restSec);
+  const exos = c.legs
+    .map((l) => ({
+      leg: l,
+      remaining: legRemaining(l),
+      perSet: Math.min(25, Math.max(8, Math.round(l.target / 4))),
+      sets: [] as number[],
+    }))
+    .filter((e) => e.remaining > 0);
+  let placed = 0;
+  while (placed < budget && exos.some((e) => e.remaining > 0)) {
+    for (const e of exos) {
+      if (placed >= budget) break;
+      if (e.remaining <= 0) continue;
+      const s = Math.min(e.perSet, e.remaining);
+      e.sets.push(s);
+      e.remaining -= s;
+      placed++;
+    }
+  }
+  return exos
+    .filter((e) => e.sets.length)
+    .map((e) => ({
+      exercise_id: e.leg.exercise_id,
+      exercise_name: e.leg.exercise_name,
+      weight_kg: e.leg.weight_kg ?? null,
+      sets: e.sets,
+    }));
+}
+
+/** Objectif de reps/semaine suggéré pour un emplacement (calibré « stimulant »).
+ *  ~12-15 séries/semaine par groupe (hypertrophie) → volume relevé pour que la
+ *  barre ne monte pas trop vite (essentiel 180, optionnel 120, avant niveau). */
 export function suggestComboTarget(level: Level, essential: boolean): number {
-  const base = essential ? 120 : 80; // reps/semaine (~10-15 séries)
+  const base = essential ? 180 : 120;
   const f = level === 'debutant' ? 0.7 : level === 'avance' ? 1.4 : 1;
   return Math.round((base * f) / 5) * 5; // arrondi à 5
 }

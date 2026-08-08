@@ -3,6 +3,7 @@
 // statistiques (streak/complétion) et évaluation des succès.
 import type { Level } from './types';
 import { REP_XP } from './athlete';
+import { isCardioChallengeExercise } from '@/data/cardio';
 
 export type ChallengeFormat =
   | 'fixed'
@@ -194,8 +195,14 @@ export function computeDailyTargets(
 function repsBase(level: Level): number {
   return level === 'debutant' ? 25 : level === 'avance' ? 70 : 45;
 }
-function secBase(level: Level): number {
-  return level === 'debutant' ? 20 : level === 'avance' ? 60 : 40;
+// Gainage (secondes/JOUR) : volume stimulant = plusieurs séries de 30-60 s.
+// (avant : 20-60 s/j = ridicule, une seule série pas même à l'échec).
+function gainageSecBase(level: Level): number {
+  return level === 'debutant' ? 90 : level === 'avance' ? 210 : 150;
+}
+// Cardio en temps (MINUTES/jour) — vélo/course/marche.
+function cardioMinBase(level: Level): number {
+  return level === 'debutant' ? 20 : level === 'avance' ? 50 : 35;
 }
 function incBase(level: Level): number {
   return level === 'debutant' ? 2 : level === 'avance' ? 5 : 3;
@@ -231,7 +238,8 @@ export function suggestConfig(
   exerciseId: string,
 ): ChallengeConfig {
   let max: number;
-  if (unit === 'time') max = secBase(level);
+  if (unit === 'time')
+    max = isCardioChallengeExercise(exerciseId) ? cardioMinBase(level) : gainageSecBase(level);
   else if (unit === 'distance') max = distanceBase(level, exerciseId);
   else max = Math.max(3, Math.round(repsBase(level) * exerciseFactor(exerciseId)));
   const common = {

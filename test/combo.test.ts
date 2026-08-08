@@ -6,6 +6,8 @@ import {
   comboProgressPct,
   comboXpPoints,
   suggestComboTarget,
+  buildComboSession,
+  comboSessionSetBudget,
   type ComboChallenge,
   type ComboLeg,
 } from '@/lib/combo';
@@ -77,6 +79,41 @@ describe('comboXpPoints', () => {
     const early = combo([leg({ target: 100, progress: [{ date: '2026-01-05', reps: 100 }] })]);
     const late = combo([leg({ target: 100, progress: [{ date: '2026-01-11', reps: 100 }] })]);
     expect(comboXpPoints([early])).toBeGreaterThan(comboXpPoints([late]));
+  });
+});
+
+describe('buildComboSession (time-boxée)', () => {
+  const bigCombo = () =>
+    combo([
+      leg({ slot: 'push', exercise_id: 'a', target: 400 }),
+      leg({ slot: 'pull', exercise_id: 'b', target: 400 }),
+      leg({ slot: 'squat', exercise_id: 'c', target: 400 }),
+    ]);
+  it('ne prend PAS toutes les reps : le volume dépend du temps', () => {
+    const short = buildComboSession(bigCombo(), { minutes: 15, restSec: 60 });
+    const long = buildComboSession(bigCombo(), { minutes: 45, restSec: 60 });
+    const totReps = (s: ReturnType<typeof buildComboSession>) =>
+      s.reduce((a, e) => a + e.sets.reduce((b, r) => b + r, 0), 0);
+    expect(totReps(long)).toBeGreaterThan(totReps(short));
+    // et bien moins que le total restant (1200)
+    expect(totReps(long)).toBeLessThan(1200);
+  });
+  it('le budget de séries = durée / (exécution + repos)', () => {
+    expect(comboSessionSetBudget(15, 60)).toBe(9); // 900s / 100s
+    expect(comboSessionSetBudget(30, 60)).toBe(18);
+  });
+  it('exclut les exos déjà finis', () => {
+    const c = combo([
+      leg({
+        slot: 'push',
+        exercise_id: 'a',
+        target: 50,
+        progress: [{ date: '2026-01-05', reps: 50 }],
+      }),
+      leg({ slot: 'pull', exercise_id: 'b', target: 100 }),
+    ]);
+    const s = buildComboSession(c, { minutes: 30, restSec: 60 });
+    expect(s.map((e) => e.exercise_id)).toEqual(['b']);
   });
 });
 
