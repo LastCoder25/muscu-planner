@@ -441,17 +441,31 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 .tab {
-  padding: 7px 12px;
-  border-radius: 10px;
+  padding: 8px 15px;
+  border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--dim);
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    transform 0.1s;
+  &:hover {
+    border-color: var(--dim);
+    color: var(--text);
+  }
   &.on {
     border-color: var(--accent);
-    color: var(--text);
-    background: var(--surface-2);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  &.on:active {
+    transform: scale(0.97);
   }
 }
 .empty {
@@ -733,21 +747,36 @@ onMounted(async () => {
   color: var(--text);
 }
 .cc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 6px;
+  letter-spacing: 0.03em;
+  padding: 3px 9px;
+  border-radius: 999px;
   background: var(--surface-2);
   color: var(--dim);
 }
+.cc-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
 .cc-badge.active {
-  background: var(--accent);
-  color: var(--accent-ink);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 .cc-badge.done {
-  background: var(--d1);
-  color: var(--accent-ink);
+  color: var(--d1);
+  background: color-mix(in srgb, var(--d1) 16%, transparent);
+}
+.cc-badge.abandoned {
+  color: var(--d4);
+  background: color-mix(in srgb, var(--d4) 16%, transparent);
 }
 .cc-today {
   flex: none;

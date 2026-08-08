@@ -36,8 +36,22 @@
         <div>
           <div class="quick-title font-display">Séance rapide</div>
           <div class="quick-desc">
-            Juste la durée → XP muscu. Saisir les exos/poids en donne plus.
+            Juste la durée → XP. Muscu compte en Muscu ; crossfit/hyrox en Spécifique.
           </div>
+        </div>
+      </div>
+      <div class="quick-row">
+        <span class="quick-lbl">Type</span>
+        <div class="disc-chips">
+          <button
+            v-for="d in DISCIPLINES"
+            :key="d.value"
+            class="disc-chip"
+            :class="{ on: qDiscipline === d.value }"
+            @click="qDiscipline = d.value"
+          >
+            {{ d.label }}
+          </button>
         </div>
       </div>
       <div class="quick-row">
@@ -161,9 +175,17 @@ function performedAtIso(dateIso: string): string {
   return dt.toISOString();
 }
 
+type QuickDiscipline = 'musculation' | 'crossfit' | 'hyrox' | 'mobilite';
+const DISCIPLINES: { value: QuickDiscipline; label: string }[] = [
+  { value: 'musculation', label: 'Muscu' },
+  { value: 'crossfit', label: 'Crossfit' },
+  { value: 'hyrox', label: 'Hyrox' },
+  { value: 'mobilite', label: 'Mobilité' },
+];
 const qDate = ref(todayIso());
 const qHours = ref<number>(1);
 const qMinutes = ref<number>(0);
+const qDiscipline = ref<QuickDiscipline>('musculation');
 const saving = ref(false);
 
 async function saveQuick() {
@@ -177,21 +199,29 @@ async function saveQuick() {
   saving.value = true;
   try {
     const iso = performedAtIso(qDate.value);
+    const disc = qDiscipline.value;
+    const label = DISCIPLINES.find((d) => d.value === disc)?.label ?? 'Muscu';
     const log: SessionLog = {
       schema_version: SCHEMA_VERSION,
       type: 'session_log',
       id: crypto.randomUUID(),
-      name: 'Séance muscu',
+      name: `Séance ${label.toLowerCase()}`,
       started_at: iso,
       ended_at: iso,
       duration_min: totalMin,
       exercises: [],
+      // musculation = piste Muscu ; crossfit/hyrox = piste Spécifique (cf. useProgress).
+      ...(disc !== 'musculation' ? { discipline: disc } : {}),
     };
     await logs.insert(uid, log);
-    $q.notify({ type: 'positive', message: 'Séance enregistrée — XP muscu gagné.' });
+    $q.notify({
+      type: 'positive',
+      message: `Séance enregistrée — XP ${disc === 'musculation' ? 'muscu' : 'spécifique'} gagné.`,
+    });
     qDate.value = todayIso();
     qHours.value = 1;
     qMinutes.value = 0;
+    qDiscipline.value = 'musculation';
     fetched = false; // l'historique se rechargera à la prochaine ouverture
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
@@ -379,6 +409,26 @@ onMounted(() => {
   font-size: 13px;
   color: var(--dim);
   min-width: 48px;
+}
+.disc-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.disc-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.disc-chip.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .tile {
   display: flex;

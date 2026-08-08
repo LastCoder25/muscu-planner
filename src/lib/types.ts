@@ -126,7 +126,7 @@ export interface Session {
   level?: Level;
   // Nature de la séance : musculation (défaut) ou prépa physique. La prépa
   // réutilise tout le moteur muscu (runner/bilan/stats) mais est listée à part.
-  discipline?: 'musculation' | 'prepa_physique' | 'crossfit' | 'hyrox';
+  discipline?: 'musculation' | 'prepa_physique' | 'crossfit' | 'hyrox' | 'mobilite';
   estimated_duration_min?: number;
   source?: 'app' | 'user' | 'template' | 'ai' | 'engine';
   created_at?: string;
@@ -165,9 +165,9 @@ export interface SessionLog {
   global_difficulty?: Difficulty;
   global_comment?: string;
   readiness?: number; // forme du jour 1–5 (5 = top) — check pré-séance
-  // Discipline portée par le log lui-même (log rapide sans séance : crossfit/hyrox
-  // → comptent dans le Spécifique). Absent = musculation.
-  discipline?: 'musculation' | 'prepa_physique' | 'crossfit' | 'hyrox';
+  // Discipline portée par le log lui-même (log rapide sans séance : crossfit/hyrox/
+  // mobilité → comptent dans le Spécifique). Absent = musculation.
+  discipline?: 'musculation' | 'prepa_physique' | 'crossfit' | 'hyrox' | 'mobilite';
   exercises: LoggedExercise[];
 }
 
