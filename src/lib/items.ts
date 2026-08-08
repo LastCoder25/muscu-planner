@@ -29,13 +29,16 @@ export interface Item {
   rarity: Rarity;
   level: number; // niveau ACTUEL (monté via la Poussière d'évolution, ≤ niveau du joueur)
   baseLevel: number; // niveau à l'obtention (drop) → sert au remboursement au recyclage
-  effect: ItemEffect; // value = magnitude de BASE (niveau 1) ; l'effet réel grandit avec le niveau
+  effect: ItemEffect; // effet PRIMAIRE. value = magnitude de BASE (niv.1) ; grandit avec le niveau
+  effect2?: ItemEffect; // effet SECONDAIRE (~50 % du primaire). Tous les drops récents en ont un.
   setId?: string; // appartenance à un SET (bonus à 2/3/4 pièces) — cf. ITEM_SETS
 }
 
-// L'effet grandit de +10 % de la base par niveau au-dessus de 1.
+// L'effet grandit de +5 % de la base par niveau au-dessus de 1. Pente VOLONTAIREMENT
+// douce (2026‑08‑08) : le gear reste un GATE progressif (plus j'ai de bon gear,
+// plus mon % monte) et n'explose pas en multiplicateur ×2 qui trivialise les boss.
 export function itemLevelMult(level: number): number {
-  return 1 + Math.max(0, level - 1) * 0.1;
+  return 1 + Math.max(0, level - 1) * 0.05;
 }
 /** Valeur réelle d'un effet au niveau de l'objet. */
 export function effectiveValue(effect: ItemEffect, level: number): number {
@@ -135,6 +138,25 @@ const RARITY_ADJ: Record<Rarity, string> = {
   legendary: 'mythique',
 };
 
+// Pool d'effets SECONDAIRES (tous types) — la 2e stat de CHAQUE objet (set ou
+// donjon). Base ~50 % d'une primaire. Tous les objets ont 2 stats (2026‑08‑08) :
+// les pièces de set ne sont donc jamais « pires » qu'un objet de donjon (mêmes 2
+// stats + la synergie de set en prime) → le set reste toujours désirable.
+const SECONDARY_EFFECTS: { type: EffectType; base: number }[] = [
+  { type: 'damage_pct', base: 4 },
+  { type: 'crit_pct', base: 3 },
+  { type: 'lifesteal_pct', base: 3 },
+  { type: 'dmg_reduction_pct', base: 3 },
+  { type: 'max_pv_pct', base: 5 },
+  { type: 'gold_pct', base: 8 },
+];
+/** Tire un effet secondaire (type différent du primaire), magnitude selon rareté. */
+function rollSecondary(rng: () => number, rarity: Rarity, excludeType: EffectType): ItemEffect {
+  const pool = SECONDARY_EFFECTS.filter((e) => e.type !== excludeType);
+  const c = pick(rng, pool);
+  return { type: c.type, value: Math.max(1, Math.round(c.base * RARITY_MULT[rarity])) };
+}
+
 /** Libellé de l'effet à un niveau d'objet donné (valeur réelle). */
 export function effectLabel(e: ItemEffect, level = 1): string {
   const v = effectiveValue(e, level);
@@ -154,9 +176,11 @@ export function effectLabel(e: ItemEffect, level = 1): string {
   }
 }
 
-/** Puissance indicative d'un objet (valeur réelle au niveau courant) → compare deux objets. */
+/** Puissance indicative d'un objet (2 stats au niveau courant) → compare deux objets. */
 export function itemScore(it: Item): number {
-  return effectiveValue(it.effect, it.level);
+  return (
+    effectiveValue(it.effect, it.level) + (it.effect2 ? effectiveValue(it.effect2, it.level) : 0)
+  );
 }
 
 function pick<T>(rng: () => number, arr: T[]): T {
@@ -219,6 +243,7 @@ export function rollDrop(
     level,
     baseLevel: level,
     effect: { type: chosen.type, value },
+    effect2: rollSecondary(rng, rarity, chosen.type), // 2e stat (tous les objets en ont)
   };
 }
 
@@ -248,6 +273,7 @@ export function rollSetPiece(
     level,
     baseLevel: level,
     effect: { type: chosen.type, value },
+    effect2: rollSecondary(rng, rarity, chosen.type), // 2e stat + la synergie de set
     ...(set ? { setId: opts.setId } : {}),
   };
 }
@@ -316,6 +342,9 @@ export interface ItemSet {
 
 // Un set PAR boss de palier (cf. src/data/bosses.ts). Chaque set a un pouvoir
 // spécifique. Les pièces ne droppent QUE sur le boss correspondant.
+// Bonus MODESTES (2026‑08‑08) : les pièces de set portent déjà 2 stats comme les
+// objets de donjon → le bonus de set est la CERISE (identité + petit plus), pas
+// un multiplicateur qui trivialise. Full set > mix > objets 2-stats, mais de peu.
 export const ITEM_SETS: ItemSet[] = [
   {
     id: 'golem',
@@ -323,9 +352,9 @@ export const ITEM_SETS: ItemSet[] = [
     emoji: '🗿',
     theme: 'Le mur increvable : encaisse tout, ne tombe jamais.',
     tiers: [
-      { pieces: 2, type: 'max_pv_pct', base: 12 },
-      { pieces: 3, type: 'dmg_reduction_pct', base: 8 },
-      { pieces: 4, type: 'max_pv_pct', base: 18 },
+      { pieces: 2, type: 'max_pv_pct', base: 5 },
+      { pieces: 3, type: 'dmg_reduction_pct', base: 4 },
+      { pieces: 4, type: 'max_pv_pct', base: 6 },
     ],
   },
   {
@@ -334,9 +363,9 @@ export const ITEM_SETS: ItemSet[] = [
     emoji: '🐲',
     theme: 'Offensif : frappe fort et se soigne en tapant.',
     tiers: [
-      { pieces: 2, type: 'damage_pct', base: 8 },
-      { pieces: 3, type: 'crit_pct', base: 6 },
-      { pieces: 4, type: 'lifesteal_pct', base: 10 },
+      { pieces: 2, type: 'damage_pct', base: 5 },
+      { pieces: 3, type: 'crit_pct', base: 4 },
+      { pieces: 4, type: 'lifesteal_pct', base: 5 },
     ],
   },
   {
@@ -345,9 +374,9 @@ export const ITEM_SETS: ItemSet[] = [
     emoji: '💀',
     theme: 'Vampirique : vole la vie à chaque coup critique.',
     tiers: [
-      { pieces: 2, type: 'lifesteal_pct', base: 8 },
-      { pieces: 3, type: 'crit_pct', base: 6 },
-      { pieces: 4, type: 'damage_pct', base: 12 },
+      { pieces: 2, type: 'lifesteal_pct', base: 5 },
+      { pieces: 3, type: 'crit_pct', base: 4 },
+      { pieces: 4, type: 'damage_pct', base: 6 },
     ],
   },
   {
@@ -356,9 +385,9 @@ export const ITEM_SETS: ItemSet[] = [
     emoji: '🌌',
     theme: 'Défensif-punisseur : encaisse, dure, puis frappe juste.',
     tiers: [
-      { pieces: 2, type: 'max_pv_pct', base: 10 },
-      { pieces: 3, type: 'dmg_reduction_pct', base: 6 },
-      { pieces: 4, type: 'crit_pct', base: 10 },
+      { pieces: 2, type: 'max_pv_pct', base: 5 },
+      { pieces: 3, type: 'dmg_reduction_pct', base: 4 },
+      { pieces: 4, type: 'crit_pct', base: 6 },
     ],
   },
   {
@@ -367,8 +396,8 @@ export const ITEM_SETS: ItemSet[] = [
     emoji: '🔥',
     theme: 'Hybride cupide : dégâts, survie et montagnes d’or.',
     tiers: [
-      { pieces: 2, type: 'damage_pct', base: 10 },
-      { pieces: 3, type: 'max_pv_pct', base: 12 },
+      { pieces: 2, type: 'damage_pct', base: 6 },
+      { pieces: 3, type: 'max_pv_pct', base: 6 },
       { pieces: 4, type: 'gold_pct', base: 40 },
     ],
   },
@@ -415,6 +444,7 @@ export function aggregateEffects(equipped: Equipped): AggregatedEffects {
     const it = equipped[slot];
     if (!it) continue;
     applyEffect(a, it.effect.type, effectiveValue(it.effect, it.level) / 100);
+    if (it.effect2) applyEffect(a, it.effect2.type, effectiveValue(it.effect2, it.level) / 100);
   }
   // Bonus de set (2/3/4 pièces) — ajoutés par-dessus les effets d'objet.
   const s = setEffects(equipped);

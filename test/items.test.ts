@@ -29,10 +29,10 @@ const item = (over: Partial<Item> & Pick<Item, 'slot' | 'effect'>): Item => ({
 });
 
 describe('niveaux d’objet', () => {
-  it('effectiveValue grandit avec le niveau (+10 %/niv)', () => {
+  it('effectiveValue grandit avec le niveau (+5 %/niv)', () => {
     const eff = { type: 'damage_pct' as const, value: 10 };
     expect(effectiveValue(eff, 1)).toBe(10);
-    expect(effectiveValue(eff, 6)).toBe(Math.round(10 * (1 + 5 * 0.1))); // 15
+    expect(effectiveValue(eff, 6)).toBe(Math.round(10 * (1 + 5 * 0.05))); // 13
   });
   it('upgradeCost croît avec le niveau ET la rareté', () => {
     expect(upgradeCost(1, 'common')).toBeLessThan(upgradeCost(5, 'common'));
@@ -125,6 +125,12 @@ describe('rollDrop', () => {
     expect(d!.level).toBe(6); // fixé par le donjon, pas par le joueur
     expect(d!.slot).toBe('weapon');
   });
+  it('tout objet de donjon a 2 stats (primaire + secondaire de type différent)', () => {
+    const d = rollDrop(() => 0.2, { cleared: true, defeated: 1, level: 5 });
+    expect(d).not.toBeNull();
+    expect(d!.effect2).toBeDefined();
+    expect(d!.effect2!.type).not.toBe(d!.effect.type);
+  });
   it('spread → le drop peut tomber SOUS le niveau du donjon, jamais au-dessus', () => {
     // rng=0.9 pour le tirage de niveau → base - floor(0.9*(spread+1))
     const d = rollDrop(() => 0.001, { cleared: true, defeated: 1, level: 8, spread: 2 });
@@ -211,6 +217,7 @@ describe('sets d’équipement', () => {
     expect(piece.level).toBe(10); // niveau plein du palier (boss)
     expect(piece.baseLevel).toBe(10);
     expect(piece.name).toContain('Dragon');
+    expect(piece.effect2).toBeDefined(); // pièce de set = 2 stats + synergie
     expect(ITEM_SETS.some((s) => s.id === 'dragon')).toBe(true);
   });
 });

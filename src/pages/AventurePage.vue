@@ -223,7 +223,7 @@
                 {{ RARITY_LABEL[char.row.equipped[slot]!.rarity] }}
               </div>
               <div class="slot-eff">
-                {{ effectLabel(char.row.equipped[slot]!.effect, char.row.equipped[slot]!.level) }}
+                {{ itemEffects(char.row.equipped[slot]!) }}
               </div>
               <div class="slot-actions">
                 <button
@@ -284,9 +284,7 @@
                   {{ it.name }} <span class="rarity">{{ RARITY_LABEL[it.rarity] }}</span>
                   <span class="inv-nv">Nv {{ it.level }}</span>
                 </div>
-                <div class="inv-eff">
-                  {{ SLOT_LABEL[it.slot] }} · {{ effectLabel(it.effect, it.level) }}
-                </div>
+                <div class="inv-eff">{{ SLOT_LABEL[it.slot] }} · {{ itemEffects(it) }}</div>
                 <div class="inv-actions">
                   <button class="equip-btn" @click="doEquip(it.id)">
                     {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
@@ -369,17 +367,13 @@
                 <div class="inv-name">
                   {{ d.name }} <span class="rarity">{{ RARITY_LABEL[d.rarity] }}</span>
                 </div>
-                <div class="inv-eff">
-                  {{ SLOT_LABEL[d.slot] }} · {{ effectLabel(d.effect, d.level) }}
-                </div>
+                <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}</div>
                 <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
                   <span
                     >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
                     {{ equippedInSlot(d.slot)!.level }}
                     ·
-                    {{
-                      effectLabel(equippedInSlot(d.slot)!.effect, equippedInSlot(d.slot)!.level)
-                    }}</span
+                    {{ itemEffects(equippedInSlot(d.slot)!) }}</span
                   >
                   <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
                     rarityVerdict(d).label
@@ -1082,6 +1076,13 @@ function bossLockReason(b: MilestoneBoss): string {
 }
 function bossSet(b: MilestoneBoss) {
   return SET_BY_ID[b.setId]!; // garanti par les données (cf. test bosses.test.ts)
+}
+
+// Libellé des 2 stats d'un objet (primaire · secondaire). Les anciens objets
+// (1 stat) n'affichent que la primaire.
+function itemEffects(it: Item): string {
+  const a = effectLabel(it.effect, it.level);
+  return it.effect2 ? `${a} · ${effectLabel(it.effect2, it.level)}` : a;
 }
 // Nombre de pièces du set d'un boss possédées (équipées + sac).
 function bossSetCount(b: MilestoneBoss): number {
