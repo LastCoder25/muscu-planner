@@ -86,7 +86,7 @@
           <q-icon name="castle" size="18px" /> Donjons
         </button>
         <button class="seg-b" :class="{ on: tab === 'boss' }" @click="tab = 'boss'">
-          <q-icon name="local_fire_department" size="18px" /> Boss
+          <q-icon name="public" size="18px" /> Mondial
         </button>
       </div>
 
@@ -426,33 +426,32 @@
             class="dgn mboss"
             :class="{ locked: !bossUnlocked(b), beaten: isBossBeaten(b) }"
           >
-            <span class="dgn-emo">{{ bossUnlocked(b) ? b.emoji : '🔒' }}</span>
+            <span class="mboss-emo">{{ bossUnlocked(b) ? b.emoji : '🔒' }}</span>
             <div class="dgn-main">
+              <div class="mboss-eyebrow">👑 Boss · palier niv. {{ b.unlockLevel }}</div>
               <div class="dgn-top">
-                <span class="dgn-name font-display">
+                <span class="dgn-name mboss-name font-display">
                   {{ b.name }}
                   <span v-if="isBossBeaten(b)" class="mboss-badge">⭐</span>
                 </span>
                 <span class="dgn-gold">+{{ b.gold }} 🪙</span>
               </div>
-              <div class="dgn-stats">
-                coûte {{ b.energyCost }} ⚡ · palier niv. {{ b.unlockLevel }}
-              </div>
               <div class="mboss-set">
                 {{ bossSet(b).emoji }} {{ bossSet(b).name }} · <b>{{ bossSetCount(b) }}/4</b> pièces
               </div>
+              <div class="dgn-stats">coûte {{ b.energyCost }} ⚡</div>
               <div v-if="bossUnlocked(b)" class="dgn-hint">{{ b.hint }}</div>
               <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(b) }}</div>
+              <button
+                v-if="bossUnlocked(b)"
+                class="fight mboss-fight"
+                :disabled="c.energy < b.energyCost || busy"
+                @click="fightBoss(b)"
+              >
+                ⚔️ {{ isBossBeaten(b) ? 'Réaffronter' : 'Combattre' }} ({{ b.energyCost }} ⚡)
+              </button>
+              <button v-else class="fight mboss-fight" disabled>🔒 Verrouillé</button>
             </div>
-            <button
-              v-if="bossUnlocked(b)"
-              class="fight"
-              :disabled="c.energy < b.energyCost || busy"
-              @click="fightBoss(b)"
-            >
-              {{ isBossBeaten(b) ? 'Refaire' : 'Combattre' }}
-            </button>
-            <button v-else class="fight" disabled>Verrouillé</button>
           </div>
         </div>
 
@@ -2264,37 +2263,76 @@ onMounted(async () => {
   opacity: 0.85;
   margin-top: 4px;
 }
-/* Boss de palier : carte de donjon mise en avant (bordure accent) */
+/* ── Boss de palier : cartes NETTEMENT plus grandes & dramatiques ── */
 .mboss-title {
-  margin-top: 14px;
+  margin-top: 16px;
+  font-size: 15px;
+  color: var(--accent);
 }
 .mboss {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  align-items: flex-start;
+  gap: 14px;
+  padding: 15px 16px;
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  border-radius: 16px;
   background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent) 7%, var(--surface)),
-    var(--surface)
+    155deg,
+    color-mix(in srgb, var(--accent) 13%, var(--surface)),
+    var(--surface) 70%
   );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent),
+    0 8px 22px -12px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 .mboss.locked {
   background: var(--surface);
   border-color: var(--line);
+  box-shadow: none;
+  opacity: 0.75;
 }
 .mboss.beaten {
-  border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
+  border-color: color-mix(in srgb, var(--d1, #7bc86c) 60%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--d1, #7bc86c) 25%, transparent);
+}
+.mboss-emo {
+  font-size: 46px;
+  line-height: 1;
+  flex-shrink: 0;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.5));
+}
+.mboss-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+.mboss.locked .mboss-eyebrow {
+  color: var(--dim);
+}
+.mboss-name {
+  font-size: 19px;
 }
 .mboss-set {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--accent);
   font-weight: 600;
-  margin-top: 3px;
+  margin-top: 4px;
 }
 .mboss.locked .mboss-set {
   color: var(--dim);
 }
 .mboss-badge {
-  font-size: 12px;
+  font-size: 13px;
   margin-left: 4px;
+}
+.mboss-fight {
+  width: 100%;
+  margin-top: 10px;
+  padding: 11px;
+  font-size: 14px;
 }
 .fight {
   flex-shrink: 0;

@@ -88,13 +88,12 @@
             <span class="mt-name font-display">{{ t.label }}</span>
             <span class="mt-lvl">Niv. {{ t.level.level }} · {{ fmtDur(t.minutes) }}</span>
             <span v-if="t.sig" class="mt-sig">{{ sigLabel(t.sig) }}</span>
-            <span class="mt-bar"
-              ><span class="mt-fill" :style="{ width: t.level.progressPct + '%' }"
-            /></span>
-            <span class="mt-prog"
-              >{{ fmtDur(t.level.xpIntoLevel) }} / {{ fmtDur(t.level.xpForLevel) }} → niv.
-              {{ t.level.level + 1 }}</span
-            >
+            <span class="mt-bar">
+              <span class="mt-fill" :style="{ width: t.level.progressPct + '%' }" />
+              <span class="mt-bar-txt"
+                >{{ fmtDur(t.level.xpIntoLevel) }} / {{ fmtDur(t.level.xpForLevel) }}</span
+              >
+            </span>
           </button>
         </div>
       </div>
@@ -1035,25 +1034,36 @@ async function saveAutre() {
   white-space: nowrap;
 }
 .mt-bar {
+  position: relative;
   width: 100%;
-  height: 5px;
+  height: 15px;
   border-radius: 999px;
   background: var(--line);
   overflow: hidden;
-  margin-top: 3px;
+  margin-top: 4px;
 }
 .mt-fill {
-  display: block;
-  height: 100%;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
   border-radius: 999px;
   background: var(--c);
 }
-.mt-prog {
+/* Volume d'heures faites / requises pour le niveau suivant, DANS la barre.
+   mix-blend-mode: difference → lisible aussi bien sur le remplissage que sur le fond. */
+.mt-bar-txt {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 9px;
-  color: var(--dim);
+  font-weight: 700;
   letter-spacing: 0.2px;
   font-variant-numeric: tabular-nums;
-  margin-top: 3px;
   white-space: nowrap;
+  color: #fff;
+  mix-blend-mode: difference;
 }
 </style>
