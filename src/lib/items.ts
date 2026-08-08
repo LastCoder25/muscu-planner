@@ -175,20 +175,25 @@ function rollRarity(rng: () => number, luck = 0): Rarity {
 }
 
 /**
- * Tire un butin après un run. Renvoie l'objet SANS id (l'appelant en pose un),
- * ou null si pas de drop.
- *  - `level` : niveau de base de l'objet (selon le donjon), plafonné au niveau du joueur ;
+ * Tire un butin après un run de donjon. Renvoie l'objet SANS id (l'appelant en
+ * pose un), ou null si pas de drop.
+ * RÈGLE (2026‑08‑08) : le niveau du drop est fixé par le DONJON, **découplé du
+ * niveau du joueur** — un perso niv.10 dans un donjon niv.1 ne trouve QUE du
+ * niv.1 (on monte ensuite les objets à la Poussière). Les drops peuvent même
+ * tomber un peu SOUS le niveau du donjon (`spread`) → fourrage à améliorer ; le
+ * niveau plein d'un palier ne s'obtient qu'auprès des BOSS (cf. rollSetPiece).
+ *  - `level` : niveau de base de l'objet (selon le donjon) ;
+ *  - `spread` : combien de niveaux SOUS `level` le drop peut descendre (0 = pile au niveau) ;
  *  - `luck` : biais de rareté (donjon + fiole de chance), 0..1.
  */
 export function rollDrop(
   rng: () => number,
   opts: {
-    playerLevel: number;
     cleared: boolean;
     defeated: number;
     level?: number;
+    spread?: number;
     luck?: number;
-    set?: { id: string; chance: number }; // donjon à set : chance de tirer une pièce de set
   },
 ): Omit<Item, 'id'> | null {
   if (opts.defeated <= 0) return null;
@@ -202,10 +207,39 @@ export function rollDrop(
   // value = magnitude de BASE (niveau 1) : pilotée par la rareté ; grandit avec le niveau.
   const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
   const noun = pick(rng, NAMES[slot]);
-  // Niveau de l'objet = niveau de base du donjon, borné [1, niveau joueur].
-  const level = Math.min(Math.max(1, opts.playerLevel), Math.max(1, Math.round(opts.level ?? 1)));
-  // Pièce de set ? (donjons de fin uniquement). Tirage indépendant après le drop.
-  const set = opts.set && rng() < opts.set.chance ? SET_BY_ID[opts.set.id] : undefined;
+  // Niveau = niveau du donjon, moins une dispersion vers le bas (jamais au-dessus).
+  const base = Math.max(1, Math.round(opts.level ?? 1));
+  const spread = Math.max(0, Math.round(opts.spread ?? 0));
+  const level = Math.max(1, base - Math.floor(rng() * (spread + 1)));
+  return {
+    slot,
+    name: `${noun} ${RARITY_ADJ[rarity]}`,
+    emoji: SLOT_EMOJI[slot],
+    rarity,
+    level,
+    baseLevel: level,
+    effect: { type: chosen.type, value },
+  };
+}
+
+/**
+ * Tire une PIÈCE DE SET pour une victoire de boss. Toujours une pièce (drop
+ * garanti), slot **aléatoire** parmi les 4 (des doublons sont possibles), au
+ * niveau PLEIN du palier du boss (`level`, non découplé : les boss sont la seule
+ * source de base gear au niveau de leur palier). L'objet garde un effet propre
+ * (rollé) EN PLUS de sa contribution aux bonus de set.
+ */
+export function rollSetPiece(
+  rng: () => number,
+  opts: { setId: string; level: number; luck?: number },
+): Omit<Item, 'id'> {
+  const set = SET_BY_ID[opts.setId];
+  const slot = pick(rng, SLOTS);
+  const rarity = rollRarity(rng, opts.luck ?? 0);
+  const chosen = pick(rng, SLOT_EFFECTS[slot]);
+  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
+  const noun = pick(rng, NAMES[slot]);
+  const level = Math.max(1, Math.round(opts.level));
   return {
     slot,
     name: set ? `${noun} · ${set.name}` : `${noun} ${RARITY_ADJ[rarity]}`,
@@ -214,7 +248,7 @@ export function rollDrop(
     level,
     baseLevel: level,
     effect: { type: chosen.type, value },
-    ...(set ? { setId: set.id } : {}),
+    ...(set ? { setId: opts.setId } : {}),
   };
 }
 
@@ -280,7 +314,20 @@ export interface ItemSet {
   tiers: SetTier[];
 }
 
+// Un set PAR boss de palier (cf. src/data/bosses.ts). Chaque set a un pouvoir
+// spécifique. Les pièces ne droppent QUE sur le boss correspondant.
 export const ITEM_SETS: ItemSet[] = [
+  {
+    id: 'golem',
+    name: 'Rempart du Golem',
+    emoji: '🗿',
+    theme: 'Le mur increvable : encaisse tout, ne tombe jamais.',
+    tiers: [
+      { pieces: 2, type: 'max_pv_pct', base: 12 },
+      { pieces: 3, type: 'dmg_reduction_pct', base: 8 },
+      { pieces: 4, type: 'max_pv_pct', base: 18 },
+    ],
+  },
   {
     id: 'dragon',
     name: 'Écailles du Dragon',
@@ -293,10 +340,21 @@ export const ITEM_SETS: ItemSet[] = [
     ],
   },
   {
+    id: 'lich',
+    name: 'Voile de la Liche',
+    emoji: '💀',
+    theme: 'Vampirique : vole la vie à chaque coup critique.',
+    tiers: [
+      { pieces: 2, type: 'lifesteal_pct', base: 8 },
+      { pieces: 3, type: 'crit_pct', base: 6 },
+      { pieces: 4, type: 'damage_pct', base: 12 },
+    ],
+  },
+  {
     id: 'void',
     name: 'Sceau du Néant',
     emoji: '🌌',
-    theme: 'Défensif : encaisse et dure longtemps.',
+    theme: 'Défensif-punisseur : encaisse, dure, puis frappe juste.',
     tiers: [
       { pieces: 2, type: 'max_pv_pct', base: 10 },
       { pieces: 3, type: 'dmg_reduction_pct', base: 6 },
@@ -307,7 +365,7 @@ export const ITEM_SETS: ItemSet[] = [
     id: 'apocalypse',
     name: 'Braise de l’Apocalypse',
     emoji: '🔥',
-    theme: 'Hybride : dégâts, survie et or.',
+    theme: 'Hybride cupide : dégâts, survie et montagnes d’or.',
     tiers: [
       { pieces: 2, type: 'damage_pct', base: 10 },
       { pieces: 3, type: 'max_pv_pct', base: 12 },

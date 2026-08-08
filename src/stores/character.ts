@@ -23,6 +23,7 @@ export interface CharacterRow {
   inventory: Item[];
   talents: string[];
   cleared_dungeons: string[];
+  defeated_bosses: string[];
   login_streak: number;
   login_grace_used: boolean;
   last_login_date: string | null;
@@ -43,7 +44,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level';
 
   async function fetchMine() {
     const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
@@ -119,6 +120,43 @@ export const useCharacterStore = defineStore('character', () => {
       energy_spent: cur.energy_spent + input.energyCost,
       inventory: [...cur.inventory, ...input.drops],
       cleared_dungeons: cleared,
+      consumables,
+    });
+  }
+
+  // Applique une tentative de BOSS de palier : dépense l'énergie (win ou lose),
+  // encaisse or + poussière + la pièce de set lâchée, et — seulement en cas de
+  // victoire — mémorise le boss vaincu (débloque le suivant, dédup).
+  async function applyBossWin(
+    userId: string,
+    input: {
+      bossId: string;
+      energyCost: number;
+      gold: number;
+      dust: number;
+      drops: Item[];
+      defeated: boolean;
+      consumed?: string[];
+    },
+  ) {
+    const cur = row.value;
+    if (!cur) return;
+    const defeated =
+      input.defeated && !cur.defeated_bosses.includes(input.bossId)
+        ? [...cur.defeated_bosses, input.bossId]
+        : cur.defeated_bosses;
+    const consumables = { ...cur.consumables };
+    for (const id of input.consumed ?? []) {
+      const left = (consumables[id] ?? 0) - 1;
+      if (left > 0) consumables[id] = left;
+      else delete consumables[id];
+    }
+    return persist(userId, {
+      gold: cur.gold + input.gold,
+      dust: cur.dust + input.dust,
+      energy_spent: cur.energy_spent + input.energyCost,
+      inventory: [...cur.inventory, ...input.drops],
+      defeated_bosses: defeated,
       consumables,
     });
   }
@@ -292,6 +330,7 @@ export const useCharacterStore = defineStore('character', () => {
     fetchMine,
     setPseudo,
     applyRun,
+    applyBossWin,
     equip,
     unequip,
     chooseTalent,

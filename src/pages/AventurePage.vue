@@ -318,20 +318,32 @@
           <div class="report-head">
             <span class="report-title font-display">📋 Rapport de combat</span>
             <button
-              v-if="lastDungeon"
+              v-if="reattack"
               class="reattack"
-              :disabled="c.energy < lastDungeon.energyCost || busy"
-              @click="explore(lastDungeon)"
+              :disabled="c.energy < reattack.cost || busy"
+              @click="reattack.fn()"
             >
-              ⚔️ Réattaquer {{ lastDungeon.name }} ({{ lastDungeon.energyCost }} ⚡)
+              ⚔️ Réattaquer {{ reattack.name }} ({{ reattack.cost }} ⚡)
             </button>
           </div>
           <div class="result-head">
-            <span>{{ run.cleared ? '🏆 Donjon nettoyé' : '💀 Échec' }} — {{ run.name }}</span>
+            <span
+              >{{
+                run.cleared
+                  ? run.kind === 'boss'
+                    ? '🏆 Boss vaincu'
+                    : '🏆 Donjon nettoyé'
+                  : '💀 Échec'
+              }}
+              — {{ run.name }}</span
+            >
             <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
           </div>
           <div class="result-sub">
-            {{ run.defeated }}/{{ run.total }} monstres vaincus · PV restants {{ run.finalPv }}
+            <template v-if="run.kind === 'dungeon'"
+              >{{ run.defeated }}/{{ run.total }} monstres vaincus ·
+            </template>
+            PV restants {{ run.finalPv }}
           </div>
           <button class="report-toggle" @click="reportOpen = !reportOpen">
             {{ reportOpen ? '▴ Masquer le détail' : '▾ Voir le détail du combat' }}
@@ -412,6 +424,45 @@
           </div>
         </div>
 
+        <div class="sec-title mboss-title">👑 Boss de palier — chacun son set</div>
+        <div class="dungeons">
+          <div
+            v-for="b in BOSSES"
+            :key="b.id"
+            class="dgn mboss"
+            :class="{ locked: !bossUnlocked(b), beaten: isBossBeaten(b) }"
+          >
+            <span class="dgn-emo">{{ bossUnlocked(b) ? b.emoji : '🔒' }}</span>
+            <div class="dgn-main">
+              <div class="dgn-top">
+                <span class="dgn-name font-display">
+                  {{ b.name }}
+                  <span v-if="isBossBeaten(b)" class="mboss-badge">⭐</span>
+                </span>
+                <span class="dgn-gold">+{{ b.gold }} 🪙</span>
+              </div>
+              <div class="dgn-stats">
+                coûte {{ b.energyCost }} ⚡ · palier niv. {{ b.unlockLevel }}
+              </div>
+              <div class="mboss-set">
+                {{ bossSet(b).emoji }} {{ bossSet(b).name }} · <b>{{ bossSetCount(b) }}/4</b> pièces
+              </div>
+              <div v-if="bossUnlocked(b)" class="dgn-hint">{{ b.hint }}</div>
+              <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(b) }}</div>
+            </div>
+            <button
+              v-if="bossUnlocked(b)"
+              class="fight"
+              :disabled="c.energy < b.energyCost || busy"
+              @click="fightBoss(b)"
+            >
+              {{ isBossBeaten(b) ? 'Refaire' : 'Combattre' }}
+            </button>
+            <button v-else class="fight" disabled>Verrouillé</button>
+          </div>
+        </div>
+
+        <div class="sec-title mboss-title">🗺️ Donjons</div>
         <div class="dungeons">
           <div
             v-for="d in DUNGEONS"
@@ -615,13 +666,15 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
-import { simulateDungeon, mulberry32, combatPower } from '@/lib/combat';
+import { simulateDungeon, simulateCombat, mulberry32, combatPower } from '@/lib/combat';
 import { MONSTERS } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
+import { BOSSES, type MilestoneBoss } from '@/data/bosses';
 import {
   playerWithGear,
   aggregateEffects,
   rollDrop,
+  rollSetPiece,
   effectLabel,
   canUpgrade,
   upgradeCost,
@@ -633,6 +686,7 @@ import {
   RARITY_LABEL,
   RARITY_RANK,
   ITEM_SETS,
+  SET_BY_ID,
   setCounts,
   type Item,
   type ItemSlot,
@@ -659,6 +713,7 @@ interface RunFight {
 }
 interface RunView {
   name: string;
+  kind: 'dungeon' | 'boss';
   cleared: boolean;
   defeated: number;
   total: number;
@@ -818,7 +873,21 @@ function barW(v: number): string {
 const busy = ref(false);
 const run = ref<RunView | null>(null);
 const lastDungeon = ref<Dungeon | null>(null); // pour « Réattaquer » depuis le rapport
+const lastBoss = ref<MilestoneBoss | null>(null); // idem pour un boss de palier
 const reportOpen = ref(false); // détail du combat repliable (bouton)
+
+// « Réattaquer » unifié : boss (prioritaire) ou donjon selon le dernier run.
+const reattack = computed<{ name: string; cost: number; fn: () => void } | null>(() => {
+  if (lastBoss.value) {
+    const b = lastBoss.value;
+    return { name: b.name, cost: b.energyCost, fn: () => void fightBoss(b) };
+  }
+  if (lastDungeon.value) {
+    const d = lastDungeon.value;
+    return { name: d.name, cost: d.energyCost, fn: () => void explore(d) };
+  }
+  return null;
+});
 const sacTitle = ref<HTMLElement | null>(null);
 
 // ── Boutique & consommables ──
@@ -930,6 +999,7 @@ async function explore(d: Dungeon) {
   if (!uid || !char.row || busy.value || c.value.energy < d.energyCost) return;
   if (!dungeonUnlocked(d)) return;
   lastDungeon.value = d;
+  lastBoss.value = null;
   busy.value = true;
   try {
     // Consommables sélectionnés pour ce run (buffs + chance de butin).
@@ -944,12 +1014,11 @@ async function explore(d: Dungeon) {
     const dropRng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
     const drops: Item[] = [];
     const rolled = rollDrop(dropRng, {
-      playerLevel: c.value.level.level,
       cleared: r.cleared,
       defeated: r.defeated,
       level: d.dropLevel,
+      spread: 1, // le donjon peut lâcher un cran sous son niveau (fourrage à upgrader)
       luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
-      ...(d.setId && d.setChance ? { set: { id: d.setId, chance: d.setChance } } : {}),
     });
     if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
     // Butin consommable (en plus de l'équipement).
@@ -968,6 +1037,7 @@ async function explore(d: Dungeon) {
     selectedConsumables.value = []; // consommés
     run.value = {
       name: d.name,
+      kind: 'dungeon',
       cleared: r.cleared,
       defeated: r.defeated,
       total: r.total,
@@ -986,6 +1056,99 @@ async function explore(d: Dungeon) {
     if (r.cleared) $q.notify({ type: 'positive', message: `Donjon nettoyé — +${gold} 🪙` });
   } catch {
     $q.notify({ type: 'negative', message: 'Échec de l’exploration.' });
+  } finally {
+    busy.value = false;
+  }
+}
+
+// ── Boss de palier ──
+const defeatedBossSet = computed(() => new Set(char.row?.defeated_bosses ?? []));
+function isBossBeaten(b: MilestoneBoss): boolean {
+  return defeatedBossSet.value.has(b.id);
+}
+// Déblocage SÉQUENTIEL : palier de niveau atteint + boss précédent vaincu.
+function bossUnlocked(b: MilestoneBoss): boolean {
+  if (c.value.level.level < b.unlockLevel) return false;
+  const i = BOSSES.findIndex((x) => x.id === b.id);
+  const prev = i > 0 ? BOSSES[i - 1] : undefined;
+  return !prev || defeatedBossSet.value.has(prev.id);
+}
+function bossLockReason(b: MilestoneBoss): string {
+  if (c.value.level.level < b.unlockLevel) return `Niveau ${b.unlockLevel} requis`;
+  const i = BOSSES.findIndex((x) => x.id === b.id);
+  const prev = i > 0 ? BOSSES[i - 1] : undefined;
+  if (prev && !defeatedBossSet.value.has(prev.id)) return `Vaincs ${prev.name} d’abord`;
+  return '';
+}
+function bossSet(b: MilestoneBoss) {
+  return SET_BY_ID[b.setId]!; // garanti par les données (cf. test bosses.test.ts)
+}
+// Nombre de pièces du set d'un boss possédées (équipées + sac).
+function bossSetCount(b: MilestoneBoss): number {
+  const r = char.row;
+  if (!r) return 0;
+  const all = [...r.inventory, ...SLOTS.map((s) => r.equipped[s]).filter((it): it is Item => !!it)];
+  return all.filter((it) => it.setId === b.setId).length;
+}
+
+async function fightBoss(b: MilestoneBoss) {
+  const uid = auth.user?.id;
+  if (!uid || !char.row || busy.value || c.value.energy < b.energyCost) return;
+  if (!bossUnlocked(b)) return;
+  lastBoss.value = b;
+  lastDungeon.value = null;
+  busy.value = true;
+  try {
+    const consumed = [...selectedConsumables.value];
+    const { extra, lucky } = runExtra();
+    const seed = Math.floor(Math.random() * 1e9);
+    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra);
+    const r = simulateCombat(player, b.combatant, { seed, goldOnWin: b.gold });
+    const win = r.win;
+    const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
+    const gold = win ? Math.round(b.gold * (1 + goldPct)) : 0;
+    const dust = win ? 15 : 0;
+    // Victoire → pièce de set garantie (slot aléatoire, niveau plein du palier).
+    const drops: Item[] = [];
+    if (win) {
+      const dropRng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+      const piece = rollSetPiece(dropRng, {
+        setId: b.setId,
+        level: b.dropLevel,
+        luck: Math.min(1, 0.3 + (lucky ? 0.5 : 0)),
+      });
+      drops.push({ ...piece, id: crypto.randomUUID() });
+    }
+    const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
+    await char.applyBossWin(uid, {
+      bossId: b.id,
+      energyCost: b.energyCost,
+      gold,
+      dust,
+      drops,
+      defeated: win,
+      ...(consumed.length ? { consumed } : {}),
+    });
+    selectedConsumables.value = [];
+    run.value = {
+      name: b.name,
+      kind: 'boss',
+      cleared: win,
+      defeated: win ? 1 : 0,
+      total: 1,
+      gold,
+      dust,
+      finalPv,
+      fights: [{ monster: b.name, emoji: b.emoji, win, rounds: r.rounds }],
+      drops,
+    };
+    $q.notify(
+      win
+        ? { type: 'positive', message: `${b.emoji} ${b.name} vaincu — +${gold} 🪙` }
+        : { type: 'warning', message: `${b.name} t’a terrassé… reviens plus fort.` },
+    );
+  } catch {
+    $q.notify({ type: 'negative', message: 'Échec du combat.' });
   } finally {
     busy.value = false;
   }
@@ -1953,6 +2116,38 @@ onMounted(async () => {
   color: var(--dim);
   opacity: 0.85;
   margin-top: 4px;
+}
+/* Boss de palier : carte de donjon mise en avant (bordure accent) */
+.mboss-title {
+  margin-top: 14px;
+}
+.mboss {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 7%, var(--surface)),
+    var(--surface)
+  );
+}
+.mboss.locked {
+  background: var(--surface);
+  border-color: var(--line);
+}
+.mboss.beaten {
+  border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
+}
+.mboss-set {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: 3px;
+}
+.mboss.locked .mboss-set {
+  color: var(--dim);
+}
+.mboss-badge {
+  font-size: 12px;
+  margin-left: 4px;
 }
 .fight {
   flex-shrink: 0;

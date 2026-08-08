@@ -3,6 +3,7 @@ import {
   aggregateEffects,
   playerWithGear,
   rollDrop,
+  rollSetPiece,
   itemScore,
   effectiveValue,
   salvageValue,
@@ -112,17 +113,24 @@ describe('playerWithGear', () => {
 
 describe('rollDrop', () => {
   it('pas de butin si aucun monstre vaincu', () => {
-    expect(rollDrop(() => 0, { playerLevel: 5, cleared: true, defeated: 0 })).toBeNull();
+    expect(rollDrop(() => 0, { cleared: true, defeated: 0 })).toBeNull();
   });
   it('rng haut → pas de drop', () => {
-    expect(rollDrop(() => 0.99, { playerLevel: 5, cleared: true, defeated: 3 })).toBeNull();
+    expect(rollDrop(() => 0.99, { cleared: true, defeated: 3 })).toBeNull();
   });
-  it('rng bas → drop légendaire, démarre au niveau 1', () => {
-    const d = rollDrop(() => 0, { playerLevel: 4, cleared: true, defeated: 3 });
+  it('rng bas → drop légendaire au niveau du donjon (découplé du joueur)', () => {
+    const d = rollDrop(() => 0, { cleared: true, defeated: 3, level: 6 });
     expect(d).not.toBeNull();
     expect(d!.rarity).toBe('legendary');
-    expect(d!.level).toBe(1); // les objets montent ensuite via la Poussière
+    expect(d!.level).toBe(6); // fixé par le donjon, pas par le joueur
     expect(d!.slot).toBe('weapon');
+  });
+  it('spread → le drop peut tomber SOUS le niveau du donjon, jamais au-dessus', () => {
+    // rng=0.9 pour le tirage de niveau → base - floor(0.9*(spread+1))
+    const d = rollDrop(() => 0.001, { cleared: true, defeated: 1, level: 8, spread: 2 });
+    expect(d).not.toBeNull();
+    expect(d!.level).toBeLessThanOrEqual(8);
+    expect(d!.level).toBeGreaterThanOrEqual(6); // 8 - 2 au plus bas
   });
 });
 
@@ -197,24 +205,12 @@ describe('sets d’équipement', () => {
     expect(setEffects(lvl10).damagePct).toBeGreaterThan(setEffects(lvl1).damagePct);
   });
 
-  it('rollDrop peut produire une pièce de set (chance = 1)', () => {
-    let seed = 1;
-    const rng = () => {
-      seed = (seed * 1103515245 + 12345) % 2 ** 31;
-      return seed / 2 ** 31;
-    };
-    let gotSet = false;
-    for (let i = 0; i < 50 && !gotSet; i++) {
-      const d = rollDrop(rng, {
-        playerLevel: 9,
-        cleared: true,
-        defeated: 2,
-        level: 8,
-        set: { id: 'dragon', chance: 1 },
-      });
-      if (d?.setId === 'dragon') gotSet = true;
-    }
-    expect(gotSet).toBe(true);
+  it('rollSetPiece produit toujours une pièce du set, au niveau plein du palier', () => {
+    const piece = rollSetPiece(() => 0.3, { setId: 'dragon', level: 10 });
+    expect(piece.setId).toBe('dragon');
+    expect(piece.level).toBe(10); // niveau plein du palier (boss)
+    expect(piece.baseLevel).toBe(10);
+    expect(piece.name).toContain('Dragon');
     expect(ITEM_SETS.some((s) => s.id === 'dragon')).toBe(true);
   });
 });

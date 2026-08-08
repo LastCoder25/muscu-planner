@@ -18,11 +18,11 @@ export interface Dungeon {
   recoLevel: number; // niveau conseillé (calibré par simulation)
   hintStat: StatKey; // stat clé pour ce donjon
   hint: string; // conseil « coach »
-  dropLevel: number; // niveau de base des objets lâchés (plafonné au niveau du joueur)
+  dropLevel: number; // niveau des objets lâchés (fixé par le donjon, découplé du joueur)
   dropLuck: number; // biais de rareté du butin (0 = normal … 1 = très généreux)
-  setId?: string; // donjon à set : id du set dont il peut lâcher des pièces (cf. ITEM_SETS)
-  setChance?: number; // proba qu'un drop soit une pièce de ce set (0..1)
 }
+// NB : les SETS ne droppent plus sur les donjons — uniquement sur les BOSS de
+// palier (cf. src/data/bosses.ts). Les donjons ne lâchent que du butin normal.
 
 export const DUNGEONS: Dungeon[] = [
   {
@@ -102,8 +102,6 @@ export const DUNGEONS: Dungeon[] = [
     hint: 'Le dragon frappe et crit fort → build complet, beaucoup de PV.',
     dropLevel: 7,
     dropLuck: 0.7,
-    setId: 'dragon',
-    setChance: 0.4,
   },
   {
     id: 'neant',
@@ -117,8 +115,6 @@ export const DUNGEONS: Dungeon[] = [
     hint: 'Le défi ultime : le titan est un mur. Tout à fond, surtout la Puissance.',
     dropLevel: 8,
     dropLuck: 0.9,
-    setId: 'void',
-    setChance: 0.45,
   },
   {
     id: 'apocalypse',
@@ -132,8 +128,6 @@ export const DUNGEONS: Dungeon[] = [
     hint: 'End-game absolu : l’Archidémon frappe et crit très fort → build complet, PV au max.',
     dropLevel: 9,
     dropLuck: 1,
-    setId: 'apocalypse',
-    setChance: 0.5,
   },
 ];
 
