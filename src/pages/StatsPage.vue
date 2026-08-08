@@ -183,11 +183,10 @@ const loading = ref(true);
 const logs = ref<LogRow[]>([]);
 const drillLogs = ref<DrillLogRow[]>([]);
 const progress = useProgress();
+// Global + un niveau par SPORT réellement pratiqué (cohérent avec l'accueil) + Défis.
 const levelCards = computed(() => [
   { key: 'global', label: 'Global', info: progress.global.value },
-  { key: 'muscu', label: 'Muscu', info: progress.muscu.value },
-  { key: 'tennis', label: 'Tennis', info: progress.tennis.value },
-  { key: 'cardio', label: 'Cardio', info: progress.cardio.value },
+  ...progress.sportTiles.value.map((t) => ({ key: t.key, label: t.label, info: t.level })),
   { key: 'challenges', label: 'Défis', info: progress.challenges.value },
 ]);
 
