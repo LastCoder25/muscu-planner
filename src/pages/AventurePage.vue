@@ -469,6 +469,14 @@
               <div class="dgn-top">
                 <span class="dgn-name font-display">{{ d.name }}</span>
                 <span class="dgn-gold">+{{ dungeonGold(d) }} 🪙</span>
+                <button
+                  v-if="dungeonUnlocked(d)"
+                  class="dgn-loot"
+                  aria-label="Butin possible"
+                  @click.stop="openDrops(d)"
+                >
+                  🎁
+                </button>
               </div>
               <div class="dgn-stats">
                 {{ d.monsterIds.length }} monstres · coûte {{ d.energyCost }} ⚡ · conseillé niv.
@@ -650,6 +658,35 @@
         </div>
       </div>
     </transition>
+
+    <!-- Butin possible d'un donjon -->
+    <q-dialog :model-value="!!dropInfo" position="bottom" @update:model-value="dropInfo = null">
+      <q-card v-if="dropInfo" class="drops-card">
+        <div class="drops-title font-display">{{ dropInfo.emoji }} Butin — {{ dropInfo.name }}</div>
+        <div class="drops-row">
+          <span class="drops-k">Niveau des objets</span>
+          <span class="drops-v"
+            >{{ Math.max(1, dropInfo.dropLevel - 1) }}–{{ dropInfo.dropLevel }}</span
+          >
+        </div>
+        <div class="drops-row">
+          <span class="drops-k">Récompenses</span>
+          <span class="drops-v">jusqu'à {{ dungeonGold(dropInfo) }} 🪙 · poussière ✨</span>
+        </div>
+        <div class="drops-sub">Chances de rareté</div>
+        <div class="odds">
+          <div v-for="o in rarityOdds(dropInfo.dropLuck)" :key="o.label" class="odd" :class="o.cls">
+            <span class="odd-pct font-display">{{ o.pct }}%</span>
+            <span class="odd-lbl">{{ o.label }}</span>
+          </div>
+        </div>
+        <div class="drops-note">
+          Chaque objet a <b>2 stats</b> (dégâts / PV / critique / vol de vie / réduction / or). Les
+          <b>pièces de set</b> ne tombent que sur les <b>boss de palier</b>.
+        </div>
+        <button class="drops-close" @click="dropInfo = null">Fermer</button>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -868,6 +905,26 @@ const busy = ref(false);
 const run = ref<RunView | null>(null);
 const lastDungeon = ref<Dungeon | null>(null); // pour « Réattaquer » depuis le rapport
 const lastBoss = ref<MilestoneBoss | null>(null); // idem pour un boss de palier
+
+// Butin possible d'un donjon (affiché à la demande via 🎁).
+const dropInfo = ref<Dungeon | null>(null);
+function openDrops(d: Dungeon) {
+  dropInfo.value = d;
+}
+// Chances de rareté d'un drop selon la chance du donjon (miroir de rollRarity, items.ts).
+function rarityOdds(luck: number) {
+  const l = Math.min(1, Math.max(0, luck));
+  const leg = 0.02 + l * 0.08;
+  const epic = 0.1 + l * 0.12;
+  const rare = 0.28 + l * 0.12;
+  const common = Math.max(0, 1 - leg - epic - rare);
+  return [
+    { label: 'Commun', pct: Math.round(common * 100), cls: 'r-common' },
+    { label: 'Rare', pct: Math.round(rare * 100), cls: 'r-rare' },
+    { label: 'Épique', pct: Math.round(epic * 100), cls: 'r-epic' },
+    { label: 'Légendaire', pct: Math.round(leg * 100), cls: 'r-legendary' },
+  ];
+}
 const reportOpen = ref(false); // détail du combat repliable (bouton)
 
 // « Réattaquer » unifié : boss (prioritaire) ou donjon selon le dernier run.
@@ -1297,7 +1354,9 @@ onMounted(async () => {
 .adv-page {
   background: var(--bg);
   min-height: 100vh;
-  padding: 18px 16px 40px;
+  /* Marge basse généreuse (+ safe-area iOS) : le contenu ne doit pas être coupé
+     ni passer sous le FAB feedback / le badge de version. */
+  padding: 18px 16px calc(96px + env(safe-area-inset-bottom, 0px));
 }
 .page-title {
   font-size: 30px;
@@ -2055,6 +2114,93 @@ onMounted(async () => {
 }
 .r-legendary .rarity {
   color: var(--accent);
+}
+/* Bouton « butin possible » d'un donjon */
+.dgn-loot {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 1px 6px;
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.drops-card {
+  width: 100%;
+  background: var(--surface);
+  border-top: 2px solid var(--accent);
+  border-radius: 16px 16px 0 0;
+  padding: 16px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+  color: var(--text);
+}
+.drops-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.drops-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  padding: 4px 0;
+}
+.drops-k {
+  color: var(--dim);
+}
+.drops-v {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.drops-sub {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+  margin: 12px 0 8px;
+}
+.odds {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.odd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 8px;
+  padding: 6px 2px;
+}
+.odd-pct {
+  font-size: 15px;
+  font-weight: 700;
+}
+.odd-lbl {
+  font-size: 9px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.drops-note {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 12px;
+  line-height: 1.4;
+}
+.drops-close {
+  width: 100%;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 /* Donjons */

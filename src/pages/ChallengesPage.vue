@@ -240,8 +240,15 @@
               :class="{ on: n <= legSetsDone(leg) }"
             />
           </div>
+          <div class="cl-add-lbl">Ajouter des séries :</div>
           <div class="cl-actions">
-            <button v-for="n in [1, 2, 3, 4]" :key="n" class="cl-add" @click="openSet(leg, n)">
+            <button
+              v-for="n in [1, 2, 3, 4]"
+              :key="n"
+              class="cl-add"
+              :title="`Ajouter ${n} série${n > 1 ? 's' : ''}`"
+              @click="openSet(leg, n)"
+            >
               +{{ n }}
             </button>
             <button
@@ -873,10 +880,17 @@ onMounted(async () => {
 .cl-sub.ok {
   color: var(--d1);
 }
+.cl-add-lbl {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
 .cl-actions {
   display: flex;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 .cl-add {
   flex: 1;

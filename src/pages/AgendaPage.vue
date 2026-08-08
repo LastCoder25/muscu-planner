@@ -34,6 +34,10 @@
             <div class="entry-main">
               <div class="entry-title">{{ e.title }}</div>
               <div v-if="e.meta" class="entry-meta">{{ e.meta }}</div>
+              <div v-if="e.xp > 0" class="entry-gain">
+                <span class="eg-xp">+{{ e.xp }} XP</span>
+                <span v-if="e.energy > 0" class="eg-en">+{{ e.energy }} ⚡</span>
+              </div>
             </div>
           </div>
         </div>
@@ -49,7 +53,12 @@ import { useTennisStore } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { challengeDayXp } from '@/lib/challenges';
+import { sessionXp, otherSportXp, cardioSessionXp, drillSessionXp } from '@/lib/athlete';
 import { ACTIVITY_LABELS, ACTIVITY_ICONS, paceLabel } from '@/data/cardio';
+
+// Disciplines « spécifiques » (tennis/prépa…) : comptent leur XP mais N'alimentent
+// PAS l'énergie d'aventure (fond = muscu + cardio + autre sport uniquement).
+const SPECIFIQUE_DISC = new Set(['crossfit', 'hyrox', 'mobilite', 'prepa_physique']);
 
 const logs = useLogsStore();
 const tennis = useTennisStore();
@@ -63,6 +72,8 @@ interface Entry {
   icon: string;
   title: string;
   meta: string;
+  xp: number; // XP gagnée par l'activité
+  energy: number; // énergie d'aventure gagnée (= XP si activité de fond, 0 sinon)
 }
 
 function fmtDur(min?: number): string {
@@ -100,12 +111,19 @@ const entries = computed<Entry[]>(() => {
   for (const r of logs.all) {
     const exos = r.payload.exercises?.length ?? 0;
     const bits = [fmtDur(r.payload.duration_min), exos ? `${exos} exos` : ''].filter(Boolean);
+    const disc = r.payload.discipline ?? 'musculation';
+    const xp =
+      disc === 'autre_sport'
+        ? otherSportXp(r.payload.duration_min ?? 0, r.payload.name)
+        : sessionXp(r.payload);
     out.push({
       ts: Date.parse(r.performed_at),
       kind: 'muscu',
       icon: 'fitness_center',
       title: r.payload.name || 'Séance',
       meta: bits.join(' · '),
+      xp,
+      energy: SPECIFIQUE_DISC.has(disc) ? 0 : xp, // spécifique = XP mais pas d'énergie
     });
   }
   for (const r of tennis.logs) {
@@ -115,6 +133,8 @@ const entries = computed<Entry[]>(() => {
       icon: 'sports_tennis',
       title: r.payload.name || 'Tennis',
       meta: fmtDur(r.payload.duration_min),
+      xp: drillSessionXp(r.payload),
+      energy: 0, // tennis exclu de l'énergie d'aventure
     });
   }
   for (const r of cardio.logs) {
@@ -124,12 +144,15 @@ const entries = computed<Entry[]>(() => {
       fmtDur(p.duration_min),
       paceLabel(p.distance_km, p.duration_min) ?? '',
     ].filter(Boolean);
+    const xp = p.challenge_id ? 0 : cardioSessionXp(p); // sortie miroir = 0 (déjà comptée par le défi)
     out.push({
       ts: Date.parse(r.performed_at),
       kind: 'cardio',
       icon: ACTIVITY_ICONS[p.activity] ?? 'directions_run',
       title: ACTIVITY_LABELS[p.activity] ?? 'Cardio',
       meta: bits.join(' · '),
+      xp,
+      energy: xp,
     });
   }
   // Reps de défis MUSCU jour par jour (le cardio est déjà couvert par les sorties miroir).
@@ -146,7 +169,9 @@ const entries = computed<Entry[]>(() => {
         kind: 'challenge',
         icon: 'emoji_events',
         title: c.exercise_name,
-        meta: [`${p.done} ${uLabel}`, xp > 0 ? `⚡ +${xp} XP` : ''].filter(Boolean).join(' · '),
+        meta: `${p.done} ${uLabel}`,
+        xp,
+        energy: xp, // défis muscu/cardio → comptent dans le fond → énergie
       });
     }
   }
@@ -301,5 +326,19 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--dim);
   margin-top: 2px;
+}
+.entry-gain {
+  display: flex;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.eg-xp {
+  color: var(--accent);
+}
+.eg-en {
+  color: var(--text);
+  opacity: 0.75;
 }
 </style>

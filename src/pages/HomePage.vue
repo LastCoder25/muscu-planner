@@ -91,6 +91,10 @@
             <span class="mt-bar"
               ><span class="mt-fill" :style="{ width: t.level.progressPct + '%' }"
             /></span>
+            <span class="mt-prog"
+              >{{ fmtDur(t.level.xpIntoLevel) }} / {{ fmtDur(t.level.xpForLevel) }} → niv.
+              {{ t.level.level + 1 }}</span
+            >
           </button>
         </div>
       </div>
@@ -394,10 +398,14 @@ function sigLabel(sig: { power: number; endurance: number; agility: number }): s
   if (sig.agility > 0) parts.push(`⚡${Math.round(sig.agility * 100)}`);
   return parts.join(' ');
 }
-// Tap sur une tuile de sport → son HISTORIQUE (la saisie se fait via « + Séance »).
+// Tap sur une tuile de sport → son HISTORIQUE FILTRÉ sur ce sport (la saisie se
+// fait via « + Séance »). On passe la clé de tuile → la page d'historique filtre.
 async function goSport(key: string) {
-  if (key.startsWith('cardio:')) await router.push('/cardio?tab=hist');
-  else await router.push('/muscu?tab=hist'); // muscu / autre sport / spécifique → historique séances
+  if (key.startsWith('cardio:'))
+    await router.push(
+      `/cardio?tab=hist&activity=${encodeURIComponent(key.slice('cardio:'.length))}`,
+    );
+  else await router.push(`/muscu?tab=hist&filter=${encodeURIComponent(key)}`);
 }
 const autreOpen = ref(false);
 const autreSport = ref<string>('Tennis');
@@ -593,8 +601,8 @@ async function saveAutre() {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  width: 50px;
-  height: 50px;
+  width: 58px;
+  height: 52px;
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: 13px;
@@ -1039,5 +1047,13 @@ async function saveAutre() {
   height: 100%;
   border-radius: 999px;
   background: var(--c);
+}
+.mt-prog {
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 0.2px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 3px;
+  white-space: nowrap;
 }
 </style>

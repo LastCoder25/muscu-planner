@@ -93,12 +93,26 @@
       <div v-if="loading" class="column items-center q-mt-lg">
         <q-spinner color="primary" size="28px" />
       </div>
-      <div v-else-if="!rows.length && !challengeDays.length" class="empty">
-        Aucune séance enregistrée pour l'instant.
+      <div
+        v-else-if="!filteredRows.length && !(showChallengeDays && challengeDays.length)"
+        class="empty"
+      >
+        {{
+          activeFilter
+            ? 'Aucune séance pour ce sport.'
+            : "Aucune séance enregistrée pour l'instant."
+        }}
       </div>
 
-      <div v-if="rows.length" class="hist-sub">Séances</div>
-      <div v-for="r in rows" :key="r.id" class="log-card" @click="open(r.id)">
+      <div v-if="activeFilter" class="filter-banner">
+        <span
+          >Historique : <b>{{ filterLabel }}</b></span
+        >
+        <button class="filter-clear" @click="clearFilter">Tout voir ✕</button>
+      </div>
+
+      <div v-if="filteredRows.length" class="hist-sub">Séances</div>
+      <div v-for="r in filteredRows" :key="r.id" class="log-card" @click="open(r.id)">
         <div class="log-main">
           <div class="log-name">{{ r.payload.name || 'Séance' }}</div>
           <div class="log-meta">
@@ -107,7 +121,8 @@
             }}<template v-if="r.payload.global_difficulty">
               · note {{ r.payload.global_difficulty }}/4</template
             >
-            · <span class="log-xp">⚡ +{{ sessXp(r) }} XP</span>
+            · <span class="log-xp">+{{ sessXp(r) }} XP</span> ·
+            <span class="log-en">+{{ sessXp(r) }} ⚡</span>
           </div>
         </div>
         <button class="log-del" aria-label="Supprimer" @click.stop="confirmDelete(r)">
@@ -117,7 +132,7 @@
       </div>
 
       <!-- Reps de défis muscu, jour par jour, avec l'XP gagnée -->
-      <template v-if="challengeDays.length">
+      <template v-if="showChallengeDays && challengeDays.length">
         <div class="hist-sub">Défis (reps par jour)</div>
         <div v-for="d in challengeDays" :key="d.key" class="log-card static">
           <div class="log-main">
@@ -125,7 +140,8 @@
             <div class="log-meta">
               {{ fmtDate(d.date) }} · {{ d.done }} {{ d.unit
               }}<template v-if="d.xp > 0">
-                · <span class="log-xp">⚡ +{{ d.xp }} XP</span></template
+                · <span class="log-xp">+{{ d.xp }} XP</span> ·
+                <span class="log-en">+{{ d.xp }} ⚡</span></template
               >
             </div>
           </div>
@@ -143,7 +159,7 @@ import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useAuthStore } from '@/stores/auth';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { challengeDayXp } from '@/lib/challenges';
-import { sessionXp } from '@/lib/athlete';
+import { sessionXp, otherSportXp } from '@/lib/athlete';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
 
 const router = useRouter();
@@ -245,7 +261,43 @@ function volume(r: LogRow): number {
     0,
   );
 }
-const sessXp = (r: LogRow) => sessionXp(r.payload);
+const sessXp = (r: LogRow) =>
+  r.payload.discipline === 'autre_sport'
+    ? otherSportXp(r.payload.duration_min ?? 0, r.payload.name)
+    : sessionXp(r.payload);
+
+// Filtre d'historique (arrive depuis une tuile d'accueil : disc:<x> ou sport:<nom>).
+const DISC_FILTER_LABEL: Record<string, string> = {
+  musculation: 'Muscu',
+  crossfit: 'Crossfit',
+  hyrox: 'Hyrox',
+  mobilite: 'Mobilité',
+  prepa_physique: 'Prépa physique',
+};
+const activeFilter = computed(() => (route.query.filter as string) || '');
+const filterLabel = computed(() => {
+  const f = activeFilter.value;
+  if (f.startsWith('sport:')) return f.slice(6);
+  if (f.startsWith('disc:')) return DISC_FILTER_LABEL[f.slice(5)] ?? f.slice(5);
+  return '';
+});
+function matchesFilter(r: LogRow): boolean {
+  const f = activeFilter.value;
+  if (!f) return true;
+  const disc = r.payload.discipline ?? 'musculation';
+  if (f.startsWith('disc:')) return disc === f.slice(5);
+  if (f.startsWith('sport:'))
+    return disc === 'autre_sport' && (r.payload.name || 'Autre') === f.slice(6);
+  return true;
+}
+const filteredRows = computed(() => rows.value.filter(matchesFilter));
+// Les défis muscu ne concernent que la tuile Muscu → masqués si un autre filtre est actif.
+const showChallengeDays = computed(
+  () => !activeFilter.value || activeFilter.value === 'disc:musculation',
+);
+function clearFilter() {
+  void router.replace({ query: { tab: 'hist' } });
+}
 // Reps de défis muscu, jour par jour, avec l'XP d'effort gagnée ce jour-là.
 const challengeDays = computed(() => {
   const out: { key: string; date: string; name: string; done: number; unit: string; xp: number }[] =
@@ -493,8 +545,34 @@ onMounted(() => {
   color: var(--dim);
   margin: 6px 2px 8px;
 }
+.filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.filter-clear {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
 .log-xp {
   color: var(--accent);
+  font-weight: 700;
+}
+.log-en {
+  color: var(--text);
+  opacity: 0.75;
   font-weight: 700;
 }
 .log-main {

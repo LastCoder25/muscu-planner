@@ -220,8 +220,14 @@
             :key="d"
             class="seg"
             :class="segState(d)"
-            :title="`J${d + 1} : ${fmtV(doneOf(d))} / ${fmtV(t)}`"
+            :title="`J${d + 1} : ${fmtV(doneOf(d))} / ${fmtV(t)}${dayXpOf(d) > 0 ? ' · +' + dayXpOf(d) + ' XP' : ''}`"
           />
+        </div>
+        <!-- Gains cumulés (XP = énergie, 1:1) + note surplus -->
+        <div v-if="ch.format !== 'cumulative'" class="gains-line">
+          <span class="gain-xp">+{{ earnedXp }} XP</span>
+          <span class="gain-en">+{{ earnedXp }} ⚡</span>
+          <span class="gain-note">gagnés · le surplus est en vert</span>
         </div>
 
         <!-- Graphique cible vs réalisé -->
@@ -236,7 +242,16 @@
             :title="`J${d + 1} : ${doneOf(d)} / ${t}`"
           >
             <div class="gbar gt" :style="{ height: pctOf(t) + '%' }" />
-            <div class="gbar gd" :style="{ height: pctOf(doneOf(d)) + '%' }" />
+            <div
+              class="gbar gd"
+              :style="{ height: pctOf(Math.min(doneOf(d), t || doneOf(d))) + '%' }"
+            />
+            <!-- Surplus (au-dessus de l'objectif) en couleur distincte -->
+            <div
+              v-if="t > 0 && doneOf(d) > t"
+              class="gbar gs"
+              :style="{ bottom: pctOf(t) + '%', height: pctOf(doneOf(d) - t) + '%' }"
+            />
           </div>
         </div>
 
@@ -248,6 +263,7 @@
             <span class="c-t">{{
               ch.format === 'cumulative' ? (doneOf(d) ? fmtV(doneOf(d)) : '·') : t ? fmtV(t) : '💤'
             }}</span>
+            <span v-if="dayXpOf(d) > 0" class="c-xp">+{{ dayXpOf(d) }} ⚡</span>
           </div>
         </div>
 
@@ -283,6 +299,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import {
   challengeStats,
+  challengeDayXp,
   isChallengeComplete,
   evaluateAchievements,
   challengeLiveBalance,
@@ -477,6 +494,17 @@ function ensureToday(): DayProgress {
 function doneOf(d: number) {
   return entryOf(d)?.done ?? 0;
 }
+// XP d'effort gagnée un jour donné (= énergie, 1:1). Prime de complétion versée en plus à la fin.
+function dayXpOf(d: number): number {
+  const c = ch.value;
+  return c ? challengeDayXp(c, doneOf(d)) : 0;
+}
+// XP d'effort déjà gagnée (somme des jours faits) → aussi l'énergie gagnée.
+const earnedXp = computed(() => {
+  const c = ch.value;
+  if (!c) return 0;
+  return c.progress.reduce((a: number, p: DayProgress) => a + challengeDayXp(c, p.done || 0), 0);
+});
 const maxScale = computed(() => {
   const c = ch.value;
   if (!c) return 1;
@@ -666,6 +694,7 @@ function segState(d: number): string {
   const t = c.daily_targets[d] ?? 0;
   if (t === 0) return 'rest';
   const done = doneOf(d);
+  if (done > t) return 'over'; // surplus : plus que l'objectif du jour
   if (done >= t) return 'done';
   if (d === dayIndex.value) return 'today';
   if (done > 0) return 'partial';
@@ -1308,6 +1337,10 @@ onBeforeUnmount(() => {
 .seg.done {
   background: var(--accent);
 }
+.seg.over {
+  /* surplus : dépassement de l'objectif du jour → vert */
+  background: var(--d1, #7bc86c);
+}
 .seg.partial {
   background: color-mix(in srgb, var(--accent) 45%, var(--surface-3));
 }
@@ -1356,6 +1389,36 @@ onBeforeUnmount(() => {
   left: 22%;
   right: 22%;
   background: var(--accent);
+}
+.gs {
+  left: 22%;
+  right: 22%;
+  background: var(--d1, #7bc86c);
+}
+.gains-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 2px 0;
+  font-size: 13px;
+}
+.gain-xp {
+  color: var(--accent);
+  font-weight: 700;
+}
+.gain-en {
+  color: var(--text);
+  opacity: 0.75;
+  font-weight: 700;
+}
+.gain-note {
+  color: var(--dim);
+  font-size: 11px;
+}
+.c-xp {
+  font-size: 9px;
+  color: var(--accent);
+  font-weight: 700;
 }
 .cal {
   display: grid;

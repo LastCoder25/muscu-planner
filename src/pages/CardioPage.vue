@@ -117,15 +117,25 @@
     </section>
 
     <!-- Historique -->
-    <div v-if="tab === 'hist' && !cardio.logs.length" class="empty">
-      Aucune sortie enregistrée pour l'instant.
+    <div v-if="tab === 'hist' && !filteredLogs.length" class="empty">
+      {{
+        activityFilter
+          ? 'Aucune sortie pour cette activité.'
+          : "Aucune sortie enregistrée pour l'instant."
+      }}
     </div>
-    <section v-if="tab === 'hist' && cardio.logs.length" class="card">
+    <section v-if="tab === 'hist' && filteredLogs.length" class="card">
       <div class="card-head">
         <q-icon name="history" size="22px" />
         <div class="card-title">Mes sorties</div>
       </div>
-      <div v-for="l in cardio.logs" :key="l.id" class="log-row">
+      <div v-if="activityFilter" class="filter-banner">
+        <span
+          >Filtre : <b>{{ ACTIVITY_LABELS[activityFilter] }}</b></span
+        >
+        <button class="filter-clear" @click="clearActivityFilter">Tout voir ✕</button>
+      </div>
+      <div v-for="l in filteredLogs" :key="l.id" class="log-row">
         <q-icon :name="ACTIVITY_ICONS[l.payload.activity]" size="20px" class="log-ic" />
         <div class="log-main">
           <div class="log-name">{{ ACTIVITY_LABELS[l.payload.activity] }}</div>
@@ -140,7 +150,10 @@
             <span v-if="paceOf(l.payload)">🏃 {{ paceOf(l.payload) }}</span>
             <span v-if="effortPaceOf(l.payload)">⛰ {{ effortPaceOf(l.payload) }} (effort)</span>
             <span v-if="l.payload.challenge_id" class="log-mirror">↔ défi (0 XP)</span>
-            <span v-else class="log-xp">⚡ +{{ xpOf(l.payload) }} XP</span>
+            <template v-else>
+              <span class="log-xp">+{{ xpOf(l.payload) }} XP</span>
+              <span class="log-en">+{{ xpOf(l.payload) }} ⚡</span>
+            </template>
           </div>
         </div>
         <button class="log-del" aria-label="Supprimer" @click="remove(l.id)">
@@ -233,6 +246,17 @@ const effortPaceOf = (l: CardioLog) =>
     ? effortPace(l.distance_km, l.duration_min, l.elevation_m, l.descent_m)
     : null;
 const xpOf = (l: CardioLog) => cardioSessionXp(l);
+
+// Filtre par activité (arrive depuis une tuile d'accueil cardio:<activity>).
+const activityFilter = computed(() => (route.query.activity as CardioActivity | undefined) || null);
+const filteredLogs = computed(() =>
+  activityFilter.value
+    ? cardio.logs.filter((l) => l.payload.activity === activityFilter.value)
+    : cardio.logs,
+);
+function clearActivityFilter() {
+  void router.replace({ query: { tab: 'hist' } });
+}
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
@@ -596,6 +620,31 @@ function remove(id: string) {
 }
 .log-xp {
   font-weight: 700;
+}
+.log-en {
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0.75;
+}
+.filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.filter-clear {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 .log-mirror {
   color: var(--dim);
