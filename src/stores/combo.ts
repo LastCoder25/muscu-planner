@@ -102,6 +102,9 @@ export const useComboStore = defineStore('combo', () => {
     const leg = c.legs.find((l) => l.exercise_id === exerciseId);
     if (!leg?.sets?.length) return;
     leg.sets.pop();
+    // Plus aucune série → on efface aussi le poids mémorisé (souvent une saisie
+    // erronée qu'on vient de retirer) pour ne pas le repré-remplir.
+    if (!leg.sets.length) leg.weight_kg = null;
     if (comboComplete(c)) c.status = 'done';
     else if (c.status === 'done') c.status = 'active';
     void supabase

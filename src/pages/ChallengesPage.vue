@@ -223,15 +223,23 @@
         />
         <div v-for="leg in activeCombo.legs" :key="leg.exercise_id" class="combo-leg">
           <div class="cl-top">
-            <span class="cl-name">
+            <button class="cl-name" @click="openHistory(leg)">
               {{ leg.exercise_name }}
               <span v-if="leg.weight_kg" class="cl-kg">{{ leg.weight_kg }} kg</span>
-            </span>
+              <q-icon name="history" size="14px" class="cl-hist-ic" />
+            </button>
             <span class="cl-sub" :class="{ ok: legSetsDone(leg) >= leg.target }">
               {{ legSetsDone(leg) }}/{{ leg.target }} séries
             </span>
           </div>
-          <div class="bar"><div class="fill" :style="{ width: legPct(leg) + '%' }" /></div>
+          <div class="seg-bar">
+            <span
+              v-for="n in leg.target"
+              :key="n"
+              class="seg"
+              :class="{ on: n <= legSetsDone(leg) }"
+            />
+          </div>
           <div class="cl-actions">
             <button v-for="n in [1, 2, 3, 4]" :key="n" class="cl-add" @click="openSet(leg, n)">
               +{{ n }}
@@ -290,6 +298,28 @@
         </div>
       </q-card>
     </q-dialog>
+
+    <!-- Historique des séries d'un exo -->
+    <q-dialog v-model="histOpen">
+      <q-card class="set-card">
+        <div class="set-title font-display">{{ histLeg?.exercise_name }}</div>
+        <div class="set-desc">{{ histSets.length }} série{{ histSets.length > 1 ? 's' : '' }}</div>
+        <div v-if="!histSets.length" class="hist-empty">Aucune série enregistrée.</div>
+        <div v-else class="hist-list">
+          <div v-for="(s, i) in histSets" :key="i" class="hist-row">
+            <span class="hist-n">{{ histSets.length - i }}</span>
+            <span class="hist-main">
+              {{ s.reps }} reps<template v-if="s.weight"> · {{ s.weight }} kg</template>
+              <span v-if="s.assisted" class="hist-asst">assisté</span>
+            </span>
+            <span class="hist-date">{{ fmtDay(s.date) }}</span>
+          </div>
+        </div>
+        <div class="set-actions">
+          <q-btn flat no-caps label="Fermer" @click="histOpen = false" />
+        </div>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -315,6 +345,7 @@ import {
   legLastReps,
   legLastWeight,
   legLastAssisted,
+  legSets,
   type ComboLeg,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
@@ -337,9 +368,6 @@ const loading = ref(true);
 const mode = ref<'solo' | 'combo'>('solo');
 const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
 const comboPct = computed(() => (activeCombo.value ? comboProgressPct(activeCombo.value) : 0));
-function legPct(leg: ComboLeg) {
-  return leg.target > 0 ? Math.min(100, Math.round((legSetsDone(leg) / leg.target) * 100)) : 0;
-}
 
 // Saisie d'une série (reps + poids), préremplie avec la dernière série de l'exo.
 const setOpen = ref(false);
@@ -369,6 +397,21 @@ function saveSet() {
 }
 function undoSet(leg: ComboLeg) {
   if (activeCombo.value) comboStore.removeLastSet(activeCombo.value.id, leg.exercise_id);
+}
+
+// Historique des séries d'un exo.
+const histOpen = ref(false);
+const histLeg = ref<ComboLeg | null>(null);
+const histSets = computed(() => (histLeg.value ? [...legSets(histLeg.value)].reverse() : []));
+function openHistory(leg: ComboLeg) {
+  histLeg.value = leg;
+  histOpen.value = true;
+}
+function fmtDay(iso: string): string {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: 'short',
+  });
 }
 
 const TABS = [
@@ -712,15 +755,82 @@ onMounted(async () => {
   padding: 11px 12px;
   margin-bottom: 8px;
 }
+/* Barre segmentée : une case par série cible */
+.seg-bar {
+  display: flex;
+  gap: 3px;
+  margin: 9px 0;
+}
+.seg {
+  flex: 1;
+  min-width: 3px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+.seg.on {
+  background: var(--accent);
+}
 .cl-top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
 }
 .cl-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  padding: 0;
   font-weight: 600;
   font-size: 14.5px;
   color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.cl-hist-ic {
+  color: var(--dim);
+}
+.hist-empty {
+  color: var(--dim);
+  font-size: 13px;
+  padding: 8px 0;
+}
+.hist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.hist-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.hist-n {
+  min-width: 20px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--accent);
+}
+.hist-main {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+}
+.hist-asst {
+  font-size: 10px;
+  color: var(--d3, #ffb23f);
+  margin-left: 6px;
+}
+.hist-date {
+  font-size: 11px;
+  color: var(--dim);
 }
 .cl-sub {
   font-size: 12.5px;

@@ -48,7 +48,14 @@
             </div>
           </div>
         </div>
-        <div class="bar"><span :style="{ width: legPct(leg) + '%' }" /></div>
+        <div class="seg-bar">
+          <span
+            v-for="n in leg.target"
+            :key="n"
+            class="seg"
+            :class="{ on: n <= legSetsDone(leg) }"
+          />
+        </div>
         <div class="leg-actions">
           <button v-for="n in [1, 2, 3, 4]" :key="n" class="add" @click="openSet(leg, n)">
             +{{ n }}
@@ -149,9 +156,6 @@ const daysLeftLabel = computed(() => {
   return `${n} j restant${n > 1 ? 's' : ''}`;
 });
 
-function legPct(leg: ComboLeg) {
-  return leg.target > 0 ? Math.min(100, Math.round((legSetsDone(leg) / leg.target) * 100)) : 0;
-}
 function slotEmoji(key: string) {
   return comboSlot(key)?.emoji ?? '💪';
 }
@@ -335,6 +339,21 @@ onMounted(async () => {
 .bar span {
   display: block;
   height: 100%;
+  background: var(--accent);
+}
+.seg-bar {
+  display: flex;
+  gap: 3px;
+  margin: 9px 0;
+}
+.seg {
+  flex: 1;
+  min-width: 3px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+.seg.on {
   background: var(--accent);
 }
 .leg-actions {
