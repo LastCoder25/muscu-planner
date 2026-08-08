@@ -177,10 +177,10 @@ function performedAtIso(dateIso: string): string {
 }
 
 type QuickDiscipline = 'musculation' | 'crossfit' | 'hyrox' | 'mobilite';
+// Crossfit / Hyrox sont désormais des « Autre sport » (accueil → global + stats via
+// signature). Ici on garde juste Muscu et Mobilité.
 const DISCIPLINES: { value: QuickDiscipline; label: string }[] = [
   { value: 'musculation', label: 'Muscu' },
-  { value: 'crossfit', label: 'Crossfit' },
-  { value: 'hyrox', label: 'Hyrox' },
   { value: 'mobilite', label: 'Mobilité' },
 ];
 const qDate = ref(todayIso());

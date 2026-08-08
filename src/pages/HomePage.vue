@@ -314,6 +314,8 @@ const SPORT_OPTIONS = [
   'Ski',
   'Golf',
   'Danse',
+  'Crossfit',
+  'Hyrox',
   'Autre',
 ];
 const pickerOpen = ref(false);

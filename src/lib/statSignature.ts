@@ -65,6 +65,8 @@ const SPORT_SIG: Record<string, StatWeights> = {
   Ski: { power: 0.4, endurance: 0.2, agility: 0.4 },
   Golf: { power: 0.3, endurance: 0.2, agility: 0.5 },
   Danse: { power: 0.1, endurance: 0.4, agility: 0.5 },
+  Crossfit: { power: 0.4, endurance: 0.35, agility: 0.25 },
+  Hyrox: { power: 0.3, endurance: 0.55, agility: 0.15 },
 };
 // Sport inconnu / « Autre » libre : équilibré (léger biais endurance).
 export const DEFAULT_SPORT_SIG: StatWeights = { power: 0.3, endurance: 0.4, agility: 0.3 };

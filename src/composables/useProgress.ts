@@ -156,6 +156,8 @@ export function useProgress() {
     Ski: 'downhill_skiing',
     Golf: 'sports_golf',
     Danse: 'music_note',
+    Crossfit: 'sports_gymnastics',
+    Hyrox: 'sports_score',
   };
   const DISC_TILE: Record<string, { label: string; icon: string }> = {
     musculation: { label: 'Muscu', icon: 'fitness_center' },
