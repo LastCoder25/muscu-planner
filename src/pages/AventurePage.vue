@@ -283,7 +283,9 @@
                   {{ SLOT_LABEL[it.slot] }} · {{ effectLabel(it.effect, it.level) }}
                 </div>
                 <div class="inv-actions">
-                  <button class="equip-btn" @click="doEquip(it.id)">Équiper</button>
+                  <button class="equip-btn" @click="doEquip(it.id)">
+                    {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
+                  </button>
                   <button class="link-btn" @click="doSalvage(it)">
                     Casser ✨{{ salvageValue(it) }}
                   </button>
@@ -352,7 +354,7 @@
                 </div>
                 <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
                   <span
-                    >équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv{{
+                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv{{
                       equippedInSlot(d.slot)!.level
                     }}
                     ·
@@ -370,7 +372,9 @@
                 <div v-if="dropState(d) === 'equipped'" class="drop-done">⚔️ Équipé</div>
                 <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
                 <div v-else class="inv-actions">
-                  <button class="equip-btn" @click="doEquip(d.id)">Équiper</button>
+                  <button class="equip-btn" @click="doEquip(d.id)">
+                    {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
+                  </button>
                   <button class="link-btn" @click="doSalvage(d)">
                     Casser ✨{{ salvageValue(d) }}
                   </button>

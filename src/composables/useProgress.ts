@@ -46,14 +46,24 @@ export function useProgress() {
           .map((s) => s.id),
       ),
   );
+  // « Autre sport » (log rapide durée) → compte dans le GLOBAL + énergie (pas muscu,
+  // pas cardio, pas spécifique). Bucket dédié.
+  const isAutreLog = (r: (typeof logs.all)[number]) => r.payload.discipline === 'autre_sport';
   const isSpecifiqueLog = (r: (typeof logs.all)[number]) => {
     const d = r.payload.discipline;
+    if (d === 'autre_sport') return false; // géré à part (global)
     if (d && d !== 'musculation') return true;
     return !!r.payload.session_id && specifiqueSessionIds.value.has(r.payload.session_id);
   };
 
   const muscuXp = computed(() =>
-    logs.all.filter((r) => !isSpecifiqueLog(r)).reduce((a, r) => a + sessionXp(r.payload), 0),
+    logs.all
+      .filter((r) => !isSpecifiqueLog(r) && !isAutreLog(r))
+      .reduce((a, r) => a + sessionXp(r.payload), 0),
+  );
+  // XP « autre sport » (durée) → n'alimente QUE le global et l'énergie.
+  const autreXp = computed(() =>
+    logs.all.filter((r) => isAutreLog(r)).reduce((a, r) => a + sessionXp(r.payload), 0),
   );
   const specifiqueSessionXp = computed(() =>
     logs.all.filter((r) => isSpecifiqueLog(r)).reduce((a, r) => a + sessionXp(r.payload), 0),
@@ -88,9 +98,9 @@ export function useProgress() {
   // Piste Challenges = niveau « méta » (tous les défis) — affiché à part, PAS
   // ajouté au Global (l'effort est déjà compté dans muscu / cardio).
   const challengesXp = computed(() => challengeXpPoints(challenges.list));
-  // Global = sport de FOND (muscu + cardio) — c'est le niveau du personnage.
-  // Le tennis (spécifique) reste à part, jamais compté dans le global.
-  const generalXp = computed(() => muscuTotal.value + cardioXp.value);
+  // Global = sport de FOND (muscu + cardio + « autre sport ») — niveau du personnage
+  // et source de l'énergie. Le tennis (spécifique) reste à part.
+  const generalXp = computed(() => muscuTotal.value + cardioXp.value + autreXp.value);
   const globalXp = generalXp;
 
   return {

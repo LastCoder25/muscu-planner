@@ -124,6 +124,13 @@
               ><span class="mt-fill" :style="{ width: progress.tennis.value.progressPct + '%' }"
             /></span>
           </button>
+          <button class="mtile t-autre" @click="openAutre">
+            <span class="mt-strip" />
+            <span class="mt-ic-wrap"><q-icon name="sports" size="26px" class="mt-ic" /></span>
+            <span class="mt-name font-display">Autre sport</span>
+            <span class="mt-lvl">+ séance</span>
+            <span class="mt-bar"><span class="mt-fill" style="width: 0%" /></span>
+          </button>
         </div>
       </div>
 
@@ -139,6 +146,32 @@
         </button>
       </div>
     </template>
+
+    <!-- Ajout rapide d'une séance « autre sport » (durée) → XP globale + énergie -->
+    <q-dialog v-model="autreOpen">
+      <q-card class="autre-card">
+        <div class="autre-title font-display">Autre sport</div>
+        <div class="autre-desc">Compte dans ton niveau global et ton énergie d'aventure.</div>
+        <q-input v-model="autreName" label="Sport (optionnel)" filled dense class="q-mb-sm" />
+        <q-input v-model="autreDate" type="date" label="Date" filled dense class="q-mb-sm" />
+        <div class="autre-dur">
+          <q-input v-model.number="autreHours" type="number" filled dense suffix="h" />
+          <q-input v-model.number="autreMinutes" type="number" filled dense suffix="min" />
+        </div>
+        <div class="autre-actions">
+          <q-btn flat no-caps label="Annuler" @click="autreOpen = false" />
+          <q-btn
+            unelevated
+            color="primary"
+            text-color="dark"
+            no-caps
+            label="Enregistrer"
+            :loading="autreSaving"
+            @click="saveAutre"
+          />
+        </div>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -151,15 +184,18 @@ import { useSessionsStore } from '@/stores/sessions';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useLiveStore } from '@/stores/live';
 import { useLiveCourtStore } from '@/stores/liveCourt';
+import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeStats, logicalToday } from '@/lib/challenges';
+import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
 
 const $q = useQuasar();
 const router = useRouter();
 const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const logs = useLogsStore();
+const auth = useAuthStore();
 const live = useLiveStore();
 const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
@@ -272,13 +308,74 @@ async function goCardio() {
 async function goStats() {
   await router.push('/stats');
 }
+
+// ── Autre sport (durée) → XP globale + énergie ──
+function todayIsoLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const autreOpen = ref(false);
+const autreName = ref('');
+const autreDate = ref(todayIsoLocal());
+const autreHours = ref<number>(1);
+const autreMinutes = ref<number>(0);
+const autreSaving = ref(false);
+function openAutre() {
+  autreName.value = '';
+  autreDate.value = todayIsoLocal();
+  autreHours.value = 1;
+  autreMinutes.value = 0;
+  autreOpen.value = true;
+}
+async function saveAutre() {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  const totalMin = (autreHours.value || 0) * 60 + (autreMinutes.value || 0);
+  if (totalMin <= 0) {
+    $q.notify({ type: 'warning', message: 'Renseigne une durée.' });
+    return;
+  }
+  autreSaving.value = true;
+  try {
+    const [y, m, dd] = autreDate.value.split('-').map((n) => Number(n) || 0);
+    const now = new Date();
+    const iso = new Date(
+      y!,
+      (m ?? 1) - 1,
+      dd ?? 1,
+      now.getHours(),
+      now.getMinutes(),
+      now.getSeconds(),
+    ).toISOString();
+    const log: SessionLog = {
+      schema_version: SCHEMA_VERSION,
+      type: 'session_log',
+      id: crypto.randomUUID(),
+      name: autreName.value.trim() || 'Autre sport',
+      started_at: iso,
+      ended_at: iso,
+      duration_min: totalMin,
+      exercises: [],
+      discipline: 'autre_sport',
+    };
+    await logs.insert(uid, log);
+    $q.notify({ type: 'positive', message: 'Séance enregistrée — XP global + énergie 💪' });
+    autreOpen.value = false;
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
+  } finally {
+    autreSaving.value = false;
+  }
+}
 </script>
 
 <style scoped lang="scss">
 .home-page {
   background: var(--bg);
   min-height: 100vh;
-  padding: 20px 16px 32px;
+  /* Marge basse généreuse (+ safe-area) pour que la dernière tuile ne soit pas
+     masquée par le FAB de feedback ni la barre système du navigateur mobile. */
+  padding: 20px 16px calc(96px + env(safe-area-inset-bottom, 0px));
 }
 .home-head {
   margin-bottom: 24px;
@@ -665,6 +762,36 @@ async function goStats() {
 }
 .t-tennis {
   --c: var(--d1);
+}
+.t-autre {
+  --c: var(--d2, #c6d24a);
+}
+.autre-card {
+  background: var(--surface);
+  color: var(--text);
+  padding: 18px 16px;
+  border-radius: 16px;
+  width: 320px;
+  max-width: 92vw;
+}
+.autre-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+.autre-desc {
+  font-size: 12.5px;
+  color: var(--dim);
+  margin: 4px 0 12px;
+}
+.autre-dur {
+  display: flex;
+  gap: 8px;
+}
+.autre-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
 }
 .mt-strip {
   position: absolute;

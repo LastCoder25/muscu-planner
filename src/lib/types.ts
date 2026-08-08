@@ -166,8 +166,9 @@ export interface SessionLog {
   global_comment?: string;
   readiness?: number; // forme du jour 1–5 (5 = top) — check pré-séance
   // Discipline portée par le log lui-même (log rapide sans séance : crossfit/hyrox/
-  // mobilité → comptent dans le Spécifique). Absent = musculation.
-  discipline?: 'musculation' | 'prepa_physique' | 'crossfit' | 'hyrox' | 'mobilite';
+  // mobilité → comptent dans le Spécifique ; autre_sport → compte dans le GLOBAL/énergie).
+  // Absent = musculation.
+  discipline?: 'musculation' | 'prepa_physique' | 'crossfit' | 'hyrox' | 'mobilite' | 'autre_sport';
   exercises: LoggedExercise[];
 }
 
