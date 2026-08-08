@@ -67,7 +67,7 @@
         unelevated
         icon="add"
         label="Enregistrer une séance"
-        @click="pickerOpen = true"
+        @click="openPicker"
       />
 
       <div class="tile-group">
@@ -95,34 +95,60 @@
       </div>
     </template>
 
-    <!-- Sélecteur de saisie : route vers le bon logger selon le type de sport -->
+    <!-- Sélecteur de saisie : choix du sport, puis le type de séance disponible -->
     <q-dialog v-model="pickerOpen" position="bottom">
       <q-card class="picker-card">
-        <div class="picker-title font-display">Enregistrer une séance</div>
-        <button class="picker-row" @click="pickMuscu">
-          <q-icon name="fitness_center" size="24px" />
-          <div class="picker-main">
-            <div class="picker-name">Muscu</div>
-            <div class="picker-sub">Séance détaillée (reps/poids) ou rapide</div>
+        <!-- Étape 1 : le sport -->
+        <template v-if="pickerStep === 'sport'">
+          <div class="picker-title font-display">Enregistrer une séance</div>
+          <button class="picker-row" @click="pickerStep = 'muscuType'">
+            <q-icon name="fitness_center" size="24px" />
+            <div class="picker-main">
+              <div class="picker-name">Muscu</div>
+              <div class="picker-sub">Séance détaillée ou rapide</div>
+            </div>
+            <q-icon name="chevron_right" size="20px" />
+          </button>
+          <button class="picker-row" @click="pickCardio">
+            <q-icon name="directions_run" size="24px" />
+            <div class="picker-main">
+              <div class="picker-name">Cardio</div>
+              <div class="picker-sub">Course, vélo, marche… (durée / distance)</div>
+            </div>
+            <q-icon name="chevron_right" size="20px" />
+          </button>
+          <button class="picker-row" @click="pickAutre">
+            <q-icon name="sports" size="24px" />
+            <div class="picker-main">
+              <div class="picker-name">Autre sport</div>
+              <div class="picker-sub">Tennis, foot, escalade… (durée)</div>
+            </div>
+            <q-icon name="chevron_right" size="20px" />
+          </button>
+        </template>
+
+        <!-- Étape 2 : type de séance muscu -->
+        <template v-else>
+          <div class="picker-title font-display">
+            <button class="picker-back" @click="pickerStep = 'sport'">‹</button> Séance muscu
           </div>
-          <q-icon name="chevron_right" size="20px" />
-        </button>
-        <button class="picker-row" @click="pickCardio">
-          <q-icon name="directions_run" size="24px" />
-          <div class="picker-main">
-            <div class="picker-name">Cardio</div>
-            <div class="picker-sub">Course, vélo, marche… (durée / distance)</div>
-          </div>
-          <q-icon name="chevron_right" size="20px" />
-        </button>
-        <button class="picker-row" @click="pickAutre">
-          <q-icon name="sports" size="24px" />
-          <div class="picker-main">
-            <div class="picker-name">Autre sport</div>
-            <div class="picker-sub">Tennis, foot, escalade… (durée)</div>
-          </div>
-          <q-icon name="chevron_right" size="20px" />
-        </button>
+          <button class="picker-row" @click="pickMuscuDetail">
+            <q-icon name="checklist" size="24px" />
+            <div class="picker-main">
+              <div class="picker-name">Détaillée</div>
+              <div class="picker-sub">Reps, poids, séries (séance libre)</div>
+            </div>
+            <q-icon name="chevron_right" size="20px" />
+          </button>
+          <button class="picker-row" @click="pickMuscuQuick">
+            <q-icon name="timer" size="24px" />
+            <div class="picker-main">
+              <div class="picker-name">Rapide</div>
+              <div class="picker-sub">Juste la durée</div>
+            </div>
+            <q-icon name="chevron_right" size="20px" />
+          </button>
+        </template>
       </q-card>
     </q-dialog>
 
@@ -290,9 +316,18 @@ const SPORT_OPTIONS = [
   'Autre',
 ];
 const pickerOpen = ref(false);
-async function pickMuscu() {
+const pickerStep = ref<'sport' | 'muscuType'>('sport');
+function openPicker() {
+  pickerStep.value = 'sport';
+  pickerOpen.value = true;
+}
+async function pickMuscuDetail() {
   pickerOpen.value = false;
-  await router.push('/muscu');
+  await router.push('/free'); // séance libre : reps / poids / séries
+}
+async function pickMuscuQuick() {
+  pickerOpen.value = false;
+  await router.push('/muscu'); // log rapide (durée)
 }
 async function pickCardio() {
   pickerOpen.value = false;
@@ -832,6 +867,14 @@ async function saveAutre() {
   font-size: 17px;
   font-weight: 700;
   margin-bottom: 10px;
+}
+.picker-back {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 22px;
+  cursor: pointer;
+  margin-right: 4px;
 }
 .picker-row {
   display: flex;
