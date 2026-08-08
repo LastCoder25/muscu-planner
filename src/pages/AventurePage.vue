@@ -712,8 +712,9 @@ async function claimBoss() {
 
 const c = computed(() =>
   computeCharacter(
-    progress.muscuXp.value,
-    progress.cardioXp.value,
+    progress.powerXp.value,
+    progress.enduranceXp.value,
+    progress.agilityXp.value,
     // énergie = sport de fond + bonus de connexion cumulé.
     progress.energyEarned.value + (char.row?.login_energy ?? 0),
     char.row?.energy_spent ?? 0,

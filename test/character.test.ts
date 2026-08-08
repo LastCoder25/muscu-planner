@@ -6,6 +6,7 @@ import {
   isValidPseudo,
   normalizePseudo,
 } from '@/lib/character';
+import { computeLevel } from '@/lib/levels';
 
 describe('statFromXp', () => {
   it('linéaire (÷15) arrondi, jamais négatif', () => {
@@ -17,18 +18,18 @@ describe('statFromXp', () => {
 });
 
 describe('computeCharacter', () => {
-  it('Puissance←muscu, Agilité←cardio, Endurance←moyenne', () => {
-    const c = computeCharacter(900, 300, 120);
+  it('chaque stat vient de son réservoir ; niveau = total', () => {
+    const c = computeCharacter(900, 600, 300, 1200);
     expect(c.puissance).toBe(60); // 900/15
+    expect(c.endurance).toBe(40); // 600/15
     expect(c.agilite).toBe(20); // 300/15
-    expect(c.endurance).toBe(statFromXp(600)); // (900+300)/2 = 600 → 40
     expect(c.pv).toBe(100 + c.endurance * 10);
-    expect(c.energy).toBe(120);
-    expect(c.level.level).toBeGreaterThanOrEqual(1);
+    expect(c.energy).toBe(1200);
+    expect(c.level.level).toBe(computeLevel(900 + 600 + 300).level);
   });
-  it('énergie = minutes − dépensée, plancher 0', () => {
-    expect(computeCharacter(0, 0, 30, 10).energy).toBe(20);
-    expect(computeCharacter(0, 0, 10, 50).energy).toBe(0);
+  it('énergie = dispo − dépensée, plancher 0', () => {
+    expect(computeCharacter(0, 0, 0, 30, 10).energy).toBe(20);
+    expect(computeCharacter(0, 0, 0, 10, 50).energy).toBe(0);
   });
 });
 

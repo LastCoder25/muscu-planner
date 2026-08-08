@@ -156,13 +156,27 @@
     <!-- RPG STATS -->
     <section class="fx">
       <div class="fx-h"><span class="fx-emo">🛡️</span> Stats du personnage & combat</div>
-      <div class="formula">stat = XP ÷ 15 (linéaire)</div>
+      <div class="formula">stat = réservoir ÷ 15 (linéaire)</div>
       <ul class="notes">
         <li>
-          💪 Puissance = XP muscu · ⚡ Agilité = XP cardio · ❤️ Endurance = (muscu + cardio) ÷ 2
+          Chaque source d'effort répartit son XP dans 3 <b>réservoirs</b> selon la
+          <b>signature du sport</b> (muscu → surtout 💪 ; course → ❤️/⚡ ; escalade → 💪/⚡…).
         </li>
+        <li>
+          💪 Puissance = réservoir power ÷ 15 · ❤️ Endurance = endurance ÷ 15 · ⚡ Agilité = agility
+          ÷ 15
+        </li>
+        <li>Total des 3 réservoirs = XP de fond → niveau global inchangé.</li>
         <li>PV = {{ COMBAT.pvBase }} + Endurance × {{ COMBAT.pvPerEndurance }}</li>
       </ul>
+      <div class="sub-h">Signatures (répartition Puiss / End / Agi)</div>
+      <div class="tbl small">
+        <div class="tr th"><span>Source</span><span>💪 / ❤️ / ⚡</span></div>
+        <div v-for="s in signatures" :key="s.k" class="tr">
+          <span>{{ s.k }}</span
+          ><span>{{ s.v }}</span>
+        </div>
+      </div>
       <div class="sub-h">Combat</div>
       <ul class="notes wide">
         <li>Dégâts = {{ COMBAT.baseDamage }} + Puissance × {{ COMBAT.damagePerPuissance }}</li>
@@ -196,6 +210,17 @@ import { computed } from 'vue';
 import { REP_XP, MUSCU_MIN_XP } from '@/lib/athlete';
 import { LOGIN, streakBaseEnergy } from '@/lib/loginStreak';
 import { COMBAT } from '@/lib/combat';
+import { MUSCU_SIG, cardioSignature, SPORT_SIGNATURES } from '@/lib/statSignature';
+
+const pctTriplet = (w: { power: number; endurance: number; agility: number }) =>
+  `${Math.round(w.power * 100)} / ${Math.round(w.endurance * 100)} / ${Math.round(w.agility * 100)}`;
+const signatures = [
+  { k: 'Muscu', v: pctTriplet(MUSCU_SIG) },
+  { k: 'Course', v: pctTriplet(cardioSignature('course')) },
+  { k: 'Vélo', v: pctTriplet(cardioSignature('velo')) },
+  { k: 'Trail', v: pctTriplet(cardioSignature('trail')) },
+  ...Object.entries(SPORT_SIGNATURES).map(([k, w]) => ({ k, v: pctTriplet(w) })),
+];
 
 // Reproduit les constantes NON exportées (documentaires ; à garder alignées).
 const ENERGY_PER_XP = 1;

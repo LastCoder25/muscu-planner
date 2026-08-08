@@ -36,28 +36,33 @@ export const PROFILE_LABEL: Record<CharacterProfile, string> = {
 };
 
 /**
- * Construit le personnage à partir de l'XP de fond et des minutes de sport.
- * @param muscuXp  XP musculation (déjà cumulée)
- * @param cardioXp XP cardio (déjà cumulée)
- * @param minutes  minutes de sport de fond (muscu + cardio) → énergie brute
- * @param energySpent énergie déjà dépensée en aventures (0 en phase 1)
+ * Construit le personnage à partir des 3 RÉSERVOIRS d'XP (alimentés par chaque
+ * sport selon sa signature, cf. statSignature.ts) et de l'énergie disponible.
+ * @param powerXp     réservoir 💪 Puissance
+ * @param enduranceXp réservoir ❤️ Endurance
+ * @param agilityXp   réservoir ⚡ Agilité
+ * @param energy      énergie brute disponible (XP de fond + bonus connexion)
+ * @param energySpent énergie déjà dépensée en aventures
  */
 export function computeCharacter(
-  muscuXp: number,
-  cardioXp: number,
-  minutes: number,
+  powerXp: number,
+  enduranceXp: number,
+  agilityXp: number,
+  energy: number,
   energySpent = 0,
 ): Character {
-  const puissance = statFromXp(muscuXp);
-  const agilite = statFromXp(cardioXp);
-  const endurance = statFromXp((muscuXp + cardioXp) / 2);
+  const puissance = statFromXp(powerXp);
+  const endurance = statFromXp(enduranceXp);
+  const agilite = statFromXp(agilityXp);
+  // Niveau de fond = total réparti dans les 3 réservoirs (= XP de fond).
+  const fondXp = Math.max(0, powerXp) + Math.max(0, enduranceXp) + Math.max(0, agilityXp);
   return {
-    level: computeLevel(muscuXp + cardioXp),
+    level: computeLevel(fondXp),
     puissance,
     endurance,
     agilite,
     pv: 100 + endurance * 10,
-    energy: Math.max(0, Math.round(minutes) - Math.round(energySpent)),
+    energy: Math.max(0, Math.round(energy) - Math.round(energySpent)),
     profile: characterProfile(puissance, agilite),
   };
 }

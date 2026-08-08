@@ -13,6 +13,14 @@ import { challengeXpPoints } from '@/lib/challenges';
 import { comboXpPoints } from '@/lib/combo';
 import { computeLevel } from '@/lib/levels';
 import { isCardioTrackChallenge } from '@/data/cardio';
+import {
+  emptyBuckets,
+  addXp,
+  MUSCU_SIG,
+  CARDIO_CHALLENGE_SIG,
+  cardioSignature,
+  sportSignature,
+} from '@/lib/statSignature';
 
 // Part de l'XP de fond convertie en énergie d'aventure (réglable).
 // 1 = « ton énergie = ton XP de fond » (généreux : le sport finance une vraie session de jeu).
@@ -103,6 +111,26 @@ export function useProgress() {
   const generalXp = computed(() => muscuTotal.value + cardioXp.value + autreXp.value);
   const globalXp = generalXp;
 
+  // ── 3 réservoirs de stats (chaque source répartie par sa signature) ──
+  // La somme des 3 = generalXp → même total, juste réparti Puissance/Endurance/Agilité.
+  const statBuckets = computed(() => {
+    const acc = emptyBuckets();
+    // Muscu (séances + défis muscu + Défi 360) → signature force.
+    addXp(acc, muscuTotal.value, MUSCU_SIG);
+    // Cardio (sorties non miroir) → signature par activité.
+    for (const r of cardio.logs) {
+      if (r.payload.challenge_id) continue;
+      addXp(acc, cardioSessionXp(r.payload), cardioSignature(r.payload.activity));
+    }
+    // Défis cardio → signature cardio générique.
+    addXp(acc, cardioChallengeXp.value, CARDIO_CHALLENGE_SIG);
+    // « Autre sport » → signature du sport choisi (nom du log).
+    for (const r of logs.all) {
+      if (isAutreLog(r)) addXp(acc, sessionXp(r.payload), sportSignature(r.payload.name));
+    }
+    return acc;
+  });
+
   return {
     global: computed(() => computeLevel(globalXp.value)),
     general: computed(() => computeLevel(generalXp.value)),
@@ -114,6 +142,10 @@ export function useProgress() {
     // Données brutes pour le RPG (fond uniquement).
     muscuXp: computed(() => muscuTotal.value),
     cardioXp: computed(() => cardioXp.value),
+    // 3 réservoirs de stats (répartis par signature de sport) → stats du perso.
+    powerXp: computed(() => Math.round(statBuckets.value.power)),
+    enduranceXp: computed(() => Math.round(statBuckets.value.endurance)),
+    agilityXp: computed(() => Math.round(statBuckets.value.agility)),
     // Énergie RPG = fraction de l'XP de fond gagnée (l'XP encode déjà l'effort :
     // reps des challenges, durée/distance/charge des séances). Tennis exclu.
     energyEarned: computed(() => Math.round(generalXp.value * ENERGY_PER_XP)),
