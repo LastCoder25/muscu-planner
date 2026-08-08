@@ -14,7 +14,7 @@ function log(over: Partial<SessionLog> = {}): SessionLog {
 
 describe('sessionXp', () => {
   it('durée seule = base (durée×3), même sans détail', () => {
-    expect(sessionXp(log({ duration_min: 45 }))).toBe(135);
+    expect(sessionXp(log({ duration_min: 45 }))).toBe(270); // 135 × XP_MULT(2)
     expect(sessionXp(log())).toBe(0);
   });
 
@@ -33,8 +33,8 @@ describe('sessionXp', () => {
         },
       ],
     });
-    // 40×3(=120) + 20 reps×0,2(=4) + 2000 tonnage/500(=4) = 128
-    expect(sessionXp(l)).toBe(128);
+    // (40×3=120 + 20×0,2=4 + 2000/500=4) = 128 × XP_MULT(2) = 256
+    expect(sessionXp(l)).toBe(256);
   });
 });
 
@@ -60,8 +60,8 @@ describe('drillSessionXp', () => {
         { id: 'c', name: 'c', done: false },
       ],
     });
-    // 40 + 60 + 2*8(=16) + 30 = 146
-    expect(drillSessionXp(l)).toBe(146);
+    // (40 + 60 + 2*8=16 + 30) = 146 × XP_MULT(2) = 292
+    expect(drillSessionXp(l)).toBe(292);
   });
 });
 
@@ -82,7 +82,7 @@ describe('estimateSessionXp', () => {
         },
       ],
     };
-    // reps = 3*10 = 30 → ×0,2 = 6 ; tonnage 1500/500 = 3 ; total 9
-    expect(estimateSessionXp(s)).toBe(9);
+    // reps 3*10=30 ×0,2=6 ; tonnage 1500/500=3 ; total 9 × XP_MULT(2) = 18
+    expect(estimateSessionXp(s)).toBe(18);
   });
 });

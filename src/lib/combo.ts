@@ -2,7 +2,7 @@
 // Modèle SÉRIES : l'objectif d'un exo = un nombre de SÉRIES/semaine (repère
 // hypertrophie), chaque série enregistrée porte ses reps + son poids. XP façon
 // séance : Σ reps×REP_XP×poids-de-rep + tonnage/500 + prime de bouclage.
-import { REP_XP, assistMult } from './athlete';
+import { REP_XP, assistMult, XP_MULT } from './athlete';
 import { daysBetweenIso } from './loginStreak';
 import type { Level } from './types';
 
@@ -119,7 +119,7 @@ export function comboXpPoints(combos: ComboChallenge[]): number {
       targetEffort += l.target * COMBO_PLAN_REPS * (l.rep_weight ?? 1);
     }
     const bonus = comboComplete(c) ? 0.25 * targetEffort * (1 + comboEarlyFraction(c)) : 0;
-    return a + Math.round(reps + tonnage / 500 + bonus);
+    return a + Math.round((reps + tonnage / 500 + bonus) * XP_MULT);
   }, 0);
 }
 

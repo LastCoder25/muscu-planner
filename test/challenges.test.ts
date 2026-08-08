@@ -203,8 +203,8 @@ describe('challengeXpPoints', () => {
         { day: 1, date: '2026-01-06', target: 10, done: 7, elapsed_sec: 0, completed: false },
       ],
     });
-    // total prévu 30, réalisé 17 < 30 → pas de prime. reps 17×0,2 = 3,4 → 3
-    expect(challengeXpPoints([c])).toBe(3);
+    // total prévu 30, réalisé 17 < 30 → pas de prime. reps 17×0,2=3,4 ×XP_MULT(2)=6,8 → 7
+    expect(challengeXpPoints([c])).toBe(7);
   });
 
   it('total ATTEINT : reps×0,2 + prime de complétion', () => {
@@ -215,8 +215,8 @@ describe('challengeXpPoints', () => {
         { day: 2, date: '2026-01-07', target: 10, done: 10, elapsed_sec: 0, completed: true },
       ],
     });
-    // reps 30×0,2 = 6 ; prime 0,25×30×(1+3/30=1,1) = 8,25 → total round(14,25) = 14
-    expect(challengeXpPoints([c])).toBe(14);
+    // reps 30×0,2=6 ; prime round(0,25×30×1,1=8,25)=8 ; (6+8)×XP_MULT(2)=28
+    expect(challengeXpPoints([c])).toBe(28);
   });
 
   it('un défi en temps ne compte pas les reps', () => {

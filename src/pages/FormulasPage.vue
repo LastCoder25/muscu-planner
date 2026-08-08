@@ -3,7 +3,8 @@
     <h1 class="page-title font-display">Calculs XP & énergie</h1>
     <p class="page-sub">
       Vue d'ensemble admin. Les constantes sont lues depuis le code (source de vérité) — si un
-      barème change, ce tableau suit.
+      barème change, ce tableau suit. Toutes les XP ci-dessous sont ensuite ×
+      <b>{{ XP_MULT }}</b> (multiplicateur global de progression).
     </p>
 
     <!-- NIVEAUX -->
@@ -210,7 +211,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { REP_XP, MUSCU_MIN_XP } from '@/lib/athlete';
+import { REP_XP, MUSCU_MIN_XP, XP_MULT } from '@/lib/athlete';
 import { LOGIN, streakBaseEnergy } from '@/lib/loginStreak';
 import { COMBAT } from '@/lib/combat';
 import { MUSCU_SIG, cardioSignature, SPORT_SIGNATURES } from '@/lib/statSignature';

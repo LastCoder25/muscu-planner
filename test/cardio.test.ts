@@ -39,12 +39,12 @@ describe('cardioSessionXp (log global)', () => {
     ...o,
   });
   it('distance + durée (×facteur, durée dominante) + D+ + D-', () => {
-    // (10*2 + 50*3=150 → 170)*1 = 170 + (200+100)/10(=30) = 200
+    // ((10*2 + 50*3=150)*1 = 170 + 300/10=30) = 200 × XP_MULT(2) = 400
     expect(
       cardioSessionXp(
         log({ distance_km: 10, duration_min: 50, elevation_m: 200, descent_m: 100, rpe: 3 }),
       ),
-    ).toBe(200);
+    ).toBe(400);
   });
   it('D- compte autant que D+', () => {
     const up = cardioSessionXp(log({ distance_km: 5, duration_min: 30, elevation_m: 300 }));
@@ -52,8 +52,8 @@ describe('cardioSessionXp (log global)', () => {
     expect(up).toBe(down);
   });
   it('sortie sans distance : la durée compte', () => {
-    // (0 + 30*3=90)*1 = 90
-    expect(cardioSessionXp(log({ duration_min: 30 }))).toBe(90);
+    // (0 + 30*3=90)*1 = 90 × XP_MULT(2) = 180
+    expect(cardioSessionXp(log({ duration_min: 30 }))).toBe(180);
   });
   it('une longue sortie facile > une courte rapide (pro-EF)', () => {
     const longEasy = cardioSessionXp(log({ distance_km: 10, duration_min: 60 }));
@@ -65,7 +65,7 @@ describe('cardioSessionXp (log global)', () => {
     const course = cardioSessionXp(log({ ...base, activity: 'course' }));
     const marche = cardioSessionXp(log({ ...base, activity: 'marche' }));
     expect(marche).toBeLessThan(course);
-    // marche : (10*2 + 50*3=150 → 170)*0.45 = 76.5 → 77
-    expect(marche).toBe(77);
+    // marche : ((10*2 + 50*3=150)=170)*0.45=76.5 × XP_MULT(2) = 153
+    expect(marche).toBe(153);
   });
 });

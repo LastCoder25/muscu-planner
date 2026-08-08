@@ -2,7 +2,7 @@
 // Calcul des objectifs par jour selon le format, suggestion de difficulté,
 // statistiques (streak/complétion) et évaluation des succès.
 import type { Level } from './types';
-import { REP_XP, assistMult } from './athlete';
+import { REP_XP, assistMult, XP_MULT } from './athlete';
 import { isCardioChallengeExercise } from '@/data/cardio';
 
 export type ChallengeFormat =
@@ -817,7 +817,7 @@ export function earlyFinishFraction(ch: Challenge): number {
  *  effort qu'à la complétion → 0 par jour ici. */
 export function challengeDayXp(ch: Challenge, done: number): number {
   if (ch.unit !== 'reps' || done <= 0) return 0;
-  return Math.round(done * REP_XP * (ch.rep_weight ?? 1));
+  return Math.round(done * REP_XP * (ch.rep_weight ?? 1) * XP_MULT);
 }
 
 /** Points d'XP issus des CHALLENGES (modèle « total ») :
@@ -852,5 +852,5 @@ export function challengeXpPoints(challenges: Challenge[]): number {
       c.format === 'cumulative' ? 1 + earlyFinishFraction(c) : durationMultiplier(activeDaysOf(c));
     return a + Math.round(0.25 * total * weightOf(c) * mult);
   }, 0);
-  return Math.round(repsXp + completionBonus);
+  return Math.round((repsXp + completionBonus) * XP_MULT);
 }

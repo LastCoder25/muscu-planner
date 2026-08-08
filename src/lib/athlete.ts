@@ -16,6 +16,11 @@ const ACTIVITY_XP_FACTOR: Record<CardioActivity, number> = {
   marche_tapis: 0.45,
 };
 
+// Multiplicateur GLOBAL d'XP : accélère la progression (niveaux + énergie) pour
+// tous. Appliqué à la SOURCE de chaque XP → niveaux, énergie et stats scalent
+// ensemble, donc les stats-par-niveau (et l'équilibrage des monstres) restent
+// identiques ; seule la vitesse de progression dans le temps change. Réglable.
+export const XP_MULT = 2;
 // Valeur d'une répétition (partagée séance ↔ challenge → parité). Réglable.
 export const REP_XP = 0.2;
 // Facteur d'assistance (poids du corps) : une rep ASSISTÉE (élastique/machine)
@@ -39,7 +44,7 @@ export function sessionXp(log: SessionLog): number {
     }
   }
   const dur = log.duration_min ?? 0;
-  return Math.round(dur * MUSCU_MIN_XP + reps * REP_XP + tonnage / 500);
+  return Math.round((dur * MUSCU_MIN_XP + reps * REP_XP + tonnage / 500) * XP_MULT);
 }
 
 /** XP d'une séance de tennis : présence + durée + drills réalisés + intensité. */
@@ -47,7 +52,7 @@ export function drillSessionXp(log: DrillLog): number {
   const done = (log.drills ?? []).filter((d) => d.done).length;
   const minutes = log.duration_min ?? 0;
   const intensity = (log.global_difficulty ?? 2) * 10;
-  return Math.round(40 + minutes + done * 8 + intensity);
+  return Math.round((40 + minutes + done * 8 + intensity) * XP_MULT);
 }
 
 /** XP d'une sortie cardio : durée + distance (pondérées par l'activité — marche <
@@ -64,7 +69,7 @@ export function cardioSessionXp(log: CardioLog): number {
   // sortie facile rapporte PLUS qu'une courte sortie rapide (on ne récompense
   // JAMAIS la vitesse, qui pousserait à sortir de la zone EF). La distance reste
   // un petit bonus ; le dénivelé (D+ ET D-) compte à plein.
-  return Math.round((km * 2 + dur * 3) * factor + (dplus + dminus) / 10);
+  return Math.round(((km * 2 + dur * 3) * factor + (dplus + dminus) / 10) * XP_MULT);
 }
 
 /** Estimation d'XP d'une séance PRÉVUE (avant de la faire) : même barème que
@@ -86,5 +91,5 @@ export function estimateSessionXp(session: Session): number {
       tonnage += sets * avgReps * (t.load_kg || 0);
     }
   }
-  return Math.round(reps * REP_XP + tonnage / 500);
+  return Math.round((reps * REP_XP + tonnage / 500) * XP_MULT);
 }
