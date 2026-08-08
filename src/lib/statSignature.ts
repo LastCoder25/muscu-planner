@@ -67,6 +67,23 @@ const SPORT_SIG: Record<string, StatWeights> = {
   Danse: { power: 0.1, endurance: 0.4, agility: 0.5 },
   Crossfit: { power: 0.4, endurance: 0.35, agility: 0.25 },
   Hyrox: { power: 0.3, endurance: 0.55, agility: 0.15 },
+  Badminton: { power: 0, endurance: 0.4, agility: 0.6 },
+  Squash: { power: 0, endurance: 0.5, agility: 0.5 },
+  'Tennis de table': { power: 0, endurance: 0.3, agility: 0.7 },
+  Volley: { power: 0.3, endurance: 0.2, agility: 0.5 },
+  Handball: { power: 0.2, endurance: 0.4, agility: 0.4 },
+  Judo: { power: 0.5, endurance: 0.2, agility: 0.3 },
+  'Arts martiaux': { power: 0.3, endurance: 0.2, agility: 0.5 },
+  MMA: { power: 0.35, endurance: 0.3, agility: 0.35 },
+  Aviron: { power: 0.4, endurance: 0.6, agility: 0 },
+  Surf: { power: 0.2, endurance: 0.3, agility: 0.5 },
+  Paddle: { power: 0.3, endurance: 0.5, agility: 0.2 },
+  Snowboard: { power: 0.3, endurance: 0.2, agility: 0.5 },
+  Roller: { power: 0.1, endurance: 0.3, agility: 0.6 },
+  'Corde à sauter': { power: 0, endurance: 0.6, agility: 0.4 },
+  Gymnastique: { power: 0.5, endurance: 0.1, agility: 0.4 },
+  Pilates: { power: 0.3, endurance: 0.3, agility: 0.4 },
+  Équitation: { power: 0.2, endurance: 0.4, agility: 0.4 },
 };
 // Sport inconnu / « Autre » libre : équilibré (léger biais endurance).
 export const DEFAULT_SPORT_SIG: StatWeights = { power: 0.3, endurance: 0.4, agility: 0.3 };

@@ -160,14 +160,25 @@
         <div class="autre-desc">Compte dans ton niveau global et ton énergie d'aventure.</div>
         <q-select
           v-model="autreSport"
-          :options="SPORT_OPTIONS"
+          :options="filteredSports"
           label="Sport"
           filled
           dense
-          emit-value
-          map-options
+          use-input
+          fill-input
+          hide-selected
+          input-debounce="0"
           class="q-mb-sm"
-        />
+          @filter="filterSports"
+        >
+          <template #no-option>
+            <q-item>
+              <q-item-section class="text-grey">
+                Rien trouvé — choisis « Autre » pour préciser
+              </q-item-section>
+            </q-item>
+          </template>
+        </q-select>
         <q-input
           v-if="autreSport === 'Autre'"
           v-model="autreCustom"
@@ -316,8 +327,35 @@ const SPORT_OPTIONS = [
   'Danse',
   'Crossfit',
   'Hyrox',
+  'Badminton',
+  'Squash',
+  'Tennis de table',
+  'Volley',
+  'Handball',
+  'Judo',
+  'Arts martiaux',
+  'MMA',
+  'Aviron',
+  'Surf',
+  'Paddle',
+  'Snowboard',
+  'Roller',
+  'Corde à sauter',
+  'Gymnastique',
+  'Pilates',
+  'Équitation',
   'Autre',
 ];
+// Recherche dans le sélecteur de sport.
+const filteredSports = ref<string[]>([...SPORT_OPTIONS]);
+function filterSports(val: string, update: (fn: () => void) => void) {
+  update(() => {
+    const n = (val || '').toLowerCase();
+    filteredSports.value = n
+      ? SPORT_OPTIONS.filter((s) => s.toLowerCase().includes(n))
+      : [...SPORT_OPTIONS];
+  });
+}
 const pickerOpen = ref(false);
 const pickerStep = ref<'sport' | 'muscuType'>('sport');
 function openPicker() {
