@@ -10,6 +10,9 @@ import {
   upgradeCost,
   canUpgrade,
   investedDust,
+  setCounts,
+  setEffects,
+  ITEM_SETS,
   type Item,
   type Equipped,
 } from '@/lib/items';
@@ -128,5 +131,90 @@ describe('itemScore', () => {
     const a = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 } });
     const b = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 25 } });
     expect(itemScore(b)).toBeGreaterThan(itemScore(a));
+  });
+});
+
+describe('sets d’équipement', () => {
+  const dragonPiece = (slot: Item['slot']): Item =>
+    item({
+      id: `d-${slot}`,
+      slot,
+      rarity: 'epic',
+      effect: { type: 'damage_pct', value: 10 },
+      setId: 'dragon',
+    });
+
+  it('setCounts compte les pièces par set', () => {
+    const eq: Equipped = { weapon: dragonPiece('weapon'), armor: dragonPiece('armor') };
+    expect(setCounts(eq).dragon).toBe(2);
+  });
+
+  it('aucun bonus de set en dessous de 2 pièces', () => {
+    const eq: Equipped = { weapon: dragonPiece('weapon') };
+    const e = setEffects(eq);
+    expect(e.damagePct).toBe(0);
+  });
+
+  it('2 pièces → 1er palier actif (Dragon : +dégâts)', () => {
+    const eq: Equipped = { weapon: dragonPiece('weapon'), armor: dragonPiece('armor') };
+    const e = setEffects(eq);
+    expect(e.damagePct).toBeGreaterThan(0);
+    expect(e.critAdd).toBe(0); // palier 3 pièces pas encore atteint
+  });
+
+  it('4 pièces → tous les paliers Dragon actifs', () => {
+    const eq: Equipped = {
+      weapon: dragonPiece('weapon'),
+      armor: dragonPiece('armor'),
+      accessory: dragonPiece('accessory'),
+      relic: dragonPiece('relic'),
+    };
+    const e = setEffects(eq);
+    expect(e.damagePct).toBeGreaterThan(0);
+    expect(e.critAdd).toBeGreaterThan(0);
+    expect(e.lifesteal).toBeGreaterThan(0);
+  });
+
+  it('aggregateEffects inclut les bonus de set', () => {
+    const eq: Equipped = { weapon: dragonPiece('weapon'), armor: dragonPiece('armor') };
+    const withSet = aggregateEffects(eq).damagePct;
+    const noSet = aggregateEffects({
+      weapon: { ...dragonPiece('weapon'), setId: undefined },
+      armor: { ...dragonPiece('armor'), setId: undefined },
+    }).damagePct;
+    expect(withSet).toBeGreaterThan(noSet);
+  });
+
+  it('le bonus de set grandit avec le niveau des pièces', () => {
+    const lvl1: Equipped = {
+      weapon: { ...dragonPiece('weapon'), level: 1 },
+      armor: { ...dragonPiece('armor'), level: 1 },
+    };
+    const lvl10: Equipped = {
+      weapon: { ...dragonPiece('weapon'), level: 10 },
+      armor: { ...dragonPiece('armor'), level: 10 },
+    };
+    expect(setEffects(lvl10).damagePct).toBeGreaterThan(setEffects(lvl1).damagePct);
+  });
+
+  it('rollDrop peut produire une pièce de set (chance = 1)', () => {
+    let seed = 1;
+    const rng = () => {
+      seed = (seed * 1103515245 + 12345) % 2 ** 31;
+      return seed / 2 ** 31;
+    };
+    let gotSet = false;
+    for (let i = 0; i < 50 && !gotSet; i++) {
+      const d = rollDrop(rng, {
+        playerLevel: 9,
+        cleared: true,
+        defeated: 2,
+        level: 8,
+        set: { id: 'dragon', chance: 1 },
+      });
+      if (d?.setId === 'dragon') gotSet = true;
+    }
+    expect(gotSet).toBe(true);
+    expect(ITEM_SETS.some((s) => s.id === 'dragon')).toBe(true);
   });
 });

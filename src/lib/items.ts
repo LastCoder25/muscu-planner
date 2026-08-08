@@ -30,6 +30,7 @@ export interface Item {
   level: number; // niveau ACTUEL (monté via la Poussière d'évolution, ≤ niveau du joueur)
   baseLevel: number; // niveau à l'obtention (drop) → sert au remboursement au recyclage
   effect: ItemEffect; // value = magnitude de BASE (niveau 1) ; l'effet réel grandit avec le niveau
+  setId?: string; // appartenance à un SET (bonus à 2/3/4 pièces) — cf. ITEM_SETS
 }
 
 // L'effet grandit de +10 % de la base par niveau au-dessus de 1.
@@ -187,6 +188,7 @@ export function rollDrop(
     defeated: number;
     level?: number;
     luck?: number;
+    set?: { id: string; chance: number }; // donjon à set : chance de tirer une pièce de set
   },
 ): Omit<Item, 'id'> | null {
   if (opts.defeated <= 0) return null;
@@ -202,14 +204,17 @@ export function rollDrop(
   const noun = pick(rng, NAMES[slot]);
   // Niveau de l'objet = niveau de base du donjon, borné [1, niveau joueur].
   const level = Math.min(Math.max(1, opts.playerLevel), Math.max(1, Math.round(opts.level ?? 1)));
+  // Pièce de set ? (donjons de fin uniquement). Tirage indépendant après le drop.
+  const set = opts.set && rng() < opts.set.chance ? SET_BY_ID[opts.set.id] : undefined;
   return {
     slot,
-    name: `${noun} ${RARITY_ADJ[rarity]}`,
-    emoji: SLOT_EMOJI[slot],
+    name: set ? `${noun} · ${set.name}` : `${noun} ${RARITY_ADJ[rarity]}`,
+    emoji: set ? set.emoji : SLOT_EMOJI[slot],
     rarity,
     level,
     baseLevel: level,
     effect: { type: chosen.type, value },
+    ...(set ? { setId: set.id } : {}),
   };
 }
 
@@ -235,33 +240,133 @@ export function emptyEffects(): AggregatedEffects {
   };
 }
 
+/** Applique une valeur (fraction) d'un EffectType donné à un agrégat. */
+function applyEffect(a: AggregatedEffects, type: EffectType, v: number): void {
+  switch (type) {
+    case 'damage_pct':
+      a.damagePct += v;
+      break;
+    case 'crit_pct':
+      a.critAdd += v;
+      break;
+    case 'lifesteal_pct':
+      a.lifesteal += v;
+      break;
+    case 'dmg_reduction_pct':
+      a.dmgReduction += v;
+      break;
+    case 'max_pv_pct':
+      a.maxPvPct += v;
+      break;
+    case 'gold_pct':
+      a.goldPct += v;
+      break;
+  }
+}
+
+// ── Sets d'équipement (bonus à 2 / 3 / 4 pièces) ──
+// RÈGLE respectée : le bonus GRANDIT avec le niveau (moyen) des pièces du set.
+// Les pièces de set droppent sur les donjons de fin (cf. dungeons.ts).
+export interface SetTier {
+  pieces: number; // 2, 3 ou 4
+  type: EffectType;
+  base: number; // magnitude de base (niveau 1), scalée par le niveau moyen des pièces
+}
+export interface ItemSet {
+  id: string;
+  name: string;
+  emoji: string;
+  theme: string; // résumé « coach »
+  tiers: SetTier[];
+}
+
+export const ITEM_SETS: ItemSet[] = [
+  {
+    id: 'dragon',
+    name: 'Écailles du Dragon',
+    emoji: '🐲',
+    theme: 'Offensif : frappe fort et se soigne en tapant.',
+    tiers: [
+      { pieces: 2, type: 'damage_pct', base: 8 },
+      { pieces: 3, type: 'crit_pct', base: 6 },
+      { pieces: 4, type: 'lifesteal_pct', base: 10 },
+    ],
+  },
+  {
+    id: 'void',
+    name: 'Sceau du Néant',
+    emoji: '🌌',
+    theme: 'Défensif : encaisse et dure longtemps.',
+    tiers: [
+      { pieces: 2, type: 'max_pv_pct', base: 10 },
+      { pieces: 3, type: 'dmg_reduction_pct', base: 6 },
+      { pieces: 4, type: 'crit_pct', base: 10 },
+    ],
+  },
+  {
+    id: 'apocalypse',
+    name: 'Braise de l’Apocalypse',
+    emoji: '🔥',
+    theme: 'Hybride : dégâts, survie et or.',
+    tiers: [
+      { pieces: 2, type: 'damage_pct', base: 10 },
+      { pieces: 3, type: 'max_pv_pct', base: 12 },
+      { pieces: 4, type: 'gold_pct', base: 40 },
+    ],
+  },
+];
+export const SET_BY_ID: Record<string, ItemSet> = Object.fromEntries(
+  ITEM_SETS.map((s) => [s.id, s]),
+);
+
+/** Nombre de pièces équipées par set. */
+export function setCounts(equipped: Equipped): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const slot of SLOTS) {
+    const it = equipped[slot];
+    if (it?.setId) out[it.setId] = (out[it.setId] ?? 0) + 1;
+  }
+  return out;
+}
+
+/** Effets cumulés des SETS actifs (≥2 pièces), scalés par le niveau moyen des pièces. */
+export function setEffects(equipped: Equipped): AggregatedEffects {
+  const a = emptyEffects();
+  const groups: Record<string, Item[]> = {};
+  for (const slot of SLOTS) {
+    const it = equipped[slot];
+    if (it?.setId) (groups[it.setId] ??= []).push(it);
+  }
+  for (const [id, items] of Object.entries(groups)) {
+    const def = SET_BY_ID[id];
+    if (!def || items.length < 2) continue;
+    const avgLvl = Math.round(items.reduce((s, i) => s + i.level, 0) / items.length);
+    const mult = itemLevelMult(avgLvl);
+    for (const t of def.tiers) {
+      if (items.length < t.pieces) continue;
+      applyEffect(a, t.type, Math.max(1, Math.round(t.base * mult)) / 100);
+    }
+  }
+  a.dmgReduction = Math.min(0.5, a.dmgReduction);
+  return a;
+}
+
 export function aggregateEffects(equipped: Equipped): AggregatedEffects {
   const a = emptyEffects();
   for (const slot of SLOTS) {
     const it = equipped[slot];
     if (!it) continue;
-    const v = effectiveValue(it.effect, it.level) / 100; // effet réel au niveau de l'objet
-    switch (it.effect.type) {
-      case 'damage_pct':
-        a.damagePct += v;
-        break;
-      case 'crit_pct':
-        a.critAdd += v;
-        break;
-      case 'lifesteal_pct':
-        a.lifesteal += v;
-        break;
-      case 'dmg_reduction_pct':
-        a.dmgReduction += v;
-        break;
-      case 'max_pv_pct':
-        a.maxPvPct += v;
-        break;
-      case 'gold_pct':
-        a.goldPct += v;
-        break;
-    }
+    applyEffect(a, it.effect.type, effectiveValue(it.effect, it.level) / 100);
   }
+  // Bonus de set (2/3/4 pièces) — ajoutés par-dessus les effets d'objet.
+  const s = setEffects(equipped);
+  a.damagePct += s.damagePct;
+  a.critAdd += s.critAdd;
+  a.dodgeAdd += s.dodgeAdd;
+  a.lifesteal += s.lifesteal;
+  a.dmgReduction += s.dmgReduction;
+  a.maxPvPct += s.maxPvPct;
+  a.goldPct += s.goldPct;
   a.dmgReduction = Math.min(0.5, a.dmgReduction); // plafond 50 %
   return a;
 }

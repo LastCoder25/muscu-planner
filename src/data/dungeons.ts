@@ -20,6 +20,8 @@ export interface Dungeon {
   hint: string; // conseil « coach »
   dropLevel: number; // niveau de base des objets lâchés (plafonné au niveau du joueur)
   dropLuck: number; // biais de rareté du butin (0 = normal … 1 = très généreux)
+  setId?: string; // donjon à set : id du set dont il peut lâcher des pièces (cf. ITEM_SETS)
+  setChance?: number; // proba qu'un drop soit une pièce de ce set (0..1)
 }
 
 export const DUNGEONS: Dungeon[] = [
@@ -100,6 +102,8 @@ export const DUNGEONS: Dungeon[] = [
     hint: 'Le dragon frappe et crit fort → build complet, beaucoup de PV.',
     dropLevel: 7,
     dropLuck: 0.7,
+    setId: 'dragon',
+    setChance: 0.4,
   },
   {
     id: 'neant',
@@ -113,6 +117,8 @@ export const DUNGEONS: Dungeon[] = [
     hint: 'Le défi ultime : le titan est un mur. Tout à fond, surtout la Puissance.',
     dropLevel: 8,
     dropLuck: 0.9,
+    setId: 'void',
+    setChance: 0.45,
   },
   {
     id: 'apocalypse',

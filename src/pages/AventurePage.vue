@@ -242,6 +242,28 @@
           </div>
         </div>
 
+        <!-- Sets d'équipement (bonus 2/3/4 pièces) -->
+        <template v-if="activeSets.length">
+          <div class="sec-title">Sets</div>
+          <div v-for="s in activeSets" :key="s.id" class="setcard" :class="{ full: s.count >= 4 }">
+            <div class="set-top">
+              <span class="set-name">{{ s.emoji }} {{ s.name }}</span>
+              <span class="set-count font-display">{{ s.count }}/4</span>
+            </div>
+            <div class="set-theme">{{ s.theme }}</div>
+            <div class="set-tiers">
+              <span
+                v-for="t in s.tiers"
+                :key="t.pieces"
+                class="set-tier"
+                :class="{ on: s.count >= t.pieces }"
+              >
+                {{ t.pieces }} pièces : {{ t.label }}
+              </span>
+            </div>
+          </div>
+        </template>
+
         <template v-if="char.row.inventory.length">
           <div ref="sacTitle" class="sec-title">Sac ({{ char.row.inventory.length }})</div>
           <div class="inv">
@@ -283,59 +305,20 @@
 
       <!-- ONGLET DONJONS -->
       <template v-else-if="tab === 'donjons'">
-        <!-- Consommables à utiliser pour le prochain run -->
-        <div v-if="ownedConsumables.length" class="consum">
-          <div class="consum-lbl">Utiliser pour ce donjon</div>
-          <div class="consum-row">
+        <!-- Rapport de combat : au-dessus des donjons, bouton « Réattaquer » en TÊTE
+             (position stable) → on réenchaîne sans que le butin variable décale le bouton. -->
+        <div v-if="run" class="report" :class="run.cleared ? 'win' : 'lose'">
+          <div class="report-head">
+            <span class="report-title font-display">📋 Rapport de combat</span>
             <button
-              v-for="ic in ownedConsumables"
-              :key="ic.id"
-              class="consum-chip"
-              :class="{ on: selectedConsumables.includes(ic.id) }"
-              @click="toggleConsumable(ic.id)"
+              v-if="lastDungeon"
+              class="reattack"
+              :disabled="c.energy < lastDungeon.energyCost || busy"
+              @click="explore(lastDungeon)"
             >
-              {{ ic.emoji }} {{ ic.name }} ×{{ char.row.consumables[ic.id] }}
+              ⚔️ Réattaquer {{ lastDungeon.name }} ({{ lastDungeon.energyCost }} ⚡)
             </button>
           </div>
-        </div>
-
-        <div class="dungeons">
-          <div
-            v-for="d in DUNGEONS"
-            :key="d.id"
-            class="dgn"
-            :class="{ locked: !dungeonUnlocked(d) }"
-          >
-            <span class="dgn-emo">{{ dungeonUnlocked(d) ? d.emoji : '🔒' }}</span>
-            <div class="dgn-main">
-              <div class="dgn-top">
-                <span class="dgn-name font-display">{{ d.name }}</span>
-                <span class="dgn-gold">+{{ dungeonGold(d) }} 🪙</span>
-              </div>
-              <div class="dgn-stats">
-                {{ d.monsterIds.length }} monstres · coûte {{ d.energyCost }} ⚡ · conseillé niv.
-                {{ d.recoLevel }}
-              </div>
-              <div v-if="dungeonUnlocked(d)" class="dgn-hint">{{ d.hint }}</div>
-              <div v-else class="dgn-hint dgn-lock">
-                🔒 Nettoie d’abord « {{ prevDungeonName(d) }} » pour débloquer ce donjon.
-              </div>
-            </div>
-            <button
-              v-if="dungeonUnlocked(d)"
-              class="fight"
-              :disabled="c.energy < d.energyCost || busy"
-              @click="explore(d)"
-            >
-              Explorer
-            </button>
-            <button v-else class="fight" disabled>Verrouillé</button>
-          </div>
-        </div>
-
-        <!-- Résultat du run : placé SOUS la liste pour ne jamais décaler les
-             boutons de donjon (on peut réenchaîner le même donjon sans que ça bouge). -->
-        <div v-if="run" class="result" :class="run.cleared ? 'win' : 'lose'">
           <div class="result-head">
             <span>{{ run.cleared ? '🏆 Donjon nettoyé' : '💀 Échec' }} — {{ run.name }}</span>
             <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
@@ -399,6 +382,56 @@
           <div v-if="run.consumable" class="cons-drop">
             {{ run.consumable.emoji }} <b>{{ run.consumable.name }}</b> ajouté à ton sac de
             consommables 🎒
+          </div>
+        </div>
+
+        <!-- Consommables à utiliser pour le prochain run -->
+        <div v-if="ownedConsumables.length" class="consum">
+          <div class="consum-lbl">Utiliser pour ce donjon</div>
+          <div class="consum-row">
+            <button
+              v-for="ic in ownedConsumables"
+              :key="ic.id"
+              class="consum-chip"
+              :class="{ on: selectedConsumables.includes(ic.id) }"
+              @click="toggleConsumable(ic.id)"
+            >
+              {{ ic.emoji }} {{ ic.name }} ×{{ char.row.consumables[ic.id] }}
+            </button>
+          </div>
+        </div>
+
+        <div class="dungeons">
+          <div
+            v-for="d in DUNGEONS"
+            :key="d.id"
+            class="dgn"
+            :class="{ locked: !dungeonUnlocked(d) }"
+          >
+            <span class="dgn-emo">{{ dungeonUnlocked(d) ? d.emoji : '🔒' }}</span>
+            <div class="dgn-main">
+              <div class="dgn-top">
+                <span class="dgn-name font-display">{{ d.name }}</span>
+                <span class="dgn-gold">+{{ dungeonGold(d) }} 🪙</span>
+              </div>
+              <div class="dgn-stats">
+                {{ d.monsterIds.length }} monstres · coûte {{ d.energyCost }} ⚡ · conseillé niv.
+                {{ d.recoLevel }}
+              </div>
+              <div v-if="dungeonUnlocked(d)" class="dgn-hint">{{ d.hint }}</div>
+              <div v-else class="dgn-hint dgn-lock">
+                🔒 Nettoie d’abord « {{ prevDungeonName(d) }} » pour débloquer ce donjon.
+              </div>
+            </div>
+            <button
+              v-if="dungeonUnlocked(d)"
+              class="fight"
+              :disabled="c.energy < d.energyCost || busy"
+              @click="explore(d)"
+            >
+              Explorer
+            </button>
+            <button v-else class="fight" disabled>Verrouillé</button>
           </div>
         </div>
       </template>
@@ -575,6 +608,8 @@ import {
   SLOT_EMOJI,
   RARITY_LABEL,
   RARITY_RANK,
+  ITEM_SETS,
+  setCounts,
   type Item,
   type ItemSlot,
   type AggregatedEffects,
@@ -756,6 +791,7 @@ function barW(v: number): string {
 
 const busy = ref(false);
 const run = ref<RunView | null>(null);
+const lastDungeon = ref<Dungeon | null>(null); // pour « Réattaquer » depuis le rapport
 const sacTitle = ref<HTMLElement | null>(null);
 
 // ── Boutique & consommables ──
@@ -816,6 +852,28 @@ function dropState(it: Item): 'bag' | 'equipped' | 'gone' {
 function equippedInSlot(slot: ItemSlot): Item | undefined {
   return char.row?.equipped[slot];
 }
+// Sets d'équipement en cours (≥1 pièce), avec libellés des paliers scalés au niv. moyen.
+const activeSets = computed(() => {
+  const eq = char.row?.equipped ?? {};
+  const counts = setCounts(eq);
+  return ITEM_SETS.filter((s) => (counts[s.id] ?? 0) >= 1).map((s) => {
+    const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === s.id);
+    const avg = pieces.length
+      ? Math.round(pieces.reduce((a, it) => a + it.level, 0) / pieces.length)
+      : 1;
+    return {
+      id: s.id,
+      name: s.name,
+      emoji: s.emoji,
+      theme: s.theme,
+      count: counts[s.id] ?? 0,
+      tiers: s.tiers.map((t) => ({
+        pieces: t.pieces,
+        label: effectLabel({ type: t.type, value: t.base }, avg),
+      })),
+    };
+  });
+});
 // Verdict de rareté du drop vs l'objet équipé (potentiel long terme : la rareté
 // fixe la magnitude de base, la poussière fait ensuite monter le niveau).
 function rarityVerdict(d: Item): { label: string; cls: string } {
@@ -844,6 +902,7 @@ async function explore(d: Dungeon) {
   const uid = auth.user?.id;
   if (!uid || !char.row || busy.value || c.value.energy < d.energyCost) return;
   if (!dungeonUnlocked(d)) return;
+  lastDungeon.value = d;
   busy.value = true;
   try {
     // Consommables sélectionnés pour ce run (buffs + chance de butin).
@@ -863,6 +922,7 @@ async function explore(d: Dungeon) {
       defeated: r.defeated,
       level: d.dropLevel,
       luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
+      ...(d.setId && d.setChance ? { set: { id: d.setId, chance: d.setChance } } : {}),
     });
     if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
     // Butin consommable (en plus de l'équipement).
@@ -1640,6 +1700,52 @@ onMounted(async () => {
   color: var(--dim);
   opacity: 0.7;
 }
+/* Sets d'équipement */
+.setcard {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--dim);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.setcard.full {
+  border-left-color: var(--accent);
+}
+.set-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.set-name {
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.set-count {
+  font-weight: 800;
+  color: var(--accent);
+}
+.set-theme {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin: 2px 0 6px;
+}
+.set-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.set-tier {
+  font-size: 11.5px;
+  color: var(--dim);
+  opacity: 0.55;
+}
+.set-tier.on {
+  color: var(--accent);
+  opacity: 1;
+  font-weight: 600;
+}
 .slot-x {
   background: none;
   border: none;
@@ -1798,6 +1904,54 @@ onMounted(async () => {
   cursor: pointer;
 }
 .fight:disabled {
+  background: transparent;
+  color: var(--dim);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+
+/* Rapport de combat (au-dessus des donjons) */
+.report {
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+}
+.report.win {
+  border-left-color: var(--d1);
+}
+.report.lose {
+  border-left-color: var(--d4);
+}
+.report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.report-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.reattack {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.reattack:disabled {
   background: transparent;
   color: var(--dim);
   border-color: var(--line);
