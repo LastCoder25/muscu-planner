@@ -389,12 +389,13 @@ function fmtDur(min: number): string {
   const r = m % 60;
   return r ? `${h} h ${r}` : `${h} h`;
 }
-// Répartition stats du sport (signature) → « 💪60 ❤️30 ⚡10 » (parts non nulles).
+// Bénéfices BRUTS du sport (vecteur non normalisé) → « 💪60 ❤️30 ⚡10 » (parts non
+// nulles). La somme = intensité (varie selon le sport), plus de normalisation à 100.
 function sigLabel(sig: { power: number; endurance: number; agility: number }): string {
   const parts: string[] = [];
-  if (sig.power > 0) parts.push(`💪${Math.round(sig.power * 100)}`);
-  if (sig.endurance > 0) parts.push(`❤️${Math.round(sig.endurance * 100)}`);
-  if (sig.agility > 0) parts.push(`⚡${Math.round(sig.agility * 100)}`);
+  if (sig.power > 0) parts.push(`💪${Math.round(sig.power)}`);
+  if (sig.endurance > 0) parts.push(`❤️${Math.round(sig.endurance)}`);
+  if (sig.agility > 0) parts.push(`⚡${Math.round(sig.agility)}`);
   return parts.join(' ');
 }
 // Tap sur une tuile de sport → son HISTORIQUE FILTRÉ sur ce sport (la saisie se

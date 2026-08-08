@@ -25,6 +25,8 @@ import {
   CARDIO_CHALLENGE_SIG,
   cardioSignature,
   sportSignature,
+  activityBenefit,
+  sportBenefit,
 } from '@/lib/statSignature';
 import type { SportEntry } from '@/lib/sportAchievements';
 import type { CardioActivity } from '@/lib/types';
@@ -271,12 +273,13 @@ export function useProgress() {
     // Défi 360 → Muscu (XP seulement).
     if (comboXp.value > 0) bump('disc:musculation', 'Muscu', 'fitness_center', comboXp.value, 0, 0);
 
-    // Signature du sport (répartition stats) → affichée sur la tuile.
+    // Vecteur de BÉNÉFICES BRUT du sport (somme = intensité) → affiché sur la tuile.
+    // Muscu = volume-based (pas de MET) → profil de référence {60/30/10} (intensité ~100).
     const tileSig = (key: string) => {
       if (key.startsWith('cardio:'))
-        return cardioSignature(key.slice('cardio:'.length) as CardioActivity);
-      if (key === 'disc:musculation') return MUSCU_SIG;
-      if (key.startsWith('sport:')) return sportSignature(key.slice('sport:'.length));
+        return activityBenefit(key.slice('cardio:'.length) as CardioActivity);
+      if (key === 'disc:musculation') return { power: 60, endurance: 30, agility: 10 };
+      if (key.startsWith('sport:')) return sportBenefit(key.slice('sport:'.length));
       return null; // crossfit/hyrox/mobilité/prépa → n'alimentent pas les stats du perso
     };
     return [...map.values()]

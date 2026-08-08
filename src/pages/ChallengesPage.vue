@@ -209,6 +209,7 @@
         <div class="combo360-head">
           <div class="c3-top">
             <span class="c3-pct font-display">{{ comboPct }}%</span>
+            <span class="c3-week">📅 {{ comboWeek }}</span>
           </div>
           <div class="bar"><div class="fill" :style="{ width: comboPct + '%' }" /></div>
         </div>
@@ -388,6 +389,24 @@ const availableEnergy = computed(
 const mode = ref<'solo' | 'combo'>('solo');
 const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
 const comboPct = computed(() => (activeCombo.value ? comboProgressPct(activeCombo.value) : 0));
+// Semaine du Défi 360 (début → fin) pour l'afficher clairement.
+function fmtDM(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y!, (m ?? 1) - 1, d ?? 1).toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: 'short',
+  });
+}
+function addDaysLocal(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y!, (m ?? 1) - 1, (d ?? 1) + n);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+const comboWeek = computed(() => {
+  const c = activeCombo.value;
+  if (!c) return '';
+  return `${fmtDM(c.start_date)} → ${fmtDM(addDaysLocal(c.start_date, c.duration_days - 1))}`;
+});
 
 // Saisie d'une série (reps + poids), préremplie avec la dernière série de l'exo.
 const setOpen = ref(false);
@@ -780,6 +799,12 @@ onMounted(async () => {
   font-size: 26px;
   font-weight: 800;
   color: var(--accent);
+}
+.c3-week {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
 }
 .link-btn {
   background: none;

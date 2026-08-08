@@ -249,11 +249,13 @@ const xpOf = (l: CardioLog) => cardioSessionXp(l);
 
 // Filtre par activité (arrive depuis une tuile d'accueil cardio:<activity>).
 const activityFilter = computed(() => (route.query.activity as CardioActivity | undefined) || null);
-const filteredLogs = computed(() =>
-  activityFilter.value
-    ? cardio.logs.filter((l) => l.payload.activity === activityFilter.value)
-    : cardio.logs,
-);
+const filteredLogs = computed(() => {
+  // Pas les sorties « miroir » d'un défi (doublon : les défis ont leur écran dédié).
+  const base = cardio.logs.filter((l) => !l.payload.challenge_id);
+  return activityFilter.value
+    ? base.filter((l) => l.payload.activity === activityFilter.value)
+    : base;
+});
 function clearActivityFilter() {
   void router.replace({ query: { tab: 'hist' } });
 }

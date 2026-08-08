@@ -14,6 +14,7 @@
           <span class="hc-pct font-display">{{ pct }}%</span>
           <span class="hc-days">{{ daysLeftLabel }}</span>
         </div>
+        <div class="hc-week">📅 Semaine du {{ comboWeek }}</div>
         <div class="hc-bar"><span :style="{ width: pct + '%' }" /></div>
         <div v-if="c.status === 'done'" class="hc-done">🎉 Défi 360 bouclé — bravo !</div>
       </div>
@@ -143,6 +144,19 @@ const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 const pct = computed(() => (c.value ? comboProgressPct(c.value) : 0));
 
+function fmtDM(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y!, (m ?? 1) - 1, d ?? 1).toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: 'short',
+  });
+}
+// Semaine concernée (début → fin) du Défi 360.
+const comboWeek = computed(() => {
+  if (!c.value) return '';
+  return `${fmtDM(c.value.start_date)} → ${fmtDM(addDaysIso(c.value.start_date, c.value.duration_days - 1))}`;
+});
+
 const daysLeftLabel = computed(() => {
   if (!c.value) return '';
   const end = addDaysIso(c.value.start_date, c.value.duration_days - 1);
@@ -271,6 +285,12 @@ onMounted(async () => {
 .hc-days {
   font-size: 12.5px;
   color: var(--dim);
+}
+.hc-week {
+  font-size: 12.5px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  margin: 2px 0 8px;
 }
 .hc-bar {
   height: 10px;
