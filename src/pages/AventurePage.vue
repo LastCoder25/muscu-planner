@@ -45,12 +45,17 @@
           </button>
         </div>
         <div class="tb-right">
-          <span class="tb-chip">⚡ {{ c.energy }}</span>
+          <span class="tb-chip" :class="{ deficit: c.energy < 0 }">⚡ {{ c.energy }}</span>
           <button class="tb-chip gold shop-btn" aria-label="Boutique" @click="shopOpen = true">
             🪙 {{ char.row.gold }} <q-icon name="storefront" size="14px" />
           </button>
           <span class="tb-chip dust">✨ {{ char.row.dust }}</span>
         </div>
+      </div>
+
+      <div v-if="c.energy < 0" class="deficit-banner">
+        ⚠️ Déficit d'énergie ({{ c.energy }} ⚡) — refais du sport pour regagner de l'énergie avant
+        de rejouer.
       </div>
 
       <button
@@ -1177,6 +1182,20 @@ onMounted(async () => {
 }
 .tb-chip.dust {
   color: #b07cff;
+}
+.tb-chip.deficit {
+  color: var(--d4, #ff6a45);
+  border-color: var(--d4, #ff6a45);
+}
+.deficit-banner {
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--d4, #ff6a45) 15%, transparent);
+  border: 1px solid var(--d4, #ff6a45);
+  color: var(--d4, #ff6a45);
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 .shop-btn {
   display: inline-flex;

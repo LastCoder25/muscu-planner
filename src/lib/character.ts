@@ -62,7 +62,9 @@ export function computeCharacter(
     endurance,
     agilite,
     pv: 100 + endurance * 10,
-    energy: Math.max(0, Math.round(energy) - Math.round(energySpent)),
+    // Peut être NÉGATIF (déficit) : si on retire des séances/séries après avoir
+    // dépensé l'énergie, il faut la regagner par du sport avant de rejouer.
+    energy: Math.round(energy) - Math.round(energySpent),
     profile: characterProfile(puissance, agilite),
   };
 }

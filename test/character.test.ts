@@ -27,9 +27,9 @@ describe('computeCharacter', () => {
     expect(c.energy).toBe(1200);
     expect(c.level.level).toBe(computeLevel(900 + 600 + 300).level);
   });
-  it('énergie = dispo − dépensée, plancher 0', () => {
+  it('énergie = dispo − dépensée (déficit possible, négatif)', () => {
     expect(computeCharacter(0, 0, 0, 30, 10).energy).toBe(20);
-    expect(computeCharacter(0, 0, 0, 10, 50).energy).toBe(0);
+    expect(computeCharacter(0, 0, 0, 10, 50).energy).toBe(-40); // déficit
   });
 });
 

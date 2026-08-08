@@ -357,13 +357,26 @@ import {
   CHALLENGE_TOKEN_BUDGET,
   type LaneChallenge,
 } from '@/lib/challengeLimits';
+import { REP_XP, assistMult } from '@/lib/athlete';
+import { useProgress } from '@/composables/useProgress';
+import { useCharacterStore } from '@/stores/character';
 
 const router = useRouter();
 const route = useRoute();
 const $q = useQuasar();
 const store = useChallengesStore();
 const comboStore = useComboStore();
+const progress = useProgress();
+const character = useCharacterStore();
 const loading = ref(true);
+
+// Énergie d'aventure dispo (peut être négative = déficit). ENERGY_PER_XP = 1.
+const availableEnergy = computed(
+  () =>
+    progress.energyEarned.value +
+    (character.row?.login_energy ?? 0) -
+    (character.row?.energy_spent ?? 0),
+);
 
 const mode = ref<'solo' | 'combo'>('solo');
 const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
@@ -396,7 +409,26 @@ function saveSet() {
   setOpen.value = false;
 }
 function undoSet(leg: ComboLeg) {
-  if (activeCombo.value) comboStore.removeLastSet(activeCombo.value.id, leg.exercise_id);
+  if (!activeCombo.value) return;
+  const sets = legSets(leg);
+  const last = sets[sets.length - 1];
+  // Énergie que cette série a rapportée (≈ son XP, ENERGY_PER_XP=1).
+  const setEnergy = last
+    ? Math.round((last.reps || 0) * REP_XP * (leg.rep_weight ?? 1) * assistMult(last.assisted))
+    : 0;
+  const wouldDeficit = availableEnergy.value - setEnergy < 0;
+  const doRemove = () => comboStore.removeLastSet(activeCombo.value!.id, leg.exercise_id);
+  if (wouldDeficit) {
+    $q.dialog({
+      title: 'Retirer cette série ?',
+      message:
+        "Tu as déjà dépensé l'énergie gagnée avec cette série. La retirer te mettra en déficit d'énergie : il faudra refaire du sport avant de rejouer à l'aventure.",
+      cancel: { label: 'Annuler', flat: true },
+      ok: { label: 'Retirer quand même', color: 'negative' },
+    }).onOk(doRemove);
+  } else {
+    doRemove();
+  }
 }
 
 // Historique des séries d'un exo.
@@ -510,6 +542,7 @@ onMounted(async () => {
   try {
     await store.fetchMine();
     await comboStore.fetchMine().catch(() => undefined);
+    await character.fetchMine().catch(() => undefined); // pour l'énergie (garde-fou déficit)
     await store.fetchAchievements();
     // Rattrapage : débloque les succès mérités mais pas encore enregistrés.
     await store.unlock(evaluateAchievements(store.list));
