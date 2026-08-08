@@ -40,9 +40,12 @@
     <!-- CARDIO -->
     <section class="fx">
       <div class="fx-h"><span class="fx-emo">🏃</span> XP sortie cardio</div>
-      <div class="formula">XP = (km × 4 + min × 2,4) × facteur_activité + (D+ + D−) ÷ 10</div>
+      <div class="formula">XP = (km × 2 + min × 3) × facteur_activité + (D+ + D−) ÷ 10</div>
       <ul class="notes">
-        <li>Le temps pèse plus que la distance (meilleur proxy d'effort).</li>
+        <li>
+          <b>Dominé par la durée</b> (pro-EF) : une longue sortie facile &gt; une courte rapide.
+        </li>
+        <li>On ne récompense <b>jamais la vitesse</b> (ça pousserait hors zone d'endurance).</li>
         <li>D+ et D− comptent autant (la descente sollicite d'autres muscles).</li>
         <li>Sorties « miroir » d'un défi (challenge_id) = 0 XP (déjà comptées côté défi).</li>
       </ul>
