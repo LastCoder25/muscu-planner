@@ -27,6 +27,7 @@ import {
   sportSignature,
 } from '@/lib/statSignature';
 import type { SportEntry } from '@/lib/sportAchievements';
+import type { CardioActivity } from '@/lib/types';
 
 // Part de l'XP de fond convertie en énergie d'aventure (réglable).
 // 1 = « ton énergie = ton XP de fond » (généreux : le sport finance une vraie session de jeu).
@@ -224,8 +225,16 @@ export function useProgress() {
     // Défi 360 → Muscu.
     if (comboXp.value > 0) bump('disc:musculation', 'Muscu', 'fitness_center', comboXp.value, 0);
 
+    // Signature du sport (répartition stats) → affichée sur la tuile.
+    const tileSig = (key: string) => {
+      if (key.startsWith('cardio:'))
+        return cardioSignature(key.slice('cardio:'.length) as CardioActivity);
+      if (key === 'disc:musculation') return MUSCU_SIG;
+      if (key.startsWith('sport:')) return sportSignature(key.slice('sport:'.length));
+      return null; // crossfit/hyrox/mobilité/prépa → n'alimentent pas les stats du perso
+    };
     return [...map.values()]
-      .map((t) => ({ ...t, level: computeLevel(t.xp) }))
+      .map((t) => ({ ...t, level: computeLevel(t.xp), sig: tileSig(t.key) }))
       .sort((a, b) => b.ts - a.ts);
   });
 

@@ -11,45 +11,30 @@
         <button class="head-ic" aria-label="Agenda" @click="goAgenda">
           <q-icon name="calendar_month" size="22px" />
         </button>
-        <button class="head-ic" aria-label="Challenges" @click="goChallenges">
-          <q-icon name="emoji_events" size="22px" />
+        <button class="hsq" aria-label="Mon aventurier" @click="goAventure">
+          <span class="hsq-ic">⚔️</span>
+          <span class="hsq-l">Aventure</span>
+        </button>
+        <button class="hsq" aria-label="Challenges" @click="goChallenges">
+          <span class="hsq-ic">🏆</span>
+          <span class="hsq-l">Défis</span>
           <span v-if="challengesDueToday > 0" class="ic-badge">{{ challengesDueToday }}</span>
         </button>
         <button class="glvl" aria-label="Niveau global" @click="goStats">
           <span class="glvl-n font-display">{{ progress.global.value.level }}</span>
           <span class="glvl-l">Global</span>
+          <span class="glvl-bar"
+            ><span :style="{ width: progress.global.value.progressPct + '%' }"
+          /></span>
         </button>
       </div>
     </header>
-
-    <button class="xp-strip" @click="goStats">
-      <div class="xp-top">
-        <span class="xp-lvl font-display">Niveau global {{ progress.global.value.level }}</span>
-        <span class="xp-frac"
-          >{{ progress.global.value.xpIntoLevel.toLocaleString('fr-FR') }} /
-          {{ progress.global.value.xpForLevel.toLocaleString('fr-FR') }} XP</span
-        >
-      </div>
-      <div class="xp-bar">
-        <div class="xp-fill" :style="{ width: progress.global.value.progressPct + '%' }" />
-      </div>
-    </button>
 
     <div v-if="loading" class="column items-center q-mt-xl">
       <q-spinner color="primary" size="32px" />
     </div>
 
     <template v-else>
-      <!-- Accès Aventure en HAUT (visible sans scroller) -->
-      <button class="adv-tile" @click="goAventure">
-        <span class="adv-ic">⚔️</span>
-        <span class="adv-main">
-          <span class="adv-name font-display">Mon aventurier</span>
-          <span class="adv-sub">RPG · niveau {{ progress.general.value.level }}</span>
-        </span>
-        <q-icon name="chevron_right" size="22px" />
-      </button>
-
       <div v-if="hasFree" class="free-ongoing">
         <div class="fo-main">
           <q-icon name="bolt" size="20px" />
@@ -85,16 +70,6 @@
         @click="pickerOpen = true"
       />
 
-      <button class="challenge-row" @click="goChallenges">
-        <span class="cr-ic">🏆</span>
-        <div class="cr-main">
-          <div class="cr-title font-display">Challenges</div>
-          <div class="cr-sub">Niv. {{ progress.challenges.value.level }} · défis & Défi 360</div>
-        </div>
-        <span v-if="challengesDueToday > 0" class="cr-badge">{{ challengesDueToday }} à faire</span>
-        <q-icon v-else name="chevron_right" size="22px" />
-      </button>
-
       <div class="tile-group">
         <div class="group-lbl">Mes sports</div>
         <div v-if="!progress.sportTiles.value.length" class="empty-sports">
@@ -111,6 +86,7 @@
             <span class="mt-ic-wrap"><q-icon :name="t.icon" size="26px" class="mt-ic" /></span>
             <span class="mt-name font-display">{{ t.label }}</span>
             <span class="mt-lvl">Niv. {{ t.level.level }}</span>
+            <span v-if="t.sig" class="mt-sig">{{ sigLabel(t.sig) }}</span>
             <span class="mt-bar"
               ><span class="mt-fill" :style="{ width: t.level.progressPct + '%' }"
             /></span>
@@ -326,6 +302,14 @@ function pickAutre() {
   pickerOpen.value = false;
   openAutre();
 }
+// Répartition stats du sport (signature) → « 💪60 ❤️30 ⚡10 » (parts non nulles).
+function sigLabel(sig: { power: number; endurance: number; agility: number }): string {
+  const parts: string[] = [];
+  if (sig.power > 0) parts.push(`💪${Math.round(sig.power * 100)}`);
+  if (sig.endurance > 0) parts.push(`❤️${Math.round(sig.endurance * 100)}`);
+  if (sig.agility > 0) parts.push(`⚡${Math.round(sig.agility * 100)}`);
+  return parts.join(' ');
+}
 // Tap sur une tuile de sport → son HISTORIQUE (la saisie se fait via « + Séance »).
 async function goSport(key: string) {
   if (key.startsWith('cardio:')) await router.push('/cardio?tab=hist');
@@ -515,28 +499,57 @@ async function saveAutre() {
   font-size: 11px;
   line-height: 1;
 }
+/* Carrés du header : Aventure / Défis / Niveau (même taille) */
+.hsq,
 .glvl {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
-  background: var(--surface-2);
-  border: 1px solid var(--accent);
+  width: 56px;
+  height: 56px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
   border-radius: 14px;
-  padding: 8px 14px;
+  color: var(--text);
   cursor: pointer;
+  overflow: hidden;
+}
+.glvl {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+.hsq-ic {
+  font-size: 20px;
+  line-height: 1;
+}
+.hsq-l,
+.glvl-l {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--dim);
 }
 .glvl-n {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--accent);
   line-height: 1;
 }
-.glvl-l {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--dim);
+.glvl-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--line);
+}
+.glvl-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
 }
 .home-name {
   font-size: 32px;
@@ -907,6 +920,12 @@ async function saveAutre() {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--dim);
+}
+.mt-sig {
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 .mt-bar {
   width: 100%;

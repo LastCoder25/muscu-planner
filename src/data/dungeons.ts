@@ -132,6 +132,8 @@ export const DUNGEONS: Dungeon[] = [
     hint: 'End-game absolu : l’Archidémon frappe et crit très fort → build complet, PV au max.',
     dropLevel: 9,
     dropLuck: 1,
+    setId: 'apocalypse',
+    setChance: 0.5,
   },
 ];
 
