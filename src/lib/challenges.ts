@@ -535,7 +535,12 @@ export function challengeStats(ch: Challenge, todayIso = logicalToday()): Challe
     isDoneToday = todayDone > 0;
   } else {
     completionPct = activeDays ? Math.round((completedDays / activeDays) * 100) : 0;
-    isDoneToday = inRange && (todayTarget === 0 || (map.get(dayIndex)?.completed ?? false));
+    // « À jour » dès que l'objectif du jour est atteint (via reps saisies) OU la journée
+    // clôturée OU repos — pas seulement le flag `completed` (sinon le badge « à faire »
+    // reste alors que les reps du jour sont faites).
+    isDoneToday =
+      inRange &&
+      (todayTarget === 0 || (map.get(dayIndex)?.completed ?? false) || todayDone >= todayTarget);
   }
 
   // Streak : jours actifs consécutifs complétés jusqu'à aujourd'hui (les repos ne cassent pas).

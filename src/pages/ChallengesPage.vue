@@ -232,7 +232,12 @@
           </div>
           <div class="bar"><div class="fill" :style="{ width: legPct(leg) + '%' }" /></div>
           <div class="cl-actions">
-            <button v-for="n in [5, 10, 20]" :key="n" class="cl-add" @click="addComboRep(leg, n)">
+            <button
+              v-for="n in [1, 5, 10, 20]"
+              :key="n"
+              class="cl-add"
+              @click="addComboRep(leg, n)"
+            >
               +{{ n }}
             </button>
           </div>

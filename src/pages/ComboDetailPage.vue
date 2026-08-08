@@ -71,7 +71,7 @@ const auth = useAuthStore();
 const combo = useComboStore();
 
 const id = String(route.params.id);
-const QUICK = [5, 10, 20];
+const QUICK = [1, 5, 10, 20];
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 const pct = computed(() => (c.value ? comboProgressPct(c.value) : 0));
 
