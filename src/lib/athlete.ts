@@ -52,7 +52,9 @@ export function drillSessionXp(log: DrillLog): number {
  *  vélo < course) + dénivelé (D+ ET D-, même poids, la descente sollicite d'autres
  *  muscles) + intensité (ressenti). Présence, dénivelé et ressenti restent à plein. */
 export function cardioSessionXp(log: CardioLog): number {
-  const km = log.distance_km ?? 0;
+  // Distance : à défaut de km saisis, on estime depuis les pas (~0,75 m/pas) →
+  // une marche saisie en PAS rapporte quand même de l'XP.
+  const km = log.distance_km ?? (log.steps ? log.steps * 0.00075 : 0);
   const dplus = log.elevation_m ?? 0;
   const dminus = log.descent_m ?? 0;
   const dur = log.duration_min ?? 0;

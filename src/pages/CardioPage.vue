@@ -49,6 +49,7 @@
         <q-input v-model="date" type="date" filled label="Date" />
         <q-input v-model.number="distance" type="number" filled label="Distance (km)" step="0.1" />
         <q-input v-model.number="duration" type="number" filled label="Durée (min)" />
+        <q-input v-if="hasSteps" v-model.number="steps" type="number" filled label="Pas" />
         <div v-if="hasElevation" class="fields-row">
           <q-input v-model.number="dplus" type="number" filled label="D+ (m)" />
           <q-input v-model.number="dminus" type="number" filled label="D- (m)" />
@@ -143,6 +144,7 @@
             {{ fmtDate(l.performed_at) }}
             <template v-if="l.payload.distance_km"> · {{ l.payload.distance_km }} km</template>
             <template v-if="l.payload.duration_min"> · {{ l.payload.duration_min }} min</template>
+            <template v-if="l.payload.steps"> · {{ l.payload.steps }} pas</template>
             <template v-if="l.payload.elevation_m"> · +{{ l.payload.elevation_m }} m</template>
             <template v-if="l.payload.descent_m"> · −{{ l.payload.descent_m }} m</template>
           </div>
@@ -218,6 +220,7 @@ const activity = ref<CardioActivity>(
 const date = ref(todayIso());
 const distance = ref<number | null>(null);
 const duration = ref<number | null>(null);
+const steps = ref<number | null>(null);
 const dplus = ref<number | null>(null);
 const dminus = ref<number | null>(null);
 const rpe = ref<Difficulty | null>(null);
@@ -225,6 +228,8 @@ const comment = ref('');
 const saving = ref(false);
 
 const hasElevation = computed(() => activityHasElevation(activity.value));
+// Les pas sont pertinents à pied (pas à vélo).
+const hasSteps = computed(() => activity.value !== 'velo' && activity.value !== 'velo_appart');
 const hasDeniv = computed(() => !!(dplus.value || dminus.value));
 
 const pace = computed(() => paceLabel(distance.value ?? undefined, duration.value ?? undefined));
@@ -277,8 +282,8 @@ onMounted(() => {
 async function save() {
   const userId = auth.user?.id;
   if (!userId) return;
-  if (!distance.value && !duration.value) {
-    $q.notify({ type: 'warning', message: 'Renseigne une distance ou une durée.' });
+  if (!distance.value && !duration.value && !(hasSteps.value && steps.value)) {
+    $q.notify({ type: 'warning', message: 'Renseigne une durée, une distance ou des pas.' });
     return;
   }
   saving.value = true;
@@ -291,6 +296,7 @@ async function save() {
       performed_at: performedAtIso(date.value),
       ...(distance.value ? { distance_km: distance.value } : {}),
       ...(duration.value ? { duration_min: duration.value } : {}),
+      ...(steps.value && hasSteps.value ? { steps: steps.value } : {}),
       ...(dplus.value && hasElevation.value ? { elevation_m: dplus.value } : {}),
       ...(dminus.value && hasElevation.value ? { descent_m: dminus.value } : {}),
       ...(rpe.value ? { rpe: rpe.value } : {}),
@@ -343,6 +349,7 @@ async function save() {
     date.value = todayIso();
     distance.value = null;
     duration.value = null;
+    steps.value = null;
     dplus.value = null;
     dminus.value = null;
     rpe.value = null;

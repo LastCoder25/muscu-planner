@@ -304,6 +304,7 @@ export interface CardioLog {
   activity: CardioActivity;
   distance_km?: number;
   duration_min?: number;
+  steps?: number; // nombre de pas (marche/rando) — optionnel
   elevation_m?: number; // D+ (dénivelé positif)
   descent_m?: number; // D- (dénivelé négatif)
   rpe?: Difficulty; // ressenti 1–4
