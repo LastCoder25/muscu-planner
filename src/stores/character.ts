@@ -7,6 +7,7 @@ import {
   salvageValue,
   sellValue,
   upgradeCost,
+  RARITY_RANK,
   type Item,
   type ItemSlot,
   type Equipped,
@@ -287,6 +288,47 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
+  // Objets du sac de rareté STRICTEMENT inférieure à l'objet équipé du même
+  // emplacement (rien à comparer si le slot est vide → jamais recyclé en masse).
+  function itemsBelowEquipped(cur: CharacterRow): Item[] {
+    return cur.inventory.filter((it) => {
+      const eq = cur.equipped[it.slot];
+      return eq && RARITY_RANK[it.rarity] < RARITY_RANK[eq.rarity];
+    });
+  }
+  /** Combien d'objets du sac seraient concernés par un nettoyage en masse. */
+  function countBelowEquipped(): number {
+    return row.value ? itemsBelowEquipped(row.value).length : 0;
+  }
+  // Casse EN MASSE tous les objets de rareté inférieure à l'équipé → poussière.
+  async function salvageBelowEquipped(userId: string): Promise<number> {
+    const cur = row.value;
+    if (!cur) return 0;
+    const targets = itemsBelowEquipped(cur);
+    if (!targets.length) return 0;
+    const gain = targets.reduce((a, it) => a + salvageValue(it), 0);
+    const ids = new Set(targets.map((t) => t.id));
+    await persist(userId, {
+      dust: cur.dust + gain,
+      inventory: cur.inventory.filter((i) => !ids.has(i.id)),
+    });
+    return targets.length;
+  }
+  // Vend EN MASSE tous les objets de rareté inférieure à l'équipé → or.
+  async function sellBelowEquipped(userId: string): Promise<number> {
+    const cur = row.value;
+    if (!cur) return 0;
+    const targets = itemsBelowEquipped(cur);
+    if (!targets.length) return 0;
+    const gain = targets.reduce((a, it) => a + sellValue(it), 0);
+    const ids = new Set(targets.map((t) => t.id));
+    await persist(userId, {
+      gold: cur.gold + gain,
+      inventory: cur.inventory.filter((i) => !ids.has(i.id)),
+    });
+    return targets.length;
+  }
+
   // Améliore un objet (équipé ou au sac) en dépensant de la poussière ; cap = niveau joueur.
   async function upgradeItem(userId: string, itemId: string, playerLevel: number) {
     const cur = row.value;
@@ -436,6 +478,9 @@ export const useCharacterStore = defineStore('character', () => {
     chooseTalent,
     salvage,
     sell,
+    countBelowEquipped,
+    salvageBelowEquipped,
+    sellBelowEquipped,
     upgradeItem,
     resetTalents,
     spendEnergy,

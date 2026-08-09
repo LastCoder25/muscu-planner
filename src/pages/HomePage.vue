@@ -71,6 +71,20 @@
         @click="openPicker"
       />
 
+      <div v-if="statTotal > 0" class="stat-balance">
+        <div class="sb-head">Ton équilibre</div>
+        <div class="sb-bar">
+          <span class="sb-seg pow" :style="{ flexGrow: progress.powerXp.value }" />
+          <span class="sb-seg end" :style="{ flexGrow: progress.enduranceXp.value }" />
+          <span class="sb-seg agi" :style="{ flexGrow: progress.agilityXp.value }" />
+        </div>
+        <div class="sb-legend">
+          <span class="sb-l pow">💪 Force {{ statPct(progress.powerXp.value) }}%</span>
+          <span class="sb-l end">❤️ Endurance {{ statPct(progress.enduranceXp.value) }}%</span>
+          <span class="sb-l agi">⚡ Agilité {{ statPct(progress.agilityXp.value) }}%</span>
+        </div>
+      </div>
+
       <div class="tile-group">
         <div class="group-lbl">Mes sports</div>
         <div v-if="!progress.sportTiles.value.length" class="empty-sports">
@@ -86,13 +100,11 @@
             <span class="mt-strip" />
             <span class="mt-ic-wrap"><q-icon :name="t.icon" size="26px" class="mt-ic" /></span>
             <span class="mt-name font-display">{{ t.label }}</span>
-            <span class="mt-lvl">Niv. {{ t.level.level }} · {{ fmtDur(t.minutes) }}</span>
+            <span class="mt-lvl">Niv. {{ t.level.level }}</span>
             <span v-if="t.sig" class="mt-sig">{{ sigLabel(t.sig) }}</span>
             <span class="mt-bar">
               <span class="mt-fill" :style="{ width: t.level.progressPct + '%' }" />
-              <span class="mt-bar-txt"
-                >{{ fmtDur(t.level.xpIntoLevel) }} / {{ fmtDur(t.level.xpForLevel) }}</span
-              >
+              <span class="mt-bar-txt">{{ t.level.progressPct }}%</span>
             </span>
           </button>
         </div>
@@ -383,13 +395,12 @@ function pickAutre() {
   pickerOpen.value = false;
   openAutre();
 }
-// Temps total pratiqué → « 8 h 20 » / « 45 min ».
-function fmtDur(min: number): string {
-  const m = Math.round(min || 0);
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  const r = m % 60;
-  return r ? `${h} h ${r}` : `${h} h`;
+// Bilan des 3 stats du sportif (équilibre du build) → parts en %.
+const statTotal = computed(
+  () => progress.powerXp.value + progress.enduranceXp.value + progress.agilityXp.value,
+);
+function statPct(v: number): number {
+  return statTotal.value > 0 ? Math.round((v / statTotal.value) * 100) : 0;
 }
 // Bénéfices BRUTS du sport (vecteur non normalisé) → « 💪60 ❤️30 ⚡10 » (parts non
 // nulles). La somme = intensité (varie selon le sport), plus de normalisation à 100.
@@ -783,6 +794,56 @@ async function saveAutre() {
   color: var(--dim);
   font-size: 13px;
   margin-top: 4px;
+}
+.stat-balance {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+.sb-head {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+.sb-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-2, #2b241b);
+}
+.sb-seg {
+  min-width: 2px;
+}
+.sb-seg.pow {
+  background: #ff6a45;
+}
+.sb-seg.end {
+  background: #7bc86c;
+}
+.sb-seg.agi {
+  background: #ffd23f;
+}
+.sb-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.sb-l.pow {
+  color: #ff6a45;
+}
+.sb-l.end {
+  color: #7bc86c;
+}
+.sb-l.agi {
+  color: #ffd23f;
 }
 .tile-group {
   margin-bottom: 18px;

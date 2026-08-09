@@ -12,16 +12,31 @@
           <span class="head-lvl font-display">Niv. {{ xpInfo.level }}</span>
         </button>
       </div>
-      <q-btn
-        v-if="mode === 'solo'"
-        no-caps
-        unelevated
-        color="primary"
-        text-color="dark"
-        icon="add"
-        label="Nouveau"
-        @click="goNew"
-      />
+      <div v-if="mode === 'solo'" class="head-actions">
+        <q-btn flat round dense icon="insights" aria-label="Stats & succès">
+          <q-menu anchor="bottom right" self="top right">
+            <q-list style="min-width: 160px">
+              <q-item v-close-popup clickable @click="tab = 'exos'">
+                <q-item-section avatar><q-icon name="bar_chart" /></q-item-section>
+                <q-item-section>Exercices</q-item-section>
+              </q-item>
+              <q-item v-close-popup clickable @click="tab = 'ach'">
+                <q-item-section avatar><q-icon name="emoji_events" /></q-item-section>
+                <q-item-section>Succès</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+        </q-btn>
+        <q-btn
+          no-caps
+          unelevated
+          color="primary"
+          text-color="dark"
+          icon="add"
+          label="Nouveau"
+          @click="goNew"
+        />
+      </div>
     </div>
 
     <div class="seg2">
@@ -31,7 +46,7 @@
       </button>
     </div>
 
-    <div v-if="mode === 'solo'" class="tabs">
+    <div v-if="mode === 'solo' && LIST_TABS.includes(tab)" class="tabs">
       <button
         v-for="t in TABS"
         :key="t.value"
@@ -42,6 +57,14 @@
         {{ t.label }}
       </button>
     </div>
+    <!-- Retour à la liste depuis Exercices / Succès -->
+    <button
+      v-else-if="mode === 'solo' && (tab === 'exos' || tab === 'ach')"
+      class="back-to-list"
+      @click="tab = 'active'"
+    >
+      ‹ Retour aux challenges
+    </button>
 
     <div v-if="loading" class="column items-center q-mt-xl">
       <q-spinner color="primary" size="32px" />
@@ -475,14 +498,15 @@ function fmtDay(iso: string): string {
   });
 }
 
+// Barre principale = les 3 ÉTATS d'un challenge (sur une seule ligne).
 const TABS = [
   { value: 'active', label: 'En cours' },
   { value: 'done', label: 'Terminés' },
   { value: 'abandoned', label: 'Abandonnés' },
-  { value: 'exos', label: 'Exercices' },
-  { value: 'ach', label: 'Succès' },
 ];
-const tab = ref(TABS.some((t) => t.value === route.query.tab) ? String(route.query.tab) : 'active');
+// Exercices (stats) & Succès sont accessibles via le bouton dédié (menu), pas la barre.
+const ALL_TABS = [...TABS.map((t) => t.value), 'exos', 'ach'];
+const tab = ref(ALL_TABS.includes(String(route.query.tab)) ? String(route.query.tab) : 'active');
 
 const LIST_TABS = ['active', 'done', 'abandoned'];
 const shown = computed(() => store.list.filter((c) => c.status === tab.value));
@@ -605,6 +629,12 @@ onMounted(async () => {
   gap: 10px;
   min-width: 0;
 }
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
 .head-rank {
   background: none;
   border: none;
@@ -618,39 +648,55 @@ onMounted(async () => {
   color: var(--text);
   margin: 0;
 }
+/* Les 3 états sur UNE ligne : contrôle segmenté plein largeur. */
 .tabs {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   margin-bottom: 16px;
-  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
 }
 .tab {
-  padding: 8px 15px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  flex: 1;
+  padding: 9px 8px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
   color: var(--dim);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition:
     background 0.15s,
-    border-color 0.15s,
     color 0.15s,
     transform 0.1s;
   &:hover {
-    border-color: var(--dim);
     color: var(--text);
   }
   &.on {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent-ink, #15120e);
+    background: var(--accent);
     box-shadow: inset 0 0 0 1px var(--accent);
   }
   &.on:active {
     transform: scale(0.97);
   }
+}
+.back-to-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 0;
+  margin-bottom: 12px;
 }
 .empty {
   color: var(--dim);

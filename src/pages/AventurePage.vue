@@ -303,6 +303,14 @@
 
         <template v-if="char.row.inventory.length">
           <div ref="sacTitle" class="sec-title">Sac ({{ char.row.inventory.length }})</div>
+          <!-- Nettoyage en masse : objets de rareté inférieure à l'équipé du même slot -->
+          <div v-if="belowCount > 0" class="bulk">
+            <span class="bulk-lbl">{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} moins rare{{ belowCount > 1 ? 's' : '' }} que l'équipé</span>
+            <div class="bulk-btns">
+              <button class="bulk-b" @click="doSalvageBelow">✨ Tout casser</button>
+              <button class="bulk-b" @click="doSellBelow">🪙 Tout vendre</button>
+            </div>
+          </div>
           <div class="inv">
             <div
               v-for="it in char.row.inventory"
@@ -375,22 +383,9 @@
             </template>
             PV restants {{ run.finalPv }}
           </div>
-          <button class="report-toggle" @click="reportOpen = !reportOpen">
-            {{ reportOpen ? '▴ Masquer le détail' : '▾ Voir le détail du combat' }}
+          <button class="report-toggle" @click="reportOpen = true">
+            ⚔️ Voir le détail du combat
           </button>
-          <div v-if="reportOpen" class="log">
-            <div
-              v-for="(f, i) in run.fights"
-              :key="i"
-              class="fight-row"
-              :class="f.win ? 'fw' : 'fl'"
-            >
-              <span class="fr-emo">{{ f.emoji }}</span>
-              <span class="fr-name">{{ f.monster }}</span>
-              <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
-              <span class="fr-rounds">{{ f.rounds }} tours</span>
-            </div>
-          </div>
           <div v-if="run.drops.length" class="drops">
             <div class="drops-lbl">✨ Butin</div>
             <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
@@ -852,10 +847,14 @@
             v-for="(cand, i) in char.row.pending_reward.candidates"
             :key="i"
             class="reward-cand"
-            :class="cand.kind === 'item' ? 'r-' + cand.item.rarity : 'r-gold'"
+            :class="[
+              cand.kind === 'item' ? 'r-' + cand.item.rarity : 'r-gold',
+              { reco: i === recommendedRewardIndex },
+            ]"
             :disabled="busy"
             @click="doChooseReward(i)"
           >
+            <span v-if="i === recommendedRewardIndex" class="reco-badge">★ Conseillé</span>
             <template v-if="cand.kind === 'item'">
               <span class="rc-emo">{{ cand.item.emoji }}</span>
               <div class="rc-main">
@@ -901,6 +900,27 @@
       </q-card>
     </q-dialog>
 
+    <!-- Détail du combat (modale) -->
+    <q-dialog v-model="reportOpen">
+      <q-card v-if="run" class="fight-card">
+        <div class="fight-title font-display">⚔️ Détail du combat — {{ run.name }}</div>
+        <div class="fight-list">
+          <div
+            v-for="(f, i) in run.fights"
+            :key="i"
+            class="fight-row"
+            :class="f.win ? 'fw' : 'fl'"
+          >
+            <span class="fr-emo">{{ f.emoji }}</span>
+            <span class="fr-name">{{ f.monster }}</span>
+            <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
+            <span class="fr-rounds">{{ f.rounds }} tours</span>
+          </div>
+        </div>
+        <button class="fight-close" @click="reportOpen = false">Fermer</button>
+      </q-card>
+    </q-dialog>
+
     <!-- Gestion d'un emplacement : équipé en tête + objets du sac qui peuvent le remplacer -->
     <q-dialog :model-value="!!manageSlot" position="bottom" @update:model-value="manageSlot = null">
       <q-card v-if="manageSlot && char.row" class="manage-card">
@@ -923,7 +943,6 @@
             </div>
             <div class="rc-eff">{{ itemEffects(char.row.equipped[manageSlot]!) }}</div>
             <div class="manage-eq-actions">
-              <span class="manage-eq-hint">✨ Infusion depuis l'emplacement équipé</span>
               <button class="link-btn" @click="doUnequip(manageSlot)">Retirer</button>
             </div>
           </div>
@@ -995,6 +1014,7 @@ import {
   upgradeCost,
   salvageValue,
   sellValue,
+  itemScore,
   SLOTS,
   SLOT_LABEL,
   SLOT_EMOJI,
@@ -1390,6 +1410,26 @@ function rewardDupNote(item: Item): string {
   if (inBag) return '⚠ Tu as déjà cette pièce de set dans ton sac';
   return '';
 }
+// Valeur heuristique d'un candidat de récompense → sert à recommander le « meilleur ».
+function rewardScore(cand: RewardCandidate): number {
+  if (cand.kind === 'gold') return cand.dust * 0.3 + cand.gold * 0.05;
+  const it = cand.item;
+  let s = itemScore(it) * 10;
+  const eq = equippedInSlot(it.slot);
+  if (!eq) s += 30; // remplit un emplacement vide
+  else if (itemScore(it) > itemScore(eq)) s += 20; // amélioration nette
+  if (it.setId && !rewardDupNote(it)) s += 15; // avance un set (pas un doublon)
+  return s;
+}
+// Index du candidat conseillé (meilleur score). -1 si pas de récompense en attente.
+const recommendedRewardIndex = computed(() => {
+  const cands = char.row?.pending_reward?.candidates ?? [];
+  if (!cands.length) return -1;
+  let best = 0;
+  for (let i = 1; i < cands.length; i++)
+    if (rewardScore(cands[i]!) > rewardScore(cands[best]!)) best = i;
+  return best;
+});
 function rarityVerdict(d: Item): { label: string; cls: string } {
   const eq = equippedInSlot(d.slot);
   if (!eq) return { label: 'slot libre', cls: 'up' };
@@ -1794,6 +1834,49 @@ function confirmSalvage() {
           $q.notify({ type: 'positive', position: 'top', message: `+${salvageValue(it)} ✨ poussière` }),
         ),
     'Recyclage impossible.',
+  );
+}
+// Nettoyage en masse : objets du sac moins rares que l'équipé du même slot.
+const belowCount = computed(() => {
+  const r = char.row;
+  if (!r) return 0;
+  return r.inventory.filter((it) => {
+    const eq = r.equipped[it.slot];
+    return eq && RARITY_RANK[it.rarity] < RARITY_RANK[eq.rarity];
+  }).length;
+});
+function doSalvageBelow() {
+  $q.dialog({
+    title: 'Tout casser',
+    message: `Casser les ${belowCount.value} objet(s) moins rares que ton équipement (→ poussière) ?`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Casser', color: 'primary', textColor: 'dark' },
+  }).onOk(() =>
+    withUid(
+      (uid) =>
+        char
+          .salvageBelowEquipped(uid)
+          .then((n) =>
+            $q.notify({ type: 'positive', position: 'top', message: `${n} objet(s) cassé(s) en poussière.` }),
+          ),
+      'Recyclage impossible.',
+    ),
+  );
+}
+function doSellBelow() {
+  $q.dialog({
+    title: 'Tout vendre',
+    message: `Vendre les ${belowCount.value} objet(s) moins rares que ton équipement (→ or) ?`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Vendre', color: 'primary', textColor: 'dark' },
+  }).onOk(() =>
+    withUid(
+      (uid) =>
+        char
+          .sellBelowEquipped(uid)
+          .then((n) => $q.notify({ type: 'positive', position: 'top', message: `${n} objet(s) vendu(s).` })),
+      'Vente impossible.',
+    ),
   );
 }
 function doResetTalents() {
@@ -2706,6 +2789,39 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--text);
 }
+.bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.bulk-lbl {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.bulk-btns {
+  display: flex;
+  gap: 6px;
+}
+.bulk-b {
+  border: 1px solid var(--line);
+  background: var(--surface-2, #2b241b);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.bulk-b:active {
+  border-color: var(--accent);
+}
 .inv-eff {
   font-size: 11px;
   color: var(--dim);
@@ -2796,6 +2912,7 @@ onMounted(async () => {
   gap: 10px;
 }
 .reward-cand {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2808,6 +2925,54 @@ onMounted(async () => {
   cursor: pointer;
   color: var(--text);
   transition: transform 0.08s;
+}
+.reward-cand.reco {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.reco-badge {
+  position: absolute;
+  top: -9px;
+  right: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--dark, #15120e);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+/* Modale détail du combat */
+.fight-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+  color: var(--text);
+}
+.fight-title {
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+.fight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.fight-close {
+  width: 100%;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px;
+  font-weight: 600;
+  cursor: pointer;
 }
 .reward-cand:active {
   transform: scale(0.98);
