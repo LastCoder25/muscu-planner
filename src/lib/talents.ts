@@ -34,7 +34,6 @@ export const TALENTS: Talent[] = [
     icon: '💨',
     effect: { dodgeAdd: 0.04 },
   },
-  { code: 't_gold', name: 'Cupidité', desc: '+15 % or', icon: '🪙', effect: { goldPct: 0.15 } },
   {
     code: 't_leech',
     name: 'Sangsue',

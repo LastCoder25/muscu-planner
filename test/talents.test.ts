@@ -12,9 +12,9 @@ describe('talentsEarned', () => {
 
 describe('talentEffects', () => {
   it('cumule les bonus (dégâts stackent)', () => {
-    const e = talentEffects(['t_dmg', 't_dmg', 't_gold']);
+    const e = talentEffects(['t_dmg', 't_dmg', 't_pv']);
     expect(e.damagePct).toBeCloseTo(0.2);
-    expect(e.goldPct).toBeCloseTo(0.15);
+    expect(e.maxPvPct).toBeCloseTo(0.1);
   });
   it('ignore les codes inconnus', () => {
     expect(talentEffects(['nope']).damagePct).toBe(0);

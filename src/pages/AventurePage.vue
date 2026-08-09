@@ -1653,10 +1653,11 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
   const out: RewardCandidate[] = [];
   for (let n = 0; n < 3; n++) {
     const roll = rng();
-    if (roll < 0.6) {
+    // Proba de SET réduite (0.4) : une pièce de set est un butin rare et important.
+    if (roll < 0.4) {
       const p = rollSetPiece(rng, { setId: b.setId, level: b.dropLevel, luck });
       out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
-    } else if (roll < 0.85) {
+    } else if (roll < 0.8) {
       let d: ReturnType<typeof rollDrop> = null;
       for (let i = 0; i < 5 && !d; i++)
         d = rollDrop(rng, { cleared: true, defeated: 1, level: b.dropLevel, luck });
@@ -1907,25 +1908,35 @@ function confirmSalvage() {
   );
 }
 // Nettoyage en masse : objets du sac moins rares que l'équipé du même slot.
+// Slot ciblé par le nettoyage en masse = le filtre du sac actif (sinon tous).
+const bulkSlot = computed<ItemSlot | undefined>(() =>
+  invFilter.value === 'all' ? undefined : invFilter.value,
+);
 const belowCount = computed(() => {
   const r = char.row;
   if (!r) return 0;
   return r.inventory.filter((it) => {
+    if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
     const eq = r.equipped[it.slot];
     return eq && RARITY_RANK[it.rarity] < RARITY_RANK[eq.rarity];
   }).length;
 });
+// Libellé du périmètre (« du sac » ou « [type] ») pour être explicite.
+const bulkScope = computed(() =>
+  bulkSlot.value ? SLOT_LABEL[bulkSlot.value].toLowerCase() : 'ton sac',
+);
 function doSalvageBelow() {
+  const slot = bulkSlot.value;
   $q.dialog({
     title: 'Tout casser',
-    message: `Casser les ${belowCount.value} objet(s) moins rares que ton équipement (→ poussière) ?`,
+    message: `Casser les ${belowCount.value} objet(s) de ${bulkScope.value} moins rares que l'équipé (→ poussière) ?`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Casser', color: 'primary', textColor: 'dark' },
   }).onOk(() =>
     withUid(
       (uid) =>
         char
-          .salvageBelowEquipped(uid)
+          .salvageBelowEquipped(uid, slot)
           .then((n) =>
             $q.notify({ type: 'positive', position: 'top', message: `${n} objet(s) cassé(s) en poussière.` }),
           ),
@@ -1934,16 +1945,17 @@ function doSalvageBelow() {
   );
 }
 function doSellBelow() {
+  const slot = bulkSlot.value;
   $q.dialog({
     title: 'Tout vendre',
-    message: `Vendre les ${belowCount.value} objet(s) moins rares que ton équipement (→ or) ?`,
+    message: `Vendre les ${belowCount.value} objet(s) de ${bulkScope.value} moins rares que l'équipé (→ or) ?`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Vendre', color: 'primary', textColor: 'dark' },
   }).onOk(() =>
     withUid(
       (uid) =>
         char
-          .sellBelowEquipped(uid)
+          .sellBelowEquipped(uid, slot)
           .then((n) => $q.notify({ type: 'positive', position: 'top', message: `${n} objet(s) vendu(s).` })),
       'Vente impossible.',
     ),

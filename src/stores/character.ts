@@ -293,21 +293,23 @@ export const useCharacterStore = defineStore('character', () => {
 
   // Objets du sac de rareté STRICTEMENT inférieure à l'objet équipé du même
   // emplacement (rien à comparer si le slot est vide → jamais recyclé en masse).
-  function itemsBelowEquipped(cur: CharacterRow): Item[] {
+  // `slot` optionnel : restreint au type filtré dans le sac (sinon tous).
+  function itemsBelowEquipped(cur: CharacterRow, slot?: ItemSlot): Item[] {
     return cur.inventory.filter((it) => {
+      if (slot && it.slot !== slot) return false;
       const eq = cur.equipped[it.slot];
       return eq && RARITY_RANK[it.rarity] < RARITY_RANK[eq.rarity];
     });
   }
   /** Combien d'objets du sac seraient concernés par un nettoyage en masse. */
-  function countBelowEquipped(): number {
-    return row.value ? itemsBelowEquipped(row.value).length : 0;
+  function countBelowEquipped(slot?: ItemSlot): number {
+    return row.value ? itemsBelowEquipped(row.value, slot).length : 0;
   }
-  // Casse EN MASSE tous les objets de rareté inférieure à l'équipé → poussière.
-  async function salvageBelowEquipped(userId: string): Promise<number> {
+  // Casse EN MASSE les objets de rareté inférieure à l'équipé → poussière.
+  async function salvageBelowEquipped(userId: string, slot?: ItemSlot): Promise<number> {
     const cur = row.value;
     if (!cur) return 0;
-    const targets = itemsBelowEquipped(cur);
+    const targets = itemsBelowEquipped(cur, slot);
     if (!targets.length) return 0;
     const gain = targets.reduce((a, it) => a + salvageValue(it), 0);
     const ids = new Set(targets.map((t) => t.id));
@@ -317,11 +319,11 @@ export const useCharacterStore = defineStore('character', () => {
     });
     return targets.length;
   }
-  // Vend EN MASSE tous les objets de rareté inférieure à l'équipé → or.
-  async function sellBelowEquipped(userId: string): Promise<number> {
+  // Vend EN MASSE les objets de rareté inférieure à l'équipé → or.
+  async function sellBelowEquipped(userId: string, slot?: ItemSlot): Promise<number> {
     const cur = row.value;
     if (!cur) return 0;
-    const targets = itemsBelowEquipped(cur);
+    const targets = itemsBelowEquipped(cur, slot);
     if (!targets.length) return 0;
     const gain = targets.reduce((a, it) => a + sellValue(it), 0);
     const ids = new Set(targets.map((t) => t.id));

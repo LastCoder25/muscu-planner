@@ -126,12 +126,12 @@ const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
     { type: 'dmg_reduction_pct', base: 6 },
     { type: 'max_pv_pct', base: 10 },
   ],
-  // L'accessoire peut rouler de l'or OU un effet de combat (crit / vol de vie) :
-  // en modèle 1-stat, éviter qu'un slot soit « mort » au combat.
+  // L'accessoire roule un effet de COMBAT (l'or ne servait à rien en combat → un
+  // accessoire +or était un slot « mort », personne ne le prenait ; retiré).
   accessory: [
-    { type: 'gold_pct', base: 15 },
     { type: 'crit_pct', base: 5 },
     { type: 'lifesteal_pct', base: 5 },
+    { type: 'dmg_reduction_pct', base: 5 },
   ],
   relic: [
     { type: 'crit_pct', base: 6 },
@@ -256,7 +256,9 @@ export function rollSetPiece(
 ): Omit<Item, 'id'> {
   const set = SET_BY_ID[opts.setId];
   const slot = opts.preferSlot ?? pick(rng, SLOTS);
-  const rarity = rollRarity(rng, opts.luck ?? 0);
+  // Les pièces de SET sont prestigieuses : ÉPIQUE ou LÉGENDAIRE uniquement (jamais
+  // commun/rare). Plus de chance de légendaire avec la chance (fiole).
+  const rarity: Rarity = rng() < 0.45 + (opts.luck ?? 0) * 0.4 ? 'legendary' : 'epic';
   const chosen = pick(rng, SLOT_EFFECTS[slot]);
   const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
   const noun = pick(rng, NAMES[slot]);
@@ -390,11 +392,11 @@ export const ITEM_SETS: ItemSet[] = [
     id: 'apocalypse',
     name: 'Braise de l’Apocalypse',
     emoji: '🔥',
-    theme: 'Hybride cupide : dégâts, survie et montagnes d’or.',
+    theme: 'Hybride offensif : dégâts, survie et vol de vie.',
     tiers: [
       { pieces: 2, type: 'damage_pct', base: 8 },
       { pieces: 3, type: 'max_pv_pct', base: 10 },
-      { pieces: 4, type: 'gold_pct', base: 40 },
+      { pieces: 4, type: 'lifesteal_pct', base: 10 },
     ],
   },
 ];
