@@ -224,12 +224,14 @@
       <!-- ONGLET ÉQUIPEMENT -->
       <template v-else-if="tab === 'equip'">
         <div class="sec-title">Équipement</div>
+        <div class="sec-hint">Touche un emplacement pour comparer et gérer tes objets.</div>
         <div class="gear">
-          <div
+          <button
             v-for="slot in SLOTS"
             :key="slot"
             class="slot"
             :class="char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty'"
+            @click="openSlot(slot)"
           >
             <div class="slot-head">
               <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
@@ -243,29 +245,15 @@
               <div class="rarity slot-rarity">
                 {{ RARITY_LABEL[char.row.equipped[slot]!.rarity] }}
               </div>
-              <div class="slot-eff">
-                {{ itemEffects(char.row.equipped[slot]!) }}
-              </div>
-              <div class="slot-actions">
-                <button
-                  class="up-btn"
-                  :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
-                  @click="doUpgrade(char.row.equipped[slot]!.id)"
-                >
-                  <template v-if="char.row.equipped[slot]!.level >= c.level.level">max</template>
-                  <template v-else
-                    >⬆
-                    {{
-                      upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity)
-                    }}
-                    ✨</template
-                  >
-                </button>
-                <button class="link-btn" @click="doUnequip(slot)">retirer</button>
-              </div>
+              <div class="slot-eff">{{ itemEffects(char.row.equipped[slot]!) }}</div>
+              <div class="slot-manage">gérer ›</div>
             </template>
-            <div v-else class="slot-vide">vide</div>
-          </div>
+            <div v-else class="slot-vide">
+              vide<template v-if="bagCountForSlot(slot) > 0">
+                · {{ bagCountForSlot(slot) }} au sac ›</template
+              >
+            </div>
+          </button>
         </div>
 
         <!-- Sets d'équipement (bonus 2/3/4 pièces) -->
@@ -441,16 +429,17 @@
 
         <div class="sec-title mboss-title">🗺️ Donjons & boss de palier</div>
         <div class="dungeons">
-          <template v-for="it in adventureItems" :key="it.key">
+          <template v-for="it in visibleAdventure" :key="it.key">
             <!-- BOSS DE PALIER : design distinct, ressort dans la liste -->
             <div
               v-if="it.boss"
               class="dgn mboss"
               :class="{ locked: !bossUnlocked(it.boss), beaten: isBossBeaten(it.boss) }"
             >
+              <span class="lvl-pill" :class="itemState(it)">Niv {{ it.boss.unlockLevel }}</span>
               <span class="mboss-emo">{{ bossUnlocked(it.boss) ? it.boss.emoji : '🔒' }}</span>
               <div class="dgn-main">
-                <div class="mboss-eyebrow">👑 Boss · palier niv. {{ it.boss.unlockLevel }}</div>
+                <div class="mboss-eyebrow">👑 Boss de palier</div>
                 <div class="dgn-top">
                   <span class="dgn-name mboss-name font-display">
                     {{ it.boss.name }}
@@ -486,6 +475,7 @@
               class="dgn"
               :class="{ locked: !dungeonUnlocked(it.dungeon) }"
             >
+              <span class="lvl-pill" :class="itemState(it)">Niv {{ it.dungeon.recoLevel }}</span>
               <span class="dgn-emo">{{
                 dungeonUnlocked(it.dungeon) ? it.dungeon.emoji : '🔒'
               }}</span>
@@ -522,6 +512,17 @@
               <button v-else class="fight" disabled>Verrouillé</button>
             </div>
           </template>
+
+          <button
+            v-if="!showAllDungeons && hiddenCount > 0"
+            class="expand-btn"
+            @click="showAllDungeons = true"
+          >
+            ▾ Voir tous les donjons ({{ adventureItems.length }})
+          </button>
+          <button v-else-if="showAllDungeons" class="expand-btn" @click="showAllDungeons = false">
+            ▴ Réduire la liste
+          </button>
 
           <!-- Faille sans fin (end-game infini) — après le dernier donjon -->
           <div v-if="endlessUnlocked" class="dgn mboss endless">
@@ -784,6 +785,90 @@
         </div>
       </q-card>
     </q-dialog>
+
+    <!-- Gestion d'un emplacement : équipé en tête + objets du sac qui peuvent le remplacer -->
+    <q-dialog :model-value="!!manageSlot" position="bottom" @update:model-value="manageSlot = null">
+      <q-card v-if="manageSlot && char.row" class="manage-card">
+        <div class="manage-title font-display">
+          {{ SLOT_EMOJI[manageSlot] }} {{ SLOT_LABEL[manageSlot] }}
+        </div>
+
+        <!-- Objet actuellement équipé, mis en évidence -->
+        <div
+          v-if="char.row.equipped[manageSlot]"
+          class="manage-eq"
+          :class="'r-' + char.row.equipped[manageSlot]!.rarity"
+        >
+          <span class="rc-emo">{{ char.row.equipped[manageSlot]!.emoji }}</span>
+          <div class="rc-main">
+            <div class="rc-name">
+              {{ char.row.equipped[manageSlot]!.name }}
+              <span class="rarity">{{ RARITY_LABEL[char.row.equipped[manageSlot]!.rarity] }}</span>
+              <span class="rc-nv">Nv {{ char.row.equipped[manageSlot]!.level }}</span>
+            </div>
+            <div class="rc-eff">{{ itemEffects(char.row.equipped[manageSlot]!) }}</div>
+            <div class="manage-eq-actions">
+              <button
+                class="up-btn"
+                :disabled="
+                  !canUpgrade(char.row.equipped[manageSlot]!, char.row.dust, c.level.level)
+                "
+                @click="doUpgrade(char.row.equipped[manageSlot]!.id)"
+              >
+                <template v-if="char.row.equipped[manageSlot]!.level >= c.level.level"
+                  >max</template
+                >
+                <template v-else
+                  >⬆
+                  {{
+                    upgradeCost(
+                      char.row.equipped[manageSlot]!.level,
+                      char.row.equipped[manageSlot]!.rarity,
+                    )
+                  }}
+                  ✨</template
+                >
+              </button>
+              <button class="link-btn" @click="doUnequip(manageSlot)">Retirer</button>
+            </div>
+          </div>
+          <span class="manage-eq-tag">équipé</span>
+        </div>
+        <div v-else class="manage-empty-eq">Aucun objet équipé dans cet emplacement.</div>
+
+        <!-- Candidats du sac (même emplacement), comparaison de rareté -->
+        <div class="manage-sub">Dans ton sac ({{ slotCandidates.length }})</div>
+        <div v-if="!slotCandidates.length" class="manage-none">Rien de ce type dans le sac.</div>
+        <div
+          v-for="it in slotCandidates"
+          :key="it.id"
+          class="manage-cand"
+          :class="'r-' + it.rarity"
+        >
+          <span class="rc-emo">{{ it.emoji }}</span>
+          <div class="rc-main">
+            <div class="rc-name">
+              {{ it.name }} <span class="rarity">{{ RARITY_LABEL[it.rarity] }}</span>
+              <span class="rc-nv">Nv {{ it.level }}</span>
+            </div>
+            <div class="rc-eff">{{ itemEffects(it) }}</div>
+            <span class="rarity-verdict" :class="rarityVerdict(it).cls">{{
+              rarityVerdict(it).label
+            }}</span>
+            <div class="manage-cand-actions">
+              <button class="equip-btn" @click="doEquip(it.id)">
+                {{ char.row.equipped[manageSlot] ? 'Remplacer' : 'Équiper' }}
+              </button>
+              <button class="link-btn" @click="doSalvage(it)">
+                Casser ✨{{ salvageValue(it) }}
+              </button>
+              <button class="link-btn" @click="doSell(it)">Vendre 🪙{{ sellValue(it) }}</button>
+            </div>
+          </div>
+        </div>
+        <button class="manage-close" @click="manageSlot = null">Fermer</button>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -1042,6 +1127,27 @@ const adventureItems = computed(() => {
   ];
   return items.sort((a, b) => a.lvl - b.lvl);
 });
+// État visuel d'un item (pour la pastille de niveau colorée + le repli).
+function itemState(it: { dungeon?: Dungeon; boss?: MilestoneBoss }): 'done' | 'avail' | 'locked' {
+  if (itemDone(it)) return 'done';
+  const unlocked = it.boss ? bossUnlocked(it.boss) : dungeonUnlocked(it.dungeon!);
+  return unlocked ? 'avail' : 'locked';
+}
+// Repli : par défaut on n'affiche que les 2 derniers faits + le(s) déblocable(s).
+const showAllDungeons = ref(false);
+const frontierIndex = computed(() => {
+  const i = adventureItems.value.findIndex((it) => !itemDone(it));
+  return i === -1 ? adventureItems.value.length : i;
+});
+const visibleAdventure = computed(() => {
+  if (showAllDungeons.value) return adventureItems.value;
+  const f = frontierIndex.value;
+  return adventureItems.value.slice(
+    Math.max(0, f - 2),
+    Math.min(adventureItems.value.length, f + 1),
+  );
+});
+const hiddenCount = computed(() => adventureItems.value.length - visibleAdventure.value.length);
 const reportOpen = ref(false); // détail du combat repliable (bouton)
 
 // « Réattaquer » unifié : boss (prioritaire) ou donjon selon le dernier run.
@@ -1462,6 +1568,23 @@ function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
   if (!uid) return;
   fn(uid).catch(() => $q.notify({ type: 'negative', message: errMsg }));
 }
+
+// ── Gestion d'un emplacement : comparer l'équipé aux objets du sac ──
+const manageSlot = ref<ItemSlot | null>(null);
+function openSlot(slot: ItemSlot) {
+  manageSlot.value = slot;
+}
+function bagCountForSlot(slot: ItemSlot): number {
+  return (char.row?.inventory ?? []).filter((i) => i.slot === slot).length;
+}
+// Objets du sac pour le slot géré, meilleurs d'abord (rareté puis niveau).
+const slotCandidates = computed<Item[]>(() => {
+  const slot = manageSlot.value;
+  if (!slot || !char.row) return [];
+  return char.row.inventory
+    .filter((i) => i.slot === slot)
+    .sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || b.level - a.level);
+});
 
 function doEquip(itemId: string) {
   withUid((uid) => char.equip(uid, itemId), 'Impossible d’équiper.');
@@ -2138,10 +2261,17 @@ onMounted(async () => {
   gap: 10px;
   margin-bottom: 18px;
 }
+.sec-hint {
+  font-size: 12px;
+  color: var(--dim);
+  margin: -4px 2px 10px;
+}
 .slot {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  text-align: left;
+  cursor: pointer;
   background: var(--surface);
   border: 1px solid var(--line);
   border-left-width: 3px;
@@ -2468,6 +2598,94 @@ onMounted(async () => {
   color: var(--accent);
   margin-top: 3px;
 }
+/* Emplacement cliquable : hint « gérer » */
+.slot-manage {
+  margin-top: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+/* Modale de gestion d'un emplacement */
+.manage-card {
+  width: 100%;
+  background: var(--surface);
+  border-top: 2px solid var(--accent);
+  border-radius: 16px 16px 0 0;
+  padding: 16px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+  color: var(--text);
+  max-height: 82vh;
+  overflow-y: auto;
+}
+.manage-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+.manage-eq,
+.manage-cand {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.manage-eq {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+  position: relative;
+}
+.manage-eq-tag {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.manage-empty-eq {
+  color: var(--dim);
+  font-size: 13px;
+  padding: 6px 2px;
+}
+.manage-sub {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+  margin: 14px 0 8px;
+}
+.manage-none {
+  color: var(--dim);
+  font-size: 13px;
+  padding: 4px 2px;
+}
+.manage-cand {
+  margin-bottom: 8px;
+}
+.manage-eq-actions,
+.manage-cand-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.manage-close {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
 .drops-title {
   font-size: 18px;
   font-weight: 700;
@@ -2543,6 +2761,44 @@ onMounted(async () => {
   flex-direction: column;
   gap: 10px;
   margin-bottom: 22px;
+}
+/* Pastille de niveau (mise en avant, colorée par état) */
+.lvl-pill {
+  flex-shrink: 0;
+  align-self: flex-start;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: 8px;
+  white-space: nowrap;
+  background: var(--line);
+  color: var(--dim);
+}
+.lvl-pill.avail {
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+}
+.lvl-pill.done {
+  background: color-mix(in srgb, var(--d1, #7bc86c) 80%, #000);
+  color: #0c1a0c;
+}
+.lvl-pill.locked {
+  background: var(--line);
+  color: var(--dim);
+}
+.expand-btn {
+  width: 100%;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--dim);
+  border-radius: 10px;
+  padding: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 2px;
 }
 .dgn {
   display: flex;
