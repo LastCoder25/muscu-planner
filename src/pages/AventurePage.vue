@@ -390,101 +390,6 @@
 
       <!-- ONGLET DONJONS -->
       <template v-else-if="tab === 'donjons'">
-        <!-- Rapport de combat : au-dessus des donjons, bouton « Réattaquer » en TÊTE
-             (position stable) → on réenchaîne sans que le butin variable décale le bouton. -->
-        <div v-if="run" ref="reportEl" class="report" :class="run.cleared ? 'win' : 'lose'">
-          <div class="report-head">
-            <span class="report-title font-display">📋 Rapport de combat</span>
-            <button
-              v-if="reattack"
-              class="reattack"
-              :disabled="c.energy < reattack.cost || busy"
-              @click="reattack.fn()"
-            >
-              ⚔️ Réattaquer {{ reattack.name }} ({{ reattack.cost }} ⚡)
-            </button>
-          </div>
-          <div class="result-head">
-            <span
-              >{{
-                run.cleared
-                  ? run.kind === 'boss'
-                    ? '🏆 Boss vaincu'
-                    : '🏆 Donjon nettoyé'
-                  : '💀 Échec'
-              }}
-              — {{ run.name }}</span
-            >
-            <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
-          </div>
-          <div class="result-sub">
-            <template v-if="run.kind === 'dungeon'"
-              >{{ run.defeated }}/{{ run.total }} monstres vaincus ·
-            </template>
-            PV restants {{ run.finalPv }}
-          </div>
-          <div class="log">
-            <div class="log-lbl">⚔️ Détail du combat</div>
-            <div
-              v-for="(f, i) in run.fights"
-              :key="i"
-              class="fight-row"
-              :class="f.win ? 'fw' : 'fl'"
-            >
-              <span class="fr-emo">{{ f.emoji }}</span>
-              <span class="fr-name">{{ f.monster }}</span>
-              <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
-              <span class="fr-rounds">{{ f.rounds }} tours</span>
-            </div>
-          </div>
-          <div v-if="run.drops.length" class="drops">
-            <div class="drops-lbl">✨ Butin</div>
-            <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
-              <span class="inv-emo">{{ d.emoji }}</span>
-              <div class="inv-main">
-                <div class="inv-name">
-                  {{ d.name }} <span class="rarity">{{ RARITY_LABEL[d.rarity] }}</span>
-                </div>
-                <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}</div>
-                <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
-                  <span
-                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
-                    {{ equippedInSlot(d.slot)!.level }}
-                    ·
-                    {{ itemEffects(equippedInSlot(d.slot)!) }}</span
-                  >
-                  <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
-                    rarityVerdict(d).label
-                  }}</span>
-                </div>
-                <div v-else class="drop-cmp">
-                  <span class="rarity-verdict up">slot libre</span>
-                </div>
-                <div v-if="dropState(d) === 'equipped'" class="drop-done">
-                  ⚔️ Auto-équipé (slot vide)
-                </div>
-                <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
-                <div v-else class="inv-actions">
-                  <button
-                    class="equip-btn"
-                    @click="equippedInSlot(d.slot) ? openReplace(d) : doEquip(d.id)"
-                  >
-                    {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
-                  </button>
-                  <button class="link-btn" @click="doSalvage(d)">
-                    Casser ✨{{ salvageValue(d) }}
-                  </button>
-                  <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-if="run.consumable" class="cons-drop">
-            {{ run.consumable.emoji }} <b>{{ run.consumable.name }}</b> ajouté à ton sac de
-            consommables 🎒
-          </div>
-        </div>
-
         <!-- Consommables à utiliser pour le prochain run -->
         <div v-if="ownedConsumables.length" class="consum">
           <div class="consum-lbl">Utiliser pour ce donjon</div>
@@ -605,6 +510,84 @@
               </button>
               <button v-else class="fight" disabled>Verrouillé</button>
             </div>
+
+            <!-- Rapport de combat SOUS la carte combattue (contexte : pas de nom à rappeler) -->
+            <div
+              v-if="run && runUnder(it)"
+              ref="reportEl"
+              class="report run-under"
+              :class="run.cleared ? 'win' : 'lose'"
+            >
+              <div class="result-head">
+                <span>{{
+                  run.cleared ? (run.kind === 'boss' ? '🏆 Vaincu !' : '🏆 Nettoyé !') : '💀 Échec'
+                }}</span>
+                <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
+              </div>
+              <div class="result-sub">
+                <template v-if="run.kind === 'dungeon'"
+                  >{{ run.defeated }}/{{ run.total }} monstres ·
+                </template>
+                PV restants {{ run.finalPv }}
+              </div>
+              <div class="log">
+                <div
+                  v-for="(f, i) in run.fights"
+                  :key="i"
+                  class="fight-row"
+                  :class="f.win ? 'fw' : 'fl'"
+                >
+                  <span class="fr-emo">{{ f.emoji }}</span>
+                  <span class="fr-name">{{ f.monster }}</span>
+                  <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
+                  <span class="fr-rounds">{{ f.rounds }} tours</span>
+                </div>
+              </div>
+              <div v-if="run.drops.length" class="drops">
+                <div class="drops-lbl">✨ Butin</div>
+                <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
+                  <span class="inv-emo">{{ d.emoji }}</span>
+                  <div class="inv-main">
+                    <div class="inv-name">
+                      {{ d.name }} <span class="rarity">{{ RARITY_LABEL[d.rarity] }}</span>
+                    </div>
+                    <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}</div>
+                    <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
+                      <span
+                        >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
+                        {{ equippedInSlot(d.slot)!.level }} ·
+                        {{ itemEffects(equippedInSlot(d.slot)!) }}</span
+                      >
+                      <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
+                        rarityVerdict(d).label
+                      }}</span>
+                    </div>
+                    <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
+                    <div v-if="dropState(d) === 'equipped'" class="drop-done">
+                      ⚔️ Auto-équipé (slot vide)
+                    </div>
+                    <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
+                    <div v-else class="inv-actions">
+                      <button
+                        class="equip-btn"
+                        @click="equippedInSlot(d.slot) ? openReplace(d) : doEquip(d.id)"
+                      >
+                        {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
+                      </button>
+                      <button class="link-btn" @click="doSalvage(d)">
+                        Casser ✨{{ salvageValue(d) }}
+                      </button>
+                      <button class="link-btn" @click="doSell(d)">
+                        Vendre 🪙{{ sellValue(d) }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="run.consumable" class="cons-drop">
+                {{ run.consumable.emoji }} <b>{{ run.consumable.name }}</b> ajouté à ton sac 🎒
+              </div>
+            </div>
           </template>
 
           <button
@@ -645,6 +628,36 @@
               🌀 Descendre au palier {{ nextEndlessTier }} ({{ endlessEnergy(nextEndlessTier) }}
               ⚡)
             </button>
+          </div>
+
+          <!-- Rapport de la Faille sous sa carte -->
+          <div
+            v-if="run && lastEndless"
+            ref="reportEl"
+            class="report run-under"
+            :class="run.cleared ? 'win' : 'lose'"
+          >
+            <div class="result-head">
+              <span>{{ run.cleared ? '🏆 Palier franchi !' : '💀 Échec' }}</span>
+              <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
+            </div>
+            <div class="result-sub">PV restants {{ run.finalPv }}</div>
+            <div class="log">
+              <div
+                v-for="(f, i) in run.fights"
+                :key="i"
+                class="fight-row"
+                :class="f.win ? 'fw' : 'fl'"
+              >
+                <span class="fr-emo">{{ f.emoji }}</span>
+                <span class="fr-name">{{ f.monster }}</span>
+                <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
+                <span class="fr-rounds">{{ f.rounds }} tours</span>
+              </div>
+            </div>
+            <div v-if="run.drops.length" class="cons-drop">
+              ✨ Butin ajouté à ton sac ({{ run.drops.length }}) — gère-le dans l'onglet Équip.
+            </div>
           </div>
         </div>
       </template>
@@ -1293,8 +1306,17 @@ async function focusReport() {
   await nextTick();
   reportEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-const lastDungeon = ref<Dungeon | null>(null); // pour « Réattaquer » depuis le rapport
-const lastBoss = ref<MilestoneBoss | null>(null); // idem pour un boss de palier
+// Dernier lieu combattu → le rapport de combat s'affiche SOUS sa carte (contexte).
+const lastDungeon = ref<Dungeon | null>(null);
+const lastBoss = ref<MilestoneBoss | null>(null);
+const lastEndless = ref(false); // dernier run = Faille sans fin
+// Le rapport (run) doit-il s'afficher sous CETTE carte ?
+function runUnder(it: { dungeon?: Dungeon; boss?: MilestoneBoss }): boolean {
+  if (!run.value) return false;
+  if (it.boss) return run.value.kind === 'boss' && lastBoss.value?.id === it.boss.id;
+  if (it.dungeon) return run.value.kind === 'dungeon' && lastDungeon.value?.id === it.dungeon.id;
+  return false;
+}
 
 // Butin possible d'un donjon (affiché à la demande via 🎁).
 const dropInfo = ref<Dungeon | null>(null);
@@ -1351,18 +1373,6 @@ const visibleAdventure = computed(() => {
 });
 const hiddenCount = computed(() => adventureItems.value.length - visibleAdventure.value.length);
 
-// « Réattaquer » unifié : boss (prioritaire) ou donjon selon le dernier run.
-const reattack = computed<{ name: string; cost: number; fn: () => void } | null>(() => {
-  if (lastBoss.value) {
-    const b = lastBoss.value;
-    return { name: b.name, cost: b.energyCost, fn: () => void fightBoss(b) };
-  }
-  if (lastDungeon.value) {
-    const d = lastDungeon.value;
-    return { name: d.name, cost: d.energyCost, fn: () => void explore(d) };
-  }
-  return null;
-});
 const sacTitle = ref<HTMLElement | null>(null);
 
 // ── Boutique & consommables ──
@@ -1556,6 +1566,7 @@ async function explore(d: Dungeon) {
   }
   lastDungeon.value = d;
   lastBoss.value = null;
+  lastEndless.value = false;
   busy.value = true;
   try {
     // Consommables sélectionnés pour ce run (buffs + chance de butin).
@@ -1691,6 +1702,7 @@ async function fightBoss(b: MilestoneBoss) {
   }
   lastBoss.value = b;
   lastDungeon.value = null;
+  lastEndless.value = false;
   busy.value = true;
   try {
     const consumed = [...selectedConsumables.value];
@@ -1773,6 +1785,7 @@ async function fightEndless() {
   }
   lastBoss.value = null;
   lastDungeon.value = null;
+  lastEndless.value = true;
   busy.value = true;
   try {
     const consumed = [...selectedConsumables.value];
@@ -3673,6 +3686,13 @@ onMounted(async () => {
   border: 1px solid var(--line);
   border-left-width: 3px;
   scroll-margin-top: 72px;
+}
+/* Rapport rendu SOUS la carte combattue → collé à elle (contexte). */
+.run-under {
+  margin-top: -4px;
+  margin-bottom: 4px;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
 }
 .report.win {
   border-left-color: var(--d1);

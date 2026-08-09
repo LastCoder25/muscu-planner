@@ -59,12 +59,15 @@ export function cardioSessionXp(log: CardioLog): number {
   const dminus = log.descent_m ?? 0;
   const dur = log.duration_min ?? 0;
   const factor = activityIntensity(log.activity) / 100;
+  // Charge portée (veste/sac lesté) : chaque kg = +3 % d'effort (plafonné +60 %)
+  // → on valorise le poids sur l'activité (rucking).
+  const loadMult = 1 + Math.min(20, Math.max(0, log.load_kg ?? 0)) * 0.03;
   // Dosage DOMINÉ PAR LA DURÉE (min×3 > km×2) : pro-endurance-fondamentale. Le
   // temps en zone est la vraie monnaie de la progression aérobie → une longue
   // sortie facile rapporte PLUS qu'une courte sortie rapide (on ne récompense
   // JAMAIS la vitesse, qui pousserait à sortir de la zone EF). La distance reste
   // un petit bonus ; le dénivelé (D+ ET D-) compte à plein.
-  return Math.round(((km * 2 + dur * 3) * factor + (dplus + dminus) / 10) * XP_MULT);
+  return Math.round((((km * 2 + dur * 3) * factor + (dplus + dminus) / 10) * loadMult) * XP_MULT);
 }
 
 /** XP d'un « autre sport » (log durée seule) : INTENSITÉ-scalé par le sport

@@ -60,6 +60,13 @@ describe('cardioSessionXp (log global)', () => {
     const shortFast = cardioSessionXp(log({ distance_km: 10, duration_min: 35 }));
     expect(longEasy).toBeGreaterThan(shortFast);
   });
+  it('la charge portée (lest) augmente l’XP (+3 %/kg)', () => {
+    const plain = cardioSessionXp(log({ distance_km: 5, duration_min: 60 }));
+    const loaded = cardioSessionXp(log({ distance_km: 5, duration_min: 60, load_kg: 10 }));
+    expect(loaded).toBeGreaterThan(plain);
+    // 10 kg → ×1,3 (plafonné à +60 % ⇒ 20 kg).
+    expect(loaded / plain).toBeCloseTo(1.3, 1);
+  });
   it('la marche vaut moins que la course (pondération)', () => {
     const base = { distance_km: 10, duration_min: 50, rpe: 2 as const };
     const course = cardioSessionXp(log({ ...base, activity: 'course' }));

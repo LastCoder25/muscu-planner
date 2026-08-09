@@ -50,6 +50,13 @@
         <q-input v-model.number="distance" type="number" filled label="Distance (km)" step="0.1" />
         <q-input v-model.number="duration" type="number" filled label="Durée (min)" />
         <q-input v-if="hasSteps" v-model.number="steps" type="number" filled label="Pas" />
+        <q-input
+          v-model.number="load"
+          type="number"
+          filled
+          label="Charge portée (kg)"
+          hint="Veste/sac lesté — valorise le poids (+3 %/kg)"
+        />
         <div v-if="hasElevation" class="fields-row">
           <q-input v-model.number="dplus" type="number" filled label="D+ (m)" />
           <q-input v-model.number="dminus" type="number" filled label="D- (m)" />
@@ -145,6 +152,7 @@
             <template v-if="l.payload.distance_km"> · {{ l.payload.distance_km }} km</template>
             <template v-if="l.payload.duration_min"> · {{ l.payload.duration_min }} min</template>
             <template v-if="l.payload.steps"> · {{ l.payload.steps }} pas</template>
+            <template v-if="l.payload.load_kg"> · 🎒 {{ l.payload.load_kg }} kg</template>
             <template v-if="l.payload.elevation_m"> · +{{ l.payload.elevation_m }} m</template>
             <template v-if="l.payload.descent_m"> · −{{ l.payload.descent_m }} m</template>
           </div>
@@ -221,6 +229,7 @@ const date = ref(todayIso());
 const distance = ref<number | null>(null);
 const duration = ref<number | null>(null);
 const steps = ref<number | null>(null);
+const load = ref<number | null>(null);
 const dplus = ref<number | null>(null);
 const dminus = ref<number | null>(null);
 const rpe = ref<Difficulty | null>(null);
@@ -297,6 +306,7 @@ async function save() {
       ...(distance.value ? { distance_km: distance.value } : {}),
       ...(duration.value ? { duration_min: duration.value } : {}),
       ...(steps.value && hasSteps.value ? { steps: steps.value } : {}),
+      ...(load.value ? { load_kg: load.value } : {}),
       ...(dplus.value && hasElevation.value ? { elevation_m: dplus.value } : {}),
       ...(dminus.value && hasElevation.value ? { descent_m: dminus.value } : {}),
       ...(rpe.value ? { rpe: rpe.value } : {}),
@@ -350,6 +360,7 @@ async function save() {
     distance.value = null;
     duration.value = null;
     steps.value = null;
+    load.value = null;
     dplus.value = null;
     dminus.value = null;
     rpe.value = null;
