@@ -375,7 +375,9 @@ async function pickMuscuQuick() {
 }
 async function pickCardio() {
   pickerOpen.value = false;
-  await router.push('/cardio');
+  // Ouvre directement le formulaire de saisie (et pas le hub) → l'utilisateur
+  // voit tout de suite les activités (marche, course, vélo…).
+  await router.push('/cardio?new=1');
 }
 function pickAutre() {
   pickerOpen.value = false;

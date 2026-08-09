@@ -194,7 +194,8 @@ const cardio = useCardioStore();
 const challenges = useChallengesStore();
 
 const tab = ref<'act' | 'hist'>(route.query.tab === 'hist' ? 'hist' : 'act');
-const action = ref<'log' | null>(null);
+// ?new=1 (depuis le sélecteur de saisie) → ouvre directement le formulaire de sortie.
+const action = ref<'log' | null>(route.query.new ? 'log' : null);
 
 function todayIso(): string {
   const d = new Date();
