@@ -400,14 +400,27 @@ function sigLabel(sig: { power: number; endurance: number; agility: number }): s
   if (sig.agility > 0) parts.push(`⚡${Math.round(sig.agility)}`);
   return parts.join(' ');
 }
-// Tap sur une tuile de sport → son HISTORIQUE FILTRÉ sur ce sport (la saisie se
-// fait via « + Séance »). On passe la clé de tuile → la page d'historique filtre.
+// Tap sur une tuile de sport → sa SAISIE SPÉCIFIQUE (on a déjà choisi le sport en
+// tapant la tuile → pas besoin de le re-choisir). L'historique se consulte via
+// l'Agenda / les Stats.
+const DISC_SPORT_LABEL: Record<string, string> = {
+  crossfit: 'Crossfit',
+  hyrox: 'Hyrox',
+  mobilite: 'Mobilité',
+};
 async function goSport(key: string) {
-  if (key.startsWith('cardio:'))
-    await router.push(
-      `/cardio?tab=hist&activity=${encodeURIComponent(key.slice('cardio:'.length))}`,
-    );
-  else await router.push(`/muscu?tab=hist&filter=${encodeURIComponent(key)}`);
+  if (key.startsWith('cardio:')) {
+    // Cardio : ouvre le formulaire de sortie avec l'activité pré-sélectionnée.
+    await router.push(`/cardio?new=1&activity=${encodeURIComponent(key.slice('cardio:'.length))}`);
+  } else if (key === 'tennis' || key === 'disc:prepa_physique') {
+    await router.push('/tennis');
+  } else if (key === 'disc:musculation') {
+    await router.push('/muscu');
+  } else if (key.startsWith('disc:')) {
+    openAutre(DISC_SPORT_LABEL[key.slice('disc:'.length)]);
+  } else if (key.startsWith('sport:')) {
+    openAutre(key.slice('sport:'.length));
+  }
 }
 const autreOpen = ref(false);
 const autreSport = ref<string>('Tennis');

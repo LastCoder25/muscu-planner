@@ -131,9 +131,12 @@ export function useProgress() {
   // Piste Challenges = niveau « méta » (tous les défis) — affiché à part, PAS
   // ajouté au Global (l'effort est déjà compté dans muscu / cardio).
   const challengesXp = computed(() => challengeXpPoints(challenges.list));
-  // Global = sport de FOND (muscu + cardio + « autre sport ») — niveau du personnage
-  // et source de l'énergie. Le tennis (spécifique) reste à part.
-  const generalXp = computed(() => muscuTotal.value + cardioXp.value + autreXp.value);
+  // Global = TOUS les sports (muscu + cardio + « autre sport » + tennis/spécifique).
+  // Chaque sport porte son ratio d'intensité → chacun compte dans le niveau du
+  // personnage et l'énergie d'aventure. tennisXp = court (drills) + prépa/crossfit/…
+  const generalXp = computed(
+    () => muscuTotal.value + cardioXp.value + autreXp.value + tennisXp.value,
+  );
   const globalXp = generalXp;
 
   // ── 3 réservoirs de stats (chaque source répartie par sa signature) ──
@@ -157,6 +160,22 @@ export function useProgress() {
           otherSportXp(r.payload.duration_min ?? 0, r.payload.name),
           sportSignature(r.payload.name),
         );
+    }
+    // Tennis (drills court) → signature Tennis.
+    for (const r of tennis.logs) addXp(acc, drillSessionXp(r.payload), sportSignature('Tennis'));
+    // Séances « spécifiques » (prépa/crossfit/hyrox/mobilité) → signature du sport le
+    // plus proche (fallback = vecteur par défaut). Chacune compte désormais dans le fond.
+    const DISC_SIG_NAME: Record<string, string> = {
+      crossfit: 'Crossfit',
+      hyrox: 'Hyrox',
+      mobilite: 'Pilates',
+      prepa_physique: 'Tennis',
+    };
+    for (const r of logs.all) {
+      if (isSpecifiqueLog(r)) {
+        const d = r.payload.discipline ?? '';
+        addXp(acc, sessionXp(r.payload), sportSignature(DISC_SIG_NAME[d] ?? d));
+      }
     }
     return acc;
   });
@@ -254,6 +273,17 @@ export function useProgress() {
         Date.parse(r.performed_at) || 0,
       );
     }
+    // Tennis (séances sur court / drills) → sa propre tuile.
+    for (const r of tennis.logs) {
+      bump(
+        'tennis',
+        'Tennis',
+        'sports_tennis',
+        drillSessionXp(r.payload),
+        r.payload.duration_min || 0,
+        Date.parse(r.performed_at) || 0,
+      );
+    }
     // Les DÉFIS / Défi 360 alimentent la tuile en XP ET en « minutes d'effort »
     // estimées (xp ÷ rythme muscu) → le NIVEAU de la tuile (basé sur le temps)
     // monte aussi avec les défis (avant : bloqué à niv.1 malgré l'XP gagnée).
@@ -297,6 +327,7 @@ export function useProgress() {
       if (key.startsWith('cardio:'))
         return activityBenefit(key.slice('cardio:'.length) as CardioActivity);
       if (key === 'disc:musculation') return { power: 60, endurance: 30, agility: 10 };
+      if (key === 'tennis') return sportBenefit('Tennis');
       if (key.startsWith('sport:')) return sportBenefit(key.slice('sport:'.length));
       return null; // crossfit/hyrox/mobilité/prépa → n'alimentent pas les stats du perso
     };

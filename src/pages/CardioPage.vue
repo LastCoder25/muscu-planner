@@ -209,7 +209,12 @@ function performedAtIso(dateIso: string): string {
   return dt.toISOString();
 }
 
-const activity = ref<CardioActivity>('course');
+// Activité pré-sélectionnée si fournie (?activity=marche depuis la tuile d'accueil).
+const ACTIVITY_IDS = CARDIO_ACTIVITIES.map((a) => a.id);
+const queryActivity = route.query.activity as CardioActivity | undefined;
+const activity = ref<CardioActivity>(
+  queryActivity && ACTIVITY_IDS.includes(queryActivity) ? queryActivity : 'course',
+);
 const date = ref(todayIso());
 const distance = ref<number | null>(null);
 const duration = ref<number | null>(null);
