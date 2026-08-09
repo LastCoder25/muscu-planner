@@ -383,9 +383,20 @@
             </template>
             PV restants {{ run.finalPv }}
           </div>
-          <button class="report-toggle" @click="reportOpen = true">
-            ⚔️ Voir le détail du combat
-          </button>
+          <div class="log">
+            <div class="log-lbl">⚔️ Détail du combat</div>
+            <div
+              v-for="(f, i) in run.fights"
+              :key="i"
+              class="fight-row"
+              :class="f.win ? 'fw' : 'fl'"
+            >
+              <span class="fr-emo">{{ f.emoji }}</span>
+              <span class="fr-name">{{ f.monster }}</span>
+              <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
+              <span class="fr-rounds">{{ f.rounds }} tours</span>
+            </div>
+          </div>
           <div v-if="run.drops.length" class="drops">
             <div class="drops-lbl">✨ Butin</div>
             <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
@@ -921,27 +932,6 @@
       </q-card>
     </q-dialog>
 
-    <!-- Détail du combat (modale) -->
-    <q-dialog v-model="reportOpen">
-      <q-card v-if="run" class="fight-card">
-        <div class="fight-title font-display">⚔️ Détail du combat — {{ run.name }}</div>
-        <div class="fight-list">
-          <div
-            v-for="(f, i) in run.fights"
-            :key="i"
-            class="fight-row"
-            :class="f.win ? 'fw' : 'fl'"
-          >
-            <span class="fr-emo">{{ f.emoji }}</span>
-            <span class="fr-name">{{ f.monster }}</span>
-            <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
-            <span class="fr-rounds">{{ f.rounds }} tours</span>
-          </div>
-        </div>
-        <button class="fight-close" @click="reportOpen = false">Fermer</button>
-      </q-card>
-    </q-dialog>
-
     <!-- Gestion d'un emplacement : équipé en tête + objets du sac qui peuvent le remplacer -->
     <q-dialog :model-value="!!manageSlot" position="bottom" @update:model-value="manageSlot = null">
       <q-card v-if="manageSlot && char.row" class="manage-card">
@@ -1320,7 +1310,6 @@ const visibleAdventure = computed(() => {
   );
 });
 const hiddenCount = computed(() => adventureItems.value.length - visibleAdventure.value.length);
-const reportOpen = ref(false); // détail du combat repliable (bouton)
 
 // « Réattaquer » unifié : boss (prioritaire) ou donjon selon le dernier run.
 const reattack = computed<{ name: string; cost: number; fn: () => void } | null>(() => {
@@ -3604,6 +3593,14 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  margin-top: 10px;
+}
+.log-lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--dim);
+  margin-bottom: 2px;
 }
 .fight-row {
   display: flex;
