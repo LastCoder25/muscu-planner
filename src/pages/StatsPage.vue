@@ -30,6 +30,73 @@
         </div>
       </div>
 
+      <!-- Combat & équipement (Aventure) : stats de fond + effet de l'équipement -->
+      <template v-if="char.row">
+        <div class="sec-h">⚔️ Combat &amp; équipement</div>
+        <div class="combat-card">
+          <div class="cstats">
+            <span>💪 {{ cStats.puissance }}</span>
+            <span>❤️ {{ cStats.endurance }}</span>
+            <span>⚡ {{ cStats.agilite }}</span>
+          </div>
+          <div class="cattrs">
+            <div class="cattr">
+              <span class="ca-l">❤️ PV</span>
+              <span class="ca-v">{{ baseFighter.pv }} <i>→</i> <b>{{ gearedFighter.pv }}</b></span>
+            </div>
+            <div class="cattr">
+              <span class="ca-l">⚔️ Dégâts/coup</span>
+              <span class="ca-v"
+                >{{ baseFighter.damage }} <i>→</i> <b>{{ gearedFighter.damage }}</b></span
+              >
+            </div>
+            <div class="cattr">
+              <span class="ca-l">⚡ Frappes/tour</span>
+              <span class="ca-v"
+                >{{ (baseFighter.strikes ?? 1).toFixed(2) }} <i>→</i>
+                <b>{{ (gearedFighter.strikes ?? 1).toFixed(2) }}</b></span
+              >
+            </div>
+            <div class="cattr">
+              <span class="ca-l">🎯 Crit</span>
+              <span class="ca-v"
+                >{{ pct(baseFighter.crit) }} <i>→</i> <b>{{ pct(gearedFighter.crit) }}</b></span
+              >
+            </div>
+            <div class="cattr">
+              <span class="ca-l">💨 Esquive</span>
+              <span class="ca-v"
+                >{{ pct(baseFighter.dodge) }} <i>→</i> <b>{{ pct(gearedFighter.dodge) }}</b></span
+              >
+            </div>
+            <div class="cattr">
+              <span class="ca-l">🛡️ Défense</span>
+              <span class="ca-v"
+                >{{ pct(baseFighter.dmgReduction) }} <i>→</i>
+                <b>{{ pct(gearedFighter.dmgReduction) }}</b></span
+              >
+            </div>
+            <div class="cattr">
+              <span class="ca-l">🩸 Vol de vie</span>
+              <span class="ca-v"
+                >{{ pct(baseFighter.lifesteal) }} <i>→</i>
+                <b>{{ pct(gearedFighter.lifesteal) }}</b></span
+              >
+            </div>
+            <div class="cattr total">
+              <span class="ca-l">Puissance de combat</span>
+              <span class="ca-v"
+                >{{ combatPower(baseFighter) }} <i>→</i>
+                <b>{{ combatPower(gearedFighter) }}</b></span
+              >
+            </div>
+          </div>
+          <div class="combat-note">
+            Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement</b> ajoute les effets (→).
+          </div>
+        </div>
+      </template>
+
       <div v-if="logs.length === 0" class="empty">Aucune séance enregistrée pour l’instant.</div>
 
       <template v-else>
@@ -173,6 +240,11 @@ import { useCardioStore } from '@/stores/cardio';
 import { muscleColor } from '@/lib/volume';
 import { DRILL_SHOT_LABELS } from '@/data/tennis';
 import { useProgress } from '@/composables/useProgress';
+import { useCharacterStore } from '@/stores/character';
+import { statFromXp } from '@/lib/character';
+import { playerWithGear } from '@/lib/items';
+import { playerCombatant, combatPower } from '@/lib/combat';
+import { talentEffects } from '@/lib/talents';
 import type { DrillShot, Difficulty } from '@/lib/types';
 
 const router = useRouter();
@@ -180,6 +252,7 @@ const $q = useQuasar();
 const logsStore = useLogsStore();
 const tennis = useTennisStore();
 const cardio = useCardioStore();
+const char = useCharacterStore();
 const loading = ref(true);
 const logs = ref<LogRow[]>([]);
 const drillLogs = ref<DrillLogRow[]>([]);
@@ -195,6 +268,25 @@ const levelCards = computed(() => [
   })),
   { key: 'challenges', label: 'Défis', info: progress.challenges.value, unit: 'XP' },
 ]);
+
+// ── Combat & équipement (Aventure) : stats de fond → attributs effectifs équipés ──
+const cStats = computed(() => ({
+  puissance: statFromXp(progress.powerXp.value),
+  endurance: statFromXp(progress.enduranceXp.value),
+  agilite: statFromXp(progress.agilityXp.value),
+}));
+const charLevel = computed(() => progress.global.value.level);
+const baseFighter = computed(() => playerCombatant('x', cStats.value, charLevel.value));
+const gearedFighter = computed(() =>
+  playerWithGear(
+    'x',
+    cStats.value,
+    char.row?.equipped ?? {},
+    talentEffects(char.row?.talents ?? []),
+    charLevel.value,
+  ),
+);
+const pct = (x?: number) => Math.round((x ?? 0) * 100) + '%';
 
 function median(arr: number[]): number {
   if (arr.length === 0) return 0;
@@ -331,6 +423,7 @@ const cardioKpis = computed(() => {
 onMounted(async () => {
   try {
     cardio.fetchLogs(300).catch(() => undefined);
+    char.fetchMine().catch(() => undefined);
     tennis
       .fetchLogs(300)
       .then((l) => (drillLogs.value = l))
@@ -516,6 +609,65 @@ onMounted(async () => {
   text-transform: uppercase;
   color: var(--dim);
   margin: 24px 2px 10px;
+}
+/* Combat & équipement */
+.combat-card {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 14px;
+}
+.cstats {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--text);
+  padding-bottom: 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.cattrs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+}
+.cattr {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.cattr.total {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.ca-l {
+  color: var(--dim);
+}
+.ca-v {
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+}
+.ca-v i {
+  color: var(--line);
+  font-style: normal;
+}
+.ca-v b {
+  color: var(--accent);
+  font-weight: 700;
+}
+.combat-note {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.4;
 }
 .grp-card {
   background: var(--surface);
