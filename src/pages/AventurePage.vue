@@ -344,7 +344,7 @@
       <template v-else-if="tab === 'donjons'">
         <!-- Rapport de combat : au-dessus des donjons, bouton « Réattaquer » en TÊTE
              (position stable) → on réenchaîne sans que le butin variable décale le bouton. -->
-        <div v-if="run" class="report" :class="run.cleared ? 'win' : 'lose'">
+        <div v-if="run" ref="reportEl" class="report" :class="run.cleared ? 'win' : 'lose'">
           <div class="report-head">
             <span class="report-title font-display">📋 Rapport de combat</span>
             <button
@@ -419,17 +419,12 @@
                 </div>
                 <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
                 <div v-else class="inv-actions">
-                  <button class="equip-btn" @click="doEquip(d.id)">
+                  <button
+                    class="equip-btn"
+                    @click="equippedInSlot(d.slot) ? openReplace(d) : doEquip(d.id)"
+                  >
                     {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
                   </button>
-                  <template v-if="equippedInSlot(d.slot)">
-                    <button class="link-btn" @click="doReplaceDispose(d, 'salvage')">
-                      Remplacer + casser l'ancien ✨{{ salvageValue(equippedInSlot(d.slot)!) }}
-                    </button>
-                    <button class="link-btn" @click="doReplaceDispose(d, 'sell')">
-                      Remplacer + vendre l'ancien 🪙{{ sellValue(equippedInSlot(d.slot)!) }}
-                    </button>
-                  </template>
                   <button class="link-btn" @click="doSalvage(d)">
                     Casser ✨{{ salvageValue(d) }}
                   </button>
@@ -684,6 +679,76 @@
       </div>
     </transition>
 
+    <!-- Modale : remplacer un objet équipé → sort de l'ancien au choix -->
+    <transition name="salv-fade">
+      <div v-if="replaceTarget" class="salv-backdrop" @click.self="replaceTarget = null">
+        <div class="salv-card repl-card">
+          <div class="salv-title font-display">Remplacer l'équipement</div>
+
+          <div class="repl-item repl-new" :class="'r-' + replaceTarget.rarity">
+            <span class="repl-tag">Nouveau</span>
+            <span class="salv-emo">{{ replaceTarget.emoji }}</span>
+            <div class="salv-main">
+              <div class="salv-name">
+                {{ replaceTarget.name }}
+                <span class="rarity"
+                  >{{ RARITY_LABEL[replaceTarget.rarity] }} · Nv {{ replaceTarget.level }}</span
+                >
+              </div>
+              <div class="salv-eff">
+                {{ SLOT_LABEL[replaceTarget.slot] }} · {{ itemEffects(replaceTarget) }}
+              </div>
+            </div>
+          </div>
+
+          <div v-if="equippedInSlot(replaceTarget.slot)" class="repl-arrow">remplace ↓</div>
+
+          <div
+            v-if="equippedInSlot(replaceTarget.slot)"
+            class="repl-item repl-old"
+            :class="'r-' + equippedInSlot(replaceTarget.slot)!.rarity"
+          >
+            <span class="repl-tag">Actuel</span>
+            <span class="salv-emo">{{ equippedInSlot(replaceTarget.slot)!.emoji }}</span>
+            <div class="salv-main">
+              <div class="salv-name">
+                {{ equippedInSlot(replaceTarget.slot)!.name }}
+                <span class="rarity"
+                  >{{ RARITY_LABEL[equippedInSlot(replaceTarget.slot)!.rarity] }} · Nv
+                  {{ equippedInSlot(replaceTarget.slot)!.level }}</span
+                >
+              </div>
+              <div class="salv-eff">{{ itemEffects(equippedInSlot(replaceTarget.slot)!) }}</div>
+            </div>
+          </div>
+
+          <div class="repl-q">Que faire de l'objet remplacé ?</div>
+          <div class="repl-choices">
+            <button class="repl-choice" @click="confirmReplace('keep')">
+              <span class="repl-choice-emo">🎒</span>
+              <span class="repl-choice-lbl">Garder</span>
+              <small>au sac</small>
+            </button>
+            <button class="repl-choice" @click="confirmReplace('salvage')">
+              <span class="repl-choice-emo">✨</span>
+              <span class="repl-choice-lbl">Recycler</span>
+              <small v-if="equippedInSlot(replaceTarget.slot)"
+                >+{{ salvageValue(equippedInSlot(replaceTarget.slot)!) }} poussière</small
+              >
+            </button>
+            <button class="repl-choice" @click="confirmReplace('sell')">
+              <span class="repl-choice-emo">🪙</span>
+              <span class="repl-choice-lbl">Vendre</span>
+              <small v-if="equippedInSlot(replaceTarget.slot)"
+                >+{{ sellValue(equippedInSlot(replaceTarget.slot)!) }} or</small
+              >
+            </button>
+          </div>
+          <button class="salv-cancel repl-cancel" @click="replaceTarget = null">Annuler</button>
+        </div>
+      </div>
+    </transition>
+
     <!-- Animation : passage de niveau -->
     <transition name="lb-fade">
       <div v-if="levelBurst" class="lb-backdrop" @click="levelBurst = null">
@@ -794,16 +859,19 @@
             <template v-if="cand.kind === 'item'">
               <span class="rc-emo">{{ cand.item.emoji }}</span>
               <div class="rc-main">
-                <div class="rc-name">
-                  {{ cand.item.name }}
-                  <span class="rarity">{{ RARITY_LABEL[cand.item.rarity] }}</span>
-                  <span class="rc-nv">Nv {{ cand.item.level }}</span>
+                <div class="rc-name">{{ cand.item.name }}</div>
+                <div class="rc-pills">
+                  <span class="rc-pill lvl">Lvl {{ cand.item.level }}</span>
+                  <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
+                    RARITY_LABEL[cand.item.rarity]
+                  }}</span>
+                  <span v-if="cand.item.setId" class="rc-pill set">🧩 Set</span>
                 </div>
                 <div class="rc-eff">
                   {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
                 </div>
                 <div v-if="cand.item.setId" class="rc-set">
-                  🧩 pièce de set · <b>{{ SET_BY_ID[cand.item.setId]?.name }}</b>
+                  <b>{{ SET_BY_ID[cand.item.setId]?.name }}</b>
                 </div>
                 <div class="drop-cmp rc-cmp">
                   <span v-if="equippedInSlot(cand.item.slot)"
@@ -900,7 +968,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
@@ -1150,6 +1218,13 @@ function barW(v: number): string {
 
 const busy = ref(false);
 const run = ref<RunView | null>(null);
+const reportEl = ref<HTMLElement | null>(null);
+// Après un run : replie la liste (retour à la vue par défaut) et remonte au rapport.
+async function focusReport() {
+  showAllDungeons.value = false;
+  await nextTick();
+  reportEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 const lastDungeon = ref<Dungeon | null>(null); // pour « Réattaquer » depuis le rapport
 const lastBoss = ref<MilestoneBoss | null>(null); // idem pour un boss de palier
 
@@ -1413,6 +1488,7 @@ async function explore(d: Dungeon) {
       drops,
       ...(consDrop ? { consumable: { emoji: consDrop.emoji, name: consDrop.name } } : {}),
     };
+    void focusReport();
     if (r.cleared) $q.notify({ type: 'positive', message: `Donjon nettoyé — +${gold} 🪙` });
   } catch {
     $q.notify({ type: 'negative', message: 'Échec de l’exploration.' });
@@ -1472,7 +1548,11 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
       const p = d ?? rollSetPiece(rng, { setId: b.setId, level: b.dropLevel, luck });
       out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
     } else {
-      out.push({ kind: 'gold', gold: Math.round(b.gold * 0.6), dust: 30 });
+      // Cache de ressources : doit rivaliser avec une pièce d'équipement. Or plein
+      // + poussière de l'ordre de ~3 niveaux d'amélioration d'un légendaire à ce
+      // palier → vaut le coup quand ton stuff est déjà bon et que tu veux le monter.
+      const dustLump = upgradeCost(b.dropLevel, 'legendary') * 3;
+      out.push({ kind: 'gold', gold: b.gold, dust: dustLump });
     }
   }
   return out;
@@ -1529,6 +1609,7 @@ async function fightBoss(b: MilestoneBoss) {
       fights: [{ monster: b.name, emoji: b.emoji, win, rounds: r.rounds }],
       drops: [],
     };
+    void focusReport();
     $q.notify(
       win
         ? { type: 'positive', message: `${b.emoji} ${b.name} vaincu — choisis ta récompense !` }
@@ -1618,6 +1699,7 @@ async function fightEndless() {
       fights: [{ monster: foe.name, emoji: '🌀', win, rounds: r.rounds }],
       drops,
     };
+    void focusReport();
     $q.notify(
       win
         ? { type: 'positive', message: `Palier ${tier} franchi — +${gold} 🪙` }
@@ -1658,25 +1740,26 @@ const slotCandidates = computed<Item[]>(() => {
 function doEquip(itemId: string) {
   withUid((uid) => char.equip(uid, itemId), 'Impossible d’équiper.');
 }
-// Équipe le drop ET dispose de l'objet remplacé (casse/vend) sans passer par le sac.
-function doReplaceDispose(drop: Item, disposal: 'salvage' | 'sell') {
+// Remplacement d'un objet équipé : le joueur choisit dans une modale ce qu'il
+// advient de l'ancien (garder au sac / recycler → poussière / vendre → or).
+const replaceTarget = ref<Item | null>(null);
+function openReplace(drop: Item) {
+  replaceTarget.value = drop;
+}
+function confirmReplace(disposal: 'salvage' | 'sell' | 'keep') {
+  const drop = replaceTarget.value;
+  if (!drop) return;
+  replaceTarget.value = null;
   const old = equippedInSlot(drop.slot);
-  const gain = old
-    ? disposal === 'salvage'
-      ? `+${salvageValue(old)} ✨`
-      : `+${sellValue(old)} 🪙`
-    : '';
-  const verb = disposal === 'salvage' ? 'cassé' : 'vendu';
+  let message = 'Équipé';
+  if (old && disposal === 'salvage') message = `Équipé · ancien cassé (+${salvageValue(old)} ✨)`;
+  else if (old && disposal === 'sell') message = `Équipé · ancien vendu (+${sellValue(old)} 🪙)`;
+  else if (old) message = 'Équipé · ancien rangé au sac';
   withUid(
     (uid) =>
       char
         .equipReplacing(uid, drop.id, disposal)
-        .then(() =>
-          $q.notify({
-            type: 'positive',
-            message: old ? `Équipé · ancien ${verb} (${gain})` : 'Équipé',
-          }),
-        ),
+        .then(() => $q.notify({ type: 'positive', position: 'top', message })),
     'Action impossible.',
   );
 }
@@ -1691,7 +1774,7 @@ function doSell(it: Item) {
     (uid) =>
       char
         .sell(uid, it.id)
-        .then(() => $q.notify({ type: 'positive', message: `+${sellValue(it)} 🪙` })),
+        .then(() => $q.notify({ type: 'positive', position: 'top', message: `+${sellValue(it)} 🪙` })),
     'Vente impossible.',
   );
 }
@@ -1707,7 +1790,9 @@ function confirmSalvage() {
     (uid) =>
       char
         .salvage(uid, it.id)
-        .then(() => $q.notify({ type: 'positive', message: `+${salvageValue(it)} ✨ poussière` })),
+        .then(() =>
+          $q.notify({ type: 'positive', position: 'top', message: `+${salvageValue(it)} ✨ poussière` }),
+        ),
     'Recyclage impossible.',
   );
 }
@@ -2765,6 +2850,46 @@ onMounted(async () => {
   font-weight: 700;
   color: var(--d4);
 }
+.rc-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 3px 0;
+}
+.rc-pill {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  background: var(--surface);
+}
+.rc-pill.lvl {
+  color: var(--text);
+}
+.rc-pill.p-common {
+  color: var(--dim);
+  border-color: var(--dim);
+}
+.rc-pill.p-rare {
+  color: #4ec6d6;
+  border-color: #4ec6d6;
+}
+.rc-pill.p-epic {
+  color: #b07cff;
+  border-color: #b07cff;
+}
+.rc-pill.p-legendary {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.rc-pill.set {
+  color: var(--dark, #15120e);
+  background: var(--accent);
+  border-color: var(--accent);
+}
 /* Emplacement cliquable : hint « gérer » */
 .slot-manage {
   margin-top: auto;
@@ -3140,6 +3265,7 @@ onMounted(async () => {
   background: var(--surface);
   border: 1px solid var(--line);
   border-left-width: 3px;
+  scroll-margin-top: 72px;
 }
 .report.win {
   border-left-color: var(--d1);
@@ -3753,5 +3879,107 @@ onMounted(async () => {
 .salv-fade-enter-from,
 .salv-fade-leave-to {
   opacity: 0;
+}
+
+/* Modale de remplacement d'équipement */
+.repl-card {
+  border-left: none;
+}
+.repl-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2, #2b241b);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.repl-item.r-common {
+  border-left-color: var(--dim);
+}
+.repl-item.r-rare {
+  border-left-color: #4ec6d6;
+}
+.repl-item.r-epic {
+  border-left-color: #b07cff;
+}
+.repl-item.r-legendary {
+  border-left-color: var(--accent);
+}
+.repl-new {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.repl-old {
+  opacity: 0.82;
+}
+.repl-tag {
+  position: absolute;
+  top: -8px;
+  left: 10px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--dim);
+}
+.repl-new .repl-tag {
+  color: var(--dark, #15120e);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.repl-arrow {
+  text-align: center;
+  font-size: 11px;
+  color: var(--dim);
+  margin: 2px 0;
+}
+.repl-q {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+}
+.repl-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.repl-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface-2, #2b241b);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 6px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+}
+.repl-choice:active {
+  transform: scale(0.97);
+  border-color: var(--accent);
+}
+.repl-choice-emo {
+  font-size: 20px;
+}
+.repl-choice-lbl {
+  font-size: 12px;
+  font-weight: 700;
+}
+.repl-choice small {
+  font-size: 9.5px;
+  color: var(--dim);
+}
+.repl-cancel {
+  width: 100%;
 }
 </style>
