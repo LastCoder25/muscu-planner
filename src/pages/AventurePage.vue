@@ -348,6 +348,17 @@
                   <span class="inv-nv">Nv {{ it.level }}</span>
                 </div>
                 <div class="inv-eff">{{ SLOT_LABEL[it.slot] }} · {{ itemEffects(it) }}</div>
+                <div class="drop-cmp inv-cmp">
+                  <span v-if="equippedInSlot(it.slot)"
+                    >Équipé : {{ RARITY_LABEL[equippedInSlot(it.slot)!.rarity] }} Nv
+                    {{ equippedInSlot(it.slot)!.level }} ·
+                    {{ itemEffects(equippedInSlot(it.slot)!) }}</span
+                  >
+                  <span v-else>Emplacement libre</span>
+                  <span class="rarity-verdict" :class="rarityVerdict(it).cls">{{
+                    rarityVerdict(it).label
+                  }}</span>
+                </div>
                 <div class="inv-actions">
                   <button class="equip-btn" @click="doEquip(it.id)">
                     {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
@@ -1482,27 +1493,25 @@ function rarityVerdict(d: Item): { label: string; cls: string } {
 // Progression séquentielle : un donjon n'est déblocable qu'après avoir nettoyé
 // le précédent. Le premier est toujours ouvert.
 const clearedSet = computed(() => new Set(char.row?.cleared_dungeons ?? []));
-// Déblocage SÉQUENTIEL UNIFIÉ : donjons ET boss dans la MÊME chaîne (ordre de la
-// liste `adventureItems`, par niveau). Un item se débloque quand le précédent de
-// la liste est terminé (donjon nettoyé / boss vaincu). → un boss est un checkpoint
-// obligatoire entre deux donjons ; il n'apparaît jamais avant les donjons qui le précèdent.
+// Déblocage DÉCOUPLÉ (2 chaînes indépendantes) : les donjons se débloquent ENTRE
+// EUX (donjon précédent nettoyé), les boss ENTRE EUX (boss précédent vaincu). Un
+// boss ne bloque plus jamais les donjons → plus de farm forcé. AUCUN gate de
+// niveau : battre le précédent suffit (le 🎯 % de victoire prévient si c'est perdu
+// d'avance). Le niveau affiché reste indicatif (conseillé).
+const dungeonChain = computed(() => [...DUNGEONS].sort((a, b) => a.recoLevel - b.recoLevel));
+const bossChain = computed(() => [...BOSSES].sort((a, b) => a.unlockLevel - b.unlockLevel));
 function itemDone(it: { dungeon?: Dungeon; boss?: MilestoneBoss }): boolean {
   return it.boss ? defeatedBossSet.value.has(it.boss.id) : clearedSet.value.has(it.dungeon!.id);
 }
-function prevChainDone(index: number): boolean {
-  if (index <= 0) return true;
-  const prev = adventureItems.value[index - 1];
-  return !prev || itemDone(prev);
-}
-function prevChainName(index: number): string {
-  const prev = index > 0 ? adventureItems.value[index - 1] : undefined;
-  return prev ? (prev.boss?.name ?? prev.dungeon?.name ?? '') : '';
-}
 function dungeonUnlocked(d: Dungeon): boolean {
-  return prevChainDone(adventureItems.value.findIndex((x) => x.dungeon?.id === d.id));
+  const order = dungeonChain.value;
+  const i = order.findIndex((x) => x.id === d.id);
+  return i <= 0 || clearedSet.value.has(order[i - 1]!.id);
 }
 function prevDungeonName(d: Dungeon): string {
-  return prevChainName(adventureItems.value.findIndex((x) => x.dungeon?.id === d.id));
+  const order = dungeonChain.value;
+  const i = order.findIndex((x) => x.id === d.id);
+  return i > 0 ? order[i - 1]!.name : '';
 }
 
 async function explore(d: Dungeon) {
@@ -1582,16 +1591,17 @@ const defeatedBossSet = computed(() => new Set(char.row?.defeated_bosses ?? []))
 function isBossBeaten(b: MilestoneBoss): boolean {
   return defeatedBossSet.value.has(b.id);
 }
-// Déblocage : chaîne UNIFIÉE (item précédent de la liste terminé) + palier de niveau.
+// Déblocage : chaîne des BOSS uniquement (boss précédent vaincu). Pas de gate de
+// niveau → le 🎯 % de victoire indique si le combat est jouable.
 function bossUnlocked(b: MilestoneBoss): boolean {
-  if (c.value.level.level < b.unlockLevel) return false;
-  return prevChainDone(adventureItems.value.findIndex((x) => x.boss?.id === b.id));
+  const order = bossChain.value;
+  const i = order.findIndex((x) => x.id === b.id);
+  return i <= 0 || defeatedBossSet.value.has(order[i - 1]!.id);
 }
 function bossLockReason(b: MilestoneBoss): string {
-  if (c.value.level.level < b.unlockLevel) return `Niveau ${b.unlockLevel} requis`;
-  const i = adventureItems.value.findIndex((x) => x.boss?.id === b.id);
-  if (!prevChainDone(i)) return `Termine d’abord « ${prevChainName(i)} »`;
-  return '';
+  const order = bossChain.value;
+  const i = order.findIndex((x) => x.id === b.id);
+  return i > 0 ? `Bats d’abord « ${order[i - 1]!.name} »` : '';
 }
 function bossSet(b: MilestoneBoss) {
   return SET_BY_ID[b.setId]!; // garanti par les données (cf. test bosses.test.ts)
