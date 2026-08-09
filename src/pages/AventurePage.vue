@@ -203,10 +203,17 @@
             </button>
           </div>
         </div>
-        <div v-if="char.row.talents.length" class="talents-list">
-          <span v-for="(code, i) in char.row.talents" :key="i" class="talent-badge">
-            {{ talentByCode(code)?.icon }} {{ talentByCode(code)?.name }}
-          </span>
+        <div v-if="talentSummary.length" class="talents-owned">
+          <div v-for="ts in talentSummary" :key="ts.code" class="talent-card">
+            <span class="talent-card-emo">{{ ts.talent.icon }}</span>
+            <div class="talent-card-body">
+              <div class="talent-card-name font-display">{{ ts.talent.name }}</div>
+              <div class="talent-card-eff">{{ ts.total }}</div>
+            </div>
+            <span v-if="ts.count > 1" class="talent-card-mult">×{{ ts.count }}</span>
+          </div>
+        </div>
+        <div v-if="char.row.talents.length" class="talents-reset">
           <button class="reset-btn" :disabled="char.row.gold < resetCost" @click="doResetTalents">
             ↺ Réinitialiser 🪙{{ resetCost }}
           </button>
@@ -923,7 +930,13 @@ import {
   rollConsumableDrop,
   shopItem,
 } from '@/data/shop';
-import { talentsEarned, talentEffects, talentChoices, talentByCode } from '@/lib/talents';
+import {
+  talentsEarned,
+  talentEffects,
+  talentChoices,
+  talentByCode,
+  type Talent,
+} from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { logicalToday } from '@/lib/challenges';
 import { useWorldBossStore } from '@/stores/worldBoss';
@@ -1077,6 +1090,29 @@ const talentPoints = computed(() =>
 );
 const offered = computed(() => talentChoices(char.row?.talents.length ?? 0));
 const nextTalentLevel = computed(() => (talentsEarned(c.value.level.level) + 1) * 5);
+
+// Talents acquis regroupés (empilables) → carte par talent avec effet CUMULÉ.
+const talentSummary = computed(() => {
+  const counts = new Map<string, number>();
+  for (const code of char.row?.talents ?? []) counts.set(code, (counts.get(code) ?? 0) + 1);
+  return [...counts.entries()]
+    .map(([code, count]) => {
+      const t = talentByCode(code);
+      return t ? { code, count, talent: t, total: talentTotalLabel(t, count) } : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+});
+
+// Libellé de l'effet cumulé : « +20 % dégâts » pour un talent pris 2 fois.
+function talentTotalLabel(t: Talent, count: number): string {
+  if (count <= 1) return t.desc;
+  const eff = t.effect as Record<string, number | undefined>;
+  const key = Object.keys(eff)[0];
+  const base = key ? (eff[key] ?? 0) : 0;
+  const pct = Math.round(base * count * 100);
+  const noun = t.desc.replace(/^\+\s*[\d.]+\s*%?\s*/, '');
+  return `+${pct} % ${noun}`.trim();
+}
 
 async function doChooseTalent(code: string) {
   const uid = auth.user?.id;
@@ -2236,19 +2272,67 @@ onMounted(async () => {
   font-size: 10.5px;
   color: var(--dim);
 }
-.talents-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 18px;
+.talents-owned {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
 }
-.talent-badge {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
+.talent-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 12%, var(--surface)),
+    var(--surface)
+  );
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-left: 3px solid var(--accent);
+  border-radius: 12px;
+  padding: 9px 11px;
+  min-width: 0;
+}
+.talent-card-emo {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  font-size: 19px;
+}
+.talent-card-body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.talent-card-name {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text);
+  line-height: 1.15;
+}
+.talent-card-eff {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-top: 1px;
+}
+.talent-card-mult {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--dark, #15120e);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.talents-reset {
+  margin-bottom: 18px;
 }
 .talents-empty {
   font-size: 12px;
