@@ -507,42 +507,48 @@
               class="dgn mboss"
               :class="{ locked: !bossUnlocked(it.boss), beaten: isBossBeaten(it.boss) }"
             >
-              <span class="lvl-pill" :class="itemState(it)">Niv {{ it.boss.unlockLevel }}</span>
-              <span class="mboss-emo">{{ bossUnlocked(it.boss) ? it.boss.emoji : '🔒' }}</span>
-              <div class="dgn-main">
-                <div class="mboss-eyebrow">👑 Boss de palier</div>
-                <div class="dgn-top">
-                  <span class="dgn-name mboss-name font-display">
+              <div class="dgn-hd">
+                <span class="dgn-emo">{{ bossUnlocked(it.boss) ? it.boss.emoji : '🔒' }}</span>
+                <div class="dgn-hd-main">
+                  <div class="mboss-eyebrow">👑 Boss de palier</div>
+                  <div class="dgn-name mboss-name font-display">
                     {{ it.boss.name }}
                     <span v-if="isBossBeaten(it.boss)" class="mboss-badge">⭐</span>
-                  </span>
-                  <span class="dgn-gold">+{{ it.boss.gold }} 🪙</span>
+                  </div>
                 </div>
-                <div class="mboss-set">
-                  {{ bossSet(it.boss).emoji }} {{ bossSet(it.boss).name }} ·
-                  <b>{{ bossSetCount(it.boss) }}/4</b> pièces
-                </div>
-                <div class="dgn-stats">
-                  coûte {{ it.boss.energyCost }} ⚡
-                  <span v-if="bossUnlocked(it.boss)" class="winpct" :class="winClass(winPct['b:' + it.boss.id] ?? 0)"
-                    >🎯 {{ winPct['b:' + it.boss.id] ?? 0 }}%</span
-                  >
-                </div>
-                <div v-if="bossUnlocked(it.boss)" class="dgn-hint">{{ it.boss.hint }}</div>
-                <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(it.boss) }}</div>
-                <button
-                  v-if="bossUnlocked(it.boss)"
-                  class="fight mboss-fight"
-                  :disabled="c.energy < it.boss.energyCost || busy"
-                  @click="fightBoss(it.boss)"
-                >
-                  ⚔️ {{ isBossBeaten(it.boss) ? 'Réaffronter' : 'Combattre' }} ({{
-                    it.boss.energyCost
-                  }}
-                  ⚡)
-                </button>
-                <button v-else class="fight mboss-fight" disabled>🔒 Verrouillé</button>
+                <span class="lvl-pill" :class="itemState(it)">Niv {{ it.boss.unlockLevel }}</span>
               </div>
+
+              <div class="dgn-meta">
+                <span class="dgn-chip">⚡ {{ it.boss.energyCost }}</span>
+                <span class="dgn-chip gold">+{{ it.boss.gold }} 🪙</span>
+                <span
+                  v-if="bossUnlocked(it.boss)"
+                  class="dgn-chip winpct"
+                  :class="winClass(winPct['b:' + it.boss.id] ?? 0)"
+                  >🎯 {{ winPct['b:' + it.boss.id] ?? 0 }}%</span
+                >
+              </div>
+
+              <div class="mboss-set">
+                {{ bossSet(it.boss).emoji }} {{ bossSet(it.boss).name }} ·
+                <b>{{ bossSetCount(it.boss) }}/4</b> pièces
+              </div>
+              <div v-if="bossUnlocked(it.boss)" class="dgn-hint">{{ it.boss.hint }}</div>
+              <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(it.boss) }}</div>
+
+              <button
+                v-if="bossUnlocked(it.boss)"
+                class="fight mboss-fight"
+                :disabled="c.energy < it.boss.energyCost || busy"
+                @click="fightBoss(it.boss)"
+              >
+                ⚔️ {{ isBossBeaten(it.boss) ? 'Réaffronter' : 'Combattre' }} ({{
+                  it.boss.energyCost
+                }}
+                ⚡)
+              </button>
+              <button v-else class="fight mboss-fight" disabled>🔒 Verrouillé</button>
             </div>
 
             <!-- DONJON -->
@@ -551,45 +557,48 @@
               class="dgn"
               :class="{ locked: !dungeonUnlocked(it.dungeon) }"
             >
-              <span class="lvl-pill" :class="itemState(it)">Niv {{ it.dungeon.recoLevel }}</span>
-              <span class="dgn-emo">{{
-                dungeonUnlocked(it.dungeon) ? it.dungeon.emoji : '🔒'
-              }}</span>
-              <div class="dgn-main">
-                <div class="dgn-top">
-                  <span class="dgn-name font-display">{{ it.dungeon.name }}</span>
-                  <span class="dgn-gold">+{{ dungeonGold(it.dungeon) }} 🪙</span>
-                  <button
-                    v-if="dungeonUnlocked(it.dungeon)"
-                    class="dgn-loot"
-                    aria-label="Butin possible"
-                    @click.stop="openDrops(it.dungeon)"
-                  >
-                    🎁
-                  </button>
+              <div class="dgn-hd">
+                <span class="dgn-emo">{{
+                  dungeonUnlocked(it.dungeon) ? it.dungeon.emoji : '🔒'
+                }}</span>
+                <div class="dgn-hd-main">
+                  <div class="dgn-name font-display">{{ it.dungeon.name }}</div>
                 </div>
-                <div class="dgn-stats">
-                  {{ it.dungeon.monsterIds.length }} monstres · coûte {{ it.dungeon.energyCost }} ⚡
-                  · conseillé niv. {{ it.dungeon.recoLevel }}
-                  <span
-                    v-if="dungeonUnlocked(it.dungeon)"
-                    class="winpct"
-                    :class="winClass(winPct['d:' + it.dungeon.id] ?? 0)"
-                    >🎯 {{ winPct['d:' + it.dungeon.id] ?? 0 }}%</span
-                  >
-                </div>
-                <div v-if="dungeonUnlocked(it.dungeon)" class="dgn-hint">{{ it.dungeon.hint }}</div>
-                <div v-else class="dgn-hint dgn-lock">
-                  🔒 Nettoie d’abord « {{ prevDungeonName(it.dungeon) }} » pour débloquer ce donjon.
-                </div>
+                <span class="lvl-pill" :class="itemState(it)">Niv {{ it.dungeon.recoLevel }}</span>
               </div>
+
+              <div class="dgn-meta">
+                <span class="dgn-chip">⚡ {{ it.dungeon.energyCost }}</span>
+                <span class="dgn-chip">👾 {{ it.dungeon.monsterIds.length }}</span>
+                <span class="dgn-chip gold">+{{ dungeonGold(it.dungeon) }} 🪙</span>
+                <span
+                  v-if="dungeonUnlocked(it.dungeon)"
+                  class="dgn-chip winpct"
+                  :class="winClass(winPct['d:' + it.dungeon.id] ?? 0)"
+                  >🎯 {{ winPct['d:' + it.dungeon.id] ?? 0 }}%</span
+                >
+                <button
+                  v-if="dungeonUnlocked(it.dungeon)"
+                  class="dgn-loot"
+                  aria-label="Butin possible"
+                  @click.stop="openDrops(it.dungeon)"
+                >
+                  🎁 Butin
+                </button>
+              </div>
+
+              <div v-if="dungeonUnlocked(it.dungeon)" class="dgn-hint">{{ it.dungeon.hint }}</div>
+              <div v-else class="dgn-hint dgn-lock">
+                🔒 Nettoie d’abord « {{ prevDungeonName(it.dungeon) }} » pour débloquer ce donjon.
+              </div>
+
               <button
                 v-if="dungeonUnlocked(it.dungeon)"
                 class="fight"
                 :disabled="c.energy < it.dungeon.energyCost || busy"
                 @click="explore(it.dungeon)"
               >
-                Explorer
+                Explorer ({{ it.dungeon.energyCost }} ⚡)
               </button>
               <button v-else class="fight" disabled>Verrouillé</button>
             </div>
@@ -608,32 +617,31 @@
 
           <!-- Faille sans fin (end-game infini) — après le dernier donjon -->
           <div v-if="endlessUnlocked" class="dgn mboss endless">
-            <span class="mboss-emo">🌀</span>
-            <div class="dgn-main">
-              <div class="mboss-eyebrow">♾️ End-game · sans fin</div>
-              <div class="dgn-top">
-                <span class="dgn-name mboss-name font-display">Faille sans fin</span>
-                <span class="dgn-gold">+{{ endlessGold(nextEndlessTier) }} 🪙</span>
+            <div class="dgn-hd">
+              <span class="dgn-emo">🌀</span>
+              <div class="dgn-hd-main">
+                <div class="mboss-eyebrow">♾️ End-game · sans fin</div>
+                <div class="dgn-name mboss-name font-display">Faille sans fin</div>
               </div>
-              <div class="mboss-set">
-                Palier atteint : <b>{{ endlessBest }}</b> · prochain : <b>{{ nextEndlessTier }}</b>
-              </div>
-              <div class="dgn-stats">
-                coûte {{ endlessEnergy(nextEndlessTier) }} ⚡ · objets niv.
-                {{ endlessDropLevel(nextEndlessTier) }}
-              </div>
-              <div class="dgn-hint">
-                Chaque palier est plus dur — pousse aussi loin que ton build le permet.
-              </div>
-              <button
-                class="fight mboss-fight"
-                :disabled="c.energy < endlessEnergy(nextEndlessTier) || busy"
-                @click="fightEndless()"
-              >
-                🌀 Descendre au palier {{ nextEndlessTier }} ({{ endlessEnergy(nextEndlessTier) }}
-                ⚡)
-              </button>
+              <span class="lvl-pill avail">Palier {{ nextEndlessTier }}</span>
             </div>
+            <div class="dgn-meta">
+              <span class="dgn-chip">⚡ {{ endlessEnergy(nextEndlessTier) }}</span>
+              <span class="dgn-chip gold">+{{ endlessGold(nextEndlessTier) }} 🪙</span>
+              <span class="dgn-chip">🎁 niv. {{ endlessDropLevel(nextEndlessTier) }}</span>
+              <span class="dgn-chip">🏆 record {{ endlessBest }}</span>
+            </div>
+            <div class="dgn-hint">
+              Chaque palier est plus dur — pousse aussi loin que ton build le permet.
+            </div>
+            <button
+              class="fight mboss-fight"
+              :disabled="c.energy < endlessEnergy(nextEndlessTier) || busy"
+              @click="fightEndless()"
+            >
+              🌀 Descendre au palier {{ nextEndlessTier }} ({{ endlessEnergy(nextEndlessTier) }}
+              ⚡)
+            </button>
           </div>
         </div>
       </template>
@@ -3045,14 +3053,16 @@ onMounted(async () => {
 }
 /* Bouton « butin possible » d'un donjon */
 .dgn-loot {
-  flex-shrink: 0;
   border: 1px solid var(--line);
   background: var(--bg);
-  border-radius: 8px;
-  padding: 1px 6px;
-  font-size: 13px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--dim);
   cursor: pointer;
-  line-height: 1.4;
+  line-height: 1;
+  white-space: nowrap;
 }
 .drops-card {
   width: 100%;
@@ -3438,10 +3448,11 @@ onMounted(async () => {
   cursor: pointer;
   margin-top: 2px;
 }
+/* Carte donjon/boss : layout EN COLONNE (en-tête · chips · conseil · bouton) */
 .dgn {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -3457,40 +3468,53 @@ onMounted(async () => {
   color: var(--dim);
   font-style: italic;
 }
+/* En-tête : emoji + nom (flex) + pastille de niveau */
+.dgn-hd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .dgn-emo {
   font-size: 28px;
+  flex-shrink: 0;
+  line-height: 1;
 }
-.dgn-main {
+.dgn-hd-main {
   flex: 1;
   min-width: 0;
-}
-.dgn-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
 }
 .dgn-name {
   font-size: 16px;
   font-weight: 600;
   color: var(--text);
 }
-.dgn-gold {
-  font-size: 12px;
-  color: var(--accent);
-  font-weight: 600;
+/* Rangée de chips (coût énergie · monstres · or · % victoire · butin) */
+.dgn-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
-.dgn-stats {
-  font-size: 12px;
+.dgn-chip {
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
   color: var(--dim);
-  margin-top: 2px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dgn-chip.gold {
+  color: var(--accent);
 }
 .dgn-hint {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--dim);
-  opacity: 0.85;
-  margin-top: 4px;
+  opacity: 0.9;
+  line-height: 1.35;
 }
 /* ── Boss de palier : cartes NETTEMENT plus grandes & dramatiques ── */
 .mboss-title {
@@ -3499,8 +3523,7 @@ onMounted(async () => {
   color: var(--accent);
 }
 .mboss {
-  align-items: flex-start;
-  gap: 14px;
+  gap: 9px;
   padding: 15px 16px;
   border-width: 2px;
   border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
@@ -3524,10 +3547,8 @@ onMounted(async () => {
   border-color: color-mix(in srgb, var(--d1, #7bc86c) 60%, var(--line));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--d1, #7bc86c) 25%, transparent);
 }
-.mboss-emo {
-  font-size: 46px;
-  line-height: 1;
-  flex-shrink: 0;
+.mboss .dgn-emo {
+  font-size: 38px;
   filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.5));
 }
 .mboss-eyebrow {
@@ -3558,8 +3579,6 @@ onMounted(async () => {
   margin-left: 4px;
 }
 .mboss-fight {
-  width: 100%;
-  margin-top: 10px;
   padding: 11px;
   font-size: 14px;
 }
@@ -3580,12 +3599,12 @@ onMounted(async () => {
   color: #c9a6ff;
 }
 .fight {
-  flex-shrink: 0;
+  width: 100%;
   border: 1px solid var(--accent);
   background: var(--accent);
   color: var(--accent-ink, #15120e);
   border-radius: 10px;
-  padding: 9px 14px;
+  padding: 10px 14px;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 13px;
