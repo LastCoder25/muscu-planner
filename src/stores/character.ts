@@ -86,10 +86,25 @@ export const useCharacterStore = defineStore('character', () => {
     return data;
   }
 
-  // Applique un run de donjon : dépense l'énergie, encaisse l'or, range le butin
-  // (auto-équipe si le slot est vide ou si l'objet est meilleur ; l'ancien va au sac).
-  // Applique un run : dépense l'énergie, encaisse or + poussière, range le butin
-  // au SAC (équipement 100 % manuel). Les objets ne montent plus tout seuls.
+  // Range de nouveaux objets : AUTO-ÉQUIPE ceux dont le slot est VIDE (confort :
+  // on ne laisse pas un emplacement vide alors qu'on a de quoi le remplir) ; les
+  // autres vont au sac. Ne remplace JAMAIS un objet déjà équipé.
+  function distributeItems(
+    equipped: Equipped,
+    inventory: Item[],
+    newItems: Item[],
+  ): { equipped: Equipped; inventory: Item[] } {
+    const eq: Equipped = { ...equipped };
+    const inv = [...inventory];
+    for (const it of newItems) {
+      if (!eq[it.slot]) eq[it.slot] = it;
+      else inv.push(it);
+    }
+    return { equipped: eq, inventory: inv };
+  }
+
+  // Applique un run de donjon : dépense l'énergie, encaisse or + poussière, range
+  // le butin (auto-équipe si le slot est vide, sinon au sac).
   async function applyRun(
     userId: string,
     input: {
@@ -117,11 +132,13 @@ export const useCharacterStore = defineStore('character', () => {
       if (left > 0) consumables[id] = left;
       else delete consumables[id];
     }
+    const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
       energy_spent: cur.energy_spent + input.energyCost,
-      inventory: [...cur.inventory, ...input.drops],
+      equipped: dist.equipped,
+      inventory: dist.inventory,
       cleared_dungeons: cleared,
       consumables,
     });
@@ -170,8 +187,10 @@ export const useCharacterStore = defineStore('character', () => {
     const cand = cur?.pending_reward?.candidates[index];
     if (!cur || !cand) return;
     if (cand.kind === 'item') {
+      const dist = distributeItems(cur.equipped, cur.inventory, [cand.item]);
       return persist(userId, {
-        inventory: [...cur.inventory, cand.item],
+        equipped: dist.equipped,
+        inventory: dist.inventory,
         pending_reward: null,
       });
     }
@@ -204,11 +223,13 @@ export const useCharacterStore = defineStore('character', () => {
       if (left > 0) consumables[id] = left;
       else delete consumables[id];
     }
+    const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
       energy_spent: cur.energy_spent + input.energyCost,
-      inventory: [...cur.inventory, ...input.drops],
+      equipped: dist.equipped,
+      inventory: dist.inventory,
       endless_best: input.cleared && input.tier > cur.endless_best ? input.tier : cur.endless_best,
       consumables,
     });

@@ -391,7 +391,9 @@
                 <div v-else class="drop-cmp">
                   <span class="rarity-verdict up">slot libre</span>
                 </div>
-                <div v-if="dropState(d) === 'equipped'" class="drop-done">⚔️ Équipé</div>
+                <div v-if="dropState(d) === 'equipped'" class="drop-done">
+                  ⚔️ Auto-équipé (slot vide)
+                </div>
                 <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
                 <div v-else class="inv-actions">
                   <button class="equip-btn" @click="doEquip(d.id)">
