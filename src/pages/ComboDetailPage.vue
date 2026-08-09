@@ -17,6 +17,12 @@
         <div class="hc-week">📅 Semaine du {{ comboWeek }}</div>
         <div class="hc-bar"><span :style="{ width: pct + '%' }" /></div>
         <div v-if="c.status === 'done'" class="hc-done">🎉 Défi 360 bouclé — bravo !</div>
+        <div v-if="over.bonusXp > 0" class="hc-over">
+          🔥 Dépassement : +{{ over.bonusXp }} XP
+          <span class="hc-over-sub"
+            >{{ over.legsOver }}/{{ over.totalLegs }} exos au-delà de l'objectif</span
+          >
+        </div>
       </div>
 
       <q-btn
@@ -128,6 +134,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useComboStore } from '@/stores/combo';
 import {
   comboProgressPct,
+  comboOverachievement,
   legSetsDone,
   legLastReps,
   legLastWeight,
@@ -146,6 +153,9 @@ const combo = useComboStore();
 const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 const pct = computed(() => (c.value ? comboProgressPct(c.value) : 0));
+const over = computed(() =>
+  c.value ? comboOverachievement(c.value) : { bonusXp: 0, legsOver: 0, totalLegs: 0 },
+);
 
 function fmtDM(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -312,6 +322,19 @@ onMounted(async () => {
   font-size: 13px;
   color: var(--accent);
   font-weight: 600;
+}
+.hc-over {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--d1);
+}
+.hc-over-sub {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--dim);
+  margin-top: 1px;
 }
 .leg {
   background: var(--surface);

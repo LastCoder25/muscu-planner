@@ -9,6 +9,7 @@ import {
   comboComplete,
   comboProgressPct,
   comboXpPoints,
+  comboOverachievement,
   suggestComboTarget,
   buildComboSession,
   comboSessionSetBudget,
@@ -105,6 +106,33 @@ describe('comboXpPoints', () => {
       leg({ target: 2, sets: [set(10, 0, '2026-01-05'), set(10, 0, '2026-01-11')] }),
     ]);
     expect(comboXpPoints([early])).toBeGreaterThan(comboXpPoints([late]));
+  });
+  it('dépasser l’objectif rapporte un bonus (au-delà de l’XP de base des reps)', () => {
+    // Même objectif (2), mais l’un a fait 4 séries (2 en plus) → bonus de dépassement.
+    const exact = combo([leg({ target: 2, sets: [set(10), set(10)] })]);
+    const over = combo([leg({ target: 2, sets: [set(10), set(10), set(10), set(10)] })]);
+    const baseGain = comboXpPoints([over]) - comboXpPoints([exact]);
+    // Sans bonus, 2 séries en plus vaudraient 2×10×0.2×XP_MULT = 8 pts. Avec bonus, plus.
+    expect(baseGain).toBeGreaterThan(8);
+    expect(comboOverachievement(over).bonusXp).toBeGreaterThan(0);
+  });
+});
+
+describe('comboOverachievement', () => {
+  it('balance = part d’exos dépassés (anti-spam d’un seul exo)', () => {
+    const oneOfTwo = combo([
+      leg({ slot: 'push', exercise_id: 'a', target: 2, sets: [set(10), set(10), set(10)] }),
+      leg({ slot: 'pull', exercise_id: 'b', target: 2, sets: [set(10), set(10)] }),
+    ]);
+    const bothOver = combo([
+      leg({ slot: 'push', exercise_id: 'a', target: 2, sets: [set(10), set(10), set(10)] }),
+      leg({ slot: 'pull', exercise_id: 'b', target: 2, sets: [set(10), set(10), set(10)] }),
+    ]);
+    expect(comboOverachievement(oneOfTwo).balance).toBeCloseTo(0.5);
+    expect(comboOverachievement(bothOver).balance).toBeCloseTo(1);
+    expect(comboOverachievement(bothOver).bonusXp).toBeGreaterThan(
+      comboOverachievement(oneOfTwo).bonusXp,
+    );
   });
 });
 

@@ -104,7 +104,41 @@ export function comboEarlyFraction(c: ComboChallenge): number {
   return saved / c.duration_days;
 }
 
-/** XP d'un ensemble de Défis 360 (façon séance + prime de bouclage). */
+// Bonus de dépassement : l'XP des séries faites AU-DELÀ de l'objectif est
+// re-bonifiée (en plus de son XP de base) → « en faire plus » est valorisé, pas
+// juste compté. Pondéré par la part d'exos dépassés (`balance`) pour récompenser
+// l'effort RÉPARTI sur le full-body plutôt que le bourrage d'un seul exo.
+export const COMBO_SURPASS_MULT = 0.5;
+
+/** Détail du dépassement d'un Défi 360 (séries au-delà de l'objectif). */
+export function comboOverachievement(c: ComboChallenge): {
+  extraXp: number; // XP de base des séries en plus
+  legsOver: number; // nb d'exos ayant dépassé leur objectif
+  totalLegs: number;
+  balance: number; // legsOver / totalLegs (0..1)
+  bonusXp: number; // bonus final (déjà × XP_MULT) → affichable
+} {
+  let extraXp = 0;
+  let legsOver = 0;
+  const totalLegs = c.legs.length;
+  for (const l of c.legs) {
+    const sets = legSets(l);
+    const done = sets.length;
+    if (l.target > 0 && done > l.target) {
+      const legRepXp = sets.reduce(
+        (s, st) => s + (st.reps || 0) * REP_XP * (l.rep_weight ?? 1) * assistMult(st.assisted),
+        0,
+      );
+      extraXp += (legRepXp * (done - l.target)) / done; // part des séries en plus
+      legsOver++;
+    }
+  }
+  const balance = totalLegs ? legsOver / totalLegs : 0;
+  const bonusXp = Math.round(COMBO_SURPASS_MULT * extraXp * balance * XP_MULT);
+  return { extraXp, legsOver, totalLegs, balance, bonusXp };
+}
+
+/** XP d'un ensemble de Défis 360 (façon séance + prime de bouclage + dépassement). */
 export function comboXpPoints(combos: ComboChallenge[]): number {
   return combos.reduce((a, c) => {
     let reps = 0;
@@ -119,7 +153,9 @@ export function comboXpPoints(combos: ComboChallenge[]): number {
       targetEffort += l.target * COMBO_PLAN_REPS * (l.rep_weight ?? 1);
     }
     const bonus = comboComplete(c) ? 0.25 * targetEffort * (1 + comboEarlyFraction(c)) : 0;
-    return a + Math.round((reps + tonnage / 500 + bonus) * XP_MULT);
+    const over = comboOverachievement(c);
+    const surpass = COMBO_SURPASS_MULT * over.extraXp * over.balance;
+    return a + Math.round((reps + tonnage / 500 + bonus + surpass) * XP_MULT);
   }, 0);
 }
 
