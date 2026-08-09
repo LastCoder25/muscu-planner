@@ -57,6 +57,10 @@
                 <q-item-section avatar><q-icon name="shield" /></q-item-section>
                 <q-item-section>Aventure</q-item-section>
               </q-item>
+              <q-item v-close-popup clickable @click="goLeaderboard">
+                <q-item-section avatar><q-icon name="leaderboard" /></q-item-section>
+                <q-item-section>Classement</q-item-section>
+              </q-item>
               <q-item v-close-popup clickable @click="goTennis">
                 <q-item-section avatar><q-icon name="sports_tennis" /></q-item-section>
                 <q-item-section>Tennis</q-item-section>
@@ -172,6 +176,9 @@ async function goChallenges() {
 }
 async function goAventure() {
   await router.push('/aventure');
+}
+async function goLeaderboard() {
+  await router.push('/leaderboard');
 }
 async function goTennis() {
   await router.push('/tennis');

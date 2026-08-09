@@ -547,9 +547,7 @@
                 :disabled="c.energy < endlessEnergy(nextEndlessTier) || busy"
                 @click="fightEndless()"
               >
-                🌀 Descendre au palier {{ nextEndlessTier }} ({{
-                  endlessEnergy(nextEndlessTier)
-                }}
+                🌀 Descendre au palier {{ nextEndlessTier }} ({{ endlessEnergy(nextEndlessTier) }}
                 ⚡)
               </button>
             </div>
