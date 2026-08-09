@@ -185,6 +185,60 @@
           <span v-if="bonusPv" class="pv-bonus">(+{{ bonusPv }} bonus)</span>
         </div>
 
+        <div class="sec-title">Combat : base → équipé</div>
+        <div class="gear-fx">
+          <div class="gfx">
+            <span class="gfx-l">❤️ PV</span>
+            <span class="gfx-v">{{ baseFighter.pv }} <i>→</i> <b>{{ fighter.pv }}</b></span>
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">⚔️ Dégâts/coup</span>
+            <span class="gfx-v">{{ baseFighter.damage }} <i>→</i> <b>{{ fighter.damage }}</b></span>
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">⚡ Frappes/tour</span>
+            <span class="gfx-v"
+              >{{ (baseFighter.strikes ?? 1).toFixed(2) }} <i>→</i>
+              <b>{{ (fighter.strikes ?? 1).toFixed(2) }}</b></span
+            >
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">🎯 Crit</span>
+            <span class="gfx-v">{{ pctA(baseFighter.crit) }} <i>→</i> <b>{{ pctA(fighter.crit) }}</b></span>
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">💨 Esquive</span>
+            <span class="gfx-v"
+              >{{ pctA(baseFighter.dodge) }} <i>→</i> <b>{{ pctA(fighter.dodge) }}</b></span
+            >
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">🛡️ Défense</span>
+            <span class="gfx-v"
+              >{{ pctA(baseFighter.dmgReduction) }} <i>→</i>
+              <b>{{ pctA(fighter.dmgReduction) }}</b></span
+            >
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">🩸 Vol de vie</span>
+            <span class="gfx-v"
+              >{{ pctA(baseFighter.lifesteal) }} <i>→</i>
+              <b>{{ pctA(fighter.lifesteal) }}</b></span
+            >
+          </div>
+          <div class="gfx total">
+            <span class="gfx-l">Puissance de combat</span>
+            <span class="gfx-v"
+              >{{ fmtPow(combatPower(baseFighter)) }} <i>→</i>
+              <b>{{ fmtPow(combatPowerVal) }}</b></span
+            >
+          </div>
+        </div>
+        <div class="gear-fx-note">
+          Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
+          effets (→).
+        </div>
+
         <div class="sec-title">Talents</div>
         <div v-if="talentPoints > 0" class="talent-choice">
           <div class="tc-head">
@@ -327,12 +381,15 @@
               {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
             </button>
           </div>
-          <!-- Nettoyage en masse : objets de rareté inférieure à l'équipé du même slot -->
+          <!-- Nettoyage en masse : objets qui font perdre de la puissance (écart
+               de niveau pris en compte : jugés une fois montés à ton niveau) -->
           <div v-if="belowCount > 0" class="bulk">
-            <span class="bulk-lbl">{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} moins rare{{ belowCount > 1 ? 's' : '' }} que l'équipé</span>
+            <span class="bulk-lbl"
+              >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} qui {{ belowCount > 1 ? 'font' : 'fait' }} perdre de la puissance</span
+            >
             <div class="bulk-btns">
-              <button class="bulk-b" @click="doSalvageBelow">✨ Tout casser</button>
-              <button class="bulk-b" @click="doSellBelow">🪙 Tout vendre</button>
+              <button class="bulk-b" @click="doSalvageBelow">✨ Casser les faibles</button>
+              <button class="bulk-b" @click="doSellBelow">🪙 Vendre les faibles</button>
             </div>
           </div>
           <div v-if="!filteredInventory.length" class="inv-empty-filter">
@@ -367,9 +424,11 @@
                 </div>
                 <div class="pow-cmp">
                   ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
-                  <b :class="powerIfEquip(it) >= combatPowerVal ? 'up' : 'down'">{{
-                    fmtPow(powerIfEquip(it))
-                  }}</b>
+                  <b :class="powerIfEquip(it) >= combatPowerVal ? 'up' : 'down'"
+                    >{{ fmtPow(powerIfEquip(it)) }} ({{
+                      fmtDelta(combatPowerVal, powerIfEquip(it))
+                    }})</b
+                  >
                 </div>
                 <div class="inv-actions">
                   <button class="equip-btn" @click="doEquip(it.id)">
@@ -571,9 +630,11 @@
                     <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
                     <div class="pow-cmp">
                       ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
-                      <b :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'">{{
-                        fmtPow(powerIfEquip(d))
-                      }}</b>
+                      <b :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
+                        >{{ fmtPow(powerIfEquip(d)) }} ({{
+                          fmtDelta(combatPowerVal, powerIfEquip(d))
+                        }})</b
+                      >
                     </div>
                     <div v-if="dropState(d) === 'equipped'" class="drop-done">
                       ⚔️ Auto-équipé (slot vide)
@@ -1002,9 +1063,11 @@
                 </div>
                 <div class="pow-cmp">
                   ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
-                  <b :class="powerIfEquip(cand.item) >= combatPowerVal ? 'up' : 'down'">{{
-                    fmtPow(powerIfEquip(cand.item))
-                  }}</b>
+                  <b :class="powerIfEquip(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                    >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
+                      fmtDelta(combatPowerVal, powerIfEquip(cand.item))
+                    }})</b
+                  >
                 </div>
                 <div v-if="rewardDupNote(cand.item)" class="rc-dup">
                   {{ rewardDupNote(cand.item) }}
@@ -1032,7 +1095,14 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
-import { simulateDungeon, simulateCombat, mulberry32, combatPower } from '@/lib/combat';
+import {
+  simulateDungeon,
+  simulateCombat,
+  mulberry32,
+  combatPower,
+  fmtPow,
+  fmtDelta,
+} from '@/lib/combat';
 import { MONSTERS } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
 import { BOSSES, type MilestoneBoss } from '@/data/bosses';
@@ -1189,13 +1259,12 @@ const fighter = computed(() =>
   ),
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
-// La puissance grimpe vite (≈ niveau⁴) → format compact k/M pour rester lisible.
-function fmtPow(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace('.', ',') + 'M';
-  if (n >= 10_000) return Math.round(n / 1000) + 'k';
-  if (n >= 1000) return (n / 1000).toFixed(1).replace('.', ',') + 'k';
-  return String(n);
-}
+// Combattant SANS équipement ni talents (stats de fond seules) → base de la
+// comparaison « avec / sans équipement » sur la fiche perso.
+const baseFighter = computed(() =>
+  playerWithGear(char.row?.pseudo ?? 'Toi', c.value, {}, {}, c.value.level.level),
+);
+const pctA = (x?: number) => Math.round((x ?? 0) * 100) + '%';
 // Puissance de combat SI on équipait cet objet (remplace son slot) → tied au % de
 // victoire : c'est l'indicateur qui dit « ça t'aide à aller plus loin ou pas ».
 function powerIfEquip(it: Item): number {
@@ -1965,31 +2034,41 @@ function confirmSalvage() {
 const bulkSlot = computed<ItemSlot | undefined>(() =>
   invFilter.value === 'all' ? undefined : invFilter.value,
 );
-const belowCount = computed(() => {
+// Puissance de l'objet MONTÉ À TON NIVEAU (poussière) → on prend en compte
+// l'écart de niveau : un objet bas niveau n'est « faible » que s'il l'est ENCORE
+// une fois monté au max possible (= ton niveau). Évite de casser une pépite
+// sous-leveled.
+function itemMaxedPower(it: Item): number {
+  const lvl = c.value.level.level;
+  return powerIfEquip(it.level >= lvl ? it : { ...it, level: lvl });
+}
+// Objets du sac qui font PERDRE de la puissance si équipés (même montés à ton
+// niveau) → candidats à la casse/vente en masse.
+const powerLossItems = computed<Item[]>(() => {
   const r = char.row;
-  if (!r) return 0;
+  if (!r) return [];
   return r.inventory.filter((it) => {
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
-    const eq = r.equipped[it.slot];
-    return eq && RARITY_RANK[it.rarity] < RARITY_RANK[eq.rarity];
-  }).length;
+    return itemMaxedPower(it) < combatPowerVal.value;
+  });
 });
+const belowCount = computed(() => powerLossItems.value.length);
 // Libellé du périmètre (« du sac » ou « [type] ») pour être explicite.
 const bulkScope = computed(() =>
   bulkSlot.value ? SLOT_LABEL[bulkSlot.value].toLowerCase() : 'ton sac',
 );
 function doSalvageBelow() {
-  const slot = bulkSlot.value;
+  const ids = powerLossItems.value.map((i) => i.id);
   $q.dialog({
-    title: 'Tout casser',
-    message: `Casser les ${belowCount.value} objet(s) de ${bulkScope.value} moins rares que l'équipé (→ poussière) ?`,
+    title: 'Casser les objets faibles',
+    message: `Casser les ${ids.length} objet(s) de ${bulkScope.value} qui font perdre de la puissance (même montés à ton niveau) → poussière ?`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Casser', color: 'primary', textColor: 'dark' },
   }).onOk(() =>
     withUid(
       (uid) =>
         char
-          .salvageBelowEquipped(uid, slot)
+          .salvageMany(uid, ids)
           .then((n) =>
             $q.notify({ type: 'positive', position: 'top', message: `${n} objet(s) cassé(s) en poussière.` }),
           ),
@@ -1998,17 +2077,17 @@ function doSalvageBelow() {
   );
 }
 function doSellBelow() {
-  const slot = bulkSlot.value;
+  const ids = powerLossItems.value.map((i) => i.id);
   $q.dialog({
-    title: 'Tout vendre',
-    message: `Vendre les ${belowCount.value} objet(s) de ${bulkScope.value} moins rares que l'équipé (→ or) ?`,
+    title: 'Vendre les objets faibles',
+    message: `Vendre les ${ids.length} objet(s) de ${bulkScope.value} qui font perdre de la puissance (même montés à ton niveau) → or ?`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Vendre', color: 'primary', textColor: 'dark' },
   }).onOk(() =>
     withUid(
       (uid) =>
         char
-          .sellBelowEquipped(uid, slot)
+          .sellMany(uid, ids)
           .then((n) => $q.notify({ type: 'positive', position: 'top', message: `${n} objet(s) vendu(s).` })),
       'Vente impossible.',
     ),
@@ -2547,6 +2626,51 @@ onMounted(async () => {
 .pv-bonus {
   color: var(--d1);
   font-size: 11px;
+}
+/* Combat : base → équipé (effet de l'équipement + talents) */
+.gear-fx {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.gfx {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.gfx.total {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+.gfx-l {
+  color: var(--dim);
+}
+.gfx-v {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.gfx-v i {
+  color: var(--dim);
+  font-style: normal;
+  margin: 0 2px;
+}
+.gfx-v b {
+  color: var(--accent);
+  font-weight: 700;
+}
+.gear-fx-note {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.5;
+  margin: 8px 0 4px;
 }
 
 /* Héro (anneau + archétype + puissance) */

@@ -7,7 +7,6 @@ import {
   salvageValue,
   sellValue,
   upgradeCost,
-  RARITY_RANK,
   type Item,
   type ItemSlot,
   type Equipped,
@@ -291,45 +290,33 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
-  // Objets du sac de rareté STRICTEMENT inférieure à l'objet équipé du même
-  // emplacement (rien à comparer si le slot est vide → jamais recyclé en masse).
-  // `slot` optionnel : restreint au type filtré dans le sac (sinon tous).
-  function itemsBelowEquipped(cur: CharacterRow, slot?: ItemSlot): Item[] {
-    return cur.inventory.filter((it) => {
-      if (slot && it.slot !== slot) return false;
-      const eq = cur.equipped[it.slot];
-      return eq && RARITY_RANK[it.rarity] < RARITY_RANK[eq.rarity];
-    });
-  }
-  /** Combien d'objets du sac seraient concernés par un nettoyage en masse. */
-  function countBelowEquipped(slot?: ItemSlot): number {
-    return row.value ? itemsBelowEquipped(row.value, slot).length : 0;
-  }
-  // Casse EN MASSE les objets de rareté inférieure à l'équipé → poussière.
-  async function salvageBelowEquipped(userId: string, slot?: ItemSlot): Promise<number> {
+  // Casse EN MASSE une liste d'objets du sac (par id) → poussière. Le CHOIX des
+  // objets (ex. ceux qui font perdre de la puissance) est décidé côté composant,
+  // qui seul dispose des stats de combat ; le store applique simplement la liste.
+  async function salvageMany(userId: string, ids: string[]): Promise<number> {
     const cur = row.value;
-    if (!cur) return 0;
-    const targets = itemsBelowEquipped(cur, slot);
+    if (!cur || !ids.length) return 0;
+    const set = new Set(ids);
+    const targets = cur.inventory.filter((i) => set.has(i.id));
     if (!targets.length) return 0;
     const gain = targets.reduce((a, it) => a + salvageValue(it), 0);
-    const ids = new Set(targets.map((t) => t.id));
     await persist(userId, {
       dust: cur.dust + gain,
-      inventory: cur.inventory.filter((i) => !ids.has(i.id)),
+      inventory: cur.inventory.filter((i) => !set.has(i.id)),
     });
     return targets.length;
   }
-  // Vend EN MASSE les objets de rareté inférieure à l'équipé → or.
-  async function sellBelowEquipped(userId: string, slot?: ItemSlot): Promise<number> {
+  // Vend EN MASSE une liste d'objets du sac (par id) → or.
+  async function sellMany(userId: string, ids: string[]): Promise<number> {
     const cur = row.value;
-    if (!cur) return 0;
-    const targets = itemsBelowEquipped(cur, slot);
+    if (!cur || !ids.length) return 0;
+    const set = new Set(ids);
+    const targets = cur.inventory.filter((i) => set.has(i.id));
     if (!targets.length) return 0;
     const gain = targets.reduce((a, it) => a + sellValue(it), 0);
-    const ids = new Set(targets.map((t) => t.id));
     await persist(userId, {
       gold: cur.gold + gain,
-      inventory: cur.inventory.filter((i) => !ids.has(i.id)),
+      inventory: cur.inventory.filter((i) => !set.has(i.id)),
     });
     return targets.length;
   }
@@ -483,9 +470,8 @@ export const useCharacterStore = defineStore('character', () => {
     chooseTalent,
     salvage,
     sell,
-    countBelowEquipped,
-    salvageBelowEquipped,
-    sellBelowEquipped,
+    salvageMany,
+    sellMany,
     upgradeItem,
     resetTalents,
     spendEnergy,

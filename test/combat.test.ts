@@ -5,10 +5,27 @@ import {
   simulateCombat,
   simulateDungeon,
   mulberry32,
+  fmtPow,
+  fmtDelta,
 } from '@/lib/combat';
 
 const strong = playerCombatant('Fort', { puissance: 80, endurance: 60, agilite: 40 }, 10);
 const weak = playerCombatant('Faible', { puissance: 3, endurance: 1, agilite: 1 }, 1);
+
+describe('fmtPow / fmtDelta', () => {
+  it('format compact k/M (1 déc. k, 2 déc. M)', () => {
+    expect(fmtPow(950)).toBe('950');
+    expect(fmtPow(1500)).toBe('1,5k');
+    expect(fmtPow(35324)).toBe('35,3k');
+    expect(fmtPow(1_234_567)).toBe('1,23M');
+  });
+  it('delta signé précis, même quand fmtPow arrondirait pareil', () => {
+    // 35300 et 35320 s'affichent tous deux « 35,3k » → le delta reste visible.
+    expect(fmtPow(35300)).toBe(fmtPow(35320));
+    expect(fmtDelta(35300, 35320)).toBe('+20');
+    expect(fmtDelta(35320, 35300)).toBe('−20');
+  });
+});
 
 const dummy = {
   name: 'Mannequin',

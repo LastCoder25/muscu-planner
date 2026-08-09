@@ -87,6 +87,20 @@ export function combatPower(c: Combatant): number {
   return Math.round(offense * survie);
 }
 
+/** Format compact d'une puissance de combat (≈ niveau⁴ → jusqu'aux millions).
+ *  1 décimale sur les k pour que deux valeurs proches restent distinguables. */
+export function fmtPow(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2).replace('.', ',') + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace('.', ',') + 'k';
+  return String(Math.round(n));
+}
+/** Delta signé PRÉCIS entre deux puissances (petit écart = valeur exacte, gros
+ *  écart = compact) → visible même quand `fmtPow` arrondit les deux pareil. */
+export function fmtDelta(cur: number, next: number): string {
+  const d = Math.round(next - cur);
+  return (d >= 0 ? '+' : '−') + fmtPow(Math.abs(d));
+}
+
 export type CombatActor = 'player' | 'monster';
 export type CombatEventType = 'hit' | 'crit' | 'dodge';
 export interface CombatEvent {
