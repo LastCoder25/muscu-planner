@@ -241,14 +241,17 @@ export const useCharacterStore = defineStore('character', () => {
   async function buyItem(
     userId: string,
     item: { id: string; cost: number; kind: string; energy?: number },
+    qty = 1,
   ) {
     const cur = row.value;
-    if (!cur || cur.gold < item.cost) return false;
-    const patch: Record<string, unknown> = { gold: cur.gold - item.cost };
+    const n = Math.max(1, Math.floor(qty));
+    const total = item.cost * n;
+    if (!cur || cur.gold < total) return false;
+    const patch: Record<string, unknown> = { gold: cur.gold - total };
     if (item.kind === 'energy') {
-      patch.login_energy = cur.login_energy + (item.energy ?? 0);
+      patch.login_energy = cur.login_energy + (item.energy ?? 0) * n;
     } else {
-      patch.consumables = { ...cur.consumables, [item.id]: (cur.consumables[item.id] ?? 0) + 1 };
+      patch.consumables = { ...cur.consumables, [item.id]: (cur.consumables[item.id] ?? 0) + n };
     }
     await persist(userId, patch);
     return true;

@@ -796,9 +796,30 @@
                 </div>
                 <div class="si-desc">{{ it.desc }}</div>
               </div>
-              <button class="si-buy" :disabled="char.row.gold < it.cost" @click="buy(it)">
-                🪙 {{ it.cost }}
-              </button>
+              <div class="si-actions">
+                <div class="si-qty">
+                  <button
+                    class="si-step"
+                    :disabled="qtyFor(it) <= 1"
+                    aria-label="Moins"
+                    @click="bumpQty(it, -1)"
+                  >
+                    −
+                  </button>
+                  <span class="si-qn font-display">×{{ qtyFor(it) }}</span>
+                  <button
+                    class="si-step"
+                    :disabled="qtyFor(it) >= maxBuy(it)"
+                    aria-label="Plus"
+                    @click="bumpQty(it, 1)"
+                  >
+                    +
+                  </button>
+                </div>
+                <button class="si-buy" :disabled="char.row.gold < it.cost" @click="buy(it)">
+                  🪙 {{ it.cost * qtyFor(it) }}
+                </button>
+              </div>
             </div>
           </div>
           <div class="shop-hint">
@@ -1345,16 +1366,41 @@ function runExtra(): { extra: AggregatedEffects; lucky: boolean } {
   }
   return { extra, lucky };
 }
+// Achat par lot : quantité choisie par article, PAR DÉFAUT le max abordable
+// (évite de spammer le bouton). `shopQty` ne stocke que les choix explicites ;
+// sinon on retombe sur le max abordable courant (auto-recalculé après achat).
+const shopQty = ref<Record<string, number>>({});
+function maxBuy(item: (typeof SHOP_ITEMS)[number]): number {
+  return Math.max(1, Math.floor((char.row?.gold ?? 0) / item.cost));
+}
+function qtyFor(item: (typeof SHOP_ITEMS)[number]): number {
+  const chosen = shopQty.value[item.id];
+  return Math.min(chosen ?? maxBuy(item), maxBuy(item));
+}
+function bumpQty(item: (typeof SHOP_ITEMS)[number], delta: number) {
+  shopQty.value = {
+    ...shopQty.value,
+    [item.id]: Math.min(maxBuy(item), Math.max(1, qtyFor(item) + delta)),
+  };
+}
 async function buy(item: (typeof SHOP_ITEMS)[number]) {
   const uid = auth.user?.id;
   if (!uid) return;
-  if ((char.row?.gold ?? 0) < item.cost) {
+  const n = qtyFor(item);
+  if ((char.row?.gold ?? 0) < item.cost * n) {
     $q.notify({ type: 'warning', message: "Pas assez d'or." });
     return;
   }
   try {
-    const ok = await char.buyItem(uid, item);
-    if (ok) $q.notify({ type: 'positive', message: `${item.emoji} ${item.name} acheté !` });
+    const ok = await char.buyItem(uid, item, n);
+    if (ok) {
+      delete shopQty.value[item.id]; // réinitialise → redéfaut au nouveau max
+      $q.notify({
+        type: 'positive',
+        position: 'top',
+        message: `${item.emoji} ${item.name} ×${n} acheté${n > 1 ? 's' : ''} !`,
+      });
+    }
   } catch {
     $q.notify({ type: 'negative', message: 'Achat impossible.' });
   }
@@ -2233,6 +2279,43 @@ onMounted(async () => {
   cursor: not-allowed;
   background: transparent;
   color: var(--dim);
+}
+.si-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.si-qty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.si-step {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.si-step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.si-qn {
+  min-width: 34px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 .shop-hint {
   margin-top: 12px;
