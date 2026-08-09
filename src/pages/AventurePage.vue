@@ -921,8 +921,9 @@
           </div>
         </div>
         <div class="drops-note">
-          Chaque objet a <b>1 stat</b> (dégâts / PV / critique / vol de vie / réduction / or). Les
-          <b>pièces de set</b> ne tombent que sur les <b>boss de palier</b>.
+          Chaque objet a <b>1 stat</b> (dégâts / PV / critique / vol de vie / réduction). Le
+          <b>Divin</b> (rose) est la rareté ultime — 1 stat très puissante, infusable mais coûteuse.
+          Les <b>pièces de set</b> ne tombent que sur les <b>boss de palier</b>.
         </div>
         <button class="drops-close" @click="dropInfo = null">Fermer</button>
       </q-card>
@@ -1303,15 +1304,18 @@ function openDrops(d: Dungeon) {
 // Chances de rareté d'un drop selon la chance du donjon (miroir de rollRarity, items.ts).
 function rarityOdds(luck: number) {
   const l = Math.min(1, Math.max(0, luck));
-  const leg = 0.02 + l * 0.08;
-  const epic = 0.1 + l * 0.12;
-  const rare = 0.28 + l * 0.12;
-  const common = Math.max(0, 1 - leg - epic - rare);
+  // Aligné sur rollRarity : seuils cumulés divin < légendaire < épique < rare.
+  const divin = 0.004 + l * 0.02;
+  const leg = 0.02 + l * 0.08 - divin;
+  const epic = 0.12 + l * 0.2 - (0.02 + l * 0.08);
+  const rare = 0.4 + l * 0.32 - (0.12 + l * 0.2);
+  const common = Math.max(0, 1 - 0.4 - l * 0.32);
   return [
     { label: 'Commun', pct: Math.round(common * 100), cls: 'r-common' },
     { label: 'Rare', pct: Math.round(rare * 100), cls: 'r-rare' },
     { label: 'Épique', pct: Math.round(epic * 100), cls: 'r-epic' },
     { label: 'Légendaire', pct: Math.round(leg * 100), cls: 'r-legendary' },
+    { label: 'Divin', pct: Math.round(divin * 100), cls: 'r-divin' },
   ];
 }
 
@@ -2928,6 +2932,10 @@ onMounted(async () => {
   color: var(--accent);
   border-color: var(--accent);
 }
+.gpill.p-divin {
+  color: #ff5cd8;
+  border-color: #ff5cd8;
+}
 .gpill.set {
   color: var(--dark, #15120e);
   background: var(--accent);
@@ -3079,6 +3087,12 @@ onMounted(async () => {
 }
 .r-legendary .rarity {
   color: var(--accent);
+}
+.r-divin {
+  border-left-color: #ff5cd8;
+}
+.r-divin .rarity {
+  color: #ff5cd8;
 }
 /* Bouton « butin possible » d'un donjon */
 .dgn-loot {
@@ -3265,6 +3279,10 @@ onMounted(async () => {
   color: var(--accent);
   border-color: var(--accent);
 }
+.rc-pill.p-divin {
+  color: #ff5cd8;
+  border-color: #ff5cd8;
+}
 .rc-pill.set {
   color: var(--dark, #15120e);
   background: var(--accent);
@@ -3391,8 +3409,8 @@ onMounted(async () => {
 }
 .odds {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
 }
 .odd {
   display: flex;
@@ -4269,6 +4287,9 @@ onMounted(async () => {
 .salv-card.r-legendary {
   border-left-color: var(--accent);
 }
+.salv-card.r-divin {
+  border-left-color: #ff5cd8;
+}
 .salv-fade-enter-active,
 .salv-fade-leave-active {
   transition: opacity 0.18s ease;
@@ -4304,6 +4325,9 @@ onMounted(async () => {
 }
 .repl-item.r-legendary {
   border-left-color: var(--accent);
+}
+.repl-item.r-divin {
+  border-left-color: #ff5cd8;
 }
 .repl-new {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);

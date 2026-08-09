@@ -121,10 +121,10 @@ describe('rollDrop', () => {
   it('rng haut → pas de drop', () => {
     expect(rollDrop(() => 0.99, { cleared: true, defeated: 3 })).toBeNull();
   });
-  it('rng bas → drop légendaire au niveau du donjon (découplé du joueur)', () => {
+  it('rng bas → drop de la rareté ULTIME (divin) au niveau du donjon (découplé du joueur)', () => {
     const d = rollDrop(() => 0, { cleared: true, defeated: 3, level: 6 });
     expect(d).not.toBeNull();
-    expect(d!.rarity).toBe('legendary');
+    expect(d!.rarity).toBe('divin'); // rng=0 → tier le plus rare
     expect(d!.level).toBe(6); // fixé par le donjon, pas par le joueur
     expect(d!.slot).toBe('weapon');
   });

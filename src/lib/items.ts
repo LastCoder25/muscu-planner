@@ -3,7 +3,9 @@
 import { playerCombatant, type Combatant } from './combat';
 
 export type ItemSlot = 'weapon' | 'armor' | 'accessory' | 'relic';
-export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
+// « divin » = 5ᵉ rareté au-dessus de légendaire : 1 stat TRÈS puissante, très rare
+// au drop, infusable mais coûteuse. (Le légendaire garde l'adjectif « mythique ».)
+export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'divin';
 
 // Effets « signature » (un par objet). value en points de %. RÈGLE : tous les
 // effets doivent GRANDIR avec le niveau de l'objet (pas d'effet « drapeau »
@@ -46,10 +48,28 @@ export function effectiveValue(effect: ItemEffect, level: number): number {
 }
 
 // ── Économie d'objets : Poussière (évolution) & or (vente) ──
-const DUST_BY_RARITY: Record<Rarity, number> = { common: 5, rare: 12, epic: 25, legendary: 50 };
-const GOLD_BY_RARITY: Record<Rarity, number> = { common: 10, rare: 25, epic: 60, legendary: 140 };
-// Le coût d'amélioration monte avec la rareté (un légendaire = plus gros puits).
-const RARITY_COST_MULT: Record<Rarity, number> = { common: 1, rare: 1.5, epic: 2, legendary: 3 };
+const DUST_BY_RARITY: Record<Rarity, number> = {
+  common: 5,
+  rare: 12,
+  epic: 25,
+  legendary: 50,
+  divin: 100,
+};
+const GOLD_BY_RARITY: Record<Rarity, number> = {
+  common: 10,
+  rare: 25,
+  epic: 60,
+  legendary: 140,
+  divin: 300,
+};
+// Le coût d'amélioration monte avec la rareté (un divin = puits très profond).
+const RARITY_COST_MULT: Record<Rarity, number> = {
+  common: 1,
+  rare: 1.5,
+  epic: 2,
+  legendary: 3,
+  divin: 6,
+};
 
 /** Coût en poussière pour passer du niveau `level` au suivant, selon la rareté. */
 export function upgradeCost(level: number, rarity: Rarity): number {
@@ -103,17 +123,25 @@ export const RARITY_LABEL: Record<Rarity, string> = {
   rare: 'Rare',
   epic: 'Épique',
   legendary: 'Légendaire',
+  divin: 'Divin',
 };
 
-// Rang de rareté (0..3) pour comparer deux objets (potentiel à niveau égal).
+// Rang de rareté (0..4) pour comparer deux objets (potentiel à niveau égal).
 export const RARITY_RANK: Record<Rarity, number> = {
   common: 0,
   rare: 1,
   epic: 2,
   legendary: 3,
+  divin: 4,
 };
 
-const RARITY_MULT: Record<Rarity, number> = { common: 1, rare: 1.6, epic: 2.4, legendary: 3.5 };
+const RARITY_MULT: Record<Rarity, number> = {
+  common: 1,
+  rare: 1.6,
+  epic: 2.4,
+  legendary: 3.5,
+  divin: 5,
+};
 
 // Effet possible par slot + valeur de base (avant rareté/niveau).
 const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
@@ -151,6 +179,7 @@ const RARITY_ADJ: Record<Rarity, string> = {
   rare: 'affûté',
   epic: 'runique',
   legendary: 'mythique',
+  divin: 'divin',
 };
 
 /** Libellé de l'effet à un niveau d'objet donné (valeur réelle). */
@@ -188,6 +217,7 @@ function pick<T>(rng: () => number, arr: T[]): T {
 function rollRarity(rng: () => number, luck = 0): Rarity {
   const l = Math.min(1, Math.max(0, luck));
   const r = rng();
+  if (r < 0.004 + l * 0.02) return 'divin'; // très rare (0,4 % → 2,4 % avec la chance)
   if (r < 0.02 + l * 0.08) return 'legendary';
   if (r < 0.12 + l * 0.2) return 'epic';
   if (r < 0.4 + l * 0.32) return 'rare';
