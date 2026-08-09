@@ -46,15 +46,18 @@
             <div class="leg-sub">
               {{ legSetsDone(leg) }}/{{ leg.target }} séries
               <span v-if="legSetsDone(leg) >= leg.target" class="leg-ok">✓</span>
+              <span v-if="legSetsDone(leg) > leg.target" class="leg-extra"
+                >+{{ legSetsDone(leg) - leg.target }} en plus</span
+              >
             </div>
           </div>
         </div>
         <div class="seg-bar">
           <span
-            v-for="n in leg.target"
+            v-for="n in Math.max(leg.target, legSetsDone(leg))"
             :key="n"
             class="seg"
-            :class="{ on: n <= legSetsDone(leg) }"
+            :class="{ on: n <= legSetsDone(leg), extra: n > leg.target }"
           />
         </div>
         <div class="leg-actions">
@@ -363,18 +366,29 @@ onMounted(async () => {
 }
 .seg-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 3px;
   margin: 9px 0;
 }
 .seg {
-  flex: 1;
-  min-width: 3px;
+  flex: 1 1 16px;
+  min-width: 16px;
   height: 8px;
   border-radius: 3px;
   background: var(--surface-2);
 }
 .seg.on {
   background: var(--accent);
+}
+/* Série faite AU-DELÀ de l'objectif → couleur distincte (vert « en plus »). */
+.seg.extra.on {
+  background: var(--d1);
+}
+.leg-extra {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--d1);
 }
 .leg-actions {
   display: flex;

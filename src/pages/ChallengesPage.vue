@@ -231,14 +231,17 @@
             </button>
             <span class="cl-sub" :class="{ ok: legSetsDone(leg) >= leg.target }">
               {{ legSetsDone(leg) }}/{{ leg.target }} séries
+              <span v-if="legSetsDone(leg) > leg.target" class="cl-extra"
+                >+{{ legSetsDone(leg) - leg.target }} en plus</span
+              >
             </span>
           </div>
           <div class="seg-bar">
             <span
-              v-for="n in leg.target"
+              v-for="n in Math.max(leg.target, legSetsDone(leg))"
               :key="n"
               class="seg"
-              :class="{ on: n <= legSetsDone(leg) }"
+              :class="{ on: n <= legSetsDone(leg), extra: n > leg.target }"
             />
           </div>
           <div class="cl-add-lbl">Ajouter des séries :</div>
@@ -820,21 +823,31 @@ onMounted(async () => {
   padding: 11px 12px;
   margin-bottom: 8px;
 }
-/* Barre segmentée : une case par série cible */
+/* Barre segmentée : une case par série (cible + supplémentaires, sur plusieurs lignes) */
 .seg-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 3px;
   margin: 9px 0;
 }
 .seg {
-  flex: 1;
-  min-width: 3px;
+  flex: 1 1 16px;
+  min-width: 16px;
   height: 8px;
   border-radius: 3px;
   background: var(--surface-2);
 }
 .seg.on {
   background: var(--accent);
+}
+/* Série faite au-delà de l'objectif → vert « en plus ». */
+.seg.extra.on {
+  background: var(--d1);
+}
+.cl-extra {
+  margin-left: 6px;
+  font-weight: 700;
+  color: var(--d1);
 }
 .cl-top {
   display: flex;
