@@ -20,9 +20,9 @@ export function endlessFoe(tier: number): Combatant {
     initiative: 26,
   };
 }
-/** Coût d'énergie d'une tentative (croissant, au-dessus du dernier donjon). */
+/** Coût d'énergie d'une tentative (raisonnable : le jeu ne doit pas rationner). */
 export function endlessEnergy(tier: number): number {
-  return 400 + (Math.max(1, tier) - 1) * 30;
+  return 100 + (Math.max(1, tier) - 1) * 8;
 }
 /** Or gagné à la victoire (croît vite avec la profondeur). */
 export function endlessGold(tier: number): number {
