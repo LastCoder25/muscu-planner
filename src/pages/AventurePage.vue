@@ -244,14 +244,15 @@
             <div class="slot-head">
               <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
               <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
-              <span v-if="char.row.equipped[slot]" class="slot-nv"
-                >Nv {{ char.row.equipped[slot]!.level }}</span
-              >
             </div>
             <template v-if="char.row.equipped[slot]">
               <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
-              <div class="rarity slot-rarity">
-                {{ RARITY_LABEL[char.row.equipped[slot]!.rarity] }}
+              <div class="pills">
+                <span class="gpill lvl">Lvl {{ char.row.equipped[slot]!.level }}</span>
+                <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
+                  RARITY_LABEL[char.row.equipped[slot]!.rarity]
+                }}</span>
+                <span v-if="char.row.equipped[slot]!.setId" class="gpill set">🧩 Set</span>
               </div>
               <div class="slot-eff">{{ itemEffects(char.row.equipped[slot]!) }}</div>
               <button
@@ -343,9 +344,11 @@
             >
               <span class="inv-emo">{{ it.emoji }}</span>
               <div class="inv-main">
-                <div class="inv-name">
-                  {{ it.name }} <span class="rarity">{{ RARITY_LABEL[it.rarity] }}</span>
-                  <span class="inv-nv">Nv {{ it.level }}</span>
+                <div class="inv-name">{{ it.name }}</div>
+                <div class="pills">
+                  <span class="gpill lvl">Lvl {{ it.level }}</span>
+                  <span class="gpill" :class="'p-' + it.rarity">{{ RARITY_LABEL[it.rarity] }}</span>
+                  <span v-if="it.setId" class="gpill set">🧩 Set</span>
                 </div>
                 <div class="inv-eff">{{ SLOT_LABEL[it.slot] }} · {{ itemEffects(it) }}</div>
                 <div class="drop-cmp inv-cmp">
@@ -2852,6 +2855,47 @@ onMounted(async () => {
 }
 
 /* Sac / inventaire */
+/* Pastilles génériques rareté / niveau (équipé + sac) */
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 3px 0;
+}
+.gpill {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  background: var(--surface);
+}
+.gpill.lvl {
+  color: var(--text);
+}
+.gpill.p-common {
+  color: var(--dim);
+  border-color: var(--dim);
+}
+.gpill.p-rare {
+  color: #4ec6d6;
+  border-color: #4ec6d6;
+}
+.gpill.p-epic {
+  color: #b07cff;
+  border-color: #b07cff;
+}
+.gpill.p-legendary {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.gpill.set {
+  color: var(--dark, #15120e);
+  background: var(--accent);
+  border-color: var(--accent);
+}
 .winpct {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
