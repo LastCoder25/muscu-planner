@@ -260,8 +260,11 @@
                 :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
                 @click.stop="doUpgrade(char.row.equipped[slot]!.id)"
               >
-                <template v-if="char.row.equipped[slot]!.level >= c.level.level"
-                  >✨ Niveau max</template
+                <template v-if="char.row.equipped[slot]!.level > c.level.level"
+                  >✨ Infusable au niv {{ char.row.equipped[slot]!.level + 1 }}</template
+                >
+                <template v-else-if="char.row.equipped[slot]!.level >= c.level.level"
+                  >✨ Max (ton niveau {{ c.level.level }})</template
                 >
                 <template v-else
                   >✨ Infuser ·
