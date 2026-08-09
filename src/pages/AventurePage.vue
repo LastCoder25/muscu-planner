@@ -231,14 +231,15 @@
       <!-- ONGLET ÉQUIPEMENT -->
       <template v-else-if="tab === 'equip'">
         <div class="sec-title">Équipement</div>
-        <div class="sec-hint">Touche un emplacement pour comparer et gérer tes objets.</div>
+        <div class="sec-hint">
+          Ton stuff équipé. Gère tes objets dans le sac (filtrable par type ci-dessous).
+        </div>
         <div class="gear">
-          <button
+          <div
             v-for="slot in SLOTS"
             :key="slot"
             class="slot"
             :class="char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty'"
-            @click="openSlot(slot)"
           >
             <div class="slot-head">
               <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
@@ -269,14 +270,14 @@
                   ✨</template
                 >
               </button>
-              <div class="slot-manage">gérer ›</div>
+              <button class="slot-remove" @click="doUnequip(slot)">Retirer</button>
             </template>
             <div v-else class="slot-vide">
               vide<template v-if="bagCountForSlot(slot) > 0">
-                · {{ bagCountForSlot(slot) }} au sac ›</template
+                · {{ bagCountForSlot(slot) }} au sac</template
               >
             </div>
-          </button>
+          </div>
         </div>
 
         <!-- Sets d'équipement (bonus 2/3/4 pièces) -->
@@ -303,6 +304,25 @@
 
         <template v-if="char.row.inventory.length">
           <div ref="sacTitle" class="sec-title">Sac ({{ char.row.inventory.length }})</div>
+          <!-- Filtre par type d'objet -->
+          <div class="inv-filter">
+            <button
+              class="if-chip"
+              :class="{ on: invFilter === 'all' }"
+              @click="invFilter = 'all'"
+            >
+              Tous
+            </button>
+            <button
+              v-for="slot in SLOTS"
+              :key="slot"
+              class="if-chip"
+              :class="{ on: invFilter === slot }"
+              @click="invFilter = slot"
+            >
+              {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
+            </button>
+          </div>
           <!-- Nettoyage en masse : objets de rareté inférieure à l'équipé du même slot -->
           <div v-if="belowCount > 0" class="bulk">
             <span class="bulk-lbl">{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} moins rare{{ belowCount > 1 ? 's' : '' }} que l'équipé</span>
@@ -311,9 +331,12 @@
               <button class="bulk-b" @click="doSellBelow">🪙 Tout vendre</button>
             </div>
           </div>
+          <div v-if="!filteredInventory.length" class="inv-empty-filter">
+            Aucun objet de ce type dans le sac.
+          </div>
           <div class="inv">
             <div
-              v-for="it in char.row.inventory"
+              v-for="it in filteredInventory"
               :key="it.id"
               class="inv-item"
               :class="'r-' + it.rarity"
@@ -485,7 +508,12 @@
                   {{ bossSet(it.boss).emoji }} {{ bossSet(it.boss).name }} ·
                   <b>{{ bossSetCount(it.boss) }}/4</b> pièces
                 </div>
-                <div class="dgn-stats">coûte {{ it.boss.energyCost }} ⚡</div>
+                <div class="dgn-stats">
+                  coûte {{ it.boss.energyCost }} ⚡
+                  <span v-if="bossUnlocked(it.boss)" class="winpct" :class="winClass(winPct['b:' + it.boss.id] ?? 0)"
+                    >🎯 {{ winPct['b:' + it.boss.id] ?? 0 }}%</span
+                  >
+                </div>
                 <div v-if="bossUnlocked(it.boss)" class="dgn-hint">{{ it.boss.hint }}</div>
                 <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(it.boss) }}</div>
                 <button
@@ -529,6 +557,12 @@
                 <div class="dgn-stats">
                   {{ it.dungeon.monsterIds.length }} monstres · coûte {{ it.dungeon.energyCost }} ⚡
                   · conseillé niv. {{ it.dungeon.recoLevel }}
+                  <span
+                    v-if="dungeonUnlocked(it.dungeon)"
+                    class="winpct"
+                    :class="winClass(winPct['d:' + it.dungeon.id] ?? 0)"
+                    >🎯 {{ winPct['d:' + it.dungeon.id] ?? 0 }}%</span
+                  >
                 </div>
                 <div v-if="dungeonUnlocked(it.dungeon)" class="dgn-hint">{{ it.dungeon.hint }}</div>
                 <div v-else class="dgn-hint dgn-lock">
@@ -931,69 +965,6 @@
         </div>
       </q-card>
     </q-dialog>
-
-    <!-- Gestion d'un emplacement : équipé en tête + objets du sac qui peuvent le remplacer -->
-    <q-dialog :model-value="!!manageSlot" position="bottom" @update:model-value="manageSlot = null">
-      <q-card v-if="manageSlot && char.row" class="manage-card">
-        <div class="manage-title font-display">
-          {{ SLOT_EMOJI[manageSlot] }} {{ SLOT_LABEL[manageSlot] }}
-        </div>
-
-        <!-- Objet actuellement équipé, mis en évidence -->
-        <div
-          v-if="char.row.equipped[manageSlot]"
-          class="manage-eq"
-          :class="'r-' + char.row.equipped[manageSlot]!.rarity"
-        >
-          <span class="rc-emo">{{ char.row.equipped[manageSlot]!.emoji }}</span>
-          <div class="rc-main">
-            <div class="rc-name">
-              {{ char.row.equipped[manageSlot]!.name }}
-              <span class="rarity">{{ RARITY_LABEL[char.row.equipped[manageSlot]!.rarity] }}</span>
-              <span class="rc-nv">Nv {{ char.row.equipped[manageSlot]!.level }}</span>
-            </div>
-            <div class="rc-eff">{{ itemEffects(char.row.equipped[manageSlot]!) }}</div>
-            <div class="manage-eq-actions">
-              <button class="link-btn" @click="doUnequip(manageSlot)">Retirer</button>
-            </div>
-          </div>
-          <span class="manage-eq-tag">équipé</span>
-        </div>
-        <div v-else class="manage-empty-eq">Aucun objet équipé dans cet emplacement.</div>
-
-        <!-- Candidats du sac (même emplacement), comparaison de rareté -->
-        <div class="manage-sub">Dans ton sac ({{ slotCandidates.length }})</div>
-        <div v-if="!slotCandidates.length" class="manage-none">Rien de ce type dans le sac.</div>
-        <div
-          v-for="it in slotCandidates"
-          :key="it.id"
-          class="manage-cand"
-          :class="'r-' + it.rarity"
-        >
-          <span class="rc-emo">{{ it.emoji }}</span>
-          <div class="rc-main">
-            <div class="rc-name">
-              {{ it.name }} <span class="rarity">{{ RARITY_LABEL[it.rarity] }}</span>
-              <span class="rc-nv">Nv {{ it.level }}</span>
-            </div>
-            <div class="rc-eff">{{ itemEffects(it) }}</div>
-            <span class="rarity-verdict" :class="rarityVerdict(it).cls">{{
-              rarityVerdict(it).label
-            }}</span>
-            <div class="manage-cand-actions">
-              <button class="equip-btn" @click="doEquip(it.id)">
-                {{ char.row.equipped[manageSlot] ? 'Remplacer' : 'Équiper' }}
-              </button>
-              <button class="link-btn" @click="doSalvage(it)">
-                Casser ✨{{ salvageValue(it) }}
-              </button>
-              <button class="link-btn" @click="doSell(it)">Vendre 🪙{{ sellValue(it) }}</button>
-            </div>
-          </div>
-        </div>
-        <button class="manage-close" @click="manageSlot = null">Fermer</button>
-      </q-card>
-    </q-dialog>
   </q-page>
 </template>
 
@@ -1156,6 +1127,40 @@ const fighter = computed(() =>
   playerWithGear(char.row?.pseudo ?? 'Toi', c.value, char.row?.equipped ?? {}, talentFx.value),
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
+
+// Estimation live du % de victoire par donjon/boss selon les stats + le stuff
+// ÉQUIPÉ actuel (Monte-Carlo seedé). Recalculé quand le perso/l'équipement change
+// → on peut swapper du gear et voir l'effet. Clé : 'd:<id>' / 'b:<id>'.
+const WINPCT_SEEDS = 40;
+const winPct = computed<Record<string, number>>(() => {
+  const stats = c.value;
+  const eq = char.row?.equipped ?? {};
+  const name = char.row?.pseudo ?? 'Toi';
+  const fx = talentFx.value;
+  const out: Record<string, number> = {};
+  for (const d of DUNGEONS) {
+    let w = 0;
+    for (let s = 0; s < WINPCT_SEEDS; s++) {
+      const p = playerWithGear(name, stats, eq, fx);
+      if (simulateDungeon(p, dungeonFoes(d), { seed: s * 97 + 1 }).cleared) w++;
+    }
+    out['d:' + d.id] = Math.round((w / WINPCT_SEEDS) * 100);
+  }
+  for (const b of BOSSES) {
+    let w = 0;
+    for (let s = 0; s < WINPCT_SEEDS; s++) {
+      const p = playerWithGear(name, stats, eq, fx);
+      if (simulateCombat(p, b.combatant, { seed: s * 97 + 3, goldOnWin: 0 }).win) w++;
+    }
+    out['b:' + b.id] = Math.round((w / WINPCT_SEEDS) * 100);
+  }
+  return out;
+});
+function winClass(pct: number): string {
+  if (pct >= 70) return 'wp-good';
+  if (pct >= 30) return 'wp-mid';
+  return 'wp-bad';
+}
 const profileLabel = computed(() => PROFILE_LABEL[c.value.profile]);
 
 // ── Récompense de connexion quotidienne ──
@@ -1795,20 +1800,15 @@ function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
   fn(uid).catch(() => $q.notify({ type: 'negative', message: errMsg }));
 }
 
-// ── Gestion d'un emplacement : comparer l'équipé aux objets du sac ──
-const manageSlot = ref<ItemSlot | null>(null);
-function openSlot(slot: ItemSlot) {
-  manageSlot.value = slot;
-}
+// ── Sac : filtre par type d'objet + tri (meilleurs d'abord) ──
+const invFilter = ref<ItemSlot | 'all'>('all');
 function bagCountForSlot(slot: ItemSlot): number {
   return (char.row?.inventory ?? []).filter((i) => i.slot === slot).length;
 }
-// Objets du sac pour le slot géré, meilleurs d'abord (rareté puis niveau).
-const slotCandidates = computed<Item[]>(() => {
-  const slot = manageSlot.value;
-  if (!slot || !char.row) return [];
-  return char.row.inventory
-    .filter((i) => i.slot === slot)
+const filteredInventory = computed<Item[]>(() => {
+  const inv = char.row?.inventory ?? [];
+  return inv
+    .filter((i) => invFilter.value === 'all' || i.slot === invFilter.value)
     .sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || b.level - a.level);
 });
 
@@ -2650,7 +2650,6 @@ onMounted(async () => {
   flex-direction: column;
   gap: 3px;
   text-align: left;
-  cursor: pointer;
   background: var(--surface);
   border: 1px solid var(--line);
   border-left-width: 3px;
@@ -2772,6 +2771,17 @@ onMounted(async () => {
   color: var(--dim);
   cursor: not-allowed;
 }
+.slot-remove {
+  margin-top: 4px;
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
 .slot-vide {
   font-size: 12px;
   color: var(--dim);
@@ -2832,6 +2842,46 @@ onMounted(async () => {
 }
 
 /* Sac / inventaire */
+.winpct {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.winpct.wp-good {
+  color: var(--d1);
+}
+.winpct.wp-mid {
+  color: var(--d3, #ffb23f);
+}
+.winpct.wp-bad {
+  color: var(--d4, #ff6a45);
+}
+.inv-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.if-chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.if-chip.on {
+  border-color: var(--accent);
+  color: var(--accent-ink, #15120e);
+  background: var(--accent);
+}
+.inv-empty-filter {
+  color: var(--dim);
+  font-size: 13px;
+  padding: 8px 2px 14px;
+}
 .inv {
   display: flex;
   flex-direction: column;
