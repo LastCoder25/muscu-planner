@@ -1018,7 +1018,6 @@ import {
   upgradeCost,
   salvageValue,
   sellValue,
-  itemScore,
   SLOTS,
   SLOT_LABEL,
   SLOT_EMOJI,
@@ -1479,15 +1478,23 @@ function rewardDupNote(item: Item): string {
   if (inBag) return '⚠ Tu as déjà cette pièce de set dans ton sac';
   return '';
 }
-// Valeur heuristique d'un candidat de récompense → sert à recommander le « meilleur ».
+// Valeur d'un candidat de récompense → PROFIL-AWARE : on mesure la PUISSANCE DE
+// COMBAT du joueur s'il équipait l'objet (avec ses vraies stats + ses sets + ses
+// talents). La reco conseille donc l'objet qui le rend le plus fort POUR SON BUILD
+// (un coureur préférera PV/vol de vie/crit, un muscu les dégâts…), pas la plus
+// grosse magnitude brute. → aide à aller le plus loin possible.
 function rewardScore(cand: RewardCandidate): number {
-  if (cand.kind === 'gold') return cand.dust * 0.3 + cand.gold * 0.05;
+  const base = combatPowerVal.value; // puissance actuelle (loadout courant)
+  if (cand.kind === 'gold') {
+    // Ressources : ne changent pas la puissance → à peine au-dessus du statu quo,
+    // donc conseillées seulement si aucun objet n'est une vraie amélioration.
+    return base + cand.dust * 0.05 + cand.gold * 0.01;
+  }
   const it = cand.item;
-  let s = itemScore(it) * 10;
-  const eq = equippedInSlot(it.slot);
-  if (!eq) s += 30; // remplit un emplacement vide
-  else if (itemScore(it) > itemScore(eq)) s += 20; // amélioration nette
-  if (it.setId && !rewardDupNote(it)) s += 15; // avance un set (pas un doublon)
+  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: it };
+  const p = playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level);
+  let s = combatPower(p);
+  if (it.setId && !rewardDupNote(it)) s += base * 0.05; // petit bonus « avance un set »
   return s;
 }
 // Index du candidat conseillé (meilleur score). -1 si pas de récompense en attente.
