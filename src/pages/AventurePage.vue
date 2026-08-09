@@ -613,8 +613,11 @@
                 <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
                   <span class="inv-emo">{{ d.emoji }}</span>
                   <div class="inv-main">
-                    <div class="inv-name">
-                      {{ d.name }} <span class="rarity">{{ RARITY_LABEL[d.rarity] }}</span>
+                    <div class="inv-name">{{ d.name }}</div>
+                    <div class="pills">
+                      <span class="gpill lvl">Lvl {{ d.level }}</span>
+                      <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
+                      <span v-if="d.setId" class="gpill set">🧩 Set</span>
                     </div>
                     <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}</div>
                     <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
@@ -1046,9 +1049,6 @@
                 </div>
                 <div class="rc-eff">
                   {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
-                </div>
-                <div v-if="cand.item.setId" class="rc-set">
-                  <b>{{ SET_BY_ID[cand.item.setId]?.name }}</b>
                 </div>
                 <div class="drop-cmp rc-cmp">
                   <span v-if="equippedInSlot(cand.item.slot)"
@@ -3402,11 +3402,6 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--dim);
   margin-top: 2px;
-}
-.rc-set {
-  font-size: 11px;
-  color: var(--accent);
-  margin-top: 3px;
 }
 .rc-cmp {
   text-align: left;
