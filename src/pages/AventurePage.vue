@@ -381,15 +381,20 @@
               {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
             </button>
           </div>
-          <!-- Nettoyage en masse : objets qui font perdre de la puissance (écart
-               de niveau pris en compte : jugés une fois montés à ton niveau) -->
+          <!-- Nettoyage en masse : objets qui n'améliorent pas ta puissance —
+               faibles ET doublons de l'équipé (écart de niveau pris en compte :
+               jugés une fois montés à ton niveau) -->
           <div v-if="belowCount > 0" class="bulk">
             <span class="bulk-lbl"
-              >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} qui {{ belowCount > 1 ? 'font' : 'fait' }} perdre de la puissance</span
+              >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} inutile{{
+                belowCount > 1 ? 's' : ''
+              }} (faible{{ belowCount > 1 ? 's' : '' }} ou doublon{{
+                belowCount > 1 ? 's' : ''
+              }})</span
             >
             <div class="bulk-btns">
-              <button class="bulk-b" @click="doSalvageBelow">✨ Casser les faibles</button>
-              <button class="bulk-b" @click="doSellBelow">🪙 Vendre les faibles</button>
+              <button class="bulk-b" @click="doSalvageBelow">✨ Tout casser</button>
+              <button class="bulk-b" @click="doSellBelow">🪙 Tout vendre</button>
             </div>
           </div>
           <div v-if="!filteredInventory.length" class="inv-empty-filter">
@@ -2042,14 +2047,16 @@ function itemMaxedPower(it: Item): number {
   const lvl = c.value.level.level;
   return powerIfEquip(it.level >= lvl ? it : { ...it, level: lvl });
 }
-// Objets du sac qui font PERDRE de la puissance si équipés (même montés à ton
-// niveau) → candidats à la casse/vente en masse.
+// Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés (même montés à ton
+// niveau) → candidats à la casse/vente en masse. Le `<=` inclut les DOUBLONS de
+// l'équipé (égalité de puissance) en plus des objets plus faibles ; un doublon
+// montable AU-DESSUS de l'équipé donne, lui, plus de puissance → conservé.
 const powerLossItems = computed<Item[]>(() => {
   const r = char.row;
   if (!r) return [];
   return r.inventory.filter((it) => {
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
-    return itemMaxedPower(it) < combatPowerVal.value;
+    return itemMaxedPower(it) <= combatPowerVal.value;
   });
 });
 const belowCount = computed(() => powerLossItems.value.length);
@@ -2060,8 +2067,8 @@ const bulkScope = computed(() =>
 function doSalvageBelow() {
   const ids = powerLossItems.value.map((i) => i.id);
   $q.dialog({
-    title: 'Casser les objets faibles',
-    message: `Casser les ${ids.length} objet(s) de ${bulkScope.value} qui font perdre de la puissance (même montés à ton niveau) → poussière ?`,
+    title: 'Casser les objets inutiles',
+    message: `Casser les ${ids.length} objet(s) de ${bulkScope.value} qui n'améliorent pas ta puissance — faibles ou doublons de l'équipé (même montés à ton niveau) → poussière ?`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Casser', color: 'primary', textColor: 'dark' },
   }).onOk(() =>
@@ -2079,8 +2086,8 @@ function doSalvageBelow() {
 function doSellBelow() {
   const ids = powerLossItems.value.map((i) => i.id);
   $q.dialog({
-    title: 'Vendre les objets faibles',
-    message: `Vendre les ${ids.length} objet(s) de ${bulkScope.value} qui font perdre de la puissance (même montés à ton niveau) → or ?`,
+    title: 'Vendre les objets inutiles',
+    message: `Vendre les ${ids.length} objet(s) de ${bulkScope.value} qui n'améliorent pas ta puissance — faibles ou doublons de l'équipé (même montés à ton niveau) → or ?`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Vendre', color: 'primary', textColor: 'dark' },
   }).onOk(() =>
