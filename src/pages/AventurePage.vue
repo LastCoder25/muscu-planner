@@ -253,6 +253,22 @@
                 {{ RARITY_LABEL[char.row.equipped[slot]!.rarity] }}
               </div>
               <div class="slot-eff">{{ itemEffects(char.row.equipped[slot]!) }}</div>
+              <button
+                class="slot-up"
+                :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
+                @click.stop="doUpgrade(char.row.equipped[slot]!.id)"
+              >
+                <template v-if="char.row.equipped[slot]!.level >= c.level.level"
+                  >✨ Niveau max</template
+                >
+                <template v-else
+                  >✨ Infuser ·
+                  {{
+                    upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity)
+                  }}
+                  ✨</template
+                >
+              </button>
               <div class="slot-manage">gérer ›</div>
             </template>
             <div v-else class="slot-vide">
@@ -406,6 +422,14 @@
                   <button class="equip-btn" @click="doEquip(d.id)">
                     {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
                   </button>
+                  <template v-if="equippedInSlot(d.slot)">
+                    <button class="link-btn" @click="doReplaceDispose(d, 'salvage')">
+                      Remplacer + casser l'ancien ✨{{ salvageValue(equippedInSlot(d.slot)!) }}
+                    </button>
+                    <button class="link-btn" @click="doReplaceDispose(d, 'sell')">
+                      Remplacer + vendre l'ancien 🪙{{ sellValue(equippedInSlot(d.slot)!) }}
+                    </button>
+                  </template>
                   <button class="link-btn" @click="doSalvage(d)">
                     Casser ✨{{ salvageValue(d) }}
                   </button>
@@ -781,6 +805,20 @@
                 <div v-if="cand.item.setId" class="rc-set">
                   🧩 pièce de set · <b>{{ SET_BY_ID[cand.item.setId]?.name }}</b>
                 </div>
+                <div class="drop-cmp rc-cmp">
+                  <span v-if="equippedInSlot(cand.item.slot)"
+                    >Équipé : {{ RARITY_LABEL[equippedInSlot(cand.item.slot)!.rarity] }} Nv
+                    {{ equippedInSlot(cand.item.slot)!.level }} ·
+                    {{ itemEffects(equippedInSlot(cand.item.slot)!) }}</span
+                  >
+                  <span v-else>Emplacement libre</span>
+                  <span class="rarity-verdict" :class="rarityVerdict(cand.item).cls">{{
+                    rarityVerdict(cand.item).label
+                  }}</span>
+                </div>
+                <div v-if="rewardDupNote(cand.item)" class="rc-dup">
+                  {{ rewardDupNote(cand.item) }}
+                </div>
               </div>
             </template>
             <template v-else>
@@ -817,27 +855,7 @@
             </div>
             <div class="rc-eff">{{ itemEffects(char.row.equipped[manageSlot]!) }}</div>
             <div class="manage-eq-actions">
-              <button
-                class="up-btn"
-                :disabled="
-                  !canUpgrade(char.row.equipped[manageSlot]!, char.row.dust, c.level.level)
-                "
-                @click="doUpgrade(char.row.equipped[manageSlot]!.id)"
-              >
-                <template v-if="char.row.equipped[manageSlot]!.level >= c.level.level"
-                  >max</template
-                >
-                <template v-else
-                  >⬆
-                  {{
-                    upgradeCost(
-                      char.row.equipped[manageSlot]!.level,
-                      char.row.equipped[manageSlot]!.rarity,
-                    )
-                  }}
-                  ✨</template
-                >
-              </button>
+              <span class="manage-eq-hint">✨ Infusion depuis l'emplacement équipé</span>
               <button class="link-btn" @click="doUnequip(manageSlot)">Retirer</button>
             </div>
           </div>
@@ -1284,6 +1302,19 @@ const activeSets = computed(() => {
 });
 // Verdict de rareté du drop vs l'objet équipé (potentiel long terme : la rareté
 // fixe la magnitude de base, la poussière fait ensuite monter le niveau).
+// Avertit si une pièce de set proposée en récompense fait DOUBLON : soit le slot
+// porte déjà cette pièce de set (aucun gain de palier), soit une copie traîne déjà
+// dans le sac. Évite de « choisir un doublon sans le savoir ».
+function rewardDupNote(item: Item): string {
+  if (!item.setId) return '';
+  const eq = equippedInSlot(item.slot);
+  if (eq?.setId === item.setId) return '⚠ Cette pièce de set est déjà équipée sur cet emplacement';
+  const inBag = (char.row?.inventory ?? []).some(
+    (i) => i.setId === item.setId && i.slot === item.slot,
+  );
+  if (inBag) return '⚠ Tu as déjà cette pièce de set dans ton sac';
+  return '';
+}
 function rarityVerdict(d: Item): { label: string; cls: string } {
   const eq = equippedInSlot(d.slot);
   if (!eq) return { label: 'slot libre', cls: 'up' };
@@ -1626,6 +1657,28 @@ const slotCandidates = computed<Item[]>(() => {
 
 function doEquip(itemId: string) {
   withUid((uid) => char.equip(uid, itemId), 'Impossible d’équiper.');
+}
+// Équipe le drop ET dispose de l'objet remplacé (casse/vend) sans passer par le sac.
+function doReplaceDispose(drop: Item, disposal: 'salvage' | 'sell') {
+  const old = equippedInSlot(drop.slot);
+  const gain = old
+    ? disposal === 'salvage'
+      ? `+${salvageValue(old)} ✨`
+      : `+${sellValue(old)} 🪙`
+    : '';
+  const verb = disposal === 'salvage' ? 'cassé' : 'vendu';
+  withUid(
+    (uid) =>
+      char
+        .equipReplacing(uid, drop.id, disposal)
+        .then(() =>
+          $q.notify({
+            type: 'positive',
+            message: old ? `Équipé · ancien ${verb} (${gain})` : 'Équipé',
+          }),
+        ),
+    'Action impossible.',
+  );
 }
 function doUnequip(slot: ItemSlot) {
   withUid((uid) => char.unequip(uid, slot), 'Impossible de déséquiper.');
@@ -2460,6 +2513,25 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--dim);
 }
+.slot-up {
+  margin-top: 6px;
+  align-self: flex-start;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+}
+.slot-up:disabled {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--dim);
+  cursor: not-allowed;
+}
 .slot-vide {
   font-size: 12px;
   color: var(--dim);
@@ -2684,6 +2756,15 @@ onMounted(async () => {
   color: var(--accent);
   margin-top: 3px;
 }
+.rc-cmp {
+  text-align: left;
+}
+.rc-dup {
+  margin-top: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--d4);
+}
 /* Emplacement cliquable : hint « gérer » */
 .slot-manage {
   margin-top: auto;
@@ -2758,8 +2839,13 @@ onMounted(async () => {
 .manage-cand-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-top: 8px;
+}
+.manage-eq-hint {
+  font-size: 10.5px;
+  color: var(--dim);
 }
 .manage-close {
   width: 100%;
@@ -3537,7 +3623,9 @@ onMounted(async () => {
 .salv-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 3000;
+  /* Au-dessus des q-dialog Quasar (z-index 6000) : la confirmation de recyclage
+     doit rester devant la modale de gestion d'emplacement d'où elle est lancée. */
+  z-index: 7000;
   background: rgba(0, 0, 0, 0.72);
   backdrop-filter: blur(3px);
   display: flex;

@@ -381,6 +381,29 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { equipped, inventory });
   }
 
+  // Équipe un objet du sac ET dispose de l'objet remplacé (casse → poussière /
+  // vend → or / garde → sac) en UNE écriture. Évite l'aller-retour par le sac.
+  async function equipReplacing(
+    userId: string,
+    itemId: string,
+    disposal: 'salvage' | 'sell' | 'keep',
+  ) {
+    const cur = row.value;
+    if (!cur) return;
+    const item = cur.inventory.find((i) => i.id === itemId);
+    if (!item) return;
+    const equipped: Equipped = { ...cur.equipped };
+    const inventory = cur.inventory.filter((i) => i.id !== itemId);
+    const prev = equipped[item.slot];
+    equipped[item.slot] = item;
+    const patch: Partial<CharacterRow> = { equipped };
+    if (prev && disposal === 'salvage') patch.dust = cur.dust + salvageValue(prev);
+    else if (prev && disposal === 'sell') patch.gold = cur.gold + sellValue(prev);
+    else if (prev) inventory.push(prev); // keep
+    patch.inventory = inventory;
+    return persist(userId, patch);
+  }
+
   async function unequip(userId: string, slot: ItemSlot) {
     const cur = row.value;
     if (!cur) return;
@@ -408,6 +431,7 @@ export const useCharacterStore = defineStore('character', () => {
     chooseReward,
     applyEndless,
     equip,
+    equipReplacing,
     unequip,
     chooseTalent,
     salvage,
