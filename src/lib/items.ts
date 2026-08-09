@@ -76,6 +76,15 @@ export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean
 
 export type Equipped = Partial<Record<ItemSlot, Item>>;
 
+// Récompense « au choix » d'un boss : 3 candidats tirés, le joueur en garde 1.
+export type RewardCandidate =
+  | { kind: 'item'; item: Item }
+  | { kind: 'gold'; gold: number; dust: number };
+export interface PendingReward {
+  source: string; // ex. 'boss:dragon_primordial' (traçabilité)
+  candidates: RewardCandidate[];
+}
+
 export const SLOTS: ItemSlot[] = ['weapon', 'armor', 'accessory', 'relic'];
 export const SLOT_LABEL: Record<ItemSlot, string> = {
   weapon: 'Arme',

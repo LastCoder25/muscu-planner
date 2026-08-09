@@ -10,6 +10,7 @@ import {
   type Item,
   type ItemSlot,
   type Equipped,
+  type PendingReward,
 } from '@/lib/items';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 
@@ -31,6 +32,7 @@ export interface CharacterRow {
   consumables: Record<string, number>;
   reward_level: number;
   endless_best: number;
+  pending_reward: PendingReward | null;
 }
 
 export class PseudoTakenError extends Error {
@@ -45,7 +47,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward';
 
   async function fetchMine() {
     const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
@@ -126,8 +128,8 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   // Applique une tentative de BOSS de palier : dépense l'énergie (win ou lose),
-  // encaisse or + poussière + la pièce de set lâchée, et — seulement en cas de
-  // victoire — mémorise le boss vaincu (débloque le suivant, dédup).
+  // encaisse l'or + poussière de base, et — en cas de victoire — mémorise le boss
+  // vaincu + pose une RÉCOMPENSE EN ATTENTE (3 candidats au choix, cf. chooseReward).
   async function applyBossWin(
     userId: string,
     input: {
@@ -135,8 +137,8 @@ export const useCharacterStore = defineStore('character', () => {
       energyCost: number;
       gold: number;
       dust: number;
-      drops: Item[];
       defeated: boolean;
+      pending?: PendingReward | null;
       consumed?: string[];
     },
   ) {
@@ -156,9 +158,27 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
       energy_spent: cur.energy_spent + input.energyCost,
-      inventory: [...cur.inventory, ...input.drops],
       defeated_bosses: defeated,
       consumables,
+      pending_reward: input.pending ?? cur.pending_reward ?? null,
+    });
+  }
+
+  // Choisit une récompense parmi les candidats en attente → l'applique et purge.
+  async function chooseReward(userId: string, index: number) {
+    const cur = row.value;
+    const cand = cur?.pending_reward?.candidates[index];
+    if (!cur || !cand) return;
+    if (cand.kind === 'item') {
+      return persist(userId, {
+        inventory: [...cur.inventory, cand.item],
+        pending_reward: null,
+      });
+    }
+    return persist(userId, {
+      gold: cur.gold + cand.gold,
+      dust: cur.dust + cand.dust,
+      pending_reward: null,
     });
   }
 
@@ -364,6 +384,7 @@ export const useCharacterStore = defineStore('character', () => {
     setPseudo,
     applyRun,
     applyBossWin,
+    chooseReward,
     applyEndless,
     equip,
     unequip,

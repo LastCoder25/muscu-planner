@@ -736,10 +736,52 @@
           </div>
         </div>
         <div class="drops-note">
-          Chaque objet a <b>2 stats</b> (dégâts / PV / critique / vol de vie / réduction / or). Les
+          Chaque objet a <b>1 stat</b> (dégâts / PV / critique / vol de vie / réduction / or). Les
           <b>pièces de set</b> ne tombent que sur les <b>boss de palier</b>.
         </div>
         <button class="drops-close" @click="dropInfo = null">Fermer</button>
+      </q-card>
+    </q-dialog>
+
+    <!-- Récompense de boss AU CHOIX : 3 candidats, on en garde 1 -->
+    <q-dialog :model-value="!!char.row?.pending_reward" persistent>
+      <q-card v-if="char.row?.pending_reward" class="reward-card">
+        <div class="reward-title font-display">🎁 Choisis ta récompense</div>
+        <div class="reward-sub">Un seul de ces trois butins — à toi de jouer.</div>
+        <div class="reward-list">
+          <button
+            v-for="(cand, i) in char.row.pending_reward.candidates"
+            :key="i"
+            class="reward-cand"
+            :class="cand.kind === 'item' ? 'r-' + cand.item.rarity : 'r-gold'"
+            :disabled="busy"
+            @click="doChooseReward(i)"
+          >
+            <template v-if="cand.kind === 'item'">
+              <span class="rc-emo">{{ cand.item.emoji }}</span>
+              <div class="rc-main">
+                <div class="rc-name">
+                  {{ cand.item.name }}
+                  <span class="rarity">{{ RARITY_LABEL[cand.item.rarity] }}</span>
+                  <span class="rc-nv">Nv {{ cand.item.level }}</span>
+                </div>
+                <div class="rc-eff">
+                  {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
+                </div>
+                <div v-if="cand.item.setId" class="rc-set">
+                  🧩 pièce de set · <b>{{ SET_BY_ID[cand.item.setId]?.name }}</b>
+                </div>
+              </div>
+            </template>
+            <template v-else>
+              <span class="rc-emo">💰</span>
+              <div class="rc-main">
+                <div class="rc-name">Trésor</div>
+                <div class="rc-eff">+{{ cand.gold }} 🪙 · +{{ cand.dust }} ✨</div>
+              </div>
+            </template>
+          </button>
+        </div>
       </q-card>
     </q-dialog>
   </q-page>
@@ -784,6 +826,8 @@ import {
   type Item,
   type ItemSlot,
   type AggregatedEffects,
+  type RewardCandidate,
+  type PendingReward,
 } from '@/lib/items';
 import {
   SHOP_ITEMS,
@@ -1122,6 +1166,10 @@ async function explore(d: Dungeon) {
   const uid = auth.user?.id;
   if (!uid || !char.row || busy.value || c.value.energy < d.energyCost) return;
   if (!dungeonUnlocked(d)) return;
+  if (char.row.pending_reward) {
+    $q.notify({ type: 'warning', message: 'Choisis d’abord ta récompense en attente.' });
+    return;
+  }
   lastDungeon.value = d;
   lastBoss.value = null;
   busy.value = true;
@@ -1222,10 +1270,37 @@ function bossSetCount(b: MilestoneBoss): number {
   return all.filter((it) => it.setId === b.setId).length;
 }
 
+// Tire les 3 récompenses au CHOIX d'un boss (mixte : pièce de set / objet de
+// donjon / lot or+poussière), aléatoire complet et seedé (anti-reroll).
+function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): RewardCandidate[] {
+  const luck = Math.min(1, 0.3 + (lucky ? 0.5 : 0));
+  const out: RewardCandidate[] = [];
+  for (let n = 0; n < 3; n++) {
+    const roll = rng();
+    if (roll < 0.6) {
+      const p = rollSetPiece(rng, { setId: b.setId, level: b.dropLevel, luck });
+      out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
+    } else if (roll < 0.85) {
+      let d: ReturnType<typeof rollDrop> = null;
+      for (let i = 0; i < 5 && !d; i++)
+        d = rollDrop(rng, { cleared: true, defeated: 1, level: b.dropLevel, luck });
+      const p = d ?? rollSetPiece(rng, { setId: b.setId, level: b.dropLevel, luck });
+      out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
+    } else {
+      out.push({ kind: 'gold', gold: Math.round(b.gold * 0.6), dust: 30 });
+    }
+  }
+  return out;
+}
+
 async function fightBoss(b: MilestoneBoss) {
   const uid = auth.user?.id;
   if (!uid || !char.row || busy.value || c.value.energy < b.energyCost) return;
   if (!bossUnlocked(b)) return;
+  if (char.row.pending_reward) {
+    $q.notify({ type: 'warning', message: 'Choisis d’abord ta récompense en attente.' });
+    return;
+  }
   lastBoss.value = b;
   lastDungeon.value = null;
   busy.value = true;
@@ -1239,33 +1314,21 @@ async function fightBoss(b: MilestoneBoss) {
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
     const gold = win ? Math.round(b.gold * (1 + goldPct)) : 0;
     const dust = win ? 15 : 0;
-    // Victoire → pièce de set garantie. Anti-doublon : on cible en priorité un
-    // slot du set que le joueur n'a PAS encore (complète le set avant les doublons).
-    const drops: Item[] = [];
-    if (win) {
-      const dropRng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
-      const owned = new Set(
-        [...char.row.inventory, ...SLOTS.map((s) => char.row!.equipped[s])]
-          .filter((it): it is Item => !!it && it.setId === b.setId)
-          .map((it) => it.slot),
-      );
-      const missing = SLOTS.filter((s) => !owned.has(s));
-      const piece = rollSetPiece(dropRng, {
-        setId: b.setId,
-        level: b.dropLevel,
-        luck: Math.min(1, 0.3 + (lucky ? 0.5 : 0)),
-        ...(missing.length ? { preferSlot: missing[Math.floor(dropRng() * missing.length)]! } : {}),
-      });
-      drops.push({ ...piece, id: crypto.randomUUID() });
-    }
+    // Victoire → 3 récompenses au CHOIX (posées en attente ; réclamées via la modale).
+    const pending: PendingReward | null = win
+      ? {
+          source: `boss:${b.id}`,
+          candidates: rollBossRewards(b, mulberry32((seed ^ 0x9e3779b9) >>> 0), lucky),
+        }
+      : null;
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
     await char.applyBossWin(uid, {
       bossId: b.id,
       energyCost: b.energyCost,
       gold,
       dust,
-      drops,
       defeated: win,
+      pending,
       ...(consumed.length ? { consumed } : {}),
     });
     selectedConsumables.value = [];
@@ -1279,11 +1342,11 @@ async function fightBoss(b: MilestoneBoss) {
       dust,
       finalPv,
       fights: [{ monster: b.name, emoji: b.emoji, win, rounds: r.rounds }],
-      drops,
+      drops: [],
     };
     $q.notify(
       win
-        ? { type: 'positive', message: `${b.emoji} ${b.name} vaincu — +${gold} 🪙` }
+        ? { type: 'positive', message: `${b.emoji} ${b.name} vaincu — choisis ta récompense !` }
         : { type: 'warning', message: `${b.name} t’a terrassé… reviens plus fort.` },
     );
   } catch {
@@ -1291,6 +1354,16 @@ async function fightBoss(b: MilestoneBoss) {
   } finally {
     busy.value = false;
   }
+}
+// Choix d'une récompense parmi les 3 candidats en attente.
+function doChooseReward(index: number) {
+  withUid(
+    (uid) =>
+      char
+        .chooseReward(uid, index)
+        .then(() => $q.notify({ type: 'positive', message: 'Récompense récupérée !' })),
+    'Impossible de récupérer la récompense.',
+  );
 }
 
 // ── Faille sans fin (end-game infini) ──
@@ -1304,6 +1377,10 @@ async function fightEndless() {
   const tier = nextEndlessTier.value;
   const cost = endlessEnergy(tier);
   if (!uid || !char.row || busy.value || c.value.energy < cost || !endlessUnlocked.value) return;
+  if (char.row.pending_reward) {
+    $q.notify({ type: 'warning', message: 'Choisis d’abord ta récompense en attente.' });
+    return;
+  }
   lastBoss.value = null;
   lastDungeon.value = null;
   busy.value = true;
@@ -2305,6 +2382,77 @@ onMounted(async () => {
   border-radius: 16px 16px 0 0;
   padding: 16px 18px calc(24px + env(safe-area-inset-bottom, 0px));
   color: var(--text);
+}
+/* Récompense de boss au choix (3 candidats) */
+.reward-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  padding: 18px;
+  color: var(--text);
+}
+.reward-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.reward-sub {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 2px 0 12px;
+}
+.reward-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.reward-cand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--text);
+  transition: transform 0.08s;
+}
+.reward-cand:active {
+  transform: scale(0.98);
+}
+.reward-cand.r-gold {
+  border-left-color: var(--accent);
+}
+.rc-emo {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.rc-main {
+  flex: 1;
+  min-width: 0;
+}
+.rc-name {
+  font-weight: 600;
+}
+.rc-nv {
+  font-size: 11px;
+  color: var(--dim);
+  margin-left: 4px;
+}
+.rc-eff {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+.rc-set {
+  font-size: 11px;
+  color: var(--accent);
+  margin-top: 3px;
 }
 .drops-title {
   font-size: 18px;
