@@ -93,10 +93,13 @@ describe('aggregateEffects', () => {
 
 describe('playerWithGear', () => {
   const stats = { puissance: 20, endurance: 30, agilite: 10 };
+  // Base niveau 1 : pv = 100 + 15×1 + 30×10 = 415 ; dégâts = 6 + 10×1 + 20×1.2 = 40.
+  const basePv = 100 + 15 * 1 + 30 * 10;
+  const baseDmg = Math.round(6 + 10 * 1 + 20 * 1.2);
   it('sans équipement = combattant de base', () => {
     const c = playerWithGear('X', stats, {});
-    expect(c.pv).toBe(100 + 30 * 10);
-    expect(c.damage).toBe(Math.round(20 * 1.5));
+    expect(c.pv).toBe(basePv);
+    expect(c.damage).toBe(baseDmg);
   });
   it('applique +PV, +dégâts, vol de vie, réduction', () => {
     const eq: Equipped = {
@@ -106,8 +109,8 @@ describe('playerWithGear', () => {
       accessory: item({ slot: 'accessory', effect: { type: 'gold_pct', value: 15 } }),
     };
     const c = playerWithGear('X', stats, eq);
-    expect(c.pv).toBe(Math.round(400 * 1.2)); // 480
-    expect(c.damage).toBe(Math.round(30 * 1.5)); // base 30 × 1.5
+    expect(c.pv).toBe(Math.round(basePv * 1.2));
+    expect(c.damage).toBe(Math.round(baseDmg * 1.5));
   });
 });
 

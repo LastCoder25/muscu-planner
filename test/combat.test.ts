@@ -1,8 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { playerCombatant, simulateCombat, simulateDungeon, mulberry32 } from '@/lib/combat';
+import {
+  playerCombatant,
+  combatPower,
+  simulateCombat,
+  simulateDungeon,
+  mulberry32,
+} from '@/lib/combat';
 
-const strong = playerCombatant('Fort', { puissance: 80, endurance: 60, agilite: 40 });
-const weak = playerCombatant('Faible', { puissance: 3, endurance: 1, agilite: 1 });
+const strong = playerCombatant('Fort', { puissance: 80, endurance: 60, agilite: 40 }, 10);
+const weak = playerCombatant('Faible', { puissance: 3, endurance: 1, agilite: 1 }, 1);
 
 const dummy = {
   name: 'Mannequin',
@@ -15,21 +21,52 @@ const dummy = {
 const boss = { name: 'Boss', pv: 2000, damage: 200, crit: 0.2, dodge: 0.3, initiative: 99 };
 
 describe('playerCombatant', () => {
-  it('dérive PV/dégâts/crit/esquive des stats', () => {
-    const c = playerCombatant('X', { puissance: 20, endurance: 30, agilite: 50 });
-    expect(c.pv).toBe(100 + 30 * 10); // 400
-    expect(c.damage).toBe(Math.round(20 * 1.5)); // 30
-    expect(c.crit).toBeCloseTo(0.25); // 50 × 0.005
-    expect(c.dodge).toBeCloseTo(0.15); // 50 × 0.003
+  it('dérive PV/dégâts/crit/esquive/vitesse/défense des stats ET du niveau', () => {
+    const c = playerCombatant('X', { puissance: 20, endurance: 30, agilite: 50 }, 3);
+    expect(c.pv).toBe(100 + 15 * 3 + 30 * 10); // plancher niveau + endurance
+    expect(c.damage).toBe(Math.round(6 + 10 * 3 + 20 * 1.2)); // plancher niveau + puissance
+    expect(c.crit).toBeCloseTo(50 * 0.002); // agilité
+    expect(c.dodge).toBeCloseTo(50 * 0.003);
+    expect(c.strikes).toBeCloseTo(1 + 50 * 0.004); // Vitesse (multi-frappe)
+    expect(c.dmgReduction).toBeCloseTo(20 * 0.002); // Défense (puissance)
   });
-  it('un profil sans Puissance frappe quand même (base de dégâts > 1)', () => {
-    const cardio = playerCombatant('Cardio', { puissance: 0, endurance: 40, agilite: 60 });
-    expect(cardio.damage).toBeGreaterThan(1); // plancher : jamais bloqué à 1
+  it('un profil sans Puissance frappe quand même (planchers de niveau)', () => {
+    const cardio = playerCombatant('Cardio', { puissance: 0, endurance: 40, agilite: 60 }, 10);
+    expect(cardio.damage).toBeGreaterThan(1);
+    expect(cardio.strikes!).toBeGreaterThan(1); // il compense par le volume de frappes
   });
-  it('crit et esquive sont plafonnés', () => {
-    const c = playerCombatant('X', { puissance: 1, endurance: 1, agilite: 100000 });
-    expect(c.crit).toBeLessThanOrEqual(0.6);
+  it('crit, esquive et défense sont plafonnés', () => {
+    const c = playerCombatant('X', { puissance: 100000, endurance: 1, agilite: 100000 }, 1);
+    expect(c.crit).toBeLessThanOrEqual(0.5);
     expect(c.dodge).toBeLessThanOrEqual(0.4);
+    expect(c.dmgReduction!).toBeLessThanOrEqual(0.45);
+  });
+});
+
+describe('le combat récompense l’ÉQUILIBRE', () => {
+  it('à budget de stats égal, l’équilibré a la plus haute puissance de combat', () => {
+    const L = 15;
+    const budget = 800;
+    const mk = (p: number, e: number, a: number) =>
+      combatPower(
+        playerCombatant(
+          'x',
+          {
+            puissance: Math.round(budget * p),
+            endurance: Math.round(budget * e),
+            agilite: Math.round(budget * a),
+          },
+          L,
+        ),
+      );
+    const equilibre = mk(0.35, 0.46, 0.19);
+    const muscu = mk(0.6, 0.3, 0.1);
+    const coureur = mk(0.1, 0.62, 0.28);
+    expect(equilibre).toBeGreaterThan(muscu);
+    expect(equilibre).toBeGreaterThan(coureur);
+    // …mais les extrêmes restent viables (pas écrasés) : ≥ 55 % de l’équilibré.
+    expect(muscu).toBeGreaterThan(equilibre * 0.55);
+    expect(coureur).toBeGreaterThan(equilibre * 0.55);
   });
 });
 

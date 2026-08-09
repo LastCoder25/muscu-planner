@@ -1146,7 +1146,13 @@ const c = computed(() =>
 const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
 // Combattant complet (stats + équipement + talents) → puissance de combat affichée.
 const fighter = computed(() =>
-  playerWithGear(char.row?.pseudo ?? 'Toi', c.value, char.row?.equipped ?? {}, talentFx.value),
+  playerWithGear(
+    char.row?.pseudo ?? 'Toi',
+    c.value,
+    char.row?.equipped ?? {},
+    talentFx.value,
+    c.value.level.level,
+  ),
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
 
@@ -1159,11 +1165,12 @@ const winPct = computed<Record<string, number>>(() => {
   const eq = char.row?.equipped ?? {};
   const name = char.row?.pseudo ?? 'Toi';
   const fx = talentFx.value;
+  const lvl = c.value.level.level;
   const out: Record<string, number> = {};
   for (const d of DUNGEONS) {
     let w = 0;
     for (let s = 0; s < WINPCT_SEEDS; s++) {
-      const p = playerWithGear(name, stats, eq, fx);
+      const p = playerWithGear(name, stats, eq, fx, lvl);
       if (simulateDungeon(p, dungeonFoes(d), { seed: s * 97 + 1 }).cleared) w++;
     }
     out['d:' + d.id] = Math.round((w / WINPCT_SEEDS) * 100);
@@ -1171,7 +1178,7 @@ const winPct = computed<Record<string, number>>(() => {
   for (const b of BOSSES) {
     let w = 0;
     for (let s = 0; s < WINPCT_SEEDS; s++) {
-      const p = playerWithGear(name, stats, eq, fx);
+      const p = playerWithGear(name, stats, eq, fx, lvl);
       if (simulateCombat(p, b.combatant, { seed: s * 97 + 3, goldOnWin: 0 }).win) w++;
     }
     out['b:' + b.id] = Math.round((w / WINPCT_SEEDS) * 100);
@@ -1541,7 +1548,7 @@ async function explore(d: Dungeon) {
     const consumed = [...selectedConsumables.value];
     const { extra, lucky } = runExtra();
     const seed = Math.floor(Math.random() * 1e9);
-    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra);
+    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra, c.value.level.level);
     const r = simulateDungeon(player, dungeonFoes(d), { seed });
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
     const gold = Math.round(r.gold * (1 + goldPct));
@@ -1674,7 +1681,7 @@ async function fightBoss(b: MilestoneBoss) {
     const consumed = [...selectedConsumables.value];
     const { extra, lucky } = runExtra();
     const seed = Math.floor(Math.random() * 1e9);
-    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra);
+    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra, c.value.level.level);
     const r = simulateCombat(player, b.combatant, { seed, goldOnWin: b.gold });
     const win = r.win;
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
@@ -1756,7 +1763,7 @@ async function fightEndless() {
     const consumed = [...selectedConsumables.value];
     const { extra, lucky } = runExtra();
     const seed = Math.floor(Math.random() * 1e9);
-    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra);
+    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra, c.value.level.level);
     const foe = endlessFoe(tier);
     const r = simulateCombat(player, foe, { seed, goldOnWin: endlessGold(tier) });
     const win = r.win;

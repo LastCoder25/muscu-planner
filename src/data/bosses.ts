@@ -4,10 +4,12 @@
 // du palier → seule source de base gear au niveau du palier). Déblocage
 // SÉQUENTIEL : il faut avoir vaincu le boss précédent au moins une fois (plus de
 // gate de niveau — cf. déblocage découplé). Combat SOLO (un seul adversaire).
-// PV/dégâts RE-CALIBRÉS par simulation (2026‑08‑09) → ~50-55 % de win avec du
-// GEAR DE DONJON au palier (pas besoin du set, qui reste un bonus), quasi
-// impossible deux niveaux en dessous. Avant : calibrés pour un full set → 0-11 %
-// avec du gear de donjon = mur injouable (le donjon du même niveau était à ~90 %).
+// PV/dégâts RE-CALIBRÉS par simulation pour le MODÈLE DE COMBAT 3-piliers
+// (2026‑08‑09, cf. combat.ts) : profils calés en gear de donjon au palier →
+// l'ÉQUILIBRÉ (muscu+cardio) est le meilleur (~90 %), le muscu pur viable
+// (~55-90 %), le coureur pur viable au début et plus juste en fin de jeu
+// (rattrapable via gear/niveau — le 🎯 % de victoire prévient). PV modéré /
+// dégâts élevés = check de SURVIE (pas un mur de PV qui tuerait le coureur).
 // Distinct du boss communautaire hebdo (world boss).
 import type { Combatant } from '@/lib/combat';
 
@@ -37,8 +39,8 @@ export const BOSSES: MilestoneBoss[] = [
     hint: 'Un mur de pierre. Il faut des PV (Endurance) pour tenir et cogner longtemps.',
     combatant: {
       name: 'Golem ancestral',
-      pv: 560,
-      damage: 80,
+      pv: 700,
+      damage: 130,
       crit: 0.05,
       dodge: 0.05,
       initiative: 8,
@@ -56,8 +58,8 @@ export const BOSSES: MilestoneBoss[] = [
     hint: 'Frappe fort et crit souvent → gros dégâts (Puissance) pour l’abattre vite.',
     combatant: {
       name: 'Dragon primordial',
-      pv: 1530,
-      damage: 680,
+      pv: 2700,
+      damage: 620,
       crit: 0.12,
       dodge: 0.08,
       initiative: 22,
@@ -75,8 +77,8 @@ export const BOSSES: MilestoneBoss[] = [
     hint: 'Esquive beaucoup → Agilité pour la toucher, et des PV pour encaisser ses sorts.',
     combatant: {
       name: 'Liche couronnée',
-      pv: 3700,
-      damage: 1400,
+      pv: 11500,
+      damage: 1100,
       crit: 0.15,
       dodge: 0.12,
       initiative: 28,
@@ -94,8 +96,8 @@ export const BOSSES: MilestoneBoss[] = [
     hint: 'Un colosse : dégâts énormes. Build complet, un maximum de PV.',
     combatant: {
       name: 'Titan du Néant',
-      pv: 11700,
-      damage: 1890,
+      pv: 28000,
+      damage: 1800,
       crit: 0.1,
       dodge: 0.06,
       initiative: 16,
@@ -113,8 +115,8 @@ export const BOSSES: MilestoneBoss[] = [
     hint: 'End-game absolu. Tout à fond, PV au max, et un peu de chance.',
     combatant: {
       name: 'Archidémon',
-      pv: 14000,
-      damage: 4400,
+      pv: 45000,
+      damage: 2900,
       crit: 0.15,
       dodge: 0.08,
       initiative: 26,

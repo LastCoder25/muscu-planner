@@ -461,14 +461,16 @@ export function playerWithGear(
   stats: { puissance: number; endurance: number; agilite: number },
   equipped: Equipped,
   extra: Partial<AggregatedEffects> = {},
+  level = 1,
 ): Combatant {
-  const base = playerCombatant(name, stats);
+  const base = playerCombatant(name, stats, level);
   const e = aggregateEffects(equipped);
   const damagePct = e.damagePct + (extra.damagePct ?? 0);
   const maxPvPct = e.maxPvPct + (extra.maxPvPct ?? 0);
   const critAdd = e.critAdd + (extra.critAdd ?? 0);
   const dodgeAdd = e.dodgeAdd + (extra.dodgeAdd ?? 0);
-  const dmgReduction = Math.min(0.5, e.dmgReduction + (extra.dmgReduction ?? 0));
+  // La Défense de la Puissance se cumule à la réduction du gear (plafond 50 %).
+  const dmgReduction = Math.min(0.5, (base.dmgReduction ?? 0) + e.dmgReduction + (extra.dmgReduction ?? 0));
   const lifesteal = e.lifesteal + (extra.lifesteal ?? 0);
   return {
     name,
@@ -479,5 +481,6 @@ export function playerWithGear(
     initiative: base.initiative,
     dmgReduction,
     lifesteal,
+    strikes: base.strikes ?? 1,
   };
 }

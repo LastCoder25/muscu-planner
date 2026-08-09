@@ -17,52 +17,73 @@ export function mulberry32(seed: number): () => number {
 export interface Combatant {
   name: string;
   pv: number;
-  damage: number; // dégâts de base par coup
+  damage: number; // dégâts de base par coup (Force)
   crit: number; // proba de critique (0..1, ×2 dégâts)
   dodge: number; // proba d'esquive (0..1)
   initiative: number; // qui commence (plus haut = d'abord)
-  dmgReduction?: number; // 0..1 : dégâts reçus réduits (effet d'armure)
-  lifesteal?: number; // 0..1 : PV rendus = part des dégâts infligés (effet d'arme)
+  dmgReduction?: number; // 0..1 : dégâts reçus réduits (Défense / armure)
+  lifesteal?: number; // 0..1 : PV rendus = part des dégâts infligés (vol de vie)
+  strikes?: number; // frappes moyennes par tour (Vitesse) ; défaut 1 (monstres)
 }
 
 // Coefficients d'équilibrage (ajustables en un endroit).
+// MODÈLE (2026‑08‑09) : chaque sport nourrit 1 offense + 1 survie → l'équilibré
+// (bon partout) bat les mono via des PRODUITS (offense = Force×frappes×crit ;
+// survie = Vie×défense×esquive). Planchers de NIVEAU sur dégâts & PV → aucun
+// pilier n'est jamais nul → les profils extrêmes restent viables.
+//  💪 Puissance → Force (dégâts/coup) + Défense (réduction)
+//  ❤️ Endurance → Vie (PV)
+//  ⚡ Agilité   → Vitesse (multi-frappe) + Crit + Esquive
 export const COMBAT = {
+  // Coefs optimisés (2026‑08‑09) pour que l'ÉQUILIBRÉ soit le meilleur build à tous
+  // les niveaux, les extrêmes restant viables (~57-98 % de sa puissance). Chaque
+  // stat a une valeur/point comparable au point équilibré → « bon partout » gagne.
   pvBase: 100,
+  pvPerLevel: 15, // plancher de PV par niveau (le muscu ne meurt pas en 2 coups)
   pvPerEndurance: 10,
-  baseDamage: 6, // plancher : même sans Puissance, on frappe (cardio gagne par crit/esquive)
+  baseDamage: 6,
+  damagePerLevel: 10, // plancher de dégâts par niveau (le coureur frappe quand même)
   damagePerPuissance: 1.2,
-  critPerAgilite: 0.005, // +0,5 %/pt
-  critCap: 0.6,
+  defPerPuissance: 0.002, // Défense (réduction) issue de la Puissance
+  defCap: 0.45,
+  strikePerAgilite: 0.004, // Vitesse : frappes/tour = 1 + Agilité×k
+  critPerAgilite: 0.002,
+  critCap: 0.5,
   dodgePerAgilite: 0.003,
   dodgeCap: 0.4,
   varianceMin: 0.85, // dégâts × [0.85 .. 1.15]
   varianceSpan: 0.3,
-  maxRounds: 200, // garde-fou anti-boucle
+  maxRounds: 400, // garde-fou anti-boucle (multi-frappe → combats plus courts en tours)
   dungeonHealPct: 0.15, // PV régénérés entre deux combats d'un donjon (% du max)
 };
 
-/** Construit le combattant du joueur à partir de ses 3 stats. */
+/** Construit le combattant du joueur à partir de ses 3 stats et de son NIVEAU. */
 export function playerCombatant(
   name: string,
   stats: { puissance: number; endurance: number; agilite: number },
+  level = 1,
 ): Combatant {
+  const L = Math.max(1, level);
   return {
     name,
-    pv: COMBAT.pvBase + stats.endurance * COMBAT.pvPerEndurance,
+    pv: Math.round(COMBAT.pvBase + COMBAT.pvPerLevel * L + stats.endurance * COMBAT.pvPerEndurance),
     damage: Math.max(
       1,
-      Math.round(COMBAT.baseDamage + stats.puissance * COMBAT.damagePerPuissance),
+      Math.round(COMBAT.baseDamage + COMBAT.damagePerLevel * L + stats.puissance * COMBAT.damagePerPuissance),
     ),
     crit: Math.min(COMBAT.critCap, stats.agilite * COMBAT.critPerAgilite),
     dodge: Math.min(COMBAT.dodgeCap, stats.agilite * COMBAT.dodgePerAgilite),
     initiative: stats.agilite,
+    dmgReduction: Math.min(COMBAT.defCap, stats.puissance * COMBAT.defPerPuissance),
+    strikes: 1 + stats.agilite * COMBAT.strikePerAgilite,
   };
 }
 
 /** Indice synthétique de puissance de combat (offense × survie) — pour l'UI. */
 export function combatPower(c: Combatant): number {
-  const offense = c.damage * (1 + c.crit) * (1 + (c.lifesteal ?? 0));
-  const survie = (c.pv / 100) * (1 + c.dodge + (c.dmgReduction ?? 0));
+  const offense =
+    c.damage * (c.strikes ?? 1) * (1 + c.crit) * (1 + (c.lifesteal ?? 0));
+  const survie = (c.pv / 100) / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0));
   return Math.round(offense * survie);
 }
 
@@ -92,24 +113,35 @@ export function simulateCombat(
   const rng = mulberry32(opts.seed);
   let pPv = opts.startPlayerPv ?? player.pv;
   let mPv = monster.pv;
+  const maxPPv = player.pv;
   const log: CombatEvent[] = [];
   let turn: CombatActor = player.initiative >= monster.initiative ? 'player' : 'monster';
   let round = 0;
+
+  // Nombre de frappes d'un tour (Vitesse) : partie entière + reste probabiliste.
+  const strikeCount = (c: Combatant): number => {
+    const s = c.strikes ?? 1;
+    const n = Math.floor(s);
+    return n + (rng() < s - n ? 1 : 0);
+  };
 
   while (pPv > 0 && mPv > 0 && round < COMBAT.maxRounds) {
     round++;
     const atk = turn === 'player' ? player : monster;
     const def = turn === 'player' ? monster : player;
-    if (rng() < def.dodge) {
-      log.push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
-    } else {
+    const hits = Math.max(1, strikeCount(atk));
+    for (let h = 0; h < hits && pPv > 0 && mPv > 0; h++) {
+      if (rng() < def.dodge) {
+        log.push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
+        continue;
+      }
       const crit = rng() < atk.crit;
       const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
       let dmg = Math.max(1, Math.round(atk.damage * (crit ? 2 : 1) * variance));
       if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
       if (turn === 'player') {
         mPv = Math.max(0, mPv - dmg);
-        if (atk.lifesteal) pPv = Math.min(player.pv, pPv + Math.round(dmg * atk.lifesteal));
+        if (atk.lifesteal) pPv = Math.min(maxPPv, pPv + Math.round(dmg * atk.lifesteal));
       } else {
         pPv = Math.max(0, pPv - dmg);
         if (atk.lifesteal) mPv = Math.min(monster.pv, mPv + Math.round(dmg * atk.lifesteal));

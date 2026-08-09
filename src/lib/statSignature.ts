@@ -57,8 +57,8 @@ export const MUSCU_SIG: StatWeights = { power: 0.6, endurance: 0.3, agility: 0.1
 // Intensités adossées au MET (course ~9.8→100 ; vélo ~7→75 ; marche ~3.5 mais
 // remontée à 50 pour la motivation ; rando/vélo d'appart ~6.5).
 const CARDIO_BENEFIT: Record<CardioActivity, StatBuckets> = {
-  course: { power: 0, endurance: 70, agility: 30 }, // 100
-  course_tapis: { power: 0, endurance: 70, agility: 30 }, // 100
+  course: { power: 10, endurance: 62, agility: 28 }, // 100 (force de jambes)
+  course_tapis: { power: 10, endurance: 62, agility: 28 }, // 100
   trail: { power: 20, endurance: 60, agility: 20 }, // 100 (+ dénivelé côté XP)
   velo: { power: 8, endurance: 60, agility: 7 }, // 75
   velo_appart: { power: 7, endurance: 52, agility: 6 }, // 65
@@ -92,7 +92,7 @@ const SPORT_BENEFIT: Record<string, StatBuckets> = {
   Football: { power: 8, endurance: 34, agility: 43 }, // 85
   Basket: { power: 11, endurance: 26, agility: 38 }, // 75
   Natation: { power: 36, endurance: 54, agility: 0 }, // 90
-  Course: { power: 0, endurance: 70, agility: 30 }, // 100
+  Course: { power: 10, endurance: 62, agility: 28 }, // 100 (force de jambes)
   Vélo: { power: 8, endurance: 60, agility: 7 }, // 75
   Escalade: { power: 54, endurance: 9, agility: 27 }, // 90
   Boxe: { power: 31, endurance: 32, agility: 42 }, // 105
