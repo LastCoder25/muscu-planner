@@ -2,10 +2,13 @@
 // niveaux (5/10/15/20/25). Chacun a SON set (cf. ITEM_SETS) au pouvoir
 // spécifique ; le battre lâche une pièce de ce set (slot aléatoire, niveau plein
 // du palier → seule source de base gear au niveau du palier). Déblocage
-// SÉQUENTIEL : il faut avoir vaincu le boss précédent au moins une fois + être
-// au niveau requis. Combat SOLO (un seul adversaire, PV/dégâts CALIBRÉS par
-// simulation → ~60 % de win pour un build moyen au palier, quasi impossible deux
-// niveaux en dessous). Distinct du boss communautaire hebdo (world boss).
+// SÉQUENTIEL : il faut avoir vaincu le boss précédent au moins une fois (plus de
+// gate de niveau — cf. déblocage découplé). Combat SOLO (un seul adversaire).
+// PV/dégâts RE-CALIBRÉS par simulation (2026‑08‑09) → ~50-55 % de win avec du
+// GEAR DE DONJON au palier (pas besoin du set, qui reste un bonus), quasi
+// impossible deux niveaux en dessous. Avant : calibrés pour un full set → 0-11 %
+// avec du gear de donjon = mur injouable (le donjon du même niveau était à ~90 %).
+// Distinct du boss communautaire hebdo (world boss).
 import type { Combatant } from '@/lib/combat';
 
 export interface MilestoneBoss {
@@ -34,8 +37,8 @@ export const BOSSES: MilestoneBoss[] = [
     hint: 'Un mur de pierre. Il faut des PV (Endurance) pour tenir et cogner longtemps.',
     combatant: {
       name: 'Golem ancestral',
-      pv: 900,
-      damage: 130,
+      pv: 560,
+      damage: 80,
       crit: 0.05,
       dodge: 0.05,
       initiative: 8,
@@ -53,8 +56,8 @@ export const BOSSES: MilestoneBoss[] = [
     hint: 'Frappe fort et crit souvent → gros dégâts (Puissance) pour l’abattre vite.',
     combatant: {
       name: 'Dragon primordial',
-      pv: 1800,
-      damage: 800,
+      pv: 1530,
+      damage: 680,
       crit: 0.12,
       dodge: 0.08,
       initiative: 22,
@@ -91,8 +94,8 @@ export const BOSSES: MilestoneBoss[] = [
     hint: 'Un colosse : dégâts énormes. Build complet, un maximum de PV.',
     combatant: {
       name: 'Titan du Néant',
-      pv: 13000,
-      damage: 2100,
+      pv: 11700,
+      damage: 1890,
       crit: 0.1,
       dodge: 0.06,
       initiative: 16,
