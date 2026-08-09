@@ -8,7 +8,14 @@ import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { useSessionsStore } from '@/stores/sessions';
 import { useCardioStore } from '@/stores/cardio';
 import { useComboStore } from '@/stores/combo';
-import { sessionXp, drillSessionXp, cardioSessionXp, otherSportXp } from '@/lib/athlete';
+import {
+  sessionXp,
+  drillSessionXp,
+  cardioSessionXp,
+  otherSportXp,
+  MUSCU_MIN_XP,
+  XP_MULT,
+} from '@/lib/athlete';
 import { challengeXpPoints } from '@/lib/challenges';
 import { comboXpPoints } from '@/lib/combo';
 import { computeLevel } from '@/lib/levels';
@@ -247,8 +254,11 @@ export function useProgress() {
         Date.parse(r.performed_at) || 0,
       );
     }
-    // Les DÉFIS alimentent l'XP de la tuile (pour qu'elle apparaisse) mais PAS le
-    // temps (pas de durée) → n'influencent pas le niveau « pratique ».
+    // Les DÉFIS / Défi 360 alimentent la tuile en XP ET en « minutes d'effort »
+    // estimées (xp ÷ rythme muscu) → le NIVEAU de la tuile (basé sur le temps)
+    // monte aussi avec les défis (avant : bloqué à niv.1 malgré l'XP gagnée).
+    const XP_PER_MIN = MUSCU_MIN_XP * XP_MULT; // ~6 XP/min → conversion effort→minutes
+    const effortMin = (xp: number) => Math.round(xp / XP_PER_MIN);
     const challengeTs = (c: (typeof challenges.list)[number]) => {
       const last = (c.progress ?? []).reduce((m, p) => (p.date > m ? p.date : m), '');
       return last ? Date.parse(last) || 0 : 0;
@@ -263,15 +273,23 @@ export function useProgress() {
           ACTIVITY_LABELS[a] ?? 'Cardio',
           ACTIVITY_ICONS[a] ?? 'directions_run',
           xp,
-          0,
+          effortMin(xp),
           challengeTs(c),
         );
       } else {
-        bump('disc:musculation', 'Muscu', 'fitness_center', xp, 0, challengeTs(c));
+        bump('disc:musculation', 'Muscu', 'fitness_center', xp, effortMin(xp), challengeTs(c));
       }
     }
-    // Défi 360 → Muscu (XP seulement).
-    if (comboXp.value > 0) bump('disc:musculation', 'Muscu', 'fitness_center', comboXp.value, 0, 0);
+    // Défi 360 → Muscu (XP + minutes d'effort estimées).
+    if (comboXp.value > 0)
+      bump(
+        'disc:musculation',
+        'Muscu',
+        'fitness_center',
+        comboXp.value,
+        effortMin(comboXp.value),
+        0,
+      );
 
     // Vecteur de BÉNÉFICES BRUT du sport (somme = intensité) → affiché sur la tuile.
     // Muscu = volume-based (pas de MET) → profil de référence {60/30/10} (intensité ~100).

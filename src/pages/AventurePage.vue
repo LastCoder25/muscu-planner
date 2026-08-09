@@ -1152,14 +1152,27 @@ function rarityVerdict(d: Item): { label: string; cls: string } {
 // Progression séquentielle : un donjon n'est déblocable qu'après avoir nettoyé
 // le précédent. Le premier est toujours ouvert.
 const clearedSet = computed(() => new Set(char.row?.cleared_dungeons ?? []));
+// Déblocage SÉQUENTIEL UNIFIÉ : donjons ET boss dans la MÊME chaîne (ordre de la
+// liste `adventureItems`, par niveau). Un item se débloque quand le précédent de
+// la liste est terminé (donjon nettoyé / boss vaincu). → un boss est un checkpoint
+// obligatoire entre deux donjons ; il n'apparaît jamais avant les donjons qui le précèdent.
+function itemDone(it: { dungeon?: Dungeon; boss?: MilestoneBoss }): boolean {
+  return it.boss ? defeatedBossSet.value.has(it.boss.id) : clearedSet.value.has(it.dungeon!.id);
+}
+function prevChainDone(index: number): boolean {
+  if (index <= 0) return true;
+  const prev = adventureItems.value[index - 1];
+  return !prev || itemDone(prev);
+}
+function prevChainName(index: number): string {
+  const prev = index > 0 ? adventureItems.value[index - 1] : undefined;
+  return prev ? (prev.boss?.name ?? prev.dungeon?.name ?? '') : '';
+}
 function dungeonUnlocked(d: Dungeon): boolean {
-  const i = DUNGEONS.findIndex((x) => x.id === d.id);
-  const prev = i > 0 ? DUNGEONS[i - 1] : undefined;
-  return !prev || clearedSet.value.has(prev.id);
+  return prevChainDone(adventureItems.value.findIndex((x) => x.dungeon?.id === d.id));
 }
 function prevDungeonName(d: Dungeon): string {
-  const i = DUNGEONS.findIndex((x) => x.id === d.id);
-  return (i > 0 ? DUNGEONS[i - 1]?.name : '') ?? '';
+  return prevChainName(adventureItems.value.findIndex((x) => x.dungeon?.id === d.id));
 }
 
 async function explore(d: Dungeon) {
@@ -1238,18 +1251,15 @@ const defeatedBossSet = computed(() => new Set(char.row?.defeated_bosses ?? []))
 function isBossBeaten(b: MilestoneBoss): boolean {
   return defeatedBossSet.value.has(b.id);
 }
-// Déblocage SÉQUENTIEL : palier de niveau atteint + boss précédent vaincu.
+// Déblocage : chaîne UNIFIÉE (item précédent de la liste terminé) + palier de niveau.
 function bossUnlocked(b: MilestoneBoss): boolean {
   if (c.value.level.level < b.unlockLevel) return false;
-  const i = BOSSES.findIndex((x) => x.id === b.id);
-  const prev = i > 0 ? BOSSES[i - 1] : undefined;
-  return !prev || defeatedBossSet.value.has(prev.id);
+  return prevChainDone(adventureItems.value.findIndex((x) => x.boss?.id === b.id));
 }
 function bossLockReason(b: MilestoneBoss): string {
   if (c.value.level.level < b.unlockLevel) return `Niveau ${b.unlockLevel} requis`;
-  const i = BOSSES.findIndex((x) => x.id === b.id);
-  const prev = i > 0 ? BOSSES[i - 1] : undefined;
-  if (prev && !defeatedBossSet.value.has(prev.id)) return `Vaincs ${prev.name} d’abord`;
+  const i = adventureItems.value.findIndex((x) => x.boss?.id === b.id);
+  if (!prevChainDone(i)) return `Termine d’abord « ${prevChainName(i)} »`;
   return '';
 }
 function bossSet(b: MilestoneBoss) {
@@ -1367,8 +1377,9 @@ function doChooseReward(index: number) {
 }
 
 // ── Faille sans fin (end-game infini) ──
-const LAST_DUNGEON_ID = 'faille_chaos';
-const endlessUnlocked = computed(() => clearedSet.value.has(LAST_DUNGEON_ID));
+// La Faille sans fin est le tout dernier maillon : débloquée une fois le boss
+// final (Archidémon) vaincu — soit après toute la chaîne donjons + boss.
+const endlessUnlocked = computed(() => defeatedBossSet.value.has('archidemon'));
 const endlessBest = computed(() => char.row?.endless_best ?? 0);
 const nextEndlessTier = computed(() => endlessBest.value + 1);
 
@@ -2137,6 +2148,9 @@ onMounted(async () => {
   border-radius: 12px;
   padding: 10px 12px;
   min-height: 92px;
+  /* Cellule de grille : autoriser le rétrécissement (sinon un nom de set long
+     force la colonne large → débordement à droite). */
+  min-width: 0;
 }
 .slot.empty {
   border-style: dashed;
