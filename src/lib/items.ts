@@ -221,7 +221,9 @@ export function rollDrop(
   if (rng() >= chance) return null;
 
   const slot = pick(rng, SLOTS);
-  const rarity = rollRarity(rng, opts.luck ?? 0);
+  let rarity = rollRarity(rng, opts.luck ?? 0);
+  // Au-delà du niveau 5, plus de butin COMMUN (fin du fourrage gris) → planché à rare.
+  if ((opts.level ?? 1) > 5 && rarity === 'common') rarity = 'rare';
   const choices = SLOT_EFFECTS[slot];
   const chosen = pick(rng, choices);
   // value = magnitude de BASE (niveau 1) : pilotée par la rareté ; grandit avec le niveau.
