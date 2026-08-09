@@ -213,6 +213,42 @@
 
     <!-- DÉFI 360 -->
     <template v-else>
+      <div class="tabs">
+        <button
+          v-for="t in TABS"
+          :key="t.value"
+          class="tab"
+          :class="{ on: comboTab === t.value }"
+          @click="comboTab = t.value"
+        >
+          {{ t.label }}
+        </button>
+      </div>
+
+      <!-- Terminés / Abandonnés : liste récap -->
+      <template v-if="comboTab !== 'active'">
+        <div v-if="!comboList.length" class="empty">
+          {{ comboTab === 'done' ? 'Aucun Défi 360 terminé.' : 'Aucun Défi 360 abandonné.' }}
+        </div>
+        <button
+          v-for="c in comboList"
+          :key="c.id"
+          class="combo-card"
+          @click="router.push(`/combo/${c.id}`)"
+        >
+          <div class="cc-main">
+            <div class="cc-title font-display">🎯 Défi 360</div>
+            <div class="cc-sub">
+              {{ comboLegsDone(c) }}/{{ c.legs.length }} exos · {{ comboProgressPct(c) }} %
+            </div>
+          </div>
+          <span class="cc-badge" :class="c.status">{{
+            c.status === 'done' ? '✓ terminé' : 'abandonné'
+          }}</span>
+        </button>
+      </template>
+
+      <template v-else>
       <div v-if="!activeCombo" class="combo-empty">
         <p>
           Un défi <b>full-body sur 7 jours</b> : un exo par groupe, tes séries réparties dans la
@@ -259,7 +295,7 @@
               >
             </span>
           </div>
-          <div class="seg-bar">
+          <div class="seg-bar" :style="{ '--cols': leg.target }">
             <span
               v-for="n in Math.max(leg.target, legSetsDone(leg))"
               :key="n"
@@ -288,6 +324,7 @@
             </button>
           </div>
         </div>
+      </template>
       </template>
     </template>
 
@@ -413,7 +450,16 @@ const availableEnergy = computed(
 );
 
 const mode = ref<'solo' | 'combo'>('solo');
+// Même logique d'états que les défis solo (En cours / Terminés / Abandonnés).
+const comboTab = ref<string>('active');
 const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
+const comboList = computed(() =>
+  comboStore.list
+    .filter((c) => c.status === comboTab.value)
+    .sort((a, b) => (b.start_date > a.start_date ? 1 : -1)),
+);
+const comboLegsDone = (c: (typeof comboStore.list)[number]) =>
+  c.legs.filter((l) => legSetsDone(l) >= l.target).length;
 const comboPct = computed(() => (activeCombo.value ? comboProgressPct(activeCombo.value) : 0));
 // Semaine du Défi 360 (début → fin) pour l'afficher clairement.
 function fmtDM(iso: string): string {
@@ -831,6 +877,46 @@ onMounted(async () => {
   gap: 14px;
   align-items: center;
 }
+/* Récap d'un Défi 360 terminé / abandonné */
+.combo-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  color: var(--text);
+}
+.cc-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+.cc-sub {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+.cc-badge {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.cc-badge.done {
+  color: var(--d1);
+  background: color-mix(in srgb, var(--d1) 16%, transparent);
+}
+.cc-badge.abandoned {
+  color: var(--dim);
+  background: var(--surface-2, #2b241b);
+}
 .combo360-head {
   background: var(--surface);
   border: 1px solid var(--accent);
@@ -876,9 +962,11 @@ onMounted(async () => {
   gap: 3px;
   margin: 9px 0;
 }
+/* Segments de TAILLE FIXE : exactement `--cols` (l'objectif) par ligne ; les
+   séries en plus créent de nouvelles lignes de même taille (ex. 22 séries pour
+   un objectif de 9 → 3 lignes de 9). */
 .seg {
-  flex: 1 1 16px;
-  min-width: 16px;
+  flex: 0 0 calc((100% - (var(--cols, 10) - 1) * 3px) / var(--cols, 10));
   height: 8px;
   border-radius: 3px;
   background: var(--surface-2);

@@ -52,7 +52,7 @@
             </div>
           </div>
         </div>
-        <div class="seg-bar">
+        <div class="seg-bar" :style="{ '--cols': leg.target }">
           <span
             v-for="n in Math.max(leg.target, legSetsDone(leg))"
             :key="n"
@@ -370,9 +370,10 @@ onMounted(async () => {
   gap: 3px;
   margin: 9px 0;
 }
+/* Segments de TAILLE FIXE : `--cols` (l'objectif) par ligne ; les séries en plus
+   ajoutent des lignes de même taille (ex. 22 pour un objectif de 9 → 3 lignes de 9). */
 .seg {
-  flex: 1 1 16px;
-  min-width: 16px;
+  flex: 0 0 calc((100% - (var(--cols, 10) - 1) * 3px) / var(--cols, 10));
   height: 8px;
   border-radius: 3px;
   background: var(--surface-2);
