@@ -11,6 +11,8 @@ import {
   comboXpPoints,
   comboOverachievement,
   suggestComboTarget,
+  suggestComboPlan,
+  type ComboSlotSpec,
   buildComboSession,
   comboSessionSetBudget,
   legSets,
@@ -173,5 +175,68 @@ describe('suggestComboTarget (séries)', () => {
     expect(suggestComboTarget('avance', true)).toBeGreaterThan(
       suggestComboTarget('debutant', true),
     );
+  });
+});
+
+describe('suggestComboPlan (volume par séances + format)', () => {
+  const ALL = [
+    'pectoraux',
+    'dos',
+    'épaules',
+    'biceps',
+    'triceps',
+    'quadriceps',
+    'ischio-jambiers',
+    'mollets',
+    'abdominaux',
+  ];
+  const fullBody = (n: number) => Array.from({ length: n }, () => ({ muscles: ALL }));
+  const ppl = [
+    { muscles: ['pectoraux', 'épaules', 'triceps'] }, // push
+    { muscles: ['dos', 'biceps'] }, // pull
+    { muscles: ['quadriceps', 'ischio-jambiers', 'mollets', 'abdominaux'] }, // legs
+  ];
+  const SLOTS: ComboSlotSpec[] = [
+    { key: 'push', muscles: ['pectoraux'], essential: true },
+    { key: 'pull', muscles: ['dos'], essential: true },
+    { key: 'squat', muscles: ['quadriceps'], essential: true },
+    { key: 'arms', muscles: ['biceps', 'triceps'], essential: false },
+  ];
+  const bySlot = (plan: ReturnType<typeof suggestComboPlan>, key: string) =>
+    plan.find((p) => p.slot === key)!;
+
+  it('plus de séances = plus de volume', () => {
+    const low = bySlot(suggestComboPlan('intermediaire', 2, fullBody(2), SLOTS), 'push');
+    const high = bySlot(suggestComboPlan('intermediaire', 6, fullBody(6), SLOTS), 'push');
+    expect(high.weeklySets).toBeGreaterThan(low.weeklySets);
+  });
+
+  it('full-body (fréquence haute) = plus d’exos que PPL (fréquence basse), à séances égales', () => {
+    const fb = bySlot(suggestComboPlan('intermediaire', 3, fullBody(3), SLOTS), 'push');
+    const pp = bySlot(suggestComboPlan('intermediaire', 3, ppl, SLOTS), 'push');
+    expect(fb.nExos).toBeGreaterThan(pp.nExos); // 3 vs 1
+    // Même nb de séances → volume comparable, réparti différemment.
+    expect(fb.weeklySets).toBe(pp.weeklySets);
+  });
+
+  it('essentiel > optionnel (volume) et avancé > débutant', () => {
+    const plan = suggestComboPlan('intermediaire', 3, fullBody(3), SLOTS);
+    expect(bySlot(plan, 'push').weeklySets).toBeGreaterThan(bySlot(plan, 'arms').weeklySets);
+    const deb = bySlot(suggestComboPlan('debutant', 3, fullBody(3), SLOTS), 'push');
+    const adv = bySlot(suggestComboPlan('avance', 3, fullBody(3), SLOTS), 'push');
+    expect(adv.weeklySets).toBeGreaterThan(deb.weeklySets);
+  });
+
+  it('emplacement non ciblé par le split = inactif', () => {
+    const plan = suggestComboPlan('intermediaire', 3, ppl, [
+      { key: 'ghost', muscles: ['muscle-inexistant'], essential: true },
+    ]);
+    expect(bySlot(plan, 'ghost').active).toBe(false);
+    expect(bySlot(plan, 'ghost').nExos).toBe(0);
+  });
+
+  it('séries/exo = volume réparti sur les exos', () => {
+    const fb = bySlot(suggestComboPlan('intermediaire', 3, fullBody(3), SLOTS), 'push');
+    expect(fb.setsPerExo).toBe(Math.max(1, Math.round(fb.weeklySets / fb.nExos)));
   });
 });
