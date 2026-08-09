@@ -141,7 +141,7 @@
             </div>
             <div class="hero-power">
               <span class="hp-lbl">⚔️ Puissance de combat</span>
-              <span class="hp-val font-display">{{ combatPowerVal }}</span>
+              <span class="hp-val font-display">{{ fmtPow(combatPowerVal) }}</span>
             </div>
             <div class="hero-xp">
               {{ c.level.xpIntoLevel.toLocaleString('fr-FR') }} /
@@ -365,6 +365,12 @@
                     rarityVerdict(it).label
                   }}</span>
                 </div>
+                <div class="pow-cmp">
+                  ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
+                  <b :class="powerIfEquip(it) >= combatPowerVal ? 'up' : 'down'">{{
+                    fmtPow(powerIfEquip(it))
+                  }}</b>
+                </div>
                 <div class="inv-actions">
                   <button class="equip-btn" @click="doEquip(it.id)">
                     {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
@@ -563,6 +569,12 @@
                       }}</span>
                     </div>
                     <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
+                    <div class="pow-cmp">
+                      ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
+                      <b :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'">{{
+                        fmtPow(powerIfEquip(d))
+                      }}</b>
+                    </div>
                     <div v-if="dropState(d) === 'equipped'" class="drop-done">
                       ⚔️ Auto-équipé (slot vide)
                     </div>
@@ -695,7 +707,7 @@
               :disabled="c.energy < BOSS_HIT_ENERGY || busy"
               @click="hitBoss"
             >
-              ⚔️ Frapper ({{ BOSS_HIT_ENERGY }} ⚡ → {{ combatPowerVal }} dégâts)
+              ⚔️ Frapper ({{ BOSS_HIT_ENERGY }} ⚡ → {{ fmtPow(combatPowerVal) }} dégâts)
             </button>
           </div>
 
@@ -988,6 +1000,12 @@
                     rarityVerdict(cand.item).label
                   }}</span>
                 </div>
+                <div class="pow-cmp">
+                  ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
+                  <b :class="powerIfEquip(cand.item) >= combatPowerVal ? 'up' : 'down'">{{
+                    fmtPow(powerIfEquip(cand.item))
+                  }}</b>
+                </div>
                 <div v-if="rewardDupNote(cand.item)" class="rc-dup">
                   {{ rewardDupNote(cand.item) }}
                 </div>
@@ -1171,6 +1189,21 @@ const fighter = computed(() =>
   ),
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
+// La puissance grimpe vite (≈ niveau⁴) → format compact k/M pour rester lisible.
+function fmtPow(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace('.', ',') + 'M';
+  if (n >= 10_000) return Math.round(n / 1000) + 'k';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace('.', ',') + 'k';
+  return String(n);
+}
+// Puissance de combat SI on équipait cet objet (remplace son slot) → tied au % de
+// victoire : c'est l'indicateur qui dit « ça t'aide à aller plus loin ou pas ».
+function powerIfEquip(it: Item): number {
+  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: it };
+  return combatPower(
+    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level),
+  );
+}
 
 // Estimation live du % de victoire par donjon/boss selon les stats + le stuff
 // ÉQUIPÉ actuel (Monte-Carlo seedé). Recalculé quand le perso/l'équipement change
@@ -3846,6 +3879,23 @@ onMounted(async () => {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+.pow-cmp {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 3px;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.pow-cmp b {
+  font-weight: 800;
+}
+.pow-cmp b.up {
+  color: var(--d1);
+}
+.pow-cmp b.down {
+  color: var(--d4);
 }
 .rarity-verdict {
   font-style: normal;
