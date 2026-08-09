@@ -2627,11 +2627,12 @@ onMounted(async () => {
   color: var(--d1);
   font-size: 11px;
 }
-/* Combat : base → équipé (effet de l'équipement + talents) */
+/* Combat : base → équipé (effet de l'équipement + talents) — une colonne pour
+   rester lisible sur mobile (label à gauche, « base → équipé » à droite). */
 .gear-fx {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: 12px;
@@ -2641,21 +2642,23 @@ onMounted(async () => {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 6px;
+  gap: 10px;
   font-size: 12.5px;
 }
 .gfx.total {
-  grid-column: 1 / -1;
   border-top: 1px solid var(--line-soft);
   padding-top: 8px;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 .gfx-l {
   color: var(--dim);
+  white-space: nowrap;
 }
 .gfx-v {
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
 }
 .gfx-v i {
   color: var(--dim);
