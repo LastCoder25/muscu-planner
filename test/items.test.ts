@@ -220,4 +220,8 @@ describe('sets d’équipement', () => {
     expect(piece.effect2).toBeUndefined(); // 1 stat + synergie de set (pas de 2e stat)
     expect(ITEM_SETS.some((s) => s.id === 'dragon')).toBe(true);
   });
+  it('anti-doublon : preferSlot force le slot manquant', () => {
+    const piece = rollSetPiece(() => 0.3, { setId: 'dragon', level: 10, preferSlot: 'relic' });
+    expect(piece.slot).toBe('relic');
+  });
 });

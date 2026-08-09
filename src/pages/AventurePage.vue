@@ -75,6 +75,27 @@
         <span class="lc-cta font-display">Récupérer</span>
       </button>
 
+      <!-- Onboarding : mini-guide affiché une seule fois (1re visite) -->
+      <div v-if="showIntro" class="intro-card">
+        <div class="intro-h font-display">⚔️ Bienvenue dans l'Aventure</div>
+        <ul class="intro-list">
+          <li>
+            💪 Ton <b>niveau et tes stats</b> sont la projection de ton SPORT réel — rien à
+            répartir.
+          </li>
+          <li>
+            ⚡ Ton sport génère de l'<b>énergie</b> : dépense-la pour explorer donjons & boss.
+          </li>
+          <li>
+            🗺️ Onglet <b>Donjons</b> : avance dans la liste (donjons + 👑 boss de palier) pour du
+            butin.
+          </li>
+          <li>🐲 Chaque <b>boss</b> lâche une pièce de son <b>set</b> (bonus à 2/3/4 pièces).</li>
+          <li>🌌 Onglet <b>Mondial</b> : frappe le boss communautaire de la semaine.</li>
+        </ul>
+        <button class="intro-ok" @click="dismissIntro">Compris, à l'aventure !</button>
+      </div>
+
       <div class="seg">
         <button class="seg-b" :class="{ on: tab === 'perso' }" @click="tab = 'perso'">
           <q-icon name="person" size="18px" /> Perso
@@ -501,6 +522,38 @@
               <button v-else class="fight" disabled>Verrouillé</button>
             </div>
           </template>
+
+          <!-- Faille sans fin (end-game infini) — après le dernier donjon -->
+          <div v-if="endlessUnlocked" class="dgn mboss endless">
+            <span class="mboss-emo">🌀</span>
+            <div class="dgn-main">
+              <div class="mboss-eyebrow">♾️ End-game · sans fin</div>
+              <div class="dgn-top">
+                <span class="dgn-name mboss-name font-display">Faille sans fin</span>
+                <span class="dgn-gold">+{{ endlessGold(nextEndlessTier) }} 🪙</span>
+              </div>
+              <div class="mboss-set">
+                Palier atteint : <b>{{ endlessBest }}</b> · prochain : <b>{{ nextEndlessTier }}</b>
+              </div>
+              <div class="dgn-stats">
+                coûte {{ endlessEnergy(nextEndlessTier) }} ⚡ · objets niv.
+                {{ endlessDropLevel(nextEndlessTier) }}
+              </div>
+              <div class="dgn-hint">
+                Chaque palier est plus dur — pousse aussi loin que ton build le permet.
+              </div>
+              <button
+                class="fight mboss-fight"
+                :disabled="c.energy < endlessEnergy(nextEndlessTier) || busy"
+                @click="fightEndless()"
+              >
+                🌀 Descendre au palier {{ nextEndlessTier }} ({{
+                  endlessEnergy(nextEndlessTier)
+                }}
+                ⚡)
+              </button>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -705,6 +758,13 @@ import { simulateDungeon, simulateCombat, mulberry32, combatPower } from '@/lib/
 import { MONSTERS } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
 import { BOSSES, type MilestoneBoss } from '@/data/bosses';
+import {
+  endlessFoe,
+  endlessEnergy,
+  endlessGold,
+  endlessDust,
+  endlessDropLevel,
+} from '@/data/endless';
 import {
   playerWithGear,
   aggregateEffects,
@@ -1181,14 +1241,22 @@ async function fightBoss(b: MilestoneBoss) {
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
     const gold = win ? Math.round(b.gold * (1 + goldPct)) : 0;
     const dust = win ? 15 : 0;
-    // Victoire → pièce de set garantie (slot aléatoire, niveau plein du palier).
+    // Victoire → pièce de set garantie. Anti-doublon : on cible en priorité un
+    // slot du set que le joueur n'a PAS encore (complète le set avant les doublons).
     const drops: Item[] = [];
     if (win) {
       const dropRng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+      const owned = new Set(
+        [...char.row.inventory, ...SLOTS.map((s) => char.row!.equipped[s])]
+          .filter((it): it is Item => !!it && it.setId === b.setId)
+          .map((it) => it.slot),
+      );
+      const missing = SLOTS.filter((s) => !owned.has(s));
       const piece = rollSetPiece(dropRng, {
         setId: b.setId,
         level: b.dropLevel,
         luck: Math.min(1, 0.3 + (lucky ? 0.5 : 0)),
+        ...(missing.length ? { preferSlot: missing[Math.floor(dropRng() * missing.length)]! } : {}),
       });
       drops.push({ ...piece, id: crypto.randomUUID() });
     }
@@ -1219,6 +1287,80 @@ async function fightBoss(b: MilestoneBoss) {
       win
         ? { type: 'positive', message: `${b.emoji} ${b.name} vaincu — +${gold} 🪙` }
         : { type: 'warning', message: `${b.name} t’a terrassé… reviens plus fort.` },
+    );
+  } catch {
+    $q.notify({ type: 'negative', message: 'Échec du combat.' });
+  } finally {
+    busy.value = false;
+  }
+}
+
+// ── Faille sans fin (end-game infini) ──
+const LAST_DUNGEON_ID = 'faille_chaos';
+const endlessUnlocked = computed(() => clearedSet.value.has(LAST_DUNGEON_ID));
+const endlessBest = computed(() => char.row?.endless_best ?? 0);
+const nextEndlessTier = computed(() => endlessBest.value + 1);
+
+async function fightEndless() {
+  const uid = auth.user?.id;
+  const tier = nextEndlessTier.value;
+  const cost = endlessEnergy(tier);
+  if (!uid || !char.row || busy.value || c.value.energy < cost || !endlessUnlocked.value) return;
+  lastBoss.value = null;
+  lastDungeon.value = null;
+  busy.value = true;
+  try {
+    const consumed = [...selectedConsumables.value];
+    const { extra, lucky } = runExtra();
+    const seed = Math.floor(Math.random() * 1e9);
+    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra);
+    const foe = endlessFoe(tier);
+    const r = simulateCombat(player, foe, { seed, goldOnWin: endlessGold(tier) });
+    const win = r.win;
+    const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
+    const gold = win ? Math.round(endlessGold(tier) * (1 + goldPct)) : 0;
+    const dust = win ? endlessDust(tier) : 0;
+    const drops: Item[] = [];
+    if (win) {
+      // Butin GARANTI de haut niveau (niv > 25) : plusieurs tirages pour éviter le null.
+      let rolled: ReturnType<typeof rollDrop> = null;
+      for (let i = 0; i < 6 && !rolled; i++) {
+        rolled = rollDrop(mulberry32((seed ^ (0x51ed270b + i)) >>> 0), {
+          cleared: true,
+          defeated: 1,
+          level: endlessDropLevel(tier),
+          luck: Math.min(1, 0.6 + (lucky ? 0.4 : 0)),
+        });
+      }
+      if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
+    }
+    const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
+    await char.applyEndless(uid, {
+      tier,
+      energyCost: cost,
+      gold,
+      dust,
+      drops,
+      cleared: win,
+      ...(consumed.length ? { consumed } : {}),
+    });
+    selectedConsumables.value = [];
+    run.value = {
+      name: `Faille sans fin · palier ${tier}`,
+      kind: 'boss',
+      cleared: win,
+      defeated: win ? 1 : 0,
+      total: 1,
+      gold,
+      dust,
+      finalPv,
+      fights: [{ monster: foe.name, emoji: '🌀', win, rounds: r.rounds }],
+      drops,
+    };
+    $q.notify(
+      win
+        ? { type: 'positive', message: `Palier ${tier} franchi — +${gold} 🪙` }
+        : { type: 'warning', message: `Palier ${tier} : la Faille t'a repoussé.` },
     );
   } catch {
     $q.notify({ type: 'negative', message: 'Échec du combat.' });
@@ -1353,6 +1495,18 @@ watch(
   { immediate: true },
 );
 
+// Onboarding : mini-guide affiché une seule fois (persisté en localStorage).
+const INTRO_KEY = 'muscu:adv:intro';
+const showIntro = ref(false);
+function dismissIntro() {
+  showIntro.value = false;
+  try {
+    localStorage.setItem(INTRO_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
 onMounted(async () => {
   try {
     await char.fetchMine();
@@ -1360,6 +1514,11 @@ onMounted(async () => {
     /* pas bloquant */
   } finally {
     loading.value = false;
+  }
+  try {
+    showIntro.value = !localStorage.getItem(INTRO_KEY);
+  } catch {
+    /* ignore */
   }
   wboss.refresh().catch(() => undefined);
 });
@@ -2350,6 +2509,22 @@ onMounted(async () => {
   padding: 11px;
   font-size: 14px;
 }
+/* Faille sans fin : teinte « néant » violette pour la distinguer des boss */
+.mboss.endless {
+  margin-top: 4px;
+  border-color: color-mix(in srgb, #b07cff 60%, var(--line));
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, #b07cff 15%, var(--surface)),
+    var(--surface) 70%
+  );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #b07cff 22%, transparent),
+    0 8px 22px -12px color-mix(in srgb, #b07cff 55%, transparent);
+}
+.mboss.endless .mboss-eyebrow {
+  color: #c9a6ff;
+}
 .fight {
   flex-shrink: 0;
   border: 1px solid var(--accent);
@@ -2683,6 +2858,45 @@ onMounted(async () => {
 }
 
 /* Carte de récompense de connexion */
+.intro-card {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--accent) 10%, var(--surface)),
+    var(--surface) 75%
+  );
+}
+.intro-h {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.intro-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.intro-ok {
+  width: 100%;
+  margin-top: 12px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+  border-radius: 10px;
+  padding: 10px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  cursor: pointer;
+}
 .login-card {
   display: flex;
   align-items: center;

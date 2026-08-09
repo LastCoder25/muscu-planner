@@ -30,6 +30,7 @@ export interface CharacterRow {
   login_energy: number;
   consumables: Record<string, number>;
   reward_level: number;
+  endless_best: number;
 }
 
 export class PseudoTakenError extends Error {
@@ -44,7 +45,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best';
 
   async function fetchMine() {
     const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
@@ -157,6 +158,38 @@ export const useCharacterStore = defineStore('character', () => {
       energy_spent: cur.energy_spent + input.energyCost,
       inventory: [...cur.inventory, ...input.drops],
       defeated_bosses: defeated,
+      consumables,
+    });
+  }
+
+  // Applique une tentative de la Faille sans fin : dépense l'énergie, encaisse
+  // or + poussière + butin ; si victoire ET palier plus profond, met à jour le record.
+  async function applyEndless(
+    userId: string,
+    input: {
+      tier: number;
+      energyCost: number;
+      gold: number;
+      dust: number;
+      drops: Item[];
+      cleared: boolean;
+      consumed?: string[];
+    },
+  ) {
+    const cur = row.value;
+    if (!cur) return;
+    const consumables = { ...cur.consumables };
+    for (const id of input.consumed ?? []) {
+      const left = (consumables[id] ?? 0) - 1;
+      if (left > 0) consumables[id] = left;
+      else delete consumables[id];
+    }
+    return persist(userId, {
+      gold: cur.gold + input.gold,
+      dust: cur.dust + input.dust,
+      energy_spent: cur.energy_spent + input.energyCost,
+      inventory: [...cur.inventory, ...input.drops],
+      endless_best: input.cleared && input.tier > cur.endless_best ? input.tier : cur.endless_best,
       consumables,
     });
   }
@@ -331,6 +364,7 @@ export const useCharacterStore = defineStore('character', () => {
     setPseudo,
     applyRun,
     applyBossWin,
+    applyEndless,
     equip,
     unequip,
     chooseTalent,

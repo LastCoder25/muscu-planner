@@ -235,17 +235,16 @@ export function rollDrop(
 
 /**
  * Tire une PIÈCE DE SET pour une victoire de boss. Toujours une pièce (drop
- * garanti), slot **aléatoire** parmi les 4 (des doublons sont possibles), au
- * niveau PLEIN du palier du boss (`level`, non découplé : les boss sont la seule
- * source de base gear au niveau de leur palier). L'objet garde un effet propre
- * (rollé) EN PLUS de sa contribution aux bonus de set.
+ * garanti), au niveau PLEIN du palier du boss. **Anti-doublon (pity)** : si
+ * `preferSlot` est fourni (un slot du set que le joueur n'a pas encore), on le
+ * force → on complète le set avant de risquer un doublon ; sinon slot aléatoire.
  */
 export function rollSetPiece(
   rng: () => number,
-  opts: { setId: string; level: number; luck?: number },
+  opts: { setId: string; level: number; luck?: number; preferSlot?: ItemSlot },
 ): Omit<Item, 'id'> {
   const set = SET_BY_ID[opts.setId];
-  const slot = pick(rng, SLOTS);
+  const slot = opts.preferSlot ?? pick(rng, SLOTS);
   const rarity = rollRarity(rng, opts.luck ?? 0);
   const chosen = pick(rng, SLOT_EFFECTS[slot]);
   const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
