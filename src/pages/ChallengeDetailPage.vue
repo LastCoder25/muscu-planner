@@ -94,7 +94,8 @@
         </div>
         <div v-else class="today">
           <div class="today-h">
-            Objectif du jour · <b>{{ show(todayTarget) }}</b>
+            {{ isCumulative ? 'Objectif total' : 'Objectif du jour' }} ·
+            <b>{{ show(todayTarget) }}</b>
           </div>
           <div class="ring-wrap">
             <svg viewBox="0 0 120 120" class="ring">
@@ -128,7 +129,7 @@
                journée VALIDÉE (todayClosed), pas à l'atteinte → excès possible.
                Le cardio-temps (minutes) passe par les boutons « +N min » ci-dessous. -->
           <template v-if="isGainageTime">
-            <div v-if="todayClosed" class="today-ok">
+            <div v-if="todayClosed && !isCumulative" class="today-ok">
               <q-icon v-if="todayCompleted" name="check_circle" color="positive" />
               <q-icon v-else name="bedtime" color="primary" />
               Journée validée · {{ chronoDisplay }}
@@ -143,13 +144,15 @@
                 {{ running ? 'Pause' : doneToday > 0 ? 'Reprendre' : 'Démarrer' }}
                 <span class="cc-time">{{ chronoDisplay }}</span>
               </button>
-              <button class="close-day" @click="closeDay">Valider la journée</button>
+              <button v-if="!isCumulative" class="close-day" @click="closeDay">
+                Valider la journée
+              </button>
             </div>
           </template>
 
           <!-- Reps : chrono + boutons + correction -->
           <template v-else>
-            <div v-if="todayClosed && !correcting && !editMode" class="today-ok">
+            <div v-if="todayClosed && !correcting && !editMode && !isCumulative" class="today-ok">
               <q-icon v-if="todayCompleted" name="check_circle" color="positive" />
               <q-icon v-else name="bedtime" color="primary" />
               Journée validée · {{ show(doneToday) }}
@@ -203,7 +206,7 @@
                 <button v-if="editMode" class="opt" @click="resetQuick">Réinitialiser</button>
               </div>
 
-              <button v-if="!editMode" class="close-day" @click="closeDay">
+              <button v-if="!editMode && !isCumulative" class="close-day" @click="closeDay">
                 Valider la journée
               </button>
             </div>
@@ -467,6 +470,9 @@ const todayCompleted = computed(() =>
     : (entryOf(dayIndex.value)?.completed ?? false),
 );
 const todayClosed = computed(() => entryOf(dayIndex.value)?.closed ?? false);
+// Cumulé (objectif de VOLUME global) : pas de notion de « journée » — on alimente
+// petit à petit sur toute la durée. → on masque « Valider/Reprendre la journée ».
+const isCumulative = computed(() => ch.value?.format === 'cumulative');
 const pct = computed(() =>
   todayTarget.value ? Math.min(1, doneToday.value / todayTarget.value) : 0,
 );
