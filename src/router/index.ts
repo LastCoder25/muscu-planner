@@ -34,5 +34,36 @@ export default defineRouter((/* { store, ssrContext } */) => {
     history: createHistory(import.meta.env.QUASAR_VUE_ROUTER_BASE),
   });
 
+  // Redéploiements fréquents (Vercel) : les chunks lazy-loadés changent de hash à
+  // chaque build. Un onglet resté ouvert garde l'ancien index → un import à la
+  // volée peut 404 (« Failed to fetch dynamically imported module »). On recharge
+  // alors la page vers la destination (récupère le nouvel index + les bons hash),
+  // avec un garde anti-boucle si le module manque vraiment.
+  const RELOAD_KEY = 'muscu:chunk-reload';
+  const isChunkError = (msg: string): boolean =>
+    /failed to fetch dynamically imported module/i.test(msg) ||
+    /error loading dynamically imported module/i.test(msg) ||
+    /importing a module script failed/i.test(msg);
+
+  Router.onError((err, to) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!isChunkError(msg)) return;
+    if (sessionStorage.getItem(RELOAD_KEY)) return; // déjà retenté → évite la boucle
+    sessionStorage.setItem(RELOAD_KEY, '1');
+    window.location.assign(to?.fullPath ?? window.location.pathname);
+  });
+  // Nettoie le garde après une navigation réussie (chunk chargé) → un futur
+  // redéploiement pourra à nouveau déclencher un rechargement.
+  Router.afterEach(() => sessionStorage.removeItem(RELOAD_KEY));
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('vite:preloadError', (e) => {
+      if (sessionStorage.getItem(RELOAD_KEY)) return;
+      sessionStorage.setItem(RELOAD_KEY, '1');
+      e.preventDefault();
+      window.location.reload();
+    });
+  }
+
   return Router;
 });
