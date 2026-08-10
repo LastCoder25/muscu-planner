@@ -146,6 +146,12 @@
           <div class="cc-sub">
             {{ st(c).completionPct }}% · {{ st(c).totalDone }} {{ unitOf(c) }}
           </div>
+          <div v-if="c.status === 'done'" class="cc-xp">
+            <span class="xp-pill reps">+{{ xpb(c).reps }} XP reps</span>
+            <span v-if="xpb(c).bonus > 0" class="xp-pill bonus"
+              >+{{ xpb(c).bonus }} XP complétion</span
+            >
+          </div>
         </button>
       </template>
 
@@ -240,6 +246,15 @@
             <div class="cc-title font-display">🎯 Défi 360</div>
             <div class="cc-sub">
               {{ comboLegsDone(c) }}/{{ c.legs.length }} exos · {{ comboProgressPct(c) }} %
+            </div>
+            <div v-if="c.status === 'done'" class="cc-xp">
+              <span class="xp-pill reps">+{{ comboXpb(c).reps }} XP reps</span>
+              <span v-if="comboXpb(c).bonus > 0" class="xp-pill bonus"
+                >+{{ comboXpb(c).bonus }} XP bouclage</span
+              >
+              <span v-if="comboXpb(c).surpass > 0" class="xp-pill surpass"
+                >+{{ comboXpb(c).surpass }} XP dépassement</span
+              >
             </div>
           </div>
           <span class="cc-badge" :class="c.status">{{
@@ -410,6 +425,7 @@ import { useQuasar } from 'quasar';
 import {
   challengeStats,
   challengeXpPoints,
+  challengeXpBreakdown,
   challengeLiveBalance,
   evaluateAchievements,
   type Challenge,
@@ -421,11 +437,13 @@ import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
 import {
   comboProgressPct,
+  comboXpBreakdown,
   legSetsDone,
   legLastReps,
   legLastWeight,
   legLastAssisted,
   legSets,
+  type ComboChallenge,
   type ComboLeg,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
@@ -568,6 +586,9 @@ const shown = computed(() => store.list.filter((c) => c.status === tab.value));
 const unlocked = computed(() => new Set(store.unlocked));
 const unlockedCount = computed(() => ACHIEVEMENTS.filter((a) => unlocked.value.has(a.code)).length);
 const xpInfo = computed(() => computeLevel(challengeXpPoints(store.list)));
+// Décomposition XP (reps vs prime) affichée sur les défis terminés.
+const xpb = (c: Challenge) => challengeXpBreakdown(c);
+const comboXpb = (c: ComboChallenge) => comboXpBreakdown(c);
 
 // Capacité (jetons) par voie, pour que l'utilisateur s'organise.
 function laneChallenges(cardio: boolean): LaneChallenge[] {
@@ -910,6 +931,31 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--dim);
   margin-top: 2px;
+}
+.cc-xp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.xp-pill {
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 8px;
+  line-height: 1.5;
+}
+.xp-pill.reps {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+.xp-pill.bonus {
+  background: color-mix(in srgb, var(--d1) 20%, transparent);
+  color: var(--d1);
+}
+.xp-pill.surpass {
+  background: color-mix(in srgb, var(--d3) 20%, transparent);
+  color: var(--d3);
 }
 .cc-badge {
   flex: none;

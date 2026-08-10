@@ -138,6 +138,36 @@ export function comboOverachievement(c: ComboChallenge): {
   return { extraXp, legsOver, totalLegs, balance, bonusXp };
 }
 
+/** Décompose l'XP d'UN Défi 360 : reps (+ tonnage), prime de bouclage, dépassement
+ *  (pour l'affichage sur les défis terminés). Mêmes formules que comboXpPoints. */
+export function comboXpBreakdown(c: ComboChallenge): {
+  reps: number;
+  bonus: number;
+  surpass: number;
+  total: number;
+} {
+  let reps = 0;
+  let tonnage = 0;
+  let targetEffort = 0;
+  for (const l of c.legs) {
+    for (const s of legSets(l)) {
+      reps += (s.reps || 0) * REP_XP * (l.rep_weight ?? 1) * assistMult(s.assisted);
+      tonnage += (s.reps || 0) * (s.weight ?? l.weight_kg ?? 0);
+    }
+    targetEffort += l.target * COMBO_PLAN_REPS * (l.rep_weight ?? 1);
+  }
+  const bonus = comboComplete(c) ? 0.25 * targetEffort * (1 + comboEarlyFraction(c)) : 0;
+  const over = comboOverachievement(c);
+  const repsXp = Math.round((reps + tonnage / 500) * XP_MULT);
+  const bonusXp = Math.round(bonus * XP_MULT);
+  return {
+    reps: repsXp,
+    bonus: bonusXp,
+    surpass: over.bonusXp,
+    total: repsXp + bonusXp + over.bonusXp,
+  };
+}
+
 /** XP d'un ensemble de Défis 360 (façon séance + prime de bouclage + dépassement). */
 export function comboXpPoints(combos: ComboChallenge[]): number {
   return combos.reduce((a, c) => {

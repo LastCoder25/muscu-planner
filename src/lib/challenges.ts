@@ -902,3 +902,26 @@ export function challengeXpPoints(challenges: Challenge[]): number {
   }, 0);
   return Math.round((repsXp + completionBonus) * XP_MULT);
 }
+
+/** Décompose l'XP d'UN défi : part des reps vs prime de complétion (pour l'affichage
+ *  sur les défis terminés). Mêmes formules que challengeXpPoints, mais par défi. */
+export function challengeXpBreakdown(c: Challenge): { reps: number; bonus: number; total: number } {
+  const weightOf = (c.unit === 'reps' ? (c.rep_weight ?? 1) : 1) * assistMult(c.config.assisted);
+  const repsXp =
+    c.unit === 'reps'
+      ? assistedReps(c) * REP_XP * (c.rep_weight ?? 1) + challengeTonnage(c) / 500
+      : 0;
+  let bonusXp = 0;
+  const total = plannedEffort(c);
+  const done = c.progress.reduce((b, p) => b + (p.done || 0), 0);
+  const doneEffort = c.unit === 'time' ? done / 4 : done;
+  if (total > 0 && doneEffort >= total) {
+    const mult =
+      c.format === 'cumulative' ? 1 + earlyFinishFraction(c) : durationMultiplier(activeDaysOf(c));
+    const base = c.config.count_mode === 'sets' ? challengeTotalReps(c) : total;
+    bonusXp = 0.25 * base * weightOf * mult;
+  }
+  const reps = Math.round(repsXp * XP_MULT);
+  const bonus = Math.round(bonusXp * XP_MULT);
+  return { reps, bonus, total: reps + bonus };
+}
