@@ -3,6 +3,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { comboComplete, type ComboChallenge, type ComboLeg } from '@/lib/combo';
+import { useAuthStore } from '@/stores/auth';
 
 export interface ComboRow extends ComboChallenge {
   user_id?: string;
@@ -42,7 +43,11 @@ export const useComboStore = defineStore('combo', () => {
   const activeOne = () => list.value.find((c) => c.status === 'active') ?? null;
 
   async function create(input: NewCombo): Promise<ComboRow> {
-    if (list.value.some((c) => c.status === 'active')) throw new ComboActiveError();
+    // TODO(cleanup avant release) : retirer le bypass `!isAdmin` — débridage
+    // TEMPORAIRE pour tester la nouvelle génération avec plusieurs Défis 360 actifs
+    // (compte admin). En prod : 1 Défi 360 actif max. Cf. [[combo360-admin-bypass-temporaire]].
+    const isAdmin = useAuthStore().isAdmin;
+    if (!isAdmin && list.value.some((c) => c.status === 'active')) throw new ComboActiveError();
     const { data, error } = await supabase
       .from('combo_challenges')
       .insert({ ...input, status: 'active' })
