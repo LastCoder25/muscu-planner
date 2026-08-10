@@ -554,6 +554,17 @@ function laneChallenges(cardio: boolean): LaneChallenge[] {
       durationDays: c.duration_days,
     }));
 }
+// Nom de l'accessoire actif qui occupe le slot d'une voie (pour un message clair).
+function activeAccessoryName(cardio: boolean): string | null {
+  return (
+    challenges.list.find(
+      (c) =>
+        c.status === 'active' &&
+        isCardioChallengeRow(c) === cardio &&
+        isAccessoryMuscle(c.muscle_primary),
+    )?.exercise_name ?? null
+  );
+}
 // Exercice « bloquant » dès la sélection : accessoire dont le slot est pris, ou
 // exo normal dont la voie n'a plus aucun jeton (même un court ne rentrerait pas).
 function exFull(e: ExerciseRow): boolean {
@@ -768,7 +779,7 @@ function pickExercise(e: ExerciseRow) {
     $q.notify({
       type: 'warning',
       message: isAccessoryMuscle(e.muscle_primary)
-        ? `Tu as déjà un défi accessoire ${lane} en cours. Termine-le d'abord.`
+        ? `Tu as déjà un accessoire ${lane} en cours${activeAccessoryName(exIsCardio(e)) ? ` (${activeAccessoryName(exIsCardio(e))})` : ''} — termine-le pour en lancer un autre (1 accessoire à la fois).`
         : `Plus de place pour un défi ${lane}. Termine un défi en cours pour en lancer un autre.`,
     });
     return;
