@@ -580,95 +580,6 @@
               </button>
               <button v-else class="fight" disabled>Verrouillé</button>
             </div>
-
-            <!-- Rapport de combat SOUS la carte combattue (contexte : pas de nom à rappeler) -->
-            <div
-              v-if="run && runUnder(it)"
-              ref="reportEl"
-              class="report run-under"
-              :class="run.cleared ? 'win' : 'lose'"
-            >
-              <div class="result-head">
-                <span>{{
-                  run.cleared ? (run.kind === 'boss' ? '🏆 Vaincu !' : '🏆 Nettoyé !') : '💀 Échec'
-                }}</span>
-                <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
-              </div>
-              <div class="result-sub">
-                <template v-if="run.kind === 'dungeon'"
-                  >{{ run.defeated }}/{{ run.total }} monstres ·
-                </template>
-                PV restants {{ run.finalPv }}
-              </div>
-              <div class="log">
-                <div
-                  v-for="(f, i) in run.fights"
-                  :key="i"
-                  class="fight-row"
-                  :class="f.win ? 'fw' : 'fl'"
-                >
-                  <span class="fr-emo">{{ f.emoji }}</span>
-                  <span class="fr-name">{{ f.monster }}</span>
-                  <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
-                  <span class="fr-rounds">{{ f.rounds }} tours</span>
-                </div>
-              </div>
-              <div v-if="run.drops.length" class="drops">
-                <div class="drops-lbl">✨ Butin</div>
-                <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
-                  <span class="inv-emo">{{ d.emoji }}</span>
-                  <div class="inv-main">
-                    <div class="inv-name">{{ d.name }}</div>
-                    <div class="pills">
-                      <span class="gpill lvl">Lvl {{ d.level }}</span>
-                      <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
-                      <span v-if="d.setId" class="gpill set">🧩 Set</span>
-                    </div>
-                    <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}</div>
-                    <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
-                      <span
-                        >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
-                        {{ equippedInSlot(d.slot)!.level }} ·
-                        {{ itemEffects(equippedInSlot(d.slot)!) }}</span
-                      >
-                      <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
-                        rarityVerdict(d).label
-                      }}</span>
-                    </div>
-                    <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
-                    <div class="pow-cmp">
-                      ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
-                      <b :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
-                        >{{ fmtPow(powerIfEquip(d)) }} ({{
-                          fmtDelta(combatPowerVal, powerIfEquip(d))
-                        }})</b
-                      >
-                    </div>
-                    <div v-if="dropState(d) === 'equipped'" class="drop-done">
-                      ⚔️ Auto-équipé (slot vide)
-                    </div>
-                    <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
-                    <div v-else class="inv-actions">
-                      <button
-                        class="equip-btn"
-                        @click="equippedInSlot(d.slot) ? openReplace(d) : doEquip(d.id)"
-                      >
-                        {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
-                      </button>
-                      <button class="link-btn" @click="doSalvage(d)">
-                        Casser ✨{{ salvageValue(d) }}
-                      </button>
-                      <button class="link-btn" @click="doSell(d)">
-                        Vendre 🪙{{ sellValue(d) }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div v-if="run.consumable" class="cons-drop">
-                {{ run.consumable.emoji }} <b>{{ run.consumable.name }}</b> ajouté à ton sac 🎒
-              </div>
-            </div>
           </template>
 
           <button
@@ -709,36 +620,6 @@
               🌀 Descendre au palier {{ nextEndlessTier }} ({{ endlessEnergy(nextEndlessTier) }}
               ⚡)
             </button>
-          </div>
-
-          <!-- Rapport de la Faille sous sa carte -->
-          <div
-            v-if="run && lastEndless"
-            ref="reportEl"
-            class="report run-under"
-            :class="run.cleared ? 'win' : 'lose'"
-          >
-            <div class="result-head">
-              <span>{{ run.cleared ? '🏆 Palier franchi !' : '💀 Échec' }}</span>
-              <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
-            </div>
-            <div class="result-sub">PV restants {{ run.finalPv }}</div>
-            <div class="log">
-              <div
-                v-for="(f, i) in run.fights"
-                :key="i"
-                class="fight-row"
-                :class="f.win ? 'fw' : 'fl'"
-              >
-                <span class="fr-emo">{{ f.emoji }}</span>
-                <span class="fr-name">{{ f.monster }}</span>
-                <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
-                <span class="fr-rounds">{{ f.rounds }} tours</span>
-              </div>
-            </div>
-            <div v-if="run.drops.length" class="cons-drop">
-              ✨ Butin ajouté à ton sac ({{ run.drops.length }}) — gère-le dans l'onglet Équip.
-            </div>
           </div>
         </div>
       </template>
@@ -1090,11 +971,100 @@
         </div>
       </q-card>
     </q-dialog>
+
+    <!-- Rapport de combat (post-run) en MODALE : toutes les infos + réattaquer /
+         inventaire / fermer -->
+    <q-dialog v-model="reportOpen">
+      <q-card v-if="run" class="report-modal" :class="run.cleared ? 'win' : 'lose'">
+        <div class="rm-title font-display">{{ run.name }}</div>
+        <div class="result-head">
+          <span>{{
+            run.cleared ? (run.kind === 'boss' ? '🏆 Vaincu !' : '🏆 Nettoyé !') : '💀 Échec'
+          }}</span>
+          <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
+        </div>
+        <div class="result-sub">
+          <template v-if="run.kind === 'dungeon'">{{ run.defeated }}/{{ run.total }} monstres · </template>
+          PV restants {{ run.finalPv }}
+        </div>
+        <div class="log">
+          <div
+            v-for="(f, i) in run.fights"
+            :key="i"
+            class="fight-row"
+            :class="f.win ? 'fw' : 'fl'"
+          >
+            <span class="fr-emo">{{ f.emoji }}</span>
+            <span class="fr-name">{{ f.monster }}</span>
+            <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
+            <span class="fr-rounds">{{ f.rounds }} tours</span>
+          </div>
+        </div>
+        <div v-if="run.drops.length" class="drops">
+          <div class="drops-lbl">✨ Butin</div>
+          <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
+            <span class="inv-emo">{{ d.emoji }}</span>
+            <div class="inv-main">
+              <div class="inv-name">{{ d.name }}</div>
+              <div class="pills">
+                <span class="gpill lvl">Lvl {{ d.level }}</span>
+                <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
+                <span v-if="d.setId" class="gpill set">🧩 Set</span>
+              </div>
+              <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}</div>
+              <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
+                <span
+                  >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
+                  {{ equippedInSlot(d.slot)!.level }} ·
+                  {{ itemEffects(equippedInSlot(d.slot)!) }}</span
+                >
+                <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
+                  rarityVerdict(d).label
+                }}</span>
+              </div>
+              <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
+              <div class="pow-cmp">
+                ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
+                <b :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
+                  >{{ fmtPow(powerIfEquip(d)) }} ({{ fmtDelta(combatPowerVal, powerIfEquip(d)) }})</b
+                >
+              </div>
+              <div v-if="dropState(d) === 'equipped'" class="drop-done">
+                ⚔️ Auto-équipé (slot vide)
+              </div>
+              <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
+              <div v-else class="inv-actions">
+                <button
+                  class="equip-btn"
+                  @click="equippedInSlot(d.slot) ? openReplace(d) : doEquip(d.id)"
+                >
+                  {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
+                </button>
+                <button class="link-btn" @click="doSalvage(d)">Casser ✨{{ salvageValue(d) }}</button>
+                <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="run.consumable" class="cons-drop">
+          {{ run.consumable.emoji }} <b>{{ run.consumable.name }}</b> ajouté à ton sac 🎒
+        </div>
+        <div class="rm-actions">
+          <button class="fight" :disabled="!canReattack" @click="reattackLast">
+            ⚔️ Réattaquer ({{ reattackCost }} ⚡)
+          </button>
+          <div class="rm-actions-row">
+            <button class="rm-btn" @click="goInventoryFromReport">🎒 Inventaire</button>
+            <button class="rm-btn" @click="reportOpen = false">Fermer</button>
+          </div>
+        </div>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
@@ -1406,23 +1376,32 @@ function barW(v: number): string {
 
 const busy = ref(false);
 const run = ref<RunView | null>(null);
-const reportEl = ref<HTMLElement | null>(null);
-// Après un run : replie la liste (retour à la vue par défaut) et remonte au rapport.
-async function focusReport() {
+const reportOpen = ref(false); // rapport de combat affiché en MODALE (post-run)
+// Après un run : replie la liste puis ouvre la modale de rapport.
+function openReport() {
   showAllDungeons.value = false;
-  await nextTick();
-  reportEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  reportOpen.value = true;
 }
-// Dernier lieu combattu → le rapport de combat s'affiche SOUS sa carte (contexte).
+// Dernier lieu combattu → « Réattaquer » relance exactement le même run.
 const lastDungeon = ref<Dungeon | null>(null);
 const lastBoss = ref<MilestoneBoss | null>(null);
 const lastEndless = ref(false); // dernier run = Faille sans fin
-// Le rapport (run) doit-il s'afficher sous CETTE carte ?
-function runUnder(it: { dungeon?: Dungeon; boss?: MilestoneBoss }): boolean {
-  if (!run.value) return false;
-  if (it.boss) return run.value.kind === 'boss' && lastBoss.value?.id === it.boss.id;
-  if (it.dungeon) return run.value.kind === 'dungeon' && lastDungeon.value?.id === it.dungeon.id;
-  return false;
+const reattackCost = computed(() => {
+  if (lastEndless.value) return endlessEnergy(nextEndlessTier.value);
+  if (lastBoss.value) return lastBoss.value.energyCost;
+  if (lastDungeon.value) return lastDungeon.value.energyCost;
+  return 0;
+});
+const canReattack = computed(() => !busy.value && c.value.energy >= reattackCost.value);
+function reattackLast() {
+  reportOpen.value = false;
+  if (lastEndless.value) void fightEndless();
+  else if (lastBoss.value) void fightBoss(lastBoss.value);
+  else if (lastDungeon.value) void explore(lastDungeon.value);
+}
+function goInventoryFromReport() {
+  reportOpen.value = false;
+  tab.value = 'equip';
 }
 
 // Butin possible d'un donjon (affiché à la demande via 🎁).
@@ -1727,7 +1706,7 @@ async function explore(d: Dungeon) {
       drops,
       ...(consDrop ? { consumable: { emoji: consDrop.emoji, name: consDrop.name } } : {}),
     };
-    void focusReport();
+    openReport();
     if (r.cleared) $q.notify({ type: 'positive', message: `Donjon nettoyé — +${gold} 🪙` });
   } catch {
     $q.notify({ type: 'negative', message: 'Échec de l’exploration.' });
@@ -1851,7 +1830,9 @@ async function fightBoss(b: MilestoneBoss) {
       fights: [{ monster: b.name, emoji: b.emoji, win, rounds: r.rounds }],
       drops: [],
     };
-    void focusReport();
+    // Victoire → la modale de récompense (pending) prend le relais ; on n'ouvre le
+    // rapport que sur défaite (rien à choisir).
+    if (!win) openReport();
     $q.notify(
       win
         ? { type: 'positive', message: `${b.emoji} ${b.name} vaincu — choisis ta récompense !` }
@@ -1942,7 +1923,7 @@ async function fightEndless() {
       fights: [{ monster: foe.name, emoji: '🌀', win, rounds: r.rounds }],
       drops,
     };
-    void focusReport();
+    openReport();
     $q.notify(
       win
         ? { type: 'positive', message: `Palier ${tier} franchi — +${gold} 🪙` }
@@ -3840,68 +3821,59 @@ onMounted(async () => {
 }
 
 /* Rapport de combat (au-dessus des donjons) */
-.report {
-  border-radius: 14px;
-  padding: 14px;
-  margin-bottom: 16px;
+/* Rapport de combat en MODALE (post-run). */
+.report-modal {
+  width: 420px;
+  max-width: 92vw;
+  max-height: 86vh;
+  overflow-y: auto;
+  border-radius: 16px;
+  padding: 16px 18px;
   background: var(--surface);
+  color: var(--text);
   border: 1px solid var(--line);
-  border-left-width: 3px;
-  scroll-margin-top: 72px;
+  border-top-width: 3px;
 }
-/* Rapport rendu SOUS la carte combattue → collé à elle (contexte). */
-.run-under {
-  margin-top: -4px;
-  margin-bottom: 4px;
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
+.report-modal.win {
+  border-top-color: var(--d1);
 }
-.report.win {
-  border-left-color: var(--d1);
+.report-modal.lose {
+  border-top-color: var(--d4);
 }
-.report.lose {
-  border-left-color: var(--d4);
-}
-.report-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
+.rm-title {
+  font-size: 17px;
+  font-weight: 700;
   margin-bottom: 10px;
 }
-.report-title {
-  font-weight: 700;
-  font-size: 14px;
-  color: var(--dim);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.rm-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  position: sticky;
+  bottom: -16px;
+  background: var(--surface);
+  padding-top: 10px;
 }
-.report-toggle {
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 12px;
+.rm-actions .fight {
+  width: 100%;
+}
+.rm-actions-row {
+  display: flex;
+  gap: 8px;
+}
+.rm-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
   font-weight: 600;
   cursor: pointer;
-  padding: 6px 0;
 }
-.reattack {
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink, #15120e);
-  border-radius: 999px;
-  padding: 7px 14px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.reattack:disabled {
-  background: transparent;
-  color: var(--dim);
-  border-color: var(--line);
-  cursor: not-allowed;
+.rm-btn:active {
+  transform: scale(0.98);
 }
 
 /* Résultat de run */
