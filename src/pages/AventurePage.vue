@@ -408,9 +408,18 @@
               v-for="it in filteredInventory"
               :key="it.id"
               class="inv-item"
-              :class="'r-' + it.rarity"
+              :class="['r-' + it.rarity, { locked: it.locked }]"
             >
               <span class="inv-emo">{{ it.emoji }}</span>
+              <button
+                class="inv-lock"
+                :class="{ on: it.locked }"
+                :title="it.locked ? 'Déverrouiller' : 'Protéger de la casse/vente'"
+                :aria-label="it.locked ? 'Déverrouiller' : 'Verrouiller'"
+                @click="doToggleLock(it)"
+              >
+                {{ it.locked ? '🔒' : '🔓' }}
+              </button>
               <div class="inv-main">
                 <div class="inv-name">{{ it.name }}</div>
                 <div class="pills">
@@ -441,14 +450,6 @@
                 <div class="inv-actions">
                   <button class="equip-btn" @click="doEquip(it.id)">
                     {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
-                  </button>
-                  <button
-                    class="link-btn lock-btn"
-                    :class="{ on: it.locked }"
-                    :title="it.locked ? 'Déverrouiller' : 'Protéger de la casse/vente'"
-                    @click="doToggleLock(it)"
-                  >
-                    {{ it.locked ? '🔒' : '🔓' }}
                   </button>
                   <button class="link-btn" :disabled="it.locked" @click="doSalvage(it)">
                     Casser ✨{{ salvageValue(it) }}
@@ -1472,7 +1473,8 @@ const winPct = computed<Record<string, number>>(() => {
   const stats = c.value;
   const eq = char.row?.equipped ?? {};
   const name = char.row?.pseudo ?? 'Toi';
-  const fx = talentFx.value;
+  // Talents + consommables sélectionnés → le % reflète les buffs choisis pour le run.
+  const fx = runExtra().extra;
   const lvl = c.value.level.level;
   const out: Record<string, number> = {};
   for (const d of DUNGEONS) {
@@ -3240,9 +3242,6 @@ onMounted(async () => {
   opacity: 0.35;
   cursor: not-allowed;
 }
-.lock-btn.on {
-  color: var(--accent);
-}
 .reset-btn {
   background: none;
   border: 1px solid var(--line);
@@ -3460,6 +3459,7 @@ onMounted(async () => {
 }
 .inv-item,
 .drop {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -3468,6 +3468,36 @@ onMounted(async () => {
   border-left-width: 3px;
   border-radius: 12px;
   padding: 10px 12px;
+}
+/* Le sac réserve la gouttière droite pour le cadenas (pas de chevauchement). */
+.inv-item {
+  padding-right: 48px;
+}
+/* Objet verrouillé : liseré accent pour le repérer. */
+.inv-item.locked {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+/* Cadenas : à l'écart (coin haut-droit), grande cible tactile, bien visible. */
+.inv-lock {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+}
+.inv-lock.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.inv-lock:active {
+  transform: scale(0.92);
 }
 .inv-emo {
   font-size: 20px;
