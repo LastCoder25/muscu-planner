@@ -15,6 +15,13 @@
       </div>
     </div>
 
+    <!-- Butin cumulé du run -->
+    <div class="bag">
+      <span class="bag-chip">🪙 {{ gold }}</span>
+      <span class="bag-chip">✨ {{ dust }}</span>
+      <span class="bag-chip">🎒 {{ loot.length }}</span>
+    </div>
+
     <!-- Réglages bêta (nb d'étages) -->
     <div class="floors-pick">
       <span>Étages :</span>
@@ -99,8 +106,11 @@
         <div class="over-title font-display">
           {{ run.status === 'cleared' ? 'Expédition nettoyée !' : 'Vous êtes tombé…' }}
         </div>
+        <div class="over-haul">🪙 {{ gold }} · ✨ {{ dust }} · 🎒 {{ loot.length }} objet(s)</div>
         <div class="over-sub">
-          Prototype visuel — le combat, le butin et les récompenses arrivent à l'étape suivante.
+          <template v-if="run.status === 'cleared'">Bien joué !</template>
+          <template v-else>Tu gardes l'or et la poussière ; le gear reste au donjon.</template>
+          Bêta : le butin n'est pas encore crédité au perso (Phase suivante : clés + récompenses).
         </div>
         <div class="over-row">
           <q-btn flat no-caps label="Rejouer" color="primary" @click="regen" />
@@ -112,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   generateDungeon,
@@ -127,22 +137,69 @@ import {
   type Room,
   type RunState,
 } from '@/lib/dungeonCrawl';
+import { useCharacterStore } from '@/stores/character';
+import { useProgress } from '@/composables/useProgress';
+import { computeCharacter } from '@/lib/character';
+import { playerWithGear, rollDrop, type Item } from '@/lib/items';
+import { talentEffects } from '@/lib/talents';
+import { simulateCombat, mulberry32, type Combatant } from '@/lib/combat';
 
 const route = useRoute();
 const router = useRouter();
+const char = useCharacterStore();
+const progress = useProgress();
+
+// Perso réel (stats de fond + équipement + talents) → combattant.
+const character = computed(() =>
+  computeCharacter(
+    progress.powerXp.value,
+    progress.enduranceXp.value,
+    progress.agilityXp.value,
+    progress.energyEarned.value + (char.row?.login_energy ?? 0),
+    char.row?.energy_spent ?? 0,
+  ),
+);
+const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
+const fighter = computed<Combatant>(() =>
+  playerWithGear(
+    char.row?.pseudo ?? 'Toi',
+    character.value,
+    char.row?.equipped ?? {},
+    talentFx.value,
+    character.value.level.level,
+  ),
+);
+const heroLevel = computed(() => character.value.level.level);
 
 const CELL = 66;
 const SIZE = 46; // côté d'une salle (carré arrondi)
-const MAX_PV = 140; // placeholder (viendra du perso en Phase 3)
-const TRAP_DMG = 14; // placeholder
+const TRAP_DMG = 14; // dégâts d'un piège (équilibrage bêta, provisoire)
 
 const floorsWanted = ref(Math.min(5, Math.max(2, Number(route.query.floors) || 3)));
 // Seed pseudo-aléatoire (composant → Math.random autorisé, contrairement aux libs).
 const seed = ref(Math.floor(Math.random() * 1_000_000) + 1);
 const dungeon = ref<Floor[]>(generateDungeon(seed.value, floorsWanted.value));
-const run = ref<RunState>(startRun(floorsWanted.value, dungeon.value[0]!, MAX_PV));
+const run = ref<RunState>(startRun(floorsWanted.value, dungeon.value[0]!, 140));
 const lastEvent = ref<{ kind: string; text: string } | null>(null);
 const over = ref(false);
+// Butin cumulé du run (Phase 3b : affiché ; persistance/récompense = Phase 3c).
+const gold = ref(0);
+const dust = ref(0);
+const loot = ref<Item[]>([]);
+let lootN = 0;
+
+// Dès que les stats du perso sont prêtes, (ré)initialise le run avec les VRAIS PV.
+let booted = false;
+watch(
+  () => progress.ready.value && !!char.row,
+  (ok) => {
+    if (ok && !booted) {
+      booted = true;
+      freshRun();
+    }
+  },
+  { immediate: true },
+);
 
 const floor = computed(() => dungeon.value[run.value.floor]!);
 const cols = computed(() => floor.value.cols);
@@ -183,6 +240,71 @@ function roomGlyph(r: Room): string {
   return ROOM_EMOJI[r.type];
 }
 
+// Monstre de salle scalé au niveau du perso + profondeur de l'étage. Volontairement
+// plus faible qu'un boss de palier (une salle = une bouchée) : c'est l'ACCUMULATION
+// sur l'étage, PV reportés, qui use → l'Endurance compte. (équilibrage provisoire bêta)
+function makeMonster(isBoss: boolean, depth: number): Combatant {
+  const L = heroLevel.value;
+  const t = isBoss ? 2.4 : 1;
+  const d = 0.8 + 0.5 * depth;
+  return {
+    name: isBoss ? 'Gardien de l’étage' : 'Rôdeur',
+    pv: Math.round((28 + 14 * L) * d * t),
+    damage: Math.round((5 + 2.6 * L) * d * t),
+    crit: 0.05,
+    dodge: 0.04 + 0.03 * depth,
+    initiative: 8,
+    strikes: 1,
+  };
+}
+// Seed déterministe par salle (rejouable pour une même carte).
+function roomSeed(id: number): number {
+  return (seed.value * 131 + run.value.floor * 7919 + id * 17) >>> 0 || 1;
+}
+const depthOf = () => (run.value.floors > 1 ? run.value.floor / (run.value.floors - 1) : 0);
+
+function fightRoom(id: number, isBoss: boolean) {
+  const monster = makeMonster(isBoss, depthOf());
+  const goldWin = Math.round((6 + 3 * heroLevel.value) * (isBoss ? 4 : 1));
+  const res = simulateCombat(fighter.value, monster, {
+    seed: roomSeed(id),
+    goldOnWin: goldWin,
+    startPlayerPv: run.value.pv,
+  });
+  const finalPv = res.log.length ? res.log[res.log.length - 1]!.playerPv : run.value.pv;
+  run.value = { ...run.value, pv: finalPv, status: finalPv <= 0 ? 'dead' : run.value.status };
+  if (res.win) {
+    gold.value += res.gold;
+    const dd = Math.round(2 + heroLevel.value * 0.5) * (isBoss ? 3 : 1);
+    dust.value += dd;
+    lastEvent.value = {
+      kind: 'good',
+      text: `${isBoss ? '👑' : '👾'} Vaincu ! +${res.gold} 🪙 +${dd} ✨ · ${finalPv} PV`,
+    };
+  } else {
+    lastEvent.value = { kind: 'bad', text: `💀 Battu par le ${monster.name.toLowerCase()}…` };
+  }
+}
+function openChest(id: number) {
+  const rng = mulberry32(roomSeed(id));
+  let drop: Omit<Item, 'id'> | null = null;
+  for (let k = 0; k < 4 && !drop; k++)
+    drop = rollDrop(rng, {
+      cleared: true,
+      defeated: 1,
+      level: heroLevel.value,
+      luck: 0.4,
+      spread: 1,
+    });
+  if (drop) {
+    loot.value.push({ ...drop, id: `exp_${lootN++}` });
+    dust.value += 3;
+    lastEvent.value = { kind: 'good', text: `🎁 ${drop.name} !` };
+  } else {
+    lastEvent.value = { kind: 'neutral', text: '🎁 Coffre vide…' };
+  }
+}
+
 function onRoomClick(id: number) {
   if (!canMove(run.value, floor.value, id)) return;
   const wasNew = !run.value.visited.includes(id);
@@ -192,23 +314,22 @@ function onRoomClick(id: number) {
     lastEvent.value = null;
     return;
   }
-  // Résolution PLACEHOLDER (bêta) — le vrai combat/loot arrive en Phase 3.
   switch (target.type) {
     case 'trap':
       run.value = applyDamage(run.value, TRAP_DMG);
       lastEvent.value = { kind: 'bad', text: `⚠️ Piège ! −${TRAP_DMG} PV` };
       break;
     case 'monster':
-      lastEvent.value = { kind: 'fight', text: '👾 Monstre — le combat arrivera ici' };
+      fightRoom(id, false);
+      break;
+    case 'boss':
+      fightRoom(id, true);
       break;
     case 'chest':
-      lastEvent.value = { kind: 'good', text: '🎁 Coffre — le butin arrivera ici' };
+      openChest(id);
       break;
     case 'stairs':
       lastEvent.value = { kind: 'good', text: '🔽 Escalier — descends à l’étage suivant' };
-      break;
-    case 'boss':
-      lastEvent.value = { kind: 'fight', text: '👑 Salle du boss !' };
       break;
     default:
       lastEvent.value = { kind: 'neutral', text: '· Salle vide' };
@@ -227,12 +348,20 @@ function finish() {
   over.value = true;
 }
 
-function regen() {
-  seed.value = Math.floor(Math.random() * 1_000_000) + 1;
+// (Ré)initialise un run sur la carte courante avec les VRAIS PV du perso.
+function freshRun() {
   dungeon.value = generateDungeon(seed.value, floorsWanted.value);
-  run.value = startRun(floorsWanted.value, dungeon.value[0]!, MAX_PV);
+  run.value = startRun(floorsWanted.value, dungeon.value[0]!, fighter.value.pv || 140);
+  gold.value = 0;
+  dust.value = 0;
+  loot.value = [];
+  lootN = 0;
   lastEvent.value = null;
   over.value = false;
+}
+function regen() {
+  seed.value = Math.floor(Math.random() * 1_000_000) + 1;
+  freshRun();
 }
 function setFloors(n: number) {
   floorsWanted.value = n;
@@ -313,6 +442,20 @@ function setFloors(n: number) {
   font-size: 12px;
   color: var(--text);
   white-space: nowrap;
+}
+.bag {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.bag-chip {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
 }
 .floors-pick {
   display: flex;
@@ -447,6 +590,12 @@ function setFloors(n: number) {
   font-size: 20px;
   font-weight: 700;
   margin: 6px 0;
+}
+.over-haul {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 8px;
 }
 .over-sub {
   font-size: 12.5px;
