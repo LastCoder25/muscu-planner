@@ -12,6 +12,7 @@ import {
   comboOverachievement,
   suggestComboTarget,
   suggestFullBodyPlan,
+  comboMuscleInZone,
   type ComboSlotSpec,
   buildComboSession,
   comboSessionSetBudget,
@@ -229,5 +230,26 @@ describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
   it('séries/exo = volume réparti sur les exos', () => {
     const p = bySlot(suggestFullBodyPlan('intermediaire', 'moderate', 'med', SLOTS), 'push');
     expect(p.setsPerExo).toBe(Math.max(1, Math.round(p.weeklySets / p.nExos)));
+  });
+});
+
+describe('comboMuscleInZone (haut / bas / tronc)', () => {
+  it('full : tout passe', () => {
+    expect(comboMuscleInZone('quadriceps', 'full')).toBe(true);
+    expect(comboMuscleInZone('pectoraux', 'full')).toBe(true);
+  });
+  it('haut : garde le haut + le tronc, exclut le bas', () => {
+    expect(comboMuscleInZone('pectoraux', 'haut')).toBe(true);
+    expect(comboMuscleInZone('épaules', 'haut')).toBe(true);
+    expect(comboMuscleInZone('abdominaux', 'haut')).toBe(true); // tronc
+    expect(comboMuscleInZone('quadriceps', 'haut')).toBe(false);
+    expect(comboMuscleInZone('mollets', 'haut')).toBe(false);
+  });
+  it('bas : garde le bas + le tronc, exclut le haut', () => {
+    expect(comboMuscleInZone('quadriceps', 'bas')).toBe(true);
+    expect(comboMuscleInZone('mollets', 'bas')).toBe(true);
+    expect(comboMuscleInZone('abdominaux', 'bas')).toBe(true); // tronc
+    expect(comboMuscleInZone('pectoraux', 'bas')).toBe(false);
+    expect(comboMuscleInZone('épaules', 'bas')).toBe(false);
   });
 });

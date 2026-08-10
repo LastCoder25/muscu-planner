@@ -16,7 +16,24 @@
           nombre d'exercices et de séries. Tu fais tes séries <b>quand tu veux</b> dans la semaine.
         </p>
         <div class="vol-card">
-          <div class="vol-lbl">Volume d'entraînement</div>
+          <div class="vol-lbl">Zone du corps</div>
+          <div class="opt-tiles">
+            <button
+              v-for="o in ZONE_OPTS"
+              :key="o.id"
+              type="button"
+              class="opt-tile"
+              :class="{ on: zone === o.id }"
+              @click="zone = o.id"
+            >
+              <span class="ot-emo">{{ o.emoji }}</span>
+              <span class="ot-lbl">{{ o.label }}</span>
+              <span class="ot-sub">{{ o.sub }}</span>
+            </button>
+          </div>
+          <div class="zone-hint">Blessé ou tu veux zapper une partie ? Choisis haut ou bas.</div>
+
+          <div class="vol-lbl vl-mt">Volume d'entraînement</div>
           <div class="opt-tiles">
             <button
               v-for="o in VOLUME_OPTS"
@@ -226,8 +243,10 @@ import { COMBO_SLOTS, type ComboSlot } from '@/data/combo';
 import {
   suggestFullBodyPlan,
   comboWeeklySets,
+  comboMuscleInZone,
   type ComboVolume,
   type ComboVariety,
+  type ComboZone,
   type ComboLeg,
 } from '@/lib/combo';
 import { repWeightFromExercise, isBodyweightExercise, logicalToday } from '@/lib/challenges';
@@ -254,9 +273,16 @@ const tileMedia = 104;
 // Wizard : réglages → draft (choix des exos, un emplacement à la fois) → récap.
 const step = ref<'setup' | 'draft' | 'recap'>('setup');
 
-// Réglages full-body : volume (séries/groupe) + variété (exos/groupe).
+// Réglages : zone (full/haut/bas) + volume (séries/groupe) + variété (exos/groupe).
+const zone = ref<ComboZone>('full');
 const volume = ref<ComboVolume>('moderate');
 const variety = ref<ComboVariety>('med');
+
+const ZONE_OPTS: { id: ComboZone; emoji: string; label: string; sub: string }[] = [
+  { id: 'full', emoji: '🧍', label: 'Tout le corps', sub: 'full-body' },
+  { id: 'haut', emoji: '⬆️', label: 'Haut', sub: 'buste & bras' },
+  { id: 'bas', emoji: '⬇️', label: 'Bas', sub: 'jambes & fessiers' },
+];
 const isBeginner = computed(() => level.value === 'debutant');
 // Débutant : variété masquée → toujours 1 exo/groupe (le plus simple).
 const effVariety = computed<ComboVariety>(() => (isBeginner.value ? 'low' : variety.value));
@@ -331,7 +357,12 @@ const exImg = (id: string) => exerciseImage(id);
 // (favoris en tête).
 function candidates(slot: ComboSlot): ExerciseRow[] {
   return lib.value
-    .filter((e) => e.unit !== 'time' && slot.muscles.includes(e.muscle_primary ?? ''))
+    .filter(
+      (e) =>
+        e.unit !== 'time' &&
+        slot.muscles.includes(e.muscle_primary ?? '') &&
+        comboMuscleInZone(e.muscle_primary, zone.value),
+    )
     .sort((a, b) => (favSet.value.has(b.id) ? 1 : 0) - (favSet.value.has(a.id) ? 1 : 0));
 }
 function selectedExos(key: string): ExerciseRow[] {
@@ -409,7 +440,7 @@ function applyPlan() {
   }
 }
 
-watch([volume, variety], applyPlan);
+watch([zone, volume, variety], applyPlan);
 
 async function createCombo() {
   const uid = auth.user?.id;
@@ -535,6 +566,11 @@ onMounted(async () => {
 }
 .vol-lbl.vl-mt {
   margin-top: 16px;
+}
+.zone-hint {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 6px;
 }
 .opt-tiles {
   display: flex;

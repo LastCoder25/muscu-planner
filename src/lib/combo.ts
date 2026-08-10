@@ -275,6 +275,18 @@ export function comboWeeklySets(level: Level, volume: ComboVolume, essential = t
   );
 }
 
+// Zone du corps ciblée (pour les blessés ou ceux qui zappent une partie).
+export type ComboZone = 'full' | 'haut' | 'bas';
+const HAUT_MUSCLES = new Set(['pectoraux', 'dos', 'épaules', 'biceps', 'triceps']);
+const BAS_MUSCLES = new Set(['quadriceps', 'ischio-jambiers', 'mollets', 'fessiers']);
+/** Un muscle est-il dans la zone choisie ? Le tronc (abdos/lombaires) compte dans
+ *  les deux (haut = tout sauf le bas ; bas = tout sauf le haut). */
+export function comboMuscleInZone(muscle: string | null | undefined, zone: ComboZone): boolean {
+  if (zone === 'full') return true;
+  const m = muscle ?? '';
+  return zone === 'haut' ? !BAS_MUSCLES.has(m) : !HAUT_MUSCLES.has(m);
+}
+
 export interface ComboSlotSpec {
   key: string;
   muscles: string[];
