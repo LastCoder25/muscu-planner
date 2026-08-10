@@ -14,9 +14,18 @@ import {
   setCounts,
   setEffects,
   ITEM_SETS,
+  forgeCost,
+  forgeItem,
+  rerollCost,
+  rerolledEffect,
+  infuseCost,
+  infusedItem,
+  craftSetCost,
+  nextRarity,
   type Item,
   type Equipped,
 } from '@/lib/items';
+import { mulberry32 } from '@/lib/combat';
 
 const item = (over: Partial<Item> & Pick<Item, 'slot' | 'effect'>): Item => ({
   id: over.id ?? 'i',
@@ -226,5 +235,37 @@ describe('sets d’équipement', () => {
   it('anti-doublon : preferSlot force le slot manquant', () => {
     const piece = rollSetPiece(() => 0.3, { setId: 'dragon', level: 10, preferSlot: 'relic' });
     expect(piece.slot).toBe('relic');
+  });
+});
+
+describe('atelier de poussière (forge / reroll / infusion / craft)', () => {
+  it('forge : ciblé coûte plus que l’aléatoire, et ça monte avec le niveau', () => {
+    expect(forgeCost(10, true)).toBeGreaterThan(forgeCost(10, false));
+    expect(forgeCost(20, false)).toBeGreaterThan(forgeCost(5, false));
+  });
+  it('forge : objet neuf au niveau demandé, slot respecté si ciblé', () => {
+    const it = forgeItem(mulberry32(1), { level: 8, slot: 'weapon' });
+    expect(it.slot).toBe('weapon');
+    expect(it.level).toBe(8);
+    expect(it.effect.value).toBeGreaterThan(0);
+  });
+  it('reroll : nouvel effet valide pour le slot, coût > 0', () => {
+    const sword = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, level: 5 });
+    expect(rerollCost(sword)).toBeGreaterThan(0);
+    const eff = rerolledEffect(mulberry32(2), sword);
+    expect(['damage_pct', 'crit_pct', 'lifesteal_pct']).toContain(eff.type);
+  });
+  it('infusion : monte d’un cran et augmente la valeur ; null au divin', () => {
+    const rare = item({ slot: 'armor', effect: { type: 'max_pv_pct', value: 16 }, rarity: 'rare' });
+    const up = infusedItem(rare)!;
+    expect(nextRarity('rare')).toBe('epic');
+    expect(up.rarity).toBe('epic');
+    expect(up.effect.value).toBeGreaterThan(rare.effect.value);
+    const divin = item({ slot: 'armor', effect: { type: 'max_pv_pct', value: 50 }, rarity: 'divin' });
+    expect(infusedItem(divin)).toBeNull();
+  });
+  it('craft de set : coût élevé qui monte avec le niveau', () => {
+    expect(craftSetCost(10)).toBeGreaterThan(200);
+    expect(craftSetCost(20)).toBeGreaterThan(craftSetCost(10));
   });
 });

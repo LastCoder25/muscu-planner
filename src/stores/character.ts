@@ -7,6 +7,14 @@ import {
   salvageValue,
   sellValue,
   upgradeCost,
+  forgeItem,
+  forgeCost,
+  rerolledEffect,
+  rerollCost,
+  infusedItem,
+  infuseCost,
+  craftSetCost,
+  rollSetPiece,
   type Item,
   type ItemSlot,
   type Equipped,
@@ -343,6 +351,72 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
+  // ── Atelier de poussière (dust sinks) : forge / reroll / infusion / craft de set ──
+  // Applique la MAJ d'un objet possédé (équipé ou au sac) + dépense la poussière.
+  function applyItemUpdate(
+    userId: string,
+    cur: CharacterRow,
+    owned: { item: Item; slot?: ItemSlot },
+    updated: Item,
+    cost: number,
+  ) {
+    if (owned.slot)
+      return persist(userId, {
+        dust: cur.dust - cost,
+        equipped: { ...cur.equipped, [owned.slot]: updated },
+      });
+    return persist(userId, {
+      dust: cur.dust - cost,
+      inventory: cur.inventory.map((i) => (i.id === updated.id ? updated : i)),
+    });
+  }
+  // A. Forge un objet neuf (aléatoire ou ciblé) au niveau joueur → au sac.
+  async function forge(userId: string, opts: { level: number; slot?: ItemSlot }) {
+    const cur = row.value;
+    if (!cur) return;
+    const cost = forgeCost(opts.level, !!opts.slot);
+    if (cur.dust < cost) return;
+    const it: Item = { ...forgeItem(Math.random, opts), id: crypto.randomUUID() };
+    return persist(userId, { dust: cur.dust - cost, inventory: [...cur.inventory, it] });
+  }
+  // B. Reroll l'effet d'un objet (équipé ou au sac).
+  async function rerollEffect(userId: string, itemId: string) {
+    const cur = row.value;
+    if (!cur) return;
+    const owned = findOwned(cur, itemId);
+    if (!owned) return;
+    const cost = rerollCost(owned.item);
+    if (cur.dust < cost) return;
+    const updated: Item = { ...owned.item, effect: rerolledEffect(Math.random, owned.item) };
+    return applyItemUpdate(userId, cur, owned, updated, cost);
+  }
+  // C. Infuse un objet (rareté +1 cran).
+  async function infuseRarity(userId: string, itemId: string) {
+    const cur = row.value;
+    if (!cur) return;
+    const owned = findOwned(cur, itemId);
+    if (!owned) return;
+    const updated = infusedItem(owned.item);
+    if (!updated) return; // déjà divin
+    const cost = infuseCost(owned.item);
+    if (cur.dust < cost) return;
+    return applyItemUpdate(userId, cur, owned, updated, cost);
+  }
+  // D. Forge une pièce de set ciblée (set + emplacement) au niveau joueur → au sac.
+  async function craftSet(userId: string, opts: { level: number; setId: string; slot: ItemSlot }) {
+    const cur = row.value;
+    if (!cur) return;
+    const cost = craftSetCost(opts.level);
+    if (cur.dust < cost) return;
+    const piece = rollSetPiece(Math.random, {
+      setId: opts.setId,
+      level: opts.level,
+      preferSlot: opts.slot,
+    });
+    const it: Item = { ...piece, id: crypto.randomUUID() };
+    return persist(userId, { dust: cur.dust - cost, inventory: [...cur.inventory, it] });
+  }
+
   // Récompense de connexion du jour (une fois par jour logique). Renvoie le gain
   // (énergie + streak) pour l'animation, ou null si déjà réclamée aujourd'hui.
   async function claimDailyLogin(userId: string, todayIso: string, level: number) {
@@ -473,6 +547,10 @@ export const useCharacterStore = defineStore('character', () => {
     salvageMany,
     sellMany,
     upgradeItem,
+    forge,
+    rerollEffect,
+    infuseRarity,
+    craftSet,
     resetTalents,
     spendEnergy,
     claimDailyLogin,

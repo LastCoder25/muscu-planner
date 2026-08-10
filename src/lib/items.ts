@@ -305,6 +305,76 @@ export function rollSetPiece(
   };
 }
 
+// ── Atelier de poussière (dust sinks) : forge / reroll / infusion / craft de set ──
+export function nextRarity(r: Rarity): Rarity | null {
+  const order: Rarity[] = ['common', 'rare', 'epic', 'legendary', 'divin'];
+  const i = order.indexOf(r);
+  return i >= 0 && i < order.length - 1 ? order[i + 1]! : null;
+}
+
+// A. FORGE — créer un objet neuf. Ciblé (choisir l'emplacement) = plus cher que l'aléatoire.
+export function forgeCost(level: number, targeted: boolean): number {
+  const base = 30 + Math.max(1, level) * 15;
+  return targeted ? Math.round(base * 1.8) : base;
+}
+export function forgeItem(
+  rng: () => number,
+  opts: { level: number; slot?: ItemSlot; luck?: number },
+): Omit<Item, 'id'> {
+  const slot = opts.slot ?? pick(rng, SLOTS);
+  const rarity = rollRarity(rng, opts.luck ?? 0.25); // rareté au hasard (légère chance)
+  const chosen = pick(rng, SLOT_EFFECTS[slot]);
+  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
+  const level = Math.max(1, Math.round(opts.level));
+  return {
+    slot,
+    name: `${pick(rng, NAMES[slot])} forgé`,
+    emoji: SLOT_EMOJI[slot],
+    rarity,
+    level,
+    baseLevel: level,
+    effect: { type: chosen.type, value },
+  };
+}
+
+// B. REROLL d'effet — change la stat (même rareté/niveau), un autre effet du slot.
+export function rerollCost(item: Item): number {
+  return 20 + item.level * 10 + RARITY_RANK[item.rarity] * 15;
+}
+export function rerolledEffect(rng: () => number, item: Item): ItemEffect {
+  const choices = SLOT_EFFECTS[item.slot];
+  const others = choices.filter((c) => c.type !== item.effect.type);
+  const chosen = pick(rng, others.length ? others : choices);
+  return {
+    type: chosen.type,
+    value: Math.max(1, Math.round(chosen.base * RARITY_MULT[item.rarity])),
+  };
+}
+
+// C. INFUSION de rareté — monte d'un cran et recalcule la valeur des effets.
+export function infuseCost(item: Item): number {
+  return 50 + item.level * 20 + RARITY_RANK[item.rarity] * 60;
+}
+export function infusedItem(item: Item): Item | null {
+  const nr = nextRarity(item.rarity);
+  if (!nr) return null; // déjà divin
+  const rescale = (e: ItemEffect): ItemEffect => ({
+    type: e.type,
+    value: Math.max(1, Math.round((e.value / RARITY_MULT[item.rarity]) * RARITY_MULT[nr])),
+  });
+  return {
+    ...item,
+    rarity: nr,
+    effect: rescale(item.effect),
+    ...(item.effect2 ? { effect2: rescale(item.effect2) } : {}),
+  };
+}
+
+// D. CRAFT de pièce de set ciblée — coût élevé (réutilise rollSetPiece pour l'objet).
+export function craftSetCost(level: number): number {
+  return 200 + Math.max(1, level) * 40;
+}
+
 export interface AggregatedEffects {
   damagePct: number;
   critAdd: number; // fraction 0..1

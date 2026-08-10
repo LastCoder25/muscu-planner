@@ -274,6 +274,15 @@
         </div>
         <q-btn
           class="full-width q-mb-sm"
+          color="primary"
+          text-color="dark"
+          no-caps
+          icon="add"
+          label="Nouveau Défi 360"
+          @click="router.push('/combo/new')"
+        />
+        <q-btn
+          class="full-width q-mb-sm"
           outline
           color="primary"
           no-caps

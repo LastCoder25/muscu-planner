@@ -444,12 +444,60 @@
                   </button>
                   <button class="link-btn" @click="doSell(it)">Vendre 🪙{{ sellValue(it) }}</button>
                 </div>
+                <div class="inv-actions ws-inline">
+                  <button
+                    class="link-btn"
+                    :disabled="char.row.dust < rerollCost(it)"
+                    @click="doReroll(it)"
+                  >
+                    ♻️ Reroll ✨{{ rerollCost(it) }}
+                  </button>
+                  <button
+                    v-if="nextRarity(it.rarity)"
+                    class="link-btn"
+                    :disabled="char.row.dust < infuseCost(it)"
+                    @click="doInfuse(it)"
+                  >
+                    ⬆️ Sublimer ✨{{ infuseCost(it) }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </template>
         <div v-else class="empty-inv">
           Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
+        </div>
+
+        <!-- Atelier de poussière : investir la poussière autrement que l'infusion de niveau -->
+        <div class="sec-title">🔧 Atelier de poussière</div>
+        <div class="sec-hint">Investis ta poussière — <b>✨ {{ char.row.dust }}</b> dispo.</div>
+        <div class="workshop">
+          <button
+            class="ws-btn"
+            :disabled="char.row.dust < forgeCost(c.level.level, false)"
+            @click="doForge()"
+          >
+            🔨 Forger un objet (aléatoire) · ✨{{ forgeCost(c.level.level, false) }}
+          </button>
+          <button
+            class="ws-btn"
+            :disabled="char.row.dust < forgeCost(c.level.level, true)"
+            @click="forgeSlotOpen = true"
+          >
+            🎯 Forger (choisir l'emplacement) · ✨{{ forgeCost(c.level.level, true) }}
+          </button>
+          <button
+            class="ws-btn"
+            :disabled="char.row.dust < craftSetCost(c.level.level)"
+            @click="craftOpen = true"
+          >
+            🧩 Forger une pièce de set · ✨{{ craftSetCost(c.level.level) }}
+          </button>
+        </div>
+        <div class="ws-note">
+          Forge un objet neuf <b>à ton niveau</b> (rareté au hasard). <b>♻️ Reroll</b> (change la stat)
+          et <b>⬆️ Sublimer</b> (rareté +1) se font sur un objet du sac ci-dessus.
         </div>
 
         <div class="foot">
@@ -974,6 +1022,61 @@
       </q-card>
     </q-dialog>
 
+    <!-- Atelier : forge ciblée → choix de l'emplacement -->
+    <q-dialog :model-value="forgeSlotOpen" position="bottom" @update:model-value="forgeSlotOpen = false">
+      <q-card class="ws-modal">
+        <div class="ws-modal-title font-display">🎯 Forger — choisis l'emplacement</div>
+        <div class="ws-slots">
+          <button v-for="slot in SLOTS" :key="slot" class="ws-slot" @click="doForge(slot)">
+            <span class="ws-slot-emo">{{ SLOT_EMOJI[slot] }}</span>
+            <span>{{ SLOT_LABEL[slot] }}</span>
+          </button>
+        </div>
+      </q-card>
+    </q-dialog>
+
+    <!-- Atelier : craft d'une pièce de set → choix du set + emplacement -->
+    <q-dialog :model-value="craftOpen" position="bottom" @update:model-value="craftOpen = false">
+      <q-card class="ws-modal">
+        <div class="ws-modal-title font-display">🧩 Forger une pièce de set</div>
+        <div class="ws-field">
+          <span class="ws-lbl">Set</span>
+          <div class="ws-chips">
+            <button
+              v-for="s in ITEM_SETS"
+              :key="s.id"
+              class="ws-chip"
+              :class="{ on: craftSetId === s.id }"
+              @click="craftSetId = s.id"
+            >
+              {{ s.emoji }} {{ s.name }}
+            </button>
+          </div>
+        </div>
+        <div class="ws-field">
+          <span class="ws-lbl">Emplacement</span>
+          <div class="ws-chips">
+            <button
+              v-for="slot in SLOTS"
+              :key="slot"
+              class="ws-chip"
+              :class="{ on: craftSlot === slot }"
+              @click="craftSlot = slot"
+            >
+              {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
+            </button>
+          </div>
+        </div>
+        <button
+          class="ws-btn"
+          :disabled="!char.row || char.row.dust < craftSetCost(c.level.level)"
+          @click="doCraftSet"
+        >
+          Forger · ✨{{ craftSetCost(c.level.level) }}
+        </button>
+      </q-card>
+    </q-dialog>
+
     <!-- Rapport de combat (post-run) en MODALE : toutes les infos + réattaquer /
          inventaire / fermer -->
     <q-dialog v-model="reportOpen">
@@ -1162,6 +1265,11 @@ import {
   upgradeCost,
   salvageValue,
   sellValue,
+  forgeCost,
+  rerollCost,
+  infuseCost,
+  craftSetCost,
+  nextRarity,
   SLOTS,
   SLOT_LABEL,
   SLOT_EMOJI,
@@ -2055,6 +2163,58 @@ function doUnequip(slot: ItemSlot) {
 }
 function doUpgrade(itemId: string) {
   withUid((uid) => char.upgradeItem(uid, itemId, c.value.level.level), 'Amélioration impossible.');
+}
+
+// ── Atelier de poussière (forge / reroll / sublimer / craft de set) ──
+const forgeSlotOpen = ref(false);
+const craftOpen = ref(false);
+const craftSetId = ref<string>(ITEM_SETS[0]?.id ?? '');
+const craftSlot = ref<ItemSlot>('weapon');
+function doForge(slot?: ItemSlot) {
+  forgeSlotOpen.value = false;
+  withUid(
+    (uid) =>
+      char
+        .forge(uid, { level: c.value.level.level, ...(slot ? { slot } : {}) })
+        .then(() =>
+          $q.notify({ type: 'positive', position: 'top', message: 'Objet forgé — au sac 🎒' }),
+        ),
+    'Forge impossible.',
+  );
+}
+function doReroll(it: Item) {
+  withUid(
+    (uid) =>
+      char
+        .rerollEffect(uid, it.id)
+        .then(() => $q.notify({ type: 'positive', position: 'top', message: 'Effet rerollé ♻️' })),
+    'Reroll impossible.',
+  );
+}
+function doInfuse(it: Item) {
+  withUid(
+    (uid) =>
+      char
+        .infuseRarity(uid, it.id)
+        .then(() => $q.notify({ type: 'positive', position: 'top', message: 'Rareté sublimée ⬆️' })),
+    'Sublimation impossible.',
+  );
+}
+function doCraftSet() {
+  craftOpen.value = false;
+  withUid(
+    (uid) =>
+      char
+        .craftSet(uid, {
+          level: c.value.level.level,
+          setId: craftSetId.value,
+          slot: craftSlot.value,
+        })
+        .then(() =>
+          $q.notify({ type: 'positive', position: 'top', message: 'Pièce de set forgée 🧩' }),
+        ),
+    'Forge de set impossible.',
+  );
 }
 function doSell(it: Item) {
   withUid(
@@ -4227,6 +4387,103 @@ onMounted(async () => {
 }
 .foot b {
   color: var(--text);
+}
+
+/* Atelier de poussière */
+.ws-inline {
+  margin-top: 6px;
+}
+.workshop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ws-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.ws-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--dim);
+  border-color: var(--line);
+}
+.ws-note {
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.5;
+  margin: 8px 0 14px;
+}
+.ws-note b {
+  color: var(--text);
+}
+.ws-modal {
+  width: 100%;
+  max-width: 520px;
+  background: var(--surface);
+  color: var(--text);
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  padding: 16px;
+}
+.ws-modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.ws-slots {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.ws-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+.ws-slot-emo {
+  font-size: 20px;
+}
+.ws-field {
+  margin-bottom: 12px;
+}
+.ws-lbl {
+  font-size: 12px;
+  color: var(--dim);
+}
+.ws-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.ws-chip {
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--dim);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ws-chip.on {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* Sac vide (onglet Équipement) */
