@@ -2,26 +2,32 @@
   <svg class="avatar" :class="'p-' + profile" viewBox="0 0 120 140" role="img" :aria-label="label">
     <!-- Aura de profil (respire) -->
     <circle class="aura" cx="60" cy="66" r="46" />
-    <!-- Corps -->
+    <!-- Corps (idle : respire légèrement) -->
     <g class="body">
-      <!-- tête -->
-      <circle class="skin" cx="60" cy="34" r="16" />
-      <!-- casque / cheveux teintés profil -->
-      <path class="hair" d="M44 32a16 16 0 0 1 32 0 20 20 0 0 0-32 0z" />
-      <!-- torse (armure) -->
-      <path class="torso" d="M40 56h40l-5 44H45z" />
-      <!-- ceinture -->
-      <rect class="belt" x="43" y="86" width="34" height="6" rx="2" />
       <!-- jambes -->
       <rect class="leg" x="47" y="100" width="10" height="26" rx="3" />
       <rect class="leg" x="63" y="100" width="10" height="26" rx="3" />
       <!-- bras -->
       <rect class="arm" x="30" y="58" width="9" height="30" rx="4" />
       <rect class="arm" x="81" y="58" width="9" height="30" rx="4" />
-      <!-- arme (si équipée) -->
+      <!-- épaulières (visibles si armure équipée) -->
+      <template v-if="has.armor">
+        <circle class="pauldron" cx="36" cy="58" r="7" />
+        <circle class="pauldron" cx="84" cy="58" r="7" />
+      </template>
+      <!-- torse (armure) -->
+      <path class="torso" :class="{ armored: has.armor }" d="M40 56h40l-5 44H45z" />
+      <!-- ceinture -->
+      <rect class="belt" x="43" y="86" width="34" height="6" rx="2" />
+      <!-- tête -->
+      <circle class="skin" cx="60" cy="34" r="16" />
+      <!-- casque / cheveux teintés profil -->
+      <path class="hair" d="M44 32a16 16 0 0 1 32 0 20 20 0 0 0-32 0z" />
+      <!-- arme (si équipée) + éclat -->
       <g v-if="has.weapon" class="weapon">
         <rect x="90" y="40" width="4" height="52" rx="2" />
         <rect x="86" y="52" width="12" height="4" rx="2" />
+        <rect class="glint" x="90" y="40" width="4" height="10" rx="2" />
       </g>
       <!-- relique (orbe flottante, si équipée) -->
       <circle v-if="has.relic" class="relic" cx="26" cy="46" r="6" />
@@ -55,6 +61,7 @@ const props = defineProps<{
 
 const has = computed(() => ({
   weapon: !!props.equipped.weapon,
+  armor: !!props.equipped.armor,
   relic: !!props.equipped.relic,
 }));
 const slotPips = computed(() =>
@@ -96,8 +103,25 @@ const label = computed(
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .aura {
+  .aura,
+  .body,
+  .glint,
+  .relic {
     animation: none;
+  }
+}
+/* Idle : le corps respire/oscille doucement. */
+.body {
+  transform-origin: 60px 90px;
+  animation: idle 3.2s ease-in-out infinite;
+}
+@keyframes idle {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  50% {
+    transform: translateY(-1.5px) scaleY(1.012);
   }
 }
 .skin {
@@ -110,6 +134,32 @@ const label = computed(
   fill: var(--surface-2, #2a241c);
   stroke: var(--accent);
   stroke-width: 2;
+}
+/* Armure équipée : torse renforcé + épaulières. */
+.torso.armored {
+  fill: color-mix(in srgb, var(--accent) 18%, var(--surface-2, #2a241c));
+  stroke-width: 3;
+}
+.pauldron {
+  fill: var(--accent);
+  opacity: 0.85;
+}
+.glint {
+  fill: #fff;
+  opacity: 0.7;
+  animation: glint 2.6s ease-in-out infinite;
+}
+@keyframes glint {
+  0%,
+  70%,
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  80% {
+    opacity: 0.8;
+    transform: translateY(38px);
+  }
 }
 .belt {
   fill: var(--accent);

@@ -1,9 +1,10 @@
 <template>
-  <div class="stage">
+  <div class="stage" :class="{ qshake: stageShake }">
     <div class="cs-vs">
       <!-- Joueur -->
       <div class="cs-side" :class="{ shake: shakeSide === 'player' }">
-        <div class="cs-emo">🛡️</div>
+        <div class="cs-emo" :class="{ hit: shakeSide === 'player' }">🛡️</div>
+        <span v-if="burstSide === 'player'" class="cs-burst" />
         <div class="cs-name">{{ playerName }}</div>
         <div class="cs-bar"><span class="p" :style="{ width: pPct + '%' }" /></div>
         <div class="cs-pv">{{ playerPv }}</div>
@@ -14,7 +15,8 @@
 
       <!-- Monstre courant -->
       <div class="cs-side" :class="{ shake: shakeSide === 'monster' }">
-        <div class="cs-emo">{{ foe?.emoji ?? '👾' }}</div>
+        <div class="cs-emo" :class="{ hit: shakeSide === 'monster' }">{{ foe?.emoji ?? '👾' }}</div>
+        <span v-if="burstSide === 'monster'" class="cs-burst" />
         <div class="cs-name">{{ foe?.name ?? '—' }}</div>
         <div class="cs-bar"><span class="m" :style="{ width: mPct + '%' }" /></div>
         <div class="cs-pv">{{ monsterPv }}</div>
@@ -64,6 +66,8 @@ const playerPv = ref(props.playerMaxPv);
 const monsterPv = ref(props.fights[0]?.maxPv ?? 1);
 const pop = ref<{ side: 'player' | 'monster'; text: string; kind: string } | null>(null);
 const shakeSide = ref<'player' | 'monster' | null>(null);
+const burstSide = ref<'player' | 'monster' | null>(null);
+const stageShake = ref(false); // secousse de toute la scène sur un critique
 const done = ref(false);
 const lastWin = ref(false);
 
@@ -85,6 +89,7 @@ function apply(step: { fi: number; e: CombatEvent }) {
   const defender = e.who === 'player' ? 'monster' : 'player';
   if (e.type === 'dodge') {
     pop.value = { side: defender, text: 'esquive', kind: 'dodge' };
+    burstSide.value = null;
   } else {
     pop.value = {
       side: defender,
@@ -92,8 +97,14 @@ function apply(step: { fi: number; e: CombatEvent }) {
       kind: e.type,
     };
     shakeSide.value = defender;
+    burstSide.value = defender; // étincelle d'impact
+    if (e.type === 'crit') stageShake.value = true; // crit = toute la scène tremble
     clearTimeout(popTimer);
-    popTimer = setTimeout(() => (shakeSide.value = null), 140);
+    popTimer = setTimeout(() => {
+      shakeSide.value = null;
+      burstSide.value = null;
+      stageShake.value = false;
+    }, 160);
   }
 }
 
@@ -102,6 +113,8 @@ function finish() {
   timer = undefined;
   pop.value = null;
   shakeSide.value = null;
+  burstSide.value = null;
+  stageShake.value = false;
   const last = steps.value[steps.value.length - 1];
   lastWin.value = !!last && last.e.monsterPv <= 0 && last.e.playerPv > 0;
   done.value = true;
@@ -155,6 +168,58 @@ onBeforeUnmount(() => {
 .cs-emo {
   font-size: 40px;
   line-height: 1.1;
+  transition: filter 0.05s;
+}
+.cs-emo.hit {
+  filter: brightness(1.9) drop-shadow(0 0 5px var(--d4));
+}
+/* Étincelle d'impact : anneau qui s'étend et s'estompe. */
+.cs-burst {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  pointer-events: none;
+  animation: burst 0.28s ease-out;
+}
+@keyframes burst {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+/* Crit : toute la scène tremble. */
+.stage.qshake {
+  animation: qshake 0.16s linear;
+}
+@keyframes qshake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-3px, 2px);
+  }
+  75% {
+    transform: translate(3px, -2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cs-burst,
+  .stage.qshake {
+    animation: none;
+  }
+  .cs-emo.hit {
+    filter: none;
+  }
 }
 .cs-name {
   font-size: 12px;
