@@ -11,8 +11,6 @@ import {
   forgeCost,
   rerolledEffect,
   rerollCost,
-  infusedItem,
-  infuseCost,
   craftSetCost,
   rollSetPiece,
   type Item,
@@ -401,18 +399,6 @@ export const useCharacterStore = defineStore('character', () => {
     const updated: Item = { ...owned.item, effect: rerolledEffect(Math.random, owned.item) };
     return applyItemUpdate(userId, cur, owned, updated, cost);
   }
-  // C. Infuse un objet (rareté +1 cran).
-  async function infuseRarity(userId: string, itemId: string) {
-    const cur = row.value;
-    if (!cur) return;
-    const owned = findOwned(cur, itemId);
-    if (!owned) return;
-    const updated = infusedItem(owned.item);
-    if (!updated) return; // déjà divin
-    const cost = infuseCost(owned.item);
-    if (cur.dust < cost) return;
-    return applyItemUpdate(userId, cur, owned, updated, cost);
-  }
   // D. Forge une pièce de set ciblée (set + emplacement) au niveau joueur → au sac.
   async function craftSet(userId: string, opts: { level: number; setId: string; slot: ItemSlot }) {
     const cur = row.value;
@@ -561,7 +547,6 @@ export const useCharacterStore = defineStore('character', () => {
     upgradeItem,
     forge,
     rerollEffect,
-    infuseRarity,
     craftSet,
     resetTalents,
     spendEnergy,

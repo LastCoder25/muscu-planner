@@ -306,17 +306,14 @@ export function rollSetPiece(
   };
 }
 
-// ── Atelier de poussière (dust sinks) : forge / reroll / infusion / craft de set ──
-export function nextRarity(r: Rarity): Rarity | null {
-  const order: Rarity[] = ['common', 'rare', 'epic', 'legendary', 'divin'];
-  const i = order.indexOf(r);
-  return i >= 0 && i < order.length - 1 ? order[i + 1]! : null;
-}
+// ── Atelier de poussière (dust sinks) : forge / reroll / craft de set ──
+// (La SUBLIMATION de rareté a été retirée le 2026‑08‑10 : trop puissante — elle
+// permettait de fabriquer du divin bien avant d'y avoir droit. La rareté ne monte
+// plus que par les DROPS/forge, pas au craft.)
 
 // Coûts de l'atelier VOLONTAIREMENT élevés (2026‑08‑10) : la poussière s'accumule
-// vite (farm) → sans un vrai coût, on sublime/forge à l'infini. Base + composante
-// NIVEAU + facteur de RARETÉ quasi-exponentiel (chaque cran de rareté coûte bien
-// plus) → altérer/créer du haut de gamme reste un investissement, même avec du stock.
+// vite (farm) → sans un vrai coût, on forge à l'infini. Base + composante NIVEAU +
+// facteur de RARETÉ quasi-exponentiel (`rerollCost`) → altérer reste un investissement.
 const RARITY_STEP: Record<number, number> = { 0: 1, 1: 2, 2: 3.5, 3: 6, 4: 10 };
 
 // A. FORGE — créer un objet neuf. Ciblé (choisir l'emplacement) = plus cher que l'aléatoire.
@@ -355,29 +352,6 @@ export function rerolledEffect(rng: () => number, item: Item): ItemEffect {
   return {
     type: chosen.type,
     value: Math.max(1, Math.round(chosen.base * RARITY_MULT[item.rarity])),
-  };
-}
-
-// C. INFUSION de rareté — monte d'un cran et recalcule la valeur des effets. Coût
-// piloté par la rareté CIBLE (quasi-exponentiel) → sublimer jusqu'au divin = gros
-// investissement cumulé (rare→épique→légendaire→divin de plus en plus cher).
-export function infuseCost(item: Item): number {
-  const nr = nextRarity(item.rarity);
-  const targetRank = nr ? RARITY_RANK[nr] : RARITY_RANK[item.rarity] + 1;
-  return Math.round((100 + item.level * 25) * (RARITY_STEP[targetRank] ?? 12));
-}
-export function infusedItem(item: Item): Item | null {
-  const nr = nextRarity(item.rarity);
-  if (!nr) return null; // déjà divin
-  const rescale = (e: ItemEffect): ItemEffect => ({
-    type: e.type,
-    value: Math.max(1, Math.round((e.value / RARITY_MULT[item.rarity]) * RARITY_MULT[nr])),
-  });
-  return {
-    ...item,
-    rarity: nr,
-    effect: rescale(item.effect),
-    ...(item.effect2 ? { effect2: rescale(item.effect2) } : {}),
   };
 }
 

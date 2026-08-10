@@ -473,14 +473,6 @@
                   >
                     ♻️ Reroll ✨{{ rerollCost(it) }}
                   </button>
-                  <button
-                    v-if="nextRarity(it.rarity)"
-                    class="link-btn"
-                    :disabled="char.row.dust < infuseCost(it)"
-                    @click="doInfuse(it)"
-                  >
-                    ⬆️ Sublimer ✨{{ infuseCost(it) }}
-                  </button>
                 </div>
               </div>
             </div>
@@ -517,8 +509,9 @@
           </button>
         </div>
         <div class="ws-note">
-          Forge un objet neuf <b>à ton niveau</b> (rareté au hasard). <b>♻️ Reroll</b> (change la stat)
-          et <b>⬆️ Sublimer</b> (rareté +1) se font sur un objet du sac ci-dessus.
+          Forge un objet neuf <b>à ton niveau</b> (rareté au hasard). <b>♻️ Reroll</b> (change la
+          stat) se fait sur un objet du sac. La rareté ne se monte plus au craft : le
+          <b>haut de gamme s'obtient en explorant</b> (drops/boss).
         </div>
 
         <div class="foot">
@@ -1308,9 +1301,7 @@ import {
   sellValue,
   forgeCost,
   rerollCost,
-  infuseCost,
   craftSetCost,
-  nextRarity,
   SLOTS,
   SLOT_LABEL,
   SLOT_EMOJI,
@@ -2254,15 +2245,6 @@ function doReroll(it: Item) {
         .rerollEffect(uid, it.id)
         .then(() => $q.notify({ type: 'positive', position: 'top', message: 'Effet rerollé ♻️' })),
     'Reroll impossible.',
-  );
-}
-function doInfuse(it: Item) {
-  withUid(
-    (uid) =>
-      char
-        .infuseRarity(uid, it.id)
-        .then(() => $q.notify({ type: 'positive', position: 'top', message: 'Rareté sublimée ⬆️' })),
-    'Sublimation impossible.',
   );
 }
 function openCraft() {

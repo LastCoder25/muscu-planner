@@ -18,10 +18,7 @@ import {
   forgeItem,
   rerollCost,
   rerolledEffect,
-  infuseCost,
-  infusedItem,
   craftSetCost,
-  nextRarity,
   type Item,
   type Equipped,
 } from '@/lib/items';
@@ -255,34 +252,16 @@ describe('atelier de poussière (forge / reroll / infusion / craft)', () => {
     const eff = rerolledEffect(mulberry32(2), sword);
     expect(['damage_pct', 'crit_pct', 'lifesteal_pct']).toContain(eff.type);
   });
-  it('infusion : monte d’un cran et augmente la valeur ; null au divin', () => {
-    const rare = item({ slot: 'armor', effect: { type: 'max_pv_pct', value: 16 }, rarity: 'rare' });
-    const up = infusedItem(rare)!;
-    expect(nextRarity('rare')).toBe('epic');
-    expect(up.rarity).toBe('epic');
-    expect(up.effect.value).toBeGreaterThan(rare.effect.value);
-    const divin = item({ slot: 'armor', effect: { type: 'max_pv_pct', value: 50 }, rarity: 'divin' });
-    expect(infusedItem(divin)).toBeNull();
-  });
   it('craft de set : coût élevé qui monte avec le niveau', () => {
     expect(craftSetCost(10)).toBeGreaterThan(200);
     expect(craftSetCost(20)).toBeGreaterThan(craftSetCost(10));
   });
-  it('coûts qui montent avec le NIVEAU (forge/reroll/infuse)', () => {
+  it('coûts qui montent avec le NIVEAU + la rareté (forge/reroll)', () => {
     expect(forgeCost(20, false)).toBeGreaterThan(forgeCost(5, false));
     const lo = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, level: 3 });
     const hi = item({ ...lo, level: 20 });
     expect(rerollCost(hi)).toBeGreaterThan(rerollCost(lo));
-    expect(infuseCost(hi)).toBeGreaterThan(infuseCost(lo));
-  });
-  it('infusion : la rareté cible enchérit fortement (quasi-exponentiel)', () => {
-    const common = item({
-      slot: 'weapon',
-      effect: { type: 'damage_pct', value: 8 },
-      rarity: 'common',
-      level: 5,
-    });
-    const epic = item({ ...common, rarity: 'epic' });
-    expect(infuseCost(epic)).toBeGreaterThan(infuseCost(common) * 1.5);
+    const epic = item({ ...lo, rarity: 'epic' });
+    expect(rerollCost(epic)).toBeGreaterThan(rerollCost(lo)); // rareté enchérit
   });
 });
