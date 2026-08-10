@@ -670,9 +670,10 @@
               >
             </div>
 
-            <div class="mboss-set">
+            <button class="mboss-set" @click="openSetInfo(b)">
               {{ bossSet(b).emoji }} {{ bossSet(b).name }} · <b>{{ bossSetCount(b) }}/4</b> pièces
-            </div>
+              <span class="mboss-set-info">ⓘ bonus</span>
+            </button>
             <div v-if="bossUnlocked(b)" class="dgn-hint">{{ b.hint }}</div>
             <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(b) }}</div>
 
@@ -905,6 +906,32 @@
           Les <b>pièces de set</b> ne tombent que sur les <b>boss de palier</b>.
         </div>
         <button class="drops-close" @click="dropInfo = null">Fermer</button>
+      </q-card>
+    </q-dialog>
+
+    <!-- Bonus de SET d'un boss (au clic sur la ligne de set de la tuile) -->
+    <q-dialog :model-value="!!setInfo" position="bottom" @update:model-value="setInfo = null">
+      <q-card v-if="setInfo" class="drops-card">
+        <div class="drops-title font-display">
+          {{ setInfo.set.emoji }} {{ setInfo.set.name }}
+        </div>
+        <div class="set-theme">{{ setInfo.set.theme }}</div>
+        <div class="drops-sub">Bonus par paliers (au niveau {{ setInfo.level }})</div>
+        <div class="set-tiers">
+          <span
+            v-for="t in setInfo.set.tiers"
+            :key="t.pieces"
+            class="set-tier"
+            :class="{ on: setInfo.count >= t.pieces }"
+          >
+            {{ t.pieces }} pièces : {{ effectLabel({ type: t.type, value: t.base }, setInfo.level) }}
+          </span>
+        </div>
+        <div class="drops-note">
+          Tu as <b>{{ setInfo.count }}/4</b> pièces. Chaque victoire sur ce boss lâche une pièce
+          (emplacement aléatoire) au niveau du palier.
+        </div>
+        <button class="drops-close" @click="setInfo = null">Fermer</button>
       </q-card>
     </q-dialog>
 
@@ -1878,6 +1905,12 @@ function bossSetCount(b: MilestoneBoss): number {
   const r = char.row;
   if (!r) return 0;
   return SLOTS.map((s) => r.equipped[s]).filter((it) => it?.setId === b.setId).length;
+}
+
+// Aperçu du bonus de set d'un boss (modale ouverte au clic sur la ligne de set).
+const setInfo = ref<{ set: ReturnType<typeof bossSet>; level: number; count: number } | null>(null);
+function openSetInfo(b: MilestoneBoss) {
+  setInfo.value = { set: bossSet(b), level: b.unlockLevel, count: bossSetCount(b) };
 }
 
 // Tire les 3 récompenses au CHOIX d'un boss (mixte : pièce de set / objet de
@@ -3995,13 +4028,34 @@ onMounted(async () => {
   font-size: 19px;
 }
 .mboss-set {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
   font-size: 12.5px;
   color: var(--accent);
   font-weight: 600;
   margin-top: 4px;
+  padding: 4px 0;
+}
+.mboss-set-info {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 1px 7px;
 }
 .mboss.locked .mboss-set {
   color: var(--dim);
+}
+.mboss.locked .mboss-set-info {
+  background: var(--dim);
 }
 .mboss-badge {
   font-size: 13px;
