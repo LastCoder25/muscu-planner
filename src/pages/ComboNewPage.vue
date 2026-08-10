@@ -41,8 +41,8 @@
             <div class="fmt-sub">{{ currentSplit?.subtitle }}</div>
           </div>
           <div class="vol-summary">
-            🎯 <b>{{ activeCount }}</b> emplacements · <b>{{ totalSets }}</b> séries / semaine
-            <span class="vol-hint">(tu choisis les exos à l'étape suivante)</span>
+            🎯 tu choisiras <b>~{{ suggestedTotalExos }}</b> exercices (sur
+            <b>{{ activeCount }}</b> emplacements) · <b>{{ totalSets }}</b> séries / semaine
           </div>
         </div>
         <div class="foot-bar">
@@ -80,8 +80,13 @@
           </div>
         </div>
         <div class="draft-instr">
-          Choisis {{ suggestN(curKey) > 1 ? 'tes exercices' : 'ton exercice' }}
-          <span class="di-note">suggéré : {{ suggestN(curKey) }}</span>
+          <span>
+            Choisis
+            {{ suggestN(curKey) > 1 ? 'jusqu’à ' + suggestN(curKey) + ' exercices' : 'ton exercice' }}
+          </span>
+          <span class="di-note" :class="{ full: atCap(curKey) }">
+            {{ pickCount(curKey) }}/{{ suggestN(curKey) }}
+          </span>
         </div>
 
         <div class="tile-grid">
@@ -90,7 +95,10 @@
             :key="e.id"
             type="button"
             class="dtile"
-            :class="{ on: isSelected(curKey, e.id) }"
+            :class="{
+              on: isSelected(curKey, e.id),
+              muted: atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1,
+            }"
             @click="toggleExo(curKey, e.id)"
           >
             <div class="dtile-media">
@@ -308,14 +316,28 @@ function perExo(key: string): number {
   const n = p?.exercise_ids.length ?? 0;
   return n > 0 ? Math.max(1, Math.round((p!.target ?? 0) / n)) : 0;
 }
-// Sélection multiple par emplacement ; sélectionner (ré)active l'emplacement.
+// Sélection par emplacement, plafonnée au nombre suggéré (`suggestN`) :
+//  - déjà choisi → on retire ;
+//  - au plafond avec N=1 → l'exo choisi REMPLACE le précédent (façon radio) ;
+//  - au plafond avec N>1 → on bloque (il faut déselectionner pour changer).
 function toggleExo(key: string, exId: string) {
   const p = picks[key];
   if (!p) return;
   const i = p.exercise_ids.indexOf(exId);
-  if (i >= 0) p.exercise_ids.splice(i, 1);
-  else p.exercise_ids.push(exId);
+  if (i >= 0) {
+    p.exercise_ids.splice(i, 1);
+  } else {
+    const cap = suggestN(key);
+    if (p.exercise_ids.length >= cap) {
+      if (cap === 1) p.exercise_ids.splice(0, p.exercise_ids.length);
+      else return; // plein : on garde la sélection actuelle
+    }
+    p.exercise_ids.push(exId);
+  }
   enabled[key] = p.exercise_ids.length > 0;
+}
+function atCap(key: string): boolean {
+  return pickCount(key) >= suggestN(key);
 }
 function bumpTarget(key: string, d: number) {
   const p = picks[key];
@@ -330,6 +352,10 @@ function pickFormat(id: string) {
 }
 
 const activeCount = computed(() => COMBO_SLOTS.filter((s) => enabled[s.key]).length);
+// Nb d'exos qu'on choisira (somme des suggestions des emplacements actifs).
+const suggestedTotalExos = computed(() =>
+  COMBO_SLOTS.reduce((a, s) => a + (enabled[s.key] ? suggestN(s.key) : 0), 0),
+);
 const totalSets = computed(() =>
   COMBO_SLOTS.reduce((a, s) => a + (enabled[s.key] ? (picks[s.key]?.target ?? 0) : 0), 0),
 );
@@ -566,19 +592,32 @@ onMounted(async () => {
   font-size: 26px;
 }
 .draft-instr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
   margin-bottom: 12px;
 }
 .di-note {
-  font-size: 11px;
-  font-weight: 600;
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dim);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.di-note.full {
   color: var(--bg);
   background: var(--accent);
-  border-radius: 999px;
-  padding: 2px 8px;
-  margin-left: 6px;
+  border-color: var(--accent);
+}
+.dtile.muted {
+  opacity: 0.45;
 }
 .tile-grid {
   display: grid;
