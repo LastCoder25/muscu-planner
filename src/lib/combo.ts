@@ -261,7 +261,11 @@ export function suggestComboTarget(level: Level, essential: boolean): number {
 export type ComboVolume = 'light' | 'moderate' | 'intense';
 export type ComboVariety = 'low' | 'med' | 'high';
 const VOLUME_MULT: Record<ComboVolume, number> = { light: 0.6, moderate: 1, intense: 1.4 };
-const VARIETY_EXOS: Record<ComboVariety, number> = { low: 1, med: 2, high: 3 };
+// La variété est un PLAFOND d'exos/groupe ; le nombre réel découle du volume
+// (on vise ~SETS_PER_EXO séries par exo → un gros volume = plus d'exos, jamais
+// 13 séries d'un seul mouvement).
+const VARIETY_CAP: Record<ComboVariety, number> = { low: 1, med: 2, high: 3 };
+const SETS_PER_EXO = 5;
 
 /** Volume hebdo de base par muscle (séries) selon le niveau (repère hypertrophie). */
 export function comboBaseWeekly(level: Level): number {
@@ -311,12 +315,14 @@ export function suggestFullBodyPlan(
   variety: ComboVariety,
   slots: ComboSlotSpec[],
 ): ComboSlotPlan[] {
-  const nWanted = VARIETY_EXOS[variety];
+  const cap = VARIETY_CAP[variety];
   return slots.map((s) => {
     const active = s.essential || level !== 'debutant';
     if (!active) return { slot: s.key, active: false, nExos: 0, weeklySets: 0, setsPerExo: 0 };
     const weeklySets = comboWeeklySets(level, volume, s.essential);
-    const nExos = s.essential ? nWanted : 1;
+    // Nb d'exos = volume / ~5 séries, borné par le plafond de variété (accessoires : 1).
+    const wanted = Math.max(1, Math.round(weeklySets / SETS_PER_EXO));
+    const nExos = s.essential ? Math.min(cap, wanted) : 1;
     const setsPerExo = Math.max(1, Math.round(weeklySets / nExos));
     return { slot: s.key, active: true, nExos, weeklySets, setsPerExo };
   });

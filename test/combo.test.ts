@@ -197,10 +197,22 @@ describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
     expect(hi.weeklySets).toBeGreaterThan(mod.weeklySets);
   });
 
-  it('variété = nb d’exos par groupe essentiel (1/2/3)', () => {
+  it('la variété PLAFONNE le nb d’exos (1/2/3) à volume suffisant', () => {
     expect(bySlot(suggestFullBodyPlan('avance', 'moderate', 'low', SLOTS), 'push').nExos).toBe(1);
     expect(bySlot(suggestFullBodyPlan('avance', 'moderate', 'med', SLOTS), 'push').nExos).toBe(2);
     expect(bySlot(suggestFullBodyPlan('avance', 'moderate', 'high', SLOTS), 'push').nExos).toBe(3);
+  });
+
+  it('le VOLUME pilote le nb d’exos (à variété égale) — pas 13 séries d’un seul exo', () => {
+    const light = bySlot(suggestFullBodyPlan('avance', 'light', 'high', SLOTS), 'push');
+    const intense = bySlot(suggestFullBodyPlan('avance', 'intense', 'high', SLOTS), 'push');
+    expect(intense.nExos).toBeGreaterThan(light.nExos);
+    // Aucun exo ne prend un volume absurde : ~≤ 7 séries/exo.
+    expect(intense.setsPerExo).toBeLessThanOrEqual(7);
+  });
+
+  it('petit volume → 1 exo (reste simple)', () => {
+    expect(bySlot(suggestFullBodyPlan('debutant', 'light', 'high', SLOTS), 'push').nExos).toBe(1);
   });
 
   it('tous les groupes essentiels sont actifs (full-body)', () => {

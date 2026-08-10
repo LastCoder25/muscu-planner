@@ -284,8 +284,9 @@ const ZONE_OPTS: { id: ComboZone; emoji: string; label: string; sub: string }[] 
   { id: 'bas', emoji: '⬇️', label: 'Bas', sub: 'jambes & fessiers' },
 ];
 const isBeginner = computed(() => level.value === 'debutant');
-// Débutant : variété masquée → toujours 1 exo/groupe (le plus simple).
-const effVariety = computed<ComboVariety>(() => (isBeginner.value ? 'low' : variety.value));
+// Débutant : variété masquée mais plafond à 2 exos/groupe (le nb réel suit le
+// volume) → simple sans tomber dans « 13 séries d'un seul exo ».
+const effVariety = computed<ComboVariety>(() => (isBeginner.value ? 'med' : variety.value));
 
 const VOLUME_OPTS: { id: ComboVolume; emoji: string; label: string }[] = [
   { id: 'light', emoji: '🌱', label: 'Léger' },
@@ -293,9 +294,9 @@ const VOLUME_OPTS: { id: ComboVolume; emoji: string; label: string }[] = [
   { id: 'intense', emoji: '🔥', label: 'Intense' },
 ];
 const VARIETY_OPTS: { id: ComboVariety; label: string; sub: string }[] = [
-  { id: 'low', label: 'Peu', sub: '1 exo/groupe' },
-  { id: 'med', label: 'Moyen', sub: '2 exos/groupe' },
-  { id: 'high', label: 'Beaucoup', sub: '3 exos/groupe' },
+  { id: 'low', label: 'Peu', sub: "jusqu'à 1 exo/groupe" },
+  { id: 'med', label: 'Moyen', sub: "jusqu'à 2/groupe" },
+  { id: 'high', label: 'Beaucoup', sub: "jusqu'à 3/groupe" },
 ];
 // Séries/sem d'un groupe essentiel selon le volume choisi (affiché sur les tuiles).
 function volSets(v: ComboVolume): number {
