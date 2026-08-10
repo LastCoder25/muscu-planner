@@ -268,4 +268,21 @@ describe('atelier de poussière (forge / reroll / infusion / craft)', () => {
     expect(craftSetCost(10)).toBeGreaterThan(200);
     expect(craftSetCost(20)).toBeGreaterThan(craftSetCost(10));
   });
+  it('coûts qui montent avec le NIVEAU (forge/reroll/infuse)', () => {
+    expect(forgeCost(20, false)).toBeGreaterThan(forgeCost(5, false));
+    const lo = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, level: 3 });
+    const hi = item({ ...lo, level: 20 });
+    expect(rerollCost(hi)).toBeGreaterThan(rerollCost(lo));
+    expect(infuseCost(hi)).toBeGreaterThan(infuseCost(lo));
+  });
+  it('infusion : la rareté cible enchérit fortement (quasi-exponentiel)', () => {
+    const common = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 8 },
+      rarity: 'common',
+      level: 5,
+    });
+    const epic = item({ ...common, rarity: 'epic' });
+    expect(infuseCost(epic)).toBeGreaterThan(infuseCost(common) * 1.5);
+  });
 });

@@ -446,6 +446,14 @@
                 </div>
                 <div class="inv-actions ws-inline">
                   <button
+                    v-if="it.level < c.level.level"
+                    class="link-btn"
+                    :disabled="!canUpgrade(it, char.row.dust, c.level.level)"
+                    @click="doUpgrade(it.id)"
+                  >
+                    ✨ Niveau · {{ upgradeCost(it.level, it.rarity) }}✨
+                  </button>
+                  <button
                     class="link-btn"
                     :disabled="char.row.dust < rerollCost(it)"
                     @click="doReroll(it)"
@@ -490,7 +498,7 @@
           <button
             class="ws-btn"
             :disabled="char.row.dust < craftSetCost(c.level.level)"
-            @click="craftOpen = true"
+            @click="openCraft()"
           >
             🧩 Forger une pièce de set · ✨{{ craftSetCost(c.level.level) }}
           </button>
@@ -1039,20 +1047,24 @@
     <q-dialog :model-value="craftOpen" position="bottom" @update:model-value="craftOpen = false">
       <q-card class="ws-modal">
         <div class="ws-modal-title font-display">🧩 Forger une pièce de set</div>
-        <div class="ws-field">
-          <span class="ws-lbl">Set</span>
-          <div class="ws-chips">
-            <button
-              v-for="s in ITEM_SETS"
-              :key="s.id"
-              class="ws-chip"
-              :class="{ on: craftSetId === s.id }"
-              @click="craftSetId = s.id"
-            >
-              {{ s.emoji }} {{ s.name }}
-            </button>
-          </div>
+        <div v-if="!craftableSets.length" class="ws-empty">
+          Aucun set débloqué. Bats un <b>boss de palier</b> pour débloquer son set, puis forge-le ici.
         </div>
+        <template v-else>
+          <div class="ws-field">
+            <span class="ws-lbl">Set (débloqués)</span>
+            <div class="ws-chips">
+              <button
+                v-for="s in craftableSets"
+                :key="s.id"
+                class="ws-chip"
+                :class="{ on: craftSetId === s.id }"
+                @click="craftSetId = s.id"
+              >
+                {{ s.emoji }} {{ s.name }}
+              </button>
+            </div>
+          </div>
         <div class="ws-field">
           <span class="ws-lbl">Emplacement</span>
           <div class="ws-chips">
@@ -1067,13 +1079,14 @@
             </button>
           </div>
         </div>
-        <button
-          class="ws-btn"
-          :disabled="!char.row || char.row.dust < craftSetCost(c.level.level)"
-          @click="doCraftSet"
-        >
-          Forger · ✨{{ craftSetCost(c.level.level) }}
-        </button>
+          <button
+            class="ws-btn"
+            :disabled="!char.row || char.row.dust < craftSetCost(c.level.level)"
+            @click="doCraftSet"
+          >
+            Forger · ✨{{ craftSetCost(c.level.level) }}
+          </button>
+        </template>
       </q-card>
     </q-dialog>
 
@@ -1893,6 +1906,11 @@ async function explore(d: Dungeon) {
 
 // ── Boss de palier ──
 const defeatedBossSet = computed(() => new Set(char.row?.defeated_bosses ?? []));
+// Sets DÉBLOQUÉS = ceux dont le boss de palier a été vaincu → seuls forgeables à
+// l'atelier (on ne fabrique pas un set qu'on n'a pas encore gagné en combat).
+const craftableSets = computed(() =>
+  ITEM_SETS.filter((s) => BOSSES.some((b) => b.setId === s.id && defeatedBossSet.value.has(b.id))),
+);
 function isBossBeaten(b: MilestoneBoss): boolean {
   return defeatedBossSet.value.has(b.id);
 }
@@ -2200,6 +2218,12 @@ function doInfuse(it: Item) {
         .then(() => $q.notify({ type: 'positive', position: 'top', message: 'Rareté sublimée ⬆️' })),
     'Sublimation impossible.',
   );
+}
+function openCraft() {
+  // Garantit un set sélectionné valide (parmi les débloqués) avant d'ouvrir.
+  if (!craftableSets.value.some((s) => s.id === craftSetId.value))
+    craftSetId.value = craftableSets.value[0]?.id ?? '';
+  craftOpen.value = true;
 }
 function doCraftSet() {
   craftOpen.value = false;
@@ -4439,6 +4463,15 @@ onMounted(async () => {
   font-size: 17px;
   font-weight: 700;
   margin-bottom: 12px;
+}
+.ws-empty {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.5;
+  padding: 8px 0 4px;
+}
+.ws-empty b {
+  color: var(--text);
 }
 .ws-slots {
   display: grid;
