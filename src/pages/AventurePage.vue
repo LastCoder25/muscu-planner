@@ -442,10 +442,20 @@
                   <button class="equip-btn" @click="doEquip(it.id)">
                     {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
                   </button>
-                  <button class="link-btn" @click="doSalvage(it)">
+                  <button
+                    class="link-btn lock-btn"
+                    :class="{ on: it.locked }"
+                    :title="it.locked ? 'Déverrouiller' : 'Protéger de la casse/vente'"
+                    @click="doToggleLock(it)"
+                  >
+                    {{ it.locked ? '🔒' : '🔓' }}
+                  </button>
+                  <button class="link-btn" :disabled="it.locked" @click="doSalvage(it)">
                     Casser ✨{{ salvageValue(it) }}
                   </button>
-                  <button class="link-btn" @click="doSell(it)">Vendre 🪙{{ sellValue(it) }}</button>
+                  <button class="link-btn" :disabled="it.locked" @click="doSell(it)">
+                    Vendre 🪙{{ sellValue(it) }}
+                  </button>
                 </div>
                 <div class="inv-actions ws-inline">
                   <button
@@ -2286,6 +2296,9 @@ function doSell(it: Item) {
     'Vente impossible.',
   );
 }
+function doToggleLock(it: Item) {
+  withUid((uid) => char.toggleLock(uid, it.id), 'Action impossible.');
+}
 const salvageTarget = ref<Item | null>(null);
 function doSalvage(it: Item) {
   salvageTarget.value = it;
@@ -2325,6 +2338,7 @@ const powerLossItems = computed<Item[]>(() => {
   const r = char.row;
   if (!r) return [];
   return r.inventory.filter((it) => {
+    if (it.locked) return false; // 🔒 protégé de la casse/vente en masse
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
     return itemMaxedPower(it) <= combatPowerVal.value;
   });
@@ -3226,6 +3240,13 @@ onMounted(async () => {
 }
 .link-btn:active {
   color: var(--text);
+}
+.link-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.lock-btn.on {
+  color: var(--accent);
 }
 .reset-btn {
   background: none;

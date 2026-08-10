@@ -274,12 +274,21 @@ export const useCharacterStore = defineStore('character', () => {
     return null;
   }
 
+  // Verrouille/déverrouille un objet du sac (🔒 protégé de la casse/vente).
+  async function toggleLock(userId: string, itemId: string) {
+    const cur = row.value;
+    if (!cur) return;
+    return persist(userId, {
+      inventory: cur.inventory.map((i) => (i.id === itemId ? { ...i, locked: !i.locked } : i)),
+    });
+  }
+
   // Casse un objet du sac → Poussière d'évolution.
   async function salvage(userId: string, itemId: string) {
     const cur = row.value;
     if (!cur) return;
     const item = cur.inventory.find((i) => i.id === itemId);
-    if (!item) return;
+    if (!item || item.locked) return; // 🔒 protégé
     return persist(userId, {
       dust: cur.dust + salvageValue(item),
       inventory: cur.inventory.filter((i) => i.id !== itemId),
@@ -291,7 +300,7 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return;
     const item = cur.inventory.find((i) => i.id === itemId);
-    if (!item) return;
+    if (!item || item.locked) return; // 🔒 protégé
     return persist(userId, {
       gold: cur.gold + sellValue(item),
       inventory: cur.inventory.filter((i) => i.id !== itemId),
@@ -305,12 +314,13 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur || !ids.length) return 0;
     const set = new Set(ids);
-    const targets = cur.inventory.filter((i) => set.has(i.id));
+    const targets = cur.inventory.filter((i) => set.has(i.id) && !i.locked);
     if (!targets.length) return 0;
+    const rm = new Set(targets.map((t) => t.id)); // ne retire QUE les non-verrouillés
     const gain = targets.reduce((a, it) => a + salvageValue(it), 0);
     await persist(userId, {
       dust: cur.dust + gain,
-      inventory: cur.inventory.filter((i) => !set.has(i.id)),
+      inventory: cur.inventory.filter((i) => !rm.has(i.id)),
     });
     return targets.length;
   }
@@ -319,12 +329,13 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur || !ids.length) return 0;
     const set = new Set(ids);
-    const targets = cur.inventory.filter((i) => set.has(i.id));
+    const targets = cur.inventory.filter((i) => set.has(i.id) && !i.locked);
     if (!targets.length) return 0;
+    const rm = new Set(targets.map((t) => t.id)); // ne retire QUE les non-verrouillés
     const gain = targets.reduce((a, it) => a + sellValue(it), 0);
     await persist(userId, {
       gold: cur.gold + gain,
-      inventory: cur.inventory.filter((i) => !set.has(i.id)),
+      inventory: cur.inventory.filter((i) => !rm.has(i.id)),
     });
     return targets.length;
   }
@@ -546,6 +557,7 @@ export const useCharacterStore = defineStore('character', () => {
     sell,
     salvageMany,
     sellMany,
+    toggleLock,
     upgradeItem,
     forge,
     rerollEffect,

@@ -34,6 +34,7 @@ export interface Item {
   effect: ItemEffect; // effet UNIQUE. value = magnitude de BASE (niv.1) ; grandit avec le niveau
   effect2?: ItemEffect; // LEGACY : anciens objets 2-stats (les nouveaux n'en ont plus) — encore appliqué
   setId?: string; // appartenance à un SET (bonus à 2/3/4 pièces) — cf. ITEM_SETS
+  locked?: boolean; // 🔒 protégé : exclu de la casse/vente (en masse ET individuelle)
 }
 
 // L'effet grandit de +5 % de la base par niveau au-dessus de 1. Pente VOLONTAIREMENT
