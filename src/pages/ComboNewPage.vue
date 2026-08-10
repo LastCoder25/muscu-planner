@@ -9,54 +9,68 @@
     <div v-if="loading" class="row flex-center q-pa-lg"><q-spinner color="primary" /></div>
 
     <template v-else>
-      <!-- ÉTAPE 1 — RÉGLAGES : séances/sem + format (dimensionne le volume) -->
+      <!-- ÉTAPE 1 — RÉGLAGES : on renforce TOUT le corps ; volume (+ variété) -->
       <template v-if="step === 'setup'">
         <p class="intro">
-          Un défi <b>full-body sur 7 jours</b> : on dimensionne selon tes <b>séances visées</b> et
-          ton <b>format</b>, puis tu <b>choisis tes exercices</b> un par un.
+          On renforce <b>tout le corps</b> sur 7 jours : choisis ton <b>volume</b>, on te propose le
+          nombre d'exercices et de séries. Tu fais tes séries <b>quand tu veux</b> dans la semaine.
         </p>
         <div class="vol-card">
-          <div class="vol-row">
-            <span class="vol-lbl">Séances / semaine visées</span>
-            <div class="stepper">
-              <button type="button" @click="bumpSessions(-1)">−</button>
-              <span class="stp-v font-display">{{ sessions }}</span>
-              <button type="button" @click="bumpSessions(1)">+</button>
-            </div>
+          <div class="vol-lbl">Volume d'entraînement</div>
+          <div class="opt-tiles">
+            <button
+              v-for="o in VOLUME_OPTS"
+              :key="o.id"
+              type="button"
+              class="opt-tile"
+              :class="{ on: volume === o.id }"
+              @click="volume = o.id"
+            >
+              <span class="ot-emo">{{ o.emoji }}</span>
+              <span class="ot-lbl">{{ o.label }}</span>
+              <span class="ot-sub">~{{ volSets(o.id) }} séries/groupe</span>
+            </button>
           </div>
-          <div class="vol-fmt">
-            <span class="vol-lbl">Format</span>
-            <div class="fmt-chips">
+
+          <template v-if="!isBeginner">
+            <div class="vol-lbl vl-mt">Variété d'exercices</div>
+            <div class="opt-tiles">
               <button
-                v-for="f in formats"
-                :key="f.id"
+                v-for="o in VARIETY_OPTS"
+                :key="o.id"
                 type="button"
-                class="fmt-chip"
-                :class="{ on: formatId === f.id }"
-                @click="pickFormat(f.id)"
+                class="opt-tile"
+                :class="{ on: variety === o.id }"
+                @click="variety = o.id"
               >
-                {{ f.name }}
+                <span class="ot-lbl">{{ o.label }}</span>
+                <span class="ot-sub">{{ o.sub }}</span>
               </button>
             </div>
-            <div class="fmt-sub">{{ currentSplit?.subtitle }}</div>
-          </div>
+          </template>
+
           <div class="vol-summary">
-            🎯 tu choisiras <b>~{{ suggestedTotalExos }}</b> exercices (sur
-            <b>{{ activeCount }}</b> emplacements) · <b>{{ totalSets }}</b> séries / semaine
+            🎯 <b>{{ activeCount }}</b> groupes musculaires · <b>~{{ suggestedTotalExos }}</b>
+            exercices · <b>{{ totalSets }}</b> séries / semaine
           </div>
         </div>
         <div class="foot-bar cta-bar">
-          <q-btn
-            class="foot-cta"
-            color="primary"
-            text-color="dark"
-            no-caps
-            unelevated
-            icon-right="arrow_forward"
-            label="Choisir mes exercices"
-            :disable="activeCount === 0"
-            @click="startDraft"
-          />
+          <div class="cta-stack">
+            <q-btn
+              class="foot-cta"
+              color="primary"
+              text-color="dark"
+              no-caps
+              unelevated
+              icon-right="arrow_forward"
+              label="Choisir mes exercices"
+              :disable="activeCount === 0"
+              @click="startDraft"
+            />
+            <button type="button" class="cta-auto" :disabled="creating" @click="createCombo">
+              Ou créer avec une sélection auto
+            </button>
+          </div>
         </div>
       </template>
 
@@ -209,8 +223,13 @@ import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useComboStore } from '@/stores/combo';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { COMBO_SLOTS, type ComboSlot } from '@/data/combo';
-import { splitsFor, defaultSplit } from '@/data/splits';
-import { suggestComboPlan, type ComboLeg } from '@/lib/combo';
+import {
+  suggestFullBodyPlan,
+  comboWeeklySets,
+  type ComboVolume,
+  type ComboVariety,
+  type ComboLeg,
+} from '@/lib/combo';
 import { repWeightFromExercise, isBodyweightExercise, logicalToday } from '@/lib/challenges';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
@@ -235,13 +254,27 @@ const tileMedia = 104;
 // Wizard : réglages → draft (choix des exos, un emplacement à la fois) → récap.
 const step = ref<'setup' | 'draft' | 'recap'>('setup');
 
-// Curseurs de volume.
-const sessions = ref(3);
-const formatId = ref('');
-const formats = computed(() => splitsFor(sessions.value));
-const currentSplit = computed(
-  () => formats.value.find((f) => f.id === formatId.value) ?? formats.value[0],
-);
+// Réglages full-body : volume (séries/groupe) + variété (exos/groupe).
+const volume = ref<ComboVolume>('moderate');
+const variety = ref<ComboVariety>('med');
+const isBeginner = computed(() => level.value === 'debutant');
+// Débutant : variété masquée → toujours 1 exo/groupe (le plus simple).
+const effVariety = computed<ComboVariety>(() => (isBeginner.value ? 'low' : variety.value));
+
+const VOLUME_OPTS: { id: ComboVolume; emoji: string; label: string }[] = [
+  { id: 'light', emoji: '🌱', label: 'Léger' },
+  { id: 'moderate', emoji: '💪', label: 'Modéré' },
+  { id: 'intense', emoji: '🔥', label: 'Intense' },
+];
+const VARIETY_OPTS: { id: ComboVariety; label: string; sub: string }[] = [
+  { id: 'low', label: 'Peu', sub: '1 exo/groupe' },
+  { id: 'med', label: 'Moyen', sub: '2 exos/groupe' },
+  { id: 'high', label: 'Beaucoup', sub: '3 exos/groupe' },
+];
+// Séries/sem d'un groupe essentiel selon le volume choisi (affiché sur les tuiles).
+function volSets(v: ComboVolume): number {
+  return comboWeeklySets(level.value, v, true);
+}
 
 const enabled = reactive<Record<string, boolean>>({}); // emplacement inclus dans le défi
 const picks = reactive<
@@ -343,14 +376,6 @@ function bumpTarget(key: string, d: number) {
   const p = picks[key];
   if (p) p.target = Math.max(3, p.target + d);
 }
-function bumpSessions(d: number) {
-  sessions.value = Math.min(6, Math.max(2, sessions.value + d));
-}
-function pickFormat(id: string) {
-  formatId.value = id;
-  applyPlan();
-}
-
 const activeCount = computed(() => COMBO_SLOTS.filter((s) => enabled[s.key]).length);
 // Nb d'exos qu'on choisira (somme des suggestions des emplacements actifs).
 const suggestedTotalExos = computed(() =>
@@ -364,11 +389,9 @@ const recapKeys = computed(() =>
   COMBO_SLOTS.filter((s) => enabled[s.key] && pickCount(s.key) > 0).map((s) => s.key),
 );
 
-// (Re)génère le volume par emplacement selon niveau + séances + format choisi.
+// (Re)génère le volume/variété full-body selon niveau + volume + variété.
 function applyPlan() {
-  const split = currentSplit.value;
-  if (!split) return;
-  const plan = suggestComboPlan(level.value, sessions.value, split.days, COMBO_SLOTS);
+  const plan = suggestFullBodyPlan(level.value, volume.value, effVariety.value, COMBO_SLOTS);
   for (const slot of COMBO_SLOTS) {
     const p = plan.find((x) => x.slot === slot.key);
     const cands = candidates(slot);
@@ -386,11 +409,7 @@ function applyPlan() {
   }
 }
 
-// Changer le nb de séances peut changer les formats dispo → recale sur le défaut.
-watch(sessions, () => {
-  formatId.value = defaultSplit(sessions.value, level.value).id;
-  applyPlan();
-});
+watch([volume, variety], applyPlan);
 
 async function createCombo() {
   const uid = auth.user?.id;
@@ -455,8 +474,6 @@ onMounted(async () => {
     if (challenges.list.length === 0) await challenges.fetchMine();
     if (combo.list.length === 0) await combo.fetchMine();
     lib.value = await library.fetchAll();
-    sessions.value = 3;
-    formatId.value = defaultSplit(3, level.value).id;
     applyPlan();
   } catch (e) {
     $q.notify({
@@ -511,45 +528,54 @@ onMounted(async () => {
   padding: 14px;
   margin-bottom: 14px;
 }
-.vol-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
 .vol-lbl {
   font-size: 13px;
   color: var(--text);
   font-weight: 600;
 }
-.vol-fmt {
-  margin-top: 14px;
+.vol-lbl.vl-mt {
+  margin-top: 16px;
 }
-.fmt-chips {
+.opt-tiles {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   margin-top: 8px;
 }
-.fmt-chip {
-  padding: 7px 11px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
+.opt-tile {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  border-radius: 12px;
+  border: 2px solid var(--line-soft);
   background: var(--surface-2);
-  color: var(--dim);
-  font-size: 12.5px;
+  color: var(--text);
   cursor: pointer;
 }
-.fmt-chip.on {
+.opt-tile.on {
   border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.ot-emo {
+  font-size: 22px;
+  line-height: 1;
+}
+.ot-lbl {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.ot-sub {
+  font-size: 10.5px;
+  color: var(--dim);
+  text-align: center;
+}
+.opt-tile.on .ot-sub {
   color: var(--accent);
 }
-.fmt-sub {
-  font-size: 11.5px;
-  color: var(--dim);
-  margin-top: 6px;
-}
 .vol-summary {
-  margin-top: 14px;
+  margin-top: 16px;
   padding-top: 12px;
   border-top: 1px solid var(--line-soft);
   font-size: 13px;
@@ -557,10 +583,6 @@ onMounted(async () => {
 }
 .vol-summary b {
   color: var(--accent);
-}
-.vol-hint {
-  color: var(--dim);
-  font-size: 11px;
 }
 
 /* ── Draft ── */
@@ -841,15 +863,33 @@ onMounted(async () => {
   color: var(--dim);
 }
 .cta-bar {
-  padding-top: 14px;
-  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  padding-top: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+.cta-stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .foot-cta {
-  flex: 1;
+  width: 100%;
   height: 54px;
   border-radius: 14px;
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.2px;
+}
+.cta-auto {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px;
+}
+.cta-auto:disabled {
+  opacity: 0.5;
 }
 </style>

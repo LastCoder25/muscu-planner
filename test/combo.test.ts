@@ -11,7 +11,7 @@ import {
   comboXpPoints,
   comboOverachievement,
   suggestComboTarget,
-  suggestComboPlan,
+  suggestFullBodyPlan,
   type ComboSlotSpec,
   buildComboSession,
   comboSessionSetBudget,
@@ -178,65 +178,56 @@ describe('suggestComboTarget (séries)', () => {
   });
 });
 
-describe('suggestComboPlan (volume par séances + format)', () => {
-  const ALL = [
-    'pectoraux',
-    'dos',
-    'épaules',
-    'biceps',
-    'triceps',
-    'quadriceps',
-    'ischio-jambiers',
-    'mollets',
-    'abdominaux',
-  ];
-  const fullBody = (n: number) => Array.from({ length: n }, () => ({ muscles: ALL }));
-  const ppl = [
-    { muscles: ['pectoraux', 'épaules', 'triceps'] }, // push
-    { muscles: ['dos', 'biceps'] }, // pull
-    { muscles: ['quadriceps', 'ischio-jambiers', 'mollets', 'abdominaux'] }, // legs
-  ];
+describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
   const SLOTS: ComboSlotSpec[] = [
     { key: 'push', muscles: ['pectoraux'], essential: true },
     { key: 'pull', muscles: ['dos'], essential: true },
     { key: 'squat', muscles: ['quadriceps'], essential: true },
     { key: 'arms', muscles: ['biceps', 'triceps'], essential: false },
   ];
-  const bySlot = (plan: ReturnType<typeof suggestComboPlan>, key: string) =>
+  const bySlot = (plan: ReturnType<typeof suggestFullBodyPlan>, key: string) =>
     plan.find((p) => p.slot === key)!;
 
-  it('plus de séances = plus de volume', () => {
-    const low = bySlot(suggestComboPlan('intermediaire', 2, fullBody(2), SLOTS), 'push');
-    const high = bySlot(suggestComboPlan('intermediaire', 6, fullBody(6), SLOTS), 'push');
-    expect(high.weeklySets).toBeGreaterThan(low.weeklySets);
+  it('volume intense > modéré > léger (séries)', () => {
+    const light = bySlot(suggestFullBodyPlan('intermediaire', 'light', 'med', SLOTS), 'push');
+    const mod = bySlot(suggestFullBodyPlan('intermediaire', 'moderate', 'med', SLOTS), 'push');
+    const hi = bySlot(suggestFullBodyPlan('intermediaire', 'intense', 'med', SLOTS), 'push');
+    expect(mod.weeklySets).toBeGreaterThan(light.weeklySets);
+    expect(hi.weeklySets).toBeGreaterThan(mod.weeklySets);
   });
 
-  it('full-body (fréquence haute) = plus d’exos que PPL (fréquence basse), à séances égales', () => {
-    const fb = bySlot(suggestComboPlan('intermediaire', 3, fullBody(3), SLOTS), 'push');
-    const pp = bySlot(suggestComboPlan('intermediaire', 3, ppl, SLOTS), 'push');
-    expect(fb.nExos).toBeGreaterThan(pp.nExos); // 3 vs 1
-    // Même nb de séances → volume comparable, réparti différemment.
-    expect(fb.weeklySets).toBe(pp.weeklySets);
+  it('variété = nb d’exos par groupe essentiel (1/2/3)', () => {
+    expect(bySlot(suggestFullBodyPlan('avance', 'moderate', 'low', SLOTS), 'push').nExos).toBe(1);
+    expect(bySlot(suggestFullBodyPlan('avance', 'moderate', 'med', SLOTS), 'push').nExos).toBe(2);
+    expect(bySlot(suggestFullBodyPlan('avance', 'moderate', 'high', SLOTS), 'push').nExos).toBe(3);
   });
 
-  it('essentiel > optionnel (volume) et avancé > débutant', () => {
-    const plan = suggestComboPlan('intermediaire', 3, fullBody(3), SLOTS);
+  it('tous les groupes essentiels sont actifs (full-body)', () => {
+    const plan = suggestFullBodyPlan('intermediaire', 'moderate', 'med', SLOTS);
+    for (const key of ['push', 'pull', 'squat'])
+      expect(bySlot(plan, key).active).toBe(true);
+  });
+
+  it('débutant : accessoires exclus + essentiels à 1 exo suffisent', () => {
+    const plan = suggestFullBodyPlan('debutant', 'moderate', 'high', SLOTS);
+    expect(bySlot(plan, 'arms').active).toBe(false); // accessoire exclu pour débutant
+    expect(bySlot(plan, 'push').active).toBe(true);
+  });
+
+  it('accessoire = 1 exo même en haute variété ; essentiel > accessoire (volume)', () => {
+    const plan = suggestFullBodyPlan('avance', 'moderate', 'high', SLOTS);
+    expect(bySlot(plan, 'arms').nExos).toBe(1);
     expect(bySlot(plan, 'push').weeklySets).toBeGreaterThan(bySlot(plan, 'arms').weeklySets);
-    const deb = bySlot(suggestComboPlan('debutant', 3, fullBody(3), SLOTS), 'push');
-    const adv = bySlot(suggestComboPlan('avance', 3, fullBody(3), SLOTS), 'push');
+  });
+
+  it('avancé > débutant (volume)', () => {
+    const deb = bySlot(suggestFullBodyPlan('debutant', 'moderate', 'med', SLOTS), 'push');
+    const adv = bySlot(suggestFullBodyPlan('avance', 'moderate', 'med', SLOTS), 'push');
     expect(adv.weeklySets).toBeGreaterThan(deb.weeklySets);
   });
 
-  it('emplacement non ciblé par le split = inactif', () => {
-    const plan = suggestComboPlan('intermediaire', 3, ppl, [
-      { key: 'ghost', muscles: ['muscle-inexistant'], essential: true },
-    ]);
-    expect(bySlot(plan, 'ghost').active).toBe(false);
-    expect(bySlot(plan, 'ghost').nExos).toBe(0);
-  });
-
   it('séries/exo = volume réparti sur les exos', () => {
-    const fb = bySlot(suggestComboPlan('intermediaire', 3, fullBody(3), SLOTS), 'push');
-    expect(fb.setsPerExo).toBe(Math.max(1, Math.round(fb.weeklySets / fb.nExos)));
+    const p = bySlot(suggestFullBodyPlan('intermediaire', 'moderate', 'med', SLOTS), 'push');
+    expect(p.setsPerExo).toBe(Math.max(1, Math.round(p.weeklySets / p.nExos)));
   });
 });

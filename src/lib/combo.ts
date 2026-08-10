@@ -251,22 +251,28 @@ export function suggestComboTarget(level: Level, essential: boolean): number {
   return Math.max(4, Math.round(base * f));
 }
 
-// --- Dimensionnement par nombre de séances + format (split) ----------------
-// Le Défi 360 reste un conteneur de VOLUME hebdo (on fait ses séries quand on
-// veut). Le nombre de séances et le format ne PLANIFIENT pas des jours — ils
-// DIMENSIONNENT : les séances pilotent le volume total, le format pilote la
-// fréquence par muscle (= la VARIÉTÉ d'exos). C'est ce qui adapte le défi à
-// tout le monde (débutant 2 full-body → avancé 6 PPL) tout en gardant la même
-// organisation par pattern.
+// --- Dimensionnement FULL-BODY par volume + variété ------------------------
+// Le Défi 360 renforce TOUT le corps (tous les groupes), sans notion de séances
+// ni de split (on fait ses séries quand on veut dans la semaine). Deux réglages
+// honnêtes : le VOLUME (léger/modéré/intense → séries/groupe) et la VARIÉTÉ
+// (peu/moyen/beaucoup → nb d'exos/groupe). Débutant : variété forcée à 1 exo et
+// groupes accessoires exclus (le plus simple) ; inter/avancé : tout est ouvert.
 
-/** Volume hebdo de base par muscle (séries), avant facteur séances. */
+export type ComboVolume = 'light' | 'moderate' | 'intense';
+export type ComboVariety = 'low' | 'med' | 'high';
+const VOLUME_MULT: Record<ComboVolume, number> = { light: 0.6, moderate: 1, intense: 1.4 };
+const VARIETY_EXOS: Record<ComboVariety, number> = { low: 1, med: 2, high: 3 };
+
+/** Volume hebdo de base par muscle (séries) selon le niveau (repère hypertrophie). */
 export function comboBaseWeekly(level: Level): number {
   return level === 'debutant' ? 9 : level === 'avance' ? 15 : 12;
 }
-/** Facteur volume selon le nombre de séances visées (2→0.86 … 6→1.38). */
-export function comboSessionFactor(sessions: number): number {
-  const s = Math.min(6, Math.max(2, sessions));
-  return 0.6 + 0.13 * s;
+/** Séries/sem cible pour un groupe selon niveau + volume (essentiel ×1, accessoire ×0.7). */
+export function comboWeeklySets(level: Level, volume: ComboVolume, essential = true): number {
+  return Math.max(
+    3,
+    Math.round(comboBaseWeekly(level) * VOLUME_MULT[volume] * (essential ? 1 : 0.7)),
+  );
 }
 
 export interface ComboSlotSpec {
@@ -276,37 +282,30 @@ export interface ComboSlotSpec {
 }
 export interface ComboSlotPlan {
   slot: string;
-  active: boolean; // le split cible-t-il ce pattern ?
-  freq: number; // nb de jours/sem ciblant le pattern (fréquence)
-  nExos: number; // nb d'exos suggérés (variété ∝ fréquence)
-  weeklySets: number; // séries/sem pour le pattern (total)
+  active: boolean; // groupe inclus dans le défi
+  nExos: number; // nb d'exos suggérés (variété)
+  weeklySets: number; // séries/sem pour le groupe (total)
   setsPerExo: number; // séries/sem par exo (= weeklySets / nExos)
 }
 
 /**
- * Plan de volume par emplacement à partir du niveau, du nombre de séances et
- * des jours du split choisi. Le volume vient des SÉANCES (`comboSessionFactor`),
- * la variété (nb d'exos) vient de la FRÉQUENCE du pattern dans le split →
- * full-body (fréquence haute) = même volume réparti sur PLUS d'exos ; PPL
- * (fréquence basse) = volume concentré sur MOINS d'exos. Pur/testable.
+ * Plan FULL-BODY : tous les groupes essentiels sont actifs (+ les accessoires,
+ * hors débutant). Le VOLUME (séries/groupe) vient de `volume`, la VARIÉTÉ (nb
+ * d'exos/groupe) de `variety` (les accessoires restent à 1 exo). Pur/testable.
  */
-export function suggestComboPlan(
+export function suggestFullBodyPlan(
   level: Level,
-  sessions: number,
-  splitDays: { muscles: string[] }[],
+  volume: ComboVolume,
+  variety: ComboVariety,
   slots: ComboSlotSpec[],
 ): ComboSlotPlan[] {
-  const base = comboBaseWeekly(level);
-  const factor = comboSessionFactor(sessions);
-  const freqOf = (muscle: string) => splitDays.filter((d) => d.muscles.includes(muscle)).length;
+  const nWanted = VARIETY_EXOS[variety];
   return slots.map((s) => {
-    const freq = Math.max(0, ...s.muscles.map(freqOf));
-    if (freq === 0) {
-      return { slot: s.key, active: false, freq: 0, nExos: 0, weeklySets: 0, setsPerExo: 0 };
-    }
-    const weeklySets = Math.max(3, Math.round(base * (s.essential ? 1 : 0.7) * factor));
-    const nExos = Math.min(3, Math.max(1, freq)); // variété ∝ fréquence, plafond 3
+    const active = s.essential || level !== 'debutant';
+    if (!active) return { slot: s.key, active: false, nExos: 0, weeklySets: 0, setsPerExo: 0 };
+    const weeklySets = comboWeeklySets(level, volume, s.essential);
+    const nExos = s.essential ? nWanted : 1;
     const setsPerExo = Math.max(1, Math.round(weeklySets / nExos));
-    return { slot: s.key, active: true, freq, nExos, weeklySets, setsPerExo };
+    return { slot: s.key, active: true, nExos, weeklySets, setsPerExo };
   });
 }
