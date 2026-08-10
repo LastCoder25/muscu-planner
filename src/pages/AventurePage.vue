@@ -1133,6 +1133,8 @@
             :player-name="char.row?.pseudo ?? 'Toi'"
             :player-max-pv="run.playerMaxPv ?? 100"
             :fights="stageFights"
+            :player-profile="c.profile"
+            :player-equipped="char.row?.equipped ?? {}"
           />
         </div>
         <div class="log">
