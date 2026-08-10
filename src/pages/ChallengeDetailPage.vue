@@ -150,13 +150,15 @@
             </div>
           </template>
 
-          <!-- Reps : chrono + boutons + correction -->
+          <!-- Reps / Séries / Cardio-minutes : saisie du jour -->
           <template v-else>
             <div v-if="todayClosed && !correcting && !editMode && !isCumulative" class="today-ok">
               <q-icon v-if="todayCompleted" name="check_circle" color="positive" />
               <q-icon v-else name="bedtime" color="primary" />
               Journée validée · {{ show(doneToday) }}
-              <button class="corr-link" @click="correcting = true">Corriger</button>
+              <button v-if="isCardioTime" class="corr-link" @click="correcting = true">
+                Corriger
+              </button>
               <button class="corr-link" @click="reopenDay">Reprendre</button>
             </div>
             <div v-else class="exec">
@@ -175,42 +177,54 @@
                 <span class="cc-time">{{ chronoDisplay }}</span>
               </button>
 
-              <div v-if="!isSetsMode" class="quick-row">
+              <!-- Cardio (minutes) : boutons rapides +N personnalisables (pas de poids) -->
+              <template v-if="isCardioTime">
+                <div class="quick-row">
+                  <button
+                    v-for="q in quickAdds"
+                    :key="q"
+                    class="add"
+                    :class="{ editing: editMode, minus: correcting && !editMode }"
+                    @click="editMode ? removeQuick(q) : addReps(correcting ? -q : q)"
+                  >
+                    <span v-if="editMode" class="rm">✕ {{ q }}</span>
+                    <template v-else>{{ correcting ? '−' : '+' }}{{ q }}</template>
+                  </button>
+                  <button
+                    v-if="editMode"
+                    class="add ghost"
+                    aria-label="Ajouter un bouton"
+                    @click="addQuickButton"
+                  >
+                    ＋
+                  </button>
+                </div>
+                <div class="opts-row">
+                  <button class="opt" :class="{ on: correcting }" @click="correcting = !correcting">
+                    <q-icon name="backspace" size="15px" /> Correction (−)
+                  </button>
+                  <button class="opt" :class="{ on: editMode }" @click="editMode = !editMode">
+                    <q-icon name="tune" size="15px" /> Gérer
+                  </button>
+                  <button v-if="editMode" class="opt" @click="resetQuick">Réinitialiser</button>
+                </div>
+              </template>
+
+              <!-- Séries : ＋1/＋2/＋3/＋4 → fenêtre reps + poids -->
+              <div v-else-if="isSetsMode" class="quick-row">
                 <button
-                  v-for="q in quickAdds"
-                  :key="q"
+                  v-for="n in [1, 2, 3, 4]"
+                  :key="n"
                   class="add"
-                  :class="{ editing: editMode, minus: correcting && !editMode }"
-                  @click="editMode ? removeQuick(q) : addReps(correcting ? -q : q)"
+                  @click="openAddSet(n)"
                 >
-                  <span v-if="editMode" class="rm">✕ {{ q }}</span>
-                  <template v-else>{{ correcting ? '−' : '+' }}{{ q }}</template>
-                </button>
-                <button
-                  v-if="editMode"
-                  class="add ghost"
-                  aria-label="Ajouter un bouton"
-                  @click="addQuickButton"
-                >
-                  ＋
+                  ＋{{ n }}
                 </button>
               </div>
 
-              <div v-if="!isSetsMode" class="opts-row">
-                <button class="opt" :class="{ on: correcting }" @click="correcting = !correcting">
-                  <q-icon name="backspace" size="15px" /> Correction (−)
-                </button>
-                <button class="opt" :class="{ on: editMode }" @click="editMode = !editMode">
-                  <q-icon name="tune" size="15px" /> Gérer
-                </button>
-                <button v-if="editMode" class="opt" @click="resetQuick">Réinitialiser</button>
-              </div>
+              <!-- Reps : un seul bouton ＋ → fenêtre reps + poids -->
+              <button v-else class="add-set" @click="openAddSet(1)">＋ Ajouter (reps + poids)</button>
 
-              <!-- Saisie par série (reps + poids + assisté) : principale en mode Séries,
-                   secondaire (« ＋ série (poids) ») en mode Reps. -->
-              <button v-if="!editMode" class="add-set" @click="openAddSet">
-                {{ isSetsMode ? '＋ Ajouter une série' : '＋ série (poids)' }}
-              </button>
               <div v-if="todaySets.length" class="sets-log">
                 <div v-for="(s, i) in todaySets" :key="i" class="set-item">
                   <span class="si-n">Série {{ i + 1 }}</span>
@@ -313,6 +327,7 @@
     <SetLogDialog
       v-model="setOpen"
       :title="ch?.exercise_name ?? ''"
+      :desc="setCount > 1 ? setCount + ' séries à ajouter (mêmes reps/poids)' : undefined"
       :assistable="!!ch?.config.bodyweight"
       :initial-reps="setInitReps"
       :initial-weight="setInitWeight"
@@ -647,7 +662,10 @@ const setOpen = ref(false);
 const setInitReps = ref(10);
 const setInitWeight = ref<number | null>(null);
 const setInitAssisted = ref(false);
-function openAddSet() {
+// Nombre de séries à ajouter d'un coup (mode Séries : boutons ＋1/＋2/… ; mode Reps : 1).
+const setCount = ref(1);
+function openAddSet(count = 1) {
+  setCount.value = Math.max(1, count);
   const last = todaySets.value[todaySets.value.length - 1];
   setInitReps.value = last?.reps ?? (quickAdds.value[0] ?? 10);
   setInitWeight.value = last?.weight ?? null;
@@ -658,8 +676,11 @@ function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }
   if (!inToday.value || !ch.value) return;
   const e = ensureToday();
   if (!e.sets) e.sets = [];
-  e.sets.push({ reps: v.reps, weight: v.weight, assisted: v.assisted });
-  e.done = isSetsMode.value ? e.sets.length : Math.max(0, e.done + v.reps);
+  for (let k = 0; k < setCount.value; k++) {
+    e.sets.push({ reps: v.reps, weight: v.weight, assisted: v.assisted });
+    if (!isSetsMode.value) e.done = Math.max(0, e.done + v.reps);
+  }
+  if (isSetsMode.value) e.done = e.sets.length;
   syncComplete(e);
   void afterChange();
 }
