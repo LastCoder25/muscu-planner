@@ -33,6 +33,17 @@ export interface ChallengeConfig {
   capacity?: number; // échelle courante (pic) pilotée par l'autorégulation
   time_display?: 'sec' | 'mmss'; // gainage (unit='time', non-cardio) : affichage secondes ou min:sec
   assisted?: boolean; // exo poids du corps fait ASSISTÉ (élastique/machine) → XP pondérée ×0,6
+  count_mode?: 'reps' | 'sets'; // 'reps' (défaut) = objectif en reps ; 'sets' = en SÉRIES
+  //   (saisie par série reps+poids+assisté façon Défi 360 ; formats fixe/cumulé uniquement).
+  bodyweight?: boolean; // exo au poids du corps → propose le toggle « assisté » à la saisie
+}
+
+// Une série réalisée (mode 'sets', ou détail optionnel en mode 'reps') : reps +
+// poids + assisté, comme le Défi 360.
+export interface ChallengeSet {
+  reps: number;
+  weight?: number | null; // charge (kg) — poids du corps = vide
+  assisted?: boolean; // poids du corps assisté (élastique/machine) → XP ×0,6
 }
 
 // Progressif basé sur le MAX (cf. formule) : J1 = start_coef × MAX,
@@ -64,6 +75,7 @@ export interface DayProgress {
   completed: boolean;
   closed?: boolean; // « journée » clôturée par l'utilisateur (session finie)
   rpe?: 1 | 2 | 3; // ressenti à la clôture : 1=facile, 2=bien dosé, 3=très dur
+  sets?: ChallengeSet[]; // détail par série (mode 'sets', ou détail optionnel en 'reps')
 }
 
 // « Jour d'entraînement » : bascule à 4 h du matin (local). Les reps faites
@@ -810,13 +822,48 @@ export function earlyFinishFraction(ch: Challenge): number {
   return daysSaved / ch.duration_days;
 }
 
-/** XP « d'effort » d'une journée de défi (reps du jour) — sert à afficher l'XP
- *  gagnée jour par jour dans les historiques. La prime de complétion (bonus versé
- *  une fois le total atteint) n'est PAS répartie par jour : elle s'ajoute au total
- *  du défi via `challengeXpPoints`. Les défis en temps (gainage) ne comptent leur
- *  effort qu'à la complétion → 0 par jour ici. */
-export function challengeDayXp(ch: Challenge, done: number): number {
-  if (ch.unit !== 'reps' || done <= 0) return 0;
+/** Séries réalisées d'un jour (mode 'sets', ou détail optionnel en mode 'reps'). */
+export function daySets(p: DayProgress): ChallengeSet[] {
+  return p.sets ?? [];
+}
+/** Reps totales réalisées (pour l'XP) : Σ reps des séries en mode 'sets' (où `done`
+ *  = nb de séries), sinon `done` (mode 'reps', où done = reps). */
+export function challengeTotalReps(c: Challenge): number {
+  if (c.config.count_mode === 'sets')
+    return c.progress.reduce((a, p) => a + daySets(p).reduce((b, s) => b + (s.reps || 0), 0), 0);
+  return c.progress.reduce((a, p) => a + (p.done || 0), 0);
+}
+/** Reps pondérées par l'assistance : per-série en mode 'sets', flag global en 'reps'. */
+function assistedReps(c: Challenge): number {
+  if (c.config.count_mode === 'sets')
+    return c.progress.reduce(
+      (a, p) => a + daySets(p).reduce((b, s) => b + (s.reps || 0) * assistMult(s.assisted), 0),
+      0,
+    );
+  return challengeTotalReps(c) * assistMult(c.config.assisted);
+}
+/** Tonnage réalisé (Σ reps×poids) — issu des séries (poids saisi). */
+export function challengeTonnage(c: Challenge): number {
+  return c.progress.reduce(
+    (a, p) => a + daySets(p).reduce((b, s) => b + (s.reps || 0) * (s.weight || 0), 0),
+    0,
+  );
+}
+
+/** XP « d'effort » d'une journée de défi — sert à afficher l'XP gagnée jour par
+ *  jour dans les historiques. Depuis les SÉRIES si présentes (reps assistées +
+ *  tonnage), sinon depuis `done` (reps mode). La prime de complétion n'est PAS
+ *  répartie par jour (cf. `challengeXpPoints`). Gainage (temps) → 0 par jour. */
+export function challengeDayXp(ch: Challenge, p: DayProgress): number {
+  if (ch.unit !== 'reps') return 0;
+  const sets = daySets(p);
+  if (sets.length) {
+    const reps = sets.reduce((a, s) => a + (s.reps || 0) * assistMult(s.assisted), 0);
+    const ton = sets.reduce((a, s) => a + (s.reps || 0) * (s.weight || 0), 0);
+    return Math.round((reps * REP_XP * (ch.rep_weight ?? 1) + ton / 500) * XP_MULT);
+  }
+  const done = p.done || 0;
+  if (done <= 0) return 0;
   return Math.round(done * REP_XP * (ch.rep_weight ?? 1) * XP_MULT);
 }
 
@@ -830,14 +877,12 @@ export function challengeXpPoints(challenges: Challenge[]): number {
   // d'assistance (une rep assistée vaut moins).
   const weightOf = (c: Challenge) =>
     (c.unit === 'reps' ? (c.rep_weight ?? 1) : 1) * assistMult(c.config.assisted);
-  const repsXp = challenges.reduce(
-    (a, c) =>
-      a +
-      (c.unit === 'reps'
-        ? c.progress.reduce((b, p) => b + (p.done || 0), 0) * REP_XP * weightOf(c)
-        : 0),
-    0,
-  );
+  // reps mode : Σdone × REP_XP × weightOf (identique à avant).
+  // sets mode : Σ(reps assistées) × REP_XP × rep_weight + tonnage/500 (façon séance).
+  const repsXp = challenges.reduce((a, c) => {
+    if (c.unit !== 'reps') return a;
+    return a + assistedReps(c) * REP_XP * (c.rep_weight ?? 1) + challengeTonnage(c) / 500;
+  }, 0);
   const completionBonus = challenges.reduce((a, c) => {
     const total = plannedEffort(c);
     const done = c.progress.reduce((b, p) => b + (p.done || 0), 0);
@@ -850,7 +895,10 @@ export function challengeXpPoints(challenges: Challenge[]): number {
     // - X/jour = objectif de RÉGULARITÉ → × multiplicateur des jours réellement tenus.
     const mult =
       c.format === 'cumulative' ? 1 + earlyFinishFraction(c) : durationMultiplier(activeDaysOf(c));
-    return a + Math.round(0.25 * total * weightOf(c) * mult);
+    // Base de la prime : en mode SÉRIES l'effort réel est en REPS (pas en nb de
+    // séries) → on prime sur les reps réalisées ; sinon sur l'effort planifié.
+    const base = c.config.count_mode === 'sets' ? challengeTotalReps(c) : total;
+    return a + Math.round(0.25 * base * weightOf(c) * mult);
   }, 0);
   return Math.round((repsXp + completionBonus) * XP_MULT);
 }

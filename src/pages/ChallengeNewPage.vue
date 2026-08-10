@@ -153,10 +153,22 @@
 
       <!-- ÉTAPE 2 · Format -->
       <template v-else-if="step === 2">
+        <div v-if="unit === 'reps'" class="count-toggle">
+          <button :class="{ on: countMode === 'reps' }" @click="setCountMode('reps')">
+            🔢 Reps
+          </button>
+          <button :class="{ on: countMode === 'sets' }" @click="setCountMode('sets')">
+            📚 Séries
+          </button>
+        </div>
+        <div v-if="countMode === 'sets'" class="count-note">
+          Objectif en <b>séries</b> ; à la saisie tu renseignes reps + poids par série (comme le Défi
+          360). Formats <b>Fixe</b> et <b>Cumulé</b> uniquement.
+        </div>
         <div class="step-h">Quel format ?</div>
         <div class="fmt-grid">
           <button
-            v-for="f in CHALLENGE_FORMATS"
+            v-for="f in availableFormats"
             :key="f.id"
             class="fmt"
             :class="{ sel: format === f.id }"
@@ -493,6 +505,20 @@ const customOn = ref(false);
 const customDays = ref(45);
 const config = ref<ChallengeConfig>({ start: 50 });
 const restDays = ref<number[]>([]);
+// Compter en Reps (défaut) ou en Séries (saisie par série façon Défi 360). Le mode
+// Séries n'accepte que les formats Fixe et Cumulé (pas de « séries progressives »).
+const countMode = ref<'reps' | 'sets'>('reps');
+const availableFormats = computed(() =>
+  countMode.value === 'sets'
+    ? CHALLENGE_FORMATS.filter((f) => f.id === 'fixed' || f.id === 'cumulative')
+    : CHALLENGE_FORMATS,
+);
+function setCountMode(m: 'reps' | 'sets') {
+  countMode.value = m;
+  if (m === 'sets' && format.value !== 'fixed' && format.value !== 'cumulative')
+    format.value = 'fixed';
+  reset();
+}
 const reminderOn = ref(false);
 const reminderTime = ref('18:00');
 const carryOver = ref(false);
@@ -711,6 +737,11 @@ function reset() {
     durationDays.value,
     exercise.value.id,
   );
+  // Mode Séries : l'objectif est un petit nombre de SÉRIES (pas des reps).
+  if (unit.value === 'reps' && countMode.value === 'sets') {
+    if (format.value === 'cumulative') config.value.total = 4 * durationDays.value;
+    else config.value.start = 4;
+  }
   restDays.value = config.value.rest_weekdays ?? [];
 }
 // Durée par défaut à la sélection : le conseillé (30 j) s'il rentre dans la place
@@ -804,6 +835,10 @@ async function createChallenge() {
     if (carryOver.value && format.value !== 'cumulative') cfg.carry_over = true;
     if (isGainageTime.value && timeDisplay.value === 'mmss') cfg.time_display = 'mmss';
     if (showAssist.value && assistedMode.value) cfg.assisted = true;
+    // Mode Séries (reps uniquement) : objectif en nombre de séries, saisie par
+    // série (reps+poids+assisté). Le flag bodyweight active le toggle « assisté ».
+    if (unit.value === 'reps' && countMode.value === 'sets') cfg.count_mode = 'sets';
+    if (isBodyweightExercise(exercise.value.equipment_required)) cfg.bodyweight = true;
     const daily = computeDailyTargets(format.value, cfg, durationDays.value, startDate);
     if (adaptiveMode.value) {
       cfg.adaptive = true;
@@ -1173,6 +1208,36 @@ onMounted(async () => {
   text-decoration: none;
 }
 
+.count-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.count-toggle button {
+  flex: 1;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.count-toggle button.on {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.count-note {
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.4;
+  margin-bottom: 14px;
+}
+.count-note b {
+  color: var(--text);
+}
 .fmt-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

@@ -82,47 +82,17 @@
       <button v-if="c.status !== 'abandoned'" class="abandon" @click="abandon">Abandonner</button>
     </template>
 
-    <!-- Saisie d'une série (reps + poids), préremplie -->
-    <q-dialog v-model="setOpen">
-      <q-card class="set-card">
-        <div class="set-title font-display">{{ setLeg?.exercise_name }}</div>
-        <div class="set-desc">
-          {{ setCount > 1 ? `${setCount} séries` : '1 série' }} · reps &amp; poids
-        </div>
-        <div class="set-row">
-          <span class="set-lbl">Reps</span>
-          <q-input v-model.number="setReps" type="number" filled dense style="max-width: 110px" />
-        </div>
-        <div class="set-row">
-          <span class="set-lbl">Poids</span>
-          <q-input
-            v-model.number="setWeight"
-            type="number"
-            filled
-            dense
-            suffix="kg"
-            style="max-width: 130px"
-          />
-          <span class="set-hint">vide = PdC</span>
-        </div>
-        <div v-if="setLeg?.assistable" class="set-row">
-          <span class="set-lbl">Assisté</span>
-          <q-toggle v-model="setAssisted" />
-          <span class="set-hint">élastique → ×0,6</span>
-        </div>
-        <div class="set-actions">
-          <q-btn flat no-caps label="Annuler" @click="setOpen = false" />
-          <q-btn
-            unelevated
-            color="primary"
-            text-color="dark"
-            no-caps
-            label="Valider"
-            @click="saveSet"
-          />
-        </div>
-      </q-card>
-    </q-dialog>
+    <!-- Saisie d'une série (reps + poids + assisté), dialogue partagé -->
+    <SetLogDialog
+      v-model="setOpen"
+      :title="setLeg?.exercise_name ?? ''"
+      :desc="`${setCount > 1 ? setCount + ' séries' : '1 série'} · reps & poids`"
+      :assistable="setLeg?.assistable"
+      :initial-reps="setInitReps"
+      :initial-weight="setInitWeight"
+      :initial-assisted="setInitAssisted"
+      @save="onSetSave"
+    />
   </q-page>
 </template>
 
@@ -143,6 +113,7 @@ import {
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
 import { logicalToday, addDaysIso } from '@/lib/challenges';
+import SetLogDialog from '@/components/SetLogDialog.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -187,32 +158,28 @@ function slotEmoji(key: string) {
   return comboSlot(key)?.emoji ?? '💪';
 }
 
-// Saisie d'une série (reps + poids), préremplie avec la dernière série.
+// Saisie d'une série via le dialogue partagé, préremplie avec la dernière série.
 const setOpen = ref(false);
 const setLeg = ref<ComboLeg | null>(null);
 const setCount = ref(1);
-const setReps = ref<number>(10);
-const setWeight = ref<number | null>(null);
-const setAssisted = ref(false);
+const setInitReps = ref(10);
+const setInitWeight = ref<number | null>(null);
+const setInitAssisted = ref(false);
 function openSet(leg: ComboLeg, count: number) {
   setLeg.value = leg;
   setCount.value = count;
-  setReps.value = legLastReps(leg);
-  setWeight.value = legLastWeight(leg);
-  setAssisted.value = legLastAssisted(leg);
+  setInitReps.value = legLastReps(leg);
+  setInitWeight.value = legLastWeight(leg);
+  setInitAssisted.value = legLastAssisted(leg);
   setOpen.value = true;
 }
-function saveSet() {
+function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }) {
   const leg = setLeg.value;
-  const reps = Math.max(1, Math.round(setReps.value || 0));
   if (!auth.user?.id || !c.value || !leg) return;
   const before = c.value.status;
-  const w = setWeight.value != null && setWeight.value > 0 ? setWeight.value : null;
-  const asst = !!leg.assistable && setAssisted.value;
   for (let i = 0; i < setCount.value; i++) {
-    combo.addSet(id, leg.exercise_id, logicalToday(), reps, w, asst);
+    combo.addSet(id, leg.exercise_id, logicalToday(), v.reps, v.weight, v.assisted);
   }
-  setOpen.value = false;
   if (before !== 'done' && c.value.status === 'done') {
     $q.notify({ type: 'positive', message: 'Défi 360 bouclé 🎉' });
   }
@@ -444,44 +411,6 @@ onMounted(async () => {
 .add.corr:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-.set-card {
-  background: var(--surface);
-  color: var(--text);
-  padding: 18px 16px;
-  border-radius: 16px;
-  width: 320px;
-  max-width: 92vw;
-}
-.set-title {
-  font-size: 18px;
-  font-weight: 700;
-}
-.set-desc {
-  font-size: 12.5px;
-  color: var(--dim);
-  margin: 4px 0 14px;
-}
-.set-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.set-lbl {
-  font-size: 13px;
-  color: var(--dim);
-  min-width: 46px;
-}
-.set-hint {
-  font-size: 11px;
-  color: var(--dim);
-}
-.set-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
 }
 .foot {
   font-size: 11.5px;

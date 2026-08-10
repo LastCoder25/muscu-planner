@@ -219,6 +219,38 @@ describe('challengeXpPoints', () => {
     expect(challengeXpPoints([c])).toBe(28);
   });
 
+  // Mode Séries : done = nb de séries ; les reps/poids viennent de `sets`.
+  const setsCh = (sets: { reps: number; weight?: number; assisted?: boolean }[]): Challenge =>
+    challenge({
+      format: 'fixed',
+      config: cfg({ start: 3, count_mode: 'sets' }),
+      daily_targets: [3, 3, 3],
+      progress: [
+        {
+          day: 0,
+          date: '2026-01-05',
+          target: 3,
+          done: sets.length,
+          elapsed_sec: 0,
+          completed: false,
+          sets,
+        },
+      ],
+    });
+  it('mode séries : le poids (tonnage) augmente l’XP', () => {
+    const light = setsCh([{ reps: 10 }, { reps: 10 }]);
+    const heavy = setsCh([
+      { reps: 10, weight: 40 },
+      { reps: 10, weight: 40 },
+    ]);
+    expect(challengeXpPoints([heavy])).toBeGreaterThan(challengeXpPoints([light]));
+  });
+  it('mode séries : une série assistée vaut moins', () => {
+    const strict = setsCh([{ reps: 10 }]);
+    const assisted = setsCh([{ reps: 10, assisted: true }]);
+    expect(challengeXpPoints([assisted])).toBeLessThan(challengeXpPoints([strict]));
+  });
+
   it('un défi en temps ne compte pas les reps', () => {
     const c = challenge({
       unit: 'time',

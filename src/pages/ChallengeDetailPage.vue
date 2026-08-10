@@ -165,7 +165,7 @@
                 continue pour un excès
               </div>
               <button
-                v-if="!editMode && !isCardioTime"
+                v-if="!editMode && !isCardioTime && !isSetsMode"
                 class="chrono-cta"
                 :class="{ running }"
                 @click="toggleChrono"
@@ -175,7 +175,7 @@
                 <span class="cc-time">{{ chronoDisplay }}</span>
               </button>
 
-              <div class="quick-row">
+              <div v-if="!isSetsMode" class="quick-row">
                 <button
                   v-for="q in quickAdds"
                   :key="q"
@@ -196,7 +196,7 @@
                 </button>
               </div>
 
-              <div class="opts-row">
+              <div v-if="!isSetsMode" class="opts-row">
                 <button class="opt" :class="{ on: correcting }" @click="correcting = !correcting">
                   <q-icon name="backspace" size="15px" /> Correction (−)
                 </button>
@@ -206,7 +206,23 @@
                 <button v-if="editMode" class="opt" @click="resetQuick">Réinitialiser</button>
               </div>
 
-              <button v-if="!editMode && !isCumulative" class="close-day" @click="closeDay">
+              <!-- Saisie par série (reps + poids + assisté) : principale en mode Séries,
+                   secondaire (« ＋ série (poids) ») en mode Reps. -->
+              <button v-if="!editMode" class="add-set" @click="openAddSet">
+                {{ isSetsMode ? '＋ Ajouter une série' : '＋ série (poids)' }}
+              </button>
+              <div v-if="todaySets.length" class="sets-log">
+                <div v-for="(s, i) in todaySets" :key="i" class="set-item">
+                  <span class="si-n">Série {{ i + 1 }}</span>
+                  <span class="si-v"
+                    >{{ s.reps }} reps<template v-if="s.weight"> · {{ s.weight }} kg</template
+                    ><template v-if="s.assisted"> · assisté</template></span
+                  >
+                </div>
+                <button class="corr-link" @click="undoLastSet">↩ Retirer la dernière</button>
+              </div>
+
+              <button v-if="!editMode && !isCumulative && !isSetsMode" class="close-day" @click="closeDay">
                 Valider la journée
               </button>
             </div>
@@ -293,6 +309,16 @@
       @close="celebrate = false"
       @see-success="goSuccess"
     />
+
+    <SetLogDialog
+      v-model="setOpen"
+      :title="ch?.exercise_name ?? ''"
+      :assistable="!!ch?.config.bodyweight"
+      :initial-reps="setInitReps"
+      :initial-weight="setInitWeight"
+      :initial-assisted="setInitAssisted"
+      @save="onSetSave"
+    />
   </q-page>
 </template>
 
@@ -317,6 +343,7 @@ import {
   addDaysIso,
   type Challenge,
   type DayProgress,
+  type ChallengeSet,
 } from '@/lib/challenges';
 import { formatOption } from '@/data/challengeFormats';
 import { isCardioChallengeExercise, defaultActivityForChallenge } from '@/data/cardio';
@@ -324,6 +351,7 @@ import { useChallengesStore } from '@/stores/challenges';
 import { useCardioStore } from '@/stores/cardio';
 import { useAuthStore } from '@/stores/auth';
 import ChallengeCelebration from '@/components/ChallengeCelebration.vue';
+import SetLogDialog from '@/components/SetLogDialog.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -503,13 +531,14 @@ function doneOf(d: number) {
 // XP d'effort gagnée un jour donné (= énergie, 1:1). Prime de complétion versée en plus à la fin.
 function dayXpOf(d: number): number {
   const c = ch.value;
-  return c ? challengeDayXp(c, doneOf(d)) : 0;
+  const e = entryOf(d);
+  return c && e ? challengeDayXp(c, e) : 0;
 }
 // XP d'effort déjà gagnée (somme des jours faits) → aussi l'énergie gagnée.
 const earnedXp = computed(() => {
   const c = ch.value;
   if (!c) return 0;
-  return c.progress.reduce((a: number, p: DayProgress) => a + challengeDayXp(c, p.done || 0), 0);
+  return c.progress.reduce((a: number, p: DayProgress) => a + challengeDayXp(c, p), 0);
 });
 const maxScale = computed(() => {
   const c = ch.value;
@@ -605,6 +634,40 @@ function addReps(n: number) {
   if (!inToday.value) return;
   const e = ensureToday();
   e.done = Math.max(0, e.done + n);
+  syncComplete(e);
+  void afterChange();
+}
+
+// ── Saisie par SÉRIE (reps + poids + assisté), via le dialogue partagé ──
+// Mode 'sets' : done = nb de séries. Mode 'reps' : la série ajoute ses reps à done
+// ET garde le détail (poids → tonnage) ; bouton « ＋ série (poids) » secondaire.
+const isSetsMode = computed(() => ch.value?.config.count_mode === 'sets');
+const todaySets = computed<ChallengeSet[]>(() => entryOf(dayIndex.value)?.sets ?? []);
+const setOpen = ref(false);
+const setInitReps = ref(10);
+const setInitWeight = ref<number | null>(null);
+const setInitAssisted = ref(false);
+function openAddSet() {
+  const last = todaySets.value[todaySets.value.length - 1];
+  setInitReps.value = last?.reps ?? (quickAdds.value[0] ?? 10);
+  setInitWeight.value = last?.weight ?? null;
+  setInitAssisted.value = last?.assisted ?? false;
+  setOpen.value = true;
+}
+function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }) {
+  if (!inToday.value || !ch.value) return;
+  const e = ensureToday();
+  if (!e.sets) e.sets = [];
+  e.sets.push({ reps: v.reps, weight: v.weight, assisted: v.assisted });
+  e.done = isSetsMode.value ? e.sets.length : Math.max(0, e.done + v.reps);
+  syncComplete(e);
+  void afterChange();
+}
+function undoLastSet() {
+  const e = ensureToday();
+  if (!e.sets?.length) return;
+  const removed = e.sets.pop()!;
+  e.done = isSetsMode.value ? e.sets.length : Math.max(0, e.done - (removed.reps || 0));
   syncComplete(e);
   void afterChange();
 }
@@ -1101,6 +1164,41 @@ onBeforeUnmount(() => {
   letter-spacing: 0.5px;
   text-transform: uppercase;
   cursor: pointer;
+}
+.add-set {
+  margin-top: 8px;
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.sets-log {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.set-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+}
+.si-n {
+  color: var(--dim);
+}
+.si-v {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 .close-day:active {
   background: var(--accent);

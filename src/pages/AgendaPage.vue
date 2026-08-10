@@ -170,7 +170,7 @@ const entries = computed<Entry[]>(() => {
       if (!(p.done > 0)) continue;
       const [y, m, dd] = p.date.split('-').map(Number);
       const ts = new Date(y!, (m ?? 1) - 1, dd ?? 1, 12).getTime();
-      const xp = challengeDayXp(c, p.done);
+      const xp = challengeDayXp(c, p);
       out.push({
         ts,
         kind: 'challenge',
