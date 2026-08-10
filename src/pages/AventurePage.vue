@@ -113,6 +113,9 @@
 
       <!-- ONGLET PERSONNAGE -->
       <template v-if="tab === 'perso'">
+        <div class="avatar-wrap">
+          <AventureAvatar :profile="c.profile" :equipped="char.row.equipped" />
+        </div>
         <div class="hero">
           <div class="lvl-ring">
             <svg viewBox="0 0 84 84" aria-hidden="true">
@@ -1117,6 +1120,18 @@
           <template v-if="run.kind === 'dungeon'">{{ run.defeated }}/{{ run.total }} monstres · </template>
           PV restants {{ run.finalPv }}
         </div>
+        <!-- Rejeu animé du combat (prototype Phase 1) -->
+        <div v-if="stageFights.length" class="rm-stage-wrap">
+          <button v-if="!showStage" class="rm-stage-btn" @click="showStage = true">
+            ▶ Voir le combat animé
+          </button>
+          <CombatStage
+            v-else
+            :player-name="char.row?.pseudo ?? 'Toi'"
+            :player-max-pv="run.playerMaxPv ?? 100"
+            :fights="stageFights"
+          />
+        </div>
         <div class="log">
           <div
             v-for="(f, i) in run.fights"
@@ -1250,6 +1265,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
+import AventureAvatar from '@/components/AventureAvatar.vue';
 import {
   simulateDungeon,
   simulateCombat,
@@ -1257,7 +1273,9 @@ import {
   combatPower,
   fmtPow,
   fmtDelta,
+  type CombatEvent,
 } from '@/lib/combat';
+import CombatStage from '@/components/CombatStage.vue';
 import { MONSTERS } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
 import { BOSSES, type MilestoneBoss } from '@/data/bosses';
@@ -1321,6 +1339,8 @@ interface RunFight {
   emoji: string;
   win: boolean;
   rounds: number;
+  maxPv?: number; // PV max du monstre (barre du rejeu)
+  log?: CombatEvent[]; // détail par coup → rejeu animé
 }
 interface RunView {
   name: string;
@@ -1331,6 +1351,7 @@ interface RunView {
   gold: number;
   dust: number;
   finalPv: number;
+  playerMaxPv?: number; // PV max du joueur (barre du rejeu)
   fights: RunFight[];
   drops: Item[];
   consumable?: { emoji: string; name: string };
@@ -1562,9 +1583,17 @@ function barW(v: number): string {
 const busy = ref(false);
 const run = ref<RunView | null>(null);
 const reportOpen = ref(false); // rapport de combat affiché en MODALE (post-run)
-// Après un run : replie la liste puis ouvre la modale de rapport.
+const showStage = ref(false); // rejeu animé du combat (dans la modale de rapport)
+// Combats rejouables (avec log détaillé) → alimente CombatStage.
+const stageFights = computed(() =>
+  (run.value?.fights ?? [])
+    .filter((f) => f.log?.length)
+    .map((f) => ({ name: f.monster, emoji: f.emoji, maxPv: f.maxPv ?? 1, log: f.log! })),
+);
+// Après un run : replie la liste puis ouvre la modale de rapport (rejeu replié).
 function openReport() {
   showAllDungeons.value = false;
+  showStage.value = false;
   reportOpen.value = true;
 }
 // Dernier lieu combattu → « Réattaquer » relance exactement le même run.
@@ -1886,11 +1915,14 @@ async function explore(d: Dungeon) {
       gold,
       dust,
       finalPv: r.finalPv,
+      playerMaxPv: player.pv,
       fights: r.fights.map((f) => ({
         monster: f.monster,
         emoji: MONSTERS.find((m) => m.name === f.monster)?.emoji ?? '👾',
         win: f.win,
         rounds: f.result.rounds,
+        maxPv: MONSTERS.find((m) => m.name === f.monster)?.pv,
+        log: f.result.log,
       })),
       drops,
       ...(consDrop ? { consumable: { emoji: consDrop.emoji, name: consDrop.name } } : {}),
@@ -2022,7 +2054,10 @@ async function fightBoss(b: MilestoneBoss) {
       gold,
       dust,
       finalPv,
-      fights: [{ monster: b.name, emoji: b.emoji, win, rounds: r.rounds }],
+      playerMaxPv: player.pv,
+      fights: [
+        { monster: b.name, emoji: b.emoji, win, rounds: r.rounds, maxPv: b.combatant.pv, log: r.log },
+      ],
       drops: [],
     };
     // Rapport toujours ouvert : sur victoire, il affiche le CHOIX de récompense en
@@ -2115,7 +2150,8 @@ async function fightEndless() {
       gold,
       dust,
       finalPv,
-      fights: [{ monster: foe.name, emoji: '🌀', win, rounds: r.rounds }],
+      playerMaxPv: player.pv,
+      fights: [{ monster: foe.name, emoji: '🌀', win, rounds: r.rounds, maxPv: foe.pv, log: r.log }],
       drops,
     };
     openReport();
@@ -2918,6 +2954,11 @@ onMounted(async () => {
 }
 
 /* Héro (anneau + archétype + puissance) */
+.avatar-wrap {
+  width: 128px;
+  height: 150px;
+  margin: 0 auto 6px;
+}
 .hero {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -4121,6 +4162,24 @@ onMounted(async () => {
 }
 .rm-reward {
   margin-top: 14px;
+}
+.rm-stage-wrap {
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.rm-stage-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
 }
 .rm-actions-row {
   display: flex;
