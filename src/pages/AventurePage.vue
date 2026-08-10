@@ -1919,11 +1919,12 @@ function itemEffects(it: Item): string {
   return it.effect2 ? `${a} · ${effectLabel(it.effect2, it.level)}` : a;
 }
 // Nombre de pièces du set d'un boss possédées (équipées + sac).
+// Pièces du set du boss ACTUELLEMENT ÉQUIPÉES (≤ 4 slots) — pas celles du sac,
+// pour que le compteur colle aux paliers 2/3/4 (jamais « 6/4 »).
 function bossSetCount(b: MilestoneBoss): number {
   const r = char.row;
   if (!r) return 0;
-  const all = [...r.inventory, ...SLOTS.map((s) => r.equipped[s]).filter((it): it is Item => !!it)];
-  return all.filter((it) => it.setId === b.setId).length;
+  return SLOTS.map((s) => r.equipped[s]).filter((it) => it?.setId === b.setId).length;
 }
 
 // Tire les 3 récompenses au CHOIX d'un boss (mixte : pièce de set / objet de
