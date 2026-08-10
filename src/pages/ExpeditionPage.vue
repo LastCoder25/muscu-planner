@@ -49,7 +49,14 @@
           :class="['room', roomClass(r.id)]"
           @click="onRoomClick(r.id)"
         >
-          <circle :cx="cx(r)" :cy="cy(r)" :r="RADIUS" class="room-bg" />
+          <rect
+            :x="cx(r) - SIZE / 2"
+            :y="cy(r) - SIZE / 2"
+            :width="SIZE"
+            :height="SIZE"
+            rx="9"
+            class="room-bg"
+          />
           <text :x="cx(r)" :y="cy(r) + 1" class="room-emo">{{ roomGlyph(r) }}</text>
         </g>
       </svg>
@@ -125,7 +132,7 @@ const route = useRoute();
 const router = useRouter();
 
 const CELL = 66;
-const RADIUS = 24;
+const SIZE = 46; // côté d'une salle (carré arrondi)
 const MAX_PV = 140; // placeholder (viendra du perso en Phase 3)
 const TRAP_DMG = 14; // placeholder
 
