@@ -53,3 +53,10 @@ export const EXERCISE_IMAGES: Record<string, string> = {
 export function exerciseImage(id: string): string | undefined {
   return EXERCISE_IMAGES[id];
 }
+
+// Les 2 poses (départ/fin) d'un exo pour l'animation d'exécution (bascule 0↔1).
+// public/exercises/<id>.jpg = pose 0 ; <id>-1.jpg = pose 1 (cf. scripts/fetch-exercise-frames.mjs).
+export function exerciseFrames(id: string): [string, string] | undefined {
+  const base = EXERCISE_IMAGES[id];
+  return base ? [base, base.replace(/\.jpg$/, '-1.jpg')] : undefined;
+}

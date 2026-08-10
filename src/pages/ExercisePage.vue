@@ -12,12 +12,7 @@
     <div v-else-if="ex" class="scroll">
       <!-- Média : illustration animée du mouvement (sinon photo fournie, sinon icône) -->
       <div class="media">
-        <ExerciseAnim
-          v-if="animKey"
-          :pattern-key="animKey"
-          :size="164"
-          :title="ex.name"
-        />
+        <ExerciseAnim v-if="hasAnim" :exercise-id="ex.id" :size="164" :title="ex.name" />
         <img v-else-if="ex.payload?.media_url" :src="ex.payload.media_url" :alt="ex.name" />
         <q-icon v-else name="fitness_center" size="48px" color="grey-7" />
       </div>
@@ -108,7 +103,7 @@ import { useLogsStore } from '@/stores/logs';
 import { bestE1RM } from '@/lib/estimates';
 import { EQUIPMENT_ITEMS } from '@/data/profileOptions';
 import { exerciseInstructions } from '@/data/exerciseInstructions';
-import { patternKeyFor } from '@/data/exercisePatterns';
+import { exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
 
 const route = useRoute();
@@ -122,10 +117,8 @@ const ex = ref<ExerciseFull | null>(null);
 const alts = ref<ExerciseRow[]>([]);
 const series = ref<number[]>([]); // 1RM estimé chronologique (historique de l'exo)
 const guide = computed(() => (ex.value ? exerciseInstructions(ex.value.id) : undefined));
-// Illustration animée du mouvement (par exo, sinon par muscle).
-const animKey = computed(() =>
-  ex.value ? patternKeyFor(ex.value.id, ex.value.muscle_primary) : null,
-);
+// Démonstration animée (bascule des 2 poses) si l'exo a des images.
+const hasAnim = computed(() => (ex.value ? !!exerciseFrames(ex.value.id) : false));
 
 const chart = computed(() => {
   const s = series.value;

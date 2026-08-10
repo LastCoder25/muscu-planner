@@ -109,7 +109,7 @@
           <div class="exd-head">
             <ExerciseAnim
               v-if="exoAnim"
-              :pattern-key="exoAnim"
+              :exercise-id="exercise.id"
               :size="72"
               :title="exercise.name"
               class="exd-img"
@@ -463,8 +463,7 @@ import {
   type ChallengeConfig,
 } from '@/lib/challenges';
 import { exerciseInstructions } from '@/data/exerciseInstructions';
-import { exerciseImage } from '@/data/exerciseImages';
-import { patternKeyFor } from '@/data/exercisePatterns';
+import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useProfileStore } from '@/stores/profile';
@@ -617,9 +616,7 @@ const guide = computed(() =>
   exercise.value ? exerciseInstructions(exercise.value.id) : undefined,
 );
 const exoImg = computed(() => (exercise.value ? exerciseImage(exercise.value.id) : undefined));
-const exoAnim = computed(() =>
-  exercise.value ? patternKeyFor(exercise.value.id, exercise.value.muscle_primary) : null,
-);
+const exoAnim = computed(() => (exercise.value ? !!exerciseFrames(exercise.value.id) : false));
 const demoUrl = computed(
   () =>
     `https://www.youtube.com/results?search_query=${encodeURIComponent((exercise.value?.name ?? '') + ' exécution technique musculation')}`,
