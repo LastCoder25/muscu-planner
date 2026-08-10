@@ -86,12 +86,11 @@
           <li>
             ⚡ Ton sport génère de l'<b>énergie</b> : dépense-la pour explorer donjons & boss.
           </li>
+          <li>🗺️ Onglet <b>Donjons</b> : avance dans la liste pour du butin.</li>
           <li>
-            🗺️ Onglet <b>Donjons</b> : avance dans la liste (donjons + 👑 boss de palier) pour du
-            butin.
+            👑 Onglet <b>Boss</b> : un boss tous les 5 niveaux — chacun lâche une pièce de son
+            <b>set</b> (bonus à 2/3/4 pièces).
           </li>
-          <li>🐲 Chaque <b>boss</b> lâche une pièce de son <b>set</b> (bonus à 2/3/4 pièces).</li>
-          <li>🌌 Onglet <b>Mondial</b> : frappe le boss communautaire de la semaine.</li>
         </ul>
         <button class="intro-ok" @click="dismissIntro">Compris, à l'aventure !</button>
       </div>
@@ -107,7 +106,7 @@
           <q-icon name="castle" size="18px" /> Donjons
         </button>
         <button class="seg-b" :class="{ on: tab === 'boss' }" @click="tab = 'boss'">
-          <q-icon name="public" size="18px" /> Mondial
+          👑 Boss
         </button>
       </div>
 
@@ -539,111 +538,59 @@
           </div>
         </div>
 
-        <div class="sec-title mboss-title">🗺️ Donjons & boss de palier</div>
+        <div class="sec-title mboss-title">🗺️ Donjons</div>
         <div class="dungeons">
-          <template v-for="it in visibleAdventure" :key="it.key">
-            <!-- BOSS DE PALIER : design distinct, ressort dans la liste -->
-            <div
-              v-if="it.boss"
-              class="dgn mboss"
-              :class="{ locked: !bossUnlocked(it.boss), beaten: isBossBeaten(it.boss) }"
-            >
-              <div class="dgn-hd">
-                <span class="dgn-emo">{{ bossUnlocked(it.boss) ? it.boss.emoji : '🔒' }}</span>
-                <div class="dgn-hd-main">
-                  <div class="mboss-eyebrow">👑 Boss de palier</div>
-                  <div class="dgn-name mboss-name font-display">
-                    {{ it.boss.name }}
-                    <span v-if="isBossBeaten(it.boss)" class="mboss-badge">⭐</span>
-                  </div>
-                </div>
-                <span class="lvl-pill" :class="itemState(it)">Niv {{ it.boss.unlockLevel }}</span>
+          <div
+            v-for="it in visibleAdventure"
+            :key="it.key"
+            class="dgn"
+            :class="{ locked: !dungeonUnlocked(it.dungeon) }"
+          >
+            <div class="dgn-hd">
+              <span class="dgn-emo">{{
+                dungeonUnlocked(it.dungeon) ? it.dungeon.emoji : '🔒'
+              }}</span>
+              <div class="dgn-hd-main">
+                <div class="dgn-name font-display">{{ it.dungeon.name }}</div>
               </div>
-
-              <div class="dgn-meta">
-                <span class="dgn-chip">⚡ {{ it.boss.energyCost }}</span>
-                <span class="dgn-chip gold">+{{ it.boss.gold }} 🪙</span>
-                <span
-                  v-if="bossUnlocked(it.boss)"
-                  class="dgn-chip winpct"
-                  :class="winClass(winPct['b:' + it.boss.id] ?? 0)"
-                  >🎯 {{ winPct['b:' + it.boss.id] ?? 0 }}%</span
-                >
-              </div>
-
-              <div class="mboss-set">
-                {{ bossSet(it.boss).emoji }} {{ bossSet(it.boss).name }} ·
-                <b>{{ bossSetCount(it.boss) }}/4</b> pièces
-              </div>
-              <div v-if="bossUnlocked(it.boss)" class="dgn-hint">{{ it.boss.hint }}</div>
-              <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(it.boss) }}</div>
-
-              <button
-                v-if="bossUnlocked(it.boss)"
-                class="fight mboss-fight"
-                :disabled="c.energy < it.boss.energyCost || busy"
-                @click="fightBoss(it.boss)"
-              >
-                ⚔️ {{ isBossBeaten(it.boss) ? 'Réaffronter' : 'Combattre' }} ({{
-                  it.boss.energyCost
-                }}
-                ⚡)
-              </button>
-              <button v-else class="fight mboss-fight" disabled>🔒 Verrouillé</button>
+              <span class="lvl-pill" :class="itemState(it)">Niv {{ it.dungeon.recoLevel }}</span>
             </div>
 
-            <!-- DONJON -->
-            <div
-              v-else-if="it.dungeon"
-              class="dgn"
-              :class="{ locked: !dungeonUnlocked(it.dungeon) }"
-            >
-              <div class="dgn-hd">
-                <span class="dgn-emo">{{
-                  dungeonUnlocked(it.dungeon) ? it.dungeon.emoji : '🔒'
-                }}</span>
-                <div class="dgn-hd-main">
-                  <div class="dgn-name font-display">{{ it.dungeon.name }}</div>
-                </div>
-                <span class="lvl-pill" :class="itemState(it)">Niv {{ it.dungeon.recoLevel }}</span>
-              </div>
-
-              <div class="dgn-meta">
-                <span class="dgn-chip">⚡ {{ it.dungeon.energyCost }}</span>
-                <span class="dgn-chip">👾 {{ it.dungeon.monsterIds.length }}</span>
-                <span class="dgn-chip gold">+{{ dungeonGold(it.dungeon) }} 🪙</span>
-                <span
-                  v-if="dungeonUnlocked(it.dungeon)"
-                  class="dgn-chip winpct"
-                  :class="winClass(winPct['d:' + it.dungeon.id] ?? 0)"
-                  >🎯 {{ winPct['d:' + it.dungeon.id] ?? 0 }}%</span
-                >
-                <button
-                  v-if="dungeonUnlocked(it.dungeon)"
-                  class="dgn-loot"
-                  aria-label="Butin possible"
-                  @click.stop="openDrops(it.dungeon)"
-                >
-                  🎁 Butin
-                </button>
-              </div>
-
-              <div v-if="dungeonUnlocked(it.dungeon)" class="dgn-hint">{{ it.dungeon.hint }}</div>
-              <div v-else class="dgn-hint dgn-lock">
-                🔒 Nettoie d’abord « {{ prevDungeonName(it.dungeon) }} » pour débloquer ce donjon.
-              </div>
-
+            <div class="dgn-meta">
+              <span class="dgn-chip">⚡ {{ it.dungeon.energyCost }}</span>
+              <span class="dgn-chip">👾 {{ it.dungeon.monsterIds.length }}</span>
+              <span class="dgn-chip gold">+{{ dungeonGold(it.dungeon) }} 🪙</span>
+              <span
+                v-if="dungeonUnlocked(it.dungeon)"
+                class="dgn-chip winpct"
+                :class="winClass(winPct['d:' + it.dungeon.id] ?? 0)"
+                >🎯 {{ winPct['d:' + it.dungeon.id] ?? 0 }}%</span
+              >
               <button
                 v-if="dungeonUnlocked(it.dungeon)"
-                class="fight"
-                :disabled="c.energy < it.dungeon.energyCost || busy"
-                @click="explore(it.dungeon)"
+                class="dgn-loot"
+                aria-label="Butin possible"
+                @click.stop="openDrops(it.dungeon)"
               >
-                Explorer ({{ it.dungeon.energyCost }} ⚡)
+                🎁 Butin
               </button>
-              <button v-else class="fight" disabled>Verrouillé</button>
             </div>
-          </template>
+
+            <div v-if="dungeonUnlocked(it.dungeon)" class="dgn-hint">{{ it.dungeon.hint }}</div>
+            <div v-else class="dgn-hint dgn-lock">
+              🔒 Nettoie d’abord « {{ prevDungeonName(it.dungeon) }} » pour débloquer ce donjon.
+            </div>
+
+            <button
+              v-if="dungeonUnlocked(it.dungeon)"
+              class="fight"
+              :disabled="c.energy < it.dungeon.energyCost || busy"
+              @click="explore(it.dungeon)"
+            >
+              Explorer ({{ it.dungeon.energyCost }} ⚡)
+            </button>
+            <button v-else class="fight" disabled>Verrouillé</button>
+          </div>
 
           <button
             v-if="!showAllDungeons && hiddenCount > 0"
@@ -687,65 +634,59 @@
         </div>
       </template>
 
-      <!-- ONGLET BOSS COMMUNAUTAIRE -->
+      <!-- ONGLET BOSS DE PALIER -->
       <template v-else>
-        <div v-if="!wboss.boss" class="talents-empty">Chargement du boss de la semaine…</div>
-        <template v-else>
-          <div class="boss-card" :class="{ dead: wboss.boss.status === 'defeated' }">
-            <div class="boss-top">
-              <span class="boss-emo">{{ wboss.boss.emoji }}</span>
-              <div>
-                <div class="boss-name font-display">{{ wboss.boss.name }}</div>
-                <div class="boss-sub">Boss communautaire · {{ weekLeft }}</div>
+        <div class="sec-title mboss-title">👑 Boss de palier</div>
+        <div class="sec-hint">
+          Un boss tous les 5 niveaux — chacun lâche une pièce de son <b>set</b> unique. Débloqués en
+          chaîne (bats le précédent).
+        </div>
+        <div class="dungeons">
+          <div
+            v-for="b in bossChain"
+            :key="b.id"
+            class="dgn mboss"
+            :class="{ locked: !bossUnlocked(b), beaten: isBossBeaten(b) }"
+          >
+            <div class="dgn-hd">
+              <span class="dgn-emo">{{ bossUnlocked(b) ? b.emoji : '🔒' }}</span>
+              <div class="dgn-hd-main">
+                <div class="dgn-name mboss-name font-display">
+                  {{ b.name }}
+                  <span v-if="isBossBeaten(b)" class="mboss-badge">⭐</span>
+                </div>
               </div>
-            </div>
-            <div class="boss-hpbar">
-              <span :style="{ width: hpPct + '%' }" />
-            </div>
-            <div class="boss-hptext font-display">
-              {{ wboss.boss.hp_remaining.toLocaleString('fr-FR') }} /
-              {{ wboss.boss.hp_total.toLocaleString('fr-FR') }} PV
+              <span class="lvl-pill" :class="itemState({ boss: b })">Niv {{ b.unlockLevel }}</span>
             </div>
 
-            <div v-if="wboss.boss.status === 'defeated'" class="boss-dead">
-              🏆 Boss vaincu par la communauté !
-              <button v-if="canClaim" class="fight q-mt-sm" :disabled="busy" @click="claimBoss">
-                Réclamer ma récompense
-              </button>
-              <div v-else-if="myContribution" class="talents-empty">Récompense déjà réclamée.</div>
+            <div class="dgn-meta">
+              <span class="dgn-chip">⚡ {{ b.energyCost }}</span>
+              <span class="dgn-chip gold">+{{ b.gold }} 🪙</span>
+              <span
+                v-if="bossUnlocked(b)"
+                class="dgn-chip winpct"
+                :class="winClass(winPct['b:' + b.id] ?? 0)"
+                >🎯 {{ winPct['b:' + b.id] ?? 0 }}%</span
+              >
             </div>
+
+            <div class="mboss-set">
+              {{ bossSet(b).emoji }} {{ bossSet(b).name }} · <b>{{ bossSetCount(b) }}/4</b> pièces
+            </div>
+            <div v-if="bossUnlocked(b)" class="dgn-hint">{{ b.hint }}</div>
+            <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(b) }}</div>
+
             <button
-              v-else
-              class="fight full-width q-mt-sm"
-              :disabled="c.energy < BOSS_HIT_ENERGY || busy"
-              @click="hitBoss"
+              v-if="bossUnlocked(b)"
+              class="fight mboss-fight"
+              :disabled="c.energy < b.energyCost || busy"
+              @click="fightBoss(b)"
             >
-              ⚔️ Frapper ({{ BOSS_HIT_ENERGY }} ⚡ → {{ fmtPow(combatPowerVal) }} dégâts)
+              ⚔️ {{ isBossBeaten(b) ? 'Réaffronter' : 'Combattre' }} ({{ b.energyCost }} ⚡)
             </button>
+            <button v-else class="fight mboss-fight" disabled>🔒 Verrouillé</button>
           </div>
-
-          <div class="sec-title">Contributeurs</div>
-          <div v-if="!wboss.contributions.length" class="talents-empty">
-            Personne n'a encore frappé. Sois le premier !
-          </div>
-          <div v-else class="ladder">
-            <div
-              v-for="(ct, i) in wboss.contributions"
-              :key="ct.user_id"
-              class="ladder-row"
-              :class="{ me: ct.user_id === myUid }"
-            >
-              <span class="lad-rank">{{ i + 1 }}</span>
-              <span class="lad-name">{{ ct.pseudo }}</span>
-              <span class="lad-dmg">{{ ct.damage.toLocaleString('fr-FR') }}</span>
-            </div>
-          </div>
-          <div class="foot">
-            Chaque frappe coûte de l'énergie (gagnée en faisant du sport) et inflige ta
-            <b>puissance de combat</b>. Toute la communauté tape le même boss ; s'il tombe avant la
-            fin de semaine, chaque contributeur récupère une récompense (bonus au plus actif).
-          </div>
-        </template>
+        </div>
       </template>
     </template>
 
@@ -1341,8 +1282,6 @@ import {
 } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { logicalToday } from '@/lib/challenges';
-import { useWorldBossStore } from '@/stores/worldBoss';
-import { BOSS_HIT_ENERGY } from '@/data/worldBoss';
 
 interface RunFight {
   monster: string;
@@ -1371,61 +1310,12 @@ const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
 const progress = useProgress();
-const wboss = useWorldBossStore();
 
 const loading = ref(true);
 const saving = ref(false);
 const pseudoInput = ref('');
 const pseudoError = ref('');
 const tab = ref<'perso' | 'equip' | 'donjons' | 'boss'>('perso');
-
-const myUid = computed(() => auth.user?.id);
-const myContribution = computed(() => wboss.contributions.find((ct) => ct.user_id === myUid.value));
-const canClaim = computed(
-  () =>
-    wboss.boss?.status === 'defeated' && !!myContribution.value && !myContribution.value.claimed,
-);
-const hpPct = computed(() =>
-  wboss.boss ? Math.round((wboss.boss.hp_remaining / wboss.boss.hp_total) * 100) : 0,
-);
-const weekLeft = computed(() => {
-  if (!wboss.boss) return '';
-  const days = Math.max(0, Math.ceil((Date.parse(wboss.boss.week_end) - Date.now()) / 86400000));
-  return days <= 1 ? 'dernier jour' : `${days} j restants`;
-});
-
-async function hitBoss() {
-  const uid = auth.user?.id;
-  if (!uid || !char.row || busy.value || c.value.energy < BOSS_HIT_ENERGY) return;
-  busy.value = true;
-  try {
-    await char.spendEnergy(uid, BOSS_HIT_ENERGY);
-    await wboss.hit(combatPowerVal.value, char.row.pseudo);
-  } catch {
-    $q.notify({ type: 'negative', message: 'Frappe impossible.' });
-  } finally {
-    busy.value = false;
-  }
-}
-async function claimBoss() {
-  const uid = auth.user?.id;
-  if (!uid || busy.value) return;
-  busy.value = true;
-  try {
-    const r = await wboss.claim();
-    if (r) {
-      await char.fetchMine();
-      $q.notify({
-        type: 'positive',
-        message: `Récompense : +${r.gold} 🪙 · +${r.dust} ✨${r.top ? ' (top contributeur !)' : ''}`,
-      });
-    }
-  } catch {
-    $q.notify({ type: 'negative', message: 'Impossible de réclamer.' });
-  } finally {
-    busy.value = false;
-  }
-}
 
 const c = computed(() =>
   computeCharacter(
@@ -1661,16 +1551,13 @@ function rarityOdds(luck: number) {
   ];
 }
 
-// Liste UNIFIÉE donjons + boss de palier, ordonnée par niveau. Le boss d'un
-// palier (+0.5) apparaît juste après le donjon du même niveau → progression
-// naturelle, boss intégrés dans la liste mais au design distinct.
-const adventureItems = computed(() => {
-  const items: { key: string; lvl: number; dungeon?: Dungeon; boss?: MilestoneBoss }[] = [
-    ...DUNGEONS.map((d) => ({ key: 'd:' + d.id, lvl: d.recoLevel, dungeon: d })),
-    ...BOSSES.map((b) => ({ key: 'b:' + b.id, lvl: b.unlockLevel + 0.5, boss: b })),
-  ];
-  return items.sort((a, b) => a.lvl - b.lvl);
-});
+// Liste des DONJONS (onglet Donjons), ordonnée par niveau. Les boss de palier ont
+// leur propre onglet « Boss » (cf. bossChain).
+const adventureItems = computed(() =>
+  [...DUNGEONS]
+    .sort((a, b) => a.recoLevel - b.recoLevel)
+    .map((d) => ({ key: 'd:' + d.id, lvl: d.recoLevel, dungeon: d })),
+);
 // État visuel d'un item (pour la pastille de niveau colorée + le repli).
 function itemState(it: { dungeon?: Dungeon; boss?: MilestoneBoss }): 'done' | 'avail' | 'locked' {
   if (itemDone(it)) return 'done';
@@ -2490,7 +2377,6 @@ onMounted(async () => {
   } catch {
     /* ignore */
   }
-  wboss.refresh().catch(() => undefined);
 });
 </script>
 
