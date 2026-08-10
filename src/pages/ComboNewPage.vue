@@ -73,14 +73,16 @@
           <template v-else>
             <div class="ex-choices">
               <button
-                v-for="e in candidates(slot)"
+                v-for="e in selectedExos(slot.key)"
                 :key="e.id"
                 type="button"
-                class="ex-chip"
-                :class="{ on: picks[slot.key]?.exercise_ids.includes(e.id) }"
+                class="ex-chip on"
                 @click="toggleExo(slot.key, e.id)"
               >
-                {{ e.name }}
+                {{ e.name }} <span class="ex-x">✕</span>
+              </button>
+              <button type="button" class="ex-add" @click="openPicker(slot.key)">
+                + Choisir des exercices
               </button>
             </div>
             <div class="leg-cfg">
@@ -116,6 +118,54 @@
         </template>
       </div>
     </template>
+
+    <!-- Picker d'exercices (par pattern) : recherche + liste complète + multi-sélection -->
+    <q-dialog
+      :model-value="!!pickerSlot"
+      position="bottom"
+      @update:model-value="pickerSlot = null"
+    >
+      <q-card v-if="pickerSlotObj" class="picker-card">
+        <div class="picker-title font-display">
+          {{ pickerSlotObj.emoji }} {{ pickerSlotObj.label }}
+        </div>
+        <q-input
+          v-model="pickerSearch"
+          filled
+          dense
+          placeholder="Rechercher un exercice…"
+          clearable
+          class="q-mb-sm"
+        />
+        <div v-if="!pickerCandidates.length" class="picker-empty">Aucun exercice ne correspond.</div>
+        <div v-else class="picker-list">
+          <button
+            v-for="e in pickerCandidates"
+            :key="e.id"
+            type="button"
+            class="picker-row"
+            :class="{ on: picks[pickerSlot!]?.exercise_ids.includes(e.id) }"
+            @click="toggleExo(pickerSlot!, e.id)"
+          >
+            <q-icon v-if="favSet.has(e.id)" name="star" size="15px" color="primary" />
+            <div class="pr-main">
+              <div class="pr-name">{{ e.name }}</div>
+              <div class="pr-meta">{{ e.muscle_primary }}</div>
+            </div>
+            <q-icon
+              v-if="picks[pickerSlot!]?.exercise_ids.includes(e.id)"
+              name="check_circle"
+              color="primary"
+              size="20px"
+            />
+          </button>
+        </div>
+        <div class="picker-foot">
+          <span class="picker-count">{{ pickCount(pickerSlot!) }} sélectionné(s)</span>
+          <q-btn flat no-caps label="Valider" color="primary" @click="pickerSlot = null" />
+        </div>
+      </q-card>
+    </q-dialog>
 
     <div class="foot-bar">
       <div class="foot-info">{{ totalExos }} exo{{ totalExos > 1 ? 's' : '' }} · full-body</div>
@@ -176,12 +226,38 @@ const picks = reactive<
   Record<string, { exercise_ids: string[]; target: number; weight_kg: number | null }>
 >({});
 
+// Picker d'exercices en modale (par pattern) : slot ouvert + recherche.
+const pickerSlot = ref<string | null>(null);
+const pickerSearch = ref('');
+const pickerSlotObj = computed(() => COMBO_SLOTS.find((s) => s.key === pickerSlot.value) ?? null);
+const pickerCandidates = computed<ExerciseRow[]>(() => {
+  const slot = pickerSlotObj.value;
+  if (!slot) return [];
+  const n = pickerSearch.value.trim().toLowerCase();
+  const all = candidates(slot);
+  return n
+    ? all.filter(
+        (e) =>
+          e.name.toLowerCase().includes(n) || (e.muscle_primary ?? '').toLowerCase().includes(n),
+      )
+    : all;
+});
+function openPicker(slotKey: string) {
+  pickerSearch.value = '';
+  pickerSlot.value = slotKey;
+}
+
 // Exos candidats d'un emplacement : reps, muscle_primary du slot, matériel possédé.
+// Liste COMPLÈTE (favoris en tête) — le picker en modale la présente avec recherche.
 function candidates(slot: ComboSlot): ExerciseRow[] {
   return lib.value
     .filter((e) => e.unit !== 'time' && slot.muscles.includes(e.muscle_primary ?? ''))
-    .sort((a, b) => (favSet.value.has(b.id) ? 1 : 0) - (favSet.value.has(a.id) ? 1 : 0))
-    .slice(0, 6);
+    .sort((a, b) => (favSet.value.has(b.id) ? 1 : 0) - (favSet.value.has(a.id) ? 1 : 0));
+}
+// Exos actuellement sélectionnés pour un emplacement (affichés en chips).
+function selectedExos(slotKey: string): ExerciseRow[] {
+  const ids = picks[slotKey]?.exercise_ids ?? [];
+  return ids.map((id) => lib.value.find((e) => e.id === id)).filter((e): e is ExerciseRow => !!e);
 }
 function pickCount(slotKey: string): number {
   return picks[slotKey]?.exercise_ids.length ?? 0;
@@ -482,6 +558,86 @@ onMounted(async () => {
 .ex-chip.on {
   border-color: var(--accent);
   color: var(--accent);
+}
+.ex-x {
+  opacity: 0.7;
+  font-size: 11px;
+}
+.ex-add {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* Picker d'exercices (modale bas d'écran) */
+.picker-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--surface);
+  color: var(--text);
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  padding: 16px;
+}
+.picker-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.picker-empty {
+  font-size: 13px;
+  color: var(--dim);
+  padding: 16px 4px;
+}
+.picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.picker-row.on {
+  border-color: var(--accent);
+}
+.pr-main {
+  flex: 1;
+  min-width: 0;
+}
+.pr-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+.pr-meta {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.picker-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.picker-count {
+  font-size: 12.5px;
+  color: var(--dim);
 }
 .leg-cfg {
   margin-top: 10px;
