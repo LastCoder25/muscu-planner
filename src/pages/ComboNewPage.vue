@@ -16,7 +16,21 @@
           nombre d'exercices et de séries. Tu fais tes séries <b>quand tu veux</b> dans la semaine.
         </p>
         <div class="vol-card">
-          <div class="vol-lbl">Zone du corps</div>
+          <div class="vol-lbl">Ton niveau</div>
+          <div class="opt-tiles">
+            <button
+              v-for="o in LEVEL_OPTS"
+              :key="o.id"
+              type="button"
+              class="opt-tile lvl-tile"
+              :class="{ on: level === o.id }"
+              @click="level = o.id"
+            >
+              <span class="ot-lbl">{{ o.label }}</span>
+            </button>
+          </div>
+
+          <div class="vol-lbl vl-mt">Zone du corps</div>
           <div class="opt-tiles">
             <button
               v-for="o in ZONE_OPTS"
@@ -265,8 +279,16 @@ const challenges = useChallengesStore();
 const lib = ref<ExerciseRow[]>([]);
 const loading = ref(true);
 const creating = ref(false);
-const level = computed<Level>(() => profileStore.profile?.experience?.level ?? 'intermediaire');
+// Niveau : pré-réglé sur le profil mais MODIFIABLE ici (pilote volume/variété/
+// groupes accessoires). Ne change pas le profil.
+const level = ref<Level>('intermediaire');
 const favSet = computed(() => new Set(profileStore.profile?.favorite_exercises ?? []));
+
+const LEVEL_OPTS: { id: Level; label: string }[] = [
+  { id: 'debutant', label: 'Débutant' },
+  { id: 'intermediaire', label: 'Intermédiaire' },
+  { id: 'avance', label: 'Avancé' },
+];
 
 const tileMedia = 104;
 
@@ -441,7 +463,7 @@ function applyPlan() {
   }
 }
 
-watch([zone, volume, variety], applyPlan);
+watch([level, zone, volume, variety], applyPlan);
 
 async function createCombo() {
   const uid = auth.user?.id;
@@ -506,6 +528,7 @@ onMounted(async () => {
     if (challenges.list.length === 0) await challenges.fetchMine();
     if (combo.list.length === 0) await combo.fetchMine();
     lib.value = await library.fetchAll();
+    level.value = profileStore.profile?.experience?.level ?? 'intermediaire';
     applyPlan();
   } catch (e) {
     $q.notify({
