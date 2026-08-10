@@ -1,186 +1,193 @@
 <template>
   <q-page class="combo-new">
     <header class="top">
-      <button class="iconbtn" aria-label="Retour" @click="router.back()">‹</button>
+      <button class="iconbtn" aria-label="Retour" @click="onBack">‹</button>
       <div class="top-title font-display">Nouveau Défi 360</div>
       <div class="top-spacer" />
     </header>
 
-    <p class="intro">
-      Un défi <b>full-body sur 7 jours</b> : on dimensionne selon tes <b>séances visées</b> et ton
-      <b>format</b>, puis tu fais tes <b>séries</b> quand tu veux dans la semaine.
-    </p>
-
     <div v-if="loading" class="row flex-center q-pa-lg"><q-spinner color="primary" /></div>
 
     <template v-else>
-      <!-- Curseurs de volume : séances/sem + format -->
-      <div class="vol-card">
-        <div class="vol-row">
-          <span class="vol-lbl">Séances / semaine visées</span>
-          <div class="stepper">
-            <button type="button" @click="bumpSessions(-1)">−</button>
-            <span class="stp-v font-display">{{ sessions }}</span>
-            <button type="button" @click="bumpSessions(1)">+</button>
-          </div>
-        </div>
-        <div class="vol-fmt">
-          <span class="vol-lbl">Format</span>
-          <div class="fmt-chips">
-            <button
-              v-for="f in formats"
-              :key="f.id"
-              type="button"
-              class="fmt-chip"
-              :class="{ on: formatId === f.id }"
-              @click="pickFormat(f.id)"
-            >
-              {{ f.name }}
-            </button>
-          </div>
-          <div class="fmt-sub">{{ currentSplit?.subtitle }}</div>
-        </div>
-        <div class="vol-summary">
-          🎯 <b>{{ totalExos }}</b> exos · <b>{{ totalSets }}</b> séries / semaine
-          <span class="vol-hint">(éditable exo par exo ci-dessous)</span>
-        </div>
-      </div>
-
-      <div
-        v-for="slot in COMBO_SLOTS"
-        :key="slot.key"
-        class="slot-card"
-        :class="{ off: !enabled[slot.key] }"
-      >
-        <div class="slot-head">
-          <span class="slot-emo">{{ slot.emoji }}</span>
-          <div class="slot-main">
-            <div class="slot-label font-display">
-              {{ slot.label }}
-              <span v-if="!slot.essential" class="slot-opt">option</span>
+      <!-- ÉTAPE 1 — RÉGLAGES : séances/sem + format (dimensionne le volume) -->
+      <template v-if="step === 'setup'">
+        <p class="intro">
+          Un défi <b>full-body sur 7 jours</b> : on dimensionne selon tes <b>séances visées</b> et
+          ton <b>format</b>, puis tu <b>choisis tes exercices</b> un par un.
+        </p>
+        <div class="vol-card">
+          <div class="vol-row">
+            <span class="vol-lbl">Séances / semaine visées</span>
+            <div class="stepper">
+              <button type="button" @click="bumpSessions(-1)">−</button>
+              <span class="stp-v font-display">{{ sessions }}</span>
+              <button type="button" @click="bumpSessions(1)">+</button>
             </div>
-            <div class="slot-hint">{{ slot.hint }}</div>
           </div>
-          <q-toggle
-            v-model="enabled[slot.key]"
+          <div class="vol-fmt">
+            <span class="vol-lbl">Format</span>
+            <div class="fmt-chips">
+              <button
+                v-for="f in formats"
+                :key="f.id"
+                type="button"
+                class="fmt-chip"
+                :class="{ on: formatId === f.id }"
+                @click="pickFormat(f.id)"
+              >
+                {{ f.name }}
+              </button>
+            </div>
+            <div class="fmt-sub">{{ currentSplit?.subtitle }}</div>
+          </div>
+          <div class="vol-summary">
+            🎯 <b>{{ activeCount }}</b> emplacements · <b>{{ totalSets }}</b> séries / semaine
+            <span class="vol-hint">(tu choisis les exos à l'étape suivante)</span>
+          </div>
+        </div>
+        <div class="foot-bar">
+          <div class="foot-info">{{ activeCount }} emplacement{{ activeCount > 1 ? 's' : '' }}</div>
+          <q-btn
             color="primary"
-            :disable="!candidates(slot).length"
+            text-color="dark"
+            no-caps
+            size="lg"
+            icon-right="arrow_forward"
+            label="Choisir mes exercices"
+            :disable="activeCount === 0"
+            @click="startDraft"
           />
         </div>
+      </template>
 
-        <template v-if="enabled[slot.key]">
-          <div v-if="!candidates(slot).length" class="no-ex">Aucun exo dispo (matériel).</div>
-          <template v-else>
-            <div class="ex-choices">
-              <button
-                v-for="e in selectedExos(slot.key)"
-                :key="e.id"
-                type="button"
-                class="ex-chip on"
-                @click="toggleExo(slot.key, e.id)"
-              >
-                {{ e.name }} <span class="ex-x">✕</span>
-              </button>
-              <button type="button" class="ex-add" @click="openPicker(slot.key)">
-                + Choisir des exercices
-              </button>
-            </div>
-            <div class="leg-cfg">
-              <div class="cfg-row">
-                <span class="cfg-lbl"
-                  >Séries / semaine
-                  <span class="cfg-note">{{ pickCount(slot.key) }} exo{{
-                    pickCount(slot.key) > 1 ? 's' : ''
-                  }}</span></span
-                >
-                <div class="stepper">
-                  <button type="button" @click="bumpTarget(slot.key, -1)">−</button>
-                  <span class="stp-v font-display">{{ picks[slot.key]?.target ?? 0 }}</span>
-                  <button type="button" @click="bumpTarget(slot.key, 1)">+</button>
-                </div>
-              </div>
-              <div v-if="pickCount(slot.key) > 1" class="cfg-split">
-                ≈ {{ perExo(slot.key) }} séries / exo
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-lbl">Charge départ (kg, option)</span>
-                <q-input
-                  v-model.number="picks[slot.key]!.weight_kg"
-                  type="number"
-                  dense
-                  filled
-                  placeholder="—"
-                  style="max-width: 90px"
-                />
-              </div>
-            </div>
-          </template>
-        </template>
-      </div>
-    </template>
-
-    <!-- Picker d'exercices (par pattern) : recherche + liste complète + multi-sélection -->
-    <q-dialog
-      :model-value="!!pickerSlot"
-      position="bottom"
-      @update:model-value="pickerSlot = null"
-    >
-      <q-card v-if="pickerSlotObj" class="picker-card">
-        <div class="picker-title font-display">
-          {{ pickerSlotObj.emoji }} {{ pickerSlotObj.label }}
+      <!-- ÉTAPE 2 — DRAFT : un emplacement à la fois, tuiles animées -->
+      <template v-else-if="step === 'draft' && curSlot">
+        <div class="draft-progress">
+          <span>Emplacement {{ draftIndex + 1 }} / {{ draftKeys.length }}</span>
+          <div class="dp-bar">
+            <div class="dp-fill" :style="{ width: ((draftIndex + 1) / draftKeys.length) * 100 + '%' }" />
+          </div>
         </div>
-        <q-input
-          v-model="pickerSearch"
-          filled
-          dense
-          placeholder="Rechercher un exercice…"
-          clearable
-          class="q-mb-sm"
-        />
-        <div v-if="!pickerCandidates.length" class="picker-empty">Aucun exercice ne correspond.</div>
-        <div v-else class="picker-list">
+
+        <div class="draft-head">
+          <span class="slot-emo">{{ curSlot.emoji }}</span>
+          <div class="slot-main">
+            <div class="slot-label font-display">
+              {{ curSlot.label }}
+              <span v-if="!curSlot.essential" class="slot-opt">option</span>
+            </div>
+            <div class="slot-hint">{{ curSlot.hint }}</div>
+          </div>
+        </div>
+        <div class="draft-instr">
+          Choisis {{ suggestN(curKey) > 1 ? 'tes exercices' : 'ton exercice' }}
+          <span class="di-note">suggéré : {{ suggestN(curKey) }}</span>
+        </div>
+
+        <div class="tile-grid">
           <button
-            v-for="e in pickerCandidates"
+            v-for="e in candidates(curSlot)"
             :key="e.id"
             type="button"
-            class="picker-row"
-            :class="{ on: picks[pickerSlot!]?.exercise_ids.includes(e.id) }"
-            @click="toggleExo(pickerSlot!, e.id)"
+            class="dtile"
+            :class="{ on: isSelected(curKey, e.id) }"
+            @click="toggleExo(curKey, e.id)"
           >
-            <q-icon v-if="favSet.has(e.id)" name="star" size="15px" color="primary" />
-            <div class="pr-main">
-              <div class="pr-name">{{ e.name }}</div>
-              <div class="pr-meta">{{ e.muscle_primary }}</div>
+            <div class="dtile-media">
+              <ExerciseAnim
+                v-if="hasAnim(e.id)"
+                :exercise-id="e.id"
+                :size="tileMedia"
+                :title="e.name"
+              />
+              <img v-else-if="exImg(e.id)" :src="exImg(e.id)" :alt="e.name" loading="lazy" />
+              <span v-else class="dtile-badge"><q-icon name="fitness_center" size="24px" /></span>
+              <q-icon v-if="favSet.has(e.id)" name="star" size="15px" class="dtile-fav" />
+              <div v-if="isSelected(curKey, e.id)" class="dtile-check">
+                <q-icon name="check_circle" size="22px" />
+              </div>
             </div>
-            <q-icon
-              v-if="picks[pickerSlot!]?.exercise_ids.includes(e.id)"
-              name="check_circle"
-              color="primary"
-              size="20px"
-            />
+            <div class="dtile-name">{{ e.name }}</div>
+            <div class="dtile-mus">{{ e.muscle_primary }}</div>
           </button>
         </div>
-        <div class="picker-foot">
-          <span class="picker-count">{{ pickCount(pickerSlot!) }} sélectionné(s)</span>
-          <q-btn flat no-caps label="Valider" color="primary" @click="pickerSlot = null" />
-        </div>
-      </q-card>
-    </q-dialog>
 
-    <div class="foot-bar">
-      <div class="foot-info">{{ totalExos }} exo{{ totalExos > 1 ? 's' : '' }} · full-body</div>
-      <q-btn
-        color="primary"
-        text-color="dark"
-        no-caps
-        size="lg"
-        icon="check"
-        label="Créer le Défi 360"
-        :loading="creating"
-        :disable="totalExos === 0"
-        @click="createCombo"
-      />
-    </div>
+        <div class="foot-bar draft-foot">
+          <button type="button" class="draft-nav" @click="prevSlot">
+            ‹ {{ draftIndex === 0 ? 'Réglages' : 'Précédent' }}
+          </button>
+          <button v-if="!curSlot.essential" type="button" class="draft-skip" @click="skipSlot">
+            Passer
+          </button>
+          <q-btn
+            color="primary"
+            text-color="dark"
+            no-caps
+            :icon-right="isLastDraft ? 'checklist' : 'arrow_forward'"
+            :label="isLastDraft ? 'Récap' : 'Suivant'"
+            :disable="pickCount(curKey) === 0"
+            @click="nextSlot"
+          />
+        </div>
+      </template>
+
+      <!-- ÉTAPE 3 — RÉCAP : volume/charge éditables + créer -->
+      <template v-else>
+        <p class="intro">Ajuste le <b>volume</b> et la <b>charge</b>, puis lance ton défi.</p>
+        <div v-if="!recapKeys.length" class="no-ex">
+          Aucun exercice choisi. <button class="link-btn" @click="step = 'draft'">Revenir au choix</button>
+        </div>
+        <div v-for="key in recapKeys" :key="key" class="slot-card">
+          <div class="slot-head">
+            <span class="slot-emo">{{ slotOf(key)?.emoji }}</span>
+            <div class="slot-main">
+              <div class="slot-label font-display">{{ slotOf(key)?.label }}</div>
+              <div class="slot-hint">{{ pickCount(key) }} exo{{ pickCount(key) > 1 ? 's' : '' }}</div>
+            </div>
+            <button type="button" class="ex-add" @click="editSlot(key)">Modifier</button>
+          </div>
+          <div class="ex-choices">
+            <span v-for="e in selectedExos(key)" :key="e.id" class="ex-chip on">{{ e.name }}</span>
+          </div>
+          <div class="leg-cfg">
+            <div class="cfg-row">
+              <span class="cfg-lbl">Séries / semaine</span>
+              <div class="stepper">
+                <button type="button" @click="bumpTarget(key, -1)">−</button>
+                <span class="stp-v font-display">{{ picks[key]?.target ?? 0 }}</span>
+                <button type="button" @click="bumpTarget(key, 1)">+</button>
+              </div>
+            </div>
+            <div v-if="pickCount(key) > 1" class="cfg-split">≈ {{ perExo(key) }} séries / exo</div>
+            <div class="cfg-row">
+              <span class="cfg-lbl">Charge départ (kg, option)</span>
+              <q-input
+                v-model.number="picks[key]!.weight_kg"
+                type="number"
+                dense
+                filled
+                placeholder="—"
+                style="max-width: 90px"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="foot-bar">
+          <button type="button" class="draft-nav" @click="step = 'draft'">‹ Exercices</button>
+          <q-btn
+            color="primary"
+            text-color="dark"
+            no-caps
+            size="lg"
+            icon="check"
+            label="Créer le Défi 360"
+            :loading="creating"
+            :disable="!recapKeys.length"
+            @click="createCombo"
+          />
+        </div>
+      </template>
+    </template>
   </q-page>
 </template>
 
@@ -197,6 +204,8 @@ import { COMBO_SLOTS, type ComboSlot } from '@/data/combo';
 import { splitsFor, defaultSplit } from '@/data/splits';
 import { suggestComboPlan, type ComboLeg } from '@/lib/combo';
 import { repWeightFromExercise, isBodyweightExercise, logicalToday } from '@/lib/challenges';
+import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
+import ExerciseAnim from '@/components/ExerciseAnim.vue';
 import type { Level } from '@/lib/types';
 
 const router = useRouter();
@@ -213,6 +222,11 @@ const creating = ref(false);
 const level = computed<Level>(() => profileStore.profile?.experience?.level ?? 'intermediaire');
 const favSet = computed(() => new Set(profileStore.profile?.favorite_exercises ?? []));
 
+const tileMedia = 104;
+
+// Wizard : réglages → draft (choix des exos, un emplacement à la fois) → récap.
+const step = ref<'setup' | 'draft' | 'recap'>('setup');
+
 // Curseurs de volume.
 const sessions = ref(3);
 const formatId = ref('');
@@ -221,65 +235,90 @@ const currentSplit = computed(
   () => formats.value.find((f) => f.id === formatId.value) ?? formats.value[0],
 );
 
-const enabled = reactive<Record<string, boolean>>({});
+const enabled = reactive<Record<string, boolean>>({}); // emplacement inclus dans le défi
 const picks = reactive<
   Record<string, { exercise_ids: string[]; target: number; weight_kg: number | null }>
 >({});
+const planN = reactive<Record<string, number>>({}); // nb d'exos suggéré par le plan
 
-// Picker d'exercices en modale (par pattern) : slot ouvert + recherche.
-const pickerSlot = ref<string | null>(null);
-const pickerSearch = ref('');
-const pickerSlotObj = computed(() => COMBO_SLOTS.find((s) => s.key === pickerSlot.value) ?? null);
-const pickerCandidates = computed<ExerciseRow[]>(() => {
-  const slot = pickerSlotObj.value;
-  if (!slot) return [];
-  const n = pickerSearch.value.trim().toLowerCase();
-  const all = candidates(slot);
-  return n
-    ? all.filter(
-        (e) =>
-          e.name.toLowerCase().includes(n) || (e.muscle_primary ?? '').toLowerCase().includes(n),
-      )
-    : all;
-});
-function openPicker(slotKey: string) {
-  pickerSearch.value = '';
-  pickerSlot.value = slotKey;
+// ── Draft (choix séquentiel) ──
+const draftKeys = ref<string[]>([]);
+const draftIndex = ref(0);
+const curKey = computed(() => draftKeys.value[draftIndex.value] ?? '');
+const curSlot = computed(() => COMBO_SLOTS.find((s) => s.key === curKey.value) ?? null);
+const isLastDraft = computed(() => draftIndex.value === draftKeys.value.length - 1);
+function slotOf(key: string) {
+  return COMBO_SLOTS.find((s) => s.key === key) ?? null;
+}
+function suggestN(key: string): number {
+  return Math.max(1, planN[key] ?? 1);
 }
 
-// Exos candidats d'un emplacement : reps, muscle_primary du slot, matériel possédé.
-// Liste COMPLÈTE (favoris en tête) — le picker en modale la présente avec recherche.
+function startDraft() {
+  draftKeys.value = COMBO_SLOTS.filter((s) => enabled[s.key]).map((s) => s.key);
+  draftIndex.value = 0;
+  step.value = 'draft';
+}
+function nextSlot() {
+  if (isLastDraft.value) step.value = 'recap';
+  else draftIndex.value++;
+}
+function prevSlot() {
+  if (draftIndex.value === 0) step.value = 'setup';
+  else draftIndex.value--;
+}
+function skipSlot() {
+  enabled[curKey.value] = false;
+  if (picks[curKey.value]) picks[curKey.value]!.exercise_ids = [];
+  nextSlot();
+}
+function editSlot(key: string) {
+  const i = draftKeys.value.indexOf(key);
+  draftIndex.value = i >= 0 ? i : 0;
+  step.value = 'draft';
+}
+function onBack() {
+  if (step.value === 'recap') step.value = 'draft';
+  else if (step.value === 'draft') step.value = 'setup';
+  else router.back();
+}
+
+const hasAnim = (id: string) => !!exerciseFrames(id);
+const exImg = (id: string) => exerciseImage(id);
+
+// Exos candidats d'un emplacement : reps, muscle_primary du slot, matériel possédé
+// (favoris en tête).
 function candidates(slot: ComboSlot): ExerciseRow[] {
   return lib.value
     .filter((e) => e.unit !== 'time' && slot.muscles.includes(e.muscle_primary ?? ''))
     .sort((a, b) => (favSet.value.has(b.id) ? 1 : 0) - (favSet.value.has(a.id) ? 1 : 0));
 }
-// Exos actuellement sélectionnés pour un emplacement (affichés en chips).
-function selectedExos(slotKey: string): ExerciseRow[] {
-  const ids = picks[slotKey]?.exercise_ids ?? [];
+function selectedExos(key: string): ExerciseRow[] {
+  const ids = picks[key]?.exercise_ids ?? [];
   return ids.map((id) => lib.value.find((e) => e.id === id)).filter((e): e is ExerciseRow => !!e);
 }
-function pickCount(slotKey: string): number {
-  return picks[slotKey]?.exercise_ids.length ?? 0;
+function isSelected(key: string, exId: string): boolean {
+  return picks[key]?.exercise_ids.includes(exId) ?? false;
 }
-function perExo(slotKey: string): number {
-  const p = picks[slotKey];
+function pickCount(key: string): number {
+  return picks[key]?.exercise_ids.length ?? 0;
+}
+function perExo(key: string): number {
+  const p = picks[key];
   const n = p?.exercise_ids.length ?? 0;
   return n > 0 ? Math.max(1, Math.round((p!.target ?? 0) / n)) : 0;
 }
-// Sélection multiple d'exos par pattern (min 1 quand l'emplacement est actif).
-function toggleExo(slotKey: string, exId: string) {
-  const p = picks[slotKey];
+// Sélection multiple par emplacement ; sélectionner (ré)active l'emplacement.
+function toggleExo(key: string, exId: string) {
+  const p = picks[key];
   if (!p) return;
   const i = p.exercise_ids.indexOf(exId);
-  if (i >= 0) {
-    if (p.exercise_ids.length > 1) p.exercise_ids.splice(i, 1);
-  } else {
-    p.exercise_ids.push(exId);
-  }
+  if (i >= 0) p.exercise_ids.splice(i, 1);
+  else p.exercise_ids.push(exId);
+  enabled[key] = p.exercise_ids.length > 0;
 }
-function bumpTarget(slotKey: string, d: number) {
-  const p = picks[slotKey];
+function bumpTarget(key: string, d: number) {
+  const p = picks[key];
   if (p) p.target = Math.max(3, p.target + d);
 }
 function bumpSessions(d: number) {
@@ -290,15 +329,16 @@ function pickFormat(id: string) {
   applyPlan();
 }
 
-const totalExos = computed(() =>
-  COMBO_SLOTS.reduce((a, s) => a + (enabled[s.key] ? pickCount(s.key) : 0), 0),
-);
+const activeCount = computed(() => COMBO_SLOTS.filter((s) => enabled[s.key]).length);
 const totalSets = computed(() =>
   COMBO_SLOTS.reduce((a, s) => a + (enabled[s.key] ? (picks[s.key]?.target ?? 0) : 0), 0),
 );
+// Récap : emplacements inclus avec au moins un exo.
+const recapKeys = computed(() =>
+  COMBO_SLOTS.filter((s) => enabled[s.key] && pickCount(s.key) > 0).map((s) => s.key),
+);
 
 // (Re)génère le volume par emplacement selon niveau + séances + format choisi.
-// `COMBO_SLOTS` est structurellement compatible avec `ComboSlotSpec`.
 function applyPlan() {
   const split = currentSplit.value;
   if (!split) return;
@@ -306,18 +346,21 @@ function applyPlan() {
   for (const slot of COMBO_SLOTS) {
     const p = plan.find((x) => x.slot === slot.key);
     const cands = candidates(slot);
-    enabled[slot.key] = !!p?.active && cands.length > 0;
+    const active = !!p?.active && cands.length > 0;
     const nExos = Math.min(p?.nExos ?? 1, cands.length || 1);
+    planN[slot.key] = Math.max(1, nExos);
+    enabled[slot.key] = active;
+    // Pré-sélection des favoris/premiers exos pour les emplacements actifs ;
+    // vide pour les autres (le draft laisse choisir).
     picks[slot.key] = {
-      exercise_ids: cands.slice(0, Math.max(1, nExos)).map((e) => e.id),
+      exercise_ids: active ? cands.slice(0, Math.max(1, nExos)).map((e) => e.id) : [],
       target: p?.weeklySets ?? 0,
       weight_kg: null,
     };
   }
 }
 
-// Changer le nb de séances peut changer les formats dispo → on recale sur le
-// défaut puis on régénère (pickFormat gère le cas du changement de format seul).
+// Changer le nb de séances peut changer les formats dispo → recale sur le défaut.
 watch(sessions, () => {
   formatId.value = defaultSplit(sessions.value, level.value).id;
   applyPlan();
@@ -344,7 +387,6 @@ async function createCombo() {
     if (!enabled[slot.key]) continue;
     const p = picks[slot.key];
     if (!p?.exercise_ids.length) continue;
-    // Volume du pattern réparti sur ses exos (min 1 série/exo).
     const perExoTarget = perExo(slot.key);
     for (const exId of p.exercise_ids) {
       const e = lib.value.find((x) => x.id === exId);
@@ -387,7 +429,6 @@ onMounted(async () => {
     if (challenges.list.length === 0) await challenges.fetchMine();
     if (combo.list.length === 0) await combo.fetchMine();
     lib.value = await library.fetchAll();
-    // Défaut : 3 séances, format par défaut du niveau → plan appliqué.
     sessions.value = 3;
     formatId.value = defaultSplit(3, level.value).id;
     applyPlan();
@@ -495,15 +536,140 @@ onMounted(async () => {
   color: var(--dim);
   font-size: 11px;
 }
+
+/* ── Draft ── */
+.draft-progress {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 12px;
+}
+.dp-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line-soft);
+  margin-top: 6px;
+  overflow: hidden;
+}
+.dp-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.25s ease;
+}
+.draft-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.draft-head .slot-emo {
+  font-size: 26px;
+}
+.draft-instr {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+.di-note {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 6px;
+}
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.dtile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--surface);
+  border: 2px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.dtile.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.dtile-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dtile-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.dtile-badge {
+  color: var(--dim);
+}
+.dtile-fav {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  color: var(--accent);
+}
+.dtile-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  color: var(--accent);
+  background: var(--surface);
+  border-radius: 50%;
+  line-height: 0;
+}
+.dtile-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 6px;
+  line-height: 1.25;
+}
+.dtile-mus {
+  font-size: 11px;
+  color: var(--dim);
+}
+.draft-nav,
+.draft-skip {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.draft-skip {
+  color: var(--dim);
+}
+.draft-foot {
+  gap: 8px;
+}
+
+/* ── Récap ── */
 .slot-card {
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: 14px;
   padding: 12px 14px;
   margin-bottom: 10px;
-}
-.slot-card.off {
-  opacity: 0.55;
 }
 .slot-head {
   display: flex;
@@ -536,9 +702,17 @@ onMounted(async () => {
   color: var(--dim);
 }
 .no-ex {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--dim);
-  margin-top: 8px;
+  margin: 8px 0;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
 }
 .ex-choices {
   display: flex;
@@ -553,91 +727,20 @@ onMounted(async () => {
   background: var(--surface-2);
   color: var(--dim);
   font-size: 12.5px;
-  cursor: pointer;
 }
 .ex-chip.on {
   border-color: var(--accent);
   color: var(--accent);
 }
-.ex-x {
-  opacity: 0.7;
-  font-size: 11px;
-}
 .ex-add {
-  padding: 7px 12px;
+  padding: 6px 11px;
   border-radius: 999px;
   border: 1px dashed var(--line);
   background: transparent;
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-}
-/* Picker d'exercices (modale bas d'écran) */
-.picker-card {
-  width: 100%;
-  max-width: 520px;
-  background: var(--surface);
-  color: var(--text);
-  border-top-left-radius: 18px;
-  border-top-right-radius: 18px;
-  padding: 16px;
-}
-.picker-title {
-  font-size: 17px;
-  font-weight: 700;
-  margin-bottom: 12px;
-}
-.picker-empty {
-  font-size: 13px;
-  color: var(--dim);
-  padding: 16px 4px;
-}
-.picker-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 52vh;
-  overflow-y: auto;
-}
-.picker-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line-soft);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-}
-.picker-row.on {
-  border-color: var(--accent);
-}
-.pr-main {
-  flex: 1;
-  min-width: 0;
-}
-.pr-name {
-  font-size: 14px;
-  font-weight: 600;
-}
-.pr-meta {
-  font-size: 11.5px;
-  color: var(--dim);
-}
-.picker-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line-soft);
-}
-.picker-count {
-  font-size: 12.5px;
-  color: var(--dim);
 }
 .leg-cfg {
   margin-top: 10px;
@@ -653,11 +756,6 @@ onMounted(async () => {
 .cfg-lbl {
   font-size: 12.5px;
   color: var(--dim);
-}
-.cfg-note {
-  color: var(--accent);
-  font-weight: 700;
-  margin-left: 4px;
 }
 .cfg-split {
   font-size: 11px;
@@ -695,6 +793,7 @@ onMounted(async () => {
   border-top: 1px solid var(--line);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
 }
 .foot-info {
