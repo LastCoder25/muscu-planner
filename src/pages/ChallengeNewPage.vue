@@ -107,7 +107,14 @@
         <!-- Exécution + descriptif de l'exo sélectionné -->
         <div v-if="exercise" class="ex-detail">
           <div class="exd-head">
-            <img v-if="exoImg" :src="exoImg" :alt="exercise.name" class="exd-img" />
+            <ExerciseAnim
+              v-if="exoAnim"
+              :pattern-key="exoAnim"
+              :size="72"
+              :title="exercise.name"
+              class="exd-img"
+            />
+            <img v-else-if="exoImg" :src="exoImg" :alt="exercise.name" class="exd-img" />
             <div>
               <div class="exd-name font-display">{{ exercise.name }}</div>
               <div class="exd-meta">
@@ -457,6 +464,8 @@ import {
 } from '@/lib/challenges';
 import { exerciseInstructions } from '@/data/exerciseInstructions';
 import { exerciseImage } from '@/data/exerciseImages';
+import { patternKeyFor } from '@/data/exercisePatterns';
+import ExerciseAnim from '@/components/ExerciseAnim.vue';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useProfileStore } from '@/stores/profile';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
@@ -608,6 +617,9 @@ const guide = computed(() =>
   exercise.value ? exerciseInstructions(exercise.value.id) : undefined,
 );
 const exoImg = computed(() => (exercise.value ? exerciseImage(exercise.value.id) : undefined));
+const exoAnim = computed(() =>
+  exercise.value ? patternKeyFor(exercise.value.id, exercise.value.muscle_primary) : null,
+);
 const demoUrl = computed(
   () =>
     `https://www.youtube.com/results?search_query=${encodeURIComponent((exercise.value?.name ?? '') + ' exécution technique musculation')}`,

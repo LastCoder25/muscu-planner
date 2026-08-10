@@ -45,6 +45,7 @@ src/data/
   templates.ts     programmes débutant (Full-Body A/B/C) + suggestTemplates()
   exerciseInstructions.ts  instructions de mouvement FR (débutant : étapes + conseil) par exo ; `exerciseInstructions(id)` → affichées sur la fiche (fallback si pas de `payload.instructions`).
   exerciseImages.ts  illustrations d'exercices (free-exercise-db, domaine public) mappées sur nos 47 exos, bundlées dans `public/exercises/<id>.jpg` ; `exerciseImage(id)`. Affichées sur les tuiles de séance libre (fallback icône MDI matériel + couleur muscle si absente).
+  exercisePatterns.ts  **animation d'exécution** : ~21 patterns de mouvement (squat/charnière/pompe/traction/développé/curl/gainage…), chacun = un ancrage + 2 poses interpolées. `EXERCISE_PATTERN` mappe les 47 exos ; fallback par `muscle_primary` (`patternKeyFor`/`patternFor`). Rendu par `src/components/ExerciseAnim.vue` (SVG procédural, bonhomme articulé animé en ping-pong lissé via `src/lib/figure.ts` = cinématique directe pure/testée `test/figure.test.ts` ; `prefers-reduced-motion` → pose figée). 100 % maison, aucune dépendance. Affiché sur la fiche exo (ExercisePage), l'exo courant de la séance libre et l'aperçu du wizard de challenge (photo/​icône en repli).
 supabase/
   migrations/0001_init.sql   4 tables + RLS (à appliquer dans Supabase)
   seed.sql                   bibliothèque d'exercices globale

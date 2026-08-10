@@ -53,7 +53,14 @@
       <div ref="scrollEl" class="scroll">
         <div v-if="ex" class="exo">
           <div class="exo-top">
-            <img v-if="exImg" :src="exImg" :alt="ex.name" class="exo-img" />
+            <ExerciseAnim
+              v-if="exAnim"
+              :pattern-key="exAnim"
+              :size="76"
+              :title="ex.name"
+              class="exo-img"
+            />
+            <img v-else-if="exImg" :src="exImg" :alt="ex.name" class="exo-img" />
             <div class="exo-id">
               <div class="exo-name font-display">{{ ex.name }}</div>
               <div class="exo-meta">
@@ -477,6 +484,8 @@ import { useLiveStore, type LiveSet, type LiveExercise } from '@/stores/live';
 import { useLogsStore } from '@/stores/logs';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { exerciseImage } from '@/data/exerciseImages';
+import { patternKeyFor } from '@/data/exercisePatterns';
+import ExerciseAnim from '@/components/ExerciseAnim.vue';
 
 const router = useRouter();
 const $q = useQuasar();
@@ -496,6 +505,9 @@ const DIFFS = [
 const run = computed(() => live.run);
 const ex = computed(() => live.current);
 const exImg = computed(() => (ex.value ? exerciseImage(ex.value.id) : undefined));
+const exAnim = computed(() =>
+  ex.value ? patternKeyFor(ex.value.id, ex.value.muscle_primary) : null,
+);
 const curSetIndex = computed(() => ex.value?.sets.findIndex((s) => !s.done) ?? -1);
 const curSet = computed(() => (curSetIndex.value >= 0 ? ex.value!.sets[curSetIndex.value]! : null));
 // Série la plus récemment validée — c'est elle qu'on note (pendant le repos / une fois faite).
