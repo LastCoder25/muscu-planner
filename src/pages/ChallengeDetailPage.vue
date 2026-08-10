@@ -108,6 +108,18 @@
                 stroke-dasharray="327"
                 :stroke-dashoffset="327 * (1 - pct)"
               />
+              <!-- Repères tous les 10 % (défis en temps) -->
+              <g v-if="isTime">
+                <line
+                  v-for="(t, i) in RING_TICKS"
+                  :key="i"
+                  class="rtick"
+                  :x1="t.x1"
+                  :y1="t.y1"
+                  :x2="t.x2"
+                  :y2="t.y2"
+                />
+              </g>
             </svg>
             <div class="ring-num">
               <div class="rn-v font-display">{{ fmtV(doneToday) }}</div>
@@ -519,6 +531,14 @@ const isCumulative = computed(() => ch.value?.format === 'cumulative');
 const pct = computed(() =>
   todayTarget.value ? Math.min(1, doneToday.value / todayTarget.value) : 0,
 );
+// Séparateurs de l'anneau (tous les 10 %) pour lire l'avancement des défis en
+// temps (gainage) — 10 traits radiaux au bord de la bande (r 52, épaisseur 8).
+const RING_TICKS = Array.from({ length: 10 }, (_, i) => {
+  const a = (i * 36 * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return { x1: 60 + c * 47, y1: 60 + s * 47, x2: 60 + c * 57, y2: 60 + s * 57 };
+});
 const chronoSec = computed(() => entryOf(dayIndex.value)?.elapsed_sec ?? 0);
 const chronoDisplay = computed(
   () => `${Math.floor(chronoSec.value / 60)}:${String(chronoSec.value % 60).padStart(2, '0')}`,
@@ -1119,6 +1139,11 @@ onBeforeUnmount(() => {
   stroke-width: 8;
   stroke-linecap: round;
   transition: stroke-dashoffset 0.4s;
+}
+/* Séparateurs de 10 % : traits couleur fond qui « coupent » la bande. */
+.rtick {
+  stroke: var(--bg);
+  stroke-width: 3;
 }
 .ring-num {
   position: absolute;
