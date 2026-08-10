@@ -157,3 +157,67 @@ export const ROOM_EMOJI: Record<RoomType, string> = {
   stairs: '🔽',
   boss: '👑',
 };
+
+// ── Phase 2 : état d'exploration (pur) ─────────────────────────────────────
+// La RÉSOLUTION d'une salle (combat/loot/piège) vit dans le store/la page
+// (elle dépend de simulateCombat / rollDrop) ; ici on ne gère que le
+// DÉPLACEMENT salle par salle, le brouillard et les PV reportés entre étages.
+export interface RunState {
+  floors: number; // nb total d'étages
+  floor: number; // étage courant (0-based)
+  current: number; // salle courante (id sur l'étage courant)
+  visited: number[]; // salles déjà entrées sur l'étage courant
+  pv: number;
+  maxPv: number;
+  status: 'exploring' | 'dead' | 'cleared';
+}
+
+/** Démarre un run sur le 1er étage (à la salle de départ, déjà « visitée »). */
+export function startRun(floors: number, first: Floor, maxPv: number): RunState {
+  return {
+    floors,
+    floor: 0,
+    current: first.startId,
+    visited: [first.startId],
+    pv: maxPv,
+    maxPv,
+    status: 'exploring',
+  };
+}
+
+/** Peut-on aller dans cette salle ? (reliée à la salle courante, run en cours) */
+export function canMove(state: RunState, floor: Floor, roomId: number): boolean {
+  if (state.status !== 'exploring' || roomId === state.current) return false;
+  return floor.rooms[state.current]?.links.includes(roomId) ?? false;
+}
+/** Salle jamais entrée (→ à résoudre : combat/coffre/piège). */
+export function isNewRoom(state: RunState, roomId: number): boolean {
+  return !state.visited.includes(roomId);
+}
+/** Entre dans une salle reliée (déplacement + marque visitée si nouvelle). */
+export function enterRoom(state: RunState, floor: Floor, roomId: number): RunState {
+  if (!canMove(state, floor, roomId)) return state;
+  const visited = state.visited.includes(roomId) ? state.visited : [...state.visited, roomId];
+  return { ...state, current: roomId, visited };
+}
+/** Applique des dégâts (piège/combat) — passe en 'dead' à 0 PV. */
+export function applyDamage(state: RunState, dmg: number): RunState {
+  const pv = Math.max(0, state.pv - Math.max(0, Math.round(dmg)));
+  return { ...state, pv, status: pv <= 0 ? 'dead' : state.status };
+}
+/** Descend à l'étage suivant (PV reportés). Marque 'cleared' si c'était le dernier. */
+export function descend(state: RunState, next: Floor | null): RunState {
+  if (!next) return { ...state, status: 'cleared' };
+  return { ...state, floor: state.floor + 1, current: next.startId, visited: [next.startId] };
+}
+/** « Frontière » du brouillard : salles adjacentes à une salle visitée, non visitées. */
+export function frontier(floor: Floor, state: RunState): number[] {
+  const out = new Set<number>();
+  for (const v of state.visited)
+    for (const nb of floor.rooms[v]?.links ?? []) if (!state.visited.includes(nb)) out.add(nb);
+  return [...out];
+}
+/** Une salle est-elle visible sur la carte ? (visitée ou sur la frontière) */
+export function isVisible(floor: Floor, state: RunState, roomId: number): boolean {
+  return state.visited.includes(roomId) || frontier(floor, state).includes(roomId);
+}

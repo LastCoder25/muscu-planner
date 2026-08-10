@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { generateFloor, generateDungeon, type Floor } from '@/lib/dungeonCrawl';
+import {
+  generateFloor,
+  generateDungeon,
+  startRun,
+  canMove,
+  enterRoom,
+  applyDamage,
+  descend,
+  frontier,
+  isNewRoom,
+  type Floor,
+} from '@/lib/dungeonCrawl';
 
 // Toutes les salles sont-elles atteignables depuis le départ (via les couloirs) ?
 function allReachable(f: Floor): boolean {
@@ -46,5 +57,64 @@ describe('dungeonCrawl — génération d’étage', () => {
     const f = generateFloor(13, 0, 3);
     for (const r of f.rooms)
       for (const nb of r.links) expect(f.rooms[nb]!.links).toContain(r.id);
+  });
+});
+
+describe('dungeonCrawl — exploration (état)', () => {
+  const floor = generateFloor(5, 0, 3);
+
+  it('startRun : au départ, salle de départ visitée, PV pleins', () => {
+    const s = startRun(3, floor, 140);
+    expect(s.current).toBe(floor.startId);
+    expect(s.visited).toEqual([floor.startId]);
+    expect(s.pv).toBe(140);
+    expect(s.status).toBe('exploring');
+  });
+
+  it('canMove : seulement vers une salle reliée à la courante', () => {
+    const s = startRun(3, floor, 140);
+    const link = floor.rooms[floor.startId]!.links[0]!;
+    const notLinked = floor.rooms.find(
+      (r) => r.id !== floor.startId && !floor.rooms[floor.startId]!.links.includes(r.id),
+    );
+    expect(canMove(s, floor, link)).toBe(true);
+    if (notLinked) expect(canMove(s, floor, notLinked.id)).toBe(false);
+  });
+
+  it('enterRoom : déplace + marque visitée ; isNewRoom bascule', () => {
+    const s = startRun(3, floor, 140);
+    const link = floor.rooms[floor.startId]!.links[0]!;
+    expect(isNewRoom(s, link)).toBe(true);
+    const s2 = enterRoom(s, floor, link);
+    expect(s2.current).toBe(link);
+    expect(s2.visited).toContain(link);
+    expect(isNewRoom(s2, link)).toBe(false);
+  });
+
+  it('applyDamage : PV plancher 0 → status dead', () => {
+    const s = startRun(3, floor, 30);
+    expect(applyDamage(s, 10).pv).toBe(20);
+    const dead = applyDamage(s, 999);
+    expect(dead.pv).toBe(0);
+    expect(dead.status).toBe('dead');
+  });
+
+  it('descend : étage suivant (PV reportés) ; null = donjon nettoyé', () => {
+    const s = { ...startRun(3, floor, 100), pv: 55 };
+    const next = generateFloor(5, 1, 3);
+    const d = descend(s, next);
+    expect(d.floor).toBe(1);
+    expect(d.current).toBe(next.startId);
+    expect(d.pv).toBe(55); // reportés
+    expect(descend(s, null).status).toBe('cleared');
+  });
+
+  it('frontier : salles adjacentes aux visitées, non visitées', () => {
+    const s = startRun(3, floor, 140);
+    const fr = frontier(floor, s);
+    expect(fr.length).toBeGreaterThan(0);
+    for (const id of fr) expect(s.visited).not.toContain(id);
+    // La frontière initiale = les voisins directs du départ.
+    expect(new Set(fr)).toEqual(new Set(floor.rooms[floor.startId]!.links));
   });
 });
