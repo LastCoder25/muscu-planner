@@ -904,8 +904,10 @@
       </q-card>
     </q-dialog>
 
-    <!-- Récompense de boss AU CHOIX : 3 candidats, on en garde 1 -->
-    <q-dialog :model-value="!!char.row?.pending_reward" persistent>
+    <!-- Récompense de boss AU CHOIX : 3 candidats, on en garde 1. Fallback (reprise
+         d'une récompense non choisie) — sinon le CHOIX se fait dans le rapport de
+         combat ci-dessous, tant qu'il est ouvert. -->
+    <q-dialog :model-value="!!char.row?.pending_reward && !reportOpen" persistent>
       <q-card v-if="char.row?.pending_reward" class="reward-card">
         <div class="reward-title font-display">🎁 Choisis ta récompense</div>
         <div class="reward-sub">Un seul de ces trois butins — à toi de jouer.</div>
@@ -976,7 +978,19 @@
          inventaire / fermer -->
     <q-dialog v-model="reportOpen">
       <q-card v-if="run" class="report-modal" :class="run.cleared ? 'win' : 'lose'">
-        <div class="rm-title font-display">{{ run.name }}</div>
+        <div class="rm-head">
+          <div class="rm-title font-display">{{ run.name }}</div>
+          <button
+            v-if="!char.row?.pending_reward"
+            class="rm-reattack"
+            :disabled="!canReattack"
+            :title="`Réattaquer (${reattackCost} ⚡)`"
+            aria-label="Réattaquer"
+            @click="reattackLast"
+          >
+            ⚔️
+          </button>
+        </div>
         <div class="result-head">
           <span>{{
             run.cleared ? (run.kind === 'boss' ? '🏆 Vaincu !' : '🏆 Nettoyé !') : '💀 Échec'
@@ -1049,14 +1063,64 @@
         <div v-if="run.consumable" class="cons-drop">
           {{ run.consumable.emoji }} <b>{{ run.consumable.name }}</b> ajouté à ton sac 🎒
         </div>
-        <div class="rm-actions">
-          <button class="fight" :disabled="!canReattack" @click="reattackLast">
-            ⚔️ Réattaquer ({{ reattackCost }} ⚡)
-          </button>
-          <div class="rm-actions-row">
-            <button class="rm-btn" @click="goInventoryFromReport">🎒 Inventaire</button>
-            <button class="rm-btn" @click="reportOpen = false">Fermer</button>
+
+        <!-- Récompense de boss AU CHOIX (à la place du butin) : 3 candidats, on en garde 1 -->
+        <div v-if="char.row?.pending_reward" class="rm-reward">
+          <div class="drops-lbl">🎁 Choisis ta récompense</div>
+          <div class="reward-list">
+            <button
+              v-for="(cand, i) in char.row.pending_reward.candidates"
+              :key="i"
+              class="reward-cand"
+              :class="[
+                cand.kind === 'item' ? 'r-' + cand.item.rarity : 'r-gold',
+                { reco: i === recommendedRewardIndex },
+              ]"
+              :disabled="busy"
+              @click="doChooseReward(i)"
+            >
+              <span v-if="i === recommendedRewardIndex" class="reco-badge">★ Conseillé</span>
+              <template v-if="cand.kind === 'item'">
+                <span class="rc-emo">{{ cand.item.emoji }}</span>
+                <div class="rc-main">
+                  <div class="rc-name">{{ cand.item.name }}</div>
+                  <div class="rc-pills">
+                    <span class="rc-pill lvl">Lvl {{ cand.item.level }}</span>
+                    <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
+                      RARITY_LABEL[cand.item.rarity]
+                    }}</span>
+                    <span v-if="cand.item.setId" class="rc-pill set">🧩 Set</span>
+                  </div>
+                  <div class="rc-eff">
+                    {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
+                  </div>
+                  <div class="pow-cmp">
+                    ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
+                    <b :class="powerIfEquip(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                      >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
+                        fmtDelta(combatPowerVal, powerIfEquip(cand.item))
+                      }})</b
+                    >
+                  </div>
+                  <div v-if="rewardDupNote(cand.item)" class="rc-dup">
+                    {{ rewardDupNote(cand.item) }}
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <span class="rc-emo">💰</span>
+                <div class="rc-main">
+                  <div class="rc-name">Trésor</div>
+                  <div class="rc-eff">+{{ cand.gold }} 🪙 · +{{ cand.dust }} ✨</div>
+                </div>
+              </template>
+            </button>
           </div>
+        </div>
+
+        <div class="rm-actions-row">
+          <button class="rm-btn" @click="goInventoryFromReport">🎒 Inventaire</button>
+          <button class="rm-btn" @click="reportOpen = false">Fermer</button>
         </div>
       </q-card>
     </q-dialog>
@@ -1392,9 +1456,13 @@ const reattackCost = computed(() => {
   if (lastDungeon.value) return lastDungeon.value.energyCost;
   return 0;
 });
-const canReattack = computed(() => !busy.value && c.value.energy >= reattackCost.value);
+const canReattack = computed(
+  () => !busy.value && !char.row?.pending_reward && c.value.energy >= reattackCost.value,
+);
+// Réattaque SANS fermer la modale (le run met à jour `run` en place → on peut
+// spammer le bouton icône). Les gardes énergie/déblocage/récompense sont dans les
+// fonctions de run.
 function reattackLast() {
-  reportOpen.value = false;
   if (lastEndless.value) void fightEndless();
   else if (lastBoss.value) void fightBoss(lastBoss.value);
   else if (lastDungeon.value) void explore(lastDungeon.value);
@@ -1830,9 +1898,9 @@ async function fightBoss(b: MilestoneBoss) {
       fights: [{ monster: b.name, emoji: b.emoji, win, rounds: r.rounds }],
       drops: [],
     };
-    // Victoire → la modale de récompense (pending) prend le relais ; on n'ouvre le
-    // rapport que sur défaite (rien à choisir).
-    if (!win) openReport();
+    // Rapport toujours ouvert : sur victoire, il affiche le CHOIX de récompense en
+    // bas (à la place du butin) ; sur défaite, juste le résultat.
+    openReport();
     $q.notify(
       win
         ? { type: 'positive', message: `${b.emoji} ${b.name} vaincu — choisis ta récompense !` }
@@ -3820,7 +3888,6 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
-/* Rapport de combat (au-dessus des donjons) */
 /* Rapport de combat en MODALE (post-run). */
 .report-modal {
   width: 420px;
@@ -3840,27 +3907,44 @@ onMounted(async () => {
 .report-modal.lose {
   border-top-color: var(--d4);
 }
+.rm-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
 .rm-title {
   font-size: 17px;
   font-weight: 700;
-  margin-bottom: 10px;
 }
-.rm-actions {
+/* Réattaquer : bouton icône en haut à droite (spam-able, ne ferme pas la modale). */
+.rm-reattack {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 18px;
+  cursor: pointer;
+}
+.rm-reattack:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.rm-reward {
+  margin-top: 14px;
+}
+.rm-actions-row {
   display: flex;
-  flex-direction: column;
   gap: 8px;
   margin-top: 14px;
   position: sticky;
   bottom: -16px;
   background: var(--surface);
   padding-top: 10px;
-}
-.rm-actions .fight {
-  width: 100%;
-}
-.rm-actions-row {
-  display: flex;
-  gap: 8px;
 }
 .rm-btn {
   flex: 1;
