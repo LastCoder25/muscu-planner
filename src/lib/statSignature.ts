@@ -87,14 +87,14 @@ export const CARDIO_CHALLENGE_SIG: StatWeights = { power: 0, endurance: 0.7, agi
 // (corde à sauter ~120, squash/MMA ~110, boxe/hyrox ~105…), les doux sont bas
 // (yoga 30, pilates 35). La direction = ce que le sport travaille.
 const SPORT_BENEFIT: Record<string, StatBuckets> = {
-  Tennis: { power: 0, endurance: 30, agility: 45 }, // 75
-  Padel: { power: 0, endurance: 28, agility: 42 }, // 70
+  Tennis: { power: 8, endurance: 27, agility: 40 }, // 75 (service/fentes = un peu de puissance)
+  Padel: { power: 6, endurance: 26, agility: 38 }, // 70
   Football: { power: 8, endurance: 34, agility: 43 }, // 85
   Basket: { power: 11, endurance: 26, agility: 38 }, // 75
-  Natation: { power: 36, endurance: 54, agility: 0 }, // 90
+  Natation: { power: 28, endurance: 62, agility: 0 }, // 90 (aérobie dominante, force modérée)
   Course: { power: 10, endurance: 62, agility: 28 }, // 100 (force de jambes)
   Vélo: { power: 8, endurance: 60, agility: 7 }, // 75
-  Escalade: { power: 54, endurance: 9, agility: 27 }, // 90
+  Escalade: { power: 46, endurance: 22, agility: 22 }, // 90 (grip/avant-bras = endurance musc.)
   Boxe: { power: 31, endurance: 32, agility: 42 }, // 105
   Rugby: { power: 34, endurance: 25, agility: 26 }, // 85
   Yoga: { power: 9, endurance: 9, agility: 12 }, // 30
@@ -104,9 +104,9 @@ const SPORT_BENEFIT: Record<string, StatBuckets> = {
   Danse: { power: 6, endurance: 24, agility: 30 }, // 60
   Crossfit: { power: 40, endurance: 35, agility: 25 }, // 100
   Hyrox: { power: 31, endurance: 58, agility: 16 }, // 105
-  Badminton: { power: 0, endurance: 28, agility: 42 }, // 70
-  Squash: { power: 0, endurance: 55, agility: 55 }, // 110
-  'Tennis de table': { power: 0, endurance: 14, agility: 31 }, // 45
+  Badminton: { power: 6, endurance: 24, agility: 40 }, // 70 (smash = puissance)
+  Squash: { power: 12, endurance: 50, agility: 48 }, // 110 (fentes explosives)
+  'Tennis de table': { power: 4, endurance: 12, agility: 29 }, // 45
   Volley: { power: 16, endurance: 11, agility: 28 }, // 55
   Handball: { power: 17, endurance: 34, agility: 34 }, // 85
   Judo: { power: 50, endurance: 20, agility: 30 }, // 100
@@ -117,7 +117,7 @@ const SPORT_BENEFIT: Record<string, StatBuckets> = {
   Paddle: { power: 18, endurance: 30, agility: 12 }, // 60
   Snowboard: { power: 20, endurance: 13, agility: 32 }, // 65
   Roller: { power: 8, endurance: 22, agility: 45 }, // 75
-  'Corde à sauter': { power: 0, endurance: 72, agility: 48 }, // 120
+  'Corde à sauter': { power: 14, endurance: 60, agility: 46 }, // 120 (mollets/pliométrie)
   Gymnastique: { power: 32, endurance: 7, agility: 26 }, // 65
   Pilates: { power: 10, endurance: 10, agility: 15 }, // 35
   Équitation: { power: 10, endurance: 20, agility: 20 }, // 50
