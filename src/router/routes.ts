@@ -87,6 +87,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/layouts/BlankLayout.vue'),
     children: [{ path: '', component: () => import('@/pages/ChallengeDetailPage.vue') }],
   },
+  {
+    path: '/expedition',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/ExpeditionPage.vue') }],
+  },
 
   // App authentifiée
   {

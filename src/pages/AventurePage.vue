@@ -522,6 +522,16 @@
 
       <!-- ONGLET DONJONS -->
       <template v-else-if="tab === 'donjons'">
+        <!-- Expéditions (nouveau mode, prototype visuel) -->
+        <button class="expe-card" @click="router.push('/expedition')">
+          <span class="expe-emo">🗝️</span>
+          <span class="expe-main">
+            <span class="expe-name font-display">Expéditions <span class="expe-beta">bêta</span></span>
+            <span class="expe-sub">Donjons à étages à explorer — carte, salles, coffres…</span>
+          </span>
+          <span class="expe-go">›</span>
+        </button>
+
         <!-- Consommables à utiliser pour le prochain run -->
         <div v-if="ownedConsumables.length" class="consum">
           <div class="consum-lbl">Utiliser pour ce donjon</div>
@@ -1240,6 +1250,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
@@ -1334,6 +1345,7 @@ interface RunView {
 }
 
 const $q = useQuasar();
+const router = useRouter();
 const auth = useAuthStore();
 const char = useCharacterStore();
 const progress = useProgress();
@@ -3977,6 +3989,50 @@ onMounted(async () => {
   color: var(--dim);
   opacity: 0.9;
   line-height: 1.35;
+}
+/* ── Carte d'entrée « Expéditions » (nouveau mode) ── */
+.expe-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.expe-emo {
+  font-size: 26px;
+}
+.expe-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.expe-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.expe-beta {
+  font-size: 10px;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-left: 4px;
+}
+.expe-sub {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.expe-go {
+  font-size: 22px;
+  color: var(--accent);
 }
 /* ── Boss de palier : cartes NETTEMENT plus grandes & dramatiques ── */
 .mboss-title {
