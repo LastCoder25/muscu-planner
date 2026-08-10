@@ -1123,13 +1123,10 @@
           <template v-if="run.kind === 'dungeon'">{{ run.defeated }}/{{ run.total }} monstres · </template>
           PV restants {{ run.finalPv }}
         </div>
-        <!-- Rejeu animé du combat (prototype Phase 1) -->
+        <!-- Rejeu animé du combat (auto à l'ouverture ; :key relance à chaque run) -->
         <div v-if="stageFights.length" class="rm-stage-wrap">
-          <button v-if="!showStage" class="rm-stage-btn" @click="showStage = true">
-            ▶ Voir le combat animé
-          </button>
           <CombatStage
-            v-else
+            :key="runSeq"
             :player-name="char.row?.pseudo ?? 'Toi'"
             :player-max-pv="run.playerMaxPv ?? 100"
             :fights="stageFights"
@@ -1586,17 +1583,18 @@ function barW(v: number): string {
 const busy = ref(false);
 const run = ref<RunView | null>(null);
 const reportOpen = ref(false); // rapport de combat affiché en MODALE (post-run)
-const showStage = ref(false); // rejeu animé du combat (dans la modale de rapport)
+const runSeq = ref(0); // clé de rejeu → remonte CombatStage à chaque run (relance l'anim)
 // Combats rejouables (avec log détaillé) → alimente CombatStage.
 const stageFights = computed(() =>
   (run.value?.fights ?? [])
     .filter((f) => f.log?.length)
     .map((f) => ({ name: f.monster, emoji: f.emoji, maxPv: f.maxPv ?? 1, log: f.log! })),
 );
-// Après un run : replie la liste puis ouvre la modale de rapport (rejeu replié).
+// Après un run : replie la liste, ouvre la modale de rapport, et l'animation de
+// combat se (re)lance automatiquement (runSeq change → CombatStage remonte).
 function openReport() {
   showAllDungeons.value = false;
-  showStage.value = false;
+  runSeq.value++;
   reportOpen.value = true;
 }
 // Dernier lieu combattu → « Réattaquer » relance exactement le même run.
