@@ -52,7 +52,22 @@ const MAP = {
   "ex_skullcrusher": "Lying_Close-Grip_Barbell_Triceps_Extension_Behind_The_Head",
   "ex_squat_barbell": "Barbell_Full_Squat",
   "ex_superman": "Superman",
-  "ex_triceps_pushdown": "Reverse_Grip_Triceps_Pushdown"
+  "ex_triceps_pushdown": "Reverse_Grip_Triceps_Pushdown",
+  "ex_crunch": "Cross-Body_Crunch",
+  "ex_mountain_climbers": "Mountain_Climbers",
+  "ex_squat_jump": "Freehand_Jump_Squat",
+  "ex_abductors": "Thigh_Abductor",
+  "ex_adductors": "Thigh_Adductor",
+  "ex_glute_machine": "Glute_Kickback",
+  "ex_pp_arm_circles": "Arm_Circles",
+  "ex_pp_broad_jump": "Standing_Long_Jump",
+  "ex_pp_lateral_bound": "Lateral_Bound",
+  "ex_pp_medball_rot_throw": "Standing_Cable_Wood_Chop",
+  "ex_pp_medball_slam": "Overhead_Slam",
+  "ex_pp_pallof_press": "Pallof_Press",
+  "ex_pp_russian_twist": "Russian_Twist",
+  "ex_pp_side_plank": "Side_Bridge",
+  "ex_pp_squat_jump": "Freehand_Jump_Squat"
 };
 mkdirSync('public/exercises', { recursive: true });
 let ok = 0, fail = 0;
@@ -69,6 +84,5 @@ for (const [id, src] of Object.entries(MAP)) {
       fail++;
     }
   }
-  console.log(id, '←', src);
 }
 console.log('done — ok', ok, 'fail', fail);

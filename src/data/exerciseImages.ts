@@ -48,6 +48,22 @@ export const EXERCISE_IMAGES: Record<string, string> = {
   ex_squat_barbell: '/exercises/ex_squat_barbell.jpg',
   ex_superman: '/exercises/ex_superman.jpg',
   ex_triceps_pushdown: '/exercises/ex_triceps_pushdown.jpg',
+  // Conditionnement / challenge + machines + prépa physique (ajout 2026-08).
+  ex_crunch: '/exercises/ex_crunch.jpg',
+  ex_mountain_climbers: '/exercises/ex_mountain_climbers.jpg',
+  ex_squat_jump: '/exercises/ex_squat_jump.jpg',
+  ex_abductors: '/exercises/ex_abductors.jpg',
+  ex_adductors: '/exercises/ex_adductors.jpg',
+  ex_glute_machine: '/exercises/ex_glute_machine.jpg',
+  ex_pp_arm_circles: '/exercises/ex_pp_arm_circles.jpg',
+  ex_pp_broad_jump: '/exercises/ex_pp_broad_jump.jpg',
+  ex_pp_lateral_bound: '/exercises/ex_pp_lateral_bound.jpg',
+  ex_pp_medball_rot_throw: '/exercises/ex_pp_medball_rot_throw.jpg',
+  ex_pp_medball_slam: '/exercises/ex_pp_medball_slam.jpg',
+  ex_pp_pallof_press: '/exercises/ex_pp_pallof_press.jpg',
+  ex_pp_russian_twist: '/exercises/ex_pp_russian_twist.jpg',
+  ex_pp_side_plank: '/exercises/ex_pp_side_plank.jpg',
+  ex_pp_squat_jump: '/exercises/ex_pp_squat_jump.jpg',
 };
 
 export function exerciseImage(id: string): string | undefined {
