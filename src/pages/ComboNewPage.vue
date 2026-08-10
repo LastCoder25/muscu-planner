@@ -45,13 +45,13 @@
             <b>{{ activeCount }}</b> emplacements) · <b>{{ totalSets }}</b> séries / semaine
           </div>
         </div>
-        <div class="foot-bar">
-          <div class="foot-info">{{ activeCount }} emplacement{{ activeCount > 1 ? 's' : '' }}</div>
+        <div class="foot-bar cta-bar">
           <q-btn
+            class="foot-cta"
             color="primary"
             text-color="dark"
             no-caps
-            size="lg"
+            unelevated
             icon-right="arrow_forward"
             label="Choisir mes exercices"
             :disable="activeCount === 0"
@@ -839,5 +839,17 @@ onMounted(async () => {
   flex: 1;
   font-size: 12.5px;
   color: var(--dim);
+}
+.cta-bar {
+  padding-top: 14px;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+}
+.foot-cta {
+  flex: 1;
+  height: 54px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
 }
 </style>
