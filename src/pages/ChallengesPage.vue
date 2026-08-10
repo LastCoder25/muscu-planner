@@ -147,7 +147,9 @@
             {{ st(c).completionPct }}% · {{ st(c).totalDone }} {{ unitOf(c) }}
           </div>
           <div v-if="c.status === 'done'" class="cc-xp">
-            <span class="xp-pill reps">+{{ xpb(c).reps }} XP reps</span>
+            <span v-if="xpb(c).reps > 0" class="xp-pill reps"
+              >+{{ xpb(c).reps }} XP {{ c.unit === 'time' ? 'durée' : 'reps' }}</span
+            >
             <span v-if="xpb(c).bonus > 0" class="xp-pill bonus"
               >+{{ xpb(c).bonus }} XP complétion</span
             >

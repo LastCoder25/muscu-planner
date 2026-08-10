@@ -3,7 +3,7 @@
 // statistiques (streak/complétion) et évaluation des succès.
 import type { Level } from './types';
 import { REP_XP, assistMult, XP_MULT } from './athlete';
-import { isCardioChallengeExercise } from '@/data/cardio';
+import { isCardioChallengeExercise, isCardioTrackChallenge } from '@/data/cardio';
 
 export type ChallengeFormat =
   | 'fixed'
@@ -850,11 +850,31 @@ export function challengeTonnage(c: Challenge): number {
   );
 }
 
+/** XP d'EFFORT brute (avant XP_MULT) d'un défi, quel que soit le format :
+ *  - reps → Σ reps assistées × REP_XP × poids-de-rep + tonnage/500 ;
+ *  - GAINAGE (temps en secondes, hors cardio) → 1 pt / 4 s × REP_XP ;
+ *  - cardio (temps=minutes ou distance) → 0 (compté via les sorties, pas de doublon). */
+function effortXpRaw(c: Challenge): number {
+  if (c.unit === 'reps')
+    return assistedReps(c) * REP_XP * (c.rep_weight ?? 1) + challengeTonnage(c) / 500;
+  if (c.unit === 'time' && !isCardioTrackChallenge(c)) {
+    const secs = c.progress.reduce((a, p) => a + (p.done || 0), 0);
+    return (secs / 4) * REP_XP;
+  }
+  return 0;
+}
+
 /** XP « d'effort » d'une journée de défi — sert à afficher l'XP gagnée jour par
  *  jour dans les historiques. Depuis les SÉRIES si présentes (reps assistées +
  *  tonnage), sinon depuis `done` (reps mode). La prime de complétion n'est PAS
  *  répartie par jour (cf. `challengeXpPoints`). Gainage (temps) → 0 par jour. */
 export function challengeDayXp(ch: Challenge, p: DayProgress): number {
+  if (ch.unit === 'time') {
+    // Gainage → XP selon le temps (1 pt / 4 s) ; cardio-temps compté ailleurs.
+    if (isCardioTrackChallenge(ch)) return 0;
+    const secs = p.done || 0;
+    return secs > 0 ? Math.round((secs / 4) * REP_XP * XP_MULT) : 0;
+  }
   if (ch.unit !== 'reps') return 0;
   const sets = daySets(p);
   if (sets.length) {
@@ -877,17 +897,13 @@ export function challengeXpPoints(challenges: Challenge[]): number {
   // d'assistance (une rep assistée vaut moins).
   const weightOf = (c: Challenge) =>
     (c.unit === 'reps' ? (c.rep_weight ?? 1) : 1) * assistMult(c.config.assisted);
-  // reps mode : Σdone × REP_XP × weightOf (identique à avant).
-  // sets mode : Σ(reps assistées) × REP_XP × rep_weight + tonnage/500 (façon séance).
-  const repsXp = challenges.reduce((a, c) => {
-    if (c.unit !== 'reps') return a;
-    return a + assistedReps(c) * REP_XP * (c.rep_weight ?? 1) + challengeTonnage(c) / 500;
-  }, 0);
+  // XP d'effort : reps (Σ reps + tonnage) OU gainage (temps) — cf. effortXpRaw.
+  const repsXp = challenges.reduce((a, c) => a + effortXpRaw(c), 0);
   const completionBonus = challenges.reduce((a, c) => {
     const total = plannedEffort(c);
-    const done = c.progress.reduce((b, p) => b + (p.done || 0), 0);
-    const doneEffort = c.unit === 'time' ? done / 4 : done;
-    if (total <= 0 || doneEffort < total) return a; // prime seulement si le total est atteint
+    // Prime versée si le défi est réellement complété OU marqué terminé (aligné sur
+    // le statut : un défi 'done' ajusté sous le total garde sa prime).
+    if (total <= 0 || !(isChallengeComplete(c) || c.status === 'done')) return a;
     // Prime adaptée au format. Le poids de rep pondère la magnitude (pas la complétion).
     // - CUMULÉ (reps globales) = objectif de VOLUME → prime ∝ reps × (1 + avance),
     //   où avance = jours gagnés / durée (finir tôt récompense, mais tout est
@@ -907,15 +923,10 @@ export function challengeXpPoints(challenges: Challenge[]): number {
  *  sur les défis terminés). Mêmes formules que challengeXpPoints, mais par défi. */
 export function challengeXpBreakdown(c: Challenge): { reps: number; bonus: number; total: number } {
   const weightOf = (c.unit === 'reps' ? (c.rep_weight ?? 1) : 1) * assistMult(c.config.assisted);
-  const repsXp =
-    c.unit === 'reps'
-      ? assistedReps(c) * REP_XP * (c.rep_weight ?? 1) + challengeTonnage(c) / 500
-      : 0;
+  const repsXp = effortXpRaw(c);
   let bonusXp = 0;
   const total = plannedEffort(c);
-  const done = c.progress.reduce((b, p) => b + (p.done || 0), 0);
-  const doneEffort = c.unit === 'time' ? done / 4 : done;
-  if (total > 0 && doneEffort >= total) {
+  if (total > 0 && (isChallengeComplete(c) || c.status === 'done')) {
     const mult =
       c.format === 'cumulative' ? 1 + earlyFinishFraction(c) : durationMultiplier(activeDaysOf(c));
     const base = c.config.count_mode === 'sets' ? challengeTotalReps(c) : total;

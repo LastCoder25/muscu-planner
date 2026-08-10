@@ -251,15 +251,49 @@ describe('challengeXpPoints', () => {
     expect(challengeXpPoints([assisted])).toBeLessThan(challengeXpPoints([strict]));
   });
 
-  it('un défi en temps ne compte pas les reps', () => {
+  it('gainage (temps) : XP d’effort selon le temps même sans complétion', () => {
     const c = challenge({
       unit: 'time',
+      exercise_id: 'ex_plank',
+      format: 'cumulative',
+      config: cfg({ total: 400 }), // total non atteint
+      daily_targets: [0, 0, 0],
       progress: [
-        { day: 0, date: '2026-01-05', target: 10, done: 5, elapsed_sec: 5, completed: false },
+        { day: 0, date: '2026-01-05', target: 0, done: 120, elapsed_sec: 120, completed: false },
       ],
     });
-    // unit time → reps 0 ; total non atteint → 0
+    // 120 s → 30 pts × REP_XP(0,2) × XP_MULT(2) = 12 ; total non atteint → pas de prime
+    expect(challengeXpPoints([c])).toBe(12);
+  });
+
+  it('cardio en temps : pas d’XP d’effort ici (compté via les sorties)', () => {
+    const c = challenge({
+      unit: 'time',
+      exercise_id: 'ex_ch_velo',
+      format: 'cumulative',
+      config: cfg({ total: 400 }), // non atteint → pas de prime, on isole l'effort
+      daily_targets: [0, 0, 0],
+      progress: [
+        { day: 0, date: '2026-01-05', target: 0, done: 60, elapsed_sec: 0, completed: false },
+      ],
+    });
+    // cardio (temps) → effort 0 ; total non atteint → prime 0 → total 0
     expect(challengeXpPoints([c])).toBe(0);
+  });
+
+  it('défi marqué terminé (sous le total) : prime tout de même versée', () => {
+    const c = challenge({
+      format: 'cumulative',
+      status: 'done',
+      config: cfg({ total: 100 }),
+      daily_targets: [0, 0, 0],
+      progress: [
+        { day: 0, date: '2026-01-05', target: 0, done: 90, elapsed_sec: 0, completed: false },
+      ],
+    });
+    // sous le total mais status 'done' → prime comptée (donc > la seule XP de reps)
+    const repsOnly = 90 * 0.2 * 1 * 2;
+    expect(challengeXpPoints([c])).toBeGreaterThan(repsOnly);
   });
 
   it('le poids de rep pondère reps ET prime', () => {
