@@ -1103,7 +1103,7 @@
         <div class="rm-head">
           <div class="rm-title font-display">{{ run.name }}</div>
           <button
-            v-if="!char.row?.pending_reward"
+            v-if="stageDone && !char.row?.pending_reward"
             class="rm-reattack"
             :disabled="!canReattack"
             :title="`Réattaquer (${reattackCost} ⚡)`"
@@ -1113,17 +1113,8 @@
             ⚔️
           </button>
         </div>
-        <div class="result-head">
-          <span>{{
-            run.cleared ? (run.kind === 'boss' ? '🏆 Vaincu !' : '🏆 Nettoyé !') : '💀 Échec'
-          }}</span>
-          <span class="result-gold">+{{ run.gold }} 🪙 · +{{ run.dust }} ✨</span>
-        </div>
-        <div class="result-sub">
-          <template v-if="run.kind === 'dungeon'">{{ run.defeated }}/{{ run.total }} monstres · </template>
-          PV restants {{ run.finalPv }}
-        </div>
-        <!-- Rejeu animé du combat (auto à l'ouverture ; :key relance à chaque run) -->
+        <!-- Rejeu animé du combat (auto ; :key relance à chaque run). Le résultat et
+             le butin ne sont révélés QU'À LA FIN de l'animation (@done). -->
         <div v-if="stageFights.length" class="rm-stage-wrap">
           <CombatStage
             :key="runSeq"
@@ -1132,9 +1123,27 @@
             :fights="stageFights"
             :player-profile="c.profile"
             :player-equipped="char.row?.equipped ?? {}"
+            @done="stageDone = true"
           />
         </div>
-        <div class="log">
+        <template v-if="stageDone">
+          <div class="result-head">
+            <span>{{
+              run.cleared ? (run.kind === 'boss' ? '🏆 Vaincu !' : '🏆 Nettoyé !') : '💀 Échec'
+            }}</span>
+            <span class="result-gains">
+              <span class="gain-pill gold">+{{ run.gold }} 🪙</span>
+              <span class="gain-pill dust">+{{ run.dust }} ✨</span>
+            </span>
+          </div>
+          <div class="result-sub">
+            <template v-if="run.kind === 'dungeon'"
+              >{{ run.defeated }}/{{ run.total }} monstres ·
+            </template>
+            PV restants {{ run.finalPv }}
+          </div>
+        </template>
+        <div v-if="stageDone" class="log">
           <div
             v-for="(f, i) in run.fights"
             :key="i"
@@ -1147,7 +1156,7 @@
             <span class="fr-rounds">{{ f.rounds }} tours</span>
           </div>
         </div>
-        <div v-if="run.drops.length" class="drops">
+        <div v-if="stageDone && run.drops.length" class="drops">
           <div class="drops-lbl">✨ Butin</div>
           <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
             <span class="inv-emo">{{ d.emoji }}</span>
@@ -1193,12 +1202,12 @@
             </div>
           </div>
         </div>
-        <div v-if="run.consumable" class="cons-drop">
+        <div v-if="stageDone && run.consumable" class="cons-drop">
           {{ run.consumable.emoji }} <b>{{ run.consumable.name }}</b> ajouté à ton sac 🎒
         </div>
 
         <!-- Récompense de boss AU CHOIX (à la place du butin) : 3 candidats, on en garde 1 -->
-        <div v-if="char.row?.pending_reward" class="rm-reward">
+        <div v-if="stageDone && char.row?.pending_reward" class="rm-reward">
           <div class="drops-lbl">🎁 Choisis ta récompense</div>
           <div class="reward-list">
             <button
@@ -1584,6 +1593,7 @@ const busy = ref(false);
 const run = ref<RunView | null>(null);
 const reportOpen = ref(false); // rapport de combat affiché en MODALE (post-run)
 const runSeq = ref(0); // clé de rejeu → remonte CombatStage à chaque run (relance l'anim)
+const stageDone = ref(true); // résultat + butin révélés seulement à la FIN de l'animation
 // Combats rejouables (avec log détaillé) → alimente CombatStage.
 const stageFights = computed(() =>
   (run.value?.fights ?? [])
@@ -1595,6 +1605,9 @@ const stageFights = computed(() =>
 function openReport() {
   showAllDungeons.value = false;
   runSeq.value++;
+  // Résultat/butin masqués tant que l'animation joue (révélés à la fin). Si pas de
+  // rejeu (pas de log), on montre tout de suite.
+  stageDone.value = !stageFights.value.length;
   reportOpen.value = true;
 }
 // Dernier lieu combattu → « Réattaquer » relance exactement le même run.
@@ -4238,6 +4251,29 @@ onMounted(async () => {
 }
 .result-gold {
   color: var(--accent);
+}
+/* Gains en pastilles colorées (or / poussière). */
+.result-gains {
+  display: flex;
+  gap: 6px;
+}
+.gain-pill {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.gain-pill.gold {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid var(--accent);
+}
+.gain-pill.dust {
+  color: #b07cff;
+  background: color-mix(in srgb, #b07cff 16%, transparent);
+  border: 1px solid #b07cff;
 }
 .result-sub {
   font-size: 12px;

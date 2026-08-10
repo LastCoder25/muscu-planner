@@ -75,6 +75,7 @@ const props = defineProps<{
   playerProfile: 'puissant' | 'agile' | 'polyvalent';
   playerEquipped: Equipped;
 }>();
+const emit = defineEmits<{ done: [] }>(); // fin de l'animation → révèle résultat + butin
 
 // Séquence à plat : chaque pas = un événement + l'index de son combat.
 const steps = computed(() => {
@@ -157,6 +158,7 @@ function finish() {
   const last = steps.value[steps.value.length - 1];
   lastWin.value = !!last && last.e.monsterPv <= 0 && last.e.playerPv > 0;
   done.value = true;
+  emit('done');
 }
 
 function start() {
