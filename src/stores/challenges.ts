@@ -12,7 +12,7 @@ import {
   type ChallengeConfig,
   type ChallengeFormat,
 } from '@/lib/challenges';
-import { challengeIdsForActivity, CARDIO_CHALLENGE_IDS } from '@/data/cardio';
+import { challengeIdsForActivity, isCardioTrackChallenge } from '@/data/cardio';
 import {
   canAddChallenge,
   isAccessoryMuscle,
@@ -21,9 +21,12 @@ import {
 } from '@/lib/challengeLimits';
 import type { CardioActivity } from '@/lib/types';
 
-// Voie d'un défi (budget séparé) : cardio vs muscu.
+// Voie d'un défi (budget séparé) : cardio vs muscu. La voie CARDIO regroupe les
+// vraies sorties (marche/course/vélo, distance) ET les exos de CONDITIONNEMENT
+// (jumping jacks, burpees…) — leur XP va déjà à la piste Cardio, donc ils vivent
+// dans la voie cardio (budget + affichage), pas en muscu.
 export function isCardioChallengeRow(c: { unit: string; exercise_id: string }): boolean {
-  return c.unit === 'distance' || CARDIO_CHALLENGE_IDS.has(c.exercise_id);
+  return isCardioTrackChallenge(c);
 }
 
 export class ChallengeLimitError extends Error {

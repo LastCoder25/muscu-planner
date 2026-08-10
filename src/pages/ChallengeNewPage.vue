@@ -448,6 +448,7 @@ import { exerciseImage } from '@/data/exerciseImages';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useProfileStore } from '@/stores/profile';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
+import { CONDITIONING_CHALLENGE_IDS } from '@/data/cardio';
 import { useComboStore } from '@/stores/combo';
 import { useAuthStore } from '@/stores/auth';
 import {
@@ -501,12 +502,15 @@ const creating = ref(false);
 const level = computed<Level>(() => profileStore.profile?.experience?.level ?? 'intermediaire');
 const levelLabel = computed(() => level.value);
 const favSet = computed(() => new Set(profileStore.profile?.favorite_exercises ?? []));
+// SORTIE cardio (tag 'cardio' = marche/course/vélo) : pilote le sélecteur
+// d'unité distance/temps. Le conditionnement (jumping jacks…) n'en est PAS (reps).
 const isCardio = computed(() => !!exercise.value?.tags?.includes('cardio'));
 
-// Limite « jetons par durée » + slot accessoire (par voie muscu / cardio),
-// reflétée dès le wizard. On lit les défis actifs de la voie concernée.
+// VOIE cardio (budget + onglet) : sorties cardio ET exos de conditionnement
+// (jumping jacks, burpees…) → leur XP va au Cardio, ils vivent donc côté cardio,
+// pas muscu. (Distinct de `isCardio` qui, lui, ne gère que le type d'unité.)
 function exIsCardio(e: ExerciseRow): boolean {
-  return !!e.tags?.includes('cardio');
+  return !!e.tags?.includes('cardio') || CONDITIONING_CHALLENGE_IDS.has(e.id);
 }
 function laneChallenges(cardio: boolean): LaneChallenge[] {
   return challenges.list
@@ -553,7 +557,8 @@ const fields = computed(() => formatOption(format.value)?.fields ?? ['start']);
 
 // Jetons : voie de l'exo choisi, coût du défi (selon durée), place restante.
 const selAccessory = computed(() => isAccessoryMuscle(exercise.value?.muscle_primary));
-const laneActive = computed(() => laneChallenges(isCardio.value));
+const selIsCardioLane = computed(() => (exercise.value ? exIsCardio(exercise.value) : false));
+const laneActive = computed(() => laneChallenges(selIsCardioLane.value));
 const laneUsed = computed(() => usedTokens(laneActive.value));
 const laneRemaining = computed(() => remainingTokens(laneActive.value));
 const candidateCost = computed(() => (selAccessory.value ? 0 : tokenCost(durationDays.value)));
@@ -562,7 +567,7 @@ const candidateFits = computed(() =>
     ? accessoryCount(laneActive.value) < 1
     : laneUsed.value + candidateCost.value <= CHALLENGE_TOKEN_BUDGET,
 );
-const laneLabel = computed(() => (isCardio.value ? 'cardio' : 'muscu'));
+const laneLabel = computed(() => (selIsCardioLane.value ? 'cardio' : 'muscu'));
 // Une durée preset rentre-t-elle dans la place restante de la voie ?
 function presetFits(d: number): boolean {
   if (selAccessory.value) return true;

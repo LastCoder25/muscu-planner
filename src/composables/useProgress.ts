@@ -4,7 +4,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useLogsStore } from '@/stores/logs';
 import { useTennisStore } from '@/stores/tennis';
-import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
+import { useChallengesStore } from '@/stores/challenges';
 import { useSessionsStore } from '@/stores/sessions';
 import { useCardioStore } from '@/stores/cardio';
 import { useComboStore } from '@/stores/combo';
@@ -21,6 +21,7 @@ import { comboXpPoints } from '@/lib/combo';
 import { computeLevel } from '@/lib/levels';
 import {
   isCardioTrackChallenge,
+  isCardioOutingChallenge,
   ACTIVITY_LABELS,
   ACTIVITY_ICONS,
   defaultActivityForChallenge,
@@ -296,7 +297,10 @@ export function useProgress() {
     for (const c of challenges.list) {
       const xp = challengeXpPoints([c]);
       if (xp <= 0) continue;
-      if (isCardioChallengeRow(c)) {
+      // Tuile d'activité : réservée aux VRAIES sorties cardio (marche/course/vélo).
+      // Le conditionnement (cardio track mais sans activité de sortie) reste sur la
+      // tuile Muscu pour le raccourci de saisie.
+      if (isCardioOutingChallenge(c)) {
         const a = defaultActivityForChallenge(c.exercise_id);
         bump(
           `cardio:${a}`,

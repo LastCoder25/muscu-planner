@@ -52,6 +52,12 @@ export const CARDIO_CHALLENGE_IDS = new Set([
 export function isCardioChallengeExercise(id: string): boolean {
   return CARDIO_CHALLENGE_IDS.has(id);
 }
+/** Vraie SORTIE cardio (marche/course/vélo, par distance ou id) : a une activité
+ *  dédiée + un miroir de sortie. ≠ conditionnement (cardio-track mais SANS sortie)
+ *  → sert à réserver la tuile d'activité / l'exclusion agenda aux seules sorties. */
+export function isCardioOutingChallenge(c: { unit: string; exercise_id: string }): boolean {
+  return c.unit === 'distance' || CARDIO_CHALLENGE_IDS.has(c.exercise_id);
+}
 // Exos de CONDITIONNEMENT (métaboliques) : comptent comme CARDIO pour l'XP/le
 // niveau (→ Agilité côté RPG), MAIS ce ne sont PAS des « sorties cardio »
 // (pas de miroir ni de report auto : on ne les déduit pas d'une marche/vélo).

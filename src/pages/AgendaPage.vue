@@ -51,10 +51,15 @@ import { ref, computed, onMounted } from 'vue';
 import { useLogsStore } from '@/stores/logs';
 import { useTennisStore } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
-import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
+import { useChallengesStore } from '@/stores/challenges';
 import { challengeDayXp } from '@/lib/challenges';
 import { sessionXp, otherSportXp, cardioSessionXp, drillSessionXp } from '@/lib/athlete';
-import { ACTIVITY_LABELS, ACTIVITY_ICONS, paceLabel } from '@/data/cardio';
+import {
+  ACTIVITY_LABELS,
+  ACTIVITY_ICONS,
+  paceLabel,
+  isCardioOutingChallenge,
+} from '@/data/cardio';
 
 // Disciplines « spécifiques » (tennis/prépa…) : comptent leur XP mais N'alimentent
 // PAS l'énergie d'aventure (fond = muscu + cardio + autre sport uniquement).
@@ -155,9 +160,11 @@ const entries = computed<Entry[]>(() => {
       energy: xp,
     });
   }
-  // Reps de défis MUSCU jour par jour (le cardio est déjà couvert par les sorties miroir).
+  // Reps de défis jour par jour, SAUF les vraies sorties cardio (marche/course/
+  // vélo) déjà couvertes par les sorties miroir. Le conditionnement (jumping
+  // jacks…) n'a pas de miroir → il reste affiché ici.
   for (const c of challenges.list) {
-    if (isCardioChallengeRow(c)) continue;
+    if (isCardioOutingChallenge(c)) continue;
     const uLabel = c.unit === 'time' ? 'sec' : c.unit === 'distance' ? 'km' : 'reps';
     for (const p of c.progress) {
       if (!(p.done > 0)) continue;
