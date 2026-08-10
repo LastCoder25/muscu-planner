@@ -811,17 +811,22 @@ function confirmAbandon() {
   });
 }
 function confirmDelete() {
+  // Si des reps/séries ont déjà été faites, on NE supprime PAS (l'effort compte
+  // pour l'XP/l'énergie) : on marque « abandonné » (conservé en historique).
+  // Suppression sèche réservée aux défis vierges (créés par erreur).
+  const hasDone = (ch.value?.progress ?? []).some((p) => (p.done || 0) > 0);
   $q.dialog({
-    title: 'Supprimer',
-    message: 'Supprimer définitivement ce challenge ?',
+    title: hasDone ? 'Abandonner' : 'Supprimer',
+    message: hasDone
+      ? 'Tu as déjà fait des séries : le défi passe en « abandonné » (ton effort et ton XP restent comptés). OK ?'
+      : 'Supprimer définitivement ce challenge (aucune série faite) ?',
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Supprimer', color: 'negative' },
+    ok: { label: hasDone ? 'Abandonner' : 'Supprimer', color: 'negative' },
   }).onOk(() => {
-    // replace (pas push) : le détail supprimé sort de l'historique → pas de
-    // retour arrière vers un challenge inexistant (« Challenge introuvable »).
-    $q.loading.show({ message: 'Suppression…' });
-    store
-      .remove(id)
+    // replace (pas push) : le détail sort de l'historique actif → pas de retour
+    // arrière vers un challenge introuvable.
+    $q.loading.show({ message: hasDone ? 'Abandon…' : 'Suppression…' });
+    (hasDone ? store.setStatus(id, 'abandoned') : store.remove(id))
       .then(() => router.replace('/challenges'))
       .catch((e) =>
         $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' }),

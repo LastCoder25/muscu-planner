@@ -198,13 +198,18 @@ function abandon() {
   });
 }
 function confirmRemove() {
+  // Des séries déjà faites comptent pour l'XP/l'énergie → on marque « abandonné »
+  // (conservé) au lieu de supprimer. Suppression sèche réservée aux 360 vierges.
+  const hasDone = (c.value?.legs ?? []).some((l) => legSetsDone(l) > 0);
   $q.dialog({
-    title: 'Supprimer ce Défi 360 ?',
-    message: 'Suppression définitive.',
+    title: hasDone ? 'Abandonner ce Défi 360 ?' : 'Supprimer ce Défi 360 ?',
+    message: hasDone
+      ? 'Tu as déjà fait des séries : il passe en « abandonné » (ton effort et ton XP restent comptés).'
+      : 'Aucune série faite : suppression définitive.',
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Supprimer', color: 'negative' },
+    ok: { label: hasDone ? 'Abandonner' : 'Supprimer', color: 'negative' },
   }).onOk(() => {
-    void combo.remove(id).then(() => router.back());
+    void (hasDone ? combo.setStatus(id, 'abandoned') : combo.remove(id)).then(() => router.back());
   });
 }
 

@@ -207,8 +207,8 @@
         </div>
         <div class="tok-note" :class="{ warn: !candidateFits }">
           <template v-if="selAccessory">
-            ✨ Exercice accessoire : ne prend pas de place ({{ laneLabel }}, 1 accessoire à la
-            fois).
+            ✨ Exercice accessoire (exo d'appoint) : ne prend pas de place ({{ laneLabel }}, 1 à la
+            fois) et se lance sur <b>1 semaine</b>.
           </template>
           <template v-else-if="candidateFits">
             Ce défi occupe <b>{{ candidateCost }}</b> place{{ candidateCost > 1 ? 's' : '' }} en
@@ -596,15 +596,17 @@ const laneActive = computed(() => laneChallenges(selIsCardioLane.value));
 const laneUsed = computed(() => usedTokens(laneActive.value));
 const laneRemaining = computed(() => remainingTokens(laneActive.value));
 const candidateCost = computed(() => (selAccessory.value ? 0 : tokenCost(durationDays.value)));
+// Accessoire = exo d'appoint : gratuit en jeton MAIS limité à 1 semaine.
+const ACCESSORY_MAX_DAYS = 7;
 const candidateFits = computed(() =>
   selAccessory.value
-    ? accessoryCount(laneActive.value) < 1
+    ? accessoryCount(laneActive.value) < 1 && durationDays.value <= ACCESSORY_MAX_DAYS
     : laneUsed.value + candidateCost.value <= CHALLENGE_TOKEN_BUDGET,
 );
 const laneLabel = computed(() => (selIsCardioLane.value ? 'cardio' : 'muscu'));
 // Une durée preset rentre-t-elle dans la place restante de la voie ?
 function presetFits(d: number): boolean {
-  if (selAccessory.value) return true;
+  if (selAccessory.value) return d <= ACCESSORY_MAX_DAYS; // accessoire : 1 sem. max
   return laneUsed.value + tokenCost(d) <= CHALLENGE_TOKEN_BUDGET;
 }
 // Jauge d'espace (bannière) : usage des deux voies.
@@ -756,7 +758,7 @@ function reset() {
 // Durée par défaut à la sélection : le conseillé (30 j) s'il rentre dans la place
 // restante de la voie, sinon 1 semaine → on ne tombe jamais sur une durée refusée.
 function defaultDurationFor(e: ExerciseRow): number {
-  if (isAccessoryMuscle(e.muscle_primary)) return 30; // accessoire = pas de coût
+  if (isAccessoryMuscle(e.muscle_primary)) return 7; // accessoire = exo d'appoint, 1 sem. max
   const rem = remainingTokens(laneChallenges(exIsCardio(e)));
   return tokenCost(30) <= rem ? 30 : 7;
 }
@@ -796,7 +798,8 @@ function enableCustom() {
 // Un défi implique une répétition sur plusieurs jours : durée mini = 3 j.
 const MIN_CUSTOM_DAYS = 3;
 function applyCustom() {
-  const d = Math.min(365, Math.max(MIN_CUSTOM_DAYS, Math.round(customDays.value || 0)));
+  const max = selAccessory.value ? ACCESSORY_MAX_DAYS : 365; // accessoire : 1 sem. max
+  const d = Math.min(max, Math.max(MIN_CUSTOM_DAYS, Math.round(customDays.value || 0)));
   customDays.value = d;
   durationDays.value = d;
   reset();

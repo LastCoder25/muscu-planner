@@ -82,6 +82,9 @@ export const useChallengesStore = defineStore('challenges', () => {
         accessory: isAccessoryMuscle(c.muscle_primary),
         durationDays: c.duration_days,
       }));
+    // Accessoire (exo d'appoint) : limité à 1 semaine.
+    if (isAccessoryMuscle(input.muscle_primary) && input.duration_days > 7)
+      throw new Error("Un défi accessoire est un exo d'appoint : 1 semaine maximum.");
     const res = canAddChallenge(sameLane, {
       accessory: isAccessoryMuscle(input.muscle_primary),
       durationDays: input.duration_days,

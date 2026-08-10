@@ -171,12 +171,18 @@ const entries = computed<Entry[]>(() => {
       const [y, m, dd] = p.date.split('-').map(Number);
       const ts = new Date(y!, (m ?? 1) - 1, dd ?? 1, 12).getTime();
       const xp = challengeDayXp(c, p);
+      // Détail par série si saisi (ex. « 10/9/11 reps ») ; sinon le total du jour.
+      const setReps = (p.sets ?? []).map((s) => s.reps).filter((r) => r > 0);
+      const meta =
+        c.unit === 'reps' && setReps.length > 1
+          ? `${setReps.join('/')} ${uLabel}`
+          : `${p.done} ${uLabel}`;
       out.push({
         ts,
         kind: 'challenge',
         icon: 'emoji_events',
         title: c.exercise_name,
-        meta: `${p.done} ${uLabel}`,
+        meta,
         xp,
         energy: xp, // défis muscu/cardio → comptent dans le fond → énergie
       });
