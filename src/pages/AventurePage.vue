@@ -594,10 +594,61 @@
           <div v-else class="rb-next">⭐ Dernière région — tu touches au bout du monde.</div>
         </div>
 
-        <div class="sec-title mboss-title">🗺️ Donjons</div>
+        <div class="sec-title mboss-title">🗺️ Carte des mondes</div>
+        <!-- Carte-monde serpentine : un nœud par région, fil énergisé, cadenas. -->
+        <div class="worldmap" :style="{ height: mapGeom.viewH + 'px' }">
+          <svg class="wm-svg" :viewBox="`0 0 100 ${mapGeom.viewH}`" preserveAspectRatio="none">
+            <path :d="mapGeom.pathD" class="wm-wire" vector-effect="non-scaling-stroke" />
+            <path
+              :d="mapGeom.pathD"
+              class="wm-wire wm-energized"
+              pathLength="1"
+              stroke-dasharray="1"
+              :stroke-dashoffset="1 - mapFill"
+              vector-effect="non-scaling-stroke"
+            />
+          </svg>
+          <button
+            v-for="(r, i) in REGIONS"
+            :key="r.id"
+            class="wm-node"
+            :class="[regionState(r), { sel: selRegion.id === r.id, shatter: shatterId === r.id }]"
+            :style="{ ...nodeStyle(i), '--rc': r.color }"
+            @click="tapRegion(r)"
+          >
+            <span class="wm-disc">
+              <span v-if="regionState(r) === 'locked' && shatterId !== r.id" class="wm-lockemo">🔒</span>
+              <span v-else class="wm-emo">{{ r.emoji }}</span>
+              <span v-if="regionState(r) === 'done'" class="wm-star">★</span>
+              <!-- Chaînes + cadenas (verrou / explosion) -->
+              <span
+                v-if="regionState(r) === 'locked' || shatterId === r.id"
+                class="wm-chains"
+                aria-hidden="true"
+              >
+                <i class="wm-link l1" />
+                <i class="wm-link l2" />
+                <i class="wm-lock">🔒</i>
+              </span>
+            </span>
+            <span class="wm-cap">{{ regionState(r) === 'locked' ? '???' : r.name }}</span>
+            <span class="wm-pips">
+              <i v-for="n in r.dungeonIds.length" :key="n" :class="{ on: n <= regionDone(r) }" />
+            </span>
+          </button>
+        </div>
+
+        <!-- Drawer : donjons de la région sélectionnée -->
+        <div class="region-drawer" :style="{ '--rc': selRegion.color }">
+          <div class="rd-head">
+            <span class="rd-emo">{{ selRegion.emoji }}</span>
+            <span class="rd-name font-display">{{ selRegion.name }}</span>
+            <span class="rd-prog">{{ regionDone(selRegion) }}/{{ selRegion.dungeonIds.length }}</span>
+          </div>
+        </div>
         <div class="dungeons">
           <div
-            v-for="it in visibleAdventure"
+            v-for="it in selectedRegionItems"
             :key="it.key"
             class="dgn"
             :class="{ locked: !dungeonUnlocked(it.dungeon) }"
@@ -649,19 +700,11 @@
             <button v-else class="fight" disabled>Verrouillé</button>
           </div>
 
-          <button
-            v-if="!showAllDungeons && hiddenCount > 0"
-            class="expand-btn"
-            @click="showAllDungeons = true"
+          <!-- Faille sans fin (end-game infini) — visible sur la dernière région -->
+          <div
+            v-if="endlessUnlocked && selRegion.id === endRegionId"
+            class="dgn mboss endless"
           >
-            ▾ Voir tous les donjons ({{ adventureItems.length }})
-          </button>
-          <button v-else-if="showAllDungeons" class="expand-btn" @click="showAllDungeons = false">
-            ▴ Réduire la liste
-          </button>
-
-          <!-- Faille sans fin (end-game infini) — après le dernier donjon -->
-          <div v-if="endlessUnlocked" class="dgn mboss endless">
             <div class="dgn-hd">
               <span class="dgn-emo">🌀</span>
               <div class="dgn-hd-main">
@@ -1472,7 +1515,16 @@ import {
 } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { unlocksAtLevel, upcomingUnlocks } from '@/lib/advUnlocks';
-import { currentRegion, nextRegion, regionProgress, regionOfDungeon } from '@/lib/regions';
+import {
+  REGIONS,
+  currentRegion,
+  nextRegion,
+  regionProgress,
+  regionOfDungeon,
+  regionMapGeometry,
+  mapFillFraction,
+  type Region,
+} from '@/lib/regions';
 import { bestiary, setCollection, codexSummary } from '@/lib/codex';
 import { logicalToday } from '@/lib/challenges';
 
@@ -1617,6 +1669,10 @@ watch(
       const r = curRegion.value;
       regionBurst.value = { emoji: r.emoji, name: r.name, blurb: r.blurb, color: r.color };
       setTimeout(() => (regionBurst.value = null), 5200);
+      // La carte : le cadenas de la région fraîchement débloquée explose.
+      shatterId.value = id;
+      selectedRegionId.value = id; // ouvre la nouvelle région dans le drawer
+      setTimeout(() => (shatterId.value = null), 1400);
     }
     lastRegionId = id;
   },
@@ -1661,6 +1717,61 @@ const clearedIds = computed(() => char.row?.cleared_dungeons ?? []);
 const curRegion = computed(() => currentRegion(clearedIds.value));
 const curRegionProg = computed(() => regionProgress(curRegion.value, clearedIds.value));
 const nxtRegion = computed(() => nextRegion(clearedIds.value));
+
+// ── Carte-monde serpentine des régions ──
+const mapGeom = regionMapGeometry(REGIONS.length);
+const currentRegionIndex = computed(() => REGIONS.findIndex((r) => r.id === curRegion.value.id));
+const mapFill = computed(() =>
+  mapFillFraction(
+    currentRegionIndex.value,
+    curRegionProg.value.total ? curRegionProg.value.done / curRegionProg.value.total : 0,
+    REGIONS.length,
+  ),
+);
+// État d'une région : 'done' (tous nettoyés) / 'current' (frontière) / 'locked'.
+function regionCleared(r: Region): boolean {
+  const cleared = clearedSet.value;
+  return r.dungeonIds.every((id) => cleared.has(id));
+}
+function regionState(r: Region): 'done' | 'current' | 'locked' {
+  if (regionCleared(r)) return 'done';
+  const i = REGIONS.findIndex((x) => x.id === r.id);
+  if (i > currentRegionIndex.value) return 'locked';
+  return 'current';
+}
+// Nœud : position en % dans la viewBox de la carte.
+function nodeStyle(i: number) {
+  const n = mapGeom.nodes[i]!;
+  return { left: n.x + '%', top: (n.y / mapGeom.viewH) * 100 + '%' };
+}
+function regionDone(r: Region): number {
+  return regionProgress(r, clearedIds.value).done;
+}
+// Région sélectionnée (drawer de donjons dessous). Défaut = région courante.
+const selectedRegionId = ref<string | null>(null);
+const selRegion = computed(
+  () => REGIONS.find((r) => r.id === selectedRegionId.value) ?? curRegion.value,
+);
+const selectedRegionItems = computed(() =>
+  adventureItems.value.filter((it) => selRegion.value.dungeonIds.includes(it.dungeon.id)),
+);
+function tapRegion(r: Region) {
+  if (regionState(r) === 'locked') {
+    const prev = REGIONS[REGIONS.findIndex((x) => x.id === r.id) - 1];
+    $q.notify({
+      type: 'warning',
+      message: prev
+        ? `Brise les chaînes en terminant « ${prev.name} » d'abord.`
+        : 'Région verrouillée.',
+    });
+    return;
+  }
+  selectedRegionId.value = r.id;
+}
+// Explosion des chaînes quand une région vient d'être débloquée (piloté par le reveal).
+const shatterId = ref<string | null>(null);
+// Dernière région (fin de monde) — la Faille sans fin s'y rattache.
+const endRegionId = computed(() => REGIONS[REGIONS.length - 1]?.id);
 
 // Codex (méta de collection) : bestiaire + journal des sets. Tout dérivé.
 const codexOpen = ref(false);
@@ -1759,7 +1870,6 @@ const stageFights = computed(() =>
 // Après un run : replie la liste, ouvre la modale de rapport, et l'animation de
 // combat se (re)lance automatiquement (runSeq change → CombatStage remonte).
 function openReport() {
-  showAllDungeons.value = false;
   runSeq.value++;
   // Résultat/butin masqués tant que l'animation joue (révélés à la fin). Si pas de
   // rejeu (pas de log), on montre tout de suite.
@@ -1838,21 +1948,6 @@ function itemState(it: { dungeon?: Dungeon; boss?: MilestoneBoss }): 'done' | 'a
   const unlocked = it.boss ? bossUnlocked(it.boss) : dungeonUnlocked(it.dungeon!);
   return unlocked ? 'avail' : 'locked';
 }
-// Repli : par défaut on n'affiche que les 2 derniers faits + le(s) déblocable(s).
-const showAllDungeons = ref(false);
-const frontierIndex = computed(() => {
-  const i = adventureItems.value.findIndex((it) => !itemDone(it));
-  return i === -1 ? adventureItems.value.length : i;
-});
-const visibleAdventure = computed(() => {
-  if (showAllDungeons.value) return adventureItems.value;
-  const f = frontierIndex.value;
-  return adventureItems.value.slice(
-    Math.max(0, f - 2),
-    Math.min(adventureItems.value.length, f + 1),
-  );
-});
-const hiddenCount = computed(() => adventureItems.value.length - visibleAdventure.value.length);
 
 const sacTitle = ref<HTMLElement | null>(null);
 
@@ -5217,6 +5312,217 @@ onMounted(async () => {
 /* Teinte de région sur la tuile de donjon (liseré gauche) */
 .dgn {
   border-left: 3px solid var(--rc, var(--line));
+}
+
+/* ── Carte-monde serpentine ── */
+.worldmap {
+  position: relative;
+  width: 100%;
+  margin: 6px 0 4px;
+}
+.wm-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.wm-wire {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.wm-energized {
+  stroke: var(--accent);
+  filter: drop-shadow(0 0 4px var(--accent));
+  transition: stroke-dashoffset 0.6s ease;
+}
+.wm-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 96px;
+}
+.wm-disc {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  background: color-mix(in srgb, var(--rc) 20%, var(--surface));
+  border: 2px solid var(--rc);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.wm-node.locked .wm-disc {
+  background: var(--surface);
+  border-color: var(--line);
+  filter: grayscale(1);
+}
+.wm-node.current .wm-disc {
+  animation: wm-pulse 1.6s ease-in-out infinite;
+}
+.wm-node.sel .wm-disc {
+  outline: 3px solid var(--rc);
+  outline-offset: 2px;
+}
+@keyframes wm-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--rc) 60%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+.wm-lockemo {
+  font-size: 24px;
+  filter: grayscale(1);
+}
+.wm-star {
+  position: absolute;
+  right: -4px;
+  top: -6px;
+  font-size: 16px;
+  color: var(--accent);
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+}
+.wm-cap {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.1;
+  max-width: 96px;
+}
+.wm-node.locked .wm-cap {
+  color: var(--dim);
+}
+.wm-pips {
+  display: flex;
+  gap: 3px;
+}
+.wm-pips i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.wm-pips i.on {
+  background: var(--rc);
+}
+/* Chaînes + cadenas sur une région verrouillée + explosion au déblocage */
+.wm-chains {
+  position: absolute;
+  inset: -6px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.wm-chains .wm-lock {
+  font-size: 22px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+.wm-link {
+  position: absolute;
+  width: 10px;
+  height: 16px;
+  border: 3px solid #9a8f7e;
+  border-radius: 5px;
+  background: transparent;
+}
+.wm-link.l1 {
+  transform: rotate(38deg) translate(-16px, 0);
+}
+.wm-link.l2 {
+  transform: rotate(38deg) translate(16px, 0);
+}
+/* Explosion : les maillons volent + le cadenas éclate, arc voltage */
+.wm-node.shatter .wm-chains {
+  animation: wm-flash 0.5s ease-out;
+}
+.wm-node.shatter .wm-link.l1 {
+  animation: wm-fly-l 0.6s ease-out forwards;
+}
+.wm-node.shatter .wm-link.l2 {
+  animation: wm-fly-r 0.6s ease-out forwards;
+}
+.wm-node.shatter .wm-lock {
+  animation: wm-burst 0.5s ease-out forwards;
+}
+@keyframes wm-flash {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent);
+  }
+  40% {
+    box-shadow: 0 0 22px 10px var(--accent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@keyframes wm-fly-l {
+  to {
+    transform: rotate(220deg) translate(-46px, -30px);
+    opacity: 0;
+  }
+}
+@keyframes wm-fly-r {
+  to {
+    transform: rotate(-180deg) translate(46px, 30px);
+    opacity: 0;
+  }
+}
+@keyframes wm-burst {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  40% {
+    transform: scale(1.6) rotate(12deg);
+  }
+  100% {
+    transform: scale(0.2) rotate(-20deg);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wm-node.current .wm-disc,
+  .wm-node.shatter .wm-chains,
+  .wm-node.shatter .wm-link,
+  .wm-node.shatter .wm-lock {
+    animation: none;
+  }
+}
+/* Drawer de région (en-tête au-dessus des donjons) */
+.region-drawer {
+  margin: 14px 0 8px;
+}
+.rd-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rd-emo {
+  font-size: 20px;
+}
+.rd-name {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--rc);
+  flex: 1;
+}
+.rd-prog {
+  font-weight: 700;
+  color: var(--rc);
+  font-size: 14px;
 }
 /* Reveal de région : carte teintée par le biome */
 .lb-card.region .lb-wave {

@@ -6,6 +6,8 @@ import {
   currentRegion,
   nextRegion,
   regionProgress,
+  regionMapGeometry,
+  mapFillFraction,
 } from '@/lib/regions';
 import { DUNGEONS } from '@/data/dungeons';
 
@@ -53,5 +55,23 @@ describe('regions — biomes de l’Aventure', () => {
     const r = REGIONS[0]!;
     expect(regionProgress(r, [])).toEqual({ done: 0, total: 3 });
     expect(regionProgress(r, ['clairiere', 'caverne'])).toEqual({ done: 2, total: 3 });
+  });
+
+  it('regionMapGeometry : nœuds en zigzag + chemin', () => {
+    const g = regionMapGeometry(5);
+    expect(g.nodes).toHaveLength(5);
+    expect(g.viewH).toBe(460);
+    expect(g.nodes[0]).toEqual({ x: 26, y: 46 });
+    expect(g.nodes[1]).toEqual({ x: 74, y: 138 });
+    expect(g.nodes[2]!.x).toBe(26); // alternance
+    expect(g.pathD.startsWith('M 26 46')).toBe(true);
+    expect(g.pathD).toContain('C'); // au moins une courbe
+  });
+
+  it('mapFillFraction : 0 au départ, 1 à la fin, bornée', () => {
+    expect(mapFillFraction(0, 0, 5)).toBe(0);
+    expect(mapFillFraction(4, 1, 5)).toBe(1);
+    expect(mapFillFraction(2, 0.5, 5)).toBeCloseTo(0.5, 5);
+    expect(mapFillFraction(9, 9, 5)).toBe(1); // clamp haut
   });
 });
