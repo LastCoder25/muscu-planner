@@ -1281,7 +1281,7 @@
         <!-- Boss : une fois l'animation finie et le CHOIX de récompense affiché, on
              masque l'arène (sinon elle reste ouverte au-dessus du choix). -->
         <div
-          v-if="stageFights.length && !(stageDone && (char.row?.pending_reward || stageSkipped))"
+          v-if="stageFights.length && !(stageDone && (stageWasReward || stageSkipped))"
           class="rm-stage-wrap"
         >
           <CombatStage
@@ -1861,6 +1861,11 @@ function flushNotify() {
 // (découverte) ; une fois le donjon déjà nettoyé, les réattaques sautent l'anim.
 const stageSkipped = ref(false);
 const lastRunFirstVisit = ref(true); // ce run était-il la 1re fois sur ce donjon ?
+// Boss : la récompense au choix vide `pending_reward` une fois choisie ; sans ce
+// verrou latché, l'arène (masquée pendant le choix) se ré-afficherait et REJOUERAIT
+// l'animation après coup. On mémorise « ce run avait une récompense » pour la garder
+// masquée jusqu'au prochain run.
+const stageWasReward = ref(false);
 // Réglage persistant : passer automatiquement l'animation des donjons DÉJÀ FAITS
 // et gagnés d'avance (≥ 90 %) — le 1er passage d'un donjon reste animé.
 const AUTOSKIP_KEY = 'muscu:adv:autoskip';
@@ -1886,6 +1891,7 @@ function openReport() {
   // donjon a DÉJÀ été fait (pas la 1re visite) → droit au résultat, sinon on anime.
   const skipAll = autoSkipEasy.value && canSkipStage.value && !lastRunFirstVisit.value;
   stageSkipped.value = skipAll;
+  stageWasReward.value = !!char.row?.pending_reward; // boss : latch pour ne pas rejouer
   stageDone.value = !stageFights.value.length || skipAll;
   reportOpen.value = true;
   if (stageDone.value) flushNotify(); // pas d'animation → notif tout de suite
