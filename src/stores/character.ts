@@ -60,10 +60,27 @@ export const useCharacterStore = defineStore('character', () => {
   const COLS =
     'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys';
 
+  // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
+  // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
+  // normalise les types attendus au chargement.
+  function normalizeRow(r: CharacterRow | null): CharacterRow | null {
+    if (!r) return r;
+    const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+    const obj = <T>(v: unknown): T =>
+      v && typeof v === 'object' && !Array.isArray(v) ? (v as T) : ({} as T);
+    r.talents = arr<string>(r.talents);
+    r.inventory = arr<Item>(r.inventory);
+    r.cleared_dungeons = arr<string>(r.cleared_dungeons);
+    r.defeated_bosses = arr<string>(r.defeated_bosses);
+    r.equipped = obj<Equipped>(r.equipped);
+    r.consumables = obj<Record<string, number>>(r.consumables);
+    return r;
+  }
+
   async function fetchMine() {
     const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
     if (error) throw error;
-    row.value = data ?? null;
+    row.value = normalizeRow(data ?? null);
     loaded.value = true;
     return row.value;
   }
