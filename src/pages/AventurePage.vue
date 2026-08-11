@@ -526,8 +526,11 @@
         <button class="expe-card" @click="router.push('/expedition')">
           <span class="expe-emo">🗝️</span>
           <span class="expe-main">
-            <span class="expe-name font-display">Expéditions <span class="expe-beta">bêta</span></span>
-            <span class="expe-sub">Donjons à étages à explorer — carte, salles, coffres…</span>
+            <span class="expe-name font-display">Expéditions</span>
+            <span class="expe-sub">
+              Donjons à étages à explorer ·
+              <b>{{ char.row?.keys ?? 0 }}</b> clé{{ (char.row?.keys ?? 0) > 1 ? 's' : '' }}
+            </span>
           </span>
           <span class="expe-go">›</span>
         </button>
@@ -4017,14 +4020,6 @@ onMounted(async () => {
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
-}
-.expe-beta {
-  font-size: 10px;
-  color: var(--bg);
-  background: var(--accent);
-  border-radius: 999px;
-  padding: 1px 6px;
-  margin-left: 4px;
 }
 .expe-sub {
   font-size: 11.5px;

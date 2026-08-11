@@ -2,102 +2,110 @@
   <q-page class="expe">
     <header class="top">
       <button class="iconbtn" aria-label="Retour" @click="router.back()">‹</button>
-      <div class="top-title font-display">Expédition <span class="beta">bêta</span></div>
-      <button class="iconbtn" aria-label="Nouvelle carte" @click="regen">🎲</button>
+      <div class="top-title font-display">Expédition</div>
+      <div class="iconbtn" />
     </header>
 
-    <!-- Barre d'état : étage + PV -->
-    <div class="hud">
-      <div class="hud-floor">Étage <b>{{ run.floor + 1 }}</b> / {{ run.floors }}</div>
-      <div class="hud-pv">
-        <div class="pv-bar"><div class="pv-fill" :style="{ width: pvPct + '%' }" /></div>
-        <span class="pv-txt">❤️ {{ run.pv }}/{{ run.maxPv }}</span>
+    <!-- LOBBY : lancer une expédition (coûte 1 clé) -->
+    <div v-if="phase === 'lobby'" class="lobby">
+      <div class="lobby-emo">🗝️</div>
+      <div class="lobby-keys"><b>{{ keys }}</b> clé{{ keys > 1 ? 's' : '' }}</div>
+      <p class="lobby-txt">
+        Un donjon à <b>étages</b> à explorer : salles, coffres, pièges, boss. Tes <b>PV se
+        reportent</b> entre les salles — c'est l'attrition qui te met en danger. À la mort tu gardes
+        l'<b>or</b> et la <b>poussière</b>, mais tu perds les objets trouvés.
+      </p>
+      <p class="lobby-txt dim">Les clés 🗝️ tombent sur les donjons, les boss et la faille.</p>
+      <q-btn
+        class="lobby-cta"
+        color="primary"
+        text-color="dark"
+        no-caps
+        unelevated
+        size="lg"
+        :disable="!canStart"
+        :label="keys > 0 ? 'Lancer une expédition (−1 🗝️)' : 'Aucune clé pour l’instant'"
+        @click="start"
+      />
+    </div>
+
+    <!-- RUNNING : exploration -->
+    <template v-else>
+      <div class="hud">
+        <div class="hud-floor">Étage <b>{{ run.floor + 1 }}</b> / {{ run.floors }}</div>
+        <div class="hud-pv">
+          <div class="pv-bar"><div class="pv-fill" :style="{ width: pvPct + '%' }" /></div>
+          <span class="pv-txt">❤️ {{ run.pv }}/{{ run.maxPv }}</span>
+        </div>
       </div>
-    </div>
 
-    <!-- Butin cumulé du run -->
-    <div class="bag">
-      <span class="bag-chip">🪙 {{ gold }}</span>
-      <span class="bag-chip">✨ {{ dust }}</span>
-      <span class="bag-chip">🎒 {{ loot.length }}</span>
-    </div>
+      <div class="bag">
+        <span class="bag-chip">🪙 {{ gold }}</span>
+        <span class="bag-chip">✨ {{ dust }}</span>
+        <span class="bag-chip">🎒 {{ loot.length }}</span>
+      </div>
 
-    <!-- Réglages bêta (nb d'étages) -->
-    <div class="floors-pick">
-      <span>Étages :</span>
-      <button
-        v-for="n in [2, 3, 4, 5]"
-        :key="n"
-        class="fp"
-        :class="{ on: floorsWanted === n }"
-        @click="setFloors(n)"
-      >
-        {{ n }}
-      </button>
-    </div>
-
-    <!-- Carte de l'étage -->
-    <div class="map-wrap">
-      <svg :viewBox="`0 0 ${cols * CELL} ${rows * CELL}`" class="map">
-        <!-- Couloirs (entre salles visibles) -->
-        <line
-          v-for="c in corridors"
-          :key="c.k"
-          class="corridor"
-          :x1="c.x1"
-          :y1="c.y1"
-          :x2="c.x2"
-          :y2="c.y2"
-        />
-        <!-- Salles -->
-        <g
-          v-for="r in floor.rooms"
-          :key="r.id"
-          :class="['room', roomClass(r.id)]"
-          @click="onRoomClick(r.id)"
-        >
-          <rect
-            :x="cx(r) - SIZE / 2"
-            :y="cy(r) - SIZE / 2"
-            :width="SIZE"
-            :height="SIZE"
-            rx="9"
-            class="room-bg"
+      <div class="map-wrap">
+        <svg :viewBox="`0 0 ${cols * CELL} ${rows * CELL}`" class="map">
+          <line
+            v-for="c in corridors"
+            :key="c.k"
+            class="corridor"
+            :x1="c.x1"
+            :y1="c.y1"
+            :x2="c.x2"
+            :y2="c.y2"
           />
-          <text :x="cx(r)" :y="cy(r) + 1" class="room-emo">{{ roomGlyph(r) }}</text>
-        </g>
-      </svg>
-    </div>
-
-    <!-- Dernier événement (placeholder résolution) -->
-    <div v-if="lastEvent" class="event" :class="lastEvent.kind">{{ lastEvent.text }}</div>
-
-    <!-- Actions contextuelles -->
-    <div class="actions">
-      <q-btn
-        v-if="onStairs"
-        color="primary"
-        text-color="dark"
-        no-caps
-        unelevated
-        icon="south"
-        label="Descendre à l'étage suivant"
-        @click="goDown"
-      />
-      <q-btn
-        v-else-if="onBoss"
-        color="primary"
-        text-color="dark"
-        no-caps
-        unelevated
-        icon="emoji_events"
-        label="Terminer l'expédition (bêta)"
-        @click="finish"
-      />
-      <div v-else class="hint">
-        Touche une salle <b>?</b> reliée pour explorer. Les couloirs mènent vers l'inconnu.
+          <g
+            v-for="r in floor.rooms"
+            :key="r.id"
+            :class="['room', roomClass(r.id)]"
+            @click="onRoomClick(r.id)"
+          >
+            <rect
+              :x="cx(r) - SIZE / 2"
+              :y="cy(r) - SIZE / 2"
+              :width="SIZE"
+              :height="SIZE"
+              rx="9"
+              class="room-bg"
+            />
+            <text :x="cx(r)" :y="cy(r) + 1" class="room-emo">{{ roomGlyph(r) }}</text>
+          </g>
+        </svg>
       </div>
-    </div>
+
+      <div v-if="lastEvent" class="event" :class="lastEvent.kind">{{ lastEvent.text }}</div>
+
+      <div class="actions">
+        <q-btn
+          v-if="onStairs"
+          color="primary"
+          text-color="dark"
+          no-caps
+          unelevated
+          icon="south"
+          label="Descendre à l'étage suivant"
+          @click="goDown"
+        />
+        <q-btn
+          v-else-if="onBoss"
+          color="primary"
+          text-color="dark"
+          no-caps
+          unelevated
+          icon="emoji_events"
+          label="Vaincre & terminer l'expédition"
+          @click="finish"
+        />
+        <div v-else class="hint">
+          Touche une salle <b>?</b> reliée pour explorer. Les couloirs mènent vers l'inconnu.
+        </div>
+        <button v-if="canRetreat" type="button" class="retreat-btn" @click="retreat">
+          🚪 Sortir en gardant le butin
+        </button>
+      </div>
+    </template>
 
     <!-- Fin de run (bêta) -->
     <q-dialog v-model="over" persistent>
@@ -106,14 +114,27 @@
         <div class="over-title font-display">
           {{ run.status === 'cleared' ? 'Expédition nettoyée !' : 'Vous êtes tombé…' }}
         </div>
-        <div class="over-haul">🪙 {{ gold }} · ✨ {{ dust }} · 🎒 {{ loot.length }} objet(s)</div>
+        <div class="over-haul">
+          🪙 {{ gold }} · ✨ {{ dust }} ·
+          🎒 {{ run.status === 'dead' ? 0 : loot.length }} objet(s)
+        </div>
         <div class="over-sub">
-          <template v-if="run.status === 'cleared'">Bien joué !</template>
-          <template v-else>Tu gardes l'or et la poussière ; le gear reste au donjon.</template>
-          Bêta : le butin n'est pas encore crédité au perso (Phase suivante : clés + récompenses).
+          <template v-if="run.status === 'cleared'">
+            Butin crédité (+ trésor final) 🎉
+          </template>
+          <template v-else>
+            Tu es tombé : l'or et la poussière sont gardés, les objets restent au donjon.
+          </template>
         </div>
         <div class="over-row">
-          <q-btn flat no-caps label="Rejouer" color="primary" @click="regen" />
+          <q-btn
+            flat
+            no-caps
+            :label="keys > 0 ? 'Nouvelle expédition (−1 🗝️)' : 'Pas de clé'"
+            color="primary"
+            :disable="!canStart"
+            @click="replay"
+          />
           <q-btn flat no-caps label="Sortir" @click="router.back()" />
         </div>
       </q-card>
@@ -122,7 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   generateDungeon,
@@ -137,6 +158,8 @@ import {
   type Room,
   type RunState,
 } from '@/lib/dungeonCrawl';
+import { useQuasar } from 'quasar';
+import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { computeCharacter } from '@/lib/character';
@@ -146,8 +169,16 @@ import { simulateCombat, mulberry32, type Combatant } from '@/lib/combat';
 
 const route = useRoute();
 const router = useRouter();
+const $q = useQuasar();
+const auth = useAuthStore();
 const char = useCharacterStore();
 const progress = useProgress();
+
+// Phase : lobby (choix de lancer, coûte 1 clé) → running (exploration).
+const phase = ref<'lobby' | 'running'>('lobby');
+const credited = ref(false); // butin crédité une seule fois en fin de run
+const keys = computed(() => char.row?.keys ?? 0);
+const canStart = computed(() => keys.value > 0 && progress.ready.value && !!char.row);
 
 // Perso réel (stats de fond + équipement + talents) → combattant.
 const character = computed(() =>
@@ -188,18 +219,13 @@ const dust = ref(0);
 const loot = ref<Item[]>([]);
 let lootN = 0;
 
-// Dès que les stats du perso sont prêtes, (ré)initialise le run avec les VRAIS PV.
-let booted = false;
-watch(
-  () => progress.ready.value && !!char.row,
-  (ok) => {
-    if (ok && !booted) {
-      booted = true;
-      freshRun();
-    }
-  },
-  { immediate: true },
-);
+onMounted(async () => {
+  try {
+    await char.fetchMine();
+  } catch {
+    /* pas bloquant */
+  }
+});
 
 const floor = computed(() => dungeon.value[run.value.floor]!);
 const cols = computed(() => floor.value.cols);
@@ -208,6 +234,12 @@ const pvPct = computed(() => Math.round((run.value.pv / run.value.maxPv) * 100))
 const currentRoom = computed(() => floor.value.rooms[run.value.current]!);
 const onStairs = computed(() => currentRoom.value.type === 'stairs' && run.value.status === 'exploring');
 const onBoss = computed(() => currentRoom.value.type === 'boss' && run.value.status === 'exploring');
+// Retraite possible depuis le départ ou un escalier (banque le butin, pas de trésor final).
+const canRetreat = computed(
+  () =>
+    run.value.status === 'exploring' &&
+    (currentRoom.value.type === 'start' || currentRoom.value.type === 'stairs'),
+);
 
 const cx = (r: Room) => r.x * CELL + CELL / 2;
 const cy = (r: Room) => r.y * CELL + CELL / 2;
@@ -334,18 +366,38 @@ function onRoomClick(id: number) {
     default:
       lastEvent.value = { kind: 'neutral', text: '· Salle vide' };
   }
-  if (run.value.status === 'dead') over.value = true;
+  if (run.value.status === 'dead') void endRun('dead');
 }
 
 function goDown() {
   const next = dungeon.value[run.value.floor + 1] ?? null;
   run.value = descend(run.value, next);
   lastEvent.value = null;
-  if (run.value.status === 'cleared') over.value = true;
 }
 function finish() {
-  run.value = descend(run.value, null); // dernier étage → nettoyé
-  over.value = true;
+  void endRun('cleared');
+}
+function retreat() {
+  void endRun('retreat');
+}
+
+// Nb d'étages selon le niveau du perso (2 → 5).
+function floorsForLevel(): number {
+  return Math.min(5, Math.max(2, 2 + Math.floor(heroLevel.value / 5)));
+}
+// Trésor final garanti (haute chance + haute rareté) à la victoire.
+function rollTreasure(): Item | null {
+  const rng = mulberry32((seed.value * 977 + 4242) >>> 0 || 1);
+  let d: Omit<Item, 'id'> | null = null;
+  for (let k = 0; k < 8 && !d; k++)
+    d = rollDrop(rng, {
+      cleared: true,
+      defeated: 1,
+      level: heroLevel.value + 1,
+      luck: 0.85,
+      spread: 0,
+    });
+  return d ? { ...d, id: `exp_t_${lootN++}` } : null;
 }
 
 // (Ré)initialise un run sur la carte courante avec les VRAIS PV du perso.
@@ -359,13 +411,47 @@ function freshRun() {
   lastEvent.value = null;
   over.value = false;
 }
-function regen() {
+
+// Lance une expédition (consomme 1 clé) : carte fraîche, PV pleins.
+async function start() {
+  const uid = auth.user?.id;
+  if (!uid || !canStart.value) return;
+  const ok = await char.spendKey(uid);
+  if (!ok) {
+    $q.notify({ type: 'warning', message: 'Il te faut une clé 🗝️ (donjons, boss, faille).' });
+    return;
+  }
   seed.value = Math.floor(Math.random() * 1_000_000) + 1;
+  floorsWanted.value = floorsForLevel();
+  credited.value = false;
   freshRun();
+  phase.value = 'running';
 }
-function setFloors(n: number) {
-  floorsWanted.value = n;
-  regen();
+
+// Termine le run et CRÉDITE le butin au perso. Mort → or+poussière seuls (gear
+// perdu) ; nettoyé → + trésor final ; retraite → butin gardé, pas de trésor final.
+async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
+  run.value = { ...run.value, status: outcome === 'dead' ? 'dead' : 'cleared' };
+  if (!credited.value) {
+    credited.value = true;
+    if (outcome === 'cleared') {
+      const t = rollTreasure();
+      if (t) loot.value.push(t);
+    }
+    const uid = auth.user?.id;
+    if (uid)
+      await char.applyExpedition(uid, {
+        gold: gold.value,
+        dust: dust.value,
+        drops: outcome === 'dead' ? [] : loot.value,
+      });
+  }
+  over.value = true;
+}
+// Relance directement une nouvelle expédition depuis la modale de fin (−1 clé).
+function replay() {
+  over.value = false;
+  void start();
 }
 </script>
 
@@ -395,13 +481,41 @@ function setFloors(n: number) {
   font-size: 18px;
   font-weight: 700;
 }
-.beta {
-  font-size: 10px;
-  color: var(--bg);
-  background: var(--accent);
-  border-radius: 999px;
-  padding: 1px 7px;
-  vertical-align: middle;
+/* Lobby */
+.lobby {
+  text-align: center;
+  padding: 24px 16px;
+}
+.lobby-emo {
+  font-size: 52px;
+}
+.lobby-keys {
+  font-size: 15px;
+  color: var(--dim);
+  margin-top: 4px;
+}
+.lobby-keys b {
+  color: var(--accent);
+  font-size: 22px;
+}
+.lobby-txt {
+  font-size: 13.5px;
+  color: var(--text);
+  line-height: 1.55;
+  max-width: 460px;
+  margin: 14px auto 0;
+}
+.lobby-txt.dim {
+  color: var(--dim);
+  font-size: 12.5px;
+}
+.lobby-cta {
+  margin-top: 20px;
+  height: 54px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  min-width: 260px;
 }
 .hud {
   display: flex;
@@ -456,27 +570,6 @@ function setFloors(n: number) {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 3px 10px;
-}
-.floors-pick {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--dim);
-  margin-bottom: 12px;
-}
-.fp {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-}
-.fp.on {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 .map-wrap {
   background: var(--surface);
@@ -567,7 +660,19 @@ function setFloors(n: number) {
 .actions {
   margin-top: 16px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.retreat-btn {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
 }
 .hint {
   font-size: 12.5px;

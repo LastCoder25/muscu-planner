@@ -39,6 +39,7 @@ export interface CharacterRow {
   reward_level: number;
   endless_best: number;
   pending_reward: PendingReward | null;
+  keys: number; // clés d'expédition (donjons à étages)
 }
 
 export class PseudoTakenError extends Error {
@@ -53,7 +54,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys';
 
   async function fetchMine() {
     const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
@@ -139,6 +140,8 @@ export const useCharacterStore = defineStore('character', () => {
       else delete consumables[id];
     }
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
+    // Clé d'expédition : ~12 % sur un donjon NETTOYÉ (redonne un but au farm).
+    const gotKey = input.clearedDungeonId && Math.random() < 0.12 ? 1 : 0;
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
@@ -147,6 +150,7 @@ export const useCharacterStore = defineStore('character', () => {
       inventory: dist.inventory,
       cleared_dungeons: cleared,
       consumables,
+      keys: cur.keys + gotKey,
     });
   }
 
@@ -184,6 +188,8 @@ export const useCharacterStore = defineStore('character', () => {
       defeated_bosses: defeated,
       consumables,
       pending_reward: input.pending ?? cur.pending_reward ?? null,
+      // Un boss vaincu lâche toujours une clé d'expédition.
+      keys: cur.keys + (input.defeated ? 1 : 0),
     });
   }
 
@@ -238,6 +244,32 @@ export const useCharacterStore = defineStore('character', () => {
       inventory: dist.inventory,
       endless_best: input.cleared && input.tier > cur.endless_best ? input.tier : cur.endless_best,
       consumables,
+      // ~20 % de clé d'expédition sur une faille nettoyée.
+      keys: cur.keys + (input.cleared && Math.random() < 0.2 ? 1 : 0),
+    });
+  }
+
+  // ── Expéditions (donjons à étages) ──
+  // Consomme 1 clé pour lancer une expédition (garde-fou : refuse si aucune clé).
+  async function spendKey(userId: string): Promise<boolean> {
+    const cur = row.value;
+    if (!cur || cur.keys <= 0) return false;
+    await persist(userId, { keys: cur.keys - 1 });
+    return true;
+  }
+  // Crédite le butin d'une expédition (or + poussière + objets au sac/équipés vides).
+  async function applyExpedition(
+    userId: string,
+    input: { gold: number; dust: number; drops: Item[] },
+  ) {
+    const cur = row.value;
+    if (!cur) return;
+    const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
+    return persist(userId, {
+      gold: cur.gold + input.gold,
+      dust: cur.dust + input.dust,
+      equipped: dist.equipped,
+      inventory: dist.inventory,
     });
   }
 
@@ -535,6 +567,8 @@ export const useCharacterStore = defineStore('character', () => {
     applyBossWin,
     chooseReward,
     applyEndless,
+    spendKey,
+    applyExpedition,
     equip,
     equipReplacing,
     unequip,
