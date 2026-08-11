@@ -278,6 +278,19 @@
           Prochain talent au niveau {{ nextTalentLevel }}.
         </div>
 
+        <!-- Codex : bestiaire + journal des sets (méta de collection). -->
+        <button class="codex-btn" @click="codexOpen = true">
+          <span class="cx-emo">📖</span>
+          <span class="cx-main">
+            <span class="cx-title">Codex</span>
+            <span class="cx-sub">
+              👾 {{ codexSum.monstersFound }}/{{ codexSum.monstersTotal }} monstres ·
+              🧩 {{ codexSum.setsComplete }}/{{ codexSum.setsTotal }} sets
+            </span>
+          </span>
+          <span class="cx-go">›</span>
+        </button>
+
         <!-- Timeline « À venir » : ce que les prochains niveaux débloquent. -->
         <div v-if="upcoming.length" class="upcoming">
           <div class="up-title">🔮 À venir</div>
@@ -890,6 +903,72 @@
       </div>
     </transition>
 
+    <!-- Codex : bestiaire + journal des sets (méta de collection) -->
+    <transition name="salv-fade">
+      <div v-if="codexOpen" class="shop-backdrop" @click.self="codexOpen = false">
+        <div class="shop-card codex-card">
+          <div class="shop-head">
+            <div class="shop-title font-display">📖 Codex</div>
+            <button class="shop-x" aria-label="Fermer" @click="codexOpen = false">✕</button>
+          </div>
+          <div class="codex-body">
+            <!-- Bestiaire -->
+            <div class="cx-sec-h">
+              👾 Bestiaire
+              <span class="cx-count">{{ codexSum.monstersFound }}/{{ codexSum.monstersTotal }}</span>
+            </div>
+            <div class="bestiary-grid">
+              <div
+                v-for="m in bestiaryList"
+                :key="m.id"
+                class="best-tile"
+                :class="{ found: m.discovered }"
+              >
+                <span class="best-emo">{{ m.discovered ? m.emoji : '❔' }}</span>
+                <span class="best-name">{{ m.discovered ? m.name : '???' }}</span>
+                <span class="best-tier">Palier {{ m.tier }}</span>
+              </div>
+            </div>
+
+            <!-- Journal des sets -->
+            <div class="cx-sec-h cx-sec-h2">
+              🧩 Sets d'équipement
+              <span class="cx-count">{{ codexSum.setsComplete }}/{{ codexSum.setsTotal }} complets</span>
+            </div>
+            <div class="setj-list">
+              <div
+                v-for="s in setsList"
+                :key="s.set.id"
+                class="setj"
+                :class="{ complete: s.complete }"
+              >
+                <span class="setj-emo">{{ s.set.emoji }}</span>
+                <div class="setj-main">
+                  <div class="setj-name">
+                    {{ s.set.name }}
+                    <span v-if="s.complete" class="setj-badge">✓ complet</span>
+                  </div>
+                  <div class="setj-theme">{{ s.set.theme }}</div>
+                  <div v-if="!s.bossDefeated" class="setj-lock">
+                    🔒 Bats « {{ bossNameById(s.bossId) }} » pour débloquer ce set.
+                  </div>
+                </div>
+                <div class="setj-pips">
+                  <span
+                    v-for="n in s.total"
+                    :key="n"
+                    class="setj-pip"
+                    :class="{ on: n <= s.owned }"
+                  />
+                  <span class="setj-frac">{{ s.owned }}/{{ s.total }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
     <!-- Boutique : dépenser l'or -->
     <transition name="salv-fade">
       <div v-if="shopOpen && char.row" class="shop-backdrop" @click.self="shopOpen = false">
@@ -1394,6 +1473,7 @@ import {
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { unlocksAtLevel, upcomingUnlocks } from '@/lib/advUnlocks';
 import { currentRegion, nextRegion, regionProgress, regionOfDungeon } from '@/lib/regions';
+import { bestiary, setCollection, codexSummary } from '@/lib/codex';
 import { logicalToday } from '@/lib/challenges';
 
 interface RunFight {
@@ -1581,6 +1661,22 @@ const clearedIds = computed(() => char.row?.cleared_dungeons ?? []);
 const curRegion = computed(() => currentRegion(clearedIds.value));
 const curRegionProg = computed(() => regionProgress(curRegion.value, clearedIds.value));
 const nxtRegion = computed(() => nextRegion(clearedIds.value));
+
+// Codex (méta de collection) : bestiaire + journal des sets. Tout dérivé.
+const codexOpen = ref(false);
+const codexSum = computed(() =>
+  codexSummary(
+    clearedIds.value,
+    char.row?.equipped ?? {},
+    char.row?.inventory ?? [],
+    char.row?.defeated_bosses ?? [],
+  ),
+);
+const bestiaryList = computed(() => bestiary(clearedIds.value));
+const setsList = computed(() =>
+  setCollection(char.row?.equipped ?? {}, char.row?.inventory ?? [], char.row?.defeated_bosses ?? []),
+);
+const bossNameById = (id: string | undefined) => BOSSES.find((b) => b.id === id)?.name ?? '';
 // Déblocages franchis lors du dernier level-up (from → to) → affichés sur l'écran
 // de montée de niveau. Peut couvrir plusieurs niveaux d'un coup.
 const levelBurstUnlocks = computed(() => {
@@ -5139,6 +5235,169 @@ onMounted(async () => {
   line-height: 1.05;
   color: var(--rc);
   text-align: center;
+}
+/* Bouton d'entrée du Codex (onglet Perso) */
+.codex-btn {
+  width: 100%;
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  text-align: left;
+  cursor: pointer;
+}
+.cx-emo {
+  font-size: 26px;
+  flex: none;
+}
+.cx-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cx-title {
+  font-weight: 700;
+  color: var(--text);
+  font-size: 15px;
+}
+.cx-sub {
+  font-size: 12px;
+  color: var(--dim);
+}
+.cx-go {
+  color: var(--dim);
+  font-size: 22px;
+}
+/* Modale Codex */
+.codex-card {
+  max-height: 84vh;
+}
+.codex-body {
+  overflow-y: auto;
+  padding: 4px 2px 8px;
+}
+.cx-sec-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-weight: 700;
+  color: var(--text);
+  font-size: 14px;
+  margin: 6px 2px 10px;
+}
+.cx-sec-h2 {
+  margin-top: 18px;
+}
+.cx-count {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.bestiary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 8px;
+}
+.best-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  opacity: 0.55;
+}
+.best-tile.found {
+  opacity: 1;
+  border-color: var(--accent);
+}
+.best-emo {
+  font-size: 26px;
+}
+.best-name {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.15;
+}
+.best-tier {
+  font-size: 9.5px;
+  color: var(--dim);
+}
+.setj-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.setj {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.setj.complete {
+  border-color: var(--accent);
+}
+.setj-emo {
+  font-size: 26px;
+  flex: none;
+}
+.setj-main {
+  flex: 1;
+  min-width: 0;
+}
+.setj-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.setj-badge {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 700;
+  margin-left: 4px;
+}
+.setj-theme {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.25;
+}
+.setj-lock {
+  font-size: 11px;
+  color: var(--d3);
+  margin-top: 2px;
+}
+.setj-pips {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.setj-pip {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.setj-pip.on {
+  background: var(--accent);
+}
+.setj-frac {
+  font-size: 11px;
+  color: var(--dim);
+  margin-left: 4px;
+  font-weight: 600;
 }
 @keyframes lb-pop {
   from {
