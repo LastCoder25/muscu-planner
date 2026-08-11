@@ -163,7 +163,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { computeCharacter } from '@/lib/character';
-import { playerWithGear, rollDrop, type Item } from '@/lib/items';
+import { playerWithGear, rollDrop, rollSetPiece, ITEM_SETS, type Item } from '@/lib/items';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, mulberry32, type Combatant } from '@/lib/combat';
 
@@ -385,9 +385,16 @@ function retreat() {
 function floorsForLevel(): number {
   return Math.min(5, Math.max(2, 2 + Math.floor(heroLevel.value / 5)));
 }
-// Trésor final garanti (haute chance + haute rareté) à la victoire.
+// Trésor final garanti à la victoire (haute chance + haute rareté). ~15 % de
+// chance que ce soit une PIÈCE DE SET (2e voie d'accès aux sets, cf. ticket) —
+// les boss restent la source garantie/ciblée.
 function rollTreasure(): Item | null {
   const rng = mulberry32((seed.value * 977 + 4242) >>> 0 || 1);
+  if (rng() < 0.15 && ITEM_SETS.length) {
+    const set = ITEM_SETS[Math.floor(rng() * ITEM_SETS.length)]!;
+    const piece = rollSetPiece(rng, { setId: set.id, level: heroLevel.value, luck: 0.85 });
+    return { ...piece, id: `exp_t_${lootN++}` };
+  }
   let d: Omit<Item, 'id'> | null = null;
   for (let k = 0; k < 8 && !d; k++)
     d = rollDrop(rng, {

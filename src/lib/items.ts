@@ -145,6 +145,15 @@ const RARITY_MULT: Record<Rarity, number> = {
 };
 
 // Effet possible par slot + valeur de base (avant rareté/niveau).
+// Niveau minimum pour qu'une stat « exotique » puisse tomber sur un drop (pool
+// progressif) : le début est simple (dégâts/PV/or), la profondeur ajoute crit,
+// vol de vie puis réduction. Les stats absentes d'ici tombent dès le niveau 1.
+const EFFECT_MIN_LEVEL: Partial<Record<EffectType, number>> = {
+  crit_pct: 5,
+  lifesteal_pct: 8,
+  dmg_reduction_pct: 10,
+};
+
 const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
   weapon: [
     { type: 'damage_pct', base: 8 },
@@ -254,11 +263,17 @@ export function rollDrop(
   const slot = pick(rng, SLOTS);
   let rarity = rollRarity(rng, opts.luck ?? 0);
   // Au-delà du niveau 5, plus de butin COMMUN (fin du fourrage gris) → planché à rare.
-  if ((opts.level ?? 1) > 5 && rarity === 'common') rarity = 'rare';
-  const choices = SLOT_EFFECTS[slot];
-  const chosen = pick(rng, choices);
-  // value = magnitude de BASE (niveau 1) : pilotée par la rareté ; grandit avec le niveau.
-  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
+  const lvl = opts.level ?? 1;
+  if (lvl > 5 && rarity === 'common') rarity = 'rare';
+  // Pool de stats PROGRESSIF : au début, seules les stats basiques (dégâts/PV)
+  // tombent ; les stats exotiques se débloquent en montant (cf. EFFECT_MIN_LEVEL).
+  const avail = SLOT_EFFECTS[slot].filter((e) => (EFFECT_MIN_LEVEL[e.type] ?? 1) <= lvl);
+  const pool = avail.length ? avail : [{ type: 'max_pv_pct' as EffectType, base: 6 }];
+  const chosen = pick(rng, pool);
+  // value = magnitude de BASE (niveau 1) : rareté × VARIANCE de roll ±20 % (farmer
+  // pour un bon roll a du sens ; un drop peut remplacer une stat mal rollée).
+  const variance = 0.8 + rng() * 0.4;
+  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity] * variance));
   const noun = pick(rng, NAMES[slot]);
   // Niveau = niveau du donjon, moins une dispersion vers le bas (jamais au-dessus).
   const base = Math.max(1, Math.round(opts.level ?? 1));

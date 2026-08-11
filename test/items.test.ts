@@ -147,6 +147,26 @@ describe('rollDrop', () => {
     expect(d!.level).toBeLessThanOrEqual(8);
     expect(d!.level).toBeGreaterThanOrEqual(6); // 8 - 2 au plus bas
   });
+  it('variance de roll ±20 % : rng=0 → valeur × 0.8 (weapon/dégâts divin = 8×5×0.8)', () => {
+    const d = rollDrop(() => 0, { cleared: true, defeated: 1, level: 6 });
+    expect(d!.effect.type).toBe('damage_pct');
+    expect(d!.effect.value).toBe(32);
+  });
+  it('pool progressif : au niveau 1, aucune stat exotique (crit/vol de vie/réduction)', () => {
+    const exotic = new Set(['crit_pct', 'lifesteal_pct', 'dmg_reduction_pct']);
+    for (let s = 1; s <= 80; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 1 });
+      if (d) expect(exotic.has(d.effect.type)).toBe(false);
+    }
+  });
+  it('pool progressif : le crit peut tomber une fois débloqué (niv ≥ 5)', () => {
+    let sawCrit = false;
+    for (let s = 1; s <= 300 && !sawCrit; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 10, luck: 1 });
+      if (d?.effect.type === 'crit_pct') sawCrit = true;
+    }
+    expect(sawCrit).toBe(true);
+  });
 });
 
 describe('itemScore', () => {
