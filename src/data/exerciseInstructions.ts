@@ -389,6 +389,62 @@ export const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
     ],
     tip: 'Débute genoux pliés, puis tends les jambes.',
   },
+  ex_hammer_curl: {
+    steps: [
+      'Un haltère dans chaque main, prise NEUTRE (paumes face à face), bras le long du corps.',
+      'Fléchis les coudes pour monter les haltères, coudes fixes contre les côtes.',
+      'Redescends en contrôlant, sans balancer le buste.',
+    ],
+    tip: 'Prise marteau (pouces vers le haut) → travaille aussi les avant-bras.',
+  },
+  ex_overhead_triceps: {
+    steps: [
+      'Un haltère tenu à deux mains, bras tendus au-dessus de la tête.',
+      'Descends l’haltère derrière la nuque en fléchissant seulement les coudes.',
+      'Retends les bras vers le haut en contractant les triceps.',
+    ],
+    tip: 'Garde les coudes serrés et pointés vers le plafond.',
+  },
+  ex_triceps_kickback: {
+    steps: [
+      'Buste penché en avant, un haltère en main, coude remonté contre le corps.',
+      'Tends le bras vers l’arrière jusqu’à l’extension complète du coude.',
+      'Reviens en contrôlant sans bouger l’épaule.',
+    ],
+    tip: 'C’est l’extension du coude qui travaille : garde le bras (épaule) immobile.',
+  },
+  ex_front_raise: {
+    steps: [
+      'Un haltère dans chaque main devant les cuisses, bras tendus.',
+      'Monte les bras tendus devant toi jusqu’à hauteur des épaules.',
+      'Redescends lentement, sans élan du buste.',
+    ],
+    tip: 'Monte à hauteur d’épaule, pas plus haut ; évite de te cambrer.',
+  },
+  ex_rear_delt_fly: {
+    steps: [
+      'Buste penché en avant (dos droit), un haltère dans chaque main sous la poitrine.',
+      'Écarte les bras vers l’extérieur/arrière en serrant les omoplates.',
+      'Reviens en contrôlant.',
+    ],
+    tip: 'Charge légère : ce sont les épaules arrière, pas le dos, qui doivent tirer.',
+  },
+  ex_seated_calf: {
+    steps: [
+      'Assis, avant-pieds sur la cale, charge posée sur les genoux (machine mollets assis).',
+      'Monte sur la pointe des pieds le plus haut possible.',
+      'Redescends lentement en étirant bien le mollet en bas.',
+    ],
+    tip: 'Genou plié → cible le soléaire (mollet profond), complément des mollets debout.',
+  },
+  ex_deadlift: {
+    steps: [
+      'Barre au sol contre les tibias, pieds largeur de hanches, saisis la barre bras tendus.',
+      'Dos droit et gainé, pousse dans les jambes pour décoller la barre le long des tibias.',
+      'Termine debout, hanches en avant, puis redescends la barre en poussant les fesses en arrière.',
+    ],
+    tip: 'Dos JAMAIS arrondi. Commence léger pour maîtriser la charnière de hanche.',
+  },
 };
 
 export function exerciseInstructions(id: string): ExerciseGuide | undefined {
