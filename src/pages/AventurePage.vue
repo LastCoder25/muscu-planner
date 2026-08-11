@@ -278,6 +278,19 @@
           Prochain talent au niveau {{ nextTalentLevel }}.
         </div>
 
+        <!-- Timeline « À venir » : ce que les prochains niveaux débloquent. -->
+        <div v-if="upcoming.length" class="upcoming">
+          <div class="up-title">🔮 À venir</div>
+          <div v-for="(u, i) in upcoming" :key="i" class="up-row">
+            <span class="up-lvl font-display">Niv. {{ u.level }}</span>
+            <span class="up-emo">{{ u.emoji }}</span>
+            <div class="up-txt">
+              <div class="up-name">{{ u.title }}</div>
+              <div class="up-detail">{{ u.detail }}</div>
+            </div>
+          </div>
+        </div>
+
         <div class="foot">
           <b>Chaque séance fait progresser ton aventurier.</b> Les stats et le niveau viennent du
           sport. La connexion quotidienne, elle, ne donne qu'un peu d'énergie pour jouer.
@@ -810,12 +823,22 @@
     <!-- Animation : passage de niveau -->
     <transition name="lb-fade">
       <div v-if="levelBurst" class="lb-backdrop" @click="levelBurst = null">
-        <div class="lb-card">
+        <div class="lb-card major">
           <span class="lb-wave" aria-hidden="true" />
           <span class="lb-bolt">🎉</span>
           <div class="lb-energy font-display">Niveau {{ levelBurst.to }} !</div>
           <div class="lb-lbl">bravo, tu montes en puissance</div>
           <div class="lb-streak">+{{ levelBurst.energy }} ⚡ de bonus</div>
+          <div v-if="levelBurstUnlocks.length" class="lb-unlocks">
+            <div class="lb-unlocks-h">🎁 Tu débloques</div>
+            <div v-for="(u, i) in levelBurstUnlocks" :key="i" class="lb-unlock">
+              <span class="lu-emo">{{ u.emoji }}</span>
+              <div class="lu-txt">
+                <div class="lu-title">{{ u.title }}</div>
+                <div class="lu-detail">{{ u.detail }}</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </transition>
@@ -1338,6 +1361,7 @@ import {
   type Talent,
 } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
+import { unlocksAtLevel, upcomingUnlocks } from '@/lib/advUnlocks';
 import { logicalToday } from '@/lib/challenges';
 
 interface RunFight {
@@ -1499,6 +1523,19 @@ const talentPoints = computed(() =>
 );
 const offered = computed(() => talentChoices(char.row?.talents.length ?? 0));
 const nextTalentLevel = computed(() => (talentsEarned(c.value.level.level) + 1) * 5);
+
+// Prochains déblocages (timeline « À venir » de l'onglet Perso) — donne envie de
+// monter (« encore 2 niveaux et j'ouvre le Dragon »).
+const upcoming = computed(() => upcomingUnlocks(c.value.level.level, 3));
+// Déblocages franchis lors du dernier level-up (from → to) → affichés sur l'écran
+// de montée de niveau. Peut couvrir plusieurs niveaux d'un coup.
+const levelBurstUnlocks = computed(() => {
+  const lb = levelBurst.value;
+  if (!lb) return [];
+  const out = [];
+  for (let lvl = lb.from + 1; lvl <= lb.to; lvl++) out.push(...unlocksAtLevel(lvl));
+  return out;
+});
 
 // Talents acquis regroupés (empilables) → carte par talent avec effet CUMULÉ.
 const talentSummary = computed(() => {
@@ -2434,7 +2471,9 @@ watch(
       const r = await char.claimLevelUps(uid, lvl);
       if (r) {
         levelBurst.value = r;
-        setTimeout(() => (levelBurst.value = null), 3200);
+        // Plus long s'il y a des déblocages à lire (sinon simple montée).
+        const hasUnlocks = levelBurstUnlocks.value.length > 0;
+        setTimeout(() => (levelBurst.value = null), hasUnlocks ? 7000 : 3200);
       }
     } finally {
       claimingLevel = false;
@@ -4871,6 +4910,100 @@ onMounted(async () => {
   margin-top: 2px;
   font-size: 12px;
   color: var(--dim);
+}
+/* Level-up « majeur » : liste des déblocages franchis */
+.lb-card.major .lb-bolt {
+  font-size: 54px;
+}
+.lb-unlocks {
+  margin-top: 16px;
+  width: min(86vw, 340px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  animation: lb-pop 0.5s ease-out 0.2s both;
+}
+.lb-unlocks-h {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  text-align: center;
+}
+.lb-unlock {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.lu-emo {
+  font-size: 24px;
+  line-height: 1.1;
+  flex: none;
+}
+.lu-txt {
+  min-width: 0;
+}
+.lu-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.lu-detail {
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.3;
+}
+/* Timeline « À venir » (onglet Perso) */
+.upcoming {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.up-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+.up-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.up-lvl {
+  flex: none;
+  min-width: 52px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.up-emo {
+  font-size: 22px;
+  flex: none;
+}
+.up-txt {
+  min-width: 0;
+}
+.up-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.up-detail {
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.3;
 }
 @keyframes lb-pop {
   from {
