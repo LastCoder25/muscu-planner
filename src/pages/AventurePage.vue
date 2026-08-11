@@ -1281,14 +1281,14 @@
         <!-- Boss : une fois l'animation finie et le CHOIX de récompense affiché, on
              masque l'arène (sinon elle reste ouverte au-dessus du choix). -->
         <div
-          v-if="stageAnimFights.length && !(stageDone && char.row?.pending_reward)"
+          v-if="stageFights.length && !(stageDone && (char.row?.pending_reward || stageSkipped))"
           class="rm-stage-wrap"
         >
           <CombatStage
             :key="runSeq"
             :player-name="char.row?.pseudo ?? 'Toi'"
             :player-max-pv="run.playerMaxPv ?? 100"
-            :fights="stageAnimFights"
+            :fights="stageFights"
             :player-profile="c.profile"
             :player-equipped="char.row?.equipped ?? {}"
             @done="stageFinish"
@@ -1432,7 +1432,7 @@
         <!-- Réglage persistant : sauter l'animation des combats gagnés d'avance -->
         <label class="rm-skip-toggle">
           <q-toggle v-model="autoSkipEasy" color="primary" dense size="sm" />
-          <span>⏭ Passer les combats suivants (garder le 1er) sur donjon gagné d'avance (≥ 90 %)</span>
+          <span>⏭ Passer l'animation des donjons déjà faits et gagnés d'avance (≥ 90 %) — 1er passage toujours animé</span>
         </label>
 
         <div class="rm-actions-row">
@@ -1856,11 +1856,13 @@ function flushNotify() {
     pendingNotify.value = null;
   }
 }
-// Skip = on n'anime QUE le 1er combat du donjon puis on saute au résultat (on ne
-// masque jamais tout : on garde toujours le premier combat, on passe les suivants).
-const stageFirstOnly = ref(false);
-// Réglage persistant : passer automatiquement les combats SUIVANTS d'un donjon
-// gagné d'avance (≥ 90 %) — le premier combat reste toujours animé.
+// Skip = animation occultée (droit au résultat). On l'applique SEULEMENT en
+// REJEU : la 1re fois qu'on fait un donjon (pas encore nettoyé), on anime toujours
+// (découverte) ; une fois le donjon déjà nettoyé, les réattaques sautent l'anim.
+const stageSkipped = ref(false);
+const lastRunFirstVisit = ref(true); // ce run était-il la 1re fois sur ce donjon ?
+// Réglage persistant : passer automatiquement l'animation des donjons DÉJÀ FAITS
+// et gagnés d'avance (≥ 90 %) — le 1er passage d'un donjon reste animé.
 const AUTOSKIP_KEY = 'muscu:adv:autoskip';
 const autoSkipEasy = ref(localStorage.getItem(AUTOSKIP_KEY) === '1');
 watch(autoSkipEasy, (v) => localStorage.setItem(AUTOSKIP_KEY, v ? '1' : '0'));
@@ -1874,21 +1876,17 @@ const stageFights = computed(() =>
     .filter((f) => f.log?.length)
     .map((f) => ({ name: f.monster, emoji: f.emoji, maxPv: f.maxPv ?? 1, log: f.log! })),
 );
-// Combats réellement ANIMÉS : tous, ou seulement le 1er si skip actif (on garde
-// toujours le premier combat du donjon, on passe les suivants).
-const stageAnimFights = computed(() =>
-  stageFirstOnly.value ? stageFights.value.slice(0, 1) : stageFights.value,
-);
 // Après un run : replie la liste, ouvre la modale de rapport, et l'animation de
 // combat se (re)lance automatiquement (runSeq change → CombatStage remonte).
 function openReport() {
   runSeq.value++;
   // Résultat/butin masqués tant que l'animation joue (révélés à la fin). Si pas de
   // rejeu (pas de log), on montre tout de suite.
-  // Skip auto si le réglage est actif ET la victoire était quasi acquise (≥ 90 %) :
-  // on n'anime alors QUE le 1er combat (les suivants sont passés), jamais tout.
-  stageFirstOnly.value = autoSkipEasy.value && canSkipStage.value;
-  stageDone.value = stageAnimFights.value.length === 0;
+  // Skip SEULEMENT en rejeu : réglage actif + victoire quasi acquise (≥ 90 %) + ce
+  // donjon a DÉJÀ été fait (pas la 1re visite) → droit au résultat, sinon on anime.
+  const skipAll = autoSkipEasy.value && canSkipStage.value && !lastRunFirstVisit.value;
+  stageSkipped.value = skipAll;
+  stageDone.value = !stageFights.value.length || skipAll;
   reportOpen.value = true;
   if (stageDone.value) flushNotify(); // pas d'animation → notif tout de suite
 }
@@ -2155,6 +2153,8 @@ async function explore(d: Dungeon) {
   lastDungeon.value = d;
   lastBoss.value = null;
   lastEndless.value = false;
+  // 1re visite ? (capturé AVANT applyRun, qui va ajouter d.id à cleared_dungeons).
+  lastRunFirstVisit.value = !clearedSet.value.has(d.id);
   busy.value = true;
   try {
     // Consommables sélectionnés pour ce run (buffs + chance de butin).
