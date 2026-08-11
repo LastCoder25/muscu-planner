@@ -648,10 +648,16 @@ function exRank(id: string): number {
 // Marche/course séparées masquées : on ne propose plus que « Marche ou course »
 // (une seule piste → une sortie course compte aussi, pas de doublon).
 const HIDDEN_EX_IDS = new Set(['ex_ch_marche', 'ex_ch_course']);
-// Exos déjà utilisés par un défi ACTIF → on ne les propose pas (pas de doublon).
-const activeExoIds = computed(
-  () => new Set(challenges.list.filter((c) => c.status === 'active').map((c) => c.exercise_id)),
-);
+// Exos déjà utilisés par un défi ACTIF (solo) OU présents dans le Défi 360 actif
+// → on ne les propose pas (pas de doublon d'un même exo entre défis).
+const activeExoIds = computed(() => {
+  const ids = new Set(
+    challenges.list.filter((c) => c.status === 'active').map((c) => c.exercise_id),
+  );
+  for (const combo of comboStore.list.filter((c) => c.status === 'active'))
+    for (const leg of combo.legs ?? []) ids.add(leg.exercise_id);
+  return ids;
+});
 const exFilter = ref<'all' | 'muscu' | 'cardio'>('all');
 const filteredLib = computed(() => {
   const n = search.value.trim().toLowerCase();
