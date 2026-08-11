@@ -4,7 +4,7 @@
 // séance : Σ reps×REP_XP×poids-de-rep + tonnage/500 + prime de bouclage.
 import { REP_XP, assistMult, XP_MULT } from './athlete';
 import { daysBetweenIso } from './loginStreak';
-import type { Level } from './types';
+import type { Level, Objective, SportPractice } from './types';
 
 export interface ComboSet {
   date: string; // YYYY-MM-DD
@@ -304,22 +304,108 @@ export interface ComboSlotPlan {
   setsPerExo: number; // séries/sem par exo (= weeklySets / nExos)
 }
 
+// ── Emphase par groupe : objectif physique + complémentarité avec les sports ──
+// Le Défi 360 s'adapte : un objectif « sculpter » booste les groupes esthétiques ;
+// les sports d'endurance (course/trail…) matraquant déjà les jambes, on RÉDUIT leur
+// volume muscu (anti-surmenage) et on renforce le haut + fessiers/gainage. Pur.
+export type ComboGoal = 'sculpt' | 'perf' | 'balanced';
+
+// muscle_primary → emplacement du 360.
+const MUSCLE_SLOT: Record<string, string> = {
+  pectoraux: 'push',
+  dos: 'pull',
+  quadriceps: 'squat',
+  'ischio-jambiers': 'hinge',
+  fessiers: 'hinge',
+  abdominaux: 'core',
+  lombaires: 'core',
+  biceps: 'arms',
+  triceps: 'arms',
+  épaules: 'shoulders',
+  mollets: 'shoulders',
+};
+// Multiplicateur de volume par emplacement selon l'objectif.
+const GOAL_SLOT_MULT: Record<ComboGoal, Record<string, number>> = {
+  // Esthétique : haut du corps + fessiers + abdos ; jambes un cran plus bas.
+  sculpt: { push: 1.15, pull: 1.15, squat: 0.9, hinge: 1.15, core: 1.1, arms: 1.2, shoulders: 1.15 },
+  // Perf/fonctionnel : chaîne postérieure + gainage + composés ; moins d'isolation.
+  perf: { push: 1.0, pull: 1.1, squat: 1.1, hinge: 1.2, core: 1.2, arms: 0.8, shoulders: 0.95 },
+  balanced: {},
+};
+// Groupes musculaires déjà sollicités par un sport (nom → muscle_primary).
+const SPORT_LOADS: Record<string, string[]> = {
+  Course: ['quadriceps', 'ischio-jambiers', 'mollets'],
+  Trail: ['quadriceps', 'ischio-jambiers', 'mollets'],
+  Marche: ['quadriceps', 'mollets'],
+  Randonnée: ['quadriceps', 'mollets'],
+  Vélo: ['quadriceps'],
+  "Vélo d'appart": ['quadriceps'],
+  Tennis: ['épaules', 'abdominaux', 'quadriceps'],
+  Padel: ['épaules', 'abdominaux'],
+  Squash: ['épaules', 'abdominaux', 'quadriceps'],
+  Badminton: ['épaules', 'abdominaux'],
+  Natation: ['dos', 'épaules'],
+  Football: ['quadriceps', 'ischio-jambiers'],
+  Basket: ['quadriceps', 'mollets'],
+  Aviron: ['dos', 'ischio-jambiers'],
+  Escalade: ['dos', 'biceps'],
+};
+
+/** Objectif de profil → objectif de défi (préréglage). */
+export function objectiveToGoal(o?: Objective | null): ComboGoal {
+  if (o === 'force' || o === 'endurance') return 'perf';
+  if (o === 'remise_en_forme') return 'balanced';
+  return 'sculpt'; // hypertrophie / perte_de_gras / défaut
+}
+
+/** Poids de volume par emplacement : objectif × complémentarité sports × prioritaires.
+ *  Borné [0.6, 1.45] pour rester raisonnable. Pur/testable. */
+export function comboEmphasis(
+  goal: ComboGoal,
+  sports?: SportPractice[] | null,
+  priorityMuscles?: string[] | null,
+): Record<string, number> {
+  const slots = ['push', 'pull', 'squat', 'hinge', 'core', 'arms', 'shoulders'];
+  const w: Record<string, number> = {};
+  for (const s of slots) w[s] = GOAL_SLOT_MULT[goal][s] ?? 1;
+  // Sports : réduit les emplacements déjà chargés (∝ fréquence × intensité).
+  for (const sp of sports ?? []) {
+    const factor =
+      (sp.sessions_per_week || 1) *
+      (sp.intensity === 'elevee' ? 1.3 : sp.intensity === 'faible' ? 0.6 : 1);
+    for (const m of SPORT_LOADS[sp.name] ?? []) {
+      const slot = MUSCLE_SLOT[m];
+      if (slot) w[slot]! *= 1 - Math.min(0.28, 0.05 * factor);
+    }
+  }
+  // Muscles prioritaires (profil) : boost.
+  for (const m of priorityMuscles ?? []) {
+    const slot = MUSCLE_SLOT[m.trim().toLowerCase()];
+    if (slot) w[slot]! *= 1.2;
+  }
+  for (const s of slots) w[s] = Math.round(Math.max(0.6, Math.min(1.45, w[s]!)) * 100) / 100;
+  return w;
+}
+
 /**
  * Plan FULL-BODY : tous les groupes essentiels sont actifs (+ les accessoires,
  * hors débutant). Le VOLUME (séries/groupe) vient de `volume`, la VARIÉTÉ (nb
- * d'exos/groupe) de `variety` (les accessoires restent à 1 exo). Pur/testable.
+ * d'exos/groupe) de `variety` ; `emphasis` (optionnel) module le volume par
+ * emplacement (objectif + sports). Pur/testable.
  */
 export function suggestFullBodyPlan(
   level: Level,
   volume: ComboVolume,
   variety: ComboVariety,
   slots: ComboSlotSpec[],
+  emphasis?: Record<string, number>,
 ): ComboSlotPlan[] {
   const cap = VARIETY_CAP[variety];
   return slots.map((s) => {
     const active = s.essential || level !== 'debutant';
     if (!active) return { slot: s.key, active: false, nExos: 0, weeklySets: 0, setsPerExo: 0 };
-    const weeklySets = comboWeeklySets(level, volume, s.essential);
+    const mult = emphasis?.[s.key] ?? 1;
+    const weeklySets = Math.max(3, Math.round(comboWeeklySets(level, volume, s.essential) * mult));
     // Nb d'exos = volume / ~5 séries, borné par le plafond de variété (accessoires : 1).
     const wanted = Math.max(1, Math.round(weeklySets / SETS_PER_EXO));
     const nExos = s.essential ? Math.min(cap, wanted) : 1;

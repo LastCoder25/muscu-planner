@@ -13,6 +13,8 @@ import {
   suggestComboTarget,
   suggestFullBodyPlan,
   comboMuscleInZone,
+  comboEmphasis,
+  objectiveToGoal,
   type ComboSlotSpec,
   buildComboSession,
   comboSessionSetBudget,
@@ -242,6 +244,79 @@ describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
   it('séries/exo = volume réparti sur les exos', () => {
     const p = bySlot(suggestFullBodyPlan('intermediaire', 'moderate', 'med', SLOTS), 'push');
     expect(p.setsPerExo).toBe(Math.max(1, Math.round(p.weeklySets / p.nExos)));
+  });
+});
+
+describe('comboEmphasis / objectiveToGoal (objectif + sports)', () => {
+  it('objectiveToGoal : force/endurance→perf, remise→balanced, reste→sculpt', () => {
+    expect(objectiveToGoal('force')).toBe('perf');
+    expect(objectiveToGoal('endurance')).toBe('perf');
+    expect(objectiveToGoal('remise_en_forme')).toBe('balanced');
+    expect(objectiveToGoal('hypertrophie')).toBe('sculpt');
+    expect(objectiveToGoal('perte_de_gras')).toBe('sculpt');
+    expect(objectiveToGoal(null)).toBe('sculpt');
+  });
+
+  it('sculpt : haut/bras boostés, squat allégé', () => {
+    const e = comboEmphasis('sculpt');
+    expect(e.arms!).toBeGreaterThan(1);
+    expect(e.push!).toBeGreaterThan(1);
+    expect(e.squat!).toBeLessThan(1);
+  });
+
+  it('perf : chaîne postérieure/gainage boostés, bras allégés', () => {
+    const e = comboEmphasis('perf');
+    expect(e.hinge!).toBeGreaterThan(1);
+    expect(e.core!).toBeGreaterThan(1);
+    expect(e.arms!).toBeLessThan(1);
+  });
+
+  it('balanced sans sport = tout neutre (1)', () => {
+    const e = comboEmphasis('balanced');
+    for (const k of ['push', 'pull', 'squat', 'hinge', 'core', 'arms', 'shoulders'])
+      expect(e[k]!).toBe(1);
+  });
+
+  it('sports d’endurance allègent les jambes (course = quads/ischios/mollets)', () => {
+    const base = comboEmphasis('balanced');
+    const withRun = comboEmphasis('balanced', [
+      { name: 'Course', sessions_per_week: 3, intensity: 'elevee' },
+    ]);
+    expect(withRun.squat!).toBeLessThan(base.squat!);
+    expect(withRun.hinge!).toBeLessThan(base.hinge!);
+    // Le haut du corps n'est pas touché par la course.
+    expect(withRun.push!).toBe(base.push!);
+  });
+
+  it('muscles prioritaires : boost le groupe correspondant', () => {
+    const base = comboEmphasis('balanced');
+    const withPrio = comboEmphasis('balanced', null, ['pectoraux']);
+    expect(withPrio.push!).toBeGreaterThan(base.push!);
+  });
+
+  it('bornage [0.6, 1.45] même avec sport intense cumulé', () => {
+    const e = comboEmphasis('perf', [
+      { name: 'Trail', sessions_per_week: 6, intensity: 'elevee' },
+      { name: 'Course', sessions_per_week: 6, intensity: 'elevee' },
+    ]);
+    for (const k of Object.keys(e)) {
+      expect(e[k]!).toBeGreaterThanOrEqual(0.6);
+      expect(e[k]!).toBeLessThanOrEqual(1.45);
+    }
+  });
+
+  it('emphasis appliqué au plan : sculpt donne plus de volume aux bras que perf', () => {
+    const SLOTS: ComboSlotSpec[] = [
+      { key: 'squat', muscles: ['quadriceps'], essential: true },
+      { key: 'arms', muscles: ['biceps', 'triceps'], essential: true },
+    ];
+    const bySlot = (plan: ReturnType<typeof suggestFullBodyPlan>, key: string) =>
+      plan.find((p) => p.slot === key)!;
+    const sculpt = suggestFullBodyPlan('avance', 'moderate', 'med', SLOTS, comboEmphasis('sculpt'));
+    const perf = suggestFullBodyPlan('avance', 'moderate', 'med', SLOTS, comboEmphasis('perf'));
+    expect(bySlot(sculpt, 'arms').weeklySets).toBeGreaterThan(bySlot(perf, 'arms').weeklySets);
+    // Plancher : jamais moins de 3 séries.
+    expect(bySlot(sculpt, 'squat').weeklySets).toBeGreaterThanOrEqual(3);
   });
 });
 

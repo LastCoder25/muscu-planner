@@ -47,6 +47,25 @@
           </div>
           <div class="zone-hint">Blessé ou tu veux zapper une partie ? Choisis haut ou bas.</div>
 
+          <div class="vol-lbl vl-mt">Ton objectif</div>
+          <div class="opt-tiles">
+            <button
+              v-for="o in GOAL_OPTS"
+              :key="o.id"
+              type="button"
+              class="opt-tile"
+              :class="{ on: goal === o.id }"
+              @click="goal = o.id"
+            >
+              <span class="ot-emo">{{ o.emoji }}</span>
+              <span class="ot-lbl">{{ o.label }}</span>
+              <span class="ot-sub">{{ o.sub }}</span>
+            </button>
+          </div>
+          <div v-if="sportsHint" class="zone-hint">
+            Adapté à tes sports ({{ sportsHint }}) : on allège les groupes déjà sollicités.
+          </div>
+
           <div class="vol-lbl vl-mt">Volume d'entraînement</div>
           <div class="opt-tiles">
             <button
@@ -297,6 +316,9 @@ import {
   suggestFullBodyPlan,
   comboWeeklySets,
   comboMuscleInZone,
+  comboEmphasis,
+  objectiveToGoal,
+  type ComboGoal,
   type ComboVolume,
   type ComboVariety,
   type ComboZone,
@@ -338,6 +360,28 @@ const step = ref<'setup' | 'draft' | 'recap'>('setup');
 const zone = ref<ComboZone>('full');
 const volume = ref<ComboVolume>('moderate');
 const variety = ref<ComboVariety>('med');
+// Objectif du défi : pré-réglé depuis le profil (modifiable ici). Module le volume
+// par groupe (sculpter = haut/bras/fessiers ; perf = chaîne postérieure/gainage).
+const goal = ref<ComboGoal>('balanced');
+const GOAL_OPTS: { id: ComboGoal; emoji: string; label: string; sub: string }[] = [
+  { id: 'sculpt', emoji: '🏛️', label: 'Me sculpter', sub: 'esthétique — haut & bras' },
+  { id: 'perf', emoji: '🏃', label: 'Booster mes sports', sub: 'fonctionnel — chaîne & gainage' },
+  { id: 'balanced', emoji: '⚖️', label: 'Équilibré', sub: 'tout le corps à parts égales' },
+];
+// Sports pratiqués + muscles prioritaires (profil) → complémentarité (allège les
+// groupes déjà sollicités, renforce les prioritaires). Recalculé à chaque changement.
+const emphasis = computed(() =>
+  comboEmphasis(
+    goal.value,
+    profileStore.profile?.sports ?? null,
+    profileStore.profile?.preferences?.priority_muscles ?? null,
+  ),
+);
+// Résumé lisible de l'adaptation aux sports (pour informer l'utilisateur).
+const sportsHint = computed(() => {
+  const names = (profileStore.profile?.sports ?? []).map((s) => s.name);
+  return names.length ? names.join(', ') : '';
+});
 
 const ZONE_OPTS: { id: ComboZone; emoji: string; label: string; sub: string }[] = [
   { id: 'full', emoji: '🧍', label: 'Tout le corps', sub: 'full-body' },
@@ -497,7 +541,13 @@ const recapKeys = computed(() =>
 
 // (Re)génère le volume/variété full-body selon niveau + volume + variété.
 function applyPlan() {
-  const plan = suggestFullBodyPlan(level.value, volume.value, effVariety.value, COMBO_SLOTS);
+  const plan = suggestFullBodyPlan(
+    level.value,
+    volume.value,
+    effVariety.value,
+    COMBO_SLOTS,
+    emphasis.value,
+  );
   for (const slot of COMBO_SLOTS) {
     const p = plan.find((x) => x.slot === slot.key);
     // Pré-sélection : d'abord les exos FAISABLES avec ton matériel, puis les autres.
@@ -516,7 +566,7 @@ function applyPlan() {
   }
 }
 
-watch([level, zone, volume, variety], applyPlan);
+watch([level, zone, volume, variety, goal], applyPlan);
 
 async function createCombo() {
   const uid = auth.user?.id;
@@ -582,6 +632,7 @@ onMounted(async () => {
     if (combo.list.length === 0) await combo.fetchMine();
     lib.value = await library.fetchAll();
     level.value = profileStore.profile?.experience?.level ?? 'intermediaire';
+    goal.value = objectiveToGoal(profileStore.profile?.objective);
     applyPlan();
   } catch (e) {
     $q.notify({
