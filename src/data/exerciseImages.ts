@@ -39,6 +39,7 @@ export const EXERCISE_IMAGES: Record<string, string> = {
   ex_pullup: '/exercises/ex_pullup.jpg',
   ex_pullup_assisted: '/exercises/ex_pullup_assisted.jpg',
   ex_pushup: '/exercises/ex_pushup.jpg',
+  ex_pushup_knees: '/exercises/ex_pushup.jpg', // même mouvement (photos de pompes réutilisées)
   ex_romanian_deadlift: '/exercises/ex_romanian_deadlift.jpg',
   ex_row_barbell: '/exercises/ex_row_barbell.jpg',
   ex_row_dumbbell: '/exercises/ex_row_dumbbell.jpg',

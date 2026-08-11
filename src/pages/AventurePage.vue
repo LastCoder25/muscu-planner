@@ -1105,7 +1105,7 @@
             :fights="stageFights"
             :player-profile="c.profile"
             :player-equipped="char.row?.equipped ?? {}"
-            @done="stageDone = true"
+            @done="stageFinish"
           />
         </div>
         <template v-if="stageDone">
@@ -1528,6 +1528,19 @@ const run = ref<RunView | null>(null);
 const reportOpen = ref(false); // rapport de combat affiché en MODALE (post-run)
 const runSeq = ref(0); // clé de rejeu → remonte CombatStage à chaque run (relance l'anim)
 const stageDone = ref(true); // résultat + butin révélés seulement à la FIN de l'animation
+// Notif de résultat (victoire/défaite) DIFFÉRÉE : elle ne s'affiche qu'à la fin de
+// l'animation de combat (sinon elle « spoile » avant la fin — cf. ticket).
+const pendingNotify = ref<{ type: string; message: string } | null>(null);
+function flushNotify() {
+  if (pendingNotify.value) {
+    $q.notify(pendingNotify.value);
+    pendingNotify.value = null;
+  }
+}
+function stageFinish() {
+  stageDone.value = true;
+  flushNotify();
+}
 // Combats rejouables (avec log détaillé) → alimente CombatStage.
 const stageFights = computed(() =>
   (run.value?.fights ?? [])
@@ -1543,6 +1556,7 @@ function openReport() {
   // rejeu (pas de log), on montre tout de suite.
   stageDone.value = !stageFights.value.length;
   reportOpen.value = true;
+  if (stageDone.value) flushNotify(); // pas d'animation → notif tout de suite
 }
 // Dernier lieu combattu → « Réattaquer » relance exactement le même run.
 const lastDungeon = ref<Dungeon | null>(null);
@@ -1872,8 +1886,10 @@ async function explore(d: Dungeon) {
       drops,
       ...(consDrop ? { consumable: { emoji: consDrop.emoji, name: consDrop.name } } : {}),
     };
+    pendingNotify.value = r.cleared
+      ? { type: 'positive', message: `Donjon nettoyé — +${gold} 🪙` }
+      : null;
     openReport();
-    if (r.cleared) $q.notify({ type: 'positive', message: `Donjon nettoyé — +${gold} 🪙` });
   } catch {
     $q.notify({ type: 'negative', message: 'Échec de l’exploration.' });
   } finally {
@@ -2013,12 +2029,10 @@ async function fightBoss(b: MilestoneBoss) {
     };
     // Rapport toujours ouvert : sur victoire, il affiche le CHOIX de récompense en
     // bas (à la place du butin) ; sur défaite, juste le résultat.
+    pendingNotify.value = win
+      ? { type: 'positive', message: `${b.emoji} ${b.name} vaincu — choisis ta récompense !` }
+      : { type: 'warning', message: `${b.name} t’a terrassé… reviens plus fort.` };
     openReport();
-    $q.notify(
-      win
-        ? { type: 'positive', message: `${b.emoji} ${b.name} vaincu — choisis ta récompense !` }
-        : { type: 'warning', message: `${b.name} t’a terrassé… reviens plus fort.` },
-    );
   } catch {
     $q.notify({ type: 'negative', message: 'Échec du combat.' });
   } finally {
@@ -2105,12 +2119,10 @@ async function fightEndless() {
       fights: [{ monster: foe.name, emoji: '🌀', win, rounds: r.rounds, maxPv: foe.pv, log: r.log }],
       drops,
     };
+    pendingNotify.value = win
+      ? { type: 'positive', message: `Palier ${tier} franchi — +${gold} 🪙` }
+      : { type: 'warning', message: `Palier ${tier} : la Faille t'a repoussé.` };
     openReport();
-    $q.notify(
-      win
-        ? { type: 'positive', message: `Palier ${tier} franchi — +${gold} 🪙` }
-        : { type: 'warning', message: `Palier ${tier} : la Faille t'a repoussé.` },
-    );
   } catch {
     $q.notify({ type: 'negative', message: 'Échec du combat.' });
   } finally {

@@ -42,6 +42,10 @@ export interface CharacterRow {
   keys: number; // clés d'expédition (donjons à étages)
 }
 
+// Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
+// premiers donjons) → le joueur n'est pas bloqué à 0 énergie au départ.
+const WELCOME_ENERGY = 300;
+
 export class PseudoTakenError extends Error {
   constructor() {
     super('Ce pseudo est déjà pris.');
@@ -68,9 +72,14 @@ export const useCharacterStore = defineStore('character', () => {
   // déjà pris renvoie l'erreur 23505 → on la traduit en PseudoTakenError.
   async function setPseudo(userId: string, rawPseudo: string) {
     const pseudo = normalizePseudo(rawPseudo);
+    // Pécule de bienvenue à la 1re création (0 XP de fond → 0 énergie sinon) : de
+    // quoi lancer quelques donjons et accrocher le joueur. Pas au renommage.
+    const isNew = !row.value;
+    const patch: Record<string, unknown> = { user_id: userId, pseudo, updated_at: new Date().toISOString() };
+    if (isNew) patch.login_energy = WELCOME_ENERGY;
     const { data, error } = await supabase
       .from('characters')
-      .upsert({ user_id: userId, pseudo, updated_at: new Date().toISOString() })
+      .upsert(patch)
       .select(COLS)
       .single();
     if (error) {

@@ -36,6 +36,13 @@ body {
   font-family: var(--font-ui);
 }
 
+// Modales : fond nettement assombri (+ léger flou) pour mettre le focus sur la
+// modale ouverte et estomper la page derrière (cf. écran de combat).
+.q-dialog__backdrop {
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(2px);
+}
+
 // Oswald pour chiffres/titres/timer/valeurs : tabular nums.
 .font-display,
 .q-timer,
