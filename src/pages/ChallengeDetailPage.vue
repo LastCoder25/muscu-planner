@@ -108,8 +108,8 @@
                 stroke-dasharray="327"
                 :stroke-dashoffset="327 * (1 - pct)"
               />
-              <!-- Repères tous les 10 % (défis en temps) -->
-              <g v-if="isTime">
+              <!-- Repères tous les 10 % → cercle segmenté en 10 (tous les défis) -->
+              <g>
                 <line
                   v-for="(t, i) in RING_TICKS"
                   :key="i"
