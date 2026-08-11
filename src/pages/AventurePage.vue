@@ -595,6 +595,7 @@
         </div>
 
         <div class="sec-title mboss-title">🗺️ Carte des mondes</div>
+        <div class="sec-hint map-hint">Touche une région pour voir ses donjons ↓</div>
         <!-- Carte-monde serpentine : un nœud par région, fil énergisé, cadenas. -->
         <div class="worldmap" :style="{ height: mapGeom.viewH + 'px' }">
           <svg class="wm-svg" :viewBox="`0 0 100 ${mapGeom.viewH}`" preserveAspectRatio="none">
@@ -639,7 +640,7 @@
         </div>
 
         <!-- Drawer : donjons de la région sélectionnée -->
-        <div class="region-drawer" :style="{ '--rc': selRegion.color }">
+        <div ref="drawerEl" class="region-drawer" :style="{ '--rc': selRegion.color }">
           <div class="rd-head">
             <span class="rd-emo">{{ selRegion.emoji }}</span>
             <span class="rd-name font-display">{{ selRegion.name }}</span>
@@ -1444,7 +1445,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -1755,6 +1756,7 @@ const selRegion = computed(
 const selectedRegionItems = computed(() =>
   adventureItems.value.filter((it) => selRegion.value.dungeonIds.includes(it.dungeon.id)),
 );
+const drawerEl = ref<HTMLElement | null>(null);
 function tapRegion(r: Region) {
   if (regionState(r) === 'locked') {
     const prev = REGIONS[REGIONS.findIndex((x) => x.id === r.id) - 1];
@@ -1767,6 +1769,9 @@ function tapRegion(r: Region) {
     return;
   }
   selectedRegionId.value = r.id;
+  // Fait défiler vers les donjons de la région (sinon le drawer, sous la carte,
+  // reste hors écran → on croit que le clic ne fait rien).
+  void nextTick(() => drawerEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 }
 // Explosion des chaînes quand une région vient d'être débloquée (piloté par le reveal).
 const shatterId = ref<string | null>(null);
@@ -5504,6 +5509,11 @@ onMounted(async () => {
 /* Drawer de région (en-tête au-dessus des donjons) */
 .region-drawer {
   margin: 14px 0 8px;
+  scroll-margin-top: 64px; /* décale sous le header fixe au scrollIntoView */
+}
+.map-hint {
+  text-align: center;
+  margin-top: -2px;
 }
 .rd-head {
   display: flex;
