@@ -180,10 +180,11 @@ export const useCharacterStore = defineStore('character', () => {
   ) {
     const cur = row.value;
     if (!cur) return;
-    const defeated =
-      input.defeated && !cur.defeated_bosses.includes(input.bossId)
-        ? [...cur.defeated_bosses, input.bossId]
-        : cur.defeated_bosses;
+    const firstDefeat = input.defeated && !cur.defeated_bosses.includes(input.bossId);
+    const defeated = firstDefeat ? [...cur.defeated_bosses, input.bossId] : cur.defeated_bosses;
+    // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~25 % ensuite sur les
+    // réaffrontements → pas de faucet infini en spammant un boss déjà battu.
+    const keyGain = firstDefeat ? 1 : input.defeated && Math.random() < 0.25 ? 1 : 0;
     const consumables = { ...cur.consumables };
     for (const id of input.consumed ?? []) {
       const left = (consumables[id] ?? 0) - 1;
@@ -197,8 +198,7 @@ export const useCharacterStore = defineStore('character', () => {
       defeated_bosses: defeated,
       consumables,
       pending_reward: input.pending ?? cur.pending_reward ?? null,
-      // Un boss vaincu lâche toujours une clé d'expédition.
-      keys: cur.keys + (input.defeated ? 1 : 0),
+      keys: cur.keys + keyGain,
     });
   }
 
