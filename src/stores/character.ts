@@ -166,8 +166,9 @@ export const useCharacterStore = defineStore('character', () => {
       else delete consumables[id];
     }
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
-    // Clé d'expédition : ~12 % sur un donjon NETTOYÉ (redonne un but au farm).
-    const gotKey = input.clearedDungeonId && Math.random() < 0.12 ? 1 : 0;
+    // Clé d'expédition : ~6 % sur un donjon NETTOYÉ (rare → l'expédition redevient
+    // un événement à belle récompense, pas du farm à la chaîne).
+    const gotKey = input.clearedDungeonId && Math.random() < 0.06 ? 1 : 0;
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
@@ -201,7 +202,7 @@ export const useCharacterStore = defineStore('character', () => {
     const defeated = firstDefeat ? [...cur.defeated_bosses, input.bossId] : cur.defeated_bosses;
     // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~25 % ensuite sur les
     // réaffrontements → pas de faucet infini en spammant un boss déjà battu.
-    const keyGain = firstDefeat ? 1 : input.defeated && Math.random() < 0.25 ? 1 : 0;
+    const keyGain = firstDefeat ? 1 : input.defeated && Math.random() < 0.12 ? 1 : 0;
     const consumables = { ...cur.consumables };
     for (const id of input.consumed ?? []) {
       const left = (consumables[id] ?? 0) - 1;
@@ -270,8 +271,8 @@ export const useCharacterStore = defineStore('character', () => {
       inventory: dist.inventory,
       endless_best: input.cleared && input.tier > cur.endless_best ? input.tier : cur.endless_best,
       consumables,
-      // ~20 % de clé d'expédition sur une faille nettoyée.
-      keys: cur.keys + (input.cleared && Math.random() < 0.2 ? 1 : 0),
+      // ~10 % de clé d'expédition sur une faille nettoyée.
+      keys: cur.keys + (input.cleared && Math.random() < 0.1 ? 1 : 0),
     });
   }
 

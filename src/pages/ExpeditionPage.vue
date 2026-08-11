@@ -289,7 +289,6 @@ const heroLevel = computed(() => character.value.level.level);
 
 const CELL = 66;
 const SIZE = 46; // côté d'une salle (carré arrondi)
-const TRAP_DMG = 14; // dégâts d'un piège (équilibrage bêta, provisoire)
 
 const floorsWanted = ref(Math.min(5, Math.max(2, Number(route.query.floors) || 3)));
 // Seed pseudo-aléatoire (composant → Math.random autorisé, contrairement aux libs).
@@ -373,20 +372,29 @@ function roomGlyph(r: Room): string {
 // Monstre de salle scalé au niveau du perso + profondeur de l'étage. Volontairement
 // plus faible qu'un boss de palier (une salle = une bouchée) : c'est l'ACCUMULATION
 // sur l'étage, PV reportés, qui use → l'Endurance compte. (équilibrage provisoire bêta)
+// Monstres calibrés RELATIVEMENT au joueur (le sport rend le perso très fort en
+// absolu → une échelle fixe le laissait one-shot tout sans jamais perdre de PV).
+// pv = k × dégâts/tour du joueur (⇒ le monstre SURVIT et riposte) ; dégâts = part
+// des PV max du joueur (⇒ attrition réelle). Deeper = plus dur (push-your-luck).
 function makeMonster(isBoss: boolean, depth: number): Combatant {
-  const L = heroLevel.value;
-  const t = isBoss ? 2.4 : 1;
-  const d = 0.8 + 0.5 * depth;
+  const f = fighter.value;
+  const pTurn = f.damage * (f.strikes ?? 1) * (1 + f.crit); // dégâts/tour approx du joueur
+  const P = f.pv;
+  const d = 0.85 + 0.55 * depth; // 0.85 (surface) → 1.4 (fond)
   return {
     name: isBoss ? 'Gardien de l’étage' : 'Rôdeur',
-    pv: Math.round((28 + 14 * L) * d * t),
-    damage: Math.round((5 + 2.6 * L) * d * t),
-    crit: 0.05,
-    dodge: 0.04 + 0.03 * depth,
-    initiative: 8,
+    // Survit ~1,5 tour (rôdeur) / ~3,8 tours (gardien) → il a le temps de frapper.
+    pv: Math.max(10, Math.round(pTurn * (isBoss ? 3.8 : 1.5) * d)),
+    // Chaque coup retire ~4,5 % (rôdeur) / ~7,5 % (gardien) des PV max du joueur.
+    damage: Math.max(1, Math.round(P * (isBoss ? 0.075 : 0.045) * d)),
+    crit: 0.05 + 0.05 * depth,
+    dodge: 0.03 + 0.04 * depth,
+    initiative: isBoss ? 14 : 8,
     strikes: 1,
   };
 }
+// Piège = 5 % des PV max du joueur (proportionnel, plus les 14 fixes ridicules).
+const trapDmg = computed(() => Math.max(8, Math.round(fighter.value.pv * 0.05)));
 // Seed déterministe par salle (rejouable pour une même carte).
 function roomSeed(id: number): number {
   return (seed.value * 131 + run.value.floor * 7919 + id * 17) >>> 0 || 1;
@@ -423,13 +431,15 @@ function fightRoom(id: number, isBoss: boolean) {
 }
 function openChest(id: number) {
   const rng = mulberry32(roomSeed(id));
+  // Plus on est profond, plus la rareté du coffre grimpe (récompense du risque).
+  const luck = Math.min(1, 0.35 + 0.45 * depthOf());
   let drop: Omit<Item, 'id'> | null = null;
   for (let k = 0; k < 4 && !drop; k++)
     drop = rollDrop(rng, {
       cleared: true,
       defeated: 1,
       level: heroLevel.value,
-      luck: 0.4,
+      luck,
       spread: 1,
     });
   const item = drop ? { ...drop, id: `exp_${lootN++}` } : null;
@@ -459,9 +469,9 @@ function onRoomClick(id: number) {
   }
   switch (target.type) {
     case 'trap':
-      run.value = applyDamage(run.value, TRAP_DMG);
-      lastEvent.value = { kind: 'bad', text: `⚠️ Piège ! −${TRAP_DMG} PV` };
-      roomFx.value = { kind: 'trap', dmg: TRAP_DMG }; // mort gérée à la fermeture (closeFx)
+      run.value = applyDamage(run.value, trapDmg.value);
+      lastEvent.value = { kind: 'bad', text: `⚠️ Piège ! −${trapDmg.value} PV` };
+      roomFx.value = { kind: 'trap', dmg: trapDmg.value }; // mort gérée à la fermeture (closeFx)
       break;
     case 'monster':
       fightRoom(id, false);
@@ -504,22 +514,31 @@ function floorsForLevel(): number {
 // Trésor final garanti à la victoire (haute chance + haute rareté). ~15 % de
 // chance que ce soit une PIÈCE DE SET (2e voie d'accès aux sets, cf. ticket) —
 // les boss restent la source garantie/ciblée.
+// Trésor final = la « belle récompense » du clear (le seul intérêt de pousser
+// jusqu'au bout malgré l'attrition). Objet de HAUT niveau (heroLevel+2), rareté
+// GARANTIE épique minimum, ~25 % de chance d'être une pièce de set convoitée.
 function rollTreasure(): Item | null {
   const rng = mulberry32((seed.value * 977 + 4242) >>> 0 || 1);
-  if (rng() < 0.15 && ITEM_SETS.length) {
+  if (rng() < 0.25 && ITEM_SETS.length) {
     const set = ITEM_SETS[Math.floor(rng() * ITEM_SETS.length)]!;
-    const piece = rollSetPiece(rng, { setId: set.id, level: heroLevel.value, luck: 0.85 });
+    const piece = rollSetPiece(rng, { setId: set.id, level: heroLevel.value + 1, luck: 1 });
     return { ...piece, id: `exp_t_${lootN++}` };
   }
+  // Tire jusqu'à obtenir au moins de l'épique (le trésor final ne doit jamais être
+  // « léger » — plus de commun/rare gris ici).
   let d: Omit<Item, 'id'> | null = null;
-  for (let k = 0; k < 8 && !d; k++)
-    d = rollDrop(rng, {
+  for (let k = 0; k < 24; k++) {
+    const cand = rollDrop(rng, {
       cleared: true,
       defeated: 1,
-      level: heroLevel.value + 1,
-      luck: 0.85,
+      level: heroLevel.value + 2,
+      luck: 1,
       spread: 0,
     });
+    if (!cand) continue;
+    d = cand;
+    if (cand.rarity === 'epic' || cand.rarity === 'legendary' || cand.rarity === 'divin') break;
+  }
   return d ? { ...d, id: `exp_t_${lootN++}` } : null;
 }
 
