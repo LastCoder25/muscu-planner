@@ -164,7 +164,9 @@
               class="dtile"
               :class="{
                 on: isSelected(curKey, e.id),
-                muted: atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1,
+                muted:
+                  variantBlocked(curKey, e.id) ||
+                  (atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1),
               }"
               @click="toggleExo(curKey, e.id)"
             >
@@ -183,7 +185,10 @@
                 </div>
               </div>
               <div class="dtile-name">{{ e.name }}</div>
-              <div class="dtile-mus">{{ e.muscle_primary }}</div>
+              <div v-if="variantBlocked(curKey, e.id)" class="dtile-mus variant">
+                ≈ variante déjà choisie
+              </div>
+              <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
             </button>
           </div>
         </template>
@@ -199,7 +204,9 @@
               class="dtile"
               :class="{
                 on: isSelected(curKey, e.id),
-                muted: atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1,
+                muted:
+                  variantBlocked(curKey, e.id) ||
+                  (atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1),
               }"
               @click="toggleExo(curKey, e.id)"
             >
@@ -218,7 +225,10 @@
                 </div>
               </div>
               <div class="dtile-name">{{ e.name }}</div>
-              <div class="dtile-mus">{{ e.muscle_primary }}</div>
+              <div v-if="variantBlocked(curKey, e.id)" class="dtile-mus variant">
+                ≈ variante déjà choisie
+              </div>
+              <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
             </button>
           </div>
         </template>
@@ -311,7 +321,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useComboStore } from '@/stores/combo';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
-import { COMBO_SLOTS, type ComboSlot } from '@/data/combo';
+import { COMBO_SLOTS, variantFamilyKey, type ComboSlot } from '@/data/combo';
 import {
   suggestFullBodyPlan,
   comboWeeklySets,
@@ -510,6 +520,14 @@ function toggleExo(key: string, exId: string) {
   if (i >= 0) {
     p.exercise_ids.splice(i, 1);
   } else {
+    // Variante : si une version du MÊME mouvement (ex. pompes / pompes sur genoux)
+    // est déjà choisie, on la REMPLACE (redondant → jamais les deux ensemble).
+    const fam = variantFamilyKey(exId);
+    const sibling = p.exercise_ids.findIndex((id) => variantFamilyKey(id) === fam);
+    if (sibling >= 0) {
+      p.exercise_ids.splice(sibling, 1, exId);
+      return;
+    }
     const cap = suggestN(key);
     if (p.exercise_ids.length >= cap) {
       if (cap === 1) p.exercise_ids.splice(0, p.exercise_ids.length);
@@ -518,6 +536,14 @@ function toggleExo(key: string, exId: string) {
     p.exercise_ids.push(exId);
   }
   enabled[key] = p.exercise_ids.length > 0;
+}
+// Un exo est-il bloqué car une VARIANTE du même mouvement est déjà sélectionnée ?
+// (le clic swap quand même, mais on le grise pour signaler la redondance)
+function variantBlocked(key: string, exId: string): boolean {
+  const ids = picks[key]?.exercise_ids ?? [];
+  if (ids.includes(exId)) return false;
+  const fam = variantFamilyKey(exId);
+  return ids.some((id) => variantFamilyKey(id) === fam);
 }
 function atCap(key: string): boolean {
   return pickCount(key) >= suggestN(key);
@@ -551,7 +577,14 @@ function applyPlan() {
   for (const slot of COMBO_SLOTS) {
     const p = plan.find((x) => x.slot === slot.key);
     // Pré-sélection : d'abord les exos FAISABLES avec ton matériel, puis les autres.
-    const cands = [...mineCandidates(slot), ...otherCandidates(slot)];
+    // Dédup par famille de variantes : jamais pompes ET pompes sur genoux d'office.
+    const seenFam = new Set<string>();
+    const cands = [...mineCandidates(slot), ...otherCandidates(slot)].filter((e) => {
+      const fam = variantFamilyKey(e.id);
+      if (seenFam.has(fam)) return false;
+      seenFam.add(fam);
+      return true;
+    });
     const active = !!p?.active && cands.length > 0;
     const nExos = Math.min(p?.nExos ?? 1, cands.length || 1);
     planN[slot.key] = Math.max(1, nExos);
@@ -879,6 +912,10 @@ onMounted(async () => {
 .dtile-mus {
   font-size: 11px;
   color: var(--dim);
+}
+.dtile-mus.variant {
+  color: var(--d3);
+  font-weight: 600;
 }
 .draft-nav,
 .draft-skip {

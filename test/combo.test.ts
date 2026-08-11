@@ -247,6 +247,20 @@ describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
   });
 });
 
+describe('variantFamilyKey (variantes normale/assistée exclusives)', () => {
+  it('les variantes d’un même mouvement partagent une clé', async () => {
+    const { variantFamilyKey } = await import('@/data/combo');
+    expect(variantFamilyKey('ex_pushup')).toBe(variantFamilyKey('ex_pushup_knees'));
+    expect(variantFamilyKey('ex_dips')).toBe(variantFamilyKey('ex_dips_assisted'));
+    expect(variantFamilyKey('ex_pullup')).toBe(variantFamilyKey('ex_pullup_assisted'));
+  });
+  it('des mouvements différents ont des clés différentes', async () => {
+    const { variantFamilyKey } = await import('@/data/combo');
+    expect(variantFamilyKey('ex_pushup')).not.toBe(variantFamilyKey('ex_dips'));
+    expect(variantFamilyKey('ex_bench_dumbbell')).toBe('ex_bench_dumbbell'); // sans variante
+  });
+});
+
 describe('comboEmphasis / objectiveToGoal (objectif + sports)', () => {
   it('objectiveToGoal : force/endurance→perf, remise→balanced, reste→sculpt', () => {
     expect(objectiveToGoal('force')).toBe('perf');

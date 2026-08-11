@@ -73,3 +73,24 @@ export const COMBO_SLOTS: ComboSlot[] = [
 export function comboSlot(key: string): ComboSlot | undefined {
   return COMBO_SLOTS.find((s) => s.key === key);
 }
+
+// Familles de VARIANTES : même mouvement décliné en version normale + version
+// assistée/allégée (élastique, sur les genoux…). Choisir deux membres d'une même
+// famille dans un emplacement est redondant → on les rend mutuellement exclusifs
+// dans le picker du Défi 360. Chaque groupe = ids d'un même mouvement.
+export const EXERCISE_VARIANT_FAMILIES: string[][] = [
+  ['ex_pushup', 'ex_pushup_knees'], // pompes / pompes sur les genoux
+  ['ex_dips', 'ex_dips_assisted'], // dips / dips assistés (élastique)
+  ['ex_pullup', 'ex_pullup_assisted'], // tractions / tractions assistées (élastique)
+];
+
+// id de variante → clé de famille (= 1er id du groupe). Absent = pas de variante.
+const VARIANT_FAMILY_OF: Record<string, string> = Object.fromEntries(
+  EXERCISE_VARIANT_FAMILIES.flatMap((fam) => fam.map((id) => [id, fam[0] as string])),
+);
+
+/** Clé de famille de variantes d'un exo (lui-même si pas de variante). Deux exos
+ *  de même clé sont le même mouvement à difficultés différentes → exclusifs. */
+export function variantFamilyKey(exerciseId: string): string {
+  return VARIANT_FAMILY_OF[exerciseId] ?? exerciseId;
+}
