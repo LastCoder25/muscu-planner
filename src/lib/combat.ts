@@ -24,6 +24,10 @@ export interface Combatant {
   dmgReduction?: number; // 0..1 : dégâts reçus réduits (Défense / armure)
   lifesteal?: number; // 0..1 : PV rendus = part des dégâts infligés (vol de vie)
   strikes?: number; // frappes moyennes par tour (Vitesse) ; défaut 1 (monstres)
+  // Effets SIGNATURE (objets rares, joueur uniquement) — bonus de dégâts CONDITIONNELS.
+  execute?: number; // + dégâts quand l'ENNEMI est bas (< executeThreshold PV)
+  rage?: number; // + dégâts quand TOI tu es bas (< rageThreshold PV)
+  momentum?: number; // + dégâts par coup consécutif porté dans le combat (cumul plafonné)
 }
 
 // Coefficients d'équilibrage (ajustables en un endroit).
@@ -55,6 +59,10 @@ export const COMBAT = {
   varianceSpan: 0.3,
   maxRounds: 400, // garde-fou anti-boucle (multi-frappe → combats plus courts en tours)
   dungeonHealPct: 0.15, // PV régénérés entre deux combats d'un donjon (% du max)
+  // Effets signature (conditionnels) — seuils & plafond.
+  executeThreshold: 0.25, // « Exécution » active si l'ennemi est sous 25 % PV
+  rageThreshold: 0.3, // « Rage » active si le joueur est sous 30 % PV
+  momentumMaxStacks: 6, // « Déferlante » : cumul plafonné à 6 coups
 };
 
 /** Construit le combattant du joueur à partir de ses 3 stats et de son NIVEAU. */
@@ -81,8 +89,15 @@ export function playerCombatant(
 
 /** Indice synthétique de puissance de combat (offense × survie) — pour l'UI. */
 export function combatPower(c: Combatant): number {
+  // Les effets signature (conditionnels) sont pondérés par une valeur MOYENNE
+  // attendue sur un combat (ils ne s'appliquent pas tout le temps).
+  const sig =
+    1 +
+    0.35 * (c.execute ?? 0) +
+    0.3 * (c.rage ?? 0) +
+    (c.momentum ?? 0) * (COMBAT.momentumMaxStacks * 0.5);
   const offense =
-    c.damage * (c.strikes ?? 1) * (1 + c.crit) * (1 + (c.lifesteal ?? 0));
+    c.damage * (c.strikes ?? 1) * (1 + c.crit) * (1 + (c.lifesteal ?? 0)) * sig;
   const survie = (c.pv / 100) / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0));
   return Math.round(offense * survie);
 }
@@ -131,6 +146,8 @@ export function simulateCombat(
   const log: CombatEvent[] = [];
   let turn: CombatActor = player.initiative >= monster.initiative ? 'player' : 'monster';
   let round = 0;
+  const monsterMaxPv = monster.pv;
+  let pStacks = 0; // Déferlante : coups consécutifs du joueur dans CE combat
 
   // Nombre de frappes d'un tour (Vitesse) : partie entière + reste probabiliste.
   const strikeCount = (c: Combatant): number => {
@@ -152,9 +169,18 @@ export function simulateCombat(
       const crit = rng() < atk.crit;
       const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
       let dmg = Math.max(1, Math.round(atk.damage * (crit ? 2 : 1) * variance));
+      // Effets signature du JOUEUR : bonus de dégâts conditionnels (avant réduction).
+      if (turn === 'player') {
+        let mult = 1;
+        if (atk.execute && mPv / monsterMaxPv < COMBAT.executeThreshold) mult += atk.execute;
+        if (atk.rage && pPv / maxPPv < COMBAT.rageThreshold) mult += atk.rage;
+        if (atk.momentum) mult += Math.min(COMBAT.momentumMaxStacks, pStacks) * atk.momentum;
+        if (mult !== 1) dmg = Math.max(1, Math.round(dmg * mult));
+      }
       if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
       if (turn === 'player') {
         mPv = Math.max(0, mPv - dmg);
+        pStacks++; // Déferlante : le joueur a porté un coup → cumul
         if (atk.lifesteal) pPv = Math.min(maxPPv, pPv + Math.round(dmg * atk.lifesteal));
       } else {
         pPv = Math.max(0, pPv - dmg);

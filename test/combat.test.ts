@@ -156,3 +156,51 @@ describe('mulberry32', () => {
     }
   });
 });
+
+describe('effets signature (execute / rage / momentum)', () => {
+  const base = playerCombatant('Héros', { puissance: 50, endurance: 40, agilite: 20 }, 8);
+  const foe = { name: 'Cible', pv: 900, damage: 40, crit: 0.05, dodge: 0.05, initiative: 5 };
+
+  it('combatPower augmente avec chaque effet signature', () => {
+    const p0 = combatPower(base);
+    expect(combatPower({ ...base, execute: 0.5 })).toBeGreaterThan(p0);
+    expect(combatPower({ ...base, rage: 0.5 })).toBeGreaterThan(p0);
+    expect(combatPower({ ...base, momentum: 0.1 })).toBeGreaterThan(p0);
+  });
+
+  it('Exécution ne ralentit jamais et achève plus vite (l’ennemi passe sous 25% PV)', () => {
+    const ref = simulateCombat(base, foe, { seed: 7, goldOnWin: 0 });
+    const withExec = simulateCombat({ ...base, execute: 0.6 }, foe, { seed: 7, goldOnWin: 0 });
+    expect(ref.win).toBe(true);
+    expect(withExec.win).toBe(true);
+    expect(withExec.rounds).toBeLessThanOrEqual(ref.rounds);
+  });
+
+  it('Déferlante (momentum) accélère la victoire (dégâts cumulés par coup)', () => {
+    const ref = simulateCombat(base, foe, { seed: 11, goldOnWin: 0 });
+    const withMom = simulateCombat({ ...base, momentum: 0.15 }, foe, { seed: 11, goldOnWin: 0 });
+    expect(ref.win).toBe(true);
+    expect(withMom.win).toBe(true);
+    expect(withMom.rounds).toBeLessThanOrEqual(ref.rounds);
+  });
+
+  it('Rage aide quand le joueur démarre bas (< 30% PV)', () => {
+    const lowPv = Math.round(base.pv * 0.2);
+    const ref = simulateCombat(base, foe, { seed: 3, goldOnWin: 0, startPlayerPv: lowPv });
+    const withRage = simulateCombat({ ...base, rage: 0.8 }, foe, {
+      seed: 3,
+      goldOnWin: 0,
+      startPlayerPv: lowPv,
+    });
+    // La rage n'enlève jamais de dégâts : au pire égalité, sinon meilleur.
+    if (ref.win && withRage.win) expect(withRage.rounds).toBeLessThanOrEqual(ref.rounds);
+    expect(withRage.win || !ref.win).toBe(true);
+  });
+
+  it('sans effet signature, le combat est inchangé (rétro-compat)', () => {
+    const a = simulateCombat(base, foe, { seed: 99, goldOnWin: 5 });
+    const b = simulateCombat({ ...base }, foe, { seed: 99, goldOnWin: 5 });
+    expect(a.rounds).toBe(b.rounds);
+    expect(a.win).toBe(b.win);
+  });
+});

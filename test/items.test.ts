@@ -285,3 +285,43 @@ describe('atelier de poussière (forge / reroll / infusion / craft)', () => {
     expect(rerollCost(epic)).toBeGreaterThan(rerollCost(lo)); // rareté enchérit
   });
 });
+
+describe('effets signature & payoff divin (rollDrop)', () => {
+  // Balaye des seeds déterministes et collecte les drops correspondants.
+  function scan(level: number, luck: number, n = 4000) {
+    const drops = [];
+    for (let s = 1; s <= n; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 3, level, luck });
+      if (d) drops.push(d);
+    }
+    return drops;
+  }
+
+  it('un DIVIN roule un 2ᵉ effet distinct (double affixe) ; les autres non', () => {
+    const drops = scan(20, 1); // luck haute → des divins apparaissent
+    const divin = drops.find((d) => d.rarity === 'divin');
+    expect(divin).toBeTruthy();
+    expect(divin!.effect2).toBeTruthy();
+    expect(divin!.effect2!.type).not.toBe(divin!.effect.type);
+    // Aucune rareté sous divin ne porte de 2ᵉ effet.
+    for (const d of drops) if (d.rarity !== 'divin') expect(d.effect2).toBeUndefined();
+  });
+
+  it('les effets signature n’apparaissent qu’en profondeur (gate de niveau)', () => {
+    const SIG = new Set(['execute_pct', 'rage_pct', 'momentum_pct']);
+    const low = scan(3, 1).filter((d) => SIG.has(d.effect.type));
+    const deep = scan(20, 1).filter((d) => SIG.has(d.effect.type));
+    expect(low).toHaveLength(0); // < niv.12 → jamais de signature
+    expect(deep.length).toBeGreaterThan(0); // profond → on en trouve
+  });
+
+  it('un objet à effet signature porte un nom évocateur (pas « … mythique »)', () => {
+    const NAMED = ['Guillotine', 'Couperet du Bourreau', 'Faux des Âmes', 'Déferlante',
+      'Crescendo', 'Élan Implacable', 'Cœur du Berserk', 'Fureur Écarlate', 'Rage du Damné'];
+    const sig = scan(20, 1).find((d) =>
+      ['execute_pct', 'rage_pct', 'momentum_pct'].includes(d.effect.type),
+    );
+    expect(sig).toBeTruthy();
+    expect(NAMED).toContain(sig!.name);
+  });
+})

@@ -16,7 +16,11 @@ export type EffectType =
   | 'lifesteal_pct' // arme : vol de vie
   | 'dmg_reduction_pct' // armure : dégâts reçus réduits
   | 'max_pv_pct' // armure : + PV max
-  | 'gold_pct'; // accessoire : + or gagné
+  | 'gold_pct' // accessoire : + or gagné
+  // Effets SIGNATURE (conditionnels, débloqués tard → nouveauté de haut niveau).
+  | 'execute_pct' // arme : + dégâts quand l'ennemi est bas (< 25 % PV)
+  | 'rage_pct' // relique : + dégâts quand TU es bas (< 30 % PV)
+  | 'momentum_pct'; // arme : + dégâts par coup consécutif porté (cumul)
 
 export interface ItemEffect {
   type: EffectType;
@@ -152,6 +156,11 @@ const EFFECT_MIN_LEVEL: Partial<Record<EffectType, number>> = {
   crit_pct: 5,
   lifesteal_pct: 8,
   dmg_reduction_pct: 10,
+  // Effets SIGNATURE : débloqués TARD → il reste des choses à découvrir passé le
+  // niv.10 (le pool basique se tarissait sinon). Rares (haut niveau de donjon).
+  execute_pct: 12,
+  momentum_pct: 18,
+  rage_pct: 15,
 };
 
 const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
@@ -159,6 +168,8 @@ const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
     { type: 'damage_pct', base: 8 },
     { type: 'crit_pct', base: 4 },
     { type: 'lifesteal_pct', base: 6 },
+    { type: 'execute_pct', base: 12 }, // signature : achève les ennemis bas
+    { type: 'momentum_pct', base: 3 }, // signature : monte en puissance dans le combat
   ],
   armor: [
     { type: 'dmg_reduction_pct', base: 6 },
@@ -174,7 +185,24 @@ const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
   relic: [
     { type: 'crit_pct', base: 6 },
     { type: 'max_pv_pct', base: 8 },
+    { type: 'rage_pct', base: 12 }, // signature : fureur quand tu es au bord de la mort
   ],
+};
+
+/** Effets réellement disponibles pour un slot À CE NIVEAU (pool progressif — les
+ *  effets exotiques/signature ne se débloquent qu'en profondeur via EFFECT_MIN_LEVEL).
+ *  Fallback PV si rien n'est débloqué. Partagé par rollDrop / forge / reroll. */
+function availableEffects(slot: ItemSlot, level: number): { type: EffectType; base: number }[] {
+  const avail = SLOT_EFFECTS[slot].filter((e) => (EFFECT_MIN_LEVEL[e.type] ?? 1) <= level);
+  return avail.length ? avail : [{ type: 'max_pv_pct', base: 6 }];
+}
+
+// Noms ÉVOCATEURS des objets à effet signature (« légendaires nommés » → le drop
+// devient un événement, pas un « Lame mythique » de plus).
+const SIGNATURE_NAMES: Partial<Record<EffectType, string[]>> = {
+  execute_pct: ['Guillotine', 'Couperet du Bourreau', 'Faux des Âmes'],
+  momentum_pct: ['Déferlante', 'Crescendo', 'Élan Implacable'],
+  rage_pct: ['Cœur du Berserk', 'Fureur Écarlate', 'Rage du Damné'],
 };
 
 // Noms d'objets par slot (saveur).
@@ -208,6 +236,12 @@ export function effectLabel(e: ItemEffect, level = 1): string {
       return `+${v}% PV`;
     case 'gold_pct':
       return `+${v}% or`;
+    case 'execute_pct':
+      return `+${v}% dégâts (ennemi < 25% PV)`;
+    case 'rage_pct':
+      return `+${v}% dégâts (toi < 30% PV)`;
+    case 'momentum_pct':
+      return `+${v}% dégâts/coup (cumul)`;
   }
 }
 
@@ -267,26 +301,38 @@ export function rollDrop(
   if (lvl > 5 && rarity === 'common') rarity = 'rare';
   // Pool de stats PROGRESSIF : au début, seules les stats basiques (dégâts/PV)
   // tombent ; les stats exotiques se débloquent en montant (cf. EFFECT_MIN_LEVEL).
-  const avail = SLOT_EFFECTS[slot].filter((e) => (EFFECT_MIN_LEVEL[e.type] ?? 1) <= lvl);
-  const pool = avail.length ? avail : [{ type: 'max_pv_pct' as EffectType, base: 6 }];
+  const pool = availableEffects(slot, lvl);
   const chosen = pick(rng, pool);
   // value = magnitude de BASE (niveau 1) : rareté × VARIANCE de roll ±20 % (farmer
   // pour un bon roll a du sens ; un drop peut remplacer une stat mal rollée).
-  const variance = 0.8 + rng() * 0.4;
-  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity] * variance));
-  const noun = pick(rng, NAMES[slot]);
+  const rollValue = (b: number) => Math.max(1, Math.round(b * RARITY_MULT[rarity] * (0.8 + rng() * 0.4)));
+  const value = rollValue(chosen.base);
+  // Objet à effet SIGNATURE → nom évocateur (« Guillotine ») ; sinon nom + adjectif.
+  const sigNames = SIGNATURE_NAMES[chosen.type];
+  const name = sigNames ? pick(rng, sigNames) : `${pick(rng, NAMES[slot])} ${RARITY_ADJ[rarity]}`;
   // Niveau = niveau du donjon, moins une dispersion vers le bas (jamais au-dessus).
   const base = Math.max(1, Math.round(opts.level ?? 1));
   const spread = Math.max(0, Math.round(opts.spread ?? 0));
   const level = Math.max(1, base - Math.floor(rng() * (spread + 1)));
+  // PAYOFF DIVIN : la 5ᵉ rareté roule un DEUXIÈME effet (distinct) → un divin est
+  // enfin « waouh » (double affixe), pas juste un ×5 de magnitude sur une stat.
+  let effect2: ItemEffect | undefined;
+  if (rarity === 'divin') {
+    const others = pool.filter((e) => e.type !== chosen.type);
+    if (others.length) {
+      const second = pick(rng, others);
+      effect2 = { type: second.type, value: rollValue(second.base) };
+    }
+  }
   return {
     slot,
-    name: `${noun} ${RARITY_ADJ[rarity]}`,
+    name,
     emoji: SLOT_EMOJI[slot],
     rarity,
     level,
     baseLevel: level,
-    effect: { type: chosen.type, value }, // 1 seule stat (le set fait la différence par sa synergie)
+    effect: { type: chosen.type, value }, // 1 stat (le set fait la synergie) — sauf divin (2 effets)
+    ...(effect2 ? { effect2 } : {}),
   };
 }
 
@@ -342,9 +388,9 @@ export function forgeItem(
 ): Omit<Item, 'id'> {
   const slot = opts.slot ?? pick(rng, SLOTS);
   const rarity = rollRarity(rng, opts.luck ?? 0.25); // rareté au hasard (légère chance)
-  const chosen = pick(rng, SLOT_EFFECTS[slot]);
-  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
   const level = Math.max(1, Math.round(opts.level));
+  const chosen = pick(rng, availableEffects(slot, level));
+  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
   return {
     slot,
     name: `${pick(rng, NAMES[slot])} forgé`,
@@ -361,7 +407,9 @@ export function rerollCost(item: Item): number {
   return Math.round((40 + item.level * 15) * (RARITY_STEP[RARITY_RANK[item.rarity]] ?? 1));
 }
 export function rerolledEffect(rng: () => number, item: Item): ItemEffect {
-  const choices = SLOT_EFFECTS[item.slot];
+  // Respecte le gate de niveau : un objet bas niveau ne peut pas rerollmer sur un
+  // effet signature (ils restent une découverte de profondeur).
+  const choices = availableEffects(item.slot, item.level);
   const others = choices.filter((c) => c.type !== item.effect.type);
   const chosen = pick(rng, others.length ? others : choices);
   return {
@@ -383,6 +431,9 @@ export interface AggregatedEffects {
   dmgReduction: number; // fraction, plafonnée
   maxPvPct: number; // fraction
   goldPct: number; // fraction
+  executePct: number; // signature : + dégâts si ennemi bas
+  ragePct: number; // signature : + dégâts si joueur bas
+  momentumPct: number; // signature : + dégâts/coup cumulé
 }
 
 export function emptyEffects(): AggregatedEffects {
@@ -394,6 +445,9 @@ export function emptyEffects(): AggregatedEffects {
     dmgReduction: 0,
     maxPvPct: 0,
     goldPct: 0,
+    executePct: 0,
+    ragePct: 0,
+    momentumPct: 0,
   };
 }
 
@@ -417,6 +471,15 @@ function applyEffect(a: AggregatedEffects, type: EffectType, v: number): void {
       break;
     case 'gold_pct':
       a.goldPct += v;
+      break;
+    case 'execute_pct':
+      a.executePct += v;
+      break;
+    case 'rage_pct':
+      a.ragePct += v;
+      break;
+    case 'momentum_pct':
+      a.momentumPct += v;
       break;
   }
 }
@@ -553,6 +616,9 @@ export function aggregateEffects(equipped: Equipped): AggregatedEffects {
   a.dmgReduction += s.dmgReduction;
   a.maxPvPct += s.maxPvPct;
   a.goldPct += s.goldPct;
+  a.executePct += s.executePct;
+  a.ragePct += s.ragePct;
+  a.momentumPct += s.momentumPct;
   a.dmgReduction = Math.min(0.5, a.dmgReduction); // plafond 50 %
   return a;
 }
@@ -584,5 +650,8 @@ export function playerWithGear(
     dmgReduction,
     lifesteal,
     strikes: base.strikes ?? 1,
+    execute: e.executePct + (extra.executePct ?? 0),
+    rage: e.ragePct + (extra.ragePct ?? 0),
+    momentum: e.momentumPct + (extra.momentumPct ?? 0),
   };
 }
