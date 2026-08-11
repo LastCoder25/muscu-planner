@@ -1100,7 +1100,7 @@
         <!-- Boss : une fois l'animation finie et le CHOIX de récompense affiché, on
              masque l'arène (sinon elle reste ouverte au-dessus du choix). -->
         <div
-          v-if="stageFights.length && !(stageDone && char.row?.pending_reward)"
+          v-if="stageFights.length && !(stageDone && (char.row?.pending_reward || stageSkipped))"
           class="rm-stage-wrap"
         >
           <CombatStage
@@ -1246,6 +1246,12 @@
             </button>
           </div>
         </div>
+
+        <!-- Réglage persistant : sauter l'animation des combats gagnés d'avance -->
+        <label class="rm-skip-toggle">
+          <q-toggle v-model="autoSkipEasy" color="primary" dense size="sm" />
+          <span>⏭ Passer les combats gagnés d'avance (≥ 90 %)</span>
+        </label>
 
         <div class="rm-actions-row">
           <button class="rm-btn" @click="goInventoryFromReport">🎒 Inventaire</button>
@@ -1542,6 +1548,12 @@ function flushNotify() {
     pendingNotify.value = null;
   }
 }
+const stageSkipped = ref(false); // animation passée (auto sur donjon facile)
+// Réglage persistant : passer automatiquement l'animation des combats gagnés
+// d'avance (≥ 90 %) → droit au résultat + butin.
+const AUTOSKIP_KEY = 'muscu:adv:autoskip';
+const autoSkipEasy = ref(localStorage.getItem(AUTOSKIP_KEY) === '1');
+watch(autoSkipEasy, (v) => localStorage.setItem(AUTOSKIP_KEY, v ? '1' : '0'));
 function stageFinish() {
   stageDone.value = true;
   flushNotify();
@@ -1559,10 +1571,19 @@ function openReport() {
   runSeq.value++;
   // Résultat/butin masqués tant que l'animation joue (révélés à la fin). Si pas de
   // rejeu (pas de log), on montre tout de suite.
-  stageDone.value = !stageFights.value.length;
+  // Auto-skip si le réglage est actif ET la victoire était quasi acquise (≥ 90 %).
+  const auto = autoSkipEasy.value && canSkipStage.value;
+  stageDone.value = !stageFights.value.length || auto;
+  stageSkipped.value = auto;
   reportOpen.value = true;
   if (stageDone.value) flushNotify(); // pas d'animation → notif tout de suite
 }
+// « Passer l'animation » proposé quand la victoire était quasi acquise (≥ 90 %)
+// sur un donjon → pas de suspense à regarder.
+const canSkipStage = computed(() => {
+  const d = lastDungeon.value;
+  return !!d && (winPct.value['d:' + d.id] ?? 0) >= 90;
+});
 // Dernier lieu combattu → « Réattaquer » relance exactement le même run.
 const lastDungeon = ref<Dungeon | null>(null);
 const lastBoss = ref<MilestoneBoss | null>(null);
@@ -4223,6 +4244,15 @@ onMounted(async () => {
   border: 1px solid var(--line-soft);
   border-radius: 12px;
   background: var(--bg);
+}
+.rm-skip-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 6px;
+  font-size: 12px;
+  color: var(--dim);
+  cursor: pointer;
 }
 .rm-stage-btn {
   width: 100%;
