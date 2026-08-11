@@ -8,7 +8,10 @@ export type ShopItemId =
   | 'energy_big'
   | 'potion_heal'
   | 'vial_luck'
-  | 'elixir_force';
+  | 'elixir_force'
+  | 'potion_heal_big'
+  | 'scroll_crit'
+  | 'scroll_guard';
 
 export interface ShopItem {
   id: ShopItemId;
@@ -66,6 +69,31 @@ export const SHOP_ITEMS: ShopItem[] = [
     cost: 100,
     kind: 'consumable',
   },
+  // Sinks d'or supplémentaires (achat à l'or uniquement, non droppables).
+  {
+    id: 'potion_heal_big',
+    name: 'Grande potion',
+    emoji: '❤️‍🔥',
+    desc: '+100 % PV max sur ton prochain donjon.',
+    cost: 200,
+    kind: 'consumable',
+  },
+  {
+    id: 'scroll_crit',
+    name: 'Parchemin de précision',
+    emoji: '🎯',
+    desc: '+15 % de critique sur ton prochain donjon.',
+    cost: 150,
+    kind: 'consumable',
+  },
+  {
+    id: 'scroll_guard',
+    name: 'Parchemin de garde',
+    emoji: '🛡️',
+    desc: '+15 % de réduction des dégâts sur ton prochain donjon.',
+    cost: 150,
+    kind: 'consumable',
+  },
 ];
 
 export const CONSUMABLE_ITEMS = SHOP_ITEMS.filter((i) => i.kind === 'consumable');
@@ -89,7 +117,10 @@ export function consumableEffect(id: string): {
   lucky?: boolean;
 } {
   if (id === 'potion_heal') return { extra: { maxPvPct: 0.5 } };
+  if (id === 'potion_heal_big') return { extra: { maxPvPct: 1 } };
   if (id === 'elixir_force') return { extra: { damagePct: 0.25 } };
+  if (id === 'scroll_crit') return { extra: { critAdd: 0.15 } };
+  if (id === 'scroll_guard') return { extra: { dmgReduction: 0.15 } };
   if (id === 'vial_luck') return { lucky: true };
   return {};
 }

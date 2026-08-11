@@ -31,8 +31,10 @@ export const DUNGEONS: Dungeon[] = [
     emoji: '🌿',
     tier: 1,
     energyCost: 20,
-    monsterIds: ['slime', 'slime', 'wolf'],
-    recoLevel: 2,
+    // Donjon TUTORIEL : clearable NU par un débutant (retrait du Loup) → amorce la
+    // boucle de gear (le gear ne vient que des donjons). 2 Gluants seulement.
+    monsterIds: ['slime', 'slime'],
+    recoLevel: 1,
     hintStat: 'endurance',
     hint: 'Idéal pour débuter. Un peu d’Endurance suffit à tenir la distance.',
     dropLevel: 1,
