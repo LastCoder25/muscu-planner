@@ -107,6 +107,68 @@
       </div>
     </template>
 
+    <!-- Animation de salle : combat / coffre / piège -->
+    <q-dialog :model-value="!!roomFx" persistent>
+      <q-card class="fx-card">
+        <template v-if="roomFx?.kind === 'combat'">
+          <CombatStage
+            :key="run.current"
+            :player-name="char.row?.pseudo ?? 'Toi'"
+            :player-max-pv="run.maxPv"
+            :fights="stageFights"
+            :player-profile="playerProfile"
+            :player-equipped="playerEquipped"
+            @done="fxDone = true"
+          />
+          <template v-if="fxDone">
+            <div class="fx-result" :class="roomFx.win ? 'good' : 'bad'">
+              {{ roomFx.win ? '🏆 Victoire !' : '💀 Défaite…' }}
+            </div>
+            <q-btn
+              class="fx-cta"
+              color="primary"
+              text-color="dark"
+              no-caps
+              unelevated
+              label="Continuer"
+              @click="closeFx"
+            />
+          </template>
+        </template>
+
+        <template v-else-if="roomFx?.kind === 'chest'">
+          <div class="chest-anim">🎁</div>
+          <div v-if="roomFx.item" class="fx-loot" :class="'r-' + roomFx.item.rarity">
+            {{ roomFx.item.emoji }} {{ roomFx.item.name }}
+          </div>
+          <div v-else class="fx-result neutral">Coffre vide…</div>
+          <q-btn
+            class="fx-cta"
+            color="primary"
+            text-color="dark"
+            no-caps
+            unelevated
+            :label="roomFx.item ? 'Récupérer' : 'Continuer'"
+            @click="closeFx"
+          />
+        </template>
+
+        <template v-else-if="roomFx?.kind === 'trap'">
+          <div class="trap-anim">⚠️</div>
+          <div class="fx-result bad">Piège ! −{{ roomFx.dmg }} PV</div>
+          <q-btn
+            class="fx-cta"
+            color="primary"
+            text-color="dark"
+            no-caps
+            unelevated
+            label="Continuer"
+            @click="closeFx"
+          />
+        </template>
+      </q-card>
+    </q-dialog>
+
     <!-- Fin de run (bêta) -->
     <q-dialog v-model="over" persistent>
       <q-card class="over-card">
@@ -165,7 +227,8 @@ import { useProgress } from '@/composables/useProgress';
 import { computeCharacter } from '@/lib/character';
 import { playerWithGear, rollDrop, rollSetPiece, ITEM_SETS, type Item } from '@/lib/items';
 import { talentEffects } from '@/lib/talents';
-import { simulateCombat, mulberry32, type Combatant } from '@/lib/combat';
+import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
+import CombatStage from '@/components/CombatStage.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -218,6 +281,19 @@ const gold = ref(0);
 const dust = ref(0);
 const loot = ref<Item[]>([]);
 let lootN = 0;
+
+// Animation de salle (combat / coffre / piège) jouée en overlay avant de continuer.
+type StageFight = { name: string; emoji: string; maxPv: number; log: CombatEvent[] };
+const roomFx = ref<{
+  kind: 'combat' | 'chest' | 'trap';
+  win?: boolean;
+  item?: Item | null;
+  dmg?: number;
+} | null>(null);
+const stageFights = ref<StageFight[]>([]);
+const fxDone = ref(false); // combat : résultat révélé à la fin de l'animation
+const playerProfile = computed(() => character.value.profile);
+const playerEquipped = computed(() => char.row?.equipped ?? {});
 
 onMounted(async () => {
   try {
@@ -316,6 +392,12 @@ function fightRoom(id: number, isBoss: boolean) {
   } else {
     lastEvent.value = { kind: 'bad', text: `💀 Battu par le ${monster.name.toLowerCase()}…` };
   }
+  // Rejoue le combat animé (log seedé exact) en overlay.
+  stageFights.value = [
+    { name: monster.name, emoji: isBoss ? '👑' : '👾', maxPv: monster.pv, log: res.log },
+  ];
+  fxDone.value = false;
+  roomFx.value = { kind: 'combat', win: res.win };
 }
 function openChest(id: number) {
   const rng = mulberry32(roomSeed(id));
@@ -328,13 +410,20 @@ function openChest(id: number) {
       luck: 0.4,
       spread: 1,
     });
-  if (drop) {
-    loot.value.push({ ...drop, id: `exp_${lootN++}` });
+  const item = drop ? { ...drop, id: `exp_${lootN++}` } : null;
+  if (item) {
+    loot.value.push(item);
     dust.value += 3;
-    lastEvent.value = { kind: 'good', text: `🎁 ${drop.name} !` };
+    lastEvent.value = { kind: 'good', text: `🎁 ${item.name} !` };
   } else {
     lastEvent.value = { kind: 'neutral', text: '🎁 Coffre vide…' };
   }
+  roomFx.value = { kind: 'chest', item };
+}
+// Ferme l'overlay de salle ; si le combat a été fatal, on bascule sur la fin de run.
+function closeFx() {
+  roomFx.value = null;
+  if (run.value.status === 'dead') void endRun('dead');
 }
 
 function onRoomClick(id: number) {
@@ -350,6 +439,7 @@ function onRoomClick(id: number) {
     case 'trap':
       run.value = applyDamage(run.value, TRAP_DMG);
       lastEvent.value = { kind: 'bad', text: `⚠️ Piège ! −${TRAP_DMG} PV` };
+      roomFx.value = { kind: 'trap', dmg: TRAP_DMG }; // mort gérée à la fermeture (closeFx)
       break;
     case 'monster':
       fightRoom(id, false);
@@ -366,7 +456,6 @@ function onRoomClick(id: number) {
     default:
       lastEvent.value = { kind: 'neutral', text: '· Salle vide' };
   }
-  if (run.value.status === 'dead') void endRun('dead');
 }
 
 function goDown() {
@@ -686,6 +775,117 @@ function replay() {
   color: var(--dim);
   text-align: center;
   line-height: 1.5;
+}
+/* Overlay d'animation de salle (combat / coffre / piège) */
+.fx-card {
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 16px;
+  width: 100%;
+  max-width: 440px;
+  text-align: center;
+}
+.fx-result {
+  font-size: 18px;
+  font-weight: 800;
+  margin-top: 12px;
+}
+.fx-result.good {
+  color: var(--d1);
+}
+.fx-result.bad {
+  color: var(--d4);
+}
+.fx-result.neutral {
+  color: var(--dim);
+}
+.fx-cta {
+  margin-top: 14px;
+  width: 100%;
+  height: 48px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+/* Coffre : rebond + ouverture */
+.chest-anim {
+  font-size: 76px;
+  animation: chest-open 0.9s ease-out;
+  transform-origin: bottom center;
+}
+@keyframes chest-open {
+  0% {
+    transform: scale(0.5) rotate(0);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.1) rotate(-6deg);
+    opacity: 1;
+  }
+  55% {
+    transform: scale(1) rotate(6deg);
+  }
+  70% {
+    transform: scale(1.15) rotate(-3deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+.fx-loot {
+  font-size: 16px;
+  font-weight: 700;
+  margin-top: 10px;
+  color: var(--accent);
+  animation: fx-pop 0.4s ease-out 0.5s both;
+}
+.fx-loot.r-common {
+  color: var(--dim);
+}
+.fx-loot.r-rare {
+  color: #5aa9ff;
+}
+.fx-loot.r-epic {
+  color: #b06cff;
+}
+.fx-loot.r-legendary {
+  color: var(--accent);
+}
+.fx-loot.r-divin {
+  color: #ff6ad5;
+}
+@keyframes fx-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+/* Piège : secousse + flash rouge */
+.trap-anim {
+  font-size: 76px;
+  animation: trap-shake 0.5s ease-in-out;
+}
+@keyframes trap-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-8px) rotate(-5deg);
+  }
+  40% {
+    transform: translateX(8px) rotate(5deg);
+  }
+  60% {
+    transform: translateX(-6px);
+  }
+  80% {
+    transform: translateX(6px);
+  }
 }
 .over-card {
   background: var(--surface);

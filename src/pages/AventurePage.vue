@@ -1097,7 +1097,12 @@
         </div>
         <!-- Rejeu animé du combat (auto ; :key relance à chaque run). Le résultat et
              le butin ne sont révélés QU'À LA FIN de l'animation (@done). -->
-        <div v-if="stageFights.length" class="rm-stage-wrap">
+        <!-- Boss : une fois l'animation finie et le CHOIX de récompense affiché, on
+             masque l'arène (sinon elle reste ouverte au-dessus du choix). -->
+        <div
+          v-if="stageFights.length && !(stageDone && char.row?.pending_reward)"
+          class="rm-stage-wrap"
+        >
           <CombatStage
             :key="runSeq"
             :player-name="char.row?.pseudo ?? 'Toi'"
