@@ -138,8 +138,16 @@
 
         <template v-else-if="roomFx?.kind === 'chest'">
           <div class="chest-anim">🎁</div>
-          <div v-if="roomFx.item" class="fx-loot" :class="'r-' + roomFx.item.rarity">
-            {{ roomFx.item.emoji }} {{ roomFx.item.name }}
+          <!-- Détail complet de l'objet gagné -->
+          <div v-if="roomFx.item" class="fx-loot-card" :class="'r-' + roomFx.item.rarity">
+            <div class="fl-emoji">{{ roomFx.item.emoji }}</div>
+            <div class="fl-name">{{ roomFx.item.name }}</div>
+            <div class="fl-meta">
+              {{ RARITY_LABEL[roomFx.item.rarity] }} · {{ SLOT_LABEL[roomFx.item.slot] }} · niv
+              {{ roomFx.item.level }}
+            </div>
+            <div class="fl-eff">✦ {{ effectLabel(roomFx.item.effect, roomFx.item.level) }}</div>
+            <div v-if="roomFx.item.setId" class="fl-set">🧩 Pièce de set</div>
           </div>
           <div v-else class="fx-result neutral">Coffre vide…</div>
           <q-btn
@@ -151,6 +159,11 @@
             :label="roomFx.item ? 'Récupérer' : 'Continuer'"
             @click="closeFx"
           />
+        </template>
+
+        <template v-else-if="roomFx?.kind === 'descend'">
+          <div class="descend-anim">🪜</div>
+          <div class="fx-result good">Étage {{ run.floor + 1 }} / {{ run.floors }}</div>
         </template>
 
         <template v-else-if="roomFx?.kind === 'trap'">
@@ -225,7 +238,16 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { computeCharacter } from '@/lib/character';
-import { playerWithGear, rollDrop, rollSetPiece, ITEM_SETS, type Item } from '@/lib/items';
+import {
+  playerWithGear,
+  rollDrop,
+  rollSetPiece,
+  ITEM_SETS,
+  effectLabel,
+  RARITY_LABEL,
+  SLOT_LABEL,
+  type Item,
+} from '@/lib/items';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
 import CombatStage from '@/components/CombatStage.vue';
@@ -285,7 +307,7 @@ let lootN = 0;
 // Animation de salle (combat / coffre / piège) jouée en overlay avant de continuer.
 type StageFight = { name: string; emoji: string; maxPv: number; log: CombatEvent[] };
 const roomFx = ref<{
-  kind: 'combat' | 'chest' | 'trap';
+  kind: 'combat' | 'chest' | 'trap' | 'descend';
   win?: boolean;
   item?: Item | null;
   dmg?: number;
@@ -462,6 +484,11 @@ function goDown() {
   const next = dungeon.value[run.value.floor + 1] ?? null;
   run.value = descend(run.value, next);
   lastEvent.value = null;
+  // Animation de descente d'étage (l'étage suivant est déjà chargé derrière).
+  roomFx.value = { kind: 'descend' };
+  setTimeout(() => {
+    if (roomFx.value?.kind === 'descend') closeFx();
+  }, 1200);
 }
 function finish() {
   void endRun('cleared');
@@ -832,27 +859,72 @@ function replay() {
     transform: scale(1) rotate(0);
   }
 }
-.fx-loot {
-  font-size: 16px;
-  font-weight: 700;
-  margin-top: 10px;
-  color: var(--accent);
+/* Carte détaillée de l'objet gagné (coffre) */
+.fx-loot-card {
+  margin: 12px auto 0;
+  max-width: 300px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--surface-2);
   animation: fx-pop 0.4s ease-out 0.5s both;
 }
-.fx-loot.r-common {
+.fl-emoji {
+  font-size: 34px;
+}
+.fl-name {
+  font-size: 16px;
+  font-weight: 800;
+  margin-top: 2px;
+}
+.fl-meta {
+  font-size: 11.5px;
   color: var(--dim);
+  margin-top: 2px;
 }
-.fx-loot.r-rare {
-  color: #5aa9ff;
-}
-.fx-loot.r-epic {
-  color: #b06cff;
-}
-.fx-loot.r-legendary {
+.fl-eff {
+  font-size: 14px;
+  font-weight: 700;
   color: var(--accent);
+  margin-top: 8px;
 }
-.fx-loot.r-divin {
-  color: #ff6ad5;
+.fl-set {
+  font-size: 11.5px;
+  color: var(--accent);
+  margin-top: 4px;
+}
+.fx-loot-card.r-common {
+  border-color: var(--line);
+}
+.fx-loot-card.r-rare {
+  border-color: #5aa9ff;
+}
+.fx-loot-card.r-epic {
+  border-color: #b06cff;
+}
+.fx-loot-card.r-legendary {
+  border-color: var(--accent);
+}
+.fx-loot-card.r-divin {
+  border-color: #ff6ad5;
+}
+/* Descente d'étage */
+.descend-anim {
+  font-size: 76px;
+  animation: descend 1s ease-in;
+}
+@keyframes descend {
+  0% {
+    transform: translateY(-40px);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(30px);
+    opacity: 0.85;
+  }
 }
 @keyframes fx-pop {
   0% {

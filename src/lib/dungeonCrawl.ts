@@ -154,7 +154,7 @@ export const ROOM_EMOJI: Record<RoomType, string> = {
   chest: '🎁',
   trap: '⚠️',
   empty: '·',
-  stairs: '🔽',
+  stairs: '🪜',
   boss: '👑',
 };
 
