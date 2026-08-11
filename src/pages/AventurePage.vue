@@ -1432,7 +1432,7 @@
         <!-- Réglage persistant : sauter l'animation des combats gagnés d'avance -->
         <label class="rm-skip-toggle">
           <q-toggle v-model="autoSkipEasy" color="primary" dense size="sm" />
-          <span>⏭ Passer l'animation des donjons déjà faits et gagnés d'avance (≥ 90 %) — 1er passage toujours animé</span>
+          <span>⏭ Passer l'animation des donjons et boss déjà faits et gagnés d'avance (≥ 90 %) — 1er passage toujours animé</span>
         </label>
 
         <div class="rm-actions-row">
@@ -1896,11 +1896,14 @@ function openReport() {
   reportOpen.value = true;
   if (stageDone.value) flushNotify(); // pas d'animation → notif tout de suite
 }
-// « Passer l'animation » proposé quand la victoire était quasi acquise (≥ 90 %)
-// sur un donjon → pas de suspense à regarder.
+// « Passer l'animation » quand la victoire était quasi acquise (≥ 90 %) — donjon
+// OU boss (mêmes règles). Le 1er passage reste animé (cf. lastRunFirstVisit).
 const canSkipStage = computed(() => {
   const d = lastDungeon.value;
-  return !!d && (winPct.value['d:' + d.id] ?? 0) >= 90;
+  if (d) return (winPct.value['d:' + d.id] ?? 0) >= 90;
+  const b = lastBoss.value;
+  if (b) return (winPct.value['b:' + b.id] ?? 0) >= 90;
+  return false;
 });
 // Dernier lieu combattu → « Réattaquer » relance exactement le même run.
 const lastDungeon = ref<Dungeon | null>(null);
@@ -2314,6 +2317,9 @@ async function fightBoss(b: MilestoneBoss) {
   lastBoss.value = b;
   lastDungeon.value = null;
   lastEndless.value = false;
+  // 1re fois sur ce boss ? (capturé AVANT applyBossWin qui l'ajoute à defeated_bosses)
+  // → 1er passage toujours animé, réaffrontements gagnés d'avance = skip.
+  lastRunFirstVisit.value = !defeatedBossSet.value.has(b.id);
   busy.value = true;
   try {
     const consumed = [...selectedConsumables.value];
