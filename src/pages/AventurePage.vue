@@ -564,6 +564,23 @@
           </div>
         </div>
 
+        <!-- Bandeau de RÉGION : où tu es + ce qui t'attend après (biomes). -->
+        <div class="region-banner" :style="{ '--rc': curRegion.color }">
+          <div class="rb-top">
+            <span class="rb-emo">{{ curRegion.emoji }}</span>
+            <div class="rb-main">
+              <div class="rb-name font-display">{{ curRegion.name }}</div>
+              <div class="rb-blurb">{{ curRegion.blurb }}</div>
+            </div>
+            <span class="rb-prog">{{ curRegionProg.done }}/{{ curRegionProg.total }}</span>
+          </div>
+          <div class="rb-bar"><span :style="{ width: (curRegionProg.done / curRegionProg.total) * 100 + '%' }" /></div>
+          <div v-if="nxtRegion" class="rb-next">
+            ⟶ Prochaine région : <span :style="{ color: nxtRegion.color }">{{ nxtRegion.emoji }} {{ nxtRegion.name }}</span>
+          </div>
+          <div v-else class="rb-next">⭐ Dernière région — tu touches au bout du monde.</div>
+        </div>
+
         <div class="sec-title mboss-title">🗺️ Donjons</div>
         <div class="dungeons">
           <div
@@ -571,6 +588,7 @@
             :key="it.key"
             class="dgn"
             :class="{ locked: !dungeonUnlocked(it.dungeon) }"
+            :style="{ '--rc': regionOfDungeon(it.dungeon.id)?.color ?? 'var(--line)' }"
           >
             <div class="dgn-hd">
               <span class="dgn-emo">{{
@@ -855,6 +873,19 @@
             🔥 {{ loginBurst.streak }} jour{{ loginBurst.streak > 1 ? 's' : '' }} d'affilée
           </div>
           <div v-if="loginBurst.usedGrace" class="lb-grace">🛟 jour manqué rattrapé (grâce)</div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Reveal : nouvelle région (biome) découverte -->
+    <transition name="lb-fade">
+      <div v-if="regionBurst" class="lb-backdrop" @click="regionBurst = null">
+        <div class="lb-card region" :style="{ '--rc': regionBurst.color }">
+          <span class="lb-wave" aria-hidden="true" />
+          <span class="lb-bolt">{{ regionBurst.emoji }}</span>
+          <div class="rburst-kicker">Nouvelle région</div>
+          <div class="rburst-name font-display">{{ regionBurst.name }}</div>
+          <div class="lb-lbl">{{ regionBurst.blurb }}</div>
         </div>
       </div>
     </transition>
@@ -1362,6 +1393,7 @@ import {
 } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { unlocksAtLevel, upcomingUnlocks } from '@/lib/advUnlocks';
+import { currentRegion, nextRegion, regionProgress, regionOfDungeon } from '@/lib/regions';
 import { logicalToday } from '@/lib/challenges';
 
 interface RunFight {
@@ -1494,6 +1526,21 @@ const loginPreview = computed(() => {
 const claimingLogin = ref(false);
 const loginBurst = ref<{ streak: number; energy: number; usedGrace: boolean } | null>(null);
 const levelBurst = ref<{ from: number; to: number; energy: number } | null>(null);
+// Reveal de nouvelle région : célèbre le passage dans un biome inédit.
+const regionBurst = ref<{ emoji: string; name: string; blurb: string; color: string } | null>(null);
+let lastRegionId = '';
+watch(
+  () => curRegion.value.id,
+  (id) => {
+    // Pas au chargement initial : uniquement quand on ENTRE dans une nouvelle région.
+    if (lastRegionId && id !== lastRegionId) {
+      const r = curRegion.value;
+      regionBurst.value = { emoji: r.emoji, name: r.name, blurb: r.blurb, color: r.color };
+      setTimeout(() => (regionBurst.value = null), 5200);
+    }
+    lastRegionId = id;
+  },
+);
 async function claimLogin() {
   const uid = auth.user?.id;
   if (!uid || claimingLogin.value || !loginClaimable.value) return;
@@ -1527,6 +1574,13 @@ const nextTalentLevel = computed(() => (talentsEarned(c.value.level.level) + 1) 
 // Prochains déblocages (timeline « À venir » de l'onglet Perso) — donne envie de
 // monter (« encore 2 niveaux et j'ouvre le Dragon »).
 const upcoming = computed(() => upcomingUnlocks(c.value.level.level, 3));
+
+// Régions / biomes (onglet Donjons) : bandeau de la région courante + teaser de la
+// suivante → sensation de « découvrir de nouveaux mondes ».
+const clearedIds = computed(() => char.row?.cleared_dungeons ?? []);
+const curRegion = computed(() => currentRegion(clearedIds.value));
+const curRegionProg = computed(() => regionProgress(curRegion.value, clearedIds.value));
+const nxtRegion = computed(() => nextRegion(clearedIds.value));
 // Déblocages franchis lors du dernier level-up (from → to) → affichés sur l'écran
 // de montée de niveau. Peut couvrir plusieurs niveaux d'un coup.
 const levelBurstUnlocks = computed(() => {
@@ -5004,6 +5058,87 @@ onMounted(async () => {
   font-size: 11.5px;
   color: var(--dim);
   line-height: 1.3;
+}
+/* Bandeau de région (biome) — onglet Donjons */
+.region-banner {
+  margin: 4px 0 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface); /* fallback si color-mix non supporté */
+  background: color-mix(in srgb, var(--rc) 12%, var(--surface));
+  border: 1px solid var(--rc);
+  border-color: color-mix(in srgb, var(--rc) 45%, var(--line));
+}
+.rb-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rb-emo {
+  font-size: 30px;
+  flex: none;
+}
+.rb-main {
+  min-width: 0;
+  flex: 1;
+}
+.rb-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--rc);
+  line-height: 1.1;
+}
+.rb-blurb {
+  font-size: 12px;
+  color: var(--dim);
+}
+.rb-prog {
+  flex: none;
+  font-weight: 700;
+  color: var(--rc);
+  font-size: 14px;
+}
+.rb-bar {
+  height: 6px;
+  border-radius: 4px;
+  background: var(--line);
+  margin: 10px 0 8px;
+  overflow: hidden;
+}
+.rb-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--rc);
+  transition: width 0.4s ease;
+}
+.rb-next {
+  font-size: 12px;
+  color: var(--dim);
+}
+.rb-next span {
+  font-weight: 700;
+}
+/* Teinte de région sur la tuile de donjon (liseré gauche) */
+.dgn {
+  border-left: 3px solid var(--rc, var(--line));
+}
+/* Reveal de région : carte teintée par le biome */
+.lb-card.region .lb-wave {
+  border-color: var(--rc);
+}
+.rburst-kicker {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  margin-top: 4px;
+}
+.rburst-name {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--rc);
+  text-align: center;
 }
 @keyframes lb-pop {
   from {
