@@ -1281,14 +1281,14 @@
         <!-- Boss : une fois l'animation finie et le CHOIX de récompense affiché, on
              masque l'arène (sinon elle reste ouverte au-dessus du choix). -->
         <div
-          v-if="stageFights.length && !(stageDone && (char.row?.pending_reward || stageSkipped))"
+          v-if="stageAnimFights.length && !(stageDone && char.row?.pending_reward)"
           class="rm-stage-wrap"
         >
           <CombatStage
             :key="runSeq"
             :player-name="char.row?.pseudo ?? 'Toi'"
             :player-max-pv="run.playerMaxPv ?? 100"
-            :fights="stageFights"
+            :fights="stageAnimFights"
             :player-profile="c.profile"
             :player-equipped="char.row?.equipped ?? {}"
             @done="stageFinish"
@@ -1432,7 +1432,7 @@
         <!-- Réglage persistant : sauter l'animation des combats gagnés d'avance -->
         <label class="rm-skip-toggle">
           <q-toggle v-model="autoSkipEasy" color="primary" dense size="sm" />
-          <span>⏭ Passer les combats gagnés d'avance (≥ 90 %)</span>
+          <span>⏭ Passer les combats suivants (garder le 1er) sur donjon gagné d'avance (≥ 90 %)</span>
         </label>
 
         <div class="rm-actions-row">
@@ -1856,9 +1856,11 @@ function flushNotify() {
     pendingNotify.value = null;
   }
 }
-const stageSkipped = ref(false); // animation passée (auto sur donjon facile)
-// Réglage persistant : passer automatiquement l'animation des combats gagnés
-// d'avance (≥ 90 %) → droit au résultat + butin.
+// Skip = on n'anime QUE le 1er combat du donjon puis on saute au résultat (on ne
+// masque jamais tout : on garde toujours le premier combat, on passe les suivants).
+const stageFirstOnly = ref(false);
+// Réglage persistant : passer automatiquement les combats SUIVANTS d'un donjon
+// gagné d'avance (≥ 90 %) — le premier combat reste toujours animé.
 const AUTOSKIP_KEY = 'muscu:adv:autoskip';
 const autoSkipEasy = ref(localStorage.getItem(AUTOSKIP_KEY) === '1');
 watch(autoSkipEasy, (v) => localStorage.setItem(AUTOSKIP_KEY, v ? '1' : '0'));
@@ -1872,16 +1874,21 @@ const stageFights = computed(() =>
     .filter((f) => f.log?.length)
     .map((f) => ({ name: f.monster, emoji: f.emoji, maxPv: f.maxPv ?? 1, log: f.log! })),
 );
+// Combats réellement ANIMÉS : tous, ou seulement le 1er si skip actif (on garde
+// toujours le premier combat du donjon, on passe les suivants).
+const stageAnimFights = computed(() =>
+  stageFirstOnly.value ? stageFights.value.slice(0, 1) : stageFights.value,
+);
 // Après un run : replie la liste, ouvre la modale de rapport, et l'animation de
 // combat se (re)lance automatiquement (runSeq change → CombatStage remonte).
 function openReport() {
   runSeq.value++;
   // Résultat/butin masqués tant que l'animation joue (révélés à la fin). Si pas de
   // rejeu (pas de log), on montre tout de suite.
-  // Auto-skip si le réglage est actif ET la victoire était quasi acquise (≥ 90 %).
-  const auto = autoSkipEasy.value && canSkipStage.value;
-  stageDone.value = !stageFights.value.length || auto;
-  stageSkipped.value = auto;
+  // Skip auto si le réglage est actif ET la victoire était quasi acquise (≥ 90 %) :
+  // on n'anime alors QUE le 1er combat (les suivants sont passés), jamais tout.
+  stageFirstOnly.value = autoSkipEasy.value && canSkipStage.value;
+  stageDone.value = stageAnimFights.value.length === 0;
   reportOpen.value = true;
   if (stageDone.value) flushNotify(); // pas d'animation → notif tout de suite
 }
