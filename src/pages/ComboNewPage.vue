@@ -134,36 +134,75 @@
           </span>
         </div>
 
-        <div class="tile-grid">
-          <button
-            v-for="e in candidates(curSlot)"
-            :key="e.id"
-            type="button"
-            class="dtile"
-            :class="{
-              on: isSelected(curKey, e.id),
-              muted: atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1,
-            }"
-            @click="toggleExo(curKey, e.id)"
-          >
-            <div class="dtile-media">
-              <ExerciseAnim
-                v-if="hasAnim(e.id)"
-                :exercise-id="e.id"
-                :size="tileMedia"
-                :title="e.name"
-              />
-              <img v-else-if="exImg(e.id)" :src="exImg(e.id)" :alt="e.name" loading="lazy" />
-              <span v-else class="dtile-badge"><q-icon name="fitness_center" size="24px" /></span>
-              <q-icon v-if="favSet.has(e.id)" name="star" size="15px" class="dtile-fav" />
-              <div v-if="isSelected(curKey, e.id)" class="dtile-check">
-                <q-icon name="check_circle" size="22px" />
+        <!-- Faisables avec ton matériel (poids du corps inclus) -->
+        <template v-if="mineCandidates(curSlot).length">
+          <div v-if="otherCandidates(curSlot).length" class="grp-label">🎒 Avec ton matériel</div>
+          <div class="tile-grid">
+            <button
+              v-for="e in mineCandidates(curSlot)"
+              :key="e.id"
+              type="button"
+              class="dtile"
+              :class="{
+                on: isSelected(curKey, e.id),
+                muted: atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1,
+              }"
+              @click="toggleExo(curKey, e.id)"
+            >
+              <div class="dtile-media">
+                <ExerciseAnim
+                  v-if="hasAnim(e.id)"
+                  :exercise-id="e.id"
+                  :size="tileMedia"
+                  :title="e.name"
+                />
+                <img v-else-if="exImg(e.id)" :src="exImg(e.id)" :alt="e.name" loading="lazy" />
+                <span v-else class="dtile-badge"><q-icon name="fitness_center" size="24px" /></span>
+                <q-icon v-if="favSet.has(e.id)" name="star" size="15px" class="dtile-fav" />
+                <div v-if="isSelected(curKey, e.id)" class="dtile-check">
+                  <q-icon name="check_circle" size="22px" />
+                </div>
               </div>
-            </div>
-            <div class="dtile-name">{{ e.name }}</div>
-            <div class="dtile-mus">{{ e.muscle_primary }}</div>
-          </button>
-        </div>
+              <div class="dtile-name">{{ e.name }}</div>
+              <div class="dtile-mus">{{ e.muscle_primary }}</div>
+            </button>
+          </div>
+        </template>
+
+        <!-- Autres exos (matériel de salle non possédé) — accessibles si tu vas en salle -->
+        <template v-if="otherCandidates(curSlot).length">
+          <div class="grp-label alt">🏋️ En salle (autre matériel)</div>
+          <div class="tile-grid">
+            <button
+              v-for="e in otherCandidates(curSlot)"
+              :key="e.id"
+              type="button"
+              class="dtile"
+              :class="{
+                on: isSelected(curKey, e.id),
+                muted: atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1,
+              }"
+              @click="toggleExo(curKey, e.id)"
+            >
+              <div class="dtile-media">
+                <ExerciseAnim
+                  v-if="hasAnim(e.id)"
+                  :exercise-id="e.id"
+                  :size="tileMedia"
+                  :title="e.name"
+                />
+                <img v-else-if="exImg(e.id)" :src="exImg(e.id)" :alt="e.name" loading="lazy" />
+                <span v-else class="dtile-badge"><q-icon name="fitness_center" size="24px" /></span>
+                <q-icon v-if="favSet.has(e.id)" name="star" size="15px" class="dtile-fav" />
+                <div v-if="isSelected(curKey, e.id)" class="dtile-check">
+                  <q-icon name="check_circle" size="22px" />
+                </div>
+              </div>
+              <div class="dtile-name">{{ e.name }}</div>
+              <div class="dtile-mus">{{ e.muscle_primary }}</div>
+            </button>
+          </div>
+        </template>
 
         <div class="foot-bar draft-foot">
           <button type="button" class="draft-nav" @click="prevSlot">
@@ -388,6 +427,19 @@ function candidates(slot: ComboSlot): ExerciseRow[] {
     )
     .sort((a, b) => (favSet.value.has(b.id) ? 1 : 0) - (favSet.value.has(a.id) ? 1 : 0));
 }
+// Matériel possédé (atomes) → un exo est « faisable » si TOUS ses atomes requis
+// sont possédés (poids du corps = aucun atome → toujours faisable).
+const ownedSet = computed(() => new Set<string>(profileStore.profile?.available_equipment ?? []));
+function canDo(e: ExerciseRow): boolean {
+  return (e.equipment_required ?? []).every((r) => ownedSet.value.has(r));
+}
+// Deux groupes pour le draft : ce que tu peux faire chez toi vs le reste (salle).
+function mineCandidates(slot: ComboSlot): ExerciseRow[] {
+  return candidates(slot).filter(canDo);
+}
+function otherCandidates(slot: ComboSlot): ExerciseRow[] {
+  return candidates(slot).filter((e) => !canDo(e));
+}
 function selectedExos(key: string): ExerciseRow[] {
   const ids = picks[key]?.exercise_ids ?? [];
   return ids.map((id) => lib.value.find((e) => e.id === id)).filter((e): e is ExerciseRow => !!e);
@@ -448,7 +500,8 @@ function applyPlan() {
   const plan = suggestFullBodyPlan(level.value, volume.value, effVariety.value, COMBO_SLOTS);
   for (const slot of COMBO_SLOTS) {
     const p = plan.find((x) => x.slot === slot.key);
-    const cands = candidates(slot);
+    // Pré-sélection : d'abord les exos FAISABLES avec ton matériel, puis les autres.
+    const cands = [...mineCandidates(slot), ...otherCandidates(slot)];
     const active = !!p?.active && cands.length > 0;
     const nExos = Math.min(p?.nExos ?? 1, cands.length || 1);
     planN[slot.key] = Math.max(1, nExos);
@@ -700,6 +753,16 @@ onMounted(async () => {
 }
 .dtile.muted {
   opacity: 0.45;
+}
+.grp-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 6px 0 8px;
+}
+.grp-label.alt {
+  color: var(--dim);
+  margin-top: 16px;
 }
 .tile-grid {
   display: grid;
