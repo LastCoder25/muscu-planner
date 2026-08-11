@@ -154,6 +154,9 @@ export const MONSTERS: Monster[] = [
     hint: 'Au-delà du titan : frappe énorme + crits. Build complet, PV et Puissance au max.',
   },
   // ── Bestiaire haut-niveau (donjons reco 12→24) — calibré par simulation ──
+  // OR : continue la courbe géométrique du bestiaire de base (archdémon=900) au lieu
+  // de repartir bas (2026‑08‑11) → l'or par donjon reste MONOTONE croissant (avant :
+  // chute brutale 1600 → 270 au donjon reco 12, les donjons durs payaient moins).
   {
     id: 'chimere',
     name: 'Chimère',
@@ -165,7 +168,7 @@ export const MONSTERS: Monster[] = [
     dodge: 0.06,
     initiative: 16,
     energyCost: 90,
-    gold: 90,
+    gold: 660,
     hint: 'Trois têtes, gros dégâts : il faut des PV (Endurance) pour encaisser.',
   },
   {
@@ -179,7 +182,7 @@ export const MONSTERS: Monster[] = [
     dodge: 0.06,
     initiative: 16,
     energyCost: 100,
-    gold: 110,
+    gold: 840,
     hint: 'Un mur de PV qui repousse → grosse Puissance pour la faire tomber.',
   },
   {
@@ -193,7 +196,7 @@ export const MONSTERS: Monster[] = [
     dodge: 0.06,
     initiative: 14,
     energyCost: 110,
-    gold: 140,
+    gold: 1040,
     hint: 'Colosse increvable : Puissance pour percer, PV pour durer.',
   },
   {
@@ -207,7 +210,7 @@ export const MONSTERS: Monster[] = [
     dodge: 0.06,
     initiative: 18,
     energyCost: 120,
-    gold: 170,
+    gold: 1300,
     hint: 'Frappe et encaisse → build complet, beaucoup de PV.',
   },
   {
@@ -221,7 +224,7 @@ export const MONSTERS: Monster[] = [
     dodge: 0.06,
     initiative: 20,
     energyCost: 135,
-    gold: 200,
+    gold: 1640,
     hint: 'Ses tentacules font mal → PV élevés obligatoires.',
   },
   {
@@ -235,7 +238,7 @@ export const MONSTERS: Monster[] = [
     dodge: 0.06,
     initiative: 22,
     energyCost: 150,
-    gold: 240,
+    gold: 2040,
     hint: 'Dégâts terribles → gros PV et Puissance pour le tuer vite.',
   },
   {
@@ -249,7 +252,7 @@ export const MONSTERS: Monster[] = [
     dodge: 0.06,
     initiative: 24,
     energyCost: 170,
-    gold: 300,
+    gold: 2540,
     hint: 'La créature ultime des profondeurs : build complet, tout au max.',
   },
 ];
