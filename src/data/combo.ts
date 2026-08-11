@@ -74,14 +74,33 @@ export function comboSlot(key: string): ComboSlot | undefined {
   return COMBO_SLOTS.find((s) => s.key === key);
 }
 
-// Familles de VARIANTES : même mouvement décliné en version normale + version
-// assistée/allégée (élastique, sur les genoux…). Choisir deux membres d'une même
-// famille dans un emplacement est redondant → on les rend mutuellement exclusifs
-// dans le picker du Défi 360. Chaque groupe = ids d'un même mouvement.
+// Familles de MOUVEMENT : mêmes gestes déclinés en versions différentes (assistée,
+// élastique, sur les genoux, à la barre / aux haltères / au poids du corps…).
+// Deux exos d'une même famille = le même mouvement → redondants : on ne les propose
+// jamais ensemble (Défi 360 : exclusifs dans un emplacement ; challenges : un seul
+// défi par mouvement). Chaque groupe = ids d'un même mouvement.
 export const EXERCISE_VARIANT_FAMILIES: string[][] = [
-  ['ex_pushup', 'ex_pushup_knees'], // pompes / pompes sur les genoux
+  // Pompes : toutes les variations de pompes au sol.
+  ['ex_pushup', 'ex_pushup_knees', 'ex_diamond_pushup', 'ex_pike_pushup'],
   ['ex_dips', 'ex_dips_assisted'], // dips / dips assistés (élastique)
-  ['ex_pullup', 'ex_pullup_assisted'], // tractions / tractions assistées (élastique)
+  // Tractions / tirage vertical (tractions, assistées élastique, tirage machine).
+  ['ex_pullup', 'ex_pullup_assisted', 'ex_lat_pulldown'],
+  // Squat : au poids du corps, chargé, élastique, goblet.
+  ['ex_squat_barbell', 'ex_bw_squat', 'ex_band_squat', 'ex_kb_goblet_squat'],
+  // Rowing / tirage horizontal (barre, haltère, kettlebell, élastique, machine).
+  ['ex_row_barbell', 'ex_row_dumbbell', 'ex_kb_row', 'ex_band_row', 'ex_seated_row'],
+  // Curl biceps (barre, haltères, élastique).
+  ['ex_curl_barbell', 'ex_curl_dumbbell', 'ex_band_curl'],
+  // Extension triceps à la poulie / élastique.
+  ['ex_triceps_pushdown', 'ex_band_pushdown'],
+  // Développé couché à plat (barre, haltères).
+  ['ex_bench_barbell', 'ex_bench_dumbbell'],
+  // Développé incliné (haltères, machine).
+  ['ex_incline_dumbbell', 'ex_incline_machine'],
+  // Développé épaules (haltères, kettlebell, militaire barre).
+  ['ex_shoulder_press_db', 'ex_kb_press', 'ex_ohp_barbell'],
+  // Mollets debout (machine / poids du corps).
+  ['ex_calf_raise', 'ex_calf_raise_bw'],
 ];
 
 // id de variante → clé de famille (= 1er id du groupe). Absent = pas de variante.

@@ -65,7 +65,7 @@
           v-model="search"
           filled
           dense
-          placeholder="Rechercher un exercice…"
+          placeholder="Rechercher (nom ou muscle : triceps, dos…)"
           class="q-mb-sm"
           clearable
         />
@@ -470,6 +470,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { CONDITIONING_CHALLENGE_IDS } from '@/data/cardio';
 import { useComboStore } from '@/stores/combo';
+import { variantFamilyKey } from '@/data/combo';
 import { useAuthStore } from '@/stores/auth';
 import {
   tokenCost,
@@ -648,15 +649,17 @@ function exRank(id: string): number {
 // Marche/course séparées masquées : on ne propose plus que « Marche ou course »
 // (une seule piste → une sortie course compte aussi, pas de doublon).
 const HIDDEN_EX_IDS = new Set(['ex_ch_marche', 'ex_ch_course']);
-// Exos déjà utilisés par un défi ACTIF (solo) OU présents dans le Défi 360 actif
-// → on ne les propose pas (pas de doublon d'un même exo entre défis).
-const activeExoIds = computed(() => {
-  const ids = new Set(
-    challenges.list.filter((c) => c.status === 'active').map((c) => c.exercise_id),
-  );
+// FAMILLES d'exos déjà utilisées par un défi ACTIF (solo) OU par le Défi 360 actif
+// → on ne les propose pas. On dédup par FAMILLE DE VARIANTE (`variantFamilyKey`) :
+// prendre « dips » bloque aussi « dips assistés », « pompes » bloque « pompes sur
+// genoux », etc. (même mouvement, version assistée/élastique = doublon).
+const activeExoFamilies = computed(() => {
+  const keys = new Set<string>();
+  for (const c of challenges.list.filter((c) => c.status === 'active'))
+    keys.add(variantFamilyKey(c.exercise_id));
   for (const combo of comboStore.list.filter((c) => c.status === 'active'))
-    for (const leg of combo.legs ?? []) ids.add(leg.exercise_id);
-  return ids;
+    for (const leg of combo.legs ?? []) keys.add(variantFamilyKey(leg.exercise_id));
+  return keys;
 });
 const exFilter = ref<'all' | 'muscu' | 'cardio'>('all');
 const filteredLib = computed(() => {
@@ -667,14 +670,18 @@ const filteredLib = computed(() => {
   const visible = lib.value.filter(
     (e) =>
       !HIDDEN_EX_IDS.has(e.id) &&
-      !activeExoIds.value.has(e.id) &&
+      !activeExoFamilies.value.has(variantFamilyKey(e.id)) &&
       !exFull(e) &&
       (exFilter.value === 'all' || exIsCardio(e) === (exFilter.value === 'cardio')),
   );
+  // Recherche par NOM ou par MUSCLE (primaire OU secondaire) → taper « triceps »
+  // remonte aussi les exos qui le travaillent en secondaire (ex. développé couché).
   const base = n
     ? visible.filter(
         (e) =>
-          e.name.toLowerCase().includes(n) || (e.muscle_primary ?? '').toLowerCase().includes(n),
+          e.name.toLowerCase().includes(n) ||
+          (e.muscle_primary ?? '').toLowerCase().includes(n) ||
+          (e.muscle_secondary ?? []).some((m) => m.toLowerCase().includes(n)),
       )
     : visible;
   return [...base].sort((a, b) => exRank(b.id) - exRank(a.id)).slice(0, 60);

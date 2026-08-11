@@ -248,16 +248,24 @@ describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
 });
 
 describe('variantFamilyKey (variantes normale/assistée exclusives)', () => {
-  it('les variantes d’un même mouvement partagent une clé', async () => {
+  it('les variations d’un même mouvement partagent une clé', async () => {
     const { variantFamilyKey } = await import('@/data/combo');
+    // Pompes : toutes les variations groupées.
     expect(variantFamilyKey('ex_pushup')).toBe(variantFamilyKey('ex_pushup_knees'));
+    expect(variantFamilyKey('ex_pushup')).toBe(variantFamilyKey('ex_diamond_pushup'));
+    expect(variantFamilyKey('ex_pushup')).toBe(variantFamilyKey('ex_pike_pushup'));
     expect(variantFamilyKey('ex_dips')).toBe(variantFamilyKey('ex_dips_assisted'));
     expect(variantFamilyKey('ex_pullup')).toBe(variantFamilyKey('ex_pullup_assisted'));
+    // Squat et rowing : variations chargées / poids du corps / élastique groupées.
+    expect(variantFamilyKey('ex_squat_barbell')).toBe(variantFamilyKey('ex_bw_squat'));
+    expect(variantFamilyKey('ex_row_barbell')).toBe(variantFamilyKey('ex_band_row'));
+    expect(variantFamilyKey('ex_curl_barbell')).toBe(variantFamilyKey('ex_curl_dumbbell'));
   });
   it('des mouvements différents ont des clés différentes', async () => {
     const { variantFamilyKey } = await import('@/data/combo');
     expect(variantFamilyKey('ex_pushup')).not.toBe(variantFamilyKey('ex_dips'));
-    expect(variantFamilyKey('ex_bench_dumbbell')).toBe('ex_bench_dumbbell'); // sans variante
+    expect(variantFamilyKey('ex_squat_barbell')).not.toBe(variantFamilyKey('ex_row_barbell'));
+    expect(variantFamilyKey('ex_plank')).toBe('ex_plank'); // gainage : sans variante
   });
 });
 
