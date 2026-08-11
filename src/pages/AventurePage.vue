@@ -1080,7 +1080,7 @@
 
     <!-- Rapport de combat (post-run) en MODALE : toutes les infos + réattaquer /
          inventaire / fermer -->
-    <q-dialog v-model="reportOpen">
+    <q-dialog v-model="reportOpen" position="top">
       <q-card v-if="run" class="report-modal" :class="run.cleared ? 'win' : 'lose'">
         <div class="rm-head">
           <div class="rm-title font-display">{{ run.name }}</div>
@@ -1095,6 +1095,10 @@
             ⚔️
           </button>
         </div>
+        <!-- Corps scrollable : la carte garde une HAUTEUR FIXE → la tête (avec le
+             bouton Réattaquer) et les actions ne bougent pas selon le contenu
+             (drop ou non) → on peut spammer Réattaquer sans que le bouton se déplace. -->
+        <div class="rm-body">
         <!-- Rejeu animé du combat (auto ; :key relance à chaque run). Le résultat et
              le butin ne sont révélés QU'À LA FIN de l'animation (@done). -->
         <!-- Boss : une fois l'animation finie et le CHOIX de récompense affiché, on
@@ -1247,6 +1251,7 @@
           </div>
         </div>
 
+        </div>
         <!-- Réglage persistant : sauter l'animation des combats gagnés d'avance -->
         <label class="rm-skip-toggle">
           <q-toggle v-model="autoSkipEasy" color="primary" dense size="sm" />
@@ -4193,14 +4198,28 @@ onMounted(async () => {
 .report-modal {
   width: 420px;
   max-width: 92vw;
-  max-height: 86vh;
-  overflow-y: auto;
+  /* Ancrée en HAUT (position="top") + hauteur bornée → la tête (bouton Réattaquer)
+     reste à la même place quel que soit le contenu ; seul le CORPS scrolle. */
+  height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-radius: 16px;
   padding: 16px 18px;
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--line);
   border-top-width: 3px;
+}
+.rm-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.report-modal > .rm-head,
+.report-modal > .rm-skip-toggle,
+.report-modal > .rm-actions-row {
+  flex: none;
 }
 .report-modal.win {
   border-top-color: var(--d1);
