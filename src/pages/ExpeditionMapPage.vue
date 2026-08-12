@@ -15,6 +15,25 @@
     <!-- Carte -->
     <div class="map-wrap">
       <svg viewBox="0 0 100 100" class="map" preserveAspectRatio="xMidYMid meet">
+        <!-- Lignes arcaniques (leylines) rayonnant de la ville -->
+        <line
+          v-for="l in LEYS"
+          :key="'ley' + l.a"
+          :x1="TOWN.x" :y1="TOWN.y" :x2="l.x" :y2="l.y"
+          class="ley"
+        />
+        <!-- Anneaux de distance (guides de trajet) -->
+        <circle v-for="r in RINGS" :key="'ring' + r" :cx="TOWN.x" :cy="TOWN.y" :r="r" class="ring" />
+        <text :x="TOWN.x" :y="TOWN.y - RING_NEAR + 2.5" class="ring-lbl">proche</text>
+        <text :x="TOWN.x" :y="TOWN.y - RING_FAR + 2.5" class="ring-lbl">loin</text>
+
+        <!-- Boussole (coin haut-droit) -->
+        <g class="compass">
+          <circle cx="90" cy="10" r="6" class="comp-bg" />
+          <text x="90" y="6.5" class="comp-n">N</text>
+          <line x1="90" y1="10" x2="90" y2="5.5" class="comp-needle" />
+        </g>
+
         <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant) -->
         <template v-if="active && hero">
           <line
@@ -52,10 +71,11 @@
           <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
         </g>
 
-        <!-- Ville -->
+        <!-- Ville (centre) -->
         <g class="town">
-          <circle :cx="TOWN.x" :cy="TOWN.y" r="5" class="town-bg" />
-          <text :x="TOWN.x" :y="TOWN.y + 1.6" class="town-emo">🏰</text>
+          <circle :cx="TOWN.x" :cy="TOWN.y" r="8" class="town-glow" />
+          <circle :cx="TOWN.x" :cy="TOWN.y" r="5.5" class="town-bg" />
+          <text :x="TOWN.x" :y="TOWN.y + 1.9" class="town-emo">🏰</text>
         </g>
       </svg>
     </div>
@@ -152,6 +172,14 @@ const char = useCharacterStore();
 const progress = useProgress();
 
 const TOWN = EXPE.town;
+// Décor de carte : anneaux de distance + lignes arcaniques rayonnant de la ville.
+const RINGS = [EXPE.distMin, (EXPE.distMin + EXPE.distMax) / 2, EXPE.distMax];
+const RING_NEAR = EXPE.distMin;
+const RING_FAR = EXPE.distMax;
+const LEYS = Array.from({ length: 8 }, (_, i) => {
+  const a = (i * Math.PI * 2) / 8;
+  return { a: i, x: TOWN.x + Math.cos(a) * EXPE.distMax, y: TOWN.y + Math.sin(a) * EXPE.distMax };
+});
 const POI_EMO: Record<PoiType, string> = { mine: '⛏️', camp: '🏕️', lair: '👹' };
 const POI_LABEL: Record<PoiType, string> = { mine: 'Mine', camp: 'Camp', lair: 'Repaire' };
 
@@ -344,9 +372,63 @@ function fmtMin(min: number): string {
 .map {
   width: 100%;
   aspect-ratio: 1;
-  background: radial-gradient(circle at 50% 88%, color-mix(in srgb, var(--accent) 8%, var(--surface)), var(--bg) 70%);
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--bg) 72%);
   border: 1px solid var(--line);
   border-radius: 16px;
+}
+/* Décor de carte */
+.ley {
+  stroke: color-mix(in srgb, #4a9eff 35%, transparent);
+  stroke-width: 0.3;
+  stroke-dasharray: 1 2;
+}
+.ring {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.4;
+  stroke-dasharray: 1.5 2;
+  opacity: 0.7;
+}
+.ring-lbl {
+  font-size: 2.4px;
+  text-anchor: middle;
+  fill: var(--dim);
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+.compass .comp-bg {
+  fill: var(--surface);
+  stroke: var(--line);
+  stroke-width: 0.4;
+}
+.compass .comp-n {
+  font-size: 3px;
+  text-anchor: middle;
+  fill: var(--accent);
+  font-weight: 700;
+}
+.compass .comp-needle {
+  stroke: var(--accent);
+  stroke-width: 0.6;
+  stroke-linecap: round;
+}
+.town-glow {
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
+  animation: town-pulse 2.4s ease-in-out infinite;
+}
+@keyframes town-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .town-glow {
+    animation: none;
+  }
 }
 .trail {
   stroke-width: 1.4;

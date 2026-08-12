@@ -89,11 +89,11 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
 
 // ── Constantes (tunables ; éco chiffrée affinée par simulation en phase 6) ──
 export const EXPE = {
-  town: { x: 50, y: 88 }, // ville de départ (bas-centre)
+  town: { x: 50, y: 50 }, // ville de départ (CENTRE de la carte)
   poiCap: 6,
-  minDistPoi: 20, // écart mini entre POI (placement espacé)
-  distMin: 18, // distance mini ville↔POI (coord)
-  distMax: 78, // distance maxi
+  minDistPoi: 17, // écart mini entre POI (placement espacé)
+  distMin: 16, // distance mini ville↔POI (coord ; la ville est au centre)
+  distMax: 40, // distance maxi (rayon → POI tout autour, 360°)
   spawnMinMs: 2 * 3600_000, // intervalle de spawn : 2 h..4 h (jitter)
   spawnJitterMs: 2 * 3600_000,
   lifespanMs: { mine: 24 * 3600_000, camp: 12 * 3600_000, lair: 30 * 3600_000 },
@@ -152,21 +152,19 @@ function pick<T>(rng: () => number, arr: readonly T[]): T {
   return arr[Math.floor(rng() * arr.length)]!;
 }
 
-// Placement espacé (reject-sampling) d'un POI autour de la ville.
+// Placement espacé (reject-sampling) d'un POI TOUT AUTOUR de la ville (360°).
 function placePoi(rng: () => number): { x: number; y: number; distNorm: number } {
-  const { town, distMin, distMax, minDistPoi } = EXPE;
+  const { town, distMin, distMax } = EXPE;
   for (let tries = 0; tries < 40; tries++) {
-    // Angle biaisé vers le HAUT (les POI rayonnent au-dessus de la ville).
-    const ang = -Math.PI / 2 + (rng() - 0.5) * Math.PI * 1.5; // ~ [-135°, +45°] autour du haut
+    const ang = rng() * Math.PI * 2; // angle libre → POI dans tous les sens
     const dd = distMin + rng() * (distMax - distMin);
     const x = Math.round(town.x + Math.cos(ang) * dd);
     const y = Math.round(town.y + Math.sin(ang) * dd);
-    if (x < 6 || x > 94 || y < 6 || y > 82) continue; // reste dans la carte, au-dessus de la ville
-    void minDistPoi; // (l'espacement vs les autres est vérifié par l'appelant)
+    if (x < 8 || x > 92 || y < 8 || y > 92) continue; // reste dans la carte
     return { x, y, distNorm: clamp01((dd - distMin) / (distMax - distMin)) };
   }
-  // Repli : au-dessus de la ville.
-  return { x: town.x, y: 40, distNorm: 0.5 };
+  // Repli : à l'est de la ville.
+  return { x: town.x + distMin, y: town.y, distNorm: 0 };
 }
 
 /** Crée une carte neuve avec `seedPois` POI d'entrée (à la 1re visite). */
