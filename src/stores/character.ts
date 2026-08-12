@@ -19,6 +19,18 @@ import {
   type PendingReward,
 } from '@/lib/items';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
+import {
+  createMap,
+  advanceWorld,
+  startExpedition,
+  buildMessage,
+  goldCost as expeGoldCost,
+  type ActiveExpedition,
+  type ExpeditionMap,
+  type ExpeditionMessage,
+  type Poi,
+} from '@/lib/expedition';
+import type { Combatant } from '@/lib/combat';
 
 export interface CharacterRow {
   user_id: string;
@@ -40,6 +52,9 @@ export interface CharacterRow {
   endless_best: number;
   pending_reward: PendingReward | null;
   keys: number; // clés d'expédition (donjons à étages)
+  expedition: ActiveExpedition | null; // mode idle « Expédition » en cours
+  expedition_map: ExpeditionMap | null; // carte du monde (POI)
+  messages: ExpeditionMessage[]; // boîte à messages 📬 (rapports d'expédition)
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -58,7 +73,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, expedition, expedition_map, messages';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -74,6 +89,9 @@ export const useCharacterStore = defineStore('character', () => {
     r.defeated_bosses = arr<string>(r.defeated_bosses);
     r.equipped = obj<Equipped>(r.equipped);
     r.consumables = obj<Record<string, number>>(r.consumables);
+    r.messages = arr<ExpeditionMessage>(r.messages);
+    if (!r.expedition || typeof r.expedition !== 'object') r.expedition = null;
+    if (!r.expedition_map || typeof r.expedition_map !== 'object') r.expedition_map = null;
     return r;
   }
 
@@ -585,11 +603,79 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { talents: [...cur.talents, code] });
   }
 
+  // ── Mode idle « Expédition » (carte + héros temporisé) ──
+  function newSeed(now: number): number {
+    return ((now ^ 0x9e3779b9) >>> 0) || 1;
+  }
+  // Assure la carte (crée si absente) et l'avance jusqu'à `now`. Persiste si changé.
+  async function expeSyncMap(userId: string, now: number, level: number) {
+    const cur = row.value;
+    if (!cur) return;
+    const map: ExpeditionMap = cur.expedition_map
+      ? advanceWorld(cur.expedition_map, now, level, cur.expedition?.poi.id)
+      : createMap(newSeed(now), now, level);
+    if (JSON.stringify(map) !== JSON.stringify(cur.expedition_map))
+      await persist(userId, { expedition_map: map });
+  }
+  // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).
+  async function expeSend(userId: string, poi: Poi, hero: Combatant, now: number, level: number) {
+    const cur = row.value;
+    if (!cur) return;
+    if (cur.expedition) throw new Error('Une expédition est déjà en cours.');
+    const cost = expeGoldCost(poi.type, poi.level);
+    if (cur.gold < cost) throw new Error('Pas assez d’or pour cette expédition.');
+    const exp = startExpedition(hero, poi, now, ((now ^ (poi.level * 2654435761)) >>> 0) || 1);
+    const baseMap = cur.expedition_map ?? createMap(newSeed(now), now, level);
+    const map: ExpeditionMap = { ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) };
+    await persist(userId, { gold: cur.gold - cost, expedition: exp, expedition_map: map });
+  }
+  // À l'arrivée à l'objectif : dépose le rapport (une seule fois). Renvoie le message si nouveau.
+  async function expeTick(userId: string, now: number): Promise<ExpeditionMessage | null> {
+    const cur = row.value;
+    const exp = cur?.expedition;
+    if (!cur || !exp || now < exp.midAt || exp.reported) return null;
+    const msg = buildMessage(exp);
+    const messages = [msg, ...cur.messages].slice(0, 20);
+    await persist(userId, { expedition: { ...exp, reported: true }, messages });
+    return msg;
+  }
+  // Au retour en ville : crédite le butin (or/poussière/objet/clé) et libère le héros.
+  async function expeCollect(userId: string, now: number) {
+    const cur = row.value;
+    const exp = cur?.expedition;
+    if (!cur || !exp || now < exp.returnAt) return null;
+    const o = exp.outcome;
+    const inventory = o.item ? [...cur.inventory, { ...o.item, id: crypto.randomUUID() }] : cur.inventory;
+    // Si le rapport n'a jamais été déposé (app fermée tout du long), on le dépose aussi.
+    const messages = exp.reported
+      ? cur.messages
+      : [buildMessage({ ...exp, reported: true }), ...cur.messages].slice(0, 20);
+    await persist(userId, {
+      gold: cur.gold + o.gold,
+      dust: cur.dust + o.dust,
+      keys: cur.keys + o.key,
+      inventory,
+      messages,
+      expedition: null,
+    });
+    return o;
+  }
+  async function expeMarkRead(userId: string) {
+    const cur = row.value;
+    if (!cur || !cur.messages.some((m) => !m.read)) return;
+    await persist(userId, { messages: cur.messages.map((m) => ({ ...m, read: true })) });
+  }
+
   return {
     row,
     loaded,
     fetchMine,
     setPseudo,
+    expeSyncMap,
+    expeSend,
+    expeTick,
+    expeCollect,
+    expeMarkRead,
     applyRun,
     applyBossWin,
     chooseReward,

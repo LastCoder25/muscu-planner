@@ -49,6 +49,42 @@ export interface ActiveExpedition {
   goldCost: number;
   seed: number;
   outcome: ExpeditionOutcome; // calculé au DÉPART, révélé/crédité aux timestamps
+  reported?: boolean; // le rapport a-t-il déjà été déposé dans la boîte (à midAt) ?
+}
+
+// Rapport déposé dans la boîte à messages 📬 à l'arrivée à l'objectif.
+export interface ExpeditionMessage {
+  id: string;
+  poiType: PoiType;
+  setId?: string;
+  level: number;
+  win: boolean;
+  text: string;
+  gold: number;
+  dust: number;
+  itemName?: string;
+  key: number;
+  resolvedAt: number; // ms epoch (midAt)
+  read: boolean;
+}
+
+/** Construit le message de rapport d'une expédition (déposé à l'arrivée à l'objectif). */
+export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
+  const o = exp.outcome;
+  return {
+    id: `msg_${exp.poi.id}_${exp.sentAt}`,
+    poiType: exp.poi.type,
+    ...(exp.poi.setId ? { setId: exp.poi.setId } : {}),
+    level: exp.poi.level,
+    win: o.win,
+    text: o.text,
+    gold: o.gold,
+    dust: o.dust,
+    ...(o.item ? { itemName: o.item.name } : {}),
+    key: o.key,
+    resolvedAt: exp.midAt,
+    read: false,
+  };
 }
 
 // ── Constantes (tunables ; éco chiffrée affinée par simulation en phase 6) ──
