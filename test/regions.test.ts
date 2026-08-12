@@ -66,6 +66,9 @@ describe('regions — biomes de l’Aventure', () => {
     expect(g.nodes[2]!.x).toBe(26); // alternance
     expect(g.pathD.startsWith('M 26 46')).toBe(true);
     expect(g.pathD).toContain('C'); // au moins une courbe
+    // Un segment par PAIRE de nœuds (5 nœuds → 4 segments), chacun un chemin propre.
+    expect(g.segments).toHaveLength(4);
+    expect(g.segments[0]!.startsWith('M 26 46')).toBe(true);
   });
 
   it('mapFillFraction : 0 au départ, 1 à la fin, bornée', () => {

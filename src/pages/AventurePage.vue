@@ -599,13 +599,14 @@
         <!-- Carte-monde serpentine : un nœud par région, fil énergisé, cadenas. -->
         <div class="worldmap" :style="{ height: mapGeom.viewH + 'px' }">
           <svg class="wm-svg" :viewBox="`0 0 100 ${mapGeom.viewH}`" preserveAspectRatio="none">
-            <path :d="mapGeom.pathD" class="wm-wire" vector-effect="non-scaling-stroke" />
+            <!-- Un segment par paire de zones : BLEU si la zone d'arrivée est
+                 accessible (les deux zones ouvertes), NOIR vers une zone verrouillée. -->
             <path
-              :d="mapGeom.pathD"
-              class="wm-wire wm-energized"
-              pathLength="1"
-              stroke-dasharray="1"
-              :stroke-dashoffset="1 - mapFill"
+              v-for="(seg, i) in mapGeom.segments"
+              :key="i"
+              :d="seg"
+              class="wm-seg"
+              :class="{ open: segmentOpen(i) }"
               vector-effect="non-scaling-stroke"
             />
           </svg>
@@ -1531,7 +1532,6 @@ import {
   regionProgress,
   regionOfDungeon,
   regionMapGeometry,
-  mapFillFraction,
   type Region,
 } from '@/lib/regions';
 import { bestiary, setCollection, codexSummary } from '@/lib/codex';
@@ -1732,13 +1732,12 @@ const nxtRegion = computed(() => nextRegion(clearedIds.value));
 // ── Carte-monde serpentine des régions ──
 const mapGeom = regionMapGeometry(REGIONS.length);
 const currentRegionIndex = computed(() => REGIONS.findIndex((r) => r.id === curRegion.value.id));
-const mapFill = computed(() =>
-  mapFillFraction(
-    currentRegionIndex.value,
-    curRegionProg.value.total ? curRegionProg.value.done / curRegionProg.value.total : 0,
-    REGIONS.length,
-  ),
-);
+// Segment i (nœud i → i+1) « ouvert » (bleu) si la zone d'ARRIVÉE est accessible
+// (débloquée) ; sinon noir (mène vers une zone verrouillée).
+function segmentOpen(i: number): boolean {
+  const dest = REGIONS[i + 1];
+  return !!dest && regionState(dest) !== 'locked';
+}
 // État d'une région : 'done' (tous nettoyés) / 'current' (frontière) / 'locked'.
 function regionCleared(r: Region): boolean {
   const cleared = clearedSet.value;
@@ -5380,16 +5379,17 @@ onMounted(async () => {
   width: 100%;
   height: 100%;
 }
-.wm-wire {
+/* Segment entre deux zones : noir (vers une zone verrouillée) ou bleu (les deux
+   zones accessibles, trait plein de bout en bout). */
+.wm-seg {
   fill: none;
   stroke: var(--line);
   stroke-width: 5;
   stroke-linecap: round;
 }
-.wm-energized {
-  stroke: var(--accent);
-  filter: drop-shadow(0 0 4px var(--accent));
-  transition: stroke-dashoffset 0.6s ease;
+.wm-seg.open {
+  stroke: #4a9eff;
+  filter: drop-shadow(0 0 4px rgba(74, 158, 255, 0.55));
 }
 .wm-node {
   position: absolute;

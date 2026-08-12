@@ -107,23 +107,27 @@ const MAP_ROWH = 92;
 export interface MapGeometry {
   nodes: { x: number; y: number }[];
   viewH: number;
-  pathD: string; // chemin SVG reliant les nœuds
+  pathD: string; // chemin SVG reliant les nœuds (tout d'un trait)
+  segments: string[]; // chemin de CHAQUE paire (segment i = nœud i → nœud i+1)
 }
 
-/** Positions des nœuds + chemin serpentin, pour `count` régions. */
+/** Positions des nœuds + chemin serpentin (+ segments par paire), pour `count` régions. */
 export function regionMapGeometry(count = REGIONS.length): MapGeometry {
   const nodes = Array.from({ length: count }, (_, i) => ({
     x: i % 2 === 0 ? MAP_XL : MAP_XR,
     y: i * MAP_ROWH + MAP_ROWH / 2,
   }));
   let pathD = nodes.length ? `M ${nodes[0]!.x} ${nodes[0]!.y}` : '';
+  const segments: string[] = [];
   for (let i = 1; i < nodes.length; i++) {
     const p = nodes[i - 1]!;
     const n = nodes[i]!;
     // Bézier cubique en S vertical entre deux nœuds décalés.
-    pathD += ` C ${p.x} ${p.y + MAP_ROWH / 2}, ${n.x} ${n.y - MAP_ROWH / 2}, ${n.x} ${n.y}`;
+    const c = `C ${p.x} ${p.y + MAP_ROWH / 2}, ${n.x} ${n.y - MAP_ROWH / 2}, ${n.x} ${n.y}`;
+    pathD += ` ${c}`;
+    segments.push(`M ${p.x} ${p.y} ${c}`);
   }
-  return { nodes, viewH: count * MAP_ROWH, pathD };
+  return { nodes, viewH: count * MAP_ROWH, pathD, segments };
 }
 
 /** Fraction [0..1] du fil « énergisé » selon l'avancement (région courante + %). */
