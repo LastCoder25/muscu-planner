@@ -34,9 +34,9 @@
     </g>
     <!-- Familier (compagnon) : halo teinté + emoji de la race, flotte près du héros -->
     <g v-if="companion" class="familiar">
-      <ellipse class="fam-shadow" cx="97" cy="127" rx="13" ry="3.4" />
-      <circle class="fam-glow" cx="97" cy="108" r="17" :style="{ fill: companion.tint }" />
-      <text class="fam-emoji" x="97" y="117" text-anchor="middle">{{ companion.emoji }}</text>
+      <ellipse class="fam-shadow" cx="95" cy="131" rx="16" ry="4" />
+      <circle class="fam-glow" cx="95" cy="109" r="21" :style="{ fill: companion.tint }" />
+      <text class="fam-emoji" x="95" y="120" text-anchor="middle">{{ companion.emoji }}</text>
     </g>
     <!-- Pips d'équipement (4 slots) -->
     <g class="slots">
@@ -221,7 +221,7 @@ const label = computed(
 }
 /* Familier (compagnon) : halo tamisé + emoji, flotte doucement. */
 .familiar {
-  transform-origin: 97px 108px;
+  transform-origin: 95px 109px;
   animation: fam-bob 2.8s ease-in-out infinite;
 }
 .fam-glow {
@@ -233,7 +233,7 @@ const label = computed(
   opacity: 0.18;
 }
 .fam-emoji {
-  font-size: 26px;
+  font-size: 34px;
 }
 @keyframes fam-bob {
   0%,
