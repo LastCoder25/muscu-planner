@@ -10,6 +10,7 @@ import {
   heroPosition,
   resolveOutcome,
   startExpedition,
+  expeditionTerrain,
   type ActiveExpedition,
   type Poi,
 } from '@/lib/expedition';
@@ -67,6 +68,19 @@ describe('expedition — carte / monde', () => {
     const adv = advanceWorld(m, m.nextSpawnAt + 1, 10);
     expect(adv.pois.length).toBe(before + 1);
     expect(adv.nextSpawnAt).toBeGreaterThan(m.nextSpawnAt);
+  });
+});
+
+describe('expedition — terrain (fond de carte)', () => {
+  it('déterministe + biomes/glyphes non vides', () => {
+    const t1 = expeditionTerrain(42);
+    const t2 = expeditionTerrain(42);
+    expect(t1).toEqual(t2); // même seed → même terrain
+    expect(t1.biomes.length).toBeGreaterThan(0);
+    expect(t1.glyphs.length).toBeGreaterThan(0);
+    expect(t1.biomes[0]!.path.startsWith('M ')).toBe(true);
+    // Seeds différents → terrains différents.
+    expect(expeditionTerrain(1)).not.toEqual(expeditionTerrain(2));
   });
 });
 

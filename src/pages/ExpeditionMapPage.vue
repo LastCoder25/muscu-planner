@@ -16,6 +16,22 @@
     <div class="map-outer">
       <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
       <svg viewBox="0 0 100 100" class="map" :style="{ width: mapPx + 'px', height: mapPx + 'px' }">
+        <!-- Terrain (biomes + décor) — fond de carte -->
+        <path
+          v-for="(b, i) in terrain.biomes"
+          :key="'bio' + i"
+          :d="b.path"
+          class="biome"
+          :class="'b-' + b.type"
+        />
+        <text
+          v-for="(g, i) in terrain.glyphs"
+          :key="'gly' + i"
+          :x="g.x"
+          :y="g.y + 1.6"
+          class="terr-glyph"
+        >{{ g.emoji }}</text>
+
         <!-- Lignes arcaniques (leylines) rayonnant de la ville -->
         <line
           v-for="l in LEYS"
@@ -182,6 +198,7 @@ import {
   poiCombatant,
   goldCost,
   travelOneWayMin,
+  expeditionTerrain,
   type Poi,
   type PoiType,
   type ExpeditionOutcome,
@@ -230,6 +247,10 @@ const fighter = computed<Combatant>(() =>
 
 const active = computed(() => char.row?.expedition ?? null);
 const pois = computed<Poi[]>(() => char.row?.expedition_map?.pois ?? []);
+// Fond de carte (terrain) déterministe pour le seed de la carte.
+const terrain = computed(() =>
+  char.row?.expedition_map ? expeditionTerrain(char.row.expedition_map.seed) : { biomes: [], glyphs: [] },
+);
 const hero = computed(() => (active.value ? heroPosition(active.value, now.value) : null));
 
 // ── Carte pannable/zoomable (plus grande que l'écran) ──
@@ -540,6 +561,35 @@ function fmtMin(min: number): string {
   place-items: center;
 }
 /* Décor de carte */
+/* Terrain (biomes + décor) */
+.biome {
+  stroke: none;
+  mix-blend-mode: normal;
+}
+.b-forest {
+  fill: rgba(58, 108, 68, 0.4);
+}
+.b-mountains {
+  fill: rgba(92, 92, 104, 0.42);
+}
+.b-desert {
+  fill: rgba(150, 122, 62, 0.32);
+}
+.b-water {
+  fill: rgba(48, 92, 142, 0.42);
+}
+.b-plains {
+  fill: rgba(112, 112, 60, 0.28);
+}
+.b-swamp {
+  fill: rgba(58, 88, 60, 0.4);
+}
+.terr-glyph {
+  font-size: 3.6px;
+  text-anchor: middle;
+  opacity: 0.5;
+  pointer-events: none;
+}
 .ley {
   stroke: color-mix(in srgb, #4a9eff 35%, transparent);
   stroke-width: 0.3;

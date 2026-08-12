@@ -336,6 +336,85 @@ export function resolveOutcome(
   };
 }
 
+// ── Fond de carte : TERRAIN procédural déterministe (biomes + décor) ──
+export type BiomeType = 'forest' | 'desert' | 'mountains' | 'water' | 'plains' | 'swamp';
+export interface Biome {
+  type: BiomeType;
+  path: string; // blob SVG (coord 0..100)
+}
+export interface TerrainGlyph {
+  emoji: string;
+  x: number;
+  y: number;
+}
+export interface Terrain {
+  biomes: Biome[];
+  glyphs: TerrainGlyph[];
+}
+
+const BIOME_GLYPHS: Record<BiomeType, string[]> = {
+  forest: ['🌲', '🌳'],
+  desert: ['🌵', '🏜️'],
+  mountains: ['⛰️', '🏔️', '🪨'],
+  water: ['🌊'],
+  plains: ['🌾'],
+  swamp: ['🌿', '🍄'],
+};
+const BIOME_POOL: BiomeType[] = ['forest', 'mountains', 'desert', 'water', 'plains', 'swamp', 'forest', 'mountains'];
+
+// Blob organique fermé (lissé) autour de (cx,cy).
+function blobPath(rng: () => number, cx: number, cy: number, r: number, n = 9): string {
+  const pts: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const rr = r * (0.7 + rng() * 0.55);
+    pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
+  }
+  const mid = (i: number): [number, number] => {
+    const p = pts[i]!;
+    const q = pts[(i + 1) % n]!;
+    return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+  };
+  let d = `M ${mid(n - 1)[0].toFixed(1)} ${mid(n - 1)[1].toFixed(1)}`;
+  for (let i = 0; i < n; i++) {
+    const p = pts[i]!;
+    const m = mid(i);
+    d += ` Q ${p[0].toFixed(1)} ${p[1].toFixed(1)} ${m[0].toFixed(1)} ${m[1].toFixed(1)}`;
+  }
+  return d + ' Z';
+}
+
+/** Terrain de la carte (déterministe pour un `seed`) : biomes + décor. */
+export function expeditionTerrain(seed: number): Terrain {
+  const rng = mulberry32((seed >>> 0) || 1);
+  const biomes: Biome[] = [];
+  const glyphs: TerrainGlyph[] = [];
+  // ~6 biomes sur une grille 3×2 jitterée couvrant toute la carte.
+  const cols = 3;
+  const rows = 2;
+  for (let gy = 0; gy < rows; gy++)
+    for (let gx = 0; gx < cols; gx++) {
+      const cx = ((gx + 0.5) / cols) * 100 + (rng() - 0.5) * 18;
+      const cy = ((gy + 0.5) / rows) * 100 + (rng() - 0.5) * 18;
+      const type = BIOME_POOL[Math.floor(rng() * BIOME_POOL.length)]!;
+      const r = 20 + rng() * 12;
+      biomes.push({ type, path: blobPath(rng, cx, cy, r) });
+      // Quelques glyphes de décor dans le biome.
+      const gl = BIOME_GLYPHS[type];
+      const nG = 2 + Math.floor(rng() * 2);
+      for (let k = 0; k < nG; k++) {
+        const a = rng() * Math.PI * 2;
+        const rr = rng() * r * 0.55;
+        glyphs.push({
+          emoji: gl[Math.floor(rng() * gl.length)]!,
+          x: Math.round(cx + Math.cos(a) * rr),
+          y: Math.round(cy + Math.sin(a) * rr),
+        });
+      }
+    }
+  return { biomes, glyphs };
+}
+
 /** Construit une expédition (au moment de l'envoi). `now` = ms epoch. */
 export function startExpedition(
   hero: Combatant,
