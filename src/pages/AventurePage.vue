@@ -1055,6 +1055,14 @@
                   >
                     +
                   </button>
+                  <button
+                    class="si-max"
+                    :disabled="qtyFor(it) >= maxBuy(it)"
+                    aria-label="Quantité max"
+                    @click="setMaxQty(it)"
+                  >
+                    max
+                  </button>
                 </div>
                 <button class="si-buy" :disabled="char.row.gold < it.cost" @click="buy(it)">
                   🪙 {{ it.cost * qtyFor(it) }}
@@ -2011,13 +2019,16 @@ function maxBuy(item: (typeof SHOP_ITEMS)[number]): number {
 }
 function qtyFor(item: (typeof SHOP_ITEMS)[number]): number {
   const chosen = shopQty.value[item.id];
-  return Math.min(chosen ?? maxBuy(item), maxBuy(item));
+  return Math.min(chosen ?? 1, maxBuy(item)); // défaut = 1 (bouton « max » pour tout)
 }
 function bumpQty(item: (typeof SHOP_ITEMS)[number], delta: number) {
   shopQty.value = {
     ...shopQty.value,
     [item.id]: Math.min(maxBuy(item), Math.max(1, qtyFor(item) + delta)),
   };
+}
+function setMaxQty(item: (typeof SHOP_ITEMS)[number]) {
+  shopQty.value = { ...shopQty.value, [item.id]: maxBuy(item) };
 }
 async function buy(item: (typeof SHOP_ITEMS)[number]) {
   const uid = auth.user?.id;
@@ -3049,6 +3060,23 @@ onMounted(async () => {
   cursor: pointer;
 }
 .si-step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.si-max {
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.si-max:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
