@@ -62,12 +62,25 @@ describe('expedition — carte / monde', () => {
     // Les non-protégés périmés sont retirés.
     for (const p of adv.pois) if (p.id !== target) expect(p.expiresAt).toBeGreaterThan(later);
   });
-  it('advanceWorld : spawn quand l’heure est venue (sous le cap)', () => {
+  it('createMap : démarre au PLANCHER par défaut (~une dizaine d’activités)', () => {
+    const m = createMap(9, 0, 10);
+    expect(m.pois.length).toBe(EXPE.poiFloor);
+    expect(m.pois.length).toBeLessThanOrEqual(EXPE.poiCap);
+  });
+  it('advanceWorld : maintient le PLANCHER + avance l’horloge de spawn', () => {
+    // Carte volontairement sous le plancher (1 POI) → advanceWorld doit la recompléter.
     const m = createMap(9, 0, 10, 1);
-    const before = m.pois.length;
     const adv = advanceWorld(m, m.nextSpawnAt + 1, 10);
-    expect(adv.pois.length).toBe(before + 1);
+    expect(adv.pois.length).toBeGreaterThanOrEqual(EXPE.poiFloor);
+    expect(adv.pois.length).toBeLessThanOrEqual(EXPE.poiCap);
     expect(adv.nextSpawnAt).toBeGreaterThan(m.nextSpawnAt);
+  });
+  it('advanceWorld : rattrape les spawns manqués après une longue absence (jusqu’au cap)', () => {
+    const m = createMap(3, 0, 10, 1);
+    // Très loin dans le futur → beaucoup d’intervalles écoulés, mais jamais > cap.
+    const adv = advanceWorld(m, 500 * H, 10);
+    expect(adv.pois.length).toBeLessThanOrEqual(EXPE.poiCap);
+    expect(adv.pois.length).toBeGreaterThanOrEqual(EXPE.poiFloor);
   });
 });
 

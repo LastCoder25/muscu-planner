@@ -396,7 +396,7 @@ onMounted(async () => {
   if (uid) await char.expeSyncMap(uid, Date.now(), heroLevel.value).catch(() => undefined);
   await nextTick();
   measure();
-  mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, Math.round(contW.value * 1.7))); // départ : un peu dézoomé
+  mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, Math.round(contW.value * 1.3))); // départ dézoomé (grande carte → on voit ~toutes les activités)
   await nextTick();
   centerTown();
   window.addEventListener('resize', measure);

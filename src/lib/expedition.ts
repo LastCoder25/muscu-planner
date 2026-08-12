@@ -89,12 +89,13 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
 
 // ── Constantes (tunables ; éco chiffrée affinée par simulation en phase 6) ──
 export const EXPE = {
-  mapSize: 140, // côté de la carte (coord 0..mapSize) — grande, on pan/zoom dessus
-  town: { x: 70, y: 70 }, // ville de départ (CENTRE de la carte)
-  poiCap: 6,
-  minDistPoi: 24, // écart mini entre POI (placement espacé)
-  distMin: 24, // distance mini ville↔POI (coord ; la ville est au centre)
-  distMax: 58, // distance maxi (rayon → POI tout autour, 360°)
+  mapSize: 200, // côté de la carte (coord 0..mapSize) — GRANDE, on pan/zoom dessus
+  town: { x: 100, y: 100 }, // ville de départ (CENTRE de la carte)
+  poiCap: 12,
+  poiFloor: 10, // PLANCHER : ~une dizaine d'activités en permanence (jamais vide)
+  minDistPoi: 20, // écart mini entre POI (placement espacé)
+  distMin: 30, // distance mini ville↔POI (coord ; la ville est au centre)
+  distMax: 88, // distance maxi (rayon → POI tout autour, 360°)
   spawnMinMs: 2 * 3600_000, // intervalle de spawn : 2 h..4 h (jitter)
   spawnJitterMs: 2 * 3600_000,
   lifespanMs: { mine: 24 * 3600_000, camp: 12 * 3600_000, lair: 30 * 3600_000 },
@@ -172,8 +173,9 @@ function placePoi(rng: () => number): { x: number; y: number; distNorm: number }
   return { x: town.x + distMin, y: town.y, distNorm: 0 };
 }
 
-/** Crée une carte neuve avec `seedPois` POI d'entrée (à la 1re visite). */
-export function createMap(seed: number, now: number, playerLevel: number, seedPois = 3): ExpeditionMap {
+/** Crée une carte neuve avec `seedPois` POI d'entrée (à la 1re visite). Par défaut,
+ *  on démarre AU PLANCHER (`poiFloor`) → la carte n'est jamais quasi-vide au début. */
+export function createMap(seed: number, now: number, playerLevel: number, seedPois = EXPE.poiFloor): ExpeditionMap {
   const map: ExpeditionMap = { seed: seed >>> 0 || 1, spawnCount: 0, pois: [], nextSpawnAt: now };
   for (let i = 0; i < seedPois; i++) spawnOne(map, now, playerLevel);
   map.nextSpawnAt = now + EXPE.spawnMinMs;
@@ -224,11 +226,20 @@ export function advanceWorld(
     nextSpawnAt: map.nextSpawnAt,
     pois: map.pois.filter((p) => p.id === protectedPoiId || p.expiresAt > now),
   };
-  if (now >= next.nextSpawnAt) {
-    if (next.pois.length < EXPE.poiCap) spawnOne(next, now, playerLevel);
+  // Rattrapage : après une longue absence, l'heure de spawn a pu être dépassée
+  // PLUSIEURS fois → on fait apparaître autant de POI que d'intervalles écoulés
+  // (jusqu'au cap), sinon la carte restait à 1 spawn/ouverture et se vidait.
+  let guard = 0;
+  while (now >= next.nextSpawnAt && next.pois.length < EXPE.poiCap && guard++ < EXPE.poiCap) {
+    spawnOne(next, now, playerLevel);
     const rng = mulberry32((next.seed + next.spawnCount * 40503) >>> 0);
-    next.nextSpawnAt = now + EXPE.spawnMinMs + Math.floor(rng() * EXPE.spawnJitterMs);
+    next.nextSpawnAt = next.nextSpawnAt + EXPE.spawnMinMs + Math.floor(rng() * EXPE.spawnJitterMs);
   }
+  // PLANCHER : la carte ne descend jamais sous `poiFloor` activités → on complète
+  // immédiatement (les activités de base sont toujours dispo ; la rareté/churn ne
+  // joue qu'entre le plancher et le cap).
+  while (next.pois.length < EXPE.poiFloor) spawnOne(next, now, playerLevel);
+  if (next.nextSpawnAt <= now) next.nextSpawnAt = now + EXPE.spawnMinMs;
   return next;
 }
 
@@ -425,18 +436,20 @@ export function expeditionTerrain(seed: number): Terrain {
     const d = kind === 'mountain' ? peakPath(x, y, s) : kind === 'tree' ? treePath(x, y, s) : dunePath(x, y, s);
     features.push({ kind, d, x, y });
   };
-  // 5-7 amas de relief (chaîne / forêt / désert) répartis dans le continent.
-  const clusters = 5 + Math.floor(rng() * 3);
+  // Amas de relief (chaîne / forêt / désert) répartis dans le continent — nombre
+  // et étalement mis à l'échelle de la carte (plus grande = plus de reliefs, étalés).
+  const clusters = 8 + Math.floor(rng() * 4);
+  const spread = EXPE.mapSize * 0.3; // rayon d'étalement des amas (reste dans la côte)
   const centers: [number, number][] = [];
   for (let c = 0; c < clusters; c++) {
     let cx = C;
     let cy = C;
     for (let tries = 0; tries < 24; tries++) {
       const a = rng() * Math.PI * 2;
-      const rr = 14 + rng() * 40;
+      const rr = EXPE.mapSize * 0.1 + rng() * spread;
       cx = C + Math.cos(a) * rr;
       cy = C + Math.sin(a) * rr;
-      if (centers.every(([px, py]) => Math.hypot(px - cx, py - cy) > 22)) break;
+      if (centers.every(([px, py]) => Math.hypot(px - cx, py - cy) > 24)) break;
     }
     centers.push([cx, cy]);
     const kind: MotifKind = (['mountain', 'tree', 'dune', 'mountain', 'tree'] as const)[Math.floor(rng() * 5)]!;

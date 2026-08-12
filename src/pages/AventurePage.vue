@@ -183,8 +183,8 @@
                 transform="rotate(-90 18 18)"
                 :stroke-dasharray="`${s.share} 100`"
               />
-              <text class="rc-emo" x="18" y="14.5" text-anchor="middle">{{ s.emo }}</text>
-              <text class="rc-n font-display" x="18" y="25" text-anchor="middle">{{ s.value }}</text>
+              <text class="rc-emo" x="18" y="13" text-anchor="middle">{{ s.emo }}</text>
+              <text class="rc-n font-display" x="18" y="26.5" text-anchor="middle">{{ s.value }}</text>
             </svg>
             <div class="statc-nm font-display">{{ s.name }}</div>
             <div class="statc-inf">{{ s.inf }}</div>
@@ -3410,8 +3410,8 @@ onUnmounted(() => {
   text-align: center;
 }
 .statc .ring {
-  width: 68px;
-  height: 68px;
+  width: 78px;
+  height: 78px;
   display: block;
   margin: 0 auto 4px;
 }
@@ -3428,10 +3428,10 @@ onUnmounted(() => {
   transition: stroke-dasharray 0.5s ease;
 }
 .ring .rc-emo {
-  font-size: 9px;
+  font-size: 7.5px;
 }
 .ring .rc-n {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 .statc-nm {
