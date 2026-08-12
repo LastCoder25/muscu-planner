@@ -70,8 +70,11 @@ body {
 
 // ── Z Fold DÉPLIÉ (et grand écran) : le COCKPIT deux volets prend TOUTE la largeur ──
 // L'accueil déplié (HomeCockpit) échappe au plafond mobile 560 px pour afficher
-// SPORT | AVENTURE côte à côte. `:has()` est supporté par le Chromium du Fold.
-@media (min-width: 820px) {
+// SPORT | AVENTURE côte à côte. On exige largeur ET hauteur ≥ 600 (= écran quasi
+// carré : Z Fold déplié dans LES DEUX orientations, tablette, desktop) — pas un
+// téléphone en paysage (hauteur < 600). Doit matcher le seuil JS de HomeCockpit.
+// `:has()` est supporté par le Chromium du Fold.
+@media (min-width: 600px) and (min-height: 600px) {
   .q-page-container:has(.home-cockpit) {
     max-width: none;
     margin: 0;

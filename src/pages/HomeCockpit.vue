@@ -18,13 +18,16 @@ import { ref, onMounted, onBeforeUnmount } from 'vue';
 import HomePage from '@/pages/HomePage.vue';
 import AventurePage from '@/pages/AventurePage.vue';
 
-// Seuil « déplié » : ~820 px capte l'écran principal du Z Fold (~830 px, quasi
-// carré) et au-delà (tablette/desktop). En dessous : colonne unique (téléphone,
-// Z Fold plié ~344 px).
-const WIDE_MIN = 820;
+// Le cockpit 2 volets s'active sur un GRAND écran quasi-carré : Z Fold déplié dans
+// LES DEUX orientations (portrait ~714 ET paysage ~830), tablette, desktop.
+// Détection par la PLUS PETITE dimension (largeur ET hauteur ≥ seuil) : un écran
+// carré/large déclenche ; un TÉLÉPHONE non — même en paysage son côté court
+// (≤ ~450) reste sous le seuil. (Avant : largeur seule ≥ 820 → ne marchait qu'en
+// paysage sur le Fold.)
+const WIDE_MIN = 600;
 const cockpit = ref(false);
 function check() {
-  cockpit.value = window.innerWidth >= WIDE_MIN;
+  cockpit.value = window.innerWidth >= WIDE_MIN && window.innerHeight >= WIDE_MIN;
 }
 onMounted(() => {
   check();
