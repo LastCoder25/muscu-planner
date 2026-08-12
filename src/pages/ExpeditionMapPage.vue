@@ -13,8 +13,9 @@
     </div>
 
     <!-- Carte -->
-    <div class="map-wrap">
-      <svg viewBox="0 0 100 100" class="map" preserveAspectRatio="xMidYMid meet">
+    <div class="map-outer">
+      <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
+      <svg viewBox="0 0 100 100" class="map" :style="{ width: mapPx + 'px', height: mapPx + 'px' }">
         <!-- Lignes arcaniques (leylines) rayonnant de la ville -->
         <line
           v-for="l in LEYS"
@@ -78,6 +79,27 @@
           <text :x="TOWN.x" :y="TOWN.y + 1.9" class="town-emo">🏰</text>
         </g>
       </svg>
+      </div>
+
+      <!-- Indicateurs de bord : flèche vers les activités hors écran -->
+      <button
+        v-for="e in edgeIndicators"
+        :key="'edge' + e.id"
+        class="edge-ind"
+        :class="e.diff"
+        :style="{ left: e.x + 'px', top: e.y + 'px' }"
+        @click="panToPoi(e.poi)"
+      >
+        <span class="ei-arrow" :style="{ transform: `rotate(${e.deg}deg)` }">➤</span>
+        <span class="ei-emo">{{ POI_EMO[e.poi.type] }}</span>
+      </button>
+
+      <!-- Zoom -->
+      <div class="zoom-ctl">
+        <button class="zoom-b" aria-label="Dézoomer" @click="zoom(-1)">−</button>
+        <button class="zoom-b" aria-label="Recentrer" @click="centerTown">⌂</button>
+        <button class="zoom-b" aria-label="Zoomer" @click="zoom(1)">+</button>
+      </div>
     </div>
 
     <!-- Bandeau expédition en cours -->
@@ -144,7 +166,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -209,6 +231,75 @@ const fighter = computed<Combatant>(() =>
 const active = computed(() => char.row?.expedition ?? null);
 const pois = computed<Poi[]>(() => char.row?.expedition_map?.pois ?? []);
 const hero = computed(() => (active.value ? heroPosition(active.value, now.value) : null));
+
+// ── Carte pannable/zoomable (plus grande que l'écran) ──
+const scrollEl = ref<HTMLElement | null>(null);
+const mapPx = ref(700); // taille de rendu du SVG (px) → zoom
+const scrollX = ref(0);
+const scrollY = ref(0);
+const contW = ref(1);
+const contH = ref(1);
+const MIN_PX = 340;
+const MAX_PX = 1700;
+function measure() {
+  const el = scrollEl.value;
+  if (!el) return;
+  contW.value = el.clientWidth;
+  contH.value = el.clientHeight;
+}
+function onScroll() {
+  const el = scrollEl.value;
+  if (!el) return;
+  scrollX.value = el.scrollLeft;
+  scrollY.value = el.scrollTop;
+}
+function centerOn(svgX: number, svgY: number) {
+  const el = scrollEl.value;
+  if (!el) return;
+  el.scrollLeft = (svgX / 100) * mapPx.value - el.clientWidth / 2;
+  el.scrollTop = (svgY / 100) * mapPx.value - el.clientHeight / 2;
+  onScroll();
+}
+function centerTown() {
+  centerOn(TOWN.x, TOWN.y);
+}
+function panToPoi(p: Poi) {
+  centerOn(p.x, p.y);
+}
+function zoom(dir: number) {
+  const el = scrollEl.value;
+  // Fraction du centre du viewport (0..1) → on la conserve après le zoom.
+  const cx = ((el?.scrollLeft ?? 0) + contW.value / 2) / mapPx.value;
+  const cy = ((el?.scrollTop ?? 0) + contH.value / 2) / mapPx.value;
+  mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, mapPx.value + dir * 200));
+  void nextTick(() => centerOn(cx * 100, cy * 100));
+}
+// Activités hors écran → flèche au bord pointant vers elles (clic = slide dessus).
+const edgeIndicators = computed(() => {
+  if (!scrollEl.value) return [] as { id: string; poi: Poi; x: number; y: number; deg: number; diff: string }[];
+  const cw = contW.value;
+  const ch = contH.value;
+  const m = 22;
+  const src = [...pois.value, ...(active.value ? [active.value.poi] : [])];
+  const out: { id: string; poi: Poi; x: number; y: number; deg: number; diff: string }[] = [];
+  for (const p of src) {
+    const px = (p.x / 100) * mapPx.value - scrollX.value;
+    const py = (p.y / 100) * mapPx.value - scrollY.value;
+    if (px >= 0 && px <= cw && py >= 0 && py <= ch) continue; // visible
+    const dx = px - cw / 2;
+    const dy = py - ch / 2;
+    const scale = Math.min((cw / 2 - m) / (Math.abs(dx) || 1e-6), (ch / 2 - m) / (Math.abs(dy) || 1e-6));
+    out.push({
+      id: p.id,
+      poi: p,
+      x: cw / 2 + dx * scale,
+      y: ch / 2 + dy * scale,
+      deg: (Math.atan2(dy, dx) * 180) / Math.PI,
+      diff: diffClass(p),
+    });
+  }
+  return out;
+});
 
 const selected = ref<Poi | null>(null);
 const collectOpen = ref(false);
@@ -300,6 +391,12 @@ onMounted(async () => {
   const uid = auth.user?.id;
   if (uid && !char.row) await char.fetchMine().catch(() => undefined);
   if (uid) await char.expeSyncMap(uid, Date.now(), heroLevel.value).catch(() => undefined);
+  await nextTick();
+  measure();
+  mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, Math.round(contW.value * 1.7))); // départ : un peu dézoomé
+  await nextTick();
+  centerTown();
+  window.addEventListener('resize', measure);
   timer = setInterval(() => {
     now.value = Date.now();
     void lifecycle();
@@ -307,6 +404,7 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   if (timer) clearInterval(timer);
+  window.removeEventListener('resize', measure);
 });
 
 // ── Formatage durées ──
@@ -366,15 +464,80 @@ function fmtMin(min: number): string {
   border-color: var(--accent);
   color: var(--accent);
 }
-.map-wrap {
-  padding: 0 8px;
-}
-.map {
-  width: 100%;
-  aspect-ratio: 1;
-  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--bg) 72%);
+.map-outer {
+  position: relative;
+  margin: 0 8px;
   border: 1px solid var(--line);
   border-radius: 16px;
+  overflow: hidden;
+}
+.map-scroll {
+  height: 62vh;
+  overflow: auto;
+  touch-action: pan-x pan-y;
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--bg) 72%);
+  scrollbar-width: none;
+}
+.map-scroll::-webkit-scrollbar {
+  display: none;
+}
+.map {
+  display: block;
+}
+/* Indicateurs de bord (activités hors écran) */
+.edge-ind {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  z-index: 3;
+  font-size: 12px;
+}
+.edge-ind.easy {
+  border-color: #7bc86c;
+}
+.edge-ind.mid {
+  border-color: #ffb23f;
+}
+.edge-ind.hard {
+  border-color: #ff6a45;
+}
+.ei-arrow {
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1;
+}
+.ei-emo {
+  font-size: 13px;
+}
+/* Contrôles de zoom */
+.zoom-ctl {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 3;
+}
+.zoom-b {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
 }
 /* Décor de carte */
 .ley {
