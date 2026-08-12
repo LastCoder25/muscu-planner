@@ -98,8 +98,11 @@
           <text v-else-if="!pl.building" :x="pl.x" :y="pl.y + 1.6" class="plot-emo plot-plus">＋</text>
           <template v-else>
             <text :x="pl.x" :y="pl.y + 1.4" class="plot-emo">{{ filonEmoji(pl.building) }}</text>
-            <text :x="pl.x + 3.2" :y="pl.y - 2.6" class="plot-lvl font-display">{{ pl.building.level }}</text>
-            <circle v-if="pl.ready" :cx="pl.x + 3.2" :cy="pl.y + 3" r="1.4" class="plot-ready" />
+            <!-- Pastille de NIVEAU (lisible) en haut à droite du bâtiment -->
+            <circle :cx="pl.x + 3.4" :cy="pl.y - 3.4" r="2.3" class="plot-lvl-bg" />
+            <text :x="pl.x + 3.4" :y="pl.y - 2.5" class="plot-lvl font-display">{{ pl.building.level }}</text>
+            <!-- Pastille « prêt à récolter » en bas à droite -->
+            <circle v-if="pl.ready" :cx="pl.x + 3.4" :cy="pl.y + 3.4" r="1.5" class="plot-ready" />
           </template>
         </g>
 
@@ -988,9 +991,14 @@ function fmtMin(min: number): string {
   fill: var(--accent);
   font-size: 5px;
 }
+.plot-lvl-bg {
+  fill: var(--accent);
+  stroke: var(--bg);
+  stroke-width: 0.5;
+}
 .plot-lvl {
   font-size: 3px;
-  fill: var(--text);
+  fill: var(--accent-ink, #15120e);
   text-anchor: middle;
   font-weight: 700;
 }
