@@ -89,18 +89,23 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
 
 // ── Constantes (tunables ; éco chiffrée affinée par simulation en phase 6) ──
 export const EXPE = {
-  town: { x: 50, y: 50 }, // ville de départ (CENTRE de la carte)
+  mapSize: 140, // côté de la carte (coord 0..mapSize) — grande, on pan/zoom dessus
+  town: { x: 70, y: 70 }, // ville de départ (CENTRE de la carte)
   poiCap: 6,
-  minDistPoi: 17, // écart mini entre POI (placement espacé)
-  distMin: 16, // distance mini ville↔POI (coord ; la ville est au centre)
-  distMax: 40, // distance maxi (rayon → POI tout autour, 360°)
+  minDistPoi: 24, // écart mini entre POI (placement espacé)
+  distMin: 24, // distance mini ville↔POI (coord ; la ville est au centre)
+  distMax: 58, // distance maxi (rayon → POI tout autour, 360°)
   spawnMinMs: 2 * 3600_000, // intervalle de spawn : 2 h..4 h (jitter)
   spawnJitterMs: 2 * 3600_000,
   lifespanMs: { mine: 24 * 3600_000, camp: 12 * 3600_000, lair: 30 * 3600_000 },
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
-  goldCostBase: { mine: 40, camp: 120, lair: 500 },
-  failRefund: 0.35, // échec : fraction de l'or remboursée (< coût → jamais un profit)
+  // Coût = base × niveau^1.6 → VRAI puits d'or (2026‑08‑12). Repère : un donjon
+  // rapporte ~1600 or à reco10, ~4920 à reco20 ; un repaire coûte ~6k (niv10) → ~20k
+  // (niv20) = plusieurs runs de donjon pour une pièce de set (l'or s'écoule).
+  goldCostBase: { mine: 22, camp: 65, lair: 155 },
+  goldCostExp: 1.6,
+  failRefund: 0.3, // échec : fraction de l'or remboursée (< coût → jamais un profit)
 } as const;
 
 /** Fenêtre de niveaux de spawn autour du joueur : [niveau−5, niveau+3] (min 1). */
@@ -108,9 +113,9 @@ export function spawnWindow(playerLevel: number): { min: number; max: number } {
   return { min: Math.max(1, playerLevel - 5), max: Math.max(1, playerLevel + 3) };
 }
 
-/** Coût en OR pour envoyer une expédition (∝ type × niveau). */
+/** Coût en OR pour envoyer une expédition = base × niveau^1.6 (vrai puits d'or). */
 export function goldCost(type: PoiType, level: number): number {
-  return Math.round(EXPE.goldCostBase[type] * (1 + Math.max(0, level) * 0.12));
+  return Math.round(EXPE.goldCostBase[type] * Math.pow(Math.max(1, level), EXPE.goldCostExp));
 }
 
 /** Trajet ALLER (minutes) selon distance + niveau. Round-trip = 2×. */
@@ -154,16 +159,16 @@ function pick<T>(rng: () => number, arr: readonly T[]): T {
 
 // Placement espacé (reject-sampling) d'un POI TOUT AUTOUR de la ville (360°).
 function placePoi(rng: () => number): { x: number; y: number; distNorm: number } {
-  const { town, distMin, distMax } = EXPE;
+  const { town, distMin, distMax, mapSize } = EXPE;
+  const pad = 10;
   for (let tries = 0; tries < 40; tries++) {
     const ang = rng() * Math.PI * 2; // angle libre → POI dans tous les sens
     const dd = distMin + rng() * (distMax - distMin);
     const x = Math.round(town.x + Math.cos(ang) * dd);
     const y = Math.round(town.y + Math.sin(ang) * dd);
-    if (x < 8 || x > 92 || y < 8 || y > 92) continue; // reste dans la carte
+    if (x < pad || x > mapSize - pad || y < pad || y > mapSize - pad) continue;
     return { x, y, distNorm: clamp01((dd - distMin) / (distMax - distMin)) };
   }
-  // Repli : à l'est de la ville.
   return { x: town.x + distMin, y: town.y, distNorm: 0 };
 }
 
@@ -347,6 +352,7 @@ export interface Motif {
 export interface Terrain {
   coast: string; // contour de la CÔTE (continent) — path fermé
   features: Motif[]; // reliefs dessinés (chaînes de montagnes, forêts, dunes)
+  rivers: string[]; // rivières serpentant depuis les reliefs
 }
 
 const f1 = (v: number) => v.toFixed(1);
@@ -388,63 +394,76 @@ function treePath(x: number, y: number, s: number): string {
 function dunePath(x: number, y: number, s: number): string {
   return `M ${f1(x - 4 * s)} ${f1(y)} Q ${f1(x)} ${f1(y - 2.2 * s)} ${f1(x + 4 * s)} ${f1(y)}`;
 }
+// Une rivière serpentant depuis (x,y) vers l'extérieur (path lissé).
+function riverPath(rng: () => number, x: number, y: number, dir: number, len: number): string {
+  let px = x;
+  let py = y;
+  let d = `M ${f1(px)} ${f1(py)}`;
+  const steps = 5 + Math.floor(len / 10);
+  let a = dir;
+  for (let i = 0; i < steps; i++) {
+    a += (rng() - 0.5) * 1.1; // serpente
+    const seg = len / steps;
+    const mx = px + Math.cos(a) * seg * 0.5;
+    const my = py + Math.sin(a) * seg * 0.5;
+    px += Math.cos(a) * seg;
+    py += Math.sin(a) * seg;
+    d += ` Q ${f1(mx)} ${f1(my)} ${f1(px)} ${f1(py)}`;
+  }
+  return d;
+}
 
-/** Terrain de la carte (déterministe pour un `seed`) : côte + reliefs à l'encre. */
+/** Terrain de la carte (déterministe pour un `seed`) : côte + reliefs + rivières (encre). */
 export function expeditionTerrain(seed: number): Terrain {
   const rng = mulberry32((seed >>> 0) || 1);
-  // Continent : grand contour irrégulier centré, couvrant l'essentiel de la carte.
-  const coast = blobPath(rng, 50, 50, 46, 16);
+  const C = EXPE.mapSize / 2; // centre de la carte
+  // Continent : grand contour irrégulier, très découpé (détaillé).
+  const coast = blobPath(rng, C, C, EXPE.mapSize * 0.44, 20);
   const features: Motif[] = [];
+  const rivers: string[] = [];
   const push = (kind: MotifKind, x: number, y: number, s: number) => {
     const d = kind === 'mountain' ? peakPath(x, y, s) : kind === 'tree' ? treePath(x, y, s) : dunePath(x, y, s);
     features.push({ kind, d, x, y });
   };
-  // 3-4 amas de relief (chaîne / forêt / désert) répartis dans le continent.
-  const clusters = 3 + Math.floor(rng() * 2);
+  // 5-7 amas de relief (chaîne / forêt / désert) répartis dans le continent.
+  const clusters = 5 + Math.floor(rng() * 3);
   const centers: [number, number][] = [];
   for (let c = 0; c < clusters; c++) {
-    let cx = 50;
-    let cy = 50;
-    for (let tries = 0; tries < 20; tries++) {
+    let cx = C;
+    let cy = C;
+    for (let tries = 0; tries < 24; tries++) {
       const a = rng() * Math.PI * 2;
-      const rr = 12 + rng() * 24;
-      cx = 50 + Math.cos(a) * rr;
-      cy = 50 + Math.sin(a) * rr;
-      if (centers.every(([px, py]) => Math.hypot(px - cx, py - cy) > 20)) break;
+      const rr = 14 + rng() * 40;
+      cx = C + Math.cos(a) * rr;
+      cy = C + Math.sin(a) * rr;
+      if (centers.every(([px, py]) => Math.hypot(px - cx, py - cy) > 22)) break;
     }
     centers.push([cx, cy]);
-    const kind: MotifKind = (['mountain', 'tree', 'dune'] as const)[Math.floor(rng() * 3)]!;
+    const kind: MotifKind = (['mountain', 'tree', 'dune', 'mountain', 'tree'] as const)[Math.floor(rng() * 5)]!;
     if (kind === 'mountain') {
-      // Chaîne : pics alignés le long d'une direction, taille dégressive.
       const dir = rng() * Math.PI;
-      const n = 4 + Math.floor(rng() * 4);
+      const n = 5 + Math.floor(rng() * 5);
       for (let i = 0; i < n; i++) {
-        const t = (i - (n - 1) / 2) * (3.2 + rng());
-        push(
-          'mountain',
-          cx + Math.cos(dir) * t + (rng() - 0.5) * 2,
-          cy + Math.sin(dir) * t + (rng() - 0.5) * 2,
-          0.9 + rng() * 0.7,
-        );
+        const t = (i - (n - 1) / 2) * (3.4 + rng());
+        push('mountain', cx + Math.cos(dir) * t + (rng() - 0.5) * 2.5, cy + Math.sin(dir) * t + (rng() - 0.5) * 2.5, 0.9 + rng() * 0.8);
       }
+      // Une rivière descend souvent de la montagne.
+      if (rng() < 0.7) rivers.push(riverPath(rng, cx, cy, rng() * Math.PI * 2, 30 + rng() * 30));
     } else if (kind === 'tree') {
-      // Forêt : bosquet dense.
-      const n = 8 + Math.floor(rng() * 6);
+      const n = 12 + Math.floor(rng() * 9);
       for (let i = 0; i < n; i++) {
         const a = rng() * Math.PI * 2;
-        const rr = rng() * 9;
-        push('tree', cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 0.8 + rng() * 0.5);
+        const rr = rng() * 12;
+        push('tree', cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 0.8 + rng() * 0.6);
       }
     } else {
-      // Désert : dunes éparses.
-      const n = 3 + Math.floor(rng() * 3);
-      for (let i = 0; i < n; i++)
-        push('dune', cx + (rng() - 0.5) * 12, cy + (rng() - 0.5) * 10, 0.9 + rng() * 0.6);
+      const n = 4 + Math.floor(rng() * 4);
+      for (let i = 0; i < n; i++) push('dune', cx + (rng() - 0.5) * 16, cy + (rng() - 0.5) * 12, 0.9 + rng() * 0.7);
     }
   }
-  // Ordre peintre : dessine du fond (haut) vers l'avant (bas).
+  // Ordre peintre : du fond (haut) vers l'avant (bas).
   features.sort((a, b) => a.y - b.y);
-  return { coast, features };
+  return { coast, features, rivers };
 }
 
 /** Construit une expédition (au moment de l'envoi). `now` = ms epoch. */

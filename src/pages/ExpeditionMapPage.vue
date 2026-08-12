@@ -15,11 +15,12 @@
     <!-- Carte -->
     <div class="map-outer">
       <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
-      <svg viewBox="0 0 100 100" class="map" :style="{ width: mapPx + 'px', height: mapPx + 'px' }">
-        <!-- Fond PARCHEMIN : mer + côte + reliefs dessinés à l'encre -->
-        <rect x="-10" y="-10" width="120" height="120" class="sea" />
+      <svg :viewBox="`0 0 ${MAP} ${MAP}`" class="map" :style="{ width: mapPx + 'px', height: mapPx + 'px' }">
+        <!-- Fond PARCHEMIN noir & blanc : mer + côte + rivières + reliefs à l'encre -->
+        <rect :x="-10" :y="-10" :width="MAP + 20" :height="MAP + 20" class="sea" />
         <path :d="terrain.coast" class="coast-line" />
         <path :d="terrain.coast" class="land" />
+        <path v-for="(rv, i) in terrain.rivers" :key="'rv' + i" :d="rv" class="river" />
         <path
           v-for="(feat, i) in terrain.features"
           :key="'ft' + i"
@@ -29,9 +30,9 @@
         />
 
         <!-- Cadre décoratif + boussole (visibles carte dézoomée) -->
-        <rect x="1.5" y="1.5" width="97" height="97" rx="2" class="map-frame" />
-        <rect x="3.5" y="3.5" width="93" height="93" rx="1" class="map-frame thin" />
-        <g class="compass">
+        <rect x="1.5" y="1.5" :width="MAP - 3" :height="MAP - 3" rx="2" class="map-frame" />
+        <rect x="3.5" y="3.5" :width="MAP - 7" :height="MAP - 7" rx="1" class="map-frame thin" />
+        <g class="compass" :transform="`translate(${MAP - 100} 0)`">
           <circle cx="90" cy="10" r="5.5" class="comp-bg" />
           <path d="M 90 5 L 91.4 10 L 90 8.7 L 88.6 10 Z" class="comp-needle" />
           <text x="90" y="4" class="comp-n">N</text>
@@ -197,6 +198,7 @@ const char = useCharacterStore();
 const progress = useProgress();
 
 const TOWN = EXPE.town;
+const MAP = EXPE.mapSize;
 const POI_EMO: Record<PoiType, string> = { mine: '⛏️', camp: '🏕️', lair: '👹' };
 const POI_LABEL: Record<PoiType, string> = { mine: 'Mine', camp: 'Camp', lair: 'Repaire' };
 
@@ -227,7 +229,9 @@ const active = computed(() => char.row?.expedition ?? null);
 const pois = computed<Poi[]>(() => char.row?.expedition_map?.pois ?? []);
 // Fond de carte (terrain) déterministe pour le seed de la carte.
 const terrain = computed(() =>
-  char.row?.expedition_map ? expeditionTerrain(char.row.expedition_map.seed) : { coast: '', features: [] },
+  char.row?.expedition_map
+    ? expeditionTerrain(char.row.expedition_map.seed)
+    : { coast: '', features: [], rivers: [] },
 );
 const hero = computed(() => (active.value ? heroPosition(active.value, now.value) : null));
 
@@ -255,8 +259,8 @@ function onScroll() {
 function centerOn(svgX: number, svgY: number) {
   const el = scrollEl.value;
   if (!el) return;
-  el.scrollLeft = (svgX / 100) * mapPx.value - el.clientWidth / 2;
-  el.scrollTop = (svgY / 100) * mapPx.value - el.clientHeight / 2;
+  el.scrollLeft = (svgX / MAP) * mapPx.value - el.clientWidth / 2;
+  el.scrollTop = (svgY / MAP) * mapPx.value - el.clientHeight / 2;
   onScroll();
 }
 function centerTown() {
@@ -271,7 +275,7 @@ function zoom(dir: number) {
   const cx = ((el?.scrollLeft ?? 0) + contW.value / 2) / mapPx.value;
   const cy = ((el?.scrollTop ?? 0) + contH.value / 2) / mapPx.value;
   mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, mapPx.value + dir * 200));
-  void nextTick(() => centerOn(cx * 100, cy * 100));
+  void nextTick(() => centerOn(cx * MAP, cy * MAP));
 }
 // Activités hors écran → flèche au bord pointant vers elles (clic = slide dessus).
 const edgeIndicators = computed(() => {
@@ -282,8 +286,8 @@ const edgeIndicators = computed(() => {
   const src = [...pois.value, ...(active.value ? [active.value.poi] : [])];
   const out: { id: string; poi: Poi; x: number; y: number; deg: number; diff: string }[] = [];
   for (const p of src) {
-    const px = (p.x / 100) * mapPx.value - scrollX.value;
-    const py = (p.y / 100) * mapPx.value - scrollY.value;
+    const px = (p.x / MAP) * mapPx.value - scrollX.value;
+    const py = (p.y / MAP) * mapPx.value - scrollY.value;
     if (px >= 0 && px <= cw && py >= 0 && py <= ch) continue; // visible
     const dx = px - cw / 2;
     const dy = py - ch / 2;
@@ -474,7 +478,7 @@ function fmtMin(min: number): string {
   height: 62vh;
   overflow: auto;
   touch-action: pan-x pan-y;
-  background: #b9c6c4;
+  background: #d7d0bd;
   scrollbar-width: none;
 }
 .map-scroll::-webkit-scrollbar {
@@ -541,60 +545,68 @@ function fmtMin(min: number): string {
 /* Décor de carte */
 /* Terrain : socle + régions SOLIDES + motifs vectoriels */
 /* Carte PARCHEMIN dessinée à l'encre (style livre d'aventure) */
+/* Parchemin NOIR & BLANC (encre monochrome) */
 .sea {
-  fill: #b9c6c4;
+  fill: #d7d0bd;
 }
 .coast-line {
-  fill: #7a6a4a;
-  transform: translate(0.6px, 0.7px); /* ombre portée = double-trait de côte */
+  fill: #2a251c;
+  transform: translate(0.7px, 0.8px); /* double-trait de côte */
 }
 .land {
-  fill: #e7d7b0;
-  stroke: #6a5638;
-  stroke-width: 0.45;
+  fill: #ece3cd;
+  stroke: #2a251c;
+  stroke-width: 0.5;
+}
+.river {
+  fill: none;
+  stroke: #2a251c;
+  stroke-width: 0.35;
+  stroke-linecap: round;
+  opacity: 0.65;
 }
 .feat {
   pointer-events: none;
 }
 .f-mountain {
   fill: none;
-  stroke: #5a4630;
+  stroke: #2a251c;
   stroke-width: 0.42;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
 .f-tree {
-  fill: #4d6b47;
-  stroke: #3a4d33;
-  stroke-width: 0.15;
+  fill: #2f2b22;
+  stroke: none;
 }
 .f-dune {
   fill: none;
-  stroke: #9a8048;
-  stroke-width: 0.45;
+  stroke: #2a251c;
+  stroke-width: 0.4;
   stroke-linecap: round;
+  opacity: 0.7;
 }
 .map-frame {
   fill: none;
-  stroke: #6a5638;
-  stroke-width: 0.6;
+  stroke: #2a251c;
+  stroke-width: 0.55;
 }
 .map-frame.thin {
-  stroke-width: 0.3;
+  stroke-width: 0.28;
 }
 .compass .comp-bg {
-  fill: #efe4c4;
-  stroke: #6a5638;
+  fill: #ece3cd;
+  stroke: #2a251c;
   stroke-width: 0.4;
 }
 .compass .comp-n {
   font-size: 3px;
   text-anchor: middle;
-  fill: #5a4630;
+  fill: #2a251c;
   font-weight: 700;
 }
 .compass .comp-needle {
-  fill: #5a4630;
+  fill: #2a251c;
 }
 .town-glow {
   fill: color-mix(in srgb, var(--accent) 22%, transparent);
