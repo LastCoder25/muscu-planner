@@ -272,14 +272,26 @@ function pick<T>(rng: () => number, arr: T[]): T {
 
 // `luck` 0..1 décale progressivement les seuils vers le haut (donjons durs +
 // fiole de chance). 0 = odds de base, 1 = très généreux.
-function rollRarity(rng: () => number, luck = 0): Rarity {
+// `commonDecay` 0..1 fait FONDRE les communs au profit des rares SANS toucher aux
+// paliers du haut (épique/légendaire/divin restent pilotés par `luck` → l'équilibre
+// boss/itémisation calibré est préservé). 0 = ~60 % commun ; 1 = ~18 % commun.
+// Les communs ne disparaissent JAMAIS totalement (part de rare plafonnée à 0,85).
+export function rollRarity(rng: () => number, luck = 0, commonDecay = 0): Rarity {
   const l = Math.min(1, Math.max(0, luck));
+  const d = Math.min(1, Math.max(0, commonDecay));
   const r = rng();
   if (r < 0.004 + l * 0.02) return 'divin'; // très rare (0,4 % → 2,4 % avec la chance)
   if (r < 0.02 + l * 0.08) return 'legendary';
   if (r < 0.12 + l * 0.2) return 'epic';
-  if (r < 0.4 + l * 0.32) return 'rare';
+  if (r < Math.min(0.85, 0.4 + l * 0.32 + d * 0.42)) return 'rare';
   return 'common';
+}
+
+/** Facteur de décroissance des communs selon le NIVEAU du contenu (donjon). Bas
+ *  niveau = communs pleins (~60 %) ; haut niveau = communs rares (~18 %). Partagé
+ *  par rollDrop et le miroir d'affichage des odds. */
+export function commonDecayForLevel(level: number): number {
+  return Math.min(1, Math.max(0, (level - 2) / 22));
 }
 
 /**
@@ -309,10 +321,10 @@ export function rollDrop(
   if (rng() >= chance) return null;
 
   const slot = pick(rng, SLOTS);
-  let rarity = rollRarity(rng, opts.luck ?? 0);
-  // Au-delà du niveau 5, plus de butin COMMUN (fin du fourrage gris) → planché à rare.
   const lvl = opts.level ?? 1;
-  if (lvl > 5 && rarity === 'common') rarity = 'rare';
+  // Les communs REVIENNENT (plus de couperet niv.5), mais fondent PROGRESSIVEMENT
+  // avec le niveau du donjon (`commonDecay`) → plus on farme profond, moins de gris.
+  const rarity = rollRarity(rng, opts.luck ?? 0, commonDecayForLevel(lvl));
   // Pool de stats PROGRESSIF : au début, seules les stats basiques (dégâts/PV)
   // tombent ; les stats exotiques se débloquent en montant (cf. EFFECT_MIN_LEVEL).
   const pool = availableEffects(slot, lvl);

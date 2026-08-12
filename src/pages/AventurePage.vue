@@ -1223,7 +1223,7 @@
         </div>
         <div class="drops-sub">Chances de rareté</div>
         <div class="odds">
-          <div v-for="o in rarityOdds(dropInfo.dropLuck)" :key="o.label" class="odd" :class="o.cls">
+          <div v-for="o in rarityOdds(dropInfo.dropLuck, dropInfo.dropLevel)" :key="o.label" class="odd" :class="o.cls">
             <span class="odd-pct font-display">{{ o.pct }}%</span>
             <span class="odd-lbl">{{ o.label }}</span>
           </div>
@@ -1627,6 +1627,7 @@ import {
   familiarStoneCost,
   isFamiliar,
   FAMILIAR_SLOT,
+  commonDecayForLevel,
   SLOTS,
   SLOT_LABEL,
   SLOT_EMOJI,
@@ -2088,15 +2089,20 @@ const dropInfo = ref<Dungeon | null>(null);
 function openDrops(d: Dungeon) {
   dropInfo.value = d;
 }
-// Chances de rareté d'un drop selon la chance du donjon (miroir de rollRarity, items.ts).
-function rarityOdds(luck: number) {
+// Chances de rareté d'un drop selon la chance ET le niveau du donjon (miroir de
+// rollRarity, items.ts) : les communs fondent avec le niveau via commonDecay.
+function rarityOdds(luck: number, level = 1) {
   const l = Math.min(1, Math.max(0, luck));
+  const d = commonDecayForLevel(level);
   // Aligné sur rollRarity : seuils cumulés divin < légendaire < épique < rare.
+  const legCut = 0.02 + l * 0.08;
+  const epicCut = 0.12 + l * 0.2;
+  const rareCut = Math.min(0.85, 0.4 + l * 0.32 + d * 0.42);
   const divin = 0.004 + l * 0.02;
-  const leg = 0.02 + l * 0.08 - divin;
-  const epic = 0.12 + l * 0.2 - (0.02 + l * 0.08);
-  const rare = 0.4 + l * 0.32 - (0.12 + l * 0.2);
-  const common = Math.max(0, 1 - 0.4 - l * 0.32);
+  const leg = legCut - divin;
+  const epic = epicCut - legCut;
+  const rare = rareCut - epicCut;
+  const common = Math.max(0, 1 - rareCut);
   return [
     { label: 'Commun', pct: Math.round(common * 100), cls: 'r-common' },
     { label: 'Rare', pct: Math.round(rare * 100), cls: 'r-rare' },

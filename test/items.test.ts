@@ -4,6 +4,7 @@ import {
   playerWithGear,
   rollDrop,
   rollSetPiece,
+  commonDecayForLevel,
   itemScore,
   effectiveValue,
   salvageValue,
@@ -166,6 +167,40 @@ describe('rollDrop', () => {
       if (d?.effect.type === 'crit_pct') sawCrit = true;
     }
     expect(sawCrit).toBe(true);
+  });
+});
+
+describe('raretés — communs progressifs (commonDecay)', () => {
+  it('commonDecayForLevel : borné [0,1] et croissant', () => {
+    expect(commonDecayForLevel(1)).toBe(0);
+    expect(commonDecayForLevel(2)).toBe(0);
+    expect(commonDecayForLevel(24)).toBe(1);
+    expect(commonDecayForLevel(100)).toBe(1);
+    expect(commonDecayForLevel(12)).toBeGreaterThan(commonDecayForLevel(6));
+  });
+  it('les communs REVIENNENT au-dessus du niveau 5 (plus de couperet)', () => {
+    let sawCommon = false;
+    for (let s = 1; s <= 200 && !sawCommon; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 10 });
+      if (d?.rarity === 'common') sawCommon = true;
+    }
+    expect(sawCommon).toBe(true);
+  });
+  it('moins de communs sur un donjon HAUT niveau que BAS niveau', () => {
+    const commonShare = (level: number): number => {
+      let n = 0;
+      let common = 0;
+      for (let s = 1; s <= 600; s++) {
+        const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level });
+        if (d) {
+          n++;
+          if (d.rarity === 'common') common++;
+        }
+      }
+      return n ? common / n : 0;
+    };
+    expect(commonShare(3)).toBeGreaterThan(commonShare(22));
+    expect(commonShare(22)).toBeGreaterThan(0); // jamais zéro (les communs subsistent)
   });
 });
 
