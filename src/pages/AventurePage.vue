@@ -548,13 +548,13 @@
 
       <!-- ONGLET DONJONS -->
       <template v-else-if="tab === 'donjons'">
-        <!-- Expéditions (nouveau mode, prototype visuel) -->
+        <!-- Labyrinthe (donjon à étages exploré, gate à la clé) -->
         <button class="expe-card" @click="router.push('/expedition')">
           <span class="expe-emo">🗝️</span>
           <span class="expe-main">
-            <span class="expe-name font-display">Expéditions</span>
+            <span class="expe-name font-display">Labyrinthe</span>
             <span class="expe-sub">
-              Donjons à étages à explorer ·
+              Donjon à étages à explorer ·
               <b>{{ char.row?.keys ?? 0 }}</b> clé{{ (char.row?.keys ?? 0) > 1 ? 's' : '' }}
             </span>
           </span>

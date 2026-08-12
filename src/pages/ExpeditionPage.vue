@@ -2,7 +2,7 @@
   <q-page class="expe">
     <header class="top">
       <button class="iconbtn" aria-label="Retour" @click="router.back()">‹</button>
-      <div class="top-title font-display">Expédition</div>
+      <div class="top-title font-display">Labyrinthe</div>
       <div class="iconbtn" />
     </header>
 
@@ -24,7 +24,7 @@
         unelevated
         size="lg"
         :disable="!canStart"
-        :label="keys > 0 ? 'Lancer une expédition (−1 🗝️)' : 'Aucune clé pour l’instant'"
+        :label="keys > 0 ? 'Entrer dans le labyrinthe (−1 🗝️)' : 'Aucune clé pour l’instant'"
         @click="start"
       />
     </div>
@@ -95,7 +95,7 @@
           no-caps
           unelevated
           icon="emoji_events"
-          label="Vaincre & terminer l'expédition"
+          label="Vaincre & sortir du labyrinthe"
           @click="finish"
         />
         <div v-else class="hint">
@@ -187,7 +187,7 @@
       <q-card class="over-card">
         <div class="over-emo">{{ run.status === 'cleared' ? '🏆' : '💀' }}</div>
         <div class="over-title font-display">
-          {{ run.status === 'cleared' ? 'Expédition nettoyée !' : 'Vous êtes tombé…' }}
+          {{ run.status === 'cleared' ? 'Labyrinthe nettoyé !' : 'Vous êtes tombé…' }}
         </div>
         <div class="over-haul">
           🪙 {{ gold }} · ✨ {{ dust }} ·
@@ -205,7 +205,7 @@
           <q-btn
             flat
             no-caps
-            :label="keys > 0 ? 'Nouvelle expédition (−1 🗝️)' : 'Pas de clé'"
+            :label="keys > 0 ? 'Nouveau labyrinthe (−1 🗝️)' : 'Pas de clé'"
             color="primary"
             :disable="!canStart"
             @click="replay"
@@ -383,10 +383,11 @@ function makeMonster(isBoss: boolean, depth: number): Combatant {
   const d = 0.85 + 0.55 * depth; // 0.85 (surface) → 1.4 (fond)
   return {
     name: isBoss ? 'Gardien de l’étage' : 'Rôdeur',
-    // Survit ~1,5 tour (rôdeur) / ~3,8 tours (gardien) → il a le temps de frapper.
-    pv: Math.max(10, Math.round(pTurn * (isBoss ? 3.8 : 1.5) * d)),
-    // Chaque coup retire ~4,5 % (rôdeur) / ~7,5 % (gardien) des PV max du joueur.
-    damage: Math.max(1, Math.round(P * (isBoss ? 0.075 : 0.045) * d)),
+    // Coriaces : survivent ~3 tours (rôdeur) / ~6,5 tours (gardien) → de VRAIS
+    // combats de plusieurs rounds (avant : ~1,5 tour → mouraient en un coup).
+    pv: Math.max(10, Math.round(pTurn * (isBoss ? 6.5 : 3) * d)),
+    // Frappent plus fort : ~5,5 % (rôdeur) / ~9 % (gardien) des PV max par coup.
+    damage: Math.max(1, Math.round(P * (isBoss ? 0.09 : 0.055) * d)),
     crit: 0.05 + 0.05 * depth,
     dodge: 0.03 + 0.04 * depth,
     initiative: isBoss ? 14 : 8,
@@ -481,13 +482,22 @@ function onRoomClick(id: number) {
       break;
     case 'chest':
       openChest(id);
+      regen(0.06); // le repos d'un coffre soigne un peu
       break;
     case 'stairs':
       lastEvent.value = { kind: 'good', text: '🔽 Escalier — descends à l’étage suivant' };
       break;
     default:
-      lastEvent.value = { kind: 'neutral', text: '· Salle vide' };
+      regen(0.1); // salle vide = on souffle → petite récupération
+      lastEvent.value = { kind: 'neutral', text: '· Salle vide — tu récupères un peu' };
   }
+}
+// Régénère `pct` des PV MAX (salles sûres) → l'attrition reste survivable malgré
+// des monstres plus coriaces ; pousser en profondeur (moins de salles sûres) reste risqué.
+function regen(pct: number) {
+  const max = run.value.maxPv;
+  const pv = Math.min(max, run.value.pv + Math.round(max * pct));
+  run.value = { ...run.value, pv };
 }
 
 function goDown() {
