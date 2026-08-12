@@ -1,5 +1,5 @@
 <template>
-  <q-page class="adv-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="adv-page" :class="{ embedded }">
     <div v-if="loading" class="column items-center q-mt-xl">
       <q-spinner color="primary" size="32px" />
     </div>
@@ -1579,7 +1579,7 @@
         </div>
       </q-card>
     </q-dialog>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -1694,6 +1694,10 @@ interface RunView {
   drops: Item[];
   consumable?: { emoji: string; name: string };
 }
+
+// `embedded` : rendu dans le VOLET droit du cockpit (Z Fold déplié) → racine <div>
+// au lieu de <q-page> + hauteur fluide (le volet gère le scroll).
+defineProps<{ embedded?: boolean }>();
 
 const $q = useQuasar();
 const router = useRouter();
@@ -3056,6 +3060,11 @@ onUnmounted(() => {
   /* Marge basse généreuse (+ safe-area iOS) : le contenu ne doit pas être coupé
      ni passer sous le FAB feedback / le badge de version. */
   padding: 18px 16px calc(96px + env(safe-area-inset-bottom, 0px));
+}
+/* Rendu dans le volet droit du cockpit : le volet gère le scroll → pas de min-height. */
+.adv-page.embedded {
+  min-height: 0;
+  padding-bottom: 40px;
 }
 .page-title {
   font-size: 30px;

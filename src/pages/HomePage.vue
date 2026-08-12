@@ -1,5 +1,5 @@
 <template>
-  <q-page class="home-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="home-page" :class="{ embedded }">
     <header class="home-head">
       <div>
         <div class="text-dim text-caption">Salut</div>
@@ -221,7 +221,7 @@
         </div>
       </q-card>
     </q-dialog>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -238,6 +238,10 @@ import { useProgress } from '@/composables/useProgress';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeStats, logicalToday } from '@/lib/challenges';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
+
+// `embedded` : rendu dans un VOLET (cockpit Z Fold déplié) → racine <div> au lieu
+// de <q-page> (pas de q-page imbriquée) + hauteur fluide (le volet gère le scroll).
+defineProps<{ embedded?: boolean }>();
 
 const $q = useQuasar();
 const router = useRouter();
@@ -507,6 +511,11 @@ async function saveAutre() {
   /* Marge basse généreuse (+ safe-area) pour que la dernière tuile ne soit pas
      masquée par le FAB de feedback ni la barre système du navigateur mobile. */
   padding: 20px 16px calc(96px + env(safe-area-inset-bottom, 0px));
+}
+/* Rendu dans un volet du cockpit : le volet gère le scroll → pas de min-height. */
+.home-page.embedded {
+  min-height: 0;
+  padding-bottom: 40px;
 }
 .home-head {
   margin-bottom: 24px;

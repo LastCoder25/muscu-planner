@@ -64,12 +64,16 @@ body {
     margin-left: auto;
     margin-right: auto;
   }
-  // Le contenu du header suit la même colonne ; la barre elle-même reste pleine
-  // largeur (le trait du bas traverse tout l'écran).
-  .app-header .q-toolbar {
-    max-width: var(--app-max-width, 560px);
-    margin-left: auto;
-    margin-right: auto;
-    width: 100%;
+  // (Le header reste pleine largeur — barre + trait du bas traversent l'écran ;
+  // c'est le pattern habituel « header large, contenu centré ».)
+}
+
+// ── Z Fold DÉPLIÉ (et grand écran) : le COCKPIT deux volets prend TOUTE la largeur ──
+// L'accueil déplié (HomeCockpit) échappe au plafond mobile 560 px pour afficher
+// SPORT | AVENTURE côte à côte. `:has()` est supporté par le Chromium du Fold.
+@media (min-width: 820px) {
+  .q-page-container:has(.home-cockpit) {
+    max-width: none;
+    margin: 0;
   }
 }
