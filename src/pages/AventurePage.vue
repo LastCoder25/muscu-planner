@@ -45,6 +45,9 @@
           </button>
         </div>
         <div class="tb-right">
+          <button class="tb-chip inbox-btn" aria-label="Messages" @click="openInbox">
+            📬<span v-if="unreadMessages" class="inbox-dot">{{ unreadMessages }}</span>
+          </button>
           <span class="tb-chip" :class="{ deficit: c.energy < 0 }">⚡ {{ c.energy }}</span>
           <button class="tb-chip gold shop-btn" aria-label="Boutique" @click="shopOpen = true">
             🪙 {{ char.row.gold }} <q-icon name="storefront" size="14px" />
@@ -57,6 +60,14 @@
         ⚠️ Déficit d'énergie ({{ c.energy }} ⚡) — refais du sport pour regagner de l'énergie avant
         de rejouer.
       </div>
+
+      <!-- Bannière : héros en expédition (autres modes + équipement gelés) -->
+      <button v-if="onExpedition && expeHero" class="expe-banner" @click="router.push('/expedition-map')">
+        🧭 Ton héros est en expédition —
+        <b v-if="expeHero.phase !== 'done'">{{ expeHero.phase === 'return' ? 'retour' : 'arrivée' }} dans
+          {{ fmtExpeMs(expeHero.phase === 'return' ? expeHero.remainTotalMs : expeHero.remainToObjectiveMs) }}</b>
+        <b v-else>de retour !</b>. Donjons, boss et équipement indisponibles.
+      </button>
 
       <button
         v-if="loginClaimable"
@@ -548,8 +559,28 @@
 
       <!-- ONGLET DONJONS -->
       <template v-else-if="tab === 'donjons'">
+        <!-- Expédition (mode idle : envoyer le héros explorer la carte) -->
+        <button class="expe-card expe-idle" @click="router.push('/expedition-map')">
+          <span class="expe-emo">🗺️</span>
+          <span class="expe-main">
+            <span class="expe-name font-display">Expédition</span>
+            <span class="expe-sub">
+              <template v-if="onExpedition && expeHero">
+                🧭 En cours — {{ expeHero.phase === 'return' ? 'retour' : 'arrivée' }} dans
+                {{ fmtExpeMs(expeHero.phase === 'return' ? expeHero.remainTotalMs : expeHero.remainToObjectiveMs) }}
+              </template>
+              <template v-else>Envoie ton héros explorer la carte (or)</template>
+            </span>
+          </span>
+          <span class="expe-go">›</span>
+        </button>
+
         <!-- Labyrinthe (donjon à étages exploré, gate à la clé) -->
-        <button class="expe-card" @click="router.push('/expedition')">
+        <button
+          class="expe-card"
+          :disabled="onExpedition"
+          @click="onExpedition ? expeBlocked() : router.push('/expedition')"
+        >
           <span class="expe-emo">🗝️</span>
           <span class="expe-main">
             <span class="expe-name font-display">Labyrinthe</span>
@@ -944,6 +975,41 @@
           <div class="rburst-kicker">Nouvelle région</div>
           <div class="rburst-name font-display">{{ regionBurst.name }}</div>
           <div class="lb-lbl">{{ regionBurst.blurb }}</div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Boîte à messages 📬 : rapports d'expédition -->
+    <transition name="salv-fade">
+      <div v-if="inboxOpen" class="shop-backdrop" @click.self="inboxOpen = false">
+        <div class="shop-card">
+          <div class="shop-head">
+            <div class="shop-title font-display">📬 Messages</div>
+            <button class="shop-x" aria-label="Fermer" @click="inboxOpen = false">✕</button>
+          </div>
+          <div class="inbox-list">
+            <div v-if="!(char.row?.messages ?? []).length" class="inbox-empty">
+              Aucun message. Les rapports de tes expéditions apparaîtront ici.
+            </div>
+            <div
+              v-for="m in char.row?.messages ?? []"
+              :key="m.id"
+              class="inbox-msg"
+              :class="m.win ? 'win' : 'lose'"
+            >
+              <div class="im-head">
+                <span class="im-emo">{{ m.win ? '🏆' : '💀' }}</span>
+                <span class="im-title">{{ POI_MSG_LABEL[m.poiType] }} · niv {{ m.level }}</span>
+              </div>
+              <div class="im-text">{{ m.text }}</div>
+              <div class="im-haul">
+                <span v-if="m.gold">🪙 +{{ m.gold }}</span>
+                <span v-if="m.dust">✨ +{{ m.dust }}</span>
+                <span v-if="m.key">🗝️ +{{ m.key }}</span>
+                <span v-if="m.itemName" class="im-item">🎁 {{ m.itemName }}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </transition>
@@ -1454,7 +1520,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -1535,6 +1601,7 @@ import {
   type Region,
 } from '@/lib/regions';
 import { bestiary, setCollection, codexSummary } from '@/lib/codex';
+import { heroPosition } from '@/lib/expedition';
 import { logicalToday } from '@/lib/challenges';
 
 interface RunFight {
@@ -2165,6 +2232,7 @@ function prevDungeonName(d: Dungeon): string {
 
 async function explore(d: Dungeon) {
   const uid = auth.user?.id;
+  if (expeBlocked()) return;
   if (!uid || !char.row || busy.value || c.value.energy < d.energyCost) return;
   if (!dungeonUnlocked(d)) return;
   if (char.row.pending_reward) {
@@ -2320,6 +2388,7 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
 
 async function fightBoss(b: MilestoneBoss) {
   const uid = auth.user?.id;
+  if (expeBlocked()) return;
   if (!uid || !char.row || busy.value || c.value.energy < b.energyCost) return;
   if (!bossUnlocked(b)) return;
   if (char.row.pending_reward) {
@@ -2408,6 +2477,7 @@ const nextEndlessTier = computed(() => endlessBest.value + 1);
 
 async function fightEndless() {
   const uid = auth.user?.id;
+  if (expeBlocked()) return;
   const tier = nextEndlessTier.value;
   const cost = endlessEnergy(tier);
   if (!uid || !char.row || busy.value || c.value.energy < cost || !endlessUnlocked.value) return;
@@ -2484,8 +2554,57 @@ const resetCost = computed(() => 80 + 40 * (char.row?.talents.length ?? 0));
 function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
   const uid = auth.user?.id;
   if (!uid) return;
+  // Héros en expédition = équipement/atelier GELÉS (il est parti avec son barda).
+  if (onExpedition.value) {
+    $q.notify({ type: 'warning', message: '🧭 Ton héros est en expédition — indisponible.' });
+    return;
+  }
   fn(uid).catch(() => $q.notify({ type: 'negative', message: errMsg }));
 }
+
+// ── Mode idle « Expédition » : gel des autres modes + cycle de vie + messagerie ──
+const onExpedition = computed(() => !!char.row?.expedition);
+function expeBlocked(): boolean {
+  if (!onExpedition.value) return false;
+  $q.notify({ type: 'warning', message: '🧭 Ton héros est en expédition — indisponible jusqu’à son retour.' });
+  return true;
+}
+const expeNow = ref(Date.now());
+const expeHero = computed(() =>
+  char.row?.expedition ? heroPosition(char.row.expedition, expeNow.value) : null,
+);
+const unreadMessages = computed(() => (char.row?.messages ?? []).filter((m) => !m.read).length);
+const inboxOpen = ref(false);
+function openInbox() {
+  inboxOpen.value = true;
+  const uid = auth.user?.id;
+  if (uid) void char.expeMarkRead(uid);
+}
+let expeBusy = false;
+async function expeLifecycle() {
+  const uid = auth.user?.id;
+  if (!uid || expeBusy) return;
+  expeBusy = true;
+  try {
+    const msg = await char.expeTick(uid, Date.now());
+    if (msg) $q.notify({ type: msg.win ? 'positive' : 'warning', message: '📬 Nouveau rapport d’expédition.' });
+    const o = await char.expeCollect(uid, Date.now());
+    if (o)
+      $q.notify({
+        type: 'positive',
+        message: `🎉 Héros rentré ! +${o.gold} 🪙${o.item ? ' · ' + o.item.name : ''}`,
+      });
+    await char.expeSyncMap(uid, Date.now(), c.value.level.level);
+  } finally {
+    expeBusy = false;
+  }
+}
+function fmtExpeMs(ms: number): string {
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
+}
+const POI_MSG_LABEL: Record<string, string> = { mine: 'Mine', camp: 'Camp', lair: 'Repaire' };
 
 // ── Sac : filtre par type d'objet + tri (meilleurs d'abord) ──
 const invFilter = ref<ItemSlot | 'all'>('all');
@@ -2788,6 +2907,16 @@ onMounted(async () => {
   } catch {
     /* ignore */
   }
+  // Expédition idle : synchro carte + cycle de vie (rapport/collecte) au fil du temps.
+  void expeLifecycle();
+  expeTimer = setInterval(() => {
+    expeNow.value = Date.now();
+    void expeLifecycle();
+  }, 1000);
+});
+let expeTimer: ReturnType<typeof setInterval> | null = null;
+onUnmounted(() => {
+  if (expeTimer) clearInterval(expeTimer);
 });
 </script>
 
@@ -4374,6 +4503,96 @@ onMounted(async () => {
   line-height: 1.35;
 }
 /* ── Carte d'entrée « Expéditions » (nouveau mode) ── */
+.expe-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.expe-idle {
+  background: color-mix(in srgb, #4a9eff 12%, var(--surface)) !important;
+  border-color: #4a9eff !important;
+}
+/* Boîte à messages (topbar) */
+.inbox-btn {
+  position: relative;
+}
+.inbox-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--d4);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+/* Bannière héros en expédition */
+.expe-banner {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, #4a9eff 14%, var(--surface));
+  border: 1px solid #4a9eff;
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.inbox-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 2px;
+}
+.inbox-empty {
+  color: var(--dim);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+}
+.inbox-msg {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+}
+.inbox-msg.win {
+  border-left-color: #7bc86c;
+}
+.inbox-msg.lose {
+  border-left-color: var(--d4);
+}
+.im-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13.5px;
+}
+.im-text {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 4px 0;
+  line-height: 1.3;
+}
+.im-haul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.im-item {
+  color: var(--accent);
+}
 .expe-card {
   display: flex;
   align-items: center;
