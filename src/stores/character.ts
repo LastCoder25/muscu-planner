@@ -32,6 +32,14 @@ import {
   type ExpeditionMessage,
   type Poi,
 } from '@/lib/expedition';
+import {
+  buildingType,
+  buildingUpgradeCost,
+  canUpgradeBuilding,
+  plotsForLevel,
+  collectable,
+  type Building,
+} from '@/lib/buildings';
 import type { Combatant } from '@/lib/combat';
 
 export interface CharacterRow {
@@ -58,6 +66,7 @@ export interface CharacterRow {
   expedition: ActiveExpedition | null; // mode idle « Expédition » en cours
   expedition_map: ExpeditionMap | null; // carte du monde (POI)
   messages: ExpeditionMessage[]; // boîte à messages 📬 (rapports d'expédition)
+  buildings: Building[]; // filons de production passive (village)
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -76,7 +85,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, expedition, expedition_map, messages';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, expedition, expedition_map, messages, buildings';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -93,6 +102,7 @@ export const useCharacterStore = defineStore('character', () => {
     r.equipped = obj<Equipped>(r.equipped);
     r.consumables = obj<Record<string, number>>(r.consumables);
     r.messages = arr<ExpeditionMessage>(r.messages);
+    r.buildings = arr<Building>(r.buildings); // colonne récente (migr. 0046)
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (!r.expedition || typeof r.expedition !== 'object') r.expedition = null;
     if (!r.expedition_map || typeof r.expedition_map !== 'object') r.expedition_map = null;
@@ -726,6 +736,46 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, { messages: cur.messages.map((m) => ({ ...m, read: true })) });
   }
 
+  // ── Filons de production passive (village autour de la ville) ──
+  // Construit un filon sur un emplacement libre (débloqué par le niveau), payé à l'or.
+  async function buildFilon(userId: string, typeId: string, slot: number, now: number, playerLevel: number) {
+    const cur = row.value;
+    const t = buildingType(typeId);
+    if (!cur || !t) return;
+    const plots = plotsForLevel(playerLevel);
+    if (slot < 0 || slot >= plots) return; // emplacement non débloqué
+    if (cur.buildings.some((b) => b.slot === slot)) return; // déjà occupé
+    if (cur.gold < t.buildGold) return;
+    const b: Building = { typeId, level: 1, slot, collectedAt: now };
+    await persist(userId, { gold: cur.gold - t.buildGold, buildings: [...cur.buildings, b] });
+  }
+  // Améliore un filon (or ; plafonné au niveau du joueur).
+  async function upgradeFilon(userId: string, slot: number, playerLevel: number) {
+    const cur = row.value;
+    if (!cur) return;
+    const b = cur.buildings.find((x) => x.slot === slot);
+    if (!b || !canUpgradeBuilding(b, playerLevel)) return;
+    const cost = buildingUpgradeCost(b.level);
+    if (cur.gold < cost) return;
+    await persist(userId, {
+      gold: cur.gold - cost,
+      buildings: cur.buildings.map((x) => (x.slot === slot ? { ...x, level: x.level + 1 } : x)),
+    });
+  }
+  // Récolte TOUS les filons : crédite poussière/pierres accumulées, réinitialise l'horloge.
+  async function collectFilons(userId: string, now: number) {
+    const cur = row.value;
+    if (!cur || !cur.buildings.length) return null;
+    const got = collectable(cur.buildings, now);
+    if (got.dust <= 0 && got.stone <= 0) return null;
+    await persist(userId, {
+      dust: cur.dust + got.dust,
+      stones: cur.stones + got.stone,
+      buildings: cur.buildings.map((b) => ({ ...b, collectedAt: now })),
+    });
+    return got;
+  }
+
   return {
     row,
     loaded,
@@ -736,6 +786,9 @@ export const useCharacterStore = defineStore('character', () => {
     expeTick,
     expeCollect,
     expeMarkRead,
+    buildFilon,
+    upgradeFilon,
+    collectFilons,
     applyRun,
     applyBossWin,
     chooseReward,
