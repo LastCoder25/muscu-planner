@@ -99,7 +99,10 @@ export function combatPower(c: Combatant): number {
   const offense =
     c.damage * (c.strikes ?? 1) * (1 + c.crit) * (1 + (c.lifesteal ?? 0)) * sig;
   const survie = (c.pv / 100) / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0));
-  return Math.round(offense * survie);
+  // offense×survie croît ≈ niveau⁴ → chiffres énormes (dizaines de milliers dès le
+  // début). On prend la RACINE : indice toujours monotone/comparable mais à échelle
+  // humaine (~niveau², qq centaines au milieu de jeu au lieu de dizaines de milliers).
+  return Math.round(Math.sqrt(offense * survie));
 }
 
 /** Format compact d'une puissance de combat (≈ niveau⁴ → jusqu'aux millions).
