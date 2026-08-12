@@ -54,7 +54,7 @@
             v-for="a in travelArrows"
             :key="'arr' + a.i"
             class="dir-arrow"
-            d="M -1 -1.1 L 1.3 0 L -1 1.1 Z"
+            d="M -1 -1.5 L 1.4 0 L -1 1.5 Z"
             :transform="`translate(${a.x} ${a.y}) rotate(${a.angle})`"
             :style="{ animationDelay: a.delay + 's' }"
           />
@@ -676,7 +676,7 @@ function fmtMin(min: number): string {
 /* Chevrons de direction : s'allument un à un (délai croissant héros→cible) puis
    s'éteignent → sensation de flux dans le sens du déplacement. En boucle. */
 .dir-arrow {
-  fill: #7ab8ff;
+  fill: #4a9eff;
   stroke: none;
   opacity: 0;
   animation: dir-flow 1.5s ease-in-out infinite;
