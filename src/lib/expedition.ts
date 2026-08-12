@@ -125,10 +125,16 @@ export function travelOneWayMin(level: number, distNorm: number): number {
 export function poiCombatant(level: number, type: PoiType): Combatant {
   const t = type === 'lair' ? 1.35 : 1; // le repaire est plus coriace
   const L = Math.max(1, level);
+  // Échelle niveau² : la puissance du joueur croît ~niveau² (stats = XP/15, XP
+  // quadratique). Un adversaire LINÉAIRE devenait trivial dès le niveau 10 → on
+  // scale en L² (calibré sur le gradient sain du niveau 5, cf. simulation 2026‑08‑12).
+  const name = type === 'lair' ? 'Gardien du repaire' : type === 'camp' ? 'Chef de camp' : 'Éboulement';
   return {
-    name: type === 'lair' ? 'Gardien du repaire' : type === 'camp' ? 'Chef de camp' : 'Éboulement',
-    pv: Math.round((80 + L * 55) * t),
-    damage: Math.round((25 + L * 25) * t),
+    name,
+    // PV ~L³ (le multi-frappe fait croître l'offense du joueur ~L⁴ → un L² devenait
+    // trivial en fin de jeu). Dégâts ~L² (check de survie constant relatif aux PV joueur).
+    pv: Math.round((2.9 * L * L * L + 40) * t),
+    damage: Math.round((5.5 * L * L + 12) * t),
     crit: 0.08,
     dodge: 0.05,
     initiative: 12,
