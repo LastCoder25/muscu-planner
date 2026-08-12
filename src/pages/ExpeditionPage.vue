@@ -248,6 +248,7 @@ import {
   SLOT_LABEL,
   type Item,
 } from '@/lib/items';
+import { rollActivityFamiliar } from '@/data/familiars';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
 import CombatStage from '@/components/CombatStage.vue';
@@ -589,12 +590,20 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
     if (outcome === 'cleared') {
       const t = rollTreasure();
       if (t) loot.value.push(t);
+      // SIGNATURE du Labyrinthe : un FAMILIER garanti au clear (voie thémée/garantie).
+      const famRng = mulberry32((seed.value * 131 + 91) >>> 0 || 1);
+      const fam = rollActivityFamiliar(famRng, { level: heroLevel.value + 1, luck: 1 });
+      loot.value.push({ ...fam, id: `exp_f_${lootN++}` });
     }
+    // Pierres magiques 💎 (voie diffuse) : proportionnelles à la progression du run
+    // (la poussière amassée = proxy des salles/monstres) + bonus de clear.
+    const stones = Math.max(2, Math.round(dust.value / 3)) + (outcome === 'cleared' ? 4 : 0);
     const uid = auth.user?.id;
     if (uid)
       await char.applyExpedition(uid, {
         gold: gold.value,
         dust: dust.value,
+        stones: outcome === 'dead' ? Math.floor(stones / 2) : stones,
         drops: outcome === 'dead' ? [] : loot.value,
       });
   }

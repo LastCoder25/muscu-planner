@@ -53,6 +53,7 @@
             🪙 {{ char.row.gold }} <q-icon name="storefront" size="14px" />
           </button>
           <span class="tb-chip dust">✨ {{ char.row.dust }}</span>
+          <span v-if="char.row.stones" class="tb-chip stones">💎 {{ char.row.stones }}</span>
         </div>
       </div>
 
@@ -373,6 +374,72 @@
               vide<template v-if="bagCountForSlot(slot) > 0">
                 · {{ bagCountForSlot(slot) }} au sac</template
               >
+            </div>
+          </div>
+        </div>
+
+        <!-- Familier (compagnon) : 5ᵉ emplacement, monté aux PIERRES MAGIQUES 💎 -->
+        <div class="sec-title">🐾 Familier</div>
+        <div class="sec-hint">
+          Ton compagnon donne un bonus. Monte-le avec des <b>💎 pierres magiques</b> (Labyrinthe &
+          butin). <b>💎 {{ char.row.stones }}</b> dispo.
+        </div>
+        <div class="fam-panel">
+          <div
+            v-if="equippedFamiliar"
+            class="fam-card equipped"
+            :class="'r-' + equippedFamiliar.rarity"
+          >
+            <div class="fam-emo">{{ equippedFamiliar.emoji }}</div>
+            <div class="fam-body">
+              <div class="fam-name">
+                {{ equippedFamiliar.name }}
+                <span class="gpill" :class="'p-' + equippedFamiliar.rarity">{{
+                  RARITY_LABEL[equippedFamiliar.rarity]
+                }}</span>
+                <span class="gpill lvl">Lvl {{ equippedFamiliar.level }}</span>
+              </div>
+              <div class="fam-eff">{{ itemEffects(equippedFamiliar) }}</div>
+              <div v-if="familiarBlurb(equippedFamiliar)" class="fam-blurb">
+                {{ familiarBlurb(equippedFamiliar) }}
+              </div>
+              <div class="fam-actions">
+                <button
+                  class="slot-up"
+                  :disabled="!canUpgradeFamiliar(equippedFamiliar)"
+                  @click.stop="doUpgradeFamiliar(equippedFamiliar.id)"
+                >
+                  <template v-if="equippedFamiliar.level >= c.level.level"
+                    >💎 Max (niv {{ c.level.level }})</template
+                  >
+                  <template v-else
+                    >💎 Monter ·
+                    {{ familiarStoneCost(equippedFamiliar.level, equippedFamiliar.rarity) }} 💎</template
+                  >
+                </button>
+                <button class="slot-remove" @click="doUnequipFamiliar()">Retirer</button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="fam-empty">
+            Aucun familier équipé. Trouves-en un au <b>Labyrinthe</b> (garanti au clear) ou en butin
+            de donjon/faille.
+          </div>
+
+          <!-- Familiers au sac (à équiper) -->
+          <div v-if="bagFamiliars.length" class="fam-bag">
+            <div class="fam-bag-title">Au sac ({{ bagFamiliars.length }})</div>
+            <div
+              v-for="f in bagFamiliars"
+              :key="f.id"
+              class="fam-mini"
+              :class="'r-' + f.rarity"
+            >
+              <span class="fam-mini-emo">{{ f.emoji }}</span>
+              <span class="fam-mini-name">{{ f.name }}</span>
+              <span class="gpill lvl">Lv{{ f.level }}</span>
+              <span class="fam-mini-eff">{{ itemEffects(f) }}</span>
+              <button class="fam-mini-eq" @click="doEquipFamiliar(f.id)">Équiper</button>
             </div>
           </div>
         </div>
@@ -1561,6 +1628,9 @@ import {
   forgeCost,
   rerollCost,
   craftSetCost,
+  familiarStoneCost,
+  isFamiliar,
+  FAMILIAR_SLOT,
   SLOTS,
   SLOT_LABEL,
   SLOT_EMOJI,
@@ -1575,6 +1645,7 @@ import {
   type RewardCandidate,
   type PendingReward,
 } from '@/lib/items';
+import { rollActivityFamiliar, familiarSpecies } from '@/data/familiars';
 import {
   SHOP_ITEMS,
   CONSUMABLE_ITEMS,
@@ -2265,15 +2336,26 @@ async function explore(d: Dungeon) {
       luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
     });
     if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
+    // Familier (voie DIFFUSE) : ~8 % sur un donjon nettoyé → un compagnon peut
+    // tomber n'importe où (le Labyrinthe reste la voie garantie/thémée).
+    if (r.cleared && dropRng() < 0.08) {
+      const fam = rollActivityFamiliar(dropRng, {
+        level: d.dropLevel,
+        luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
+      });
+      drops.push({ ...fam, id: crypto.randomUUID() });
+    }
     // Butin consommable (en plus de l'équipement).
     const consDropId = rollConsumableDrop(dropRng, r.cleared);
     const consDrop = consDropId ? shopItem(consDropId) : undefined;
     const dust = r.defeated * 2; // petit filet de poussière par run
+    const stones = r.defeated + (r.cleared ? 3 : 0); // filet de pierres 💎 (familiers)
     await char.applyRun(uid, {
       energyCost: d.energyCost,
       gold,
       dust,
       drops,
+      stones,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(consumed.length ? { consumed } : {}),
       ...(consDropId ? { gained: [consDropId] } : {}),
@@ -2427,6 +2509,7 @@ async function fightBoss(b: MilestoneBoss) {
       dust,
       defeated: win,
       pending,
+      stones: 12, // jalon boss → lot de pierres 💎 (crédité seulement si vaincu)
       ...(consumed.length ? { consumed } : {}),
     });
     selectedConsumables.value = [];
@@ -2513,6 +2596,12 @@ async function fightEndless() {
         });
       }
       if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
+      // Familier de fin de jeu (~15 %, haut niveau) — voie diffuse.
+      const famRng = mulberry32((seed ^ 0x1b873593) >>> 0);
+      if (famRng() < 0.15) {
+        const fam = rollActivityFamiliar(famRng, { level: endlessDropLevel(tier), luck: 0.6 });
+        drops.push({ ...fam, id: crypto.randomUUID() });
+      }
     }
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
     await char.applyEndless(uid, {
@@ -2522,6 +2611,7 @@ async function fightEndless() {
       dust,
       drops,
       cleared: win,
+      stones: win ? 6 : 0,
       ...(consumed.length ? { consumed } : {}),
     });
     selectedConsumables.value = [];
@@ -2614,9 +2704,36 @@ function bagCountForSlot(slot: ItemSlot): number {
 const filteredInventory = computed<Item[]>(() => {
   const inv = char.row?.inventory ?? [];
   return inv
+    .filter((i) => !isFamiliar(i)) // les familiers ont leur propre section
     .filter((i) => invFilter.value === 'all' || i.slot === invFilter.value)
     .sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || b.level - a.level);
 });
+
+// ── Familier (compagnon) ──
+const equippedFamiliar = computed<Item | null>(() => char.row?.equipped[FAMILIAR_SLOT] ?? null);
+const bagFamiliars = computed<Item[]>(() =>
+  (char.row?.inventory ?? [])
+    .filter((i) => isFamiliar(i))
+    .sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || b.level - a.level),
+);
+function familiarBlurb(it: Item): string {
+  return (it.species ? familiarSpecies(it.species)?.blurb : '') ?? '';
+}
+function canUpgradeFamiliar(it: Item): boolean {
+  return it.level < c.value.level.level && (char.row?.stones ?? 0) >= familiarStoneCost(it.level, it.rarity);
+}
+function doEquipFamiliar(itemId: string) {
+  withUid((uid) => char.equip(uid, itemId), 'Impossible d’équiper le familier.');
+}
+function doUnequipFamiliar() {
+  withUid((uid) => char.unequip(uid, FAMILIAR_SLOT), 'Impossible de déséquiper.');
+}
+function doUpgradeFamiliar(itemId: string) {
+  withUid(
+    (uid) => char.upgradeFamiliar(uid, itemId, c.value.level.level),
+    'Montée du familier impossible.',
+  );
+}
 
 function doEquip(itemId: string) {
   withUid((uid) => char.equip(uid, itemId), 'Impossible d’équiper.');
@@ -2751,6 +2868,7 @@ const powerLossItems = computed<Item[]>(() => {
   if (!r) return [];
   return r.inventory.filter((it) => {
     if (it.locked) return false; // 🔒 protégé de la casse/vente en masse
+    if (isFamiliar(it)) return false; // familiers = piste de collection, jamais en masse
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
     return itemMaxedPower(it) <= combatPowerVal.value;
   });
@@ -3011,6 +3129,9 @@ onUnmounted(() => {
 }
 .tb-chip.dust {
   color: #b07cff;
+}
+.tb-chip.stones {
+  color: #4ec6d6;
 }
 .tb-chip.deficit {
   color: var(--d4, #ff6a45);
@@ -3753,6 +3874,130 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--dim);
   opacity: 0.7;
+}
+/* Familier (compagnon) */
+.fam-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fam-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 12px;
+}
+.fam-card.r-rare {
+  border-left-color: #4ec6d6;
+}
+.fam-card.r-epic {
+  border-left-color: #b07cff;
+}
+.fam-card.r-legendary {
+  border-left-color: var(--accent);
+}
+.fam-card.r-divin {
+  border-left-color: #ff5cd8;
+}
+.fam-emo {
+  font-size: 34px;
+  line-height: 1;
+}
+.fam-body {
+  flex: 1;
+  min-width: 0;
+}
+.fam-name {
+  font-weight: 700;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.fam-eff {
+  color: #4ec6d6;
+  font-weight: 600;
+  font-size: 13px;
+  margin-top: 4px;
+}
+.fam-blurb {
+  color: var(--dim);
+  font-size: 12px;
+  font-style: italic;
+  margin-top: 4px;
+}
+.fam-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+}
+.fam-empty {
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  color: var(--dim);
+  font-size: 13px;
+}
+.fam-bag-title {
+  font-size: 12px;
+  color: var(--dim);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 4px 0;
+}
+.fam-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+.fam-mini.r-rare {
+  border-left-color: #4ec6d6;
+}
+.fam-mini.r-epic {
+  border-left-color: #b07cff;
+}
+.fam-mini.r-legendary {
+  border-left-color: var(--accent);
+}
+.fam-mini.r-divin {
+  border-left-color: #ff5cd8;
+}
+.fam-mini-emo {
+  font-size: 20px;
+}
+.fam-mini-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.fam-mini-eff {
+  color: #4ec6d6;
+  font-size: 12px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+}
+.fam-mini-eq {
+  border: 1px solid var(--accent);
+  background: none;
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 /* Sets d'équipement */
 .setcard {

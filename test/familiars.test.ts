@@ -9,7 +9,12 @@ import {
   FAMILIAR_SLOT,
   type Item,
 } from '@/lib/items';
-import { FAMILIAR_SPECIES, familiarSpecies, pickFamiliarSpecies } from '@/data/familiars';
+import {
+  FAMILIAR_SPECIES,
+  familiarSpecies,
+  pickFamiliarSpecies,
+  rollActivityFamiliar,
+} from '@/data/familiars';
 import { mulberry32 } from '@/lib/combat';
 
 const wolf = familiarSpecies('wolf')!;
@@ -88,5 +93,15 @@ describe('familiers — pierres magiques & sélection', () => {
   it('pickFamiliarSpecies : sans biome → une race valide du catalogue', () => {
     const s = pickFamiliarSpecies(mulberry32(9));
     expect(FAMILIAR_SPECIES.some((x) => x.id === s.id)).toBe(true);
+  });
+  it('rollActivityFamiliar : produit un familier valide (slot + species) au niveau donné', () => {
+    const f = rollActivityFamiliar(mulberry32(11), { level: 7, luck: 0.5 });
+    expect(f.slot).toBe(FAMILIAR_SLOT);
+    expect(f.species).toBeTruthy();
+    expect(f.level).toBe(7);
+  });
+  it('rollActivityFamiliar : biome forcé → race de ce biome', () => {
+    const f = rollActivityFamiliar(mulberry32(2), { level: 5, biome: 'plain' });
+    expect(f.species).toBe('marmot'); // seule race de biome plain
   });
 });

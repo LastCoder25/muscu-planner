@@ -8,7 +8,7 @@
 // poussière), droppées dans les mêmes lieux que les familiers (Labyrinthe + un peu
 // partout). Le compagnon s'affiche à côté du personnage (AventureAvatar).
 
-import type { EffectType } from '@/lib/items';
+import { rollFamiliar, type EffectType, type Item } from '@/lib/items';
 
 // Biomes = lieu d'obtention privilégié (thématise le drop du trésor de Labyrinthe /
 // des régions). `any` = peut tomber n'importe où (voie diffuse par pierres).
@@ -99,4 +99,16 @@ export function pickFamiliarSpecies(rng: () => number, biome?: FamiliarBiome): F
   const pool = biome ? FAMILIAR_SPECIES.filter((s) => s.biome === biome) : FAMILIAR_SPECIES;
   const arr = pool.length ? pool : FAMILIAR_SPECIES;
   return arr[Math.floor(rng() * arr.length)]!;
+}
+
+/** Tire un familier « de terrain » : choisit une race (biome-thémée si fourni) puis
+ *  la roule au niveau/chance donnés. Utilisé par le butin des activités. */
+export function rollActivityFamiliar(
+  rng: () => number,
+  opts: { level: number; luck?: number; biome?: FamiliarBiome },
+): Omit<Item, 'id'> {
+  return rollFamiliar(rng, pickFamiliarSpecies(rng, opts.biome), {
+    level: opts.level,
+    ...(opts.luck !== undefined ? { luck: opts.luck } : {}),
+  });
 }

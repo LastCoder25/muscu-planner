@@ -32,6 +32,12 @@
       <!-- relique (orbe flottante, si équipée) -->
       <circle v-if="has.relic" class="relic" cx="26" cy="46" r="6" />
     </g>
+    <!-- Familier (compagnon) : halo teinté + emoji de la race, flotte près du héros -->
+    <g v-if="companion" class="familiar">
+      <ellipse class="fam-shadow" cx="99" cy="122" rx="9" ry="2.6" />
+      <circle class="fam-glow" cx="99" cy="108" r="12" :style="{ fill: companion.tint }" />
+      <text class="fam-emoji" x="99" y="114" text-anchor="middle">{{ companion.emoji }}</text>
+    </g>
     <!-- Pips d'équipement (4 slots) -->
     <g class="slots">
       <circle
@@ -52,7 +58,8 @@
 // d'équipement par slot (couleur = rareté), arme/relique montrées si équipées.
 // Léger, theme-aware, aucune image. Prototype Phase 1.
 import { computed } from 'vue';
-import { SLOTS, SLOT_LABEL, type Equipped, type ItemSlot } from '@/lib/items';
+import { SLOTS, SLOT_LABEL, FAMILIAR_SLOT, type Equipped, type ItemSlot } from '@/lib/items';
+import { familiarSpecies } from '@/data/familiars';
 
 const props = defineProps<{
   profile: 'puissant' | 'agile' | 'polyvalent';
@@ -64,6 +71,12 @@ const has = computed(() => ({
   armor: !!props.equipped.armor,
   relic: !!props.equipped.relic,
 }));
+// Compagnon (familier équipé) : emoji + teinte de la race, s'il y en a un.
+const companion = computed(() => {
+  const fam = props.equipped[FAMILIAR_SLOT];
+  const sp = fam?.species ? familiarSpecies(fam.species) : undefined;
+  return sp ? { emoji: sp.emoji, tint: sp.tint } : null;
+});
 const slotPips = computed(() =>
   SLOTS.map((slot: ItemSlot) => {
     const it = props.equipped[slot];
@@ -205,6 +218,36 @@ const label = computed(
 }
 .avatar.p-agile .torso {
   stroke: #4ec6d6;
+}
+/* Familier (compagnon) : halo tamisé + emoji, flotte doucement. */
+.familiar {
+  transform-origin: 99px 108px;
+  animation: fam-bob 2.8s ease-in-out infinite;
+}
+.fam-glow {
+  opacity: 0.28;
+  filter: blur(1px);
+}
+.fam-shadow {
+  fill: #000;
+  opacity: 0.18;
+}
+.fam-emoji {
+  font-size: 15px;
+}
+@keyframes fam-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .familiar {
+    animation: none;
+  }
 }
 .pip.off {
   fill: var(--line, #3a332a);

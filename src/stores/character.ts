@@ -170,6 +170,7 @@ export const useCharacterStore = defineStore('character', () => {
       clearedDungeonId?: string;
       consumed?: string[]; // consommables dépensés pour ce run
       gained?: string[]; // consommables gagnés en butin
+      stones?: number; // pierres magiques 💎 (filet diffus, familiers)
     },
   ) {
     const cur = row.value;
@@ -194,6 +195,7 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
+      stones: cur.stones + (input.stones ?? 0),
       energy_spent: cur.energy_spent + input.energyCost,
       equipped: dist.equipped,
       inventory: dist.inventory,
@@ -216,6 +218,7 @@ export const useCharacterStore = defineStore('character', () => {
       defeated: boolean;
       pending?: PendingReward | null;
       consumed?: string[];
+      stones?: number; // pierres magiques 💎 (jalon boss)
     },
   ) {
     const cur = row.value;
@@ -234,6 +237,7 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
+      stones: cur.stones + (input.defeated ? (input.stones ?? 0) : 0),
       energy_spent: cur.energy_spent + input.energyCost,
       defeated_bosses: defeated,
       consumables,
@@ -274,6 +278,7 @@ export const useCharacterStore = defineStore('character', () => {
       drops: Item[];
       cleared: boolean;
       consumed?: string[];
+      stones?: number; // pierres magiques 💎 (fin de jeu)
     },
   ) {
     const cur = row.value;
@@ -288,6 +293,7 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
+      stones: cur.stones + (input.stones ?? 0),
       energy_spent: cur.energy_spent + input.energyCost,
       equipped: dist.equipped,
       inventory: dist.inventory,
@@ -306,10 +312,11 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, { keys: cur.keys - 1 });
     return true;
   }
-  // Crédite le butin d'une expédition (or + poussière + objets au sac/équipés vides).
+  // Crédite le butin d'une expédition/Labyrinthe (or + poussière + pierres 💎 +
+  // objets au sac/équipés vides ; un familier passe simplement dans `drops`).
   async function applyExpedition(
     userId: string,
-    input: { gold: number; dust: number; drops: Item[] },
+    input: { gold: number; dust: number; drops: Item[]; stones?: number },
   ) {
     const cur = row.value;
     if (!cur) return;
@@ -317,6 +324,7 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
+      stones: cur.stones + (input.stones ?? 0),
       equipped: dist.equipped,
       inventory: dist.inventory,
     });
