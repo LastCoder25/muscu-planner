@@ -48,6 +48,16 @@
             :x1="TOWN.x" :y1="TOWN.y" :x2="hero.x" :y2="hero.y"
             class="trail" :class="hero.phase === 'return' ? 'todo' : 'done'"
           />
+          <!-- Chevrons de direction : s'allument un à un du héros vers la cible
+               (sens du déplacement), orientés dans la direction, en boucle. -->
+          <path
+            v-for="a in travelArrows"
+            :key="'arr' + a.i"
+            class="dir-arrow"
+            d="M -1.7 -2 L 2 0 L -1.7 2"
+            :transform="`translate(${a.x} ${a.y}) rotate(${a.angle})`"
+            :style="{ animationDelay: a.delay + 's' }"
+          />
         </template>
 
         <!-- POI -->
@@ -234,6 +244,29 @@ const terrain = computed(() =>
     : { coast: '', features: [], rivers: [] },
 );
 const hero = computed(() => (active.value ? heroPosition(active.value, now.value) : null));
+
+// Chevrons de direction le long du segment RESTANT (héros → cible du moment :
+// l'objectif à l'aller, la ville au retour). Ils s'allument un à un du héros vers
+// la cible (délai croissant) et sont orientés dans le sens du déplacement.
+const ARROW_STEP = 0.16; // décalage d'allumage entre 2 chevrons (s)
+const travelArrows = computed(() => {
+  const h = hero.value;
+  const a = active.value;
+  if (!h || !a || h.phase === 'done') return [];
+  const target = h.phase === 'return' ? TOWN : a.poi;
+  const dx = target.x - h.x;
+  const dy = target.y - h.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 6) return []; // trop proche de la cible → rien à montrer
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const n = Math.min(5, Math.max(2, Math.round(len / 14))); // ~1 chevron / 14 u
+  const arrows: { x: number; y: number; angle: number; i: number; delay: number }[] = [];
+  for (let i = 1; i <= n; i++) {
+    const t = i / (n + 1); // répartis, sans coller au héros ni à la cible
+    arrows.push({ x: h.x + dx * t, y: h.y + dy * t, angle, i, delay: (i - 1) * ARROW_STEP });
+  }
+  return arrows;
+});
 
 // ── Carte pannable/zoomable (plus grande que l'écran) ──
 const scrollEl = ref<HTMLElement | null>(null);
@@ -639,6 +672,38 @@ function fmtMin(min: number): string {
 .trail.todo {
   stroke: #4a9eff;
   filter: drop-shadow(0 0 1px rgba(74, 158, 255, 0.6));
+}
+/* Chevrons de direction : s'allument un à un (délai croissant héros→cible) puis
+   s'éteignent → sensation de flux dans le sens du déplacement. En boucle. */
+.dir-arrow {
+  fill: none;
+  stroke: #7ab8ff;
+  stroke-width: 0.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  animation: dir-flow 1.5s ease-in-out infinite;
+}
+@keyframes dir-flow {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+    stroke-width: 0.9;
+  }
+  55% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dir-arrow {
+    animation: none;
+    opacity: 0.85;
+  }
 }
 .poi {
   cursor: pointer;
