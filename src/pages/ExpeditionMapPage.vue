@@ -85,6 +85,24 @@
           <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
         </g>
 
+        <!-- Filons de production (village autour de la ville) -->
+        <g
+          v-for="pl in plots"
+          :key="'plot' + pl.slot"
+          class="plot"
+          :class="{ locked: !pl.unlocked, built: !!pl.building, ready: pl.ready }"
+          @click="openPlot(pl)"
+        >
+          <circle :cx="pl.x" :cy="pl.y" r="4.2" class="plot-bg" />
+          <text v-if="!pl.unlocked" :x="pl.x" :y="pl.y + 1.4" class="plot-emo">🔒</text>
+          <text v-else-if="!pl.building" :x="pl.x" :y="pl.y + 1.6" class="plot-emo plot-plus">＋</text>
+          <template v-else>
+            <text :x="pl.x" :y="pl.y + 1.4" class="plot-emo">{{ filonEmoji(pl.building) }}</text>
+            <text :x="pl.x + 3.2" :y="pl.y - 2.6" class="plot-lvl font-display">{{ pl.building.level }}</text>
+            <circle v-if="pl.ready" :cx="pl.x + 3.2" :cy="pl.y + 3" r="1.4" class="plot-ready" />
+          </template>
+        </g>
+
         <!-- Ville (centre) -->
         <g class="town">
           <circle :cx="TOWN.x" :cy="TOWN.y" r="8" class="town-glow" />
@@ -113,6 +131,13 @@
         <button class="zoom-b" aria-label="Recentrer" @click="centerTown">⌂</button>
         <button class="zoom-b" aria-label="Zoomer" @click="zoom(1)">+</button>
       </div>
+
+      <!-- Récolte des filons (visible dès qu'il y a quelque chose à récolter) -->
+      <button v-if="readyTotal.dust + readyTotal.stone > 0" class="collect-pill" @click="collectAll">
+        🧺 Récolter
+        <span v-if="readyTotal.dust" class="cp-r">✨{{ readyTotal.dust }}</span>
+        <span v-if="readyTotal.stone" class="cp-r">💎{{ readyTotal.stone }}</span>
+      </button>
     </div>
 
     <!-- Bandeau expédition en cours -->
@@ -155,6 +180,65 @@
       </div>
     </transition>
 
+    <!-- Panneau emplacement de filon (construire / récolter / améliorer) -->
+    <transition name="sheet">
+      <div v-if="selectedPlot" class="sheet">
+        <div class="sh-head">
+          <span class="sh-emo">{{ selectedPlot.building ? filonEmoji(selectedPlot.building) : '🏗️' }}</span>
+          <div class="sh-main">
+            <div class="sh-title font-display">
+              {{ selectedPlot.building ? filonLabel(selectedPlot.building) : 'Emplacement libre' }}
+            </div>
+            <div class="sh-sub">
+              <template v-if="!selectedPlot.unlocked">🔒 Débloqué au niveau {{ plotUnlockLevel(selectedPlot.slot) }}</template>
+              <template v-else-if="selectedPlot.building">Niv {{ selectedPlot.building.level }} · {{ filonProdLabel(selectedPlot.building) }}</template>
+              <template v-else>Construis un filon (production passive de ressources).</template>
+            </div>
+          </div>
+          <button class="sh-x" @click="selectedPlot = null">✕</button>
+        </div>
+
+        <!-- Construire : choix du type -->
+        <div v-if="selectedPlot.unlocked && !selectedPlot.building" class="plot-build">
+          <button
+            v-for="t in BUILDING_TYPES"
+            :key="t.id"
+            class="pb-opt"
+            :disabled="(char.row?.gold ?? 0) < t.buildGold"
+            @click="doBuild(selectedPlot.slot, t.id)"
+          >
+            <span class="pb-emo">{{ t.emoji }}</span>
+            <span class="pb-main">
+              <span class="pb-name">{{ t.label }}</span>
+              <span class="pb-desc">{{ t.desc }}</span>
+            </span>
+            <span class="pb-cost">🪙{{ t.buildGold }}</span>
+          </button>
+        </div>
+
+        <!-- Filon construit : récolter + améliorer -->
+        <div v-else-if="selectedPlot.building" class="plot-manage">
+          <div class="pm-ready">
+            <span>Prêt : <b>{{ filonEmoji(selectedPlot.building) === '⛏️' ? '✨' : '💎' }}{{ plotAccrued(selectedPlot.building) }}</b></span>
+            <span class="pm-cap">/ {{ Math.floor(plotStorage(selectedPlot.building)) }} max</span>
+          </div>
+          <div class="pm-actions">
+            <button class="pm-collect" :disabled="plotAccrued(selectedPlot.building) <= 0" @click="collectAll">
+              🧺 Récolter
+            </button>
+            <button
+              class="pm-up"
+              :disabled="!plotCanUpgrade(selectedPlot.building) || (char.row?.gold ?? 0) < plotUpCost(selectedPlot.building)"
+              @click="doUpgrade(selectedPlot.slot)"
+            >
+              <template v-if="!plotCanUpgrade(selectedPlot.building)">Max (niv {{ heroLevel }})</template>
+              <template v-else>⬆️ Améliorer · 🪙{{ plotUpCost(selectedPlot.building) }}</template>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
     <!-- Modale de collecte au retour -->
     <q-dialog v-model="collectOpen">
       <q-card class="coll-card" v-if="lastOutcome">
@@ -187,6 +271,19 @@ import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { computeCharacter } from '@/lib/character';
 import { playerWithGear } from '@/lib/items';
+import {
+  BUILDING_TYPES,
+  buildingType,
+  plotsForLevel,
+  buildingUpgradeCost,
+  canUpgradeBuilding,
+  buildingProdPerHour,
+  buildingStorageCap,
+  buildingAccrued,
+  collectable,
+  BUILD,
+  type Building,
+} from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, type Combatant } from '@/lib/combat';
 import {
@@ -341,6 +438,73 @@ const edgeIndicators = computed(() => {
 const selected = ref<Poi | null>(null);
 const collectOpen = ref(false);
 const lastOutcome = ref<ExpeditionOutcome | null>(null);
+
+// ── Filons de production (village autour de la ville) ──
+const PLOT_R = 22; // rayon des emplacements autour de la ville (< distMin des POI)
+interface PlotView { slot: number; x: number; y: number; unlocked: boolean; building: Building | null; ready: boolean }
+const plots = computed<PlotView[]>(() => {
+  const cap = BUILD.plotCap;
+  const unlocked = plotsForLevel(heroLevel.value);
+  const bs = char.row?.buildings ?? [];
+  return Array.from({ length: cap }, (_, i) => {
+    const ang = ((-90 + i * (360 / cap)) * Math.PI) / 180;
+    const b = bs.find((x) => x.slot === i) ?? null;
+    return {
+      slot: i,
+      x: TOWN.x + Math.cos(ang) * PLOT_R,
+      y: TOWN.y + Math.sin(ang) * PLOT_R,
+      unlocked: i < unlocked,
+      building: b,
+      ready: b ? buildingAccrued(b, now.value) > 0 : false,
+    };
+  });
+});
+const readyTotal = computed(() => collectable(char.row?.buildings ?? [], now.value));
+const selectedSlot = ref<number | null>(null);
+const selectedPlot = computed<PlotView | null>(() =>
+  selectedSlot.value === null ? null : plots.value.find((p) => p.slot === selectedSlot.value) ?? null,
+);
+function openPlot(pl: PlotView) {
+  selected.value = null;
+  selectedSlot.value = pl.slot;
+}
+function plotUnlockLevel(slot: number): number {
+  return Math.max(0, (slot - 1) * BUILD.plotEvery);
+}
+function filonEmoji(b: Building): string {
+  return buildingType(b.typeId)?.emoji ?? '⛏️';
+}
+function filonLabel(b: Building): string {
+  return buildingType(b.typeId)?.label ?? 'Filon';
+}
+function filonProdLabel(b: Building): string {
+  const t = buildingType(b.typeId);
+  return t ? `${buildingProdPerHour(b).toFixed(1)} ${t.resource === 'dust' ? '✨' : '💎'}/h` : '';
+}
+function plotAccrued(b: Building): number {
+  return buildingAccrued(b, now.value);
+}
+function plotStorage(b: Building): number {
+  return buildingStorageCap(b);
+}
+function plotCanUpgrade(b: Building): boolean {
+  return canUpgradeBuilding(b, heroLevel.value);
+}
+function plotUpCost(b: Building): number {
+  return buildingUpgradeCost(b.level);
+}
+function doBuild(slot: number, typeId: string) {
+  const uid = auth.user?.id;
+  if (uid) void char.buildFilon(uid, typeId, slot, Date.now(), heroLevel.value);
+}
+function doUpgrade(slot: number) {
+  const uid = auth.user?.id;
+  if (uid) void char.upgradeFilon(uid, slot, heroLevel.value);
+}
+function collectAll() {
+  const uid = auth.user?.id;
+  if (uid) void char.collectFilons(uid, Date.now());
+}
 
 function selectPoi(p: Poi) {
   if (active.value) return;
@@ -755,6 +919,167 @@ function fmtMin(min: number): string {
 .town-emo {
   font-size: 5px;
   text-anchor: middle;
+}
+/* Filons (emplacements autour de la ville) */
+.plot {
+  cursor: pointer;
+}
+.plot-bg {
+  fill: var(--surface);
+  stroke: var(--line);
+  stroke-width: 0.6;
+}
+.plot.locked .plot-bg {
+  opacity: 0.5;
+  stroke-dasharray: 1 1;
+}
+.plot:not(.locked):not(.built) .plot-bg {
+  stroke: var(--accent);
+  stroke-dasharray: 1.4 1.2;
+  fill: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.plot.built .plot-bg {
+  stroke: #7ab8ff;
+}
+.plot.ready .plot-bg {
+  stroke: var(--accent);
+  animation: plot-pulse 1.8s ease-in-out infinite;
+}
+.plot-emo {
+  font-size: 4px;
+  text-anchor: middle;
+}
+.plot-plus {
+  fill: var(--accent);
+  font-size: 5px;
+}
+.plot-lvl {
+  font-size: 3px;
+  fill: var(--text);
+  text-anchor: middle;
+  font-weight: 700;
+}
+.plot-ready {
+  fill: var(--accent);
+}
+@keyframes plot-pulse {
+  0%,
+  100% {
+    stroke-width: 0.6;
+  }
+  50% {
+    stroke-width: 1.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plot.ready .plot-bg {
+    animation: none;
+  }
+}
+/* Pastille « récolter » (flottante sur la carte) */
+.collect-pill {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cp-r {
+  font-variant-numeric: tabular-nums;
+}
+/* Panneau construction / gestion de filon */
+.plot-build {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pb-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.pb-opt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pb-emo {
+  font-size: 22px;
+}
+.pb-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pb-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+.pb-desc {
+  font-size: 11px;
+  color: var(--dim);
+}
+.pb-cost {
+  color: var(--accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.plot-manage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pm-ready {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+}
+.pm-cap {
+  color: var(--dim);
+  font-size: 12px;
+}
+.pm-actions {
+  display: flex;
+  gap: 8px;
+}
+.pm-collect,
+.pm-up {
+  flex: 1;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pm-collect {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pm-collect:disabled,
+.pm-up:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .active-card,
 .sheet {
