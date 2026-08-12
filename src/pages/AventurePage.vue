@@ -3086,7 +3086,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 10px 6px;
+  flex-wrap: wrap; /* écrans étroits (Z Fold plié ~344 px) : les puces passent à la ligne */
   margin-bottom: 14px;
 }
 .tb-left {
@@ -3123,8 +3124,9 @@ onUnmounted(() => {
 }
 .tb-right {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
-  flex-shrink: 0;
 }
 .tb-chip {
   background: var(--surface);
