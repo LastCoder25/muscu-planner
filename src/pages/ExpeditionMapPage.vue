@@ -244,6 +244,7 @@ const contW = ref(1);
 const contH = ref(1);
 const MIN_PX = 340;
 const MAX_PX = 1700;
+const ZOOM_STEP = 200; // 1 cran de zoom (± via les boutons +/−)
 function measure() {
   const el = scrollEl.value;
   if (!el) return;
@@ -274,7 +275,7 @@ function zoom(dir: number) {
   // Fraction du centre du viewport (0..1) → on la conserve après le zoom.
   const cx = ((el?.scrollLeft ?? 0) + contW.value / 2) / mapPx.value;
   const cy = ((el?.scrollTop ?? 0) + contH.value / 2) / mapPx.value;
-  mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, mapPx.value + dir * 200));
+  mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, mapPx.value + dir * ZOOM_STEP));
   void nextTick(() => centerOn(cx * MAP, cy * MAP));
 }
 // Activités hors écran → flèche au bord pointant vers elles (clic = slide dessus).
@@ -396,7 +397,8 @@ onMounted(async () => {
   if (uid) await char.expeSyncMap(uid, Date.now(), heroLevel.value).catch(() => undefined);
   await nextTick();
   measure();
-  mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, Math.round(contW.value * 1.3))); // départ dézoomé (grande carte → on voit ~toutes les activités)
+  // Vue de départ : base large (grande carte) + 2 crans de zoom (1 cran = 200 px).
+  mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, Math.round(contW.value * 1.3) + 2 * ZOOM_STEP));
   await nextTick();
   centerTown();
   window.addEventListener('resize', measure);
