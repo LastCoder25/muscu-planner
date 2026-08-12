@@ -13,6 +13,8 @@ import {
   rerollCost,
   craftSetCost,
   rollSetPiece,
+  familiarStoneCost,
+  isFamiliar,
   type Item,
   type ItemSlot,
   type Equipped,
@@ -52,6 +54,7 @@ export interface CharacterRow {
   endless_best: number;
   pending_reward: PendingReward | null;
   keys: number; // clés d'expédition (donjons à étages)
+  stones: number; // pierres magiques 💎 : montée de niveau des familiers
   expedition: ActiveExpedition | null; // mode idle « Expédition » en cours
   expedition_map: ExpeditionMap | null; // carte du monde (POI)
   messages: ExpeditionMessage[]; // boîte à messages 📬 (rapports d'expédition)
@@ -73,7 +76,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, expedition, expedition_map, messages';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, expedition, expedition_map, messages';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -90,6 +93,7 @@ export const useCharacterStore = defineStore('character', () => {
     r.equipped = obj<Equipped>(r.equipped);
     r.consumables = obj<Record<string, number>>(r.consumables);
     r.messages = arr<ExpeditionMessage>(r.messages);
+    if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (!r.expedition || typeof r.expedition !== 'object') r.expedition = null;
     if (!r.expedition_map || typeof r.expedition_map !== 'object') r.expedition_map = null;
     return r;
@@ -437,6 +441,28 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
+  // Monte un FAMILIER d'un niveau en dépensant des PIERRES MAGIQUES 💎 (≠ poussière).
+  // Cap = niveau du joueur, comme le stuff. Familier équipé OU au sac (findOwned).
+  async function upgradeFamiliar(userId: string, itemId: string, playerLevel: number) {
+    const cur = row.value;
+    if (!cur) return;
+    const found = findOwned(cur, itemId);
+    if (!found || !isFamiliar(found.item)) return;
+    const { item, slot } = found;
+    const cost = familiarStoneCost(item.level, item.rarity);
+    if (item.level >= playerLevel || cur.stones < cost) return;
+    const upgraded: Item = { ...item, level: item.level + 1 };
+    if (slot)
+      return persist(userId, {
+        stones: cur.stones - cost,
+        equipped: { ...cur.equipped, [slot]: upgraded },
+      });
+    return persist(userId, {
+      stones: cur.stones - cost,
+      inventory: cur.inventory.map((i) => (i.id === itemId ? upgraded : i)),
+    });
+  }
+
   // ── Atelier de poussière (dust sinks) : forge / reroll / infusion / craft de set ──
   // Applique la MAJ d'un objet possédé (équipé ou au sac) + dépense la poussière.
   function applyItemUpdate(
@@ -692,6 +718,7 @@ export const useCharacterStore = defineStore('character', () => {
     sellMany,
     toggleLock,
     upgradeItem,
+    upgradeFamiliar,
     forge,
     rerollEffect,
     craftSet,

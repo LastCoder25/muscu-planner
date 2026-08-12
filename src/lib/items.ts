@@ -1,8 +1,12 @@
 // items.ts — équipement RPG (Phase 2c). RÈGLE : l'équipement ne donne PAS de
 // stats (elles viennent du sport) — il donne des EFFETS de gameplay. Pur/testable.
 import { playerCombatant, type Combatant } from './combat';
+import type { FamiliarSpecies } from '@/data/familiars';
 
-export type ItemSlot = 'weapon' | 'armor' | 'accessory' | 'relic';
+// `familiar` = 5ᵉ emplacement PARALLÈLE (compagnon) : compté par aggregateEffects
+// mais EXCLU de SLOTS (donc des drops normaux / sets / forge). Cf. src/data/familiars.ts.
+export type ItemSlot = 'weapon' | 'armor' | 'accessory' | 'relic' | 'familiar';
+export const FAMILIAR_SLOT: ItemSlot = 'familiar';
 // « divin » = 5ᵉ rareté au-dessus de légendaire : 1 stat TRÈS puissante, très rare
 // au drop, infusable mais coûteuse. (Le légendaire garde l'adjectif « mythique ».)
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'divin';
@@ -39,6 +43,7 @@ export interface Item {
   effect2?: ItemEffect; // LEGACY : anciens objets 2-stats (les nouveaux n'en ont plus) — encore appliqué
   setId?: string; // appartenance à un SET (bonus à 2/3/4 pièces) — cf. ITEM_SETS
   locked?: boolean; // 🔒 protégé : exclu de la casse/vente (en masse ET individuelle)
+  species?: string; // slot 'familiar' uniquement : id de la RACE (cf. FAMILIAR_SPECIES)
 }
 
 // L'effet grandit de +5 % de la base par niveau au-dessus de 1. Pente VOLONTAIREMENT
@@ -116,12 +121,14 @@ export const SLOT_LABEL: Record<ItemSlot, string> = {
   armor: 'Armure',
   accessory: 'Accessoire',
   relic: 'Relique',
+  familiar: 'Familier',
 };
 export const SLOT_EMOJI: Record<ItemSlot, string> = {
   weapon: '⚔️',
   armor: '🛡️',
   accessory: '💍',
   relic: '🔮',
+  familiar: '🐾',
 };
 export const RARITY_LABEL: Record<Rarity, string> = {
   common: 'Commun',
@@ -190,6 +197,9 @@ const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
     { type: 'max_pv_pct', base: 8 },
     { type: 'rage_pct', base: 12 }, // signature : fureur quand tu es au bord de la mort
   ],
+  // Familier : l'effet vient de la RACE (cf. rollFamiliar), pas de ce pool (jamais
+  // tiré par pick(rng, SLOTS)). Entrée requise par le type Record<ItemSlot,…>.
+  familiar: [{ type: 'damage_pct', base: 6 }],
 };
 
 /** Effets réellement disponibles pour un slot À CE NIVEAU (pool progressif — les
@@ -214,6 +224,7 @@ const NAMES: Record<ItemSlot, string[]> = {
   armor: ['Plastron', 'Cotte', 'Cuirasse', 'Harnois'],
   accessory: ['Anneau', 'Amulette', 'Talisman', 'Bracelet'],
   relic: ['Éclat', 'Totem', 'Sceau', 'Idole'],
+  familiar: ['Compagnon'], // nom réel = nom de la race (cf. rollFamiliar)
 };
 const RARITY_ADJ: Record<Rarity, string> = {
   common: 'usé',
@@ -367,6 +378,41 @@ export function rollSetPiece(
     baseLevel: level,
     effect: { type: chosen.type, value }, // 1 stat + la synergie de set (bonus 2/3/4 pièces)
     ...(set ? { setId: opts.setId } : {}),
+  };
+}
+
+// ── Familiers (compagnons) — slot parallèle, monté aux PIERRES MAGIQUES 💎 ──
+
+/** `true` si l'objet est un familier (slot compagnon). */
+export function isFamiliar(it: Item | null | undefined): boolean {
+  return !!it && it.slot === FAMILIAR_SLOT;
+}
+
+/** Coût en PIERRES MAGIQUES pour monter un familier du niveau `level` au suivant
+ *  (plus cher que la poussière d'un objet : les pierres sont rares). Cap = niveau joueur. */
+export function familiarStoneCost(level: number, rarity: Rarity): number {
+  return Math.round((3 + level * 2) * RARITY_COST_MULT[rarity]);
+}
+
+/** Tire un FAMILIER d'une race donnée. L'effet = le bonus de la race, magnitude
+ *  variable (rareté × niveau × variance ±20 %), comme un objet. Pur/testable. */
+export function rollFamiliar(
+  rng: () => number,
+  species: FamiliarSpecies,
+  opts: { level: number; luck?: number },
+): Omit<Item, 'id'> {
+  const rarity = rollRarity(rng, opts.luck ?? 0);
+  const value = Math.max(1, Math.round(species.base * RARITY_MULT[rarity] * (0.8 + rng() * 0.4)));
+  const level = Math.max(1, Math.round(opts.level));
+  return {
+    slot: FAMILIAR_SLOT,
+    name: species.name,
+    emoji: species.emoji,
+    rarity,
+    level,
+    baseLevel: level,
+    effect: { type: species.effect, value },
+    species: species.id,
   };
 }
 
@@ -617,6 +663,9 @@ export function aggregateEffects(equipped: Equipped, capLevel = Infinity): Aggre
     applyEffect(a, it.effect.type, effectiveValue(it.effect, lv) / 100);
     if (it.effect2) applyEffect(a, it.effect2.type, effectiveValue(it.effect2, lv) / 100);
   }
+  // Familier (slot parallèle, hors SLOTS) : son bonus de race compte comme un effet.
+  const fam = equipped[FAMILIAR_SLOT];
+  if (fam) applyEffect(a, fam.effect.type, effectiveValue(fam.effect, Math.min(fam.level, capLevel)) / 100);
   // Bonus de set (2/3/4 pièces) — ajoutés par-dessus les effets d'objet.
   const s = setEffects(equipped, capLevel);
   a.damagePct += s.damagePct;
