@@ -147,10 +147,10 @@ describe('rollDrop', () => {
     expect(d!.level).toBeLessThanOrEqual(8);
     expect(d!.level).toBeGreaterThanOrEqual(6); // 8 - 2 au plus bas
   });
-  it('variance de roll ±20 % : rng=0 → valeur × 0.8 (weapon/dégâts divin = 8×5×0.8)', () => {
+  it('variance de roll ±20 % : rng=0 → valeur × 0.8 (weapon/dégâts divin = round(8×3.8×0.8))', () => {
     const d = rollDrop(() => 0, { cleared: true, defeated: 1, level: 6 });
     expect(d!.effect.type).toBe('damage_pct');
-    expect(d!.effect.value).toBe(32);
+    expect(d!.effect.value).toBe(Math.round(8 * 3.8 * 0.8)); // = 24
   });
   it('pool progressif : au niveau 1, aucune stat exotique (crit/vol de vie/réduction)', () => {
     const exotic = new Set(['crit_pct', 'lifesteal_pct', 'dmg_reduction_pct']);

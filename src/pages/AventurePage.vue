@@ -1610,8 +1610,10 @@ const winPct = computed<Record<string, number>>(() => {
   const stats = c.value;
   const eq = char.row?.equipped ?? {};
   const name = char.row?.pseudo ?? 'Toi';
-  // Talents + consommables sélectionnés → le % reflète les buffs choisis pour le run.
-  const fx = runExtra().extra;
+  // Le % reflète ta VRAIE puissance (stats + gear plafonné + talents) SANS les
+  // consommables (2026‑08‑12) : ils gonflaient le % affiché et faussaient la lecture
+  // « ce contenu est-il à ma portée ». Les consommables restent appliqués au run réel.
+  const fx = talentFx.value;
   const lvl = c.value.level.level;
   const out: Record<string, number> = {};
   for (const d of DUNGEONS) {

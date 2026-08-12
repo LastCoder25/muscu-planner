@@ -49,7 +49,7 @@ export const SHOP_ITEMS: ShopItem[] = [
     id: 'potion_heal',
     name: 'Potion de soin',
     emoji: '❤️',
-    desc: '+50 % PV max sur ton prochain donjon.',
+    desc: '+35 % PV max sur ton prochain donjon.',
     cost: 80,
     kind: 'consumable',
   },
@@ -65,7 +65,7 @@ export const SHOP_ITEMS: ShopItem[] = [
     id: 'elixir_force',
     name: 'Élixir de force',
     emoji: '💥',
-    desc: '+25 % dégâts sur ton prochain donjon.',
+    desc: '+18 % dégâts sur ton prochain donjon.',
     cost: 100,
     kind: 'consumable',
   },
@@ -74,7 +74,7 @@ export const SHOP_ITEMS: ShopItem[] = [
     id: 'potion_heal_big',
     name: 'Grande potion',
     emoji: '❤️‍🔥',
-    desc: '+100 % PV max sur ton prochain donjon.',
+    desc: '+50 % PV max sur ton prochain donjon.',
     cost: 200,
     kind: 'consumable',
   },
@@ -82,7 +82,7 @@ export const SHOP_ITEMS: ShopItem[] = [
     id: 'scroll_crit',
     name: 'Parchemin de précision',
     emoji: '🎯',
-    desc: '+15 % de critique sur ton prochain donjon.',
+    desc: '+10 % de critique sur ton prochain donjon.',
     cost: 150,
     kind: 'consumable',
   },
@@ -90,7 +90,7 @@ export const SHOP_ITEMS: ShopItem[] = [
     id: 'scroll_guard',
     name: 'Parchemin de garde',
     emoji: '🛡️',
-    desc: '+15 % de réduction des dégâts sur ton prochain donjon.',
+    desc: '+10 % de réduction des dégâts sur ton prochain donjon.',
     cost: 150,
     kind: 'consumable',
   },
@@ -116,11 +116,13 @@ export function consumableEffect(id: string): {
   extra?: Partial<AggregatedEffects>;
   lucky?: boolean;
 } {
-  if (id === 'potion_heal') return { extra: { maxPvPct: 0.5 } };
-  if (id === 'potion_heal_big') return { extra: { maxPvPct: 1 } };
-  if (id === 'elixir_force') return { extra: { damagePct: 0.25 } };
-  if (id === 'scroll_crit') return { extra: { critAdd: 0.15 } };
-  if (id === 'scroll_guard') return { extra: { dmgReduction: 0.15 } };
+  // Forces réduites (2026‑08‑12) : cumulées au gear/set/talents elles faisaient
+  // sauter des tiers de contenu (cf. simulation). Restent un coup de pouce, pas un ×2.
+  if (id === 'potion_heal') return { extra: { maxPvPct: 0.35 } };
+  if (id === 'potion_heal_big') return { extra: { maxPvPct: 0.5 } };
+  if (id === 'elixir_force') return { extra: { damagePct: 0.18 } };
+  if (id === 'scroll_crit') return { extra: { critAdd: 0.1 } };
+  if (id === 'scroll_guard') return { extra: { dmgReduction: 0.1 } };
   if (id === 'vial_luck') return { lucky: true };
   return {};
 }

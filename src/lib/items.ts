@@ -140,12 +140,15 @@ export const RARITY_RANK: Record<Rarity, number> = {
   divin: 4,
 };
 
+// Multiplicateur de magnitude par rareté. Hautes raretés ABAISSÉES (2026‑08‑12) :
+// l'écart nu→équipé était trop grand (un loadout légendaire faisait sauter ~2 tiers
+// de contenu → un bas niveau battait du contenu très au-dessus). Voir simulation.
 const RARITY_MULT: Record<Rarity, number> = {
   common: 1,
-  rare: 1.6,
-  epic: 2.4,
-  legendary: 3.5,
-  divin: 5,
+  rare: 1.5,
+  epic: 2.1,
+  legendary: 2.8,
+  divin: 3.8,
 };
 
 // Effet possible par slot + valeur de base (avant rareté/niveau).
@@ -577,8 +580,9 @@ export function setCounts(equipped: Equipped): Record<string, number> {
   return out;
 }
 
-/** Effets cumulés des SETS actifs (≥2 pièces), scalés par le niveau moyen des pièces. */
-export function setEffects(equipped: Equipped): AggregatedEffects {
+/** Effets cumulés des SETS actifs (≥2 pièces), scalés par le niveau moyen des pièces.
+ *  `capLevel` (optionnel) plafonne le niveau effectif des pièces au niveau du joueur. */
+export function setEffects(equipped: Equipped, capLevel = Infinity): AggregatedEffects {
   const a = emptyEffects();
   const groups: Record<string, Item[]> = {};
   for (const slot of SLOTS) {
@@ -588,7 +592,9 @@ export function setEffects(equipped: Equipped): AggregatedEffects {
   for (const [id, items] of Object.entries(groups)) {
     const def = SET_BY_ID[id];
     if (!def || items.length < 2) continue;
-    const avgLvl = Math.round(items.reduce((s, i) => s + i.level, 0) / items.length);
+    const avgLvl = Math.round(
+      items.reduce((s, i) => s + Math.min(i.level, capLevel), 0) / items.length,
+    );
     const mult = itemLevelMult(avgLvl);
     for (const t of def.tiers) {
       if (items.length < t.pieces) continue;
@@ -599,16 +605,20 @@ export function setEffects(equipped: Equipped): AggregatedEffects {
   return a;
 }
 
-export function aggregateEffects(equipped: Equipped): AggregatedEffects {
+// `capLevel` plafonne le niveau EFFECTIF de chaque objet au niveau du joueur (comme
+// l'upgrade) → un objet sur-leveled ne donne que la puissance de TON niveau (anti
+// « bas niveau en gear trop haut qui punch 3 tiers au-dessus », cf. simulation 2026‑08‑12).
+export function aggregateEffects(equipped: Equipped, capLevel = Infinity): AggregatedEffects {
   const a = emptyEffects();
   for (const slot of SLOTS) {
     const it = equipped[slot];
     if (!it) continue;
-    applyEffect(a, it.effect.type, effectiveValue(it.effect, it.level) / 100);
-    if (it.effect2) applyEffect(a, it.effect2.type, effectiveValue(it.effect2, it.level) / 100);
+    const lv = Math.min(it.level, capLevel);
+    applyEffect(a, it.effect.type, effectiveValue(it.effect, lv) / 100);
+    if (it.effect2) applyEffect(a, it.effect2.type, effectiveValue(it.effect2, lv) / 100);
   }
   // Bonus de set (2/3/4 pièces) — ajoutés par-dessus les effets d'objet.
-  const s = setEffects(equipped);
+  const s = setEffects(equipped, capLevel);
   a.damagePct += s.damagePct;
   a.critAdd += s.critAdd;
   a.dodgeAdd += s.dodgeAdd;
@@ -632,7 +642,8 @@ export function playerWithGear(
   level = 1,
 ): Combatant {
   const base = playerCombatant(name, stats, level);
-  const e = aggregateEffects(equipped);
+  // Plafonne le niveau effectif du gear au niveau du joueur (anti sur-leveling).
+  const e = aggregateEffects(equipped, level);
   const damagePct = e.damagePct + (extra.damagePct ?? 0);
   const maxPvPct = e.maxPvPct + (extra.maxPvPct ?? 0);
   const critAdd = e.critAdd + (extra.critAdd ?? 0);
