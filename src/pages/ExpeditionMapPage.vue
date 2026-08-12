@@ -16,7 +16,8 @@
     <div class="map-outer">
       <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
       <svg viewBox="0 0 100 100" class="map" :style="{ width: mapPx + 'px', height: mapPx + 'px' }">
-        <!-- Terrain (biomes + décor) — fond de carte -->
+        <!-- Terrain — fond de carte : socle de terre + régions solides + motifs -->
+        <rect x="-5" y="-5" width="110" height="110" class="land-base" />
         <path
           v-for="(b, i) in terrain.biomes"
           :key="'bio' + i"
@@ -24,13 +25,13 @@
           class="biome"
           :class="'b-' + b.type"
         />
-        <text
-          v-for="(g, i) in terrain.glyphs"
-          :key="'gly' + i"
-          :x="g.x"
-          :y="g.y + 1.6"
-          class="terr-glyph"
-        >{{ g.emoji }}</text>
+        <path
+          v-for="(m, i) in terrain.motifs"
+          :key="'mo' + i"
+          :d="m.d"
+          class="motif"
+          :class="'m-' + m.kind"
+        />
 
         <!-- Lignes arcaniques (leylines) rayonnant de la ville -->
         <line
@@ -249,7 +250,7 @@ const active = computed(() => char.row?.expedition ?? null);
 const pois = computed<Poi[]>(() => char.row?.expedition_map?.pois ?? []);
 // Fond de carte (terrain) déterministe pour le seed de la carte.
 const terrain = computed(() =>
-  char.row?.expedition_map ? expeditionTerrain(char.row.expedition_map.seed) : { biomes: [], glyphs: [] },
+  char.row?.expedition_map ? expeditionTerrain(char.row.expedition_map.seed) : { biomes: [], motifs: [] },
 );
 const hero = computed(() => (active.value ? heroPosition(active.value, now.value) : null));
 
@@ -561,34 +562,54 @@ function fmtMin(min: number): string {
   place-items: center;
 }
 /* Décor de carte */
-/* Terrain (biomes + décor) */
+/* Terrain : socle + régions SOLIDES + motifs vectoriels */
+.land-base {
+  fill: #2b3128;
+}
 .biome {
-  stroke: none;
-  mix-blend-mode: normal;
+  stroke: rgba(0, 0, 0, 0.25);
+  stroke-width: 0.3;
 }
 .b-forest {
-  fill: rgba(58, 108, 68, 0.4);
+  fill: #335740;
 }
 .b-mountains {
-  fill: rgba(92, 92, 104, 0.42);
+  fill: #4b4e56;
 }
 .b-desert {
-  fill: rgba(150, 122, 62, 0.32);
+  fill: #6e5f39;
 }
 .b-water {
-  fill: rgba(48, 92, 142, 0.42);
+  fill: #2c4e6f;
 }
 .b-plains {
-  fill: rgba(112, 112, 60, 0.28);
+  fill: #565a30;
 }
 .b-swamp {
-  fill: rgba(58, 88, 60, 0.4);
+  fill: #364a34;
 }
-.terr-glyph {
-  font-size: 3.6px;
-  text-anchor: middle;
-  opacity: 0.5;
+.motif {
   pointer-events: none;
+}
+.m-mountain {
+  fill: #6b6f78;
+  stroke: #3a3d44;
+  stroke-width: 0.15;
+}
+.m-tree {
+  fill: #234a30;
+}
+.m-dune {
+  fill: none;
+  stroke: #9a8752;
+  stroke-width: 0.4;
+  stroke-linecap: round;
+}
+.m-ripple {
+  fill: none;
+  stroke: #4f80b4;
+  stroke-width: 0.35;
+  stroke-linecap: round;
 }
 .ley {
   stroke: color-mix(in srgb, #4a9eff 35%, transparent);

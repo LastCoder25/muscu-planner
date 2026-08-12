@@ -336,38 +336,38 @@ export function resolveOutcome(
   };
 }
 
-// ── Fond de carte : TERRAIN procédural déterministe (biomes + décor) ──
+// ── Fond de carte : TERRAIN procédural déterministe (régions solides + motifs) ──
 export type BiomeType = 'forest' | 'desert' | 'mountains' | 'water' | 'plains' | 'swamp';
+export type MotifKind = 'mountain' | 'tree' | 'dune' | 'ripple';
 export interface Biome {
   type: BiomeType;
-  path: string; // blob SVG (coord 0..100)
+  path: string; // blob SVG SOLIDE (coord 0..100)
 }
-export interface TerrainGlyph {
-  emoji: string;
-  x: number;
-  y: number;
+export interface Motif {
+  kind: MotifKind; // motif VECTORIEL (dessiné, pas d'emoji)
+  d: string; // path prêt à rendre
 }
 export interface Terrain {
   biomes: Biome[];
-  glyphs: TerrainGlyph[];
+  motifs: Motif[];
 }
 
-const BIOME_GLYPHS: Record<BiomeType, string[]> = {
-  forest: ['🌲', '🌳'],
-  desert: ['🌵', '🏜️'],
-  mountains: ['⛰️', '🏔️', '🪨'],
-  water: ['🌊'],
-  plains: ['🌾'],
-  swamp: ['🌿', '🍄'],
-};
 const BIOME_POOL: BiomeType[] = ['forest', 'mountains', 'desert', 'water', 'plains', 'swamp', 'forest', 'mountains'];
+const BIOME_MOTIF: Record<BiomeType, MotifKind | null> = {
+  forest: 'tree',
+  mountains: 'mountain',
+  desert: 'dune',
+  water: 'ripple',
+  plains: null,
+  swamp: 'tree',
+};
 
 // Blob organique fermé (lissé) autour de (cx,cy).
-function blobPath(rng: () => number, cx: number, cy: number, r: number, n = 9): string {
+function blobPath(rng: () => number, cx: number, cy: number, r: number, n = 10): string {
   const pts: [number, number][] = [];
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
-    const rr = r * (0.7 + rng() * 0.55);
+    const rr = r * (0.72 + rng() * 0.5);
     pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
   }
   const mid = (i: number): [number, number] => {
@@ -375,44 +375,64 @@ function blobPath(rng: () => number, cx: number, cy: number, r: number, n = 9): 
     const q = pts[(i + 1) % n]!;
     return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
   };
-  let d = `M ${mid(n - 1)[0].toFixed(1)} ${mid(n - 1)[1].toFixed(1)}`;
+  const f = (v: number) => v.toFixed(1);
+  let d = `M ${f(mid(n - 1)[0])} ${f(mid(n - 1)[1])}`;
   for (let i = 0; i < n; i++) {
     const p = pts[i]!;
     const m = mid(i);
-    d += ` Q ${p[0].toFixed(1)} ${p[1].toFixed(1)} ${m[0].toFixed(1)} ${m[1].toFixed(1)}`;
+    d += ` Q ${f(p[0])} ${f(p[1])} ${f(m[0])} ${f(m[1])}`;
   }
   return d + ' Z';
 }
 
-/** Terrain de la carte (déterministe pour un `seed`) : biomes + décor. */
+// Path d'un motif vectoriel (petit, dessiné) selon le type.
+function motifPath(kind: MotifKind, x: number, y: number, s: number): string {
+  const f = (v: number) => v.toFixed(1);
+  if (kind === 'mountain') {
+    // Chaîne de 2-3 pics (silhouette remplie).
+    return `M ${f(x - 4 * s)} ${f(y + 2 * s)} L ${f(x - 1.5 * s)} ${f(y - 2.6 * s)} L ${f(x + 0.6 * s)} ${f(y + 0.4 * s)} L ${f(x + 2.6 * s)} ${f(y - 3.2 * s)} L ${f(x + 4.6 * s)} ${f(y + 2 * s)} Z`;
+  }
+  if (kind === 'tree') {
+    // Petit conifère (triangle).
+    return `M ${f(x)} ${f(y - 3 * s)} L ${f(x - 1.8 * s)} ${f(y + 1.2 * s)} L ${f(x + 1.8 * s)} ${f(y + 1.2 * s)} Z`;
+  }
+  if (kind === 'dune') {
+    // Deux arcs de dune.
+    return `M ${f(x - 4 * s)} ${f(y)} Q ${f(x - 1.5 * s)} ${f(y - 1.6 * s)} ${f(x + 1 * s)} ${f(y)} M ${f(x + 0.5 * s)} ${f(y + 1.6 * s)} Q ${f(x + 3 * s)} ${f(y)} ${f(x + 5 * s)} ${f(y + 1.4 * s)}`;
+  }
+  // ripple : vaguelette.
+  return `M ${f(x - 3 * s)} ${f(y)} q ${f(1.5 * s)} ${f(-1.6 * s)} ${f(3 * s)} 0 q ${f(1.5 * s)} ${f(1.6 * s)} ${f(3 * s)} 0`;
+}
+
+/** Terrain de la carte (déterministe pour un `seed`) : régions solides + motifs vectoriels. */
 export function expeditionTerrain(seed: number): Terrain {
   const rng = mulberry32((seed >>> 0) || 1);
   const biomes: Biome[] = [];
-  const glyphs: TerrainGlyph[] = [];
-  // ~6 biomes sur une grille 3×2 jitterée couvrant toute la carte.
+  const motifs: Motif[] = [];
+  // ~6 biomes sur une grille 3×2 jitterée couvrant toute la carte (blobs SOLIDES,
+  // superposés sur un socle de terre → lecture « régions », pas de bouillie).
   const cols = 3;
   const rows = 2;
   for (let gy = 0; gy < rows; gy++)
     for (let gx = 0; gx < cols; gx++) {
-      const cx = ((gx + 0.5) / cols) * 100 + (rng() - 0.5) * 18;
-      const cy = ((gy + 0.5) / rows) * 100 + (rng() - 0.5) * 18;
+      const cx = ((gx + 0.5) / cols) * 100 + (rng() - 0.5) * 16;
+      const cy = ((gy + 0.5) / rows) * 100 + (rng() - 0.5) * 16;
       const type = BIOME_POOL[Math.floor(rng() * BIOME_POOL.length)]!;
-      const r = 20 + rng() * 12;
+      const r = 22 + rng() * 12;
       biomes.push({ type, path: blobPath(rng, cx, cy, r) });
-      // Quelques glyphes de décor dans le biome.
-      const gl = BIOME_GLYPHS[type];
-      const nG = 2 + Math.floor(rng() * 2);
-      for (let k = 0; k < nG; k++) {
+      const kind = BIOME_MOTIF[type];
+      if (!kind) continue;
+      const nM = 3 + Math.floor(rng() * 3);
+      for (let k = 0; k < nM; k++) {
         const a = rng() * Math.PI * 2;
-        const rr = rng() * r * 0.55;
-        glyphs.push({
-          emoji: gl[Math.floor(rng() * gl.length)]!,
-          x: Math.round(cx + Math.cos(a) * rr),
-          y: Math.round(cy + Math.sin(a) * rr),
+        const rr = rng() * r * 0.6;
+        motifs.push({
+          kind,
+          d: motifPath(kind, cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 0.8 + rng() * 0.6),
         });
       }
     }
-  return { biomes, glyphs };
+  return { biomes, motifs };
 }
 
 /** Construit une expédition (au moment de l'envoi). `now` = ms epoch. */
