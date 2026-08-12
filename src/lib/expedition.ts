@@ -336,38 +336,27 @@ export function resolveOutcome(
   };
 }
 
-// ── Fond de carte : TERRAIN procédural déterministe (régions solides + motifs) ──
-export type BiomeType = 'forest' | 'desert' | 'mountains' | 'water' | 'plains' | 'swamp';
-export type MotifKind = 'mountain' | 'tree' | 'dune' | 'ripple';
-export interface Biome {
-  type: BiomeType;
-  path: string; // blob SVG SOLIDE (coord 0..100)
-}
+// ── Fond de carte : PARCHEMIN dessiné à l'encre (style « livre d'aventure ») ──
+export type MotifKind = 'mountain' | 'tree' | 'dune';
 export interface Motif {
-  kind: MotifKind; // motif VECTORIEL (dessiné, pas d'emoji)
-  d: string; // path prêt à rendre
+  kind: MotifKind;
+  d: string; // path prêt à rendre (encre)
+  x: number; // pour l'ordre de rendu (peintre : du fond vers l'avant)
+  y: number;
 }
 export interface Terrain {
-  biomes: Biome[];
-  motifs: Motif[];
+  coast: string; // contour de la CÔTE (continent) — path fermé
+  features: Motif[]; // reliefs dessinés (chaînes de montagnes, forêts, dunes)
 }
 
-const BIOME_POOL: BiomeType[] = ['forest', 'mountains', 'desert', 'water', 'plains', 'swamp', 'forest', 'mountains'];
-const BIOME_MOTIF: Record<BiomeType, MotifKind | null> = {
-  forest: 'tree',
-  mountains: 'mountain',
-  desert: 'dune',
-  water: 'ripple',
-  plains: null,
-  swamp: 'tree',
-};
+const f1 = (v: number) => v.toFixed(1);
 
 // Blob organique fermé (lissé) autour de (cx,cy).
-function blobPath(rng: () => number, cx: number, cy: number, r: number, n = 10): string {
+function blobPath(rng: () => number, cx: number, cy: number, r: number, n: number): string {
   const pts: [number, number][] = [];
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
-    const rr = r * (0.72 + rng() * 0.5);
+    const rr = r * (0.74 + rng() * 0.46);
     pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
   }
   const mid = (i: number): [number, number] => {
@@ -375,64 +364,87 @@ function blobPath(rng: () => number, cx: number, cy: number, r: number, n = 10):
     const q = pts[(i + 1) % n]!;
     return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
   };
-  const f = (v: number) => v.toFixed(1);
-  let d = `M ${f(mid(n - 1)[0])} ${f(mid(n - 1)[1])}`;
+  let d = `M ${f1(mid(n - 1)[0])} ${f1(mid(n - 1)[1])}`;
   for (let i = 0; i < n; i++) {
     const p = pts[i]!;
     const m = mid(i);
-    d += ` Q ${f(p[0])} ${f(p[1])} ${f(m[0])} ${f(m[1])}`;
+    d += ` Q ${f1(p[0])} ${f1(p[1])} ${f1(m[0])} ${f1(m[1])}`;
   }
   return d + ' Z';
 }
 
-// Path d'un motif vectoriel (petit, dessiné) selon le type.
-function motifPath(kind: MotifKind, x: number, y: number, s: number): string {
-  const f = (v: number) => v.toFixed(1);
-  if (kind === 'mountain') {
-    // Chaîne de 2-3 pics (silhouette remplie).
-    return `M ${f(x - 4 * s)} ${f(y + 2 * s)} L ${f(x - 1.5 * s)} ${f(y - 2.6 * s)} L ${f(x + 0.6 * s)} ${f(y + 0.4 * s)} L ${f(x + 2.6 * s)} ${f(y - 3.2 * s)} L ${f(x + 4.6 * s)} ${f(y + 2 * s)} Z`;
-  }
-  if (kind === 'tree') {
-    // Petit conifère (triangle).
-    return `M ${f(x)} ${f(y - 3 * s)} L ${f(x - 1.8 * s)} ${f(y + 1.2 * s)} L ${f(x + 1.8 * s)} ${f(y + 1.2 * s)} Z`;
-  }
-  if (kind === 'dune') {
-    // Deux arcs de dune.
-    return `M ${f(x - 4 * s)} ${f(y)} Q ${f(x - 1.5 * s)} ${f(y - 1.6 * s)} ${f(x + 1 * s)} ${f(y)} M ${f(x + 0.5 * s)} ${f(y + 1.6 * s)} Q ${f(x + 3 * s)} ${f(y)} ${f(x + 5 * s)} ${f(y + 1.4 * s)}`;
-  }
-  // ripple : vaguelette.
-  return `M ${f(x - 3 * s)} ${f(y)} q ${f(1.5 * s)} ${f(-1.6 * s)} ${f(3 * s)} 0 q ${f(1.5 * s)} ${f(1.6 * s)} ${f(3 * s)} 0`;
+// Un pic de montagne dessiné à l'encre (contour + versant hachuré).
+function peakPath(x: number, y: number, s: number): string {
+  const bx = x - 3.4 * s;
+  const cx = x + 3.4 * s;
+  const py = y - 3.6 * s;
+  return `M ${f1(bx)} ${f1(y + 1.6 * s)} L ${f1(x)} ${f1(py)} L ${f1(cx)} ${f1(y + 1.6 * s)} M ${f1(x)} ${f1(py)} L ${f1(x - 1.1 * s)} ${f1(y - 0.3 * s)}`;
+}
+// Un conifère (encre).
+function treePath(x: number, y: number, s: number): string {
+  return `M ${f1(x)} ${f1(y - 3 * s)} L ${f1(x - 1.7 * s)} ${f1(y + 1 * s)} L ${f1(x + 1.7 * s)} ${f1(y + 1 * s)} Z M ${f1(x)} ${f1(y + 1 * s)} L ${f1(x)} ${f1(y + 2.2 * s)}`;
+}
+// Une dune (arc d'encre).
+function dunePath(x: number, y: number, s: number): string {
+  return `M ${f1(x - 4 * s)} ${f1(y)} Q ${f1(x)} ${f1(y - 2.2 * s)} ${f1(x + 4 * s)} ${f1(y)}`;
 }
 
-/** Terrain de la carte (déterministe pour un `seed`) : régions solides + motifs vectoriels. */
+/** Terrain de la carte (déterministe pour un `seed`) : côte + reliefs à l'encre. */
 export function expeditionTerrain(seed: number): Terrain {
   const rng = mulberry32((seed >>> 0) || 1);
-  const biomes: Biome[] = [];
-  const motifs: Motif[] = [];
-  // ~6 biomes sur une grille 3×2 jitterée couvrant toute la carte (blobs SOLIDES,
-  // superposés sur un socle de terre → lecture « régions », pas de bouillie).
-  const cols = 3;
-  const rows = 2;
-  for (let gy = 0; gy < rows; gy++)
-    for (let gx = 0; gx < cols; gx++) {
-      const cx = ((gx + 0.5) / cols) * 100 + (rng() - 0.5) * 16;
-      const cy = ((gy + 0.5) / rows) * 100 + (rng() - 0.5) * 16;
-      const type = BIOME_POOL[Math.floor(rng() * BIOME_POOL.length)]!;
-      const r = 22 + rng() * 12;
-      biomes.push({ type, path: blobPath(rng, cx, cy, r) });
-      const kind = BIOME_MOTIF[type];
-      if (!kind) continue;
-      const nM = 3 + Math.floor(rng() * 3);
-      for (let k = 0; k < nM; k++) {
-        const a = rng() * Math.PI * 2;
-        const rr = rng() * r * 0.6;
-        motifs.push({
-          kind,
-          d: motifPath(kind, cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 0.8 + rng() * 0.6),
-        });
-      }
+  // Continent : grand contour irrégulier centré, couvrant l'essentiel de la carte.
+  const coast = blobPath(rng, 50, 50, 46, 16);
+  const features: Motif[] = [];
+  const push = (kind: MotifKind, x: number, y: number, s: number) => {
+    const d = kind === 'mountain' ? peakPath(x, y, s) : kind === 'tree' ? treePath(x, y, s) : dunePath(x, y, s);
+    features.push({ kind, d, x, y });
+  };
+  // 3-4 amas de relief (chaîne / forêt / désert) répartis dans le continent.
+  const clusters = 3 + Math.floor(rng() * 2);
+  const centers: [number, number][] = [];
+  for (let c = 0; c < clusters; c++) {
+    let cx = 50;
+    let cy = 50;
+    for (let tries = 0; tries < 20; tries++) {
+      const a = rng() * Math.PI * 2;
+      const rr = 12 + rng() * 24;
+      cx = 50 + Math.cos(a) * rr;
+      cy = 50 + Math.sin(a) * rr;
+      if (centers.every(([px, py]) => Math.hypot(px - cx, py - cy) > 20)) break;
     }
-  return { biomes, motifs };
+    centers.push([cx, cy]);
+    const kind: MotifKind = (['mountain', 'tree', 'dune'] as const)[Math.floor(rng() * 3)]!;
+    if (kind === 'mountain') {
+      // Chaîne : pics alignés le long d'une direction, taille dégressive.
+      const dir = rng() * Math.PI;
+      const n = 4 + Math.floor(rng() * 4);
+      for (let i = 0; i < n; i++) {
+        const t = (i - (n - 1) / 2) * (3.2 + rng());
+        push(
+          'mountain',
+          cx + Math.cos(dir) * t + (rng() - 0.5) * 2,
+          cy + Math.sin(dir) * t + (rng() - 0.5) * 2,
+          0.9 + rng() * 0.7,
+        );
+      }
+    } else if (kind === 'tree') {
+      // Forêt : bosquet dense.
+      const n = 8 + Math.floor(rng() * 6);
+      for (let i = 0; i < n; i++) {
+        const a = rng() * Math.PI * 2;
+        const rr = rng() * 9;
+        push('tree', cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 0.8 + rng() * 0.5);
+      }
+    } else {
+      // Désert : dunes éparses.
+      const n = 3 + Math.floor(rng() * 3);
+      for (let i = 0; i < n; i++)
+        push('dune', cx + (rng() - 0.5) * 12, cy + (rng() - 0.5) * 10, 0.9 + rng() * 0.6);
+    }
+  }
+  // Ordre peintre : dessine du fond (haut) vers l'avant (bas).
+  features.sort((a, b) => a.y - b.y);
+  return { coast, features };
 }
 
 /** Construit une expédition (au moment de l'envoi). `now` = ms epoch. */

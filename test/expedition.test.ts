@@ -72,14 +72,13 @@ describe('expedition — carte / monde', () => {
 });
 
 describe('expedition — terrain (fond de carte)', () => {
-  it('déterministe + biomes/motifs non vides', () => {
+  it('déterministe + côte/reliefs non vides', () => {
     const t1 = expeditionTerrain(42);
     const t2 = expeditionTerrain(42);
     expect(t1).toEqual(t2); // même seed → même terrain
-    expect(t1.biomes.length).toBeGreaterThan(0);
-    expect(t1.motifs.length).toBeGreaterThan(0);
-    expect(t1.biomes[0]!.path.startsWith('M ')).toBe(true);
-    expect(t1.motifs[0]!.d.startsWith('M ')).toBe(true);
+    expect(t1.coast.startsWith('M ')).toBe(true);
+    expect(t1.features.length).toBeGreaterThan(0);
+    expect(t1.features[0]!.d.startsWith('M ')).toBe(true);
     // Seeds différents → terrains différents.
     expect(expeditionTerrain(1)).not.toEqual(expeditionTerrain(2));
   });

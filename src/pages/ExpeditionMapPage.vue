@@ -16,40 +16,25 @@
     <div class="map-outer">
       <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
       <svg viewBox="0 0 100 100" class="map" :style="{ width: mapPx + 'px', height: mapPx + 'px' }">
-        <!-- Terrain — fond de carte : socle de terre + régions solides + motifs -->
-        <rect x="-5" y="-5" width="110" height="110" class="land-base" />
+        <!-- Fond PARCHEMIN : mer + côte + reliefs dessinés à l'encre -->
+        <rect x="-10" y="-10" width="120" height="120" class="sea" />
+        <path :d="terrain.coast" class="coast-line" />
+        <path :d="terrain.coast" class="land" />
         <path
-          v-for="(b, i) in terrain.biomes"
-          :key="'bio' + i"
-          :d="b.path"
-          class="biome"
-          :class="'b-' + b.type"
-        />
-        <path
-          v-for="(m, i) in terrain.motifs"
-          :key="'mo' + i"
-          :d="m.d"
-          class="motif"
-          :class="'m-' + m.kind"
+          v-for="(feat, i) in terrain.features"
+          :key="'ft' + i"
+          :d="feat.d"
+          class="feat"
+          :class="'f-' + feat.kind"
         />
 
-        <!-- Lignes arcaniques (leylines) rayonnant de la ville -->
-        <line
-          v-for="l in LEYS"
-          :key="'ley' + l.a"
-          :x1="TOWN.x" :y1="TOWN.y" :x2="l.x" :y2="l.y"
-          class="ley"
-        />
-        <!-- Anneaux de distance (guides de trajet) -->
-        <circle v-for="r in RINGS" :key="'ring' + r" :cx="TOWN.x" :cy="TOWN.y" :r="r" class="ring" />
-        <text :x="TOWN.x" :y="TOWN.y - RING_NEAR + 2.5" class="ring-lbl">proche</text>
-        <text :x="TOWN.x" :y="TOWN.y - RING_FAR + 2.5" class="ring-lbl">loin</text>
-
-        <!-- Boussole (coin haut-droit) -->
+        <!-- Cadre décoratif + boussole (visibles carte dézoomée) -->
+        <rect x="1.5" y="1.5" width="97" height="97" rx="2" class="map-frame" />
+        <rect x="3.5" y="3.5" width="93" height="93" rx="1" class="map-frame thin" />
         <g class="compass">
-          <circle cx="90" cy="10" r="6" class="comp-bg" />
-          <text x="90" y="6.5" class="comp-n">N</text>
-          <line x1="90" y1="10" x2="90" y2="5.5" class="comp-needle" />
+          <circle cx="90" cy="10" r="5.5" class="comp-bg" />
+          <path d="M 90 5 L 91.4 10 L 90 8.7 L 88.6 10 Z" class="comp-needle" />
+          <text x="90" y="4" class="comp-n">N</text>
         </g>
 
         <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant) -->
@@ -212,14 +197,6 @@ const char = useCharacterStore();
 const progress = useProgress();
 
 const TOWN = EXPE.town;
-// Décor de carte : anneaux de distance + lignes arcaniques rayonnant de la ville.
-const RINGS = [EXPE.distMin, (EXPE.distMin + EXPE.distMax) / 2, EXPE.distMax];
-const RING_NEAR = EXPE.distMin;
-const RING_FAR = EXPE.distMax;
-const LEYS = Array.from({ length: 8 }, (_, i) => {
-  const a = (i * Math.PI * 2) / 8;
-  return { a: i, x: TOWN.x + Math.cos(a) * EXPE.distMax, y: TOWN.y + Math.sin(a) * EXPE.distMax };
-});
 const POI_EMO: Record<PoiType, string> = { mine: '⛏️', camp: '🏕️', lair: '👹' };
 const POI_LABEL: Record<PoiType, string> = { mine: 'Mine', camp: 'Camp', lair: 'Repaire' };
 
@@ -250,7 +227,7 @@ const active = computed(() => char.row?.expedition ?? null);
 const pois = computed<Poi[]>(() => char.row?.expedition_map?.pois ?? []);
 // Fond de carte (terrain) déterministe pour le seed de la carte.
 const terrain = computed(() =>
-  char.row?.expedition_map ? expeditionTerrain(char.row.expedition_map.seed) : { biomes: [], motifs: [] },
+  char.row?.expedition_map ? expeditionTerrain(char.row.expedition_map.seed) : { coast: '', features: [] },
 );
 const hero = computed(() => (active.value ? heroPosition(active.value, now.value) : null));
 
@@ -497,7 +474,7 @@ function fmtMin(min: number): string {
   height: 62vh;
   overflow: auto;
   touch-action: pan-x pan-y;
-  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--bg) 72%);
+  background: #b9c6c4;
   scrollbar-width: none;
 }
 .map-scroll::-webkit-scrollbar {
@@ -563,88 +540,61 @@ function fmtMin(min: number): string {
 }
 /* Décor de carte */
 /* Terrain : socle + régions SOLIDES + motifs vectoriels */
-.land-base {
-  fill: #2b3128;
+/* Carte PARCHEMIN dessinée à l'encre (style livre d'aventure) */
+.sea {
+  fill: #b9c6c4;
 }
-.biome {
-  stroke: rgba(0, 0, 0, 0.25);
-  stroke-width: 0.3;
+.coast-line {
+  fill: #7a6a4a;
+  transform: translate(0.6px, 0.7px); /* ombre portée = double-trait de côte */
 }
-.b-forest {
-  fill: #335740;
+.land {
+  fill: #e7d7b0;
+  stroke: #6a5638;
+  stroke-width: 0.45;
 }
-.b-mountains {
-  fill: #4b4e56;
-}
-.b-desert {
-  fill: #6e5f39;
-}
-.b-water {
-  fill: #2c4e6f;
-}
-.b-plains {
-  fill: #565a30;
-}
-.b-swamp {
-  fill: #364a34;
-}
-.motif {
+.feat {
   pointer-events: none;
 }
-.m-mountain {
-  fill: #6b6f78;
-  stroke: #3a3d44;
+.f-mountain {
+  fill: none;
+  stroke: #5a4630;
+  stroke-width: 0.42;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.f-tree {
+  fill: #4d6b47;
+  stroke: #3a4d33;
   stroke-width: 0.15;
 }
-.m-tree {
-  fill: #234a30;
-}
-.m-dune {
+.f-dune {
   fill: none;
-  stroke: #9a8752;
-  stroke-width: 0.4;
+  stroke: #9a8048;
+  stroke-width: 0.45;
   stroke-linecap: round;
 }
-.m-ripple {
+.map-frame {
   fill: none;
-  stroke: #4f80b4;
-  stroke-width: 0.35;
-  stroke-linecap: round;
+  stroke: #6a5638;
+  stroke-width: 0.6;
 }
-.ley {
-  stroke: color-mix(in srgb, #4a9eff 35%, transparent);
+.map-frame.thin {
   stroke-width: 0.3;
-  stroke-dasharray: 1 2;
-}
-.ring {
-  fill: none;
-  stroke: var(--line);
-  stroke-width: 0.4;
-  stroke-dasharray: 1.5 2;
-  opacity: 0.7;
-}
-.ring-lbl {
-  font-size: 2.4px;
-  text-anchor: middle;
-  fill: var(--dim);
-  letter-spacing: 0.2px;
-  text-transform: uppercase;
 }
 .compass .comp-bg {
-  fill: var(--surface);
-  stroke: var(--line);
+  fill: #efe4c4;
+  stroke: #6a5638;
   stroke-width: 0.4;
 }
 .compass .comp-n {
   font-size: 3px;
   text-anchor: middle;
-  fill: var(--accent);
+  fill: #5a4630;
   font-weight: 700;
 }
 .compass .comp-needle {
-  stroke: var(--accent);
-  stroke-width: 0.6;
-  stroke-linecap: round;
+  fill: #5a4630;
 }
 .town-glow {
   fill: color-mix(in srgb, var(--accent) 22%, transparent);
