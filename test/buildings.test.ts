@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   plotsForLevel,
+  slotUnlockLevel,
   buildingUpgradeCost,
   canUpgradeBuilding,
   buildingProdPerHour,
@@ -20,12 +21,22 @@ const H = 3_600_000;
 const mk = (typeId: string, level: number, collectedAt = 0, slot = 0): Building => ({ typeId, level, slot, collectedAt });
 
 describe('buildings — emplacements & coûts', () => {
-  it('plotsForLevel : +1 tous les 4 niveaux, plafonné', () => {
-    expect(plotsForLevel(1)).toBe(2);
-    expect(plotsForLevel(4)).toBe(3);
-    expect(plotsForLevel(8)).toBe(4);
-    expect(plotsForLevel(16)).toBe(6);
+  it('plotsForLevel : 1 au départ, +1/niveau jusqu’à 4, puis +1/4 niveaux', () => {
+    expect(plotsForLevel(1)).toBe(1);
+    expect(plotsForLevel(2)).toBe(2);
+    expect(plotsForLevel(3)).toBe(3);
+    expect(plotsForLevel(4)).toBe(4);
+    expect(plotsForLevel(5)).toBe(4); // ensuite cadence douce
+    expect(plotsForLevel(8)).toBe(5);
+    expect(plotsForLevel(16)).toBe(7);
     expect(plotsForLevel(40)).toBe(BUILD.plotCap); // plafonné
+  });
+  it('slotUnlockLevel : inverse cohérent de plotsForLevel', () => {
+    for (const slot of [0, 1, 2, 3, 4, 5, 8]) {
+      const lvl = slotUnlockLevel(slot);
+      expect(plotsForLevel(lvl)).toBeGreaterThanOrEqual(slot + 1); // débloqué à ce niveau
+      if (lvl > 1) expect(plotsForLevel(lvl - 1)).toBeLessThanOrEqual(slot); // pas avant
+    }
   });
   it('buildingUpgradeCost : steep et croissant', () => {
     expect(buildingUpgradeCost(1)).toBeLessThan(buildingUpgradeCost(5));

@@ -286,6 +286,7 @@ import {
   BUILDING_TYPES,
   buildingType,
   plotsForLevel,
+  slotUnlockLevel,
   buildingUpgradeCost,
   canUpgradeBuilding,
   canBuildType,
@@ -484,7 +485,7 @@ function openPlot(pl: PlotView) {
   selectedSlot.value = pl.slot;
 }
 function plotUnlockLevel(slot: number): number {
-  return Math.max(0, (slot - 1) * BUILD.plotEvery);
+  return slotUnlockLevel(slot);
 }
 function filonEmoji(b: Building): string {
   return buildingType(b.typeId)?.emoji ?? '⛏️';

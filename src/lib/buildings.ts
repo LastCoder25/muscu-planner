@@ -105,10 +105,20 @@ export const BUILD = {
   hourMs: 3_600_000,
 } as const;
 
-/** Nombre d'emplacements DÉBLOQUÉS à un niveau donné (scale avec la progression,
- *  continue au-delà du niv.25 — le village grandit avec toi, pas de « fin »). */
+/** Nombre d'emplacements DÉBLOQUÉS à un niveau donné.
+ *  DÉBUT : 1 emplacement, puis **+1 par niveau** jusqu'à 4 (une récompense à chaque
+ *  niveau, le temps de prendre ses marques). ENSUITE : +1 tous les `plotEvery`
+ *  niveaux (cadence douce). Continue au-delà du niv.25 (le village grandit). */
 export function plotsForLevel(level: number): number {
-  return Math.min(BUILD.plotCap, 2 + Math.floor(Math.max(0, level) / BUILD.plotEvery));
+  const l = Math.max(1, level);
+  const n = l <= 4 ? l : 4 + Math.floor((l - 4) / BUILD.plotEvery);
+  return Math.min(BUILD.plotCap, n);
+}
+
+/** Niveau auquel l'emplacement d'index `slot` (0-based) se débloque (inverse de
+ *  plotsForLevel). Sert à afficher « débloqué au niv X » sur un emplacement verrouillé. */
+export function slotUnlockLevel(slot: number): number {
+  return slot < 4 ? slot + 1 : 4 + (slot - 3) * BUILD.plotEvery;
 }
 
 /** Niveau requis pour pouvoir construire ce type (défaut 1). */
