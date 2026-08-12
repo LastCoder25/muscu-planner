@@ -20,18 +20,28 @@
 // Ressource produite (union extensible : on pourra ajouter 'energy', 'gold', …).
 export type BuildResource = 'dust' | 'stone';
 
-// Catégorie d'un bâtiment (extensible : plus tard 'buff', 'utility'…). Pour l'instant
-// seuls les producteurs existent.
-export type BuildingCategory = 'producer';
+// Catégorie d'un bâtiment. `producer` = filon de ressource ; `utility` = bâtiment
+// à EFFET global (entrepôt, tour de reconnaissance…). Extensible.
+export type BuildingCategory = 'producer' | 'utility';
+
+// Effet global d'un bâtiment `utility` (par niveau). Extensible (tour, forge…).
+export interface BuildingEffect {
+  storageMultPerLvl?: number; // Entrepôt : +X au multiplicateur de stockage / niveau
+  expeSpeedPerLvl?: number; // Tour : −X% temps de trajet / niveau (plus tard)
+  expeWinPerLvl?: number; // Tour : +X% chance / niveau (plus tard)
+}
 
 export interface BuildingType {
   id: string; // ex. 'dust_vein'
   label: string;
   emoji: string;
   category: BuildingCategory;
-  resource: BuildResource; // ce qu'il produit (producteurs)
-  prodPerHrPerLvl: number; // production/heure par niveau
+  resource?: BuildResource; // ce qu'il produit (producteurs uniquement)
+  prodPerHrPerLvl?: number; // production/heure par niveau (producteurs)
+  effect?: BuildingEffect; // effet global (utility)
   buildGold: number; // coût de construction (or)
+  unlockLevel?: number; // niveau joueur requis pour pouvoir le construire (défaut 1)
+  unique?: boolean; // un seul exemplaire autorisé (utilitaires)
   desc: string;
 }
 
@@ -65,6 +75,19 @@ export const BUILDING_TYPES: BuildingType[] = [
     buildGold: 800,
     desc: 'Produit des pierres magiques 💎 (montée des familiers).',
   },
+  // Utilitaire UNIQUE : augmente le STOCKAGE de tous les filons (tu peux louper
+  // plus de jours sans saturer). Débloqué niv.7 (offset des boss). +15 %/niveau.
+  {
+    id: 'warehouse',
+    label: 'Entrepôt',
+    emoji: '🏬',
+    category: 'utility',
+    effect: { storageMultPerLvl: 0.15 },
+    buildGold: 1500,
+    unlockLevel: 7,
+    unique: true,
+    desc: 'Augmente le stockage de tous tes filons (+15 %/niveau).',
+  },
 ];
 
 const BY_ID = new Map(BUILDING_TYPES.map((t) => [t.id, t]));
@@ -74,17 +97,41 @@ export function buildingType(id: string): BuildingType | undefined {
 
 // ── Constantes de dimensionnement (validées par simulation) ──
 export const BUILD = {
-  plotCap: 6, // emplacements max
-  plotEvery: 4, // +1 emplacement débloqué tous les 4 niveaux
+  plotCap: 10, // emplacements max (le jeu va bien au-delà du niv.25 → cap élevé)
+  plotEvery: 4, // +1 emplacement débloqué tous les 4 niveaux (atteint le cap ~niv.32)
   upBase: 220, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   upExp: 2,
   storageHours: 18, // heures de production stockables (puis saturation)
   hourMs: 3_600_000,
 } as const;
 
-/** Nombre d'emplacements DÉBLOQUÉS à un niveau donné (scale avec la progression). */
+/** Nombre d'emplacements DÉBLOQUÉS à un niveau donné (scale avec la progression,
+ *  continue au-delà du niv.25 — le village grandit avec toi, pas de « fin »). */
 export function plotsForLevel(level: number): number {
   return Math.min(BUILD.plotCap, 2 + Math.floor(Math.max(0, level) / BUILD.plotEvery));
+}
+
+/** Niveau requis pour pouvoir construire ce type (défaut 1). */
+export function buildingUnlockLevel(typeId: string): number {
+  return buildingType(typeId)?.unlockLevel ?? 1;
+}
+
+/** Peut-on construire ce type ? (niveau atteint + pas déjà posé si `unique`). */
+export function canBuildType(typeId: string, playerLevel: number, existing: Building[]): boolean {
+  const t = buildingType(typeId);
+  if (!t || playerLevel < (t.unlockLevel ?? 1)) return false;
+  if (t.unique && existing.some((b) => b.typeId === typeId)) return false;
+  return true;
+}
+
+/** Multiplicateur de stockage global apporté par les entrepôts posés (≥ 1). */
+export function storageMult(buildings: Building[]): number {
+  let m = 1;
+  for (const b of buildings) {
+    const per = buildingType(b.typeId)?.effect?.storageMultPerLvl;
+    if (per) m += per * b.level;
+  }
+  return m;
 }
 
 /** Coût en OR pour améliorer un filon du niveau `level` au suivant (puits d'or steep). */
@@ -97,31 +144,33 @@ export function canUpgradeBuilding(b: Building, playerLevel: number): boolean {
   return b.level < playerLevel;
 }
 
-/** Production par heure d'un filon à son niveau. */
+/** Production par heure d'un filon à son niveau (0 pour les utilitaires). */
 export function buildingProdPerHour(b: Building): number {
   const t = buildingType(b.typeId);
-  return t ? b.level * t.prodPerHrPerLvl : 0;
+  return t?.prodPerHrPerLvl ? b.level * t.prodPerHrPerLvl : 0;
 }
 
-/** Capacité de stockage (au-delà, la production sature → pas de perte punitive). */
-export function buildingStorageCap(b: Building): number {
-  return buildingProdPerHour(b) * BUILD.storageHours;
+/** Capacité de stockage (au-delà, la production sature → pas de perte punitive).
+ *  `mult` = bonus global des entrepôts (cf. storageMult). */
+export function buildingStorageCap(b: Building, mult = 1): number {
+  return buildingProdPerHour(b) * BUILD.storageHours * mult;
 }
 
 /** Ressource ACCUMULÉE depuis la dernière récolte, plafonnée au stockage (entier). */
-export function buildingAccrued(b: Building, now: number): number {
+export function buildingAccrued(b: Building, now: number, mult = 1): number {
   const perHr = buildingProdPerHour(b);
   const hours = Math.max(0, (now - b.collectedAt) / BUILD.hourMs);
-  return Math.floor(Math.min(perHr * hours, buildingStorageCap(b)));
+  return Math.floor(Math.min(perHr * hours, buildingStorageCap(b, mult)));
 }
 
-/** Somme des ressources prêtes à récolter, par ressource (pour l'affichage/le crédit). */
+/** Somme des ressources prêtes à récolter, par ressource (entrepôts appliqués). */
 export function collectable(buildings: Building[], now: number): Record<BuildResource, number> {
   const acc: Record<BuildResource, number> = { dust: 0, stone: 0 };
+  const mult = storageMult(buildings);
   for (const b of buildings) {
     const t = buildingType(b.typeId);
-    if (!t) continue;
-    acc[t.resource] += buildingAccrued(b, now);
+    if (!t?.resource) continue; // utilitaires : ne produisent rien
+    acc[t.resource] += buildingAccrued(b, now, mult);
   }
   return acc;
 }

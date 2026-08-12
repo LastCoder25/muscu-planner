@@ -36,6 +36,7 @@ import {
   buildingType,
   buildingUpgradeCost,
   canUpgradeBuilding,
+  canBuildType,
   plotsForLevel,
   collectable,
   type Building,
@@ -745,6 +746,7 @@ export const useCharacterStore = defineStore('character', () => {
     const plots = plotsForLevel(playerLevel);
     if (slot < 0 || slot >= plots) return; // emplacement non débloqué
     if (cur.buildings.some((b) => b.slot === slot)) return; // déjà occupé
+    if (!canBuildType(typeId, playerLevel, cur.buildings)) return; // niveau/unicité
     if (cur.gold < t.buildGold) return;
     const b: Building = { typeId, level: 1, slot, collectedAt: now };
     await persist(userId, { gold: cur.gold - t.buildGold, buildings: [...cur.buildings, b] });

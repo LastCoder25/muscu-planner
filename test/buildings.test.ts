@@ -8,6 +8,9 @@ import {
   buildingAccrued,
   collectable,
   buildingType,
+  buildingUnlockLevel,
+  canBuildType,
+  storageMult,
   BUILDING_TYPES,
   BUILD,
   type Building,
@@ -65,9 +68,44 @@ describe('buildings — production', () => {
 });
 
 describe('buildings — registre extensible', () => {
-  it('les 2 filons de base existent et produisent leur ressource', () => {
+  it('les 2 filons de base : producteurs, débloqués dès le début', () => {
     expect(buildingType('dust_vein')?.resource).toBe('dust');
     expect(buildingType('stone_vein')?.resource).toBe('stone');
-    for (const t of BUILDING_TYPES) expect(t.category).toBe('producer');
+    expect(buildingUnlockLevel('dust_vein')).toBe(1);
+  });
+});
+
+describe('buildings — déblocage & unicité (utilitaires)', () => {
+  it('canBuildType : gate par niveau (Entrepôt niv.7)', () => {
+    expect(buildingUnlockLevel('warehouse')).toBe(7);
+    expect(canBuildType('warehouse', 6, [])).toBe(false);
+    expect(canBuildType('warehouse', 7, [])).toBe(true);
+  });
+  it('canBuildType : bâtiment UNIQUE non re-constructible', () => {
+    const wh: Building = mk('warehouse', 1, 0, 3);
+    expect(canBuildType('warehouse', 10, [])).toBe(true);
+    expect(canBuildType('warehouse', 10, [wh])).toBe(false); // déjà posé
+  });
+  it('filons NON uniques : constructibles en plusieurs', () => {
+    expect(canBuildType('dust_vein', 5, [mk('dust_vein', 3, 0, 0)])).toBe(true);
+  });
+});
+
+describe('buildings — Entrepôt : effet stockage global', () => {
+  it("l'entrepôt augmente le stockage des filons (+15%/niveau), pas la prod", () => {
+    const wh = mk('warehouse', 4, 0, 5); // +60 % stockage
+    expect(storageMult([wh])).toBeCloseTo(1.6, 5);
+    expect(buildingProdPerHour(wh)).toBe(0); // un utilitaire ne produit rien
+    const dust = mk('dust_vein', 10, 0, 0);
+    expect(buildingStorageCap(dust, storageMult([wh]))).toBeCloseTo(buildingStorageCap(dust) * 1.6, 3);
+  });
+  it("collectable applique le bonus d'entrepôt et ignore les utilitaires", () => {
+    const now = 1000 * H; // saturé
+    const dust = mk('dust_vein', 10, 0, 0);
+    const wh = mk('warehouse', 4, 0, 1);
+    const base = collectable([dust], now).dust;
+    const boosted = collectable([dust, wh], now).dust;
+    expect(boosted).toBeGreaterThan(base); // stockage plus grand → plus récolté à saturation
+    expect(collectable([wh], now)).toEqual({ dust: 0, stone: 0 }); // l'entrepôt ne produit rien
   });
 });

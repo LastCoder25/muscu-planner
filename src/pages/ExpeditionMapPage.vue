@@ -198,13 +198,14 @@
           <button class="sh-x" @click="selectedPlot = null">✕</button>
         </div>
 
-        <!-- Construire : choix du type -->
+        <!-- Construire : choix du type (gaté par niveau + unicité) -->
         <div v-if="selectedPlot.unlocked && !selectedPlot.building" class="plot-build">
           <button
             v-for="t in BUILDING_TYPES"
             :key="t.id"
             class="pb-opt"
-            :disabled="(char.row?.gold ?? 0) < t.buildGold"
+            :class="{ locked: !typeBuildable(t) }"
+            :disabled="!typeBuildable(t) || (char.row?.gold ?? 0) < t.buildGold"
             @click="doBuild(selectedPlot.slot, t.id)"
           >
             <span class="pb-emo">{{ t.emoji }}</span>
@@ -212,18 +213,28 @@
               <span class="pb-name">{{ t.label }}</span>
               <span class="pb-desc">{{ t.desc }}</span>
             </span>
-            <span class="pb-cost">🪙{{ t.buildGold }}</span>
+            <span class="pb-cost">{{ typeBuildable(t) ? '🪙' + t.buildGold : typeLockReason(t) }}</span>
           </button>
         </div>
 
-        <!-- Filon construit : récolter + améliorer -->
+        <!-- Bâtiment construit : gérer -->
         <div v-else-if="selectedPlot.building" class="plot-manage">
-          <div class="pm-ready">
+          <!-- Utilitaire (entrepôt…) : effet + améliorer (pas de récolte) -->
+          <div v-if="isUtility(selectedPlot.building)" class="pm-ready">
+            <span>⚙️ <b>{{ utilityEffectLabel(selectedPlot.building) }}</b></span>
+          </div>
+          <!-- Filon : récolte -->
+          <div v-else class="pm-ready">
             <span>Prêt : <b>{{ filonEmoji(selectedPlot.building) === '⛏️' ? '✨' : '💎' }}{{ plotAccrued(selectedPlot.building) }}</b></span>
             <span class="pm-cap">/ {{ Math.floor(plotStorage(selectedPlot.building)) }} max</span>
           </div>
           <div class="pm-actions">
-            <button class="pm-collect" :disabled="plotAccrued(selectedPlot.building) <= 0" @click="collectAll">
+            <button
+              v-if="!isUtility(selectedPlot.building)"
+              class="pm-collect"
+              :disabled="plotAccrued(selectedPlot.building) <= 0"
+              @click="collectAll"
+            >
               🧺 Récolter
             </button>
             <button
@@ -277,12 +288,16 @@ import {
   plotsForLevel,
   buildingUpgradeCost,
   canUpgradeBuilding,
+  canBuildType,
+  buildingUnlockLevel,
   buildingProdPerHour,
   buildingStorageCap,
   buildingAccrued,
+  storageMult,
   collectable,
   BUILD,
   type Building,
+  type BuildingType,
 } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, type Combatant } from '@/lib/combat';
@@ -479,13 +494,15 @@ function filonLabel(b: Building): string {
 }
 function filonProdLabel(b: Building): string {
   const t = buildingType(b.typeId);
-  return t ? `${buildingProdPerHour(b).toFixed(1)} ${t.resource === 'dust' ? '✨' : '💎'}/h` : '';
+  if (!t) return '';
+  if (t.category === 'utility') return utilityEffectLabel(b);
+  return `${buildingProdPerHour(b).toFixed(1)} ${t.resource === 'dust' ? '✨' : '💎'}/h`;
 }
 function plotAccrued(b: Building): number {
-  return buildingAccrued(b, now.value);
+  return buildingAccrued(b, now.value, storageMult(char.row?.buildings ?? []));
 }
 function plotStorage(b: Building): number {
-  return buildingStorageCap(b);
+  return buildingStorageCap(b, storageMult(char.row?.buildings ?? []));
 }
 function plotCanUpgrade(b: Building): boolean {
   return canUpgradeBuilding(b, heroLevel.value);
@@ -504,6 +521,23 @@ function doUpgrade(slot: number) {
 function collectAll() {
   const uid = auth.user?.id;
   if (uid) void char.collectFilons(uid, Date.now());
+}
+// Construction : un type est-il disponible (niveau atteint + unicité respectée) ?
+function typeBuildable(t: BuildingType): boolean {
+  return canBuildType(t.id, heroLevel.value, char.row?.buildings ?? []);
+}
+function typeLockReason(t: BuildingType): string {
+  if (heroLevel.value < buildingUnlockLevel(t.id)) return `🔒 niv ${buildingUnlockLevel(t.id)}`;
+  if (t.unique && (char.row?.buildings ?? []).some((b) => b.typeId === t.id)) return 'déjà construit';
+  return '';
+}
+function isUtility(b: Building): boolean {
+  return buildingType(b.typeId)?.category === 'utility';
+}
+// Libellé d'effet d'un utilitaire (pour l'instant : l'entrepôt = +stockage).
+function utilityEffectLabel(b: Building): string {
+  const pct = Math.round((storageMult([b]) - 1) * 100);
+  return pct > 0 ? `+${pct}% stockage de tous les filons` : '';
 }
 
 function selectPoi(p: Poi) {
@@ -1018,6 +1052,11 @@ function fmtMin(min: number): string {
 .pb-opt:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.pb-opt.locked .pb-cost {
+  color: var(--dim);
+  font-size: 11px;
+  white-space: nowrap;
 }
 .pb-emo {
   font-size: 22px;
