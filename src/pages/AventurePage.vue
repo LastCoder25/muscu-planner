@@ -164,34 +164,30 @@
           </div>
         </div>
 
-        <div class="stats">
-          <div class="stat s-pui">
-            <div class="top">
-              <span class="emo">💪</span><span class="nm font-display">Puissance</span
-              ><span class="n font-display">{{ c.puissance }}</span>
-            </div>
-            <div class="bar"><span :style="{ width: barW(c.puissance) }" /></div>
-            <div class="lines"><b>Musculation</b> · <span class="infl">dégâts</span></div>
-          </div>
-          <div class="stat s-end">
-            <div class="top">
-              <span class="emo">❤️</span><span class="nm font-display">Endurance</span
-              ><span class="n font-display">{{ c.endurance }}</span>
-            </div>
-            <div class="bar"><span :style="{ width: barW(c.endurance) }" /></div>
-            <div class="lines">
-              <b>Muscu + Cardio</b> · <span class="infl">PV · résistance</span>
-            </div>
-          </div>
-          <div class="stat s-agi">
-            <div class="top">
-              <span class="emo">⚡</span><span class="nm font-display">Agilité</span
-              ><span class="n font-display">{{ c.agilite }}</span>
-            </div>
-            <div class="bar"><span :style="{ width: barW(c.agilite) }" /></div>
-            <div class="lines">
-              <b>Cardio</b> · <span class="infl">esquive · critiques · initiative</span>
-            </div>
+        <!-- 3 stats en CERCLES sur une ligne. L'anneau = part du build (somme=100 %),
+             le chiffre au centre = la valeur réelle (jamais « pleine » à tort). -->
+        <div class="stats-circles">
+          <div
+            v-for="s in statCircles"
+            :key="s.key"
+            class="statc"
+            :class="s.key"
+          >
+            <svg class="ring" viewBox="0 0 36 36" role="img" :aria-label="`${s.name} ${s.value}`">
+              <circle class="track" cx="18" cy="18" r="15.9155" />
+              <circle
+                class="arc"
+                cx="18"
+                cy="18"
+                r="15.9155"
+                transform="rotate(-90 18 18)"
+                :stroke-dasharray="`${s.share} 100`"
+              />
+              <text class="rc-emo" x="18" y="14.5" text-anchor="middle">{{ s.emo }}</text>
+              <text class="rc-n font-display" x="18" y="25" text-anchor="middle">{{ s.value }}</text>
+            </svg>
+            <div class="statc-nm font-display">{{ s.name }}</div>
+            <div class="statc-inf">{{ s.inf }}</div>
           </div>
         </div>
         <div class="pv-line">
@@ -1984,10 +1980,19 @@ async function doChooseTalent(code: string) {
   }
 }
 
-function barW(v: number): string {
-  const max = Math.max(c.value.puissance, c.value.endurance, c.value.agilite, 1);
-  return `${Math.round((v / max) * 100)}%`;
+// Part d'une stat dans le build (les 3 stats somment à 100 %) → « forme du build »
+// HONNÊTE : une stat ne paraît « pleine » que si elle est TOUT le build (les autres
+// à 0), pas parce qu'elle est simplement la plus haute. (Remplace les barres
+// relatives où la plus haute stat semblait « au max » alors qu'elle monte encore.)
+function statShare(v: number): number {
+  const total = c.value.puissance + c.value.endurance + c.value.agilite;
+  return total > 0 ? Math.round((v / total) * 100) : 0;
 }
+const statCircles = computed(() => [
+  { key: 's-pui', emo: '💪', name: 'Puissance', inf: 'Muscu · dégâts', value: c.value.puissance, share: statShare(c.value.puissance) },
+  { key: 's-end', emo: '❤️', name: 'Endurance', inf: 'Muscu+Cardio · PV', value: c.value.endurance, share: statShare(c.value.endurance) },
+  { key: 's-agi', emo: '⚡', name: 'Agilité', inf: 'Cardio · esquive/crit', value: c.value.agilite, share: statShare(c.value.agilite) },
+]);
 
 const busy = ref(false);
 const run = ref<RunView | null>(null);
@@ -3390,80 +3395,82 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-/* Stats */
-.stats {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+/* Stats — 3 cercles sur une ligne (anneau = part du build, chiffre = valeur réelle) */
+.stats-circles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
   margin-bottom: 14px;
 }
-.stat {
+.statc {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 11px 14px;
-}
-.stat .top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.stat .emo {
-  font-size: 20px;
-  width: 24px;
+  padding: 10px 6px 9px;
   text-align: center;
 }
-.stat .nm {
-  font-size: 16px;
-  font-weight: 600;
-  flex: 1;
-}
-.stat .n {
-  font-size: 22px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.bar {
-  height: 6px;
-  border-radius: 999px;
-  background: #000;
-  border: 1px solid var(--line);
-  overflow: hidden;
-  margin: 8px 0 5px;
-}
-.bar > span {
+.statc .ring {
+  width: 68px;
+  height: 68px;
   display: block;
-  height: 100%;
-  border-radius: 999px;
+  margin: 0 auto 4px;
 }
-.stat .lines {
-  font-size: 11px;
-  color: var(--dim);
+.ring .track {
+  fill: none;
+  stroke: #000;
+  stroke-opacity: 0.55;
+  stroke-width: 3;
 }
-.stat .lines b {
-  color: var(--text);
+.ring .arc {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.5s ease;
+}
+.ring .rc-emo {
+  font-size: 9px;
+}
+.ring .rc-n {
+  font-size: 12px;
+  font-weight: 700;
+}
+.statc-nm {
+  font-size: 13px;
   font-weight: 600;
 }
-.s-pui .n,
-.s-pui .nm {
+.statc-inf {
+  font-size: 10px;
+  color: var(--dim);
+  line-height: 1.25;
+}
+.s-pui .arc {
+  stroke: var(--d4);
+}
+.s-pui .rc-n,
+.s-pui .statc-nm {
+  fill: var(--d4);
   color: var(--d4);
 }
-.s-pui .bar > span {
-  background: var(--d4);
+.s-end .arc {
+  stroke: var(--d1);
 }
-.s-end .n,
-.s-end .nm {
+.s-end .rc-n,
+.s-end .statc-nm {
+  fill: var(--d1);
   color: var(--d1);
 }
-.s-end .bar > span {
-  background: var(--d1);
+.s-agi .arc {
+  stroke: var(--accent);
 }
-.s-agi .n,
-.s-agi .nm {
+.s-agi .rc-n,
+.s-agi .statc-nm {
+  fill: var(--accent);
   color: var(--accent);
 }
-.s-agi .bar > span {
-  background: var(--accent);
+@media (prefers-reduced-motion: reduce) {
+  .ring .arc {
+    transition: none;
+  }
 }
 .pv-line {
   text-align: center;
