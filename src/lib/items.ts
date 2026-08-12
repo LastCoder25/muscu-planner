@@ -72,18 +72,34 @@ const GOLD_BY_RARITY: Record<Rarity, number> = {
   legendary: 140,
   divin: 300,
 };
-// Le coût d'amélioration monte avec la rareté (un divin = puits très profond).
+// Le coût d'amélioration monte avec la rareté (un divin = puits plus profond).
+// ADOUCI pour la refonte « C » (infusion = progression verticale obligatoire, plus
+// un luxe optionnel) : sans ça, tout monter à son niveau serait un mur de grind.
 const RARITY_COST_MULT: Record<Rarity, number> = {
   common: 1,
-  rare: 1.5,
-  epic: 2,
-  legendary: 3,
-  divin: 6,
+  rare: 1.3,
+  epic: 1.6,
+  legendary: 2.2,
+  divin: 3.5,
 };
 
-/** Coût en poussière pour passer du niveau `level` au suivant, selon la rareté. */
+/** Coût en poussière pour passer du niveau `level` au suivant, selon la rareté.
+ *  Base DIVISÉE PAR 2 (refonte C) : `5 + level*3` (vs `10 + level*6`). */
 export function upgradeCost(level: number, rarity: Rarity): number {
-  return Math.round((10 + level * 6) * RARITY_COST_MULT[rarity]);
+  return Math.round((5 + level * 3) * RARITY_COST_MULT[rarity]);
+}
+/** Coût TOTAL pour construire un objet du niveau 1 jusqu'à `level` (sous C, tout
+ *  drop part du niveau 1). Sert au recyclage history-independent + à l'affichage. */
+export function fullInfuseCost(level: number, rarity: Rarity): number {
+  let sum = 0;
+  for (let k = 1; k < level; k++) sum += upgradeCost(k, rarity);
+  return sum;
+}
+/** Coût pour infuser un objet de son niveau ACTUEL jusqu'au cap `playerLevel`. */
+export function infuseToMaxCost(it: Item, playerLevel: number): number {
+  let sum = 0;
+  for (let k = it.level; k < playerLevel; k++) sum += upgradeCost(k, it.rarity);
+  return sum;
 }
 /** Poussière déjà investie dans un objet (des niveaux payés : baseLevel → level). */
 export function investedDust(it: Item): number {
@@ -91,9 +107,15 @@ export function investedDust(it: Item): number {
   for (let k = it.baseLevel ?? 1; k < it.level; k++) sum += upgradeCost(k, it.rarity);
   return sum;
 }
-/** Casser un objet → base de rareté + TOUTE la poussière investie (remboursée). */
+// Fraction de poussière rendue au recyclage (le reste = sink permanent). Bouton
+// d'équilibrage : baisser = poussière plus rare.
+const REFUND_RATE = 0.5;
+/** Casser un objet → base de rareté + une FRACTION du coût de construction 1→niveau.
+ *  HISTORY-INDEPENDENT (refonte C) : ne dépend QUE de rareté + niveau actuel, donc un
+ *  objet DROPPÉ au niv.N se recycle comme un niv.1 INFUSÉ →N (fin de l'incohérence).
+ *  Faucet-free car tout drop part du niveau 1 (coût(1→1)=0). */
 export function salvageValue(it: Item): number {
-  return DUST_BY_RARITY[it.rarity] + investedDust(it);
+  return DUST_BY_RARITY[it.rarity] + Math.round(REFUND_RATE * fullInfuseCost(it.level, it.rarity));
 }
 /** Or obtenu en vendant un objet. */
 export function sellValue(it: Item): number {
@@ -336,10 +358,11 @@ export function rollDrop(
   // Objet à effet SIGNATURE → nom évocateur (« Guillotine ») ; sinon nom + adjectif.
   const sigNames = SIGNATURE_NAMES[chosen.type];
   const name = sigNames ? pick(rng, sigNames) : `${pick(rng, NAMES[slot])} ${RARITY_ADJ[rarity]}`;
-  // Niveau = niveau du donjon, moins une dispersion vers le bas (jamais au-dessus).
-  const base = Math.max(1, Math.round(opts.level ?? 1));
-  const spread = Math.max(0, Math.round(opts.spread ?? 0));
-  const level = Math.max(1, base - Math.floor(rng() * (spread + 1)));
+  // REFONTE C : tout drop part du NIVEAU 1 (identité pure = rareté + affixe). Toute
+  // la puissance se construit ensuite à la poussière jusqu'au niveau du joueur. Le
+  // niveau du CONTENU (opts.level) n'agit plus que sur la RARETÉ (commonDecay) et le
+  // POOL d'affixes (availableEffects ci-dessus), pas sur le niveau de l'objet.
+  const level = 1;
   // PAYOFF DIVIN : la 5ᵉ rareté roule un DEUXIÈME effet (distinct) → un divin est
   // enfin « waouh » (double affixe), pas juste un ×5 de magnitude sur une stat.
   let effect2: ItemEffect | undefined;
@@ -380,7 +403,7 @@ export function rollSetPiece(
   const chosen = pick(rng, SLOT_EFFECTS[slot]);
   const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
   const noun = pick(rng, NAMES[slot]);
-  const level = Math.max(1, Math.round(opts.level));
+  const level = 1; // REFONTE C : la pièce de set arrive niv.1 (identité) → à infuser
   return {
     slot,
     name: set ? `${noun} · ${set.name}` : `${noun} ${RARITY_ADJ[rarity]}`,
@@ -415,7 +438,7 @@ export function rollFamiliar(
 ): Omit<Item, 'id'> {
   const rarity = rollRarity(rng, opts.luck ?? 0);
   const value = Math.max(1, Math.round(species.base * RARITY_MULT[rarity] * (0.8 + rng() * 0.4)));
-  const level = Math.max(1, Math.round(opts.level));
+  const level = 1; // REFONTE C : le familier arrive niv.1 (identité de race) → à infuser
   return {
     slot: FAMILIAR_SLOT,
     name: species.name,

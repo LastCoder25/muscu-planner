@@ -30,7 +30,7 @@ describe('familiers — roll & identité', () => {
     expect(f.slot).toBe(FAMILIAR_SLOT);
     expect(f.effect.type).toBe(wolf.effect); // damage_pct
     expect(f.species).toBe('wolf');
-    expect(f.level).toBe(8);
+    expect(f.level).toBe(1); // REFONTE C : le familier arrive niv.1 → à infuser
     expect(isFamiliar(f)).toBe(true);
   });
   it('déterministe : même seed/race/niveau → même familier', () => {
@@ -94,11 +94,11 @@ describe('familiers — pierres magiques & sélection', () => {
     const s = pickFamiliarSpecies(mulberry32(9));
     expect(FAMILIAR_SPECIES.some((x) => x.id === s.id)).toBe(true);
   });
-  it('rollActivityFamiliar : produit un familier valide (slot + species) au niveau donné', () => {
+  it('rollActivityFamiliar : produit un familier valide (slot + species), niveau 1', () => {
     const f = rollActivityFamiliar(mulberry32(11), { level: 7, luck: 0.5 });
     expect(f.slot).toBe(FAMILIAR_SLOT);
     expect(f.species).toBeTruthy();
-    expect(f.level).toBe(7);
+    expect(f.level).toBe(1); // REFONTE C
   });
   it('rollActivityFamiliar : biome forcé → race de ce biome', () => {
     const f = rollActivityFamiliar(mulberry32(2), { level: 5, biome: 'plain' });

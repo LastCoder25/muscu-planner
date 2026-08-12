@@ -449,6 +449,32 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
+  // « Infuser à fond » (refonte C) : monte un objet jusqu'au plus haut niveau
+  // ABORDABLE (≤ niveau joueur) en dépensant la poussière, en une écriture.
+  async function infuseToMax(userId: string, itemId: string, playerLevel: number) {
+    const cur = row.value;
+    if (!cur) return;
+    const found = findOwned(cur, itemId);
+    if (!found) return;
+    const { item, slot } = found;
+    let level = item.level;
+    let dust = cur.dust;
+    while (level < playerLevel) {
+      const cost = upgradeCost(level, item.rarity);
+      if (dust < cost) break;
+      dust -= cost;
+      level++;
+    }
+    if (level === item.level) return; // rien d'infusé (pas assez de poussière)
+    const upgraded: Item = { ...item, level };
+    if (slot)
+      return persist(userId, { dust, equipped: { ...cur.equipped, [slot]: upgraded } });
+    return persist(userId, {
+      dust,
+      inventory: cur.inventory.map((i) => (i.id === itemId ? upgraded : i)),
+    });
+  }
+
   // Monte un FAMILIER d'un niveau en dépensant des PIERRES MAGIQUES 💎 (≠ poussière).
   // Cap = niveau du joueur, comme le stuff. Familier équipé OU au sac (findOwned).
   async function upgradeFamiliar(userId: string, itemId: string, playerLevel: number) {
@@ -726,6 +752,7 @@ export const useCharacterStore = defineStore('character', () => {
     sellMany,
     toggleLock,
     upgradeItem,
+    infuseToMax,
     upgradeFamiliar,
     forge,
     rerollEffect,

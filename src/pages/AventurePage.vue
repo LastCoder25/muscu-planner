@@ -357,12 +357,20 @@
                   >✨ Max (ton niveau {{ c.level.level }})</template
                 >
                 <template v-else
-                  >✨ Infuser ·
+                  >✨ +1 niv ·
                   {{
                     upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity)
                   }}
                   ✨</template
                 >
+              </button>
+              <button
+                v-if="char.row.equipped[slot]!.level < c.level.level - 1"
+                class="slot-up alt"
+                :disabled="char.row.dust < upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity)"
+                @click.stop="doInfuseMax(char.row.equipped[slot]!.id)"
+              >
+                ⚡ À fond (niv {{ c.level.level }}) · {{ infuseToMaxCost(char.row.equipped[slot]!, c.level.level) }} ✨
               </button>
               <button class="slot-remove" @click="doUnequip(slot)">Retirer</button>
             </template>
@@ -545,6 +553,9 @@
                       fmtDelta(combatPowerVal, powerIfEquip(it))
                     }})</b
                   >
+                  <span v-if="infuseCostFor(it)" class="pow-cost"
+                    >une fois infusé · ~{{ infuseCostFor(it) }} ✨</span
+                  >
                 </div>
                 <div class="inv-actions">
                   <button class="equip-btn" @click="doEquip(it.id)">
@@ -564,7 +575,15 @@
                     :disabled="!canUpgrade(it, char.row.dust, c.level.level)"
                     @click="doUpgrade(it.id)"
                   >
-                    ✨ Niveau · {{ upgradeCost(it.level, it.rarity) }}✨
+                    ✨ +1 · {{ upgradeCost(it.level, it.rarity) }}✨
+                  </button>
+                  <button
+                    v-if="it.level < c.level.level - 1"
+                    class="link-btn strong"
+                    :disabled="char.row.dust < upgradeCost(it.level, it.rarity)"
+                    @click="doInfuseMax(it.id)"
+                  >
+                    ⚡ À fond · {{ infuseToMaxCost(it, c.level.level) }}✨
                   </button>
                   <button
                     class="link-btn"
@@ -1315,6 +1334,9 @@
                       fmtDelta(combatPowerVal, powerIfEquip(cand.item))
                     }})</b
                   >
+                  <span v-if="infuseCostFor(cand.item)" class="pow-cost"
+                    >une fois infusé · ~{{ infuseCostFor(cand.item) }} ✨</span
+                  >
                 </div>
                 <div v-if="rewardDupNote(cand.item)" class="rc-dup">
                   {{ rewardDupNote(cand.item) }}
@@ -1490,6 +1512,9 @@
                 <b :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
                   >{{ fmtPow(powerIfEquip(d)) }} ({{ fmtDelta(combatPowerVal, powerIfEquip(d)) }})</b
                 >
+                <span v-if="infuseCostFor(d)" class="pow-cost"
+                  >une fois infusé · ~{{ infuseCostFor(d) }} ✨</span
+                >
               </div>
               <div v-if="dropState(d) === 'equipped'" class="drop-done">
                 ⚔️ Auto-équipé (slot vide)
@@ -1548,6 +1573,9 @@
                       >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
                         fmtDelta(combatPowerVal, powerIfEquip(cand.item))
                       }})</b
+                    >
+                    <span v-if="infuseCostFor(cand.item)" class="pow-cost"
+                      >une fois infusé · ~{{ infuseCostFor(cand.item) }} ✨</span
                     >
                   </div>
                   <div v-if="rewardDupNote(cand.item)" class="rc-dup">
@@ -1619,6 +1647,7 @@ import {
   effectLabel,
   canUpgrade,
   upgradeCost,
+  infuseToMaxCost,
   salvageValue,
   sellValue,
   forgeCost,
@@ -1742,11 +1771,18 @@ const baseFighter = computed(() =>
 const pctA = (x?: number) => Math.round((x ?? 0) * 100) + '%';
 // Puissance de combat SI on équipait cet objet (remplace son slot) → tied au % de
 // victoire : c'est l'indicateur qui dit « ça t'aide à aller plus loin ou pas ».
+// REFONTE C : les drops arrivent niveau 1 (identité) → comparer au niveau BRUT
+// tromperait (une pépite afficherait « nul »). On compare donc au POTENTIEL :
+// l'objet infusé à ton niveau (le vrai verdict « si j'investis, est-ce mieux ? »).
 function powerIfEquip(it: Item): number {
-  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: it };
-  return combatPower(
-    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level),
-  );
+  const lvl = c.value.level.level;
+  const maxed = it.level >= lvl ? it : { ...it, level: lvl };
+  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: maxed };
+  return combatPower(playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, lvl));
+}
+// Coût en poussière pour infuser un drop jusqu'à ton niveau (affiché à côté du Δ).
+function infuseCostFor(it: Item): number {
+  return infuseToMaxCost(it, c.value.level.level);
 }
 
 // Estimation live du % de victoire par donjon/boss selon les stats + le stuff
@@ -2363,7 +2399,9 @@ async function explore(d: Dungeon) {
     // Butin consommable (en plus de l'équipement).
     const consDropId = rollConsumableDrop(dropRng, r.cleared);
     const consDrop = consDropId ? shopItem(consDropId) : undefined;
-    const dust = r.defeated * 2; // petit filet de poussière par run
+    // Poussière SCALÉE au niveau du donjon (refonte C : l'infusion est la
+    // progression → le revenu doit suivre les coûts qui montent avec le niveau).
+    const dust = r.defeated * (2 + Math.round(d.dropLevel * 0.5)) + (r.cleared ? d.dropLevel : 0);
     const stones = r.defeated + (r.cleared ? 3 : 0); // filet de pierres 💎 (familiers)
     await char.applyRun(uid, {
       energyCost: d.energyCost,
@@ -2782,6 +2820,10 @@ function doUnequip(slot: ItemSlot) {
 function doUpgrade(itemId: string) {
   withUid((uid) => char.upgradeItem(uid, itemId, c.value.level.level), 'Amélioration impossible.');
 }
+// « Infuser à fond » (refonte C) : monte l'objet au max abordable ≤ ton niveau.
+function doInfuseMax(itemId: string) {
+  withUid((uid) => char.infuseToMax(uid, itemId, c.value.level.level), 'Infusion impossible.');
+}
 
 // ── Atelier de poussière (forge / reroll / sublimer / craft de set) ──
 const forgeSlotOpen = ref(false);
@@ -2870,9 +2912,9 @@ const bulkSlot = computed<ItemSlot | undefined>(() =>
 // l'écart de niveau : un objet bas niveau n'est « faible » que s'il l'est ENCORE
 // une fois monté au max possible (= ton niveau). Évite de casser une pépite
 // sous-leveled.
+// `powerIfEquip` évalue déjà au potentiel (objet infusé à ton niveau) → identique.
 function itemMaxedPower(it: Item): number {
-  const lvl = c.value.level.level;
-  return powerIfEquip(it.level >= lvl ? it : { ...it, level: lvl });
+  return powerIfEquip(it);
 }
 // Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés (même montés à ton
 // niveau) → candidats à la casse/vente en masse. Le `<=` inclut les DOUBLONS de
@@ -3876,6 +3918,27 @@ onUnmounted(() => {
   font-weight: 700;
   font-size: 11px;
   cursor: pointer;
+}
+/* Bouton « À fond » (infuser au cap) : accent plein pour le distinguer du +1. */
+.slot-up.alt {
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+}
+.slot-up.alt:disabled {
+  background: transparent;
+  color: var(--dim);
+}
+/* Note « une fois infusé · ~N ✨ » sous un comparateur de puissance. */
+.pow-cost {
+  display: block;
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+/* Bouton bag « à fond » mis en avant. */
+.link-btn.strong {
+  color: var(--accent);
+  font-weight: 700;
 }
 .slot-up:disabled {
   border-color: var(--line);

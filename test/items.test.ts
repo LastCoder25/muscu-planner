@@ -5,6 +5,8 @@ import {
   rollDrop,
   rollSetPiece,
   commonDecayForLevel,
+  fullInfuseCost,
+  infuseToMaxCost,
   itemScore,
   effectiveValue,
   salvageValue,
@@ -68,19 +70,40 @@ describe('recyclage / vente', () => {
     expect(salvageValue(legendary)).toBeGreaterThan(salvageValue(common));
     expect(sellValue(legendary)).toBeGreaterThan(sellValue(common));
   });
-  it('le recyclage rembourse la poussière investie (niveaux payés)', () => {
+  it('recyclage HISTORY-INDEPENDENT (refonte C) : ne dépend que de rareté + niveau', () => {
     const rarity = 'rare' as const;
-    const invested = upgradeCost(3, rarity) + upgradeCost(4, rarity); // 3→4 et 4→5
-    const it = item({
-      slot: 'weapon',
-      effect: { type: 'damage_pct', value: 10 },
-      rarity,
-      baseLevel: 3, // obtenu niveau 3
-      level: 5, // monté à 5
-    });
-    expect(investedDust(it)).toBe(invested);
-    // salvage = base rareté + investi ; on ne rembourse PAS les niveaux non payés (1→3)
-    expect(salvageValue(it)).toBe(salvageValue(item({ ...it, level: 3 })) + invested);
+    // Deux objets AU MÊME NIVEAU se recyclent PAREIL, quel que soit leur baseLevel
+    // (un droppé niv.5 = un niv.1 infusé →5). Fin de l'incohérence « bête ».
+    const dropped = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, rarity, baseLevel: 5, level: 5 });
+    const infused = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, rarity, baseLevel: 1, level: 5 });
+    expect(salvageValue(dropped)).toBe(salvageValue(infused));
+    // = base rareté (= salvage d'un niv.1) + 50 % du coût de construction 1→niveau.
+    const base1 = salvageValue(item({ ...infused, level: 1 }));
+    expect(salvageValue(infused)).toBe(base1 + Math.round(0.5 * fullInfuseCost(5, rarity)));
+    // Un niveau plus haut rend plus (le coût cumulé monte).
+    expect(salvageValue(item({ ...infused, level: 10 }))).toBeGreaterThan(salvageValue(infused));
+  });
+});
+
+describe('économie C — infusion & coûts', () => {
+  it('upgradeCost croît avec le niveau et la rareté', () => {
+    expect(upgradeCost(1, 'common')).toBeLessThan(upgradeCost(10, 'common'));
+    expect(upgradeCost(5, 'divin')).toBeGreaterThan(upgradeCost(5, 'common'));
+  });
+  it('fullInfuseCost(1) = 0 et croît avec le niveau cible', () => {
+    expect(fullInfuseCost(1, 'rare')).toBe(0);
+    expect(fullInfuseCost(5, 'rare')).toBe(
+      upgradeCost(1, 'rare') + upgradeCost(2, 'rare') + upgradeCost(3, 'rare') + upgradeCost(4, 'rare'),
+    );
+    expect(fullInfuseCost(10, 'rare')).toBeGreaterThan(fullInfuseCost(5, 'rare'));
+  });
+  it('infuseToMaxCost : du niveau actuel jusqu’au cap joueur', () => {
+    const lvl1 = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, rarity: 'common', baseLevel: 1, level: 1 });
+    expect(infuseToMaxCost(lvl1, 1)).toBe(0); // déjà au cap
+    expect(infuseToMaxCost(lvl1, 5)).toBe(fullInfuseCost(5, 'common'));
+    expect(infuseToMaxCost({ ...lvl1, level: 3 }, 5)).toBe(
+      upgradeCost(3, 'common') + upgradeCost(4, 'common'),
+    );
   });
 });
 
@@ -128,11 +151,12 @@ describe('rollDrop', () => {
   it('rng haut → pas de drop', () => {
     expect(rollDrop(() => 0.99, { cleared: true, defeated: 3 })).toBeNull();
   });
-  it('rng bas → drop de la rareté ULTIME (divin) au niveau du donjon (découplé du joueur)', () => {
+  it('rng bas → drop de la rareté ULTIME (divin), toujours NIVEAU 1 (refonte C)', () => {
     const d = rollDrop(() => 0, { cleared: true, defeated: 3, level: 6 });
     expect(d).not.toBeNull();
     expect(d!.rarity).toBe('divin'); // rng=0 → tier le plus rare
-    expect(d!.level).toBe(6); // fixé par le donjon, pas par le joueur
+    expect(d!.level).toBe(1); // REFONTE C : identité pure, la puissance se construit
+    expect(d!.baseLevel).toBe(1);
     expect(d!.slot).toBe('weapon');
   });
   it('un objet de donjon a UNE seule stat (le set fait la différence)', () => {
@@ -141,12 +165,16 @@ describe('rollDrop', () => {
     expect(d!.effect).toBeDefined();
     expect(d!.effect2).toBeUndefined();
   });
-  it('spread → le drop peut tomber SOUS le niveau du donjon, jamais au-dessus', () => {
-    // rng=0.9 pour le tirage de niveau → base - floor(0.9*(spread+1))
-    const d = rollDrop(() => 0.001, { cleared: true, defeated: 1, level: 8, spread: 2 });
-    expect(d).not.toBeNull();
-    expect(d!.level).toBeLessThanOrEqual(8);
-    expect(d!.level).toBeGreaterThanOrEqual(6); // 8 - 2 au plus bas
+  it('REFONTE C : tout drop part du niveau 1, quel que soit le niveau du contenu', () => {
+    for (const level of [1, 8, 20, 40]) {
+      for (let s = 1; s <= 12; s++) {
+        const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level });
+        if (d) {
+          expect(d.level).toBe(1);
+          expect(d.baseLevel).toBe(1);
+        }
+      }
+    }
   });
   it('variance de roll ±20 % : rng=0 → valeur × 0.8 (weapon/dégâts divin = round(8×3.8×0.8))', () => {
     const d = rollDrop(() => 0, { cleared: true, defeated: 1, level: 6 });
@@ -275,11 +303,11 @@ describe('sets d’équipement', () => {
     expect(setEffects(lvl10).damagePct).toBeGreaterThan(setEffects(lvl1).damagePct);
   });
 
-  it('rollSetPiece produit toujours une pièce du set, au niveau plein du palier', () => {
+  it('rollSetPiece produit toujours une pièce du set, au NIVEAU 1 (refonte C)', () => {
     const piece = rollSetPiece(() => 0.3, { setId: 'dragon', level: 10 });
     expect(piece.setId).toBe('dragon');
-    expect(piece.level).toBe(10); // niveau plein du palier (boss)
-    expect(piece.baseLevel).toBe(10);
+    expect(piece.level).toBe(1); // REFONTE C : identité (set) niv.1 → à infuser
+    expect(piece.baseLevel).toBe(1);
     expect(piece.name).toContain('Dragon');
     expect(piece.effect2).toBeUndefined(); // 1 stat + synergie de set (pas de 2e stat)
     expect(ITEM_SETS.some((s) => s.id === 'dragon')).toBe(true);
