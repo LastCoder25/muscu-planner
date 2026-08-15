@@ -2,6 +2,14 @@
   <q-page class="cd-page">
     <header class="top">
       <button class="iconbtn" aria-label="Retour" @click="back">‹</button>
+      <button
+        v-if="ch && exoImg"
+        class="exo-thumb"
+        aria-label="Voir l'exécution"
+        @click="exoModal = true"
+      >
+        <img :src="exoImg" alt="" />
+      </button>
       <div class="top-mid">
         <div class="top-title font-display">{{ ch?.exercise_name || 'Challenge' }}</div>
         <div class="top-sub" v-if="ch">
@@ -346,6 +354,35 @@
       :initial-assisted="setInitAssisted"
       @save="onSetSave"
     />
+
+    <!-- Fiche d'exécution : image agrandie + animation + conseils -->
+    <q-dialog v-model="exoModal">
+      <q-card class="exo-modal">
+        <div class="exo-modal-title font-display">{{ ch?.exercise_name }}</div>
+        <div class="exo-modal-media">
+          <ExerciseAnim
+            v-if="exoFrames && ch"
+            :exercise-id="ch.exercise_id"
+            :size="300"
+            :title="ch.exercise_name"
+          />
+          <img v-else-if="exoImg" :src="exoImg" :alt="ch?.exercise_name" />
+        </div>
+        <ol v-if="exoSteps?.steps?.length" class="exo-steps">
+          <li v-for="(s, i) in exoSteps.steps" :key="i">{{ s }}</li>
+        </ol>
+        <div v-if="exoSteps?.tip" class="exo-tip">💡 {{ exoSteps.tip }}</div>
+        <q-btn
+          class="exo-modal-close"
+          no-caps
+          unelevated
+          color="primary"
+          text-color="dark"
+          label="Fermer"
+          @click="exoModal = false"
+        />
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -379,6 +416,9 @@ import { useCardioStore } from '@/stores/cardio';
 import { useAuthStore } from '@/stores/auth';
 import ChallengeCelebration from '@/components/ChallengeCelebration.vue';
 import SetLogDialog from '@/components/SetLogDialog.vue';
+import ExerciseAnim from '@/components/ExerciseAnim.vue';
+import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
+import { exerciseInstructions } from '@/data/exerciseInstructions';
 
 const route = useRoute();
 const router = useRouter();
@@ -390,6 +430,11 @@ const auth = useAuthStore();
 const id = String(route.params.id);
 const loading = ref(true);
 const ch = ref<Challenge | null>(null);
+// Fiche d'exécution (image agrandie + animation) au tap de la vignette d'exo.
+const exoModal = ref(false);
+const exoImg = computed(() => (ch.value ? exerciseImage(ch.value.exercise_id) : undefined));
+const exoFrames = computed(() => (ch.value ? exerciseFrames(ch.value.exercise_id) : undefined));
+const exoSteps = computed(() => (ch.value ? exerciseInstructions(ch.value.exercise_id) : undefined));
 const running = ref(false);
 let tick: ReturnType<typeof setInterval> | undefined;
 const scrollBox = ref<HTMLElement | null>(null);
@@ -1005,9 +1050,68 @@ onBeforeUnmount(() => {
   cursor: pointer;
   flex: none;
 }
+.exo-thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  padding: 0;
+  cursor: pointer;
+  background: var(--surface);
+}
+.exo-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 .top-mid {
   flex: 1;
   min-width: 0;
+}
+.exo-modal {
+  padding: 16px;
+  max-width: 440px;
+  width: 92vw;
+  border-radius: 16px;
+  background: var(--surface);
+}
+.exo-modal-title {
+  font-weight: 700;
+  font-size: 18px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.exo-modal-media {
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  padding: 8px;
+}
+.exo-modal-media img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+.exo-steps {
+  margin: 14px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+.exo-tip {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.exo-modal-close {
+  margin-top: 16px;
+  width: 100%;
 }
 .top-title {
   font-weight: 600;

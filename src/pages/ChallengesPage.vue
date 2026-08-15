@@ -463,6 +463,7 @@ import { exerciseImage } from '@/data/exerciseImages';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
+import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
   comboXpBreakdown,
@@ -492,6 +493,17 @@ const route = useRoute();
 const $q = useQuasar();
 const store = useChallengesStore();
 const comboStore = useComboStore();
+const gameFx = useGameFx();
+// Grosse animation centrale à la complétion d'un Défi 360 (full-body bouclé).
+function celebrateCombo() {
+  gameFx.celebrate({
+    kind: 'generic',
+    emoji: '🎯',
+    title: 'Défi 360 bouclé !',
+    subtitle: 'Full-body complété — bravo 💪',
+    rarity: 'divin',
+  });
+}
 const progress = useProgress();
 const character = useCharacterStore();
 const loading = ref(true);
@@ -556,10 +568,12 @@ function saveSet() {
   if (!activeCombo.value || !leg) return;
   const w = setWeight.value != null && setWeight.value > 0 ? setWeight.value : null;
   const asst = !!leg.assistable && setAssisted.value;
+  const before = activeCombo.value.status;
   for (let i = 0; i < setCount.value; i++) {
     comboStore.addSet(activeCombo.value.id, leg.exercise_id, logicalToday(), reps, w, asst);
   }
   setOpen.value = false;
+  if (before !== 'done' && activeCombo.value.status === 'done') celebrateCombo();
 }
 function undoSet(leg: ComboLeg) {
   if (!activeCombo.value) return;

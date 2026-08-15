@@ -106,6 +106,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useComboStore } from '@/stores/combo';
+import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
   comboOverachievement,
@@ -124,6 +125,7 @@ const route = useRoute();
 const $q = useQuasar();
 const auth = useAuthStore();
 const combo = useComboStore();
+const gameFx = useGameFx();
 
 const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
@@ -185,7 +187,13 @@ function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }
     combo.addSet(id, leg.exercise_id, logicalToday(), v.reps, v.weight, v.assisted);
   }
   if (before !== 'done' && c.value.status === 'done') {
-    $q.notify({ type: 'positive', message: 'Défi 360 bouclé 🎉' });
+    gameFx.celebrate({
+      kind: 'generic',
+      emoji: '🎯',
+      title: 'Défi 360 bouclé !',
+      subtitle: 'Full-body complété — bravo 💪',
+      rarity: 'divin',
+    });
   }
 }
 function undoSet(leg: ComboLeg) {
