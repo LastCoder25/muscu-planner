@@ -49,9 +49,8 @@
             📬<span v-if="unreadMessages" class="inbox-dot">{{ unreadMessages }}</span>
           </button>
           <span class="tb-chip" :class="{ deficit: c.energy < 0 }">⚡ {{ c.energy }}</span>
-          <button class="tb-chip gold shop-btn" aria-label="Boutique" @click="shopOpen = true">
-            🪙 {{ char.row.gold }} <q-icon name="storefront" size="14px" />
-          </button>
+          <!-- Boutique retirée pour le moment (ticket dc7c746d) : la puce or est un simple indicateur. -->
+          <span class="tb-chip gold">🪙 {{ char.row.gold }}</span>
           <span class="tb-chip dust">✨ {{ char.row.dust }}</span>
           <span v-if="char.row.stones" class="tb-chip stones">💎 {{ char.row.stones }}</span>
         </div>

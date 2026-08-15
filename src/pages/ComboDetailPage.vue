@@ -75,10 +75,6 @@
             +{{ n }}
           </button>
           <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
-          <!-- Exo bouclé → le reprendre en petit défi (d073a26b). -->
-          <button v-if="legComplete(leg)" class="add chal" @click="toChallenge(leg)">
-            🏆 En challenge
-          </button>
         </div>
       </div>
 
@@ -206,10 +202,6 @@ function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }
 }
 function undoSet(leg: ComboLeg) {
   combo.removeLastSet(id, leg.exercise_id);
-}
-// Reprendre cet exo (bouclé dans le 360) en petit défi solo → wizard pré-rempli.
-function toChallenge(leg: ComboLeg) {
-  void router.push({ path: '/challenges/new', query: { ex: leg.exercise_id } });
 }
 function abandon() {
   $q.dialog({

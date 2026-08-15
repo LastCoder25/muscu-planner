@@ -54,6 +54,14 @@ describe('expedition — carte / monde', () => {
   it('déterministe : même seed/now/niveau → même carte', () => {
     expect(createMap(7, 0, 10)).toEqual(createMap(7, 0, 10));
   });
+  it('AU PLUS UNE arène sur la carte (rare, placée loin)', () => {
+    for (const seed of [1, 7, 42, 123, 999]) {
+      const m = createMap(seed, 0, 20, 12);
+      const arenas = m.pois.filter((p) => p.type === 'arena');
+      expect(arenas.length).toBeLessThanOrEqual(1);
+      for (const a of arenas) expect(a.distNorm).toBeGreaterThan(0.7); // spawn loin
+    }
+  });
   it('advanceWorld : expire les POI périmés (sauf la cible protégée)', () => {
     const m = createMap(5, 0, 10, 2);
     const target = m.pois[0]!.id;

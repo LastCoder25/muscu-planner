@@ -106,13 +106,15 @@ export const EXPE = {
   distMax: 88, // distance maxi (rayon → POI tout autour, 360°)
   spawnMinMs: 2 * 3600_000, // intervalle de spawn : 2 h..4 h (jitter)
   spawnJitterMs: 2 * 3600_000,
-  lifespanMs: { mine: 24 * 3600_000, camp: 12 * 3600_000, lair: 30 * 3600_000, arena: 18 * 3600_000 },
+  lifespanMs: { mine: 24 * 3600_000, camp: 12 * 3600_000, lair: 30 * 3600_000, arena: 48 * 3600_000 },
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
   // Coût = base × niveau^1.6 → VRAI puits d'or (2026‑08‑12). Repère : un donjon
   // rapporte ~1600 or à reco10, ~4920 à reco20 ; un repaire coûte ~6k (niv10) → ~20k
   // (niv20) = plusieurs runs de donjon pour une pièce de set (l'or s'écoule).
-  goldCostBase: { mine: 22, camp: 65, lair: 155, arena: 90 },
+  // ARÈNE (ticket 2d616665) : événement RARE fait pour la nuit → coût d'or ÉLEVÉ
+  // (le plus cher), placée LOIN (trajet long) et récompense grasse (∝ vagues).
+  goldCostBase: { mine: 22, camp: 65, lair: 155, arena: 240 },
   goldCostExp: 1.6,
   failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
 } as const;
@@ -120,7 +122,7 @@ export const EXPE = {
 // Arène : survie par vagues. Cap de vagues (fin garantie même pour un héros surboosté),
 // petite régén entre deux vagues (l'Endurance compte), et rampe de difficulté/vague.
 export const ARENA = {
-  maxWaves: 25,
+  maxWaves: 35, // gauntlet de nuit : on peut tenir longtemps si bien buildé
   healPct: 0.16, // régén entre deux vagues (l'Endurance compte)
   pvBase: 0.42, // vague 0 = 42 % d'un camp de même niveau (démarrage doux)
   pvRamp: 0.2, // +20 % de PV par vague
@@ -213,18 +215,20 @@ function pick<T>(rng: () => number, arr: readonly T[]): T {
 }
 
 // Placement espacé (reject-sampling) d'un POI TOUT AUTOUR de la ville (360°).
-function placePoi(rng: () => number): { x: number; y: number; distNorm: number } {
+// `minFrac` (0..1) force une distance MINIMALE (l'arène spawn loin → trajet de nuit).
+function placePoi(rng: () => number, minFrac = 0): { x: number; y: number; distNorm: number } {
   const { town, distMin, distMax, mapSize } = EXPE;
   const pad = 10;
+  const lo = distMin + clamp01(minFrac) * (distMax - distMin);
   for (let tries = 0; tries < 40; tries++) {
     const ang = rng() * Math.PI * 2; // angle libre → POI dans tous les sens
-    const dd = distMin + rng() * (distMax - distMin);
+    const dd = lo + rng() * (distMax - lo);
     const x = Math.round(town.x + Math.cos(ang) * dd);
     const y = Math.round(town.y + Math.sin(ang) * dd);
     if (x < pad || x > mapSize - pad || y < pad || y > mapSize - pad) continue;
     return { x, y, distNorm: clamp01((dd - distMin) / (distMax - distMin)) };
   }
-  return { x: town.x + distMin, y: town.y, distNorm: 0 };
+  return { x: town.x + lo, y: town.y, distNorm: clamp01((lo - distMin) / (distMax - distMin)) };
 }
 
 /** Crée une carte neuve avec `seedPois` POI d'entrée (à la 1re visite). Par défaut,
@@ -240,15 +244,19 @@ export function createMap(seed: number, now: number, playerLevel: number, seedPo
 function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   const rng = mulberry32((map.seed + map.spawnCount * 2654435761) >>> 0);
   map.spawnCount++;
-  const type = pick(rng, ['mine', 'mine', 'camp', 'camp', 'camp', 'lair', 'arena', 'arena'] as const); // pondéré
+  let type = pick(rng, ['mine', 'mine', 'camp', 'camp', 'camp', 'lair', 'arena'] as const); // pondéré (arène rare)
+  // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
+  if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
   const win = spawnWindow(playerLevel);
   const level = win.min + Math.floor(rng() * (win.max - win.min + 1));
-  let pos = placePoi(rng);
+  // L'arène spawn LOIN (trajet long, fait pour la nuit) ; les autres, n'importe où.
+  const minFrac = type === 'arena' ? 0.8 : 0;
+  let pos = placePoi(rng, minFrac);
   // Espacement : re-tire si trop proche d'un POI existant (quelques essais).
   for (let k = 0; k < 6; k++) {
     const tooClose = map.pois.some((p) => dist(p.x, p.y, pos.x, pos.y) < EXPE.minDistPoi);
     if (!tooClose) break;
-    pos = placePoi(rng);
+    pos = placePoi(rng, minFrac);
   }
   const poi: Poi = {
     id: `poi_${map.seed}_${map.spawnCount}`,
@@ -367,21 +375,23 @@ export function resolveOutcome(
   const rng = mulberry32((seed >>> 0) || 1);
   const cost = goldCost(poi.type, poi.level);
 
-  // ── ARÈNE : survie par vagues → récompense ∝ vagues tenues (pas de binaire). ──
+  // ── ARÈNE : gauntlet de survie par vagues (nuit) → RÉCOMPENSE GRASSE ∝ vagues. ──
+  // Chère en or (puits) + trajet long, mais paie beaucoup en poussière/pierres/gear.
   if (poi.type === 'arena') {
     const rthA = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
     const tfA = 0.5 + rthA;
     const waves = simulateArena(hero, poi.level, seed + 17);
-    const good = waves >= 5; // « belle performance » (pour le ton du rapport / notif)
-    const gold = Math.round((poi.level * 10 + waves * poi.level * 5) * (1 + rthA * 0.4)) + Math.round(cost * 0.15);
-    const dust = Math.round((5 + waves * 3) * tfA);
-    const stones = Math.round((2 + waves * 0.9) * tfA);
-    // Objet : à partir de 4 vagues, chance/qualité qui montent avec les vagues.
+    const good = waves >= 6; // « belle performance » (pour le ton du rapport / notif)
+    // Or : on rend une part du coût (sink net) mais la vraie paie est en ressources.
+    const gold = Math.round((poi.level * 12 + waves * poi.level * 7) * (1 + rthA * 0.4)) + Math.round(cost * 0.25);
+    const dust = Math.round((20 + waves * 7) * tfA);
+    const stones = Math.round((8 + waves * 2.5) * tfA);
+    // Objet dès 3 vagues, qualité/chance croissantes ; un long run lâche du haut niveau.
     const item =
-      waves >= 4
-        ? rollDrop(rng, { cleared: true, defeated: 1, level: poi.level, luck: Math.min(0.85, 0.2 + waves * 0.05), spread: 0 })
+      waves >= 3
+        ? rollDrop(rng, { cleared: true, defeated: 1, level: poi.level, luck: Math.min(0.9, 0.35 + waves * 0.05), spread: 0 })
         : null;
-    const key = rng() < Math.min(0.25, waves * 0.02) ? 1 : 0;
+    const key = rng() < Math.min(0.4, waves * 0.03) ? 1 : 0;
     const text =
       waves === 0
         ? pick(rng, FAIL_TEXT.arena)
