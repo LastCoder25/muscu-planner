@@ -103,6 +103,10 @@
             <div class="ch-tiles">
               <button v-for="c in grp.list" :key="c.id" class="ch-tile" @click="goDetail(c.id)">
                 <div class="ct-top">
+                  <span class="ch-ic">
+                    <img v-if="exerciseImage(c.exercise_id)" :src="exerciseImage(c.exercise_id)" alt="" />
+                    <q-icon v-else name="fitness_center" size="15px" />
+                  </span>
                   <span class="ct-name">{{ c.exercise_name }}</span>
                   <span class="ct-cost">{{ cardCostLabel(c) }}</span>
                 </div>
@@ -115,7 +119,7 @@
                 <div class="ct-sub">
                   {{ st(c).completionPct }}% · j{{
                     Math.min(Math.max(1, st(c).dayIndex + 1), c.duration_days)
-                  }}/{{ c.duration_days }}
+                  }}/{{ c.duration_days }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} reps</template>
                 </div>
                 <div v-if="bal(c) !== 0" class="cc-bal" :class="bal(c) > 0 ? 'ahead' : 'behind'">
                   <template v-if="bal(c) > 0">▲ +{{ bal(c) }} {{ unitOf(c) }}</template>
@@ -138,13 +142,18 @@
         </div>
         <button v-for="c in shown" :key="c.id" class="ch-card" @click="goDetail(c.id)">
           <div class="cc-top">
+            <span class="ch-ic">
+              <img v-if="exerciseImage(c.exercise_id)" :src="exerciseImage(c.exercise_id)" alt="" />
+              <q-icon v-else name="fitness_center" size="15px" />
+            </span>
             <div class="cc-name">{{ c.exercise_name }}</div>
             <span class="cc-badge" :class="c.status">{{ statusLabel(c) }}</span>
           </div>
           <div class="cc-meta">{{ fmtName(c.format) }} · {{ c.duration_days }} j</div>
           <div class="bar"><div class="fill" :style="{ width: st(c).completionPct + '%' }" /></div>
           <div class="cc-sub">
-            {{ st(c).completionPct }}% · {{ st(c).totalDone }} {{ unitOf(c) }}
+            {{ st(c).completionPct }}% · {{ st(c).totalDone }} {{ isSetsMode(c) ? 'séries' : unitOf(c)
+            }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} reps</template>
           </div>
           <div v-if="c.status === 'done'" class="cc-xp">
             <span v-if="xpb(c).reps > 0" class="xp-pill reps"
@@ -431,11 +440,13 @@ import {
   challengeXpPoints,
   challengeXpBreakdown,
   challengeLiveBalance,
+  challengeTotalReps,
   evaluateAchievements,
   type Challenge,
 } from '@/lib/challenges';
 import { computeLevel } from '@/lib/levels';
 import { formatOption } from '@/data/challengeFormats';
+import { exerciseImage } from '@/data/exerciseImages';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
@@ -635,6 +646,13 @@ function unitOf(c: Challenge) {
   // cardio en temps = minutes ; gainage en temps = secondes.
   if (c.unit === 'time') return isCardioChallengeRow(c) ? 'min' : 'sec';
   return c.unit === 'distance' ? 'km' : 'reps';
+}
+// Mode Séries : le total est en séries → on affiche AUSSI le total de reps (fa798da3).
+function isSetsMode(c: Challenge) {
+  return c.config.count_mode === 'sets';
+}
+function totalRepsOf(c: Challenge) {
+  return challengeTotalReps(c);
 }
 function fmtName(f: string) {
   return formatOption(f)?.name ?? f;
@@ -1232,11 +1250,31 @@ onMounted(async () => {
 }
 .ct-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 6px;
 }
+/* Vignette d'exo (identifier l'exo d'un coup d'œil) : image bundlée, sinon icône. */
+.ch-ic {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-2, #2b241b);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+.ch-ic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .ct-name {
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
   font-size: 14px;
   color: var(--text);
@@ -1269,8 +1307,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
 }
 .cc-name {
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
   font-size: 16px;
   color: var(--text);
