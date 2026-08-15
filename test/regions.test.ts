@@ -45,9 +45,9 @@ describe('regions — biomes de l’Aventure', () => {
     // Toute la 1re région nettoyée → on passe à la 2e.
     const r1 = REGIONS[0]!.dungeonIds;
     expect(currentRegion(r1).id).toBe('gouffres');
-    // Tout nettoyé → dernière région, plus de suivante.
+    // Tout nettoyé → dernière région (procédurale en bout de chaîne), plus de suivante.
     const allIds = REGIONS.flatMap((r) => r.dungeonIds);
-    expect(currentRegion(allIds).id).toBe('chaos');
+    expect(currentRegion(allIds).id).toBe(REGIONS[REGIONS.length - 1]!.id);
     expect(nextRegion(allIds)).toBeUndefined();
   });
 

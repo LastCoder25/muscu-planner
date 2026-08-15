@@ -2,6 +2,7 @@
 // pour suivre la courbe du joueur (stat = XP/15) : chaque palier suit la montée en
 // niveau. Chaque monstre suggère la stat à travailler (« coach »).
 import type { Combatant } from '@/lib/combat';
+import { PROCEDURAL } from '@/lib/proceduralContent';
 
 export interface Monster extends Combatant {
   id: string;
@@ -29,7 +30,7 @@ export function monsterArchetype(c: {
   return 'normal';
 }
 
-export const MONSTERS: Monster[] = [
+const HAND_MONSTERS: Monster[] = [
   {
     id: 'slime',
     name: 'Gluant',
@@ -273,3 +274,6 @@ export const MONSTERS: Monster[] = [
     hint: 'La créature ultime des profondeurs : build complet, tout au max.',
   },
 ];
+
+// Bestiaire complet = écrit à la main + monstres PROCÉDURAUX (donjons reco 25→94).
+export const MONSTERS: Monster[] = [...HAND_MONSTERS, ...PROCEDURAL.monsters];

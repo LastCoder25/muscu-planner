@@ -3,6 +3,7 @@
 // sensation de « découvrir de nouveaux mondes » plutôt qu'une liste plate. Chaque
 // région a sa couleur/ambiance ; franchir une région est un moment célébré (reveal).
 // Purement présentation + progression : n'affecte PAS le combat ni les drops.
+import { PROCEDURAL } from '@/lib/proceduralContent';
 
 export interface Region {
   id: string;
@@ -14,7 +15,7 @@ export interface Region {
 }
 
 // Les ids suivent l'ordre de `DUNGEONS` (par recoLevel croissant).
-export const REGIONS: Region[] = [
+const HAND_REGIONS: Region[] = [
   {
     id: 'aube',
     name: "Terres de l'Aube",
@@ -56,6 +57,9 @@ export const REGIONS: Region[] = [
     dungeonIds: ['kraken_abysses', 'necropole', 'faille_chaos'],
   },
 ];
+
+// Régions complètes = écrites à la main (5) + PROCÉDURALES (8, reco 25→94).
+export const REGIONS: Region[] = [...HAND_REGIONS, ...PROCEDURAL.regions];
 
 // Ordre à plat des donjons (= ordre de progression global).
 const ORDERED_IDS: string[] = REGIONS.flatMap((r) => r.dungeonIds);

@@ -191,3 +191,9 @@ export function buildProceduralContent(): {
   });
   return { monsters, dungeons, regions: proceduralRegions() };
 }
+
+// Contenu procédural calculé UNE fois au chargement, à concaténer aux tableaux
+// écrits à la main (MONSTERS/DUNGEONS/REGIONS). Ne référence AUCUN de ces tableaux
+// (génération autonome) → import type-only vers monsters/dungeons/regions, pas de
+// cycle runtime.
+export const PROCEDURAL = buildProceduralContent();

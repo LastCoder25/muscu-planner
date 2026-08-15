@@ -2677,9 +2677,13 @@ function doChooseReward(index: number) {
 }
 
 // ── Faille sans fin (end-game infini) ──
-// La Faille sans fin est le tout dernier maillon : débloquée une fois le boss
-// final (Archidémon) vaincu — soit après toute la chaîne donjons + boss.
-const endlessUnlocked = computed(() => defeatedBossSet.value.has('archidemon'));
+// La Faille sans fin est le TOUT dernier maillon : débloquée une fois le DERNIER
+// donjon de la chaîne nettoyé (le contenu procédural fini va jusqu'à reco ~94 →
+// la Faille infinie prend le relais). Repli : au moins l'Archidémon vaincu.
+const endlessUnlocked = computed(() => {
+  const last = dungeonChain.value[dungeonChain.value.length - 1];
+  return last ? clearedIds.value.includes(last.id) : defeatedBossSet.value.has('archidemon');
+});
 const endlessBest = computed(() => char.row?.endless_best ?? 0);
 const nextEndlessTier = computed(() => endlessBest.value + 1);
 

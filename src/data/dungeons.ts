@@ -5,6 +5,7 @@
 // rareté 0..1) → les donjons durs récompensent mieux.
 import type { DungeonFoe } from '@/lib/combat';
 import { MONSTERS } from '@/data/monsters';
+import { PROCEDURAL } from '@/lib/proceduralContent';
 
 export type StatKey = 'puissance' | 'endurance' | 'agilite';
 
@@ -24,7 +25,7 @@ export interface Dungeon {
 // NB : les SETS ne droppent plus sur les donjons — uniquement sur les BOSS de
 // palier (cf. src/data/bosses.ts). Les donjons ne lâchent que du butin normal.
 
-export const DUNGEONS: Dungeon[] = [
+const HAND_DUNGEONS: Dungeon[] = [
   {
     id: 'clairiere',
     name: 'Clairière tranquille',
@@ -227,6 +228,9 @@ export const DUNGEONS: Dungeon[] = [
     dropLuck: 1,
   },
 ];
+
+// Donjons complets = écrits à la main (reco 1→22) + PROCÉDURAUX (reco 25→94).
+export const DUNGEONS: Dungeon[] = [...HAND_DUNGEONS, ...PROCEDURAL.dungeons];
 
 /** Convertit les ids de monstres d'un donjon en adversaires pour le moteur. */
 export function dungeonFoes(d: Dungeon): DungeonFoe[] {
