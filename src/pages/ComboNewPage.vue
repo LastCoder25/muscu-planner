@@ -680,11 +680,11 @@ async function createCombo() {
         exercise_id: e.id,
         exercise_name: e.name,
         muscle_primary: e.muscle_primary,
-        rep_weight: repWeightFromExercise(e.muscle_secondary, e.equipment_required),
+        rep_weight: repWeightFromExercise(e.muscle_secondary, e.equipment_required, e.name),
         target: perExoTarget,
         count_mode: p.count_mode,
         weight_kg: p.weight_kg || null,
-        assistable: isBodyweightExercise(e.equipment_required),
+        assistable: isBodyweightExercise(e.equipment_required, e.name),
         sets: [],
       });
     }

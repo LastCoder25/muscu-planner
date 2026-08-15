@@ -2,7 +2,7 @@
 // Calcul des objectifs par jour selon le format, suggestion de difficulté,
 // statistiques (streak/complétion) et évaluation des succès.
 import type { Level } from './types';
-import { REP_XP, assistMult, XP_MULT } from './athlete';
+import { REP_XP, assistMult, ASSIST_MULT, XP_MULT } from './athlete';
 import { isCardioChallengeExercise, isCardioTrackChallenge } from '@/data/cardio';
 
 export type ChallengeFormat =
@@ -779,8 +779,20 @@ export function activeDaysOf(ch: Challenge): number {
 // bench, rack ne portent pas de charge → poids du corps).
 const LOADED_EQUIPMENT = ['barbell', 'dumbbells', 'kettlebell', 'machine', 'cable'];
 
-/** Exo au poids du corps (aucune charge externe) → l'option « assisté » a du sens. */
-export function isBodyweightExercise(equipmentRequired?: string[] | null): boolean {
+/** Exo INTRINSÈQUEMENT assisté (variante « (élastique) » : tractions/dips assistés).
+ *  Détecté par le nom → sa rep vaut moins (comme une rep « assisté » cochée), et on
+ *  ne propose PAS l'option « assisté » dessus (elle est déjà dans l'exo). */
+export function isAssistedExercise(name?: string | null): boolean {
+  return /assist[ée]/i.test(name ?? '');
+}
+
+/** Exo au poids du corps (aucune charge externe) → l'option « assisté » a du sens.
+ *  Sauf les variantes DÉJÀ assistées (l'assistance est intrinsèque → pas de case). */
+export function isBodyweightExercise(
+  equipmentRequired?: string[] | null,
+  name?: string | null,
+): boolean {
+  if (isAssistedExercise(name)) return false;
   return !(equipmentRequired ?? []).some((e) => LOADED_EQUIPMENT.includes(e));
 }
 
@@ -789,15 +801,19 @@ export function isBodyweightExercise(equipmentRequired?: string[] | null): boole
  * via le nb de muscles travaillés) × facteur charge (résisté ou poids du corps).
  * Dérivé automatiquement de la biblio, figé sur le défi à la création.
  *  - 1 muscle → 0,6 · 2 → 1,0 · 3+ → 1,3 ; chargé → ×1,25.
+ * Variante INTRINSÈQUEMENT assistée (nom « assisté ») → × ASSIST_MULT : une rep
+ * assistée vaut moins, comme « exo non-assisté + case cochée » (pas de double compte).
  */
 export function repWeightFromExercise(
   muscleSecondary?: string[] | null,
   equipmentRequired?: string[] | null,
+  name?: string | null,
 ): number {
   const muscles = 1 + (muscleSecondary?.length ?? 0);
   const muscleFactor = muscles <= 1 ? 0.6 : muscles === 2 ? 1 : 1.3;
   const loaded = (equipmentRequired ?? []).some((e) => LOADED_EQUIPMENT.includes(e));
-  return Math.round(muscleFactor * (loaded ? 1.25 : 1) * 100) / 100;
+  const assist = isAssistedExercise(name) ? ASSIST_MULT : 1;
+  return Math.round(muscleFactor * (loaded ? 1.25 : 1) * assist * 100) / 100;
 }
 
 /** Jour (index 0-based) où un défi CUMULÉ atteint son total ; -1 si pas atteint. */

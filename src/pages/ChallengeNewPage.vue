@@ -588,7 +588,7 @@ const showAssist = computed(
   () =>
     unit.value === 'reps' &&
     !isCardio.value &&
-    isBodyweightExercise(exercise.value?.equipment_required),
+    isBodyweightExercise(exercise.value?.equipment_required, exercise.value?.name),
 );
 const assistedMode = ref(false);
 const unitLabel = computed(() =>
@@ -880,7 +880,8 @@ async function createChallenge() {
     // Mode Séries (reps uniquement) : objectif en nombre de séries, saisie par
     // série (reps+poids+assisté). Le flag bodyweight active le toggle « assisté ».
     if (unit.value === 'reps' && countMode.value === 'sets') cfg.count_mode = 'sets';
-    if (isBodyweightExercise(exercise.value.equipment_required)) cfg.bodyweight = true;
+    if (isBodyweightExercise(exercise.value.equipment_required, exercise.value.name))
+      cfg.bodyweight = true;
     const daily = computeDailyTargets(format.value, cfg, durationDays.value, startDate);
     if (adaptiveMode.value) {
       cfg.adaptive = true;
@@ -893,6 +894,7 @@ async function createChallenge() {
       rep_weight: repWeightFromExercise(
         exercise.value.muscle_secondary,
         exercise.value.equipment_required,
+        exercise.value.name,
       ),
       unit: unit.value,
       format: format.value,

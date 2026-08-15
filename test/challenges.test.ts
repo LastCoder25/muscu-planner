@@ -8,6 +8,8 @@ import {
   challengeLiveBalance,
   isChallengeComplete,
   repWeightFromExercise,
+  isAssistedExercise,
+  isBodyweightExercise,
   activeDaysOf,
   type Challenge,
   type ChallengeConfig,
@@ -393,6 +395,18 @@ describe('repWeightFromExercise', () => {
   });
   it('isolation chargé (leg extension machine) = 0,75', () => {
     expect(repWeightFromExercise([], ['machine'])).toBe(0.75);
+  });
+  it('variante ASSISTÉE (nom) → rep_weight × 0,6 (parité avec la case « assisté »)', () => {
+    // Tractions : 2 muscles, poids du corps → 1,0. Version assistée → 0,6.
+    expect(repWeightFromExercise(['biceps'], ['pullup_bar', 'bands'])).toBe(1);
+    expect(
+      repWeightFromExercise(['biceps'], ['pullup_bar', 'bands'], 'Tractions assistées (élastique)'),
+    ).toBe(0.6);
+    expect(isAssistedExercise('Tractions assistées (élastique)')).toBe(true);
+    expect(isAssistedExercise('Tractions')).toBe(false);
+    // Pas d'option « assisté » sur un exo déjà assisté.
+    expect(isBodyweightExercise(['pullup_bar', 'bands'], 'Dips assistés (élastique)')).toBe(false);
+    expect(isBodyweightExercise(['pullup_bar', 'bands'], 'Tractions')).toBe(true);
   });
 });
 
