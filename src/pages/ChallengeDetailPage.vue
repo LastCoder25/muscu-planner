@@ -135,17 +135,6 @@
               <div class="rn-t">/ {{ fmtV(todayTarget) }}</div>
             </div>
           </div>
-          <!-- Ressenti à la clôture (mode adaptatif) → ajuste la suite -->
-          <div v-if="awaitingRpe" class="rpe">
-            <div class="rpe-h">C'était comment aujourd'hui ?</div>
-            <div class="rpe-row">
-              <button class="rpe-btn easy" @click="rateAndAdapt(1)">🙂 Facile</button>
-              <button class="rpe-btn ok" @click="rateAndAdapt(2)">💪 Bien dosé</button>
-              <button class="rpe-btn hard" @click="rateAndAdapt(3)">🥵 Très dur</button>
-            </div>
-            <button class="rpe-skip" @click="rateAndAdapt(null)">Passer</button>
-          </div>
-
           <!-- Gainage (temps en secondes) : chrono. Se replie seulement une fois la
                journée VALIDÉE (todayClosed), pas à l'atteinte → excès possible.
                Le cardio-temps (minutes) passe par les boutons « +N min » ci-dessous. -->
@@ -164,9 +153,6 @@
                 <q-icon :name="running ? 'pause' : 'play_arrow'" size="20px" />
                 {{ running ? 'Pause' : doneToday > 0 ? 'Reprendre' : 'Démarrer' }}
                 <span class="cc-time">{{ chronoDisplay }}</span>
-              </button>
-              <button v-if="!isCumulative" class="close-day" @click="closeDay">
-                Valider la journée
               </button>
             </div>
           </template>
@@ -256,10 +242,6 @@
                 </div>
                 <button class="corr-link" @click="undoLastSet">↩ Retirer la dernière</button>
               </div>
-
-              <button v-if="!editMode && !isCumulative && !isSetsMode" class="close-day" @click="closeDay">
-                Valider la journée
-              </button>
             </div>
           </template>
         </div>
@@ -391,7 +373,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import {
@@ -442,7 +424,6 @@ const exoSteps = computed(() => (ch.value ? exerciseInstructions(ch.value.exerci
 const running = ref(false);
 let tick: ReturnType<typeof setInterval> | undefined;
 const scrollBox = ref<HTMLElement | null>(null);
-const awaitingRpe = ref(false); // ressenti à demander après clôture (mode adaptatif)
 const celebrate = ref(false); // animation de fin de challenge
 const celebrateCodes = ref<string[]>([]);
 
@@ -779,23 +760,62 @@ function toggleChrono() {
     void afterChange(); // sauvegarde à la pause
   }
 }
-// Valide la « journée » : stoppe le chrono, fige la session (même après minuit)
-// et remonte sur l'avancement (stats + graphe + calendrier).
-function closeDay() {
-  if (!inToday.value) return;
-  running.value = false;
-  clearInterval(tick);
-  const e = ensureToday();
-  e.closed = true;
-  // Adaptatif : on demande le ressenti (une fois) pour ajuster la suite.
-  if (adaptiveOn.value && !e.rpe) awaitingRpe.value = true;
-  void afterChange();
-  void nextTick(() => scrollBox.value?.scrollTo({ top: 0, behavior: 'smooth' }));
+// CLÔTURE AUTOMATIQUE des journées écoulées : plus de bouton « Valider la journée »,
+// chaque jour se ferme tout seul quand il devient passé (au changement de jour
+// logique). Marque `closed` les jours < aujourd'hui (déficit figé) et, en mode
+// adaptatif, ajuste la suite d'après la perf réelle du jour (sans ressenti manuel).
+async function autoCloseElapsedDays() {
+  const c = ch.value;
+  if (!c || isCumulative.value) return; // le cumulé n'a pas de notion de journée
+  const todayIdx = dayIndex.value;
+  let changed = false;
+  let planChanged = false;
+  for (let d = 0; d < todayIdx && d < c.duration_days; d++) {
+    if ((c.daily_targets[d] ?? 0) === 0) continue; // jour de repos : rien à clôturer
+    let e = c.progress.find((p) => p.day === d);
+    if (!e) {
+      e = {
+        day: d,
+        date: addDaysIso(c.start_date, d),
+        target: c.daily_targets[d] ?? 0,
+        done: 0,
+        elapsed_sec: 0,
+        completed: false,
+      };
+      c.progress.push(e);
+    }
+    if (e.closed) continue;
+    e.closed = true;
+    changed = true;
+    if (adaptDayRemaining(c, d, e)) planChanged = true;
+  }
+  if (planChanged) {
+    try {
+      await store.updatePlan(id, c.daily_targets, c.config);
+    } catch {
+      /* silencieux */
+    }
+  } else if (changed) {
+    await persist();
+  }
+}
+// Adaptation auto (ratio, sans ressenti) : ajuste les jours restants d'après la
+// perf du jour `d`. Renvoie true si le plan a changé. Silencieux.
+function adaptDayRemaining(c: Challenge, d: number, e: DayProgress): boolean {
+  if (!adaptiveOn.value) return false;
+  const base = c.daily_targets[d] ?? 0;
+  const ratio = base > 0 ? (e.done || 0) / base : 1;
+  const adj = adaptiveDayAdjustment(ratio);
+  const fromDay = d + 1;
+  if (fromDay >= c.duration_days || adj === 0) return false;
+  const { daily_targets, config } = scaleRemaining(c, fromDay, 1 + adj);
+  c.daily_targets = daily_targets;
+  c.config = config;
+  return true;
 }
 function reopenDay() {
   const e = ensureToday();
   e.closed = false;
-  awaitingRpe.value = false;
   void persist();
 }
 
@@ -861,37 +881,6 @@ function editDay(d: number) {
       $q.notify({ type: 'positive', message: 'Jour corrigé.' });
     })();
   });
-}
-
-// Ressenti à la clôture → autorégule les jours restants (silencieux mais visible).
-async function rateAndAdapt(rpe: 1 | 2 | 3 | null) {
-  const c = ch.value;
-  if (!c) return;
-  const e = ensureToday();
-  if (rpe) e.rpe = rpe;
-  awaitingRpe.value = false;
-
-  const base = c.daily_targets[dayIndex.value] ?? 0;
-  const ratio = base > 0 ? (e.done || 0) / base : 1;
-  const adj = adaptiveDayAdjustment(ratio, rpe ?? undefined);
-  const fromDay = dayIndex.value + 1;
-
-  if (fromDay < c.duration_days && adj !== 0) {
-    const { daily_targets, config } = scaleRemaining(c, fromDay, 1 + adj);
-    c.daily_targets = daily_targets;
-    c.config = config;
-    try {
-      await store.updatePlan(id, daily_targets, config);
-      $q.notify({
-        type: 'info',
-        message: adj > 0 ? 'Suite un peu relevée 💪' : 'Suite un peu allégée 👍',
-        timeout: 1800,
-      });
-    } catch {
-      /* silencieux */
-    }
-  }
-  await persist(); // enregistre le rpe
 }
 
 function dayState(d: number): string {
@@ -1075,6 +1064,7 @@ onMounted(async () => {
       return;
     }
     maybeCoverByReserve();
+    await autoCloseElapsedDays(); // clôture auto des journées écoulées (plus de bouton manuel)
     await store.fetchAchievements();
   } catch (e) {
     $q.notify({

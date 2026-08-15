@@ -5,6 +5,7 @@ import {
   challengeStats,
   suggestConfig,
   addContribution,
+  removeContribution,
   challengeLiveBalance,
   isChallengeComplete,
   repWeightFromExercise,
@@ -112,6 +113,25 @@ describe('addContribution (report cardio → défi)', () => {
     const ch = distanceCh();
     addContribution(ch, '2026-01-05', 4);
     expect(ch.progress).toEqual([]);
+  });
+
+  it('removeContribution : soustrait (plancher 0) et recalcule completed', () => {
+    const ch = distanceCh();
+    ch.progress = [
+      { day: 2, date: '2026-01-07', target: 5, done: 53, elapsed_sec: 0, completed: true },
+    ];
+    // Faute de frappe 53 → on retire la sortie erronée : le faux surplus disparaît.
+    const p = removeContribution(ch, '2026-01-07', 53)!;
+    const e = p.find((x) => x.day === 2)!;
+    expect(e.done).toBe(0);
+    expect(e.completed).toBe(false);
+  });
+  it('removeContribution : ne descend jamais sous 0, null si rien à retirer', () => {
+    const ch = distanceCh();
+    ch.progress = [{ day: 2, date: '2026-01-07', target: 5, done: 3, elapsed_sec: 0, completed: false }];
+    expect(removeContribution(ch, '2026-01-07', 10)!.find((x) => x.day === 2)!.done).toBe(0);
+    expect(removeContribution(ch, '2026-01-08', 5)).toBeNull(); // jour sans progrès
+    expect(removeContribution(ch, '2026-01-11', 5)).toBeNull(); // hors plage
   });
 });
 

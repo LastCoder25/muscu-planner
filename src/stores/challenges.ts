@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import {
   addContribution,
+  removeContribution,
   isChallengeComplete,
   evaluateAchievements,
   type Challenge,
@@ -197,6 +198,49 @@ export const useChallengesStore = defineStore('challenges', () => {
     return fed;
   }
 
+  // Miroir d'applyCardioLog : quand une sortie cardio est SUPPRIMÉE, on retire sa
+  // contribution des défis cardio qu'elle avait alimentés (sinon un faux surplus
+  // reste — ex. 53 km tapés par erreur, sortie supprimée mais avance figée). Un
+  // défi 'done' par erreur repasse 'active' s'il n'est plus complété. Silencieux.
+  async function removeCardioLog(input: {
+    date: string;
+    activity: CardioActivity;
+    distanceKm?: number;
+    durationMin?: number;
+  }): Promise<void> {
+    if (!loaded.value) {
+      try {
+        await fetchMine();
+      } catch {
+        return;
+      }
+    }
+    const ids = challengeIdsForActivity(input.activity);
+    for (const c of list.value) {
+      if (c.status === 'abandoned' || !ids.includes(c.exercise_id)) continue;
+      const amount =
+        c.unit === 'distance'
+          ? (input.distanceKm ?? 0)
+          : c.unit === 'time'
+            ? (input.durationMin ?? 0)
+            : 0;
+      if (amount <= 0) continue;
+      const progress = removeContribution(c, input.date, amount);
+      if (!progress) continue;
+      const next: Challenge = { ...c, progress };
+      // Recalcule le statut : dé-complète si le total n'est plus atteint (repasse actif).
+      const complete = isChallengeComplete(next);
+      const status: ChallengeStatus | undefined =
+        complete ? 'done' : c.status === 'done' ? 'active' : undefined;
+      try {
+        await updateProgress(c.id, progress, complete ? 'done' : undefined);
+        if (status === 'active') await setStatus(c.id, 'active');
+      } catch {
+        /* silencieux : la sortie est déjà supprimée */
+      }
+    }
+  }
+
   async function setStatus(id: string, status: ChallengeStatus) {
     const { error } = await supabase.from('challenges').update({ status }).eq('id', id);
     if (error) throw error;
@@ -240,6 +284,7 @@ export const useChallengesStore = defineStore('challenges', () => {
     updatePlan,
     updateDuration,
     applyCardioLog,
+    removeCardioLog,
     setStatus,
     remove,
     fetchAchievements,

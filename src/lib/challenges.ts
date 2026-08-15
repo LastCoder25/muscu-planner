@@ -626,6 +626,26 @@ export function addContribution(
   return progress;
 }
 
+/** RETIRE une contribution (miroir d'addContribution) : soustrait `amount` du jour
+ *  correspondant (plancher 0), recalcule `completed`. Utilisé quand une sortie cardio
+ *  qui alimentait le défi est SUPPRIMÉE → le défi n'affiche plus de faux surplus.
+ *  Renvoie null si la date est hors plage, `amount` ≤ 0, ou le jour n'a rien. */
+export function removeContribution(
+  ch: Challenge,
+  dateIso: string,
+  amount: number,
+): DayProgress[] | null {
+  const day = diffDays(ch.start_date, dateIso);
+  if (day < 0 || day >= ch.duration_days || amount <= 0) return null;
+  const progress = ch.progress.map((p) => ({ ...p }));
+  const e = progress.find((p) => p.day === day);
+  if (!e || (e.done || 0) <= 0) return null;
+  e.done = Math.max(0, Math.round((e.done - amount) * 100) / 100);
+  const base = ch.daily_targets[day] ?? 0;
+  if (ch.format !== 'cumulative' && base > 0) e.completed = e.done >= e.target;
+  return progress;
+}
+
 // ── Succès (codes ; catalogue statique côté front) ──────
 const ALL_FORMATS: ChallengeFormat[] = [
   'fixed',

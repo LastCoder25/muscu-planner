@@ -409,9 +409,25 @@ function remove(id: string) {
     cancel: { label: 'Retour', flat: true },
     ok: { label: 'Supprimer', color: 'negative' },
   }).onOk(() => {
-    void cardio
-      .remove(id)
-      .then(() => $q.notify({ type: 'positive', message: 'Sortie supprimée.' }));
+    void (async () => {
+      // Retire la contribution de cette sortie aux défis cardio qu'elle alimentait
+      // (une sortie MIROIR d'un défi n'a rien alimenté → on ne soustrait pas).
+      const row = cardio.logs.find((l) => l.id === id);
+      const p = row?.payload;
+      const isMirror = !!p?.challenge_id;
+      await cardio.remove(id);
+      if (p && !isMirror) {
+        await challenges
+          .removeCardioLog({
+            date: (p.performed_at ?? '').slice(0, 10),
+            activity: p.activity,
+            distanceKm: p.distance_km ?? undefined,
+            durationMin: p.duration_min ?? undefined,
+          })
+          .catch(() => undefined);
+      }
+      $q.notify({ type: 'positive', message: 'Sortie supprimée.' });
+    })();
   });
 }
 </script>
