@@ -17,9 +17,22 @@
         le repos choisi.
       </p>
       <div class="cfg">
-        <div class="cfg-lbl">Séries par exercice</div>
+        <div class="cfg-lbl">Exercices à faire</div>
         <div v-if="!availableLegs.length" class="empty">Tout est déjà fait cette semaine 🎉</div>
-        <div v-for="leg in availableLegs" :key="leg.exercise_id" class="exo-row">
+        <div
+          v-for="leg in availableLegs"
+          :key="leg.exercise_id"
+          class="exo-row"
+          :class="{ off: !included[leg.exercise_id] }"
+        >
+          <button
+            type="button"
+            class="exo-check"
+            :aria-pressed="included[leg.exercise_id]"
+            @click="included[leg.exercise_id] = !included[leg.exercise_id]"
+          >
+            {{ included[leg.exercise_id] ? '☑' : '☐' }}
+          </button>
           <div class="exo-main">
             <span class="exo-name">{{ leg.exercise_name }}</span>
             <span class="exo-rem">reste {{ legRemaining(leg) }} {{ legUnitLabel(leg) }}</span>
@@ -27,15 +40,18 @@
           <div class="stepper">
             <button
               type="button"
-              :disabled="(counts[leg.exercise_id] ?? 0) <= 0"
+              :disabled="!included[leg.exercise_id] || (counts[leg.exercise_id] ?? 0) <= stepFor(leg)"
               @click="bumpCount(leg.exercise_id, -1)"
             >
               −
             </button>
-            <span class="stp-v font-display">{{ counts[leg.exercise_id] ?? 0 }}</span>
+            <span class="stp-v font-display"
+              >{{ counts[leg.exercise_id] ?? 0
+              }}<span class="stp-u">{{ legMode(leg) === 'reps' ? 'r' : 's' }}</span></span
+            >
             <button
               type="button"
-              :disabled="(counts[leg.exercise_id] ?? 0) >= maxSets(leg)"
+              :disabled="!included[leg.exercise_id] || (counts[leg.exercise_id] ?? 0) >= maxCount(leg)"
               @click="bumpCount(leg.exercise_id, 1)"
             >
               ＋
@@ -151,6 +167,7 @@ import {
   legRemaining,
   legUnitLabel,
   legMode,
+  legLastReps,
   type ComboLeg,
   type ComboSessionExo,
 } from '@/lib/combo';
@@ -171,30 +188,50 @@ const phase = ref<'config' | 'run'>('config');
 
 // Exos encore à faire cette semaine (candidats à la séance).
 const availableLegs = computed(() => (c.value?.legs ?? []).filter((l) => legRemaining(l) > 0));
-// Nombre de séries CHOISI PAR EXO (indépendant). Clé = exercise_id.
+// Coché = à faire dans la séance ; compteur = nb de séries (mode 'sets') OU de reps
+// (mode 'reps') par exo. Clé = exercise_id.
+const included = reactive<Record<string, boolean>>({});
 const counts = reactive<Record<string, number>>({});
-// Plafond de séries d'un exo pour cette séance = séries restantes ('sets') ou
-// reps restantes / reps-par-série (mode 'reps', borné pour rester raisonnable).
-function maxSets(leg: ComboLeg): number {
-  if (legMode(leg) === 'reps') return Math.max(1, Math.ceil(legRemaining(leg) / 10));
+// Pas d'incrément selon le mode (1 série, ou 5 reps).
+function stepFor(leg: ComboLeg): number {
+  return legMode(leg) === 'reps' ? 5 : 1;
+}
+// Plafond dans l'unité de l'exo (séries ou reps restantes).
+function maxCount(leg: ComboLeg): number {
   return legRemaining(leg);
 }
-function bumpCount(exId: string, d: number) {
+function bumpCount(exId: string, dir: number) {
   const leg = availableLegs.value.find((l) => l.exercise_id === exId);
   if (!leg) return;
+  const step = stepFor(leg);
   const cur = counts[exId] ?? 0;
-  counts[exId] = Math.max(0, Math.min(maxSets(leg), cur + d));
+  counts[exId] = Math.max(step, Math.min(maxCount(leg), cur + dir * step));
 }
-// Défaut : ~2 séries/exo (borné au restant) pour amorcer, ajustable exo par exo.
+// Défaut : tous cochés, ~2 séries (ou ~20 reps) par exo — ajustable, décochable.
 function initCounts() {
   for (const leg of availableLegs.value) {
-    counts[leg.exercise_id] = Math.min(2, maxSets(leg));
+    included[leg.exercise_id] = true;
+    const def = legMode(leg) === 'reps' ? 20 : 2;
+    counts[leg.exercise_id] = Math.min(def, maxCount(leg));
   }
 }
+// Compteurs en SÉRIES pour la construction : exos cochés seulement ; en mode reps
+// on convertit les reps voulues en nb de séries (~reps de la dernière série).
+const buildCounts = computed<Record<string, number>>(() => {
+  const out: Record<string, number> = {};
+  for (const leg of availableLegs.value) {
+    if (!included[leg.exercise_id]) continue;
+    const n = counts[leg.exercise_id] ?? 0;
+    if (n <= 0) continue;
+    out[leg.exercise_id] =
+      legMode(leg) === 'reps' ? Math.max(1, Math.ceil(n / Math.max(1, legLastReps(leg)))) : n;
+  }
+  return out;
+});
 
 // Aperçu (avant de commencer) — d'après les compteurs par exo.
 const previewSession = computed(() =>
-  c.value ? buildComboSessionFromCounts(c.value, counts) : [],
+  c.value ? buildComboSessionFromCounts(c.value, buildCounts.value) : [],
 );
 const previewSets = computed(() => previewSession.value.reduce((a, e) => a + e.sets.length, 0));
 const previewMinutes = computed(() => comboSessionDurationMin(previewSets.value, restSec.value));
@@ -391,7 +428,7 @@ onUnmounted(() => clearInterval(tick));
   border-color: var(--accent);
   color: var(--accent);
 }
-/* Réglage du nb de séries PAR EXO (indépendant) */
+/* Coche l'exo + nb de séries (ou reps) PAR EXO */
 .exo-row {
   display: flex;
   align-items: center;
@@ -401,6 +438,24 @@ onUnmounted(() => clearInterval(tick));
   border: 1px solid var(--line);
   background: var(--surface);
   margin-bottom: 6px;
+}
+.exo-row.off {
+  opacity: 0.5;
+}
+.exo-check {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.stp-u {
+  font-size: 11px;
+  color: var(--dim);
+  margin-left: 1px;
 }
 .exo-main {
   flex: 1;
