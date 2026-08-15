@@ -657,8 +657,13 @@ const activeExoFamilies = computed(() => {
   const keys = new Set<string>();
   for (const c of challenges.list.filter((c) => c.status === 'active'))
     keys.add(variantFamilyKey(c.exercise_id));
-  for (const combo of comboStore.list.filter((c) => c.status === 'active'))
-    for (const leg of combo.legs ?? []) keys.add(variantFamilyKey(leg.exercise_id));
+  // Le Défi 360 masque aussi ses familles — SAUF pour l'admin, qui a le bypass
+  // « muscu + 360 en parallèle » (aligné sur le create-guard). Sinon un curl
+  // auto-choisi par le 360 bloquait tous les curls en challenge (cb1e481c).
+  // TODO(cleanup avant release) : retirer le bypass `!auth.isAdmin`.
+  if (!auth.isAdmin)
+    for (const combo of comboStore.list.filter((c) => c.status === 'active'))
+      for (const leg of combo.legs ?? []) keys.add(variantFamilyKey(leg.exercise_id));
   return keys;
 });
 const exFilter = ref<'all' | 'muscu' | 'cardio'>('all');

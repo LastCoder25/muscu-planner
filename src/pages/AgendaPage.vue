@@ -142,10 +142,29 @@ const entries = computed<Entry[]>(() => {
       energy: 0, // tennis exclu de l'énergie d'aventure
     });
   }
+  // DÉDUP anti-doublon : une sortie MIROIR (créée depuis un défi) ne s'affiche pas
+  // s'il existe déjà une saisie MANUELLE du même jour+activité (elle la couvre), et
+  // au plus UN miroir par (défi, jour). (Sinon marches en double dans l'agenda.)
+  const dayOf = (iso: string) => iso.slice(0, 10);
+  const manualDayAct = new Set(
+    cardio.logs
+      .filter((r) => !r.payload.challenge_id)
+      .map((r) => `${r.payload.activity}|${dayOf(r.performed_at)}`),
+  );
+  const seenMirror = new Set<string>();
   for (const r of cardio.logs) {
     const p = r.payload;
+    const day = dayOf(r.performed_at);
+    if (p.challenge_id) {
+      if (manualDayAct.has(`${p.activity}|${day}`)) continue; // couvert par une saisie manuelle
+      const key = `${p.challenge_id}|${p.challenge_day ?? day}`;
+      if (seenMirror.has(key)) continue; // déjà un miroir pour ce (défi, jour)
+      seenMirror.add(key);
+    }
+    // km affiché (arrondi ; à défaut de distance saisie, estimé depuis les pas).
+    const km = p.distance_km ?? (p.steps ? p.steps * 0.00075 : 0);
     const bits = [
-      p.distance_km ? `${p.distance_km} km` : '',
+      km ? `${km.toFixed(1)} km` : '',
       fmtDur(p.duration_min),
       paceLabel(p.distance_km, p.duration_min) ?? '',
     ].filter(Boolean);
