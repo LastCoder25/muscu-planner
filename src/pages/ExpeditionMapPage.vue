@@ -1,5 +1,6 @@
 <template>
   <q-page class="emap">
+    <GameLoader :show="booting" icon="🗺️" label="Chargement de la carte…" />
     <header class="top">
       <button class="iconbtn" aria-label="Retour" @click="router.back()">‹</button>
       <div class="top-title font-display">Carte des expéditions</div>
@@ -90,7 +91,7 @@
           v-for="pl in plots"
           :key="'plot' + pl.slot"
           class="plot"
-          :class="{ locked: !pl.unlocked, built: !!pl.building, ready: pl.ready }"
+          :class="{ locked: !pl.unlocked, built: !!pl.building, ready: pl.ready, upgraded: flashSlot === pl.slot }"
           @click="openPlot(pl)"
         >
           <circle :cx="pl.x" :cy="pl.y" r="4.2" class="plot-bg" />
@@ -287,6 +288,8 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
+import { useGameFx } from '@/composables/useGameFx';
+import GameLoader from '@/components/GameLoader.vue';
 import { computeCharacter } from '@/lib/character';
 import { playerWithGear } from '@/lib/items';
 import {
@@ -326,6 +329,9 @@ const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
 const progress = useProgress();
+const gameFx = useGameFx();
+// Emplacement fraîchement amélioré → flash localisé bref (anim d'upgrade).
+const flashSlot = ref<number | null>(null);
 
 const TOWN = EXPE.town;
 const MAP = EXPE.mapSize;
@@ -528,11 +534,28 @@ function plotUpCost(b: Building): number {
 }
 function doBuild(slot: number, typeId: string) {
   const uid = auth.user?.id;
-  if (uid) void char.buildFilon(uid, typeId, slot, Date.now(), heroLevel.value);
+  const t = buildingType(typeId);
+  if (!uid || !t) return;
+  void char.buildFilon(uid, typeId, slot, Date.now(), heroLevel.value).then(() => {
+    // Célébration centrale uniquement à la CONSTRUCTION (rare), pas aux upgrades.
+    if (char.row?.buildings.some((b) => b.slot === slot))
+      gameFx.celebrate({ kind: 'building', emoji: t.emoji, title: 'Bâtiment construit !', subtitle: t.label });
+  });
 }
 function doUpgrade(slot: number) {
   const uid = auth.user?.id;
-  if (uid) void char.upgradeFilon(uid, slot, heroLevel.value);
+  if (!uid) return;
+  const before = char.row?.buildings.find((b) => b.slot === slot)?.level ?? 0;
+  void char.upgradeFilon(uid, slot, heroLevel.value).then(() => {
+    // Upgrade fréquent → flash LOCALISÉ sur l'emplacement (pas d'overlay plein écran).
+    const after = char.row?.buildings.find((b) => b.slot === slot)?.level ?? 0;
+    if (after > before) {
+      flashSlot.value = slot;
+      setTimeout(() => {
+        if (flashSlot.value === slot) flashSlot.value = null;
+      }, 700);
+    }
+  });
 }
 function collectAll() {
   const uid = auth.user?.id;
@@ -638,7 +661,10 @@ async function lifecycle() {
   }
 }
 
+// Écran de chargement thématique bref à l'ouverture de la carte (immersion).
+const booting = ref(true);
 onMounted(async () => {
+  setTimeout(() => (booting.value = false), 750);
   const uid = auth.user?.id;
   if (uid && !char.row) await char.fetchMine().catch(() => undefined);
   if (uid) await char.expeSyncMap(uid, Date.now(), heroLevel.value).catch(() => undefined);
@@ -1024,6 +1050,21 @@ function fmtMin(min: number): string {
   }
   50% {
     stroke-width: 1.4;
+  }
+}
+/* Flash d'UPGRADE localisé sur l'emplacement (bref anneau accent qui jaillit). */
+.plot.upgraded .plot-bg {
+  animation: plot-upflash 0.7s ease-out;
+}
+@keyframes plot-upflash {
+  0% {
+    stroke: var(--accent);
+    stroke-width: 3;
+    filter: drop-shadow(0 0 3px var(--accent));
+  }
+  100% {
+    stroke-width: 0.6;
+    filter: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

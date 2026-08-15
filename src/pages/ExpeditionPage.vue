@@ -1,5 +1,6 @@
 <template>
   <q-page class="expe">
+    <GameLoader :show="booting" icon="🗝️" label="Entrée dans le Labyrinthe…" />
     <header class="top">
       <button class="iconbtn" aria-label="Retour" @click="router.back()">‹</button>
       <div class="top-title font-display">Labyrinthe</div>
@@ -254,6 +255,7 @@ import { rollActivityFamiliar } from '@/data/familiars';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
 import CombatStage from '@/components/CombatStage.vue';
+import GameLoader from '@/components/GameLoader.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -325,7 +327,10 @@ const fxDone = ref(false); // combat : résultat révélé à la fin de l'animat
 const playerProfile = computed(() => character.value.profile);
 const playerEquipped = computed(() => char.row?.equipped ?? {});
 
+// Écran de chargement thématique bref à l'entrée du Labyrinthe (immersion).
+const booting = ref(true);
 onMounted(async () => {
+  setTimeout(() => (booting.value = false), 750);
   try {
     await char.fetchMine();
   } catch {

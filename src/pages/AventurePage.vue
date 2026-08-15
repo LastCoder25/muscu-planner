@@ -1509,7 +1509,13 @@
         </div>
         <div v-if="stageDone && run.drops.length" class="drops">
           <div class="drops-lbl">✨ Butin</div>
-          <div v-for="d in run.drops" :key="d.id" class="drop" :class="'r-' + d.rarity">
+          <div
+            v-for="(d, di) in run.drops"
+            :key="d.id"
+            class="drop drop-reveal"
+            :class="'r-' + d.rarity"
+            :style="{ animationDelay: di * 0.12 + 's' }"
+          >
             <span class="inv-emo">{{ d.emoji }}</span>
             <div class="inv-main">
               <div class="inv-name">{{ d.name }}</div>
@@ -4349,6 +4355,25 @@ onUnmounted(() => {
   margin-bottom: 18px;
 }
 .inv-item,
+/* Apparition animée du butin (pop-in en cascade, léger « éclat » de la bordure). */
+.drop-reveal {
+  animation: drop-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes drop-in {
+  0% {
+    transform: scale(0.7) translateY(8px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drop-reveal {
+    animation: none;
+  }
+}
 .drop {
   position: relative;
   display: flex;
