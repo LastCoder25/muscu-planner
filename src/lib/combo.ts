@@ -292,6 +292,28 @@ export function buildComboSession(
     }));
 }
 
+/** Construit une séance à partir d'un nombre de séries CHOISI PAR EXO (indépendant).
+ *  `counts` = { exercise_id: nb de séries }. Chaque série reprend les reps de la
+ *  dernière faite (ou un défaut). Ordre = celui des legs du défi. Pur/testable. */
+export function buildComboSessionFromCounts(
+  c: ComboChallenge,
+  counts: Record<string, number>,
+): ComboSessionExo[] {
+  const out: ComboSessionExo[] = [];
+  for (const l of c.legs) {
+    const n = Math.max(0, Math.floor(counts[l.exercise_id] ?? 0));
+    if (n <= 0) continue;
+    const reps = legLastReps(l);
+    out.push({
+      exercise_id: l.exercise_id,
+      exercise_name: l.exercise_name,
+      weight_kg: legLastWeight(l),
+      sets: Array.from({ length: n }, () => reps),
+    });
+  }
+  return out;
+}
+
 /** Objectif de SÉRIES/semaine suggéré pour un emplacement (repère hypertrophie
  *  ~10-15 séries/muscle/sem). Essentiel ~12, optionnel ~9, ajusté au niveau. */
 export function suggestComboTarget(level: Level, essential: boolean): number {

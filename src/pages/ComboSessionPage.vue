@@ -13,21 +13,34 @@
     <!-- Configuration de la séance -->
     <template v-else-if="phase === 'config'">
       <p class="intro">
-        Choisis <b>combien de séries</b> tu veux faire, réparties sur les exos qu'il te reste.
-        Chaque série ≈ 40 s d'exécution + le repos choisi.
+        Choisis le nombre de séries <b>pour chaque exercice</b>. Chaque série ≈ 40 s d'exécution +
+        le repos choisi.
       </p>
       <div class="cfg">
-        <div class="cfg-lbl">Nombre de séries</div>
-        <div class="chips">
-          <button
-            v-for="n in SET_COUNTS"
-            :key="n"
-            class="chip"
-            :class="{ on: targetSets === n }"
-            @click="targetSets = n"
-          >
-            {{ n }}
-          </button>
+        <div class="cfg-lbl">Séries par exercice</div>
+        <div v-if="!availableLegs.length" class="empty">Tout est déjà fait cette semaine 🎉</div>
+        <div v-for="leg in availableLegs" :key="leg.exercise_id" class="exo-row">
+          <div class="exo-main">
+            <span class="exo-name">{{ leg.exercise_name }}</span>
+            <span class="exo-rem">reste {{ legRemaining(leg) }} {{ legUnitLabel(leg) }}</span>
+          </div>
+          <div class="stepper">
+            <button
+              type="button"
+              :disabled="(counts[leg.exercise_id] ?? 0) <= 0"
+              @click="bumpCount(leg.exercise_id, -1)"
+            >
+              −
+            </button>
+            <span class="stp-v font-display">{{ counts[leg.exercise_id] ?? 0 }}</span>
+            <button
+              type="button"
+              :disabled="(counts[leg.exercise_id] ?? 0) >= maxSets(leg)"
+              @click="bumpCount(leg.exercise_id, 1)"
+            >
+              ＋
+            </button>
+          </div>
         </div>
       </div>
       <div class="cfg">
@@ -43,32 +56,6 @@
             {{ r }} s
           </button>
         </div>
-      </div>
-      <div class="cfg">
-        <div class="cfg-lbl">Exercices</div>
-        <div class="chips">
-          <button class="chip" :class="{ on: pickMode === 'auto' }" @click="pickMode = 'auto'">
-            ✨ Automatique
-          </button>
-          <button class="chip" :class="{ on: pickMode === 'manual' }" @click="pickMode = 'manual'">
-            ✍️ Choisir
-          </button>
-        </div>
-      </div>
-      <!-- Sélection manuelle des exos (parmi ceux qu'il reste à faire) -->
-      <div v-if="pickMode === 'manual'" class="picklist">
-        <div v-if="!availableLegs.length" class="empty">Tout est déjà fait cette semaine 🎉</div>
-        <button
-          v-for="leg in availableLegs"
-          :key="leg.exercise_id"
-          class="pick"
-          :class="{ on: chosenIds.includes(leg.exercise_id) }"
-          @click="toggleLeg(leg.exercise_id)"
-        >
-          <span class="pick-check">{{ chosenIds.includes(leg.exercise_id) ? '☑' : '☐' }}</span>
-          <span class="pick-name">{{ leg.exercise_name }}</span>
-          <span class="pick-rem">{{ legRemaining(leg) }} {{ legUnitLabel(leg) }} restantes</span>
-        </button>
       </div>
       <div class="preview">
         <b>{{ previewSets }}</b> séries · ~{{ previewMinutes }} min · {{ previewExos }} exo{{
@@ -154,15 +141,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useComboStore } from '@/stores/combo';
 import {
-  buildComboSession,
+  buildComboSessionFromCounts,
   comboSessionDurationMin,
   legRemaining,
   legUnitLabel,
+  legMode,
+  type ComboLeg,
   type ComboSessionExo,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
@@ -176,38 +165,37 @@ const combo = useComboStore();
 const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 
-const SET_COUNTS = [6, 9, 12, 15, 20];
 const RESTS = [30, 60, 90];
-const targetSets = ref(12);
 const restSec = ref(60);
 const phase = ref<'config' | 'run'>('config');
 
-// Choix des exos : auto (tous) ou manuel (sélection).
-const pickMode = ref<'auto' | 'manual'>('auto');
-const chosenIds = ref<string[]>([]);
 // Exos encore à faire cette semaine (candidats à la séance).
 const availableLegs = computed(() => (c.value?.legs ?? []).filter((l) => legRemaining(l) > 0));
-function toggleLeg(id: string) {
-  chosenIds.value = chosenIds.value.includes(id)
-    ? chosenIds.value.filter((x) => x !== id)
-    : [...chosenIds.value, id];
+// Nombre de séries CHOISI PAR EXO (indépendant). Clé = exercise_id.
+const counts = reactive<Record<string, number>>({});
+// Plafond de séries d'un exo pour cette séance = séries restantes ('sets') ou
+// reps restantes / reps-par-série (mode 'reps', borné pour rester raisonnable).
+function maxSets(leg: ComboLeg): number {
+  if (legMode(leg) === 'reps') return Math.max(1, Math.ceil(legRemaining(leg) / 10));
+  return legRemaining(leg);
 }
-// ids à inclure : sélection manuelle non vide, sinon tous (auto).
-const includeIds = computed(() =>
-  pickMode.value === 'manual' && chosenIds.value.length ? chosenIds.value : undefined,
-);
+function bumpCount(exId: string, d: number) {
+  const leg = availableLegs.value.find((l) => l.exercise_id === exId);
+  if (!leg) return;
+  const cur = counts[exId] ?? 0;
+  counts[exId] = Math.max(0, Math.min(maxSets(leg), cur + d));
+}
+// Défaut : ~2 séries/exo (borné au restant) pour amorcer, ajustable exo par exo.
+function initCounts() {
+  for (const leg of availableLegs.value) {
+    counts[leg.exercise_id] = Math.min(2, maxSets(leg));
+  }
+}
 
-// Aperçu (avant de commencer) — recalculé selon nb de séries/repos/sélection.
+// Aperçu (avant de commencer) — d'après les compteurs par exo.
 const previewSession = computed(() =>
-  c.value
-    ? buildComboSession(c.value, {
-        sets: targetSets.value,
-        restSec: restSec.value,
-        ...(includeIds.value ? { includeIds: includeIds.value } : {}),
-      })
-    : [],
+  c.value ? buildComboSessionFromCounts(c.value, counts) : [],
 );
-// Séries réellement plaçables (borné par les séries restantes) + durée estimée.
 const previewSets = computed(() => previewSession.value.reduce((a, e) => a + e.sets.length, 0));
 const previewMinutes = computed(() => comboSessionDurationMin(previewSets.value, restSec.value));
 const previewExos = computed(() => previewSession.value.length);
@@ -337,6 +325,7 @@ function cancel() {
 
 onMounted(async () => {
   if (!combo.loaded) await combo.fetchMine().catch(() => undefined);
+  initCounts(); // amorce les compteurs par exo (défaut ~2/exo)
 });
 onUnmounted(() => clearInterval(tick));
 </script>
@@ -402,13 +391,8 @@ onUnmounted(() => clearInterval(tick));
   border-color: var(--accent);
   color: var(--accent);
 }
-.picklist {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-.pick {
+/* Réglage du nb de séries PAR EXO (indépendant) */
+.exo-row {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -416,25 +400,48 @@ onUnmounted(() => clearInterval(tick));
   border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
+  margin-bottom: 6px;
 }
-.pick.on {
-  border-color: var(--accent);
-}
-.pick-check {
-  font-size: 16px;
-  color: var(--accent);
-}
-.pick-name {
+.exo-main {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.exo-name {
   font-weight: 600;
   font-size: 14px;
+  color: var(--text);
 }
-.pick-rem {
+.exo-rem {
   font-size: 11px;
   color: var(--dim);
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.stepper button {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface-2, #2a241c);
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+}
+.stepper button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.stp-v {
+  min-width: 26px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
 }
 .preview {
   font-size: 13px;
