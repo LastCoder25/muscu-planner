@@ -12,6 +12,23 @@ export interface Monster extends Combatant {
   hint: string; // conseil « coach » : quelle stat pousser
 }
 
+// Archétype VISUEL (dérivé des stats, aucun impact combat) → aura + idle distincts
+// dans le rejeu animé (CombatStage) pour que les monstres ne se ressemblent pas tous.
+export type MonsterArchetype = 'evasive' | 'striker' | 'brute' | 'tank' | 'normal';
+export function monsterArchetype(c: {
+  pv: number;
+  damage: number;
+  crit: number;
+  dodge: number;
+}): MonsterArchetype {
+  if (c.dodge >= 0.1) return 'evasive'; // insaisissable (spectre, loup)
+  if (c.crit >= 0.12) return 'striker'; // grosse chance de crit (dragon, archidémon)
+  const r = c.damage / Math.max(1, c.pv);
+  if (r >= 0.55) return 'brute'; // frappe fort pour sa masse
+  if (r <= 0.42) return 'tank'; // sac à PV
+  return 'normal';
+}
+
 export const MONSTERS: Monster[] = [
   {
     id: 'slime',

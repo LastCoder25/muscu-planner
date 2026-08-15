@@ -12,6 +12,17 @@ import {
 const strong = playerCombatant('Fort', { puissance: 80, endurance: 60, agilite: 40 }, 10);
 const weak = playerCombatant('Faible', { puissance: 3, endurance: 1, agilite: 1 }, 1);
 
+describe('archétypes de monstres (variété visuelle)', () => {
+  it('classe selon les stats (esquive/crit/ratio)', async () => {
+    const { monsterArchetype } = await import('@/data/monsters');
+    expect(monsterArchetype({ pv: 100, damage: 30, crit: 0.02, dodge: 0.16 })).toBe('evasive');
+    expect(monsterArchetype({ pv: 100, damage: 30, crit: 0.14, dodge: 0.05 })).toBe('striker');
+    expect(monsterArchetype({ pv: 100, damage: 70, crit: 0.05, dodge: 0.05 })).toBe('brute');
+    expect(monsterArchetype({ pv: 100, damage: 30, crit: 0.05, dodge: 0.05 })).toBe('tank');
+    expect(monsterArchetype({ pv: 100, damage: 48, crit: 0.05, dodge: 0.05 })).toBe('normal');
+  });
+});
+
 describe('épines (thorns)', () => {
   const monster = { name: 'M', pv: 400, damage: 40, crit: 0, dodge: 0, initiative: 1, strikes: 1 };
   const base = playerCombatant('Tank', { puissance: 10, endurance: 60, agilite: 5 }, 6);

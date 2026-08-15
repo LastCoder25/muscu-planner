@@ -7,7 +7,7 @@
         class="cs-side player"
         :class="{ shake: shakeSide === 'player', lunge: lungeSide === 'player' }"
       >
-        <div class="cs-fighter" :class="{ hit: shakeSide === 'player' }">
+        <div class="cs-fighter idle-player" :class="{ hit: shakeSide === 'player' }">
           <AventureAvatar :profile="playerProfile" :equipped="playerEquipped" />
         </div>
         <span v-if="burstSide === 'player'" class="cs-burst" />
@@ -18,6 +18,7 @@
         </div>
         <div class="cs-pv">{{ playerPv }}</div>
         <div v-if="pop && pop.side === 'player'" class="cs-pop" :class="pop.kind">{{ pop.text }}</div>
+        <div v-if="heal && heal.side === 'player'" class="cs-pop heal">{{ heal.text }}</div>
       </div>
 
       <div class="cs-mid">⚔️</div>
@@ -32,15 +33,26 @@
           enter: monsterEnter,
         }"
       >
-        <div class="cs-emo" :class="{ hit: shakeSide === 'monster' }">{{ foe?.emoji ?? '👾' }}</div>
+        <div class="cs-emo-wrap">
+          <span class="cs-aura" :class="'ar-' + foeArchetype" />
+          <div class="cs-emo" :class="['idle-' + foeArchetype, { hit: shakeSide === 'monster' }]">
+            {{ foe?.emoji ?? '👾' }}
+          </div>
+        </div>
         <span v-if="burstSide === 'monster'" class="cs-burst" />
-        <div class="cs-name">{{ foe?.name ?? '—' }}</div>
+        <div class="cs-name">
+          {{ foe?.name ?? '—' }}
+          <span v-if="foeArchetype !== 'normal'" class="cs-arch" :class="'ar-' + foeArchetype">{{
+            ARCH_LABEL[foeArchetype]
+          }}</span>
+        </div>
         <div class="cs-bar">
           <span class="ghost gm" :style="{ width: mPct + '%' }" />
           <span class="m" :style="{ width: mPct + '%' }" />
         </div>
         <div class="cs-pv">{{ monsterPv }}</div>
         <div v-if="pop && pop.side === 'monster'" class="cs-pop" :class="pop.kind">{{ pop.text }}</div>
+        <div v-if="heal && heal.side === 'monster'" class="cs-pop heal">{{ heal.text }}</div>
       </div>
     </div>
 
@@ -66,8 +78,17 @@ interface StageFight {
   name: string;
   emoji: string;
   maxPv: number;
+  archetype?: string; // identité visuelle (aura + idle)
   log: CombatEvent[];
 }
+
+const ARCH_LABEL: Record<string, string> = {
+  evasive: 'insaisissable',
+  striker: 'féroce',
+  brute: 'brutal',
+  tank: 'colosse',
+  normal: '',
+};
 const props = defineProps<{
   playerName: string;
   playerMaxPv: number;
@@ -90,6 +111,7 @@ const fightIdx = ref(0);
 const playerPv = ref(props.playerMaxPv);
 const monsterPv = ref(props.fights[0]?.maxPv ?? 1);
 const pop = ref<{ side: 'player' | 'monster'; text: string; kind: string } | null>(null);
+const heal = ref<{ side: 'player' | 'monster'; text: string } | null>(null); // soin (vol de vie) / épines
 const shakeSide = ref<'player' | 'monster' | null>(null);
 const burstSide = ref<'player' | 'monster' | null>(null);
 const lungeSide = ref<'player' | 'monster' | null>(null); // l'attaquant s'élance
@@ -101,6 +123,7 @@ const done = ref(false);
 const lastWin = ref(false);
 
 const foe = computed(() => props.fights[fightIdx.value] ?? null);
+const foeArchetype = computed(() => foe.value?.archetype ?? 'normal');
 const pPct = computed(() => Math.round((playerPv.value / Math.max(1, props.playerMaxPv)) * 100));
 const mPct = computed(() =>
   Math.round((monsterPv.value / Math.max(1, foe.value?.maxPv ?? 1)) * 100),
@@ -124,6 +147,18 @@ function apply(step: { fi: number; e: CombatEvent }) {
     monsterDead.value = false;
     monsterEnter.value = true;
     setTimeout(() => (monsterEnter.value = false), 320);
+  }
+  // Soin / épines : détecte les PV qui remontent (vol de vie) ou qui baissent hors
+  // du coup direct (épines) → petit pop dédié, en plus du pop de dégâts.
+  heal.value = null;
+  const prevP = playerPv.value;
+  const prevM = monsterPv.value;
+  if (step.fi === fightIdx.value) {
+    if (e.playerPv > prevP) heal.value = { side: 'player', text: `+${e.playerPv - prevP}` };
+    else if (e.monsterPv > prevM) heal.value = { side: 'monster', text: `+${e.monsterPv - prevM}` };
+    // Épines : le joueur attaqué renvoie des dégâts → le monstre perd des PV pendant SON tour.
+    else if (e.who === 'monster' && e.monsterPv < prevM)
+      heal.value = { side: 'monster', text: `↩−${prevM - e.monsterPv}` };
   }
   playerPv.value = e.playerPv;
   monsterPv.value = e.monsterPv;
@@ -154,6 +189,7 @@ function finish() {
   clearInterval(timer);
   timer = undefined;
   pop.value = null;
+  heal.value = null;
   clearFx();
   const last = steps.value[steps.value.length - 1];
   lastWin.value = !!last && last.e.monsterPv <= 0 && last.e.playerPv > 0;
@@ -168,6 +204,7 @@ function start() {
   fightIdx.value = 0;
   monsterDead.value = false;
   monsterEnter.value = false;
+  heal.value = null;
   clearFx();
   playerPv.value = props.playerMaxPv;
   monsterPv.value = props.fights[0]?.maxPv ?? 1;
@@ -249,13 +286,131 @@ onBeforeUnmount(() => {
 .cs-fighter.hit {
   filter: brightness(1.6) drop-shadow(0 0 5px var(--d4));
 }
+.cs-emo-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+}
 .cs-emo {
   font-size: 40px;
   line-height: 1.1;
   transition: filter 0.05s;
+  position: relative;
+  z-index: 1;
 }
 .cs-emo.hit {
   filter: brightness(1.9) drop-shadow(0 0 5px var(--d4));
+}
+/* Aura d'archétype (derrière l'emoji) : halo teinté qui pulse doucement. */
+.cs-aura {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  opacity: 0.5;
+  filter: blur(7px);
+  animation: auraPulse 2.4s ease-in-out infinite;
+}
+.cs-aura.ar-normal {
+  display: none;
+}
+.cs-aura.ar-evasive {
+  background: radial-gradient(circle, #4ec6d6 0%, transparent 70%);
+}
+.cs-aura.ar-striker {
+  background: radial-gradient(circle, #ff6a45 0%, transparent 70%);
+}
+.cs-aura.ar-brute {
+  background: radial-gradient(circle, #ff3b1f 0%, transparent 70%);
+}
+.cs-aura.ar-tank {
+  background: radial-gradient(circle, #9aa7b5 0%, transparent 70%);
+}
+@keyframes auraPulse {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.65;
+  }
+}
+/* Idle « respiration » selon l'archétype (feel distinct par monstre). */
+.idle-evasive {
+  animation: idleFloat 1.5s ease-in-out infinite;
+}
+.idle-striker {
+  animation: idleTwitch 1.3s ease-in-out infinite;
+}
+.idle-brute {
+  animation: idleHeavy 2.6s ease-in-out infinite;
+}
+.idle-tank {
+  animation: idleHeavy 3.4s ease-in-out infinite;
+}
+.idle-normal {
+  animation: idleFloat 2.6s ease-in-out infinite;
+}
+.idle-player {
+  animation: idleFloat 3s ease-in-out infinite;
+}
+@keyframes idleFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes idleTwitch {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-2px) rotate(-3deg);
+  }
+}
+@keyframes idleHeavy {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+.cs-arch {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 5px;
+  border-radius: 999px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.cs-arch.ar-evasive {
+  color: #4ec6d6;
+  border: 1px solid #4ec6d6;
+}
+.cs-arch.ar-striker {
+  color: #ff6a45;
+  border: 1px solid #ff6a45;
+}
+.cs-arch.ar-brute {
+  color: #ff3b1f;
+  border: 1px solid #ff3b1f;
+}
+.cs-arch.ar-tank {
+  color: #9aa7b5;
+  border: 1px solid #9aa7b5;
 }
 /* Éclair plein écran sur un critique. */
 .crit-flash {
@@ -318,7 +473,14 @@ onBeforeUnmount(() => {
   .cs-burst,
   .stage.qshake,
   .crit-flash,
-  .cs-side.monster.enter {
+  .cs-side.monster.enter,
+  .cs-aura,
+  .idle-evasive,
+  .idle-striker,
+  .idle-brute,
+  .idle-tank,
+  .idle-normal,
+  .idle-player {
     animation: none;
   }
   .cs-side,
@@ -396,6 +558,11 @@ onBeforeUnmount(() => {
 .cs-pop.dodge {
   color: var(--dim);
   font-style: italic;
+}
+.cs-pop.heal {
+  color: var(--d1);
+  top: 40px;
+  font-size: 12px;
 }
 @keyframes floatpop {
   0% {

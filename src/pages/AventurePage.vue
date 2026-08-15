@@ -1666,7 +1666,7 @@ import {
   type CombatEvent,
 } from '@/lib/combat';
 import CombatStage from '@/components/CombatStage.vue';
-import { MONSTERS } from '@/data/monsters';
+import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
 import { BOSSES, type MilestoneBoss } from '@/data/bosses';
 import {
@@ -1746,6 +1746,7 @@ interface RunFight {
   win: boolean;
   rounds: number;
   maxPv?: number; // PV max du monstre (barre du rejeu)
+  archetype?: string; // identité visuelle du monstre (aura/idle du rejeu)
   log?: CombatEvent[]; // détail par coup → rejeu animé
 }
 interface RunView {
@@ -2129,7 +2130,13 @@ function stageFinish() {
 const stageFights = computed(() =>
   (run.value?.fights ?? [])
     .filter((f) => f.log?.length)
-    .map((f) => ({ name: f.monster, emoji: f.emoji, maxPv: f.maxPv ?? 1, log: f.log! })),
+    .map((f) => ({
+      name: f.monster,
+      emoji: f.emoji,
+      maxPv: f.maxPv ?? 1,
+      archetype: f.archetype ?? 'normal',
+      log: f.log!,
+    })),
 );
 // Après un run : replie la liste, ouvre la modale de rapport, et l'animation de
 // combat se (re)lance automatiquement (runSeq change → CombatStage remonte).
@@ -2477,14 +2484,18 @@ async function explore(d: Dungeon) {
       dust,
       finalPv: r.finalPv,
       playerMaxPv: player.pv,
-      fights: r.fights.map((f) => ({
-        monster: f.monster,
-        emoji: MONSTERS.find((m) => m.name === f.monster)?.emoji ?? '👾',
-        win: f.win,
-        rounds: f.result.rounds,
-        maxPv: MONSTERS.find((m) => m.name === f.monster)?.pv,
-        log: f.result.log,
-      })),
+      fights: r.fights.map((f) => {
+        const mon = MONSTERS.find((m) => m.name === f.monster);
+        return {
+          monster: f.monster,
+          emoji: mon?.emoji ?? '👾',
+          win: f.win,
+          rounds: f.result.rounds,
+          maxPv: mon?.pv,
+          archetype: mon ? monsterArchetype(mon) : 'normal',
+          log: f.result.log,
+        };
+      }),
       drops,
       ...(consDrop ? { consumable: { emoji: consDrop.emoji, name: consDrop.name } } : {}),
     };
@@ -2630,7 +2641,15 @@ async function fightBoss(b: MilestoneBoss) {
       finalPv,
       playerMaxPv: player.pv,
       fights: [
-        { monster: b.name, emoji: b.emoji, win, rounds: r.rounds, maxPv: b.combatant.pv, log: r.log },
+        {
+          monster: b.name,
+          emoji: b.emoji,
+          win,
+          rounds: r.rounds,
+          maxPv: b.combatant.pv,
+          archetype: monsterArchetype(b.combatant),
+          log: r.log,
+        },
       ],
       drops: [],
     };
@@ -2730,7 +2749,17 @@ async function fightEndless() {
       dust,
       finalPv,
       playerMaxPv: player.pv,
-      fights: [{ monster: foe.name, emoji: '🌀', win, rounds: r.rounds, maxPv: foe.pv, log: r.log }],
+      fights: [
+        {
+          monster: foe.name,
+          emoji: '🌀',
+          win,
+          rounds: r.rounds,
+          maxPv: foe.pv,
+          archetype: monsterArchetype(foe),
+          log: r.log,
+        },
+      ],
       drops,
     };
     pendingNotify.value = win
