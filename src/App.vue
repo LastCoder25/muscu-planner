@@ -2,12 +2,14 @@
   <router-view />
   <FeedbackFab />
   <VersionBadge />
+  <GameFxOverlay />
 </template>
 
 <script setup lang="ts">
 import { onMounted } from 'vue';
 import VersionBadge from '@/components/VersionBadge.vue';
 import FeedbackFab from '@/components/FeedbackFab.vue';
+import GameFxOverlay from '@/components/GameFxOverlay.vue';
 import { useBodyReminder } from '@/composables/useBodyReminder';
 import { useChallengeReminder } from '@/composables/useChallengeReminder';
 

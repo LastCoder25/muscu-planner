@@ -238,6 +238,7 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
+import { useGameFx } from '@/composables/useGameFx';
 import { computeCharacter } from '@/lib/character';
 import {
   playerWithGear,
@@ -259,6 +260,7 @@ const router = useRouter();
 const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
+const gameFx = useGameFx();
 const progress = useProgress();
 
 // Phase : lobby (choix de lancer, coûte 1 clé) → running (exploration).
@@ -605,6 +607,13 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
       const famRng = mulberry32((seed.value * 131 + 91) >>> 0 || 1);
       const fam = rollActivityFamiliar(famRng, { level: heroLevel.value + 1, luck: 1 });
       loot.value.push({ ...fam, id: `exp_f_${lootN++}` });
+      gameFx.celebrate({
+        kind: 'familiar',
+        emoji: fam.emoji,
+        title: 'Familier trouvé !',
+        subtitle: `${fam.name} · ${RARITY_LABEL[fam.rarity]}`,
+        rarity: fam.rarity,
+      });
     }
     // Pierres magiques 💎 (voie diffuse) : proportionnelles à la progression du run
     // (la poussière amassée = proxy des salles/monstres) + bonus de clear.

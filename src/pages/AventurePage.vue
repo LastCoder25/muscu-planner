@@ -1640,6 +1640,7 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
+import { useGameFx } from '@/composables/useGameFx';
 import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import {
@@ -1758,6 +1759,18 @@ const router = useRouter();
 const auth = useAuthStore();
 const char = useCharacterStore();
 const progress = useProgress();
+const gameFx = useGameFx();
+// Célébration centrale pour un DROP marquant (légendaire = éclat, divin = explosion).
+function celebrateRareDrop(it: Item) {
+  if (it.rarity !== 'legendary' && it.rarity !== 'divin') return;
+  gameFx.celebrate({
+    kind: 'drop',
+    emoji: it.emoji,
+    title: it.rarity === 'divin' ? 'DROP DIVIN !' : 'Drop légendaire !',
+    subtitle: it.name,
+    rarity: it.rarity,
+  });
+}
 
 const loading = ref(true);
 const saving = ref(false);
@@ -2411,7 +2424,11 @@ async function explore(d: Dungeon) {
       spread: 1, // le donjon peut lâcher un cran sous son niveau (fourrage à upgrader)
       luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
     });
-    if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
+    if (rolled) {
+      const dr: Item = { ...rolled, id: crypto.randomUUID() };
+      drops.push(dr);
+      celebrateRareDrop(dr);
+    }
     // (Les familiers ne tombent PLUS dans les donjons — uniquement au Labyrinthe.)
     // Butin consommable (en plus de l'équipement).
     const consDropId = rollConsumableDrop(dropRng, r.cleared);
@@ -2665,7 +2682,11 @@ async function fightEndless() {
           luck: Math.min(1, 0.6 + (lucky ? 0.4 : 0)),
         });
       }
-      if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
+      if (rolled) {
+        const dr: Item = { ...rolled, id: crypto.randomUUID() };
+        drops.push(dr);
+        celebrateRareDrop(dr);
+      }
       // (Les familiers ne tombent PLUS à la Faille — uniquement au Labyrinthe.)
     }
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
@@ -2822,9 +2843,12 @@ function doFuse(rarity: Rarity) {
     (uid) =>
       char.fuseFamiliars(uid, ids).then((res) => {
         if (res)
-          $q.notify({
-            type: 'positive',
-            message: `Fusion réussie → ${res.emoji} ${res.name} (${RARITY_LABEL[res.rarity]}) !`,
+          gameFx.celebrate({
+            kind: 'familiar',
+            emoji: res.emoji,
+            title: 'Fusion réussie !',
+            subtitle: `${res.name} · ${RARITY_LABEL[res.rarity]}`,
+            rarity: res.rarity,
           });
       }),
     'Fusion impossible.',
