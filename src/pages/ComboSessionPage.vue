@@ -65,7 +65,7 @@
         >
           <span class="pick-check">{{ chosenIds.includes(leg.exercise_id) ? '☑' : '☐' }}</span>
           <span class="pick-name">{{ leg.exercise_name }}</span>
-          <span class="pick-rem">{{ legRemaining(leg) }} séries restantes</span>
+          <span class="pick-rem">{{ legRemaining(leg) }} {{ legUnitLabel(leg) }} restantes</span>
         </button>
       </div>
       <div class="preview">
@@ -140,6 +140,7 @@ import {
   buildComboSession,
   comboSessionSetBudget,
   legRemaining,
+  legUnitLabel,
   type ComboSessionExo,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';

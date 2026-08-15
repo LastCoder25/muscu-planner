@@ -4,6 +4,9 @@ import {
   legReps,
   legRemaining,
   legComplete,
+  legDone,
+  legMode,
+  legUnitLabel,
   legLastReps,
   legLastWeight,
   comboComplete,
@@ -11,6 +14,7 @@ import {
   comboXpPoints,
   comboOverachievement,
   suggestComboTarget,
+  suggestComboTargetFromHistory,
   suggestFullBodyPlan,
   comboMuscleInZone,
   comboEmphasis,
@@ -72,6 +76,47 @@ describe('legs (modèle séries)', () => {
     });
     expect(legSetsDone(legacy)).toBe(2);
     expect(legSets(legacy)[0]!.weight).toBe(30);
+  });
+});
+
+describe('mode séries vs reps par exo (173b322a)', () => {
+  it('mode reps : legDone = total reps, complétion sur les reps', () => {
+    const l = leg({ count_mode: 'reps', target: 100, sets: [set(30), set(40)] });
+    expect(legMode(l)).toBe('reps');
+    expect(legUnitLabel(l)).toBe('reps');
+    expect(legDone(l)).toBe(70); // 30+40
+    expect(legRemaining(l)).toBe(30);
+    expect(legComplete(l)).toBe(false);
+    const full = leg({ count_mode: 'reps', target: 100, sets: [set(60), set(50)] });
+    expect(legComplete(full)).toBe(true); // 110 ≥ 100
+    expect(legDone(full) - full.target).toBe(10); // dépassement en reps
+  });
+  it('mode sets (défaut) : legDone = nb de séries', () => {
+    const l = leg({ target: 3, sets: [set(10), set(10)] });
+    expect(legMode(l)).toBe('sets');
+    expect(legDone(l)).toBe(2);
+    expect(legRemaining(l)).toBe(1);
+  });
+  it('comboProgressPct : moyenne des fractions (mélange de modes OK)', () => {
+    const a = leg({ target: 4, sets: [set(10), set(10)] }); // 2/4 = 50 %
+    const b = leg({ slot: 'pull', exercise_id: 'b', count_mode: 'reps', target: 100, sets: [set(100)] }); // 100 %
+    expect(comboProgressPct(combo([a, b]))).toBe(75); // (0.5 + 1)/2
+  });
+  it('buildComboSession : mode reps → assez de séries pour couvrir les reps restantes', () => {
+    const c = combo([leg({ count_mode: 'reps', target: 100, exercise_id: 'a' })]);
+    const s = buildComboSession(c, { minutes: 60, restSec: 60 });
+    const totalReps = s[0]!.sets.reduce((x, r) => x + r, 0);
+    expect(totalReps).toBeGreaterThanOrEqual(100); // couvre l'objectif de reps
+  });
+  it('suggestComboTargetFromHistory : reprend le target du dernier défi (converti si mode diffère)', () => {
+    const past = combo([leg({ exercise_id: 'a', target: 8 })], {
+      status: 'done',
+      start_date: '2026-01-01',
+    });
+    expect(suggestComboTargetFromHistory('a', 'sets', [past])).toBe(8);
+    // Conversion séries→reps (~10 reps/série).
+    expect(suggestComboTargetFromHistory('a', 'reps', [past])).toBe(80);
+    expect(suggestComboTargetFromHistory('zzz', 'sets', [past])).toBeNull();
   });
 });
 

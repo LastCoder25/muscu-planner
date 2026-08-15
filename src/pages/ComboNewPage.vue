@@ -272,14 +272,35 @@
           </div>
           <div class="leg-cfg">
             <div class="cfg-row">
-              <span class="cfg-lbl">Séries / semaine</span>
+              <span class="cfg-lbl">Compter en</span>
+              <div class="mode-toggle">
+                <button
+                  type="button"
+                  :class="{ on: picks[key]?.count_mode !== 'reps' }"
+                  @click="picks[key]?.count_mode === 'reps' && toggleMode(key)"
+                >
+                  Séries
+                </button>
+                <button
+                  type="button"
+                  :class="{ on: picks[key]?.count_mode === 'reps' }"
+                  @click="picks[key]?.count_mode !== 'reps' && toggleMode(key)"
+                >
+                  Reps
+                </button>
+              </div>
+            </div>
+            <div class="cfg-row">
+              <span class="cfg-lbl">{{ picks[key]?.count_mode === 'reps' ? 'Reps' : 'Séries' }} / semaine</span>
               <div class="stepper">
                 <button type="button" @click="bumpTarget(key, -1)">−</button>
                 <span class="stp-v font-display">{{ picks[key]?.target ?? 0 }}</span>
                 <button type="button" @click="bumpTarget(key, 1)">+</button>
               </div>
             </div>
-            <div v-if="pickCount(key) > 1" class="cfg-split">≈ {{ perExo(key) }} séries / exo</div>
+            <div v-if="pickCount(key) > 1" class="cfg-split">
+              ≈ {{ perExo(key) }} {{ picks[key]?.count_mode === 'reps' ? 'reps' : 'séries' }} / exo
+            </div>
             <div class="cfg-row">
               <span class="cfg-lbl">Charge départ (kg, option)</span>
               <q-input
@@ -328,11 +349,14 @@ import {
   comboMuscleInZone,
   comboEmphasis,
   objectiveToGoal,
+  suggestComboTargetFromHistory,
+  COMBO_PLAN_REPS,
   type ComboGoal,
   type ComboVolume,
   type ComboVariety,
   type ComboZone,
   type ComboLeg,
+  type ComboCountMode,
 } from '@/lib/combo';
 import { repWeightFromExercise, isBodyweightExercise, logicalToday } from '@/lib/challenges';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
@@ -420,7 +444,10 @@ function volSets(v: ComboVolume): number {
 
 const enabled = reactive<Record<string, boolean>>({}); // emplacement inclus dans le défi
 const picks = reactive<
-  Record<string, { exercise_ids: string[]; target: number; weight_kg: number | null }>
+  Record<
+    string,
+    { exercise_ids: string[]; target: number; weight_kg: number | null; count_mode: ComboCountMode }
+  >
 >({});
 const planN = reactive<Record<string, number>>({}); // nb d'exos suggéré par le plan
 
@@ -550,7 +577,28 @@ function atCap(key: string): boolean {
 }
 function bumpTarget(key: string, d: number) {
   const p = picks[key];
-  if (p) p.target = Math.max(3, p.target + d);
+  if (!p) return;
+  // Pas de 10 reps en mode 'reps', 1 série en mode 'sets'.
+  const step = p.count_mode === 'reps' ? 10 : 1;
+  const min = p.count_mode === 'reps' ? 10 : 3;
+  p.target = Math.max(min, p.target + d * step);
+}
+// Bascule séries ↔ reps pour un emplacement. Cherche un défaut dans l'HISTORIQUE
+// (dernier Défi 360 avec cet exo), sinon convertit l'objectif courant (~10 reps/série).
+function toggleMode(key: string) {
+  const p = picks[key];
+  if (!p) return;
+  const nextMode: ComboCountMode = p.count_mode === 'reps' ? 'sets' : 'reps';
+  const firstEx = p.exercise_ids[0];
+  const hist = firstEx ? suggestComboTargetFromHistory(firstEx, nextMode, combo.list) : null;
+  const n = Math.max(1, p.exercise_ids.length);
+  // Objectif total = suggestion d'historique (×nb d'exos) sinon conversion directe.
+  p.target = hist
+    ? hist * n
+    : nextMode === 'reps'
+      ? p.target * COMBO_PLAN_REPS
+      : Math.max(3, Math.round(p.target / COMBO_PLAN_REPS));
+  p.count_mode = nextMode;
 }
 const activeCount = computed(() => COMBO_SLOTS.filter((s) => enabled[s.key]).length);
 // Nb d'exos qu'on choisira (somme des suggestions des emplacements actifs).
@@ -595,6 +643,7 @@ function applyPlan() {
       exercise_ids: active ? cands.slice(0, Math.max(1, nExos)).map((e) => e.id) : [],
       target: p?.weeklySets ?? 0,
       weight_kg: null,
+      count_mode: 'sets',
     };
   }
 }
@@ -633,6 +682,7 @@ async function createCombo() {
         muscle_primary: e.muscle_primary,
         rep_weight: repWeightFromExercise(e.muscle_secondary, e.equipment_required),
         target: perExoTarget,
+        count_mode: p.count_mode,
         weight_kg: p.weight_kg || null,
         assistable: isBodyweightExercise(e.equipment_required),
         sets: [],
@@ -1033,6 +1083,25 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--dim);
   text-align: right;
+}
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.mode-toggle button {
+  border: none;
+  background: var(--surface-2);
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.mode-toggle button.on {
+  background: var(--accent);
+  color: var(--dark, #15120e);
 }
 .stepper {
   display: flex;

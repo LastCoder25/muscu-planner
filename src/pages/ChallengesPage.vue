@@ -338,20 +338,23 @@
               <span v-if="leg.weight_kg" class="cl-kg">{{ leg.weight_kg }} kg</span>
               <q-icon name="history" size="14px" class="cl-hist-ic" />
             </button>
-            <span class="cl-sub" :class="{ ok: legSetsDone(leg) >= leg.target }">
-              {{ legSetsDone(leg) }}/{{ leg.target }} séries
-              <span v-if="legSetsDone(leg) > leg.target" class="cl-extra"
-                >+{{ legSetsDone(leg) - leg.target }} en plus</span
+            <span class="cl-sub" :class="{ ok: legComplete(leg) }">
+              {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
+              <span v-if="legDone(leg) > leg.target" class="cl-extra"
+                >+{{ legDone(leg) - leg.target }} en plus</span
               >
             </span>
           </div>
-          <div class="seg-bar" :style="{ '--cols': leg.target }">
+          <div v-if="legMode(leg) === 'sets'" class="seg-bar" :style="{ '--cols': leg.target }">
             <span
-              v-for="n in Math.max(leg.target, legSetsDone(leg))"
+              v-for="n in Math.max(leg.target, legDone(leg))"
               :key="n"
               class="seg"
-              :class="{ on: n <= legSetsDone(leg), extra: n > leg.target }"
+              :class="{ on: n <= legDone(leg), extra: n > leg.target }"
             />
+          </div>
+          <div v-else class="reps-bar">
+            <span class="reps-fill" :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }" />
           </div>
           <div class="cl-add-lbl">Ajouter des séries :</div>
           <div class="cl-actions">
@@ -468,6 +471,10 @@ import {
   comboProgressPct,
   comboXpBreakdown,
   legSetsDone,
+  legDone,
+  legComplete,
+  legMode,
+  legUnitLabel,
   legLastReps,
   legLastWeight,
   legLastAssisted,
@@ -526,7 +533,7 @@ const comboList = computed(() =>
     .sort((a, b) => (b.start_date > a.start_date ? 1 : -1)),
 );
 const comboLegsDone = (c: (typeof comboStore.list)[number]) =>
-  c.legs.filter((l) => legSetsDone(l) >= l.target).length;
+  c.legs.filter((l) => legComplete(l)).length;
 const comboPct = computed(() => (activeCombo.value ? comboProgressPct(activeCombo.value) : 0));
 // Semaine du Défi 360 (début → fin) pour l'afficher clairement.
 function fmtDM(iso: string): string {
@@ -1097,6 +1104,20 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 3px;
   margin: 9px 0;
+}
+/* Mode reps : barre continue (l'objectif en reps peut être élevé → pas de segments). */
+.reps-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin: 9px 0;
+}
+.reps-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
 }
 /* Segments de TAILLE FIXE : exactement `--cols` (l'objectif) par ligne ; les
    séries en plus créent de nouvelles lignes de même taille (ex. 22 séries pour

@@ -17,13 +17,18 @@ export interface ComboLegEntry {
   date: string;
   reps: number;
 }
+// Mode de comptage d'un exo : par SÉRIES (target = nb de séries/sem, défaut) ou par
+// REPS (target = total de reps/sem, en autant de séries qu'on veut). Choisi par exo.
+export type ComboCountMode = 'sets' | 'reps';
+
 export interface ComboLeg {
   slot: string;
   exercise_id: string;
   exercise_name: string;
   muscle_primary?: string | null;
   rep_weight: number; // poids de rep de l'exo (pour l'XP)
-  target: number; // objectif de SÉRIES sur la semaine
+  target: number; // objectif : SÉRIES (mode 'sets') OU total REPS (mode 'reps') sur la sem
+  count_mode?: ComboCountMode; // défaut 'sets' (rétro-compat)
   weight_kg?: number | null; // dernier poids utilisé → préremplissage de la prochaine série
   assistable?: boolean; // exo au poids du corps → propose l'option « assisté »
   sets?: ComboSet[]; // séries réalisées (modèle courant)
@@ -56,12 +61,24 @@ export function legSetsDone(leg: ComboLeg): number {
 export function legReps(leg: ComboLeg): number {
   return legSets(leg).reduce((a, s) => a + (s.reps || 0), 0);
 }
-/** Séries restantes avant l'objectif. */
+/** Mode de comptage de l'exo (défaut 'sets' pour les défis existants). */
+export function legMode(leg: ComboLeg): ComboCountMode {
+  return leg.count_mode ?? 'sets';
+}
+/** Libellé de l'unité de l'objectif (séries ou reps) selon le mode. */
+export function legUnitLabel(leg: ComboLeg): string {
+  return legMode(leg) === 'reps' ? 'reps' : 'séries';
+}
+/** Avancement réalisé dans l'UNITÉ de l'objectif (séries faites OU reps cumulées). */
+export function legDone(leg: ComboLeg): number {
+  return legMode(leg) === 'reps' ? legReps(leg) : legSetsDone(leg);
+}
+/** Restant avant l'objectif, dans l'unité du mode (séries ou reps). */
 export function legRemaining(leg: ComboLeg): number {
-  return Math.max(0, leg.target - legSetsDone(leg));
+  return Math.max(0, leg.target - legDone(leg));
 }
 export function legComplete(leg: ComboLeg): boolean {
-  return leg.target > 0 && legSetsDone(leg) >= leg.target;
+  return leg.target > 0 && legDone(leg) >= leg.target;
 }
 /** Poids de préremplissage : dernier poids saisi (sinon poids de l'exo). */
 export function legLastWeight(leg: ComboLeg): number | null {
@@ -79,15 +96,15 @@ export function legLastAssisted(leg: ComboLeg): boolean {
   return s.length ? !!s[s.length - 1]!.assisted : false;
 }
 
-export function comboTargetTotal(c: ComboChallenge): number {
-  return c.legs.reduce((a, l) => a + l.target, 0);
-}
-export function comboDoneTotal(c: ComboChallenge): number {
-  return c.legs.reduce((a, l) => a + Math.min(legSetsDone(l), l.target), 0);
-}
+/** Avancement global = MOYENNE des fractions de complétion par exo (mode-neutre :
+ *  chaque exo compte pour 1, quel que soit son unité séries/reps → on peut mélanger). */
 export function comboProgressPct(c: ComboChallenge): number {
-  const tgt = comboTargetTotal(c);
-  return tgt > 0 ? Math.min(100, Math.round((comboDoneTotal(c) / tgt) * 100)) : 0;
+  if (!c.legs.length) return 0;
+  const frac = c.legs.reduce((a, l) => {
+    if (l.target <= 0) return a;
+    return a + Math.min(1, legDone(l) / l.target);
+  }, 0);
+  return Math.round((frac / c.legs.length) * 100);
 }
 export function comboComplete(c: ComboChallenge): boolean {
   return c.legs.length > 0 && c.legs.every((l) => legComplete(l));
@@ -123,13 +140,14 @@ export function comboOverachievement(c: ComboChallenge): {
   const totalLegs = c.legs.length;
   for (const l of c.legs) {
     const sets = legSets(l);
-    const done = sets.length;
+    // « done » dans l'unité du mode : nb de séries ('sets') ou total de reps ('reps').
+    const done = legDone(l);
     if (l.target > 0 && done > l.target) {
       const legRepXp = sets.reduce(
         (s, st) => s + (st.reps || 0) * REP_XP * (l.rep_weight ?? 1) * assistMult(st.assisted),
         0,
       );
-      extraXp += (legRepXp * (done - l.target)) / done; // part des séries en plus
+      extraXp += (legRepXp * (done - l.target)) / done; // part de l'effort au-delà de l'objectif
       legsOver++;
     }
   }
@@ -148,10 +166,16 @@ export function comboTargetEffort(c: ComboChallenge): number {
   let sum = 0;
   for (const l of c.legs) {
     const sets = legSets(l);
-    const counted = l.target > 0 ? sets.slice(0, l.target) : sets;
-    const reps = counted.reduce((a, s) => a + (s.reps || COMBO_PLAN_REPS), 0);
-    const missing = Math.max(0, l.target - counted.length);
-    sum += (reps + missing * COMBO_PLAN_REPS) * (l.rep_weight ?? 1);
+    if (legMode(l) === 'reps') {
+      // Mode REPS : effort = reps réalisées jusqu'à l'objectif (plancher pondéré).
+      const reps = legReps(l);
+      sum += Math.min(reps, l.target > 0 ? l.target : reps) * (l.rep_weight ?? 1);
+    } else {
+      const counted = l.target > 0 ? sets.slice(0, l.target) : sets;
+      const reps = counted.reduce((a, s) => a + (s.reps || COMBO_PLAN_REPS), 0);
+      const missing = Math.max(0, l.target - counted.length);
+      sum += (reps + missing * COMBO_PLAN_REPS) * (l.rep_weight ?? 1);
+    }
   }
   return sum;
 }
@@ -232,12 +256,14 @@ export function buildComboSession(
   const include = opts.includeIds ? new Set(opts.includeIds) : null;
   const exos = c.legs
     .filter((l) => !include || include.has(l.exercise_id))
-    .map((l) => ({
-      leg: l,
-      remaining: legRemaining(l), // séries restantes
-      reps: legLastReps(l),
-      sets: [] as number[],
-    }))
+    .map((l) => {
+      const reps = legLastReps(l);
+      // Séries restantes à générer : direct en mode 'sets' ; en mode 'reps' on
+      // convertit les reps restantes en nb de séries (à ~reps/série).
+      const remaining =
+        legMode(l) === 'reps' ? Math.ceil(legRemaining(l) / Math.max(1, reps)) : legRemaining(l);
+      return { leg: l, remaining, reps, sets: [] as number[] };
+    })
     .filter((e) => e.remaining > 0);
   let placed = 0;
   while (placed < budget && exos.some((e) => e.remaining > 0)) {
@@ -265,6 +291,29 @@ export function suggestComboTarget(level: Level, essential: boolean): number {
   const base = essential ? 12 : 9;
   const f = level === 'debutant' ? 0.75 : level === 'avance' ? 1.3 : 1;
   return Math.max(4, Math.round(base * f));
+}
+
+/** Suggère un objectif pour un exo à partir de l'HISTORIQUE : reprend le `target`
+ *  du dernier Défi 360 contenant cet exo (converti si le mode diffère : séries↔reps
+ *  via ~COMBO_PLAN_REPS reps/série). `null` si aucun historique. Pur/testable. */
+export function suggestComboTargetFromHistory(
+  exerciseId: string,
+  mode: ComboCountMode,
+  history: ComboChallenge[],
+): number | null {
+  // Le plus récent d'abord (start_date décroissant).
+  const sorted = [...history].sort((a, b) => (a.start_date < b.start_date ? 1 : -1));
+  for (const c of sorted) {
+    const leg = c.legs.find((l) => l.exercise_id === exerciseId && l.target > 0);
+    if (!leg) continue;
+    const pastMode = legMode(leg);
+    if (pastMode === mode) return leg.target;
+    // Conversion entre unités (séries ↔ reps).
+    return mode === 'reps'
+      ? leg.target * COMBO_PLAN_REPS
+      : Math.max(1, Math.round(leg.target / COMBO_PLAN_REPS));
+  }
+  return null;
 }
 
 // --- Dimensionnement FULL-BODY par volume + variété ------------------------

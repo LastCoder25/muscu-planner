@@ -40,7 +40,7 @@
         v-for="leg in c.legs"
         :key="leg.exercise_id"
         class="leg"
-        :class="{ ok: legSetsDone(leg) >= leg.target }"
+        :class="{ ok: legComplete(leg) }"
       >
         <div class="leg-top">
           <span class="leg-emo">{{ slotEmoji(leg.slot) }}</span>
@@ -50,21 +50,25 @@
               <span v-if="leg.weight_kg" class="leg-kg">{{ leg.weight_kg }} kg</span>
             </div>
             <div class="leg-sub">
-              {{ legSetsDone(leg) }}/{{ leg.target }} séries
-              <span v-if="legSetsDone(leg) >= leg.target" class="leg-ok">✓</span>
-              <span v-if="legSetsDone(leg) > leg.target" class="leg-extra"
-                >+{{ legSetsDone(leg) - leg.target }} en plus</span
+              {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
+              <span v-if="legComplete(leg)" class="leg-ok">✓</span>
+              <span v-if="legDone(leg) > leg.target" class="leg-extra"
+                >+{{ legDone(leg) - leg.target }} en plus</span
               >
             </div>
           </div>
         </div>
-        <div class="seg-bar" :style="{ '--cols': leg.target }">
+        <!-- Mode séries : segments par série ; mode reps : barre de progression simple. -->
+        <div v-if="legMode(leg) === 'sets'" class="seg-bar" :style="{ '--cols': leg.target }">
           <span
-            v-for="n in Math.max(leg.target, legSetsDone(leg))"
+            v-for="n in Math.max(leg.target, legDone(leg))"
             :key="n"
             class="seg"
-            :class="{ on: n <= legSetsDone(leg), extra: n > leg.target }"
+            :class="{ on: n <= legDone(leg), extra: n > leg.target }"
           />
+        </div>
+        <div v-else class="reps-bar">
+          <span class="reps-fill" :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }" />
         </div>
         <div class="leg-actions">
           <button v-for="n in [1, 2, 3, 4]" :key="n" class="add" @click="openSet(leg, n)">
@@ -72,7 +76,7 @@
           </button>
           <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
           <!-- Exo bouclé → le reprendre en petit défi (d073a26b). -->
-          <button v-if="legSetsDone(leg) >= leg.target" class="add chal" @click="toChallenge(leg)">
+          <button v-if="legComplete(leg)" class="add chal" @click="toChallenge(leg)">
             🏆 En challenge
           </button>
         </div>
@@ -111,6 +115,10 @@ import {
   comboProgressPct,
   comboOverachievement,
   legSetsDone,
+  legDone,
+  legComplete,
+  legMode,
+  legUnitLabel,
   legLastReps,
   legLastWeight,
   legLastAssisted,
@@ -380,6 +388,20 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 3px;
   margin: 9px 0;
+}
+/* Mode reps : barre de progression continue (l'objectif en reps peut être élevé). */
+.reps-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin: 9px 0;
+}
+.reps-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
 }
 /* Segments de TAILLE FIXE : `--cols` (l'objectif) par ligne ; les séries en plus
    ajoutent des lignes de même taille (ex. 22 pour un objectif de 9 → 3 lignes de 9). */
