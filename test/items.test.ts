@@ -4,6 +4,7 @@ import {
   playerWithGear,
   rollDrop,
   rollSetPiece,
+  dropMagnitude,
   commonDecayForLevel,
   fullInfuseCost,
   infuseToMaxCost,
@@ -184,10 +185,18 @@ describe('rollDrop', () => {
       }
     }
   });
-  it('variance de roll ±20 % : rng=0 → valeur × 0.8 (weapon/dégâts divin = round(8×3.8×0.8))', () => {
+  it('variance ±20 % × magnitude de donjon : rng=0 → round(8×3.8×mag(6)×0.8)', () => {
     const d = rollDrop(() => 0, { cleared: true, defeated: 1, level: 6 });
     expect(d!.effect.type).toBe('damage_pct');
-    expect(d!.effect.value).toBe(Math.round(8 * 3.8 * 0.8)); // = 24
+    expect(d!.effect.value).toBe(Math.round(8 * 3.8 * dropMagnitude(6) * 0.8));
+  });
+  it('chasse au loot : un donjon PROFOND lâche des stats de base plus GROSSES', () => {
+    // Même seed/rareté → la magnitude croît avec le niveau du donjon.
+    const shallow = rollDrop(() => 0, { cleared: true, defeated: 1, level: 5 })!;
+    const deep = rollDrop(() => 0, { cleared: true, defeated: 1, level: 90 })!;
+    expect(deep.effect.value).toBeGreaterThan(shallow.effect.value);
+    expect(dropMagnitude(90)).toBeGreaterThan(dropMagnitude(5));
+    expect(dropMagnitude(1)).toBe(1);
   });
   it('pool progressif : au niveau 1, aucune stat exotique (crit/vol de vie/réduction)', () => {
     const exotic = new Set(['crit_pct', 'lifesteal_pct', 'dmg_reduction_pct']);

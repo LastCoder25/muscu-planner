@@ -54,6 +54,17 @@ export interface Item {
 export function itemLevelMult(level: number): number {
   return 1 + Math.max(0, level - 1) * 0.05;
 }
+
+// CHASSE AU LOOT (2026‑08‑15, ticket 355753d2) : la MAGNITUDE DE BASE d'un drop
+// croît avec le niveau du DONJON/palier où il tombe → un objet d'un donjon profond
+// est objectivement meilleur (une fois les deux infusés) qu'un objet peu profond →
+// on veut remplacer son stuff en farmant plus profond. L'infusion (niveau) reste la
+// grinde ; la SOURCE fixe le plafond de qualité. Modeste (~+1,5×/niv de fond) pour
+// ne pas casser l'équilibrage nu.
+const MAGNITUDE_PER_LEVEL = 0.015;
+export function dropMagnitude(dropLevel: number): number {
+  return 1 + Math.max(0, dropLevel - 1) * MAGNITUDE_PER_LEVEL;
+}
 /** Valeur réelle d'un effet au niveau de l'objet. */
 export function effectiveValue(effect: ItemEffect, level: number): number {
   return Math.max(1, Math.round(effect.value * itemLevelMult(level)));
@@ -357,9 +368,11 @@ export function rollDrop(
   // tombent ; les stats exotiques se débloquent en montant (cf. EFFECT_MIN_LEVEL).
   const pool = availableEffects(slot, lvl);
   const chosen = pick(rng, pool);
-  // value = magnitude de BASE (niveau 1) : rareté × VARIANCE de roll ±20 % (farmer
-  // pour un bon roll a du sens ; un drop peut remplacer une stat mal rollée).
-  const rollValue = (b: number) => Math.max(1, Math.round(b * RARITY_MULT[rarity] * (0.8 + rng() * 0.4)));
+  // value = magnitude de BASE : rareté × magnitude du DONJON (deeper = meilleur
+  // objet, chasse au loot) × VARIANCE de roll ±20 % (farmer un bon roll a du sens).
+  const mag = dropMagnitude(lvl);
+  const rollValue = (b: number) =>
+    Math.max(1, Math.round(b * RARITY_MULT[rarity] * mag * (0.8 + rng() * 0.4)));
   const value = rollValue(chosen.base);
   // Objet à effet SIGNATURE → nom évocateur (« Guillotine ») ; sinon nom + adjectif.
   const sigNames = SIGNATURE_NAMES[chosen.type];
@@ -407,7 +420,9 @@ export function rollSetPiece(
   // commun/rare). Plus de chance de légendaire avec la chance (fiole).
   const rarity: Rarity = rng() < 0.45 + (opts.luck ?? 0) * 0.4 ? 'legendary' : 'epic';
   const chosen = pick(rng, SLOT_EFFECTS[slot]);
-  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
+  // Magnitude liée au palier du boss (chasse au loot : un set de palier profond est
+  // objectivement meilleur qu'un set de palier bas).
+  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity] * dropMagnitude(opts.level)));
   const noun = pick(rng, NAMES[slot]);
   const level = 1; // REFONTE C : la pièce de set arrive niv.1 (identité) → à infuser
   return {
