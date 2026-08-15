@@ -3,6 +3,7 @@ import {
   rollFamiliar,
   familiarStoneCost,
   isFamiliar,
+  nextRarity,
   aggregateEffects,
   playerWithGear,
   effectiveValue,
@@ -14,6 +15,7 @@ import {
   familiarSpecies,
   pickFamiliarSpecies,
   rollActivityFamiliar,
+  rollFusedFamiliar,
 } from '@/data/familiars';
 import { mulberry32 } from '@/lib/combat';
 
@@ -103,5 +105,30 @@ describe('familiers — pierres magiques & sélection', () => {
   it('rollActivityFamiliar : biome forcé → race de ce biome', () => {
     const f = rollActivityFamiliar(mulberry32(2), { level: 5, biome: 'plain' });
     expect(f.species).toBe('marmot'); // seule race de biome plain
+  });
+});
+
+describe('familiers — fusion (incubateur)', () => {
+  it('nextRarity : rareté juste au-dessus, null au max', () => {
+    expect(nextRarity('common')).toBe('rare');
+    expect(nextRarity('rare')).toBe('epic');
+    expect(nextRarity('legendary')).toBe('divin');
+    expect(nextRarity('divin')).toBeNull();
+  });
+  it('rollFamiliar : rareté forçable (fusion)', () => {
+    const f = rollFamiliar(mulberry32(1), wolf, { level: 1, rarity: 'epic' });
+    expect(f.rarity).toBe('epic');
+    expect(f.level).toBe(1);
+  });
+  it('rollFusedFamiliar : 3 d’une rareté → 1 familier de la rareté au-dessus', () => {
+    const fused = rollFusedFamiliar(mulberry32(4), 'rare');
+    expect(fused).not.toBeNull();
+    expect(fused!.rarity).toBe('epic');
+    expect(fused!.slot).toBe(FAMILIAR_SLOT);
+    expect(fused!.level).toBe(1);
+    expect(fused!.species).toBeTruthy();
+  });
+  it('rollFusedFamiliar : divin → null (pas de fusion au-delà)', () => {
+    expect(rollFusedFamiliar(mulberry32(5), 'divin')).toBeNull();
   });
 });

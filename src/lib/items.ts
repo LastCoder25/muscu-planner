@@ -429,14 +429,23 @@ export function familiarStoneCost(level: number, rarity: Rarity): number {
   return Math.round((3 + level * 2) * RARITY_COST_MULT[rarity]);
 }
 
+// Ordre des raretés (fusion : 3 d'une rareté → 1 de la rareté juste au-dessus).
+const RARITY_ORDER: Rarity[] = ['common', 'rare', 'epic', 'legendary', 'divin'];
+/** Rareté juste au-dessus, ou `null` si déjà au maximum (divin). */
+export function nextRarity(r: Rarity): Rarity | null {
+  const i = RARITY_ORDER.indexOf(r);
+  return i >= 0 && i < RARITY_ORDER.length - 1 ? RARITY_ORDER[i + 1]! : null;
+}
+
 /** Tire un FAMILIER d'une race donnée. L'effet = le bonus de la race, magnitude
- *  variable (rareté × niveau × variance ±20 %), comme un objet. Pur/testable. */
+ *  variable (rareté × niveau × variance ±20 %), comme un objet. `opts.rarity` force
+ *  la rareté (fusion) ; sinon tirée au hasard. Pur/testable. */
 export function rollFamiliar(
   rng: () => number,
   species: FamiliarSpecies,
-  opts: { level: number; luck?: number },
+  opts: { level: number; luck?: number; rarity?: Rarity },
 ): Omit<Item, 'id'> {
-  const rarity = rollRarity(rng, opts.luck ?? 0);
+  const rarity = opts.rarity ?? rollRarity(rng, opts.luck ?? 0);
   const value = Math.max(1, Math.round(species.base * RARITY_MULT[rarity] * (0.8 + rng() * 0.4)));
   const level = 1; // REFONTE C : le familier arrive niv.1 (identité de race) → à infuser
   return {

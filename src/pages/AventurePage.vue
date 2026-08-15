@@ -426,11 +426,10 @@
             </div>
           </div>
           <div v-else class="fam-empty">
-            Aucun familier équipé. Trouves-en un au <b>Labyrinthe</b> (garanti au clear) ou en butin
-            de donjon/faille.
+            Aucun familier équipé. On en trouve un <b>garanti au clear du Labyrinthe</b> 🗝️.
           </div>
 
-          <!-- Familiers au sac (à équiper) -->
+          <!-- Familiers au sac (équiper / vendre) -->
           <div v-if="bagFamiliars.length" class="fam-bag">
             <div class="fam-bag-title">Au sac ({{ bagFamiliars.length }})</div>
             <div
@@ -441,10 +440,33 @@
             >
               <span class="fam-mini-emo">{{ f.emoji }}</span>
               <span class="fam-mini-name">{{ f.name }}</span>
+              <span class="gpill" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
               <span class="gpill lvl">Lv{{ f.level }}</span>
               <span class="fam-mini-eff">{{ itemEffects(f) }}</span>
               <button class="fam-mini-eq" @click="doEquipFamiliar(f.id)">Équiper</button>
+              <button class="fam-mini-sell" @click="doSell(f)">Vendre 🪙{{ sellValue(f) }}</button>
             </div>
+          </div>
+
+          <!-- Incubateur : fusion 3 familiers de même rareté → 1 de la rareté au-dessus -->
+          <div v-if="c.level.level >= 3" class="fam-incub">
+            <div class="fam-bag-title">🐾 Incubateur — fusion</div>
+            <div class="fam-incub-hint">
+              Fusionne <b>3 familiers de même rareté</b> → 1 aléatoire de la rareté juste au-dessus.
+            </div>
+            <div v-if="!fusableRarities.length" class="fam-incub-empty">
+              Il te faut au moins 3 familiers d'une même rareté (hors divin) au sac.
+            </div>
+            <button
+              v-for="fr in fusableRarities"
+              :key="fr.rarity"
+              class="fam-fuse-btn"
+              @click="doFuse(fr.rarity)"
+            >
+              Fusionner 3× <b :class="'p-' + fr.rarity">{{ RARITY_LABEL[fr.rarity] }}</b>
+              → <b :class="'p-' + fr.next">{{ RARITY_LABEL[fr.next] }}</b>
+              <span class="ff-have">({{ fr.count }} dispo)</span>
+            </button>
           </div>
         </div>
 
@@ -1655,6 +1677,7 @@ import {
   craftSetCost,
   familiarStoneCost,
   isFamiliar,
+  nextRarity,
   FAMILIAR_SLOT,
   commonDecayForLevel,
   SLOTS,
@@ -1667,11 +1690,12 @@ import {
   setCounts,
   type Item,
   type ItemSlot,
+  type Rarity,
   type AggregatedEffects,
   type RewardCandidate,
   type PendingReward,
 } from '@/lib/items';
-import { rollActivityFamiliar, familiarSpecies } from '@/data/familiars';
+import { familiarSpecies } from '@/data/familiars';
 import {
   SHOP_ITEMS,
   CONSUMABLE_ITEMS,
@@ -2387,15 +2411,7 @@ async function explore(d: Dungeon) {
       luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
     });
     if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
-    // Familier (voie DIFFUSE) : ~8 % sur un donjon nettoyé → un compagnon peut
-    // tomber n'importe où (le Labyrinthe reste la voie garantie/thémée).
-    if (r.cleared && dropRng() < 0.08) {
-      const fam = rollActivityFamiliar(dropRng, {
-        level: d.dropLevel,
-        luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
-      });
-      drops.push({ ...fam, id: crypto.randomUUID() });
-    }
+    // (Les familiers ne tombent PLUS dans les donjons — uniquement au Labyrinthe.)
     // Butin consommable (en plus de l'équipement).
     const consDropId = rollConsumableDrop(dropRng, r.cleared);
     const consDrop = consDropId ? shopItem(consDropId) : undefined;
@@ -2649,12 +2665,7 @@ async function fightEndless() {
         });
       }
       if (rolled) drops.push({ ...rolled, id: crypto.randomUUID() });
-      // Familier de fin de jeu (~15 %, haut niveau) — voie diffuse.
-      const famRng = mulberry32((seed ^ 0x1b873593) >>> 0);
-      if (famRng() < 0.15) {
-        const fam = rollActivityFamiliar(famRng, { level: endlessDropLevel(tier), luck: 0.6 });
-        drops.push({ ...fam, id: crypto.randomUUID() });
-      }
+      // (Les familiers ne tombent PLUS à la Faille — uniquement au Labyrinthe.)
     }
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
     await char.applyEndless(uid, {
@@ -2785,6 +2796,35 @@ function doUpgradeFamiliar(itemId: string) {
   withUid(
     (uid) => char.upgradeFamiliar(uid, itemId, c.value.level.level),
     'Montée du familier impossible.',
+  );
+}
+// Incubateur : raretés du sac avec ≥ 3 familiers ET fusionnables (pas divin).
+const fusableRarities = computed(() => {
+  const byR = new Map<Rarity, number>();
+  for (const f of bagFamiliars.value) byR.set(f.rarity, (byR.get(f.rarity) ?? 0) + 1);
+  const out: { rarity: Rarity; next: Rarity; count: number }[] = [];
+  for (const [rarity, count] of byR) {
+    const next = nextRarity(rarity);
+    if (count >= 3 && next) out.push({ rarity, next, count });
+  }
+  return out.sort((a, b) => RARITY_RANK[a.rarity] - RARITY_RANK[b.rarity]);
+});
+function doFuse(rarity: Rarity) {
+  const ids = bagFamiliars.value
+    .filter((f) => f.rarity === rarity)
+    .slice(0, 3)
+    .map((f) => f.id);
+  if (ids.length < 3) return;
+  withUid(
+    (uid) =>
+      char.fuseFamiliars(uid, ids).then((res) => {
+        if (res)
+          $q.notify({
+            type: 'positive',
+            message: `Fusion réussie → ${res.emoji} ${res.name} (${RARITY_LABEL[res.rarity]}) !`,
+          });
+      }),
+    'Fusion impossible.',
   );
 }
 
@@ -4085,6 +4125,55 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+}
+.fam-mini-sell {
+  border: none;
+  background: none;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 3px 4px;
+}
+/* Incubateur (fusion de familiers) */
+.fam-incub {
+  margin-top: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+.fam-incub-hint {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 4px 0 8px;
+}
+.fam-incub-empty {
+  font-size: 12px;
+  color: var(--dim);
+  font-style: italic;
+}
+.fam-fuse-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ff-have {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 500;
 }
 /* Sets d'équipement */
 .setcard {

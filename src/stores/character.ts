@@ -41,6 +41,7 @@ import {
   collectable,
   type Building,
 } from '@/lib/buildings';
+import { rollFusedFamiliar } from '@/data/familiars';
 import type { Combatant } from '@/lib/combat';
 
 export interface CharacterRow {
@@ -508,6 +509,26 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
+  // FUSION (incubateur) : consomme 3 familiers du SAC de MÊME rareté → 1 familier
+  // ALÉATOIRE de la rareté JUSTE AU-DESSUS (niveau 1). rng = Math.random.
+  async function fuseFamiliars(userId: string, ids: string[]) {
+    const cur = row.value;
+    if (!cur || ids.length !== 3) return;
+    const picked = ids.map((id) => cur.inventory.find((i) => i.id === id)).filter((i): i is Item => !!i);
+    if (picked.length !== 3 || !picked.every(isFamiliar)) return;
+    const rarity = picked[0]!.rarity;
+    if (!picked.every((f) => f.rarity === rarity)) return; // même rareté requise
+    const fused = rollFusedFamiliar(Math.random, rarity);
+    if (!fused) return; // divin → pas de fusion
+    const idSet = new Set(ids);
+    const inventory = [
+      ...cur.inventory.filter((i) => !idSet.has(i.id)),
+      { ...fused, id: crypto.randomUUID() },
+    ];
+    await persist(userId, { inventory });
+    return fused;
+  }
+
   // ── Atelier de poussière (dust sinks) : forge / reroll / infusion / craft de set ──
   // Applique la MAJ d'un objet possédé (équipé ou au sac) + dépense la poussière.
   function applyItemUpdate(
@@ -809,6 +830,7 @@ export const useCharacterStore = defineStore('character', () => {
     upgradeItem,
     infuseToMax,
     upgradeFamiliar,
+    fuseFamiliars,
     forge,
     rerollEffect,
     craftSet,

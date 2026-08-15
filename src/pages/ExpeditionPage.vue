@@ -16,6 +16,7 @@
         l'<b>or</b> et la <b>poussière</b>, mais tu perds les objets trouvés.
       </p>
       <p class="lobby-txt dim">Les clés 🗝️ tombent sur les donjons, les boss et la faille.</p>
+      <p v-if="!labyUnlocked" class="lobby-txt dim">🔒 Débloqué au niveau {{ LABY_MIN_LEVEL }}.</p>
       <q-btn
         class="lobby-cta"
         color="primary"
@@ -24,7 +25,7 @@
         unelevated
         size="lg"
         :disable="!canStart"
-        :label="keys > 0 ? 'Entrer dans le labyrinthe (−1 🗝️)' : 'Aucune clé pour l’instant'"
+        :label="!labyUnlocked ? `🔒 Niveau ${LABY_MIN_LEVEL} requis` : keys > 0 ? 'Entrer dans le labyrinthe (−1 🗝️)' : 'Aucune clé pour l’instant'"
         @click="start"
       />
     </div>
@@ -264,7 +265,12 @@ const progress = useProgress();
 const phase = ref<'lobby' | 'running'>('lobby');
 const credited = ref(false); // butin crédité une seule fois en fin de run
 const keys = computed(() => char.row?.keys ?? 0);
-const canStart = computed(() => keys.value > 0 && progress.ready.value && !!char.row);
+// Le Labyrinthe est bloqué avant le niveau 2 (il faut d'abord poser les bases).
+const LABY_MIN_LEVEL = 2;
+const labyUnlocked = computed(() => heroLevel.value >= LABY_MIN_LEVEL);
+const canStart = computed(
+  () => labyUnlocked.value && keys.value > 0 && progress.ready.value && !!char.row,
+);
 
 // Perso réel (stats de fond + équipement + talents) → combattant.
 const character = computed(() =>
@@ -568,7 +574,12 @@ function freshRun() {
 // Lance une expédition (consomme 1 clé) : carte fraîche, PV pleins.
 async function start() {
   const uid = auth.user?.id;
-  if (!uid || !canStart.value) return;
+  if (!uid) return;
+  if (!labyUnlocked.value) {
+    $q.notify({ type: 'warning', message: `Le Labyrinthe se débloque au niveau ${LABY_MIN_LEVEL}.` });
+    return;
+  }
+  if (!canStart.value) return;
   const ok = await char.spendKey(uid);
   if (!ok) {
     $q.notify({ type: 'warning', message: 'Il te faut une clé 🗝️ (donjons, boss, faille).' });
