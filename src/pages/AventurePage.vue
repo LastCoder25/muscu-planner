@@ -1119,8 +1119,22 @@
                 <span v-if="m.dust">✨ +{{ m.dust }}</span>
                 <span v-if="m.stones">💎 +{{ m.stones }}</span>
                 <span v-if="m.key">🗝️ +{{ m.key }}</span>
-                <span v-if="m.itemName" class="im-item">🎁 {{ m.itemName }}</span>
               </div>
+              <!-- Objet gagné : détail complet (rareté / niveau / effet). -->
+              <div v-if="m.item" class="im-loot" :class="'p-' + m.item.rarity">
+                <span class="im-loot-emo">{{ m.item.emoji }}</span>
+                <div class="im-loot-main">
+                  <div class="im-loot-name">
+                    {{ m.item.name }}<span v-if="m.item.setId" class="im-loot-set"> 🧩</span>
+                  </div>
+                  <div class="im-loot-sub">
+                    <span :class="'p-' + m.item.rarity">{{ RARITY_LABEL[m.item.rarity] }}</span>
+                    · Nv {{ m.item.level }} · {{ SLOT_LABEL[m.item.slot] }}
+                  </div>
+                  <div class="im-loot-eff">{{ itemEffects(m.item) }}</div>
+                </div>
+              </div>
+              <span v-else-if="m.itemName" class="im-item">🎁 {{ m.itemName }}</span>
             </div>
           </div>
         </div>
@@ -2545,7 +2559,7 @@ function bossSet(b: MilestoneBoss) {
 
 // Libellé des 2 stats d'un objet (primaire · secondaire). Les anciens objets
 // (1 stat) n'affichent que la primaire.
-function itemEffects(it: Item): string {
+function itemEffects(it: Omit<Item, 'id'>): string {
   const a = effectLabel(it.effect, it.level);
   return it.effect2 ? `${a} · ${effectLabel(it.effect2, it.level)}` : a;
 }
@@ -5147,6 +5161,40 @@ onUnmounted(() => {
 }
 .im-item {
   color: var(--accent);
+}
+/* Objet gagné : mini-carte détaillée (bordure teintée par la rareté via currentColor). */
+.im-loot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+}
+.im-loot-emo {
+  font-size: 22px;
+  flex: none;
+}
+.im-loot-main {
+  flex: 1;
+  min-width: 0;
+}
+.im-loot-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.im-loot-sub {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 1px;
+}
+.im-loot-eff {
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: 2px;
 }
 .expe-card {
   display: flex;

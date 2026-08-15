@@ -67,7 +67,8 @@ export interface ExpeditionMessage {
   gold: number;
   dust: number;
   stones: number;
-  itemName?: string;
+  itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
+  item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
   key: number;
   waves?: number; // 'arena' : vagues tenues
   resolvedAt: number; // ms epoch (midAt)
@@ -87,7 +88,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     gold: o.gold,
     dust: o.dust,
     stones: o.stones,
-    ...(o.item ? { itemName: o.item.name } : {}),
+    ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     key: o.key,
     ...(o.waves !== undefined ? { waves: o.waves } : {}),
     resolvedAt: exp.midAt,
