@@ -3044,10 +3044,13 @@ function itemMaxedPower(it: Item): number {
   const eq = { ...(char.row?.equipped ?? {}), [it.slot]: maxed };
   return combatPower(playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, lvl));
 }
-// Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés (même montés à ton
-// niveau) → candidats à la casse/vente en masse. Le `<=` inclut les DOUBLONS de
-// l'équipé (égalité de puissance) en plus des objets plus faibles ; un doublon
-// montable AU-DESSUS de l'équipé donne, lui, plus de puissance → conservé.
+// Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés → candidats à la
+// casse/vente en masse. Comparaison PAR SLOT, POTENTIEL vs POTENTIEL (les deux montés
+// à ton niveau) : un objet est « inutile » s'il n'est pas meilleur que l'équipé du
+// MÊME emplacement une fois infusé (faible ou doublon). STABLE : ne dépend pas de
+// l'état d'infusion courant (bug 19689c3c : après avoir équipé un objet non infusé,
+// la puissance ACTUELLE chutait → le bouton « Tout casser » disparaissait). Slot vide
+// → l'objet est utile (à équiper), on ne le casse pas.
 const powerLossItems = computed<Item[]>(() => {
   const r = char.row;
   if (!r) return [];
@@ -3055,7 +3058,9 @@ const powerLossItems = computed<Item[]>(() => {
     if (it.locked) return false; // 🔒 protégé de la casse/vente en masse
     if (isFamiliar(it)) return false; // familiers = piste de collection, jamais en masse
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
-    return itemMaxedPower(it) <= combatPowerVal.value;
+    const equipped = r.equipped[it.slot];
+    if (!equipped) return false; // emplacement vide → objet utile, on garde
+    return itemMaxedPower(it) <= itemMaxedPower(equipped);
   });
 });
 const belowCount = computed(() => powerLossItems.value.length);
