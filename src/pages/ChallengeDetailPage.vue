@@ -173,6 +173,20 @@
                 <q-icon name="check_circle" color="positive" size="18px" /> Objectif atteint ✅ —
                 continue pour un excès
               </div>
+
+              <!-- Vraies sorties cardio (marche/course/vélo) : PAS de saisie de reps →
+                   on saisit une SORTIE (comme les tuiles d'accueil) ; elle est reportée
+                   automatiquement dans le défi. -->
+              <template v-if="isCardioOuting">
+                <button class="chrono-cta" @click="goLogCardio">
+                  <q-icon name="directions_run" size="20px" /> Saisir une sortie
+                </button>
+                <div class="cardio-note">
+                  Ta sortie ({{ unitWord }}) est comptée automatiquement dans ce défi.
+                </div>
+              </template>
+
+              <template v-else>
               <button
                 v-if="!editMode && !isCardioTime && !isSetsMode"
                 class="chrono-cta"
@@ -242,6 +256,7 @@
                 </div>
                 <button class="corr-link" @click="undoLastSet">↩ Retirer la dernière</button>
               </div>
+              </template>
             </div>
           </template>
         </div>
@@ -476,6 +491,11 @@ const isTime = computed(() => ch.value?.unit === 'time');
 const isCardioTime = computed(
   () => !!ch.value && ch.value.unit === 'time' && isCardioChallengeExercise(ch.value.exercise_id),
 );
+// Vraie sortie cardio (marche/course/vélo) — km OU minutes : la saisie = une SORTIE
+// cardio (comme les tuiles d'accueil), pas des reps manuelles.
+const isCardioOuting = computed(
+  () => !!ch.value && isCardioChallengeExercise(ch.value.exercise_id),
+);
 const isGainageTime = computed(() => isTime.value && !isCardioTime.value);
 const unitLabel = computed(() =>
   ch.value?.unit === 'time'
@@ -662,6 +682,17 @@ async function afterChange() {
     }
     celebrate.value = true;
   }
+}
+
+// Saisie d'une sortie cardio (comme les tuiles d'accueil) → l'écran Cardio
+// pré-sélectionne l'activité du défi ; la sortie est reportée auto dans le défi.
+function goLogCardio() {
+  const c = ch.value;
+  if (!c) return;
+  void router.push({
+    path: '/cardio',
+    query: { new: '1', activity: defaultActivityForChallenge(c.exercise_id) },
+  });
 }
 
 // Miroir défi cardio → Cardio : reflète le jour courant (validé, ou entamé pour
@@ -1440,6 +1471,12 @@ onBeforeUnmount(() => {
   color: var(--d1);
   font-size: 13px;
   font-weight: 600;
+  text-align: center;
+}
+.cardio-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--dim);
   text-align: center;
 }
 .quick-row {

@@ -12,8 +12,8 @@
           <span class="head-lvl font-display">Niv. {{ xpInfo.level }}</span>
         </button>
       </div>
-      <div v-if="mode === 'solo'" class="head-actions">
-        <q-btn flat round dense icon="insights" aria-label="Stats & succès">
+      <div class="head-actions">
+        <q-btn v-if="mode === 'solo'" flat round dense icon="insights" aria-label="Stats & succès">
           <q-menu anchor="bottom right" self="top right">
             <q-list style="min-width: 160px">
               <q-item v-close-popup clickable @click="tab = 'exos'">
@@ -34,7 +34,7 @@
           text-color="dark"
           icon="add"
           label="Nouveau"
-          @click="goNew"
+          @click="mode === 'combo' ? router.push('/combo/new') : goNew()"
         />
       </div>
     </div>
@@ -313,15 +313,6 @@
           </div>
           <div class="bar"><div class="fill" :style="{ width: comboPct + '%' }" /></div>
         </div>
-        <q-btn
-          class="full-width q-mb-sm"
-          color="primary"
-          text-color="dark"
-          no-caps
-          icon="add"
-          label="Nouveau Défi 360"
-          @click="router.push('/combo/new')"
-        />
         <q-btn
           class="full-width q-mb-sm"
           outline
