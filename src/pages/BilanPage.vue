@@ -91,6 +91,10 @@
         <!-- Progression proposée (moteur) -->
         <template v-if="source && deltas.length && !readOnly">
           <div class="sec-h">Progression proposée</div>
+          <div v-if="isDeloadNext" class="deload-note">
+            🌙 Semaine de <b>décharge</b> planifiée : charges et volume allégés pour
+            récupérer (supercompensation). La progression reprend ensuite.
+          </div>
           <div class="prog-card">
             <div v-for="d in deltas" :key="d.id" class="prog-row">
               <span>{{ d.name }}</span>
@@ -177,7 +181,7 @@ import type { Session, SessionLog, ExerciseTarget } from '@/lib/types';
 import { nextSessionDeterministic } from '@/lib/progression';
 import { buildCoachRequest, validateImportedSession } from '@/lib/coach';
 import { bestE1RM, detectLiftPRs, type LiftPR } from '@/lib/estimates';
-import { setsByMuscleFromLog, muscleColor } from '@/lib/volume';
+import { setsByMuscleFromLog, muscleColor, isMuscuLog } from '@/lib/volume';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
@@ -243,6 +247,9 @@ const deltas = computed(() => {
   });
   return out;
 });
+
+// La prochaine séance est-elle une DÉCHARGE planifiée ? (marquée par le moteur.)
+const isDeloadNext = computed(() => !!nextPlan.value?.name?.includes('Décharge'));
 
 const coachJson = computed(() => {
   const profile = profileStore.profile;
@@ -321,33 +328,47 @@ onMounted(async () => {
     iaOpen.value = cfg?.program_mode === 'free';
     history.value = await logs.fetchHistory(cfg?.coach_history_depth ?? 1);
 
+    // Historique COMPLET (rafraîchi pour inclure ce bilan tout juste enregistré) :
+    // sert au moteur (plateau sur plusieurs séances + cadence de décharge) et aux
+    // records de force. Sans risque : ne bloque pas le bilan en cas d'échec.
+    let allRows: Awaited<ReturnType<typeof logs.fetchAll>> = [];
+    try {
+      allRows = await logs.fetchAll(true);
+    } catch {
+      /* réseau : on continue sans historique complet */
+    }
+    const engineHistory = allRows.map((r) => r.payload);
+    // Décharge planifiée ~toutes les 5,5 semaines, cadencée sur la fréquence du profil.
+    const muscuCount = allRows.filter((r) => isMuscuLog(r.payload) && r.payload.session_id).length;
+    const spw = profileStore.profile?.availability?.sessions_per_week ?? 3;
+    const deloadEvery = Math.max(8, Math.min(24, Math.round(spw * 5.5)));
+
     const sid = log.value.session_id;
     if (sid) {
       if (sessionsStore.list.length === 0) await sessionsStore.fetchMine();
       source.value = sessionsStore.list.find((s) => s.id === sid)?.payload ?? null;
       if (source.value && cfg) {
-        nextPlan.value = nextSessionDeterministic(source.value, log.value, cfg, history.value);
+        nextPlan.value = nextSessionDeterministic(
+          source.value,
+          log.value,
+          cfg,
+          engineHistory.length ? engineHistory : history.value,
+          { muscuSessionCount: muscuCount, deloadEvery },
+        );
       }
     }
 
     // Records de force (1RM estimé) — uniquement à la sortie d'une VRAIE séance
     // (pas en revue d'historique) pour ne pas comparer contre des bilans postérieurs.
     if (!readOnly.value && log.value) {
-      try {
-        const all = await logs.fetchAll();
-        const priors = all
-          .filter((r) => r.payload?.id !== log.value!.id)
-          .map((r) => r.payload);
-        prs.value = detectLiftPRs(log.value, priors);
-        if (prs.value.length) {
-          $q.notify({
-            type: 'positive',
-            icon: 'emoji_events',
-            message: `🏆 ${prs.value.length} record${prs.value.length > 1 ? 's' : ''} de force battu${prs.value.length > 1 ? 's' : ''} !`,
-          });
-        }
-      } catch {
-        /* les records ne doivent jamais bloquer le bilan */
+      const priors = allRows.filter((r) => r.payload?.id !== log.value!.id).map((r) => r.payload);
+      prs.value = detectLiftPRs(log.value, priors);
+      if (prs.value.length) {
+        $q.notify({
+          type: 'positive',
+          icon: 'emoji_events',
+          message: `🏆 ${prs.value.length} record${prs.value.length > 1 ? 's' : ''} de force battu${prs.value.length > 1 ? 's' : ''} !`,
+        });
       }
     }
   } catch (e) {
@@ -481,6 +502,18 @@ onMounted(async () => {
   text-transform: uppercase;
   color: var(--dim);
   margin: 24px 2px 10px;
+}
+.deload-note {
+  background: color-mix(in srgb, var(--d2) 15%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--d2) 40%, transparent);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text);
+  margin-bottom: 10px;
+  b {
+    color: var(--d2);
+  }
 }
 .ex-card {
   background: var(--surface);
