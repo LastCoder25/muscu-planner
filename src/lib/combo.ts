@@ -138,6 +138,24 @@ export function comboOverachievement(c: ComboChallenge): {
   return { extraXp, legsOver, totalLegs, balance, bonusXp };
 }
 
+/** Base de la prime de bouclage = reps RÉELLES des séries comptées (jusqu'à l'objectif)
+ *  × poids-de-rep, au lieu de `target × COMBO_PLAN_REPS` figé. Corrige la sous-évaluation
+ *  du 360 (2026‑08‑15, ticket 135fa252) : avant, faire 20 reps/série au lieu de 10 ne
+ *  changeait pas la prime → l'XP/rep chutait. Désormais symétrique avec les petits défis
+ *  (prime ∝ effort réel). Fallback COMBO_PLAN_REPS pour une série sans reps saisies /
+ *  un objectif non encore couvert (le helper n'est utilisé qu'au bouclage). */
+export function comboTargetEffort(c: ComboChallenge): number {
+  let sum = 0;
+  for (const l of c.legs) {
+    const sets = legSets(l);
+    const counted = l.target > 0 ? sets.slice(0, l.target) : sets;
+    const reps = counted.reduce((a, s) => a + (s.reps || COMBO_PLAN_REPS), 0);
+    const missing = Math.max(0, l.target - counted.length);
+    sum += (reps + missing * COMBO_PLAN_REPS) * (l.rep_weight ?? 1);
+  }
+  return sum;
+}
+
 /** Décompose l'XP d'UN Défi 360 : reps (+ tonnage), prime de bouclage, dépassement
  *  (pour l'affichage sur les défis terminés). Mêmes formules que comboXpPoints. */
 export function comboXpBreakdown(c: ComboChallenge): {
@@ -148,15 +166,13 @@ export function comboXpBreakdown(c: ComboChallenge): {
 } {
   let reps = 0;
   let tonnage = 0;
-  let targetEffort = 0;
   for (const l of c.legs) {
     for (const s of legSets(l)) {
       reps += (s.reps || 0) * REP_XP * (l.rep_weight ?? 1) * assistMult(s.assisted);
       tonnage += (s.reps || 0) * (s.weight ?? l.weight_kg ?? 0);
     }
-    targetEffort += l.target * COMBO_PLAN_REPS * (l.rep_weight ?? 1);
   }
-  const bonus = comboComplete(c) ? 0.25 * targetEffort * (1 + comboEarlyFraction(c)) : 0;
+  const bonus = comboComplete(c) ? 0.25 * comboTargetEffort(c) * (1 + comboEarlyFraction(c)) : 0;
   const over = comboOverachievement(c);
   const repsXp = Math.round((reps + tonnage / 500) * XP_MULT);
   const bonusXp = Math.round(bonus * XP_MULT);
@@ -173,16 +189,13 @@ export function comboXpPoints(combos: ComboChallenge[]): number {
   return combos.reduce((a, c) => {
     let reps = 0;
     let tonnage = 0;
-    let targetEffort = 0;
     for (const l of c.legs) {
       for (const s of legSets(l)) {
         reps += (s.reps || 0) * REP_XP * (l.rep_weight ?? 1) * assistMult(s.assisted);
         tonnage += (s.reps || 0) * (s.weight ?? l.weight_kg ?? 0);
       }
-      // Volume planifié ≈ séries × reps supposées × poids-de-rep.
-      targetEffort += l.target * COMBO_PLAN_REPS * (l.rep_weight ?? 1);
     }
-    const bonus = comboComplete(c) ? 0.25 * targetEffort * (1 + comboEarlyFraction(c)) : 0;
+    const bonus = comboComplete(c) ? 0.25 * comboTargetEffort(c) * (1 + comboEarlyFraction(c)) : 0;
     const over = comboOverachievement(c);
     const surpass = COMBO_SURPASS_MULT * over.extraXp * over.balance;
     return a + Math.round((reps + tonnage / 500 + bonus + surpass) * XP_MULT);

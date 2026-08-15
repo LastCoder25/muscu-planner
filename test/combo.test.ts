@@ -96,6 +96,18 @@ describe('comboXpPoints', () => {
     const loaded = combo([leg({ target: 3, sets: [set(10, 40), set(10, 40), set(10, 40)] })]);
     expect(comboXpPoints([loaded])).toBeGreaterThan(comboXpPoints([light]));
   });
+  it('la prime de bouclage suit les reps RÉELLES par série (pas le plan figé)', () => {
+    // Même nb de séries (objectif atteint), mais 2× plus de reps/série → l'XP totale
+    // ne doit PAS baisser par rep (correctif 135fa252 : avant, la prime était figée
+    // à COMBO_PLAN_REPS et l'XP/rep chutait quand on faisait plus de reps).
+    const light = combo([leg({ target: 3, sets: [set(10), set(10), set(10)] })]);
+    const heavy = combo([leg({ target: 3, sets: [set(20), set(20), set(20)] })]);
+    const xpLight = comboXpPoints([light]);
+    const xpHeavy = comboXpPoints([heavy]);
+    expect(xpHeavy).toBeGreaterThan(xpLight);
+    // L'XP par rep ne régresse pas (≈ constante) : le double de reps ≈ le double d'XP.
+    expect(xpHeavy / 60).toBeGreaterThanOrEqual((xpLight / 30) * 0.98);
+  });
   it('une série assistée vaut moins qu’une série stricte', () => {
     const strict = combo([leg({ target: 1, sets: [{ date: '2026-01-05', reps: 10 }] })]);
     const assisted = combo([
