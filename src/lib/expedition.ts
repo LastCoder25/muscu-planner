@@ -114,7 +114,7 @@ export const EXPE = {
   // (niv20) = plusieurs runs de donjon pour une pièce de set (l'or s'écoule).
   goldCostBase: { mine: 22, camp: 65, lair: 155, arena: 90 },
   goldCostExp: 1.6,
-  failRefund: 0.3, // échec : fraction de l'or remboursée (< coût → jamais un profit)
+  failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
 } as const;
 
 // Arène : survie par vagues. Cap de vagues (fin garantie même pour un héros surboosté),
@@ -158,8 +158,12 @@ export function poiCombatant(level: number, type: PoiType): Combatant {
     name,
     // PV ~L³ (le multi-frappe fait croître l'offense du joueur ~L⁴ → un L² devenait
     // trivial en fin de jeu). Dégâts ~L² (check de survie constant relatif aux PV joueur).
-    pv: Math.round((2.9 * L * L * L + 40) * t),
-    damage: Math.round((5.5 * L * L + 12) * t),
+    // RECALIBRÉ (2026‑08‑15, ticket 86331df3) : coefs 2,9/5,5 → 2,0/3,9 — un héros
+    // de niveau approprié gagnait ~28-53 % des camps et ~2-26 % des repaires (net
+    // négatif, pas rentable). Désormais camp ~90 % (option fiable), repaire ~45-88 %
+    // (le pari, meilleur si sur-niveau) ; le winPct affiché prévient avant l'envoi.
+    pv: Math.round((2.0 * L * L * L + 40) * t),
+    damage: Math.round((3.9 * L * L + 12) * t),
     crit: 0.08,
     dodge: 0.05,
     initiative: 12,
