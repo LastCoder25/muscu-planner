@@ -39,6 +39,8 @@ import {
   canBuildType,
   plotsForLevel,
   collectable,
+  expeditionsUnlocked,
+  travelTimeMult,
   type Building,
 } from '@/lib/buildings';
 import { rollFusedFamiliar } from '@/data/familiars';
@@ -758,9 +760,18 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return;
     if (cur.expedition) throw new Error('Une expédition est déjà en cours.');
+    if (!expeditionsUnlocked(cur.buildings))
+      throw new Error('Construis un Avant-poste d’expédition pour envoyer des héros.');
     const cost = expeGoldCost(poi.type, poi.level);
     if (cur.gold < cost) throw new Error('Pas assez d’or pour cette expédition.');
-    const exp = startExpedition(hero, poi, now, ((now ^ (poi.level * 2654435761)) >>> 0) || 1);
+    // Réduction de trajet selon le niveau de l'avant-poste.
+    const exp = startExpedition(
+      hero,
+      poi,
+      now,
+      ((now ^ (poi.level * 2654435761)) >>> 0) || 1,
+      travelTimeMult(cur.buildings),
+    );
     const baseMap = cur.expedition_map ?? createMap(newSeed(now), now, level);
     const map: ExpeditionMap = { ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) };
     await persist(userId, { gold: cur.gold - cost, expedition: exp, expedition_map: map });

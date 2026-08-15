@@ -587,14 +587,16 @@ export function expeditionTerrain(seed: number): Terrain {
   return { coast, features, rivers };
 }
 
-/** Construit une expédition (au moment de l'envoi). `now` = ms epoch. */
+/** Construit une expédition (au moment de l'envoi). `now` = ms epoch. `travelMult`
+ *  (< 1 = plus rapide) applique la réduction de trajet de l'avant-poste. */
 export function startExpedition(
   hero: Combatant,
   poi: Poi,
   now: number,
   seed: number,
+  travelMult = 1,
 ): ActiveExpedition {
-  const oneWayMs = travelOneWayMin(poi.level, poi.distNorm) * 60_000;
+  const oneWayMs = Math.round(travelOneWayMin(poi.level, poi.distNorm) * 60_000 * travelMult);
   return {
     poi,
     sentAt: now,

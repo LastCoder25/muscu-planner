@@ -11,6 +11,15 @@
       <span class="bar-chip">🪙 {{ char.row?.gold ?? 0 }}</span>
       <span class="bar-chip">Niv. {{ heroLevel }}</span>
       <span v-if="active" class="bar-chip live">🧭 En expédition</span>
+      <span v-else-if="outpostBuilt && travelMult < 1" class="bar-chip">
+        🧭 −{{ Math.round((1 - travelMult) * 100) }}% trajet
+      </span>
+    </div>
+
+    <!-- Avant-poste requis pour envoyer des expéditions (construis-le sur un emplacement). -->
+    <div v-if="!outpostBuilt" class="outpost-hint">
+      🧭 Construis un <b>Avant-poste d’expédition</b> sur un emplacement pour envoyer des héros.
+      Chaque niveau réduit les temps de trajet.
     </div>
 
     <!-- Carte -->
@@ -316,6 +325,8 @@ import {
   buildingAccrued,
   storageMult,
   collectable,
+  expeditionsUnlocked,
+  travelTimeMult,
   BUILD,
   type Building,
   type BuildingType,
@@ -622,7 +633,10 @@ function diffClass(p: Poi): string {
 }
 
 const costOf = (p: Poi) => goldCost(p.type, p.level);
-const roundTripMin = (p: Poi) => travelOneWayMin(p.level, p.distNorm) * 2;
+// Avant-poste : débloque les expéditions + réduit les trajets.
+const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));
+const travelMult = computed(() => travelTimeMult(char.row?.buildings ?? []));
+const roundTripMin = (p: Poi) => Math.round(travelOneWayMin(p.level, p.distNorm) * 2 * travelMult.value);
 function poiRewardLabel(p: Poi): string {
   if (p.type === 'mine') return 'Or + poussière (récolte)';
   if (p.type === 'camp') return 'Poussière + un objet';
@@ -636,10 +650,12 @@ const canSend = computed(
     !active.value &&
     !!char.row &&
     progress.ready.value &&
+    outpostBuilt.value &&
     (char.row?.gold ?? 0) >= costOf(selected.value),
 );
 const sendLabel = computed(() => {
   if (!selected.value) return 'Envoyer';
+  if (!outpostBuilt.value) return '🧭 Construis un Avant-poste d’abord';
   if ((char.row?.gold ?? 0) < costOf(selected.value)) return 'Pas assez d’or';
   return `Envoyer le héros (🪙 ${costOf(selected.value)})`;
 });
@@ -749,6 +765,16 @@ function fmtMin(min: number): string {
   display: flex;
   gap: 8px;
   padding: 0 12px 8px;
+}
+.outpost-hint {
+  margin: 0 12px 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 .bar-chip {
   background: var(--surface);

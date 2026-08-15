@@ -75,6 +75,19 @@ export const BUILDING_TYPES: BuildingType[] = [
     buildGold: 800,
     desc: 'Produit des pierres magiques 💎 (montée des familiers).',
   },
+  // Utilitaire UNIQUE : l'AVANT-POSTE débloque les expéditions (idle) et chaque
+  // niveau réduit les temps de trajet → on revient chercher le butin plus vite.
+  // Extensible (socle des futurs déblocages d'activités via bâtiment).
+  {
+    id: 'outpost',
+    label: 'Avant-poste d’expédition',
+    emoji: '🧭',
+    category: 'utility',
+    effect: { expeSpeedPerLvl: 0.06 }, // −6 % de trajet / niveau (plancher via cap)
+    buildGold: 400, // 1er niveau bon marché : c'est le déblocage
+    unique: true,
+    desc: 'Débloque les expéditions. Chaque niveau réduit les temps de trajet (−6 %).',
+  },
   // Utilitaire UNIQUE : augmente le STOCKAGE de tous les filons (tu peux louper
   // plus de jours sans saturer). Débloqué niv.7 (offset des boss). +15 %/niveau.
   {
@@ -142,6 +155,25 @@ export function storageMult(buildings: Building[]): number {
     if (per) m += per * b.level;
   }
   return m;
+}
+
+// ── Avant-poste d'expédition (gate + vitesse de trajet) ──
+const OUTPOST_ID = 'outpost';
+const TRAVEL_REDUCTION_CAP = 0.6; // −60 % de trajet au maximum (jamais instantané)
+
+/** Niveau de l'avant-poste posé (0 si aucun). */
+export function outpostLevel(buildings: Building[]): number {
+  return buildings.find((b) => b.typeId === OUTPOST_ID)?.level ?? 0;
+}
+/** Les expéditions sont-elles débloquées ? (avant-poste construit). */
+export function expeditionsUnlocked(buildings: Building[]): boolean {
+  return outpostLevel(buildings) > 0;
+}
+/** Multiplicateur de TEMPS de trajet (< 1 = plus rapide), selon l'avant-poste. */
+export function travelTimeMult(buildings: Building[]): number {
+  const lvl = outpostLevel(buildings);
+  const per = buildingType(OUTPOST_ID)?.effect?.expeSpeedPerLvl ?? 0;
+  return 1 - Math.min(TRAVEL_REDUCTION_CAP, lvl * per);
 }
 
 /** Coût en OR pour améliorer un filon du niveau `level` au suivant (puits d'or steep). */

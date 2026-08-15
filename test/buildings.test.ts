@@ -12,6 +12,9 @@ import {
   buildingUnlockLevel,
   canBuildType,
   storageMult,
+  expeditionsUnlocked,
+  travelTimeMult,
+  outpostLevel,
   BUILDING_TYPES,
   BUILD,
   type Building,
@@ -118,5 +121,20 @@ describe('buildings — Entrepôt : effet stockage global', () => {
     const boosted = collectable([dust, wh], now).dust;
     expect(boosted).toBeGreaterThan(base); // stockage plus grand → plus récolté à saturation
     expect(collectable([wh], now)).toEqual({ dust: 0, stone: 0 }); // l'entrepôt ne produit rien
+  });
+});
+
+describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
+  it('expeditionsUnlocked = true seulement avec un avant-poste', () => {
+    expect(expeditionsUnlocked([])).toBe(false);
+    expect(expeditionsUnlocked([mk('dust_vein', 5)])).toBe(false);
+    expect(expeditionsUnlocked([mk('outpost', 1)])).toBe(true);
+  });
+  it('travelTimeMult < 1 et décroît avec le niveau (plancher à −60 %)', () => {
+    expect(travelTimeMult([])).toBe(1);
+    expect(travelTimeMult([mk('outpost', 1)])).toBeCloseTo(0.94, 5); // −6 %
+    expect(travelTimeMult([mk('outpost', 5)])).toBeCloseTo(0.7, 5); // −30 %
+    expect(travelTimeMult([mk('outpost', 20)])).toBeCloseTo(0.4, 5); // plafonné −60 %
+    expect(outpostLevel([mk('outpost', 3)])).toBe(3);
   });
 });
