@@ -33,6 +33,21 @@
         </div>
         <div v-if="log.global_comment" class="global-comment">« {{ log.global_comment }} »</div>
 
+        <!-- Records de force battus (1RM estimé) -->
+        <div v-if="prs.length" class="pr-banner">
+          <div class="pr-title font-display">
+            🏆 {{ prs.length }} record{{ prs.length > 1 ? 's' : '' }} battu{{
+              prs.length > 1 ? 's' : ''
+            }} !
+          </div>
+          <div v-for="p in prs" :key="p.id" class="pr-row">
+            <span class="pr-name">{{ p.name }}</span>
+            <span class="pr-val font-display"
+              >{{ p.e1rm }} kg <small>+{{ p.gain }}</small></span
+            >
+          </div>
+        </div>
+
         <!-- Séries par groupe musculaire (prévu / réalisé) -->
         <template v-if="muscleVolume.length">
           <div class="sec-h">Séries par groupe</div>
@@ -161,7 +176,7 @@ import { useQuasar, copyToClipboard } from 'quasar';
 import type { Session, SessionLog, ExerciseTarget } from '@/lib/types';
 import { nextSessionDeterministic } from '@/lib/progression';
 import { buildCoachRequest, validateImportedSession } from '@/lib/coach';
-import { bestE1RM } from '@/lib/estimates';
+import { bestE1RM, detectLiftPRs, type LiftPR } from '@/lib/estimates';
 import { setsByMuscleFromLog, muscleColor } from '@/lib/volume';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
@@ -182,6 +197,7 @@ const log = ref<SessionLog | null>(null);
 const source = ref<Session | null>(null);
 const nextPlan = ref<Session | null>(null);
 const history = ref<SessionLog[]>([]);
+const prs = ref<LiftPR[]>([]);
 const applying = ref(false);
 
 const iaOpen = ref(false);
@@ -313,6 +329,27 @@ onMounted(async () => {
         nextPlan.value = nextSessionDeterministic(source.value, log.value, cfg, history.value);
       }
     }
+
+    // Records de force (1RM estimé) — uniquement à la sortie d'une VRAIE séance
+    // (pas en revue d'historique) pour ne pas comparer contre des bilans postérieurs.
+    if (!readOnly.value && log.value) {
+      try {
+        const all = await logs.fetchAll();
+        const priors = all
+          .filter((r) => r.payload?.id !== log.value!.id)
+          .map((r) => r.payload);
+        prs.value = detectLiftPRs(log.value, priors);
+        if (prs.value.length) {
+          $q.notify({
+            type: 'positive',
+            icon: 'emoji_events',
+            message: `🏆 ${prs.value.length} record${prs.value.length > 1 ? 's' : ''} de force battu${prs.value.length > 1 ? 's' : ''} !`,
+          });
+        }
+      } catch {
+        /* les records ne doivent jamais bloquer le bilan */
+      }
+    }
   } catch (e) {
     $q.notify({
       type: 'negative',
@@ -398,6 +435,42 @@ onMounted(async () => {
   font-style: italic;
   margin-top: 12px;
   font-size: 14px;
+}
+
+/* Records de force battus : bandeau accent. */
+.pr-banner {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.pr-title {
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.pr-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+}
+.pr-name {
+  color: var(--text);
+  font-size: 14px;
+}
+.pr-val {
+  color: var(--text);
+  font-size: 15px;
+  white-space: nowrap;
+  small {
+    color: var(--d1);
+    font-size: 12px;
+    margin-left: 2px;
+  }
 }
 
 .sec-h {

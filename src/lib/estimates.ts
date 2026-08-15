@@ -1,7 +1,7 @@
 // estimates.ts — estimation de force (1RM) à partir des séries réalisées.
 // Pur (aucune dépendance Vue/Supabase). Consommé par le Bilan (Étape 4.1)
 // et l'affichage de tendances. Formule d'Epley.
-import type { PerformedSet, Session } from './types';
+import type { PerformedSet, Session, SessionLog } from './types';
 
 function round(n: number, step = 0.25): number {
   return Math.round(n / step) * step;
@@ -22,6 +22,45 @@ export function bestE1RM(performed: PerformedSet[]): number {
     if (e > best) best = e;
   }
   return best;
+}
+
+/** Un record de force battu sur un exercice. */
+export interface LiftPR {
+  id: string;
+  name: string;
+  e1rm: number; // nouveau meilleur 1RM estimé
+  prev: number; // ancien meilleur (> 0)
+  gain: number; // e1rm − prev (kg)
+}
+
+/**
+ * Records de force battus dans `current` par rapport aux bilans `priors` (antérieurs,
+ * current EXCLU). Pour chaque exercice dont le meilleur 1RM estimé DÉPASSE son
+ * meilleur antérieur (> 0 → on ne « célèbre » pas un premier passage). Match par id
+ * d'exercice. Pur — sert au Bilan pour féliciter (les PR muscu n'étaient jamais
+ * détectés, seul le cardio avait ses records).
+ */
+export function detectLiftPRs(current: SessionLog, priors: SessionLog[]): LiftPR[] {
+  const prevBest = new Map<string, number>();
+  for (const log of priors) {
+    for (const ex of log.exercises ?? []) {
+      const e = bestE1RM(ex.performed ?? []);
+      if (e > (prevBest.get(ex.id) ?? 0)) prevBest.set(ex.id, e);
+    }
+  }
+  const out: LiftPR[] = [];
+  const seen = new Set<string>();
+  for (const ex of current.exercises ?? []) {
+    if (seen.has(ex.id)) continue;
+    const e = bestE1RM(ex.performed ?? []);
+    if (e <= 0) continue;
+    const prev = prevBest.get(ex.id) ?? 0;
+    if (prev > 0 && e > prev) {
+      out.push({ id: ex.id, name: ex.name, e1rm: e, prev, gain: Math.round((e - prev) * 10) / 10 });
+      seen.add(ex.id);
+    }
+  }
+  return out.sort((a, b) => b.e1rm - a.e1rm);
 }
 
 /**
