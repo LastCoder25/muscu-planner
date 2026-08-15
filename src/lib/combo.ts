@@ -225,10 +225,13 @@ export function comboSessionSetBudget(minutes: number, restSec: number): number 
  */
 export function buildComboSession(
   c: ComboChallenge,
-  opts: { minutes: number; restSec: number },
+  opts: { minutes: number; restSec: number; includeIds?: string[] },
 ): ComboSessionExo[] {
   const budget = comboSessionSetBudget(opts.minutes, opts.restSec);
+  // Sélection manuelle éventuelle : ne garder que les exos choisis (sinon tous).
+  const include = opts.includeIds ? new Set(opts.includeIds) : null;
   const exos = c.legs
+    .filter((l) => !include || include.has(l.exercise_id))
     .map((l) => ({
       leg: l,
       remaining: legRemaining(l), // séries restantes

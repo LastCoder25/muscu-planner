@@ -180,6 +180,10 @@ describe('buildComboSession (time-boxée, en séries)', () => {
     const s = buildComboSession(c, { minutes: 30, restSec: 60 });
     expect(s.map((e) => e.exercise_id)).toEqual(['b']);
   });
+  it('includeIds : ne garde que les exos choisis', () => {
+    const s = buildComboSession(bigCombo(), { minutes: 45, restSec: 60, includeIds: ['a', 'c'] });
+    expect(new Set(s.map((e) => e.exercise_id))).toEqual(new Set(['a', 'c']));
+  });
 });
 
 describe('suggestComboTarget (séries)', () => {

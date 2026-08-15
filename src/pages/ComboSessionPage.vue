@@ -42,6 +42,32 @@
           </button>
         </div>
       </div>
+      <div class="cfg">
+        <div class="cfg-lbl">Exercices</div>
+        <div class="chips">
+          <button class="chip" :class="{ on: pickMode === 'auto' }" @click="pickMode = 'auto'">
+            ✨ Automatique
+          </button>
+          <button class="chip" :class="{ on: pickMode === 'manual' }" @click="pickMode = 'manual'">
+            ✍️ Choisir
+          </button>
+        </div>
+      </div>
+      <!-- Sélection manuelle des exos (parmi ceux qu'il reste à faire) -->
+      <div v-if="pickMode === 'manual'" class="picklist">
+        <div v-if="!availableLegs.length" class="empty">Tout est déjà fait cette semaine 🎉</div>
+        <button
+          v-for="leg in availableLegs"
+          :key="leg.exercise_id"
+          class="pick"
+          :class="{ on: chosenIds.includes(leg.exercise_id) }"
+          @click="toggleLeg(leg.exercise_id)"
+        >
+          <span class="pick-check">{{ chosenIds.includes(leg.exercise_id) ? '☑' : '☐' }}</span>
+          <span class="pick-name">{{ leg.exercise_name }}</span>
+          <span class="pick-rem">{{ legRemaining(leg) }} séries restantes</span>
+        </button>
+      </div>
       <div class="preview">
         ≈ <b>{{ previewSets }}</b> séries sur ~{{ minutes }} min · {{ previewExos }} exo{{
           previewExos > 1 ? 's' : ''
@@ -110,7 +136,12 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useComboStore } from '@/stores/combo';
-import { buildComboSession, comboSessionSetBudget, type ComboSessionExo } from '@/lib/combo';
+import {
+  buildComboSession,
+  comboSessionSetBudget,
+  legRemaining,
+  type ComboSessionExo,
+} from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
 
 const router = useRouter();
@@ -127,9 +158,30 @@ const minutes = ref(30);
 const restSec = ref(60);
 const phase = ref<'config' | 'run'>('config');
 
-// Aperçu (avant de commencer) — recalculé selon temps/repos.
+// Choix des exos : auto (tous) ou manuel (sélection).
+const pickMode = ref<'auto' | 'manual'>('auto');
+const chosenIds = ref<string[]>([]);
+// Exos encore à faire cette semaine (candidats à la séance).
+const availableLegs = computed(() => (c.value?.legs ?? []).filter((l) => legRemaining(l) > 0));
+function toggleLeg(id: string) {
+  chosenIds.value = chosenIds.value.includes(id)
+    ? chosenIds.value.filter((x) => x !== id)
+    : [...chosenIds.value, id];
+}
+// ids à inclure : sélection manuelle non vide, sinon tous (auto).
+const includeIds = computed(() =>
+  pickMode.value === 'manual' && chosenIds.value.length ? chosenIds.value : undefined,
+);
+
+// Aperçu (avant de commencer) — recalculé selon temps/repos/sélection.
 const previewSession = computed(() =>
-  c.value ? buildComboSession(c.value, { minutes: minutes.value, restSec: restSec.value }) : [],
+  c.value
+    ? buildComboSession(c.value, {
+        minutes: minutes.value,
+        restSec: restSec.value,
+        ...(includeIds.value ? { includeIds: includeIds.value } : {}),
+      })
+    : [],
 );
 const previewSets = computed(() =>
   Math.min(
@@ -248,6 +300,40 @@ onUnmounted(() => clearInterval(tick));
 .chip.on {
   border-color: var(--accent);
   color: var(--accent);
+}
+.picklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.pick.on {
+  border-color: var(--accent);
+}
+.pick-check {
+  font-size: 16px;
+  color: var(--accent);
+}
+.pick-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+}
+.pick-rem {
+  font-size: 11px;
+  color: var(--dim);
 }
 .preview {
   font-size: 13px;
