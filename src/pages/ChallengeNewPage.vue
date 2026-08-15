@@ -444,7 +444,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import {
   CHALLENGE_FORMATS,
@@ -484,6 +484,7 @@ import {
 import type { Level } from '@/lib/types';
 
 const router = useRouter();
+const route = useRoute();
 const $q = useQuasar();
 const libraryStore = useLibraryStore();
 const profileStore = useProfileStore();
@@ -916,6 +917,16 @@ onMounted(async () => {
     if (challenges.list.length === 0) await challenges.fetchMine();
     if (comboStore.list.length === 0) await comboStore.fetchMine().catch(() => undefined);
     lib.value = await libraryStore.fetchAll();
+    // Pré-sélection depuis l'URL (?ex=<id>) : « reprendre en challenge » un exo de
+    // Défi 360 (d073a26b). On pré-sélectionne et on avance à l'étape suivante.
+    const exId = typeof route.query.ex === 'string' ? route.query.ex : null;
+    if (exId) {
+      const e = lib.value.find((x) => x.id === exId);
+      if (e && !exFull(e)) {
+        pickExercise(e);
+        if (exercise.value) step.value = 2;
+      }
+    }
   } catch (e) {
     $q.notify({
       type: 'negative',

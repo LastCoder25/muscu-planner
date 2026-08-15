@@ -168,7 +168,20 @@
 
       <!-- Exercices challengés -->
       <template v-else-if="tab === 'exos'">
-        <div v-if="exoAgg.length === 0" class="empty">Pas encore d’exercice challengé.</div>
+        <div class="range-tabs">
+          <button
+            v-for="r in [{ v: 'all', l: 'Tout' }, { v: 'week', l: 'Semaine' }, { v: 'month', l: 'Mois' }]"
+            :key="r.v"
+            class="range-tab"
+            :class="{ on: statsRange === r.v }"
+            @click="setRange(r.v)"
+          >
+            {{ r.l }}
+          </button>
+        </div>
+        <div v-if="exoAgg.length === 0" class="empty">
+          {{ statsRange === 'all' ? 'Pas encore d’exercice challengé.' : 'Rien sur cette période.' }}
+        </div>
         <div v-for="e in exoAgg" :key="e.id" class="exo-card">
           <div class="exo-main">
             <div class="exo-name">{{ e.name }}</div>
@@ -661,13 +674,27 @@ function statusLabel(c: Challenge) {
   return c.status === 'active' ? 'en cours' : c.status === 'done' ? 'terminé' : 'abandonné';
 }
 
+// Période des stats (Tout / Semaine / Mois) — filtre les jours de progression.
+const statsRange = ref<'all' | 'week' | 'month'>('all');
+function setRange(v: string) {
+  statsRange.value = v as 'all' | 'week' | 'month';
+}
+function inStatsRange(dateStr: string): boolean {
+  if (statsRange.value === 'all') return true;
+  const days = statsRange.value === 'week' ? 7 : 30;
+  const t = Date.parse(dateStr + 'T00:00:00');
+  return !Number.isNaN(t) && t >= Date.now() - days * 86_400_000;
+}
 // Agrégat par exercice : nb de challenges + itérations cumulées.
 const exoAgg = computed(() => {
   const map = new Map<
     string,
     { id: string; name: string; unit: string; count: number; total: number }
   >();
+  const ok = (d: string) => inStatsRange(d); // filtre période (Tout / Semaine / Mois)
   for (const c of store.list) {
+    const total = c.progress.filter((p) => ok(p.date)).reduce((a, p) => a + (p.done || 0), 0);
+    if (total <= 0 && statsRange.value !== 'all') continue; // rien sur la période → on masque
     const cur = map.get(c.exercise_id) ?? {
       id: c.exercise_id,
       name: c.exercise_name,
@@ -676,13 +703,15 @@ const exoAgg = computed(() => {
       total: 0,
     };
     cur.count += 1;
-    cur.total += c.progress.reduce((a, p) => a + (p.done || 0), 0);
+    cur.total += total;
     map.set(c.exercise_id, cur);
   }
   // CENTRALISE (d8aa8e2b) : inclut aussi les reps des Défi 360 (par exo), pour que
   // les stats couvrent TOUTES les origines, pas seulement les petits défis.
   for (const combo of comboStore.list) {
     for (const leg of combo.legs ?? []) {
+      const total = (leg.progress ?? []).filter((p) => ok(p.date)).reduce((a, p) => a + (p.reps || 0), 0);
+      if (total <= 0 && statsRange.value !== 'all') continue;
       const cur = map.get(leg.exercise_id) ?? {
         id: leg.exercise_id,
         name: leg.exercise_name,
@@ -691,7 +720,7 @@ const exoAgg = computed(() => {
         total: 0,
       };
       cur.count += 1;
-      cur.total += (leg.progress ?? []).reduce((a, p) => a + (p.reps || 0), 0);
+      cur.total += total;
       map.set(leg.exercise_id, cur);
     }
   }
@@ -1424,6 +1453,27 @@ onMounted(async () => {
   background: color-mix(in srgb, var(--dim) 14%, transparent);
 }
 
+.range-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.range-tab {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.range-tab.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--accent);
+}
 .exo-card {
   display: flex;
   align-items: center;
