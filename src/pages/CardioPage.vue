@@ -175,12 +175,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore } from '@/stores/challenges';
+import { useProgress } from '@/composables/useProgress';
+import { useXpFx } from '@/composables/useXpFx';
 import {
   CARDIO_ACTIVITIES,
   ACTIVITY_LABELS,
@@ -202,6 +204,8 @@ const route = useRoute();
 const auth = useAuthStore();
 const cardio = useCardioStore();
 const challenges = useChallengesStore();
+const progress = useProgress();
+const xpFx = useXpFx();
 
 const tab = ref<'act' | 'hist'>(route.query.tab === 'hist' ? 'hist' : 'act');
 // ?new=1 (depuis le sélecteur de saisie) → ouvre directement le formulaire de sortie.
@@ -296,6 +300,9 @@ async function save() {
     return;
   }
   saving.value = true;
+  // Snapshot XP AVANT (cardio + global) pour l'animation de progression.
+  const beforeC = progress.cardio.value;
+  const beforeG = progress.global.value;
   try {
     const log: CardioLog = {
       schema_version: SCHEMA_VERSION,
@@ -356,6 +363,26 @@ async function save() {
     } catch {
       /* silencieux : la sortie est déjà enregistrée */
     }
+    // Animation d'XP gagnée (cercle Cardio + cercle Global, progression avant→après).
+    await nextTick();
+    xpFx.show([
+      {
+        emoji: '🏃',
+        label: 'Cardio',
+        fromLevel: beforeC.level,
+        fromPct: beforeC.progressPct,
+        toLevel: progress.cardio.value.level,
+        toPct: progress.cardio.value.progressPct,
+      },
+      {
+        emoji: '🌍',
+        label: 'Global',
+        fromLevel: beforeG.level,
+        fromPct: beforeG.progressPct,
+        toLevel: progress.global.value.level,
+        toPct: progress.global.value.progressPct,
+      },
+    ]);
     date.value = todayIso();
     distance.value = null;
     duration.value = null;

@@ -225,7 +225,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useProfileStore } from '@/stores/profile';
@@ -235,6 +235,7 @@ import { useLiveStore } from '@/stores/live';
 import { useLiveCourtStore } from '@/stores/liveCourt';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
+import { useXpFx } from '@/composables/useXpFx';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeStats, logicalToday } from '@/lib/challenges';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
@@ -253,6 +254,7 @@ const live = useLiveStore();
 const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
 const progress = useProgress();
+const xpFx = useXpFx();
 const challenges = useChallengesStore();
 // Défis actifs dont l'objectif du jour reste à faire (badge sur l'icône Challenges).
 const challengesDueToday = computed(() => {
@@ -469,6 +471,7 @@ async function saveAutre() {
     return;
   }
   autreSaving.value = true;
+  const beforeG = progress.global.value; // snapshot XP Global (animation)
   try {
     const [y, m, dd] = autreDate.value.split('-').map((n) => Number(n) || 0);
     const now = new Date();
@@ -496,6 +499,17 @@ async function saveAutre() {
     await logs.insert(uid, log);
     $q.notify({ type: 'positive', message: 'Séance enregistrée — XP global + énergie 💪' });
     autreOpen.value = false;
+    await nextTick();
+    xpFx.show([
+      {
+        emoji: '🌍',
+        label: 'Global',
+        fromLevel: beforeG.level,
+        fromPct: beforeG.progressPct,
+        toLevel: progress.global.value.level,
+        toPct: progress.global.value.progressPct,
+      },
+    ]);
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
   } finally {

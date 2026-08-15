@@ -133,7 +133,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
+import { useProgress } from '@/composables/useProgress';
+import { useXpFx } from '@/composables/useXpFx';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
@@ -146,6 +148,8 @@ const route = useRoute();
 const $q = useQuasar();
 const logs = useLogsStore();
 const auth = useAuthStore();
+const progress = useProgress();
+const xpFx = useXpFx();
 
 const tab = ref<'act' | 'hist'>('act');
 const loading = ref(false);
@@ -192,6 +196,8 @@ async function saveQuick() {
     return;
   }
   saving.value = true;
+  const beforeM = progress.muscu.value; // snapshots XP (animation)
+  const beforeG = progress.global.value;
   try {
     const iso = performedAtIso(qDate.value);
     const disc = qDiscipline.value;
@@ -213,6 +219,25 @@ async function saveQuick() {
       type: 'positive',
       message: `Séance enregistrée — XP ${disc === 'musculation' ? 'muscu' : 'spécifique'} gagné.`,
     });
+    await nextTick();
+    xpFx.show([
+      {
+        emoji: '🏋️',
+        label: 'Muscu',
+        fromLevel: beforeM.level,
+        fromPct: beforeM.progressPct,
+        toLevel: progress.muscu.value.level,
+        toPct: progress.muscu.value.progressPct,
+      },
+      {
+        emoji: '🌍',
+        label: 'Global',
+        fromLevel: beforeG.level,
+        fromPct: beforeG.progressPct,
+        toLevel: progress.global.value.level,
+        toPct: progress.global.value.progressPct,
+      },
+    ]);
     qDate.value = todayIso();
     qHours.value = 1;
     qMinutes.value = 0;
