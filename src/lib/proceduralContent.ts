@@ -187,9 +187,19 @@ export const BOSS_MILESTONES: number[] = Array.from(
   (_, i) => BOSS_START + i * BOSS_STEP,
 ); // [30,35,...,100]
 
-// Boss = combat SOLO plus coriace qu'un donjon (fittés par simulation, cf. test) :
-// un build équilibré NU gagne ~45-55 % au palier ; avec gear/talents on monte à ~65-75 %.
+// Boss = combat SOLO plus coriace qu'un donjon (fittés par simulation, cf. test).
 const BOSS_CALIB = { kpv: 11, kdmg: 0.28 } as const;
+
+// Facteur de GEAR (2026‑08‑15, simulation globale) : contrairement aux donjons, un
+// boss se joue quasi toujours ÉQUIPÉ. Or le gear est de plus en plus fort avec le
+// niveau (dropMagnitude × itemLevelMult → ratio puissance équipé/nu mesuré ~1,3× au
+// niv.10, ~1,7× au 50, ~2,7× au 80). Un boss dérivé du combattant NU était donc
+// trivialisé (100 % équipé). On scale ses PV/dégâts par ce facteur (≈ gearRatio^0,72)
+// → boss ~50-60 % ÉQUIPÉ au palier (challenge réel, télégraphié par le winPct live).
+function bossGearMult(level: number): number {
+  const L = Math.max(1, level);
+  return 1 + 0.006 * L + 0.0001 * L * L;
+}
 
 const BOSS_SKINS: { emoji: string; name: string }[] = [
   { emoji: '👺', name: 'Shogun des Ombres' },
@@ -251,8 +261,9 @@ export function proceduralSet(milestone: number, index: number): ItemSet {
 export function proceduralBoss(milestone: number, index: number): MilestoneBoss {
   const f = refFighter(milestone);
   const skin = BOSS_SKINS[index % BOSS_SKINS.length]!;
-  const pv = Math.round(refOffensePerRound(f) * BOSS_CALIB.kpv);
-  const damage = Math.round(f.pv * BOSS_CALIB.kdmg);
+  const g = bossGearMult(milestone); // le boss se joue équipé → on scale au gear du palier
+  const pv = Math.round(refOffensePerRound(f) * BOSS_CALIB.kpv * g);
+  const damage = Math.round(f.pv * BOSS_CALIB.kdmg * g);
   return {
     id: `proc_boss_${milestone}`,
     name: skin.name,

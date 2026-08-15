@@ -97,8 +97,10 @@ const HAND_BOSSES: MilestoneBoss[] = [
     hint: 'Un colosse : dégâts énormes. Build complet, un maximum de PV.',
     combatant: {
       name: 'Titan du Néant',
-      pv: 28000,
-      damage: 1800,
+      // Dégâts relevés (1800→2600) : il était trivialisé une fois équipé (dmg trop
+      // bas pour menacer un joueur en gear du palier, cf. simulation globale 2026‑08‑15).
+      pv: 32000,
+      damage: 2600,
       crit: 0.1,
       dodge: 0.06,
       initiative: 16,

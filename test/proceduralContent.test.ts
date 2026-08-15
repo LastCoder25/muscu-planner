@@ -109,21 +109,22 @@ describe('procedural — boss de palier + sets', () => {
     const s = proceduralSet(30, 0);
     expect(s.tiers.map((t) => t.pieces)).toEqual([2, 3, 4]);
   });
-  it('boss plus coriace qu’un donjon : un build nu gagne rarement, pas toujours', () => {
-    // Boss = check plus dur (nu ~35-55 % au palier → ~65-75 % équipé). On vérifie
-    // juste que c'est ni trivial (100 %) ni impossible (0 %) au palier.
-    const winPct = (m: number, n = 100) => {
-      const boss = proceduralBoss(m, 0).combatant;
-      const p = refFighter(m);
-      let w = 0;
-      for (let s = 0; s < n; s++) if (simulateCombat(p, boss, { seed: s * 89 + 1, goldOnWin: 0 }).win) w++;
-      return w / n;
-    };
-    for (const m of [30, 60, 100]) {
-      const w = winPct(m);
-      expect(w).toBeGreaterThan(0.15);
-      expect(w).toBeLessThan(0.85);
-    }
+  it('boss calibré ÉQUIPÉ (bossGearMult) : très dur NU, PV/dégâts croissants', () => {
+    // Les boss se jouent équipés → ils sont calibrés contre le gear du palier
+    // (bossGearMult) donc TRÈS durs nu (simulation globale 2026‑08‑15). On vérifie
+    // juste la cohérence : stats strictement croissantes avec le palier.
+    const b30 = proceduralBoss(30, 0).combatant;
+    const b60 = proceduralBoss(60, 0).combatant;
+    const b100 = proceduralBoss(100, 0).combatant;
+    expect(b60.pv).toBeGreaterThan(b30.pv);
+    expect(b100.pv).toBeGreaterThan(b60.pv);
+    expect(b60.damage).toBeGreaterThan(b30.damage);
+    expect(b100.damage).toBeGreaterThan(b60.damage);
+    // Nu, le boss est censé être quasi-imbattable (il faut du gear).
+    const p = refFighter(30);
+    let w = 0;
+    for (let s = 0; s < 60; s++) if (simulateCombat(p, b30, { seed: s * 89 + 1, goldOnWin: 0 }).win) w++;
+    expect(w / 60).toBeLessThan(0.5);
   });
   it('buildProceduralContent : bosses + sets alignés (même count, ids appariés)', () => {
     const { bosses, sets } = buildProceduralContent();
