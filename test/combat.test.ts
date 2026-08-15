@@ -12,6 +12,23 @@ import {
 const strong = playerCombatant('Fort', { puissance: 80, endurance: 60, agilite: 40 }, 10);
 const weak = playerCombatant('Faible', { puissance: 3, endurance: 1, agilite: 1 }, 1);
 
+describe('épines (thorns)', () => {
+  const monster = { name: 'M', pv: 400, damage: 40, crit: 0, dodge: 0, initiative: 1, strikes: 1 };
+  const base = playerCombatant('Tank', { puissance: 10, endurance: 60, agilite: 5 }, 6);
+  it('un défenseur avec épines renvoie des dégâts → gagne au moins aussi souvent', () => {
+    const win = (thorns: number) => {
+      let w = 0;
+      for (let s = 0; s < 40; s++)
+        if (simulateCombat({ ...base, thorns }, monster, { seed: s * 53 + 1, goldOnWin: 0 }).win) w++;
+      return w;
+    };
+    expect(win(0.5)).toBeGreaterThanOrEqual(win(0));
+  });
+  it('combatPower croît avec les épines', () => {
+    expect(combatPower({ ...base, thorns: 0.5 })).toBeGreaterThan(combatPower({ ...base, thorns: 0 }));
+  });
+});
+
 describe('fmtPow / fmtDelta', () => {
   it('format compact k/M (1 déc. k, 2 déc. M)', () => {
     expect(fmtPow(950)).toBe('950');

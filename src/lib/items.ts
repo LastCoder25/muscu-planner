@@ -24,7 +24,8 @@ export type EffectType =
   // Effets SIGNATURE (conditionnels, débloqués tard → nouveauté de haut niveau).
   | 'execute_pct' // arme : + dégâts quand l'ennemi est bas (< 25 % PV)
   | 'rage_pct' // relique : + dégâts quand TU es bas (< 30 % PV)
-  | 'momentum_pct'; // arme : + dégâts par coup consécutif porté (cumul)
+  | 'momentum_pct' // arme : + dégâts par coup consécutif porté (cumul)
+  | 'thorns_pct'; // armure : renvoie une part des dégâts reçus à l'attaquant (épines)
 
 export interface ItemEffect {
   type: EffectType;
@@ -193,6 +194,7 @@ const EFFECT_MIN_LEVEL: Partial<Record<EffectType, number>> = {
   execute_pct: 12,
   momentum_pct: 18,
   rage_pct: 15,
+  thorns_pct: 9, // épines : build défensif « qui pique » → débloqué en profondeur
 };
 
 const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
@@ -206,6 +208,7 @@ const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
   armor: [
     { type: 'dmg_reduction_pct', base: 6 },
     { type: 'max_pv_pct', base: 10 },
+    { type: 'thorns_pct', base: 12 }, // épines : renvoie des dégâts (build tanky offensif)
   ],
   // L'accessoire roule un effet de COMBAT (l'or ne servait à rien en combat → un
   // accessoire +or était un slot « mort », personne ne le prenait ; retiré).
@@ -278,6 +281,8 @@ export function effectLabel(e: ItemEffect, level = 1): string {
       return `+${v}% dégâts (toi < 30% PV)`;
     case 'momentum_pct':
       return `+${v}% dégâts/coup (cumul)`;
+    case 'thorns_pct':
+      return `renvoie ${v}% des dégâts reçus`;
   }
 }
 
@@ -554,6 +559,7 @@ export interface AggregatedEffects {
   executePct: number; // signature : + dégâts si ennemi bas
   ragePct: number; // signature : + dégâts si joueur bas
   momentumPct: number; // signature : + dégâts/coup cumulé
+  thornsPct: number; // épines : fraction des dégâts reçus renvoyée à l'attaquant
 }
 
 export function emptyEffects(): AggregatedEffects {
@@ -568,6 +574,7 @@ export function emptyEffects(): AggregatedEffects {
     executePct: 0,
     ragePct: 0,
     momentumPct: 0,
+    thornsPct: 0,
   };
 }
 
@@ -600,6 +607,9 @@ function applyEffect(a: AggregatedEffects, type: EffectType, v: number): void {
       break;
     case 'momentum_pct':
       a.momentumPct += v;
+      break;
+    case 'thorns_pct':
+      a.thornsPct += v;
       break;
   }
 }
@@ -754,6 +764,7 @@ export function aggregateEffects(equipped: Equipped, capLevel = Infinity): Aggre
   a.executePct += s.executePct;
   a.ragePct += s.ragePct;
   a.momentumPct += s.momentumPct;
+  a.thornsPct += s.thornsPct;
   a.dmgReduction = Math.min(0.5, a.dmgReduction); // plafond 50 %
   return a;
 }
@@ -789,5 +800,6 @@ export function playerWithGear(
     execute: e.executePct + (extra.executePct ?? 0),
     rage: e.ragePct + (extra.ragePct ?? 0),
     momentum: e.momentumPct + (extra.momentumPct ?? 0),
+    thorns: e.thornsPct + (extra.thornsPct ?? 0),
   };
 }

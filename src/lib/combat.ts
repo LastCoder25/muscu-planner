@@ -28,6 +28,7 @@ export interface Combatant {
   execute?: number; // + dégâts quand l'ENNEMI est bas (< executeThreshold PV)
   rage?: number; // + dégâts quand TOI tu es bas (< rageThreshold PV)
   momentum?: number; // + dégâts par coup consécutif porté dans le combat (cumul plafonné)
+  thorns?: number; // 0..1 : part des dégâts reçus renvoyée à l'attaquant (épines, joueur)
 }
 
 // Coefficients d'équilibrage (ajustables en un endroit).
@@ -97,7 +98,7 @@ export function combatPower(c: Combatant): number {
     0.3 * (c.rage ?? 0) +
     (c.momentum ?? 0) * (COMBAT.momentumMaxStacks * 0.5);
   const offense =
-    c.damage * (c.strikes ?? 1) * (1 + c.crit) * (1 + (c.lifesteal ?? 0)) * sig;
+    c.damage * (c.strikes ?? 1) * (1 + c.crit) * (1 + (c.lifesteal ?? 0)) * sig * (1 + 0.5 * (c.thorns ?? 0));
   const survie = (c.pv / 100) / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0));
   // offense×survie croît ≈ niveau⁴ → chiffres énormes (dizaines de milliers dès le
   // début). On prend la RACINE : indice toujours monotone/comparable mais à échelle
@@ -188,6 +189,8 @@ export function simulateCombat(
       } else {
         pPv = Math.max(0, pPv - dmg);
         if (atk.lifesteal) mPv = Math.min(monster.pv, mPv + Math.round(dmg * atk.lifesteal));
+        // Épines : le joueur (défenseur) renvoie une part des dégâts reçus.
+        if (def.thorns && dmg > 0) mPv = Math.max(0, mPv - Math.max(1, Math.round(dmg * def.thorns)));
       }
       log.push({
         round,

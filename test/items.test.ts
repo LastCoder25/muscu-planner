@@ -119,6 +119,14 @@ describe('aggregateEffects', () => {
     expect(a.dmgReduction).toBe(0.5); // plafonné
     expect(a.critAdd).toBeCloseTo(0.06);
   });
+  it('agrège les épines (thorns) et playerWithGear les propage', () => {
+    const eq: Equipped = {
+      armor: item({ slot: 'armor', level: 10, effect: { type: 'thorns_pct', value: 20 } }),
+    };
+    expect(aggregateEffects(eq).thornsPct).toBeGreaterThan(0);
+    const c = playerWithGear('X', { puissance: 20, endurance: 30, agilite: 10 }, eq, {}, 10);
+    expect(c.thorns).toBeGreaterThan(0);
+  });
 });
 
 describe('playerWithGear', () => {

@@ -63,6 +63,13 @@ function buildSchedule(): AdvUnlock[] {
     detail: 'Tes objets peuvent désormais rouler du vol de vie.',
   });
   out.push({
+    level: 9,
+    kind: 'effect',
+    emoji: '🌵',
+    title: 'Effet d’objet : Épines',
+    detail: 'Tes armures peuvent désormais renvoyer une part des dégâts reçus.',
+  });
+  out.push({
     level: 10,
     kind: 'effect',
     emoji: '🛡️',
