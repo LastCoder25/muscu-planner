@@ -172,7 +172,8 @@
         <div class="sh-row">
           <span class="sh-chip">⏱️ {{ fmtMin(roundTripMin(selected)) }}</span>
           <span class="sh-chip">🪙 {{ costOf(selected) }}</span>
-          <span v-if="selected.type !== 'mine'" class="sh-chip" :class="winClass(winPct)">🎯 {{ winPct }}%</span>
+          <span v-if="selected.type === 'arena'" class="sh-chip">🌊 ~{{ arenaWaves }} vagues</span>
+          <span v-else-if="selected.type !== 'mine'" class="sh-chip" :class="winClass(winPct)">🎯 {{ winPct }}%</span>
         </div>
         <button
           class="sh-send"
@@ -260,8 +261,17 @@
     <!-- Modale de collecte au retour -->
     <q-dialog v-model="collectOpen">
       <q-card class="coll-card" v-if="lastOutcome">
-        <div class="coll-emo">{{ lastOutcome.win ? '🏆' : '💀' }}</div>
-        <div class="coll-title font-display">{{ lastOutcome.win ? 'Expédition réussie !' : 'Expédition ratée' }}</div>
+        <div class="coll-emo">
+          {{ lastOutcome.waves !== undefined ? '🏟️' : lastOutcome.win ? '🏆' : '💀' }}
+        </div>
+        <div class="coll-title font-display">
+          <template v-if="lastOutcome.waves !== undefined"
+            >{{ lastOutcome.waves }} vague{{ lastOutcome.waves > 1 ? 's' : '' }} tenue{{
+              lastOutcome.waves > 1 ? 's' : ''
+            }}</template
+          >
+          <template v-else>{{ lastOutcome.win ? 'Expédition réussie !' : 'Expédition ratée' }}</template>
+        </div>
         <div class="coll-text">{{ lastOutcome.text }}</div>
         <div class="coll-haul">
           <span v-if="lastOutcome.gold">🪙 +{{ lastOutcome.gold }}</span>
@@ -316,6 +326,7 @@ import {
   EXPE,
   heroPosition,
   poiCombatant,
+  simulateArena,
   goldCost,
   travelOneWayMin,
   expeditionTerrain,
@@ -335,8 +346,8 @@ const flashSlot = ref<number | null>(null);
 
 const TOWN = EXPE.town;
 const MAP = EXPE.mapSize;
-const POI_EMO: Record<PoiType, string> = { mine: '⛏️', camp: '🏕️', lair: '👹' };
-const POI_LABEL: Record<PoiType, string> = { mine: 'Mine', camp: 'Camp', lair: 'Repaire' };
+const POI_EMO: Record<PoiType, string> = { mine: '⛏️', camp: '🏕️', lair: '👹', arena: '🏟️' };
+const POI_LABEL: Record<PoiType, string> = { mine: 'Mine', camp: 'Camp', lair: 'Repaire', arena: 'Arène' };
 
 const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -587,12 +598,20 @@ function selectPoi(p: Poi) {
 // % de victoire (Monte-Carlo) contre l'adversaire du POI.
 const winPct = computed(() => {
   const p = selected.value;
-  if (!p || p.type === 'mine') return 100;
+  if (!p || p.type === 'mine' || p.type === 'arena') return 100;
   const foe = poiCombatant(p.level, p.type);
   let w = 0;
   for (let s = 0; s < 40; s++)
     if (simulateCombat(fighter.value, foe, { seed: s * 131 + 5, goldOnWin: 0 }).win) w++;
   return Math.round((w / 40) * 100);
+});
+// Arène : estimation du nombre de vagues tenues (moyenne Monte-Carlo).
+const arenaWaves = computed(() => {
+  const p = selected.value;
+  if (!p || p.type !== 'arena') return 0;
+  let sum = 0;
+  for (let s = 0; s < 24; s++) sum += simulateArena(fighter.value, p.level, s * 977 + 3);
+  return Math.round(sum / 24);
 });
 function winClass(pct: number): string {
   return pct >= 70 ? 'wp-good' : pct >= 35 ? 'wp-mid' : 'wp-bad';
@@ -607,6 +626,7 @@ const roundTripMin = (p: Poi) => travelOneWayMin(p.level, p.distNorm) * 2;
 function poiRewardLabel(p: Poi): string {
   if (p.type === 'mine') return 'Or + poussière (récolte)';
   if (p.type === 'camp') return 'Poussière + un objet';
+  if (p.type === 'arena') return 'Survie par vagues — butin ∝ vagues 🌊';
   return 'Pièce de set garantie sur réussite 🧩';
 }
 

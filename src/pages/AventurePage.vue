@@ -2797,7 +2797,7 @@ function fmtExpeMs(ms: number): string {
   if (m < 60) return `${m} min`;
   return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
 }
-const POI_MSG_LABEL: Record<string, string> = { mine: 'Mine', camp: 'Camp', lair: 'Repaire' };
+const POI_MSG_LABEL: Record<string, string> = { mine: 'Mine', camp: 'Camp', lair: 'Repaire', arena: 'Arène' };
 
 // ── Sac : filtre par type d'objet + tri (meilleurs d'abord) ──
 const invFilter = ref<ItemSlot | 'all'>('all');

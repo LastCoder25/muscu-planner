@@ -11,6 +11,8 @@ import {
   resolveOutcome,
   startExpedition,
   expeditionTerrain,
+  simulateArena,
+  ARENA,
   type ActiveExpedition,
   type Poi,
 } from '@/lib/expedition';
@@ -157,6 +159,21 @@ describe('expedition — résolution', () => {
     expect(o.reconBonus).toBeGreaterThan(0);
     expect(o.text.length).toBeGreaterThan(0);
   });
+  it('arène : renvoie un nombre de vagues, butin croissant avec les vagues tenues', () => {
+    const arenaP: Poi = { id: 'a', type: 'arena', level: 6, x: 40, y: 40, distNorm: 0.4, spawnedAt: 0, expiresAt: 999 * H };
+    const oStrong = resolveOutcome(strong, arenaP, 5);
+    const oWeak = resolveOutcome(weak, arenaP, 5);
+    expect(oStrong.waves).toBeGreaterThanOrEqual(0);
+    expect(oWeak.waves).toBeGreaterThanOrEqual(0);
+    // un héros FORT tient plus de vagues → plus de butin qu'un faible.
+    expect(oStrong.waves!).toBeGreaterThan(oWeak.waves!);
+    expect(oStrong.gold).toBeGreaterThan(oWeak.gold);
+  });
+  it('arène : simulateArena est bornée au cap de vagues et déterministe', () => {
+    expect(simulateArena(strong, 6, 9)).toBe(simulateArena(strong, 6, 9));
+    expect(simulateArena(strong, 1, 9)).toBeLessThanOrEqual(ARENA.maxWaves);
+  });
+
   it('startExpedition : aller/retour symétriques, coût cohérent', () => {
     const e = startExpedition(strong, lair, 1000, 42);
     expect(e.midAt - e.sentAt).toBe(e.returnAt - e.midAt);

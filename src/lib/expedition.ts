@@ -10,7 +10,9 @@ import { mulberry32, simulateCombat, type Combatant } from './combat';
 import { rollDrop, rollSetPiece, ITEM_SETS, type Item } from './items';
 
 // ── Types ──
-export type PoiType = 'mine' | 'camp' | 'lair';
+// 'arena' = survie par VAGUES : le héros tient le plus longtemps possible contre des
+// vagues de plus en plus fortes (PV reportés) → récompense ∝ vagues tenues.
+export type PoiType = 'mine' | 'camp' | 'lair' | 'arena';
 
 export interface Poi {
   id: string;
@@ -39,6 +41,7 @@ export interface ExpeditionOutcome {
   item: Omit<Item, 'id'> | null; // la « prise » (pièce de set / objet) ou null
   key: number; // clé de Labyrinthe (consolation rare)
   reconBonus: number; // +fraction de réussite au prochain essai (échec)
+  waves?: number; // 'arena' uniquement : nombre de vagues tenues
   text: string; // texte du rapport
 }
 
@@ -66,6 +69,7 @@ export interface ExpeditionMessage {
   stones: number;
   itemName?: string;
   key: number;
+  waves?: number; // 'arena' : vagues tenues
   resolvedAt: number; // ms epoch (midAt)
   read: boolean;
 }
@@ -85,6 +89,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     stones: o.stones,
     ...(o.item ? { itemName: o.item.name } : {}),
     key: o.key,
+    ...(o.waves !== undefined ? { waves: o.waves } : {}),
     resolvedAt: exp.midAt,
     read: false,
   };
@@ -101,15 +106,26 @@ export const EXPE = {
   distMax: 88, // distance maxi (rayon → POI tout autour, 360°)
   spawnMinMs: 2 * 3600_000, // intervalle de spawn : 2 h..4 h (jitter)
   spawnJitterMs: 2 * 3600_000,
-  lifespanMs: { mine: 24 * 3600_000, camp: 12 * 3600_000, lair: 30 * 3600_000 },
+  lifespanMs: { mine: 24 * 3600_000, camp: 12 * 3600_000, lair: 30 * 3600_000, arena: 18 * 3600_000 },
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
   // Coût = base × niveau^1.6 → VRAI puits d'or (2026‑08‑12). Repère : un donjon
   // rapporte ~1600 or à reco10, ~4920 à reco20 ; un repaire coûte ~6k (niv10) → ~20k
   // (niv20) = plusieurs runs de donjon pour une pièce de set (l'or s'écoule).
-  goldCostBase: { mine: 22, camp: 65, lair: 155 },
+  goldCostBase: { mine: 22, camp: 65, lair: 155, arena: 90 },
   goldCostExp: 1.6,
   failRefund: 0.3, // échec : fraction de l'or remboursée (< coût → jamais un profit)
+} as const;
+
+// Arène : survie par vagues. Cap de vagues (fin garantie même pour un héros surboosté),
+// petite régén entre deux vagues (l'Endurance compte), et rampe de difficulté/vague.
+export const ARENA = {
+  maxWaves: 25,
+  healPct: 0.16, // régén entre deux vagues (l'Endurance compte)
+  pvBase: 0.42, // vague 0 = 42 % d'un camp de même niveau (démarrage doux)
+  pvRamp: 0.2, // +20 % de PV par vague
+  dmgBase: 0.45,
+  dmgRamp: 0.08, // +8 % de dégâts par vague (attrition progressive)
 } as const;
 
 /** Fenêtre de niveaux de spawn autour du joueur : [niveau−5, niveau+3] (min 1). */
@@ -151,6 +167,37 @@ export function poiCombatant(level: number, type: PoiType): Combatant {
   };
 }
 
+/** Adversaire de la vague `wave` d'une arène de niveau `level` — dérivé d'un camp,
+ *  démarrage doux puis rampe de PV/dégâts par vague (attrition croissante). */
+export function arenaWaveCombatant(level: number, wave: number): Combatant {
+  const base = poiCombatant(level, 'camp');
+  return {
+    ...base,
+    name: `Assaillant · vague ${wave + 1}`,
+    pv: Math.max(1, Math.round(base.pv * (ARENA.pvBase + wave * ARENA.pvRamp))),
+    damage: Math.max(1, Math.round(base.damage * (ARENA.dmgBase + wave * ARENA.dmgRamp))),
+  };
+}
+
+/** Simule une arène : vagues consécutives, PV reportés (+ petite régén), jusqu'à la
+ *  mort ou le cap. Renvoie le nombre de vagues TENUES (vaincues). Seedé/pur. */
+export function simulateArena(hero: Combatant, level: number, seed: number): number {
+  let pv = hero.pv;
+  let waves = 0;
+  for (let w = 0; w < ARENA.maxWaves; w++) {
+    const r = simulateCombat(hero, arenaWaveCombatant(level, w), {
+      seed: seed + w * 1009,
+      goldOnWin: 0,
+      startPlayerPv: pv,
+    });
+    pv = r.log.length ? r.log[r.log.length - 1]!.playerPv : pv;
+    if (!r.win) break;
+    waves++;
+    pv = Math.min(hero.pv, pv + Math.round(hero.pv * ARENA.healPct));
+  }
+  return waves;
+}
+
 function clamp01(x: number): number {
   return Math.max(0, Math.min(1, x));
 }
@@ -189,7 +236,7 @@ export function createMap(seed: number, now: number, playerLevel: number, seedPo
 function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   const rng = mulberry32((map.seed + map.spawnCount * 2654435761) >>> 0);
   map.spawnCount++;
-  const type = pick(rng, ['mine', 'mine', 'camp', 'camp', 'camp', 'lair'] as const); // pondéré
+  const type = pick(rng, ['mine', 'mine', 'camp', 'camp', 'camp', 'lair', 'arena', 'arena'] as const); // pondéré
   const win = spawnWindow(playerLevel);
   const level = win.min + Math.floor(rng() * (win.max - win.min + 1));
   let pos = placePoi(rng);
@@ -298,11 +345,13 @@ const FAIL_TEXT: Record<PoiType, string[]> = {
     'Embuscade évitée de justesse : bredouille côté butin, mais une faille repérée dans leur garde.',
   ],
   mine: ['Le filon s’est effondré avant l’extraction complète. Ton héros remonte les mains presque vides.'],
+  arena: ['La foule gronde : ton héros est tombé dès les premières vagues.'],
 };
 const WIN_TEXT: Record<PoiType, string[]> = {
   lair: ['🏆 Repaire nettoyé ! Le trésor du set est à toi.', '🏆 Le gardien tombe — la relique est récupérée.'],
   camp: ['🏆 Camp dispersé ! Butin ramassé.', '🏆 Victoire nette au camp.'],
   mine: ['⛏️ Filon exploité — ressources chargées.', '⛏️ Extraction réussie.'],
+  arena: ['🏟️ L’arène acclame ton champion !'],
 };
 
 /** Calcule l'issue d'une expédition (seedée). Le butin est crédité au RETOUR. */
@@ -313,6 +362,29 @@ export function resolveOutcome(
 ): ExpeditionOutcome {
   const rng = mulberry32((seed >>> 0) || 1);
   const cost = goldCost(poi.type, poi.level);
+
+  // ── ARÈNE : survie par vagues → récompense ∝ vagues tenues (pas de binaire). ──
+  if (poi.type === 'arena') {
+    const rthA = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
+    const tfA = 0.5 + rthA;
+    const waves = simulateArena(hero, poi.level, seed + 17);
+    const good = waves >= 5; // « belle performance » (pour le ton du rapport / notif)
+    const gold = Math.round((poi.level * 10 + waves * poi.level * 5) * (1 + rthA * 0.4)) + Math.round(cost * 0.15);
+    const dust = Math.round((5 + waves * 3) * tfA);
+    const stones = Math.round((2 + waves * 0.9) * tfA);
+    // Objet : à partir de 4 vagues, chance/qualité qui montent avec les vagues.
+    const item =
+      waves >= 4
+        ? rollDrop(rng, { cleared: true, defeated: 1, level: poi.level, luck: Math.min(0.85, 0.2 + waves * 0.05), spread: 0 })
+        : null;
+    const key = rng() < Math.min(0.25, waves * 0.02) ? 1 : 0;
+    const text =
+      waves === 0
+        ? pick(rng, FAIL_TEXT.arena)
+        : `🏟️ ${waves} vague${waves > 1 ? 's' : ''} tenue${waves > 1 ? 's' : ''} !${good ? ' La foule est en délire.' : ''}`;
+    return { win: good, gold, dust, stones, item, key, reconBonus: 0, waves, text };
+  }
+
   // Mine = récolte (pas de combat) ; camp/repaire = combat auto seedé.
   const win =
     poi.type === 'mine'
