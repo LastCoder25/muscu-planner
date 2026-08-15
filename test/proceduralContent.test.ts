@@ -1,0 +1,90 @@
+import { describe, it, expect } from 'vitest';
+import { simulateDungeon, type DungeonFoe } from '@/lib/combat';
+import {
+  cumXpForLevel,
+  refFighter,
+  proceduralMonster,
+  proceduralDungeon,
+  proceduralDungeonMonsters,
+  proceduralRecos,
+  proceduralRegions,
+  buildProceduralContent,
+  PROC_REGION_COUNT,
+} from '@/lib/proceduralContent';
+
+describe('procedural — courbe XP', () => {
+  it('cumXpForLevel = forme fermée des coûts de niveau', () => {
+    // Coût niveau k = 200+(k-1)×100 ; cumul jusqu'à L.
+    let cum = 0;
+    for (let k = 1; k < 12; k++) {
+      expect(cumXpForLevel(k)).toBe(cum);
+      cum += 200 + (k - 1) * 100;
+    }
+  });
+});
+
+describe('procedural — génération', () => {
+  it('proceduralMonster : stats croissantes weak < mid < strong, ids/skin déterministes', () => {
+    const w = proceduralMonster(30, 'weak', 0);
+    const m = proceduralMonster(30, 'mid', 0);
+    const s = proceduralMonster(30, 'strong', 0);
+    expect(w.pv).toBeLessThan(m.pv);
+    expect(m.pv).toBeLessThan(s.pv);
+    expect(w.damage).toBeLessThan(s.damage);
+    expect(proceduralMonster(30, 'mid', 0)).toEqual(proceduralMonster(30, 'mid', 0));
+  });
+  it('les stats montent avec la reco', () => {
+    expect(proceduralMonster(50, 'mid', 0).pv).toBeGreaterThan(proceduralMonster(30, 'mid', 0).pv);
+  });
+  it('proceduralRecos : croissant, PROC_REGION_COUNT×3 donjons, à partir de 25', () => {
+    const r = proceduralRecos();
+    expect(r.length).toBe(PROC_REGION_COUNT * 3);
+    expect(r[0]).toBe(25);
+    for (let i = 1; i < r.length; i++) expect(r[i]!).toBeGreaterThan(r[i - 1]!);
+  });
+  it('proceduralDungeon : trio de 3 monstres, recoLevel = reco', () => {
+    const d = proceduralDungeon(31, 2);
+    expect(d.monsterIds.length).toBe(3);
+    expect(d.recoLevel).toBe(31);
+    expect(proceduralDungeonMonsters(31).map((m) => m.id)).toEqual(d.monsterIds);
+  });
+  it('proceduralRegions : couvre TOUS les donjons procéduraux, sans doublon', () => {
+    const regs = proceduralRegions();
+    expect(regs.length).toBe(PROC_REGION_COUNT);
+    const ids = regs.flatMap((r) => r.dungeonIds);
+    const expected = proceduralRecos().map((reco) => `proc_dungeon_${reco}`);
+    expect(new Set(ids)).toEqual(new Set(expected));
+    expect(ids.length).toBe(expected.length); // pas de doublon
+  });
+  it('buildProceduralContent : ids de monstres uniques et référencés par les donjons', () => {
+    const { monsters, dungeons } = buildProceduralContent();
+    const ids = monsters.map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length); // uniques
+    const monSet = new Set(ids);
+    for (const d of dungeons) for (const mid of d.monsterIds) expect(monSet.has(mid)).toBe(true);
+  });
+});
+
+describe('procedural — calibration (clear ~systématique au reco)', () => {
+  function trioFoes(reco: number): DungeonFoe[] {
+    return proceduralDungeonMonsters(reco).map((m) => ({ combatant: m, gold: m.gold }));
+  }
+  function clearPct(reco: number, atLevel: number, n = 100): number {
+    const foes = trioFoes(reco);
+    const p = refFighter(atLevel);
+    let c = 0;
+    for (let s = 0; s < n; s++) if (simulateDungeon(p, foes, { seed: s * 211 + 5 }).cleared) c++;
+    return c / n;
+  }
+  it('un build équilibré nu clear ~systématiquement (≥ 78 %) à son recoLevel (25→94)', () => {
+    // Référence NUE : un joueur équipé fait nettement mieux. La courbe vise ~85-95 %.
+    for (const reco of [25, 34, 46, 58, 70, 82, 94]) {
+      expect(clearPct(reco, reco)).toBeGreaterThanOrEqual(0.78);
+    }
+  });
+  it('mur en début de courbe : bien plus dur 2 niveaux en dessous', () => {
+    // Au bas de la courbe (variation de puissance encore marquée sur 2 niveaux).
+    expect(clearPct(25, 23)).toBeLessThan(clearPct(25, 25));
+    expect(clearPct(34, 32)).toBeLessThan(clearPct(34, 34));
+  });
+});
