@@ -13,6 +13,7 @@
 // Distinct du boss communautaire hebdo (world boss).
 import type { Combatant } from '@/lib/combat';
 import { PROCEDURAL } from '@/lib/proceduralContent';
+import { DUNGEONS, dungeonGold } from '@/data/dungeons';
 
 export interface MilestoneBoss {
   id: string;
@@ -127,5 +128,26 @@ const HAND_BOSSES: MilestoneBoss[] = [
   },
 ];
 
-// Boss complets = écrits à la main (paliers 5→25) + PROCÉDURAUX (30→100).
-export const BOSSES: MilestoneBoss[] = [...HAND_BOSSES, ...PROCEDURAL.bosses];
+// ── Or des boss : DÉRIVÉ du donjon de leur palier ────────────────────────────
+// Un boss est un combat gated, plus dur, et l'économie de fin de jeu tourne en
+// dizaines de milliers d'or (une expédition vers un repaire coûte ~18 700 or au
+// niveau 20). Or les valeurs `gold` écrites à la main (120→1500) et la formule
+// procédurale ne rapportaient que ~1/4 à 1/12 d'un donjon de même niveau → un boss
+// vaincu ne finançait quasi rien. On aligne donc l'or du boss sur le donjon le PLUS
+// DUR accessible à son palier (recoLevel ≤ palier), × prime légère. ×1,1 (et non
+// davantage) : le boss coûtant plus d'énergie, il reste SOUS le donjon en or/énergie
+// → le donjon demeure le farm d'or, le boss « paie honnêtement » son palier. Source
+// unique (dungeonGold) → suit automatiquement tout futur rééquilibrage des donjons.
+const BOSS_GOLD_MULT = 1.1;
+function bossGoldForLevel(unlockLevel: number): number {
+  let ref = 0;
+  for (const d of DUNGEONS) if (d.recoLevel <= unlockLevel) ref = Math.max(ref, dungeonGold(d));
+  return ref > 0 ? Math.round((ref * BOSS_GOLD_MULT) / 10) * 10 : 200;
+}
+
+// Boss complets = écrits à la main (paliers 5→25) + PROCÉDURAUX (30→100). L'or
+// statique/procédural est REMPLACÉ par la valeur dérivée du donjon du palier.
+export const BOSSES: MilestoneBoss[] = [...HAND_BOSSES, ...PROCEDURAL.bosses].map((b) => ({
+  ...b,
+  gold: bossGoldForLevel(b.unlockLevel),
+}));
