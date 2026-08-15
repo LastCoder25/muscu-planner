@@ -172,7 +172,7 @@
         <div v-for="e in exoAgg" :key="e.id" class="exo-card">
           <div class="exo-main">
             <div class="exo-name">{{ e.name }}</div>
-            <div class="exo-meta">{{ e.count }} challenge{{ e.count > 1 ? 's' : '' }}</div>
+            <div class="exo-meta">{{ e.count }} défi{{ e.count > 1 ? 's' : '' }} (défis + 360)</div>
           </div>
           <div class="exo-reps">
             <span class="er-v font-display">{{
@@ -678,6 +678,22 @@ const exoAgg = computed(() => {
     cur.count += 1;
     cur.total += c.progress.reduce((a, p) => a + (p.done || 0), 0);
     map.set(c.exercise_id, cur);
+  }
+  // CENTRALISE (d8aa8e2b) : inclut aussi les reps des Défi 360 (par exo), pour que
+  // les stats couvrent TOUTES les origines, pas seulement les petits défis.
+  for (const combo of comboStore.list) {
+    for (const leg of combo.legs ?? []) {
+      const cur = map.get(leg.exercise_id) ?? {
+        id: leg.exercise_id,
+        name: leg.exercise_name,
+        unit: 'reps',
+        count: 0,
+        total: 0,
+      };
+      cur.count += 1;
+      cur.total += (leg.progress ?? []).reduce((a, p) => a + (p.reps || 0), 0);
+      map.set(leg.exercise_id, cur);
+    }
   }
   return [...map.values()].sort((a, b) => b.total - a.total);
 });
