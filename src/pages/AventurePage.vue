@@ -1109,6 +1109,7 @@
               <div class="im-haul">
                 <span v-if="m.gold">🪙 +{{ m.gold }}</span>
                 <span v-if="m.dust">✨ +{{ m.dust }}</span>
+                <span v-if="m.stones">💎 +{{ m.stones }}</span>
                 <span v-if="m.key">🗝️ +{{ m.key }}</span>
                 <span v-if="m.itemName" class="im-item">🎁 {{ m.itemName }}</span>
               </div>

@@ -265,6 +265,7 @@
         <div class="coll-haul">
           <span v-if="lastOutcome.gold">🪙 +{{ lastOutcome.gold }}</span>
           <span v-if="lastOutcome.dust">✨ +{{ lastOutcome.dust }}</span>
+          <span v-if="lastOutcome.stones">💎 +{{ lastOutcome.stones }}</span>
           <span v-if="lastOutcome.key">🗝️ +{{ lastOutcome.key }}</span>
           <span v-if="lastOutcome.item" class="coll-item">🎁 {{ lastOutcome.item.name }}</span>
         </div>

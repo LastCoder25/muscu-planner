@@ -745,6 +745,7 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       gold: cur.gold + o.gold,
       dust: cur.dust + o.dust,
+      stones: cur.stones + (o.stones ?? 0),
       keys: cur.keys + o.key,
       inventory,
       messages,

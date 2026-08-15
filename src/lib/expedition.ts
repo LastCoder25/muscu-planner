@@ -35,6 +35,7 @@ export interface ExpeditionOutcome {
   win: boolean;
   gold: number; // crédité au RETOUR
   dust: number;
+  stones: number; // pierres magiques 💎 (ressource rare des familiers)
   item: Omit<Item, 'id'> | null; // la « prise » (pièce de set / objet) ou null
   key: number; // clé de Labyrinthe (consolation rare)
   reconBonus: number; // +fraction de réussite au prochain essai (échec)
@@ -62,6 +63,7 @@ export interface ExpeditionMessage {
   text: string;
   gold: number;
   dust: number;
+  stones: number;
   itemName?: string;
   key: number;
   resolvedAt: number; // ms epoch (midAt)
@@ -80,6 +82,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     text: o.text,
     gold: o.gold,
     dust: o.dust,
+    stones: o.stones,
     ...(o.item ? { itemName: o.item.name } : {}),
     key: o.key,
     resolvedAt: exp.midAt,
@@ -316,12 +319,21 @@ export function resolveOutcome(
       ? true
       : simulateCombat(hero, poiCombatant(poi.level, poi.type), { seed: seed + 7, goldOnWin: 0 }).win;
 
+  // HAUL SCALÉ AU TEMPS DE TRAJET (aller-retour) : une expédition de plusieurs
+  // heures doit VALOIR le coup (avant : reward ∝ niveau seul → dérisoire vs un
+  // donjon actif). Facteur temps `(0.5 + rth)` : un trajet court rend un peu, un
+  // long rend beaucoup. On mise sur les ressources RARES (poussière/pierres/gear) —
+  // l'or déborde déjà (filons = le puits) mais reste un bonus net correct.
+  const rth = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60; // heures A/R
+  const tf = 0.5 + rth;
+
   if (!win) {
     const key = rng() < 0.12 ? 1 : 0;
     return {
       win: false,
       gold: Math.round(cost * EXPE.failRefund), // < coût → jamais un profit
       dust: Math.round(poi.level * 1.5),
+      stones: Math.round(poi.level * 0.4),
       item: null,
       key,
       reconBonus: 0.08,
@@ -329,24 +341,31 @@ export function resolveOutcome(
     };
   }
 
-  // Réussite : HAUL (or + poussière, coloré par type) + PRISE éventuelle.
+  // Réussite : HAUL (or + poussière + pierres) + PRISE éventuelle.
   const goldHaul =
     poi.type === 'mine'
-      ? Math.round(cost * 1.4 + poi.level * 8) // mine = léger gain net d'or
-      : Math.round(poi.level * 6);
-  const dustHaul = Math.round((poi.type === 'mine' ? 8 : 4) + poi.level * 2);
+      ? Math.round((cost + poi.level * 15) * (1 + rth * 0.6)) // mine = vraie source d'or
+      : Math.round((cost * 0.4 + poi.level * 10) * (1 + rth * 0.4));
+  const dustHaul = Math.round((poi.type === 'mine' ? 14 + poi.level * 4 : 9 + poi.level * 3) * tf);
+  const stoneHaul = Math.round(
+    (poi.type === 'lair' ? 4 + poi.level * 1.4 : poi.type === 'mine' ? 3 + poi.level * 1.1 : 2 + poi.level * 0.7) * tf,
+  );
   let item: Omit<Item, 'id'> | null = null;
+  let key = 0;
   if (poi.type === 'lair' && poi.setId) {
     item = rollSetPiece(rng, { setId: poi.setId, level: poi.level, luck: 0.6 });
+    key = rng() < 0.2 ? 1 : 0;
   } else if (poi.type === 'camp') {
     item = rollDrop(rng, { cleared: true, defeated: 1, level: poi.level, luck: 0.4, spread: 1 });
+    key = rng() < 0.1 ? 1 : 0;
   }
   return {
     win: true,
     gold: goldHaul,
     dust: dustHaul,
+    stones: stoneHaul,
     item,
-    key: 0,
+    key,
     reconBonus: 0,
     text: pick(rng, WIN_TEXT[poi.type]),
   };
