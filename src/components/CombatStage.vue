@@ -92,10 +92,15 @@ const ARCH_LABEL: Record<string, string> = {
 const props = defineProps<{
   playerName: string;
   playerMaxPv: number;
+  // PV du joueur AU DÉBUT du combat (attrition : Labyrinthe/donjon avec PV reportés).
+  // Défaut = playerMaxPv (le combat démarre à pleine vie). Évite l'illusion « gros
+  // coup au démarrage » quand la barre partait du max puis chutait aux PV réels.
+  playerStartPv?: number;
   fights: StageFight[];
   playerProfile: 'puissant' | 'agile' | 'polyvalent';
   playerEquipped: Equipped;
 }>();
+const startPv = computed(() => props.playerStartPv ?? props.playerMaxPv);
 const emit = defineEmits<{ done: [] }>(); // fin de l'animation → révèle résultat + butin
 
 // Séquence à plat : chaque pas = un événement + l'index de son combat.
@@ -108,7 +113,7 @@ const stepMs = computed(() => (steps.value.length > 60 ? 90 : steps.value.length
 
 const i = ref(0);
 const fightIdx = ref(0);
-const playerPv = ref(props.playerMaxPv);
+const playerPv = ref(startPv.value);
 const monsterPv = ref(props.fights[0]?.maxPv ?? 1);
 const pop = ref<{ side: 'player' | 'monster'; text: string; kind: string } | null>(null);
 const heal = ref<{ side: 'player' | 'monster'; text: string } | null>(null); // soin (vol de vie) / épines
@@ -206,7 +211,7 @@ function start() {
   monsterEnter.value = false;
   heal.value = null;
   clearFx();
-  playerPv.value = props.playerMaxPv;
+  playerPv.value = startPv.value;
   monsterPv.value = props.fights[0]?.maxPv ?? 1;
   const reduce =
     typeof window !== 'undefined' &&

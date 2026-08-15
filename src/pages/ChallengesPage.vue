@@ -101,7 +101,14 @@
           <div v-if="grp.list.length" class="lane-group">
             <div class="lane-title">{{ grp.label }}</div>
             <div class="ch-tiles">
-              <button v-for="c in grp.list" :key="c.id" class="ch-tile" @click="goDetail(c.id)">
+              <button
+                v-for="c in grp.list"
+                :key="c.id"
+                class="ch-tile"
+                :class="{ expiring: expiring(c) }"
+                @click="goDetail(c.id)"
+              >
+                <div v-if="expiring(c)" class="ct-expire">⏳ Expire bientôt</div>
                 <div class="ct-top">
                   <span class="ch-ic">
                     <img v-if="exerciseImage(c.exercise_id)" :src="exerciseImage(c.exercise_id)" alt="" />
@@ -663,6 +670,11 @@ function cardCostLabel(c: Challenge): string {
 
 function st(c: Challenge) {
   return challengeStats(c);
+}
+// Défi bientôt EXPIRÉ et pas fini → encadré rouge (dernier(s) jour(s), < 100 %).
+function expiring(c: Challenge): boolean {
+  const s = st(c);
+  return s.daysLeft <= 2 && s.completionPct < 100;
 }
 function bal(c: Challenge) {
   return challengeLiveBalance(c);
@@ -1318,6 +1330,22 @@ onMounted(async () => {
 }
 .ch-tile:active {
   transform: scale(0.99);
+}
+/* Défi bientôt expiré et pas fini → encadré rouge d'alerte. */
+.ch-tile.expiring {
+  border-color: var(--d4);
+  box-shadow: 0 0 0 1px var(--d4) inset;
+}
+.ct-expire {
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--d4);
+  background: color-mix(in srgb, var(--d4) 14%, transparent);
+  border-radius: 999px;
+  padding: 2px 8px;
 }
 .ct-top {
   display: flex;

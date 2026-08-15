@@ -117,6 +117,7 @@
             :key="run.current"
             :player-name="char.row?.pseudo ?? 'Toi'"
             :player-max-pv="run.maxPv"
+            :player-start-pv="stageStartPv"
             :fights="stageFights"
             :player-profile="playerProfile"
             :player-equipped="playerEquipped"
@@ -202,6 +203,18 @@
           <template v-else>
             Tu es tombé : l'or et la poussière sont gardés, les objets restent au donjon.
           </template>
+        </div>
+
+        <!-- Récap du butin ramené (pour juger la rentabilité du run sans fouiller le sac) -->
+        <div v-if="run.status !== 'dead' && loot.length" class="over-loot">
+          <div class="ol-title">Objets rapportés</div>
+          <div v-for="(it, i) in loot" :key="i" class="ol-item" :class="'r-' + it.rarity">
+            <span class="ol-emo">{{ it.emoji }}</span>
+            <div class="ol-main">
+              <span class="ol-name">{{ it.name }}</span>
+              <span class="ol-meta">{{ RARITY_LABEL[it.rarity] }} · {{ effectLabel(it.effect, it.level) }}</span>
+            </div>
+          </div>
         </div>
         <div class="over-row">
           <q-btn
@@ -323,6 +336,7 @@ const roomFx = ref<{
   dmg?: number;
 } | null>(null);
 const stageFights = ref<StageFight[]>([]);
+const stageStartPv = ref(0); // PV du joueur AU DÉBUT du combat animé (attrition)
 const fxDone = ref(false); // combat : résultat révélé à la fin de l'animation
 const playerProfile = computed(() => character.value.profile);
 const playerEquipped = computed(() => char.row?.equipped ?? {});
@@ -419,6 +433,7 @@ const depthOf = () => (run.value.floors > 1 ? run.value.floor / (run.value.floor
 function fightRoom(id: number, isBoss: boolean) {
   const monster = makeMonster(isBoss, depthOf());
   const goldWin = Math.round((6 + 3 * heroLevel.value) * (isBoss ? 4 : 1));
+  stageStartPv.value = run.value.pv; // PV AVANT le combat (barre part de là, pas du max)
   const res = simulateCombat(fighter.value, monster, {
     seed: roomSeed(id),
     goldOnWin: goldWin,
@@ -1049,6 +1064,62 @@ function replay() {
   color: var(--dim);
   line-height: 1.5;
   margin-bottom: 14px;
+}
+.over-loot {
+  text-align: left;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 0 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ol-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.ol-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  background: var(--surface);
+}
+.ol-item.r-rare {
+  border-left-color: #4ec6d6;
+}
+.ol-item.r-epic {
+  border-left-color: #b07cff;
+}
+.ol-item.r-legendary {
+  border-left-color: var(--accent);
+}
+.ol-item.r-divin {
+  border-left-color: #ff5cd8;
+}
+.ol-emo {
+  font-size: 18px;
+}
+.ol-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ol-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ol-meta {
+  font-size: 11px;
+  color: var(--dim);
 }
 .over-row {
   display: flex;
