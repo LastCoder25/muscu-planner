@@ -89,6 +89,7 @@
         <!-- Exécution du jour -->
         <div v-if="statusDone" class="done-banner">
           <q-icon name="emoji_events" size="20px" /> Challenge terminé — bravo !
+          <button class="reopen-btn" @click="reopenChallenge">↩ Rouvrir (corriger une erreur)</button>
         </div>
         <div v-else-if="!inToday" class="rest-banner">
           <q-icon name="bedtime" size="18px" />
@@ -263,17 +264,20 @@
           </template>
         </div>
 
-        <!-- Projection segmentée : 1 segment par jour pour visualiser l'avancement -->
+        <!-- Projection segmentée : 1 segment par jour pour visualiser l'avancement.
+             Taper un jour PASSÉ/aujourd'hui → corriger sa valeur (erreur de saisie). -->
         <div v-if="ch.format !== 'cumulative'" class="sec-h">
-          Projection · {{ ch.duration_days }} jours
+          Projection · {{ ch.duration_days }} jours <span class="sec-hint">— touche un jour pour corriger</span>
         </div>
         <div v-if="ch.format !== 'cumulative'" class="seg-strip">
-          <div
+          <button
             v-for="(t, d) in ch.daily_targets"
             :key="d"
             class="seg"
             :class="segState(d)"
+            :disabled="d > dayIndex"
             :title="`J${d + 1} : ${fmtV(doneOf(d))} / ${fmtV(t)}${dayXpOf(d) > 0 ? ' · +' + dayXpOf(d) + ' XP' : ''}`"
+            @click="editDay(d)"
           />
         </div>
         <!-- Gains cumulés (XP = énergie, 1:1) + note surplus -->
@@ -795,6 +799,70 @@ function reopenDay() {
   void persist();
 }
 
+// Rouvre un défi clôturé par erreur (ex. sortie cardio erronée puis corrigée) →
+// repasse en actif pour pouvoir corriger la journée fautive en mode correction.
+function reopenChallenge() {
+  if (!ch.value) return;
+  $q.dialog({
+    title: 'Rouvrir le défi ?',
+    message:
+      'Le défi repasse en cours. Corrige ensuite la journée erronée (mode correction −). Il se re-clôturera de lui-même si le total est de nouveau atteint.',
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Rouvrir', color: 'primary' },
+  }).onOk(() => {
+    void (async () => {
+      await store.setStatus(ch.value!.id, 'active');
+      if (ch.value) ch.value.status = 'active';
+      $q.notify({ type: 'positive', message: 'Défi rouvert — tu peux corriger.' });
+    })();
+  });
+}
+
+// Corrige la valeur réalisée d'un jour passé/courant (erreur de saisie, ex. sortie
+// cardio erronée). Réévalue la complétion : re-clôt si le total reste atteint, sinon
+// rouvre le défi de lui-même.
+function editDay(d: number) {
+  const c = ch.value;
+  if (!c || d > dayIndex.value) return;
+  const cur = doneOf(d);
+  $q.dialog({
+    title: `Corriger le jour ${d + 1}`,
+    message: `${unitWord.value} réalisé${isCardioTime.value ? '' : 's'} ce jour-là :`,
+    prompt: { model: String(cur), type: 'number' },
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Corriger', color: 'primary' },
+  }).onOk((val: string) => {
+    void (async () => {
+      const n = Math.max(0, Math.round(Number(val) || 0));
+      let e = c.progress.find((p: DayProgress) => p.day === d);
+      if (!e) {
+        e = {
+          day: d,
+          date: addDaysIso(c.start_date, d),
+          target: c.daily_targets[d] ?? 0,
+          done: 0,
+          elapsed_sec: 0,
+          completed: false,
+        };
+        c.progress.push(e);
+      }
+      e.done = n;
+      const base = c.daily_targets[d] ?? 0;
+      e.completed = base > 0 && n >= base;
+      // Réévalue le statut global d'après le nouveau total.
+      const complete = isChallengeComplete(c);
+      const nextStatus: 'done' | 'active' | undefined =
+        complete && c.status !== 'done' ? 'done' : !complete && c.status === 'done' ? 'active' : undefined;
+      if (nextStatus) c.status = nextStatus;
+      await store.updateProgress(c.id, c.progress, complete ? 'done' : undefined);
+      if (nextStatus === 'active') {
+        await store.setStatus(c.id, 'active'); // updateProgress ne repasse jamais done→active
+      }
+      $q.notify({ type: 'positive', message: 'Jour corrigé.' });
+    })();
+  });
+}
+
 // Ressenti à la clôture → autorégule les jours restants (silencieux mais visible).
 async function rateAndAdapt(rpe: 1 | 2 | 3 | null) {
   const c = ch.value;
@@ -1159,6 +1227,7 @@ onBeforeUnmount(() => {
 .done-banner {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 14px;
   background: #7bc86c1a;
@@ -1167,6 +1236,17 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   padding: 12px 14px;
   font-size: 14px;
+}
+.reopen-btn {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
 .rest-banner {
   display: flex;
