@@ -441,13 +441,19 @@
               :class="'r-' + f.rarity"
             >
               <span class="fam-mini-emo">{{ f.emoji }}</span>
-              <span class="fam-mini-name">{{ f.name }}</span>
-              <span class="gpill" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
-              <span class="gpill lvl">Lv{{ f.level }}</span>
-              <span v-if="f.effect2" class="gpill sig">✦</span>
-              <span class="fam-mini-eff">{{ itemEffects(f) }}</span>
-              <button class="fam-mini-eq" @click="doEquipFamiliar(f.id)">Équiper</button>
-              <button class="fam-mini-sell" @click="doSell(f)">Vendre 🪙{{ sellValue(f) }}</button>
+              <div class="fam-mini-body">
+                <div class="fam-mini-head">
+                  <span class="fam-mini-name">{{ f.name }}</span>
+                  <span class="gpill" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
+                  <span class="gpill lvl">Lv{{ f.level }}</span>
+                  <span v-if="f.effect2" class="gpill sig">✦</span>
+                </div>
+                <div class="fam-mini-eff">{{ itemEffects(f) }}</div>
+              </div>
+              <div class="fam-mini-acts">
+                <button class="fam-mini-eq" @click="doEquipFamiliar(f.id)">Équiper</button>
+                <button class="fam-mini-sell" @click="doSell(f)">Vendre 🪙{{ sellValue(f) }}</button>
+              </div>
             </div>
           </div>
 
@@ -1447,16 +1453,6 @@
       <q-card v-if="run" class="report-modal" :class="run.cleared ? 'win' : 'lose'">
         <div class="rm-head">
           <div class="rm-title font-display">{{ run.name }}</div>
-          <button
-            v-if="stageDone && !char.row?.pending_reward"
-            class="rm-reattack"
-            :disabled="!canReattack"
-            :title="`Réattaquer (${reattackCost} ⚡)`"
-            aria-label="Réattaquer"
-            @click="reattackLast"
-          >
-            ⚔️
-          </button>
         </div>
         <!-- Corps scrollable : la carte garde une HAUTEUR FIXE → la tête (avec le
              bouton Réattaquer) et les actions ne bougent pas selon le contenu
@@ -1634,6 +1630,14 @@
         </label>
 
         <div class="rm-actions-row">
+          <button
+            v-if="stageDone && !char.row?.pending_reward"
+            class="rm-btn rm-btn-primary"
+            :disabled="!canReattack"
+            @click="reattackLast"
+          >
+            ⚔️ Réattaquer ({{ reattackCost }} ⚡)
+          </button>
           <button class="rm-btn" @click="goInventoryFromReport">🎒 Inventaire</button>
           <button class="rm-btn" @click="reportOpen = false">Fermer</button>
         </div>
@@ -4123,7 +4127,7 @@ onUnmounted(() => {
 }
 .fam-mini {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -4131,6 +4135,23 @@ onUnmounted(() => {
   border-radius: 10px;
   padding: 8px 10px;
   margin-bottom: 6px;
+}
+.fam-mini-body {
+  flex: 1;
+  min-width: 0;
+}
+.fam-mini-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.fam-mini-acts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
 }
 .fam-mini.r-rare {
   border-left-color: #4ec6d6;
@@ -4146,6 +4167,7 @@ onUnmounted(() => {
 }
 .fam-mini-emo {
   font-size: 20px;
+  line-height: 1.2;
 }
 .fam-mini-name {
   font-weight: 600;
@@ -4155,8 +4177,7 @@ onUnmounted(() => {
   color: #4ec6d6;
   font-size: 12px;
   font-weight: 600;
-  flex: 1;
-  min-width: 0;
+  margin-top: 3px;
 }
 .fam-mini-eq {
   border: 1px solid var(--accent);
@@ -5281,22 +5302,6 @@ onUnmounted(() => {
   font-size: 17px;
   font-weight: 700;
 }
-/* Réattaquer : bouton icône en haut à droite (spam-able, ne ferme pas la modale). */
-.rm-reattack {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-  font-size: 18px;
-  cursor: pointer;
-}
-.rm-reattack:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
 .rm-reward {
   margin-top: 14px;
 }
@@ -5348,6 +5353,16 @@ onUnmounted(() => {
 }
 .rm-btn:active {
   transform: scale(0.98);
+}
+.rm-btn-primary {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 700;
+}
+.rm-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* Résultat de run */

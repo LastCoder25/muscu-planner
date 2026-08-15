@@ -155,6 +155,22 @@ export const useCharacterStore = defineStore('character', () => {
     return data;
   }
 
+  // MAJ optimiste : reflète le patch localement TOUT DE SUITE (l'or/les bâtiments
+  // changent à l'écran sans attendre le roundtrip DB), puis persiste (qui écrase
+  // avec la donnée serveur faisant autorité). Rollback si la persistance échoue.
+  async function persistOptimistic(userId: string, patch: Partial<CharacterRow>) {
+    const cur = row.value;
+    if (!cur) return;
+    const prev = row.value;
+    row.value = { ...cur, ...patch };
+    try {
+      await persist(userId, patch);
+    } catch (e) {
+      row.value = prev;
+      throw e;
+    }
+  }
+
   // Range de nouveaux objets : AUTO-ÉQUIPE ceux dont le slot est VIDE (confort :
   // on ne laisse pas un emplacement vide alors qu'on a de quoi le remplir) ; les
   // autres vont au sac. Ne remplace JAMAIS un objet déjà équipé.
@@ -801,7 +817,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!canBuildType(typeId, playerLevel, cur.buildings)) return; // niveau/unicité
     if (cur.gold < t.buildGold) return;
     const b: Building = { typeId, level: 1, slot, collectedAt: now };
-    await persist(userId, { gold: cur.gold - t.buildGold, buildings: [...cur.buildings, b] });
+    await persistOptimistic(userId, { gold: cur.gold - t.buildGold, buildings: [...cur.buildings, b] });
   }
   // Améliore un filon (or ; plafonné au niveau du joueur).
   async function upgradeFilon(userId: string, slot: number, playerLevel: number) {
@@ -811,7 +827,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!b || !canUpgradeBuilding(b, playerLevel)) return;
     const cost = buildingUpgradeCost(b.level);
     if (cur.gold < cost) return;
-    await persist(userId, {
+    await persistOptimistic(userId, {
       gold: cur.gold - cost,
       buildings: cur.buildings.map((x) => (x.slot === slot ? { ...x, level: x.level + 1 } : x)),
     });
@@ -822,7 +838,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || !cur.buildings.length) return null;
     const got = collectable(cur.buildings, now);
     if (got.dust <= 0 && got.stone <= 0) return null;
-    await persist(userId, {
+    await persistOptimistic(userId, {
       dust: cur.dust + got.dust,
       stones: cur.stones + got.stone,
       buildings: cur.buildings.map((b) => ({ ...b, collectedAt: now })),
