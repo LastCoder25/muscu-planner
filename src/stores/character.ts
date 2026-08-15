@@ -69,6 +69,7 @@ export interface CharacterRow {
   expedition_map: ExpeditionMap | null; // carte du monde (POI)
   messages: ExpeditionMessage[]; // boîte à messages 📬 (rapports d'expédition)
   buildings: Building[]; // filons de production passive (village)
+  set_pieces_seen: Record<string, string[]>; // codex : slots de set déjà obtenus par setId
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -87,7 +88,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, expedition, expedition_map, messages, buildings';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, expedition, expedition_map, messages, buildings, set_pieces_seen';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -105,6 +106,7 @@ export const useCharacterStore = defineStore('character', () => {
     r.consumables = obj<Record<string, number>>(r.consumables);
     r.messages = arr<ExpeditionMessage>(r.messages);
     r.buildings = arr<Building>(r.buildings); // colonne récente (migr. 0046)
+    r.set_pieces_seen = obj<Record<string, string[]>>(r.set_pieces_seen); // migr. 0047
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (!r.expedition || typeof r.expedition !== 'object') r.expedition = null;
     if (!r.expedition_map || typeof r.expedition_map !== 'object') r.expedition_map = null;
@@ -168,6 +170,26 @@ export const useCharacterStore = defineStore('character', () => {
       else inv.push(it);
     }
     return { equipped: eq, inventory: inv };
+  }
+
+  // Codex des sets : mémorise les slots de set obtenus (indépendant de l'inventaire,
+  // qu'on casse/vend). Renvoie la map inchangée si rien de nouveau (évite un write).
+  function mergeSetSeen(
+    cur: Record<string, string[]>,
+    items: Array<{ setId?: string; slot: string } | null | undefined>,
+  ): Record<string, string[]> {
+    let changed = false;
+    const next: Record<string, string[]> = { ...cur };
+    for (const it of items) {
+      if (!it?.setId) continue;
+      const slots = next[it.setId] ? [...next[it.setId]!] : [];
+      if (!slots.includes(it.slot)) {
+        slots.push(it.slot);
+        next[it.setId] = slots;
+        changed = true;
+      }
+    }
+    return changed ? next : cur;
   }
 
   // Applique un run de donjon : dépense l'énergie, encaisse or + poussière, range
@@ -268,6 +290,7 @@ export const useCharacterStore = defineStore('character', () => {
       return persist(userId, {
         equipped: dist.equipped,
         inventory: dist.inventory,
+        set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, [cand.item]),
         pending_reward: null,
       });
     }
@@ -339,6 +362,7 @@ export const useCharacterStore = defineStore('character', () => {
       stones: cur.stones + (input.stones ?? 0),
       equipped: dist.equipped,
       inventory: dist.inventory,
+      set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, input.drops),
     });
   }
 
@@ -580,7 +604,11 @@ export const useCharacterStore = defineStore('character', () => {
       preferSlot: opts.slot,
     });
     const it: Item = { ...piece, id: crypto.randomUUID() };
-    return persist(userId, { dust: cur.dust - cost, inventory: [...cur.inventory, it] });
+    return persist(userId, {
+      dust: cur.dust - cost,
+      inventory: [...cur.inventory, it],
+      set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, [it]),
+    });
   }
 
   // Récompense de connexion du jour (une fois par jour logique). Renvoie le gain
@@ -737,7 +765,8 @@ export const useCharacterStore = defineStore('character', () => {
     const exp = cur?.expedition;
     if (!cur || !exp || now < exp.returnAt) return null;
     const o = exp.outcome;
-    const inventory = o.item ? [...cur.inventory, { ...o.item, id: crypto.randomUUID() }] : cur.inventory;
+    const gained = o.item ? { ...o.item, id: crypto.randomUUID() } : null;
+    const inventory = gained ? [...cur.inventory, gained] : cur.inventory;
     // Si le rapport n'a jamais été déposé (app fermée tout du long), on le dépose aussi.
     const messages = exp.reported
       ? cur.messages
@@ -749,6 +778,7 @@ export const useCharacterStore = defineStore('character', () => {
       keys: cur.keys + o.key,
       inventory,
       messages,
+      set_pieces_seen: gained ? mergeSetSeen(cur.set_pieces_seen, [gained]) : cur.set_pieces_seen,
       expedition: null,
     });
     return o;

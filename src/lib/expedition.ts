@@ -359,16 +359,29 @@ export function resolveOutcome(
     item = rollDrop(rng, { cleared: true, defeated: 1, level: poi.level, luck: 0.4, spread: 1 });
     key = rng() < 0.1 ? 1 : 0;
   }
-  return {
-    win: true,
-    gold: goldHaul,
-    dust: dustHaul,
-    stones: stoneHaul,
-    item,
-    key,
-    reconBonus: 0,
-    text: pick(rng, WIN_TEXT[poi.type]),
-  };
+  let gold = goldHaul;
+  let dust = dustHaul;
+  let stones = stoneHaul;
+  let text = pick(rng, WIN_TEXT[poi.type]);
+  // EMBUSCADE sur le trajet (seedée) : ~35 % de chance d'un combat rapide en chemin.
+  // Gagné → butin renforcé ; subi (héros trop faible) → butin écorné. Risque/reward.
+  if (rng() < 0.35) {
+    const ambushWon = simulateCombat(hero, poiCombatant(Math.max(1, poi.level - 1), 'camp'), {
+      seed: seed + 31,
+      goldOnWin: 0,
+    }).win;
+    if (ambushWon) {
+      gold = Math.round(gold * 1.25);
+      dust = Math.round(dust * 1.3);
+      stones = Math.round(stones * 1.3);
+      text += ' ⚔️ Embuscade repoussée en chemin — butin renforcé !';
+    } else {
+      gold = Math.round(gold * 0.7);
+      dust = Math.round(dust * 0.7);
+      text += ' 🩸 Embuscade subie sur le trajet — butin écorné.';
+    }
+  }
+  return { win: true, gold, dust, stones, item, key, reconBonus: 0, text };
 }
 
 // ── Fond de carte : PARCHEMIN dessiné à l'encre (style « livre d'aventure ») ──

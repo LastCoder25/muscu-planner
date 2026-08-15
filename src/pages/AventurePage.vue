@@ -2014,11 +2014,17 @@ const codexSum = computed(() =>
     char.row?.equipped ?? {},
     char.row?.inventory ?? [],
     char.row?.defeated_bosses ?? [],
+    char.row?.set_pieces_seen ?? {},
   ),
 );
 const bestiaryList = computed(() => bestiary(clearedIds.value));
 const setsList = computed(() =>
-  setCollection(char.row?.equipped ?? {}, char.row?.inventory ?? [], char.row?.defeated_bosses ?? []),
+  setCollection(
+    char.row?.equipped ?? {},
+    char.row?.inventory ?? [],
+    char.row?.defeated_bosses ?? [],
+    char.row?.set_pieces_seen ?? {},
+  ),
 );
 const bossNameById = (id: string | undefined) => BOSSES.find((b) => b.id === id)?.name ?? '';
 // Déblocages franchis lors du dernier level-up (from → to) → affichés sur l'écran

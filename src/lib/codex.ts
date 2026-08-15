@@ -51,11 +51,14 @@ export function setCollection(
   equipped: Equipped,
   inventory: Item[],
   defeatedBossIds: string[],
+  // Journal des pièces DÉJÀ OBTENUES (map setId → slots) : le codex reflète ce qu'on
+  // a possédé, même après avoir cassé/vendu la pièce (c9dd608d).
+  seen: Record<string, string[]> = {},
 ): SetCollectionEntry[] {
   const defeated = new Set(defeatedBossIds);
   const all: Item[] = [...SLOTS.map((s) => equipped[s]).filter((i): i is Item => !!i), ...inventory];
   return ITEM_SETS.map((set) => {
-    const slotsOwned = new Set<string>();
+    const slotsOwned = new Set<string>(seen[set.id] ?? []);
     for (const it of all) if (it.setId === set.id) slotsOwned.add(it.slot);
     const owned = Math.min(4, slotsOwned.size);
     const boss = BOSSES.find((b) => b.setId === set.id);
@@ -83,9 +86,10 @@ export function codexSummary(
   equipped: Equipped,
   inventory: Item[],
   defeatedBossIds: string[],
+  seen: Record<string, string[]> = {},
 ): CodexSummary {
   const b = bestiary(clearedDungeonIds);
-  const sets = setCollection(equipped, inventory, defeatedBossIds);
+  const sets = setCollection(equipped, inventory, defeatedBossIds, seen);
   return {
     monstersFound: b.filter((e) => e.discovered).length,
     monstersTotal: b.length,
