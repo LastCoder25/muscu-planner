@@ -1,7 +1,9 @@
 <template>
   <q-page class="combo-session">
     <header class="top">
-      <button class="iconbtn" aria-label="Retour" @click="router.back()">‹</button>
+      <button class="iconbtn" aria-label="Retour" @click="phase === 'run' ? cancel() : router.back()">
+        ‹
+      </button>
       <div class="top-title font-display">Séance · Défi 360</div>
       <div class="top-spacer" />
     </header>
@@ -108,11 +110,20 @@
             :key="j"
             class="s-set"
             :class="{ done: isDone(i, j) }"
-            :disabled="isDone(i, j)"
             @click="validate(i, j, reps)"
           >
-            <span v-if="isDone(i, j)">✓</span>
+            <span v-if="isDone(i, j)">✓ {{ doneReps(i, j) }}</span>
             <template v-else>{{ reps }}</template>
+          </button>
+          <!-- Ajuster le nb de séries de cet exo (en faire plus / moins). -->
+          <button class="s-adj" title="Une série de plus" @click="addSetSlot(i)">＋</button>
+          <button
+            class="s-adj"
+            :disabled="!canRemoveSlot(i)"
+            title="Retirer la dernière série (non faite)"
+            @click="removeSetSlot(i)"
+          >
+            −
           </button>
         </div>
       </div>
@@ -127,7 +138,18 @@
         label="Terminer la séance"
         @click="finish"
       />
+      <button class="cancel-btn" @click="cancel">Annuler la séance</button>
     </template>
+
+    <SetLogDialog
+      v-model="logOpen"
+      :title="logExoName"
+      :assistable="logAssistable"
+      :initial-reps="logReps"
+      :initial-weight="logWeight"
+      :initial-assisted="logAssisted"
+      @save="onLogSave"
+    />
   </q-page>
 </template>
 
@@ -144,6 +166,7 @@ import {
   type ComboSessionExo,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
+import SetLogDialog from '@/components/SetLogDialog.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -192,13 +215,33 @@ const previewSets = computed(() =>
 );
 const previewExos = computed(() => previewSession.value.length);
 
-// Séance figée au démarrage (ne bouge plus quand on valide des séries).
+// Séance générée au démarrage. Les séries validées sont accumulées LOCALEMENT
+// (pas d'enregistrement en direct) → on ne commite qu'à la fin (ou au choix à
+// l'annulation). Le nb de séries par exo est ajustable pendant la séance.
 const session = ref<ComboSessionExo[]>([]);
-const done = ref<Set<string>>(new Set());
+// Séries validées, clé `i-j` → { reps, weight, assisted } saisis par l'utilisateur.
+const logged = ref<Record<string, { reps: number; weight: number | null; assisted: boolean }>>({});
 const totalSets = computed(() => session.value.reduce((a, e) => a + e.sets.length, 0));
-const validatedCount = computed(() => done.value.size);
+const validatedCount = computed(() => Object.keys(logged.value).length);
 function isDone(i: number, j: number) {
-  return done.value.has(`${i}-${j}`);
+  return `${i}-${j}` in logged.value;
+}
+function doneReps(i: number, j: number) {
+  return logged.value[`${i}-${j}`]?.reps ?? 0;
+}
+function canRemoveSlot(i: number) {
+  const exo = session.value[i];
+  if (!exo || exo.sets.length === 0) return false;
+  return !isDone(i, exo.sets.length - 1); // on ne retire pas une série déjà faite
+}
+function addSetSlot(i: number) {
+  const exo = session.value[i];
+  if (!exo) return;
+  exo.sets.push(exo.sets[exo.sets.length - 1] ?? 10); // même reps que la dernière
+}
+function removeSetSlot(i: number) {
+  if (!canRemoveSlot(i)) return;
+  session.value[i]!.sets.pop();
 }
 
 // Chrono séance + repos.
@@ -210,29 +253,89 @@ const elapsedLabel = computed(
 );
 
 function start() {
-  session.value = previewSession.value;
+  // Copie profonde des sets (tableaux mutables → ajout/retrait de séries).
+  session.value = previewSession.value.map((e) => ({ ...e, sets: [...e.sets] }));
+  logged.value = {};
   phase.value = 'run';
   tick = setInterval(() => {
     elapsed.value++;
     if (restLeft.value > 0) restLeft.value--;
   }, 1000);
 }
+
+// Ouverture du dialogue de saisie (reps + poids + assisté) pour une série.
+const logOpen = ref(false);
+const logSlot = ref<{ i: number; j: number } | null>(null);
+const logExoName = ref('');
+const logReps = ref(10);
+const logWeight = ref<number | null>(null);
+const logAssisted = ref(false);
+const logAssistable = ref(false);
+
 function validate(i: number, j: number, reps: number) {
-  if (isDone(i, j) || !c.value) return;
   const exo = session.value[i];
   if (!exo) return;
-  // Chaque série validée alimente le défi (reps + poids de l'exo). Optimiste.
-  combo.addSet(id, exo.exercise_id, logicalToday(), reps, exo.weight_kg ?? null);
-  done.value = new Set(done.value).add(`${i}-${j}`);
-  restLeft.value = restSec.value;
+  const leg = c.value?.legs.find((l) => l.exercise_id === exo.exercise_id);
+  const prev = logged.value[`${i}-${j}`];
+  logSlot.value = { i, j };
+  logExoName.value = exo.exercise_name;
+  logReps.value = prev?.reps ?? reps;
+  logWeight.value = prev?.weight ?? exo.weight_kg ?? null;
+  logAssisted.value = prev?.assisted ?? false;
+  logAssistable.value = !!leg?.assistable;
+  logOpen.value = true;
+}
+function onLogSave(v: { reps: number; weight: number | null; assisted: boolean }) {
+  const slot = logSlot.value;
+  if (!slot) return;
+  const key = `${slot.i}-${slot.j}`;
+  const wasDone = key in logged.value;
+  logged.value = { ...logged.value, [key]: v };
+  if (!wasDone) restLeft.value = restSec.value; // repos après une NOUVELLE série
   if (validatedCount.value >= totalSets.value) {
     $q.notify({ type: 'positive', message: 'Toutes les séries faites 💪' });
   }
 }
+
+// Enregistre au défi toutes les séries validées localement (à la fin / au choix).
+function commitLogged() {
+  const today = logicalToday();
+  const entries = Object.entries(logged.value) as [
+    string,
+    { reps: number; weight: number | null; assisted: boolean },
+  ][];
+  for (const [key, v] of entries) {
+    const i = Number(key.split('-')[0]);
+    const exo = session.value[i];
+    if (exo) combo.addSet(id, exo.exercise_id, today, v.reps, v.weight, v.assisted);
+  }
+}
 function finish() {
   const n = validatedCount.value;
+  if (n > 0) commitLogged();
   $q.notify({ type: 'positive', message: `Séance terminée · ${n} série${n > 1 ? 's' : ''}` });
   void router.replace(`/combo/${id}`);
+}
+function cancel() {
+  const n = validatedCount.value;
+  if (n === 0) {
+    void router.replace(`/combo/${id}`);
+    return;
+  }
+  $q.dialog({
+    title: 'Annuler la séance ?',
+    message: `Tu as fait ${n} série${n > 1 ? 's' : ''}. Les conserver dans ton Défi 360 ?`,
+    ok: { label: 'Conserver', color: 'primary' },
+    cancel: { label: 'Jeter', flat: true, color: 'negative' },
+  })
+    .onOk(() => {
+      commitLogged();
+      $q.notify({ type: 'positive', message: `${n} série${n > 1 ? 's' : ''} conservée${n > 1 ? 's' : ''}` });
+      void router.replace(`/combo/${id}`);
+    })
+    .onCancel(() => {
+      void router.replace(`/combo/${id}`);
+    });
 }
 
 onMounted(async () => {
@@ -414,5 +517,31 @@ onUnmounted(() => clearInterval(tick));
   background: var(--d1);
   border-color: var(--d1);
   color: var(--accent-ink, #15120e);
+  font-size: 13px;
+}
+.s-adj {
+  min-width: 40px;
+  height: 46px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.s-adj:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.cancel-btn {
+  display: block;
+  margin: 12px auto 0;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
 }
 </style>
