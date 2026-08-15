@@ -385,8 +385,9 @@
         <!-- Familier (compagnon) : 5ᵉ emplacement, monté aux PIERRES MAGIQUES 💎 -->
         <div class="sec-title">🐾 Familier</div>
         <div class="sec-hint">
-          Ton compagnon donne un bonus. Monte-le avec des <b>💎 pierres magiques</b> (Labyrinthe &
-          butin). <b>💎 {{ char.row.stones }}</b> dispo.
+          Ton compagnon donne un bonus de race. Les plus rares portent en plus un effet
+          <b>✦ signature</b> (exécution, fureur, élan). Monte-le avec des <b>💎 pierres magiques</b>
+          (Labyrinthe & butin). <b>💎 {{ char.row.stones }}</b> dispo.
         </div>
         <div class="fam-panel">
           <div
@@ -402,6 +403,7 @@
                   RARITY_LABEL[equippedFamiliar.rarity]
                 }}</span>
                 <span class="gpill lvl">Lvl {{ equippedFamiliar.level }}</span>
+                <span v-if="equippedFamiliar.effect2" class="gpill sig">✦ Signature</span>
               </div>
               <div class="fam-eff">{{ itemEffects(equippedFamiliar) }}</div>
               <div v-if="familiarBlurb(equippedFamiliar)" class="fam-blurb">
@@ -442,6 +444,7 @@
               <span class="fam-mini-name">{{ f.name }}</span>
               <span class="gpill" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
               <span class="gpill lvl">Lv{{ f.level }}</span>
+              <span v-if="f.effect2" class="gpill sig">✦</span>
               <span class="fam-mini-eff">{{ itemEffects(f) }}</span>
               <button class="fam-mini-eq" @click="doEquipFamiliar(f.id)">Équiper</button>
               <button class="fam-mini-sell" @click="doSell(f)">Vendre 🪙{{ sellValue(f) }}</button>
@@ -4313,6 +4316,11 @@ onUnmounted(() => {
   color: var(--dark, #15120e);
   background: var(--accent);
   border-color: var(--accent);
+}
+.gpill.sig {
+  color: #ffd23f;
+  border-color: #ffd23f;
+  background: rgba(255, 210, 63, 0.12);
 }
 .winpct {
   font-weight: 700;

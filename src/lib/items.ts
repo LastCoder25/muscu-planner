@@ -437,9 +437,28 @@ export function nextRarity(r: Rarity): Rarity | null {
   return i >= 0 && i < RARITY_ORDER.length - 1 ? RARITY_ORDER[i + 1]! : null;
 }
 
+// Effets SIGNATURE possibles sur un familier (2ᵉ effet conditionnel, en plus du bonus
+// de race). Bases modestes → une cerise, pas un doublon d'objet ; grandit à l'infusion.
+const FAMILIAR_SIGNATURE: { type: EffectType; base: number }[] = [
+  { type: 'execute_pct', base: 10 },
+  { type: 'rage_pct', base: 10 },
+  { type: 'momentum_pct', base: 3 },
+];
+// Chance de rouler un effet signature selon la rareté : nulle en commun, croissante
+// jusqu'au divin → un familier SIGNATURE est une trouvaille désirable (« option »).
+const FAMILIAR_SIG_CHANCE: Record<Rarity, number> = {
+  common: 0,
+  rare: 0.1,
+  epic: 0.22,
+  legendary: 0.4,
+  divin: 0.65,
+};
+
 /** Tire un FAMILIER d'une race donnée. L'effet = le bonus de la race, magnitude
- *  variable (rareté × niveau × variance ±20 %), comme un objet. `opts.rarity` force
- *  la rareté (fusion) ; sinon tirée au hasard. Pur/testable. */
+ *  variable (rareté × niveau × variance ±20 %), comme un objet. En plus, selon la
+ *  rareté, une CHANCE de rouler un effet SIGNATURE (execute/rage/momentum) en `effect2`
+ *  → familier « buff constant + option signature ». `opts.rarity` force la rareté
+ *  (fusion) ; sinon tirée au hasard. Pur/testable. */
 export function rollFamiliar(
   rng: () => number,
   species: FamiliarSpecies,
@@ -448,6 +467,11 @@ export function rollFamiliar(
   const rarity = opts.rarity ?? rollRarity(rng, opts.luck ?? 0);
   const value = Math.max(1, Math.round(species.base * RARITY_MULT[rarity] * (0.8 + rng() * 0.4)));
   const level = 1; // REFONTE C : le familier arrive niv.1 (identité de race) → à infuser
+  let effect2: ItemEffect | undefined;
+  if (rng() < FAMILIAR_SIG_CHANCE[rarity]) {
+    const sig = FAMILIAR_SIGNATURE[Math.floor(rng() * FAMILIAR_SIGNATURE.length)]!;
+    effect2 = { type: sig.type, value: Math.max(1, Math.round(sig.base * RARITY_MULT[rarity] * (0.8 + rng() * 0.4))) };
+  }
   return {
     slot: FAMILIAR_SLOT,
     name: species.name,
@@ -456,6 +480,7 @@ export function rollFamiliar(
     level,
     baseLevel: level,
     effect: { type: species.effect, value },
+    ...(effect2 ? { effect2 } : {}),
     species: species.id,
   };
 }
@@ -709,9 +734,14 @@ export function aggregateEffects(equipped: Equipped, capLevel = Infinity): Aggre
     applyEffect(a, it.effect.type, effectiveValue(it.effect, lv) / 100);
     if (it.effect2) applyEffect(a, it.effect2.type, effectiveValue(it.effect2, lv) / 100);
   }
-  // Familier (slot parallèle, hors SLOTS) : son bonus de race compte comme un effet.
+  // Familier (slot parallèle, hors SLOTS) : son bonus de race + son éventuel effet
+  // SIGNATURE (effect2) comptent comme des effets.
   const fam = equipped[FAMILIAR_SLOT];
-  if (fam) applyEffect(a, fam.effect.type, effectiveValue(fam.effect, Math.min(fam.level, capLevel)) / 100);
+  if (fam) {
+    const flv = Math.min(fam.level, capLevel);
+    applyEffect(a, fam.effect.type, effectiveValue(fam.effect, flv) / 100);
+    if (fam.effect2) applyEffect(a, fam.effect2.type, effectiveValue(fam.effect2, flv) / 100);
+  }
   // Bonus de set (2/3/4 pièces) — ajoutés par-dessus les effets d'objet.
   const s = setEffects(equipped, capLevel);
   a.damagePct += s.damagePct;

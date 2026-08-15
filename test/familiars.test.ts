@@ -82,6 +82,39 @@ describe('familiers — effet compté dans le combat', () => {
   });
 });
 
+describe('familiers — effet signature (buff constant + option)', () => {
+  it('un familier commun ne roule jamais de signature (effect2)', () => {
+    for (let s = 0; s < 40; s++) {
+      const f = rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'common' });
+      expect(f.effect2).toBeUndefined();
+    }
+  });
+  it('un familier divin roule parfois une signature (execute/rage/momentum)', () => {
+    let found = 0;
+    for (let s = 0; s < 60; s++) {
+      const f = rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'divin' });
+      if (f.effect2) {
+        found++;
+        expect(['execute_pct', 'rage_pct', 'momentum_pct']).toContain(f.effect2.type);
+      }
+    }
+    expect(found).toBeGreaterThan(0);
+  });
+  it("l'effet signature du familier est compté dans aggregateEffects", () => {
+    // Cherche un seed qui donne un familier divin AVEC signature.
+    let fam: Item | null = null;
+    for (let s = 0; s < 60 && !fam; s++) {
+      const f = { id: 'f', ...rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'divin' }) };
+      if (f.effect2) fam = f;
+    }
+    expect(fam).not.toBeNull();
+    const agg = aggregateEffects({ familiar: fam! });
+    // le bonus de race (damage) ET la signature sont pris en compte.
+    const anySig = agg.executePct + agg.ragePct + agg.momentumPct;
+    expect(anySig).toBeGreaterThan(0);
+  });
+});
+
 describe('familiers — pierres magiques & sélection', () => {
   it('familiarStoneCost croît avec le niveau et la rareté', () => {
     expect(familiarStoneCost(1, 'common')).toBeLessThan(familiarStoneCost(10, 'common'));
