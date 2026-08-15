@@ -115,8 +115,69 @@
           </div>
         </div>
 
+        <!-- Cette semaine : régularité -->
+        <div class="sec-h">Cette semaine</div>
+        <div class="kpis">
+          <div class="kpi">
+            <span class="kpi-v font-display">{{ weekSetsTotal }}</span
+            ><span class="kpi-l">séries</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-v font-display">{{ muscuFreq30 }}</span
+            ><span class="kpi-l">séances / 30 j</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-v font-display">{{ weekStreak }}</span
+            ><span class="kpi-l">sem. d’affilée</span>
+          </div>
+        </div>
+
+        <!-- Volume hebdo RÉEL vs CIBLE (ferme la boucle du programme) -->
+        <template v-if="volStatus.length">
+          <div class="sec-h">Volume hebdo vs objectif</div>
+          <div class="grp-card">
+            <div v-for="s in volStatus" :key="s.muscle" class="grp-row">
+              <span class="grp-name"
+                ><span class="grp-dot" :style="{ background: muscleColor(s.muscle) }" />{{
+                  s.muscle
+                }}</span
+              >
+              <div class="grp-bar">
+                <div class="grp-fill" :style="{ width: volPct(s) + '%', background: VOL_COLORS[s.state] }" />
+              </div>
+              <span class="grp-val" :class="'vs-' + s.state"
+                ><b>{{ s.done }}</b
+                >/{{ s.target }}</span
+              >
+            </div>
+          </div>
+          <p class="hint hint-legend">
+            <span class="vs-dot low" /> négligé · <span class="vs-dot ok" /> dans la cible ·
+            <span class="vs-dot high" /> au-dessus. Cible hebdo = ton programme (objectif, niveau,
+            sports).
+          </p>
+        </template>
+
+        <!-- Volume par semaine (tendance) -->
+        <div class="sec-h">Volume par semaine (8 sem.)</div>
+        <div class="wk-chart">
+          <div
+            v-for="(w, i) in weekSeries"
+            :key="w.weekStart"
+            class="wk-col"
+            :title="w.weekStart + ' — ' + w.sets + ' séries'"
+          >
+            <div
+              class="wk-bar"
+              :class="{ cur: i === weekSeries.length - 1 }"
+              :style="{ height: Math.round((w.sets / maxWeekSets) * 100) + '%' }"
+            />
+            <span class="wk-x">{{ w.sets }}</span>
+          </div>
+        </div>
+
         <!-- Séries par groupe musculaire -->
-        <div class="sec-h">Séries par groupe musculaire</div>
+        <div class="sec-h">Séries par groupe musculaire (total)</div>
         <div class="grp-card">
           <div v-for="g in muscleSets" :key="g.muscle" class="grp-row">
             <span class="grp-name"
@@ -237,7 +298,17 @@ import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useTennisStore, type DrillLogRow } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
-import { muscleColor } from '@/lib/volume';
+import {
+  muscleColor,
+  weeklySetsByMuscle,
+  volumeVsTarget,
+  weeklyVolumeSeries,
+  muscuSessionsInLastDays,
+  muscuWeekStreak,
+  type LogEntry,
+} from '@/lib/volume';
+import { computeMuscleTargets } from '@/lib/programBuilder';
+import { useProfileStore } from '@/stores/profile';
 import { DRILL_SHOT_LABELS } from '@/data/tennis';
 import { useProgress } from '@/composables/useProgress';
 import { useCharacterStore } from '@/stores/character';
@@ -251,6 +322,7 @@ const router = useRouter();
 const $q = useQuasar();
 
 const logsStore = useLogsStore();
+const profileStore = useProfileStore();
 const tennis = useTennisStore();
 const cardio = useCardioStore();
 const char = useCharacterStore();
@@ -371,6 +443,34 @@ const totalSets = computed(() => muscleSets.value.reduce((a, g) => a + g.sets, 0
 const maxMuscle = computed(() => Math.max(1, ...muscleSets.value.map((g) => g.sets)));
 function barPct(n: number) {
   return Math.round((n / maxMuscle.value) * 100);
+}
+
+// ── Volume HEBDO : réel vs cible + tendances (ferme la boucle du programme) ──
+const entries = computed<LogEntry[]>(() =>
+  logs.value.map((r) => ({ performedAt: r.performed_at, log: r.payload })),
+);
+// Date du jour en LOCAL (jamais toISOString → pas de décalage de fuseau).
+const todayIso = (() => {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+})();
+const targets = computed(() =>
+  profileStore.profile ? computeMuscleTargets(profileStore.profile) : {},
+);
+const weeklyDone = computed(() => weeklySetsByMuscle(entries.value, todayIso));
+const volStatus = computed(() => volumeVsTarget(weeklyDone.value, targets.value));
+const weekSeries = computed(() => weeklyVolumeSeries(entries.value, 8, todayIso));
+const maxWeekSets = computed(() => Math.max(1, ...weekSeries.value.map((w) => w.sets)));
+const muscuFreq30 = computed(() => muscuSessionsInLastDays(entries.value, 30, todayIso));
+const weekStreak = computed(() => muscuWeekStreak(entries.value, todayIso));
+const weekSetsTotal = computed(() => Object.values(weeklyDone.value).reduce((a, b) => a + b, 0));
+// Couleur par état : négligé (rouge) / dans la cible (jaune voltage) / au-dessus (orange).
+const VOL_COLORS: Record<string, string> = { low: '#FF6A45', ok: '#FFD23F', high: '#FFB23F' };
+// Largeur de barre = done/target plafonné à 100 % (le surplus se lit à la couleur).
+function volPct(s: { pct: number }) {
+  return Math.round(Math.min(1, s.pct) * 100);
 }
 
 async function openExercise(id: string) {
@@ -787,5 +887,72 @@ onMounted(async () => {
   font-size: 12px;
   margin-top: 10px;
   text-align: center;
+}
+
+/* Volume hebdo vs cible : la valeur "done/target" se teinte selon l'état. */
+.grp-val.vs-low b {
+  color: #ff6a45;
+}
+.grp-val.vs-high b {
+  color: #ffb23f;
+}
+.hint-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.vs-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.vs-dot.low {
+  background: #ff6a45;
+}
+.vs-dot.ok {
+  background: var(--accent);
+}
+.vs-dot.high {
+  background: #ffb23f;
+}
+
+/* Tendance : volume par semaine (barres). */
+.wk-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 120px;
+  padding: 8px 10px 0;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+}
+.wk-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 4px;
+}
+.wk-bar {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+  transition: height 0.3s;
+}
+.wk-bar.cur {
+  background: var(--accent);
+}
+.wk-x {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: var(--dim);
 }
 </style>
