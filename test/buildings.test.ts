@@ -130,11 +130,12 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
     expect(expeditionsUnlocked([mk('dust_vein', 5)])).toBe(false);
     expect(expeditionsUnlocked([mk('outpost', 1)])).toBe(true);
   });
-  it('travelTimeMult < 1 et décroît avec le niveau (plancher à −60 %)', () => {
+  it('travelTimeMult < 1 et décroît avec le niveau (−1,5 %/niv, plancher −60 % au niv.40)', () => {
     expect(travelTimeMult([])).toBe(1);
-    expect(travelTimeMult([mk('outpost', 1)])).toBeCloseTo(0.94, 5); // −6 %
-    expect(travelTimeMult([mk('outpost', 5)])).toBeCloseTo(0.7, 5); // −30 %
-    expect(travelTimeMult([mk('outpost', 20)])).toBeCloseTo(0.4, 5); // plafonné −60 %
+    expect(travelTimeMult([mk('outpost', 1)])).toBeCloseTo(0.985, 5); // −1,5 %
+    expect(travelTimeMult([mk('outpost', 13)])).toBeCloseTo(0.805, 5); // −19,5 %
+    expect(travelTimeMult([mk('outpost', 40)])).toBeCloseTo(0.4, 5); // plafonné −60 % au niv.40
+    expect(travelTimeMult([mk('outpost', 60)])).toBeCloseTo(0.4, 5); // reste plafonné
     expect(outpostLevel([mk('outpost', 3)])).toBe(3);
   });
 });

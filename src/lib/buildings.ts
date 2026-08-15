@@ -83,10 +83,13 @@ export const BUILDING_TYPES: BuildingType[] = [
     label: 'Avant-poste d’expédition',
     emoji: '🧭',
     category: 'utility',
-    effect: { expeSpeedPerLvl: 0.06 }, // −6 % de trajet / niveau (plancher via cap)
+    // −1,5 % de trajet / niveau : le plafond (−60 %) n'est atteint qu'au niveau 40 de
+    // l'avant-poste → montée étalée sur toute la partie (le jeu va jusqu'au niv.100),
+    // pas un max dès le niveau 10 comme avant (6 %/niv). Niv.13 ≈ −20 %.
+    effect: { expeSpeedPerLvl: 0.015 },
     buildGold: 400, // 1er niveau bon marché : c'est le déblocage
     unique: true,
-    desc: 'Débloque les expéditions. Chaque niveau réduit les temps de trajet (−6 %).',
+    desc: 'Débloque les expéditions. Chaque niveau réduit les temps de trajet (−1,5 %).',
   },
   // Utilitaire UNIQUE : augmente le STOCKAGE de tous les filons (tu peux louper
   // plus de jours sans saturer). Débloqué niv.7 (offset des boss). +15 %/niveau.
