@@ -13,20 +13,20 @@
     <!-- Configuration de la séance -->
     <template v-else-if="phase === 'config'">
       <p class="intro">
-        Une séance <b>calée sur ton temps</b> à partir des reps qu'il te reste. Chaque série ≈ 40 s
-        d'exécution + le repos choisi.
+        Choisis <b>combien de séries</b> tu veux faire, réparties sur les exos qu'il te reste.
+        Chaque série ≈ 40 s d'exécution + le repos choisi.
       </p>
       <div class="cfg">
-        <div class="cfg-lbl">Temps dispo</div>
+        <div class="cfg-lbl">Nombre de séries</div>
         <div class="chips">
           <button
-            v-for="m in DURATIONS"
-            :key="m"
+            v-for="n in SET_COUNTS"
+            :key="n"
             class="chip"
-            :class="{ on: minutes === m }"
-            @click="minutes = m"
+            :class="{ on: targetSets === n }"
+            @click="targetSets = n"
           >
-            {{ m }} min
+            {{ n }}
           </button>
         </div>
       </div>
@@ -71,7 +71,7 @@
         </button>
       </div>
       <div class="preview">
-        ≈ <b>{{ previewSets }}</b> séries sur ~{{ minutes }} min · {{ previewExos }} exo{{
+        <b>{{ previewSets }}</b> séries · ~{{ previewMinutes }} min · {{ previewExos }} exo{{
           previewExos > 1 ? 's' : ''
         }}
       </div>
@@ -160,7 +160,7 @@ import { useQuasar } from 'quasar';
 import { useComboStore } from '@/stores/combo';
 import {
   buildComboSession,
-  comboSessionSetBudget,
+  comboSessionDurationMin,
   legRemaining,
   legUnitLabel,
   type ComboSessionExo,
@@ -176,9 +176,9 @@ const combo = useComboStore();
 const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 
-const DURATIONS = [15, 30, 45, 60];
+const SET_COUNTS = [6, 9, 12, 15, 20];
 const RESTS = [30, 60, 90];
-const minutes = ref(30);
+const targetSets = ref(12);
 const restSec = ref(60);
 const phase = ref<'config' | 'run'>('config');
 
@@ -197,22 +197,19 @@ const includeIds = computed(() =>
   pickMode.value === 'manual' && chosenIds.value.length ? chosenIds.value : undefined,
 );
 
-// Aperçu (avant de commencer) — recalculé selon temps/repos/sélection.
+// Aperçu (avant de commencer) — recalculé selon nb de séries/repos/sélection.
 const previewSession = computed(() =>
   c.value
     ? buildComboSession(c.value, {
-        minutes: minutes.value,
+        sets: targetSets.value,
         restSec: restSec.value,
         ...(includeIds.value ? { includeIds: includeIds.value } : {}),
       })
     : [],
 );
-const previewSets = computed(() =>
-  Math.min(
-    comboSessionSetBudget(minutes.value, restSec.value),
-    previewSession.value.reduce((a, e) => a + e.sets.length, 0),
-  ),
-);
+// Séries réellement plaçables (borné par les séries restantes) + durée estimée.
+const previewSets = computed(() => previewSession.value.reduce((a, e) => a + e.sets.length, 0));
+const previewMinutes = computed(() => comboSessionDurationMin(previewSets.value, restSec.value));
 const previewExos = computed(() => previewSession.value.length);
 
 // Séance générée au démarrage. Les séries validées sont accumulées LOCALEMENT

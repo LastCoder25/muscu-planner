@@ -241,17 +241,24 @@ export function comboSessionSetBudget(minutes: number, restSec: number): number 
   return Math.max(1, Math.floor((minutes * 60) / perSet));
 }
 
+/** Durée estimée (min) d'une séance de `sets` séries (exécution + repos) → affichage
+ *  quand on choisit directement le nombre de séries. */
+export function comboSessionDurationMin(sets: number, restSec: number): number {
+  const perSet = COMBO_EXEC_SEC + Math.max(0, restSec);
+  return Math.max(1, Math.round((sets * perSet) / 60));
+}
+
 /**
- * Génère une SÉANCE TIME-BOXÉE à partir des SÉRIES restantes : on ne dump pas
- * tout — on remplit une séance de `minutes` (chaque série = ~40 s + repos),
- * répartie en round-robin sur les exos dont il reste des séries. Chaque série
- * reprend les reps de la dernière série faite (ou un défaut). Pur/testable.
+ * Génère une SÉANCE à partir des SÉRIES restantes : on ne dump pas tout — on
+ * remplit un BUDGET de séries (soit choisi directement via `sets`, soit déduit
+ * d'un temps `minutes`), réparti en round-robin sur les exos dont il reste des
+ * séries. Chaque série reprend les reps de la dernière faite (ou un défaut). Pur/testable.
  */
 export function buildComboSession(
   c: ComboChallenge,
-  opts: { minutes: number; restSec: number; includeIds?: string[] },
+  opts: { minutes?: number; restSec: number; sets?: number; includeIds?: string[] },
 ): ComboSessionExo[] {
-  const budget = comboSessionSetBudget(opts.minutes, opts.restSec);
+  const budget = opts.sets ?? comboSessionSetBudget(opts.minutes ?? 30, opts.restSec);
   // Sélection manuelle éventuelle : ne garder que les exos choisis (sinon tous).
   const include = opts.includeIds ? new Set(opts.includeIds) : null;
   const exos = c.legs

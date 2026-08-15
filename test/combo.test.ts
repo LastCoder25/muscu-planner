@@ -22,6 +22,7 @@ import {
   type ComboSlotSpec,
   buildComboSession,
   comboSessionSetBudget,
+  comboSessionDurationMin,
   legSets,
   type ComboChallenge,
   type ComboLeg,
@@ -228,6 +229,15 @@ describe('buildComboSession (time-boxée, en séries)', () => {
   it('includeIds : ne garde que les exos choisis', () => {
     const s = buildComboSession(bigCombo(), { minutes: 45, restSec: 60, includeIds: ['a', 'c'] });
     expect(new Set(s.map((e) => e.exercise_id))).toEqual(new Set(['a', 'c']));
+  });
+  it('budget de séries DIRECT (sets) : place exactement ce nombre', () => {
+    const s = buildComboSession(bigCombo(), { sets: 12, restSec: 60 });
+    const total = s.reduce((a, e) => a + e.sets.length, 0);
+    expect(total).toBe(12);
+  });
+  it('comboSessionDurationMin : durée estimée croît avec les séries et le repos', () => {
+    expect(comboSessionDurationMin(12, 60)).toBeGreaterThan(comboSessionDurationMin(6, 60));
+    expect(comboSessionDurationMin(12, 90)).toBeGreaterThan(comboSessionDurationMin(12, 30));
   });
 });
 
