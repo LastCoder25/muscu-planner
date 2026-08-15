@@ -585,7 +585,7 @@
                     }})</b
                   >
                   <span v-if="infuseCostFor(it)" class="pow-cost"
-                    >une fois infusé · ~{{ infuseCostFor(it) }} ✨</span
+                    >à infuser (~{{ infuseCostFor(it) }} ✨) pour le monter à ton niveau</span
                   >
                 </div>
                 <div class="inv-actions">
@@ -1367,7 +1367,7 @@
                     }})</b
                   >
                   <span v-if="infuseCostFor(cand.item)" class="pow-cost"
-                    >une fois infusé · ~{{ infuseCostFor(cand.item) }} ✨</span
+                    >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton niveau</span
                   >
                 </div>
                 <div v-if="rewardDupNote(cand.item)" class="rc-dup">
@@ -1541,7 +1541,7 @@
                   >{{ fmtPow(powerIfEquip(d)) }} ({{ fmtDelta(combatPowerVal, powerIfEquip(d)) }})</b
                 >
                 <span v-if="infuseCostFor(d)" class="pow-cost"
-                  >une fois infusé · ~{{ infuseCostFor(d) }} ✨</span
+                  >à infuser (~{{ infuseCostFor(d) }} ✨) pour le monter à ton niveau</span
                 >
               </div>
               <div v-if="dropState(d) === 'equipped'" class="drop-done">
@@ -1603,7 +1603,7 @@
                       }})</b
                     >
                     <span v-if="infuseCostFor(cand.item)" class="pow-cost"
-                      >une fois infusé · ~{{ infuseCostFor(cand.item) }} ✨</span
+                      >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton niveau</span
                     >
                   </div>
                   <div v-if="rewardDupNote(cand.item)" class="rc-dup">
@@ -1821,15 +1821,15 @@ const baseFighter = computed(() =>
   playerWithGear(char.row?.pseudo ?? 'Toi', c.value, {}, {}, c.value.level.level),
 );
 const pctA = (x?: number) => Math.round((x ?? 0) * 100) + '%';
-// Puissance de combat SI on équipait cet objet (remplace son slot) → tied au % de
-// victoire : c'est l'indicateur qui dit « ça t'aide à aller plus loin ou pas ».
-// REFONTE C : les drops arrivent niveau 1 (identité) → comparer au niveau BRUT
-// tromperait (une pépite afficherait « nul »). On compare donc au POTENTIEL :
-// l'objet infusé à ton niveau (le vrai verdict « si j'investis, est-ce mieux ? »).
+// Puissance de combat SI on équipait cet objet À SON NIVEAU ACTUEL (remplace son
+// slot). Comparaison HONNÊTE et SYMÉTRIQUE : équiper A puis re-équiper B donne des
+// deltas opposés (+/−), car on compare l'état RÉEL (2026‑08‑15 : avant, on maxait le
+// candidat mais pas l'équipé → équiper un objet niv.1 faisait chuter la puissance
+// réelle alors que le comparatif promettait « +X » → incohérent). Le coût d'infusion
+// est affiché à côté pour signaler le potentiel d'un objet bas niveau.
 function powerIfEquip(it: Item): number {
   const lvl = c.value.level.level;
-  const maxed = it.level >= lvl ? it : { ...it, level: lvl };
-  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: maxed };
+  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: it };
   return combatPower(playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, lvl));
 }
 // Coût en poussière pour infuser un drop jusqu'à ton niveau (affiché à côté du Δ).
@@ -3038,10 +3038,12 @@ const bulkSlot = computed<ItemSlot | undefined>(() =>
 // Puissance de l'objet MONTÉ À TON NIVEAU (poussière) → on prend en compte
 // l'écart de niveau : un objet bas niveau n'est « faible » que s'il l'est ENCORE
 // une fois monté au max possible (= ton niveau). Évite de casser une pépite
-// sous-leveled.
-// `powerIfEquip` évalue déjà au potentiel (objet infusé à ton niveau) → identique.
+// sous-leveled. (≠ powerIfEquip qui compare à niveau réel pour l'affichage.)
 function itemMaxedPower(it: Item): number {
-  return powerIfEquip(it);
+  const lvl = c.value.level.level;
+  const maxed = it.level >= lvl ? it : { ...it, level: lvl };
+  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: maxed };
+  return combatPower(playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, lvl));
 }
 // Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés (même montés à ton
 // niveau) → candidats à la casse/vente en masse. Le `<=` inclut les DOUBLONS de
