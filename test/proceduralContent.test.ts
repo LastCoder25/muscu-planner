@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { simulateDungeon, type DungeonFoe } from '@/lib/combat';
+import { simulateCombat, simulateDungeon, type DungeonFoe } from '@/lib/combat';
 import {
   cumXpForLevel,
   refFighter,
@@ -8,7 +8,10 @@ import {
   proceduralDungeonMonsters,
   proceduralRecos,
   proceduralRegions,
+  proceduralBoss,
+  proceduralSet,
   buildProceduralContent,
+  BOSS_MILESTONES,
   PROC_REGION_COUNT,
 } from '@/lib/proceduralContent';
 
@@ -86,5 +89,47 @@ describe('procedural — calibration (clear ~systématique au reco)', () => {
     // Au bas de la courbe (variation de puissance encore marquée sur 2 niveaux).
     expect(clearPct(25, 23)).toBeLessThan(clearPct(25, 25));
     expect(clearPct(34, 32)).toBeLessThan(clearPct(34, 34));
+  });
+});
+
+describe('procedural — boss de palier + sets', () => {
+  it('BOSS_MILESTONES : 30→100 tous les 5', () => {
+    expect(BOSS_MILESTONES[0]).toBe(30);
+    expect(BOSS_MILESTONES[BOSS_MILESTONES.length - 1]).toBe(100);
+    for (let i = 1; i < BOSS_MILESTONES.length; i++)
+      expect(BOSS_MILESTONES[i]! - BOSS_MILESTONES[i - 1]!).toBe(5);
+  });
+  it('proceduralBoss : unlockLevel = palier, setId lié à proceduralSet', () => {
+    const b = proceduralBoss(45, 3);
+    expect(b.unlockLevel).toBe(45);
+    expect(b.dropLevel).toBe(45);
+    expect(b.setId).toBe(proceduralSet(45, 3).id);
+  });
+  it('proceduralSet : 3 paliers 2/3/4 pièces', () => {
+    const s = proceduralSet(30, 0);
+    expect(s.tiers.map((t) => t.pieces)).toEqual([2, 3, 4]);
+  });
+  it('boss plus coriace qu’un donjon : un build nu gagne rarement, pas toujours', () => {
+    // Boss = check plus dur (nu ~35-55 % au palier → ~65-75 % équipé). On vérifie
+    // juste que c'est ni trivial (100 %) ni impossible (0 %) au palier.
+    const winPct = (m: number, n = 100) => {
+      const boss = proceduralBoss(m, 0).combatant;
+      const p = refFighter(m);
+      let w = 0;
+      for (let s = 0; s < n; s++) if (simulateCombat(p, boss, { seed: s * 89 + 1, goldOnWin: 0 }).win) w++;
+      return w / n;
+    };
+    for (const m of [30, 60, 100]) {
+      const w = winPct(m);
+      expect(w).toBeGreaterThan(0.15);
+      expect(w).toBeLessThan(0.85);
+    }
+  });
+  it('buildProceduralContent : bosses + sets alignés (même count, ids appariés)', () => {
+    const { bosses, sets } = buildProceduralContent();
+    expect(bosses.length).toBe(BOSS_MILESTONES.length);
+    expect(sets.length).toBe(BOSS_MILESTONES.length);
+    const setIds = new Set(sets.map((s) => s.id));
+    for (const b of bosses) expect(setIds.has(b.setId)).toBe(true);
   });
 });

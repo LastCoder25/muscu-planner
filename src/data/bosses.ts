@@ -12,6 +12,7 @@
 // dégâts élevés = check de SURVIE (pas un mur de PV qui tuerait le coureur).
 // Distinct du boss communautaire hebdo (world boss).
 import type { Combatant } from '@/lib/combat';
+import { PROCEDURAL } from '@/lib/proceduralContent';
 
 export interface MilestoneBoss {
   id: string;
@@ -26,7 +27,7 @@ export interface MilestoneBoss {
   combatant: Omit<Combatant, 'dmgReduction' | 'lifesteal'>; // stats du boss pour le moteur
 }
 
-export const BOSSES: MilestoneBoss[] = [
+const HAND_BOSSES: MilestoneBoss[] = [
   {
     id: 'golem_ancestral',
     name: 'Golem ancestral',
@@ -123,3 +124,6 @@ export const BOSSES: MilestoneBoss[] = [
     },
   },
 ];
+
+// Boss complets = écrits à la main (paliers 5→25) + PROCÉDURAUX (30→100).
+export const BOSSES: MilestoneBoss[] = [...HAND_BOSSES, ...PROCEDURAL.bosses];

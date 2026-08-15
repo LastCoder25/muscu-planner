@@ -43,8 +43,13 @@ describe('advUnlocks — calendrier des déblocages', () => {
     for (const u of up) expect(u.level).toBeGreaterThan(4);
   });
 
-  it('upcomingUnlocks au bout du calendrier → vide', () => {
-    expect(upcomingUnlocks(25)).toHaveLength(0);
-    expect(upcomingUnlocks(99)).toHaveLength(0);
+  it('upcomingUnlocks tease le contenu procédural (boss jusqu’au niv.100)', () => {
+    // Depuis le contenu procédural, il reste des déblocages (boss de palier) après 25.
+    expect(upcomingUnlocks(25).length).toBeGreaterThan(0);
+    for (const u of upcomingUnlocks(25)) expect(u.level).toBeGreaterThan(25);
+  });
+
+  it('upcomingUnlocks au tout bout du calendrier (niv.100) → vide', () => {
+    expect(upcomingUnlocks(100)).toHaveLength(0);
   });
 });

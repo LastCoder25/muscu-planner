@@ -12,6 +12,8 @@ import { playerCombatant, type Combatant } from './combat';
 import type { Monster } from '@/data/monsters';
 import type { Dungeon, StatKey } from '@/data/dungeons';
 import type { Region } from '@/lib/regions';
+import type { MilestoneBoss } from '@/data/bosses';
+import type { EffectType, ItemSet, SetTier } from '@/lib/items';
 
 // XP de fond cumulée pour atteindre le niveau L (= Σ des coûts de niveau
 // 200+(k-1)×100). Forme fermée : 50·(L-1)·(L+2). Miroir de levels.ts (gardé local
@@ -176,11 +178,109 @@ export function proceduralRegions(): Region[] {
   return out;
 }
 
-/** Tout le contenu procédural (monstres + donjons + régions), assemblé. */
+// ── Boss de palier + sets procéduraux (paliers 30 → 100, tous les 5 niveaux) ──
+
+const BOSS_START = 30;
+const BOSS_STEP = 5;
+export const BOSS_MILESTONES: number[] = Array.from(
+  { length: (100 - BOSS_START) / BOSS_STEP + 1 },
+  (_, i) => BOSS_START + i * BOSS_STEP,
+); // [30,35,...,100]
+
+// Boss = combat SOLO plus coriace qu'un donjon (fittés par simulation, cf. test) :
+// un build équilibré NU gagne ~45-55 % au palier ; avec gear/talents on monte à ~65-75 %.
+const BOSS_CALIB = { kpv: 11, kdmg: 0.28 } as const;
+
+const BOSS_SKINS: { emoji: string; name: string }[] = [
+  { emoji: '👺', name: 'Shogun des Ombres' },
+  { emoji: '🐙', name: 'Souverain des Abysses' },
+  { emoji: '🦅', name: 'Roi-Rapace du Firmament' },
+  { emoji: '🕷️', name: 'Reine du Vide' },
+  { emoji: '🐍', name: 'Serpent-Monde' },
+  { emoji: '👁️', name: 'Regard Primordial' },
+  { emoji: '🦖', name: 'Tyran des Âges' },
+  { emoji: '🌑', name: 'Dévoreur d’Éclipses' },
+  { emoji: '⚔️', name: 'Champion Déchu' },
+  { emoji: '🩸', name: 'Seigneur Écarlate' },
+  { emoji: '🌪️', name: 'Fléau Tournoyant' },
+  { emoji: '💠', name: 'Cristal Conscient' },
+  { emoji: '🔱', name: 'Trident du Chaos' },
+  { emoji: '☄️', name: 'Comète Vivante' },
+  { emoji: '♾️', name: 'Gardien de l’Infini' },
+];
+const SET_SKINS: { emoji: string; name: string; theme: string }[] = [
+  { emoji: '👺', name: 'Masque du Shogun', theme: 'Offensif : frappe et achève.' },
+  { emoji: '🐙', name: 'Étreinte Abyssale', theme: 'Vampirique et tenace.' },
+  { emoji: '🦅', name: 'Serres du Firmament', theme: 'Crit et vitesse.' },
+  { emoji: '🕷️', name: 'Soie du Vide', theme: 'Défensif-punisseur.' },
+  { emoji: '🐍', name: 'Écaille-Monde', theme: 'Mur de PV et épines.' },
+  { emoji: '👁️', name: 'Œil Primordial', theme: 'Crit dévastateur.' },
+  { emoji: '🦖', name: 'Cuir du Tyran', theme: 'Dégâts bruts et survie.' },
+  { emoji: '🌑', name: 'Voile d’Éclipse', theme: 'Vol de vie et fureur.' },
+  { emoji: '⚔️', name: 'Armure Déchue', theme: 'Défense et riposte.' },
+  { emoji: '🩸', name: 'Parure Écarlate', theme: 'Fureur du berserk.' },
+  { emoji: '🌪️', name: 'Manteau Tournoyant', theme: 'Vitesse et esquive.' },
+  { emoji: '💠', name: 'Éclat Conscient', theme: 'Équilibre parfait.' },
+  { emoji: '🔱', name: 'Insigne du Chaos', theme: 'Tout-puissant.' },
+  { emoji: '☄️', name: 'Traînée de Comète', theme: 'Élan implacable.' },
+  { emoji: '♾️', name: 'Sceau de l’Infini', theme: 'Le set ultime.' },
+];
+// Combos d'effets de set (2/3/4 pièces) cyclés pour varier les thèmes de build.
+const SET_TIER_THEMES: [EffectType, EffectType, EffectType][] = [
+  ['damage_pct', 'crit_pct', 'lifesteal_pct'],
+  ['max_pv_pct', 'dmg_reduction_pct', 'thorns_pct'],
+  ['crit_pct', 'damage_pct', 'max_pv_pct'],
+  ['lifesteal_pct', 'max_pv_pct', 'damage_pct'],
+  ['dmg_reduction_pct', 'thorns_pct', 'max_pv_pct'],
+];
+
+/** Set procédural lâché par le boss de palier `milestone`. */
+export function proceduralSet(milestone: number, index: number): ItemSet {
+  const skin = SET_SKINS[index % SET_SKINS.length]!;
+  const combo = SET_TIER_THEMES[index % SET_TIER_THEMES.length]!;
+  const tiers: SetTier[] = [
+    { pieces: 2, type: combo[0], base: 9 },
+    { pieces: 3, type: combo[1], base: 7 },
+    { pieces: 4, type: combo[2], base: 11 },
+  ];
+  return { id: `proc_set_${milestone}`, name: skin.name, emoji: skin.emoji, theme: skin.theme, tiers };
+}
+
+/** Boss de palier procédural pour `milestone` (30,35,…,100). Stats calibrées
+ *  relativement au joueur de référence du palier. */
+export function proceduralBoss(milestone: number, index: number): MilestoneBoss {
+  const f = refFighter(milestone);
+  const skin = BOSS_SKINS[index % BOSS_SKINS.length]!;
+  const pv = Math.round(refOffensePerRound(f) * BOSS_CALIB.kpv);
+  const damage = Math.round(f.pv * BOSS_CALIB.kdmg);
+  return {
+    id: `proc_boss_${milestone}`,
+    name: skin.name,
+    emoji: skin.emoji,
+    unlockLevel: milestone,
+    energyCost: 100 + (milestone - 25) * 3,
+    gold: 1500 + (milestone - 25) * 120,
+    setId: `proc_set_${milestone}`,
+    dropLevel: milestone,
+    hint: 'Boss de palier profond : build complet, tout au max, un peu de chance.',
+    combatant: {
+      name: skin.name,
+      pv,
+      damage,
+      crit: 0.14,
+      dodge: 0.08,
+      initiative: 24,
+    },
+  };
+}
+
+/** Tout le contenu procédural, assemblé. */
 export function buildProceduralContent(): {
   monsters: Monster[];
   dungeons: Dungeon[];
   regions: Region[];
+  bosses: MilestoneBoss[];
+  sets: ItemSet[];
 } {
   const recos = proceduralRecos();
   const monsters: Monster[] = [];
@@ -189,7 +289,9 @@ export function buildProceduralContent(): {
     monsters.push(...proceduralDungeonMonsters(reco));
     dungeons.push(proceduralDungeon(reco, i));
   });
-  return { monsters, dungeons, regions: proceduralRegions() };
+  const bosses = BOSS_MILESTONES.map((m, i) => proceduralBoss(m, i));
+  const sets = BOSS_MILESTONES.map((m, i) => proceduralSet(m, i));
+  return { monsters, dungeons, regions: proceduralRegions(), bosses, sets };
 }
 
 // Contenu procédural calculé UNE fois au chargement, à concaténer aux tableaux

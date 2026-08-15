@@ -2,6 +2,7 @@
 // stats (elles viennent du sport) — il donne des EFFETS de gameplay. Pur/testable.
 import { playerCombatant, type Combatant } from './combat';
 import type { FamiliarSpecies } from '@/data/familiars';
+import { PROCEDURAL } from '@/lib/proceduralContent';
 
 // `familiar` = 5ᵉ emplacement PARALLÈLE (compagnon) : compté par aggregateEffects
 // mais EXCLU de SLOTS (donc des drops normaux / sets / forge). Cf. src/data/familiars.ts.
@@ -636,7 +637,7 @@ export interface ItemSet {
 // BONUS de set RENFORCE le thème → un set = un build focalisé et désirable. Assez
 // fort pour valoir le coup, assez modéré pour qu'un légendaire de donjon (stat
 // unique très élevée) puisse tenter de casser le set → vraie chasse ARPG.
-export const ITEM_SETS: ItemSet[] = [
+const HAND_SETS: ItemSet[] = [
   {
     id: 'golem',
     name: 'Rempart du Golem',
@@ -693,6 +694,8 @@ export const ITEM_SETS: ItemSet[] = [
     ],
   },
 ];
+// Sets complets = écrits à la main (5 boss de palier) + PROCÉDURAUX (boss 30→100).
+export const ITEM_SETS: ItemSet[] = [...HAND_SETS, ...PROCEDURAL.sets];
 export const SET_BY_ID: Record<string, ItemSet> = Object.fromEntries(
   ITEM_SETS.map((s) => [s.id, s]),
 );

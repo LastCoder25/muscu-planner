@@ -6,7 +6,7 @@ import {
   codexSummary,
 } from '@/lib/codex';
 import { MONSTERS } from '@/data/monsters';
-import type { Item, ItemSlot } from '@/lib/items';
+import { ITEM_SETS, type Item, type ItemSlot } from '@/lib/items';
 
 const setItem = (slot: ItemSlot, setId: string): Item => ({
   id: `${setId}_${slot}`,
@@ -83,6 +83,6 @@ describe('codex — résumé', () => {
     expect(s.monstersFound).toBe(1);
     expect(s.monstersTotal).toBe(MONSTERS.length);
     expect(s.setsComplete).toBe(0);
-    expect(s.setsTotal).toBe(5);
+    expect(s.setsTotal).toBe(ITEM_SETS.length);
   });
 });
