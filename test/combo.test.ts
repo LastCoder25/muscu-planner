@@ -23,6 +23,7 @@ import {
   buildComboSession,
   comboSessionSetBudget,
   comboSessionDurationMin,
+  buildComboSessionFromCounts,
   legSets,
   type ComboChallenge,
   type ComboLeg,
@@ -238,6 +239,12 @@ describe('buildComboSession (time-boxée, en séries)', () => {
   it('comboSessionDurationMin : durée estimée croît avec les séries et le repos', () => {
     expect(comboSessionDurationMin(12, 60)).toBeGreaterThan(comboSessionDurationMin(6, 60));
     expect(comboSessionDurationMin(12, 90)).toBeGreaterThan(comboSessionDurationMin(12, 30));
+  });
+  it('buildComboSessionFromCounts : nb de séries choisi PAR EXO, exclut les 0', () => {
+    const s = buildComboSessionFromCounts(bigCombo(), { a: 3, b: 0, c: 5 });
+    expect(s.map((e) => e.exercise_id)).toEqual(['a', 'c']); // b (0) exclu, ordre des legs
+    expect(s.find((e) => e.exercise_id === 'a')!.sets.length).toBe(3);
+    expect(s.find((e) => e.exercise_id === 'c')!.sets.length).toBe(5);
   });
 });
 
