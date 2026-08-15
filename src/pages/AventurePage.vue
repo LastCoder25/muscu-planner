@@ -755,7 +755,7 @@
             />
           </svg>
           <button
-            v-for="(r, i) in REGIONS"
+            v-for="(r, i) in visibleRegions"
             :key="r.id"
             class="wm-node"
             :class="[regionState(r), { sel: selRegion.id === r.id, shatter: shatterId === r.id }]"
@@ -1956,13 +1956,20 @@ const curRegion = computed(() => currentRegion(clearedIds.value));
 const curRegionProg = computed(() => regionProgress(curRegion.value, clearedIds.value));
 const nxtRegion = computed(() => nextRegion(clearedIds.value));
 
-// ── Carte-monde serpentine des régions ──
-const mapGeom = regionMapGeometry(REGIONS.length);
+// ── Carte-monde serpentine des régions (FENÊTRE : précédente · actuelle · suivante) ──
 const currentRegionIndex = computed(() => REGIONS.findIndex((r) => r.id === curRegion.value.id));
-// Segment i (nœud i → i+1) « ouvert » (bleu) si la zone d'ARRIVÉE est accessible
-// (débloquée) ; sinon noir (mène vers une zone verrouillée).
+// On n'affiche que 3 régions autour de la frontière : la précédente (faite), la
+// courante, et la suivante (verrouillée) → carte focalisée, pas tout le monde.
+const visibleRegions = computed(() => {
+  const cur = currentRegionIndex.value;
+  const start = Math.max(0, cur - 1);
+  return REGIONS.slice(start, cur + 2); // [cur-1, cur, cur+1] (bornes clampées)
+});
+const mapGeom = computed(() => regionMapGeometry(visibleRegions.value.length));
+// Segment i (nœud i → i+1) « ouvert » (bleu) si la zone d'ARRIVÉE (dans la fenêtre)
+// est accessible ; sinon noir (mène vers la zone verrouillée).
 function segmentOpen(i: number): boolean {
-  const dest = REGIONS[i + 1];
+  const dest = visibleRegions.value[i + 1];
   return !!dest && regionState(dest) !== 'locked';
 }
 // État d'une région : 'done' (tous nettoyés) / 'current' (frontière) / 'locked'.
@@ -1978,8 +1985,9 @@ function regionState(r: Region): 'done' | 'current' | 'locked' {
 }
 // Nœud : position en % dans la viewBox de la carte.
 function nodeStyle(i: number) {
-  const n = mapGeom.nodes[i]!;
-  return { left: n.x + '%', top: (n.y / mapGeom.viewH) * 100 + '%' };
+  const g = mapGeom.value;
+  const n = g.nodes[i]!;
+  return { left: n.x + '%', top: (n.y / g.viewH) * 100 + '%' };
 }
 function regionDone(r: Region): number {
   return regionProgress(r, clearedIds.value).done;
