@@ -2703,7 +2703,9 @@ async function fightEndless() {
   }
 }
 
-const resetCost = computed(() => 80 + 40 * (char.row?.talents.length ?? 0));
+// Respec = bonus permanent important → coût NON trivial (croît fort avec le nombre
+// de talents acquis). (Avant : 80+40×nb, quasi gratuit vu l'or gagné.)
+const resetCost = computed(() => 600 + 500 * (char.row?.talents.length ?? 0));
 
 function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
   const uid = auth.user?.id;

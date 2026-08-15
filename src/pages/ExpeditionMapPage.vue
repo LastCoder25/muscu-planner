@@ -226,16 +226,19 @@
           <div v-if="isUtility(selectedPlot.building)" class="pm-ready">
             <span>⚙️ <b>{{ utilityEffectLabel(selectedPlot.building) }}</b></span>
           </div>
-          <!-- Filon : récolte -->
+          <!-- Filon : récolte (accumulation fractionnaire visible même quand < 1) -->
           <div v-else class="pm-ready">
-            <span>Prêt : <b>{{ filonEmoji(selectedPlot.building) === '⛏️' ? '✨' : '💎' }}{{ plotAccrued(selectedPlot.building) }}</b></span>
-            <span class="pm-cap">/ {{ Math.floor(plotStorage(selectedPlot.building)) }} max</span>
+            <span>
+              En stock :
+              <b>{{ filonEmoji(selectedPlot.building) === '⛏️' ? '✨' : '💎' }}{{ plotAccruedExact(selectedPlot.building).toFixed(1) }}</b>
+            </span>
+            <span class="pm-cap">/ {{ Math.floor(plotStorage(selectedPlot.building)) }} max · {{ filonProdLabel(selectedPlot.building) }}</span>
           </div>
           <div class="pm-actions">
             <button
               v-if="!isUtility(selectedPlot.building)"
               class="pm-collect"
-              :disabled="plotAccrued(selectedPlot.building) <= 0"
+              :disabled="plotAccrued(selectedPlot.building) < 1"
               @click="collectAll"
             >
               🧺 Récolter
@@ -504,6 +507,14 @@ function filonProdLabel(b: Building): string {
 }
 function plotAccrued(b: Building): number {
   return buildingAccrued(b, now.value, storageMult(char.row?.buildings ?? []));
+}
+// Accumulation EXACTE (non arrondie) pour l'affichage : un filon lent (pierres
+// niv.1 ~0.16/h) affichait « 0 » pendant des heures (floor) → on voit qu'il tourne.
+function plotAccruedExact(b: Building): number {
+  const perHr = buildingProdPerHour(b);
+  const mult = storageMult(char.row?.buildings ?? []);
+  const hours = Math.max(0, (now.value - b.collectedAt) / 3_600_000);
+  return Math.min(perHr * hours, buildingStorageCap(b, mult));
 }
 function plotStorage(b: Building): number {
   return buildingStorageCap(b, storageMult(char.row?.buildings ?? []));

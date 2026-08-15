@@ -166,7 +166,9 @@
             <div class="exo-meta">{{ e.count }} challenge{{ e.count > 1 ? 's' : '' }}</div>
           </div>
           <div class="exo-reps">
-            <span class="er-v font-display">{{ e.total }}</span
+            <span class="er-v font-display">{{
+              e.unit === 'distance' ? e.total.toFixed(1) : Math.round(e.total)
+            }}</span
             ><span class="er-l">{{
               e.unit === 'time'
                 ? isCardioChallengeRow({ unit: e.unit, exercise_id: e.id })

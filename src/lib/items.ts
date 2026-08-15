@@ -480,8 +480,10 @@ export function forgeItem(
   opts: { level: number; slot?: ItemSlot; luck?: number },
 ): Omit<Item, 'id'> {
   const slot = opts.slot ?? pick(rng, SLOTS);
-  const rarity = rollRarity(rng, opts.luck ?? 0.25); // rareté au hasard (légère chance)
   const level = Math.max(1, Math.round(opts.level));
+  // Rareté : décroissance des communs selon le NIVEAU (comme les drops) → forger à
+  // haut niveau ne donne plus quasi que du commun (bug : forge = commun à répétition).
+  const rarity = rollRarity(rng, opts.luck ?? 0.25, commonDecayForLevel(level));
   const chosen = pick(rng, availableEffects(slot, level));
   const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
   return {
