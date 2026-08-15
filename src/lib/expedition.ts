@@ -120,15 +120,20 @@ export const EXPE = {
   failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
 } as const;
 
-// Arène : survie par vagues. Cap de vagues (fin garantie même pour un héros surboosté),
-// petite régén entre deux vagues (l'Endurance compte), et rampe de difficulté/vague.
+// Arène : survie par vagues, SANS fin fixe. La difficulté croît de façon
+// EXPONENTIELLE (×/vague) → les dégâts de l'assaillant finissent TOUJOURS par
+// dépasser les PV+soin du héros, quel que soit son build (le multi-frappe et le vol
+// de vie, bornés par des stats fixes, ne peuvent pas suivre une croissance
+// géométrique) → la run se termine forcément par la mort. `maxWaves` n'est plus qu'un
+// GARDE-FOU anti-boucle (jamais atteint en pratique). Ramp calibré par simulation
+// (2026‑08‑15) : un build de référence tient ~5-9 vagues nu, ~15-30 bien équipé.
 export const ARENA = {
-  maxWaves: 35, // gauntlet de nuit : on peut tenir longtemps si bien buildé
+  maxWaves: 500, // garde-fou anti-boucle infinie (la mort arrive bien avant)
   healPct: 0.16, // régén entre deux vagues (l'Endurance compte)
   pvBase: 0.42, // vague 0 = 42 % d'un camp de même niveau (démarrage doux)
-  pvRamp: 0.2, // +20 % de PV par vague
-  dmgBase: 0.45,
-  dmgRamp: 0.08, // +8 % de dégâts par vague (attrition progressive)
+  pvGrow: 1.15, // ×1,15 de PV par vague (croissance géométrique)
+  dmgBase: 0.5,
+  dmgGrow: 1.14, // ×1,14 de dégâts par vague → attrition qui accélère → fin garantie
 } as const;
 
 /** Fenêtre de niveaux de spawn autour du joueur : [niveau−5, niveau+3] (min 1). */
@@ -181,13 +186,14 @@ export function arenaWaveCombatant(level: number, wave: number): Combatant {
   return {
     ...base,
     name: `Assaillant · vague ${wave + 1}`,
-    pv: Math.max(1, Math.round(base.pv * (ARENA.pvBase + wave * ARENA.pvRamp))),
-    damage: Math.max(1, Math.round(base.damage * (ARENA.dmgBase + wave * ARENA.dmgRamp))),
+    pv: Math.max(1, Math.round(base.pv * ARENA.pvBase * Math.pow(ARENA.pvGrow, wave))),
+    damage: Math.max(1, Math.round(base.damage * ARENA.dmgBase * Math.pow(ARENA.dmgGrow, wave))),
   };
 }
 
-/** Simule une arène : vagues consécutives, PV reportés (+ petite régén), jusqu'à la
- *  mort ou le cap. Renvoie le nombre de vagues TENUES (vaincues). Seedé/pur. */
+/** Simule une arène : vagues consécutives (difficulté exponentielle), PV reportés
+ *  (+ petite régén), jusqu'à la MORT (le cap n'est qu'un garde-fou anti-boucle).
+ *  Renvoie le nombre de vagues TENUES (vaincues). Seedé/pur. */
 export function simulateArena(hero: Combatant, level: number, seed: number): number {
   let pv = hero.pv;
   let waves = 0;
