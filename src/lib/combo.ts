@@ -2,7 +2,7 @@
 // Modèle SÉRIES : l'objectif d'un exo = un nombre de SÉRIES/semaine (repère
 // hypertrophie), chaque série enregistrée porte ses reps + son poids. XP façon
 // séance : Σ reps×REP_XP×poids-de-rep + tonnage/500 + prime de bouclage.
-import { REP_XP, assistMult, XP_MULT } from './athlete';
+import { REP_XP, assistMult, XP_MULT, MUSCU_MIN_XP } from './athlete';
 import { daysBetweenIso } from './loginStreak';
 import type { Level, Objective, SportPractice } from './types';
 
@@ -180,10 +180,39 @@ export function comboTargetEffort(c: ComboChallenge): number {
   return sum;
 }
 
-/** Décompose l'XP d'UN Défi 360 : reps (+ tonnage), prime de bouclage, dépassement
- *  (pour l'affichage sur les défis terminés). Mêmes formules que comboXpPoints. */
+// Minutes de séance créditées par SÉRIE comptée (jusqu'à l'objectif). Le Défi 360
+// REPRÉSENTE les séances muscu de la semaine, or `sessionXp` fait porter l'essentiel
+// de l'XP par la DURÉE (durée×MUSCU_MIN_XP). Sans terme de durée, boucler son volume
+// hebdo via le 360 ne rapportait que ~36 % d'une semaine loggée en séances (le même
+// volume !). On crédite ~3,5 min de séance par série (exécution + repos), un cran sous
+// une séance « pleine » (~4 min/série avec échauffement) → format efficace, honnête.
+// PLAFONNÉ à l'objectif (comboCountedSets) : pas de farm de séries vides au-delà du
+// plan ; le dépassement passe par le bonus `surpass`, pas par la durée.
+export const COMBO_SET_MIN = 3.5;
+
+/** Séries comptées vers l'objectif (mode-aware), plafonnées à la cible par exo. */
+export function comboCountedSets(c: ComboChallenge): number {
+  let n = 0;
+  for (const l of c.legs) {
+    const reps = legMode(l) === 'reps';
+    const done = reps ? Math.ceil(legReps(l) / COMBO_PLAN_REPS) : legSetsDone(l);
+    const targetSets = reps ? Math.ceil(l.target / COMBO_PLAN_REPS) : l.target;
+    n += targetSets > 0 ? Math.min(done, targetSets) : done;
+  }
+  return n;
+}
+
+/** Minutes de séance équivalentes au volume bouclé (terme de durée de l'XP). */
+export function comboImpliedMinutes(c: ComboChallenge): number {
+  return comboCountedSets(c) * COMBO_SET_MIN;
+}
+
+/** Décompose l'XP d'UN Défi 360 : durée (volume bouclé), reps (+ tonnage), prime de
+ *  bouclage, dépassement (pour l'affichage sur les défis terminés). Mêmes formules que
+ *  comboXpPoints. */
 export function comboXpBreakdown(c: ComboChallenge): {
   reps: number;
+  duration: number;
   bonus: number;
   surpass: number;
   total: number;
@@ -198,17 +227,19 @@ export function comboXpBreakdown(c: ComboChallenge): {
   }
   const bonus = comboComplete(c) ? 0.25 * comboTargetEffort(c) * (1 + comboEarlyFraction(c)) : 0;
   const over = comboOverachievement(c);
+  const durationXp = Math.round(comboImpliedMinutes(c) * MUSCU_MIN_XP * XP_MULT);
   const repsXp = Math.round((reps + tonnage / 500) * XP_MULT);
   const bonusXp = Math.round(bonus * XP_MULT);
   return {
     reps: repsXp,
+    duration: durationXp,
     bonus: bonusXp,
     surpass: over.bonusXp,
-    total: repsXp + bonusXp + over.bonusXp,
+    total: repsXp + durationXp + bonusXp + over.bonusXp,
   };
 }
 
-/** XP d'un ensemble de Défis 360 (façon séance + prime de bouclage + dépassement). */
+/** XP d'un ensemble de Défis 360 (façon séance : durée + reps + prime + dépassement). */
 export function comboXpPoints(combos: ComboChallenge[]): number {
   return combos.reduce((a, c) => {
     let reps = 0;
@@ -219,10 +250,11 @@ export function comboXpPoints(combos: ComboChallenge[]): number {
         tonnage += (s.reps || 0) * (s.weight ?? l.weight_kg ?? 0);
       }
     }
+    const duration = comboImpliedMinutes(c) * MUSCU_MIN_XP;
     const bonus = comboComplete(c) ? 0.25 * comboTargetEffort(c) * (1 + comboEarlyFraction(c)) : 0;
     const over = comboOverachievement(c);
     const surpass = COMBO_SURPASS_MULT * over.extraXp * over.balance;
-    return a + Math.round((reps + tonnage / 500 + bonus + surpass) * XP_MULT);
+    return a + Math.round((reps + tonnage / 500 + duration + bonus + surpass) * XP_MULT);
   }, 0);
 }
 

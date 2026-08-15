@@ -12,6 +12,10 @@ import {
   comboComplete,
   comboProgressPct,
   comboXpPoints,
+  comboXpBreakdown,
+  comboCountedSets,
+  comboImpliedMinutes,
+  COMBO_SET_MIN,
   comboOverachievement,
   suggestComboTarget,
   suggestComboTargetFromHistory,
@@ -144,16 +148,18 @@ describe('comboXpPoints', () => {
     expect(comboXpPoints([loaded])).toBeGreaterThan(comboXpPoints([light]));
   });
   it('la prime de bouclage suit les reps RÉELLES par série (pas le plan figé)', () => {
-    // Même nb de séries (objectif atteint), mais 2× plus de reps/série → l'XP totale
-    // ne doit PAS baisser par rep (correctif 135fa252 : avant, la prime était figée
-    // à COMBO_PLAN_REPS et l'XP/rep chutait quand on faisait plus de reps).
+    // Même nb de séries (objectif atteint), mais 2× plus de reps/série. La PORTION
+    // EFFORT (reps + prime, hors durée) ne doit PAS baisser par rep (correctif 135fa252 :
+    // avant, la prime était figée à COMBO_PLAN_REPS et l'XP/rep chutait). NB : la portion
+    // DURÉE est par-série (comme la durée wall-clock de sessionXp) → elle dilue l'XP/rep
+    // totale quand on entasse les reps, exactement comme une vraie séance. On l'exclut ici.
     const light = combo([leg({ target: 3, sets: [set(10), set(10), set(10)] })]);
     const heavy = combo([leg({ target: 3, sets: [set(20), set(20), set(20)] })]);
-    const xpLight = comboXpPoints([light]);
-    const xpHeavy = comboXpPoints([heavy]);
-    expect(xpHeavy).toBeGreaterThan(xpLight);
-    // L'XP par rep ne régresse pas (≈ constante) : le double de reps ≈ le double d'XP.
-    expect(xpHeavy / 60).toBeGreaterThanOrEqual((xpLight / 30) * 0.98);
+    expect(comboXpPoints([heavy])).toBeGreaterThan(comboXpPoints([light]));
+    const effL = comboXpBreakdown(light).reps + comboXpBreakdown(light).bonus;
+    const effH = comboXpBreakdown(heavy).reps + comboXpBreakdown(heavy).bonus;
+    // L'effort par rep ne régresse pas : le double de reps ≈ le double d'effort-XP.
+    expect(effH / 60).toBeGreaterThanOrEqual((effL / 30) * 0.98);
   });
   it('une série assistée vaut moins qu’une série stricte', () => {
     const strict = combo([leg({ target: 1, sets: [{ date: '2026-01-05', reps: 10 }] })]);
@@ -179,6 +185,28 @@ describe('comboXpPoints', () => {
     // Sans bonus, 2 séries en plus vaudraient 2×10×0.2×XP_MULT = 8 pts. Avec bonus, plus.
     expect(baseGain).toBeGreaterThan(8);
     expect(comboOverachievement(over).bonusXp).toBeGreaterThan(0);
+  });
+});
+
+describe('terme de durée (parité avec les séances)', () => {
+  it('crédite une durée façon séance ∝ séries comptées', () => {
+    const c = combo([leg({ target: 3, sets: [set(10), set(10), set(10)] })]);
+    expect(comboCountedSets(c)).toBe(3);
+    expect(comboImpliedMinutes(c)).toBe(3 * COMBO_SET_MIN);
+    expect(comboXpBreakdown(c).duration).toBeGreaterThan(0);
+  });
+  it('la durée est PLAFONNÉE à l’objectif (pas de farm de séries vides)', () => {
+    const exact = combo([leg({ target: 2, sets: [set(10), set(10)] })]);
+    const spam = combo([leg({ target: 2, sets: [set(1), set(1), set(1), set(1), set(1)] })]);
+    // 5 séries mais objectif 2 → durée créditée identique (capée à 2).
+    expect(comboImpliedMinutes(spam)).toBe(comboImpliedMinutes(exact));
+    expect(comboXpBreakdown(spam).duration).toBe(comboXpBreakdown(exact).duration);
+  });
+  it('la durée domine → un 360 bouclé au poids du corps reste rentable', () => {
+    // Sans le terme de durée, un 360 100 % poids du corps ne touchait quasi rien.
+    const bw = combo([leg({ target: 4, sets: [set(12), set(12), set(12), set(12)] })]);
+    const br = comboXpBreakdown(bw);
+    expect(br.duration).toBeGreaterThan(br.reps); // la durée porte l'essentiel, comme sessionXp
   });
 });
 

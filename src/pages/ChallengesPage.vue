@@ -281,6 +281,9 @@
               {{ comboLegsDone(c) }}/{{ c.legs.length }} exos · {{ comboProgressPct(c) }} %
             </div>
             <div v-if="c.status === 'done'" class="cc-xp">
+              <span v-if="comboXpb(c).duration > 0" class="xp-pill dur"
+                >+{{ comboXpb(c).duration }} XP séance</span
+              >
               <span class="xp-pill reps">+{{ comboXpb(c).reps }} XP reps</span>
               <span v-if="comboXpb(c).bonus > 0" class="xp-pill bonus"
                 >+{{ comboXpb(c).bonus }} XP bouclage</span
@@ -1039,6 +1042,10 @@ onMounted(async () => {
 .xp-pill.reps {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
+}
+.xp-pill.dur {
+  background: color-mix(in srgb, var(--d2) 20%, transparent);
+  color: var(--d2);
 }
 .xp-pill.bonus {
   background: color-mix(in srgb, var(--d1) 20%, transparent);
