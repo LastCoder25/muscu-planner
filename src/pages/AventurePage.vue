@@ -1899,16 +1899,15 @@ function celebrateRareDrop(it: Item) {
     rarity: it.rarity,
   });
 }
-// Drop de talent : éclat central si épique+ (moment notable), sinon toast discret.
+// Drop de talent : éclat central si épique+ (moment notable). Les talents droppent
+// désormais au niveau 1 (commun) → pas de toast en bas (le talent apparaît dans la
+// collection de l'onglet Perso › Talents).
 function celebrateTalentDrop(t: TalentInstance) {
   const def = talentByCode(t.code);
   if (!def) return;
   const rarity = talentRarity(talentLevel(t.xp));
-  if (rarity === 'epic' || rarity === 'legendary' || rarity === 'divin') {
+  if (rarity === 'epic' || rarity === 'legendary' || rarity === 'divin')
     gameFx.celebrate({ kind: 'generic', emoji: '🎓', title: `Talent ${RARITY_LABEL[rarity]} !`, subtitle: def.name, rarity });
-  } else {
-    $q.notify({ type: 'positive', icon: 'school', message: `🎓 Talent trouvé : ${def.name}` });
-  }
 }
 
 const loading = ref(true);
@@ -2170,6 +2169,7 @@ async function doInfuse(fodderId: string) {
     const def = talentByCode(updated.code);
     const lvl = talentLevel(updated.xp);
     const afterRarity = talentRarity(lvl);
+    // Montée de rareté = éclat central (moment fort) ; sinon rien (pas de toast en bas).
     if (afterRarity !== beforeRarity)
       gameFx.celebrate({
         kind: 'generic',
@@ -2177,11 +2177,6 @@ async function doInfuse(fodderId: string) {
         title: `${def?.name ?? 'Talent'} — ${RARITY_LABEL[afterRarity]} !`,
         subtitle: `Niveau ${lvl}`,
         rarity: afterRarity,
-      });
-    else
-      $q.notify({
-        type: 'positive',
-        message: `✨ ${def?.name ?? 'Talent'} infusé → Nv ${lvl}`,
       });
   }
   // Plus assez de talents pour continuer → on sort du mode infusion.
@@ -2320,6 +2315,12 @@ const pendingCelebrations = ref<(() => void)[]>([]);
 function queueFx(fn: () => void) {
   pendingCelebrations.value.push(fn);
 }
+// À la FERMETURE de la modale de rapport, on purge toute célébration NON jouée (ex.
+// modale fermée avant la fin de l'animation) → elles ne s'accumulent plus pour se
+// déclencher « toutes d'un coup » lors d'un run suivant (bug : éclats en rafale).
+watch(reportOpen, (open) => {
+  if (!open) pendingCelebrations.value = [];
+});
 function flushCelebrations() {
   if (pendingCelebrations.value.length) {
     const fns = pendingCelebrations.value;
@@ -2932,14 +2933,7 @@ function doChooseReward(index: number) {
   // La récompense de boss est RÉCUPÉRÉE (drop) → va au sac (ou slot vide). PAS
   // d'animation de palier de set ici : elle est réservée à l'ÉQUIPEMENT délibéré
   // (sac → équipé). Le joueur équipe ensuite depuis l'onglet Équip. (bug 63c392dd).
-  const isItem = char.row?.pending_reward?.candidates[index]?.kind === 'item';
-  withUid(
-    (uid) =>
-      char
-        .chooseReward(uid, index)
-        .then(() => $q.notify({ type: 'positive', message: isItem ? 'Objet récupéré !' : 'Récompense récupérée !' })),
-    'Impossible de récupérer la récompense.',
-  );
+  withUid((uid) => char.chooseReward(uid, index), 'Impossible de récupérer la récompense.');
 }
 
 // ── Faille sans fin (end-game infini) ──
@@ -3222,18 +3216,12 @@ function confirmReplace(disposal: 'salvage' | 'sell' | 'keep') {
   const drop = replaceTarget.value;
   if (!drop) return;
   replaceTarget.value = null;
-  const old = equippedInSlot(drop.slot);
-  let message = 'Équipé';
-  if (old && disposal === 'salvage') message = `Équipé · ancien cassé (+${salvageValue(old)} ✨)`;
-  else if (old && disposal === 'sell') message = `Équipé · ancien vendu (+${sellValue(old)} 🪙)`;
-  else if (old) message = 'Équipé · ancien rangé au sac';
   const setId = drop.setId;
   const before = setId ? setCounts(char.row?.equipped ?? {})[setId] ?? 0 : 0;
   withUid(
     (uid) =>
       char.equipReplacing(uid, drop.id, disposal).then(() => {
         if (setId) celebrateSetTier(setId, before, setCounts(char.row?.equipped ?? {})[setId] ?? 0);
-        $q.notify({ type: 'positive', position: 'top', message });
       }),
     'Action impossible.',
   );
@@ -3257,23 +3245,12 @@ const craftSlot = ref<ItemSlot>('weapon');
 function doForge(slot?: ItemSlot) {
   forgeSlotOpen.value = false;
   withUid(
-    (uid) =>
-      char
-        .forge(uid, { level: c.value.level.level, ...(slot ? { slot } : {}) })
-        .then(() =>
-          $q.notify({ type: 'positive', position: 'top', message: 'Objet forgé — au sac 🎒' }),
-        ),
+    (uid) => char.forge(uid, { level: c.value.level.level, ...(slot ? { slot } : {}) }),
     'Forge impossible.',
   );
 }
 function doReroll(it: Item) {
-  withUid(
-    (uid) =>
-      char
-        .rerollEffect(uid, it.id)
-        .then(() => $q.notify({ type: 'positive', position: 'top', message: 'Effet rerollé ♻️' })),
-    'Reroll impossible.',
-  );
+  withUid((uid) => char.rerollEffect(uid, it.id), 'Reroll impossible.');
 }
 function openCraft() {
   // Garantit un set sélectionné valide (parmi les débloqués) avant d'ouvrir.
@@ -3285,26 +3262,16 @@ function doCraftSet() {
   craftOpen.value = false;
   withUid(
     (uid) =>
-      char
-        .craftSet(uid, {
-          level: c.value.level.level,
-          setId: craftSetId.value,
-          slot: craftSlot.value,
-        })
-        .then(() =>
-          $q.notify({ type: 'positive', position: 'top', message: 'Pièce de set forgée 🧩' }),
-        ),
+      char.craftSet(uid, {
+        level: c.value.level.level,
+        setId: craftSetId.value,
+        slot: craftSlot.value,
+      }),
     'Forge de set impossible.',
   );
 }
 function doSell(it: Item) {
-  withUid(
-    (uid) =>
-      char
-        .sell(uid, it.id)
-        .then(() => $q.notify({ type: 'positive', position: 'top', message: `+${sellValue(it)} 🪙` })),
-    'Vente impossible.',
-  );
+  withUid((uid) => char.sell(uid, it.id), 'Vente impossible.');
 }
 function doToggleLock(it: Item) {
   withUid((uid) => char.toggleLock(uid, it.id), 'Action impossible.');
@@ -3317,15 +3284,7 @@ function confirmSalvage() {
   const it = salvageTarget.value;
   if (!it) return;
   salvageTarget.value = null;
-  withUid(
-    (uid) =>
-      char
-        .salvage(uid, it.id)
-        .then(() =>
-          $q.notify({ type: 'positive', position: 'top', message: `+${salvageValue(it)} ✨ poussière` }),
-        ),
-    'Recyclage impossible.',
-  );
+  withUid((uid) => char.salvage(uid, it.id), 'Recyclage impossible.');
 }
 // Nettoyage en masse : objets du sac moins rares que l'équipé du même slot.
 // Slot ciblé par le nettoyage en masse = le filtre du sac actif (sinon tous).
@@ -3373,17 +3332,7 @@ function doSalvageBelow() {
     message: `Casser les ${ids.length} objet(s) de ${bulkScope.value} qui n'améliorent pas ta puissance — faibles ou doublons de l'équipé (même montés à ton niveau) → poussière ?`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Casser', color: 'primary', textColor: 'dark' },
-  }).onOk(() =>
-    withUid(
-      (uid) =>
-        char
-          .salvageMany(uid, ids)
-          .then((n) =>
-            $q.notify({ type: 'positive', position: 'top', message: `${n} objet(s) cassé(s) en poussière.` }),
-          ),
-      'Recyclage impossible.',
-    ),
-  );
+  }).onOk(() => withUid((uid) => char.salvageMany(uid, ids), 'Recyclage impossible.'));
 }
 function doSellBelow() {
   const ids = powerLossItems.value.map((i) => i.id);
@@ -3392,15 +3341,7 @@ function doSellBelow() {
     message: `Vendre les ${ids.length} objet(s) de ${bulkScope.value} qui n'améliorent pas ta puissance — faibles ou doublons de l'équipé (même montés à ton niveau) → or ?`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Vendre', color: 'primary', textColor: 'dark' },
-  }).onOk(() =>
-    withUid(
-      (uid) =>
-        char
-          .sellMany(uid, ids)
-          .then((n) => $q.notify({ type: 'positive', position: 'top', message: `${n} objet(s) vendu(s).` })),
-      'Vente impossible.',
-    ),
-  );
+  }).onOk(() => withUid((uid) => char.sellMany(uid, ids), 'Vente impossible.'));
 }
 async function savePseudo() {
   const uid = auth.user?.id;
