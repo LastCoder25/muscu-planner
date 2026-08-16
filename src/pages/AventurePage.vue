@@ -340,19 +340,6 @@
           <span class="cx-go">›</span>
         </button>
 
-        <!-- Timeline « À venir » : ce que les prochains niveaux débloquent. -->
-        <div v-if="upcoming.length" class="upcoming">
-          <div class="up-title">🔮 À venir</div>
-          <div v-for="(u, i) in upcoming" :key="i" class="up-row">
-            <span class="up-lvl font-display">Niv. {{ u.level }}</span>
-            <span class="up-emo">{{ u.emoji }}</span>
-            <div class="up-txt">
-              <div class="up-name">{{ u.title }}</div>
-              <div class="up-detail">{{ u.detail }}</div>
-            </div>
-          </div>
-        </div>
-
         <div class="foot">
           <b>Chaque séance fait progresser ton aventurier.</b> Les stats et le niveau viennent du
           sport. La connexion quotidienne, elle, ne donne qu'un peu d'énergie pour jouer.
@@ -367,11 +354,11 @@
           <button class="gs-b" :class="{ on: gearSub === 'equip' }" @click="gearSub = 'equip'">
             🛡️ Équipement
           </button>
-          <button class="gs-b" :class="{ on: gearSub === 'familiar' }" @click="gearSub = 'familiar'">
-            🐾 Familier
-          </button>
           <button class="gs-b" :class="{ on: gearSub === 'bag' }" @click="gearSub = 'bag'">
             🎒 Sac<span v-if="char.row.inventory.length" class="gs-badge">{{ char.row.inventory.length }}</span>
+          </button>
+          <button class="gs-b" :class="{ on: gearSub === 'familiar' }" @click="gearSub = 'familiar'">
+            🐾 Familier
           </button>
           <button class="gs-b" :class="{ on: gearSub === 'shop' }" @click="gearSub = 'shop'">
             🔧 Atelier
@@ -1825,7 +1812,7 @@ import {
   type TalentInstance,
 } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
-import { unlocksAtLevel, upcomingUnlocks } from '@/lib/advUnlocks';
+import { unlocksAtLevel } from '@/lib/advUnlocks';
 import { incubatorBuilt } from '@/lib/buildings';
 import {
   REGIONS,
@@ -2141,9 +2128,6 @@ async function doInfuse(fodderId: string) {
     });
 }
 
-// Prochains déblocages (timeline « À venir » de l'onglet Perso) — donne envie de
-// monter (« encore 2 niveaux et j'ouvre le Dragon »).
-const upcoming = computed(() => upcomingUnlocks(c.value.level.level, 3));
 
 // Régions / biomes (onglet Donjons) : bandeau de la région courante + teaser de la
 // suivante → sensation de « découvrir de nouveaux mondes ».
@@ -2271,10 +2255,17 @@ const stageDone = ref(true); // résultat + butin révélés seulement à la FIN
 // Notif de résultat (victoire/défaite) DIFFÉRÉE : elle ne s'affiche qu'à la fin de
 // l'animation de combat (sinon elle « spoile » avant la fin — cf. ticket).
 const pendingNotify = ref<{ type: string; message: string } | null>(null);
+// Célébration (éclat plein écran) DIFFÉRÉE à la fin de l'animation de combat —
+// ex. « donjon nettoyé » à la 1re victoire : sinon l'éclat recouvre le combat.
+const pendingCelebrate = ref<(() => void) | null>(null);
 function flushNotify() {
   if (pendingNotify.value) {
     $q.notify(pendingNotify.value);
     pendingNotify.value = null;
+  }
+  if (pendingCelebrate.value) {
+    pendingCelebrate.value();
+    pendingCelebrate.value = null;
   }
 }
 // Skip = animation occultée (droit au résultat). On l'applique SEULEMENT en
@@ -2673,15 +2664,18 @@ async function explore(d: Dungeon) {
       }),
       drops,
     };
-    // 1er nettoyage d'un donjon (débloque le suivant) = moment de progression → éclat.
+    // 1er nettoyage d'un donjon (débloque le suivant) = moment de progression →
+    // éclat, mais SEULEMENT à la fin de l'animation de combat (sinon il recouvre
+    // le combat). Différé via pendingCelebrate → flush dans stageFinish/openReport.
     if (r.cleared && lastRunFirstVisit.value)
-      gameFx.celebrate({
-        kind: 'unlock',
-        emoji: d.emoji,
-        title: `${d.name} nettoyé !`,
-        subtitle: 'Nouveau donjon débloqué',
-        rarity: 'epic',
-      });
+      pendingCelebrate.value = () =>
+        gameFx.celebrate({
+          kind: 'unlock',
+          emoji: d.emoji,
+          title: `${d.name} nettoyé !`,
+          subtitle: 'Nouveau donjon débloqué',
+          rarity: 'epic',
+        });
     pendingNotify.value = r.cleared
       ? { type: 'positive', message: `Donjon nettoyé — +${gold} 🪙` }
       : null;
@@ -6363,53 +6357,6 @@ onUnmounted(() => {
 }
 .lu-detail {
   font-size: 12px;
-  color: var(--dim);
-  line-height: 1.3;
-}
-/* Timeline « À venir » (onglet Perso) */
-.upcoming {
-  margin-top: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.up-title {
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--dim);
-}
-.up-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-.up-lvl {
-  flex: none;
-  min-width: 52px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--accent);
-}
-.up-emo {
-  font-size: 22px;
-  flex: none;
-}
-.up-txt {
-  min-width: 0;
-}
-.up-name {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text);
-}
-.up-detail {
-  font-size: 11.5px;
   color: var(--dim);
   line-height: 1.3;
 }
