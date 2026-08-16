@@ -611,85 +611,100 @@
               class="inv-item"
               :class="['r-' + it.rarity, { locked: it.locked }]"
             >
-              <span class="inv-emo">{{ it.emoji }}</span>
-              <button
-                class="inv-lock"
-                :class="{ on: it.locked }"
-                :title="it.locked ? 'Déverrouiller' : 'Protéger de la casse/vente'"
-                :aria-label="it.locked ? 'Déverrouiller' : 'Verrouiller'"
-                @click="doToggleLock(it)"
-              >
-                {{ it.locked ? '🔒' : '🔓' }}
-              </button>
-              <div class="inv-main">
-                <div class="inv-name">{{ it.name }}</div>
-                <div class="pills">
-                  <span class="gpill lvl">Lvl {{ it.level }}</span>
-                  <span class="gpill" :class="'p-' + it.rarity">{{ RARITY_LABEL[it.rarity] }}</span>
-                  <span v-if="it.setId" class="gpill set">🧩 Set</span>
-                </div>
-                <div class="inv-eff">
-                  {{ SLOT_LABEL[it.slot] }} · {{ itemEffects(it) }}
-                  <span v-if="rollStarStr(it)" class="roll-stars" :title="'Qualité du roll'">{{ rollStarStr(it) }}</span>
-                </div>
-                <div class="drop-cmp inv-cmp">
-                  <span v-if="equippedInSlot(it.slot)"
-                    >Équipé : {{ RARITY_LABEL[equippedInSlot(it.slot)!.rarity] }} Nv
-                    {{ equippedInSlot(it.slot)!.level }} ·
-                    {{ itemEffects(equippedInSlot(it.slot)!) }}</span
-                  >
-                  <span v-else>Emplacement libre</span>
-                  <span class="rarity-verdict" :class="rarityVerdict(it).cls">{{
-                    rarityVerdict(it).label
-                  }}</span>
-                </div>
-                <div class="pow-cmp">
-                  ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
-                  <b :class="powerIfEquip(it) >= combatPowerMaxed ? 'up' : 'down'"
-                    >{{ fmtPow(powerIfEquip(it)) }} ({{
-                      fmtDelta(combatPowerMaxed, powerIfEquip(it))
-                    }})</b
-                  >
-                  <span v-if="infuseCostFor(it)" class="pow-cost"
-                    >à infuser (~{{ infuseCostFor(it) }} ✨) pour le monter à ton niveau</span
-                  >
-                </div>
-                <div class="inv-actions">
-                  <button class="equip-btn" @click="doEquip(it.id)">
-                    {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
-                  </button>
-                  <button class="link-btn" :disabled="it.locked" @click="doSalvage(it)">
-                    Casser ✨{{ salvageValue(it) }}
-                  </button>
-                  <button class="link-btn" :disabled="it.locked" @click="doSell(it)">
-                    Vendre 🪙{{ sellValue(it) }}
-                  </button>
-                </div>
-                <div class="inv-actions ws-inline">
-                  <button
-                    v-if="it.level < c.level.level"
-                    class="link-btn"
-                    :disabled="!canUpgrade(it, char.row.dust, c.level.level)"
-                    @click="doUpgrade(it.id)"
-                  >
-                    ✨ +1 · {{ upgradeCost(it.level, it.rarity) }}✨
-                  </button>
-                  <button
-                    v-if="it.level < c.level.level - 1"
-                    class="link-btn strong"
-                    :disabled="char.row.dust < upgradeCost(it.level, it.rarity)"
-                    @click="doInfuseMax(it.id)"
-                  >
-                    ⚡ À fond · {{ infuseToMaxCost(it, c.level.level) }}✨
-                  </button>
-                  <button
-                    class="link-btn"
-                    :disabled="char.row.dust < rerollCost(it)"
-                    @click="doReroll(it)"
-                  >
-                    ♻️ Reroll ✨{{ rerollCost(it) }}
-                  </button>
-                </div>
+              <!-- Ligne 1 : emoji + nom + VERDICT de puissance (la décision) -->
+              <div class="ii-head">
+                <span class="inv-emo">{{ it.emoji }}</span>
+                <div class="ii-name">{{ it.name }}</div>
+                <span class="ii-verdict" :class="powerVerdict(it).cls">{{
+                  powerVerdict(it).label
+                }}</span>
+              </div>
+              <!-- Ligne 2 : méta grisée (rareté · niveau · slot · qualité · set) + cadenas -->
+              <div class="ii-meta">
+                <span class="ii-rar" :class="'p-' + it.rarity">{{ RARITY_LABEL[it.rarity] }}</span>
+                <span class="ii-dot">·</span> Nv {{ it.level }}
+                <span class="ii-dot">·</span> {{ SLOT_LABEL[it.slot] }}
+                <span v-if="rollStarStr(it)" class="roll-stars" title="Qualité du roll">{{
+                  rollStarStr(it)
+                }}</span>
+                <span v-if="it.setId" class="gpill set">🧩 Set</span>
+                <button
+                  class="inv-lock"
+                  :class="{ on: it.locked }"
+                  :title="it.locked ? 'Déverrouiller' : 'Protéger de la casse/vente'"
+                  :aria-label="it.locked ? 'Déverrouiller' : 'Verrouiller'"
+                  @click="doToggleLock(it)"
+                >
+                  {{ it.locked ? '🔒' : '🔓' }}
+                </button>
+              </div>
+              <!-- Ligne 3 : EFFET mis en avant -->
+              <div class="ii-eff">➜ {{ itemEffects(it) }}</div>
+              <!-- Ligne 4 : comparaison de puissance compacte -->
+              <div class="ii-cmp">
+                ⚔️ {{ fmtPow(combatPowerMaxed) }} →
+                <b :class="powerIfEquip(it) >= combatPowerMaxed ? 'up' : 'down'"
+                  >{{ fmtPow(powerIfEquip(it)) }} ({{
+                    fmtDelta(combatPowerMaxed, powerIfEquip(it))
+                  }})</b
+                >
+                <span v-if="equippedInSlot(it.slot)" class="ii-cmp-eq"
+                  >· équipé {{ itemEffects(equippedInSlot(it.slot)!) }}</span
+                >
+                <span v-else class="ii-cmp-eq">· emplacement libre</span>
+              </div>
+              <div v-if="infuseCostFor(it)" class="ii-cost">
+                à infuser (~{{ infuseCostFor(it) }} ✨) pour le monter à ton niveau
+              </div>
+              <!-- Actions : primaire (Équiper) + menu ⋯ (secondaires) -->
+              <div class="ii-actions">
+                <button class="equip-btn" @click="doEquip(it.id)">
+                  {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
+                </button>
+                <button class="ii-more" aria-label="Plus d'actions">
+                  ⋯
+                  <q-menu anchor="bottom right" self="top right" class="ii-menu">
+                    <div class="ii-menu-list">
+                      <button
+                        class="ii-mi"
+                        :disabled="it.locked"
+                        @click="doSalvage(it)"
+                        v-close-popup
+                      >
+                        ✨ Casser · {{ salvageValue(it) }}
+                      </button>
+                      <button class="ii-mi" :disabled="it.locked" @click="doSell(it)" v-close-popup>
+                        🪙 Vendre · {{ sellValue(it) }}
+                      </button>
+                      <button
+                        v-if="it.level < c.level.level"
+                        class="ii-mi"
+                        :disabled="!canUpgrade(it, char.row.dust, c.level.level)"
+                        @click="doUpgrade(it.id)"
+                        v-close-popup
+                      >
+                        ✨ Infuser +1 · {{ upgradeCost(it.level, it.rarity) }}✨
+                      </button>
+                      <button
+                        v-if="it.level < c.level.level - 1"
+                        class="ii-mi"
+                        :disabled="char.row.dust < upgradeCost(it.level, it.rarity)"
+                        @click="doInfuseMax(it.id)"
+                        v-close-popup
+                      >
+                        ⚡ Infuser à fond · {{ infuseToMaxCost(it, c.level.level) }}✨
+                      </button>
+                      <button
+                        class="ii-mi"
+                        :disabled="char.row.dust < rerollCost(it)"
+                        @click="doReroll(it)"
+                        v-close-popup
+                      >
+                        ♻️ Reroll · {{ rerollCost(it) }}✨
+                      </button>
+                    </div>
+                  </q-menu>
+                </button>
               </div>
             </div>
           </div>
@@ -2547,6 +2562,15 @@ function rarityVerdict(d: Item): { label: string; cls: string } {
   if (diff > 0) return { label: '↑ rareté supérieure', cls: 'up' };
   if (diff < 0) return { label: '↓ rareté inférieure', cls: 'down' };
   return { label: '≈ même rareté', cls: 'same' };
+}
+// Verdict par PUISSANCE (potentiel vs potentiel) = la vraie décision « je l'équipe ? ».
+// Affiché en tête de la carte du sac.
+function powerVerdict(it: Item): { label: string; cls: string } {
+  if (!equippedInSlot(it.slot)) return { label: '＋ à équiper', cls: 'up' };
+  const d = powerIfEquip(it) - combatPowerMaxed.value;
+  if (d > 0) return { label: '↑ Meilleur', cls: 'up' };
+  if (d < 0) return { label: '↓ Inférieur', cls: 'down' };
+  return { label: '≈ Égal', cls: 'same' };
 }
 
 // Progression séquentielle : un donjon n'est déblocable qu'après avoir nettoyé
@@ -4756,28 +4780,87 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 10px 12px;
 }
-/* Le sac réserve la gouttière droite pour le cadenas (pas de chevauchement). */
+/* Carte objet du sac : vraie carte (fond + bordure + liseré de rareté à gauche),
+   organisée en colonne pour une hiérarchie claire (verdict → méta → effet → compare). */
 .inv-item {
-  padding-right: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 12px;
+  padding: 10px 12px;
 }
 /* Objet verrouillé : liseré accent pour le repérer. */
 .inv-item.locked {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
-/* Cadenas : à l'écart (coin haut-droit), grande cible tactile, bien visible. */
+/* Ligne 1 : emoji + nom + verdict de puissance (la décision). */
+.ii-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inv-emo {
+  font-size: 22px;
+  flex: none;
+}
+.ii-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.15;
+}
+/* Verdict : chip coloré, l'élément le plus visible de la carte. */
+.ii-verdict {
+  flex: none;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.ii-verdict.up {
+  color: var(--d1);
+  background: color-mix(in srgb, var(--d1) 18%, transparent);
+}
+.ii-verdict.down {
+  color: var(--d4);
+  background: color-mix(in srgb, var(--d4) 16%, transparent);
+}
+.ii-verdict.same {
+  color: var(--dim);
+  background: color-mix(in srgb, var(--dim) 16%, transparent);
+}
+/* Ligne 2 : méta discrète. */
+.ii-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.ii-rar {
+  font-weight: 700;
+}
+.ii-dot {
+  opacity: 0.5;
+}
+/* Cadenas : petit bouton inline en fin de ligne méta. */
 .inv-lock {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  margin-left: auto;
+  width: 30px;
+  height: 26px;
+  border-radius: 8px;
   border: 1px solid var(--line);
   background: var(--bg);
-  font-size: 18px;
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
-  z-index: 1;
 }
 .inv-lock.on {
   border-color: var(--accent);
@@ -4786,17 +4869,84 @@ onUnmounted(() => {
 .inv-lock:active {
   transform: scale(0.92);
 }
-.inv-emo {
-  font-size: 20px;
+/* Ligne 3 : EFFET mis en avant (ce que l'objet fait). */
+.ii-eff {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--accent);
 }
-.inv-main {
+/* Ligne 4 : comparaison de puissance, discrète. */
+.ii-cmp {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.ii-cmp b {
+  font-weight: 800;
+}
+.ii-cmp b.up {
+  color: var(--d1);
+}
+.ii-cmp b.down {
+  color: var(--d4);
+}
+.ii-cmp-eq {
+  opacity: 0.85;
+}
+.ii-cost {
+  font-size: 10.5px;
+  color: var(--dim);
+  opacity: 0.85;
+}
+/* Actions : primaire (Équiper) + menu ⋯. */
+.ii-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+}
+.ii-actions .equip-btn {
   flex: 1;
-  min-width: 0;
 }
-.inv-name {
-  font-size: 14px;
-  font-weight: 600;
+.ii-more {
+  flex: none;
+  width: 40px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--bg);
   color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ii-more:active {
+  border-color: var(--accent);
+}
+.ii-menu-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 4px;
+  background: var(--surface);
+}
+.ii-mi {
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.ii-mi:hover {
+  background: var(--bg);
+}
+.ii-mi:disabled {
+  color: var(--dim);
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .bulk {
   display: flex;
