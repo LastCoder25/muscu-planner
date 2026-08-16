@@ -229,8 +229,19 @@ const HAND_DUNGEONS: Dungeon[] = [
   },
 ];
 
+// Coût d'énergie d'un run PLAFONNÉ (2026‑08‑16) : un run coûte ~pareil quel que soit
+// le niveau du donjon. Le coût énergie n'a qu'un rôle — lier le jeu au volume
+// d'entraînement (~10 runs/séance) — et ce lien doit être CONSTANT, pas punir la
+// progression (le coût brut montait 20→96→384 en procédural → ~1 run/séance en
+// end-game). La difficulté vient du CONTENU (monstres), pas du prix d'entrée. Early
+// garde sa rampe douce (20→40) ; tout ce qui dépasse est ramené à 40.
+export const DUNGEON_ENERGY_CAP = 40;
+
 // Donjons complets = écrits à la main (reco 1→22) + PROCÉDURAUX (reco 25→94).
-export const DUNGEONS: Dungeon[] = [...HAND_DUNGEONS, ...PROCEDURAL.dungeons];
+export const DUNGEONS: Dungeon[] = [...HAND_DUNGEONS, ...PROCEDURAL.dungeons].map((d) => ({
+  ...d,
+  energyCost: Math.min(DUNGEON_ENERGY_CAP, d.energyCost),
+}));
 
 /** Convertit les ids de monstres d'un donjon en adversaires pour le moteur. */
 export function dungeonFoes(d: Dungeon): DungeonFoe[] {

@@ -145,9 +145,17 @@ function bossGoldForLevel(unlockLevel: number): number {
   return ref > 0 ? Math.round((ref * BOSS_GOLD_MULT) / 10) * 10 : 200;
 }
 
+// Coût d'énergie PLAFONNÉ (2026‑08‑16, cf. DUNGEON_ENERGY_CAP) : un boss est un
+// combat occasionnel ; son « poids » vient de sa difficulté + son set, pas d'un prix
+// d'entrée qui punit la progression (coût brut 36→100+). Cap un cran au-dessus des
+// donjons (le boss reste le run le plus cher).
+const BOSS_ENERGY_CAP = 48;
+
 // Boss complets = écrits à la main (paliers 5→25) + PROCÉDURAUX (30→100). L'or
-// statique/procédural est REMPLACÉ par la valeur dérivée du donjon du palier.
+// statique/procédural est REMPLACÉ par la valeur dérivée du donjon du palier, et le
+// coût d'énergie est plafonné.
 export const BOSSES: MilestoneBoss[] = [...HAND_BOSSES, ...PROCEDURAL.bosses].map((b) => ({
   ...b,
   gold: bossGoldForLevel(b.unlockLevel),
+  energyCost: Math.min(BOSS_ENERGY_CAP, b.energyCost),
 }));

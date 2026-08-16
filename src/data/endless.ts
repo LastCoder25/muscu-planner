@@ -20,9 +20,11 @@ export function endlessFoe(tier: number): Combatant {
     initiative: 26,
   };
 }
-/** Coût d'énergie d'une tentative (raisonnable : le jeu ne doit pas rationner). */
+/** Coût d'énergie d'une tentative, PLAFONNÉ (2026‑08‑16, cf. DUNGEON_ENERGY_CAP) :
+ *  le coût énergie ne doit pas croître sans borne (il punirait la progression) ; la
+ *  difficulté vient des paliers, pas du prix d'entrée. Cap 60 (end-game, réserve large). */
 export function endlessEnergy(tier: number): number {
-  return 100 + (Math.max(1, tier) - 1) * 8;
+  return Math.min(60, 100 + (Math.max(1, tier) - 1) * 8);
 }
 /** Or gagné à la victoire (croît vite avec la profondeur). */
 export function endlessGold(tier: number): number {
