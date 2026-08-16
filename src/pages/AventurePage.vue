@@ -292,7 +292,15 @@
                 <span v-else class="tal-b cur">cible</span>
               </template>
               <template v-else>
-                <button v-if="!t.equipped" class="tal-b" :disabled="!canEquipMore" @click="doEquipTalent(t.id)">Équiper</button>
+                <button
+                  v-if="!t.equipped"
+                  class="tal-b"
+                  :disabled="!canEquipMore || talentCodeEquipped(t.def.code)"
+                  :title="talentCodeEquipped(t.def.code) ? 'Un talent de ce type est déjà équipé' : ''"
+                  @click="doEquipTalent(t.id)"
+                >
+                  {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
+                </button>
                 <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
                 <button class="tal-b ghost" @click="infuseTarget = t.inst">🔧</button>
               </template>
@@ -1634,9 +1642,6 @@
             </div>
           </div>
         </div>
-        <div v-if="stageDone && run.consumable" class="cons-drop">
-          {{ run.consumable.emoji }} <b>{{ run.consumable.name }}</b> ajouté à ton sac 🎒
-        </div>
 
         <!-- Récompense de boss AU CHOIX (à la place du butin) : 3 candidats, on en garde 1 -->
         <div v-if="stageDone && char.row?.pending_reward" class="rm-reward">
@@ -1786,13 +1791,7 @@ import {
   type PendingReward,
 } from '@/lib/items';
 import { familiarSpecies } from '@/data/familiars';
-import {
-  SHOP_ITEMS,
-  CONSUMABLE_ITEMS,
-  consumableEffect,
-  rollConsumableDrop,
-  shopItem,
-} from '@/data/shop';
+import { SHOP_ITEMS, CONSUMABLE_ITEMS, consumableEffect } from '@/data/shop';
 import {
   talentsEarned,
   talentEffects,
@@ -2068,15 +2067,17 @@ const talentsView = computed(() =>
   (char.row?.talents ?? [])
     .map((inst) => {
       const def = talentByCode(inst.code);
-      const level = effectiveTalentLevel(inst.xp, c.value.level.level); // plafonné au niveau joueur
+      const raw = talentLevel(inst.xp); // niveau réel (→ vraie rareté)
+      const eff = effectiveTalentLevel(inst.xp, c.value.level.level); // plafonné (→ effet actif)
       return def
         ? {
             id: inst.id,
             inst,
             def,
-            level,
-            rarity: talentRarity(level),
-            effLabel: Math.round(talentValue(def, level) * 100) + ' %',
+            level: eff,
+            rarity: talentRarity(raw),
+            effLabel: Math.round(talentValue(def, eff) * 100) + ' %',
+            capped: raw > c.value.level.level, // effet bridé par ton niveau
             xpp: talentXpProgress(inst.xp),
             equipped: !!inst.equipped,
           }
@@ -2088,9 +2089,19 @@ const talentsView = computed(() =>
 function talentName(inst: TalentInstance): string {
   return talentByCode(inst.code)?.name ?? 'Talent';
 }
+// Un talent de ce CODE est-il déjà équipé ? (loadout à effets distincts). Sert à
+// désactiver « Équiper » sur un doublon d'un talent déjà porté.
+function talentCodeEquipped(code: string, exceptId?: string): boolean {
+  return (char.row?.talents ?? []).some((t) => t.equipped && t.code === code && t.id !== exceptId);
+}
 async function doEquipTalent(id: string) {
   const uid = auth.user?.id;
-  if (uid) await char.equipTalent(uid, id, c.value.level.level);
+  if (!uid) return;
+  const res = await char.equipTalent(uid, id, c.value.level.level);
+  if (res === 'dup')
+    $q.notify({ type: 'warning', message: 'Un talent de ce type est déjà équipé (effets distincts uniquement).' });
+  else if (res === 'full')
+    $q.notify({ type: 'warning', message: 'Plus d’emplacement de talent libre.' });
 }
 async function doUnequipTalent(id: string) {
   const uid = auth.user?.id;
@@ -2100,7 +2111,12 @@ async function doInfuse(fodderId: string) {
   const uid = auth.user?.id;
   const target = infuseTarget.value;
   if (!uid || !target) return;
-  await char.infuseTalent(uid, target.id, fodderId, c.value.level.level);
+  const ok = await char.infuseTalent(uid, target.id, fodderId, c.value.level.level);
+  if (!ok)
+    $q.notify({
+      type: 'warning',
+      message: 'Ce talent est déjà à ton niveau max — monte de niveau pour le pousser plus loin.',
+    });
 }
 
 // Prochains déblocages (timeline « À venir » de l'onglet Perso) — donne envie de
@@ -2589,9 +2605,7 @@ async function explore(d: Dungeon) {
       celebrateRareDrop(dr);
     }
     // (Les familiers ne tombent PLUS dans les donjons — uniquement au Labyrinthe.)
-    // Butin consommable (en plus de l'équipement).
-    const consDropId = rollConsumableDrop(dropRng, r.cleared);
-    const consDrop = consDropId ? shopItem(consDropId) : undefined;
+    // (Les consommables ne DROPPENT plus — peu utiles ; restent achetables en boutique.)
     // Poussière SCALÉE au niveau du donjon (refonte C : l'infusion est la
     // progression → le revenu doit suivre les coûts qui montent avec le niveau).
     const dust = r.defeated * (2 + Math.round(d.dropLevel * 0.5)) + (r.cleared ? d.dropLevel : 0);
@@ -2609,7 +2623,6 @@ async function explore(d: Dungeon) {
       stones,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(consumed.length ? { consumed } : {}),
-      ...(consDropId ? { gained: [consDropId] } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
     });
     if (talentDrops.length) celebrateTalentDrop(talentDrops[0]!);
@@ -2637,7 +2650,6 @@ async function explore(d: Dungeon) {
         };
       }),
       drops,
-      ...(consDrop ? { consumable: { emoji: consDrop.emoji, name: consDrop.name } } : {}),
     };
     // 1er nettoyage d'un donjon (débloque le suivant) = moment de progression → éclat.
     if (r.cleared && lastRunFirstVisit.value)

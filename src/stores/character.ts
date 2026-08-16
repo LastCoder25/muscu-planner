@@ -21,7 +21,7 @@ import {
   type PendingReward,
 } from '@/lib/items';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
-import { normalizeTalents, talentInfuseXp, talentsEarned, effectiveTalentLevel, type TalentInstance } from '@/lib/talents';
+import { normalizeTalents, talentInfuseXp, talentsEarned, talentXpFloor, type TalentInstance } from '@/lib/talents';
 import {
   createMap,
   advanceWorld,
@@ -688,15 +688,22 @@ export const useCharacterStore = defineStore('character', () => {
 
   // ── Talents (refonte B : drop + infusion + loadout à emplacements) ──
   // Équipe un talent possédé (respecte le quota talentsEarned(level)). Swap libre.
-  async function equipTalent(userId: string, id: string, playerLevel: number) {
+  // Équipe un talent. Refuse si un talent du MÊME code est déjà équipé (loadout à
+  // effets DISTINCTS) ou si plus d'emplacement. Renvoie un code de résultat pour le feedback.
+  async function equipTalent(
+    userId: string,
+    id: string,
+    playerLevel: number,
+  ): Promise<'ok' | 'dup' | 'full' | 'noop'> {
     const cur = row.value;
-    if (!cur) return;
+    if (!cur) return 'noop';
     const inst = cur.talents.find((t) => t.id === id);
-    if (!inst || inst.equipped) return;
-    const equippedCount = cur.talents.filter((t) => t.equipped).length;
-    if (equippedCount >= talentsEarned(playerLevel)) return; // plus d'emplacement libre
+    if (!inst || inst.equipped) return 'noop';
+    if (cur.talents.some((t) => t.equipped && t.code === inst.code)) return 'dup'; // déjà ce type
+    if (cur.talents.filter((t) => t.equipped).length >= talentsEarned(playerLevel)) return 'full';
     const talents = cur.talents.map((t) => (t.id === id ? { ...t, equipped: true } : t));
-    return persistOptimistic(userId, { talents });
+    await persistOptimistic(userId, { talents });
+    return 'ok';
   }
   async function unequipTalent(userId: string, id: string) {
     const cur = row.value;
@@ -704,20 +711,29 @@ export const useCharacterStore = defineStore('character', () => {
     const talents = cur.talents.map((t) => (t.id === id ? { ...t, equipped: false } : t));
     return persistOptimistic(userId, { talents });
   }
-  // Infuse (consomme) le talent `fodderId` dans `targetId` → +XP au target, fodder
-  // retiré. BLOQUÉ si le target est déjà au plafond (niveau effectif ≥ niveau joueur) →
-  // pas de gaspillage ni de dépassement (comme le gear plafonné au niveau joueur).
-  async function infuseTalent(userId: string, targetId: string, fodderId: string, playerLevel: number) {
+  // Infuse (consomme) `fodderId` dans `targetId` → +XP au target (clampé au niveau
+  // joueur : pas de « banking » au-delà, sinon un talent auto-maxerait en montant de
+  // niveau). Renvoie false si le target est déjà au plafond (feedback UI). Le fodder
+  // n'est consommé QUE si l'infusion a lieu.
+  async function infuseTalent(
+    userId: string,
+    targetId: string,
+    fodderId: string,
+    playerLevel: number,
+  ): Promise<boolean> {
     const cur = row.value;
-    if (!cur || targetId === fodderId) return;
+    if (!cur || targetId === fodderId) return false;
     const target = cur.talents.find((t) => t.id === targetId);
     const fodder = cur.talents.find((t) => t.id === fodderId);
-    if (!target || !fodder) return;
-    if (effectiveTalentLevel(target.xp, playerLevel) >= playerLevel) return; // déjà au plafond
+    if (!target || !fodder) return false;
+    const capXp = Math.max(0, talentXpFloor(playerLevel + 1) - 1); // XP max au niveau joueur
+    if (target.xp >= capXp) return false; // déjà au plafond → on ne consomme rien
+    const newXp = Math.min(capXp, target.xp + talentInfuseXp(fodder));
     const talents = cur.talents
       .filter((t) => t.id !== fodderId)
-      .map((t) => (t.id === targetId ? { ...t, xp: t.xp + talentInfuseXp(fodder) } : t));
-    return persistOptimistic(userId, { talents });
+      .map((t) => (t.id === targetId ? { ...t, xp: newXp } : t));
+    await persistOptimistic(userId, { talents });
+    return true;
   }
 
   async function equip(userId: string, itemId: string) {
