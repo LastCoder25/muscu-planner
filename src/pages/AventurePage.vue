@@ -2741,13 +2741,19 @@ async function fightBoss(b: MilestoneBoss) {
 }
 // Choix d'une récompense parmi les 3 candidats en attente.
 function doChooseReward(index: number) {
-  withUid(
-    (uid) =>
-      char
-        .chooseReward(uid, index)
-        .then(() => $q.notify({ type: 'positive', message: 'Récompense récupérée !' })),
-    'Impossible de récupérer la récompense.',
-  );
+  const cand = char.row?.pending_reward?.candidates[index];
+  const isItem = cand?.kind === 'item';
+  const setId = isItem ? cand.item.setId : undefined;
+  const itemId = isItem ? cand.item.id : undefined;
+  withUid(async (uid) => {
+    const before = setId ? setCounts(char.row?.equipped ?? {})[setId] ?? 0 : 0;
+    await char.chooseReward(uid, index);
+    // ÉQUIPE directement l'objet choisi depuis la fenêtre du boss (comme en donjon) :
+    // si `chooseReward` l'a mis au sac (slot occupé), on le force-équipe (l'ancien → sac).
+    if (isItem && itemId && char.row?.inventory.some((i) => i.id === itemId)) await char.equip(uid, itemId);
+    if (setId) celebrateSetTier(setId, before, setCounts(char.row?.equipped ?? {})[setId] ?? 0);
+    $q.notify({ type: 'positive', message: isItem ? 'Objet équipé !' : 'Récompense récupérée !' });
+  }, 'Impossible de récupérer la récompense.');
 }
 
 // ── Faille sans fin (end-game infini) ──
@@ -2978,8 +2984,37 @@ function doFuse(rarity: Rarity) {
   );
 }
 
+// Animation de PALIER DE SET : si équiper `setId` a fait franchir un palier (2/3/4
+// pièces), on célèbre en montrant le set + le bonus tout juste débloqué.
+function celebrateSetTier(setId: string | undefined, before: number, after: number) {
+  if (!setId || after <= before) return;
+  const set = SET_BY_ID[setId];
+  if (!set) return;
+  const crossed = set.tiers.filter((t) => before < t.pieces && after >= t.pieces);
+  if (!crossed.length) return;
+  const top = crossed[crossed.length - 1]!;
+  // Niveau moyen des pièces du set équipées (pour le libellé du bonus).
+  const eq = char.row?.equipped ?? {};
+  const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === setId);
+  const avg = pieces.length ? Math.round(pieces.reduce((a, it) => a + it.level, 0) / pieces.length) : 1;
+  gameFx.celebrate({
+    kind: 'unlock',
+    emoji: set.emoji,
+    title: `${set.emoji} ${set.name} — ${after}/4 pièces`,
+    subtitle: `Bonus ${top.pieces} pièces : ${effectLabel({ type: top.type, value: top.base }, avg)}`,
+    rarity: top.pieces >= 4 ? 'divin' : top.pieces >= 3 ? 'legendary' : 'epic',
+  });
+}
+// Équipe un objet du sac + déclenche l'animation de palier de set le cas échéant.
+async function equipWithSetFx(uid: string, itemId: string) {
+  const item = char.row?.inventory.find((i) => i.id === itemId);
+  const setId = item?.setId;
+  const before = setId ? setCounts(char.row?.equipped ?? {})[setId] ?? 0 : 0;
+  await char.equip(uid, itemId);
+  if (setId) celebrateSetTier(setId, before, setCounts(char.row?.equipped ?? {})[setId] ?? 0);
+}
 function doEquip(itemId: string) {
-  withUid((uid) => char.equip(uid, itemId), 'Impossible d’équiper.');
+  withUid((uid) => equipWithSetFx(uid, itemId), 'Impossible d’équiper.');
 }
 // Remplacement d'un objet équipé : le joueur choisit dans une modale ce qu'il
 // advient de l'ancien (garder au sac / recycler → poussière / vendre → or).
@@ -2996,11 +3031,14 @@ function confirmReplace(disposal: 'salvage' | 'sell' | 'keep') {
   if (old && disposal === 'salvage') message = `Équipé · ancien cassé (+${salvageValue(old)} ✨)`;
   else if (old && disposal === 'sell') message = `Équipé · ancien vendu (+${sellValue(old)} 🪙)`;
   else if (old) message = 'Équipé · ancien rangé au sac';
+  const setId = drop.setId;
+  const before = setId ? setCounts(char.row?.equipped ?? {})[setId] ?? 0 : 0;
   withUid(
     (uid) =>
-      char
-        .equipReplacing(uid, drop.id, disposal)
-        .then(() => $q.notify({ type: 'positive', position: 'top', message })),
+      char.equipReplacing(uid, drop.id, disposal).then(() => {
+        if (setId) celebrateSetTier(setId, before, setCounts(char.row?.equipped ?? {})[setId] ?? 0);
+        $q.notify({ type: 'positive', position: 'top', message });
+      }),
     'Action impossible.',
   );
 }
