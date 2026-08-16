@@ -312,6 +312,8 @@ import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLiveStore, type LiveSet, type LiveExercise } from '@/stores/live';
 import { useLogsStore } from '@/stores/logs';
+import { useProgress } from '@/composables/useProgress';
+import { useXpFx } from '@/composables/useXpFx';
 import SwapSheet from '@/components/SwapSheet.vue';
 
 const route = useRoute();
@@ -322,6 +324,8 @@ const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const live = useLiveStore();
 const logs = useLogsStore();
+const progress = useProgress();
+const xpFx = useXpFx();
 
 const DIFFS = [
   { n: 1, label: 'Facile' },
@@ -518,12 +522,36 @@ async function finish() {
   if (!userId) return;
   saving.value = true;
   try {
+    await logs.fetchAll(); // garantit le cache → l'insert met à jour l'XP/progress
     const log = live.buildLog({
       difficulty: globalDiff.value,
       comment: globalComment.value.trim(),
     });
+    // Snapshot XP AVANT (piste de la séance + Global) pour l'animation de gain.
+    const isMuscu = (log.discipline ?? 'musculation') === 'musculation';
+    const beforeA = isMuscu ? progress.muscu.value : progress.tennis.value;
+    const beforeG = progress.global.value;
     await logs.insert(userId, log);
     live.clear();
+    await nextTick();
+    xpFx.show([
+      {
+        emoji: isMuscu ? '🏋️' : '🤸',
+        label: isMuscu ? 'Muscu' : 'Prépa',
+        fromLevel: beforeA.level,
+        fromPct: beforeA.progressPct,
+        toLevel: (isMuscu ? progress.muscu.value : progress.tennis.value).level,
+        toPct: (isMuscu ? progress.muscu.value : progress.tennis.value).progressPct,
+      },
+      {
+        emoji: '🌍',
+        label: 'Global',
+        fromLevel: beforeG.level,
+        fromPct: beforeG.progressPct,
+        toLevel: progress.global.value.level,
+        toPct: progress.global.value.progressPct,
+      },
+    ]);
     $q.notify({ type: 'positive', message: 'Séance enregistrée 💪' });
     await router.push(`/bilan/${log.id}`);
   } catch (e) {

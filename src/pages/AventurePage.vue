@@ -1790,6 +1790,7 @@ import {
   talentEffects,
   talentByCode,
   effectiveTalentLevel,
+  talentLevel,
   talentRarity,
   talentValue,
   talentXpProgress,
@@ -1856,6 +1857,17 @@ function celebrateRareDrop(it: Item) {
     subtitle: it.name,
     rarity: it.rarity,
   });
+}
+// Drop de talent : éclat central si épique+ (moment notable), sinon toast discret.
+function celebrateTalentDrop(t: TalentInstance) {
+  const def = talentByCode(t.code);
+  if (!def) return;
+  const rarity = talentRarity(talentLevel(t.xp));
+  if (rarity === 'epic' || rarity === 'legendary' || rarity === 'divin') {
+    gameFx.celebrate({ kind: 'generic', emoji: '🎓', title: `Talent ${RARITY_LABEL[rarity]} !`, subtitle: def.name, rarity });
+  } else {
+    $q.notify({ type: 'positive', icon: 'school', message: `🎓 Talent trouvé : ${def.name}` });
+  }
 }
 
 const loading = ref(true);
@@ -2592,8 +2604,7 @@ async function explore(d: Dungeon) {
       ...(consDropId ? { gained: [consDropId] } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
     });
-    if (talentDrops.length)
-      $q.notify({ type: 'positive', icon: 'school', message: `🎓 Talent trouvé : ${talentName(talentDrops[0]!)} !` });
+    if (talentDrops.length) celebrateTalentDrop(talentDrops[0]!);
     selectedConsumables.value = []; // consommés
     run.value = {
       name: d.name,
@@ -2620,6 +2631,15 @@ async function explore(d: Dungeon) {
       drops,
       ...(consDrop ? { consumable: { emoji: consDrop.emoji, name: consDrop.name } } : {}),
     };
+    // 1er nettoyage d'un donjon (débloque le suivant) = moment de progression → éclat.
+    if (r.cleared && lastRunFirstVisit.value)
+      gameFx.celebrate({
+        kind: 'unlock',
+        emoji: d.emoji,
+        title: `${d.name} nettoyé !`,
+        subtitle: 'Nouveau donjon débloqué',
+        rarity: 'epic',
+      });
     pendingNotify.value = r.cleared
       ? { type: 'positive', message: `Donjon nettoyé — +${gold} 🪙` }
       : null;
@@ -2761,8 +2781,7 @@ async function fightBoss(b: MilestoneBoss) {
       ...(consumed.length ? { consumed } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
     });
-    if (talentDrops.length)
-      $q.notify({ type: 'positive', icon: 'school', message: `🎓 Talent trouvé : ${talentName(talentDrops[0]!)} !` });
+    if (talentDrops.length) celebrateTalentDrop(talentDrops[0]!);
     selectedConsumables.value = [];
     run.value = {
       name: b.name,
@@ -2787,6 +2806,15 @@ async function fightBoss(b: MilestoneBoss) {
       ],
       drops: [],
     };
+    // Victoire de boss de palier = jalon MAJEUR → célébration centrale (gros éclat).
+    if (win)
+      gameFx.celebrate({
+        kind: 'generic',
+        emoji: b.emoji,
+        title: `${b.name} vaincu !`,
+        subtitle: 'Boss de palier terrassé 🏆',
+        rarity: 'divin',
+      });
     // Rapport toujours ouvert : sur victoire, il affiche le CHOIX de récompense en
     // bas (à la place du butin) ; sur défaite, juste le résultat.
     pendingNotify.value = win
@@ -2870,6 +2898,7 @@ async function fightEndless() {
       // (Les familiers ne tombent PLUS à la Faille — uniquement au Labyrinthe.)
     }
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
+    const prevBest = endlessBest.value;
     await char.applyEndless(uid, {
       tier,
       energyCost: cost,
@@ -2880,6 +2909,15 @@ async function fightEndless() {
       stones: win ? 6 : 0,
       ...(consumed.length ? { consumed } : {}),
     });
+    // Nouveau palier RECORD de la Faille → célébration (progression end-game).
+    if (win && tier > prevBest)
+      gameFx.celebrate({
+        kind: 'generic',
+        emoji: '🌀',
+        title: `Faille · palier ${tier} !`,
+        subtitle: 'Nouveau record de profondeur',
+        rarity: 'legendary',
+      });
     selectedConsumables.value = [];
     run.value = {
       name: `Faille sans fin · palier ${tier}`,

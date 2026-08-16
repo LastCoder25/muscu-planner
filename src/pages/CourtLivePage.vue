@@ -105,12 +105,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useLiveCourtStore } from '@/stores/liveCourt';
 import { useTennisStore } from '@/stores/tennis';
+import { useProgress } from '@/composables/useProgress';
+import { useXpFx } from '@/composables/useXpFx';
 import {
   DRILL_CATEGORY_LABELS,
   DRILL_SHOT_LABELS,
@@ -127,6 +129,8 @@ const router = useRouter();
 const auth = useAuthStore();
 const live = useLiveCourtStore();
 const tennis = useTennisStore();
+const progress = useProgress();
+const xpFx = useXpFx();
 
 const run = computed(() => live.run);
 const idx = computed(() => live.run?.index ?? 0);
@@ -219,8 +223,29 @@ async function finish() {
   const log = live.buildLog();
   if (!log || !userId) return;
   try {
+    const beforeT = progress.tennis.value;
+    const beforeG = progress.global.value;
     await tennis.addLog(userId, log);
     live.clear();
+    await nextTick();
+    xpFx.show([
+      {
+        emoji: '🎾',
+        label: 'Tennis',
+        fromLevel: beforeT.level,
+        fromPct: beforeT.progressPct,
+        toLevel: progress.tennis.value.level,
+        toPct: progress.tennis.value.progressPct,
+      },
+      {
+        emoji: '🌍',
+        label: 'Global',
+        fromLevel: beforeG.level,
+        fromPct: beforeG.progressPct,
+        toLevel: progress.global.value.level,
+        toPct: progress.global.value.progressPct,
+      },
+    ]);
     await router.push(`/court/bilan/${log.id}`);
   } catch (e) {
     $q.notify({

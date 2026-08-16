@@ -709,6 +709,15 @@ async function lifecycle() {
     if (o) {
       lastOutcome.value = o;
       collectOpen.value = true;
+      // Butin d'expédition légendaire/divin → éclat central (gros moment).
+      if (o.item && (o.item.rarity === 'legendary' || o.item.rarity === 'divin'))
+        gameFx.celebrate({
+          kind: 'drop',
+          emoji: o.item.emoji,
+          title: o.item.rarity === 'divin' ? 'DROP DIVIN !' : 'Butin légendaire !',
+          subtitle: o.item.name,
+          rarity: o.item.rarity,
+        });
     }
     await char.expeSyncMap(uid, Date.now(), heroLevel.value);
   } finally {

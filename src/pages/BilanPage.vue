@@ -186,6 +186,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLogsStore } from '@/stores/logs';
+import { useGameFx } from '@/composables/useGameFx';
 
 const route = useRoute();
 const router = useRouter();
@@ -194,6 +195,7 @@ const auth = useAuthStore();
 const profileStore = useProfileStore();
 const sessionsStore = useSessionsStore();
 const logs = useLogsStore();
+const gameFx = useGameFx();
 
 const readOnly = computed(() => !!route.query.h);
 const loading = ref(true);
@@ -364,10 +366,17 @@ onMounted(async () => {
       const priors = allRows.filter((r) => r.payload?.id !== log.value!.id).map((r) => r.payload);
       prs.value = detectLiftPRs(log.value, priors);
       if (prs.value.length) {
-        $q.notify({
-          type: 'positive',
-          icon: 'emoji_events',
-          message: `🏆 ${prs.value.length} record${prs.value.length > 1 ? 's' : ''} de force battu${prs.value.length > 1 ? 's' : ''} !`,
+        const top = prs.value[0]!;
+        // Célébration centrale (gros moment de motivation) + le bandeau reste en détail.
+        gameFx.celebrate({
+          kind: 'generic',
+          emoji: '🏆',
+          title:
+            prs.value.length > 1
+              ? `${prs.value.length} records de force !`
+              : 'Nouveau record de force !',
+          subtitle: `${top.name} · ${top.e1rm} kg (+${top.gain})`,
+          rarity: 'legendary',
         });
       }
     }
