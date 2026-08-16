@@ -579,7 +579,10 @@
                   <span class="gpill" :class="'p-' + it.rarity">{{ RARITY_LABEL[it.rarity] }}</span>
                   <span v-if="it.setId" class="gpill set">🧩 Set</span>
                 </div>
-                <div class="inv-eff">{{ SLOT_LABEL[it.slot] }} · {{ itemEffects(it) }}</div>
+                <div class="inv-eff">
+                  {{ SLOT_LABEL[it.slot] }} · {{ itemEffects(it) }}
+                  <span v-if="rollStarStr(it)" class="roll-stars" :title="'Qualité du roll'">{{ rollStarStr(it) }}</span>
+                </div>
                 <div class="drop-cmp inv-cmp">
                   <span v-if="equippedInSlot(it.slot)"
                     >Équipé : {{ RARITY_LABEL[equippedInSlot(it.slot)!.rarity] }} Nv
@@ -1376,6 +1379,7 @@
                 </div>
                 <div class="rc-eff">
                   {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
+                  <span v-if="rollStarStr(cand.item)" class="roll-stars">{{ rollStarStr(cand.item) }}</span>
                 </div>
                 <div class="drop-cmp rc-cmp">
                   <span v-if="equippedInSlot(cand.item.slot)"
@@ -1552,7 +1556,10 @@
                 <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
                 <span v-if="d.setId" class="gpill set">🧩 Set</span>
               </div>
-              <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}</div>
+              <div class="inv-eff">
+                {{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}
+                <span v-if="rollStarStr(d)" class="roll-stars">{{ rollStarStr(d) }}</span>
+              </div>
               <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
                 <span
                   >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
@@ -1711,6 +1718,7 @@ import {
   rollDrop,
   rollSetPiece,
   effectLabel,
+  rollStars,
   canUpgrade,
   upgradeCost,
   infuseToMaxCost,
@@ -2595,6 +2603,11 @@ function itemEffects(it: Omit<Item, 'id'>): string {
   const a = effectLabel(it.effect, it.level);
   return it.effect2 ? `${a} · ${effectLabel(it.effect2, it.level)}` : a;
 }
+// Qualité du roll en étoiles pleines/vides (« ★★★★☆ ») ; vide si objet legacy (pas de roll).
+function rollStarStr(it: { roll?: number } | null | undefined): string {
+  const n = rollStars(it?.roll);
+  return n ? '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n) : '';
+}
 // Nombre de pièces du set d'un boss possédées (équipées + sac).
 // Pièces du set du boss ACTUELLEMENT ÉQUIPÉES (≤ 4 slots) — pas celles du sac,
 // pour que le compteur colle aux paliers 2/3/4 (jamais « 6/4 »).
@@ -3213,6 +3226,17 @@ watch(
       const r = await char.claimLevelUps(uid, lvl);
       if (r) {
         levelBurst.value = r;
+        // Animation centrale (overlay plein écran) : montée de niveau + un éclat par
+        // déblocage (chaîne). La carte .lb-card.major reste le détail lisible en dessous.
+        gameFx.celebrate({
+          kind: 'levelup',
+          emoji: '⭐',
+          title: `Niveau ${r.to} !`,
+          ...(r.to > r.from + 1 ? { subtitle: `+${r.to - r.from} niveaux` } : {}),
+          rarity: 'epic',
+        });
+        for (const u of levelBurstUnlocks.value.slice(0, 3))
+          gameFx.celebrate({ kind: 'unlock', emoji: u.emoji, title: u.title, subtitle: u.detail, rarity: 'legendary' });
         // Plus long s'il y a des déblocages à lire (sinon simple montée).
         const hasUnlocks = levelBurstUnlocks.value.length > 0;
         setTimeout(() => (levelBurst.value = null), hasUnlocks ? 7000 : 3200);
@@ -4593,6 +4617,14 @@ onUnmounted(() => {
 .inv-eff {
   font-size: 11px;
   color: var(--dim);
+}
+/* Qualité du roll : étoiles jaune voltage (pleines) sur fond discret (vides). */
+.roll-stars {
+  margin-left: 4px;
+  letter-spacing: 1px;
+  color: var(--accent);
+  font-size: 10px;
+  white-space: nowrap;
 }
 .rarity {
   font-size: 10px;

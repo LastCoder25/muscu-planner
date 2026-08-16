@@ -199,9 +199,11 @@
       </div>
     </transition>
 
-    <!-- Panneau emplacement de filon (construire / récolter / améliorer) -->
-    <transition name="sheet">
-      <div v-if="selectedPlot" class="sheet">
+    <!-- Emplacement de filon (construire / récolter / améliorer) — MODALE centrée
+         (clic-dehors ou croix pour fermer ; plus de scroll en bas de page). -->
+    <transition name="plot-fade">
+      <div v-if="selectedPlot" class="plot-backdrop" @click.self="selectedSlot = null">
+      <div class="sheet plot-modal">
         <div class="sh-head">
           <span class="sh-emo">{{ selectedPlot.building ? filonEmoji(selectedPlot.building) : '🏗️' }}</span>
           <div class="sh-main">
@@ -214,7 +216,7 @@
               <template v-else>Construis un filon (production passive de ressources).</template>
             </div>
           </div>
-          <button class="sh-x" @click="selectedPlot = null">✕</button>
+          <button class="sh-x" @click="selectedSlot = null">✕</button>
         </div>
 
         <!-- Construire : choix du type (gaté par niveau + unicité) -->
@@ -269,6 +271,7 @@
             </button>
           </div>
         </div>
+      </div>
       </div>
     </transition>
 
@@ -566,8 +569,16 @@ function doBuild(slot: number, typeId: string) {
   if (!uid || !t) return;
   void char.buildFilon(uid, typeId, slot, Date.now(), heroLevel.value).then(() => {
     // Célébration centrale uniquement à la CONSTRUCTION (rare), pas aux upgrades.
-    if (char.row?.buildings.some((b) => b.slot === slot))
-      gameFx.celebrate({ kind: 'building', emoji: t.emoji, title: 'Bâtiment construit !', subtitle: t.label });
+    if (char.row?.buildings.some((b) => b.slot === slot)) {
+      selectedSlot.value = null; // ferme la modale → l'animation joue en plein écran
+      gameFx.celebrate({
+        kind: 'building',
+        emoji: t.emoji,
+        title: 'Bâtiment construit !',
+        subtitle: t.label,
+        rarity: 'legendary', // gros éclat pour un moment marquant
+      });
+    }
   });
 }
 function doUpgrade(slot: number) {
@@ -1241,6 +1252,32 @@ function fmtMin(min: number): string {
   border-radius: 14px;
   background: var(--surface);
   border: 1px solid var(--line);
+}
+/* Emplacement de filon en MODALE centrée (fini le scroll + croix qui ferme). */
+.plot-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.plot-modal {
+  margin: 0;
+  width: 100%;
+  max-width: 440px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.plot-fade-enter-active,
+.plot-fade-leave-active {
+  transition: opacity 0.2s;
+}
+.plot-fade-enter-from,
+.plot-fade-leave-to {
+  opacity: 0;
 }
 .active-card {
   display: flex;

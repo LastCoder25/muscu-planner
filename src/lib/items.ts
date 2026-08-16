@@ -46,6 +46,15 @@ export interface Item {
   setId?: string; // appartenance à un SET (bonus à 2/3/4 pièces) — cf. ITEM_SETS
   locked?: boolean; // 🔒 protégé : exclu de la casse/vente (en masse ET individuelle)
   species?: string; // slot 'familiar' uniquement : id de la RACE (cf. FAMILIAR_SPECIES)
+  roll?: number; // qualité du roll de l'effet principal (0..1 dans la bande ±20 %) → étoiles
+}
+
+// Qualité de roll → nombre d'ÉTOILES (1..5) : où l'effet est tombé dans la bande de
+// variance ±20 %. 5★ = roll quasi max (proche du +20 %), 1★ = bas de fourchette.
+// Aide le joueur à juger « bon roll ou pas » sans calcul.
+export function rollStars(roll: number | undefined): number {
+  if (roll == null) return 0; // objet legacy sans roll → pas d'étoiles
+  return Math.min(5, 1 + Math.floor(Math.max(0, Math.min(1, roll)) * 5));
 }
 
 // L'effet grandit de +5 % de la base par niveau au-dessus de 1. Pente VOLONTAIREMENT
@@ -375,9 +384,11 @@ export function rollDrop(
   // value = magnitude de BASE : rareté × magnitude du DONJON (deeper = meilleur
   // objet, chasse au loot) × VARIANCE de roll ±20 % (farmer un bon roll a du sens).
   const mag = dropMagnitude(lvl);
-  const rollValue = (b: number) =>
-    Math.max(1, Math.round(b * RARITY_MULT[rarity] * mag * (0.8 + rng() * 0.4)));
-  const value = rollValue(chosen.base);
+  // VARIANCE ±20 % : `vf` = fraction de roll de l'effet PRINCIPAL (→ qualité/étoiles).
+  const vf = 0.8 + rng() * 0.4;
+  const rollValue = (b: number, v: number = 0.8 + rng() * 0.4) =>
+    Math.max(1, Math.round(b * RARITY_MULT[rarity] * mag * v));
+  const value = rollValue(chosen.base, vf);
   // Objet à effet SIGNATURE → nom évocateur (« Guillotine ») ; sinon nom + adjectif.
   const sigNames = SIGNATURE_NAMES[chosen.type];
   const name = sigNames ? pick(rng, sigNames) : `${pick(rng, NAMES[slot])} ${RARITY_ADJ[rarity]}`;
@@ -405,6 +416,7 @@ export function rollDrop(
     baseLevel: level,
     effect: { type: chosen.type, value }, // 1 stat (le set fait la synergie) — sauf divin (2 effets)
     ...(effect2 ? { effect2 } : {}),
+    roll: Math.round(((vf - 0.8) / 0.4) * 100) / 100,
   };
 }
 
@@ -420,13 +432,17 @@ export function rollSetPiece(
 ): Omit<Item, 'id'> {
   const set = SET_BY_ID[opts.setId];
   const slot = opts.preferSlot ?? pick(rng, SLOTS);
-  // Les pièces de SET sont prestigieuses : ÉPIQUE ou LÉGENDAIRE uniquement (jamais
-  // commun/rare). Plus de chance de légendaire avec la chance (fiole).
-  const rarity: Rarity = rng() < 0.45 + (opts.luck ?? 0) * 0.4 ? 'legendary' : 'epic';
+  // Rareté RARE → LÉGENDAIRE (2026‑08‑16) : les sets couvrent désormais 3 raretés
+  // (plus « épique/lég uniquement ») → on trouve régulièrement mieux, la satisfaction
+  // de renouveler son stuff. Pondérée par la `luck` (palier/fiole → plus haut).
+  const luck = opts.luck ?? 0;
+  const rr = rng();
+  const rarity: Rarity = rr < 0.15 + luck * 0.4 ? 'legendary' : rr < 0.55 + luck * 0.25 ? 'epic' : 'rare';
   const chosen = pick(rng, SLOT_EFFECTS[slot]);
-  // Magnitude liée au palier du boss (chasse au loot : un set de palier profond est
-  // objectivement meilleur qu'un set de palier bas).
-  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity] * dropMagnitude(opts.level)));
+  // Magnitude = base × rareté × palier (chasse au loot) × VARIANCE ±20 % (comme les
+  // drops normaux → un bon roll de set a de la valeur ; qualité affichée en étoiles).
+  const vf = 0.8 + rng() * 0.4;
+  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity] * dropMagnitude(opts.level) * vf));
   const noun = pick(rng, NAMES[slot]);
   const level = 1; // REFONTE C : la pièce de set arrive niv.1 (identité) → à infuser
   return {
@@ -438,6 +454,7 @@ export function rollSetPiece(
     baseLevel: level,
     effect: { type: chosen.type, value }, // 1 stat + la synergie de set (bonus 2/3/4 pièces)
     ...(set ? { setId: opts.setId } : {}),
+    roll: Math.round(((vf - 0.8) / 0.4) * 100) / 100,
   };
 }
 
