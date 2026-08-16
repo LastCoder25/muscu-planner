@@ -240,17 +240,23 @@
 
         <!-- Bâtiment construit : gérer -->
         <div v-else-if="selectedPlot.building" class="plot-manage">
-          <!-- Utilitaire (entrepôt…) : effet + améliorer (pas de récolte) -->
-          <div v-if="isUtility(selectedPlot.building)" class="pm-ready">
-            <span>⚙️ <b>{{ utilityEffectLabel(selectedPlot.building) }}</b></span>
+          <!-- Niveau actuel + effet/production, avec APERÇU du niveau suivant -->
+          <div class="pm-level">
+            <span>Niveau <b>{{ selectedPlot.building.level }}</b> · {{ filonProdLabel(selectedPlot.building) }}</span>
+            <span
+              v-if="nextEffectLabel(selectedPlot.building) && nextEffectLabel(selectedPlot.building) !== filonProdLabel(selectedPlot.building)"
+              class="pm-next"
+            >
+              ⬆️ Niv {{ selectedPlot.building.level + 1 }} · {{ nextEffectLabel(selectedPlot.building) }}
+            </span>
           </div>
           <!-- Filon : récolte (accumulation fractionnaire visible même quand < 1) -->
-          <div v-else class="pm-ready">
+          <div v-if="!isUtility(selectedPlot.building)" class="pm-ready">
             <span>
               En stock :
-              <b>{{ filonEmoji(selectedPlot.building) === '⛏️' ? '✨' : '💎' }}{{ plotAccruedExact(selectedPlot.building).toFixed(1) }}</b>
+              <b>{{ filonResEmoji(selectedPlot.building) }}{{ plotAccruedExact(selectedPlot.building).toFixed(1) }}</b>
             </span>
-            <span class="pm-cap">/ {{ Math.floor(plotStorage(selectedPlot.building)) }} max · {{ filonProdLabel(selectedPlot.building) }}</span>
+            <span class="pm-cap">/ {{ Math.floor(plotStorage(selectedPlot.building)) }} max</span>
           </div>
           <div class="pm-actions">
             <button
@@ -262,6 +268,7 @@
               🧺 Récolter
             </button>
             <button
+              v-if="buildingScales(selectedPlot.building.typeId)"
               class="pm-up"
               :disabled="!plotCanUpgrade(selectedPlot.building) || (char.row?.gold ?? 0) < plotUpCost(selectedPlot.building)"
               @click="doUpgrade(selectedPlot.slot)"
@@ -322,6 +329,7 @@ import { playerWithGear } from '@/lib/items';
 import {
   BUILDING_TYPES,
   buildingType,
+  buildingScales,
   plotsForLevel,
   slotUnlockLevel,
   buildingUpgradeCost,
@@ -537,11 +545,24 @@ function filonLabel(b: Building): string {
   return buildingType(b.typeId)?.label ?? 'Filon';
 }
 const RES_EMOJI: Record<string, string> = { dust: '✨', stone: '💎', energy: '⚡' };
-function filonProdLabel(b: Building): string {
+// Emoji de la ressource produite par un bâtiment (✨/💎/⚡) — remplace l'ancien binaire.
+function filonResEmoji(b: Building): string {
+  return RES_EMOJI[buildingType(b.typeId)?.resource ?? 'dust'] ?? '✨';
+}
+// Effet/production d'un bâtiment À UN NIVEAU donné (producteur → prod/h ; utilitaire → effet).
+function buildingEffectAt(b: Building, level: number): string {
   const t = buildingType(b.typeId);
   if (!t) return '';
-  if (t.category === 'utility') return utilityEffectLabel(b);
-  return `${buildingProdPerHour(b).toFixed(1)} ${RES_EMOJI[t.resource ?? 'dust'] ?? '✨'}/h`;
+  const at: Building = { ...b, level };
+  if (t.category === 'utility') return utilityEffectLabel(at);
+  return `${buildingProdPerHour(at).toFixed(1)} ${RES_EMOJI[t.resource ?? 'dust'] ?? '✨'}/h`;
+}
+function filonProdLabel(b: Building): string {
+  return buildingEffectAt(b, b.level);
+}
+// Effet du niveau SUIVANT (vide si déjà au max = niveau joueur).
+function nextEffectLabel(b: Building): string {
+  return plotCanUpgrade(b) ? buildingEffectAt(b, b.level + 1) : '';
 }
 function plotAccrued(b: Building): number {
   return buildingAccrued(b, now.value, storageMult(char.row?.buildings ?? []));
@@ -1220,6 +1241,17 @@ function fmtMin(min: number): string {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.pm-level {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.pm-next {
+  font-size: 12.5px;
+  color: var(--accent);
 }
 .pm-ready {
   display: flex;

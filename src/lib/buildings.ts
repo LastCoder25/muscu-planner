@@ -222,8 +222,15 @@ export function buildingUpgradeCost(level: number): number {
 }
 
 /** Un filon peut-il être amélioré ? (plafonné au niveau du joueur). */
+/** Un bâtiment a-t-il un effet qui SCALE avec le niveau ? (producteur, ou utilitaire
+ *  à effet par niveau). L'incubateur (effet « drapeau » : débloque la fusion) ne scale
+ *  pas → pas d'amélioration possible (éviter un upgrade inutile). */
+export function buildingScales(typeId: string): boolean {
+  const t = buildingType(typeId);
+  return !!t && (!!t.resource || Object.keys(t.effect ?? {}).length > 0);
+}
 export function canUpgradeBuilding(b: Building, playerLevel: number): boolean {
-  return b.level < playerLevel;
+  return buildingScales(b.typeId) && b.level < playerLevel;
 }
 
 /** Production par heure d'un filon à son niveau (0 pour les utilitaires). */

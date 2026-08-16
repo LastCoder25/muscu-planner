@@ -339,6 +339,9 @@
           <button class="gs-b" :class="{ on: gearSub === 'equip' }" @click="gearSub = 'equip'">
             🛡️ Équipement
           </button>
+          <button class="gs-b" :class="{ on: gearSub === 'familiar' }" @click="gearSub = 'familiar'">
+            🐾 Familier
+          </button>
           <button class="gs-b" :class="{ on: gearSub === 'bag' }" @click="gearSub = 'bag'">
             🎒 Sac<span v-if="char.row.inventory.length" class="gs-badge">{{ char.row.inventory.length }}</span>
           </button>
@@ -415,7 +418,10 @@
           </div>
         </div>
 
+        </template>
+
         <!-- Familier (compagnon) : 5ᵉ emplacement, monté aux PIERRES MAGIQUES 💎 -->
+        <template v-if="gearSub === 'familiar'">
         <div class="sec-title">🐾 Familier</div>
         <div class="sec-hint">
           Ton compagnon donne un bonus de race. Les plus rares portent en plus un effet
@@ -515,8 +521,10 @@
             🥚 Construis un <b>Incubateur</b> sur la carte pour fusionner tes familiers.
           </button>
         </div>
+        </template>
 
-        <!-- Sets d'équipement (bonus 2/3/4 pièces) -->
+        <!-- Sets d'équipement (bonus 2/3/4 pièces) — rattachés à l'équipement -->
+        <template v-if="gearSub === 'equip'">
         <template v-if="activeSets.length">
           <div class="sec-title">Sets</div>
           <div v-for="s in activeSets" :key="s.id" class="setcard" :class="{ full: s.count >= 4 }">
@@ -1875,8 +1883,8 @@ const saving = ref(false);
 const pseudoInput = ref('');
 const pseudoError = ref('');
 const tab = ref<'perso' | 'equip' | 'donjons' | 'boss'>('perso');
-// Sous-onglet de l'onglet Équip. : équipement / sac / atelier (évite le long scroll).
-const gearSub = ref<'equip' | 'bag' | 'shop'>('equip');
+// Sous-onglet de l'onglet Équip. : équipement / familier / sac / atelier.
+const gearSub = ref<'equip' | 'familiar' | 'bag' | 'shop'>('equip');
 // L'incubateur (fusion de familiers) est débloqué en le construisant sur la carte.
 const hasIncubator = computed(() => incubatorBuilt(char.row?.buildings ?? []));
 
