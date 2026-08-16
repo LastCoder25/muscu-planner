@@ -37,6 +37,7 @@ export interface ExpeditionOutcome {
   win: boolean;
   gold: number; // crédité au RETOUR
   dust: number;
+  energy: number; // ⚡ énergie de jeu (mines uniquement) → crédite login_energy
   stones: number; // pierres magiques 💎 (ressource rare des familiers)
   item: Omit<Item, 'id'> | null; // la « prise » (pièce de set / objet) ou null
   key: number; // clé de Labyrinthe (consolation rare)
@@ -66,6 +67,7 @@ export interface ExpeditionMessage {
   text: string;
   gold: number;
   dust: number;
+  energy: number; // ⚡ énergie gagnée (mines)
   stones: number;
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
@@ -87,6 +89,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     text: o.text,
     gold: o.gold,
     dust: o.dust,
+    energy: o.energy,
     stones: o.stones,
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     key: o.key,
@@ -403,7 +406,7 @@ export function resolveOutcome(
       waves === 0
         ? pick(rng, FAIL_TEXT.arena)
         : `🏟️ ${waves} vague${waves > 1 ? 's' : ''} tenue${waves > 1 ? 's' : ''} !${good ? ' La foule est en délire.' : ''}`;
-    return { win: good, gold, dust, stones, item, key, reconBonus: 0, waves, text };
+    return { win: good, gold, dust, energy: 0, stones, item, key, reconBonus: 0, waves, text };
   }
 
   // Mine = récolte (pas de combat) ; camp/repaire = combat auto seedé.
@@ -426,6 +429,7 @@ export function resolveOutcome(
       win: false,
       gold: Math.round(cost * EXPE.failRefund), // < coût → jamais un profit
       dust: Math.round(poi.level * 1.5),
+      energy: 0,
       stones: Math.round(poi.level * 0.4),
       item: null,
       key,
@@ -455,6 +459,10 @@ export function resolveOutcome(
   let gold = goldHaul;
   let dust = dustHaul;
   let stones = stoneHaul;
+  // ÉNERGIE : les MINES rendent un peu d'énergie de jeu (∝ niveau × temps de trajet)
+  // → un revenu d'énergie passif, complément du sport, qui adoucit le pincement de
+  // fin de partie (le coût des runs monte plus vite que l'énergie/séance). Mines seules.
+  const energy = poi.type === 'mine' ? Math.round((4 + poi.level * 1.5) * tf) : 0;
   let text = pick(rng, WIN_TEXT[poi.type]);
   // EMBUSCADE sur le trajet (seedée) : ~35 % de chance d'un combat rapide en chemin.
   // Gagné → butin renforcé ; subi (héros trop faible) → butin écorné. Risque/reward.
@@ -474,7 +482,7 @@ export function resolveOutcome(
       text += ' 🩸 Embuscade subie sur le trajet — butin écorné.';
     }
   }
-  return { win: true, gold, dust, stones, item, key, reconBonus: 0, text };
+  return { win: true, gold, dust, energy, stones, item, key, reconBonus: 0, text };
 }
 
 // ── Fond de carte : PARCHEMIN dessiné à l'encre (style « livre d'aventure ») ──

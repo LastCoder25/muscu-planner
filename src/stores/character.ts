@@ -802,6 +802,7 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold + o.gold,
       dust: cur.dust + o.dust,
       stones: cur.stones + (o.stones ?? 0),
+      login_energy: cur.login_energy + (o.energy ?? 0), // ⚡ mine → énergie de jeu
       keys: cur.keys + o.key,
       inventory,
       messages,
@@ -848,10 +849,11 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur || !cur.buildings.length) return null;
     const got = collectable(cur.buildings, now);
-    if (got.dust <= 0 && got.stone <= 0) return null;
+    if (got.dust <= 0 && got.stone <= 0 && got.energy <= 0) return null;
     await persistOptimistic(userId, {
       dust: cur.dust + got.dust,
       stones: cur.stones + got.stone,
+      login_energy: cur.login_energy + got.energy, // ⚡ dynamo → énergie de jeu
       buildings: cur.buildings.map((b) => ({ ...b, collectedAt: now })),
     });
     return got;

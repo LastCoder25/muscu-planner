@@ -146,10 +146,15 @@
       </div>
 
       <!-- Récolte des filons (visible dès qu'il y a quelque chose à récolter) -->
-      <button v-if="readyTotal.dust + readyTotal.stone > 0" class="collect-pill" @click="collectAll">
+      <button
+        v-if="readyTotal.dust + readyTotal.stone + readyTotal.energy > 0"
+        class="collect-pill"
+        @click="collectAll"
+      >
         🧺 Récolter
         <span v-if="readyTotal.dust" class="cp-r">✨{{ readyTotal.dust }}</span>
         <span v-if="readyTotal.stone" class="cp-r">💎{{ readyTotal.stone }}</span>
+        <span v-if="readyTotal.energy" class="cp-r">⚡{{ readyTotal.energy }}</span>
       </button>
     </div>
 
@@ -528,11 +533,12 @@ function filonEmoji(b: Building): string {
 function filonLabel(b: Building): string {
   return buildingType(b.typeId)?.label ?? 'Filon';
 }
+const RES_EMOJI: Record<string, string> = { dust: '✨', stone: '💎', energy: '⚡' };
 function filonProdLabel(b: Building): string {
   const t = buildingType(b.typeId);
   if (!t) return '';
   if (t.category === 'utility') return utilityEffectLabel(b);
-  return `${buildingProdPerHour(b).toFixed(1)} ${t.resource === 'dust' ? '✨' : '💎'}/h`;
+  return `${buildingProdPerHour(b).toFixed(1)} ${RES_EMOJI[t.resource ?? 'dust'] ?? '✨'}/h`;
 }
 function plotAccrued(b: Building): number {
   return buildingAccrued(b, now.value, storageMult(char.row?.buildings ?? []));

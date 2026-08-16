@@ -114,7 +114,7 @@ describe('expedition — héros / trajet', () => {
   };
   const exp: ActiveExpedition = {
     poi, sentAt: 0, midAt: 2 * H, returnAt: 4 * H, goldCost: 100, seed: 1,
-    outcome: { win: true, gold: 0, dust: 0, stones: 0, item: null, key: 0, reconBonus: 0, text: '' },
+    outcome: { win: true, gold: 0, dust: 0, energy: 0, stones: 0, item: null, key: 0, reconBonus: 0, text: '' },
   };
   it('aller : part de la ville, arrive à l’objectif à mi-parcours', () => {
     const t = EXPE.town;
@@ -140,12 +140,16 @@ describe('expedition — résolution', () => {
   const mine: Poi = { id: 'm', type: 'mine', level: 8, x: 30, y: 30, distNorm: 0.3, spawnedAt: 0, expiresAt: 999 * H };
   const lair: Poi = { id: 'l', type: 'lair', setId: 'dragon', level: 6, x: 40, y: 40, distNorm: 0.4, spawnedAt: 0, expiresAt: 999 * H };
 
-  it('mine : toujours réussie + gain NET d’or + poussière + pierres', () => {
+  it('mine : toujours réussie + gain NET d’or + poussière + pierres + énergie', () => {
     const o = resolveOutcome(strong, mine, 1);
     expect(o.win).toBe(true);
     expect(o.gold).toBeGreaterThan(goldCost('mine', mine.level)); // vrai gain net
     expect(o.dust).toBeGreaterThan(0);
     expect(o.stones).toBeGreaterThan(0);
+    expect(o.energy).toBeGreaterThan(0); // les mines rendent un peu d'énergie
+  });
+  it('camp/repaire : PAS d’énergie (mines uniquement)', () => {
+    expect(resolveOutcome(strong, lair, 3).energy).toBe(0);
   });
   it('haul scalé au TEMPS de trajet : un POI plus loin rend plus (même niveau)', () => {
     const near: Poi = { ...mine, distNorm: 0.1 };

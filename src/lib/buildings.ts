@@ -17,8 +17,8 @@
 // NB : `Date.now()` n'est PAS utilisé ici — le `now` (ms epoch) est toujours passé
 // par l'appelant → fonctions pures et testables.
 
-// Ressource produite (union extensible : on pourra ajouter 'energy', 'gold', …).
-export type BuildResource = 'dust' | 'stone';
+// Ressource produite (union extensible : on pourra ajouter 'gold', …).
+export type BuildResource = 'dust' | 'stone' | 'energy';
 
 // Catégorie d'un bâtiment. `producer` = filon de ressource ; `utility` = bâtiment
 // à EFFET global (entrepôt, tour de reconnaissance…). Extensible.
@@ -41,7 +41,7 @@ export interface BuildingType {
   effect?: BuildingEffect; // effet global (utility)
   buildGold: number; // coût de construction (or)
   unlockLevel?: number; // niveau joueur requis pour pouvoir le construire (défaut 1)
-  unique?: boolean; // un seul exemplaire autorisé (utilitaires)
+  unique?: boolean; // un seul exemplaire autorisé (tous les types : 1 de chaque sur la carte)
   desc: string;
 }
 
@@ -63,6 +63,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     resource: 'dust',
     prodPerHrPerLvl: 0.35,
     buildGold: 800,
+    unique: true,
     desc: 'Produit de la poussière d’évolution ✨ en continu.',
   },
   {
@@ -73,7 +74,24 @@ export const BUILDING_TYPES: BuildingType[] = [
     resource: 'stone',
     prodPerHrPerLvl: 0.16,
     buildGold: 800,
+    unique: true,
     desc: 'Produit des pierres magiques 💎 (montée des familiers).',
+  },
+  // Producteur d'ÉNERGIE : convertit l'or (surabondant en fin de partie) en énergie
+  // de JEU → adoucit le pincement d'énergie au niveau élevé (le coût des runs monte
+  // plus vite que l'énergie/séance). Reste borné (stockage 18 h + niveau ≤ joueur) →
+  // complément, jamais un substitut au sport (qui seul fait le NIVEAU et les STATS).
+  {
+    id: 'energy_font',
+    label: 'Dynamo de faille',
+    emoji: '⚡',
+    category: 'producer',
+    resource: 'energy',
+    prodPerHrPerLvl: 0.8, // niv.20 ≈ 16/h → ~288 ⚡/jour (cap 18 h) = quelques runs
+    buildGold: 1200, // plus cher qu'un filon : c'est un vrai puits d'or
+    unlockLevel: 5,
+    unique: true,
+    desc: 'Convertit l’or en énergie ⚡ de jeu (pour lancer plus de donjons).',
   },
   // Utilitaire UNIQUE : l'AVANT-POSTE débloque les expéditions (idle) et chaque
   // niveau réduit les temps de trajet → on revient chercher le butin plus vite.
@@ -210,7 +228,7 @@ export function buildingAccrued(b: Building, now: number, mult = 1): number {
 
 /** Somme des ressources prêtes à récolter, par ressource (entrepôts appliqués). */
 export function collectable(buildings: Building[], now: number): Record<BuildResource, number> {
-  const acc: Record<BuildResource, number> = { dust: 0, stone: 0 };
+  const acc: Record<BuildResource, number> = { dust: 0, stone: 0, energy: 0 };
   const mult = storageMult(buildings);
   for (const b of buildings) {
     const t = buildingType(b.typeId);

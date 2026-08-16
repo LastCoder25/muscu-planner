@@ -77,7 +77,7 @@ describe('buildings — production', () => {
   });
   it('type inconnu → prod 0 (robustesse)', () => {
     expect(buildingProdPerHour(mk('inexistant', 5))).toBe(0);
-    expect(collectable([mk('inexistant', 5)], 100 * H)).toEqual({ dust: 0, stone: 0 });
+    expect(collectable([mk('inexistant', 5)], 100 * H)).toEqual({ dust: 0, stone: 0, energy: 0 });
   });
 });
 
@@ -100,8 +100,11 @@ describe('buildings — déblocage & unicité (utilitaires)', () => {
     expect(canBuildType('warehouse', 10, [])).toBe(true);
     expect(canBuildType('warehouse', 10, [wh])).toBe(false); // déjà posé
   });
-  it('filons NON uniques : constructibles en plusieurs', () => {
-    expect(canBuildType('dust_vein', 5, [mk('dust_vein', 3, 0, 0)])).toBe(true);
+  it('filons UNIQUES : 1 de chaque type sur la carte', () => {
+    expect(canBuildType('dust_vein', 5, [])).toBe(true);
+    expect(canBuildType('dust_vein', 5, [mk('dust_vein', 3, 0, 0)])).toBe(false); // déjà posé
+    // Un autre type reste constructible.
+    expect(canBuildType('stone_vein', 5, [mk('dust_vein', 3, 0, 0)])).toBe(true);
   });
 });
 
@@ -120,7 +123,7 @@ describe('buildings — Entrepôt : effet stockage global', () => {
     const base = collectable([dust], now).dust;
     const boosted = collectable([dust, wh], now).dust;
     expect(boosted).toBeGreaterThan(base); // stockage plus grand → plus récolté à saturation
-    expect(collectable([wh], now)).toEqual({ dust: 0, stone: 0 }); // l'entrepôt ne produit rien
+    expect(collectable([wh], now)).toEqual({ dust: 0, stone: 0, energy: 0 }); // l'entrepôt ne produit rien
   });
 });
 
