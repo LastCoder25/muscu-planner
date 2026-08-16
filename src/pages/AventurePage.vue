@@ -490,9 +490,10 @@
             </div>
           </div>
 
-          <!-- Incubateur : fusion 3 familiers de même rareté → 1 de la rareté au-dessus -->
-          <div v-if="c.level.level >= 3" class="fam-incub">
-            <div class="fam-bag-title">🐾 Incubateur — fusion</div>
+          <!-- Incubateur : fusion 3 familiers de même rareté → 1 de la rareté au-dessus.
+               Débloqué en construisant l'INCUBATEUR sur la carte (plus de gate de niveau). -->
+          <div v-if="hasIncubator" class="fam-incub">
+            <div class="fam-bag-title">🥚 Incubateur — fusion</div>
             <div class="fam-incub-hint">
               Fusionne <b>3 familiers de même rareté</b> → 1 aléatoire de la rareté juste au-dessus.
             </div>
@@ -510,6 +511,9 @@
               <span class="ff-have">({{ fr.count }} dispo)</span>
             </button>
           </div>
+          <button v-else class="fam-incub-locked" @click="router.push('/expedition-map')">
+            🥚 Construis un <b>Incubateur</b> sur la carte pour fusionner tes familiers.
+          </button>
         </div>
 
         <!-- Sets d'équipement (bonus 2/3/4 pièces) -->
@@ -1794,6 +1798,7 @@ import {
 } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { unlocksAtLevel, upcomingUnlocks } from '@/lib/advUnlocks';
+import { incubatorBuilt } from '@/lib/buildings';
 import {
   REGIONS,
   currentRegion,
@@ -1860,6 +1865,8 @@ const pseudoError = ref('');
 const tab = ref<'perso' | 'equip' | 'donjons' | 'boss'>('perso');
 // Sous-onglet de l'onglet Équip. : équipement / sac / atelier (évite le long scroll).
 const gearSub = ref<'equip' | 'bag' | 'shop'>('equip');
+// L'incubateur (fusion de familiers) est débloqué en le construisant sur la carte.
+const hasIncubator = computed(() => incubatorBuilt(char.row?.buildings ?? []));
 
 const c = computed(() =>
   computeCharacter(
@@ -4464,6 +4471,17 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--dim);
   font-style: italic;
+}
+.fam-incub-locked {
+  width: 100%;
+  text-align: left;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
 }
 .fam-fuse-btn {
   display: flex;

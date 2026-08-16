@@ -13,6 +13,7 @@ import {
   canBuildType,
   storageMult,
   expeditionsUnlocked,
+  incubatorBuilt,
   travelTimeMult,
   outpostLevel,
   BUILDING_TYPES,
@@ -132,6 +133,11 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
     expect(expeditionsUnlocked([])).toBe(false);
     expect(expeditionsUnlocked([mk('dust_vein', 5)])).toBe(false);
     expect(expeditionsUnlocked([mk('outpost', 1)])).toBe(true);
+  });
+  it('incubatorBuilt = true seulement avec un incubateur (débloque la fusion)', () => {
+    expect(incubatorBuilt([])).toBe(false);
+    expect(incubatorBuilt([mk('outpost', 3)])).toBe(false);
+    expect(incubatorBuilt([mk('incubator', 1)])).toBe(true);
   });
   it('travelTimeMult < 1 et décroît avec le niveau (−1,5 %/niv, plancher −60 % au niv.40)', () => {
     expect(travelTimeMult([])).toBe(1);

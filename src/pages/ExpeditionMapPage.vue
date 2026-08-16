@@ -615,7 +615,9 @@ function isUtility(b: Building): boolean {
 // Libellé d'effet d'un utilitaire (pour l'instant : l'entrepôt = +stockage).
 function utilityEffectLabel(b: Building): string {
   const pct = Math.round((storageMult([b]) - 1) * 100);
-  return pct > 0 ? `+${pct}% stockage de tous les filons` : '';
+  if (pct > 0) return `+${pct}% stockage de tous les filons`;
+  if (b.typeId === 'outpost') return `−${Math.round((1 - travelTimeMult([b])) * 100)}% temps de trajet`;
+  return buildingType(b.typeId)?.desc ?? ''; // incubateur & co : description
 }
 
 function selectPoi(p: Poi) {

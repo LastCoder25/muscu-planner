@@ -122,6 +122,21 @@ export const BUILDING_TYPES: BuildingType[] = [
     unique: true,
     desc: 'Augmente le stockage de tous tes filons (+15 %/niveau).',
   },
+  // Utilitaire UNIQUE : l'INCUBATEUR débloque la FUSION des familiers (3 identiques →
+  // rareté supérieure). Pas de gate de niveau dur sur les raretés : la progression de
+  // rareté reste pilotée par le grind (fusion) + la profondeur (drops), pas par un
+  // verrou par palier → jamais de sensation de blocage.
+  {
+    id: 'incubator',
+    label: 'Incubateur',
+    emoji: '🥚',
+    category: 'utility',
+    effect: {},
+    buildGold: 900,
+    unlockLevel: 3,
+    unique: true,
+    desc: 'Débloque la fusion des familiers (3 identiques → rareté supérieure).',
+  },
 ];
 
 const BY_ID = new Map(BUILDING_TYPES.map((t) => [t.id, t]));
@@ -189,6 +204,10 @@ export function outpostLevel(buildings: Building[]): number {
 /** Les expéditions sont-elles débloquées ? (avant-poste construit). */
 export function expeditionsUnlocked(buildings: Building[]): boolean {
   return outpostLevel(buildings) > 0;
+}
+/** L'incubateur est-il construit ? → débloque la fusion des familiers. */
+export function incubatorBuilt(buildings: Building[]): boolean {
+  return buildings.some((b) => b.typeId === 'incubator');
 }
 /** Multiplicateur de TEMPS de trajet (< 1 = plus rapide), selon l'avant-poste. */
 export function travelTimeMult(buildings: Building[]): number {
