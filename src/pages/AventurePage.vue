@@ -334,9 +334,23 @@
 
       <!-- ONGLET ÉQUIPEMENT -->
       <template v-else-if="tab === 'equip'">
+        <!-- Sous-navigation : Équipement / Sac / Atelier (fini le long scroll). -->
+        <div class="gear-sub">
+          <button class="gs-b" :class="{ on: gearSub === 'equip' }" @click="gearSub = 'equip'">
+            🛡️ Équipement
+          </button>
+          <button class="gs-b" :class="{ on: gearSub === 'bag' }" @click="gearSub = 'bag'">
+            🎒 Sac<span v-if="char.row.inventory.length" class="gs-badge">{{ char.row.inventory.length }}</span>
+          </button>
+          <button class="gs-b" :class="{ on: gearSub === 'shop' }" @click="gearSub = 'shop'">
+            🔧 Atelier
+          </button>
+        </div>
+
+        <template v-if="gearSub === 'equip'">
         <div class="sec-title">Équipement</div>
         <div class="sec-hint">
-          Ton stuff équipé. Gère tes objets dans le sac (filtrable par type ci-dessous).
+          Ton stuff équipé. Gère tes objets dans le <b>Sac</b> (onglet ci-dessus).
         </div>
         <div class="gear">
           <div
@@ -520,6 +534,9 @@
           </div>
         </template>
 
+        </template>
+
+        <template v-if="gearSub === 'bag'">
         <template v-if="char.row.inventory.length">
           <div ref="sacTitle" class="sec-title">Sac ({{ char.row.inventory.length }})</div>
           <!-- Filtre par type d'objet -->
@@ -653,7 +670,9 @@
         <div v-else class="empty-inv">
           Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
         </div>
+        </template>
 
+        <template v-if="gearSub === 'shop'">
         <!-- Atelier de poussière : investir la poussière autrement que l'infusion de niveau -->
         <div class="sec-title">🔧 Atelier de poussière</div>
         <div class="sec-hint">Investis ta poussière — <b>✨ {{ char.row.dust }}</b> dispo.</div>
@@ -690,6 +709,7 @@
           L'équipement ne donne pas de stats (elles viennent du sport) mais des <b>effets</b> — vol
           de vie, réduction de dégâts, or… → à toi de composer ton style.
         </div>
+        </template>
       </template>
 
       <!-- ONGLET DONJONS -->
@@ -1838,6 +1858,8 @@ const saving = ref(false);
 const pseudoInput = ref('');
 const pseudoError = ref('');
 const tab = ref<'perso' | 'equip' | 'donjons' | 'boss'>('perso');
+// Sous-onglet de l'onglet Équip. : équipement / sac / atelier (évite le long scroll).
+const gearSub = ref<'equip' | 'bag' | 'shop'>('equip');
 
 const c = computed(() =>
   computeCharacter(
@@ -2269,6 +2291,7 @@ function reattackLast() {
 function goInventoryFromReport() {
   reportOpen.value = false;
   tab.value = 'equip';
+  gearSub.value = 'bag'; // ouvre directement le sous-onglet Sac
 }
 
 // Butin possible d'un donjon (affiché à la demande via 🎁).
@@ -3699,6 +3722,47 @@ onUnmounted(() => {
 .seg-b.on {
   background: var(--accent);
   color: var(--accent-ink, #15120e);
+}
+
+/* Sous-navigation de l'onglet Équip. (Équipement / Sac / Atelier). */
+.gear-sub {
+  display: flex;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 14px;
+}
+.gs-b {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 5px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.gs-b.on {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+.gs-badge {
+  margin-left: 4px;
+  background: var(--accent);
+  color: var(--accent-ink, #15120e);
+  border-radius: 999px;
+  font-size: 10px;
+  padding: 0 5px;
+  font-family: var(--font-display);
 }
 
 .sec-title {
