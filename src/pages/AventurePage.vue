@@ -597,8 +597,8 @@
               }})</span
             >
             <div class="bulk-btns">
-              <button class="bulk-b" @click="doSalvageBelow">✨ Tout casser</button>
-              <button class="bulk-b" @click="doSellBelow">🪙 Tout vendre</button>
+              <button class="bulk-b" @click="doSalvageBelow">✨ Casser ces {{ belowCount }}</button>
+              <button class="bulk-b" @click="doSellBelow">🪙 Vendre ces {{ belowCount }}</button>
             </div>
           </div>
           <div v-if="!filteredInventory.length" class="inv-empty-filter">
@@ -1708,11 +1708,6 @@
         </div>
 
         </div>
-        <!-- Réglage persistant : sauter l'animation des combats gagnés d'avance -->
-        <label class="rm-skip-toggle">
-          <q-toggle v-model="autoSkipEasy" color="primary" dense size="sm" />
-          <span>⏭ Passer l'animation des donjons et boss déjà faits et gagnés d'avance (≥ 90 %) — 1er passage toujours animé</span>
-        </label>
 
         <div class="rm-actions-row">
           <button
@@ -2280,9 +2275,9 @@ const lastRunFirstVisit = ref(true); // ce run était-il la 1re fois sur ce donj
 const stageWasReward = ref(false);
 // Réglage persistant : passer automatiquement l'animation des donjons DÉJÀ FAITS
 // et gagnés d'avance (≥ 90 %) — le 1er passage d'un donjon reste animé.
-const AUTOSKIP_KEY = 'muscu:adv:autoskip';
-const autoSkipEasy = ref(localStorage.getItem(AUTOSKIP_KEY) === '1');
-watch(autoSkipEasy, (v) => localStorage.setItem(AUTOSKIP_KEY, v ? '1' : '0'));
+// Passer l'animation des combats gagnés d'avance : plus de switch dans l'UI —
+// appliqué D'OFFICE pour le compte testeur (admin), qui relance des runs en boucle.
+const autoSkipEasy = computed(() => auth.isAdmin);
 function stageFinish() {
   stageDone.value = true;
   flushNotify();
@@ -5664,7 +5659,6 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 .report-modal > .rm-head,
-.report-modal > .rm-skip-toggle,
 .report-modal > .rm-actions-row {
   flex: none;
 }
@@ -5694,15 +5688,6 @@ onUnmounted(() => {
   border: 1px solid var(--line-soft);
   border-radius: 12px;
   background: var(--bg);
-}
-.rm-skip-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 10px 0 6px;
-  font-size: 12px;
-  color: var(--dim);
-  cursor: pointer;
 }
 .rm-stage-btn {
   width: 100%;
