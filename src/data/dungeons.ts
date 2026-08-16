@@ -237,10 +237,20 @@ const HAND_DUNGEONS: Dungeon[] = [
 // garde sa rampe douce (20→40) ; tout ce qui dépasse est ramené à 40.
 export const DUNGEON_ENERGY_CAP = 40;
 
-// Donjons complets = écrits à la main (reco 1→22) + PROCÉDURAUX (reco 25→94).
+// Biais de rareté du butin (`dropLuck`) DÉRIVÉ de la profondeur, montée PROGRESSIVE
+// sur toute la plage (2026‑08‑16) : avant, il atteignait 1,0 dès reco 11 (apocalypse)
+// → un joueur niv.11-15 croulait déjà sous l'épique. Désormais `(reco-1)/45` → reco1=0,
+// reco15≈0,31, reco20≈0,42, luck 1,0 seulement vers reco 46. Combiné à `rollRarity`
+// (avare en bas), une passe jusqu'au niv.15 donne ~surtout du commun + un peu de rare +
+// épique rare ; l'épique/légendaire devient une chasse de mi/fin de partie.
+const DROP_LUCK_DIVISOR = 45;
+
+// Donjons complets = écrits à la main (reco 1→22) + PROCÉDURAUX (reco 25→94). Le coût
+// d'énergie est plafonné et le dropLuck re-dérivé de la profondeur (courbe douce).
 export const DUNGEONS: Dungeon[] = [...HAND_DUNGEONS, ...PROCEDURAL.dungeons].map((d) => ({
   ...d,
   energyCost: Math.min(DUNGEON_ENERGY_CAP, d.energyCost),
+  dropLuck: Math.min(1, Math.max(0, (d.recoLevel - 1) / DROP_LUCK_DIVISOR)),
 }));
 
 /** Convertit les ids de monstres d'un donjon en adversaires pour le moteur. */

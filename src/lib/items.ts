@@ -319,10 +319,14 @@ export function rollRarity(rng: () => number, luck = 0, commonDecay = 0): Rarity
   const l = Math.min(1, Math.max(0, luck));
   const d = Math.min(1, Math.max(0, commonDecay));
   const r = rng();
-  if (r < 0.004 + l * 0.02) return 'divin'; // très rare (0,4 % → 2,4 % avec la chance)
-  if (r < 0.02 + l * 0.08) return 'legendary';
-  if (r < 0.12 + l * 0.2) return 'epic';
-  if (r < Math.min(0.85, 0.4 + l * 0.32 + d * 0.42)) return 'rare';
+  // Rareté AVARE en bas (début de partie = surtout du commun, un peu de rare), et
+  // pilotée par la `luck` (= profondeur du donjon) pour le haut du panier : l'épique+
+  // devient une chasse de mi/fin de partie, pas une pluie dès les premiers donjons.
+  // Bases (luck 0) : divin 0,2 % · légendaire 0,8 % · épique 4 % · rare ~20 % · commun ~75 %.
+  if (r < 0.002 + l * 0.02) return 'divin'; // 0,2 % → 2,2 % à luck max
+  if (r < 0.01 + l * 0.08) return 'legendary';
+  if (r < 0.05 + l * 0.22) return 'epic'; // 5 % → 27 % (band luck-dépendant)
+  if (r < Math.min(0.85, 0.25 + l * 0.35 + d * 0.42)) return 'rare';
   return 'common';
 }
 
