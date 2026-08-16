@@ -355,7 +355,7 @@ const gearedFighter = computed(() =>
     'x',
     cStats.value,
     char.row?.equipped ?? {},
-    talentEffects(char.row?.talents ?? []),
+    talentEffects(char.row?.talents ?? [], charLevel.value),
     charLevel.value,
   ),
 );

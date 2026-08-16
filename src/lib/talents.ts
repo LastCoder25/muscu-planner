@@ -105,15 +105,22 @@ export function normalizeTalents(raw: unknown): TalentInstance[] {
   }).filter((t) => BY_CODE.has(t.code));
 }
 
+/** Niveau EFFECTIF d'un talent : plafonné au niveau du joueur (comme le gear —
+ *  « seul le sport rend plus fort » : un talent ne dépasse jamais ton niveau). */
+export function effectiveTalentLevel(xp: number, playerLevel = Infinity): number {
+  return Math.min(talentLevel(xp), Math.max(1, playerLevel));
+}
+
 /** Cumule les effets des talents ÉQUIPÉS (accepte l'ancien format `string[]` ou les
- *  instances ; `normalizeTalents` gère les deux). */
-export function talentEffects(raw: unknown): AggregatedEffects {
+ *  instances ; `normalizeTalents` gère les deux). Le niveau est PLAFONNÉ au niveau du
+ *  joueur (`playerLevel`) → pas de power creep au-delà du sport. */
+export function talentEffects(raw: unknown, playerLevel = Infinity): AggregatedEffects {
   const a = emptyEffects();
   for (const inst of normalizeTalents(raw)) {
     if (inst.equipped === false) continue; // seuls les équipés comptent
     const def = BY_CODE.get(inst.code);
     if (!def) continue;
-    a[def.effectKey] += talentValue(def, talentLevel(inst.xp));
+    a[def.effectKey] += talentValue(def, effectiveTalentLevel(inst.xp, playerLevel));
   }
   return a;
 }

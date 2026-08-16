@@ -299,7 +299,7 @@ const character = computed(() =>
     char.row?.energy_spent ?? 0,
   ),
 );
-const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
+const talentFx = computed(() => talentEffects(char.row?.talents ?? [], character.value.level.level));
 const fighter = computed<Combatant>(() =>
   playerWithGear(
     char.row?.pseudo ?? 'Toi',

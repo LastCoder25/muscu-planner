@@ -1751,7 +1751,7 @@ import {
   talentsEarned,
   talentEffects,
   talentByCode,
-  talentLevel,
+  effectiveTalentLevel,
   talentRarity,
   talentValue,
   talentXpProgress,
@@ -1836,7 +1836,7 @@ const c = computed(() =>
   ),
 );
 // Effets cumulés des talents choisis.
-const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
+const talentFx = computed(() => talentEffects(char.row?.talents ?? [], c.value.level.level));
 // Combattant complet (stats + équipement + talents) → puissance de combat affichée.
 const fighter = computed(() =>
   playerWithGear(
@@ -1981,7 +1981,7 @@ const talentsView = computed(() =>
   (char.row?.talents ?? [])
     .map((inst) => {
       const def = talentByCode(inst.code);
-      const level = talentLevel(inst.xp);
+      const level = effectiveTalentLevel(inst.xp, c.value.level.level); // plafonné au niveau joueur
       return def
         ? {
             id: inst.id,
@@ -2013,7 +2013,7 @@ async function doInfuse(fodderId: string) {
   const uid = auth.user?.id;
   const target = infuseTarget.value;
   if (!uid || !target) return;
-  await char.infuseTalent(uid, target.id, fodderId);
+  await char.infuseTalent(uid, target.id, fodderId, c.value.level.level);
 }
 
 // Prochains déblocages (timeline « À venir » de l'onglet Perso) — donne envie de
@@ -2508,9 +2508,9 @@ async function explore(d: Dungeon) {
     // progression → le revenu doit suivre les coûts qui montent avec le niveau).
     const dust = r.defeated * (2 + Math.round(d.dropLevel * 0.5)) + (r.cleared ? d.dropLevel : 0);
     const stones = r.defeated + (r.cleared ? 3 : 0); // filet de pierres 💎 (familiers)
-    // Drop de TALENT (drop-only) : ~14 % sur un donjon nettoyé, rareté ∝ luck du donjon.
+    // Drop de TALENT (drop-only) : ~6 % sur un donjon nettoyé, rareté ∝ luck du donjon.
     const talentDrops =
-      r.cleared && dropRng() < 0.14
+      r.cleared && dropRng() < 0.06
         ? [rollTalentDrop(dropRng, { luck: d.dropLuck, idSeed: seed })]
         : [];
     await char.applyRun(uid, {
@@ -2672,11 +2672,11 @@ async function fightBoss(b: MilestoneBoss) {
         }
       : null;
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
-    // Drop de TALENT au boss (source plus généreuse que les donjons) : ~40 % à la
+    // Drop de TALENT au boss (source plus généreuse que les donjons) : ~25 % à la
     // victoire, rareté rehaussée (luck 0.6) — les boss sont une bonne source de talents.
     const bossTalentRng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
     const talentDrops =
-      win && bossTalentRng() < 0.4 ? [rollTalentDrop(bossTalentRng, { luck: 0.6, idSeed: seed })] : [];
+      win && bossTalentRng() < 0.25 ? [rollTalentDrop(bossTalentRng, { luck: 0.6, idSeed: seed })] : [];
     await char.applyBossWin(uid, {
       bossId: b.id,
       energyCost: b.energyCost,

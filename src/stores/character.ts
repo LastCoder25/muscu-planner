@@ -21,7 +21,7 @@ import {
   type PendingReward,
 } from '@/lib/items';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
-import { normalizeTalents, talentInfuseXp, talentsEarned, type TalentInstance } from '@/lib/talents';
+import { normalizeTalents, talentInfuseXp, talentsEarned, effectiveTalentLevel, type TalentInstance } from '@/lib/talents';
 import {
   createMap,
   advanceWorld,
@@ -704,13 +704,16 @@ export const useCharacterStore = defineStore('character', () => {
     const talents = cur.talents.map((t) => (t.id === id ? { ...t, equipped: false } : t));
     return persistOptimistic(userId, { talents });
   }
-  // Infuse (consomme) le talent `fodderId` dans `targetId` → +XP au target, fodder retiré.
-  async function infuseTalent(userId: string, targetId: string, fodderId: string) {
+  // Infuse (consomme) le talent `fodderId` dans `targetId` → +XP au target, fodder
+  // retiré. BLOQUÉ si le target est déjà au plafond (niveau effectif ≥ niveau joueur) →
+  // pas de gaspillage ni de dépassement (comme le gear plafonné au niveau joueur).
+  async function infuseTalent(userId: string, targetId: string, fodderId: string, playerLevel: number) {
     const cur = row.value;
     if (!cur || targetId === fodderId) return;
     const target = cur.talents.find((t) => t.id === targetId);
     const fodder = cur.talents.find((t) => t.id === fodderId);
     if (!target || !fodder) return;
+    if (effectiveTalentLevel(target.xp, playerLevel) >= playerLevel) return; // déjà au plafond
     const talents = cur.talents
       .filter((t) => t.id !== fodderId)
       .map((t) => (t.id === targetId ? { ...t, xp: t.xp + talentInfuseXp(fodder) } : t));
