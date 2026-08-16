@@ -290,6 +290,11 @@ export const useCharacterStore = defineStore('character', () => {
       if (left > 0) consumables[id] = left;
       else delete consumables[id];
     }
+    // Codex : on « croise » les sets des candidats de récompense PROPOSÉS (même sans
+    // les garder) → le glossaire les enregistre à la rencontre, pas à la possession.
+    const crossedSetItems = (input.pending?.candidates ?? [])
+      .map((cnd) => (cnd.kind === 'item' ? cnd.item : null))
+      .filter((it): it is Item => !!it);
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
@@ -298,6 +303,7 @@ export const useCharacterStore = defineStore('character', () => {
       defeated_bosses: defeated,
       consumables,
       pending_reward: input.pending ?? cur.pending_reward ?? null,
+      set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, crossedSetItems),
       keys: cur.keys + keyGain,
       ...(input.talentDrops?.length ? { talents: [...cur.talents, ...input.talentDrops] } : {}),
     });

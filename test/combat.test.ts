@@ -41,9 +41,11 @@ describe('épines (thorns)', () => {
 });
 
 describe('fmtPow / fmtDelta', () => {
-  it('format compact k/M (1 déc. k, 2 déc. M)', () => {
+  it('entier jusqu’à 9999, puis compact k/M (1 déc. k, 2 déc. M)', () => {
     expect(fmtPow(950)).toBe('950');
-    expect(fmtPow(1500)).toBe('1,5k');
+    expect(fmtPow(1500)).toBe('1500'); // ≤ 9999 → affiché en entier
+    expect(fmtPow(9999)).toBe('9999');
+    expect(fmtPow(10000)).toBe('10,0k'); // > 9999 → compact
     expect(fmtPow(35324)).toBe('35,3k');
     expect(fmtPow(1_234_567)).toBe('1,23M');
   });

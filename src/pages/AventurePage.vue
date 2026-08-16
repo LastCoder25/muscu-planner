@@ -269,8 +269,9 @@
           Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
         </div>
         <div class="sec-hint">
-          Les talents <b>droppent</b> dans les donjons/boss. Équipe-en {{ talentSlots }} (change quand
-          tu veux), et <b>infuse tes doublons</b> pour les faire monter en rareté.
+          Les talents <b>droppent au niveau 1</b> (donjons/boss). Équipe-en {{ talentSlots }} (change
+          quand tu veux), et <b>infuse-en un dans un autre</b> (🔧) pour le faire monter en niveau et
+          en rareté.
         </div>
 
         <!-- Cible d'infusion active -->
@@ -319,7 +320,20 @@
                   {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
                 </button>
                 <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
-                <button class="tal-b ghost" @click="infuseTarget = t.inst">🔧</button>
+                <button
+                  class="tal-b ghost"
+                  :disabled="!hasSpareTalent || talentAtCap(t.inst)"
+                  :title="
+                    talentAtCap(t.inst)
+                      ? 'Déjà à ton niveau max — monte de niveau (sport)'
+                      : !hasSpareTalent
+                        ? 'Il te faut un 2ᵉ talent à sacrifier'
+                        : 'Infuser : monter ce talent en le nourrissant d’un autre'
+                  "
+                  @click="infuseTarget = t.inst"
+                >
+                  🔧
+                </button>
               </template>
             </div>
           </div>
@@ -1690,6 +1704,9 @@
                     <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
                       RARITY_LABEL[cand.item.rarity]
                     }}</span>
+                    <span v-if="rollStarStr(cand.item)" class="roll-stars" title="Qualité du roll">{{
+                      rollStarStr(cand.item)
+                    }}</span>
                     <span v-if="cand.item.setId" class="rc-pill set">🧩 Set</span>
                   </div>
                   <div class="rc-eff">
@@ -2126,16 +2143,49 @@ async function doUnequipTalent(id: string) {
   const uid = auth.user?.id;
   if (uid) await char.unequipTalent(uid, id);
 }
+// Un talent peut-il encore gagner de l'XP ? (niveau < niveau joueur = cap). Sinon,
+// l'infuser ne sert à rien tant qu'on n'a pas monté de niveau de sport.
+function talentAtCap(inst: TalentInstance): boolean {
+  return talentLevel(inst.xp) >= c.value.level.level;
+}
+// Y a-t-il au moins un AUTRE talent à sacrifier ? (il en faut 2 pour infuser).
+const hasSpareTalent = computed(() => (char.row?.talents?.length ?? 0) >= 2);
 async function doInfuse(fodderId: string) {
   const uid = auth.user?.id;
   const target = infuseTarget.value;
   if (!uid || !target) return;
+  const beforeRarity = talentRarity(talentLevel(target.xp));
   const ok = await char.infuseTalent(uid, target.id, fodderId, c.value.level.level);
-  if (!ok)
+  if (!ok) {
     $q.notify({
       type: 'warning',
-      message: 'Ce talent est déjà à ton niveau max — monte de niveau pour le pousser plus loin.',
+      message: 'Ce talent est déjà à ton niveau max — monte de niveau (sport) pour le pousser plus loin.',
     });
+    return;
+  }
+  // Cible à jour → feedback clair : montée de rareté = éclat, sinon petit toast.
+  const updated = char.row?.talents.find((t) => t.id === target.id) ?? null;
+  infuseTarget.value = updated; // garde la cible sélectionnée (à jour) pour enchaîner
+  if (updated) {
+    const def = talentByCode(updated.code);
+    const lvl = talentLevel(updated.xp);
+    const afterRarity = talentRarity(lvl);
+    if (afterRarity !== beforeRarity)
+      gameFx.celebrate({
+        kind: 'generic',
+        emoji: def?.icon ?? '✨',
+        title: `${def?.name ?? 'Talent'} — ${RARITY_LABEL[afterRarity]} !`,
+        subtitle: `Niveau ${lvl}`,
+        rarity: afterRarity,
+      });
+    else
+      $q.notify({
+        type: 'positive',
+        message: `✨ ${def?.name ?? 'Talent'} infusé → Nv ${lvl}`,
+      });
+  }
+  // Plus assez de talents pour continuer → on sort du mode infusion.
+  if (!hasSpareTalent.value) infuseTarget.value = null;
 }
 
 
@@ -2262,20 +2312,19 @@ const run = ref<RunView | null>(null);
 const reportOpen = ref(false); // rapport de combat affiché en MODALE (post-run)
 const runSeq = ref(0); // clé de rejeu → remonte CombatStage à chaque run (relance l'anim)
 const stageDone = ref(true); // résultat + butin révélés seulement à la FIN de l'animation
-// Notif de résultat (victoire/défaite) DIFFÉRÉE : elle ne s'affiche qu'à la fin de
-// l'animation de combat (sinon elle « spoile » avant la fin — cf. ticket).
-const pendingNotify = ref<{ type: string; message: string } | null>(null);
-// Célébration (éclat plein écran) DIFFÉRÉE à la fin de l'animation de combat —
-// ex. « donjon nettoyé » à la 1re victoire : sinon l'éclat recouvre le combat.
-const pendingCelebrate = ref<(() => void) | null>(null);
-function flushNotify() {
-  if (pendingNotify.value) {
-    $q.notify(pendingNotify.value);
-    pendingNotify.value = null;
-  }
-  if (pendingCelebrate.value) {
-    pendingCelebrate.value();
-    pendingCelebrate.value = null;
+// Célébrations (éclats plein écran) DIFFÉRÉES à la FIN de l'animation de combat —
+// boss vaincu, donjon nettoyé, drop rare, talent, record… : sinon l'éclat recouvre
+// le combat en cours. File jouée dans l'ordre au flush (gameFx enchaîne).
+// (Plus de toast de résultat en bas d'écran : le rapport affiche déjà le verdict.)
+const pendingCelebrations = ref<(() => void)[]>([]);
+function queueFx(fn: () => void) {
+  pendingCelebrations.value.push(fn);
+}
+function flushCelebrations() {
+  if (pendingCelebrations.value.length) {
+    const fns = pendingCelebrations.value;
+    pendingCelebrations.value = [];
+    for (const fn of fns) fn();
   }
 }
 // Skip = animation occultée (droit au résultat). On l'applique SEULEMENT en
@@ -2295,7 +2344,7 @@ const stageWasReward = ref(false);
 const autoSkipEasy = computed(() => auth.isAdmin);
 function stageFinish() {
   stageDone.value = true;
-  flushNotify();
+  flushCelebrations();
 }
 // Combats rejouables (avec log détaillé) → alimente CombatStage.
 const stageFights = computed(() =>
@@ -2322,7 +2371,7 @@ function openReport() {
   stageWasReward.value = !!char.row?.pending_reward; // boss : latch pour ne pas rejouer
   stageDone.value = !stageFights.value.length || skipAll;
   reportOpen.value = true;
-  if (stageDone.value) flushNotify(); // pas d'animation → notif tout de suite
+  if (stageDone.value) flushCelebrations(); // pas d'animation → célébrations tout de suite
 }
 // « Passer l'animation » quand la victoire était quasi acquise (≥ 90 %) — donjon
 // OU boss (mêmes règles). Le 1er passage reste animé (cf. lastRunFirstVisit).
@@ -2634,7 +2683,7 @@ async function explore(d: Dungeon) {
     if (rolled) {
       const dr: Item = { ...rolled, id: crypto.randomUUID() };
       drops.push(dr);
-      celebrateRareDrop(dr);
+      queueFx(() => celebrateRareDrop(dr));
     }
     // (Les familiers ne tombent PLUS dans les donjons — uniquement au Labyrinthe.)
     // (Les consommables ne DROPPENT plus — peu utiles ; restent achetables en boutique.)
@@ -2657,7 +2706,7 @@ async function explore(d: Dungeon) {
       ...(consumed.length ? { consumed } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
     });
-    if (talentDrops.length) celebrateTalentDrop(talentDrops[0]!);
+    if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!));
     selectedConsumables.value = []; // consommés
     run.value = {
       name: d.name,
@@ -2685,19 +2734,17 @@ async function explore(d: Dungeon) {
     };
     // 1er nettoyage d'un donjon (débloque le suivant) = moment de progression →
     // éclat, mais SEULEMENT à la fin de l'animation de combat (sinon il recouvre
-    // le combat). Différé via pendingCelebrate → flush dans stageFinish/openReport.
+    // le combat). Différé via queueFx → flush dans stageFinish/openReport.
     if (r.cleared && lastRunFirstVisit.value)
-      pendingCelebrate.value = () =>
+      queueFx(() =>
         gameFx.celebrate({
           kind: 'unlock',
           emoji: d.emoji,
           title: `${d.name} nettoyé !`,
           subtitle: 'Nouveau donjon débloqué',
           rarity: 'epic',
-        });
-    pendingNotify.value = r.cleared
-      ? { type: 'positive', message: `Donjon nettoyé — +${gold} 🪙` }
-      : null;
+        }),
+      );
     openReport();
   } catch {
     $q.notify({ type: 'negative', message: 'Échec de l’exploration.' });
@@ -2836,7 +2883,7 @@ async function fightBoss(b: MilestoneBoss) {
       ...(consumed.length ? { consumed } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
     });
-    if (talentDrops.length) celebrateTalentDrop(talentDrops[0]!);
+    if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!));
     selectedConsumables.value = [];
     run.value = {
       name: b.name,
@@ -2861,20 +2908,18 @@ async function fightBoss(b: MilestoneBoss) {
       ],
       drops: [],
     };
-    // Victoire de boss de palier = jalon MAJEUR → célébration centrale (gros éclat).
+    // Victoire de boss de palier = jalon MAJEUR → célébration centrale (gros éclat),
+    // DIFFÉRÉE à la fin de l'animation de combat.
     if (win)
-      gameFx.celebrate({
-        kind: 'generic',
-        emoji: b.emoji,
-        title: `${b.name} vaincu !`,
-        subtitle: 'Boss de palier terrassé 🏆',
-        rarity: 'divin',
-      });
-    // Rapport toujours ouvert : sur victoire, il affiche le CHOIX de récompense en
-    // bas (à la place du butin) ; sur défaite, juste le résultat.
-    pendingNotify.value = win
-      ? { type: 'positive', message: `${b.emoji} ${b.name} vaincu — choisis ta récompense !` }
-      : { type: 'warning', message: `${b.name} t’a terrassé… reviens plus fort.` };
+      queueFx(() =>
+        gameFx.celebrate({
+          kind: 'generic',
+          emoji: b.emoji,
+          title: `${b.name} vaincu !`,
+          subtitle: 'Boss de palier terrassé 🏆',
+          rarity: 'divin',
+        }),
+      );
     openReport();
   } catch {
     $q.notify({ type: 'negative', message: 'Échec du combat.' });
@@ -2948,7 +2993,7 @@ async function fightEndless() {
       if (rolled) {
         const dr: Item = { ...rolled, id: crypto.randomUUID() };
         drops.push(dr);
-        celebrateRareDrop(dr);
+        queueFx(() => celebrateRareDrop(dr));
       }
       // (Les familiers ne tombent PLUS à la Faille — uniquement au Labyrinthe.)
     }
@@ -2964,15 +3009,18 @@ async function fightEndless() {
       stones: win ? 6 : 0,
       ...(consumed.length ? { consumed } : {}),
     });
-    // Nouveau palier RECORD de la Faille → célébration (progression end-game).
+    // Nouveau palier RECORD de la Faille → célébration (progression end-game),
+    // différée à la fin de l'animation de combat.
     if (win && tier > prevBest)
-      gameFx.celebrate({
-        kind: 'generic',
-        emoji: '🌀',
-        title: `Faille · palier ${tier} !`,
-        subtitle: 'Nouveau record de profondeur',
-        rarity: 'legendary',
-      });
+      queueFx(() =>
+        gameFx.celebrate({
+          kind: 'generic',
+          emoji: '🌀',
+          title: `Faille · palier ${tier} !`,
+          subtitle: 'Nouveau record de profondeur',
+          rarity: 'legendary',
+        }),
+      );
     selectedConsumables.value = [];
     run.value = {
       name: `Faille sans fin · palier ${tier}`,
@@ -2997,9 +3045,6 @@ async function fightEndless() {
       ],
       drops,
     };
-    pendingNotify.value = win
-      ? { type: 'positive', message: `Palier ${tier} franchi — +${gold} 🪙` }
-      : { type: 'warning', message: `Palier ${tier} : la Faille t'a repoussé.` };
     openReport();
   } catch {
     $q.notify({ type: 'negative', message: 'Échec du combat.' });

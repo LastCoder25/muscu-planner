@@ -107,10 +107,10 @@ export function combatPower(c: Combatant): number {
 }
 
 /** Format compact d'une puissance de combat (≈ niveau⁴ → jusqu'aux millions).
- *  1 décimale sur les k pour que deux valeurs proches restent distinguables. */
+ *  Affichée EN ENTIER tant que ≤ 9999 (lisibilité), puis compactée (k / M). */
 export function fmtPow(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(2).replace('.', ',') + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(1).replace('.', ',') + 'k';
+  if (n > 9999) return (n / 1000).toFixed(1).replace('.', ',') + 'k';
   return String(Math.round(n));
 }
 /** Delta signé PRÉCIS entre deux puissances (petit écart = valeur exacte, gros

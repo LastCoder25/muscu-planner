@@ -2,7 +2,7 @@
 // (plus de choix 1-parmi-3), ont une RARETÉ, montent en niveau/rareté par INFUSION de
 // doublons (XP), et on n'en ÉQUIPE qu'un nombre limité (swap libre). Bonus appliqués
 // via AggregatedEffects (comme le gear/les familiers). Pur/testable.
-import { emptyEffects, rollRarity, type AggregatedEffects, type Rarity } from './items';
+import { emptyEffects, type AggregatedEffects, type Rarity } from './items';
 
 // Définition catalogue : un talent = une clé d'effet + une magnitude de BASE (niv.1),
 // qui grandit avec le niveau (talentLevelMult). Élargi de 5 → 11 (un par effet).
@@ -125,16 +125,15 @@ export function talentEffects(raw: unknown, playerLevel = Infinity): AggregatedE
   return a;
 }
 
-// ── Drop : un talent tombe avec une rareté (pilotée par la luck du contenu) → niveau
-// de départ correspondant. Code aléatoire dans le catalogue. Non équipé par défaut. ──
+// ── Drop : un talent tombe TOUJOURS au niveau 1 (commun). La rareté n'est PAS tirée
+// au drop — elle se GAGNE en infusant des doublons (le niveau monte → la rareté monte).
+// Code aléatoire dans le catalogue. Non équipé par défaut. ──
 export function rollTalentDrop(
   rng: () => number,
   opts: { luck?: number; idSeed?: number } = {},
 ): TalentInstance {
   const def = TALENTS[Math.floor(rng() * TALENTS.length)]!;
-  const rarity = rollRarity(rng, opts.luck ?? 0);
-  const level = startLevelForRarity(rarity);
-  return { id: `tal_${opts.idSeed ?? Math.floor(rng() * 1e9)}`, code: def.code, xp: talentXpFloor(level) };
+  return { id: `tal_${opts.idSeed ?? Math.floor(rng() * 1e9)}`, code: def.code, xp: 0 };
 }
 
 /** XP rendue en infusant (consommant) un talent dans un autre (∝ son investissement). */

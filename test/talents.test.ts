@@ -85,10 +85,11 @@ describe('talentEffects (équipés uniquement)', () => {
 });
 
 describe('drop & infusion', () => {
-  it('rollTalentDrop : code valide, xp cohérente avec la rareté', () => {
+  it('rollTalentDrop : code valide, TOUJOURS niveau 1 (xp 0), non équipé', () => {
     const t = rollTalentDrop(mulberry32(3), { luck: 0.5, idSeed: 1 });
     expect(TALENTS.some((d) => d.code === t.code)).toBe(true);
-    expect(t.xp).toBeGreaterThanOrEqual(0);
+    expect(t.xp).toBe(0); // drop toujours niveau 1 → on infuse pour monter
+    expect(talentLevel(t.xp)).toBe(1);
     expect(t.equipped).toBeFalsy();
   });
   it('infuser un fourrage de plus haut niveau rend plus d’XP', () => {
