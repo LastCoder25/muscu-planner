@@ -253,12 +253,33 @@ export const DUNGEONS: Dungeon[] = [...HAND_DUNGEONS, ...PROCEDURAL.dungeons].ma
   dropLuck: Math.min(1, Math.max(0, (d.recoLevel - 1) / DROP_LUCK_DIVISOR)),
 }));
 
-/** Convertit les ids de monstres d'un donjon en adversaires pour le moteur. */
+// GEAR-GATÉ (2026‑08‑16) : refonte de philosophie — le but du jeu est de S'ÉQUIPER,
+// donc à ton niveau : NU tu ne passes pas, gear basique tu galères, suréquipé tu passes
+// tranquille. Avant, les donjons étaient calibrés « nu-clearable » (~90 % nu) → le gear
+// ne servait qu'à pousser au-dessus. On applique une RAMPE de difficulté aux monstres
+// (PV + dégâts) : ×1 sur le 1er donjon (AMORÇAGE : il faut pouvoir clear nu pour choper
+// son 1er stuff → le gear ne vient que des donjons), montée rapide vers ×2 dès reco ~6.
+// Calibré par simulation « stuff RÉEL accumulé aux taux de drop actuels » : nu échoue
+// dès reco 3-4, stuff basique ~55-70 % (galère), stuff épique/lég ~cruise. La luck et
+// l'or NE sont PAS touchés (seuls PV/dégâts scalent). Le 🎯 % live reflète auto la rampe.
+export function dungeonDifficultyMult(recoLevel: number): number {
+  return 1 + Math.min(1.0, Math.max(0, recoLevel - 2) * 0.3);
+}
+
+/** Convertit les ids de monstres d'un donjon en adversaires pour le moteur (PV/dégâts
+ *  mis à l'échelle par la rampe gear-gated ; l'or reste inchangé). */
 export function dungeonFoes(d: Dungeon): DungeonFoe[] {
+  const mult = dungeonDifficultyMult(d.recoLevel);
   return d.monsterIds
     .map((id) => MONSTERS.find((m) => m.id === id))
     .filter((m): m is (typeof MONSTERS)[number] => !!m)
-    .map((m) => ({ combatant: m, gold: m.gold }));
+    .map((m) => ({
+      combatant:
+        mult === 1
+          ? m
+          : { ...m, pv: Math.round(m.pv * mult), damage: Math.round(m.damage * mult) },
+      gold: m.gold,
+    }));
 }
 
 /** Or total possible d'un donjon (tous monstres vaincus). */
