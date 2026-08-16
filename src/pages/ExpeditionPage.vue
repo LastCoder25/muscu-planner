@@ -318,7 +318,13 @@ const floorsWanted = ref(Math.min(5, Math.max(2, Number(route.query.floors) || 3
 // Seed pseudo-aléatoire (composant → Math.random autorisé, contrairement aux libs).
 const seed = ref(Math.floor(Math.random() * 1_000_000) + 1);
 const dungeon = ref<Floor[]>(generateDungeon(seed.value, floorsWanted.value));
-const run = ref<RunState>(startRun(floorsWanted.value, dungeon.value[0]!, 140));
+// Le pool de PV du run = les VRAIS PV max du héros (avant : 140 fixe → incohérent
+// avec le combat qui, lui, plafonnait le vol de vie aux PV réels → on remontait au
+// max à chaque combat). Ré-initialisé dans onMounted une fois le perso chargé.
+const run = ref<RunState>(startRun(floorsWanted.value, dungeon.value[0]!, Math.max(60, fighter.value.pv)));
+// Vol de vie ATTÉNUÉ dans le labyrinthe → l'attrition (PV reportés) reste réelle même
+// pour un build sustain (sinon on finit tous les étages à PV pleins).
+const LABY_LIFESTEAL = 0.5;
 const lastEvent = ref<{ kind: string; text: string } | null>(null);
 const over = ref(false);
 // Butin cumulé du run (Phase 3b : affiché ; persistance/récompense = Phase 3c).
@@ -350,6 +356,10 @@ onMounted(async () => {
   } catch {
     /* pas bloquant */
   }
+  // Perso chargé (équipement/talents inclus) → cale le pool sur les vrais PV max,
+  // tant que le run n'a pas commencé (uniquement la salle de départ visitée).
+  if (run.value.visited.length <= 1)
+    run.value = startRun(floorsWanted.value, dungeon.value[0]!, Math.max(60, fighter.value.pv));
 });
 
 const floor = computed(() => dungeon.value[run.value.floor]!);
@@ -434,7 +444,15 @@ function fightRoom(id: number, isBoss: boolean) {
   const monster = makeMonster(isBoss, depthOf());
   const goldWin = Math.round((6 + 3 * heroLevel.value) * (isBoss ? 4 : 1));
   stageStartPv.value = run.value.pv; // PV AVANT le combat (barre part de là, pas du max)
-  const res = simulateCombat(fighter.value, monster, {
+  // Combattant du labyrinthe : max PLAFONNÉ au pool courant (le vol de vie ne peut
+  // pas dépasser les PV reportés → pas de « remontée au max » entre les combats) et
+  // vol de vie atténué → l'attrition compte vraiment.
+  const combatFighter: Combatant = {
+    ...fighter.value,
+    pv: run.value.pv,
+    lifesteal: (fighter.value.lifesteal ?? 0) * LABY_LIFESTEAL,
+  };
+  const res = simulateCombat(combatFighter, monster, {
     seed: roomSeed(id),
     goldOnWin: goldWin,
     startPlayerPv: run.value.pv,
