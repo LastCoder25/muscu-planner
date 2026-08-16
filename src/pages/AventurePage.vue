@@ -5643,25 +5643,32 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .expe-emo {
+  flex: none;
   font-size: 26px;
+  line-height: 1;
 }
 .expe-main {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 .expe-name {
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
+  line-height: 1.25;
 }
 .expe-sub {
   font-size: 11.5px;
   color: var(--dim);
+  line-height: 1.35;
 }
 .expe-go {
+  flex: none;
   font-size: 22px;
+  line-height: 1;
   color: var(--accent);
 }
 /* ── Boss de palier : cartes NETTEMENT plus grandes & dramatiques ── */
