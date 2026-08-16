@@ -17,7 +17,12 @@
         l'<b>or</b> et la <b>poussière</b>, mais tu perds les objets trouvés.
       </p>
       <p class="lobby-txt dim">Les clés 🗝️ tombent sur les donjons, les boss et la faille.</p>
-      <p v-if="!labyUnlocked" class="lobby-txt dim">🔒 Débloqué au niveau {{ LABY_MIN_LEVEL }}.</p>
+      <p v-if="!labyUnlocked" class="lobby-txt dim">
+        🔒 Construis la <b>🚪 Porte du Labyrinthe</b> sur la carte d'expédition pour le débloquer.
+      </p>
+      <p v-else-if="labyLuck > 0" class="lobby-txt dim">
+        🚪 Porte niv.{{ gateLevel }} : butin des coffres +{{ Math.round(labyLuck * 100) }} %.
+      </p>
       <q-btn
         class="lobby-cta"
         color="primary"
@@ -26,7 +31,13 @@
         unelevated
         size="lg"
         :disable="!canStart"
-        :label="!labyUnlocked ? `🔒 Niveau ${LABY_MIN_LEVEL} requis` : keys > 0 ? 'Entrer dans le labyrinthe (−1 🗝️)' : 'Aucune clé pour l’instant'"
+        :label="
+          !labyUnlocked
+            ? '🔒 Porte du Labyrinthe requise'
+            : keys > 0
+              ? 'Entrer dans le labyrinthe (−1 🗝️)'
+              : 'Aucune clé pour l’instant'
+        "
         @click="start"
       />
     </div>
@@ -253,6 +264,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
+import { labyrinthUnlocked, labyrinthLuckBonus } from '@/lib/buildings';
 import { computeCharacter } from '@/lib/character';
 import {
   playerWithGear,
@@ -282,9 +294,13 @@ const progress = useProgress();
 const phase = ref<'lobby' | 'running'>('lobby');
 const credited = ref(false); // butin crédité une seule fois en fin de run
 const keys = computed(() => char.row?.keys ?? 0);
-// Le Labyrinthe est bloqué avant le niveau 2 (il faut d'abord poser les bases).
-const LABY_MIN_LEVEL = 2;
-const labyUnlocked = computed(() => heroLevel.value >= LABY_MIN_LEVEL);
+// Le Labyrinthe est débloqué en construisant la 🚪 Porte du Labyrinthe sur la carte.
+// Chaque niveau de la Porte enrichit le butin des coffres (labyLuck).
+const labyUnlocked = computed(() => labyrinthUnlocked(char.row?.buildings ?? []));
+const gateLevel = computed(
+  () => (char.row?.buildings ?? []).find((b) => b.typeId === 'labyrinth_gate')?.level ?? 0,
+);
+const labyLuck = computed(() => labyrinthLuckBonus(char.row?.buildings ?? []));
 const canStart = computed(
   () => labyUnlocked.value && keys.value > 0 && progress.ready.value && !!char.row,
 );
@@ -479,8 +495,9 @@ function fightRoom(id: number, isBoss: boolean) {
 }
 function openChest(id: number) {
   const rng = mulberry32(roomSeed(id));
-  // Plus on est profond, plus la rareté du coffre grimpe (récompense du risque).
-  const luck = Math.min(1, 0.35 + 0.45 * depthOf());
+  // Plus on est profond, plus la rareté du coffre grimpe (récompense du risque),
+  // + bonus de la Porte du Labyrinthe (chaque niveau enrichit le butin).
+  const luck = Math.min(1, 0.35 + 0.45 * depthOf() + labyLuck.value);
   let drop: Omit<Item, 'id'> | null = null;
   for (let k = 0; k < 4 && !drop; k++)
     drop = rollDrop(rng, {
@@ -616,7 +633,10 @@ async function start() {
   const uid = auth.user?.id;
   if (!uid) return;
   if (!labyUnlocked.value) {
-    $q.notify({ type: 'warning', message: `Le Labyrinthe se débloque au niveau ${LABY_MIN_LEVEL}.` });
+    $q.notify({
+      type: 'warning',
+      message: 'Construis la 🚪 Porte du Labyrinthe (carte d’expédition) pour le débloquer.',
+    });
     return;
   }
   if (!canStart.value) return;

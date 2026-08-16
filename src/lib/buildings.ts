@@ -29,6 +29,7 @@ export interface BuildingEffect {
   storageMultPerLvl?: number; // Entrepôt : +X au multiplicateur de stockage / niveau
   expeSpeedPerLvl?: number; // Tour : −X% temps de trajet / niveau (plus tard)
   expeWinPerLvl?: number; // Tour : +X% chance / niveau (plus tard)
+  labyLuckPerLvl?: number; // Porte du Labyrinthe : +X à la chance de butin des coffres / niveau
 }
 
 export interface BuildingType {
@@ -137,6 +138,20 @@ export const BUILDING_TYPES: BuildingType[] = [
     unique: true,
     desc: 'Débloque la fusion des familiers (3 identiques → rareté supérieure).',
   },
+  // Utilitaire UNIQUE : la PORTE DU LABYRINTHE débloque le Labyrinthe (donjon à
+  // étages, source unique des familiers). Chaque niveau AMÉLIORE la qualité du butin
+  // des coffres (+4 % de chance de rareté) → investir de l'or rend les runs plus riches.
+  {
+    id: 'labyrinth_gate',
+    label: 'Porte du Labyrinthe',
+    emoji: '🚪',
+    category: 'utility',
+    effect: { labyLuckPerLvl: 0.04 },
+    buildGold: 500,
+    unlockLevel: 2,
+    unique: true,
+    desc: 'Débloque le Labyrinthe. Chaque niveau enrichit le butin des coffres (+4 %).',
+  },
 ];
 
 const BY_ID = new Map(BUILDING_TYPES.map((t) => [t.id, t]));
@@ -208,6 +223,20 @@ export function expeditionsUnlocked(buildings: Building[]): boolean {
 /** L'incubateur est-il construit ? → débloque la fusion des familiers. */
 export function incubatorBuilt(buildings: Building[]): boolean {
   return buildings.some((b) => b.typeId === 'incubator');
+}
+// ── Porte du Labyrinthe (gate + qualité du butin) ──
+const LABY_GATE_ID = 'labyrinth_gate';
+const LABY_LUCK_CAP = 0.4; // +40 % de chance de butin au maximum
+/** Le Labyrinthe est-il débloqué ? (Porte du Labyrinthe construite). */
+export function labyrinthUnlocked(buildings: Building[]): boolean {
+  return buildings.some((b) => b.typeId === LABY_GATE_ID);
+}
+/** Bonus de chance (luck 0..1) sur le butin des coffres du Labyrinthe, selon la Porte. */
+export function labyrinthLuckBonus(buildings: Building[]): number {
+  const b = buildings.find((x) => x.typeId === LABY_GATE_ID);
+  if (!b) return 0;
+  const per = buildingType(LABY_GATE_ID)?.effect?.labyLuckPerLvl ?? 0;
+  return Math.min(LABY_LUCK_CAP, b.level * per);
 }
 /** Multiplicateur de TEMPS de trajet (< 1 = plus rapide), selon l'avant-poste. */
 export function travelTimeMult(buildings: Building[]): number {

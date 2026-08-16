@@ -343,6 +343,7 @@ import {
   collectable,
   expeditionsUnlocked,
   travelTimeMult,
+  labyrinthLuckBonus,
   BUILD,
   type Building,
   type BuildingType,
@@ -638,6 +639,8 @@ function utilityEffectLabel(b: Building): string {
   const pct = Math.round((storageMult([b]) - 1) * 100);
   if (pct > 0) return `+${pct}% stockage de tous les filons`;
   if (b.typeId === 'outpost') return `−${Math.round((1 - travelTimeMult([b])) * 100)}% temps de trajet`;
+  if (b.typeId === 'labyrinth_gate')
+    return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   return buildingType(b.typeId)?.desc ?? ''; // incubateur & co : description
 }
 
