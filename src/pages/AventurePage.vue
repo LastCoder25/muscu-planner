@@ -358,7 +358,12 @@
                 }}</span>
                 <span v-if="char.row.equipped[slot]!.setId" class="gpill set">🧩 Set</span>
               </div>
-              <div class="slot-eff">{{ itemEffects(char.row.equipped[slot]!) }}</div>
+              <div class="slot-eff">
+                {{ itemEffects(char.row.equipped[slot]!) }}
+                <span v-if="rollStarStr(char.row.equipped[slot])" class="roll-stars">{{
+                  rollStarStr(char.row.equipped[slot])
+                }}</span>
+              </div>
               <button
                 class="slot-up"
                 :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
@@ -595,10 +600,10 @@
                   }}</span>
                 </div>
                 <div class="pow-cmp">
-                  ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
-                  <b :class="powerIfEquip(it) >= combatPowerVal ? 'up' : 'down'"
+                  ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
+                  <b :class="powerIfEquip(it) >= combatPowerMaxed ? 'up' : 'down'"
                     >{{ fmtPow(powerIfEquip(it)) }} ({{
-                      fmtDelta(combatPowerVal, powerIfEquip(it))
+                      fmtDelta(combatPowerMaxed, powerIfEquip(it))
                     }})</b
                   >
                   <span v-if="infuseCostFor(it)" class="pow-cost"
@@ -1393,10 +1398,10 @@
                   }}</span>
                 </div>
                 <div class="pow-cmp">
-                  ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
-                  <b :class="powerIfEquip(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                  ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
+                  <b :class="powerIfEquip(cand.item) >= combatPowerMaxed ? 'up' : 'down'"
                     >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
-                      fmtDelta(combatPowerVal, powerIfEquip(cand.item))
+                      fmtDelta(combatPowerMaxed, powerIfEquip(cand.item))
                     }})</b
                   >
                   <span v-if="infuseCostFor(cand.item)" class="pow-cost"
@@ -1572,9 +1577,9 @@
               </div>
               <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
               <div class="pow-cmp">
-                ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
-                <b :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
-                  >{{ fmtPow(powerIfEquip(d)) }} ({{ fmtDelta(combatPowerVal, powerIfEquip(d)) }})</b
+                ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
+                <b :class="powerIfEquip(d) >= combatPowerMaxed ? 'up' : 'down'"
+                  >{{ fmtPow(powerIfEquip(d)) }} ({{ fmtDelta(combatPowerMaxed, powerIfEquip(d)) }})</b
                 >
                 <span v-if="infuseCostFor(d)" class="pow-cost"
                   >à infuser (~{{ infuseCostFor(d) }} ✨) pour le monter à ton niveau</span
@@ -1632,10 +1637,10 @@
                     {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
                   </div>
                   <div class="pow-cmp">
-                    ⚔️ Puissance {{ fmtPow(combatPowerVal) }} →
-                    <b :class="powerIfEquip(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                    ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
+                    <b :class="powerIfEquip(cand.item) >= combatPowerMaxed ? 'up' : 'down'"
                       >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
-                        fmtDelta(combatPowerVal, powerIfEquip(cand.item))
+                        fmtDelta(combatPowerMaxed, powerIfEquip(cand.item))
                       }})</b
                     >
                     <span v-if="infuseCostFor(cand.item)" class="pow-cost"
@@ -1741,6 +1746,7 @@ import {
   SET_BY_ID,
   setCounts,
   type Item,
+  type Equipped,
   type ItemSlot,
   type Rarity,
   type AggregatedEffects,
@@ -1856,6 +1862,27 @@ const fighter = computed(() =>
   ),
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
+// Gear infusé à ton NIVEAU (potentiel) → base des COMPARAISONS d'objets : un drop
+// s'évalue à ce qu'il vaudra une fois monté, pas à son niveau 1 de drop.
+function maxGear(eq: Equipped, lvl: number): Equipped {
+  const out: Equipped = {};
+  for (const s of Object.keys(eq) as ItemSlot[]) {
+    const it = eq[s];
+    if (it) out[s] = { ...it, level: lvl };
+  }
+  return out;
+}
+const combatPowerMaxed = computed(() =>
+  combatPower(
+    playerWithGear(
+      char.row?.pseudo ?? 'Toi',
+      c.value,
+      maxGear(char.row?.equipped ?? {}, c.value.level.level),
+      talentFx.value,
+      c.value.level.level,
+    ),
+  ),
+);
 // Combattant SANS équipement ni talents (stats de fond seules) → base de la
 // comparaison « avec / sans équipement » sur la fiche perso.
 const baseFighter = computed(() =>
@@ -1870,7 +1897,10 @@ const pctA = (x?: number) => Math.round((x ?? 0) * 100) + '%';
 // est affiché à côté pour signaler le potentiel d'un objet bas niveau.
 function powerIfEquip(it: Item): number {
   const lvl = c.value.level.level;
-  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: it };
+  // POTENTIEL : le candidat ET le gear en place évalués infusés à ton niveau → un
+  // drop lég. niv.1 se compare à sa vraie valeur (pas à son niveau 1) → « meilleur
+  // objet ? » a un sens (avant : Δ négatif pour un bon drop → « ça marche pas »).
+  const eq = { ...maxGear(char.row?.equipped ?? {}, lvl), [it.slot]: { ...it, level: lvl } };
   return combatPower(playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, lvl));
 }
 // Coût en poussière pour infuser un drop jusqu'à ton niveau (affiché à côté du Δ).
@@ -2741,19 +2771,17 @@ async function fightBoss(b: MilestoneBoss) {
 }
 // Choix d'une récompense parmi les 3 candidats en attente.
 function doChooseReward(index: number) {
-  const cand = char.row?.pending_reward?.candidates[index];
-  const isItem = cand?.kind === 'item';
-  const setId = isItem ? cand.item.setId : undefined;
-  const itemId = isItem ? cand.item.id : undefined;
-  withUid(async (uid) => {
-    const before = setId ? setCounts(char.row?.equipped ?? {})[setId] ?? 0 : 0;
-    await char.chooseReward(uid, index);
-    // ÉQUIPE directement l'objet choisi depuis la fenêtre du boss (comme en donjon) :
-    // si `chooseReward` l'a mis au sac (slot occupé), on le force-équipe (l'ancien → sac).
-    if (isItem && itemId && char.row?.inventory.some((i) => i.id === itemId)) await char.equip(uid, itemId);
-    if (setId) celebrateSetTier(setId, before, setCounts(char.row?.equipped ?? {})[setId] ?? 0);
-    $q.notify({ type: 'positive', message: isItem ? 'Objet équipé !' : 'Récompense récupérée !' });
-  }, 'Impossible de récupérer la récompense.');
+  // La récompense de boss est RÉCUPÉRÉE (drop) → va au sac (ou slot vide). PAS
+  // d'animation de palier de set ici : elle est réservée à l'ÉQUIPEMENT délibéré
+  // (sac → équipé). Le joueur équipe ensuite depuis l'onglet Équip. (bug 63c392dd).
+  const isItem = char.row?.pending_reward?.candidates[index]?.kind === 'item';
+  withUid(
+    (uid) =>
+      char
+        .chooseReward(uid, index)
+        .then(() => $q.notify({ type: 'positive', message: isItem ? 'Objet récupéré !' : 'Récompense récupérée !' })),
+    'Impossible de récupérer la récompense.',
+  );
 }
 
 // ── Faille sans fin (end-game infini) ──
