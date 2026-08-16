@@ -123,6 +123,19 @@
 
       <!-- ONGLET PERSONNAGE -->
       <template v-if="tab === 'perso'">
+        <div class="gear-sub">
+          <button class="gs-b" :class="{ on: persoSub === 'perso' }" @click="persoSub = 'perso'">
+            🧍 Perso
+          </button>
+          <button class="gs-b" :class="{ on: persoSub === 'stats' }" @click="persoSub = 'stats'">
+            ⚔️ Stats
+          </button>
+          <button class="gs-b" :class="{ on: persoSub === 'talents' }" @click="persoSub = 'talents'">
+            ✨ Talents<span v-if="talentFreeSlots" class="gs-badge">{{ talentFreeSlots }}</span>
+          </button>
+        </div>
+
+        <template v-if="persoSub === 'perso'">
         <div class="avatar-wrap">
           <AventureAvatar :profile="c.profile" :equipped="char.row.equipped" />
         </div>
@@ -193,7 +206,9 @@
           ❤️ <b class="font-display">{{ c.pv + bonusPv }} PV</b>
           <span v-if="bonusPv" class="pv-bonus">(+{{ bonusPv }} bonus)</span>
         </div>
+        </template>
 
+        <template v-if="persoSub === 'stats'">
         <div class="sec-title">Combat : base → équipé</div>
         <div class="gear-fx">
           <div class="gfx">
@@ -247,7 +262,9 @@
           Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
           effets (→).
         </div>
+        </template>
 
+        <template v-if="persoSub === 'talents'">
         <div class="sec-title">
           Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
         </div>
@@ -307,7 +324,9 @@
             </div>
           </div>
         </div>
+        </template>
 
+        <template v-if="persoSub === 'perso'">
         <!-- Codex : bestiaire + journal des sets (méta de collection). -->
         <button class="codex-btn" @click="codexOpen = true">
           <span class="cx-emo">📖</span>
@@ -338,6 +357,7 @@
           <b>Chaque séance fait progresser ton aventurier.</b> Les stats et le niveau viennent du
           sport. La connexion quotidienne, elle, ne donne qu'un peu d'énergie pour jouer.
         </div>
+        </template>
       </template>
 
       <!-- ONGLET ÉQUIPEMENT -->
@@ -1884,6 +1904,7 @@ const pseudoError = ref('');
 const tab = ref<'perso' | 'equip' | 'donjons' | 'boss'>('perso');
 // Sous-onglet de l'onglet Équip. : équipement / familier / sac / atelier.
 const gearSub = ref<'equip' | 'familiar' | 'bag' | 'shop'>('equip');
+const persoSub = ref<'perso' | 'stats' | 'talents'>('perso');
 // L'incubateur (fusion de familiers) est débloqué en le construisant sur la carte.
 const hasIncubator = computed(() => incubatorBuilt(char.row?.buildings ?? []));
 
@@ -2060,6 +2081,7 @@ const bonusPv = computed(() => {
 // ── Talents (refonte B : drop + infusion + loadout) ──
 const talentSlots = computed(() => talentsEarned(c.value.level.level));
 const equippedTalents = computed(() => (char.row?.talents ?? []).filter((t) => t.equipped));
+const talentFreeSlots = computed(() => Math.max(0, talentSlots.value - equippedTalents.value.length));
 const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.value);
 const infuseTarget = ref<TalentInstance | null>(null);
 // Vue enrichie : équipés d'abord, puis par niveau décroissant.
