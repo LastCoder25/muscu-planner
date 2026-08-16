@@ -21,6 +21,7 @@ import {
   type PendingReward,
 } from '@/lib/items';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
+import { normalizeTalents, talentInfuseXp, talentsEarned, type TalentInstance } from '@/lib/talents';
 import {
   createMap,
   advanceWorld,
@@ -54,7 +55,7 @@ export interface CharacterRow {
   energy_spent: number;
   equipped: Equipped;
   inventory: Item[];
-  talents: string[];
+  talents: TalentInstance[];
   cleared_dungeons: string[];
   defeated_bosses: string[];
   login_streak: number;
@@ -100,7 +101,7 @@ export const useCharacterStore = defineStore('character', () => {
     const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
     const obj = <T>(v: unknown): T =>
       v && typeof v === 'object' && !Array.isArray(v) ? (v as T) : ({} as T);
-    r.talents = arr<string>(r.talents);
+    r.talents = normalizeTalents(r.talents); // legacy string[] → instances (rétro-compat)
     r.inventory = arr<Item>(r.inventory);
     r.cleared_dungeons = arr<string>(r.cleared_dungeons);
     r.defeated_bosses = arr<string>(r.defeated_bosses);
@@ -223,6 +224,7 @@ export const useCharacterStore = defineStore('character', () => {
       consumed?: string[]; // consommables dépensés pour ce run
       gained?: string[]; // consommables gagnés en butin
       stones?: number; // pierres magiques 💎 (filet diffus, familiers)
+      talentDrops?: TalentInstance[]; // talents tombés (drop-only)
     },
   ) {
     const cur = row.value;
@@ -254,6 +256,7 @@ export const useCharacterStore = defineStore('character', () => {
       cleared_dungeons: cleared,
       consumables,
       keys: cur.keys + gotKey,
+      ...(input.talentDrops?.length ? { talents: [...cur.talents, ...input.talentDrops] } : {}),
     });
   }
 
@@ -271,6 +274,7 @@ export const useCharacterStore = defineStore('character', () => {
       pending?: PendingReward | null;
       consumed?: string[];
       stones?: number; // pierres magiques 💎 (jalon boss)
+      talentDrops?: TalentInstance[]; // talents tombés (drop-only)
     },
   ) {
     const cur = row.value;
@@ -295,6 +299,7 @@ export const useCharacterStore = defineStore('character', () => {
       consumables,
       pending_reward: input.pending ?? cur.pending_reward ?? null,
       keys: cur.keys + keyGain,
+      ...(input.talentDrops?.length ? { talents: [...cur.talents, ...input.talentDrops] } : {}),
     });
   }
 
@@ -681,11 +686,35 @@ export const useCharacterStore = defineStore('character', () => {
     return { from: prev, to: currentLevel, energy };
   }
 
-  // Réinitialise les talents (respec) contre de l'or → on les rechoisit ensuite.
-  async function resetTalents(userId: string, cost: number) {
+  // ── Talents (refonte B : drop + infusion + loadout à emplacements) ──
+  // Équipe un talent possédé (respecte le quota talentsEarned(level)). Swap libre.
+  async function equipTalent(userId: string, id: string, playerLevel: number) {
     const cur = row.value;
-    if (!cur || cur.talents.length === 0 || cur.gold < cost) return;
-    return persist(userId, { gold: cur.gold - cost, talents: [] });
+    if (!cur) return;
+    const inst = cur.talents.find((t) => t.id === id);
+    if (!inst || inst.equipped) return;
+    const equippedCount = cur.talents.filter((t) => t.equipped).length;
+    if (equippedCount >= talentsEarned(playerLevel)) return; // plus d'emplacement libre
+    const talents = cur.talents.map((t) => (t.id === id ? { ...t, equipped: true } : t));
+    return persistOptimistic(userId, { talents });
+  }
+  async function unequipTalent(userId: string, id: string) {
+    const cur = row.value;
+    if (!cur) return;
+    const talents = cur.talents.map((t) => (t.id === id ? { ...t, equipped: false } : t));
+    return persistOptimistic(userId, { talents });
+  }
+  // Infuse (consomme) le talent `fodderId` dans `targetId` → +XP au target, fodder retiré.
+  async function infuseTalent(userId: string, targetId: string, fodderId: string) {
+    const cur = row.value;
+    if (!cur || targetId === fodderId) return;
+    const target = cur.talents.find((t) => t.id === targetId);
+    const fodder = cur.talents.find((t) => t.id === fodderId);
+    if (!target || !fodder) return;
+    const talents = cur.talents
+      .filter((t) => t.id !== fodderId)
+      .map((t) => (t.id === targetId ? { ...t, xp: t.xp + talentInfuseXp(fodder) } : t));
+    return persistOptimistic(userId, { talents });
   }
 
   async function equip(userId: string, itemId: string) {
@@ -734,12 +763,6 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { equipped, inventory: [...cur.inventory, item] });
   }
 
-  // Choisit un talent (validation du quota côté appelant via talentsEarned).
-  async function chooseTalent(userId: string, code: string, maxAllowed: number) {
-    const cur = row.value;
-    if (!cur || cur.talents.length >= maxAllowed) return;
-    return persist(userId, { talents: [...cur.talents, code] });
-  }
 
   // ── Mode idle « Expédition » (carte + héros temporisé) ──
   function newSeed(now: number): number {
@@ -881,7 +904,9 @@ export const useCharacterStore = defineStore('character', () => {
     equip,
     equipReplacing,
     unequip,
-    chooseTalent,
+    equipTalent,
+    unequipTalent,
+    infuseTalent,
     salvage,
     sell,
     salvageMany,
@@ -894,7 +919,6 @@ export const useCharacterStore = defineStore('character', () => {
     forge,
     rerollEffect,
     craftSet,
-    resetTalents,
     spendEnergy,
     claimDailyLogin,
     claimLevelUps,

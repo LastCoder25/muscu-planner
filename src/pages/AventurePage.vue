@@ -248,41 +248,56 @@
           effets (→).
         </div>
 
-        <div class="sec-title">Talents</div>
-        <div v-if="talentPoints > 0" class="talent-choice">
-          <div class="tc-head">
-            🎓 {{ talentPoints }} talent{{ talentPoints > 1 ? 's' : '' }} à choisir
-          </div>
-          <div class="tc-opts">
-            <button
-              v-for="t in offered"
-              :key="t.code"
-              class="tc-opt"
-              @click="doChooseTalent(t.code)"
-            >
-              <span class="tc-emo">{{ t.icon }}</span>
-              <span class="tc-name font-display">{{ t.name }}</span>
-              <span class="tc-desc">{{ t.desc }}</span>
-            </button>
-          </div>
+        <div class="sec-title">
+          Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
         </div>
-        <div v-if="talentSummary.length" class="talents-owned">
-          <div v-for="ts in talentSummary" :key="ts.code" class="talent-card">
-            <span class="talent-card-emo">{{ ts.talent.icon }}</span>
-            <div class="talent-card-body">
-              <div class="talent-card-name font-display">{{ ts.talent.name }}</div>
-              <div class="talent-card-eff">{{ ts.total }}</div>
+        <div class="sec-hint">
+          Les talents <b>droppent</b> dans les donjons/boss. Équipe-en {{ talentSlots }} (change quand
+          tu veux), et <b>infuse tes doublons</b> pour les faire monter en rareté.
+        </div>
+
+        <!-- Cible d'infusion active -->
+        <div v-if="infuseTarget" class="tal-infuse-banner">
+          🔧 Infusion dans <b>{{ talentName(infuseTarget) }}</b> — tape un talent à sacrifier.
+          <button class="tib-x" @click="infuseTarget = null">annuler</button>
+        </div>
+
+        <div v-if="!char.row.talents.length" class="talents-empty">
+          Aucun talent pour l'instant — vaincs des donjons pour en faire tomber.
+        </div>
+        <div v-else class="talents-grid">
+          <div
+            v-for="t in talentsView"
+            :key="t.id"
+            class="tal-card"
+            :class="['p-' + t.rarity, { eq: t.equipped, tgt: infuseTarget?.id === t.id }]"
+          >
+            <span class="tal-emo">{{ t.def.icon }}</span>
+            <div class="tal-body">
+              <div class="tal-name font-display">
+                {{ t.def.name }} <span class="tal-lv">Nv{{ t.level }}</span>
+              </div>
+              <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
+              <div class="tal-xp"><span :style="{ width: Math.round(t.xpp * 100) + '%' }" /></div>
             </div>
-            <span v-if="ts.count > 1" class="talent-card-mult">×{{ ts.count }}</span>
+            <div class="tal-actions">
+              <template v-if="infuseTarget">
+                <button
+                  v-if="infuseTarget.id !== t.id"
+                  class="tal-b feed"
+                  @click="doInfuse(t.id)"
+                >
+                  ✨ Sacrifier
+                </button>
+                <span v-else class="tal-b cur">cible</span>
+              </template>
+              <template v-else>
+                <button v-if="!t.equipped" class="tal-b" :disabled="!canEquipMore" @click="doEquipTalent(t.id)">Équiper</button>
+                <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
+                <button class="tal-b ghost" @click="infuseTarget = t.inst">🔧</button>
+              </template>
+            </div>
           </div>
-        </div>
-        <div v-if="char.row.talents.length" class="talents-reset">
-          <button class="reset-btn" :disabled="char.row.gold < resetCost" @click="doResetTalents">
-            ↺ Réinitialiser 🪙{{ resetCost }}
-          </button>
-        </div>
-        <div v-if="!char.row.talents.length && talentPoints === 0" class="talents-empty">
-          Prochain talent au niveau {{ nextTalentLevel }}.
         </div>
 
         <!-- Codex : bestiaire + journal des sets (méta de collection). -->
@@ -1735,9 +1750,13 @@ import {
 import {
   talentsEarned,
   talentEffects,
-  talentChoices,
   talentByCode,
-  type Talent,
+  talentLevel,
+  talentRarity,
+  talentValue,
+  talentXpProgress,
+  rollTalentDrop,
+  type TalentInstance,
 } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { unlocksAtLevel, upcomingUnlocks } from '@/lib/advUnlocks';
@@ -1952,12 +1971,50 @@ const bonusPv = computed(() => {
   return Math.round(c.value.pv * pct);
 });
 
-// Talents : combien à choisir, et les 3 proposés pour le prochain choix.
-const talentPoints = computed(() =>
-  char.row ? talentsEarned(c.value.level.level) - char.row.talents.length : 0,
+// ── Talents (refonte B : drop + infusion + loadout) ──
+const talentSlots = computed(() => talentsEarned(c.value.level.level));
+const equippedTalents = computed(() => (char.row?.talents ?? []).filter((t) => t.equipped));
+const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.value);
+const infuseTarget = ref<TalentInstance | null>(null);
+// Vue enrichie : équipés d'abord, puis par niveau décroissant.
+const talentsView = computed(() =>
+  (char.row?.talents ?? [])
+    .map((inst) => {
+      const def = talentByCode(inst.code);
+      const level = talentLevel(inst.xp);
+      return def
+        ? {
+            id: inst.id,
+            inst,
+            def,
+            level,
+            rarity: talentRarity(level),
+            effLabel: Math.round(talentValue(def, level) * 100) + ' %',
+            xpp: talentXpProgress(inst.xp),
+            equipped: !!inst.equipped,
+          }
+        : null;
+    })
+    .filter((t): t is NonNullable<typeof t> => !!t)
+    .sort((a, b) => Number(b.equipped) - Number(a.equipped) || b.level - a.level),
 );
-const offered = computed(() => talentChoices(char.row?.talents.length ?? 0));
-const nextTalentLevel = computed(() => (talentsEarned(c.value.level.level) + 1) * 5);
+function talentName(inst: TalentInstance): string {
+  return talentByCode(inst.code)?.name ?? 'Talent';
+}
+async function doEquipTalent(id: string) {
+  const uid = auth.user?.id;
+  if (uid) await char.equipTalent(uid, id, c.value.level.level);
+}
+async function doUnequipTalent(id: string) {
+  const uid = auth.user?.id;
+  if (uid) await char.unequipTalent(uid, id);
+}
+async function doInfuse(fodderId: string) {
+  const uid = auth.user?.id;
+  const target = infuseTarget.value;
+  if (!uid || !target) return;
+  await char.infuseTalent(uid, target.id, fodderId);
+}
 
 // Prochains déblocages (timeline « À venir » de l'onglet Perso) — donne envie de
 // monter (« encore 2 niveaux et j'ouvre le Dragon »).
@@ -2066,40 +2123,6 @@ const levelBurstUnlocks = computed(() => {
   for (let lvl = lb.from + 1; lvl <= lb.to; lvl++) out.push(...unlocksAtLevel(lvl));
   return out;
 });
-
-// Talents acquis regroupés (empilables) → carte par talent avec effet CUMULÉ.
-const talentSummary = computed(() => {
-  const counts = new Map<string, number>();
-  for (const code of char.row?.talents ?? []) counts.set(code, (counts.get(code) ?? 0) + 1);
-  return [...counts.entries()]
-    .map(([code, count]) => {
-      const t = talentByCode(code);
-      return t ? { code, count, talent: t, total: talentTotalLabel(t, count) } : null;
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
-});
-
-// Libellé de l'effet cumulé : « +20 % dégâts » pour un talent pris 2 fois.
-function talentTotalLabel(t: Talent, count: number): string {
-  if (count <= 1) return t.desc;
-  const eff = t.effect as Record<string, number | undefined>;
-  const key = Object.keys(eff)[0];
-  const base = key ? (eff[key] ?? 0) : 0;
-  const pct = Math.round(base * count * 100);
-  const noun = t.desc.replace(/^\+\s*[\d.]+\s*%?\s*/, '');
-  return `+${pct} % ${noun}`.trim();
-}
-
-async function doChooseTalent(code: string) {
-  const uid = auth.user?.id;
-  if (!uid) return;
-  try {
-    await char.chooseTalent(uid, code, talentsEarned(c.value.level.level));
-    $q.notify({ type: 'positive', message: 'Talent acquis !' });
-  } catch {
-    $q.notify({ type: 'negative', message: 'Impossible de choisir ce talent.' });
-  }
-}
 
 // Part d'une stat dans le build (les 3 stats somment à 100 %) → « forme du build »
 // HONNÊTE : une stat ne paraît « pleine » que si elle est TOUT le build (les autres
@@ -2485,6 +2508,11 @@ async function explore(d: Dungeon) {
     // progression → le revenu doit suivre les coûts qui montent avec le niveau).
     const dust = r.defeated * (2 + Math.round(d.dropLevel * 0.5)) + (r.cleared ? d.dropLevel : 0);
     const stones = r.defeated + (r.cleared ? 3 : 0); // filet de pierres 💎 (familiers)
+    // Drop de TALENT (drop-only) : ~14 % sur un donjon nettoyé, rareté ∝ luck du donjon.
+    const talentDrops =
+      r.cleared && dropRng() < 0.14
+        ? [rollTalentDrop(dropRng, { luck: d.dropLuck, idSeed: seed })]
+        : [];
     await char.applyRun(uid, {
       energyCost: d.energyCost,
       gold,
@@ -2494,7 +2522,10 @@ async function explore(d: Dungeon) {
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(consumed.length ? { consumed } : {}),
       ...(consDropId ? { gained: [consDropId] } : {}),
+      ...(talentDrops.length ? { talentDrops } : {}),
     });
+    if (talentDrops.length)
+      $q.notify({ type: 'positive', icon: 'school', message: `🎓 Talent trouvé : ${talentName(talentDrops[0]!)} !` });
     selectedConsumables.value = []; // consommés
     run.value = {
       name: d.name,
@@ -2641,6 +2672,11 @@ async function fightBoss(b: MilestoneBoss) {
         }
       : null;
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
+    // Drop de TALENT au boss (source plus généreuse que les donjons) : ~40 % à la
+    // victoire, rareté rehaussée (luck 0.6) — les boss sont une bonne source de talents.
+    const bossTalentRng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
+    const talentDrops =
+      win && bossTalentRng() < 0.4 ? [rollTalentDrop(bossTalentRng, { luck: 0.6, idSeed: seed })] : [];
     await char.applyBossWin(uid, {
       bossId: b.id,
       energyCost: b.energyCost,
@@ -2650,7 +2686,10 @@ async function fightBoss(b: MilestoneBoss) {
       pending,
       stones: 12, // jalon boss → lot de pierres 💎 (crédité seulement si vaincu)
       ...(consumed.length ? { consumed } : {}),
+      ...(talentDrops.length ? { talentDrops } : {}),
     });
+    if (talentDrops.length)
+      $q.notify({ type: 'positive', icon: 'school', message: `🎓 Talent trouvé : ${talentName(talentDrops[0]!)} !` });
     selectedConsumables.value = [];
     run.value = {
       name: b.name,
@@ -2799,9 +2838,6 @@ async function fightEndless() {
   }
 }
 
-// Respec = bonus permanent important → coût NON trivial (croît fort avec le nombre
-// de talents acquis). (Avant : 80+40×nb, quasi gratuit vu l'or gagné.)
-const resetCost = computed(() => 600 + 500 * (char.row?.talents.length ?? 0));
 
 function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
   const uid = auth.user?.id;
@@ -3119,23 +3155,6 @@ function doSellBelow() {
     ),
   );
 }
-function doResetTalents() {
-  $q.dialog({
-    title: 'Réinitialiser les talents',
-    message: `Tous tes talents seront remis à zéro (tu les rechoisiras) contre ${resetCost.value} 🪙. Continuer ?`,
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Réinitialiser', color: 'primary', textColor: 'dark' },
-  }).onOk(() =>
-    withUid(
-      (uid) =>
-        char
-          .resetTalents(uid, resetCost.value)
-          .then(() => $q.notify({ type: 'positive', message: 'Talents réinitialisés.' })),
-      'Réinitialisation impossible.',
-    ),
-  );
-}
-
 async function savePseudo() {
   const uid = auth.user?.id;
   if (!uid || !isValidPseudo(pseudoInput.value)) return;
@@ -3816,114 +3835,128 @@ onUnmounted(() => {
 }
 
 /* Talents */
-.talent-choice {
-  background: var(--surface);
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 14px;
-}
-.tc-head {
+.tal-slots {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--accent);
-  margin-bottom: 10px;
+  margin-left: 6px;
 }
-.tc-opts {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-}
-.tc-opt {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  background: var(--surface-2, #2b241b);
-  border: 1px solid var(--line);
+.tal-infuse-banner {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: 10px;
-  padding: 10px 6px;
+  padding: 8px 12px;
+  font-size: 12.5px;
   color: var(--text);
-  cursor: pointer;
-  text-align: center;
-}
-.tc-opt:active {
-  transform: scale(0.97);
-  border-color: var(--accent);
-}
-.tc-emo {
-  font-size: 22px;
-}
-.tc-name {
-  font-size: 12px;
-  font-weight: 600;
-}
-.tc-desc {
-  font-size: 10.5px;
-  color: var(--dim);
-}
-.talents-owned {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 8px;
   margin-bottom: 10px;
 }
-.talent-card {
-  position: relative;
+.tib-x {
+  margin-left: 6px;
+  background: none;
+  border: none;
+  color: var(--dim);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 12px;
+}
+.talents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+/* .tal-card prend une classe p-<rareté> (color = teinte de rareté via currentColor). */
+.tal-card {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--accent) 12%, var(--surface)),
-    var(--surface)
-  );
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
-  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  border-left: 3px solid currentColor;
   border-radius: 12px;
   padding: 9px 11px;
   min-width: 0;
 }
-.talent-card-emo {
+.tal-card.eq {
+  background: color-mix(in srgb, currentColor 12%, var(--surface));
+}
+.tal-card.tgt {
+  outline: 2px solid var(--accent);
+}
+.tal-emo {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  background: color-mix(in srgb, currentColor 20%, transparent);
   font-size: 19px;
 }
-.talent-card-body {
+.tal-body {
   min-width: 0;
   flex: 1 1 auto;
 }
-.talent-card-name {
+.tal-name {
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
   line-height: 1.15;
 }
-.talent-card-eff {
+.tal-lv {
+  font-size: 11px;
+  color: var(--dim);
+}
+.tal-eff {
   font-size: 11.5px;
   font-weight: 600;
   color: var(--accent);
   margin-top: 1px;
 }
-.talent-card-mult {
-  flex: 0 0 auto;
-  align-self: flex-start;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 12px;
-  color: var(--dark, #15120e);
-  background: var(--accent);
-  border-radius: 999px;
-  padding: 1px 7px;
+.tal-xp {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  margin-top: 5px;
+  overflow: hidden;
 }
-.talents-reset {
-  margin-bottom: 18px;
+.tal-xp span {
+  display: block;
+  height: 100%;
+  background: currentColor;
+}
+.tal-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tal-b {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tal-b:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.tal-b.feed {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.tal-b.ghost {
+  color: var(--dim);
+}
+.tal-b.cur {
+  color: var(--accent);
+  border: none;
+  background: none;
 }
 .talents-empty {
   font-size: 12px;
