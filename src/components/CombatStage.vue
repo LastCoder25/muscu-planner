@@ -56,12 +56,8 @@
       </div>
     </div>
 
-    <div class="cs-foot">
-      <span v-if="fights.length > 1" class="cs-prog">Combat {{ fightIdx + 1 }}/{{ fights.length }}</span>
-      <span v-if="done" class="cs-result" :class="lastWin ? 'win' : 'lose'">
-        {{ lastWin ? '🏆 Victoire' : '💀 Défaite' }}
-      </span>
-      <button v-if="done" class="cs-replay" @click="start">⟲ Rejouer</button>
+    <div v-if="fights.length > 1" class="cs-foot">
+      <span class="cs-prog">Combat {{ fightIdx + 1 }}/{{ fights.length }}</span>
     </div>
   </div>
 </template>
