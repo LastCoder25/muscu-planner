@@ -2705,16 +2705,17 @@ function rewardDupNote(item: Item): string {
 // (un coureur préférera PV/vol de vie/crit, un muscu les dégâts…), pas la plus
 // grosse magnitude brute. → aide à aller le plus loin possible.
 function rewardScore(cand: RewardCandidate): number {
-  const base = combatPowerVal.value; // puissance actuelle (loadout courant)
+  // POTENTIEL (objet monté à ton niveau) → COHÉRENT avec le comparateur affiché sur la
+  // carte. Avant : puissance au niveau ACTUEL → une pièce de set (niv.1 au drop) était
+  // toujours sous-évaluée et jamais conseillée, même quand elle est meilleure une fois
+  // infusée (bug c88be5b3).
+  const base = combatPowerMaxed.value;
   if (cand.kind === 'gold') {
-    // Ressources : ne changent pas la puissance → à peine au-dessus du statu quo,
-    // donc conseillées seulement si aucun objet n'est une vraie amélioration.
+    // Ressources : ne changent pas la puissance → à peine au-dessus du statu quo.
     return base + cand.dust * 0.05 + cand.gold * 0.01;
   }
   const it = cand.item;
-  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: it };
-  const p = playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level);
-  let s = combatPower(p);
+  let s = powerIfEquip(it); // potentiel une fois monté à ton niveau (comme la carte)
   if (it.setId && !rewardDupNote(it)) s += base * 0.05; // petit bonus « avance un set »
   return s;
 }
