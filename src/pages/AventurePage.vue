@@ -845,7 +845,7 @@
         <div class="sec-title mboss-title">🗺️ Carte des mondes</div>
         <div class="sec-hint map-hint">Touche une région pour voir ses donjons ↓</div>
         <!-- Carte-monde serpentine : un nœud par région, fil énergisé, cadenas. -->
-        <div class="worldmap" :style="{ height: mapGeom.viewH + 'px' }">
+        <div ref="worldmapEl" class="worldmap" :style="{ height: mapGeom.viewH + 'px' }">
           <svg class="wm-svg" :viewBox="`0 0 100 ${mapGeom.viewH}`" preserveAspectRatio="none">
             <!-- Un segment par paire de zones : BLEU si la zone d'arrivée est
                  accessible (les deux zones ouvertes), NOIR vers une zone verrouillée. -->
@@ -2081,6 +2081,33 @@ const loginBurst = ref<{ streak: number; energy: number; usedGrace: boolean } | 
 const levelBurst = ref<{ from: number; to: number; energy: number } | null>(null);
 // Reveal de nouvelle région : célèbre le passage dans un biome inédit.
 const regionBurst = ref<{ emoji: string; name: string; blurb: string; color: string } | null>(null);
+const worldmapEl = ref<HTMLElement | null>(null);
+type RegionReveal = { id: string; emoji: string; name: string; blurb: string; color: string };
+// Reveal EN ATTENTE : quand on nettoie le dernier donjon d'une zone en combat, on
+// attend la FERMETURE du rapport pour jouer l'animation (sinon elle recouvre le combat).
+const pendingRegionReveal = ref<RegionReveal | null>(null);
+// Joue le reveal d'une nouvelle zone : bascule sur l'onglet Donjons, CENTRE la carte
+// (slide de l'écran), FAIT EXPLOSER les chaînes/cadenas de la nouvelle zone (visible
+// sur la carte), puis affiche la bannière « nouvelle zone » (nommée) → le joueur peut
+// ensuite cliquer la zone pour continuer.
+function triggerRegionReveal(rev: RegionReveal) {
+  tab.value = 'donjons'; // la carte des mondes doit être à l'écran
+  selectedRegionId.value = rev.id; // ouvre la nouvelle zone dans le drawer (cliquable)
+  void nextTick(() => {
+    // 1) slide l'écran pour centrer la carte sur la nouvelle zone
+    worldmapEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // 2) une fois le scroll amorcé, la chaîne + le cadenas EXPLOSENT sur la carte
+    setTimeout(() => {
+      shatterId.value = rev.id;
+      setTimeout(() => (shatterId.value = null), 1400);
+      // 3) après l'explosion, la bannière de zone (nommée) apparaît
+      setTimeout(() => {
+        regionBurst.value = { emoji: rev.emoji, name: rev.name, blurb: rev.blurb, color: rev.color };
+        setTimeout(() => (regionBurst.value = null), 5200);
+      }, 1500);
+    }, 450);
+  });
+}
 let lastRegionId = '';
 watch(
   () => curRegion.value.id,
@@ -2088,12 +2115,11 @@ watch(
     // Pas au chargement initial : uniquement quand on ENTRE dans une nouvelle région.
     if (lastRegionId && id !== lastRegionId) {
       const r = curRegion.value;
-      regionBurst.value = { emoji: r.emoji, name: r.name, blurb: r.blurb, color: r.color };
-      setTimeout(() => (regionBurst.value = null), 5200);
-      // La carte : le cadenas de la région fraîchement débloquée explose.
-      shatterId.value = id;
-      selectedRegionId.value = id; // ouvre la nouvelle région dans le drawer
-      setTimeout(() => (shatterId.value = null), 1400);
+      const rev: RegionReveal = { id, emoji: r.emoji, name: r.name, blurb: r.blurb, color: r.color };
+      // Changement issu d'un COMBAT (rapport ouvert) → on diffère à sa fermeture ;
+      // sinon (cas rare) on joue tout de suite.
+      if (reportOpen.value) pendingRegionReveal.value = rev;
+      else triggerRegionReveal(rev);
     }
     lastRegionId = id;
   },
@@ -2352,7 +2378,16 @@ function queueFx(fn: () => void) {
 // modale fermée avant la fin de l'animation) → elles ne s'accumulent plus pour se
 // déclencher « toutes d'un coup » lors d'un run suivant (bug : éclats en rafale).
 watch(reportOpen, (open) => {
-  if (!open) pendingCelebrations.value = [];
+  if (!open) {
+    pendingCelebrations.value = [];
+    // Le rapport se ferme → si le dernier donjon d'une zone vient d'être nettoyé,
+    // on joue MAINTENANT le reveal de la nouvelle zone (slide + explosion sur la carte).
+    if (pendingRegionReveal.value) {
+      const rev = pendingRegionReveal.value;
+      pendingRegionReveal.value = null;
+      triggerRegionReveal(rev);
+    }
+  }
 });
 function flushCelebrations() {
   if (pendingCelebrations.value.length) {
