@@ -736,6 +736,10 @@
         <template v-if="gearSub === 'shop'">
         <!-- Atelier de poussière : investir la poussière autrement que l'infusion de niveau -->
         <div class="sec-title">🔧 Atelier de poussière</div>
+        <div v-if="!hasForge" class="sec-hint">
+          🔒 Construis la <b>🔨 Forge</b> sur la carte d'expédition pour ouvrir l'Atelier.
+        </div>
+        <template v-else>
         <div class="sec-hint">Investis ta poussière — <b>✨ {{ char.row.dust }}</b> dispo.</div>
         <div class="workshop">
           <button
@@ -761,10 +765,11 @@
           </button>
         </div>
         <div class="ws-note">
-          Forge un objet neuf <b>à ton niveau</b> (rareté au hasard). <b>♻️ Reroll</b> (change la
-          stat) se fait sur un objet du sac. La rareté ne se monte plus au craft : le
+          Forge un objet neuf <b>à ton niveau</b> (rareté au hasard). <b>♻️ Reroll qualité</b> se
+          fait sur un objet du sac. La rareté ne se monte plus au craft : le
           <b>haut de gamme s'obtient en explorant</b> (drops/boss).
         </div>
+        </template>
 
         <div class="foot">
           L'équipement ne donne pas de stats (elles viennent du sport) mais des <b>effets</b> — vol
@@ -1877,6 +1882,7 @@ import { unlocksAtLevel } from '@/lib/advUnlocks';
 import {
   incubatorBuilt,
   labyrinthUnlocked,
+  forgeBuilt,
   bossAltarBuilt,
   bossAltarRollFloor,
   bossRewardCount,
@@ -1961,6 +1967,8 @@ const gearSub = ref<'equip' | 'familiar' | 'bag' | 'shop'>('equip');
 const persoSub = ref<'perso' | 'stats' | 'talents'>('perso');
 // L'incubateur (fusion de familiers) est débloqué en le construisant sur la carte.
 const hasIncubator = computed(() => incubatorBuilt(char.row?.buildings ?? []));
+// L'Atelier (forge d'objet / de set) est débloqué par le bâtiment 🔨 Forge.
+const hasForge = computed(() => forgeBuilt(char.row?.buildings ?? []));
 // Le Labyrinthe est débloqué par la 🚪 Porte du Labyrinthe (bâtiment sur la carte).
 const hasLabyGate = computed(() => labyrinthUnlocked(char.row?.buildings ?? []));
 // Clic sur la tuile Labyrinthe : bloqué en expédition ; sinon → Labyrinthe si la Porte

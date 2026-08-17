@@ -25,14 +25,11 @@ const H = 3_600_000;
 const mk = (typeId: string, level: number, collectedAt = 0, slot = 0): Building => ({ typeId, level, slot, collectedAt });
 
 describe('buildings — emplacements & coûts', () => {
-  it('plotsForLevel : 1 au départ, +1/niveau jusqu’à 4, puis +1/4 niveaux', () => {
+  it('plotsForLevel : UN emplacement par niveau (le joueur priorise), plafonné', () => {
     expect(plotsForLevel(1)).toBe(1);
     expect(plotsForLevel(2)).toBe(2);
-    expect(plotsForLevel(3)).toBe(3);
-    expect(plotsForLevel(4)).toBe(4);
-    expect(plotsForLevel(5)).toBe(4); // ensuite cadence douce
-    expect(plotsForLevel(8)).toBe(5);
-    expect(plotsForLevel(16)).toBe(7);
+    expect(plotsForLevel(5)).toBe(5);
+    expect(plotsForLevel(9)).toBe(9);
     expect(plotsForLevel(40)).toBe(BUILD.plotCap); // plafonné
   });
   it('slotUnlockLevel : inverse cohérent de plotsForLevel', () => {
@@ -91,10 +88,16 @@ describe('buildings — registre extensible', () => {
 });
 
 describe('buildings — déblocage & unicité (utilitaires)', () => {
-  it('canBuildType : gate par niveau (Entrepôt niv.7)', () => {
-    expect(buildingUnlockLevel('warehouse')).toBe(7);
-    expect(canBuildType('warehouse', 6, [])).toBe(false);
-    expect(canBuildType('warehouse', 7, [])).toBe(true);
+  it('canBuildType : gate par niveau (Autel des boss niv.4, Forge niv.5)', () => {
+    expect(buildingUnlockLevel('boss_altar')).toBe(4);
+    expect(canBuildType('boss_altar', 3, [])).toBe(false);
+    expect(canBuildType('boss_altar', 4, [])).toBe(true);
+    expect(buildingUnlockLevel('forge')).toBe(5);
+    expect(canBuildType('forge', 4, [])).toBe(false);
+    expect(canBuildType('forge', 5, [])).toBe(true);
+    // Production de base dispo dès le niv.1 (nouvel ordre des emplacements).
+    expect(buildingUnlockLevel('warehouse')).toBe(1);
+    expect(buildingUnlockLevel('energy_font')).toBe(1);
   });
   it('canBuildType : bâtiment UNIQUE non re-constructible', () => {
     const wh: Building = mk('warehouse', 1, 0, 3);

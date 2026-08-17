@@ -101,7 +101,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     resource: 'energy',
     prodPerHrPerLvl: 0.8, // niv.20 ≈ 16/h → ~288 ⚡/jour (cap 18 h) = quelques runs
     buildGold: 1200, // plus cher qu'un filon : c'est un vrai puits d'or
-    unlockLevel: 5,
+    unlockLevel: 1, // dispo dès le niv.1 (production de base) — cf. ordre des emplacements
     unique: true,
     desc: 'Convertit l’or en énergie ⚡ de jeu (pour lancer plus de donjons).',
   },
@@ -134,7 +134,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     category: 'utility',
     effect: { storageMultPerLvl: 0.15 },
     buildGold: 1500,
-    unlockLevel: 7,
+    unlockLevel: 1, // production de base dispo dès le niv.1 (cf. ordre des emplacements)
     unique: true,
     desc: 'Augmente le stockage de tous tes filons (+15 %/niveau).',
   },
@@ -187,9 +187,26 @@ export const BUILDING_TYPES: BuildingType[] = [
     category: 'utility',
     effect: { bossRollFloorPerLvl: 0.06 },
     buildGold: 700,
-    unlockLevel: 5,
+    unlockLevel: 4,
     unique: true,
     desc: 'Récompenses de boss : 4ᵉ choix + ciblage du set manquant (dès la construction). Chaque niveau : +qualité de roll.',
+  },
+  // Utilitaire UNIQUE : la FORGE débloque l'Atelier de poussière (forger un objet neuf,
+  // forge de set). Sans elle, l'Atelier reste fermé → un cran de progression de plus.
+  {
+    id: 'forge',
+    label: 'Forge',
+    emoji: '🔨',
+    category: 'utility',
+    effect: {},
+    buildGold: 1000,
+    unlockLevel: 5,
+    unique: true,
+    unlock: {
+      activity: 'L’Atelier de forge (poussière)',
+      where: 'Aventure › onglet Équip. › 🔧 Atelier.',
+    },
+    desc: 'Débloque l’Atelier : forger un objet neuf à ton niveau + forge de pièces de set.',
   },
 ];
 
@@ -200,28 +217,23 @@ export function buildingType(id: string): BuildingType | undefined {
 
 // ── Constantes de dimensionnement (validées par simulation) ──
 export const BUILD = {
-  plotCap: 10, // emplacements max (le jeu va bien au-delà du niv.25 → cap élevé)
-  plotEvery: 4, // +1 emplacement débloqué tous les 4 niveaux (atteint le cap ~niv.32)
+  plotCap: 12, // emplacements max (≥ nb de types de bâtiments → on peut tous les poser)
   upBase: 220, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   upExp: 2,
   storageHours: 18, // heures de production stockables (puis saturation)
   hourMs: 3_600_000,
 } as const;
 
-/** Nombre d'emplacements DÉBLOQUÉS à un niveau donné.
- *  DÉBUT : 1 emplacement, puis **+1 par niveau** jusqu'à 4 (une récompense à chaque
- *  niveau, le temps de prendre ses marques). ENSUITE : +1 tous les `plotEvery`
- *  niveaux (cadence douce). Continue au-delà du niv.25 (le village grandit). */
+/** Nombre d'emplacements DÉBLOQUÉS à un niveau donné : **UN par niveau** (le joueur
+ *  gère ses priorités — plus de bâtiments débloqués que d'emplacements au début). */
 export function plotsForLevel(level: number): number {
-  const l = Math.max(1, level);
-  const n = l <= 4 ? l : 4 + Math.floor((l - 4) / BUILD.plotEvery);
-  return Math.min(BUILD.plotCap, n);
+  return Math.min(BUILD.plotCap, Math.max(1, level));
 }
 
 /** Niveau auquel l'emplacement d'index `slot` (0-based) se débloque (inverse de
  *  plotsForLevel). Sert à afficher « débloqué au niv X » sur un emplacement verrouillé. */
 export function slotUnlockLevel(slot: number): number {
-  return slot < 4 ? slot + 1 : 4 + (slot - 3) * BUILD.plotEvery;
+  return slot + 1;
 }
 
 /** Niveau requis pour pouvoir construire ce type (défaut 1). */
@@ -262,6 +274,10 @@ export function expeditionsUnlocked(buildings: Building[]): boolean {
 /** L'incubateur est-il construit ? → débloque la fusion des familiers. */
 export function incubatorBuilt(buildings: Building[]): boolean {
   return buildings.some((b) => b.typeId === 'incubator');
+}
+/** La Forge est-elle construite ? → débloque l'Atelier (forge d'objet / de set). */
+export function forgeBuilt(buildings: Building[]): boolean {
+  return buildings.some((b) => b.typeId === 'forge');
 }
 // ── Porte du Labyrinthe (gate + qualité du butin) ──
 const LABY_GATE_ID = 'labyrinth_gate';
