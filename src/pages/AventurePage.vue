@@ -719,7 +719,7 @@
                         @click="doReroll(it)"
                         v-close-popup
                       >
-                        ♻️ Reroll · {{ rerollCost(it) }}✨
+                        ♻️ Reroll qualité · {{ rerollCost(it) }}✨
                       </button>
                     </div>
                   </q-menu>

@@ -585,15 +585,28 @@ export function forgeItem(
 export function rerollCost(item: Item): number {
   return Math.round((40 + item.level * 15) * (RARITY_STEP[RARITY_RANK[item.rarity]] ?? 1));
 }
-export function rerolledEffect(rng: () => number, item: Item): ItemEffect {
-  // Respecte le gate de niveau : un objet bas niveau ne peut pas rerollmer sur un
-  // effet signature (ils restent une découverte de profondeur).
-  const choices = availableEffects(item.slot, item.level);
-  const others = choices.filter((c) => c.type !== item.effect.type);
-  const chosen = pick(rng, others.length ? others : choices);
+// Reroll de QUALITÉ (étoiles) : re-tire la QUALITÉ de l'objet en gardant le TYPE
+// d'effet, la RARETÉ et le NIVEAU. Ne touche JAMAIS la rareté → aucun risque de perdre
+// un divin ; sert à retenter une meilleure qualité (ex. un 1★). On rescale la valeur
+// par le rapport des multiplicateurs de qualité (préserve base × rareté × magnitude),
+// et on met à jour `roll` → les étoiles restent cohérentes avec la valeur.
+export function rerolledQuality(
+  rng: () => number,
+  item: Item,
+): { effect: ItemEffect; effect2?: ItemEffect; roll: number } {
+  const oldStars = rollStars(item.roll);
+  const oldVf = oldStars ? starQualityMult(oldStars) : 1; // legacy sans roll → base
+  const stars = rollStars(rng());
+  const newVf = starQualityMult(stars);
+  const ratio = newVf / oldVf;
+  const scale = (e: ItemEffect): ItemEffect => ({
+    type: e.type,
+    value: Math.max(1, Math.round(e.value * ratio)),
+  });
   return {
-    type: chosen.type,
-    value: Math.max(1, Math.round(chosen.base * RARITY_MULT[item.rarity])),
+    effect: scale(item.effect),
+    ...(item.effect2 ? { effect2: scale(item.effect2) } : {}),
+    roll: Math.round(((newVf - 0.8) / 0.4) * 100) / 100,
   };
 }
 

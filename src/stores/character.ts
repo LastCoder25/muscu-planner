@@ -9,7 +9,7 @@ import {
   upgradeCost,
   forgeItem,
   forgeCost,
-  rerolledEffect,
+  rerolledQuality,
   rerollCost,
   craftSetCost,
   rollSetPiece,
@@ -618,7 +618,9 @@ export const useCharacterStore = defineStore('character', () => {
     if (!owned) return;
     const cost = rerollCost(owned.item);
     if (cur.dust < cost) return;
-    const updated: Item = { ...owned.item, effect: rerolledEffect(Math.random, owned.item) };
+    const rq = rerolledQuality(Math.random, owned.item);
+    const updated: Item = { ...owned.item, effect: rq.effect, roll: rq.roll };
+    if (rq.effect2) updated.effect2 = rq.effect2;
     return applyItemUpdate(userId, cur, owned, updated, cost);
   }
   // D. Forge une pièce de set ciblée (set + emplacement) au niveau joueur → au sac.

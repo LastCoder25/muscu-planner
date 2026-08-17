@@ -21,8 +21,8 @@ import {
   forgeCost,
   forgeItem,
   rerollCost,
-  rerolledEffect,
   craftSetCost,
+  rerolledQuality,
   starQualityMult,
   rollStars,
   type Item,
@@ -369,11 +369,13 @@ describe('atelier de poussière (forge / reroll / infusion / craft)', () => {
     expect(it.level).toBe(8);
     expect(it.effect.value).toBeGreaterThan(0);
   });
-  it('reroll : nouvel effet valide pour le slot, coût > 0', () => {
-    const sword = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, level: 5 });
+  it('reroll de QUALITÉ : garde le type + la rareté, ne touche que la valeur/étoiles', () => {
+    const sword = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, level: 5, roll: 0.1 });
     expect(rerollCost(sword)).toBeGreaterThan(0);
-    const eff = rerolledEffect(mulberry32(2), sword);
-    expect(['damage_pct', 'crit_pct', 'lifesteal_pct']).toContain(eff.type);
+    const rq = rerolledQuality(mulberry32(2), sword);
+    expect(rq.effect.type).toBe('damage_pct'); // type inchangé
+    expect(rq.effect.value).toBeGreaterThan(0);
+    expect(rq.roll).toBeGreaterThanOrEqual(0); // nouvelle qualité (étoiles) cohérente
   });
   it('craft de set : coût élevé qui monte avec le niveau', () => {
     expect(craftSetCost(10)).toBeGreaterThan(200);
