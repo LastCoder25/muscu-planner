@@ -2119,11 +2119,30 @@ function triggerRegionReveal(rev: RegionReveal) {
   }, 380);
 }
 let lastRegionId = '';
+// ARMEMENT : on n'active le reveal qu'une fois le perso chargé, en initialisant
+// `lastRegionId` sur la zone courante réelle. Sinon, après un RESET (clearedIds=[] →
+// curRegion ne change jamais à l'hydratation), lastRegionId restait '' et le TOUT
+// PREMIER passage de zone était mangé par le garde → aucun reveal (bug observé).
+const revealReady = ref(false);
+watch(
+  () => char.row?.user_id ?? null,
+  (uid) => {
+    if (uid) {
+      lastRegionId = curRegion.value.id;
+      // laisse un tick pour que clearedIds/curRegion se stabilisent, puis on arme.
+      void nextTick(() => {
+        lastRegionId = curRegion.value.id;
+        revealReady.value = true;
+      });
+    }
+  },
+  { immediate: true },
+);
 watch(
   () => curRegion.value.id,
   (id) => {
-    // Pas au chargement initial : uniquement quand on ENTRE dans une nouvelle région.
-    if (lastRegionId && id !== lastRegionId) {
+    // Uniquement une fois ARMÉ (perso chargé) ET sur un vrai changement de zone.
+    if (revealReady.value && id !== lastRegionId) {
       const r = curRegion.value;
       const rev: RegionReveal = { id, emoji: r.emoji, name: r.name, blurb: r.blurb, color: r.color };
       // Un changement de zone vient TOUJOURS d'un donjon nettoyé → un rapport de combat
