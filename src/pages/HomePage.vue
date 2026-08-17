@@ -85,44 +85,37 @@
         </div>
       </div>
 
-      <!-- Piliers Force & Endurance : niveaux des BÉNÉFICES de tout ton sport
-           (chaque activité contribue selon son profil) → 2 chiffres qui évoluent. -->
+      <!-- Piliers Force & Endurance : niveaux des BÉNÉFICES de tout ton sport, en
+           CERCLES (anneau = progression, chiffre au centre = niveau). -->
       <div v-if="statTotal > 0" class="pillars">
-        <button class="pillar pow" @click="goStats" aria-label="Détail Force">
-          <span class="pl-emo">💪</span>
-          <div class="pl-body">
-            <div class="pl-top">
-              <span class="pl-name font-display">Force</span>
-              <span class="pl-lvl font-display">Niv. {{ progress.force.value.level }}</span>
-            </div>
-            <div class="pl-bar">
-              <span class="pl-fill" :style="{ width: progress.force.value.progressPct + '%' }" />
-            </div>
-            <div class="pl-foot">
-              <span class="pl-pts">{{ progress.powerXp.value.toLocaleString('fr-FR') }} pts</span>
-              <span v-if="progress.force30.value > 0" class="pl-trend"
-                >↑ +{{ progress.force30.value.toLocaleString('fr-FR') }} · 30 j</span
-              >
-            </div>
-          </div>
-        </button>
-        <button class="pillar end" @click="goStats" aria-label="Détail Endurance">
-          <span class="pl-emo">❤️</span>
-          <div class="pl-body">
-            <div class="pl-top">
-              <span class="pl-name font-display">Endurance</span>
-              <span class="pl-lvl font-display">Niv. {{ progress.endurance.value.level }}</span>
-            </div>
-            <div class="pl-bar">
-              <span class="pl-fill" :style="{ width: progress.endurance.value.progressPct + '%' }" />
-            </div>
-            <div class="pl-foot">
-              <span class="pl-pts">{{ progress.enduranceXp.value.toLocaleString('fr-FR') }} pts</span>
-              <span v-if="progress.endurance30.value > 0" class="pl-trend"
-                >↑ +{{ progress.endurance30.value.toLocaleString('fr-FR') }} · 30 j</span
-              >
-            </div>
-          </div>
+        <button
+          v-for="p in pillars"
+          :key="p.key"
+          class="pillar"
+          :class="p.key"
+          :aria-label="'Détail ' + p.name"
+          @click="goStats"
+        >
+          <span class="pl-ring">
+            <svg viewBox="0 0 36 36" role="img" :aria-label="`${p.name} niveau ${p.lvl.level}`">
+              <circle class="plr-track" cx="18" cy="18" r="15.9155" />
+              <circle
+                class="plr-arc"
+                cx="18"
+                cy="18"
+                r="15.9155"
+                transform="rotate(-90 18 18)"
+                :stroke-dasharray="`${p.lvl.progressPct} 100`"
+              />
+              <text class="plr-emo" x="18" y="14.5" text-anchor="middle">{{ p.emoji }}</text>
+              <text class="plr-n font-display" x="18" y="25" text-anchor="middle">
+                {{ p.lvl.level }}
+              </text>
+            </svg>
+          </span>
+          <span class="pl-name font-display">{{ p.name }}</span>
+          <span class="pl-pts">{{ p.pts.toLocaleString('fr-FR') }} pts</span>
+          <span v-if="p.d30 > 0" class="pl-trend">↑ +{{ p.d30.toLocaleString('fr-FR') }} · 30 j</span>
         </button>
       </div>
 
@@ -446,6 +439,25 @@ function pickAutre() {
 const statTotal = computed(
   () => progress.powerXp.value + progress.enduranceXp.value + progress.agilityXp.value,
 );
+// Piliers Force / Endurance (cercles) : niveau + points cumulés + tendance 30 j.
+const pillars = computed(() => [
+  {
+    key: 'pow',
+    name: 'Force',
+    emoji: '💪',
+    lvl: progress.force.value,
+    pts: progress.powerXp.value,
+    d30: progress.force30.value,
+  },
+  {
+    key: 'end',
+    name: 'Endurance',
+    emoji: '❤️',
+    lvl: progress.endurance.value,
+    pts: progress.enduranceXp.value,
+    d30: progress.endurance30.value,
+  },
+]);
 function statPct(v: number): number {
   return statTotal.value > 0 ? Math.round((v / statTotal.value) * 100) : 0;
 }
@@ -909,7 +921,7 @@ async function saveAutre() {
 .sb-l.agi {
   color: #ffd23f;
 }
-/* Piliers Force / Endurance : 2 tuiles côte à côte, teintées par la stat. */
+/* Piliers Force / Endurance : 2 CERCLES (anneau = progression, niveau au centre). */
 .pillars {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -919,13 +931,13 @@ async function saveAutre() {
 .pillar {
   --pc: var(--accent);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  text-align: left;
-  padding: 12px;
+  gap: 3px;
+  padding: 12px 8px;
   border-radius: 14px;
-  background: color-mix(in srgb, var(--pc) 10%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--pc) 45%, var(--line));
+  background: color-mix(in srgb, var(--pc) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--pc) 42%, var(--line));
   cursor: pointer;
 }
 .pillar:active {
@@ -937,62 +949,50 @@ async function saveAutre() {
 .pillar.end {
   --pc: #7bc86c;
 }
-.pl-emo {
-  font-size: 26px;
-  flex: none;
+.pl-ring {
+  width: 84px;
+  height: 84px;
 }
-.pl-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.pl-ring svg {
+  width: 100%;
+  height: 100%;
 }
-.pl-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
+.plr-track {
+  fill: none;
+  stroke: color-mix(in srgb, var(--pc) 20%, var(--bg));
+  stroke-width: 3;
+}
+.plr-arc {
+  fill: none;
+  stroke: var(--pc);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.plr-emo {
+  font-size: 8px;
+}
+.plr-n {
+  font-size: 13px;
+  font-weight: 800;
+  fill: var(--text);
 }
 .pl-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--pc);
 }
-.pl-lvl {
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--text);
-}
-.pl-bar {
-  position: relative;
-  height: 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--pc) 18%, var(--bg));
-  overflow: hidden;
-}
-.pl-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 999px;
-  background: var(--pc);
-}
-.pl-foot {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-}
 .pl-pts {
+  font-size: 10.5px;
   color: var(--dim);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .pl-trend {
+  font-size: 10.5px;
   color: var(--pc);
   font-weight: 700;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .tile-group {
   margin-bottom: 18px;

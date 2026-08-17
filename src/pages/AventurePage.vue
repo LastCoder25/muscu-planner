@@ -1764,12 +1764,29 @@
             v-if="stageDone && !char.row?.pending_reward"
             class="rm-btn rm-btn-primary"
             :disabled="!canReattack"
+            title="Réattaquer"
+            aria-label="Réattaquer"
             @click="reattackLast"
           >
-            ⚔️ Réattaquer ({{ reattackCost }} ⚡)
+            <span class="rm-ic">⚔️</span>
+            <span class="rm-cost">{{ reattackCost }} ⚡</span>
           </button>
-          <button class="rm-btn" @click="goInventoryFromReport">🎒 Inventaire</button>
-          <button class="rm-btn" @click="reportOpen = false">Fermer</button>
+          <button
+            class="rm-btn rm-icon"
+            title="Inventaire"
+            aria-label="Inventaire"
+            @click="goInventoryFromReport"
+          >
+            🎒
+          </button>
+          <button
+            class="rm-btn rm-icon"
+            title="Fermer"
+            aria-label="Fermer"
+            @click="reportOpen = false"
+          >
+            ✕
+          </button>
         </div>
       </q-card>
     </q-dialog>
@@ -6046,22 +6063,43 @@ onUnmounted(() => {
 }
 .rm-btn {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
   padding: 10px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
-.rm-btn:active {
-  transform: scale(0.98);
+/* Boutons ICÔNE seuls (Inventaire, Fermer) : carrés, ne s'étirent pas. */
+.rm-btn.rm-icon {
+  flex: none;
+  width: 46px;
+  font-size: 18px;
+  line-height: 1;
 }
+.rm-btn:active {
+  transform: scale(0.96);
+}
+/* Réattaquer = action principale : prend la largeur, icône + coût énergie. */
 .rm-btn-primary {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
-  font-weight: 700;
+}
+.rm-ic {
+  font-size: 18px;
+  line-height: 1;
+}
+.rm-cost {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 .rm-btn:disabled {
   opacity: 0.4;
