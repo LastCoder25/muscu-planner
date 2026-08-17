@@ -2098,20 +2098,25 @@ const pendingRegionReveal = ref<RegionReveal | null>(null);
 function triggerRegionReveal(rev: RegionReveal) {
   tab.value = 'donjons'; // la carte des mondes doit être à l'écran
   selectedRegionId.value = rev.id; // ouvre la nouvelle zone dans le drawer (cliquable)
-  void nextTick(() => {
-    // 1) slide l'écran pour centrer la carte sur la nouvelle zone
-    worldmapEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // 2) une fois le scroll amorcé, la chaîne + le cadenas EXPLOSENT sur la carte
-    setTimeout(() => {
-      shatterId.value = rev.id;
-      setTimeout(() => (shatterId.value = null), 1400);
-      // 3) après l'explosion, la bannière de zone (nommée) apparaît
+  // La modale de rapport a une transition de FERMETURE (~300 ms) pendant laquelle le
+  // scroll passe inaperçu et l'overlay est encore là → on attend qu'elle disparaisse,
+  // PUIS on scrolle la carte au centre (slide visible), on fait EXPLOSER les chaînes,
+  // et on affiche la bannière de zone.
+  setTimeout(() => {
+    void nextTick(() => {
+      worldmapEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Après le scroll : explosion du cadenas/chaînes sur la carte.
+      setTimeout(() => {
+        shatterId.value = rev.id;
+        setTimeout(() => (shatterId.value = null), 1400);
+      }, 550);
+      // Bannière de zone (nommée) — signal fort, indépendant du scroll.
       setTimeout(() => {
         regionBurst.value = { emoji: rev.emoji, name: rev.name, blurb: rev.blurb, color: rev.color };
         setTimeout(() => (regionBurst.value = null), 5200);
-      }, 1500);
-    }, 450);
-  });
+      }, 1300);
+    });
+  }, 380);
 }
 let lastRegionId = '';
 watch(
