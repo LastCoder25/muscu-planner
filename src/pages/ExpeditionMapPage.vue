@@ -282,6 +282,22 @@
       </div>
     </transition>
 
+    <!-- Annonce « activité débloquée » à la construction d'un bâtiment de déblocage -->
+    <q-dialog v-model="unlockOpen">
+      <q-card v-if="unlockInfo" class="unlock-card">
+        <div class="unlock-emo">{{ unlockInfo.emoji }}</div>
+        <div class="unlock-title font-display">{{ unlockInfo.label }} construit !</div>
+        <div class="unlock-act">
+          🎉 Débloqué : <b>{{ unlockInfo.unlock.activity }}</b>
+        </div>
+        <div class="unlock-where">📍 {{ unlockInfo.unlock.where }}</div>
+        <div class="unlock-actions">
+          <button v-if="unlockInfo.unlock.route" class="unlock-go" @click="goUnlock">Y aller</button>
+          <button class="unlock-ok" @click="unlockInfo = null">Continuer</button>
+        </div>
+      </q-card>
+    </q-dialog>
+
     <!-- Modale de collecte au retour -->
     <q-dialog v-model="collectOpen">
       <q-card class="coll-card" v-if="lastOutcome">
@@ -348,6 +364,7 @@ import {
   BUILD,
   type Building,
   type BuildingType,
+  type BuildingUnlock,
 } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, type Combatant } from '@/lib/combat';
@@ -586,6 +603,20 @@ function plotCanUpgrade(b: Building): boolean {
 function plotUpCost(b: Building): number {
   return buildingUpgradeCost(b.level);
 }
+// Annonce « activité débloquée » (quoi + où) après avoir construit un bâtiment de
+// déblocage → le joueur sait ce qu'il vient d'ouvrir et où le trouver.
+const unlockInfo = ref<{ emoji: string; label: string; unlock: BuildingUnlock } | null>(null);
+const unlockOpen = computed({
+  get: () => !!unlockInfo.value,
+  set: (v: boolean) => {
+    if (!v) unlockInfo.value = null;
+  },
+});
+function goUnlock() {
+  const route = unlockInfo.value?.unlock.route;
+  unlockInfo.value = null;
+  if (route) void router.push(route);
+}
 function doBuild(slot: number, typeId: string) {
   const uid = auth.user?.id;
   const t = buildingType(typeId);
@@ -601,6 +632,8 @@ function doBuild(slot: number, typeId: string) {
         subtitle: t.label,
         rarity: 'legendary', // gros éclat pour un moment marquant
       });
+      // Bâtiment qui DÉBLOQUE une activité → annonce « débloqué : X, ça se trouve ici ».
+      if (t.unlock) unlockInfo.value = { emoji: t.emoji, label: t.label, unlock: t.unlock };
     }
   });
 }
@@ -1438,6 +1471,59 @@ function fmtMin(min: number): string {
   color: var(--text);
   border-radius: 16px;
   min-width: 260px;
+}
+/* Annonce « activité débloquée » (construction d'un bâtiment de déblocage). */
+.unlock-card {
+  padding: 24px;
+  text-align: center;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 16px;
+  min-width: 280px;
+  max-width: 360px;
+  border: 1px solid var(--accent);
+}
+.unlock-emo {
+  font-size: 46px;
+}
+.unlock-title {
+  font-size: 19px;
+  font-weight: 800;
+  margin: 6px 0 12px;
+  color: var(--accent);
+}
+.unlock-act {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+.unlock-where {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.4;
+  margin-bottom: 18px;
+}
+.unlock-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.unlock-go {
+  border: none;
+  background: var(--accent);
+  color: var(--dark, #15120e);
+  font-weight: 800;
+  border-radius: 10px;
+  padding: 10px 18px;
+  cursor: pointer;
+}
+.unlock-ok {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 10px 18px;
+  cursor: pointer;
 }
 .coll-emo {
   font-size: 48px;

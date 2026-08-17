@@ -33,6 +33,15 @@ export interface BuildingEffect {
   bossRollFloorPerLvl?: number; // Autel des boss : +X au plancher de qualité de roll / niveau
 }
 
+// Ce qu'un bâtiment DÉBLOQUE (activité/fonctionnalité) → affiché au joueur à la
+// construction (« tu as débloqué X, ça se trouve ici »). Absent = bâtiment de
+// production/effet passif (pas de nouvelle activité à annoncer).
+export interface BuildingUnlock {
+  activity: string; // ce qui est débloqué (ex. « Le Labyrinthe »)
+  where: string; // où le trouver dans l'app
+  route?: string; // route de navigation directe (bouton « Y aller »), si applicable
+}
+
 export interface BuildingType {
   id: string; // ex. 'dust_vein'
   label: string;
@@ -44,6 +53,7 @@ export interface BuildingType {
   buildGold: number; // coût de construction (or)
   unlockLevel?: number; // niveau joueur requis pour pouvoir le construire (défaut 1)
   unique?: boolean; // un seul exemplaire autorisé (tous les types : 1 de chaque sur la carte)
+  unlock?: BuildingUnlock; // activité débloquée (annoncée à la construction)
   desc: string;
 }
 
@@ -109,6 +119,10 @@ export const BUILDING_TYPES: BuildingType[] = [
     effect: { expeSpeedPerLvl: 0.015 },
     buildGold: 400, // 1er niveau bon marché : c'est le déblocage
     unique: true,
+    unlock: {
+      activity: 'Les Expéditions (mode idle)',
+      where: 'Ici, sur la carte : choisis un lieu et envoie ton héros l’explorer.',
+    },
     desc: 'Débloque les expéditions. Chaque niveau réduit les temps de trajet (−1,5 %).',
   },
   // Utilitaire UNIQUE : augmente le STOCKAGE de tous les filons (tu peux louper
@@ -137,6 +151,10 @@ export const BUILDING_TYPES: BuildingType[] = [
     buildGold: 900,
     unlockLevel: 3,
     unique: true,
+    unlock: {
+      activity: 'La fusion des familiers',
+      where: 'Aventure › onglet Équip. › 🐾 Familier › Incubateur.',
+    },
     desc: 'Débloque la fusion des familiers (3 identiques → rareté supérieure).',
   },
   // Utilitaire UNIQUE : la PORTE DU LABYRINTHE débloque le Labyrinthe (donjon à
@@ -151,6 +169,11 @@ export const BUILDING_TYPES: BuildingType[] = [
     buildGold: 500,
     unlockLevel: 2,
     unique: true,
+    unlock: {
+      activity: 'Le Labyrinthe',
+      where: 'Aventure › onglet Donjons › 🗝️ Labyrinthe.',
+      route: '/expedition',
+    },
     desc: 'Débloque le Labyrinthe. Chaque niveau enrichit le butin des coffres (+4 %).',
   },
   // Utilitaire UNIQUE : l'AUTEL DES BOSS améliore les RÉCOMPENSES de boss (il ne les

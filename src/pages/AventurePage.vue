@@ -1563,8 +1563,12 @@
 
     <!-- Rapport de combat (post-run) en MODALE : toutes les infos + réattaquer /
          inventaire / fermer -->
-    <q-dialog v-model="reportOpen" position="top">
-      <q-card v-if="run" class="report-modal" :class="run.cleared ? 'win' : 'lose'">
+    <q-dialog v-model="reportOpen" :position="rewardChoiceMode ? 'standard' : 'top'">
+      <q-card
+        v-if="run"
+        class="report-modal"
+        :class="[run.cleared ? 'win' : 'lose', { 'rm-compact': rewardChoiceMode }]"
+      >
         <div class="rm-head">
           <div class="rm-title font-display">{{ run.name }}</div>
         </div>
@@ -1741,7 +1745,9 @@
 
         </div>
 
-        <div class="rm-actions-row">
+        <!-- Actions masquées pendant le CHOIX de récompense : le joueur doit choisir
+             (pas d'Inventaire/Fermer/Réattaquer parasites). -->
+        <div v-if="!rewardChoiceMode" class="rm-actions-row">
           <button
             v-if="stageDone && !char.row?.pending_reward"
             class="rm-btn rm-btn-primary"
@@ -2310,6 +2316,9 @@ const statCircles = computed(() => [
 const busy = ref(false);
 const run = ref<RunView | null>(null);
 const reportOpen = ref(false); // rapport de combat affiché en MODALE (post-run)
+// Mode « choix de récompense de boss » : le butin n'est PAS affiché (le joueur a déjà
+// vu les candidats) → modale RÉDUITE et CENTRÉE, sans actions parasites.
+const rewardChoiceMode = computed(() => stageDone.value && !!char.row?.pending_reward);
 const runSeq = ref(0); // clé de rejeu → remonte CombatStage à chaque run (relance l'anim)
 const stageDone = ref(true); // résultat + butin révélés seulement à la FIN de l'animation
 // Célébrations (éclats plein écran) DIFFÉRÉES à la FIN de l'animation de combat —
@@ -5823,6 +5832,12 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+/* Choix de récompense de boss : pas de butin à afficher → modale AJUSTÉE au contenu
+   (plus la hauteur fixe 82vh) et centrée (position="standard"). */
+.report-modal.rm-compact {
+  height: auto;
+  max-height: 82vh;
 }
 .report-modal > .rm-head,
 .report-modal > .rm-actions-row {
