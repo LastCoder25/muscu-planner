@@ -2104,75 +2104,14 @@ const claimingLogin = ref(false);
 const loginBurst = ref<{ streak: number; energy: number; usedGrace: boolean } | null>(null);
 const levelBurst = ref<{ from: number; to: number; energy: number } | null>(null);
 // Reveal de nouvelle région : célèbre le passage dans un biome inédit.
+// (Défini APRÈS curRegion/selectedRegionId/shatterId — cf. plus bas — pour éviter tout
+// accès en TDZ dans la callback d'armement `immediate`.)
 const regionBurst = ref<{ emoji: string; name: string; blurb: string; color: string } | null>(null);
 const worldmapEl = ref<HTMLElement | null>(null);
 type RegionReveal = { id: string; emoji: string; name: string; blurb: string; color: string };
 // Reveal EN ATTENTE : quand on nettoie le dernier donjon d'une zone en combat, on
 // attend la FERMETURE du rapport pour jouer l'animation (sinon elle recouvre le combat).
 const pendingRegionReveal = ref<RegionReveal | null>(null);
-// Joue le reveal d'une nouvelle zone : bascule sur l'onglet Donjons, CENTRE la carte
-// (slide de l'écran), FAIT EXPLOSER les chaînes/cadenas de la nouvelle zone (visible
-// sur la carte), puis affiche la bannière « nouvelle zone » (nommée) → le joueur peut
-// ensuite cliquer la zone pour continuer.
-function triggerRegionReveal(rev: RegionReveal) {
-  tab.value = 'donjons'; // la carte des mondes doit être à l'écran
-  selectedRegionId.value = rev.id; // ouvre la nouvelle zone dans le drawer (cliquable)
-  // La modale de rapport a une transition de FERMETURE (~300 ms) pendant laquelle le
-  // scroll passe inaperçu et l'overlay est encore là → on attend qu'elle disparaisse,
-  // PUIS on scrolle la carte au centre (slide visible), on fait EXPLOSER les chaînes,
-  // et on affiche la bannière de zone.
-  setTimeout(() => {
-    void nextTick(() => {
-      worldmapEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Après le scroll : explosion du cadenas/chaînes sur la carte.
-      setTimeout(() => {
-        shatterId.value = rev.id;
-        setTimeout(() => (shatterId.value = null), 1400);
-      }, 550);
-      // Bannière de zone (nommée) — signal fort, indépendant du scroll.
-      setTimeout(() => {
-        regionBurst.value = { emoji: rev.emoji, name: rev.name, blurb: rev.blurb, color: rev.color };
-        setTimeout(() => (regionBurst.value = null), 5200);
-      }, 1300);
-    });
-  }, 380);
-}
-let lastRegionId = '';
-// ARMEMENT : on n'active le reveal qu'une fois le perso chargé, en initialisant
-// `lastRegionId` sur la zone courante réelle. Sinon, après un RESET (clearedIds=[] →
-// curRegion ne change jamais à l'hydratation), lastRegionId restait '' et le TOUT
-// PREMIER passage de zone était mangé par le garde → aucun reveal (bug observé).
-const revealReady = ref(false);
-watch(
-  () => char.row?.user_id ?? null,
-  (uid) => {
-    if (uid) {
-      lastRegionId = curRegion.value.id;
-      // laisse un tick pour que clearedIds/curRegion se stabilisent, puis on arme.
-      void nextTick(() => {
-        lastRegionId = curRegion.value.id;
-        revealReady.value = true;
-      });
-    }
-  },
-  { immediate: true },
-);
-watch(
-  () => curRegion.value.id,
-  (id) => {
-    // Uniquement une fois ARMÉ (perso chargé) ET sur un vrai changement de zone.
-    if (revealReady.value && id !== lastRegionId) {
-      const r = curRegion.value;
-      const rev: RegionReveal = { id, emoji: r.emoji, name: r.name, blurb: r.blurb, color: r.color };
-      // Un changement de zone vient TOUJOURS d'un donjon nettoyé → un rapport de combat
-      // s'ouvre. On DIFFÈRE systématiquement à sa fermeture (le watcher peut s'exécuter
-      // avant OU après openReport selon l'ordre des microtâches → ne pas tester reportOpen
-      // ici, sinon le reveal se jouait sous le rapport et était manqué).
-      pendingRegionReveal.value = rev;
-    }
-    lastRegionId = id;
-  },
-);
 async function claimLogin() {
   const uid = auth.user?.id;
   if (!uid || claimingLogin.value || !loginClaimable.value) return;
@@ -2361,6 +2300,60 @@ function tapRegion(r: Region) {
 const shatterId = ref<string | null>(null);
 // Dernière région (fin de monde) — la Faille sans fin s'y rattache.
 const endRegionId = computed(() => REGIONS[REGIONS.length - 1]?.id);
+
+// ── Reveal de nouvelle zone (défini ICI, après curRegion/selectedRegionId/shatterId) ──
+// Joue le reveal : bascule onglet Donjons, CENTRE la carte (slide), FAIT EXPLOSER les
+// chaînes/cadenas de la nouvelle zone, puis affiche la bannière nommée → zone cliquable.
+function triggerRegionReveal(rev: RegionReveal) {
+  tab.value = 'donjons';
+  selectedRegionId.value = rev.id;
+  // On attend la fin de la transition de fermeture de la modale (~300 ms), PUIS scroll
+  // (slide visible) + explosion + bannière.
+  setTimeout(() => {
+    void nextTick(() => {
+      worldmapEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => {
+        shatterId.value = rev.id;
+        setTimeout(() => (shatterId.value = null), 1400);
+      }, 550);
+      setTimeout(() => {
+        regionBurst.value = { emoji: rev.emoji, name: rev.name, blurb: rev.blurb, color: rev.color };
+        setTimeout(() => (regionBurst.value = null), 5200);
+      }, 1300);
+    });
+  }, 380);
+}
+let lastRegionId = '';
+// ARMEMENT : on n'active le reveal qu'une fois le perso chargé, en initialisant
+// `lastRegionId` sur la zone courante réelle (sinon, après un reset avec clearedIds=[],
+// le tout premier passage de zone était mangé par le garde → aucun reveal).
+const revealReady = ref(false);
+watch(
+  () => char.row?.user_id ?? null,
+  (uid) => {
+    if (uid) {
+      lastRegionId = curRegion.value.id;
+      void nextTick(() => {
+        lastRegionId = curRegion.value.id;
+        revealReady.value = true;
+      });
+    }
+  },
+  { immediate: true },
+);
+watch(
+  () => curRegion.value.id,
+  (id) => {
+    // Uniquement une fois ARMÉ (perso chargé) ET sur un vrai changement de zone. On
+    // DIFFÈRE toujours à la fermeture du rapport (cf. watch reportOpen) — le watcher peut
+    // s'exécuter avant/après openReport selon l'ordre des microtâches.
+    if (revealReady.value && id !== lastRegionId) {
+      const r = curRegion.value;
+      pendingRegionReveal.value = { id, emoji: r.emoji, name: r.name, blurb: r.blurb, color: r.color };
+    }
+    lastRegionId = id;
+  },
+);
 
 // Codex (méta de collection) : bestiaire + journal des sets. Tout dérivé.
 const codexOpen = ref(false);
