@@ -118,6 +118,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     // pas un max dès le niveau 10 comme avant (6 %/niv). Niv.13 ≈ −20 %.
     effect: { expeSpeedPerLvl: 0.015 },
     buildGold: 400, // 1er niveau bon marché : c'est le déblocage
+    unlockLevel: 3,
     unique: true,
     unlock: {
       activity: 'Les Expéditions (mode idle)',
@@ -149,7 +150,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     category: 'utility',
     effect: {},
     buildGold: 900,
-    unlockLevel: 3,
+    unlockLevel: 2,
     unique: true,
     unlock: {
       activity: 'La fusion des familiers',
