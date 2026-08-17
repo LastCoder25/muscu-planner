@@ -290,7 +290,14 @@
             class="tal-card"
             :class="['p-' + t.rarity, { eq: t.equipped, tgt: infuseTarget?.id === t.id }]"
           >
-            <span class="tal-emo">{{ t.def.icon }}</span>
+            <button
+              class="tal-emo"
+              title="Explication du talent"
+              aria-label="Expliquer ce talent"
+              @click="explainTalent(t)"
+            >
+              {{ t.def.icon }}
+            </button>
             <div class="tal-body">
               <div class="tal-name font-display">
                 {{ t.def.name }} <span class="tal-lv">Nv{{ t.level }}</span>
@@ -428,14 +435,6 @@
                   }}
                   ✨</template
                 >
-              </button>
-              <button
-                v-if="char.row.equipped[slot]!.level < c.level.level - 1"
-                class="slot-up alt"
-                :disabled="char.row.dust < upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity)"
-                @click.stop="doInfuseMax(char.row.equipped[slot]!.id)"
-              >
-                ⚡ À fond (niv {{ c.level.level }}) · {{ infuseToMaxCost(char.row.equipped[slot]!, c.level.level) }} ✨
               </button>
               <button class="slot-remove" @click="doUnequip(slot)">Retirer</button>
             </template>
@@ -2167,6 +2166,19 @@ const talentsView = computed(() =>
 );
 function talentName(inst: TalentInstance): string {
   return talentByCode(inst.code)?.name ?? 'Talent';
+}
+// Explique un talent (nature de l'effet + comment il monte) au tap sur son icône.
+function explainTalent(t: (typeof talentsView.value)[number]) {
+  const d = t.def;
+  $q.dialog({
+    title: `${d.icon} ${d.name}`,
+    html: true,
+    message:
+      `Améliore : <b>${d.desc}</b> — actuellement <b>+${t.effLabel}</b> ` +
+      `(niveau ${t.level} · ${RARITY_LABEL[t.rarity]}).<br><br>` +
+      `L'effet grandit à chaque niveau. Pour le monter : <b>infuse un doublon</b> dedans ` +
+      `(bouton 🔧) → il gagne niveaux et rareté. Un talent ne dépasse jamais ton niveau de sport.`,
+  });
 }
 // Un talent de ce CODE est-il déjà équipé ? (loadout à effets distincts). Sert à
 // désactiver « Équiper » sur un doublon d'un talent déjà porté.
@@ -4266,8 +4278,14 @@ onUnmounted(() => {
   width: 34px;
   height: 34px;
   border-radius: 9px;
+  border: none;
   background: color-mix(in srgb, currentColor 20%, transparent);
   font-size: 19px;
+  cursor: pointer;
+  color: inherit;
+}
+.tal-emo:active {
+  transform: scale(0.92);
 }
 .tal-body {
   min-width: 0;
