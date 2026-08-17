@@ -855,7 +855,10 @@ export function playerWithGear(
   const dodgeAdd = e.dodgeAdd + (extra.dodgeAdd ?? 0);
   // La Défense de la Puissance se cumule à la réduction du gear (plafond 50 %).
   const dmgReduction = Math.min(0.5, (base.dmgReduction ?? 0) + e.dmgReduction + (extra.dmgReduction ?? 0));
-  const lifesteal = e.lifesteal + (extra.lifesteal ?? 0);
+  // Vol de vie PLAFONNÉ à 50 % (comme la réduction de dégâts) : il stacke (arme +
+  // talent + set + familier) et, avec le multi-frappe, rendait le sustain quasi
+  // infini. Borné → build sustain fort mais pas increvable (ticket adab525d).
+  const lifesteal = Math.min(0.5, e.lifesteal + (extra.lifesteal ?? 0));
   return {
     name,
     pv: Math.round(base.pv * (1 + maxPvPct)),
