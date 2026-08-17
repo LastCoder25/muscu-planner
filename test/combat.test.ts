@@ -23,6 +23,18 @@ describe('archétypes de monstres (variété visuelle)', () => {
   });
 });
 
+describe('timeout de combat (garde-fou anti-boucle)', () => {
+  it('un combat borné en tours se termine (pas de boucle infinie) et tranche au % de PV', () => {
+    // Deux combattants ultra-tanky à faibles dégâts → aucune mort avant maxRounds.
+    const tanky = { name: 'A', pv: 100000, damage: 1, crit: 0, dodge: 0, initiative: 5, strikes: 1 };
+    const foe = { name: 'B', pv: 500, damage: 1, crit: 0, dodge: 0, initiative: 1, strikes: 1 };
+    const r = simulateCombat(tanky, foe, { seed: 7, goldOnWin: 10 });
+    expect(r.rounds).toBeLessThanOrEqual(400); // borné → jamais « sans fin »
+    // Le joueur garde un % de PV bien supérieur → il l'emporte au timeout.
+    expect(r.win).toBe(true);
+  });
+});
+
 describe('épines (thorns)', () => {
   const monster = { name: 'M', pv: 400, damage: 40, crit: 0, dodge: 0, initiative: 1, strikes: 1 };
   const base = playerCombatant('Tank', { puissance: 10, endurance: 60, agilite: 5 }, 6);

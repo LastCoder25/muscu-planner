@@ -204,7 +204,15 @@ export function simulateCombat(
     turn = turn === 'player' ? 'monster' : 'player';
   }
 
-  const win = mPv <= 0 && pPv > 0;
+  // Issue du combat :
+  //  - mort d'un camp → vainqueur normal ;
+  //  - TIMEOUT (maxRounds atteint sans mort, cf. builds ultra-tanky/vol de vie) → on
+  //    tranche par le % de PV restant (décisif et JUSTE : plus de « défaite » d'un
+  //    combat qu'on dominait). Départage strict → au pire (parfaite égalité) = défaite.
+  let win: boolean;
+  if (mPv <= 0 && pPv > 0) win = true;
+  else if (pPv <= 0) win = false;
+  else win = pPv / maxPPv > mPv / monsterMaxPv; // timeout → au % de vie
   return { win, rounds: round, log, gold: win ? opts.goldOnWin : 0 };
 }
 
