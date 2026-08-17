@@ -30,6 +30,7 @@ export interface BuildingEffect {
   expeSpeedPerLvl?: number; // Tour : −X% temps de trajet / niveau (plus tard)
   expeWinPerLvl?: number; // Tour : +X% chance / niveau (plus tard)
   labyLuckPerLvl?: number; // Porte du Labyrinthe : +X à la chance de butin des coffres / niveau
+  bossRollFloorPerLvl?: number; // Autel des boss : +X au plancher de qualité de roll / niveau
 }
 
 export interface BuildingType {
@@ -152,6 +153,20 @@ export const BUILDING_TYPES: BuildingType[] = [
     unique: true,
     desc: 'Débloque le Labyrinthe. Chaque niveau enrichit le butin des coffres (+4 %).',
   },
+  // Utilitaire UNIQUE : l'AUTEL DES BOSS améliore les RÉCOMPENSES de boss (il ne les
+  // gate pas). Chaque niveau relève la qualité de roll (+étoiles) ; deux PALIERS
+  // ajoutent des perks binaires (4ᵉ candidat, ciblage du slot de set manquant).
+  {
+    id: 'boss_altar',
+    label: 'Autel des boss',
+    emoji: '🔮',
+    category: 'utility',
+    effect: { bossRollFloorPerLvl: 0.06 },
+    buildGold: 700,
+    unlockLevel: 5,
+    unique: true,
+    desc: 'Améliore les récompenses de boss : +qualité de roll par niveau · niv.3 : 4ᵉ choix · niv.5 : ciblage du set.',
+  },
 ];
 
 const BY_ID = new Map(BUILDING_TYPES.map((t) => [t.id, t]));
@@ -237,6 +252,29 @@ export function labyrinthLuckBonus(buildings: Building[]): number {
   if (!b) return 0;
   const per = buildingType(LABY_GATE_ID)?.effect?.labyLuckPerLvl ?? 0;
   return Math.min(LABY_LUCK_CAP, b.level * per);
+}
+// ── Autel des boss (qualité des récompenses de boss) ──
+const BOSS_ALTAR_ID = 'boss_altar';
+const BOSS_ROLL_FLOOR_CAP = 0.85; // plancher de qualité de roll max (jamais 100 % garanti)
+export const BOSS_ALTAR_EXTRA_CANDIDATE_LVL = 3; // 4ᵉ candidat de récompense à ce niveau d'autel
+export const BOSS_ALTAR_TARGETING_LVL = 5; // ciblage du slot de set manquant à ce niveau
+/** Niveau de l'Autel des boss posé (0 si aucun). */
+export function bossAltarLevel(buildings: Building[]): number {
+  return buildings.find((b) => b.typeId === BOSS_ALTAR_ID)?.level ?? 0;
+}
+/** Plancher de qualité de roll (0..1) sur les récompenses de boss, selon l'Autel. */
+export function bossAltarRollFloor(buildings: Building[]): number {
+  const lvl = bossAltarLevel(buildings);
+  const per = buildingType(BOSS_ALTAR_ID)?.effect?.bossRollFloorPerLvl ?? 0;
+  return Math.min(BOSS_ROLL_FLOOR_CAP, lvl * per);
+}
+/** Nombre de candidats de récompense de boss (3, +1 dès l'Autel niv.3). */
+export function bossRewardCount(buildings: Building[]): number {
+  return 3 + (bossAltarLevel(buildings) >= BOSS_ALTAR_EXTRA_CANDIDATE_LVL ? 1 : 0);
+}
+/** Ciblage : la pièce de set d'un boss vise un slot MANQUANT (Autel niv.5+). */
+export function bossTargetingUnlocked(buildings: Building[]): boolean {
+  return bossAltarLevel(buildings) >= BOSS_ALTAR_TARGETING_LVL;
 }
 /** Multiplicateur de TEMPS de trajet (< 1 = plus rapide), selon l'avant-poste. */
 export function travelTimeMult(buildings: Building[]): number {

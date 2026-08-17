@@ -1840,7 +1840,12 @@ import {
 } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { unlocksAtLevel } from '@/lib/advUnlocks';
-import { incubatorBuilt } from '@/lib/buildings';
+import {
+  incubatorBuilt,
+  bossAltarRollFloor,
+  bossRewardCount,
+  bossTargetingUnlocked,
+} from '@/lib/buildings';
 import {
   REGIONS,
   currentRegion,
@@ -2806,22 +2811,40 @@ function openSetInfo(b: MilestoneBoss) {
   setInfo.value = { set: bossSet(b), level: b.unlockLevel, count: bossSetCount(b) };
 }
 
-// Tire les 3 récompenses au CHOIX d'un boss (mixte : pièce de set / objet de
-// donjon / lot or+poussière), aléatoire complet et seedé (anti-reroll).
+// Slots d'un set déjà possédés (équipé + sac) → pour le ciblage anti-doublon de l'Autel.
+function ownedSetSlots(setId: string): Set<ItemSlot> {
+  const s = new Set<ItemSlot>();
+  for (const slot of SLOTS) if (char.row?.equipped[slot]?.setId === setId) s.add(slot);
+  for (const it of char.row?.inventory ?? [])
+    if (it.setId === setId && (SLOTS as string[]).includes(it.slot)) s.add(it.slot);
+  return s;
+}
+// Tire les récompenses au CHOIX d'un boss (mixte : pièce de set / objet de donjon /
+// lot or+poussière), aléatoire complet et seedé (anti-reroll). L'AUTEL DES BOSS
+// améliore : nombre de candidats, plancher de qualité de roll, et ciblage du slot
+// de set MANQUANT (anti-doublon → on complète le set plus vite).
 function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): RewardCandidate[] {
   const luck = Math.min(1, 0.3 + (lucky ? 0.5 : 0));
+  const buildings = char.row?.buildings ?? [];
+  const rollFloor = bossAltarRollFloor(buildings);
+  const count = bossRewardCount(buildings);
+  const targeting = bossTargetingUnlocked(buildings);
+  // Slot de set visé (un manquant) si le ciblage est débloqué.
+  const missing = targeting ? SLOTS.filter((s) => !ownedSetSlots(b.setId).has(s)) : [];
+  const preferSlot = missing.length ? missing[Math.floor(rng() * missing.length)] : undefined;
+  const setOpts = { setId: b.setId, level: b.dropLevel, luck, rollFloor, ...(preferSlot ? { preferSlot } : {}) };
   const out: RewardCandidate[] = [];
-  for (let n = 0; n < 3; n++) {
+  for (let n = 0; n < count; n++) {
     const roll = rng();
     // Proba de SET réduite (0.4) : une pièce de set est un butin rare et important.
     if (roll < 0.4) {
-      const p = rollSetPiece(rng, { setId: b.setId, level: b.dropLevel, luck });
+      const p = rollSetPiece(rng, setOpts);
       out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
     } else if (roll < 0.8) {
       let d: ReturnType<typeof rollDrop> = null;
       for (let i = 0; i < 5 && !d; i++)
-        d = rollDrop(rng, { cleared: true, defeated: 1, level: b.dropLevel, luck });
-      const p = d ?? rollSetPiece(rng, { setId: b.setId, level: b.dropLevel, luck });
+        d = rollDrop(rng, { cleared: true, defeated: 1, level: b.dropLevel, luck, rollFloor });
+      const p = d ?? rollSetPiece(rng, setOpts);
       out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
     } else {
       // Cache de ressources : doit rivaliser avec une pièce d'équipement. Or plein

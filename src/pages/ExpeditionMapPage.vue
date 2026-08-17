@@ -344,6 +344,10 @@ import {
   expeditionsUnlocked,
   travelTimeMult,
   labyrinthLuckBonus,
+  bossAltarRollFloor,
+  bossAltarLevel,
+  BOSS_ALTAR_EXTRA_CANDIDATE_LVL,
+  BOSS_ALTAR_TARGETING_LVL,
   BUILD,
   type Building,
   type BuildingType,
@@ -641,6 +645,14 @@ function utilityEffectLabel(b: Building): string {
   if (b.typeId === 'outpost') return `−${Math.round((1 - travelTimeMult([b])) * 100)}% temps de trajet`;
   if (b.typeId === 'labyrinth_gate')
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
+  if (b.typeId === 'boss_altar') {
+    const parts = [`+${Math.round(bossAltarRollFloor([b]) * 100)}% qualité de roll`];
+    if (bossAltarLevel([b]) >= BOSS_ALTAR_EXTRA_CANDIDATE_LVL) parts.push('4ᵉ choix');
+    else parts.push(`4ᵉ choix au niv.${BOSS_ALTAR_EXTRA_CANDIDATE_LVL}`);
+    if (bossAltarLevel([b]) >= BOSS_ALTAR_TARGETING_LVL) parts.push('ciblage du set');
+    else parts.push(`ciblage au niv.${BOSS_ALTAR_TARGETING_LVL}`);
+    return parts.join(' · ');
+  }
   return buildingType(b.typeId)?.desc ?? ''; // incubateur & co : description
 }
 

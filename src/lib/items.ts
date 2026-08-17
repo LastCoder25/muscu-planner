@@ -366,6 +366,7 @@ export function rollDrop(
     level?: number;
     spread?: number;
     luck?: number;
+    rollFloor?: number; // 0..1 : plancher de qualité de roll (Autel des boss) → meilleures étoiles
   },
 ): Omit<Item, 'id'> | null {
   if (opts.defeated <= 0) return null;
@@ -385,7 +386,9 @@ export function rollDrop(
   // objet, chasse au loot) × VARIANCE de roll ±20 % (farmer un bon roll a du sens).
   const mag = dropMagnitude(lvl);
   // VARIANCE ±20 % : `vf` = fraction de roll de l'effet PRINCIPAL (→ qualité/étoiles).
-  const vf = 0.8 + rng() * 0.4;
+  // `rollFloor` (Autel des boss) relève le PLANCHER de qualité → meilleures étoiles.
+  const rqFloor = Math.min(1, Math.max(0, opts.rollFloor ?? 0));
+  const vf = 0.8 + (rqFloor + (1 - rqFloor) * rng()) * 0.4;
   const rollValue = (b: number, v: number = 0.8 + rng() * 0.4) =>
     Math.max(1, Math.round(b * RARITY_MULT[rarity] * mag * v));
   const value = rollValue(chosen.base, vf);
@@ -428,7 +431,7 @@ export function rollDrop(
  */
 export function rollSetPiece(
   rng: () => number,
-  opts: { setId: string; level: number; luck?: number; preferSlot?: ItemSlot },
+  opts: { setId: string; level: number; luck?: number; preferSlot?: ItemSlot; rollFloor?: number },
 ): Omit<Item, 'id'> {
   const set = SET_BY_ID[opts.setId];
   const slot = opts.preferSlot ?? pick(rng, SLOTS);
@@ -441,7 +444,9 @@ export function rollSetPiece(
   const chosen = pick(rng, SLOT_EFFECTS[slot]);
   // Magnitude = base × rareté × palier (chasse au loot) × VARIANCE ±20 % (comme les
   // drops normaux → un bon roll de set a de la valeur ; qualité affichée en étoiles).
-  const vf = 0.8 + rng() * 0.4;
+  // `rollFloor` (Autel des boss) relève le plancher de qualité → meilleures étoiles.
+  const rqFloor = Math.min(1, Math.max(0, opts.rollFloor ?? 0));
+  const vf = 0.8 + (rqFloor + (1 - rqFloor) * rng()) * 0.4;
   const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity] * dropMagnitude(opts.level) * vf));
   const noun = pick(rng, NAMES[slot]);
   const level = 1; // REFONTE C : la pièce de set arrive niv.1 (identité) → à infuser
