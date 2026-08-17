@@ -23,10 +23,31 @@ import {
   rerollCost,
   rerolledEffect,
   craftSetCost,
+  starQualityMult,
+  rollStars,
   type Item,
   type Equipped,
 } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
+
+describe('qualité en étoiles = intervalles NON chevauchants', () => {
+  it('starQualityMult strictement croissant par étoile', () => {
+    for (let s = 2; s <= 5; s++)
+      expect(starQualityMult(s)).toBeGreaterThan(starQualityMult(s - 1));
+  });
+  it('un objet de plus haute étoile a une stat ≥ (jamais < ) à rareté/niveau égaux', () => {
+    // Même base/rareté/niveau : la valeur ne dépend QUE de la qualité (multiplicateur
+    // discret) → monotone en étoiles, jamais « même stat pour 2 étoiles différentes ».
+    const base = 100;
+    const val = (s: number) => Math.round(base * starQualityMult(s));
+    const vals = [1, 2, 3, 4, 5].map(val);
+    for (let i = 1; i < vals.length; i++) expect(vals[i]!).toBeGreaterThan(vals[i - 1]!);
+  });
+  it('rollStars cohérent avec le multiplicateur (roll → étoile → mult)', () => {
+    expect(rollStars(0.1)).toBe(1);
+    expect(rollStars(0.9)).toBe(5);
+  });
+});
 
 const item = (over: Partial<Item> & Pick<Item, 'slot' | 'effect'>): Item => ({
   id: over.id ?? 'i',
@@ -185,10 +206,12 @@ describe('rollDrop', () => {
       }
     }
   });
-  it('variance ±20 % × magnitude de donjon : rng=0 → round(8×3.8×mag(6)×0.8)', () => {
+  it('qualité discrète × magnitude de donjon : rng=0 → 1★ (mult 0,84)', () => {
     const d = rollDrop(() => 0, { cleared: true, defeated: 1, level: 6 });
     expect(d!.effect.type).toBe('damage_pct');
-    expect(d!.effect.value).toBe(Math.round(8 * 3.8 * dropMagnitude(6) * 0.8));
+    // rng=0 → q=0 → 1★ → starQualityMult(1)=0,84 (plus l'ancienne variance continue 0,8).
+    expect(d!.effect.value).toBe(Math.round(8 * 3.8 * dropMagnitude(6) * starQualityMult(1)));
+    expect(rollStars(d!.roll)).toBe(1);
   });
   it('chasse au loot : un donjon PROFOND lâche des stats de base plus GROSSES', () => {
     // Même seed/rareté → la magnitude croît avec le niveau du donjon.

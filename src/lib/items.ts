@@ -56,6 +56,14 @@ export function rollStars(roll: number | undefined): number {
   if (roll == null) return 0; // objet legacy sans roll → pas d'étoiles
   return Math.min(5, 1 + Math.floor(Math.max(0, Math.min(1, roll)) * 5));
 }
+// Multiplicateur de qualité DISCRET par palier d'étoiles (1-5). Les paliers sont
+// espacés de 0,08 → les intervalles de stats NE SE CHEVAUCHENT PAS : à rareté/niveau
+// égaux, un 1★ a strictement moins qu'un 2★, etc. (fini « 2 qualités très différentes,
+// mêmes stats »). La qualité est figée au drop puis suit le niveau (effectiveValue).
+export function starQualityMult(stars: number): number {
+  const s = Math.min(5, Math.max(1, Math.round(stars)));
+  return 0.8 + (s - 0.5) * 0.08; // 1★ 0,84 · 2★ 0,92 · 3★ 1,00 · 4★ 1,08 · 5★ 1,16
+}
 
 // L'effet grandit de +5 % de la base par niveau au-dessus de 1. Pente VOLONTAIREMENT
 // douce (2026‑08‑08) : le gear reste un GATE progressif (plus j'ai de bon gear,
@@ -385,11 +393,15 @@ export function rollDrop(
   // value = magnitude de BASE : rareté × magnitude du DONJON (deeper = meilleur
   // objet, chasse au loot) × VARIANCE de roll ±20 % (farmer un bon roll a du sens).
   const mag = dropMagnitude(lvl);
-  // VARIANCE ±20 % : `vf` = fraction de roll de l'effet PRINCIPAL (→ qualité/étoiles).
-  // `rollFloor` (Autel des boss) relève le PLANCHER de qualité → meilleures étoiles.
+  // QUALITÉ EN ÉTOILES : on tire une qualité brute (avec plancher `rollFloor` de
+  // l'Autel des boss), on en déduit le PALIER d'étoiles, puis un multiplicateur
+  // DISCRET (starQualityMult) → les intervalles de stats par étoile ne se chevauchent
+  // pas (un 1★ ≠ un 2★ à rareté/niveau égaux).
   const rqFloor = Math.min(1, Math.max(0, opts.rollFloor ?? 0));
-  const vf = 0.8 + (rqFloor + (1 - rqFloor) * rng()) * 0.4;
-  const rollValue = (b: number, v: number = 0.8 + rng() * 0.4) =>
+  const q = rqFloor + (1 - rqFloor) * rng();
+  const stars = rollStars(q);
+  const vf = starQualityMult(stars);
+  const rollValue = (b: number, v: number = vf) =>
     Math.max(1, Math.round(b * RARITY_MULT[rarity] * mag * v));
   const value = rollValue(chosen.base, vf);
   // Objet à effet SIGNATURE → nom évocateur (« Guillotine ») ; sinon nom + adjectif.
@@ -442,11 +454,11 @@ export function rollSetPiece(
   const rr = rng();
   const rarity: Rarity = rr < 0.15 + luck * 0.4 ? 'legendary' : rr < 0.55 + luck * 0.25 ? 'epic' : 'rare';
   const chosen = pick(rng, SLOT_EFFECTS[slot]);
-  // Magnitude = base × rareté × palier (chasse au loot) × VARIANCE ±20 % (comme les
-  // drops normaux → un bon roll de set a de la valeur ; qualité affichée en étoiles).
+  // Qualité EN ÉTOILES (multiplicateur discret, non chevauchant), comme les drops.
   // `rollFloor` (Autel des boss) relève le plancher de qualité → meilleures étoiles.
   const rqFloor = Math.min(1, Math.max(0, opts.rollFloor ?? 0));
-  const vf = 0.8 + (rqFloor + (1 - rqFloor) * rng()) * 0.4;
+  const q = rqFloor + (1 - rqFloor) * rng();
+  const vf = starQualityMult(rollStars(q));
   const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity] * dropMagnitude(opts.level) * vf));
   const noun = pick(rng, NAMES[slot]);
   const level = 1; // REFONTE C : la pièce de set arrive niv.1 (identité) → à infuser
