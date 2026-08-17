@@ -652,20 +652,26 @@
                   {{ it.locked ? '🔒' : '🔓' }}
                 </button>
               </div>
-              <!-- Ligne 3 : EFFET mis en avant -->
-              <div class="ii-eff">➜ {{ itemEffects(it) }}</div>
-              <!-- Ligne 4 : comparaison de puissance compacte -->
-              <div class="ii-cmp">
-                ⚔️ {{ fmtPow(combatPowerMaxed) }} →
-                <b :class="powerIfEquip(it) >= combatPowerMaxed ? 'up' : 'down'"
-                  >{{ fmtPow(powerIfEquip(it)) }} ({{
-                    fmtDelta(combatPowerMaxed, powerIfEquip(it))
-                  }})</b
+              <!-- Comparaison d'EFFET claire : cet objet vs l'équipé du même emplacement -->
+              <div class="ii-compare">
+                <div class="ii-cmp-row this">
+                  <span class="ii-cmp-lbl">Cet objet</span>
+                  <span class="ii-cmp-val">{{ itemEffects(it) }}</span>
+                </div>
+                <div class="ii-cmp-row eq">
+                  <span class="ii-cmp-lbl">Équipé</span>
+                  <span v-if="equippedInSlot(it.slot)" class="ii-cmp-val">{{
+                    itemEffects(equippedInSlot(it.slot)!)
+                  }}</span>
+                  <span v-else class="ii-cmp-val dim">— emplacement libre</span>
+                </div>
+              </div>
+              <!-- PUISSANCE : l'info la plus importante → bloc mis en avant. -->
+              <div class="ii-power" :class="powerIfEquip(it) >= combatPowerMaxed ? 'up' : 'down'">
+                <span class="ii-power-delta">{{ fmtDelta(combatPowerMaxed, powerIfEquip(it)) }}</span>
+                <span class="ii-power-sub"
+                  >⚔️ {{ fmtPow(combatPowerMaxed) }} → {{ fmtPow(powerIfEquip(it)) }}</span
                 >
-                <span v-if="equippedInSlot(it.slot)" class="ii-cmp-eq"
-                  >· équipé {{ itemEffects(equippedInSlot(it.slot)!) }}</span
-                >
-                <span v-else class="ii-cmp-eq">· emplacement libre</span>
               </div>
               <div v-if="infuseCostFor(it)" class="ii-cost">
                 à infuser (~{{ infuseCostFor(it) }} ✨) pour le monter à ton niveau
@@ -1569,11 +1575,7 @@
 
     <!-- Rapport de combat (post-run) en MODALE : toutes les infos + réattaquer /
          inventaire / fermer -->
-    <q-dialog
-      v-model="reportOpen"
-      :position="rewardChoiceMode ? 'standard' : 'top'"
-      :persistent="!stageDone"
-    >
+    <q-dialog v-model="reportOpen" :persistent="!stageDone">
       <q-card
         v-if="run"
         class="report-modal"
@@ -4980,27 +4982,74 @@ onUnmounted(() => {
   transform: scale(0.92);
 }
 /* Ligne 3 : EFFET mis en avant (ce que l'objet fait). */
-.ii-eff {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--accent);
+/* Comparaison d'EFFET : cet objet vs équipé, en 2 lignes alignées et lisibles. */
+.ii-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--line) 22%, transparent);
 }
-/* Ligne 4 : comparaison de puissance, discrète. */
-.ii-cmp {
-  font-size: 11.5px;
+.ii-cmp-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.ii-cmp-lbl {
+  flex: none;
+  width: 62px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
   color: var(--dim);
 }
-.ii-cmp b {
+.ii-cmp-row.this .ii-cmp-val {
   font-weight: 800;
+  color: var(--accent); /* l'objet du sac = mis en avant */
 }
-.ii-cmp b.up {
+.ii-cmp-row.eq .ii-cmp-val {
+  color: var(--text);
+}
+.ii-cmp-val.dim {
+  color: var(--dim);
+}
+/* PUISSANCE : bloc mis en avant (l'info clé de la décision). Le DELTA est gros. */
+.ii-power {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 5px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+}
+.ii-power.up {
+  border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
+  background: color-mix(in srgb, var(--d1) 12%, transparent);
+}
+.ii-power.down {
+  border-color: color-mix(in srgb, var(--d4) 50%, var(--line));
+  background: color-mix(in srgb, var(--d4) 10%, transparent);
+}
+.ii-power-delta {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 20px;
+  line-height: 1;
+}
+.ii-power.up .ii-power-delta {
   color: var(--d1);
 }
-.ii-cmp b.down {
+.ii-power.down .ii-power-delta {
   color: var(--d4);
 }
-.ii-cmp-eq {
-  opacity: 0.85;
+.ii-power-sub {
+  font-size: 11.5px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
 }
 .ii-cost {
   font-size: 10.5px;
@@ -5095,12 +5144,19 @@ onUnmounted(() => {
   font-size: 11px;
   color: var(--dim);
 }
-/* Qualité du roll : étoiles jaune voltage (pleines) sur fond discret (vides). */
+/* Qualité du roll : étoiles jaune voltage dans une PASTILLE pour ressortir. */
 .roll-stars {
+  display: inline-flex;
+  align-items: center;
   margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
   letter-spacing: 1px;
   color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   font-size: 10px;
+  line-height: 1.4;
   white-space: nowrap;
 }
 .rarity {
@@ -5913,9 +5969,9 @@ onUnmounted(() => {
 .report-modal {
   width: 420px;
   max-width: 92vw;
-  /* Ancrée en HAUT (position="top") + hauteur bornée → la tête (bouton Réattaquer)
-     reste à la même place quel que soit le contenu ; seul le CORPS scrolle. */
-  height: 82vh;
+  /* CENTRÉE + hauteur AJUSTÉE au contenu (bornée) → l'animation de combat puis le
+     rapport/butin restent centrés à l'écran (le corps scrolle si besoin). */
+  max-height: 82vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
