@@ -786,18 +786,24 @@
           <span class="expe-go">›</span>
         </button>
 
-        <!-- Labyrinthe (donjon à étages exploré, gate à la clé) -->
+        <!-- Labyrinthe (donjon à étages exploré, débloqué par la Porte du Labyrinthe) -->
         <button
           class="expe-card"
+          :class="{ locked: !hasLabyGate }"
           :disabled="onExpedition"
-          @click="onExpedition ? expeBlocked() : router.push('/expedition')"
+          @click="openLabyrinth"
         >
-          <span class="expe-emo">🗝️</span>
+          <span class="expe-emo">{{ hasLabyGate ? '🗝️' : '🔒' }}</span>
           <span class="expe-main">
             <span class="expe-name font-display">Labyrinthe</span>
             <span class="expe-sub">
-              Donjon à étages à explorer ·
-              <b>{{ char.row?.keys ?? 0 }}</b> clé{{ (char.row?.keys ?? 0) > 1 ? 's' : '' }}
+              <template v-if="!hasLabyGate">
+                🚪 Construis la <b>Porte du Labyrinthe</b> (carte) pour le débloquer
+              </template>
+              <template v-else>
+                Donjon à étages à explorer ·
+                <b>{{ char.row?.keys ?? 0 }}</b> clé{{ (char.row?.keys ?? 0) > 1 ? 's' : '' }}
+              </template>
             </span>
           </span>
           <span class="expe-go">›</span>
@@ -1848,6 +1854,7 @@ import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStre
 import { unlocksAtLevel } from '@/lib/advUnlocks';
 import {
   incubatorBuilt,
+  labyrinthUnlocked,
   bossAltarRollFloor,
   bossRewardCount,
   bossTargetingUnlocked,
@@ -1931,6 +1938,18 @@ const gearSub = ref<'equip' | 'familiar' | 'bag' | 'shop'>('equip');
 const persoSub = ref<'perso' | 'stats' | 'talents'>('perso');
 // L'incubateur (fusion de familiers) est débloqué en le construisant sur la carte.
 const hasIncubator = computed(() => incubatorBuilt(char.row?.buildings ?? []));
+// Le Labyrinthe est débloqué par la 🚪 Porte du Labyrinthe (bâtiment sur la carte).
+const hasLabyGate = computed(() => labyrinthUnlocked(char.row?.buildings ?? []));
+// Clic sur la tuile Labyrinthe : bloqué en expédition ; sinon → Labyrinthe si la Porte
+// est construite, sinon on redirige vers la carte pour la construire.
+function openLabyrinth() {
+  if (onExpedition.value) return expeBlocked();
+  if (!hasLabyGate.value) {
+    $q.notify({ type: 'warning', message: 'Construis la 🚪 Porte du Labyrinthe sur la carte pour le débloquer.' });
+    return void router.push('/expedition-map');
+  }
+  void router.push('/expedition');
+}
 
 const c = computed(() =>
   computeCharacter(
@@ -5526,6 +5545,12 @@ onUnmounted(() => {
 .expe-card:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+/* Activité verrouillée (bâtiment requis non construit) : grisée, liseré neutre. */
+.expe-card.locked {
+  background: var(--surface);
+  border-color: var(--line);
+  opacity: 0.75;
 }
 .expe-idle {
   background: color-mix(in srgb, #4a9eff 12%, var(--surface)) !important;
