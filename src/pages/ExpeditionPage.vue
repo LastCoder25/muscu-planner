@@ -750,11 +750,19 @@ function replay() {
 }
 .lobby-cta {
   margin-top: 20px;
-  height: 54px;
+  min-height: 54px;
+  height: auto;
   border-radius: 14px;
   font-size: 16px;
   font-weight: 700;
   min-width: 260px;
+  padding: 10px 18px;
+}
+/* Le libellé (avec le nombre de clés) peut être long → il s'enroule proprement au
+   lieu de déborder sous le bouton (hauteur auto). */
+.lobby-cta :deep(.q-btn__content) {
+  white-space: normal;
+  line-height: 1.25;
 }
 .hud {
   display: flex;

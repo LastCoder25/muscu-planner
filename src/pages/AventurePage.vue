@@ -1569,7 +1569,11 @@
 
     <!-- Rapport de combat (post-run) en MODALE : toutes les infos + réattaquer /
          inventaire / fermer -->
-    <q-dialog v-model="reportOpen" :position="rewardChoiceMode ? 'standard' : 'top'">
+    <q-dialog
+      v-model="reportOpen"
+      :position="rewardChoiceMode ? 'standard' : 'top'"
+      :persistent="!stageDone"
+    >
       <q-card
         v-if="run"
         class="report-modal"
@@ -1751,9 +1755,9 @@
 
         </div>
 
-        <!-- Actions masquées pendant le CHOIX de récompense : le joueur doit choisir
-             (pas d'Inventaire/Fermer/Réattaquer parasites). -->
-        <div v-if="!rewardChoiceMode" class="rm-actions-row">
+        <!-- Actions masquées PENDANT l'animation (on ne peut pas fermer un combat avant
+             la fin) ET pendant le CHOIX de récompense (le joueur doit choisir). -->
+        <div v-if="stageDone && !rewardChoiceMode" class="rm-actions-row">
           <button
             v-if="stageDone && !char.row?.pending_reward"
             class="rm-btn rm-btn-primary"
@@ -1855,6 +1859,7 @@ import { unlocksAtLevel } from '@/lib/advUnlocks';
 import {
   incubatorBuilt,
   labyrinthUnlocked,
+  bossAltarBuilt,
   bossAltarRollFloor,
   bossRewardCount,
   bossTargetingUnlocked,
@@ -2116,10 +2121,11 @@ watch(
     if (lastRegionId && id !== lastRegionId) {
       const r = curRegion.value;
       const rev: RegionReveal = { id, emoji: r.emoji, name: r.name, blurb: r.blurb, color: r.color };
-      // Changement issu d'un COMBAT (rapport ouvert) → on diffère à sa fermeture ;
-      // sinon (cas rare) on joue tout de suite.
-      if (reportOpen.value) pendingRegionReveal.value = rev;
-      else triggerRegionReveal(rev);
+      // Un changement de zone vient TOUJOURS d'un donjon nettoyé → un rapport de combat
+      // s'ouvre. On DIFFÈRE systématiquement à sa fermeture (le watcher peut s'exécuter
+      // avant OU après openReport selon l'ordre des microtâches → ne pas tester reportOpen
+      // ici, sinon le reveal se jouait sous le rapport et était manqué).
+      pendingRegionReveal.value = rev;
     }
     lastRegionId = id;
   },
@@ -2832,14 +2838,18 @@ const craftableSets = computed(() =>
 function isBossBeaten(b: MilestoneBoss): boolean {
   return defeatedBossSet.value.has(b.id);
 }
-// Déblocage : chaîne des BOSS uniquement (boss précédent vaincu). Pas de gate de
-// niveau → le 🎯 % de victoire indique si le combat est jouable.
+// L'Autel des boss (bâtiment) est REQUIS pour affronter les boss de palier.
+const hasBossAltar = computed(() => bossAltarBuilt(char.row?.buildings ?? []));
+// Déblocage : Autel des boss construit ET chaîne des BOSS (boss précédent vaincu).
+// Pas de gate de niveau → le 🎯 % de victoire indique si le combat est jouable.
 function bossUnlocked(b: MilestoneBoss): boolean {
+  if (!hasBossAltar.value) return false;
   const order = bossChain.value;
   const i = order.findIndex((x) => x.id === b.id);
   return i <= 0 || defeatedBossSet.value.has(order[i - 1]!.id);
 }
 function bossLockReason(b: MilestoneBoss): string {
+  if (!hasBossAltar.value) return '🔮 Construis l’Autel des boss (carte)';
   const order = bossChain.value;
   const i = order.findIndex((x) => x.id === b.id);
   return i > 0 ? `Bats d’abord « ${order[i - 1]!.name} »` : '';
@@ -2924,6 +2934,10 @@ async function fightBoss(b: MilestoneBoss) {
   const uid = auth.user?.id;
   if (expeBlocked()) return;
   if (!uid || !char.row || busy.value || c.value.energy < b.energyCost) return;
+  if (!hasBossAltar.value) {
+    $q.notify({ type: 'warning', message: 'Construis l’Autel des boss (carte d’expédition) pour affronter les boss.' });
+    return void router.push('/expedition-map');
+  }
   if (!bossUnlocked(b)) return;
   if (char.row.pending_reward) {
     $q.notify({ type: 'warning', message: 'Choisis d’abord ta récompense en attente.' });
