@@ -181,6 +181,39 @@ export function useProgress() {
     return acc;
   });
 
+  // ── Réservoirs de stats sur une FENÊTRE récente (tendance « ce mois ») ──
+  // Sources DATÉES uniquement (séances / cardio non-miroir / tennis) → les défis et
+  // le Défi 360 (XP cumulée sans date fine) sont exclus : tendance INDICATIVE.
+  const DISC_SIG_WINDOW: Record<string, string> = {
+    crossfit: 'Crossfit',
+    hyrox: 'Hyrox',
+    mobilite: 'Pilates',
+    prepa_physique: 'Tennis',
+  };
+  function bucketsSince(cutoffIso: string) {
+    const acc = emptyBuckets();
+    for (const r of logs.all) {
+      if ((r.performed_at || '') < cutoffIso) continue;
+      if (isAutreLog(r))
+        addXp(acc, otherSportXp(r.payload.duration_min ?? 0, r.payload.name), sportSignature(r.payload.name));
+      else if (isSpecifiqueLog(r)) {
+        const d = r.payload.discipline ?? '';
+        addXp(acc, sessionXp(r.payload), sportSignature(DISC_SIG_WINDOW[d] ?? d));
+      } else addXp(acc, sessionXp(r.payload), MUSCU_SIG);
+    }
+    for (const r of cardio.logs) {
+      if (r.payload.challenge_id || (r.performed_at || '') < cutoffIso) continue;
+      addXp(acc, cardioSessionXp(r.payload), cardioSignature(r.payload.activity));
+    }
+    for (const r of tennis.logs) {
+      if ((r.performed_at || '') < cutoffIso) continue;
+      addXp(acc, drillSessionXp(r.payload), sportSignature('Tennis'));
+    }
+    return acc;
+  }
+  // Fenêtre glissante 30 jours (le cutoff est recalculé à chaque évaluation → « ~now »).
+  const buckets30 = computed(() => bucketsSince(new Date(Date.now() - 30 * 86400000).toISOString()));
+
   // ── Tuiles par SPORT (une par activité réellement pratiquée) ──
   // = séances loggées uniquement (les challenges/Défi 360 ont leur propre entrée).
   const SPORT_ICON: Record<string, string> = {
@@ -409,6 +442,12 @@ export function useProgress() {
     powerXp: computed(() => Math.round(statBuckets.value.power)),
     enduranceXp: computed(() => Math.round(statBuckets.value.endurance)),
     agilityXp: computed(() => Math.round(statBuckets.value.agility)),
+    // Piliers Force / Endurance = niveaux des réservoirs (bénéfices de TOUT le sport).
+    force: computed(() => computeLevel(Math.round(statBuckets.value.power))),
+    endurance: computed(() => computeLevel(Math.round(statBuckets.value.endurance))),
+    // Tendance ~30 j (indicative, sources datées) → « ce chiffre évolue au fil du temps ».
+    force30: computed(() => Math.round(buckets30.value.power)),
+    endurance30: computed(() => Math.round(buckets30.value.endurance)),
     // Énergie RPG = fraction de l'XP de fond gagnée (l'XP encode déjà l'effort :
     // reps des challenges, durée/distance/charge des séances). Tennis exclu.
     energyEarned: computed(() => Math.round(generalXp.value * ENERGY_PER_XP)),

@@ -85,6 +85,47 @@
         </div>
       </div>
 
+      <!-- Piliers Force & Endurance : niveaux des BÉNÉFICES de tout ton sport
+           (chaque activité contribue selon son profil) → 2 chiffres qui évoluent. -->
+      <div v-if="statTotal > 0" class="pillars">
+        <button class="pillar pow" @click="goStats" aria-label="Détail Force">
+          <span class="pl-emo">💪</span>
+          <div class="pl-body">
+            <div class="pl-top">
+              <span class="pl-name font-display">Force</span>
+              <span class="pl-lvl font-display">Niv. {{ progress.force.value.level }}</span>
+            </div>
+            <div class="pl-bar">
+              <span class="pl-fill" :style="{ width: progress.force.value.progressPct + '%' }" />
+            </div>
+            <div class="pl-foot">
+              <span class="pl-pts">{{ progress.powerXp.value.toLocaleString('fr-FR') }} pts</span>
+              <span v-if="progress.force30.value > 0" class="pl-trend"
+                >↑ +{{ progress.force30.value.toLocaleString('fr-FR') }} · 30 j</span
+              >
+            </div>
+          </div>
+        </button>
+        <button class="pillar end" @click="goStats" aria-label="Détail Endurance">
+          <span class="pl-emo">❤️</span>
+          <div class="pl-body">
+            <div class="pl-top">
+              <span class="pl-name font-display">Endurance</span>
+              <span class="pl-lvl font-display">Niv. {{ progress.endurance.value.level }}</span>
+            </div>
+            <div class="pl-bar">
+              <span class="pl-fill" :style="{ width: progress.endurance.value.progressPct + '%' }" />
+            </div>
+            <div class="pl-foot">
+              <span class="pl-pts">{{ progress.enduranceXp.value.toLocaleString('fr-FR') }} pts</span>
+              <span v-if="progress.endurance30.value > 0" class="pl-trend"
+                >↑ +{{ progress.endurance30.value.toLocaleString('fr-FR') }} · 30 j</span
+              >
+            </div>
+          </div>
+        </button>
+      </div>
+
       <div class="tile-group">
         <div class="group-lbl">Mes sports</div>
         <div v-if="!progress.sportTiles.value.length" class="empty-sports">
@@ -867,6 +908,91 @@ async function saveAutre() {
 }
 .sb-l.agi {
   color: #ffd23f;
+}
+/* Piliers Force / Endurance : 2 tuiles côte à côte, teintées par la stat. */
+.pillars {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.pillar {
+  --pc: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--pc) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--pc) 45%, var(--line));
+  cursor: pointer;
+}
+.pillar:active {
+  transform: scale(0.98);
+}
+.pillar.pow {
+  --pc: #ff6a45;
+}
+.pillar.end {
+  --pc: #7bc86c;
+}
+.pl-emo {
+  font-size: 26px;
+  flex: none;
+}
+.pl-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pl-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.pl-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--pc);
+}
+.pl-lvl {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+.pl-bar {
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pc) 18%, var(--bg));
+  overflow: hidden;
+}
+.pl-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--pc);
+}
+.pl-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.pl-pts {
+  color: var(--dim);
+  font-weight: 600;
+}
+.pl-trend {
+  color: var(--pc);
+  font-weight: 700;
+  white-space: nowrap;
 }
 .tile-group {
   margin-bottom: 18px;
