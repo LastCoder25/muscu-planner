@@ -2146,7 +2146,7 @@
             @click="reattackLast"
           >
             <span class="rm-ic">⚔️</span>
-            <span class="rm-cost">{{ reattackCost }} ⚡</span>
+            <span class="rm-cost">{{ reattackCost }} {{ reattackCostIcon }}</span>
           </button>
           <button
             class="rm-btn rm-icon"
@@ -3013,7 +3013,8 @@ const reattackCost = computed(() => {
   return 0;
 });
 // La ressource dépend du type de run : le boss se paie en pierres d'invocation 🔮,
-// donjon/faille en énergie ⚡.
+// donjon/faille en énergie ⚡ → le logo du bouton Réattaquer suit.
+const reattackCostIcon = computed(() => (lastBoss.value ? '🔮' : '⚡'));
 const canReattack = computed(() => {
   if (busy.value || char.row?.pending_reward) return false;
   const have = lastBoss.value ? (char.row?.summon_stones ?? 0) : c.value.energy;
