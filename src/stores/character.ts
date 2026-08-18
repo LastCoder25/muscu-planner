@@ -243,9 +243,9 @@ export const useCharacterStore = defineStore('character', () => {
       else delete consumables[id];
     }
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
-    // Clé d'expédition : ~6 % sur un donjon NETTOYÉ (rare → l'expédition redevient
-    // un événement à belle récompense, pas du farm à la chaîne).
-    const gotKey = input.clearedDungeonId && Math.random() < 0.06 ? 1 : 0;
+    // Clé d'expédition : ~2 % sur un donjon NETTOYÉ (raréfié 2026‑08‑18 : les gros
+    // volumes de runs inondaient les clés → le Labyrinthe redevient un événement rare).
+    const gotKey = input.clearedDungeonId && Math.random() < 0.02 ? 1 : 0;
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
@@ -281,9 +281,9 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur) return;
     const firstDefeat = input.defeated && !cur.defeated_bosses.includes(input.bossId);
     const defeated = firstDefeat ? [...cur.defeated_bosses, input.bossId] : cur.defeated_bosses;
-    // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~25 % ensuite sur les
-    // réaffrontements → pas de faucet infini en spammant un boss déjà battu.
-    const keyGain = firstDefeat ? 1 : input.defeated && Math.random() < 0.12 ? 1 : 0;
+    // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~6 % ensuite sur les
+    // réaffrontements (raréfié 2026‑08‑18) → pas de flux de clés en spammant un boss.
+    const keyGain = firstDefeat ? 1 : input.defeated && Math.random() < 0.06 ? 1 : 0;
     const consumables = { ...cur.consumables };
     for (const id of input.consumed ?? []) {
       const left = (consumables[id] ?? 0) - 1;

@@ -197,8 +197,12 @@ const BOSS_CALIB = { kpv: 11, kdmg: 0.28 } as const;
 // trivialisé (100 % équipé). On scale ses PV/dégâts par ce facteur (≈ gearRatio^0,72)
 // → boss ~50-60 % ÉQUIPÉ au palier (challenge réel, télégraphié par le winPct live).
 function bossGearMult(level: number): number {
+  // ADOUCI (2026‑08‑18) : 0.006L+0.0001L² → 0.004L+0.00006L². Les boss de fin étaient
+  // un MUR de puissance unique (chaîne franchie d'un coup) ; une rampe plus douce en
+  // fait des checkpoints graduels, beatables plus près de leur palier avec du gear
+  // générique (le winPct live prévient toujours si c'est perdu d'avance).
   const L = Math.max(1, level);
-  return 1 + 0.006 * L + 0.0001 * L * L;
+  return 1 + 0.004 * L + 0.00006 * L * L;
 }
 
 const BOSS_SKINS: { emoji: string; name: string }[] = [

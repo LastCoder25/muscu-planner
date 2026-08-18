@@ -220,7 +220,7 @@ export function buildingType(id: string): BuildingType | undefined {
 export const BUILD = {
   plotCap: 12, // emplacements max (≥ nb de types de bâtiments → on peut tous les poser)
   upBase: 220, // upgrade L→L+1 (or) = round(upBase × L^upExp)
-  upExp: 2,
+  upExp: 2.6, // puits d'or RAIDE (2→2.6) : l'or de fin de partie n'a plus de puits sinon
   storageHours: 18, // heures de production stockables (puis saturation)
   hourMs: 3_600_000,
 } as const;

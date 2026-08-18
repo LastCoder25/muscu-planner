@@ -114,9 +114,12 @@ const RARITY_COST_MULT: Record<Rarity, number> = {
 };
 
 /** Coût en poussière pour passer du niveau `level` au suivant, selon la rareté.
- *  Base DIVISÉE PAR 2 (refonte C) : `5 + level*3` (vs `10 + level*6`). */
+ *  SUPER-LINÉAIRE (terme quadratique 2026‑08‑18) : le robinet de poussière suit le
+ *  volume de runs (∝ niveau), donc un coût linéaire laissait la poussière déborder et
+ *  le stuff toujours maxé → l'infusion cesse d'être un objectif. `level²×0.4` fait de
+ *  l'infusion un vrai puits qui reste un but en fin de partie. */
 export function upgradeCost(level: number, rarity: Rarity): number {
-  return Math.round((5 + level * 3) * RARITY_COST_MULT[rarity]);
+  return Math.round((5 + level * 3 + level * level * 0.4) * RARITY_COST_MULT[rarity]);
 }
 /** Coût TOTAL pour construire un objet du niveau 1 jusqu'à `level` (sous C, tout
  *  drop part du niveau 1). Sert au recyclage history-independent + à l'affichage. */

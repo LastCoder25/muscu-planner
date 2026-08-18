@@ -2822,7 +2822,10 @@ async function explore(d: Dungeon) {
     // Poussière SCALÉE au niveau du donjon (refonte C : l'infusion est la
     // progression → le revenu doit suivre les coûts qui montent avec le niveau).
     const dust = r.defeated * (2 + Math.round(d.dropLevel * 0.5)) + (r.cleared ? d.dropLevel : 0);
-    const stones = r.defeated + (r.cleared ? 3 : 0); // filet de pierres 💎 (familiers)
+    // Pierres 💎 raréfiées (2026‑08‑18) : seulement au NETTOYAGE (petit lot), plus par
+    // monstre → les gros volumes de runs n'inondent plus les pierres (ressource rare
+    // des familiers). Filon de pierres + boss restent les sources principales.
+    const stones = r.cleared ? 2 : 0;
     // Drop de TALENT (drop-only) : ~6 % sur un donjon nettoyé, rareté ∝ luck du donjon.
     const talentDrops =
       r.cleared && dropRng() < 0.06
@@ -3037,7 +3040,7 @@ async function fightBoss(b: MilestoneBoss) {
       dust,
       defeated: win,
       pending,
-      stones: 12, // jalon boss → lot de pierres 💎 (crédité seulement si vaincu)
+      stones: 6, // jalon boss (raréfié 2026-08-18) → lot de pierres 💎 (crédité seulement si vaincu)
       ...(consumed.length ? { consumed } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
     });
@@ -3157,7 +3160,7 @@ async function fightEndless() {
       dust,
       drops,
       cleared: win,
-      stones: win ? 6 : 0,
+      stones: win ? 3 : 0, // raréfié 2026-08-18
       ...(consumed.length ? { consumed } : {}),
     });
     // Nouveau palier RECORD de la Faille → célébration (progression end-game),
