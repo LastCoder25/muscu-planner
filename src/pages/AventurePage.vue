@@ -1979,6 +1979,13 @@
               <span class="result-gains">
                 <span class="gain-pill gold">+{{ run.gold }} 🪙</span>
                 <span class="gain-pill dust">+{{ run.dust }} ✨</span>
+                <span
+                  v-if="run.summonStones"
+                  class="gain-pill summon"
+                  title="Pierres d’invocation (pour affronter les boss)"
+                  >+{{ run.summonStones }} 🔮</span
+                >
+                <span v-if="run.stones" class="gain-pill stones">+{{ run.stones }} 💎</span>
               </span>
             </div>
             <div class="result-sub">
@@ -2063,6 +2070,34 @@
                     Casser ✨{{ salvageValue(d) }}
                   </button>
                   <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Talent(s) tombé(s) : rangés directement dans la collection Talents (onglet Perso). -->
+          <div v-if="stageDone && run.talentDrops?.length" class="drops talent-drops">
+            <div class="drops-lbl">
+              🧠 {{ run.talentDrops.length > 1 ? 'Talents trouvés' : 'Talent trouvé' }}
+            </div>
+            <div
+              v-for="(t, ti) in run.talentDrops"
+              :key="t.id"
+              class="drop drop-reveal"
+              :class="'r-' + talentRankOf(t)"
+              :style="{ animationDelay: ti * 0.12 + 's' }"
+            >
+              <span class="inv-emo">{{ talentIcon(t) }}</span>
+              <div class="inv-main">
+                <div class="inv-name">{{ talentName(t) }}</div>
+                <div class="pills">
+                  <span class="rk-badge" :class="'p-' + talentRankOf(t)">{{
+                    talentRankOf(t)
+                  }}</span>
+                  <span class="q-badge" :class="'q-' + talentDropQuality(t)">{{
+                    talentDropQuality(t)
+                  }}</span>
+                  <span class="gpill">→ collection Talents</span>
                 </div>
               </div>
             </div>
@@ -2305,6 +2340,9 @@ interface RunView {
   playerMaxPv?: number; // PV max du joueur (barre du rejeu)
   fights: RunFight[];
   drops: Item[];
+  talentDrops?: TalentInstance[]; // talents tombés (affichés dans le rapport)
+  summonStones?: number; // pierres d'invocation 🔮 gagnées (donjon → aller aux boss)
+  stones?: number; // pierres magiques 💎 gagnées (familiers)
   consumable?: { emoji: string; name: string };
 }
 
@@ -2593,6 +2631,13 @@ const talentsView = computed(() =>
 );
 function talentName(inst: TalentInstance): string {
   return talentByCode(inst.code)?.name ?? 'Talent';
+}
+function talentIcon(inst: TalentInstance): string {
+  return talentByCode(inst.code)?.icon ?? '✨';
+}
+// Qualité (1..5) d'un talent tombé, pour le rapport de combat.
+function talentDropQuality(inst: TalentInstance): number {
+  return talentQuality(tierOf(inst));
 }
 // Explique un talent (nature de l'effet + comment il monte) au tap sur son icône.
 function explainTalent(t: (typeof talentsView.value)[number]) {
@@ -3365,6 +3410,9 @@ async function explore(d: Dungeon) {
         };
       }),
       drops,
+      ...(talentDrops.length ? { talentDrops } : {}),
+      ...(summonStones ? { summonStones } : {}),
+      ...(stones ? { stones } : {}),
     };
     // 1er nettoyage d'un donjon (débloque le suivant) = moment de progression →
     // éclat, mais SEULEMENT à la fin de l'animation de combat (sinon il recouvre
@@ -3597,6 +3645,8 @@ async function fightBoss(b: MilestoneBoss) {
         },
       ],
       drops: [],
+      ...(talentDrops.length ? { talentDrops } : {}),
+      ...(win ? { stones: 6 } : {}),
     };
     // Victoire de boss de palier = jalon MAJEUR → célébration centrale (gros éclat),
     // DIFFÉRÉE à la fin de l'animation de combat.
@@ -7075,9 +7125,10 @@ onUnmounted(() => {
 .result-gold {
   color: var(--accent);
 }
-/* Gains en pastilles colorées (or / poussière). */
+/* Gains en pastilles colorées (or / poussière / 🔮 / 💎), empilables sur petit écran. */
 .result-gains {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .gain-pill {
@@ -7097,6 +7148,16 @@ onUnmounted(() => {
   color: #b07cff;
   background: color-mix(in srgb, #b07cff 16%, transparent);
   border: 1px solid #b07cff;
+}
+.gain-pill.summon {
+  color: #ffd23f;
+  background: color-mix(in srgb, #ffd23f 16%, transparent);
+  border: 1px solid #ffd23f;
+}
+.gain-pill.stones {
+  color: #5fd0e0;
+  background: color-mix(in srgb, #5fd0e0 16%, transparent);
+  border: 1px solid #5fd0e0;
 }
 .result-sub {
   font-size: 12px;
