@@ -536,6 +536,13 @@
                       💎</template
                     >
                   </button>
+                  <button
+                    v-if="hasIncubator && !famTarget"
+                    class="slot-remove"
+                    @click.stop="setFamTarget(equippedFamiliar)"
+                  >
+                    🔧 Infuser
+                  </button>
                   <button class="slot-remove" @click="doUnequipFamiliar()">Retirer</button>
                 </div>
               </div>
@@ -566,49 +573,79 @@
                   <div class="fam-mini-eff">{{ itemEffects(f) }}</div>
                 </div>
                 <div class="fam-mini-acts">
-                  <button class="fam-mini-eq" @click="doEquipFamiliar(f.id)">Équiper</button>
-                  <button class="fam-mini-sell" @click="doSell(f)">
-                    Vendre 🪙{{ sellValue(f) }}
-                  </button>
+                  <template v-if="famTarget">
+                    <span v-if="famTarget.id === f.id" class="fam-mini-cur">cible</span>
+                    <button
+                      v-else-if="!f.locked"
+                      class="fam-mini-eq feed"
+                      @click="doInfuseFam(f.id)"
+                    >
+                      ✨ Sacrifier
+                    </button>
+                    <span v-else class="fam-mini-cur" title="Verrouillé — protégé">🔒</span>
+                  </template>
+                  <template v-else>
+                    <button class="fam-mini-eq" @click="doEquipFamiliar(f.id)">Équiper</button>
+                    <button v-if="hasIncubator" class="fam-mini-eq" @click="setFamTarget(f)">
+                      🔧 Infuser
+                    </button>
+                    <button class="fam-mini-sell" @click="doSell(f)">
+                      Vendre 🪙{{ sellValue(f) }}
+                    </button>
+                  </template>
                 </div>
               </div>
             </div>
 
-            <!-- Incubateur : fusion 3 familiers de même rareté → 1 de la rareté au-dessus.
-               Débloqué en construisant l'INCUBATEUR sur la carte (plus de gate de niveau). -->
+            <!-- Incubateur : INFUSION — choisis un familier CIBLE (🔧) puis sacrifie les
+               autres du sac pour monter son tier (qualité → rang). Rang plafonné par le
+               niveau de l'Incubateur. -->
             <div v-if="hasIncubator" class="fam-incub">
-              <div class="fam-bag-title">🥚 Incubateur niv.{{ incubLevel }} — fusion</div>
-              <div class="fam-incub-hint">
-                Fusionne <b>3 familiers de même rang</b> → 1 aléatoire du rang au-dessus. Fusion
-                débloquée jusqu'à
+              <div class="fam-bag-title">🥚 Incubateur niv.{{ incubLevel }} — infusion</div>
+              <div v-if="famTarget" class="tal-infuse-banner">
+                🔧 Infusion dans
+                <b>{{ famTarget.name }} ({{ famTierLabel(famTarget) }})</b> —
+                <template v-if="famTargetCapped"
+                  >rang max atteint pour cet Incubateur (monte-le).</template
+                >
+                <template v-else-if="famSacrificeable.length"
+                  >sacrifie un familier <b>non verrouillé</b> du sac.</template
+                >
+                <template v-else>plus aucun familier à sacrifier.</template>
+                <button
+                  class="tib-x"
+                  :class="{ done: famTargetCapped || !famSacrificeable.length }"
+                  @click="famTarget = null"
+                >
+                  {{ famTargetCapped || !famSacrificeable.length ? '✓ Terminer' : 'annuler' }}
+                </button>
+                <div v-if="!famTargetCapped" class="tal-xp fam-xp">
+                  <span
+                    :style="{
+                      width:
+                        Math.min(
+                          100,
+                          Math.round(
+                            (familiarTierProgress(famTarget).xp /
+                              familiarTierProgress(famTarget).cost) *
+                              100,
+                          ),
+                        ) + '%',
+                    }"
+                  />
+                </div>
+              </div>
+              <div v-else class="fam-incub-hint">
+                Choisis un familier <b>cible</b> (🔧) puis sacrifie les autres pour monter son
+                <b>tier</b> (qualité → rang). Rang max débloqué :
                 <b class="ii-rar" :class="'p-' + RANK_ORDER[fuseMaxIndex]">{{
                   RANK_ORDER[fuseMaxIndex]
                 }}</b>
                 — monte l'Incubateur (+1 rang tous les 2 niveaux).
               </div>
-              <div v-if="!fusableRarities.length" class="fam-incub-empty">
-                Il te faut au moins 3 familiers d'un même rang (hors SSS) au sac.
-              </div>
-              <button
-                v-for="fr in fusableRarities"
-                :key="fr.rarity"
-                class="fam-fuse-btn"
-                :class="{ locked: !fr.unlocked }"
-                @click="fr.unlocked ? doFuse(fr.rarity) : router.push('/expedition-map')"
-              >
-                <template v-if="fr.unlocked">
-                  Fusionner 3× <b :class="'p-' + fr.rarity">{{ RARITY_LABEL[fr.rarity] }}</b> →
-                  <b :class="'p-' + fr.next">{{ RARITY_LABEL[fr.next] }}</b>
-                  <span class="ff-have">({{ fr.count }} dispo)</span>
-                </template>
-                <template v-else>
-                  🔒 Fusion vers <b :class="'p-' + fr.next">{{ RARITY_LABEL[fr.next] }}</b> —
-                  <b>Incubateur niv.{{ fr.reqLevel }}</b> requis →
-                </template>
-              </button>
             </div>
             <button v-else class="fam-incub-locked" @click="router.push('/expedition-map')">
-              🥚 Construis un <b>Incubateur</b> sur la carte pour fusionner tes familiers.
+              🥚 Construis un <b>Incubateur</b> sur la carte pour infuser tes familiers.
             </button>
           </div>
         </template>
@@ -2105,6 +2142,8 @@ import {
   rollSetPiece,
   effectLabel,
   rollStars,
+  tierIndexOf,
+  familiarTierProgress,
   canUpgrade,
   upgradeCost,
   infuseToMaxCost,
@@ -2115,7 +2154,6 @@ import {
   craftSetCost,
   familiarStoneCost,
   isFamiliar,
-  nextRarity,
   FAMILIAR_SLOT,
   rollTier,
   RANK_ORDER,
@@ -2154,7 +2192,6 @@ import {
   incubatorBuilt,
   incubatorLevel,
   maxFuseTargetIndex,
-  fuseUnlockLevel,
   labyrinthUnlocked,
   forgeBuilt,
   bossAltarBuilt,
@@ -3708,54 +3745,47 @@ function doUpgradeFamiliar(itemId: string) {
     'Montée du familier impossible.',
   );
 }
-// Niveau de l'Incubateur + rang cible max fusionnable (débloqué par niveau).
+// Niveau de l'Incubateur + rang cible max atteignable par infusion (débloqué par niveau).
 const incubLevel = computed(() => incubatorLevel(char.row?.buildings ?? []));
 const fuseMaxIndex = computed(() => maxFuseTargetIndex(char.row?.buildings ?? []));
-// Incubateur : raretés du sac avec ≥ 3 familiers ET fusionnables (pas au rang max).
-// `unlocked` = le rang CIBLE est débloqué par le niveau de l'Incubateur (sinon on
-// affiche le niveau requis). `reqLevel` = niveau d'Incubateur pour débloquer.
-const fusableRarities = computed(() => {
-  const byR = new Map<Rarity, number>();
-  for (const f of bagFamiliars.value) byR.set(f.rarity, (byR.get(f.rarity) ?? 0) + 1);
-  const out: {
-    rarity: Rarity;
-    next: Rarity;
-    count: number;
-    unlocked: boolean;
-    reqLevel: number;
-  }[] = [];
-  for (const [rarity, count] of byR) {
-    const next = nextRarity(rarity);
-    if (count >= 3 && next)
-      out.push({
-        rarity,
-        next,
-        count,
-        unlocked: RARITY_RANK[next] <= fuseMaxIndex.value,
-        reqLevel: fuseUnlockLevel(RARITY_RANK[next]),
-      });
-  }
-  return out.sort((a, b) => RARITY_RANK[a.rarity] - RARITY_RANK[b.rarity]);
+// ── INFUSION des familiers (remplace la fusion 3→1) : on choisit un familier CIBLE,
+// on sacrifie les autres du sac dedans pour monter son tier (qualité → rang). ──
+const famTarget = ref<Item | null>(null);
+// Familiers du sac sacrifiables pour l'infusion en cours : non verrouillés, ≠ la cible.
+const famSacrificeable = computed(() =>
+  bagFamiliars.value.filter((f) => !f.locked && f.id !== famTarget.value?.id),
+);
+// Rang cible actuel de la cible débloqué par l'Incubateur ? (sinon on est plafonné).
+const famTargetCapped = computed(() => {
+  const t = famTarget.value;
+  if (!t) return false;
+  return tierIndexOf(t) >= 49 || Math.floor((tierIndexOf(t) + 1) / 5) > fuseMaxIndex.value;
 });
-function doFuse(rarity: Rarity) {
-  const ids = bagFamiliars.value
-    .filter((f) => f.rarity === rarity)
-    .slice(0, 3)
-    .map((f) => f.id);
-  if (ids.length < 3) return;
+function famTierLabel(f: Item): string {
+  return `${RARITY_LABEL[f.rarity]}${itemQuality(f) || ''}`;
+}
+function setFamTarget(f: Item) {
+  famTarget.value = f;
+}
+function doInfuseFam(fodderId: string) {
+  const target = famTarget.value;
+  if (!target) return;
+  const beforeTier = tierIndexOf(target);
   withUid(
     (uid) =>
-      char.fuseFamiliars(uid, ids).then((res) => {
-        if (res)
+      char.infuseFamiliar(uid, target.id, fodderId).then((res) => {
+        if (!res) return;
+        famTarget.value = res; // garde la cible à jour pour enchaîner
+        if (tierIndexOf(res) > beforeTier)
           gameFx.celebrate({
             kind: 'familiar',
             emoji: res.emoji,
-            title: 'Fusion réussie !',
-            subtitle: `${res.name} · ${RARITY_LABEL[res.rarity]}`,
+            title: `${res.name} — ${famTierLabel(res)} !`,
+            subtitle: 'Tier amélioré par infusion',
             rarity: fxRarity(res.rarity),
           });
       }),
-    'Fusion impossible.',
+    'Infusion impossible.',
   );
 }
 
@@ -5135,6 +5165,20 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   padding: 3px 4px;
+}
+.fam-mini-eq.feed {
+  border-color: var(--d3);
+  color: var(--d3);
+}
+.fam-mini-cur {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 4px;
+}
+/* Barre d'XP de tier de la cible d'infusion (familier). */
+.fam-xp {
+  margin-top: 8px;
 }
 /* Incubateur (fusion de familiers) */
 .fam-incub {

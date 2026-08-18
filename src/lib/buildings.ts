@@ -18,7 +18,7 @@
 // par l'appelant → fonctions pures et testables.
 
 // Ressource produite (union extensible : on pourra ajouter 'gold', …).
-export type BuildResource = 'dust' | 'stone' | 'energy';
+export type BuildResource = 'dust' | 'stone' | 'energy' | 'parchemins';
 
 // Catégorie d'un bâtiment. `producer` = filon de ressource ; `utility` = bâtiment
 // à EFFET global (entrepôt, tour de reconnaissance…). Extensible.
@@ -88,6 +88,20 @@ export const BUILDING_TYPES: BuildingType[] = [
     buildGold: 800,
     unique: true,
     desc: 'Produit des pierres magiques 💎 (montée des familiers).',
+  },
+  // Producteur de PARCHEMINS 📜 : ressource de progression des TALENTS (montée de
+  // niveau). Cadence proche des pierres (ressource de progression, pas abondante).
+  {
+    id: 'library',
+    label: 'Bibliothèque',
+    emoji: '📚',
+    category: 'producer',
+    resource: 'parchemins',
+    prodPerHrPerLvl: 0.16,
+    buildGold: 900,
+    unlockLevel: 2,
+    unique: true,
+    desc: 'Produit des parchemins de maîtrise 📜 (montée du niveau des talents).',
   },
   // Producteur d'ÉNERGIE : convertit l'or (surabondant en fin de partie) en énergie
   // de JEU → adoucit le pincement d'énergie au niveau élevé (le coût des runs monte
@@ -389,7 +403,7 @@ export function buildingAccrued(b: Building, now: number, mult = 1): number {
 
 /** Somme des ressources prêtes à récolter, par ressource (entrepôts appliqués). */
 export function collectable(buildings: Building[], now: number): Record<BuildResource, number> {
-  const acc: Record<BuildResource, number> = { dust: 0, stone: 0, energy: 0 };
+  const acc: Record<BuildResource, number> = { dust: 0, stone: 0, energy: 0, parchemins: 0 };
   const mult = storageMult(buildings);
   for (const b of buildings) {
     const t = buildingType(b.typeId);

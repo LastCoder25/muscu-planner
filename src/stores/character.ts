@@ -16,8 +16,9 @@ import {
   familiarStoneCost,
   isFamiliar,
   normRank,
-  nextRarity,
-  rankIndex,
+  familiarInfuseXp,
+  infuseFamiliar as applyFamiliarInfusion,
+  FAMILIAR_SLOT,
   type Item,
   type ItemSlot,
   type Equipped,
@@ -54,7 +55,6 @@ import {
   maxFuseTargetIndex,
   type Building,
 } from '@/lib/buildings';
-import { rollFusedFamiliar } from '@/data/familiars';
 import type { Combatant } from '@/lib/combat';
 
 export interface CharacterRow {
@@ -78,6 +78,7 @@ export interface CharacterRow {
   pending_reward: PendingReward | null;
   keys: number; // clés d'expédition (donjons à étages)
   stones: number; // pierres magiques 💎 : montée de niveau des familiers
+  parchemins: number; // parchemins de maîtrise 📜 : montée de niveau des talents (migr. 0048)
   expedition: ActiveExpedition | null; // mode idle « Expédition » en cours
   expedition_map: ExpeditionMap | null; // carte du monde (POI)
   messages: ExpeditionMessage[]; // boîte à messages 📬 (rapports d'expédition)
@@ -101,7 +102,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, expedition, expedition_map, messages, buildings, set_pieces_seen';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, expedition, expedition_map, messages, buildings, set_pieces_seen';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -130,6 +131,7 @@ export const useCharacterStore = defineStore('character', () => {
     r.buildings = arr<Building>(r.buildings); // colonne récente (migr. 0046)
     r.set_pieces_seen = obj<Record<string, string[]>>(r.set_pieces_seen); // migr. 0047
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
+    if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
     if (!r.expedition || typeof r.expedition !== 'object') r.expedition = null;
     if (!r.expedition_map || typeof r.expedition_map !== 'object') r.expedition_map = null;
     return r;
@@ -582,28 +584,36 @@ export const useCharacterStore = defineStore('character', () => {
 
   // FUSION (incubateur) : consomme 3 familiers du SAC de MÊME rareté → 1 familier
   // ALÉATOIRE de la rareté JUSTE AU-DESSUS (niveau 1). rng = Math.random.
-  async function fuseFamiliars(userId: string, ids: string[]) {
+  // INFUSION d'un familier (remplace la fusion 3→1) : on SACRIFIE un familier du sac
+  // dans un familier CIBLE (équipé ou au sac) → son TIER (rang+qualité) grimpe, plafonné
+  // par le niveau de l'Incubateur (ticket f93c219b). Les pierres 💎 gèrent le NIVEAU.
+  async function infuseFamiliar(userId: string, targetId: string, fodderId: string) {
     const cur = row.value;
-    if (!cur || ids.length !== 3) return;
-    const picked = ids
-      .map((id) => cur.inventory.find((i) => i.id === id))
-      .filter((i): i is Item => !!i);
-    if (picked.length !== 3 || !picked.every(isFamiliar)) return;
-    const rarity = picked[0]!.rarity;
-    if (!picked.every((f) => f.rarity === rarity)) return; // même rang requis
-    // Gate INCUBATEUR : le RANG CIBLE de la fusion doit être débloqué par le niveau de
-    // l'Incubateur (fusions supérieures = niveaux d'Incubateur plus hauts — ticket f93c219b).
-    const target = nextRarity(rarity);
-    if (!target || rankIndex(target) > maxFuseTargetIndex(cur.buildings)) return;
-    const fused = rollFusedFamiliar(Math.random, rarity);
-    if (!fused) return; // rang max → pas de fusion
-    const idSet = new Set(ids);
-    const inventory = [
-      ...cur.inventory.filter((i) => !idSet.has(i.id)),
-      { ...fused, id: crypto.randomUUID() },
-    ];
-    await persist(userId, { inventory });
-    return fused;
+    if (!cur || targetId === fodderId) return;
+    const fodder = cur.inventory.find((i) => i.id === fodderId);
+    if (!fodder || !isFamiliar(fodder) || fodder.locked) return;
+    const equippedFam = cur.equipped[FAMILIAR_SLOT];
+    const bagTarget = cur.inventory.find((i) => i.id === targetId);
+    const target =
+      equippedFam?.id === targetId
+        ? equippedFam
+        : bagTarget && isFamiliar(bagTarget)
+          ? bagTarget
+          : null;
+    if (!target) return;
+    const updated = applyFamiliarInfusion(
+      target,
+      familiarInfuseXp(fodder),
+      maxFuseTargetIndex(cur.buildings),
+    );
+    const inventory = cur.inventory
+      .filter((i) => i.id !== fodderId)
+      .map((i) => (i.id === target.id ? updated : i));
+    const patch: Partial<CharacterRow> = { inventory };
+    if (equippedFam?.id === targetId)
+      patch.equipped = { ...cur.equipped, [FAMILIAR_SLOT]: updated };
+    await persist(userId, patch);
+    return updated;
   }
 
   // ── Atelier de poussière (dust sinks) : forge / reroll / infusion / craft de set ──
@@ -937,10 +947,11 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur || !cur.buildings.length) return null;
     const got = collectable(cur.buildings, now);
-    if (got.dust <= 0 && got.stone <= 0 && got.energy <= 0) return null;
+    if (got.dust <= 0 && got.stone <= 0 && got.energy <= 0 && got.parchemins <= 0) return null;
     await persistOptimistic(userId, {
       dust: cur.dust + got.dust,
       stones: cur.stones + got.stone,
+      parchemins: cur.parchemins + got.parchemins, // 📚 bibliothèque → parchemins (talents)
       login_energy: cur.login_energy + got.energy, // ⚡ dynamo → énergie de jeu
       buildings: cur.buildings.map((b) => ({ ...b, collectedAt: now })),
     });
@@ -980,7 +991,7 @@ export const useCharacterStore = defineStore('character', () => {
     upgradeItem,
     infuseToMax,
     upgradeFamiliar,
-    fuseFamiliars,
+    infuseFamiliar,
     forge,
     rerollEffect,
     craftSet,

@@ -5,6 +5,9 @@ import {
   isFamiliar,
   nextRarity,
   rollStars,
+  tierIndexOf,
+  familiarInfuseXp,
+  infuseFamiliar,
   aggregateEffects,
   playerWithGear,
   effectiveValue,
@@ -16,7 +19,6 @@ import {
   familiarSpecies,
   pickFamiliarSpecies,
   rollActivityFamiliar,
-  rollFusedFamiliar,
 } from '@/data/familiars';
 import { mulberry32 } from '@/lib/combat';
 
@@ -156,27 +158,50 @@ describe('familiers — pierres magiques & sélection', () => {
   });
 });
 
-describe('familiers — fusion (incubateur)', () => {
+describe('familiers — infusion (incubateur)', () => {
   it('nextRarity : rang juste au-dessus, null au max (SSS)', () => {
     expect(nextRarity('G')).toBe('F');
-    expect(nextRarity('D')).toBe('C');
-    expect(nextRarity('SS')).toBe('SSS');
     expect(nextRarity('SSS')).toBeNull();
   });
-  it('rollFamiliar : rang forçable (fusion)', () => {
+  it('rollFamiliar : rang forçable', () => {
     const f = rollFamiliar(mulberry32(1), wolf, { level: 1, rarity: 'B' });
     expect(f.rarity).toBe('B');
-    expect(f.level).toBe(1);
   });
-  it('rollFusedFamiliar : 3 d’un rang → 1 familier du rang au-dessus', () => {
-    const fused = rollFusedFamiliar(mulberry32(4), 'D');
-    expect(fused).not.toBeNull();
-    expect(fused!.rarity).toBe('C');
-    expect(fused!.slot).toBe(FAMILIAR_SLOT);
-    expect(fused!.level).toBe(1);
-    expect(fused!.species).toBeTruthy();
+  const fam = (rarity: Item['rarity'], quality: number): Item => ({
+    id: 'f',
+    slot: FAMILIAR_SLOT,
+    name: 'Loup',
+    emoji: '🐺',
+    rarity,
+    level: 1,
+    baseLevel: 1,
+    effect: { type: 'damage_pct', value: 10 },
+    roll: (quality - 0.5) / 5,
+    species: 'wolf',
   });
-  it('rollFusedFamiliar : SSS → null (pas de fusion au-delà)', () => {
-    expect(rollFusedFamiliar(mulberry32(5), 'SSS')).toBeNull();
+  it('tierIndexOf : rang×5 + (qualité−1)', () => {
+    expect(tierIndexOf(fam('G', 1))).toBe(0);
+    expect(tierIndexOf(fam('G', 5))).toBe(4);
+    expect(tierIndexOf(fam('F', 1))).toBe(5);
+    expect(tierIndexOf(fam('SSS', 5))).toBe(49);
+  });
+  it('familiarInfuseXp : ∝ tier (un familier de haut tier nourrit plus)', () => {
+    expect(familiarInfuseXp(fam('G', 1))).toBe(1);
+    expect(familiarInfuseXp(fam('SSS', 5))).toBe(50);
+    expect(familiarInfuseXp(fam('C', 3))).toBeGreaterThan(familiarInfuseXp(fam('G', 3)));
+  });
+  it('infuseFamiliar : assez d’XP → monte la qualité puis le rang, plafonné par l’Incubateur', () => {
+    // Beaucoup d'XP, plafond rang index 2 (E) → grimpe jusqu'à E5 puis bloque.
+    const up = infuseFamiliar(fam('G', 1), 500, 2);
+    expect(tierIndexOf(up)).toBe(14); // E5 = 2×5+4
+    expect(up.rarity).toBe('E');
+    expect(rollStars(up.roll)).toBe(5);
+    // Effet re-scalé vers le haut (tier plus élevé = plus fort).
+    expect(up.effect.value).toBeGreaterThan(10);
+  });
+  it('infuseFamiliar : XP insuffisante → reste au même tier, accumule fxp', () => {
+    const up = infuseFamiliar(fam('G', 1), 1, 9);
+    expect(tierIndexOf(up)).toBe(0);
+    expect(up.fxp).toBe(1);
   });
 });

@@ -176,13 +176,14 @@
 
       <!-- Récolte des filons (visible dès qu'il y a quelque chose à récolter) -->
       <button
-        v-if="readyTotal.dust + readyTotal.stone + readyTotal.energy > 0"
+        v-if="readyTotal.dust + readyTotal.stone + readyTotal.energy + readyTotal.parchemins > 0"
         class="collect-pill"
         @click="collectAll"
       >
         🧺 Récolter
         <span v-if="readyTotal.dust" class="cp-r">✨{{ readyTotal.dust }}</span>
         <span v-if="readyTotal.stone" class="cp-r">💎{{ readyTotal.stone }}</span>
+        <span v-if="readyTotal.parchemins" class="cp-r">📜{{ readyTotal.parchemins }}</span>
         <span v-if="readyTotal.energy" class="cp-r">⚡{{ readyTotal.energy }}</span>
       </button>
     </div>
@@ -659,7 +660,12 @@ function filonEmoji(b: Building): string {
 function filonLabel(b: Building): string {
   return buildingType(b.typeId)?.label ?? 'Filon';
 }
-const RES_EMOJI: Record<string, string> = { dust: '✨', stone: '💎', energy: '⚡' };
+const RES_EMOJI: Record<string, string> = {
+  dust: '✨',
+  stone: '💎',
+  energy: '⚡',
+  parchemins: '📜',
+};
 // Emoji de la ressource produite par un bâtiment (✨/💎/⚡) — remplace l'ancien binaire.
 function filonResEmoji(b: Building): string {
   return RES_EMOJI[buildingType(b.typeId)?.resource ?? 'dust'] ?? '✨';

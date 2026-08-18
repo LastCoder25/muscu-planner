@@ -8,7 +8,7 @@
 // poussière), droppées dans les mêmes lieux que les familiers (Labyrinthe + un peu
 // partout). Le compagnon s'affiche à côté du personnage (AventureAvatar).
 
-import { rollFamiliar, nextRarity, type EffectType, type Item, type Rarity } from '@/lib/items';
+import { rollFamiliar, type EffectType, type Item } from '@/lib/items';
 
 // Biomes = lieu d'obtention privilégié (thématise le drop du trésor de Labyrinthe /
 // des régions). `any` = peut tomber n'importe où (voie diffuse par pierres).
@@ -111,13 +111,4 @@ export function rollActivityFamiliar(
     level: opts.level,
     ...(opts.luck !== undefined ? { luck: opts.luck } : {}),
   });
-}
-
-/** FUSION (incubateur) : à partir de 3 familiers de rareté `fromRarity`, produit 1
- *  familier ALÉATOIRE (race au hasard) de la rareté JUSTE AU-DESSUS, niveau 1.
- *  `null` si `fromRarity` est déjà au max (divin → pas de fusion). */
-export function rollFusedFamiliar(rng: () => number, fromRarity: Rarity): Omit<Item, 'id'> | null {
-  const nr = nextRarity(fromRarity);
-  if (!nr) return null;
-  return rollFamiliar(rng, pickFamiliarSpecies(rng), { level: 1, rarity: nr });
 }

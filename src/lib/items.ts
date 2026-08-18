@@ -81,6 +81,7 @@ export interface Item {
   locked?: boolean; // 🔒 protégé : exclu de la casse/vente (en masse ET individuelle)
   species?: string; // slot 'familiar' uniquement : id de la RACE (cf. FAMILIAR_SPECIES)
   roll?: number; // qualité du roll de l'effet principal (0..1 dans la bande ±20 %) → étoiles
+  fxp?: number; // familier : progression d'INFUSION vers le prochain pas de tier (rang+qualité)
 }
 
 // Qualité de roll → nombre d'ÉTOILES (1..5) : où l'effet est tombé dans la bande de
@@ -568,6 +569,61 @@ export function rollFamiliar(
     ...(effect2 ? { effect2 } : {}),
     species: species.id,
     roll: (quality - 0.5) / 5, // qualité relue par rollStars (comme les objets)
+  };
+}
+
+// ── Infusion des familiers : monte le TIER (rang + qualité) en sacrifiant d'autres
+// familiers (le tier grimpe = qualité d'abord, puis saut de rang). Le NIVEAU reste
+// piloté par les pierres 💎 (familiarStoneCost). Cf. ticket f93c219b. ──
+
+/** Tier 0..49 d'un familier/objet = rang×5 + (qualité−1). */
+export function tierIndexOf(it: { rarity: Rarity; roll?: number }): number {
+  return rankIndex(it.rarity) * 5 + (Math.max(1, rollStars(it.roll)) - 1);
+}
+/** XP d'infusion qu'un familier SACRIFIÉ rend (∝ son tier) : G1 → 1 … SSS5 → 50. */
+export function familiarInfuseXp(fam: { rarity: Rarity; roll?: number }): number {
+  return 1 + tierIndexOf(fam);
+}
+/** Coût d'un pas de tier (croît avec le tier) : bon marché en bas, cher en haut. */
+export function tierStepCost(tier: number): number {
+  return 3 + tier;
+}
+/** XP totale déjà accumulée + le seuil du prochain pas → barre de progression. */
+export function familiarTierProgress(fam: Item): { xp: number; cost: number } {
+  return { xp: fam.fxp ?? 0, cost: tierStepCost(tierIndexOf(fam)) };
+}
+/** Applique `addXp` d'infusion à un familier : monte son tier (qualité → rang),
+ *  plafonné au rang d'index `maxRankIndex` (Incubateur). La magnitude de l'effet
+ *  (et de la signature) est re-scalée par le ratio des multiplicateurs de tier →
+ *  un familier infusé = un familier droppé au même tier. Renvoie le familier à jour. */
+export function infuseFamiliar(fam: Item, addXp: number, maxRankIndex: number): Item {
+  let fxp = (fam.fxp ?? 0) + Math.max(0, addXp);
+  let rank = fam.rarity;
+  let quality = Math.max(1, rollStars(fam.roll));
+  let effVal = fam.effect.value;
+  let eff2Val = fam.effect2?.value;
+  for (;;) {
+    const tier = rankIndex(rank) * 5 + (quality - 1);
+    if (tier >= 49) break; // SSS5 = tier max absolu
+    const nextRankIdx = Math.floor((tier + 1) / 5);
+    if (nextRankIdx > maxRankIndex) break; // rang cible non débloqué par l'Incubateur
+    const cost = tierStepCost(tier);
+    if (fxp < cost) break;
+    fxp -= cost;
+    const oldMult = RARITY_MULT[rank] * starQualityMult(quality);
+    rank = RANK_ORDER[nextRankIdx]!;
+    quality = ((tier + 1) % 5) + 1;
+    const ratio = (RARITY_MULT[rank] * starQualityMult(quality)) / oldMult;
+    effVal = Math.max(1, Math.round(effVal * ratio));
+    if (eff2Val != null) eff2Val = Math.max(1, Math.round(eff2Val * ratio));
+  }
+  return {
+    ...fam,
+    rarity: rank,
+    roll: (quality - 0.5) / 5,
+    fxp,
+    effect: { ...fam.effect, value: effVal },
+    ...(fam.effect2 && eff2Val != null ? { effect2: { ...fam.effect2, value: eff2Val } } : {}),
   };
 }
 

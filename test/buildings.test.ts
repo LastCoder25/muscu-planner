@@ -86,7 +86,12 @@ describe('buildings — production', () => {
   });
   it('type inconnu → prod 0 (robustesse)', () => {
     expect(buildingProdPerHour(mk('inexistant', 5))).toBe(0);
-    expect(collectable([mk('inexistant', 5)], 100 * H)).toEqual({ dust: 0, stone: 0, energy: 0 });
+    expect(collectable([mk('inexistant', 5)], 100 * H)).toEqual({
+      dust: 0,
+      stone: 0,
+      energy: 0,
+      parchemins: 0,
+    });
   });
 });
 
@@ -141,7 +146,7 @@ describe('buildings — Entrepôt : effet stockage global', () => {
     const base = collectable([dust], now).dust;
     const boosted = collectable([dust, wh], now).dust;
     expect(boosted).toBeGreaterThan(base); // stockage plus grand → plus récolté à saturation
-    expect(collectable([wh], now)).toEqual({ dust: 0, stone: 0, energy: 0 }); // l'entrepôt ne produit rien
+    expect(collectable([wh], now)).toEqual({ dust: 0, stone: 0, energy: 0, parchemins: 0 }); // l'entrepôt ne produit rien
   });
 });
 
