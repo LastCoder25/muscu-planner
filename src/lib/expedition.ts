@@ -39,7 +39,8 @@ export interface ExpeditionOutcome {
   dust: number;
   energy: number; // ⚡ énergie de jeu (mines uniquement) → crédite login_energy
   stones: number; // pierres magiques 💎 (ressource rare des familiers)
-  item: Omit<Item, 'id'> | null; // la « prise » (pièce de set / objet) ou null
+  item: Omit<Item, 'id'> | null; // la « prise » principale (pièce de set / objet) ou null
+  items?: Omit<Item, 'id'>[]; // ARÈNE : plusieurs objets (1 par palier de vagues) ; `item` = le 1er
   key: number; // clé de Labyrinthe (consolation rare)
   reconBonus: number; // +fraction de réussite au prochain essai (échec)
   waves?: number; // 'arena' uniquement : nombre de vagues tenues
@@ -71,6 +72,7 @@ export interface ExpeditionMessage {
   stones: number;
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
+  itemCount?: number; // ARÈNE : nombre total d'objets ramenés (> 1) — le reste va au sac
   key: number;
   waves?: number; // 'arena' : vagues tenues
   resolvedAt: number; // ms epoch (midAt)
@@ -92,6 +94,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     energy: o.energy,
     stones: o.stones,
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
+    ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
     key: o.key,
     ...(o.waves !== undefined ? { waves: o.waves } : {}),
     resolvedAt: exp.midAt,
@@ -399,17 +402,24 @@ export function resolveOutcome(
     // longtemps devient une VRAIE grosse paie de ressources → justifie la dépense d'or.
     const dust = Math.round((20 + waves * 15) * tfA);
     const stones = Math.round((8 + waves * 5) * tfA);
-    // Objet dès 3 vagues, qualité/chance croissantes ; un long run lâche du haut niveau.
-    const item =
-      waves >= 3
-        ? rollDrop(rng, { cleared: true, defeated: 1, level: poi.level, luck: Math.min(0.9, 0.35 + waves * 0.05), spread: 0 })
-        : null;
+    // BUTIN MULTIPLE (2026‑08‑18) : l'arène (gauntlet de survie) lâche PLUSIEURS objets
+    // — 1 par palier de 5 vagues (3-9 vagues → 1, 10-14 → 2, … plafonné à 5) — la
+    // qualité montant avec les vagues + le rang de l'objet. Seule source de « tas de loot ».
+    const nItems = waves >= 3 ? Math.min(5, Math.max(1, Math.floor(waves / 5))) : 0;
+    const items: Omit<Item, 'id'>[] = [];
+    for (let i = 0; i < nItems; i++) {
+      const d = rollDrop(rng, {
+        cleared: true, defeated: 1, level: poi.level,
+        luck: Math.min(0.95, 0.35 + waves * 0.05 + i * 0.04), spread: 0,
+      });
+      if (d) items.push(d);
+    }
     const key = rng() < Math.min(0.4, waves * 0.03) ? 1 : 0;
     const text =
       waves === 0
         ? pick(rng, FAIL_TEXT.arena)
         : `🏟️ ${waves} vague${waves > 1 ? 's' : ''} tenue${waves > 1 ? 's' : ''} !${good ? ' La foule est en délire.' : ''}`;
-    return { win: good, gold, dust, energy: 0, stones, item, key, reconBonus: 0, waves, text };
+    return { win: good, gold, dust, energy: 0, stones, item: items[0] ?? null, items, key, reconBonus: 0, waves, text };
   }
 
   // Mine = récolte (pas de combat) ; camp/repaire = combat auto seedé.

@@ -842,8 +842,12 @@ export const useCharacterStore = defineStore('character', () => {
     const exp = cur?.expedition;
     if (!cur || !exp || now < exp.returnAt) return null;
     const o = exp.outcome;
-    const gained = o.item ? { ...o.item, id: crypto.randomUUID() } : null;
-    const inventory = gained ? [...cur.inventory, gained] : cur.inventory;
+    // Objets ramenés : l'arène en rend PLUSIEURS (o.items) ; les autres POI un seul (o.item).
+    const drops = (o.items && o.items.length ? o.items : o.item ? [o.item] : []).map((it) => ({
+      ...it,
+      id: crypto.randomUUID(),
+    }));
+    const inventory = drops.length ? [...cur.inventory, ...drops] : cur.inventory;
     // Si le rapport n'a jamais été déposé (app fermée tout du long), on le dépose aussi.
     const messages = exp.reported
       ? cur.messages
@@ -856,7 +860,7 @@ export const useCharacterStore = defineStore('character', () => {
       keys: cur.keys + o.key,
       inventory,
       messages,
-      set_pieces_seen: gained ? mergeSetSeen(cur.set_pieces_seen, [gained]) : cur.set_pieces_seen,
+      set_pieces_seen: drops.length ? mergeSetSeen(cur.set_pieces_seen, drops) : cur.set_pieces_seen,
       expedition: null,
     });
     return o;

@@ -318,7 +318,7 @@
           <span v-if="lastOutcome.dust">✨ +{{ lastOutcome.dust }}</span>
           <span v-if="lastOutcome.stones">💎 +{{ lastOutcome.stones }}</span>
           <span v-if="lastOutcome.key">🗝️ +{{ lastOutcome.key }}</span>
-          <span v-if="lastOutcome.item" class="coll-item">🎁 {{ lastOutcome.item.name }}</span>
+          <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item">🎁 {{ it.name }}</span>
         </div>
         <q-btn color="primary" text-color="dark" no-caps unelevated label="Super" @click="collectOpen = false" />
       </q-card>
@@ -524,6 +524,12 @@ const edgeIndicators = computed(() => {
 const selected = ref<Poi | null>(null);
 const collectOpen = ref(false);
 const lastOutcome = ref<ExpeditionOutcome | null>(null);
+// Objets ramenés (l'arène en rend PLUSIEURS via `items`, les autres un seul via `item`).
+const lastOutcomeItems = computed(() => {
+  const o = lastOutcome.value;
+  if (!o) return [];
+  return o.items && o.items.length ? o.items : o.item ? [o.item] : [];
+});
 
 // ── Filons de production (village autour de la ville) ──
 const PLOT_R = 22; // rayon des emplacements autour de la ville (< distMin des POI)
@@ -719,7 +725,7 @@ const roundTripMin = (p: Poi) => Math.round(travelOneWayMin(p.level, p.distNorm)
 function poiRewardLabel(p: Poi): string {
   if (p.type === 'mine') return 'Or + poussière (récolte)';
   if (p.type === 'camp') return 'Poussière + un objet';
-  if (p.type === 'arena') return 'Survie par vagues — butin ∝ vagues 🌊';
+  if (p.type === 'arena') return 'Survie par vagues — PLUSIEURS objets + poussière ∝ vagues 🌊';
   return 'Pièce de set garantie sur réussite 🧩';
 }
 
@@ -769,14 +775,18 @@ async function lifecycle() {
     if (o) {
       lastOutcome.value = o;
       collectOpen.value = true;
-      // Butin d'expédition légendaire/divin → éclat central (gros moment).
-      if (o.item && (o.item.rarity === 'legendary' || o.item.rarity === 'divin'))
+      // Butin d'expédition légendaire/divin → éclat central (gros moment). L'arène peut
+      // en ramener plusieurs → on célèbre le PLUS RARE.
+      const drops = o.items && o.items.length ? o.items : o.item ? [o.item] : [];
+      const rank = (r: string) => ['common', 'rare', 'epic', 'legendary', 'divin'].indexOf(r);
+      const top = drops.slice().sort((a, b) => rank(b.rarity) - rank(a.rarity))[0];
+      if (top && (top.rarity === 'legendary' || top.rarity === 'divin'))
         gameFx.celebrate({
           kind: 'drop',
-          emoji: o.item.emoji,
-          title: o.item.rarity === 'divin' ? 'DROP DIVIN !' : 'Butin légendaire !',
-          subtitle: o.item.name,
-          rarity: o.item.rarity,
+          emoji: top.emoji,
+          title: top.rarity === 'divin' ? 'DROP DIVIN !' : 'Butin légendaire !',
+          subtitle: drops.length > 1 ? `${top.name} (+${drops.length - 1} autre${drops.length > 2 ? 's' : ''})` : top.name,
+          rarity: top.rarity,
         });
     }
     await char.expeSyncMap(uid, Date.now(), heroLevel.value);

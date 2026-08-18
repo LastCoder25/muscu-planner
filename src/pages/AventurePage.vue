@@ -1248,6 +1248,9 @@
                     · Nv {{ m.item.level }} · {{ SLOT_LABEL[m.item.slot] }}
                   </div>
                   <div class="im-loot-eff">{{ itemEffects(m.item) }}</div>
+                  <div v-if="m.itemCount && m.itemCount > 1" class="im-loot-more">
+                    🎁 +{{ m.itemCount - 1 }} autre{{ m.itemCount - 1 > 1 ? 's' : '' }} objet{{ m.itemCount - 1 > 1 ? 's' : '' }} au sac
+                  </div>
                 </div>
               </div>
               <span v-else-if="m.itemName" class="im-item">🎁 {{ m.itemName }}</span>
@@ -5840,6 +5843,11 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--accent);
   margin-top: 2px;
+}
+.im-loot-more {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-top: 3px;
 }
 .expe-card {
   display: flex;
