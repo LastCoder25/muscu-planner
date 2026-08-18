@@ -368,12 +368,10 @@ export function useProgress() {
       if (key.startsWith('sport:')) return sportBenefit(key.slice('sport:'.length));
       return null; // crossfit/hyrox/mobilité/prépa → n'alimentent pas les stats du perso
     };
-    // Ordre : MUSCU puis CARDIO en tête (les 2 piliers du perso), le reste par récence.
-    const tilePrio = (key: string) =>
-      key === 'disc:musculation' ? 0 : key.startsWith('cardio:') ? 1 : 2;
+    // Ordre : par NIVEAU décroissant (le sport le plus poussé en tête), récence en départage.
     return [...map.values()]
       .map((t) => ({ ...t, level: computeLevel(t.minutes), sig: tileSig(t.key) }))
-      .sort((a, b) => tilePrio(a.key) - tilePrio(b.key) || b.ts - a.ts);
+      .sort((a, b) => b.level.level - a.level.level || b.ts - a.ts);
   });
 
   // Séances normalisées (pour les Trophées : records + paliers par sport).

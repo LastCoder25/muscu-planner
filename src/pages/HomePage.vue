@@ -131,14 +131,25 @@
             @click="goSport(t.key)"
           >
             <span class="mt-strip" />
-            <span class="mt-ic-wrap"><q-icon :name="t.icon" size="26px" class="mt-ic" /></span>
-            <span class="mt-name font-display">{{ t.label }}</span>
-            <span class="mt-lvl">Niv. {{ t.level.level }}</span>
-            <span v-if="t.sig" class="mt-sig">{{ sigLabel(t.sig) }}</span>
-            <span class="mt-bar">
-              <span class="mt-fill" :style="{ width: t.level.progressPct + '%' }" />
-              <span class="mt-bar-txt">{{ t.level.progressPct }}%</span>
+            <!-- Anneau d'XP : progression vers le niveau suivant, icône du sport au centre. -->
+            <span class="mt-ring">
+              <svg viewBox="0 0 40 40" aria-hidden="true">
+                <circle class="mtr-track" cx="20" cy="20" r="17" pathLength="100" />
+                <circle
+                  class="mtr-arc"
+                  cx="20"
+                  cy="20"
+                  r="17"
+                  pathLength="100"
+                  transform="rotate(-90 20 20)"
+                  :stroke-dasharray="`${t.level.progressPct} 100`"
+                />
+              </svg>
+              <q-icon :name="t.icon" size="24px" class="mt-ic" />
             </span>
+            <span class="mt-name font-display">{{ t.label }}</span>
+            <span class="mt-lvl">Niv. {{ t.level.level }} · {{ t.level.progressPct }}%</span>
+            <span v-if="t.sig" class="mt-sig">{{ sigLabel(t.sig) }}</span>
           </button>
         </div>
       </div>
@@ -1225,15 +1236,31 @@ async function saveAutre() {
   height: 4px;
   background: var(--c);
 }
-.mt-ic-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
+/* Anneau d'XP : icône du sport au centre, arc de progression autour. */
+.mt-ring {
+  position: relative;
+  width: 60px;
+  height: 60px;
   margin-top: 4px;
-  background: color-mix(in srgb, var(--c) 16%, transparent);
+  display: grid;
+  place-items: center;
+}
+.mt-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.mtr-track {
+  fill: none;
+  stroke: color-mix(in srgb, var(--c) 20%, var(--line));
+  stroke-width: 3;
+}
+.mtr-arc {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 3;
+  stroke-linecap: round;
 }
 .mt-ic {
   color: var(--c);
@@ -1254,38 +1281,5 @@ async function saveAutre() {
   color: var(--dim);
   letter-spacing: 0.2px;
   white-space: nowrap;
-}
-.mt-bar {
-  position: relative;
-  width: 100%;
-  height: 15px;
-  border-radius: 999px;
-  background: var(--line);
-  overflow: hidden;
-  margin-top: 4px;
-}
-.mt-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  border-radius: 999px;
-  background: var(--c);
-}
-/* Volume d'heures faites / requises pour le niveau suivant, DANS la barre.
-   mix-blend-mode: difference → lisible aussi bien sur le remplissage que sur le fond. */
-.mt-bar-txt {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: #fff;
-  mix-blend-mode: difference;
 }
 </style>
