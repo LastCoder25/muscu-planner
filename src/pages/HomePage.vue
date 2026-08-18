@@ -71,22 +71,8 @@
         @click="openPicker"
       />
 
-      <div v-if="statTotal > 0" class="stat-balance">
-        <div class="sb-head">Ton équilibre</div>
-        <div class="sb-bar">
-          <span class="sb-seg pow" :style="{ flexGrow: progress.powerXp.value }" />
-          <span class="sb-seg end" :style="{ flexGrow: progress.enduranceXp.value }" />
-          <span class="sb-seg agi" :style="{ flexGrow: progress.agilityXp.value }" />
-        </div>
-        <div class="sb-legend">
-          <span class="sb-l pow">💪 Force {{ statPct(progress.powerXp.value) }}%</span>
-          <span class="sb-l end">❤️ Endurance {{ statPct(progress.enduranceXp.value) }}%</span>
-          <span class="sb-l agi">⚡ Agilité {{ statPct(progress.agilityXp.value) }}%</span>
-        </div>
-      </div>
-
-      <!-- Piliers Force & Endurance : niveaux des BÉNÉFICES de tout ton sport, en
-           CERCLES (anneau = progression, chiffre au centre = niveau). -->
+      <!-- Force / Endurance / Agilité : 3 CERCLES sur une ligne (anneau = progression,
+           chiffre au centre = niveau). Ni points ni tendance. -->
       <div v-if="statTotal > 0" class="pillars">
         <button
           v-for="p in pillars"
@@ -113,10 +99,6 @@
             </svg>
           </span>
           <span class="pl-name font-display">{{ p.emoji }} {{ p.name }}</span>
-          <span class="pl-pts">{{ p.pts.toLocaleString('fr-FR') }} pts</span>
-          <span v-if="p.d30 > 0" class="pl-trend"
-            >↑ +{{ p.d30.toLocaleString('fr-FR') }} · 30 j</span
-          >
         </button>
       </div>
 
@@ -133,7 +115,8 @@
             @click="goSport(t.key)"
           >
             <span class="mt-strip" />
-            <!-- Anneau d'XP : progression vers le niveau suivant, icône du sport au centre. -->
+            <!-- Anneau d'XP : progression vers le niveau suivant ; au centre le LOGO du
+                 sport + le NIVEAU (pas de %). -->
             <span class="mt-ring">
               <svg viewBox="0 0 40 40" aria-hidden="true">
                 <circle class="mtr-track" cx="20" cy="20" r="17" pathLength="100" />
@@ -147,10 +130,12 @@
                   :stroke-dasharray="`${t.level.progressPct} 100`"
                 />
               </svg>
-              <q-icon :name="t.icon" size="24px" class="mt-ic" />
+              <span class="mt-ring-in">
+                <q-icon :name="t.icon" size="17px" class="mt-ic" />
+                <span class="mt-lvl-in font-display">{{ t.level.level }}</span>
+              </span>
             </span>
             <span class="mt-name font-display">{{ t.label }}</span>
-            <span class="mt-lvl">Niv. {{ t.level.level }} · {{ t.level.progressPct }}%</span>
             <span v-if="t.sig" class="mt-sig">{{ sigLabel(t.sig) }}</span>
           </button>
         </div>
@@ -451,28 +436,14 @@ function pickAutre() {
 const statTotal = computed(
   () => progress.powerXp.value + progress.enduranceXp.value + progress.agilityXp.value,
 );
-// Piliers Force / Endurance (cercles) : niveau + points cumulés + tendance 30 j.
+// Piliers Force / Endurance / Agilité (3 cercles) : anneau = progression, chiffre au
+// centre = niveau. Sur une seule ligne, sans points ni tendance (tickets 0bc608f8 /
+// a6c11b49 : on remplace la barre de répartition par ces cercles).
 const pillars = computed(() => [
-  {
-    key: 'pow',
-    name: 'Force',
-    emoji: '💪',
-    lvl: progress.force.value,
-    pts: progress.powerXp.value,
-    d30: progress.force30.value,
-  },
-  {
-    key: 'end',
-    name: 'Endurance',
-    emoji: '❤️',
-    lvl: progress.endurance.value,
-    pts: progress.enduranceXp.value,
-    d30: progress.endurance30.value,
-  },
+  { key: 'pow', name: 'Force', emoji: '💪', lvl: progress.force.value },
+  { key: 'end', name: 'Endurance', emoji: '❤️', lvl: progress.endurance.value },
+  { key: 'agi', name: 'Agilité', emoji: '⚡', lvl: progress.agility.value },
 ]);
-function statPct(v: number): number {
-  return statTotal.value > 0 ? Math.round((v / statTotal.value) * 100) : 0;
-}
 // Bénéfices BRUTS du sport (vecteur non normalisé) → « 💪60 ❤️30 ⚡10 » (parts non
 // nulles). La somme = intensité (varie selon le sport), plus de normalisation à 100.
 function sigLabel(sig: { power: number; endurance: number; agility: number }): string {
@@ -883,61 +854,11 @@ async function saveAutre() {
   font-size: 13px;
   margin-top: 4px;
 }
-.stat-balance {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin-bottom: 18px;
-}
-.sb-head {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--dim);
-  margin-bottom: 8px;
-}
-.sb-bar {
-  display: flex;
-  height: 10px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: var(--surface-2, #2b241b);
-}
-.sb-seg {
-  min-width: 2px;
-}
-.sb-seg.pow {
-  background: #ff6a45;
-}
-.sb-seg.end {
-  background: #7bc86c;
-}
-.sb-seg.agi {
-  background: #ffd23f;
-}
-.sb-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 8px;
-  font-size: 11.5px;
-  font-weight: 600;
-}
-.sb-l.pow {
-  color: #ff6a45;
-}
-.sb-l.end {
-  color: #7bc86c;
-}
-.sb-l.agi {
-  color: #ffd23f;
-}
-/* Piliers Force / Endurance : 2 CERCLES (anneau = progression, niveau au centre). */
+/* Force / Endurance / Agilité : 3 CERCLES sur une ligne (anneau = progression). */
 .pillars {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
   margin-bottom: 18px;
 }
 .pillar {
@@ -961,9 +882,12 @@ async function saveAutre() {
 .pillar.end {
   --pc: #7bc86c;
 }
+.pillar.agi {
+  --pc: #ffd23f;
+}
 .pl-ring {
-  width: 84px;
-  height: 84px;
+  width: 66px;
+  height: 66px;
 }
 .pl-ring svg {
   width: 100%;
@@ -986,22 +910,9 @@ async function saveAutre() {
   fill: var(--text);
 }
 .pl-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--pc);
-}
-.pl-pts {
-  font-size: 10.5px;
-  color: var(--dim);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.pl-trend {
-  font-size: 10.5px;
-  color: var(--pc);
-  font-weight: 700;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
 .tile-group {
   margin-bottom: 18px;
@@ -1264,19 +1175,27 @@ async function saveAutre() {
   stroke-width: 3;
   stroke-linecap: round;
 }
+/* Contenu centré de l'anneau : logo du sport + niveau. */
+.mt-ring-in {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+  gap: 1px;
+}
 .mt-ic {
   color: var(--c);
+}
+.mt-lvl-in {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
 }
 .mt-name {
   font-weight: 700;
   font-size: 14px;
   letter-spacing: 0.3px;
-}
-.mt-lvl {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--dim);
 }
 .mt-sig {
   font-size: 10px;

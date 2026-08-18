@@ -449,6 +449,7 @@ export function useProgress() {
     // Piliers Force / Endurance = niveaux des réservoirs (bénéfices de TOUT le sport).
     force: computed(() => computeLevel(Math.round(statBuckets.value.power))),
     endurance: computed(() => computeLevel(Math.round(statBuckets.value.endurance))),
+    agility: computed(() => computeLevel(Math.round(statBuckets.value.agility))),
     // Tendance ~30 j (indicative, sources datées) → « ce chiffre évolue au fil du temps ».
     force30: computed(() => Math.round(buckets30.value.power)),
     endurance30: computed(() => Math.round(buckets30.value.endurance)),
