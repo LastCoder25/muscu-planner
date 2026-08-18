@@ -1106,6 +1106,15 @@
           Un boss tous les 5 niveaux — chacun lâche une pièce de son <b>set</b> unique. Débloqués en
           chaîne (bats le précédent).
         </div>
+        <!-- Prérequis : les boss exigent l'Autel des boss (bâtiment) → CTA « où aller ». -->
+        <button v-if="!hasBossAltar" class="boss-gate-cta" @click="router.push('/expedition-map')">
+          <span class="bg-emo">🔮</span>
+          <span class="bg-txt">
+            <b>Les boss sont verrouillés</b> — construis l’<b>Autel des boss</b> sur la carte
+            d’expédition pour les affronter.
+          </span>
+          <span class="bg-go">Aller à la carte →</span>
+        </button>
         <div class="dungeons">
           <div
             v-for="b in bossChain"
@@ -1150,7 +1159,16 @@
             >
               ⚔️ {{ isBossBeaten(b) ? 'Réaffronter' : 'Combattre' }} ({{ b.energyCost }} ⚡)
             </button>
-            <button v-else class="fight mboss-fight" disabled>🔒 Verrouillé</button>
+            <!-- Verrouillé par l'Autel manquant → bouton qui EMMÈNE le construire. -->
+            <button
+              v-else-if="!hasBossAltar"
+              class="fight mboss-fight lock-go"
+              @click="router.push('/expedition-map')"
+            >
+              🔮 Construire l’Autel →
+            </button>
+            <!-- Verrouillé par la chaîne → on dit quel boss battre d'abord (juste au-dessus). -->
+            <button v-else class="fight mboss-fight" disabled>🔒 {{ bossLockReason(b) }}</button>
           </div>
         </div>
       </template>
@@ -6337,6 +6355,52 @@ onUnmounted(() => {
 .mboss-fight {
   padding: 11px;
   font-size: 14px;
+}
+/* Bouton d'un boss verrouillé PAR L'AUTEL : actionnable (emmène le construire). */
+.lock-go {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  color: var(--accent);
+  cursor: pointer;
+}
+.lock-go:active {
+  transform: scale(0.98);
+}
+/* Bandeau « où aller » en tête de l'onglet Boss quand l'Autel manque. */
+.boss-gate-cta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  margin: 2px 0 10px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--text);
+  cursor: pointer;
+}
+.boss-gate-cta:active {
+  transform: scale(0.99);
+}
+.boss-gate-cta .bg-emo {
+  font-size: 22px;
+  line-height: 1;
+  flex: none;
+}
+.boss-gate-cta .bg-txt {
+  flex: 1;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.boss-gate-cta .bg-go {
+  flex: none;
+  align-self: center;
+  font-weight: 800;
+  font-size: 11.5px;
+  color: var(--accent);
+  white-space: nowrap;
 }
 /* Faille sans fin : teinte « néant » violette pour la distinguer des boss */
 .mboss.endless {
