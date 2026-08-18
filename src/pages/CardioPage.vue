@@ -1,5 +1,5 @@
 <template>
-  <q-page class="cardio-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="cardio-page" :class="{ embedded }">
     <h1 class="page-title font-display">Cardio</h1>
     <p class="page-sub text-dim">Marche, rando, course, trail, vélo…</p>
 
@@ -171,10 +171,11 @@
         </button>
       </div>
     </section>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -437,6 +438,9 @@ function remove(id: string) {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 32px;
+}
+.cardio-page.embedded {
+  min-height: 0;
 }
 .page-title {
   font-size: 30px;

@@ -1,5 +1,5 @@
 <template>
-  <q-page class="agenda-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="agenda-page" :class="{ embedded }">
     <h1 class="page-title font-display">Agenda</h1>
     <div class="week-nav">
       <button class="wk-btn" aria-label="Semaine précédente" @click="weekOffset--">‹</button>
@@ -43,10 +43,11 @@
         </div>
       </div>
     </template>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted } from 'vue';
 import { useLogsStore } from '@/stores/logs';
 import { useTennisStore } from '@/stores/tennis';
@@ -250,6 +251,9 @@ onMounted(async () => {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 32px;
+}
+.agenda-page.embedded {
+  min-height: 0;
 }
 .page-title {
   font-size: 30px;

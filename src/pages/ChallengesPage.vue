@@ -1,5 +1,5 @@
 <template>
-  <q-page class="ch-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="ch-page" :class="{ embedded }">
     <div class="head">
       <div class="head-left">
         <h1 class="p-title font-display">Challenges</h1>
@@ -460,10 +460,11 @@
         </div>
       </q-card>
     </q-dialog>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -814,6 +815,9 @@ onMounted(async () => {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 32px;
+}
+.ch-page.embedded {
+  min-height: 0;
 }
 .head {
   display: flex;

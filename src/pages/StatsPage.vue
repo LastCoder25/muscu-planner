@@ -1,5 +1,5 @@
 <template>
-  <q-page class="stats-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="stats-page" :class="{ embedded }">
     <h1 class="p-title font-display">Statistiques</h1>
 
     <div v-if="loading" class="column items-center q-mt-xl">
@@ -293,10 +293,11 @@
         </div>
       </template>
     </template>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -551,6 +552,9 @@ onMounted(async () => {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 32px;
+}
+.stats-page.embedded {
+  min-height: 0;
 }
 /* Niveaux (global + pistes) */
 .lvl-note {

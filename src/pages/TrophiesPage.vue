@@ -1,5 +1,5 @@
 <template>
-  <q-page class="tr-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="tr-page" :class="{ embedded }">
     <h1 class="page-title font-display">Trophées</h1>
     <p class="page-sub">
       {{ counts.unlocked }} / {{ counts.total }} débloqués · records &amp; paliers par sport
@@ -70,10 +70,11 @@
         </div>
       </section>
     </template>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { computed } from 'vue';
 import { useProgress } from '@/composables/useProgress';
 import {
@@ -113,6 +114,9 @@ function sportEmoji(cat: SportCategory, hasDistance: boolean): string {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px calc(40px + env(safe-area-inset-bottom, 0px));
+}
+.tr-page.embedded {
+  min-height: 0;
 }
 .page-title {
   font-size: 30px;

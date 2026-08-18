@@ -1,5 +1,5 @@
 <template>
-  <q-page class="fx-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="fx-page" :class="{ embedded }">
     <h1 class="page-title font-display">Calculs XP & énergie</h1>
     <p class="page-sub">
       Vue d'ensemble admin. Les constantes sont lues depuis le code (source de vérité) — si un
@@ -214,10 +214,11 @@
     </section>
 
     <div class="fx-foot">Page réservée à l'administrateur.</div>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { computed } from 'vue';
 import { REP_XP, MUSCU_MIN_XP, XP_MULT } from '@/lib/athlete';
 import { LOGIN, streakBaseEnergy } from '@/lib/loginStreak';
@@ -294,6 +295,9 @@ const streakTable = computed(() =>
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 40px;
+}
+.fx-page.embedded {
+  min-height: 0;
 }
 .page-title {
   font-size: 28px;

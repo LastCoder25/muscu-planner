@@ -1,5 +1,5 @@
 <template>
-  <q-page class="lb-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="lb-page" :class="{ embedded }">
     <h1 class="page-title font-display">Classement</h1>
     <p class="page-sub text-dim">
       Le niveau global de chaque aventurier — « sur l'honneur ». Fais du sport pour grimper 💪
@@ -56,10 +56,11 @@
         <span class="lvl font-display">Niv {{ levelOf(myRow) }}</span>
       </div>
     </div>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted, watch } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
@@ -133,6 +134,9 @@ watch(
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px calc(96px + env(safe-area-inset-bottom, 0px));
+}
+.lb-page.embedded {
+  min-height: 0;
 }
 .page-title {
   font-size: 30px;

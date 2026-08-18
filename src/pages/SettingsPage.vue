@@ -1,5 +1,5 @@
 <template>
-  <q-page class="settings-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="settings-page" :class="{ embedded }">
     <h1 class="p-title font-display">Paramètres</h1>
 
     <!-- Apparence -->
@@ -60,10 +60,11 @@
       class="full-width q-mt-md"
       @click="logout"
     />
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -109,6 +110,9 @@ async function logout() {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 40px;
+}
+.settings-page.embedded {
+  min-height: 0;
 }
 .p-title {
   font-size: 28px;

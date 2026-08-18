@@ -1,5 +1,5 @@
 <template>
-  <q-page class="muscu-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="muscu-page" :class="{ embedded }">
     <h1 class="page-title font-display">Muscu</h1>
     <p class="page-sub text-dim">Séance libre, import IA ou ton programme.</p>
 
@@ -129,10 +129,11 @@
       </div>
       <!-- Les défis ne sont PAS listés ici (doublon) : ils ont leur écran dédié (Challenges). -->
     </template>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx } from '@/composables/useXpFx';
@@ -356,6 +357,9 @@ onMounted(() => {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 32px;
+}
+.muscu-page.embedded {
+  min-height: 0;
 }
 .page-title {
   font-size: 30px;

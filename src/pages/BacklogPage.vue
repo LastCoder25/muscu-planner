@@ -1,5 +1,5 @@
 <template>
-  <q-page class="backlog-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="backlog-page" :class="{ embedded }">
     <div class="head">
       <h1 class="p-title font-display">Backlog</h1>
       <q-btn
@@ -123,10 +123,11 @@
         />
       </div>
     </q-dialog>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -269,6 +270,9 @@ onMounted(async () => {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 32px;
+}
+.backlog-page.embedded {
+  min-height: 0;
 }
 .head {
   display: flex;

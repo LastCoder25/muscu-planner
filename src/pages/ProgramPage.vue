@@ -1,5 +1,5 @@
 <template>
-  <q-page class="program-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="program-page" :class="{ embedded }">
     <header class="row items-center justify-between q-mb-md">
       <h1 class="prog-title font-display">Mon programme</h1>
       <span class="text-dim text-caption"
@@ -44,10 +44,11 @@
         Régénérer mon programme
       </button>
     </template>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -97,6 +98,9 @@ async function goProfile() {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 32px;
+}
+.program-page.embedded {
+  min-height: 0;
 }
 .prog-title {
   font-size: 26px;

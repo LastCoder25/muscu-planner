@@ -1,5 +1,5 @@
 <template>
-  <q-page class="body-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="body-page" :class="{ embedded }">
     <h1 class="p-title font-display">Suivi corporel</h1>
 
     <!-- Fréquence de saisie -->
@@ -242,10 +242,11 @@
     <div v-else-if="!loading" class="empty">
       Aucune saisie pour l’instant. Note ta première mesure ci-dessus.
     </div>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -604,6 +605,9 @@ onMounted(async () => {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 40px;
+}
+.body-page.embedded {
+  min-height: 0;
 }
 .p-title {
   font-size: 28px;

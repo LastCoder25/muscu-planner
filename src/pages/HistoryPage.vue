@@ -1,5 +1,5 @@
 <template>
-  <q-page class="hist-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="hist-page" :class="{ embedded }">
     <h1 class="p-title font-display">Historique</h1>
 
     <div v-if="loading" class="column items-center q-mt-xl">
@@ -37,10 +37,11 @@
         </div>
       </div>
     </template>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -110,6 +111,9 @@ onMounted(async () => {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 32px;
+}
+.hist-page.embedded {
+  min-height: 0;
 }
 .p-title {
   font-size: 28px;

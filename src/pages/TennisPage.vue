@@ -1,5 +1,5 @@
 <template>
-  <q-page class="tennis-page">
+  <component :is="embedded ? 'div' : 'q-page'" class="tennis-page" :class="{ embedded }">
     <h1 class="page-title font-display">Tennis</h1>
     <p class="page-sub text-dim">Enregistre tes séances, tes drills et ta prépa physique.</p>
 
@@ -355,10 +355,11 @@
         <q-icon name="chevron_right" color="grey-6" size="20px" />
       </div>
     </section>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -648,6 +649,9 @@ function remove(id: string) {
   background: var(--bg);
   min-height: 100vh;
   padding: 20px 16px 32px;
+}
+.tennis-page.embedded {
+  min-height: 0;
 }
 .page-title {
   font-size: 30px;
