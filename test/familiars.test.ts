@@ -4,6 +4,7 @@ import {
   familiarStoneCost,
   isFamiliar,
   nextRarity,
+  rollStars,
   aggregateEffects,
   playerWithGear,
   effectiveValue,
@@ -44,6 +45,14 @@ describe('familiers — roll & identité', () => {
     for (const s of FAMILIAR_SPECIES) {
       const f = { id: 'x', ...rollFamiliar(mulberry32(7), s, { level: 3 }) };
       expect(f.effect.type).toBe(s.effect);
+    }
+  });
+  it('familier = rang + QUALITÉ (1→5) comme un objet (ticket f93c219b)', () => {
+    for (let s = 1; s <= 30; s++) {
+      const f = rollFamiliar(mulberry32(s), wolf, { level: 5 });
+      const stars = rollStars(f.roll);
+      expect(stars).toBeGreaterThanOrEqual(1);
+      expect(stars).toBeLessThanOrEqual(5);
     }
   });
   it('isFamiliar : faux pour un objet normal', () => {

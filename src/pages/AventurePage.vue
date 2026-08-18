@@ -507,6 +507,13 @@
                   <span class="gpill" :class="'p-' + equippedFamiliar.rarity">{{
                     RARITY_LABEL[equippedFamiliar.rarity]
                   }}</span>
+                  <span
+                    v-if="itemQuality(equippedFamiliar)"
+                    class="q-badge"
+                    :class="'q-' + itemQuality(equippedFamiliar)"
+                    title="Qualité (5 = meilleur)"
+                    >{{ itemQuality(equippedFamiliar) }}</span
+                  >
                   <span class="gpill lvl">Lvl {{ equippedFamiliar.level }}</span>
                   <span v-if="equippedFamiliar.effect2" class="gpill sig">✦ Signature</span>
                 </div>
@@ -546,6 +553,13 @@
                   <div class="fam-mini-head">
                     <span class="fam-mini-name">{{ f.name }}</span>
                     <span class="gpill" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
+                    <span
+                      v-if="itemQuality(f)"
+                      class="q-badge"
+                      :class="'q-' + itemQuality(f)"
+                      title="Qualité (5 = meilleur)"
+                      >{{ itemQuality(f) }}</span
+                    >
                     <span class="gpill lvl">Lv{{ f.level }}</span>
                     <span v-if="f.effect2" class="gpill sig">✦</span>
                   </div>
@@ -563,23 +577,34 @@
             <!-- Incubateur : fusion 3 familiers de même rareté → 1 de la rareté au-dessus.
                Débloqué en construisant l'INCUBATEUR sur la carte (plus de gate de niveau). -->
             <div v-if="hasIncubator" class="fam-incub">
-              <div class="fam-bag-title">🥚 Incubateur — fusion</div>
+              <div class="fam-bag-title">🥚 Incubateur niv.{{ incubLevel }} — fusion</div>
               <div class="fam-incub-hint">
-                Fusionne <b>3 familiers de même rareté</b> → 1 aléatoire de la rareté juste
-                au-dessus.
+                Fusionne <b>3 familiers de même rang</b> → 1 aléatoire du rang au-dessus. Fusion
+                débloquée jusqu'à
+                <b class="ii-rar" :class="'p-' + RANK_ORDER[fuseMaxIndex]">{{
+                  RANK_ORDER[fuseMaxIndex]
+                }}</b>
+                — monte l'Incubateur (+1 rang tous les 2 niveaux).
               </div>
               <div v-if="!fusableRarities.length" class="fam-incub-empty">
-                Il te faut au moins 3 familiers d'une même rareté (hors divin) au sac.
+                Il te faut au moins 3 familiers d'un même rang (hors SSS) au sac.
               </div>
               <button
                 v-for="fr in fusableRarities"
                 :key="fr.rarity"
                 class="fam-fuse-btn"
-                @click="doFuse(fr.rarity)"
+                :class="{ locked: !fr.unlocked }"
+                @click="fr.unlocked ? doFuse(fr.rarity) : router.push('/expedition-map')"
               >
-                Fusionner 3× <b :class="'p-' + fr.rarity">{{ RARITY_LABEL[fr.rarity] }}</b> →
-                <b :class="'p-' + fr.next">{{ RARITY_LABEL[fr.next] }}</b>
-                <span class="ff-have">({{ fr.count }} dispo)</span>
+                <template v-if="fr.unlocked">
+                  Fusionner 3× <b :class="'p-' + fr.rarity">{{ RARITY_LABEL[fr.rarity] }}</b> →
+                  <b :class="'p-' + fr.next">{{ RARITY_LABEL[fr.next] }}</b>
+                  <span class="ff-have">({{ fr.count }} dispo)</span>
+                </template>
+                <template v-else>
+                  🔒 Fusion vers <b :class="'p-' + fr.next">{{ RARITY_LABEL[fr.next] }}</b> —
+                  <b>Incubateur niv.{{ fr.reqLevel }}</b> requis →
+                </template>
               </button>
             </div>
             <button v-else class="fam-incub-locked" @click="router.push('/expedition-map')">
@@ -2127,6 +2152,9 @@ import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStre
 import { unlocksAtLevel } from '@/lib/advUnlocks';
 import {
   incubatorBuilt,
+  incubatorLevel,
+  maxFuseTargetIndex,
+  fuseUnlockLevel,
   labyrinthUnlocked,
   forgeBuilt,
   bossAltarBuilt,
@@ -3680,14 +3708,32 @@ function doUpgradeFamiliar(itemId: string) {
     'Montée du familier impossible.',
   );
 }
-// Incubateur : raretés du sac avec ≥ 3 familiers ET fusionnables (pas divin).
+// Niveau de l'Incubateur + rang cible max fusionnable (débloqué par niveau).
+const incubLevel = computed(() => incubatorLevel(char.row?.buildings ?? []));
+const fuseMaxIndex = computed(() => maxFuseTargetIndex(char.row?.buildings ?? []));
+// Incubateur : raretés du sac avec ≥ 3 familiers ET fusionnables (pas au rang max).
+// `unlocked` = le rang CIBLE est débloqué par le niveau de l'Incubateur (sinon on
+// affiche le niveau requis). `reqLevel` = niveau d'Incubateur pour débloquer.
 const fusableRarities = computed(() => {
   const byR = new Map<Rarity, number>();
   for (const f of bagFamiliars.value) byR.set(f.rarity, (byR.get(f.rarity) ?? 0) + 1);
-  const out: { rarity: Rarity; next: Rarity; count: number }[] = [];
+  const out: {
+    rarity: Rarity;
+    next: Rarity;
+    count: number;
+    unlocked: boolean;
+    reqLevel: number;
+  }[] = [];
   for (const [rarity, count] of byR) {
     const next = nextRarity(rarity);
-    if (count >= 3 && next) out.push({ rarity, next, count });
+    if (count >= 3 && next)
+      out.push({
+        rarity,
+        next,
+        count,
+        unlocked: RARITY_RANK[next] <= fuseMaxIndex.value,
+        reqLevel: fuseUnlockLevel(RARITY_RANK[next]),
+      });
   }
   return out.sort((a, b) => RARITY_RANK[a.rarity] - RARITY_RANK[b.rarity]);
 });
@@ -5134,6 +5180,12 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+/* Fusion vers un rang non encore débloqué par l'Incubateur : grisée, mène à la carte. */
+.fam-fuse-btn.locked {
+  border-color: var(--line);
+  color: var(--dim);
+  background: var(--surface);
 }
 .ff-have {
   margin-left: auto;

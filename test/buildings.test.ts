@@ -14,6 +14,8 @@ import {
   storageMult,
   expeditionsUnlocked,
   incubatorBuilt,
+  maxFuseTargetIndex,
+  fuseUnlockLevel,
   travelTimeMult,
   outpostLevel,
   BUILDING_TYPES,
@@ -153,6 +155,19 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
     expect(incubatorBuilt([])).toBe(false);
     expect(incubatorBuilt([mk('outpost', 3)])).toBe(false);
     expect(incubatorBuilt([mk('incubator', 1)])).toBe(true);
+  });
+  it('maxFuseTargetIndex : F (1) à la construction, +1 rang tous les 2 niveaux, SSS (9) au niv.16', () => {
+    expect(maxFuseTargetIndex([])).toBe(0); // pas d'incubateur → aucune fusion
+    expect(maxFuseTargetIndex([mk('incubator', 1)])).toBe(1); // F
+    expect(maxFuseTargetIndex([mk('incubator', 2)])).toBe(2); // E
+    expect(maxFuseTargetIndex([mk('incubator', 6)])).toBe(4); // C
+    expect(maxFuseTargetIndex([mk('incubator', 16)])).toBe(9); // SSS
+    expect(maxFuseTargetIndex([mk('incubator', 40)])).toBe(9); // plafonné
+  });
+  it('fuseUnlockLevel : niveau d’Incubateur requis pour fuser vers un rang', () => {
+    expect(fuseUnlockLevel(1)).toBe(1); // F : dès la construction
+    expect(fuseUnlockLevel(2)).toBe(2); // E
+    expect(fuseUnlockLevel(9)).toBe(16); // SSS
   });
   it('travelTimeMult < 1 et décroît avec le niveau (−1,5 %/niv, plancher −60 % au niv.40)', () => {
     expect(travelTimeMult([])).toBe(1);

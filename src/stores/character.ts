@@ -16,6 +16,8 @@ import {
   familiarStoneCost,
   isFamiliar,
   normRank,
+  nextRarity,
+  rankIndex,
   type Item,
   type ItemSlot,
   type Equipped,
@@ -49,6 +51,7 @@ import {
   collectable,
   expeditionsUnlocked,
   travelTimeMult,
+  maxFuseTargetIndex,
   type Building,
 } from '@/lib/buildings';
 import { rollFusedFamiliar } from '@/data/familiars';
@@ -587,9 +590,13 @@ export const useCharacterStore = defineStore('character', () => {
       .filter((i): i is Item => !!i);
     if (picked.length !== 3 || !picked.every(isFamiliar)) return;
     const rarity = picked[0]!.rarity;
-    if (!picked.every((f) => f.rarity === rarity)) return; // même rareté requise
+    if (!picked.every((f) => f.rarity === rarity)) return; // même rang requis
+    // Gate INCUBATEUR : le RANG CIBLE de la fusion doit être débloqué par le niveau de
+    // l'Incubateur (fusions supérieures = niveaux d'Incubateur plus hauts — ticket f93c219b).
+    const target = nextRarity(rarity);
+    if (!target || rankIndex(target) > maxFuseTargetIndex(cur.buildings)) return;
     const fused = rollFusedFamiliar(Math.random, rarity);
-    if (!fused) return; // divin → pas de fusion
+    if (!fused) return; // rang max → pas de fusion
     const idSet = new Set(ids);
     const inventory = [
       ...cur.inventory.filter((i) => !idSet.has(i.id)),

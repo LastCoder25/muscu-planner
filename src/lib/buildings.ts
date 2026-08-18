@@ -272,9 +272,25 @@ export function outpostLevel(buildings: Building[]): number {
 export function expeditionsUnlocked(buildings: Building[]): boolean {
   return outpostLevel(buildings) > 0;
 }
+/** Niveau de l'Incubateur posé (0 si aucun). */
+export function incubatorLevel(buildings: Building[]): number {
+  return buildings.find((b) => b.typeId === 'incubator')?.level ?? 0;
+}
 /** L'incubateur est-il construit ? → débloque la fusion des familiers. */
 export function incubatorBuilt(buildings: Building[]): boolean {
-  return buildings.some((b) => b.typeId === 'incubator');
+  return incubatorLevel(buildings) > 0;
+}
+/** Index de RANG max (0..9) qu'on peut FUSER selon le niveau de l'Incubateur : la
+ *  fusion vers F (index 1) dès la construction, puis +1 rang cible tous les 2 niveaux
+ *  → SSS (index 9) au niveau 16. Monter l'Incubateur débloque les fusions supérieures
+ *  (ticket f93c219b). 0 = pas d'incubateur (aucune fusion). */
+export function maxFuseTargetIndex(buildings: Building[]): number {
+  const lvl = incubatorLevel(buildings);
+  return lvl < 1 ? 0 : Math.min(9, 1 + Math.floor(lvl / 2));
+}
+/** Niveau d'Incubateur requis pour débloquer la fusion vers le rang d'index `idx`. */
+export function fuseUnlockLevel(idx: number): number {
+  return Math.max(1, 2 * (idx - 1));
 }
 /** La Forge est-elle construite ? → débloque l'Atelier (forge d'objet / de set). */
 export function forgeBuilt(buildings: Building[]): boolean {

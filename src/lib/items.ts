@@ -543,14 +543,18 @@ export function rollFamiliar(
   opts: { level: number; luck?: number; rarity?: Rarity },
 ): Omit<Item, 'id'> {
   const rarity = opts.rarity ?? rollRarity(rng, opts.luck ?? 0, opts.level);
-  const value = Math.max(1, Math.round(species.base * RARITY_MULT[rarity] * (0.8 + rng() * 0.4)));
+  // Les familiers ont désormais un RANG (G→SSS) ET une QUALITÉ (1→5) comme les objets
+  // → 50 tiers (ticket f93c219b). La qualité pilote la magnitude dans la bande du rang.
+  const quality = 1 + Math.floor(rng() * 5); // 1..5
+  const vf = starQualityMult(quality);
+  const value = Math.max(1, Math.round(species.base * RARITY_MULT[rarity] * vf));
   const level = 1; // REFONTE C : le familier arrive niv.1 (identité de race) → à infuser
   let effect2: ItemEffect | undefined;
   if (rng() < familiarSigChance(rarity)) {
     const sig = FAMILIAR_SIGNATURE[Math.floor(rng() * FAMILIAR_SIGNATURE.length)]!;
     effect2 = {
       type: sig.type,
-      value: Math.max(1, Math.round(sig.base * RARITY_MULT[rarity] * (0.8 + rng() * 0.4))),
+      value: Math.max(1, Math.round(sig.base * RARITY_MULT[rarity] * vf)),
     };
   }
   return {
@@ -563,6 +567,7 @@ export function rollFamiliar(
     effect: { type: species.effect, value },
     ...(effect2 ? { effect2 } : {}),
     species: species.id,
+    roll: (quality - 0.5) / 5, // qualité relue par rollStars (comme les objets)
   };
 }
 
