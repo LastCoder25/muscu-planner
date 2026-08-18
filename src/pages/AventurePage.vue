@@ -1569,6 +1569,21 @@
             </button>
           </div>
         </div>
+        <!-- Objet ACTUELLEMENT équipé sur ce slot → savoir si le craft vaut le coup. -->
+        <div class="ws-field">
+          <span class="ws-lbl">Équipé sur {{ SLOT_LABEL[craftSlot] }}</span>
+          <div v-if="equippedInSlot(craftSlot)" class="ws-equipped">
+            <span :class="'p-' + equippedInSlot(craftSlot)!.rarity">{{
+              RARITY_LABEL[equippedInSlot(craftSlot)!.rarity]
+            }}</span>
+            · Nv {{ equippedInSlot(craftSlot)!.level }} ·
+            <b>{{ itemEffects(equippedInSlot(craftSlot)!) }}</b>
+            <span v-if="rollStarStr(equippedInSlot(craftSlot)!)" class="roll-stars">{{
+              rollStarStr(equippedInSlot(craftSlot)!)
+            }}</span>
+          </div>
+          <div v-else class="ws-equipped dim">— emplacement libre (rien d'équipé)</div>
+        </div>
           <button
             class="ws-btn"
             :disabled="!char.row || char.row.dust < craftSetCost(c.level.level)"
@@ -6513,6 +6528,16 @@ onUnmounted(() => {
 }
 .ws-lbl {
   font-size: 12px;
+  color: var(--dim);
+}
+.ws-equipped {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--line) 22%, transparent);
+  font-size: 12.5px;
+}
+.ws-equipped.dim {
   color: var(--dim);
 }
 .ws-chips {
