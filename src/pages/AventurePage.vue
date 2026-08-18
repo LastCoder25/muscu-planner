@@ -780,12 +780,12 @@
                     🔧 Infuser puis équiper · {{ infuseToMaxCost(it, equipMatchLevel(it)) }}✨
                   </button>
                   <button
-                    class="ii-ic"
+                    class="ii-ic destroy"
                     :disabled="it.locked"
-                    :title="'Casser → poussière (' + salvageValue(it) + '✨)'"
+                    :title="'Casser : DÉTRUIT l’objet → poussière (' + salvageValue(it) + '✨)'"
                     @click="doSalvage(it)"
                   >
-                    ✨
+                    <span class="destroy-glyph">✨</span>
                   </button>
                   <button
                     class="ii-ic"
@@ -1688,14 +1688,15 @@
                   }}</span>
                 </div>
                 <div class="pow-cmp">
-                  ⚔️ {{ fmtPow(combatPowerVal) }} →
-                  <b :class="powerIfEquipMatched(cand.item) >= combatPowerVal ? 'up' : 'down'"
-                    >{{ fmtPow(powerIfEquipMatched(cand.item)) }} ({{
-                      fmtDelta(combatPowerVal, powerIfEquipMatched(cand.item))
+                  ⚔️ Potentiel {{ fmtPow(combatPowerVal) }} →
+                  <b :class="itemMaxedPower(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                    >{{ fmtPow(itemMaxedPower(cand.item)) }} ({{
+                      fmtDelta(combatPowerVal, itemMaxedPower(cand.item))
                     }})</b
                   >
                   <span v-if="infuseCostFor(cand.item)" class="pow-cost"
-                    >à infuser (~{{ infuseCostFor(cand.item) }} ✨) au niveau de ton équipé</span
+                    >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton
+                    niveau</span
                   >
                 </div>
                 <div v-if="rewardDupNote(cand.item)" class="rc-dup">
@@ -1898,14 +1899,14 @@
                 </div>
                 <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
                 <div class="pow-cmp">
-                  ⚔️ {{ fmtPow(combatPowerVal) }} →
-                  <b :class="powerIfEquipMatched(d) >= combatPowerVal ? 'up' : 'down'"
-                    >{{ fmtPow(powerIfEquipMatched(d)) }} ({{
-                      fmtDelta(combatPowerVal, powerIfEquipMatched(d))
+                  ⚔️ Potentiel {{ fmtPow(combatPowerVal) }} →
+                  <b :class="itemMaxedPower(d) >= combatPowerVal ? 'up' : 'down'"
+                    >{{ fmtPow(itemMaxedPower(d)) }} ({{
+                      fmtDelta(combatPowerVal, itemMaxedPower(d))
                     }})</b
                   >
                   <span v-if="infuseCostFor(d)" class="pow-cost"
-                    >à infuser (~{{ infuseCostFor(d) }} ✨) au niveau de ton équipé</span
+                    >à infuser (~{{ infuseCostFor(d) }} ✨) pour le monter à ton niveau</span
                   >
                 </div>
                 <div v-if="dropState(d) === 'equipped'" class="drop-done">
@@ -1966,15 +1967,15 @@
                       {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
                     </div>
                     <div class="pow-cmp">
-                      ⚔️ {{ fmtPow(combatPowerVal) }} →
-                      <b :class="powerIfEquipMatched(cand.item) >= combatPowerVal ? 'up' : 'down'"
-                        >{{ fmtPow(powerIfEquipMatched(cand.item)) }} ({{
-                          fmtDelta(combatPowerVal, powerIfEquipMatched(cand.item))
+                      ⚔️ Potentiel {{ fmtPow(combatPowerVal) }} →
+                      <b :class="itemMaxedPower(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                        >{{ fmtPow(itemMaxedPower(cand.item)) }} ({{
+                          fmtDelta(combatPowerVal, itemMaxedPower(cand.item))
                         }})</b
                       >
                       <span v-if="infuseCostFor(cand.item)" class="pow-cost"
-                        >à infuser (~{{ infuseCostFor(cand.item) }} ✨) au niveau de ton
-                        équipé</span
+                        >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton
+                        niveau</span
                       >
                     </div>
                     <div v-if="rewardDupNote(cand.item)" class="rc-dup">
@@ -2284,9 +2285,10 @@ function powerIfEquipNow(it: Item): number {
 function powerIfEquipMatched(it: Item): number {
   return powerIfEquipAtLevel(it, equipMatchLevel(it));
 }
-// Coût en poussière pour amener un drop AU NIVEAU DE L'ÉQUIPÉ (base de la comparaison).
+// Coût en poussière pour infuser un drop JUSQU'À TON NIVEAU (potentiel max — affiché
+// sur les cartes de butin/récompense, qui raisonnent en potentiel long terme).
 function infuseCostFor(it: Item): number {
-  return infuseToMaxCost(it, equipMatchLevel(it));
+  return infuseToMaxCost(it, c.value.level.level);
 }
 // Niveau de RENTABILITÉ : plus petit niveau d'infusion (≤ niveau de l'équipé) où l'objet
 // dépasse ta puissance ACTUELLE + le coût en poussière. `reachable` = faux s'il n'y
@@ -3022,16 +3024,17 @@ function rewardDupNote(item: Item): string {
 // (un coureur préférera PV/vol de vie/crit, un muscu les dégâts…), pas la plus
 // grosse magnitude brute. → aide à aller le plus loin possible.
 function rewardScore(cand: RewardCandidate): number {
-  // Objet évalué MONTÉ AU NIVEAU DE L'ÉQUIPÉ (à armes égales) → cohérent avec le
-  // comparateur des cartes. Une pièce de set (niv.1 au drop) est jugée à sa vraie
-  // valeur une fois amenée au niveau de ton stuff, pas sous-évaluée (bug c88be5b3).
+  // Récompense de boss = KEEPER long terme → on conseille le MEILLEUR POTENTIEL (objet
+  // monté à TON niveau max, pas au niveau de l'équipé). Une pièce de set (niv.1 au
+  // drop) est jugée à sa vraie valeur une fois infusée à fond (2026‑08‑18 : la
+  // comparaison « à armes égales » sous-évaluait le potentiel → mauvais conseil).
   const base = combatPowerVal.value;
   if (cand.kind === 'gold') {
     // Ressources : ne changent pas la puissance → à peine au-dessus du statu quo.
     return base + cand.dust * 0.05 + cand.gold * 0.01;
   }
   const it = cand.item;
-  let s = powerIfEquipMatched(it); // au niveau de l'équipé (comme la carte)
+  let s = itemMaxedPower(it); // potentiel une fois monté au max (comme la carte de récompense)
   if (it.setId && !rewardDupNote(it)) s += base * 0.05; // petit bonus « avance un set »
   return s;
 }
@@ -5573,6 +5576,26 @@ onUnmounted(() => {
 .ii-ic.lock.on {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+/* Casser = DÉTRUIRE l'objet : ✨ (poussière) BARRÉ d'un trait rouge → ce n'est PAS
+   l'infusion (qui garde l'objet), c'est la destruction (l'objet est cassé). */
+.ii-ic.destroy {
+  border-color: color-mix(in srgb, var(--d4) 45%, var(--line));
+}
+.destroy-glyph {
+  position: relative;
+  display: inline-block;
+}
+.destroy-glyph::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  top: 50%;
+  height: 2.5px;
+  border-radius: 2px;
+  background: var(--d4);
+  transform: translateY(-50%) rotate(-22deg);
 }
 .ii-more {
   flex: none;
