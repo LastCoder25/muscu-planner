@@ -277,6 +277,7 @@ import {
   effectLabel,
   RARITY_LABEL,
   RARITY_RANK,
+  tierIndexOf,
   SLOT_LABEL,
   type Item,
   type Rarity,
@@ -617,10 +618,11 @@ function rollTreasure(): Item | null {
     const piece = rollSetPiece(rng, { setId: set.id, level: heroLevel.value + 1, luck: 1 });
     return { ...piece, id: `exp_t_${lootN++}` };
   }
-  // Tire jusqu'à obtenir au moins de l'épique (le trésor final ne doit jamais être
-  // « léger » — plus de commun/rare gris ici).
-  let d: Omit<Item, 'id'> | null = null;
-  for (let k = 0; k < 24; k++) {
+  // Garde le MEILLEUR tier (rang+qualité) sur plusieurs tirages → « belle récompense »
+  // RELATIVE à la profondeur. (Le rang est plafonné par la profondeur : un seuil absolu
+  // « ≥ B » était impossible sous ~niv.22 → la garantie devenait du code mort.)
+  let best: Omit<Item, 'id'> | null = null;
+  for (let k = 0; k < 8; k++) {
     const cand = rollDrop(rng, {
       cleared: true,
       defeated: 1,
@@ -628,11 +630,9 @@ function rollTreasure(): Item | null {
       luck: 1,
       spread: 0,
     });
-    if (!cand) continue;
-    d = cand;
-    if (RARITY_RANK[cand.rarity] >= 5) break; // rang B+ = beau trésor final → on garde
+    if (cand && (!best || tierIndexOf(cand) > tierIndexOf(best))) best = cand;
   }
-  return d ? { ...d, id: `exp_t_${lootN++}` } : null;
+  return best ? { ...best, id: `exp_t_${lootN++}` } : null;
 }
 
 // (Ré)initialise un run sur la carte courante avec les VRAIS PV du perso.
