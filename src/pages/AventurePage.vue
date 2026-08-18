@@ -664,33 +664,56 @@
                     powerVerdict(it).label
                   }}</span>
                 </div>
-                <!-- Ligne 2 : méta grisée (rareté · niveau · slot · qualité · set) + cadenas -->
+                <!-- Ligne 2 : méta grisée (rang · niveau · slot · qualité · set). Le rang et
+                     la qualité sont CLIQUABLES → explication (ticket d094eac6). -->
                 <div class="ii-meta">
-                  <span class="ii-rar" :class="'p-' + it.rarity">{{
-                    RARITY_LABEL[it.rarity]
-                  }}</span>
+                  <span
+                    class="ii-rar clk"
+                    :class="'p-' + it.rarity"
+                    role="button"
+                    title="Qu’est-ce que le rang ?"
+                    @click="helpTopic = 'rank'"
+                    >{{ RARITY_LABEL[it.rarity] }}</span
+                  >
                   <span
                     v-if="itemQuality(it)"
-                    class="q-badge"
+                    class="q-badge clk"
                     :class="'q-' + itemQuality(it)"
-                    title="Qualité (5 = meilleur)"
+                    role="button"
+                    title="Qu’est-ce que la qualité ?"
+                    @click="helpTopic = 'quality'"
                     >{{ itemQuality(it) }}</span
                   >
                   <span class="ii-dot">·</span> Nv {{ it.level }} <span class="ii-dot">·</span>
                   {{ SLOT_LABEL[it.slot] }}
                   <span v-if="it.setId" class="gpill set">🧩 Set</span>
                 </div>
-                <!-- Comparaison d'EFFET claire : cet objet vs l'équipé du même emplacement -->
+                <!-- Comparaison : rang + qualité + effet, cet objet vs l'équipé (ticket 50f593a2). -->
                 <div class="ii-compare">
                   <div class="ii-cmp-row this">
                     <span class="ii-cmp-lbl">Cet objet</span>
+                    <span class="ii-rar" :class="'p-' + it.rarity">{{
+                      RARITY_LABEL[it.rarity]
+                    }}</span>
+                    <span v-if="itemQuality(it)" class="q-badge" :class="'q-' + itemQuality(it)">{{
+                      itemQuality(it)
+                    }}</span>
                     <span class="ii-cmp-val">{{ itemEffects(it) }}</span>
                   </div>
                   <div class="ii-cmp-row eq">
                     <span class="ii-cmp-lbl">Équipé</span>
-                    <span v-if="equippedInSlot(it.slot)" class="ii-cmp-val">{{
-                      itemEffects(equippedInSlot(it.slot)!)
-                    }}</span>
+                    <template v-if="equippedInSlot(it.slot)">
+                      <span class="ii-rar" :class="'p-' + equippedInSlot(it.slot)!.rarity">{{
+                        RARITY_LABEL[equippedInSlot(it.slot)!.rarity]
+                      }}</span>
+                      <span
+                        v-if="itemQuality(equippedInSlot(it.slot))"
+                        class="q-badge"
+                        :class="'q-' + itemQuality(equippedInSlot(it.slot))"
+                        >{{ itemQuality(equippedInSlot(it.slot)) }}</span
+                      >
+                      <span class="ii-cmp-val">{{ itemEffects(equippedInSlot(it.slot)!) }}</span>
+                    </template>
                     <span v-else class="ii-cmp-val dim">— emplacement libre</span>
                   </div>
                 </div>
@@ -1521,6 +1544,38 @@
     </transition>
 
     <!-- Butin possible d'un donjon -->
+    <!-- Explication RANG / QUALITÉ (clic sur la pastille de rang ou le chiffre de qualité). -->
+    <q-dialog :model-value="!!helpTopic" position="bottom" @update:model-value="helpTopic = null">
+      <q-card class="help-card">
+        <template v-if="helpTopic === 'rank'">
+          <div class="help-title font-display">🏅 Le rang de l’objet</div>
+          <p class="help-p">
+            Le <b>rang</b> va de <b>G</b> (le plus bas) à <b>SSS</b> (le graal). Un rang supérieur
+            est <b>toujours meilleur</b> — les valeurs ne se chevauchent jamais. On débloque les
+            rangs plus hauts en farmant du contenu plus <b>profond</b> (donjons et boss de plus haut
+            niveau).
+          </p>
+          <div class="help-scale">
+            <span v-for="r in RANK_ORDER" :key="r" class="ii-rar" :class="'p-' + r">{{ r }}</span>
+          </div>
+        </template>
+        <template v-else>
+          <div class="help-title font-display">✦ La qualité de l’objet</div>
+          <p class="help-p">
+            La <b>qualité</b> (de <b>1</b> à <b>5</b>, <b>5 = meilleur</b>) est un
+            <b>sous-rang</b> dans la bande du rang : la finesse du roll. Un <b>5</b> vaut presque le
+            rang au-dessus, un <b>1</b> est le plancher du rang. Couleur du rouge (1) au vert (5).
+          </p>
+          <div class="help-scale">
+            <span v-for="q in [1, 2, 3, 4, 5]" :key="q" class="q-badge" :class="'q-' + q">{{
+              q
+            }}</span>
+          </div>
+        </template>
+        <button v-close-popup class="help-close">Compris</button>
+      </q-card>
+    </q-dialog>
+
     <q-dialog :model-value="!!dropInfo" position="bottom" @update:model-value="dropInfo = null">
       <q-card v-if="dropInfo" class="drops-card">
         <div class="drops-title font-display">{{ dropInfo.emoji }} Butin — {{ dropInfo.name }}</div>
@@ -2113,6 +2168,9 @@ const auth = useAuthStore();
 const char = useCharacterStore();
 const progress = useProgress();
 const gameFx = useGameFx();
+// Explication « rang » / « qualité » (ouverte en cliquant le pastille de rang ou le
+// chiffre de qualité d'un objet — ticket d094eac6). Les 10 rangs pour l'échelle visuelle.
+const helpTopic = ref<'rank' | 'quality' | null>(null);
 // Rang d'objet (G..SSS) → intensité d'animation (5 crans de GameFx). Les hauts rangs
 // déclenchent l'explosion « divin ».
 type FxRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'divin';
@@ -5338,6 +5396,75 @@ onUnmounted(() => {
 }
 .ii-cmp-val.dim {
   color: var(--dim);
+}
+.ii-cmp-val {
+  flex: 1;
+}
+/* Rang / qualité CLIQUABLES (méta) → curseur + affordance discrète. */
+.clk {
+  cursor: pointer;
+}
+.clk:active {
+  transform: scale(0.94);
+}
+.ii-rar.clk {
+  text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 2px;
+}
+.q-badge.clk {
+  outline: 1px dashed color-mix(in srgb, #15120e 45%, transparent);
+  outline-offset: 1px;
+}
+/* Modale d'explication rang / qualité. */
+.help-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  padding: 16px 16px 14px;
+  color: var(--text);
+}
+.help-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.help-p {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dim);
+  margin: 0 0 12px;
+}
+.help-p b {
+  color: var(--text);
+}
+.help-scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+.help-scale .ii-rar {
+  min-width: 24px;
+  text-align: center;
+  padding: 3px 6px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--rk) 45%, var(--line));
+  background: color-mix(in srgb, var(--rk) 12%, transparent);
+  font-size: 12px;
+}
+.help-close {
+  width: 100%;
+  padding: 11px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: #15120e;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
 }
 /* PUISSANCE — comparaison sur UNE LIGNE : verdict « vs équipé » (à armes égales) +
    « maintenant » (si sous-leveled). Chips colorées vert/rouge, la 2ᵉ atténuée. */
