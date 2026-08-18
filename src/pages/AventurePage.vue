@@ -55,6 +55,12 @@
           <span v-if="char.row.stones" class="tb-chip stones">💎 {{ char.row.stones }}</span>
           <span v-if="char.row.parchemins" class="tb-chip">📜 {{ char.row.parchemins }}</span>
           <span v-if="char.row.fragments" class="tb-chip">🧩 {{ char.row.fragments }}</span>
+          <span
+            v-if="char.row.summon_stones"
+            class="tb-chip"
+            title="Pierres d’invocation (tenter un boss)"
+            >🔮 {{ char.row.summon_stones }}</span
+          >
         </div>
       </div>
 
@@ -1236,7 +1242,19 @@
         <div class="sec-title mboss-title">👑 Boss de palier</div>
         <div class="sec-hint">
           Un boss tous les 5 niveaux — chacun lâche une pièce de son <b>set</b> unique. Débloqués en
-          chaîne (bats le précédent).
+          chaîne (bats le précédent). Tenter un boss coûte des <b>pierres d’invocation 🔮</b>
+          (farmées dans les donjons, ou forgées à la poussière ci-dessous).
+        </div>
+        <!-- Forge de pierres d'invocation : voie de secours au farm de donjon (poussière ✨). -->
+        <div v-if="hasBossAltar" class="summon-forge">
+          <span class="sf-have">🔮 {{ char.row.summon_stones }} pierre(s)</span>
+          <button
+            class="sf-craft"
+            :disabled="char.row.dust < summonCraftDust || busy"
+            @click="doCraftSummon()"
+          >
+            Forger 1 🔮 · {{ summonCraftDust }} ✨
+          </button>
         </div>
         <!-- Prérequis : les boss exigent l'Autel des boss (bâtiment) → CTA « où aller ». -->
         <button v-if="!hasBossAltar" class="boss-gate-cta" @click="router.push('/expedition-map')">
@@ -1266,7 +1284,12 @@
             </div>
 
             <div class="dgn-meta">
-              <span class="dgn-chip">⚡ {{ b.energyCost }}</span>
+              <span
+                class="dgn-chip"
+                :class="{ short: (char.row?.summon_stones ?? 0) < summonCostFor(b) }"
+                title="Coût en pierres d’invocation (farmées dans les donjons)"
+                >🔮 {{ summonCostFor(b) }}</span
+              >
               <span class="dgn-chip gold">+{{ b.gold }} 🪙</span>
               <span
                 v-if="bossUnlocked(b)"
@@ -1286,11 +1309,18 @@
             <button
               v-if="bossUnlocked(b)"
               class="fight mboss-fight"
-              :disabled="c.energy < b.energyCost || busy"
+              :disabled="(char.row?.summon_stones ?? 0) < summonCostFor(b) || busy"
               @click="fightBoss(b)"
             >
-              ⚔️ {{ isBossBeaten(b) ? 'Réaffronter' : 'Combattre' }} ({{ b.energyCost }} ⚡)
+              ⚔️ {{ isBossBeaten(b) ? 'Réaffronter' : 'Combattre' }} ({{ summonCostFor(b) }} 🔮)
             </button>
+            <!-- Pas assez de pierres → on dit d'où elles viennent (farm de donjon / forge). -->
+            <div
+              v-if="bossUnlocked(b) && (char.row?.summon_stones ?? 0) < summonCostFor(b)"
+              class="dgn-hint summon-hint"
+            >
+              🔮 Farme les donjons (drop au nettoyage) ou forge à la poussière ↓
+            </div>
             <!-- Verrouillé par l'Autel manquant → bouton qui EMMÈNE le construire. -->
             <button
               v-else-if="!hasBossAltar"
@@ -2162,7 +2192,7 @@ import {
 import CombatStage from '@/components/CombatStage.vue';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
-import { BOSSES, type MilestoneBoss } from '@/data/bosses';
+import { BOSSES, bossSummonCost, type MilestoneBoss } from '@/data/bosses';
 import {
   endlessFoe,
   endlessEnergy,
@@ -2238,6 +2268,8 @@ import {
   bossAltarRollFloor,
   bossRewardCount,
   bossTargetingUnlocked,
+  summonCostWith,
+  SUMMON_CRAFT_DUST,
 } from '@/lib/buildings';
 import {
   REGIONS,
@@ -2976,13 +3008,17 @@ const lastBoss = ref<MilestoneBoss | null>(null);
 const lastEndless = ref(false); // dernier run = Faille sans fin
 const reattackCost = computed(() => {
   if (lastEndless.value) return endlessEnergy(nextEndlessTier.value);
-  if (lastBoss.value) return lastBoss.value.energyCost;
+  if (lastBoss.value) return summonCostFor(lastBoss.value); // boss = pierres d'invocation 🔮
   if (lastDungeon.value) return lastDungeon.value.energyCost;
   return 0;
 });
-const canReattack = computed(
-  () => !busy.value && !char.row?.pending_reward && c.value.energy >= reattackCost.value,
-);
+// La ressource dépend du type de run : le boss se paie en pierres d'invocation 🔮,
+// donjon/faille en énergie ⚡.
+const canReattack = computed(() => {
+  if (busy.value || char.row?.pending_reward) return false;
+  const have = lastBoss.value ? (char.row?.summon_stones ?? 0) : c.value.energy;
+  return have >= reattackCost.value;
+});
 // Réattaque SANS fermer la modale (le run met à jour `run` en place → on peut
 // spammer le bouton icône). Les gardes énergie/déblocage/récompense sont dans les
 // fonctions de run.
@@ -3284,6 +3320,9 @@ async function explore(d: Dungeon) {
     // monstre → les gros volumes de runs n'inondent plus les pierres (ressource rare
     // des familiers). Filon de pierres + boss restent les sources principales.
     const stones = r.cleared ? 2 : 0;
+    // Pierres d'invocation 🔮 : lot au NETTOYAGE, ∝ profondeur du donjon → farmer plus
+    // profond finance des boss plus hauts. Un boss de palier coûte ~2-6 pierres → 2-6 runs.
+    const summonStones = r.cleared ? 1 + Math.floor(d.recoLevel / 8) : 0;
     // Drop de TALENT (drop-only) : ~6 % sur un donjon nettoyé, rareté ∝ luck du donjon.
     const talentDrops =
       r.cleared && dropRng() < 0.06
@@ -3295,6 +3334,7 @@ async function explore(d: Dungeon) {
       dust,
       drops,
       stones,
+      summonStones,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(consumed.length ? { consumed } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
@@ -3358,6 +3398,17 @@ function isBossBeaten(b: MilestoneBoss): boolean {
 }
 // L'Autel des boss (bâtiment) est REQUIS pour affronter les boss de palier.
 const hasBossAltar = computed(() => bossAltarBuilt(char.row?.buildings ?? []));
+// Coût effectif d'un boss en pierres d'invocation 🔮 (base ∝ palier, réduite par l'Autel).
+function summonCostFor(b: MilestoneBoss): number {
+  return summonCostWith(bossSummonCost(b.unlockLevel), char.row?.buildings ?? []);
+}
+const summonCraftDust = SUMMON_CRAFT_DUST;
+async function doCraftSummon() {
+  const uid = auth.user?.id;
+  if (!uid || busy.value) return;
+  const ok = await char.craftSummonStone(uid, summonCraftDust);
+  if (!ok) $q.notify({ type: 'warning', message: `Il te faut ${summonCraftDust} ✨.` });
+}
 // Déblocage : Autel des boss construit ET chaîne des BOSS (boss précédent vaincu).
 // Pas de gate de niveau → le 🎯 % de victoire indique si le combat est jouable.
 function bossUnlocked(b: MilestoneBoss): boolean {
@@ -3458,7 +3509,8 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
 async function fightBoss(b: MilestoneBoss) {
   const uid = auth.user?.id;
   if (expeBlocked()) return;
-  if (!uid || !char.row || busy.value || c.value.energy < b.energyCost) return;
+  const summonCost = summonCostFor(b);
+  if (!uid || !char.row || busy.value || char.row.summon_stones < summonCost) return;
   if (!hasBossAltar.value) {
     $q.notify({
       type: 'warning',
@@ -3511,7 +3563,7 @@ async function fightBoss(b: MilestoneBoss) {
         : [];
     await char.applyBossWin(uid, {
       bossId: b.id,
-      energyCost: b.energyCost,
+      summonCost,
       gold,
       dust,
       defeated: win,
@@ -6468,11 +6520,57 @@ onUnmounted(() => {
 .dgn-chip.gold {
   color: var(--accent);
 }
+/* Coût en pierres d'invocation quand on n'en a pas assez → alerte douce. */
+.dgn-chip.short {
+  color: #ff6a45;
+  border-color: color-mix(in srgb, #ff6a45 45%, var(--line));
+}
 .dgn-hint {
   font-size: 11.5px;
   color: var(--dim);
   opacity: 0.9;
   line-height: 1.35;
+}
+.dgn-hint.summon-hint {
+  color: color-mix(in srgb, var(--accent) 70%, var(--dim));
+  opacity: 1;
+}
+/* Forge de pierres d'invocation (poussière → 🔮). */
+.summon-forge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.summon-forge .sf-have {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+}
+.summon-forge .sf-craft {
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 9px;
+  padding: 6px 12px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.summon-forge .sf-craft:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.summon-forge .sf-craft:not(:disabled):active {
+  transform: scale(0.96);
 }
 /* ── Carte d'entrée « Expéditions » (nouveau mode) ── */
 .expe-card:disabled {

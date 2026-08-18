@@ -18,10 +18,13 @@ import {
   fuseUnlockLevel,
   travelTimeMult,
   outpostLevel,
+  bossSummonDiscount,
+  summonCostWith,
   BUILDING_TYPES,
   BUILD,
   type Building,
 } from '@/lib/buildings';
+import { bossSummonCost } from '@/data/bosses';
 
 const H = 3_600_000;
 const mk = (typeId: string, level: number, collectedAt = 0, slot = 0): Building => ({
@@ -181,5 +184,26 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
     expect(travelTimeMult([mk('outpost', 40)])).toBeCloseTo(0.4, 5); // plafonné −60 % au niv.40
     expect(travelTimeMult([mk('outpost', 60)])).toBeCloseTo(0.4, 5); // reste plafonné
     expect(outpostLevel([mk('outpost', 3)])).toBe(3);
+  });
+});
+
+describe('boss — pierres d’invocation 🔮', () => {
+  it('bossSummonCost croît avec le palier', () => {
+    expect(bossSummonCost(5)).toBe(2);
+    expect(bossSummonCost(15)).toBe(4);
+    expect(bossSummonCost(25)).toBe(6);
+    expect(bossSummonCost(100)).toBe(21);
+  });
+  it('bossSummonDiscount : −4 %/niveau d’Autel, plafond −50 %', () => {
+    expect(bossSummonDiscount([])).toBe(0);
+    expect(bossSummonDiscount([mk('boss_altar', 1)])).toBeCloseTo(0.04, 5);
+    expect(bossSummonDiscount([mk('boss_altar', 5)])).toBeCloseTo(0.2, 5);
+    expect(bossSummonDiscount([mk('boss_altar', 30)])).toBe(0.5); // plafonné
+  });
+  it('summonCostWith applique la remise (arrondi haut, plancher 1)', () => {
+    expect(summonCostWith(6, [])).toBe(6); // sans Autel
+    expect(summonCostWith(6, [mk('boss_altar', 5)])).toBe(5); // 6×0,8 = 4,8 → 5
+    expect(summonCostWith(2, [mk('boss_altar', 30)])).toBe(1); // 2×0,5 = 1
+    expect(summonCostWith(1, [mk('boss_altar', 30)])).toBe(1); // plancher 1
   });
 });

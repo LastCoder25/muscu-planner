@@ -31,6 +31,7 @@ export interface BuildingEffect {
   expeWinPerLvl?: number; // Tour : +X% chance / niveau (plus tard)
   labyLuckPerLvl?: number; // Porte du Labyrinthe : +X à la chance de butin des coffres / niveau
   bossRollFloorPerLvl?: number; // Autel des boss : +X au plancher de qualité de roll / niveau
+  summonCostRedPerLvl?: number; // Autel des boss : −X% du coût en pierres d'invocation / niveau
 }
 
 // Ce qu'un bâtiment DÉBLOQUE (activité/fonctionnalité) → affiché au joueur à la
@@ -200,11 +201,11 @@ export const BUILDING_TYPES: BuildingType[] = [
     label: 'Autel des boss',
     emoji: '🔮',
     category: 'utility',
-    effect: { bossRollFloorPerLvl: 0.03 },
+    effect: { bossRollFloorPerLvl: 0.03, summonCostRedPerLvl: 0.04 },
     buildGold: 700,
     unlockLevel: 4,
     unique: true,
-    desc: 'Récompenses de boss : 4ᵉ choix + ciblage du set manquant (dès la construction). Chaque niveau : +qualité de roll.',
+    desc: 'Récompenses de boss : 4ᵉ choix + ciblage du set manquant (dès la construction). Chaque niveau : +qualité de roll, −coût en pierres d’invocation 🔮.',
   },
   // Utilitaire UNIQUE : la FORGE débloque l'Atelier de poussière (forger un objet neuf,
   // forge de set). Sans elle, l'Atelier reste fermé → un cran de progression de plus.
@@ -358,6 +359,20 @@ export function bossRewardCount(buildings: Building[]): number {
 export function bossTargetingUnlocked(buildings: Building[]): boolean {
   return bossAltarBuilt(buildings);
 }
+const SUMMON_COST_RED_CAP = 0.5; // −50 % max sur le coût en pierres d'invocation
+/** Réduction (0..1) du coût en pierres d'invocation 🔮 des boss, selon le NIVEAU
+ *  de l'Autel des boss (−4 %/niveau, plafond −50 % au niveau ~12). */
+export function bossSummonDiscount(buildings: Building[]): number {
+  const lvl = bossAltarLevel(buildings);
+  const per = buildingType(BOSS_ALTAR_ID)?.effect?.summonCostRedPerLvl ?? 0;
+  return Math.min(SUMMON_COST_RED_CAP, lvl * per);
+}
+/** Coût effectif en pierres d'invocation 🔮 d'un boss (base réduite par l'Autel). */
+export function summonCostWith(baseCost: number, buildings: Building[]): number {
+  return Math.max(1, Math.ceil(baseCost * (1 - bossSummonDiscount(buildings))));
+}
+/** Poussière ✨ nécessaire pour forger 1 pierre d'invocation 🔮 (voie de secours au farm). */
+export const SUMMON_CRAFT_DUST = 50;
 /** Multiplicateur de TEMPS de trajet (< 1 = plus rapide), selon l'avant-poste. */
 export function travelTimeMult(buildings: Building[]): number {
   const lvl = outpostLevel(buildings);

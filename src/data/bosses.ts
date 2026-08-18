@@ -159,3 +159,11 @@ export const BOSSES: MilestoneBoss[] = [...HAND_BOSSES, ...PROCEDURAL.bosses].ma
   gold: bossGoldForLevel(b.unlockLevel),
   energyCost: Math.min(BOSS_ENERGY_CAP, b.energyCost),
 }));
+
+// Coût en PIERRES D'INVOCATION 🔮 d'une tentative de boss (win ou lose). Croît avec
+// le palier → tenter un boss très au-dessus de sa ligue coûte cher (soft-gate
+// naturel, PAS de verrou de niveau dur : le 🎯 % prévient si c'est perdu d'avance).
+// lvl5→2 · lvl15→4 · lvl25→6 · lvl50→11 · lvl100→21. L'Autel des boss réduit ce coût.
+export function bossSummonCost(unlockLevel: number): number {
+  return 1 + Math.floor(unlockLevel / 5);
+}

@@ -82,6 +82,7 @@ export interface CharacterRow {
   stones: number; // pierres magiques 💎 : montée de niveau des familiers
   parchemins: number; // parchemins de maîtrise 📜 : montée de niveau des talents (migr. 0048)
   fragments: number; // fragments de familiers 🧩 : XP d'infusion du TIER (migr. 0049)
+  summon_stones: number; // pierres d'invocation 🔮 : tenter les boss (migr. 0050)
   expedition: ActiveExpedition | null; // mode idle « Expédition » en cours
   expedition_map: ExpeditionMap | null; // carte du monde (POI)
   messages: ExpeditionMessage[]; // boîte à messages 📬 (rapports d'expédition)
@@ -105,7 +106,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, expedition, expedition_map, messages, buildings, set_pieces_seen';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -136,6 +137,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
     if (typeof r.fragments !== 'number') r.fragments = 0; // colonne récente (migr. 0049)
+    if (typeof r.summon_stones !== 'number') r.summon_stones = 0; // colonne récente (migr. 0050)
     if (!r.expedition || typeof r.expedition !== 'object') r.expedition = null;
     if (!r.expedition_map || typeof r.expedition_map !== 'object') r.expedition_map = null;
     return r;
@@ -249,6 +251,7 @@ export const useCharacterStore = defineStore('character', () => {
       consumed?: string[]; // consommables dépensés pour ce run
       gained?: string[]; // consommables gagnés en butin
       stones?: number; // pierres magiques 💎 (filet diffus, familiers)
+      summonStones?: number; // pierres d'invocation 🔮 (drop de donjon nettoyé)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
     },
   ) {
@@ -275,6 +278,7 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
       stones: cur.stones + (input.stones ?? 0),
+      summon_stones: cur.summon_stones + (input.summonStones ?? 0),
       energy_spent: cur.energy_spent + input.energyCost,
       equipped: dist.equipped,
       inventory: dist.inventory,
@@ -285,14 +289,15 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
-  // Applique une tentative de BOSS de palier : dépense l'énergie (win ou lose),
-  // encaisse l'or + poussière de base, et — en cas de victoire — mémorise le boss
-  // vaincu + pose une RÉCOMPENSE EN ATTENTE (3 candidats au choix, cf. chooseReward).
+  // Applique une tentative de BOSS de palier : dépense les PIERRES D'INVOCATION 🔮
+  // (win ou lose ; farmées dans les donjons → lie le farm aux boss), encaisse l'or +
+  // poussière de base, et — en cas de victoire — mémorise le boss vaincu + pose une
+  // RÉCOMPENSE EN ATTENTE (3 candidats au choix, cf. chooseReward).
   async function applyBossWin(
     userId: string,
     input: {
       bossId: string;
-      energyCost: number;
+      summonCost: number; // pierres d'invocation dépensées (win ou lose)
       gold: number;
       dust: number;
       defeated: boolean;
@@ -324,7 +329,7 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
       stones: cur.stones + (input.defeated ? (input.stones ?? 0) : 0),
-      energy_spent: cur.energy_spent + input.energyCost,
+      summon_stones: Math.max(0, cur.summon_stones - input.summonCost),
       defeated_bosses: defeated,
       consumables,
       pending_reward: input.pending ?? cur.pending_reward ?? null,
@@ -811,6 +816,17 @@ export const useCharacterStore = defineStore('character', () => {
     return true;
   }
 
+  // Forge une pierre d'invocation 🔮 à la poussière ✨ (voie de secours au farm de donjon).
+  async function craftSummonStone(userId: string, dustCost: number): Promise<boolean> {
+    const cur = row.value;
+    if (!cur || cur.dust < dustCost) return false;
+    await persistOptimistic(userId, {
+      dust: cur.dust - dustCost,
+      summon_stones: cur.summon_stones + 1,
+    });
+    return true;
+  }
+
   async function equip(userId: string, itemId: string) {
     const cur = row.value;
     if (!cur) return;
@@ -1017,6 +1033,7 @@ export const useCharacterStore = defineStore('character', () => {
     unequipTalent,
     infuseTalent,
     upgradeTalentLevel,
+    craftSummonStone,
     salvage,
     sell,
     salvageMany,
