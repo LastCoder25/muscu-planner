@@ -29,7 +29,9 @@ import {
   normalizeTalents,
   talentInfuseXp,
   talentsEarned,
-  talentXpFloor,
+  talentTier,
+  talentLevelOf,
+  talentLevelUpCost,
   type TalentInstance,
 } from '@/lib/talents';
 import {
@@ -757,24 +759,44 @@ export const useCharacterStore = defineStore('character', () => {
   // joueur : pas de « banking » au-delà, sinon un talent auto-maxerait en montant de
   // niveau). Renvoie false si le target est déjà au plafond (feedback UI). Le fodder
   // n'est consommé QUE si l'infusion a lieu.
+  // INFUSION d'un talent : on SACRIFIE un autre talent (non équipé) dans la cible →
+  // XP ∝ son tier → le TIER (rang+qualité) de la cible grimpe. Le tier n'est PAS
+  // plafonné par le niveau joueur (c'est le NIVEAU, via parchemins, qui l'est).
   async function infuseTalent(
     userId: string,
     targetId: string,
     fodderId: string,
-    playerLevel: number,
   ): Promise<boolean> {
     const cur = row.value;
     if (!cur || targetId === fodderId) return false;
     const target = cur.talents.find((t) => t.id === targetId);
     const fodder = cur.talents.find((t) => t.id === fodderId);
-    if (!target || !fodder) return false;
-    const capXp = Math.max(0, talentXpFloor(playerLevel + 1) - 1); // XP max au niveau joueur
-    if (target.xp >= capXp) return false; // déjà au plafond → on ne consomme rien
-    const newXp = Math.min(capXp, target.xp + talentInfuseXp(fodder));
+    if (!target || !fodder || fodder.equipped) return false; // jamais sacrifier un équipé
+    if (talentTier(target.xp) >= 49) return false; // déjà au tier max (SSS5)
+    const newXp = target.xp + talentInfuseXp(fodder);
     const talents = cur.talents
       .filter((t) => t.id !== fodderId)
       .map((t) => (t.id === targetId ? { ...t, xp: newXp } : t));
     await persistOptimistic(userId, { talents });
+    return true;
+  }
+  // Monte le NIVEAU d'un talent en dépensant des PARCHEMINS 📜 (Bibliothèque),
+  // plafonné au niveau JOUEUR (seul le sport rend plus fort).
+  async function upgradeTalentLevel(
+    userId: string,
+    talentId: string,
+    playerLevel: number,
+  ): Promise<boolean> {
+    const cur = row.value;
+    if (!cur) return false;
+    const t = cur.talents.find((x) => x.id === talentId);
+    if (!t) return false;
+    const level = talentLevelOf(t);
+    if (level >= playerLevel) return false; // plafonné au niveau joueur
+    const cost = talentLevelUpCost(level);
+    if (cur.parchemins < cost) return false;
+    const talents = cur.talents.map((x) => (x.id === talentId ? { ...x, level: level + 1 } : x));
+    await persistOptimistic(userId, { parchemins: cur.parchemins - cost, talents });
     return true;
   }
 
@@ -983,6 +1005,7 @@ export const useCharacterStore = defineStore('character', () => {
     equipTalent,
     unequipTalent,
     infuseTalent,
+    upgradeTalentLevel,
     salvage,
     sell,
     salvageMany,

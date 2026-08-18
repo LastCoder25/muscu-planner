@@ -53,6 +53,7 @@
           <span class="tb-chip gold">🪙 {{ char.row.gold }}</span>
           <span class="tb-chip dust">✨ {{ char.row.dust }}</span>
           <span v-if="char.row.stones" class="tb-chip stones">💎 {{ char.row.stones }}</span>
+          <span v-if="char.row.parchemins" class="tb-chip">📜 {{ char.row.parchemins }}</span>
         </div>
       </div>
 
@@ -284,9 +285,13 @@
             Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
           </div>
           <div class="sec-hint">
-            Les talents <b>droppent au niveau 1</b> (donjons/boss). Équipe-en
-            {{ talentSlots }} (change quand tu veux), et <b>infuse-en un dans un autre</b> (🔧) pour
-            le faire monter en niveau et en rareté.
+            Les talents <b>droppent au rang G</b> (donjons/boss). Équipe-en
+            {{ talentSlots }} (change quand tu veux). Deux axes : <b>🔧 Infuse</b> d'autres talents
+            → monte le <b>rang + qualité</b> ; <b>📜 Monte le niveau</b> (magnitude) avec des
+            parchemins de la <b>Bibliothèque</b
+            ><template v-if="char.row.parchemins">
+              — <b>{{ char.row.parchemins }} 📜</b> dispo</template
+            >.
           </div>
 
           <!-- Cible d'infusion active -->
@@ -325,10 +330,15 @@
               </button>
               <div class="tal-body">
                 <div class="tal-name font-display">
-                  {{ t.def.name }} <span class="tal-lv">Nv{{ t.level }}</span>
+                  {{ t.def.name }}
+                  <span class="ii-rar" :class="'p-' + t.rarity">{{ RARITY_LABEL[t.rarity] }}</span>
+                  <span class="q-badge" :class="'q-' + t.quality">{{ t.quality }}</span>
+                  <span class="tal-lv">Nv{{ t.level }}</span>
                 </div>
                 <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
-                <div class="tal-xp"><span :style="{ width: Math.round(t.xpp * 100) + '%' }" /></div>
+                <div class="tal-xp" :title="'Tier ' + t.tier + '/49 (infusion)'">
+                  <span :style="{ width: Math.round(t.xpp * 100) + '%' }" />
+                </div>
               </div>
               <div class="tal-actions">
                 <template v-if="infuseTarget">
@@ -358,13 +368,25 @@
                   <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
                   <button
                     class="tal-b ghost"
+                    :disabled="t.levelMaxed || (char.row?.parchemins ?? 0) < t.upCost"
+                    :title="
+                      t.levelMaxed
+                        ? 'Niveau plafonné à ton niveau de sport'
+                        : 'Monter le NIVEAU (magnitude) avec des parchemins 📜'
+                    "
+                    @click="doUpgradeTalentLevel(t.id)"
+                  >
+                    📜 {{ t.levelMaxed ? 'Max' : '+1·' + t.upCost }}
+                  </button>
+                  <button
+                    class="tal-b ghost"
                     :disabled="!hasSpareTalent || talentAtCap(t.inst)"
                     :title="
                       talentAtCap(t.inst)
-                        ? 'Déjà à ton niveau max — monte de niveau (sport)'
+                        ? 'Déjà au tier max (SSS5)'
                         : !hasSpareTalent
                           ? 'Il te faut un 2ᵉ talent à sacrifier'
-                          : 'Infuser : monter ce talent en le nourrissant d’un autre'
+                          : 'Infuser : monter le tier (rang+qualité) en sacrifiant un autre'
                     "
                     @click="infuseTarget = t.inst"
                   >
@@ -2179,10 +2201,14 @@ import {
   talentEffects,
   talentByCode,
   effectiveTalentLevel,
-  talentLevel,
-  talentRarity,
+  tierOf,
+  talentRank,
+  talentRankOf,
+  talentQuality,
+  talentLevelOf,
   talentValue,
-  talentXpProgress,
+  talentTierProgress,
+  talentLevelUpCost,
   rollTalentDrop,
   type TalentInstance,
 } from '@/lib/talents';
@@ -2272,7 +2298,7 @@ function celebrateRareDrop(it: Item) {
 function celebrateTalentDrop(t: TalentInstance) {
   const def = talentByCode(t.code);
   if (!def) return;
-  const rarity = talentRarity(talentLevel(t.xp));
+  const rarity = talentRankOf(t);
   if (RARITY_RANK[rarity] >= 4)
     gameFx.celebrate({
       kind: 'generic',
@@ -2493,24 +2519,31 @@ const talentsView = computed(() =>
   (char.row?.talents ?? [])
     .map((inst) => {
       const def = talentByCode(inst.code);
-      const raw = talentLevel(inst.xp); // niveau réel (→ vraie rareté)
-      const eff = effectiveTalentLevel(inst.xp, c.value.level.level); // plafonné (→ effet actif)
-      return def
-        ? {
-            id: inst.id,
-            inst,
-            def,
-            level: eff,
-            rarity: talentRarity(raw),
-            effLabel: Math.round(talentValue(def, eff) * 100) + ' %',
-            capped: raw > c.value.level.level, // effet bridé par ton niveau
-            xpp: talentXpProgress(inst.xp),
-            equipped: !!inst.equipped,
-          }
-        : null;
+      if (!def) return null;
+      const tier = tierOf(inst); // rang + qualité (infusion)
+      const level = talentLevelOf(inst); // niveau (parchemins)
+      const eff = effectiveTalentLevel(inst, c.value.level.level); // niveau plafonné (effet actif)
+      const pl = c.value.level.level;
+      return {
+        id: inst.id,
+        inst,
+        def,
+        tier,
+        level,
+        rarity: talentRank(tier),
+        quality: talentQuality(tier),
+        effLabel: Math.round(talentValue(def, tier, eff) * 100) + ' %',
+        levelMaxed: level >= pl, // niveau plafonné par le sport → parchemins inutiles
+        tierMaxed: tier >= 49, // SSS5 → infusion inutile
+        upCost: talentLevelUpCost(level),
+        xpp: talentTierProgress(inst.xp),
+        equipped: !!inst.equipped,
+      };
     })
     .filter((t): t is NonNullable<typeof t> => !!t)
-    .sort((a, b) => Number(b.equipped) - Number(a.equipped) || b.level - a.level),
+    .sort(
+      (a, b) => Number(b.equipped) - Number(a.equipped) || b.tier - a.tier || b.level - a.level,
+    ),
 );
 function talentName(inst: TalentInstance): string {
   return talentByCode(inst.code)?.name ?? 'Talent';
@@ -2523,9 +2556,10 @@ function explainTalent(t: (typeof talentsView.value)[number]) {
     html: true,
     message:
       `Améliore : <b>${d.desc}</b> — actuellement <b>+${t.effLabel}</b> ` +
-      `(niveau ${t.level} · ${RARITY_LABEL[t.rarity]}).<br><br>` +
-      `L'effet grandit à chaque niveau. Pour le monter : <b>infuse un doublon</b> dedans ` +
-      `(bouton 🔧) → il gagne niveaux et rareté. Un talent ne dépasse jamais ton niveau de sport.`,
+      `(rang ${RARITY_LABEL[t.rarity]}${t.quality} · niveau ${t.level}).<br><br>` +
+      `Deux axes : <b>🔧 Infuse</b> d'autres talents dedans → monte son <b>rang + qualité</b> ` +
+      `(tier). <b>📜 Monte le niveau</b> avec des parchemins (Bibliothèque) → magnitude, ` +
+      `plafonnée à ton niveau de sport.`,
   });
 }
 // Un talent de ce CODE est-il déjà équipé ? (loadout à effets distincts). Sert à
@@ -2549,10 +2583,17 @@ async function doUnequipTalent(id: string) {
   const uid = auth.user?.id;
   if (uid) await char.unequipTalent(uid, id);
 }
-// Un talent peut-il encore gagner de l'XP ? (niveau < niveau joueur = cap). Sinon,
-// l'infuser ne sert à rien tant qu'on n'a pas monté de niveau de sport.
+// Un talent peut-il encore monter de TIER par infusion ? (SSS5 = tier max). Sinon,
+// l'infuser ne sert plus à rien.
 function talentAtCap(inst: TalentInstance): boolean {
-  return talentLevel(inst.xp) >= c.value.level.level;
+  return tierOf(inst) >= 49;
+}
+// Monte le NIVEAU d'un talent avec des parchemins 📜 (plafonné au niveau joueur).
+function doUpgradeTalentLevel(id: string) {
+  withUid(
+    (uid) => char.upgradeTalentLevel(uid, id, c.value.level.level),
+    'Montée de niveau impossible (parchemins ou plafond).',
+  );
 }
 // Y a-t-il au moins un AUTRE talent à sacrifier ? (il en faut 2 pour infuser).
 const hasSpareTalent = computed(() => (char.row?.talents?.length ?? 0) >= 2);
@@ -2572,31 +2613,28 @@ async function doInfuse(fodderId: string) {
     $q.notify({ type: 'warning', message: 'Talent équipé — retire-le d’abord pour le sacrifier.' });
     return;
   }
-  const beforeRarity = talentRarity(talentLevel(target.xp));
-  const ok = await char.infuseTalent(uid, target.id, fodderId, c.value.level.level);
+  const beforeRank = talentRankOf(target);
+  const ok = await char.infuseTalent(uid, target.id, fodderId);
   if (!ok) {
     $q.notify({
       type: 'warning',
-      message:
-        'Ce talent est déjà à ton niveau max — monte de niveau (sport) pour le pousser plus loin.',
+      message: 'Ce talent est déjà au tier max (SSS5).',
     });
     return;
   }
-  // Cible à jour → feedback clair : montée de rareté = éclat, sinon petit toast.
+  // Cible à jour → feedback clair : montée de RANG = éclat, sinon rien.
   const updated = char.row?.talents.find((t) => t.id === target.id) ?? null;
   infuseTarget.value = updated; // garde la cible sélectionnée (à jour) pour enchaîner
   if (updated) {
     const def = talentByCode(updated.code);
-    const lvl = talentLevel(updated.xp);
-    const afterRarity = talentRarity(lvl);
-    // Montée de rareté = éclat central (moment fort) ; sinon rien (pas de toast en bas).
-    if (afterRarity !== beforeRarity)
+    const afterRank = talentRankOf(updated);
+    if (afterRank !== beforeRank)
       gameFx.celebrate({
         kind: 'generic',
         emoji: def?.icon ?? '✨',
-        title: `${def?.name ?? 'Talent'} — ${RARITY_LABEL[afterRarity]} !`,
-        subtitle: `Niveau ${lvl}`,
-        rarity: fxRarity(afterRarity),
+        title: `${def?.name ?? 'Talent'} — rang ${RARITY_LABEL[afterRank]} !`,
+        subtitle: `Tier amélioré par infusion`,
+        rarity: fxRarity(afterRank),
       });
   }
   // On NE sort PAS automatiquement : quand il n'y a plus rien à sacrifier, le bandeau
