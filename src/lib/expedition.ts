@@ -394,8 +394,11 @@ export function resolveOutcome(
     const good = waves >= 6; // « belle performance » (pour le ton du rapport / notif)
     // Or : on rend une part du coût (sink net) mais la vraie paie est en ressources.
     const gold = Math.round((poi.level * 12 + waves * poi.level * 7) * (1 + rthA * 0.4)) + Math.round(cost * 0.25);
-    const dust = Math.round((20 + waves * 7) * tfA);
-    const stones = Math.round((8 + waves * 2.5) * tfA);
+    // Récompense par vague RELEVÉE (2026‑08‑18, ticket arène) : l'arène était strictement
+    // dominée par un camp (moins de poussière pour un coût d'or 4× plus élevé). Tenir
+    // longtemps devient une VRAIE grosse paie de ressources → justifie la dépense d'or.
+    const dust = Math.round((20 + waves * 15) * tfA);
+    const stones = Math.round((8 + waves * 5) * tfA);
     // Objet dès 3 vagues, qualité/chance croissantes ; un long run lâche du haut niveau.
     const item =
       waves >= 3
