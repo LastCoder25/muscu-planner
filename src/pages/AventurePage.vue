@@ -331,8 +331,13 @@
               </button>
               <div class="tal-body">
                 <div class="tal-name font-display">
-                  {{ t.def.name }}
-                  <span class="ii-rar" :class="'p-' + t.rarity">{{ RARITY_LABEL[t.rarity] }}</span>
+                  <span class="tal-nm">{{ t.def.name }}</span>
+                  <span
+                    class="rk-badge"
+                    :class="'p-' + t.rarity"
+                    :title="'Rang ' + RARITY_LABEL[t.rarity]"
+                    >{{ t.rarity }}</span
+                  >
                   <span class="q-badge" :class="'q-' + t.quality">{{ t.quality }}</span>
                   <span class="tal-lv">Nv{{ t.level }}</span>
                 </div>
@@ -4845,12 +4850,21 @@ onUnmounted(() => {
   flex: 1 1 auto;
 }
 .tal-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
   line-height: 1.15;
 }
+.tal-nm {
+  min-width: 0;
+}
+/* Le niveau est « décollé » du couple rang+qualité : poussé à droite de la ligne. */
 .tal-lv {
+  margin-left: auto;
   font-size: 11px;
   color: var(--dim);
 }
@@ -5893,6 +5907,22 @@ onUnmounted(() => {
   font-size: 11px;
   line-height: 1;
   color: #15120e;
+}
+/* Rang en pastille ronde (comme la qualité), fond = couleur du rang --rk. */
+.rk-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 10.5px;
+  line-height: 1;
+  color: #15120e;
+  background: var(--rk, var(--dim));
 }
 .q-1 {
   background: #ff6a45;
