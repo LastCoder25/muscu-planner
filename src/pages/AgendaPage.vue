@@ -54,12 +54,7 @@ import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeDayXp } from '@/lib/challenges';
 import { sessionXp, otherSportXp, cardioSessionXp, drillSessionXp } from '@/lib/athlete';
-import {
-  ACTIVITY_LABELS,
-  ACTIVITY_ICONS,
-  paceLabel,
-  isCardioOutingChallenge,
-} from '@/data/cardio';
+import { ACTIVITY_LABELS, ACTIVITY_ICONS, paceLabel, isCardioOutingChallenge } from '@/data/cardio';
 
 // Disciplines « spécifiques » (tennis/prépa…) : comptent leur XP mais N'alimentent
 // PAS l'énergie d'aventure (fond = muscu + cardio + autre sport uniquement).

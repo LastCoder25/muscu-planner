@@ -275,9 +275,7 @@ export function dungeonFoes(d: Dungeon): DungeonFoe[] {
     .filter((m): m is (typeof MONSTERS)[number] => !!m)
     .map((m) => ({
       combatant:
-        mult === 1
-          ? m
-          : { ...m, pv: Math.round(m.pv * mult), damage: Math.round(m.damage * mult) },
+        mult === 1 ? m : { ...m, pv: Math.round(m.pv * mult), damage: Math.round(m.damage * mult) },
       gold: m.gold,
     }));
 }

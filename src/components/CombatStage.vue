@@ -17,7 +17,9 @@
           <span class="p" :style="{ width: pPct + '%' }" />
         </div>
         <div class="cs-pv">{{ playerPv }}</div>
-        <div v-if="pop && pop.side === 'player'" class="cs-pop" :class="pop.kind">{{ pop.text }}</div>
+        <div v-if="pop && pop.side === 'player'" class="cs-pop" :class="pop.kind">
+          {{ pop.text }}
+        </div>
         <div v-if="heal && heal.side === 'player'" class="cs-pop heal">{{ heal.text }}</div>
       </div>
 
@@ -51,7 +53,9 @@
           <span class="m" :style="{ width: mPct + '%' }" />
         </div>
         <div class="cs-pv">{{ monsterPv }}</div>
-        <div v-if="pop && pop.side === 'monster'" class="cs-pop" :class="pop.kind">{{ pop.text }}</div>
+        <div v-if="pop && pop.side === 'monster'" class="cs-pop" :class="pop.kind">
+          {{ pop.text }}
+        </div>
         <div v-if="heal && heal.side === 'monster'" class="cs-pop heal">{{ heal.text }}</div>
       </div>
     </div>

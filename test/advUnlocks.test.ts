@@ -27,7 +27,9 @@ describe('advUnlocks — calendrier des déblocages', () => {
   });
 
   it('niveau 10 débloque le Dragon et la réduction de dégâts', () => {
-    const titles = unlocksAtLevel(10).map((u) => u.title).join(' | ');
+    const titles = unlocksAtLevel(10)
+      .map((u) => u.title)
+      .join(' | ');
     expect(titles).toContain('Dragon');
     expect(titles).toContain('Réduction');
   });

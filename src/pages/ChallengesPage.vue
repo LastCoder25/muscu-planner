@@ -111,7 +111,11 @@
                 <div v-if="expiring(c)" class="ct-expire">⏳ Expire bientôt</div>
                 <div class="ct-top">
                   <span class="ch-ic">
-                    <img v-if="exerciseImage(c.exercise_id)" :src="exerciseImage(c.exercise_id)" alt="" />
+                    <img
+                      v-if="exerciseImage(c.exercise_id)"
+                      :src="exerciseImage(c.exercise_id)"
+                      alt=""
+                    />
                     <q-icon v-else name="fitness_center" size="15px" />
                   </span>
                   <span class="ct-name">{{ c.exercise_name }}</span>
@@ -126,7 +130,8 @@
                 <div class="ct-sub">
                   {{ st(c).completionPct }}% · j{{
                     Math.min(Math.max(1, st(c).dayIndex + 1), c.duration_days)
-                  }}/{{ c.duration_days }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} reps</template>
+                  }}/{{ c.duration_days
+                  }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} reps</template>
                 </div>
                 <div v-if="bal(c) !== 0" class="cc-bal" :class="bal(c) > 0 ? 'ahead' : 'behind'">
                   <template v-if="bal(c) > 0">▲ +{{ bal(c) }} {{ unitOf(c) }}</template>
@@ -159,7 +164,8 @@
           <div class="cc-meta">{{ fmtName(c.format) }} · {{ c.duration_days }} j</div>
           <div class="bar"><div class="fill" :style="{ width: st(c).completionPct + '%' }" /></div>
           <div class="cc-sub">
-            {{ st(c).completionPct }}% · {{ st(c).totalDone }} {{ isSetsMode(c) ? 'séries' : unitOf(c)
+            {{ st(c).completionPct }}% · {{ st(c).totalDone }}
+            {{ isSetsMode(c) ? 'séries' : unitOf(c)
             }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} reps</template>
           </div>
           <div v-if="c.status === 'done'" class="cc-xp">
@@ -177,7 +183,11 @@
       <template v-else-if="tab === 'exos'">
         <div class="range-tabs">
           <button
-            v-for="r in [{ v: 'all', l: 'Tout' }, { v: 'week', l: 'Semaine' }, { v: 'month', l: 'Mois' }]"
+            v-for="r in [
+              { v: 'all', l: 'Tout' },
+              { v: 'week', l: 'Semaine' },
+              { v: 'month', l: 'Mois' },
+            ]"
             :key="r.v"
             class="range-tab"
             :class="{ on: statsRange === r.v }"
@@ -187,7 +197,9 @@
           </button>
         </div>
         <div v-if="exoAgg.length === 0" class="empty">
-          {{ statsRange === 'all' ? 'Pas encore d’exercice challengé.' : 'Rien sur cette période.' }}
+          {{
+            statsRange === 'all' ? 'Pas encore d’exercice challengé.' : 'Rien sur cette période.'
+          }}
         </div>
         <div v-for="e in exoAgg" :key="e.id" class="exo-card">
           <div class="exo-main">
@@ -300,85 +312,88 @@
       </template>
 
       <template v-else>
-      <div v-if="!activeCombo" class="combo-empty">
-        <p>
-          Un défi <b>full-body sur 7 jours</b> : un exo par groupe, tes séries réparties dans la
-          semaine.
-        </p>
-        <q-btn
-          color="primary"
-          text-color="dark"
-          no-caps
-          size="lg"
-          icon="add"
-          label="Lancer un Défi 360"
-          @click="router.push('/combo/new')"
-        />
-      </div>
-      <template v-else>
-        <div class="combo360-head">
-          <div class="c3-top">
-            <span class="c3-pct font-display">{{ comboPct }}%</span>
-            <span class="c3-week">📅 {{ comboWeek }}</span>
-          </div>
-          <div class="bar"><div class="fill" :style="{ width: comboPct + '%' }" /></div>
+        <div v-if="!activeCombo" class="combo-empty">
+          <p>
+            Un défi <b>full-body sur 7 jours</b> : un exo par groupe, tes séries réparties dans la
+            semaine.
+          </p>
+          <q-btn
+            color="primary"
+            text-color="dark"
+            no-caps
+            size="lg"
+            icon="add"
+            label="Lancer un Défi 360"
+            @click="router.push('/combo/new')"
+          />
         </div>
-        <q-btn
-          class="full-width q-mb-sm"
-          outline
-          color="primary"
-          no-caps
-          icon="fitness_center"
-          label="Générer une séance"
-          :to="`/combo/${activeCombo.id}/session`"
-        />
-        <div v-for="leg in activeComboLegs" :key="leg.exercise_id" class="combo-leg">
-          <div class="cl-top">
-            <button class="cl-name" @click="openHistory(leg)">
-              {{ leg.exercise_name }}
-              <span v-if="leg.weight_kg" class="cl-kg">{{ leg.weight_kg }} kg</span>
-              <q-icon name="history" size="14px" class="cl-hist-ic" />
-            </button>
-            <span class="cl-sub" :class="{ ok: legComplete(leg) }">
-              {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
-              <span v-if="legDone(leg) > leg.target" class="cl-extra"
-                >+{{ legDone(leg) - leg.target }} en plus</span
+        <template v-else>
+          <div class="combo360-head">
+            <div class="c3-top">
+              <span class="c3-pct font-display">{{ comboPct }}%</span>
+              <span class="c3-week">📅 {{ comboWeek }}</span>
+            </div>
+            <div class="bar"><div class="fill" :style="{ width: comboPct + '%' }" /></div>
+          </div>
+          <q-btn
+            class="full-width q-mb-sm"
+            outline
+            color="primary"
+            no-caps
+            icon="fitness_center"
+            label="Générer une séance"
+            :to="`/combo/${activeCombo.id}/session`"
+          />
+          <div v-for="leg in activeComboLegs" :key="leg.exercise_id" class="combo-leg">
+            <div class="cl-top">
+              <button class="cl-name" @click="openHistory(leg)">
+                {{ leg.exercise_name }}
+                <span v-if="leg.weight_kg" class="cl-kg">{{ leg.weight_kg }} kg</span>
+                <q-icon name="history" size="14px" class="cl-hist-ic" />
+              </button>
+              <span class="cl-sub" :class="{ ok: legComplete(leg) }">
+                {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
+                <span v-if="legDone(leg) > leg.target" class="cl-extra"
+                  >+{{ legDone(leg) - leg.target }} en plus</span
+                >
+              </span>
+            </div>
+            <div v-if="legMode(leg) === 'sets'" class="seg-bar" :style="{ '--cols': leg.target }">
+              <span
+                v-for="n in Math.max(leg.target, legDone(leg))"
+                :key="n"
+                class="seg"
+                :class="{ on: n <= legDone(leg), extra: n > leg.target }"
+              />
+            </div>
+            <div v-else class="reps-bar">
+              <span
+                class="reps-fill"
+                :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }"
+              />
+            </div>
+            <div class="cl-add-lbl">Ajouter des séries :</div>
+            <div class="cl-actions">
+              <button
+                v-for="n in [1, 2, 3, 4]"
+                :key="n"
+                class="cl-add"
+                :title="`Ajouter ${n} série${n > 1 ? 's' : ''}`"
+                @click="openSet(leg, n)"
               >
-            </span>
+                +{{ n }}
+              </button>
+              <button
+                class="cl-corr"
+                :disabled="!legSetsDone(leg)"
+                title="Retirer la dernière série"
+                @click="undoSet(leg)"
+              >
+                ↩
+              </button>
+            </div>
           </div>
-          <div v-if="legMode(leg) === 'sets'" class="seg-bar" :style="{ '--cols': leg.target }">
-            <span
-              v-for="n in Math.max(leg.target, legDone(leg))"
-              :key="n"
-              class="seg"
-              :class="{ on: n <= legDone(leg), extra: n > leg.target }"
-            />
-          </div>
-          <div v-else class="reps-bar">
-            <span class="reps-fill" :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }" />
-          </div>
-          <div class="cl-add-lbl">Ajouter des séries :</div>
-          <div class="cl-actions">
-            <button
-              v-for="n in [1, 2, 3, 4]"
-              :key="n"
-              class="cl-add"
-              :title="`Ajouter ${n} série${n > 1 ? 's' : ''}`"
-              @click="openSet(leg, n)"
-            >
-              +{{ n }}
-            </button>
-            <button
-              class="cl-corr"
-              :disabled="!legSetsDone(leg)"
-              title="Retirer la dernière série"
-              @click="undoSet(leg)"
-            >
-              ↩
-            </button>
-          </div>
-        </div>
-      </template>
+        </template>
       </template>
     </template>
 
@@ -749,7 +764,9 @@ const exoAgg = computed(() => {
   // les stats couvrent TOUTES les origines, pas seulement les petits défis.
   for (const combo of comboStore.list) {
     for (const leg of combo.legs ?? []) {
-      const total = (leg.progress ?? []).filter((p) => ok(p.date)).reduce((a, p) => a + (p.reps || 0), 0);
+      const total = (leg.progress ?? [])
+        .filter((p) => ok(p.date))
+        .reduce((a, p) => a + (p.reps || 0), 0);
       if (total <= 0 && statsRange.value !== 'all') continue;
       const cur = map.get(leg.exercise_id) ?? {
         id: leg.exercise_id,

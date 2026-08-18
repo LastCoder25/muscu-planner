@@ -10,11 +10,13 @@
     <!-- LOBBY : lancer une expédition (coûte 1 clé) -->
     <div v-if="phase === 'lobby'" class="lobby">
       <div class="lobby-emo">🗝️</div>
-      <div class="lobby-keys"><b>{{ keys }}</b> clé{{ keys > 1 ? 's' : '' }}</div>
+      <div class="lobby-keys">
+        <b>{{ keys }}</b> clé{{ keys > 1 ? 's' : '' }}
+      </div>
       <p class="lobby-txt">
-        Un donjon à <b>étages</b> à explorer : salles, coffres, pièges, boss. Tes <b>PV se
-        reportent</b> entre les salles — c'est l'attrition qui te met en danger. À la mort tu gardes
-        l'<b>or</b> et la <b>poussière</b>, mais tu perds les objets trouvés.
+        Un donjon à <b>étages</b> à explorer : salles, coffres, pièges, boss. Tes
+        <b>PV se reportent</b> entre les salles — c'est l'attrition qui te met en danger. À la mort
+        tu gardes l'<b>or</b> et la <b>poussière</b>, mais tu perds les objets trouvés.
       </p>
       <p class="lobby-txt dim">Les clés 🗝️ tombent sur les donjons, les boss et la faille.</p>
       <p v-if="!labyUnlocked" class="lobby-txt dim">
@@ -45,7 +47,9 @@
     <!-- RUNNING : exploration -->
     <template v-else>
       <div class="hud">
-        <div class="hud-floor">Étage <b>{{ run.floor + 1 }}</b> / {{ run.floors }}</div>
+        <div class="hud-floor">
+          Étage <b>{{ run.floor + 1 }}</b> / {{ run.floors }}
+        </div>
         <div class="hud-pv">
           <div class="pv-bar"><div class="pv-fill" :style="{ width: pvPct + '%' }" /></div>
           <span class="pv-txt">❤️ {{ run.pv }}/{{ run.maxPv }}</span>
@@ -204,13 +208,10 @@
           {{ run.status === 'cleared' ? 'Labyrinthe nettoyé !' : 'Vous êtes tombé…' }}
         </div>
         <div class="over-haul">
-          🪙 {{ gold }} · ✨ {{ dust }} ·
-          🎒 {{ run.status === 'dead' ? 0 : loot.length }} objet(s)
+          🪙 {{ gold }} · ✨ {{ dust }} · 🎒 {{ run.status === 'dead' ? 0 : loot.length }} objet(s)
         </div>
         <div class="over-sub">
-          <template v-if="run.status === 'cleared'">
-            Butin crédité (+ trésor final) 🎉
-          </template>
+          <template v-if="run.status === 'cleared'"> Butin crédité (+ trésor final) 🎉 </template>
           <template v-else>
             Tu es tombé : l'or et la poussière sont gardés, les objets restent au donjon.
           </template>
@@ -223,7 +224,9 @@
             <span class="ol-emo">{{ it.emoji }}</span>
             <div class="ol-main">
               <span class="ol-name">{{ it.name }}</span>
-              <span class="ol-meta">{{ RARITY_LABEL[it.rarity] }} · {{ effectLabel(it.effect, it.level) }}</span>
+              <span class="ol-meta"
+                >{{ RARITY_LABEL[it.rarity] }} · {{ effectLabel(it.effect, it.level) }}</span
+              >
             </div>
           </div>
         </div>
@@ -273,8 +276,10 @@ import {
   ITEM_SETS,
   effectLabel,
   RARITY_LABEL,
+  RARITY_RANK,
   SLOT_LABEL,
   type Item,
+  type Rarity,
 } from '@/lib/items';
 import { rollActivityFamiliar } from '@/data/familiars';
 import { talentEffects } from '@/lib/talents';
@@ -289,6 +294,12 @@ const auth = useAuthStore();
 const char = useCharacterStore();
 const gameFx = useGameFx();
 const progress = useProgress();
+
+// Rang d'objet (G..SSS) → intensité d'animation GameFx (5 crans).
+function fxRarity(r: Rarity): 'common' | 'rare' | 'epic' | 'legendary' | 'divin' {
+  const i = RARITY_RANK[r];
+  return i >= 9 ? 'divin' : i >= 7 ? 'legendary' : i >= 5 ? 'epic' : i >= 3 ? 'rare' : 'common';
+}
 
 // Phase : lobby (choix de lancer, coûte 1 clé) → running (exploration).
 const phase = ref<'lobby' | 'running'>('lobby');
@@ -315,7 +326,9 @@ const character = computed(() =>
     char.row?.energy_spent ?? 0,
   ),
 );
-const talentFx = computed(() => talentEffects(char.row?.talents ?? [], character.value.level.level));
+const talentFx = computed(() =>
+  talentEffects(char.row?.talents ?? [], character.value.level.level),
+);
 const fighter = computed<Combatant>(() =>
   playerWithGear(
     char.row?.pseudo ?? 'Toi',
@@ -337,7 +350,9 @@ const dungeon = ref<Floor[]>(generateDungeon(seed.value, floorsWanted.value));
 // Le pool de PV du run = les VRAIS PV max du héros (avant : 140 fixe → incohérent
 // avec le combat qui, lui, plafonnait le vol de vie aux PV réels → on remontait au
 // max à chaque combat). Ré-initialisé dans onMounted une fois le perso chargé.
-const run = ref<RunState>(startRun(floorsWanted.value, dungeon.value[0]!, Math.max(60, fighter.value.pv)));
+const run = ref<RunState>(
+  startRun(floorsWanted.value, dungeon.value[0]!, Math.max(60, fighter.value.pv)),
+);
 // Vol de vie ATTÉNUÉ dans le labyrinthe → l'attrition (PV reportés) reste réelle même
 // pour un build sustain (sinon on finit tous les étages à PV pleins).
 const LABY_LIFESTEAL = 0.5;
@@ -383,8 +398,12 @@ const cols = computed(() => floor.value.cols);
 const rows = computed(() => floor.value.rows);
 const pvPct = computed(() => Math.round((run.value.pv / run.value.maxPv) * 100));
 const currentRoom = computed(() => floor.value.rooms[run.value.current]!);
-const onStairs = computed(() => currentRoom.value.type === 'stairs' && run.value.status === 'exploring');
-const onBoss = computed(() => currentRoom.value.type === 'boss' && run.value.status === 'exploring');
+const onStairs = computed(
+  () => currentRoom.value.type === 'stairs' && run.value.status === 'exploring',
+);
+const onBoss = computed(
+  () => currentRoom.value.type === 'boss' && run.value.status === 'exploring',
+);
 // Retraite possible depuis le départ ou un escalier (banque le butin, pas de trésor final).
 const canRetreat = computed(
   () =>
@@ -611,7 +630,7 @@ function rollTreasure(): Item | null {
     });
     if (!cand) continue;
     d = cand;
-    if (cand.rarity === 'epic' || cand.rarity === 'legendary' || cand.rarity === 'divin') break;
+    if (RARITY_RANK[cand.rarity] >= 5) break; // rang B+ = beau trésor final → on garde
   }
   return d ? { ...d, id: `exp_t_${lootN++}` } : null;
 }
@@ -670,7 +689,7 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
         emoji: fam.emoji,
         title: 'Familier trouvé !',
         subtitle: `${fam.name} · ${RARITY_LABEL[fam.rarity]}`,
-        rarity: fam.rarity,
+        rarity: fxRarity(fam.rarity),
       });
     }
     // Pierres magiques 💎 (voie diffuse) : proportionnelles à la progression du run
@@ -1017,20 +1036,39 @@ function replay() {
   color: var(--accent);
   margin-top: 4px;
 }
-.fx-loot-card.r-common {
-  border-color: var(--line);
+/* Rangs G→SSS : couleur portée par --rk (voir défs communes plus bas). */
+.r-G {
+  --rk: #9a8f7e;
 }
-.fx-loot-card.r-rare {
-  border-color: #5aa9ff;
+.r-F {
+  --rk: #8f9c86;
 }
-.fx-loot-card.r-epic {
-  border-color: #b06cff;
+.r-E {
+  --rk: #6bd18a;
 }
-.fx-loot-card.r-legendary {
-  border-color: var(--accent);
+.r-D {
+  --rk: #4ec6d6;
 }
-.fx-loot-card.r-divin {
-  border-color: #ff6ad5;
+.r-C {
+  --rk: #5a9bff;
+}
+.r-B {
+  --rk: #b07cff;
+}
+.r-A {
+  --rk: var(--accent);
+}
+.r-S {
+  --rk: #ff9a3f;
+}
+.r-SS {
+  --rk: #ff5b5b;
+}
+.r-SSS {
+  --rk: #ff5cd8;
+}
+.fx-loot-card[class*='r-'] {
+  border-color: var(--rk, var(--line));
 }
 /* Descente d'étage */
 .descend-anim {
@@ -1138,17 +1176,8 @@ function replay() {
   border-left-width: 3px;
   background: var(--surface);
 }
-.ol-item.r-rare {
-  border-left-color: #4ec6d6;
-}
-.ol-item.r-epic {
-  border-left-color: #b07cff;
-}
-.ol-item.r-legendary {
-  border-left-color: var(--accent);
-}
-.ol-item.r-divin {
-  border-left-color: #ff5cd8;
+.ol-item[class*='r-'] {
+  border-left-color: var(--rk, var(--line));
 }
 .ol-emo {
   font-size: 18px;

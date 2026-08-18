@@ -26,14 +26,7 @@
       </div>
       <div class="sl-actions">
         <q-btn flat no-caps label="Annuler" @click="emit('update:modelValue', false)" />
-        <q-btn
-          unelevated
-          color="primary"
-          text-color="dark"
-          no-caps
-          label="Valider"
-          @click="save"
-        />
+        <q-btn unelevated color="primary" text-color="dark" no-caps label="Valider" @click="save" />
       </div>
     </q-card>
   </q-dialog>

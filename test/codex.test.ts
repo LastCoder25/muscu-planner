@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  discoveredMonsterIds,
-  bestiary,
-  setCollection,
-  codexSummary,
-} from '@/lib/codex';
+import { discoveredMonsterIds, bestiary, setCollection, codexSummary } from '@/lib/codex';
 import { MONSTERS } from '@/data/monsters';
 import { ITEM_SETS, type Item, type ItemSlot } from '@/lib/items';
 
@@ -13,7 +8,7 @@ const setItem = (slot: ItemSlot, setId: string): Item => ({
   slot,
   name: 'Pièce',
   emoji: '🐲',
-  rarity: 'epic',
+  rarity: 'B',
   level: 10,
   baseLevel: 10,
   effect: { type: 'damage_pct', value: 8 },

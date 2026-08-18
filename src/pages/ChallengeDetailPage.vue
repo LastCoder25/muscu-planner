@@ -89,7 +89,9 @@
         <!-- Exécution du jour -->
         <div v-if="statusDone" class="done-banner">
           <q-icon name="emoji_events" size="20px" /> Challenge terminé — bravo !
-          <button class="reopen-btn" @click="reopenChallenge">↩ Rouvrir (corriger une erreur)</button>
+          <button class="reopen-btn" @click="reopenChallenge">
+            ↩ Rouvrir (corriger une erreur)
+          </button>
         </div>
         <div v-else-if="!inToday" class="rest-banner">
           <q-icon name="bedtime" size="18px" />
@@ -187,82 +189,84 @@
               </template>
 
               <template v-else>
-              <button
-                v-if="!editMode && !isCardioTime && !isSetsMode"
-                class="chrono-cta"
-                :class="{ running }"
-                @click="toggleChrono"
-              >
-                <q-icon :name="running ? 'pause' : 'play_arrow'" size="20px" />
-                {{ running ? 'Pause' : chronoSec > 0 ? 'Reprendre' : 'Démarrer le chrono' }}
-                <span class="cc-time">{{ chronoDisplay }}</span>
-              </button>
-
-              <!-- Cardio (minutes) : boutons rapides +N personnalisables (pas de poids) -->
-              <template v-if="isCardioTime">
-                <div class="quick-row">
-                  <button
-                    v-for="q in quickAdds"
-                    :key="q"
-                    class="add"
-                    :class="{ editing: editMode, minus: correcting && !editMode }"
-                    @click="editMode ? removeQuick(q) : addReps(correcting ? -q : q)"
-                  >
-                    <span v-if="editMode" class="rm">✕ {{ q }}</span>
-                    <template v-else>{{ correcting ? '−' : '+' }}{{ q }}</template>
-                  </button>
-                  <button
-                    v-if="editMode"
-                    class="add ghost"
-                    aria-label="Ajouter un bouton"
-                    @click="addQuickButton"
-                  >
-                    ＋
-                  </button>
-                </div>
-                <div class="opts-row">
-                  <button class="opt" :class="{ on: correcting }" @click="correcting = !correcting">
-                    <q-icon name="backspace" size="15px" /> Correction (−)
-                  </button>
-                  <button class="opt" :class="{ on: editMode }" @click="editMode = !editMode">
-                    <q-icon name="tune" size="15px" /> Gérer
-                  </button>
-                  <button v-if="editMode" class="opt" @click="resetQuick">Réinitialiser</button>
-                </div>
-              </template>
-
-              <!-- Séries : ＋1/＋2/＋3/＋4 → fenêtre reps + poids -->
-              <div v-else-if="isSetsMode" class="quick-row">
                 <button
-                  v-for="n in [1, 2, 3, 4]"
-                  :key="n"
-                  class="add"
-                  @click="openAddSet(n)"
+                  v-if="!editMode && !isCardioTime && !isSetsMode"
+                  class="chrono-cta"
+                  :class="{ running }"
+                  @click="toggleChrono"
                 >
-                  ＋{{ n }}
+                  <q-icon :name="running ? 'pause' : 'play_arrow'" size="20px" />
+                  {{ running ? 'Pause' : chronoSec > 0 ? 'Reprendre' : 'Démarrer le chrono' }}
+                  <span class="cc-time">{{ chronoDisplay }}</span>
                 </button>
-              </div>
 
-              <!-- Reps : un seul bouton ＋ → fenêtre reps + poids -->
-              <button v-else class="add-set" @click="openAddSet(1)">＋ Ajouter (reps + poids)</button>
+                <!-- Cardio (minutes) : boutons rapides +N personnalisables (pas de poids) -->
+                <template v-if="isCardioTime">
+                  <div class="quick-row">
+                    <button
+                      v-for="q in quickAdds"
+                      :key="q"
+                      class="add"
+                      :class="{ editing: editMode, minus: correcting && !editMode }"
+                      @click="editMode ? removeQuick(q) : addReps(correcting ? -q : q)"
+                    >
+                      <span v-if="editMode" class="rm">✕ {{ q }}</span>
+                      <template v-else>{{ correcting ? '−' : '+' }}{{ q }}</template>
+                    </button>
+                    <button
+                      v-if="editMode"
+                      class="add ghost"
+                      aria-label="Ajouter un bouton"
+                      @click="addQuickButton"
+                    >
+                      ＋
+                    </button>
+                  </div>
+                  <div class="opts-row">
+                    <button
+                      class="opt"
+                      :class="{ on: correcting }"
+                      @click="correcting = !correcting"
+                    >
+                      <q-icon name="backspace" size="15px" /> Correction (−)
+                    </button>
+                    <button class="opt" :class="{ on: editMode }" @click="editMode = !editMode">
+                      <q-icon name="tune" size="15px" /> Gérer
+                    </button>
+                    <button v-if="editMode" class="opt" @click="resetQuick">Réinitialiser</button>
+                  </div>
+                </template>
 
-              <div v-if="displayedSets.length" class="sets-log">
-                <div class="sets-log-h">
-                  {{ isCumulative ? 'Séries saisies (total)' : 'Séries du jour' }}
+                <!-- Séries : ＋1/＋2/＋3/＋4 → fenêtre reps + poids -->
+                <div v-else-if="isSetsMode" class="quick-row">
+                  <button v-for="n in [1, 2, 3, 4]" :key="n" class="add" @click="openAddSet(n)">
+                    ＋{{ n }}
+                  </button>
                 </div>
-                <div v-for="(s, i) in displayedSets" :key="i" class="set-item">
-                  <span class="si-n"
-                    >Série {{ i + 1 }}<template v-if="s.date"> · {{ fmtSetDay(s.date) }}</template></span
-                  >
-                  <span class="si-v"
-                    >{{ s.reps }} reps<template v-if="s.weight"> · {{ s.weight }} kg</template
-                    ><template v-if="s.assisted"> · assisté</template></span
-                  >
-                </div>
-                <button v-if="todaySets.length" class="corr-link" @click="undoLastSet">
-                  ↩ Retirer la dernière{{ isCumulative ? ' (aujourd’hui)' : '' }}
+
+                <!-- Reps : un seul bouton ＋ → fenêtre reps + poids -->
+                <button v-else class="add-set" @click="openAddSet(1)">
+                  ＋ Ajouter (reps + poids)
                 </button>
-              </div>
+
+                <div v-if="displayedSets.length" class="sets-log">
+                  <div class="sets-log-h">
+                    {{ isCumulative ? 'Séries saisies (total)' : 'Séries du jour' }}
+                  </div>
+                  <div v-for="(s, i) in displayedSets" :key="i" class="set-item">
+                    <span class="si-n"
+                      >Série {{ i + 1
+                      }}<template v-if="s.date"> · {{ fmtSetDay(s.date) }}</template></span
+                    >
+                    <span class="si-v"
+                      >{{ s.reps }} reps<template v-if="s.weight"> · {{ s.weight }} kg</template
+                      ><template v-if="s.assisted"> · assisté</template></span
+                    >
+                  </div>
+                  <button v-if="todaySets.length" class="corr-link" @click="undoLastSet">
+                    ↩ Retirer la dernière{{ isCumulative ? ' (aujourd’hui)' : '' }}
+                  </button>
+                </div>
               </template>
             </div>
           </template>
@@ -271,7 +275,8 @@
         <!-- Projection segmentée : 1 segment par jour pour visualiser l'avancement.
              Taper un jour PASSÉ/aujourd'hui → corriger sa valeur (erreur de saisie). -->
         <div v-if="ch.format !== 'cumulative'" class="sec-h">
-          Projection · {{ ch.duration_days }} jours <span class="sec-hint">— touche un jour pour corriger</span>
+          Projection · {{ ch.duration_days }} jours
+          <span class="sec-hint">— touche un jour pour corriger</span>
         </div>
         <div v-if="ch.format !== 'cumulative'" class="seg-strip">
           <button
@@ -442,7 +447,9 @@ const ch = ref<Challenge | null>(null);
 const exoModal = ref(false);
 const exoImg = computed(() => (ch.value ? exerciseImage(ch.value.exercise_id) : undefined));
 const exoFrames = computed(() => (ch.value ? exerciseFrames(ch.value.exercise_id) : undefined));
-const exoSteps = computed(() => (ch.value ? exerciseInstructions(ch.value.exercise_id) : undefined));
+const exoSteps = computed(() =>
+  ch.value ? exerciseInstructions(ch.value.exercise_id) : undefined,
+);
 const running = ref(false);
 let tick: ReturnType<typeof setInterval> | undefined;
 const scrollBox = ref<HTMLElement | null>(null);
@@ -752,7 +759,12 @@ const todaySets = computed<ChallengeSet[]>(() => entryOf(dayIndex.value)?.sets ?
 type ShownSet = { reps: number; weight?: number | null; assisted?: boolean; date?: string };
 const allSets = computed<ShownSet[]>(() =>
   (ch.value?.progress ?? []).flatMap((p) =>
-    (p.sets ?? []).map((s) => ({ reps: s.reps, weight: s.weight, assisted: s.assisted, date: p.date })),
+    (p.sets ?? []).map((s) => ({
+      reps: s.reps,
+      weight: s.weight,
+      assisted: s.assisted,
+      date: p.date,
+    })),
   ),
 );
 const displayedSets = computed<ShownSet[]>(() =>
@@ -763,7 +775,9 @@ const displayedSets = computed<ShownSet[]>(() =>
 function fmtSetDay(iso?: string): string {
   if (!iso) return '';
   const d = new Date(iso);
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+  return isNaN(d.getTime())
+    ? ''
+    : d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
 }
 const setOpen = ref(false);
 const setInitReps = ref(10);
@@ -774,7 +788,7 @@ const setCount = ref(1);
 function openAddSet(count = 1) {
   setCount.value = Math.max(1, count);
   const last = todaySets.value[todaySets.value.length - 1];
-  setInitReps.value = last?.reps ?? (quickAdds.value[0] ?? 10);
+  setInitReps.value = last?.reps ?? quickAdds.value[0] ?? 10;
   setInitWeight.value = last?.weight ?? null;
   setInitAssisted.value = last?.assisted ?? false;
   setOpen.value = true;
@@ -929,7 +943,11 @@ function editDay(d: number) {
       // Réévalue le statut global d'après le nouveau total.
       const complete = isChallengeComplete(c);
       const nextStatus: 'done' | 'active' | undefined =
-        complete && c.status !== 'done' ? 'done' : !complete && c.status === 'done' ? 'active' : undefined;
+        complete && c.status !== 'done'
+          ? 'done'
+          : !complete && c.status === 'done'
+            ? 'active'
+            : undefined;
       if (nextStatus) c.status = nextStatus;
       await store.updateProgress(c.id, c.progress, complete ? 'done' : undefined);
       if (nextStatus === 'active') {

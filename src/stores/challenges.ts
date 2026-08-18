@@ -230,8 +230,11 @@ export const useChallengesStore = defineStore('challenges', () => {
       const next: Challenge = { ...c, progress };
       // Recalcule le statut : dé-complète si le total n'est plus atteint (repasse actif).
       const complete = isChallengeComplete(next);
-      const status: ChallengeStatus | undefined =
-        complete ? 'done' : c.status === 'done' ? 'active' : undefined;
+      const status: ChallengeStatus | undefined = complete
+        ? 'done'
+        : c.status === 'done'
+          ? 'active'
+          : undefined;
       try {
         await updateProgress(c.id, progress, complete ? 'done' : undefined);
         if (status === 'active') await setStatus(c.id, 'active');

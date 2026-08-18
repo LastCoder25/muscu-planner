@@ -113,7 +113,12 @@ export const EXPE = {
   distMax: 88, // distance maxi (rayon → POI tout autour, 360°)
   spawnMinMs: 2 * 3600_000, // intervalle de spawn : 2 h..4 h (jitter)
   spawnJitterMs: 2 * 3600_000,
-  lifespanMs: { mine: 24 * 3600_000, camp: 12 * 3600_000, lair: 30 * 3600_000, arena: 48 * 3600_000 },
+  lifespanMs: {
+    mine: 24 * 3600_000,
+    camp: 12 * 3600_000,
+    lair: 30 * 3600_000,
+    arena: 48 * 3600_000,
+  },
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
   // Coût = base × niveau^1.6 → VRAI puits d'or (2026‑08‑12). Repère : un donjon
@@ -155,7 +160,8 @@ export function goldCost(type: PoiType, level: number): number {
 /** Trajet ALLER (minutes) selon distance + niveau. Round-trip = 2×. */
 export function travelOneWayMin(level: number, distNorm: number): number {
   const base =
-    EXPE.travelOneWayMinMin + (EXPE.travelOneWayMaxMin - EXPE.travelOneWayMinMin) * clamp01(distNorm);
+    EXPE.travelOneWayMinMin +
+    (EXPE.travelOneWayMaxMin - EXPE.travelOneWayMinMin) * clamp01(distNorm);
   return Math.round(base * (1 + Math.max(0, level) * 0.02));
 }
 
@@ -167,7 +173,8 @@ export function poiCombatant(level: number, type: PoiType): Combatant {
   // Échelle niveau² : la puissance du joueur croît ~niveau² (stats = XP/15, XP
   // quadratique). Un adversaire LINÉAIRE devenait trivial dès le niveau 10 → on
   // scale en L² (calibré sur le gradient sain du niveau 5, cf. simulation 2026‑08‑12).
-  const name = type === 'lair' ? 'Gardien du repaire' : type === 'camp' ? 'Chef de camp' : 'Éboulement';
+  const name =
+    type === 'lair' ? 'Gardien du repaire' : type === 'camp' ? 'Chef de camp' : 'Éboulement';
   return {
     name,
     // PV ~L³ (le multi-frappe fait croître l'offense du joueur ~L⁴ → un L² devenait
@@ -246,7 +253,12 @@ function placePoi(rng: () => number, minFrac = 0): { x: number; y: number; distN
 
 /** Crée une carte neuve avec `seedPois` POI d'entrée (à la 1re visite). Par défaut,
  *  on démarre AU PLANCHER (`poiFloor`) → la carte n'est jamais quasi-vide au début. */
-export function createMap(seed: number, now: number, playerLevel: number, seedPois = EXPE.poiFloor): ExpeditionMap {
+export function createMap(
+  seed: number,
+  now: number,
+  playerLevel: number,
+  seedPois = EXPE.poiFloor,
+): ExpeditionMap {
   const map: ExpeditionMap = { seed: seed >>> 0 || 1, spawnCount: 0, pois: [], nextSpawnAt: now };
   for (let i = 0; i < seedPois; i++) spawnOne(map, now, playerLevel);
   map.nextSpawnAt = now + EXPE.spawnMinMs;
@@ -274,9 +286,7 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   const poi: Poi = {
     id: `poi_${map.seed}_${map.spawnCount}`,
     type,
-    ...(type === 'lair' && ITEM_SETS.length
-      ? { setId: pick(rng, ITEM_SETS).id }
-      : {}),
+    ...(type === 'lair' && ITEM_SETS.length ? { setId: pick(rng, ITEM_SETS).id } : {}),
     level,
     x: pos.x,
     y: pos.y,
@@ -369,23 +379,24 @@ const FAIL_TEXT: Record<PoiType, string[]> = {
     'Le camp était mieux gardé que prévu. Retraite en bon ordre, quelques piécettes récupérées.',
     'Embuscade évitée de justesse : bredouille côté butin, mais une faille repérée dans leur garde.',
   ],
-  mine: ['Le filon s’est effondré avant l’extraction complète. Ton héros remonte les mains presque vides.'],
+  mine: [
+    'Le filon s’est effondré avant l’extraction complète. Ton héros remonte les mains presque vides.',
+  ],
   arena: ['La foule gronde : ton héros est tombé dès les premières vagues.'],
 };
 const WIN_TEXT: Record<PoiType, string[]> = {
-  lair: ['🏆 Repaire nettoyé ! Le trésor du set est à toi.', '🏆 Le gardien tombe — la relique est récupérée.'],
+  lair: [
+    '🏆 Repaire nettoyé ! Le trésor du set est à toi.',
+    '🏆 Le gardien tombe — la relique est récupérée.',
+  ],
   camp: ['🏆 Camp dispersé ! Butin ramassé.', '🏆 Victoire nette au camp.'],
   mine: ['⛏️ Filon exploité — ressources chargées.', '⛏️ Extraction réussie.'],
   arena: ['🏟️ L’arène acclame ton champion !'],
 };
 
 /** Calcule l'issue d'une expédition (seedée). Le butin est crédité au RETOUR. */
-export function resolveOutcome(
-  hero: Combatant,
-  poi: Poi,
-  seed: number,
-): ExpeditionOutcome {
-  const rng = mulberry32((seed >>> 0) || 1);
+export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): ExpeditionOutcome {
+  const rng = mulberry32(seed >>> 0 || 1);
   const cost = goldCost(poi.type, poi.level);
 
   // ── ARÈNE : gauntlet de survie par vagues (nuit) → RÉCOMPENSE GRASSE ∝ vagues. ──
@@ -396,7 +407,9 @@ export function resolveOutcome(
     const waves = simulateArena(hero, poi.level, seed + 17);
     const good = waves >= 6; // « belle performance » (pour le ton du rapport / notif)
     // Or : on rend une part du coût (sink net) mais la vraie paie est en ressources.
-    const gold = Math.round((poi.level * 12 + waves * poi.level * 7) * (1 + rthA * 0.4)) + Math.round(cost * 0.25);
+    const gold =
+      Math.round((poi.level * 12 + waves * poi.level * 7) * (1 + rthA * 0.4)) +
+      Math.round(cost * 0.25);
     // Récompense par vague RELEVÉE (2026‑08‑18, ticket arène) : l'arène était strictement
     // dominée par un camp (moins de poussière pour un coût d'or 4× plus élevé). Tenir
     // longtemps devient une VRAIE grosse paie de ressources → justifie la dépense d'or.
@@ -409,8 +422,11 @@ export function resolveOutcome(
     const items: Omit<Item, 'id'>[] = [];
     for (let i = 0; i < nItems; i++) {
       const d = rollDrop(rng, {
-        cleared: true, defeated: 1, level: poi.level,
-        luck: Math.min(0.95, 0.35 + waves * 0.05 + i * 0.04), spread: 0,
+        cleared: true,
+        defeated: 1,
+        level: poi.level,
+        luck: Math.min(0.95, 0.35 + waves * 0.05 + i * 0.04),
+        spread: 0,
       });
       if (d) items.push(d);
     }
@@ -419,14 +435,27 @@ export function resolveOutcome(
       waves === 0
         ? pick(rng, FAIL_TEXT.arena)
         : `🏟️ ${waves} vague${waves > 1 ? 's' : ''} tenue${waves > 1 ? 's' : ''} !${good ? ' La foule est en délire.' : ''}`;
-    return { win: good, gold, dust, energy: 0, stones, item: items[0] ?? null, items, key, reconBonus: 0, waves, text };
+    return {
+      win: good,
+      gold,
+      dust,
+      energy: 0,
+      stones,
+      item: items[0] ?? null,
+      items,
+      key,
+      reconBonus: 0,
+      waves,
+      text,
+    };
   }
 
   // Mine = récolte (pas de combat) ; camp/repaire = combat auto seedé.
   const win =
     poi.type === 'mine'
       ? true
-      : simulateCombat(hero, poiCombatant(poi.level, poi.type), { seed: seed + 7, goldOnWin: 0 }).win;
+      : simulateCombat(hero, poiCombatant(poi.level, poi.type), { seed: seed + 7, goldOnWin: 0 })
+          .win;
 
   // HAUL SCALÉ AU TEMPS DE TRAJET (aller-retour) : une expédition de plusieurs
   // heures doit VALOIR le coup (avant : reward ∝ niveau seul → dérisoire vs un
@@ -458,7 +487,11 @@ export function resolveOutcome(
       : Math.round((cost * 0.4 + poi.level * 10) * (1 + rth * 0.4));
   const dustHaul = Math.round((poi.type === 'mine' ? 14 + poi.level * 4 : 9 + poi.level * 3) * tf);
   const stoneHaul = Math.round(
-    (poi.type === 'lair' ? 4 + poi.level * 1.4 : poi.type === 'mine' ? 3 + poi.level * 1.1 : 2 + poi.level * 0.7) * tf,
+    (poi.type === 'lair'
+      ? 4 + poi.level * 1.4
+      : poi.type === 'mine'
+        ? 3 + poi.level * 1.1
+        : 2 + poi.level * 0.7) * tf,
   );
   let item: Omit<Item, 'id'> | null = null;
   let key = 0;
@@ -572,14 +605,19 @@ function riverPath(rng: () => number, x: number, y: number, dir: number, len: nu
 
 /** Terrain de la carte (déterministe pour un `seed`) : côte + reliefs + rivières (encre). */
 export function expeditionTerrain(seed: number): Terrain {
-  const rng = mulberry32((seed >>> 0) || 1);
+  const rng = mulberry32(seed >>> 0 || 1);
   const C = EXPE.mapSize / 2; // centre de la carte
   // Continent : grand contour irrégulier, très découpé (détaillé).
   const coast = blobPath(rng, C, C, EXPE.mapSize * 0.44, 20);
   const features: Motif[] = [];
   const rivers: string[] = [];
   const push = (kind: MotifKind, x: number, y: number, s: number) => {
-    const d = kind === 'mountain' ? peakPath(x, y, s) : kind === 'tree' ? treePath(x, y, s) : dunePath(x, y, s);
+    const d =
+      kind === 'mountain'
+        ? peakPath(x, y, s)
+        : kind === 'tree'
+          ? treePath(x, y, s)
+          : dunePath(x, y, s);
     features.push({ kind, d, x, y });
   };
   // Amas de relief (chaîne / forêt / désert) répartis dans le continent — nombre
@@ -598,13 +636,20 @@ export function expeditionTerrain(seed: number): Terrain {
       if (centers.every(([px, py]) => Math.hypot(px - cx, py - cy) > 24)) break;
     }
     centers.push([cx, cy]);
-    const kind: MotifKind = (['mountain', 'tree', 'dune', 'mountain', 'tree'] as const)[Math.floor(rng() * 5)]!;
+    const kind: MotifKind = (['mountain', 'tree', 'dune', 'mountain', 'tree'] as const)[
+      Math.floor(rng() * 5)
+    ]!;
     if (kind === 'mountain') {
       const dir = rng() * Math.PI;
       const n = 5 + Math.floor(rng() * 5);
       for (let i = 0; i < n; i++) {
         const t = (i - (n - 1) / 2) * (3.4 + rng());
-        push('mountain', cx + Math.cos(dir) * t + (rng() - 0.5) * 2.5, cy + Math.sin(dir) * t + (rng() - 0.5) * 2.5, 0.9 + rng() * 0.8);
+        push(
+          'mountain',
+          cx + Math.cos(dir) * t + (rng() - 0.5) * 2.5,
+          cy + Math.sin(dir) * t + (rng() - 0.5) * 2.5,
+          0.9 + rng() * 0.8,
+        );
       }
       // Une rivière descend souvent de la montagne.
       if (rng() < 0.7) rivers.push(riverPath(rng, cx, cy, rng() * Math.PI * 2, 30 + rng() * 30));
@@ -617,7 +662,8 @@ export function expeditionTerrain(seed: number): Terrain {
       }
     } else {
       const n = 4 + Math.floor(rng() * 4);
-      for (let i = 0; i < n; i++) push('dune', cx + (rng() - 0.5) * 16, cy + (rng() - 0.5) * 12, 0.9 + rng() * 0.7);
+      for (let i = 0; i < n; i++)
+        push('dune', cx + (rng() - 0.5) * 16, cy + (rng() - 0.5) * 12, 0.9 + rng() * 0.7);
     }
   }
   // Ordre peintre : du fond (haut) vers l'avant (bas).

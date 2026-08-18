@@ -105,7 +105,13 @@ describe('mode séries vs reps par exo (173b322a)', () => {
   });
   it('comboProgressPct : moyenne des fractions (mélange de modes OK)', () => {
     const a = leg({ target: 4, sets: [set(10), set(10)] }); // 2/4 = 50 %
-    const b = leg({ slot: 'pull', exercise_id: 'b', count_mode: 'reps', target: 100, sets: [set(100)] }); // 100 %
+    const b = leg({
+      slot: 'pull',
+      exercise_id: 'b',
+      count_mode: 'reps',
+      target: 100,
+      sets: [set(100)],
+    }); // 100 %
     expect(comboProgressPct(combo([a, b]))).toBe(75); // (0.5 + 1)/2
   });
   it('buildComboSession : mode reps → assez de séries pour couvrir les reps restantes', () => {
@@ -325,8 +331,7 @@ describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
 
   it('tous les groupes essentiels sont actifs (full-body)', () => {
     const plan = suggestFullBodyPlan('intermediaire', 'moderate', 'med', SLOTS);
-    for (const key of ['push', 'pull', 'squat'])
-      expect(bySlot(plan, key).active).toBe(true);
+    for (const key of ['push', 'pull', 'squat']) expect(bySlot(plan, key).active).toBe(true);
   });
 
   it('débutant : accessoires exclus + essentiels à 1 exo suffisent', () => {

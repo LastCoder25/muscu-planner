@@ -93,7 +93,10 @@ export function nextRegion(clearedIds: string[]): Region | undefined {
 }
 
 /** Avancement d'une région : {done, total} donjons nettoyés. */
-export function regionProgress(region: Region, clearedIds: string[]): { done: number; total: number } {
+export function regionProgress(
+  region: Region,
+  clearedIds: string[],
+): { done: number; total: number } {
   const cleared = new Set(clearedIds);
   return {
     done: region.dungeonIds.filter((id) => cleared.has(id)).length,
@@ -135,7 +138,11 @@ export function regionMapGeometry(count = REGIONS.length): MapGeometry {
 }
 
 /** Fraction [0..1] du fil « énergisé » selon l'avancement (région courante + %). */
-export function mapFillFraction(frontierRegionIdx: number, curRegionFraction: number, count = REGIONS.length): number {
+export function mapFillFraction(
+  frontierRegionIdx: number,
+  curRegionFraction: number,
+  count = REGIONS.length,
+): number {
   if (count <= 0) return 0;
   const f = (frontierRegionIdx + Math.max(0, Math.min(1, curRegionFraction))) / count;
   return Math.max(0, Math.min(1, f));

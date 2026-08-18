@@ -80,7 +80,7 @@ const companion = computed(() => {
 const slotPips = computed(() =>
   SLOTS.map((slot: ItemSlot) => {
     const it = props.equipped[slot];
-    return { slot, on: !!it, rarity: it?.rarity ?? 'common' };
+    return { slot, on: !!it, rarity: it?.rarity ?? 'G' };
   }),
 );
 const label = computed(
@@ -252,19 +252,38 @@ const label = computed(
 .pip.off {
   fill: var(--line, #3a332a);
 }
-.pip.on.r-common {
-  fill: var(--dim);
+/* Rangs G→SSS : couleur via --rk (posée par la classe r-*). */
+.pip.on.r-G {
+  --rk: #9a8f7e;
 }
-.pip.on.r-rare {
-  fill: #4ec6d6;
+.pip.on.r-F {
+  --rk: #8f9c86;
 }
-.pip.on.r-epic {
-  fill: #b07cff;
+.pip.on.r-E {
+  --rk: #6bd18a;
 }
-.pip.on.r-legendary {
-  fill: var(--accent);
+.pip.on.r-D {
+  --rk: #4ec6d6;
 }
-.pip.on.r-divin {
-  fill: #ff5cd8;
+.pip.on.r-C {
+  --rk: #5a9bff;
+}
+.pip.on.r-B {
+  --rk: #b07cff;
+}
+.pip.on.r-A {
+  --rk: var(--accent);
+}
+.pip.on.r-S {
+  --rk: #ff9a3f;
+}
+.pip.on.r-SS {
+  --rk: #ff5b5b;
+}
+.pip.on.r-SSS {
+  --rk: #ff5cd8;
+}
+.pip.on[class*='r-'] {
+  fill: var(--rk, var(--dim));
 }
 </style>

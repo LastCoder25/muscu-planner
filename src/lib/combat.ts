@@ -78,7 +78,9 @@ export function playerCombatant(
     pv: Math.round(COMBAT.pvBase + COMBAT.pvPerLevel * L + stats.endurance * COMBAT.pvPerEndurance),
     damage: Math.max(
       1,
-      Math.round(COMBAT.baseDamage + COMBAT.damagePerLevel * L + stats.puissance * COMBAT.damagePerPuissance),
+      Math.round(
+        COMBAT.baseDamage + COMBAT.damagePerLevel * L + stats.puissance * COMBAT.damagePerPuissance,
+      ),
     ),
     crit: Math.min(COMBAT.critCap, stats.agilite * COMBAT.critPerAgilite),
     dodge: Math.min(COMBAT.dodgeCap, stats.agilite * COMBAT.dodgePerAgilite),
@@ -98,8 +100,13 @@ export function combatPower(c: Combatant): number {
     0.3 * (c.rage ?? 0) +
     (c.momentum ?? 0) * (COMBAT.momentumMaxStacks * 0.5);
   const offense =
-    c.damage * (c.strikes ?? 1) * (1 + c.crit) * (1 + (c.lifesteal ?? 0)) * sig * (1 + 0.5 * (c.thorns ?? 0));
-  const survie = (c.pv / 100) / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0));
+    c.damage *
+    (c.strikes ?? 1) *
+    (1 + c.crit) *
+    (1 + (c.lifesteal ?? 0)) *
+    sig *
+    (1 + 0.5 * (c.thorns ?? 0));
+  const survie = c.pv / 100 / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0));
   // offense×survie croît ≈ niveau⁴ → chiffres énormes (dizaines de milliers dès le
   // début). On prend la RACINE : indice toujours monotone/comparable mais à échelle
   // humaine (~niveau², qq centaines au milieu de jeu au lieu de dizaines de milliers).
@@ -190,7 +197,8 @@ export function simulateCombat(
         pPv = Math.max(0, pPv - dmg);
         if (atk.lifesteal) mPv = Math.min(monster.pv, mPv + Math.round(dmg * atk.lifesteal));
         // Épines : le joueur (défenseur) renvoie une part des dégâts reçus.
-        if (def.thorns && dmg > 0) mPv = Math.max(0, mPv - Math.max(1, Math.round(dmg * def.thorns)));
+        if (def.thorns && dmg > 0)
+          mPv = Math.max(0, mPv - Math.max(1, Math.round(dmg * def.thorns)));
       }
       log.push({
         round,

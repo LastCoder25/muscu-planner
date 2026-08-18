@@ -38,7 +38,8 @@
           <div class="pr-title font-display">
             🏆 {{ prs.length }} record{{ prs.length > 1 ? 's' : '' }} battu{{
               prs.length > 1 ? 's' : ''
-            }} !
+            }}
+            !
           </div>
           <div v-for="p in prs" :key="p.id" class="pr-row">
             <span class="pr-name">{{ p.name }}</span>
@@ -92,8 +93,8 @@
         <template v-if="source && deltas.length && !readOnly">
           <div class="sec-h">Progression proposée</div>
           <div v-if="isDeloadNext" class="deload-note">
-            🌙 Semaine de <b>décharge</b> planifiée : charges et volume allégés pour
-            récupérer (supercompensation). La progression reprend ensuite.
+            🌙 Semaine de <b>décharge</b> planifiée : charges et volume allégés pour récupérer
+            (supercompensation). La progression reprend ensuite.
           </div>
           <div class="prog-card">
             <div v-for="d in deltas" :key="d.id" class="prog-row">

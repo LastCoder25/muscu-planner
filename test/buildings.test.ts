@@ -22,7 +22,12 @@ import {
 } from '@/lib/buildings';
 
 const H = 3_600_000;
-const mk = (typeId: string, level: number, collectedAt = 0, slot = 0): Building => ({ typeId, level, slot, collectedAt });
+const mk = (typeId: string, level: number, collectedAt = 0, slot = 0): Building => ({
+  typeId,
+  level,
+  slot,
+  collectedAt,
+});
 
 describe('buildings — emplacements & coûts', () => {
   it('plotsForLevel : UN emplacement par niveau (le joueur priorise), plafonné', () => {
@@ -51,8 +56,12 @@ describe('buildings — emplacements & coûts', () => {
 
 describe('buildings — production', () => {
   it('prod/h et stockage croissent avec le niveau', () => {
-    expect(buildingProdPerHour(mk('dust_vein', 10))).toBeGreaterThan(buildingProdPerHour(mk('dust_vein', 3)));
-    expect(buildingStorageCap(mk('dust_vein', 5))).toBe(buildingProdPerHour(mk('dust_vein', 5)) * BUILD.storageHours);
+    expect(buildingProdPerHour(mk('dust_vein', 10))).toBeGreaterThan(
+      buildingProdPerHour(mk('dust_vein', 3)),
+    );
+    expect(buildingStorageCap(mk('dust_vein', 5))).toBe(
+      buildingProdPerHour(mk('dust_vein', 5)) * BUILD.storageHours,
+    );
   });
   it('accumulation dans le temps, PLAFONNÉE au stockage', () => {
     const b = mk('dust_vein', 10, 0);
@@ -118,7 +127,10 @@ describe('buildings — Entrepôt : effet stockage global', () => {
     expect(storageMult([wh])).toBeCloseTo(1.6, 5);
     expect(buildingProdPerHour(wh)).toBe(0); // un utilitaire ne produit rien
     const dust = mk('dust_vein', 10, 0, 0);
-    expect(buildingStorageCap(dust, storageMult([wh]))).toBeCloseTo(buildingStorageCap(dust) * 1.6, 3);
+    expect(buildingStorageCap(dust, storageMult([wh]))).toBeCloseTo(
+      buildingStorageCap(dust) * 1.6,
+      3,
+    );
   });
   it("collectable applique le bonus d'entrepôt et ignore les utilitaires", () => {
     const now = 1000 * H; // saturé

@@ -15,13 +15,20 @@ import {
   rollSetPiece,
   familiarStoneCost,
   isFamiliar,
+  normRank,
   type Item,
   type ItemSlot,
   type Equipped,
   type PendingReward,
 } from '@/lib/items';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
-import { normalizeTalents, talentInfuseXp, talentsEarned, talentXpFloor, type TalentInstance } from '@/lib/talents';
+import {
+  normalizeTalents,
+  talentInfuseXp,
+  talentsEarned,
+  talentXpFloor,
+  type TalentInstance,
+} from '@/lib/talents';
 import {
   createMap,
   advanceWorld,
@@ -102,10 +109,19 @@ export const useCharacterStore = defineStore('character', () => {
     const obj = <T>(v: unknown): T =>
       v && typeof v === 'object' && !Array.isArray(v) ? (v as T) : ({} as T);
     r.talents = normalizeTalents(r.talents); // legacy string[] → instances (rétro-compat)
-    r.inventory = arr<Item>(r.inventory);
+    // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
+    const fixItem = (it: Item): Item => ({
+      ...it,
+      rarity: normRank(it.rarity),
+    });
+    r.inventory = arr<Item>(r.inventory).map(fixItem);
     r.cleared_dungeons = arr<string>(r.cleared_dungeons);
     r.defeated_bosses = arr<string>(r.defeated_bosses);
     r.equipped = obj<Equipped>(r.equipped);
+    for (const k of Object.keys(r.equipped) as (keyof Equipped)[]) {
+      const it = r.equipped[k];
+      if (it) r.equipped[k] = fixItem(it);
+    }
     r.consumables = obj<Record<string, number>>(r.consumables);
     r.messages = arr<ExpeditionMessage>(r.messages);
     r.buildings = arr<Building>(r.buildings); // colonne récente (migr. 0046)
@@ -131,13 +147,13 @@ export const useCharacterStore = defineStore('character', () => {
     // Pécule de bienvenue à la 1re création (0 XP de fond → 0 énergie sinon) : de
     // quoi lancer quelques donjons et accrocher le joueur. Pas au renommage.
     const isNew = !row.value;
-    const patch: Record<string, unknown> = { user_id: userId, pseudo, updated_at: new Date().toISOString() };
+    const patch: Record<string, unknown> = {
+      user_id: userId,
+      pseudo,
+      updated_at: new Date().toISOString(),
+    };
     if (isNew) patch.login_energy = WELCOME_ENERGY;
-    const { data, error } = await supabase
-      .from('characters')
-      .upsert(patch)
-      .select(COLS)
-      .single();
+    const { data, error } = await supabase.from('characters').upsert(patch).select(COLS).single();
     if (error) {
       if (error.code === '23505') throw new PseudoTakenError();
       throw error;
@@ -532,8 +548,7 @@ export const useCharacterStore = defineStore('character', () => {
     }
     if (level === item.level) return; // rien d'infusé (pas assez de poussière)
     const upgraded: Item = { ...item, level };
-    if (slot)
-      return persist(userId, { dust, equipped: { ...cur.equipped, [slot]: upgraded } });
+    if (slot) return persist(userId, { dust, equipped: { ...cur.equipped, [slot]: upgraded } });
     return persist(userId, {
       dust,
       inventory: cur.inventory.map((i) => (i.id === itemId ? upgraded : i)),
@@ -567,7 +582,9 @@ export const useCharacterStore = defineStore('character', () => {
   async function fuseFamiliars(userId: string, ids: string[]) {
     const cur = row.value;
     if (!cur || ids.length !== 3) return;
-    const picked = ids.map((id) => cur.inventory.find((i) => i.id === id)).filter((i): i is Item => !!i);
+    const picked = ids
+      .map((id) => cur.inventory.find((i) => i.id === id))
+      .filter((i): i is Item => !!i);
     if (picked.length !== 3 || !picked.every(isFamiliar)) return;
     const rarity = picked[0]!.rarity;
     if (!picked.every((f) => f.rarity === rarity)) return; // même rareté requise
@@ -790,10 +807,9 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { equipped, inventory: [...cur.inventory, item] });
   }
 
-
   // ── Mode idle « Expédition » (carte + héros temporisé) ──
   function newSeed(now: number): number {
-    return ((now ^ 0x9e3779b9) >>> 0) || 1;
+    return (now ^ 0x9e3779b9) >>> 0 || 1;
   }
   // Assure la carte (crée si absente) et l'avance jusqu'à `now`. Persiste si changé.
   async function expeSyncMap(userId: string, now: number, level: number) {
@@ -819,7 +835,7 @@ export const useCharacterStore = defineStore('character', () => {
       hero,
       poi,
       now,
-      ((now ^ (poi.level * 2654435761)) >>> 0) || 1,
+      (now ^ (poi.level * 2654435761)) >>> 0 || 1,
       travelTimeMult(cur.buildings),
     );
     const baseMap = cur.expedition_map ?? createMap(newSeed(now), now, level);
@@ -860,7 +876,9 @@ export const useCharacterStore = defineStore('character', () => {
       keys: cur.keys + o.key,
       inventory,
       messages,
-      set_pieces_seen: drops.length ? mergeSetSeen(cur.set_pieces_seen, drops) : cur.set_pieces_seen,
+      set_pieces_seen: drops.length
+        ? mergeSetSeen(cur.set_pieces_seen, drops)
+        : cur.set_pieces_seen,
       expedition: null,
     });
     return o;
@@ -873,7 +891,13 @@ export const useCharacterStore = defineStore('character', () => {
 
   // ── Filons de production passive (village autour de la ville) ──
   // Construit un filon sur un emplacement libre (débloqué par le niveau), payé à l'or.
-  async function buildFilon(userId: string, typeId: string, slot: number, now: number, playerLevel: number) {
+  async function buildFilon(
+    userId: string,
+    typeId: string,
+    slot: number,
+    now: number,
+    playerLevel: number,
+  ) {
     const cur = row.value;
     const t = buildingType(typeId);
     if (!cur || !t) return;
@@ -883,7 +907,10 @@ export const useCharacterStore = defineStore('character', () => {
     if (!canBuildType(typeId, playerLevel, cur.buildings)) return; // niveau/unicité
     if (cur.gold < t.buildGold) return;
     const b: Building = { typeId, level: 1, slot, collectedAt: now };
-    await persistOptimistic(userId, { gold: cur.gold - t.buildGold, buildings: [...cur.buildings, b] });
+    await persistOptimistic(userId, {
+      gold: cur.gold - t.buildGold,
+      buildings: [...cur.buildings, b],
+    });
   }
   // Améliore un filon (or ; plafonné au niveau du joueur).
   async function upgradeFilon(userId: string, slot: number, playerLevel: number) {

@@ -35,8 +35,10 @@ const RARITY_COLOR: Record<string, string> = {
   divin: '#ff5cd8',
 };
 const RARITY_TIER: Record<string, number> = { common: 0, rare: 1, epic: 2, legendary: 3, divin: 4 };
-const tier = computed(() => (cur.value?.rarity ? RARITY_TIER[cur.value.rarity] ?? 2 : 2));
-const color = computed(() => (cur.value?.rarity ? RARITY_COLOR[cur.value.rarity] ?? '#ffd23f' : '#ffd23f'));
+const tier = computed(() => (cur.value?.rarity ? (RARITY_TIER[cur.value.rarity] ?? 2) : 2));
+const color = computed(() =>
+  cur.value?.rarity ? (RARITY_COLOR[cur.value.rarity] ?? '#ffd23f') : '#ffd23f',
+);
 
 const reduced =
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;

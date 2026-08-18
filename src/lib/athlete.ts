@@ -67,7 +67,7 @@ export function cardioSessionXp(log: CardioLog): number {
   // sortie facile rapporte PLUS qu'une courte sortie rapide (on ne récompense
   // JAMAIS la vitesse, qui pousserait à sortir de la zone EF). La distance reste
   // un petit bonus ; le dénivelé (D+ ET D-) compte à plein.
-  return Math.round((((km * 2 + dur * 3) * factor + (dplus + dminus) / 10) * loadMult) * XP_MULT);
+  return Math.round(((km * 2 + dur * 3) * factor + (dplus + dminus) / 10) * loadMult * XP_MULT);
 }
 
 /** XP d'un « autre sport » (log durée seule) : INTENSITÉ-scalé par le sport

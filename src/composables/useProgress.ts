@@ -195,7 +195,11 @@ export function useProgress() {
     for (const r of logs.all) {
       if ((r.performed_at || '') < cutoffIso) continue;
       if (isAutreLog(r))
-        addXp(acc, otherSportXp(r.payload.duration_min ?? 0, r.payload.name), sportSignature(r.payload.name));
+        addXp(
+          acc,
+          otherSportXp(r.payload.duration_min ?? 0, r.payload.name),
+          sportSignature(r.payload.name),
+        );
       else if (isSpecifiqueLog(r)) {
         const d = r.payload.discipline ?? '';
         addXp(acc, sessionXp(r.payload), sportSignature(DISC_SIG_WINDOW[d] ?? d));
@@ -212,7 +216,9 @@ export function useProgress() {
     return acc;
   }
   // Fenêtre glissante 30 jours (le cutoff est recalculé à chaque évaluation → « ~now »).
-  const buckets30 = computed(() => bucketsSince(new Date(Date.now() - 30 * 86400000).toISOString()));
+  const buckets30 = computed(() =>
+    bucketsSince(new Date(Date.now() - 30 * 86400000).toISOString()),
+  );
 
   // ── Tuiles par SPORT (une par activité réellement pratiquée) ──
   // = séances loggées uniquement (les challenges/Défi 360 ont leur propre entrée).

@@ -16,17 +16,94 @@ export interface TalentDef {
 }
 
 export const TALENTS: TalentDef[] = [
-  { code: 't_dmg', name: 'Force brute', desc: 'dégâts', icon: '🗡️', effectKey: 'damagePct', base: 0.08 },
-  { code: 't_pv', name: 'Robustesse', desc: 'PV max', icon: '❤️', effectKey: 'maxPvPct', base: 0.08 },
-  { code: 't_crit', name: 'Précision', desc: 'critique', icon: '🎯', effectKey: 'critAdd', base: 0.04 },
-  { code: 't_dodge', name: 'Vivacité', desc: 'esquive', icon: '💨', effectKey: 'dodgeAdd', base: 0.035 },
-  { code: 't_leech', name: 'Sangsue', desc: 'vol de vie', icon: '🩸', effectKey: 'lifesteal', base: 0.04 },
-  { code: 't_armor', name: 'Cuirasse', desc: 'réduction de dégâts', icon: '🛡️', effectKey: 'dmgReduction', base: 0.045 },
-  { code: 't_gold', name: 'Cupidité', desc: 'or gagné', icon: '🪙', effectKey: 'goldPct', base: 0.1 },
-  { code: 't_thorns', name: 'Épines', desc: 'dégâts renvoyés', icon: '🌵', effectKey: 'thornsPct', base: 0.06 },
-  { code: 't_execute', name: 'Bourreau', desc: 'achève les ennemis affaiblis', icon: '⚔️', effectKey: 'executePct', base: 0.1 },
-  { code: 't_rage', name: 'Berserk', desc: 'plus fort à basse vie', icon: '🔥', effectKey: 'ragePct', base: 0.1 },
-  { code: 't_momentum', name: 'Élan', desc: 'dégâts cumulés au combat', icon: '🌀', effectKey: 'momentumPct', base: 0.05 },
+  {
+    code: 't_dmg',
+    name: 'Force brute',
+    desc: 'dégâts',
+    icon: '🗡️',
+    effectKey: 'damagePct',
+    base: 0.08,
+  },
+  {
+    code: 't_pv',
+    name: 'Robustesse',
+    desc: 'PV max',
+    icon: '❤️',
+    effectKey: 'maxPvPct',
+    base: 0.08,
+  },
+  {
+    code: 't_crit',
+    name: 'Précision',
+    desc: 'critique',
+    icon: '🎯',
+    effectKey: 'critAdd',
+    base: 0.04,
+  },
+  {
+    code: 't_dodge',
+    name: 'Vivacité',
+    desc: 'esquive',
+    icon: '💨',
+    effectKey: 'dodgeAdd',
+    base: 0.035,
+  },
+  {
+    code: 't_leech',
+    name: 'Sangsue',
+    desc: 'vol de vie',
+    icon: '🩸',
+    effectKey: 'lifesteal',
+    base: 0.04,
+  },
+  {
+    code: 't_armor',
+    name: 'Cuirasse',
+    desc: 'réduction de dégâts',
+    icon: '🛡️',
+    effectKey: 'dmgReduction',
+    base: 0.045,
+  },
+  {
+    code: 't_gold',
+    name: 'Cupidité',
+    desc: 'or gagné',
+    icon: '🪙',
+    effectKey: 'goldPct',
+    base: 0.1,
+  },
+  {
+    code: 't_thorns',
+    name: 'Épines',
+    desc: 'dégâts renvoyés',
+    icon: '🌵',
+    effectKey: 'thornsPct',
+    base: 0.06,
+  },
+  {
+    code: 't_execute',
+    name: 'Bourreau',
+    desc: 'achève les ennemis affaiblis',
+    icon: '⚔️',
+    effectKey: 'executePct',
+    base: 0.1,
+  },
+  {
+    code: 't_rage',
+    name: 'Berserk',
+    desc: 'plus fort à basse vie',
+    icon: '🔥',
+    effectKey: 'ragePct',
+    base: 0.1,
+  },
+  {
+    code: 't_momentum',
+    name: 'Élan',
+    desc: 'dégâts cumulés au combat',
+    icon: '🌀',
+    effectKey: 'momentumPct',
+    base: 0.05,
+  },
 ];
 
 const BY_CODE = new Map(TALENTS.map((t) => [t.code, t]));
@@ -71,14 +148,16 @@ export function talentXpProgress(xp: number): number {
   return Math.min(1, into / talentXpForNext(level));
 }
 
-// Rareté = palier de niveau (tous les 5 niveaux). 1-4 commun … 20+ divin.
-const RARITY_TIERS: Rarity[] = ['common', 'rare', 'epic', 'legendary', 'divin'];
+// Rang = palier de niveau (tous les 5 niveaux). Les talents utilisent 5 crans de la
+// nouvelle échelle de rangs (E→SSS) : niv.1-5 E … niv.21+ SSS.
+const RARITY_TIERS: Rarity[] = ['E', 'C', 'A', 'S', 'SSS'];
 export function talentRarity(level: number): Rarity {
   return RARITY_TIERS[Math.min(RARITY_TIERS.length - 1, Math.floor((Math.max(1, level) - 1) / 5))]!;
 }
-/** Niveau de départ d'un talent qui droppe à une rareté donnée. */
+/** Niveau de départ d'un talent qui droppe à un rang donné. */
 export function startLevelForRarity(r: Rarity): number {
-  return RARITY_TIERS.indexOf(r) * 5 + 1; // common→1, rare→6, epic→11, legendary→16, divin→21
+  const i = RARITY_TIERS.indexOf(r);
+  return (i < 0 ? 0 : i) * 5 + 1; // E→1, C→6, A→11, S→16, SSS→21
 }
 
 // Effet d'un talent = base × multiplicateur de niveau (+8 %/niveau, comme le gear).
@@ -98,11 +177,13 @@ export function talentsEarned(level: number): number {
 // (tous actifs, niveau 1). On les convertit en instances équipées niveau 1. ──
 export function normalizeTalents(raw: unknown): TalentInstance[] {
   if (!Array.isArray(raw)) return [];
-  return raw.map((t, i) => {
-    if (typeof t === 'string') return { id: `legacy_${i}_${t}`, code: t, xp: 0, equipped: true };
-    const o = t as Partial<TalentInstance>;
-    return { id: o.id ?? `t_${i}`, code: o.code ?? '', xp: o.xp ?? 0, equipped: o.equipped };
-  }).filter((t) => BY_CODE.has(t.code));
+  return raw
+    .map((t, i) => {
+      if (typeof t === 'string') return { id: `legacy_${i}_${t}`, code: t, xp: 0, equipped: true };
+      const o = t as Partial<TalentInstance>;
+      return { id: o.id ?? `t_${i}`, code: o.code ?? '', xp: o.xp ?? 0, equipped: o.equipped };
+    })
+    .filter((t) => BY_CODE.has(t.code));
 }
 
 /** Niveau EFFECTIF d'un talent : plafonné au niveau du joueur (comme le gear —

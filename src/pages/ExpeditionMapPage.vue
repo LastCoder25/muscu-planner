@@ -25,104 +25,133 @@
     <!-- Carte -->
     <div class="map-outer">
       <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
-      <svg :viewBox="`0 0 ${MAP} ${MAP}`" class="map" :style="{ width: mapPx + 'px', height: mapPx + 'px' }">
-        <!-- Fond PARCHEMIN noir & blanc : mer + côte + rivières + reliefs à l'encre -->
-        <rect :x="-10" :y="-10" :width="MAP + 20" :height="MAP + 20" class="sea" />
-        <path :d="terrain.coast" class="coast-line" />
-        <path :d="terrain.coast" class="land" />
-        <path v-for="(rv, i) in terrain.rivers" :key="'rv' + i" :d="rv" class="river" />
-        <path
-          v-for="(feat, i) in terrain.features"
-          :key="'ft' + i"
-          :d="feat.d"
-          class="feat"
-          :class="'f-' + feat.kind"
-        />
-
-        <!-- Cadre décoratif + boussole (visibles carte dézoomée) -->
-        <rect x="1.5" y="1.5" :width="MAP - 3" :height="MAP - 3" rx="2" class="map-frame" />
-        <rect x="3.5" y="3.5" :width="MAP - 7" :height="MAP - 7" rx="1" class="map-frame thin" />
-        <g class="compass" :transform="`translate(${MAP - 100} 0)`">
-          <circle cx="90" cy="10" r="5.5" class="comp-bg" />
-          <path d="M 90 5 L 91.4 10 L 90 8.7 L 88.6 10 Z" class="comp-needle" />
-          <text x="90" y="4" class="comp-n">N</text>
-        </g>
-
-        <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant) -->
-        <template v-if="active && hero">
-          <line
-            :x1="active.poi.x" :y1="active.poi.y" :x2="hero.x" :y2="hero.y"
-            class="trail" :class="hero.phase === 'return' ? 'done' : 'todo'"
-          />
-          <line
-            :x1="TOWN.x" :y1="TOWN.y" :x2="hero.x" :y2="hero.y"
-            class="trail" :class="hero.phase === 'return' ? 'todo' : 'done'"
-          />
-          <!-- Chevrons de direction : s'allument un à un du héros vers la cible
-               (sens du déplacement), orientés dans la direction, en boucle. -->
+        <svg
+          :viewBox="`0 0 ${MAP} ${MAP}`"
+          class="map"
+          :style="{ width: mapPx + 'px', height: mapPx + 'px' }"
+        >
+          <!-- Fond PARCHEMIN noir & blanc : mer + côte + rivières + reliefs à l'encre -->
+          <rect :x="-10" :y="-10" :width="MAP + 20" :height="MAP + 20" class="sea" />
+          <path :d="terrain.coast" class="coast-line" />
+          <path :d="terrain.coast" class="land" />
+          <path v-for="(rv, i) in terrain.rivers" :key="'rv' + i" :d="rv" class="river" />
           <path
-            v-for="a in travelArrows"
-            :key="'arr' + a.i"
-            class="dir-arrow"
-            d="M -1 -1.5 L 1.4 0 L -1 1.5 Z"
-            :transform="`translate(${a.x} ${a.y}) rotate(${a.angle})`"
-            :style="{ animationDelay: a.delay + 's' }"
+            v-for="(feat, i) in terrain.features"
+            :key="'ft' + i"
+            :d="feat.d"
+            class="feat"
+            :class="'f-' + feat.kind"
           />
-        </template>
 
-        <!-- POI -->
-        <g
-          v-for="p in pois"
-          :key="p.id"
-          class="poi"
-          :class="[diffClass(p), { sel: selected?.id === p.id, dim: !!active }]"
-          @click="selectPoi(p)"
-        >
-          <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" />
-          <text :x="p.x" :y="p.y + 1.4" class="poi-emo">{{ POI_EMO[p.type] }}</text>
-          <text :x="p.x" :y="p.y - 5.5" class="poi-lvl">{{ p.level }}</text>
-        </g>
+          <!-- Cadre décoratif + boussole (visibles carte dézoomée) -->
+          <rect x="1.5" y="1.5" :width="MAP - 3" :height="MAP - 3" rx="2" class="map-frame" />
+          <rect x="3.5" y="3.5" :width="MAP - 7" :height="MAP - 7" rx="1" class="map-frame thin" />
+          <g class="compass" :transform="`translate(${MAP - 100} 0)`">
+            <circle cx="90" cy="10" r="5.5" class="comp-bg" />
+            <path d="M 90 5 L 91.4 10 L 90 8.7 L 88.6 10 Z" class="comp-needle" />
+            <text x="90" y="4" class="comp-n">N</text>
+          </g>
 
-        <!-- Objectif actif -->
-        <g v-if="active" class="poi target">
-          <circle :cx="active.poi.x" :cy="active.poi.y" r="4.8" class="poi-bg" />
-          <text :x="active.poi.x" :y="active.poi.y + 1.4" class="poi-emo">{{ POI_EMO[active.poi.type] }}</text>
-        </g>
-
-        <!-- Héros -->
-        <g v-if="active && hero">
-          <circle :cx="hero.x" :cy="hero.y" r="3.4" class="hero" />
-          <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
-        </g>
-
-        <!-- Filons de production (village autour de la ville) -->
-        <g
-          v-for="pl in plots"
-          :key="'plot' + pl.slot"
-          class="plot"
-          :class="{ locked: !pl.unlocked, built: !!pl.building, ready: pl.ready, upgraded: flashSlot === pl.slot }"
-          @click="openPlot(pl)"
-        >
-          <circle :cx="pl.x" :cy="pl.y" r="4.2" class="plot-bg" />
-          <text v-if="!pl.unlocked" :x="pl.x" :y="pl.y + 1.4" class="plot-emo">🔒</text>
-          <text v-else-if="!pl.building" :x="pl.x" :y="pl.y + 1.6" class="plot-emo plot-plus">＋</text>
-          <template v-else>
-            <text :x="pl.x" :y="pl.y + 1.4" class="plot-emo">{{ filonEmoji(pl.building) }}</text>
-            <!-- Pastille de NIVEAU (lisible) en haut à droite du bâtiment -->
-            <circle :cx="pl.x + 3.4" :cy="pl.y - 3.4" r="2.3" class="plot-lvl-bg" />
-            <text :x="pl.x + 3.4" :y="pl.y - 2.5" class="plot-lvl font-display">{{ pl.building.level }}</text>
-            <!-- Pastille « prêt à récolter » en bas à droite -->
-            <circle v-if="pl.ready" :cx="pl.x + 3.4" :cy="pl.y + 3.4" r="1.5" class="plot-ready" />
+          <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant) -->
+          <template v-if="active && hero">
+            <line
+              :x1="active.poi.x"
+              :y1="active.poi.y"
+              :x2="hero.x"
+              :y2="hero.y"
+              class="trail"
+              :class="hero.phase === 'return' ? 'done' : 'todo'"
+            />
+            <line
+              :x1="TOWN.x"
+              :y1="TOWN.y"
+              :x2="hero.x"
+              :y2="hero.y"
+              class="trail"
+              :class="hero.phase === 'return' ? 'todo' : 'done'"
+            />
+            <!-- Chevrons de direction : s'allument un à un du héros vers la cible
+               (sens du déplacement), orientés dans la direction, en boucle. -->
+            <path
+              v-for="a in travelArrows"
+              :key="'arr' + a.i"
+              class="dir-arrow"
+              d="M -1 -1.5 L 1.4 0 L -1 1.5 Z"
+              :transform="`translate(${a.x} ${a.y}) rotate(${a.angle})`"
+              :style="{ animationDelay: a.delay + 's' }"
+            />
           </template>
-        </g>
 
-        <!-- Ville (centre) -->
-        <g class="town">
-          <circle :cx="TOWN.x" :cy="TOWN.y" r="8" class="town-glow" />
-          <circle :cx="TOWN.x" :cy="TOWN.y" r="5.5" class="town-bg" />
-          <text :x="TOWN.x" :y="TOWN.y + 1.9" class="town-emo">🏰</text>
-        </g>
-      </svg>
+          <!-- POI -->
+          <g
+            v-for="p in pois"
+            :key="p.id"
+            class="poi"
+            :class="[diffClass(p), { sel: selected?.id === p.id, dim: !!active }]"
+            @click="selectPoi(p)"
+          >
+            <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" />
+            <text :x="p.x" :y="p.y + 1.4" class="poi-emo">{{ POI_EMO[p.type] }}</text>
+            <text :x="p.x" :y="p.y - 5.5" class="poi-lvl">{{ p.level }}</text>
+          </g>
+
+          <!-- Objectif actif -->
+          <g v-if="active" class="poi target">
+            <circle :cx="active.poi.x" :cy="active.poi.y" r="4.8" class="poi-bg" />
+            <text :x="active.poi.x" :y="active.poi.y + 1.4" class="poi-emo">
+              {{ POI_EMO[active.poi.type] }}
+            </text>
+          </g>
+
+          <!-- Héros -->
+          <g v-if="active && hero">
+            <circle :cx="hero.x" :cy="hero.y" r="3.4" class="hero" />
+            <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
+          </g>
+
+          <!-- Filons de production (village autour de la ville) -->
+          <g
+            v-for="pl in plots"
+            :key="'plot' + pl.slot"
+            class="plot"
+            :class="{
+              locked: !pl.unlocked,
+              built: !!pl.building,
+              ready: pl.ready,
+              upgraded: flashSlot === pl.slot,
+            }"
+            @click="openPlot(pl)"
+          >
+            <circle :cx="pl.x" :cy="pl.y" r="4.2" class="plot-bg" />
+            <text v-if="!pl.unlocked" :x="pl.x" :y="pl.y + 1.4" class="plot-emo">🔒</text>
+            <text v-else-if="!pl.building" :x="pl.x" :y="pl.y + 1.6" class="plot-emo plot-plus">
+              ＋
+            </text>
+            <template v-else>
+              <text :x="pl.x" :y="pl.y + 1.4" class="plot-emo">{{ filonEmoji(pl.building) }}</text>
+              <!-- Pastille de NIVEAU (lisible) en haut à droite du bâtiment -->
+              <circle :cx="pl.x + 3.4" :cy="pl.y - 3.4" r="2.3" class="plot-lvl-bg" />
+              <text :x="pl.x + 3.4" :y="pl.y - 2.5" class="plot-lvl font-display">
+                {{ pl.building.level }}
+              </text>
+              <!-- Pastille « prêt à récolter » en bas à droite -->
+              <circle
+                v-if="pl.ready"
+                :cx="pl.x + 3.4"
+                :cy="pl.y + 3.4"
+                r="1.5"
+                class="plot-ready"
+              />
+            </template>
+          </g>
+
+          <!-- Ville (centre) -->
+          <g class="town">
+            <circle :cx="TOWN.x" :cy="TOWN.y" r="8" class="town-glow" />
+            <circle :cx="TOWN.x" :cy="TOWN.y" r="5.5" class="town-bg" />
+            <text :x="TOWN.x" :y="TOWN.y + 1.9" class="town-emo">🏰</text>
+          </g>
+        </svg>
       </div>
 
       <!-- Indicateurs de bord : flèche vers les activités hors écran -->
@@ -162,9 +191,13 @@
     <div v-if="active" class="active-card">
       <div class="ac-emo">{{ POI_EMO[active.poi.type] }}</div>
       <div class="ac-main">
-        <div class="ac-title font-display">{{ POI_LABEL[active.poi.type] }} niv {{ active.poi.level }}</div>
+        <div class="ac-title font-display">
+          {{ POI_LABEL[active.poi.type] }} niv {{ active.poi.level }}
+        </div>
         <div class="ac-timers" v-if="hero && hero.phase !== 'done'">
-          <span v-if="hero.phase === 'outbound'">🎯 Arrivée dans {{ fmtMs(hero.remainToObjectiveMs) }}</span>
+          <span v-if="hero.phase === 'outbound'"
+            >🎯 Arrivée dans {{ fmtMs(hero.remainToObjectiveMs) }}</span
+          >
           <span v-else>🏰 Retour dans {{ fmtMs(hero.remainTotalMs) }}</span>
           <span class="ac-total">· total {{ fmtMs(hero.remainTotalMs) }}</span>
         </div>
@@ -178,7 +211,9 @@
         <div class="sh-head">
           <span class="sh-emo">{{ POI_EMO[selected.type] }}</span>
           <div class="sh-main">
-            <div class="sh-title font-display">{{ POI_LABEL[selected.type] }} · niv {{ selected.level }}</div>
+            <div class="sh-title font-display">
+              {{ POI_LABEL[selected.type] }} · niv {{ selected.level }}
+            </div>
             <div class="sh-sub">{{ poiRewardLabel(selected) }}</div>
           </div>
           <button class="sh-x" @click="selected = null">✕</button>
@@ -187,13 +222,11 @@
           <span class="sh-chip">⏱️ {{ fmtMin(roundTripMin(selected)) }}</span>
           <span class="sh-chip">🪙 {{ costOf(selected) }}</span>
           <span v-if="selected.type === 'arena'" class="sh-chip">🌊 ~{{ arenaWaves }} vagues</span>
-          <span v-else-if="selected.type !== 'mine'" class="sh-chip" :class="winClass(winPct)">🎯 {{ winPct }}%</span>
+          <span v-else-if="selected.type !== 'mine'" class="sh-chip" :class="winClass(winPct)"
+            >🎯 {{ winPct }}%</span
+          >
         </div>
-        <button
-          class="sh-send"
-          :disabled="!canSend"
-          @click="send"
-        >
+        <button class="sh-send" :disabled="!canSend" @click="send">
           {{ sendLabel }}
         </button>
       </div>
@@ -203,82 +236,108 @@
          (clic-dehors ou croix pour fermer ; plus de scroll en bas de page). -->
     <transition name="plot-fade">
       <div v-if="selectedPlot" class="plot-backdrop" @click.self="selectedSlot = null">
-      <div class="sheet plot-modal">
-        <div class="sh-head">
-          <span class="sh-emo">{{ selectedPlot.building ? filonEmoji(selectedPlot.building) : '🏗️' }}</span>
-          <div class="sh-main">
-            <div class="sh-title font-display">
-              {{ selectedPlot.building ? filonLabel(selectedPlot.building) : 'Emplacement libre' }}
+        <div class="sheet plot-modal">
+          <div class="sh-head">
+            <span class="sh-emo">{{
+              selectedPlot.building ? filonEmoji(selectedPlot.building) : '🏗️'
+            }}</span>
+            <div class="sh-main">
+              <div class="sh-title font-display">
+                {{
+                  selectedPlot.building ? filonLabel(selectedPlot.building) : 'Emplacement libre'
+                }}
+              </div>
+              <div class="sh-sub">
+                <template v-if="!selectedPlot.unlocked"
+                  >🔒 Débloqué au niveau {{ plotUnlockLevel(selectedPlot.slot) }}</template
+                >
+                <template v-else-if="selectedPlot.building"
+                  >Niv {{ selectedPlot.building.level }} ·
+                  {{ filonProdLabel(selectedPlot.building) }}</template
+                >
+                <template v-else>Construis un filon (production passive de ressources).</template>
+              </div>
             </div>
-            <div class="sh-sub">
-              <template v-if="!selectedPlot.unlocked">🔒 Débloqué au niveau {{ plotUnlockLevel(selectedPlot.slot) }}</template>
-              <template v-else-if="selectedPlot.building">Niv {{ selectedPlot.building.level }} · {{ filonProdLabel(selectedPlot.building) }}</template>
-              <template v-else>Construis un filon (production passive de ressources).</template>
-            </div>
+            <button class="sh-x" @click="selectedSlot = null">✕</button>
           </div>
-          <button class="sh-x" @click="selectedSlot = null">✕</button>
-        </div>
 
-        <!-- Construire : choix du type (gaté par niveau + unicité) -->
-        <div v-if="selectedPlot.unlocked && !selectedPlot.building" class="plot-build">
-          <button
-            v-for="t in BUILDING_TYPES"
-            :key="t.id"
-            class="pb-opt"
-            :class="{ locked: !typeBuildable(t) }"
-            :disabled="!typeBuildable(t) || (char.row?.gold ?? 0) < t.buildGold"
-            @click="doBuild(selectedPlot.slot, t.id)"
-          >
-            <span class="pb-emo">{{ t.emoji }}</span>
-            <span class="pb-main">
-              <span class="pb-name">{{ t.label }}</span>
-              <span class="pb-desc">{{ t.desc }}</span>
-            </span>
-            <span class="pb-cost">{{ typeBuildable(t) ? '🪙' + t.buildGold : typeLockReason(t) }}</span>
-          </button>
-        </div>
-
-        <!-- Bâtiment construit : gérer -->
-        <div v-else-if="selectedPlot.building" class="plot-manage">
-          <!-- Niveau actuel + effet/production, avec APERÇU du niveau suivant -->
-          <div class="pm-level">
-            <span>Niveau <b>{{ selectedPlot.building.level }}</b> · {{ filonProdLabel(selectedPlot.building) }}</span>
-            <span
-              v-if="nextEffectLabel(selectedPlot.building) && nextEffectLabel(selectedPlot.building) !== filonProdLabel(selectedPlot.building)"
-              class="pm-next"
-            >
-              ⬆️ Niv {{ selectedPlot.building.level + 1 }} · {{ nextEffectLabel(selectedPlot.building) }}
-            </span>
-          </div>
-          <!-- Filon : récolte (accumulation fractionnaire visible même quand < 1) -->
-          <div v-if="!isUtility(selectedPlot.building)" class="pm-ready">
-            <span>
-              En stock :
-              <b>{{ filonResEmoji(selectedPlot.building) }}{{ plotAccruedExact(selectedPlot.building).toFixed(1) }}</b>
-            </span>
-            <span class="pm-cap">/ {{ Math.floor(plotStorage(selectedPlot.building)) }} max</span>
-          </div>
-          <div class="pm-actions">
+          <!-- Construire : choix du type (gaté par niveau + unicité) -->
+          <div v-if="selectedPlot.unlocked && !selectedPlot.building" class="plot-build">
             <button
-              v-if="!isUtility(selectedPlot.building)"
-              class="pm-collect"
-              :disabled="plotAccrued(selectedPlot.building) < 1"
-              @click="collectAll"
+              v-for="t in BUILDING_TYPES"
+              :key="t.id"
+              class="pb-opt"
+              :class="{ locked: !typeBuildable(t) }"
+              :disabled="!typeBuildable(t) || (char.row?.gold ?? 0) < t.buildGold"
+              @click="doBuild(selectedPlot.slot, t.id)"
             >
-              🧺 Récolter
-            </button>
-            <button
-              v-if="buildingScales(selectedPlot.building.typeId)"
-              class="pm-up"
-              :disabled="!plotCanUpgrade(selectedPlot.building) || (char.row?.gold ?? 0) < plotUpCost(selectedPlot.building)"
-              @click="doUpgrade(selectedPlot.slot)"
-            >
-              <template v-if="!plotCanUpgrade(selectedPlot.building)">Max (niv {{ heroLevel }})</template>
-              <template v-else>⬆️ Améliorer · 🪙{{ plotUpCost(selectedPlot.building) }}</template>
+              <span class="pb-emo">{{ t.emoji }}</span>
+              <span class="pb-main">
+                <span class="pb-name">{{ t.label }}</span>
+                <span class="pb-desc">{{ t.desc }}</span>
+              </span>
+              <span class="pb-cost">{{
+                typeBuildable(t) ? '🪙' + t.buildGold : typeLockReason(t)
+              }}</span>
             </button>
           </div>
+
+          <!-- Bâtiment construit : gérer -->
+          <div v-else-if="selectedPlot.building" class="plot-manage">
+            <!-- Niveau actuel + effet/production, avec APERÇU du niveau suivant -->
+            <div class="pm-level">
+              <span
+                >Niveau <b>{{ selectedPlot.building.level }}</b> ·
+                {{ filonProdLabel(selectedPlot.building) }}</span
+              >
+              <span
+                v-if="
+                  nextEffectLabel(selectedPlot.building) &&
+                  nextEffectLabel(selectedPlot.building) !== filonProdLabel(selectedPlot.building)
+                "
+                class="pm-next"
+              >
+                ⬆️ Niv {{ selectedPlot.building.level + 1 }} ·
+                {{ nextEffectLabel(selectedPlot.building) }}
+              </span>
+            </div>
+            <!-- Filon : récolte (accumulation fractionnaire visible même quand < 1) -->
+            <div v-if="!isUtility(selectedPlot.building)" class="pm-ready">
+              <span>
+                En stock :
+                <b
+                  >{{ filonResEmoji(selectedPlot.building)
+                  }}{{ plotAccruedExact(selectedPlot.building).toFixed(1) }}</b
+                >
+              </span>
+              <span class="pm-cap">/ {{ Math.floor(plotStorage(selectedPlot.building)) }} max</span>
+            </div>
+            <div class="pm-actions">
+              <button
+                v-if="!isUtility(selectedPlot.building)"
+                class="pm-collect"
+                :disabled="plotAccrued(selectedPlot.building) < 1"
+                @click="collectAll"
+              >
+                🧺 Récolter
+              </button>
+              <button
+                v-if="buildingScales(selectedPlot.building.typeId)"
+                class="pm-up"
+                :disabled="
+                  !plotCanUpgrade(selectedPlot.building) ||
+                  (char.row?.gold ?? 0) < plotUpCost(selectedPlot.building)
+                "
+                @click="doUpgrade(selectedPlot.slot)"
+              >
+                <template v-if="!plotCanUpgrade(selectedPlot.building)"
+                  >Max (niv {{ heroLevel }})</template
+                >
+                <template v-else>⬆️ Améliorer · 🪙{{ plotUpCost(selectedPlot.building) }}</template>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
       </div>
     </transition>
 
@@ -292,7 +351,9 @@
         </div>
         <div class="unlock-where">📍 {{ unlockInfo.unlock.where }}</div>
         <div class="unlock-actions">
-          <button v-if="unlockInfo.unlock.route" class="unlock-go" @click="goUnlock">Y aller</button>
+          <button v-if="unlockInfo.unlock.route" class="unlock-go" @click="goUnlock">
+            Y aller
+          </button>
           <button class="unlock-ok" @click="unlockInfo = null">Continuer</button>
         </div>
       </q-card>
@@ -310,7 +371,9 @@
               lastOutcome.waves > 1 ? 's' : ''
             }}</template
           >
-          <template v-else>{{ lastOutcome.win ? 'Expédition réussie !' : 'Expédition ratée' }}</template>
+          <template v-else>{{
+            lastOutcome.win ? 'Expédition réussie !' : 'Expédition ratée'
+          }}</template>
         </div>
         <div class="coll-text">{{ lastOutcome.text }}</div>
         <div class="coll-haul">
@@ -318,9 +381,18 @@
           <span v-if="lastOutcome.dust">✨ +{{ lastOutcome.dust }}</span>
           <span v-if="lastOutcome.stones">💎 +{{ lastOutcome.stones }}</span>
           <span v-if="lastOutcome.key">🗝️ +{{ lastOutcome.key }}</span>
-          <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item">🎁 {{ it.name }}</span>
+          <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item"
+            >🎁 {{ it.name }}</span
+          >
         </div>
-        <q-btn color="primary" text-color="dark" no-caps unelevated label="Super" @click="collectOpen = false" />
+        <q-btn
+          color="primary"
+          text-color="dark"
+          no-caps
+          unelevated
+          label="Super"
+          @click="collectOpen = false"
+        />
       </q-card>
     </q-dialog>
 
@@ -341,7 +413,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
 import GameLoader from '@/components/GameLoader.vue';
 import { computeCharacter } from '@/lib/character';
-import { playerWithGear } from '@/lib/items';
+import { playerWithGear, RARITY_RANK } from '@/lib/items';
 import {
   BUILDING_TYPES,
   buildingType,
@@ -393,7 +465,12 @@ const flashSlot = ref<number | null>(null);
 const TOWN = EXPE.town;
 const MAP = EXPE.mapSize;
 const POI_EMO: Record<PoiType, string> = { mine: '⛏️', camp: '🏕️', lair: '👹', arena: '🏟️' };
-const POI_LABEL: Record<PoiType, string> = { mine: 'Mine', camp: 'Camp', lair: 'Repaire', arena: 'Arène' };
+const POI_LABEL: Record<PoiType, string> = {
+  mine: 'Mine',
+  camp: 'Camp',
+  lair: 'Repaire',
+  arena: 'Arène',
+};
 
 const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -496,7 +573,8 @@ function zoom(dir: number) {
 }
 // Activités hors écran → flèche au bord pointant vers elles (clic = slide dessus).
 const edgeIndicators = computed(() => {
-  if (!scrollEl.value) return [] as { id: string; poi: Poi; x: number; y: number; deg: number; diff: string }[];
+  if (!scrollEl.value)
+    return [] as { id: string; poi: Poi; x: number; y: number; deg: number; diff: string }[];
   const cw = contW.value;
   const ch = contH.value;
   const m = 22;
@@ -508,7 +586,10 @@ const edgeIndicators = computed(() => {
     if (px >= 0 && px <= cw && py >= 0 && py <= ch) continue; // visible
     const dx = px - cw / 2;
     const dy = py - ch / 2;
-    const scale = Math.min((cw / 2 - m) / (Math.abs(dx) || 1e-6), (ch / 2 - m) / (Math.abs(dy) || 1e-6));
+    const scale = Math.min(
+      (cw / 2 - m) / (Math.abs(dx) || 1e-6),
+      (ch / 2 - m) / (Math.abs(dy) || 1e-6),
+    );
     out.push({
       id: p.id,
       poi: p,
@@ -533,7 +614,14 @@ const lastOutcomeItems = computed(() => {
 
 // ── Filons de production (village autour de la ville) ──
 const PLOT_R = 22; // rayon des emplacements autour de la ville (< distMin des POI)
-interface PlotView { slot: number; x: number; y: number; unlocked: boolean; building: Building | null; ready: boolean }
+interface PlotView {
+  slot: number;
+  x: number;
+  y: number;
+  unlocked: boolean;
+  building: Building | null;
+  ready: boolean;
+}
 const plots = computed<PlotView[]>(() => {
   const cap = BUILD.plotCap;
   const unlocked = plotsForLevel(heroLevel.value);
@@ -554,7 +642,9 @@ const plots = computed<PlotView[]>(() => {
 const readyTotal = computed(() => collectable(char.row?.buildings ?? [], now.value));
 const selectedSlot = ref<number | null>(null);
 const selectedPlot = computed<PlotView | null>(() =>
-  selectedSlot.value === null ? null : plots.value.find((p) => p.slot === selectedSlot.value) ?? null,
+  selectedSlot.value === null
+    ? null
+    : (plots.value.find((p) => p.slot === selectedSlot.value) ?? null),
 );
 function openPlot(pl: PlotView) {
   selected.value = null;
@@ -668,7 +758,8 @@ function typeBuildable(t: BuildingType): boolean {
 }
 function typeLockReason(t: BuildingType): string {
   if (heroLevel.value < buildingUnlockLevel(t.id)) return `🔒 niv ${buildingUnlockLevel(t.id)}`;
-  if (t.unique && (char.row?.buildings ?? []).some((b) => b.typeId === t.id)) return 'déjà construit';
+  if (t.unique && (char.row?.buildings ?? []).some((b) => b.typeId === t.id))
+    return 'déjà construit';
   return '';
 }
 function isUtility(b: Building): boolean {
@@ -678,7 +769,8 @@ function isUtility(b: Building): boolean {
 function utilityEffectLabel(b: Building): string {
   const pct = Math.round((storageMult([b]) - 1) * 100);
   if (pct > 0) return `+${pct}% stockage de tous les filons`;
-  if (b.typeId === 'outpost') return `−${Math.round((1 - travelTimeMult([b])) * 100)}% temps de trajet`;
+  if (b.typeId === 'outpost')
+    return `−${Math.round((1 - travelTimeMult([b])) * 100)}% temps de trajet`;
   if (b.typeId === 'labyrinth_gate')
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')
@@ -721,7 +813,8 @@ const costOf = (p: Poi) => goldCost(p.type, p.level);
 // Avant-poste : débloque les expéditions + réduit les trajets.
 const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));
 const travelMult = computed(() => travelTimeMult(char.row?.buildings ?? []));
-const roundTripMin = (p: Poi) => Math.round(travelOneWayMin(p.level, p.distNorm) * 2 * travelMult.value);
+const roundTripMin = (p: Poi) =>
+  Math.round(travelOneWayMin(p.level, p.distNorm) * 2 * travelMult.value);
 function poiRewardLabel(p: Poi): string {
   if (p.type === 'mine') return 'Or + poussière (récolte)';
   if (p.type === 'camp') return 'Poussière + un objet';
@@ -778,15 +871,18 @@ async function lifecycle() {
       // Butin d'expédition légendaire/divin → éclat central (gros moment). L'arène peut
       // en ramener plusieurs → on célèbre le PLUS RARE.
       const drops = o.items && o.items.length ? o.items : o.item ? [o.item] : [];
-      const rank = (r: string) => ['common', 'rare', 'epic', 'legendary', 'divin'].indexOf(r);
-      const top = drops.slice().sort((a, b) => rank(b.rarity) - rank(a.rarity))[0];
-      if (top && (top.rarity === 'legendary' || top.rarity === 'divin'))
+      const rk = (r: string) => RARITY_RANK[r as keyof typeof RARITY_RANK] ?? 0;
+      const top = drops.slice().sort((a, b) => rk(b.rarity) - rk(a.rarity))[0];
+      if (top && rk(top.rarity) >= 7)
         gameFx.celebrate({
           kind: 'drop',
           emoji: top.emoji,
-          title: top.rarity === 'divin' ? 'DROP DIVIN !' : 'Butin légendaire !',
-          subtitle: drops.length > 1 ? `${top.name} (+${drops.length - 1} autre${drops.length > 2 ? 's' : ''})` : top.name,
-          rarity: top.rarity,
+          title: rk(top.rarity) >= 9 ? 'DROP RANG SSS !' : `Butin rang ${top.rarity} !`,
+          subtitle:
+            drops.length > 1
+              ? `${top.name} (+${drops.length - 1} autre${drops.length > 2 ? 's' : ''})`
+              : top.name,
+          rarity: rk(top.rarity) >= 9 ? 'divin' : rk(top.rarity) >= 8 ? 'legendary' : 'epic',
         });
     }
     await char.expeSyncMap(uid, Date.now(), heroLevel.value);

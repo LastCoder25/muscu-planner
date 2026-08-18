@@ -68,7 +68,10 @@
           />
         </div>
         <div v-else class="reps-bar">
-          <span class="reps-fill" :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }" />
+          <span
+            class="reps-fill"
+            :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }"
+          />
         </div>
         <div class="leg-actions">
           <button v-for="n in [1, 2, 3, 4]" :key="n" class="add" @click="openSet(leg, n)">

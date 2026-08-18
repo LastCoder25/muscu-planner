@@ -22,9 +22,17 @@ const cfg = (over: Partial<ChallengeConfig> = {}): ChallengeConfig => ({ start: 
 describe('extendChallenge : l’affichage des jours s’adapte', () => {
   const mk = (over: Partial<Challenge> = {}): Challenge =>
     ({
-      id: 'x', exercise_id: 'e', exercise_name: 'E', unit: 'reps', format: 'fixed',
-      duration_days: 7, start_date: '2026-01-05', config: cfg({ start: 20 }),
-      daily_targets: [20, 20, 20, 20, 20, 20, 20], progress: [], status: 'active',
+      id: 'x',
+      exercise_id: 'e',
+      exercise_name: 'E',
+      unit: 'reps',
+      format: 'fixed',
+      duration_days: 7,
+      start_date: '2026-01-05',
+      config: cfg({ start: 20 }),
+      daily_targets: [20, 20, 20, 20, 20, 20, 20],
+      progress: [],
+      status: 'active',
       ...over,
     }) as Challenge;
   it('fixed : daily_targets ET duration_days s’allongent', () => {
@@ -33,7 +41,11 @@ describe('extendChallenge : l’affichage des jours s’adapte', () => {
     expect(r.daily_targets).toHaveLength(10);
   });
   it('cumulative : daily_targets (zéros pour le calendrier) s’allonge aussi', () => {
-    const c = mk({ format: 'cumulative', config: cfg({ total: 100 }), daily_targets: [0, 0, 0, 0, 0, 0, 0] });
+    const c = mk({
+      format: 'cumulative',
+      config: cfg({ total: 100 }),
+      daily_targets: [0, 0, 0, 0, 0, 0, 0],
+    });
     const r = extendChallenge(c, 5);
     expect(r.duration_days).toBe(12);
     expect(r.daily_targets).toHaveLength(12); // avant le fix : restait à 7
@@ -150,7 +162,9 @@ describe('addContribution (report cardio → défi)', () => {
   });
   it('removeContribution : ne descend jamais sous 0, null si rien à retirer', () => {
     const ch = distanceCh();
-    ch.progress = [{ day: 2, date: '2026-01-07', target: 5, done: 3, elapsed_sec: 0, completed: false }];
+    ch.progress = [
+      { day: 2, date: '2026-01-07', target: 5, done: 3, elapsed_sec: 0, completed: false },
+    ];
     expect(removeContribution(ch, '2026-01-07', 10)!.find((x) => x.day === 2)!.done).toBe(0);
     expect(removeContribution(ch, '2026-01-08', 5)).toBeNull(); // jour sans progrès
     expect(removeContribution(ch, '2026-01-11', 5)).toBeNull(); // hors plage

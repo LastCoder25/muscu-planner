@@ -100,8 +100,8 @@
           </template>
 
           <div class="vol-summary">
-            🎯 <b>{{ activeCount }}</b> groupes musculaires · <b>~{{ suggestedTotalExos }}</b>
-            exercices · <b>{{ totalSets }}</b> séries / semaine
+            🎯 <b>{{ activeCount }}</b> groupes musculaires ·
+            <b>~{{ suggestedTotalExos }}</b> exercices · <b>{{ totalSets }}</b> séries / semaine
           </div>
         </div>
         <div class="foot-bar cta-bar">
@@ -129,7 +129,10 @@
         <div class="draft-progress">
           <span>Emplacement {{ draftIndex + 1 }} / {{ draftKeys.length }}</span>
           <div class="dp-bar">
-            <div class="dp-fill" :style="{ width: ((draftIndex + 1) / draftKeys.length) * 100 + '%' }" />
+            <div
+              class="dp-fill"
+              :style="{ width: ((draftIndex + 1) / draftKeys.length) * 100 + '%' }"
+            />
           </div>
         </div>
 
@@ -146,7 +149,9 @@
         <div class="draft-instr">
           <span>
             Choisis
-            {{ suggestN(curKey) > 1 ? 'jusqu’à ' + suggestN(curKey) + ' exercices' : 'ton exercice' }}
+            {{
+              suggestN(curKey) > 1 ? 'jusqu’à ' + suggestN(curKey) + ' exercices' : 'ton exercice'
+            }}
           </span>
           <span class="di-note" :class="{ full: atCap(curKey) }">
             {{ pickCount(curKey) }}/{{ suggestN(curKey) }}
@@ -256,14 +261,17 @@
       <template v-else>
         <p class="intro">Ajuste le <b>volume</b> et la <b>charge</b>, puis lance ton défi.</p>
         <div v-if="!recapKeys.length" class="no-ex">
-          Aucun exercice choisi. <button class="link-btn" @click="step = 'draft'">Revenir au choix</button>
+          Aucun exercice choisi.
+          <button class="link-btn" @click="step = 'draft'">Revenir au choix</button>
         </div>
         <div v-for="key in recapKeys" :key="key" class="slot-card">
           <div class="slot-head">
             <span class="slot-emo">{{ slotOf(key)?.emoji }}</span>
             <div class="slot-main">
               <div class="slot-label font-display">{{ slotOf(key)?.label }}</div>
-              <div class="slot-hint">{{ pickCount(key) }} exo{{ pickCount(key) > 1 ? 's' : '' }}</div>
+              <div class="slot-hint">
+                {{ pickCount(key) }} exo{{ pickCount(key) > 1 ? 's' : '' }}
+              </div>
             </div>
             <button type="button" class="ex-add" @click="editSlot(key)">Modifier</button>
           </div>
@@ -291,7 +299,9 @@
               </div>
             </div>
             <div class="cfg-row">
-              <span class="cfg-lbl">{{ picks[key]?.count_mode === 'reps' ? 'Reps' : 'Séries' }} / semaine</span>
+              <span class="cfg-lbl"
+                >{{ picks[key]?.count_mode === 'reps' ? 'Reps' : 'Séries' }} / semaine</span
+              >
               <div class="stepper">
                 <button type="button" @click="bumpTarget(key, -1)">−</button>
                 <span class="stp-v font-display">{{ picks[key]?.target ?? 0 }}</span>

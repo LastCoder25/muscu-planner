@@ -8,9 +8,43 @@ import { PROCEDURAL } from '@/lib/proceduralContent';
 // mais EXCLU de SLOTS (donc des drops normaux / sets / forge). Cf. src/data/familiars.ts.
 export type ItemSlot = 'weapon' | 'armor' | 'accessory' | 'relic' | 'familiar';
 export const FAMILIAR_SLOT: ItemSlot = 'familiar';
-// « divin » = 5ᵉ rareté au-dessus de légendaire : 1 stat TRÈS puissante, très rare
-// au drop, infusable mais coûteuse. (Le légendaire garde l'adjectif « mythique ».)
-export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'divin';
+// RANGS façon manga (2026‑08‑18) : 10 rangs G (le plus bas) → SSS (le graal), qui
+// remplacent les 5 anciennes raretés. Chaque rang a une bande de valeur DISJOINTE
+// (un rang supérieur est TOUJOURS meilleur) et une couleur propre. La QUALITÉ (1→5,
+// cf. rollStars) est un SOUS-RANG dans la bande — petite progression continue avant
+// le saut de rang. Le rang droppable est gaté par la PROFONDEUR du contenu (le sport
+// gate le niveau → le niveau gate le rang), SSS réservé au très long terme.
+// NB : on garde le NOM de type `Rarity` et le champ `rarity` (moins de churn) ; ce
+// sont désormais des rangs. RANK_ORDER = du plus bas au plus haut.
+export type Rarity = 'G' | 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S' | 'SS' | 'SSS';
+export const RANK_ORDER: Rarity[] = ['G', 'F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
+// Couleur par rang (source unique JS ; le CSS miroir pose --rk par classe .r-*/.p-*).
+export const RANK_COLOR: Record<Rarity, string> = {
+  G: '#9a8f7e',
+  F: '#8f9c86',
+  E: '#6bd18a',
+  D: '#4ec6d6',
+  C: '#5a9bff',
+  B: '#b07cff',
+  A: '#ffd23f',
+  S: '#ff9a3f',
+  SS: '#ff5b5b',
+  SSS: '#ff5cd8',
+};
+// Mapping des ANCIENNES raretés (objets sauvegardés en JSONB) vers les nouveaux rangs,
+// calé sur la proximité de multiplicateur (divin≈SSS, légendaire≈S, épique≈B, rare≈D,
+// commun≈F). `normRank` normalise n'importe quelle chaîne en un rang valide.
+const LEGACY_RANK: Record<string, Rarity> = {
+  common: 'F',
+  rare: 'D',
+  epic: 'B',
+  legendary: 'S',
+  divin: 'SSS',
+};
+export function normRank(r: string | undefined | null): Rarity {
+  if (r && (RANK_ORDER as string[]).includes(r)) return r as Rarity;
+  return (r && LEGACY_RANK[r]) || 'G';
+}
 
 // Effets « signature » (un par objet). value en points de %. RÈGLE : tous les
 // effets doivent GRANDIR avec le niveau de l'objet (pas d'effet « drapeau »
@@ -56,13 +90,15 @@ export function rollStars(roll: number | undefined): number {
   if (roll == null) return 0; // objet legacy sans roll → pas d'étoiles
   return Math.min(5, 1 + Math.floor(Math.max(0, Math.min(1, roll)) * 5));
 }
-// Multiplicateur de qualité DISCRET par palier d'étoiles (1-5). Les paliers sont
-// espacés de 0,08 → les intervalles de stats NE SE CHEVAUCHENT PAS : à rareté/niveau
-// égaux, un 1★ a strictement moins qu'un 2★, etc. (fini « 2 qualités très différentes,
-// mêmes stats »). La qualité est figée au drop puis suit le niveau (effectiveValue).
+// QUALITÉ = SOUS-RANG (1→5) dans la bande du rang. Multiplicateur DISCRET, de 1,0
+// (qualité 1 = plancher du rang) à 1,10 (qualité 5 = presque le rang suivant). La
+// bande NE DÉBORDE JAMAIS sur le rang au-dessus : l'écart entre rangs est +16,6 %
+// (RANK_MULT), la qualité n'en consomme que ~10 % → il reste un saut de rang ressenti
+// (+6 %). Ainsi qualité 1→5 = petite montée continue, et le passage de rang = vrai
+// palier. La qualité est figée au drop puis suit le niveau (effectiveValue).
 export function starQualityMult(stars: number): number {
   const s = Math.min(5, Math.max(1, Math.round(stars)));
-  return 0.8 + (s - 0.5) * 0.08; // 1★ 0,84 · 2★ 0,92 · 3★ 1,00 · 4★ 1,08 · 5★ 1,16
+  return 1 + (s - 1) * 0.025; // Q1 1,000 · Q2 1,025 · Q3 1,050 · Q4 1,075 · Q5 1,100
 }
 
 // L'effet grandit de +5 % de la base par niveau au-dessus de 1. Pente VOLONTAIREMENT
@@ -88,30 +124,23 @@ export function effectiveValue(effect: ItemEffect, level: number): number {
 }
 
 // ── Économie d'objets : Poussière (évolution) & or (vente) ──
-const DUST_BY_RARITY: Record<Rarity, number> = {
-  common: 5,
-  rare: 12,
-  epic: 25,
-  legendary: 50,
-  divin: 100,
-};
-const GOLD_BY_RARITY: Record<Rarity, number> = {
-  common: 10,
-  rare: 25,
-  epic: 60,
-  legendary: 140,
-  divin: 300,
-};
-// Le coût d'amélioration monte avec la rareté (un divin = puits plus profond).
-// ADOUCI pour la refonte « C » (infusion = progression verticale obligatoire, plus
-// un luxe optionnel) : sans ça, tout monter à son niveau serait un mur de grind.
-const RARITY_COST_MULT: Record<Rarity, number> = {
-  common: 1,
-  rare: 1.3,
-  epic: 1.6,
-  legendary: 2.2,
-  divin: 3.5,
-};
+// Index 0..9 du rang → sert aux barèmes croissants (poussière / or / coûts).
+export function rankIndex(r: Rarity): number {
+  return Math.max(0, RANK_ORDER.indexOf(r));
+}
+// Poussière/or de base par rang (croissance géométrique douce, ~×1,5 et ×1,6 par rang).
+const DUST_BY_RARITY: Record<Rarity, number> = Object.fromEntries(
+  RANK_ORDER.map((r, i) => [r, Math.round(4 * Math.pow(1.5, i))]),
+) as Record<Rarity, number>;
+const GOLD_BY_RARITY: Record<Rarity, number> = Object.fromEntries(
+  RANK_ORDER.map((r, i) => [r, Math.round(8 * Math.pow(1.6, i))]),
+) as Record<Rarity, number>;
+// Le coût d'amélioration monte avec le rang (un rang haut = puits plus profond).
+// ADOUCI (infusion = progression verticale obligatoire, pas un luxe) : sans ça, tout
+// monter à son niveau serait un mur de grind. Linéaire léger sur 10 rangs.
+const RARITY_COST_MULT: Record<Rarity, number> = Object.fromEntries(
+  RANK_ORDER.map((r, i) => [r, 1 + i * 0.28]),
+) as Record<Rarity, number>;
 
 /** Coût en poussière pour passer du niveau `level` au suivant, selon la rareté.
  *  SUPER-LINÉAIRE (terme quadratique 2026‑08‑18) : le robinet de poussière suit le
@@ -185,33 +214,23 @@ export const SLOT_EMOJI: Record<ItemSlot, string> = {
   relic: '🔮',
   familiar: '🐾',
 };
-export const RARITY_LABEL: Record<Rarity, string> = {
-  common: 'Commun',
-  rare: 'Rare',
-  epic: 'Épique',
-  legendary: 'Légendaire',
-  divin: 'Divin',
-};
+// Libellé = la lettre du rang elle-même (identité manga : « G », « SSS »).
+export const RARITY_LABEL: Record<Rarity, string> = Object.fromEntries(
+  RANK_ORDER.map((r) => [r, r]),
+) as Record<Rarity, string>;
 
-// Rang de rareté (0..4) pour comparer deux objets (potentiel à niveau égal).
-export const RARITY_RANK: Record<Rarity, number> = {
-  common: 0,
-  rare: 1,
-  epic: 2,
-  legendary: 3,
-  divin: 4,
-};
+// Rang numérique (0..9) pour comparer deux objets (potentiel à niveau égal).
+export const RARITY_RANK: Record<Rarity, number> = Object.fromEntries(
+  RANK_ORDER.map((r, i) => [r, i]),
+) as Record<Rarity, number>;
 
-// Multiplicateur de magnitude par rareté. Hautes raretés ABAISSÉES (2026‑08‑12) :
-// l'écart nu→équipé était trop grand (un loadout légendaire faisait sauter ~2 tiers
-// de contenu → un bas niveau battait du contenu très au-dessus). Voir simulation.
-const RARITY_MULT: Record<Rarity, number> = {
-  common: 1,
-  rare: 1.5,
-  epic: 2.1,
-  legendary: 2.8,
-  divin: 3.8,
-};
+// Multiplicateur de magnitude par RANG (plancher de la bande = qualité 1). Géométrique
+// (ratio 1,166) : SSS×qualité5 (×1,10) ≈ 3,98 → plafond de puissance ≈ divin d'avant,
+// et les bandes restent DISJOINTES (1,166 > qualité max 1,10 → un rang > toujours
+// meilleur, avec un saut de +6 % au passage). Calibré par simulation (2026‑08‑18).
+export const RARITY_MULT: Record<Rarity, number> = Object.fromEntries(
+  RANK_ORDER.map((r, i) => [r, Math.round(0.908 * Math.pow(1.166, i) * 1000) / 1000]),
+) as Record<Rarity, number>;
 
 // Effet possible par slot + valeur de base (avant rareté/niveau).
 // Niveau minimum pour qu'une stat « exotique » puisse tomber sur un drop (pool
@@ -284,11 +303,16 @@ const NAMES: Record<ItemSlot, string[]> = {
   familiar: ['Compagnon'], // nom réel = nom de la race (cf. rollFamiliar)
 };
 const RARITY_ADJ: Record<Rarity, string> = {
-  common: 'usé',
-  rare: 'affûté',
-  epic: 'runique',
-  legendary: 'mythique',
-  divin: 'divin',
+  G: 'brut',
+  F: 'usé',
+  E: 'affûté',
+  D: 'aiguisé',
+  C: 'runique',
+  B: 'enchanté',
+  A: 'héroïque',
+  S: 'mythique',
+  SS: 'légendaire',
+  SSS: 'divin',
 };
 
 /** Libellé de l'effet à un niveau d'objet donné (valeur réelle). */
@@ -329,32 +353,41 @@ function pick<T>(rng: () => number, arr: T[]): T {
   return arr[Math.floor(rng() * arr.length)]!;
 }
 
-// `luck` 0..1 décale progressivement les seuils vers le haut (donjons durs +
-// fiole de chance). 0 = odds de base, 1 = très généreux.
-// `commonDecay` 0..1 fait FONDRE les communs au profit des rares SANS toucher aux
-// paliers du haut (épique/légendaire/divin restent pilotés par `luck` → l'équilibre
-// boss/itémisation calibré est préservé). 0 = ~60 % commun ; 1 = ~18 % commun.
-// Les communs ne disparaissent JAMAIS totalement (part de rare plafonnée à 0,85).
-export function rollRarity(rng: () => number, luck = 0, commonDecay = 0): Rarity {
-  const l = Math.min(1, Math.max(0, luck));
-  const d = Math.min(1, Math.max(0, commonDecay));
-  const r = rng();
-  // Rareté AVARE en bas (début de partie = surtout du commun, un peu de rare), et
-  // pilotée par la `luck` (= profondeur du donjon) pour le haut du panier : l'épique+
-  // devient une chasse de mi/fin de partie, pas une pluie dès les premiers donjons.
-  // Bases (luck 0) : divin 0,2 % · légendaire 0,8 % · épique 4 % · rare ~20 % · commun ~75 %.
-  if (r < 0.002 + l * 0.02) return 'divin'; // 0,2 % → 2,2 % à luck max
-  if (r < 0.01 + l * 0.08) return 'legendary';
-  if (r < 0.05 + l * 0.22) return 'epic'; // 5 % → 27 % (band luck-dépendant)
-  if (r < Math.min(0.85, 0.25 + l * 0.35 + d * 0.42)) return 'rare';
-  return 'common';
+// ── Tirage de RANG (gaté par la profondeur) ──
+// Plafond de rang selon le NIVEAU du contenu (racine → RAPIDE tôt, LENT tard) : le
+// 1er mois on traverse G→D, puis chaque rang haut coûte de plus en plus de niveaux
+// (SSS ≈ niv.90 → graal long terme). Calibré par simulation (2026‑08‑18).
+export function rankCeilingForLevel(level: number): number {
+  return Math.min(9, Math.max(0, Math.floor(Math.sqrt(Math.max(0, level)) * 1.03)));
 }
-
-/** Facteur de décroissance des communs selon le NIVEAU du contenu (donjon). Bas
- *  niveau = communs pleins (~60 %) ; haut niveau = communs rares (~18 %). Partagé
- *  par rollDrop et le miroir d'affichage des odds. */
-export function commonDecayForLevel(level: number): number {
-  return Math.min(1, Math.max(0, (level - 2) / 22));
+// Gaussienne seedée (Box-Muller) — 2 tirages rng, déterministe.
+function gaussian(rng: () => number): number {
+  const u = Math.max(1e-9, rng());
+  const v = rng();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+/** Tire un PALIER (0..49) = rang×5 + (qualité-1). Le plafond vient de la profondeur ;
+ *  la moyenne est ~2 rangs sous le plafond (le plafond reste RARE), remontée par la
+ *  `luck` (profondeur/fiole) et par `floorBonus` (Autel des boss, en paliers). Renvoie
+ *  { rank, quality, roll } où roll∈[0,1] encode la qualité (rollStars le relit). */
+export function rollTier(
+  rng: () => number,
+  level: number,
+  luck = 0,
+  floorBonus = 0,
+): { rank: Rarity; quality: number; roll: number } {
+  const rankCeil = rankCeilingForLevel(level);
+  const tierCeil = rankCeil * 5 + 4;
+  const b = Math.min(1, Math.max(0, luck)) * 10 + Math.max(0, floorBonus); // luck → +2 rangs max
+  let tier = Math.round(tierCeil - 11 + b + gaussian(rng) * 7);
+  tier = Math.min(tierCeil, Math.max(0, tier));
+  const rank = RANK_ORDER[Math.floor(tier / 5)]!;
+  const quality = (tier % 5) + 1; // 1..5
+  return { rank, quality, roll: (quality - 0.5) / 5 };
+}
+/** Rang seul (utilitaires forge/familier qui n'ont pas besoin de la qualité fine). */
+export function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {
+  return rollTier(rng, level, luck).rank;
 }
 
 /**
@@ -386,39 +419,31 @@ export function rollDrop(
 
   const slot = pick(rng, SLOTS);
   const lvl = opts.level ?? 1;
-  // Les communs REVIENNENT (plus de couperet niv.5), mais fondent PROGRESSIVEMENT
-  // avec le niveau du donjon (`commonDecay`) → plus on farme profond, moins de gris.
-  const rarity = rollRarity(rng, opts.luck ?? 0, commonDecayForLevel(lvl));
+  // RANG + QUALITÉ gatés par la PROFONDEUR du contenu (rollTier) : le donjon plafonne
+  // le rang droppable, la `luck` (profondeur/fiole) et `rollFloor` (Autel) remontent la
+  // cloche. Un perso haut niveau dans un donjon bas ne trouve QUE du bas rang.
+  const floorTiers = Math.round(Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 8); // 0..8 paliers
+  const { rank: rarity, quality, roll } = rollTier(rng, lvl, opts.luck ?? 0, floorTiers);
   // Pool de stats PROGRESSIF : au début, seules les stats basiques (dégâts/PV)
   // tombent ; les stats exotiques se débloquent en montant (cf. EFFECT_MIN_LEVEL).
   const pool = availableEffects(slot, lvl);
   const chosen = pick(rng, pool);
-  // value = magnitude de BASE : rareté × magnitude du DONJON (deeper = meilleur
-  // objet, chasse au loot) × VARIANCE de roll ±20 % (farmer un bon roll a du sens).
-  const mag = dropMagnitude(lvl);
-  // QUALITÉ EN ÉTOILES : on tire une qualité brute (avec plancher `rollFloor` de
-  // l'Autel des boss), on en déduit le PALIER d'étoiles, puis un multiplicateur
-  // DISCRET (starQualityMult) → les intervalles de stats par étoile ne se chevauchent
-  // pas (un 1★ ≠ un 2★ à rareté/niveau égaux).
-  const rqFloor = Math.min(1, Math.max(0, opts.rollFloor ?? 0));
-  const q = rqFloor + (1 - rqFloor) * rng();
-  const stars = rollStars(q);
-  const vf = starQualityMult(stars);
-  const rollValue = (b: number, v: number = vf) =>
-    Math.max(1, Math.round(b * RARITY_MULT[rarity] * mag * v));
-  const value = rollValue(chosen.base, vf);
+  // value = base × RANG × QUALITÉ. La PROFONDEUR est encodée par le RANG (gate) → plus
+  // de multiplicateur de magnitude par niveau ici (sinon deux objets même rang mais
+  // profondeurs différentes auraient des valeurs différentes → chevauchement).
+  const vf = starQualityMult(quality);
+  const rollValue = (b: number) => Math.max(1, Math.round(b * RARITY_MULT[rarity] * vf));
+  const value = rollValue(chosen.base);
   // Objet à effet SIGNATURE → nom évocateur (« Guillotine ») ; sinon nom + adjectif.
   const sigNames = SIGNATURE_NAMES[chosen.type];
   const name = sigNames ? pick(rng, sigNames) : `${pick(rng, NAMES[slot])} ${RARITY_ADJ[rarity]}`;
-  // REFONTE C : tout drop part du NIVEAU 1 (identité pure = rareté + affixe). Toute
-  // la puissance se construit ensuite à la poussière jusqu'au niveau du joueur. Le
-  // niveau du CONTENU (opts.level) n'agit plus que sur la RARETÉ (commonDecay) et le
-  // POOL d'affixes (availableEffects ci-dessus), pas sur le niveau de l'objet.
+  // REFONTE C : tout drop part du NIVEAU 1 (identité pure = rang + affixe). Toute la
+  // puissance se construit ensuite à la poussière jusqu'au niveau du joueur.
   const level = 1;
-  // PAYOFF DIVIN : la 5ᵉ rareté roule un DEUXIÈME effet (distinct) → un divin est
-  // enfin « waouh » (double affixe), pas juste un ×5 de magnitude sur une stat.
+  // PAYOFF HAUT-RANG : SS/SSS (index ≥ 8) roulent un DEUXIÈME effet distinct → un objet
+  // de très haut rang est « waouh » (double affixe), pas juste un ×magnitude de plus.
   let effect2: ItemEffect | undefined;
-  if (rarity === 'divin') {
+  if (rankIndex(rarity) >= 8) {
     const others = pool.filter((e) => e.type !== chosen.type);
     if (others.length) {
       const second = pick(rng, others);
@@ -432,9 +457,9 @@ export function rollDrop(
     rarity,
     level,
     baseLevel: level,
-    effect: { type: chosen.type, value }, // 1 stat (le set fait la synergie) — sauf divin (2 effets)
+    effect: { type: chosen.type, value }, // 1 stat (le set fait la synergie) — sauf haut rang (2 effets)
     ...(effect2 ? { effect2 } : {}),
-    roll: Math.round(((vf - 0.8) / 0.4) * 100) / 100,
+    roll,
   };
 }
 
@@ -450,19 +475,14 @@ export function rollSetPiece(
 ): Omit<Item, 'id'> {
   const set = SET_BY_ID[opts.setId];
   const slot = opts.preferSlot ?? pick(rng, SLOTS);
-  // Rareté RARE → LÉGENDAIRE (2026‑08‑16) : les sets couvrent désormais 3 raretés
-  // (plus « épique/lég uniquement ») → on trouve régulièrement mieux, la satisfaction
-  // de renouveler son stuff. Pondérée par la `luck` (palier/fiole → plus haut).
-  const luck = opts.luck ?? 0;
-  const rr = rng();
-  const rarity: Rarity = rr < 0.15 + luck * 0.4 ? 'legendary' : rr < 0.55 + luck * 0.25 ? 'epic' : 'rare';
+  // Le RANG d'une pièce de set est gaté par le niveau du PALIER du boss (rollTier),
+  // remonté d'un cran (les boss sont une source solide) + `rollFloor` (Autel). La
+  // qualité vient du même tirage → un set haut palier bat un set bas palier.
+  const floorTiers = Math.round(Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 8) + 3; // +3 : boss généreux
+  const { rank: rarity, quality, roll } = rollTier(rng, opts.level, opts.luck ?? 0, floorTiers);
   const chosen = pick(rng, SLOT_EFFECTS[slot]);
-  // Qualité EN ÉTOILES (multiplicateur discret, non chevauchant), comme les drops.
-  // `rollFloor` (Autel des boss) relève le plancher de qualité → meilleures étoiles.
-  const rqFloor = Math.min(1, Math.max(0, opts.rollFloor ?? 0));
-  const q = rqFloor + (1 - rqFloor) * rng();
-  const vf = starQualityMult(rollStars(q));
-  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity] * dropMagnitude(opts.level) * vf));
+  const vf = starQualityMult(quality);
+  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity] * vf));
   const noun = pick(rng, NAMES[slot]);
   const level = 1; // REFONTE C : la pièce de set arrive niv.1 (identité) → à infuser
   return {
@@ -474,7 +494,7 @@ export function rollSetPiece(
     baseLevel: level,
     effect: { type: chosen.type, value }, // 1 stat + la synergie de set (bonus 2/3/4 pièces)
     ...(set ? { setId: opts.setId } : {}),
-    roll: Math.round(((vf - 0.8) / 0.4) * 100) / 100,
+    roll,
   };
 }
 
@@ -491,9 +511,9 @@ export function familiarStoneCost(level: number, rarity: Rarity): number {
   return Math.round((3 + level * 2) * RARITY_COST_MULT[rarity]);
 }
 
-// Ordre des raretés (fusion : 3 d'une rareté → 1 de la rareté juste au-dessus).
-const RARITY_ORDER: Rarity[] = ['common', 'rare', 'epic', 'legendary', 'divin'];
-/** Rareté juste au-dessus, ou `null` si déjà au maximum (divin). */
+// Ordre des rangs (fusion : 3 d'un rang → 1 du rang juste au-dessus).
+const RARITY_ORDER: Rarity[] = RANK_ORDER;
+/** Rang juste au-dessus, ou `null` si déjà au maximum (SSS). */
 export function nextRarity(r: Rarity): Rarity | null {
   const i = RARITY_ORDER.indexOf(r);
   return i >= 0 && i < RARITY_ORDER.length - 1 ? RARITY_ORDER[i + 1]! : null;
@@ -506,15 +526,11 @@ const FAMILIAR_SIGNATURE: { type: EffectType; base: number }[] = [
   { type: 'rage_pct', base: 10 },
   { type: 'momentum_pct', base: 3 },
 ];
-// Chance de rouler un effet signature selon la rareté : nulle en commun, croissante
-// jusqu'au divin → un familier SIGNATURE est une trouvaille désirable (« option »).
-const FAMILIAR_SIG_CHANCE: Record<Rarity, number> = {
-  common: 0,
-  rare: 0.1,
-  epic: 0.22,
-  legendary: 0.4,
-  divin: 0.65,
-};
+// Chance de rouler un effet signature selon le RANG : nulle en bas, croissante vers
+// le haut → un familier SIGNATURE est une trouvaille désirable (« option »).
+function familiarSigChance(rarity: Rarity): number {
+  return Math.min(0.65, Math.max(0, (rankIndex(rarity) - 1) * 0.08));
+}
 
 /** Tire un FAMILIER d'une race donnée. L'effet = le bonus de la race, magnitude
  *  variable (rareté × niveau × variance ±20 %), comme un objet. En plus, selon la
@@ -526,13 +542,16 @@ export function rollFamiliar(
   species: FamiliarSpecies,
   opts: { level: number; luck?: number; rarity?: Rarity },
 ): Omit<Item, 'id'> {
-  const rarity = opts.rarity ?? rollRarity(rng, opts.luck ?? 0);
+  const rarity = opts.rarity ?? rollRarity(rng, opts.luck ?? 0, opts.level);
   const value = Math.max(1, Math.round(species.base * RARITY_MULT[rarity] * (0.8 + rng() * 0.4)));
   const level = 1; // REFONTE C : le familier arrive niv.1 (identité de race) → à infuser
   let effect2: ItemEffect | undefined;
-  if (rng() < FAMILIAR_SIG_CHANCE[rarity]) {
+  if (rng() < familiarSigChance(rarity)) {
     const sig = FAMILIAR_SIGNATURE[Math.floor(rng() * FAMILIAR_SIGNATURE.length)]!;
-    effect2 = { type: sig.type, value: Math.max(1, Math.round(sig.base * RARITY_MULT[rarity] * (0.8 + rng() * 0.4))) };
+    effect2 = {
+      type: sig.type,
+      value: Math.max(1, Math.round(sig.base * RARITY_MULT[rarity] * (0.8 + rng() * 0.4))),
+    };
   }
   return {
     slot: FAMILIAR_SLOT,
@@ -554,8 +573,10 @@ export function rollFamiliar(
 
 // Coûts de l'atelier VOLONTAIREMENT élevés (2026‑08‑10) : la poussière s'accumule
 // vite (farm) → sans un vrai coût, on forge à l'infini. Base + composante NIVEAU +
-// facteur de RARETÉ quasi-exponentiel (`rerollCost`) → altérer reste un investissement.
-const RARITY_STEP: Record<number, number> = { 0: 1, 1: 2, 2: 3.5, 3: 6, 4: 10 };
+// facteur de RANG quasi-exponentiel (`rerollCost`) → altérer reste un investissement.
+function rarityStep(rarity: Rarity): number {
+  return Math.pow(1.5, rankIndex(rarity)); // 1 · 1,5 · 2,25 … ≈ 25 au SSS
+}
 
 // A. FORGE — créer un objet neuf. Ciblé (choisir l'emplacement) = plus cher que l'aléatoire.
 export function forgeCost(level: number, targeted: boolean): number {
@@ -568,9 +589,9 @@ export function forgeItem(
 ): Omit<Item, 'id'> {
   const slot = opts.slot ?? pick(rng, SLOTS);
   const level = Math.max(1, Math.round(opts.level));
-  // Rareté : décroissance des communs selon le NIVEAU (comme les drops) → forger à
-  // haut niveau ne donne plus quasi que du commun (bug : forge = commun à répétition).
-  const rarity = rollRarity(rng, opts.luck ?? 0.25, commonDecayForLevel(level));
+  // Rang gaté par le NIVEAU de forge (comme les drops) : forger à ton niveau donne des
+  // rangs cohérents avec ta profondeur, jamais du SSS gratuit.
+  const rarity = rollRarity(rng, opts.luck ?? 0.25, level);
   const chosen = pick(rng, availableEffects(slot, level));
   const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
   return {
@@ -586,7 +607,7 @@ export function forgeItem(
 
 // B. REROLL d'effet — change la stat (même rareté/niveau), un autre effet du slot.
 export function rerollCost(item: Item): number {
-  return Math.round((40 + item.level * 15) * (RARITY_STEP[RARITY_RANK[item.rarity]] ?? 1));
+  return Math.round((40 + item.level * 15) * rarityStep(item.rarity));
 }
 // Reroll de QUALITÉ (étoiles) : re-tire la QUALITÉ de l'objet en gardant le TYPE
 // d'effet, la RARETÉ et le NIVEAU. Ne touche JAMAIS la rareté → aucun risque de perdre
@@ -609,7 +630,7 @@ export function rerolledQuality(
   return {
     effect: scale(item.effect),
     ...(item.effect2 ? { effect2: scale(item.effect2) } : {}),
-    roll: Math.round(((newVf - 0.8) / 0.4) * 100) / 100,
+    roll: (stars - 0.5) / 5, // roll cohérent avec les étoiles (rollStars le relit)
   };
 }
 
@@ -857,7 +878,10 @@ export function playerWithGear(
   const critAdd = e.critAdd + (extra.critAdd ?? 0);
   const dodgeAdd = e.dodgeAdd + (extra.dodgeAdd ?? 0);
   // La Défense de la Puissance se cumule à la réduction du gear (plafond 50 %).
-  const dmgReduction = Math.min(0.5, (base.dmgReduction ?? 0) + e.dmgReduction + (extra.dmgReduction ?? 0));
+  const dmgReduction = Math.min(
+    0.5,
+    (base.dmgReduction ?? 0) + e.dmgReduction + (extra.dmgReduction ?? 0),
+  );
   // Vol de vie PLAFONNÉ à 50 % (comme la réduction de dégâts) : il stacke (arme +
   // talent + set + familier) et, avec le multi-frappe, rendait le sustain quasi
   // infini. Borné → build sustain fort mais pas increvable (ticket adab525d).

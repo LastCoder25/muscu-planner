@@ -114,7 +114,9 @@
           </span>
           <span class="pl-name font-display">{{ p.emoji }} {{ p.name }}</span>
           <span class="pl-pts">{{ p.pts.toLocaleString('fr-FR') }} pts</span>
-          <span v-if="p.d30 > 0" class="pl-trend">↑ +{{ p.d30.toLocaleString('fr-FR') }} · 30 j</span>
+          <span v-if="p.d30 > 0" class="pl-trend"
+            >↑ +{{ p.d30.toLocaleString('fr-FR') }} · 30 j</span
+          >
         </button>
       </div>
 

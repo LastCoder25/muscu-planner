@@ -26,7 +26,15 @@ describe('archétypes de monstres (variété visuelle)', () => {
 describe('timeout de combat (garde-fou anti-boucle)', () => {
   it('un combat borné en tours se termine (pas de boucle infinie) et tranche au % de PV', () => {
     // Deux combattants ultra-tanky à faibles dégâts → aucune mort avant maxRounds.
-    const tanky = { name: 'A', pv: 100000, damage: 1, crit: 0, dodge: 0, initiative: 5, strikes: 1 };
+    const tanky = {
+      name: 'A',
+      pv: 100000,
+      damage: 1,
+      crit: 0,
+      dodge: 0,
+      initiative: 5,
+      strikes: 1,
+    };
     const foe = { name: 'B', pv: 500, damage: 1, crit: 0, dodge: 0, initiative: 1, strikes: 1 };
     const r = simulateCombat(tanky, foe, { seed: 7, goldOnWin: 10 });
     expect(r.rounds).toBeLessThanOrEqual(400); // borné → jamais « sans fin »
@@ -42,13 +50,16 @@ describe('épines (thorns)', () => {
     const win = (thorns: number) => {
       let w = 0;
       for (let s = 0; s < 40; s++)
-        if (simulateCombat({ ...base, thorns }, monster, { seed: s * 53 + 1, goldOnWin: 0 }).win) w++;
+        if (simulateCombat({ ...base, thorns }, monster, { seed: s * 53 + 1, goldOnWin: 0 }).win)
+          w++;
       return w;
     };
     expect(win(0.5)).toBeGreaterThanOrEqual(win(0));
   });
   it('combatPower croît avec les épines', () => {
-    expect(combatPower({ ...base, thorns: 0.5 })).toBeGreaterThan(combatPower({ ...base, thorns: 0 }));
+    expect(combatPower({ ...base, thorns: 0.5 })).toBeGreaterThan(
+      combatPower({ ...base, thorns: 0 }),
+    );
   });
 });
 

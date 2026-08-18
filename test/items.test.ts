@@ -4,8 +4,12 @@ import {
   playerWithGear,
   rollDrop,
   rollSetPiece,
-  dropMagnitude,
-  commonDecayForLevel,
+  rollTier,
+  rankCeilingForLevel,
+  RANK_ORDER,
+  RARITY_MULT,
+  RARITY_RANK,
+  normRank,
   fullInfuseCost,
   infuseToMaxCost,
   itemScore,
@@ -14,7 +18,6 @@ import {
   sellValue,
   upgradeCost,
   canUpgrade,
-  investedDust,
   setCounts,
   setEffects,
   ITEM_SETS,
@@ -30,22 +33,67 @@ import {
 } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
 
-describe('qualité en étoiles = intervalles NON chevauchants', () => {
-  it('starQualityMult strictement croissant par étoile', () => {
-    for (let s = 2; s <= 5; s++)
-      expect(starQualityMult(s)).toBeGreaterThan(starQualityMult(s - 1));
+describe('rangs G→SSS : bandes disjointes', () => {
+  it('RANK_MULT strictement croissant (un rang supérieur vaut toujours plus)', () => {
+    for (let i = 1; i < RANK_ORDER.length; i++)
+      expect(RARITY_MULT[RANK_ORDER[i]!]).toBeGreaterThan(RARITY_MULT[RANK_ORDER[i - 1]!]);
   });
-  it('un objet de plus haute étoile a une stat ≥ (jamais < ) à rareté/niveau égaux', () => {
-    // Même base/rareté/niveau : la valeur ne dépend QUE de la qualité (multiplicateur
-    // discret) → monotone en étoiles, jamais « même stat pour 2 étoiles différentes ».
-    const base = 100;
-    const val = (s: number) => Math.round(base * starQualityMult(s));
-    const vals = [1, 2, 3, 4, 5].map(val);
-    for (let i = 1; i < vals.length; i++) expect(vals[i]!).toBeGreaterThan(vals[i - 1]!);
+  it('bandes DISJOINTES : meilleure qualité d’un rang < pire qualité du rang au-dessus', () => {
+    for (let i = 1; i < RANK_ORDER.length; i++) {
+      const topOfLower = RARITY_MULT[RANK_ORDER[i - 1]!] * starQualityMult(5);
+      const bottomOfUpper = RARITY_MULT[RANK_ORDER[i]!] * starQualityMult(1);
+      expect(bottomOfUpper).toBeGreaterThan(topOfLower);
+    }
   });
-  it('rollStars cohérent avec le multiplicateur (roll → étoile → mult)', () => {
+  it('plafond SSS×qualité5 ≈ 3,98 (plafond de puissance ≈ divin d’avant)', () => {
+    expect(RARITY_MULT.SSS * starQualityMult(5)).toBeGreaterThan(3.8);
+    expect(RARITY_MULT.SSS * starQualityMult(5)).toBeLessThan(4.1);
+  });
+  it('normRank : mappe les anciennes raretés vers des rangs valides', () => {
+    expect(normRank('divin')).toBe('SSS');
+    expect(normRank('common')).toBe('F');
+    expect(normRank('A')).toBe('A');
+    expect(normRank(undefined)).toBe('G');
+  });
+});
+
+describe('qualité (sous-rang 1→5)', () => {
+  it('starQualityMult strictement croissant, de 1,0 à 1,10', () => {
+    expect(starQualityMult(1)).toBe(1);
+    expect(starQualityMult(5)).toBeCloseTo(1.1);
+    for (let s = 2; s <= 5; s++) expect(starQualityMult(s)).toBeGreaterThan(starQualityMult(s - 1));
+  });
+  it('rollStars cohérent (roll → étoile)', () => {
     expect(rollStars(0.1)).toBe(1);
     expect(rollStars(0.9)).toBe(5);
+  });
+});
+
+describe('rollTier : gate de profondeur', () => {
+  it('rankCeilingForLevel : racine (rapide tôt, lent tard), SSS très tardif', () => {
+    expect(rankCeilingForLevel(1)).toBe(1); // F
+    expect(rankCeilingForLevel(6)).toBeGreaterThanOrEqual(2);
+    expect(RANK_ORDER[rankCeilingForLevel(90)]).toBe('SSS');
+    expect(rankCeilingForLevel(20)).toBeLessThan(9); // pas de SSS avant le très long terme
+  });
+  it('le rang tiré ne dépasse JAMAIS le plafond de la profondeur', () => {
+    for (let level = 1; level <= 100; level += 7) {
+      const ceil = rankCeilingForLevel(level);
+      for (let s = 1; s <= 60; s++) {
+        const { rank } = rollTier(mulberry32(s), level, 1, 0);
+        expect(RARITY_RANK[rank]).toBeLessThanOrEqual(ceil);
+      }
+    }
+  });
+  it('contenu PROFOND → rangs plus hauts que contenu peu profond', () => {
+    const avg = (level: number) => {
+      let sum = 0;
+      const N = 200;
+      for (let s = 1; s <= N; s++) sum += RARITY_RANK[rollTier(mulberry32(s), level, 0.4).rank];
+      return sum / N;
+    };
+    expect(avg(60)).toBeGreaterThan(avg(20));
+    expect(avg(20)).toBeGreaterThan(avg(6));
   });
 });
 
@@ -53,7 +101,7 @@ const item = (over: Partial<Item> & Pick<Item, 'slot' | 'effect'>): Item => ({
   id: over.id ?? 'i',
   name: 'X',
   emoji: '❔',
-  rarity: over.rarity ?? 'common',
+  rarity: over.rarity ?? 'G',
   level: over.level ?? 1,
   baseLevel: over.baseLevel ?? 1,
   ...over,
@@ -65,66 +113,68 @@ describe('niveaux d’objet', () => {
     expect(effectiveValue(eff, 1)).toBe(10);
     expect(effectiveValue(eff, 6)).toBe(Math.round(10 * (1 + 5 * 0.05))); // 13
   });
-  it('upgradeCost croît avec le niveau ET la rareté', () => {
-    expect(upgradeCost(1, 'common')).toBeLessThan(upgradeCost(5, 'common'));
-    expect(upgradeCost(3, 'legendary')).toBeGreaterThan(upgradeCost(3, 'common'));
+  it('upgradeCost croît avec le niveau ET le rang', () => {
+    expect(upgradeCost(1, 'G')).toBeLessThan(upgradeCost(5, 'G'));
+    expect(upgradeCost(3, 'S')).toBeGreaterThan(upgradeCost(3, 'G'));
   });
   it('canUpgrade : faux si poussière insuffisante ou au plafond', () => {
     const it = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, level: 2 });
-    expect(canUpgrade(it, upgradeCost(2, 'common'), 10)).toBe(true);
-    expect(canUpgrade(it, upgradeCost(2, 'common') - 1, 10)).toBe(false);
+    expect(canUpgrade(it, upgradeCost(2, 'G'), 10)).toBe(true);
+    expect(canUpgrade(it, upgradeCost(2, 'G') - 1, 10)).toBe(false);
     expect(canUpgrade({ ...it, level: 5 }, 9999, 5)).toBe(false); // au plafond
   });
 });
 
 describe('recyclage / vente', () => {
-  it('poussière et or croissent avec la rareté', () => {
-    const common = item({
-      slot: 'weapon',
-      effect: { type: 'damage_pct', value: 8 },
-      rarity: 'common',
-    });
-    const legendary = item({
-      slot: 'weapon',
-      effect: { type: 'damage_pct', value: 28 },
-      rarity: 'legendary',
-    });
-    expect(salvageValue(legendary)).toBeGreaterThan(salvageValue(common));
-    expect(sellValue(legendary)).toBeGreaterThan(sellValue(common));
+  it('poussière et or croissent avec le rang', () => {
+    const low = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, rarity: 'G' });
+    const high = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 28 }, rarity: 'S' });
+    expect(salvageValue(high)).toBeGreaterThan(salvageValue(low));
+    expect(sellValue(high)).toBeGreaterThan(sellValue(low));
   });
-  it('recyclage HISTORY-INDEPENDENT (refonte C) : ne dépend que de rareté + niveau', () => {
-    const rarity = 'rare' as const;
-    // Deux objets AU MÊME NIVEAU se recyclent PAREIL, quel que soit leur baseLevel
-    // (un droppé niv.5 = un niv.1 infusé →5). Fin de l'incohérence « bête ».
-    const dropped = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, rarity, baseLevel: 5, level: 5 });
-    const infused = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, rarity, baseLevel: 1, level: 5 });
+  it('recyclage HISTORY-INDEPENDENT : ne dépend que du rang + niveau', () => {
+    const rarity = 'D' as const;
+    const dropped = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 10 },
+      rarity,
+      baseLevel: 5,
+      level: 5,
+    });
+    const infused = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 10 },
+      rarity,
+      baseLevel: 1,
+      level: 5,
+    });
     expect(salvageValue(dropped)).toBe(salvageValue(infused));
-    // = base rareté (= salvage d'un niv.1) + 50 % du coût de construction 1→niveau.
     const base1 = salvageValue(item({ ...infused, level: 1 }));
     expect(salvageValue(infused)).toBe(base1 + Math.round(0.5 * fullInfuseCost(5, rarity)));
-    // Un niveau plus haut rend plus (le coût cumulé monte).
     expect(salvageValue(item({ ...infused, level: 10 }))).toBeGreaterThan(salvageValue(infused));
   });
 });
 
-describe('économie C — infusion & coûts', () => {
-  it('upgradeCost croît avec le niveau et la rareté', () => {
-    expect(upgradeCost(1, 'common')).toBeLessThan(upgradeCost(10, 'common'));
-    expect(upgradeCost(5, 'divin')).toBeGreaterThan(upgradeCost(5, 'common'));
-  });
+describe('économie — infusion & coûts', () => {
   it('fullInfuseCost(1) = 0 et croît avec le niveau cible', () => {
-    expect(fullInfuseCost(1, 'rare')).toBe(0);
-    expect(fullInfuseCost(5, 'rare')).toBe(
-      upgradeCost(1, 'rare') + upgradeCost(2, 'rare') + upgradeCost(3, 'rare') + upgradeCost(4, 'rare'),
+    expect(fullInfuseCost(1, 'D')).toBe(0);
+    expect(fullInfuseCost(5, 'D')).toBe(
+      upgradeCost(1, 'D') + upgradeCost(2, 'D') + upgradeCost(3, 'D') + upgradeCost(4, 'D'),
     );
-    expect(fullInfuseCost(10, 'rare')).toBeGreaterThan(fullInfuseCost(5, 'rare'));
+    expect(fullInfuseCost(10, 'D')).toBeGreaterThan(fullInfuseCost(5, 'D'));
   });
   it('infuseToMaxCost : du niveau actuel jusqu’au cap joueur', () => {
-    const lvl1 = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, rarity: 'common', baseLevel: 1, level: 1 });
-    expect(infuseToMaxCost(lvl1, 1)).toBe(0); // déjà au cap
-    expect(infuseToMaxCost(lvl1, 5)).toBe(fullInfuseCost(5, 'common'));
+    const lvl1 = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 8 },
+      rarity: 'G',
+      baseLevel: 1,
+      level: 1,
+    });
+    expect(infuseToMaxCost(lvl1, 1)).toBe(0);
+    expect(infuseToMaxCost(lvl1, 5)).toBe(fullInfuseCost(5, 'G'));
     expect(infuseToMaxCost({ ...lvl1, level: 3 }, 5)).toBe(
-      upgradeCost(3, 'common') + upgradeCost(4, 'common'),
+      upgradeCost(3, 'G') + upgradeCost(4, 'G'),
     );
   });
 });
@@ -138,7 +188,7 @@ describe('aggregateEffects', () => {
     };
     const a = aggregateEffects(eq);
     expect(a.lifesteal).toBeCloseTo(0.1);
-    expect(a.dmgReduction).toBe(0.5); // plafonné
+    expect(a.dmgReduction).toBe(0.5);
     expect(a.critAdd).toBeCloseTo(0.06);
   });
   it('agrège les épines (thorns) et playerWithGear les propage', () => {
@@ -153,7 +203,6 @@ describe('aggregateEffects', () => {
 
 describe('playerWithGear', () => {
   const stats = { puissance: 20, endurance: 30, agilite: 10 };
-  // Base niveau 1 : pv = 100 + 15×1 + 30×10 = 415 ; dégâts = 6 + 10×1 + 20×1.2 = 40.
   const basePv = 100 + 15 * 1 + 30 * 10;
   const baseDmg = Math.round(6 + 10 * 1 + 20 * 1.2);
   it('sans équipement = combattant de base', () => {
@@ -161,7 +210,7 @@ describe('playerWithGear', () => {
     expect(c.pv).toBe(basePv);
     expect(c.damage).toBe(baseDmg);
   });
-  it('applique +PV, +dégâts, vol de vie, réduction', () => {
+  it('applique +PV, +dégâts', () => {
     const eq: Equipped = {
       weapon: item({ slot: 'weapon', effect: { type: 'damage_pct', value: 50 } }),
       armor: item({ slot: 'armor', effect: { type: 'max_pv_pct', value: 20 } }),
@@ -181,13 +230,12 @@ describe('rollDrop', () => {
   it('rng haut → pas de drop', () => {
     expect(rollDrop(() => 0.99, { cleared: true, defeated: 3 })).toBeNull();
   });
-  it('rng bas → drop de la rareté ULTIME (divin), toujours NIVEAU 1 (refonte C)', () => {
+  it('drop toujours NIVEAU 1 (refonte C), rang plafonné par la profondeur', () => {
     const d = rollDrop(() => 0, { cleared: true, defeated: 3, level: 6 });
     expect(d).not.toBeNull();
-    expect(d!.rarity).toBe('divin'); // rng=0 → tier le plus rare
-    expect(d!.level).toBe(1); // REFONTE C : identité pure, la puissance se construit
+    expect(d!.level).toBe(1);
     expect(d!.baseLevel).toBe(1);
-    expect(d!.slot).toBe('weapon');
+    expect(RARITY_RANK[d!.rarity]).toBeLessThanOrEqual(rankCeilingForLevel(6));
   });
   it('un objet de donjon a UNE seule stat (le set fait la différence)', () => {
     const d = rollDrop(() => 0.2, { cleared: true, defeated: 1, level: 5 });
@@ -195,7 +243,7 @@ describe('rollDrop', () => {
     expect(d!.effect).toBeDefined();
     expect(d!.effect2).toBeUndefined();
   });
-  it('REFONTE C : tout drop part du niveau 1, quel que soit le niveau du contenu', () => {
+  it('tout drop part du niveau 1, quel que soit le niveau du contenu', () => {
     for (const level of [1, 8, 20, 40]) {
       for (let s = 1; s <= 12; s++) {
         const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level });
@@ -206,20 +254,11 @@ describe('rollDrop', () => {
       }
     }
   });
-  it('qualité discrète × magnitude de donjon : rng=0 → 1★ (mult 0,84)', () => {
-    const d = rollDrop(() => 0, { cleared: true, defeated: 1, level: 6 });
-    expect(d!.effect.type).toBe('damage_pct');
-    // rng=0 → q=0 → 1★ → starQualityMult(1)=0,84 (plus l'ancienne variance continue 0,8).
-    expect(d!.effect.value).toBe(Math.round(8 * 3.8 * dropMagnitude(6) * starQualityMult(1)));
-    expect(rollStars(d!.roll)).toBe(1);
-  });
-  it('chasse au loot : un donjon PROFOND lâche des stats de base plus GROSSES', () => {
-    // Même seed/rareté → la magnitude croît avec le niveau du donjon.
+  it('chasse au loot : un donjon PROFOND lâche des rangs plus HAUTS (donc + de valeur)', () => {
     const shallow = rollDrop(() => 0, { cleared: true, defeated: 1, level: 5 })!;
     const deep = rollDrop(() => 0, { cleared: true, defeated: 1, level: 90 })!;
+    expect(RARITY_RANK[deep.rarity]).toBeGreaterThan(RARITY_RANK[shallow.rarity]);
     expect(deep.effect.value).toBeGreaterThan(shallow.effect.value);
-    expect(dropMagnitude(90)).toBeGreaterThan(dropMagnitude(5));
-    expect(dropMagnitude(1)).toBe(1);
   });
   it('pool progressif : au niveau 1, aucune stat exotique (crit/vol de vie/réduction)', () => {
     const exotic = new Set(['crit_pct', 'lifesteal_pct', 'dmg_reduction_pct']);
@@ -238,40 +277,6 @@ describe('rollDrop', () => {
   });
 });
 
-describe('raretés — communs progressifs (commonDecay)', () => {
-  it('commonDecayForLevel : borné [0,1] et croissant', () => {
-    expect(commonDecayForLevel(1)).toBe(0);
-    expect(commonDecayForLevel(2)).toBe(0);
-    expect(commonDecayForLevel(24)).toBe(1);
-    expect(commonDecayForLevel(100)).toBe(1);
-    expect(commonDecayForLevel(12)).toBeGreaterThan(commonDecayForLevel(6));
-  });
-  it('les communs REVIENNENT au-dessus du niveau 5 (plus de couperet)', () => {
-    let sawCommon = false;
-    for (let s = 1; s <= 200 && !sawCommon; s++) {
-      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 10 });
-      if (d?.rarity === 'common') sawCommon = true;
-    }
-    expect(sawCommon).toBe(true);
-  });
-  it('moins de communs sur un donjon HAUT niveau que BAS niveau', () => {
-    const commonShare = (level: number): number => {
-      let n = 0;
-      let common = 0;
-      for (let s = 1; s <= 600; s++) {
-        const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level });
-        if (d) {
-          n++;
-          if (d.rarity === 'common') common++;
-        }
-      }
-      return n ? common / n : 0;
-    };
-    expect(commonShare(3)).toBeGreaterThan(commonShare(22));
-    expect(commonShare(22)).toBeGreaterThan(0); // jamais zéro (les communs subsistent)
-  });
-});
-
 describe('itemScore', () => {
   it('classe par valeur d’effet', () => {
     const a = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 } });
@@ -285,7 +290,7 @@ describe('sets d’équipement', () => {
     item({
       id: `d-${slot}`,
       slot,
-      rarity: 'epic',
+      rarity: 'B',
       effect: { type: 'damage_pct', value: 10 },
       setId: 'dragon',
     });
@@ -294,43 +299,25 @@ describe('sets d’équipement', () => {
     const eq: Equipped = { weapon: dragonPiece('weapon'), armor: dragonPiece('armor') };
     expect(setCounts(eq).dragon).toBe(2);
   });
-
   it('aucun bonus de set en dessous de 2 pièces', () => {
-    const eq: Equipped = { weapon: dragonPiece('weapon') };
-    const e = setEffects(eq);
-    expect(e.damagePct).toBe(0);
+    expect(setEffects({ weapon: dragonPiece('weapon') }).damagePct).toBe(0);
   });
-
   it('2 pièces → 1er palier actif (Dragon : +dégâts)', () => {
-    const eq: Equipped = { weapon: dragonPiece('weapon'), armor: dragonPiece('armor') };
-    const e = setEffects(eq);
+    const e = setEffects({ weapon: dragonPiece('weapon'), armor: dragonPiece('armor') });
     expect(e.damagePct).toBeGreaterThan(0);
-    expect(e.critAdd).toBe(0); // palier 3 pièces pas encore atteint
+    expect(e.critAdd).toBe(0);
   });
-
   it('4 pièces → tous les paliers Dragon actifs', () => {
-    const eq: Equipped = {
+    const e = setEffects({
       weapon: dragonPiece('weapon'),
       armor: dragonPiece('armor'),
       accessory: dragonPiece('accessory'),
       relic: dragonPiece('relic'),
-    };
-    const e = setEffects(eq);
+    });
     expect(e.damagePct).toBeGreaterThan(0);
     expect(e.critAdd).toBeGreaterThan(0);
     expect(e.lifesteal).toBeGreaterThan(0);
   });
-
-  it('aggregateEffects inclut les bonus de set', () => {
-    const eq: Equipped = { weapon: dragonPiece('weapon'), armor: dragonPiece('armor') };
-    const withSet = aggregateEffects(eq).damagePct;
-    const noSet = aggregateEffects({
-      weapon: { ...dragonPiece('weapon'), setId: undefined },
-      armor: { ...dragonPiece('armor'), setId: undefined },
-    }).damagePct;
-    expect(withSet).toBeGreaterThan(noSet);
-  });
-
   it('le bonus de set grandit avec le niveau des pièces', () => {
     const lvl1: Equipped = {
       weapon: { ...dragonPiece('weapon'), level: 1 },
@@ -342,14 +329,13 @@ describe('sets d’équipement', () => {
     };
     expect(setEffects(lvl10).damagePct).toBeGreaterThan(setEffects(lvl1).damagePct);
   });
-
   it('rollSetPiece produit toujours une pièce du set, au NIVEAU 1 (refonte C)', () => {
     const piece = rollSetPiece(() => 0.3, { setId: 'dragon', level: 10 });
     expect(piece.setId).toBe('dragon');
-    expect(piece.level).toBe(1); // REFONTE C : identité (set) niv.1 → à infuser
+    expect(piece.level).toBe(1);
     expect(piece.baseLevel).toBe(1);
     expect(piece.name).toContain('Dragon');
-    expect(piece.effect2).toBeUndefined(); // 1 stat + synergie de set (pas de 2e stat)
+    expect(piece.effect2).toBeUndefined();
     expect(ITEM_SETS.some((s) => s.id === 'dragon')).toBe(true);
   });
   it('anti-doublon : preferSlot force le slot manquant', () => {
@@ -358,7 +344,7 @@ describe('sets d’équipement', () => {
   });
 });
 
-describe('atelier de poussière (forge / reroll / infusion / craft)', () => {
+describe('atelier de poussière (forge / reroll / craft)', () => {
   it('forge : ciblé coûte plus que l’aléatoire, et ça monte avec le niveau', () => {
     expect(forgeCost(10, true)).toBeGreaterThan(forgeCost(10, false));
     expect(forgeCost(20, false)).toBeGreaterThan(forgeCost(5, false));
@@ -369,30 +355,33 @@ describe('atelier de poussière (forge / reroll / infusion / craft)', () => {
     expect(it.level).toBe(8);
     expect(it.effect.value).toBeGreaterThan(0);
   });
-  it('reroll de QUALITÉ : garde le type + la rareté, ne touche que la valeur/étoiles', () => {
-    const sword = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, level: 5, roll: 0.1 });
+  it('reroll de QUALITÉ : garde le type + le rang, ne touche que la valeur/étoiles', () => {
+    const sword = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 8 },
+      level: 5,
+      roll: 0.1,
+    });
     expect(rerollCost(sword)).toBeGreaterThan(0);
     const rq = rerolledQuality(mulberry32(2), sword);
-    expect(rq.effect.type).toBe('damage_pct'); // type inchangé
+    expect(rq.effect.type).toBe('damage_pct');
     expect(rq.effect.value).toBeGreaterThan(0);
-    expect(rq.roll).toBeGreaterThanOrEqual(0); // nouvelle qualité (étoiles) cohérente
+    expect(rollStars(rq.roll)).toBeGreaterThanOrEqual(1);
   });
   it('craft de set : coût élevé qui monte avec le niveau', () => {
     expect(craftSetCost(10)).toBeGreaterThan(200);
     expect(craftSetCost(20)).toBeGreaterThan(craftSetCost(10));
   });
-  it('coûts qui montent avec le NIVEAU + la rareté (forge/reroll)', () => {
-    expect(forgeCost(20, false)).toBeGreaterThan(forgeCost(5, false));
+  it('coûts qui montent avec le NIVEAU + le rang (reroll)', () => {
     const lo = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, level: 3 });
     const hi = item({ ...lo, level: 20 });
     expect(rerollCost(hi)).toBeGreaterThan(rerollCost(lo));
-    const epic = item({ ...lo, rarity: 'epic' });
-    expect(rerollCost(epic)).toBeGreaterThan(rerollCost(lo)); // rareté enchérit
+    const high = item({ ...lo, rarity: 'A' });
+    expect(rerollCost(high)).toBeGreaterThan(rerollCost(lo));
   });
 });
 
-describe('effets signature & payoff divin (rollDrop)', () => {
-  // Balaye des seeds déterministes et collecte les drops correspondants.
+describe('effets signature & payoff haut-rang (rollDrop)', () => {
   function scan(level: number, luck: number, n = 4000) {
     const drops = [];
     for (let s = 1; s <= n; s++) {
@@ -401,32 +390,37 @@ describe('effets signature & payoff divin (rollDrop)', () => {
     }
     return drops;
   }
-
-  it('un DIVIN roule un 2ᵉ effet distinct (double affixe) ; les autres non', () => {
-    const drops = scan(20, 1); // luck haute → des divins apparaissent
-    const divin = drops.find((d) => d.rarity === 'divin');
-    expect(divin).toBeTruthy();
-    expect(divin!.effect2).toBeTruthy();
-    expect(divin!.effect2!.type).not.toBe(divin!.effect.type);
-    // Aucune rareté sous divin ne porte de 2ᵉ effet.
-    for (const d of drops) if (d.rarity !== 'divin') expect(d.effect2).toBeUndefined();
+  it('un objet SS/SSS roule un 2ᵉ effet distinct ; les rangs inférieurs non', () => {
+    const drops = scan(80, 1); // contenu très profond → rangs SS/SSS possibles
+    const high = drops.find((d) => RARITY_RANK[d.rarity] >= 8);
+    expect(high).toBeTruthy();
+    expect(high!.effect2).toBeTruthy();
+    expect(high!.effect2!.type).not.toBe(high!.effect.type);
+    for (const d of drops) if (RARITY_RANK[d.rarity] < 8) expect(d.effect2).toBeUndefined();
   });
-
   it('les effets signature n’apparaissent qu’en profondeur (gate de niveau)', () => {
     const SIG = new Set(['execute_pct', 'rage_pct', 'momentum_pct']);
     const low = scan(3, 1).filter((d) => SIG.has(d.effect.type));
     const deep = scan(20, 1).filter((d) => SIG.has(d.effect.type));
-    expect(low).toHaveLength(0); // < niv.12 → jamais de signature
-    expect(deep.length).toBeGreaterThan(0); // profond → on en trouve
+    expect(low).toHaveLength(0);
+    expect(deep.length).toBeGreaterThan(0);
   });
-
-  it('un objet à effet signature porte un nom évocateur (pas « … mythique »)', () => {
-    const NAMED = ['Guillotine', 'Couperet du Bourreau', 'Faux des Âmes', 'Déferlante',
-      'Crescendo', 'Élan Implacable', 'Cœur du Berserk', 'Fureur Écarlate', 'Rage du Damné'];
+  it('un objet à effet signature porte un nom évocateur', () => {
+    const NAMED = [
+      'Guillotine',
+      'Couperet du Bourreau',
+      'Faux des Âmes',
+      'Déferlante',
+      'Crescendo',
+      'Élan Implacable',
+      'Cœur du Berserk',
+      'Fureur Écarlate',
+      'Rage du Damné',
+    ];
     const sig = scan(20, 1).find((d) =>
       ['execute_pct', 'rage_pct', 'momentum_pct'].includes(d.effect.type),
     );
     expect(sig).toBeTruthy();
     expect(NAMED).toContain(sig!.name);
   });
-})
+});

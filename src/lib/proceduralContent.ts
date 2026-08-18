@@ -76,7 +76,10 @@ export function proceduralMonster(reco: number, role: MonsterRole, seedIdx: numb
   const roleMult = CALIB.role[role] ?? 1;
   const pv = Math.round(refOffensePerRound(f) * CALIB.kpv * roleMult);
   const damage = Math.round(f.pv * CALIB.kdmg * roleMult);
-  const skin = PROC_MONSTERS[((seedIdx % PROC_MONSTERS.length) + PROC_MONSTERS.length) % PROC_MONSTERS.length]!;
+  const skin =
+    PROC_MONSTERS[
+      ((seedIdx % PROC_MONSTERS.length) + PROC_MONSTERS.length) % PROC_MONSTERS.length
+    ]!;
   // Crit/esquive/initiative modestes, un peu plus « féroces » pour le strong.
   const crit = role === 'strong' ? 0.12 : 0.08;
   return {
@@ -147,14 +150,39 @@ export function proceduralDungeon(reco: number, index: number): Dungeon {
 }
 
 const PROC_REGION_SKINS: { emoji: string; color: string; name: string; blurb: string }[] = [
-  { emoji: '🕯️', color: '#C9A24A', name: 'Sanctuaires Perdus', blurb: 'Reliques d’un âge d’or effondré.' },
+  {
+    emoji: '🕯️',
+    color: '#C9A24A',
+    name: 'Sanctuaires Perdus',
+    blurb: 'Reliques d’un âge d’or effondré.',
+  },
   { emoji: '🌋', color: '#FF6A45', name: 'Terres Calcinées', blurb: 'Le feu du monde à nu.' },
   { emoji: '🕸️', color: '#9A6BFF', name: 'Toile du Vide', blurb: 'Là où la réalité s’effiloche.' },
-  { emoji: '🌀', color: '#3FB6C6', name: 'Spirales Hurlantes', blurb: 'Des vents qui broient les âmes.' },
+  {
+    emoji: '🌀',
+    color: '#3FB6C6',
+    name: 'Spirales Hurlantes',
+    blurb: 'Des vents qui broient les âmes.',
+  },
   { emoji: '🪐', color: '#6B8BFF', name: 'Confins Astraux', blurb: 'Au bord des étoiles mortes.' },
-  { emoji: '🦴', color: '#B0A18A', name: 'Ossuaires Titanesques', blurb: 'Le cimetière des colosses.' },
-  { emoji: '🌌', color: '#B07CFF', name: 'Brèches Cosmiques', blurb: 'Le tissu du réel se déchire.' },
-  { emoji: '🔥', color: '#FF3B6B', name: 'Cœur de l’Enfer', blurb: 'Le fond de tout. Il n’y a plus rien après.' },
+  {
+    emoji: '🦴',
+    color: '#B0A18A',
+    name: 'Ossuaires Titanesques',
+    blurb: 'Le cimetière des colosses.',
+  },
+  {
+    emoji: '🌌',
+    color: '#B07CFF',
+    name: 'Brèches Cosmiques',
+    blurb: 'Le tissu du réel se déchire.',
+  },
+  {
+    emoji: '🔥',
+    color: '#FF3B6B',
+    name: 'Cœur de l’Enfer',
+    blurb: 'Le fond de tout. Il n’y a plus rien après.',
+  },
 ];
 
 /** Régions procédurales groupant les donjons procéduraux (3 par région). */
@@ -257,7 +285,13 @@ export function proceduralSet(milestone: number, index: number): ItemSet {
     { pieces: 3, type: combo[1], base: 7 },
     { pieces: 4, type: combo[2], base: 11 },
   ];
-  return { id: `proc_set_${milestone}`, name: skin.name, emoji: skin.emoji, theme: skin.theme, tiers };
+  return {
+    id: `proc_set_${milestone}`,
+    name: skin.name,
+    emoji: skin.emoji,
+    theme: skin.theme,
+    tiers,
+  };
 }
 
 /** Boss de palier procédural pour `milestone` (30,35,…,100). Stats calibrées

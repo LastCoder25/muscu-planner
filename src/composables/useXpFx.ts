@@ -23,7 +23,9 @@ let seq = 0;
 export function useXpFx() {
   // N'affiche que s'il y a un vrai gain (évite l'overlay pour 0 XP).
   function show(rings: XpRing[]): void {
-    const meaningful = rings.some((r) => r.toLevel > r.fromLevel || Math.abs(r.toPct - r.fromPct) >= 1);
+    const meaningful = rings.some(
+      (r) => r.toLevel > r.fromLevel || Math.abs(r.toPct - r.fromPct) >= 1,
+    );
     if (!meaningful) return;
     current.value = { id: ++seq, rings };
   }

@@ -48,8 +48,14 @@ describe('familiers — roll & identité', () => {
   });
   it('isFamiliar : faux pour un objet normal', () => {
     const sword: Item = {
-      id: 's', slot: 'weapon', name: 'Lame', emoji: '⚔️', rarity: 'common',
-      level: 1, baseLevel: 1, effect: { type: 'damage_pct', value: 8 },
+      id: 's',
+      slot: 'weapon',
+      name: 'Lame',
+      emoji: '⚔️',
+      rarity: 'G',
+      level: 1,
+      baseLevel: 1,
+      effect: { type: 'damage_pct', value: 8 },
     };
     expect(isFamiliar(sword)).toBe(false);
   });
@@ -69,7 +75,7 @@ describe('familiers — effet compté dans le combat', () => {
     const withWolf = playerWithGear('X', stats, { familiar: makeFam(wolf, 5) }, {}, 5);
     expect(withWolf.damage).toBeGreaterThan(bare.damage);
   });
-  it("le niveau du familier est plafonné au niveau du joueur (comme le stuff)", () => {
+  it('le niveau du familier est plafonné au niveau du joueur (comme le stuff)', () => {
     const stats = { puissance: 50, endurance: 40, agilite: 20 };
     const strong = makeFam(wolf, 20); // familier niv.20
     const capped = playerWithGear('X', stats, { familiar: strong }, {}, 3); // joueur niv.3
@@ -83,16 +89,16 @@ describe('familiers — effet compté dans le combat', () => {
 });
 
 describe('familiers — effet signature (buff constant + option)', () => {
-  it('un familier commun ne roule jamais de signature (effect2)', () => {
+  it('un familier de rang bas (G) ne roule jamais de signature (effect2)', () => {
     for (let s = 0; s < 40; s++) {
-      const f = rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'common' });
+      const f = rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'G' });
       expect(f.effect2).toBeUndefined();
     }
   });
-  it('un familier divin roule parfois une signature (execute/rage/momentum)', () => {
+  it('un familier SSS roule parfois une signature (execute/rage/momentum)', () => {
     let found = 0;
     for (let s = 0; s < 60; s++) {
-      const f = rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'divin' });
+      const f = rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'SSS' });
       if (f.effect2) {
         found++;
         expect(['execute_pct', 'rage_pct', 'momentum_pct']).toContain(f.effect2.type);
@@ -104,7 +110,7 @@ describe('familiers — effet signature (buff constant + option)', () => {
     // Cherche un seed qui donne un familier divin AVEC signature.
     let fam: Item | null = null;
     for (let s = 0; s < 60 && !fam; s++) {
-      const f = { id: 'f', ...rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'divin' }) };
+      const f = { id: 'f', ...rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'SSS' }) };
       if (f.effect2) fam = f;
     }
     expect(fam).not.toBeNull();
@@ -117,8 +123,8 @@ describe('familiers — effet signature (buff constant + option)', () => {
 
 describe('familiers — pierres magiques & sélection', () => {
   it('familiarStoneCost croît avec le niveau et la rareté', () => {
-    expect(familiarStoneCost(1, 'common')).toBeLessThan(familiarStoneCost(10, 'common'));
-    expect(familiarStoneCost(5, 'common')).toBeLessThan(familiarStoneCost(5, 'legendary'));
+    expect(familiarStoneCost(1, 'G')).toBeLessThan(familiarStoneCost(10, 'G'));
+    expect(familiarStoneCost(5, 'G')).toBeLessThan(familiarStoneCost(5, 'S'));
   });
   it('pickFamiliarSpecies : respecte le biome quand fourni', () => {
     // marmotte = biome 'plain' (seule de ce biome) → toujours choisie.
@@ -142,26 +148,26 @@ describe('familiers — pierres magiques & sélection', () => {
 });
 
 describe('familiers — fusion (incubateur)', () => {
-  it('nextRarity : rareté juste au-dessus, null au max', () => {
-    expect(nextRarity('common')).toBe('rare');
-    expect(nextRarity('rare')).toBe('epic');
-    expect(nextRarity('legendary')).toBe('divin');
-    expect(nextRarity('divin')).toBeNull();
+  it('nextRarity : rang juste au-dessus, null au max (SSS)', () => {
+    expect(nextRarity('G')).toBe('F');
+    expect(nextRarity('D')).toBe('C');
+    expect(nextRarity('SS')).toBe('SSS');
+    expect(nextRarity('SSS')).toBeNull();
   });
-  it('rollFamiliar : rareté forçable (fusion)', () => {
-    const f = rollFamiliar(mulberry32(1), wolf, { level: 1, rarity: 'epic' });
-    expect(f.rarity).toBe('epic');
+  it('rollFamiliar : rang forçable (fusion)', () => {
+    const f = rollFamiliar(mulberry32(1), wolf, { level: 1, rarity: 'B' });
+    expect(f.rarity).toBe('B');
     expect(f.level).toBe(1);
   });
-  it('rollFusedFamiliar : 3 d’une rareté → 1 familier de la rareté au-dessus', () => {
-    const fused = rollFusedFamiliar(mulberry32(4), 'rare');
+  it('rollFusedFamiliar : 3 d’un rang → 1 familier du rang au-dessus', () => {
+    const fused = rollFusedFamiliar(mulberry32(4), 'D');
     expect(fused).not.toBeNull();
-    expect(fused!.rarity).toBe('epic');
+    expect(fused!.rarity).toBe('C');
     expect(fused!.slot).toBe(FAMILIAR_SLOT);
     expect(fused!.level).toBe(1);
     expect(fused!.species).toBeTruthy();
   });
-  it('rollFusedFamiliar : divin → null (pas de fusion au-delà)', () => {
-    expect(rollFusedFamiliar(mulberry32(5), 'divin')).toBeNull();
+  it('rollFusedFamiliar : SSS → null (pas de fusion au-delà)', () => {
+    expect(rollFusedFamiliar(mulberry32(5), 'SSS')).toBeNull();
   });
 });

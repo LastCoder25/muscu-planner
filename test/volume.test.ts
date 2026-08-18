@@ -59,7 +59,13 @@ describe('mondayOf', () => {
 
 describe('setsByMuscleInRange / weeklySetsByMuscle', () => {
   const entries = [
-    entry('2026-08-10T10:00:00Z', mkLog([{ muscle: 'pectoraux', sets: 3 }, { muscle: 'triceps', sets: 2 }])),
+    entry(
+      '2026-08-10T10:00:00Z',
+      mkLog([
+        { muscle: 'pectoraux', sets: 3 },
+        { muscle: 'triceps', sets: 2 },
+      ]),
+    ),
     entry('2026-08-13T10:00:00Z', mkLog([{ muscle: 'pectoraux', sets: 2 }])),
     entry('2026-08-03T10:00:00Z', mkLog([{ muscle: 'pectoraux', sets: 4 }])), // semaine précédente
     entry('2026-08-12T10:00:00Z', mkLog([{ muscle: 'dos', sets: 5 }], 'prepa_physique')), // exclu

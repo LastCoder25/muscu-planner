@@ -453,7 +453,15 @@ const MUSCLE_SLOT: Record<string, string> = {
 // Multiplicateur de volume par emplacement selon l'objectif.
 const GOAL_SLOT_MULT: Record<ComboGoal, Record<string, number>> = {
   // Esthétique : haut du corps + fessiers + abdos ; jambes un cran plus bas.
-  sculpt: { push: 1.15, pull: 1.15, squat: 0.9, hinge: 1.15, core: 1.1, arms: 1.2, shoulders: 1.15 },
+  sculpt: {
+    push: 1.15,
+    pull: 1.15,
+    squat: 0.9,
+    hinge: 1.15,
+    core: 1.1,
+    arms: 1.2,
+    shoulders: 1.15,
+  },
   // Perf/fonctionnel : chaîne postérieure + gainage + composés ; moins d'isolation.
   perf: { push: 1.0, pull: 1.1, squat: 1.1, hinge: 1.2, core: 1.2, arms: 0.8, shoulders: 0.95 },
   balanced: {},

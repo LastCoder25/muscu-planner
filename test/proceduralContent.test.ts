@@ -123,7 +123,8 @@ describe('procedural — boss de palier + sets', () => {
     // Nu, le boss est censé être quasi-imbattable (il faut du gear).
     const p = refFighter(30);
     let w = 0;
-    for (let s = 0; s < 60; s++) if (simulateCombat(p, b30, { seed: s * 89 + 1, goldOnWin: 0 }).win) w++;
+    for (let s = 0; s < 60; s++)
+      if (simulateCombat(p, b30, { seed: s * 89 + 1, goldOnWin: 0 }).win) w++;
     expect(w / 60).toBeLessThan(0.5);
   });
   it('buildProceduralContent : bosses + sets alignés (même count, ids appariés)', () => {

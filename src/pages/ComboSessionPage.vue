@@ -1,7 +1,11 @@
 <template>
   <q-page class="combo-session">
     <header class="top">
-      <button class="iconbtn" aria-label="Retour" @click="phase === 'run' ? cancel() : router.back()">
+      <button
+        class="iconbtn"
+        aria-label="Retour"
+        @click="phase === 'run' ? cancel() : router.back()"
+      >
         ‹
       </button>
       <div class="top-title font-display">Séance · Défi 360</div>
@@ -40,7 +44,9 @@
           <div class="stepper">
             <button
               type="button"
-              :disabled="!included[leg.exercise_id] || (counts[leg.exercise_id] ?? 0) <= stepFor(leg)"
+              :disabled="
+                !included[leg.exercise_id] || (counts[leg.exercise_id] ?? 0) <= stepFor(leg)
+              "
               @click="bumpCount(leg.exercise_id, -1)"
             >
               −
@@ -51,7 +57,9 @@
             >
             <button
               type="button"
-              :disabled="!included[leg.exercise_id] || (counts[leg.exercise_id] ?? 0) >= maxCount(leg)"
+              :disabled="
+                !included[leg.exercise_id] || (counts[leg.exercise_id] ?? 0) >= maxCount(leg)
+              "
               @click="bumpCount(leg.exercise_id, 1)"
             >
               ＋
@@ -352,7 +360,10 @@ function cancel() {
   })
     .onOk(() => {
       commitLogged();
-      $q.notify({ type: 'positive', message: `${n} série${n > 1 ? 's' : ''} conservée${n > 1 ? 's' : ''}` });
+      $q.notify({
+        type: 'positive',
+        message: `${n} série${n > 1 ? 's' : ''} conservée${n > 1 ? 's' : ''}`,
+      });
       void router.replace(`/combo/${id}`);
     })
     .onCancel(() => {

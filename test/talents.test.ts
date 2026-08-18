@@ -37,20 +37,20 @@ describe('niveau / rareté / valeur', () => {
     expect(talentLevel(talentXpFloor(5))).toBe(5);
     expect(talentLevel(talentXpFloor(10))).toBe(10);
   });
-  it('la rareté = palier de 5 niveaux', () => {
-    expect(talentRarity(1)).toBe('common');
-    expect(talentRarity(6)).toBe('rare');
-    expect(talentRarity(11)).toBe('epic');
-    expect(talentRarity(16)).toBe('legendary');
-    expect(talentRarity(21)).toBe('divin');
+  it('le rang = palier de 5 niveaux (E→SSS)', () => {
+    expect(talentRarity(1)).toBe('E');
+    expect(talentRarity(6)).toBe('C');
+    expect(talentRarity(11)).toBe('A');
+    expect(talentRarity(16)).toBe('S');
+    expect(talentRarity(21)).toBe('SSS');
   });
   it('l’effet grandit avec le niveau', () => {
     const def = talentByCode('t_dmg')!;
     expect(talentValue(def, 10)).toBeGreaterThan(talentValue(def, 1));
   });
-  it('startLevelForRarity : commun→1, épique→11', () => {
-    expect(startLevelForRarity('common')).toBe(1);
-    expect(startLevelForRarity('epic')).toBe(11);
+  it('startLevelForRarity : E→1, A→11', () => {
+    expect(startLevelForRarity('E')).toBe(1);
+    expect(startLevelForRarity('A')).toBe(11);
   });
 });
 

@@ -169,8 +169,8 @@
           </button>
         </div>
         <div v-if="countMode === 'sets'" class="count-note">
-          Objectif en <b>séries</b> ; à la saisie tu renseignes reps + poids par série (comme le Défi
-          360). Formats <b>Fixe</b> et <b>Cumulé</b> uniquement.
+          Objectif en <b>séries</b> ; à la saisie tu renseignes reps + poids par série (comme le
+          Défi 360). Formats <b>Fixe</b> et <b>Cumulé</b> uniquement.
         </div>
         <div class="step-h">Quel format ?</div>
         <div class="fmt-grid">

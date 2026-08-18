@@ -62,10 +62,20 @@
       </div>
 
       <!-- Bannière : héros en expédition (autres modes + équipement gelés) -->
-      <button v-if="onExpedition && expeHero" class="expe-banner" @click="router.push('/expedition-map')">
+      <button
+        v-if="onExpedition && expeHero"
+        class="expe-banner"
+        @click="router.push('/expedition-map')"
+      >
         🧭 Ton héros est en expédition —
-        <b v-if="expeHero.phase !== 'done'">{{ expeHero.phase === 'return' ? 'retour' : 'arrivée' }} dans
-          {{ fmtExpeMs(expeHero.phase === 'return' ? expeHero.remainTotalMs : expeHero.remainToObjectiveMs) }}</b>
+        <b v-if="expeHero.phase !== 'done'"
+          >{{ expeHero.phase === 'return' ? 'retour' : 'arrivée' }} dans
+          {{
+            fmtExpeMs(
+              expeHero.phase === 'return' ? expeHero.remainTotalMs : expeHero.remainToObjectiveMs,
+            )
+          }}</b
+        >
         <b v-else>de retour !</b>. Donjons, boss et équipement indisponibles.
       </button>
 
@@ -116,9 +126,7 @@
         <button class="seg-b" :class="{ on: tab === 'donjons' }" @click="tab = 'donjons'">
           <q-icon name="castle" size="18px" /> Donjons
         </button>
-        <button class="seg-b" :class="{ on: tab === 'boss' }" @click="tab = 'boss'">
-          👑 Boss
-        </button>
+        <button class="seg-b" :class="{ on: tab === 'boss' }" @click="tab = 'boss'">👑 Boss</button>
       </div>
 
       <!-- ONGLET PERSONNAGE -->
@@ -130,241 +138,250 @@
           <button class="gs-b" :class="{ on: persoSub === 'stats' }" @click="persoSub = 'stats'">
             ⚔️ Stats
           </button>
-          <button class="gs-b" :class="{ on: persoSub === 'talents' }" @click="persoSub = 'talents'">
+          <button
+            class="gs-b"
+            :class="{ on: persoSub === 'talents' }"
+            @click="persoSub = 'talents'"
+          >
             ✨ Talents<span v-if="talentFreeSlots" class="gs-badge">{{ talentFreeSlots }}</span>
           </button>
         </div>
 
         <template v-if="persoSub === 'perso'">
-        <div class="avatar-wrap">
-          <AventureAvatar :profile="c.profile" :equipped="char.row.equipped" />
-        </div>
-        <div class="hero">
-          <div class="lvl-ring">
-            <svg viewBox="0 0 84 84" aria-hidden="true">
-              <circle cx="42" cy="42" r="38" fill="none" stroke="#000" stroke-width="5" />
-              <circle
-                cx="42"
-                cy="42"
-                r="38"
-                fill="none"
-                stroke="var(--accent)"
-                stroke-width="5"
-                stroke-linecap="round"
-                stroke-dasharray="239"
-                :stroke-dashoffset="239 * (1 - c.level.progressPct / 100)"
-                transform="rotate(-90 42 42)"
-              />
-            </svg>
-            <div class="ring-txt">
-              <div class="num font-display">{{ c.level.level }}</div>
-              <div class="cap">Niveau</div>
+          <div class="avatar-wrap">
+            <AventureAvatar :profile="c.profile" :equipped="char.row.equipped" />
+          </div>
+          <div class="hero">
+            <div class="lvl-ring">
+              <svg viewBox="0 0 84 84" aria-hidden="true">
+                <circle cx="42" cy="42" r="38" fill="none" stroke="#000" stroke-width="5" />
+                <circle
+                  cx="42"
+                  cy="42"
+                  r="38"
+                  fill="none"
+                  stroke="var(--accent)"
+                  stroke-width="5"
+                  stroke-linecap="round"
+                  stroke-dasharray="239"
+                  :stroke-dashoffset="239 * (1 - c.level.progressPct / 100)"
+                  transform="rotate(-90 42 42)"
+                />
+              </svg>
+              <div class="ring-txt">
+                <div class="num font-display">{{ c.level.level }}</div>
+                <div class="cap">Niveau</div>
+              </div>
+            </div>
+            <div class="hero-info">
+              <div class="hero-arch">
+                Profil : <b>{{ profileLabel }}</b>
+              </div>
+              <div class="hero-power">
+                <span class="hp-lbl">⚔️ Puissance de combat</span>
+                <span class="hp-val font-display">{{ fmtPow(combatPowerVal) }}</span>
+              </div>
+              <div class="hero-xp">
+                {{ c.level.xpIntoLevel.toLocaleString('fr-FR') }} /
+                {{ c.level.xpForLevel.toLocaleString('fr-FR') }} XP
+              </div>
             </div>
           </div>
-          <div class="hero-info">
-            <div class="hero-arch">
-              Profil : <b>{{ profileLabel }}</b>
-            </div>
-            <div class="hero-power">
-              <span class="hp-lbl">⚔️ Puissance de combat</span>
-              <span class="hp-val font-display">{{ fmtPow(combatPowerVal) }}</span>
-            </div>
-            <div class="hero-xp">
-              {{ c.level.xpIntoLevel.toLocaleString('fr-FR') }} /
-              {{ c.level.xpForLevel.toLocaleString('fr-FR') }} XP
-            </div>
-          </div>
-        </div>
 
-        <!-- 3 stats en CERCLES sur une ligne. L'anneau = part du build (somme=100 %),
+          <!-- 3 stats en CERCLES sur une ligne. L'anneau = part du build (somme=100 %),
              le chiffre au centre = la valeur réelle (jamais « pleine » à tort). -->
-        <div class="stats-circles">
-          <div
-            v-for="s in statCircles"
-            :key="s.key"
-            class="statc"
-            :class="s.key"
-          >
-            <svg class="ring" viewBox="0 0 36 36" role="img" :aria-label="`${s.name} ${s.value}`">
-              <circle class="track" cx="18" cy="18" r="15.9155" />
-              <circle
-                class="arc"
-                cx="18"
-                cy="18"
-                r="15.9155"
-                transform="rotate(-90 18 18)"
-                :stroke-dasharray="`${s.share} 100`"
-              />
-              <text class="rc-emo" x="18" y="13" text-anchor="middle">{{ s.emo }}</text>
-              <text class="rc-n font-display" x="18" y="26.5" text-anchor="middle">{{ s.value }}</text>
-            </svg>
-            <div class="statc-nm font-display">{{ s.name }}</div>
-            <div class="statc-inf">{{ s.inf }}</div>
+          <div class="stats-circles">
+            <div v-for="s in statCircles" :key="s.key" class="statc" :class="s.key">
+              <svg class="ring" viewBox="0 0 36 36" role="img" :aria-label="`${s.name} ${s.value}`">
+                <circle class="track" cx="18" cy="18" r="15.9155" />
+                <circle
+                  class="arc"
+                  cx="18"
+                  cy="18"
+                  r="15.9155"
+                  transform="rotate(-90 18 18)"
+                  :stroke-dasharray="`${s.share} 100`"
+                />
+                <text class="rc-emo" x="18" y="13" text-anchor="middle">{{ s.emo }}</text>
+                <text class="rc-n font-display" x="18" y="26.5" text-anchor="middle">
+                  {{ s.value }}
+                </text>
+              </svg>
+              <div class="statc-nm font-display">{{ s.name }}</div>
+              <div class="statc-inf">{{ s.inf }}</div>
+            </div>
           </div>
-        </div>
-        <div class="pv-line">
-          ❤️ <b class="font-display">{{ c.pv + bonusPv }} PV</b>
-          <span v-if="bonusPv" class="pv-bonus">(+{{ bonusPv }} bonus)</span>
-        </div>
+          <div class="pv-line">
+            ❤️ <b class="font-display">{{ c.pv + bonusPv }} PV</b>
+            <span v-if="bonusPv" class="pv-bonus">(+{{ bonusPv }} bonus)</span>
+          </div>
         </template>
 
         <template v-if="persoSub === 'stats'">
-        <div class="sec-title">Combat : base → équipé</div>
-        <div class="gear-fx">
-          <div class="gfx">
-            <span class="gfx-l">❤️ PV</span>
-            <span class="gfx-v">{{ baseFighter.pv }} <i>→</i> <b>{{ fighter.pv }}</b></span>
+          <div class="sec-title">Combat : base → équipé</div>
+          <div class="gear-fx">
+            <div class="gfx">
+              <span class="gfx-l">❤️ PV</span>
+              <span class="gfx-v"
+                >{{ baseFighter.pv }} <i>→</i> <b>{{ fighter.pv }}</b></span
+              >
+            </div>
+            <div class="gfx">
+              <span class="gfx-l">⚔️ Dégâts/coup</span>
+              <span class="gfx-v"
+                >{{ baseFighter.damage }} <i>→</i> <b>{{ fighter.damage }}</b></span
+              >
+            </div>
+            <div class="gfx">
+              <span class="gfx-l">⚡ Frappes/tour</span>
+              <span class="gfx-v"
+                >{{ (baseFighter.strikes ?? 1).toFixed(2) }} <i>→</i>
+                <b>{{ (fighter.strikes ?? 1).toFixed(2) }}</b></span
+              >
+            </div>
+            <div class="gfx">
+              <span class="gfx-l">🎯 Crit</span>
+              <span class="gfx-v"
+                >{{ pctA(baseFighter.crit) }} <i>→</i> <b>{{ pctA(fighter.crit) }}</b></span
+              >
+            </div>
+            <div class="gfx">
+              <span class="gfx-l">💨 Esquive</span>
+              <span class="gfx-v"
+                >{{ pctA(baseFighter.dodge) }} <i>→</i> <b>{{ pctA(fighter.dodge) }}</b></span
+              >
+            </div>
+            <div class="gfx">
+              <span class="gfx-l">🛡️ Défense</span>
+              <span class="gfx-v"
+                >{{ pctA(baseFighter.dmgReduction) }} <i>→</i>
+                <b>{{ pctA(fighter.dmgReduction) }}</b></span
+              >
+            </div>
+            <div class="gfx">
+              <span class="gfx-l">🩸 Vol de vie</span>
+              <span class="gfx-v"
+                >{{ pctA(baseFighter.lifesteal) }} <i>→</i>
+                <b>{{ pctA(fighter.lifesteal) }}</b></span
+              >
+            </div>
+            <div class="gfx total">
+              <span class="gfx-l">Puissance de combat</span>
+              <span class="gfx-v"
+                >{{ fmtPow(combatPower(baseFighter)) }} <i>→</i>
+                <b>{{ fmtPow(combatPowerVal) }}</b></span
+              >
+            </div>
           </div>
-          <div class="gfx">
-            <span class="gfx-l">⚔️ Dégâts/coup</span>
-            <span class="gfx-v">{{ baseFighter.damage }} <i>→</i> <b>{{ fighter.damage }}</b></span>
+          <div class="gear-fx-note">
+            Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
+            effets (→).
           </div>
-          <div class="gfx">
-            <span class="gfx-l">⚡ Frappes/tour</span>
-            <span class="gfx-v"
-              >{{ (baseFighter.strikes ?? 1).toFixed(2) }} <i>→</i>
-              <b>{{ (fighter.strikes ?? 1).toFixed(2) }}</b></span
-            >
-          </div>
-          <div class="gfx">
-            <span class="gfx-l">🎯 Crit</span>
-            <span class="gfx-v">{{ pctA(baseFighter.crit) }} <i>→</i> <b>{{ pctA(fighter.crit) }}</b></span>
-          </div>
-          <div class="gfx">
-            <span class="gfx-l">💨 Esquive</span>
-            <span class="gfx-v"
-              >{{ pctA(baseFighter.dodge) }} <i>→</i> <b>{{ pctA(fighter.dodge) }}</b></span
-            >
-          </div>
-          <div class="gfx">
-            <span class="gfx-l">🛡️ Défense</span>
-            <span class="gfx-v"
-              >{{ pctA(baseFighter.dmgReduction) }} <i>→</i>
-              <b>{{ pctA(fighter.dmgReduction) }}</b></span
-            >
-          </div>
-          <div class="gfx">
-            <span class="gfx-l">🩸 Vol de vie</span>
-            <span class="gfx-v"
-              >{{ pctA(baseFighter.lifesteal) }} <i>→</i>
-              <b>{{ pctA(fighter.lifesteal) }}</b></span
-            >
-          </div>
-          <div class="gfx total">
-            <span class="gfx-l">Puissance de combat</span>
-            <span class="gfx-v"
-              >{{ fmtPow(combatPower(baseFighter)) }} <i>→</i>
-              <b>{{ fmtPow(combatPowerVal) }}</b></span
-            >
-          </div>
-        </div>
-        <div class="gear-fx-note">
-          Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
-          effets (→).
-        </div>
         </template>
 
         <template v-if="persoSub === 'talents'">
-        <div class="sec-title">
-          Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
-        </div>
-        <div class="sec-hint">
-          Les talents <b>droppent au niveau 1</b> (donjons/boss). Équipe-en {{ talentSlots }} (change
-          quand tu veux), et <b>infuse-en un dans un autre</b> (🔧) pour le faire monter en niveau et
-          en rareté.
-        </div>
+          <div class="sec-title">
+            Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
+          </div>
+          <div class="sec-hint">
+            Les talents <b>droppent au niveau 1</b> (donjons/boss). Équipe-en
+            {{ talentSlots }} (change quand tu veux), et <b>infuse-en un dans un autre</b> (🔧) pour
+            le faire monter en niveau et en rareté.
+          </div>
 
-        <!-- Cible d'infusion active -->
-        <div v-if="infuseTarget" class="tal-infuse-banner">
-          🔧 Infusion dans <b>{{ talentName(infuseTarget) }}</b> — tape un talent à sacrifier.
-          <button class="tib-x" @click="infuseTarget = null">annuler</button>
-        </div>
+          <!-- Cible d'infusion active -->
+          <div v-if="infuseTarget" class="tal-infuse-banner">
+            🔧 Infusion dans <b>{{ talentName(infuseTarget) }}</b> — tape un talent à sacrifier.
+            <button class="tib-x" @click="infuseTarget = null">annuler</button>
+          </div>
 
-        <div v-if="!char.row.talents.length" class="talents-empty">
-          Aucun talent pour l'instant — vaincs des donjons pour en faire tomber.
-        </div>
-        <div v-else class="talents-grid">
-          <div
-            v-for="t in talentsView"
-            :key="t.id"
-            class="tal-card"
-            :class="['p-' + t.rarity, { eq: t.equipped, tgt: infuseTarget?.id === t.id }]"
-          >
-            <button
-              class="tal-emo"
-              title="Explication du talent"
-              aria-label="Expliquer ce talent"
-              @click="explainTalent(t)"
+          <div v-if="!char.row.talents.length" class="talents-empty">
+            Aucun talent pour l'instant — vaincs des donjons pour en faire tomber.
+          </div>
+          <div v-else class="talents-grid">
+            <div
+              v-for="t in talentsView"
+              :key="t.id"
+              class="tal-card"
+              :class="['p-' + t.rarity, { eq: t.equipped, tgt: infuseTarget?.id === t.id }]"
             >
-              {{ t.def.icon }}
-            </button>
-            <div class="tal-body">
-              <div class="tal-name font-display">
-                {{ t.def.name }} <span class="tal-lv">Nv{{ t.level }}</span>
+              <button
+                class="tal-emo"
+                title="Explication du talent"
+                aria-label="Expliquer ce talent"
+                @click="explainTalent(t)"
+              >
+                {{ t.def.icon }}
+              </button>
+              <div class="tal-body">
+                <div class="tal-name font-display">
+                  {{ t.def.name }} <span class="tal-lv">Nv{{ t.level }}</span>
+                </div>
+                <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
+                <div class="tal-xp"><span :style="{ width: Math.round(t.xpp * 100) + '%' }" /></div>
               </div>
-              <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
-              <div class="tal-xp"><span :style="{ width: Math.round(t.xpp * 100) + '%' }" /></div>
-            </div>
-            <div class="tal-actions">
-              <template v-if="infuseTarget">
-                <button
-                  v-if="infuseTarget.id !== t.id"
-                  class="tal-b feed"
-                  @click="doInfuse(t.id)"
-                >
-                  ✨ Sacrifier
-                </button>
-                <span v-else class="tal-b cur">cible</span>
-              </template>
-              <template v-else>
-                <button
-                  v-if="!t.equipped"
-                  class="tal-b"
-                  :disabled="!canEquipMore || talentCodeEquipped(t.def.code)"
-                  :title="talentCodeEquipped(t.def.code) ? 'Un talent de ce type est déjà équipé' : ''"
-                  @click="doEquipTalent(t.id)"
-                >
-                  {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
-                </button>
-                <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
-                <button
-                  class="tal-b ghost"
-                  :disabled="!hasSpareTalent || talentAtCap(t.inst)"
-                  :title="
-                    talentAtCap(t.inst)
-                      ? 'Déjà à ton niveau max — monte de niveau (sport)'
-                      : !hasSpareTalent
-                        ? 'Il te faut un 2ᵉ talent à sacrifier'
-                        : 'Infuser : monter ce talent en le nourrissant d’un autre'
-                  "
-                  @click="infuseTarget = t.inst"
-                >
-                  🔧
-                </button>
-              </template>
+              <div class="tal-actions">
+                <template v-if="infuseTarget">
+                  <button
+                    v-if="infuseTarget.id !== t.id"
+                    class="tal-b feed"
+                    @click="doInfuse(t.id)"
+                  >
+                    ✨ Sacrifier
+                  </button>
+                  <span v-else class="tal-b cur">cible</span>
+                </template>
+                <template v-else>
+                  <button
+                    v-if="!t.equipped"
+                    class="tal-b"
+                    :disabled="!canEquipMore || talentCodeEquipped(t.def.code)"
+                    :title="
+                      talentCodeEquipped(t.def.code) ? 'Un talent de ce type est déjà équipé' : ''
+                    "
+                    @click="doEquipTalent(t.id)"
+                  >
+                    {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
+                  </button>
+                  <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
+                  <button
+                    class="tal-b ghost"
+                    :disabled="!hasSpareTalent || talentAtCap(t.inst)"
+                    :title="
+                      talentAtCap(t.inst)
+                        ? 'Déjà à ton niveau max — monte de niveau (sport)'
+                        : !hasSpareTalent
+                          ? 'Il te faut un 2ᵉ talent à sacrifier'
+                          : 'Infuser : monter ce talent en le nourrissant d’un autre'
+                    "
+                    @click="infuseTarget = t.inst"
+                  >
+                    🔧
+                  </button>
+                </template>
+              </div>
             </div>
           </div>
-        </div>
         </template>
 
         <template v-if="persoSub === 'perso'">
-        <!-- Codex : bestiaire + journal des sets (méta de collection). -->
-        <button class="codex-btn" @click="codexOpen = true">
-          <span class="cx-emo">📖</span>
-          <span class="cx-main">
-            <span class="cx-title">Codex</span>
-            <span class="cx-sub">
-              👾 {{ codexSum.monstersFound }}/{{ codexSum.monstersTotal }} monstres ·
-              🧩 {{ codexSum.setsComplete }}/{{ codexSum.setsTotal }} sets
+          <!-- Codex : bestiaire + journal des sets (méta de collection). -->
+          <button class="codex-btn" @click="codexOpen = true">
+            <span class="cx-emo">📖</span>
+            <span class="cx-main">
+              <span class="cx-title">Codex</span>
+              <span class="cx-sub">
+                👾 {{ codexSum.monstersFound }}/{{ codexSum.monstersTotal }} monstres · 🧩
+                {{ codexSum.setsComplete }}/{{ codexSum.setsTotal }} sets
+              </span>
             </span>
-          </span>
-          <span class="cx-go">›</span>
-        </button>
+            <span class="cx-go">›</span>
+          </button>
 
-        <div class="foot">
-          <b>Chaque séance fait progresser ton aventurier.</b> Les stats et le niveau viennent du
-          sport. La connexion quotidienne, elle, ne donne qu'un peu d'énergie pour jouer.
-        </div>
+          <div class="foot">
+            <b>Chaque séance fait progresser ton aventurier.</b> Les stats et le niveau viennent du
+            sport. La connexion quotidienne, elle, ne donne qu'un peu d'énergie pour jouer.
+          </div>
         </template>
       </template>
 
@@ -376,9 +393,15 @@
             🛡️ Équipement
           </button>
           <button class="gs-b" :class="{ on: gearSub === 'bag' }" @click="gearSub = 'bag'">
-            🎒 Sac<span v-if="char.row.inventory.length" class="gs-badge">{{ char.row.inventory.length }}</span>
+            🎒 Sac<span v-if="char.row.inventory.length" class="gs-badge">{{
+              char.row.inventory.length
+            }}</span>
           </button>
-          <button class="gs-b" :class="{ on: gearSub === 'familiar' }" @click="gearSub = 'familiar'">
+          <button
+            class="gs-b"
+            :class="{ on: gearSub === 'familiar' }"
+            @click="gearSub = 'familiar'"
+          >
             🐾 Familier
           </button>
           <button class="gs-b" :class="{ on: gearSub === 'shop' }" @click="gearSub = 'shop'">
@@ -387,394 +410,438 @@
         </div>
 
         <template v-if="gearSub === 'equip'">
-        <div class="sec-title">Équipement</div>
-        <div class="sec-hint">
-          Ton stuff équipé. Gère tes objets dans le <b>Sac</b> (onglet ci-dessus).
-        </div>
-        <div class="gear">
-          <div
-            v-for="slot in SLOTS"
-            :key="slot"
-            class="slot"
-            :class="char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty'"
-          >
-            <div class="slot-head">
-              <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
-              <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
-            </div>
-            <template v-if="char.row.equipped[slot]">
-              <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
-              <div class="pills">
-                <span class="gpill lvl">Lvl {{ char.row.equipped[slot]!.level }}</span>
-                <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
-                  RARITY_LABEL[char.row.equipped[slot]!.rarity]
-                }}</span>
-                <span v-if="char.row.equipped[slot]!.setId" class="gpill set">🧩 Set</span>
+          <div class="sec-title">Équipement</div>
+          <div class="sec-hint">
+            Ton stuff équipé. Gère tes objets dans le <b>Sac</b> (onglet ci-dessus).
+          </div>
+          <div class="gear">
+            <div
+              v-for="slot in SLOTS"
+              :key="slot"
+              class="slot"
+              :class="char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty'"
+            >
+              <div class="slot-head">
+                <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
+                <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
               </div>
-              <div class="slot-eff">
-                {{ itemEffects(char.row.equipped[slot]!) }}
-                <span v-if="rollStarStr(char.row.equipped[slot])" class="roll-stars">{{
-                  rollStarStr(char.row.equipped[slot])
-                }}</span>
+              <template v-if="char.row.equipped[slot]">
+                <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
+                <div class="pills">
+                  <span class="gpill lvl">Lvl {{ char.row.equipped[slot]!.level }}</span>
+                  <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
+                    RARITY_LABEL[char.row.equipped[slot]!.rarity]
+                  }}</span>
+                  <span v-if="char.row.equipped[slot]!.setId" class="gpill set">🧩 Set</span>
+                </div>
+                <div class="slot-eff">
+                  {{ itemEffects(char.row.equipped[slot]!) }}
+                  <span v-if="rollStarStr(char.row.equipped[slot])" class="roll-stars">{{
+                    rollStarStr(char.row.equipped[slot])
+                  }}</span>
+                </div>
+                <button
+                  class="slot-up"
+                  :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
+                  @click.stop="doUpgrade(char.row.equipped[slot]!.id)"
+                >
+                  <template v-if="char.row.equipped[slot]!.level > c.level.level"
+                    >✨ Infusable au niv {{ char.row.equipped[slot]!.level + 1 }}</template
+                  >
+                  <template v-else-if="char.row.equipped[slot]!.level >= c.level.level"
+                    >✨ Max (ton niveau {{ c.level.level }})</template
+                  >
+                  <template v-else
+                    >✨ +1 niv ·
+                    {{
+                      upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity)
+                    }}
+                    ✨</template
+                  >
+                </button>
+                <button class="slot-remove" @click="doUnequip(slot)">Retirer</button>
+              </template>
+              <div v-else class="slot-vide">
+                vide<template v-if="bagCountForSlot(slot) > 0">
+                  · {{ bagCountForSlot(slot) }} au sac</template
+                >
               </div>
-              <button
-                class="slot-up"
-                :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
-                @click.stop="doUpgrade(char.row.equipped[slot]!.id)"
-              >
-                <template v-if="char.row.equipped[slot]!.level > c.level.level"
-                  >✨ Infusable au niv {{ char.row.equipped[slot]!.level + 1 }}</template
-                >
-                <template v-else-if="char.row.equipped[slot]!.level >= c.level.level"
-                  >✨ Max (ton niveau {{ c.level.level }})</template
-                >
-                <template v-else
-                  >✨ +1 niv ·
-                  {{
-                    upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity)
-                  }}
-                  ✨</template
-                >
-              </button>
-              <button class="slot-remove" @click="doUnequip(slot)">Retirer</button>
-            </template>
-            <div v-else class="slot-vide">
-              vide<template v-if="bagCountForSlot(slot) > 0">
-                · {{ bagCountForSlot(slot) }} au sac</template
-              >
             </div>
           </div>
-        </div>
-
         </template>
 
         <!-- Familier (compagnon) : 5ᵉ emplacement, monté aux PIERRES MAGIQUES 💎 -->
         <template v-if="gearSub === 'familiar'">
-        <div class="sec-title">🐾 Familier</div>
-        <div class="sec-hint">
-          Ton compagnon donne un bonus de race. Les plus rares portent en plus un effet
-          <b>✦ signature</b> (exécution, fureur, élan). Monte-le avec des <b>💎 pierres magiques</b>
-          (Labyrinthe & butin). <b>💎 {{ char.row.stones }}</b> dispo.
-        </div>
-        <div class="fam-panel">
-          <div
-            v-if="equippedFamiliar"
-            class="fam-card equipped"
-            :class="'r-' + equippedFamiliar.rarity"
-          >
-            <div class="fam-emo">{{ equippedFamiliar.emoji }}</div>
-            <div class="fam-body">
-              <div class="fam-name">
-                {{ equippedFamiliar.name }}
-                <span class="gpill" :class="'p-' + equippedFamiliar.rarity">{{
-                  RARITY_LABEL[equippedFamiliar.rarity]
-                }}</span>
-                <span class="gpill lvl">Lvl {{ equippedFamiliar.level }}</span>
-                <span v-if="equippedFamiliar.effect2" class="gpill sig">✦ Signature</span>
-              </div>
-              <div class="fam-eff">{{ itemEffects(equippedFamiliar) }}</div>
-              <div v-if="familiarBlurb(equippedFamiliar)" class="fam-blurb">
-                {{ familiarBlurb(equippedFamiliar) }}
-              </div>
-              <div class="fam-actions">
-                <button
-                  class="slot-up"
-                  :disabled="!canUpgradeFamiliar(equippedFamiliar)"
-                  @click.stop="doUpgradeFamiliar(equippedFamiliar.id)"
-                >
-                  <template v-if="equippedFamiliar.level >= c.level.level"
-                    >💎 Max (niv {{ c.level.level }})</template
-                  >
-                  <template v-else
-                    >💎 Monter ·
-                    {{ familiarStoneCost(equippedFamiliar.level, equippedFamiliar.rarity) }} 💎</template
-                  >
-                </button>
-                <button class="slot-remove" @click="doUnequipFamiliar()">Retirer</button>
-              </div>
-            </div>
+          <div class="sec-title">🐾 Familier</div>
+          <div class="sec-hint">
+            Ton compagnon donne un bonus de race. Les plus rares portent en plus un effet
+            <b>✦ signature</b> (exécution, fureur, élan). Monte-le avec des
+            <b>💎 pierres magiques</b> (Labyrinthe & butin). <b>💎 {{ char.row.stones }}</b> dispo.
           </div>
-          <div v-else class="fam-empty">
-            Aucun familier équipé. On en trouve un <b>garanti au clear du Labyrinthe</b> 🗝️.
-          </div>
-
-          <!-- Familiers au sac (équiper / vendre) -->
-          <div v-if="bagFamiliars.length" class="fam-bag">
-            <div class="fam-bag-title">Au sac ({{ bagFamiliars.length }})</div>
+          <div class="fam-panel">
             <div
-              v-for="f in bagFamiliars"
-              :key="f.id"
-              class="fam-mini"
-              :class="'r-' + f.rarity"
+              v-if="equippedFamiliar"
+              class="fam-card equipped"
+              :class="'r-' + equippedFamiliar.rarity"
             >
-              <span class="fam-mini-emo">{{ f.emoji }}</span>
-              <div class="fam-mini-body">
-                <div class="fam-mini-head">
-                  <span class="fam-mini-name">{{ f.name }}</span>
-                  <span class="gpill" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
-                  <span class="gpill lvl">Lv{{ f.level }}</span>
-                  <span v-if="f.effect2" class="gpill sig">✦</span>
+              <div class="fam-emo">{{ equippedFamiliar.emoji }}</div>
+              <div class="fam-body">
+                <div class="fam-name">
+                  {{ equippedFamiliar.name }}
+                  <span class="gpill" :class="'p-' + equippedFamiliar.rarity">{{
+                    RARITY_LABEL[equippedFamiliar.rarity]
+                  }}</span>
+                  <span class="gpill lvl">Lvl {{ equippedFamiliar.level }}</span>
+                  <span v-if="equippedFamiliar.effect2" class="gpill sig">✦ Signature</span>
                 </div>
-                <div class="fam-mini-eff">{{ itemEffects(f) }}</div>
-              </div>
-              <div class="fam-mini-acts">
-                <button class="fam-mini-eq" @click="doEquipFamiliar(f.id)">Équiper</button>
-                <button class="fam-mini-sell" @click="doSell(f)">Vendre 🪙{{ sellValue(f) }}</button>
+                <div class="fam-eff">{{ itemEffects(equippedFamiliar) }}</div>
+                <div v-if="familiarBlurb(equippedFamiliar)" class="fam-blurb">
+                  {{ familiarBlurb(equippedFamiliar) }}
+                </div>
+                <div class="fam-actions">
+                  <button
+                    class="slot-up"
+                    :disabled="!canUpgradeFamiliar(equippedFamiliar)"
+                    @click.stop="doUpgradeFamiliar(equippedFamiliar.id)"
+                  >
+                    <template v-if="equippedFamiliar.level >= c.level.level"
+                      >💎 Max (niv {{ c.level.level }})</template
+                    >
+                    <template v-else
+                      >💎 Monter ·
+                      {{ familiarStoneCost(equippedFamiliar.level, equippedFamiliar.rarity) }}
+                      💎</template
+                    >
+                  </button>
+                  <button class="slot-remove" @click="doUnequipFamiliar()">Retirer</button>
+                </div>
               </div>
             </div>
-          </div>
+            <div v-else class="fam-empty">
+              Aucun familier équipé. On en trouve un <b>garanti au clear du Labyrinthe</b> 🗝️.
+            </div>
 
-          <!-- Incubateur : fusion 3 familiers de même rareté → 1 de la rareté au-dessus.
+            <!-- Familiers au sac (équiper / vendre) -->
+            <div v-if="bagFamiliars.length" class="fam-bag">
+              <div class="fam-bag-title">Au sac ({{ bagFamiliars.length }})</div>
+              <div v-for="f in bagFamiliars" :key="f.id" class="fam-mini" :class="'r-' + f.rarity">
+                <span class="fam-mini-emo">{{ f.emoji }}</span>
+                <div class="fam-mini-body">
+                  <div class="fam-mini-head">
+                    <span class="fam-mini-name">{{ f.name }}</span>
+                    <span class="gpill" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
+                    <span class="gpill lvl">Lv{{ f.level }}</span>
+                    <span v-if="f.effect2" class="gpill sig">✦</span>
+                  </div>
+                  <div class="fam-mini-eff">{{ itemEffects(f) }}</div>
+                </div>
+                <div class="fam-mini-acts">
+                  <button class="fam-mini-eq" @click="doEquipFamiliar(f.id)">Équiper</button>
+                  <button class="fam-mini-sell" @click="doSell(f)">
+                    Vendre 🪙{{ sellValue(f) }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Incubateur : fusion 3 familiers de même rareté → 1 de la rareté au-dessus.
                Débloqué en construisant l'INCUBATEUR sur la carte (plus de gate de niveau). -->
-          <div v-if="hasIncubator" class="fam-incub">
-            <div class="fam-bag-title">🥚 Incubateur — fusion</div>
-            <div class="fam-incub-hint">
-              Fusionne <b>3 familiers de même rareté</b> → 1 aléatoire de la rareté juste au-dessus.
+            <div v-if="hasIncubator" class="fam-incub">
+              <div class="fam-bag-title">🥚 Incubateur — fusion</div>
+              <div class="fam-incub-hint">
+                Fusionne <b>3 familiers de même rareté</b> → 1 aléatoire de la rareté juste
+                au-dessus.
+              </div>
+              <div v-if="!fusableRarities.length" class="fam-incub-empty">
+                Il te faut au moins 3 familiers d'une même rareté (hors divin) au sac.
+              </div>
+              <button
+                v-for="fr in fusableRarities"
+                :key="fr.rarity"
+                class="fam-fuse-btn"
+                @click="doFuse(fr.rarity)"
+              >
+                Fusionner 3× <b :class="'p-' + fr.rarity">{{ RARITY_LABEL[fr.rarity] }}</b> →
+                <b :class="'p-' + fr.next">{{ RARITY_LABEL[fr.next] }}</b>
+                <span class="ff-have">({{ fr.count }} dispo)</span>
+              </button>
             </div>
-            <div v-if="!fusableRarities.length" class="fam-incub-empty">
-              Il te faut au moins 3 familiers d'une même rareté (hors divin) au sac.
-            </div>
-            <button
-              v-for="fr in fusableRarities"
-              :key="fr.rarity"
-              class="fam-fuse-btn"
-              @click="doFuse(fr.rarity)"
-            >
-              Fusionner 3× <b :class="'p-' + fr.rarity">{{ RARITY_LABEL[fr.rarity] }}</b>
-              → <b :class="'p-' + fr.next">{{ RARITY_LABEL[fr.next] }}</b>
-              <span class="ff-have">({{ fr.count }} dispo)</span>
+            <button v-else class="fam-incub-locked" @click="router.push('/expedition-map')">
+              🥚 Construis un <b>Incubateur</b> sur la carte pour fusionner tes familiers.
             </button>
           </div>
-          <button v-else class="fam-incub-locked" @click="router.push('/expedition-map')">
-            🥚 Construis un <b>Incubateur</b> sur la carte pour fusionner tes familiers.
-          </button>
-        </div>
         </template>
 
         <!-- Sets d'équipement (bonus 2/3/4 pièces) — rattachés à l'équipement -->
         <template v-if="gearSub === 'equip'">
-        <template v-if="activeSets.length">
-          <div class="sec-title">Sets</div>
-          <div v-for="s in activeSets" :key="s.id" class="setcard" :class="{ full: s.count >= 4 }">
-            <div class="set-top">
-              <span class="set-name">{{ s.emoji }} {{ s.name }}</span>
-              <span class="set-count font-display">{{ s.count }}/4</span>
+          <template v-if="activeSets.length">
+            <div class="sec-title">Sets</div>
+            <div
+              v-for="s in activeSets"
+              :key="s.id"
+              class="setcard"
+              :class="{ full: s.count >= 4 }"
+            >
+              <div class="set-top">
+                <span class="set-name">{{ s.emoji }} {{ s.name }}</span>
+                <span class="set-count font-display">{{ s.count }}/4</span>
+              </div>
+              <div class="set-theme">{{ s.theme }}</div>
+              <div class="set-tiers">
+                <span
+                  v-for="t in s.tiers"
+                  :key="t.pieces"
+                  class="set-tier"
+                  :class="{ on: s.count >= t.pieces }"
+                >
+                  {{ t.pieces }} pièces : {{ t.label }}
+                </span>
+              </div>
             </div>
-            <div class="set-theme">{{ s.theme }}</div>
-            <div class="set-tiers">
-              <span
-                v-for="t in s.tiers"
-                :key="t.pieces"
-                class="set-tier"
-                :class="{ on: s.count >= t.pieces }"
-              >
-                {{ t.pieces }} pièces : {{ t.label }}
-              </span>
-            </div>
-          </div>
-        </template>
-
+          </template>
         </template>
 
         <template v-if="gearSub === 'bag'">
-        <template v-if="char.row.inventory.length">
-          <div ref="sacTitle" class="sec-title">Sac ({{ char.row.inventory.length }})</div>
-          <!-- Filtre par type d'objet -->
-          <div class="inv-filter">
-            <button
-              class="if-chip"
-              :class="{ on: invFilter === 'all' }"
-              @click="invFilter = 'all'"
-            >
-              Tous
-            </button>
-            <button
-              v-for="slot in SLOTS"
-              :key="slot"
-              class="if-chip"
-              :class="{ on: invFilter === slot }"
-              @click="invFilter = slot"
-            >
-              {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
-            </button>
-          </div>
-          <!-- Nettoyage en masse : objets qui n'améliorent pas ta puissance —
+          <template v-if="char.row.inventory.length">
+            <div ref="sacTitle" class="sec-title">Sac ({{ char.row.inventory.length }})</div>
+            <!-- Filtre par type d'objet -->
+            <div class="inv-filter">
+              <button
+                class="if-chip"
+                :class="{ on: invFilter === 'all' }"
+                @click="invFilter = 'all'"
+              >
+                Tous
+              </button>
+              <button
+                v-for="slot in SLOTS"
+                :key="slot"
+                class="if-chip"
+                :class="{ on: invFilter === slot }"
+                @click="invFilter = slot"
+              >
+                {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
+              </button>
+            </div>
+            <!-- Nettoyage en masse : objets qui n'améliorent pas ta puissance —
                faibles ET doublons de l'équipé (écart de niveau pris en compte :
                jugés une fois montés à ton niveau) -->
-          <div v-if="belowCount > 0" class="bulk">
-            <span class="bulk-lbl"
-              >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} inutile{{
-                belowCount > 1 ? 's' : ''
-              }} (faible{{ belowCount > 1 ? 's' : '' }} ou doublon{{
-                belowCount > 1 ? 's' : ''
-              }})</span
-            >
-            <div class="bulk-btns">
-              <button class="bulk-b" @click="doSalvageBelow">✨ Casser ces {{ belowCount }}</button>
-              <button class="bulk-b" @click="doSellBelow">🪙 Vendre ces {{ belowCount }}</button>
-            </div>
-          </div>
-          <div v-if="!filteredInventory.length" class="inv-empty-filter">
-            Aucun objet de ce type dans le sac.
-          </div>
-          <div class="inv">
-            <div
-              v-for="it in filteredInventory"
-              :key="it.id"
-              class="inv-item"
-              :class="['r-' + it.rarity, { locked: it.locked }]"
-            >
-              <!-- Ligne 1 : emoji + nom + VERDICT de puissance (la décision) -->
-              <div class="ii-head">
-                <span class="inv-emo">{{ it.emoji }}</span>
-                <div class="ii-name">{{ it.name }}</div>
-                <span class="ii-verdict" :class="powerVerdict(it).cls">{{
-                  powerVerdict(it).label
-                }}</span>
-              </div>
-              <!-- Ligne 2 : méta grisée (rareté · niveau · slot · qualité · set) + cadenas -->
-              <div class="ii-meta">
-                <span class="ii-rar" :class="'p-' + it.rarity">{{ RARITY_LABEL[it.rarity] }}</span>
-                <span class="ii-dot">·</span> Nv {{ it.level }}
-                <span class="ii-dot">·</span> {{ SLOT_LABEL[it.slot] }}
-                <span v-if="rollStarStr(it)" class="roll-stars" title="Qualité du roll">{{
-                  rollStarStr(it)
-                }}</span>
-                <span v-if="it.setId" class="gpill set">🧩 Set</span>
-                <button
-                  class="inv-lock"
-                  :class="{ on: it.locked }"
-                  :title="it.locked ? 'Déverrouiller' : 'Protéger de la casse/vente'"
-                  :aria-label="it.locked ? 'Déverrouiller' : 'Verrouiller'"
-                  @click="doToggleLock(it)"
-                >
-                  {{ it.locked ? '🔒' : '🔓' }}
+            <div v-if="belowCount > 0" class="bulk">
+              <span class="bulk-lbl"
+                >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} inutile{{
+                  belowCount > 1 ? 's' : ''
+                }}
+                (faible{{ belowCount > 1 ? 's' : '' }} ou doublon{{
+                  belowCount > 1 ? 's' : ''
+                }})</span
+              >
+              <div class="bulk-btns">
+                <button class="bulk-b" @click="doSalvageBelow">
+                  ✨ Casser ces {{ belowCount }}
                 </button>
+                <button class="bulk-b" @click="doSellBelow">🪙 Vendre ces {{ belowCount }}</button>
               </div>
-              <!-- Comparaison d'EFFET claire : cet objet vs l'équipé du même emplacement -->
-              <div class="ii-compare">
-                <div class="ii-cmp-row this">
-                  <span class="ii-cmp-lbl">Cet objet</span>
-                  <span class="ii-cmp-val">{{ itemEffects(it) }}</span>
-                </div>
-                <div class="ii-cmp-row eq">
-                  <span class="ii-cmp-lbl">Équipé</span>
-                  <span v-if="equippedInSlot(it.slot)" class="ii-cmp-val">{{
-                    itemEffects(equippedInSlot(it.slot)!)
+            </div>
+            <div v-if="!filteredInventory.length" class="inv-empty-filter">
+              Aucun objet de ce type dans le sac.
+            </div>
+            <div class="inv">
+              <div
+                v-for="it in filteredInventory"
+                :key="it.id"
+                class="inv-item"
+                :class="['r-' + it.rarity, { locked: it.locked }]"
+              >
+                <!-- Ligne 1 : emoji + nom + VERDICT de puissance (la décision) -->
+                <div class="ii-head">
+                  <span class="inv-emo">{{ it.emoji }}</span>
+                  <div class="ii-name">{{ it.name }}</div>
+                  <span class="ii-verdict" :class="powerVerdict(it).cls">{{
+                    powerVerdict(it).label
                   }}</span>
-                  <span v-else class="ii-cmp-val dim">— emplacement libre</span>
+                </div>
+                <!-- Ligne 2 : méta grisée (rareté · niveau · slot · qualité · set) + cadenas -->
+                <div class="ii-meta">
+                  <span class="ii-rar" :class="'p-' + it.rarity">{{
+                    RARITY_LABEL[it.rarity]
+                  }}</span>
+                  <span class="ii-dot">·</span> Nv {{ it.level }} <span class="ii-dot">·</span>
+                  {{ SLOT_LABEL[it.slot] }}
+                  <span v-if="rollStarStr(it)" class="roll-stars" title="Qualité du roll">{{
+                    rollStarStr(it)
+                  }}</span>
+                  <span v-if="it.setId" class="gpill set">🧩 Set</span>
+                </div>
+                <!-- Comparaison d'EFFET claire : cet objet vs l'équipé du même emplacement -->
+                <div class="ii-compare">
+                  <div class="ii-cmp-row this">
+                    <span class="ii-cmp-lbl">Cet objet</span>
+                    <span class="ii-cmp-val">{{ itemEffects(it) }}</span>
+                  </div>
+                  <div class="ii-cmp-row eq">
+                    <span class="ii-cmp-lbl">Équipé</span>
+                    <span v-if="equippedInSlot(it.slot)" class="ii-cmp-val">{{
+                      itemEffects(equippedInSlot(it.slot)!)
+                    }}</span>
+                    <span v-else class="ii-cmp-val dim">— emplacement libre</span>
+                  </div>
+                </div>
+                <!-- PUISSANCE : 2 lectures — MAINTENANT (équipé tel quel, niveau réel)
+                     vs POTENTIEL (monté à ton niveau). Montre qu'un objet sous-leveled
+                     fait perdre s'il est équipé tel quel mais devient meilleur infusé. -->
+                <div class="ii-pow2">
+                  <div class="ii-pw" :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'">
+                    <span class="ii-pw-k">Maintenant</span>
+                    <span class="ii-pw-v"
+                      >{{ fmtPow(combatPowerVal) }} → {{ fmtPow(powerIfEquipNow(it)) }}</span
+                    >
+                    <span class="ii-pw-d">{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</span>
+                  </div>
+                  <div
+                    v-if="it.level < c.level.level"
+                    class="ii-pw"
+                    :class="powerIfEquip(it) >= combatPowerMaxed ? 'up' : 'down'"
+                  >
+                    <span class="ii-pw-k">Monté à ton niveau</span>
+                    <span class="ii-pw-v"
+                      >{{ fmtPow(combatPowerMaxed) }} → {{ fmtPow(powerIfEquip(it)) }}</span
+                    >
+                    <span class="ii-pw-d">{{ fmtDelta(combatPowerMaxed, powerIfEquip(it)) }}</span>
+                  </div>
+                </div>
+                <!-- Rentabilité : palier d'infusion où l'objet dépasse ton équipé actuel. -->
+                <div
+                  v-if="showBreakEven(it)"
+                  class="ii-be"
+                  :class="{ ok: breakEvenFor(it).cost <= char.row.dust }"
+                >
+                  🔧 Rentable dès Nv {{ breakEvenFor(it).level }} · {{ breakEvenFor(it).cost }}✨
+                  <span class="ii-be-have">(tu as {{ char.row.dust }}✨)</span>
+                </div>
+                <!-- Actions : Équiper · (Infuser puis équiper) · icônes casser/vendre/lock · ⋯ -->
+                <div class="ii-actions">
+                  <button class="equip-btn" @click="doEquip(it.id)">
+                    {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
+                  </button>
+                  <button
+                    v-if="it.level < c.level.level"
+                    class="equip-btn ghost"
+                    :disabled="char.row.dust < infuseToMaxCost(it, c.level.level)"
+                    :title="'Monte l’objet à ton niveau puis l’équipe'"
+                    @click="doInfuseThenEquip(it)"
+                  >
+                    🔧 Infuser puis équiper · {{ infuseToMaxCost(it, c.level.level) }}✨
+                  </button>
+                  <button
+                    class="ii-ic"
+                    :disabled="it.locked"
+                    :title="'Casser → poussière (' + salvageValue(it) + '✨)'"
+                    @click="doSalvage(it)"
+                  >
+                    ✨
+                  </button>
+                  <button
+                    class="ii-ic"
+                    :disabled="it.locked"
+                    :title="'Vendre → or (' + sellValue(it) + '🪙)'"
+                    @click="doSell(it)"
+                  >
+                    🪙
+                  </button>
+                  <button
+                    class="ii-ic lock"
+                    :class="{ on: it.locked }"
+                    :title="it.locked ? 'Déverrouiller' : 'Garder pour plus tard (protéger)'"
+                    @click="doToggleLock(it)"
+                  >
+                    {{ it.locked ? '🔒' : '🔓' }}
+                  </button>
+                  <button class="ii-more" aria-label="Plus d'actions">
+                    ⋯
+                    <q-menu anchor="bottom right" self="top right" class="ii-menu">
+                      <div class="ii-menu-list">
+                        <button
+                          v-if="it.level < c.level.level"
+                          class="ii-mi"
+                          :disabled="!canUpgrade(it, char.row.dust, c.level.level)"
+                          @click="doUpgrade(it.id)"
+                          v-close-popup
+                        >
+                          ✨ Infuser +1 · {{ upgradeCost(it.level, it.rarity) }}✨
+                        </button>
+                        <button
+                          v-if="it.level < c.level.level - 1"
+                          class="ii-mi"
+                          :disabled="char.row.dust < upgradeCost(it.level, it.rarity)"
+                          @click="doInfuseMax(it.id)"
+                          v-close-popup
+                        >
+                          ⚡ Infuser à fond · {{ infuseToMaxCost(it, c.level.level) }}✨
+                        </button>
+                        <button
+                          class="ii-mi"
+                          :disabled="char.row.dust < rerollCost(it)"
+                          @click="doReroll(it)"
+                          v-close-popup
+                        >
+                          ♻️ Reroll qualité · {{ rerollCost(it) }}✨
+                        </button>
+                      </div>
+                    </q-menu>
+                  </button>
                 </div>
               </div>
-              <!-- PUISSANCE : l'info la plus importante → bloc mis en avant. -->
-              <div class="ii-power" :class="powerIfEquip(it) >= combatPowerMaxed ? 'up' : 'down'">
-                <span class="ii-power-delta">{{ fmtDelta(combatPowerMaxed, powerIfEquip(it)) }}</span>
-                <span class="ii-power-sub"
-                  >⚔️ {{ fmtPow(combatPowerMaxed) }} → {{ fmtPow(powerIfEquip(it)) }}</span
-                >
-              </div>
-              <div v-if="infuseCostFor(it)" class="ii-cost">
-                à infuser (~{{ infuseCostFor(it) }} ✨) pour le monter à ton niveau
-              </div>
-              <!-- Actions : primaire (Équiper) + menu ⋯ (secondaires) -->
-              <div class="ii-actions">
-                <button class="equip-btn" @click="doEquip(it.id)">
-                  {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
-                </button>
-                <button class="ii-more" aria-label="Plus d'actions">
-                  ⋯
-                  <q-menu anchor="bottom right" self="top right" class="ii-menu">
-                    <div class="ii-menu-list">
-                      <button
-                        class="ii-mi"
-                        :disabled="it.locked"
-                        @click="doSalvage(it)"
-                        v-close-popup
-                      >
-                        ✨ Casser · {{ salvageValue(it) }}
-                      </button>
-                      <button class="ii-mi" :disabled="it.locked" @click="doSell(it)" v-close-popup>
-                        🪙 Vendre · {{ sellValue(it) }}
-                      </button>
-                      <button
-                        v-if="it.level < c.level.level"
-                        class="ii-mi"
-                        :disabled="!canUpgrade(it, char.row.dust, c.level.level)"
-                        @click="doUpgrade(it.id)"
-                        v-close-popup
-                      >
-                        ✨ Infuser +1 · {{ upgradeCost(it.level, it.rarity) }}✨
-                      </button>
-                      <button
-                        v-if="it.level < c.level.level - 1"
-                        class="ii-mi"
-                        :disabled="char.row.dust < upgradeCost(it.level, it.rarity)"
-                        @click="doInfuseMax(it.id)"
-                        v-close-popup
-                      >
-                        ⚡ Infuser à fond · {{ infuseToMaxCost(it, c.level.level) }}✨
-                      </button>
-                      <button
-                        class="ii-mi"
-                        :disabled="char.row.dust < rerollCost(it)"
-                        @click="doReroll(it)"
-                        v-close-popup
-                      >
-                        ♻️ Reroll qualité · {{ rerollCost(it) }}✨
-                      </button>
-                    </div>
-                  </q-menu>
-                </button>
-              </div>
             </div>
+          </template>
+          <div v-else class="empty-inv">
+            Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
           </div>
-        </template>
-        <div v-else class="empty-inv">
-          Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
-        </div>
         </template>
 
         <template v-if="gearSub === 'shop'">
-        <!-- Atelier de poussière : investir la poussière autrement que l'infusion de niveau -->
-        <div class="sec-title">🔧 Atelier de poussière</div>
-        <div v-if="!hasForge" class="sec-hint">
-          🔒 Construis la <b>🔨 Forge</b> sur la carte d'expédition pour ouvrir l'Atelier.
-        </div>
-        <template v-else>
-        <div class="sec-hint">Investis ta poussière — <b>✨ {{ char.row.dust }}</b> dispo.</div>
-        <div class="workshop">
-          <button
-            class="ws-btn"
-            :disabled="char.row.dust < forgeCost(c.level.level, false)"
-            @click="doForge()"
-          >
-            🔨 Forger un objet (aléatoire) · ✨{{ forgeCost(c.level.level, false) }}
-          </button>
-          <button
-            class="ws-btn"
-            :disabled="char.row.dust < forgeCost(c.level.level, true)"
-            @click="forgeSlotOpen = true"
-          >
-            🎯 Forger (choisir l'emplacement) · ✨{{ forgeCost(c.level.level, true) }}
-          </button>
-          <button
-            class="ws-btn"
-            :disabled="char.row.dust < craftSetCost(c.level.level)"
-            @click="openCraft()"
-          >
-            🧩 Forger une pièce de set · ✨{{ craftSetCost(c.level.level) }}
-          </button>
-        </div>
-        <div class="ws-note">
-          Forge un objet neuf <b>à ton niveau</b> (rareté au hasard). <b>♻️ Reroll qualité</b> se
-          fait sur un objet du sac. La rareté ne se monte plus au craft : le
-          <b>haut de gamme s'obtient en explorant</b> (drops/boss).
-        </div>
-        </template>
+          <!-- Atelier de poussière : investir la poussière autrement que l'infusion de niveau -->
+          <div class="sec-title">🔧 Atelier de poussière</div>
+          <div v-if="!hasForge" class="sec-hint">
+            🔒 Construis la <b>🔨 Forge</b> sur la carte d'expédition pour ouvrir l'Atelier.
+          </div>
+          <template v-else>
+            <div class="sec-hint">
+              Investis ta poussière — <b>✨ {{ char.row.dust }}</b> dispo.
+            </div>
+            <div class="workshop">
+              <button
+                class="ws-btn"
+                :disabled="char.row.dust < forgeCost(c.level.level, false)"
+                @click="doForge()"
+              >
+                🔨 Forger un objet (aléatoire) · ✨{{ forgeCost(c.level.level, false) }}
+              </button>
+              <button
+                class="ws-btn"
+                :disabled="char.row.dust < forgeCost(c.level.level, true)"
+                @click="forgeSlotOpen = true"
+              >
+                🎯 Forger (choisir l'emplacement) · ✨{{ forgeCost(c.level.level, true) }}
+              </button>
+              <button
+                class="ws-btn"
+                :disabled="char.row.dust < craftSetCost(c.level.level)"
+                @click="openCraft()"
+              >
+                🧩 Forger une pièce de set · ✨{{ craftSetCost(c.level.level) }}
+              </button>
+            </div>
+            <div class="ws-note">
+              Forge un objet neuf <b>à ton niveau</b> (rareté au hasard).
+              <b>♻️ Reroll qualité</b> se fait sur un objet du sac. La rareté ne se monte plus au
+              craft : le <b>haut de gamme s'obtient en explorant</b> (drops/boss).
+            </div>
+          </template>
 
-        <div class="foot">
-          L'équipement ne donne pas de stats (elles viennent du sport) mais des <b>effets</b> — vol
-          de vie, réduction de dégâts, or… → à toi de composer ton style.
-        </div>
+          <div class="foot">
+            L'équipement ne donne pas de stats (elles viennent du sport) mais des <b>effets</b> —
+            vol de vie, réduction de dégâts, or… → à toi de composer ton style.
+          </div>
         </template>
       </template>
 
@@ -788,9 +855,17 @@
             <span class="expe-sub">
               <template v-if="onExpedition && expeHero">
                 🧭 En cours — {{ expeHero.phase === 'return' ? 'retour' : 'arrivée' }} dans
-                {{ fmtExpeMs(expeHero.phase === 'return' ? expeHero.remainTotalMs : expeHero.remainToObjectiveMs) }}
+                {{
+                  fmtExpeMs(
+                    expeHero.phase === 'return'
+                      ? expeHero.remainTotalMs
+                      : expeHero.remainToObjectiveMs,
+                  )
+                }}
               </template>
-              <template v-else>Expéditions (or) + filons de production ⛏️💎 autour de la ville</template>
+              <template v-else
+                >Expéditions (or) + filons de production ⛏️💎 autour de la ville</template
+              >
             </span>
           </span>
           <span class="expe-go">›</span>
@@ -845,9 +920,14 @@
             </div>
             <span class="rb-prog">{{ curRegionProg.done }}/{{ curRegionProg.total }}</span>
           </div>
-          <div class="rb-bar"><span :style="{ width: (curRegionProg.done / curRegionProg.total) * 100 + '%' }" /></div>
+          <div class="rb-bar">
+            <span :style="{ width: (curRegionProg.done / curRegionProg.total) * 100 + '%' }" />
+          </div>
           <div v-if="nxtRegion" class="rb-next">
-            ⟶ Prochaine région : <span :style="{ color: nxtRegion.color }">{{ nxtRegion.emoji }} {{ nxtRegion.name }}</span>
+            ⟶ Prochaine région :
+            <span :style="{ color: nxtRegion.color }"
+              >{{ nxtRegion.emoji }} {{ nxtRegion.name }}</span
+            >
           </div>
           <div v-else class="rb-next">⭐ Dernière région — tu touches au bout du monde.</div>
         </div>
@@ -877,7 +957,9 @@
             @click="tapRegion(r)"
           >
             <span class="wm-disc">
-              <span v-if="regionState(r) === 'locked' && shatterId !== r.id" class="wm-lockemo">🔒</span>
+              <span v-if="regionState(r) === 'locked' && shatterId !== r.id" class="wm-lockemo"
+                >🔒</span
+              >
               <span v-else class="wm-emo">{{ r.emoji }}</span>
               <span v-if="regionState(r) === 'done'" class="wm-star">★</span>
               <!-- Chaînes + cadenas (verrou / explosion) -->
@@ -903,7 +985,9 @@
           <div class="rd-head">
             <span class="rd-emo">{{ selRegion.emoji }}</span>
             <span class="rd-name font-display">{{ selRegion.name }}</span>
-            <span class="rd-prog">{{ regionDone(selRegion) }}/{{ selRegion.dungeonIds.length }}</span>
+            <span class="rd-prog"
+              >{{ regionDone(selRegion) }}/{{ selRegion.dungeonIds.length }}</span
+            >
           </div>
         </div>
         <div class="dungeons">
@@ -961,10 +1045,7 @@
           </div>
 
           <!-- Faille sans fin (end-game infini) — visible sur la dernière région -->
-          <div
-            v-if="endlessUnlocked && selRegion.id === endRegionId"
-            class="dgn mboss endless"
-          >
+          <div v-if="endlessUnlocked && selRegion.id === endRegionId" class="dgn mboss endless">
             <div class="dgn-hd">
               <span class="dgn-emo">🌀</span>
               <div class="dgn-hd-main">
@@ -1249,7 +1330,10 @@
                   </div>
                   <div class="im-loot-eff">{{ itemEffects(m.item) }}</div>
                   <div v-if="m.itemCount && m.itemCount > 1" class="im-loot-more">
-                    🎁 +{{ m.itemCount - 1 }} autre{{ m.itemCount - 1 > 1 ? 's' : '' }} objet{{ m.itemCount - 1 > 1 ? 's' : '' }} au sac
+                    🎁 +{{ m.itemCount - 1 }} autre{{ m.itemCount - 1 > 1 ? 's' : '' }} objet{{
+                      m.itemCount - 1 > 1 ? 's' : ''
+                    }}
+                    au sac
                   </div>
                 </div>
               </div>
@@ -1272,7 +1356,9 @@
             <!-- Bestiaire -->
             <div class="cx-sec-h">
               👾 Bestiaire
-              <span class="cx-count">{{ codexSum.monstersFound }}/{{ codexSum.monstersTotal }}</span>
+              <span class="cx-count"
+                >{{ codexSum.monstersFound }}/{{ codexSum.monstersTotal }}</span
+              >
             </div>
             <div class="bestiary-grid">
               <div
@@ -1290,7 +1376,9 @@
             <!-- Journal des sets -->
             <div class="cx-sec-h cx-sec-h2">
               🧩 Sets d'équipement
-              <span class="cx-count">{{ codexSum.setsComplete }}/{{ codexSum.setsTotal }} complets</span>
+              <span class="cx-count"
+                >{{ codexSum.setsComplete }}/{{ codexSum.setsTotal }} complets</span
+              >
             </div>
             <div class="setj-list">
               <div
@@ -1406,7 +1494,12 @@
         </div>
         <div class="drops-sub">Chances de rareté</div>
         <div class="odds">
-          <div v-for="o in rarityOdds(dropInfo.dropLuck, dropInfo.dropLevel)" :key="o.label" class="odd" :class="o.cls">
+          <div
+            v-for="o in rarityOdds(dropInfo.dropLuck, dropInfo.dropLevel)"
+            :key="o.label"
+            class="odd"
+            :class="o.cls"
+          >
             <span class="odd-pct font-display">{{ o.pct }}%</span>
             <span class="odd-lbl">{{ o.label }}</span>
           </div>
@@ -1423,9 +1516,7 @@
     <!-- Bonus de SET d'un boss (au clic sur la ligne de set de la tuile) -->
     <q-dialog :model-value="!!setInfo" position="bottom" @update:model-value="setInfo = null">
       <q-card v-if="setInfo" class="drops-card">
-        <div class="drops-title font-display">
-          {{ setInfo.set.emoji }} {{ setInfo.set.name }}
-        </div>
+        <div class="drops-title font-display">{{ setInfo.set.emoji }} {{ setInfo.set.name }}</div>
         <div class="set-theme">{{ setInfo.set.theme }}</div>
         <div class="drops-sub">Bonus par paliers (au niveau {{ setInfo.level }})</div>
         <div class="set-tiers">
@@ -1435,7 +1526,8 @@
             class="set-tier"
             :class="{ on: setInfo.count >= t.pieces }"
           >
-            {{ t.pieces }} pièces : {{ effectLabel({ type: t.type, value: t.base }, setInfo.level) }}
+            {{ t.pieces }} pièces :
+            {{ effectLabel({ type: t.type, value: t.base }, setInfo.level) }}
           </span>
         </div>
         <div class="drops-note">
@@ -1479,7 +1571,9 @@
                 </div>
                 <div class="rc-eff">
                   {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
-                  <span v-if="rollStarStr(cand.item)" class="roll-stars">{{ rollStarStr(cand.item) }}</span>
+                  <span v-if="rollStarStr(cand.item)" class="roll-stars">{{
+                    rollStarStr(cand.item)
+                  }}</span>
                 </div>
                 <div class="drop-cmp rc-cmp">
                   <span v-if="equippedInSlot(cand.item.slot)"
@@ -1500,7 +1594,8 @@
                     }})</b
                   >
                   <span v-if="infuseCostFor(cand.item)" class="pow-cost"
-                    >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton niveau</span
+                    >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton
+                    niveau</span
                   >
                 </div>
                 <div v-if="rewardDupNote(cand.item)" class="rc-dup">
@@ -1521,7 +1616,11 @@
     </q-dialog>
 
     <!-- Atelier : forge ciblée → choix de l'emplacement -->
-    <q-dialog :model-value="forgeSlotOpen" position="bottom" @update:model-value="forgeSlotOpen = false">
+    <q-dialog
+      :model-value="forgeSlotOpen"
+      position="bottom"
+      @update:model-value="forgeSlotOpen = false"
+    >
       <q-card class="ws-modal">
         <div class="ws-modal-title font-display">🎯 Forger — choisis l'emplacement</div>
         <div class="ws-slots">
@@ -1538,7 +1637,8 @@
       <q-card class="ws-modal">
         <div class="ws-modal-title font-display">🧩 Forger une pièce de set</div>
         <div v-if="!craftableSets.length" class="ws-empty">
-          Aucun set débloqué. Bats un <b>boss de palier</b> pour débloquer son set, puis forge-le ici.
+          Aucun set débloqué. Bats un <b>boss de palier</b> pour débloquer son set, puis forge-le
+          ici.
         </div>
         <template v-else>
           <div class="ws-field">
@@ -1555,35 +1655,35 @@
               </button>
             </div>
           </div>
-        <div class="ws-field">
-          <span class="ws-lbl">Emplacement</span>
-          <div class="ws-chips">
-            <button
-              v-for="slot in SLOTS"
-              :key="slot"
-              class="ws-chip"
-              :class="{ on: craftSlot === slot }"
-              @click="craftSlot = slot"
-            >
-              {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
-            </button>
+          <div class="ws-field">
+            <span class="ws-lbl">Emplacement</span>
+            <div class="ws-chips">
+              <button
+                v-for="slot in SLOTS"
+                :key="slot"
+                class="ws-chip"
+                :class="{ on: craftSlot === slot }"
+                @click="craftSlot = slot"
+              >
+                {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
+              </button>
+            </div>
           </div>
-        </div>
-        <!-- Objet ACTUELLEMENT équipé sur ce slot → savoir si le craft vaut le coup. -->
-        <div class="ws-field">
-          <span class="ws-lbl">Équipé sur {{ SLOT_LABEL[craftSlot] }}</span>
-          <div v-if="equippedInSlot(craftSlot)" class="ws-equipped">
-            <span :class="'p-' + equippedInSlot(craftSlot)!.rarity">{{
-              RARITY_LABEL[equippedInSlot(craftSlot)!.rarity]
-            }}</span>
-            · Nv {{ equippedInSlot(craftSlot)!.level }} ·
-            <b>{{ itemEffects(equippedInSlot(craftSlot)!) }}</b>
-            <span v-if="rollStarStr(equippedInSlot(craftSlot)!)" class="roll-stars">{{
-              rollStarStr(equippedInSlot(craftSlot)!)
-            }}</span>
+          <!-- Objet ACTUELLEMENT équipé sur ce slot → savoir si le craft vaut le coup. -->
+          <div class="ws-field">
+            <span class="ws-lbl">Équipé sur {{ SLOT_LABEL[craftSlot] }}</span>
+            <div v-if="equippedInSlot(craftSlot)" class="ws-equipped">
+              <span :class="'p-' + equippedInSlot(craftSlot)!.rarity">{{
+                RARITY_LABEL[equippedInSlot(craftSlot)!.rarity]
+              }}</span>
+              · Nv {{ equippedInSlot(craftSlot)!.level }} ·
+              <b>{{ itemEffects(equippedInSlot(craftSlot)!) }}</b>
+              <span v-if="rollStarStr(equippedInSlot(craftSlot)!)" class="roll-stars">{{
+                rollStarStr(equippedInSlot(craftSlot)!)
+              }}</span>
+            </div>
+            <div v-else class="ws-equipped dim">— emplacement libre (rien d'équipé)</div>
           </div>
-          <div v-else class="ws-equipped dim">— emplacement libre (rien d'équipé)</div>
-        </div>
           <button
             class="ws-btn"
             :disabled="!char.row || char.row.dust < craftSetCost(c.level.level)"
@@ -1610,173 +1710,180 @@
              bouton Réattaquer) et les actions ne bougent pas selon le contenu
              (drop ou non) → on peut spammer Réattaquer sans que le bouton se déplace. -->
         <div class="rm-body">
-        <!-- Rejeu animé du combat (auto ; :key relance à chaque run). Le résultat et
+          <!-- Rejeu animé du combat (auto ; :key relance à chaque run). Le résultat et
              le butin ne sont révélés QU'À LA FIN de l'animation (@done). -->
-        <!-- Boss : une fois l'animation finie et le CHOIX de récompense affiché, on
+          <!-- Boss : une fois l'animation finie et le CHOIX de récompense affiché, on
              masque l'arène (sinon elle reste ouverte au-dessus du choix). -->
-        <div
-          v-if="stageFights.length && !(stageDone && (stageWasReward || stageSkipped))"
-          class="rm-stage-wrap"
-        >
-          <CombatStage
-            :key="runSeq"
-            :player-name="char.row?.pseudo ?? 'Toi'"
-            :player-max-pv="run.playerMaxPv ?? 100"
-            :fights="stageFights"
-            :player-profile="c.profile"
-            :player-equipped="char.row?.equipped ?? {}"
-            @done="stageFinish"
-          />
-        </div>
-        <template v-if="stageDone">
-          <div class="result-head">
-            <span>{{
-              run.cleared ? (run.kind === 'boss' ? '🏆 Vaincu !' : '🏆 Nettoyé !') : '💀 Échec'
-            }}</span>
-            <span class="result-gains">
-              <span class="gain-pill gold">+{{ run.gold }} 🪙</span>
-              <span class="gain-pill dust">+{{ run.dust }} ✨</span>
-            </span>
-          </div>
-          <div class="result-sub">
-            <template v-if="run.kind === 'dungeon'"
-              >{{ run.defeated }}/{{ run.total }} monstres ·
-            </template>
-            PV restants {{ run.finalPv }}
-          </div>
-        </template>
-        <div v-if="stageDone" class="log">
           <div
-            v-for="(f, i) in run.fights"
-            :key="i"
-            class="fight-row"
-            :class="f.win ? 'fw' : 'fl'"
+            v-if="stageFights.length && !(stageDone && (stageWasReward || stageSkipped))"
+            class="rm-stage-wrap"
           >
-            <span class="fr-emo">{{ f.emoji }}</span>
-            <span class="fr-name">{{ f.monster }}</span>
-            <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
-            <span class="fr-rounds">{{ f.rounds }} tours</span>
+            <CombatStage
+              :key="runSeq"
+              :player-name="char.row?.pseudo ?? 'Toi'"
+              :player-max-pv="run.playerMaxPv ?? 100"
+              :fights="stageFights"
+              :player-profile="c.profile"
+              :player-equipped="char.row?.equipped ?? {}"
+              @done="stageFinish"
+            />
           </div>
-        </div>
-        <div v-if="stageDone && run.drops.length" class="drops">
-          <div class="drops-lbl">✨ Butin</div>
-          <div
-            v-for="(d, di) in run.drops"
-            :key="d.id"
-            class="drop drop-reveal"
-            :class="'r-' + d.rarity"
-            :style="{ animationDelay: di * 0.12 + 's' }"
-          >
-            <span class="inv-emo">{{ d.emoji }}</span>
-            <div class="inv-main">
-              <div class="inv-name">{{ d.name }}</div>
-              <div class="pills">
-                <span class="gpill lvl">Lvl {{ d.level }}</span>
-                <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
-                <span v-if="d.setId" class="gpill set">🧩 Set</span>
-              </div>
-              <div class="inv-eff">
-                {{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}
-                <span v-if="rollStarStr(d)" class="roll-stars">{{ rollStarStr(d) }}</span>
-              </div>
-              <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
-                <span
-                  >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
-                  {{ equippedInSlot(d.slot)!.level }} ·
-                  {{ itemEffects(equippedInSlot(d.slot)!) }}</span
-                >
-                <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
-                  rarityVerdict(d).label
-                }}</span>
-              </div>
-              <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
-              <div class="pow-cmp">
-                ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
-                <b :class="powerIfEquip(d) >= combatPowerMaxed ? 'up' : 'down'"
-                  >{{ fmtPow(powerIfEquip(d)) }} ({{ fmtDelta(combatPowerMaxed, powerIfEquip(d)) }})</b
-                >
-                <span v-if="infuseCostFor(d)" class="pow-cost"
-                  >à infuser (~{{ infuseCostFor(d) }} ✨) pour le monter à ton niveau</span
-                >
-              </div>
-              <div v-if="dropState(d) === 'equipped'" class="drop-done">
-                ⚔️ Auto-équipé (slot vide)
-              </div>
-              <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
-              <div v-else class="inv-actions">
-                <button
-                  class="equip-btn"
-                  @click="equippedInSlot(d.slot) ? openReplace(d) : doEquip(d.id)"
-                >
-                  {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
-                </button>
-                <button class="link-btn" @click="doSalvage(d)">Casser ✨{{ salvageValue(d) }}</button>
-                <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
+          <template v-if="stageDone">
+            <div class="result-head">
+              <span>{{
+                run.cleared ? (run.kind === 'boss' ? '🏆 Vaincu !' : '🏆 Nettoyé !') : '💀 Échec'
+              }}</span>
+              <span class="result-gains">
+                <span class="gain-pill gold">+{{ run.gold }} 🪙</span>
+                <span class="gain-pill dust">+{{ run.dust }} ✨</span>
+              </span>
+            </div>
+            <div class="result-sub">
+              <template v-if="run.kind === 'dungeon'"
+                >{{ run.defeated }}/{{ run.total }} monstres ·
+              </template>
+              PV restants {{ run.finalPv }}
+            </div>
+          </template>
+          <div v-if="stageDone" class="log">
+            <div
+              v-for="(f, i) in run.fights"
+              :key="i"
+              class="fight-row"
+              :class="f.win ? 'fw' : 'fl'"
+            >
+              <span class="fr-emo">{{ f.emoji }}</span>
+              <span class="fr-name">{{ f.monster }}</span>
+              <span class="fr-out">{{ f.win ? 'vaincu' : 'tu es tombé' }}</span>
+              <span class="fr-rounds">{{ f.rounds }} tours</span>
+            </div>
+          </div>
+          <div v-if="stageDone && run.drops.length" class="drops">
+            <div class="drops-lbl">✨ Butin</div>
+            <div
+              v-for="(d, di) in run.drops"
+              :key="d.id"
+              class="drop drop-reveal"
+              :class="'r-' + d.rarity"
+              :style="{ animationDelay: di * 0.12 + 's' }"
+            >
+              <span class="inv-emo">{{ d.emoji }}</span>
+              <div class="inv-main">
+                <div class="inv-name">{{ d.name }}</div>
+                <div class="pills">
+                  <span class="gpill lvl">Lvl {{ d.level }}</span>
+                  <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
+                  <span v-if="d.setId" class="gpill set">🧩 Set</span>
+                </div>
+                <div class="inv-eff">
+                  {{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}
+                  <span v-if="rollStarStr(d)" class="roll-stars">{{ rollStarStr(d) }}</span>
+                </div>
+                <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
+                  <span
+                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
+                    {{ equippedInSlot(d.slot)!.level }} ·
+                    {{ itemEffects(equippedInSlot(d.slot)!) }}</span
+                  >
+                  <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
+                    rarityVerdict(d).label
+                  }}</span>
+                </div>
+                <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
+                <div class="pow-cmp">
+                  ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
+                  <b :class="powerIfEquip(d) >= combatPowerMaxed ? 'up' : 'down'"
+                    >{{ fmtPow(powerIfEquip(d)) }} ({{
+                      fmtDelta(combatPowerMaxed, powerIfEquip(d))
+                    }})</b
+                  >
+                  <span v-if="infuseCostFor(d)" class="pow-cost"
+                    >à infuser (~{{ infuseCostFor(d) }} ✨) pour le monter à ton niveau</span
+                  >
+                </div>
+                <div v-if="dropState(d) === 'equipped'" class="drop-done">
+                  ⚔️ Auto-équipé (slot vide)
+                </div>
+                <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
+                <div v-else class="inv-actions">
+                  <button
+                    class="equip-btn"
+                    @click="equippedInSlot(d.slot) ? openReplace(d) : doEquip(d.id)"
+                  >
+                    {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
+                  </button>
+                  <button class="link-btn" @click="doSalvage(d)">
+                    Casser ✨{{ salvageValue(d) }}
+                  </button>
+                  <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Récompense de boss AU CHOIX (à la place du butin) : 3 candidats, on en garde 1 -->
-        <div v-if="stageDone && char.row?.pending_reward" class="rm-reward">
-          <div class="drops-lbl">🎁 Choisis ta récompense</div>
-          <div class="reward-list">
-            <button
-              v-for="(cand, i) in char.row.pending_reward.candidates"
-              :key="i"
-              class="reward-cand"
-              :class="[
-                cand.kind === 'item' ? 'r-' + cand.item.rarity : 'r-gold',
-                { reco: i === recommendedRewardIndex },
-              ]"
-              :disabled="busy"
-              @click="doChooseReward(i)"
-            >
-              <span v-if="i === recommendedRewardIndex" class="reco-badge">★ Conseillé</span>
-              <template v-if="cand.kind === 'item'">
-                <span class="rc-emo">{{ cand.item.emoji }}</span>
-                <div class="rc-main">
-                  <div class="rc-name">{{ cand.item.name }}</div>
-                  <div class="rc-pills">
-                    <span class="rc-pill lvl">Lvl {{ cand.item.level }}</span>
-                    <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
-                      RARITY_LABEL[cand.item.rarity]
-                    }}</span>
-                    <span v-if="rollStarStr(cand.item)" class="roll-stars" title="Qualité du roll">{{
-                      rollStarStr(cand.item)
-                    }}</span>
-                    <span v-if="cand.item.setId" class="rc-pill set">🧩 Set</span>
+          <!-- Récompense de boss AU CHOIX (à la place du butin) : 3 candidats, on en garde 1 -->
+          <div v-if="stageDone && char.row?.pending_reward" class="rm-reward">
+            <div class="drops-lbl">🎁 Choisis ta récompense</div>
+            <div class="reward-list">
+              <button
+                v-for="(cand, i) in char.row.pending_reward.candidates"
+                :key="i"
+                class="reward-cand"
+                :class="[
+                  cand.kind === 'item' ? 'r-' + cand.item.rarity : 'r-gold',
+                  { reco: i === recommendedRewardIndex },
+                ]"
+                :disabled="busy"
+                @click="doChooseReward(i)"
+              >
+                <span v-if="i === recommendedRewardIndex" class="reco-badge">★ Conseillé</span>
+                <template v-if="cand.kind === 'item'">
+                  <span class="rc-emo">{{ cand.item.emoji }}</span>
+                  <div class="rc-main">
+                    <div class="rc-name">{{ cand.item.name }}</div>
+                    <div class="rc-pills">
+                      <span class="rc-pill lvl">Lvl {{ cand.item.level }}</span>
+                      <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
+                        RARITY_LABEL[cand.item.rarity]
+                      }}</span>
+                      <span
+                        v-if="rollStarStr(cand.item)"
+                        class="roll-stars"
+                        title="Qualité du roll"
+                        >{{ rollStarStr(cand.item) }}</span
+                      >
+                      <span v-if="cand.item.setId" class="rc-pill set">🧩 Set</span>
+                    </div>
+                    <div class="rc-eff">
+                      {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
+                    </div>
+                    <div class="pow-cmp">
+                      ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
+                      <b :class="powerIfEquip(cand.item) >= combatPowerMaxed ? 'up' : 'down'"
+                        >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
+                          fmtDelta(combatPowerMaxed, powerIfEquip(cand.item))
+                        }})</b
+                      >
+                      <span v-if="infuseCostFor(cand.item)" class="pow-cost"
+                        >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton
+                        niveau</span
+                      >
+                    </div>
+                    <div v-if="rewardDupNote(cand.item)" class="rc-dup">
+                      {{ rewardDupNote(cand.item) }}
+                    </div>
                   </div>
-                  <div class="rc-eff">
-                    {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
+                </template>
+                <template v-else>
+                  <span class="rc-emo">💰</span>
+                  <div class="rc-main">
+                    <div class="rc-name">Trésor</div>
+                    <div class="rc-eff">+{{ cand.gold }} 🪙 · +{{ cand.dust }} ✨</div>
                   </div>
-                  <div class="pow-cmp">
-                    ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
-                    <b :class="powerIfEquip(cand.item) >= combatPowerMaxed ? 'up' : 'down'"
-                      >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
-                        fmtDelta(combatPowerMaxed, powerIfEquip(cand.item))
-                      }})</b
-                    >
-                    <span v-if="infuseCostFor(cand.item)" class="pow-cost"
-                      >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton niveau</span
-                    >
-                  </div>
-                  <div v-if="rewardDupNote(cand.item)" class="rc-dup">
-                    {{ rewardDupNote(cand.item) }}
-                  </div>
-                </div>
-              </template>
-              <template v-else>
-                <span class="rc-emo">💰</span>
-                <div class="rc-main">
-                  <div class="rc-name">Trésor</div>
-                  <div class="rc-eff">+{{ cand.gold }} 🪙 · +{{ cand.dust }} ✨</div>
-                </div>
-              </template>
-            </button>
+                </template>
+              </button>
+            </div>
           </div>
-        </div>
-
         </div>
 
         <!-- Actions masquées PENDANT l'animation (on ne peut pas fermer un combat avant
@@ -1864,7 +1971,8 @@ import {
   isFamiliar,
   nextRarity,
   FAMILIAR_SLOT,
-  commonDecayForLevel,
+  rollTier,
+  RANK_ORDER,
   SLOTS,
   SLOT_LABEL,
   SLOT_EMOJI,
@@ -1953,26 +2061,38 @@ const auth = useAuthStore();
 const char = useCharacterStore();
 const progress = useProgress();
 const gameFx = useGameFx();
-// Célébration centrale pour un DROP marquant (légendaire = éclat, divin = explosion).
+// Rang d'objet (G..SSS) → intensité d'animation (5 crans de GameFx). Les hauts rangs
+// déclenchent l'explosion « divin ».
+type FxRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'divin';
+function fxRarity(r: Rarity): FxRarity {
+  const i = RARITY_RANK[r];
+  return i >= 9 ? 'divin' : i >= 7 ? 'legendary' : i >= 5 ? 'epic' : i >= 3 ? 'rare' : 'common';
+}
+// Célébration centrale pour un DROP marquant (rang S+ = éclat, SSS = explosion).
 function celebrateRareDrop(it: Item) {
-  if (it.rarity !== 'legendary' && it.rarity !== 'divin') return;
+  if (RARITY_RANK[it.rarity] < 7) return; // S / SS / SSS uniquement
   gameFx.celebrate({
     kind: 'drop',
     emoji: it.emoji,
-    title: it.rarity === 'divin' ? 'DROP DIVIN !' : 'Drop légendaire !',
+    title: RARITY_RANK[it.rarity] >= 9 ? 'DROP RANG SSS !' : `Drop rang ${it.rarity} !`,
     subtitle: it.name,
-    rarity: it.rarity,
+    rarity: fxRarity(it.rarity),
   });
 }
-// Drop de talent : éclat central si épique+ (moment notable). Les talents droppent
-// désormais au niveau 1 (commun) → pas de toast en bas (le talent apparaît dans la
-// collection de l'onglet Perso › Talents).
+// Drop de talent : éclat central si rang élevé (moment notable). Les talents droppent
+// au niveau 1 → pas de toast en bas (le talent apparaît dans la collection Perso › Talents).
 function celebrateTalentDrop(t: TalentInstance) {
   const def = talentByCode(t.code);
   if (!def) return;
   const rarity = talentRarity(talentLevel(t.xp));
-  if (rarity === 'epic' || rarity === 'legendary' || rarity === 'divin')
-    gameFx.celebrate({ kind: 'generic', emoji: '🎓', title: `Talent ${RARITY_LABEL[rarity]} !`, subtitle: def.name, rarity });
+  if (RARITY_RANK[rarity] >= 4)
+    gameFx.celebrate({
+      kind: 'generic',
+      emoji: '🎓',
+      title: `Talent ${RARITY_LABEL[rarity]} !`,
+      subtitle: def.name,
+      rarity: fxRarity(rarity),
+    });
 }
 
 const loading = ref(true);
@@ -1994,7 +2114,10 @@ const hasLabyGate = computed(() => labyrinthUnlocked(char.row?.buildings ?? []))
 function openLabyrinth() {
   if (onExpedition.value) return expeBlocked();
   if (!hasLabyGate.value) {
-    $q.notify({ type: 'warning', message: 'Construis la 🚪 Porte du Labyrinthe sur la carte pour le débloquer.' });
+    $q.notify({
+      type: 'warning',
+      message: 'Construis la 🚪 Porte du Labyrinthe sur la carte pour le débloquer.',
+    });
     return void router.push('/expedition-map');
   }
   void router.push('/expedition');
@@ -2067,6 +2190,36 @@ function powerIfEquip(it: Item): number {
 // Coût en poussière pour infuser un drop jusqu'à ton niveau (affiché à côté du Δ).
 function infuseCostFor(it: Item): number {
   return infuseToMaxCost(it, c.value.level.level);
+}
+// Puissance SI on équipe cet objet À SON NIVEAU ACTUEL (le reste du gear à son niveau
+// RÉEL) → l'état immédiat : montre la PERTE si on équipe un objet sous-leveled tel quel.
+function powerIfEquipNow(it: Item): number {
+  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: it };
+  return combatPower(
+    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level),
+  );
+}
+// Niveau de RENTABILITÉ : plus petit niveau d'infusion où l'objet, une fois équipé
+// (reste du gear réel), dépasse ta puissance ACTUELLE + le coût en poussière pour
+// l'atteindre. `reachable` = faux s'il ne dépasse jamais l'équipé, même monté à fond.
+function breakEvenFor(it: Item): { level: number; cost: number; reachable: boolean } {
+  const now = combatPowerVal.value;
+  const cap = c.value.level.level;
+  const name = char.row?.pseudo ?? 'Toi';
+  let cost = 0;
+  for (let L = it.level; L <= cap; L++) {
+    const eq = { ...(char.row?.equipped ?? {}), [it.slot]: { ...it, level: L } };
+    const p = combatPower(playerWithGear(name, c.value, eq, talentFx.value, cap));
+    if (p >= now) return { level: L, cost, reachable: true };
+    if (L < cap) cost += upgradeCost(L, it.rarity);
+  }
+  return { level: cap, cost, reachable: false };
+}
+// Vaut-il mieux INFUSER avant d'équiper ? (équiper tel quel fait perdre, mais monté il
+// devient rentable) → on affiche alors le palier de rentabilité + le coût.
+function showBreakEven(it: Item): boolean {
+  if (it.level >= c.value.level.level) return false;
+  return powerIfEquipNow(it) < combatPowerVal.value && breakEvenFor(it).reachable;
 }
 
 // Estimation live du % de victoire par donjon/boss selon les stats + le stuff
@@ -2163,7 +2316,9 @@ const bonusPv = computed(() => {
 // ── Talents (refonte B : drop + infusion + loadout) ──
 const talentSlots = computed(() => talentsEarned(c.value.level.level));
 const equippedTalents = computed(() => (char.row?.talents ?? []).filter((t) => t.equipped));
-const talentFreeSlots = computed(() => Math.max(0, talentSlots.value - equippedTalents.value.length));
+const talentFreeSlots = computed(() =>
+  Math.max(0, talentSlots.value - equippedTalents.value.length),
+);
 const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.value);
 const infuseTarget = ref<TalentInstance | null>(null);
 // Vue enrichie : équipés d'abord, puis par niveau décroissant.
@@ -2216,7 +2371,10 @@ async function doEquipTalent(id: string) {
   if (!uid) return;
   const res = await char.equipTalent(uid, id, c.value.level.level);
   if (res === 'dup')
-    $q.notify({ type: 'warning', message: 'Un talent de ce type est déjà équipé (effets distincts uniquement).' });
+    $q.notify({
+      type: 'warning',
+      message: 'Un talent de ce type est déjà équipé (effets distincts uniquement).',
+    });
   else if (res === 'full')
     $q.notify({ type: 'warning', message: 'Plus d’emplacement de talent libre.' });
 }
@@ -2240,7 +2398,8 @@ async function doInfuse(fodderId: string) {
   if (!ok) {
     $q.notify({
       type: 'warning',
-      message: 'Ce talent est déjà à ton niveau max — monte de niveau (sport) pour le pousser plus loin.',
+      message:
+        'Ce talent est déjà à ton niveau max — monte de niveau (sport) pour le pousser plus loin.',
     });
     return;
   }
@@ -2258,13 +2417,12 @@ async function doInfuse(fodderId: string) {
         emoji: def?.icon ?? '✨',
         title: `${def?.name ?? 'Talent'} — ${RARITY_LABEL[afterRarity]} !`,
         subtitle: `Niveau ${lvl}`,
-        rarity: afterRarity,
+        rarity: fxRarity(afterRarity),
       });
   }
   // Plus assez de talents pour continuer → on sort du mode infusion.
   if (!hasSpareTalent.value) infuseTarget.value = null;
 }
-
 
 // Régions / biomes (onglet Donjons) : bandeau de la région courante + teaser de la
 // suivante → sensation de « découvrir de nouveaux mondes ».
@@ -2355,7 +2513,12 @@ function triggerRegionReveal(rev: RegionReveal) {
         setTimeout(() => (shatterId.value = null), 1400);
       }, 550);
       setTimeout(() => {
-        regionBurst.value = { emoji: rev.emoji, name: rev.name, blurb: rev.blurb, color: rev.color };
+        regionBurst.value = {
+          emoji: rev.emoji,
+          name: rev.name,
+          blurb: rev.blurb,
+          color: rev.color,
+        };
         setTimeout(() => (regionBurst.value = null), 5200);
       }, 1300);
     });
@@ -2387,7 +2550,13 @@ watch(
     // s'exécuter avant/après openReport selon l'ordre des microtâches.
     if (revealReady.value && id !== lastRegionId) {
       const r = curRegion.value;
-      pendingRegionReveal.value = { id, emoji: r.emoji, name: r.name, blurb: r.blurb, color: r.color };
+      pendingRegionReveal.value = {
+        id,
+        emoji: r.emoji,
+        name: r.name,
+        blurb: r.blurb,
+        color: r.color,
+      };
     }
     lastRegionId = id;
   },
@@ -2433,9 +2602,30 @@ function statShare(v: number): number {
   return total > 0 ? Math.round((v / total) * 100) : 0;
 }
 const statCircles = computed(() => [
-  { key: 's-pui', emo: '💪', name: 'Puissance', inf: 'Muscu · dégâts', value: c.value.puissance, share: statShare(c.value.puissance) },
-  { key: 's-end', emo: '❤️', name: 'Endurance', inf: 'Muscu+Cardio · PV', value: c.value.endurance, share: statShare(c.value.endurance) },
-  { key: 's-agi', emo: '⚡', name: 'Agilité', inf: 'Cardio · esquive/crit', value: c.value.agilite, share: statShare(c.value.agilite) },
+  {
+    key: 's-pui',
+    emo: '💪',
+    name: 'Puissance',
+    inf: 'Muscu · dégâts',
+    value: c.value.puissance,
+    share: statShare(c.value.puissance),
+  },
+  {
+    key: 's-end',
+    emo: '❤️',
+    name: 'Endurance',
+    inf: 'Muscu+Cardio · PV',
+    value: c.value.endurance,
+    share: statShare(c.value.endurance),
+  },
+  {
+    key: 's-agi',
+    emo: '⚡',
+    name: 'Agilité',
+    inf: 'Cardio · esquive/crit',
+    value: c.value.agilite,
+    share: statShare(c.value.agilite),
+  },
 ]);
 
 const busy = ref(false);
@@ -2563,27 +2753,22 @@ const dropInfo = ref<Dungeon | null>(null);
 function openDrops(d: Dungeon) {
   dropInfo.value = d;
 }
-// Chances de rareté d'un drop selon la chance ET le niveau du donjon (miroir de
-// rollRarity, items.ts) : les communs fondent avec le niveau via commonDecay.
+// Distribution des RANGS d'un drop selon la chance ET le niveau du donjon (Monte-Carlo
+// sur rollTier → toujours en phase avec le modèle). Ne montre que les rangs qui
+// apparaissent (≥1 %), du plus bas au plus haut.
 function rarityOdds(luck: number, level = 1) {
-  const l = Math.min(1, Math.max(0, luck));
-  const d = commonDecayForLevel(level);
-  // Aligné sur rollRarity : seuils cumulés divin < légendaire < épique < rare.
-  const legCut = 0.02 + l * 0.08;
-  const epicCut = 0.12 + l * 0.2;
-  const rareCut = Math.min(0.85, 0.4 + l * 0.32 + d * 0.42);
-  const divin = 0.004 + l * 0.02;
-  const leg = legCut - divin;
-  const epic = epicCut - legCut;
-  const rare = rareCut - epicCut;
-  const common = Math.max(0, 1 - rareCut);
-  return [
-    { label: 'Commun', pct: Math.round(common * 100), cls: 'r-common' },
-    { label: 'Rare', pct: Math.round(rare * 100), cls: 'r-rare' },
-    { label: 'Épique', pct: Math.round(epic * 100), cls: 'r-epic' },
-    { label: 'Légendaire', pct: Math.round(leg * 100), cls: 'r-legendary' },
-    { label: 'Divin', pct: Math.round(divin * 100), cls: 'r-divin' },
-  ];
+  const rng = mulberry32((Math.round(level * 131 + luck * 997) >>> 0) + 1);
+  const N = 600;
+  const counts = new Array(10).fill(0) as number[];
+  for (let i = 0; i < N; i++) {
+    const idx = RARITY_RANK[rollTier(rng, level, luck).rank];
+    counts[idx] = (counts[idx] ?? 0) + 1;
+  }
+  return RANK_ORDER.map((r, i) => ({
+    label: r,
+    pct: Math.round((counts[i]! / N) * 100),
+    cls: 'r-' + r,
+  })).filter((o) => o.pct > 0);
 }
 
 // Liste des DONJONS (onglet Donjons), ordonnée par niveau. Les boss de palier ont
@@ -2816,7 +3001,13 @@ async function explore(d: Dungeon) {
     const consumed = [...selectedConsumables.value];
     const { extra, lucky } = runExtra();
     const seed = Math.floor(Math.random() * 1e9);
-    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra, c.value.level.level);
+    const player = playerWithGear(
+      char.row.pseudo,
+      c.value,
+      char.row.equipped,
+      extra,
+      c.value.level.level,
+    );
     const r = simulateDungeon(player, dungeonFoes(d), { seed });
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
     const gold = Math.round(r.gold * (1 + goldPct));
@@ -2983,7 +3174,13 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
   // Slot de set visé (un manquant) si le ciblage est débloqué.
   const missing = targeting ? SLOTS.filter((s) => !ownedSetSlots(b.setId).has(s)) : [];
   const preferSlot = missing.length ? missing[Math.floor(rng() * missing.length)] : undefined;
-  const setOpts = { setId: b.setId, level: b.dropLevel, luck, rollFloor, ...(preferSlot ? { preferSlot } : {}) };
+  const setOpts = {
+    setId: b.setId,
+    level: b.dropLevel,
+    luck,
+    rollFloor,
+    ...(preferSlot ? { preferSlot } : {}),
+  };
   const out: RewardCandidate[] = [];
   for (let n = 0; n < count; n++) {
     const roll = rng();
@@ -3001,7 +3198,7 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
       // Cache de ressources : doit rivaliser avec une pièce d'équipement. Or plein
       // + poussière de l'ordre de ~3 niveaux d'amélioration d'un légendaire à ce
       // palier → vaut le coup quand ton stuff est déjà bon et que tu veux le monter.
-      const dustLump = upgradeCost(b.dropLevel, 'legendary') * 3;
+      const dustLump = upgradeCost(b.dropLevel, 'S') * 3;
       out.push({ kind: 'gold', gold: b.gold, dust: dustLump });
     }
   }
@@ -3013,7 +3210,10 @@ async function fightBoss(b: MilestoneBoss) {
   if (expeBlocked()) return;
   if (!uid || !char.row || busy.value || c.value.energy < b.energyCost) return;
   if (!hasBossAltar.value) {
-    $q.notify({ type: 'warning', message: 'Construis l’Autel des boss (carte d’expédition) pour affronter les boss.' });
+    $q.notify({
+      type: 'warning',
+      message: 'Construis l’Autel des boss (carte d’expédition) pour affronter les boss.',
+    });
     return void router.push('/expedition-map');
   }
   if (!bossUnlocked(b)) return;
@@ -3032,7 +3232,13 @@ async function fightBoss(b: MilestoneBoss) {
     const consumed = [...selectedConsumables.value];
     const { extra, lucky } = runExtra();
     const seed = Math.floor(Math.random() * 1e9);
-    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra, c.value.level.level);
+    const player = playerWithGear(
+      char.row.pseudo,
+      c.value,
+      char.row.equipped,
+      extra,
+      c.value.level.level,
+    );
     const r = simulateCombat(player, b.combatant, { seed, goldOnWin: b.gold });
     const win = r.win;
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
@@ -3050,7 +3256,9 @@ async function fightBoss(b: MilestoneBoss) {
     // victoire, rareté rehaussée (luck 0.6) — les boss sont une bonne source de talents.
     const bossTalentRng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
     const talentDrops =
-      win && bossTalentRng() < 0.25 ? [rollTalentDrop(bossTalentRng, { luck: 0.6, idSeed: seed })] : [];
+      win && bossTalentRng() < 0.25
+        ? [rollTalentDrop(bossTalentRng, { luck: 0.6, idSeed: seed })]
+        : [];
     await char.applyBossWin(uid, {
       bossId: b.id,
       energyCost: b.energyCost,
@@ -3143,7 +3351,13 @@ async function fightEndless() {
     const consumed = [...selectedConsumables.value];
     const { extra, lucky } = runExtra();
     const seed = Math.floor(Math.random() * 1e9);
-    const player = playerWithGear(char.row.pseudo, c.value, char.row.equipped, extra, c.value.level.level);
+    const player = playerWithGear(
+      char.row.pseudo,
+      c.value,
+      char.row.equipped,
+      extra,
+      c.value.level.level,
+    );
     const foe = endlessFoe(tier);
     const r = simulateCombat(player, foe, { seed, goldOnWin: endlessGold(tier) });
     const win = r.win;
@@ -3225,7 +3439,6 @@ async function fightEndless() {
   }
 }
 
-
 function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
   const uid = auth.user?.id;
   if (!uid) return;
@@ -3241,7 +3454,10 @@ function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
 const onExpedition = computed(() => !!char.row?.expedition);
 function expeBlocked(): boolean {
   if (!onExpedition.value) return false;
-  $q.notify({ type: 'warning', message: '🧭 Ton héros est en expédition — indisponible jusqu’à son retour.' });
+  $q.notify({
+    type: 'warning',
+    message: '🧭 Ton héros est en expédition — indisponible jusqu’à son retour.',
+  });
   return true;
 }
 const expeNow = ref(Date.now());
@@ -3262,7 +3478,11 @@ async function expeLifecycle() {
   expeBusy = true;
   try {
     const msg = await char.expeTick(uid, Date.now());
-    if (msg) $q.notify({ type: msg.win ? 'positive' : 'warning', message: '📬 Nouveau rapport d’expédition.' });
+    if (msg)
+      $q.notify({
+        type: msg.win ? 'positive' : 'warning',
+        message: '📬 Nouveau rapport d’expédition.',
+      });
     const o = await char.expeCollect(uid, Date.now());
     if (o)
       $q.notify({
@@ -3279,7 +3499,12 @@ function fmtExpeMs(ms: number): string {
   if (m < 60) return `${m} min`;
   return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
 }
-const POI_MSG_LABEL: Record<string, string> = { mine: 'Mine', camp: 'Camp', lair: 'Repaire', arena: 'Arène' };
+const POI_MSG_LABEL: Record<string, string> = {
+  mine: 'Mine',
+  camp: 'Camp',
+  lair: 'Repaire',
+  arena: 'Arène',
+};
 
 // ── Sac : filtre par type d'objet + tri (meilleurs d'abord) ──
 const invFilter = ref<ItemSlot | 'all'>('all');
@@ -3305,7 +3530,10 @@ function familiarBlurb(it: Item): string {
   return (it.species ? familiarSpecies(it.species)?.blurb : '') ?? '';
 }
 function canUpgradeFamiliar(it: Item): boolean {
-  return it.level < c.value.level.level && (char.row?.stones ?? 0) >= familiarStoneCost(it.level, it.rarity);
+  return (
+    it.level < c.value.level.level &&
+    (char.row?.stones ?? 0) >= familiarStoneCost(it.level, it.rarity)
+  );
 }
 function doEquipFamiliar(itemId: string) {
   withUid((uid) => char.equip(uid, itemId), 'Impossible d’équiper le familier.');
@@ -3345,7 +3573,7 @@ function doFuse(rarity: Rarity) {
             emoji: res.emoji,
             title: 'Fusion réussie !',
             subtitle: `${res.name} · ${RARITY_LABEL[res.rarity]}`,
-            rarity: res.rarity,
+            rarity: fxRarity(res.rarity),
           });
       }),
     'Fusion impossible.',
@@ -3364,7 +3592,9 @@ function celebrateSetTier(setId: string | undefined, before: number, after: numb
   // Niveau moyen des pièces du set équipées (pour le libellé du bonus).
   const eq = char.row?.equipped ?? {};
   const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === setId);
-  const avg = pieces.length ? Math.round(pieces.reduce((a, it) => a + it.level, 0) / pieces.length) : 1;
+  const avg = pieces.length
+    ? Math.round(pieces.reduce((a, it) => a + it.level, 0) / pieces.length)
+    : 1;
   gameFx.celebrate({
     kind: 'unlock',
     emoji: set.emoji,
@@ -3377,7 +3607,7 @@ function celebrateSetTier(setId: string | undefined, before: number, after: numb
 async function equipWithSetFx(uid: string, itemId: string) {
   const item = char.row?.inventory.find((i) => i.id === itemId);
   const setId = item?.setId;
-  const before = setId ? setCounts(char.row?.equipped ?? {})[setId] ?? 0 : 0;
+  const before = setId ? (setCounts(char.row?.equipped ?? {})[setId] ?? 0) : 0;
   await char.equip(uid, itemId);
   if (setId) celebrateSetTier(setId, before, setCounts(char.row?.equipped ?? {})[setId] ?? 0);
 }
@@ -3395,7 +3625,7 @@ function confirmReplace(disposal: 'salvage' | 'sell' | 'keep') {
   if (!drop) return;
   replaceTarget.value = null;
   const setId = drop.setId;
-  const before = setId ? setCounts(char.row?.equipped ?? {})[setId] ?? 0 : 0;
+  const before = setId ? (setCounts(char.row?.equipped ?? {})[setId] ?? 0) : 0;
   withUid(
     (uid) =>
       char.equipReplacing(uid, drop.id, disposal).then(() => {
@@ -3413,6 +3643,14 @@ function doUpgrade(itemId: string) {
 // « Infuser à fond » (refonte C) : monte l'objet au max abordable ≤ ton niveau.
 function doInfuseMax(itemId: string) {
   withUid((uid) => char.infuseToMax(uid, itemId, c.value.level.level), 'Infusion impossible.');
+}
+// « Infuser puis équiper » : monte l'objet à ton niveau PUIS l'équipe → on ne subit pas
+// la perte de puissance de l'équiper sous-leveled. Nécessite la poussière (bouton grisé sinon).
+function doInfuseThenEquip(it: Item) {
+  withUid(async (uid) => {
+    await char.infuseToMax(uid, it.id, c.value.level.level);
+    await equipWithSetFx(uid, it.id);
+  }, 'Action impossible.');
 }
 
 // ── Atelier de poussière (forge / reroll / sublimer / craft de set) ──
@@ -3589,7 +3827,13 @@ watch(
           rarity: 'epic',
         });
         for (const u of levelBurstUnlocks.value.slice(0, 3))
-          gameFx.celebrate({ kind: 'unlock', emoji: u.emoji, title: u.title, subtitle: u.detail, rarity: 'legendary' });
+          gameFx.celebrate({
+            kind: 'unlock',
+            emoji: u.emoji,
+            title: u.title,
+            subtitle: u.detail,
+            rarity: 'legendary',
+          });
         // Plus long s'il y a des déblocages à lire (sinon simple montée).
         const hasUnlocks = levelBurstUnlocks.value.length > 0;
         setTimeout(() => (levelBurst.value = null), hasUnlocks ? 7000 : 3200);
@@ -4583,18 +4827,7 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 12px;
 }
-.fam-card.r-rare {
-  border-left-color: #4ec6d6;
-}
-.fam-card.r-epic {
-  border-left-color: #b07cff;
-}
-.fam-card.r-legendary {
-  border-left-color: var(--accent);
-}
-.fam-card.r-divin {
-  border-left-color: #ff5cd8;
-}
+/* couleur de rang gérée par la règle générique .r-* (var(--rk)) */
 .fam-emo {
   font-size: 34px;
   line-height: 1;
@@ -4672,18 +4905,7 @@ onUnmounted(() => {
   gap: 4px;
   flex-shrink: 0;
 }
-.fam-mini.r-rare {
-  border-left-color: #4ec6d6;
-}
-.fam-mini.r-epic {
-  border-left-color: #b07cff;
-}
-.fam-mini.r-legendary {
-  border-left-color: var(--accent);
-}
-.fam-mini.r-divin {
-  border-left-color: #ff5cd8;
-}
+/* couleur de rang gérée par la règle générique .r-* (var(--rk)) */
 .fam-mini-emo {
   font-size: 20px;
   line-height: 1.2;
@@ -4843,25 +5065,18 @@ onUnmounted(() => {
 .gpill.lvl {
   color: var(--text);
 }
-.gpill.p-common {
-  color: var(--dim);
-  border-color: var(--dim);
-}
-.gpill.p-rare {
-  color: #4ec6d6;
-  border-color: #4ec6d6;
-}
-.gpill.p-epic {
-  color: #b07cff;
-  border-color: #b07cff;
-}
-.gpill.p-legendary {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.gpill.p-divin {
-  color: #ff5cd8;
-  border-color: #ff5cd8;
+.gpill.p-G,
+.gpill.p-F,
+.gpill.p-E,
+.gpill.p-D,
+.gpill.p-C,
+.gpill.p-B,
+.gpill.p-A,
+.gpill.p-S,
+.gpill.p-SS,
+.gpill.p-SSS {
+  color: var(--rk);
+  border-color: var(--rk);
 }
 .gpill.set {
   color: var(--dark, #15120e);
@@ -5015,7 +5230,8 @@ onUnmounted(() => {
   color: var(--dim);
 }
 .ii-rar {
-  font-weight: 700;
+  font-weight: 800;
+  color: var(--rk, var(--dim));
 }
 .ii-dot {
   opacity: 0.5;
@@ -5075,54 +5291,110 @@ onUnmounted(() => {
   color: var(--dim);
 }
 /* PUISSANCE : bloc mis en avant (l'info clé de la décision). Le DELTA est gros. */
-.ii-power {
+/* Deux lectures de puissance : Maintenant (niveau réel) + Monté à ton niveau. */
+.ii-pow2 {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 5px;
+}
+.ii-pw {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  margin-top: 5px;
-  padding: 7px 10px;
+  gap: 8px;
+  padding: 5px 10px;
   border-radius: 9px;
   border: 1px solid var(--line);
 }
-.ii-power.up {
+.ii-pw.up {
   border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
   background: color-mix(in srgb, var(--d1) 12%, transparent);
 }
-.ii-power.down {
+.ii-pw.down {
   border-color: color-mix(in srgb, var(--d4) 50%, var(--line));
   background: color-mix(in srgb, var(--d4) 10%, transparent);
 }
-.ii-power-delta {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 20px;
-  line-height: 1;
+.ii-pw-k {
+  flex: none;
+  width: 118px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--dim);
 }
-.ii-power.up .ii-power-delta {
-  color: var(--d1);
-}
-.ii-power.down .ii-power-delta {
-  color: var(--d4);
-}
-.ii-power-sub {
+.ii-pw-v {
+  flex: 1;
   font-size: 11.5px;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
 }
-.ii-cost {
-  font-size: 10.5px;
-  color: var(--dim);
-  opacity: 0.85;
+.ii-pw-d {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
-/* Actions : primaire (Équiper) + menu ⋯. */
+.ii-pw.up .ii-pw-d {
+  color: var(--d1);
+}
+.ii-pw.down .ii-pw-d {
+  color: var(--d4);
+}
+/* Rentabilité : palier d'infusion où l'objet dépasse l'équipé actuel. */
+.ii-be {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--d3);
+}
+.ii-be.ok {
+  color: var(--d1);
+}
+.ii-be-have {
+  font-weight: 400;
+  color: var(--dim);
+}
+/* Actions : Équiper (+ Infuser puis équiper) · icônes casser/vendre/lock · ⋯. */
 .ii-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 3px;
+  margin-top: 5px;
 }
 .ii-actions .equip-btn {
-  flex: 1;
+  flex: 1 1 auto;
+}
+.equip-btn.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+.equip-btn.ghost:disabled {
+  opacity: 0.45;
+}
+.ii-ic {
+  flex: none;
+  width: 38px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ii-ic:disabled {
+  opacity: 0.4;
+}
+.ii-ic:active {
+  border-color: var(--accent);
+}
+.ii-ic.lock.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .ii-more {
   flex: none;
@@ -5236,33 +5508,64 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
-/* Raretés */
-.r-common {
-  border-left-color: var(--dim);
+/* ── Rangs G→SSS : une couleur unique par rang, portée par la variable --rk
+   (posée par les classes de rang r- et p-). Les consommateurs (liseré, texte,
+   pastilles) lisent var(--rk) → plus besoin d'une règle par rang et par composant. ── */
+.r-G,
+.p-G {
+  --rk: #9a8f7e;
 }
-.r-rare {
-  border-left-color: #4ec6d6;
+.r-F,
+.p-F {
+  --rk: #8f9c86;
 }
-.r-rare .rarity {
-  color: #4ec6d6;
+.r-E,
+.p-E {
+  --rk: #6bd18a;
 }
-.r-epic {
-  border-left-color: #b07cff;
+.r-D,
+.p-D {
+  --rk: #4ec6d6;
 }
-.r-epic .rarity {
-  color: #b07cff;
+.r-C,
+.p-C {
+  --rk: #5a9bff;
 }
-.r-legendary {
-  border-left-color: var(--accent);
+.r-B,
+.p-B {
+  --rk: #b07cff;
 }
-.r-legendary .rarity {
-  color: var(--accent);
+.r-A,
+.p-A {
+  --rk: var(--accent);
 }
-.r-divin {
-  border-left-color: #ff5cd8;
+.r-S,
+.p-S {
+  --rk: #ff9a3f;
 }
-.r-divin .rarity {
-  color: #ff5cd8;
+.r-SS,
+.p-SS {
+  --rk: #ff5b5b;
+}
+.r-SSS,
+.p-SSS {
+  --rk: #ff5cd8;
+}
+/* Cartes à liseré gauche (r-*) : le bord suit le rang ; le texte .rarity aussi. */
+.r-G,
+.r-F,
+.r-E,
+.r-D,
+.r-C,
+.r-B,
+.r-A,
+.r-S,
+.r-SS,
+.r-SSS {
+  border-left-color: var(--rk);
+}
+.rarity {
+  color: var(--rk);
 }
 /* Bouton « butin possible » d'un donjon */
 .dgn-loot {
@@ -5428,25 +5731,18 @@ onUnmounted(() => {
 .rc-pill.lvl {
   color: var(--text);
 }
-.rc-pill.p-common {
-  color: var(--dim);
-  border-color: var(--dim);
-}
-.rc-pill.p-rare {
-  color: #4ec6d6;
-  border-color: #4ec6d6;
-}
-.rc-pill.p-epic {
-  color: #b07cff;
-  border-color: #b07cff;
-}
-.rc-pill.p-legendary {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.rc-pill.p-divin {
-  color: #ff5cd8;
-  border-color: #ff5cd8;
+.rc-pill.p-G,
+.rc-pill.p-F,
+.rc-pill.p-E,
+.rc-pill.p-D,
+.rc-pill.p-C,
+.rc-pill.p-B,
+.rc-pill.p-A,
+.rc-pill.p-S,
+.rc-pill.p-SS,
+.rc-pill.p-SSS {
+  color: var(--rk);
+  border-color: var(--rk);
 }
 .rc-pill.set {
   color: var(--dark, #15120e);
@@ -7368,22 +7664,7 @@ onUnmounted(() => {
 .salv-cancel:active {
   transform: scale(0.97);
 }
-/* Rareté = liseré gauche de la carte */
-.salv-card.r-common {
-  border-left-color: var(--dim);
-}
-.salv-card.r-rare {
-  border-left-color: #4ec6d6;
-}
-.salv-card.r-epic {
-  border-left-color: #b07cff;
-}
-.salv-card.r-legendary {
-  border-left-color: var(--accent);
-}
-.salv-card.r-divin {
-  border-left-color: #ff5cd8;
-}
+/* Rang = liseré gauche de la carte (règle générique .r-* via var(--rk)) */
 .salv-fade-enter-active,
 .salv-fade-leave-active {
   transition: opacity 0.18s ease;
@@ -7408,21 +7689,7 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 10px 12px;
 }
-.repl-item.r-common {
-  border-left-color: var(--dim);
-}
-.repl-item.r-rare {
-  border-left-color: #4ec6d6;
-}
-.repl-item.r-epic {
-  border-left-color: #b07cff;
-}
-.repl-item.r-legendary {
-  border-left-color: var(--accent);
-}
-.repl-item.r-divin {
-  border-left-color: #ff5cd8;
-}
+/* couleur de rang gérée par la règle générique .r-* (var(--rk)) */
 .repl-new {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }

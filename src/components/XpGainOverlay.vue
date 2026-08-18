@@ -15,7 +15,9 @@
               :style="{ strokeDasharray: filled[i] + ' 100', transitionDelay: i * 0.3 + 's' }"
             />
             <text class="xf-emo" x="20" y="18" text-anchor="middle">{{ r.emoji }}</text>
-            <text class="xf-lvl font-display" x="20" y="27" text-anchor="middle">{{ shown[i] }}</text>
+            <text class="xf-lvl font-display" x="20" y="27" text-anchor="middle">
+              {{ shown[i] }}
+            </text>
           </svg>
           <div class="xf-label">{{ r.label }}</div>
           <div v-if="r.toLevel > r.fromLevel" class="xf-up">⬆ Niveau {{ r.toLevel }} !</div>

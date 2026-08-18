@@ -56,7 +56,10 @@ export function setCollection(
   seen: Record<string, string[]> = {},
 ): SetCollectionEntry[] {
   const defeated = new Set(defeatedBossIds);
-  const all: Item[] = [...SLOTS.map((s) => equipped[s]).filter((i): i is Item => !!i), ...inventory];
+  const all: Item[] = [
+    ...SLOTS.map((s) => equipped[s]).filter((i): i is Item => !!i),
+    ...inventory,
+  ];
   return ITEM_SETS.map((set) => {
     const slotsOwned = new Set<string>(seen[set.id] ?? []);
     for (const it of all) if (it.setId === set.id) slotsOwned.add(it.slot);

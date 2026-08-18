@@ -47,7 +47,8 @@ describe('expedition — carte / monde', () => {
     // Espacement mini entre paires.
     for (let i = 0; i < m.pois.length; i++)
       for (let j = i + 1; j < m.pois.length; j++) {
-        const a = m.pois[i]!, b = m.pois[j]!;
+        const a = m.pois[i]!,
+          b = m.pois[j]!;
         expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual(EXPE.minDistPoi - 0.001);
       }
   });
@@ -109,12 +110,33 @@ describe('expedition — terrain (fond de carte)', () => {
 
 describe('expedition — héros / trajet', () => {
   const poi: Poi = {
-    id: 'p', type: 'camp', level: 10, x: 20, y: 20, distNorm: 0.5,
-    spawnedAt: 0, expiresAt: 999 * H,
+    id: 'p',
+    type: 'camp',
+    level: 10,
+    x: 20,
+    y: 20,
+    distNorm: 0.5,
+    spawnedAt: 0,
+    expiresAt: 999 * H,
   };
   const exp: ActiveExpedition = {
-    poi, sentAt: 0, midAt: 2 * H, returnAt: 4 * H, goldCost: 100, seed: 1,
-    outcome: { win: true, gold: 0, dust: 0, energy: 0, stones: 0, item: null, key: 0, reconBonus: 0, text: '' },
+    poi,
+    sentAt: 0,
+    midAt: 2 * H,
+    returnAt: 4 * H,
+    goldCost: 100,
+    seed: 1,
+    outcome: {
+      win: true,
+      gold: 0,
+      dust: 0,
+      energy: 0,
+      stones: 0,
+      item: null,
+      key: 0,
+      reconBonus: 0,
+      text: '',
+    },
   };
   it('aller : part de la ville, arrive à l’objectif à mi-parcours', () => {
     const t = EXPE.town;
@@ -137,8 +159,27 @@ describe('expedition — héros / trajet', () => {
 describe('expedition — résolution', () => {
   const strong = playerCombatant('Fort', { puissance: 300, endurance: 260, agilite: 120 }, 20);
   const weak = playerCombatant('Faible', { puissance: 3, endurance: 1, agilite: 1 }, 1);
-  const mine: Poi = { id: 'm', type: 'mine', level: 8, x: 30, y: 30, distNorm: 0.3, spawnedAt: 0, expiresAt: 999 * H };
-  const lair: Poi = { id: 'l', type: 'lair', setId: 'dragon', level: 6, x: 40, y: 40, distNorm: 0.4, spawnedAt: 0, expiresAt: 999 * H };
+  const mine: Poi = {
+    id: 'm',
+    type: 'mine',
+    level: 8,
+    x: 30,
+    y: 30,
+    distNorm: 0.3,
+    spawnedAt: 0,
+    expiresAt: 999 * H,
+  };
+  const lair: Poi = {
+    id: 'l',
+    type: 'lair',
+    setId: 'dragon',
+    level: 6,
+    x: 40,
+    y: 40,
+    distNorm: 0.4,
+    spawnedAt: 0,
+    expiresAt: 999 * H,
+  };
 
   it('mine : toujours réussie + gain NET d’or + poussière + pierres + énergie', () => {
     const o = resolveOutcome(strong, mine, 1);
@@ -154,8 +195,12 @@ describe('expedition — résolution', () => {
   it('haul scalé au TEMPS de trajet : un POI plus loin rend plus (même niveau)', () => {
     const near: Poi = { ...mine, distNorm: 0.1 };
     const far: Poi = { ...mine, distNorm: 0.95 };
-    expect(resolveOutcome(strong, far, 2).dust).toBeGreaterThan(resolveOutcome(strong, near, 2).dust);
-    expect(resolveOutcome(strong, far, 2).gold).toBeGreaterThan(resolveOutcome(strong, near, 2).gold);
+    expect(resolveOutcome(strong, far, 2).dust).toBeGreaterThan(
+      resolveOutcome(strong, near, 2).dust,
+    );
+    expect(resolveOutcome(strong, far, 2).gold).toBeGreaterThan(
+      resolveOutcome(strong, near, 2).gold,
+    );
   });
   it('repaire gagné (héros fort) : pièce de set du bon set', () => {
     const o = resolveOutcome(strong, lair, 3);
@@ -172,7 +217,16 @@ describe('expedition — résolution', () => {
     expect(o.text.length).toBeGreaterThan(0);
   });
   it('arène : renvoie un nombre de vagues, butin croissant avec les vagues tenues', () => {
-    const arenaP: Poi = { id: 'a', type: 'arena', level: 6, x: 40, y: 40, distNorm: 0.4, spawnedAt: 0, expiresAt: 999 * H };
+    const arenaP: Poi = {
+      id: 'a',
+      type: 'arena',
+      level: 6,
+      x: 40,
+      y: 40,
+      distNorm: 0.4,
+      spawnedAt: 0,
+      expiresAt: 999 * H,
+    };
     const oStrong = resolveOutcome(strong, arenaP, 5);
     const oWeak = resolveOutcome(weak, arenaP, 5);
     expect(oStrong.waves).toBeGreaterThanOrEqual(0);

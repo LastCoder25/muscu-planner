@@ -55,8 +55,7 @@ describe('dungeonCrawl — génération d’étage', () => {
 
   it('liens symétriques (couloir dans les deux sens)', () => {
     const f = generateFloor(13, 0, 3);
-    for (const r of f.rooms)
-      for (const nb of r.links) expect(f.rooms[nb]!.links).toContain(r.id);
+    for (const r of f.rooms) for (const nb of r.links) expect(f.rooms[nb]!.links).toContain(r.id);
   });
 });
 

@@ -42,7 +42,9 @@
           <div class="cattrs">
             <div class="cattr">
               <span class="ca-l">❤️ PV</span>
-              <span class="ca-v">{{ baseFighter.pv }} <i>→</i> <b>{{ gearedFighter.pv }}</b></span>
+              <span class="ca-v"
+                >{{ baseFighter.pv }} <i>→</i> <b>{{ gearedFighter.pv }}</b></span
+              >
             </div>
             <div class="cattr">
               <span class="ca-l">⚔️ Dégâts/coup</span>
@@ -143,7 +145,10 @@
                 }}</span
               >
               <div class="grp-bar">
-                <div class="grp-fill" :style="{ width: volPct(s) + '%', background: VOL_COLORS[s.state] }" />
+                <div
+                  class="grp-fill"
+                  :style="{ width: volPct(s) + '%', background: VOL_COLORS[s.state] }"
+                />
               </div>
               <span class="grp-val" :class="'vs-' + s.state"
                 ><b>{{ s.done }}</b
