@@ -362,6 +362,7 @@ const over = ref(false);
 // Butin cumulé du run (Phase 3b : affiché ; persistance/récompense = Phase 3c).
 const gold = ref(0);
 const dust = ref(0);
+const frags = ref(0); // fragments de familiers 🧩 amassés dans les coffres
 const loot = ref<Item[]>([]);
 let lootN = 0;
 
@@ -528,10 +529,19 @@ function openChest(id: number) {
       spread: 1,
     });
   const item = drop ? { ...drop, id: `exp_${lootN++}` } : null;
+  // Fragments de familiers 🧩 : ~30 % des coffres, montant ∝ profondeur (+ Porte).
+  const gotFrag =
+    rng() < 0.3 ? Math.max(1, Math.round((1 + depthOf() * 2) * (1 + labyLuck.value))) : 0;
+  frags.value += gotFrag;
   if (item) {
     loot.value.push(item);
     dust.value += 3;
-    lastEvent.value = { kind: 'good', text: `🎁 ${item.name} !` };
+    lastEvent.value = {
+      kind: 'good',
+      text: gotFrag ? `🎁 ${item.name} + 🧩${gotFrag}` : `🎁 ${item.name} !`,
+    };
+  } else if (gotFrag) {
+    lastEvent.value = { kind: 'good', text: `🎁 🧩 ${gotFrag} fragments !` };
   } else {
     lastEvent.value = { kind: 'neutral', text: '🎁 Coffre vide…' };
   }
@@ -641,6 +651,7 @@ function freshRun() {
   run.value = startRun(floorsWanted.value, dungeon.value[0]!, fighter.value.pv || 140);
   gold.value = 0;
   dust.value = 0;
+  frags.value = 0;
   loot.value = [];
   lootN = 0;
   lastEvent.value = null;
@@ -701,6 +712,7 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
         gold: gold.value,
         dust: dust.value,
         stones: outcome === 'dead' ? Math.floor(stones / 2) : stones,
+        fragments: outcome === 'dead' ? Math.floor(frags.value / 2) : frags.value,
         drops: outcome === 'dead' ? [] : loot.value,
       });
   }

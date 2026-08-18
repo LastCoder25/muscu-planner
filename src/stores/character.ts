@@ -81,6 +81,7 @@ export interface CharacterRow {
   keys: number; // clés d'expédition (donjons à étages)
   stones: number; // pierres magiques 💎 : montée de niveau des familiers
   parchemins: number; // parchemins de maîtrise 📜 : montée de niveau des talents (migr. 0048)
+  fragments: number; // fragments de familiers 🧩 : XP d'infusion du TIER (migr. 0049)
   expedition: ActiveExpedition | null; // mode idle « Expédition » en cours
   expedition_map: ExpeditionMap | null; // carte du monde (POI)
   messages: ExpeditionMessage[]; // boîte à messages 📬 (rapports d'expédition)
@@ -104,7 +105,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, expedition, expedition_map, messages, buildings, set_pieces_seen';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, expedition, expedition_map, messages, buildings, set_pieces_seen';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -134,6 +135,7 @@ export const useCharacterStore = defineStore('character', () => {
     r.set_pieces_seen = obj<Record<string, string[]>>(r.set_pieces_seen); // migr. 0047
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
+    if (typeof r.fragments !== 'number') r.fragments = 0; // colonne récente (migr. 0049)
     if (!r.expedition || typeof r.expedition !== 'object') r.expedition = null;
     if (!r.expedition_map || typeof r.expedition_map !== 'object') r.expedition_map = null;
     return r;
@@ -403,7 +405,7 @@ export const useCharacterStore = defineStore('character', () => {
   // objets au sac/équipés vides ; un familier passe simplement dans `drops`).
   async function applyExpedition(
     userId: string,
-    input: { gold: number; dust: number; drops: Item[]; stones?: number },
+    input: { gold: number; dust: number; drops: Item[]; stones?: number; fragments?: number },
   ) {
     const cur = row.value;
     if (!cur) return;
@@ -412,6 +414,7 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
       stones: cur.stones + (input.stones ?? 0),
+      fragments: cur.fragments + (input.fragments ?? 0), // 🧩 coffres du Labyrinthe
       equipped: dist.equipped,
       inventory: dist.inventory,
       set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, input.drops),
@@ -586,14 +589,28 @@ export const useCharacterStore = defineStore('character', () => {
 
   // FUSION (incubateur) : consomme 3 familiers du SAC de MÊME rareté → 1 familier
   // ALÉATOIRE de la rareté JUSTE AU-DESSUS (niveau 1). rng = Math.random.
-  // INFUSION d'un familier (remplace la fusion 3→1) : on SACRIFIE un familier du sac
-  // dans un familier CIBLE (équipé ou au sac) → son TIER (rang+qualité) grimpe, plafonné
-  // par le niveau de l'Incubateur (ticket f93c219b). Les pierres 💎 gèrent le NIVEAU.
-  async function infuseFamiliar(userId: string, targetId: string, fodderId: string) {
+  // RECYCLE un familier en FRAGMENTS 🧩 (∝ son tier) : les doublons nourrissent
+  // l'infusion sans « gâcher » un familier entier. Refuse un familier équipé/verrouillé.
+  async function recycleFamiliar(userId: string, familiarId: string) {
     const cur = row.value;
-    if (!cur || targetId === fodderId) return;
-    const fodder = cur.inventory.find((i) => i.id === fodderId);
-    if (!fodder || !isFamiliar(fodder) || fodder.locked) return;
+    if (!cur) return 0;
+    const fam = cur.inventory.find((i) => i.id === familiarId);
+    if (!fam || !isFamiliar(fam) || fam.locked) return 0;
+    const gain = familiarInfuseXp(fam);
+    await persistOptimistic(userId, {
+      fragments: cur.fragments + gain,
+      inventory: cur.inventory.filter((i) => i.id !== familiarId),
+    });
+    return gain;
+  }
+  // INFUSE un familier CIBLE (équipé ou au sac) en dépensant des FRAGMENTS 🧩 → son
+  // TIER (rang+qualité) grimpe (qualité puis rang), plafonné par le niveau de
+  // l'Incubateur. Les pierres 💎 gèrent le NIVEAU à part. `amount` = fragments dépensés.
+  async function infuseFamiliar(userId: string, targetId: string, amount: number) {
+    const cur = row.value;
+    if (!cur) return;
+    const spend = Math.min(Math.max(0, Math.floor(amount)), cur.fragments);
+    if (spend <= 0) return;
     const equippedFam = cur.equipped[FAMILIAR_SLOT];
     const bagTarget = cur.inventory.find((i) => i.id === targetId);
     const target =
@@ -603,18 +620,12 @@ export const useCharacterStore = defineStore('character', () => {
           ? bagTarget
           : null;
     if (!target) return;
-    const updated = applyFamiliarInfusion(
-      target,
-      familiarInfuseXp(fodder),
-      maxFuseTargetIndex(cur.buildings),
-    );
-    const inventory = cur.inventory
-      .filter((i) => i.id !== fodderId)
-      .map((i) => (i.id === target.id ? updated : i));
-    const patch: Partial<CharacterRow> = { inventory };
+    const updated = applyFamiliarInfusion(target, spend, maxFuseTargetIndex(cur.buildings));
+    const patch: Partial<CharacterRow> = { fragments: cur.fragments - spend };
     if (equippedFam?.id === targetId)
       patch.equipped = { ...cur.equipped, [FAMILIAR_SLOT]: updated };
-    await persist(userId, patch);
+    else patch.inventory = cur.inventory.map((i) => (i.id === target.id ? updated : i));
+    await persistOptimistic(userId, patch);
     return updated;
   }
 
@@ -1015,6 +1026,7 @@ export const useCharacterStore = defineStore('character', () => {
     infuseToMax,
     upgradeFamiliar,
     infuseFamiliar,
+    recycleFamiliar,
     forge,
     rerollEffect,
     craftSet,
