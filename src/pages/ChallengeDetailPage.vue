@@ -246,15 +246,22 @@
               <!-- Reps : un seul bouton ＋ → fenêtre reps + poids -->
               <button v-else class="add-set" @click="openAddSet(1)">＋ Ajouter (reps + poids)</button>
 
-              <div v-if="todaySets.length" class="sets-log">
-                <div v-for="(s, i) in todaySets" :key="i" class="set-item">
-                  <span class="si-n">Série {{ i + 1 }}</span>
+              <div v-if="displayedSets.length" class="sets-log">
+                <div class="sets-log-h">
+                  {{ isCumulative ? 'Séries saisies (total)' : 'Séries du jour' }}
+                </div>
+                <div v-for="(s, i) in displayedSets" :key="i" class="set-item">
+                  <span class="si-n"
+                    >Série {{ i + 1 }}<template v-if="s.date"> · {{ fmtSetDay(s.date) }}</template></span
+                  >
                   <span class="si-v"
                     >{{ s.reps }} reps<template v-if="s.weight"> · {{ s.weight }} kg</template
                     ><template v-if="s.assisted"> · assisté</template></span
                   >
                 </div>
-                <button class="corr-link" @click="undoLastSet">↩ Retirer la dernière</button>
+                <button v-if="todaySets.length" class="corr-link" @click="undoLastSet">
+                  ↩ Retirer la dernière{{ isCumulative ? ' (aujourd’hui)' : '' }}
+                </button>
               </div>
               </template>
             </div>
@@ -739,6 +746,25 @@ function addReps(n: number) {
 // ET garde le détail (poids → tonnage) ; bouton « ＋ série (poids) » secondaire.
 const isSetsMode = computed(() => ch.value?.config.count_mode === 'sets');
 const todaySets = computed<ChallengeSet[]>(() => entryOf(dayIndex.value)?.sets ?? []);
+// Cumulatif (objectif en REPS TOTALES) : les séries sont réparties sur plusieurs
+// jours → on montre TOUTES les séries saisies (avec le jour), pas seulement celles
+// d'aujourd'hui. Sinon, la vue par jour suffit.
+type ShownSet = { reps: number; weight?: number | null; assisted?: boolean; date?: string };
+const allSets = computed<ShownSet[]>(() =>
+  (ch.value?.progress ?? []).flatMap((p) =>
+    (p.sets ?? []).map((s) => ({ reps: s.reps, weight: s.weight, assisted: s.assisted, date: p.date })),
+  ),
+);
+const displayedSets = computed<ShownSet[]>(() =>
+  isCumulative.value
+    ? allSets.value
+    : todaySets.value.map((s) => ({ reps: s.reps, weight: s.weight, assisted: s.assisted })),
+);
+function fmtSetDay(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+}
 const setOpen = ref(false);
 const setInitReps = ref(10);
 const setInitWeight = ref<number | null>(null);
@@ -1438,6 +1464,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+.sets-log-h {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  margin-bottom: 2px;
 }
 .set-item {
   display: flex;

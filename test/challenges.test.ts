@@ -12,11 +12,33 @@ import {
   isAssistedExercise,
   isBodyweightExercise,
   activeDaysOf,
+  extendChallenge,
   type Challenge,
   type ChallengeConfig,
 } from '@/lib/challenges';
 
 const cfg = (over: Partial<ChallengeConfig> = {}): ChallengeConfig => ({ start: 10, ...over });
+
+describe('extendChallenge : l’affichage des jours s’adapte', () => {
+  const mk = (over: Partial<Challenge> = {}): Challenge =>
+    ({
+      id: 'x', exercise_id: 'e', exercise_name: 'E', unit: 'reps', format: 'fixed',
+      duration_days: 7, start_date: '2026-01-05', config: cfg({ start: 20 }),
+      daily_targets: [20, 20, 20, 20, 20, 20, 20], progress: [], status: 'active',
+      ...over,
+    }) as Challenge;
+  it('fixed : daily_targets ET duration_days s’allongent', () => {
+    const r = extendChallenge(mk(), 3);
+    expect(r.duration_days).toBe(10);
+    expect(r.daily_targets).toHaveLength(10);
+  });
+  it('cumulative : daily_targets (zéros pour le calendrier) s’allonge aussi', () => {
+    const c = mk({ format: 'cumulative', config: cfg({ total: 100 }), daily_targets: [0, 0, 0, 0, 0, 0, 0] });
+    const r = extendChallenge(c, 5);
+    expect(r.duration_days).toBe(12);
+    expect(r.daily_targets).toHaveLength(12); // avant le fix : restait à 7
+  });
+});
 
 describe('computeDailyTargets', () => {
   it('fixed : objectif constant', () => {

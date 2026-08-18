@@ -485,7 +485,9 @@ export function extendChallenge(
     const total = Math.round(((ch.config.total ?? 0) * newDuration) / (ch.duration_days || 1));
     return {
       duration_days: newDuration,
-      daily_targets: ch.daily_targets,
+      // Le cumulatif a un daily_targets de zéros LONG de duration_days (pour le
+      // calendrier) → on l'allonge aussi, sinon l'affichage des jours ne s'adapte pas.
+      daily_targets: [...ch.daily_targets, ...Array(add).fill(0)],
       config: { ...ch.config, total },
     };
   }
