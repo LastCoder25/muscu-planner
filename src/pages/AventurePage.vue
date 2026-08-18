@@ -432,13 +432,17 @@
                   <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
                     RARITY_LABEL[char.row.equipped[slot]!.rarity]
                   }}</span>
+                  <span
+                    v-if="itemQuality(char.row.equipped[slot])"
+                    class="q-badge"
+                    :class="'q-' + itemQuality(char.row.equipped[slot])"
+                    title="Qualité (5 = meilleur)"
+                    >{{ itemQuality(char.row.equipped[slot]) }}</span
+                  >
                   <span v-if="char.row.equipped[slot]!.setId" class="gpill set">🧩 Set</span>
                 </div>
                 <div class="slot-eff">
                   {{ itemEffects(char.row.equipped[slot]!) }}
-                  <span v-if="rollStarStr(char.row.equipped[slot])" class="roll-stars">{{
-                    rollStarStr(char.row.equipped[slot])
-                  }}</span>
                 </div>
                 <button
                   class="slot-up"
@@ -665,11 +669,15 @@
                   <span class="ii-rar" :class="'p-' + it.rarity">{{
                     RARITY_LABEL[it.rarity]
                   }}</span>
+                  <span
+                    v-if="itemQuality(it)"
+                    class="q-badge"
+                    :class="'q-' + itemQuality(it)"
+                    title="Qualité (5 = meilleur)"
+                    >{{ itemQuality(it) }}</span
+                  >
                   <span class="ii-dot">·</span> Nv {{ it.level }} <span class="ii-dot">·</span>
                   {{ SLOT_LABEL[it.slot] }}
-                  <span v-if="rollStarStr(it)" class="roll-stars" title="Qualité du roll">{{
-                    rollStarStr(it)
-                  }}</span>
                   <span v-if="it.setId" class="gpill set">🧩 Set</span>
                 </div>
                 <!-- Comparaison d'EFFET claire : cet objet vs l'équipé du même emplacement -->
@@ -1567,13 +1575,17 @@
                   <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
                     RARITY_LABEL[cand.item.rarity]
                   }}</span>
+                  <span
+                    v-if="itemQuality(cand.item)"
+                    class="q-badge"
+                    :class="'q-' + itemQuality(cand.item)"
+                    title="Qualité (5 = meilleur)"
+                    >{{ itemQuality(cand.item) }}</span
+                  >
                   <span v-if="cand.item.setId" class="rc-pill set">🧩 Set</span>
                 </div>
                 <div class="rc-eff">
                   {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
-                  <span v-if="rollStarStr(cand.item)" class="roll-stars">{{
-                    rollStarStr(cand.item)
-                  }}</span>
                 </div>
                 <div class="drop-cmp rc-cmp">
                   <span v-if="equippedInSlot(cand.item.slot)"
@@ -1676,11 +1688,14 @@
               <span :class="'p-' + equippedInSlot(craftSlot)!.rarity">{{
                 RARITY_LABEL[equippedInSlot(craftSlot)!.rarity]
               }}</span>
+              <span
+                v-if="itemQuality(equippedInSlot(craftSlot))"
+                class="q-badge"
+                :class="'q-' + itemQuality(equippedInSlot(craftSlot))"
+                >{{ itemQuality(equippedInSlot(craftSlot)) }}</span
+              >
               · Nv {{ equippedInSlot(craftSlot)!.level }} ·
               <b>{{ itemEffects(equippedInSlot(craftSlot)!) }}</b>
-              <span v-if="rollStarStr(equippedInSlot(craftSlot)!)" class="roll-stars">{{
-                rollStarStr(equippedInSlot(craftSlot)!)
-              }}</span>
             </div>
             <div v-else class="ws-equipped dim">— emplacement libre (rien d'équipé)</div>
           </div>
@@ -1758,7 +1773,7 @@
               <span class="fr-rounds">{{ f.rounds }} tours</span>
             </div>
           </div>
-          <div v-if="stageDone && run.drops.length" class="drops">
+          <div v-if="stageDone && run.drops.length" ref="dropsEl" class="drops">
             <div class="drops-lbl">✨ Butin</div>
             <div
               v-for="(d, di) in run.drops"
@@ -1773,12 +1788,16 @@
                 <div class="pills">
                   <span class="gpill lvl">Lvl {{ d.level }}</span>
                   <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
+                  <span
+                    v-if="itemQuality(d)"
+                    class="q-badge"
+                    :class="'q-' + itemQuality(d)"
+                    title="Qualité (5 = meilleur)"
+                    >{{ itemQuality(d) }}</span
+                  >
                   <span v-if="d.setId" class="gpill set">🧩 Set</span>
                 </div>
-                <div class="inv-eff">
-                  {{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}
-                  <span v-if="rollStarStr(d)" class="roll-stars">{{ rollStarStr(d) }}</span>
-                </div>
+                <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}</div>
                 <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
                   <span
                     >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
@@ -1847,10 +1866,11 @@
                         RARITY_LABEL[cand.item.rarity]
                       }}</span>
                       <span
-                        v-if="rollStarStr(cand.item)"
-                        class="roll-stars"
-                        title="Qualité du roll"
-                        >{{ rollStarStr(cand.item) }}</span
+                        v-if="itemQuality(cand.item)"
+                        class="q-badge"
+                        :class="'q-' + itemQuality(cand.item)"
+                        title="Qualité (5 = meilleur)"
+                        >{{ itemQuality(cand.item) }}</span
                       >
                       <span v-if="cand.item.setId" class="rc-pill set">🧩 Set</span>
                     </div>
@@ -2684,6 +2704,21 @@ const autoSkipEasy = computed(() => auth.isAdmin);
 function stageFinish() {
   stageDone.value = true;
   flushCelebrations();
+  revealDrops();
+}
+// Butin : après révélation du résultat, on fait DÉFILER doucement la modale jusqu'au
+// butin (laisse voir le résultat d'abord, puis glisse vers les objets). Respecte
+// prefers-reduced-motion (saut direct).
+const dropsEl = ref<HTMLElement | null>(null);
+function revealDrops() {
+  if (!run.value?.drops.length) return;
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  void nextTick(() => {
+    setTimeout(
+      () => dropsEl.value?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }),
+      reduce ? 0 : 480,
+    );
+  });
 }
 // Combats rejouables (avec log détaillé) → alimente CombatStage.
 const stageFights = computed(() =>
@@ -2710,7 +2745,10 @@ function openReport() {
   stageWasReward.value = !!char.row?.pending_reward; // boss : latch pour ne pas rejouer
   stageDone.value = !stageFights.value.length || skipAll;
   reportOpen.value = true;
-  if (stageDone.value) flushCelebrations(); // pas d'animation → célébrations tout de suite
+  if (stageDone.value) {
+    flushCelebrations(); // pas d'animation → célébrations tout de suite
+    revealDrops();
+  }
 }
 // « Passer l'animation » quand la victoire était quasi acquise (≥ 90 %) — donjon
 // OU boss (mêmes règles). Le 1er passage reste animé (cf. lastRunFirstVisit).
@@ -3134,9 +3172,10 @@ function itemEffects(it: Omit<Item, 'id'>): string {
   return it.effect2 ? `${a} · ${effectLabel(it.effect2, it.level)}` : a;
 }
 // Qualité du roll en étoiles pleines/vides (« ★★★★☆ ») ; vide si objet legacy (pas de roll).
-function rollStarStr(it: { roll?: number } | null | undefined): string {
-  const n = rollStars(it?.roll);
-  return n ? '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n) : '';
+// Qualité en CHIFFRE (1→5, 5 = meilleur) affiché à côté du rang, code couleur
+// rouge (1) → vert (5) via la classe `.q-<n>`. 0 = objet legacy sans roll (masqué).
+function itemQuality(it: { roll?: number } | null | undefined): number {
+  return rollStars(it?.roll);
 }
 // Nombre de pièces du set d'un boss possédées (équipées + sac).
 // Pièces du set du boss ACTUELLEMENT ÉQUIPÉES (≤ 4 slots) — pas celles du sac,
@@ -5474,20 +5513,36 @@ onUnmounted(() => {
   font-size: 11px;
   color: var(--dim);
 }
-/* Qualité du roll : étoiles jaune voltage dans une PASTILLE pour ressortir. */
-.roll-stars {
+/* Qualité en chiffre (1→5) collé au rang : pastille ronde colorée rouge→vert. */
+.q-badge {
   display: inline-flex;
   align-items: center;
-  margin-left: 4px;
-  padding: 1px 6px;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 2px;
+  margin-left: 3px;
   border-radius: 999px;
-  letter-spacing: 1px;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  font-size: 10px;
-  line-height: 1.4;
-  white-space: nowrap;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 11px;
+  line-height: 1;
+  color: #15120e;
+}
+.q-1 {
+  background: #ff6a45;
+}
+.q-2 {
+  background: #ff9a3f;
+}
+.q-3 {
+  background: #ffd23f;
+}
+.q-4 {
+  background: #c6d24a;
+}
+.q-5 {
+  background: #7bc86c;
 }
 .rarity {
   font-size: 10px;

@@ -717,7 +717,11 @@ async function mirrorCardio() {
   const uid = auth.user?.id;
   if (!c || !uid || !isCardioChallengeExercise(c.exercise_id)) return;
   const e = entryOf(dayIndex.value);
-  const worth = c.format === 'cumulative' ? (e?.done ?? 0) > 0 : (e?.completed ?? false);
+  // Une sortie miroir = une VRAIE sortie → exige `done > 0` (distance/durée réelle).
+  // Sans ce garde-fou, un jour auto-clos avec target 0 (donc `completed` = 0 ≥ 0 = vrai)
+  // mais done 0 créait une marche FANTÔME de 0 km dans l'historique (ticket 72996f3b).
+  const done = e?.done ?? 0;
+  const worth = done > 0 && (c.format === 'cumulative' || (e?.completed ?? false));
   if (!e || !worth) return;
   const dateIso = e.date || addDaysIso(c.start_date, dayIndex.value);
   try {

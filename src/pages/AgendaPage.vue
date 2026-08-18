@@ -53,7 +53,13 @@ import { useTennisStore } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeDayXp } from '@/lib/challenges';
-import { sessionXp, otherSportXp, cardioSessionXp, drillSessionXp } from '@/lib/athlete';
+import {
+  sessionXp,
+  otherSportXp,
+  cardioSessionXp,
+  drillSessionXp,
+  estimateKm,
+} from '@/lib/athlete';
 import { ACTIVITY_LABELS, ACTIVITY_ICONS, paceLabel, isCardioOutingChallenge } from '@/data/cardio';
 
 // Disciplines « spécifiques » (tennis/prépa…) : comptent leur XP mais N'alimentent
@@ -150,14 +156,17 @@ const entries = computed<Entry[]>(() => {
   for (const r of cardio.logs) {
     const p = r.payload;
     const day = dayOf(r.performed_at);
+    // km affiché (arrondi ; à défaut de distance saisie, estimé depuis les pas).
+    const km = estimateKm(p);
     if (p.challenge_id) {
+      // Miroir SANS contenu réel (0 km ET 0 min) = artefact (jour auto-clos à target 0)
+      // → jamais affiché (ticket 72996f3b : marche fantôme le lundi).
+      if (!km && !(p.duration_min ?? 0)) continue;
       if (manualDayAct.has(`${p.activity}|${day}`)) continue; // couvert par une saisie manuelle
       const key = `${p.challenge_id}|${p.challenge_day ?? day}`;
       if (seenMirror.has(key)) continue; // déjà un miroir pour ce (défi, jour)
       seenMirror.add(key);
     }
-    // km affiché (arrondi ; à défaut de distance saisie, estimé depuis les pas).
-    const km = p.distance_km ?? (p.steps ? p.steps * 0.00075 : 0);
     const bits = [
       km ? `${km.toFixed(1)} km` : '',
       fmtDur(p.duration_min),

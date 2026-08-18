@@ -48,13 +48,17 @@ export function drillSessionXp(log: DrillLog): number {
   return Math.round((40 + minutes + done * 8 + intensity) * XP_MULT);
 }
 
+/** Distance en km d'une sortie : km saisis, sinon estimés depuis les pas (~0,75 m/pas)
+ *  → une marche saisie en PAS compte quand même. Source unique (XP + affichage agenda). */
+export function estimateKm(log: { distance_km?: number | null; steps?: number | null }): number {
+  return log.distance_km ?? (log.steps ? log.steps * 0.00075 : 0);
+}
+
 /** XP d'une sortie cardio : durée + distance (pondérées par l'activité — marche <
  *  vélo < course) + dénivelé (D+ ET D-, même poids, la descente sollicite d'autres
  *  muscles) + intensité (ressenti). Présence, dénivelé et ressenti restent à plein. */
 export function cardioSessionXp(log: CardioLog): number {
-  // Distance : à défaut de km saisis, on estime depuis les pas (~0,75 m/pas) →
-  // une marche saisie en PAS rapporte quand même de l'XP.
-  const km = log.distance_km ?? (log.steps ? log.steps * 0.00075 : 0);
+  const km = estimateKm(log);
   const dplus = log.elevation_m ?? 0;
   const dminus = log.descent_m ?? 0;
   const dur = log.duration_min ?? 0;
