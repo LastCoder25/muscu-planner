@@ -299,6 +299,7 @@ describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
     { key: 'pull', muscles: ['dos'], essential: true },
     { key: 'squat', muscles: ['quadriceps'], essential: true },
     { key: 'arms', muscles: ['biceps', 'triceps'], essential: false },
+    { key: 'shoulders', muscles: ['epaules'], essential: false },
   ];
   const bySlot = (plan: ReturnType<typeof suggestFullBodyPlan>, key: string) =>
     plan.find((p) => p.slot === key)!;
@@ -334,9 +335,10 @@ describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
     for (const key of ['push', 'pull', 'squat']) expect(bySlot(plan, key).active).toBe(true);
   });
 
-  it('débutant : accessoires exclus + essentiels à 1 exo suffisent', () => {
+  it('débutant : le BRAS est toujours proposé, les autres accessoires exclus', () => {
     const plan = suggestFullBodyPlan('debutant', 'moderate', 'high', SLOTS);
-    expect(bySlot(plan, 'arms').active).toBe(false); // accessoire exclu pour débutant
+    expect(bySlot(plan, 'arms').active).toBe(true); // bras TOUJOURS proposé (ticket adbc5ff4)
+    expect(bySlot(plan, 'shoulders').active).toBe(false); // autre accessoire exclu en débutant
     expect(bySlot(plan, 'push').active).toBe(true);
   });
 

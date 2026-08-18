@@ -536,7 +536,10 @@ export function suggestFullBodyPlan(
 ): ComboSlotPlan[] {
   const cap = VARIETY_CAP[variety];
   return slots.map((s) => {
-    const active = s.essential || level !== 'debutant';
+    // Le BRAS est TOUJOURS proposé (même en débutant) — les bras sont un groupe
+    // motivant qu'on ne veut pas laisser tomber en silence (ticket adbc5ff4). Les
+    // autres accessoires (épaules/mollets) restent réservés à inter/avancé.
+    const active = s.essential || s.key === 'arms' || level !== 'debutant';
     if (!active) return { slot: s.key, active: false, nExos: 0, weeklySets: 0, setsPerExo: 0 };
     const mult = emphasis?.[s.key] ?? 1;
     const weeklySets = Math.max(3, Math.round(comboWeeklySets(level, volume, s.essential) * mult));
