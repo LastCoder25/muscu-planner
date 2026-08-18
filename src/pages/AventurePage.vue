@@ -697,25 +697,41 @@
                 <!-- PUISSANCE : 2 lectures — MAINTENANT (équipé tel quel, niveau réel)
                      vs POTENTIEL (monté à ton niveau). Montre qu'un objet sous-leveled
                      fait perdre s'il est équipé tel quel mais devient meilleur infusé. -->
-                <div class="ii-pow2">
-                  <div class="ii-pw" :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'">
-                    <span class="ii-pw-k">Maintenant</span>
-                    <span class="ii-pw-v"
-                      >{{ fmtPow(combatPowerVal) }} → {{ fmtPow(powerIfEquipNow(it)) }}</span
-                    >
-                    <span class="ii-pw-d">{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</span>
-                  </div>
-                  <div
-                    v-if="it.level < c.level.level"
-                    class="ii-pw"
-                    :class="powerIfEquip(it) >= combatPowerMaxed ? 'up' : 'down'"
+                <!-- Comparaison SUR UNE LIGNE : verdict « vs équipé » (à armes égales, au
+                     niveau de l'objet équipé) + « maintenant » (si équipé sous-leveled tel quel). -->
+                <div class="ii-cmp2">
+                  <span class="ii-cmp2-ic">⚔️</span>
+                  <span
+                    v-if="!equippedInSlot(it.slot)"
+                    class="ii-cmp2-chip"
+                    :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
                   >
-                    <span class="ii-pw-k">Monté à ton niveau</span>
-                    <span class="ii-pw-v"
-                      >{{ fmtPow(combatPowerMaxed) }} → {{ fmtPow(powerIfEquip(it)) }}</span
+                    <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
+                    ><i>emplacement libre</i>
+                  </span>
+                  <template v-else>
+                    <span
+                      class="ii-cmp2-chip"
+                      :class="powerIfEquipMatched(it) >= combatPowerVal ? 'up' : 'down'"
+                      :title="
+                        'À armes égales : monté au niveau de ton équipé (Nv ' +
+                        equipMatchLevel(it) +
+                        ')'
+                      "
                     >
-                    <span class="ii-pw-d">{{ fmtDelta(combatPowerMaxed, powerIfEquip(it)) }}</span>
-                  </div>
+                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipMatched(it)) }}</b
+                      ><i>vs équipé</i>
+                    </span>
+                    <span
+                      v-if="it.level < equipMatchLevel(it)"
+                      class="ii-cmp2-chip sub"
+                      :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
+                      title="Si équipé tel quel, à son niveau actuel"
+                    >
+                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
+                      ><i>maintenant</i>
+                    </span>
+                  </template>
                 </div>
                 <!-- Rentabilité : palier d'infusion où l'objet dépasse ton équipé actuel. -->
                 <div
@@ -732,13 +748,13 @@
                     {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
                   </button>
                   <button
-                    v-if="it.level < c.level.level"
+                    v-if="it.level < equipMatchLevel(it)"
                     class="equip-btn ghost"
-                    :disabled="char.row.dust < infuseToMaxCost(it, c.level.level)"
-                    :title="'Monte l’objet à ton niveau puis l’équipe'"
+                    :disabled="char.row.dust < infuseToMaxCost(it, equipMatchLevel(it))"
+                    :title="'Monte l’objet au niveau de ton équipé puis l’équipe'"
                     @click="doInfuseThenEquip(it)"
                   >
-                    🔧 Infuser puis équiper · {{ infuseToMaxCost(it, c.level.level) }}✨
+                    🔧 Infuser puis équiper · {{ infuseToMaxCost(it, equipMatchLevel(it)) }}✨
                   </button>
                   <button
                     class="ii-ic"
@@ -1599,15 +1615,14 @@
                   }}</span>
                 </div>
                 <div class="pow-cmp">
-                  ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
-                  <b :class="powerIfEquip(cand.item) >= combatPowerMaxed ? 'up' : 'down'"
-                    >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
-                      fmtDelta(combatPowerMaxed, powerIfEquip(cand.item))
+                  ⚔️ {{ fmtPow(combatPowerVal) }} →
+                  <b :class="powerIfEquipMatched(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                    >{{ fmtPow(powerIfEquipMatched(cand.item)) }} ({{
+                      fmtDelta(combatPowerVal, powerIfEquipMatched(cand.item))
                     }})</b
                   >
                   <span v-if="infuseCostFor(cand.item)" class="pow-cost"
-                    >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton
-                    niveau</span
+                    >à infuser (~{{ infuseCostFor(cand.item) }} ✨) au niveau de ton équipé</span
                   >
                 </div>
                 <div v-if="rewardDupNote(cand.item)" class="rc-dup">
@@ -1810,14 +1825,14 @@
                 </div>
                 <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
                 <div class="pow-cmp">
-                  ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
-                  <b :class="powerIfEquip(d) >= combatPowerMaxed ? 'up' : 'down'"
-                    >{{ fmtPow(powerIfEquip(d)) }} ({{
-                      fmtDelta(combatPowerMaxed, powerIfEquip(d))
+                  ⚔️ {{ fmtPow(combatPowerVal) }} →
+                  <b :class="powerIfEquipMatched(d) >= combatPowerVal ? 'up' : 'down'"
+                    >{{ fmtPow(powerIfEquipMatched(d)) }} ({{
+                      fmtDelta(combatPowerVal, powerIfEquipMatched(d))
                     }})</b
                   >
                   <span v-if="infuseCostFor(d)" class="pow-cost"
-                    >à infuser (~{{ infuseCostFor(d) }} ✨) pour le monter à ton niveau</span
+                    >à infuser (~{{ infuseCostFor(d) }} ✨) au niveau de ton équipé</span
                   >
                 </div>
                 <div v-if="dropState(d) === 'equipped'" class="drop-done">
@@ -1878,15 +1893,15 @@
                       {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
                     </div>
                     <div class="pow-cmp">
-                      ⚔️ Potentiel {{ fmtPow(combatPowerMaxed) }} →
-                      <b :class="powerIfEquip(cand.item) >= combatPowerMaxed ? 'up' : 'down'"
-                        >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
-                          fmtDelta(combatPowerMaxed, powerIfEquip(cand.item))
+                      ⚔️ {{ fmtPow(combatPowerVal) }} →
+                      <b :class="powerIfEquipMatched(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                        >{{ fmtPow(powerIfEquipMatched(cand.item)) }} ({{
+                          fmtDelta(combatPowerVal, powerIfEquipMatched(cand.item))
                         }})</b
                       >
                       <span v-if="infuseCostFor(cand.item)" class="pow-cost"
-                        >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton
-                        niveau</span
+                        >à infuser (~{{ infuseCostFor(cand.item) }} ✨) au niveau de ton
+                        équipé</span
                       >
                     </div>
                     <div v-if="rewardDupNote(cand.item)" class="rc-dup">
@@ -2002,7 +2017,6 @@ import {
   SET_BY_ID,
   setCounts,
   type Item,
-  type Equipped,
   type ItemSlot,
   type Rarity,
   type AggregatedEffects,
@@ -2166,80 +2180,58 @@ const fighter = computed(() =>
   ),
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
-// Gear infusé à ton NIVEAU (potentiel) → base des COMPARAISONS d'objets : un drop
-// s'évalue à ce qu'il vaudra une fois monté, pas à son niveau 1 de drop.
-function maxGear(eq: Equipped, lvl: number): Equipped {
-  const out: Equipped = {};
-  for (const s of Object.keys(eq) as ItemSlot[]) {
-    const it = eq[s];
-    if (it) out[s] = { ...it, level: lvl };
-  }
-  return out;
-}
-const combatPowerMaxed = computed(() =>
-  combatPower(
-    playerWithGear(
-      char.row?.pseudo ?? 'Toi',
-      c.value,
-      maxGear(char.row?.equipped ?? {}, c.value.level.level),
-      talentFx.value,
-      c.value.level.level,
-    ),
-  ),
-);
 // Combattant SANS équipement ni talents (stats de fond seules) → base de la
 // comparaison « avec / sans équipement » sur la fiche perso.
 const baseFighter = computed(() =>
   playerWithGear(char.row?.pseudo ?? 'Toi', c.value, {}, {}, c.value.level.level),
 );
 const pctA = (x?: number) => Math.round((x ?? 0) * 100) + '%';
-// Puissance de combat SI on équipait cet objet À SON NIVEAU ACTUEL (remplace son
-// slot). Comparaison HONNÊTE et SYMÉTRIQUE : équiper A puis re-équiper B donne des
-// deltas opposés (+/−), car on compare l'état RÉEL (2026‑08‑15 : avant, on maxait le
-// candidat mais pas l'équipé → équiper un objet niv.1 faisait chuter la puissance
-// réelle alors que le comparatif promettait « +X » → incohérent). Le coût d'infusion
-// est affiché à côté pour signaler le potentiel d'un objet bas niveau.
-function powerIfEquip(it: Item): number {
-  const lvl = c.value.level.level;
-  // POTENTIEL : le candidat ET le gear en place évalués infusés à ton niveau → un
-  // drop lég. niv.1 se compare à sa vraie valeur (pas à son niveau 1) → « meilleur
-  // objet ? » a un sens (avant : Δ négatif pour un bon drop → « ça marche pas »).
-  const eq = { ...maxGear(char.row?.equipped ?? {}, lvl), [it.slot]: { ...it, level: lvl } };
-  return combatPower(playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, lvl));
-}
-// Coût en poussière pour infuser un drop jusqu'à ton niveau (affiché à côté du Δ).
-function infuseCostFor(it: Item): number {
-  return infuseToMaxCost(it, c.value.level.level);
-}
-// Puissance SI on équipe cet objet À SON NIVEAU ACTUEL (le reste du gear à son niveau
-// RÉEL) → l'état immédiat : montre la PERTE si on équipe un objet sous-leveled tel quel.
-function powerIfEquipNow(it: Item): number {
-  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: it };
+// Puissance de combat SI on équipe `it` À UN NIVEAU donné (le reste du gear reste à son
+// niveau RÉEL). Base commune de toutes les comparaisons d'objets.
+function powerIfEquipAtLevel(it: Item, lvl: number): number {
+  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: { ...it, level: lvl } };
   return combatPower(
     playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level),
   );
 }
-// Niveau de RENTABILITÉ : plus petit niveau d'infusion où l'objet, une fois équipé
-// (reste du gear réel), dépasse ta puissance ACTUELLE + le coût en poussière pour
-// l'atteindre. `reachable` = faux s'il ne dépasse jamais l'équipé, même monté à fond.
+// Niveau de RÉFÉRENCE d'une comparaison = niveau de l'objet ÉQUIPÉ du même slot (À
+// ARMES ÉGALES : on juge l'objet une fois amené LÀ OÙ EST TON STUFF actuel, pas à un
+// potentiel max théorique — ticket 03b9de1e). Slot vide → son propre niveau (gain pur).
+function equipMatchLevel(it: Item): number {
+  return equippedInSlot(it.slot)?.level ?? it.level;
+}
+// Puissance SI on équipe l'objet À SON NIVEAU ACTUEL → perte immédiate si sous-leveled.
+function powerIfEquipNow(it: Item): number {
+  return powerIfEquipAtLevel(it, it.level);
+}
+// Puissance SI on équipe l'objet MONTÉ AU NIVEAU DE L'ÉQUIPÉ → le vrai verdict « meilleur ? ».
+function powerIfEquipMatched(it: Item): number {
+  return powerIfEquipAtLevel(it, equipMatchLevel(it));
+}
+// Coût en poussière pour amener un drop AU NIVEAU DE L'ÉQUIPÉ (base de la comparaison).
+function infuseCostFor(it: Item): number {
+  return infuseToMaxCost(it, equipMatchLevel(it));
+}
+// Niveau de RENTABILITÉ : plus petit niveau d'infusion (≤ niveau de l'équipé) où l'objet
+// dépasse ta puissance ACTUELLE + le coût en poussière. `reachable` = faux s'il n'y
+// arrive jamais, même monté au niveau de l'équipé.
 function breakEvenFor(it: Item): { level: number; cost: number; reachable: boolean } {
   const now = combatPowerVal.value;
-  const cap = c.value.level.level;
-  const name = char.row?.pseudo ?? 'Toi';
+  const cap = equipMatchLevel(it);
   let cost = 0;
   for (let L = it.level; L <= cap; L++) {
-    const eq = { ...(char.row?.equipped ?? {}), [it.slot]: { ...it, level: L } };
-    const p = combatPower(playerWithGear(name, c.value, eq, talentFx.value, cap));
-    if (p >= now) return { level: L, cost, reachable: true };
+    if (powerIfEquipAtLevel(it, L) >= now) return { level: L, cost, reachable: true };
     if (L < cap) cost += upgradeCost(L, it.rarity);
   }
   return { level: cap, cost, reachable: false };
 }
-// Vaut-il mieux INFUSER avant d'équiper ? (équiper tel quel fait perdre, mais monté il
-// devient rentable) → on affiche alors le palier de rentabilité + le coût.
+// Vaut-il mieux INFUSER avant d'équiper ? (équiper tel quel fait perdre, mais monté au
+// niveau de l'équipé il dépasse) → on affiche le palier de rentabilité + le coût.
 function showBreakEven(it: Item): boolean {
-  if (it.level >= c.value.level.level) return false;
-  return powerIfEquipNow(it) < combatPowerVal.value && breakEvenFor(it).reachable;
+  if (it.level >= equipMatchLevel(it)) return false;
+  return (
+    powerIfEquipNow(it) < combatPowerVal.value && powerIfEquipMatched(it) >= combatPowerVal.value
+  );
 }
 
 // Estimation live du % de victoire par donjon/boss selon les stats + le stuff
@@ -2954,17 +2946,16 @@ function rewardDupNote(item: Item): string {
 // (un coureur préférera PV/vol de vie/crit, un muscu les dégâts…), pas la plus
 // grosse magnitude brute. → aide à aller le plus loin possible.
 function rewardScore(cand: RewardCandidate): number {
-  // POTENTIEL (objet monté à ton niveau) → COHÉRENT avec le comparateur affiché sur la
-  // carte. Avant : puissance au niveau ACTUEL → une pièce de set (niv.1 au drop) était
-  // toujours sous-évaluée et jamais conseillée, même quand elle est meilleure une fois
-  // infusée (bug c88be5b3).
-  const base = combatPowerMaxed.value;
+  // Objet évalué MONTÉ AU NIVEAU DE L'ÉQUIPÉ (à armes égales) → cohérent avec le
+  // comparateur des cartes. Une pièce de set (niv.1 au drop) est jugée à sa vraie
+  // valeur une fois amenée au niveau de ton stuff, pas sous-évaluée (bug c88be5b3).
+  const base = combatPowerVal.value;
   if (cand.kind === 'gold') {
     // Ressources : ne changent pas la puissance → à peine au-dessus du statu quo.
     return base + cand.dust * 0.05 + cand.gold * 0.01;
   }
   const it = cand.item;
-  let s = powerIfEquip(it); // potentiel une fois monté à ton niveau (comme la carte)
+  let s = powerIfEquipMatched(it); // au niveau de l'équipé (comme la carte)
   if (it.setId && !rewardDupNote(it)) s += base * 0.05; // petit bonus « avance un set »
   return s;
 }
@@ -2985,11 +2976,11 @@ function rarityVerdict(d: Item): { label: string; cls: string } {
   if (diff < 0) return { label: '↓ rareté inférieure', cls: 'down' };
   return { label: '≈ même rareté', cls: 'same' };
 }
-// Verdict par PUISSANCE (potentiel vs potentiel) = la vraie décision « je l'équipe ? ».
-// Affiché en tête de la carte du sac.
+// Verdict par PUISSANCE (à armes égales, au niveau de l'équipé) = la vraie décision
+// « je l'équipe ? ». Affiché en tête de la carte du sac.
 function powerVerdict(it: Item): { label: string; cls: string } {
   if (!equippedInSlot(it.slot)) return { label: '＋ à équiper', cls: 'up' };
-  const d = powerIfEquip(it) - combatPowerMaxed.value;
+  const d = powerIfEquipMatched(it) - combatPowerVal.value;
   if (d > 0) return { label: '↑ Meilleur', cls: 'up' };
   if (d < 0) return { label: '↓ Inférieur', cls: 'down' };
   return { label: '≈ Égal', cls: 'same' };
@@ -3683,11 +3674,12 @@ function doUpgrade(itemId: string) {
 function doInfuseMax(itemId: string) {
   withUid((uid) => char.infuseToMax(uid, itemId, c.value.level.level), 'Infusion impossible.');
 }
-// « Infuser puis équiper » : monte l'objet à ton niveau PUIS l'équipe → on ne subit pas
-// la perte de puissance de l'équiper sous-leveled. Nécessite la poussière (bouton grisé sinon).
+// « Infuser puis équiper » : monte l'objet AU NIVEAU DE L'ÉQUIPÉ (à armes égales) PUIS
+// l'équipe → on ne subit pas la perte de l'équiper sous-leveled. Poussière requise.
 function doInfuseThenEquip(it: Item) {
+  const target = equipMatchLevel(it);
   withUid(async (uid) => {
-    await char.infuseToMax(uid, it.id, c.value.level.level);
+    await char.infuseToMax(uid, it.id, target);
     await equipWithSetFx(uid, it.id);
   }, 'Action impossible.');
 }
@@ -3746,10 +3738,10 @@ function confirmSalvage() {
 const bulkSlot = computed<ItemSlot | undefined>(() =>
   invFilter.value === 'all' ? undefined : invFilter.value,
 );
-// Puissance de l'objet MONTÉ À TON NIVEAU (poussière) → on prend en compte
-// l'écart de niveau : un objet bas niveau n'est « faible » que s'il l'est ENCORE
-// une fois monté au max possible (= ton niveau). Évite de casser une pépite
-// sous-leveled. (≠ powerIfEquip qui compare à niveau réel pour l'affichage.)
+// Puissance de l'objet MONTÉ À TON NIVEAU (poussière) → pour la CASSE EN MASSE : un
+// objet bas niveau n'est « faible » que s'il l'est ENCORE une fois monté au max
+// possible (= ton niveau). Évite de casser une pépite sous-leveled. (≠ la comparaison
+// AFFICHÉE, qui juge au niveau de l'objet équipé — powerIfEquipMatched.)
 function itemMaxedPower(it: Item): number {
   const lvl = c.value.level.level;
   const maxed = it.level >= lvl ? it : { ...it, level: lvl };
@@ -5329,57 +5321,59 @@ onUnmounted(() => {
 .ii-cmp-val.dim {
   color: var(--dim);
 }
-/* PUISSANCE : bloc mis en avant (l'info clé de la décision). Le DELTA est gros. */
-/* Deux lectures de puissance : Maintenant (niveau réel) + Monté à ton niveau. */
-.ii-pow2 {
+/* PUISSANCE — comparaison sur UNE LIGNE : verdict « vs équipé » (à armes égales) +
+   « maintenant » (si sous-leveled). Chips colorées vert/rouge, la 2ᵉ atténuée. */
+.ii-cmp2 {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-top: 5px;
 }
-.ii-pw {
-  display: flex;
+.ii-cmp2-ic {
+  font-size: 13px;
+  line-height: 1;
+}
+.ii-cmp2-chip {
+  display: inline-flex;
   align-items: baseline;
-  gap: 8px;
-  padding: 5px 10px;
-  border-radius: 9px;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
   border: 1px solid var(--line);
+  font-size: 11px;
 }
-.ii-pw.up {
-  border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
-  background: color-mix(in srgb, var(--d1) 12%, transparent);
-}
-.ii-pw.down {
-  border-color: color-mix(in srgb, var(--d4) 50%, var(--line));
-  background: color-mix(in srgb, var(--d4) 10%, transparent);
-}
-.ii-pw-k {
-  flex: none;
-  width: 118px;
-  font-size: 10.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--dim);
-}
-.ii-pw-v {
-  flex: 1;
-  font-size: 11.5px;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-}
-.ii-pw-d {
+.ii-cmp2-chip b {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.ii-pw.up .ii-pw-d {
+.ii-cmp2-chip i {
+  font-style: normal;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 9.5px;
+}
+.ii-cmp2-chip.up {
+  border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
+  background: color-mix(in srgb, var(--d1) 12%, transparent);
+}
+.ii-cmp2-chip.up b {
   color: var(--d1);
 }
-.ii-pw.down .ii-pw-d {
+.ii-cmp2-chip.down {
+  border-color: color-mix(in srgb, var(--d4) 50%, var(--line));
+  background: color-mix(in srgb, var(--d4) 10%, transparent);
+}
+.ii-cmp2-chip.down b {
   color: var(--d4);
+}
+.ii-cmp2-chip.sub {
+  opacity: 0.72;
+  transform: scale(0.96);
 }
 /* Rentabilité : palier d'infusion où l'objet dépasse l'équipé actuel. */
 .ii-be {
