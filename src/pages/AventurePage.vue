@@ -291,8 +291,18 @@
 
           <!-- Cible d'infusion active -->
           <div v-if="infuseTarget" class="tal-infuse-banner">
-            🔧 Infusion dans <b>{{ talentName(infuseTarget) }}</b> — tape un talent à sacrifier.
-            <button class="tib-x" @click="infuseTarget = null">annuler</button>
+            🔧 Infusion dans <b>{{ talentName(infuseTarget) }}</b> —
+            <template v-if="sacrificeableCount"
+              >tape un talent <b>non équipé</b> à sacrifier.</template
+            >
+            <template v-else>plus aucun talent à sacrifier.</template>
+            <button
+              class="tib-x"
+              :class="{ done: !sacrificeableCount }"
+              @click="infuseTarget = null"
+            >
+              {{ sacrificeableCount ? 'annuler' : '✓ Terminer' }}
+            </button>
           </div>
 
           <div v-if="!char.row.talents.length" class="talents-empty">
@@ -322,14 +332,16 @@
               </div>
               <div class="tal-actions">
                 <template v-if="infuseTarget">
-                  <button
-                    v-if="infuseTarget.id !== t.id"
-                    class="tal-b feed"
-                    @click="doInfuse(t.id)"
-                  >
+                  <span v-if="infuseTarget.id === t.id" class="tal-b cur">cible</span>
+                  <button v-else-if="!t.equipped" class="tal-b feed" @click="doInfuse(t.id)">
                     ✨ Sacrifier
                   </button>
-                  <span v-else class="tal-b cur">cible</span>
+                  <span
+                    v-else
+                    class="tal-b eqlock"
+                    title="Talent équipé — retire-le d’abord pour le sacrifier"
+                    >🔒 équipé</span
+                  >
                 </template>
                 <template v-else>
                   <button
@@ -2479,10 +2491,22 @@ function talentAtCap(inst: TalentInstance): boolean {
 }
 // Y a-t-il au moins un AUTRE talent à sacrifier ? (il en faut 2 pour infuser).
 const hasSpareTalent = computed(() => (char.row?.talents?.length ?? 0) >= 2);
+// Talents SACRIFIABLES pour l'infusion en cours : non équipés et ≠ la cible (on ne
+// sacrifie jamais un talent ÉQUIPÉ). 0 → l'infusion est « finie » (bouton Terminer).
+const sacrificeableCount = computed(
+  () =>
+    (char.row?.talents ?? []).filter((t) => !t.equipped && t.id !== infuseTarget.value?.id).length,
+);
 async function doInfuse(fodderId: string) {
   const uid = auth.user?.id;
   const target = infuseTarget.value;
   if (!uid || !target) return;
+  // On ne sacrifie JAMAIS un talent équipé (retire-le d'abord).
+  const fodder = char.row?.talents.find((t) => t.id === fodderId);
+  if (fodder?.equipped) {
+    $q.notify({ type: 'warning', message: 'Talent équipé — retire-le d’abord pour le sacrifier.' });
+    return;
+  }
   const beforeRarity = talentRarity(talentLevel(target.xp));
   const ok = await char.infuseTalent(uid, target.id, fodderId, c.value.level.level);
   if (!ok) {
@@ -2510,8 +2534,8 @@ async function doInfuse(fodderId: string) {
         rarity: fxRarity(afterRarity),
       });
   }
-  // Plus assez de talents pour continuer → on sort du mode infusion.
-  if (!hasSpareTalent.value) infuseTarget.value = null;
+  // On NE sort PAS automatiquement : quand il n'y a plus rien à sacrifier, le bandeau
+  // propose « Terminer » (sacrificeableCount === 0) → sortie manuelle explicite.
 }
 
 // Régions / biomes (onglet Donjons) : bandeau de la région courante + teaser de la
@@ -4631,6 +4655,15 @@ onUnmounted(() => {
   cursor: pointer;
   font-size: 12px;
 }
+/* Rien de plus à sacrifier → « Terminer » mis en avant (pastille accent, pas un lien). */
+.tib-x.done {
+  text-decoration: none;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #15120e;
+  font-weight: 800;
+}
 .talents-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -4735,6 +4768,14 @@ onUnmounted(() => {
   color: var(--accent);
   border: none;
   background: none;
+}
+/* Talent équipé pendant une infusion : non sacrifiable (protégé). */
+.tal-b.eqlock {
+  color: var(--dim);
+  border: none;
+  background: none;
+  opacity: 0.75;
+  cursor: not-allowed;
 }
 .talents-empty {
   font-size: 12px;
