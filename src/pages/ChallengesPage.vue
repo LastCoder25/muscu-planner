@@ -332,7 +332,7 @@
           label="Générer une séance"
           :to="`/combo/${activeCombo.id}/session`"
         />
-        <div v-for="leg in activeCombo.legs" :key="leg.exercise_id" class="combo-leg">
+        <div v-for="leg in activeComboLegs" :key="leg.exercise_id" class="combo-leg">
           <div class="cl-top">
             <button class="cl-name" @click="openHistory(leg)">
               {{ leg.exercise_name }}
@@ -474,6 +474,7 @@ import {
   legSetsDone,
   legDone,
   legComplete,
+  legRemaining,
   legMode,
   legUnitLabel,
   legLastReps,
@@ -528,6 +529,17 @@ const mode = ref<'solo' | 'combo'>('solo');
 // Même logique d'états que les défis solo (En cours / Terminés / Abandonnés).
 const comboTab = ref<string>('active');
 const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
+// Ordre d'affichage des exos du Défi 360 : les MOINS avancés d'abord (moins de restant),
+// les TERMINÉS relégués en bas → on voit tout de suite ce qu'il reste à faire.
+const activeComboLegs = computed(() => {
+  const legs = activeCombo.value?.legs ?? [];
+  return [...legs].sort((a, b) => {
+    const ca = legComplete(a) ? 1 : 0;
+    const cb = legComplete(b) ? 1 : 0;
+    if (ca !== cb) return ca - cb; // non terminés d'abord
+    return legRemaining(a) - legRemaining(b); // moins de restant d'abord
+  });
+});
 const comboList = computed(() =>
   comboStore.list
     .filter((c) => c.status === comboTab.value)

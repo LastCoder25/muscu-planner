@@ -107,13 +107,12 @@
                 transform="rotate(-90 18 18)"
                 :stroke-dasharray="`${p.lvl.progressPct} 100`"
               />
-              <text class="plr-emo" x="18" y="14.5" text-anchor="middle">{{ p.emoji }}</text>
-              <text class="plr-n font-display" x="18" y="25" text-anchor="middle">
+              <text class="plr-n font-display" x="18" y="23" text-anchor="middle">
                 {{ p.lvl.level }}
               </text>
             </svg>
           </span>
-          <span class="pl-name font-display">{{ p.name }}</span>
+          <span class="pl-name font-display">{{ p.emoji }} {{ p.name }}</span>
           <span class="pl-pts">{{ p.pts.toLocaleString('fr-FR') }} pts</span>
           <span v-if="p.d30 > 0" class="pl-trend">↑ +{{ p.d30.toLocaleString('fr-FR') }} · 30 j</span>
         </button>
@@ -968,11 +967,8 @@ async function saveAutre() {
   stroke-width: 3;
   stroke-linecap: round;
 }
-.plr-emo {
-  font-size: 8px;
-}
 .plr-n {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
   fill: var(--text);
 }
