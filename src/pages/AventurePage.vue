@@ -1827,10 +1827,10 @@
                   }}</span>
                 </div>
                 <div class="pow-cmp">
-                  ⚔️ Potentiel {{ fmtPow(combatPowerVal) }} →
-                  <b :class="itemMaxedPower(cand.item) >= combatPowerVal ? 'up' : 'down'"
-                    >{{ fmtPow(itemMaxedPower(cand.item)) }} ({{
-                      fmtDelta(combatPowerVal, itemMaxedPower(cand.item))
+                  ⚔️ vs équipé {{ fmtPow(combatPowerVal) }} →
+                  <b :class="powerIfEquipMatched(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                    >{{ fmtPow(powerIfEquipMatched(cand.item)) }} ({{
+                      fmtDelta(combatPowerVal, powerIfEquipMatched(cand.item))
                     }})</b
                   >
                   <span v-if="infuseCostFor(cand.item)" class="pow-cost"
@@ -2045,10 +2045,10 @@
                 </div>
                 <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
                 <div class="pow-cmp">
-                  ⚔️ Potentiel {{ fmtPow(combatPowerVal) }} →
-                  <b :class="itemMaxedPower(d) >= combatPowerVal ? 'up' : 'down'"
-                    >{{ fmtPow(itemMaxedPower(d)) }} ({{
-                      fmtDelta(combatPowerVal, itemMaxedPower(d))
+                  ⚔️ vs équipé {{ fmtPow(combatPowerVal) }} →
+                  <b :class="powerIfEquipMatched(d) >= combatPowerVal ? 'up' : 'down'"
+                    >{{ fmtPow(powerIfEquipMatched(d)) }} ({{
+                      fmtDelta(combatPowerVal, powerIfEquipMatched(d))
                     }})</b
                   >
                   <span v-if="infuseCostFor(d)" class="pow-cost"
@@ -2141,10 +2141,10 @@
                       {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
                     </div>
                     <div class="pow-cmp">
-                      ⚔️ Potentiel {{ fmtPow(combatPowerVal) }} →
-                      <b :class="itemMaxedPower(cand.item) >= combatPowerVal ? 'up' : 'down'"
-                        >{{ fmtPow(itemMaxedPower(cand.item)) }} ({{
-                          fmtDelta(combatPowerVal, itemMaxedPower(cand.item))
+                      ⚔️ vs équipé {{ fmtPow(combatPowerVal) }} →
+                      <b :class="powerIfEquipMatched(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                        >{{ fmtPow(powerIfEquipMatched(cand.item)) }} ({{
+                          fmtDelta(combatPowerVal, powerIfEquipMatched(cand.item))
                         }})</b
                       >
                       <span v-if="infuseCostFor(cand.item)" class="pow-cost"
@@ -3361,7 +3361,13 @@ async function explore(d: Dungeon) {
     // (Les consommables ne DROPPENT plus — peu utiles ; restent achetables en boutique.)
     // Poussière SCALÉE au niveau du donjon (refonte C : l'infusion est la
     // progression → le revenu doit suivre les coûts qui montent avec le niveau).
-    const dust = r.defeated * (2 + Math.round(d.dropLevel * 0.5)) + (r.cleared ? d.dropLevel : 0);
+    // Sur un donjon PERDU (non nettoyé), la poussière par monstre est réduite de moitié
+    // (ticket 58fe7ba4 : un échec rapportait presque autant qu'un clear → on récompense
+    // le nettoyage, pas le farm de pertes). Bonus de clear seulement si nettoyé.
+    const dustPerMonster = 2 + Math.round(d.dropLevel * 0.5);
+    const dust = r.cleared
+      ? r.defeated * dustPerMonster + d.dropLevel
+      : Math.round(r.defeated * dustPerMonster * 0.5);
     // Pierres 💎 raréfiées (2026‑08‑18) : seulement au NETTOYAGE (petit lot), plus par
     // monstre → les gros volumes de runs n'inondent plus les pierres (ressource rare
     // des familiers). Filon de pierres + boss restent les sources principales.

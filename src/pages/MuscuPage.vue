@@ -287,8 +287,11 @@ const filterLabel = computed(() => {
 });
 function matchesFilter(r: LogRow): boolean {
   const f = activeFilter.value;
-  if (!f) return true;
   const disc = r.payload.discipline ?? 'musculation';
+  // Défaut (sans filtre) : la prépa physique appartient au hub Tennis (elle a son
+  // propre historique) → on ne la mélange PAS à l'historique muscu. Un filtre
+  // explicite `disc:prepa_physique` la réaffiche quand même (cf. ci-dessous).
+  if (!f) return disc !== 'prepa_physique';
   if (f.startsWith('disc:')) return disc === f.slice(5);
   if (f.startsWith('sport:'))
     return disc === 'autre_sport' && (r.payload.name || 'Autre') === f.slice(6);
