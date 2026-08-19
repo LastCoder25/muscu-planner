@@ -169,10 +169,10 @@ export const BUILDING_TYPES: BuildingType[] = [
     unlockLevel: 2,
     unique: true,
     unlock: {
-      activity: 'La fusion des familiers',
+      activity: "L'infusion des familiers",
       where: 'Aventure › onglet Équip. › 🐾 Familier › Incubateur.',
     },
-    desc: 'Débloque la fusion des familiers (3 identiques → rareté supérieure).',
+    desc: "Débloque l'infusion des familiers : dépense des fragments 🧩 pour monter le rang/qualité d'un familier. Chaque niveau relève le rang MAX atteignable.",
   },
   // Utilitaire UNIQUE : la PORTE DU LABYRINTHE débloque le Labyrinthe (donjon à
   // étages, source unique des familiers). Chaque niveau AMÉLIORE la qualité du butin
@@ -392,13 +392,14 @@ export function buildingUpgradeCost(level: number): number {
   return Math.round(BUILD.upBase * Math.pow(Math.max(1, level), BUILD.upExp));
 }
 
-/** Un filon peut-il être amélioré ? (plafonné au niveau du joueur). */
 /** Un bâtiment a-t-il un effet qui SCALE avec le niveau ? (producteur, ou utilitaire
- *  à effet par niveau). L'incubateur (effet « drapeau » : débloque la fusion) ne scale
- *  pas → pas d'amélioration possible (éviter un upgrade inutile). */
+ *  à effet par niveau) → est-il améliorable. L'INCUBATEUR scale via son niveau (chaque
+ *  niveau relève le rang MAX d'infusion des familiers, cf. maxFuseTargetIndex), même si
+ *  son `effect` est vide → il DOIT être améliorable (sinon les familiers restent bloqués
+ *  au rang F). */
 export function buildingScales(typeId: string): boolean {
   const t = buildingType(typeId);
-  return !!t && (!!t.resource || Object.keys(t.effect ?? {}).length > 0);
+  return !!t && (!!t.resource || Object.keys(t.effect ?? {}).length > 0 || typeId === 'incubator');
 }
 export function canUpgradeBuilding(b: Building, playerLevel: number): boolean {
   return buildingScales(b.typeId) && b.level < playerLevel;

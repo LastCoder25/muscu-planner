@@ -4,6 +4,7 @@ import {
   slotUnlockLevel,
   buildingUpgradeCost,
   canUpgradeBuilding,
+  buildingScales,
   buildingProdPerHour,
   buildingStorageCap,
   buildingAccrued,
@@ -58,6 +59,15 @@ describe('buildings — emplacements & coûts', () => {
   it('canUpgradeBuilding : plafonné au niveau joueur', () => {
     expect(canUpgradeBuilding(mk('dust_vein', 4), 10)).toBe(true);
     expect(canUpgradeBuilding(mk('dust_vein', 10), 10)).toBe(false);
+  });
+  it("l'Incubateur est AMÉLIORABLE (son niveau relève le rang max d'infusion)", () => {
+    // Régression : effect vide → jadis buildingScales=false → jamais améliorable →
+    // familiers bloqués au rang F. Le niveau DOIT compter.
+    expect(buildingScales('incubator')).toBe(true);
+    expect(canUpgradeBuilding(mk('incubator', 1), 10)).toBe(true);
+    expect(maxFuseTargetIndex([mk('incubator', 4)])).toBeGreaterThan(
+      maxFuseTargetIndex([mk('incubator', 1)]),
+    );
   });
 });
 

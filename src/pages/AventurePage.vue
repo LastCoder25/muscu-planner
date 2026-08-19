@@ -692,7 +692,12 @@
               </div>
               <div v-if="famTarget" class="tal-infuse-banner">
                 🔧 Infusion dans <b>{{ famTarget.name }} ({{ famTierLabel(famTarget) }})</b>
-                <template v-if="famTargetCapped"> — rang max (monte l'Incubateur).</template>
+                <template v-if="famTargetCapped">
+                  — rang max <b>{{ RANK_ORDER[fuseMaxIndex] }}</b> pour l'Incubateur niv.{{
+                    incubLevel
+                  }}. <b>Améliore l'Incubateur</b> (carte 🗺️ Expédition) pour infuser plus
+                  haut.</template
+                >
                 <button class="tib-x done" @click="famTarget = null">✓ Terminer</button>
                 <template v-if="!famTargetCapped">
                   <div class="tal-xp fam-xp">

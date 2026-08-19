@@ -415,7 +415,7 @@ import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
 import { computeCharacter } from '@/lib/character';
-import { playerWithGear, RARITY_RANK } from '@/lib/items';
+import { playerWithGear, RARITY_RANK, RANK_ORDER } from '@/lib/items';
 import {
   BUILDING_TYPES,
   buildingType,
@@ -436,6 +436,7 @@ import {
   labyrinthLuckBonus,
   bossAltarRollFloor,
   bossRewardCount,
+  maxFuseTargetIndex,
   BUILD,
   type Building,
   type BuildingType,
@@ -793,7 +794,9 @@ function utilityEffectLabel(b: Building): string {
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')
     return `${bossRewardCount([b])} choix de récompense · ciblage du set · +${Math.round(bossAltarRollFloor([b]) * 100)}% qualité de roll`;
-  return buildingType(b.typeId)?.desc ?? ''; // incubateur & co : description
+  if (b.typeId === 'incubator')
+    return `infusion familier → rang max ${RANK_ORDER[maxFuseTargetIndex([b])]}`;
+  return buildingType(b.typeId)?.desc ?? ''; // autres utilitaires : description
 }
 
 function selectPoi(p: Poi) {
