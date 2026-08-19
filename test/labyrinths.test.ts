@@ -7,6 +7,7 @@ import {
   frontierLabyrinth,
   deathKeepFraction,
 } from '@/data/labyrinths';
+import { RANK_ORDER, RARITY_RANK, rankCeilingForLevel } from '@/lib/items';
 
 describe('labyrinths — ladder de paliers', () => {
   it('paliers ordonnés (recoLevel + étages croissants)', () => {
@@ -15,6 +16,16 @@ describe('labyrinths — ladder de paliers', () => {
       expect(LABYRINTHS[i]!.floors).toBeGreaterThanOrEqual(LABYRINTHS[i - 1]!.floors);
       expect(LABYRINTHS[i]!.dropLevel).toBeGreaterThan(LABYRINTHS[i - 1]!.dropLevel);
       expect(LABYRINTHS[i]!.luck).toBeGreaterThanOrEqual(LABYRINTHS[i - 1]!.luck);
+    }
+  });
+
+  it('UN palier par rang de familier G → SSS (10 paliers, plafond aligné)', () => {
+    expect(LABYRINTHS.map((l) => l.rank)).toEqual(RANK_ORDER); // G,F,E,D,C,B,A,S,SS,SSS
+    for (const l of LABYRINTHS) {
+      // Le plafond de rang à dropLevel couvre AU MOINS le rang cible (le rang G est sous
+      // le plancher F du plafond → géré par une luck basse, cf. données).
+      if (l.rank !== 'G')
+        expect(rankCeilingForLevel(l.dropLevel)).toBeGreaterThanOrEqual(RARITY_RANK[l.rank]);
     }
   });
 

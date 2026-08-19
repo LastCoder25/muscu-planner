@@ -44,10 +44,7 @@
             <div class="lt-meta">
               Niv {{ t.laby.recoLevel }} · {{ t.laby.floors }} étages ·
               <span class="lt-fam"
-                >🐾 familier
-                {{
-                  t.laby.dropLevel >= 40 ? 'très rare' : t.laby.dropLevel >= 16 ? 'rare' : 'commun+'
-                }}</span
+                >🐾 familier rang <b>{{ t.laby.rank }}</b></span
               >
               · <span class="lt-death">💀 garde {{ t.deathKeep }}%</span>
             </div>

@@ -6,10 +6,13 @@
 // DÉBLOQUE en ayant nettoyé le précédent (préfixe `laby:` dans cleared_dungeons).
 // Pur (aucune dépendance Vue/Supabase), testé.
 
+import type { Rarity } from '@/lib/items';
+
 export interface Labyrinth {
   id: string;
   name: string;
   emoji: string;
+  rank: Rarity; // rang de familier CIBLE du palier (G → SSS ; un palier par rang)
   recoLevel: number; // niveau conseillé (indicatif — pas de gate dur, cf. donjons)
   floors: number; // nb d'étages (croissant → plus long, plus d'attrition)
   dropLevel: number; // niveau des objets/familier de fin (croissant)
@@ -21,67 +24,95 @@ export interface Labyrinth {
 export const LABY_CLEAR_PREFIX = 'laby:';
 export const labyClearId = (id: string) => `${LABY_CLEAR_PREFIX}${id}`;
 
-// 6 paliers couvrant la partie (reco 2 → 60). floors 3→8, dropLevel/luck/frag croissants
-// → un palier profond rend des objets/familiers de rang plus haut (via level+luck) tout
-// en étant plus long/dangereux (plus d'étages = plus d'attrition sans soin).
+// 10 paliers — UN PAR RANG DE FAMILIER (G → SSS). Le `dropLevel` place le PLAFOND de rang
+// (rankCeilingForLevel) sur le rang cible, et la `luck` (haute pour F+) fait taper ce
+// plafond → le familier garanti est ~du rang du palier. Le palier G a une luck BASSE (le
+// plafond minimum est F) pour rendre surtout du G. floors/frag/luck croissants, déblocage
+// séquentiel (nettoyer le précédent). reco 2 → 85 (couvre toute la partie).
 export const LABYRINTHS: Labyrinth[] = [
   {
     id: 'novice',
     name: 'Dédale des Novices',
     emoji: '🌀',
+    rank: 'G',
     recoLevel: 2,
     floors: 3,
-    dropLevel: 4,
-    luck: 0.3,
+    dropLevel: 2,
+    luck: 0.15,
+    fragBonus: 0,
+  },
+  {
+    id: 'sentiers',
+    name: 'Sentiers Perdus',
+    emoji: '🌿',
+    rank: 'F',
+    recoLevel: 3,
+    floors: 3,
+    dropLevel: 3,
+    luck: 0.9,
     fragBonus: 0,
   },
   {
     id: 'cryptes',
     name: 'Cryptes Tortueuses',
     emoji: '🕳️',
-    recoLevel: 8,
+    rank: 'E',
+    recoLevel: 6,
     floors: 4,
-    dropLevel: 10,
-    luck: 0.45,
+    dropLevel: 6,
+    luck: 0.9,
     fragBonus: 1,
   },
   {
     id: 'abysse',
     name: 'Abysse Sinueux',
     emoji: '🌌',
-    recoLevel: 16,
+    rank: 'D',
+    recoLevel: 12,
+    floors: 4,
+    dropLevel: 12,
+    luck: 0.9,
+    fragBonus: 1,
+  },
+  {
+    id: 'gouffre',
+    name: 'Gouffre Oublié',
+    emoji: '🪨',
+    rank: 'C',
+    recoLevel: 20,
     floors: 5,
-    dropLevel: 18,
-    luck: 0.6,
+    dropLevel: 20,
+    luck: 0.9,
     fragBonus: 2,
   },
   {
     id: 'sansfond',
     name: 'Labyrinthe Sans Fond',
     emoji: '⚫',
-    recoLevel: 26,
+    rank: 'B',
+    recoLevel: 28,
     floors: 6,
     dropLevel: 28,
-    luck: 0.75,
+    luck: 0.9,
     fragBonus: 3,
   },
   {
     id: 'chaos',
     name: 'Spirale du Chaos',
     emoji: '🌪️',
+    rank: 'A',
     recoLevel: 40,
     floors: 7,
-    dropLevel: 42,
-    luck: 0.9,
+    dropLevel: 40,
+    luck: 0.92,
     fragBonus: 4,
   },
   {
-    // Palier intermédiaire (2026‑08‑19) : lisse le saut de rang de familier B → SS entre
-    // Spirale (plafond A) et Cœur du Néant (plafond SS) → familier rang ~S.
     id: 'astral',
     name: 'Vortex Astral',
     emoji: '🌠',
-    recoLevel: 50,
+    rank: 'S',
+    recoLevel: 52,
     floors: 8,
     dropLevel: 52,
     luck: 0.95,
@@ -91,11 +122,23 @@ export const LABYRINTHS: Labyrinth[] = [
     id: 'neant',
     name: 'Cœur du Néant',
     emoji: '🕸️',
-    recoLevel: 60,
+    rank: 'SS',
+    recoLevel: 66,
     floors: 9,
-    dropLevel: 62,
-    luck: 1,
+    dropLevel: 66,
+    luck: 0.97,
     fragBonus: 6,
+  },
+  {
+    id: 'infini',
+    name: "Œil de l'Infini",
+    emoji: '👁️',
+    rank: 'SSS',
+    recoLevel: 85,
+    floors: 10,
+    dropLevel: 85,
+    luck: 1,
+    fragBonus: 8,
   },
 ];
 
@@ -119,7 +162,7 @@ export function labyrinthCleared(id: string, cleared: string[]): boolean {
  *  (Ne s'applique qu'à la MORT ; la retraite banque tout le ramassé.) */
 export function deathKeepFraction(id: string): number {
   const i = LABYRINTHS.findIndex((l) => l.id === id);
-  return Math.max(0.4, 1 - Math.max(0, i) * 0.12);
+  return Math.max(0.4, 1 - Math.max(0, i) * 0.07); // 10 paliers : novice 100 % → infini 40 %
 }
 
 /** Premier palier NON nettoyé (la « frontière » à afficher par défaut). */
