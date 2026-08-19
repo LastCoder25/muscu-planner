@@ -618,6 +618,33 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, patch);
     return updated;
   }
+  // SACRIFIE un familier du sac DIRECTEMENT dans une cible (recycle + infuse en un geste,
+  // calqué sur l'infusion des talents) : son XP de tier (∝ son propre tier) part dans la
+  // cible, il disparaît. Pas de passage par la réserve de fragments. Refuse un verrouillé
+  // ou la cible elle-même.
+  async function sacrificeFamiliar(userId: string, targetId: string, fodderId: string) {
+    const cur = row.value;
+    if (!cur || targetId === fodderId) return;
+    const equippedFam = cur.equipped[FAMILIAR_SLOT];
+    const bagTarget = cur.inventory.find((i) => i.id === targetId);
+    const target =
+      equippedFam?.id === targetId
+        ? equippedFam
+        : bagTarget && isFamiliar(bagTarget)
+          ? bagTarget
+          : null;
+    const fodder = cur.inventory.find((i) => i.id === fodderId);
+    if (!target || !fodder || !isFamiliar(fodder) || fodder.locked) return;
+    const xp = familiarInfuseXp(fodder);
+    const updated = applyFamiliarInfusion(target, xp, maxFuseTargetIndex(cur.buildings));
+    const inventory = cur.inventory.filter((i) => i.id !== fodderId);
+    const patch: Partial<CharacterRow> =
+      equippedFam?.id === targetId
+        ? { equipped: { ...cur.equipped, [FAMILIAR_SLOT]: updated }, inventory }
+        : { inventory: inventory.map((i) => (i.id === target.id ? updated : i)) };
+    await persistOptimistic(userId, patch);
+    return updated;
+  }
 
   // ── Atelier de poussière (dust sinks) : forge / reroll / infusion / craft de set ──
   // Applique la MAJ d'un objet possédé (équipé ou au sac) + dépense la poussière.
@@ -1040,6 +1067,7 @@ export const useCharacterStore = defineStore('character', () => {
     upgradeFamiliar,
     infuseFamiliar,
     recycleFamiliar,
+    sacrificeFamiliar,
     forge,
     rerollEffect,
     craftSet,
