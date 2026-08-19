@@ -178,6 +178,14 @@
               </div>
             </div>
             <div class="hero-info">
+              <div
+                class="hero-rank"
+                :title="'Rang de prestige — ' + rank.name + ' ' + rank.star + '/5'"
+              >
+                <span class="hr-emo">{{ rank.emoji }}</span>
+                <span class="hr-name font-display">{{ rank.name }}</span>
+                <span class="hr-stars">{{ rankStarStr(rank.star) }}</span>
+              </div>
               <div class="hero-arch">
                 Profil : <b>{{ profileLabel }}</b>
               </div>
@@ -2215,6 +2223,7 @@ import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
+import { characterRank, rankStarStr } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import {
@@ -2459,6 +2468,8 @@ const fighter = computed(() =>
   ),
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
+// Rang de PRESTIGE (cosmétique, dérivé du niveau) — n'affecte pas le combat.
+const rank = computed(() => characterRank(c.value.level.level));
 // Combattant SANS équipement ni talents (stats de fond seules) → base de la
 // comparaison « avec / sans équipement » sur la fiche perso.
 const baseFighter = computed(() =>
@@ -4864,6 +4875,31 @@ onUnmounted(() => {
 }
 .hero-info {
   min-width: 0;
+}
+/* Badge de rang de prestige (cosmétique). */
+.hero-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.hr-emo {
+  font-size: 15px;
+  line-height: 1;
+}
+.hr-name {
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.hr-stars {
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 1px;
 }
 .hero-arch {
   font-size: 13px;
