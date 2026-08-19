@@ -380,8 +380,6 @@ export function bossSummonDiscount(buildings: Building[]): number {
 export function summonCostWith(baseCost: number, buildings: Building[]): number {
   return Math.max(1, Math.ceil(baseCost * (1 - bossSummonDiscount(buildings))));
 }
-/** Poussière ✨ nécessaire pour forger 1 pierre d'invocation 🔮 (voie de secours au farm). */
-export const SUMMON_CRAFT_DUST = 50;
 /** Multiplicateur de TEMPS de trajet (< 1 = plus rapide), selon l'avant-poste. */
 export function travelTimeMult(buildings: Building[]): number {
   const lvl = outpostLevel(buildings);

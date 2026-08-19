@@ -847,17 +847,6 @@ export const useCharacterStore = defineStore('character', () => {
     return true;
   }
 
-  // Forge une pierre d'invocation 🔮 à la poussière ✨ (voie de secours au farm de donjon).
-  async function craftSummonStone(userId: string, dustCost: number): Promise<boolean> {
-    const cur = row.value;
-    if (!cur || cur.dust < dustCost) return false;
-    await persistOptimistic(userId, {
-      dust: cur.dust - dustCost,
-      summon_stones: cur.summon_stones + 1,
-    });
-    return true;
-  }
-
   async function equip(userId: string, itemId: string) {
     const cur = row.value;
     if (!cur) return;
@@ -1085,7 +1074,6 @@ export const useCharacterStore = defineStore('character', () => {
     unequipTalent,
     infuseTalent,
     upgradeTalentLevel,
-    craftSummonStone,
     salvage,
     sell,
     salvageMany,

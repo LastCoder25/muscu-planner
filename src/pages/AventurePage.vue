@@ -1339,18 +1339,11 @@
         <div class="sec-hint">
           Un boss tous les 5 niveaux — chacun lâche une pièce de son <b>set</b> unique. Débloqués en
           chaîne (bats le précédent). Tenter un boss coûte des <b>pierres d’invocation 🔮</b>
-          (farmées dans les donjons, ou forgées à la poussière ci-dessous).
+          <b>farmées dans les donjons</b> (drop au nettoyage) — c'est ce qui relie le farm de donjon
+          aux boss.
         </div>
-        <!-- Forge de pierres d'invocation : voie de secours au farm de donjon (poussière ✨). -->
         <div v-if="hasBossAltar" class="summon-forge">
-          <span class="sf-have">🔮 {{ char.row.summon_stones }} pierre(s)</span>
-          <button
-            class="sf-craft"
-            :disabled="char.row.dust < summonCraftDust || busy"
-            @click="doCraftSummon()"
-          >
-            Forger 1 🔮 · {{ summonCraftDust }} ✨
-          </button>
+          <span class="sf-have">🔮 {{ char.row.summon_stones }} pierre(s) d’invocation</span>
         </div>
         <!-- Prérequis : les boss exigent l'Autel des boss (bâtiment) → CTA « où aller ». -->
         <button v-if="!hasBossAltar" class="boss-gate-cta" @click="openGame('/expedition-map')">
@@ -2436,7 +2429,6 @@ import {
   bossRewardCount,
   bossTargetingUnlocked,
   summonCostWith,
-  SUMMON_CRAFT_DUST,
 } from '@/lib/buildings';
 import {
   REGIONS,
@@ -3610,13 +3602,6 @@ const hasBossAltar = computed(() => bossAltarBuilt(char.row?.buildings ?? []));
 // Coût effectif d'un boss en pierres d'invocation 🔮 (base ∝ palier, réduite par l'Autel).
 function summonCostFor(b: MilestoneBoss): number {
   return summonCostWith(bossSummonCost(b.unlockLevel), char.row?.buildings ?? []);
-}
-const summonCraftDust = SUMMON_CRAFT_DUST;
-async function doCraftSummon() {
-  const uid = auth.user?.id;
-  if (!uid || busy.value) return;
-  const ok = await char.craftSummonStone(uid, summonCraftDust);
-  if (!ok) $q.notify({ type: 'warning', message: `Il te faut ${summonCraftDust} ✨.` });
 }
 // Déblocage : Autel des boss construit ET chaîne des BOSS (boss précédent vaincu).
 // Pas de gate de niveau → le 🎯 % de victoire indique si le combat est jouable.
