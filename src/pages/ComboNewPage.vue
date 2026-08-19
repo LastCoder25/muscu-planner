@@ -506,15 +506,25 @@ function onBack() {
 const hasAnim = (id: string) => !!exerciseFrames(id);
 const exImg = (id: string) => exerciseImage(id);
 
+// Familles d'exos déjà prises par un défi MUSCU actif → exclues du 360 (EXCLUSIVITÉ
+// PAR EXERCICE : un exo est soit en challenge, soit en 360, jamais les deux — pour tous).
+const challengeFamilies = computed(() => {
+  const keys = new Set<string>();
+  for (const c of challenges.list)
+    if (c.status === 'active' && !isCardioChallengeRow(c))
+      keys.add(variantFamilyKey(c.exercise_id));
+  return keys;
+});
 // Exos candidats d'un emplacement : reps, muscle_primary du slot, matériel possédé
-// (favoris en tête).
+// (favoris en tête). Exclut les exos déjà pris par un défi muscu actif.
 function candidates(slot: ComboSlot): ExerciseRow[] {
   return lib.value
     .filter(
       (e) =>
         e.unit !== 'time' &&
         slot.muscles.includes(e.muscle_primary ?? '') &&
-        comboMuscleInZone(e.muscle_primary, zone.value),
+        comboMuscleInZone(e.muscle_primary, zone.value) &&
+        !challengeFamilies.value.has(variantFamilyKey(e.id)),
     )
     .sort((a, b) => (favSet.value.has(b.id) ? 1 : 0) - (favSet.value.has(a.id) ? 1 : 0));
 }
@@ -663,16 +673,18 @@ watch([level, zone, volume, variety, goal], applyPlan);
 async function createCombo() {
   const uid = auth.user?.id;
   if (!uid) return;
-  // Exclusivité : pas de Défi 360 si un défi MUSCU est déjà actif.
-  // TODO(cleanup avant release) : retirer le bypass `!auth.isAdmin` — débridage
-  // TEMPORAIRE pour tester le Défi 360 en parallèle des défis muscu (compte admin).
-  const activeMuscu = challenges.list.some(
-    (c) => c.status === 'active' && !isCardioChallengeRow(c),
-  );
-  if (activeMuscu && !auth.isAdmin) {
+  // EXCLUSIVITÉ PAR EXERCICE : aucun exo sélectionné ne peut être déjà dans un défi MUSCU
+  // actif (le draft les masque déjà ; garde-fou au cas où). Un 360 et des challenges sur
+  // d'AUTRES exos coexistent sans souci.
+  const selectedFams = new Set<string>();
+  for (const slot of COMBO_SLOTS)
+    if (enabled[slot.key])
+      for (const id of picks[slot.key]?.exercise_ids ?? []) selectedFams.add(variantFamilyKey(id));
+  if ([...selectedFams].some((f) => challengeFamilies.value.has(f))) {
     $q.notify({
       type: 'warning',
-      message: 'Termine tes défis muscu en cours : le Défi 360 les remplace (1 seul programme).',
+      message:
+        'Un exo sélectionné est déjà dans un défi en cours : un exo est soit en challenge, soit en Défi 360 — pas les deux.',
     });
     return;
   }

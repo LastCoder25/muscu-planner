@@ -658,13 +658,11 @@ const activeExoFamilies = computed(() => {
   const keys = new Set<string>();
   for (const c of challenges.list.filter((c) => c.status === 'active'))
     keys.add(variantFamilyKey(c.exercise_id));
-  // Le Défi 360 masque aussi ses familles — SAUF pour l'admin, qui a le bypass
-  // « muscu + 360 en parallèle » (aligné sur le create-guard). Sinon un curl
-  // auto-choisi par le 360 bloquait tous les curls en challenge (cb1e481c).
-  // TODO(cleanup avant release) : retirer le bypass `!auth.isAdmin`.
-  if (!auth.isAdmin)
-    for (const combo of comboStore.list.filter((c) => c.status === 'active'))
-      for (const leg of combo.legs ?? []) keys.add(variantFamilyKey(leg.exercise_id));
+  // EXCLUSIVITÉ PAR EXERCICE : un exo est soit dans le Défi 360, soit dans un challenge,
+  // jamais les deux → on masque aussi les familles du 360 actif (pour TOUS, admin inclus).
+  // Un 360 et des challenges peuvent coexister, tant qu'ils ne partagent PAS d'exercice.
+  for (const combo of comboStore.list.filter((c) => c.status === 'active'))
+    for (const leg of combo.legs ?? []) keys.add(variantFamilyKey(leg.exercise_id));
   return keys;
 });
 const exFilter = ref<'all' | 'muscu' | 'cardio'>('all');
@@ -859,14 +857,19 @@ const totalPlanned = computed(() => previewTargets.value.reduce((a, t) => a + t,
 async function createChallenge() {
   const userId = auth.user?.id;
   if (!userId || !exercise.value) return;
-  // Exclusivité : pas de défi MUSCU si un Défi 360 (programme full-body) est actif.
-  // TODO(cleanup avant release) : retirer le bypass `!auth.isAdmin` — débridage
-  // TEMPORAIRE pour tester Défi 360 + défis muscu en parallèle (compte admin).
-  if (!isCardio.value && !auth.isAdmin && comboStore.list.some((c) => c.status === 'active')) {
+  // EXCLUSIVITÉ PAR EXERCICE : un exo déjà dans le Défi 360 actif ne peut pas être aussi
+  // en challenge (et inversement). On bloque uniquement le CHEVAUCHEMENT d'exercice (le
+  // picker les masque déjà ; ceci couvre la pré-sélection par tuile/deep-link). Un 360 et
+  // des challenges sur d'AUTRES exos coexistent sans souci.
+  const famKey = variantFamilyKey(exercise.value.id);
+  const inActiveCombo = comboStore.list
+    .filter((c) => c.status === 'active')
+    .some((c) => (c.legs ?? []).some((leg) => variantFamilyKey(leg.exercise_id) === famKey));
+  if (!isCardio.value && inActiveCombo) {
     $q.notify({
       type: 'warning',
       message:
-        'Un Défi 360 est en cours (il couvre déjà ta muscu). Termine-le pour des défis muscu.',
+        'Cet exercice est déjà dans ton Défi 360 : un exo est soit en 360, soit en challenge — pas les deux.',
     });
     return;
   }
