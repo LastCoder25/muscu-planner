@@ -824,21 +824,45 @@ function scheduleAuto(ms = AUTO_STEP_MS) {
   if (autoTimer) clearTimeout(autoTimer);
   autoTimer = setTimeout(autoTick, ms);
 }
-// Prochaine salle à « cliquer » : on explore d'abord les salles NON escalier/boss
-// (loot + combats), l'escalier/boss en dernier → on visite TOUTES les cases puis on
-// descend / on affronte le boss.
-function nextAutoRoom(): number | null {
-  // NON VISITÉES uniquement : `canMove` autorise aussi le retour vers une salle déjà
-  // vue → sans ce filtre l'auto faisait des allers-retours en boucle. On n'avance donc
-  // que vers du NOUVEAU, escalier/boss gardés pour la fin (visite max puis sortie).
-  const reachable = floor.value.rooms.filter(
-    (r) => !run.value.visited.includes(r.id) && canMove(run.value, floor.value, r.id),
-  );
-  if (!reachable.length) return null;
-  const explore = reachable.filter((r) => r.type !== 'stairs' && r.type !== 'boss');
-  return (explore[0] ?? reachable[0]!).id;
+// Seuil de PV bas : en dessous, si une SORTIE sûre est trouvée, l'auto sort (retraite)
+// plutôt que de risquer la mort (qui fait perdre les objets).
+const AUTO_SAFE_PV = 0.28;
+
+// Premier PAS (salle adjacente) vers la salle la PLUS PROCHE qui satisfait `pred`, en ne
+// TRAVERSANT que des salles déjà visitées (le backtracking ne redéclenche rien). Renvoie
+// l'id du 1ᵉʳ hop, ou null si aucune cible atteignable. BFS sur le graphe des couloirs.
+function hopToNearest(pred: (r: (typeof floor.value.rooms)[number]) => boolean): number | null {
+  const start = run.value.current;
+  const rooms = floor.value.rooms;
+  const visited = new Set(run.value.visited);
+  const prev = new Map<number, number>([[start, -1]]);
+  const q: number[] = [start];
+  let goal = -1;
+  while (q.length) {
+    const id = q.shift()!;
+    for (const nb of rooms[id]!.links) {
+      if (prev.has(nb)) continue;
+      prev.set(nb, id);
+      if (pred(rooms[nb]!)) {
+        goal = nb;
+        q.length = 0;
+        break;
+      }
+      if (visited.has(nb)) q.push(nb); // on ne marche que sur du connu
+    }
+  }
+  if (goal < 0) return null;
+  let cur = goal; // remonte jusqu'au 1ᵉʳ hop depuis `start`
+  while (prev.get(cur) !== start) cur = prev.get(cur)!;
+  return cur;
 }
-// Un « tour » d'auto : ferme la modale en cours si prête, sinon agit (salle/escalier/boss).
+const isUnvisited = (r: { id: number }) => !run.value.visited.includes(r.id);
+const isSafeExit = (r: { type: string; id: number }) =>
+  (r.type === 'start' || r.type === 'stairs') && run.value.visited.includes(r.id);
+const hasSafeExit = computed(() => floor.value.rooms.some((r) => isSafeExit(r)));
+const lowHp = computed(() => run.value.pv / Math.max(1, run.value.maxPv) < AUTO_SAFE_PV);
+
+// Un « tour » d'auto : ferme la modale en cours si prête, sinon agit.
 function autoTick() {
   if (!autoMode.value) return;
   if (over.value || phase.value !== 'running') return stopAuto();
@@ -850,17 +874,47 @@ function autoTick() {
     return scheduleAuto();
   }
   if (over.value) return stopAuto();
-  if (onBoss.value) return void finish(); // boss battu → écran de fin
-  if (onStairs.value) {
-    goDown();
-    return scheduleAuto(1500); // laisse l'animation de descente
+
+  // SÉCURITÉ : PV bas ET une sortie sûre (départ/escalier visité) existe → on SORT en
+  // gardant le butin plutôt que de risquer la mort (perte des objets).
+  if (lowHp.value && hasSafeExit.value) {
+    if (canRetreat.value) return void retreat(); // déjà sur un point de sortie
+    const hop = hopToNearest(isSafeExit);
+    if (hop != null) {
+      onRoomClick(hop);
+      return scheduleAuto(Math.round(AUTO_STEP_MS * 0.7)); // repli un peu plus vif
+    }
   }
-  const next = nextAutoRoom();
-  if (next != null) {
-    onRoomClick(next);
+
+  // NETTOYAGE COMPLET : on visite TOUTES les salles avant de sortir. On garde
+  // escalier/boss pour la fin (sinon on descendrait/affronterait trop tôt).
+  const exploreHop = hopToNearest(
+    (r) => isUnvisited(r) && r.type !== 'stairs' && r.type !== 'boss',
+  );
+  if (exploreHop != null) {
+    onRoomClick(exploreHop);
     return scheduleAuto();
   }
-  retreat(); // sécurité (aucune salle atteignable) : on sort avec le butin
+
+  // Plus rien de « neutre » à explorer → on s'occupe de l'escalier / du boss.
+  if (onBoss.value) return void finish(); // sur le boss (déjà affronté) → écran de fin
+  if (onStairs.value) {
+    goDown();
+    return scheduleAuto(1500);
+  }
+  // Il reste l'escalier ou le boss non visité → on y va (dernières cases).
+  const exitHop = hopToNearest((r) => isUnvisited(r) && (r.type === 'stairs' || r.type === 'boss'));
+  if (exitHop != null) {
+    onRoomClick(exitHop);
+    return scheduleAuto();
+  }
+  // On a tout visité mais on n'est pas sur l'escalier (étage intermédiaire) → y retourner.
+  const backToStairs = hopToNearest((r) => r.type === 'stairs' && run.value.visited.includes(r.id));
+  if (backToStairs != null) {
+    onRoomClick(backToStairs);
+    return scheduleAuto();
+  }
+  retreat(); // sécurité ultime : on sort avec le butin
 }
 // Lance un palier NETTOYÉ en mode auto (mêmes règles/coût qu'un run manuel).
 async function startAuto(tier: Labyrinth) {
