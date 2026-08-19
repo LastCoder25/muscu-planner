@@ -1287,8 +1287,9 @@
               <span
                 class="dgn-chip"
                 :class="{ short: (char.row?.summon_stones ?? 0) < summonCostFor(b) }"
-                title="Coût en pierres d’invocation (farmées dans les donjons)"
-                >🔮 {{ summonCostFor(b) }}</span
+                title="Coût en pierres d’invocation · réserve dont tu disposes"
+                >🔮 {{ summonCostFor(b) }}
+                <span class="chip-reserve">/ {{ char.row.summon_stones }} en réserve</span></span
               >
               <span class="dgn-chip gold">+{{ b.gold }} 🪙</span>
               <span
@@ -6611,6 +6612,11 @@ onUnmounted(() => {
 }
 .dgn-chip.gold {
   color: var(--accent);
+}
+/* Réserve de pierres affichée à côté du coût du boss (plus discrète). */
+.chip-reserve {
+  color: var(--dim);
+  font-weight: 600;
 }
 /* Coût en pierres d'invocation quand on n'en a pas assez → alerte douce. */
 .dgn-chip.short {

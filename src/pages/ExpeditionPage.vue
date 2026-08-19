@@ -25,23 +25,41 @@
       <p v-else-if="labyLuck > 0" class="lobby-txt dim">
         🚪 Porte niv.{{ gateLevel }} : butin des coffres +{{ Math.round(labyLuck * 100) }} %.
       </p>
-      <q-btn
-        class="lobby-cta"
-        color="primary"
-        text-color="dark"
-        no-caps
-        unelevated
-        size="lg"
-        :disable="!canStart"
-        :label="
-          !labyUnlocked
-            ? '🔒 Porte du Labyrinthe requise'
-            : keys > 0
-              ? 'Entrer dans le labyrinthe (−1 🗝️)'
-              : 'Aucune clé pour l’instant'
-        "
-        @click="start"
-      />
+
+      <!-- Ladder : paliers de plus en plus profonds, débloqués en chaîne. -->
+      <div v-if="labyUnlocked" class="laby-list">
+        <button
+          v-for="t in tiers"
+          :key="t.laby.id"
+          type="button"
+          class="laby-tier"
+          :class="{ locked: !t.unlocked, cleared: t.cleared }"
+          :disabled="!t.unlocked || keys < 1"
+          @click="start(t.laby)"
+        >
+          <span class="lt-emo">{{ t.unlocked ? t.laby.emoji : '🔒' }}</span>
+          <div class="lt-main">
+            <div class="lt-name font-display">
+              {{ t.laby.name }}
+              <span v-if="t.cleared" class="lt-badge">✓</span>
+            </div>
+            <div class="lt-meta">
+              Niv {{ t.laby.recoLevel }} · {{ t.laby.floors }} étages ·
+              <span class="lt-fam"
+                >🐾 familier
+                {{
+                  t.laby.dropLevel >= 40 ? 'très rare' : t.laby.dropLevel >= 16 ? 'rare' : 'commun+'
+                }}</span
+              >
+            </div>
+            <div v-if="!t.unlocked" class="lt-lock">
+              🔒 Nettoie «
+              {{ LABYRINTHS[LABYRINTHS.findIndex((l) => l.id === t.laby.id) - 1]?.name }} » d’abord
+            </div>
+          </div>
+          <span v-if="t.unlocked" class="lt-cta">{{ keys > 0 ? '−1 🗝️' : 'clé ?' }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- RUNNING : exploration -->
@@ -308,6 +326,13 @@ import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { labyrinthUnlocked, labyrinthLuckBonus } from '@/lib/buildings';
+import {
+  LABYRINTHS,
+  labyrinthUnlockedTier,
+  labyrinthCleared,
+  labyClearId,
+  type Labyrinth,
+} from '@/data/labyrinths';
 import { computeCharacter } from '@/lib/character';
 import {
   playerWithGear,
@@ -364,6 +389,18 @@ const labyLuck = computed(() => labyrinthLuckBonus(char.row?.buildings ?? []));
 const canStart = computed(
   () => labyUnlocked.value && keys.value > 0 && progress.ready.value && !!char.row,
 );
+
+// ── Ladder de paliers : chaque palier se débloque en nettoyant le précédent. ──
+const clearedSet = computed(() => char.row?.cleared_dungeons ?? []);
+const tiers = computed(() =>
+  LABYRINTHS.map((l) => ({
+    laby: l,
+    unlocked: labyrinthUnlockedTier(l.id, clearedSet.value),
+    cleared: labyrinthCleared(l.id, clearedSet.value),
+  })),
+);
+// Palier en cours d'exploration (choisi dans le lobby).
+const selectedLaby = ref<Labyrinth | null>(null);
 
 // Perso réel (stats de fond + équipement + talents) → combattant.
 const character = computed(() =>
@@ -664,9 +701,13 @@ function retreat() {
   void endRun('retreat');
 }
 
-// Nb d'étages selon le niveau du perso (2 → 5).
-function floorsForLevel(): number {
-  return Math.min(5, Math.max(2, 2 + Math.floor(heroLevel.value / 5)));
+// Niveau de butin/familier du run = celui du PALIER choisi (croît avec la profondeur),
+// borné pour ne pas déborder si un palier profond est atteint sous-nivelé.
+function runDropLevel(): number {
+  return selectedLaby.value?.dropLevel ?? heroLevel.value + 1;
+}
+function runLuck(): number {
+  return Math.min(1, (selectedLaby.value?.luck ?? 0.5) + labyLuck.value);
 }
 // Trésor final garanti à la victoire (haute chance + haute rareté). ~15 % de
 // chance que ce soit une PIÈCE DE SET (2e voie d'accès aux sets, cf. ticket) —
@@ -676,23 +717,18 @@ function floorsForLevel(): number {
 // GARANTIE épique minimum, ~25 % de chance d'être une pièce de set convoitée.
 function rollTreasure(): Item | null {
   const rng = mulberry32((seed.value * 977 + 4242) >>> 0 || 1);
+  const lvl = runDropLevel() + 1; // niveau du PALIER (croît avec la profondeur)
+  const luck = runLuck();
   if (rng() < 0.25 && ITEM_SETS.length) {
     const set = ITEM_SETS[Math.floor(rng() * ITEM_SETS.length)]!;
-    const piece = rollSetPiece(rng, { setId: set.id, level: heroLevel.value + 1, luck: 1 });
+    const piece = rollSetPiece(rng, { setId: set.id, level: lvl, luck });
     return { ...piece, id: `exp_t_${lootN++}` };
   }
   // Garde le MEILLEUR tier (rang+qualité) sur plusieurs tirages → « belle récompense »
-  // RELATIVE à la profondeur. (Le rang est plafonné par la profondeur : un seuil absolu
-  // « ≥ B » était impossible sous ~niv.22 → la garantie devenait du code mort.)
+  // RELATIVE à la profondeur du PALIER (plus le palier est profond, plus le rang monte).
   let best: Omit<Item, 'id'> | null = null;
   for (let k = 0; k < 8; k++) {
-    const cand = rollDrop(rng, {
-      cleared: true,
-      defeated: 1,
-      level: heroLevel.value + 2,
-      luck: 1,
-      spread: 0,
-    });
+    const cand = rollDrop(rng, { cleared: true, defeated: 1, level: lvl, luck, spread: 0 });
     if (cand && (!best || tierIndexOf(cand) > tierIndexOf(best))) best = cand;
   }
   return best ? { ...best, id: `exp_t_${lootN++}` } : null;
@@ -711,8 +747,8 @@ function freshRun() {
   over.value = false;
 }
 
-// Lance une expédition (consomme 1 clé) : carte fraîche, PV pleins.
-async function start() {
+// Lance un PALIER (consomme 1 clé) : carte fraîche du palier, PV pleins.
+async function start(tier?: Labyrinth) {
   const uid = auth.user?.id;
   if (!uid) return;
   if (!labyUnlocked.value) {
@@ -723,13 +759,17 @@ async function start() {
     return;
   }
   if (!canStart.value) return;
+  // Palier : celui passé (clic sur une carte) ou le courant (rejouer depuis la modale).
+  const laby = tier ?? selectedLaby.value ?? LABYRINTHS[0]!;
+  if (!labyrinthUnlockedTier(laby.id, clearedSet.value)) return;
   const ok = await char.spendKey(uid);
   if (!ok) {
     $q.notify({ type: 'warning', message: 'Il te faut une clé 🗝️ (donjons, boss, faille).' });
     return;
   }
+  selectedLaby.value = laby;
   seed.value = Math.floor(Math.random() * 1_000_000) + 1;
-  floorsWanted.value = floorsForLevel();
+  floorsWanted.value = laby.floors;
   credited.value = false;
   freshRun();
   phase.value = 'running';
@@ -744,9 +784,10 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
     if (outcome === 'cleared') {
       const t = rollTreasure();
       if (t) loot.value.push(t);
-      // SIGNATURE du Labyrinthe : un FAMILIER garanti au clear (voie thémée/garantie).
+      // SIGNATURE du Labyrinthe : un FAMILIER garanti au clear, de rang d'autant plus
+      // haut que le PALIER est profond (level+luck du palier → raretés croissantes).
       const famRng = mulberry32((seed.value * 131 + 91) >>> 0 || 1);
-      const fam = rollActivityFamiliar(famRng, { level: heroLevel.value + 1, luck: 1 });
+      const fam = rollActivityFamiliar(famRng, { level: runDropLevel(), luck: runLuck() });
       loot.value.push({ ...fam, id: `exp_f_${lootN++}` });
       gameFx.celebrate({
         kind: 'familiar',
@@ -759,14 +800,21 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
     // Pierres magiques 💎 (voie diffuse) : proportionnelles à la progression du run
     // (la poussière amassée = proxy des salles/monstres) + bonus de clear.
     const stones = Math.max(2, Math.round(dust.value / 3)) + (outcome === 'cleared' ? 4 : 0);
+    // Fragments : bonus de palier au clear (plus profond = plus de fragments).
+    const fragTotal =
+      frags.value + (outcome === 'cleared' ? (selectedLaby.value?.fragBonus ?? 0) : 0);
     const uid = auth.user?.id;
     if (uid)
       await char.applyExpedition(uid, {
         gold: gold.value,
         dust: dust.value,
         stones: outcome === 'dead' ? Math.floor(stones / 2) : stones,
-        fragments: outcome === 'dead' ? Math.floor(frags.value / 2) : frags.value,
+        fragments: outcome === 'dead' ? Math.floor(fragTotal / 2) : fragTotal,
         drops: outcome === 'dead' ? [] : loot.value,
+        // Nettoyage → débloque le palier suivant (mort/retraite ne débloquent pas).
+        ...(outcome === 'cleared' && selectedLaby.value
+          ? { clearedDungeonId: labyClearId(selectedLaby.value.id) }
+          : {}),
       });
   }
   over.value = true;
@@ -850,6 +898,83 @@ function replay() {
 .lobby-cta :deep(.q-btn__content) {
   white-space: normal;
   line-height: 1.25;
+}
+/* Ladder : liste des paliers de Labyrinthe. */
+.laby-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+  margin-top: 16px;
+}
+.laby-tier {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.laby-tier:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+.laby-tier:not(:disabled):active {
+  transform: scale(0.99);
+}
+.laby-tier.locked {
+  border-left-color: var(--line);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.laby-tier.cleared {
+  border-left-color: var(--d1);
+}
+.laby-tier:disabled {
+  cursor: not-allowed;
+}
+.lt-emo {
+  font-size: 24px;
+  flex: 0 0 auto;
+}
+.lt-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.lt-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.lt-badge {
+  color: var(--d1);
+}
+.lt-meta {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-top: 1px;
+}
+.lt-fam {
+  color: color-mix(in srgb, var(--accent) 70%, var(--dim));
+}
+.lt-lock {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+.lt-cta {
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--accent);
 }
 .hud {
   display: flex;

@@ -412,11 +412,23 @@ export const useCharacterStore = defineStore('character', () => {
   // objets au sac/équipés vides ; un familier passe simplement dans `drops`).
   async function applyExpedition(
     userId: string,
-    input: { gold: number; dust: number; drops: Item[]; stones?: number; fragments?: number },
+    input: {
+      gold: number;
+      dust: number;
+      drops: Item[];
+      stones?: number;
+      fragments?: number;
+      clearedDungeonId?: string; // palier de Labyrinthe nettoyé (préfixe `laby:…`)
+    },
   ) {
     const cur = row.value;
     if (!cur) return;
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
+    // Déblocage séquentiel des paliers de Labyrinthe (mémorisé dans cleared_dungeons, dédup).
+    const cleared =
+      input.clearedDungeonId && !cur.cleared_dungeons.includes(input.clearedDungeonId)
+        ? [...cur.cleared_dungeons, input.clearedDungeonId]
+        : cur.cleared_dungeons;
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
@@ -424,6 +436,7 @@ export const useCharacterStore = defineStore('character', () => {
       fragments: cur.fragments + (input.fragments ?? 0), // 🧩 coffres du Labyrinthe
       equipped: dist.equipped,
       inventory: dist.inventory,
+      cleared_dungeons: cleared,
       set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, input.drops),
     });
   }
