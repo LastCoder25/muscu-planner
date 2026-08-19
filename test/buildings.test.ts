@@ -19,6 +19,7 @@ import {
   fuseUnlockLevel,
   travelTimeMult,
   outpostLevel,
+  forgeLuckBonus,
   bossSummonDiscount,
   summonCostWith,
   BUILDING_TYPES,
@@ -215,6 +216,15 @@ describe('filons — report du reliquat à la récolte', () => {
 
   it('un utilitaire (perHr = 0) garde son collectedAt', () => {
     expect(nextCollectedAt(mk('boss_altar', 5, 123), 999_999)).toBe(123);
+  });
+});
+
+describe('forge — le niveau améliore la rareté forgée', () => {
+  it('forgeLuckBonus croît avec le niveau de Forge, plafonné', () => {
+    expect(forgeLuckBonus([])).toBe(0);
+    expect(forgeLuckBonus([mk('forge', 1)])).toBeCloseTo(0.035, 5);
+    expect(forgeLuckBonus([mk('forge', 4)])).toBeCloseTo(0.14, 5);
+    expect(forgeLuckBonus([mk('forge', 40)])).toBe(0.5); // plafonné
   });
 });
 

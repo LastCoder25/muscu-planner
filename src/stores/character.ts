@@ -57,6 +57,7 @@ import {
   expeditionsUnlocked,
   travelTimeMult,
   maxFuseTargetIndex,
+  forgeLuckBonus,
   type Building,
 } from '@/lib/buildings';
 import type { Combatant } from '@/lib/combat';
@@ -674,7 +675,9 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur) return;
     const cost = forgeCost(opts.level, !!opts.slot);
     if (cur.dust < cost) return;
-    const it: Item = { ...forgeItem(Math.random, opts), id: crypto.randomUUID() };
+    // Le NIVEAU de la Forge améliore le biais de rareté des objets forgés.
+    const luck = 0.25 + forgeLuckBonus(cur.buildings);
+    const it: Item = { ...forgeItem(Math.random, { ...opts, luck }), id: crypto.randomUUID() };
     return persist(userId, { dust: cur.dust - cost, inventory: [...cur.inventory, it] });
   }
   // B. Reroll l'effet d'un objet (équipé ou au sac).

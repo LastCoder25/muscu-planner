@@ -32,6 +32,7 @@ export interface BuildingEffect {
   labyLuckPerLvl?: number; // Porte du Labyrinthe : +X à la chance de butin des coffres / niveau
   bossRollFloorPerLvl?: number; // Autel des boss : +X au plancher de qualité de roll / niveau
   summonCostRedPerLvl?: number; // Autel des boss : −X% du coût en pierres d'invocation / niveau
+  forgeLuckPerLvl?: number; // Forge : +X au biais de rareté des objets forgés / niveau
 }
 
 // Ce qu'un bâtiment DÉBLOQUE (activité/fonctionnalité) → affiché au joueur à la
@@ -214,7 +215,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     label: 'Forge',
     emoji: '🔨',
     category: 'utility',
-    effect: {},
+    effect: { forgeLuckPerLvl: 0.035 },
     buildGold: 1000,
     unlockLevel: 5,
     unique: true,
@@ -222,7 +223,7 @@ export const BUILDING_TYPES: BuildingType[] = [
       activity: 'L’Atelier de forge (poussière)',
       where: 'Aventure › onglet Équip. › 🔧 Atelier.',
     },
-    desc: 'Débloque l’Atelier : forger un objet neuf à ton niveau + forge de pièces de set.',
+    desc: 'Débloque l’Atelier : forger un objet neuf à ton niveau + forge de pièces de set. Chaque niveau améliore la rareté des objets forgés.',
   },
 ];
 
@@ -310,6 +311,14 @@ export function fuseUnlockLevel(idx: number): number {
 /** La Forge est-elle construite ? → débloque l'Atelier (forge d'objet / de set). */
 export function forgeBuilt(buildings: Building[]): boolean {
   return buildings.some((b) => b.typeId === 'forge');
+}
+const FORGE_LUCK_CAP = 0.5; // biais de rareté max apporté par le niveau de Forge
+/** Bonus de chance de RARETÉ des objets forgés selon le NIVEAU de la Forge (comme
+ *  l'Autel/Incubateur : monter le bâtiment améliore ses sorties). Plafonné. */
+export function forgeLuckBonus(buildings: Building[]): number {
+  const lvl = buildings.find((b) => b.typeId === 'forge')?.level ?? 0;
+  const per = buildingType('forge')?.effect?.forgeLuckPerLvl ?? 0;
+  return Math.min(FORGE_LUCK_CAP, lvl * per);
 }
 // ── Porte du Labyrinthe (gate + qualité du butin) ──
 const LABY_GATE_ID = 'labyrinth_gate';
