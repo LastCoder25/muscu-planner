@@ -45,22 +45,54 @@
           </button>
         </div>
         <div class="tb-right">
-          <button class="tb-chip inbox-btn" aria-label="Messages" @click="openInbox">
+          <button class="inbox-btn" aria-label="Messages" @click="openInbox">
             📬<span v-if="unreadMessages" class="inbox-dot">{{ unreadMessages }}</span>
           </button>
-          <span class="tb-chip" :class="{ deficit: c.energy < 0 }">⚡ {{ c.energy }}</span>
-          <!-- Boutique retirée pour le moment (ticket dc7c746d) : la puce or est un simple indicateur. -->
-          <span class="tb-chip gold">🪙 {{ char.row.gold }}</span>
-          <span class="tb-chip dust">✨ {{ char.row.dust }}</span>
-          <span v-if="char.row.stones" class="tb-chip stones">💎 {{ char.row.stones }}</span>
-          <span v-if="char.row.parchemins" class="tb-chip">📜 {{ char.row.parchemins }}</span>
-          <span v-if="char.row.fragments" class="tb-chip">🧩 {{ char.row.fragments }}</span>
-          <span
-            v-if="char.row.summon_stones"
-            class="tb-chip"
-            title="Pierres d’invocation (tenter un boss)"
-            >🔮 {{ char.row.summon_stones }}</span
-          >
+          <!-- Plateau de ressources : jauges (⚡ or) · séparateur · matériaux d'amélioration.
+               Une seule bordure = groupe lisible au lieu de 8 puces éparses. Chaque ressource
+               a une infobulle expliquant ce qu'elle fait monter. -->
+          <div class="tb-tray">
+            <span
+              class="tb-r energy"
+              :class="{ deficit: c.energy < 0 }"
+              title="Énergie — dépensée pour lancer donjons, labyrinthe et expéditions (gagnée en faisant du sport)"
+              >⚡ {{ c.energy }}</span
+            >
+            <!-- Boutique retirée pour le moment (ticket dc7c746d) : la puce or est un simple indicateur. -->
+            <span class="tb-r gold" title="Or — expéditions, boutique et construction des bâtiments"
+              >🪙 {{ char.row.gold }}</span
+            >
+            <span class="tb-sep" aria-hidden="true"></span>
+            <span
+              class="tb-r dust"
+              title="Poussière — niveau des OBJETS (infusion) + forge / reroll / craft de set"
+              >✨ {{ char.row.dust }}</span
+            >
+            <span
+              v-if="char.row.stones"
+              class="tb-r stones"
+              title="Pierres magiques — NIVEAU des familiers"
+              >💎 {{ char.row.stones }}</span
+            >
+            <span
+              v-if="char.row.fragments"
+              class="tb-r frag"
+              title="Fragments — RANG / qualité des familiers (infusion)"
+              >🧩 {{ char.row.fragments }}</span
+            >
+            <span
+              v-if="char.row.parchemins"
+              class="tb-r parch"
+              title="Parchemins — NIVEAU des talents"
+              >📜 {{ char.row.parchemins }}</span
+            >
+            <span
+              v-if="char.row.summon_stones"
+              class="tb-r summon"
+              title="Pierres d’invocation — tenter un boss de palier"
+              >🔮 {{ char.row.summon_stones }}</span
+            >
+          </div>
         </div>
       </div>
 
@@ -4535,27 +4567,64 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 6px;
 }
-.tb-chip {
+/* Plateau de ressources : un seul contenant bordé qui regroupe toutes les puces. */
+.tb-tray {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+.tb-sep {
+  width: 1px;
+  align-self: stretch;
+  min-height: 14px;
+  background: var(--line);
+}
+.tb-r {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.tb-r.energy {
+  color: #8fd0ff;
+}
+.tb-r.gold {
+  color: var(--accent);
+}
+.tb-r.dust {
+  color: #b07cff;
+}
+.tb-r.stones {
+  color: #4ec6d6;
+}
+.tb-r.frag {
+  color: #6dd28f;
+}
+.tb-r.parch {
+  color: #d8b46a;
+}
+.tb-r.summon {
+  color: #e08bd8;
+}
+.tb-r.energy.deficit {
+  color: var(--d4, #ff6a45);
+}
+/* Bouton messages : action distincte des ressources (self-stylé, ex-.tb-chip). */
+.inbox-btn {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 4px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.tb-chip.gold {
-  color: var(--accent);
-}
-.tb-chip.dust {
-  color: #b07cff;
-}
-.tb-chip.stones {
-  color: #4ec6d6;
-}
-.tb-chip.deficit {
-  color: var(--d4, #ff6a45);
-  border-color: var(--d4, #ff6a45);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
 }
 .deficit-banner {
   margin-bottom: 12px;
@@ -7003,9 +7072,6 @@ onUnmounted(() => {
   border-color: #4a9eff !important;
 }
 /* Boîte à messages (topbar) */
-.inbox-btn {
-  position: relative;
-}
 .inbox-dot {
   position: absolute;
   top: -4px;
