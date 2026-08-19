@@ -746,6 +746,61 @@
           </template>
         </template>
 
+        <!-- Loadouts : ranger un set d'équipement (4 slots gear) en réserve. -->
+        <template v-if="gearSub === 'equip'">
+          <div class="sec-title">📦 Loadouts</div>
+          <div class="sec-hint">
+            Range ton stuff équipé (arme / armure / accessoire / relique — le
+            <b>familier reste</b>) pour garder un set pendant que tu en testes un autre. Les objets
+            rangés ne sont <b>pas</b> dans le sac.
+          </div>
+          <div class="loadouts">
+            <div
+              v-for="(lo, i) in loadoutsView"
+              :key="i"
+              class="loadout"
+              :class="{ empty: !lo.count }"
+            >
+              <div class="lo-head">
+                <span class="lo-name font-display">Loadout {{ i + 1 }}</span>
+                <span
+                  v-if="lo.count"
+                  class="lo-power"
+                  :class="lo.delta >= 0 ? 'up' : 'down'"
+                  title="Puissance si tu équipes ce loadout (familier actuel conservé)"
+                >
+                  ⚔️ {{ fmtPow(lo.power) }}
+                  <b>({{ fmtDelta(combatPowerVal, lo.power) }})</b>
+                </span>
+                <span v-else class="lo-empty-tag">vide</span>
+              </div>
+              <div v-if="lo.count" class="lo-items">
+                <span
+                  v-for="it in lo.items"
+                  :key="it.slot"
+                  class="lo-item"
+                  :class="'r-' + it.rarity"
+                  :title="SLOT_LABEL[it.slot] + ' · ' + it.name"
+                  >{{ SLOT_EMOJI[it.slot] }}</span
+                >
+              </div>
+              <button
+                class="lo-btn"
+                :disabled="(!lo.count && !hasEquippedGear) || busy"
+                @click="doSwapLoadout(i)"
+              >
+                {{
+                  lo.count
+                    ? hasEquippedGear
+                      ? '🔄 Échanger'
+                      : '⬆️ Équiper'
+                    : '📦 Ranger mon stuff (nu)'
+                }}
+              </button>
+            </div>
+          </div>
+        </template>
+
         <template v-if="gearSub === 'bag'">
           <template v-if="bagCount">
             <div ref="sacTitle" class="sec-title">Sac ({{ bagCount }})</div>
@@ -2305,6 +2360,7 @@ import {
   setCounts,
   type Item,
   type ItemSlot,
+  type Equipped,
   type Rarity,
   type AggregatedEffects,
   type RewardCandidate,
@@ -3933,6 +3989,31 @@ const filteredInventory = computed<Item[]>(() => {
 // Nb d'objets RÉELLEMENT dans le Sac = hors familiers (rangés dans leur propre section)
 // → sinon le badge « Sac » comptait un familier fantôme (ticket e3d61676).
 const bagCount = computed(() => (char.row?.inventory ?? []).filter((i) => !isFamiliar(i)).length);
+
+// ── Loadouts (sets d'équipement rangés) ──
+const hasEquippedGear = computed(() => SLOTS.some((s) => !!char.row?.equipped[s]));
+// Puissance SI on équipe ce loadout : ses 4 objets gear + le FAMILIER actuel (non rangé).
+function loadoutPower(items: Equipped): number {
+  const fam = char.row?.equipped[FAMILIAR_SLOT];
+  const eq: Equipped = { ...items, ...(fam ? { [FAMILIAR_SLOT]: fam } : {}) };
+  return combatPower(
+    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level),
+  );
+}
+const loadoutsView = computed(() => {
+  const los = char.row?.loadouts ?? [];
+  return Array.from({ length: 3 }, (_, i) => {
+    const stored = los[i]?.items ?? {};
+    const items = SLOTS.map((s) => stored[s]).filter((it): it is Item => !!it);
+    const power = items.length ? loadoutPower(stored) : 0;
+    return { items, count: items.length, power, delta: power - combatPowerVal.value };
+  });
+});
+async function doSwapLoadout(i: number) {
+  const uid = auth.user?.id;
+  if (!uid || busy.value) return;
+  await char.swapLoadout(uid, i);
+}
 
 // ── Familier (compagnon) ──
 const equippedFamiliar = computed<Item | null>(() => char.row?.equipped[FAMILIAR_SLOT] ?? null);
@@ -5611,6 +5692,86 @@ onUnmounted(() => {
   color: var(--accent);
   opacity: 1;
   font-weight: 600;
+}
+/* ── Loadouts (sets d'équipement rangés) ── */
+.loadouts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.loadout {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 9px 11px;
+}
+.loadout.empty {
+  border-style: dashed;
+}
+.lo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lo-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+}
+.lo-power {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+}
+.lo-power.up b {
+  color: var(--d1);
+}
+.lo-power.down b {
+  color: var(--d4);
+}
+.lo-empty-tag {
+  font-size: 11px;
+  color: var(--dim);
+}
+.lo-items {
+  display: flex;
+  gap: 6px;
+  margin: 7px 0;
+}
+.lo-item {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  border-radius: 8px;
+  border: 1px solid var(--rk, var(--line));
+  background: color-mix(in srgb, var(--rk, var(--line)) 12%, var(--surface));
+}
+.lo-btn {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 0;
+  border-radius: 9px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.lo-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: var(--line);
+  color: var(--dim);
+}
+.lo-btn:not(:disabled):active {
+  transform: scale(0.98);
 }
 .slot-x {
   background: none;

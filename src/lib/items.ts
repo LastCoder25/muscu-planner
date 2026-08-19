@@ -191,6 +191,34 @@ export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean
 
 export type Equipped = Partial<Record<ItemSlot, Item>>;
 
+// Loadout : un « set » d'équipement rangé (les 4 slots gear uniquement — le familier
+// n'est jamais rangé). Ranger déplace le stuff équipé dans un loadout (joueur nu) ; les
+// objets rangés ne sont ni dans le sac ni pris en compte au combat. Max 3 loadouts.
+export interface Loadout {
+  items: Equipped;
+}
+export const MAX_LOADOUTS = 3;
+
+/** Échange les 4 slots gear (weapon/armor/accessory/relic) entre l'équipement et un
+ *  loadout → renvoie le nouvel équipement + les items du loadout. Le familier reste
+ *  équipé (non touché). Sert au « ranger » (loadout vide) comme au swap de sets. */
+export function swapLoadoutGear(
+  equipped: Equipped,
+  loadoutItems: Equipped,
+): { equipped: Equipped; loadoutItems: Equipped } {
+  const eq: Equipped = { ...equipped };
+  const lo: Equipped = { ...loadoutItems };
+  for (const slot of SLOTS) {
+    const held = eq[slot];
+    const stored = lo[slot];
+    if (stored) eq[slot] = stored;
+    else delete eq[slot];
+    if (held) lo[slot] = held;
+    else delete lo[slot];
+  }
+  return { equipped: eq, loadoutItems: lo };
+}
+
 // Récompense « au choix » d'un boss : 3 candidats tirés, le joueur en garde 1.
 export type RewardCandidate =
   | { kind: 'item'; item: Item }

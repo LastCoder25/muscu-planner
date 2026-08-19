@@ -28,6 +28,7 @@ import {
   rerolledQuality,
   starQualityMult,
   rollStars,
+  swapLoadoutGear,
   type Item,
   type Equipped,
 } from '@/lib/items';
@@ -422,5 +423,44 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
     );
     expect(sig).toBeTruthy();
     expect(NAMED).toContain(sig!.name);
+  });
+});
+
+describe('swapLoadoutGear — ranger / échanger un set (4 slots gear, familier intact)', () => {
+  const mk = (slot: string, name: string): Item =>
+    ({
+      id: name,
+      slot,
+      name,
+      emoji: '🗡️',
+      rarity: 'D',
+      level: 1,
+      effect: { type: 'damage_pct', value: 10 },
+    }) as unknown as Item;
+
+  it('loadout vide + équipé plein → « ranger » : le joueur devient nu, le loadout garde le stuff', () => {
+    const equipped: Equipped = {
+      weapon: mk('weapon', 'W'),
+      armor: mk('armor', 'A'),
+      familiar: mk('familiar', 'F'),
+    };
+    const { equipped: eq, loadoutItems: lo } = swapLoadoutGear(equipped, {});
+    // Les 4 slots gear sont vidés, le familier RESTE équipé.
+    expect(eq.weapon).toBeUndefined();
+    expect(eq.armor).toBeUndefined();
+    expect(eq.familiar?.name).toBe('F');
+    expect(lo.weapon?.name).toBe('W');
+    expect(lo.armor?.name).toBe('A');
+    expect(lo.familiar).toBeUndefined(); // le familier n'est jamais rangé
+  });
+
+  it('swap deux sets : ce qu’on portait passe dans le loadout, on porte le loadout', () => {
+    const equipped: Equipped = { weapon: mk('weapon', 'W1') };
+    const stored: Equipped = { weapon: mk('weapon', 'W2'), armor: mk('armor', 'A2') };
+    const { equipped: eq, loadoutItems: lo } = swapLoadoutGear(equipped, stored);
+    expect(eq.weapon?.name).toBe('W2');
+    expect(eq.armor?.name).toBe('A2');
+    expect(lo.weapon?.name).toBe('W1');
+    expect(lo.armor).toBeUndefined();
   });
 });

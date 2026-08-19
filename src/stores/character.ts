@@ -19,9 +19,12 @@ import {
   familiarInfuseXp,
   infuseFamiliar as applyFamiliarInfusion,
   FAMILIAR_SLOT,
+  swapLoadoutGear,
+  MAX_LOADOUTS,
   type Item,
   type ItemSlot,
   type Equipped,
+  type Loadout,
   type PendingReward,
 } from '@/lib/items';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
@@ -91,6 +94,7 @@ export interface CharacterRow {
   messages: ExpeditionMessage[]; // boîte à messages 📬 (rapports d'expédition)
   buildings: Building[]; // filons de production passive (village)
   set_pieces_seen: Record<string, string[]>; // codex : slots de set déjà obtenus par setId
+  loadouts: Loadout[]; // sets d'équipement rangés (max 3, migr. 0051)
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -109,7 +113,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -134,6 +138,15 @@ export const useCharacterStore = defineStore('character', () => {
       if (it) r.equipped[k] = fixItem(it);
     }
     r.consumables = obj<Record<string, number>>(r.consumables);
+    // Loadouts (migr. 0051) : max 3 sets rangés ; on normalise le rang des objets rangés.
+    r.loadouts = arr<Loadout>(r.loadouts)
+      .slice(0, MAX_LOADOUTS)
+      .map((l) => {
+        const items = obj<Equipped>(l?.items);
+        for (const k of Object.keys(items) as (keyof Equipped)[])
+          if (items[k]) items[k] = fixItem(items[k]);
+        return { items };
+      });
     r.messages = arr<ExpeditionMessage>(r.messages);
     r.buildings = arr<Building>(r.buildings); // colonne récente (migr. 0046)
     r.set_pieces_seen = obj<Record<string, string[]>>(r.set_pieces_seen); // migr. 0047
@@ -891,6 +904,22 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { equipped, inventory: [...cur.inventory, item] });
   }
 
+  // Échange le stuff équipé (4 slots gear, familier NON touché) avec le loadout `i` :
+  // loadout vide → « ranger » (le joueur se retrouve nu, le stuff part en réserve) ;
+  // loadout plein → swap (on porte le loadout, il garde l'ancien stuff). Les objets
+  // rangés ne sont PAS dans le sac et n'affectent pas le combat.
+  async function swapLoadout(userId: string, i: number) {
+    const cur = row.value;
+    if (!cur || i < 0 || i >= MAX_LOADOUTS) return;
+    const loadouts: Loadout[] = Array.from(
+      { length: MAX_LOADOUTS },
+      (_, k) => cur.loadouts[k] ?? { items: {} },
+    );
+    const { equipped, loadoutItems } = swapLoadoutGear(cur.equipped, loadouts[i]!.items);
+    loadouts[i] = { items: loadoutItems };
+    return persist(userId, { equipped, loadouts });
+  }
+
   // ── Mode idle « Expédition » (carte + héros temporisé) ──
   function newSeed(now: number): number {
     return (now ^ 0x9e3779b9) >>> 0 || 1;
@@ -1049,6 +1078,7 @@ export const useCharacterStore = defineStore('character', () => {
     spendKey,
     applyExpedition,
     equip,
+    swapLoadout,
     equipReplacing,
     unequip,
     equipTalent,
