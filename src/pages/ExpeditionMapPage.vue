@@ -435,6 +435,7 @@ import {
   travelTimeMult,
   labyrinthLuckBonus,
   bossAltarRollFloor,
+  bossRewardCount,
   BUILD,
   type Building,
   type BuildingType,
@@ -791,7 +792,7 @@ function utilityEffectLabel(b: Building): string {
   if (b.typeId === 'labyrinth_gate')
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')
-    return `4ᵉ choix · ciblage du set · +${Math.round(bossAltarRollFloor([b]) * 100)}% qualité de roll`;
+    return `${bossRewardCount([b])} choix de récompense · ciblage du set · +${Math.round(bossAltarRollFloor([b]) * 100)}% qualité de roll`;
   return buildingType(b.typeId)?.desc ?? ''; // incubateur & co : description
 }
 
