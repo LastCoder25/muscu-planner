@@ -5,6 +5,7 @@ import {
   labyrinthUnlockedTier,
   labyrinthCleared,
   frontierLabyrinth,
+  deathKeepFraction,
 } from '@/data/labyrinths';
 
 describe('labyrinths — ladder de paliers', () => {
@@ -37,5 +38,18 @@ describe('labyrinths — ladder de paliers', () => {
 
   it('id inconnu → verrouillé', () => {
     expect(labyrinthUnlockedTier('inconnu', [])).toBe(false);
+  });
+
+  it('perte à la mort liée à la profondeur : premier palier pardonne le plus, décroissant', () => {
+    expect(deathKeepFraction(LABYRINTHS[0]!.id)).toBe(1);
+    expect(deathKeepFraction(LABYRINTHS[LABYRINTHS.length - 1]!.id)).toBeLessThan(
+      deathKeepFraction(LABYRINTHS[0]!.id),
+    );
+    for (let i = 1; i < LABYRINTHS.length; i++) {
+      expect(deathKeepFraction(LABYRINTHS[i]!.id)).toBeLessThanOrEqual(
+        deathKeepFraction(LABYRINTHS[i - 1]!.id),
+      );
+    }
+    expect(deathKeepFraction(LABYRINTHS[LABYRINTHS.length - 1]!.id)).toBeGreaterThanOrEqual(0.4);
   });
 });

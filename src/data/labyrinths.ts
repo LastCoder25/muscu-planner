@@ -100,6 +100,16 @@ export function labyrinthCleared(id: string, cleared: string[]): boolean {
   return cleared.includes(labyClearId(id));
 }
 
+/** Fraction des gains (or/poussière/pierres/fragments) CONSERVÉE si on MEURT dans ce
+ *  palier — les objets trouvés sont perdus dans tous les cas. La perte est liée à la
+ *  PROFONDEUR : un palier profond « non terminé » pardonne MOINS (risque croissant,
+ *  cohérent avec ses meilleures récompenses). novice 100 % → cœur du néant 40 %.
+ *  (Ne s'applique qu'à la MORT ; la retraite banque tout le ramassé.) */
+export function deathKeepFraction(id: string): number {
+  const i = LABYRINTHS.findIndex((l) => l.id === id);
+  return Math.max(0.4, 1 - Math.max(0, i) * 0.12);
+}
+
 /** Premier palier NON nettoyé (la « frontière » à afficher par défaut). */
 export function frontierLabyrinth(cleared: string[]): Labyrinth {
   return (

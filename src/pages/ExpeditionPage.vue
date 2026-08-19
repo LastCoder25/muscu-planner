@@ -16,7 +16,8 @@
       <p class="lobby-txt">
         Un donjon à <b>étages</b> à explorer : salles, coffres, pièges, boss. Tes
         <b>PV se reportent</b> entre les salles — c'est l'attrition qui te met en danger. À la mort
-        tu gardes l'<b>or</b> et la <b>poussière</b>, mais tu perds les objets trouvés.
+        tu <b>perds les objets trouvés</b> et une part des gains (or/poussière/pierres) qui
+        <b>grandit avec la profondeur du palier</b>. La <b>retraite</b> banque tout le ramassé.
       </p>
       <p class="lobby-txt dim">Les clés 🗝️ tombent sur les donjons, les boss et la faille.</p>
       <p v-if="!labyUnlocked" class="lobby-txt dim">
@@ -51,6 +52,7 @@
                   t.laby.dropLevel >= 40 ? 'très rare' : t.laby.dropLevel >= 16 ? 'rare' : 'commun+'
                 }}</span
               >
+              · <span class="lt-death">💀 garde {{ t.deathKeep }}%</span>
             </div>
             <div v-if="!t.unlocked" class="lt-lock">
               🔒 Nettoie «
@@ -331,6 +333,7 @@ import {
   labyrinthUnlockedTier,
   labyrinthCleared,
   labyClearId,
+  deathKeepFraction,
   type Labyrinth,
 } from '@/data/labyrinths';
 import { computeCharacter } from '@/lib/character';
@@ -397,6 +400,7 @@ const tiers = computed(() =>
     laby: l,
     unlocked: labyrinthUnlockedTier(l.id, clearedSet.value),
     cleared: labyrinthCleared(l.id, clearedSet.value),
+    deathKeep: Math.round(deathKeepFraction(l.id) * 100),
   })),
 );
 // Palier en cours d'exploration (choisi dans le lobby).
@@ -803,13 +807,16 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
     // Fragments : bonus de palier au clear (plus profond = plus de fragments).
     const fragTotal =
       frags.value + (outcome === 'cleared' ? (selectedLaby.value?.fragBonus ?? 0) : 0);
+    // MORT : on garde une FRACTION des gains liée à la profondeur du palier non terminé
+    // (profond = pardonne moins). Les objets restent perdus. Retraite/clear = tout gardé.
+    const keep = outcome === 'dead' ? deathKeepFraction(selectedLaby.value?.id ?? '') : 1;
     const uid = auth.user?.id;
     if (uid)
       await char.applyExpedition(uid, {
-        gold: gold.value,
-        dust: dust.value,
-        stones: outcome === 'dead' ? Math.floor(stones / 2) : stones,
-        fragments: outcome === 'dead' ? Math.floor(fragTotal / 2) : fragTotal,
+        gold: Math.floor(gold.value * keep),
+        dust: Math.floor(dust.value * keep),
+        stones: Math.floor(stones * keep),
+        fragments: Math.floor(fragTotal * keep),
         drops: outcome === 'dead' ? [] : loot.value,
         // Nettoyage → débloque le palier suivant (mort/retraite ne débloquent pas).
         ...(outcome === 'cleared' && selectedLaby.value
@@ -963,6 +970,9 @@ function replay() {
 }
 .lt-fam {
   color: color-mix(in srgb, var(--accent) 70%, var(--dim));
+}
+.lt-death {
+  color: color-mix(in srgb, #ff6a45 60%, var(--dim));
 }
 .lt-lock {
   font-size: 11px;
