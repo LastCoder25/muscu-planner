@@ -125,26 +125,22 @@
       </div>
 
       <div class="seg">
-        <button class="seg-b" :class="{ on: tab === 'perso' }" @click="tab = 'perso'">
-          <q-icon name="person" size="18px" /> Perso
+        <button class="seg-b" :class="{ on: tab === 'hero' }" @click="tab = 'hero'">
+          <q-icon name="person" size="18px" /> Héros
         </button>
-        <button class="seg-b" :class="{ on: tab === 'equip' }" @click="tab = 'equip'">
-          <q-icon name="checkroom" size="18px" /> Équip.
+        <button class="seg-b" :class="{ on: tab === 'gear' }" @click="tab = 'gear'">
+          <q-icon name="checkroom" size="18px" /> Équipement
         </button>
-        <button class="seg-b" :class="{ on: tab === 'donjons' }" @click="tab = 'donjons'">
-          <q-icon name="castle" size="18px" /> Donjons
+        <button class="seg-b" :class="{ on: tab === 'explore' }" @click="tab = 'explore'">
+          <q-icon name="castle" size="18px" /> Explorer
         </button>
-        <button class="seg-b" :class="{ on: tab === 'boss' }" @click="tab = 'boss'">👑 Boss</button>
       </div>
 
-      <!-- ONGLET PERSONNAGE -->
-      <template v-if="tab === 'perso'">
+      <!-- ONGLET HÉROS (fiche + stats fusionnées + talents) -->
+      <template v-if="tab === 'hero'">
         <div class="gear-sub">
           <button class="gs-b" :class="{ on: persoSub === 'perso' }" @click="persoSub = 'perso'">
-            🧍 Perso
-          </button>
-          <button class="gs-b" :class="{ on: persoSub === 'stats' }" @click="persoSub = 'stats'">
-            ⚔️ Stats
+            🧍 Fiche
           </button>
           <button
             class="gs-b"
@@ -225,7 +221,8 @@
           </div>
         </template>
 
-        <template v-if="persoSub === 'stats'">
+        <!-- Stats de combat : fusionnées dans la Fiche (plus de sous-onglet Stats). -->
+        <template v-if="persoSub === 'perso'">
           <div class="sec-title">Combat : base → équipé</div>
           <div class="gear-fx">
             <div class="gfx">
@@ -432,8 +429,8 @@
       </template>
 
       <!-- ONGLET ÉQUIPEMENT -->
-      <template v-else-if="tab === 'equip'">
-        <!-- Sous-navigation : Équipement / Sac / Atelier (fini le long scroll). -->
+      <template v-else-if="tab === 'gear'">
+        <!-- Sous-navigation : Équipement (+ familier) / Sac / Atelier. -->
         <div class="gear-sub">
           <button class="gs-b" :class="{ on: gearSub === 'equip' }" @click="gearSub = 'equip'">
             🛡️ Équipement
@@ -442,13 +439,6 @@
             🎒 Sac<span v-if="char.row.inventory.length" class="gs-badge">{{
               char.row.inventory.length
             }}</span>
-          </button>
-          <button
-            class="gs-b"
-            :class="{ on: gearSub === 'familiar' }"
-            @click="gearSub = 'familiar'"
-          >
-            🐾 Familier
           </button>
           <button class="gs-b" :class="{ on: gearSub === 'shop' }" @click="gearSub = 'shop'">
             🔧 Atelier
@@ -520,8 +510,9 @@
           </div>
         </template>
 
-        <!-- Familier (compagnon) : 5ᵉ emplacement, monté aux PIERRES MAGIQUES 💎 -->
-        <template v-if="gearSub === 'familiar'">
+        <!-- Familier (compagnon) : 5ᵉ emplacement équipé → affiché dans la vue Équipement
+             (fusionné, plus de sous-onglet dédié). Monté aux PIERRES MAGIQUES 💎. -->
+        <template v-if="gearSub === 'equip'">
           <div class="sec-title">🐾 Familier</div>
           <div class="sec-hint">
             Ton compagnon donne un bonus de race. Les plus rares portent en plus un effet
@@ -1007,8 +998,12 @@
         </template>
       </template>
 
-      <!-- ONGLET DONJONS -->
-      <template v-else-if="tab === 'donjons'">
+      <!-- ONGLET EXPLORER — sous-onglet Donjons (carte) -->
+      <template v-else-if="tab === 'explore' && exploreSub === 'donjons'">
+        <div class="gear-sub">
+          <button class="gs-b on" @click="exploreSub = 'donjons'">🗺️ Donjons</button>
+          <button class="gs-b" @click="exploreSub = 'boss'">👑 Boss de palier</button>
+        </div>
         <!-- Expédition (mode idle : envoyer le héros explorer la carte) -->
         <button class="expe-card expe-idle" @click="router.push('/expedition-map')">
           <span class="expe-emo">🗺️</span>
@@ -1237,8 +1232,12 @@
         </div>
       </template>
 
-      <!-- ONGLET BOSS DE PALIER -->
-      <template v-else>
+      <!-- ONGLET EXPLORER — sous-onglet Boss de palier -->
+      <template v-else-if="tab === 'explore' && exploreSub === 'boss'">
+        <div class="gear-sub">
+          <button class="gs-b" @click="exploreSub = 'donjons'">🗺️ Donjons</button>
+          <button class="gs-b on" @click="exploreSub = 'boss'">👑 Boss de palier</button>
+        </div>
         <div class="sec-title mboss-title">👑 Boss de palier</div>
         <div class="sec-hint">
           Un boss tous les 5 niveaux — chacun lâche une pièce de son <b>set</b> unique. Débloqués en
@@ -2397,10 +2396,15 @@ const loading = ref(true);
 const saving = ref(false);
 const pseudoInput = ref('');
 const pseudoError = ref('');
-const tab = ref<'perso' | 'equip' | 'donjons' | 'boss'>('perso');
-// Sous-onglet de l'onglet Équip. : équipement / familier / sac / atelier.
-const gearSub = ref<'equip' | 'familiar' | 'bag' | 'shop'>('equip');
-const persoSub = ref<'perso' | 'stats' | 'talents'>('perso');
+// Nav « par activité » : 3 onglets — Héros (fiche+stats+talents+familier) /
+// Équipement (équipé+sac+atelier) / Explorer (donjons+boss de palier).
+const tab = ref<'hero' | 'gear' | 'explore'>('hero');
+// Sous-onglet de l'onglet Équipement : équipement (+ familier) / sac / atelier.
+const gearSub = ref<'equip' | 'bag' | 'shop'>('equip');
+// Sous-onglet Héros : fiche (stats fusionnées) / talents.
+const persoSub = ref<'perso' | 'talents'>('perso');
+// Sous-onglet Explorer : donjons (carte) / boss de palier.
+const exploreSub = ref<'donjons' | 'boss'>('donjons');
 // L'incubateur (fusion de familiers) est débloqué en le construisant sur la carte.
 const hasIncubator = computed(() => incubatorBuilt(char.row?.buildings ?? []));
 // L'Atelier (forge d'objet / de set) est débloqué par le bâtiment 🔨 Forge.
@@ -2809,7 +2813,8 @@ const endRegionId = computed(() => REGIONS[REGIONS.length - 1]?.id);
 // Joue le reveal : bascule onglet Donjons, CENTRE la carte (slide), FAIT EXPLOSER les
 // chaînes/cadenas de la nouvelle zone, puis affiche la bannière nommée → zone cliquable.
 function triggerRegionReveal(rev: RegionReveal) {
-  tab.value = 'donjons';
+  tab.value = 'explore';
+  exploreSub.value = 'donjons';
   selectedRegionId.value = rev.id;
   // On attend la fin de la transition de fermeture de la modale (~300 ms), PUIS scroll
   // (slide visible) + explosion + bannière.
@@ -3075,7 +3080,7 @@ function reattackLast() {
 }
 function goInventoryFromReport() {
   reportOpen.value = false;
-  tab.value = 'equip';
+  tab.value = 'gear';
   gearSub.value = 'bag'; // ouvre directement le sous-onglet Sac
 }
 
