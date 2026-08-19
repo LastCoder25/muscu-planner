@@ -828,7 +828,12 @@ function scheduleAuto(ms = AUTO_STEP_MS) {
 // (loot + combats), l'escalier/boss en dernier → on visite TOUTES les cases puis on
 // descend / on affronte le boss.
 function nextAutoRoom(): number | null {
-  const reachable = floor.value.rooms.filter((r) => canMove(run.value, floor.value, r.id));
+  // NON VISITÉES uniquement : `canMove` autorise aussi le retour vers une salle déjà
+  // vue → sans ce filtre l'auto faisait des allers-retours en boucle. On n'avance donc
+  // que vers du NOUVEAU, escalier/boss gardés pour la fin (visite max puis sortie).
+  const reachable = floor.value.rooms.filter(
+    (r) => !run.value.visited.includes(r.id) && canMove(run.value, floor.value, r.id),
+  );
   if (!reachable.length) return null;
   const explore = reachable.filter((r) => r.type !== 'stairs' && r.type !== 'boss');
   return (explore[0] ?? reachable[0]!).id;
