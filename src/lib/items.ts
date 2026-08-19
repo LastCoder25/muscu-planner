@@ -414,10 +414,24 @@ export function tierCeilForLevel(level: number): number {
 
 const TIER_LO_WIDTH = 4; // traîne basse ≈ 0,8 rang (fourrage à infuser)
 
+/** Paramètres de la fenêtre glissante pour un contenu donné (source UNIQUE partagée par
+ *  `rollTier` et `dropBand` → l'affichage de la bande de drop suit toujours le tirage réel).
+ *  - `mode` : pic, calé sur le BAS du rang courant + fraction (PAS de +4) → au bas d'un rang
+ *    le pic est à ★1, en haut de bande à ★5 (la qualité monte dans la bande), avance ≈ 1
+ *    cran/niveau tôt puis ralentit en √ ; petit coup de pouce luck ;
+ *  - `hiWidth` : pointe haute, épaissie par la luck (re-pondère vers la droite) ;
+ *  - `hardCap` : plafond DUR de rang (√) — ni la luck ni la traîne ne le passent. */
+function tierWindow(level: number, luck: number, floorBonus: number) {
+  const l = Math.min(1, Math.max(0, luck));
+  const hardCap = rankCeilingForLevel(level) * 5 + 4;
+  const center = Math.sqrt(Math.max(0, level)) * 1.03 * 5;
+  const mode = Math.min(hardCap, center + l * 1.2 + Math.max(0, floorBonus));
+  return { mode, loWidth: TIER_LO_WIDTH, hiWidth: 1.6 + l * 2.2, hardCap };
+}
+
 /** Tire un PALIER (0..49) = rang×5 + (qualité-1) via la fenêtre glissante ci‑dessus.
  *  - `level` : niveau du CONTENU (donjon/boss/labyrinthe) → position de la fenêtre ;
- *  - `luck` (0..1) : pousse le pic vers le haut ET épaissit la pointe haute (favorise la
- *    droite de la frise), SANS jamais dépasser le plafond DUR de rang (gate de profondeur) ;
+ *  - `luck` (0..1) : épaissit la pointe haute (favorise la droite), sans passer le plafond ;
  *  - `floorBonus` : décale le pic vers le haut (Autel des boss), en crans.
  *  Renvoie { rank, quality, roll } où roll∈[0,1] encode la qualité (rollStars le relit). */
 export function rollTier(
@@ -426,23 +440,39 @@ export function rollTier(
   luck = 0,
   floorBonus = 0,
 ): { rank: Rarity; quality: number; roll: number } {
-  const l = Math.min(1, Math.max(0, luck));
-  const hardCap = rankCeilingForLevel(level) * 5 + 4; // plafond DUR (√), la luck ne le passe pas
-  // PIC calé sur le BAS du rang courant + fraction (PAS de +4) → au bas d'un rang le pic
-  // est à ★1, en haut de bande à ★5 : la qualité monte cran par cran DANS la bande, puis
-  // on bascule sur le rang suivant. Avance ≈ 1 cran/niveau tôt, ralentit en √.
-  const center = Math.sqrt(Math.max(0, level)) * 1.03 * 5;
-  // Le PIC suit le niveau (petit coup de pouce luck) ; c'est surtout la TRAÎNE HAUTE que
-  // la luck épaissit → elle re-pondère les probas vers la droite (drops chanceux) sans
-  // téléporter le pic au plafond (ce qui saturerait le ★5 dès le bas de bande).
-  const mode = Math.min(hardCap, center + l * 1.2 + Math.max(0, floorBonus));
+  const { mode, loWidth, hiWidth, hardCap } = tierWindow(level, luck, floorBonus);
   const g = gaussian(rng);
-  const hiWidth = 1.6 + l * 2.2; // pointe haute : fine à luck 0, grasse à luck 1
-  let tier = Math.round(mode + (g >= 0 ? g * hiWidth : g * TIER_LO_WIDTH));
+  let tier = Math.round(mode + (g >= 0 ? g * hiWidth : g * loWidth));
   tier = Math.min(hardCap, Math.max(0, tier)); // plafond dur + plancher mou (0)
-  const rank = RANK_ORDER[Math.floor(tier / 5)]!;
-  const quality = (tier % 5) + 1; // 1..5
-  return { rank, quality, roll: (quality - 0.5) / 5 };
+  return tierToRankQ(tier);
+}
+
+/** Convertit un cran 0..49 → { rank, quality, roll } (roll encode la qualité). */
+export function tierToRankQ(tier: number): { rank: Rarity; quality: number; roll: number } {
+  const t = Math.min(49, Math.max(0, Math.round(tier)));
+  const quality = (t % 5) + 1;
+  return { rank: RANK_ORDER[Math.floor(t / 5)]!, quality, roll: (quality - 0.5) / 5 };
+}
+
+/** Bande de drop TYPIQUE d'un contenu (≈ 10e→90e centile de la fenêtre) → pour afficher
+ *  « ce donjon drop E★3 → D★1 ». Déterministe (analytique, pas de rng). */
+export function dropBand(
+  level: number,
+  luck = 0,
+  floorBonus = 0,
+): { lo: { rank: Rarity; quality: number }; hi: { rank: Rarity; quality: number } } {
+  const { mode, loWidth, hiWidth, hardCap } = tierWindow(level, luck, floorBonus);
+  const clamp = (t: number) => Math.min(hardCap, Math.max(0, Math.round(t)));
+  const lo = tierToRankQ(clamp(mode - 1.3 * loWidth));
+  const hi = tierToRankQ(clamp(mode + 1.3 * hiWidth));
+  return { lo: { rank: lo.rank, quality: lo.quality }, hi: { rank: hi.rank, quality: hi.quality } };
+}
+
+/** Libellé compact de la bande de drop : « E★3 → D★1 » (ou « E★2 → E★5 » même rang). */
+export function dropBandLabel(level: number, luck = 0, floorBonus = 0): string {
+  const { lo, hi } = dropBand(level, luck, floorBonus);
+  const f = (x: { rank: Rarity; quality: number }) => `${x.rank}★${x.quality}`;
+  return lo.rank === hi.rank && lo.quality === hi.quality ? f(lo) : `${f(lo)} → ${f(hi)}`;
 }
 /** Rang seul (utilitaires forge/familier qui n'ont pas besoin de la qualité fine). */
 export function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {

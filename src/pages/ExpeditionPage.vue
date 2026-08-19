@@ -46,6 +46,13 @@
               <span class="lt-fam"
                 >🐾 familier rang <b>{{ t.laby.rank }}</b></span
               >
+              ·
+              <span
+                class="lt-band"
+                :style="{ color: RANK_COLOR[dropBand(t.laby.dropLevel, t.laby.luck).hi.rank] }"
+                title="Rangs★qualité de butin typiques (coffres/trésor)"
+                >🎖️ {{ dropBandLabel(t.laby.dropLevel, t.laby.luck) }}</span
+              >
               · <span class="lt-death">💀 garde {{ t.deathKeep }}%</span>
             </div>
             <div v-if="!t.unlocked" class="lt-lock">
@@ -369,8 +376,11 @@ import {
   effectLabel,
   RARITY_LABEL,
   RARITY_RANK,
+  RANK_COLOR,
   rollStars,
   tierIndexOf,
+  dropBand,
+  dropBandLabel,
   SLOT_LABEL,
   type Item,
   type Rarity,

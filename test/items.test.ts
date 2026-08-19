@@ -5,6 +5,8 @@ import {
   rollDrop,
   rollSetPiece,
   rollTier,
+  dropBand,
+  dropBandLabel,
   rankCeilingForLevel,
   RANK_ORDER,
   RARITY_MULT,
@@ -127,6 +129,20 @@ describe('rollTier : gate de profondeur', () => {
     const ceil = rankCeilingForLevel(20);
     for (let s = 1; s <= 300; s++)
       expect(RARITY_RANK[rollTier(mulberry32(s), 20, 1).rank]).toBeLessThanOrEqual(ceil);
+  });
+  it('dropBand : bande cohérente (lo ≤ hi ≤ plafond) et qui monte avec le niveau', () => {
+    const tier = (x: { rank: string; quality: number }) =>
+      RARITY_RANK[x.rank as keyof typeof RARITY_RANK] * 5 + (x.quality - 1);
+    for (const lv of [4, 12, 25, 60]) {
+      const b = dropBand(lv, 0.4);
+      expect(tier(b.lo)).toBeLessThanOrEqual(tier(b.hi));
+      expect(RARITY_RANK[b.hi.rank]).toBeLessThanOrEqual(rankCeilingForLevel(lv));
+    }
+    // la bande glisse vers le haut avec le niveau
+    expect(tier(dropBand(30, 0.4).hi)).toBeGreaterThan(tier(dropBand(12, 0.4).hi));
+    // luck pousse le haut de bande (ou égal si déjà au plafond)
+    expect(tier(dropBand(20, 0.9).hi)).toBeGreaterThanOrEqual(tier(dropBand(20, 0).hi));
+    expect(typeof dropBandLabel(12, 0.5)).toBe('string');
   });
 });
 

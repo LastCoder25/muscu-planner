@@ -1304,6 +1304,13 @@
                 :class="winClass(winPct['d:' + it.dungeon.id] ?? 0)"
                 >🎯 {{ winPct['d:' + it.dungeon.id] ?? 0 }}%</span
               >
+              <span
+                v-if="dungeonUnlocked(it.dungeon)"
+                class="dgn-chip band"
+                :class="'p-' + dropBand(it.dungeon.dropLevel, it.dungeon.dropLuck).hi.rank"
+                title="Rangs★qualité de butin typiques (bande de drop)"
+                >🎖️ {{ dropBandLabel(it.dungeon.dropLevel, it.dungeon.dropLuck) }}</span
+              >
               <button
                 v-if="dungeonUnlocked(it.dungeon)"
                 class="dgn-loot"
@@ -2419,6 +2426,8 @@ import {
   isFamiliar,
   FAMILIAR_SLOT,
   rollTier,
+  dropBand,
+  dropBandLabel,
   RANK_ORDER,
   SLOTS,
   SLOT_LABEL,
@@ -6995,6 +7004,12 @@ onUnmounted(() => {
   color: var(--dim);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+/* Bande de drop : teintée par le rang HAUT de la bande (var(--rk) via .p-<rang>). */
+.dgn-chip.band {
+  color: var(--rk, var(--accent));
+  border-color: color-mix(in srgb, var(--rk, var(--accent)) 45%, var(--line));
+  background: color-mix(in srgb, var(--rk, var(--accent)) 10%, var(--bg));
 }
 .dgn-chip.gold {
   color: var(--accent);
