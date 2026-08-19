@@ -7,6 +7,7 @@ import {
   buildingProdPerHour,
   buildingStorageCap,
   buildingAccrued,
+  nextCollectedAt,
   collectable,
   buildingType,
   buildingUnlockLevel,
@@ -184,6 +185,36 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
     expect(travelTimeMult([mk('outpost', 40)])).toBeCloseTo(0.4, 5); // plafonné −60 % au niv.40
     expect(travelTimeMult([mk('outpost', 60)])).toBeCloseTo(0.4, 5); // reste plafonné
     expect(outpostLevel([mk('outpost', 3)])).toBe(3);
+  });
+});
+
+describe('filons — report du reliquat à la récolte', () => {
+  it('la fraction non récoltée est conservée (pas remise à zéro)', () => {
+    const b = mk('dust_vein', 10, 0); // 0,35/h/niv → 3,5/h
+    const now = H; // 1 h → 3,5 stockés
+    expect(buildingAccrued(b, now, 1)).toBe(3);
+    const nca = nextCollectedAt(b, now, 1);
+    // Le reliquat reporté ≈ 0,5 unité (et non 0) : le stock ne repart pas de zéro.
+    const carriedUnits = (3.5 * (now - nca)) / H;
+    expect(carriedUnits).toBeCloseTo(0.5, 6);
+    // Re-récolte immédiate = 0 (moins d’une unité entière en stock).
+    expect(buildingAccrued({ ...b, collectedAt: nca }, now, 1)).toBe(0);
+  });
+
+  it('un filon lent n’est pas affamé par des récoltes fréquentes', () => {
+    let b = mk('stone_vein', 1, 0); // 0,16/h
+    let total = 0;
+    const step = 0.5 * H; // récolte toutes les 30 min (bien plus vite que 1 unité/6,25 h)
+    for (let now = step; now <= 20 * H; now += step) {
+      total += buildingAccrued(b, now, 1);
+      b = { ...b, collectedAt: nextCollectedAt(b, now, 1) };
+    }
+    // 20 h × 0,16/h = 3,2 → on récupère 3 (et non 0 comme avec l’ancien reset à `now`).
+    expect(total).toBe(3);
+  });
+
+  it('un utilitaire (perHr = 0) garde son collectedAt', () => {
+    expect(nextCollectedAt(mk('boss_altar', 5, 123), 999_999)).toBe(123);
   });
 });
 

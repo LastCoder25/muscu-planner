@@ -52,6 +52,8 @@ import {
   canBuildType,
   plotsForLevel,
   collectable,
+  nextCollectedAt,
+  storageMult,
   expeditionsUnlocked,
   travelTimeMult,
   maxFuseTargetIndex,
@@ -997,12 +999,16 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || !cur.buildings.length) return null;
     const got = collectable(cur.buildings, now);
     if (got.dust <= 0 && got.stone <= 0 && got.energy <= 0 && got.parchemins <= 0) return null;
+    // Report du reliquat : chaque filon n'avance son `collectedAt` que du temps des
+    // unités ENTIÈRES récoltées → pas de perte de fraction, un filon lent n'est plus
+    // affamé par des récoltes fréquentes (cf. nextCollectedAt).
+    const mult = storageMult(cur.buildings);
     await persistOptimistic(userId, {
       dust: cur.dust + got.dust,
       stones: cur.stones + got.stone,
       parchemins: cur.parchemins + got.parchemins, // 📚 bibliothèque → parchemins (talents)
       login_energy: cur.login_energy + got.energy, // ⚡ dynamo → énergie de jeu
-      buildings: cur.buildings.map((b) => ({ ...b, collectedAt: now })),
+      buildings: cur.buildings.map((b) => ({ ...b, collectedAt: nextCollectedAt(b, now, mult) })),
     });
     return got;
   }

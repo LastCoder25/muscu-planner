@@ -427,3 +427,20 @@ export function collectable(buildings: Building[], now: number): Record<BuildRes
   }
   return acc;
 }
+
+/** Nouveau `collectedAt` d'un filon APRÈS récolte. On n'avance le compteur QUE du
+ *  temps correspondant aux unités ENTIÈRES récoltées → le reliquat fractionnaire est
+ *  REPORTÉ au lieu d'être jeté. Conséquences : (1) plus de perte de fraction à chaque
+ *  récolte ; (2) un filon LENT (0,16/h) n'est plus « affamé » quand on récolte souvent
+ *  pour un filon rapide (sa fraction < 1 est conservée, il finit par cumuler son unité).
+ *  Filon sans unité entière prête (ou utilitaire) → `collectedAt` inchangé (rien jeté). */
+export function nextCollectedAt(b: Building, now: number, mult = 1): number {
+  const perHr = buildingProdPerHour(b);
+  if (perHr <= 0) return b.collectedAt; // utilitaire : rien à récolter
+  const cap = buildingStorageCap(b, mult); // en unités
+  const stored = Math.min((perHr * (now - b.collectedAt)) / BUILD.hourMs, cap);
+  const collected = Math.floor(stored);
+  if (collected <= 0) return b.collectedAt; // rien récolté → on garde l'accumulation en cours
+  const remaining = stored - collected; // 0 ≤ remaining < 1 : reporté dans le stock
+  return now - (remaining / perHr) * BUILD.hourMs;
+}
