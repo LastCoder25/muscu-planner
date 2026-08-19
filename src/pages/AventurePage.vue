@@ -448,9 +448,7 @@
             🛡️ Équipement
           </button>
           <button class="gs-b" :class="{ on: gearSub === 'bag' }" @click="gearSub = 'bag'">
-            🎒 Sac<span v-if="char.row.inventory.length" class="gs-badge">{{
-              char.row.inventory.length
-            }}</span>
+            🎒 Sac<span v-if="bagCount" class="gs-badge">{{ bagCount }}</span>
           </button>
           <button class="gs-b" :class="{ on: gearSub === 'shop' }" @click="gearSub = 'shop'">
             🔧 Atelier
@@ -749,8 +747,8 @@
         </template>
 
         <template v-if="gearSub === 'bag'">
-          <template v-if="char.row.inventory.length">
-            <div ref="sacTitle" class="sec-title">Sac ({{ char.row.inventory.length }})</div>
+          <template v-if="bagCount">
+            <div ref="sacTitle" class="sec-title">Sac ({{ bagCount }})</div>
             <!-- Filtre par type d'objet -->
             <div class="inv-filter">
               <button
@@ -3932,6 +3930,9 @@ const filteredInventory = computed<Item[]>(() => {
     .filter((i) => invFilter.value === 'all' || i.slot === invFilter.value)
     .sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || b.level - a.level);
 });
+// Nb d'objets RÉELLEMENT dans le Sac = hors familiers (rangés dans leur propre section)
+// → sinon le badge « Sac » comptait un familier fantôme (ticket e3d61676).
+const bagCount = computed(() => (char.row?.inventory ?? []).filter((i) => !isFamiliar(i)).length);
 
 // ── Familier (compagnon) ──
 const equippedFamiliar = computed<Item | null>(() => char.row?.equipped[FAMILIAR_SLOT] ?? null);

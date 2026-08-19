@@ -119,8 +119,10 @@
                     <q-icon v-else name="fitness_center" size="15px" />
                   </span>
                   <span class="ct-name">{{ c.exercise_name }}</span>
-                  <span class="ct-cost">{{ cardCostLabel(c) }}</span>
                 </div>
+                <span class="ct-cost" :class="{ accessoire: cardCostLabel(c) === 'accessoire' }">{{
+                  cardCostLabel(c)
+                }}</span>
                 <span class="cc-today" :class="st(c).isDoneToday ? 'done' : 'todo'">{{
                   st(c).isDoneToday ? '✓ À jour' : '● À faire'
                 }}</span>
@@ -1414,17 +1416,26 @@ onMounted(async () => {
 .ct-name {
   flex: 1;
   min-width: 0;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 14px;
   color: var(--text);
   line-height: 1.2;
 }
+/* Coût (jetons / accessoire) : sur sa PROPRE ligne sous le titre, en petite pastille. */
 .ct-cost {
-  flex: none;
+  align-self: flex-start;
+  margin-top: 1px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
   font-size: 10px;
   font-weight: 700;
   color: var(--accent);
   white-space: nowrap;
+}
+.ct-cost.accessoire {
+  color: var(--dim);
+  border-color: var(--line);
 }
 .ct-sub {
   font-size: 11px;
