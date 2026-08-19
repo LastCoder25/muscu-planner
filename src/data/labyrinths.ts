@@ -76,11 +76,23 @@ export const LABYRINTHS: Labyrinth[] = [
     fragBonus: 4,
   },
   {
+    // Palier intermédiaire (2026‑08‑19) : lisse le saut de rang de familier B → SS entre
+    // Spirale (plafond A) et Cœur du Néant (plafond SS) → familier rang ~S.
+    id: 'astral',
+    name: 'Vortex Astral',
+    emoji: '🌠',
+    recoLevel: 50,
+    floors: 8,
+    dropLevel: 52,
+    luck: 0.95,
+    fragBonus: 5,
+  },
+  {
     id: 'neant',
     name: 'Cœur du Néant',
     emoji: '🕸️',
     recoLevel: 60,
-    floors: 8,
+    floors: 9,
     dropLevel: 62,
     luck: 1,
     fragBonus: 6,
