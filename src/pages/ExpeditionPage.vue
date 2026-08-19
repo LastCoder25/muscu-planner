@@ -219,8 +219,17 @@
 
         <!-- Récap du butin ramené (pour juger la rentabilité du run sans fouiller le sac) -->
         <div v-if="run.status !== 'dead' && loot.length" class="over-loot">
-          <div class="ol-title">Objets rapportés</div>
-          <div v-for="(it, i) in loot" :key="i" class="ol-item" :class="'r-' + it.rarity">
+          <div class="ol-title">
+            Objets rapportés <span class="ol-hint">(tape pour le détail)</span>
+          </div>
+          <button
+            v-for="(it, i) in loot"
+            :key="i"
+            type="button"
+            class="ol-item"
+            :class="'r-' + it.rarity"
+            @click="detailItem = it"
+          >
             <span class="ol-emo">{{ it.emoji }}</span>
             <div class="ol-main">
               <span class="ol-name">{{ it.name }}</span>
@@ -228,7 +237,8 @@
                 >{{ RARITY_LABEL[it.rarity] }} · {{ effectLabel(it.effect, it.level) }}</span
               >
             </div>
-          </div>
+            <span class="ol-chevron">›</span>
+          </button>
         </div>
         <div class="over-row">
           <q-btn
@@ -241,6 +251,35 @@
           />
           <q-btn flat no-caps label="Sortir" @click="back()" />
         </div>
+      </q-card>
+    </q-dialog>
+
+    <!-- Détail d'un objet rapporté (clic sur le récap de butin) -->
+    <q-dialog :model-value="!!detailItem" @update:model-value="detailItem = null">
+      <q-card v-if="detailItem" class="fx-loot-card im-card" :class="'r-' + detailItem.rarity">
+        <div class="fl-emoji">{{ detailItem.emoji }}</div>
+        <div class="fl-name">{{ detailItem.name }}</div>
+        <div class="fl-meta">
+          {{ RARITY_LABEL[detailItem.rarity]
+          }}<template v-if="rollStars(detailItem.roll)">
+            · qualité {{ rollStars(detailItem.roll) }}/5</template
+          >
+          · {{ SLOT_LABEL[detailItem.slot] }} · niv {{ detailItem.level }}
+        </div>
+        <div class="fl-eff">✦ {{ effectLabel(detailItem.effect, detailItem.level) }}</div>
+        <div v-if="detailItem.effect2" class="fl-eff">
+          ✦ {{ effectLabel(detailItem.effect2, detailItem.level) }}
+        </div>
+        <div v-if="detailItem.setId" class="fl-set">🧩 {{ setName(detailItem.setId) }}</div>
+        <q-btn
+          class="fx-cta"
+          color="primary"
+          text-color="dark"
+          no-caps
+          unelevated
+          label="Fermer"
+          @click="detailItem = null"
+        />
       </q-card>
     </q-dialog>
   </component>
@@ -278,6 +317,7 @@ import {
   effectLabel,
   RARITY_LABEL,
   RARITY_RANK,
+  rollStars,
   tierIndexOf,
   SLOT_LABEL,
   type Item,
@@ -373,6 +413,11 @@ const dust = ref(0);
 const frags = ref(0); // fragments de familiers 🧩 amassés dans les coffres
 const loot = ref<Item[]>([]);
 let lootN = 0;
+// Détail d'un objet du récap de butin (modale au clic).
+const detailItem = ref<Item | null>(null);
+function setName(id?: string): string {
+  return id ? (ITEM_SETS.find((s) => s.id === id)?.name ?? 'Set') : '';
+}
 
 // Animation de salle (combat / coffre / piège) jouée en overlay avant de continuer.
 type StageFight = { name: string; emoji: string; maxPv: number; log: CombatEvent[] };
@@ -1189,18 +1234,45 @@ function replay() {
   font-weight: 700;
   margin-bottom: 2px;
 }
+.ol-hint {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  opacity: 0.75;
+}
 .ol-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  text-align: left;
   padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid var(--line);
   border-left-width: 3px;
   background: var(--surface);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 .ol-item[class*='r-'] {
   border-left-color: var(--rk, var(--line));
+}
+.ol-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.ol-item:active {
+  transform: scale(0.99);
+}
+.ol-chevron {
+  margin-left: auto;
+  font-size: 18px;
+  color: var(--dim);
+}
+/* Modale de détail d'objet : la carte de butin, un peu plus large. */
+.im-card {
+  min-width: 260px;
+  max-width: 92vw;
 }
 .ol-emo {
   font-size: 18px;
