@@ -527,9 +527,21 @@
         <template v-if="gearSub === 'equip'">
           <div class="sec-title">🐾 Familier</div>
           <div class="sec-hint">
-            Ton compagnon donne un bonus de race. Les plus rares portent en plus un effet
-            <b>✦ signature</b> (exécution, fureur, élan). Monte-le avec des
-            <b>💎 pierres magiques</b> (Labyrinthe & butin). <b>💎 {{ char.row.stones }}</b> dispo.
+            Ton compagnon donne un bonus de race (+ un effet <b>✦ signature</b> pour les plus
+            rares). <b>Deux façons de le renforcer</b>, indépendantes :
+            <div class="fam-res">
+              <span class="fam-res-l"
+                ><b>💎 Pierres → NIVEAU</b> (la puissance de l'effet). Montées au bouton
+                <b>💎</b> du familier.</span
+              >
+              <span class="fam-res-l"
+                ><b>🧩 Fragments → TIER</b> (rang + qualité). Via l'<b>Incubateur 🥚</b> : choisis
+                une cible <b>🔧</b> puis dépense tes fragments. Recycler ♻️ un familier du sac donne
+                des fragments.</span
+              >
+            </div>
+            Tu as <b>💎 {{ char.row.stones }}</b> pierres · <b>🧩 {{ char.row.fragments }}</b>
+            fragments.
           </div>
           <div class="fam-panel">
             <div
@@ -562,24 +574,37 @@
                   <button
                     class="slot-up"
                     :disabled="!canUpgradeFamiliar(equippedFamiliar)"
+                    title="Monte le NIVEAU (puissance de l'effet) avec des pierres 💎"
                     @click.stop="doUpgradeFamiliar(equippedFamiliar.id)"
                   >
                     <template v-if="equippedFamiliar.level >= c.level.level"
-                      >💎 Max (niv {{ c.level.level }})</template
+                      >💎 Niveau max ({{ c.level.level }})</template
                     >
                     <template v-else
-                      >💎 Monter ·
+                      >💎 Niveau +1 ·
                       {{ familiarStoneCost(equippedFamiliar.level, equippedFamiliar.rarity) }}
                       💎</template
                     >
                   </button>
+                  <!-- Infusion du TIER (rang+qualité) : toujours visible ; sans Incubateur,
+                       le bouton emmène en construire un. -->
                   <button
-                    v-if="hasIncubator && !famTarget"
+                    v-if="!famTarget"
                     class="slot-remove"
-                    @click.stop="setFamTarget(equippedFamiliar)"
+                    :title="
+                      hasIncubator
+                        ? 'Monte le TIER (rang + qualité) avec des fragments 🧩'
+                        : 'Construis un Incubateur 🥚 pour infuser le tier'
+                    "
+                    @click.stop="
+                      hasIncubator ? setFamTarget(equippedFamiliar) : openGame('/expedition-map')
+                    "
                   >
-                    🔧 Infuser
+                    {{ hasIncubator ? '🧩 Infuser le tier' : '🧩 Infuser (Incubateur 🥚)' }}
                   </button>
+                  <span v-else-if="famTarget.id === equippedFamiliar.id" class="fam-target-tag"
+                    >🔧 cible ↓</span
+                  >
                   <button class="slot-remove" @click="doUnequipFamiliar()">Retirer</button>
                 </div>
               </div>
@@ -5358,6 +5383,32 @@ onUnmounted(() => {
   gap: 10px;
   align-items: center;
   margin-top: 8px;
+  flex-wrap: wrap;
+}
+.fam-target-tag {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--accent);
+}
+/* Explication des 2 ressources du familier (💎 niveau / 🧩 tier). */
+.fam-res {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.fam-res-l {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dim);
+}
+.fam-res-l b {
+  color: var(--text);
 }
 .fam-empty {
   background: var(--surface);
