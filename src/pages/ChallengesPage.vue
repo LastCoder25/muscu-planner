@@ -374,16 +374,9 @@
                 :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }"
               />
             </div>
-            <div class="cl-add-lbl">Ajouter des séries :</div>
             <div class="cl-actions">
-              <button
-                v-for="n in [1, 2, 3, 4]"
-                :key="n"
-                class="cl-add"
-                :title="`Ajouter ${n} série${n > 1 ? 's' : ''}`"
-                @click="openSet(leg, n)"
-              >
-                +{{ n }}
+              <button class="cl-add" title="Ajouter une série" @click="openSet(leg, 1)">
+                ＋ 1 série
               </button>
               <button
                 class="cl-corr"
@@ -1169,26 +1162,35 @@ onMounted(async () => {
    un objectif de 9 → 3 lignes de 9). */
 .seg {
   flex: 0 0 calc((100% - (var(--cols, 10) - 1) * 3px) / var(--cols, 10));
-  height: 8px;
-  border-radius: 3px;
-  background: var(--surface-2);
+  height: 14px;
+  border-radius: 4px;
+  /* Série À FAIRE : plus visible (fond légèrement teinté + liseré) au lieu de noir sur noir. */
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
 }
 .seg.on {
   background: var(--accent);
+  border-color: var(--accent);
 }
 /* Série faite au-delà de l'objectif → vert « en plus ». */
 .seg.extra.on {
   background: var(--d1);
+  border-color: var(--d1);
 }
 .cl-extra {
   margin-left: 6px;
   font-weight: 700;
   color: var(--d1);
 }
+/* Dans la pastille verte (objectif atteint), le « +N en plus » doit rester lisible. */
+.cl-sub.ok .cl-extra {
+  color: #15120e;
+}
 .cl-top {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 8px;
 }
 .cl-name {
   display: inline-flex;
@@ -1246,13 +1248,24 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--dim);
 }
+/* Pastille séries faites/à faire, en haut à droite de la ligne. */
 .cl-sub {
-  font-size: 12.5px;
-  color: var(--dim);
+  flex: none;
+  align-self: flex-start;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .cl-sub.ok {
-  color: var(--d1);
+  color: #15120e;
+  background: var(--d1);
+  border-color: var(--d1);
 }
 .cl-add-lbl {
   margin-top: 8px;
