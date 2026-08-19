@@ -389,9 +389,33 @@ const route = useRoute();
 const router = useRouter();
 const { gameBack } = useGamePanel();
 // Retour/Sortir : dans le volet jeu (cockpit) → revient à l'Aventure ; sinon route.
-function back() {
+function leave() {
   if (props.embedded) return gameBack();
   router.back();
+}
+// Quitter un run EN COURS = abandon → le butin ramassé (crédité seulement à la fin du
+// palier) est perdu. On avertit (le bouton « 🚪 Sortir en gardant le butin » banque, lui).
+const runInProgress = () => phase.value === 'running' && !over.value;
+function back() {
+  if (runInProgress()) {
+    $q.dialog({
+      title: 'Quitter le labyrinthe ?',
+      message:
+        'Le run en cours sera <b>abandonné</b> : tu perds tout le butin ramassé (or, poussière, objets). Le butin n’est crédité qu’<b>à la fin du palier</b>. Pour le garder, utilise « 🚪 Sortir en gardant le butin » sur un escalier.',
+      html: true,
+      cancel: { label: 'Rester', flat: true },
+      ok: { label: 'Quitter (perdre le butin)', color: 'negative' },
+    }).onOk(leave);
+    return;
+  }
+  leave();
+}
+// Rafraîchir/fermer l'onglet pendant un run → avertissement natif du navigateur.
+function beforeUnload(e: BeforeUnloadEvent) {
+  if (runInProgress()) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
 }
 const $q = useQuasar();
 const auth = useAuthStore();
@@ -513,6 +537,7 @@ const playerEquipped = computed(() => char.row?.equipped ?? {});
 const booting = ref(true);
 onMounted(async () => {
   setTimeout(() => (booting.value = false), 750);
+  window.addEventListener('beforeunload', beforeUnload);
   try {
     await char.fetchMine();
   } catch {
@@ -924,7 +949,10 @@ async function startAuto(tier: Labyrinth) {
     scheduleAuto(800);
   }
 }
-onBeforeUnmount(stopAuto);
+onBeforeUnmount(() => {
+  stopAuto();
+  window.removeEventListener('beforeunload', beforeUnload);
+});
 
 // Termine le run et CRÉDITE le butin au perso. Mort → or+poussière seuls (gear
 // perdu) ; nettoyé → + trésor final ; retraite → butin gardé, pas de trésor final.
