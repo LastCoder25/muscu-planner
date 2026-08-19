@@ -2076,6 +2076,12 @@
                   >+{{ run.summonStones }} 🔮</span
                 >
                 <span v-if="run.stones" class="gain-pill stones">+{{ run.stones }} 💎</span>
+                <span
+                  v-if="run.parchemins"
+                  class="gain-pill parch"
+                  title="Parchemins (montée du niveau des talents)"
+                  >+{{ run.parchemins }} 📜</span
+                >
               </span>
             </div>
             <div class="result-sub">
@@ -2467,6 +2473,7 @@ interface RunView {
   talentDrops?: TalentInstance[]; // talents tombés (affichés dans le rapport)
   summonStones?: number; // pierres d'invocation 🔮 gagnées (donjon → aller aux boss)
   stones?: number; // pierres magiques 💎 gagnées (familiers)
+  parchemins?: number; // parchemins 📜 gagnés (niveau des talents)
   consumable?: { emoji: string; name: string };
 }
 
@@ -3521,10 +3528,14 @@ async function explore(d: Dungeon) {
     // Pierres d'invocation 🔮 : lot au NETTOYAGE, ∝ profondeur du donjon → farmer plus
     // profond finance des boss plus hauts. Un boss de palier coûte ~2-6 pierres → 2-6 runs.
     const summonStones = r.cleared ? 1 + Math.floor(d.recoLevel / 8) : 0;
-    // Drop de TALENT (drop-only) : ~6 % sur un donjon nettoyé, rareté ∝ luck du donjon.
+    // Parchemins 📜 (niveau des talents) : filet au NETTOYAGE, ∝ profondeur → la
+    // Bibliothèque n'est plus la SEULE source (elle reste la production passive/régulière).
+    const parchemins = r.cleared ? 1 + Math.floor(d.recoLevel / 6) : 0;
+    // Drop de TALENT (drop-only) : ~6 % sur un donjon nettoyé ; RANG gaté par le niveau
+    // du donjon (`dropLevel`), biaisé par sa luck → farmer profond = talents plus hauts.
     const talentDrops =
       r.cleared && dropRng() < 0.06
-        ? [rollTalentDrop(dropRng, { luck: d.dropLuck, idSeed: seed })]
+        ? [rollTalentDrop(dropRng, { level: d.dropLevel, luck: d.dropLuck, idSeed: seed })]
         : [];
     await char.applyRun(uid, {
       energyCost: d.energyCost,
@@ -3533,6 +3544,7 @@ async function explore(d: Dungeon) {
       drops,
       stones,
       summonStones,
+      parchemins,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(consumed.length ? { consumed } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
@@ -3565,6 +3577,7 @@ async function explore(d: Dungeon) {
       ...(talentDrops.length ? { talentDrops } : {}),
       ...(summonStones ? { summonStones } : {}),
       ...(stones ? { stones } : {}),
+      ...(parchemins ? { parchemins } : {}),
     };
     // 1er nettoyage d'un donjon (débloque le suivant) = moment de progression →
     // éclat, mais SEULEMENT à la fin de l'animation de combat (sinon il recouvre
@@ -3749,11 +3762,12 @@ async function fightBoss(b: MilestoneBoss) {
       : null;
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
     // Drop de TALENT au boss (source plus généreuse que les donjons) : ~25 % à la
-    // victoire, rareté rehaussée (luck 0.6) — les boss sont une bonne source de talents.
+    // victoire, RANG gaté par le palier du boss (`dropLevel`) et luck rehaussée (0.6) —
+    // les boss lâchent des talents plus hauts que les donjons de même profondeur.
     const bossTalentRng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
     const talentDrops =
       win && bossTalentRng() < 0.25
-        ? [rollTalentDrop(bossTalentRng, { luck: 0.6, idSeed: seed })]
+        ? [rollTalentDrop(bossTalentRng, { level: b.dropLevel, luck: 0.6, idSeed: seed })]
         : [];
     await char.applyBossWin(uid, {
       bossId: b.id,
@@ -3763,6 +3777,7 @@ async function fightBoss(b: MilestoneBoss) {
       defeated: win,
       pending,
       stones: 6, // jalon boss (raréfié 2026-08-18) → lot de pierres 💎 (crédité seulement si vaincu)
+      parchemins: 5 + Math.floor(b.unlockLevel / 4), // jalon boss → lot de parchemins 📜 (talents)
       ...(consumed.length ? { consumed } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
     });
@@ -3792,6 +3807,7 @@ async function fightBoss(b: MilestoneBoss) {
       drops: [],
       ...(talentDrops.length ? { talentDrops } : {}),
       ...(win ? { stones: 6 } : {}),
+      ...(win ? { parchemins: 5 + Math.floor(b.unlockLevel / 4) } : {}),
     };
     // Victoire de boss de palier = jalon MAJEUR → célébration centrale (gros éclat),
     // DIFFÉRÉE à la fin de l'animation de combat.
@@ -7506,6 +7522,11 @@ onUnmounted(() => {
   color: #5fd0e0;
   background: color-mix(in srgb, #5fd0e0 16%, transparent);
   border: 1px solid #5fd0e0;
+}
+.gain-pill.parch {
+  color: #d8b46a;
+  background: color-mix(in srgb, #d8b46a 16%, transparent);
+  border: 1px solid #d8b46a;
 }
 .result-sub {
   font-size: 12px;

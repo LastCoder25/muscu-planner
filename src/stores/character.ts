@@ -268,6 +268,7 @@ export const useCharacterStore = defineStore('character', () => {
       gained?: string[]; // consommables gagnés en butin
       stones?: number; // pierres magiques 💎 (filet diffus, familiers)
       summonStones?: number; // pierres d'invocation 🔮 (drop de donjon nettoyé)
+      parchemins?: number; // parchemins 📜 (filet de donjon nettoyé, niveau des talents)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
     },
   ) {
@@ -295,6 +296,7 @@ export const useCharacterStore = defineStore('character', () => {
       dust: cur.dust + input.dust,
       stones: cur.stones + (input.stones ?? 0),
       summon_stones: cur.summon_stones + (input.summonStones ?? 0),
+      parchemins: cur.parchemins + (input.parchemins ?? 0),
       energy_spent: cur.energy_spent + input.energyCost,
       equipped: dist.equipped,
       inventory: dist.inventory,
@@ -320,6 +322,7 @@ export const useCharacterStore = defineStore('character', () => {
       pending?: PendingReward | null;
       consumed?: string[];
       stones?: number; // pierres magiques 💎 (jalon boss)
+      parchemins?: number; // parchemins 📜 (jalon boss, niveau des talents)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
     },
   ) {
@@ -345,6 +348,7 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
       stones: cur.stones + (input.defeated ? (input.stones ?? 0) : 0),
+      parchemins: cur.parchemins + (input.defeated ? (input.parchemins ?? 0) : 0),
       summon_stones: Math.max(0, cur.summon_stones - input.summonCost),
       defeated_bosses: defeated,
       consumables,

@@ -2,7 +2,7 @@
 // (plus de choix 1-parmi-3), ont une RARETÉ, montent en niveau/rareté par INFUSION de
 // doublons (XP), et on n'en ÉQUIPE qu'un nombre limité (swap libre). Bonus appliqués
 // via AggregatedEffects (comme le gear/les familiers). Pur/testable.
-import { emptyEffects, RANK_ORDER, type AggregatedEffects, type Rarity } from './items';
+import { emptyEffects, RANK_ORDER, rollTier, type AggregatedEffects, type Rarity } from './items';
 
 // Définition catalogue : un talent = une clé d'effet + une magnitude de BASE (niv.1),
 // qui grandit avec le niveau (talentLevelMult). Élargi de 5 → 11 (un par effet).
@@ -236,14 +236,24 @@ export function talentEffects(raw: unknown, playerLevel = Infinity): AggregatedE
   return a;
 }
 
-// ── Drop : un talent tombe au TIER 0 (G1), niveau 1. Le tier monte par INFUSION
-// (sacrifice), le niveau par PARCHEMINS. Non équipé par défaut. ──
+// ── Drop : le RANG+QUALITÉ du talent est GATÉ par la profondeur du contenu (comme
+// les objets/familiers via `rollTier`) — un talent d'un donjon/boss profond tombe à
+// un rang plus haut, biaisé par la `luck`. Le niveau (magnitude) démarre à 1 et
+// monte aux PARCHEMINS ; le tier peut ensuite grimper par INFUSION. Non équipé par
+// défaut. ──
 export function rollTalentDrop(
   rng: () => number,
-  opts: { luck?: number; idSeed?: number } = {},
+  opts: { level?: number; luck?: number; floorBonus?: number; idSeed?: number } = {},
 ): TalentInstance {
   const def = TALENTS[Math.floor(rng() * TALENTS.length)]!;
-  return { id: `tal_${opts.idSeed ?? Math.floor(rng() * 1e9)}`, code: def.code, xp: 0, level: 1 };
+  const { rank, quality } = rollTier(rng, opts.level ?? 1, opts.luck ?? 0, opts.floorBonus ?? 0);
+  const tier = RANK_ORDER.indexOf(rank) * 5 + (quality - 1);
+  return {
+    id: `tal_${opts.idSeed ?? Math.floor(rng() * 1e9)}`,
+    code: def.code,
+    xp: talentTierFloor(tier),
+    level: 1,
+  };
 }
 
 /** XP d'infusion qu'un talent SACRIFIÉ rend (∝ son tier) : G1 → 1 … SSS5 → 50. */

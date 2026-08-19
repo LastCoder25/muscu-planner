@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
+import { RANK_ORDER, rankCeilingForLevel } from '@/lib/items';
 import {
   talentsEarned,
   talentEffects,
@@ -113,12 +114,28 @@ describe('talentEffects (équipés uniquement)', () => {
 });
 
 describe('drop', () => {
-  it('rollTalentDrop : code valide, TIER 0 (xp 0) + niveau 1, non équipé', () => {
-    const t = rollTalentDrop(mulberry32(3), { luck: 0.5, idSeed: 1 });
+  it('rollTalentDrop : code valide, niveau 1, non équipé', () => {
+    const t = rollTalentDrop(mulberry32(3), { level: 4, luck: 0.5, idSeed: 1 });
     expect(TALENTS.some((d) => d.code === t.code)).toBe(true);
-    expect(t.xp).toBe(0);
     expect(t.level).toBe(1);
-    expect(talentRankOf(t)).toBe('G');
     expect(t.equipped).toBeFalsy();
+  });
+
+  it('rollTalentDrop : le RANG est gaté par le niveau du contenu', () => {
+    // niveau bas → rang plafonné bas (jamais au-dessus du plafond de profondeur)
+    const ceilLow = rankCeilingForLevel(4);
+    for (let s = 0; s < 40; s++) {
+      const t = rollTalentDrop(mulberry32(s * 7 + 1), { level: 4, luck: 0.4, idSeed: s });
+      expect(RANK_ORDER.indexOf(talentRankOf(t))).toBeLessThanOrEqual(ceilLow);
+    }
+    // niveau haut + luck → dépasse le rang G (progression réelle)
+    const highMax = Math.max(
+      ...Array.from({ length: 60 }, (_, s) =>
+        RANK_ORDER.indexOf(
+          talentRankOf(rollTalentDrop(mulberry32(s * 13 + 5), { level: 80, luck: 1, idSeed: s })),
+        ),
+      ),
+    );
+    expect(highMax).toBeGreaterThan(0);
   });
 });
