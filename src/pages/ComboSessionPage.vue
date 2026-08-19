@@ -18,7 +18,7 @@
     <template v-else-if="phase === 'config'">
       <p class="intro">
         Choisis le nombre de séries <b>pour chaque exercice</b>. Chaque série ≈ 40 s d'exécution +
-        le repos choisi.
+        le repos choisi. <b>Décoche</b> un exo pour le <b>retirer</b> de cette séance.
       </p>
       <div class="cfg">
         <div class="cfg-lbl">Exercices à faire</div>
@@ -32,13 +32,19 @@
           <button
             type="button"
             class="exo-check"
+            :class="{ on: included[leg.exercise_id] }"
             :aria-pressed="included[leg.exercise_id]"
+            :title="
+              included[leg.exercise_id] ? 'Retirer de cette séance' : 'Ajouter à cette séance'
+            "
             @click="included[leg.exercise_id] = !included[leg.exercise_id]"
           >
             {{ included[leg.exercise_id] ? '☑' : '☐' }}
           </button>
           <div class="exo-main">
-            <span class="exo-name">{{ leg.exercise_name }}</span>
+            <span class="exo-name" :class="{ struck: !included[leg.exercise_id] }">{{
+              leg.exercise_name
+            }}</span>
             <span class="exo-rem">reste {{ legRemaining(leg) }} {{ legUnitLabel(leg) }}</span>
           </div>
           <div class="stepper">
@@ -457,11 +463,14 @@ onUnmounted(() => clearInterval(tick));
   flex: none;
   border: none;
   background: none;
-  color: var(--accent);
-  font-size: 20px;
+  color: var(--dim);
+  font-size: 22px;
   line-height: 1;
   cursor: pointer;
   padding: 0;
+}
+.exo-check.on {
+  color: var(--accent);
 }
 .stp-u {
   font-size: 11px;
@@ -478,6 +487,10 @@ onUnmounted(() => clearInterval(tick));
   font-weight: 600;
   font-size: 14px;
   color: var(--text);
+}
+.exo-name.struck {
+  text-decoration: line-through;
+  color: var(--dim);
 }
 .exo-rem {
   font-size: 11px;

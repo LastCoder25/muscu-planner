@@ -5,10 +5,17 @@
       <button
         v-if="ch && exoImg"
         class="exo-thumb"
-        aria-label="Voir l'exécution"
+        aria-label="Voir l'exécution en grand"
         @click="exoModal = true"
       >
-        <img :src="exoImg" alt="" />
+        <ExerciseAnim
+          v-if="exoFrames"
+          :exercise-id="ch.exercise_id"
+          :size="42"
+          :title="ch.exercise_name"
+        />
+        <img v-else :src="exoImg" alt="" />
+        <span class="exo-thumb-zoom" aria-hidden="true">⤢</span>
       </button>
       <div class="top-mid">
         <div class="top-title font-display">{{ ch?.exercise_name || 'Challenge' }}</div>
@@ -1188,15 +1195,33 @@ onBeforeUnmount(() => {
   flex: none;
 }
 .exo-thumb {
+  position: relative;
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 10px;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 1px solid var(--accent);
   padding: 0;
   cursor: pointer;
   background: var(--surface);
+}
+/* Badge « agrandir » : signale que la vignette est cliquable → animation en grand. */
+.exo-thumb-zoom {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #15120e;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
 }
 .exo-thumb img {
   width: 100%;
