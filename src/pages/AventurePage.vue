@@ -180,11 +180,14 @@
             <div class="hero-info">
               <div
                 class="hero-rank"
+                :style="{ '--rank-c': rank.color }"
                 :title="'Rang de prestige — ' + rank.name + ' ' + rank.star + '/5'"
               >
                 <span class="hr-emo">{{ rank.emoji }}</span>
-                <span class="hr-name font-display">{{ rank.name }}</span>
-                <span class="hr-stars">{{ rankStarStr(rank.star) }}</span>
+                <span class="hr-txt">
+                  <span class="hr-name font-display">{{ rank.name }}</span>
+                  <span class="hr-stars">{{ rankStarStr(rank.star) }}</span>
+                </span>
               </div>
               <div class="hero-arch">
                 Profil : <b>{{ profileLabel }}</b>
@@ -4876,30 +4879,43 @@ onUnmounted(() => {
 .hero-info {
   min-width: 0;
 }
-/* Badge de rang de prestige (cosmétique). */
+/* Badge de rang de prestige (cosmétique) — GROS et COLORÉ selon le rang (--rank-c). */
 .hero-rank {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 3px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  gap: 9px;
+  margin-bottom: 8px;
+  padding: 7px 14px 7px 11px;
+  border-radius: 14px;
+  border: 1.5px solid color-mix(in srgb, var(--rank-c, var(--accent)) 70%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--rank-c, var(--accent)) 26%, var(--surface)),
+    color-mix(in srgb, var(--rank-c, var(--accent)) 8%, var(--surface))
+  );
+  box-shadow: 0 0 14px color-mix(in srgb, var(--rank-c, var(--accent)) 30%, transparent);
 }
 .hr-emo {
-  font-size: 15px;
+  font-size: 24px;
   line-height: 1;
 }
+.hr-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.05;
+}
 .hr-name {
-  font-weight: 700;
-  font-size: 12.5px;
-  color: var(--text);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+  color: color-mix(in srgb, var(--rank-c, var(--accent)) 55%, var(--text));
 }
 .hr-stars {
-  font-size: 11px;
-  color: var(--accent);
-  letter-spacing: 1px;
+  font-size: 13px;
+  color: var(--rank-c, var(--accent));
+  letter-spacing: 2px;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--rank-c, var(--accent)) 55%, transparent);
 }
 .hero-arch {
   font-size: 13px;

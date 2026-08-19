@@ -6,15 +6,6 @@
         <h1 class="home-name font-display">
           {{ profileStore.profile?.identity.name || 'Athlète' }}
         </h1>
-        <button
-          class="home-rank"
-          :title="'Rang de prestige — ' + homeRank.name + ' ' + homeRank.star + '/5'"
-          @click="goAventure"
-        >
-          <span class="hr-emo">{{ homeRank.emoji }}</span>
-          <span class="hr-name font-display">{{ homeRank.name }}</span>
-          <span class="hr-stars">{{ rankStarStr(homeRank.star) }}</span>
-        </button>
       </div>
       <div class="head-actions">
         <button class="hsq" aria-label="Agenda" @click="goAgenda">
@@ -275,7 +266,6 @@ import { useLiveStore } from '@/stores/live';
 import { useLiveCourtStore } from '@/stores/liveCourt';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
-import { characterRank, rankStarStr } from '@/lib/characterRank';
 import { useXpFx } from '@/composables/useXpFx';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeStats, logicalToday } from '@/lib/challenges';
@@ -295,8 +285,6 @@ const live = useLiveStore();
 const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
 const progress = useProgress();
-// Rang de prestige (cosmétique) dérivé du niveau Global.
-const homeRank = computed(() => characterRank(progress.global.value.level));
 const xpFx = useXpFx();
 const challenges = useChallengesStore();
 // Défis actifs dont l'objectif du jour reste à faire (badge sur l'icône Challenges).
@@ -752,35 +740,6 @@ async function saveAutre() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-/* Pastille de rang de prestige sous le nom (compacte, cliquable → Aventure). */
-.home-rank {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
-  cursor: pointer;
-}
-.home-rank:active {
-  transform: scale(0.97);
-}
-.home-rank .hr-emo {
-  font-size: 13px;
-  line-height: 1;
-}
-.home-rank .hr-name {
-  font-weight: 700;
-  font-size: 11.5px;
-  color: var(--text);
-}
-.home-rank .hr-stars {
-  font-size: 10px;
-  color: var(--accent);
-  letter-spacing: 0.5px;
 }
 .text-dim {
   color: var(--dim);

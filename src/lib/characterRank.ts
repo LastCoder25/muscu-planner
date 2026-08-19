@@ -7,20 +7,22 @@
 export interface RankTier {
   name: string;
   emoji: string;
+  color: string; // couleur du rang (badge coloré → progression lisible d'un coup d'œil)
 }
 
-// L'ordre = la progression (bronze → tout-puissant).
+// L'ordre = la progression (bronze → tout-puissant). Couleur montante : cuivre →
+// argent → or → or sombre → orange légendaire → violet mythique → bleus divins → or éclatant.
 export const CHARACTER_RANKS: RankTier[] = [
-  { name: 'Bronze', emoji: '🥉' },
-  { name: 'Argent', emoji: '🥈' },
-  { name: 'Or', emoji: '🥇' },
-  { name: 'Or noir', emoji: '🖤' },
-  { name: 'Légendaire', emoji: '🏆' },
-  { name: 'Demi-dieu', emoji: '⚡' },
-  { name: 'Divin', emoji: '✨' },
-  { name: 'Divin ancestral', emoji: '🌟' },
-  { name: 'Divin céleste', emoji: '☄️' },
-  { name: 'Tout-puissant', emoji: '👑' },
+  { name: 'Bronze', emoji: '🥉', color: '#cd7f32' },
+  { name: 'Argent', emoji: '🥈', color: '#c9d2dc' },
+  { name: 'Or', emoji: '🥇', color: '#ffcf3f' },
+  { name: 'Or noir', emoji: '🖤', color: '#b8912e' },
+  { name: 'Légendaire', emoji: '🏆', color: '#ff9a3f' },
+  { name: 'Demi-dieu', emoji: '⚡', color: '#b07cff' },
+  { name: 'Divin', emoji: '✨', color: '#6cc8ff' },
+  { name: 'Divin ancestral', emoji: '🌟', color: '#5fe0d0' },
+  { name: 'Divin céleste', emoji: '☄️', color: '#a9ecff' },
+  { name: 'Tout-puissant', emoji: '👑', color: '#fff0a0' },
 ];
 
 const STARS_PER_RANK = 5;
@@ -31,6 +33,7 @@ export interface CharacterRank {
   rankIndex: number; // 0..9
   name: string;
   emoji: string;
+  color: string; // couleur du rang
   star: number; // 1..5 (étoile courante dans le rang)
   tier: number; // 0..49 (cran global)
 }
@@ -45,7 +48,7 @@ export function characterRank(level: number): CharacterRank {
   const rankIndex = Math.floor(tier / STARS_PER_RANK);
   const star = (tier % STARS_PER_RANK) + 1;
   const t = CHARACTER_RANKS[rankIndex]!;
-  return { rankIndex, name: t.name, emoji: t.emoji, star, tier };
+  return { rankIndex, name: t.name, emoji: t.emoji, color: t.color, star, tier };
 }
 
 /** « ★★★★☆ » pour l'étoile courante d'un rang (5 crans). */
