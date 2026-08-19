@@ -29,14 +29,11 @@
 
       <!-- Ladder : paliers de plus en plus profonds, débloqués en chaîne. -->
       <div v-if="labyUnlocked" class="laby-list">
-        <button
+        <div
           v-for="t in tiers"
           :key="t.laby.id"
-          type="button"
           class="laby-tier"
           :class="{ locked: !t.unlocked, cleared: t.cleared }"
-          :disabled="!t.unlocked || keys < 1"
-          @click="start(t.laby)"
         >
           <span class="lt-emo">{{ t.unlocked ? t.laby.emoji : '🔒' }}</span>
           <div class="lt-main">
@@ -59,8 +56,23 @@
               {{ LABYRINTHS[LABYRINTHS.findIndex((l) => l.id === t.laby.id) - 1]?.name }} » d’abord
             </div>
           </div>
-          <span v-if="t.unlocked" class="lt-cta">{{ keys > 0 ? '−1 🗝️' : 'clé ?' }}</span>
-        </button>
+          <div v-if="t.unlocked" class="lt-actions">
+            <button type="button" class="lt-go" :disabled="keys < 1" @click="start(t.laby)">
+              {{ keys > 0 ? 'Lancer −1 🗝️' : 'clé ?' }}
+            </button>
+            <!-- Auto : réservé aux paliers DÉJÀ nettoyés (le run se joue tout seul). -->
+            <button
+              v-if="t.cleared"
+              type="button"
+              class="lt-go auto"
+              :disabled="keys < 1"
+              title="Le run se joue tout seul, tu regardes"
+              @click="startAuto(t.laby)"
+            >
+              ⚡ Auto
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -82,6 +94,12 @@
         <span class="bag-chip">🎒 {{ loot.length }}</span>
       </div>
 
+      <!-- Bandeau AUTO : le run se joue seul → indicateur + bouton pour reprendre la main. -->
+      <div v-if="autoMode" class="auto-banner">
+        <span class="ab-txt"><span class="ab-dot" /> ⚡ Auto — le héros explore seul</span>
+        <button type="button" class="ab-stop" @click="stopAuto">✋ Reprendre la main</button>
+      </div>
+
       <div class="map-wrap">
         <svg :viewBox="`0 0 ${cols * CELL} ${rows * CELL}`" class="map">
           <line
@@ -96,8 +114,8 @@
           <g
             v-for="r in floor.rooms"
             :key="r.id"
-            :class="['room', roomClass(r.id)]"
-            @click="onRoomClick(r.id)"
+            :class="['room', roomClass(r.id), { auto: autoMode }]"
+            @click="autoMode || onRoomClick(r.id)"
           >
             <rect
               :x="cx(r) - SIZE / 2"
@@ -264,10 +282,19 @@
           <q-btn
             flat
             no-caps
-            :label="keys > 0 ? 'Nouveau labyrinthe (−1 🗝️)' : 'Pas de clé'"
+            :label="keys > 0 ? 'Rejouer (−1 🗝️)' : 'Pas de clé'"
             color="primary"
             :disable="!canStart"
             @click="replay"
+          />
+          <q-btn
+            v-if="labyrinthCleared(selectedLaby?.id ?? '', clearedSet)"
+            flat
+            no-caps
+            label="⚡ Rejouer en auto"
+            color="primary"
+            :disable="!canStart"
+            @click="replayAuto"
           />
           <q-btn flat no-caps label="Sortir" @click="back()" />
         </div>
@@ -306,7 +333,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   generateDungeon,
@@ -405,6 +432,14 @@ const tiers = computed(() =>
 );
 // Palier en cours d'exploration (choisi dans le lobby).
 const selectedLaby = ref<Labyrinth | null>(null);
+
+// ── Mode AUTO (paliers déjà nettoyés) : le run se joue TOUT SEUL, visuellement en
+// temps réel (clique chaque salle, avance d'étage, combat le boss), puis affiche
+// l'écran de fin. On enchaîne les salles via un timer qui appelle les MÊMES actions
+// que le joueur (onRoomClick/goDown/finish), en fermant automatiquement les modales.
+const autoMode = ref(false);
+let autoTimer: ReturnType<typeof setTimeout> | undefined;
+const AUTO_STEP_MS = 550;
 
 // Perso réel (stats de fond + équipement + talents) → combattant.
 const character = computed(() =>
@@ -779,6 +814,59 @@ async function start(tier?: Labyrinth) {
   phase.value = 'running';
 }
 
+// ── Auto-run (paliers nettoyés) ──
+function stopAuto() {
+  autoMode.value = false;
+  if (autoTimer) clearTimeout(autoTimer);
+  autoTimer = undefined;
+}
+function scheduleAuto(ms = AUTO_STEP_MS) {
+  if (autoTimer) clearTimeout(autoTimer);
+  autoTimer = setTimeout(autoTick, ms);
+}
+// Prochaine salle à « cliquer » : on explore d'abord les salles NON escalier/boss
+// (loot + combats), l'escalier/boss en dernier → on visite TOUTES les cases puis on
+// descend / on affronte le boss.
+function nextAutoRoom(): number | null {
+  const reachable = floor.value.rooms.filter((r) => canMove(run.value, floor.value, r.id));
+  if (!reachable.length) return null;
+  const explore = reachable.filter((r) => r.type !== 'stairs' && r.type !== 'boss');
+  return (explore[0] ?? reachable[0]!).id;
+}
+// Un « tour » d'auto : ferme la modale en cours si prête, sinon agit (salle/escalier/boss).
+function autoTick() {
+  if (!autoMode.value) return;
+  if (over.value || phase.value !== 'running') return stopAuto();
+  if (roomFx.value) {
+    const k = roomFx.value.kind;
+    if (k === 'combat' && !fxDone.value) return scheduleAuto(300); // laisse jouer l'animation
+    if (k === 'descend') return scheduleAuto(300); // s'auto-ferme déjà
+    closeFx(); // combat fini / coffre / piège → on ferme et on enchaîne
+    return scheduleAuto();
+  }
+  if (over.value) return stopAuto();
+  if (onBoss.value) return void finish(); // boss battu → écran de fin
+  if (onStairs.value) {
+    goDown();
+    return scheduleAuto(1500); // laisse l'animation de descente
+  }
+  const next = nextAutoRoom();
+  if (next != null) {
+    onRoomClick(next);
+    return scheduleAuto();
+  }
+  retreat(); // sécurité (aucune salle atteignable) : on sort avec le butin
+}
+// Lance un palier NETTOYÉ en mode auto (mêmes règles/coût qu'un run manuel).
+async function startAuto(tier: Labyrinth) {
+  await start(tier);
+  if (phase.value === 'running') {
+    autoMode.value = true;
+    scheduleAuto(800);
+  }
+}
+onBeforeUnmount(stopAuto);
+
 // Termine le run et CRÉDITE le butin au perso. Mort → or+poussière seuls (gear
 // perdu) ; nettoyé → + trésor final ; retraite → butin gardé, pas de trésor final.
 async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
@@ -824,12 +912,18 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
           : {}),
       });
   }
+  stopAuto(); // fin de run → coupe l'auto (la relance depuis la modale est manuelle)
   over.value = true;
 }
 // Relance directement une nouvelle expédition depuis la modale de fin (−1 clé).
 function replay() {
   over.value = false;
   void start();
+}
+// Relance le même palier en AUTO depuis la modale de fin.
+function replayAuto() {
+  over.value = false;
+  if (selectedLaby.value) void startAuto(selectedLaby.value);
 }
 </script>
 
@@ -927,25 +1021,13 @@ function replay() {
   border-left: 3px solid var(--accent);
   background: var(--surface);
   color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-.laby-tier:not(:disabled):hover {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-}
-.laby-tier:not(:disabled):active {
-  transform: scale(0.99);
 }
 .laby-tier.locked {
   border-left-color: var(--line);
   opacity: 0.6;
-  cursor: not-allowed;
 }
 .laby-tier.cleared {
   border-left-color: var(--d1);
-}
-.laby-tier:disabled {
-  cursor: not-allowed;
 }
 .lt-emo {
   font-size: 24px;
@@ -979,12 +1061,91 @@ function replay() {
   color: var(--dim);
   margin-top: 2px;
 }
-.lt-cta {
+.lt-actions {
   flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lt-go {
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 9px;
+  padding: 6px 10px;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 12px;
-  color: var(--accent);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lt-go.auto {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
+}
+.lt-go:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.lt-go:not(:disabled):active {
+  transform: scale(0.96);
+}
+/* Bandeau AUTO pendant un run auto. */
+.auto-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 6px 0 10px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.ab-txt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+}
+.ab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: ab-pulse 1s ease-in-out infinite;
+}
+@keyframes ab-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ab-dot {
+    animation: none;
+  }
+}
+.ab-stop {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 5px 10px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+/* En auto, les salles ne sont pas cliquables → curseur neutre. */
+.room.auto {
+  cursor: default;
 }
 .hud {
   display: flex;
