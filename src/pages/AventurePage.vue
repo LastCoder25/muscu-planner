@@ -1179,10 +1179,17 @@
           <div v-else class="rb-next">⭐ Dernière région — tu touches au bout du monde.</div>
         </div>
 
-        <div class="sec-title mboss-title">🗺️ Carte des mondes</div>
-        <div class="sec-hint map-hint">Touche une région pour voir ses donjons ↓</div>
+        <div v-if="!regionView" class="sec-title mboss-title">🗺️ Carte des mondes</div>
+        <div v-if="!regionView" class="sec-hint map-hint">
+          Touche une région pour ouvrir ses donjons.
+        </div>
         <!-- Carte-monde serpentine : un nœud par région, fil énergisé, cadenas. -->
-        <div ref="worldmapEl" class="worldmap" :style="{ height: mapGeom.viewH + 'px' }">
+        <div
+          v-if="!regionView"
+          ref="worldmapEl"
+          class="worldmap"
+          :style="{ height: mapGeom.viewH + 'px' }"
+        >
           <svg class="wm-svg" :viewBox="`0 0 100 ${mapGeom.viewH}`" preserveAspectRatio="none">
             <!-- Un segment par paire de zones : BLEU si la zone d'arrivée est
                  accessible (les deux zones ouvertes), NOIR vers une zone verrouillée. -->
@@ -1227,9 +1234,15 @@
           </button>
         </div>
 
-        <!-- Drawer : donjons de la région sélectionnée -->
-        <div ref="drawerEl" class="region-drawer" :style="{ '--rc': selRegion.color }">
+        <!-- Vue région : arbre des donjons de la région tapée (remplace la carte). -->
+        <div
+          v-if="regionView"
+          ref="drawerEl"
+          class="region-drawer"
+          :style="{ '--rc': selRegion.color }"
+        >
           <div class="rd-head">
+            <button class="rd-back" title="Retour à la carte" @click="closeRegion">‹ Carte</button>
             <span class="rd-emo">{{ selRegion.emoji }}</span>
             <span class="rd-name font-display">{{ selRegion.name }}</span>
             <span class="rd-prog"
@@ -1237,7 +1250,7 @@
             >
           </div>
         </div>
-        <div class="dungeons">
+        <div v-if="regionView" class="dungeons">
           <div
             v-for="it in selectedRegionItems"
             :key="it.key"
@@ -2892,6 +2905,12 @@ const selectedRegionItems = computed(() =>
   adventureItems.value.filter((it) => selRegion.value.dungeonIds.includes(it.dungeon.id)),
 );
 const drawerEl = ref<HTMLElement | null>(null);
+// La carte des mondes ne montre que les 3 lignes de régions ; taper une région
+// « charge » l'arbre de ses donjons (regionView) ; le retour ramène à la carte.
+const regionView = ref(false);
+function closeRegion() {
+  regionView.value = false;
+}
 function tapRegion(r: Region) {
   if (regionState(r) === 'locked') {
     const prev = REGIONS[REGIONS.findIndex((x) => x.id === r.id) - 1];
@@ -2904,8 +2923,7 @@ function tapRegion(r: Region) {
     return;
   }
   selectedRegionId.value = r.id;
-  // Fait défiler vers les donjons de la région (sinon le drawer, sous la carte,
-  // reste hors écran → on croit que le clic ne fait rien).
+  regionView.value = true; // ouvre l'arbre des donjons de la région (masque la carte)
   void nextTick(() => drawerEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 }
 // Explosion des chaînes quand une région vient d'être débloquée (piloté par le reveal).
@@ -2919,6 +2937,7 @@ const endRegionId = computed(() => REGIONS[REGIONS.length - 1]?.id);
 function triggerRegionReveal(rev: RegionReveal) {
   tab.value = 'explore';
   exploreSub.value = 'donjons';
+  regionView.value = false; // le reveal se joue SUR la carte (chaînes qui explosent)
   selectedRegionId.value = rev.id;
   // On attend la fin de la transition de fermeture de la modale (~300 ms), PUIS scroll
   // (slide visible) + explosion + bannière.
@@ -8303,6 +8322,21 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.rd-back {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.rd-back:active {
+  transform: scale(0.96);
 }
 .rd-emo {
   font-size: 20px;
