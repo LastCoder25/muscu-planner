@@ -114,7 +114,9 @@
           </router-view>
         </section>
         <section class="pane pane-game" aria-label="Aventure">
-          <AventurePage embedded />
+          <!-- Volet jeu : Aventure par défaut, ou un écran jeu profond (carte
+               d'expédition, Labyrinthe) ouvert DANS le volet via useGamePanel. -->
+          <component :is="gamePaneComponent" embedded />
         </section>
       </div>
       <router-view v-else />
@@ -126,13 +128,16 @@
 import { computed, defineAsyncComponent, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
-// Chargé à la demande : le volet jeu n'existe qu'en cockpit → un téléphone ne
-// télécharge jamais ce (gros) chunk via le layout.
+// Chargés à la demande : le volet jeu n'existe qu'en cockpit → un téléphone ne
+// télécharge jamais ces (gros) chunks via le layout.
 const AventurePage = defineAsyncComponent(() => import('@/pages/AventurePage.vue'));
+const ExpeditionMapPage = defineAsyncComponent(() => import('@/pages/ExpeditionMapPage.vue'));
+const ExpeditionPage = defineAsyncComponent(() => import('@/pages/ExpeditionPage.vue'));
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useFeedbackStore } from '@/stores/feedback';
 import { useInstallPrompt } from '@/composables/useInstallPrompt';
+import { useGamePanel } from '@/composables/useGamePanel';
 
 const $q = useQuasar();
 const route = useRoute();
@@ -166,6 +171,16 @@ async function installApp() {
 // Volet droit = AVENTURE épinglée persistante ; volet gauche = l'écran sport courant.
 const WIDE_MIN = 600;
 const isCockpit = computed(() => $q.screen.width >= WIDE_MIN && $q.screen.height >= WIDE_MIN);
+
+// Composant du volet jeu (droite) : Aventure, ou un écran jeu profond (carte
+// d'expédition, Labyrinthe) ouvert DANS le volet via useGamePanel (Étape 2 cockpit).
+const { view: gameView } = useGamePanel();
+const GAME_PANES = {
+  aventure: AventurePage,
+  'expedition-map': ExpeditionMapPage,
+  expedition: ExpeditionPage,
+};
+const gamePaneComponent = computed(() => GAME_PANES[gameView.value]);
 
 onMounted(() => {
   if (auth.isAdmin) feedback.fetchOpenCount().catch(() => undefined);

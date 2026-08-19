@@ -73,7 +73,7 @@
       <button
         v-if="onExpedition && expeHero"
         class="expe-banner"
-        @click="router.push('/expedition-map')"
+        @click="openGame('/expedition-map')"
       >
         🧭 Ton héros est en expédition —
         <b v-if="expeHero.phase !== 'done'"
@@ -676,7 +676,7 @@
                 (monte l'Incubateur).
               </div>
             </div>
-            <button v-else class="fam-incub-locked" @click="router.push('/expedition-map')">
+            <button v-else class="fam-incub-locked" @click="openGame('/expedition-map')">
               🥚 Construis un <b>Incubateur</b> sur la carte pour infuser tes familiers.
             </button>
           </div>
@@ -1005,7 +1005,7 @@
           <button class="gs-b" @click="exploreSub = 'boss'">👑 Boss de palier</button>
         </div>
         <!-- Expédition (mode idle : envoyer le héros explorer la carte) -->
-        <button class="expe-card expe-idle" @click="router.push('/expedition-map')">
+        <button class="expe-card expe-idle" @click="openGame('/expedition-map')">
           <span class="expe-emo">🗺️</span>
           <span class="expe-main">
             <span class="expe-name font-display">Carte & village</span>
@@ -1256,7 +1256,7 @@
           </button>
         </div>
         <!-- Prérequis : les boss exigent l'Autel des boss (bâtiment) → CTA « où aller ». -->
-        <button v-if="!hasBossAltar" class="boss-gate-cta" @click="router.push('/expedition-map')">
+        <button v-if="!hasBossAltar" class="boss-gate-cta" @click="openGame('/expedition-map')">
           <span class="bg-emo">🔮</span>
           <span class="bg-txt">
             <b>Les boss sont verrouillés</b> — construis l’<b>Autel des boss</b> sur la carte
@@ -1324,7 +1324,7 @@
             <button
               v-else-if="!hasBossAltar"
               class="fight mboss-fight lock-go"
-              @click="router.push('/expedition-map')"
+              @click="openGame('/expedition-map')"
             >
               🔮 Construire l’Autel →
             </button>
@@ -2212,6 +2212,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
+import { useGamePanel } from '@/composables/useGamePanel';
 import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import {
@@ -2347,10 +2348,18 @@ interface RunView {
 
 // `embedded` : rendu dans le VOLET droit du cockpit (Z Fold déplié) → racine <div>
 // au lieu de <q-page> + hauteur fluide (le volet gère le scroll).
-defineProps<{ embedded?: boolean }>();
+const props = defineProps<{ embedded?: boolean }>();
 
 const $q = useQuasar();
 const router = useRouter();
+const { goGame, viewForPath } = useGamePanel();
+// Ouvre un écran jeu profond : en cockpit (embedded) → DANS le volet droit (pas de
+// route, sinon on router-ait le volet gauche) ; sinon navigation plein écran normale.
+function openGame(path: string) {
+  const v = props.embedded ? viewForPath(path) : null;
+  if (v) return goGame(v);
+  void router.push(path);
+}
 const auth = useAuthStore();
 const char = useCharacterStore();
 const progress = useProgress();
@@ -2420,9 +2429,9 @@ function openLabyrinth() {
       type: 'warning',
       message: 'Construis la 🚪 Porte du Labyrinthe sur la carte pour le débloquer.',
     });
-    return void router.push('/expedition-map');
+    return void openGame('/expedition-map');
   }
-  void router.push('/expedition');
+  void openGame('/expedition');
 }
 
 const c = computed(() =>
@@ -3576,7 +3585,7 @@ async function fightBoss(b: MilestoneBoss) {
       type: 'warning',
       message: 'Construis l’Autel des boss (carte d’expédition) pour affronter les boss.',
     });
-    return void router.push('/expedition-map');
+    return void openGame('/expedition-map');
   }
   if (!bossUnlocked(b)) return;
   if (char.row.pending_reward) {

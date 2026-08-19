@@ -1,8 +1,8 @@
 <template>
-  <q-page class="emap">
+  <component :is="embedded ? 'div' : 'q-page'" class="emap" :class="{ embedded }">
     <GameLoader :show="booting" icon="🗺️" label="Chargement de la carte…" />
     <header class="top">
-      <button class="iconbtn" aria-label="Retour" @click="router.back()">‹</button>
+      <button class="iconbtn" aria-label="Retour" @click="back()">‹</button>
       <div class="top-title font-display">Carte des expéditions</div>
       <div class="iconbtn" />
     </header>
@@ -401,7 +401,7 @@
       La carte se peuple avec le temps — de nouvelles activités apparaissent régulièrement. Reviens
       bientôt.
     </div>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -412,6 +412,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
+import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
 import { computeCharacter } from '@/lib/character';
 import { playerWithGear, RARITY_RANK } from '@/lib/items';
@@ -454,7 +455,14 @@ import {
   type ExpeditionOutcome,
 } from '@/lib/expedition';
 
+const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
+const { gameBack, goGame, viewForPath } = useGamePanel();
+// Retour : dans le volet jeu (cockpit) → revient à l'Aventure du volet ; sinon route.
+function back() {
+  if (props.embedded) return gameBack();
+  router.back();
+}
 const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
@@ -717,7 +725,10 @@ const unlockOpen = computed({
 function goUnlock() {
   const route = unlockInfo.value?.unlock.route;
   unlockInfo.value = null;
-  if (route) void router.push(route);
+  if (!route) return;
+  const v = props.embedded ? viewForPath(route) : null;
+  if (v) return goGame(v); // dans le volet jeu (cockpit)
+  void router.push(route);
 }
 function doBuild(slot: number, typeId: string) {
   const uid = auth.user?.id;
@@ -939,6 +950,9 @@ function fmtMin(min: number): string {
   min-height: 100vh;
   color: var(--text);
   padding-bottom: 24px;
+}
+.emap.embedded {
+  min-height: 0;
 }
 .top {
   display: flex;

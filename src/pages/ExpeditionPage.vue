@@ -1,8 +1,8 @@
 <template>
-  <q-page class="expe">
+  <component :is="embedded ? 'div' : 'q-page'" class="expe" :class="{ embedded }">
     <GameLoader :show="booting" icon="🗝️" label="Entrée dans le Labyrinthe…" />
     <header class="top">
-      <button class="iconbtn" aria-label="Retour" @click="router.back()">‹</button>
+      <button class="iconbtn" aria-label="Retour" @click="back()">‹</button>
       <div class="top-title font-display">Labyrinthe</div>
       <div class="iconbtn" />
     </header>
@@ -239,11 +239,11 @@
             :disable="!canStart"
             @click="replay"
           />
-          <q-btn flat no-caps label="Sortir" @click="router.back()" />
+          <q-btn flat no-caps label="Sortir" @click="back()" />
         </div>
       </q-card>
     </q-dialog>
-  </q-page>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -267,6 +267,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
+import { useGamePanel } from '@/composables/useGamePanel';
 import { labyrinthUnlocked, labyrinthLuckBonus } from '@/lib/buildings';
 import { computeCharacter } from '@/lib/character';
 import {
@@ -288,8 +289,15 @@ import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/
 import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
 
+const props = defineProps<{ embedded?: boolean }>();
 const route = useRoute();
 const router = useRouter();
+const { gameBack } = useGamePanel();
+// Retour/Sortir : dans le volet jeu (cockpit) → revient à l'Aventure ; sinon route.
+function back() {
+  if (props.embedded) return gameBack();
+  router.back();
+}
 const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
@@ -730,6 +738,9 @@ function replay() {
   background: var(--bg);
   min-height: 100vh;
   padding: 0 16px 40px;
+}
+.expe.embedded {
+  min-height: 0;
 }
 .top {
   display: flex;
