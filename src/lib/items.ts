@@ -395,21 +395,51 @@ function gaussian(rng: () => number): number {
   const v = rng();
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
-/** Tire un PALIER (0..49) = rang×5 + (qualité-1). Le plafond vient de la profondeur ;
- *  la moyenne est ~2 rangs sous le plafond (le plafond reste RARE), remontée par la
- *  `luck` (profondeur/fiole) et par `floorBonus` (Autel des boss, en paliers). Renvoie
- *  { rank, quality, roll } où roll∈[0,1] encode la qualité (rollStars le relit). */
+
+// ── FRISE CONTINUE de crans (2026‑08‑19) ──
+// Rangs + qualités forment UNE seule échelle de 50 crans (tier = rang×5 + (qualité−1)).
+// Le drop est une FENÊTRE GLISSANTE sur cette frise : son centre avance CONTINÛMENT avec
+// le niveau (≈ 1 cran/niveau tôt, ralentit en √ → SSS reste end‑game) → la QUALITÉ monte
+// à l'intérieur d'un rang à mesure qu'on progresse (ex. F★1 tôt → F★5 en fin de bande),
+// puis on bascule sur le rang suivant avec chevauchement (encore un peu de l'ancien rang,
+// du bas du nouveau). Asymétrique : longue traîne BASSE (fourrage à infuser), courte
+// pointe HAUTE (drop chanceux) que la `luck` épaissit et pousse vers le haut.
+// NB : c'est un changement de DISTRIBUTION de tirage — la valeur d'un cran (RARITY_MULT ×
+// starQualityMult) est inchangée → équilibrage combat intact.
+
+/** Plafond de cran CONTINU (0..49) — version fine du plafond de rang (même courbe √). */
+export function tierCeilForLevel(level: number): number {
+  return Math.min(49, Math.max(0, Math.sqrt(Math.max(0, level)) * 1.03 * 5 + 4));
+}
+
+const TIER_LO_WIDTH = 4; // traîne basse ≈ 0,8 rang (fourrage à infuser)
+
+/** Tire un PALIER (0..49) = rang×5 + (qualité-1) via la fenêtre glissante ci‑dessus.
+ *  - `level` : niveau du CONTENU (donjon/boss/labyrinthe) → position de la fenêtre ;
+ *  - `luck` (0..1) : pousse le pic vers le haut ET épaissit la pointe haute (favorise la
+ *    droite de la frise), SANS jamais dépasser le plafond DUR de rang (gate de profondeur) ;
+ *  - `floorBonus` : décale le pic vers le haut (Autel des boss), en crans.
+ *  Renvoie { rank, quality, roll } où roll∈[0,1] encode la qualité (rollStars le relit). */
 export function rollTier(
   rng: () => number,
   level: number,
   luck = 0,
   floorBonus = 0,
 ): { rank: Rarity; quality: number; roll: number } {
-  const rankCeil = rankCeilingForLevel(level);
-  const tierCeil = rankCeil * 5 + 4;
-  const b = Math.min(1, Math.max(0, luck)) * 10 + Math.max(0, floorBonus); // luck → +2 rangs max
-  let tier = Math.round(tierCeil - 11 + b + gaussian(rng) * 7);
-  tier = Math.min(tierCeil, Math.max(0, tier));
+  const l = Math.min(1, Math.max(0, luck));
+  const hardCap = rankCeilingForLevel(level) * 5 + 4; // plafond DUR (√), la luck ne le passe pas
+  // PIC calé sur le BAS du rang courant + fraction (PAS de +4) → au bas d'un rang le pic
+  // est à ★1, en haut de bande à ★5 : la qualité monte cran par cran DANS la bande, puis
+  // on bascule sur le rang suivant. Avance ≈ 1 cran/niveau tôt, ralentit en √.
+  const center = Math.sqrt(Math.max(0, level)) * 1.03 * 5;
+  // Le PIC suit le niveau (petit coup de pouce luck) ; c'est surtout la TRAÎNE HAUTE que
+  // la luck épaissit → elle re-pondère les probas vers la droite (drops chanceux) sans
+  // téléporter le pic au plafond (ce qui saturerait le ★5 dès le bas de bande).
+  const mode = Math.min(hardCap, center + l * 1.2 + Math.max(0, floorBonus));
+  const g = gaussian(rng);
+  const hiWidth = 1.6 + l * 2.2; // pointe haute : fine à luck 0, grasse à luck 1
+  let tier = Math.round(mode + (g >= 0 ? g * hiWidth : g * TIER_LO_WIDTH));
+  tier = Math.min(hardCap, Math.max(0, tier)); // plafond dur + plancher mou (0)
   const rank = RANK_ORDER[Math.floor(tier / 5)]!;
   const quality = (tier % 5) + 1; // 1..5
   return { rank, quality, roll: (quality - 0.5) / 5 };

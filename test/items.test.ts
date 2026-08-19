@@ -96,6 +96,38 @@ describe('rollTier : gate de profondeur', () => {
     expect(avg(60)).toBeGreaterThan(avg(20));
     expect(avg(20)).toBeGreaterThan(avg(6));
   });
+  it('frise glissante : le cran moyen (rang+qualité) monte CONTINÛMENT avec le niveau', () => {
+    const meanTier = (level: number, luck = 0.3) => {
+      let sum = 0;
+      const N = 4000;
+      for (let s = 1; s <= N; s++) {
+        const { rank, quality } = rollTier(mulberry32(s * 31 + level), level, luck);
+        sum += RARITY_RANK[rank] * 5 + (quality - 1);
+      }
+      return sum / N;
+    };
+    // Dans une même bande de rang (E ≈ niv 4→8), la QUALITÉ moyenne monte avec le niveau.
+    expect(meanTier(8)).toBeGreaterThan(meanTier(4));
+    // Et le glissement est continu entre niveaux adjacents (pas de palier plat).
+    expect(meanTier(6)).toBeGreaterThan(meanTier(5));
+    expect(meanTier(13)).toBeGreaterThan(meanTier(11));
+  });
+  it('luck : re-pondère vers le HAUT (plus de 5★) sans passer le plafond dur', () => {
+    const fiveStarRate = (luck: number) => {
+      let five = 0;
+      const N = 4000;
+      for (let s = 1; s <= N; s++) {
+        const { quality } = rollTier(mulberry32(s * 17 + 3), 20, luck);
+        if (quality === 5) five++;
+      }
+      return five / N;
+    };
+    expect(fiveStarRate(0.6)).toBeGreaterThan(fiveStarRate(0));
+    // gate : même à luck 1, jamais au-dessus du plafond de rang du niveau
+    const ceil = rankCeilingForLevel(20);
+    for (let s = 1; s <= 300; s++)
+      expect(RARITY_RANK[rollTier(mulberry32(s), 20, 1).rank]).toBeLessThanOrEqual(ceil);
+  });
 });
 
 const item = (over: Partial<Item> & Pick<Item, 'slot' | 'effect'>): Item => ({
