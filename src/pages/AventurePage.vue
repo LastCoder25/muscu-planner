@@ -309,20 +309,15 @@
             >.
           </div>
 
-          <!-- Cible d'infusion active -->
+          <!-- Cible d'infusion active. Chaque sacrifice est IMMÉDIAT (le talent monte
+               tout de suite) → pas de « pending » à annuler ; « Terminer » sort du mode. -->
           <div v-if="infuseTarget" class="tal-infuse-banner">
             🔧 Infusion dans <b>{{ talentName(infuseTarget) }}</b> —
             <template v-if="sacrificeableCount"
-              >tape un talent <b>non équipé</b> à sacrifier.</template
+              >tape un talent <b>non équipé</b> à sacrifier (effet immédiat).</template
             >
             <template v-else>plus aucun talent à sacrifier.</template>
-            <button
-              class="tib-x"
-              :class="{ done: !sacrificeableCount }"
-              @click="infuseTarget = null"
-            >
-              {{ sacrificeableCount ? 'annuler' : '✓ Terminer' }}
-            </button>
+            <button class="tib-x done" @click="infuseTarget = null">✓ Terminer</button>
           </div>
 
           <div v-if="!char.row.talents.length" class="talents-empty">
@@ -2147,16 +2142,48 @@
                   }}</span>
                 </div>
                 <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
-                <div class="pow-cmp">
-                  ⚔️ vs équipé {{ fmtPow(combatPowerVal) }} →
-                  <b :class="powerIfEquipMatched(d) >= combatPowerVal ? 'up' : 'down'"
-                    >{{ fmtPow(powerIfEquipMatched(d)) }} ({{
-                      fmtDelta(combatPowerVal, powerIfEquipMatched(d))
-                    }})</b
+                <!-- Comparaison IDENTIQUE au sac (ii-cmp2 + rentabilité) pour cohérence. -->
+                <div class="ii-cmp2">
+                  <span class="ii-cmp2-ic">⚔️</span>
+                  <span
+                    v-if="!equippedInSlot(d.slot)"
+                    class="ii-cmp2-chip"
+                    :class="powerIfEquipNow(d) >= combatPowerVal ? 'up' : 'down'"
                   >
-                  <span v-if="infuseCostFor(d)" class="pow-cost"
-                    >à infuser (~{{ infuseCostFor(d) }} ✨) pour le monter à ton niveau</span
-                  >
+                    <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(d)) }}</b
+                    ><i>emplacement libre</i>
+                  </span>
+                  <template v-else>
+                    <span
+                      class="ii-cmp2-chip"
+                      :class="powerIfEquipMatched(d) >= combatPowerVal ? 'up' : 'down'"
+                      :title="
+                        'À armes égales : monté au niveau de ton équipé (Nv ' +
+                        equipMatchLevel(d) +
+                        ')'
+                      "
+                    >
+                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipMatched(d)) }}</b
+                      ><i>vs équipé</i>
+                    </span>
+                    <span
+                      v-if="d.level < equipMatchLevel(d)"
+                      class="ii-cmp2-chip sub"
+                      :class="powerIfEquipNow(d) >= combatPowerVal ? 'up' : 'down'"
+                      title="Si équipé tel quel, à son niveau actuel"
+                    >
+                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(d)) }}</b
+                      ><i>maintenant</i>
+                    </span>
+                  </template>
+                </div>
+                <div
+                  v-if="showBreakEven(d)"
+                  class="ii-be"
+                  :class="{ ok: breakEvenFor(d).cost <= (char.row?.dust ?? 0) }"
+                >
+                  🔧 Rentable dès Nv {{ breakEvenFor(d).level }} · {{ breakEvenFor(d).cost }}✨
+                  <span class="ii-be-have">(tu as {{ char.row?.dust ?? 0 }}✨)</span>
                 </div>
                 <div v-if="dropState(d) === 'equipped'" class="drop-done">
                   ⚔️ Auto-équipé (slot vide)
@@ -4267,13 +4294,23 @@ function itemMaxedPower(it: Item): number {
 const powerLossItems = computed<Item[]>(() => {
   const r = char.row;
   if (!r) return [];
+  // Meilleur potentiel du SAC par slot → référence quand l'emplacement est VIDE (on
+  // garde le meilleur, le reste est cassable). Sinon un perso nu avec des doublons
+  // n'avait AUCUNE option « tout casser » (ticket 97b0fa3b).
+  const bestBySlot = new Map<string, number>();
+  for (const it of r.inventory) {
+    if (isFamiliar(it)) continue;
+    const p = itemMaxedPower(it);
+    if (p > (bestBySlot.get(it.slot) ?? -1)) bestBySlot.set(it.slot, p);
+  }
   return r.inventory.filter((it) => {
     if (it.locked) return false; // 🔒 protégé de la casse/vente en masse
     if (isFamiliar(it)) return false; // familiers = piste de collection, jamais en masse
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
     const equipped = r.equipped[it.slot];
-    if (!equipped) return false; // emplacement vide → objet utile, on garde
-    return itemMaxedPower(it) <= itemMaxedPower(equipped);
+    if (equipped) return itemMaxedPower(it) <= itemMaxedPower(equipped); // ≤ l'équipé
+    // Emplacement VIDE : on garde le meilleur du sac, le reste (strictement pire) est cassable.
+    return itemMaxedPower(it) < (bestBySlot.get(it.slot) ?? itemMaxedPower(it));
   });
 });
 const belowCount = computed(() => powerLossItems.value.length);

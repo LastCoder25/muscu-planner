@@ -206,7 +206,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     buildGold: 700,
     unlockLevel: 4,
     unique: true,
-    desc: 'Récompenses de boss : 4ᵉ choix + ciblage du set manquant (dès la construction). Chaque niveau : +qualité de roll, −coût en pierres d’invocation 🔮.',
+    desc: 'Récompenses de boss : ciblage du set manquant (dès la construction) + plus de CHOIX en montant l’Autel (2 → 3 au niv.10 → 4 au niv.20 → 5 au niv.30). Chaque niveau : +qualité de roll, −coût en pierres d’invocation 🔮.',
   },
   // Utilitaire UNIQUE : la FORGE débloque l'Atelier de poussière (forger un objet neuf,
   // forge de set). Sans elle, l'Atelier reste fermé → un cran de progression de plus.
