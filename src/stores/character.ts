@@ -264,8 +264,6 @@ export const useCharacterStore = defineStore('character', () => {
       dust: number;
       drops: Item[];
       clearedDungeonId?: string;
-      consumed?: string[]; // consommables dépensés pour ce run
-      gained?: string[]; // consommables gagnés en butin
       stones?: number; // pierres magiques 💎 (filet diffus, familiers)
       summonStones?: number; // pierres d'invocation 🔮 (drop de donjon nettoyé)
       parchemins?: number; // parchemins 📜 (filet de donjon nettoyé, niveau des talents)
@@ -279,14 +277,6 @@ export const useCharacterStore = defineStore('character', () => {
       input.clearedDungeonId && !cur.cleared_dungeons.includes(input.clearedDungeonId)
         ? [...cur.cleared_dungeons, input.clearedDungeonId]
         : cur.cleared_dungeons;
-    // Consommables : +1 par gain (butin), −1 par dépense (retire l'entrée à 0).
-    const consumables = { ...cur.consumables };
-    for (const id of input.gained ?? []) consumables[id] = (consumables[id] ?? 0) + 1;
-    for (const id of input.consumed ?? []) {
-      const left = (consumables[id] ?? 0) - 1;
-      if (left > 0) consumables[id] = left;
-      else delete consumables[id];
-    }
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
     // Clé d'expédition : ~2 % sur un donjon NETTOYÉ (raréfié 2026‑08‑18 : les gros
     // volumes de runs inondaient les clés → le Labyrinthe redevient un événement rare).
@@ -301,7 +291,6 @@ export const useCharacterStore = defineStore('character', () => {
       equipped: dist.equipped,
       inventory: dist.inventory,
       cleared_dungeons: cleared,
-      consumables,
       keys: cur.keys + gotKey,
       ...(input.talentDrops?.length ? { talents: [...cur.talents, ...input.talentDrops] } : {}),
     });
@@ -320,7 +309,6 @@ export const useCharacterStore = defineStore('character', () => {
       dust: number;
       defeated: boolean;
       pending?: PendingReward | null;
-      consumed?: string[];
       stones?: number; // pierres magiques 💎 (jalon boss)
       parchemins?: number; // parchemins 📜 (jalon boss, niveau des talents)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
@@ -333,12 +321,6 @@ export const useCharacterStore = defineStore('character', () => {
     // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~6 % ensuite sur les
     // réaffrontements (raréfié 2026‑08‑18) → pas de flux de clés en spammant un boss.
     const keyGain = firstDefeat ? 1 : input.defeated && Math.random() < 0.06 ? 1 : 0;
-    const consumables = { ...cur.consumables };
-    for (const id of input.consumed ?? []) {
-      const left = (consumables[id] ?? 0) - 1;
-      if (left > 0) consumables[id] = left;
-      else delete consumables[id];
-    }
     // Codex : on « croise » les sets des candidats de récompense PROPOSÉS (même sans
     // les garder) → le glossaire les enregistre à la rencontre, pas à la possession.
     const crossedSetItems = (input.pending?.candidates ?? [])
@@ -351,7 +333,6 @@ export const useCharacterStore = defineStore('character', () => {
       parchemins: cur.parchemins + (input.defeated ? (input.parchemins ?? 0) : 0),
       summon_stones: Math.max(0, cur.summon_stones - input.summonCost),
       defeated_bosses: defeated,
-      consumables,
       pending_reward: input.pending ?? cur.pending_reward ?? null,
       set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, crossedSetItems),
       keys: cur.keys + keyGain,
@@ -391,18 +372,11 @@ export const useCharacterStore = defineStore('character', () => {
       dust: number;
       drops: Item[];
       cleared: boolean;
-      consumed?: string[];
       stones?: number; // pierres magiques 💎 (fin de jeu)
     },
   ) {
     const cur = row.value;
     if (!cur) return;
-    const consumables = { ...cur.consumables };
-    for (const id of input.consumed ?? []) {
-      const left = (consumables[id] ?? 0) - 1;
-      if (left > 0) consumables[id] = left;
-      else delete consumables[id];
-    }
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
     return persist(userId, {
       gold: cur.gold + input.gold,
@@ -412,7 +386,6 @@ export const useCharacterStore = defineStore('character', () => {
       equipped: dist.equipped,
       inventory: dist.inventory,
       endless_best: input.cleared && input.tier > cur.endless_best ? input.tier : cur.endless_best,
-      consumables,
       // ~10 % de clé d'expédition sur une faille nettoyée.
       keys: cur.keys + (input.cleared && Math.random() < 0.1 ? 1 : 0),
     });
@@ -457,27 +430,6 @@ export const useCharacterStore = defineStore('character', () => {
       cleared_dungeons: cleared,
       set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, input.drops),
     });
-  }
-
-  // Achat en boutique : débite l'or, applique l'effet (énergie instantanée →
-  // login_energy = pool d'énergie bonus ; consommable → +1 au compteur).
-  async function buyItem(
-    userId: string,
-    item: { id: string; cost: number; kind: string; energy?: number },
-    qty = 1,
-  ) {
-    const cur = row.value;
-    const n = Math.max(1, Math.floor(qty));
-    const total = item.cost * n;
-    if (!cur || cur.gold < total) return false;
-    const patch: Record<string, unknown> = { gold: cur.gold - total };
-    if (item.kind === 'energy') {
-      patch.login_energy = cur.login_energy + (item.energy ?? 0) * n;
-    } else {
-      patch.consumables = { ...cur.consumables, [item.id]: (cur.consumables[item.id] ?? 0) + n };
-    }
-    await persist(userId, patch);
-    return true;
   }
 
   function findOwned(cur: CharacterRow, itemId: string): { item: Item; slot?: ItemSlot } | null {
@@ -1094,7 +1046,6 @@ export const useCharacterStore = defineStore('character', () => {
     spendEnergy,
     claimDailyLogin,
     claimLevelUps,
-    buyItem,
   };
 });
 
