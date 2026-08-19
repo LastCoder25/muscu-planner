@@ -571,10 +571,19 @@ export function rollFamiliar(
   species: FamiliarSpecies,
   opts: { level: number; luck?: number; rarity?: Rarity },
 ): Omit<Item, 'id'> {
-  const rarity = opts.rarity ?? rollRarity(rng, opts.luck ?? 0, opts.level);
-  // Les familiers ont désormais un RANG (G→SSS) ET une QUALITÉ (1→5) comme les objets
-  // → 50 tiers (ticket f93c219b). La qualité pilote la magnitude dans la bande du rang.
-  const quality = 1 + Math.floor(rng() * 5); // 1..5
+  // RANG + QUALITÉ comme les objets : tous deux via rollTier → la LUCK (élevée dans les
+  // labyrinthes profonds) pousse aussi la QUALITÉ vers le haut (avant : rang biaisé par la
+  // luck mais qualité uniforme 20 %). Rareté forcée (fusion) → qualité uniforme.
+  let rarity: Rarity;
+  let quality: number;
+  if (opts.rarity) {
+    rarity = opts.rarity;
+    quality = 1 + Math.floor(rng() * 5); // 1..5 uniforme
+  } else {
+    const t = rollTier(rng, opts.level, opts.luck ?? 0);
+    rarity = t.rank;
+    quality = t.quality;
+  }
   const vf = starQualityMult(quality);
   const value = Math.max(1, Math.round(species.base * RARITY_MULT[rarity] * vf));
   const level = 1; // REFONTE C : le familier arrive niv.1 (identité de race) → à infuser
