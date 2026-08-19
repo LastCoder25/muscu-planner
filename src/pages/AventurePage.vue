@@ -335,6 +335,7 @@
               <div class="tal-body">
                 <div class="tal-name font-display">
                   <span class="tal-nm">{{ t.def.name }}</span>
+                  <span v-if="t.equipped" class="tal-eqbadge">✓ Équipé</span>
                   <span
                     class="rk-badge"
                     :class="'p-' + t.rarity"
@@ -4946,8 +4947,28 @@ onUnmounted(() => {
   padding: 9px 11px;
   min-width: 0;
 }
+/* Talent ÉQUIPÉ : nettement plus visible — liseré + fond accent (voltage) et léger halo,
+   pour le distinguer d'un coup d'œil des talents en réserve. */
 .tal-card.eq {
-  background: color-mix(in srgb, currentColor 12%, var(--surface));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  border-left-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+/* Puce « ✓ Équipé » accent. */
+.tal-eqbadge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #15120e;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
 }
 .tal-card.tgt {
   outline: 2px solid var(--accent);
