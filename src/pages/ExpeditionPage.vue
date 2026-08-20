@@ -110,7 +110,26 @@
         <svg
           :viewBox="`${-MAP_PAD} ${-MAP_PAD} ${cols * CELL + 2 * MAP_PAD} ${rows * CELL + 2 * MAP_PAD}`"
           class="map"
+          :style="{ '--amb': ambianceColor }"
         >
+          <!-- Teinte d'ambiance du palier (rang G→SSS) -->
+          <rect
+            :x="-MAP_PAD"
+            :y="-MAP_PAD"
+            :width="cols * CELL + 2 * MAP_PAD"
+            :height="rows * CELL + 2 * MAP_PAD"
+            class="map-amb"
+          />
+          <!-- Couloirs = passages carvés (large sous-couche + trait) -->
+          <line
+            v-for="c in corridors"
+            :key="'f' + c.k"
+            class="corridor-floor"
+            :x1="c.x1"
+            :y1="c.y1"
+            :x2="c.x2"
+            :y2="c.y2"
+          />
           <line
             v-for="c in corridors"
             :key="c.k"
@@ -126,14 +145,18 @@
             :class="['room', roomClass(r.id), { auto: autoMode }]"
             @click="autoMode || onRoomClick(r.id)"
           >
-            <rect
-              :x="cx(r) - SIZE / 2"
-              :y="cy(r) - SIZE / 2"
-              :width="SIZE"
-              :height="SIZE"
-              rx="9"
-              class="room-bg"
-            />
+            <circle :cx="cx(r)" :cy="cy(r)" :r="SIZE / 2" class="room-bg" />
+            <!-- Torches : salle visitée = éclairée (2 flammes qui vacillent) -->
+            <template v-if="roomLit(r)">
+              <path
+                class="torch"
+                :d="`M${cx(r) - SIZE / 2 - 1} ${cy(r) - 5} q -1.7 -2.4 0 -4.8 q 1.7 2.4 0 4.8 Z`"
+              />
+              <path
+                class="torch t2"
+                :d="`M${cx(r) + SIZE / 2 + 1} ${cy(r) - 5} q -1.7 -2.4 0 -4.8 q 1.7 2.4 0 4.8 Z`"
+              />
+            </template>
             <ChestIcon
               v-if="isVisitedChest(r)"
               :color="chestColorOf(r.id)"
@@ -668,6 +691,13 @@ function chestColorOf(id: number): string {
 const labyTierIndex = computed(() =>
   Math.max(0, RANK_ORDER.indexOf(selectedLaby.value?.rank ?? 'G')),
 );
+// Teinte d'ambiance de l'étage = couleur du RANG du palier (G→SSS) → chaque palier a
+// son atmosphère de fond sur la carte.
+const ambianceColor = computed(() => RANK_COLOR[selectedLaby.value?.rank ?? 'G']);
+// Torches : les salles VISITÉES sont « éclairées » (2 flammes) ; le reste est sombre.
+function roomLit(r: Room): boolean {
+  return run.value.visited.includes(r.id) && isVisible(floor.value, run.value, r.id);
+}
 
 // Monstre = baseline (pv/dégâts scalés au joueur + profondeur) MODULÉE par l'archétype
 // de la créature tirée (assassin/brute/colosse/sangsue/vif) → même fourchette de
@@ -1482,7 +1512,7 @@ function replayAuto() {
   padding: 3px 10px;
 }
 .map-wrap {
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 12px;
@@ -1492,10 +1522,49 @@ function replayAuto() {
   height: auto;
   display: block;
 }
-.corridor {
-  stroke: var(--line);
-  stroke-width: 6;
+/* Teinte d'ambiance du palier (couleur du rang), douce, en fond de carte. */
+.map-amb {
+  fill: var(--amb, #9a8f7e);
+  opacity: 0.1;
+}
+/* Couloirs = passages carvés : large sous-couche « sol » teintée + trait plus clair. */
+.corridor-floor {
+  stroke: color-mix(in srgb, var(--amb, #9a8f7e) 30%, #000);
+  stroke-width: 9;
   stroke-linecap: round;
+  opacity: 0.55;
+}
+.corridor {
+  stroke: color-mix(in srgb, var(--amb, #9a8f7e) 35%, var(--line));
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+/* Torches des salles éclairées (visitées) : petites flammes qui vacillent. */
+.torch {
+  fill: #ffb23f;
+  filter: drop-shadow(0 0 1.4px #ff8a2f);
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: torch-flicker 0.9s ease-in-out infinite;
+}
+.torch.t2 {
+  animation-delay: 0.45s;
+}
+@keyframes torch-flicker {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1.18);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .torch {
+    animation: none;
+  }
 }
 .room {
   cursor: default;
