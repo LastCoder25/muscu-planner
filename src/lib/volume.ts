@@ -1,6 +1,7 @@
 // volume.ts — répartition des séries par groupe musculaire (pur).
 // Pour une séance planifiée (prévu) et pour un bilan (prévu vs réalisé).
-import type { Session, SessionLog } from './types';
+import type { Session, SessionLog, LoggedExercise } from './types';
+import { legSets, type ComboChallenge } from './combo';
 
 export interface MuscleSets {
   muscle: string;
@@ -154,6 +155,57 @@ export function muscleVolumeInRange(
   }
   const byExo = [...exoMap.values()].sort((a, b) => b.sets - a.sets);
   return { byMuscle, byExo, totalSets };
+}
+
+/** Convertit les séries d'un/des Défi(s) 360 en `LogEntry` synthétiques — une « séance »
+ *  par (défi, jour) — pour que le volume travaillé dans le 360 traverse TOUT le pipeline
+ *  muscu (heatmap, objectif hebdo, tendance, fréquence) comme une vraie séance. Une série
+ *  du 360 = une entrée `performed` ; le muscle vient du leg (`muscle_primary`). En mode
+ *  gainage/durée, le champ `reps` de la série porte des secondes (compté tel quel). */
+export function comboLogEntries(combos: ComboChallenge[]): LogEntry[] {
+  const out: LogEntry[] = [];
+  for (const c of combos) {
+    // Regroupe les séries par jour → une séance synthétique par jour actif.
+    const byDay = new Map<string, Map<string, LoggedExercise>>();
+    for (const leg of c.legs) {
+      const muscle = leg.muscle_primary ?? undefined;
+      for (const s of legSets(leg)) {
+        const day = s.date.slice(0, 10);
+        let exos = byDay.get(day);
+        if (!exos) byDay.set(day, (exos = new Map()));
+        let ex = exos.get(leg.exercise_id);
+        if (!ex) {
+          ex = {
+            id: leg.exercise_id,
+            name: leg.exercise_name,
+            muscle_primary: muscle,
+            planned: {},
+            performed: [],
+          };
+          exos.set(leg.exercise_id, ex);
+        }
+        ex.performed.push({
+          set: ex.performed.length + 1,
+          load_kg: s.weight ?? 0,
+          reps: s.reps ?? 0,
+          difficulty: 2,
+        });
+      }
+    }
+    for (const [day, exos] of byDay) {
+      out.push({
+        performedAt: day,
+        log: {
+          schema_version: '1.0',
+          type: 'session_log',
+          id: `combo:${c.id}:${day}`,
+          name: c.name,
+          exercises: [...exos.values()],
+        },
+      });
+    }
+  }
+  return out;
 }
 
 /** Premier jour (YYYY-MM-DD) du mois de `dateIso`. */

@@ -4,6 +4,7 @@ import {
   mondayOf,
   setsByMuscleInRange,
   muscleVolumeInRange,
+  comboLogEntries,
   firstOfMonth,
   dayAfter,
   weeklySetsByMuscle,
@@ -71,6 +72,51 @@ describe('muscleVolumeInRange', () => {
     expect(v.totalSets).toBe(9);
     // par exo : trié par séries décroissantes
     expect(v.byExo[0]!.sets).toBeGreaterThanOrEqual(v.byExo[1]!.sets);
+  });
+});
+
+describe('comboLogEntries', () => {
+  it('convertit les séries du Défi 360 en séances muscu (une par jour actif)', () => {
+    const combo = {
+      id: 'c1',
+      name: 'Défi 360',
+      start_date: '2026-08-10',
+      duration_days: 7,
+      status: 'active' as const,
+      legs: [
+        {
+          slot: 'push',
+          exercise_id: 'ex_pushup',
+          exercise_name: 'Pompes',
+          muscle_primary: 'pectoraux',
+          rep_weight: 1,
+          target: 5,
+          count_mode: 'sets' as const,
+          sets: [
+            { date: '2026-08-11', reps: 12 },
+            { date: '2026-08-11', reps: 10 },
+            { date: '2026-08-12', reps: 8 },
+          ],
+        },
+        {
+          slot: 'pull',
+          exercise_id: 'ex_row',
+          exercise_name: 'Rowing',
+          muscle_primary: 'dos',
+          rep_weight: 1,
+          target: 5,
+          count_mode: 'sets' as const,
+          sets: [{ date: '2026-08-11', reps: 10, weight: 40 }],
+        },
+      ],
+    };
+    const es = comboLogEntries([combo]);
+    expect(es).toHaveLength(2); // 11/08 et 12/08
+    // Passé dans muscleVolumeInRange : pecto = 3 séries (12+10+8=30), dos = 1 série (10).
+    const v = muscleVolumeInRange(es, '2026-08-10', '2026-08-17');
+    expect(v.byMuscle['pectoraux']).toEqual({ sets: 3, reps: 30 });
+    expect(v.byMuscle['dos']).toEqual({ sets: 1, reps: 10 });
+    expect(v.totalSets).toBe(4);
   });
 });
 

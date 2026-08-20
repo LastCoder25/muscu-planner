@@ -1,6 +1,6 @@
 <template>
   <component :is="embedded ? 'div' : 'q-page'" class="stats-page" :class="{ embedded }">
-    <h1 class="p-title font-display">Statistiques</h1>
+    <h1 class="p-title font-display">{{ muscuScope ? 'Stats muscu' : 'Statistiques' }}</h1>
 
     <div v-if="loading" class="column items-center q-mt-xl">
       <q-spinner color="primary" size="32px" />
@@ -8,7 +8,9 @@
 
     <template v-else>
       <!-- Niveaux : Global/Défis = effort (XP) ; par sport = pratique (temps). -->
-      <div class="lvl-note">Global &amp; Défis = effort · par sport = temps de pratique</div>
+      <div v-if="!muscuScope" class="lvl-note">
+        Global &amp; Défis = effort · par sport = temps de pratique
+      </div>
       <div class="lvl-list">
         <div
           v-for="c in levelCards"
@@ -30,12 +32,16 @@
         </div>
       </div>
 
-      <div v-if="logs.length === 0" class="empty">Aucune séance enregistrée pour l’instant.</div>
+      <div v-if="muscuSessionCount === 0" class="empty">
+        Aucune série muscu enregistrée pour l’instant. Fais une <b>Séance libre</b>, suis ton
+        <b>programme</b> ou remplis ton <b>Défi 360</b> — les séances rapides (durée seule) ne
+        comptent pas de séries par muscle.
+      </div>
 
       <template v-else>
         <div class="kpis">
           <div class="kpi">
-            <span class="kpi-v font-display">{{ logs.length }}</span
+            <span class="kpi-v font-display">{{ muscuSessionCount }}</span
             ><span class="kpi-l">séances</span>
           </div>
           <div class="kpi">
@@ -198,7 +204,7 @@
       </template>
 
       <!-- Tennis -->
-      <template v-if="drillLogs.length">
+      <template v-if="!muscuScope && drillLogs.length">
         <div class="sec-h sec-tennis">🎾 Tennis</div>
         <div class="kpis">
           <div class="kpi">
@@ -233,7 +239,7 @@
       </template>
 
       <!-- Cardio -->
-      <template v-if="cardio.logs.length">
+      <template v-if="!muscuScope && cardio.logs.length">
         <div class="sec-h sec-tennis">🏃 Cardio</div>
         <div class="kpis">
           <div class="kpi">
@@ -261,16 +267,19 @@
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useTennisStore, type DrillLogRow } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
+import { useComboStore } from '@/stores/combo';
 import MuscleBody from '@/components/MuscleBody.vue';
 import {
   muscleColor,
   weeklySetsByMuscle,
   muscleVolumeInRange,
+  comboLogEntries,
+  isMuscuLog,
   mondayOf,
   firstOfMonth,
   dayAfter,
@@ -287,27 +296,40 @@ import { useProgress } from '@/composables/useProgress';
 import type { DrillShot, Difficulty } from '@/lib/types';
 
 const router = useRouter();
+const route = useRoute();
 const $q = useQuasar();
 
 const logsStore = useLogsStore();
 const profileStore = useProfileStore();
 const tennis = useTennisStore();
 const cardio = useCardioStore();
+const combo = useComboStore();
 const loading = ref(true);
+// Vue « muscu seule » (ouverte depuis la tuile Muscu, `?scope=muscu`) : on masque
+// tennis / cardio / autres sports et on ne garde que le niveau Muscu.
+const muscuScope = computed(() => route.query.scope === 'muscu');
 const logs = ref<LogRow[]>([]);
 const drillLogs = ref<DrillLogRow[]>([]);
 const progress = useProgress();
 // Global + un niveau par SPORT réellement pratiqué (cohérent avec l'accueil) + Défis.
-const levelCards = computed(() => [
-  { key: 'global', label: 'Global', info: progress.global.value, unit: 'XP' },
-  ...progress.sportTiles.value.map((t) => ({
-    key: t.key,
-    label: t.label,
-    info: t.level,
-    unit: 'min',
-  })),
-  { key: 'challenges', label: 'Défis', info: progress.challenges.value, unit: 'XP' },
-]);
+// En vue muscu seule : seulement le niveau Muscu (tuile `disc:musculation`).
+const levelCards = computed(() => {
+  if (muscuScope.value) {
+    return progress.sportTiles.value
+      .filter((t) => t.key === 'disc:musculation')
+      .map((t) => ({ key: t.key, label: t.label, info: t.level, unit: 'min' }));
+  }
+  return [
+    { key: 'global', label: 'Global', info: progress.global.value, unit: 'XP' },
+    ...progress.sportTiles.value.map((t) => ({
+      key: t.key,
+      label: t.label,
+      info: t.level,
+      unit: 'min',
+    })),
+    { key: 'challenges', label: 'Défis', info: progress.challenges.value, unit: 'XP' },
+  ];
+});
 
 function median(arr: number[]): number {
   if (arr.length === 0) return 0;
@@ -327,7 +349,7 @@ interface ExoStat {
   max: number | null;
 }
 
-// Agrégat par exercice (toutes séances).
+// Agrégat par exercice (toutes séances MUSCU, séances + Défi 360).
 const exos = computed<ExoStat[]>(() => {
   const map = new Map<
     string,
@@ -340,8 +362,9 @@ const exos = computed<ExoStat[]>(() => {
       loads: number[];
     }
   >();
-  for (const row of logs.value) {
-    for (const ex of row.payload.exercises) {
+  for (const e of entries.value) {
+    if (!isMuscuLog(e.log)) continue;
+    for (const ex of e.log.exercises) {
       const cur = map.get(ex.id) ?? {
         id: ex.id,
         name: ex.name,
@@ -350,7 +373,7 @@ const exos = computed<ExoStat[]>(() => {
         sets: 0,
         loads: [],
       };
-      cur.sessions.add(row.id);
+      cur.sessions.add(e.log.id);
       for (const s of ex.performed) {
         cur.sets++;
         if (s.load_kg > 0) cur.loads.push(s.load_kg);
@@ -376,8 +399,9 @@ const exos = computed<ExoStat[]>(() => {
 
 const muscleSets = computed(() => {
   const map = new Map<string, number>();
-  for (const row of logs.value) {
-    for (const ex of row.payload.exercises) {
+  for (const e of entries.value) {
+    if (!isMuscuLog(e.log)) continue;
+    for (const ex of e.log.exercises) {
       const m = ex.muscle_primary ?? '—';
       map.set(m, (map.get(m) ?? 0) + ex.performed.length);
     }
@@ -388,15 +412,22 @@ const muscleSets = computed(() => {
 });
 
 const totalSets = computed(() => muscleSets.value.reduce((a, g) => a + g.sets, 0));
+// Nb de séances MUSCU (séances loggées + jours de Défi 360) avec ≥1 série.
+const muscuSessionCount = computed(
+  () => entries.value.filter((e) => isMuscuLog(e.log) && e.log.exercises.length > 0).length,
+);
 const maxMuscle = computed(() => Math.max(1, ...muscleSets.value.map((g) => g.sets)));
 function barPct(n: number) {
   return Math.round((n / maxMuscle.value) * 100);
 }
 
 // ── Volume HEBDO : réel vs cible + tendances (ferme la boucle du programme) ──
-const entries = computed<LogEntry[]>(() =>
-  logs.value.map((r) => ({ performedAt: r.performed_at, log: r.payload })),
-);
+// Les séries du Défi 360 sont converties en séances synthétiques → elles comptent
+// dans TOUT le volume muscu (heatmap, objectif, tendance) au même titre qu'une séance.
+const entries = computed<LogEntry[]>(() => [
+  ...logs.value.map((r) => ({ performedAt: r.performed_at, log: r.payload })),
+  ...comboLogEntries(combo.list),
+]);
 // Date du jour en LOCAL (jamais toISOString → pas de décalage de fuseau).
 const todayIso = (() => {
   const d = new Date();
@@ -487,6 +518,7 @@ const cardioKpis = computed(() => {
 onMounted(async () => {
   try {
     cardio.fetchLogs(300).catch(() => undefined);
+    combo.fetchMine().catch(() => undefined);
     tennis
       .fetchLogs(300)
       .then((l) => (drillLogs.value = l))
