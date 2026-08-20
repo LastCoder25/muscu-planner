@@ -54,6 +54,10 @@ export interface BuildingType {
   category: BuildingCategory;
   resource?: BuildResource; // ce qu'il produit (producteurs uniquement)
   prodPerHrPerLvl?: number; // production/heure par niveau (producteurs)
+  // Bâtiment COMBINÉ qui, en plus de produire, PLAFONNE un rang d'infusion selon son
+  // niveau (familier via maxFuseTierIndex, talent via maxTalentTierIndex). Data-driven
+  // → l'UI affiche le « rang max » sans coder en dur l'id du bâtiment.
+  capsRank?: 'familiar' | 'talent';
   effect?: BuildingEffect; // effet global (utility)
   buildGold: number; // coût de construction (or)
   unlockLevel?: number; // niveau joueur requis pour pouvoir le construire (défaut 1)
@@ -172,6 +176,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     category: 'producer',
     resource: 'fragments', // = poussière d'âme
     prodPerHrPerLvl: 0.14,
+    capsRank: 'familiar',
     buildGold: 900,
     unlockLevel: 2,
     unique: true,
@@ -242,6 +247,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     category: 'producer',
     resource: 'ink_dust', // = poussière d'encre
     prodPerHrPerLvl: 0.12,
+    capsRank: 'talent',
     buildGold: 900,
     unlockLevel: 3,
     unique: true,
@@ -348,11 +354,16 @@ export function incubatorBuilt(buildings: Building[]): boolean {
  *  très en retard sur les drops (G au niv.8 alors qu'on droppe déjà du C/D). La MAGNITUDE
  *  reste plafonnée au niveau joueur (pierres) → « seul le sport rend plus fort » tenu.
  *  `-1` = pas d'incubateur (aucune infusion). Formule √ inlinée (buildings = feuille). */
-export function maxFuseTierIndex(buildings: Building[]): number {
-  const lvl = incubatorLevel(buildings);
+// CRAN max (0..49) débloqué par un bâtiment de rang à `lvl` : même racine √ que la courbe
+// des drops (`rankCeilingForLevel` dans items.ts, ré-inlinée ici — buildings = feuille, pas
+// d'import d'items). `lvl<1` (pas construit) → -1 = aucune infusion. Partagé Incubateur/Scriptorium.
+function rankCapForBuildingLevel(lvl: number): number {
   if (lvl < 1) return -1;
   const rankCeil = Math.min(9, Math.max(0, Math.floor(Math.sqrt(lvl) * 1.03)));
   return rankCeil * 5 + 4; // rang plafond × qualité 5
+}
+export function maxFuseTierIndex(buildings: Building[]): number {
+  return rankCapForBuildingLevel(incubatorLevel(buildings));
 }
 /** Niveau du Scriptorium (bâtiment COMBINÉ des talents : produit la poussière d'encre
  *  ET plafonne le rang d'infusion des talents). 0 = pas construit. */
@@ -366,10 +377,7 @@ export function scriptoriumBuilt(buildings: Building[]): boolean {
  *  courbe √ que l'Incubateur pour les familiers. `-1` = pas de Scriptorium (aucune
  *  infusion de rang possible ; le talent reste au rang de drop). */
 export function maxTalentTierIndex(buildings: Building[]): number {
-  const lvl = scriptoriumLevel(buildings);
-  if (lvl < 1) return -1;
-  const rankCeil = Math.min(9, Math.max(0, Math.floor(Math.sqrt(lvl) * 1.03)));
-  return rankCeil * 5 + 4;
+  return rankCapForBuildingLevel(scriptoriumLevel(buildings));
 }
 /** La Forge est-elle construite ? → débloque l'Atelier (forge d'objet / de set). */
 export function forgeBuilt(buildings: Building[]): boolean {

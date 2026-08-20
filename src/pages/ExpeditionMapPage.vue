@@ -722,13 +722,11 @@ function buildingEffectAt(b: Building, level: number): string {
   const at: Building = { ...b, level };
   if (t.category === 'utility') return utilityEffectLabel(at);
   const prod = `${buildingProdPerHour(at).toFixed(1)} ${RES_EMOJI[t.resource ?? 'dust'] ?? '✨'}/h`;
-  // Bâtiments COMBINÉS (produisent une poussière ET plafonnent un rang) → on montre les deux.
-  if (b.typeId === 'incubator') {
-    const rq = tierToRankQ(Math.max(0, maxFuseTierIndex([at])));
-    return `${prod} · rang max ${rq.rank}★${rq.quality}`;
-  }
-  if (b.typeId === 'scriptorium') {
-    const rq = tierToRankQ(Math.max(0, maxTalentTierIndex([at])));
+  // Bâtiment COMBINÉ (produit une poussière ET plafonne un rang) → on montre les deux,
+  // piloté par `capsRank` (data-driven, pas d'id en dur dans la vue).
+  if (t.capsRank) {
+    const cap = t.capsRank === 'familiar' ? maxFuseTierIndex([at]) : maxTalentTierIndex([at]);
+    const rq = tierToRankQ(Math.max(0, cap));
     return `${prod} · rang max ${rq.rank}★${rq.quality}`;
   }
   return prod;
@@ -847,10 +845,8 @@ function utilityEffectLabel(b: Building): string {
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')
     return `${bossRewardCount([b])} choix de récompense · ciblage du set · +${Math.round(bossAltarRollFloor([b]) * 100)}% qualité de roll`;
-  if (b.typeId === 'incubator') {
-    const rq = tierToRankQ(Math.max(0, maxFuseTierIndex([b])));
-    return `infusion familier → cran max ${rq.rank}★${rq.quality}`;
-  }
+  // (Incubateur/Scriptorium sont désormais des PRODUCTEURs → leur libellé passe par
+  //  buildingEffectAt, jamais ici.)
   if (b.typeId === 'comptoir') return `100 🪙 → ${goldToDust([b], 100)} ✨`;
   return buildingType(b.typeId)?.desc ?? ''; // autres utilitaires : description
 }

@@ -2727,15 +2727,18 @@ const talentFreeSlots = computed(() =>
 );
 const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.value);
 // Vue enrichie : équipés d'abord, puis par niveau décroissant.
-const talentsView = computed(() =>
-  (char.row?.talents ?? [])
+const talentsView = computed(() => {
+  // Plafond de rang EFFECTIF (min SSS5 / Scriptorium) — hoisté hors du map (identique
+  // pour tous les talents ; évite un `.find()` par talent à chaque rendu).
+  const tierCap = Math.min(49, maxTalentTierIndex(char.row?.buildings ?? []));
+  const pl = c.value.level.level;
+  return (char.row?.talents ?? [])
     .map((inst) => {
       const def = talentByCode(inst.code);
       if (!def) return null;
       const tier = tierOf(inst); // rang + qualité (infusion)
       const level = talentLevelOf(inst); // niveau (parchemins)
-      const eff = effectiveTalentLevel(inst, c.value.level.level); // niveau plafonné (effet actif)
-      const pl = c.value.level.level;
+      const eff = effectiveTalentLevel(inst, pl); // niveau plafonné (effet actif)
       return {
         id: inst.id,
         inst,
@@ -2746,9 +2749,7 @@ const talentsView = computed(() =>
         quality: talentQuality(tier),
         effLabel: Math.round(talentValue(def, tier, eff) * 100) + ' %',
         levelMaxed: level >= pl, // niveau plafonné par le sport → parchemins inutiles
-        tierMaxed: tier >= 49, // SSS5 = plafond absolu
-        // Plafond EFFECTIF = min(SSS5, Scriptorium) → au-delà, l'infusion de rang est bloquée.
-        tierCapped: tier >= Math.min(49, maxTalentTierIndex(char.row?.buildings ?? [])),
+        tierCapped: tier >= tierCap, // au-delà (SSS5 ou plafond Scriptorium) → infusion bloquée
         upCost: talentLevelUpCost(level), // 📜 coût du prochain NIVEAU
         tierCost: talentTierStepCost(tier), // poussière d'encre : coût du prochain PALIER
         recycleGain: talentInfuseXp(inst), // poussière d'encre rendue par le recyclage
@@ -2758,8 +2759,8 @@ const talentsView = computed(() =>
     .filter((t): t is NonNullable<typeof t> => !!t)
     .sort(
       (a, b) => Number(b.equipped) - Number(a.equipped) || b.tier - a.tier || b.level - a.level,
-    ),
-);
+    );
+});
 function talentName(inst: TalentInstance): string {
   return talentByCode(inst.code)?.name ?? 'Talent';
 }
@@ -4091,9 +4092,8 @@ function doInfuseFamStep(f: Item) {
     'Infusion impossible.',
   );
 }
-// RECYCLE un familier du sac → FRAGMENTS 🧩 (∝ son tier). Les fragments servent ensuite
-// à infuser une cible (doInfuseFam). C'est la SEULE voie : on ne sacrifie pas un familier
-// directement dans un autre (tout passe par les fragments).
+// RECYCLE un familier du sac → poussière d'âme (∝ son tier). Alimente la réserve qui
+// finance l'infusion de RANG des familiers gardés (bouton 🔧 par familier).
 function doRecycleFam(id: string) {
   withUid(
     (uid) =>
@@ -4953,45 +4953,6 @@ onUnmounted(() => {
   color: var(--accent);
   margin-left: 6px;
 }
-.tal-infuse-banner {
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  border-radius: 10px;
-  padding: 8px 12px;
-  font-size: 12.5px;
-  color: var(--text);
-  margin-bottom: 10px;
-}
-.tib-x {
-  margin-left: 6px;
-  background: none;
-  border: none;
-  color: var(--dim);
-  text-decoration: underline;
-  cursor: pointer;
-  font-size: 12px;
-}
-/* Rien de plus à sacrifier → « Terminer » mis en avant (pastille accent, pas un lien). */
-.tib-x.done {
-  text-decoration: none;
-  padding: 3px 12px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #15120e;
-  font-weight: 800;
-}
-/* « Verser N fragments » dans la cible (bannière d'infusion familier). */
-.tib-frag {
-  margin-left: 6px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
 .talents-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -5039,9 +5000,6 @@ onUnmounted(() => {
   color: #ffd23f;
   font-weight: 800;
   font-size: 12px;
-}
-.tal-card.tgt {
-  outline: 2px solid var(--accent);
 }
 .tal-emo {
   flex: 0 0 auto;
@@ -5121,25 +5079,8 @@ onUnmounted(() => {
   opacity: 0.4;
   cursor: default;
 }
-.tal-b.feed {
-  border-color: var(--accent);
-  color: var(--accent);
-}
 .tal-b.ghost {
   color: var(--dim);
-}
-.tal-b.cur {
-  color: var(--accent);
-  border: none;
-  background: none;
-}
-/* Talent équipé pendant une infusion : non sacrifiable (protégé). */
-.tal-b.eqlock {
-  color: var(--dim);
-  border: none;
-  background: none;
-  opacity: 0.75;
-  cursor: not-allowed;
 }
 .talents-empty {
   font-size: 12px;
@@ -5418,287 +5359,6 @@ onUnmounted(() => {
   color: var(--dim);
   opacity: 0.7;
 }
-/* Familier (compagnon) */
-.fam-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.fam-card {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-left-width: 4px;
-  border-radius: 12px;
-  padding: 12px;
-}
-/* couleur de rang gérée par la règle générique .r-* (var(--rk)) */
-.fam-emo {
-  font-size: 34px;
-  line-height: 1;
-}
-.fam-body {
-  flex: 1;
-  min-width: 0;
-}
-.fam-name {
-  font-weight: 700;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.fam-eff {
-  color: #4ec6d6;
-  font-weight: 600;
-  font-size: 13px;
-  margin-top: 4px;
-}
-.fam-blurb {
-  color: var(--dim);
-  font-size: 12px;
-  font-style: italic;
-  margin-top: 4px;
-}
-.fam-actions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
-/* Rangée d'actions du familier équipé — boutons homogènes, lisibles. */
-.fam-eq-actions {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-  margin-top: 10px;
-  flex-wrap: wrap;
-}
-.fam-eq-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--surface-2, #2b241b);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  line-height: 1.15;
-}
-.fam-eq-btn .feb-ico {
-  font-size: 14px;
-}
-.fam-eq-btn .feb-txt {
-  display: flex;
-  flex-direction: column;
-}
-.fam-eq-btn .feb-txt em {
-  font-style: normal;
-  font-weight: 600;
-  font-size: 11px;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-}
-.fam-eq-btn.lvl {
-  border-color: color-mix(in srgb, #4ec6d6 55%, var(--line));
-  color: #4ec6d6;
-}
-.fam-eq-btn.infuse {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  color: var(--accent);
-}
-.fam-eq-btn.remove {
-  color: var(--dim);
-}
-.fam-eq-btn.cur {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  border-color: var(--accent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.fam-eq-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  color: var(--dim);
-  border-color: var(--line);
-}
-.fam-target-tag {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 12px;
-  color: var(--accent);
-}
-/* Explication des 2 ressources du familier (💎 niveau / 🧩 tier). */
-.fam-res {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 6px 0;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-}
-.fam-res-l {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--dim);
-}
-.fam-res-l b {
-  color: var(--text);
-}
-.fam-empty {
-  background: var(--surface);
-  border: 1px dashed var(--line);
-  border-radius: 12px;
-  padding: 14px;
-  color: var(--dim);
-  font-size: 13px;
-}
-.fam-bag-title {
-  font-size: 12px;
-  color: var(--dim);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: 4px 0;
-}
-.fam-mini {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-left-width: 3px;
-  border-radius: 10px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-}
-.fam-mini-body {
-  flex: 1;
-  min-width: 0;
-}
-.fam-mini-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-/* Actions en LIGNE, sous la fiche du familier (pleine largeur), harmonisées. */
-.fam-mini-top {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.fam-mini-acts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding-top: 7px;
-  border-top: 1px solid var(--line-soft, var(--line));
-}
-/* couleur de rang gérée par la règle générique .r-* (var(--rk)) */
-.fam-mini-emo {
-  font-size: 20px;
-  line-height: 1.2;
-}
-.fam-mini-name {
-  font-weight: 600;
-  font-size: 13px;
-}
-.fam-mini-eff {
-  color: #4ec6d6;
-  font-size: 12px;
-  font-weight: 600;
-  margin-top: 3px;
-}
-.fam-mini-cmp {
-  margin-top: 3px;
-  font-size: 11.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.fam-mini-cmp.up {
-  color: var(--d1);
-}
-.fam-mini-cmp.down {
-  color: var(--d4);
-}
-.fam-mini-eq {
-  border: 1px solid var(--accent);
-  background: none;
-  color: var(--accent);
-  border-radius: 999px;
-  padding: 3px 12px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-/* Harmonisé avec .fam-mini-eq : même pilule, teinte discrète (secondaire). */
-.fam-mini-sell {
-  border: 1px solid var(--line);
-  background: none;
-  color: var(--dim);
-  border-radius: 999px;
-  padding: 3px 12px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.fam-mini-eq.feed {
-  border-color: var(--d3);
-  color: var(--d3);
-}
-.fam-mini-cur {
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-  padding: 3px 4px;
-}
-/* Barre d'XP de tier de la cible d'infusion (familier). */
-.fam-xp {
-  margin-top: 8px;
-}
-/* Barre de tier compacte affichée SUR la carte du familier cible (feedback d'infusion
-   là où on clique, en plus du bandeau du haut). Couleur accent = bien visible. */
-.fam-xp.cur-bar {
-  width: 72px;
-  margin-top: 4px;
-  color: var(--accent);
-}
-.fam-infuse-btns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-/* Incubateur (fusion de familiers) */
-.fam-incub {
-  margin-top: 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px;
-}
-.fam-incub-hint {
-  font-size: 12px;
-  color: var(--dim);
-  margin: 4px 0 8px;
-}
-.fam-incub-empty {
-  font-size: 12px;
-  color: var(--dim);
-  font-style: italic;
-}
 .fam-incub-locked {
   width: 100%;
   text-align: left;
@@ -5709,34 +5369,6 @@ onUnmounted(() => {
   color: var(--text);
   font-size: 12.5px;
   cursor: pointer;
-}
-.fam-fuse-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
-  text-align: left;
-  background: var(--surface-2);
-  border: 1px solid var(--accent);
-  border-radius: 10px;
-  padding: 9px 12px;
-  margin-bottom: 6px;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-/* Fusion vers un rang non encore débloqué par l'Incubateur : grisée, mène à la carte. */
-.fam-fuse-btn.locked {
-  border-color: var(--line);
-  color: var(--dim);
-  background: var(--surface);
-}
-.ff-have {
-  margin-left: auto;
-  color: var(--dim);
-  font-size: 11px;
-  font-weight: 500;
 }
 /* Sets d'équipement */
 .setcard {
