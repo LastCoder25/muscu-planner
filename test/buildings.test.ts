@@ -17,7 +17,6 @@ import {
   expeditionsUnlocked,
   incubatorBuilt,
   maxFuseTierIndex,
-  fuseUnlockLevel,
   travelTimeMult,
   outpostLevel,
   forgeLuckBonus,
@@ -202,18 +201,15 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
     expect(incubatorBuilt([mk('outpost', 3)])).toBe(false);
     expect(incubatorBuilt([mk('incubator', 1)])).toBe(true);
   });
-  it('maxFuseTierIndex : CRAN max, +1 tous les 2 niveaux (50 crans), SSS★5 (49) au niv.~97', () => {
+  it('maxFuseTierIndex : ALIGNÉ sur la courbe des drops (√ rankCeiling ×5+4)', () => {
     expect(maxFuseTierIndex([])).toBe(-1); // pas d'incubateur → aucune infusion
-    expect(maxFuseTierIndex([mk('incubator', 1)])).toBe(1); // cran 1 (G★2) dès la construction
-    expect(maxFuseTierIndex([mk('incubator', 3)])).toBe(2); // +1 cran tous les 2 niveaux
-    expect(maxFuseTierIndex([mk('incubator', 5)])).toBe(3);
-    expect(maxFuseTierIndex([mk('incubator', 97)])).toBe(49); // SSS★5
-    expect(maxFuseTierIndex([mk('incubator', 200)])).toBe(49); // plafonné à 49
-  });
-  it('fuseUnlockLevel : niveau d’Incubateur requis pour un cran', () => {
-    expect(fuseUnlockLevel(1)).toBe(1); // cran 1 dès la construction
-    expect(fuseUnlockLevel(2)).toBe(3);
-    expect(fuseUnlockLevel(49)).toBe(97); // SSS★5
+    expect(maxFuseTierIndex([mk('incubator', 1)])).toBe(9); // F★5
+    expect(maxFuseTierIndex([mk('incubator', 4)])).toBe(14); // E★5
+    expect(maxFuseTierIndex([mk('incubator', 16)])).toBe(24); // C★5
+    expect(maxFuseTierIndex([mk('incubator', 25)])).toBe(29); // B★5
+    expect(maxFuseTierIndex([mk('incubator', 80)])).toBe(49); // SSS★5
+    // croît avec le niveau, plafonné à 49
+    expect(maxFuseTierIndex([mk('incubator', 200)])).toBe(49);
   });
   it('travelTimeMult < 1 et décroît avec le niveau (−1,5 %/niv, plancher −60 % au niv.40)', () => {
     expect(travelTimeMult([])).toBe(1);

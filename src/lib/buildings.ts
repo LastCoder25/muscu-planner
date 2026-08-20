@@ -331,16 +331,18 @@ export function incubatorBuilt(buildings: Building[]): boolean {
   return incubatorLevel(buildings) > 0;
 }
 /** CRAN (tier 0..49 = rang×5 + qualité−1) MAX atteignable par infusion selon le niveau
- *  de l'Incubateur. Comme partout ailleurs : **une qualité (cran) tous les 2 niveaux** →
- *  les 50 crans (rang+qualité) sont débloqués progressivement, SSS★5 au niveau ~97 (graal
- *  long terme). Construit (niv.1) → cran 1 (G★2). `-1` = pas d'incubateur (aucune infusion). */
+ *  de l'Incubateur. ALIGNÉ SUR LA COURBE DES DROPS (v0.503) : l'incubateur laisse infuser
+ *  jusqu'au RANG★5 que les drops plafonnent à ce niveau — même racine `rankCeilingForLevel`
+ *  = `floor(√level×1,03)` (RAPIDE tôt : E dès l'incubateur niv.4, C au niv.16, B au 25 …
+ *  SSS au ~80). Avant (v0.498) : « 1 qualité / 2 niveaux » linéaire → l'incubateur était
+ *  très en retard sur les drops (G au niv.8 alors qu'on droppe déjà du C/D). La MAGNITUDE
+ *  reste plafonnée au niveau joueur (pierres) → « seul le sport rend plus fort » tenu.
+ *  `-1` = pas d'incubateur (aucune infusion). Formule √ inlinée (buildings = feuille). */
 export function maxFuseTierIndex(buildings: Building[]): number {
   const lvl = incubatorLevel(buildings);
-  return lvl < 1 ? -1 : Math.min(49, 1 + Math.floor((lvl - 1) / 2));
-}
-/** Niveau d'Incubateur requis pour débloquer le cran (tier) `tier`. */
-export function fuseUnlockLevel(tier: number): number {
-  return Math.max(1, 1 + 2 * (tier - 1));
+  if (lvl < 1) return -1;
+  const rankCeil = Math.min(9, Math.max(0, Math.floor(Math.sqrt(lvl) * 1.03)));
+  return rankCeil * 5 + 4; // rang plafond × qualité 5
 }
 /** La Forge est-elle construite ? → débloque l'Atelier (forge d'objet / de set). */
 export function forgeBuilt(buildings: Building[]): boolean {

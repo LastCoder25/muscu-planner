@@ -699,33 +699,37 @@
             <div v-if="bagFamiliars.length" class="fam-bag">
               <div class="fam-bag-title">Au sac ({{ bagFamiliars.length }})</div>
               <div v-for="f in bagFamiliars" :key="f.id" class="fam-mini" :class="'r-' + f.rarity">
-                <span class="fam-mini-emo">{{ f.emoji }}</span>
-                <div class="fam-mini-body">
-                  <div class="fam-mini-head">
-                    <span class="fam-mini-name">{{ f.name }}</span>
-                    <span class="gpill" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
-                    <span
-                      v-if="itemQuality(f)"
-                      class="q-badge"
-                      :class="'q-' + itemQuality(f)"
-                      title="Qualité (5 = meilleur)"
-                      >{{ itemQuality(f) }}</span
-                    >
-                    <span class="gpill lvl">Lv{{ f.level }}</span>
-                    <span v-if="f.effect2" class="gpill sig">✦</span>
-                  </div>
-                  <div class="fam-mini-eff">{{ itemEffects(f) }}</div>
-                  <!-- Comparatif de puissance vs familier ÉQUIPÉ, à ARMES ÉGALES : le
+                <div class="fam-mini-top">
+                  <span class="fam-mini-emo">{{ f.emoji }}</span>
+                  <div class="fam-mini-body">
+                    <div class="fam-mini-head">
+                      <span class="fam-mini-name">{{ f.name }}</span>
+                      <span class="gpill" :class="'p-' + f.rarity">{{
+                        RARITY_LABEL[f.rarity]
+                      }}</span>
+                      <span
+                        v-if="itemQuality(f)"
+                        class="q-badge"
+                        :class="'q-' + itemQuality(f)"
+                        title="Qualité (5 = meilleur)"
+                        >{{ itemQuality(f) }}</span
+                      >
+                      <span class="gpill lvl">Lv{{ f.level }}</span>
+                      <span v-if="f.effect2" class="gpill sig">✦</span>
+                    </div>
+                    <div class="fam-mini-eff">{{ itemEffects(f) }}</div>
+                    <!-- Comparatif de puissance vs familier ÉQUIPÉ, à ARMES ÉGALES : le
                        candidat est jugé AU NIVEAU du familier équipé (powerIfEquipMatched),
                        pas à son niveau actuel → on compare le potentiel, pas un sous-niveau. -->
-                  <div
-                    v-if="!famTarget && equippedFamiliar?.id !== f.id"
-                    class="fam-mini-cmp"
-                    :class="powerIfEquipMatched(f) >= combatPowerVal ? 'up' : 'down'"
-                    title="Puissance de combat si tu équipes ce familier (au niveau de l'équipé)"
-                  >
-                    ⚔️ {{ fmtPow(combatPowerVal) }} → {{ fmtPow(powerIfEquipMatched(f)) }}
-                    <b>({{ fmtDelta(combatPowerVal, powerIfEquipMatched(f)) }})</b>
+                    <div
+                      v-if="!famTarget && equippedFamiliar?.id !== f.id"
+                      class="fam-mini-cmp"
+                      :class="powerIfEquipMatched(f) >= combatPowerVal ? 'up' : 'down'"
+                      title="Puissance de combat si tu équipes ce familier (au niveau de l'équipé)"
+                    >
+                      ⚔️ {{ fmtPow(combatPowerVal) }} → {{ fmtPow(powerIfEquipMatched(f)) }}
+                      <b>({{ fmtDelta(combatPowerVal, powerIfEquipMatched(f)) }})</b>
+                    </div>
                   </div>
                 </div>
                 <div class="fam-mini-acts">
@@ -5456,7 +5460,7 @@ onUnmounted(() => {
 }
 .fam-mini {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 8px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -5475,12 +5479,19 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
 }
+/* Actions en LIGNE, sous la fiche du familier (pleine largeur), harmonisées. */
+.fam-mini-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
 .fam-mini-acts {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-soft, var(--line));
 }
 /* couleur de rang gérée par la règle générique .r-* (var(--rk)) */
 .fam-mini-emo {
@@ -5519,14 +5530,16 @@ onUnmounted(() => {
   font-weight: 700;
   cursor: pointer;
 }
+/* Harmonisé avec .fam-mini-eq : même pilule, teinte discrète (secondaire). */
 .fam-mini-sell {
-  border: none;
+  border: 1px solid var(--line);
   background: none;
   color: var(--dim);
-  font-size: 11px;
-  font-weight: 600;
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
-  padding: 3px 4px;
 }
 .fam-mini-eq.feed {
   border-color: var(--d3);
