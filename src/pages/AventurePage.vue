@@ -2563,7 +2563,10 @@ const talentsView = computed(() => {
         enchant,
         rarity: talentRank(tier),
         quality: talentQuality(tier),
-        effLabel: Math.round(talentValue(def, tier, enchant) * 100) + ' %',
+        // 1 décimale : les bonus de talent sont petits (armure 4,5 %…) et la courbe de
+        // grade est plate → l'arrondi entier faisait paraître D5 et E3 identiques
+        // (ticket f7e389e4) alors que leurs valeurs diffèrent (6,2 % vs 5,6 %).
+        effLabel: (talentValue(def, tier, enchant) * 100).toFixed(1).replace('.', ',') + ' %',
         equipped: !!inst.equipped,
       };
     })

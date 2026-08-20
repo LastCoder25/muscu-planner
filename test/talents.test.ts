@@ -57,16 +57,24 @@ describe('magnitude = grade × enchant (uniforme avec les objets)', () => {
     expect(talentValue(def, 10, 0)).toBeGreaterThan(talentValue(def, 0, 0)); // grade ↑
     expect(talentValue(def, 0, 6)).toBeGreaterThan(talentValue(def, 0, 0)); // enchant ↑
   });
-  it('enchant partage le mult des objets (enchantMult)', () => {
+  it('enchant partage le mult des objets (enchantMult), à grade égal', () => {
     const def = talentByCode('t_dmg')!;
-    expect(talentValue(def, 12, 4)).toBeCloseTo(def.base * (1 + 12 * 0.02) * enchantMult(4));
+    expect(talentValue(def, 12, 4) / talentValue(def, 12, 0)).toBeCloseTo(enchantMult(4));
   });
-  it('MAX (SSS5, +12) = grade max × enchant max', () => {
+  it('MAX (SSS5, +12) ≈ ancien plafond (~×9,8 de la base) → équilibrage préservé', () => {
     const def = talentByCode('t_dmg')!;
     const ratio = talentValue(def, 49, ENCHANT_MAX) / def.base;
-    // tier49 ~×1,98 × enchantMult(12) ~×4,96 ≈ ×9,8
+    // (base/2) × RARITY_MULT[SSS] × qualité5 × enchantMult(12) ≈ ×9,87
     expect(ratio).toBeGreaterThan(9);
     expect(ratio).toBeLessThan(10.5);
+  });
+  it('grades NETTEMENT séparés — D5 > E3, distincts (ticket f7e389e4)', () => {
+    const def = talentByCode('t_armor')!; // Cuirasse : base petite → cas du bug
+    const tierAt = (rank: string, q: number) => RANK_ORDER.indexOf(rank as never) * 5 + (q - 1);
+    const d5 = talentValue(def, tierAt('D', 5), 0);
+    const e3 = talentValue(def, tierAt('E', 3), 0);
+    expect(d5).toBeGreaterThan(e3);
+    expect(d5 / e3).toBeGreaterThan(1.05); // écart net (plus un arrondi près)
   });
 });
 
@@ -91,10 +99,10 @@ describe('normalizeTalents (rétro-compat)', () => {
 });
 
 describe('talentEffects (équipés uniquement)', () => {
-  it('legacy string[] : tous comptent (tier 0, +0 = base)', () => {
+  it('legacy string[] : tous comptent (grade G1 +0)', () => {
     const e = talentEffects(['t_dmg', 't_dmg', 't_pv']);
-    expect(e.damagePct).toBeCloseTo(0.16); // 2 × base 0.08
-    expect(e.maxPvPct).toBeCloseTo(0.08);
+    expect(e.damagePct).toBeCloseTo(2 * talentValue(talentByCode('t_dmg')!, 0, 0));
+    expect(e.maxPvPct).toBeCloseTo(talentValue(talentByCode('t_pv')!, 0, 0));
   });
   it('instances : seuls les ÉQUIPÉS comptent', () => {
     const insts: TalentInstance[] = [
@@ -102,7 +110,7 @@ describe('talentEffects (équipés uniquement)', () => {
       { id: 'b', code: 't_crit', xp: 0, enchant: 0, equipped: false },
     ];
     const e = talentEffects(insts);
-    expect(e.damagePct).toBeCloseTo(0.08);
+    expect(e.damagePct).toBeCloseTo(talentValue(talentByCode('t_dmg')!, 0, 0));
     expect(e.critAdd).toBe(0); // non équipé
   });
   it('l’enchant augmente la magnitude', () => {

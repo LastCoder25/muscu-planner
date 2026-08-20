@@ -6,6 +6,8 @@ import {
   emptyEffects,
   enchantMult,
   RANK_ORDER,
+  RARITY_MULT,
+  starQualityMult,
   rollTier,
   type AggregatedEffects,
   type Rarity,
@@ -174,14 +176,23 @@ export function enchantOf(inst: TalentInstance): number {
   return Math.max(0, inst.enchant ?? 0);
 }
 
-// ── Magnitude : base × mult de TIER (grade) × enchantMult (+N, partagé avec les
-// objets). Calibré pour que le MAX (SSS5, +12) reste dans l'ordre de l'ancien plafond
-// → équilibrage combat préservé. ──
-export function talentTierMult(tier: number): number {
-  return 1 + Math.max(0, tier) * 0.02; // tier0 1,0 … tier49 ~1,98
-}
+// ── Magnitude UNIFORME avec les objets (2026‑08‑20, ticket f7e389e4) : le GRADE suit la
+// MÊME courbe géométrique que les objets — `RARITY_MULT[rang] × starQualityMult(qualité)`
+// (spread ×4,4 de G à SSS) → un rang supérieur est NETTEMENT meilleur (fini l'ancienne
+// courbe de tier plate `1+tier×0,02` où D5 ≈ E3 au centième près). Les `base` du catalogue
+// sont divisées par 2 pour PRÉSERVER le plafond combat : (base/2)×RARITY_MULT[SSS]×q5×
+// enchantMult(12) ≈ base_avant × 9,8 (= l'ancien max). Conséquence assumée : les bas grades
+// sont plus faibles (comme un objet G), ce qui donne du sens à la chasse au grade. ──
+// Facteur qui divise les `base` du catalogue (gardées lisibles) pour préserver le plafond.
+const GRADE_BASE_SCALE = 0.5;
 export function talentValue(def: TalentDef, tier: number, enchant: number): number {
-  return def.base * talentTierMult(tier) * enchantMult(enchant);
+  return (
+    def.base *
+    GRADE_BASE_SCALE *
+    RARITY_MULT[talentRank(tier)] *
+    starQualityMult(talentQuality(tier)) *
+    enchantMult(enchant)
+  );
 }
 
 /** Nombre d'emplacements de talents ÉQUIPÉS (1 tous les 5 niveaux JOUEUR). */
