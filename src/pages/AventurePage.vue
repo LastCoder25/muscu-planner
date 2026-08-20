@@ -626,451 +626,365 @@
 
       <!-- ONGLET ÉQUIPEMENT -->
       <template v-else-if="tab === 'gear'">
-        <!-- Sous-navigation : Équipement (+ familier) / Sac / Atelier. -->
-        <div class="gear-sub">
-          <button class="gs-b" :class="{ on: gearSub === 'equip' }" @click="gearSub = 'equip'">
-            🛡️ Équipement
-          </button>
-          <button class="gs-b" :class="{ on: gearSub === 'bag' }" @click="gearSub = 'bag'">
-            🎒 Sac<span v-if="bagCount" class="gs-badge">{{ bagCount }}</span>
-          </button>
-          <button class="gs-b" :class="{ on: gearSub === 'shop' }" @click="gearSub = 'shop'">
-            🔧 Atelier
-          </button>
+        <!-- En-tête Équipement : titre + accès Force / Loadouts / Atelier par ICÔNES
+             (plus de sous-onglets ; le sac est à la suite des items équipés). -->
+        <div class="gear-head">
+          <div class="sec-title gh-title">Équipement</div>
+          <div class="gear-icons">
+            <button
+              class="gi-b"
+              title="Force — stats de combat (base → équipé)"
+              @click="forceOpen = true"
+            >
+              💪
+            </button>
+            <button
+              class="gi-b"
+              title="Loadouts — ranger un set d'équipement"
+              @click="loadoutOpen = true"
+            >
+              📦
+            </button>
+            <button
+              class="gi-b"
+              title="Atelier — forge & craft de poussière"
+              @click="atelierOpen = true"
+            >
+              🔧
+            </button>
+          </div>
+        </div>
+        <div class="sec-hint">
+          Ton stuff équipé. Ton butin est dans le <b>Sac</b>, juste dessous.
+        </div>
+        <div class="gear">
+          <div
+            v-for="slot in SLOTS"
+            :key="slot"
+            class="slot"
+            :class="char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty'"
+          >
+            <div class="slot-head">
+              <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
+              <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
+            </div>
+            <template v-if="char.row.equipped[slot]">
+              <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
+              <div class="pills">
+                <span class="gpill lvl">Lvl {{ char.row.equipped[slot]!.level }}</span>
+                <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
+                  RARITY_LABEL[char.row.equipped[slot]!.rarity]
+                }}</span>
+                <span
+                  v-if="itemQuality(char.row.equipped[slot])"
+                  class="q-badge"
+                  :class="'q-' + itemQuality(char.row.equipped[slot])"
+                  title="Qualité (5 = meilleur)"
+                  >{{ itemQuality(char.row.equipped[slot]) }}</span
+                >
+                <span v-if="char.row.equipped[slot]!.setId" class="gpill set">🧩 Set</span>
+              </div>
+              <div class="slot-eff">
+                {{ itemEffects(char.row.equipped[slot]!) }}
+              </div>
+              <button
+                class="slot-up"
+                :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
+                @click.stop="doUpgrade(char.row.equipped[slot]!.id)"
+              >
+                <template v-if="char.row.equipped[slot]!.level > c.level.level"
+                  >✨ Infusable au niv {{ char.row.equipped[slot]!.level + 1 }}</template
+                >
+                <template v-else-if="char.row.equipped[slot]!.level >= c.level.level"
+                  >✨ Max (ton niveau {{ c.level.level }})</template
+                >
+                <template v-else
+                  >✨ +1 niv ·
+                  {{ upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity) }}
+                  ✨</template
+                >
+              </button>
+              <button class="slot-remove" @click="doUnequip(slot)">Retirer</button>
+              <!-- Badge : nb d'objets du SAC (même slot) au potentiel supérieur. Tap →
+                     filtre le sac dessus. Cercle avec le 🎒 en fond. -->
+              <button
+                v-if="betterInBagCount(slot) > 0"
+                class="slot-better"
+                :title="betterInBagCount(slot) + ' objet(s) du sac au potentiel supérieur — voir'"
+                @click="showBetterForSlot(slot)"
+              >
+                <span class="sb-n">{{ betterInBagCount(slot) }}</span>
+              </button>
+            </template>
+            <div v-else class="slot-vide">
+              vide<template v-if="bagCountForSlot(slot) > 0">
+                · {{ bagCountForSlot(slot) }} au sac</template
+              >
+            </div>
+          </div>
         </div>
 
-        <template v-if="gearSub === 'equip'">
-          <div class="sec-title">Équipement</div>
-          <div class="sec-hint">
-            Ton stuff équipé. Gère tes objets dans le <b>Sac</b> (onglet ci-dessus).
+        <!-- Sets d'équipement (bonus 2/3/4 pièces) — rattachés à l'équipement -->
+        <template v-if="activeSets.length">
+          <div class="sec-title">Sets</div>
+          <div v-for="s in activeSets" :key="s.id" class="setcard" :class="{ full: s.count >= 4 }">
+            <div class="set-top">
+              <span class="set-name">{{ s.emoji }} {{ s.name }}</span>
+              <span class="set-count font-display">{{ s.count }}/4</span>
+            </div>
+            <div class="set-theme">{{ s.theme }}</div>
+            <div class="set-tiers">
+              <span
+                v-for="t in s.tiers"
+                :key="t.pieces"
+                class="set-tier"
+                :class="{ on: s.count >= t.pieces }"
+              >
+                {{ t.pieces }} pièces : {{ t.label }}
+              </span>
+            </div>
           </div>
-          <div class="gear">
-            <div
+        </template>
+
+        <!-- Sac : à la suite des items équipés (plus de sous-onglet). -->
+        <template v-if="bagCount">
+          <div ref="sacTitle" class="sec-title">🎒 Sac ({{ bagCount }})</div>
+          <!-- Bannière du filtre « mieux au sac » (posé via le badge d'un item équipé). -->
+          <div v-if="betterFilterSlot" class="better-banner">
+            🔼 Upgrades potentielles pour <b>{{ SLOT_LABEL[betterFilterSlot] }}</b>
+            <button class="bb-clear" @click="setInvFilter('all')">Tout voir ✕</button>
+          </div>
+          <!-- Filtre par type d'objet -->
+          <div class="inv-filter">
+            <button
+              class="if-chip"
+              :class="{ on: invFilter === 'all' && !betterFilterSlot }"
+              @click="setInvFilter('all')"
+            >
+              Tous
+            </button>
+            <button
               v-for="slot in SLOTS"
               :key="slot"
-              class="slot"
-              :class="char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty'"
+              class="if-chip"
+              :class="{ on: invFilter === slot && !betterFilterSlot }"
+              @click="setInvFilter(slot)"
             >
-              <div class="slot-head">
-                <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
-                <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
-              </div>
-              <template v-if="char.row.equipped[slot]">
-                <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
-                <div class="pills">
-                  <span class="gpill lvl">Lvl {{ char.row.equipped[slot]!.level }}</span>
-                  <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
-                    RARITY_LABEL[char.row.equipped[slot]!.rarity]
-                  }}</span>
-                  <span
-                    v-if="itemQuality(char.row.equipped[slot])"
-                    class="q-badge"
-                    :class="'q-' + itemQuality(char.row.equipped[slot])"
-                    title="Qualité (5 = meilleur)"
-                    >{{ itemQuality(char.row.equipped[slot]) }}</span
-                  >
-                  <span v-if="char.row.equipped[slot]!.setId" class="gpill set">🧩 Set</span>
-                </div>
-                <div class="slot-eff">
-                  {{ itemEffects(char.row.equipped[slot]!) }}
-                </div>
-                <button
-                  class="slot-up"
-                  :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
-                  @click.stop="doUpgrade(char.row.equipped[slot]!.id)"
-                >
-                  <template v-if="char.row.equipped[slot]!.level > c.level.level"
-                    >✨ Infusable au niv {{ char.row.equipped[slot]!.level + 1 }}</template
-                  >
-                  <template v-else-if="char.row.equipped[slot]!.level >= c.level.level"
-                    >✨ Max (ton niveau {{ c.level.level }})</template
-                  >
-                  <template v-else
-                    >✨ +1 niv ·
-                    {{
-                      upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity)
-                    }}
-                    ✨</template
-                  >
-                </button>
-                <button class="slot-remove" @click="doUnequip(slot)">Retirer</button>
-              </template>
-              <div v-else class="slot-vide">
-                vide<template v-if="bagCountForSlot(slot) > 0">
-                  · {{ bagCountForSlot(slot) }} au sac</template
-                >
-              </div>
-            </div>
+              {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
+            </button>
           </div>
-        </template>
-
-        <!-- Sets d'équipement (bonus 2/3/4 pièces) — rattachés à l'équipement -->
-        <template v-if="gearSub === 'equip'">
-          <template v-if="activeSets.length">
-            <div class="sec-title">Sets</div>
-            <div
-              v-for="s in activeSets"
-              :key="s.id"
-              class="setcard"
-              :class="{ full: s.count >= 4 }"
-            >
-              <div class="set-top">
-                <span class="set-name">{{ s.emoji }} {{ s.name }}</span>
-                <span class="set-count font-display">{{ s.count }}/4</span>
-              </div>
-              <div class="set-theme">{{ s.theme }}</div>
-              <div class="set-tiers">
-                <span
-                  v-for="t in s.tiers"
-                  :key="t.pieces"
-                  class="set-tier"
-                  :class="{ on: s.count >= t.pieces }"
-                >
-                  {{ t.pieces }} pièces : {{ t.label }}
-                </span>
-              </div>
-            </div>
-          </template>
-        </template>
-
-        <!-- Loadouts : ranger un set d'équipement (4 slots gear) en réserve. -->
-        <template v-if="gearSub === 'equip'">
-          <div class="sec-title">📦 Loadouts</div>
-          <div class="sec-hint">
-            Range ton stuff équipé (arme / armure / accessoire / relique — le
-            <b>familier reste</b>) pour garder un set pendant que tu en testes un autre. Les objets
-            rangés ne sont <b>pas</b> dans le sac.
-          </div>
-          <div class="loadouts">
-            <div
-              v-for="(lo, i) in loadoutsView"
-              :key="i"
-              class="loadout"
-              :class="{ empty: !lo.count }"
-            >
-              <div class="lo-head">
-                <span class="lo-name font-display">Loadout {{ i + 1 }}</span>
-                <span
-                  v-if="lo.count"
-                  class="lo-power"
-                  :class="lo.delta >= 0 ? 'up' : 'down'"
-                  title="Puissance si tu équipes ce loadout (familier actuel conservé)"
-                >
-                  ⚔️ {{ fmtPow(lo.power) }}
-                  <b>({{ fmtDelta(combatPowerVal, lo.power) }})</b>
-                </span>
-                <span v-else class="lo-empty-tag">vide</span>
-              </div>
-              <div v-if="lo.count" class="lo-items">
-                <span
-                  v-for="it in lo.items"
-                  :key="it.slot"
-                  class="lo-item"
-                  :class="'r-' + it.rarity"
-                  :title="SLOT_LABEL[it.slot] + ' · ' + it.name"
-                  >{{ SLOT_EMOJI[it.slot] }}</span
-                >
-              </div>
-              <button
-                class="lo-btn"
-                :disabled="(!lo.count && !hasEquippedGear) || busy"
-                @click="doSwapLoadout(i)"
-              >
-                {{
-                  lo.count
-                    ? hasEquippedGear
-                      ? '🔄 Échanger'
-                      : '⬆️ Équiper'
-                    : '📦 Ranger mon stuff (nu)'
-                }}
-              </button>
-            </div>
-          </div>
-        </template>
-
-        <template v-if="gearSub === 'bag'">
-          <template v-if="bagCount">
-            <div ref="sacTitle" class="sec-title">Sac ({{ bagCount }})</div>
-            <!-- Filtre par type d'objet -->
-            <div class="inv-filter">
-              <button
-                class="if-chip"
-                :class="{ on: invFilter === 'all' }"
-                @click="invFilter = 'all'"
-              >
-                Tous
-              </button>
-              <button
-                v-for="slot in SLOTS"
-                :key="slot"
-                class="if-chip"
-                :class="{ on: invFilter === slot }"
-                @click="invFilter = slot"
-              >
-                {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
-              </button>
-            </div>
-            <!-- Casse/vente en masse : objets qui n'améliorent pas ta puissance (pas
+          <!-- Casse/vente en masse : objets qui n'améliorent pas ta puissance (pas
                meilleurs que l'équipé du même emplacement, MÊME montés à ton niveau).
                Les pépites potentielles et le 🔒 sont protégés. Respecte le filtre type. -->
-            <div v-if="belowCount > 0" class="bulk">
-              <span class="bulk-lbl"
-                >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} sans intérêt
-                <span class="bulk-note">(≤ ton équipement ; pépites &amp; 🔒 gardés)</span></span
-              >
-              <div class="bulk-btns">
-                <button class="bulk-b" @click="doSalvageBelow">
-                  ✨ Tout casser ({{ belowCount }})
-                </button>
-                <button class="bulk-b" @click="doSellBelow">
-                  🪙 Tout vendre ({{ belowCount }})
-                </button>
+          <div v-if="belowCount > 0" class="bulk">
+            <span class="bulk-lbl"
+              >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} sans intérêt
+              <span class="bulk-note">(≤ ton équipement ; pépites &amp; 🔒 gardés)</span></span
+            >
+            <div class="bulk-btns">
+              <button class="bulk-b" @click="doSalvageBelow">
+                ✨ Tout casser ({{ belowCount }})
+              </button>
+              <button class="bulk-b" @click="doSellBelow">🪙 Tout vendre ({{ belowCount }})</button>
+            </div>
+          </div>
+          <div v-if="!filteredInventory.length" class="inv-empty-filter">
+            Aucun objet de ce type dans le sac.
+          </div>
+          <div class="inv">
+            <div
+              v-for="it in filteredInventory"
+              :key="it.id"
+              class="inv-item"
+              :class="['r-' + it.rarity, { locked: it.locked }]"
+            >
+              <!-- Ligne 1 : emoji + nom + VERDICT de puissance (la décision) -->
+              <div class="ii-head">
+                <span class="inv-emo">{{ it.emoji }}</span>
+                <div class="ii-name">{{ it.name }}</div>
+                <span class="ii-verdict" :class="powerVerdict(it).cls">{{
+                  powerVerdict(it).label
+                }}</span>
               </div>
-            </div>
-            <div v-if="!filteredInventory.length" class="inv-empty-filter">
-              Aucun objet de ce type dans le sac.
-            </div>
-            <div class="inv">
-              <div
-                v-for="it in filteredInventory"
-                :key="it.id"
-                class="inv-item"
-                :class="['r-' + it.rarity, { locked: it.locked }]"
-              >
-                <!-- Ligne 1 : emoji + nom + VERDICT de puissance (la décision) -->
-                <div class="ii-head">
-                  <span class="inv-emo">{{ it.emoji }}</span>
-                  <div class="ii-name">{{ it.name }}</div>
-                  <span class="ii-verdict" :class="powerVerdict(it).cls">{{
-                    powerVerdict(it).label
-                  }}</span>
-                </div>
-                <!-- Ligne 2 : méta grisée (rang · niveau · slot · qualité · set). Le rang et
+              <!-- Ligne 2 : méta grisée (rang · niveau · slot · qualité · set). Le rang et
                      la qualité sont CLIQUABLES → explication (ticket d094eac6). -->
-                <div class="ii-meta">
-                  <span
-                    class="ii-rar clk"
-                    :class="'p-' + it.rarity"
-                    role="button"
-                    title="Qu’est-ce que le rang ?"
-                    @click="helpTopic = 'rank'"
-                    >{{ RARITY_LABEL[it.rarity] }}</span
-                  >
-                  <span
-                    v-if="itemQuality(it)"
-                    class="q-badge clk"
-                    :class="'q-' + itemQuality(it)"
-                    role="button"
-                    title="Qu’est-ce que la qualité ?"
-                    @click="helpTopic = 'quality'"
-                    >{{ itemQuality(it) }}</span
-                  >
-                  <span class="ii-dot">·</span> Nv {{ it.level }} <span class="ii-dot">·</span>
-                  {{ SLOT_LABEL[it.slot] }}
-                  <span v-if="it.setId" class="gpill set">🧩 Set</span>
+              <div class="ii-meta">
+                <span
+                  class="ii-rar clk"
+                  :class="'p-' + it.rarity"
+                  role="button"
+                  title="Qu’est-ce que le rang ?"
+                  @click="helpTopic = 'rank'"
+                  >{{ RARITY_LABEL[it.rarity] }}</span
+                >
+                <span
+                  v-if="itemQuality(it)"
+                  class="q-badge clk"
+                  :class="'q-' + itemQuality(it)"
+                  role="button"
+                  title="Qu’est-ce que la qualité ?"
+                  @click="helpTopic = 'quality'"
+                  >{{ itemQuality(it) }}</span
+                >
+                <span class="ii-dot">·</span> Nv {{ it.level }} <span class="ii-dot">·</span>
+                {{ SLOT_LABEL[it.slot] }}
+                <span v-if="it.setId" class="gpill set">🧩 Set</span>
+              </div>
+              <!-- Comparaison : rang + qualité + effet, cet objet vs l'équipé (ticket 50f593a2). -->
+              <div class="ii-compare">
+                <div class="ii-cmp-row this">
+                  <span class="ii-cmp-lbl">Cet objet</span>
+                  <span class="ii-rar" :class="'p-' + it.rarity">{{
+                    RARITY_LABEL[it.rarity]
+                  }}</span>
+                  <span v-if="itemQuality(it)" class="q-badge" :class="'q-' + itemQuality(it)">{{
+                    itemQuality(it)
+                  }}</span>
+                  <span class="ii-cmp-val">{{ itemEffects(it) }}</span>
                 </div>
-                <!-- Comparaison : rang + qualité + effet, cet objet vs l'équipé (ticket 50f593a2). -->
-                <div class="ii-compare">
-                  <div class="ii-cmp-row this">
-                    <span class="ii-cmp-lbl">Cet objet</span>
-                    <span class="ii-rar" :class="'p-' + it.rarity">{{
-                      RARITY_LABEL[it.rarity]
+                <div class="ii-cmp-row eq">
+                  <span class="ii-cmp-lbl">Équipé</span>
+                  <template v-if="equippedInSlot(it.slot)">
+                    <span class="ii-rar" :class="'p-' + equippedInSlot(it.slot)!.rarity">{{
+                      RARITY_LABEL[equippedInSlot(it.slot)!.rarity]
                     }}</span>
-                    <span v-if="itemQuality(it)" class="q-badge" :class="'q-' + itemQuality(it)">{{
-                      itemQuality(it)
-                    }}</span>
-                    <span class="ii-cmp-val">{{ itemEffects(it) }}</span>
-                  </div>
-                  <div class="ii-cmp-row eq">
-                    <span class="ii-cmp-lbl">Équipé</span>
-                    <template v-if="equippedInSlot(it.slot)">
-                      <span class="ii-rar" :class="'p-' + equippedInSlot(it.slot)!.rarity">{{
-                        RARITY_LABEL[equippedInSlot(it.slot)!.rarity]
-                      }}</span>
-                      <span
-                        v-if="itemQuality(equippedInSlot(it.slot))"
-                        class="q-badge"
-                        :class="'q-' + itemQuality(equippedInSlot(it.slot))"
-                        >{{ itemQuality(equippedInSlot(it.slot)) }}</span
-                      >
-                      <span class="ii-cmp-val">{{ itemEffects(equippedInSlot(it.slot)!) }}</span>
-                    </template>
-                    <span v-else class="ii-cmp-val dim">— emplacement libre</span>
-                  </div>
+                    <span
+                      v-if="itemQuality(equippedInSlot(it.slot))"
+                      class="q-badge"
+                      :class="'q-' + itemQuality(equippedInSlot(it.slot))"
+                      >{{ itemQuality(equippedInSlot(it.slot)) }}</span
+                    >
+                    <span class="ii-cmp-val">{{ itemEffects(equippedInSlot(it.slot)!) }}</span>
+                  </template>
+                  <span v-else class="ii-cmp-val dim">— emplacement libre</span>
                 </div>
-                <!-- PUISSANCE : 2 lectures — MAINTENANT (équipé tel quel, niveau réel)
+              </div>
+              <!-- PUISSANCE : 2 lectures — MAINTENANT (équipé tel quel, niveau réel)
                      vs POTENTIEL (monté à ton niveau). Montre qu'un objet sous-leveled
                      fait perdre s'il est équipé tel quel mais devient meilleur infusé. -->
-                <!-- Comparaison SUR UNE LIGNE : verdict « vs équipé » (à armes égales, au
+              <!-- Comparaison SUR UNE LIGNE : verdict « vs équipé » (à armes égales, au
                      niveau de l'objet équipé) + « maintenant » (si équipé sous-leveled tel quel). -->
-                <div class="ii-cmp2">
-                  <span class="ii-cmp2-ic">⚔️</span>
+              <div class="ii-cmp2">
+                <span class="ii-cmp2-ic">⚔️</span>
+                <span
+                  v-if="!equippedInSlot(it.slot)"
+                  class="ii-cmp2-chip"
+                  :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
+                >
+                  <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
+                  ><i>emplacement libre</i>
+                </span>
+                <template v-else>
                   <span
-                    v-if="!equippedInSlot(it.slot)"
                     class="ii-cmp2-chip"
+                    :class="powerIfEquipMatched(it) >= combatPowerVal ? 'up' : 'down'"
+                    :title="
+                      'À armes égales : monté au niveau de ton équipé (Nv ' +
+                      equipMatchLevel(it) +
+                      ')'
+                    "
+                  >
+                    <b>{{ fmtDelta(combatPowerVal, powerIfEquipMatched(it)) }}</b
+                    ><i>vs équipé</i>
+                  </span>
+                  <span
+                    v-if="it.level < equipMatchLevel(it)"
+                    class="ii-cmp2-chip sub"
                     :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
+                    title="Si équipé tel quel, à son niveau actuel"
                   >
                     <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
-                    ><i>emplacement libre</i>
+                    ><i>maintenant</i>
                   </span>
-                  <template v-else>
-                    <span
-                      class="ii-cmp2-chip"
-                      :class="powerIfEquipMatched(it) >= combatPowerVal ? 'up' : 'down'"
-                      :title="
-                        'À armes égales : monté au niveau de ton équipé (Nv ' +
-                        equipMatchLevel(it) +
-                        ')'
-                      "
-                    >
-                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipMatched(it)) }}</b
-                      ><i>vs équipé</i>
-                    </span>
-                    <span
-                      v-if="it.level < equipMatchLevel(it)"
-                      class="ii-cmp2-chip sub"
-                      :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
-                      title="Si équipé tel quel, à son niveau actuel"
-                    >
-                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
-                      ><i>maintenant</i>
-                    </span>
-                  </template>
-                </div>
-                <!-- Rentabilité : palier d'infusion où l'objet dépasse ton équipé actuel. -->
-                <div
-                  v-if="showBreakEven(it)"
-                  class="ii-be"
-                  :class="{ ok: breakEvenFor(it).cost <= char.row.dust }"
+                </template>
+              </div>
+              <!-- Rentabilité : palier d'infusion où l'objet dépasse ton équipé actuel. -->
+              <div
+                v-if="showBreakEven(it)"
+                class="ii-be"
+                :class="{ ok: breakEvenFor(it).cost <= char.row.dust }"
+              >
+                🔧 Rentable dès Nv {{ breakEvenFor(it).level }} · {{ breakEvenFor(it).cost }}✨
+                <span class="ii-be-have">(tu as {{ char.row.dust }}✨)</span>
+              </div>
+              <!-- Actions : Équiper · (Infuser puis équiper) · icônes casser/vendre/lock · ⋯ -->
+              <div class="ii-actions">
+                <button class="equip-btn" @click="doEquip(it.id)">
+                  {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
+                </button>
+                <button
+                  v-if="it.level < equipMatchLevel(it)"
+                  class="equip-btn ghost"
+                  :disabled="char.row.dust < infuseToMaxCost(it, equipMatchLevel(it))"
+                  :title="'Monte l’objet au niveau de ton équipé puis l’équipe'"
+                  @click="doInfuseThenEquip(it)"
                 >
-                  🔧 Rentable dès Nv {{ breakEvenFor(it).level }} · {{ breakEvenFor(it).cost }}✨
-                  <span class="ii-be-have">(tu as {{ char.row.dust }}✨)</span>
-                </div>
-                <!-- Actions : Équiper · (Infuser puis équiper) · icônes casser/vendre/lock · ⋯ -->
-                <div class="ii-actions">
-                  <button class="equip-btn" @click="doEquip(it.id)">
-                    {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
-                  </button>
-                  <button
-                    v-if="it.level < equipMatchLevel(it)"
-                    class="equip-btn ghost"
-                    :disabled="char.row.dust < infuseToMaxCost(it, equipMatchLevel(it))"
-                    :title="'Monte l’objet au niveau de ton équipé puis l’équipe'"
-                    @click="doInfuseThenEquip(it)"
-                  >
-                    🔧 Infuser puis équiper · {{ infuseToMaxCost(it, equipMatchLevel(it)) }}✨
-                  </button>
-                  <button
-                    class="ii-ic destroy"
-                    :disabled="it.locked"
-                    :title="'Casser : DÉTRUIT l’objet → poussière (' + salvageValue(it) + '✨)'"
-                    @click="doSalvage(it)"
-                  >
-                    <span class="destroy-glyph">✨</span>
-                  </button>
-                  <button
-                    class="ii-ic"
-                    :disabled="it.locked"
-                    :title="'Vendre → or (' + sellValue(it) + '🪙)'"
-                    @click="doSell(it)"
-                  >
-                    🪙
-                  </button>
-                  <button
-                    class="ii-ic lock"
-                    :class="{ on: it.locked }"
-                    :title="it.locked ? 'Déverrouiller' : 'Garder pour plus tard (protéger)'"
-                    @click="doToggleLock(it)"
-                  >
-                    {{ it.locked ? '🔒' : '🔓' }}
-                  </button>
-                  <button class="ii-more" aria-label="Plus d'actions">
-                    ⋯
-                    <q-menu anchor="bottom right" self="top right" class="ii-menu">
-                      <div class="ii-menu-list">
-                        <button
-                          v-if="it.level < c.level.level"
-                          class="ii-mi"
-                          :disabled="!canUpgrade(it, char.row.dust, c.level.level)"
-                          @click="doUpgrade(it.id)"
-                          v-close-popup
-                        >
-                          ✨ Infuser +1 · {{ upgradeCost(it.level, it.rarity) }}✨
-                        </button>
-                        <button
-                          v-if="it.level < c.level.level - 1"
-                          class="ii-mi"
-                          :disabled="char.row.dust < upgradeCost(it.level, it.rarity)"
-                          @click="doInfuseMax(it.id)"
-                          v-close-popup
-                        >
-                          ⚡ Infuser à fond · {{ infuseToMaxCost(it, c.level.level) }}✨
-                        </button>
-                        <button
-                          class="ii-mi"
-                          :disabled="char.row.dust < rerollCost(it)"
-                          @click="doReroll(it)"
-                          v-close-popup
-                        >
-                          ♻️ Reroll qualité · {{ rerollCost(it) }}✨
-                        </button>
-                      </div>
-                    </q-menu>
-                  </button>
-                </div>
+                  🔧 Infuser puis équiper · {{ infuseToMaxCost(it, equipMatchLevel(it)) }}✨
+                </button>
+                <button
+                  class="ii-ic destroy"
+                  :disabled="it.locked"
+                  :title="'Casser : DÉTRUIT l’objet → poussière (' + salvageValue(it) + '✨)'"
+                  @click="doSalvage(it)"
+                >
+                  <span class="destroy-glyph">✨</span>
+                </button>
+                <button
+                  class="ii-ic"
+                  :disabled="it.locked"
+                  :title="'Vendre → or (' + sellValue(it) + '🪙)'"
+                  @click="doSell(it)"
+                >
+                  🪙
+                </button>
+                <button
+                  class="ii-ic lock"
+                  :class="{ on: it.locked }"
+                  :title="it.locked ? 'Déverrouiller' : 'Garder pour plus tard (protéger)'"
+                  @click="doToggleLock(it)"
+                >
+                  {{ it.locked ? '🔒' : '🔓' }}
+                </button>
+                <button class="ii-more" aria-label="Plus d'actions">
+                  ⋯
+                  <q-menu anchor="bottom right" self="top right" class="ii-menu">
+                    <div class="ii-menu-list">
+                      <button
+                        v-if="it.level < c.level.level"
+                        class="ii-mi"
+                        :disabled="!canUpgrade(it, char.row.dust, c.level.level)"
+                        @click="doUpgrade(it.id)"
+                        v-close-popup
+                      >
+                        ✨ Infuser +1 · {{ upgradeCost(it.level, it.rarity) }}✨
+                      </button>
+                      <button
+                        v-if="it.level < c.level.level - 1"
+                        class="ii-mi"
+                        :disabled="char.row.dust < upgradeCost(it.level, it.rarity)"
+                        @click="doInfuseMax(it.id)"
+                        v-close-popup
+                      >
+                        ⚡ Infuser à fond · {{ infuseToMaxCost(it, c.level.level) }}✨
+                      </button>
+                      <button
+                        class="ii-mi"
+                        :disabled="char.row.dust < rerollCost(it)"
+                        @click="doReroll(it)"
+                        v-close-popup
+                      >
+                        ♻️ Reroll qualité · {{ rerollCost(it) }}✨
+                      </button>
+                    </div>
+                  </q-menu>
+                </button>
               </div>
             </div>
-          </template>
-          <div v-else class="empty-inv">
-            Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
           </div>
         </template>
-
-        <template v-if="gearSub === 'shop'">
-          <!-- Atelier de poussière : investir la poussière autrement que l'infusion de niveau -->
-          <div class="sec-title">🔧 Atelier de poussière</div>
-          <div v-if="!hasForge" class="sec-hint">
-            🔒 Construis la <b>🔨 Forge</b> sur la carte d'expédition pour ouvrir l'Atelier.
-          </div>
-          <template v-else>
-            <div class="sec-hint">
-              Investis ta poussière — <b>✨ {{ char.row.dust }}</b> dispo.
-            </div>
-            <div class="workshop">
-              <button
-                class="ws-btn"
-                :disabled="char.row.dust < forgeCost(c.level.level, false)"
-                @click="doForge()"
-              >
-                🔨 Forger un objet (aléatoire) · ✨{{ forgeCost(c.level.level, false) }}
-              </button>
-              <button
-                class="ws-btn"
-                :disabled="char.row.dust < forgeCost(c.level.level, true)"
-                @click="forgeSlotOpen = true"
-              >
-                🎯 Forger (choisir l'emplacement) · ✨{{ forgeCost(c.level.level, true) }}
-              </button>
-              <button
-                class="ws-btn"
-                :disabled="char.row.dust < craftSetCost(c.level.level)"
-                @click="openCraft()"
-              >
-                🧩 Forger une pièce de set · ✨{{ craftSetCost(c.level.level) }}
-              </button>
-            </div>
-            <div class="ws-note">
-              Forge un objet neuf <b>à ton niveau</b> (rareté au hasard).
-              <b>♻️ Reroll qualité</b> se fait sur un objet du sac. La rareté ne se monte plus au
-              craft : le <b>haut de gamme s'obtient en explorant</b> (drops/boss).
-            </div>
-          </template>
-
-          <div class="foot">
-            L'équipement ne donne pas de stats (elles viennent du sport) mais des <b>effets</b> —
-            vol de vie, réduction de dégâts, or… → à toi de composer ton style.
-          </div>
-        </template>
+        <div v-else class="empty-inv">
+          Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
+        </div>
       </template>
 
       <!-- ONGLET EXPLORER — sous-onglet Donjons (carte) -->
@@ -1689,6 +1603,178 @@
         </div>
       </div>
     </transition>
+
+    <!-- MODALE FORCE — stats de combat (base → équipé), accès par l'icône 💪 de l'Équipement. -->
+    <div v-if="forceOpen" class="shop-backdrop" @click.self="forceOpen = false">
+      <div class="shop-card">
+        <div class="shop-head">
+          <div class="shop-title font-display">💪 Force — combat</div>
+          <button class="shop-x" aria-label="Fermer" @click="forceOpen = false">✕</button>
+        </div>
+        <div class="gear-fx">
+          <div class="gfx">
+            <span class="gfx-l">❤️ PV</span>
+            <span class="gfx-v"
+              >{{ baseFighter.pv }} <i>→</i> <b>{{ fighter.pv }}</b></span
+            >
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">⚔️ Dégâts/coup</span>
+            <span class="gfx-v"
+              >{{ baseFighter.damage }} <i>→</i> <b>{{ fighter.damage }}</b></span
+            >
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">⚡ Frappes/tour</span>
+            <span class="gfx-v"
+              >{{ (baseFighter.strikes ?? 1).toFixed(2) }} <i>→</i>
+              <b>{{ (fighter.strikes ?? 1).toFixed(2) }}</b></span
+            >
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">🎯 Crit</span>
+            <span class="gfx-v"
+              >{{ pctA(baseFighter.crit) }} <i>→</i> <b>{{ pctA(fighter.crit) }}</b></span
+            >
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">💨 Esquive</span>
+            <span class="gfx-v"
+              >{{ pctA(baseFighter.dodge) }} <i>→</i> <b>{{ pctA(fighter.dodge) }}</b></span
+            >
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">🛡️ Défense</span>
+            <span class="gfx-v"
+              >{{ pctA(baseFighter.dmgReduction) }} <i>→</i>
+              <b>{{ pctA(fighter.dmgReduction) }}</b></span
+            >
+          </div>
+          <div class="gfx">
+            <span class="gfx-l">🩸 Vol de vie</span>
+            <span class="gfx-v"
+              >{{ pctA(baseFighter.lifesteal) }} <i>→</i> <b>{{ pctA(fighter.lifesteal) }}</b></span
+            >
+          </div>
+          <div class="gfx total">
+            <span class="gfx-l">Puissance de combat</span>
+            <span class="gfx-v"
+              >{{ fmtPow(combatPower(baseFighter)) }} <i>→</i>
+              <b>{{ fmtPow(combatPowerVal) }}</b></span
+            >
+          </div>
+        </div>
+        <div class="gear-fx-note">
+          Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
+          effets (→).
+        </div>
+      </div>
+    </div>
+
+    <!-- MODALE LOADOUTS — accès par l'icône 📦 de l'Équipement. -->
+    <div v-if="loadoutOpen" class="shop-backdrop" @click.self="loadoutOpen = false">
+      <div class="shop-card">
+        <div class="shop-head">
+          <div class="shop-title font-display">📦 Loadouts</div>
+          <button class="shop-x" aria-label="Fermer" @click="loadoutOpen = false">✕</button>
+        </div>
+        <div class="sec-hint">
+          Range ton stuff équipé (arme / armure / accessoire / relique — le <b>familier reste</b>)
+          pour garder un set pendant que tu en testes un autre. Les objets rangés ne sont
+          <b>pas</b> dans le sac.
+        </div>
+        <div class="loadouts">
+          <div
+            v-for="(lo, i) in loadoutsView"
+            :key="i"
+            class="loadout"
+            :class="{ empty: !lo.count }"
+          >
+            <div class="lo-head">
+              <span class="lo-name font-display">Loadout {{ i + 1 }}</span>
+              <span
+                v-if="lo.count"
+                class="lo-power"
+                :class="lo.delta >= 0 ? 'up' : 'down'"
+                title="Puissance si tu équipes ce loadout (familier actuel conservé)"
+              >
+                ⚔️ {{ fmtPow(lo.power) }} <b>({{ fmtDelta(combatPowerVal, lo.power) }})</b>
+              </span>
+              <span v-else class="lo-empty-tag">vide</span>
+            </div>
+            <div v-if="lo.count" class="lo-items">
+              <span
+                v-for="it in lo.items"
+                :key="it.slot"
+                class="lo-item"
+                :class="'r-' + it.rarity"
+                :title="SLOT_LABEL[it.slot] + ' · ' + it.name"
+                >{{ SLOT_EMOJI[it.slot] }}</span
+              >
+            </div>
+            <button
+              class="lo-btn"
+              :disabled="(!lo.count && !hasEquippedGear) || busy"
+              @click="doSwapLoadout(i)"
+            >
+              {{
+                lo.count
+                  ? hasEquippedGear
+                    ? '🔄 Échanger'
+                    : '⬆️ Équiper'
+                  : '📦 Ranger mon stuff (nu)'
+              }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODALE ATELIER — forge & craft de poussière, accès par l'icône 🔧 de l'Équipement. -->
+    <div v-if="atelierOpen && char.row" class="shop-backdrop" @click.self="atelierOpen = false">
+      <div class="shop-card">
+        <div class="shop-head">
+          <div class="shop-title font-display">🔧 Atelier de poussière</div>
+          <button class="shop-x" aria-label="Fermer" @click="atelierOpen = false">✕</button>
+        </div>
+        <div v-if="!hasForge" class="sec-hint">
+          🔒 Construis la <b>🔨 Forge</b> sur la carte d'expédition pour ouvrir l'Atelier.
+        </div>
+        <template v-else>
+          <div class="sec-hint">
+            Investis ta poussière — <b>✨ {{ char.row!.dust }}</b> dispo.
+          </div>
+          <div class="workshop">
+            <button
+              class="ws-btn"
+              :disabled="char.row!.dust < forgeCost(c.level.level, false)"
+              @click="doForge()"
+            >
+              🔨 Forger un objet (aléatoire) · ✨{{ forgeCost(c.level.level, false) }}
+            </button>
+            <button
+              class="ws-btn"
+              :disabled="char.row!.dust < forgeCost(c.level.level, true)"
+              @click="forgeSlotOpen = true"
+            >
+              🎯 Forger (choisir l'emplacement) · ✨{{ forgeCost(c.level.level, true) }}
+            </button>
+            <button
+              class="ws-btn"
+              :disabled="char.row!.dust < craftSetCost(c.level.level)"
+              @click="openCraft()"
+            >
+              🧩 Forger une pièce de set · ✨{{ craftSetCost(c.level.level) }}
+            </button>
+          </div>
+          <div class="ws-note">
+            Forge un objet neuf <b>à ton niveau</b> (rareté au hasard). <b>♻️ Reroll qualité</b> se
+            fait sur un objet du sac. La rareté ne se monte plus au craft : le
+            <b>haut de gamme s'obtient en explorant</b> (drops/boss).
+          </div>
+        </template>
+      </div>
+    </div>
 
     <!-- Butin possible d'un donjon -->
     <!-- Explication RANG / QUALITÉ (clic sur la pastille de rang ou le chiffre de qualité). -->
@@ -2458,7 +2544,13 @@ const pseudoError = ref('');
 // Équipement (équipé+sac+atelier) / Explorer (donjons+boss de palier).
 const tab = ref<'hero' | 'gear' | 'explore'>('hero');
 // Sous-onglet de l'onglet Équipement : équipement (+ familier) / sac / atelier.
-const gearSub = ref<'equip' | 'bag' | 'shop'>('equip');
+// Équipement : plus de sous-onglets. Force / Loadouts / Atelier ouvrent des modales.
+const forceOpen = ref(false);
+const loadoutOpen = ref(false);
+const atelierOpen = ref(false);
+// Filtre « seulement les objets du sac au potentiel supérieur » pour un slot donné
+// (posé en cliquant le badge d'un item équipé). null = pas de filtre « mieux ».
+const betterFilterSlot = ref<ItemSlot | null>(null);
 // Sous-onglet Héros : fiche (stats fusionnées) / talents.
 const persoSub = ref<'perso' | 'talents' | 'familiars'>('perso');
 // Sous-onglet Explorer : donjons (carte) / boss de palier.
@@ -3146,8 +3238,8 @@ function reattackLast() {
 }
 function goInventoryFromReport() {
   reportOpen.value = false;
-  tab.value = 'gear';
-  gearSub.value = 'bag'; // ouvre directement le sous-onglet Sac
+  tab.value = 'gear'; // le sac est directement dans l'onglet Équipement
+  betterFilterSlot.value = null;
 }
 
 // Butin possible d'un donjon (affiché à la demande via 🎁).
@@ -3869,12 +3961,41 @@ function bagCountForSlot(slot: ItemSlot): number {
   return (char.row?.inventory ?? []).filter((i) => i.slot === slot).length;
 }
 const filteredInventory = computed<Item[]>(() => {
-  const inv = char.row?.inventory ?? [];
-  return inv
-    .filter((i) => !isFamiliar(i)) // les familiers ont leur propre section
-    .filter((i) => invFilter.value === 'all' || i.slot === invFilter.value)
-    .sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || b.level - a.level);
+  const inv = (char.row?.inventory ?? []).filter((i) => !isFamiliar(i));
+  const bf = betterFilterSlot.value;
+  let list: Item[];
+  if (bf) {
+    // Filtre « badge » : uniquement les objets de ce slot au POTENTIEL supérieur à l'équipé.
+    const eqPow = slotEquippedMaxedPower(bf) ?? -Infinity;
+    list = inv.filter((i) => i.slot === bf && itemMaxedPower(i) > eqPow);
+  } else {
+    list = inv.filter((i) => invFilter.value === 'all' || i.slot === invFilter.value);
+  }
+  return list.sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || b.level - a.level);
 });
+// Objets du SAC (même slot) au POTENTIEL supérieur à l'équipé (montés à ton niveau) →
+// alimente le badge sur l'item équipé + le filtre « mieux au sac ».
+function betterInBagForSlot(slot: ItemSlot): Item[] {
+  const eqPow = slotEquippedMaxedPower(slot);
+  if (eqPow === null) return []; // pas d'équipé → pas de badge
+  return (char.row?.inventory ?? []).filter(
+    (i) => !isFamiliar(i) && i.slot === slot && itemMaxedPower(i) > eqPow,
+  );
+}
+function betterInBagCount(slot: ItemSlot): number {
+  return betterInBagForSlot(slot).length;
+}
+// Clic sur le badge d'un item équipé → filtre le sac sur ses upgrades potentielles.
+function showBetterForSlot(slot: ItemSlot) {
+  betterFilterSlot.value = slot;
+  invFilter.value = slot;
+  void nextTick(() => sacTitle.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+}
+// Les chips de filtre du sac annulent le filtre « mieux » (navigation normale).
+function setInvFilter(f: ItemSlot | 'all') {
+  betterFilterSlot.value = null;
+  invFilter.value = f;
+}
 // Nb d'objets RÉELLEMENT dans le Sac = hors familiers (rangés dans leur propre section)
 // → sinon le badge « Sac » comptait un familier fantôme (ticket e3d61676).
 const bagCount = computed(() => (char.row?.inventory ?? []).filter((i) => !isFamiliar(i)).length);
@@ -5060,6 +5181,7 @@ onUnmounted(() => {
   margin: -4px 2px 10px;
 }
 .slot {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -5073,6 +5195,97 @@ onUnmounted(() => {
   /* Cellule de grille : autoriser le rétrécissement (sinon un nom de set long
      force la colonne large → débordement à droite). */
   min-width: 0;
+}
+/* Badge « N objets du sac au potentiel supérieur » — cercle avec le 🎒 en fond,
+   en bas à droite de l'item équipé. Tap → filtre le sac. */
+.slot-better {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #15120e;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+.slot-better::before {
+  content: '🎒';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  opacity: 0.35;
+}
+.slot-better .sb-n {
+  position: relative;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1;
+}
+/* En-tête Équipement : titre à gauche, icônes Force/Loadout/Atelier à droite. */
+.gear-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 18px 2px 4px;
+}
+.gh-title {
+  margin: 0;
+}
+.gear-icons {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+.gi-b {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 19px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+.gi-b:active {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+/* Bannière du filtre « upgrades potentielles » (posé via le badge d'un item équipé). */
+.better-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 7px 12px;
+  margin: 4px 0 8px;
+  font-size: 13px;
+}
+.bb-clear {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
 }
 .slot.empty {
   border-style: dashed;
