@@ -484,10 +484,13 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
   // MINE = INVESTISSEMENT D'OR (+ temps réel) → doit rapporter nettement plus que le coût.
   // Rendement = coût × (1,8 + heures A/R) : ~2,3× pour un trajet court, ~3,3× pour ~1,5 h,
   // jusqu'à ~5× pour un long trajet (avant : ~2× seulement → trop léger pour l'attente).
+  // MINE = reine de l'or (coût × 1,8..~5). CAMP/REPAIRE = butin (item/set) ; leur or doit
+  // au moins ÉQUILIBRER le coût (l'item = profit pur) au lieu d'être net négatif sur un
+  // trajet court → on ne se sent plus « volé ». Reste sous la mine en or/coût.
   const goldHaul =
     poi.type === 'mine'
-      ? Math.round(cost * (1.8 + rth))
-      : Math.round((cost * 0.4 + poi.level * 10) * (1 + rth * 0.4));
+      ? Math.round(cost * (1.8 + rth)) // reine de l'or : ~2,3×..~5× le coût
+      : Math.round(cost * (1.0 + rth * 0.1)); // camp/repaire : ≥ équilibre (+3..+65 %), item = le vrai gain, reste SOUS la mine
   const dustHaul = Math.round((poi.type === 'mine' ? 14 + poi.level * 4 : 9 + poi.level * 3) * tf);
   const stoneHaul = Math.round(
     (poi.type === 'lair'
