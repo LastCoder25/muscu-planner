@@ -65,7 +65,9 @@
               >🪙 {{ char.row.gold }}</span
             >
             <span class="tb-sep" aria-hidden="true"></span>
-            <span class="tb-r dust" title="Poussière — forge / reroll / craft de set (Atelier)"
+            <span
+              class="tb-r dust"
+              title="Poussière — grade des objets (🔧) + forge / reroll / craft de set (Atelier)"
               ><DustIcon variant="dust" /> {{ char.row.dust }}</span
             >
             <span
@@ -176,23 +178,17 @@
 
       <!-- ONGLET HÉROS (fiche + stats fusionnées + talents) -->
       <template v-if="tab === 'hero'">
-        <div class="gear-sub">
-          <button class="gs-b" :class="{ on: persoSub === 'perso' }" @click="persoSub = 'perso'">
-            🧍 Fiche
+        <!-- Accès Talents / Familier par CLIC (modale), plus de sous-onglets (ticket 5efcc6bc). -->
+        <div class="hero-access">
+          <button class="ha-b" @click="talentsOpen = true">
+            ✨ Talents
+            <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
+            <span v-if="talentFreeSlots" class="gs-badge">{{ talentFreeSlots }}</span>
           </button>
-          <button
-            class="gs-b"
-            :class="{ on: persoSub === 'talents' }"
-            @click="persoSub = 'talents'"
-          >
-            ✨ Talents<span v-if="talentFreeSlots" class="gs-badge">{{ talentFreeSlots }}</span>
-          </button>
-          <button
-            class="gs-b"
-            :class="{ on: persoSub === 'familiars' }"
-            @click="persoSub = 'familiars'"
-          >
-            🐾 Familiers
+          <button class="ha-b" @click="familiarsOpen = true">
+            🐾 Familier
+            <span v-if="equippedFamiliar" class="ha-fam">{{ equippedFamiliar.emoji }}</span>
+            <span v-else class="ha-none">à équiper</span>
           </button>
         </div>
 
@@ -340,225 +336,235 @@
           </div>
         </template>
 
-        <template v-if="persoSub === 'talents'">
-          <div class="sec-title">
-            Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
-          </div>
-          <div class="sec-hint">
-            Les talents <b>droppent à un grade</b> (rang + qualité). Équipe-en
-            {{ talentSlots }} (change quand tu veux). Deux axes : <b>⚡ enchant</b> (+N, parchemins
-            📜 / protections 🛡️, gamble) et <b>🔧 grade</b>. Recycle les surplus →
-            <b><DustIcon variant="ink" /> poussière d'encre</b> (tu as {{ char.row.ink_dust }}) →
-            infuse le grade jusqu'au plafond de ton niveau.
-          </div>
-          <div class="ench-bar">
-            <span
-              >⚡ <b>📜 {{ char.row.enchant_scrolls }}</b> ·
-              <b>🛡️ {{ char.row.protections }}</b></span
-            >
-            <label class="ench-prot" :class="{ off: char.row.protections < 1 }">
-              <input
-                v-model="enchantUseProtection"
-                type="checkbox"
-                :disabled="char.row.protections < 1"
-              />
-              🛡️ Protéger l'échec
-            </label>
-          </div>
-
-          <div v-if="!char.row.talents.length" class="talents-empty">
-            Aucun talent pour l'instant — vaincs des donjons pour en faire tomber.
-          </div>
-          <div v-else class="talents-grid">
-            <div
-              v-for="t in talentsView"
-              :key="t.id"
-              class="tal-card"
-              :class="['p-' + t.rarity, { eq: t.equipped }]"
-            >
-              <button
-                class="tal-emo"
-                title="Explication du talent"
-                aria-label="Expliquer ce talent"
-                @click="explainTalent(t)"
+        <q-dialog v-model="talentsOpen" position="bottom">
+          <q-card class="adv-modal">
+            <button class="adv-modal-x" aria-label="Fermer" @click="talentsOpen = false">✕</button>
+            <div class="sec-title">
+              Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
+            </div>
+            <div class="sec-hint">
+              Les talents <b>droppent à un grade</b> (rang + qualité). Équipe-en
+              {{ talentSlots }} (change quand tu veux). Deux axes : <b>⚡ enchant</b> (+N,
+              parchemins 📜 / protections 🛡️, gamble) et <b>🔧 grade</b>. Recycle les surplus →
+              <b><DustIcon variant="ink" /> poussière d'encre</b> (tu as {{ char.row.ink_dust }}) →
+              infuse le grade jusqu'au plafond de ton niveau.
+            </div>
+            <div class="ench-bar">
+              <span
+                >⚡ <b>📜 {{ char.row.enchant_scrolls }}</b> ·
+                <b>🛡️ {{ char.row.protections }}</b></span
               >
-                {{ t.def.icon }}
-              </button>
-              <div class="tal-body">
-                <div class="tal-name font-display">
-                  <span class="tal-nm">{{ t.def.name }}</span>
-                  <span v-if="t.equipped" class="tal-eqbadge">✓ Équipé</span>
-                  <span
-                    class="rk-badge"
-                    :class="'p-' + t.rarity"
-                    :title="'Rang ' + RARITY_LABEL[t.rarity]"
-                    >{{ t.rarity }}</span
-                  >
-                  <span class="q-badge" :class="'q-' + t.quality">{{ t.quality }}</span>
-                  <span v-if="t.enchant > 0" class="tal-lv">+{{ t.enchant }}</span>
+              <label class="ench-prot" :class="{ off: char.row.protections < 1 }">
+                <input
+                  v-model="enchantUseProtection"
+                  type="checkbox"
+                  :disabled="char.row.protections < 1"
+                />
+                🛡️ Protéger l'échec
+              </label>
+            </div>
+
+            <div v-if="!char.row.talents.length" class="talents-empty">
+              Aucun talent pour l'instant — vaincs des donjons pour en faire tomber.
+            </div>
+            <div v-else class="talents-grid">
+              <div
+                v-for="t in talentsView"
+                :key="t.id"
+                class="tal-card"
+                :class="['p-' + t.rarity, { eq: t.equipped }]"
+              >
+                <button
+                  class="tal-emo"
+                  title="Explication du talent"
+                  aria-label="Expliquer ce talent"
+                  @click="explainTalent(t)"
+                >
+                  {{ t.def.icon }}
+                </button>
+                <div class="tal-body">
+                  <div class="tal-name font-display">
+                    <span class="tal-nm">{{ t.def.name }}</span>
+                    <span v-if="t.equipped" class="tal-eqbadge">✓ Équipé</span>
+                    <span
+                      class="rk-badge"
+                      :class="'p-' + t.rarity"
+                      :title="'Rang ' + RARITY_LABEL[t.rarity]"
+                      >{{ t.rarity }}</span
+                    >
+                    <span class="q-badge" :class="'q-' + t.quality">{{ t.quality }}</span>
+                    <span v-if="t.enchant > 0" class="tal-lv">+{{ t.enchant }}</span>
+                  </div>
+                  <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
                 </div>
-                <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
-              </div>
-              <div class="tal-actions">
-                <button
-                  v-if="!t.equipped"
-                  class="tal-b"
-                  :disabled="!canEquipMore || talentCodeEquipped(t.def.code)"
-                  :title="
-                    talentCodeEquipped(t.def.code) ? 'Un talent de ce type est déjà équipé' : ''
-                  "
-                  @click="doEquipTalent(t.id)"
-                >
-                  {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
-                </button>
-                <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
-                <!-- ⚡ Enchant (gamble) : parchemins 📜 (+ protection optionnelle). -->
-                <button
-                  class="tal-b ghost"
-                  :disabled="!canEnchant(t.enchant) || char.row.enchant_scrolls < 1"
-                  :title="enchantTitleTalent(t)"
-                  @click="doEnchantTalent(t.id)"
-                >
-                  <template v-if="!canEnchant(t.enchant)">⚡ Max</template>
-                  <template v-else
-                    >⚡ +{{ t.enchant + 1 }} ·
-                    {{ Math.round(enchantSuccessRate(t.enchant) * 100) }}%</template
+                <div class="tal-actions">
+                  <button
+                    v-if="!t.equipped"
+                    class="tal-b"
+                    :disabled="!canEquipMore || talentCodeEquipped(t.def.code)"
+                    :title="
+                      talentCodeEquipped(t.def.code) ? 'Un talent de ce type est déjà équipé' : ''
+                    "
+                    @click="doEquipTalent(t.id)"
                   >
-                </button>
-                <!-- 🔧 Grade +1 (rang/qualité) : poussière d'encre, plafonné au grade du niveau. -->
-                <button
-                  class="tal-b ghost"
-                  :disabled="t.tier >= maxGrade || char.row.ink_dust < talGradeCost(t.tier)"
-                  :title="
-                    t.tier >= maxGrade
-                      ? 'Grade déjà au plafond de ton niveau'
-                      : 'Monter le grade (rang/qualité) — poussière d’encre'
-                  "
-                  @click="doInfuseTalentGrade(t.id)"
-                >
-                  <template v-if="t.tier >= maxGrade">🔧 Max</template>
-                  <template v-else
-                    >🔧 +1·{{ talGradeCost(t.tier) }}<DustIcon variant="ink"
-                  /></template>
-                </button>
-                <button
-                  v-if="!t.equipped"
-                  class="tal-b ghost"
-                  title="Recycler ce talent → poussière d'encre (pour infuser le grade)"
-                  @click="doRecycleTalent(t.id)"
-                >
-                  ♻️<DustIcon variant="ink" />
-                </button>
+                    {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
+                  </button>
+                  <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
+                  <!-- ⚡ Enchant (gamble) : parchemins 📜 (+ protection optionnelle). -->
+                  <button
+                    class="tal-b ghost"
+                    :disabled="!canEnchant(t.enchant) || char.row.enchant_scrolls < 1"
+                    :title="enchantTitleTalent(t)"
+                    @click="doEnchantTalent(t.id)"
+                  >
+                    <template v-if="!canEnchant(t.enchant)">⚡ Max</template>
+                    <template v-else
+                      >⚡ +{{ t.enchant + 1 }} ·
+                      {{ Math.round(enchantSuccessRate(t.enchant) * 100) }}%</template
+                    >
+                  </button>
+                  <!-- 🔧 Grade +1 (rang/qualité) : poussière d'encre, plafonné au grade du niveau. -->
+                  <button
+                    class="tal-b ghost"
+                    :disabled="t.tier >= maxGrade || char.row.ink_dust < talGradeCost(t.tier)"
+                    :title="
+                      t.tier >= maxGrade
+                        ? 'Grade déjà au plafond de ton niveau'
+                        : 'Monter le grade (rang/qualité) — poussière d’encre'
+                    "
+                    @click="doInfuseTalentGrade(t.id)"
+                  >
+                    <template v-if="t.tier >= maxGrade">🔧 Max</template>
+                    <template v-else
+                      >🔧 +1·{{ talGradeCost(t.tier) }}<DustIcon variant="ink"
+                    /></template>
+                  </button>
+                  <button
+                    v-if="!t.equipped"
+                    class="tal-b ghost"
+                    title="Recycler ce talent → poussière d'encre (pour infuser le grade)"
+                    @click="doRecycleTalent(t.id)"
+                  >
+                    ♻️<DustIcon variant="ink" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        </template>
+          </q-card>
+        </q-dialog>
 
         <!-- FAMILIERS — recycle les surplus → poussière d'âme, puis 2 axes par familier :
              ⚡ enchant (+N, parchemins) et 🔧 grade (rang/qualité, poussière d'âme). -->
-        <template v-if="persoSub === 'familiars'">
-          <div class="sec-title">
-            🐾 Familiers <span class="tal-slots">{{ equippedFamiliar ? 1 : 0 }}/1</span>
-          </div>
-          <div class="sec-hint">
-            Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Équipe-en 1.
-            Deux axes : <b>⚡ enchant</b> (+N, parchemins 📜 / protections 🛡️, gamble) et
-            <b>🔧 grade</b> (rang/qualité). Recycle les familiers en trop →
-            <b><DustIcon variant="soul" /> poussière d'âme</b> (tu as {{ char.row.fragments }}) →
-            infuse le grade jusqu'au plafond de ton niveau (ou <b>vends 🪙</b>).
-          </div>
+        <q-dialog v-model="familiarsOpen" position="bottom">
+          <q-card class="adv-modal">
+            <button class="adv-modal-x" aria-label="Fermer" @click="familiarsOpen = false">
+              ✕
+            </button>
+            <div class="sec-title">
+              🐾 Familiers <span class="tal-slots">{{ equippedFamiliar ? 1 : 0 }}/1</span>
+            </div>
+            <div class="sec-hint">
+              Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Équipe-en 1.
+              Deux axes : <b>⚡ enchant</b> (+N, parchemins 📜 / protections 🛡️, gamble) et
+              <b>🔧 grade</b> (rang/qualité). Recycle les familiers en trop →
+              <b><DustIcon variant="soul" /> poussière d'âme</b> (tu as {{ char.row.fragments }}) →
+              infuse le grade jusqu'au plafond de ton niveau (ou <b>vends 🪙</b>).
+            </div>
 
-          <div class="ench-bar">
-            <span
-              >⚡ <b>📜 {{ char.row.enchant_scrolls }}</b> ·
-              <b>🛡️ {{ char.row.protections }}</b></span
-            >
-            <label class="ench-prot" :class="{ off: char.row.protections < 1 }">
-              <input
-                v-model="enchantUseProtection"
-                type="checkbox"
-                :disabled="char.row.protections < 1"
-              />
-              🛡️ Protéger l'échec
-            </label>
-          </div>
+            <div class="ench-bar">
+              <span
+                >⚡ <b>📜 {{ char.row.enchant_scrolls }}</b> ·
+                <b>🛡️ {{ char.row.protections }}</b></span
+              >
+              <label class="ench-prot" :class="{ off: char.row.protections < 1 }">
+                <input
+                  v-model="enchantUseProtection"
+                  type="checkbox"
+                  :disabled="char.row.protections < 1"
+                />
+                🛡️ Protéger l'échec
+              </label>
+            </div>
 
-          <div v-if="!allFamiliars.length" class="talents-empty">
-            Aucun familier — <b>clear le Labyrinthe 🗝️</b> pour en trouver un garanti.
-          </div>
-          <div v-else class="talents-grid">
-            <div
-              v-for="f in allFamiliars"
-              :key="f.id"
-              class="tal-card"
-              :class="['p-' + f.rarity, { eq: f.equipped }]"
-            >
-              <span class="tal-emo" role="img" :aria-label="f.name">{{ f.emoji }}</span>
-              <div class="tal-body">
-                <div class="tal-name font-display">
-                  <span class="tal-nm">{{ f.name }}</span>
-                  <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
-                  <span class="rk-badge" :class="'p-' + f.rarity">{{ f.rarity }}</span>
-                  <span v-if="itemQuality(f)" class="q-badge" :class="'q-' + itemQuality(f)">{{
-                    itemQuality(f)
-                  }}</span>
-                  <span v-if="(f.enchant ?? 0) > 0" class="tal-lv">+{{ f.enchant }}</span>
-                  <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
+            <div v-if="!allFamiliars.length" class="talents-empty">
+              Aucun familier — <b>clear le Labyrinthe 🗝️</b> pour en trouver un garanti.
+            </div>
+            <div v-else class="talents-grid">
+              <div
+                v-for="f in allFamiliars"
+                :key="f.id"
+                class="tal-card"
+                :class="['p-' + f.rarity, { eq: f.equipped }]"
+              >
+                <span class="tal-emo" role="img" :aria-label="f.name">{{ f.emoji }}</span>
+                <div class="tal-body">
+                  <div class="tal-name font-display">
+                    <span class="tal-nm">{{ f.name }}</span>
+                    <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
+                    <span class="rk-badge" :class="'p-' + f.rarity">{{ f.rarity }}</span>
+                    <span v-if="itemQuality(f)" class="q-badge" :class="'q-' + itemQuality(f)">{{
+                      itemQuality(f)
+                    }}</span>
+                    <span v-if="(f.enchant ?? 0) > 0" class="tal-lv">+{{ f.enchant }}</span>
+                    <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
+                  </div>
+                  <div class="tal-eff">{{ itemEffects(f) }}</div>
                 </div>
-                <div class="tal-eff">{{ itemEffects(f) }}</div>
-              </div>
-              <div class="tal-actions">
-                <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
-                  Retirer
-                </button>
-                <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
-                <!-- ⚡ Enchant (gamble) : parchemins 📜 (+ protection optionnelle). -->
-                <button
-                  class="tal-b ghost"
-                  :disabled="!canEnchant(f.enchant ?? 0) || char.row.enchant_scrolls < 1"
-                  :title="enchantTitle(f)"
-                  @click="doEnchant(f.id)"
-                >
-                  <template v-if="!canEnchant(f.enchant ?? 0)">⚡ Max</template>
-                  <template v-else
-                    >⚡ +{{ (f.enchant ?? 0) + 1 }} ·
-                    {{ Math.round(enchantSuccessRate(f.enchant ?? 0) * 100) }}%</template
+                <div class="tal-actions">
+                  <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
+                    Retirer
+                  </button>
+                  <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
+                  <!-- ⚡ Enchant (gamble) : parchemins 📜 (+ protection optionnelle). -->
+                  <button
+                    class="tal-b ghost"
+                    :disabled="!canEnchant(f.enchant ?? 0) || char.row.enchant_scrolls < 1"
+                    :title="enchantTitle(f)"
+                    @click="doEnchant(f.id)"
                   >
-                </button>
-                <!-- 🔧 Grade +1 (rang/qualité) : poussière d'âme, plafonné au grade du niveau. -->
-                <button
-                  class="tal-b ghost"
-                  :disabled="famGradeCapped(f) || char.row.fragments < famGradeCost(f)"
-                  :title="
-                    famGradeCapped(f)
-                      ? 'Grade déjà au plafond de ton niveau'
-                      : 'Monter le grade (rang/qualité) — poussière d’âme'
-                  "
-                  @click="doInfuseFamiliarGrade(f)"
-                >
-                  <template v-if="famGradeCapped(f)">🔧 Max</template>
-                  <template v-else>🔧 +1·{{ famGradeCost(f) }}<DustIcon variant="soul" /></template>
-                </button>
-                <button
-                  v-if="!f.equipped && !f.locked"
-                  class="tal-b ghost"
-                  title="Recycler ce familier → poussière d'âme (pour infuser le grade)"
-                  @click="doRecycleFamiliar(f.id)"
-                >
-                  ♻️<DustIcon variant="soul" />
-                </button>
-                <button
-                  v-if="!f.equipped"
-                  class="tal-b ghost"
-                  title="Vendre contre de l'or"
-                  @click="doSell(f)"
-                >
-                  🪙{{ sellValue(f) }}
-                </button>
+                    <template v-if="!canEnchant(f.enchant ?? 0)">⚡ Max</template>
+                    <template v-else
+                      >⚡ +{{ (f.enchant ?? 0) + 1 }} ·
+                      {{ Math.round(enchantSuccessRate(f.enchant ?? 0) * 100) }}%</template
+                    >
+                  </button>
+                  <!-- 🔧 Grade +1 (rang/qualité) : poussière d'âme, plafonné au grade du niveau. -->
+                  <button
+                    class="tal-b ghost"
+                    :disabled="gradeCapped(f) || char.row.fragments < gradeStepCost(f)"
+                    :title="
+                      gradeCapped(f)
+                        ? 'Grade déjà au plafond de ton niveau'
+                        : 'Monter le grade (rang/qualité) — poussière d’âme'
+                    "
+                    @click="doInfuseFamiliarGrade(f)"
+                  >
+                    <template v-if="gradeCapped(f)">🔧 Max</template>
+                    <template v-else
+                      >🔧 +1·{{ gradeStepCost(f) }}<DustIcon variant="soul"
+                    /></template>
+                  </button>
+                  <button
+                    v-if="!f.equipped && !f.locked"
+                    class="tal-b ghost"
+                    title="Recycler ce familier → poussière d'âme (pour infuser le grade)"
+                    @click="doRecycleFamiliar(f.id)"
+                  >
+                    ♻️<DustIcon variant="soul" />
+                  </button>
+                  <button
+                    v-if="!f.equipped"
+                    class="tal-b ghost"
+                    title="Vendre contre de l'or"
+                    @click="doSell(f)"
+                  >
+                    🪙{{ sellValue(f) }}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        </template>
+          </q-card>
+        </q-dialog>
 
         <template v-if="persoSub === 'perso'">
           <!-- Codex : bestiaire + journal des sets (méta de collection). -->
@@ -880,6 +886,21 @@
                     >
                       ⚡ +{{ (it.enchant ?? 0) + 1 }} ·
                       {{ Math.round(enchantSuccessRate(it.enchant ?? 0) * 100) }}%
+                    </button>
+                    <button
+                      class="equip-btn ghost"
+                      :disabled="gradeCapped(it) || char.row.dust < gradeStepCost(it)"
+                      :title="
+                        gradeCapped(it)
+                          ? 'Grade au plafond de ton niveau'
+                          : 'Monter le grade (rang/qualité) — poussière ✨'
+                      "
+                      @click="doInfuseItemGrade(it)"
+                    >
+                      <template v-if="gradeCapped(it)">🔧 Max</template>
+                      <template v-else
+                        >🔧 grade · {{ gradeStepCost(it) }}<DustIcon variant="dust"
+                      /></template>
                     </button>
                     <button
                       class="ii-ic destroy"
@@ -2414,7 +2435,11 @@ function openBag() {
 // (posé en cliquant le badge d'un item équipé). null = pas de filtre « mieux ».
 const betterFilterSlot = ref<ItemSlot | null>(null);
 // Sous-onglet Héros : fiche (stats fusionnées) / talents.
-const persoSub = ref<'perso' | 'talents' | 'familiars'>('perso');
+// La fiche Héros est toujours affichée ; Talents et Familier s'ouvrent en MODALE au clic
+// (ticket 5efcc6bc, plus de sous-onglets). persoSub reste 'perso' (fiche = seule vue inline).
+const persoSub = ref<'perso'>('perso');
+const talentsOpen = ref(false);
+const familiarsOpen = ref(false);
 // Sous-onglet Explorer : donjons (carte) / boss de palier.
 const exploreSub = ref<'donjons' | 'boss'>('donjons');
 // L'Atelier (forge d'objet / de set) est débloqué par le bâtiment 🔨 Forge.
@@ -3906,10 +3931,10 @@ function doRecycleTalent(id: string) {
 // Infuse +1 cran de GRADE (rang/qualité) un familier/talent avec la poussière dédiée,
 // plafonné au grade droppable de ton niveau. Éclat si le RANG monte.
 const maxGrade = computed(() => maxGradeCran(c.value.level.level));
-function famGradeCost(f: Item): number {
+function gradeStepCost(f: Item): number {
   return tierStepCost(tierIndexOf(f));
 }
-function famGradeCapped(f: Item): boolean {
+function gradeCapped(f: Item): boolean {
   return tierIndexOf(f) >= maxGrade.value;
 }
 function talGradeCost(tier: number): number {
@@ -3926,6 +3951,24 @@ function doInfuseFamiliarGrade(f: Item) {
             emoji: res.emoji,
             title: `${res.name} — rang ${RARITY_LABEL[res.rarity]} !`,
             subtitle: 'Grade amélioré (poussière d’âme)',
+            rarity: fxRarity(res.rarity),
+          });
+      }),
+    'Infusion impossible.',
+  );
+}
+// Infuse +1 cran de grade un OBJET d'équipement en dépensant la poussière ✨ (ticket 37ee20db).
+function doInfuseItemGrade(it: Item) {
+  const beforeRank = it.rarity;
+  withUid(
+    (uid) =>
+      char.infuseItemGrade(uid, it.id, c.value.level.level).then((res) => {
+        if (res && res.rarity !== beforeRank)
+          gameFx.celebrate({
+            kind: 'drop',
+            emoji: res.emoji,
+            title: `${res.name} — rang ${RARITY_LABEL[res.rarity]} !`,
+            subtitle: 'Grade amélioré (poussière)',
             rarity: fxRarity(res.rarity),
           });
       }),
@@ -4543,6 +4586,61 @@ onUnmounted(() => {
   font-size: 10px;
   padding: 0 5px;
   font-family: var(--font-display);
+}
+
+/* Accès Talents / Familier (boutons qui ouvrent une modale) + modale d'aventure. */
+.hero-access {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.ha-b {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.ha-fam {
+  font-size: 18px;
+}
+.ha-none {
+  font-size: 11px;
+  color: var(--dim);
+  font-weight: 600;
+}
+.adv-modal {
+  position: relative;
+  width: 100%;
+  max-width: var(--app-max-width, 560px);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 16px 14px 24px;
+  background: var(--surface);
+  border-radius: 16px 16px 0 0;
+}
+.adv-modal-x {
+  position: sticky;
+  top: 0;
+  float: right;
+  margin: -4px -4px 0 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 2;
 }
 
 .sec-title {

@@ -772,6 +772,30 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, patch);
     return updated;
   }
+  // Infuse +1 cran de GRADE un OBJET d'équipement (équipé ou au sac) en dépensant la
+  // POUSSIÈRE d'évolution ✨, plafonné au grade droppable du niveau joueur. Symétrique
+  // des talents/familiers (ticket 37ee20db). La magnitude est re-scalée (même helper).
+  async function infuseItemGrade(
+    userId: string,
+    itemId: string,
+    playerLevel: number,
+  ): Promise<Item | null> {
+    const cur = row.value;
+    if (!cur) return null;
+    const found = findOwned(cur, itemId);
+    if (!found || isFamiliar(found.item)) return null; // objets d'équipement uniquement
+    const { item, slot } = found;
+    const cap = maxGradeCran(playerLevel);
+    if (tierIndexOf(item) >= cap) return null; // grade déjà au plafond du niveau
+    const cost = tierStepCost(tierIndexOf(item));
+    if (cur.dust < cost) return null;
+    const updated = applyFamiliarInfusion({ ...item, fxp: 0 }, cost, cap);
+    const patch: Partial<CharacterRow> = { dust: cur.dust - cost };
+    if (slot) patch.equipped = { ...cur.equipped, [slot]: updated };
+    else patch.inventory = cur.inventory.map((i) => (i.id === itemId ? updated : i));
+    await persistOptimistic(userId, patch);
+    return updated;
+  }
   // Infuse +1 cran de GRADE un talent (équipé ou au sac) en dépensant la poussière d'encre,
   // plafonné au grade droppable du niveau joueur. Renvoie l'instance à jour, ou null.
   async function infuseTalentGrade(
@@ -1047,6 +1071,7 @@ export const useCharacterStore = defineStore('character', () => {
     recycleFamiliar,
     recycleTalent,
     infuseFamiliarGrade,
+    infuseItemGrade,
     infuseTalentGrade,
     salvage,
     sell,
