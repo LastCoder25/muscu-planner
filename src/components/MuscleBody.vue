@@ -37,6 +37,19 @@
         <rect v-bind="reg('quadriceps')" x="62" y="114" width="13" height="44" rx="6" />
         <ellipse v-bind="reg('mollets')" cx="50" cy="185" rx="7" ry="19" />
         <ellipse v-bind="reg('mollets')" cx="70" cy="185" rx="7" ry="19" />
+        <!-- Nombre de séries par groupe (une seule valeur par muscle) -->
+        <text
+          v-for="n in FRONT_NUMS"
+          v-show="(series[n.m] ?? 0) > 0"
+          :key="n.m"
+          class="mnum"
+          :x="n.x"
+          :y="n.y"
+          text-anchor="middle"
+          dominant-baseline="middle"
+        >
+          {{ series[n.m] ?? 0 }}
+        </text>
       </g>
       <g v-else>
         <ellipse v-bind="reg('épaules')" cx="40" cy="46" rx="11" ry="7" />
@@ -50,6 +63,18 @@
         <rect v-bind="reg('ischio-jambiers')" x="62" y="122" width="13" height="38" rx="6" />
         <ellipse v-bind="reg('mollets')" cx="50" cy="185" rx="7" ry="19" />
         <ellipse v-bind="reg('mollets')" cx="70" cy="185" rx="7" ry="19" />
+        <text
+          v-for="n in BACK_NUMS"
+          v-show="(series[n.m] ?? 0) > 0"
+          :key="n.m"
+          class="mnum"
+          :x="n.x"
+          :y="n.y"
+          text-anchor="middle"
+          dominant-baseline="middle"
+        >
+          {{ series[n.m] ?? 0 }}
+        </text>
       </g>
     </svg>
 
@@ -84,6 +109,23 @@ function reg(m: string) {
     onClick: () => (selected.value = selected.value === m ? null : m),
   };
 }
+// Ancres du NOMBRE de séries par muscle (une valeur/groupe ; paires symétriques →
+// nombre centré, bras/épaules → sur la forme visible). Coords dans le viewBox 120×250.
+const FRONT_NUMS = [
+  { m: 'épaules', x: 40, y: 48 },
+  { m: 'pectoraux', x: 60, y: 59 },
+  { m: 'biceps', x: 26, y: 74 },
+  { m: 'abdominaux', x: 60, y: 88 },
+  { m: 'quadriceps', x: 60, y: 138 },
+  { m: 'mollets', x: 60, y: 188 },
+];
+const BACK_NUMS = [
+  { m: 'épaules', x: 40, y: 48 },
+  { m: 'dos', x: 60, y: 73 },
+  { m: 'triceps', x: 26, y: 74 },
+  { m: 'ischio-jambiers', x: 60, y: 140 },
+  { m: 'mollets', x: 60, y: 188 },
+];
 const LABELS: Record<string, string> = {
   pectoraux: 'Pectoraux',
   épaules: 'Épaules',
@@ -147,6 +189,19 @@ const label = (m: string) => LABELS[m] ?? m;
 .muscle.sel {
   stroke: var(--text);
   stroke-width: 1.6;
+}
+/* Nombre de séries sur le groupe : lisible quelle que soit la teinte (contour sombre
+   + remplissage clair) ; ne capte pas les clics (le muscle dessous reste sélectionnable). */
+.mnum {
+  font-family: var(--font-display, inherit);
+  font-size: 8px;
+  font-weight: 800;
+  fill: #f3eee6;
+  stroke: #15120e;
+  stroke-width: 1.6;
+  paint-order: stroke;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
 .mbody-pick {
   font-size: 13px;
