@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
-import { RANK_ORDER, rankCeilingForLevel } from '@/lib/items';
+import { RANK_ORDER, rankCeilingForLevel, enchantMult, ENCHANT_MAX } from '@/lib/items';
 import {
   talentsEarned,
   talentEffects,
@@ -12,12 +12,9 @@ import {
   talentRankOf,
   tierOf,
   talentValue,
-  talentLevelUpCost,
-  talentTierStepCost,
   talentByCode,
   normalizeTalents,
   rollTalentDrop,
-  talentInfuseXp,
   type TalentInstance,
 } from '@/lib/talents';
 
@@ -36,16 +33,12 @@ describe('catalogue élargi', () => {
   });
 });
 
-describe('axe TIER (infusion) : rang + qualité', () => {
-  it('le tier croît avec l’XP d’infusion', () => {
+describe('GRADE (rang + qualité, fixé au drop)', () => {
+  it('le tier encodé par l’xp donne le grade', () => {
     expect(talentTier(0)).toBe(0);
     expect(talentTier(talentTierFloor(5))).toBe(5);
     expect(talentTier(talentTierFloor(20))).toBe(20);
     expect(talentTier(1e9)).toBe(49); // plafonné à SSS5
-  });
-  it('talentTierStepCost : coût du +1 palier (poussière d’encre) croissant', () => {
-    expect(talentTierStepCost(0)).toBeGreaterThan(0);
-    expect(talentTierStepCost(20)).toBeGreaterThan(talentTierStepCost(0));
   });
   it('rang G→SSS + qualité 1→5 dérivés du tier (mêmes rangs que les objets)', () => {
     expect(talentRank(0)).toBe('G');
@@ -56,38 +49,40 @@ describe('axe TIER (infusion) : rang + qualité', () => {
     expect(talentRank(49)).toBe('SSS');
     expect(talentQuality(49)).toBe(5);
   });
-  it('talentInfuseXp ∝ tier (un talent de haut tier nourrit plus)', () => {
-    const low: TalentInstance = { id: 'l', code: 't_dmg', xp: 0 };
-    const high: TalentInstance = { id: 'h', code: 't_dmg', xp: talentTierFloor(20) };
-    expect(talentInfuseXp(low)).toBe(1); // tier 0 → 1
-    expect(talentInfuseXp(high)).toBeGreaterThan(talentInfuseXp(low));
-    expect(tierOf(high)).toBe(20);
-  });
 });
 
-describe('axe NIVEAU (parchemins) + magnitude', () => {
-  it('talentValue grandit avec le TIER ET le NIVEAU', () => {
+describe('magnitude = grade × enchant (uniforme avec les objets)', () => {
+  it('talentValue grandit avec le TIER (grade) ET l’ENCHANT', () => {
     const def = talentByCode('t_dmg')!;
-    expect(talentValue(def, 10, 1)).toBeGreaterThan(talentValue(def, 0, 1)); // tier ↑
-    expect(talentValue(def, 0, 10)).toBeGreaterThan(talentValue(def, 0, 1)); // niveau ↑
+    expect(talentValue(def, 10, 0)).toBeGreaterThan(talentValue(def, 0, 0)); // grade ↑
+    expect(talentValue(def, 0, 6)).toBeGreaterThan(talentValue(def, 0, 0)); // enchant ↑
   });
-  it('MAX (SSS5, niveau élevé) ≈ ancien plafond (~×4,9 la base) → équilibrage préservé', () => {
+  it('enchant partage le mult des objets (enchantMult)', () => {
     const def = talentByCode('t_dmg')!;
-    const ratio = talentValue(def, 49, 50) / def.base;
-    expect(ratio).toBeGreaterThan(4);
-    expect(ratio).toBeLessThan(5.5);
+    expect(talentValue(def, 12, 4)).toBeCloseTo(def.base * (1 + 12 * 0.02) * enchantMult(4));
   });
-  it('talentLevelUpCost croît avec le niveau', () => {
-    expect(talentLevelUpCost(1)).toBeLessThan(talentLevelUpCost(10));
+  it('MAX (SSS5, +12) = grade max × enchant max', () => {
+    const def = talentByCode('t_dmg')!;
+    const ratio = talentValue(def, 49, ENCHANT_MAX) / def.base;
+    // tier49 ~×1,98 × enchantMult(12) ~×4,96 ≈ ×9,8
+    expect(ratio).toBeGreaterThan(9);
+    expect(ratio).toBeLessThan(10.5);
   });
 });
 
 describe('normalizeTalents (rétro-compat)', () => {
-  it('convertit un ancien string[] en instances équipées (niveau 1)', () => {
+  it('convertit un ancien string[] en instances équipées (+0)', () => {
     const n = normalizeTalents(['t_dmg', 't_pv']);
     expect(n).toHaveLength(2);
     expect(n[0]!.equipped).toBe(true);
-    expect(n[0]!.level).toBe(1);
+    expect(n[0]!.enchant).toBe(0);
+  });
+  it('migre l’ancien axe `level` en enchant équivalent', () => {
+    // level 1 → +0 ; un level élevé → un enchant > 0 (magnitude préservée, plafonnée à 12)
+    expect(normalizeTalents([{ id: 'a', code: 't_dmg', xp: 0, level: 1 }])[0]!.enchant).toBe(0);
+    const migrated = normalizeTalents([{ id: 'b', code: 't_dmg', xp: 0, level: 50 }])[0]!.enchant!;
+    expect(migrated).toBeGreaterThan(0);
+    expect(migrated).toBeLessThanOrEqual(ENCHANT_MAX);
   });
   it('filtre les codes inconnus et tolère le non-tableau', () => {
     expect(normalizeTalents(['nope', 't_crit'])).toHaveLength(1);
@@ -96,33 +91,32 @@ describe('normalizeTalents (rétro-compat)', () => {
 });
 
 describe('talentEffects (équipés uniquement)', () => {
-  it('legacy string[] : tous comptent (tier 0, niveau 1 = base)', () => {
+  it('legacy string[] : tous comptent (tier 0, +0 = base)', () => {
     const e = talentEffects(['t_dmg', 't_dmg', 't_pv']);
     expect(e.damagePct).toBeCloseTo(0.16); // 2 × base 0.08
     expect(e.maxPvPct).toBeCloseTo(0.08);
   });
   it('instances : seuls les ÉQUIPÉS comptent', () => {
     const insts: TalentInstance[] = [
-      { id: 'a', code: 't_dmg', xp: 0, level: 1, equipped: true },
-      { id: 'b', code: 't_crit', xp: 0, level: 1, equipped: false },
+      { id: 'a', code: 't_dmg', xp: 0, enchant: 0, equipped: true },
+      { id: 'b', code: 't_crit', xp: 0, enchant: 0, equipped: false },
     ];
     const e = talentEffects(insts);
     expect(e.damagePct).toBeCloseTo(0.08);
     expect(e.critAdd).toBe(0); // non équipé
   });
-  it('niveau PLAFONNÉ au niveau joueur', () => {
-    const inst: TalentInstance = { id: 'a', code: 't_dmg', xp: 0, level: 50, equipped: true };
-    const atCap = talentEffects([inst], 5).damagePct; // joueur niv.5 → niveau bridé à 5
-    const full = talentEffects([inst], 100).damagePct;
-    expect(atCap).toBeLessThan(full);
+  it('l’enchant augmente la magnitude', () => {
+    const base: TalentInstance = { id: 'a', code: 't_dmg', xp: 0, enchant: 0, equipped: true };
+    const ench: TalentInstance = { id: 'b', code: 't_dmg', xp: 0, enchant: 6, equipped: true };
+    expect(talentEffects([ench]).damagePct).toBeGreaterThan(talentEffects([base]).damagePct);
   });
 });
 
 describe('drop', () => {
-  it('rollTalentDrop : code valide, niveau 1, non équipé', () => {
+  it('rollTalentDrop : code valide, +0, non équipé', () => {
     const t = rollTalentDrop(mulberry32(3), { level: 4, luck: 0.5, idSeed: 1 });
     expect(TALENTS.some((d) => d.code === t.code)).toBe(true);
-    expect(t.level).toBe(1);
+    expect(t.enchant).toBe(0);
     expect(t.equipped).toBeFalsy();
   });
 

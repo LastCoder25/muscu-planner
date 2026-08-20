@@ -359,19 +359,23 @@
             Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
           </div>
           <div class="sec-hint">
-            Les talents <b>droppent à un rang</b> selon la profondeur (comme les objets). Équipe-en
-            {{ talentSlots }} (change quand tu veux). Comme les objets : <b>♻️ recycle</b> ceux que
-            tu gardes pas → <b><DustIcon variant="ink" /> poussière d'encre</b>, puis sur chaque
-            talent <b>🔧 +1 palier</b> (rang/qualité, plafonné par le Scriptorium) et
-            <b>📜 +1 niveau</b> (magnitude, parchemins).
-            <br />
-            Tu as <b><DustIcon variant="ink" /> {{ char.row.ink_dust }}</b> ·
-            <b>📜 {{ char.row.parchemins }}</b> · Scriptorium
-            <template v-if="hasScriptorium"
-              >niv.{{ scriptoLevel }} (rang max
-              <b class="ii-rar" :class="'p-' + talentTierMaxRank">{{ talentTierMaxLabel }}</b
-              >)</template
-            ><template v-else>non construit (🕯️ à bâtir pour infuser le rang)</template>.
+            Les talents <b>droppent à un grade</b> (rang + qualité) selon la profondeur,
+            <b>comme les objets</b>. Équipe-en {{ talentSlots }} (change quand tu veux) et monte
+            leur puissance en les <b>⚡ enchantant</b> (parchemins 📜 / protections 🛡️, gamble).
+          </div>
+          <div class="ench-bar">
+            <span
+              >⚡ <b>📜 {{ char.row.enchant_scrolls }}</b> ·
+              <b>🛡️ {{ char.row.protections }}</b></span
+            >
+            <label class="ench-prot" :class="{ off: char.row.protections < 1 }">
+              <input
+                v-model="enchantUseProtection"
+                type="checkbox"
+                :disabled="char.row.protections < 1"
+              />
+              🛡️ Protéger l'échec
+            </label>
           </div>
 
           <div v-if="!char.row.talents.length" class="talents-empty">
@@ -403,12 +407,9 @@
                     >{{ t.rarity }}</span
                   >
                   <span class="q-badge" :class="'q-' + t.quality">{{ t.quality }}</span>
-                  <span class="tal-lv">Nv{{ t.level }}</span>
+                  <span v-if="t.enchant > 0" class="tal-lv">+{{ t.enchant }}</span>
                 </div>
                 <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
-                <div class="tal-xp" :title="'Rang tier ' + t.tier + '/49'">
-                  <span :style="{ width: Math.round((t.tier / 49) * 100) + '%' }" />
-                </div>
               </div>
               <div class="tal-actions">
                 <button
@@ -423,40 +424,18 @@
                   {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
                 </button>
                 <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
-                <!-- 🔧 +1 palier (rang/qualité) : poussière d'encre, plafonné par le Scriptorium -->
+                <!-- ⚡ Enchant (gamble) : parchemins 📜 (+ protection optionnelle). -->
                 <button
                   class="tal-b ghost"
-                  :disabled="
-                    hasScriptorium && (t.tierCapped || (char.row?.ink_dust ?? 0) < t.tierCost)
-                  "
-                  :title="talentInfuseTitle(t)"
-                  @click="hasScriptorium ? doInfuseTalentTier(t.id) : openGame('/expedition-map')"
+                  :disabled="!canEnchant(t.enchant) || char.row.enchant_scrolls < 1"
+                  :title="enchantTitleTalent(t)"
+                  @click="doEnchantTalent(t.id)"
                 >
-                  <template v-if="!hasScriptorium">🔧 🕯️</template>
-                  <template v-else-if="t.tierCapped">🔧 Max</template>
-                  <template v-else>🔧 +1·{{ t.tierCost }}<DustIcon variant="ink" /></template>
-                </button>
-                <!-- 📜 +1 niveau (magnitude) : parchemins -->
-                <button
-                  class="tal-b ghost"
-                  :disabled="t.levelMaxed || (char.row?.parchemins ?? 0) < t.upCost"
-                  :title="
-                    t.levelMaxed
-                      ? 'Niveau plafonné à ton niveau de sport'
-                      : 'Monter le NIVEAU (magnitude) avec des parchemins 📜'
-                  "
-                  @click="doUpgradeTalentLevel(t.id)"
-                >
-                  📜 {{ t.levelMaxed ? 'Max' : '+1·' + t.upCost }}
-                </button>
-                <!-- ♻️ recycler → poussière d'encre (talent rangé) -->
-                <button
-                  v-if="!t.equipped"
-                  class="tal-b ghost"
-                  title="Recycler ce talent → poussière d'encre"
-                  @click="doRecycleTalent(t.id)"
-                >
-                  ♻️ +{{ t.recycleGain }}<DustIcon variant="ink" />
+                  <template v-if="!canEnchant(t.enchant)">⚡ Max</template>
+                  <template v-else
+                    >⚡ +{{ t.enchant + 1 }} ·
+                    {{ Math.round(enchantSuccessRate(t.enchant) * 100) }}%</template
+                  >
                 </button>
               </div>
             </div>
@@ -2207,7 +2186,6 @@ import {
   isFamiliar,
   FAMILIAR_SLOT,
   rollTier,
-  tierToRankQ,
   dropBand,
   dropBandLabel,
   RANK_ORDER,
@@ -2231,25 +2209,17 @@ import {
   talentsEarned,
   talentEffects,
   talentByCode,
-  effectiveTalentLevel,
   tierOf,
   talentRank,
   talentRankOf,
   talentQuality,
-  talentLevelOf,
   talentValue,
-  talentLevelUpCost,
-  talentTierStepCost,
-  talentInfuseXp,
   rollTalentDrop,
   type TalentInstance,
 } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { unlocksAtLevel } from '@/lib/advUnlocks';
 import {
-  scriptoriumBuilt,
-  scriptoriumLevel,
-  maxTalentTierIndex,
   labyrinthUnlocked,
   forgeBuilt,
   bossAltarBuilt,
@@ -2406,7 +2376,7 @@ const c = computed(() =>
   ),
 );
 // Effets cumulés des talents choisis.
-const talentFx = computed(() => talentEffects(char.row?.talents ?? [], c.value.level.level));
+const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
 // Combattant complet (stats + équipement + talents) → puissance de combat affichée.
 const fighter = computed(() =>
   playerWithGear(
@@ -2534,39 +2504,29 @@ const talentFreeSlots = computed(() =>
   Math.max(0, talentSlots.value - equippedTalents.value.length),
 );
 const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.value);
-// Vue enrichie : équipés d'abord, puis par niveau décroissant.
+// Vue enrichie : équipés d'abord, puis par grade (tier) puis enchant décroissants.
 const talentsView = computed(() => {
-  // Plafond de rang EFFECTIF (min SSS5 / Scriptorium) — hoisté hors du map (identique
-  // pour tous les talents ; évite un `.find()` par talent à chaque rendu).
-  const tierCap = Math.min(49, maxTalentTierIndex(char.row?.buildings ?? []));
-  const pl = c.value.level.level;
   return (char.row?.talents ?? [])
     .map((inst) => {
       const def = talentByCode(inst.code);
       if (!def) return null;
-      const tier = tierOf(inst); // rang + qualité (infusion)
-      const level = talentLevelOf(inst); // niveau (parchemins)
-      const eff = effectiveTalentLevel(inst, pl); // niveau plafonné (effet actif)
+      const tier = tierOf(inst); // rang + qualité (grade fixé au drop)
+      const enchant = inst.enchant ?? 0; // +N magnitude (gamble)
       return {
         id: inst.id,
         inst,
         def,
         tier,
-        level,
+        enchant,
         rarity: talentRank(tier),
         quality: talentQuality(tier),
-        effLabel: Math.round(talentValue(def, tier, eff) * 100) + ' %',
-        levelMaxed: level >= pl, // niveau plafonné par le sport → parchemins inutiles
-        tierCapped: tier >= tierCap, // au-delà (SSS5 ou plafond Scriptorium) → infusion bloquée
-        upCost: talentLevelUpCost(level), // 📜 coût du prochain NIVEAU
-        tierCost: talentTierStepCost(tier), // poussière d'encre : coût du prochain PALIER
-        recycleGain: talentInfuseXp(inst), // poussière d'encre rendue par le recyclage
+        effLabel: Math.round(talentValue(def, tier, enchant) * 100) + ' %',
         equipped: !!inst.equipped,
       };
     })
     .filter((t): t is NonNullable<typeof t> => !!t)
     .sort(
-      (a, b) => Number(b.equipped) - Number(a.equipped) || b.tier - a.tier || b.level - a.level,
+      (a, b) => Number(b.equipped) - Number(a.equipped) || b.tier - a.tier || b.enchant - a.enchant,
     );
 });
 function talentName(inst: TalentInstance): string {
@@ -2587,10 +2547,10 @@ function explainTalent(t: (typeof talentsView.value)[number]) {
     html: true,
     message:
       `Améliore : <b>${d.desc}</b> — actuellement <b>+${t.effLabel}</b> ` +
-      `(rang ${RARITY_LABEL[t.rarity]}${t.quality} · niveau ${t.level}).<br><br>` +
-      `Deux axes : <b>🔧 Infuse</b> d'autres talents dedans → monte son <b>rang + qualité</b> ` +
-      `(tier). <b>📜 Monte le niveau</b> avec des parchemins (Bibliothèque) → magnitude, ` +
-      `plafonnée à ton niveau de sport.`,
+      `(rang ${RARITY_LABEL[t.rarity]}${t.quality} · +${t.enchant}).<br><br>` +
+      `Comme les objets : son <b>grade (rang + qualité)</b> est fixé au drop (trouve mieux en ` +
+      `explorant plus profond) et tu montes sa puissance en l'<b>⚡ enchantant</b> ` +
+      `(parchemins 📜 / protections 🛡️, gamble).`,
   });
 }
 // Un talent de ce CODE est-il déjà équipé ? (loadout à effets distincts). Sert à
@@ -2614,43 +2574,34 @@ async function doUnequipTalent(id: string) {
   const uid = auth.user?.id;
   if (uid) await char.unequipTalent(uid, id);
 }
-// Monte le NIVEAU d'un talent avec des parchemins 📜 (plafonné au niveau joueur).
-function doUpgradeTalentLevel(id: string) {
-  withUid(
-    (uid) => char.upgradeTalentLevel(uid, id, c.value.level.level),
-    'Montée de niveau impossible (parchemins ou plafond).',
-  );
-}
-// Infuse +1 PALIER (rang/qualité) un talent en dépensant des parchemins 📜 (comme
-// l'infusion de niveau d'un objet avec la poussière). Éclat sur montée de rang.
-async function doInfuseTalentTier(id: string) {
+// ⚡ ENCHANTE un talent (gamble +N, comme les objets/familiers) : coûte 1 parchemin
+// d'enchantement 📜 + éventuellement 1 protection 🛡️. Notif selon le résultat.
+async function doEnchantTalent(id: string) {
   const uid = auth.user?.id;
   if (!uid) return;
-  const before = char.row?.talents.find((t) => t.id === id) ?? null;
-  const beforeRank = before ? talentRankOf(before) : null;
-  const ok = await char.infuseTalentTier(uid, id);
-  if (!ok) {
-    $q.notify({ type: 'warning', message: 'Palier max (SSS5) ou parchemins insuffisants.' });
+  const before = char.row?.talents.find((t) => t.id === id)?.enchant ?? 0;
+  const res = await char.enchantTalent(uid, id, enchantUseProtection.value);
+  if (!res) {
+    $q.notify({ type: 'warning', message: 'Enchant impossible (au cap ou plus de parchemin).' });
     return;
   }
-  const updated = char.row?.talents.find((t) => t.id === id) ?? null;
-  if (updated && beforeRank) {
-    const afterRank = talentRankOf(updated);
-    if (afterRank !== beforeRank) {
-      const def = talentByCode(updated.code);
-      gameFx.celebrate({
-        kind: 'generic',
-        emoji: def?.icon ?? '✨',
-        title: `${def?.name ?? 'Talent'} — rang ${RARITY_LABEL[afterRank]} !`,
-        subtitle: 'Palier amélioré par infusion',
-        rarity: fxRarity(afterRank),
-      });
-    }
-  }
+  if (res.enchant > before)
+    $q.notify({
+      type: 'positive',
+      message: `⚡ Enchant réussi → +${res.enchant}`,
+      position: 'top',
+    });
+  else if (res.protectionUsed)
+    $q.notify({ type: 'info', message: '🛡️ Échec protégé — enchant préservé.', position: 'top' });
+  else $q.notify({ type: 'negative', message: '💥 Échec — retombé à +0.', position: 'top' });
 }
-// Recycle un talent STOCKÉ (non équipé) → parchemins 📜 (comme casser un objet).
-function doRecycleTalent(id: string) {
-  withUid((uid) => char.recycleTalent(uid, id), 'Recyclage impossible (talent équipé ?).');
+// Titre du bouton d'enchant d'un talent (rappelle le risque en zone dangereuse).
+function enchantTitleTalent(t: { enchant: number }): string {
+  const n = t.enchant;
+  if (!canEnchant(n)) return `Enchant au maximum (+${ENCHANT_MAX}).`;
+  const rate = Math.round(enchantSuccessRate(n) * 100);
+  if (n < ENCHANT_SAFE) return `+${n} → +${n + 1} · réussite garantie (${rate} %).`;
+  return `+${n} → +${n + 1} · ${rate} % de réussite. Échec → +0 (sauf 🛡️ protection).`;
 }
 
 // Régions / biomes (onglet Donjons) : bandeau de la région courante + teaser de la
@@ -3824,22 +3775,6 @@ function doEquipFamiliar(itemId: string) {
 }
 function doUnequipFamiliar() {
   withUid((uid) => char.unequip(uid, FAMILIAR_SLOT), 'Impossible de déséquiper.');
-}
-// Scriptorium (talents) : produit la poussière d'encre ET plafonne le rang d'infusion.
-const scriptoLevel = computed(() => scriptoriumLevel(char.row?.buildings ?? []));
-const hasScriptorium = computed(() => scriptoriumBuilt(char.row?.buildings ?? []));
-const talentTierCap = computed(() => maxTalentTierIndex(char.row?.buildings ?? []));
-const talentTierMaxRank = computed(() => tierToRankQ(Math.max(0, talentTierCap.value)).rank);
-const talentTierMaxLabel = computed(() => {
-  const t = talentTierCap.value;
-  if (t < 0) return '—';
-  const rq = tierToRankQ(t);
-  return `${rq.rank}★${rq.quality}`;
-});
-function talentInfuseTitle(t: { tierCapped: boolean; tierCost: number }): string {
-  if (!hasScriptorium.value) return 'Construis un Scriptorium 🕯️ pour infuser le rang';
-  if (t.tierCapped) return `Rang max (plafond Scriptorium ${talentTierMaxLabel.value})`;
-  return `Infuser +1 palier (rang/qualité) — ${t.tierCost} poussière d'encre`;
 }
 // Animation de PALIER DE SET : si équiper `setId` a fait franchir un palier (2/3/4
 // pièces), on célèbre en montrant le set + le bonus tout juste débloqué.

@@ -25,17 +25,7 @@ import {
   type PendingReward,
 } from '@/lib/items';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
-import {
-  normalizeTalents,
-  talentInfuseXp,
-  talentsEarned,
-  talentTier,
-  talentTierFloor,
-  talentTierStepCost,
-  talentLevelOf,
-  talentLevelUpCost,
-  type TalentInstance,
-} from '@/lib/talents';
+import { normalizeTalents, talentsEarned, type TalentInstance } from '@/lib/talents';
 import {
   createMap,
   advanceWorld,
@@ -58,7 +48,6 @@ import {
   storageMult,
   expeditionsUnlocked,
   travelTimeMult,
-  maxTalentTierIndex,
   forgeLuckBonus,
   goldToDust,
   type Building,
@@ -693,56 +682,27 @@ export const useCharacterStore = defineStore('character', () => {
     const talents = cur.talents.map((t) => (t.id === id ? { ...t, equipped: false } : t));
     return persistOptimistic(userId, { talents });
   }
-  // Infuse (consomme) `fodderId` dans `targetId` → +XP au target (clampé au niveau
-  // joueur : pas de « banking » au-delà, sinon un talent auto-maxerait en montant de
-  // RECYCLE un talent STOCKÉ (non équipé) → POUSSIÈRE D'ENCRE (`ink_dust`, ∝ son tier,
-  // comme casser un objet → poussière). Alimente la réserve qui finance l'infusion de RANG.
-  async function recycleTalent(userId: string, talentId: string): Promise<boolean> {
+  // ENCHANTE un talent (UNIFORME avec les objets/familiers) : gamble +N sur sa
+  // magnitude, coûte 1 parchemin d'enchantement 📜 + éventuellement 1 protection 🛡️.
+  // Grade (rang/qualité) fixé au drop — plus de niveau ni d'infusion de tier.
+  async function enchantTalent(userId: string, talentId: string, useProtection: boolean) {
     const cur = row.value;
-    if (!cur) return false;
+    if (!cur) return null;
     const t = cur.talents.find((x) => x.id === talentId);
-    if (!t || t.equipped) return false; // on ne recycle que les talents rangés
-    const gain = talentInfuseXp(t);
-    const talents = cur.talents.filter((x) => x.id !== talentId);
-    await persistOptimistic(userId, { ink_dust: cur.ink_dust + gain, talents });
-    return true;
-  }
-  // INFUSE +1 PALIER (rang/qualité) un talent en dépensant de la POUSSIÈRE D'ENCRE de la
-  // réserve (comme l'infusion de niveau d'un objet avec la poussière). Plafonné par le
-  // Scriptorium (maxTalentTierIndex), comme les familiers par l'Incubateur.
-  async function infuseTalentTier(userId: string, talentId: string): Promise<boolean> {
-    const cur = row.value;
-    if (!cur) return false;
-    const t = cur.talents.find((x) => x.id === talentId);
-    if (!t) return false;
-    const tier = talentTier(t.xp);
-    const cap = Math.min(49, maxTalentTierIndex(cur.buildings));
-    if (tier >= cap) return false; // rang max atteint (SSS5 ou plafond Scriptorium)
-    const cost = talentTierStepCost(tier);
-    if (cur.ink_dust < cost) return false;
-    const newXp = talentTierFloor(tier + 1); // avance d'EXACTEMENT un palier
-    const talents = cur.talents.map((x) => (x.id === talentId ? { ...x, xp: newXp } : x));
-    await persistOptimistic(userId, { ink_dust: cur.ink_dust - cost, talents });
-    return true;
-  }
-  // Monte le NIVEAU d'un talent en dépensant des PARCHEMINS 📜 (Bibliothèque),
-  // plafonné au niveau JOUEUR (seul le sport rend plus fort).
-  async function upgradeTalentLevel(
-    userId: string,
-    talentId: string,
-    playerLevel: number,
-  ): Promise<boolean> {
-    const cur = row.value;
-    if (!cur) return false;
-    const t = cur.talents.find((x) => x.id === talentId);
-    if (!t) return false;
-    const level = talentLevelOf(t);
-    if (level >= playerLevel) return false; // plafonné au niveau joueur
-    const cost = talentLevelUpCost(level);
-    if (cur.parchemins < cost) return false;
-    const talents = cur.talents.map((x) => (x.id === talentId ? { ...x, level: level + 1 } : x));
-    await persistOptimistic(userId, { parchemins: cur.parchemins - cost, talents });
-    return true;
+    if (!t) return null;
+    const n = t.enchant ?? 0;
+    if (!canEnchant(n) || cur.enchant_scrolls < 1) return null; // au cap ou plus de parchemin
+    const withProtection = useProtection && cur.protections > 0;
+    const outcome = attemptEnchant(Math.random, n, withProtection);
+    const talents = cur.talents.map((x) =>
+      x.id === talentId ? { ...x, enchant: outcome.enchant } : x,
+    );
+    await persist(userId, {
+      enchant_scrolls: cur.enchant_scrolls - 1,
+      protections: cur.protections - (outcome.protectionUsed ? 1 : 0),
+      talents,
+    });
+    return outcome;
   }
 
   async function equip(userId: string, itemId: string) {
@@ -992,9 +952,7 @@ export const useCharacterStore = defineStore('character', () => {
     unequip,
     equipTalent,
     unequipTalent,
-    recycleTalent,
-    infuseTalentTier,
-    upgradeTalentLevel,
+    enchantTalent,
     salvage,
     sell,
     salvageMany,

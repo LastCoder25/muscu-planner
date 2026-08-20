@@ -2,7 +2,14 @@
 // (plus de choix 1-parmi-3), ont une RARETÉ, montent en niveau/rareté par INFUSION de
 // doublons (XP), et on n'en ÉQUIPE qu'un nombre limité (swap libre). Bonus appliqués
 // via AggregatedEffects (comme le gear/les familiers). Pur/testable.
-import { emptyEffects, RANK_ORDER, rollTier, type AggregatedEffects, type Rarity } from './items';
+import {
+  emptyEffects,
+  enchantMult,
+  RANK_ORDER,
+  rollTier,
+  type AggregatedEffects,
+  type Rarity,
+} from './items';
 
 // Définition catalogue : un talent = une clé d'effet + une magnitude de BASE (niv.1),
 // qui grandit avec le niveau (talentLevelMult). Élargi de 5 → 11 (un par effet).
@@ -111,32 +118,32 @@ export function talentByCode(code: string): TalentDef | undefined {
   return BY_CODE.get(code);
 }
 
-// Un talent POSSÉDÉ : DEUX axes indépendants (comme les familiers/objets) —
-//  - `xp` (INFUSION de talents sacrifiés) → le TIER (rang G→SSS + qualité 1→5) ;
-//  - `level` (PARCHEMINS 📜 de la Bibliothèque) → la magnitude (≤ niveau joueur).
+// Un talent POSSÉDÉ — UNIFORME avec les objets/familiers : son GRADE (rang G→SSS +
+// qualité 1→5, encodé par `xp` = tier) est FIXÉ au drop (gaté par la profondeur), et
+// sa magnitude se monte en l'ENCHANTANT (`enchant` +N, gamble aux parchemins 📜 /
+// protections 🛡️). Plus d'axe niveau (parchemins→magnitude) ni d'infusion de tier.
 export interface TalentInstance {
   id: string;
   code: string;
-  xp: number; // infusion → tier (rang + qualité)
-  level?: number; // parchemins → niveau (magnitude), défaut 1
+  xp: number; // encode le TIER (rang + qualité), fixé au drop
+  enchant?: number; // +N magnitude (gamble), défaut 0
   equipped?: boolean;
 }
 
-// ── Axe TIER (infusion) : xp cumulée → tier 0..49 = rang×5 + (qualité−1). Mêmes 50
-// tiers que les objets/familiers. Un talent DROPPE au tier 0 (G1) et grimpe en
-// SACRIFIANT d'autres talents (XP ∝ leur tier). ──
+// ── GRADE : `xp` (fixé au drop) → tier 0..49 = rang×5 + (qualité−1). Mêmes 50 tiers
+// que les objets/familiers. Le tier ne bouge plus après le drop. ──
 const MAX_TIER = 49;
-/** XP pour passer du tier `tier` au suivant (croissant). */
+/** XP pour passer du tier `tier` au suivant — sert à ENCODER le tier de drop. */
 export function talentXpForNextTier(tier: number): number {
   return 12 + Math.max(0, tier) * 4;
 }
-/** XP cumulée pour ATTEINDRE un tier (tier 0 = 0). */
+/** XP cumulée pour ATTEINDRE un tier (tier 0 = 0) — encode le tier au drop. */
 export function talentTierFloor(tier: number): number {
   let sum = 0;
   for (let t = 0; t < Math.max(0, tier); t++) sum += talentXpForNextTier(t);
   return sum;
 }
-/** Tier 0..49 d'après l'XP d'infusion. */
+/** Tier 0..49 d'après l'XP encodée. */
 export function talentTier(xp: number): number {
   let tier = 0;
   let remaining = Math.max(0, xp);
@@ -145,13 +152,6 @@ export function talentTier(xp: number): number {
     tier++;
   }
   return tier;
-}
-/** Progression 0..1 vers le prochain tier (barre d'infusion). */
-export function talentTierProgress(xp: number): number {
-  const tier = talentTier(xp);
-  if (tier >= MAX_TIER) return 1;
-  const into = Math.max(0, xp) - talentTierFloor(tier);
-  return Math.min(1, into / talentXpForNextTier(tier));
 }
 /** Rang (G→SSS) d'un tier — mêmes rangs que les objets. */
 export function talentRank(tier: number): Rarity {
@@ -170,33 +170,18 @@ export function talentRankOf(inst: TalentInstance): Rarity {
 export function talentQualityOf(inst: TalentInstance): number {
   return talentQuality(tierOf(inst));
 }
-
-// ── Axe NIVEAU (parchemins) : magnitude, plafonné au niveau JOUEUR (seul le sport
-// rend plus fort). ──
-/** Coût en PARCHEMINS 📜 pour passer du niveau `level` au suivant (croissant). */
-export function talentLevelUpCost(level: number): number {
-  return 3 + Math.max(1, level) * 2;
-}
-/** Coût en PARCHEMINS 📜 pour infuser +1 PALIER (rang/qualité) depuis le tier `tier`
- *  (croissant). L'infusion par palier remplace l'ancien sacrifice : on dépense la
- *  réserve de parchemins (nourrie par le recyclage) sur le talent qu'on garde. */
-export function talentTierStepCost(tier: number): number {
-  return 4 + Math.max(0, tier) * 2;
-}
-export function talentLevelOf(inst: TalentInstance): number {
-  return Math.max(1, inst.level ?? 1);
+export function enchantOf(inst: TalentInstance): number {
+  return Math.max(0, inst.enchant ?? 0);
 }
 
-// ── Magnitude : base × mult de TIER × mult de NIVEAU. Calibré pour que le MAX
-// (SSS5, niveau = joueur) ≈ l'ancien plafond (~×4,9) → équilibrage combat préservé. ──
+// ── Magnitude : base × mult de TIER (grade) × enchantMult (+N, partagé avec les
+// objets). Calibré pour que le MAX (SSS5, +12) reste dans l'ordre de l'ancien plafond
+// → équilibrage combat préservé. ──
 export function talentTierMult(tier: number): number {
   return 1 + Math.max(0, tier) * 0.02; // tier0 1,0 … tier49 ~1,98
 }
-export function talentLevelMult(level: number): number {
-  return 1 + (Math.max(1, level) - 1) * 0.03; // niv.1 1,0 … niv.50 ~2,47
-}
-export function talentValue(def: TalentDef, tier: number, level: number): number {
-  return def.base * talentTierMult(tier) * talentLevelMult(level);
+export function talentValue(def: TalentDef, tier: number, enchant: number): number {
+  return def.base * talentTierMult(tier) * enchantMult(enchant);
 }
 
 /** Nombre d'emplacements de talents ÉQUIPÉS (1 tous les 5 niveaux JOUEUR). */
@@ -205,48 +190,46 @@ export function talentsEarned(playerLevel: number): number {
 }
 
 // ── Normalisation (rétro-compat) : ancien `string[]` de codes → instances équipées
-// (tier 0, niveau 1). Les anciennes instances gardent leur xp (réinterprété en
-// tier-xp) + niveau par défaut 1. ──
+// (tier 0, +0). Les anciennes instances gardent leur xp (tier) ; leur `level`
+// (ancien axe parchemins) est CONVERTI en enchant équivalent (magnitude préservée). ──
+function talentLevelToEnchant(level: number): number {
+  // Ancien mult de niveau valait 1 + (level−1)×0,03 ; enchant vaut 1 + N×0,33.
+  return Math.max(0, Math.min(12, Math.round(((Math.max(1, level) - 1) * 0.03) / 0.33)));
+}
 export function normalizeTalents(raw: unknown): TalentInstance[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((t, i) => {
       if (typeof t === 'string')
-        return { id: `legacy_${i}_${t}`, code: t, xp: 0, level: 1, equipped: true };
-      const o = t as Partial<TalentInstance>;
+        return { id: `legacy_${i}_${t}`, code: t, xp: 0, enchant: 0, equipped: true };
+      const o = t as Partial<TalentInstance> & { level?: number };
       return {
         id: o.id ?? `t_${i}`,
         code: o.code ?? '',
         xp: o.xp ?? 0,
-        level: o.level ?? 1,
+        enchant: o.enchant ?? (o.level !== undefined ? talentLevelToEnchant(o.level) : 0),
         equipped: o.equipped,
       };
     })
     .filter((t) => BY_CODE.has(t.code));
 }
 
-/** Niveau EFFECTIF d'un talent : plafonné au niveau du joueur. */
-export function effectiveTalentLevel(inst: TalentInstance, playerLevel = Infinity): number {
-  return Math.min(talentLevelOf(inst), Math.max(1, playerLevel));
-}
-
-/** Cumule les effets des talents ÉQUIPÉS. Le niveau est PLAFONNÉ au niveau joueur. */
-export function talentEffects(raw: unknown, playerLevel = Infinity): AggregatedEffects {
+/** Cumule les effets des talents ÉQUIPÉS (grade + enchant). */
+export function talentEffects(raw: unknown): AggregatedEffects {
   const a = emptyEffects();
   for (const inst of normalizeTalents(raw)) {
     if (inst.equipped === false) continue; // seuls les équipés comptent
     const def = BY_CODE.get(inst.code);
     if (!def) continue;
-    a[def.effectKey] += talentValue(def, tierOf(inst), effectiveTalentLevel(inst, playerLevel));
+    a[def.effectKey] += talentValue(def, tierOf(inst), enchantOf(inst));
   }
   return a;
 }
 
-// ── Drop : le RANG+QUALITÉ du talent est GATÉ par la profondeur du contenu (comme
-// les objets/familiers via `rollTier`) — un talent d'un donjon/boss profond tombe à
-// un rang plus haut, biaisé par la `luck`. Le niveau (magnitude) démarre à 1 et
-// monte aux PARCHEMINS ; le tier peut ensuite grimper par INFUSION. Non équipé par
-// défaut. ──
+// ── Drop : le RANG+QUALITÉ (grade) est GATÉ par la profondeur du contenu (comme les
+// objets/familiers via `rollTier`) — un talent d'un donjon/boss profond tombe à un
+// grade plus haut, biaisé par la `luck`. La magnitude démarre à +0 et monte en
+// l'ENCHANTANT. Non équipé par défaut. ──
 export function rollTalentDrop(
   rng: () => number,
   opts: { level?: number; luck?: number; floorBonus?: number; idSeed?: number } = {},
@@ -258,11 +241,6 @@ export function rollTalentDrop(
     id: `tal_${opts.idSeed ?? Math.floor(rng() * 1e9)}`,
     code: def.code,
     xp: talentTierFloor(tier),
-    level: 1,
+    enchant: 0,
   };
-}
-
-/** XP d'infusion qu'un talent SACRIFIÉ rend (∝ son tier) : G1 → 1 … SSS5 → 50. */
-export function talentInfuseXp(consumed: TalentInstance): number {
-  return 1 + tierOf(consumed);
 }

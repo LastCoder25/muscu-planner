@@ -547,7 +547,7 @@ const fighter = computed<Combatant>(() =>
     char.row?.pseudo ?? 'Toi',
     character.value,
     char.row?.equipped ?? {},
-    talentEffects(char.row?.talents ?? [], heroLevel.value),
+    talentEffects(char.row?.talents ?? []),
     heroLevel.value,
   ),
 );
