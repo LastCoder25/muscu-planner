@@ -587,17 +587,13 @@
 
       <!-- ONGLET ÉQUIPEMENT -->
       <template v-else-if="tab === 'gear'">
-        <!-- En-tête Équipement : titre + accès Force / Loadouts / Atelier par ICÔNES
-             (plus de sous-onglets ; le sac est à la suite des items équipés). -->
+        <!-- En-tête Équipement : titre + accès Sac / Loadouts / Atelier par ICÔNES
+             (plus de sous-onglets ; les stats de combat sont sur la fiche Héros). -->
         <div class="gear-head">
           <div class="sec-title gh-title">Équipement</div>
           <div class="gear-icons">
-            <button
-              class="gi-b"
-              title="Force — stats de combat (base → équipé)"
-              @click="forceOpen = true"
-            >
-              💪
+            <button class="gi-b" title="Sac — ton butin" @click="openBag()">
+              🎒<span v-if="bagCount" class="gi-badge">{{ bagCount }}</span>
             </button>
             <button
               class="gi-b"
@@ -616,7 +612,7 @@
           </div>
         </div>
         <div class="sec-hint">
-          Ton stuff équipé. Ton butin est dans le <b>Sac</b>, juste dessous.
+          Ton stuff équipé. Ton butin est dans le <b>🎒 Sac</b> (icône en haut à droite).
         </div>
         <div class="gear">
           <div
@@ -671,7 +667,7 @@
               <button
                 v-if="betterInBagCount(slot) > 0"
                 class="slot-better"
-                :title="betterInBagCount(slot) + ' objet(s) du sac au potentiel supérieur — voir'"
+                :title="betterInBagCount(slot) + ' objet(s) du sac meilleur(s) si équipé(s) — voir'"
                 @click="showBetterForSlot(slot)"
               >
                 <span class="sb-n">{{ betterInBagCount(slot) }}</span>
@@ -707,244 +703,256 @@
           </div>
         </template>
 
-        <!-- Sac : à la suite des items équipés (plus de sous-onglet). -->
-        <template v-if="bagCount">
-          <div ref="sacTitle" class="sec-title">🎒 Sac ({{ bagCount }})</div>
-          <!-- Bannière du filtre « mieux au sac » (posé via le badge d'un item équipé). -->
-          <div v-if="betterFilterSlot" class="better-banner">
-            🔼 Upgrades potentielles pour <b>{{ SLOT_LABEL[betterFilterSlot] }}</b>
-            <button class="bb-clear" @click="setInvFilter('all')">Tout voir ✕</button>
-          </div>
-          <!-- Filtre par type d'objet -->
-          <div class="inv-filter">
-            <button
-              class="if-chip"
-              :class="{ on: invFilter === 'all' && !betterFilterSlot }"
-              @click="setInvFilter('all')"
-            >
-              Tous
-            </button>
-            <button
-              v-for="slot in SLOTS"
-              :key="slot"
-              class="if-chip"
-              :class="{ on: invFilter === slot && !betterFilterSlot }"
-              @click="setInvFilter(slot)"
-            >
-              {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
-            </button>
-          </div>
-          <!-- Casse/vente en masse : objets qui n'améliorent pas ta puissance (pas
+        <!-- Sac : MODALE ouverte par l'icône 🎒 en haut à droite (plus d'inline). -->
+        <div v-if="bagOpen" class="shop-backdrop" @click.self="bagOpen = false">
+          <div class="shop-card bag-card">
+            <div class="shop-head">
+              <div class="shop-title font-display">🎒 Sac ({{ bagCount }})</div>
+              <button class="shop-x" aria-label="Fermer" @click="bagOpen = false">✕</button>
+            </div>
+            <template v-if="bagCount">
+              <!-- Bannière du filtre « mieux au sac » (posé via le badge d'un item équipé). -->
+              <div v-if="betterFilterSlot" class="better-banner">
+                🔼 Meilleurs si équipés pour <b>{{ SLOT_LABEL[betterFilterSlot] }}</b>
+                <button class="bb-clear" @click="setInvFilter('all')">Tout voir ✕</button>
+              </div>
+              <!-- Filtre par type d'objet -->
+              <div class="inv-filter">
+                <button
+                  class="if-chip"
+                  :class="{ on: invFilter === 'all' && !betterFilterSlot }"
+                  @click="setInvFilter('all')"
+                >
+                  Tous
+                </button>
+                <button
+                  v-for="slot in SLOTS"
+                  :key="slot"
+                  class="if-chip"
+                  :class="{ on: invFilter === slot && !betterFilterSlot }"
+                  @click="setInvFilter(slot)"
+                >
+                  {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
+                </button>
+              </div>
+              <!-- Casse/vente en masse : objets qui n'améliorent pas ta puissance (pas
                meilleurs que l'équipé du même emplacement, MÊME montés à ton niveau).
                Les pépites potentielles et le 🔒 sont protégés. Respecte le filtre type. -->
-          <div v-if="belowCount > 0" class="bulk">
-            <span class="bulk-lbl"
-              >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} sans intérêt
-              <span class="bulk-note">(≤ ton équipement ; pépites &amp; 🔒 gardés)</span></span
-            >
-            <div class="bulk-btns">
-              <button class="bulk-b" @click="doSalvageBelow">
-                ✨ Tout casser ({{ belowCount }})
-              </button>
-              <button class="bulk-b" @click="doSellBelow">🪙 Tout vendre ({{ belowCount }})</button>
-            </div>
-          </div>
-          <div v-if="!filteredInventory.length" class="inv-empty-filter">
-            Aucun objet de ce type dans le sac.
-          </div>
-          <div class="inv">
-            <div
-              v-for="it in filteredInventory"
-              :key="it.id"
-              class="inv-item"
-              :class="['r-' + it.rarity, { locked: it.locked }]"
-            >
-              <!-- Ligne 1 : emoji + nom + VERDICT de puissance (la décision) -->
-              <div class="ii-head">
-                <span class="inv-emo">{{ it.emoji }}</span>
-                <div class="ii-name">{{ it.name }}</div>
-                <span class="ii-verdict" :class="powerVerdict(it).cls">{{
-                  powerVerdict(it).label
-                }}</span>
-              </div>
-              <!-- Ligne 2 : méta grisée (rang · niveau · slot · qualité · set). Le rang et
-                     la qualité sont CLIQUABLES → explication (ticket d094eac6). -->
-              <div class="ii-meta">
-                <span
-                  class="ii-rar clk"
-                  :class="'p-' + it.rarity"
-                  role="button"
-                  title="Qu’est-ce que le rang ?"
-                  @click="helpTopic = 'rank'"
-                  >{{ RARITY_LABEL[it.rarity] }}</span
+              <div v-if="belowCount > 0" class="bulk">
+                <span class="bulk-lbl"
+                  >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} sans intérêt
+                  <span class="bulk-note">(≤ ton équipement ; pépites &amp; 🔒 gardés)</span></span
                 >
-                <span
-                  v-if="itemQuality(it)"
-                  class="q-badge clk"
-                  :class="'q-' + itemQuality(it)"
-                  role="button"
-                  title="Qu’est-ce que la qualité ?"
-                  @click="helpTopic = 'quality'"
-                  >{{ itemQuality(it) }}</span
-                >
-                <span class="ii-dot">·</span> Nv {{ it.level }} <span class="ii-dot">·</span>
-                {{ SLOT_LABEL[it.slot] }}
-                <span v-if="it.setId" class="gpill set">🧩 Set</span>
-              </div>
-              <!-- Comparaison : rang + qualité + effet, cet objet vs l'équipé (ticket 50f593a2). -->
-              <div class="ii-compare">
-                <div class="ii-cmp-row this">
-                  <span class="ii-cmp-lbl">Cet objet</span>
-                  <span class="ii-rar" :class="'p-' + it.rarity">{{
-                    RARITY_LABEL[it.rarity]
-                  }}</span>
-                  <span v-if="itemQuality(it)" class="q-badge" :class="'q-' + itemQuality(it)">{{
-                    itemQuality(it)
-                  }}</span>
-                  <span class="ii-cmp-val">{{ itemEffects(it) }}</span>
+                <div class="bulk-btns">
+                  <button class="bulk-b" @click="doSalvageBelow">
+                    ✨ Tout casser ({{ belowCount }})
+                  </button>
+                  <button class="bulk-b" @click="doSellBelow">
+                    🪙 Tout vendre ({{ belowCount }})
+                  </button>
                 </div>
-                <div class="ii-cmp-row eq">
-                  <span class="ii-cmp-lbl">Équipé</span>
-                  <template v-if="equippedInSlot(it.slot)">
-                    <span class="ii-rar" :class="'p-' + equippedInSlot(it.slot)!.rarity">{{
-                      RARITY_LABEL[equippedInSlot(it.slot)!.rarity]
+              </div>
+              <div v-if="!filteredInventory.length" class="inv-empty-filter">
+                Aucun objet de ce type dans le sac.
+              </div>
+              <div class="inv">
+                <div
+                  v-for="it in filteredInventory"
+                  :key="it.id"
+                  class="inv-item"
+                  :class="['r-' + it.rarity, { locked: it.locked }]"
+                >
+                  <!-- Ligne 1 : emoji + nom + VERDICT de puissance (la décision) -->
+                  <div class="ii-head">
+                    <span class="inv-emo">{{ it.emoji }}</span>
+                    <div class="ii-name">{{ it.name }}</div>
+                    <span class="ii-verdict" :class="powerVerdict(it).cls">{{
+                      powerVerdict(it).label
                     }}</span>
+                  </div>
+                  <!-- Ligne 2 : méta grisée (rang · niveau · slot · qualité · set). Le rang et
+                     la qualité sont CLIQUABLES → explication (ticket d094eac6). -->
+                  <div class="ii-meta">
                     <span
-                      v-if="itemQuality(equippedInSlot(it.slot))"
-                      class="q-badge"
-                      :class="'q-' + itemQuality(equippedInSlot(it.slot))"
-                      >{{ itemQuality(equippedInSlot(it.slot)) }}</span
+                      class="ii-rar clk"
+                      :class="'p-' + it.rarity"
+                      role="button"
+                      title="Qu’est-ce que le rang ?"
+                      @click="helpTopic = 'rank'"
+                      >{{ RARITY_LABEL[it.rarity] }}</span
                     >
-                    <span class="ii-cmp-val">{{ itemEffects(equippedInSlot(it.slot)!) }}</span>
-                  </template>
-                  <span v-else class="ii-cmp-val dim">— emplacement libre</span>
-                </div>
-              </div>
-              <!-- PUISSANCE : 2 lectures — MAINTENANT (équipé tel quel, niveau réel)
+                    <span
+                      v-if="itemQuality(it)"
+                      class="q-badge clk"
+                      :class="'q-' + itemQuality(it)"
+                      role="button"
+                      title="Qu’est-ce que la qualité ?"
+                      @click="helpTopic = 'quality'"
+                      >{{ itemQuality(it) }}</span
+                    >
+                    <span class="ii-dot">·</span> Nv {{ it.level }} <span class="ii-dot">·</span>
+                    {{ SLOT_LABEL[it.slot] }}
+                    <span v-if="it.setId" class="gpill set">🧩 Set</span>
+                  </div>
+                  <!-- Comparaison : rang + qualité + effet, cet objet vs l'équipé (ticket 50f593a2). -->
+                  <div class="ii-compare">
+                    <div class="ii-cmp-row this">
+                      <span class="ii-cmp-lbl">Cet objet</span>
+                      <span class="ii-rar" :class="'p-' + it.rarity">{{
+                        RARITY_LABEL[it.rarity]
+                      }}</span>
+                      <span
+                        v-if="itemQuality(it)"
+                        class="q-badge"
+                        :class="'q-' + itemQuality(it)"
+                        >{{ itemQuality(it) }}</span
+                      >
+                      <span class="ii-cmp-val">{{ itemEffects(it) }}</span>
+                    </div>
+                    <div class="ii-cmp-row eq">
+                      <span class="ii-cmp-lbl">Équipé</span>
+                      <template v-if="equippedInSlot(it.slot)">
+                        <span class="ii-rar" :class="'p-' + equippedInSlot(it.slot)!.rarity">{{
+                          RARITY_LABEL[equippedInSlot(it.slot)!.rarity]
+                        }}</span>
+                        <span
+                          v-if="itemQuality(equippedInSlot(it.slot))"
+                          class="q-badge"
+                          :class="'q-' + itemQuality(equippedInSlot(it.slot))"
+                          >{{ itemQuality(equippedInSlot(it.slot)) }}</span
+                        >
+                        <span class="ii-cmp-val">{{ itemEffects(equippedInSlot(it.slot)!) }}</span>
+                      </template>
+                      <span v-else class="ii-cmp-val dim">— emplacement libre</span>
+                    </div>
+                  </div>
+                  <!-- PUISSANCE : 2 lectures — MAINTENANT (équipé tel quel, niveau réel)
                      vs POTENTIEL (monté à ton niveau). Montre qu'un objet sous-leveled
                      fait perdre s'il est équipé tel quel mais devient meilleur infusé. -->
-              <!-- Comparaison SUR UNE LIGNE : verdict « vs équipé » (à armes égales, au
+                  <!-- Comparaison SUR UNE LIGNE : verdict « vs équipé » (à armes égales, au
                      niveau de l'objet équipé) + « maintenant » (si équipé sous-leveled tel quel). -->
-              <div class="ii-cmp2">
-                <span class="ii-cmp2-ic">⚔️</span>
-                <span
-                  v-if="!equippedInSlot(it.slot)"
-                  class="ii-cmp2-chip"
-                  :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
-                >
-                  <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
-                  ><i>emplacement libre</i>
-                </span>
-                <template v-else>
-                  <span
-                    class="ii-cmp2-chip"
-                    :class="powerIfEquipMatched(it) >= combatPowerVal ? 'up' : 'down'"
-                    :title="
-                      'À armes égales : monté au niveau de ton équipé (Nv ' +
-                      equipMatchLevel(it) +
-                      ')'
-                    "
+                  <div class="ii-cmp2">
+                    <span class="ii-cmp2-ic">⚔️</span>
+                    <span
+                      v-if="!equippedInSlot(it.slot)"
+                      class="ii-cmp2-chip"
+                      :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
+                    >
+                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
+                      ><i>emplacement libre</i>
+                    </span>
+                    <template v-else>
+                      <span
+                        class="ii-cmp2-chip"
+                        :class="powerIfEquipMatched(it) >= combatPowerVal ? 'up' : 'down'"
+                        :title="
+                          'À armes égales : monté au niveau de ton équipé (Nv ' +
+                          equipMatchLevel(it) +
+                          ')'
+                        "
+                      >
+                        <b>{{ fmtDelta(combatPowerVal, powerIfEquipMatched(it)) }}</b
+                        ><i>vs équipé</i>
+                      </span>
+                      <span
+                        v-if="it.level < equipMatchLevel(it)"
+                        class="ii-cmp2-chip sub"
+                        :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
+                        title="Si équipé tel quel, à son niveau actuel"
+                      >
+                        <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
+                        ><i>maintenant</i>
+                      </span>
+                    </template>
+                  </div>
+                  <!-- Rentabilité : palier d'infusion où l'objet dépasse ton équipé actuel. -->
+                  <div
+                    v-if="showBreakEven(it)"
+                    class="ii-be"
+                    :class="{ ok: breakEvenFor(it).cost <= char.row.dust }"
                   >
-                    <b>{{ fmtDelta(combatPowerVal, powerIfEquipMatched(it)) }}</b
-                    ><i>vs équipé</i>
-                  </span>
-                  <span
-                    v-if="it.level < equipMatchLevel(it)"
-                    class="ii-cmp2-chip sub"
-                    :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
-                    title="Si équipé tel quel, à son niveau actuel"
-                  >
-                    <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
-                    ><i>maintenant</i>
-                  </span>
-                </template>
+                    🔧 Rentable dès Nv {{ breakEvenFor(it).level }} · {{ breakEvenFor(it).cost }}✨
+                    <span class="ii-be-have">(tu as {{ char.row.dust }}✨)</span>
+                  </div>
+                  <!-- Actions : Équiper · (Infuser puis équiper) · icônes casser/vendre/lock · ⋯ -->
+                  <div class="ii-actions">
+                    <button class="equip-btn" @click="doEquip(it.id)">
+                      {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
+                    </button>
+                    <button
+                      v-if="it.level < equipMatchLevel(it)"
+                      class="equip-btn ghost"
+                      :disabled="char.row.dust < infuseToMaxCost(it, equipMatchLevel(it))"
+                      :title="'Monte l’objet au niveau de ton équipé puis l’équipe'"
+                      @click="doInfuseThenEquip(it)"
+                    >
+                      🔧 Infuser puis équiper · {{ infuseToMaxCost(it, equipMatchLevel(it)) }}✨
+                    </button>
+                    <button
+                      class="ii-ic destroy"
+                      :disabled="it.locked"
+                      :title="'Casser : DÉTRUIT l’objet → poussière (' + salvageValue(it) + '✨)'"
+                      @click="doSalvage(it)"
+                    >
+                      <span class="destroy-glyph">✨</span>
+                    </button>
+                    <button
+                      class="ii-ic"
+                      :disabled="it.locked"
+                      :title="'Vendre → or (' + sellValue(it) + '🪙)'"
+                      @click="doSell(it)"
+                    >
+                      🪙
+                    </button>
+                    <button
+                      class="ii-ic lock"
+                      :class="{ on: it.locked }"
+                      :title="it.locked ? 'Déverrouiller' : 'Garder pour plus tard (protéger)'"
+                      @click="doToggleLock(it)"
+                    >
+                      {{ it.locked ? '🔒' : '🔓' }}
+                    </button>
+                    <button class="ii-more" aria-label="Plus d'actions">
+                      ⋯
+                      <q-menu anchor="bottom right" self="top right" class="ii-menu">
+                        <div class="ii-menu-list">
+                          <button
+                            v-if="it.level < c.level.level"
+                            class="ii-mi"
+                            :disabled="!canUpgrade(it, char.row.dust, c.level.level)"
+                            @click="doUpgrade(it.id)"
+                            v-close-popup
+                          >
+                            ✨ Infuser +1 · {{ upgradeCost(it.level, it.rarity) }}✨
+                          </button>
+                          <button
+                            v-if="it.level < c.level.level - 1"
+                            class="ii-mi"
+                            :disabled="char.row.dust < upgradeCost(it.level, it.rarity)"
+                            @click="doInfuseMax(it.id)"
+                            v-close-popup
+                          >
+                            ⚡ Infuser à fond · {{ infuseToMaxCost(it, c.level.level) }}✨
+                          </button>
+                          <button
+                            class="ii-mi"
+                            :disabled="char.row.dust < rerollCost(it)"
+                            @click="doReroll(it)"
+                            v-close-popup
+                          >
+                            ♻️ Reroll qualité · {{ rerollCost(it) }}✨
+                          </button>
+                        </div>
+                      </q-menu>
+                    </button>
+                  </div>
+                </div>
               </div>
-              <!-- Rentabilité : palier d'infusion où l'objet dépasse ton équipé actuel. -->
-              <div
-                v-if="showBreakEven(it)"
-                class="ii-be"
-                :class="{ ok: breakEvenFor(it).cost <= char.row.dust }"
-              >
-                🔧 Rentable dès Nv {{ breakEvenFor(it).level }} · {{ breakEvenFor(it).cost }}✨
-                <span class="ii-be-have">(tu as {{ char.row.dust }}✨)</span>
-              </div>
-              <!-- Actions : Équiper · (Infuser puis équiper) · icônes casser/vendre/lock · ⋯ -->
-              <div class="ii-actions">
-                <button class="equip-btn" @click="doEquip(it.id)">
-                  {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
-                </button>
-                <button
-                  v-if="it.level < equipMatchLevel(it)"
-                  class="equip-btn ghost"
-                  :disabled="char.row.dust < infuseToMaxCost(it, equipMatchLevel(it))"
-                  :title="'Monte l’objet au niveau de ton équipé puis l’équipe'"
-                  @click="doInfuseThenEquip(it)"
-                >
-                  🔧 Infuser puis équiper · {{ infuseToMaxCost(it, equipMatchLevel(it)) }}✨
-                </button>
-                <button
-                  class="ii-ic destroy"
-                  :disabled="it.locked"
-                  :title="'Casser : DÉTRUIT l’objet → poussière (' + salvageValue(it) + '✨)'"
-                  @click="doSalvage(it)"
-                >
-                  <span class="destroy-glyph">✨</span>
-                </button>
-                <button
-                  class="ii-ic"
-                  :disabled="it.locked"
-                  :title="'Vendre → or (' + sellValue(it) + '🪙)'"
-                  @click="doSell(it)"
-                >
-                  🪙
-                </button>
-                <button
-                  class="ii-ic lock"
-                  :class="{ on: it.locked }"
-                  :title="it.locked ? 'Déverrouiller' : 'Garder pour plus tard (protéger)'"
-                  @click="doToggleLock(it)"
-                >
-                  {{ it.locked ? '🔒' : '🔓' }}
-                </button>
-                <button class="ii-more" aria-label="Plus d'actions">
-                  ⋯
-                  <q-menu anchor="bottom right" self="top right" class="ii-menu">
-                    <div class="ii-menu-list">
-                      <button
-                        v-if="it.level < c.level.level"
-                        class="ii-mi"
-                        :disabled="!canUpgrade(it, char.row.dust, c.level.level)"
-                        @click="doUpgrade(it.id)"
-                        v-close-popup
-                      >
-                        ✨ Infuser +1 · {{ upgradeCost(it.level, it.rarity) }}✨
-                      </button>
-                      <button
-                        v-if="it.level < c.level.level - 1"
-                        class="ii-mi"
-                        :disabled="char.row.dust < upgradeCost(it.level, it.rarity)"
-                        @click="doInfuseMax(it.id)"
-                        v-close-popup
-                      >
-                        ⚡ Infuser à fond · {{ infuseToMaxCost(it, c.level.level) }}✨
-                      </button>
-                      <button
-                        class="ii-mi"
-                        :disabled="char.row.dust < rerollCost(it)"
-                        @click="doReroll(it)"
-                        v-close-popup
-                      >
-                        ♻️ Reroll qualité · {{ rerollCost(it) }}✨
-                      </button>
-                    </div>
-                  </q-menu>
-                </button>
-              </div>
+            </template>
+            <div v-else class="empty-inv">
+              Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
             </div>
           </div>
-        </template>
-        <div v-else class="empty-inv">
-          Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
         </div>
       </template>
 
@@ -1564,73 +1572,6 @@
         </div>
       </div>
     </transition>
-
-    <!-- MODALE FORCE — stats de combat (base → équipé), accès par l'icône 💪 de l'Équipement. -->
-    <div v-if="forceOpen" class="shop-backdrop" @click.self="forceOpen = false">
-      <div class="shop-card">
-        <div class="shop-head">
-          <div class="shop-title font-display">💪 Force — combat</div>
-          <button class="shop-x" aria-label="Fermer" @click="forceOpen = false">✕</button>
-        </div>
-        <div class="gear-fx">
-          <div class="gfx">
-            <span class="gfx-l">❤️ PV</span>
-            <span class="gfx-v"
-              >{{ baseFighter.pv }} <i>→</i> <b>{{ fighter.pv }}</b></span
-            >
-          </div>
-          <div class="gfx">
-            <span class="gfx-l">⚔️ Dégâts/coup</span>
-            <span class="gfx-v"
-              >{{ baseFighter.damage }} <i>→</i> <b>{{ fighter.damage }}</b></span
-            >
-          </div>
-          <div class="gfx">
-            <span class="gfx-l">⚡ Frappes/tour</span>
-            <span class="gfx-v"
-              >{{ (baseFighter.strikes ?? 1).toFixed(2) }} <i>→</i>
-              <b>{{ (fighter.strikes ?? 1).toFixed(2) }}</b></span
-            >
-          </div>
-          <div class="gfx">
-            <span class="gfx-l">🎯 Crit</span>
-            <span class="gfx-v"
-              >{{ pctA(baseFighter.crit) }} <i>→</i> <b>{{ pctA(fighter.crit) }}</b></span
-            >
-          </div>
-          <div class="gfx">
-            <span class="gfx-l">💨 Esquive</span>
-            <span class="gfx-v"
-              >{{ pctA(baseFighter.dodge) }} <i>→</i> <b>{{ pctA(fighter.dodge) }}</b></span
-            >
-          </div>
-          <div class="gfx">
-            <span class="gfx-l">🛡️ Défense</span>
-            <span class="gfx-v"
-              >{{ pctA(baseFighter.dmgReduction) }} <i>→</i>
-              <b>{{ pctA(fighter.dmgReduction) }}</b></span
-            >
-          </div>
-          <div class="gfx">
-            <span class="gfx-l">🩸 Vol de vie</span>
-            <span class="gfx-v"
-              >{{ pctA(baseFighter.lifesteal) }} <i>→</i> <b>{{ pctA(fighter.lifesteal) }}</b></span
-            >
-          </div>
-          <div class="gfx total">
-            <span class="gfx-l">Puissance de combat</span>
-            <span class="gfx-v"
-              >{{ fmtPow(combatPower(baseFighter)) }} <i>→</i>
-              <b>{{ fmtPow(combatPowerVal) }}</b></span
-            >
-          </div>
-        </div>
-        <div class="gear-fx-note">
-          Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
-          effets (→).
-        </div>
-      </div>
-    </div>
 
     <!-- MODALE LOADOUTS — accès par l'icône 📦 de l'Équipement. -->
     <div v-if="loadoutOpen" class="shop-backdrop" @click.self="loadoutOpen = false">
@@ -2516,11 +2457,15 @@ const pseudoError = ref('');
 // Nav « par activité » : 3 onglets — Héros (fiche+stats+talents+familier) /
 // Équipement (équipé+sac+atelier) / Explorer (donjons+boss de palier).
 const tab = ref<'hero' | 'gear' | 'explore'>('hero');
-// Sous-onglet de l'onglet Équipement : équipement (+ familier) / sac / atelier.
-// Équipement : plus de sous-onglets. Force / Loadouts / Atelier ouvrent des modales.
-const forceOpen = ref(false);
+// Équipement : plus de sous-onglets. Sac / Loadouts / Atelier ouvrent des modales
+// (les stats de combat « Force » vivent sur la fiche Héros).
+const bagOpen = ref(false);
 const loadoutOpen = ref(false);
 const atelierOpen = ref(false);
+function openBag() {
+  betterFilterSlot.value = null; // ouverture directe = pas de filtre « upgrades »
+  bagOpen.value = true;
+}
 // Filtre « seulement les objets du sac au potentiel supérieur » pour un slot donné
 // (posé en cliquant le badge d'un item équipé). null = pas de filtre « mieux ».
 const betterFilterSlot = ref<ItemSlot | null>(null);
@@ -3195,8 +3140,9 @@ function reattackLast() {
 }
 function goInventoryFromReport() {
   reportOpen.value = false;
-  tab.value = 'gear'; // le sac est directement dans l'onglet Équipement
+  tab.value = 'gear';
   betterFilterSlot.value = null;
+  bagOpen.value = true; // ouvre directement la modale Sac
 }
 
 // Butin possible d'un donjon (affiché à la demande via 🎁).
@@ -3235,8 +3181,6 @@ function itemState(it: { dungeon?: Dungeon; boss?: MilestoneBoss }): 'done' | 'a
   const unlocked = it.boss ? bossUnlocked(it.boss) : dungeonUnlocked(it.dungeon!);
   return unlocked ? 'avail' : 'locked';
 }
-
-const sacTitle = ref<HTMLElement | null>(null);
 
 // Effets bonus d'un run = uniquement les TALENTS (la boutique et les consommables ont
 // été retirés — code inatteignable). `lucky` conservé (toujours false) pour la signature
@@ -3939,21 +3883,26 @@ const filteredInventory = computed<Item[]>(() => {
 });
 // Objets du SAC (même slot) au POTENTIEL supérieur à l'équipé (montés à ton niveau) →
 // alimente le badge sur l'item équipé + le filtre « mieux au sac ».
+// Objets du sac (même slot) qui sont un VRAI upgrade = ce que montre le verdict « vs
+// équipé » de la fiche (powerIfEquipMatched, à armes égales). On aligne le badge sur ce
+// que le joueur LIT dans le sac → plus d'incohérence « badge vert / comparatif rouge »
+// (avant : le badge jugeait au POTENTIEL max, l'autre à armes égales → désaccord possible
+// vu la non-linéarité de la puissance).
 function betterInBagForSlot(slot: ItemSlot): Item[] {
-  const eqPow = slotEquippedMaxedPower(slot);
-  if (eqPow === null) return []; // pas d'équipé → pas de badge
+  if (!equippedInSlot(slot)) return []; // slot vide → rien à comparer, pas de badge
+  const cur = combatPowerVal.value;
   return (char.row?.inventory ?? []).filter(
-    (i) => !isFamiliar(i) && i.slot === slot && itemMaxedPower(i) > eqPow,
+    (i) => !isFamiliar(i) && i.slot === slot && powerIfEquipMatched(i) > cur,
   );
 }
 function betterInBagCount(slot: ItemSlot): number {
   return betterInBagForSlot(slot).length;
 }
-// Clic sur le badge d'un item équipé → filtre le sac sur ses upgrades potentielles.
+// Clic sur le badge d'un item équipé → ouvre le Sac (modale) filtré sur ses upgrades.
 function showBetterForSlot(slot: ItemSlot) {
   betterFilterSlot.value = slot;
   invFilter.value = slot;
-  void nextTick(() => sacTitle.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  bagOpen.value = true;
 }
 // Les chips de filtre du sac annulent le filtre « mieux » (navigation normale).
 function setInvFilter(f: ItemSlot | 'all') {
@@ -5167,6 +5116,7 @@ onUnmounted(() => {
   flex: none;
 }
 .gi-b {
+  position: relative;
   width: 40px;
   height: 40px;
   border: 1px solid var(--line);
@@ -5184,6 +5134,28 @@ onUnmounted(() => {
 .gi-b:active {
   background: var(--surface-2);
   border-color: var(--accent);
+}
+/* Compteur d'objets sur l'icône Sac. */
+.gi-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #15120e;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+/* Modale Sac : scrollable (l'inventaire peut être long). */
+.bag-card {
+  max-height: 86vh;
+  overflow-y: auto;
 }
 /* Bannière du filtre « upgrades potentielles » (posé via le badge d'un item équipé). */
 .better-banner {
