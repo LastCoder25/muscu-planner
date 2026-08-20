@@ -181,17 +181,25 @@
             readyTotal.stone +
             readyTotal.energy +
             readyTotal.parchemins +
-            readyTotal.fragments >
+            readyTotal.fragments +
+            readyTotal.ink_dust >
           0
         "
         class="collect-pill"
         @click="collectAll"
       >
         🧺 Récolter
-        <span v-if="readyTotal.dust" class="cp-r">✨{{ readyTotal.dust }}</span>
+        <span v-if="readyTotal.dust" class="cp-r"
+          ><DustIcon variant="dust" />{{ readyTotal.dust }}</span
+        >
         <span v-if="readyTotal.stone" class="cp-r">💎{{ readyTotal.stone }}</span>
         <span v-if="readyTotal.parchemins" class="cp-r">📜{{ readyTotal.parchemins }}</span>
-        <span v-if="readyTotal.fragments" class="cp-r">🧩{{ readyTotal.fragments }}</span>
+        <span v-if="readyTotal.fragments" class="cp-r"
+          ><DustIcon variant="soul" />{{ readyTotal.fragments }}</span
+        >
+        <span v-if="readyTotal.ink_dust" class="cp-r"
+          ><DustIcon variant="ink" />{{ readyTotal.ink_dust }}</span
+        >
         <span v-if="readyTotal.energy" class="cp-r">⚡{{ readyTotal.energy }}</span>
       </button>
     </div>
@@ -436,6 +444,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
+import DustIcon from '@/components/DustIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { playerWithGear, RARITY_RANK, tierToRankQ } from '@/lib/items';
 import {
@@ -459,6 +468,7 @@ import {
   bossAltarRollFloor,
   bossRewardCount,
   maxFuseTierIndex,
+  maxTalentTierIndex,
   goldToDust,
   BUILD,
   type Building,
@@ -698,7 +708,8 @@ const RES_EMOJI: Record<string, string> = {
   stone: '💎',
   energy: '⚡',
   parchemins: '📜',
-  fragments: '🧩',
+  fragments: '🫧', // poussière d'âme
+  ink_dust: '🖋️', // poussière d'encre
 };
 // Emoji de la ressource produite par un bâtiment (✨/💎/⚡) — remplace l'ancien binaire.
 function filonResEmoji(b: Building): string {
@@ -710,7 +721,17 @@ function buildingEffectAt(b: Building, level: number): string {
   if (!t) return '';
   const at: Building = { ...b, level };
   if (t.category === 'utility') return utilityEffectLabel(at);
-  return `${buildingProdPerHour(at).toFixed(1)} ${RES_EMOJI[t.resource ?? 'dust'] ?? '✨'}/h`;
+  const prod = `${buildingProdPerHour(at).toFixed(1)} ${RES_EMOJI[t.resource ?? 'dust'] ?? '✨'}/h`;
+  // Bâtiments COMBINÉS (produisent une poussière ET plafonnent un rang) → on montre les deux.
+  if (b.typeId === 'incubator') {
+    const rq = tierToRankQ(Math.max(0, maxFuseTierIndex([at])));
+    return `${prod} · rang max ${rq.rank}★${rq.quality}`;
+  }
+  if (b.typeId === 'scriptorium') {
+    const rq = tierToRankQ(Math.max(0, maxTalentTierIndex([at])));
+    return `${prod} · rang max ${rq.rank}★${rq.quality}`;
+  }
+  return prod;
 }
 function filonProdLabel(b: Building): string {
   return buildingEffectAt(b, b.level);

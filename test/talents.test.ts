@@ -13,6 +13,7 @@ import {
   tierOf,
   talentValue,
   talentLevelUpCost,
+  talentTierStepCost,
   talentByCode,
   normalizeTalents,
   rollTalentDrop,
@@ -41,6 +42,10 @@ describe('axe TIER (infusion) : rang + qualité', () => {
     expect(talentTier(talentTierFloor(5))).toBe(5);
     expect(talentTier(talentTierFloor(20))).toBe(20);
     expect(talentTier(1e9)).toBe(49); // plafonné à SSS5
+  });
+  it('talentTierStepCost : coût du +1 palier (poussière d’encre) croissant', () => {
+    expect(talentTierStepCost(0)).toBeGreaterThan(0);
+    expect(talentTierStepCost(20)).toBeGreaterThan(talentTierStepCost(0));
   });
   it('rang G→SSS + qualité 1→5 dérivés du tier (mêmes rangs que les objets)', () => {
     expect(talentRank(0)).toBe('G');

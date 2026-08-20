@@ -67,8 +67,8 @@
             <span class="tb-sep" aria-hidden="true"></span>
             <span
               class="tb-r dust"
-              title="Poussière — niveau des OBJETS (infusion) + forge / reroll / craft de set"
-              >✨ {{ char.row.dust }}</span
+              title="Poussière — NIVEAU des OBJETS (infusion) + forge / reroll / craft de set"
+              ><DustIcon variant="dust" /> {{ char.row.dust }}</span
             >
             <span
               v-if="char.row.stones"
@@ -79,14 +79,20 @@
             <span
               v-if="char.row.fragments"
               class="tb-r frag"
-              title="Fragments — RANG / qualité des familiers (infusion)"
-              >🧩 {{ char.row.fragments }}</span
+              title="Poussière d'âme — RANG des familiers (infusion)"
+              ><DustIcon variant="soul" /> {{ char.row.fragments }}</span
             >
             <span
               v-if="char.row.parchemins"
               class="tb-r parch"
               title="Parchemins — NIVEAU des talents"
               >📜 {{ char.row.parchemins }}</span
+            >
+            <span
+              v-if="char.row.ink_dust"
+              class="tb-r ink"
+              title="Poussière d'encre — RANG des talents (infusion)"
+              ><DustIcon variant="ink" /> {{ char.row.ink_dust }}</span
             >
             <span
               v-if="char.row.summon_stones"
@@ -341,24 +347,19 @@
             Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
           </div>
           <div class="sec-hint">
-            Les talents <b>droppent à un rang</b> selon la profondeur du donjon/boss (comme les
-            objets). Équipe-en {{ talentSlots }} (change quand tu veux). Deux axes :
-            <b>🔧 Infuse</b> d'autres talents → monte le <b>rang + qualité</b> ;
-            <b>📜 Monte le niveau</b> (magnitude) avec des parchemins de la <b>Bibliothèque</b
-            ><template v-if="char.row.parchemins">
-              — <b>{{ char.row.parchemins }} 📜</b> dispo</template
-            >.
-          </div>
-
-          <!-- Cible d'infusion active. Chaque sacrifice est IMMÉDIAT (le talent monte
-               tout de suite) → pas de « pending » à annuler ; « Terminer » sort du mode. -->
-          <div v-if="infuseTarget" class="tal-infuse-banner">
-            🔧 Infusion dans <b>{{ talentName(infuseTarget) }}</b> —
-            <template v-if="sacrificeableCount"
-              >tape un talent <b>non équipé</b> à sacrifier (effet immédiat).</template
-            >
-            <template v-else>plus aucun talent à sacrifier.</template>
-            <button class="tib-x done" @click="infuseTarget = null">✓ Terminer</button>
+            Les talents <b>droppent à un rang</b> selon la profondeur (comme les objets). Équipe-en
+            {{ talentSlots }} (change quand tu veux). Comme les objets : <b>♻️ recycle</b> ceux que
+            tu gardes pas → <b><DustIcon variant="ink" /> poussière d'encre</b>, puis sur chaque
+            talent <b>🔧 +1 palier</b> (rang/qualité, plafonné par le Scriptorium) et
+            <b>📜 +1 niveau</b> (magnitude, parchemins).
+            <br />
+            Tu as <b><DustIcon variant="ink" /> {{ char.row.ink_dust }}</b> ·
+            <b>📜 {{ char.row.parchemins }}</b> · Scriptorium
+            <template v-if="hasScriptorium"
+              >niv.{{ scriptoLevel }} (rang max
+              <b class="ii-rar" :class="'p-' + talentTierMaxRank">{{ talentTierMaxLabel }}</b
+              >)</template
+            ><template v-else>non construit (🕯️ à bâtir pour infuser le rang)</template>.
           </div>
 
           <div v-if="!char.row.talents.length" class="talents-empty">
@@ -369,7 +370,7 @@
               v-for="t in talentsView"
               :key="t.id"
               class="tal-card"
-              :class="['p-' + t.rarity, { eq: t.equipped, tgt: infuseTarget?.id === t.id }]"
+              :class="['p-' + t.rarity, { eq: t.equipped }]"
             >
               <button
                 class="tal-emo"
@@ -393,105 +394,82 @@
                   <span class="tal-lv">Nv{{ t.level }}</span>
                 </div>
                 <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
-                <div class="tal-xp" :title="'Tier ' + t.tier + '/49 (infusion)'">
-                  <span :style="{ width: Math.round(t.xpp * 100) + '%' }" />
+                <div class="tal-xp" :title="'Rang tier ' + t.tier + '/49'">
+                  <span :style="{ width: Math.round((t.tier / 49) * 100) + '%' }" />
                 </div>
               </div>
               <div class="tal-actions">
-                <template v-if="infuseTarget">
-                  <span v-if="infuseTarget.id === t.id" class="tal-b cur">cible</span>
-                  <button v-else-if="!t.equipped" class="tal-b feed" @click="doInfuse(t.id)">
-                    ✨ Sacrifier
-                  </button>
-                  <span
-                    v-else
-                    class="tal-b eqlock"
-                    title="Talent équipé — retire-le d’abord pour le sacrifier"
-                    >🔒 équipé</span
-                  >
-                </template>
-                <template v-else>
-                  <button
-                    v-if="!t.equipped"
-                    class="tal-b"
-                    :disabled="!canEquipMore || talentCodeEquipped(t.def.code)"
-                    :title="
-                      talentCodeEquipped(t.def.code) ? 'Un talent de ce type est déjà équipé' : ''
-                    "
-                    @click="doEquipTalent(t.id)"
-                  >
-                    {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
-                  </button>
-                  <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
-                  <button
-                    class="tal-b ghost"
-                    :disabled="t.levelMaxed || (char.row?.parchemins ?? 0) < t.upCost"
-                    :title="
-                      t.levelMaxed
-                        ? 'Niveau plafonné à ton niveau de sport'
-                        : 'Monter le NIVEAU (magnitude) avec des parchemins 📜'
-                    "
-                    @click="doUpgradeTalentLevel(t.id)"
-                  >
-                    📜 {{ t.levelMaxed ? 'Max' : '+1·' + t.upCost }}
-                  </button>
-                  <button
-                    class="tal-b ghost"
-                    :disabled="!hasSpareTalent || talentAtCap(t.inst)"
-                    :title="
-                      talentAtCap(t.inst)
-                        ? 'Déjà au tier max (SSS5)'
-                        : !hasSpareTalent
-                          ? 'Il te faut un 2ᵉ talent à sacrifier'
-                          : 'Infuser : monter le tier (rang+qualité) en sacrifiant un autre'
-                    "
-                    @click="infuseTarget = t.inst"
-                  >
-                    🔧
-                  </button>
-                </template>
+                <button
+                  v-if="!t.equipped"
+                  class="tal-b"
+                  :disabled="!canEquipMore || talentCodeEquipped(t.def.code)"
+                  :title="
+                    talentCodeEquipped(t.def.code) ? 'Un talent de ce type est déjà équipé' : ''
+                  "
+                  @click="doEquipTalent(t.id)"
+                >
+                  {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
+                </button>
+                <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
+                <!-- 🔧 +1 palier (rang/qualité) : poussière d'encre, plafonné par le Scriptorium -->
+                <button
+                  class="tal-b ghost"
+                  :disabled="
+                    hasScriptorium && (t.tierCapped || (char.row?.ink_dust ?? 0) < t.tierCost)
+                  "
+                  :title="talentInfuseTitle(t)"
+                  @click="hasScriptorium ? doInfuseTalentTier(t.id) : openGame('/expedition-map')"
+                >
+                  <template v-if="!hasScriptorium">🔧 🕯️</template>
+                  <template v-else-if="t.tierCapped">🔧 Max</template>
+                  <template v-else>🔧 +1·{{ t.tierCost }}<DustIcon variant="ink" /></template>
+                </button>
+                <!-- 📜 +1 niveau (magnitude) : parchemins -->
+                <button
+                  class="tal-b ghost"
+                  :disabled="t.levelMaxed || (char.row?.parchemins ?? 0) < t.upCost"
+                  :title="
+                    t.levelMaxed
+                      ? 'Niveau plafonné à ton niveau de sport'
+                      : 'Monter le NIVEAU (magnitude) avec des parchemins 📜'
+                  "
+                  @click="doUpgradeTalentLevel(t.id)"
+                >
+                  📜 {{ t.levelMaxed ? 'Max' : '+1·' + t.upCost }}
+                </button>
+                <!-- ♻️ recycler → poussière d'encre (talent rangé) -->
+                <button
+                  v-if="!t.equipped"
+                  class="tal-b ghost"
+                  title="Recycler ce talent → poussière d'encre"
+                  @click="doRecycleTalent(t.id)"
+                >
+                  ♻️ +{{ t.recycleGain }}<DustIcon variant="ink" />
+                </button>
               </div>
             </div>
           </div>
         </template>
 
-        <!-- FAMILIERS — même gestion que les talents (drop, un seul équipé, infusion par
-             sacrifice, montée de niveau par ressource) → affichage HOMOGÈNE (mêmes cartes). -->
+        <!-- FAMILIERS — gérés comme les objets/talents : recycle les non-voulus → poussière
+             d'âme, puis sur chaque familier gardé un bouton PAR AXE (rang / niveau). -->
         <template v-if="persoSub === 'familiars'">
           <div class="sec-title">
             🐾 Familiers <span class="tal-slots">{{ equippedFamiliar ? 1 : 0 }}/1</span>
           </div>
           <div class="sec-hint">
             Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Équipe-en 1.
-            Deux axes, comme les talents : <b>🔧 Infuse</b> — recycle <b>♻️</b> des familiers en
-            <b>fragments 🧩</b> (aussi dans les coffres), choisis une <b>cible 🔧</b> et verse-les →
-            monte le <b>rang + qualité</b> ; <b>💎 Niveau</b> (magnitude) avec des pierres.
+            Comme les objets : <b>♻️ recycle</b> ceux que tu gardes pas →
+            <b><DustIcon variant="soul" /> poussière d'âme</b>, puis sur chaque familier
+            <b>🔧 +1 palier</b> (rang/qualité, plafonné par l'Incubateur) et
+            <b>💎 +1 niveau</b> (magnitude).
             <br />
-            Tu as <b>💎 {{ char.row.stones }}</b> · <b>🧩 {{ char.row.fragments }}</b> · Incubateur
-            niv.{{ incubLevel }} (cran max
-            <b class="ii-rar" :class="'p-' + fuseMaxRank">{{ fuseMaxLabel }}</b
+            Tu as <b>💎 {{ char.row.stones }}</b> ·
+            <b><DustIcon variant="soul" /> {{ char.row.fragments }}</b> · Incubateur niv.{{
+              incubLevel
+            }}
+            (rang max <b class="ii-rar" :class="'p-' + fuseMaxRank">{{ fuseMaxLabel }}</b
             >).
-          </div>
-
-          <!-- Bannière d'infusion (mode cible) — identique aux talents. -->
-          <div v-if="famTarget" class="tal-infuse-banner">
-            🔧 Infusion dans <b>{{ famTarget.name }} ({{ famTierLabel(famTarget) }})</b>
-            <template v-if="famTargetCapped">
-              — cran max <b>{{ fuseMaxLabel }}</b> (Incubateur niv.{{ incubLevel }}). Améliore-le
-              (carte 🗺️ Expédition) pour infuser plus haut.
-            </template>
-            <template v-else>
-              — recycle <b>♻️</b> des familiers du sac pour des <b>🧩 {{ char.row.fragments }}</b>
-              fragments, puis verse-les.
-            </template>
-            <button
-              v-if="!famTargetCapped && char.row.fragments"
-              class="tib-frag"
-              @click="doInfuseFam(char.row.fragments)"
-            >
-              🧩 Verser {{ char.row.fragments }}
-            </button>
-            <button class="tib-x done" @click="famTarget = null">✓ Terminer</button>
           </div>
 
           <div v-if="!allFamiliars.length" class="talents-empty">
@@ -502,7 +480,7 @@
               v-for="f in allFamiliars"
               :key="f.id"
               class="tal-card"
-              :class="['p-' + f.rarity, { eq: f.equipped, tgt: famTarget?.id === f.id }]"
+              :class="['p-' + f.rarity, { eq: f.equipped }]"
             >
               <span class="tal-emo" role="img" :aria-label="f.name">{{ f.emoji }}</span>
               <div class="tal-body">
@@ -519,77 +497,60 @@
                 <div class="tal-eff">{{ itemEffects(f) }}</div>
                 <div
                   class="tal-xp"
-                  :title="'Tier ' + famTierLabel(f) + ' (infusion par fragments)'"
+                  :title="'Rang ' + famTierLabel(f) + ' (tier ' + famTierIndex(f) + '/49)'"
                 >
-                  <span :style="{ width: famTierPct(f) + '%' }" />
+                  <span :style="{ width: Math.round((famTierIndex(f) / 49) * 100) + '%' }" />
                 </div>
               </div>
               <div class="tal-actions">
-                <template v-if="famTarget">
-                  <span v-if="famTarget.id === f.id" class="tal-b cur">cible</span>
-                  <button
-                    v-else-if="!f.equipped && !f.locked"
-                    class="tal-b feed"
-                    title="Recycler ce familier en fragments 🧩 (à verser dans la cible)"
-                    @click="doRecycleFam(f.id)"
-                  >
-                    ♻️ +{{ familiarInfuseXp(f) }}🧩
-                  </button>
-                  <span v-else-if="f.equipped" class="tal-b eqlock" title="Familier équipé"
-                    >🔒 équipé</span
-                  >
-                  <span v-else class="tal-b eqlock" title="Verrouillé (protégé)">🔒</span>
-                </template>
-                <template v-else>
-                  <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
-                    Retirer
-                  </button>
-                  <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
-                  <button
-                    class="tal-b ghost"
-                    :disabled="!canUpgradeFamiliar(f)"
-                    :title="
-                      f.level >= c.level.level
-                        ? 'Niveau plafonné à ton niveau de sport'
-                        : 'Monter le NIVEAU (puissance de l’effet) avec des pierres 💎'
-                    "
-                    @click="doUpgradeFamiliar(f.id)"
-                  >
-                    💎
-                    {{
-                      f.level >= c.level.level
-                        ? 'Max'
-                        : '+1·' + familiarStoneCost(f.level, f.rarity)
-                    }}
-                  </button>
-                  <button
-                    class="tal-b ghost"
-                    :title="
-                      hasIncubator
-                        ? 'Infuser : monter le TIER (rang+qualité) avec des fragments 🧩'
-                        : 'Construis un Incubateur 🥚 pour infuser'
-                    "
-                    @click="hasIncubator ? setFamTarget(f) : openGame('/expedition-map')"
-                  >
-                    🔧
-                  </button>
-                  <button
-                    v-if="!f.equipped && hasIncubator && !f.locked"
-                    class="tal-b ghost"
-                    title="Recycler en fragments 🧩"
-                    @click="doRecycleFam(f.id)"
-                  >
-                    ♻️{{ familiarInfuseXp(f) }}
-                  </button>
-                  <button
-                    v-if="!f.equipped"
-                    class="tal-b ghost"
-                    title="Vendre contre de l'or"
-                    @click="doSell(f)"
-                  >
-                    🪙{{ sellValue(f) }}
-                  </button>
-                </template>
+                <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
+                  Retirer
+                </button>
+                <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
+                <!-- 🔧 +1 palier (rang/qualité) : poussière d'âme, plafonné par l'Incubateur -->
+                <button
+                  class="tal-b ghost"
+                  :disabled="hasIncubator && !canInfuseFam(f)"
+                  :title="famInfuseTitle(f)"
+                  @click="hasIncubator ? doInfuseFamStep(f) : openGame('/expedition-map')"
+                >
+                  <template v-if="!hasIncubator">🔧 🥚</template>
+                  <template v-else-if="famTierCapped(f)">🔧 Max</template>
+                  <template v-else>🔧 +1·{{ famStepCost(f) }}<DustIcon variant="soul" /></template>
+                </button>
+                <!-- 💎 +1 niveau (magnitude) : pierres -->
+                <button
+                  class="tal-b ghost"
+                  :disabled="!canUpgradeFamiliar(f)"
+                  :title="
+                    f.level >= c.level.level
+                      ? 'Niveau plafonné à ton niveau de sport'
+                      : 'Monter le NIVEAU (puissance de l’effet) avec des pierres 💎'
+                  "
+                  @click="doUpgradeFamiliar(f.id)"
+                >
+                  💎
+                  {{
+                    f.level >= c.level.level ? 'Max' : '+1·' + familiarStoneCost(f.level, f.rarity)
+                  }}
+                </button>
+                <!-- ♻️ recycler → poussière d'âme (sac, non verrouillé) -->
+                <button
+                  v-if="!f.equipped && !f.locked"
+                  class="tal-b ghost"
+                  title="Recycler ce familier → poussière d'âme"
+                  @click="doRecycleFam(f.id)"
+                >
+                  ♻️ +{{ familiarInfuseXp(f) }}<DustIcon variant="soul" />
+                </button>
+                <button
+                  v-if="!f.equipped"
+                  class="tal-b ghost"
+                  title="Vendre contre de l'or"
+                  @click="doSell(f)"
+                >
+                  🪙{{ sellValue(f) }}
+                </button>
               </div>
             </div>
           </div>
@@ -2086,6 +2047,12 @@
                   title="Parchemins (montée du niveau des talents)"
                   >+{{ run.parchemins }} 📜</span
                 >
+                <span
+                  v-if="run.inkDust"
+                  class="gain-pill parch"
+                  title="Poussière d'encre (montée du rang des talents)"
+                  >+{{ run.inkDust }} <DustIcon variant="ink"
+                /></span>
               </span>
             </div>
             <div class="result-sub">
@@ -2349,6 +2316,7 @@ import { useGamePanel } from '@/composables/useGamePanel';
 import { characterRank, rankStarStr } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
+import DustIcon from '@/components/DustIcon.vue';
 import {
   simulateDungeon,
   simulateCombat,
@@ -2377,7 +2345,7 @@ import {
   effectLabel,
   rollStars,
   tierIndexOf,
-  familiarTierProgress,
+  tierStepCost,
   familiarInfuseXp,
   canUpgrade,
   upgradeCost,
@@ -2422,8 +2390,9 @@ import {
   talentQuality,
   talentLevelOf,
   talentValue,
-  talentTierProgress,
   talentLevelUpCost,
+  talentTierStepCost,
+  talentInfuseXp,
   rollTalentDrop,
   type TalentInstance,
 } from '@/lib/talents';
@@ -2433,6 +2402,9 @@ import {
   incubatorBuilt,
   incubatorLevel,
   maxFuseTierIndex,
+  scriptoriumBuilt,
+  scriptoriumLevel,
+  maxTalentTierIndex,
   labyrinthUnlocked,
   forgeBuilt,
   bossAltarBuilt,
@@ -2479,6 +2451,7 @@ interface RunView {
   summonStones?: number; // pierres d'invocation 🔮 gagnées (donjon → aller aux boss)
   stones?: number; // pierres magiques 💎 gagnées (familiers)
   parchemins?: number; // parchemins 📜 gagnés (niveau des talents)
+  inkDust?: number; // poussière d'encre gagnée (rang des talents)
 }
 
 // `embedded` : rendu dans le VOLET droit du cockpit (Z Fold déplié) → racine <div>
@@ -2753,7 +2726,6 @@ const talentFreeSlots = computed(() =>
   Math.max(0, talentSlots.value - equippedTalents.value.length),
 );
 const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.value);
-const infuseTarget = ref<TalentInstance | null>(null);
 // Vue enrichie : équipés d'abord, puis par niveau décroissant.
 const talentsView = computed(() =>
   (char.row?.talents ?? [])
@@ -2774,9 +2746,12 @@ const talentsView = computed(() =>
         quality: talentQuality(tier),
         effLabel: Math.round(talentValue(def, tier, eff) * 100) + ' %',
         levelMaxed: level >= pl, // niveau plafonné par le sport → parchemins inutiles
-        tierMaxed: tier >= 49, // SSS5 → infusion inutile
-        upCost: talentLevelUpCost(level),
-        xpp: talentTierProgress(inst.xp),
+        tierMaxed: tier >= 49, // SSS5 = plafond absolu
+        // Plafond EFFECTIF = min(SSS5, Scriptorium) → au-delà, l'infusion de rang est bloquée.
+        tierCapped: tier >= Math.min(49, maxTalentTierIndex(char.row?.buildings ?? [])),
+        upCost: talentLevelUpCost(level), // 📜 coût du prochain NIVEAU
+        tierCost: talentTierStepCost(tier), // poussière d'encre : coût du prochain PALIER
+        recycleGain: talentInfuseXp(inst), // poussière d'encre rendue par le recyclage
         equipped: !!inst.equipped,
       };
     })
@@ -2830,11 +2805,6 @@ async function doUnequipTalent(id: string) {
   const uid = auth.user?.id;
   if (uid) await char.unequipTalent(uid, id);
 }
-// Un talent peut-il encore monter de TIER par infusion ? (SSS5 = tier max). Sinon,
-// l'infuser ne sert plus à rien.
-function talentAtCap(inst: TalentInstance): boolean {
-  return tierOf(inst) >= 49;
-}
 // Monte le NIVEAU d'un talent avec des parchemins 📜 (plafonné au niveau joueur).
 function doUpgradeTalentLevel(id: string) {
   withUid(
@@ -2842,50 +2812,36 @@ function doUpgradeTalentLevel(id: string) {
     'Montée de niveau impossible (parchemins ou plafond).',
   );
 }
-// Y a-t-il au moins un AUTRE talent à sacrifier ? (il en faut 2 pour infuser).
-const hasSpareTalent = computed(() => (char.row?.talents?.length ?? 0) >= 2);
-// Talents SACRIFIABLES pour l'infusion en cours : non équipés et ≠ la cible (on ne
-// sacrifie jamais un talent ÉQUIPÉ). 0 → l'infusion est « finie » (bouton Terminer).
-const sacrificeableCount = computed(
-  () =>
-    (char.row?.talents ?? []).filter((t) => !t.equipped && t.id !== infuseTarget.value?.id).length,
-);
-async function doInfuse(fodderId: string) {
+// Infuse +1 PALIER (rang/qualité) un talent en dépensant des parchemins 📜 (comme
+// l'infusion de niveau d'un objet avec la poussière). Éclat sur montée de rang.
+async function doInfuseTalentTier(id: string) {
   const uid = auth.user?.id;
-  const target = infuseTarget.value;
-  if (!uid || !target) return;
-  // On ne sacrifie JAMAIS un talent équipé (retire-le d'abord).
-  const fodder = char.row?.talents.find((t) => t.id === fodderId);
-  if (fodder?.equipped) {
-    $q.notify({ type: 'warning', message: 'Talent équipé — retire-le d’abord pour le sacrifier.' });
-    return;
-  }
-  const beforeRank = talentRankOf(target);
-  const ok = await char.infuseTalent(uid, target.id, fodderId);
+  if (!uid) return;
+  const before = char.row?.talents.find((t) => t.id === id) ?? null;
+  const beforeRank = before ? talentRankOf(before) : null;
+  const ok = await char.infuseTalentTier(uid, id);
   if (!ok) {
-    $q.notify({
-      type: 'warning',
-      message: 'Ce talent est déjà au tier max (SSS5).',
-    });
+    $q.notify({ type: 'warning', message: 'Palier max (SSS5) ou parchemins insuffisants.' });
     return;
   }
-  // Cible à jour → feedback clair : montée de RANG = éclat, sinon rien.
-  const updated = char.row?.talents.find((t) => t.id === target.id) ?? null;
-  infuseTarget.value = updated; // garde la cible sélectionnée (à jour) pour enchaîner
-  if (updated) {
-    const def = talentByCode(updated.code);
+  const updated = char.row?.talents.find((t) => t.id === id) ?? null;
+  if (updated && beforeRank) {
     const afterRank = talentRankOf(updated);
-    if (afterRank !== beforeRank)
+    if (afterRank !== beforeRank) {
+      const def = talentByCode(updated.code);
       gameFx.celebrate({
         kind: 'generic',
         emoji: def?.icon ?? '✨',
         title: `${def?.name ?? 'Talent'} — rang ${RARITY_LABEL[afterRank]} !`,
-        subtitle: `Tier amélioré par infusion`,
+        subtitle: 'Palier amélioré par infusion',
         rarity: fxRarity(afterRank),
       });
+    }
   }
-  // On NE sort PAS automatiquement : quand il n'y a plus rien à sacrifier, le bandeau
-  // propose « Terminer » (sacrificeableCount === 0) → sortie manuelle explicite.
+}
+// Recycle un talent STOCKÉ (non équipé) → parchemins 📜 (comme casser un objet).
+function doRecycleTalent(id: string) {
+  withUid((uid) => char.recycleTalent(uid, id), 'Recyclage impossible (talent équipé ?).');
 }
 
 // Régions / biomes (onglet Donjons) : bandeau de la région courante + teaser de la
@@ -3474,6 +3430,9 @@ async function explore(d: Dungeon) {
     // Parchemins 📜 (niveau des talents) : filet au NETTOYAGE, ∝ profondeur → la
     // Bibliothèque n'est plus la SEULE source (elle reste la production passive/régulière).
     const parchemins = r.cleared ? 1 + Math.floor(d.recoLevel / 6) : 0;
+    // Poussière d'encre : petit filet au nettoyage (RANG des talents) → une source dès
+    // l'early (avant les boss), symétrique du filet de parchemins.
+    const inkDust = r.cleared ? 1 + Math.floor(d.recoLevel / 8) : 0;
     // Drop de TALENT (drop-only) : ~6 % sur un donjon nettoyé ; RANG gaté par le niveau
     // du donjon (`dropLevel`), biaisé par sa luck → farmer profond = talents plus hauts.
     const talentDrops =
@@ -3488,6 +3447,7 @@ async function explore(d: Dungeon) {
       stones,
       summonStones,
       parchemins,
+      inkDust,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
     });
@@ -3519,6 +3479,7 @@ async function explore(d: Dungeon) {
       ...(summonStones ? { summonStones } : {}),
       ...(stones ? { stones } : {}),
       ...(parchemins ? { parchemins } : {}),
+      ...(inkDust ? { inkDust } : {}),
     };
     // 1er nettoyage d'un donjon (débloque le suivant) = moment de progression →
     // éclat, mais SEULEMENT à la fin de l'animation de combat (sinon il recouvre
@@ -3717,7 +3678,8 @@ async function fightBoss(b: MilestoneBoss) {
       defeated: win,
       pending,
       stones: 6, // jalon boss (raréfié 2026-08-18) → lot de pierres 💎 (crédité seulement si vaincu)
-      parchemins: 5 + Math.floor(b.unlockLevel / 4), // jalon boss → lot de parchemins 📜 (talents)
+      parchemins: 5 + Math.floor(b.unlockLevel / 4), // jalon boss → parchemins 📜 (niveau talents)
+      inkDust: 8 + Math.floor(b.unlockLevel / 3), // jalon boss → poussière d'encre (RANG talents)
       ...(talentDrops.length ? { talentDrops } : {}),
     });
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!));
@@ -3746,6 +3708,7 @@ async function fightBoss(b: MilestoneBoss) {
       ...(talentDrops.length ? { talentDrops } : {}),
       ...(win ? { stones: 6 } : {}),
       ...(win ? { parchemins: 5 + Math.floor(b.unlockLevel / 4) } : {}),
+      ...(win ? { inkDust: 8 + Math.floor(b.unlockLevel / 3) } : {}),
     };
     // Victoire de boss de palier = jalon MAJEUR → célébration centrale (gros éclat),
     // DIFFÉRÉE à la fin de l'animation de combat.
@@ -4070,43 +4033,58 @@ const fuseMaxLabel = computed(() => {
   const rq = tierToRankQ(t);
   return `${rq.rank}★${rq.quality}`;
 });
-// ── INFUSION des familiers : on choisit un familier CIBLE et on dépense des
-// FRAGMENTS 🧩 (coffres du Labyrinthe + recyclage de doublons) pour monter son tier
-// (qualité → rang). Le NIVEAU reste piloté par les pierres 💎. ──
-const famTarget = ref<Item | null>(null);
-// Cible au plafond de tier ? (SSS5, ou rang suivant non débloqué par l'Incubateur).
-const famTargetCapped = computed(() => {
-  const t = famTarget.value;
-  if (!t) return false;
-  return tierIndexOf(t) >= Math.min(49, fuseMaxTier.value);
+// Scriptorium (talents) : produit la poussière d'encre ET plafonne le rang d'infusion.
+const scriptoLevel = computed(() => scriptoriumLevel(char.row?.buildings ?? []));
+const hasScriptorium = computed(() => scriptoriumBuilt(char.row?.buildings ?? []));
+const talentTierCap = computed(() => maxTalentTierIndex(char.row?.buildings ?? []));
+const talentTierMaxRank = computed(() => tierToRankQ(Math.max(0, talentTierCap.value)).rank);
+const talentTierMaxLabel = computed(() => {
+  const t = talentTierCap.value;
+  if (t < 0) return '—';
+  const rq = tierToRankQ(t);
+  return `${rq.rank}★${rq.quality}`;
 });
+function talentInfuseTitle(t: { tierCapped: boolean; tierCost: number }): string {
+  if (!hasScriptorium.value) return 'Construis un Scriptorium 🕯️ pour infuser le rang';
+  if (t.tierCapped) return `Rang max (plafond Scriptorium ${talentTierMaxLabel.value})`;
+  return `Infuser +1 palier (rang/qualité) — ${t.tierCost} poussière d'encre`;
+}
+// ── INFUSION des familiers (PAR PALIER, comme les objets) : chaque familier a son
+// bouton « 🔧 +1 palier » qui dépense la POUSSIÈRE D'ÂME de la réserve (recyclage +
+// coffres + Incubateur) pour monter son rang/qualité. Plafonné par l'Incubateur. ──
 function famTierLabel(f: Item): string {
   return `${RARITY_LABEL[f.rarity]}${itemQuality(f) || ''}`;
 }
-// Progression 0..100 vers le prochain tier (barre d'infusion sur la carte cible).
-function famTierPct(f: Item): number {
-  const p = familiarTierProgress(f);
-  return Math.min(100, Math.round((p.xp / Math.max(1, p.cost)) * 100));
+function famTierIndex(f: Item): number {
+  return tierIndexOf(f);
 }
-function setFamTarget(f: Item) {
-  famTarget.value = f;
+function famStepCost(f: Item): number {
+  return tierStepCost(tierIndexOf(f)); // poussière d'âme pour +1 palier
 }
-// Dépense `amount` fragments dans la cible → monte son tier.
-function doInfuseFam(amount: number) {
-  const target = famTarget.value;
-  if (!target || amount <= 0) return;
-  const beforeTier = tierIndexOf(target);
+function famTierCapped(f: Item): boolean {
+  return tierIndexOf(f) >= Math.min(49, fuseMaxTier.value);
+}
+function canInfuseFam(f: Item): boolean {
+  return hasIncubator.value && !famTierCapped(f) && (char.row?.fragments ?? 0) >= famStepCost(f);
+}
+function famInfuseTitle(f: Item): string {
+  if (!hasIncubator.value) return 'Construis un Incubateur 🥚 pour infuser le rang';
+  if (famTierCapped(f)) return `Rang max (plafond Incubateur ${fuseMaxLabel.value})`;
+  return `Infuser +1 palier (rang/qualité) — ${famStepCost(f)} poussière d'âme`;
+}
+// Infuse +1 PALIER un familier (dépense la poussière d'âme). Éclat si le RANG monte.
+function doInfuseFamStep(f: Item) {
+  const cost = famStepCost(f);
+  const beforeRank = f.rarity;
   withUid(
     (uid) =>
-      char.infuseFamiliar(uid, target.id, amount).then((res) => {
-        if (!res) return;
-        famTarget.value = res; // garde la cible à jour pour enchaîner
-        if (tierIndexOf(res) > beforeTier)
+      char.infuseFamiliar(uid, f.id, cost).then((res) => {
+        if (res && res.rarity !== beforeRank)
           gameFx.celebrate({
             kind: 'familiar',
             emoji: res.emoji,
             title: `${res.name} — ${famTierLabel(res)} !`,
-            subtitle: 'Tier amélioré (fragments)',
+            subtitle: "Rang amélioré (poussière d'âme)",
             rarity: fxRarity(res.rarity),
           });
       }),
@@ -4120,7 +4098,8 @@ function doRecycleFam(id: string) {
   withUid(
     (uid) =>
       char.recycleFamiliar(uid, id).then((g) => {
-        if (g) $q.notify({ type: 'positive', message: `♻️ +${g} 🧩 fragments`, position: 'top' });
+        if (g)
+          $q.notify({ type: 'positive', message: `♻️ +${g} poussière d'âme`, position: 'top' });
       }),
     'Recyclage impossible.',
   );

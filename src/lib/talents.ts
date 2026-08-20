@@ -177,6 +177,12 @@ export function talentQualityOf(inst: TalentInstance): number {
 export function talentLevelUpCost(level: number): number {
   return 3 + Math.max(1, level) * 2;
 }
+/** Coût en PARCHEMINS 📜 pour infuser +1 PALIER (rang/qualité) depuis le tier `tier`
+ *  (croissant). L'infusion par palier remplace l'ancien sacrifice : on dépense la
+ *  réserve de parchemins (nourrie par le recyclage) sur le talent qu'on garde. */
+export function talentTierStepCost(tier: number): number {
+  return 4 + Math.max(0, tier) * 2;
+}
 export function talentLevelOf(inst: TalentInstance): number {
   return Math.max(1, inst.level ?? 1);
 }

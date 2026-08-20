@@ -17,6 +17,8 @@ import {
   expeditionsUnlocked,
   incubatorBuilt,
   maxFuseTierIndex,
+  maxTalentTierIndex,
+  scriptoriumBuilt,
   travelTimeMult,
   outpostLevel,
   forgeLuckBonus,
@@ -70,13 +72,26 @@ describe('buildings — emplacements & coûts', () => {
       maxFuseTierIndex([mk('incubator', 1)]),
     );
   });
+  it('Scriptorium plafonne le rang des talents (maxTalentTierIndex ∝ niveau)', () => {
+    expect(maxTalentTierIndex([])).toBe(-1); // pas de Scriptorium → aucune infusion de rang
+    expect(scriptoriumBuilt([mk('scriptorium', 1)])).toBe(true);
+    expect(maxTalentTierIndex([mk('scriptorium', 25)])).toBeGreaterThan(
+      maxTalentTierIndex([mk('scriptorium', 1)]),
+    );
+  });
 });
 
 describe('buildings — nouveaux (fragments + comptoir)', () => {
-  it('Filon de fragments : producteur de fragments, prod croît avec le niveau', () => {
-    expect(buildingType('fragment_vein')?.resource).toBe('fragments');
-    expect(buildingProdPerHour(mk('fragment_vein', 6))).toBeGreaterThan(0);
-    expect(collectable([mk('fragment_vein', 5, -10 * H)], 0).fragments).toBeGreaterThan(0);
+  it('Incubateur : produit de la poussière d’âme (fragments) ET plafonne le rang', () => {
+    expect(buildingType('incubator')?.resource).toBe('fragments');
+    expect(buildingProdPerHour(mk('incubator', 6))).toBeGreaterThan(0);
+    expect(collectable([mk('incubator', 5, -10 * H)], 0).fragments).toBeGreaterThan(0);
+  });
+  it('Scriptorium : produit de la poussière d’encre (ink_dust) ET plafonne le rang', () => {
+    expect(buildingType('scriptorium')?.resource).toBe('ink_dust');
+    expect(buildingProdPerHour(mk('scriptorium', 6))).toBeGreaterThan(0);
+    expect(collectable([mk('scriptorium', 5, -10 * H)], 0).ink_dust).toBeGreaterThan(0);
+    expect(buildingScales('scriptorium')).toBe(true);
   });
   it('Comptoir : taux or→poussière = 0 sans bâtiment, croît avec le niveau', () => {
     expect(comptoirRate([])).toBe(0);
@@ -125,6 +140,7 @@ describe('buildings — production', () => {
       energy: 0,
       parchemins: 0,
       fragments: 0,
+      ink_dust: 0,
     });
   });
 });
@@ -186,6 +202,7 @@ describe('buildings — Entrepôt : effet stockage global', () => {
       energy: 0,
       parchemins: 0,
       fragments: 0,
+      ink_dust: 0,
     }); // l'entrepôt ne produit rien
   });
 });

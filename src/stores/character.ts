@@ -33,6 +33,8 @@ import {
   talentInfuseXp,
   talentsEarned,
   talentTier,
+  talentTierFloor,
+  talentTierStepCost,
   talentLevelOf,
   talentLevelUpCost,
   type TalentInstance,
@@ -60,6 +62,7 @@ import {
   expeditionsUnlocked,
   travelTimeMult,
   maxFuseTierIndex,
+  maxTalentTierIndex,
   forgeLuckBonus,
   goldToDust,
   type Building,
@@ -87,8 +90,9 @@ export interface CharacterRow {
   pending_reward: PendingReward | null;
   keys: number; // clés d'expédition (donjons à étages)
   stones: number; // pierres magiques 💎 : montée de niveau des familiers
-  parchemins: number; // parchemins de maîtrise 📜 : montée de niveau des talents (migr. 0048)
-  fragments: number; // fragments de familiers 🧩 : XP d'infusion du TIER (migr. 0049)
+  parchemins: number; // parchemins de maîtrise 📜 : montée de NIVEAU des talents (migr. 0048)
+  fragments: number; // poussière d'âme : montée du RANG des familiers (migr. 0049 ; ex-🧩)
+  ink_dust: number; // poussière d'encre : montée du RANG des talents (migr. 0053)
   summon_stones: number; // pierres d'invocation 🔮 : tenter les boss (migr. 0050)
   expedition: ActiveExpedition | null; // mode idle « Expédition » en cours
   expedition_map: ExpeditionMap | null; // carte du monde (POI)
@@ -114,7 +118,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -149,12 +153,15 @@ export const useCharacterStore = defineStore('character', () => {
         return { items };
       });
     r.messages = arr<ExpeditionMessage>(r.messages);
-    r.buildings = arr<Building>(r.buildings); // colonne récente (migr. 0046)
+    // Bâtiments (migr. 0046). On DROPPE les types disparus du registre (ex. l'ancien
+    // 'fragment_vein', fusionné dans l'Incubateur) → pas d'emplacement fantôme.
+    r.buildings = arr<Building>(r.buildings).filter((b) => !!buildingType(b.typeId));
     r.set_pieces_seen = obj<Record<string, string[]>>(r.set_pieces_seen); // migr. 0047
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
     if (typeof r.fragments !== 'number') r.fragments = 0; // colonne récente (migr. 0049)
     if (typeof r.summon_stones !== 'number') r.summon_stones = 0; // colonne récente (migr. 0050)
+    if (typeof r.ink_dust !== 'number') r.ink_dust = 0; // poussière d'encre (migr. 0053)
     if (!r.expedition || typeof r.expedition !== 'object') r.expedition = null;
     if (!r.expedition_map || typeof r.expedition_map !== 'object') r.expedition_map = null;
     return r;
@@ -268,6 +275,7 @@ export const useCharacterStore = defineStore('character', () => {
       stones?: number; // pierres magiques 💎 (filet diffus, familiers)
       summonStones?: number; // pierres d'invocation 🔮 (drop de donjon nettoyé)
       parchemins?: number; // parchemins 📜 (filet de donjon nettoyé, niveau des talents)
+      inkDust?: number; // poussière d'encre (filet de donjon nettoyé, RANG des talents)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
     },
   ) {
@@ -288,6 +296,7 @@ export const useCharacterStore = defineStore('character', () => {
       stones: cur.stones + (input.stones ?? 0),
       summon_stones: cur.summon_stones + (input.summonStones ?? 0),
       parchemins: cur.parchemins + (input.parchemins ?? 0),
+      ink_dust: cur.ink_dust + (input.inkDust ?? 0),
       energy_spent: cur.energy_spent + input.energyCost,
       equipped: dist.equipped,
       inventory: dist.inventory,
@@ -312,6 +321,7 @@ export const useCharacterStore = defineStore('character', () => {
       pending?: PendingReward | null;
       stones?: number; // pierres magiques 💎 (jalon boss)
       parchemins?: number; // parchemins 📜 (jalon boss, niveau des talents)
+      inkDust?: number; // poussière d'encre (jalon boss, RANG des talents)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
     },
   ) {
@@ -332,6 +342,7 @@ export const useCharacterStore = defineStore('character', () => {
       dust: cur.dust + input.dust,
       stones: cur.stones + (input.defeated ? (input.stones ?? 0) : 0),
       parchemins: cur.parchemins + (input.defeated ? (input.parchemins ?? 0) : 0),
+      ink_dust: cur.ink_dust + (input.defeated ? (input.inkDust ?? 0) : 0),
       summon_stones: Math.max(0, cur.summon_stones - input.summonCost),
       defeated_bosses: defeated,
       pending_reward: input.pending ?? cur.pending_reward ?? null,
@@ -619,33 +630,6 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, patch);
     return updated;
   }
-  // SACRIFIE un familier du sac DIRECTEMENT dans une cible (recycle + infuse en un geste,
-  // calqué sur l'infusion des talents) : son XP de tier (∝ son propre tier) part dans la
-  // cible, il disparaît. Pas de passage par la réserve de fragments. Refuse un verrouillé
-  // ou la cible elle-même.
-  async function sacrificeFamiliar(userId: string, targetId: string, fodderId: string) {
-    const cur = row.value;
-    if (!cur || targetId === fodderId) return;
-    const equippedFam = cur.equipped[FAMILIAR_SLOT];
-    const bagTarget = cur.inventory.find((i) => i.id === targetId);
-    const target =
-      equippedFam?.id === targetId
-        ? equippedFam
-        : bagTarget && isFamiliar(bagTarget)
-          ? bagTarget
-          : null;
-    const fodder = cur.inventory.find((i) => i.id === fodderId);
-    if (!target || !fodder || !isFamiliar(fodder) || fodder.locked) return;
-    const xp = familiarInfuseXp(fodder);
-    const updated = applyFamiliarInfusion(target, xp, maxFuseTierIndex(cur.buildings));
-    const inventory = cur.inventory.filter((i) => i.id !== fodderId);
-    const patch: Partial<CharacterRow> =
-      equippedFam?.id === targetId
-        ? { equipped: { ...cur.equipped, [FAMILIAR_SLOT]: updated }, inventory }
-        : { inventory: inventory.map((i) => (i.id === target.id ? updated : i)) };
-    await persistOptimistic(userId, patch);
-    return updated;
-  }
 
   // ── Atelier de poussière (dust sinks) : forge / reroll / infusion / craft de set ──
   // Applique la MAJ d'un objet possédé (équipé ou au sac) + dépense la poussière.
@@ -788,27 +772,34 @@ export const useCharacterStore = defineStore('character', () => {
   }
   // Infuse (consomme) `fodderId` dans `targetId` → +XP au target (clampé au niveau
   // joueur : pas de « banking » au-delà, sinon un talent auto-maxerait en montant de
-  // niveau). Renvoie false si le target est déjà au plafond (feedback UI). Le fodder
-  // n'est consommé QUE si l'infusion a lieu.
-  // INFUSION d'un talent : on SACRIFIE un autre talent (non équipé) dans la cible →
-  // XP ∝ son tier → le TIER (rang+qualité) de la cible grimpe. Le tier n'est PAS
-  // plafonné par le niveau joueur (c'est le NIVEAU, via parchemins, qui l'est).
-  async function infuseTalent(
-    userId: string,
-    targetId: string,
-    fodderId: string,
-  ): Promise<boolean> {
+  // RECYCLE un talent STOCKÉ (non équipé) → POUSSIÈRE D'ENCRE (`ink_dust`, ∝ son tier,
+  // comme casser un objet → poussière). Alimente la réserve qui finance l'infusion de RANG.
+  async function recycleTalent(userId: string, talentId: string): Promise<boolean> {
     const cur = row.value;
-    if (!cur || targetId === fodderId) return false;
-    const target = cur.talents.find((t) => t.id === targetId);
-    const fodder = cur.talents.find((t) => t.id === fodderId);
-    if (!target || !fodder || fodder.equipped) return false; // jamais sacrifier un équipé
-    if (talentTier(target.xp) >= 49) return false; // déjà au tier max (SSS5)
-    const newXp = target.xp + talentInfuseXp(fodder);
-    const talents = cur.talents
-      .filter((t) => t.id !== fodderId)
-      .map((t) => (t.id === targetId ? { ...t, xp: newXp } : t));
-    await persistOptimistic(userId, { talents });
+    if (!cur) return false;
+    const t = cur.talents.find((x) => x.id === talentId);
+    if (!t || t.equipped) return false; // on ne recycle que les talents rangés
+    const gain = talentInfuseXp(t);
+    const talents = cur.talents.filter((x) => x.id !== talentId);
+    await persistOptimistic(userId, { ink_dust: cur.ink_dust + gain, talents });
+    return true;
+  }
+  // INFUSE +1 PALIER (rang/qualité) un talent en dépensant de la POUSSIÈRE D'ENCRE de la
+  // réserve (comme l'infusion de niveau d'un objet avec la poussière). Plafonné par le
+  // Scriptorium (maxTalentTierIndex), comme les familiers par l'Incubateur.
+  async function infuseTalentTier(userId: string, talentId: string): Promise<boolean> {
+    const cur = row.value;
+    if (!cur) return false;
+    const t = cur.talents.find((x) => x.id === talentId);
+    if (!t) return false;
+    const tier = talentTier(t.xp);
+    const cap = Math.min(49, maxTalentTierIndex(cur.buildings));
+    if (tier >= cap) return false; // rang max atteint (SSS5 ou plafond Scriptorium)
+    const cost = talentTierStepCost(tier);
+    if (cur.ink_dust < cost) return false;
+    const newXp = talentTierFloor(tier + 1); // avance d'EXACTEMENT un palier
+    const talents = cur.talents.map((x) => (x.id === talentId ? { ...x, xp: newXp } : x));
+    await persistOptimistic(userId, { ink_dust: cur.ink_dust - cost, talents });
     return true;
   }
   // Monte le NIVEAU d'un talent en dépensant des PARCHEMINS 📜 (Bibliothèque),
@@ -1021,7 +1012,8 @@ export const useCharacterStore = defineStore('character', () => {
       got.stone <= 0 &&
       got.energy <= 0 &&
       got.parchemins <= 0 &&
-      got.fragments <= 0
+      got.fragments <= 0 &&
+      got.ink_dust <= 0
     )
       return null;
     // Report du reliquat : chaque filon n'avance son `collectedAt` que du temps des
@@ -1032,7 +1024,8 @@ export const useCharacterStore = defineStore('character', () => {
       dust: cur.dust + got.dust,
       stones: cur.stones + got.stone,
       parchemins: cur.parchemins + got.parchemins, // 📚 bibliothèque → parchemins (talents)
-      fragments: cur.fragments + got.fragments, // 🧩 filon de fragments → familiers (tier)
+      fragments: cur.fragments + got.fragments, // 🥚 Incubateur → poussière d'âme (rang familiers)
+      ink_dust: cur.ink_dust + got.ink_dust, // 🕯️ Scriptorium → poussière d'encre (rang talents)
       login_energy: cur.login_energy + got.energy, // ⚡ dynamo → énergie de jeu
       buildings: cur.buildings.map((b) => ({ ...b, collectedAt: nextCollectedAt(b, now, mult) })),
     });
@@ -1076,7 +1069,8 @@ export const useCharacterStore = defineStore('character', () => {
     unequip,
     equipTalent,
     unequipTalent,
-    infuseTalent,
+    recycleTalent,
+    infuseTalentTier,
     upgradeTalentLevel,
     salvage,
     sell,
@@ -1088,7 +1082,6 @@ export const useCharacterStore = defineStore('character', () => {
     upgradeFamiliar,
     infuseFamiliar,
     recycleFamiliar,
-    sacrificeFamiliar,
     forge,
     rerollEffect,
     craftSet,

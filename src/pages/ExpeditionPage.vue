@@ -294,7 +294,7 @@
         </div>
         <div class="over-haul">
           🪙 {{ gold }} · ✨ {{ dust }} · 💎 {{ stonesGained }}
-          <template v-if="frags"> · 🧩 {{ frags }}</template> · 🎒
+          <template v-if="frags"> · 🫧 {{ frags }}</template> · 🎒
           {{ run.status === 'dead' ? 0 : loot.length }} objet(s)
         </div>
         <div class="over-sub">
@@ -800,7 +800,7 @@ function openChest(id: number) {
   frags.value += gotFrag;
   dust.value += 3 + grade.dustBonus;
   if (item) loot.value.push(item);
-  const bits = [item?.name, gotFrag ? `🧩${gotFrag}` : ''].filter(Boolean).join(' + ');
+  const bits = [item?.name, gotFrag ? `🫧${gotFrag}` : ''].filter(Boolean).join(' + ');
   lastEvent.value = {
     kind: 'good',
     text: `${grade.emoji} Coffre ${grade.label}${bits ? ' — ' + bits : ' ouvert'} !`,
@@ -861,7 +861,7 @@ function openVault(id: number) {
   if (item) loot.value.push(item);
   lastEvent.value = {
     kind: 'good',
-    text: `💎 Salle secrète ! ${item ? item.name + ' · ' : ''}+${gGold}🪙 +${gDust}✨ +${gFrag}🧩`,
+    text: `💎 Salle secrète ! ${item ? item.name + ' · ' : ''}+${gGold}🪙 +${gDust}✨ +${gFrag}🫧`,
   };
   gameFx.celebrate({
     kind: 'drop',

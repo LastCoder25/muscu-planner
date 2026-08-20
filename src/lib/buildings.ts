@@ -18,7 +18,9 @@
 // par l'appelant → fonctions pures et testables.
 
 // Ressource produite (union extensible : on pourra ajouter 'gold', …).
-export type BuildResource = 'dust' | 'stone' | 'energy' | 'parchemins' | 'fragments';
+// `fragments` = poussière d'âme (rang des familiers) ; `ink_dust` = poussière d'encre
+// (rang des talents). Noms de colonnes conservés (`fragments`) ; libellés UI = « poussière ».
+export type BuildResource = 'dust' | 'stone' | 'energy' | 'parchemins' | 'fragments' | 'ink_dust';
 
 // Catégorie d'un bâtiment. `producer` = filon de ressource ; `utility` = bâtiment
 // à EFFET global (entrepôt, tour de reconnaissance…). Extensible.
@@ -160,20 +162,24 @@ export const BUILDING_TYPES: BuildingType[] = [
   // rareté supérieure). Pas de gate de niveau dur sur les raretés : la progression de
   // rareté reste pilotée par le grind (fusion) + la profondeur (drops), pas par un
   // verrou par palier → jamais de sensation de blocage.
+  // BÂTIMENT COMBINÉ des familiers : PRODUIT de la poussière d'âme (rang des familiers)
+  // ET plafonne le rang max d'infusion (maxFuseTierIndex, par niveau). Un seul bâtiment
+  // pour toute la « famille familier-rang » (l'ancien Filon de fragments est fusionné ici).
   {
     id: 'incubator',
     label: 'Incubateur',
     emoji: '🥚',
-    category: 'utility',
-    effect: {},
+    category: 'producer',
+    resource: 'fragments', // = poussière d'âme
+    prodPerHrPerLvl: 0.14,
     buildGold: 900,
     unlockLevel: 2,
     unique: true,
     unlock: {
       activity: "L'infusion des familiers",
-      where: 'Aventure › onglet Équip. › 🐾 Familier › Incubateur.',
+      where: 'Aventure › Héros › 🐾 Familiers.',
     },
-    desc: "Débloque l'infusion des familiers : dépense des fragments 🧩 pour monter le rang/qualité d'un familier. Chaque niveau relève le rang MAX atteignable.",
+    desc: "Produit de la poussière d'âme (rang des familiers) et débloque leur infusion. Chaque niveau relève le rang MAX atteignable ET la production.",
   },
   // Utilitaire UNIQUE : la PORTE DU LABYRINTHE débloque le Labyrinthe (donjon à
   // étages, source unique des familiers). Chaque niveau AMÉLIORE la qualité du butin
@@ -226,20 +232,24 @@ export const BUILDING_TYPES: BuildingType[] = [
     },
     desc: 'Débloque l’Atelier : forger un objet neuf à ton niveau + forge de pièces de set. Chaque niveau améliore la rareté des objets forgés.',
   },
-  // Producteur : la SEULE ressource sans source passive (fragments = grinde de TIER des
-  // familiers, jusqu'ici coffres du Labyrinthe + recyclage). Débit lent (comme le filon de
-  // pierre) pour compléter sans court-circuiter la grinde.
+  // BÂTIMENT COMBINÉ des talents (symétrique à l'Incubateur) : PRODUIT de la poussière
+  // d'encre (rang des talents) ET plafonne le rang max d'infusion des talents
+  // (maxTalentTierIndex, par niveau). Un seul bâtiment pour la « famille talent-rang ».
   {
-    id: 'fragment_vein',
-    label: 'Filon de fragments',
-    emoji: '🧩',
+    id: 'scriptorium',
+    label: 'Scriptorium',
+    emoji: '🕯️',
     category: 'producer',
-    resource: 'fragments',
-    prodPerHrPerLvl: 0.14,
+    resource: 'ink_dust', // = poussière d'encre
+    prodPerHrPerLvl: 0.12,
     buildGold: 900,
     unlockLevel: 3,
     unique: true,
-    desc: 'Produit des fragments de familier 🧩 (montée du TIER des familiers) en continu.',
+    unlock: {
+      activity: "L'infusion des talents (rang)",
+      where: 'Aventure › Héros › ✨ Talents.',
+    },
+    desc: "Produit de la poussière d'encre (rang des talents) et débloque leur infusion. Chaque niveau relève le rang MAX atteignable ET la production.",
   },
   // Utilitaire : PUITS D'OR. Depuis le retrait de la boutique/respec, l'or s'accumule sans
   // débouché → le Comptoir l'échange contre de la poussière ✨ (ressource la plus demandée).
@@ -343,6 +353,23 @@ export function maxFuseTierIndex(buildings: Building[]): number {
   if (lvl < 1) return -1;
   const rankCeil = Math.min(9, Math.max(0, Math.floor(Math.sqrt(lvl) * 1.03)));
   return rankCeil * 5 + 4; // rang plafond × qualité 5
+}
+/** Niveau du Scriptorium (bâtiment COMBINÉ des talents : produit la poussière d'encre
+ *  ET plafonne le rang d'infusion des talents). 0 = pas construit. */
+export function scriptoriumLevel(buildings: Building[]): number {
+  return buildings.find((b) => b.typeId === 'scriptorium')?.level ?? 0;
+}
+export function scriptoriumBuilt(buildings: Building[]): boolean {
+  return scriptoriumLevel(buildings) > 0;
+}
+/** CRAN (tier 0..49) MAX d'infusion des TALENTS selon le niveau du Scriptorium — même
+ *  courbe √ que l'Incubateur pour les familiers. `-1` = pas de Scriptorium (aucune
+ *  infusion de rang possible ; le talent reste au rang de drop). */
+export function maxTalentTierIndex(buildings: Building[]): number {
+  const lvl = scriptoriumLevel(buildings);
+  if (lvl < 1) return -1;
+  const rankCeil = Math.min(9, Math.max(0, Math.floor(Math.sqrt(lvl) * 1.03)));
+  return rankCeil * 5 + 4;
 }
 /** La Forge est-elle construite ? → débloque l'Atelier (forge d'objet / de set). */
 export function forgeBuilt(buildings: Building[]): boolean {
@@ -478,6 +505,7 @@ export function collectable(buildings: Building[], now: number): Record<BuildRes
     energy: 0,
     parchemins: 0,
     fragments: 0,
+    ink_dust: 0,
   };
   const mult = storageMult(buildings);
   for (const b of buildings) {
