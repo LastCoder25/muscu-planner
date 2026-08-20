@@ -1090,12 +1090,12 @@ export function aggregateEffects(equipped: Equipped): AggregatedEffects {
     applyEffect(a, it.effect.type, enchantedValue(it.effect, n) / 100);
     if (it.effect2) applyEffect(a, it.effect2.type, enchantedValue(it.effect2, n) / 100);
   }
-  // Familier (slot parallèle, hors SLOTS) : garde son axe NIVEAU (pierres) pour l'instant
-  // — sa conversion en enchant viendra à la passe suivante. Son bonus + signature comptent.
+  // Familier (slot parallèle, hors SLOTS) : comme les objets → magnitude = grade × ENCHANT.
   const fam = equipped[FAMILIAR_SLOT];
   if (fam) {
-    applyEffect(a, fam.effect.type, effectiveValue(fam.effect, fam.level) / 100);
-    if (fam.effect2) applyEffect(a, fam.effect2.type, effectiveValue(fam.effect2, fam.level) / 100);
+    const fn = fam.enchant ?? 0;
+    applyEffect(a, fam.effect.type, enchantedValue(fam.effect, fn) / 100);
+    if (fam.effect2) applyEffect(a, fam.effect2.type, enchantedValue(fam.effect2, fn) / 100);
   }
   // Bonus de set (2/3/4 pièces) — ajoutés par-dessus les effets d'objet.
   const s = setEffects(equipped);

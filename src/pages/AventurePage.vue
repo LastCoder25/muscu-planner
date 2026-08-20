@@ -471,17 +471,24 @@
           </div>
           <div class="sec-hint">
             Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Équipe-en 1.
-            Comme les objets : <b>♻️ recycle</b> ceux que tu gardes pas →
-            <b><DustIcon variant="soul" /> poussière d'âme</b>, puis sur chaque familier
-            <b>🔧 +1 palier</b> (rang/qualité, plafonné par l'Incubateur) et
-            <b>💎 +1 niveau</b> (magnitude).
-            <br />
-            Tu as <b>💎 {{ char.row.stones }}</b> ·
-            <b><DustIcon variant="soul" /> {{ char.row.fragments }}</b> · Incubateur niv.{{
-              incubLevel
-            }}
-            (rang max <b class="ii-rar" :class="'p-' + fuseMaxRank">{{ fuseMaxLabel }}</b
-            >).
+            <b>Comme les objets</b> : son <b>grade (rang + qualité)</b> est fixé au drop (trouve
+            mieux au Labyrinthe 🗝️), et tu montes sa puissance en l'<b>⚡ enchantant</b>
+            (parchemins 📜 / protections 🛡️, gamble).
+          </div>
+
+          <div class="ench-bar">
+            <span
+              >⚡ <b>📜 {{ char.row.enchant_scrolls }}</b> ·
+              <b>🛡️ {{ char.row.protections }}</b></span
+            >
+            <label class="ench-prot" :class="{ off: char.row.protections < 1 }">
+              <input
+                v-model="enchantUseProtection"
+                type="checkbox"
+                :disabled="char.row.protections < 1"
+              />
+              🛡️ Protéger l'échec
+            </label>
           </div>
 
           <div v-if="!allFamiliars.length" class="talents-empty">
@@ -503,57 +510,28 @@
                   <span v-if="itemQuality(f)" class="q-badge" :class="'q-' + itemQuality(f)">{{
                     itemQuality(f)
                   }}</span>
-                  <span class="tal-lv">Nv{{ f.level }}</span>
+                  <span v-if="(f.enchant ?? 0) > 0" class="tal-lv">+{{ f.enchant }}</span>
                   <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
                 </div>
                 <div class="tal-eff">{{ itemEffects(f) }}</div>
-                <div
-                  class="tal-xp"
-                  :title="'Rang ' + famTierLabel(f) + ' (tier ' + famTierIndex(f) + '/49)'"
-                >
-                  <span :style="{ width: Math.round((famTierIndex(f) / 49) * 100) + '%' }" />
-                </div>
               </div>
               <div class="tal-actions">
                 <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
                   Retirer
                 </button>
                 <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
-                <!-- 🔧 +1 palier (rang/qualité) : poussière d'âme, plafonné par l'Incubateur -->
+                <!-- ⚡ Enchant (gamble) : parchemins 📜 (+ protection optionnelle). -->
                 <button
                   class="tal-b ghost"
-                  :disabled="hasIncubator && !canInfuseFam(f)"
-                  :title="famInfuseTitle(f)"
-                  @click="hasIncubator ? doInfuseFamStep(f) : openGame('/expedition-map')"
+                  :disabled="!canEnchant(f.enchant ?? 0) || char.row.enchant_scrolls < 1"
+                  :title="enchantTitle(f)"
+                  @click="doEnchant(f.id)"
                 >
-                  <template v-if="!hasIncubator">🔧 🥚</template>
-                  <template v-else-if="famTierCapped(f)">🔧 Max</template>
-                  <template v-else>🔧 +1·{{ famStepCost(f) }}<DustIcon variant="soul" /></template>
-                </button>
-                <!-- 💎 +1 niveau (magnitude) : pierres -->
-                <button
-                  class="tal-b ghost"
-                  :disabled="!canUpgradeFamiliar(f)"
-                  :title="
-                    f.level >= c.level.level
-                      ? 'Niveau plafonné à ton niveau de sport'
-                      : 'Monter le NIVEAU (puissance de l’effet) avec des pierres 💎'
-                  "
-                  @click="doUpgradeFamiliar(f.id)"
-                >
-                  💎
-                  {{
-                    f.level >= c.level.level ? 'Max' : '+1·' + familiarStoneCost(f.level, f.rarity)
-                  }}
-                </button>
-                <!-- ♻️ recycler → poussière d'âme (sac, non verrouillé) -->
-                <button
-                  v-if="!f.equipped && !f.locked"
-                  class="tal-b ghost"
-                  title="Recycler ce familier → poussière d'âme"
-                  @click="doRecycleFam(f.id)"
-                >
-                  ♻️ +{{ familiarInfuseXp(f) }}<DustIcon variant="soul" />
+                  <template v-if="!canEnchant(f.enchant ?? 0)">⚡ Max</template>
+                  <template v-else
+                    >⚡ +{{ (f.enchant ?? 0) + 1 }} ·
+                    {{ Math.round(enchantSuccessRate(f.enchant ?? 0) * 100) }}%</template
+                  >
                 </button>
                 <button
                   v-if="!f.equipped"
@@ -566,14 +544,6 @@
               </div>
             </div>
           </div>
-
-          <button
-            v-if="!hasIncubator"
-            class="fam-incub-locked"
-            @click="openGame('/expedition-map')"
-          >
-            🥚 Construis un <b>Incubateur</b> sur la carte pour infuser tes familiers.
-          </button>
         </template>
 
         <template v-if="persoSub === 'perso'">
@@ -2224,11 +2194,7 @@ import {
   rollSetPiece,
   effectLabel,
   enchantEffectLabel,
-  type ItemEffect,
   rollStars,
-  tierIndexOf,
-  tierStepCost,
-  familiarInfuseXp,
   canEnchant,
   enchantSuccessRate,
   ENCHANT_MAX,
@@ -2238,7 +2204,6 @@ import {
   forgeCost,
   rerollCost,
   craftSetCost,
-  familiarStoneCost,
   isFamiliar,
   FAMILIAR_SLOT,
   rollTier,
@@ -2282,9 +2247,6 @@ import {
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { unlocksAtLevel } from '@/lib/advUnlocks';
 import {
-  incubatorBuilt,
-  incubatorLevel,
-  maxFuseTierIndex,
   scriptoriumBuilt,
   scriptoriumLevel,
   maxTalentTierIndex,
@@ -2415,8 +2377,6 @@ const betterFilterSlot = ref<ItemSlot | null>(null);
 const persoSub = ref<'perso' | 'talents' | 'familiars'>('perso');
 // Sous-onglet Explorer : donjons (carte) / boss de palier.
 const exploreSub = ref<'donjons' | 'boss'>('donjons');
-// L'incubateur (fusion de familiers) est débloqué en le construisant sur la carte.
-const hasIncubator = computed(() => incubatorBuilt(char.row?.buildings ?? []));
 // L'Atelier (forge d'objet / de set) est débloqué par le bâtiment 🔨 Forge.
 const hasForge = computed(() => forgeBuilt(char.row?.buildings ?? []));
 // Le Labyrinthe est débloqué par la 🚪 Porte du Labyrinthe (bâtiment sur la carte).
@@ -3389,13 +3349,10 @@ function bossSet(b: MilestoneBoss) {
 // Libellé des 2 stats d'un objet (primaire · secondaire). Les anciens objets
 // (1 stat) n'affichent que la primaire.
 function itemEffects(it: Omit<Item, 'id'>): string {
-  // OBJETS : magnitude = grade × enchant. FAMILIERS : encore sur l'axe niveau (passe suivante).
-  const lbl =
-    it.slot === FAMILIAR_SLOT
-      ? (e: ItemEffect) => effectLabel(e, it.level)
-      : (e: ItemEffect) => enchantEffectLabel(e, it.enchant ?? 0);
-  const a = lbl(it.effect);
-  return it.effect2 ? `${a} · ${lbl(it.effect2)}` : a;
+  // OBJETS ET FAMILIERS : magnitude = grade × ENCHANT.
+  const n = it.enchant ?? 0;
+  const a = enchantEffectLabel(it.effect, n);
+  return it.effect2 ? `${a} · ${enchantEffectLabel(it.effect2, n)}` : a;
 }
 // Qualité du roll en étoiles pleines/vides (« ★★★★☆ ») ; vide si objet legacy (pas de roll).
 // Qualité en CHIFFRE (1→5, 5 = meilleur) affiché à côté du rang, code couleur
@@ -3862,35 +3819,12 @@ const allFamiliars = computed<Array<Item & { equipped: boolean }>>(() => {
   for (const f of bagFamiliars.value) list.push({ ...f, equipped: false });
   return list;
 });
-function canUpgradeFamiliar(it: Item): boolean {
-  return (
-    it.level < c.value.level.level &&
-    (char.row?.stones ?? 0) >= familiarStoneCost(it.level, it.rarity)
-  );
-}
 function doEquipFamiliar(itemId: string) {
   withUid((uid) => char.equip(uid, itemId), 'Impossible d’équiper le familier.');
 }
 function doUnequipFamiliar() {
   withUid((uid) => char.unequip(uid, FAMILIAR_SLOT), 'Impossible de déséquiper.');
 }
-function doUpgradeFamiliar(itemId: string) {
-  withUid(
-    (uid) => char.upgradeFamiliar(uid, itemId, c.value.level.level),
-    'Montée du familier impossible.',
-  );
-}
-// Niveau de l'Incubateur + rang cible max atteignable par infusion (débloqué par niveau).
-const incubLevel = computed(() => incubatorLevel(char.row?.buildings ?? []));
-// CRAN (tier 0..49) max d'infusion débloqué par l'Incubateur (aligné sur la courbe √ des drops).
-const fuseMaxTier = computed(() => maxFuseTierIndex(char.row?.buildings ?? []));
-const fuseMaxRank = computed(() => tierToRankQ(Math.max(0, fuseMaxTier.value)).rank);
-const fuseMaxLabel = computed(() => {
-  const t = fuseMaxTier.value;
-  if (t < 0) return '—';
-  const rq = tierToRankQ(t);
-  return `${rq.rank}★${rq.quality}`;
-});
 // Scriptorium (talents) : produit la poussière d'encre ET plafonne le rang d'infusion.
 const scriptoLevel = computed(() => scriptoriumLevel(char.row?.buildings ?? []));
 const hasScriptorium = computed(() => scriptoriumBuilt(char.row?.buildings ?? []));
@@ -3907,61 +3841,6 @@ function talentInfuseTitle(t: { tierCapped: boolean; tierCost: number }): string
   if (t.tierCapped) return `Rang max (plafond Scriptorium ${talentTierMaxLabel.value})`;
   return `Infuser +1 palier (rang/qualité) — ${t.tierCost} poussière d'encre`;
 }
-// ── INFUSION des familiers (PAR PALIER, comme les objets) : chaque familier a son
-// bouton « 🔧 +1 palier » qui dépense la POUSSIÈRE D'ÂME de la réserve (recyclage +
-// coffres + Incubateur) pour monter son rang/qualité. Plafonné par l'Incubateur. ──
-function famTierLabel(f: Item): string {
-  return `${RARITY_LABEL[f.rarity]}${itemQuality(f) || ''}`;
-}
-function famTierIndex(f: Item): number {
-  return tierIndexOf(f);
-}
-function famStepCost(f: Item): number {
-  return tierStepCost(tierIndexOf(f)); // poussière d'âme pour +1 palier
-}
-function famTierCapped(f: Item): boolean {
-  return tierIndexOf(f) >= Math.min(49, fuseMaxTier.value);
-}
-function canInfuseFam(f: Item): boolean {
-  return hasIncubator.value && !famTierCapped(f) && (char.row?.fragments ?? 0) >= famStepCost(f);
-}
-function famInfuseTitle(f: Item): string {
-  if (!hasIncubator.value) return 'Construis un Incubateur 🥚 pour infuser le rang';
-  if (famTierCapped(f)) return `Rang max (plafond Incubateur ${fuseMaxLabel.value})`;
-  return `Infuser +1 palier (rang/qualité) — ${famStepCost(f)} poussière d'âme`;
-}
-// Infuse +1 PALIER un familier (dépense la poussière d'âme). Éclat si le RANG monte.
-function doInfuseFamStep(f: Item) {
-  const cost = famStepCost(f);
-  const beforeRank = f.rarity;
-  withUid(
-    (uid) =>
-      char.infuseFamiliar(uid, f.id, cost).then((res) => {
-        if (res && res.rarity !== beforeRank)
-          gameFx.celebrate({
-            kind: 'familiar',
-            emoji: res.emoji,
-            title: `${res.name} — ${famTierLabel(res)} !`,
-            subtitle: "Rang amélioré (poussière d'âme)",
-            rarity: fxRarity(res.rarity),
-          });
-      }),
-    'Infusion impossible.',
-  );
-}
-// RECYCLE un familier du sac → poussière d'âme (∝ son tier). Alimente la réserve qui
-// finance l'infusion de RANG des familiers gardés (bouton 🔧 par familier).
-function doRecycleFam(id: string) {
-  withUid(
-    (uid) =>
-      char.recycleFamiliar(uid, id).then((g) => {
-        if (g)
-          $q.notify({ type: 'positive', message: `♻️ +${g} poussière d'âme`, position: 'top' });
-      }),
-    'Recyclage impossible.',
-  );
-}
-
 // Animation de PALIER DE SET : si équiper `setId` a fait franchir un palier (2/3/4
 // pièces), on célèbre en montrant le set + le bonus tout juste débloqué.
 function celebrateSetTier(setId: string | undefined, before: number, after: number) {

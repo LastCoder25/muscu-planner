@@ -15,12 +15,7 @@ import {
   rerollCost,
   craftSetCost,
   rollSetPiece,
-  familiarStoneCost,
-  isFamiliar,
   normRank,
-  familiarInfuseXp,
-  infuseFamiliar as applyFamiliarInfusion,
-  FAMILIAR_SLOT,
   swapLoadoutGear,
   MAX_LOADOUTS,
   type Item,
@@ -63,7 +58,6 @@ import {
   storageMult,
   expeditionsUnlocked,
   travelTimeMult,
-  maxFuseTierIndex,
   maxTalentTierIndex,
   forgeLuckBonus,
   goldToDust,
@@ -137,10 +131,9 @@ export const useCharacterStore = defineStore('character', () => {
     const fixItem = (it: Item): Item => ({
       ...it,
       rarity: normRank(it.rarity),
-      // MIGRATION enchant (migr. 0054) : les OBJETS d'avant (axe « niveau ») → ENCHANT
-      // équivalent (magnitude préservée). Les FAMILIERS gardent leur niveau (pas encore
-      // convertis). Idempotent : une fois `enchant` posé, on ne re-migre pas.
-      ...(it.enchant === undefined && !isFamiliar(it) ? { enchant: levelToEnchant(it.level) } : {}),
+      // MIGRATION enchant (migr. 0054) : objets ET familiers d'avant (axe « niveau ») →
+      // ENCHANT équivalent (magnitude préservée). Idempotent (enchant déjà posé → non re-migré).
+      ...(it.enchant === undefined ? { enchant: levelToEnchant(it.level) } : {}),
     });
     r.inventory = arr<Item>(r.inventory).map(fixItem);
     r.cleared_dungeons = arr<string>(r.cleared_dungeons);
@@ -544,7 +537,7 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return null;
     const found = findOwned(cur, itemId);
-    if (!found || isFamiliar(found.item)) return null; // objets uniquement (les familiers viendront)
+    if (!found) return null; // objets ET familiers (tous des Item)
     const { item, slot } = found;
     const n = item.enchant ?? 0;
     if (!canEnchant(n) || cur.enchant_scrolls < 1) return null; // au cap ou plus de parchemin
@@ -559,70 +552,6 @@ export const useCharacterStore = defineStore('character', () => {
     else patch.inventory = cur.inventory.map((i) => (i.id === itemId ? upgraded : i));
     await persist(userId, patch);
     return outcome;
-  }
-
-  // Monte un FAMILIER d'un niveau en dépensant des PIERRES MAGIQUES 💎 (≠ poussière).
-  // Cap = niveau du joueur, comme le stuff. Familier équipé OU au sac (findOwned).
-  async function upgradeFamiliar(userId: string, itemId: string, playerLevel: number) {
-    const cur = row.value;
-    if (!cur) return;
-    const found = findOwned(cur, itemId);
-    if (!found || !isFamiliar(found.item)) return;
-    const { item, slot } = found;
-    const cost = familiarStoneCost(item.level, item.rarity);
-    if (item.level >= playerLevel || cur.stones < cost) return;
-    const upgraded: Item = { ...item, level: item.level + 1 };
-    if (slot)
-      return persist(userId, {
-        stones: cur.stones - cost,
-        equipped: { ...cur.equipped, [slot]: upgraded },
-      });
-    return persist(userId, {
-      stones: cur.stones - cost,
-      inventory: cur.inventory.map((i) => (i.id === itemId ? upgraded : i)),
-    });
-  }
-
-  // FUSION (incubateur) : consomme 3 familiers du SAC de MÊME rareté → 1 familier
-  // ALÉATOIRE de la rareté JUSTE AU-DESSUS (niveau 1). rng = Math.random.
-  // RECYCLE un familier en FRAGMENTS 🧩 (∝ son tier) : les doublons nourrissent
-  // l'infusion sans « gâcher » un familier entier. Refuse un familier équipé/verrouillé.
-  async function recycleFamiliar(userId: string, familiarId: string) {
-    const cur = row.value;
-    if (!cur) return 0;
-    const fam = cur.inventory.find((i) => i.id === familiarId);
-    if (!fam || !isFamiliar(fam) || fam.locked) return 0;
-    const gain = familiarInfuseXp(fam);
-    await persistOptimistic(userId, {
-      fragments: cur.fragments + gain,
-      inventory: cur.inventory.filter((i) => i.id !== familiarId),
-    });
-    return gain;
-  }
-  // INFUSE un familier CIBLE (équipé ou au sac) en dépensant des FRAGMENTS 🧩 → son
-  // TIER (rang+qualité) grimpe (qualité puis rang), plafonné par le niveau de
-  // l'Incubateur. Les pierres 💎 gèrent le NIVEAU à part. `amount` = fragments dépensés.
-  async function infuseFamiliar(userId: string, targetId: string, amount: number) {
-    const cur = row.value;
-    if (!cur) return;
-    const spend = Math.min(Math.max(0, Math.floor(amount)), cur.fragments);
-    if (spend <= 0) return;
-    const equippedFam = cur.equipped[FAMILIAR_SLOT];
-    const bagTarget = cur.inventory.find((i) => i.id === targetId);
-    const target =
-      equippedFam?.id === targetId
-        ? equippedFam
-        : bagTarget && isFamiliar(bagTarget)
-          ? bagTarget
-          : null;
-    if (!target) return;
-    const updated = applyFamiliarInfusion(target, spend, maxFuseTierIndex(cur.buildings));
-    const patch: Partial<CharacterRow> = { fragments: cur.fragments - spend };
-    if (equippedFam?.id === targetId)
-      patch.equipped = { ...cur.equipped, [FAMILIAR_SLOT]: updated };
-    else patch.inventory = cur.inventory.map((i) => (i.id === target.id ? updated : i));
-    await persistOptimistic(userId, patch);
-    return updated;
   }
 
   // ── Atelier de poussière (dust sinks) : forge / reroll / infusion / craft de set ──
@@ -1072,9 +1001,6 @@ export const useCharacterStore = defineStore('character', () => {
     sellMany,
     toggleLock,
     enchantItem,
-    upgradeFamiliar,
-    infuseFamiliar,
-    recycleFamiliar,
     forge,
     rerollEffect,
     craftSet,
