@@ -105,7 +105,12 @@
       </div>
 
       <div class="map-wrap">
-        <svg :viewBox="`0 0 ${cols * CELL} ${rows * CELL}`" class="map">
+        <!-- Marge : les salles sont décalées aléatoirement (aspect organique) → padding
+             pour ne pas rogner celles des bords. -->
+        <svg
+          :viewBox="`${-MAP_PAD} ${-MAP_PAD} ${cols * CELL + 2 * MAP_PAD} ${rows * CELL + 2 * MAP_PAD}`"
+          class="map"
+        >
           <line
             v-for="c in corridors"
             :key="c.k"
@@ -500,6 +505,7 @@ const heroLevel = computed(() => character.value.level.level);
 
 const CELL = 66;
 const SIZE = 46; // côté d'une salle (carré arrondi)
+const MAP_PAD = 20; // marge du viewBox (les salles sont décalées → bords non rognés)
 
 const floorsWanted = ref(Math.min(5, Math.max(2, Number(route.query.floors) || 3)));
 // Seed pseudo-aléatoire (composant → Math.random autorisé, contrairement aux libs).
