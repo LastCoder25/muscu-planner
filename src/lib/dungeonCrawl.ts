@@ -43,14 +43,6 @@ function gridFor(rng: () => number, floorIndex: number): { cols: number; rows: n
   const rows = 3 + (rng() < 0.35 ? 1 : 0); // 3..4
   return { cols, rows };
 }
-// Amplitude du décalage aléatoire des salles (en fraction de cellule) → aspect ORGANIQUE
-// (scatter + couloirs en biais) plutôt qu'une grille alignée. Purement VISUEL (x/y ne
-// servent qu'au rendu ; le graphe/exploration passe par les ids + liens).
-// INVARIANT d'espacement (avec le rendu, CELL=66 / SIZE=44 dans ExpeditionPage) : deux
-// salles adjacentes ne se touchent JAMAIS → `CELL·(1−2·JITTER) − SIZE ≥ ~7 px`. À 0.11 :
-// 66·0.78 − 44 ≈ 7,5 px d'écart minimum garanti. Ne pas augmenter sans réduire SIZE.
-const ROOM_JITTER = 0.11;
-
 // Distance BFS max depuis `from` (via les couloirs) → salle la plus éloignée = sortie.
 function farthestRoom(rooms: Room[], from: number): number {
   const dist = new Map<number, number>([[from, 0]]);
@@ -166,12 +158,8 @@ export function generateFloor(seed: number, floorIndex: number, floors: number):
     const pool = deadEnds.length ? deadEnds : rooms.filter(isFree);
     if (pool.length) pool[Math.floor(rng() * pool.length)]!.type = 'vault';
   }
-  // Décalage ORGANIQUE des positions (en DERNIER → n'affecte ni le graphe ni les ids ;
-  // rooms + couloirs se placent d'après x/y → scatter + couloirs en biais).
-  for (const r of rooms) {
-    r.x += (rng() * 2 - 1) * ROOM_JITTER;
-    r.y += (rng() * 2 - 1) * ROOM_JITTER;
-  }
+  // Salles ALIGNÉES sur la grille (positions entières) — dispo neat ; la variété vient
+  // des dimensions non carrées + (à venir) des formes/décors de salle par type.
   return { index: floorIndex, cols, rows, rooms, startId, exitId };
 }
 

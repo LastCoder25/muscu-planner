@@ -54,22 +54,23 @@ describe('dungeonCrawl — génération d’étage', () => {
     expect(JSON.stringify(generateFloor(99, 2, 5))).toBe(JSON.stringify(generateFloor(99, 2, 5)));
   });
 
-  it('disposition NON carrée + positions décalées (aspect organique)', () => {
+  it('dimensions variées (non carrées) mais salles ALIGNÉES sur la grille', () => {
     let nonSquare = 0;
-    let jittered = 0;
     for (let s = 1; s <= 60; s++) {
       const f = generateFloor(s, 1, 4);
       if (f.cols !== f.rows) nonSquare++;
-      // au moins une salle à une position non entière (décalage seedé)
-      if (f.rooms.some((r) => r.x !== Math.round(r.x) || r.y !== Math.round(r.y))) jittered++;
-      // reste borné : dimensions raisonnables pour l'écran
+      // positions ENTIÈRES (grille propre, pas de scatter)
+      for (const r of f.rooms) {
+        expect(Number.isInteger(r.x)).toBe(true);
+        expect(Number.isInteger(r.y)).toBe(true);
+      }
+      // dimensions bornées (lisible sur mobile)
       expect(f.cols).toBeGreaterThanOrEqual(3);
       expect(f.cols).toBeLessThanOrEqual(5);
       expect(f.rows).toBeGreaterThanOrEqual(3);
       expect(f.rows).toBeLessThanOrEqual(4);
     }
     expect(nonSquare).toBeGreaterThan(0); // certains étages ne sont PAS carrés
-    expect(jittered).toBe(60); // toutes les cartes sont décalées
   });
 
   it('liens symétriques (couloir dans les deux sens)', () => {

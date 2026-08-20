@@ -134,7 +134,15 @@
               rx="9"
               class="room-bg"
             />
-            <text :x="cx(r)" :y="cy(r) + 1" class="room-emo">{{ roomGlyph(r) }}</text>
+            <ChestIcon
+              v-if="isVisitedChest(r)"
+              :color="chestColorOf(r.id)"
+              :x="cx(r) - 12"
+              :y="cy(r) - 12"
+              width="24"
+              height="24"
+            />
+            <text v-else :x="cx(r)" :y="cy(r) + 1" class="room-emo">{{ roomGlyph(r) }}</text>
           </g>
         </svg>
       </div>
@@ -202,7 +210,12 @@
         </template>
 
         <template v-else-if="roomFx?.kind === 'chest'">
-          <div class="chest-anim">🎁</div>
+          <div class="chest-anim">
+            <ChestIcon :color="roomFx.grade?.color ?? '#c8813f'" class="chest-big" />
+          </div>
+          <div v-if="roomFx.grade" class="chest-grade" :style="{ color: roomFx.grade.color }">
+            Coffre {{ roomFx.grade.label }}
+          </div>
           <!-- Détail complet de l'objet gagné -->
           <div v-if="roomFx.item" class="fx-loot-card" :class="'r-' + roomFx.item.rarity">
             <div class="fl-emoji">{{ roomFx.item.emoji }}</div>
@@ -232,8 +245,10 @@
         </template>
 
         <template v-else-if="roomFx?.kind === 'trap'">
-          <div class="trap-anim">⚠️</div>
-          <div class="fx-result bad">Piège ! −{{ roomFx.dmg }} PV</div>
+          <div class="trap-anim">{{ roomFx.trap?.emoji ?? '⚠️' }}</div>
+          <div class="fx-result bad">
+            {{ roomFx.trap?.label ?? 'Piège' }} !{{ roomFx.dmg ? ` −${roomFx.dmg} PV` : '' }}
+          </div>
           <q-btn
             class="fx-cta"
             color="primary"
@@ -255,7 +270,9 @@
           {{ run.status === 'cleared' ? 'Labyrinthe nettoyé !' : 'Vous êtes tombé…' }}
         </div>
         <div class="over-haul">
-          🪙 {{ gold }} · ✨ {{ dust }} · 🎒 {{ run.status === 'dead' ? 0 : loot.length }} objet(s)
+          🪙 {{ gold }} · ✨ {{ dust }} · 💎 {{ stonesGained }}
+          <template v-if="frags"> · 🧩 {{ frags }}</template> · 🎒
+          {{ run.status === 'dead' ? 0 : loot.length }} objet(s)
         </div>
         <div class="over-sub">
           <template v-if="run.status === 'cleared'"> Butin crédité (+ trésor final) 🎉 </template>
@@ -394,10 +411,12 @@ import {
 } from '@/lib/items';
 import { rollActivityFamiliar } from '@/data/familiars';
 import { pickLabyFoe, type LabyFoe } from '@/data/labyrinthFoes';
+import { rollChestGrade, pickLabyTrap, type ChestGrade, type LabyTrap } from '@/data/labyrinthLoot';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
 import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
+import ChestIcon from '@/components/ChestIcon.vue';
 
 const props = defineProps<{ embedded?: boolean }>();
 const route = useRoute();
@@ -505,10 +524,8 @@ const fighter = computed<Combatant>(() =>
 const heroLevel = computed(() => character.value.level.level);
 
 const CELL = 66;
-// SIZE couplé à ROOM_JITTER (dungeonCrawl) : CELL·(1−2·0,11) − SIZE ≥ ~7 px → les salles
-// adjacentes gardent TOUJOURS un écart (jamais collées). Baisser SIZE si on augmente le jitter.
-const SIZE = 44; // côté d'une salle (carré arrondi)
-const MAP_PAD = 16; // marge du viewBox (les salles sont décalées → bords non rognés)
+const SIZE = 46; // côté d'une salle (carré arrondi) ; salles alignées sur la grille
+const MAP_PAD = 8; // petite marge du viewBox
 
 const floorsWanted = ref(Math.min(5, Math.max(2, Number(route.query.floors) || 3)));
 // Seed pseudo-aléatoire (composant → Math.random autorisé, contrairement aux libs).
@@ -529,6 +546,7 @@ const over = ref(false);
 const gold = ref(0);
 const dust = ref(0);
 const frags = ref(0); // fragments de familiers 🧩 amassés dans les coffres
+const stonesGained = ref(0); // pierres 💎 créditées (affiché dans le récap de fin)
 const loot = ref<Item[]>([]);
 let lootN = 0;
 // Détail d'un objet du récap de butin (modale au clic).
@@ -549,7 +567,9 @@ const roomFx = ref<{
   kind: 'combat' | 'chest' | 'trap' | 'descend';
   win?: boolean;
   item?: Item | null;
+  grade?: ChestGrade;
   dmg?: number;
+  trap?: LabyTrap;
 } | null>(null);
 const stageFights = ref<StageFight[]>([]);
 const stageStartPv = ref(0); // PV du joueur AU DÉBUT du combat animé (attrition)
@@ -620,7 +640,16 @@ function roomClass(id: number): string {
 function roomGlyph(r: Room): string {
   if (!isVisible(floor.value, run.value, r.id)) return '';
   if (!run.value.visited.includes(r.id)) return '?'; // frontière : type inconnu
+  if (r.type === 'chest') return ''; // coffre = image tintée (ChestIcon), pas d'emoji
+  if (r.type === 'trap') return trapKindOf(r.id).emoji; // piège découvert = son icône variée
   return ROOM_EMOJI[r.type];
+}
+// Coffre déjà ouvert (visité) → on affiche l'image de coffre teintée à son grade.
+function isVisitedChest(r: Room): boolean {
+  return r.type === 'chest' && run.value.visited.includes(r.id);
+}
+function chestColorOf(id: number): string {
+  return chestGradeOf(id).color;
 }
 
 // Monstre de salle scalé au niveau du perso + profondeur de l'étage. Volontairement
@@ -712,38 +741,65 @@ function fightRoom(id: number, isBoss: boolean) {
   fxDone.value = false;
   roomFx.value = { kind: 'combat', win: res.win };
 }
+// Grade d'un coffre (bronze→platine) : seed SÉPARÉ (n'interfère pas avec le tirage du
+// butin), dérivé de la frise glissante (rollChestGrade) → se décale avec le niveau du
+// palier. Déterministe → identique entre l'ouverture et l'affichage sur la carte.
+function chestGradeOf(id: number): ChestGrade {
+  return rollChestGrade(mulberry32((roomSeed(id) ^ 0xc0ffee) >>> 0), runDropLevel(), runLuck());
+}
 function openChest(id: number) {
+  const grade = chestGradeOf(id);
   const rng = mulberry32(roomSeed(id));
-  // Plus on est profond, plus la rareté du coffre grimpe (récompense du risque),
-  // + bonus de la Porte du Labyrinthe (chaque niveau enrichit le butin).
-  const luck = Math.min(1, 0.35 + 0.45 * depthOf() + labyLuck.value);
+  // Le GRADE du coffre pilote le contenu : luck (rareté), niveau, ressources, objet garanti.
+  const luck = Math.min(1, 0.35 + 0.45 * depthOf() + labyLuck.value + grade.luckBonus);
+  const level = Math.max(1, heroLevel.value + grade.levelBonus);
+  const tries = grade.guaranteed ? 8 : 4;
   let drop: Omit<Item, 'id'> | null = null;
-  for (let k = 0; k < 4 && !drop; k++)
-    drop = rollDrop(rng, {
-      cleared: true,
-      defeated: 1,
-      level: heroLevel.value,
-      luck,
-      spread: 1,
-    });
+  for (let k = 0; k < tries && !drop; k++)
+    drop = rollDrop(rng, { cleared: true, defeated: 1, level, luck, spread: 1 });
   const item = drop ? { ...drop, id: `exp_${lootN++}` } : null;
-  // Fragments de familiers 🧩 : ~30 % des coffres, montant ∝ profondeur (+ Porte).
+  // Fragments 🧩 : base ~30 % + bonus de grade ; poussière ✨ bonus de grade.
   const gotFrag =
-    rng() < 0.3 ? Math.max(1, Math.round((1 + depthOf() * 2) * (1 + labyLuck.value))) : 0;
+    (rng() < 0.3 ? Math.max(1, Math.round((1 + depthOf() * 2) * (1 + labyLuck.value))) : 0) +
+    grade.fragBonus;
   frags.value += gotFrag;
-  if (item) {
-    loot.value.push(item);
-    dust.value += 3;
-    lastEvent.value = {
-      kind: 'good',
-      text: gotFrag ? `🎁 ${item.name} + 🧩${gotFrag}` : `🎁 ${item.name} !`,
-    };
-  } else if (gotFrag) {
-    lastEvent.value = { kind: 'good', text: `🎁 🧩 ${gotFrag} fragments !` };
+  dust.value += 3 + grade.dustBonus;
+  if (item) loot.value.push(item);
+  const bits = [item?.name, gotFrag ? `🧩${gotFrag}` : ''].filter(Boolean).join(' + ');
+  lastEvent.value = {
+    kind: 'good',
+    text: `${grade.emoji} Coffre ${grade.label}${bits ? ' — ' + bits : ' ouvert'} !`,
+  };
+  roomFx.value = { kind: 'chest', item, grade };
+}
+// Piège de la salle (seed séparé) : type varié (pointes/gaz/flammes = dégâts modulés ;
+// trappe = vol d'or ; toile = vol de poussière). Déterministe → même icône à l'affichage.
+function trapKindOf(id: number): LabyTrap {
+  return pickLabyTrap(mulberry32((roomSeed(id) ^ 0x7a17) >>> 0));
+}
+function springTrap(id: number) {
+  const trap = trapKindOf(id);
+  if (trap.kind === 'dmg') {
+    const dmg = Math.max(1, Math.round(trapDmg.value * trap.mult));
+    run.value = applyDamage(run.value, dmg); // mort gérée à la fermeture (closeFx)
+    lastEvent.value = { kind: 'bad', text: `${trap.emoji} ${trap.label} ! −${dmg} PV` };
+    roomFx.value = { kind: 'trap', trap, dmg };
   } else {
-    lastEvent.value = { kind: 'neutral', text: '🎁 Coffre vide…' };
+    const isGold = trap.kind === 'gold';
+    const pool = isGold ? gold : dust;
+    const want = isGold
+      ? Math.round((10 + heroLevel.value * 4) * (1 + depthOf()))
+      : Math.round((4 + heroLevel.value) * (1 + depthOf()));
+    const loss = Math.min(pool.value, want);
+    pool.value -= loss;
+    lastEvent.value = {
+      kind: 'bad',
+      text: loss
+        ? `${trap.emoji} ${trap.label} ! −${loss} ${isGold ? '🪙' : '✨'}`
+        : `${trap.emoji} ${trap.label} — rien à voler !`,
+    };
+    roomFx.value = { kind: 'trap', trap };
   }
-  roomFx.value = { kind: 'chest', item };
 }
 // SALLE SECRÈTE : gros butin GARANTI — un objet de HAUT rang (plusieurs tirages, on garde
 // le meilleur, niveau+2 et forte luck) + lot d'or/poussière/fragments. Comme les autres
@@ -840,9 +896,7 @@ function onRoomClick(id: number) {
   }
   switch (target.type) {
     case 'trap':
-      run.value = applyDamage(run.value, trapDmg.value);
-      lastEvent.value = { kind: 'bad', text: `⚠️ Piège ! −${trapDmg.value} PV` };
-      roomFx.value = { kind: 'trap', dmg: trapDmg.value }; // mort gérée à la fermeture (closeFx)
+      springTrap(id);
       break;
     case 'monster':
       fightRoom(id, false);
@@ -1120,11 +1174,18 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
         stones: Math.floor(stones * keep),
         fragments: Math.floor(fragTotal * keep),
         drops: outcome === 'dead' ? [] : loot.value,
+        // (les lignes de récap sont recalées ci-dessous sur les montants RÉELLEMENT crédités)
         // Nettoyage → débloque le palier suivant (mort/retraite ne débloquent pas).
         ...(outcome === 'cleared' && selectedLaby.value
           ? { clearedDungeonId: labyClearId(selectedLaby.value.id) }
           : {}),
       });
+    // Recale les compteurs affichés sur les montants RÉELLEMENT crédités (bonus de clear
+    // pour les fragments, fraction gardée en cas de mort) → le récap ne ment pas.
+    gold.value = Math.floor(gold.value * keep);
+    dust.value = Math.floor(dust.value * keep);
+    frags.value = Math.floor(fragTotal * keep);
+    stonesGained.value = Math.floor(stones * keep);
   }
   stopAuto(); // fin de run → coupe l'auto (la relance depuis la modale est manuelle)
   over.value = true;
@@ -1566,6 +1627,17 @@ function replayAuto() {
   font-size: 76px;
   animation: chest-open 0.9s ease-out;
   transform-origin: bottom center;
+}
+.chest-big {
+  width: 84px;
+  height: 84px;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.4));
+}
+.chest-grade {
+  font-weight: 800;
+  font-size: 18px;
+  margin-top: 2px;
+  letter-spacing: 0.02em;
 }
 @keyframes chest-open {
   0% {

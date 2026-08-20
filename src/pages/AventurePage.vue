@@ -670,9 +670,12 @@
                   >
                     {{ hasIncubator ? '🔧 Infuser' : '🔧 Infuser (Incubateur 🥚)' }}
                   </button>
-                  <span v-else-if="famTarget.id === equippedFamiliar.id" class="fam-target-tag"
-                    >🔧 cible</span
-                  >
+                  <template v-else-if="famTarget.id === equippedFamiliar.id">
+                    <span class="fam-target-tag">🔧 cible</span>
+                    <div v-if="!famTargetCapped" class="tal-xp fam-xp cur-bar">
+                      <span :style="{ width: famTierPct(equippedFamiliar) + '%' }" />
+                    </div>
+                  </template>
                   <button class="slot-remove" @click="doUnequipFamiliar()">Retirer</button>
                 </div>
               </div>
@@ -701,21 +704,28 @@
                     <span v-if="f.effect2" class="gpill sig">✦</span>
                   </div>
                   <div class="fam-mini-eff">{{ itemEffects(f) }}</div>
-                  <!-- Comparatif de puissance vs familier ÉQUIPÉ (comme les objets). -->
+                  <!-- Comparatif de puissance vs familier ÉQUIPÉ, à ARMES ÉGALES : le
+                       candidat est jugé AU NIVEAU du familier équipé (powerIfEquipMatched),
+                       pas à son niveau actuel → on compare le potentiel, pas un sous-niveau. -->
                   <div
                     v-if="!famTarget && equippedFamiliar?.id !== f.id"
                     class="fam-mini-cmp"
-                    :class="powerIfEquipNow(f) >= combatPowerVal ? 'up' : 'down'"
-                    title="Puissance de combat si tu équipes ce familier"
+                    :class="powerIfEquipMatched(f) >= combatPowerVal ? 'up' : 'down'"
+                    title="Puissance de combat si tu équipes ce familier (au niveau de l'équipé)"
                   >
-                    ⚔️ {{ fmtPow(combatPowerVal) }} → {{ fmtPow(powerIfEquipNow(f)) }}
-                    <b>({{ fmtDelta(combatPowerVal, powerIfEquipNow(f)) }})</b>
+                    ⚔️ {{ fmtPow(combatPowerVal) }} → {{ fmtPow(powerIfEquipMatched(f)) }}
+                    <b>({{ fmtDelta(combatPowerVal, powerIfEquipMatched(f)) }})</b>
                   </div>
                 </div>
                 <div class="fam-mini-acts">
                   <!-- MODE CIBLE : sacrifier ce familier dans la cible (comme les talents). -->
                   <template v-if="famTarget">
-                    <span v-if="famTarget.id === f.id" class="fam-mini-cur">🔧 cible</span>
+                    <template v-if="famTarget.id === f.id">
+                      <span class="fam-mini-cur">🔧 cible</span>
+                      <div v-if="!famTargetCapped" class="tal-xp fam-xp cur-bar">
+                        <span :style="{ width: famTierPct(f) + '%' }" />
+                      </div>
+                    </template>
                     <button
                       v-else-if="!f.locked"
                       class="fam-mini-eq feed"
@@ -4011,6 +4021,11 @@ const famTargetCapped = computed(() => {
 function famTierLabel(f: Item): string {
   return `${RARITY_LABEL[f.rarity]}${itemQuality(f) || ''}`;
 }
+// Progression 0..100 vers le prochain tier (barre d'infusion sur la carte cible).
+function famTierPct(f: Item): number {
+  const p = familiarTierProgress(f);
+  return Math.min(100, Math.round((p.xp / Math.max(1, p.cost)) * 100));
+}
 function setFamTarget(f: Item) {
   famTarget.value = f;
 }
@@ -5453,6 +5468,13 @@ onUnmounted(() => {
 /* Barre d'XP de tier de la cible d'infusion (familier). */
 .fam-xp {
   margin-top: 8px;
+}
+/* Barre de tier compacte affichée SUR la carte du familier cible (feedback d'infusion
+   là où on clique, en plus du bandeau du haut). Couleur accent = bien visible. */
+.fam-xp.cur-bar {
+  width: 72px;
+  margin-top: 4px;
+  color: var(--accent);
 }
 .fam-infuse-btns {
   display: flex;
