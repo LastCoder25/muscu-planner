@@ -153,6 +153,14 @@ export const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
       'Écarte lentement en contrôlant.',
     ],
   },
+  ex_chest_fly_dumbbell: {
+    steps: [
+      'Allongé sur le banc, un haltère dans chaque main, bras tendus au-dessus de la poitrine.',
+      'Coudes LÉGÈREMENT fléchis (angle fixe), descends les bras sur les côtés en arc de cercle.',
+      'Sens l’étirement des pectoraux, puis referme en arc jusqu’au-dessus de la poitrine.',
+    ],
+    tip: 'Garde les coudes semi-fléchis tout du long — ce n’est pas un développé. Charge modérée, mouvement contrôlé.',
+  },
   ex_pushup: {
     steps: [
       'Mains un peu plus larges que les épaules, corps gainé en planche.',
