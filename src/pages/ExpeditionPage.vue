@@ -377,6 +377,7 @@ import {
   RARITY_LABEL,
   RARITY_RANK,
   RANK_COLOR,
+  RANK_ORDER,
   rollStars,
   tierIndexOf,
   dropBand,
@@ -386,6 +387,7 @@ import {
   type Rarity,
 } from '@/lib/items';
 import { rollActivityFamiliar } from '@/data/familiars';
+import { pickLabyFoe, type LabyFoe } from '@/data/labyrinthFoes';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
 import CombatStage from '@/components/CombatStage.vue';
@@ -527,7 +529,13 @@ function setName(id?: string): string {
 }
 
 // Animation de salle (combat / coffre / piège) jouée en overlay avant de continuer.
-type StageFight = { name: string; emoji: string; maxPv: number; log: CombatEvent[] };
+type StageFight = {
+  name: string;
+  emoji: string;
+  maxPv: number;
+  archetype?: string;
+  log: CombatEvent[];
+};
 const roomFx = ref<{
   kind: 'combat' | 'chest' | 'trap' | 'descend';
   win?: boolean;
@@ -612,22 +620,32 @@ function roomGlyph(r: Room): string {
 // absolu → une échelle fixe le laissait one-shot tout sans jamais perdre de PV).
 // pv = k × dégâts/tour du joueur (⇒ le monstre SURVIT et riposte) ; dégâts = part
 // des PV max du joueur (⇒ attrition réelle). Deeper = plus dur (push-your-luck).
-function makeMonster(isBoss: boolean, depth: number): Combatant {
+// Index de rang du palier courant (0=G … 9=SSS) → thème du roster de monstres.
+const labyTierIndex = computed(() =>
+  Math.max(0, RANK_ORDER.indexOf(selectedLaby.value?.rank ?? 'G')),
+);
+
+// Monstre = baseline (pv/dégâts scalés au joueur + profondeur) MODULÉE par l'archétype
+// de la créature tirée (assassin/brute/colosse/sangsue/vif) → même fourchette de
+// difficulté, mais un FEEL différent à chaque combat. Nom/emoji viennent du roster du palier.
+function makeMonster(isBoss: boolean, depth: number, foe: LabyFoe): Combatant {
   const f = fighter.value;
   const pTurn = f.damage * (f.strikes ?? 1) * (1 + f.crit); // dégâts/tour approx du joueur
   const P = f.pv;
   const d = 0.85 + 0.55 * depth; // 0.85 (surface) → 1.4 (fond)
+  const a = foe.arch;
+  // Baseline coriace : ~3 tours (salle) / ~6,5 tours (gardien) ; dégâts ~5,5 % / ~9 % des PV.
+  const basePv = pTurn * (isBoss ? 6.5 : 3) * d;
+  const baseDmg = P * (isBoss ? 0.09 : 0.055) * d;
   return {
-    name: isBoss ? 'Gardien de l’étage' : 'Rôdeur',
-    // Coriaces : survivent ~3 tours (rôdeur) / ~6,5 tours (gardien) → de VRAIS
-    // combats de plusieurs rounds (avant : ~1,5 tour → mouraient en un coup).
-    pv: Math.max(10, Math.round(pTurn * (isBoss ? 6.5 : 3) * d)),
-    // Frappent plus fort : ~5,5 % (rôdeur) / ~9 % (gardien) des PV max par coup.
-    damage: Math.max(1, Math.round(P * (isBoss ? 0.09 : 0.055) * d)),
-    crit: 0.05 + 0.05 * depth,
-    dodge: 0.03 + 0.04 * depth,
+    name: foe.name,
+    pv: Math.max(10, Math.round(basePv * a.pvMult)),
+    damage: Math.max(1, Math.round(baseDmg * a.dmgMult)),
+    crit: a.crit + 0.03 * depth,
+    dodge: a.dodge + 0.02 * depth,
     initiative: isBoss ? 14 : 8,
-    strikes: 1,
+    strikes: a.strikes ?? 1,
+    ...(a.lifesteal ? { lifesteal: a.lifesteal } : {}),
   };
 }
 // Piège = 5 % des PV max du joueur (proportionnel, plus les 14 fixes ridicules).
@@ -639,7 +657,9 @@ function roomSeed(id: number): number {
 const depthOf = () => (run.value.floors > 1 ? run.value.floor / (run.value.floors - 1) : 0);
 
 function fightRoom(id: number, isBoss: boolean) {
-  const monster = makeMonster(isBoss, depthOf());
+  // Créature de la salle (roster du palier + archétype), seedée → rejouable.
+  const foe = pickLabyFoe(mulberry32((roomSeed(id) ^ 0x2f6b) >>> 0), labyTierIndex.value, isBoss);
+  const monster = makeMonster(isBoss, depthOf(), foe);
   const goldWin = Math.round((6 + 3 * heroLevel.value) * (isBoss ? 4 : 1));
   stageStartPv.value = run.value.pv; // PV AVANT le combat (barre part de là, pas du max)
   // Combattant du labyrinthe : max PLAFONNÉ au pool courant (le vol de vie ne peut
@@ -663,14 +683,21 @@ function fightRoom(id: number, isBoss: boolean) {
     dust.value += dd;
     lastEvent.value = {
       kind: 'good',
-      text: `${isBoss ? '👑' : '👾'} Vaincu ! +${res.gold} 🪙 +${dd} ✨ · ${finalPv} PV`,
+      text: `${foe.emoji} Vaincu ! +${res.gold} 🪙 +${dd} ✨ · ${finalPv} PV`,
     };
   } else {
-    lastEvent.value = { kind: 'bad', text: `💀 Battu par le ${monster.name.toLowerCase()}…` };
+    lastEvent.value = { kind: 'bad', text: `💀 Battu par ${monster.name}…` };
   }
-  // Rejoue le combat animé (log seedé exact) en overlay.
+  // Rejoue le combat animé (log seedé exact) en overlay, avec l'identité de la créature
+  // (emoji + archétype → aura + tag « féroce/brutal/colosse/insaisissable » via CombatStage).
   stageFights.value = [
-    { name: monster.name, emoji: isBoss ? '👑' : '👾', maxPv: monster.pv, log: res.log },
+    {
+      name: monster.name,
+      emoji: foe.emoji,
+      maxPv: monster.pv,
+      archetype: foe.arch.arch,
+      log: res.log,
+    },
   ];
   fxDone.value = false;
   roomFx.value = { kind: 'combat', win: res.win };
