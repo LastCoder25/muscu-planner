@@ -105,7 +105,7 @@
         </div>
 
         <!-- Exécution + descriptif de l'exo sélectionné -->
-        <div v-if="exercise" class="ex-detail">
+        <div v-if="exercise" ref="detailEl" class="ex-detail">
           <div class="exd-head">
             <ExerciseAnim
               v-if="exoAnim"
@@ -144,15 +144,19 @@
               durée
             </button>
           </div>
-          <!-- Exo « rythmique » (corde à sauter…) : reps OU durée, au choix. -->
-          <div v-else-if="isDual" class="cardio-unit">
-            <span class="cu-lbl">Objectif en</span>
+          <!-- Exo « rythmique » (corde à sauter, burpees…) : reps OU durée, au choix. Mis en
+               avant (bordure accent + note) car c'est LE réglage à ne pas rater pour ces exos. -->
+          <div v-else-if="isDual" class="cardio-unit dual-hi">
+            <span class="cu-lbl">Compter en</span>
             <button class="cu-b" :class="{ on: dualUnit === 'reps' }" @click="dualUnit = 'reps'">
               répétitions
             </button>
             <button class="cu-b" :class="{ on: dualUnit === 'time' }" @click="dualUnit = 'time'">
               durée
             </button>
+          </div>
+          <div v-if="isDual" class="dual-note">
+            💡 Cet exo se compte en <b>répétitions</b> ou en <b>durée</b> — choisis ci-dessus.
           </div>
           <template v-if="guide">
             <div class="exd-sec">Exécution</div>
@@ -453,7 +457,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import {
@@ -520,6 +524,9 @@ const lib = ref<ExerciseRow[]>([]);
 const loadingLib = ref(true);
 const search = ref('');
 const exercise = ref<ExerciseRow | null>(null);
+// Panneau de détail de l'exo sélectionné → on l'amène dans le champ de vision à la
+// sélection (sinon, sous une longue liste sur mobile, on rate le choix reps/durée).
+const detailEl = ref<HTMLElement | null>(null);
 const format = ref<ChallengeFormat>('fixed');
 const durationDays = ref(30);
 const customOn = ref(false);
@@ -820,6 +827,8 @@ function pickExercise(e: ExerciseRow) {
   customOn.value = false;
   durationDays.value = defaultDurationFor(e);
   reset();
+  // Amène le panneau de détail (choix reps/durée, exécution) dans le champ de vision.
+  void nextTick(() => detailEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
 }
 // Recalcule les objectifs quand on bascule km ↔ durée (défauts différents).
 watch(cardioUnit, () => {
@@ -1259,6 +1268,19 @@ onMounted(async () => {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-ink);
+}
+/* Exo dual (reps OU durée) : bloc mis en avant pour ne pas rater le choix. */
+.cardio-unit.dual-hi {
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  flex-wrap: wrap;
+}
+.dual-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dim);
 }
 .exd-none {
   margin-top: 10px;

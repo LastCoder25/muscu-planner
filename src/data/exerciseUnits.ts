@@ -15,6 +15,8 @@ export const DUAL_UNIT_EXERCISE_IDS = new Set<string>([
   'ex_jumping_jacks', // jumping jacks
   'ex_high_knees', // montées de genoux
   'ex_mountain_climbers', // mountain climbers
+  'ex_burpees', // burpees (AMRAP ou « X min »)
+  'ex_squat_jump', // squats sautés (pliométrie au temps)
 ]);
 
 /** Cet exo se fait-il logiquement en reps OU en durée (→ proposer le choix) ? */
