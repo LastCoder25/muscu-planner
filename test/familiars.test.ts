@@ -190,17 +190,23 @@ describe('familiers — infusion (incubateur)', () => {
     expect(familiarInfuseXp(fam('SSS', 5))).toBe(50);
     expect(familiarInfuseXp(fam('C', 3))).toBeGreaterThan(familiarInfuseXp(fam('G', 3)));
   });
-  it('infuseFamiliar : assez d’XP → monte la qualité puis le rang, plafonné par l’Incubateur', () => {
-    // Beaucoup d'XP, plafond rang index 2 (E) → grimpe jusqu'à E5 puis bloque.
-    const up = infuseFamiliar(fam('G', 1), 500, 2);
-    expect(tierIndexOf(up)).toBe(14); // E5 = 2×5+4
+  it('infuseFamiliar : assez d’XP → monte qualité puis rang, plafonné au CRAN de l’Incubateur', () => {
+    // Beaucoup d'XP, plafond au CRAN 14 (E★5) → grimpe jusqu'à E★5 puis bloque.
+    const up = infuseFamiliar(fam('G', 1), 500, 14);
+    expect(tierIndexOf(up)).toBe(14); // E★5 = 2×5+4
     expect(up.rarity).toBe('E');
     expect(rollStars(up.roll)).toBe(5);
     // Effet re-scalé vers le haut (tier plus élevé = plus fort).
     expect(up.effect.value).toBeGreaterThan(10);
   });
+  it('infuseFamiliar : le CRAN plafonne finement (un cran à la fois)', () => {
+    // Cap au cran 2 (G★3) → même avec beaucoup d'XP on ne dépasse pas G★3.
+    const up = infuseFamiliar(fam('G', 1), 500, 2);
+    expect(tierIndexOf(up)).toBe(2);
+    expect(up.rarity).toBe('G');
+  });
   it('infuseFamiliar : XP insuffisante → reste au même tier, accumule fxp', () => {
-    const up = infuseFamiliar(fam('G', 1), 1, 9);
+    const up = infuseFamiliar(fam('G', 1), 1, 49);
     expect(tierIndexOf(up)).toBe(0);
     expect(up.fxp).toBe(1);
   });

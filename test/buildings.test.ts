@@ -16,7 +16,7 @@ import {
   storageMult,
   expeditionsUnlocked,
   incubatorBuilt,
-  maxFuseTargetIndex,
+  maxFuseTierIndex,
   fuseUnlockLevel,
   travelTimeMult,
   outpostLevel,
@@ -67,8 +67,8 @@ describe('buildings — emplacements & coûts', () => {
     // familiers bloqués au rang F. Le niveau DOIT compter.
     expect(buildingScales('incubator')).toBe(true);
     expect(canUpgradeBuilding(mk('incubator', 1), 10)).toBe(true);
-    expect(maxFuseTargetIndex([mk('incubator', 4)])).toBeGreaterThan(
-      maxFuseTargetIndex([mk('incubator', 1)]),
+    expect(maxFuseTierIndex([mk('incubator', 4)])).toBeGreaterThan(
+      maxFuseTierIndex([mk('incubator', 1)]),
     );
   });
 });
@@ -202,18 +202,18 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
     expect(incubatorBuilt([mk('outpost', 3)])).toBe(false);
     expect(incubatorBuilt([mk('incubator', 1)])).toBe(true);
   });
-  it('maxFuseTargetIndex : F (1) à la construction, +1 rang tous les 2 niveaux, SSS (9) au niv.16', () => {
-    expect(maxFuseTargetIndex([])).toBe(0); // pas d'incubateur → aucune fusion
-    expect(maxFuseTargetIndex([mk('incubator', 1)])).toBe(1); // F
-    expect(maxFuseTargetIndex([mk('incubator', 2)])).toBe(2); // E
-    expect(maxFuseTargetIndex([mk('incubator', 6)])).toBe(4); // C
-    expect(maxFuseTargetIndex([mk('incubator', 16)])).toBe(9); // SSS
-    expect(maxFuseTargetIndex([mk('incubator', 40)])).toBe(9); // plafonné
+  it('maxFuseTierIndex : CRAN max, +1 tous les 2 niveaux (50 crans), SSS★5 (49) au niv.~97', () => {
+    expect(maxFuseTierIndex([])).toBe(-1); // pas d'incubateur → aucune infusion
+    expect(maxFuseTierIndex([mk('incubator', 1)])).toBe(1); // cran 1 (G★2) dès la construction
+    expect(maxFuseTierIndex([mk('incubator', 3)])).toBe(2); // +1 cran tous les 2 niveaux
+    expect(maxFuseTierIndex([mk('incubator', 5)])).toBe(3);
+    expect(maxFuseTierIndex([mk('incubator', 97)])).toBe(49); // SSS★5
+    expect(maxFuseTierIndex([mk('incubator', 200)])).toBe(49); // plafonné à 49
   });
-  it('fuseUnlockLevel : niveau d’Incubateur requis pour fuser vers un rang', () => {
-    expect(fuseUnlockLevel(1)).toBe(1); // F : dès la construction
-    expect(fuseUnlockLevel(2)).toBe(2); // E
-    expect(fuseUnlockLevel(9)).toBe(16); // SSS
+  it('fuseUnlockLevel : niveau d’Incubateur requis pour un cran', () => {
+    expect(fuseUnlockLevel(1)).toBe(1); // cran 1 dès la construction
+    expect(fuseUnlockLevel(2)).toBe(3);
+    expect(fuseUnlockLevel(49)).toBe(97); // SSS★5
   });
   it('travelTimeMult < 1 et décroît avec le niveau (−1,5 %/niv, plancher −60 % au niv.40)', () => {
     expect(travelTimeMult([])).toBe(1);

@@ -693,17 +693,17 @@ export function familiarTierProgress(fam: Item): { xp: number; cost: number } {
  *  plafonné au rang d'index `maxRankIndex` (Incubateur). La magnitude de l'effet
  *  (et de la signature) est re-scalée par le ratio des multiplicateurs de tier →
  *  un familier infusé = un familier droppé au même tier. Renvoie le familier à jour. */
-export function infuseFamiliar(fam: Item, addXp: number, maxRankIndex: number): Item {
+export function infuseFamiliar(fam: Item, addXp: number, maxTierIndex: number): Item {
   let fxp = (fam.fxp ?? 0) + Math.max(0, addXp);
   let rank = fam.rarity;
   let quality = Math.max(1, rollStars(fam.roll));
   let effVal = fam.effect.value;
   let eff2Val = fam.effect2?.value;
+  const cap = Math.min(49, maxTierIndex); // CRAN max débloqué par l'Incubateur (rang+qualité)
   for (;;) {
     const tier = rankIndex(rank) * 5 + (quality - 1);
-    if (tier >= 49) break; // SSS5 = tier max absolu
+    if (tier >= cap) break; // cran cible non débloqué (ou SSS★5 max)
     const nextRankIdx = Math.floor((tier + 1) / 5);
-    if (nextRankIdx > maxRankIndex) break; // rang cible non débloqué par l'Incubateur
     const cost = tierStepCost(tier);
     if (fxp < cost) break;
     fxp -= cost;

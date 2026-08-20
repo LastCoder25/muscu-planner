@@ -437,7 +437,7 @@ import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
 import { computeCharacter } from '@/lib/character';
-import { playerWithGear, RARITY_RANK, RANK_ORDER } from '@/lib/items';
+import { playerWithGear, RARITY_RANK, tierToRankQ } from '@/lib/items';
 import {
   BUILDING_TYPES,
   buildingType,
@@ -458,7 +458,7 @@ import {
   labyrinthLuckBonus,
   bossAltarRollFloor,
   bossRewardCount,
-  maxFuseTargetIndex,
+  maxFuseTierIndex,
   goldToDust,
   BUILD,
   type Building,
@@ -826,8 +826,10 @@ function utilityEffectLabel(b: Building): string {
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')
     return `${bossRewardCount([b])} choix de récompense · ciblage du set · +${Math.round(bossAltarRollFloor([b]) * 100)}% qualité de roll`;
-  if (b.typeId === 'incubator')
-    return `infusion familier → rang max ${RANK_ORDER[maxFuseTargetIndex([b])]}`;
+  if (b.typeId === 'incubator') {
+    const rq = tierToRankQ(Math.max(0, maxFuseTierIndex([b])));
+    return `infusion familier → cran max ${rq.rank}★${rq.quality}`;
+  }
   if (b.typeId === 'comptoir') return `100 🪙 → ${goldToDust([b], 100)} ✨`;
   return buildingType(b.typeId)?.desc ?? ''; // autres utilitaires : description
 }

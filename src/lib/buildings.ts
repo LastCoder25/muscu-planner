@@ -330,17 +330,17 @@ export function incubatorLevel(buildings: Building[]): number {
 export function incubatorBuilt(buildings: Building[]): boolean {
   return incubatorLevel(buildings) > 0;
 }
-/** Index de RANG max (0..9) qu'on peut FUSER selon le niveau de l'Incubateur : la
- *  fusion vers F (index 1) dès la construction, puis +1 rang cible tous les 2 niveaux
- *  → SSS (index 9) au niveau 16. Monter l'Incubateur débloque les fusions supérieures
- *  (ticket f93c219b). 0 = pas d'incubateur (aucune fusion). */
-export function maxFuseTargetIndex(buildings: Building[]): number {
+/** CRAN (tier 0..49 = rang×5 + qualité−1) MAX atteignable par infusion selon le niveau
+ *  de l'Incubateur. Comme partout ailleurs : **une qualité (cran) tous les 2 niveaux** →
+ *  les 50 crans (rang+qualité) sont débloqués progressivement, SSS★5 au niveau ~97 (graal
+ *  long terme). Construit (niv.1) → cran 1 (G★2). `-1` = pas d'incubateur (aucune infusion). */
+export function maxFuseTierIndex(buildings: Building[]): number {
   const lvl = incubatorLevel(buildings);
-  return lvl < 1 ? 0 : Math.min(9, 1 + Math.floor(lvl / 2));
+  return lvl < 1 ? -1 : Math.min(49, 1 + Math.floor((lvl - 1) / 2));
 }
-/** Niveau d'Incubateur requis pour débloquer la fusion vers le rang d'index `idx`. */
-export function fuseUnlockLevel(idx: number): number {
-  return Math.max(1, 2 * (idx - 1));
+/** Niveau d'Incubateur requis pour débloquer le cran (tier) `tier`. */
+export function fuseUnlockLevel(tier: number): number {
+  return Math.max(1, 1 + 2 * (tier - 1));
 }
 /** La Forge est-elle construite ? → débloque l'Atelier (forge d'objet / de set). */
 export function forgeBuilt(buildings: Building[]): boolean {
@@ -438,7 +438,7 @@ export function buildingUpgradeCost(level: number): number {
 
 /** Un bâtiment a-t-il un effet qui SCALE avec le niveau ? (producteur, ou utilitaire
  *  à effet par niveau) → est-il améliorable. L'INCUBATEUR scale via son niveau (chaque
- *  niveau relève le rang MAX d'infusion des familiers, cf. maxFuseTargetIndex), même si
+ *  niveau relève le CRAN max d'infusion des familiers, cf. maxFuseTierIndex), même si
  *  son `effect` est vide → il DOIT être améliorable (sinon les familiers restent bloqués
  *  au rang F). */
 export function buildingScales(typeId: string): boolean {

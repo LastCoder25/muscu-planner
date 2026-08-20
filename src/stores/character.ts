@@ -59,7 +59,7 @@ import {
   storageMult,
   expeditionsUnlocked,
   travelTimeMult,
-  maxFuseTargetIndex,
+  maxFuseTierIndex,
   forgeLuckBonus,
   goldToDust,
   type Building,
@@ -611,7 +611,7 @@ export const useCharacterStore = defineStore('character', () => {
           ? bagTarget
           : null;
     if (!target) return;
-    const updated = applyFamiliarInfusion(target, spend, maxFuseTargetIndex(cur.buildings));
+    const updated = applyFamiliarInfusion(target, spend, maxFuseTierIndex(cur.buildings));
     const patch: Partial<CharacterRow> = { fragments: cur.fragments - spend };
     if (equippedFam?.id === targetId)
       patch.equipped = { ...cur.equipped, [FAMILIAR_SLOT]: updated };
@@ -637,7 +637,7 @@ export const useCharacterStore = defineStore('character', () => {
     const fodder = cur.inventory.find((i) => i.id === fodderId);
     if (!target || !fodder || !isFamiliar(fodder) || fodder.locked) return;
     const xp = familiarInfuseXp(fodder);
-    const updated = applyFamiliarInfusion(target, xp, maxFuseTargetIndex(cur.buildings));
+    const updated = applyFamiliarInfusion(target, xp, maxFuseTierIndex(cur.buildings));
     const inventory = cur.inventory.filter((i) => i.id !== fodderId);
     const patch: Partial<CharacterRow> =
       equippedFam?.id === targetId
