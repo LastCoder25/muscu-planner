@@ -249,6 +249,25 @@
       <template v-else-if="step === 4">
         <div class="step-h">Difficulté & options</div>
 
+        <!-- Format de la durée (gainage/exo au temps) : saisie en secondes ou m:ss. -->
+        <div v-if="isGainageTime" class="row items-center q-mb-md" style="gap: 10px">
+          <span class="lbl" style="margin: 0">Saisir la durée en</span>
+          <q-btn-toggle
+            v-model="timeDisplay"
+            no-caps
+            dense
+            unelevated
+            :options="[
+              { label: 'secondes', value: 'sec' },
+              { label: 'min:sec', value: 'mmss' },
+            ]"
+            color="grey-9"
+            text-color="grey-5"
+            toggle-color="primary"
+            toggle-text-color="dark"
+          />
+        </div>
+
         <div class="auto-card">
           <div class="row items-center" style="gap: 10px">
             <q-toggle v-model="adaptiveMode" />
@@ -268,6 +287,20 @@
             }})
           </div>
           <q-input
+            v-if="showMmss"
+            :model-value="secToMmss(cfgDisplay(format === 'cumulative' ? 'total' : 'start'))"
+            mask="##:##"
+            fill-mask="0"
+            filled
+            dense
+            suffix="m:ss"
+            class="q-mb-md"
+            @update:model-value="
+              setField(format === 'cumulative' ? 'total' : 'start', mmssToSec($event))
+            "
+          />
+          <q-input
+            v-else
             :model-value="cfgDisplay(format === 'cumulative' ? 'total' : 'start')"
             type="number"
             inputmode="numeric"
@@ -302,6 +335,16 @@
                     +
                   </button>
                 </div>
+                <q-input
+                  v-else-if="showMmss && isTimeValueField(field)"
+                  :model-value="secToMmss(cfgDisplay(field))"
+                  mask="##:##"
+                  fill-mask="0"
+                  filled
+                  dense
+                  suffix="m:ss"
+                  @update:model-value="setField(field, mmssToSec($event))"
+                />
                 <q-input
                   v-else
                   :model-value="cfgDisplay(field)"
@@ -343,24 +386,6 @@
             filled
             dense
             style="max-width: 130px"
-          />
-        </div>
-
-        <div v-if="isGainageTime" class="row items-center q-mb-md" style="gap: 10px">
-          <span class="lbl" style="margin: 0">Affichage durée</span>
-          <q-btn-toggle
-            v-model="timeDisplay"
-            no-caps
-            dense
-            unelevated
-            :options="[
-              { label: 'secondes', value: 'sec' },
-              { label: 'min:sec', value: 'mmss' },
-            ]"
-            color="grey-9"
-            text-color="grey-5"
-            toggle-color="primary"
-            toggle-text-color="dark"
           />
         </div>
 
@@ -595,6 +620,21 @@ const unit = computed<'reps' | 'time' | 'distance'>(() => {
 // Gainage en temps (hors cardio) → propose secondes ou min:sec.
 const isGainageTime = computed(() => unit.value === 'time' && !isCardio.value);
 const timeDisplay = ref<'sec' | 'mmss'>('sec');
+// Saisie de la durée AU FORMAT choisi (ticket e6c51fc9) : quand min:sec est sélectionné,
+// les champs de durée s'affichent/se saisissent en m:ss (converti en secondes en interne).
+const showMmss = computed(() => isGainageTime.value && timeDisplay.value === 'mmss');
+function secToMmss(sec: number | string): string {
+  const s = Math.max(0, Math.round(Number(sec) || 0));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+function mmssToSec(str: unknown): number {
+  const [mm, ss] = String(str).split(':');
+  return (parseInt(mm ?? '0', 10) || 0) * 60 + (parseInt(ss ?? '0', 10) || 0);
+}
+// Un champ de VALEUR temporelle (objectif, pic…) — à saisir en m:ss quand showMmss.
+function isTimeValueField(f: string): boolean {
+  return f === 'start' || f === 'peak' || f === 'total' || f === 'increment';
+}
 // Option « assisté » : exos poids du corps en reps (tractions, dips…).
 const showAssist = computed(
   () =>

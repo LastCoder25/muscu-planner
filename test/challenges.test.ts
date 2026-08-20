@@ -308,6 +308,24 @@ describe('challengeXpPoints', () => {
     const assisted = setsCh([{ reps: 10, assisted: true }]);
     expect(challengeXpPoints([assisted])).toBeLessThan(challengeXpPoints([strict]));
   });
+  // Ticket 0f18ade6 : même exo, même effort → même XP, quelle que soit la façon de
+  // marquer « assisté ». La pénalité ×0,6 est appliquée EXACTEMENT une fois.
+  it('assisté cohérent : variante intrinsèque ≡ exo normal + case « assisté » (même XP)', () => {
+    const prog = [
+      { day: 0, date: '2026-01-05', target: 10, done: 10, elapsed_sec: 0, completed: true },
+      { day: 1, date: '2026-01-06', target: 10, done: 10, elapsed_sec: 0, completed: true },
+      { day: 2, date: '2026-01-07', target: 10, done: 10, elapsed_sec: 0, completed: true },
+    ];
+    // « Dips assisté » : la pénalité est FIGÉE dans rep_weight (0,6), pas de case.
+    const intrinseque = challenge({ rep_weight: 0.6, progress: prog });
+    // « Dips » normal + case « assisté » cochée à la création (config.assisted).
+    const normalCoche = challenge({
+      rep_weight: 1,
+      config: cfg({ start: 10, assisted: true }),
+      progress: prog,
+    });
+    expect(challengeXpPoints([intrinseque])).toBe(challengeXpPoints([normalCoche]));
+  });
 
   it('gainage (temps) : XP d’effort selon le temps même sans complétion', () => {
     const c = challenge({

@@ -202,7 +202,12 @@ watch(
 // Bouton retour visible partout sauf sur l'accueil.
 const showBack = computed(() => route.path !== '/');
 function goBack() {
-  router.back();
+  // Accès direct / rechargement / lancement PWA → pas d'entrée précédente dans
+  // l'historique : `router.back()` ne ferait rien (ticket b459601a). On replie
+  // alors vers l'accueil. Vue Router stocke la précédente dans history.state.back.
+  const hasPrev = window.history.state?.back != null;
+  if (hasPrev) router.back();
+  else void router.push('/');
 }
 
 async function goHome() {
