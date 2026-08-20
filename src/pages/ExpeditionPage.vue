@@ -505,8 +505,10 @@ const fighter = computed<Combatant>(() =>
 const heroLevel = computed(() => character.value.level.level);
 
 const CELL = 66;
-const SIZE = 46; // côté d'une salle (carré arrondi)
-const MAP_PAD = 20; // marge du viewBox (les salles sont décalées → bords non rognés)
+// SIZE couplé à ROOM_JITTER (dungeonCrawl) : CELL·(1−2·0,11) − SIZE ≥ ~7 px → les salles
+// adjacentes gardent TOUJOURS un écart (jamais collées). Baisser SIZE si on augmente le jitter.
+const SIZE = 44; // côté d'une salle (carré arrondi)
+const MAP_PAD = 16; // marge du viewBox (les salles sont décalées → bords non rognés)
 
 const floorsWanted = ref(Math.min(5, Math.max(2, Number(route.query.floors) || 3)));
 // Seed pseudo-aléatoire (composant → Math.random autorisé, contrairement aux libs).

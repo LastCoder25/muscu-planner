@@ -701,6 +701,16 @@
                     <span v-if="f.effect2" class="gpill sig">✦</span>
                   </div>
                   <div class="fam-mini-eff">{{ itemEffects(f) }}</div>
+                  <!-- Comparatif de puissance vs familier ÉQUIPÉ (comme les objets). -->
+                  <div
+                    v-if="!famTarget && equippedFamiliar?.id !== f.id"
+                    class="fam-mini-cmp"
+                    :class="powerIfEquipNow(f) >= combatPowerVal ? 'up' : 'down'"
+                    title="Puissance de combat si tu équipes ce familier"
+                  >
+                    ⚔️ {{ fmtPow(combatPowerVal) }} → {{ fmtPow(powerIfEquipNow(f)) }}
+                    <b>({{ fmtDelta(combatPowerVal, powerIfEquipNow(f)) }})</b>
+                  </div>
                 </div>
                 <div class="fam-mini-acts">
                   <!-- MODE CIBLE : sacrifier ce familier dans la cible (comme les talents). -->
@@ -716,9 +726,22 @@
                     </button>
                     <span v-else class="fam-mini-cur" title="Verrouillé (protégé)">🔒</span>
                   </template>
-                  <!-- MODE NORMAL : équiper / choisir comme cible / vendre. -->
+                  <!-- MODE NORMAL : équiper / monter le niveau 💎 / infuser / vendre. -->
                   <template v-else>
                     <button class="fam-mini-eq" @click="doEquipFamiliar(f.id)">Équiper</button>
+                    <button
+                      class="fam-mini-eq"
+                      :disabled="!canUpgradeFamiliar(f)"
+                      :title="
+                        f.level >= c.level.level
+                          ? 'Niveau plafonné à ton niveau de sport'
+                          : 'Monter le NIVEAU (puissance) avec des pierres 💎'
+                      "
+                      @click="doUpgradeFamiliar(f.id)"
+                    >
+                      💎
+                      {{ f.level >= c.level.level ? 'Max' : familiarStoneCost(f.level, f.rarity) }}
+                    </button>
                     <button
                       v-if="hasIncubator"
                       class="fam-mini-eq"
@@ -5385,6 +5408,18 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   margin-top: 3px;
+}
+.fam-mini-cmp {
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fam-mini-cmp.up {
+  color: var(--d1);
+}
+.fam-mini-cmp.down {
+  color: var(--d4);
 }
 .fam-mini-eq {
   border: 1px solid var(--accent);

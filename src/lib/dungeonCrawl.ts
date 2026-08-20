@@ -46,7 +46,10 @@ function gridFor(rng: () => number, floorIndex: number): { cols: number; rows: n
 // Amplitude du décalage aléatoire des salles (en fraction de cellule) → aspect ORGANIQUE
 // (scatter + couloirs en biais) plutôt qu'une grille alignée. Purement VISUEL (x/y ne
 // servent qu'au rendu ; le graphe/exploration passe par les ids + liens).
-const ROOM_JITTER = 0.22;
+// INVARIANT d'espacement (avec le rendu, CELL=66 / SIZE=44 dans ExpeditionPage) : deux
+// salles adjacentes ne se touchent JAMAIS → `CELL·(1−2·JITTER) − SIZE ≥ ~7 px`. À 0.11 :
+// 66·0.78 − 44 ≈ 7,5 px d'écart minimum garanti. Ne pas augmenter sans réduire SIZE.
+const ROOM_JITTER = 0.11;
 
 // Distance BFS max depuis `from` (via les couloirs) → salle la plus éloignée = sortie.
 function farthestRoom(rooms: Room[], from: number): number {
