@@ -176,7 +176,14 @@
 
       <!-- Récolte des filons (visible dès qu'il y a quelque chose à récolter) -->
       <button
-        v-if="readyTotal.dust + readyTotal.stone + readyTotal.energy + readyTotal.parchemins > 0"
+        v-if="
+          readyTotal.dust +
+            readyTotal.stone +
+            readyTotal.energy +
+            readyTotal.parchemins +
+            readyTotal.fragments >
+          0
+        "
         class="collect-pill"
         @click="collectAll"
       >
@@ -184,6 +191,7 @@
         <span v-if="readyTotal.dust" class="cp-r">✨{{ readyTotal.dust }}</span>
         <span v-if="readyTotal.stone" class="cp-r">💎{{ readyTotal.stone }}</span>
         <span v-if="readyTotal.parchemins" class="cp-r">📜{{ readyTotal.parchemins }}</span>
+        <span v-if="readyTotal.fragments" class="cp-r">🧩{{ readyTotal.fragments }}</span>
         <span v-if="readyTotal.energy" class="cp-r">⚡{{ readyTotal.energy }}</span>
       </button>
     </div>
@@ -337,6 +345,20 @@
                 <template v-else>⬆️ Améliorer · 🪙{{ plotUpCost(selectedPlot.building) }}</template>
               </button>
             </div>
+            <!-- Comptoir : échanger de l'or contre de la poussière ✨ -->
+            <div v-if="selectedPlot.building.typeId === 'comptoir'" class="pm-comptoir">
+              <div class="pmc-rate">
+                Taux : <b>100 🪙 → {{ goldToDust(char.row?.buildings ?? [], 100) }} ✨</b>
+              </div>
+              <button
+                class="pm-up convert"
+                :disabled="goldToDust(char.row?.buildings ?? [], char.row?.gold ?? 0) < 1"
+                @click="doConvert(char.row?.gold ?? 0)"
+              >
+                🏪 Échanger tout · {{ char.row?.gold ?? 0 }} 🪙 →
+                {{ goldToDust(char.row?.buildings ?? [], char.row?.gold ?? 0) }} ✨
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -437,6 +459,7 @@ import {
   bossAltarRollFloor,
   bossRewardCount,
   maxFuseTargetIndex,
+  goldToDust,
   BUILD,
   type Building,
   type BuildingType,
@@ -675,6 +698,7 @@ const RES_EMOJI: Record<string, string> = {
   stone: '💎',
   energy: '⚡',
   parchemins: '📜',
+  fragments: '🧩',
 };
 // Emoji de la ressource produite par un bâtiment (✨/💎/⚡) — remplace l'ancien binaire.
 function filonResEmoji(b: Building): string {
@@ -771,6 +795,14 @@ function collectAll() {
   const uid = auth.user?.id;
   if (uid) void char.collectFilons(uid, Date.now());
 }
+// Comptoir : échange tout l'or contre de la poussière ✨.
+function doConvert(gold: number) {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  void char.convertGold(uid, gold).then((dust) => {
+    if (dust) $q.notify({ type: 'positive', message: `🏪 +${dust} ✨ (or échangé)` });
+  });
+}
 // Construction : un type est-il disponible (niveau atteint + unicité respectée) ?
 function typeBuildable(t: BuildingType): boolean {
   return canBuildType(t.id, heroLevel.value, char.row?.buildings ?? []);
@@ -796,6 +828,7 @@ function utilityEffectLabel(b: Building): string {
     return `${bossRewardCount([b])} choix de récompense · ciblage du set · +${Math.round(bossAltarRollFloor([b]) * 100)}% qualité de roll`;
   if (b.typeId === 'incubator')
     return `infusion familier → rang max ${RANK_ORDER[maxFuseTargetIndex([b])]}`;
+  if (b.typeId === 'comptoir') return `100 🪙 → ${goldToDust([b], 100)} ✨`;
   return buildingType(b.typeId)?.desc ?? ''; // autres utilitaires : description
 }
 
@@ -1447,6 +1480,24 @@ function fmtMin(min: number): string {
   font-weight: 700;
   font-size: 13px;
   cursor: pointer;
+}
+.pm-comptoir {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pmc-rate {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.pm-up.convert {
+  border-color: #b07cff;
+  color: #b07cff;
+}
+.pm-up.convert:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .pm-collect {
   border-color: var(--accent);

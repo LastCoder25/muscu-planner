@@ -18,7 +18,7 @@
 // par l'appelant → fonctions pures et testables.
 
 // Ressource produite (union extensible : on pourra ajouter 'gold', …).
-export type BuildResource = 'dust' | 'stone' | 'energy' | 'parchemins';
+export type BuildResource = 'dust' | 'stone' | 'energy' | 'parchemins' | 'fragments';
 
 // Catégorie d'un bâtiment. `producer` = filon de ressource ; `utility` = bâtiment
 // à EFFET global (entrepôt, tour de reconnaissance…). Extensible.
@@ -33,6 +33,7 @@ export interface BuildingEffect {
   bossRollFloorPerLvl?: number; // Autel des boss : +X au plancher de qualité de roll / niveau
   summonCostRedPerLvl?: number; // Autel des boss : −X% du coût en pierres d'invocation / niveau
   forgeLuckPerLvl?: number; // Forge : +X au biais de rareté des objets forgés / niveau
+  goldToDustPerLvl?: number; // Comptoir : poussière ✨ obtenue par OR échangé / niveau
 }
 
 // Ce qu'un bâtiment DÉBLOQUE (activité/fonctionnalité) → affiché au joueur à la
@@ -225,6 +226,39 @@ export const BUILDING_TYPES: BuildingType[] = [
     },
     desc: 'Débloque l’Atelier : forger un objet neuf à ton niveau + forge de pièces de set. Chaque niveau améliore la rareté des objets forgés.',
   },
+  // Producteur : la SEULE ressource sans source passive (fragments = grinde de TIER des
+  // familiers, jusqu'ici coffres du Labyrinthe + recyclage). Débit lent (comme le filon de
+  // pierre) pour compléter sans court-circuiter la grinde.
+  {
+    id: 'fragment_vein',
+    label: 'Filon de fragments',
+    emoji: '🧩',
+    category: 'producer',
+    resource: 'fragments',
+    prodPerHrPerLvl: 0.14,
+    buildGold: 900,
+    unlockLevel: 3,
+    unique: true,
+    desc: 'Produit des fragments de familier 🧩 (montée du TIER des familiers) en continu.',
+  },
+  // Utilitaire : PUITS D'OR. Depuis le retrait de la boutique/respec, l'or s'accumule sans
+  // débouché → le Comptoir l'échange contre de la poussière ✨ (ressource la plus demandée).
+  // Taux qui monte avec le niveau. Sens UNIQUE (pas de retour poussière→or) → pas de boucle.
+  {
+    id: 'comptoir',
+    label: 'Comptoir',
+    emoji: '🏪',
+    category: 'utility',
+    effect: { goldToDustPerLvl: 0.02 }, // niv.1 ~0,02 ✨/or … niv.20 ~0,4 ✨/or
+    buildGold: 700,
+    unlockLevel: 4,
+    unique: true,
+    unlock: {
+      activity: 'L’échange or → poussière',
+      where: 'Carte 🗺️ Expédition › touche le Comptoir.',
+    },
+    desc: 'Échange ton OR contre de la poussière ✨. Chaque niveau améliore le taux de change.',
+  },
 ];
 
 const BY_ID = new Map(BUILDING_TYPES.map((t) => [t.id, t]));
@@ -319,6 +353,16 @@ export function forgeLuckBonus(buildings: Building[]): number {
   const lvl = buildings.find((b) => b.typeId === 'forge')?.level ?? 0;
   const per = buildingType('forge')?.effect?.forgeLuckPerLvl ?? 0;
   return Math.min(FORGE_LUCK_CAP, lvl * per);
+}
+// ── Comptoir : taux de change OR → POUSSIÈRE (poussière obtenue par or échangé). ──
+export function comptoirRate(buildings: Building[]): number {
+  const lvl = buildings.find((b) => b.typeId === 'comptoir')?.level ?? 0;
+  const per = buildingType('comptoir')?.effect?.goldToDustPerLvl ?? 0;
+  return lvl * per;
+}
+/** Poussière obtenue en échangeant `gold` or au Comptoir (0 si non construit). */
+export function goldToDust(buildings: Building[], gold: number): number {
+  return Math.floor(Math.max(0, gold) * comptoirRate(buildings));
 }
 // ── Porte du Labyrinthe (gate + qualité du butin) ──
 const LABY_GATE_ID = 'labyrinth_gate';
@@ -426,7 +470,13 @@ export function buildingAccrued(b: Building, now: number, mult = 1): number {
 
 /** Somme des ressources prêtes à récolter, par ressource (entrepôts appliqués). */
 export function collectable(buildings: Building[], now: number): Record<BuildResource, number> {
-  const acc: Record<BuildResource, number> = { dust: 0, stone: 0, energy: 0, parchemins: 0 };
+  const acc: Record<BuildResource, number> = {
+    dust: 0,
+    stone: 0,
+    energy: 0,
+    parchemins: 0,
+    fragments: 0,
+  };
   const mult = storageMult(buildings);
   for (const b of buildings) {
     const t = buildingType(b.typeId);

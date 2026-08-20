@@ -23,6 +23,8 @@ import {
   forgeLuckBonus,
   bossSummonDiscount,
   summonCostWith,
+  comptoirRate,
+  goldToDust,
   BUILDING_TYPES,
   BUILD,
   type Building,
@@ -71,6 +73,23 @@ describe('buildings — emplacements & coûts', () => {
   });
 });
 
+describe('buildings — nouveaux (fragments + comptoir)', () => {
+  it('Filon de fragments : producteur de fragments, prod croît avec le niveau', () => {
+    expect(buildingType('fragment_vein')?.resource).toBe('fragments');
+    expect(buildingProdPerHour(mk('fragment_vein', 6))).toBeGreaterThan(0);
+    expect(collectable([mk('fragment_vein', 5, -10 * H)], 0).fragments).toBeGreaterThan(0);
+  });
+  it('Comptoir : taux or→poussière = 0 sans bâtiment, croît avec le niveau', () => {
+    expect(comptoirRate([])).toBe(0);
+    expect(goldToDust([], 1000)).toBe(0);
+    const lo = goldToDust([mk('comptoir', 2)], 1000);
+    const hi = goldToDust([mk('comptoir', 10)], 1000);
+    expect(lo).toBeGreaterThan(0);
+    expect(hi).toBeGreaterThan(lo);
+    expect(buildingScales('comptoir')).toBe(true); // améliorable (effet par niveau)
+  });
+});
+
 describe('buildings — production', () => {
   it('prod/h et stockage croissent avec le niveau', () => {
     expect(buildingProdPerHour(mk('dust_vein', 10))).toBeGreaterThan(
@@ -106,6 +125,7 @@ describe('buildings — production', () => {
       stone: 0,
       energy: 0,
       parchemins: 0,
+      fragments: 0,
     });
   });
 });
@@ -161,7 +181,13 @@ describe('buildings — Entrepôt : effet stockage global', () => {
     const base = collectable([dust], now).dust;
     const boosted = collectable([dust, wh], now).dust;
     expect(boosted).toBeGreaterThan(base); // stockage plus grand → plus récolté à saturation
-    expect(collectable([wh], now)).toEqual({ dust: 0, stone: 0, energy: 0, parchemins: 0 }); // l'entrepôt ne produit rien
+    expect(collectable([wh], now)).toEqual({
+      dust: 0,
+      stone: 0,
+      energy: 0,
+      parchemins: 0,
+      fragments: 0,
+    }); // l'entrepôt ne produit rien
   });
 });
 
