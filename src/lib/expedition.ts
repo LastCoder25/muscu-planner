@@ -481,9 +481,12 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
   }
 
   // Réussite : HAUL (or + poussière + pierres) + PRISE éventuelle.
+  // MINE = INVESTISSEMENT D'OR (+ temps réel) → doit rapporter nettement plus que le coût.
+  // Rendement = coût × (1,8 + heures A/R) : ~2,3× pour un trajet court, ~3,3× pour ~1,5 h,
+  // jusqu'à ~5× pour un long trajet (avant : ~2× seulement → trop léger pour l'attente).
   const goldHaul =
     poi.type === 'mine'
-      ? Math.round((cost + poi.level * 15) * (1 + rth * 0.6)) // mine = vraie source d'or
+      ? Math.round(cost * (1.8 + rth))
       : Math.round((cost * 0.4 + poi.level * 10) * (1 + rth * 0.4));
   const dustHaul = Math.round((poi.type === 'mine' ? 14 + poi.level * 4 : 9 + poi.level * 3) * tf);
   const stoneHaul = Math.round(

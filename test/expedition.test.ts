@@ -184,7 +184,8 @@ describe('expedition — résolution', () => {
   it('mine : toujours réussie + gain NET d’or + poussière + pierres + énergie', () => {
     const o = resolveOutcome(strong, mine, 1);
     expect(o.win).toBe(true);
-    expect(o.gold).toBeGreaterThan(goldCost('mine', mine.level)); // vrai gain net
+    // Vrai gain net : la mine rend NETTEMENT plus que son coût (investissement + temps).
+    expect(o.gold).toBeGreaterThan(goldCost('mine', mine.level) * 2);
     expect(o.dust).toBeGreaterThan(0);
     expect(o.stones).toBeGreaterThan(0);
     expect(o.energy).toBeGreaterThan(0); // les mines rendent un peu d'énergie
