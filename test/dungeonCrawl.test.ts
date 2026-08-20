@@ -9,6 +9,7 @@ import {
   descend,
   frontier,
   isNewRoom,
+  pathTo,
   type Floor,
 } from '@/lib/dungeonCrawl';
 
@@ -125,6 +126,34 @@ describe('dungeonCrawl — exploration (état)', () => {
     expect(s2.current).toBe(link);
     expect(s2.visited).toContain(link);
     expect(isNewRoom(s2, link)).toBe(false);
+  });
+
+  it('pathTo : retour arrière auto via salles visitées', () => {
+    const f = generateFloor(5, 0, 3);
+    let s = startRun(3, f, 140);
+    const a = f.rooms[f.startId]!.links[0]!;
+    s = enterRoom(s, f, a);
+    const b = f.rooms[a]!.links.find((x) => x !== f.startId);
+    if (b != null) s = enterRoom(s, f, b);
+    // Retour au départ : chemin non vide, finit au départ, ne passe QUE par du visité.
+    const path = pathTo(s, f, f.startId);
+    expect(path).not.toBeNull();
+    expect(path!.at(-1)).toBe(f.startId);
+    for (const id of path!) expect(s.visited).toContain(id);
+    // Chaque pas est relié au précédent (marche case par case valide).
+    let cur = s.current;
+    for (const id of path!) {
+      expect(f.rooms[cur]!.links).toContain(id);
+      cur = id;
+    }
+    // Déjà sur place → []. Frontière atteignable → chemin qui finit dessus.
+    expect(pathTo(s, f, s.current)).toEqual([]);
+    const front = f.rooms.find(
+      (r) => !s.visited.includes(r.id) && s.visited.some((v) => f.rooms[v]!.links.includes(r.id)),
+    );
+    if (front) expect(pathTo(s, f, front.id)!.at(-1)).toBe(front.id);
+    // Run terminé → pas de déplacement.
+    expect(pathTo({ ...s, status: 'dead' }, f, f.startId)).toBeNull();
   });
 
   it('applyDamage : PV plancher 0 → status dead', () => {

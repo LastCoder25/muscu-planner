@@ -349,6 +349,7 @@ import {
   startRun,
   canMove,
   enterRoom,
+  pathTo,
   applyDamage,
   descend,
   isVisible,
@@ -784,8 +785,50 @@ function closeFx() {
   if (run.value.status === 'dead') void endRun('dead');
 }
 
+// ── Clic pour marcher : cliquer une salle atteignable via la zone explorée y déplace le
+// héros de case en case (retour arrière sans re-cliquer chaque salle). ──
+const WALK_STEP_MS = 190; // plus vif que l'auto-run (on retraverse du connu)
+const walking = ref(false);
+let walkTimer: ReturnType<typeof setTimeout> | undefined;
+function stopWalk() {
+  if (walkTimer) clearTimeout(walkTimer);
+  walkTimer = undefined;
+  walking.value = false;
+}
+function walkTo(path: number[]) {
+  if (!path.length || walking.value) return;
+  walking.value = true;
+  let i = 0;
+  const step = () => {
+    if (i >= path.length || run.value.status !== 'exploring') {
+      stopWalk();
+      return;
+    }
+    const id = path[i]!;
+    const last = i === path.length - 1;
+    // Dernière case NEUVE (frontière) → on y déclenche son événement (combat/coffre/…).
+    if (last && !run.value.visited.includes(id)) {
+      stopWalk();
+      onRoomClick(id);
+      return;
+    }
+    run.value = enterRoom(run.value, floor.value, id);
+    lastEvent.value = null;
+    i++;
+    walkTimer = setTimeout(step, WALK_STEP_MS);
+  };
+  step();
+}
+
 function onRoomClick(id: number) {
-  if (!canMove(run.value, floor.value, id)) return;
+  if (walking.value) return; // déplacement auto en cours → on ignore les clics
+  // Salle NON adjacente : si elle est atteignable via la zone déjà explorée, on y
+  // marche automatiquement de case en case (retour arrière sans re-cliquer chaque salle).
+  if (!canMove(run.value, floor.value, id)) {
+    const path = pathTo(run.value, floor.value, id);
+    if (path && path.length) walkTo(path);
+    return;
+  }
   const wasNew = !run.value.visited.includes(id);
   const target = floor.value.rooms[id]!;
   run.value = enterRoom(run.value, floor.value, id);
@@ -1032,6 +1075,7 @@ async function startAuto(tier: Labyrinth) {
 }
 onBeforeUnmount(() => {
   stopAuto();
+  stopWalk();
   window.removeEventListener('beforeunload', beforeUnload);
 });
 

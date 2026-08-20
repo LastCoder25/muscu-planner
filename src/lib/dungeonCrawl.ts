@@ -229,6 +229,41 @@ export function canMove(state: RunState, floor: Floor, roomId: number): boolean 
 export function isNewRoom(state: RunState, roomId: number): boolean {
   return !state.visited.includes(roomId);
 }
+/** Chemin le plus court de la salle COURANTE vers `targetId`, en ne traversant que des
+ *  salles DÉJÀ VISITÉES (la cible peut être une salle-frontière non visitée, atteinte au
+ *  DERNIER pas → on y déclenchera son événement). Renvoie la liste ordonnée des ids à
+ *  parcourir (hors salle courante), `[]` si on y est déjà, ou `null` si la cible n'est pas
+ *  atteignable via la zone explorée. Sert au « clic pour marcher » (retour arrière auto). */
+export function pathTo(state: RunState, floor: Floor, targetId: number): number[] | null {
+  const start = state.current;
+  if (targetId === start) return [];
+  if (state.status !== 'exploring') return null;
+  const visited = new Set(state.visited);
+  const prev = new Map<number, number>();
+  const seen = new Set<number>([start]);
+  const queue = [start];
+  while (queue.length) {
+    const cur = queue.shift()!;
+    for (const nb of floor.rooms[cur]?.links ?? []) {
+      if (seen.has(nb)) continue;
+      // on ne marche que sur des salles visitées — sauf si c'est la cible (dernier pas).
+      if (!visited.has(nb) && nb !== targetId) continue;
+      seen.add(nb);
+      prev.set(nb, cur);
+      if (nb === targetId) {
+        const path: number[] = [];
+        let c = targetId;
+        while (c !== start) {
+          path.unshift(c);
+          c = prev.get(c)!;
+        }
+        return path;
+      }
+      queue.push(nb);
+    }
+  }
+  return null;
+}
 /** Entre dans une salle reliée (déplacement + marque visitée si nouvelle). */
 export function enterRoom(state: RunState, floor: Floor, roomId: number): RunState {
   if (!canMove(state, floor, roomId)) return state;
