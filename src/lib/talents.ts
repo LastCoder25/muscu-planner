@@ -200,6 +200,18 @@ export function talentsEarned(playerLevel: number): number {
   return Math.floor(playerLevel / 5);
 }
 
+// ── INFUSION DE GRADE (2026‑08‑20) : recycler les talents en trop → POUSSIÈRE D'ENCRE,
+// dépensée pour monter le GRADE (rang + qualité) d'un talent gardé de +1 cran. Plafonné
+// au grade droppable de ton niveau (cf. maxGradeCran). L'enchant (+N) reste à part. ──
+/** Coût en poussière d'encre pour infuser +1 cran de grade depuis le tier `tier`. */
+export function talentTierStepCost(tier: number): number {
+  return 3 + Math.max(0, tier);
+}
+/** Poussière d'encre rendue en RECYCLANT un talent (∝ son grade). G1 → 1 … SSS5 → 50. */
+export function talentRecycleYield(inst: TalentInstance): number {
+  return 1 + talentTier(inst.xp);
+}
+
 // ── Normalisation (rétro-compat) : ancien `string[]` de codes → instances équipées
 // (tier 0, +0). Les anciennes instances gardent leur xp (tier) ; leur `level`
 // (ancien axe parchemins) est CONVERTI en enchant équivalent (magnitude préservée). ──

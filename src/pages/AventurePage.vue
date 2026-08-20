@@ -65,10 +65,20 @@
               >🪙 {{ char.row.gold }}</span
             >
             <span class="tb-sep" aria-hidden="true"></span>
-            <span
-              class="tb-r dust"
-              title="Poussière — NIVEAU des OBJETS (infusion) + forge / reroll / craft de set"
+            <span class="tb-r dust" title="Poussière — forge / reroll / craft de set (Atelier)"
               ><DustIcon variant="dust" /> {{ char.row.dust }}</span
+            >
+            <span
+              v-if="char.row.fragments"
+              class="tb-r frag"
+              title="Poussière d'âme — infuse le GRADE des familiers"
+              ><DustIcon variant="soul" /> {{ char.row.fragments }}</span
+            >
+            <span
+              v-if="char.row.ink_dust"
+              class="tb-r ink"
+              title="Poussière d'encre — infuse le GRADE des talents"
+              ><DustIcon variant="ink" /> {{ char.row.ink_dust }}</span
             >
             <span
               v-if="char.row.summon_stones"
@@ -335,10 +345,11 @@
             Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
           </div>
           <div class="sec-hint">
-            Les talents <b>droppent à un grade</b> (rang + qualité) selon la profondeur,
-            <b>comme les objets</b>. Équipe-en {{ talentSlots }} (change quand tu veux) et monte
-            leur puissance en les <b>⚡ enchantant</b> (parchemins 📜 / protections 🛡️, gamble). Les
-            surplus se <b>♻️ recyclent</b> en parchemins 📜.
+            Les talents <b>droppent à un grade</b> (rang + qualité). Équipe-en
+            {{ talentSlots }} (change quand tu veux). Deux axes : <b>⚡ enchant</b> (+N, parchemins
+            📜 / protections 🛡️, gamble) et <b>🔧 grade</b>. Recycle les surplus →
+            <b><DustIcon variant="ink" /> poussière d'encre</b> (tu as {{ char.row.ink_dust }}) →
+            infuse le grade jusqu'au plafond de ton niveau.
           </div>
           <div class="ench-bar">
             <span
@@ -414,31 +425,47 @@
                     {{ Math.round(enchantSuccessRate(t.enchant) * 100) }}%</template
                   >
                 </button>
+                <!-- 🔧 Grade +1 (rang/qualité) : poussière d'encre, plafonné au grade du niveau. -->
+                <button
+                  class="tal-b ghost"
+                  :disabled="t.tier >= maxGrade || char.row.ink_dust < talGradeCost(t.tier)"
+                  :title="
+                    t.tier >= maxGrade
+                      ? 'Grade déjà au plafond de ton niveau'
+                      : 'Monter le grade (rang/qualité) — poussière d’encre'
+                  "
+                  @click="doInfuseTalentGrade(t.id)"
+                >
+                  <template v-if="t.tier >= maxGrade">🔧 Max</template>
+                  <template v-else
+                    >🔧 +1·{{ talGradeCost(t.tier) }}<DustIcon variant="ink"
+                  /></template>
+                </button>
                 <button
                   v-if="!t.equipped"
                   class="tal-b ghost"
-                  title="Recycler ce talent → parchemins d'enchant 📜"
+                  title="Recycler ce talent → poussière d'encre (pour infuser le grade)"
                   @click="doRecycleTalent(t.id)"
                 >
-                  ♻️ 📜
+                  ♻️<DustIcon variant="ink" />
                 </button>
               </div>
             </div>
           </div>
         </template>
 
-        <!-- FAMILIERS — gérés comme les objets/talents : recycle les non-voulus → poussière
-             d'âme, puis sur chaque familier gardé un bouton PAR AXE (rang / niveau). -->
+        <!-- FAMILIERS — recycle les surplus → poussière d'âme, puis 2 axes par familier :
+             ⚡ enchant (+N, parchemins) et 🔧 grade (rang/qualité, poussière d'âme). -->
         <template v-if="persoSub === 'familiars'">
           <div class="sec-title">
             🐾 Familiers <span class="tal-slots">{{ equippedFamiliar ? 1 : 0 }}/1</span>
           </div>
           <div class="sec-hint">
             Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Équipe-en 1.
-            <b>Comme les objets</b> : son <b>grade (rang + qualité)</b> est fixé au drop (trouve
-            mieux au Labyrinthe 🗝️), et tu montes sa puissance en l'<b>⚡ enchantant</b>
-            (parchemins 📜 / protections 🛡️, gamble). Les familiers en trop se
-            <b>♻️ recyclent</b> en parchemins 📜 (ou se vendent 🪙).
+            Deux axes : <b>⚡ enchant</b> (+N, parchemins 📜 / protections 🛡️, gamble) et
+            <b>🔧 grade</b> (rang/qualité). Recycle les familiers en trop →
+            <b><DustIcon variant="soul" /> poussière d'âme</b> (tu as {{ char.row.fragments }}) →
+            infuse le grade jusqu'au plafond de ton niveau (ou <b>vends 🪙</b>).
           </div>
 
           <div class="ench-bar">
@@ -498,13 +525,27 @@
                     {{ Math.round(enchantSuccessRate(f.enchant ?? 0) * 100) }}%</template
                   >
                 </button>
+                <!-- 🔧 Grade +1 (rang/qualité) : poussière d'âme, plafonné au grade du niveau. -->
+                <button
+                  class="tal-b ghost"
+                  :disabled="famGradeCapped(f) || char.row.fragments < famGradeCost(f)"
+                  :title="
+                    famGradeCapped(f)
+                      ? 'Grade déjà au plafond de ton niveau'
+                      : 'Monter le grade (rang/qualité) — poussière d’âme'
+                  "
+                  @click="doInfuseFamiliarGrade(f)"
+                >
+                  <template v-if="famGradeCapped(f)">🔧 Max</template>
+                  <template v-else>🔧 +1·{{ famGradeCost(f) }}<DustIcon variant="soul" /></template>
+                </button>
                 <button
                   v-if="!f.equipped && !f.locked"
                   class="tal-b ghost"
-                  title="Recycler ce familier → parchemins d'enchant 📜"
+                  title="Recycler ce familier → poussière d'âme (pour infuser le grade)"
                   @click="doRecycleFamiliar(f.id)"
                 >
-                  ♻️ 📜
+                  ♻️<DustIcon variant="soul" />
                 </button>
                 <button
                   v-if="!f.equipped"
@@ -2211,6 +2252,9 @@ import {
   craftSetCost,
   isFamiliar,
   FAMILIAR_SLOT,
+  tierIndexOf,
+  tierStepCost,
+  maxGradeCran,
   rollTier,
   dropBand,
   dropBandLabel,
@@ -2240,6 +2284,7 @@ import {
   talentRankOf,
   talentQuality,
   talentValue,
+  talentTierStepCost,
   rollTalentDrop,
   type TalentInstance,
 } from '@/lib/talents';
@@ -3815,13 +3860,14 @@ function doEquipFamiliar(itemId: string) {
 function doUnequipFamiliar() {
   withUid((uid) => char.unequip(uid, FAMILIAR_SLOT), 'Impossible de déséquiper.');
 }
-// Recycle un familier/talent en trop → parchemins d'enchant 📜 (donne une utilité aux
-// surplus, ticket 9b62342c). Notif du gain.
+// Recycle un familier/talent en trop → poussière d'âme / d'encre (sert à infuser le
+// GRADE, ticket 9b62342c). Notif du gain.
 function doRecycleFamiliar(id: string) {
   withUid(
     (uid) =>
       char.recycleFamiliar(uid, id).then((g: number) => {
-        if (g) $q.notify({ type: 'positive', message: `♻️ +${g} 📜`, position: 'top' });
+        if (g)
+          $q.notify({ type: 'positive', message: `♻️ +${g} poussière d'âme`, position: 'top' });
       }),
     'Recyclage impossible.',
   );
@@ -3830,9 +3876,59 @@ function doRecycleTalent(id: string) {
   withUid(
     (uid) =>
       char.recycleTalent(uid, id).then((g: number) => {
-        if (g) $q.notify({ type: 'positive', message: `♻️ +${g} 📜`, position: 'top' });
+        if (g)
+          $q.notify({ type: 'positive', message: `♻️ +${g} poussière d'encre`, position: 'top' });
       }),
     'Recyclage impossible.',
+  );
+}
+// Infuse +1 cran de GRADE (rang/qualité) un familier/talent avec la poussière dédiée,
+// plafonné au grade droppable de ton niveau. Éclat si le RANG monte.
+const maxGrade = computed(() => maxGradeCran(c.value.level.level));
+function famGradeCost(f: Item): number {
+  return tierStepCost(tierIndexOf(f));
+}
+function famGradeCapped(f: Item): boolean {
+  return tierIndexOf(f) >= maxGrade.value;
+}
+function talGradeCost(tier: number): number {
+  return talentTierStepCost(tier);
+}
+function doInfuseFamiliarGrade(f: Item) {
+  const beforeRank = f.rarity;
+  withUid(
+    (uid) =>
+      char.infuseFamiliarGrade(uid, f.id, c.value.level.level).then((res) => {
+        if (res && res.rarity !== beforeRank)
+          gameFx.celebrate({
+            kind: 'familiar',
+            emoji: res.emoji,
+            title: `${res.name} — rang ${RARITY_LABEL[res.rarity]} !`,
+            subtitle: 'Grade amélioré (poussière d’âme)',
+            rarity: fxRarity(res.rarity),
+          });
+      }),
+    'Infusion impossible.',
+  );
+}
+function doInfuseTalentGrade(id: string) {
+  const before = char.row?.talents.find((t) => t.id === id) ?? null;
+  const beforeRank = before ? talentRankOf(before) : null;
+  withUid(
+    (uid) =>
+      char.infuseTalentGrade(uid, id, c.value.level.level).then((res) => {
+        if (res && beforeRank && talentRankOf(res) !== beforeRank) {
+          const def = talentByCode(res.code);
+          gameFx.celebrate({
+            kind: 'generic',
+            emoji: def?.icon ?? '✨',
+            title: `${def?.name ?? 'Talent'} — rang ${RARITY_LABEL[talentRankOf(res)]} !`,
+            subtitle: 'Grade amélioré (poussière d’encre)',
+            rarity: fxRarity(talentRankOf(res)),
+          });
+        }
+      }),
+    'Infusion impossible.',
   );
 }
 // Animation de PALIER DE SET : si équiper `setId` a fait franchir un palier (2/3/4

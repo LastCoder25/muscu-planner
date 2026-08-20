@@ -485,6 +485,12 @@ function pick<T>(rng: () => number, arr: T[]): T {
 export function rankCeilingForLevel(level: number): number {
   return Math.min(9, Math.max(0, Math.floor(Math.sqrt(Math.max(0, level)) * 1.03)));
 }
+/** CRAN de grade MAX (0..49 = rang×5 + qualité−1) atteignable par INFUSION à un niveau
+ *  joueur donné = même plafond que les drops (rang √-gaté, qualité 5). Plafonne l'infusion
+ *  de grade des talents/familiers → l'infusion lisse la grinde sans dépasser la profondeur. */
+export function maxGradeCran(level: number): number {
+  return rankCeilingForLevel(level) * 5 + 4;
+}
 // Gaussienne seedée (Box-Muller) — 2 tirages rng, déterministe.
 function gaussian(rng: () => number): number {
   const u = Math.max(1e-9, rng());

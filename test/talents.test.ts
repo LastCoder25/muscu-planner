@@ -1,12 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
-import { RANK_ORDER, rankCeilingForLevel, enchantMult, ENCHANT_MAX } from '@/lib/items';
+import {
+  RANK_ORDER,
+  rankCeilingForLevel,
+  maxGradeCran,
+  enchantMult,
+  ENCHANT_MAX,
+} from '@/lib/items';
 import {
   talentsEarned,
   talentEffects,
   TALENTS,
   talentTier,
   talentTierFloor,
+  talentTierStepCost,
+  talentRecycleYield,
   talentRank,
   talentQuality,
   talentRankOf,
@@ -75,6 +83,25 @@ describe('magnitude = grade × enchant (uniforme avec les objets)', () => {
     const e3 = talentValue(def, tierAt('E', 3), 0);
     expect(d5).toBeGreaterThan(e3);
     expect(d5 / e3).toBeGreaterThan(1.05); // écart net (plus un arrondi près)
+  });
+});
+
+describe('infusion de GRADE (poussière d’encre)', () => {
+  it('talentTierStepCost croît avec le tier', () => {
+    expect(talentTierStepCost(0)).toBeGreaterThan(0);
+    expect(talentTierStepCost(20)).toBeGreaterThan(talentTierStepCost(0));
+  });
+  it('talentRecycleYield ∝ grade (G1 → 1, plus haut → plus)', () => {
+    const g1: TalentInstance = { id: 'a', code: 't_dmg', xp: 0 };
+    const b5: TalentInstance = { id: 'b', code: 't_dmg', xp: talentTierFloor(29) };
+    expect(talentRecycleYield(g1)).toBe(1);
+    expect(talentRecycleYield(b5)).toBeGreaterThan(talentRecycleYield(g1));
+  });
+  it('maxGradeCran = plafond de drop du niveau (rang √ × qualité 5)', () => {
+    expect(maxGradeCran(1)).toBe(rankCeilingForLevel(1) * 5 + 4);
+    expect(maxGradeCran(4)).toBe(14); // E★5
+    expect(maxGradeCran(25)).toBe(29); // B★5
+    expect(maxGradeCran(1)).toBeLessThan(maxGradeCran(100)); // monte avec le niveau
   });
 });
 
