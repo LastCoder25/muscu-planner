@@ -16,6 +16,8 @@ import {
   craftSetCost,
   rollSetPiece,
   normRank,
+  isFamiliar,
+  tierIndexOf,
   swapLoadoutGear,
   MAX_LOADOUTS,
   type Item,
@@ -25,7 +27,7 @@ import {
   type PendingReward,
 } from '@/lib/items';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
-import { normalizeTalents, talentsEarned, type TalentInstance } from '@/lib/talents';
+import { normalizeTalents, talentsEarned, talentTier, type TalentInstance } from '@/lib/talents';
 import {
   createMap,
   advanceWorld,
@@ -703,6 +705,36 @@ export const useCharacterStore = defineStore('character', () => {
     return outcome;
   }
 
+  // ── Recyclage des SURPLUS (familiers / talents non voulus) → parchemins d'enchant 📜.
+  // Donne une utilité aux doublons (comme casser un objet → poussière). Gain ∝ grade.
+  const recycleScrolls = (tier: number) => 1 + Math.floor(Math.max(0, tier) / 12); // G→1 … SSS→5
+  // Recycle un familier NON équipé et NON verrouillé du sac → parchemins d'enchant.
+  async function recycleFamiliar(userId: string, familiarId: string): Promise<number> {
+    const cur = row.value;
+    if (!cur) return 0;
+    const fam = cur.inventory.find((i) => i.id === familiarId);
+    if (!fam || !isFamiliar(fam) || fam.locked) return 0;
+    const gain = recycleScrolls(tierIndexOf(fam));
+    await persistOptimistic(userId, {
+      enchant_scrolls: cur.enchant_scrolls + gain,
+      inventory: cur.inventory.filter((i) => i.id !== familiarId),
+    });
+    return gain;
+  }
+  // Recycle un talent NON équipé → parchemins d'enchant.
+  async function recycleTalent(userId: string, talentId: string): Promise<number> {
+    const cur = row.value;
+    if (!cur) return 0;
+    const t = cur.talents.find((x) => x.id === talentId);
+    if (!t || t.equipped) return 0;
+    const gain = recycleScrolls(talentTier(t.xp));
+    await persistOptimistic(userId, {
+      enchant_scrolls: cur.enchant_scrolls + gain,
+      talents: cur.talents.filter((x) => x.id !== talentId),
+    });
+    return gain;
+  }
+
   async function equip(userId: string, itemId: string) {
     const cur = row.value;
     if (!cur) return;
@@ -951,6 +983,8 @@ export const useCharacterStore = defineStore('character', () => {
     equipTalent,
     unequipTalent,
     enchantTalent,
+    recycleFamiliar,
+    recycleTalent,
     salvage,
     sell,
     salvageMany,

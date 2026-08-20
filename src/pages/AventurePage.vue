@@ -337,7 +337,8 @@
           <div class="sec-hint">
             Les talents <b>droppent à un grade</b> (rang + qualité) selon la profondeur,
             <b>comme les objets</b>. Équipe-en {{ talentSlots }} (change quand tu veux) et monte
-            leur puissance en les <b>⚡ enchantant</b> (parchemins 📜 / protections 🛡️, gamble).
+            leur puissance en les <b>⚡ enchantant</b> (parchemins 📜 / protections 🛡️, gamble). Les
+            surplus se <b>♻️ recyclent</b> en parchemins 📜.
           </div>
           <div class="ench-bar">
             <span
@@ -413,6 +414,14 @@
                     {{ Math.round(enchantSuccessRate(t.enchant) * 100) }}%</template
                   >
                 </button>
+                <button
+                  v-if="!t.equipped"
+                  class="tal-b ghost"
+                  title="Recycler ce talent → parchemins d'enchant 📜"
+                  @click="doRecycleTalent(t.id)"
+                >
+                  ♻️ 📜
+                </button>
               </div>
             </div>
           </div>
@@ -428,7 +437,8 @@
             Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Équipe-en 1.
             <b>Comme les objets</b> : son <b>grade (rang + qualité)</b> est fixé au drop (trouve
             mieux au Labyrinthe 🗝️), et tu montes sa puissance en l'<b>⚡ enchantant</b>
-            (parchemins 📜 / protections 🛡️, gamble).
+            (parchemins 📜 / protections 🛡️, gamble). Les familiers en trop se
+            <b>♻️ recyclent</b> en parchemins 📜 (ou se vendent 🪙).
           </div>
 
           <div class="ench-bar">
@@ -487,6 +497,14 @@
                     >⚡ +{{ (f.enchant ?? 0) + 1 }} ·
                     {{ Math.round(enchantSuccessRate(f.enchant ?? 0) * 100) }}%</template
                   >
+                </button>
+                <button
+                  v-if="!f.equipped && !f.locked"
+                  class="tal-b ghost"
+                  title="Recycler ce familier → parchemins d'enchant 📜"
+                  @click="doRecycleFamiliar(f.id)"
+                >
+                  ♻️ 📜
                 </button>
                 <button
                   v-if="!f.equipped"
@@ -782,7 +800,8 @@
                       <span v-else class="ii-cmp-val dim">— emplacement libre</span>
                     </div>
                   </div>
-                  <!-- PUISSANCE si équipé (grade + enchant, fixe) : un seul verdict. -->
+                  <!-- PUISSANCE si équipé : lecture GRADE-FAIR (à enchant égal) + « tel quel »
+                       si le candidat est moins enchanté que l'équipé (ticket 8314ede9). -->
                   <div class="ii-cmp2">
                     <span class="ii-cmp2-ic">⚔️</span>
                     <span
@@ -790,7 +809,21 @@
                       :class="powerIfEquip(it) >= combatPowerVal ? 'up' : 'down'"
                     >
                       <b>{{ fmtDelta(combatPowerVal, powerIfEquip(it)) }}</b
-                      ><i>{{ equippedInSlot(it.slot) ? 'vs équipé' : 'emplacement libre' }}</i>
+                      ><i>{{
+                        equippedInSlot(it.slot)
+                          ? enchantGap(it)
+                            ? 'à enchant égal'
+                            : 'vs équipé'
+                          : 'emplacement libre'
+                      }}</i>
+                    </span>
+                    <span
+                      v-if="enchantGap(it)"
+                      class="ii-cmp2-chip"
+                      :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
+                    >
+                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
+                      ><i>tel quel (+{{ it.enchant ?? 0 }})</i>
                     </span>
                   </div>
                   <!-- Actions : Équiper · ⚡ Enchanter · icônes casser/vendre/lock · ⋯ -->
@@ -1655,7 +1688,11 @@
       <q-card v-if="setInfo" class="drops-card">
         <div class="drops-title font-display">{{ setInfo.set.emoji }} {{ setInfo.set.name }}</div>
         <div class="set-theme">{{ setInfo.set.theme }}</div>
-        <div class="drops-sub">Bonus par paliers (au niveau {{ setInfo.level }})</div>
+        <div class="drops-sub">
+          Bonus par paliers<span v-if="setInfo.avgEnch > 0">
+            (à +{{ Math.round(setInfo.avgEnch) }} moyen)</span
+          >
+        </div>
         <div class="set-tiers">
           <span
             v-for="t in setInfo.set.tiers"
@@ -1664,7 +1701,7 @@
             :class="{ on: setInfo.count >= t.pieces }"
           >
             {{ t.pieces }} pièces :
-            {{ effectLabel({ type: t.type, value: t.base }, setInfo.level) }}
+            {{ enchantEffectLabel({ type: t.type, value: t.base }, setInfo.avgEnch) }}
           </span>
         </div>
         <div class="drops-note">
@@ -1942,16 +1979,17 @@
                 <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}</div>
                 <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
                   <span
-                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
-                    {{ equippedInSlot(d.slot)!.enchant ?? 0 }} ·
-                    {{ itemEffects(equippedInSlot(d.slot)!) }}</span
+                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} +{{
+                      equippedInSlot(d.slot)!.enchant ?? 0
+                    }}
+                    · {{ itemEffects(equippedInSlot(d.slot)!) }}</span
                   >
                   <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
                     rarityVerdict(d).label
                   }}</span>
                 </div>
                 <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
-                <!-- Puissance si équipé (grade + enchant, fixe) : un seul verdict. -->
+                <!-- Puissance : GRADE-FAIR (à enchant égal) + « tel quel » (un drop est à +0). -->
                 <div class="ii-cmp2">
                   <span class="ii-cmp2-ic">⚔️</span>
                   <span
@@ -1959,7 +1997,21 @@
                     :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
                   >
                     <b>{{ fmtDelta(combatPowerVal, powerIfEquip(d)) }}</b
-                    ><i>{{ equippedInSlot(d.slot) ? 'vs équipé' : 'emplacement libre' }}</i>
+                    ><i>{{
+                      equippedInSlot(d.slot)
+                        ? enchantGap(d)
+                          ? 'à enchant égal'
+                          : 'vs équipé'
+                        : 'emplacement libre'
+                    }}</i>
+                  </span>
+                  <span
+                    v-if="enchantGap(d)"
+                    class="ii-cmp2-chip"
+                    :class="powerIfEquipNow(d) >= combatPowerVal ? 'up' : 'down'"
+                  >
+                    <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(d)) }}</b
+                    ><i>tel quel (+{{ d.enchant ?? 0 }})</i>
                   </span>
                 </div>
                 <div v-if="dropState(d) === 'equipped'" class="drop-done">
@@ -2146,7 +2198,6 @@ import {
   aggregateEffects,
   rollDrop,
   rollSetPiece,
-  effectLabel,
   enchantEffectLabel,
   rollStars,
   canEnchant,
@@ -2371,13 +2422,31 @@ const baseFighter = computed(() =>
 );
 const pctA = (x?: number) => Math.round((x ?? 0) * 100) + '%';
 // Puissance de combat SI on équipe `it` (à son ENCHANT actuel). Un objet a une puissance
-// FIXE (grade + enchant) → une seule comparaison, plus de « à quel niveau » (fini les
-// lectures « maintenant / monté à ton niveau » et la rentabilité, cf. refonte enchant).
-function powerIfEquip(it: Item): number {
-  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: it };
+// Puissance de combat si `it` remplaçait la pièce du même slot, ÉVALUÉ à un enchant donné.
+function powerAtEnchant(it: Item, enchant: number): number {
+  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: { ...it, enchant } };
   return combatPower(
     playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level),
   );
+}
+function equippedEnchant(slot: ItemSlot): number {
+  return char.row?.equipped?.[slot]?.enchant ?? 0;
+}
+// COMPARAISON PRINCIPALE = GRADE-FAIR (ticket 1f4de847/8314ede9) : on évalue l'objet à
+// enchant ÉGAL à la pièce équipée du slot → c'est le RANG + la QUALITÉ qui décident, pas
+// l'écart d'enchant (sinon un grade C fraîchement droppé paraît « pire » qu'un grade G déjà
+// enchanté). C'est aussi la lecture utilisée par « Tout casser » (ne casse pas un meilleur grade).
+function powerIfEquip(it: Item): number {
+  return powerAtEnchant(it, Math.max(it.enchant ?? 0, equippedEnchant(it.slot)));
+}
+// 2e lecture = TEL QUEL (à son enchant actuel) : ce que ça donne SI équipé maintenant.
+function powerIfEquipNow(it: Item): number {
+  return powerAtEnchant(it, it.enchant ?? 0);
+}
+// La lecture « tel quel » n'apporte quelque chose que si le candidat est MOINS enchanté
+// que l'équipé (sinon les deux lectures sont identiques).
+function enchantGap(it: Item): boolean {
+  return (it.enchant ?? 0) < equippedEnchant(it.slot);
 }
 
 // Estimation live du % de victoire par donjon/boss selon les stats + le stuff
@@ -2996,9 +3065,10 @@ const activeSets = computed(() => {
   const counts = setCounts(eq);
   return ITEM_SETS.filter((s) => (counts[s.id] ?? 0) >= 1).map((s) => {
     const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === s.id);
-    const avg = pieces.length
-      ? Math.round(pieces.reduce((a, it) => a + it.level, 0) / pieces.length)
-      : 1;
+    // Le bonus de set est scalé par l'ENCHANT MOYEN des pièces (cf. setEffects), plus le niveau.
+    const avgEnch = pieces.length
+      ? pieces.reduce((a, it) => a + (it.enchant ?? 0), 0) / pieces.length
+      : 0;
     return {
       id: s.id,
       name: s.name,
@@ -3007,7 +3077,7 @@ const activeSets = computed(() => {
       count: counts[s.id] ?? 0,
       tiers: s.tiers.map((t) => ({
         pieces: t.pieces,
-        label: effectLabel({ type: t.type, value: t.base }, avg),
+        label: enchantEffectLabel({ type: t.type, value: t.base }, avgEnch),
       })),
     };
   });
@@ -3281,9 +3351,20 @@ function bossSetCount(b: MilestoneBoss): number {
 }
 
 // Aperçu du bonus de set d'un boss (modale ouverte au clic sur la ligne de set).
-const setInfo = ref<{ set: ReturnType<typeof bossSet>; level: number; count: number } | null>(null);
+const setInfo = ref<{
+  set: ReturnType<typeof bossSet>;
+  avgEnch: number;
+  count: number;
+} | null>(null);
 function openSetInfo(b: MilestoneBoss) {
-  setInfo.value = { set: bossSet(b), level: b.unlockLevel, count: bossSetCount(b) };
+  // Enchant moyen des pièces de ce set déjà équipées (0 si aucune) → le bonus affiché
+  // reflète ta puissance de set réelle (cf. setEffects, scalé par l'enchant).
+  const eq = char.row?.equipped ?? {};
+  const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === b.setId);
+  const avgEnch = pieces.length
+    ? pieces.reduce((a, it) => a + (it.enchant ?? 0), 0) / pieces.length
+    : 0;
+  setInfo.value = { set: bossSet(b), avgEnch, count: bossSetCount(b) };
 }
 
 // Slots d'un set déjà possédés (équipé + sac) → pour le ciblage anti-doublon de l'Autel.
@@ -3731,6 +3812,26 @@ function doEquipFamiliar(itemId: string) {
 function doUnequipFamiliar() {
   withUid((uid) => char.unequip(uid, FAMILIAR_SLOT), 'Impossible de déséquiper.');
 }
+// Recycle un familier/talent en trop → parchemins d'enchant 📜 (donne une utilité aux
+// surplus, ticket 9b62342c). Notif du gain.
+function doRecycleFamiliar(id: string) {
+  withUid(
+    (uid) =>
+      char.recycleFamiliar(uid, id).then((g: number) => {
+        if (g) $q.notify({ type: 'positive', message: `♻️ +${g} 📜`, position: 'top' });
+      }),
+    'Recyclage impossible.',
+  );
+}
+function doRecycleTalent(id: string) {
+  withUid(
+    (uid) =>
+      char.recycleTalent(uid, id).then((g: number) => {
+        if (g) $q.notify({ type: 'positive', message: `♻️ +${g} 📜`, position: 'top' });
+      }),
+    'Recyclage impossible.',
+  );
+}
 // Animation de PALIER DE SET : si équiper `setId` a fait franchir un palier (2/3/4
 // pièces), on célèbre en montrant le set + le bonus tout juste débloqué.
 function celebrateSetTier(setId: string | undefined, before: number, after: number) {
@@ -3740,17 +3841,17 @@ function celebrateSetTier(setId: string | undefined, before: number, after: numb
   const crossed = set.tiers.filter((t) => before < t.pieces && after >= t.pieces);
   if (!crossed.length) return;
   const top = crossed[crossed.length - 1]!;
-  // Niveau moyen des pièces du set équipées (pour le libellé du bonus).
+  // Enchant moyen des pièces de set équipées (le bonus est scalé par l'enchant, cf. setEffects).
   const eq = char.row?.equipped ?? {};
   const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === setId);
-  const avg = pieces.length
-    ? Math.round(pieces.reduce((a, it) => a + it.level, 0) / pieces.length)
-    : 1;
+  const avgEnch = pieces.length
+    ? pieces.reduce((a, it) => a + (it.enchant ?? 0), 0) / pieces.length
+    : 0;
   gameFx.celebrate({
     kind: 'unlock',
     emoji: set.emoji,
     title: `${set.emoji} ${set.name} — ${after}/4 pièces`,
-    subtitle: `Bonus ${top.pieces} pièces : ${effectLabel({ type: top.type, value: top.base }, avg)}`,
+    subtitle: `Bonus ${top.pieces} pièces : ${enchantEffectLabel({ type: top.type, value: top.base }, avgEnch)}`,
     rarity: top.pieces >= 4 ? 'divin' : top.pieces >= 3 ? 'legendary' : 'epic',
   });
 }
