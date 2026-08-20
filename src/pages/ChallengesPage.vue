@@ -360,32 +360,36 @@
                 >
               </span>
             </div>
-            <div v-if="legMode(leg) === 'sets'" class="seg-bar" :style="{ '--cols': leg.target }">
-              <span
-                v-for="n in Math.max(leg.target, legDone(leg))"
-                :key="n"
-                class="seg"
-                :class="{ on: n <= legDone(leg), extra: n > leg.target }"
-              />
-            </div>
-            <div v-else class="reps-bar">
-              <span
-                class="reps-fill"
-                :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }"
-              />
-            </div>
-            <div class="cl-actions">
-              <button class="cl-add" title="Ajouter une série" @click="openSet(leg, 1)">
-                ＋ 1 série
-              </button>
-              <button
-                class="cl-corr"
-                :disabled="!legSetsDone(leg)"
-                title="Retirer la dernière série"
-                @click="undoSet(leg)"
-              >
-                ↩
-              </button>
+            <!-- Barre + actions sur la MÊME ligne → lignes d'exo plus compactes (plus
+                 d'exos visibles à l'écran). -->
+            <div class="cl-bottom">
+              <div v-if="legMode(leg) === 'sets'" class="seg-bar" :style="{ '--cols': leg.target }">
+                <span
+                  v-for="n in Math.max(leg.target, legDone(leg))"
+                  :key="n"
+                  class="seg"
+                  :class="{ on: n <= legDone(leg), extra: n > leg.target }"
+                />
+              </div>
+              <div v-else class="reps-bar">
+                <span
+                  class="reps-fill"
+                  :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }"
+                />
+              </div>
+              <div class="cl-actions">
+                <button class="cl-add" title="Ajouter une série" @click="openSet(leg, 1)">
+                  ＋ 1
+                </button>
+                <button
+                  class="cl-corr"
+                  :disabled="!legSetsDone(leg)"
+                  title="Retirer la dernière série"
+                  @click="undoSet(leg)"
+                >
+                  ↩
+                </button>
+              </div>
             </div>
           </div>
         </template>
@@ -1132,24 +1136,33 @@ onMounted(async () => {
 .combo-leg {
   background: var(--surface);
   border: 1px solid var(--line-soft);
-  border-radius: 14px;
-  padding: 11px 12px;
-  margin-bottom: 8px;
+  border-radius: 12px;
+  padding: 7px 10px;
+  margin-bottom: 6px;
+}
+/* Barre + actions sur une ligne (compact). */
+.cl-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
 }
 /* Barre segmentée : une case par série (cible + supplémentaires, sur plusieurs lignes) */
 .seg-bar {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
-  margin: 9px 0;
 }
 /* Mode reps : barre continue (l'objectif en reps peut être élevé → pas de segments). */
 .reps-bar {
+  flex: 1;
+  min-width: 0;
   height: 8px;
   border-radius: 4px;
   background: var(--surface-2);
   overflow: hidden;
-  margin: 9px 0;
 }
 .reps-fill {
   display: block;
@@ -1162,8 +1175,8 @@ onMounted(async () => {
    un objectif de 9 → 3 lignes de 9). */
 .seg {
   flex: 0 0 calc((100% - (var(--cols, 10) - 1) * 3px) / var(--cols, 10));
-  height: 14px;
-  border-radius: 4px;
+  height: 11px;
+  border-radius: 3px;
   /* Série À FAIRE : plus visible (fond légèrement teinté + liseré) au lieu de noir sur noir. */
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
@@ -1275,13 +1288,12 @@ onMounted(async () => {
   letter-spacing: 0.4px;
 }
 .cl-actions {
+  flex: none;
   display: flex;
   gap: 6px;
-  margin-top: 4px;
 }
 .cl-add {
-  flex: 1;
-  padding: 9px 0;
+  padding: 6px 14px;
   border-radius: 9px;
   border: 1px solid var(--accent);
   background: transparent;
@@ -1297,13 +1309,14 @@ onMounted(async () => {
 }
 .cl-corr {
   flex: none;
-  width: 44px;
+  width: 38px;
+  align-self: stretch;
   border-radius: 9px;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--dim);
   font-weight: 700;
-  font-size: 16px;
+  font-size: 15px;
   cursor: pointer;
 }
 .cl-corr:disabled {

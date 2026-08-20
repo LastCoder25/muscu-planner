@@ -539,7 +539,12 @@ const run = ref<RunState>(
 );
 // Vol de vie ATTÉNUÉ dans le labyrinthe → l'attrition (PV reportés) reste réelle même
 // pour un build sustain (sinon on finit tous les étages à PV pleins).
-const LABY_LIFESTEAL = 0.5;
+// Atténuation du VOL DE VIE dans le Labyrinthe. Le heal ∝ dégâts infligés (énormes face
+// aux monstres à échelle relative) → à 0,5 il ANNULAIT l'attrition (build 30-50 % vol de
+// vie = run trivial, cf. simulation). Baissé à 0,3 : le vol de vie aide encore nettement
+// mais ne trivialise plus (un build 50 % finit ~usé, pas intact) → l'Endurance/les PV
+// reportés comptent à nouveau. (curseur à ajuster si besoin.)
+const LABY_LIFESTEAL = 0.3;
 const lastEvent = ref<{ kind: string; text: string } | null>(null);
 const over = ref(false);
 // Butin cumulé du run (Phase 3b : affiché ; persistance/récompense = Phase 3c).
