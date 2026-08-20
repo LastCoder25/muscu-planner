@@ -1182,9 +1182,10 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
         rarity: fxRarity(fam.rarity),
       });
     }
-    // Parchemins d'enchant 📜 (carburant de l'enchant) : ∝ progression du run
-    // (la poussière amassée = proxy des salles/monstres) + bonus de clear.
-    const scrolls = Math.max(1, Math.round(dust.value / 5)) + (outcome === 'cleared' ? 3 : 0);
+    // Parchemins d'enchant 📜 (carburant de l'enchant) : faucet SECONDAIRE ∝ progression
+    // du run (la poussière amassée = proxy des salles/monstres), PLAFONNÉ + bonus de clear.
+    const scrolls =
+      Math.min(10, Math.max(1, Math.round(dust.value / 8))) + (outcome === 'cleared' ? 2 : 0);
     // MORT : on garde une FRACTION des gains liée à la profondeur du palier non terminé
     // (profond = pardonne moins). Les objets restent perdus. Retraite/clear = tout gardé.
     const keep = outcome === 'dead' ? deathKeepFraction(selectedLaby.value?.id ?? '') : 1;

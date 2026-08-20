@@ -414,7 +414,10 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
     // dominée par un camp (moins de poussière pour un coût d'or 4× plus élevé). Tenir
     // longtemps devient une VRAIE grosse paie de ressources → justifie la dépense d'or.
     const dust = Math.round((20 + waves * 15) * tfA);
-    const enchantScrolls = Math.round((8 + waves * 5) * tfA);
+    // Parchemins d'enchant : faucet SECONDAIRE et modeste (le donjon reste la source
+    // principale) — ∝ vagues tenues, sans le multiplicateur de trajet (déjà encodé par
+    // les vagues). NB : quantités ex-« pierres » (rares) volontairement réduites.
+    const enchantScrolls = 2 + Math.floor(waves / 2);
     // BUTIN MULTIPLE (2026‑08‑18) : l'arène (gauntlet de survie) lâche PLUSIEURS objets
     // — 1 par palier de 5 vagues (3-9 vagues → 1, 10-14 → 2, … plafonné à 5) — la
     // qualité montant avec les vagues + le rang de l'objet. Seule source de « tas de loot ».
@@ -472,7 +475,7 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
       gold: Math.round(cost * EXPE.failRefund), // < coût → jamais un profit
       dust: Math.round(poi.level * 1.5),
       energy: 0,
-      enchantScrolls: Math.round(poi.level * 0.4),
+      enchantScrolls: 1 + Math.floor(poi.level / 15), // consolation modeste sur un échec
       item: null,
       key,
       reconBonus: 0.08,
@@ -492,12 +495,15 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
       ? Math.round(cost * (1.8 + rth)) // reine de l'or : ~2,3×..~5× le coût
       : Math.round(cost * (1.0 + rth * 0.1)); // camp/repaire : ≥ équilibre (+3..+65 %), item = le vrai gain, reste SOUS la mine
   const dustHaul = Math.round((poi.type === 'mine' ? 14 + poi.level * 4 : 9 + poi.level * 3) * tf);
+  // Parchemins d'enchant : faucet SECONDAIRE (le donjon reste la source principale).
+  // Coefficients FORTEMENT réduits vs l'ex-« pierres » (~×10) → une expédition rend
+  // une poignée de parchemins, pas des dizaines.
   const scrollHaul = Math.round(
     (poi.type === 'lair'
-      ? 4 + poi.level * 1.4
+      ? 2 + poi.level * 0.12
       : poi.type === 'mine'
-        ? 3 + poi.level * 1.1
-        : 2 + poi.level * 0.7) * tf,
+        ? 1.5 + poi.level * 0.1
+        : 1 + poi.level * 0.08) * tf,
   );
   let item: Omit<Item, 'id'> | null = null;
   let key = 0;
