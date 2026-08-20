@@ -28,6 +28,11 @@
         <span>Mon programme</span>
         <small>Séances générées</small>
       </button>
+      <button class="tile" @click="go('/stats')">
+        <q-icon name="insights" size="30px" />
+        <span>Mes stats</span>
+        <small>Volume, corps, progression</small>
+      </button>
     </div>
 
     <section v-if="tab === 'act'" class="quick">
