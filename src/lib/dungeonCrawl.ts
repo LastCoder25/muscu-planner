@@ -7,7 +7,15 @@
 // viennent par-dessus (store + page), ce module ne fait que la STRUCTURE.
 import { mulberry32 } from './combat';
 
-export type RoomType = 'start' | 'monster' | 'chest' | 'trap' | 'empty' | 'stairs' | 'boss';
+export type RoomType =
+  | 'start'
+  | 'monster'
+  | 'chest'
+  | 'trap'
+  | 'empty'
+  | 'stairs'
+  | 'boss'
+  | 'vault'; // salle secrète RARE (gros butin garanti)
 
 export interface Room {
   id: number;
@@ -50,6 +58,9 @@ function farthestRoom(rooms: Room[], from: number): number {
   }
   return far;
 }
+
+// Proba de base d'une salle secrète par étage (montée légère en profondeur au runtime).
+export const VAULT_CHANCE = 0.12;
 
 // Type d'une salle « libre » selon la profondeur (0..1) : plus profond = plus de
 // monstres/pièges. Coffres constants (récompense), vide en complément.
@@ -135,6 +146,15 @@ export function generateFloor(seed: number, floorIndex: number, floors: number):
     const cand = rooms.find((r) => r.type === 'empty') ?? rooms.find((r) => r.type === 'monster');
     if (cand) cand.type = 'chest';
   }
+  // SALLE SECRÈTE (vault) : rare (~12 %/étage, + un chouïa en profondeur), tapie dans un
+  // CUL-DE-SAC (1 seul couloir) pour la sensation de « planque » → gros butin garanti.
+  // rng() en dernier → n'altère pas la disposition de base (déterminisme préservé).
+  if (rng() < VAULT_CHANCE + 0.05 * depth) {
+    const isFree = (r: Room) => r.type === 'monster' || r.type === 'empty' || r.type === 'trap';
+    const deadEnds = rooms.filter((r) => isFree(r) && r.links.length === 1);
+    const pool = deadEnds.length ? deadEnds : rooms.filter(isFree);
+    if (pool.length) pool[Math.floor(rng() * pool.length)]!.type = 'vault';
+  }
   return { index: floorIndex, cols, rows, rooms, startId, exitId };
 }
 
@@ -156,6 +176,7 @@ export const ROOM_EMOJI: Record<RoomType, string> = {
   empty: '·',
   stairs: '🪜',
   boss: '👑',
+  vault: '💎',
 };
 
 // ── Phase 2 : état d'exploration (pur) ─────────────────────────────────────

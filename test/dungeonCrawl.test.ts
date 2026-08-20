@@ -57,6 +57,25 @@ describe('dungeonCrawl — génération d’étage', () => {
     const f = generateFloor(13, 0, 3);
     for (const r of f.rooms) for (const nb of r.links) expect(f.rooms[nb]!.links).toContain(r.id);
   });
+
+  it('salle secrète (vault) : RARE, ≤1/étage, sur une salle atteignable (jamais start/sortie)', () => {
+    let floorsWithVault = 0;
+    const N = 400;
+    for (let s = 1; s <= N; s++) {
+      const f = generateFloor(s, 1, 4);
+      const vaults = f.rooms.filter((r) => r.type === 'vault');
+      expect(vaults.length).toBeLessThanOrEqual(1); // au plus une par étage
+      for (const v of vaults) {
+        expect(v.id).not.toBe(f.startId);
+        expect(v.id).not.toBe(f.exitId);
+        expect(v.links.length).toBeGreaterThanOrEqual(1); // reliée au reste
+      }
+      if (vaults.length) floorsWithVault++;
+    }
+    // Rare mais bien présente (proba de base ~12 % + profondeur).
+    expect(floorsWithVault).toBeGreaterThan(0);
+    expect(floorsWithVault).toBeLessThan(N * 0.4);
+  });
 });
 
 describe('dungeonCrawl — exploration (état)', () => {

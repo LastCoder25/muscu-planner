@@ -602,8 +602,9 @@ const corridors = computed(() => {
 
 function roomClass(id: number): string {
   if (!isVisible(floor.value, run.value, id)) return 'hidden';
-  if (id === run.value.current) return 'current';
-  if (run.value.visited.includes(id)) return 'visited';
+  const isVault = floor.value.rooms[id]?.type === 'vault';
+  if (id === run.value.current) return isVault ? 'current vault' : 'current';
+  if (run.value.visited.includes(id)) return isVault ? 'visited vault' : 'visited';
   const clickable = canMove(run.value, floor.value, id);
   return clickable ? 'frontier open' : 'frontier';
 }
@@ -735,6 +736,42 @@ function openChest(id: number) {
   }
   roomFx.value = { kind: 'chest', item };
 }
+// SALLE SECRÈTE : gros butin GARANTI — un objet de HAUT rang (plusieurs tirages, on garde
+// le meilleur, niveau+2 et forte luck) + lot d'or/poussière/fragments. Comme les autres
+// gains du run, ils passent par les accumulateurs (× fraction si on meurt ensuite).
+function openVault(id: number) {
+  const rng = mulberry32((roomSeed(id) ^ 0x5a17) >>> 0);
+  let best: Omit<Item, 'id'> | null = null;
+  for (let k = 0; k < 5; k++) {
+    const d = rollDrop(rng, {
+      cleared: true,
+      defeated: 1,
+      level: runDropLevel() + 2,
+      luck: Math.min(1, runLuck() + 0.35),
+    });
+    if (d && (!best || RARITY_RANK[d.rarity] > RARITY_RANK[best.rarity])) best = d;
+  }
+  const item = best ? { ...best, id: `exp_${lootN++}` } : null;
+  const gGold = 30 + Math.round(heroLevel.value * 6);
+  const gDust = 20 + Math.round(heroLevel.value * 0.8);
+  const gFrag = 4 + Math.round(depthOf() * 4);
+  gold.value += gGold;
+  dust.value += gDust;
+  frags.value += gFrag;
+  if (item) loot.value.push(item);
+  lastEvent.value = {
+    kind: 'good',
+    text: `💎 Salle secrète ! ${item ? item.name + ' · ' : ''}+${gGold}🪙 +${gDust}✨ +${gFrag}🧩`,
+  };
+  gameFx.celebrate({
+    kind: 'drop',
+    emoji: '💎',
+    title: 'Salle secrète !',
+    subtitle: item ? `${item.name} · ${RARITY_LABEL[item.rarity]}` : 'Coffre au trésor',
+    rarity: item ? fxRarity(item.rarity) : 'legendary',
+  });
+  roomFx.value = { kind: 'chest', item };
+}
 // Ferme l'overlay de salle ; si le combat a été fatal, on bascule sur la fin de run.
 function closeFx() {
   roomFx.value = null;
@@ -765,6 +802,10 @@ function onRoomClick(id: number) {
     case 'chest':
       openChest(id);
       regen(0.06); // le repos d'un coffre soigne un peu
+      break;
+    case 'vault':
+      openVault(id);
+      regen(0.1); // planque sûre → on souffle un peu
       break;
     case 'stairs':
       lastEvent.value = { kind: 'good', text: '🔽 Escalier — descends à l’étage suivant' };
@@ -1364,6 +1405,12 @@ function replayAuto() {
   fill: color-mix(in srgb, var(--accent) 22%, var(--surface));
   stroke: var(--accent);
   stroke-width: 3;
+}
+/* Salle secrète découverte : liseré doré (elle reste « ? » tant qu'on n'y est pas entré). */
+.room.vault .room-bg {
+  fill: color-mix(in srgb, #ffd23f 20%, var(--surface));
+  stroke: #ffd23f;
+  stroke-width: 2.5;
 }
 .room.frontier .room-bg {
   fill: var(--surface);
