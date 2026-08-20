@@ -2,6 +2,25 @@
   <svg class="avatar" :class="'p-' + profile" viewBox="0 0 120 140" role="img" :aria-label="label">
     <!-- Aura de profil (respire) -->
     <circle class="aura" cx="60" cy="66" r="46" />
+    <!-- Aura d'ENCHANT : de plus en plus visible selon l'enchant le plus haut de
+         l'équipement (façon L2). Teinte par palier (or → orange → magenta), halo +
+         anneaux pulsés, étincelles aux hauts enchants. -->
+    <g
+      v-if="maxEnchant > 0"
+      class="ench-aura"
+      :class="'e-' + enchTier"
+      :style="{ '--ei': enchIntensity }"
+    >
+      <circle class="ench-glow" cx="60" cy="70" :r="38 + maxEnchant * 1.8" />
+      <circle class="ench-ring" cx="60" cy="70" :r="42 + maxEnchant * 1.4" />
+      <circle class="ench-ring r2" cx="60" cy="70" :r="48 + maxEnchant * 1.2" />
+      <g v-if="maxEnchant >= 8" class="ench-sparks">
+        <circle class="spark" cx="60" cy="22" r="2" />
+        <circle class="spark" cx="96" cy="70" r="2" />
+        <circle class="spark" cx="24" cy="70" r="2" />
+        <circle class="spark" cx="60" cy="120" r="2" />
+      </g>
+    </g>
     <!-- Corps (idle : respire légèrement) -->
     <g class="body">
       <!-- jambes -->
@@ -71,6 +90,17 @@ const has = computed(() => ({
   armor: !!props.equipped.armor,
   relic: !!props.equipped.relic,
 }));
+// Enchant le PLUS HAUT parmi l'équipement (les 4 slots gear) → pilote l'aura d'enchant.
+const maxEnchant = computed(() => {
+  let m = 0;
+  for (const slot of SLOTS) m = Math.max(m, props.equipped[slot]?.enchant ?? 0);
+  return m;
+});
+const enchIntensity = computed(() => Math.min(1, maxEnchant.value / 12));
+// Palier de teinte : bas (or) / moyen (orange) / haut (magenta).
+const enchTier = computed(() =>
+  maxEnchant.value >= 9 ? 'high' : maxEnchant.value >= 4 ? 'mid' : 'low',
+);
 // Compagnon (familier équipé) : emoji + teinte de la race, s'il y en a un.
 const companion = computed(() => {
   const fam = props.equipped[FAMILIAR_SLOT];
@@ -115,11 +145,75 @@ const label = computed(
     opacity: 0.32;
   }
 }
+/* Aura d'ENCHANT : halo + anneaux teintés par palier, intensité ∝ `--ei` (0..1). */
+.ench-aura {
+  transform-origin: 60px 70px;
+}
+.ench-aura.e-low {
+  --ec: #ffd23f;
+}
+.ench-aura.e-mid {
+  --ec: #ff9a3f;
+}
+.ench-aura.e-high {
+  --ec: #ff5cd8;
+}
+.ench-glow {
+  fill: var(--ec);
+  opacity: calc(0.1 + var(--ei) * 0.4);
+  filter: blur(6px);
+  animation: ench-pulse 2.6s ease-in-out infinite;
+}
+.ench-ring {
+  fill: none;
+  stroke: var(--ec);
+  stroke-width: calc(0.8 + var(--ei) * 2.4);
+  opacity: calc(0.2 + var(--ei) * 0.5);
+  animation: ench-pulse 2.6s ease-in-out infinite;
+}
+.ench-ring.r2 {
+  opacity: calc(0.1 + var(--ei) * 0.35);
+  animation-delay: 0.7s;
+}
+.spark {
+  fill: var(--ec);
+  animation: spark-tw 1.8s ease-in-out infinite;
+}
+.ench-sparks .spark:nth-child(2) {
+  animation-delay: 0.45s;
+}
+.ench-sparks .spark:nth-child(3) {
+  animation-delay: 0.9s;
+}
+.ench-sparks .spark:nth-child(4) {
+  animation-delay: 1.35s;
+}
+@keyframes ench-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+@keyframes spark-tw {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .aura,
   .body,
   .glint,
-  .relic {
+  .relic,
+  .ench-glow,
+  .ench-ring,
+  .spark {
     animation: none;
   }
 }
