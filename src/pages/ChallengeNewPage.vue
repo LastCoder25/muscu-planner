@@ -144,6 +144,16 @@
               durée
             </button>
           </div>
+          <!-- Exo « rythmique » (corde à sauter…) : reps OU durée, au choix. -->
+          <div v-else-if="isDual" class="cardio-unit">
+            <span class="cu-lbl">Objectif en</span>
+            <button class="cu-b" :class="{ on: dualUnit === 'reps' }" @click="dualUnit = 'reps'">
+              répétitions
+            </button>
+            <button class="cu-b" :class="{ on: dualUnit === 'time' }" @click="dualUnit = 'time'">
+              durée
+            </button>
+          </div>
           <template v-if="guide">
             <div class="exd-sec">Exécution</div>
             <ol class="exd-steps">
@@ -469,6 +479,7 @@ import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useProfileStore } from '@/stores/profile';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { CONDITIONING_CHALLENGE_IDS } from '@/data/cardio';
+import { isDualUnitExercise } from '@/data/exerciseUnits';
 import { useComboStore } from '@/stores/combo';
 import { variantFamilyKey } from '@/data/combo';
 import { useAuthStore } from '@/stores/auth';
@@ -576,8 +587,12 @@ function exFull(e: ExerciseRow): boolean {
 }
 const selectedFull = computed(() => (exercise.value ? exFull(exercise.value) : false));
 const cardioUnit = ref<'distance' | 'time'>('distance');
+// Exos « rythmiques » de conditionnement (corde à sauter…) : reps OU durée, au choix.
+const isDual = computed(() => isDualUnitExercise(exercise.value?.id));
+const dualUnit = ref<'reps' | 'time'>('reps');
 const unit = computed<'reps' | 'time' | 'distance'>(() => {
   if (isCardio.value) return cardioUnit.value;
+  if (isDual.value) return dualUnit.value; // choix utilisateur pour les exos dual
   return exercise.value?.unit === 'time' ? 'time' : 'reps';
 });
 // Gainage en temps (hors cardio) → propose secondes ou min:sec.

@@ -446,6 +446,7 @@ import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
 import DustIcon from '@/components/DustIcon.vue';
 import { computeCharacter } from '@/lib/character';
+import { DUNGEONS } from '@/data/dungeons';
 import { playerWithGear, RARITY_RANK, tierToRankQ } from '@/lib/items';
 import {
   BUILDING_TYPES,
@@ -529,6 +530,18 @@ const character = computed(() =>
   ),
 );
 const heroLevel = computed(() => character.value.level.level);
+// Niveau de PROGRESSION DANS LE JEU (≠ niveau de sport) : profondeur atteinte en donjon
+// = recoLevel du donjon le plus profond nettoyé (frontière). Sert à caler la DIFFICULTÉ
+// des expéditions sur ce que le joueur a VRAIMENT accompli, pas sur son niveau de sport
+// (qui peut être élevé sans avoir farmé le jeu → sinon activités 100 % gagnées). Ticket
+// f6e40aa6. Plancher 2 (early : quelques activités abordables). +1 = la « frontière »
+// (le cran juste au-dessus du dernier nettoyé) → une part d'activités reste un vrai défi.
+const progressionLevel = computed(() => {
+  const cleared = new Set(char.row?.cleared_dungeons ?? []);
+  let maxReco = 0;
+  for (const d of DUNGEONS) if (cleared.has(d.id)) maxReco = Math.max(maxReco, d.recoLevel);
+  return Math.max(2, maxReco + 1); // frontière = un cran au-dessus du dernier nettoyé
+});
 const fighter = computed<Combatant>(() =>
   playerWithGear(
     char.row?.pseudo ?? 'Toi',
@@ -878,7 +891,7 @@ function winClass(pct: number): string {
   return pct >= 70 ? 'wp-good' : pct >= 35 ? 'wp-mid' : 'wp-bad';
 }
 function diffClass(p: Poi): string {
-  const d = p.level - heroLevel.value;
+  const d = p.level - progressionLevel.value;
   return d <= 0 ? 'easy' : d <= 2 ? 'mid' : 'hard';
 }
 
@@ -916,7 +929,7 @@ async function send() {
   const p = selected.value;
   if (!uid || !p || !canSend.value) return;
   try {
-    await char.expeSend(uid, p, fighter.value, Date.now(), heroLevel.value);
+    await char.expeSend(uid, p, fighter.value, Date.now(), progressionLevel.value);
     selected.value = null;
     $q.notify({ type: 'positive', message: '🧭 Héros en route !' });
   } catch (e) {
@@ -958,7 +971,7 @@ async function lifecycle() {
           rarity: rk(top.rarity) >= 9 ? 'divin' : rk(top.rarity) >= 8 ? 'legendary' : 'epic',
         });
     }
-    await char.expeSyncMap(uid, Date.now(), heroLevel.value);
+    await char.expeSyncMap(uid, Date.now(), progressionLevel.value);
   } finally {
     busy = false;
   }
@@ -970,7 +983,7 @@ onMounted(async () => {
   setTimeout(() => (booting.value = false), 750);
   const uid = auth.user?.id;
   if (uid && !char.row) await char.fetchMine().catch(() => undefined);
-  if (uid) await char.expeSyncMap(uid, Date.now(), heroLevel.value).catch(() => undefined);
+  if (uid) await char.expeSyncMap(uid, Date.now(), progressionLevel.value).catch(() => undefined);
   await nextTick();
   measure();
   // Vue de départ : base large (grande carte) + 2 crans de zoom (1 cran = 200 px).
