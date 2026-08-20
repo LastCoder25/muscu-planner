@@ -97,6 +97,16 @@ describe('mode séries vs reps par exo (173b322a)', () => {
     expect(legComplete(full)).toBe(true); // 110 ≥ 100
     expect(legDone(full) - full.target).toBe(10); // dépassement en reps
   });
+  it('mode durée (gainage) : legDone = total SECONDES, unité « sec »', () => {
+    const l = leg({ count_mode: 'time', target: 120, sets: [set(40), set(45)] });
+    expect(legMode(l)).toBe('time');
+    expect(legUnitLabel(l)).toBe('sec');
+    expect(legDone(l)).toBe(85); // 40+45 secondes
+    expect(legRemaining(l)).toBe(35);
+    expect(legComplete(l)).toBe(false);
+    const full = leg({ count_mode: 'time', target: 120, sets: [set(60), set(70)] });
+    expect(legComplete(full)).toBe(true); // 130 ≥ 120 s
+  });
   it('mode sets (défaut) : legDone = nb de séries', () => {
     const l = leg({ target: 3, sets: [set(10), set(10)] });
     expect(legMode(l)).toBe('sets');

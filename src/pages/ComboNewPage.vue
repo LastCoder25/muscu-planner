@@ -377,6 +377,8 @@ const router = useRouter();
 const $q = useQuasar();
 const auth = useAuthStore();
 const profileStore = useProfileStore();
+// Secondes de gainage visées par « série » d'objectif (mode durée du 360).
+const COMBO_GAINAGE_SEC = 40;
 const library = useLibraryStore();
 const combo = useComboStore();
 const challenges = useChallengesStore();
@@ -521,7 +523,8 @@ function candidates(slot: ComboSlot): ExerciseRow[] {
   return lib.value
     .filter(
       (e) =>
-        e.unit !== 'time' &&
+        // Les exos au TEMPS (gainage) sont désormais admis (mode DURÉE, secondes) → ils
+        // n'apparaissent que dans l'emplacement Gainage (filtre par muscle ci-dessous).
         slot.muscles.includes(e.muscle_primary ?? '') &&
         comboMuscleInZone(e.muscle_primary, zone.value) &&
         !challengeFamilies.value.has(variantFamilyKey(e.id)),
@@ -697,16 +700,18 @@ async function createCombo() {
     for (const exId of p.exercise_ids) {
       const e = lib.value.find((x) => x.id === exId);
       if (!e) continue;
+      // Exo au TEMPS (gainage) → mode DURÉE : objectif en SECONDES (~40 s / série visée).
+      const isTime = e.unit === 'time';
       legs.push({
         slot: slot.key,
         exercise_id: e.id,
         exercise_name: e.name,
         muscle_primary: e.muscle_primary,
         rep_weight: repWeightFromExercise(e.muscle_secondary, e.equipment_required, e.name),
-        target: perExoTarget,
-        count_mode: p.count_mode,
-        weight_kg: p.weight_kg || null,
-        assistable: isBodyweightExercise(e.equipment_required, e.name),
+        target: isTime ? perExoTarget * COMBO_GAINAGE_SEC : perExoTarget,
+        count_mode: isTime ? 'time' : p.count_mode,
+        weight_kg: isTime ? null : p.weight_kg || null,
+        assistable: !isTime && isBodyweightExercise(e.equipment_required, e.name),
         sets: [],
       });
     }

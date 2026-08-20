@@ -378,7 +378,18 @@
                 />
               </div>
               <div class="cl-actions">
-                <button class="cl-add" title="Ajouter une série" @click="openSet(leg, 1)">
+                <template v-if="legMode(leg) === 'time'">
+                  <button
+                    v-for="s in [30, 60]"
+                    :key="s"
+                    class="cl-add"
+                    title="Ajouter des secondes de gainage"
+                    @click="doAddSeconds(leg, s)"
+                  >
+                    ＋{{ s }}s
+                  </button>
+                </template>
+                <button v-else class="cl-add" title="Ajouter une série" @click="openSet(leg, 1)">
                   ＋ 1
                 </button>
                 <button
@@ -608,6 +619,13 @@ function saveSet() {
     comboStore.addSet(activeCombo.value.id, leg.exercise_id, logicalToday(), reps, w, asst);
   }
   setOpen.value = false;
+  if (before !== 'done' && activeCombo.value.status === 'done') celebrateCombo();
+}
+// Mode DURÉE (gainage) : ajoute directement N secondes (dans le champ reps, pas de poids).
+function doAddSeconds(leg: ComboLeg, sec: number) {
+  if (!activeCombo.value) return;
+  const before = activeCombo.value.status;
+  comboStore.addSet(activeCombo.value.id, leg.exercise_id, logicalToday(), sec, null, false);
   if (before !== 'done' && activeCombo.value.status === 'done') celebrateCombo();
 }
 function undoSet(leg: ComboLeg) {

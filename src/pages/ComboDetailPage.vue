@@ -73,7 +73,14 @@
             :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }"
           />
         </div>
-        <div class="leg-actions">
+        <!-- Mode DURÉE : ajout rapide de secondes ; sinon +séries (dialogue reps+poids). -->
+        <div v-if="legMode(leg) === 'time'" class="leg-actions">
+          <button v-for="s in [20, 30, 45, 60]" :key="s" class="add" @click="doAddSeconds(leg, s)">
+            +{{ s }}s
+          </button>
+          <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
+        </div>
+        <div v-else class="leg-actions">
           <button v-for="n in [1, 2, 3, 4]" :key="n" class="add" @click="openSet(leg, n)">
             +{{ n }}
           </button>
@@ -193,6 +200,22 @@ function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }
   for (let i = 0; i < setCount.value; i++) {
     combo.addSet(id, leg.exercise_id, logicalToday(), v.reps, v.weight, v.assisted);
   }
+  if (before !== 'done' && c.value.status === 'done') {
+    gameFx.celebrate({
+      kind: 'generic',
+      emoji: '🎯',
+      title: 'Défi 360 bouclé !',
+      subtitle: 'Full-body complété — bravo 💪',
+      rarity: 'divin',
+    });
+  }
+}
+// Mode DURÉE (gainage) : ajoute directement une « série » de N secondes (stockées dans
+// le champ reps ; pas de poids) → pas de dialogue reps+poids inadapté au gainage.
+function doAddSeconds(leg: ComboLeg, sec: number) {
+  if (!auth.user?.id || !c.value) return;
+  const before = c.value.status;
+  combo.addSet(id, leg.exercise_id, logicalToday(), sec, null, false);
   if (before !== 'done' && c.value.status === 'done') {
     gameFx.celebrate({
       kind: 'generic',

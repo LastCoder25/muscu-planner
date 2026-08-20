@@ -17,9 +17,10 @@ export interface ComboLegEntry {
   date: string;
   reps: number;
 }
-// Mode de comptage d'un exo : par SÉRIES (target = nb de séries/sem, défaut) ou par
-// REPS (target = total de reps/sem, en autant de séries qu'on veut). Choisi par exo.
-export type ComboCountMode = 'sets' | 'reps';
+// Mode de comptage d'un exo : par SÉRIES (target = nb de séries/sem, défaut), par
+// REPS (target = total de reps/sem) ou par DURÉE (target = total de SECONDES/sem — gainage :
+// les secondes sont stockées dans le champ `reps` de chaque série, comme les défis solo).
+export type ComboCountMode = 'sets' | 'reps' | 'time';
 
 export interface ComboLeg {
   slot: string;
@@ -65,13 +66,15 @@ export function legReps(leg: ComboLeg): number {
 export function legMode(leg: ComboLeg): ComboCountMode {
   return leg.count_mode ?? 'sets';
 }
-/** Libellé de l'unité de l'objectif (séries ou reps) selon le mode. */
+/** Libellé de l'unité de l'objectif (séries / reps / sec) selon le mode. */
 export function legUnitLabel(leg: ComboLeg): string {
-  return legMode(leg) === 'reps' ? 'reps' : 'séries';
+  const m = legMode(leg);
+  return m === 'reps' ? 'reps' : m === 'time' ? 'sec' : 'séries';
 }
-/** Avancement réalisé dans l'UNITÉ de l'objectif (séries faites OU reps cumulées). */
+/** Avancement réalisé dans l'UNITÉ de l'objectif (séries faites, reps OU secondes cumulées).
+ *  reps ET time somment le champ `reps` des séries (= reps, ou secondes en mode durée). */
 export function legDone(leg: ComboLeg): number {
-  return legMode(leg) === 'reps' ? legReps(leg) : legSetsDone(leg);
+  return legMode(leg) === 'sets' ? legSetsDone(leg) : legReps(leg);
 }
 /** Restant avant l'objectif, dans l'unité du mode (séries ou reps). */
 export function legRemaining(leg: ComboLeg): number {
@@ -166,8 +169,8 @@ export function comboTargetEffort(c: ComboChallenge): number {
   let sum = 0;
   for (const l of c.legs) {
     const sets = legSets(l);
-    if (legMode(l) === 'reps') {
-      // Mode REPS : effort = reps réalisées jusqu'à l'objectif (plancher pondéré).
+    if (legMode(l) !== 'sets') {
+      // Mode REPS/DURÉE : effort = reps (ou secondes) réalisées jusqu'à l'objectif.
       const reps = legReps(l);
       sum += Math.min(reps, l.target > 0 ? l.target : reps) * (l.rep_weight ?? 1);
     } else {
@@ -194,9 +197,9 @@ export const COMBO_SET_MIN = 3.5;
 export function comboCountedSets(c: ComboChallenge): number {
   let n = 0;
   for (const l of c.legs) {
-    const reps = legMode(l) === 'reps';
-    const done = reps ? Math.ceil(legReps(l) / COMBO_PLAN_REPS) : legSetsDone(l);
-    const targetSets = reps ? Math.ceil(l.target / COMBO_PLAN_REPS) : l.target;
+    const byCount = legMode(l) !== 'sets'; // reps ou durée → convertit en « séries » équivalentes
+    const done = byCount ? Math.ceil(legReps(l) / COMBO_PLAN_REPS) : legSetsDone(l);
+    const targetSets = byCount ? Math.ceil(l.target / COMBO_PLAN_REPS) : l.target;
     n += targetSets > 0 ? Math.min(done, targetSets) : done;
   }
   return n;
@@ -300,7 +303,7 @@ export function buildComboSession(
       // Séries restantes à générer : direct en mode 'sets' ; en mode 'reps' on
       // convertit les reps restantes en nb de séries (à ~reps/série).
       const remaining =
-        legMode(l) === 'reps' ? Math.ceil(legRemaining(l) / Math.max(1, reps)) : legRemaining(l);
+        legMode(l) !== 'sets' ? Math.ceil(legRemaining(l) / Math.max(1, reps)) : legRemaining(l);
       return { leg: l, remaining, reps, sets: [] as number[] };
     })
     .filter((e) => e.remaining > 0);
@@ -369,8 +372,8 @@ export function suggestComboTargetFromHistory(
     if (!leg) continue;
     const pastMode = legMode(leg);
     if (pastMode === mode) return leg.target;
-    // Conversion entre unités (séries ↔ reps).
-    return mode === 'reps'
+    // Conversion approx entre unités (séries ↔ reps/secondes, ~COMBO_PLAN_REPS/série).
+    return mode !== 'sets'
       ? leg.target * COMBO_PLAN_REPS
       : Math.max(1, Math.round(leg.target / COMBO_PLAN_REPS));
   }
