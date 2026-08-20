@@ -194,7 +194,13 @@
 
         <template v-if="persoSub === 'perso'">
           <div class="avatar-wrap">
-            <AventureAvatar :profile="c.profile" :equipped="char.row.equipped" />
+            <AventureAvatar
+              :profile="c.profile"
+              :equipped="char.row.equipped"
+              :talent-icon="firstTalentIcon"
+              @familiar-click="familiarsOpen = true"
+              @talent-click="talentsOpen = true"
+            />
           </div>
           <div class="hero">
             <div class="lvl-ring">
@@ -2613,6 +2619,11 @@ const bonusPv = computed(() => {
 // ── Talents (refonte B : drop + infusion + loadout) ──
 const talentSlots = computed(() => talentsEarned(c.value.level.level));
 const equippedTalents = computed(() => (char.row?.talents ?? []).filter((t) => t.equipped));
+// Icône du 1er talent équipé → badge cliquable bas-gauche de l'avatar (ouvre les talents).
+const firstTalentIcon = computed(() => {
+  const eq = equippedTalents.value[0];
+  return eq ? (talentByCode(eq.code)?.icon ?? '') : '';
+});
 const talentFreeSlots = computed(() =>
   Math.max(0, talentSlots.value - equippedTalents.value.length),
 );

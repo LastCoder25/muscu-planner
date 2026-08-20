@@ -109,11 +109,47 @@
       </g>
     </g>
 
-    <!-- Familier (compagnon) : halo teinté + emoji de la race, flotte près du héros -->
-    <g v-if="companion" class="familiar">
+    <!-- Familier (compagnon) : CLIQUABLE → ouvre l'inventaire des familiers (même à vide).
+         Halo teinté + emoji de la race, flotte près du héros. -->
+    <g
+      class="familiar hotspot"
+      role="button"
+      tabindex="0"
+      :aria-label="companion ? 'Familier — gérer' : 'Équiper un familier'"
+      @click="emit('familiar-click')"
+      @keydown.enter="emit('familiar-click')"
+    >
       <ellipse class="fam-shadow" cx="97" cy="136" rx="15" ry="4" />
-      <circle class="fam-glow" cx="97" cy="114" r="20" :style="{ fill: companion.tint }" />
-      <text class="fam-emoji" x="97" y="125" text-anchor="middle">{{ companion.emoji }}</text>
+      <circle
+        class="fam-glow"
+        cx="97"
+        cy="114"
+        r="20"
+        :style="{ fill: companion ? companion.tint : 'var(--dim, #9a8f7e)' }"
+      />
+      <text v-if="companion" class="fam-emoji" x="97" y="125" text-anchor="middle">
+        {{ companion.emoji }}
+      </text>
+      <text v-else class="fam-emoji empty" x="97" y="124" text-anchor="middle">🐾</text>
+      <circle class="hotspot-ring" cx="97" cy="114" r="18" />
+    </g>
+
+    <!-- Talent (bas-gauche) : CLIQUABLE → ouvre l'inventaire des talents. Icône du 1er
+         talent équipé (ou ✨ si aucun). Miroir du familier. -->
+    <g
+      class="familiar talent-badge hotspot"
+      role="button"
+      tabindex="0"
+      aria-label="Talents — gérer"
+      @click="emit('talent-click')"
+      @keydown.enter="emit('talent-click')"
+    >
+      <ellipse class="fam-shadow" cx="23" cy="136" rx="14" ry="4" />
+      <circle class="fam-glow tal" cx="23" cy="114" r="18" />
+      <text class="fam-emoji" :class="{ empty: !talentIcon }" x="23" y="124" text-anchor="middle">
+        {{ talentIcon || '✨' }}
+      </text>
+      <circle class="hotspot-ring" cx="23" cy="114" r="16" />
     </g>
 
     <!-- Pips d'équipement (4 slots) -->
@@ -151,7 +187,9 @@ import { familiarSpecies } from '@/data/familiars';
 const props = defineProps<{
   profile: 'puissant' | 'agile' | 'polyvalent';
   equipped: Equipped;
+  talentIcon?: string; // icône du 1er talent équipé (badge cliquable bas-gauche)
 }>();
+const emit = defineEmits<{ 'familiar-click': []; 'talent-click': [] }>();
 
 const rankColor = (r: Rarity) => RANK_COLOR[r] ?? '#9a8f7e';
 // Pièces d'équipement par slot (pour l'affichage des couches + teinte de rareté).
@@ -464,6 +502,34 @@ const label = computed(
 }
 .fam-emoji {
   font-size: 32px;
+}
+.talent-badge .fam-emoji {
+  font-size: 26px;
+}
+.fam-emoji.empty {
+  opacity: 0.55;
+}
+.fam-glow.tal {
+  fill: var(--accent);
+}
+/* Zones cliquables (familier / talent) : curseur + petit anneau pointillé « gérable ». */
+.hotspot {
+  cursor: pointer;
+}
+.hotspot:focus {
+  outline: none;
+}
+.hotspot-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.45;
+}
+.hotspot:hover .hotspot-ring,
+.hotspot:focus .hotspot-ring {
+  opacity: 0.95;
+  stroke-width: 1.6;
 }
 @keyframes fam-bob {
   0%,
