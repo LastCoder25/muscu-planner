@@ -59,7 +59,9 @@
               >⚡ {{ c.energy }}</span
             >
             <!-- Boutique retirée pour le moment (ticket dc7c746d) : la puce or est un simple indicateur. -->
-            <span class="tb-r gold" title="Or — expéditions, boutique et construction des bâtiments"
+            <span
+              class="tb-r gold"
+              title="Or — expéditions, Comptoir (→ poussière) et construction des bâtiments"
               >🪙 {{ char.row.gold }}</span
             >
             <span class="tb-sep" aria-hidden="true"></span>
@@ -332,10 +334,10 @@
             Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
           </div>
           <div class="sec-hint">
-            Les talents <b>droppent au rang G</b> (donjons/boss). Équipe-en
-            {{ talentSlots }} (change quand tu veux). Deux axes : <b>🔧 Infuse</b> d'autres talents
-            → monte le <b>rang + qualité</b> ; <b>📜 Monte le niveau</b> (magnitude) avec des
-            parchemins de la <b>Bibliothèque</b
+            Les talents <b>droppent à un rang</b> selon la profondeur du donjon/boss (comme les
+            objets). Équipe-en {{ talentSlots }} (change quand tu veux). Deux axes :
+            <b>🔧 Infuse</b> d'autres talents → monte le <b>rang + qualité</b> ;
+            <b>📜 Monte le niveau</b> (magnitude) avec des parchemins de la <b>Bibliothèque</b
             ><template v-if="char.row.parchemins">
               — <b>{{ char.row.parchemins }} 📜</b> dispo</template
             >.
@@ -560,9 +562,10 @@
                 familier.</span
               >
               <span class="fam-res-l"
-                ><b>🔧 Infusion → TIER</b> (rang + qualité) — choisis une <b>cible 🔧</b>, puis
-                <b>sacrifie d'autres familiers</b> dedans (ou verse tes fragments 🧩 des coffres).
-                L'<b>Incubateur 🥚</b> fixe le rang max.</span
+                ><b>🔧 Infusion → TIER</b> (rang + qualité) — <b>recycle ♻️</b> des familiers en
+                <b>fragments 🧩</b> (aussi trouvés dans les coffres), puis choisis une
+                <b>cible 🔧</b> et <b>verse les fragments</b> dedans. L'<b>Incubateur 🥚</b> fixe le
+                cran max.</span
               >
             </div>
             Tu as <b>💎 {{ char.row.stones }}</b> pierres ·
@@ -2532,8 +2535,8 @@ function celebrateRareDrop(it: Item) {
     rarity: fxRarity(it.rarity),
   });
 }
-// Drop de talent : éclat central si rang élevé (moment notable). Les talents droppent
-// au niveau 1 → pas de toast en bas (le talent apparaît dans la collection Perso › Talents).
+// Drop de talent : éclat central si rang élevé (moment notable). Le talent apparaît
+// dans la collection Perso › Talents.
 function celebrateTalentDrop(t: TalentInstance) {
   const def = talentByCode(t.code);
   if (!def) return;
@@ -4032,7 +4035,7 @@ function doUpgradeFamiliar(itemId: string) {
 }
 // Niveau de l'Incubateur + rang cible max atteignable par infusion (débloqué par niveau).
 const incubLevel = computed(() => incubatorLevel(char.row?.buildings ?? []));
-// CRAN (tier 0..49) max d'infusion débloqué par l'Incubateur (1 qualité / 2 niveaux).
+// CRAN (tier 0..49) max d'infusion débloqué par l'Incubateur (aligné sur la courbe √ des drops).
 const fuseMaxTier = computed(() => maxFuseTierIndex(char.row?.buildings ?? []));
 const fuseMaxRank = computed(() => tierToRankQ(Math.max(0, fuseMaxTier.value)).rank);
 const fuseMaxLabel = computed(() => {
