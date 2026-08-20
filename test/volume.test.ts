@@ -3,6 +3,9 @@ import {
   isMuscuLog,
   mondayOf,
   setsByMuscleInRange,
+  muscleVolumeInRange,
+  firstOfMonth,
+  dayAfter,
   weeklySetsByMuscle,
   volumeVsTarget,
   weeklyVolumeSeries,
@@ -45,6 +48,37 @@ describe('isMuscuLog', () => {
     expect(isMuscuLog(mkLog([], 'musculation'))).toBe(true);
     expect(isMuscuLog(mkLog([], 'prepa_physique'))).toBe(false);
     expect(isMuscuLog(mkLog([], 'autre_sport'))).toBe(false);
+  });
+});
+
+describe('muscleVolumeInRange', () => {
+  it('agrège séries + reps par muscle ET par exo sur la période, exclut prépa/cardio', () => {
+    const entries = [
+      entry(
+        '2026-08-11',
+        mkLog([
+          { muscle: 'pectoraux', sets: 3, reps: 10 },
+          { muscle: 'dos', sets: 4, reps: 12 },
+        ]),
+      ),
+      entry('2026-08-12', mkLog([{ muscle: 'pectoraux', sets: 2, reps: 8 }])),
+      entry('2026-08-13', mkLog([{ muscle: 'pectoraux', sets: 5 }], 'prepa_physique')), // exclu
+      entry('2026-07-30', mkLog([{ muscle: 'pectoraux', sets: 9 }])), // hors période
+    ];
+    const v = muscleVolumeInRange(entries, '2026-08-10', '2026-08-17');
+    expect(v.byMuscle['pectoraux']).toEqual({ sets: 5, reps: 46 }); // 3×10 + 2×8
+    expect(v.byMuscle['dos']).toEqual({ sets: 4, reps: 48 }); // 4×12
+    expect(v.totalSets).toBe(9);
+    // par exo : trié par séries décroissantes
+    expect(v.byExo[0]!.sets).toBeGreaterThanOrEqual(v.byExo[1]!.sets);
+  });
+});
+
+describe('firstOfMonth / dayAfter', () => {
+  it('bornes de période cohérentes', () => {
+    expect(firstOfMonth('2026-08-20')).toBe('2026-08-01');
+    expect(dayAfter('2026-08-20')).toBe('2026-08-21');
+    expect(dayAfter('2026-08-31')).toBe('2026-09-01');
   });
 });
 

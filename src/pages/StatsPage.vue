@@ -181,6 +181,33 @@
           </div>
         </div>
 
+        <!-- Volume par PÉRIODE (semaine/mois) : carte du corps + détail par exo -->
+        <div class="sec-h">Volume musculaire</div>
+        <div class="vol-period">
+          <button :class="{ on: volPeriod === 'week' }" @click="volPeriod = 'week'">
+            Cette semaine
+          </button>
+          <button :class="{ on: volPeriod === 'month' }" @click="volPeriod = 'month'">
+            Ce mois
+          </button>
+        </div>
+        <div class="vol-card">
+          <MuscleBody :series="volSets" />
+          <div class="vol-total">
+            <b>{{ volData.totalSets }}</b> séries · {{ volPeriodLabel }}
+          </div>
+          <div v-if="volData.byExo.length" class="vol-exos">
+            <div v-for="e in volData.byExo" :key="e.id" class="vol-exo">
+              <span class="ve-dot" :style="{ background: muscleColor(e.muscle) }" />
+              <span class="ve-name">{{ e.name }}</span>
+              <span class="ve-num"
+                ><b>{{ e.sets }}</b> séries · {{ e.reps }} reps</span
+              >
+            </div>
+          </div>
+          <div v-else class="vol-empty">Aucune série sur la période.</div>
+        </div>
+
         <!-- Séries par groupe musculaire -->
         <div class="sec-h">Séries par groupe musculaire (total)</div>
         <div class="grp-card">
@@ -304,9 +331,14 @@ import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useTennisStore, type DrillLogRow } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
+import MuscleBody from '@/components/MuscleBody.vue';
 import {
   muscleColor,
   weeklySetsByMuscle,
+  muscleVolumeInRange,
+  mondayOf,
+  firstOfMonth,
+  dayAfter,
   volumeVsTarget,
   weeklyVolumeSeries,
   muscuSessionsInLastDays,
@@ -465,6 +497,21 @@ const todayIso = (() => {
 const targets = computed(() =>
   profileStore.profile ? computeMuscleTargets(profileStore.profile) : {},
 );
+// Volume par PÉRIODE (heatmap corps + détail) — semaine en cours ou mois en cours.
+const volPeriod = ref<'week' | 'month'>('week');
+const volPeriodLabel = computed(() =>
+  volPeriod.value === 'week' ? 'cette semaine' : 'ce mois-ci',
+);
+const volData = computed(() => {
+  const start = volPeriod.value === 'week' ? mondayOf(todayIso) : firstOfMonth(todayIso);
+  return muscleVolumeInRange(entries.value, start, dayAfter(todayIso));
+});
+const volSets = computed<Record<string, number>>(() => {
+  const out: Record<string, number> = {};
+  const bm = volData.value.byMuscle;
+  for (const m of Object.keys(bm)) out[m] = bm[m]!.sets;
+  return out;
+});
 const weeklyDone = computed(() => weeklySetsByMuscle(entries.value, todayIso));
 const volStatus = computed(() => volumeVsTarget(weeklyDone.value, targets.value));
 const weekSeries = computed(() => weeklyVolumeSeries(entries.value, 8, todayIso));
@@ -784,6 +831,89 @@ onMounted(async () => {
   border: 1px solid var(--line-soft);
   border-radius: 14px;
   padding: 6px 14px;
+}
+/* Volume par période : sélecteur + carte du corps + détail par exo. */
+.vol-period {
+  display: inline-flex;
+  gap: 4px;
+  background: var(--surface-2, #2b241b);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+  margin-bottom: 10px;
+}
+.vol-period button {
+  border: none;
+  background: none;
+  color: var(--dim);
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 5px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.vol-period button.on {
+  background: var(--accent);
+  color: #15120e;
+}
+.vol-card {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.vol-total {
+  text-align: center;
+  font-size: 13px;
+  color: var(--dim);
+  margin: 4px 0 10px;
+}
+.vol-total b {
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+.vol-exos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.vol-exo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px;
+}
+.ve-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.ve-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ve-num {
+  flex: none;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.ve-num b {
+  color: var(--text);
+}
+.vol-empty {
+  text-align: center;
+  color: var(--dim);
+  font-size: 12.5px;
+  padding: 8px 0;
 }
 .grp-row {
   display: flex;
