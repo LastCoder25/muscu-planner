@@ -183,6 +183,13 @@
           >
             ✨ Talents<span v-if="talentFreeSlots" class="gs-badge">{{ talentFreeSlots }}</span>
           </button>
+          <button
+            class="gs-b"
+            :class="{ on: persoSub === 'familiars' }"
+            @click="persoSub = 'familiars'"
+          >
+            🐾 Familiers
+          </button>
         </div>
 
         <template v-if="persoSub === 'perso'">
@@ -448,6 +455,154 @@
           </div>
         </template>
 
+        <!-- FAMILIERS — même gestion que les talents (drop, un seul équipé, infusion par
+             sacrifice, montée de niveau par ressource) → affichage HOMOGÈNE (mêmes cartes). -->
+        <template v-if="persoSub === 'familiars'">
+          <div class="sec-title">
+            🐾 Familiers <span class="tal-slots">{{ equippedFamiliar ? 1 : 0 }}/1</span>
+          </div>
+          <div class="sec-hint">
+            Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Équipe-en 1.
+            Deux axes, comme les talents : <b>🔧 Infuse</b> — recycle <b>♻️</b> des familiers en
+            <b>fragments 🧩</b> (aussi dans les coffres), choisis une <b>cible 🔧</b> et verse-les →
+            monte le <b>rang + qualité</b> ; <b>💎 Niveau</b> (magnitude) avec des pierres.
+            <br />
+            Tu as <b>💎 {{ char.row.stones }}</b> · <b>🧩 {{ char.row.fragments }}</b> · Incubateur
+            niv.{{ incubLevel }} (cran max
+            <b class="ii-rar" :class="'p-' + fuseMaxRank">{{ fuseMaxLabel }}</b
+            >).
+          </div>
+
+          <!-- Bannière d'infusion (mode cible) — identique aux talents. -->
+          <div v-if="famTarget" class="tal-infuse-banner">
+            🔧 Infusion dans <b>{{ famTarget.name }} ({{ famTierLabel(famTarget) }})</b>
+            <template v-if="famTargetCapped">
+              — cran max <b>{{ fuseMaxLabel }}</b> (Incubateur niv.{{ incubLevel }}). Améliore-le
+              (carte 🗺️ Expédition) pour infuser plus haut.
+            </template>
+            <template v-else>
+              — recycle <b>♻️</b> des familiers du sac pour des <b>🧩 {{ char.row.fragments }}</b>
+              fragments, puis verse-les.
+            </template>
+            <button
+              v-if="!famTargetCapped && char.row.fragments"
+              class="tib-frag"
+              @click="doInfuseFam(char.row.fragments)"
+            >
+              🧩 Verser {{ char.row.fragments }}
+            </button>
+            <button class="tib-x done" @click="famTarget = null">✓ Terminer</button>
+          </div>
+
+          <div v-if="!allFamiliars.length" class="talents-empty">
+            Aucun familier — <b>clear le Labyrinthe 🗝️</b> pour en trouver un garanti.
+          </div>
+          <div v-else class="talents-grid">
+            <div
+              v-for="f in allFamiliars"
+              :key="f.id"
+              class="tal-card"
+              :class="['p-' + f.rarity, { eq: f.equipped, tgt: famTarget?.id === f.id }]"
+            >
+              <span class="tal-emo" role="img" :aria-label="f.name">{{ f.emoji }}</span>
+              <div class="tal-body">
+                <div class="tal-name font-display">
+                  <span class="tal-nm">{{ f.name }}</span>
+                  <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
+                  <span class="rk-badge" :class="'p-' + f.rarity">{{ f.rarity }}</span>
+                  <span v-if="itemQuality(f)" class="q-badge" :class="'q-' + itemQuality(f)">{{
+                    itemQuality(f)
+                  }}</span>
+                  <span class="tal-lv">Nv{{ f.level }}</span>
+                  <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
+                </div>
+                <div class="tal-eff">{{ itemEffects(f) }}</div>
+                <div
+                  class="tal-xp"
+                  :title="'Tier ' + famTierLabel(f) + ' (infusion par fragments)'"
+                >
+                  <span :style="{ width: famTierPct(f) + '%' }" />
+                </div>
+              </div>
+              <div class="tal-actions">
+                <template v-if="famTarget">
+                  <span v-if="famTarget.id === f.id" class="tal-b cur">cible</span>
+                  <button
+                    v-else-if="!f.equipped && !f.locked"
+                    class="tal-b feed"
+                    title="Recycler ce familier en fragments 🧩 (à verser dans la cible)"
+                    @click="doRecycleFam(f.id)"
+                  >
+                    ♻️ +{{ familiarInfuseXp(f) }}🧩
+                  </button>
+                  <span v-else-if="f.equipped" class="tal-b eqlock" title="Familier équipé"
+                    >🔒 équipé</span
+                  >
+                  <span v-else class="tal-b eqlock" title="Verrouillé (protégé)">🔒</span>
+                </template>
+                <template v-else>
+                  <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
+                    Retirer
+                  </button>
+                  <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
+                  <button
+                    class="tal-b ghost"
+                    :disabled="!canUpgradeFamiliar(f)"
+                    :title="
+                      f.level >= c.level.level
+                        ? 'Niveau plafonné à ton niveau de sport'
+                        : 'Monter le NIVEAU (puissance de l’effet) avec des pierres 💎'
+                    "
+                    @click="doUpgradeFamiliar(f.id)"
+                  >
+                    💎
+                    {{
+                      f.level >= c.level.level
+                        ? 'Max'
+                        : '+1·' + familiarStoneCost(f.level, f.rarity)
+                    }}
+                  </button>
+                  <button
+                    class="tal-b ghost"
+                    :title="
+                      hasIncubator
+                        ? 'Infuser : monter le TIER (rang+qualité) avec des fragments 🧩'
+                        : 'Construis un Incubateur 🥚 pour infuser'
+                    "
+                    @click="hasIncubator ? setFamTarget(f) : openGame('/expedition-map')"
+                  >
+                    🔧
+                  </button>
+                  <button
+                    v-if="!f.equipped && hasIncubator && !f.locked"
+                    class="tal-b ghost"
+                    title="Recycler en fragments 🧩"
+                    @click="doRecycleFam(f.id)"
+                  >
+                    ♻️{{ familiarInfuseXp(f) }}
+                  </button>
+                  <button
+                    v-if="!f.equipped"
+                    class="tal-b ghost"
+                    title="Vendre contre de l'or"
+                    @click="doSell(f)"
+                  >
+                    🪙{{ sellValue(f) }}
+                  </button>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <button
+            v-if="!hasIncubator"
+            class="fam-incub-locked"
+            @click="openGame('/expedition-map')"
+          >
+            🥚 Construis un <b>Incubateur</b> sur la carte pour infuser tes familiers.
+          </button>
+        </template>
+
         <template v-if="persoSub === 'perso'">
           <!-- Codex : bestiaire + journal des sets (méta de collection). -->
           <button class="codex-btn" @click="codexOpen = true">
@@ -546,260 +701,6 @@
                 >
               </div>
             </div>
-          </div>
-        </template>
-
-        <!-- Familier (compagnon) : 5ᵉ emplacement équipé → affiché dans la vue Équipement
-             (fusionné, plus de sous-onglet dédié). Monté aux PIERRES MAGIQUES 💎. -->
-        <template v-if="gearSub === 'equip'">
-          <div class="sec-title">🐾 Familier</div>
-          <div class="sec-hint">
-            Ton compagnon donne un bonus de race (+ un effet <b>✦ signature</b> pour les plus
-            rares). <b>Deux façons de le renforcer</b> :
-            <div class="fam-res">
-              <span class="fam-res-l"
-                ><b>💎 Pierres → NIVEAU</b> (puissance de l'effet) — bouton <b>💎</b> du
-                familier.</span
-              >
-              <span class="fam-res-l"
-                ><b>🔧 Infusion → TIER</b> (rang + qualité) — <b>recycle ♻️</b> des familiers en
-                <b>fragments 🧩</b> (aussi trouvés dans les coffres), puis choisis une
-                <b>cible 🔧</b> et <b>verse les fragments</b> dedans. L'<b>Incubateur 🥚</b> fixe le
-                cran max.</span
-              >
-            </div>
-            Tu as <b>💎 {{ char.row.stones }}</b> pierres ·
-            <b>🧩 {{ char.row.fragments }}</b> fragments · Incubateur niv.{{ incubLevel }} (cran max
-            <b class="ii-rar" :class="'p-' + fuseMaxRank">{{ fuseMaxLabel }}</b
-            >).
-          </div>
-
-          <!-- Bannière d'infusion (mode cible) — calquée sur les talents : tape un familier
-               du sac pour le sacrifier dans la cible (effet immédiat). -->
-          <div v-if="famTarget" class="tal-infuse-banner">
-            🔧 Infusion dans <b>{{ famTarget.name }} ({{ famTierLabel(famTarget) }})</b>
-            <template v-if="famTargetCapped">
-              — cran max <b>{{ fuseMaxLabel }}</b> pour l'Incubateur niv.{{ incubLevel }}.
-              Améliore-le (carte 🗺️ Expédition) pour infuser plus haut.
-            </template>
-            <template v-else>
-              — dépense tes <b>🧩 {{ char.row.fragments }}</b> fragments (recycle ♻️ des familiers
-              du sac pour en gagner).
-            </template>
-            <button
-              v-if="!famTargetCapped && char.row.fragments"
-              class="tib-frag"
-              @click="doInfuseFam(char.row.fragments)"
-            >
-              🧩 Verser {{ char.row.fragments }}
-            </button>
-            <button class="tib-x done" @click="famTarget = null">✓ Terminer</button>
-            <div v-if="!famTargetCapped" class="tal-xp fam-xp">
-              <span
-                :style="{
-                  width:
-                    Math.min(
-                      100,
-                      Math.round(
-                        (familiarTierProgress(famTarget).xp /
-                          familiarTierProgress(famTarget).cost) *
-                          100,
-                      ),
-                    ) + '%',
-                }"
-              />
-            </div>
-          </div>
-
-          <div class="fam-panel">
-            <div
-              v-if="equippedFamiliar"
-              class="fam-card equipped"
-              :class="'r-' + equippedFamiliar.rarity"
-            >
-              <div class="fam-emo">{{ equippedFamiliar.emoji }}</div>
-              <div class="fam-body">
-                <div class="fam-name">
-                  {{ equippedFamiliar.name }}
-                  <span class="gpill" :class="'p-' + equippedFamiliar.rarity">{{
-                    RARITY_LABEL[equippedFamiliar.rarity]
-                  }}</span>
-                  <span
-                    v-if="itemQuality(equippedFamiliar)"
-                    class="q-badge"
-                    :class="'q-' + itemQuality(equippedFamiliar)"
-                    title="Qualité (5 = meilleur)"
-                    >{{ itemQuality(equippedFamiliar) }}</span
-                  >
-                  <span class="gpill lvl">Lvl {{ equippedFamiliar.level }}</span>
-                  <span v-if="equippedFamiliar.effect2" class="gpill sig">✦ Signature</span>
-                </div>
-                <div class="fam-eff">{{ itemEffects(equippedFamiliar) }}</div>
-                <div v-if="familiarBlurb(equippedFamiliar)" class="fam-blurb">
-                  {{ familiarBlurb(equippedFamiliar) }}
-                </div>
-                <!-- Actions du familier équipé : 💎 Niveau (pierres) · 🔧 Infuser (tier, via
-                     fragments) · ✕ Retirer. Rangée d'actions homogènes et lisibles. -->
-                <div class="fam-eq-actions">
-                  <button
-                    class="fam-eq-btn lvl"
-                    :disabled="!canUpgradeFamiliar(equippedFamiliar)"
-                    :title="
-                      equippedFamiliar.level >= c.level.level
-                        ? 'Niveau plafonné à ton niveau de sport'
-                        : 'Monter le NIVEAU (puissance de l’effet) avec des pierres 💎'
-                    "
-                    @click.stop="doUpgradeFamiliar(equippedFamiliar.id)"
-                  >
-                    <span class="feb-ico">💎</span>
-                    <span class="feb-txt"
-                      >{{ equippedFamiliar.level >= c.level.level ? 'Niveau max' : 'Niveau +1' }}
-                      <em v-if="equippedFamiliar.level < c.level.level"
-                        >{{
-                          familiarStoneCost(equippedFamiliar.level, equippedFamiliar.rarity)
-                        }}
-                        💎</em
-                      ></span
-                    >
-                  </button>
-                  <template v-if="famTarget?.id === equippedFamiliar.id">
-                    <div class="fam-eq-btn cur">
-                      <span>🔧 Cible</span>
-                      <div v-if="!famTargetCapped" class="tal-xp fam-xp cur-bar">
-                        <span :style="{ width: famTierPct(equippedFamiliar) + '%' }" />
-                      </div>
-                    </div>
-                  </template>
-                  <button
-                    v-else
-                    class="fam-eq-btn infuse"
-                    :title="
-                      hasIncubator
-                        ? 'Infuser : monter le TIER (rang+qualité) avec des fragments 🧩'
-                        : 'Construis un Incubateur 🥚 pour infuser'
-                    "
-                    @click.stop="
-                      hasIncubator ? setFamTarget(equippedFamiliar) : openGame('/expedition-map')
-                    "
-                  >
-                    <span class="feb-ico">🔧</span><span class="feb-txt">Infuser</span>
-                  </button>
-                  <button
-                    class="fam-eq-btn remove"
-                    title="Retirer le familier"
-                    @click="doUnequipFamiliar()"
-                  >
-                    <span class="feb-ico">✕</span><span class="feb-txt">Retirer</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div v-else class="fam-empty">
-              Aucun familier équipé. On en trouve un <b>garanti au clear du Labyrinthe</b> 🗝️.
-            </div>
-
-            <!-- Familiers au sac (équiper / vendre) -->
-            <div v-if="bagFamiliars.length" class="fam-bag">
-              <div class="fam-bag-title">Au sac ({{ bagFamiliars.length }})</div>
-              <div v-for="f in bagFamiliars" :key="f.id" class="fam-mini" :class="'r-' + f.rarity">
-                <div class="fam-mini-top">
-                  <span class="fam-mini-emo">{{ f.emoji }}</span>
-                  <div class="fam-mini-body">
-                    <div class="fam-mini-head">
-                      <span class="fam-mini-name">{{ f.name }}</span>
-                      <span class="gpill" :class="'p-' + f.rarity">{{
-                        RARITY_LABEL[f.rarity]
-                      }}</span>
-                      <span
-                        v-if="itemQuality(f)"
-                        class="q-badge"
-                        :class="'q-' + itemQuality(f)"
-                        title="Qualité (5 = meilleur)"
-                        >{{ itemQuality(f) }}</span
-                      >
-                      <span class="gpill lvl">Lv{{ f.level }}</span>
-                      <span v-if="f.effect2" class="gpill sig">✦</span>
-                    </div>
-                    <div class="fam-mini-eff">{{ itemEffects(f) }}</div>
-                    <!-- Comparatif de puissance vs familier ÉQUIPÉ, à ARMES ÉGALES : le
-                       candidat est jugé AU NIVEAU du familier équipé (powerIfEquipMatched),
-                       pas à son niveau actuel → on compare le potentiel, pas un sous-niveau. -->
-                    <div
-                      v-if="!famTarget && equippedFamiliar?.id !== f.id"
-                      class="fam-mini-cmp"
-                      :class="powerIfEquipMatched(f) >= combatPowerVal ? 'up' : 'down'"
-                      title="Puissance de combat si tu équipes ce familier (au niveau de l'équipé)"
-                    >
-                      ⚔️ {{ fmtPow(combatPowerVal) }} → {{ fmtPow(powerIfEquipMatched(f)) }}
-                      <b>({{ fmtDelta(combatPowerVal, powerIfEquipMatched(f)) }})</b>
-                    </div>
-                  </div>
-                </div>
-                <div class="fam-mini-acts">
-                  <!-- MODE CIBLE : recycler les AUTRES familiers en fragments 🧩 (à verser
-                       ensuite dans la cible via le bandeau). -->
-                  <template v-if="famTarget">
-                    <template v-if="famTarget.id === f.id">
-                      <span class="fam-mini-cur">🔧 cible</span>
-                      <div v-if="!famTargetCapped" class="tal-xp fam-xp cur-bar">
-                        <span :style="{ width: famTierPct(f) + '%' }" />
-                      </div>
-                    </template>
-                    <button
-                      v-else-if="!f.locked"
-                      class="fam-mini-eq feed"
-                      title="Recycler ce familier en fragments 🧩 (à verser dans la cible)"
-                      @click="doRecycleFam(f.id)"
-                    >
-                      ♻️ +{{ familiarInfuseXp(f) }}🧩
-                    </button>
-                    <span v-else class="fam-mini-cur" title="Verrouillé (protégé)">🔒</span>
-                  </template>
-                  <!-- MODE NORMAL : équiper / 💎 niveau / 🔧 cible d'infusion / ♻️ recycler / vendre. -->
-                  <template v-else>
-                    <button class="fam-mini-eq" @click="doEquipFamiliar(f.id)">Équiper</button>
-                    <button
-                      class="fam-mini-eq"
-                      :disabled="!canUpgradeFamiliar(f)"
-                      :title="
-                        f.level >= c.level.level
-                          ? 'Niveau plafonné à ton niveau de sport'
-                          : 'Monter le NIVEAU (puissance) avec des pierres 💎'
-                      "
-                      @click="doUpgradeFamiliar(f.id)"
-                    >
-                      💎
-                      {{ f.level >= c.level.level ? 'Max' : familiarStoneCost(f.level, f.rarity) }}
-                    </button>
-                    <button
-                      v-if="hasIncubator"
-                      class="fam-mini-eq"
-                      title="Choisir comme cible d’infusion (monter son tier avec des fragments)"
-                      @click="setFamTarget(f)"
-                    >
-                      🔧 Infuser
-                    </button>
-                    <button
-                      v-if="hasIncubator && !f.locked"
-                      class="fam-mini-sell"
-                      title="Recycler en fragments 🧩"
-                      @click="doRecycleFam(f.id)"
-                    >
-                      ♻️{{ familiarInfuseXp(f) }}
-                    </button>
-                    <button class="fam-mini-sell" @click="doSell(f)">🪙{{ sellValue(f) }}</button>
-                  </template>
-                </div>
-              </div>
-            </div>
-
-            <button
-              v-if="!hasIncubator"
-              class="fam-incub-locked"
-              @click="openGame('/expedition-map')"
-            >
-              🥚 Construis un <b>Incubateur</b> sur la carte pour infuser tes familiers.
-            </button>
           </div>
         </template>
 
@@ -2424,7 +2325,6 @@ import {
   type RewardCandidate,
   type PendingReward,
 } from '@/lib/items';
-import { familiarSpecies } from '@/data/familiars';
 import {
   talentsEarned,
   talentEffects,
@@ -2560,7 +2460,7 @@ const tab = ref<'hero' | 'gear' | 'explore'>('hero');
 // Sous-onglet de l'onglet Équipement : équipement (+ familier) / sac / atelier.
 const gearSub = ref<'equip' | 'bag' | 'shop'>('equip');
 // Sous-onglet Héros : fiche (stats fusionnées) / talents.
-const persoSub = ref<'perso' | 'talents'>('perso');
+const persoSub = ref<'perso' | 'talents' | 'familiars'>('perso');
 // Sous-onglet Explorer : donjons (carte) / boss de palier.
 const exploreSub = ref<'donjons' | 'boss'>('donjons');
 // L'incubateur (fusion de familiers) est débloqué en le construisant sur la carte.
@@ -4011,9 +3911,15 @@ const bagFamiliars = computed<Item[]>(() =>
     .filter((i) => isFamiliar(i))
     .sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || b.level - a.level),
 );
-function familiarBlurb(it: Item): string {
-  return (it.species ? familiarSpecies(it.species)?.blurb : '') ?? '';
-}
+// TOUS les familiers (équipé d'abord, puis le sac) → une seule grille de cartes, comme
+// les talents. `equipped` marque celui porté (au plus 1). Affichage homogène avec Talents.
+const allFamiliars = computed<Array<Item & { equipped: boolean }>>(() => {
+  const eq = equippedFamiliar.value;
+  const list: Array<Item & { equipped: boolean }> = [];
+  if (eq) list.push({ ...eq, equipped: true });
+  for (const f of bagFamiliars.value) list.push({ ...f, equipped: false });
+  return list;
+});
 function canUpgradeFamiliar(it: Item): boolean {
   return (
     it.level < c.value.level.level &&
@@ -5026,6 +4932,13 @@ onUnmounted(() => {
   font-size: 10px;
   letter-spacing: 0.3px;
   white-space: nowrap;
+}
+/* Badge « effet signature » (✦) sur une carte familier, harmonisé avec les talents. */
+.fam-sig-badge {
+  flex: 0 0 auto;
+  color: #ffd23f;
+  font-weight: 800;
+  font-size: 12px;
 }
 .tal-card.tgt {
   outline: 2px solid var(--accent);
