@@ -2649,6 +2649,22 @@ function explainTalent(t: (typeof talentsView.value)[number]) {
 function talentCodeEquipped(code: string, exceptId?: string): boolean {
   return (char.row?.talents ?? []).some((t) => t.equipped && t.code === code && t.id !== exceptId);
 }
+// Auto-équipe un talent DROPPÉ si un emplacement est libre et qu'aucun talent du même
+// code n'est déjà équipé (comme l'auto-équipement des objets/familiers sur un slot vide,
+// ticket 5efcc6bc). Les drops suivants (slot plein / doublon de code) restent à ranger.
+function autoEquipTalentDrops(drops: TalentInstance[]): TalentInstance[] {
+  const equipped = (char.row?.talents ?? []).filter((t: TalentInstance) => t.equipped);
+  let free = Math.max(0, talentSlots.value - equipped.length);
+  const codes = new Set(equipped.map((t: TalentInstance) => t.code));
+  return drops.map((d) => {
+    if (free > 0 && !codes.has(d.code)) {
+      free--;
+      codes.add(d.code);
+      return { ...d, equipped: true };
+    }
+    return d;
+  });
+}
 async function doEquipTalent(id: string) {
   const uid = auth.user?.id;
   if (!uid) return;
@@ -2691,7 +2707,8 @@ function enchantTitleTalent(t: { enchant: number }): string {
   const n = t.enchant;
   if (!canEnchant(n)) return `Enchant au maximum (+${ENCHANT_MAX}).`;
   const rate = Math.round(enchantSuccessRate(n) * 100);
-  if (n < ENCHANT_SAFE) return `+${n} → +${n + 1} · réussite garantie (${rate} %).`;
+  if (n < ENCHANT_SAFE)
+    return `+${n} → +${n + 1} · ${rate} % · échec sans conséquence (reste à +${n}).`;
   return `+${n} → +${n + 1} · ${rate} % de réussite. Échec → +0 (sauf 🛡️ protection).`;
 }
 
@@ -3280,7 +3297,9 @@ async function explore(d: Dungeon) {
     // du donjon (`dropLevel`), biaisé par sa luck → farmer profond = talents plus hauts.
     const talentDrops =
       r.cleared && dropRng() < 0.06
-        ? [rollTalentDrop(dropRng, { level: d.dropLevel, luck: d.dropLuck, idSeed: seed })]
+        ? autoEquipTalentDrops([
+            rollTalentDrop(dropRng, { level: d.dropLevel, luck: d.dropLuck, idSeed: seed }),
+          ])
         : [];
     await char.applyRun(uid, {
       energyCost: d.energyCost,
@@ -3519,7 +3538,9 @@ async function fightBoss(b: MilestoneBoss) {
     const bossTalentRng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
     const talentDrops =
       win && bossTalentRng() < 0.25
-        ? [rollTalentDrop(bossTalentRng, { level: b.dropLevel, luck: 0.6, idSeed: seed })]
+        ? autoEquipTalentDrops([
+            rollTalentDrop(bossTalentRng, { level: b.dropLevel, luck: 0.6, idSeed: seed }),
+          ])
         : [];
     await char.applyBossWin(uid, {
       bossId: b.id,
@@ -3994,7 +4015,9 @@ function enchantTitle(it: Item): string {
   if (!canEnchant(n)) return `Enchant au maximum (+${ENCHANT_MAX})`;
   const rate = Math.round(enchantSuccessRate(n) * 100);
   const danger =
-    n >= ENCHANT_SAFE ? ' · ⚠️ échec = retour à +0 (protège avec 🛡️)' : ' · zone sûre (0 risque)';
+    n >= ENCHANT_SAFE
+      ? ' · ⚠️ échec = retour à +0 (protège avec 🛡️)'
+      : ' · échec sans conséquence (reste à +' + n + ')';
   return `Tenter +${n + 1} (${rate} %)${danger} — 1 parchemin 📜`;
 }
 // ENCHANT (gamble façon L2) : tente +1 sur un objet (consomme 1 parchemin 📜). Si

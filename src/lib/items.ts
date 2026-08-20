@@ -117,7 +117,11 @@ export function itemLevelMult(level: number): number {
 // décroissante, échec en ZONE DE DANGER (> SAFE) = retour à +0, SAUF protection 🛡️.
 // Plafond du +N lié au NIVEAU DE SPORT (« seul le sport rend plus fort »). Pur/testable.
 // ─────────────────────────────────────────────────────────────────────────────
-export const ENCHANT_SAFE = 3; // ≤ +3 : réussite garantie, aucun risque d'échec
+export const ENCHANT_SAFE = 3; // ≤ +3 : zone SANS RESET (un échec ne retombe pas à +0)
+// Zone où la RÉUSSITE est garantie (100 %). Séparée de ENCHANT_SAFE (2026‑08‑20, ticket
+// cc4f2e2d) : seul +1 est gratuit, le taux devient DÉGRESSIF dès +2 (91 %, 82 %…) — mais
+// tant qu'on est ≤ ENCHANT_SAFE un échec ne fait PAS retomber à +0 (juste on n'avance pas).
+const ENCHANT_RATE_SAFE = 1;
 // Cap FIXE (façon L2 : ~+9/+12), PAS lié au niveau du joueur : le sport plafonne déjà la
 // puissance via le GRADE (rang √-gaté par la profondeur) ; l'enchant est une couche polish
 // modeste, pas un puits « un seul objet toute sa vie ». +12 = ×2,2 de magnitude (cf. mult).
@@ -135,8 +139,8 @@ export function enchantMult(enchant: number): number {
 }
 /** Chance (0..1) de réussir la tentative +cur → +(cur+1). 100 % en zone sûre, puis décroît. */
 export function enchantSuccessRate(current: number): number {
-  if (current < ENCHANT_SAFE) return 1;
-  return Math.max(ENCHANT_MIN_RATE, 1 - (current - ENCHANT_SAFE + 1) * ENCHANT_FAIL_SLOPE);
+  if (current < ENCHANT_RATE_SAFE) return 1; // +1 garanti ; dégressif dès la tentative de +2
+  return Math.max(ENCHANT_MIN_RATE, 1 - (current - ENCHANT_RATE_SAFE + 1) * ENCHANT_FAIL_SLOPE);
 }
 /** L'objet peut-il encore être enchanté ? (pas au cap FIXE). */
 export function canEnchant(enchant: number): boolean {
@@ -783,9 +787,12 @@ export function tierIndexOf(it: { rarity: Rarity; roll?: number }): number {
 export function familiarInfuseXp(fam: { rarity: Rarity; roll?: number }): number {
   return 1 + tierIndexOf(fam);
 }
-/** Coût d'un pas de tier (croît avec le tier) : bon marché en bas, cher en haut. */
+/** Coût en poussière d'un pas de GRADE (rang/qualité) — croît avec le tier. Pente
+ *  DOUBLÉE (2026‑08‑20, ticket a206e0b5) vs le recyclage (rendu 1+tier) pour que monter
+ *  un grade reste « un peu long » (~2-3 surplus par cran, et plus en haut) au lieu de
+ *  ~1 surplus par cran aux hauts tiers. */
 export function tierStepCost(tier: number): number {
-  return 3 + tier;
+  return 3 + Math.max(0, tier) * 2;
 }
 /** XP totale déjà accumulée + le seuil du prochain pas → barre de progression. */
 export function familiarTierProgress(fam: Item): { xp: number; cost: number } {

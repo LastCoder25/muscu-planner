@@ -203,9 +203,11 @@ export function talentsEarned(playerLevel: number): number {
 // ── INFUSION DE GRADE (2026‑08‑20) : recycler les talents en trop → POUSSIÈRE D'ENCRE,
 // dépensée pour monter le GRADE (rang + qualité) d'un talent gardé de +1 cran. Plafonné
 // au grade droppable de ton niveau (cf. maxGradeCran). L'enchant (+N) reste à part. ──
-/** Coût en poussière d'encre pour infuser +1 cran de grade depuis le tier `tier`. */
+/** Coût en poussière d'encre pour infuser +1 cran de grade depuis le tier `tier`.
+ *  Pente DOUBLÉE (ticket a206e0b5) vs le recyclage (1+tier) → monter un grade reste
+ *  « un peu long » (~2-3 talents recyclés par cran, davantage aux hauts grades). */
 export function talentTierStepCost(tier: number): number {
-  return 3 + Math.max(0, tier);
+  return 3 + Math.max(0, tier) * 2;
 }
 /** Poussière d'encre rendue en RECYCLANT un talent (∝ son grade). G1 → 1 … SSS5 → 50. */
 export function talentRecycleYield(inst: TalentInstance): number {

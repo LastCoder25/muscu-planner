@@ -37,7 +37,6 @@ import {
   enchantSuccessRate,
   canEnchant,
   attemptEnchant,
-  ENCHANT_SAFE,
   ENCHANT_MAX,
 } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
@@ -519,9 +518,10 @@ describe('enchant (moteur L2) — étape 1', () => {
     expect(canEnchant(ENCHANT_MAX - 1)).toBe(true);
     expect(canEnchant(ENCHANT_MAX)).toBe(false);
   });
-  it('enchantSuccessRate : 100 % en zone sûre, décroissante ensuite, plancher > 0', () => {
-    for (let c = 0; c < ENCHANT_SAFE; c++) expect(enchantSuccessRate(c)).toBe(1);
-    expect(enchantSuccessRate(ENCHANT_SAFE)).toBeLessThan(1);
+  it('enchantSuccessRate : +1 garanti, DÉGRESSIF dès +2, plancher > 0', () => {
+    expect(enchantSuccessRate(0)).toBe(1); // atteindre +1 = garanti
+    expect(enchantSuccessRate(1)).toBeLessThan(1); // atteindre +2 = dégressif (ticket cc4f2e2d)
+    expect(enchantSuccessRate(2)).toBeLessThan(enchantSuccessRate(1)); // continue de décroître
     expect(enchantSuccessRate(6)).toBeLessThan(enchantSuccessRate(4));
     expect(enchantSuccessRate(50)).toBeGreaterThan(0); // jamais 0 → toujours tentable
   });
@@ -532,11 +532,16 @@ describe('enchant (moteur L2) — étape 1', () => {
     expect(r.enchant).toBe(6);
     expect(r.resetTo0).toBe(false);
   });
-  it('attemptEnchant : échec en zone SÛRE = rien ne bouge', () => {
-    const r = attemptEnchant(() => 0.999, 2, false); // +2 est safe → succès garanti quand même
-    expect(r.success).toBe(true); // zone sûre = 100 %
-    // Force un échec hors zone impossible ici → on teste la branche sûre via rate=1 : couvert.
-    expect(r.enchant).toBe(3);
+  it('attemptEnchant : +1 garanti (rng défavorable → succès quand même)', () => {
+    const r = attemptEnchant(() => 0.999, 0, false); // atteindre +1 = 100 %
+    expect(r.success).toBe(true);
+    expect(r.enchant).toBe(1);
+  });
+  it('attemptEnchant : échec en zone SANS RESET (≤ +3) → reste, pas de +0', () => {
+    const r = attemptEnchant(() => 0.999, 2, false); // +2 : dégressif → échec, mais pas de reset
+    expect(r.success).toBe(false);
+    expect(r.enchant).toBe(2); // reste (échec hors zone de danger)
+    expect(r.resetTo0).toBe(false);
   });
   it('attemptEnchant : échec en DANGER non protégé → +0', () => {
     const r = attemptEnchant(() => 0.999, 8, false); // +8 : taux < 1 → échec
