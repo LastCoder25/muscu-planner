@@ -82,6 +82,7 @@ export interface Item {
   species?: string; // slot 'familiar' uniquement : id de la RACE (cf. FAMILIAR_SPECIES)
   roll?: number; // qualité du roll de l'effet principal (0..1 dans la bande ±20 %) → étoiles
   fxp?: number; // familier : progression d'INFUSION vers le prochain pas de tier (rang+qualité)
+  enchant?: number; // ENCHANT +N (façon L2) — magnitude par-dessus le grade. Défaut 0. (étape 1)
 }
 
 // Qualité de roll → nombre d'ÉTOILES (1..5) : où l'effet est tombé dans la bande de
@@ -107,6 +108,66 @@ export function starQualityMult(stars: number): number {
 // plus mon % monte) et n'explose pas en multiplicateur ×2 qui trivialise les boss.
 export function itemLevelMult(level: number): number {
   return 1 + Math.max(0, level - 1) * 0.05;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENCHANT (façon Lineage 2) — MOTEUR (étape 1). Couche de magnitude « +N » par-dessus
+// le GRADE (rang+qualité). Destinée à REMPLACER l'axe « niveau » (chantier en cours :
+// ce moteur est pur/testé et pas encore branché sur le combat/UI). GAMBLE : réussite
+// décroissante, échec en ZONE DE DANGER (> SAFE) = retour à +0, SAUF protection 🛡️.
+// Plafond du +N lié au NIVEAU DE SPORT (« seul le sport rend plus fort »). Pur/testable.
+// ─────────────────────────────────────────────────────────────────────────────
+export const ENCHANT_SAFE = 3; // ≤ +3 : réussite garantie, aucun risque d'échec
+// Cap FIXE (façon L2 : ~+9/+12), PAS lié au niveau du joueur : le sport plafonne déjà la
+// puissance via le GRADE (rang √-gaté par la profondeur) ; l'enchant est une couche polish
+// modeste, pas un puits « un seul objet toute sa vie ». +12 = ×2,2 de magnitude (cf. mult).
+export const ENCHANT_MAX = 12;
+const ENCHANT_STEP = 0.1; // +N → magnitude × (1 + 0,1·N) : +10 = ×2, +12 = ×2,2
+const ENCHANT_FAIL_SLOPE = 0.09; // −9 pts de réussite par cran au-delà de la zone sûre
+const ENCHANT_MIN_RATE = 0.15; // plancher de réussite (jamais 0 → toujours tentable)
+
+/** Multiplicateur de magnitude d'un objet enchanté +N (grade × enchant = puissance). */
+export function enchantMult(enchant: number): number {
+  return 1 + Math.max(0, Math.min(ENCHANT_MAX, enchant)) * ENCHANT_STEP;
+}
+/** Chance (0..1) de réussir la tentative +cur → +(cur+1). 100 % en zone sûre, puis décroît. */
+export function enchantSuccessRate(current: number): number {
+  if (current < ENCHANT_SAFE) return 1;
+  return Math.max(ENCHANT_MIN_RATE, 1 - (current - ENCHANT_SAFE + 1) * ENCHANT_FAIL_SLOPE);
+}
+/** L'objet peut-il encore être enchanté ? (pas au cap FIXE). */
+export function canEnchant(enchant: number): boolean {
+  return enchant < ENCHANT_MAX;
+}
+/** Magnitude réelle d'un effet à un enchant donné (remplacera `effectiveValue`/niveau). */
+export function enchantedValue(effect: ItemEffect, enchant: number): number {
+  return Math.max(1, Math.round(effect.value * enchantMult(enchant)));
+}
+
+export interface EnchantOutcome {
+  success: boolean;
+  enchant: number; // enchant APRÈS la tentative
+  resetTo0: boolean; // échec en zone de danger, non protégé → retombé à +0
+  protectionUsed: boolean; // une protection 🛡️ a absorbé l'échec (enchant conservé)
+}
+/** Tente d'enchanter +1 (seedé). Réussite → +1. Échec : en zone SÛRE rien ne bouge ;
+ *  en zone de DANGER → retour à +0, SAUF `hasProtection` (conserve l'enchant, consomme
+ *  la protection). Jamais de destruction (choix : saveur « intermédiaire + protection »). */
+export function attemptEnchant(
+  rng: () => number,
+  current: number,
+  hasProtection: boolean,
+): EnchantOutcome {
+  if (rng() < enchantSuccessRate(current)) {
+    return { success: true, enchant: current + 1, resetTo0: false, protectionUsed: false };
+  }
+  if (current < ENCHANT_SAFE) {
+    return { success: false, enchant: current, resetTo0: false, protectionUsed: false };
+  }
+  if (hasProtection) {
+    return { success: false, enchant: current, resetTo0: false, protectionUsed: true };
+  }
+  return { success: false, enchant: 0, resetTo0: true, protectionUsed: false };
 }
 
 // CHASSE AU LOOT (2026‑08‑15, ticket 355753d2) : la MAGNITUDE DE BASE d'un drop

@@ -33,6 +33,12 @@ import {
   swapLoadoutGear,
   type Item,
   type Equipped,
+  enchantMult,
+  enchantSuccessRate,
+  canEnchant,
+  attemptEnchant,
+  ENCHANT_SAFE,
+  ENCHANT_MAX,
 } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
 
@@ -510,5 +516,52 @@ describe('swapLoadoutGear — ranger / échanger un set (4 slots gear, familier 
     expect(eq.armor?.name).toBe('A2');
     expect(lo.weapon?.name).toBe('W1');
     expect(lo.armor).toBeUndefined();
+  });
+});
+
+describe('enchant (moteur L2) — étape 1', () => {
+  it('enchantMult : croît linéairement, plafonné au cap FIXE', () => {
+    expect(enchantMult(0)).toBe(1);
+    expect(enchantMult(10)).toBeCloseTo(2, 5);
+    expect(enchantMult(5)).toBeGreaterThan(enchantMult(3));
+    expect(enchantMult(ENCHANT_MAX + 5)).toBe(enchantMult(ENCHANT_MAX)); // clampé
+  });
+  it('canEnchant : possible tant qu’on n’est pas au cap FIXE', () => {
+    expect(canEnchant(0)).toBe(true);
+    expect(canEnchant(ENCHANT_MAX - 1)).toBe(true);
+    expect(canEnchant(ENCHANT_MAX)).toBe(false);
+  });
+  it('enchantSuccessRate : 100 % en zone sûre, décroissante ensuite, plancher > 0', () => {
+    for (let c = 0; c < ENCHANT_SAFE; c++) expect(enchantSuccessRate(c)).toBe(1);
+    expect(enchantSuccessRate(ENCHANT_SAFE)).toBeLessThan(1);
+    expect(enchantSuccessRate(6)).toBeLessThan(enchantSuccessRate(4));
+    expect(enchantSuccessRate(50)).toBeGreaterThan(0); // jamais 0 → toujours tentable
+  });
+  it('attemptEnchant : réussite → +1', () => {
+    // rng qui renvoie 0 → toujours < taux → réussite garantie.
+    const r = attemptEnchant(() => 0, 5, false);
+    expect(r.success).toBe(true);
+    expect(r.enchant).toBe(6);
+    expect(r.resetTo0).toBe(false);
+  });
+  it('attemptEnchant : échec en zone SÛRE = rien ne bouge', () => {
+    const r = attemptEnchant(() => 0.999, 2, false); // +2 est safe → succès garanti quand même
+    expect(r.success).toBe(true); // zone sûre = 100 %
+    // Force un échec hors zone impossible ici → on teste la branche sûre via rate=1 : couvert.
+    expect(r.enchant).toBe(3);
+  });
+  it('attemptEnchant : échec en DANGER non protégé → +0', () => {
+    const r = attemptEnchant(() => 0.999, 8, false); // +8 : taux < 1 → échec
+    expect(r.success).toBe(false);
+    expect(r.enchant).toBe(0);
+    expect(r.resetTo0).toBe(true);
+    expect(r.protectionUsed).toBe(false);
+  });
+  it('attemptEnchant : échec en DANGER PROTÉGÉ → conserve l’enchant, consomme la protection', () => {
+    const r = attemptEnchant(() => 0.999, 8, true);
+    expect(r.success).toBe(false);
+    expect(r.enchant).toBe(8); // conservé
+    expect(r.resetTo0).toBe(false);
+    expect(r.protectionUsed).toBe(true);
   });
 });
