@@ -187,26 +187,14 @@ describe('recyclage / vente', () => {
     expect(salvageValue(high)).toBeGreaterThan(salvageValue(low));
     expect(sellValue(high)).toBeGreaterThan(sellValue(low));
   });
-  it('recyclage HISTORY-INDEPENDENT : ne dépend que du rang + niveau', () => {
+  it('recyclage : rang + petit bonus d’ENCHANT (plus de niveau)', () => {
     const rarity = 'D' as const;
-    const dropped = item({
-      slot: 'weapon',
-      effect: { type: 'damage_pct', value: 10 },
-      rarity,
-      baseLevel: 5,
-      level: 5,
-    });
-    const infused = item({
-      slot: 'weapon',
-      effect: { type: 'damage_pct', value: 10 },
-      rarity,
-      baseLevel: 1,
-      level: 5,
-    });
-    expect(salvageValue(dropped)).toBe(salvageValue(infused));
-    const base1 = salvageValue(item({ ...infused, level: 1 }));
-    expect(salvageValue(infused)).toBe(base1 + Math.round(0.5 * fullInfuseCost(5, rarity)));
-    expect(salvageValue(item({ ...infused, level: 10 }))).toBeGreaterThan(salvageValue(infused));
+    const base = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, rarity });
+    const enchanted = item({ ...base, enchant: 5 });
+    expect(salvageValue(enchanted)).toBeGreaterThan(salvageValue(base)); // enchant → un peu plus
+    // rang plus haut → plus de poussière (base de rang)
+    const higher = item({ ...base, rarity: 'S' });
+    expect(salvageValue(higher)).toBeGreaterThan(salvageValue(base));
   });
 });
 
@@ -373,16 +361,16 @@ describe('sets d’équipement', () => {
     expect(e.critAdd).toBeGreaterThan(0);
     expect(e.lifesteal).toBeGreaterThan(0);
   });
-  it('le bonus de set grandit avec le niveau des pièces', () => {
-    const lvl1: Equipped = {
-      weapon: { ...dragonPiece('weapon'), level: 1 },
-      armor: { ...dragonPiece('armor'), level: 1 },
+  it('le bonus de set grandit avec l’ENCHANT des pièces', () => {
+    const e0: Equipped = {
+      weapon: { ...dragonPiece('weapon'), enchant: 0 },
+      armor: { ...dragonPiece('armor'), enchant: 0 },
     };
-    const lvl10: Equipped = {
-      weapon: { ...dragonPiece('weapon'), level: 10 },
-      armor: { ...dragonPiece('armor'), level: 10 },
+    const e8: Equipped = {
+      weapon: { ...dragonPiece('weapon'), enchant: 8 },
+      armor: { ...dragonPiece('armor'), enchant: 8 },
     };
-    expect(setEffects(lvl10).damagePct).toBeGreaterThan(setEffects(lvl1).damagePct);
+    expect(setEffects(e8).damagePct).toBeGreaterThan(setEffects(e0).damagePct);
   });
   it('rollSetPiece produit toujours une pièce du set, au NIVEAU 1 (refonte C)', () => {
     const piece = rollSetPiece(() => 0.3, { setId: 'dragon', level: 10 });
@@ -522,7 +510,7 @@ describe('swapLoadoutGear — ranger / échanger un set (4 slots gear, familier 
 describe('enchant (moteur L2) — étape 1', () => {
   it('enchantMult : croît linéairement, plafonné au cap FIXE', () => {
     expect(enchantMult(0)).toBe(1);
-    expect(enchantMult(10)).toBeCloseTo(2, 5);
+    expect(enchantMult(3)).toBeCloseTo(1.99, 2); // zone sûre garantie ≈ ×2 (baseline)
     expect(enchantMult(5)).toBeGreaterThan(enchantMult(3));
     expect(enchantMult(ENCHANT_MAX + 5)).toBe(enchantMult(ENCHANT_MAX)); // clampé
   });

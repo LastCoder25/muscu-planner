@@ -122,7 +122,10 @@ export const ENCHANT_SAFE = 3; // ≤ +3 : réussite garantie, aucun risque d'é
 // puissance via le GRADE (rang √-gaté par la profondeur) ; l'enchant est une couche polish
 // modeste, pas un puits « un seul objet toute sa vie ». +12 = ×2,2 de magnitude (cf. mult).
 export const ENCHANT_MAX = 12;
-const ENCHANT_STEP = 0.1; // +N → magnitude × (1 + 0,1·N) : +10 = ×2, +12 = ×2,2
+// STEP calé pour PRÉSERVER l'échelle de l'ancien axe « niveau » (pas de recalibrage du
+// contenu) : +3 (zone sûre GARANTIE) ≈ ×2 (= vieux gear mid-game) ; +12 (rare) ≈ ×4,96
+// (≈ vieux plafond). Une migration au chargement mappe level→enchant (magnitude préservée).
+const ENCHANT_STEP = 0.33; // +N → × (1 + 0,33·N) : +3 = ×1,99, +12 = ×4,96
 const ENCHANT_FAIL_SLOPE = 0.09; // −9 pts de réussite par cran au-delà de la zone sûre
 const ENCHANT_MIN_RATE = 0.15; // plancher de réussite (jamais 0 → toujours tentable)
 
@@ -138,6 +141,12 @@ export function enchantSuccessRate(current: number): number {
 /** L'objet peut-il encore être enchanté ? (pas au cap FIXE). */
 export function canEnchant(enchant: number): boolean {
   return enchant < ENCHANT_MAX;
+}
+/** MIGRATION : convertit un ancien NIVEAU d'objet en ENCHANT équivalent (magnitude
+ *  préservée : enchantMult(enchant) ≈ itemLevelMult(level)). Plafonné au cap fixe. */
+export function levelToEnchant(level: number): number {
+  const target = itemLevelMult(Math.max(1, level)) - 1; // gain relatif de l'ancien niveau
+  return Math.max(0, Math.min(ENCHANT_MAX, Math.round(target / ENCHANT_STEP)));
 }
 /** Magnitude réelle d'un effet à un enchant donné (remplacera `effectiveValue`/niveau). */
 export function enchantedValue(effect: ItemEffect, enchant: number): number {
@@ -231,19 +240,16 @@ export function investedDust(it: Item): number {
   for (let k = it.baseLevel ?? 1; k < it.level; k++) sum += upgradeCost(k, it.rarity);
   return sum;
 }
-// Fraction de poussière rendue au recyclage (le reste = sink permanent). Bouton
-// d'équilibrage : baisser = poussière plus rare.
-const REFUND_RATE = 0.5;
 /** Casser un objet → base de rareté + une FRACTION du coût de construction 1→niveau.
  *  HISTORY-INDEPENDENT (refonte C) : ne dépend QUE de rareté + niveau actuel, donc un
  *  objet DROPPÉ au niv.N se recycle comme un niv.1 INFUSÉ →N (fin de l'incohérence).
  *  Faucet-free car tout drop part du niveau 1 (coût(1→1)=0). */
 export function salvageValue(it: Item): number {
-  return DUST_BY_RARITY[it.rarity] + Math.round(REFUND_RATE * fullInfuseCost(it.level, it.rarity));
+  return DUST_BY_RARITY[it.rarity] + (it.enchant ?? 0) * 4; // rang + petit bonus d'enchant
 }
 /** Or obtenu en vendant un objet. */
 export function sellValue(it: Item): number {
-  return GOLD_BY_RARITY[it.rarity] + (it.level - 1) * 8;
+  return GOLD_BY_RARITY[it.rarity] + (it.enchant ?? 0) * 8;
 }
 /** Peut-on améliorer cet objet ? (poussière suffisante + pas au plafond). */
 export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean {
@@ -405,7 +411,36 @@ const RARITY_ADJ: Record<Rarity, string> = {
   SSS: 'divin',
 };
 
-/** Libellé de l'effet à un niveau d'objet donné (valeur réelle). */
+/** Libellé d'un effet à partir de sa VALEUR déjà calculée (utilisé pour l'enchant). */
+export function effectLabelFor(type: EffectType, v: number): string {
+  switch (type) {
+    case 'damage_pct':
+      return `+${v}% dégâts`;
+    case 'crit_pct':
+      return `+${v}% critique`;
+    case 'lifesteal_pct':
+      return `+${v}% vol de vie`;
+    case 'dmg_reduction_pct':
+      return `−${v}% dégâts reçus`;
+    case 'max_pv_pct':
+      return `+${v}% PV`;
+    case 'gold_pct':
+      return `+${v}% or`;
+    case 'execute_pct':
+      return `+${v}% dégâts (ennemi < 25% PV)`;
+    case 'rage_pct':
+      return `+${v}% dégâts (toi < 30% PV)`;
+    case 'momentum_pct':
+      return `+${v}% dégâts/coup (cumul)`;
+    case 'thorns_pct':
+      return `renvoie ${v}% des dégâts reçus`;
+  }
+}
+/** Libellé de l'effet d'un objet ENCHANTÉ +N (magnitude = grade × enchant). */
+export function enchantEffectLabel(e: ItemEffect, enchant: number): string {
+  return effectLabelFor(e.type, enchantedValue(e, enchant));
+}
+/** Libellé de l'effet à un niveau d'objet donné (valeur réelle) — legacy (familiers). */
 export function effectLabel(e: ItemEffect, level = 1): string {
   const v = effectiveValue(e, level);
   switch (e.type) {
@@ -1021,7 +1056,7 @@ export function setCounts(equipped: Equipped): Record<string, number> {
 
 /** Effets cumulés des SETS actifs (≥2 pièces), scalés par le niveau moyen des pièces.
  *  `capLevel` (optionnel) plafonne le niveau effectif des pièces au niveau du joueur. */
-export function setEffects(equipped: Equipped, capLevel = Infinity): AggregatedEffects {
+export function setEffects(equipped: Equipped): AggregatedEffects {
   const a = emptyEffects();
   const groups: Record<string, Item[]> = {};
   for (const slot of SLOTS) {
@@ -1031,10 +1066,9 @@ export function setEffects(equipped: Equipped, capLevel = Infinity): AggregatedE
   for (const [id, items] of Object.entries(groups)) {
     const def = SET_BY_ID[id];
     if (!def || items.length < 2) continue;
-    const avgLvl = Math.round(
-      items.reduce((s, i) => s + Math.min(i.level, capLevel), 0) / items.length,
-    );
-    const mult = itemLevelMult(avgLvl);
+    // Bonus de set scalé par l'ENCHANT moyen des pièces (remplace l'ancien niveau moyen).
+    const avgEnch = items.reduce((s, i) => s + (i.enchant ?? 0), 0) / items.length;
+    const mult = enchantMult(avgEnch);
     for (const t of def.tiers) {
       if (items.length < t.pieces) continue;
       applyEffect(a, t.type, Math.max(1, Math.round(t.base * mult)) / 100);
@@ -1047,25 +1081,24 @@ export function setEffects(equipped: Equipped, capLevel = Infinity): AggregatedE
 // `capLevel` plafonne le niveau EFFECTIF de chaque objet au niveau du joueur (comme
 // l'upgrade) → un objet sur-leveled ne donne que la puissance de TON niveau (anti
 // « bas niveau en gear trop haut qui punch 3 tiers au-dessus », cf. simulation 2026‑08‑12).
-export function aggregateEffects(equipped: Equipped, capLevel = Infinity): AggregatedEffects {
+export function aggregateEffects(equipped: Equipped): AggregatedEffects {
   const a = emptyEffects();
   for (const slot of SLOTS) {
     const it = equipped[slot];
     if (!it) continue;
-    const lv = Math.min(it.level, capLevel);
-    applyEffect(a, it.effect.type, effectiveValue(it.effect, lv) / 100);
-    if (it.effect2) applyEffect(a, it.effect2.type, effectiveValue(it.effect2, lv) / 100);
+    const n = it.enchant ?? 0; // OBJETS : magnitude = grade × ENCHANT (plus de niveau)
+    applyEffect(a, it.effect.type, enchantedValue(it.effect, n) / 100);
+    if (it.effect2) applyEffect(a, it.effect2.type, enchantedValue(it.effect2, n) / 100);
   }
-  // Familier (slot parallèle, hors SLOTS) : son bonus de race + son éventuel effet
-  // SIGNATURE (effect2) comptent comme des effets.
+  // Familier (slot parallèle, hors SLOTS) : garde son axe NIVEAU (pierres) pour l'instant
+  // — sa conversion en enchant viendra à la passe suivante. Son bonus + signature comptent.
   const fam = equipped[FAMILIAR_SLOT];
   if (fam) {
-    const flv = Math.min(fam.level, capLevel);
-    applyEffect(a, fam.effect.type, effectiveValue(fam.effect, flv) / 100);
-    if (fam.effect2) applyEffect(a, fam.effect2.type, effectiveValue(fam.effect2, flv) / 100);
+    applyEffect(a, fam.effect.type, effectiveValue(fam.effect, fam.level) / 100);
+    if (fam.effect2) applyEffect(a, fam.effect2.type, effectiveValue(fam.effect2, fam.level) / 100);
   }
   // Bonus de set (2/3/4 pièces) — ajoutés par-dessus les effets d'objet.
-  const s = setEffects(equipped, capLevel);
+  const s = setEffects(equipped);
   a.damagePct += s.damagePct;
   a.critAdd += s.critAdd;
   a.dodgeAdd += s.dodgeAdd;
@@ -1091,7 +1124,7 @@ export function playerWithGear(
 ): Combatant {
   const base = playerCombatant(name, stats, level);
   // Plafonne le niveau effectif du gear au niveau du joueur (anti sur-leveling).
-  const e = aggregateEffects(equipped, level);
+  const e = aggregateEffects(equipped);
   const damagePct = e.damagePct + (extra.damagePct ?? 0);
   const maxPvPct = e.maxPvPct + (extra.maxPvPct ?? 0);
   const critAdd = e.critAdd + (extra.critAdd ?? 0);

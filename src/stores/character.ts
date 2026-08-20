@@ -6,7 +6,9 @@ import { normalizePseudo, levelUpEnergy } from '@/lib/character';
 import {
   salvageValue,
   sellValue,
-  upgradeCost,
+  levelToEnchant,
+  attemptEnchant,
+  canEnchant,
   forgeItem,
   forgeCost,
   rerolledQuality,
@@ -93,6 +95,8 @@ export interface CharacterRow {
   parchemins: number; // parchemins de maîtrise 📜 : montée de NIVEAU des talents (migr. 0048)
   fragments: number; // poussière d'âme : montée du RANG des familiers (migr. 0049 ; ex-🧩)
   ink_dust: number; // poussière d'encre : montée du RANG des talents (migr. 0053)
+  enchant_scrolls: number; // 📜 parchemins d'enchantement : 1 par TENTATIVE d'enchant (migr. 0054)
+  protections: number; // 🛡️ protections : évite le retour à +0 sur échec d'enchant (migr. 0054)
   summon_stones: number; // pierres d'invocation 🔮 : tenter les boss (migr. 0050)
   expedition: ActiveExpedition | null; // mode idle « Expédition » en cours
   expedition_map: ExpeditionMap | null; // carte du monde (POI)
@@ -118,7 +122,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -133,6 +137,10 @@ export const useCharacterStore = defineStore('character', () => {
     const fixItem = (it: Item): Item => ({
       ...it,
       rarity: normRank(it.rarity),
+      // MIGRATION enchant (migr. 0054) : les OBJETS d'avant (axe « niveau ») → ENCHANT
+      // équivalent (magnitude préservée). Les FAMILIERS gardent leur niveau (pas encore
+      // convertis). Idempotent : une fois `enchant` posé, on ne re-migre pas.
+      ...(it.enchant === undefined && !isFamiliar(it) ? { enchant: levelToEnchant(it.level) } : {}),
     });
     r.inventory = arr<Item>(r.inventory).map(fixItem);
     r.cleared_dungeons = arr<string>(r.cleared_dungeons);
@@ -162,6 +170,8 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.fragments !== 'number') r.fragments = 0; // colonne récente (migr. 0049)
     if (typeof r.summon_stones !== 'number') r.summon_stones = 0; // colonne récente (migr. 0050)
     if (typeof r.ink_dust !== 'number') r.ink_dust = 0; // poussière d'encre (migr. 0053)
+    if (typeof r.enchant_scrolls !== 'number') r.enchant_scrolls = 0; // migr. 0054
+    if (typeof r.protections !== 'number') r.protections = 0; // migr. 0054
     if (!r.expedition || typeof r.expedition !== 'object') r.expedition = null;
     if (!r.expedition_map || typeof r.expedition_map !== 'object') r.expedition_map = null;
     return r;
@@ -276,6 +286,7 @@ export const useCharacterStore = defineStore('character', () => {
       summonStones?: number; // pierres d'invocation 🔮 (drop de donjon nettoyé)
       parchemins?: number; // parchemins 📜 (filet de donjon nettoyé, niveau des talents)
       inkDust?: number; // poussière d'encre (filet de donjon nettoyé, RANG des talents)
+      enchantScrolls?: number; // 📜 parchemins d'enchantement (filet de donjon nettoyé)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
     },
   ) {
@@ -297,6 +308,7 @@ export const useCharacterStore = defineStore('character', () => {
       summon_stones: cur.summon_stones + (input.summonStones ?? 0),
       parchemins: cur.parchemins + (input.parchemins ?? 0),
       ink_dust: cur.ink_dust + (input.inkDust ?? 0),
+      enchant_scrolls: cur.enchant_scrolls + (input.enchantScrolls ?? 0),
       energy_spent: cur.energy_spent + input.energyCost,
       equipped: dist.equipped,
       inventory: dist.inventory,
@@ -322,6 +334,8 @@ export const useCharacterStore = defineStore('character', () => {
       stones?: number; // pierres magiques 💎 (jalon boss)
       parchemins?: number; // parchemins 📜 (jalon boss, niveau des talents)
       inkDust?: number; // poussière d'encre (jalon boss, RANG des talents)
+      enchantScrolls?: number; // 📜 parchemins d'enchantement (jalon boss)
+      protections?: number; // 🛡️ protections d'enchant (jalon boss — la source précieuse)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
     },
   ) {
@@ -343,6 +357,8 @@ export const useCharacterStore = defineStore('character', () => {
       stones: cur.stones + (input.defeated ? (input.stones ?? 0) : 0),
       parchemins: cur.parchemins + (input.defeated ? (input.parchemins ?? 0) : 0),
       ink_dust: cur.ink_dust + (input.defeated ? (input.inkDust ?? 0) : 0),
+      enchant_scrolls: cur.enchant_scrolls + (input.defeated ? (input.enchantScrolls ?? 0) : 0),
+      protections: cur.protections + (input.defeated ? (input.protections ?? 0) : 0),
       summon_stones: Math.max(0, cur.summon_stones - input.summonCost),
       defeated_bosses: defeated,
       pending_reward: input.pending ?? cur.pending_reward ?? null,
@@ -520,51 +536,29 @@ export const useCharacterStore = defineStore('character', () => {
     return targets.length;
   }
 
-  // Améliore un objet (équipé ou au sac) en dépensant de la poussière ; cap = niveau joueur.
-  async function upgradeItem(userId: string, itemId: string, playerLevel: number) {
+  // ENCHANT (façon Lineage 2) : tente +1 sur un OBJET (équipé ou au sac) en consommant
+  // 1 parchemin d'enchantement 📜. GAMBLE : échec en zone de danger → retour à +0, SAUF
+  // si `useProtection` ET protection 🛡️ dispo (alors conservé + protection consommée).
+  // Renvoie l'issue { success, resetTo0, protectionUsed, enchant } pour le feedback UI.
+  async function enchantItem(userId: string, itemId: string, useProtection: boolean) {
     const cur = row.value;
-    if (!cur) return;
+    if (!cur) return null;
     const found = findOwned(cur, itemId);
-    if (!found) return;
+    if (!found || isFamiliar(found.item)) return null; // objets uniquement (les familiers viendront)
     const { item, slot } = found;
-    const cost = upgradeCost(item.level, item.rarity);
-    if (item.level >= playerLevel || cur.dust < cost) return;
-    const upgraded: Item = { ...item, level: item.level + 1 };
-    if (slot) {
-      return persist(userId, {
-        dust: cur.dust - cost,
-        equipped: { ...cur.equipped, [slot]: upgraded },
-      });
-    }
-    return persist(userId, {
-      dust: cur.dust - cost,
-      inventory: cur.inventory.map((i) => (i.id === itemId ? upgraded : i)),
-    });
-  }
-
-  // « Infuser à fond » (refonte C) : monte un objet jusqu'au plus haut niveau
-  // ABORDABLE (≤ niveau joueur) en dépensant la poussière, en une écriture.
-  async function infuseToMax(userId: string, itemId: string, playerLevel: number) {
-    const cur = row.value;
-    if (!cur) return;
-    const found = findOwned(cur, itemId);
-    if (!found) return;
-    const { item, slot } = found;
-    let level = item.level;
-    let dust = cur.dust;
-    while (level < playerLevel) {
-      const cost = upgradeCost(level, item.rarity);
-      if (dust < cost) break;
-      dust -= cost;
-      level++;
-    }
-    if (level === item.level) return; // rien d'infusé (pas assez de poussière)
-    const upgraded: Item = { ...item, level };
-    if (slot) return persist(userId, { dust, equipped: { ...cur.equipped, [slot]: upgraded } });
-    return persist(userId, {
-      dust,
-      inventory: cur.inventory.map((i) => (i.id === itemId ? upgraded : i)),
-    });
+    const n = item.enchant ?? 0;
+    if (!canEnchant(n) || cur.enchant_scrolls < 1) return null; // au cap ou plus de parchemin
+    const withProtection = useProtection && cur.protections > 0;
+    const outcome = attemptEnchant(Math.random, n, withProtection);
+    const upgraded: Item = { ...item, enchant: outcome.enchant };
+    const patch: Partial<CharacterRow> = {
+      enchant_scrolls: cur.enchant_scrolls - 1,
+      protections: cur.protections - (outcome.protectionUsed ? 1 : 0),
+    };
+    if (slot) patch.equipped = { ...cur.equipped, [slot]: upgraded };
+    else patch.inventory = cur.inventory.map((i) => (i.id === itemId ? upgraded : i));
+    await persist(userId, patch);
+    return outcome;
   }
 
   // Monte un FAMILIER d'un niveau en dépensant des PIERRES MAGIQUES 💎 (≠ poussière).
@@ -1077,8 +1071,7 @@ export const useCharacterStore = defineStore('character', () => {
     salvageMany,
     sellMany,
     toggleLock,
-    upgradeItem,
-    infuseToMax,
+    enchantItem,
     upgradeFamiliar,
     infuseFamiliar,
     recycleFamiliar,

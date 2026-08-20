@@ -100,6 +100,18 @@
               title="Pierres d’invocation — tenter un boss de palier"
               >🔮 {{ char.row.summon_stones }}</span
             >
+            <span
+              v-if="char.row.enchant_scrolls"
+              class="tb-r scroll"
+              title="Parchemins d'enchantement — 1 par tentative d'enchant (+N)"
+              >📜 {{ char.row.enchant_scrolls }}</span
+            >
+            <span
+              v-if="char.row.protections"
+              class="tb-r protect"
+              title="Protections — évitent le retour à +0 sur un échec d'enchant"
+              >🛡️ {{ char.row.protections }}</span
+            >
           </div>
         </div>
       </div>
@@ -628,7 +640,9 @@
             <template v-if="char.row.equipped[slot]">
               <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
               <div class="pills">
-                <span class="gpill lvl">Lvl {{ char.row.equipped[slot]!.level }}</span>
+                <span v-if="(char.row.equipped[slot]!.enchant ?? 0) > 0" class="gpill ench"
+                  >+{{ char.row.equipped[slot]!.enchant }}</span
+                >
                 <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
                   RARITY_LABEL[char.row.equipped[slot]!.rarity]
                 }}</span>
@@ -646,19 +660,19 @@
               </div>
               <button
                 class="slot-up"
-                :disabled="!canUpgrade(char.row.equipped[slot]!, char.row.dust, c.level.level)"
-                @click.stop="doUpgrade(char.row.equipped[slot]!.id)"
+                :disabled="
+                  !canEnchant(char.row.equipped[slot]!.enchant ?? 0) || char.row.enchant_scrolls < 1
+                "
+                :title="enchantTitle(char.row.equipped[slot]!)"
+                @click.stop="doEnchant(char.row.equipped[slot]!.id)"
               >
-                <template v-if="char.row.equipped[slot]!.level > c.level.level"
-                  >✨ Infusable au niv {{ char.row.equipped[slot]!.level + 1 }}</template
-                >
-                <template v-else-if="char.row.equipped[slot]!.level >= c.level.level"
-                  >✨ Max (ton niveau {{ c.level.level }})</template
+                <template v-if="!canEnchant(char.row.equipped[slot]!.enchant ?? 0)"
+                  >⚡ Max (+{{ ENCHANT_MAX }})</template
                 >
                 <template v-else
-                  >✨ +1 niv ·
-                  {{ upgradeCost(char.row.equipped[slot]!.level, char.row.equipped[slot]!.rarity) }}
-                  ✨</template
+                  >⚡ Enchanter → +{{ (char.row.equipped[slot]!.enchant ?? 0) + 1 }} ·
+                  {{ Math.round(enchantSuccessRate(char.row.equipped[slot]!.enchant ?? 0) * 100) }}%
+                  · 1📜</template
                 >
               </button>
               <button class="slot-remove" @click="doUnequip(slot)">Retirer</button>
@@ -709,6 +723,21 @@
             <div class="shop-head">
               <div class="shop-title font-display">🎒 Sac ({{ bagCount }})</div>
               <button class="shop-x" aria-label="Fermer" @click="bagOpen = false">✕</button>
+            </div>
+            <!-- Enchant : rappel des ressources + option protection (⚡ boutons sur chaque objet). -->
+            <div class="ench-bar">
+              <span
+                >⚡ Enchant : <b>📜 {{ char.row.enchant_scrolls }}</b> ·
+                <b>🛡️ {{ char.row.protections }}</b></span
+              >
+              <label class="ench-prot" :class="{ off: char.row.protections < 1 }">
+                <input
+                  v-model="enchantUseProtection"
+                  type="checkbox"
+                  :disabled="char.row.protections < 1"
+                />
+                🛡️ Protéger l'échec
+              </label>
             </div>
             <template v-if="bagCount">
               <!-- Bannière du filtre « mieux au sac » (posé via le badge d'un item équipé). -->
@@ -790,8 +819,10 @@
                       @click="helpTopic = 'quality'"
                       >{{ itemQuality(it) }}</span
                     >
-                    <span class="ii-dot">·</span> Nv {{ it.level }} <span class="ii-dot">·</span>
-                    {{ SLOT_LABEL[it.slot] }}
+                    <span v-if="(it.enchant ?? 0) > 0"
+                      ><span class="ii-dot">·</span> <b class="ii-ench">+{{ it.enchant }}</b></span
+                    >
+                    <span class="ii-dot">·</span> {{ SLOT_LABEL[it.slot] }}
                     <span v-if="it.setId" class="gpill set">🧩 Set</span>
                   </div>
                   <!-- Comparaison : rang + qualité + effet, cet objet vs l'équipé (ticket 50f593a2). -->
@@ -826,67 +857,30 @@
                       <span v-else class="ii-cmp-val dim">— emplacement libre</span>
                     </div>
                   </div>
-                  <!-- PUISSANCE : 2 lectures — MAINTENANT (équipé tel quel, niveau réel)
-                     vs POTENTIEL (monté à ton niveau). Montre qu'un objet sous-leveled
-                     fait perdre s'il est équipé tel quel mais devient meilleur infusé. -->
-                  <!-- Comparaison SUR UNE LIGNE : verdict « vs équipé » (à armes égales, au
-                     niveau de l'objet équipé) + « maintenant » (si équipé sous-leveled tel quel). -->
+                  <!-- PUISSANCE si équipé (grade + enchant, fixe) : un seul verdict. -->
                   <div class="ii-cmp2">
                     <span class="ii-cmp2-ic">⚔️</span>
                     <span
-                      v-if="!equippedInSlot(it.slot)"
                       class="ii-cmp2-chip"
-                      :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
+                      :class="powerIfEquip(it) >= combatPowerVal ? 'up' : 'down'"
                     >
-                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
-                      ><i>emplacement libre</i>
+                      <b>{{ fmtDelta(combatPowerVal, powerIfEquip(it)) }}</b
+                      ><i>{{ equippedInSlot(it.slot) ? 'vs équipé' : 'emplacement libre' }}</i>
                     </span>
-                    <template v-else>
-                      <span
-                        class="ii-cmp2-chip"
-                        :class="powerIfEquipMatched(it) >= combatPowerVal ? 'up' : 'down'"
-                        :title="
-                          'À armes égales : monté au niveau de ton équipé (Nv ' +
-                          equipMatchLevel(it) +
-                          ')'
-                        "
-                      >
-                        <b>{{ fmtDelta(combatPowerVal, powerIfEquipMatched(it)) }}</b
-                        ><i>vs équipé</i>
-                      </span>
-                      <span
-                        v-if="it.level < equipMatchLevel(it)"
-                        class="ii-cmp2-chip sub"
-                        :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
-                        title="Si équipé tel quel, à son niveau actuel"
-                      >
-                        <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
-                        ><i>maintenant</i>
-                      </span>
-                    </template>
                   </div>
-                  <!-- Rentabilité : palier d'infusion où l'objet dépasse ton équipé actuel. -->
-                  <div
-                    v-if="showBreakEven(it)"
-                    class="ii-be"
-                    :class="{ ok: breakEvenFor(it).cost <= char.row.dust }"
-                  >
-                    🔧 Rentable dès Nv {{ breakEvenFor(it).level }} · {{ breakEvenFor(it).cost }}✨
-                    <span class="ii-be-have">(tu as {{ char.row.dust }}✨)</span>
-                  </div>
-                  <!-- Actions : Équiper · (Infuser puis équiper) · icônes casser/vendre/lock · ⋯ -->
+                  <!-- Actions : Équiper · ⚡ Enchanter · icônes casser/vendre/lock · ⋯ -->
                   <div class="ii-actions">
                     <button class="equip-btn" @click="doEquip(it.id)">
                       {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
                     </button>
                     <button
-                      v-if="it.level < equipMatchLevel(it)"
                       class="equip-btn ghost"
-                      :disabled="char.row.dust < infuseToMaxCost(it, equipMatchLevel(it))"
-                      :title="'Monte l’objet au niveau de ton équipé puis l’équipe'"
-                      @click="doInfuseThenEquip(it)"
+                      :disabled="!canEnchant(it.enchant ?? 0) || char.row.enchant_scrolls < 1"
+                      :title="enchantTitle(it)"
+                      @click="doEnchant(it.id)"
                     >
-                      🔧 Infuser puis équiper · {{ infuseToMaxCost(it, equipMatchLevel(it)) }}✨
+                      ⚡ +{{ (it.enchant ?? 0) + 1 }} ·
+                      {{ Math.round(enchantSuccessRate(it.enchant ?? 0) * 100) }}%
                     </button>
                     <button
                       class="ii-ic destroy"
@@ -916,24 +910,6 @@
                       ⋯
                       <q-menu anchor="bottom right" self="top right" class="ii-menu">
                         <div class="ii-menu-list">
-                          <button
-                            v-if="it.level < c.level.level"
-                            class="ii-mi"
-                            :disabled="!canUpgrade(it, char.row.dust, c.level.level)"
-                            @click="doUpgrade(it.id)"
-                            v-close-popup
-                          >
-                            ✨ Infuser +1 · {{ upgradeCost(it.level, it.rarity) }}✨
-                          </button>
-                          <button
-                            v-if="it.level < c.level.level - 1"
-                            class="ii-mi"
-                            :disabled="char.row.dust < upgradeCost(it.level, it.rarity)"
-                            @click="doInfuseMax(it.id)"
-                            v-close-popup
-                          >
-                            ⚡ Infuser à fond · {{ infuseToMaxCost(it, c.level.level) }}✨
-                          </button>
                           <button
                             class="ii-mi"
                             :disabled="char.row.dust < rerollCost(it)"
@@ -1302,12 +1278,13 @@
               <div class="salv-name">
                 {{ salvageTarget.name }}
                 <span class="rarity"
-                  >{{ RARITY_LABEL[salvageTarget.rarity] }} · Nv {{ salvageTarget.level }}</span
+                  >{{ RARITY_LABEL[salvageTarget.rarity] }} · +{{
+                    salvageTarget.enchant ?? 0
+                  }}</span
                 >
               </div>
               <div class="salv-eff">
-                {{ SLOT_LABEL[salvageTarget.slot] }} ·
-                {{ effectLabel(salvageTarget.effect, salvageTarget.level) }}
+                {{ SLOT_LABEL[salvageTarget.slot] }} · {{ itemEffects(salvageTarget) }}
               </div>
             </div>
           </div>
@@ -1337,7 +1314,9 @@
               <div class="salv-name">
                 {{ replaceTarget.name }}
                 <span class="rarity"
-                  >{{ RARITY_LABEL[replaceTarget.rarity] }} · Nv {{ replaceTarget.level }}</span
+                  >{{ RARITY_LABEL[replaceTarget.rarity] }} · +{{
+                    replaceTarget.enchant ?? 0
+                  }}</span
                 >
               </div>
               <div class="salv-eff">
@@ -1359,8 +1338,9 @@
               <div class="salv-name">
                 {{ equippedInSlot(replaceTarget.slot)!.name }}
                 <span class="rarity"
-                  >{{ RARITY_LABEL[equippedInSlot(replaceTarget.slot)!.rarity] }} · Nv
-                  {{ equippedInSlot(replaceTarget.slot)!.level }}</span
+                  >{{ RARITY_LABEL[equippedInSlot(replaceTarget.slot)!.rarity] }} · +{{
+                    equippedInSlot(replaceTarget.slot)!.enchant ?? 0
+                  }}</span
                 >
               </div>
               <div class="salv-eff">{{ itemEffects(equippedInSlot(replaceTarget.slot)!) }}</div>
@@ -1485,7 +1465,7 @@
                   </div>
                   <div class="im-loot-sub">
                     <span :class="'p-' + m.item.rarity">{{ RARITY_LABEL[m.item.rarity] }}</span>
-                    · Nv {{ m.item.level }} · {{ SLOT_LABEL[m.item.slot] }}
+                    · +{{ m.item.enchant ?? 0 }} · {{ SLOT_LABEL[m.item.slot] }}
                   </div>
                   <div class="im-loot-eff">{{ itemEffects(m.item) }}</div>
                   <div v-if="m.itemCount && m.itemCount > 1" class="im-loot-more">
@@ -1795,7 +1775,7 @@
               <div class="rc-main">
                 <div class="rc-name">{{ cand.item.name }}</div>
                 <div class="rc-pills">
-                  <span class="rc-pill lvl">Lvl {{ cand.item.level }}</span>
+                  <span class="rc-pill lvl">+{{ cand.item.enchant ?? 0 }}</span>
                   <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
                     RARITY_LABEL[cand.item.rarity]
                   }}</span>
@@ -1813,8 +1793,7 @@
                 </div>
                 <div class="drop-cmp rc-cmp">
                   <span v-if="equippedInSlot(cand.item.slot)"
-                    >Équipé : {{ RARITY_LABEL[equippedInSlot(cand.item.slot)!.rarity] }} Nv
-                    {{ equippedInSlot(cand.item.slot)!.level }} ·
+                    >Équipé : {{ RARITY_LABEL[equippedInSlot(cand.item.slot)!.rarity] }} ·
                     {{ itemEffects(equippedInSlot(cand.item.slot)!) }}</span
                   >
                   <span v-else>Emplacement libre</span>
@@ -1824,14 +1803,10 @@
                 </div>
                 <div class="pow-cmp">
                   ⚔️ vs équipé {{ fmtPow(combatPowerVal) }} →
-                  <b :class="powerIfEquipMatched(cand.item) >= combatPowerVal ? 'up' : 'down'"
-                    >{{ fmtPow(powerIfEquipMatched(cand.item)) }} ({{
-                      fmtDelta(combatPowerVal, powerIfEquipMatched(cand.item))
+                  <b :class="powerIfEquip(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                    >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
+                      fmtDelta(combatPowerVal, powerIfEquip(cand.item))
                     }})</b
-                  >
-                  <span v-if="infuseCostFor(cand.item)" class="pow-cost"
-                    >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton
-                    niveau</span
                   >
                 </div>
                 <div v-if="rewardDupNote(cand.item)" class="rc-dup">
@@ -1918,7 +1893,7 @@
                 :class="'q-' + itemQuality(equippedInSlot(craftSlot))"
                 >{{ itemQuality(equippedInSlot(craftSlot)) }}</span
               >
-              · Nv {{ equippedInSlot(craftSlot)!.level }} ·
+              · +{{ equippedInSlot(craftSlot)!.enchant ?? 0 }} ·
               <b>{{ itemEffects(equippedInSlot(craftSlot)!) }}</b>
             </div>
             <div v-else class="ws-equipped dim">— emplacement libre (rien d'équipé)</div>
@@ -2029,7 +2004,7 @@
               <div class="inv-main">
                 <div class="inv-name">{{ d.name }}</div>
                 <div class="pills">
-                  <span class="gpill lvl">Lvl {{ d.level }}</span>
+                  <span class="gpill lvl">+{{ d.enchant ?? 0 }}</span>
                   <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
                   <span
                     v-if="itemQuality(d)"
@@ -2044,7 +2019,7 @@
                 <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
                   <span
                     >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} Nv
-                    {{ equippedInSlot(d.slot)!.level }} ·
+                    {{ equippedInSlot(d.slot)!.enchant ?? 0 }} ·
                     {{ itemEffects(equippedInSlot(d.slot)!) }}</span
                   >
                   <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
@@ -2052,48 +2027,16 @@
                   }}</span>
                 </div>
                 <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
-                <!-- Comparaison IDENTIQUE au sac (ii-cmp2 + rentabilité) pour cohérence. -->
+                <!-- Puissance si équipé (grade + enchant, fixe) : un seul verdict. -->
                 <div class="ii-cmp2">
                   <span class="ii-cmp2-ic">⚔️</span>
                   <span
-                    v-if="!equippedInSlot(d.slot)"
                     class="ii-cmp2-chip"
-                    :class="powerIfEquipNow(d) >= combatPowerVal ? 'up' : 'down'"
+                    :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
                   >
-                    <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(d)) }}</b
-                    ><i>emplacement libre</i>
+                    <b>{{ fmtDelta(combatPowerVal, powerIfEquip(d)) }}</b
+                    ><i>{{ equippedInSlot(d.slot) ? 'vs équipé' : 'emplacement libre' }}</i>
                   </span>
-                  <template v-else>
-                    <span
-                      class="ii-cmp2-chip"
-                      :class="powerIfEquipMatched(d) >= combatPowerVal ? 'up' : 'down'"
-                      :title="
-                        'À armes égales : monté au niveau de ton équipé (Nv ' +
-                        equipMatchLevel(d) +
-                        ')'
-                      "
-                    >
-                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipMatched(d)) }}</b
-                      ><i>vs équipé</i>
-                    </span>
-                    <span
-                      v-if="d.level < equipMatchLevel(d)"
-                      class="ii-cmp2-chip sub"
-                      :class="powerIfEquipNow(d) >= combatPowerVal ? 'up' : 'down'"
-                      title="Si équipé tel quel, à son niveau actuel"
-                    >
-                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(d)) }}</b
-                      ><i>maintenant</i>
-                    </span>
-                  </template>
-                </div>
-                <div
-                  v-if="showBreakEven(d)"
-                  class="ii-be"
-                  :class="{ ok: breakEvenFor(d).cost <= (char.row?.dust ?? 0) }"
-                >
-                  🔧 Rentable dès Nv {{ breakEvenFor(d).level }} · {{ breakEvenFor(d).cost }}✨
-                  <span class="ii-be-have">(tu as {{ char.row?.dust ?? 0 }}✨)</span>
                 </div>
                 <div v-if="dropState(d) === 'equipped'" class="drop-done">
                   ⚔️ Auto-équipé (slot vide)
@@ -2164,7 +2107,7 @@
                   <div class="rc-main">
                     <div class="rc-name">{{ cand.item.name }}</div>
                     <div class="rc-pills">
-                      <span class="rc-pill lvl">Lvl {{ cand.item.level }}</span>
+                      <span class="rc-pill lvl">+{{ cand.item.enchant ?? 0 }}</span>
                       <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
                         RARITY_LABEL[cand.item.rarity]
                       }}</span>
@@ -2182,14 +2125,10 @@
                     </div>
                     <div class="pow-cmp">
                       ⚔️ vs équipé {{ fmtPow(combatPowerVal) }} →
-                      <b :class="powerIfEquipMatched(cand.item) >= combatPowerVal ? 'up' : 'down'"
-                        >{{ fmtPow(powerIfEquipMatched(cand.item)) }} ({{
-                          fmtDelta(combatPowerVal, powerIfEquipMatched(cand.item))
+                      <b :class="powerIfEquip(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                        >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
+                          fmtDelta(combatPowerVal, powerIfEquip(cand.item))
                         }})</b
-                      >
-                      <span v-if="infuseCostFor(cand.item)" class="pow-cost"
-                        >à infuser (~{{ infuseCostFor(cand.item) }} ✨) pour le monter à ton
-                        niveau</span
                       >
                     </div>
                     <div v-if="rewardDupNote(cand.item)" class="rc-dup">
@@ -2284,13 +2223,16 @@ import {
   rollDrop,
   rollSetPiece,
   effectLabel,
+  enchantEffectLabel,
+  type ItemEffect,
   rollStars,
   tierIndexOf,
   tierStepCost,
   familiarInfuseXp,
-  canUpgrade,
-  upgradeCost,
-  infuseToMaxCost,
+  canEnchant,
+  enchantSuccessRate,
+  ENCHANT_MAX,
+  ENCHANT_SAFE,
   salvageValue,
   sellValue,
   forgeCost,
@@ -2524,52 +2466,13 @@ const baseFighter = computed(() =>
   playerWithGear(char.row?.pseudo ?? 'Toi', c.value, {}, {}, c.value.level.level),
 );
 const pctA = (x?: number) => Math.round((x ?? 0) * 100) + '%';
-// Puissance de combat SI on équipe `it` À UN NIVEAU donné (le reste du gear reste à son
-// niveau RÉEL). Base commune de toutes les comparaisons d'objets.
-function powerIfEquipAtLevel(it: Item, lvl: number): number {
-  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: { ...it, level: lvl } };
+// Puissance de combat SI on équipe `it` (à son ENCHANT actuel). Un objet a une puissance
+// FIXE (grade + enchant) → une seule comparaison, plus de « à quel niveau » (fini les
+// lectures « maintenant / monté à ton niveau » et la rentabilité, cf. refonte enchant).
+function powerIfEquip(it: Item): number {
+  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: it };
   return combatPower(
     playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level),
-  );
-}
-// Niveau de RÉFÉRENCE d'une comparaison = niveau de l'objet ÉQUIPÉ du même slot (À
-// ARMES ÉGALES : on juge l'objet une fois amené LÀ OÙ EST TON STUFF actuel, pas à un
-// potentiel max théorique — ticket 03b9de1e). Slot vide → son propre niveau (gain pur).
-function equipMatchLevel(it: Item): number {
-  return equippedInSlot(it.slot)?.level ?? it.level;
-}
-// Puissance SI on équipe l'objet À SON NIVEAU ACTUEL → perte immédiate si sous-leveled.
-function powerIfEquipNow(it: Item): number {
-  return powerIfEquipAtLevel(it, it.level);
-}
-// Puissance SI on équipe l'objet MONTÉ AU NIVEAU DE L'ÉQUIPÉ → le vrai verdict « meilleur ? ».
-function powerIfEquipMatched(it: Item): number {
-  return powerIfEquipAtLevel(it, equipMatchLevel(it));
-}
-// Coût en poussière pour infuser un drop JUSQU'À TON NIVEAU (potentiel max — affiché
-// sur les cartes de butin/récompense, qui raisonnent en potentiel long terme).
-function infuseCostFor(it: Item): number {
-  return infuseToMaxCost(it, c.value.level.level);
-}
-// Niveau de RENTABILITÉ : plus petit niveau d'infusion (≤ niveau de l'équipé) où l'objet
-// dépasse ta puissance ACTUELLE + le coût en poussière. `reachable` = faux s'il n'y
-// arrive jamais, même monté au niveau de l'équipé.
-function breakEvenFor(it: Item): { level: number; cost: number; reachable: boolean } {
-  const now = combatPowerVal.value;
-  const cap = equipMatchLevel(it);
-  let cost = 0;
-  for (let L = it.level; L <= cap; L++) {
-    if (powerIfEquipAtLevel(it, L) >= now) return { level: L, cost, reachable: true };
-    if (L < cap) cost += upgradeCost(L, it.rarity);
-  }
-  return { level: cap, cost, reachable: false };
-}
-// Vaut-il mieux INFUSER avant d'équiper ? (équiper tel quel fait perdre, mais monté au
-// niveau de l'équipé il dépasse) → on affiche le palier de rentabilité + le coût.
-function showBreakEven(it: Item): boolean {
-  if (it.level >= equipMatchLevel(it)) return false;
-  return (
-    powerIfEquipNow(it) < combatPowerVal.value && powerIfEquipMatched(it) >= combatPowerVal.value
   );
 }
 
@@ -3255,7 +3158,7 @@ function rewardScore(cand: RewardCandidate): number {
     return base + cand.dust * 0.05 + cand.gold * 0.01;
   }
   const it = cand.item;
-  let s = itemMaxedPower(it); // potentiel une fois monté au max (comme la carte de récompense)
+  let s = powerIfEquip(it); // puissance si équipé (grade + enchant, fixe)
   if (it.setId && !rewardDupNote(it)) s += base * 0.05; // petit bonus « avance un set »
   return s;
 }
@@ -3276,11 +3179,10 @@ function rarityVerdict(d: Item): { label: string; cls: string } {
   if (diff < 0) return { label: '↓ rareté inférieure', cls: 'down' };
   return { label: '≈ même rareté', cls: 'same' };
 }
-// Verdict par PUISSANCE (à armes égales, au niveau de l'équipé) = la vraie décision
-// « je l'équipe ? ». Affiché en tête de la carte du sac.
+// Verdict par PUISSANCE (si équipé) = la vraie décision « je l'équipe ? ». En tête de carte.
 function powerVerdict(it: Item): { label: string; cls: string } {
   if (!equippedInSlot(it.slot)) return { label: '＋ à équiper', cls: 'up' };
-  const d = powerIfEquipMatched(it) - combatPowerVal.value;
+  const d = powerIfEquip(it) - combatPowerVal.value;
   if (d > 0) return { label: '↑ Meilleur', cls: 'up' };
   if (d < 0) return { label: '↓ Inférieur', cls: 'down' };
   return { label: '≈ Égal', cls: 'same' };
@@ -3378,6 +3280,8 @@ async function explore(d: Dungeon) {
     // Poussière d'encre : petit filet au nettoyage (RANG des talents) → une source dès
     // l'early (avant les boss), symétrique du filet de parchemins.
     const inkDust = r.cleared ? 1 + Math.floor(d.recoLevel / 8) : 0;
+    // Parchemins d'ENCHANT 📜 : le carburant des tentatives, filet régulier au nettoyage.
+    const enchantScrolls = r.cleared ? 2 + Math.floor(d.recoLevel / 4) : 0;
     // Drop de TALENT (drop-only) : ~6 % sur un donjon nettoyé ; RANG gaté par le niveau
     // du donjon (`dropLevel`), biaisé par sa luck → farmer profond = talents plus hauts.
     const talentDrops =
@@ -3392,6 +3296,7 @@ async function explore(d: Dungeon) {
       stones,
       summonStones,
       parchemins,
+      enchantScrolls,
       inkDust,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
@@ -3484,8 +3389,13 @@ function bossSet(b: MilestoneBoss) {
 // Libellé des 2 stats d'un objet (primaire · secondaire). Les anciens objets
 // (1 stat) n'affichent que la primaire.
 function itemEffects(it: Omit<Item, 'id'>): string {
-  const a = effectLabel(it.effect, it.level);
-  return it.effect2 ? `${a} · ${effectLabel(it.effect2, it.level)}` : a;
+  // OBJETS : magnitude = grade × enchant. FAMILIERS : encore sur l'axe niveau (passe suivante).
+  const lbl =
+    it.slot === FAMILIAR_SLOT
+      ? (e: ItemEffect) => effectLabel(e, it.level)
+      : (e: ItemEffect) => enchantEffectLabel(e, it.enchant ?? 0);
+  const a = lbl(it.effect);
+  return it.effect2 ? `${a} · ${lbl(it.effect2)}` : a;
 }
 // Qualité du roll en étoiles pleines/vides (« ★★★★☆ ») ; vide si objet legacy (pas de roll).
 // Qualité en CHIFFRE (1→5, 5 = meilleur) affiché à côté du rang, code couleur
@@ -3550,10 +3460,9 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
       const p = d ?? rollSetPiece(rng, setOpts);
       out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
     } else {
-      // Cache de ressources : doit rivaliser avec une pièce d'équipement. Or plein
-      // + poussière de l'ordre de ~3 niveaux d'amélioration d'un légendaire à ce
-      // palier → vaut le coup quand ton stuff est déjà bon et que tu veux le monter.
-      const dustLump = upgradeCost(b.dropLevel, 'S') * 3;
+      // Cache de ressources : doit rivaliser avec une pièce d'équipement. Or plein +
+      // poussière proportionnelle à la profondeur du palier (puits de forge/reroll).
+      const dustLump = Math.round((20 + b.dropLevel * 12) * 3);
       out.push({ kind: 'gold', gold: b.gold, dust: dustLump });
     }
   }
@@ -3625,6 +3534,8 @@ async function fightBoss(b: MilestoneBoss) {
       stones: 6, // jalon boss (raréfié 2026-08-18) → lot de pierres 💎 (crédité seulement si vaincu)
       parchemins: 5 + Math.floor(b.unlockLevel / 4), // jalon boss → parchemins 📜 (niveau talents)
       inkDust: 8 + Math.floor(b.unlockLevel / 3), // jalon boss → poussière d'encre (RANG talents)
+      enchantScrolls: 4 + Math.floor(b.unlockLevel / 4), // jalon boss → parchemins d'enchant
+      protections: 1 + Math.floor(b.unlockLevel / 10), // 🛡️ protections — la source précieuse
       ...(talentDrops.length ? { talentDrops } : {}),
     });
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!));
@@ -3873,26 +3784,23 @@ const filteredInventory = computed<Item[]>(() => {
   const bf = betterFilterSlot.value;
   let list: Item[];
   if (bf) {
-    // Filtre « badge » : uniquement les objets de ce slot au POTENTIEL supérieur à l'équipé.
-    const eqPow = slotEquippedMaxedPower(bf) ?? -Infinity;
-    list = inv.filter((i) => i.slot === bf && itemMaxedPower(i) > eqPow);
+    // Filtre « badge » : uniquement les objets de ce slot MEILLEURS si équipés.
+    const cur = combatPowerVal.value;
+    list = inv.filter((i) => i.slot === bf && powerIfEquip(i) > cur);
   } else {
     list = inv.filter((i) => invFilter.value === 'all' || i.slot === invFilter.value);
   }
-  return list.sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || b.level - a.level);
+  return list.sort(
+    (a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || (b.enchant ?? 0) - (a.enchant ?? 0),
+  );
 });
-// Objets du SAC (même slot) au POTENTIEL supérieur à l'équipé (montés à ton niveau) →
-// alimente le badge sur l'item équipé + le filtre « mieux au sac ».
-// Objets du sac (même slot) qui sont un VRAI upgrade = ce que montre le verdict « vs
-// équipé » de la fiche (powerIfEquipMatched, à armes égales). On aligne le badge sur ce
-// que le joueur LIT dans le sac → plus d'incohérence « badge vert / comparatif rouge »
-// (avant : le badge jugeait au POTENTIEL max, l'autre à armes égales → désaccord possible
-// vu la non-linéarité de la puissance).
+// Objets du sac (même slot) MEILLEURS si équipés (puissance fixe grade+enchant) → badge
+// sur l'item équipé + filtre « mieux au sac ». Cohérent avec le verdict affiché.
 function betterInBagForSlot(slot: ItemSlot): Item[] {
   if (!equippedInSlot(slot)) return []; // slot vide → rien à comparer, pas de badge
   const cur = combatPowerVal.value;
   return (char.row?.inventory ?? []).filter(
-    (i) => !isFamiliar(i) && i.slot === slot && powerIfEquipMatched(i) > cur,
+    (i) => !isFamiliar(i) && i.slot === slot && powerIfEquip(i) > cur,
   );
 }
 function betterInBagCount(slot: ItemSlot): number {
@@ -4111,21 +4019,53 @@ function confirmReplace(disposal: 'salvage' | 'sell' | 'keep') {
 function doUnequip(slot: ItemSlot) {
   withUid((uid) => char.unequip(uid, slot), 'Impossible de déséquiper.');
 }
-function doUpgrade(itemId: string) {
-  withUid((uid) => char.upgradeItem(uid, itemId, c.value.level.level), 'Amélioration impossible.');
+// Infobulle d'un bouton d'enchant : taux + avertissement de zone de danger.
+function enchantTitle(it: Item): string {
+  const n = it.enchant ?? 0;
+  if (!canEnchant(n)) return `Enchant au maximum (+${ENCHANT_MAX})`;
+  const rate = Math.round(enchantSuccessRate(n) * 100);
+  const danger =
+    n >= ENCHANT_SAFE ? ' · ⚠️ échec = retour à +0 (protège avec 🛡️)' : ' · zone sûre (0 risque)';
+  return `Tenter +${n + 1} (${rate} %)${danger} — 1 parchemin 📜`;
 }
-// « Infuser à fond » (refonte C) : monte l'objet au max abordable ≤ ton niveau.
-function doInfuseMax(itemId: string) {
-  withUid((uid) => char.infuseToMax(uid, itemId, c.value.level.level), 'Infusion impossible.');
-}
-// « Infuser puis équiper » : monte l'objet AU NIVEAU DE L'ÉQUIPÉ (à armes égales) PUIS
-// l'équipe → on ne subit pas la perte de l'équiper sous-leveled. Poussière requise.
-function doInfuseThenEquip(it: Item) {
-  const target = equipMatchLevel(it);
-  withUid(async (uid) => {
-    await char.infuseToMax(uid, it.id, target);
-    await equipWithSetFx(uid, it.id);
-  }, 'Action impossible.');
+// ENCHANT (gamble façon L2) : tente +1 sur un objet (consomme 1 parchemin 📜). Si
+// `enchantUseProtection`, une protection 🛡️ absorbe un échec en zone de danger.
+const enchantUseProtection = ref(false);
+function doEnchant(itemId: string) {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  void char.enchantItem(uid, itemId, enchantUseProtection.value).then((r) => {
+    if (!r) {
+      $q.notify({
+        type: 'warning',
+        message: 'Enchant impossible (cap +12 ou plus de parchemin 📜).',
+      });
+      return;
+    }
+    if (r.success) {
+      gameFx.celebrate({
+        kind: 'generic',
+        emoji: '⚡',
+        title: `Enchant réussi → +${r.enchant} !`,
+        subtitle: 'Magnitude augmentée',
+        rarity: fxRarity('A'),
+      });
+    } else if (r.resetTo0) {
+      $q.notify({
+        type: 'negative',
+        message: '💥 Échec ! L’objet est retombé à +0.',
+        position: 'top',
+      });
+    } else if (r.protectionUsed) {
+      $q.notify({
+        type: 'info',
+        message: '🛡️ Échec absorbé par une protection — enchant conservé.',
+        position: 'top',
+      });
+    } else {
+      $q.notify({ type: 'warning', message: 'Échec (zone sûre : rien perdu).', position: 'top' });
+    }
+  });
 }
 
 // ── Atelier de poussière (forge / reroll / sublimer / craft de set) ──
@@ -4182,40 +4122,19 @@ function confirmSalvage() {
 const bulkSlot = computed<ItemSlot | undefined>(() =>
   invFilter.value === 'all' ? undefined : invFilter.value,
 );
-// Puissance de l'objet MONTÉ À TON NIVEAU (poussière) → pour la CASSE EN MASSE : un
-// objet bas niveau n'est « faible » que s'il l'est ENCORE une fois monté au max
-// possible (= ton niveau). Évite de casser une pépite sous-leveled. (≠ la comparaison
-// AFFICHÉE, qui juge au niveau de l'objet équipé — powerIfEquipMatched.)
-function itemMaxedPower(it: Item): number {
-  const lvl = c.value.level.level;
-  const maxed = it.level >= lvl ? it : { ...it, level: lvl };
-  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: maxed };
-  return combatPower(playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, lvl));
-}
-// Puissance de l'objet ÉQUIPÉ d'un slot, monté à ton niveau (potentiel). Null si le
-// slot est vide → tout objet de ce slot est utile (à équiper), jamais cassé en masse.
-function slotEquippedMaxedPower(slot: ItemSlot): number | null {
-  const eq = char.row?.equipped?.[slot];
-  return eq ? itemMaxedPower(eq) : null;
-}
-// Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés → candidats à la
-// casse/vente en masse. Comparaison PAR SLOT, POTENTIEL vs POTENTIEL (les deux montés
-// à ton niveau) : un objet n'est candidat que s'il n'est PAS meilleur que l'équipé du
-// MÊME emplacement une fois infusé (faible ou doublon). Un objet qui, MONTÉ, DÉPASSERAIT
-// l'équipé est PROTÉGÉ (potentielle amélioration → jamais cassé en masse). STABLE : ne
-// dépend pas de l'état d'infusion courant (bug 19689c3c : la puissance ACTUELLE chutait
-// après avoir équipé un objet non infusé). Slot vide → l'objet est utile, on le garde.
-// Le 🔒 protège aussi ; les familiers ont leur propre piste (jamais en masse).
+// Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés → candidats à la casse/vente
+// en masse. Puissance FIXE (grade + enchant) → comparaison directe « si équipé ». Slot vide
+// → l'objet est utile (à équiper), gardé. 🔒 protège ; familiers = piste à part.
 const powerLossItems = computed<Item[]>(() => {
   const r = char.row;
   if (!r) return [];
+  const cur = combatPowerVal.value;
   return r.inventory.filter((it) => {
-    if (it.locked) return false; // 🔒 protégé
-    if (isFamiliar(it)) return false; // familiers = collection à part
+    if (it.locked) return false;
+    if (isFamiliar(it)) return false;
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
-    const eqPow = slotEquippedMaxedPower(it.slot);
-    if (eqPow === null) return false; // slot vide → à équiper, on garde
-    return itemMaxedPower(it) <= eqPow; // candidat SEULEMENT si pas meilleur (potentiel)
+    if (!equippedInSlot(it.slot)) return false; // slot vide → à équiper, on garde
+    return powerIfEquip(it) <= cur; // pas meilleur que l'équipé → candidat
   });
 });
 const belowCount = computed(() => powerLossItems.value.length);
@@ -5496,6 +5415,41 @@ onUnmounted(() => {
 }
 .gpill.lvl {
   color: var(--text);
+}
+/* Pastille d'enchant +N (objet). */
+.gpill.ench {
+  color: #15120e;
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 800;
+}
+.ii-ench {
+  color: var(--accent);
+}
+/* Barre d'enchant en tête du sac : ressources + toggle protection. */
+.ench-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 4px 0 10px;
+  font-size: 13px;
+}
+.ench-prot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.ench-prot.off {
+  opacity: 0.5;
+  cursor: default;
 }
 .gpill.p-G,
 .gpill.p-F,
