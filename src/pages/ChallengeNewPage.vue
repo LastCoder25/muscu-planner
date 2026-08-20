@@ -126,38 +126,8 @@
             </div>
           </div>
 
-          <!-- Cardio : choix km / durée -->
-          <div v-if="isCardio" class="cardio-unit">
-            <span class="cu-lbl">Objectif en</span>
-            <button
-              class="cu-b"
-              :class="{ on: cardioUnit === 'distance' }"
-              @click="cardioUnit = 'distance'"
-            >
-              km
-            </button>
-            <button
-              class="cu-b"
-              :class="{ on: cardioUnit === 'time' }"
-              @click="cardioUnit = 'time'"
-            >
-              durée
-            </button>
-          </div>
-          <!-- Exo « rythmique » (corde à sauter, burpees…) : reps OU durée, au choix. Mis en
-               avant (bordure accent + note) car c'est LE réglage à ne pas rater pour ces exos. -->
-          <div v-else-if="isDual" class="cardio-unit dual-hi">
-            <span class="cu-lbl">Compter en</span>
-            <button class="cu-b" :class="{ on: dualUnit === 'reps' }" @click="dualUnit = 'reps'">
-              répétitions
-            </button>
-            <button class="cu-b" :class="{ on: dualUnit === 'time' }" @click="dualUnit = 'time'">
-              durée
-            </button>
-          </div>
-          <div v-if="isDual" class="dual-note">
-            💡 Cet exo se compte en <b>répétitions</b> ou en <b>durée</b> — choisis ci-dessus.
-          </div>
+          <!-- Le choix d'unité (km/durée pour le cardio, reps/durée pour les rythmiques) est
+               regroupé à l'étape suivante, avec le mode de comptage Reps/Séries. -->
           <template v-if="guide">
             <div class="exd-sec">Exécution</div>
             <ol class="exd-steps">
@@ -174,6 +144,26 @@
 
       <!-- ÉTAPE 2 · Format -->
       <template v-else-if="step === 2">
+        <!-- Choix d'UNITÉ de l'objectif, regroupé avec le comptage (déplacé depuis l'étape
+             Exercice). Cardio : km / durée. Exo rythmique (corde, burpees…) : reps / durée. -->
+        <div v-if="isCardio" class="count-toggle">
+          <button :class="{ on: cardioUnit === 'distance' }" @click="cardioUnit = 'distance'">
+            📏 km
+          </button>
+          <button :class="{ on: cardioUnit === 'time' }" @click="cardioUnit = 'time'">
+            ⏱️ Durée
+          </button>
+        </div>
+        <div v-else-if="isDual" class="count-toggle">
+          <button :class="{ on: dualUnit === 'reps' }" @click="dualUnit = 'reps'">
+            🔢 Répétitions
+          </button>
+          <button :class="{ on: dualUnit === 'time' }" @click="dualUnit = 'time'">⏱️ Durée</button>
+        </div>
+        <div v-if="isDual" class="count-note">
+          💡 <b>{{ exercise?.name }}</b> se compte en répétitions ou en durée — choisis ci-dessus.
+        </div>
+        <!-- Comptage Reps / Séries (objectif en reps hors cardio uniquement). -->
         <div v-if="unit === 'reps'" class="count-toggle">
           <button :class="{ on: countMode === 'reps' }" @click="setCountMode('reps')">
             🔢 Reps
@@ -1243,44 +1233,6 @@ onMounted(async () => {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-radius: 10px;
   padding: 8px 10px;
-}
-.cardio-unit {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-}
-.cu-lbl {
-  font-size: 13px;
-  color: var(--dim);
-}
-.cu-b {
-  padding: 6px 16px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--text);
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-}
-.cu-b.on {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-/* Exo dual (reps OU durée) : bloc mis en avant pour ne pas rater le choix. */
-.cardio-unit.dual-hi {
-  padding: 8px 10px;
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  flex-wrap: wrap;
-}
-.dual-note {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--dim);
 }
 .exd-none {
   margin-top: 10px;
