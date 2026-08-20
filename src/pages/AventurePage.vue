@@ -909,14 +909,13 @@
                 {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
               </button>
             </div>
-            <!-- Casse/vente en masse : TOUS les objets NON verrouillés (verrouille 🔒
-               ceux que tu gardes). Respecte le filtre par type. -->
+            <!-- Casse/vente en masse : objets qui n'améliorent pas ta puissance (pas
+               meilleurs que l'équipé du même emplacement, MÊME montés à ton niveau).
+               Les pépites potentielles et le 🔒 sont protégés. Respecte le filtre type. -->
             <div v-if="belowCount > 0" class="bulk">
               <span class="bulk-lbl"
-                >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} non verrouillé{{
-                  belowCount > 1 ? 's' : ''
-                }}
-                <span class="bulk-note">(verrouille 🔒 ceux à garder)</span></span
+                >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} sans intérêt
+                <span class="bulk-note">(≤ ton équipement ; pépites &amp; 🔒 gardés)</span></span
               >
               <div class="bulk-btns">
                 <button class="bulk-b" @click="doSalvageBelow">
@@ -4238,16 +4237,20 @@ function itemMaxedPower(it: Item): number {
   const eq = { ...(char.row?.equipped ?? {}), [it.slot]: maxed };
   return combatPower(playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, lvl));
 }
+// Puissance de l'objet ÉQUIPÉ d'un slot, monté à ton niveau (potentiel). Null si le
+// slot est vide → tout objet de ce slot est utile (à équiper), jamais cassé en masse.
+function slotEquippedMaxedPower(slot: ItemSlot): number | null {
+  const eq = char.row?.equipped?.[slot];
+  return eq ? itemMaxedPower(eq) : null;
+}
 // Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés → candidats à la
 // casse/vente en masse. Comparaison PAR SLOT, POTENTIEL vs POTENTIEL (les deux montés
-// à ton niveau) : un objet est « inutile » s'il n'est pas meilleur que l'équipé du
-// MÊME emplacement une fois infusé (faible ou doublon). STABLE : ne dépend pas de
-// l'état d'infusion courant (bug 19689c3c : après avoir équipé un objet non infusé,
-// la puissance ACTUELLE chutait → le bouton « Tout casser » disparaissait). Slot vide
-// → l'objet est utile (à équiper), on ne le casse pas.
-// Casse/vente EN MASSE = TOUS les objets du sac NON verrouillés (le 🔒 est la seule
-// protection ; ticket : « tant qu'il n'est pas verrouillé, la casse/vente en masse est
-// dispo »). Les familiers ont leur propre piste (jamais en masse). Respecte le filtre slot.
+// à ton niveau) : un objet n'est candidat que s'il n'est PAS meilleur que l'équipé du
+// MÊME emplacement une fois infusé (faible ou doublon). Un objet qui, MONTÉ, DÉPASSERAIT
+// l'équipé est PROTÉGÉ (potentielle amélioration → jamais cassé en masse). STABLE : ne
+// dépend pas de l'état d'infusion courant (bug 19689c3c : la puissance ACTUELLE chutait
+// après avoir équipé un objet non infusé). Slot vide → l'objet est utile, on le garde.
+// Le 🔒 protège aussi ; les familiers ont leur propre piste (jamais en masse).
 const powerLossItems = computed<Item[]>(() => {
   const r = char.row;
   if (!r) return [];
@@ -4255,7 +4258,9 @@ const powerLossItems = computed<Item[]>(() => {
     if (it.locked) return false; // 🔒 protégé
     if (isFamiliar(it)) return false; // familiers = collection à part
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
-    return true;
+    const eqPow = slotEquippedMaxedPower(it.slot);
+    if (eqPow === null) return false; // slot vide → à équiper, on garde
+    return itemMaxedPower(it) <= eqPow; // candidat SEULEMENT si pas meilleur (potentiel)
   });
 });
 const belowCount = computed(() => powerLossItems.value.length);
@@ -4267,7 +4272,7 @@ function doSalvageBelow() {
   const ids = powerLossItems.value.map((i) => i.id);
   $q.dialog({
     title: 'Tout casser',
-    message: `Casser les ${ids.length} objet(s) NON verrouillés de ${bulkScope.value} → poussière ? Les objets verrouillés 🔒 sont conservés.`,
+    message: `Casser les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} → poussière ? Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Tout casser', color: 'negative' },
   }).onOk(() => withUid((uid) => char.salvageMany(uid, ids), 'Recyclage impossible.'));
@@ -4276,7 +4281,7 @@ function doSellBelow() {
   const ids = powerLossItems.value.map((i) => i.id);
   $q.dialog({
     title: 'Tout vendre',
-    message: `Vendre les ${ids.length} objet(s) NON verrouillés de ${bulkScope.value} → or ? Les objets verrouillés 🔒 sont conservés.`,
+    message: `Vendre les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} → or ? Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Tout vendre', color: 'negative' },
   }).onOk(() => withUid((uid) => char.sellMany(uid, ids), 'Vente impossible.'));
