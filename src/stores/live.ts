@@ -48,6 +48,7 @@ export interface LiveRun {
   exercises: LiveExercise[];
   free?: boolean; // séance libre (sans plan source) → session_id null au log
   readiness?: number; // forme du jour 1–5 (check pré-séance)
+  discipline?: string; // discipline de la SÉANCE (prepa_physique/crossfit… ou musculation)
 }
 
 const keyFor = (sid: string) => `muscu:live:${sid}`;
@@ -85,6 +86,7 @@ export const useLiveStore = defineStore('live', () => {
       started_at: new Date().toISOString(),
       exIndex: 0,
       readiness,
+      discipline: session.discipline,
       exercises: session.exercises.map((ex) => {
         // Poids du corps si la cible le dit, ou si l'exo n'utilise pas de charge en kg
         // (poids du corps, élastique/assisté) → charge affichée « PdC », lest optionnel.
@@ -275,6 +277,12 @@ export const useLiveStore = defineStore('live', () => {
       id: crypto.randomUUID(),
       session_id: r.free ? undefined : r.session_id,
       name: r.name,
+      // Discipline de la séance → le log est AUTO-DESCRIPTIF (l'historique muscu peut
+      // exclure prépa/tennis/crossfit sans relookup de la séance). Bug : sans ça, un log
+      // de prépa apparaissait dans l'historique muscu (discipline par défaut = musculation).
+      ...(r.discipline && r.discipline !== 'musculation'
+        ? { discipline: r.discipline as never }
+        : {}),
       started_at: r.started_at,
       ended_at: ended.toISOString(),
       duration_min: duration,

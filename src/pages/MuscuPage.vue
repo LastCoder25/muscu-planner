@@ -140,6 +140,7 @@ import { useXpFx } from '@/composables/useXpFx';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
+import { useSessionsStore } from '@/stores/sessions';
 import { useAuthStore } from '@/stores/auth';
 import { sessionXp, otherSportXp } from '@/lib/athlete';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
@@ -148,6 +149,24 @@ const router = useRouter();
 const route = useRoute();
 const $q = useQuasar();
 const logs = useLogsStore();
+const sessions = useSessionsStore();
+// Séances NON musculation (prépa physique / crossfit / hyrox…) → leur historique n'est
+// PAS l'historique muscu. On repère leurs LOGS par session_id (les vieux logs n'ont pas
+// forcément `discipline` en payload — bug historique corrigé côté live.ts pour les neufs).
+const specifiqueSessionIds = computed(
+  () =>
+    new Set(
+      sessions.list
+        .filter((s) => (s.payload.discipline ?? 'musculation') !== 'musculation')
+        .map((s) => s.id),
+    ),
+);
+function isSpecifiqueLog(r: LogRow): boolean {
+  const d = r.payload.discipline;
+  if (d === 'autre_sport') return true; // « autre sport » a sa propre tuile
+  if (d && d !== 'musculation') return true; // prépa/crossfit/hyrox explicite
+  return !!r.payload.session_id && specifiqueSessionIds.value.has(r.payload.session_id);
+}
 const auth = useAuthStore();
 const progress = useProgress();
 const xpFx = useXpFx();
@@ -288,10 +307,10 @@ const filterLabel = computed(() => {
 function matchesFilter(r: LogRow): boolean {
   const f = activeFilter.value;
   const disc = r.payload.discipline ?? 'musculation';
-  // Défaut (sans filtre) : la prépa physique appartient au hub Tennis (elle a son
-  // propre historique) → on ne la mélange PAS à l'historique muscu. Un filtre
-  // explicite `disc:prepa_physique` la réaffiche quand même (cf. ci-dessous).
-  if (!f) return disc !== 'prepa_physique';
+  // Défaut (sans filtre) : l'historique muscu = MUSCULATION PURE. On exclut prépa/tennis/
+  // crossfit/hyrox/« autre sport » — repérés par leur discipline OU leur session (les
+  // vieux logs n'ont pas `discipline` en payload). Un filtre `disc:…` explicite réaffiche.
+  if (!f) return !isSpecifiqueLog(r);
   if (f.startsWith('disc:')) return disc === f.slice(5);
   if (f.startsWith('sport:'))
     return disc === 'autre_sport' && (r.payload.name || 'Autre') === f.slice(6);
@@ -338,7 +357,9 @@ async function loadHistory() {
   fetched = true;
   loading.value = true;
   try {
-    rows.value = await logs.fetchRecent(50);
+    // Les séances (pour repérer les logs de prépa/tennis par session_id) + l'historique.
+    const [r] = await Promise.all([logs.fetchRecent(50), sessions.fetchMine()]);
+    rows.value = r;
   } catch (e) {
     $q.notify({
       type: 'negative',
