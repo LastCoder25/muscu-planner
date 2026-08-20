@@ -71,30 +71,6 @@
               ><DustIcon variant="dust" /> {{ char.row.dust }}</span
             >
             <span
-              v-if="char.row.stones"
-              class="tb-r stones"
-              title="Pierres magiques — NIVEAU des familiers"
-              >💎 {{ char.row.stones }}</span
-            >
-            <span
-              v-if="char.row.fragments"
-              class="tb-r frag"
-              title="Poussière d'âme — RANG des familiers (infusion)"
-              ><DustIcon variant="soul" /> {{ char.row.fragments }}</span
-            >
-            <span
-              v-if="char.row.parchemins"
-              class="tb-r parch"
-              title="Parchemins — NIVEAU des talents"
-              >📜 {{ char.row.parchemins }}</span
-            >
-            <span
-              v-if="char.row.ink_dust"
-              class="tb-r ink"
-              title="Poussière d'encre — RANG des talents (infusion)"
-              ><DustIcon variant="ink" /> {{ char.row.ink_dust }}</span
-            >
-            <span
               v-if="char.row.summon_stones"
               class="tb-r summon"
               title="Pierres d’invocation — tenter un boss de palier"
@@ -1402,7 +1378,7 @@
                 <span v-if="m.gold">🪙 +{{ m.gold }}</span>
                 <span v-if="m.dust">✨ +{{ m.dust }}</span>
                 <span v-if="m.energy">⚡ +{{ m.energy }}</span>
-                <span v-if="m.stones">💎 +{{ m.stones }}</span>
+                <span v-if="m.enchantScrolls">📜 +{{ m.enchantScrolls }}</span>
                 <span v-if="m.key">🗝️ +{{ m.key }}</span>
               </div>
               <!-- Objet gagné : détail complet (rareté / niveau / effet). -->
@@ -1905,19 +1881,18 @@
                   title="Pierres d’invocation (pour affronter les boss)"
                   >+{{ run.summonStones }} 🔮</span
                 >
-                <span v-if="run.stones" class="gain-pill stones">+{{ run.stones }} 💎</span>
                 <span
-                  v-if="run.parchemins"
-                  class="gain-pill parch"
-                  title="Parchemins (montée du niveau des talents)"
-                  >+{{ run.parchemins }} 📜</span
+                  v-if="run.enchantScrolls"
+                  class="gain-pill scroll"
+                  title="Parchemins d'enchantement (carburant de l'enchant +N)"
+                  >+{{ run.enchantScrolls }} 📜</span
                 >
                 <span
-                  v-if="run.inkDust"
-                  class="gain-pill parch"
-                  title="Poussière d'encre (montée du rang des talents)"
-                  >+{{ run.inkDust }} <DustIcon variant="ink"
-                /></span>
+                  v-if="run.protections"
+                  class="gain-pill protect"
+                  title="Protections (évitent le retour à +0 sur un échec d'enchant)"
+                  >+{{ run.protections }} 🛡️</span
+                >
               </span>
             </div>
             <div class="result-sub">
@@ -2264,9 +2239,8 @@ interface RunView {
   drops: Item[];
   talentDrops?: TalentInstance[]; // talents tombés (affichés dans le rapport)
   summonStones?: number; // pierres d'invocation 🔮 gagnées (donjon → aller aux boss)
-  stones?: number; // pierres magiques 💎 gagnées (familiers)
-  parchemins?: number; // parchemins 📜 gagnés (niveau des talents)
-  inkDust?: number; // poussière d'encre gagnée (rang des talents)
+  enchantScrolls?: number; // 📜 parchemins d'enchantement gagnés (carburant de l'enchant)
+  protections?: number; // 🛡️ protections d'enchant gagnées
 }
 
 // `embedded` : rendu dans le VOLET droit du cockpit (Z Fold déplié) → racine <div>
@@ -3178,20 +3152,11 @@ async function explore(d: Dungeon) {
     const dust = r.cleared
       ? r.defeated * dustPerMonster + d.dropLevel
       : Math.round(r.defeated * dustPerMonster * 0.5);
-    // Pierres 💎 raréfiées (2026‑08‑18) : seulement au NETTOYAGE (petit lot), plus par
-    // monstre → les gros volumes de runs n'inondent plus les pierres (ressource rare
-    // des familiers). Filon de pierres + boss restent les sources principales.
-    const stones = r.cleared ? 2 : 0;
     // Pierres d'invocation 🔮 : lot au NETTOYAGE, ∝ profondeur du donjon → farmer plus
     // profond finance des boss plus hauts. Un boss de palier coûte ~2-6 pierres → 2-6 runs.
     const summonStones = r.cleared ? 1 + Math.floor(d.recoLevel / 8) : 0;
-    // Parchemins 📜 (niveau des talents) : filet au NETTOYAGE, ∝ profondeur → la
-    // Bibliothèque n'est plus la SEULE source (elle reste la production passive/régulière).
-    const parchemins = r.cleared ? 1 + Math.floor(d.recoLevel / 6) : 0;
-    // Poussière d'encre : petit filet au nettoyage (RANG des talents) → une source dès
-    // l'early (avant les boss), symétrique du filet de parchemins.
-    const inkDust = r.cleared ? 1 + Math.floor(d.recoLevel / 8) : 0;
-    // Parchemins d'ENCHANT 📜 : le carburant des tentatives, filet régulier au nettoyage.
+    // Parchemins d'ENCHANT 📜 : le carburant des tentatives d'enchant, filet régulier au
+    // nettoyage (∝ profondeur). Source principale avec les boss (qui donnent aussi 🛡️).
     const enchantScrolls = r.cleared ? 2 + Math.floor(d.recoLevel / 4) : 0;
     // Drop de TALENT (drop-only) : ~6 % sur un donjon nettoyé ; RANG gaté par le niveau
     // du donjon (`dropLevel`), biaisé par sa luck → farmer profond = talents plus hauts.
@@ -3204,11 +3169,8 @@ async function explore(d: Dungeon) {
       gold,
       dust,
       drops,
-      stones,
       summonStones,
-      parchemins,
       enchantScrolls,
-      inkDust,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
     });
@@ -3238,9 +3200,7 @@ async function explore(d: Dungeon) {
       drops,
       ...(talentDrops.length ? { talentDrops } : {}),
       ...(summonStones ? { summonStones } : {}),
-      ...(stones ? { stones } : {}),
-      ...(parchemins ? { parchemins } : {}),
-      ...(inkDust ? { inkDust } : {}),
+      ...(enchantScrolls ? { enchantScrolls } : {}),
     };
     // 1er nettoyage d'un donjon (débloque le suivant) = moment de progression →
     // éclat, mais SEULEMENT à la fin de l'animation de combat (sinon il recouvre
@@ -3439,10 +3399,7 @@ async function fightBoss(b: MilestoneBoss) {
       dust,
       defeated: win,
       pending,
-      stones: 6, // jalon boss (raréfié 2026-08-18) → lot de pierres 💎 (crédité seulement si vaincu)
-      parchemins: 5 + Math.floor(b.unlockLevel / 4), // jalon boss → parchemins 📜 (niveau talents)
-      inkDust: 8 + Math.floor(b.unlockLevel / 3), // jalon boss → poussière d'encre (RANG talents)
-      enchantScrolls: 4 + Math.floor(b.unlockLevel / 4), // jalon boss → parchemins d'enchant
+      enchantScrolls: 4 + Math.floor(b.unlockLevel / 4), // jalon boss → parchemins d'enchant 📜
       protections: 1 + Math.floor(b.unlockLevel / 10), // 🛡️ protections — la source précieuse
       ...(talentDrops.length ? { talentDrops } : {}),
     });
@@ -3470,9 +3427,8 @@ async function fightBoss(b: MilestoneBoss) {
       ],
       drops: [],
       ...(talentDrops.length ? { talentDrops } : {}),
-      ...(win ? { stones: 6 } : {}),
-      ...(win ? { parchemins: 5 + Math.floor(b.unlockLevel / 4) } : {}),
-      ...(win ? { inkDust: 8 + Math.floor(b.unlockLevel / 3) } : {}),
+      ...(win ? { enchantScrolls: 4 + Math.floor(b.unlockLevel / 4) } : {}),
+      ...(win ? { protections: 1 + Math.floor(b.unlockLevel / 10) } : {}),
     };
     // Victoire de boss de palier = jalon MAJEUR → célébration centrale (gros éclat),
     // DIFFÉRÉE à la fin de l'animation de combat.
@@ -3570,7 +3526,6 @@ async function fightEndless() {
       dust,
       drops,
       cleared: win,
-      stones: win ? 3 : 0, // raréfié 2026-08-18
     });
     // Nouveau palier RECORD de la Faille → célébration (progression end-game),
     // différée à la fin de l'animation de combat.

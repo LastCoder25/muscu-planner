@@ -293,8 +293,8 @@
           {{ run.status === 'cleared' ? 'Labyrinthe nettoyé !' : 'Vous êtes tombé…' }}
         </div>
         <div class="over-haul">
-          🪙 {{ gold }} · ✨ {{ dust }} · 💎 {{ stonesGained }}
-          <template v-if="frags"> · 🫧 {{ frags }}</template> · 🎒
+          🪙 {{ gold }} · ✨ {{ dust }}
+          <template v-if="scrollsGained"> · 📜 {{ scrollsGained }}</template> · 🎒
           {{ run.status === 'dead' ? 0 : loot.length }} objet(s)
         </div>
         <div class="over-sub">
@@ -571,8 +571,7 @@ const over = ref(false);
 // Butin cumulé du run (Phase 3b : affiché ; persistance/récompense = Phase 3c).
 const gold = ref(0);
 const dust = ref(0);
-const frags = ref(0); // fragments de familiers 🧩 amassés dans les coffres
-const stonesGained = ref(0); // pierres 💎 créditées (affiché dans le récap de fin)
+const scrollsGained = ref(0); // parchemins d'enchant 📜 crédités (récap de fin)
 const loot = ref<Item[]>([]);
 let lootN = 0;
 // Détail d'un objet du récap de butin (modale au clic).
@@ -791,14 +790,9 @@ function openChest(id: number) {
   for (let k = 0; k < tries && !drop; k++)
     drop = rollDrop(rng, { cleared: true, defeated: 1, level, luck, spread: 1 });
   const item = drop ? { ...drop, id: `exp_${lootN++}` } : null;
-  // Fragments 🧩 : base ~30 % + bonus de grade ; poussière ✨ bonus de grade.
-  const gotFrag =
-    (rng() < 0.3 ? Math.max(1, Math.round((1 + depthOf() * 2) * (1 + labyLuck.value))) : 0) +
-    grade.fragBonus;
-  frags.value += gotFrag;
   dust.value += 3 + grade.dustBonus;
   if (item) loot.value.push(item);
-  const bits = [item?.name, gotFrag ? `🫧${gotFrag}` : ''].filter(Boolean).join(' + ');
+  const bits = [item?.name].filter(Boolean).join(' + ');
   lastEvent.value = {
     kind: 'good',
     text: `${grade.emoji} Coffre ${grade.label}${bits ? ' — ' + bits : ' ouvert'} !`,
@@ -852,14 +846,12 @@ function openVault(id: number) {
   const item = best ? { ...best, id: `exp_${lootN++}` } : null;
   const gGold = 30 + Math.round(heroLevel.value * 6);
   const gDust = 20 + Math.round(heroLevel.value * 0.8);
-  const gFrag = 4 + Math.round(depthOf() * 4);
   gold.value += gGold;
   dust.value += gDust;
-  frags.value += gFrag;
   if (item) loot.value.push(item);
   lastEvent.value = {
     kind: 'good',
-    text: `💎 Salle secrète ! ${item ? item.name + ' · ' : ''}+${gGold}🪙 +${gDust}✨ +${gFrag}🫧`,
+    text: `💎 Salle secrète ! ${item ? item.name + ' · ' : ''}+${gGold}🪙 +${gDust}✨`,
   };
   gameFx.celebrate({
     kind: 'drop',
@@ -1017,7 +1009,7 @@ function freshRun() {
   run.value = startRun(floorsWanted.value, dungeon.value[0]!, fighter.value.pv || 140);
   gold.value = 0;
   dust.value = 0;
-  frags.value = 0;
+  scrollsGained.value = 0;
   loot.value = [];
   lootN = 0;
   lastEvent.value = null;
@@ -1190,12 +1182,9 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
         rarity: fxRarity(fam.rarity),
       });
     }
-    // Pierres magiques 💎 (voie diffuse) : proportionnelles à la progression du run
+    // Parchemins d'enchant 📜 (carburant de l'enchant) : ∝ progression du run
     // (la poussière amassée = proxy des salles/monstres) + bonus de clear.
-    const stones = Math.max(2, Math.round(dust.value / 3)) + (outcome === 'cleared' ? 4 : 0);
-    // Fragments : bonus de palier au clear (plus profond = plus de fragments).
-    const fragTotal =
-      frags.value + (outcome === 'cleared' ? (selectedLaby.value?.fragBonus ?? 0) : 0);
+    const scrolls = Math.max(1, Math.round(dust.value / 5)) + (outcome === 'cleared' ? 3 : 0);
     // MORT : on garde une FRACTION des gains liée à la profondeur du palier non terminé
     // (profond = pardonne moins). Les objets restent perdus. Retraite/clear = tout gardé.
     const keep = outcome === 'dead' ? deathKeepFraction(selectedLaby.value?.id ?? '') : 1;
@@ -1204,8 +1193,7 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
       await char.applyExpedition(uid, {
         gold: Math.floor(gold.value * keep),
         dust: Math.floor(dust.value * keep),
-        stones: Math.floor(stones * keep),
-        fragments: Math.floor(fragTotal * keep),
+        enchantScrolls: Math.floor(scrolls * keep),
         drops: outcome === 'dead' ? [] : loot.value,
         // (les lignes de récap sont recalées ci-dessous sur les montants RÉELLEMENT crédités)
         // Nettoyage → débloque le palier suivant (mort/retraite ne débloquent pas).
@@ -1213,12 +1201,11 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
           ? { clearedDungeonId: labyClearId(selectedLaby.value.id) }
           : {}),
       });
-    // Recale les compteurs affichés sur les montants RÉELLEMENT crédités (bonus de clear
-    // pour les fragments, fraction gardée en cas de mort) → le récap ne ment pas.
+    // Recale les compteurs affichés sur les montants RÉELLEMENT crédités (fraction gardée
+    // en cas de mort) → le récap ne ment pas.
     gold.value = Math.floor(gold.value * keep);
     dust.value = Math.floor(dust.value * keep);
-    frags.value = Math.floor(fragTotal * keep);
-    stonesGained.value = Math.floor(stones * keep);
+    scrollsGained.value = Math.floor(scrolls * keep);
   }
   stopAuto(); // fin de run → coupe l'auto (la relance depuis la modale est manuelle)
   over.value = true;

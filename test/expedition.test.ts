@@ -131,7 +131,7 @@ describe('expedition — héros / trajet', () => {
       gold: 0,
       dust: 0,
       energy: 0,
-      stones: 0,
+      enchantScrolls: 0,
       item: null,
       key: 0,
       reconBonus: 0,
@@ -181,13 +181,13 @@ describe('expedition — résolution', () => {
     expiresAt: 999 * H,
   };
 
-  it('mine : toujours réussie + gain NET d’or + poussière + pierres + énergie', () => {
+  it('mine : toujours réussie + gain NET d’or + poussière + parchemins + énergie', () => {
     const o = resolveOutcome(strong, mine, 1);
     expect(o.win).toBe(true);
     // Vrai gain net : la mine rend NETTEMENT plus que son coût (investissement + temps).
     expect(o.gold).toBeGreaterThan(goldCost('mine', mine.level) * 2);
     expect(o.dust).toBeGreaterThan(0);
-    expect(o.stones).toBeGreaterThan(0);
+    expect(o.enchantScrolls).toBeGreaterThan(0);
     expect(o.energy).toBeGreaterThan(0); // les mines rendent un peu d'énergie
   });
   it('camp/repaire : PAS d’énergie (mines uniquement)', () => {

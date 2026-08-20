@@ -54,10 +54,6 @@ export interface BuildingType {
   category: BuildingCategory;
   resource?: BuildResource; // ce qu'il produit (producteurs uniquement)
   prodPerHrPerLvl?: number; // production/heure par niveau (producteurs)
-  // Bâtiment COMBINÉ qui, en plus de produire, PLAFONNE un rang d'infusion selon son
-  // niveau (familier via maxFuseTierIndex, talent via maxTalentTierIndex). Data-driven
-  // → l'UI affiche le « rang max » sans coder en dur l'id du bâtiment.
-  capsRank?: 'familiar' | 'talent';
   effect?: BuildingEffect; // effet global (utility)
   buildGold: number; // coût de construction (or)
   unlockLevel?: number; // niveau joueur requis pour pouvoir le construire (défaut 1)
@@ -86,31 +82,6 @@ export const BUILDING_TYPES: BuildingType[] = [
     buildGold: 800,
     unique: true,
     desc: 'Produit de la poussière d’évolution ✨ en continu.',
-  },
-  {
-    id: 'stone_vein',
-    label: 'Filon de pierre magique',
-    emoji: '💎',
-    category: 'producer',
-    resource: 'stone',
-    prodPerHrPerLvl: 0.16,
-    buildGold: 800,
-    unique: true,
-    desc: 'Produit des pierres magiques 💎 (montée des familiers).',
-  },
-  // Producteur de PARCHEMINS 📜 : ressource de progression des TALENTS (montée de
-  // niveau). Cadence proche des pierres (ressource de progression, pas abondante).
-  {
-    id: 'library',
-    label: 'Bibliothèque',
-    emoji: '📚',
-    category: 'producer',
-    resource: 'parchemins',
-    prodPerHrPerLvl: 0.16,
-    buildGold: 900,
-    unlockLevel: 2,
-    unique: true,
-    desc: 'Produit des parchemins de maîtrise 📜 (montée du niveau des talents).',
   },
   // Producteur d'ÉNERGIE : convertit l'or (surabondant en fin de partie) en énergie
   // de JEU → adoucit le pincement d'énergie au niveau élevé (le coût des runs monte
@@ -162,30 +133,6 @@ export const BUILDING_TYPES: BuildingType[] = [
     unique: true,
     desc: 'Augmente le stockage de tous tes filons (+15 %/niveau).',
   },
-  // Utilitaire UNIQUE : l'INCUBATEUR débloque la FUSION des familiers (3 identiques →
-  // rareté supérieure). Pas de gate de niveau dur sur les raretés : la progression de
-  // rareté reste pilotée par le grind (fusion) + la profondeur (drops), pas par un
-  // verrou par palier → jamais de sensation de blocage.
-  // BÂTIMENT COMBINÉ des familiers : PRODUIT de la poussière d'âme (rang des familiers)
-  // ET plafonne le rang max d'infusion (maxFuseTierIndex, par niveau). Un seul bâtiment
-  // pour toute la « famille familier-rang » (l'ancien Filon de fragments est fusionné ici).
-  {
-    id: 'incubator',
-    label: 'Incubateur',
-    emoji: '🥚',
-    category: 'producer',
-    resource: 'fragments', // = poussière d'âme
-    prodPerHrPerLvl: 0.14,
-    capsRank: 'familiar',
-    buildGold: 900,
-    unlockLevel: 2,
-    unique: true,
-    unlock: {
-      activity: "L'infusion des familiers",
-      where: 'Aventure › Héros › 🐾 Familiers.',
-    },
-    desc: "Produit de la poussière d'âme (rang des familiers) et débloque leur infusion. Chaque niveau relève le rang MAX atteignable ET la production.",
-  },
   // Utilitaire UNIQUE : la PORTE DU LABYRINTHE débloque le Labyrinthe (donjon à
   // étages, source unique des familiers). Chaque niveau AMÉLIORE la qualité du butin
   // des coffres (+4 % de chance de rareté) → investir de l'or rend les runs plus riches.
@@ -236,26 +183,6 @@ export const BUILDING_TYPES: BuildingType[] = [
       where: 'Aventure › onglet Équip. › 🔧 Atelier.',
     },
     desc: 'Débloque l’Atelier : forger un objet neuf à ton niveau + forge de pièces de set. Chaque niveau améliore la rareté des objets forgés.',
-  },
-  // BÂTIMENT COMBINÉ des talents (symétrique à l'Incubateur) : PRODUIT de la poussière
-  // d'encre (rang des talents) ET plafonne le rang max d'infusion des talents
-  // (maxTalentTierIndex, par niveau). Un seul bâtiment pour la « famille talent-rang ».
-  {
-    id: 'scriptorium',
-    label: 'Scriptorium',
-    emoji: '🕯️',
-    category: 'producer',
-    resource: 'ink_dust', // = poussière d'encre
-    prodPerHrPerLvl: 0.12,
-    capsRank: 'talent',
-    buildGold: 900,
-    unlockLevel: 3,
-    unique: true,
-    unlock: {
-      activity: "L'infusion des talents (rang)",
-      where: 'Aventure › Héros › ✨ Talents.',
-    },
-    desc: "Produit de la poussière d'encre (rang des talents) et débloque leur infusion. Chaque niveau relève le rang MAX atteignable ET la production.",
   },
   // Utilitaire : PUITS D'OR. Depuis le retrait de la boutique/respec, l'or s'accumule sans
   // débouché → le Comptoir l'échange contre de la poussière ✨ (ressource la plus demandée).
@@ -337,47 +264,6 @@ export function outpostLevel(buildings: Building[]): number {
 /** Les expéditions sont-elles débloquées ? (avant-poste construit). */
 export function expeditionsUnlocked(buildings: Building[]): boolean {
   return outpostLevel(buildings) > 0;
-}
-/** Niveau de l'Incubateur posé (0 si aucun). */
-export function incubatorLevel(buildings: Building[]): number {
-  return buildings.find((b) => b.typeId === 'incubator')?.level ?? 0;
-}
-/** L'incubateur est-il construit ? → débloque la fusion des familiers. */
-export function incubatorBuilt(buildings: Building[]): boolean {
-  return incubatorLevel(buildings) > 0;
-}
-/** CRAN (tier 0..49 = rang×5 + qualité−1) MAX atteignable par infusion selon le niveau
- *  de l'Incubateur. ALIGNÉ SUR LA COURBE DES DROPS (v0.503) : l'incubateur laisse infuser
- *  jusqu'au RANG★5 que les drops plafonnent à ce niveau — même racine `rankCeilingForLevel`
- *  = `floor(√level×1,03)` (RAPIDE tôt : E dès l'incubateur niv.4, C au niv.16, B au 25 …
- *  SSS au ~80). Avant (v0.498) : « 1 qualité / 2 niveaux » linéaire → l'incubateur était
- *  très en retard sur les drops (G au niv.8 alors qu'on droppe déjà du C/D). La MAGNITUDE
- *  reste plafonnée au niveau joueur (pierres) → « seul le sport rend plus fort » tenu.
- *  `-1` = pas d'incubateur (aucune infusion). Formule √ inlinée (buildings = feuille). */
-// CRAN max (0..49) débloqué par un bâtiment de rang à `lvl` : même racine √ que la courbe
-// des drops (`rankCeilingForLevel` dans items.ts, ré-inlinée ici — buildings = feuille, pas
-// d'import d'items). `lvl<1` (pas construit) → -1 = aucune infusion. Partagé Incubateur/Scriptorium.
-function rankCapForBuildingLevel(lvl: number): number {
-  if (lvl < 1) return -1;
-  const rankCeil = Math.min(9, Math.max(0, Math.floor(Math.sqrt(lvl) * 1.03)));
-  return rankCeil * 5 + 4; // rang plafond × qualité 5
-}
-export function maxFuseTierIndex(buildings: Building[]): number {
-  return rankCapForBuildingLevel(incubatorLevel(buildings));
-}
-/** Niveau du Scriptorium (bâtiment COMBINÉ des talents : produit la poussière d'encre
- *  ET plafonne le rang d'infusion des talents). 0 = pas construit. */
-export function scriptoriumLevel(buildings: Building[]): number {
-  return buildings.find((b) => b.typeId === 'scriptorium')?.level ?? 0;
-}
-export function scriptoriumBuilt(buildings: Building[]): boolean {
-  return scriptoriumLevel(buildings) > 0;
-}
-/** CRAN (tier 0..49) MAX d'infusion des TALENTS selon le niveau du Scriptorium — même
- *  courbe √ que l'Incubateur pour les familiers. `-1` = pas de Scriptorium (aucune
- *  infusion de rang possible ; le talent reste au rang de drop). */
-export function maxTalentTierIndex(buildings: Building[]): number {
-  return rankCapForBuildingLevel(scriptoriumLevel(buildings));
 }
 /** La Forge est-elle construite ? → débloque l'Atelier (forge d'objet / de set). */
 export function forgeBuilt(buildings: Building[]): boolean {
@@ -474,13 +360,10 @@ export function buildingUpgradeCost(level: number): number {
 }
 
 /** Un bâtiment a-t-il un effet qui SCALE avec le niveau ? (producteur, ou utilitaire
- *  à effet par niveau) → est-il améliorable. L'INCUBATEUR scale via son niveau (chaque
- *  niveau relève le CRAN max d'infusion des familiers, cf. maxFuseTierIndex), même si
- *  son `effect` est vide → il DOIT être améliorable (sinon les familiers restent bloqués
- *  au rang F). */
+ *  à effet par niveau) → est-il améliorable. */
 export function buildingScales(typeId: string): boolean {
   const t = buildingType(typeId);
-  return !!t && (!!t.resource || Object.keys(t.effect ?? {}).length > 0 || typeId === 'incubator');
+  return !!t && (!!t.resource || Object.keys(t.effect ?? {}).length > 0);
 }
 export function canUpgradeBuilding(b: Building, playerLevel: number): boolean {
   return buildingScales(b.typeId) && b.level < playerLevel;

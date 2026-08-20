@@ -38,7 +38,7 @@ export interface ExpeditionOutcome {
   gold: number; // crédité au RETOUR
   dust: number;
   energy: number; // ⚡ énergie de jeu (mines uniquement) → crédite login_energy
-  stones: number; // pierres magiques 💎 (ressource rare des familiers)
+  enchantScrolls: number; // 📜 parchemins d'enchantement (carburant de l'enchant)
   item: Omit<Item, 'id'> | null; // la « prise » principale (pièce de set / objet) ou null
   items?: Omit<Item, 'id'>[]; // ARÈNE : plusieurs objets (1 par palier de vagues) ; `item` = le 1er
   key: number; // clé de Labyrinthe (consolation rare)
@@ -69,7 +69,7 @@ export interface ExpeditionMessage {
   gold: number;
   dust: number;
   energy: number; // ⚡ énergie gagnée (mines)
-  stones: number;
+  enchantScrolls: number;
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
   itemCount?: number; // ARÈNE : nombre total d'objets ramenés (> 1) — le reste va au sac
@@ -92,7 +92,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     gold: o.gold,
     dust: o.dust,
     energy: o.energy,
-    stones: o.stones,
+    enchantScrolls: o.enchantScrolls,
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
     key: o.key,
@@ -414,7 +414,7 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
     // dominée par un camp (moins de poussière pour un coût d'or 4× plus élevé). Tenir
     // longtemps devient une VRAIE grosse paie de ressources → justifie la dépense d'or.
     const dust = Math.round((20 + waves * 15) * tfA);
-    const stones = Math.round((8 + waves * 5) * tfA);
+    const enchantScrolls = Math.round((8 + waves * 5) * tfA);
     // BUTIN MULTIPLE (2026‑08‑18) : l'arène (gauntlet de survie) lâche PLUSIEURS objets
     // — 1 par palier de 5 vagues (3-9 vagues → 1, 10-14 → 2, … plafonné à 5) — la
     // qualité montant avec les vagues + le rang de l'objet. Seule source de « tas de loot ».
@@ -440,7 +440,7 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
       gold,
       dust,
       energy: 0,
-      stones,
+      enchantScrolls,
       item: items[0] ?? null,
       items,
       key,
@@ -472,7 +472,7 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
       gold: Math.round(cost * EXPE.failRefund), // < coût → jamais un profit
       dust: Math.round(poi.level * 1.5),
       energy: 0,
-      stones: Math.round(poi.level * 0.4),
+      enchantScrolls: Math.round(poi.level * 0.4),
       item: null,
       key,
       reconBonus: 0.08,
@@ -492,7 +492,7 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
       ? Math.round(cost * (1.8 + rth)) // reine de l'or : ~2,3×..~5× le coût
       : Math.round(cost * (1.0 + rth * 0.1)); // camp/repaire : ≥ équilibre (+3..+65 %), item = le vrai gain, reste SOUS la mine
   const dustHaul = Math.round((poi.type === 'mine' ? 14 + poi.level * 4 : 9 + poi.level * 3) * tf);
-  const stoneHaul = Math.round(
+  const scrollHaul = Math.round(
     (poi.type === 'lair'
       ? 4 + poi.level * 1.4
       : poi.type === 'mine'
@@ -510,7 +510,7 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
   }
   let gold = goldHaul;
   let dust = dustHaul;
-  let stones = stoneHaul;
+  let enchantScrolls = scrollHaul;
   // ÉNERGIE : les MINES rendent un peu d'énergie de jeu (∝ niveau × temps de trajet)
   // → un revenu d'énergie passif, complément du sport, qui adoucit le pincement de
   // fin de partie (le coût des runs monte plus vite que l'énergie/séance). Mines seules.
@@ -526,7 +526,7 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
     if (ambushWon) {
       gold = Math.round(gold * 1.25);
       dust = Math.round(dust * 1.3);
-      stones = Math.round(stones * 1.3);
+      enchantScrolls = Math.round(enchantScrolls * 1.3);
       text += ' ⚔️ Embuscade repoussée en chemin — butin renforcé !';
     } else {
       gold = Math.round(gold * 0.7);
@@ -534,7 +534,7 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
       text += ' 🩸 Embuscade subie sur le trajet — butin écorné.';
     }
   }
-  return { win: true, gold, dust, energy, stones, item, key, reconBonus: 0, text };
+  return { win: true, gold, dust, energy, enchantScrolls, item, key, reconBonus: 0, text };
 }
 
 // ── Fond de carte : PARCHEMIN dessiné à l'encre (style « livre d'aventure ») ──

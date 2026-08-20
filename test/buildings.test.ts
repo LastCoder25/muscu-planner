@@ -15,10 +15,6 @@ import {
   canBuildType,
   storageMult,
   expeditionsUnlocked,
-  incubatorBuilt,
-  maxFuseTierIndex,
-  maxTalentTierIndex,
-  scriptoriumBuilt,
   travelTimeMult,
   outpostLevel,
   forgeLuckBonus,
@@ -63,36 +59,9 @@ describe('buildings — emplacements & coûts', () => {
     expect(canUpgradeBuilding(mk('dust_vein', 4), 10)).toBe(true);
     expect(canUpgradeBuilding(mk('dust_vein', 10), 10)).toBe(false);
   });
-  it("l'Incubateur est AMÉLIORABLE (son niveau relève le rang max d'infusion)", () => {
-    // Régression : effect vide → jadis buildingScales=false → jamais améliorable →
-    // familiers bloqués au rang F. Le niveau DOIT compter.
-    expect(buildingScales('incubator')).toBe(true);
-    expect(canUpgradeBuilding(mk('incubator', 1), 10)).toBe(true);
-    expect(maxFuseTierIndex([mk('incubator', 4)])).toBeGreaterThan(
-      maxFuseTierIndex([mk('incubator', 1)]),
-    );
-  });
-  it('Scriptorium plafonne le rang des talents (maxTalentTierIndex ∝ niveau)', () => {
-    expect(maxTalentTierIndex([])).toBe(-1); // pas de Scriptorium → aucune infusion de rang
-    expect(scriptoriumBuilt([mk('scriptorium', 1)])).toBe(true);
-    expect(maxTalentTierIndex([mk('scriptorium', 25)])).toBeGreaterThan(
-      maxTalentTierIndex([mk('scriptorium', 1)]),
-    );
-  });
 });
 
-describe('buildings — nouveaux (fragments + comptoir)', () => {
-  it('Incubateur : produit de la poussière d’âme (fragments) ET plafonne le rang', () => {
-    expect(buildingType('incubator')?.resource).toBe('fragments');
-    expect(buildingProdPerHour(mk('incubator', 6))).toBeGreaterThan(0);
-    expect(collectable([mk('incubator', 5, -10 * H)], 0).fragments).toBeGreaterThan(0);
-  });
-  it('Scriptorium : produit de la poussière d’encre (ink_dust) ET plafonne le rang', () => {
-    expect(buildingType('scriptorium')?.resource).toBe('ink_dust');
-    expect(buildingProdPerHour(mk('scriptorium', 6))).toBeGreaterThan(0);
-    expect(collectable([mk('scriptorium', 5, -10 * H)], 0).ink_dust).toBeGreaterThan(0);
-    expect(buildingScales('scriptorium')).toBe(true);
-  });
+describe('buildings — comptoir', () => {
   it('Comptoir : taux or→poussière = 0 sans bâtiment, croît avec le niveau', () => {
     expect(comptoirRate([])).toBe(0);
     expect(goldToDust([], 1000)).toBe(0);
@@ -122,15 +91,15 @@ describe('buildings — production', () => {
     expect(buildingAccrued(b, 1000 * H)).toBe(Math.floor(buildingStorageCap(b)));
   });
   it('déterministe (même building + même now → même accumulation)', () => {
-    const b = mk('stone_vein', 7, 123);
+    const b = mk('dust_vein', 7, 123);
     expect(buildingAccrued(b, 123 + 3 * H)).toBe(buildingAccrued(b, 123 + 3 * H));
   });
   it('collectable : agrège par ressource', () => {
     const now = 20 * H;
-    const bs = [mk('dust_vein', 8, 0), mk('dust_vein', 4, 0), mk('stone_vein', 6, 0)];
+    const bs = [mk('dust_vein', 8, 0), mk('dust_vein', 4, 0), mk('energy_font', 6, 0)];
     const c = collectable(bs, now);
     expect(c.dust).toBe(buildingAccrued(bs[0]!, now) + buildingAccrued(bs[1]!, now));
-    expect(c.stone).toBe(buildingAccrued(bs[2]!, now));
+    expect(c.energy).toBe(buildingAccrued(bs[2]!, now));
   });
   it('type inconnu → prod 0 (robustesse)', () => {
     expect(buildingProdPerHour(mk('inexistant', 5))).toBe(0);
@@ -146,9 +115,9 @@ describe('buildings — production', () => {
 });
 
 describe('buildings — registre extensible', () => {
-  it('les 2 filons de base : producteurs, débloqués dès le début', () => {
+  it('filons de base : producteurs, débloqués dès le début', () => {
     expect(buildingType('dust_vein')?.resource).toBe('dust');
-    expect(buildingType('stone_vein')?.resource).toBe('stone');
+    expect(buildingType('energy_font')?.resource).toBe('energy');
     expect(buildingUnlockLevel('dust_vein')).toBe(1);
   });
 });
@@ -174,7 +143,7 @@ describe('buildings — déblocage & unicité (utilitaires)', () => {
     expect(canBuildType('dust_vein', 5, [])).toBe(true);
     expect(canBuildType('dust_vein', 5, [mk('dust_vein', 3, 0, 0)])).toBe(false); // déjà posé
     // Un autre type reste constructible.
-    expect(canBuildType('stone_vein', 5, [mk('dust_vein', 3, 0, 0)])).toBe(true);
+    expect(canBuildType('energy_font', 5, [mk('dust_vein', 3, 0, 0)])).toBe(true);
   });
 });
 
@@ -213,21 +182,6 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
     expect(expeditionsUnlocked([mk('dust_vein', 5)])).toBe(false);
     expect(expeditionsUnlocked([mk('outpost', 1)])).toBe(true);
   });
-  it('incubatorBuilt = true seulement avec un incubateur (débloque la fusion)', () => {
-    expect(incubatorBuilt([])).toBe(false);
-    expect(incubatorBuilt([mk('outpost', 3)])).toBe(false);
-    expect(incubatorBuilt([mk('incubator', 1)])).toBe(true);
-  });
-  it('maxFuseTierIndex : ALIGNÉ sur la courbe des drops (√ rankCeiling ×5+4)', () => {
-    expect(maxFuseTierIndex([])).toBe(-1); // pas d'incubateur → aucune infusion
-    expect(maxFuseTierIndex([mk('incubator', 1)])).toBe(9); // F★5
-    expect(maxFuseTierIndex([mk('incubator', 4)])).toBe(14); // E★5
-    expect(maxFuseTierIndex([mk('incubator', 16)])).toBe(24); // C★5
-    expect(maxFuseTierIndex([mk('incubator', 25)])).toBe(29); // B★5
-    expect(maxFuseTierIndex([mk('incubator', 80)])).toBe(49); // SSS★5
-    // croît avec le niveau, plafonné à 49
-    expect(maxFuseTierIndex([mk('incubator', 200)])).toBe(49);
-  });
   it('travelTimeMult < 1 et décroît avec le niveau (−1,5 %/niv, plancher −60 % au niv.40)', () => {
     expect(travelTimeMult([])).toBe(1);
     expect(travelTimeMult([mk('outpost', 1)])).toBeCloseTo(0.985, 5); // −1,5 %
@@ -252,15 +206,17 @@ describe('filons — report du reliquat à la récolte', () => {
   });
 
   it('un filon lent n’est pas affamé par des récoltes fréquentes', () => {
-    let b = mk('stone_vein', 1, 0); // 0,16/h
+    let b = mk('dust_vein', 1, 0); // 0,35/h
     let total = 0;
-    const step = 0.5 * H; // récolte toutes les 30 min (bien plus vite que 1 unité/6,25 h)
+    const step = 0.5 * H; // récolte toutes les 30 min (< 1 unité/récolte → test du report)
     for (let now = step; now <= 20 * H; now += step) {
       total += buildingAccrued(b, now, 1);
       b = { ...b, collectedAt: nextCollectedAt(b, now, 1) };
     }
-    // 20 h × 0,16/h = 3,2 → on récupère 3 (et non 0 comme avec l’ancien reset à `now`).
-    expect(total).toBe(3);
+    // Le report du reliquat → on récupère le même total qu'une récolte unique sur 20 h
+    // (et non 0 comme avec l’ancien reset à `now`).
+    expect(total).toBe(buildingAccrued(mk('dust_vein', 1, 0), 20 * H, 1));
+    expect(total).toBeGreaterThan(0);
   });
 
   it('un utilitaire (perHr = 0) garde son collectedAt', () => {

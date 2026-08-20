@@ -176,29 +176,13 @@
 
       <!-- Récolte des filons (visible dès qu'il y a quelque chose à récolter) -->
       <button
-        v-if="
-          readyTotal.dust +
-            readyTotal.stone +
-            readyTotal.energy +
-            readyTotal.parchemins +
-            readyTotal.fragments +
-            readyTotal.ink_dust >
-          0
-        "
+        v-if="readyTotal.dust + readyTotal.energy > 0"
         class="collect-pill"
         @click="collectAll"
       >
         🧺 Récolter
         <span v-if="readyTotal.dust" class="cp-r"
           ><DustIcon variant="dust" />{{ readyTotal.dust }}</span
-        >
-        <span v-if="readyTotal.stone" class="cp-r">💎{{ readyTotal.stone }}</span>
-        <span v-if="readyTotal.parchemins" class="cp-r">📜{{ readyTotal.parchemins }}</span>
-        <span v-if="readyTotal.fragments" class="cp-r"
-          ><DustIcon variant="soul" />{{ readyTotal.fragments }}</span
-        >
-        <span v-if="readyTotal.ink_dust" class="cp-r"
-          ><DustIcon variant="ink" />{{ readyTotal.ink_dust }}</span
         >
         <span v-if="readyTotal.energy" class="cp-r">⚡{{ readyTotal.energy }}</span>
       </button>
@@ -410,7 +394,7 @@
         <div class="coll-haul">
           <span v-if="lastOutcome.gold">🪙 +{{ lastOutcome.gold }}</span>
           <span v-if="lastOutcome.dust">✨ +{{ lastOutcome.dust }}</span>
-          <span v-if="lastOutcome.stones">💎 +{{ lastOutcome.stones }}</span>
+          <span v-if="lastOutcome.enchantScrolls">📜 +{{ lastOutcome.enchantScrolls }}</span>
           <span v-if="lastOutcome.key">🗝️ +{{ lastOutcome.key }}</span>
           <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item"
             >🎁 {{ it.name }}</span
@@ -447,7 +431,7 @@ import GameLoader from '@/components/GameLoader.vue';
 import DustIcon from '@/components/DustIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
-import { playerWithGear, RARITY_RANK, tierToRankQ } from '@/lib/items';
+import { playerWithGear, RARITY_RANK } from '@/lib/items';
 import {
   BUILDING_TYPES,
   buildingType,
@@ -468,8 +452,6 @@ import {
   labyrinthLuckBonus,
   bossAltarRollFloor,
   bossRewardCount,
-  maxFuseTierIndex,
-  maxTalentTierIndex,
   goldToDust,
   BUILD,
   type Building,
@@ -734,15 +716,7 @@ function buildingEffectAt(b: Building, level: number): string {
   if (!t) return '';
   const at: Building = { ...b, level };
   if (t.category === 'utility') return utilityEffectLabel(at);
-  const prod = `${buildingProdPerHour(at).toFixed(1)} ${RES_EMOJI[t.resource ?? 'dust'] ?? '✨'}/h`;
-  // Bâtiment COMBINÉ (produit une poussière ET plafonne un rang) → on montre les deux,
-  // piloté par `capsRank` (data-driven, pas d'id en dur dans la vue).
-  if (t.capsRank) {
-    const cap = t.capsRank === 'familiar' ? maxFuseTierIndex([at]) : maxTalentTierIndex([at]);
-    const rq = tierToRankQ(Math.max(0, cap));
-    return `${prod} · rang max ${rq.rank}★${rq.quality}`;
-  }
-  return prod;
+  return `${buildingProdPerHour(at).toFixed(1)} ${RES_EMOJI[t.resource ?? 'dust'] ?? '✨'}/h`;
 }
 function filonProdLabel(b: Building): string {
   return buildingEffectAt(b, b.level);

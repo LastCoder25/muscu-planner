@@ -409,16 +409,15 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, { keys: cur.keys - 1 });
     return true;
   }
-  // Crédite le butin d'une expédition/Labyrinthe (or + poussière + pierres 💎 +
-  // objets au sac/équipés vides ; un familier passe simplement dans `drops`).
+  // Crédite le butin d'une expédition/Labyrinthe (or + poussière + parchemins
+  // d'enchant 📜 + objets au sac/équipés vides ; un familier passe simplement dans `drops`).
   async function applyExpedition(
     userId: string,
     input: {
       gold: number;
       dust: number;
       drops: Item[];
-      stones?: number;
-      fragments?: number;
+      enchantScrolls?: number;
       clearedDungeonId?: string; // palier de Labyrinthe nettoyé (préfixe `laby:…`)
     },
   ) {
@@ -433,8 +432,7 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, {
       gold: cur.gold + input.gold,
       dust: cur.dust + input.dust,
-      stones: cur.stones + (input.stones ?? 0),
-      fragments: cur.fragments + (input.fragments ?? 0), // 🧩 coffres du Labyrinthe
+      enchant_scrolls: cur.enchant_scrolls + (input.enchantScrolls ?? 0),
       equipped: dist.equipped,
       inventory: dist.inventory,
       cleared_dungeons: cleared,
@@ -831,7 +829,7 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       gold: cur.gold + o.gold,
       dust: cur.dust + o.dust,
-      stones: cur.stones + (o.stones ?? 0),
+      enchant_scrolls: cur.enchant_scrolls + (o.enchantScrolls ?? 0),
       login_energy: cur.login_energy + (o.energy ?? 0), // ⚡ mine → énergie de jeu
       keys: cur.keys + o.key,
       inventory,
