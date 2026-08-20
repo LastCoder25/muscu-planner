@@ -2725,7 +2725,14 @@ async function doEnchantTalent(id: string) {
     });
   else if (res.protectionUsed)
     $q.notify({ type: 'info', message: '🛡️ Échec protégé — enchant préservé.', position: 'top' });
-  else $q.notify({ type: 'negative', message: '💥 Échec — retombé à +0.', position: 'top' });
+  else if (res.resetTo0)
+    $q.notify({ type: 'negative', message: '💥 Échec — retombé à +0.', position: 'top' });
+  else
+    $q.notify({
+      type: 'warning',
+      message: `Échec — rien perdu (reste à +${res.enchant}). Retour à +0 seulement à partir de +4.`,
+      position: 'top',
+    });
 }
 // Titre du bouton d'enchant d'un talent (rappelle le risque en zone dangereuse).
 function enchantTitleTalent(t: { enchant: number }): string {
@@ -4098,7 +4105,13 @@ function doEnchant(itemId: string) {
         position: 'top',
       });
     } else {
-      $q.notify({ type: 'warning', message: 'Échec (zone sûre : rien perdu).', position: 'top' });
+      // Échec SOUS la zone de danger (objet ≤ +3) : la tentative peut rater (taux < 100 %
+      // dès +2) mais l'enchant est CONSERVÉ — le retour à +0 ne commence qu'à partir de +4.
+      $q.notify({
+        type: 'warning',
+        message: `Échec — rien perdu (reste à +${r.enchant}). Le retour à +0 ne concerne que les tentatives à partir de +4.`,
+        position: 'top',
+      });
     }
   });
 }
