@@ -467,13 +467,15 @@
                     :title="enchantTitleTalent(t)"
                     @click="doEnchantTalent(t.id)"
                   >
-                    <template v-if="!canEnchant(t.enchant)">⚡ Max</template>
+                    <template v-if="!canEnchant(t.enchant)"
+                      >📜<span class="gu-up">↑</span> Max</template
+                    >
                     <template v-else
-                      >⚡ +{{ t.enchant + 1 }} ·
+                      >📜<span class="gu-up">↑</span> +{{ t.enchant + 1 }} ·
                       {{ Math.round(enchantSuccessRate(t.enchant) * 100) }}%</template
                     >
                   </button>
-                  <!-- 🔧 Grade +1 (rang/qualité) : poussière d'encre, plafonné au grade du niveau. -->
+                  <!-- ⭐↑ Grade +1 (rang/qualité) : poussière d'encre, plafonné au grade du niveau. -->
                   <button
                     class="tal-b ghost"
                     :disabled="t.tier >= maxGrade || char.row.ink_dust < talGradeCost(t.tier)"
@@ -484,9 +486,12 @@
                     "
                     @click="doInfuseTalentGrade(t.id)"
                   >
-                    <template v-if="t.tier >= maxGrade">🔧 Max</template>
+                    <template v-if="t.tier >= maxGrade"
+                      >⭐<span class="gu-up">↑</span> Max</template
+                    >
                     <template v-else
-                      >🔧 +1·{{ talGradeCost(t.tier) }}<DustIcon variant="ink"
+                      >⭐<span class="gu-up">↑</span> +1·{{ talGradeCost(t.tier)
+                      }}<DustIcon variant="ink"
                     /></template>
                   </button>
                   <button
@@ -574,13 +579,15 @@
                     :title="enchantTitle(f)"
                     @click="doEnchant(f.id)"
                   >
-                    <template v-if="!canEnchant(f.enchant ?? 0)">⚡ Max</template>
+                    <template v-if="!canEnchant(f.enchant ?? 0)"
+                      >📜<span class="gu-up">↑</span> Max</template
+                    >
                     <template v-else
-                      >⚡ +{{ (f.enchant ?? 0) + 1 }} ·
+                      >📜<span class="gu-up">↑</span> +{{ (f.enchant ?? 0) + 1 }} ·
                       {{ Math.round(enchantSuccessRate(f.enchant ?? 0) * 100) }}%</template
                     >
                   </button>
-                  <!-- 🔧 Grade +1 (rang/qualité) : poussière d'âme, plafonné au grade du niveau. -->
+                  <!-- ⭐↑ Grade +1 (rang/qualité) : poussière d'âme, plafonné au grade du niveau. -->
                   <button
                     class="tal-b ghost"
                     :disabled="gradeCapped(f) || char.row.fragments < gradeStepCost(f)"
@@ -591,9 +598,10 @@
                     "
                     @click="doInfuseFamiliarGrade(f)"
                   >
-                    <template v-if="gradeCapped(f)">🔧 Max</template>
+                    <template v-if="gradeCapped(f)">⭐<span class="gu-up">↑</span> Max</template>
                     <template v-else
-                      >🔧 +1·{{ gradeStepCost(f) }}<DustIcon variant="soul"
+                      >⭐<span class="gu-up">↑</span> +1·{{ gradeStepCost(f)
+                      }}<DustIcon variant="soul"
                     /></template>
                   </button>
                   <button
@@ -721,13 +729,13 @@
                   @click.stop="doEnchant(char.row.equipped[slot]!.id)"
                 >
                   <template v-if="!canEnchant(char.row.equipped[slot]!.enchant ?? 0)"
-                    >⚡ Max</template
+                    >📜<span class="gu-up">↑</span> Max</template
                   >
                   <template v-else
-                    >⚡
+                    >📜<span class="gu-up">↑</span>
                     {{
                       Math.round(enchantSuccessRate(char.row.equipped[slot]!.enchant ?? 0) * 100)
-                    }}% ⚡</template
+                    }}%</template
                   >
                 </button>
                 <!-- ⭐↑ Grade +1 (rang/qualité) : poussière ✨, plafonné au grade du niveau. -->
@@ -977,7 +985,7 @@
                       :title="enchantTitle(it)"
                       @click="doEnchant(it.id)"
                     >
-                      ⚡ +{{ (it.enchant ?? 0) + 1 }} ·
+                      📜<span class="gu-up">↑</span> +{{ (it.enchant ?? 0) + 1 }} ·
                       {{ Math.round(enchantSuccessRate(it.enchant ?? 0) * 100) }}%
                     </button>
                     <button
