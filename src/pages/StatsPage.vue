@@ -149,6 +149,53 @@
           </div>
         </div>
 
+        <!-- Radar d'équilibre musculaire (pics = séries par région) -->
+        <div class="sec-h">Équilibre musculaire</div>
+        <div class="grp-card radar-card">
+          <div v-if="totalSets > 0" class="radar-wrap">
+            <svg
+              class="radar"
+              viewBox="0 0 200 200"
+              role="img"
+              aria-label="Radar d’équilibre musculaire"
+            >
+              <!-- toile (anneaux + axes) -->
+              <polygon
+                v-for="(ring, i) in radarRings"
+                :key="'ring' + i"
+                class="radar-ring"
+                :points="ring"
+              />
+              <line
+                v-for="a in radarAxes"
+                :key="'ax' + a.key"
+                class="radar-axis"
+                :x1="RADAR.cx"
+                :y1="RADAR.cy"
+                :x2="a.x2"
+                :y2="a.y2"
+              />
+              <!-- forme (séries par région) -->
+              <polygon class="radar-shape" :points="radarShape" />
+              <!-- labels -->
+              <text
+                v-for="a in radarAxes"
+                :key="'lb' + a.key"
+                class="radar-lbl"
+                :x="a.lx"
+                :y="a.ly"
+                :text-anchor="a.anchor"
+              >
+                {{ a.key }}
+                <tspan class="radar-lbl-v">{{ a.sets }}</tspan>
+              </text>
+            </svg>
+          </div>
+          <div v-else class="vol-empty">
+            Pas encore de séries — le radar se remplit avec tes séances.
+          </div>
+        </div>
+
         <!-- Séries par groupe musculaire -->
         <div class="sec-h">Séries par groupe musculaire (total)</div>
         <div class="grp-card">
@@ -417,6 +464,60 @@ const muscuSessionCount = computed(
   () => entries.value.filter((e) => isMuscuLog(e.log) && e.log.exercises.length > 0).length,
 );
 const maxMuscle = computed(() => Math.max(1, ...muscleSets.value.map((g) => g.sets)));
+
+// ── Radar d'ÉQUILIBRE musculaire (façon stats de RPG : force/agilité/…) : 6 régions,
+// pics = nb de séries du groupe sur la période → on voit d'un coup si le perso est
+// équilibré ou déséquilibré (ticket 69db971c). ──
+const RADAR_REGIONS: { key: string; muscles: string[] }[] = [
+  { key: 'Poitrine', muscles: ['pectoraux'] },
+  { key: 'Épaules', muscles: ['épaules'] },
+  { key: 'Bras', muscles: ['biceps', 'triceps', 'avant-bras'] },
+  { key: 'Jambes', muscles: ['quadriceps', 'ischio-jambiers', 'mollets', 'fessiers'] },
+  { key: 'Core', muscles: ['abdominaux'] },
+  { key: 'Dos', muscles: ['dos'] },
+];
+const RADAR = { cx: 100, cy: 100, r: 66, n: RADAR_REGIONS.length };
+const radarData = computed(() => {
+  const bySets = new Map<string, number>();
+  for (const g of muscleSets.value) bySets.set(g.muscle.toLowerCase(), g.sets);
+  return RADAR_REGIONS.map((reg) => ({
+    key: reg.key,
+    sets: reg.muscles.reduce((a, m) => a + (bySets.get(m) ?? 0), 0),
+  }));
+});
+const radarMax = computed(() => Math.max(1, ...radarData.value.map((r) => r.sets)));
+function radarPoint(i: number, frac: number): { x: number; y: number } {
+  const ang = ((-90 + (360 / RADAR.n) * i) * Math.PI) / 180;
+  return {
+    x: RADAR.cx + RADAR.r * frac * Math.cos(ang),
+    y: RADAR.cy + RADAR.r * frac * Math.sin(ang),
+  };
+}
+const poly = (frac: (i: number) => number) =>
+  radarData.value
+    .map((_, i) => {
+      const p = radarPoint(i, frac(i));
+      return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    })
+    .join(' ');
+const radarShape = computed(() => poly((i) => radarData.value[i]!.sets / radarMax.value));
+const radarRings = computed(() => [0.25, 0.5, 0.75, 1].map((f) => poly(() => f)));
+const radarAxes = computed(() =>
+  radarData.value.map((r, i) => {
+    const end = radarPoint(i, 1);
+    const lbl = radarPoint(i, 1.28);
+    return {
+      key: r.key,
+      sets: r.sets,
+      x2: end.x.toFixed(1),
+      y2: end.y.toFixed(1),
+      lx: lbl.x,
+      ly: lbl.y,
+      anchor: lbl.x < 46 ? 'end' : lbl.x > 154 ? 'start' : 'middle',
+    };
+  }),
+);
+
 function barPct(n: number) {
   return Math.round((n / maxMuscle.value) * 100);
 }
@@ -713,6 +814,47 @@ onMounted(async () => {
   border: 1px solid var(--line-soft);
   border-radius: 14px;
   padding: 6px 14px;
+}
+/* Radar d'équilibre musculaire (toile + forme). */
+.radar-card {
+  padding: 8px;
+}
+.radar-wrap {
+  max-width: 320px;
+  margin: 0 auto;
+}
+.radar {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+.radar-ring {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.8;
+  opacity: 0.5;
+}
+.radar-axis {
+  stroke: var(--line);
+  stroke-width: 0.8;
+  opacity: 0.5;
+}
+.radar-shape {
+  fill: color-mix(in srgb, var(--accent) 28%, transparent);
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.radar-lbl {
+  fill: var(--text);
+  font-size: 9px;
+  font-weight: 600;
+}
+.radar-lbl-v {
+  fill: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 700;
 }
 /* Volume par période : sélecteur + carte du corps + détail par exo. */
 .vol-period {
