@@ -210,16 +210,8 @@
               </template>
 
               <template v-else>
-                <button
-                  v-if="!editMode && !isCardioTime && !isSetsMode"
-                  class="chrono-cta"
-                  :class="{ running }"
-                  @click="toggleChrono"
-                >
-                  <q-icon :name="running ? 'pause' : 'play_arrow'" size="20px" />
-                  {{ running ? 'Pause' : chronoSec > 0 ? 'Reprendre' : 'Démarrer le chrono' }}
-                  <span class="cc-time">{{ chronoDisplay }}</span>
-                </button>
+                <!-- Reps / Séries : PAS de chrono (ticket 9e9cfc67) — le chrono reste réservé
+                     au gainage (durée en secondes) et le cardio a sa saisie de minutes. -->
 
                 <!-- Cardio (minutes) : boutons rapides +N personnalisables (pas de poids) -->
                 <template v-if="isCardioTime">

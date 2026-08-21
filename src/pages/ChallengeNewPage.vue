@@ -154,25 +154,17 @@
             ⏱️ Durée
           </button>
         </div>
-        <div v-else-if="isDual" class="count-toggle">
-          <button :class="{ on: dualUnit === 'reps' }" @click="dualUnit = 'reps'">
-            🔢 Répétitions
-          </button>
-          <button :class="{ on: dualUnit === 'time' }" @click="dualUnit = 'time'">⏱️ Durée</button>
-        </div>
-        <div v-if="isDual" class="count-note">
-          💡 <b>{{ exercise?.name }}</b> se compte en répétitions ou en durée — choisis ci-dessus.
-        </div>
-        <!-- Comptage Reps / Séries (objectif en reps hors cardio uniquement). -->
-        <div v-if="unit === 'reps'" class="count-toggle">
-          <button :class="{ on: countMode === 'reps' }" @click="setCountMode('reps')">
-            🔢 Reps
-          </button>
-          <button :class="{ on: countMode === 'sets' }" @click="setCountMode('sets')">
-            📚 Séries
+        <!-- UN seul choix d'objectif : Reps / Séries / Durée (ticket fa27e9a8). « Durée »
+             n'apparaît que pour les exos rythmiques (corde, burpees…) ; le gainage (planche)
+             est en durée d'office (aucun toggle) et le cardio a son km/durée au-dessus. -->
+        <div v-else-if="isDual || unit === 'reps'" class="count-toggle">
+          <button :class="{ on: objMode === 'reps' }" @click="setObjMode('reps')">🔢 Reps</button>
+          <button :class="{ on: objMode === 'sets' }" @click="setObjMode('sets')">📚 Séries</button>
+          <button v-if="isDual" :class="{ on: objMode === 'time' }" @click="setObjMode('time')">
+            ⏱️ Durée
           </button>
         </div>
-        <div v-if="countMode === 'sets'" class="count-note">
+        <div v-if="objMode === 'sets'" class="count-note">
           Objectif en <b>séries</b> ; à la saisie tu renseignes reps + poids par série (comme le
           Défi 360). Formats <b>Fixe</b> et <b>Cumulé</b> uniquement.
         </div>
@@ -561,6 +553,21 @@ function setCountMode(m: 'reps' | 'sets') {
   if (m === 'sets' && format.value !== 'fixed' && format.value !== 'cumulative')
     format.value = 'fixed';
   reset();
+}
+// UN seul choix d'objectif (fusion unité + comptage, ticket fa27e9a8) : Reps / Séries /
+// Durée. « Durée » n'existe que pour les exos rythmiques dual-unit (corde, burpees…) ;
+// le cardio garde son propre choix km/durée. Les séries n'ont pas de sens en durée.
+const objMode = computed<'reps' | 'sets' | 'time'>(() =>
+  unit.value === 'time' ? 'time' : countMode.value === 'sets' ? 'sets' : 'reps',
+);
+function setObjMode(m: 'reps' | 'sets' | 'time') {
+  if (m === 'time') {
+    if (isDual.value) dualUnit.value = 'time';
+    setCountMode('reps'); // pas de séries en durée
+    return;
+  }
+  if (isDual.value) dualUnit.value = 'reps';
+  setCountMode(m);
 }
 const reminderOn = ref(false);
 const reminderTime = ref('18:00');
