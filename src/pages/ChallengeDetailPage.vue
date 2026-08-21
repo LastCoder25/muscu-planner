@@ -210,17 +210,29 @@
                 <!-- Reps / Séries : PAS de chrono (ticket 9e9cfc67) — le chrono est réservé au
                      temps (gainage/conditionnement, bloc ci-dessus). -->
 
-                <!-- Séries : ＋1/＋2/＋3/＋4 → fenêtre reps + poids -->
-                <div v-if="isSetsMode" class="quick-row">
-                  <button v-for="n in [1, 2, 3, 4]" :key="n" class="add" @click="openAddSet(n)">
-                    ＋{{ n }}
-                  </button>
-                </div>
+                <!-- Séries : un seul bouton ＋ 1 série → fenêtre reps + poids (harmonisé 360) -->
+                <button v-if="isSetsMode" class="add-set" @click="openAddSet(1)">
+                  ＋ 1 série (reps + poids)
+                </button>
 
                 <!-- Reps : un seul bouton ＋ → fenêtre reps + poids -->
                 <button v-else class="add-set" @click="openAddSet(1)">
                   ＋ Ajouter (reps + poids)
                 </button>
+
+                <!-- Barre de segments (progression en SÉRIES) — comme le Défi 360. -->
+                <div
+                  v-if="isSetsMode && todayTarget && todayTarget <= 16"
+                  class="set-seg-bar"
+                  :style="{ '--cols': todayTarget }"
+                >
+                  <span
+                    v-for="n in Math.max(todayTarget, doneToday)"
+                    :key="n"
+                    class="set-seg"
+                    :class="{ on: n <= doneToday, extra: n > todayTarget }"
+                  />
+                </div>
 
                 <div v-if="displayedSets.length" class="sets-log">
                   <div class="sets-log-h">
@@ -1461,6 +1473,25 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
+}
+/* Barre de segments (progression en SÉRIES) — même style que le Défi 360. */
+.set-seg-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 10px 0 0;
+}
+.set-seg {
+  flex: 0 0 calc((100% - (var(--cols, 10) - 1) * 3px) / var(--cols, 10));
+  height: 8px;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+.set-seg.on {
+  background: var(--accent);
+}
+.set-seg.extra.on {
+  background: var(--d1);
 }
 .sets-log {
   margin-top: 10px;

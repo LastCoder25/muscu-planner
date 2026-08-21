@@ -81,10 +81,18 @@
           <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
         </div>
         <div v-else class="leg-actions">
-          <button v-for="n in [1, 2, 3, 4]" :key="n" class="add" @click="openSet(leg, n)">
-            +{{ n }}
-          </button>
+          <button class="add" @click="openSet(leg, 1)">＋ 1 série</button>
           <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
+        </div>
+        <!-- Détail des séries faites (reps × poids, ou secondes en mode durée). -->
+        <div v-if="legSets(leg).length" class="leg-sets">
+          <span v-for="(s, i) in legSets(leg)" :key="i" class="leg-set-chip">
+            <template v-if="legMode(leg) === 'time'">{{ s.reps }} s</template>
+            <template v-else
+              >{{ s.reps }}<template v-if="s.weight">×{{ s.weight }}</template
+              ><template v-if="s.assisted"> ·a</template></template
+            >
+          </span>
         </div>
       </div>
 
@@ -124,6 +132,7 @@ import {
   legDone,
   legComplete,
   legMode,
+  legSets,
   legUnitLabel,
   legLastReps,
   legLastWeight,
@@ -445,6 +454,21 @@ onMounted(async () => {
 .leg-actions {
   display: flex;
   gap: 6px;
+}
+/* Détail des séries faites : petites puces reps×poids sous les boutons. */
+.leg-sets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.leg-set-chip {
+  font-size: 11px;
+  color: var(--dim);
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-variant-numeric: tabular-nums;
 }
 .add {
   flex: 1;
