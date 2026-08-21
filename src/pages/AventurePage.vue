@@ -240,7 +240,6 @@
                 @click="ranksOpen = true"
               >
                 {{ rank.name }}
-                <span class="pt-rank-star">{{ rank.star }}/5</span>
               </button>
               <div class="pt-mini pow" :title="`Puissance ${fmtPow(combatPowerVal)}`">
                 <svg viewBox="0 0 44 44" aria-hidden="true">
@@ -263,13 +262,18 @@
           <!-- Tous les rangs de prestige (clic sur le nom du rang). Cosmétique, dérivé du niveau. -->
           <q-dialog v-model="ranksOpen" position="bottom">
             <q-card class="adv-modal">
-              <button class="adv-modal-x" aria-label="Fermer" type="button" @click="ranksOpen = false">
+              <button
+                class="adv-modal-x"
+                aria-label="Fermer"
+                type="button"
+                @click="ranksOpen = false"
+              >
                 ✕
               </button>
               <div class="sec-title">Rangs de prestige</div>
               <div class="sec-hint">
-                Cosmétique, dérivé de ton <b>niveau</b> (1 rang = 10 niveaux, 5 étoiles).
-                N'affecte ni les stats ni le combat.
+                Cosmétique, dérivé de ton <b>niveau</b> (1 rang = 10 niveaux, 5 étoiles). N'affecte
+                ni les stats ni le combat.
               </div>
               <div class="ranks-list">
                 <div
@@ -725,6 +729,26 @@
                       Math.round(enchantSuccessRate(char.row.equipped[slot]!.enchant ?? 0) * 100)
                     }}% ⚡</template
                   >
+                </button>
+                <!-- 🔧 Grade +1 (rang/qualité) : poussière ✨, plafonné au grade du niveau. -->
+                <button
+                  class="slot-up grade"
+                  :disabled="
+                    onExpedition ||
+                    gradeCapped(char.row.equipped[slot]!) ||
+                    char.row.dust < gradeStepCost(char.row.equipped[slot]!)
+                  "
+                  :title="
+                    gradeCapped(char.row.equipped[slot]!)
+                      ? 'Grade au plafond de ton niveau'
+                      : 'Monter le grade (rang/qualité) — poussière ✨'
+                  "
+                  @click.stop="doInfuseItemGrade(char.row.equipped[slot]!)"
+                >
+                  <template v-if="gradeCapped(char.row.equipped[slot]!)">🔧 Max</template>
+                  <template v-else
+                    >🔧 {{ gradeStepCost(char.row.equipped[slot]!) }}<DustIcon variant="dust"
+                  /></template>
                 </button>
                 <button class="slot-remove" :disabled="onExpedition" @click="doUnequip(slot)">
                   Retirer
@@ -4944,12 +4968,6 @@ onUnmounted(() => {
   letter-spacing: 0.4px;
   color: color-mix(in srgb, var(--rank-c, var(--accent)) 62%, var(--text));
 }
-.pt-rank-star {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  color: var(--dim);
-}
 /* Liste des rangs de prestige (modale) */
 .ranks-list {
   display: flex;
@@ -5474,7 +5492,7 @@ onUnmounted(() => {
 .slot-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   margin-top: auto;
 }
 .slot-up {
@@ -5487,6 +5505,15 @@ onUnmounted(() => {
   font-weight: 700;
   font-size: 11px;
   cursor: pointer;
+}
+/* Grade (🔧) : tonalité « outil » neutre → ne concurrence pas l'accent de l'enchant (⚡). */
+.slot-up.grade {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 /* Bouton « À fond » (infuser au cap) : accent plein pour le distinguer du +1. */
 .slot-up.alt {

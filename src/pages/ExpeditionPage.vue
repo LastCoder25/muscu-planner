@@ -64,9 +64,10 @@
             <button type="button" class="lt-go" :disabled="keys < 1" @click="start(t.laby)">
               {{ keys > 0 ? 'Lancer −1 🗝️' : 'clé ?' }}
             </button>
-            <!-- Auto : réservé aux paliers DÉJÀ nettoyés (le run se joue tout seul). -->
+            <!-- Auto : réservé aux paliers DÉJÀ nettoyés (le run se joue tout seul).
+                 Admin (mon compte) : disponible dès qu'un palier est débloqué. -->
             <button
-              v-if="t.cleared"
+              v-if="t.cleared || auth.isAdmin"
               type="button"
               class="lt-go auto"
               :disabled="keys < 1"
