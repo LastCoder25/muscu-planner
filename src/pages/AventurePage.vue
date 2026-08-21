@@ -2460,7 +2460,7 @@ const STAR_PATH =
 const STAR_ANGLES = [-150, -120, -90, -60, -30]; // degrés (0=droite, 90=bas) → arc du haut
 function starTf(i: number): string {
   const a = ((STAR_ANGLES[i] ?? -90) * Math.PI) / 180;
-  const R = 47;
+  const R = 50; // sur l'anneau (bord du cadre) → étoiles centrées sur l'épaisseur du cercle
   return `translate(${(50 + R * Math.cos(a)).toFixed(1)} ${(50 + R * Math.sin(a)).toFixed(1)})`;
 }
 // Combattant SANS équipement ni talents (stats de fond seules) → base de la
@@ -4769,38 +4769,39 @@ onUnmounted(() => {
 }
 .pt-frame {
   position: relative;
-  width: 150px;
-  height: 150px;
+  width: 172px;
+  height: 172px;
   border-radius: 50%;
   background: radial-gradient(
     circle at 50% 42%,
     color-mix(in srgb, var(--rank-c, var(--accent)) 22%, var(--surface)),
     color-mix(in srgb, var(--rank-c, var(--accent)) 6%, var(--surface)) 70%
   );
-  border: 3px solid color-mix(in srgb, var(--rank-c, var(--accent)) 78%, transparent);
+  border: 4px solid color-mix(in srgb, var(--rank-c, var(--accent)) 80%, transparent);
   box-shadow:
-    0 0 18px color-mix(in srgb, var(--rank-c, var(--accent)) 34%, transparent),
-    inset 0 0 22px color-mix(in srgb, var(--rank-c, var(--accent)) 16%, transparent);
+    0 0 20px color-mix(in srgb, var(--rank-c, var(--accent)) 34%, transparent),
+    inset 0 0 24px color-mix(in srgb, var(--rank-c, var(--accent)) 16%, transparent);
 }
 .pt-avatar {
   position: absolute;
   left: 50%;
   top: 53%;
   transform: translate(-50%, -50%);
-  width: 104px;
-  height: 128px;
+  width: 120px;
+  height: 148px;
 }
 .pt-stars {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  inset: -4px; /* couvre aussi l'épaisseur de l'anneau → étoiles centrées dessus */
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
   overflow: visible;
   pointer-events: none; /* laisse cliquer le familier/talent de l'avatar dessous */
 }
+/* Étoiles VIDES : noires opaques (+ liseré) → on voit une étoile, pas l'anneau au travers. */
 .pt-star {
-  fill: transparent;
-  stroke: color-mix(in srgb, var(--rank-c, var(--accent)) 40%, var(--line));
+  fill: #14100a;
+  stroke: color-mix(in srgb, var(--rank-c, var(--accent)) 55%, var(--dim));
   stroke-width: 1;
 }
 .pt-star.on {
