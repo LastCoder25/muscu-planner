@@ -163,6 +163,20 @@
                 {{ running ? 'Pause' : doneToday > 0 ? 'Reprendre' : 'Démarrer' }}
                 <span class="cc-time">{{ chronoDisplay }}</span>
               </button>
+              <div class="chrono-hint">
+                ⏸️ Chaque <b>pause</b> enregistre une série (sa durée) dans le journal du jour.
+              </div>
+            </div>
+            <!-- Journal des « séries » de durée du jour (une par pause), comme les reps/série. -->
+            <div v-if="timeSets.length" class="sets-log">
+              <div class="sets-log-h">Séries du jour</div>
+              <div v-for="(s, i) in timeSets" :key="i" class="set-item">
+                <span class="si-n">Série {{ i + 1 }}</span>
+                <span class="si-v">{{ fmtDur(s.sec ?? 0) }}</span>
+              </div>
+              <button v-if="!todayClosed" class="corr-link" @click="undoLastSet">
+                ↩ Retirer la dernière
+              </button>
             </div>
           </template>
 
@@ -462,6 +476,10 @@ const exoSteps = computed(() =>
   ch.value ? exerciseInstructions(ch.value.exercise_id) : undefined,
 );
 const running = ref(false);
+// Chrono gainage : elapsed_sec au DÉBUT du segment courant → à la pause, le segment
+// (elapsed_sec − segStart) est enregistré comme une « série » (durée) affichée dans le
+// journal du jour, comme les reps/série des autres exos.
+let segStart = 0;
 let tick: ReturnType<typeof setInterval> | undefined;
 const scrollBox = ref<HTMLElement | null>(null);
 const celebrate = ref(false); // animation de fin de challenge
@@ -770,6 +788,15 @@ function addReps(n: number) {
 // ET garde le détail (poids → tonnage) ; bouton « ＋ série (poids) » secondaire.
 const isSetsMode = computed(() => ch.value?.config.count_mode === 'sets');
 const todaySets = computed<ChallengeSet[]>(() => entryOf(dayIndex.value)?.sets ?? []);
+// Séries de DURÉE du jour (gainage) : une par pause du chrono (champ `sec`).
+const timeSets = computed<ChallengeSet[]>(() =>
+  todaySets.value.filter((s: ChallengeSet) => (s.sec ?? 0) > 0),
+);
+// Durée d'une série au format choisi (secondes ou m:ss selon config.time_display).
+function fmtDur(sec: number): string {
+  const s = Math.max(0, Math.round(sec));
+  return mmss.value ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s} s`;
+}
 // Cumulatif (objectif en REPS TOTALES) : les séries sont réparties sur plusieurs
 // jours → on montre TOUTES les séries saisies (avec le jour), pas seulement celles
 // d'aujourd'hui. Sinon, la vue par jour suffit.
@@ -826,7 +853,13 @@ function undoLastSet() {
   const e = ensureToday();
   if (!e.sets?.length) return;
   const removed = e.sets.pop()!;
-  e.done = isSetsMode.value ? e.sets.length : Math.max(0, e.done - (removed.reps || 0));
+  if (removed.sec) {
+    // Série de DURÉE (gainage) : on retire sa durée du total ET du chrono.
+    e.elapsed_sec = Math.max(0, e.elapsed_sec - removed.sec);
+    e.done = Math.max(0, e.done - removed.sec);
+  } else {
+    e.done = isSetsMode.value ? e.sets.length : Math.max(0, e.done - (removed.reps || 0));
+  }
   syncComplete(e);
   void afterChange();
 }
@@ -834,6 +867,7 @@ function toggleChrono() {
   if (!inToday.value) return;
   running.value = !running.value;
   if (running.value) {
+    segStart = ensureToday().elapsed_sec; // début du segment courant
     clearInterval(tick);
     tick = setInterval(() => {
       const e = ensureToday();
@@ -845,6 +879,12 @@ function toggleChrono() {
     }, 1000);
   } else {
     clearInterval(tick);
+    // PAUSE : on fige le segment comme une « série » (durée) dans le journal du jour.
+    if (isGainageTime.value) {
+      const e = ensureToday();
+      const seg = Math.max(0, e.elapsed_sec - segStart);
+      if (seg > 0) (e.sets ??= []).push({ reps: 0, sec: seg });
+    }
     void afterChange(); // sauvegarde à la pause
   }
 }
@@ -1563,6 +1603,12 @@ onBeforeUnmount(() => {
 .cardio-note {
   margin-top: 8px;
   font-size: 12px;
+  color: var(--dim);
+  text-align: center;
+}
+.chrono-hint {
+  margin-top: 6px;
+  font-size: 11px;
   color: var(--dim);
   text-align: center;
 }

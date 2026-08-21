@@ -44,6 +44,7 @@ export interface ChallengeSet {
   reps: number;
   weight?: number | null; // charge (kg) — poids du corps = vide
   assisted?: boolean; // poids du corps assisté (élastique/machine) → XP ×0,6
+  sec?: number; // exo au TEMPS (chrono) : durée de cette « série » (secondes). reps = 0.
 }
 
 // Progressif basé sur le MAX (cf. formule) : J1 = start_coef × MAX,
