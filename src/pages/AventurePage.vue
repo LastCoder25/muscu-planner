@@ -205,14 +205,34 @@
                   />
                 </svg>
               </div>
-              <!-- Niveau (bas-gauche) et Puissance (bas-droite), même ligne, bords d'écran. -->
-              <div class="pt-corner lvl">
-                <span class="ptc-l">Niveau</span>
-                <b class="ptc-v font-display">{{ c.level.level }}</b>
+              <!-- Niveau (bas-gauche, anneau de PROGRESSION + icône ⬆️) et Puissance
+                   (bas-droite, anneau plein SANS progression + icône ⚔️), aux bords d'écran. -->
+              <div class="pt-mini lvl" :title="`Niveau ${c.level.level} · ${c.level.progressPct}%`">
+                <svg viewBox="0 0 44 44" aria-hidden="true">
+                  <circle class="ptm-track" cx="22" cy="22" r="18" />
+                  <circle
+                    class="ptm-arc"
+                    cx="22"
+                    cy="22"
+                    r="18"
+                    stroke-dasharray="113.1"
+                    :stroke-dashoffset="113.1 * (1 - c.level.progressPct / 100)"
+                    transform="rotate(-90 22 22)"
+                  />
+                  <text class="ptm-v font-display" x="22" y="27" text-anchor="middle">
+                    {{ c.level.level }}
+                  </text>
+                </svg>
+                <span class="ptm-ic">⬆️</span>
               </div>
-              <div class="pt-corner pow">
-                <span class="ptc-l">Puissance</span>
-                <b class="ptc-v font-display">⚔️ {{ fmtPow(combatPowerVal) }}</b>
+              <div class="pt-mini pow" :title="`Puissance ${fmtPow(combatPowerVal)}`">
+                <svg viewBox="0 0 44 44" aria-hidden="true">
+                  <circle class="ptm-track full" cx="22" cy="22" r="18" />
+                  <text class="ptm-v font-display" x="22" y="27" text-anchor="middle">
+                    {{ fmtPow(combatPowerVal) }}
+                  </text>
+                </svg>
+                <span class="ptm-ic">⚔️</span>
               </div>
             </div>
             <div class="pt-rank font-display">{{ rank.name }}</div>
@@ -387,7 +407,9 @@
                   <!-- ⚡ Enchant (gamble) : parchemins 📜 (+ protection optionnelle). -->
                   <button
                     class="tal-b ghost"
-                    :disabled="!canEnchant(t.enchant) || char.row.enchant_scrolls < 1"
+                    :disabled="
+                      onExpedition || !canEnchant(t.enchant) || char.row.enchant_scrolls < 1
+                    "
                     :title="enchantTitleTalent(t)"
                     @click="doEnchantTalent(t.id)"
                   >
@@ -492,7 +514,9 @@
                   <!-- ⚡ Enchant (gamble) : parchemins 📜 (+ protection optionnelle). -->
                   <button
                     class="tal-b ghost"
-                    :disabled="!canEnchant(f.enchant ?? 0) || char.row.enchant_scrolls < 1"
+                    :disabled="
+                      onExpedition || !canEnchant(f.enchant ?? 0) || char.row.enchant_scrolls < 1
+                    "
                     :title="enchantTitle(f)"
                     @click="doEnchant(f.id)"
                   >
@@ -603,10 +627,9 @@
             </div>
             <template v-if="char.row.equipped[slot]">
               <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
+              <!-- Méta : rang · qualité · (+enchant) · (🧩 set). Ligne UNIQUE (nowrap) → la
+                   présence/absence d'un badge ne décale pas la carte (ticket layout). -->
               <div class="pills">
-                <span v-if="(char.row.equipped[slot]!.enchant ?? 0) > 0" class="gpill ench"
-                  >+{{ char.row.equipped[slot]!.enchant }}</span
-                >
                 <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
                   RARITY_LABEL[char.row.equipped[slot]!.rarity]
                 }}</span>
@@ -617,29 +640,40 @@
                   title="Qualité (5 = meilleur)"
                   >{{ itemQuality(char.row.equipped[slot]) }}</span
                 >
-                <span v-if="char.row.equipped[slot]!.setId" class="gpill set">🧩 Set</span>
-              </div>
-              <div class="slot-eff">
-                {{ itemEffects(char.row.equipped[slot]!) }}
-              </div>
-              <button
-                class="slot-up"
-                :disabled="
-                  !canEnchant(char.row.equipped[slot]!.enchant ?? 0) || char.row.enchant_scrolls < 1
-                "
-                :title="enchantTitle(char.row.equipped[slot]!)"
-                @click.stop="doEnchant(char.row.equipped[slot]!.id)"
-              >
-                <template v-if="!canEnchant(char.row.equipped[slot]!.enchant ?? 0)"
-                  >⚡ Max (+{{ ENCHANT_MAX }})</template
+                <span v-if="(char.row.equipped[slot]!.enchant ?? 0) > 0" class="gpill ench"
+                  >+{{ char.row.equipped[slot]!.enchant }}</span
                 >
-                <template v-else
-                  >⚡ Enchanter → +{{ (char.row.equipped[slot]!.enchant ?? 0) + 1 }} ·
-                  {{ Math.round(enchantSuccessRate(char.row.equipped[slot]!.enchant ?? 0) * 100) }}%
-                  · 1📜</template
+                <span v-if="char.row.equipped[slot]!.setId" class="gpill set" title="Pièce de set"
+                  >🧩</span
                 >
-              </button>
-              <button class="slot-remove" @click="doUnequip(slot)">Retirer</button>
+              </div>
+              <div class="slot-eff">{{ itemEffects(char.row.equipped[slot]!) }}</div>
+              <!-- Actions ancrées EN BAS (slot-eff flexible) → alignées d'une carte à l'autre. -->
+              <div class="slot-actions">
+                <button
+                  class="slot-up"
+                  :disabled="
+                    onExpedition ||
+                    !canEnchant(char.row.equipped[slot]!.enchant ?? 0) ||
+                    char.row.enchant_scrolls < 1
+                  "
+                  :title="enchantTitle(char.row.equipped[slot]!)"
+                  @click.stop="doEnchant(char.row.equipped[slot]!.id)"
+                >
+                  <template v-if="!canEnchant(char.row.equipped[slot]!.enchant ?? 0)"
+                    >⚡ Max</template
+                  >
+                  <template v-else
+                    >⚡
+                    {{
+                      Math.round(enchantSuccessRate(char.row.equipped[slot]!.enchant ?? 0) * 100)
+                    }}% ⚡</template
+                  >
+                </button>
+                <button class="slot-remove" :disabled="onExpedition" @click="doUnequip(slot)">
+                  Retirer
+                </button>
+              </div>
               <!-- Badge : nb d'objets du SAC (même slot) au potentiel supérieur. Tap →
                      filtre le sac dessus. Cercle avec le 🎒 en fond. -->
               <button
@@ -854,7 +888,9 @@
                     </button>
                     <button
                       class="equip-btn ghost"
-                      :disabled="!canEnchant(it.enchant ?? 0) || char.row.enchant_scrolls < 1"
+                      :disabled="
+                        onExpedition || !canEnchant(it.enchant ?? 0) || char.row.enchant_scrolls < 1
+                      "
                       :title="enchantTitle(it)"
                       @click="doEnchant(it.id)"
                     >
@@ -2702,7 +2738,7 @@ async function doUnequipTalent(id: string) {
 // d'enchantement 📜 + éventuellement 1 protection 🛡️. Notif selon le résultat.
 async function doEnchantTalent(id: string) {
   const uid = auth.user?.id;
-  if (!uid) return;
+  if (!uid || expeBlocked()) return; // gelé pendant une expédition
   const before = char.row?.talents.find((t) => t.id === id)?.enchant ?? 0;
   const res = await char.enchantTalent(uid, id, enchantUseProtection.value);
   if (!res) {
@@ -4067,7 +4103,7 @@ function enchantTitle(it: Item): string {
 const enchantUseProtection = ref(false);
 function doEnchant(itemId: string) {
   const uid = auth.user?.id;
-  if (!uid) return;
+  if (!uid || expeBlocked()) return; // gelé pendant une expédition (héros parti avec son barda)
   void char.enchantItem(uid, itemId, enchantUseProtection.value).then((r) => {
     if (!r) {
       $q.notify({
@@ -4837,36 +4873,60 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
 }
-.pt-corner {
+/* Mini-médaillons Niveau / Puissance qui flanquent le portrait (bords d'écran). */
+.pt-mini {
   position: absolute;
-  bottom: 6px;
-  display: flex;
-  flex-direction: column;
-  line-height: 1;
+  bottom: 8px;
+  width: 58px;
+  height: 58px;
 }
-.pt-corner.lvl {
-  left: 4px;
-  align-items: flex-start;
+.pt-mini.lvl {
+  left: 2px;
 }
-.pt-corner.pow {
-  right: 4px;
-  align-items: flex-end;
-  text-align: right;
+.pt-mini.pow {
+  right: 2px;
 }
-.ptc-l {
-  font-size: 10px;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--dim);
+.pt-mini svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
-.ptc-v {
-  font-size: 26px;
+.ptm-track {
+  fill: var(--surface);
+  stroke: var(--line);
+  stroke-width: 3.5;
+}
+.ptm-track.full {
+  stroke: color-mix(in srgb, var(--accent) 60%, var(--line));
+}
+.ptm-arc {
+  fill: none;
+  stroke: var(--rank-c, var(--accent));
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+.ptm-v {
   font-weight: 700;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
-  color: var(--accent);
 }
-.pt-corner.lvl .ptc-v {
-  color: var(--rank-c, var(--accent));
+.pt-mini.lvl .ptm-v {
+  fill: var(--rank-c, var(--accent));
+}
+.pt-mini.pow .ptm-v {
+  fill: var(--accent);
+  font-size: 13px;
+}
+.ptm-ic {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 15px;
+  line-height: 1;
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 1px 2px;
 }
 
 /* Talents */
@@ -5034,7 +5094,9 @@ onUnmounted(() => {
   border-left-width: 3px;
   border-radius: 12px;
   padding: 10px 12px;
-  min-height: 92px;
+  /* Hauteur fixe : toutes les cartes identiques quel que soit le contenu (set/enchant/
+     effet à 1 ou 2 lignes) → l'affichage ne « bouge » plus d'une carte à l'autre. */
+  min-height: 118px;
   /* Cellule de grille : autoriser le rétrécissement (sinon un nom de set long
      force la colonne large → débordement à droite). */
   min-width: 0;
@@ -5245,13 +5307,26 @@ onUnmounted(() => {
   margin-top: 1px;
   margin-bottom: 2px;
 }
+/* Effet flexible + clampé à 2 lignes → hauteur stable, pousse les actions en bas. */
 .slot-eff {
   font-size: 11px;
   color: var(--dim);
+  flex: 1 1 auto;
+  min-height: 26px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Actions ancrées en bas → alignées d'une carte à l'autre. */
+.slot-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
 }
 .slot-up {
-  margin-top: 6px;
-  align-self: flex-start;
   border: 1px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
@@ -5290,8 +5365,6 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 .slot-remove {
-  margin-top: 4px;
-  align-self: flex-start;
   border: none;
   background: none;
   color: var(--dim);
@@ -5299,6 +5372,10 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   padding: 0;
+}
+.slot-remove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .slot-vide {
   font-size: 12px;
@@ -5457,6 +5534,12 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 5px;
   margin: 3px 0;
+}
+/* Dans une carte d'équipement : méta sur UNE ligne (pas de retour → pas de décalage). */
+.slot .pills {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  min-height: 16px;
 }
 .gpill {
   font-size: 10px;
