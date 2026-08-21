@@ -189,51 +189,47 @@
               @talent-click="talentsOpen = true"
             />
           </div>
-          <div class="hero">
-            <div class="lvl-ring">
+          <!-- EMBLÈME HÉROS : niveau + rang + puissance fusionnés. Le médaillon = l'anneau
+               de NIVEAU (arc = progression) teinté par la couleur du RANG ; au centre l'emoji
+               de rang + le niveau ; dessous le nom du rang + étoiles ; la PUISSANCE en gros. -->
+          <div class="crest" :style="{ '--rank-c': rank.color }">
+            <div
+              class="crest-medal"
+              :title="`Niveau ${c.level.level} · ${rank.name} ${rank.star}/5`"
+            >
               <svg viewBox="0 0 84 84" aria-hidden="true">
-                <circle cx="42" cy="42" r="38" fill="none" stroke="#000" stroke-width="5" />
+                <circle cx="42" cy="42" r="38" fill="none" stroke="#000" stroke-width="6" />
                 <circle
+                  class="crest-arc"
                   cx="42"
                   cy="42"
                   r="38"
                   fill="none"
-                  stroke="var(--accent)"
-                  stroke-width="5"
+                  stroke="var(--rank-c)"
+                  stroke-width="6"
                   stroke-linecap="round"
                   stroke-dasharray="239"
                   :stroke-dashoffset="239 * (1 - c.level.progressPct / 100)"
                   transform="rotate(-90 42 42)"
                 />
               </svg>
-              <div class="ring-txt">
-                <div class="num font-display">{{ c.level.level }}</div>
-                <div class="cap">Niveau</div>
+              <div class="crest-txt">
+                <div class="crest-emo">{{ rank.emoji }}</div>
+                <div class="crest-lvl font-display">{{ c.level.level }}</div>
               </div>
             </div>
-            <div class="hero-info">
-              <div
-                class="hero-rank"
-                :style="{ '--rank-c': rank.color }"
-                :title="'Rang de prestige — ' + rank.name + ' ' + rank.star + '/5'"
-              >
-                <span class="hr-emo">{{ rank.emoji }}</span>
-                <span class="hr-txt">
-                  <span class="hr-name font-display">{{ rank.name }}</span>
-                  <span class="hr-stars">{{ rankStarStr(rank.star) }}</span>
-                </span>
-              </div>
-              <div class="hero-arch">
-                Profil : <b>{{ profileLabel }}</b>
-              </div>
-              <div class="hero-power">
-                <span class="hp-lbl">⚔️ Puissance de combat</span>
-                <span class="hp-val font-display">{{ fmtPow(combatPowerVal) }}</span>
-              </div>
-              <div class="hero-xp">
-                {{ c.level.xpIntoLevel.toLocaleString('fr-FR') }} /
-                {{ c.level.xpForLevel.toLocaleString('fr-FR') }} XP
-              </div>
+            <div class="crest-rank font-display">
+              {{ rank.name }} <span class="crest-stars">{{ rankStarStr(rank.star) }}</span>
+            </div>
+            <div class="crest-power">
+              <span class="cp-ic">⚔️</span>
+              <b class="cp-v font-display">{{ fmtPow(combatPowerVal) }}</b>
+              <span class="cp-l">puissance</span>
+            </div>
+            <div class="crest-xp">
+              {{ c.level.xpIntoLevel.toLocaleString('fr-FR') }} /
+              {{ c.level.xpForLevel.toLocaleString('fr-FR') }} XP · Profil
+              <b>{{ profileLabel }}</b>
             </div>
           </div>
 
@@ -4779,109 +4775,87 @@ onUnmounted(() => {
   height: 150px;
   margin: 0 auto 6px;
 }
-.hero {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 16px;
-  align-items: center;
-  margin-bottom: 18px;
-}
-.lvl-ring {
-  position: relative;
-  width: 84px;
-  height: 84px;
-  display: grid;
-  place-items: center;
-}
-.lvl-ring svg {
-  position: absolute;
-  inset: 0;
-}
-.ring-txt {
-  text-align: center;
-}
-.lvl-ring .num {
-  font-size: 40px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--accent);
-}
-.lvl-ring .cap {
-  font-size: 9px;
-  letter-spacing: 2px;
-  color: var(--dim);
-  text-transform: uppercase;
-}
-.hero-info {
-  min-width: 0;
-}
-/* Badge de rang de prestige (cosmétique) — GROS et COLORÉ selon le rang (--rank-c). */
-.hero-rank {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  margin-bottom: 8px;
-  padding: 7px 14px 7px 11px;
-  border-radius: 14px;
-  border: 1.5px solid color-mix(in srgb, var(--rank-c, var(--accent)) 70%, transparent);
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--rank-c, var(--accent)) 26%, var(--surface)),
-    color-mix(in srgb, var(--rank-c, var(--accent)) 8%, var(--surface))
-  );
-  box-shadow: 0 0 14px color-mix(in srgb, var(--rank-c, var(--accent)) 30%, transparent);
-}
-.hr-emo {
-  font-size: 24px;
-  line-height: 1;
-}
-.hr-txt {
+/* EMBLÈME HÉROS fusionné : médaillon (niveau+rang) + puissance headline. */
+.crest {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  line-height: 1.05;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 18px;
+  text-align: center;
 }
-.hr-name {
+.crest-medal {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  display: grid;
+  place-items: center;
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--rank-c, var(--accent)) 45%, transparent));
+}
+.crest-medal svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.crest-txt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+.crest-emo {
+  font-size: 20px;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+.crest-lvl {
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--rank-c, var(--accent));
+}
+.crest-rank {
   font-weight: 800;
-  font-size: 15px;
-  letter-spacing: 0.3px;
-  color: color-mix(in srgb, var(--rank-c, var(--accent)) 55%, var(--text));
+  font-size: 16px;
+  letter-spacing: 0.4px;
+  color: color-mix(in srgb, var(--rank-c, var(--accent)) 62%, var(--text));
 }
-.hr-stars {
-  font-size: 13px;
+.crest-stars {
   color: var(--rank-c, var(--accent));
   letter-spacing: 2px;
   text-shadow: 0 0 6px color-mix(in srgb, var(--rank-c, var(--accent)) 55%, transparent);
 }
-.hero-arch {
-  font-size: 13px;
-  color: var(--dim);
-}
-.hero-arch b {
-  color: var(--d1);
-  text-transform: capitalize;
-  font-weight: 600;
-}
-.hero-power {
-  display: flex;
+.crest-power {
+  display: inline-flex;
   align-items: baseline;
-  gap: 8px;
-  margin: 6px 0 2px;
+  gap: 6px;
+  margin-top: 2px;
 }
-.hp-lbl {
-  font-size: 12px;
-  color: var(--dim);
+.crest-power .cp-ic {
+  font-size: 18px;
 }
-.hp-val {
-  font-size: 26px;
+.crest-power .cp-v {
+  font-size: 30px;
   font-weight: 700;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
-.hero-xp {
+.crest-power .cp-l {
+  font-size: 11px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+.crest-xp {
   font-size: 11px;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
+}
+.crest-xp b {
+  color: var(--d1);
+  text-transform: capitalize;
+  font-weight: 600;
 }
 
 /* Talents */
