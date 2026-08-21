@@ -461,7 +461,13 @@ const isCardioOuting = computed(
 // Seules les vraies sorties cardio restent en minutes/km (isCardioOuting → saisie de sortie).
 const isGainageTime = computed(() => isTime.value && !isCardioOuting.value);
 const unitLabel = computed(() =>
-  ch.value?.unit === 'time' ? 'sec' : ch.value?.unit === 'distance' ? 'km' : 'reps',
+  ch.value?.config.count_mode === 'sets'
+    ? 'séries' // mode Séries : objectif en SÉRIES (pas en reps)
+    : ch.value?.unit === 'time'
+      ? 'sec'
+      : ch.value?.unit === 'distance'
+        ? 'km'
+        : 'reps',
 );
 // Temps au chrono : affichage secondes brutes OU min:sec (config.time_display).
 const mmss = computed(() => isGainageTime.value && ch.value?.config.time_display === 'mmss');

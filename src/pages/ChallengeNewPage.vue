@@ -647,13 +647,15 @@ const showAssist = computed(
 );
 const assistedMode = ref(false);
 const unitLabel = computed(() =>
-  unit.value === 'distance'
-    ? 'km'
-    : unit.value === 'time'
-      ? isCardio.value
-        ? 'min' // seules les vraies sorties cardio = minutes ; gainage/conditionnement = secondes
-        : 'sec'
-      : 'reps',
+  countMode.value === 'sets'
+    ? 'séries' // mode Séries : l'objectif se compte en SÉRIES (pas en reps)
+    : unit.value === 'distance'
+      ? 'km'
+      : unit.value === 'time'
+        ? isCardio.value
+          ? 'min' // seules les vraies sorties cardio = minutes ; gainage/conditionnement = secondes
+          : 'sec'
+        : 'reps',
 );
 const fields = computed(() => formatOption(format.value)?.fields ?? ['start']);
 
