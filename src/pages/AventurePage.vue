@@ -205,8 +205,10 @@
                   />
                 </svg>
               </div>
-              <!-- Niveau (bas-gauche, anneau de PROGRESSION + icône ⬆️) et Puissance
-                   (bas-droite, anneau plein SANS progression + icône ⚔️), aux bords d'écran. -->
+            </div>
+            <!-- Ligne du rang : Niveau (gauche, anneau de PROGRESSION + « LvL ») · nom du rang
+                 (centre) · Puissance (droite, anneau plein + ⚔️), au niveau de « Argent ». -->
+            <div class="pt-footer">
               <div class="pt-mini lvl" :title="`Niveau ${c.level.level} · ${c.level.progressPct}%`">
                 <svg viewBox="0 0 44 44" aria-hidden="true">
                   <circle class="ptm-track" cx="22" cy="22" r="18" />
@@ -223,8 +225,9 @@
                     {{ c.level.level }}
                   </text>
                 </svg>
-                <span class="ptm-ic">⬆️</span>
+                <span class="ptm-ic txt font-display">LvL</span>
               </div>
+              <div class="pt-rank font-display">{{ rank.name }}</div>
               <div class="pt-mini pow" :title="`Puissance ${fmtPow(combatPowerVal)}`">
                 <svg viewBox="0 0 44 44" aria-hidden="true">
                   <circle class="ptm-track full" cx="22" cy="22" r="18" />
@@ -235,7 +238,6 @@
                 <span class="ptm-ic">⚔️</span>
               </div>
             </div>
-            <div class="pt-rank font-display">{{ rank.name }}</div>
           </div>
 
           <!-- 3 stats en CERCLES sur une ligne. L'anneau = part du build (somme=100 %),
@@ -597,14 +599,20 @@
             </button>
             <button
               class="gi-b"
-              title="Loadouts — ranger un set d'équipement"
+              :disabled="onExpedition"
+              :title="
+                onExpedition
+                  ? '🧭 Indisponible en expédition'
+                  : 'Loadouts — ranger un set d\'équipement'
+              "
               @click="loadoutOpen = true"
             >
               📦
             </button>
             <button
               class="gi-b"
-              title="Atelier — forge & craft de poussière"
+              :disabled="onExpedition"
+              :title="onExpedition ? '🧭 Indisponible en expédition' : 'Atelier — forge & craft'"
               @click="atelierOpen = true"
             >
               🔧
@@ -2720,7 +2728,7 @@ function autoEquipTalentDrops(drops: TalentInstance[]): TalentInstance[] {
 }
 async function doEquipTalent(id: string) {
   const uid = auth.user?.id;
-  if (!uid) return;
+  if (!uid || expeBlocked()) return; // loadout (dont talents) gelé en expédition
   const res = await char.equipTalent(uid, id, c.value.level.level);
   if (res === 'dup')
     $q.notify({
@@ -2732,7 +2740,8 @@ async function doEquipTalent(id: string) {
 }
 async function doUnequipTalent(id: string) {
   const uid = auth.user?.id;
-  if (uid) await char.unequipTalent(uid, id);
+  if (!uid || expeBlocked()) return;
+  await char.unequipTalent(uid, id);
 }
 // ⚡ ENCHANTE un talent (gamble +N, comme les objets/familiers) : coûte 1 parchemin
 // d'enchantement 📜 + éventuellement 1 protection 🛡️. Notif selon le résultat.
@@ -3915,7 +3924,7 @@ const loadoutsView = computed(() => {
 });
 async function doSwapLoadout(i: number) {
   const uid = auth.user?.id;
-  if (!uid || busy.value) return;
+  if (!uid || busy.value || expeBlocked()) return; // gelé en expédition (héros parti avec son stuff)
   await char.swapLoadout(uid, i);
 }
 
@@ -4861,6 +4870,8 @@ onUnmounted(() => {
   filter: drop-shadow(0 0 3px color-mix(in srgb, var(--rank-c, var(--accent)) 70%, transparent));
 }
 .pt-rank {
+  flex: 1 1 auto;
+  text-align: center;
   font-weight: 800;
   font-size: 16px;
   letter-spacing: 0.4px;
@@ -4873,18 +4884,21 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
 }
-/* Mini-médaillons Niveau / Puissance qui flanquent le portrait (bords d'écran). */
+/* Ligne du rang : mini-médaillons Niveau / Puissance aux bords, nom du rang au centre,
+   tous alignés verticalement (au niveau du nom du rang). */
+.pt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin-top: 2px;
+}
 .pt-mini {
-  position: absolute;
-  bottom: 8px;
-  width: 58px;
-  height: 58px;
-}
-.pt-mini.lvl {
-  left: 2px;
-}
-.pt-mini.pow {
-  right: 2px;
+  position: relative;
+  flex: 0 0 auto;
+  width: 68px;
+  height: 68px;
 }
 .pt-mini svg {
   width: 100%;
@@ -4927,6 +4941,16 @@ onUnmounted(() => {
   background: var(--surface);
   border-radius: 999px;
   padding: 1px 2px;
+}
+/* Badge texte « LvL » (niveau) : pastille sombre lisérée de la couleur du rang. */
+.ptm-ic.txt {
+  top: -8px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--rank-c, var(--accent));
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--rank-c, var(--accent)) 60%, transparent);
 }
 
 /* Talents */
