@@ -264,23 +264,30 @@
 
           <!-- Construire : choix du type (gaté par niveau + unicité) -->
           <div v-if="selectedPlot.unlocked && !selectedPlot.building" class="plot-build">
-            <button
-              v-for="t in BUILDING_TYPES"
-              :key="t.id"
-              class="pb-opt"
-              :class="{ locked: !typeBuildable(t) }"
-              :disabled="!typeBuildable(t) || (char.row?.gold ?? 0) < t.buildGold"
-              @click="doBuild(selectedPlot.slot, t.id)"
-            >
-              <span class="pb-emo">{{ t.emoji }}</span>
-              <span class="pb-main">
-                <span class="pb-name">{{ t.label }}</span>
-                <span class="pb-desc">{{ t.desc }}</span>
-              </span>
-              <span class="pb-cost">{{
-                typeBuildable(t) ? '🪙' + t.buildGold : typeLockReason(t)
-              }}</span>
-            </button>
+            <!-- Séparés par CE QU'ILS FONT : producteurs / utilitaires. -->
+            <template v-for="g in buildGroups" :key="g.key">
+              <div class="pb-group-h">
+                <span class="pb-group-t">{{ g.label }}</span>
+                <span class="pb-group-hint">{{ g.hint }}</span>
+              </div>
+              <button
+                v-for="t in g.types"
+                :key="t.id"
+                class="pb-opt"
+                :class="{ locked: !typeBuildable(t) }"
+                :disabled="!typeBuildable(t) || (char.row?.gold ?? 0) < t.buildGold"
+                @click="doBuild(selectedPlot.slot, t.id)"
+              >
+                <span class="pb-emo">{{ t.emoji }}</span>
+                <span class="pb-main">
+                  <span class="pb-name">{{ t.label }}</span>
+                  <span class="pb-desc">{{ t.desc }}</span>
+                </span>
+                <span class="pb-cost">{{
+                  typeBuildable(t) ? '🪙' + t.buildGold : typeLockReason(t)
+                }}</span>
+              </button>
+            </template>
           </div>
 
           <!-- Bâtiment construit : gérer -->
@@ -456,6 +463,7 @@ import {
   BUILD,
   type Building,
   type BuildingType,
+  type BuildingCategory,
   type BuildingUnlock,
 } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
@@ -762,6 +770,18 @@ function goUnlock() {
   if (v) return goGame(v); // dans le volet jeu (cockpit)
   void router.push(route);
 }
+// Regroupe les bâtiments constructibles par CE QU'ILS FONT : producteurs (ressource
+// passive) vs utilitaires (effet global). Sections affichées dans la modale de construction.
+const BUILD_GROUPS: { key: BuildingCategory; label: string; hint: string }[] = [
+  { key: 'producer', label: '⛏️ Producteurs', hint: 'Ressource passive à récolter' },
+  { key: 'utility', label: '🏛️ Utilitaires', hint: 'Effet global (débloque / accélère)' },
+];
+const buildGroups = computed(() =>
+  BUILD_GROUPS.map((g) => ({
+    ...g,
+    types: BUILDING_TYPES.filter((t) => t.category === g.key),
+  })).filter((g) => g.types.length),
+);
 function doBuild(slot: number, typeId: string) {
   const uid = auth.user?.id;
   const t = buildingType(typeId);
@@ -1401,6 +1421,29 @@ function fmtMin(min: number): string {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+/* En-tête de groupe de bâtiments (producteurs / utilitaires). */
+.pb-group-h {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--line);
+}
+.pb-group-h:first-child {
+  margin-top: 0;
+}
+.pb-group-t {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  color: var(--accent);
+}
+.pb-group-hint {
+  font-size: 11px;
+  color: var(--dim);
 }
 .pb-opt {
   display: flex;

@@ -2600,14 +2600,20 @@ const rank = computed(() => characterRank(c.value.level.level));
 const STAR_PATH =
   'M0,-6 L1.76,-2.43 L5.7,-1.85 L2.85,0.94 L3.53,4.85 L0,3 L-3.53,4.85 L-2.85,0.94 L-5.7,-1.85 L-1.76,-2.43 Z';
 const STAR_ANGLES = [-150, -120, -90, -60, -30]; // degrés (0=droite, 90=bas) → arc du haut
+// STAR_PATH pointe vers le HAUT : sa pointe haute atteint y=-6 mais les pointes basses
+// n'atteignent que y=+4,85 → le centre de sa BOUNDING-BOX est à y=-0,575 (au-dessus de
+// l'origine du tracé). On aligne ce centre VISUEL (bbox), pas l'origine, sur le trait.
+const STAR_CY = -0.575;
 function starTf(i: number): string {
   const a = ((STAR_ANGLES[i] ?? -90) * Math.PI) / 180;
-  // Centre de chaque étoile PILE au milieu de l'épaisseur du trait : cadre 172px (border-box)
-  // + bordure 4px → centre du trait à 84px du centre ; l'SVG des étoiles (inset -4px) fait
-  // 180px pour un viewBox de 100 → échelle 1,8 → 84/1,8 = 46,7 unités. Le centroïde de l'étoile
-  // (symétrie d'ordre 5 → au centre géométrique) tombe donc exactement sur le trait.
+  // Trait au milieu de l'épaisseur de l'anneau : cadre 172px (border-box) + bordure 4px →
+  // 84px du centre ; l'SVG des étoiles (inset -4px) fait 180px pour un viewBox de 100 →
+  // échelle 1,8 → 84/1,8 = 46,7 unités. On retranche STAR_CY pour poser le centre de la
+  // bounding-box de l'étoile (et non l'origine du tracé) exactement sur le trait.
   const R = 46.7;
-  return `translate(${(50 + R * Math.cos(a)).toFixed(2)} ${(50 + R * Math.sin(a)).toFixed(2)})`;
+  const x = 50 + R * Math.cos(a);
+  const y = 50 + R * Math.sin(a) - STAR_CY;
+  return `translate(${x.toFixed(2)} ${y.toFixed(2)})`;
 }
 // Combattant SANS équipement ni talents (stats de fond seules) → base de la
 // comparaison « avec / sans équipement » sur la fiche perso.
