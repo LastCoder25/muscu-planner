@@ -730,7 +730,7 @@
                     }}% ⚡</template
                   >
                 </button>
-                <!-- 🔧 Grade +1 (rang/qualité) : poussière ✨, plafonné au grade du niveau. -->
+                <!-- ⭐↑ Grade +1 (rang/qualité) : poussière ✨, plafonné au grade du niveau. -->
                 <button
                   class="slot-up grade"
                   :disabled="
@@ -745,9 +745,12 @@
                   "
                   @click.stop="doInfuseItemGrade(char.row.equipped[slot]!)"
                 >
-                  <template v-if="gradeCapped(char.row.equipped[slot]!)">🔧 Max</template>
+                  <template v-if="gradeCapped(char.row.equipped[slot]!)"
+                    >⭐<span class="gu-up">↑</span> Max</template
+                  >
                   <template v-else
-                    >🔧 {{ gradeStepCost(char.row.equipped[slot]!) }}<DustIcon variant="dust"
+                    >⭐<span class="gu-up">↑</span> {{ gradeStepCost(char.row.equipped[slot]!)
+                    }}<DustIcon variant="dust"
                   /></template>
                 </button>
                 <button class="slot-remove" :disabled="onExpedition" @click="doUnequip(slot)">
@@ -987,9 +990,10 @@
                       "
                       @click="doInfuseItemGrade(it)"
                     >
-                      <template v-if="gradeCapped(it)">🔧 Max</template>
+                      <template v-if="gradeCapped(it)">⭐<span class="gu-up">↑</span> Max</template>
                       <template v-else
-                        >🔧 grade · {{ gradeStepCost(it) }}<DustIcon variant="dust"
+                        >⭐<span class="gu-up">↑</span> {{ gradeStepCost(it)
+                        }}<DustIcon variant="dust"
                       /></template>
                     </button>
                     <button
@@ -5516,7 +5520,13 @@ onUnmounted(() => {
   font-size: 11px;
   cursor: pointer;
 }
-/* Grade (🔧) : tonalité « outil » neutre → ne concurrence pas l'accent de l'enchant (⚡). */
+/* Flèche ↑ du bouton de grade (⭐↑) : hérite de la couleur du texte, collée à l'étoile. */
+.gu-up {
+  font-weight: 900;
+  margin: 0 1px 0 -1px;
+  font-size: 0.92em;
+}
+/* Grade (⭐↑) : tonalité « outil » neutre → ne concurrence pas l'accent de l'enchant (⚡). */
 .slot-up.grade {
   border-color: var(--line);
   background: color-mix(in srgb, var(--text) 8%, transparent);
