@@ -4884,15 +4884,22 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
 }
-/* Ligne du rang : mini-médaillons Niveau / Puissance aux bords, nom du rang au centre,
-   tous alignés verticalement (au niveau du nom du rang). */
+/* Ligne du rang : nom du rang au centre, mini-médaillons Niveau (gauche) / Puissance
+   (droite) CENTRÉS chacun dans leur moitié. Grille 1fr·auto·1fr → les minis flottent au
+   milieu de leur colonne (pas collés au bord), avec un écart : bord de l'écran (padding),
+   cercle au-dessus (margin-top) et tuiles de stats en dessous (margin-bottom). */
 .pt-footer {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
   width: 100%;
-  margin-top: 2px;
+  padding: 0 14px;
+  margin-top: 12px;
+  margin-bottom: 8px;
+}
+.pt-footer > .pt-mini,
+.pt-footer > .pt-rank {
+  justify-self: center;
 }
 .pt-mini {
   position: relative;
