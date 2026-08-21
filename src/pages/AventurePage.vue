@@ -181,35 +181,41 @@
       <template v-if="tab === 'hero'">
         <template v-if="persoSub === 'perso'">
           <!-- PORTRAIT HÉROS : le perso au centre d'un cercle teinté par le RANG ; couronne
-               d'ÉTOILES (pleines = étoiles gagnées) au premier plan sur l'anneau, contour
-               sombre pour ressortir. (Niveau retiré pour le moment.) -->
+               d'ÉTOILES (pleines = gagnées) au premier plan sur l'anneau. Niveau (bas-gauche)
+               et Puissance (bas-droite) flanquent le cercle sur la même ligne. -->
           <div class="portrait" :style="{ '--rank-c': rank.color }">
-            <div class="pt-frame" :title="`${rank.name} ${rank.star}/5`">
-              <AventureAvatar
-                class="pt-avatar"
-                :profile="c.profile"
-                :equipped="char.row.equipped"
-                :talent-icon="firstTalentIcon"
-                @familiar-click="familiarsOpen = true"
-                @talent-click="talentsOpen = true"
-              />
-              <svg class="pt-stars" viewBox="0 0 100 100" aria-hidden="true">
-                <path
-                  v-for="i in 5"
-                  :key="i"
-                  class="pt-star"
-                  :class="{ on: i <= rank.star }"
-                  :d="STAR_PATH"
-                  :transform="starTf(i - 1)"
+            <div class="pt-main">
+              <div class="pt-frame" :title="`${rank.name} ${rank.star}/5`">
+                <AventureAvatar
+                  class="pt-avatar"
+                  :profile="c.profile"
+                  :equipped="char.row.equipped"
+                  :talent-icon="firstTalentIcon"
+                  @familiar-click="familiarsOpen = true"
+                  @talent-click="talentsOpen = true"
                 />
-              </svg>
+                <svg class="pt-stars" viewBox="0 0 100 100" aria-hidden="true">
+                  <path
+                    v-for="i in 5"
+                    :key="i"
+                    class="pt-star"
+                    :class="{ on: i <= rank.star }"
+                    :d="STAR_PATH"
+                    :transform="starTf(i - 1)"
+                  />
+                </svg>
+              </div>
+              <!-- Niveau (bas-gauche) et Puissance (bas-droite), même ligne, bords d'écran. -->
+              <div class="pt-corner lvl">
+                <span class="ptc-l">Niveau</span>
+                <b class="ptc-v font-display">{{ c.level.level }}</b>
+              </div>
+              <div class="pt-corner pow">
+                <span class="ptc-l">Puissance</span>
+                <b class="ptc-v font-display">⚔️ {{ fmtPow(combatPowerVal) }}</b>
+              </div>
             </div>
             <div class="pt-rank font-display">{{ rank.name }}</div>
-            <div class="pt-power">
-              <span class="ppw-ic">⚔️</span>
-              <b class="ppw-v font-display">{{ fmtPow(combatPowerVal) }}</b>
-              <span class="ppw-l">puissance</span>
-            </div>
           </div>
 
           <!-- 3 stats en CERCLES sur une ligne. L'anneau = part du build (somme=100 %),
@@ -1453,7 +1459,8 @@
                   </div>
                   <div class="im-loot-sub">
                     <span :class="'p-' + m.item.rarity">{{ RARITY_LABEL[m.item.rarity] }}</span>
-                    · +{{ m.item.enchant ?? 0 }} · {{ SLOT_LABEL[m.item.slot] }}
+                    <template v-if="(m.item.enchant ?? 0) > 0"> · +{{ m.item.enchant }}</template> ·
+                    {{ SLOT_LABEL[m.item.slot] }}
                   </div>
                   <div class="im-loot-eff">{{ itemEffects(m.item) }}</div>
                   <div v-if="m.itemCount && m.itemCount > 1" class="im-loot-more">
@@ -1767,7 +1774,9 @@
               <div class="rc-main">
                 <div class="rc-name">{{ cand.item.name }}</div>
                 <div class="rc-pills">
-                  <span class="rc-pill lvl">+{{ cand.item.enchant ?? 0 }}</span>
+                  <span v-if="(cand.item.enchant ?? 0) > 0" class="rc-pill lvl"
+                    >+{{ cand.item.enchant }}</span
+                  >
                   <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
                     RARITY_LABEL[cand.item.rarity]
                   }}</span>
@@ -1885,8 +1894,10 @@
                 :class="'q-' + itemQuality(equippedInSlot(craftSlot))"
                 >{{ itemQuality(equippedInSlot(craftSlot)) }}</span
               >
-              · +{{ equippedInSlot(craftSlot)!.enchant ?? 0 }} ·
-              <b>{{ itemEffects(equippedInSlot(craftSlot)!) }}</b>
+              <template v-if="(equippedInSlot(craftSlot)!.enchant ?? 0) > 0">
+                · +{{ equippedInSlot(craftSlot)!.enchant }}</template
+              >
+              · <b>{{ itemEffects(equippedInSlot(craftSlot)!) }}</b>
             </div>
             <div v-else class="ws-equipped dim">— emplacement libre (rien d'équipé)</div>
           </div>
@@ -1995,7 +2006,7 @@
               <div class="inv-main">
                 <div class="inv-name">{{ d.name }}</div>
                 <div class="pills">
-                  <span class="gpill lvl">+{{ d.enchant ?? 0 }}</span>
+                  <span v-if="(d.enchant ?? 0) > 0" class="gpill lvl">+{{ d.enchant }}</span>
                   <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
                   <span
                     v-if="itemQuality(d)"
@@ -2113,7 +2124,9 @@
                   <div class="rc-main">
                     <div class="rc-name">{{ cand.item.name }}</div>
                     <div class="rc-pills">
-                      <span class="rc-pill lvl">+{{ cand.item.enchant ?? 0 }}</span>
+                      <span v-if="(cand.item.enchant ?? 0) > 0" class="rc-pill lvl"
+                        >+{{ cand.item.enchant }}</span
+                      >
                       <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
                         RARITY_LABEL[cand.item.rarity]
                       }}</span>
@@ -4817,25 +4830,43 @@ onUnmounted(() => {
   letter-spacing: 0.4px;
   color: color-mix(in srgb, var(--rank-c, var(--accent)) 62%, var(--text));
 }
-.pt-power {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
+/* Bloc central : cercle centré + Niveau (bas-gauche) / Puissance (bas-droite). */
+.pt-main {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
-.ppw-ic {
-  font-size: 16px;
+.pt-corner {
+  position: absolute;
+  bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
 }
-.ppw-v {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
+.pt-corner.lvl {
+  left: 4px;
+  align-items: flex-start;
 }
-.ppw-l {
-  font-size: 11px;
-  color: var(--dim);
-  text-transform: uppercase;
+.pt-corner.pow {
+  right: 4px;
+  align-items: flex-end;
+  text-align: right;
+}
+.ptc-l {
+  font-size: 10px;
   letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.ptc-v {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.pt-corner.lvl .ptc-v {
+  color: var(--rank-c, var(--accent));
 }
 
 /* Talents */
