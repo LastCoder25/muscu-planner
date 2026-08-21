@@ -436,18 +436,20 @@
                     {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
                   </button>
                   <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
-                  <!-- ⭐↑ Grade +1 (rang/qualité) : poussière d'encre, plafonné au grade du niveau. -->
+                  <!-- ⭐↑ Qualité +1 (dans le rang) : poussière d'encre. Plafond = ★5 du rang de drop. -->
                   <button
                     class="tal-b ghost"
-                    :disabled="t.tier >= maxGrade || char.row.ink_dust < talGradeCost(t.tier)"
+                    :disabled="
+                      talentGradeCapped(t.tier) || char.row.ink_dust < talGradeCost(t.tier)
+                    "
                     :title="
-                      t.tier >= maxGrade
-                        ? 'Grade déjà au plafond de ton niveau'
-                        : 'Monter le grade (rang/qualité) — poussière d’encre'
+                      talentGradeCapped(t.tier)
+                        ? 'Qualité ★5 max de ce rang — drop un rang supérieur pour monter'
+                        : 'Monter la qualité (★) dans le rang — poussière d’encre'
                     "
                     @click="doInfuseTalentGrade(t.id)"
                   >
-                    <template v-if="t.tier >= maxGrade"
+                    <template v-if="talentGradeCapped(t.tier)"
                       >⭐<span class="gu-up">↑</span> Max</template
                     >
                     <template v-else
@@ -514,14 +516,14 @@
                     Retirer
                   </button>
                   <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
-                  <!-- ⭐↑ Grade +1 (rang/qualité) : poussière d'âme, plafonné au grade du niveau. -->
+                  <!-- ⭐↑ Qualité +1 (dans le rang) : poussière d'âme. Plafond = ★5 du rang de drop. -->
                   <button
                     class="tal-b ghost"
                     :disabled="gradeCapped(f) || char.row.fragments < gradeStepCost(f)"
                     :title="
                       gradeCapped(f)
-                        ? 'Grade déjà au plafond de ton niveau'
-                        : 'Monter le grade (rang/qualité) — poussière d’âme'
+                        ? 'Qualité ★5 max de ce rang — drop un rang supérieur pour monter'
+                        : 'Monter la qualité (★) dans le rang — poussière d’âme'
                     "
                     @click="doInfuseFamiliarGrade(f)"
                   >
@@ -2051,7 +2053,6 @@ import {
   FAMILIAR_SLOT,
   tierIndexOf,
   tierStepCost,
-  maxGradeCran,
   rollTier,
   dropBand,
   dropBandLabel,
@@ -3680,54 +3681,28 @@ function doRecycleTalent(id: string) {
     'Recyclage impossible.',
   );
 }
-// Infuse +1 cran de GRADE (rang/qualité) un familier/talent avec la poussière dédiée,
-// plafonné au grade droppable de ton niveau. Éclat si le RANG monte.
-const maxGrade = computed(() => maxGradeCran(c.value.level.level));
+// Infuse +1 cran de QUALITÉ (★1→★5) un familier/talent avec la poussière dédiée, plafonné
+// à ★5 de son RANG de drop (le rang vient des drops). Jamais d'éclat de rang (l'infusion ne
+// franchit plus un rang).
 function gradeStepCost(f: Item): number {
   return tierStepCost(tierIndexOf(f));
 }
+// Plafond atteint = qualité ★5 du rang courant (cran % 5 === 4).
 function gradeCapped(f: Item): boolean {
-  return tierIndexOf(f) >= maxGrade.value;
+  return tierIndexOf(f) % 5 === 4;
+}
+function talentGradeCapped(tier: number): boolean {
+  return tier % 5 === 4;
 }
 function talGradeCost(tier: number): number {
   return talentTierStepCost(tier);
 }
+// L'infusion ne monte QUE la qualité (dans le rang) → pas d'éclat de rang.
 function doInfuseFamiliarGrade(f: Item) {
-  const beforeRank = f.rarity;
-  withUid(
-    (uid) =>
-      char.infuseFamiliarGrade(uid, f.id, c.value.level.level).then((res) => {
-        if (res && res.rarity !== beforeRank)
-          gameFx.celebrate({
-            kind: 'familiar',
-            emoji: res.emoji,
-            title: `${res.name} — rang ${RARITY_LABEL[res.rarity]} !`,
-            subtitle: 'Grade amélioré (poussière d’âme)',
-            rarity: fxRarity(res.rarity),
-          });
-      }),
-    'Infusion impossible.',
-  );
+  withUid((uid) => char.infuseFamiliarGrade(uid, f.id), 'Infusion impossible.');
 }
 function doInfuseTalentGrade(id: string) {
-  const before = char.row?.talents.find((t) => t.id === id) ?? null;
-  const beforeRank = before ? talentRankOf(before) : null;
-  withUid(
-    (uid) =>
-      char.infuseTalentGrade(uid, id, c.value.level.level).then((res) => {
-        if (res && beforeRank && talentRankOf(res) !== beforeRank) {
-          const def = talentByCode(res.code);
-          gameFx.celebrate({
-            kind: 'generic',
-            emoji: def?.icon ?? '✨',
-            title: `${def?.name ?? 'Talent'} — rang ${RARITY_LABEL[talentRankOf(res)]} !`,
-            subtitle: 'Grade amélioré (poussière d’encre)',
-            rarity: fxRarity(talentRankOf(res)),
-          });
-        }
-      }),
-    'Infusion impossible.',
-  );
+  withUid((uid) => char.infuseTalentGrade(uid, id), 'Infusion impossible.');
 }
 // Animation de PALIER DE SET : si équiper `setId` a fait franchir un palier (2/3/4
 // pièces), on célèbre en montrant le set + le bonus tout juste débloqué.

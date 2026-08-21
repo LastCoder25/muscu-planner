@@ -12,7 +12,7 @@ import {
   isFamiliar,
   tierIndexOf,
   tierStepCost,
-  maxGradeCran,
+  gradeCapForTier,
   familiarInfuseXp,
   infuseFamiliar as applyFamiliarInfusion,
   swapLoadoutGear,
@@ -585,11 +585,11 @@ export const useCharacterStore = defineStore('character', () => {
     const talents = cur.talents.map((t) => (t.id === id ? { ...t, equipped: false } : t));
     return persistOptimistic(userId, { talents });
   }
-  // ── RECYCLAGE des SURPLUS → ressource dédiée, dépensée pour infuser le GRADE (rang +
-  // qualité) d'un gardé. Familiers → POUSSIÈRE D'ÂME (`fragments`) ; talents → POUSSIÈRE
-  // D'ENCRE (`ink_dust`). Le grade infusé est plafonné au grade droppable de ton niveau
-  // (maxGradeCran) → l'infusion lisse la grinde sans dépasser la profondeur. L'ENCHANT
-  // (+N, parchemins) reste un axe SÉPARÉ. ──
+  // ── RECYCLAGE des SURPLUS → ressource dédiée (perte 2:1 : recycler rend ~la moitié de ce
+  // qu'il faut pour build), dépensée pour infuser la QUALITÉ (★1→★5) d'un gardé DANS son rang
+  // de drop. Familiers → POUSSIÈRE D'ÂME (`fragments`) ; talents → POUSSIÈRE D'ENCRE
+  // (`ink_dust`). Le RANG vient des drops (l'infusion plafonne à ★5 du rang, cf.
+  // `gradeCapForTier`). L'ENCHANT (+N, parchemins) reste un axe SÉPARÉ. ──
   // Recycle un familier NON équipé et NON verrouillé du sac → poussière d'âme (∝ grade).
   async function recycleFamiliar(userId: string, familiarId: string): Promise<number> {
     const cur = row.value;
@@ -616,20 +616,16 @@ export const useCharacterStore = defineStore('character', () => {
     });
     return gain;
   }
-  // Infuse +1 cran de GRADE un familier (équipé ou au sac) en dépensant la poussière
-  // d'âme, plafonné au grade droppable du niveau joueur. La magnitude est re-scalée
-  // (applyFamiliarInfusion). Renvoie le familier à jour, ou null si impossible.
-  async function infuseFamiliarGrade(
-    userId: string,
-    familiarId: string,
-    playerLevel: number,
-  ): Promise<Item | null> {
+  // Infuse +1 cran de QUALITÉ un familier (équipé ou au sac) en dépensant la poussière
+  // d'âme, plafonné à ★5 du rang de DROP (le rang vient des drops). La magnitude est
+  // re-scalée (applyFamiliarInfusion). Renvoie le familier à jour, ou null si impossible.
+  async function infuseFamiliarGrade(userId: string, familiarId: string): Promise<Item | null> {
     const cur = row.value;
     if (!cur) return null;
     const found = findOwned(cur, familiarId);
     if (!found || !isFamiliar(found.item)) return null;
     const { item, slot } = found;
-    const cap = maxGradeCran(playerLevel);
+    const cap = gradeCapForTier(tierIndexOf(item));
     if (tierIndexOf(item) >= cap) return null; // grade déjà au plafond du niveau
     const cost = tierStepCost(tierIndexOf(item));
     if (cur.fragments < cost) return null;
@@ -640,19 +636,18 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, patch);
     return updated;
   }
-  // Infuse +1 cran de GRADE un talent (équipé ou au sac) en dépensant la poussière d'encre,
-  // plafonné au grade droppable du niveau joueur. Renvoie l'instance à jour, ou null.
+  // Infuse +1 cran de QUALITÉ un talent (équipé ou au sac) en dépensant la poussière d'encre,
+  // plafonné à ★5 du rang de DROP (le rang vient des drops). Renvoie l'instance à jour, ou null.
   async function infuseTalentGrade(
     userId: string,
     talentId: string,
-    playerLevel: number,
   ): Promise<TalentInstance | null> {
     const cur = row.value;
     if (!cur) return null;
     const t = cur.talents.find((x) => x.id === talentId);
     if (!t) return null;
     const tier = talentTier(t.xp);
-    const cap = maxGradeCran(playerLevel);
+    const cap = gradeCapForTier(tier);
     if (tier >= cap) return null; // grade déjà au plafond
     const cost = talentTierStepCost(tier);
     if (cur.ink_dust < cost) return null;

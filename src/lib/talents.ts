@@ -9,6 +9,8 @@ import {
   RARITY_MULT,
   starQualityMult,
   rollTier,
+  gradeStepCost,
+  gradeRecycleYield,
   type AggregatedEffects,
   type Rarity,
 } from './items';
@@ -201,17 +203,16 @@ export function talentsEarned(playerLevel: number): number {
 }
 
 // ── INFUSION DE GRADE (2026‑08‑20) : recycler les talents en trop → POUSSIÈRE D'ENCRE,
-// dépensée pour monter le GRADE (rang + qualité) d'un talent gardé de +1 cran. Plafonné
-// au grade droppable de ton niveau (cf. maxGradeCran). L'enchant (+N) reste à part. ──
-/** Coût en poussière d'encre pour infuser +1 cran de grade depuis le tier `tier`.
- *  Pente DOUBLÉE (ticket a206e0b5) vs le recyclage (1+tier) → monter un grade reste
- *  « un peu long » (~2-3 talents recyclés par cran, davantage aux hauts grades). */
+// dépensée pour monter la QUALITÉ (★1→★5) d'un talent gardé DANS son rang de drop (le rang
+// vient des drops). Coûts/gains partagés avec les familiers (`gradeStepCost`/`gradeRecycleYield`,
+// perte 2:1). Plafond = ★5 du rang de drop (`gradeCapForTier`). L'enchant (+N) reste à part. ──
+/** Coût en poussière d'encre pour infuser +1 cran de qualité depuis le tier `tier`. */
 export function talentTierStepCost(tier: number): number {
-  return 3 + Math.max(0, tier) * 2;
+  return gradeStepCost(tier);
 }
-/** Poussière d'encre rendue en RECYCLANT un talent (∝ son grade). G1 → 1 … SSS5 → 50. */
+/** Poussière d'encre rendue en RECYCLANT un talent (valeur du cran, perte 2:1). */
 export function talentRecycleYield(inst: TalentInstance): number {
-  return 1 + talentTier(inst.xp);
+  return gradeRecycleYield(talentTier(inst.xp));
 }
 
 // ── Normalisation (rétro-compat) : ancien `string[]` de codes → instances équipées

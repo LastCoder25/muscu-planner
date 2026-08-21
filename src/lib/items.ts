@@ -487,9 +487,8 @@ function pick<T>(rng: () => number, arr: T[]): T {
 export function rankCeilingForLevel(level: number): number {
   return Math.min(9, Math.max(0, Math.floor(Math.sqrt(Math.max(0, level)) * 1.03)));
 }
-/** CRAN de grade MAX (0..49 = rang×5 + qualité−1) atteignable par INFUSION à un niveau
- *  joueur donné = même plafond que les drops (rang √-gaté, qualité 5). Plafonne l'infusion
- *  de grade des talents/familiers → l'infusion lisse la grinde sans dépasser la profondeur. */
+/** CRAN de grade MAX DROPPABLE (0..49 = rang×5 + qualité−1) à un niveau donné = rang √-gaté,
+ *  qualité 5. (L'infusion, elle, plafonne à ★5 du rang de DROP — cf. `gradeCapForTier`.) */
 export function maxGradeCran(level: number): number {
   return rankCeilingForLevel(level) * 5 + 4;
 }
@@ -781,16 +780,48 @@ export function rollFamiliar(
 export function tierIndexOf(it: { rarity: Rarity; roll?: number }): number {
   return rankIndex(it.rarity) * 5 + (Math.max(1, rollStars(it.roll)) - 1);
 }
-/** XP d'infusion qu'un familier SACRIFIÉ rend (∝ son tier) : G1 → 1 … SSS5 → 50. */
-export function familiarInfuseXp(fam: { rarity: Rarity; roll?: number }): number {
-  return 1 + tierIndexOf(fam);
+// ── Infusion de grade (talents & familiers), modèle « polissage de qualité » (2026‑08‑21) ──
+// L'infusion ne fait plus QUE monter la QUALITÉ à l'intérieur du rang de DROP (★1→★5) ; le
+// RANG vient uniquement des drops (contenu plus profond). Coûts/gains adossés à la valeur
+// d'un cran (RARITY_MULT × qualité) avec une PERTE 2:1 : bâtir ★1→★5 coûte 200 mais un ★5
+// sacrifié ne rend que ~la moitié → pas d'infusion sans perte (on nourrit un gardé avec du
+// surplus, on ne recycle jamais un objet monté pour du profit).
+const QUALITY_STEP_COST = [30, 45, 60, 65]; // ★1→2, ★2→3, ★3→4, ★4→5 (cumul = 200, à mult 1)
+const QUALITY_BUILD = [0, 30, 75, 135, 200]; // coût cumulé de build par qualité (★1..★5)
+const RECYCLE_FLOOR = 15; // gain plancher d'un ★1 brut (matière première)
+const RECYCLE_LOSS = 0.5; // on ne récupère que la moitié de l'investissement qualité
+
+/** Plafond de cran atteignable par infusion = ★5 du rang COURANT (= rang de drop, car
+ *  l'infusion ne franchit jamais un rang). `floor(tier/5)*5 + 4`. */
+export function gradeCapForTier(tier: number): number {
+  return Math.floor(Math.max(0, tier) / 5) * 5 + 4;
 }
-/** Coût en poussière d'un pas de GRADE (rang/qualité) — croît avec le tier. Pente
- *  DOUBLÉE (2026‑08‑20, ticket a206e0b5) vs le recyclage (rendu 1+tier) pour que monter
- *  un grade reste « un peu long » (~2-3 surplus par cran, et plus en haut) au lieu de
- *  ~1 surplus par cran aux hauts tiers. */
+/** Coût (ink_dust/fragments) d'UN pas de qualité depuis `tier`, scalé par le rang (polir un
+ *  rang haut coûte plus). ★5 (plafond) → renvoie le coût du dernier pas (jamais dépensé : le
+ *  garde-fou de plafond bloque avant). */
+export function gradeStepCost(tier: number): number {
+  const t = Math.max(0, tier);
+  const p = t % 5; // 0..4 = position de qualité (0 = ★1)
+  const step = QUALITY_STEP_COST[Math.min(3, p)]!;
+  return Math.round(step * RARITY_MULT[RANK_ORDER[Math.floor(t / 5)]!]);
+}
+/** XP d'infusion rendue en RECYCLANT un talent/familier de `tier` = plancher + moitié de son
+ *  investissement qualité, scalé par le rang. → perte 2:1 vs le coût de build. */
+export function gradeRecycleYield(tier: number): number {
+  const t = Math.max(0, tier);
+  const q = t % 5; // 0..4 = qualité-1
+  return Math.round(
+    RARITY_MULT[RANK_ORDER[Math.floor(t / 5)]!] *
+      (RECYCLE_FLOOR + RECYCLE_LOSS * QUALITY_BUILD[q]!),
+  );
+}
+/** XP d'infusion qu'un familier SACRIFIÉ rend (valeur du cran, perte 2:1). */
+export function familiarInfuseXp(fam: { rarity: Rarity; roll?: number }): number {
+  return gradeRecycleYield(tierIndexOf(fam));
+}
+/** Coût en fragments d'un pas de GRADE (qualité) d'un familier — cf. `gradeStepCost`. */
 export function tierStepCost(tier: number): number {
-  return 3 + Math.max(0, tier) * 2;
+  return gradeStepCost(tier);
 }
 /** XP totale déjà accumulée + le seuil du prochain pas → barre de progression. */
 export function familiarTierProgress(fam: Item): { xp: number; cost: number } {

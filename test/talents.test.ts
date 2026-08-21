@@ -4,6 +4,7 @@ import {
   RANK_ORDER,
   rankCeilingForLevel,
   maxGradeCran,
+  gradeCapForTier,
   enchantMult,
   ENCHANT_MAX,
 } from '@/lib/items';
@@ -87,21 +88,33 @@ describe('magnitude = grade × enchant (uniforme avec les objets)', () => {
 });
 
 describe('infusion de GRADE (poussière d’encre)', () => {
-  it('talentTierStepCost croît avec le tier', () => {
+  it('talentTierStepCost : > 0, plus cher à rang plus haut', () => {
     expect(talentTierStepCost(0)).toBeGreaterThan(0);
-    expect(talentTierStepCost(20)).toBeGreaterThan(talentTierStepCost(0));
+    expect(talentTierStepCost(20)).toBeGreaterThan(talentTierStepCost(0)); // C★1 > G★1 (rang)
   });
-  it('talentRecycleYield ∝ grade (G1 → 1, plus haut → plus)', () => {
+  it('talentRecycleYield : valeur du cran, perte 2:1', () => {
     const g1: TalentInstance = { id: 'a', code: 't_dmg', xp: 0 };
     const b5: TalentInstance = { id: 'b', code: 't_dmg', xp: talentTierFloor(29) };
-    expect(talentRecycleYield(g1)).toBe(1);
+    expect(talentRecycleYield(g1)).toBeGreaterThan(0);
     expect(talentRecycleYield(b5)).toBeGreaterThan(talentRecycleYield(g1));
+    // PERTE : recycler un ★5 rend MOINS que le coût de le build (★1→★5) → pas de gain net.
+    const buildG1toG5 =
+      talentTierStepCost(0) + talentTierStepCost(1) + talentTierStepCost(2) + talentTierStepCost(3);
+    const g5: TalentInstance = { id: 'c', code: 't_dmg', xp: talentTierFloor(4) };
+    expect(talentRecycleYield(g5)).toBeLessThan(buildG1toG5);
   });
   it('maxGradeCran = plafond de drop du niveau (rang √ × qualité 5)', () => {
     expect(maxGradeCran(1)).toBe(rankCeilingForLevel(1) * 5 + 4);
     expect(maxGradeCran(4)).toBe(14); // E★5
     expect(maxGradeCran(25)).toBe(29); // B★5
     expect(maxGradeCran(1)).toBeLessThan(maxGradeCran(100)); // monte avec le niveau
+  });
+  it('gradeCapForTier = ★5 du rang de drop (l’infusion ne franchit pas le rang)', () => {
+    expect(gradeCapForTier(0)).toBe(4); // G★1 → cap G★5
+    expect(gradeCapForTier(2)).toBe(4); // G★3 → cap G★5 (même rang)
+    expect(gradeCapForTier(4)).toBe(4); // G★5 → déjà au cap
+    expect(gradeCapForTier(5)).toBe(9); // F★1 → cap F★5
+    expect(gradeCapForTier(27)).toBe(29); // B★3 → cap B★5
   });
 });
 
