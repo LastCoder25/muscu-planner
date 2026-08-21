@@ -2600,11 +2600,14 @@ const rank = computed(() => characterRank(c.value.level.level));
 const STAR_PATH =
   'M0,-6 L1.76,-2.43 L5.7,-1.85 L2.85,0.94 L3.53,4.85 L0,3 L-3.53,4.85 L-2.85,0.94 L-5.7,-1.85 L-1.76,-2.43 Z';
 const STAR_ANGLES = [-150, -120, -90, -60, -30]; // degrés (0=droite, 90=bas) → arc du haut
-const STAR_LIFT = 3; // remonte légèrement la couronne (elle paraissait un peu basse)
 function starTf(i: number): string {
   const a = ((STAR_ANGLES[i] ?? -90) * Math.PI) / 180;
-  const R = 47; // centré sur l'ÉPAISSEUR du trait (le cadre 172 + bordure 4 → milieu du trait ≈ 47/50)
-  return `translate(${(50 + R * Math.cos(a)).toFixed(1)} ${(50 + R * Math.sin(a) - STAR_LIFT).toFixed(1)})`;
+  // Centre de chaque étoile PILE au milieu de l'épaisseur du trait : cadre 172px (border-box)
+  // + bordure 4px → centre du trait à 84px du centre ; l'SVG des étoiles (inset -4px) fait
+  // 180px pour un viewBox de 100 → échelle 1,8 → 84/1,8 = 46,7 unités. Le centroïde de l'étoile
+  // (symétrie d'ordre 5 → au centre géométrique) tombe donc exactement sur le trait.
+  const R = 46.7;
+  return `translate(${(50 + R * Math.cos(a)).toFixed(2)} ${(50 + R * Math.sin(a)).toFixed(2)})`;
 }
 // Combattant SANS équipement ni talents (stats de fond seules) → base de la
 // comparaison « avec / sans équipement » sur la fiche perso.
