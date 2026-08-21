@@ -381,8 +381,8 @@
           <span v-if="lastOutcome.gold">🪙 +{{ lastOutcome.gold }}</span>
           <span v-if="lastOutcome.enchantScrolls">📜 +{{ lastOutcome.enchantScrolls }}</span>
           <span v-if="lastOutcome.key">🗝️ +{{ lastOutcome.key }}</span>
-          <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item"
-            >🎁 {{ it.name }}</span
+          <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item">
+            <ItemIcon :item="it" :size="26" :show-stars="false" />{{ it.name }}</span
           >
         </div>
         <q-btn
@@ -413,6 +413,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
+import ItemIcon from '@/components/ItemIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
 import { playerWithGear, RARITY_RANK } from '@/lib/items';
@@ -1724,6 +1725,9 @@ function fmtMin(min: number): string {
   margin-bottom: 16px;
 }
 .coll-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--accent);
 }
 .empty {

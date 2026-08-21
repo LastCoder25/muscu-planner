@@ -497,7 +497,7 @@
                 class="tal-card"
                 :class="['p-' + f.rarity, { eq: f.equipped }]"
               >
-                <span class="tal-emo" role="img" :aria-label="f.name">{{ f.emoji }}</span>
+                <ItemIcon :item="f" :size="40" role="img" :aria-label="f.name" />
                 <div class="tal-body">
                   <div class="tal-name font-display">
                     <span class="tal-nm">{{ f.name }}</span>
@@ -611,7 +611,13 @@
             :class="char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty'"
           >
             <div class="slot-head">
-              <span class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
+              <ItemIcon
+                v-if="char.row.equipped[slot]"
+                :item="char.row.equipped[slot]!"
+                :size="38"
+                :show-stars="false"
+              />
+              <span v-else class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
               <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
             </div>
             <template v-if="char.row.equipped[slot]">
@@ -775,9 +781,9 @@
                   class="inv-item"
                   :class="['r-' + it.rarity, { locked: it.locked }]"
                 >
-                  <!-- Ligne 1 : emoji + nom + VERDICT de puissance (la décision) -->
+                  <!-- Ligne 1 : visuel + nom + VERDICT de puissance (la décision) -->
                   <div class="ii-head">
-                    <span class="inv-emo">{{ it.emoji }}</span>
+                    <ItemIcon :item="it" :size="40" />
                     <div class="ii-name">{{ it.name }}</div>
                     <span class="ii-verdict" :class="powerVerdict(it).cls">{{
                       powerVerdict(it).label
@@ -1394,7 +1400,7 @@
               </div>
               <!-- Objet gagné : détail complet (rareté / niveau / effet). -->
               <div v-if="m.item" class="im-loot" :class="'p-' + m.item.rarity">
-                <span class="im-loot-emo">{{ m.item.emoji }}</span>
+                <ItemIcon :item="m.item" :size="38" />
                 <div class="im-loot-main">
                   <div class="im-loot-name">
                     {{ m.item.name }}<span v-if="m.item.setId" class="im-loot-set"> 🧩</span>
@@ -1666,7 +1672,7 @@
           >
             <span v-if="i === recommendedRewardIndex" class="reco-badge">★ Conseillé</span>
             <template v-if="cand.kind === 'item'">
-              <span class="rc-emo">{{ cand.item.emoji }}</span>
+              <ItemIcon :item="cand.item" :size="40" />
               <div class="rc-main">
                 <div class="rc-name">{{ cand.item.name }}</div>
                 <div class="rc-pills">
@@ -1812,7 +1818,7 @@
               :class="'r-' + d.rarity"
               :style="{ animationDelay: di * 0.12 + 's' }"
             >
-              <span class="inv-emo">{{ d.emoji }}</span>
+              <ItemIcon :item="d" :size="40" />
               <div class="inv-main">
                 <div class="inv-name">{{ d.name }}</div>
                 <div class="pills">
@@ -1927,7 +1933,7 @@
               >
                 <span v-if="i === recommendedRewardIndex" class="reco-badge">★ Conseillé</span>
                 <template v-if="cand.kind === 'item'">
-                  <span class="rc-emo">{{ cand.item.emoji }}</span>
+                  <ItemIcon :item="cand.item" :size="40" />
                   <div class="rc-main">
                     <div class="rc-name">{{ cand.item.name }}</div>
                     <div class="rc-pills">
@@ -2022,6 +2028,7 @@ import { useGamePanel } from '@/composables/useGamePanel';
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
+import ItemIcon from '@/components/ItemIcon.vue';
 import DustIcon from '@/components/DustIcon.vue';
 import {
   simulateDungeon,

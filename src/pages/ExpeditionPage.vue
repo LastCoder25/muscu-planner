@@ -241,7 +241,7 @@
           </div>
           <!-- Détail complet de l'objet gagné -->
           <div v-if="roomFx.item" class="fx-loot-card" :class="'r-' + roomFx.item.rarity">
-            <div class="fl-emoji">{{ roomFx.item.emoji }}</div>
+            <ItemIcon :item="roomFx.item" :size="56" class="fl-icon" />
             <div class="fl-name">{{ roomFx.item.name }}</div>
             <div class="fl-meta">
               {{ RARITY_LABEL[roomFx.item.rarity] }} · {{ SLOT_LABEL[roomFx.item.slot] }} · niv
@@ -316,7 +316,7 @@
             :class="'r-' + it.rarity"
             @click="detailItem = it"
           >
-            <span class="ol-emo">{{ it.emoji }}</span>
+            <ItemIcon :item="it" :size="38" />
             <div class="ol-main">
               <span class="ol-name">{{ it.name }}</span>
               <span class="ol-meta"
@@ -352,7 +352,7 @@
     <!-- Détail d'un objet rapporté (clic sur le récap de butin) -->
     <q-dialog :model-value="!!detailItem" @update:model-value="detailItem = null">
       <q-card v-if="detailItem" class="fx-loot-card im-card" :class="'r-' + detailItem.rarity">
-        <div class="fl-emoji">{{ detailItem.emoji }}</div>
+        <ItemIcon :item="detailItem" :size="56" class="fl-icon" />
         <div class="fl-name">{{ detailItem.name }}</div>
         <div class="fl-meta">
           {{ RARITY_LABEL[detailItem.rarity]
@@ -439,6 +439,7 @@ import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/
 import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
 import ChestIcon from '@/components/ChestIcon.vue';
+import ItemIcon from '@/components/ItemIcon.vue';
 
 const props = defineProps<{ embedded?: boolean }>();
 const route = useRoute();
@@ -1762,6 +1763,9 @@ function replayAuto() {
 }
 .fl-emoji {
   font-size: 34px;
+}
+.fl-icon {
+  margin: 0 auto 6px;
 }
 .fl-name {
   font-size: 16px;
