@@ -221,17 +221,37 @@
                     :stroke-dashoffset="113.1 * (1 - c.level.progressPct / 100)"
                     transform="rotate(-90 22 22)"
                   />
-                  <text class="ptm-v font-display" x="22" y="27" text-anchor="middle">
+                  <text
+                    class="ptm-v font-display"
+                    x="22"
+                    y="22"
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                  >
                     {{ c.level.level }}
                   </text>
                 </svg>
                 <span class="ptm-ic txt font-display">LvL</span>
               </div>
-              <div class="pt-rank font-display">{{ rank.name }}</div>
+              <button
+                class="pt-rank font-display"
+                type="button"
+                title="Voir tous les rangs de prestige"
+                @click="ranksOpen = true"
+              >
+                {{ rank.name }}
+                <span class="pt-rank-star">{{ rank.star }}/5</span>
+              </button>
               <div class="pt-mini pow" :title="`Puissance ${fmtPow(combatPowerVal)}`">
                 <svg viewBox="0 0 44 44" aria-hidden="true">
                   <circle class="ptm-track full" cx="22" cy="22" r="18" />
-                  <text class="ptm-v font-display" x="22" y="27" text-anchor="middle">
+                  <text
+                    class="ptm-v font-display"
+                    x="22"
+                    y="22"
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                  >
                     {{ fmtPow(combatPowerVal) }}
                   </text>
                 </svg>
@@ -239,6 +259,34 @@
               </div>
             </div>
           </div>
+
+          <!-- Tous les rangs de prestige (clic sur le nom du rang). Cosmétique, dérivé du niveau. -->
+          <q-dialog v-model="ranksOpen" position="bottom">
+            <q-card class="adv-modal">
+              <button class="adv-modal-x" aria-label="Fermer" type="button" @click="ranksOpen = false">
+                ✕
+              </button>
+              <div class="sec-title">Rangs de prestige</div>
+              <div class="sec-hint">
+                Cosmétique, dérivé de ton <b>niveau</b> (1 rang = 10 niveaux, 5 étoiles).
+                N'affecte ni les stats ni le combat.
+              </div>
+              <div class="ranks-list">
+                <div
+                  v-for="r in rankList"
+                  :key="r.name"
+                  class="rank-row"
+                  :class="{ current: r.current }"
+                  :style="{ '--rank-c': r.color }"
+                >
+                  <span class="rank-emo">{{ r.emoji }}</span>
+                  <span class="rank-name font-display">{{ r.name }}</span>
+                  <span class="rank-lv">Niv. {{ r.fromLevel }}–{{ r.toLevel }}</span>
+                  <span v-if="r.current" class="rank-cur">Actuel · {{ rank.star }}/5 ★</span>
+                </div>
+              </div>
+            </q-card>
+          </q-dialog>
 
           <!-- 3 stats en CERCLES sur une ligne. L'anneau = part du build (somme=100 %),
              le chiffre au centre = la valeur réelle (jamais « pleine » à tort). -->
@@ -2256,7 +2304,7 @@ import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
-import { characterRank } from '@/lib/characterRank';
+import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import DustIcon from '@/components/DustIcon.vue';
@@ -2465,6 +2513,19 @@ const betterFilterSlot = ref<ItemSlot | null>(null);
 const persoSub = ref<'perso'>('perso');
 const talentsOpen = ref(false);
 const familiarsOpen = ref(false);
+const ranksOpen = ref(false);
+// Liste des 10 rangs de prestige (cosmétiques, dérivés du niveau) : 1 rang = 10 niveaux
+// (5 étoiles × 2 niveaux). Marque le rang courant + sa plage de niveaux.
+const rankList = computed(() =>
+  CHARACTER_RANKS.map((t, i) => ({
+    name: t.name,
+    emoji: t.emoji,
+    color: t.color,
+    fromLevel: i * 10 + 1,
+    toLevel: i * 10 + 10,
+    current: i === rank.value.rankIndex,
+  })),
+);
 // Sous-onglet Explorer : donjons (carte) / boss de palier.
 const exploreSub = ref<'donjons' | 'boss'>('donjons');
 // L'Atelier (forge d'objet / de set) est débloqué par le bâtiment 🔨 Forge.
@@ -2517,7 +2578,7 @@ const STAR_PATH =
 const STAR_ANGLES = [-150, -120, -90, -60, -30]; // degrés (0=droite, 90=bas) → arc du haut
 function starTf(i: number): string {
   const a = ((STAR_ANGLES[i] ?? -90) * Math.PI) / 180;
-  const R = 50; // sur l'anneau (bord du cadre) → étoiles centrées sur l'épaisseur du cercle
+  const R = 47; // centré sur l'ÉPAISSEUR du trait (le cadre 172 + bordure 4 → milieu du trait ≈ 47/50)
   return `translate(${(50 + R * Math.cos(a)).toFixed(1)} ${(50 + R * Math.sin(a)).toFixed(1)})`;
 }
 // Combattant SANS équipement ni talents (stats de fond seules) → base de la
@@ -4870,12 +4931,65 @@ onUnmounted(() => {
   filter: drop-shadow(0 0 3px color-mix(in srgb, var(--rank-c, var(--accent)) 70%, transparent));
 }
 .pt-rank {
-  flex: 1 1 auto;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
   font-weight: 800;
   font-size: 16px;
   letter-spacing: 0.4px;
   color: color-mix(in srgb, var(--rank-c, var(--accent)) 62%, var(--text));
+}
+.pt-rank-star {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--dim);
+}
+/* Liste des rangs de prestige (modale) */
+.ranks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.rank-row.current {
+  border-color: color-mix(in srgb, var(--rank-c) 70%, transparent);
+  background: color-mix(in srgb, var(--rank-c) 14%, var(--surface));
+}
+.rank-emo {
+  font-size: 20px;
+  line-height: 1;
+}
+.rank-name {
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--rank-c);
+}
+.rank-lv {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.rank-cur {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--rank-c);
+  white-space: nowrap;
 }
 /* Bloc central : cercle centré + Niveau (bas-gauche) / Puissance (bas-droite). */
 .pt-main {
