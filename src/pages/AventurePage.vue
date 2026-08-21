@@ -2150,8 +2150,8 @@
                   <span
                     >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} +{{
                       equippedInSlot(d.slot)!.enchant ?? 0
-                    }}
-                    · {{ itemEffects(equippedInSlot(d.slot)!) }}</span
+                    }}<span v-if="equippedInSlot(d.slot)!.setId" title="Pièce de set"> 🧩</span> ·
+                    {{ itemEffects(equippedInSlot(d.slot)!) }}</span
                   >
                   <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
                     rarityVerdict(d).label
@@ -2612,19 +2612,20 @@ const rank = computed(() => characterRank(c.value.level.level));
 const STAR_PATH =
   'M0,-6 L1.76,-2.43 L5.7,-1.85 L2.85,0.94 L3.53,4.85 L0,3 L-3.53,4.85 L-2.85,0.94 L-5.7,-1.85 L-1.76,-2.43 Z';
 const STAR_ANGLES = [-150, -120, -90, -60, -30]; // degrés (0=droite, 90=bas) → arc du haut
-// STAR_PATH pointe vers le HAUT : sa pointe haute atteint y=-6 mais les pointes basses
-// n'atteignent que y=+4,85 → le centre de sa BOUNDING-BOX est à y=-0,575 (au-dessus de
-// l'origine du tracé). On aligne ce centre VISUEL (bbox), pas l'origine, sur le trait.
-const STAR_CY = -0.575;
+// STAR_PATH pointe vers le HAUT : sa pointe haute monte à y=-6 mais les pointes basses ne
+// descendent qu'à y=+4,85 → il y a plus d'étoile AU-DESSUS du point d'ancrage qu'en dessous,
+// donc elle « paraît basse » posée sur le trait. On la remonte d'un poil (lift optique) pour
+// qu'elle SEMBLE centrée sur le trait.
+const STAR_LIFT = 1.5;
 function starTf(i: number): string {
   const a = ((STAR_ANGLES[i] ?? -90) * Math.PI) / 180;
   // Trait au milieu de l'épaisseur de l'anneau : cadre 172px (border-box) + bordure 4px →
   // 84px du centre ; l'SVG des étoiles (inset -4px) fait 180px pour un viewBox de 100 →
-  // échelle 1,8 → 84/1,8 = 46,7 unités. On retranche STAR_CY pour poser le centre de la
-  // bounding-box de l'étoile (et non l'origine du tracé) exactement sur le trait.
+  // échelle 1,8 → 84/1,8 = 46,7 unités. Le point d'ancrage tombe donc pile sur le trait ;
+  // STAR_LIFT ne fait que compenser optiquement la pointe haute plus longue.
   const R = 46.7;
   const x = 50 + R * Math.cos(a);
-  const y = 50 + R * Math.sin(a) - STAR_CY;
+  const y = 50 + R * Math.sin(a) - STAR_LIFT;
   return `translate(${x.toFixed(2)} ${y.toFixed(2)})`;
 }
 // Combattant SANS équipement ni talents (stats de fond seules) → base de la

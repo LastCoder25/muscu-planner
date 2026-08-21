@@ -1059,6 +1059,30 @@ function scheduleAuto(ms = AUTO_STEP_MS) {
 // plutôt que de risquer la mort (qui fait perdre les objets).
 const AUTO_SAFE_PV = 0.28;
 
+// Le boss du dernier étage est-il GAGNABLE au PV courant ? (simulation seedée, identique à
+// celle de fightRoom → verdict exact). En auto, on ne fuit PAS un boss gagnable : on tente
+// le clear (familier + déblocage du palier suivant), au lieu de retraiter bêtement à bas PV.
+function bossWinnableNow(): boolean {
+  const bossRoom = floor.value.rooms.find((r) => r.type === 'boss');
+  if (!bossRoom) return false; // étage intermédiaire (pas de boss) → non concerné
+  const foe = pickLabyFoe(
+    mulberry32((roomSeed(bossRoom.id) ^ 0x2f6b) >>> 0),
+    labyTierIndex.value,
+    true,
+  );
+  const monster = makeMonster(true, depthOf(), foe);
+  const combatFighter: Combatant = {
+    ...fighter.value,
+    pv: run.value.pv,
+    lifesteal: (fighter.value.lifesteal ?? 0) * LABY_LIFESTEAL,
+  };
+  return simulateCombat(combatFighter, monster, {
+    seed: roomSeed(bossRoom.id),
+    goldOnWin: 0,
+    startPlayerPv: run.value.pv,
+  }).win;
+}
+
 // Premier PAS (salle adjacente) vers la salle la PLUS PROCHE qui satisfait `pred`, en ne
 // TRAVERSANT que des salles déjà visitées (le backtracking ne redéclenche rien). Renvoie
 // l'id du 1ᵉʳ hop, ou null si aucune cible atteignable. BFS sur le graphe des couloirs.
@@ -1106,9 +1130,19 @@ function autoTick() {
   }
   if (over.value) return stopAuto();
 
-  // SÉCURITÉ : PV bas ET une sortie sûre (départ/escalier visité) existe → on SORT en
-  // gardant le butin plutôt que de risquer la mort (perte des objets).
-  if (lowHp.value && hasSafeExit.value) {
+  // NETTOYAGE COMPLET : on visite TOUTES les salles avant de sortir. On garde
+  // escalier/boss pour la fin (sinon on descendrait/affronterait trop tôt).
+  const exploreHop = hopToNearest(
+    (r) => isUnvisited(r) && r.type !== 'stairs' && r.type !== 'boss',
+  );
+  const onlyBossLeft = exploreHop == null; // exploration finie → ne reste que l'escalier/boss
+
+  // SÉCURITÉ : PV bas ET une sortie sûre (départ/escalier visité) existe → on SORT en gardant
+  // le butin plutôt que de risquer la mort. EXCEPTION : s'il ne reste QUE le boss et qu'il est
+  // GAGNABLE au PV courant, on ne fuit pas — on tente le clear (familier + déblocage du palier
+  // suivant), sinon l'auto retraitait bêtement à bas PV et ne finissait jamais (tickets
+  // c7187901 / 6294811a).
+  if (lowHp.value && hasSafeExit.value && !(onlyBossLeft && bossWinnableNow())) {
     if (canRetreat.value) return void retreat(); // déjà sur un point de sortie
     const hop = hopToNearest(isSafeExit);
     if (hop != null) {
@@ -1117,11 +1151,6 @@ function autoTick() {
     }
   }
 
-  // NETTOYAGE COMPLET : on visite TOUTES les salles avant de sortir. On garde
-  // escalier/boss pour la fin (sinon on descendrait/affronterait trop tôt).
-  const exploreHop = hopToNearest(
-    (r) => isUnvisited(r) && r.type !== 'stairs' && r.type !== 'boss',
-  );
   if (exploreHop != null) {
     onRoomClick(exploreHop);
     return scheduleAuto();
