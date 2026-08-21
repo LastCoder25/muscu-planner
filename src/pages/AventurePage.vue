@@ -4938,26 +4938,32 @@ onUnmounted(() => {
   fill: var(--accent);
   font-size: 13px;
 }
+/* Badge d'icône (LvL / ⚔️) CENTRÉ verticalement sur l'ÉPAISSEUR du trait de l'anneau
+   (viewBox y=4 sur 44 → ~6px sur 68px de haut ; translateY(-50%) → centré sur le trait),
+   pastille sombre encadrée (liseré). */
 .ptm-ic {
   position: absolute;
-  top: -7px;
+  top: 6px;
   left: 50%;
-  transform: translateX(-50%);
-  font-size: 15px;
+  transform: translate(-50%, -50%);
+  font-size: 14px;
   line-height: 1;
   background: var(--surface);
   border-radius: 999px;
-  padding: 1px 2px;
+  padding: 1px 4px;
+  border: 1px solid color-mix(in srgb, var(--rank-c, var(--accent)) 60%, transparent);
+}
+/* Puissance : encadrement accent (comme le liseré rang du LvL, mais à sa couleur). */
+.pt-mini.pow .ptm-ic {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
 }
 /* Badge texte « LvL » (niveau) : pastille sombre lisérée de la couleur du rang. */
 .ptm-ic.txt {
-  top: -8px;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.5px;
   color: var(--rank-c, var(--accent));
   padding: 2px 5px;
-  border: 1px solid color-mix(in srgb, var(--rank-c, var(--accent)) 60%, transparent);
 }
 
 /* Talents */
