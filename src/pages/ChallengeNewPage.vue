@@ -166,7 +166,7 @@
         </div>
         <div v-if="objMode === 'sets'" class="count-note">
           Objectif en <b>séries</b> ; à la saisie tu renseignes reps + poids par série (comme le
-          Défi 360). Formats <b>Fixe</b> et <b>Cumulé</b> uniquement.
+          Défi 360). Le <b>nombre de séries</b> suit la courbe du format choisi.
         </div>
         <div class="step-h">Quel format ?</div>
         <div class="fmt-grid">
@@ -540,18 +540,13 @@ const customOn = ref(false);
 const customDays = ref(45);
 const config = ref<ChallengeConfig>({ start: 50 });
 const restDays = ref<number[]>([]);
-// Compter en Reps (défaut) ou en Séries (saisie par série façon Défi 360). Le mode
-// Séries n'accepte que les formats Fixe et Cumulé (pas de « séries progressives »).
+// Compter en Reps (défaut) ou en Séries (saisie par série façon Défi 360). Le mode Séries
+// accepte TOUS les formats (ticket 9c7316a7) : le nombre de SÉRIES suit la courbe du format
+// (progressif, pyramidal…), juste à une échelle de séries (cf. scaleForSeries).
 const countMode = ref<'reps' | 'sets'>('reps');
-const availableFormats = computed(() =>
-  countMode.value === 'sets'
-    ? CHALLENGE_FORMATS.filter((f) => f.id === 'fixed' || f.id === 'cumulative')
-    : CHALLENGE_FORMATS,
-);
+const availableFormats = computed(() => CHALLENGE_FORMATS);
 function setCountMode(m: 'reps' | 'sets') {
   countMode.value = m;
-  if (m === 'sets' && format.value !== 'fixed' && format.value !== 'cumulative')
-    format.value = 'fixed';
   reset();
 }
 // UN seul choix d'objectif (fusion unité + comptage, ticket fa27e9a8) : Reps / Séries /
@@ -581,11 +576,6 @@ const favSet = computed(() => new Set(profileStore.profile?.favorite_exercises ?
 // SORTIE cardio (tag 'cardio' = marche/course/vélo) : pilote le sélecteur
 // d'unité distance/temps. Le conditionnement (jumping jacks…) n'en est PAS (reps).
 const isCardio = computed(() => !!exercise.value?.tags?.includes('cardio'));
-// VOIE cardio de l'exo (conditionnement INCLUS : corde/jumping jacks/burpees…). Pilote
-// l'unité de TEMPS : cardio-track → MINUTES (comme une sortie), sinon gainage → secondes.
-// Doit matcher isCardioChallengeRow (affichage) sinon l'avance/retard est faux (ticket 5755a833).
-const cardioTrackExo = computed(() => (exercise.value ? exIsCardio(exercise.value) : false));
-
 // VOIE cardio (budget + onglet) : sorties cardio ET exos de conditionnement
 // (jumping jacks, burpees…) → leur XP va au Cardio, ils vivent donc côté cardio,
 // pas muscu. (Distinct de `isCardio` qui, lui, ne gère que le type d'unité.)
@@ -628,9 +618,10 @@ const unit = computed<'reps' | 'time' | 'distance'>(() => {
   if (isDual.value) return dualUnit.value; // choix utilisateur pour les exos dual
   return exercise.value?.unit === 'time' ? 'time' : 'reps';
 });
-// Gainage en temps = SECONDES (planche, chaise…) → propose secondes ou min:sec. Les exos
-// cardio-track en durée (corde, burpees…) sont en MINUTES → PAS du gainage (cf. cardioTrackExo).
-const isGainageTime = computed(() => unit.value === 'time' && !cardioTrackExo.value);
+// TEMPS au chrono = SECONDES (avec affichage min:sec au choix) : gainage (planche…) ET
+// conditionnement (corde, burpees…). Seules les VRAIES sorties cardio (marche/course/vélo,
+// `isCardio`) restent en minutes/km (ticket 6fdff311).
+const isGainageTime = computed(() => unit.value === 'time' && !isCardio.value);
 const timeDisplay = ref<'sec' | 'mmss'>('sec');
 // Saisie de la durée AU FORMAT choisi (ticket e6c51fc9) : quand min:sec est sélectionné,
 // les champs de durée s'affichent/se saisissent en m:ss (converti en secondes en interne).
@@ -659,8 +650,8 @@ const unitLabel = computed(() =>
   unit.value === 'distance'
     ? 'km'
     : unit.value === 'time'
-      ? cardioTrackExo.value
-        ? 'min' // cardio-track en temps (sortie OU conditionnement) = minutes ; gainage = secondes
+      ? isCardio.value
+        ? 'min' // seules les vraies sorties cardio = minutes ; gainage/conditionnement = secondes
         : 'sec'
       : 'reps',
 );
@@ -840,12 +831,21 @@ function reset() {
     durationDays.value,
     exercise.value.id,
   );
-  // Mode Séries : l'objectif est un petit nombre de SÉRIES (pas des reps).
-  if (unit.value === 'reps' && countMode.value === 'sets') {
-    if (format.value === 'cumulative') config.value.total = 4 * durationDays.value;
-    else config.value.start = 4;
-  }
+  // Mode Séries : l'objectif est un petit nombre de SÉRIES (pas des reps) → on ramène les
+  // magnitudes (générées en reps) à une échelle de séries, en gardant la courbe du format.
+  if (unit.value === 'reps' && countMode.value === 'sets')
+    config.value = scaleForSeries(config.value, durationDays.value);
   restDays.value = config.value.rest_weekdays ?? [];
+}
+// Reps → séries : ~12 reps par série. Divise les magnitudes (start/pic/max/increment/pic
+// courant), plancher 2 ; total cumulé = ≥ 2 séries/jour. Les ratios (%, coef) sont conservés.
+function scaleForSeries(cfg: ChallengeConfig, days: number): ChallengeConfig {
+  const s = (v: number) => Math.max(2, Math.round(v / 12));
+  const out: ChallengeConfig = { ...cfg };
+  for (const k of ['start', 'peak', 'max', 'increment', 'capacity'] as const)
+    if (out[k] != null) out[k] = s(out[k]);
+  if (out.total != null) out.total = Math.max(2 * days, Math.round(out.total / 12));
+  return out;
 }
 // Durée par défaut à la sélection : le conseillé (30 j) s'il rentre dans la place
 // restante de la voie, sinon 1 semaine → on ne tombe jamais sur une durée refusée.

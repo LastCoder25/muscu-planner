@@ -3,7 +3,7 @@
 // statistiques (streak/complétion) et évaluation des succès.
 import type { Level } from './types';
 import { REP_XP, assistMult, ASSIST_MULT, XP_MULT } from './athlete';
-import { isCardioTrackChallenge } from '@/data/cardio';
+import { isCardioChallengeExercise } from '@/data/cardio';
 
 export type ChallengeFormat =
   | 'fixed'
@@ -31,10 +31,10 @@ export interface ChallengeConfig {
   carry_over?: boolean; // report du surplus/déficit d'un jour sur les suivants
   adaptive?: boolean; // difficulté auto : s'ajuste au ressenti + résultat (calibration implicite)
   capacity?: number; // échelle courante (pic) pilotée par l'autorégulation
-  time_display?: 'sec' | 'mmss'; // gainage (unit='time', non-cardio) : affichage secondes ou min:sec
+  time_display?: 'sec' | 'mmss'; // temps au chrono (gainage/conditionnement) : affichage sec ou min:sec
   assisted?: boolean; // exo poids du corps fait ASSISTÉ (élastique/machine) → XP pondérée ×0,6
   count_mode?: 'reps' | 'sets'; // 'reps' (défaut) = objectif en reps ; 'sets' = en SÉRIES
-  //   (saisie par série reps+poids+assisté façon Défi 360 ; formats fixe/cumulé uniquement).
+  //   (saisie par série reps+poids+assisté façon Défi 360 ; tous les formats, échelle séries).
   bodyweight?: boolean; // exo au poids du corps → propose le toggle « assisté » à la saisie
 }
 
@@ -254,11 +254,10 @@ export function suggestConfig(
 ): ChallengeConfig {
   let max: number;
   if (unit === 'time')
-    // Cardio-TRACK en temps (sortie OU conditionnement : corde, burpees…) = MINUTES ;
-    // gainage (planche, chaise) = SECONDES. Doit matcher l'unité du wizard/affichage.
-    max = isCardioTrackChallenge({ unit, exercise_id: exerciseId })
-      ? cardioMinBase(level)
-      : gainageSecBase(level);
+    // TEMPS : seules les VRAIES SORTIES cardio (marche/course/vélo) sont en MINUTES ; le
+    // gainage (planche…) ET le conditionnement (corde, burpees…) sont en SECONDES + chrono
+    // (ticket 6fdff311). Doit matcher l'unité du wizard/affichage.
+    max = isCardioChallengeExercise(exerciseId) ? cardioMinBase(level) : gainageSecBase(level);
   else if (unit === 'distance') max = distanceBase(level, exerciseId);
   else max = Math.max(3, Math.round(repsBase(level) * exerciseFactor(exerciseId)));
   const common = {
@@ -895,12 +894,13 @@ export function challengeTonnage(c: Challenge): number {
 
 /** XP d'EFFORT brute (avant XP_MULT) d'un défi, quel que soit le format :
  *  - reps → Σ reps assistées × REP_XP × poids-de-rep + tonnage/500 ;
- *  - GAINAGE (temps en secondes, hors cardio) → 1 pt / 4 s × REP_XP ;
- *  - cardio (temps=minutes ou distance) → 0 (compté via les sorties, pas de doublon). */
+ *  - TEMPS au chrono (gainage OU conditionnement) → 1 pt / 4 s × REP_XP ;
+ *  - VRAIE sortie cardio (temps=minutes ou distance) → 0 (compté via les sorties, pas de doublon).
+ *  La piste (muscu/cardio) est décidée en aval par `isCardioTrackChallenge` (useProgress). */
 function effortXpRaw(c: Challenge): number {
   if (c.unit === 'reps')
     return assistedReps(c) * REP_XP * (c.rep_weight ?? 1) + challengeTonnage(c) / 500;
-  if (c.unit === 'time' && !isCardioTrackChallenge(c)) {
+  if (c.unit === 'time' && !isCardioChallengeExercise(c.exercise_id)) {
     const secs = c.progress.reduce((a, p) => a + (p.done || 0), 0);
     return (secs / 4) * REP_XP;
   }
@@ -913,8 +913,9 @@ function effortXpRaw(c: Challenge): number {
  *  répartie par jour (cf. `challengeXpPoints`). Gainage (temps) → 0 par jour. */
 export function challengeDayXp(ch: Challenge, p: DayProgress): number {
   if (ch.unit === 'time') {
-    // Gainage → XP selon le temps (1 pt / 4 s) ; cardio-temps compté ailleurs.
-    if (isCardioTrackChallenge(ch)) return 0;
+    // Temps au chrono (gainage/conditionnement) → XP selon le temps (1 pt / 4 s) ; les
+    // vraies sorties cardio (minutes) sont comptées via les sorties.
+    if (isCardioChallengeExercise(ch.exercise_id)) return 0;
     const secs = p.done || 0;
     return secs > 0 ? Math.round((secs / 4) * REP_XP * XP_MULT) : 0;
   }

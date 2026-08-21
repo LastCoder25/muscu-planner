@@ -182,17 +182,14 @@
 
           <!-- Reps / Séries / Cardio-minutes : saisie du jour -->
           <template v-else>
-            <div v-if="todayClosed && !correcting && !editMode && !isCumulative" class="today-ok">
+            <div v-if="todayClosed && !isCumulative" class="today-ok">
               <q-icon v-if="todayCompleted" name="check_circle" color="positive" />
               <q-icon v-else name="bedtime" color="primary" />
               Journée validée · {{ show(doneToday) }}
-              <button v-if="isCardioTime" class="corr-link" @click="correcting = true">
-                Corriger
-              </button>
               <button class="corr-link" @click="reopenDay">Reprendre</button>
             </div>
             <div v-else class="exec">
-              <div v-if="todayCompleted && !correcting && !editMode" class="done-badge">
+              <div v-if="todayCompleted" class="done-badge">
                 <q-icon name="check_circle" color="positive" size="18px" /> Objectif atteint ✅ —
                 continue pour un excès
               </div>
@@ -210,48 +207,11 @@
               </template>
 
               <template v-else>
-                <!-- Reps / Séries : PAS de chrono (ticket 9e9cfc67) — le chrono reste réservé
-                     au gainage (durée en secondes) et le cardio a sa saisie de minutes. -->
-
-                <!-- Cardio (minutes) : boutons rapides +N personnalisables (pas de poids) -->
-                <template v-if="isCardioTime">
-                  <div class="quick-row">
-                    <button
-                      v-for="q in quickAdds"
-                      :key="q"
-                      class="add"
-                      :class="{ editing: editMode, minus: correcting && !editMode }"
-                      @click="editMode ? removeQuick(q) : addReps(correcting ? -q : q)"
-                    >
-                      <span v-if="editMode" class="rm">✕ {{ q }}</span>
-                      <template v-else>{{ correcting ? '−' : '+' }}{{ q }}</template>
-                    </button>
-                    <button
-                      v-if="editMode"
-                      class="add ghost"
-                      aria-label="Ajouter un bouton"
-                      @click="addQuickButton"
-                    >
-                      ＋
-                    </button>
-                  </div>
-                  <div class="opts-row">
-                    <button
-                      class="opt"
-                      :class="{ on: correcting }"
-                      @click="correcting = !correcting"
-                    >
-                      <q-icon name="backspace" size="15px" /> Correction (−)
-                    </button>
-                    <button class="opt" :class="{ on: editMode }" @click="editMode = !editMode">
-                      <q-icon name="tune" size="15px" /> Gérer
-                    </button>
-                    <button v-if="editMode" class="opt" @click="resetQuick">Réinitialiser</button>
-                  </div>
-                </template>
+                <!-- Reps / Séries : PAS de chrono (ticket 9e9cfc67) — le chrono est réservé au
+                     temps (gainage/conditionnement, bloc ci-dessus). -->
 
                 <!-- Séries : ＋1/＋2/＋3/＋4 → fenêtre reps + poids -->
-                <div v-else-if="isSetsMode" class="quick-row">
+                <div v-if="isSetsMode" class="quick-row">
                   <button v-for="n in [1, 2, 3, 4]" :key="n" class="add" @click="openAddSet(n)">
                     ＋{{ n }}
                   </button>
@@ -436,11 +396,7 @@ import {
   type ChallengeSet,
 } from '@/lib/challenges';
 import { formatOption } from '@/data/challengeFormats';
-import {
-  isCardioChallengeExercise,
-  isCardioTrackChallenge,
-  defaultActivityForChallenge,
-} from '@/data/cardio';
+import { isCardioChallengeExercise, defaultActivityForChallenge } from '@/data/cardio';
 import { useChallengesStore } from '@/stores/challenges';
 import { useCardioStore } from '@/stores/cardio';
 import { useAuthStore } from '@/stores/auth';
@@ -489,61 +445,25 @@ function loadQuick(): number[] {
   return [1, 5, 10];
 }
 const quickAdds = ref<number[]>(loadQuick());
-const editMode = ref(false); // gérer (ajouter/retirer) les boutons
-const correcting = ref(false); // mode correction : les ajouts deviennent des retraits
-
-function persistQuick() {
-  localStorage.setItem(QUICK_KEY, JSON.stringify(quickAdds.value));
-}
-// Ajoute un bouton « nombre favori » SANS écraser les autres (dédupliqué, trié).
-function addQuickButton() {
-  $q.dialog({
-    title: 'Nouveau bouton',
-    message: 'Nombre à ajouter d’un tap (ex. 25).',
-    prompt: { model: '', type: 'number' },
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Ajouter', color: 'primary', textColor: 'dark' },
-  }).onOk((val: string) => {
-    const n = Math.round(Number(val));
-    if (!n || n <= 0 || quickAdds.value.includes(n)) return;
-    quickAdds.value = [...quickAdds.value, n].sort((a, b) => a - b).slice(0, 8);
-    persistQuick();
-    editMode.value = false; // on ressort de la gestion → le bouton est utilisable de suite
-  });
-}
-function removeQuick(n: number) {
-  quickAdds.value = quickAdds.value.filter((x) => x !== n);
-  persistQuick();
-}
-function resetQuick() {
-  quickAdds.value = [1, 5, 10];
-  persistQuick();
-}
-
+// `quickAdds` = nombres « favoris » — sert désormais uniquement de valeur par défaut à la
+// saisie d'une série (plus de boutons +N depuis que le conditionnement passe au chrono).
 const today = logicalToday(); // « jour d'entraînement » (bascule à 4 h)
 const isTime = computed(() => ch.value?.unit === 'time');
 // Temps en MINUTES pour tout le CARDIO-TRACK : vraies sorties (vélo/course/marche) ET
 // conditionnement (corde à sauter, burpees…). Gainage (planche, chaise) = SECONDES (chrono).
 // Doit matcher le wizard/l'affichage sinon l'unité est incohérente (ticket 5755a833).
-const isCardioTime = computed(
-  () => !!ch.value && ch.value.unit === 'time' && isCardioTrackChallenge(ch.value),
-);
 // Vraie sortie cardio (marche/course/vélo) — km OU minutes : la saisie = une SORTIE
 // cardio (comme les tuiles d'accueil), pas des reps manuelles.
 const isCardioOuting = computed(
   () => !!ch.value && isCardioChallengeExercise(ch.value.exercise_id),
 );
-const isGainageTime = computed(() => isTime.value && !isCardioTime.value);
+// TEMPS au CHRONO (secondes) : gainage (planche…) ET conditionnement (corde, burpees…).
+// Seules les vraies sorties cardio restent en minutes/km (isCardioOuting → saisie de sortie).
+const isGainageTime = computed(() => isTime.value && !isCardioOuting.value);
 const unitLabel = computed(() =>
-  ch.value?.unit === 'time'
-    ? isCardioTime.value
-      ? 'min'
-      : 'sec'
-    : ch.value?.unit === 'distance'
-      ? 'km'
-      : 'reps',
+  ch.value?.unit === 'time' ? 'sec' : ch.value?.unit === 'distance' ? 'km' : 'reps',
 );
-// Gainage en temps : affichage secondes brutes OU min:sec (config.time_display).
+// Temps au chrono : affichage secondes brutes OU min:sec (config.time_display).
 const mmss = computed(() => isGainageTime.value && ch.value?.config.time_display === 'mmss');
 function fmtV(n: number): string {
   if (mmss.value) {
@@ -767,14 +687,6 @@ async function goSuccess() {
   await router.push('/challenges?tab=ach');
 }
 
-function addReps(n: number) {
-  if (!inToday.value) return;
-  const e = ensureToday();
-  e.done = Math.max(0, e.done + n);
-  syncComplete(e);
-  void afterChange();
-}
-
 // ── Saisie par SÉRIE (reps + poids + assisté), via le dialogue partagé ──
 // Mode 'sets' : done = nb de séries. Mode 'reps' : la série ajoute ses reps à done
 // ET garde le détail (poids → tonnage) ; bouton « ＋ série (poids) » secondaire.
@@ -967,7 +879,7 @@ function editDay(d: number) {
   const cur = doneOf(d);
   $q.dialog({
     title: `Corriger le jour ${d + 1}`,
-    message: `${unitWord.value} réalisé${isCardioTime.value ? '' : 's'} ce jour-là :`,
+    message: `${unitWord.value} réalisés ce jour-là :`,
     prompt: { model: String(cur), type: 'number' },
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Corriger', color: 'primary' },
