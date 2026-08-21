@@ -4893,7 +4893,7 @@ onUnmounted(() => {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   width: 100%;
-  padding: 0 14px;
+  padding: 0 6px;
   margin-top: 12px;
   margin-bottom: 8px;
 }
@@ -4904,8 +4904,8 @@ onUnmounted(() => {
 .pt-mini {
   position: relative;
   flex: 0 0 auto;
-  width: 68px;
-  height: 68px;
+  width: 80px;
+  height: 80px;
 }
 .pt-mini svg {
   width: 100%;
@@ -4928,7 +4928,7 @@ onUnmounted(() => {
 }
 .ptm-v {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 18px;
   font-variant-numeric: tabular-nums;
 }
 .pt-mini.lvl .ptm-v {
@@ -4936,34 +4936,34 @@ onUnmounted(() => {
 }
 .pt-mini.pow .ptm-v {
   fill: var(--accent);
-  font-size: 13px;
+  font-size: 15px;
 }
 /* Badge d'icône (LvL / ⚔️) CENTRÉ verticalement sur l'ÉPAISSEUR du trait de l'anneau
-   (viewBox y=4 sur 44 → ~6px sur 68px de haut ; translateY(-50%) → centré sur le trait),
-   pastille sombre encadrée (liseré). */
+   (top en % du médaillon : viewBox y=4 sur 44 → 9 % de la hauteur → suit toute taille de
+   médaillon ; translateY(-50%) → centré sur le trait). Pastille sombre encadrée (liseré),
+   petit espace HOMOGÈNE tout autour de l'icône. */
 .ptm-ic {
   position: absolute;
-  top: 6px;
+  top: 9%;
   left: 50%;
   transform: translate(-50%, -50%);
   font-size: 14px;
   line-height: 1;
   background: var(--surface);
   border-radius: 999px;
-  padding: 1px 4px;
+  padding: 2px 6px;
   border: 1px solid color-mix(in srgb, var(--rank-c, var(--accent)) 60%, transparent);
 }
 /* Puissance : encadrement accent (comme le liseré rang du LvL, mais à sa couleur). */
 .pt-mini.pow .ptm-ic {
   border-color: color-mix(in srgb, var(--accent) 60%, transparent);
 }
-/* Badge texte « LvL » (niveau) : pastille sombre lisérée de la couleur du rang. */
+/* Badge texte « LvL » : même gabarit que l'icône ⚔️ (taille alignée → homogène). */
 .ptm-ic.txt {
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.5px;
   color: var(--rank-c, var(--accent));
-  padding: 2px 5px;
 }
 
 /* Talents */
