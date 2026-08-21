@@ -175,15 +175,8 @@
       </div>
 
       <!-- Récolte des filons (visible dès qu'il y a quelque chose à récolter) -->
-      <button
-        v-if="readyTotal.dust + readyTotal.energy > 0"
-        class="collect-pill"
-        @click="collectAll"
-      >
+      <button v-if="readyTotal.energy > 0" class="collect-pill" @click="collectAll">
         🧺 Récolter
-        <span v-if="readyTotal.dust" class="cp-r"
-          ><DustIcon variant="dust" />{{ readyTotal.dust }}</span
-        >
         <span v-if="readyTotal.energy" class="cp-r">⚡{{ readyTotal.energy }}</span>
       </button>
     </div>
@@ -344,20 +337,6 @@
                 <template v-else>⬆️ Améliorer · 🪙{{ plotUpCost(selectedPlot.building) }}</template>
               </button>
             </div>
-            <!-- Comptoir : échanger de l'or contre de la poussière ✨ -->
-            <div v-if="selectedPlot.building.typeId === 'comptoir'" class="pm-comptoir">
-              <div class="pmc-rate">
-                Taux : <b>100 🪙 → {{ goldToDust(char.row?.buildings ?? [], 100) }} ✨</b>
-              </div>
-              <button
-                class="pm-up convert"
-                :disabled="goldToDust(char.row?.buildings ?? [], char.row?.gold ?? 0) < 1"
-                @click="doConvert(char.row?.gold ?? 0)"
-              >
-                🏪 Échanger tout · {{ char.row?.gold ?? 0 }} 🪙 →
-                {{ goldToDust(char.row?.buildings ?? [], char.row?.gold ?? 0) }} ✨
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -400,7 +379,6 @@
         <div class="coll-text">{{ lastOutcome.text }}</div>
         <div class="coll-haul">
           <span v-if="lastOutcome.gold">🪙 +{{ lastOutcome.gold }}</span>
-          <span v-if="lastOutcome.dust">✨ +{{ lastOutcome.dust }}</span>
           <span v-if="lastOutcome.enchantScrolls">📜 +{{ lastOutcome.enchantScrolls }}</span>
           <span v-if="lastOutcome.key">🗝️ +{{ lastOutcome.key }}</span>
           <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item"
@@ -435,7 +413,6 @@ import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
-import DustIcon from '@/components/DustIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
 import { playerWithGear, RARITY_RANK } from '@/lib/items';
@@ -459,7 +436,6 @@ import {
   labyrinthLuckBonus,
   bossAltarRollFloor,
   bossRewardCount,
-  goldToDust,
   BUILD,
   type Building,
   type BuildingType,
@@ -821,14 +797,6 @@ function collectAll() {
   const uid = auth.user?.id;
   if (uid) void char.collectFilons(uid, Date.now());
 }
-// Comptoir : échange tout l'or contre de la poussière ✨.
-function doConvert(gold: number) {
-  const uid = auth.user?.id;
-  if (!uid) return;
-  void char.convertGold(uid, gold).then((dust) => {
-    if (dust) $q.notify({ type: 'positive', message: `🏪 +${dust} ✨ (or échangé)` });
-  });
-}
 // Construction : un type est-il disponible (niveau atteint + unicité respectée) ?
 function typeBuildable(t: BuildingType): boolean {
   return canBuildType(t.id, heroLevel.value, char.row?.buildings ?? []);
@@ -852,9 +820,6 @@ function utilityEffectLabel(b: Building): string {
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')
     return `${bossRewardCount([b])} choix de récompense · ciblage du set · +${Math.round(bossAltarRollFloor([b]) * 100)}% qualité de roll`;
-  // (Incubateur/Scriptorium sont désormais des PRODUCTEURs → leur libellé passe par
-  //  buildingEffectAt, jamais ici.)
-  if (b.typeId === 'comptoir') return `100 🪙 → ${goldToDust([b], 100)} ✨`;
   return buildingType(b.typeId)?.desc ?? ''; // autres utilitaires : description
 }
 
@@ -1529,24 +1494,6 @@ function fmtMin(min: number): string {
   font-weight: 700;
   font-size: 13px;
   cursor: pointer;
-}
-.pm-comptoir {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.pmc-rate {
-  font-size: 12.5px;
-  color: var(--dim);
-}
-.pm-up.convert {
-  border-color: #b07cff;
-  color: #b07cff;
-}
-.pm-up.convert:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 .pm-collect {
   border-color: var(--accent);

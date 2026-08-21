@@ -34,8 +34,6 @@ export interface BuildingEffect {
   labyLuckPerLvl?: number; // Porte du Labyrinthe : +X à la chance de butin des coffres / niveau
   bossRollFloorPerLvl?: number; // Autel des boss : +X au plancher de qualité de roll / niveau
   summonCostRedPerLvl?: number; // Autel des boss : −X% du coût en pierres d'invocation / niveau
-  forgeLuckPerLvl?: number; // Forge : +X au biais de rareté des objets forgés / niveau
-  goldToDustPerLvl?: number; // Comptoir : poussière ✨ obtenue par OR échangé / niveau
 }
 
 // Ce qu'un bâtiment DÉBLOQUE (activité/fonctionnalité) → affiché au joueur à la
@@ -72,17 +70,6 @@ export interface Building {
 
 // ── Registre des bâtiments (le socle extensible) ──
 export const BUILDING_TYPES: BuildingType[] = [
-  {
-    id: 'dust_vein',
-    label: 'Filon de poussière',
-    emoji: '⛏️',
-    category: 'producer',
-    resource: 'dust',
-    prodPerHrPerLvl: 0.35,
-    buildGold: 800,
-    unique: true,
-    desc: 'Produit de la poussière d’évolution ✨ en continu.',
-  },
   // Producteur d'ÉNERGIE : convertit l'or (surabondant en fin de partie) en énergie
   // de JEU → adoucit le pincement d'énergie au niveau élevé (le coût des runs monte
   // plus vite que l'énergie/séance). Reste borné (stockage 18 h + niveau ≤ joueur) →
@@ -167,41 +154,6 @@ export const BUILDING_TYPES: BuildingType[] = [
     unique: true,
     desc: 'Récompenses de boss : ciblage du set manquant (dès la construction) + plus de CHOIX en montant l’Autel (2 → 3 au niv.10 → 4 au niv.20 → 5 au niv.30). Chaque niveau : +qualité de roll, −coût en pierres d’invocation 🔮.',
   },
-  // Utilitaire UNIQUE : la FORGE débloque l'Atelier de poussière (forger un objet neuf,
-  // forge de set). Sans elle, l'Atelier reste fermé → un cran de progression de plus.
-  {
-    id: 'forge',
-    label: 'Forge',
-    emoji: '🔨',
-    category: 'utility',
-    effect: { forgeLuckPerLvl: 0.035 },
-    buildGold: 1000,
-    unlockLevel: 5,
-    unique: true,
-    unlock: {
-      activity: 'L’Atelier de forge (poussière)',
-      where: 'Aventure › onglet Équip. › 🔧 Atelier.',
-    },
-    desc: 'Débloque l’Atelier : forger un objet neuf à ton niveau + forge de pièces de set. Chaque niveau améliore la rareté des objets forgés.',
-  },
-  // Utilitaire : PUITS D'OR. Depuis le retrait de la boutique/respec, l'or s'accumule sans
-  // débouché → le Comptoir l'échange contre de la poussière ✨ (ressource la plus demandée).
-  // Taux qui monte avec le niveau. Sens UNIQUE (pas de retour poussière→or) → pas de boucle.
-  {
-    id: 'comptoir',
-    label: 'Comptoir',
-    emoji: '🏪',
-    category: 'utility',
-    effect: { goldToDustPerLvl: 0.02 }, // niv.1 ~0,02 ✨/or … niv.20 ~0,4 ✨/or
-    buildGold: 700,
-    unlockLevel: 4,
-    unique: true,
-    unlock: {
-      activity: 'L’échange or → poussière',
-      where: 'Carte 🗺️ Expédition › touche le Comptoir.',
-    },
-    desc: 'Échange ton OR contre de la poussière ✨. Chaque niveau améliore le taux de change.',
-  },
 ];
 
 const BY_ID = new Map(BUILDING_TYPES.map((t) => [t.id, t]));
@@ -264,28 +216,6 @@ export function outpostLevel(buildings: Building[]): number {
 /** Les expéditions sont-elles débloquées ? (avant-poste construit). */
 export function expeditionsUnlocked(buildings: Building[]): boolean {
   return outpostLevel(buildings) > 0;
-}
-/** La Forge est-elle construite ? → débloque l'Atelier (forge d'objet / de set). */
-export function forgeBuilt(buildings: Building[]): boolean {
-  return buildings.some((b) => b.typeId === 'forge');
-}
-const FORGE_LUCK_CAP = 0.5; // biais de rareté max apporté par le niveau de Forge
-/** Bonus de chance de RARETÉ des objets forgés selon le NIVEAU de la Forge (comme
- *  l'Autel/Incubateur : monter le bâtiment améliore ses sorties). Plafonné. */
-export function forgeLuckBonus(buildings: Building[]): number {
-  const lvl = buildings.find((b) => b.typeId === 'forge')?.level ?? 0;
-  const per = buildingType('forge')?.effect?.forgeLuckPerLvl ?? 0;
-  return Math.min(FORGE_LUCK_CAP, lvl * per);
-}
-// ── Comptoir : taux de change OR → POUSSIÈRE (poussière obtenue par or échangé). ──
-export function comptoirRate(buildings: Building[]): number {
-  const lvl = buildings.find((b) => b.typeId === 'comptoir')?.level ?? 0;
-  const per = buildingType('comptoir')?.effect?.goldToDustPerLvl ?? 0;
-  return lvl * per;
-}
-/** Poussière obtenue en échangeant `gold` or au Comptoir (0 si non construit). */
-export function goldToDust(buildings: Building[], gold: number): number {
-  return Math.floor(Math.max(0, gold) * comptoirRate(buildings));
 }
 // ── Porte du Labyrinthe (gate + qualité du butin) ──
 const LABY_GATE_ID = 'labyrinth_gate';

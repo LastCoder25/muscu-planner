@@ -59,17 +59,10 @@
               >⚡ {{ c.energy }}</span
             >
             <!-- Boutique retirée pour le moment (ticket dc7c746d) : la puce or est un simple indicateur. -->
-            <span
-              class="tb-r gold"
-              title="Or — expéditions, Comptoir (→ poussière) et construction des bâtiments"
+            <span class="tb-r gold" title="Or — expéditions et construction des bâtiments"
               >🪙 {{ char.row.gold }}</span
             >
             <span class="tb-sep" aria-hidden="true"></span>
-            <span
-              class="tb-r dust"
-              title="Poussière — grade des objets (🔧) + forge / reroll / craft de set (Atelier)"
-              ><DustIcon variant="dust" /> {{ char.row.dust }}</span
-            >
             <span
               v-if="char.row.fragments"
               class="tb-r frag"
@@ -392,24 +385,9 @@
             </div>
             <div class="sec-hint">
               Les talents <b>droppent à un grade</b> (rang + qualité). Équipe-en
-              {{ talentSlots }} (change quand tu veux). Deux axes : <b>⚡ enchant</b> (+N,
-              parchemins 📜 / protections 🛡️, gamble) et <b>🔧 grade</b>. Recycle les surplus →
-              <b><DustIcon variant="ink" /> poussière d'encre</b> (tu as {{ char.row.ink_dust }}) →
-              infuse le grade jusqu'au plafond de ton niveau.
-            </div>
-            <div class="ench-bar">
-              <span
-                >⚡ <b>📜 {{ char.row.enchant_scrolls }}</b> ·
-                <b>🛡️ {{ char.row.protections }}</b></span
-              >
-              <label class="ench-prot" :class="{ off: char.row.protections < 1 }">
-                <input
-                  v-model="enchantUseProtection"
-                  type="checkbox"
-                  :disabled="char.row.protections < 1"
-                />
-                🛡️ Protéger l'échec
-              </label>
+              {{ talentSlots }} (change quand tu veux). Monte le <b>🔧 grade</b> (rang/qualité) en
+              recyclant les surplus → <b><DustIcon variant="ink" /> poussière d'encre</b> (tu as
+              {{ char.row.ink_dust }}) → infuse le grade jusqu'au plafond de ton niveau.
             </div>
 
             <div v-if="!char.row.talents.length" class="talents-empty">
@@ -458,23 +436,6 @@
                     {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
                   </button>
                   <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
-                  <!-- ⚡ Enchant (gamble) : parchemins 📜 (+ protection optionnelle). -->
-                  <button
-                    class="tal-b ghost"
-                    :disabled="
-                      onExpedition || !canEnchant(t.enchant) || char.row.enchant_scrolls < 1
-                    "
-                    :title="enchantTitleTalent(t)"
-                    @click="doEnchantTalent(t.id)"
-                  >
-                    <template v-if="!canEnchant(t.enchant)"
-                      >📜<span class="gu-up">↑</span> Max</template
-                    >
-                    <template v-else
-                      >📜<span class="gu-up">↑</span> +{{ t.enchant + 1 }} ·
-                      {{ Math.round(enchantSuccessRate(t.enchant) * 100) }}%</template
-                    >
-                  </button>
                   <!-- ⭐↑ Grade +1 (rang/qualité) : poussière d'encre, plafonné au grade du niveau. -->
                   <button
                     class="tal-b ghost"
@@ -508,8 +469,7 @@
           </q-card>
         </q-dialog>
 
-        <!-- FAMILIERS — recycle les surplus → poussière d'âme, puis 2 axes par familier :
-             ⚡ enchant (+N, parchemins) et 🔧 grade (rang/qualité, poussière d'âme). -->
+        <!-- FAMILIERS — recycle les surplus → poussière d'âme, puis 🔧 grade (rang/qualité). -->
         <q-dialog v-model="familiarsOpen" position="bottom">
           <q-card class="adv-modal">
             <button class="adv-modal-x" aria-label="Fermer" @click="familiarsOpen = false">
@@ -520,25 +480,9 @@
             </div>
             <div class="sec-hint">
               Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Équipe-en 1.
-              Deux axes : <b>⚡ enchant</b> (+N, parchemins 📜 / protections 🛡️, gamble) et
-              <b>🔧 grade</b> (rang/qualité). Recycle les familiers en trop →
+              Monte le <b>🔧 grade</b> (rang/qualité) en recyclant les familiers en trop →
               <b><DustIcon variant="soul" /> poussière d'âme</b> (tu as {{ char.row.fragments }}) →
               infuse le grade jusqu'au plafond de ton niveau (ou <b>vends 🪙</b>).
-            </div>
-
-            <div class="ench-bar">
-              <span
-                >⚡ <b>📜 {{ char.row.enchant_scrolls }}</b> ·
-                <b>🛡️ {{ char.row.protections }}</b></span
-              >
-              <label class="ench-prot" :class="{ off: char.row.protections < 1 }">
-                <input
-                  v-model="enchantUseProtection"
-                  type="checkbox"
-                  :disabled="char.row.protections < 1"
-                />
-                🛡️ Protéger l'échec
-              </label>
             </div>
 
             <div v-if="!allFamiliars.length" class="talents-empty">
@@ -570,23 +514,6 @@
                     Retirer
                   </button>
                   <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
-                  <!-- ⚡ Enchant (gamble) : parchemins 📜 (+ protection optionnelle). -->
-                  <button
-                    class="tal-b ghost"
-                    :disabled="
-                      onExpedition || !canEnchant(f.enchant ?? 0) || char.row.enchant_scrolls < 1
-                    "
-                    :title="enchantTitle(f)"
-                    @click="doEnchant(f.id)"
-                  >
-                    <template v-if="!canEnchant(f.enchant ?? 0)"
-                      >📜<span class="gu-up">↑</span> Max</template
-                    >
-                    <template v-else
-                      >📜<span class="gu-up">↑</span> +{{ (f.enchant ?? 0) + 1 }} ·
-                      {{ Math.round(enchantSuccessRate(f.enchant ?? 0) * 100) }}%</template
-                    >
-                  </button>
                   <!-- ⭐↑ Grade +1 (rang/qualité) : poussière d'âme, plafonné au grade du niveau. -->
                   <button
                     class="tal-b ghost"
@@ -649,7 +576,7 @@
 
       <!-- ONGLET ÉQUIPEMENT -->
       <template v-else-if="tab === 'gear'">
-        <!-- En-tête Équipement : titre + accès Sac / Loadouts / Atelier par ICÔNES
+        <!-- En-tête Équipement : titre + accès Sac / Loadouts par ICÔNES
              (plus de sous-onglets ; les stats de combat sont sur la fiche Héros). -->
         <div class="gear-head">
           <div class="sec-title gh-title">Équipement</div>
@@ -668,14 +595,6 @@
               @click="loadoutOpen = true"
             >
               📦
-            </button>
-            <button
-              class="gi-b"
-              :disabled="onExpedition"
-              :title="onExpedition ? '🧭 Indisponible en expédition' : 'Atelier — forge & craft'"
-              @click="atelierOpen = true"
-            >
-              🔧
             </button>
           </div>
         </div>
@@ -737,29 +656,6 @@
                       Math.round(enchantSuccessRate(char.row.equipped[slot]!.enchant ?? 0) * 100)
                     }}%</template
                   >
-                </button>
-                <!-- ⭐↑ Grade +1 (rang/qualité) : poussière ✨, plafonné au grade du niveau. -->
-                <button
-                  class="slot-up grade"
-                  :disabled="
-                    onExpedition ||
-                    gradeCapped(char.row.equipped[slot]!) ||
-                    char.row.dust < gradeStepCost(char.row.equipped[slot]!)
-                  "
-                  :title="
-                    gradeCapped(char.row.equipped[slot]!)
-                      ? 'Grade au plafond de ton niveau'
-                      : 'Monter le grade (rang/qualité) — poussière ✨'
-                  "
-                  @click.stop="doInfuseItemGrade(char.row.equipped[slot]!)"
-                >
-                  <template v-if="gradeCapped(char.row.equipped[slot]!)"
-                    >⭐<span class="gu-up">↑</span> Max</template
-                  >
-                  <template v-else
-                    >⭐<span class="gu-up">↑</span> {{ gradeStepCost(char.row.equipped[slot]!)
-                    }}<DustIcon variant="dust"
-                  /></template>
                 </button>
                 <button class="slot-remove" :disabled="onExpedition" @click="doUnequip(slot)">
                   Retirer
@@ -862,9 +758,6 @@
                   <span class="bulk-note">(≤ ton équipement ; pépites &amp; 🔒 gardés)</span></span
                 >
                 <div class="bulk-btns">
-                  <button class="bulk-b" @click="doSalvageBelow">
-                    ✨ Tout casser ({{ belowCount }})
-                  </button>
                   <button class="bulk-b" @click="doSellBelow">
                     🪙 Tout vendre ({{ belowCount }})
                   </button>
@@ -972,7 +865,7 @@
                       ><i>tel quel (+{{ it.enchant ?? 0 }})</i>
                     </span>
                   </div>
-                  <!-- Actions : Équiper · ⚡ Enchanter · icônes casser/vendre/lock · ⋯ -->
+                  <!-- Actions : Équiper · ⚡ Enchanter · icônes vendre/lock -->
                   <div class="ii-actions">
                     <button class="equip-btn" @click="doEquip(it.id)">
                       {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
@@ -989,30 +882,6 @@
                       {{ Math.round(enchantSuccessRate(it.enchant ?? 0) * 100) }}%
                     </button>
                     <button
-                      class="equip-btn ghost"
-                      :disabled="gradeCapped(it) || char.row.dust < gradeStepCost(it)"
-                      :title="
-                        gradeCapped(it)
-                          ? 'Grade au plafond de ton niveau'
-                          : 'Monter le grade (rang/qualité) — poussière ✨'
-                      "
-                      @click="doInfuseItemGrade(it)"
-                    >
-                      <template v-if="gradeCapped(it)">⭐<span class="gu-up">↑</span> Max</template>
-                      <template v-else
-                        >⭐<span class="gu-up">↑</span> {{ gradeStepCost(it)
-                        }}<DustIcon variant="dust"
-                      /></template>
-                    </button>
-                    <button
-                      class="ii-ic destroy"
-                      :disabled="it.locked"
-                      :title="'Casser : DÉTRUIT l’objet → poussière (' + salvageValue(it) + '✨)'"
-                      @click="doSalvage(it)"
-                    >
-                      <span class="destroy-glyph">✨</span>
-                    </button>
-                    <button
                       class="ii-ic"
                       :disabled="it.locked"
                       :title="'Vendre → or (' + sellValue(it) + '🪙)'"
@@ -1027,21 +896,6 @@
                       @click="doToggleLock(it)"
                     >
                       {{ it.locked ? '🔒' : '🔓' }}
-                    </button>
-                    <button class="ii-more" aria-label="Plus d'actions">
-                      ⋯
-                      <q-menu anchor="bottom right" self="top right" class="ii-menu">
-                        <div class="ii-menu-list">
-                          <button
-                            class="ii-mi"
-                            :disabled="char.row.dust < rerollCost(it)"
-                            @click="doReroll(it)"
-                            v-close-popup
-                          >
-                            ♻️ Reroll qualité · {{ rerollCost(it) }}✨
-                          </button>
-                        </div>
-                      </q-menu>
                     </button>
                   </div>
                 </div>
@@ -1389,40 +1243,6 @@
       </template>
     </template>
 
-    <!-- Modale : casser un objet → poussière -->
-    <transition name="salv-fade">
-      <div v-if="salvageTarget" class="salv-backdrop" @click.self="salvageTarget = null">
-        <div class="salv-card" :class="'r-' + salvageTarget.rarity">
-          <div class="salv-title font-display">Casser cet objet ?</div>
-          <div class="salv-item">
-            <span class="salv-emo">{{ salvageTarget.emoji }}</span>
-            <div class="salv-main">
-              <div class="salv-name">
-                {{ salvageTarget.name }}
-                <span class="rarity"
-                  >{{ RARITY_LABEL[salvageTarget.rarity] }} · +{{
-                    salvageTarget.enchant ?? 0
-                  }}</span
-                >
-              </div>
-              <div class="salv-eff">
-                {{ SLOT_LABEL[salvageTarget.slot] }} · {{ itemEffects(salvageTarget) }}
-              </div>
-            </div>
-          </div>
-          <div class="salv-reward">
-            <span class="salv-plus font-display">+{{ salvageValue(salvageTarget) }}</span>
-            <span class="salv-dust">✨ poussière d'évolution</span>
-          </div>
-          <div class="salv-warn">Objet détruit définitivement (poussière investie remboursée).</div>
-          <div class="salv-actions">
-            <button class="salv-cancel" @click="salvageTarget = null">Annuler</button>
-            <button class="salv-break" @click="confirmSalvage">Casser</button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
     <!-- Modale : remplacer un objet équipé → sort de l'ancien au choix -->
     <transition name="salv-fade">
       <div v-if="replaceTarget" class="salv-backdrop" @click.self="replaceTarget = null">
@@ -1475,13 +1295,6 @@
               <span class="repl-choice-emo">🎒</span>
               <span class="repl-choice-lbl">Garder</span>
               <small>au sac</small>
-            </button>
-            <button class="repl-choice" @click="confirmReplace('salvage')">
-              <span class="repl-choice-emo">✨</span>
-              <span class="repl-choice-lbl">Recycler</span>
-              <small v-if="equippedInSlot(replaceTarget.slot)"
-                >+{{ salvageValue(equippedInSlot(replaceTarget.slot)!) }} poussière</small
-              >
             </button>
             <button class="repl-choice" @click="confirmReplace('sell')">
               <span class="repl-choice-emo">🪙</span>
@@ -1573,7 +1386,6 @@
               <div class="im-text">{{ m.text }}</div>
               <div class="im-haul">
                 <span v-if="m.gold">🪙 +{{ m.gold }}</span>
-                <span v-if="m.dust">✨ +{{ m.dust }}</span>
                 <span v-if="m.energy">⚡ +{{ m.energy }}</span>
                 <span v-if="m.enchantScrolls">📜 +{{ m.enchantScrolls }}</span>
                 <span v-if="m.key">🗝️ +{{ m.key }}</span>
@@ -1735,52 +1547,6 @@
       </div>
     </div>
 
-    <!-- MODALE ATELIER — forge & craft de poussière, accès par l'icône 🔧 de l'Équipement. -->
-    <div v-if="atelierOpen && char.row" class="shop-backdrop" @click.self="atelierOpen = false">
-      <div class="shop-card">
-        <div class="shop-head">
-          <div class="shop-title font-display">🔧 Atelier de poussière</div>
-          <button class="shop-x" aria-label="Fermer" @click="atelierOpen = false">✕</button>
-        </div>
-        <div v-if="!hasForge" class="sec-hint">
-          🔒 Construis la <b>🔨 Forge</b> sur la carte d'expédition pour ouvrir l'Atelier.
-        </div>
-        <template v-else>
-          <div class="sec-hint">
-            Investis ta poussière — <b>✨ {{ char.row!.dust }}</b> dispo.
-          </div>
-          <div class="workshop">
-            <button
-              class="ws-btn"
-              :disabled="char.row!.dust < forgeCost(c.level.level, false)"
-              @click="doForge()"
-            >
-              🔨 Forger un objet (aléatoire) · ✨{{ forgeCost(c.level.level, false) }}
-            </button>
-            <button
-              class="ws-btn"
-              :disabled="char.row!.dust < forgeCost(c.level.level, true)"
-              @click="forgeSlotOpen = true"
-            >
-              🎯 Forger (choisir l'emplacement) · ✨{{ forgeCost(c.level.level, true) }}
-            </button>
-            <button
-              class="ws-btn"
-              :disabled="char.row!.dust < craftSetCost(c.level.level)"
-              @click="openCraft()"
-            >
-              🧩 Forger une pièce de set · ✨{{ craftSetCost(c.level.level) }}
-            </button>
-          </div>
-          <div class="ws-note">
-            Forge un objet neuf <b>à ton niveau</b> (rareté au hasard). <b>♻️ Reroll qualité</b> se
-            fait sur un objet du sac. La rareté ne se monte plus au craft : le
-            <b>haut de gamme s'obtient en explorant</b> (drops/boss).
-          </div>
-        </template>
-      </div>
-    </div>
-
     <!-- Butin possible d'un donjon -->
     <!-- Explication RANG / QUALITÉ (clic sur la pastille de rang ou le chiffre de qualité). -->
     <q-dialog :model-value="!!helpTopic" position="bottom" @update:model-value="helpTopic = null">
@@ -1825,7 +1591,7 @@
         </div>
         <div class="drops-row">
           <span class="drops-k">Récompenses</span>
-          <span class="drops-v">jusqu'à {{ dungeonGold(dropInfo) }} 🪙 · poussière ✨</span>
+          <span class="drops-v">jusqu'à {{ dungeonGold(dropInfo) }} 🪙</span>
         </div>
         <div class="drops-sub">Chances de rareté</div>
         <div class="odds">
@@ -1947,96 +1713,11 @@
               <span class="rc-emo">💰</span>
               <div class="rc-main">
                 <div class="rc-name">Trésor</div>
-                <div class="rc-eff">+{{ cand.gold }} 🪙 · +{{ cand.dust }} ✨</div>
+                <div class="rc-eff">+{{ cand.gold }} 🪙</div>
               </div>
             </template>
           </button>
         </div>
-      </q-card>
-    </q-dialog>
-
-    <!-- Atelier : forge ciblée → choix de l'emplacement -->
-    <q-dialog
-      :model-value="forgeSlotOpen"
-      position="bottom"
-      @update:model-value="forgeSlotOpen = false"
-    >
-      <q-card class="ws-modal">
-        <div class="ws-modal-title font-display">🎯 Forger — choisis l'emplacement</div>
-        <div class="ws-slots">
-          <button v-for="slot in SLOTS" :key="slot" class="ws-slot" @click="doForge(slot)">
-            <span class="ws-slot-emo">{{ SLOT_EMOJI[slot] }}</span>
-            <span>{{ SLOT_LABEL[slot] }}</span>
-          </button>
-        </div>
-      </q-card>
-    </q-dialog>
-
-    <!-- Atelier : craft d'une pièce de set → choix du set + emplacement -->
-    <q-dialog :model-value="craftOpen" position="bottom" @update:model-value="craftOpen = false">
-      <q-card class="ws-modal">
-        <div class="ws-modal-title font-display">🧩 Forger une pièce de set</div>
-        <div v-if="!craftableSets.length" class="ws-empty">
-          Aucun set débloqué. Bats un <b>boss de palier</b> pour débloquer son set, puis forge-le
-          ici.
-        </div>
-        <template v-else>
-          <div class="ws-field">
-            <span class="ws-lbl">Set (débloqués)</span>
-            <div class="ws-chips">
-              <button
-                v-for="s in craftableSets"
-                :key="s.id"
-                class="ws-chip"
-                :class="{ on: craftSetId === s.id }"
-                @click="craftSetId = s.id"
-              >
-                {{ s.emoji }} {{ s.name }}
-              </button>
-            </div>
-          </div>
-          <div class="ws-field">
-            <span class="ws-lbl">Emplacement</span>
-            <div class="ws-chips">
-              <button
-                v-for="slot in SLOTS"
-                :key="slot"
-                class="ws-chip"
-                :class="{ on: craftSlot === slot }"
-                @click="craftSlot = slot"
-              >
-                {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
-              </button>
-            </div>
-          </div>
-          <!-- Objet ACTUELLEMENT équipé sur ce slot → savoir si le craft vaut le coup. -->
-          <div class="ws-field">
-            <span class="ws-lbl">Équipé sur {{ SLOT_LABEL[craftSlot] }}</span>
-            <div v-if="equippedInSlot(craftSlot)" class="ws-equipped">
-              <span :class="'p-' + equippedInSlot(craftSlot)!.rarity">{{
-                RARITY_LABEL[equippedInSlot(craftSlot)!.rarity]
-              }}</span>
-              <span
-                v-if="itemQuality(equippedInSlot(craftSlot))"
-                class="q-badge"
-                :class="'q-' + itemQuality(equippedInSlot(craftSlot))"
-                >{{ itemQuality(equippedInSlot(craftSlot)) }}</span
-              >
-              <template v-if="(equippedInSlot(craftSlot)!.enchant ?? 0) > 0">
-                · +{{ equippedInSlot(craftSlot)!.enchant }}</template
-              >
-              · <b>{{ itemEffects(equippedInSlot(craftSlot)!) }}</b>
-            </div>
-            <div v-else class="ws-equipped dim">— emplacement libre (rien d'équipé)</div>
-          </div>
-          <button
-            class="ws-btn"
-            :disabled="!char.row || char.row.dust < craftSetCost(c.level.level)"
-            @click="doCraftSet"
-          >
-            Forger · ✨{{ craftSetCost(c.level.level) }}
-          </button>
-        </template>
       </q-card>
     </q-dialog>
 
@@ -2080,7 +1761,6 @@
               }}</span>
               <span class="result-gains">
                 <span class="gain-pill gold">+{{ run.gold }} 🪙</span>
-                <span class="gain-pill dust">+{{ run.dust }} ✨</span>
                 <span
                   v-if="run.summonStones"
                   class="gain-pill summon"
@@ -2194,9 +1874,6 @@
                   >
                     {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
                   </button>
-                  <button class="link-btn" @click="doSalvage(d)">
-                    Casser ✨{{ salvageValue(d) }}
-                  </button>
                   <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
                 </div>
               </div>
@@ -2287,7 +1964,7 @@
                   <span class="rc-emo">💰</span>
                   <div class="rc-main">
                     <div class="rc-name">Trésor</div>
-                    <div class="rc-eff">+{{ cand.gold }} 🪙 · +{{ cand.dust }} ✨</div>
+                    <div class="rc-eff">+{{ cand.gold }} 🪙</div>
                   </div>
                 </template>
               </button>
@@ -2357,13 +2034,7 @@ import CombatStage from '@/components/CombatStage.vue';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
 import { BOSSES, bossSummonCost, type MilestoneBoss } from '@/data/bosses';
-import {
-  endlessFoe,
-  endlessEnergy,
-  endlessGold,
-  endlessDust,
-  endlessDropLevel,
-} from '@/data/endless';
+import { endlessFoe, endlessEnergy, endlessGold, endlessDropLevel } from '@/data/endless';
 import {
   playerWithGear,
   aggregateEffects,
@@ -2375,11 +2046,7 @@ import {
   enchantSuccessRate,
   ENCHANT_MAX,
   ENCHANT_SAFE,
-  salvageValue,
   sellValue,
-  forgeCost,
-  rerollCost,
-  craftSetCost,
   isFamiliar,
   FAMILIAR_SLOT,
   tierIndexOf,
@@ -2422,7 +2089,6 @@ import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStre
 import { unlocksAtLevel } from '@/lib/advUnlocks';
 import {
   labyrinthUnlocked,
-  forgeBuilt,
   bossAltarBuilt,
   bossAltarRollFloor,
   bossRewardCount,
@@ -2458,7 +2124,6 @@ interface RunView {
   defeated: number;
   total: number;
   gold: number;
-  dust: number;
   finalPv: number;
   playerMaxPv?: number; // PV max du joueur (barre du rejeu)
   fights: RunFight[];
@@ -2529,13 +2194,12 @@ const saving = ref(false);
 const pseudoInput = ref('');
 const pseudoError = ref('');
 // Nav « par activité » : 3 onglets — Héros (fiche+stats+talents+familier) /
-// Équipement (équipé+sac+atelier) / Explorer (donjons+boss de palier).
+// Équipement (équipé+sac) / Explorer (donjons+boss de palier).
 const tab = ref<'hero' | 'gear' | 'explore'>('hero');
-// Équipement : plus de sous-onglets. Sac / Loadouts / Atelier ouvrent des modales
+// Équipement : plus de sous-onglets. Sac / Loadouts ouvrent des modales
 // (les stats de combat « Force » vivent sur la fiche Héros).
 const bagOpen = ref(false);
 const loadoutOpen = ref(false);
-const atelierOpen = ref(false);
 function openBag() {
   betterFilterSlot.value = null; // ouverture directe = pas de filtre « upgrades »
   bagOpen.value = true;
@@ -2564,8 +2228,6 @@ const rankList = computed(() =>
 );
 // Sous-onglet Explorer : donjons (carte) / boss de palier.
 const exploreSub = ref<'donjons' | 'boss'>('donjons');
-// L'Atelier (forge d'objet / de set) est débloqué par le bâtiment 🔨 Forge.
-const hasForge = computed(() => forgeBuilt(char.row?.buildings ?? []));
 // Le Labyrinthe est débloqué par la 🚪 Porte du Labyrinthe (bâtiment sur la carte).
 const hasLabyGate = computed(() => labyrinthUnlocked(char.row?.buildings ?? []));
 // Clic sur la tuile Labyrinthe : bloqué en expédition ; sinon → Labyrinthe si la Porte
@@ -2851,44 +2513,6 @@ async function doUnequipTalent(id: string) {
   if (!uid || expeBlocked()) return;
   await char.unequipTalent(uid, id);
 }
-// ⚡ ENCHANTE un talent (gamble +N, comme les objets/familiers) : coûte 1 parchemin
-// d'enchantement 📜 + éventuellement 1 protection 🛡️. Notif selon le résultat.
-async function doEnchantTalent(id: string) {
-  const uid = auth.user?.id;
-  if (!uid || expeBlocked()) return; // gelé pendant une expédition
-  const before = char.row?.talents.find((t) => t.id === id)?.enchant ?? 0;
-  const res = await char.enchantTalent(uid, id, enchantUseProtection.value);
-  if (!res) {
-    $q.notify({ type: 'warning', message: 'Enchant impossible (au cap ou plus de parchemin).' });
-    return;
-  }
-  if (res.enchant > before)
-    $q.notify({
-      type: 'positive',
-      message: `⚡ Enchant réussi → +${res.enchant}`,
-      position: 'top',
-    });
-  else if (res.protectionUsed)
-    $q.notify({ type: 'info', message: '🛡️ Échec protégé — enchant préservé.', position: 'top' });
-  else if (res.resetTo0)
-    $q.notify({ type: 'negative', message: '💥 Échec — retombé à +0.', position: 'top' });
-  else
-    $q.notify({
-      type: 'warning',
-      message: `Échec — rien perdu (reste à +${res.enchant}). Retour à +0 seulement à partir de +4.`,
-      position: 'top',
-    });
-}
-// Titre du bouton d'enchant d'un talent (rappelle le risque en zone dangereuse).
-function enchantTitleTalent(t: { enchant: number }): string {
-  const n = t.enchant;
-  if (!canEnchant(n)) return `Enchant au maximum (+${ENCHANT_MAX}).`;
-  const rate = Math.round(enchantSuccessRate(n) * 100);
-  if (n < ENCHANT_SAFE)
-    return `+${n} → +${n + 1} · ${rate} % · échec sans conséquence (reste à +${n}).`;
-  return `+${n} → +${n + 1} · ${rate} % de réussite. Échec → +0 (sauf 🛡️ protection).`;
-}
-
 // Régions / biomes (onglet Donjons) : bandeau de la région courante + teaser de la
 // suivante → sensation de « découvrir de nouveaux mondes ».
 const clearedIds = computed(() => char.row?.cleared_dungeons ?? []);
@@ -3351,8 +2975,8 @@ function rewardScore(cand: RewardCandidate): number {
   // comparaison « à armes égales » sous-évaluait le potentiel → mauvais conseil).
   const base = combatPowerVal.value;
   if (cand.kind === 'gold') {
-    // Ressources : ne changent pas la puissance → à peine au-dessus du statu quo.
-    return base + cand.dust * 0.05 + cand.gold * 0.01;
+    // Or : ne change pas la puissance → à peine au-dessus du statu quo.
+    return base + cand.gold * 0.01;
   }
   const it = cand.item;
   let s = powerIfEquip(it); // puissance si équipé (grade + enchant, fixe)
@@ -3455,15 +3079,6 @@ async function explore(d: Dungeon) {
     }
     // (Les familiers ne tombent PLUS dans les donjons — uniquement au Labyrinthe.)
     // (Les consommables ne DROPPENT plus — peu utiles ; restent achetables en boutique.)
-    // Poussière SCALÉE au niveau du donjon (refonte C : l'infusion est la
-    // progression → le revenu doit suivre les coûts qui montent avec le niveau).
-    // Sur un donjon PERDU (non nettoyé), la poussière par monstre est réduite de moitié
-    // (ticket 58fe7ba4 : un échec rapportait presque autant qu'un clear → on récompense
-    // le nettoyage, pas le farm de pertes). Bonus de clear seulement si nettoyé.
-    const dustPerMonster = 2 + Math.round(d.dropLevel * 0.5);
-    const dust = r.cleared
-      ? r.defeated * dustPerMonster + d.dropLevel
-      : Math.round(r.defeated * dustPerMonster * 0.5);
     // Pierres d'invocation 🔮 : lot au NETTOYAGE, ∝ profondeur du donjon → farmer plus
     // profond finance des boss plus hauts. Un boss de palier coûte ~2-6 pierres → 2-6 runs.
     const summonStones = r.cleared ? 1 + Math.floor(d.recoLevel / 8) : 0;
@@ -3481,7 +3096,6 @@ async function explore(d: Dungeon) {
     await char.applyRun(uid, {
       energyCost: d.energyCost,
       gold,
-      dust,
       drops,
       summonStones,
       enchantScrolls,
@@ -3496,7 +3110,6 @@ async function explore(d: Dungeon) {
       defeated: r.defeated,
       total: r.total,
       gold,
-      dust,
       finalPv: r.finalPv,
       playerMaxPv: player.pv,
       fights: r.fights.map((f) => {
@@ -3539,11 +3152,6 @@ async function explore(d: Dungeon) {
 
 // ── Boss de palier ──
 const defeatedBossSet = computed(() => new Set(char.row?.defeated_bosses ?? []));
-// Sets DÉBLOQUÉS = ceux dont le boss de palier a été vaincu → seuls forgeables à
-// l'atelier (on ne fabrique pas un set qu'on n'a pas encore gagné en combat).
-const craftableSets = computed(() =>
-  ITEM_SETS.filter((s) => BOSSES.some((b) => b.setId === s.id && defeatedBossSet.value.has(b.id))),
-);
 function isBossBeaten(b: MilestoneBoss): boolean {
   return defeatedBossSet.value.has(b.id);
 }
@@ -3653,10 +3261,8 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
       const p = d ?? rollSetPiece(rng, setOpts);
       out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
     } else {
-      // Cache de ressources : doit rivaliser avec une pièce d'équipement. Or plein +
-      // poussière proportionnelle à la profondeur du palier (puits de forge/reroll).
-      const dustLump = Math.round((20 + b.dropLevel * 12) * 3);
-      out.push({ kind: 'gold', gold: b.gold, dust: dustLump });
+      // Cache d'OR : doit rivaliser avec une pièce d'équipement (or plein du palier).
+      out.push({ kind: 'gold', gold: b.gold });
     }
   }
   return out;
@@ -3700,7 +3306,6 @@ async function fightBoss(b: MilestoneBoss) {
     const win = r.win;
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
     const gold = win ? Math.round(b.gold * (1 + goldPct)) : 0;
-    const dust = win ? 15 : 0;
     // Victoire → 3 récompenses au CHOIX (posées en attente ; réclamées via la modale).
     const pending: PendingReward | null = win
       ? {
@@ -3723,7 +3328,6 @@ async function fightBoss(b: MilestoneBoss) {
       bossId: b.id,
       summonCost,
       gold,
-      dust,
       defeated: win,
       pending,
       enchantScrolls: 4 + Math.floor(b.unlockLevel / 4), // jalon boss → parchemins d'enchant 📜
@@ -3738,7 +3342,6 @@ async function fightBoss(b: MilestoneBoss) {
       defeated: win ? 1 : 0,
       total: 1,
       gold,
-      dust,
       finalPv,
       playerMaxPv: player.pv,
       fights: [
@@ -3824,7 +3427,6 @@ async function fightEndless() {
     const win = r.win;
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
     const gold = win ? Math.round(endlessGold(tier) * (1 + goldPct)) : 0;
-    const dust = win ? endlessDust(tier) : 0;
     const drops: Item[] = [];
     if (win) {
       // Butin GARANTI de haut niveau (niv > 25) : plusieurs tirages pour éviter le null.
@@ -3850,7 +3452,6 @@ async function fightEndless() {
       tier,
       energyCost: cost,
       gold,
-      dust,
       drops,
       cleared: win,
     });
@@ -3873,7 +3474,6 @@ async function fightEndless() {
       defeated: win ? 1 : 0,
       total: 1,
       gold,
-      dust,
       finalPv,
       playerMaxPv: player.pv,
       fights: [
@@ -3900,7 +3500,7 @@ async function fightEndless() {
 function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
   const uid = auth.user?.id;
   if (!uid) return;
-  // Héros en expédition = équipement/atelier GELÉS (il est parti avec son barda).
+  // Héros en expédition = équipement GELÉ (il est parti avec son barda).
   if (onExpedition.value) {
     $q.notify({ type: 'warning', message: '🧭 Ton héros est en expédition — indisponible.' });
     return;
@@ -4109,24 +3709,6 @@ function doInfuseFamiliarGrade(f: Item) {
     'Infusion impossible.',
   );
 }
-// Infuse +1 cran de grade un OBJET d'équipement en dépensant la poussière ✨ (ticket 37ee20db).
-function doInfuseItemGrade(it: Item) {
-  const beforeRank = it.rarity;
-  withUid(
-    (uid) =>
-      char.infuseItemGrade(uid, it.id, c.value.level.level).then((res) => {
-        if (res && res.rarity !== beforeRank)
-          gameFx.celebrate({
-            kind: 'drop',
-            emoji: res.emoji,
-            title: `${res.name} — rang ${RARITY_LABEL[res.rarity]} !`,
-            subtitle: 'Grade amélioré (poussière)',
-            rarity: fxRarity(res.rarity),
-          });
-      }),
-    'Infusion impossible.',
-  );
-}
 function doInfuseTalentGrade(id: string) {
   const before = char.row?.talents.find((t) => t.id === id) ?? null;
   const beforeRank = before ? talentRankOf(before) : null;
@@ -4187,7 +3769,7 @@ const replaceTarget = ref<Item | null>(null);
 function openReplace(drop: Item) {
   replaceTarget.value = drop;
 }
-function confirmReplace(disposal: 'salvage' | 'sell' | 'keep') {
+function confirmReplace(disposal: 'sell' | 'keep') {
   const drop = replaceTarget.value;
   if (!drop) return;
   replaceTarget.value = null;
@@ -4261,54 +3843,11 @@ function doEnchant(itemId: string) {
   });
 }
 
-// ── Atelier de poussière (forge / reroll / sublimer / craft de set) ──
-const forgeSlotOpen = ref(false);
-const craftOpen = ref(false);
-const craftSetId = ref<string>(ITEM_SETS[0]?.id ?? '');
-const craftSlot = ref<ItemSlot>('weapon');
-function doForge(slot?: ItemSlot) {
-  forgeSlotOpen.value = false;
-  withUid(
-    (uid) => char.forge(uid, { level: c.value.level.level, ...(slot ? { slot } : {}) }),
-    'Forge impossible.',
-  );
-}
-function doReroll(it: Item) {
-  withUid((uid) => char.rerollEffect(uid, it.id), 'Reroll impossible.');
-}
-function openCraft() {
-  // Garantit un set sélectionné valide (parmi les débloqués) avant d'ouvrir.
-  if (!craftableSets.value.some((s) => s.id === craftSetId.value))
-    craftSetId.value = craftableSets.value[0]?.id ?? '';
-  craftOpen.value = true;
-}
-function doCraftSet() {
-  craftOpen.value = false;
-  withUid(
-    (uid) =>
-      char.craftSet(uid, {
-        level: c.value.level.level,
-        setId: craftSetId.value,
-        slot: craftSlot.value,
-      }),
-    'Forge de set impossible.',
-  );
-}
 function doSell(it: Item) {
   withUid((uid) => char.sell(uid, it.id), 'Vente impossible.');
 }
 function doToggleLock(it: Item) {
   withUid((uid) => char.toggleLock(uid, it.id), 'Action impossible.');
-}
-const salvageTarget = ref<Item | null>(null);
-function doSalvage(it: Item) {
-  salvageTarget.value = it;
-}
-function confirmSalvage() {
-  const it = salvageTarget.value;
-  if (!it) return;
-  salvageTarget.value = null;
-  withUid((uid) => char.salvage(uid, it.id), 'Recyclage impossible.');
 }
 // Nettoyage en masse : objets du sac moins rares que l'équipé du même slot.
 // Slot ciblé par le nettoyage en masse = le filtre du sac actif (sinon tous).
@@ -4335,15 +3874,6 @@ const belowCount = computed(() => powerLossItems.value.length);
 const bulkScope = computed(() =>
   bulkSlot.value ? SLOT_LABEL[bulkSlot.value].toLowerCase() : 'ton sac',
 );
-function doSalvageBelow() {
-  const ids = powerLossItems.value.map((i) => i.id);
-  $q.dialog({
-    title: 'Tout casser',
-    message: `Casser les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} → poussière ? Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Tout casser', color: 'negative' },
-  }).onOk(() => withUid((uid) => char.salvageMany(uid, ids), 'Recyclage impossible.'));
-}
 function doSellBelow() {
   const ids = powerLossItems.value.map((i) => i.id);
   $q.dialog({
@@ -4591,9 +4121,6 @@ onUnmounted(() => {
 .tb-r.gold {
   color: var(--accent);
 }
-.tb-r.dust {
-  color: #b07cff;
-}
 .tb-r.stones {
   color: #4ec6d6;
 }
@@ -4705,7 +4232,7 @@ onUnmounted(() => {
   color: var(--accent-ink, #15120e);
 }
 
-/* Sous-navigation de l'onglet Équip. (Équipement / Sac / Atelier). */
+/* Sous-navigation de l'onglet Équip. (Équipement / Sac). */
 .gear-sub {
   display: flex;
   gap: 4px;
@@ -5327,7 +4854,7 @@ onUnmounted(() => {
   font-size: 14px;
   line-height: 1;
 }
-/* En-tête Équipement : titre à gauche, icônes Force/Loadout/Atelier à droite. */
+/* En-tête Équipement : titre à gauche, icônes Sac/Loadout à droite. */
 .gear-head {
   display: flex;
   align-items: center;
@@ -5534,15 +5061,6 @@ onUnmounted(() => {
   font-weight: 900;
   margin: 0 1px 0 -1px;
   font-size: 0.92em;
-}
-/* Grade (⭐↑) : tonalité « outil » neutre → ne concurrence pas l'accent de l'enchant (⚡). */
-.slot-up.grade {
-  border-color: var(--line);
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text);
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
 }
 /* Bouton « À fond » (infuser au cap) : accent plein pour le distinguer du +1. */
 .slot-up.alt {
@@ -6197,67 +5715,6 @@ onUnmounted(() => {
 .ii-ic.lock.on {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-/* Casser = DÉTRUIRE l'objet : ✨ (poussière) BARRÉ d'un trait rouge → ce n'est PAS
-   l'infusion (qui garde l'objet), c'est la destruction (l'objet est cassé). */
-.ii-ic.destroy {
-  border-color: color-mix(in srgb, var(--d4) 45%, var(--line));
-}
-.destroy-glyph {
-  position: relative;
-  display: inline-block;
-}
-.destroy-glyph::after {
-  content: '';
-  position: absolute;
-  left: -3px;
-  right: -3px;
-  top: 50%;
-  height: 2.5px;
-  border-radius: 2px;
-  background: var(--d4);
-  transform: translateY(-50%) rotate(-22deg);
-}
-.ii-more {
-  flex: none;
-  width: 40px;
-  height: 34px;
-  border-radius: 9px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-.ii-more:active {
-  border-color: var(--accent);
-}
-.ii-menu-list {
-  display: flex;
-  flex-direction: column;
-  min-width: 190px;
-  padding: 4px;
-  background: var(--surface);
-}
-.ii-mi {
-  text-align: left;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 9px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.ii-mi:hover {
-  background: var(--bg);
-}
-.ii-mi:disabled {
-  color: var(--dim);
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 .bulk {
   display: flex;
@@ -7458,11 +6915,6 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   border: 1px solid var(--accent);
 }
-.gain-pill.dust {
-  color: #b07cff;
-  background: color-mix(in srgb, #b07cff 16%, transparent);
-  border: 1px solid #b07cff;
-}
 .gain-pill.summon {
   color: #ffd23f;
   background: color-mix(in srgb, #ffd23f 16%, transparent);
@@ -7713,122 +7165,6 @@ onUnmounted(() => {
 }
 .foot b {
   color: var(--text);
-}
-
-/* Atelier de poussière */
-.ws-inline {
-  margin-top: 6px;
-}
-.workshop {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.ws-btn {
-  width: 100%;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  font-weight: 700;
-  font-size: 13.5px;
-  cursor: pointer;
-}
-.ws-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  background: transparent;
-  color: var(--dim);
-  border-color: var(--line);
-}
-.ws-note {
-  font-size: 11.5px;
-  color: var(--dim);
-  line-height: 1.5;
-  margin: 8px 0 14px;
-}
-.ws-note b {
-  color: var(--text);
-}
-.ws-modal {
-  width: 100%;
-  max-width: 520px;
-  background: var(--surface);
-  color: var(--text);
-  border-top-left-radius: 18px;
-  border-top-right-radius: 18px;
-  padding: 16px;
-}
-.ws-modal-title {
-  font-size: 17px;
-  font-weight: 700;
-  margin-bottom: 12px;
-}
-.ws-empty {
-  font-size: 13px;
-  color: var(--dim);
-  line-height: 1.5;
-  padding: 8px 0 4px;
-}
-.ws-empty b {
-  color: var(--text);
-}
-.ws-slots {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-.ws-slot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--text);
-  font-weight: 600;
-  cursor: pointer;
-}
-.ws-slot-emo {
-  font-size: 20px;
-}
-.ws-field {
-  margin-bottom: 12px;
-}
-.ws-lbl {
-  font-size: 12px;
-  color: var(--dim);
-}
-.ws-equipped {
-  margin-top: 6px;
-  padding: 8px 10px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--line) 22%, transparent);
-  font-size: 12.5px;
-}
-.ws-equipped.dim {
-  color: var(--dim);
-}
-.ws-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-.ws-chip {
-  padding: 7px 11px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--dim);
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.ws-chip.on {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 
 /* Sac vide (onglet Équipement) */
@@ -8571,15 +7907,6 @@ onUnmounted(() => {
   text-align: center;
   margin-bottom: 14px;
 }
-.salv-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--surface-2, #2b241b);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px;
-}
 .salv-emo {
   font-size: 30px;
 }
@@ -8602,36 +7929,7 @@ onUnmounted(() => {
   color: var(--dim);
   margin-top: 2px;
 }
-.salv-reward {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  margin: 16px 0 6px;
-}
-.salv-plus {
-  font-size: 34px;
-  font-weight: 700;
-  color: #b07cff;
-  line-height: 1;
-  text-shadow: 0 0 20px rgba(176, 124, 255, 0.4);
-}
-.salv-dust {
-  font-size: 12px;
-  color: var(--dim);
-}
-.salv-warn {
-  font-size: 11px;
-  color: var(--dim);
-  text-align: center;
-  margin-bottom: 16px;
-}
-.salv-actions {
-  display: flex;
-  gap: 10px;
-}
-.salv-cancel,
-.salv-break {
+.salv-cancel {
   flex: 1;
   border-radius: 12px;
   padding: 12px;
@@ -8640,17 +7938,9 @@ onUnmounted(() => {
   font-size: 14px;
   cursor: pointer;
   border: 1px solid var(--line);
-}
-.salv-cancel {
   background: transparent;
   color: var(--dim);
 }
-.salv-break {
-  background: var(--d4);
-  border-color: var(--d4);
-  color: #15120e;
-}
-.salv-break:active,
 .salv-cancel:active {
   transform: scale(0.97);
 }
@@ -8720,7 +8010,7 @@ onUnmounted(() => {
 }
 .repl-choices {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 .repl-choice {

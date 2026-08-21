@@ -17,11 +17,8 @@ import {
   expeditionsUnlocked,
   travelTimeMult,
   outpostLevel,
-  forgeLuckBonus,
   bossSummonDiscount,
   summonCostWith,
-  comptoirRate,
-  goldToDust,
   BUILDING_TYPES,
   BUILD,
   type Building,
@@ -56,34 +53,22 @@ describe('buildings — emplacements & coûts', () => {
     expect(buildingUpgradeCost(10)).toBeGreaterThan(buildingUpgradeCost(5) * 2);
   });
   it('canUpgradeBuilding : plafonné au niveau joueur', () => {
-    expect(canUpgradeBuilding(mk('dust_vein', 4), 10)).toBe(true);
-    expect(canUpgradeBuilding(mk('dust_vein', 10), 10)).toBe(false);
-  });
-});
-
-describe('buildings — comptoir', () => {
-  it('Comptoir : taux or→poussière = 0 sans bâtiment, croît avec le niveau', () => {
-    expect(comptoirRate([])).toBe(0);
-    expect(goldToDust([], 1000)).toBe(0);
-    const lo = goldToDust([mk('comptoir', 2)], 1000);
-    const hi = goldToDust([mk('comptoir', 10)], 1000);
-    expect(lo).toBeGreaterThan(0);
-    expect(hi).toBeGreaterThan(lo);
-    expect(buildingScales('comptoir')).toBe(true); // améliorable (effet par niveau)
+    expect(canUpgradeBuilding(mk('energy_font', 4), 10)).toBe(true);
+    expect(canUpgradeBuilding(mk('energy_font', 10), 10)).toBe(false);
   });
 });
 
 describe('buildings — production', () => {
   it('prod/h et stockage croissent avec le niveau', () => {
-    expect(buildingProdPerHour(mk('dust_vein', 10))).toBeGreaterThan(
-      buildingProdPerHour(mk('dust_vein', 3)),
+    expect(buildingProdPerHour(mk('energy_font', 10))).toBeGreaterThan(
+      buildingProdPerHour(mk('energy_font', 3)),
     );
-    expect(buildingStorageCap(mk('dust_vein', 5))).toBe(
-      buildingProdPerHour(mk('dust_vein', 5)) * BUILD.storageHours,
+    expect(buildingStorageCap(mk('energy_font', 5))).toBe(
+      buildingProdPerHour(mk('energy_font', 5)) * BUILD.storageHours,
     );
   });
   it('accumulation dans le temps, PLAFONNÉE au stockage', () => {
-    const b = mk('dust_vein', 10, 0);
+    const b = mk('energy_font', 10, 0);
     const perHr = buildingProdPerHour(b);
     // Après 5 h : ~5×perHr.
     expect(buildingAccrued(b, 5 * H)).toBe(Math.floor(perHr * 5));
@@ -91,15 +76,15 @@ describe('buildings — production', () => {
     expect(buildingAccrued(b, 1000 * H)).toBe(Math.floor(buildingStorageCap(b)));
   });
   it('déterministe (même building + même now → même accumulation)', () => {
-    const b = mk('dust_vein', 7, 123);
+    const b = mk('energy_font', 7, 123);
     expect(buildingAccrued(b, 123 + 3 * H)).toBe(buildingAccrued(b, 123 + 3 * H));
   });
-  it('collectable : agrège par ressource', () => {
+  it('collectable : agrège la production par ressource', () => {
     const now = 20 * H;
-    const bs = [mk('dust_vein', 8, 0), mk('dust_vein', 4, 0), mk('energy_font', 6, 0)];
+    const bs = [mk('energy_font', 8, 0)];
     const c = collectable(bs, now);
-    expect(c.dust).toBe(buildingAccrued(bs[0]!, now) + buildingAccrued(bs[1]!, now));
-    expect(c.energy).toBe(buildingAccrued(bs[2]!, now));
+    expect(c.energy).toBe(buildingAccrued(bs[0]!, now));
+    expect(c.dust).toBe(0); // ressource retirée du jeu → jamais produite
   });
   it('type inconnu → prod 0 (robustesse)', () => {
     expect(buildingProdPerHour(mk('inexistant', 5))).toBe(0);
@@ -116,20 +101,16 @@ describe('buildings — production', () => {
 
 describe('buildings — registre extensible', () => {
   it('filons de base : producteurs, débloqués dès le début', () => {
-    expect(buildingType('dust_vein')?.resource).toBe('dust');
     expect(buildingType('energy_font')?.resource).toBe('energy');
-    expect(buildingUnlockLevel('dust_vein')).toBe(1);
+    expect(buildingUnlockLevel('energy_font')).toBe(1);
   });
 });
 
 describe('buildings — déblocage & unicité (utilitaires)', () => {
-  it('canBuildType : gate par niveau (Autel des boss niv.4, Forge niv.5)', () => {
+  it('canBuildType : gate par niveau (Autel des boss niv.4)', () => {
     expect(buildingUnlockLevel('boss_altar')).toBe(4);
     expect(canBuildType('boss_altar', 3, [])).toBe(false);
     expect(canBuildType('boss_altar', 4, [])).toBe(true);
-    expect(buildingUnlockLevel('forge')).toBe(5);
-    expect(canBuildType('forge', 4, [])).toBe(false);
-    expect(canBuildType('forge', 5, [])).toBe(true);
     // Production de base dispo dès le niv.1 (nouvel ordre des emplacements).
     expect(buildingUnlockLevel('warehouse')).toBe(1);
     expect(buildingUnlockLevel('energy_font')).toBe(1);
@@ -140,10 +121,10 @@ describe('buildings — déblocage & unicité (utilitaires)', () => {
     expect(canBuildType('warehouse', 10, [wh])).toBe(false); // déjà posé
   });
   it('filons UNIQUES : 1 de chaque type sur la carte', () => {
-    expect(canBuildType('dust_vein', 5, [])).toBe(true);
-    expect(canBuildType('dust_vein', 5, [mk('dust_vein', 3, 0, 0)])).toBe(false); // déjà posé
+    expect(canBuildType('energy_font', 5, [])).toBe(true);
+    expect(canBuildType('energy_font', 5, [mk('energy_font', 3, 0, 0)])).toBe(false); // déjà posé
     // Un autre type reste constructible.
-    expect(canBuildType('energy_font', 5, [mk('dust_vein', 3, 0, 0)])).toBe(true);
+    expect(canBuildType('warehouse', 5, [mk('energy_font', 3, 0, 0)])).toBe(true);
   });
 });
 
@@ -152,7 +133,7 @@ describe('buildings — Entrepôt : effet stockage global', () => {
     const wh = mk('warehouse', 4, 0, 5); // +60 % stockage
     expect(storageMult([wh])).toBeCloseTo(1.6, 5);
     expect(buildingProdPerHour(wh)).toBe(0); // un utilitaire ne produit rien
-    const dust = mk('dust_vein', 10, 0, 0);
+    const dust = mk('energy_font', 10, 0, 0);
     expect(buildingStorageCap(dust, storageMult([wh]))).toBeCloseTo(
       buildingStorageCap(dust) * 1.6,
       3,
@@ -160,10 +141,10 @@ describe('buildings — Entrepôt : effet stockage global', () => {
   });
   it("collectable applique le bonus d'entrepôt et ignore les utilitaires", () => {
     const now = 1000 * H; // saturé
-    const dust = mk('dust_vein', 10, 0, 0);
+    const dust = mk('energy_font', 10, 0, 0);
     const wh = mk('warehouse', 4, 0, 1);
-    const base = collectable([dust], now).dust;
-    const boosted = collectable([dust, wh], now).dust;
+    const base = collectable([dust], now).energy;
+    const boosted = collectable([dust, wh], now).energy;
     expect(boosted).toBeGreaterThan(base); // stockage plus grand → plus récolté à saturation
     expect(collectable([wh], now)).toEqual({
       dust: 0,
@@ -179,7 +160,7 @@ describe('buildings — Entrepôt : effet stockage global', () => {
 describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
   it('expeditionsUnlocked = true seulement avec un avant-poste', () => {
     expect(expeditionsUnlocked([])).toBe(false);
-    expect(expeditionsUnlocked([mk('dust_vein', 5)])).toBe(false);
+    expect(expeditionsUnlocked([mk('energy_font', 5)])).toBe(false);
     expect(expeditionsUnlocked([mk('outpost', 1)])).toBe(true);
   });
   it('travelTimeMult < 1 et décroît avec le niveau (−1,5 %/niv, plancher −60 % au niv.40)', () => {
@@ -194,42 +175,36 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
 
 describe('filons — report du reliquat à la récolte', () => {
   it('la fraction non récoltée est conservée (pas remise à zéro)', () => {
-    const b = mk('dust_vein', 10, 0); // 0,35/h/niv → 3,5/h
-    const now = H; // 1 h → 3,5 stockés
-    expect(buildingAccrued(b, now, 1)).toBe(3);
+    const b = mk('energy_font', 6, 0); // prod fractionnaire à l'heure → teste le report du reliquat
+    const perHr = buildingProdPerHour(b);
+    const whole = Math.floor(perHr);
+    const now = H;
+    expect(buildingAccrued(b, now, 1)).toBe(whole);
     const nca = nextCollectedAt(b, now, 1);
-    // Le reliquat reporté ≈ 0,5 unité (et non 0) : le stock ne repart pas de zéro.
-    const carriedUnits = (3.5 * (now - nca)) / H;
-    expect(carriedUnits).toBeCloseTo(0.5, 6);
+    // Le reliquat reporté = la fraction non entière (et non 0) : le stock ne repart pas de zéro.
+    const carriedUnits = (perHr * (now - nca)) / H;
+    expect(carriedUnits).toBeCloseTo(perHr - whole, 6);
     // Re-récolte immédiate = 0 (moins d’une unité entière en stock).
     expect(buildingAccrued({ ...b, collectedAt: nca }, now, 1)).toBe(0);
   });
 
   it('un filon lent n’est pas affamé par des récoltes fréquentes', () => {
-    let b = mk('dust_vein', 1, 0); // 0,35/h
+    let b = mk('energy_font', 1, 0);
     let total = 0;
     const step = 0.5 * H; // récolte toutes les 30 min (< 1 unité/récolte → test du report)
-    for (let now = step; now <= 20 * H; now += step) {
+    // Fenêtre sous le plafond de stockage (18 h) → la récolte unique n'est pas saturée.
+    for (let now = step; now <= 12 * H; now += step) {
       total += buildingAccrued(b, now, 1);
       b = { ...b, collectedAt: nextCollectedAt(b, now, 1) };
     }
-    // Le report du reliquat → on récupère le même total qu'une récolte unique sur 20 h
+    // Le report du reliquat → on récupère le même total qu'une récolte unique sur 12 h
     // (et non 0 comme avec l’ancien reset à `now`).
-    expect(total).toBe(buildingAccrued(mk('dust_vein', 1, 0), 20 * H, 1));
+    expect(total).toBe(buildingAccrued(mk('energy_font', 1, 0), 12 * H, 1));
     expect(total).toBeGreaterThan(0);
   });
 
   it('un utilitaire (perHr = 0) garde son collectedAt', () => {
     expect(nextCollectedAt(mk('boss_altar', 5, 123), 999_999)).toBe(123);
-  });
-});
-
-describe('forge — le niveau améliore la rareté forgée', () => {
-  it('forgeLuckBonus croît avec le niveau de Forge, plafonné', () => {
-    expect(forgeLuckBonus([])).toBe(0);
-    expect(forgeLuckBonus([mk('forge', 1)])).toBeCloseTo(0.035, 5);
-    expect(forgeLuckBonus([mk('forge', 4)])).toBeCloseTo(0.14, 5);
-    expect(forgeLuckBonus([mk('forge', 40)])).toBe(0.5); // plafonné
   });
 });
 

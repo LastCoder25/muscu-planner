@@ -95,7 +95,6 @@
 
       <div class="bag">
         <span class="bag-chip">🪙 {{ gold }}</span>
-        <span class="bag-chip">✨ {{ dust }}</span>
         <span class="bag-chip">🎒 {{ loot.length }}</span>
       </div>
 
@@ -294,8 +293,7 @@
           {{ run.status === 'cleared' ? 'Labyrinthe nettoyé !' : 'Vous êtes tombé…' }}
         </div>
         <div class="over-haul">
-          🪙 {{ gold }} · ✨ {{ dust }}
-          <template v-if="scrollsGained"> · 📜 {{ scrollsGained }}</template> · 🎒
+          🪙 {{ gold }} <template v-if="scrollsGained"> · 📜 {{ scrollsGained }}</template> · 🎒
           {{ run.status === 'dead' ? 0 : loot.length }} objet(s)
         </div>
         <div class="over-sub">
@@ -571,6 +569,9 @@ const lastEvent = ref<{ kind: string; text: string } | null>(null);
 const over = ref(false);
 // Butin cumulé du run (Phase 3b : affiché ; persistance/récompense = Phase 3c).
 const gold = ref(0);
+// Compteur INTERNE de richesse du run (monstres/coffres/vault − pièges) : plus une devise
+// affichée (la poussière a été retirée du jeu) → sert uniquement de proxy au faucet de
+// parchemins d'enchant 📜 en fin de run (cf. `scrolls = dust.value / 8`).
 const dust = ref(0);
 const scrollsGained = ref(0); // parchemins d'enchant 📜 crédités (récap de fin)
 const loot = ref<Item[]>([]);
@@ -755,7 +756,7 @@ function fightRoom(id: number, isBoss: boolean) {
     dust.value += dd;
     lastEvent.value = {
       kind: 'good',
-      text: `${foe.emoji} Vaincu ! +${res.gold} 🪙 +${dd} ✨ · ${finalPv} PV`,
+      text: `${foe.emoji} Vaincu ! +${res.gold} 🪙 · ${finalPv} PV`,
     };
   } else {
     lastEvent.value = { kind: 'bad', text: `💀 Battu par ${monster.name}…` };
@@ -822,9 +823,12 @@ function springTrap(id: number) {
     pool.value -= loss;
     lastEvent.value = {
       kind: 'bad',
-      text: loss
-        ? `${trap.emoji} ${trap.label} ! −${loss} ${isGold ? '🪙' : '✨'}`
-        : `${trap.emoji} ${trap.label} — rien à voler !`,
+      text:
+        loss && isGold
+          ? `${trap.emoji} ${trap.label} ! −${loss} 🪙`
+          : loss
+            ? `${trap.emoji} ${trap.label} ! butin dérobé`
+            : `${trap.emoji} ${trap.label} — rien à voler !`,
     };
     roomFx.value = { kind: 'trap', trap };
   }
@@ -852,7 +856,7 @@ function openVault(id: number) {
   if (item) loot.value.push(item);
   lastEvent.value = {
     kind: 'good',
-    text: `💎 Salle secrète ! ${item ? item.name + ' · ' : ''}+${gGold}🪙 +${gDust}✨`,
+    text: `💎 Salle secrète ! ${item ? item.name + ' · ' : ''}+${gGold}🪙`,
   };
   gameFx.celebrate({
     kind: 'drop',
@@ -1213,7 +1217,8 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
       });
     }
     // Parchemins d'enchant 📜 (carburant de l'enchant) : faucet SECONDAIRE ∝ progression
-    // du run (la poussière amassée = proxy des salles/monstres), PLAFONNÉ + bonus de clear.
+    // du run (`dust.value` = compteur INTERNE de richesse du run — salles/monstres/coffres,
+    // plus affiché — sert de proxy), PLAFONNÉ + bonus de clear.
     const scrolls =
       Math.min(10, Math.max(1, Math.round(dust.value / 8))) + (outcome === 'cleared' ? 2 : 0);
     // MORT : on garde une FRACTION des gains liée à la profondeur du palier non terminé
@@ -1223,10 +1228,8 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
     if (uid)
       await char.applyExpedition(uid, {
         gold: Math.floor(gold.value * keep),
-        dust: Math.floor(dust.value * keep),
         enchantScrolls: Math.floor(scrolls * keep),
         drops: outcome === 'dead' ? [] : loot.value,
-        // (les lignes de récap sont recalées ci-dessous sur les montants RÉELLEMENT crédités)
         // Nettoyage → débloque le palier suivant (mort/retraite ne débloquent pas).
         ...(outcome === 'cleared' && selectedLaby.value
           ? { clearedDungeonId: labyClearId(selectedLaby.value.id) }
@@ -1235,7 +1238,6 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
     // Recale les compteurs affichés sur les montants RÉELLEMENT crédités (fraction gardée
     // en cas de mort) → le récap ne ment pas.
     gold.value = Math.floor(gold.value * keep);
-    dust.value = Math.floor(dust.value * keep);
     scrollsGained.value = Math.floor(scrolls * keep);
   }
   stopAuto(); // fin de run → coupe l'auto (la relance depuis la modale est manuelle)

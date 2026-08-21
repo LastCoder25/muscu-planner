@@ -291,9 +291,7 @@ export function swapLoadoutGear(
 }
 
 // Récompense « au choix » d'un boss : 3 candidats tirés, le joueur en garde 1.
-export type RewardCandidate =
-  | { kind: 'item'; item: Item }
-  | { kind: 'gold'; gold: number; dust: number };
+export type RewardCandidate = { kind: 'item'; item: Item } | { kind: 'gold'; gold: number };
 export interface PendingReward {
   source: string; // ex. 'boss:dragon_primordial' (traçabilité)
   candidates: RewardCandidate[];

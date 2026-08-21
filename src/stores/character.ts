@@ -4,17 +4,10 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { normalizePseudo, levelUpEnergy } from '@/lib/character';
 import {
-  salvageValue,
   sellValue,
   levelToEnchant,
   attemptEnchant,
   canEnchant,
-  forgeItem,
-  forgeCost,
-  rerolledQuality,
-  rerollCost,
-  craftSetCost,
-  rollSetPiece,
   normRank,
   isFamiliar,
   tierIndexOf,
@@ -62,8 +55,6 @@ import {
   storageMult,
   expeditionsUnlocked,
   travelTimeMult,
-  forgeLuckBonus,
-  goldToDust,
   type Building,
 } from '@/lib/buildings';
 import type { Combatant } from '@/lib/combat';
@@ -275,7 +266,6 @@ export const useCharacterStore = defineStore('character', () => {
     input: {
       energyCost: number;
       gold: number;
-      dust: number;
       drops: Item[];
       clearedDungeonId?: string;
       stones?: number; // pierres magiques 💎 (filet diffus, familiers)
@@ -299,7 +289,6 @@ export const useCharacterStore = defineStore('character', () => {
     const gotKey = input.clearedDungeonId && Math.random() < 0.02 ? 1 : 0;
     return persist(userId, {
       gold: cur.gold + input.gold,
-      dust: cur.dust + input.dust,
       stones: cur.stones + (input.stones ?? 0),
       summon_stones: cur.summon_stones + (input.summonStones ?? 0),
       parchemins: cur.parchemins + (input.parchemins ?? 0),
@@ -324,7 +313,6 @@ export const useCharacterStore = defineStore('character', () => {
       bossId: string;
       summonCost: number; // pierres d'invocation dépensées (win ou lose)
       gold: number;
-      dust: number;
       defeated: boolean;
       pending?: PendingReward | null;
       stones?: number; // pierres magiques 💎 (jalon boss)
@@ -349,7 +337,6 @@ export const useCharacterStore = defineStore('character', () => {
       .filter((it): it is Item => !!it);
     return persist(userId, {
       gold: cur.gold + input.gold,
-      dust: cur.dust + input.dust,
       stones: cur.stones + (input.defeated ? (input.stones ?? 0) : 0),
       parchemins: cur.parchemins + (input.defeated ? (input.parchemins ?? 0) : 0),
       ink_dust: cur.ink_dust + (input.defeated ? (input.inkDust ?? 0) : 0),
@@ -380,7 +367,6 @@ export const useCharacterStore = defineStore('character', () => {
     }
     return persist(userId, {
       gold: cur.gold + cand.gold,
-      dust: cur.dust + cand.dust,
       pending_reward: null,
     });
   }
@@ -393,7 +379,6 @@ export const useCharacterStore = defineStore('character', () => {
       tier: number;
       energyCost: number;
       gold: number;
-      dust: number;
       drops: Item[];
       cleared: boolean;
       stones?: number; // pierres magiques 💎 (fin de jeu)
@@ -404,7 +389,6 @@ export const useCharacterStore = defineStore('character', () => {
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
     return persist(userId, {
       gold: cur.gold + input.gold,
-      dust: cur.dust + input.dust,
       stones: cur.stones + (input.stones ?? 0),
       energy_spent: cur.energy_spent + input.energyCost,
       equipped: dist.equipped,
@@ -429,7 +413,6 @@ export const useCharacterStore = defineStore('character', () => {
     userId: string,
     input: {
       gold: number;
-      dust: number;
       drops: Item[];
       enchantScrolls?: number;
       clearedDungeonId?: string; // palier de Labyrinthe nettoyé (préfixe `laby:…`)
@@ -445,7 +428,6 @@ export const useCharacterStore = defineStore('character', () => {
         : cur.cleared_dungeons;
     return persist(userId, {
       gold: cur.gold + input.gold,
-      dust: cur.dust + input.dust,
       enchant_scrolls: cur.enchant_scrolls + (input.enchantScrolls ?? 0),
       equipped: dist.equipped,
       inventory: dist.inventory,
@@ -473,18 +455,6 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
-  // Casse un objet du sac → Poussière d'évolution.
-  async function salvage(userId: string, itemId: string) {
-    const cur = row.value;
-    if (!cur) return;
-    const item = cur.inventory.find((i) => i.id === itemId);
-    if (!item || item.locked) return; // 🔒 protégé
-    return persist(userId, {
-      dust: cur.dust + salvageValue(item),
-      inventory: cur.inventory.filter((i) => i.id !== itemId),
-    });
-  }
-
   // Vend un objet du sac → or.
   async function sell(userId: string, itemId: string) {
     const cur = row.value;
@@ -497,23 +467,6 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
-  // Casse EN MASSE une liste d'objets du sac (par id) → poussière. Le CHOIX des
-  // objets (ex. ceux qui font perdre de la puissance) est décidé côté composant,
-  // qui seul dispose des stats de combat ; le store applique simplement la liste.
-  async function salvageMany(userId: string, ids: string[]): Promise<number> {
-    const cur = row.value;
-    if (!cur || !ids.length) return 0;
-    const set = new Set(ids);
-    const targets = cur.inventory.filter((i) => set.has(i.id) && !i.locked);
-    if (!targets.length) return 0;
-    const rm = new Set(targets.map((t) => t.id)); // ne retire QUE les non-verrouillés
-    const gain = targets.reduce((a, it) => a + salvageValue(it), 0);
-    await persist(userId, {
-      dust: cur.dust + gain,
-      inventory: cur.inventory.filter((i) => !rm.has(i.id)),
-    });
-    return targets.length;
-  }
   // Vend EN MASSE une liste d'objets du sac (par id) → or.
   async function sellMany(userId: string, ids: string[]): Promise<number> {
     const cur = row.value;
@@ -553,68 +506,6 @@ export const useCharacterStore = defineStore('character', () => {
     else patch.inventory = cur.inventory.map((i) => (i.id === itemId ? upgraded : i));
     await persist(userId, patch);
     return outcome;
-  }
-
-  // ── Atelier de poussière (dust sinks) : forge / reroll / infusion / craft de set ──
-  // Applique la MAJ d'un objet possédé (équipé ou au sac) + dépense la poussière.
-  function applyItemUpdate(
-    userId: string,
-    cur: CharacterRow,
-    owned: { item: Item; slot?: ItemSlot },
-    updated: Item,
-    cost: number,
-  ) {
-    if (owned.slot)
-      return persist(userId, {
-        dust: cur.dust - cost,
-        equipped: { ...cur.equipped, [owned.slot]: updated },
-      });
-    return persist(userId, {
-      dust: cur.dust - cost,
-      inventory: cur.inventory.map((i) => (i.id === updated.id ? updated : i)),
-    });
-  }
-  // A. Forge un objet neuf (aléatoire ou ciblé) au niveau joueur → au sac.
-  async function forge(userId: string, opts: { level: number; slot?: ItemSlot }) {
-    const cur = row.value;
-    if (!cur) return;
-    const cost = forgeCost(opts.level, !!opts.slot);
-    if (cur.dust < cost) return;
-    // Le NIVEAU de la Forge améliore le biais de rareté des objets forgés.
-    const luck = 0.25 + forgeLuckBonus(cur.buildings);
-    const it: Item = { ...forgeItem(Math.random, { ...opts, luck }), id: crypto.randomUUID() };
-    return persist(userId, { dust: cur.dust - cost, inventory: [...cur.inventory, it] });
-  }
-  // B. Reroll l'effet d'un objet (équipé ou au sac).
-  async function rerollEffect(userId: string, itemId: string) {
-    const cur = row.value;
-    if (!cur) return;
-    const owned = findOwned(cur, itemId);
-    if (!owned) return;
-    const cost = rerollCost(owned.item);
-    if (cur.dust < cost) return;
-    const rq = rerolledQuality(Math.random, owned.item);
-    const updated: Item = { ...owned.item, effect: rq.effect, roll: rq.roll };
-    if (rq.effect2) updated.effect2 = rq.effect2;
-    return applyItemUpdate(userId, cur, owned, updated, cost);
-  }
-  // D. Forge une pièce de set ciblée (set + emplacement) au niveau joueur → au sac.
-  async function craftSet(userId: string, opts: { level: number; setId: string; slot: ItemSlot }) {
-    const cur = row.value;
-    if (!cur) return;
-    const cost = craftSetCost(opts.level);
-    if (cur.dust < cost) return;
-    const piece = rollSetPiece(Math.random, {
-      setId: opts.setId,
-      level: opts.level,
-      preferSlot: opts.slot,
-    });
-    const it: Item = { ...piece, id: crypto.randomUUID() };
-    return persist(userId, {
-      dust: cur.dust - cost,
-      inventory: [...cur.inventory, it],
-      set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, [it]),
-    });
   }
 
   // Récompense de connexion du jour (une fois par jour logique). Renvoie le gain
@@ -694,29 +585,6 @@ export const useCharacterStore = defineStore('character', () => {
     const talents = cur.talents.map((t) => (t.id === id ? { ...t, equipped: false } : t));
     return persistOptimistic(userId, { talents });
   }
-  // ENCHANTE un talent (UNIFORME avec les objets/familiers) : gamble +N sur sa
-  // magnitude, coûte 1 parchemin d'enchantement 📜 + éventuellement 1 protection 🛡️.
-  // Grade (rang/qualité) fixé au drop — plus de niveau ni d'infusion de tier.
-  async function enchantTalent(userId: string, talentId: string, useProtection: boolean) {
-    const cur = row.value;
-    if (!cur) return null;
-    const t = cur.talents.find((x) => x.id === talentId);
-    if (!t) return null;
-    const n = t.enchant ?? 0;
-    if (!canEnchant(n) || cur.enchant_scrolls < 1) return null; // au cap ou plus de parchemin
-    const withProtection = useProtection && cur.protections > 0;
-    const outcome = attemptEnchant(Math.random, n, withProtection);
-    const talents = cur.talents.map((x) =>
-      x.id === talentId ? { ...x, enchant: outcome.enchant } : x,
-    );
-    await persist(userId, {
-      enchant_scrolls: cur.enchant_scrolls - 1,
-      protections: cur.protections - (outcome.protectionUsed ? 1 : 0),
-      talents,
-    });
-    return outcome;
-  }
-
   // ── RECYCLAGE des SURPLUS → ressource dédiée, dépensée pour infuser le GRADE (rang +
   // qualité) d'un gardé. Familiers → POUSSIÈRE D'ÂME (`fragments`) ; talents → POUSSIÈRE
   // D'ENCRE (`ink_dust`). Le grade infusé est plafonné au grade droppable de ton niveau
@@ -772,30 +640,6 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, patch);
     return updated;
   }
-  // Infuse +1 cran de GRADE un OBJET d'équipement (équipé ou au sac) en dépensant la
-  // POUSSIÈRE d'évolution ✨, plafonné au grade droppable du niveau joueur. Symétrique
-  // des talents/familiers (ticket 37ee20db). La magnitude est re-scalée (même helper).
-  async function infuseItemGrade(
-    userId: string,
-    itemId: string,
-    playerLevel: number,
-  ): Promise<Item | null> {
-    const cur = row.value;
-    if (!cur) return null;
-    const found = findOwned(cur, itemId);
-    if (!found || isFamiliar(found.item)) return null; // objets d'équipement uniquement
-    const { item, slot } = found;
-    const cap = maxGradeCran(playerLevel);
-    if (tierIndexOf(item) >= cap) return null; // grade déjà au plafond du niveau
-    const cost = tierStepCost(tierIndexOf(item));
-    if (cur.dust < cost) return null;
-    const updated = applyFamiliarInfusion({ ...item, fxp: 0 }, cost, cap);
-    const patch: Partial<CharacterRow> = { dust: cur.dust - cost };
-    if (slot) patch.equipped = { ...cur.equipped, [slot]: updated };
-    else patch.inventory = cur.inventory.map((i) => (i.id === itemId ? updated : i));
-    await persistOptimistic(userId, patch);
-    return updated;
-  }
   // Infuse +1 cran de GRADE un talent (équipé ou au sac) en dépensant la poussière d'encre,
   // plafonné au grade droppable du niveau joueur. Renvoie l'instance à jour, ou null.
   async function infuseTalentGrade(
@@ -833,13 +677,9 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { equipped, inventory });
   }
 
-  // Équipe un objet du sac ET dispose de l'objet remplacé (casse → poussière /
-  // vend → or / garde → sac) en UNE écriture. Évite l'aller-retour par le sac.
-  async function equipReplacing(
-    userId: string,
-    itemId: string,
-    disposal: 'salvage' | 'sell' | 'keep',
-  ) {
+  // Équipe un objet du sac ET dispose de l'objet remplacé (vend → or / garde → sac) en
+  // UNE écriture. Évite l'aller-retour par le sac.
+  async function equipReplacing(userId: string, itemId: string, disposal: 'sell' | 'keep') {
     const cur = row.value;
     if (!cur) return;
     const item = cur.inventory.find((i) => i.id === itemId);
@@ -849,8 +689,7 @@ export const useCharacterStore = defineStore('character', () => {
     const prev = equipped[item.slot];
     equipped[item.slot] = item;
     const patch: Partial<CharacterRow> = { equipped };
-    if (prev && disposal === 'salvage') patch.dust = cur.dust + salvageValue(prev);
-    else if (prev && disposal === 'sell') patch.gold = cur.gold + sellValue(prev);
+    if (prev && disposal === 'sell') patch.gold = cur.gold + sellValue(prev);
     else if (prev) inventory.push(prev); // keep
     patch.inventory = inventory;
     return persist(userId, patch);
@@ -945,7 +784,6 @@ export const useCharacterStore = defineStore('character', () => {
       : [buildMessage({ ...exp, reported: true }), ...cur.messages].slice(0, 20);
     await persist(userId, {
       gold: cur.gold + o.gold,
-      dust: cur.dust + o.dust,
       enchant_scrolls: cur.enchant_scrolls + (o.enchantScrolls ?? 0),
       login_energy: cur.login_energy + (o.energy ?? 0), // ⚡ mine → énergie de jeu
       keys: cur.keys + o.key,
@@ -1006,7 +844,6 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || !cur.buildings.length) return null;
     const got = collectable(cur.buildings, now);
     if (
-      got.dust <= 0 &&
       got.stone <= 0 &&
       got.energy <= 0 &&
       got.parchemins <= 0 &&
@@ -1019,7 +856,6 @@ export const useCharacterStore = defineStore('character', () => {
     // affamé par des récoltes fréquentes (cf. nextCollectedAt).
     const mult = storageMult(cur.buildings);
     await persistOptimistic(userId, {
-      dust: cur.dust + got.dust,
       stones: cur.stones + got.stone,
       parchemins: cur.parchemins + got.parchemins, // 📚 bibliothèque → parchemins (talents)
       fragments: cur.fragments + got.fragments, // 🥚 Incubateur → poussière d'âme (rang familiers)
@@ -1029,18 +865,6 @@ export const useCharacterStore = defineStore('character', () => {
     });
     return got;
   }
-  // Comptoir : échange de l'OR contre de la POUSSIÈRE ✨ (puits d'or). Sens unique →
-  // pas de boucle. `gold` = or dépensé (borné à ce qu'on possède).
-  async function convertGold(userId: string, gold: number) {
-    const cur = row.value;
-    if (!cur) return 0;
-    const spend = Math.min(Math.max(0, Math.floor(gold)), cur.gold);
-    const dust = goldToDust(cur.buildings, spend);
-    if (dust <= 0) return 0;
-    await persistOptimistic(userId, { gold: cur.gold - spend, dust: cur.dust + dust });
-    return dust;
-  }
-
   return {
     row,
     loaded,
@@ -1054,7 +878,6 @@ export const useCharacterStore = defineStore('character', () => {
     buildFilon,
     upgradeFilon,
     collectFilons,
-    convertGold,
     applyRun,
     applyBossWin,
     chooseReward,
@@ -1067,21 +890,14 @@ export const useCharacterStore = defineStore('character', () => {
     unequip,
     equipTalent,
     unequipTalent,
-    enchantTalent,
     recycleFamiliar,
     recycleTalent,
     infuseFamiliarGrade,
-    infuseItemGrade,
     infuseTalentGrade,
-    salvage,
     sell,
-    salvageMany,
     sellMany,
     toggleLock,
     enchantItem,
-    forge,
-    rerollEffect,
-    craftSet,
     spendEnergy,
     claimDailyLogin,
     claimLevelUps,
