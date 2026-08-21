@@ -180,56 +180,35 @@
            (familier à droite, badge talent en bas-gauche), ticket d06b6998. -->
       <template v-if="tab === 'hero'">
         <template v-if="persoSub === 'perso'">
-          <div class="avatar-wrap">
-            <AventureAvatar
-              :profile="c.profile"
-              :equipped="char.row.equipped"
-              :talent-icon="firstTalentIcon"
-              @familiar-click="familiarsOpen = true"
-              @talent-click="talentsOpen = true"
-            />
-          </div>
-          <!-- EMBLÈME HÉROS : niveau + rang + puissance fusionnés. Le médaillon = l'anneau
-               de NIVEAU (arc = progression) teinté par la couleur du RANG ; au centre l'emoji
-               de rang + le niveau ; dessous le nom du rang + étoiles ; la PUISSANCE en gros. -->
-          <div class="crest" :style="{ '--rank-c': rank.color }">
-            <div
-              class="crest-medal"
-              :title="`Niveau ${c.level.level} · ${rank.name} ${rank.star}/5`"
-            >
-              <svg viewBox="0 0 84 84" aria-hidden="true">
-                <circle cx="42" cy="42" r="38" fill="none" stroke="#000" stroke-width="6" />
-                <circle
-                  class="crest-arc"
-                  cx="42"
-                  cy="42"
-                  r="38"
-                  fill="none"
-                  stroke="var(--rank-c)"
-                  stroke-width="6"
-                  stroke-linecap="round"
-                  stroke-dasharray="239"
-                  :stroke-dashoffset="239 * (1 - c.level.progressPct / 100)"
-                  transform="rotate(-90 42 42)"
+          <!-- PORTRAIT HÉROS : le perso au centre d'un cercle teinté par le RANG ; couronne
+               d'ÉTOILES (pleines = étoiles gagnées) au premier plan sur l'anneau, contour
+               sombre pour ressortir. (Niveau retiré pour le moment.) -->
+          <div class="portrait" :style="{ '--rank-c': rank.color }">
+            <div class="pt-frame" :title="`${rank.name} ${rank.star}/5`">
+              <AventureAvatar
+                class="pt-avatar"
+                :profile="c.profile"
+                :equipped="char.row.equipped"
+                :talent-icon="firstTalentIcon"
+                @familiar-click="familiarsOpen = true"
+                @talent-click="talentsOpen = true"
+              />
+              <svg class="pt-stars" viewBox="0 0 100 100" aria-hidden="true">
+                <path
+                  v-for="i in 5"
+                  :key="i"
+                  class="pt-star"
+                  :class="{ on: i <= rank.star }"
+                  :d="STAR_PATH"
+                  :transform="starTf(i - 1)"
                 />
               </svg>
-              <div class="crest-txt">
-                <div class="crest-emo">{{ rank.emoji }}</div>
-                <div class="crest-lvl font-display">{{ c.level.level }}</div>
-              </div>
             </div>
-            <div class="crest-rank font-display">
-              {{ rank.name }} <span class="crest-stars">{{ rankStarStr(rank.star) }}</span>
-            </div>
-            <div class="crest-power">
-              <span class="cp-ic">⚔️</span>
-              <b class="cp-v font-display">{{ fmtPow(combatPowerVal) }}</b>
-              <span class="cp-l">puissance</span>
-            </div>
-            <div class="crest-xp">
-              {{ c.level.xpIntoLevel.toLocaleString('fr-FR') }} /
-              {{ c.level.xpForLevel.toLocaleString('fr-FR') }} XP · Profil
-              <b>{{ profileLabel }}</b>
+            <div class="pt-rank font-display">{{ rank.name }}</div>
+            <div class="pt-power">
+              <span class="ppw-ic">⚔️</span>
+              <b class="ppw-v font-display">{{ fmtPow(combatPowerVal) }}</b>
+              <span class="ppw-l">puissance</span>
             </div>
           </div>
 
@@ -2220,8 +2199,8 @@ import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
-import { characterRank, rankStarStr } from '@/lib/characterRank';
-import { computeCharacter, isValidPseudo, PROFILE_LABEL } from '@/lib/character';
+import { characterRank } from '@/lib/characterRank';
+import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import DustIcon from '@/components/DustIcon.vue';
 import {
@@ -2474,6 +2453,16 @@ const fighter = computed(() =>
 const combatPowerVal = computed(() => combatPower(fighter.value));
 // Rang de PRESTIGE (cosmétique, dérivé du niveau) — n'affecte pas le combat.
 const rank = computed(() => characterRank(c.value.level.level));
+// Couronne d'étoiles du portrait : 5 étoiles en ARC HAUT sur l'anneau (viewBox 100×100).
+// Chemin d'une étoile 5 branches (rayon ~6), placée à chaque angle.
+const STAR_PATH =
+  'M0,-6 L1.76,-2.43 L5.7,-1.85 L2.85,0.94 L3.53,4.85 L0,3 L-3.53,4.85 L-2.85,0.94 L-5.7,-1.85 L-1.76,-2.43 Z';
+const STAR_ANGLES = [-150, -120, -90, -60, -30]; // degrés (0=droite, 90=bas) → arc du haut
+function starTf(i: number): string {
+  const a = ((STAR_ANGLES[i] ?? -90) * Math.PI) / 180;
+  const R = 47;
+  return `translate(${(50 + R * Math.cos(a)).toFixed(1)} ${(50 + R * Math.sin(a)).toFixed(1)})`;
+}
 // Combattant SANS équipement ni talents (stats de fond seules) → base de la
 // comparaison « avec / sans équipement » sur la fiche perso.
 const baseFighter = computed(() =>
@@ -2545,7 +2534,6 @@ function winClass(pct: number): string {
   if (pct >= 30) return 'wp-mid';
   return 'wp-bad';
 }
-const profileLabel = computed(() => PROFILE_LABEL[c.value.profile]);
 
 // ── Récompense de connexion quotidienne ──
 const today = logicalToday();
@@ -4770,92 +4758,83 @@ onUnmounted(() => {
 }
 
 /* Héro (anneau + archétype + puissance) */
-.avatar-wrap {
-  width: 128px;
-  height: 150px;
-  margin: 0 auto 6px;
-}
-/* EMBLÈME HÉROS fusionné : médaillon (niveau+rang) + puissance headline. */
-.crest {
+/* PORTRAIT HÉROS : le perso dans un cercle teinté par le RANG + couronne d'étoiles. */
+.portrait {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  margin-bottom: 18px;
+  gap: 4px;
+  margin-bottom: 16px;
   text-align: center;
 }
-.crest-medal {
+.pt-frame {
   position: relative;
-  width: 112px;
-  height: 112px;
-  display: grid;
-  place-items: center;
-  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--rank-c, var(--accent)) 45%, transparent));
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 42%,
+    color-mix(in srgb, var(--rank-c, var(--accent)) 22%, var(--surface)),
+    color-mix(in srgb, var(--rank-c, var(--accent)) 6%, var(--surface)) 70%
+  );
+  border: 3px solid color-mix(in srgb, var(--rank-c, var(--accent)) 78%, transparent);
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--rank-c, var(--accent)) 34%, transparent),
+    inset 0 0 22px color-mix(in srgb, var(--rank-c, var(--accent)) 16%, transparent);
 }
-.crest-medal svg {
+.pt-avatar {
+  position: absolute;
+  left: 50%;
+  top: 53%;
+  transform: translate(-50%, -50%);
+  width: 104px;
+  height: 128px;
+}
+.pt-stars {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  overflow: visible;
+  pointer-events: none; /* laisse cliquer le familier/talent de l'avatar dessous */
 }
-.crest-txt {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: 1;
+.pt-star {
+  fill: transparent;
+  stroke: color-mix(in srgb, var(--rank-c, var(--accent)) 40%, var(--line));
+  stroke-width: 1;
 }
-.crest-emo {
-  font-size: 20px;
-  line-height: 1;
-  margin-bottom: 2px;
+.pt-star.on {
+  fill: var(--rank-c, var(--accent));
+  stroke: #14100a;
+  stroke-width: 1.4;
+  paint-order: stroke; /* contour SOUS le remplissage → étoile nette qui ressort */
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--rank-c, var(--accent)) 70%, transparent));
 }
-.crest-lvl {
-  font-size: 42px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--rank-c, var(--accent));
-}
-.crest-rank {
+.pt-rank {
   font-weight: 800;
   font-size: 16px;
   letter-spacing: 0.4px;
   color: color-mix(in srgb, var(--rank-c, var(--accent)) 62%, var(--text));
 }
-.crest-stars {
-  color: var(--rank-c, var(--accent));
-  letter-spacing: 2px;
-  text-shadow: 0 0 6px color-mix(in srgb, var(--rank-c, var(--accent)) 55%, transparent);
-}
-.crest-power {
+.pt-power {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
-  margin-top: 2px;
 }
-.crest-power .cp-ic {
-  font-size: 18px;
+.ppw-ic {
+  font-size: 16px;
 }
-.crest-power .cp-v {
-  font-size: 30px;
+.ppw-v {
+  font-size: 28px;
   font-weight: 700;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
-.crest-power .cp-l {
+.ppw-l {
   font-size: 11px;
   color: var(--dim);
   text-transform: uppercase;
   letter-spacing: 1.5px;
-}
-.crest-xp {
-  font-size: 11px;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-}
-.crest-xp b {
-  color: var(--d1);
-  text-transform: capitalize;
-  font-weight: 600;
 }
 
 /* Talents */
