@@ -574,6 +574,10 @@ const favSet = computed(() => new Set(profileStore.profile?.favorite_exercises ?
 // SORTIE cardio (tag 'cardio' = marche/course/vélo) : pilote le sélecteur
 // d'unité distance/temps. Le conditionnement (jumping jacks…) n'en est PAS (reps).
 const isCardio = computed(() => !!exercise.value?.tags?.includes('cardio'));
+// VOIE cardio de l'exo (conditionnement INCLUS : corde/jumping jacks/burpees…). Pilote
+// l'unité de TEMPS : cardio-track → MINUTES (comme une sortie), sinon gainage → secondes.
+// Doit matcher isCardioChallengeRow (affichage) sinon l'avance/retard est faux (ticket 5755a833).
+const cardioTrackExo = computed(() => (exercise.value ? exIsCardio(exercise.value) : false));
 
 // VOIE cardio (budget + onglet) : sorties cardio ET exos de conditionnement
 // (jumping jacks, burpees…) → leur XP va au Cardio, ils vivent donc côté cardio,
@@ -617,8 +621,9 @@ const unit = computed<'reps' | 'time' | 'distance'>(() => {
   if (isDual.value) return dualUnit.value; // choix utilisateur pour les exos dual
   return exercise.value?.unit === 'time' ? 'time' : 'reps';
 });
-// Gainage en temps (hors cardio) → propose secondes ou min:sec.
-const isGainageTime = computed(() => unit.value === 'time' && !isCardio.value);
+// Gainage en temps = SECONDES (planche, chaise…) → propose secondes ou min:sec. Les exos
+// cardio-track en durée (corde, burpees…) sont en MINUTES → PAS du gainage (cf. cardioTrackExo).
+const isGainageTime = computed(() => unit.value === 'time' && !cardioTrackExo.value);
 const timeDisplay = ref<'sec' | 'mmss'>('sec');
 // Saisie de la durée AU FORMAT choisi (ticket e6c51fc9) : quand min:sec est sélectionné,
 // les champs de durée s'affichent/se saisissent en m:ss (converti en secondes en interne).
@@ -647,8 +652,8 @@ const unitLabel = computed(() =>
   unit.value === 'distance'
     ? 'km'
     : unit.value === 'time'
-      ? isCardio.value
-        ? 'min' // cardio en temps = minutes ; gainage = secondes
+      ? cardioTrackExo.value
+        ? 'min' // cardio-track en temps (sortie OU conditionnement) = minutes ; gainage = secondes
         : 'sec'
       : 'reps',
 );

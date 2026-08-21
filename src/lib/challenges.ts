@@ -3,7 +3,7 @@
 // statistiques (streak/complétion) et évaluation des succès.
 import type { Level } from './types';
 import { REP_XP, assistMult, ASSIST_MULT, XP_MULT } from './athlete';
-import { isCardioChallengeExercise, isCardioTrackChallenge } from '@/data/cardio';
+import { isCardioTrackChallenge } from '@/data/cardio';
 
 export type ChallengeFormat =
   | 'fixed'
@@ -253,7 +253,11 @@ export function suggestConfig(
 ): ChallengeConfig {
   let max: number;
   if (unit === 'time')
-    max = isCardioChallengeExercise(exerciseId) ? cardioMinBase(level) : gainageSecBase(level);
+    // Cardio-TRACK en temps (sortie OU conditionnement : corde, burpees…) = MINUTES ;
+    // gainage (planche, chaise) = SECONDES. Doit matcher l'unité du wizard/affichage.
+    max = isCardioTrackChallenge({ unit, exercise_id: exerciseId })
+      ? cardioMinBase(level)
+      : gainageSecBase(level);
   else if (unit === 'distance') max = distanceBase(level, exerciseId);
   else max = Math.max(3, Math.round(repsBase(level) * exerciseFactor(exerciseId)));
   const common = {

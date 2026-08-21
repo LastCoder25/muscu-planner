@@ -176,22 +176,9 @@
         </button>
       </div>
 
-      <!-- ONGLET HÉROS (fiche + stats fusionnées + talents) -->
+      <!-- ONGLET HÉROS — accès Talents/Familier UNIQUEMENT par clic sur l'avatar
+           (familier à droite, badge talent en bas-gauche), ticket d06b6998. -->
       <template v-if="tab === 'hero'">
-        <!-- Accès Talents / Familier par CLIC (modale), plus de sous-onglets (ticket 5efcc6bc). -->
-        <div class="hero-access">
-          <button class="ha-b" @click="talentsOpen = true">
-            ✨ Talents
-            <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
-            <span v-if="talentFreeSlots" class="gs-badge">{{ talentFreeSlots }}</span>
-          </button>
-          <button class="ha-b" @click="familiarsOpen = true">
-            🐾 Familier
-            <span v-if="equippedFamiliar" class="ha-fam">{{ equippedFamiliar.emoji }}</span>
-            <span v-else class="ha-none">à équiper</span>
-          </button>
-        </div>
-
         <template v-if="persoSub === 'perso'">
           <div class="avatar-wrap">
             <AventureAvatar
@@ -2624,9 +2611,6 @@ const firstTalentIcon = computed(() => {
   const eq = equippedTalents.value[0];
   return eq ? (talentByCode(eq.code)?.icon ?? '') : '';
 });
-const talentFreeSlots = computed(() =>
-  Math.max(0, talentSlots.value - equippedTalents.value.length),
-);
 const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.value);
 // Vue enrichie : équipés d'abord, puis par grade (tier) puis enchant décroissants.
 const talentsView = computed(() => {
@@ -4612,35 +4596,7 @@ onUnmounted(() => {
   font-family: var(--font-display);
 }
 
-/* Accès Talents / Familier (boutons qui ouvrent une modale) + modale d'aventure. */
-.hero-access {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.ha-b {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px 8px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--text);
-  font-weight: 700;
-  font-size: 14px;
-  cursor: pointer;
-}
-.ha-fam {
-  font-size: 18px;
-}
-.ha-none {
-  font-size: 11px;
-  color: var(--dim);
-  font-weight: 600;
-}
+/* Modale d'aventure (Talents / Familier ouverts par clic sur l'avatar). */
 .adv-modal {
   position: relative;
   width: 100%;

@@ -430,7 +430,11 @@ import {
   type ChallengeSet,
 } from '@/lib/challenges';
 import { formatOption } from '@/data/challengeFormats';
-import { isCardioChallengeExercise, defaultActivityForChallenge } from '@/data/cardio';
+import {
+  isCardioChallengeExercise,
+  isCardioTrackChallenge,
+  defaultActivityForChallenge,
+} from '@/data/cardio';
 import { useChallengesStore } from '@/stores/challenges';
 import { useCardioStore } from '@/stores/cardio';
 import { useAuthStore } from '@/stores/auth';
@@ -508,9 +512,11 @@ function resetQuick() {
 
 const today = logicalToday(); // « jour d'entraînement » (bascule à 4 h)
 const isTime = computed(() => ch.value?.unit === 'time');
-// Cardio en temps = MINUTES (vélo/course/marche) ; gainage en temps = SECONDES.
+// Temps en MINUTES pour tout le CARDIO-TRACK : vraies sorties (vélo/course/marche) ET
+// conditionnement (corde à sauter, burpees…). Gainage (planche, chaise) = SECONDES (chrono).
+// Doit matcher le wizard/l'affichage sinon l'unité est incohérente (ticket 5755a833).
 const isCardioTime = computed(
-  () => !!ch.value && ch.value.unit === 'time' && isCardioChallengeExercise(ch.value.exercise_id),
+  () => !!ch.value && ch.value.unit === 'time' && isCardioTrackChallenge(ch.value),
 );
 // Vraie sortie cardio (marche/course/vélo) — km OU minutes : la saisie = une SORTIE
 // cardio (comme les tuiles d'accueil), pas des reps manuelles.

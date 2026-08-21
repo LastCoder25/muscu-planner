@@ -13,9 +13,11 @@ export interface RankTier {
 // L'ordre = la progression (bronze → tout-puissant). Couleur montante : cuivre →
 // argent → or → or sombre → orange légendaire → violet mythique → bleus divins → or éclatant.
 export const CHARACTER_RANKS: RankTier[] = [
-  { name: 'Bronze', emoji: '🥉', color: '#cd7f32' },
-  { name: 'Argent', emoji: '🥈', color: '#c9d2dc' },
-  { name: 'Or', emoji: '🥇', color: '#ffcf3f' },
+  // Pastilles teintées métal (pas les médailles 🥉🥈🥇 qui portent un chiffre de PLACE
+  // 3/2/1 → incohérent avec les étoiles de prestige, ticket fffbadf0).
+  { name: 'Bronze', emoji: '🟤', color: '#cd7f32' },
+  { name: 'Argent', emoji: '⚪', color: '#c9d2dc' },
+  { name: 'Or', emoji: '🟡', color: '#ffcf3f' },
   { name: 'Or noir', emoji: '🖤', color: '#b8912e' },
   { name: 'Légendaire', emoji: '🏆', color: '#ff9a3f' },
   { name: 'Demi-dieu', emoji: '⚡', color: '#b07cff' },
