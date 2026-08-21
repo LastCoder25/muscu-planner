@@ -849,8 +849,11 @@ export function infuseFamiliar(fam: Item, addXp: number, maxTierIndex: number): 
     rank = RANK_ORDER[nextRankIdx]!;
     quality = ((tier + 1) % 5) + 1;
     const ratio = (RARITY_MULT[rank] * starQualityMult(quality)) / oldMult;
-    effVal = Math.max(1, Math.round(effVal * ratio));
-    if (eff2Val != null) eff2Val = Math.max(1, Math.round(eff2Val * ratio));
+    // Valeur gardée en FLOAT (pas d'arrondi par pas) : un pas de qualité (+2,5 %) est petit et
+    // s'arrondissait à « aucun changement » sur les petites stats → la valeur restait BLOQUÉE
+    // (ticket 71dfd9da). En float, chaque pas s'accumule (visible sur la puissance de combat).
+    effVal = Math.max(1, effVal * ratio);
+    if (eff2Val != null) eff2Val = Math.max(1, eff2Val * ratio);
   }
   return {
     ...fam,
@@ -1129,15 +1132,17 @@ export function aggregateEffects(equipped: Equipped): AggregatedEffects {
     const it = equipped[slot];
     if (!it) continue;
     const n = it.enchant ?? 0; // OBJETS : magnitude = grade × ENCHANT (plus de niveau)
-    applyEffect(a, it.effect.type, enchantedValue(it.effect, n) / 100);
-    if (it.effect2) applyEffect(a, it.effect2.type, enchantedValue(it.effect2, n) / 100);
+    // Valeur PRÉCISE (float, pas d'arrondi par objet) → les petits gains de qualité (+2,5 %/★)
+    // comptent vraiment dans la puissance de combat au lieu d'être arrondis à zéro (ticket 71dfd9da).
+    applyEffect(a, it.effect.type, (it.effect.value * enchantMult(n)) / 100);
+    if (it.effect2) applyEffect(a, it.effect2.type, (it.effect2.value * enchantMult(n)) / 100);
   }
   // Familier (slot parallèle, hors SLOTS) : comme les objets → magnitude = grade × ENCHANT.
   const fam = equipped[FAMILIAR_SLOT];
   if (fam) {
     const fn = fam.enchant ?? 0;
-    applyEffect(a, fam.effect.type, enchantedValue(fam.effect, fn) / 100);
-    if (fam.effect2) applyEffect(a, fam.effect2.type, enchantedValue(fam.effect2, fn) / 100);
+    applyEffect(a, fam.effect.type, (fam.effect.value * enchantMult(fn)) / 100);
+    if (fam.effect2) applyEffect(a, fam.effect2.type, (fam.effect2.value * enchantMult(fn)) / 100);
   }
   // Bonus de set (2/3/4 pièces) — ajoutés par-dessus les effets d'objet.
   const s = setEffects(equipped);
