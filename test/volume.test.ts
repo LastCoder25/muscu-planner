@@ -5,6 +5,7 @@ import {
   setsByMuscleInRange,
   muscleVolumeInRange,
   comboLogEntries,
+  challengeLogEntries,
   firstOfMonth,
   dayAfter,
   weeklySetsByMuscle,
@@ -117,6 +118,85 @@ describe('comboLogEntries', () => {
     expect(v.byMuscle['pectoraux']).toEqual({ sets: 3, reps: 30 });
     expect(v.byMuscle['dos']).toEqual({ sets: 1, reps: 10 });
     expect(v.totalSets).toBe(4);
+  });
+});
+
+describe('challengeLogEntries', () => {
+  const mkChallenge = (over: Record<string, unknown>) => ({
+    id: 'ch1',
+    exercise_id: 'ex_shoulder_press',
+    exercise_name: 'Développé épaules',
+    muscle_primary: 'épaules',
+    rep_weight: 1,
+    unit: 'reps',
+    format: 'fixed',
+    duration_days: 7,
+    start_date: '2026-08-10',
+    config: {},
+    daily_targets: [],
+    status: 'active',
+    progress: [],
+    ...over,
+  });
+  it('convertit les séries d’un challenge muscu en volume (ticket 6e0b13f0)', () => {
+    const ch = mkChallenge({
+      progress: [
+        {
+          day: 0,
+          date: '2026-08-11',
+          target: 3,
+          done: 22,
+          elapsed_sec: 0,
+          completed: false,
+          sets: [
+            { reps: 12, weight: 20 },
+            { reps: 10, weight: 20 },
+          ],
+        },
+        {
+          day: 1,
+          date: '2026-08-12',
+          target: 3,
+          done: 8,
+          elapsed_sec: 0,
+          completed: false,
+          sets: [{ reps: 8, weight: 22 }],
+        },
+      ],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const es = challengeLogEntries([ch as any]);
+    expect(es).toHaveLength(2);
+    const v = muscleVolumeInRange(es, '2026-08-10', '2026-08-17');
+    expect(v.byMuscle['épaules']).toEqual({ sets: 3, reps: 30 });
+  });
+  it('exclut les challenges cardio (pas de volume muscu)', () => {
+    const ch = mkChallenge({
+      exercise_id: 'ex_ch_marche_course',
+      muscle_primary: null,
+      progress: [
+        {
+          day: 0,
+          date: '2026-08-11',
+          target: 1,
+          done: 1,
+          elapsed_sec: 0,
+          completed: false,
+          sets: [{ reps: 0, sec: 1800 }],
+        },
+      ],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(challengeLogEntries([ch as any])).toHaveLength(0);
+  });
+  it('ignore les jours sans détail de série', () => {
+    const ch = mkChallenge({
+      progress: [
+        { day: 0, date: '2026-08-11', target: 20, done: 20, elapsed_sec: 0, completed: true },
+      ],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(challengeLogEntries([ch as any])).toHaveLength(0);
   });
 });
 

@@ -2,6 +2,8 @@
 // Pour une séance planifiée (prévu) et pour un bilan (prévu vs réalisé).
 import type { Session, SessionLog, LoggedExercise } from './types';
 import { legSets, type ComboChallenge } from './combo';
+import type { Challenge } from './challenges';
+import { isCardioChallengeExercise } from '@/data/cardio';
 
 export interface MuscleSets {
   muscle: string;
@@ -201,6 +203,48 @@ export function comboLogEntries(combos: ComboChallenge[]): LogEntry[] {
           id: `combo:${c.id}:${day}`,
           name: c.name,
           exercises: [...exos.values()],
+        },
+      });
+    }
+  }
+  return out;
+}
+
+/** Convertit les SÉRIES des challenges (mode « séries » ou détail par série) en séances
+ *  synthétiques → elles comptent dans le volume muscu (séries/groupe, fréquence d'exo,
+ *  charge) au même titre qu'une séance (ticket 6e0b13f0). Tous statuts (actif/terminé/
+ *  abandonné). Les challenges CARDIO (sorties/conditionnement) sont exclus (pas de volume
+ *  muscu). Un jour sans détail `sets` (rep-mode simple) n'apporte pas de séries. */
+export function challengeLogEntries(challenges: Challenge[]): LogEntry[] {
+  const out: LogEntry[] = [];
+  for (const c of challenges) {
+    if (isCardioChallengeExercise(c.exercise_id)) continue; // cardio → hors volume muscu
+    const muscle = c.muscle_primary ?? undefined;
+    for (const day of c.progress) {
+      const sets = day.sets;
+      if (!sets || !sets.length) continue;
+      const performed = sets.map((s, i) => ({
+        set: i + 1,
+        load_kg: s.weight ?? 0,
+        reps: s.reps ?? 0,
+        difficulty: 2 as const,
+      }));
+      out.push({
+        performedAt: day.date,
+        log: {
+          schema_version: '1.0',
+          type: 'session_log',
+          id: `challenge:${c.id}:${day.date}`,
+          name: c.exercise_name,
+          exercises: [
+            {
+              id: c.exercise_id,
+              name: c.exercise_name,
+              muscle_primary: muscle,
+              planned: {},
+              performed,
+            },
+          ],
         },
       });
     }

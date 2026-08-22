@@ -320,12 +320,14 @@ import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useTennisStore, type DrillLogRow } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
 import { useComboStore } from '@/stores/combo';
+import { useChallengesStore } from '@/stores/challenges';
 import MuscleBody from '@/components/MuscleBody.vue';
 import {
   muscleColor,
   weeklySetsByMuscle,
   muscleVolumeInRange,
   comboLogEntries,
+  challengeLogEntries,
   isMuscuLog,
   mondayOf,
   firstOfMonth,
@@ -351,6 +353,7 @@ const profileStore = useProfileStore();
 const tennis = useTennisStore();
 const cardio = useCardioStore();
 const combo = useComboStore();
+const challenges = useChallengesStore();
 const loading = ref(true);
 // Vue « muscu seule » (ouverte depuis la tuile Muscu, `?scope=muscu`) : on masque
 // tennis / cardio / autres sports et on ne garde que le niveau Muscu.
@@ -528,6 +531,7 @@ function barPct(n: number) {
 const entries = computed<LogEntry[]>(() => [
   ...logs.value.map((r) => ({ performedAt: r.performed_at, log: r.payload })),
   ...comboLogEntries(combo.list),
+  ...challengeLogEntries(challenges.list),
 ]);
 // Date du jour en LOCAL (jamais toISOString → pas de décalage de fuseau).
 const todayIso = (() => {
@@ -620,6 +624,7 @@ onMounted(async () => {
   try {
     cardio.fetchLogs(300).catch(() => undefined);
     combo.fetchMine().catch(() => undefined);
+    challenges.fetchMine().catch(() => undefined);
     tennis
       .fetchLogs(300)
       .then((l) => (drillLogs.value = l))
