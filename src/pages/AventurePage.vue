@@ -921,6 +921,13 @@
         <div v-if="!regionView" class="sec-title mboss-title">🗺️ Carte des mondes</div>
         <div v-if="!regionView" class="sec-hint map-hint">
           Touche une région pour ouvrir ses donjons.
+          <button
+            v-if="currentRegionIndex > 1"
+            class="map-toggle"
+            @click="showAllRegions = !showAllRegions"
+          >
+            {{ showAllRegions ? '➖ Réduire' : '🗺️ Voir toutes les zones' }}
+          </button>
         </div>
         <!-- Carte-monde serpentine : un nœud par région, fil énergisé, cadenas. -->
         <div
@@ -2342,9 +2349,13 @@ const talentsView = computed(() => {
         };
       })
       .filter((t): t is NonNullable<typeof t> => !!t)
-      // Équipés d'abord, puis par NOM (ticket b552b16f) → liste stable, facile à retrouver.
+      // Équipés d'abord, puis par RANG/QUALITÉ décroissant, puis par NOM (tickets
+      // b552b16f + tri rang) → les meilleurs talents en tête, liste stable.
       .sort(
-        (a, b) => Number(b.equipped) - Number(a.equipped) || a.def.name.localeCompare(b.def.name),
+        (a, b) =>
+          Number(b.equipped) - Number(a.equipped) ||
+          b.tier - a.tier ||
+          a.def.name.localeCompare(b.def.name),
       )
   );
 });
@@ -2419,10 +2430,14 @@ const nxtRegion = computed(() => nextRegion(clearedIds.value));
 
 // ── Carte-monde serpentine des régions (FENÊTRE : précédente · actuelle · suivante) ──
 const currentRegionIndex = computed(() => REGIONS.findIndex((r) => r.id === curRegion.value.id));
-// On n'affiche que 3 régions autour de la frontière : la précédente (faite), la
-// courante, et la suivante (verrouillée) → carte focalisée, pas tout le monde.
+// Par défaut, fenêtre focalisée de 3 régions autour de la frontière : la précédente
+// (faite), la courante, et la suivante (verrouillée). `showAllRegions` (ticket 4a4f1c74)
+// déplie TOUTES les zones débloquées + la suivante → on peut retourner farmer une zone
+// précédente (avant, seule la zone cur-1 restait accessible).
+const showAllRegions = ref(false);
 const visibleRegions = computed(() => {
   const cur = currentRegionIndex.value;
+  if (showAllRegions.value) return REGIONS.slice(0, cur + 2); // toutes les débloquées + la suivante
   const start = Math.max(0, cur - 1);
   return REGIONS.slice(start, cur + 2); // [cur-1, cur, cur+1] (bornes clampées)
 });
@@ -3532,8 +3547,9 @@ const equippedFamiliar = computed<Item | null>(() => char.row?.equipped[FAMILIAR
 const bagFamiliars = computed<Item[]>(() =>
   (char.row?.inventory ?? [])
     .filter((i) => isFamiliar(i))
-    // Par NOM (ticket b552b16f) → liste stable (l'équipé est mis en tête par allFamiliars).
-    .sort((a, b) => a.name.localeCompare(b.name)),
+    // Par RANG/QUALITÉ décroissant, puis par NOM (tickets b552b16f + tri rang) → les
+    // meilleurs familiers en tête (l'équipé est mis en tête par allFamiliars).
+    .sort((a, b) => tierIndexOf(b) - tierIndexOf(a) || a.name.localeCompare(b.name)),
 );
 // TOUS les familiers (équipé d'abord, puis le sac) → une seule grille de cartes, comme
 // les talents. `equipped` marque celui porté (au plus 1). Affichage homogène avec Talents.
@@ -7466,6 +7482,20 @@ onUnmounted(() => {
 .map-hint {
   text-align: center;
   margin-top: -2px;
+}
+.map-toggle {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.map-toggle:hover {
+  border-color: var(--primary);
 }
 .rd-head {
   display: flex;
