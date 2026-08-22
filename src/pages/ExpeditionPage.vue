@@ -293,8 +293,7 @@
           {{ run.status === 'cleared' ? 'Labyrinthe nettoyé !' : 'Vous êtes tombé…' }}
         </div>
         <div class="over-haul">
-          🪙 {{ gold }} <template v-if="scrollsGained"> · 📜 {{ scrollsGained }}</template> · 🎒
-          {{ run.status === 'dead' ? 0 : loot.length }} objet(s)
+          🪙 {{ gold }} · 🎒 {{ run.status === 'dead' ? 0 : loot.length }} objet(s)
         </div>
         <div class="over-sub">
           <template v-if="run.status === 'cleared'"> Butin crédité (+ trésor final) 🎉 </template>

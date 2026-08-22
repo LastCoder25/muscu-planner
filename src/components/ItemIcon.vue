@@ -1,12 +1,11 @@
 <template>
   <!-- Tuile d'objet façon ARPG : glyphe (MDI pour le gear, emoji d'espèce pour un familier)
-       dans un cadre « gemme » teinté par le RANG, avec ★ de qualité, +N enchant et 🧩 set. -->
+       dans un cadre « gemme » teinté par le RANG, avec ★ de qualité et 🧩 set. -->
   <div class="item-icon" :class="{ fam: isFamiliar }" :style="frameStyle">
     <span v-if="isFamiliar" class="ii-emoji" aria-hidden="true">{{ item.emoji }}</span>
     <q-icon v-else :name="icon" class="ii-glyph" :size="glyphSize + 'px'" />
 
     <span v-if="setId" class="ii-badge set" title="Pièce de set">🧩</span>
-    <span v-if="enchant > 0" class="ii-badge ench font-display">+{{ enchant }}</span>
 
     <span v-if="showStars && stars" class="ii-stars" :title="`Qualité ${stars}/5`">
       <i v-for="n in 5" :key="n" class="ii-star" :class="{ on: n <= stars }">★</i>
@@ -30,7 +29,6 @@ const isFamiliar = computed(() => props.item.slot === FAMILIAR_SLOT);
 const icon = computed(() => itemIconName(props.item.slot, props.item.effect?.type));
 const stars = computed(() => rollStars(props.item.roll));
 const setId = computed(() => props.item.setId);
-const enchant = computed(() => props.item.enchant ?? 0);
 const glyphSize = computed(() => Math.round(props.size * 0.56));
 const frameStyle = computed(() => ({
   '--rk': rankColor.value,
@@ -68,7 +66,7 @@ const frameStyle = computed(() => ({
   line-height: 1;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
 }
-/* Badges d'angle : set (haut-gauche), enchant (haut-droite). */
+/* Badge d'angle : set (haut-gauche). */
 .ii-badge {
   position: absolute;
   top: -5px;
@@ -81,12 +79,6 @@ const frameStyle = computed(() => ({
 }
 .ii-badge.set {
   left: -5px;
-}
-.ii-badge.ench {
-  right: -5px;
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  font-weight: 800;
 }
 /* Étoiles de qualité, collées au bas de la tuile. */
 .ii-stars {

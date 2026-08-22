@@ -6,8 +6,7 @@ import { normalizePseudo, levelUpEnergy } from '@/lib/character';
 import {
   sellValue,
   levelToEnchant,
-  attemptEnchant,
-  canEnchant,
+  enchantMult,
   normRank,
   isFamiliar,
   tierIndexOf,
@@ -16,6 +15,8 @@ import {
   familiarInfuseXp,
   infuseFamiliar as applyFamiliarInfusion,
   swapLoadoutGear,
+  bestGearLoadout,
+  SLOTS,
   MAX_LOADOUTS,
   type Item,
   type ItemSlot,
@@ -122,13 +123,23 @@ export const useCharacterStore = defineStore('character', () => {
       v && typeof v === 'object' && !Array.isArray(v) ? (v as T) : ({} as T);
     r.talents = normalizeTalents(r.talents); // legacy string[] → instances (rétro-compat)
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
-    const fixItem = (it: Item): Item => ({
-      ...it,
-      rarity: normRank(it.rarity),
-      // MIGRATION enchant (migr. 0054) : objets ET familiers d'avant (axe « niveau ») →
-      // ENCHANT équivalent (magnitude préservée). Idempotent (enchant déjà posé → non re-migré).
-      ...(it.enchant === undefined ? { enchant: levelToEnchant(it.level) } : {}),
-    });
+    const fixItem = (it: Item): Item => {
+      const rarity = normRank(it.rarity);
+      // MIGRATION enchant → valeur (ticket 7acb1e7c) : l'axe enchant des OBJETS est retiré.
+      // Tout enchant existant (ou dérivé de l'ancien « niveau ») est BAKÉ dans effect.value
+      // (magnitude préservée), puis enchant remis à 0. Idempotent (enchant 0 → ×1, no-op).
+      const ench = it.enchant ?? levelToEnchant(it.level);
+      if (!ench) return { ...it, rarity, enchant: 0 };
+      const m = enchantMult(ench);
+      const effect = {
+        ...it.effect,
+        value: Math.max(1, Math.round(it.effect.value * m * 10) / 10),
+      };
+      const effect2 = it.effect2
+        ? { ...it.effect2, value: Math.max(1, Math.round(it.effect2.value * m * 10) / 10) }
+        : undefined;
+      return { ...it, rarity, enchant: 0, effect, ...(effect2 ? { effect2 } : {}) };
+    };
     r.inventory = arr<Item>(r.inventory).map(fixItem);
     r.cleared_dungeons = arr<string>(r.cleared_dungeons);
     r.defeated_bosses = arr<string>(r.defeated_bosses);
@@ -486,30 +497,9 @@ export const useCharacterStore = defineStore('character', () => {
     return targets.length;
   }
 
-  // ENCHANT (façon Lineage 2) : tente +1 sur un OBJET (équipé ou au sac) en consommant
-  // 1 parchemin d'enchantement 📜. GAMBLE : échec en zone de danger → retour à +0, SAUF
-  // si `useProtection` ET protection 🛡️ dispo (alors conservé + protection consommée).
-  // Renvoie l'issue { success, resetTo0, protectionUsed, enchant } pour le feedback UI.
-  async function enchantItem(userId: string, itemId: string, useProtection: boolean) {
-    const cur = row.value;
-    if (!cur) return null;
-    const found = findOwned(cur, itemId);
-    if (!found) return null; // objets ET familiers (tous des Item)
-    const { item, slot } = found;
-    const n = item.enchant ?? 0;
-    if (!canEnchant(n) || cur.enchant_scrolls < 1) return null; // au cap ou plus de parchemin
-    const withProtection = useProtection && cur.protections > 0;
-    const outcome = attemptEnchant(Math.random, n, withProtection);
-    const upgraded: Item = { ...item, enchant: outcome.enchant };
-    const patch: Partial<CharacterRow> = {
-      enchant_scrolls: cur.enchant_scrolls - 1,
-      protections: cur.protections - (outcome.protectionUsed ? 1 : 0),
-    };
-    if (slot) patch.equipped = { ...cur.equipped, [slot]: upgraded };
-    else patch.inventory = cur.inventory.map((i) => (i.id === itemId ? upgraded : i));
-    await persist(userId, patch);
-    return outcome;
-  }
+  // (Enchant d'objets retiré, ticket 7acb1e7c : les objets sont des drops purs — leur
+  // magnitude est 100 % définie par le grade au drop, plus d'axe +N. Talents/familiers
+  // gardent l'infusion de grade.)
 
   // Récompense de connexion du jour (une fois par jour logique). Renvoie le gain
   // (énergie + streak) pour l'animation, ou null si déjà réclamée aujourd'hui.
@@ -719,6 +709,30 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { equipped, loadouts });
   }
 
+  // OPTIMISEUR D'ÉQUIPEMENT (ticket 6d69c2fc) : équipe d'un coup la meilleure combinaison
+  // des 4 slots de gear (sets inclus) trouvée dans l'équipé + le sac ; les objets écartés
+  // retournent au sac. Le familier n'est pas touché. Renvoie true si quelque chose a changé.
+  async function optimizeGear(
+    userId: string,
+    stats: { puissance: number; endurance: number; agilite: number },
+    level: number,
+    name: string,
+  ): Promise<boolean> {
+    const cur = row.value;
+    if (!cur) return false;
+    const best = bestGearLoadout(name, stats, cur.equipped, cur.inventory, level);
+    const already = SLOTS.every((s) => (cur.equipped[s]?.id ?? null) === (best[s]?.id ?? null));
+    if (already) return false; // déjà optimal → ne rien faire
+    const chosen = new Set(SLOTS.map((s) => best[s]?.id).filter((x): x is string => !!x));
+    const equippedGear = SLOTS.map((s) => cur.equipped[s]).filter((x): x is Item => !!x);
+    // Tout le gear (équipé + sac) non retenu retourne au sac ; les familiers du sac passent tels quels.
+    const inventory = [...equippedGear, ...cur.inventory].filter((it) => !chosen.has(it.id));
+    const equipped: Equipped = { ...cur.equipped };
+    for (const s of SLOTS) equipped[s] = best[s];
+    await persist(userId, { equipped, inventory });
+    return true;
+  }
+
   // ── Mode idle « Expédition » (carte + héros temporisé) ──
   function newSeed(now: number): number {
     return (now ^ 0x9e3779b9) >>> 0 || 1;
@@ -884,6 +898,7 @@ export const useCharacterStore = defineStore('character', () => {
     applyExpedition,
     equip,
     swapLoadout,
+    optimizeGear,
     equipReplacing,
     unequip,
     equipTalent,
@@ -895,7 +910,6 @@ export const useCharacterStore = defineStore('character', () => {
     sell,
     sellMany,
     toggleLock,
-    enchantItem,
     spendEnergy,
     claimDailyLogin,
     claimLevelUps,

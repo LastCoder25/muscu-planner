@@ -81,18 +81,6 @@
               title="Pierres d’invocation — tenter un boss de palier"
               >🔮 {{ char.row.summon_stones }}</span
             >
-            <span
-              v-if="char.row.enchant_scrolls"
-              class="tb-r scroll"
-              title="Parchemins d'enchantement — 1 par tentative d'enchant (+N)"
-              >📜 {{ char.row.enchant_scrolls }}</span
-            >
-            <span
-              v-if="char.row.protections"
-              class="tb-r protect"
-              title="Protections — évitent le retour à +0 sur un échec d'enchant"
-              >🛡️ {{ char.row.protections }}</span
-            >
           </div>
         </div>
       </div>
@@ -419,7 +407,6 @@
                       >{{ t.rarity }}</span
                     >
                     <span class="q-badge" :class="'q-' + t.quality">{{ t.quality }}</span>
-                    <span v-if="t.enchant > 0" class="tal-lv">+{{ t.enchant }}</span>
                   </div>
                   <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
                 </div>
@@ -506,7 +493,6 @@
                     <span v-if="itemQuality(f)" class="q-badge" :class="'q-' + itemQuality(f)">{{
                       itemQuality(f)
                     }}</span>
-                    <span v-if="(f.enchant ?? 0) > 0" class="tal-lv">+{{ f.enchant }}</span>
                     <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
                   </div>
                   <div class="tal-eff">{{ itemEffects(f) }}</div>
@@ -635,9 +621,6 @@
                   title="Qualité (5 = meilleur)"
                   >{{ itemQuality(char.row.equipped[slot]) }}</span
                 >
-                <span v-if="(char.row.equipped[slot]!.enchant ?? 0) > 0" class="gpill ench"
-                  >+{{ char.row.equipped[slot]!.enchant }}</span
-                >
                 <span v-if="char.row.equipped[slot]!.setId" class="gpill set" title="Pièce de set"
                   >🧩</span
                 >
@@ -645,26 +628,6 @@
               <div class="slot-eff">{{ itemEffects(char.row.equipped[slot]!) }}</div>
               <!-- Actions ancrées EN BAS (slot-eff flexible) → alignées d'une carte à l'autre. -->
               <div class="slot-actions">
-                <button
-                  class="slot-up"
-                  :disabled="
-                    onExpedition ||
-                    !canEnchant(char.row.equipped[slot]!.enchant ?? 0) ||
-                    char.row.enchant_scrolls < 1
-                  "
-                  :title="enchantTitle(char.row.equipped[slot]!)"
-                  @click.stop="doEnchant(char.row.equipped[slot]!.id)"
-                >
-                  <template v-if="!canEnchant(char.row.equipped[slot]!.enchant ?? 0)"
-                    >📜<span class="gu-up">↑</span> Max</template
-                  >
-                  <template v-else
-                    >📜<span class="gu-up">↑</span>
-                    {{
-                      Math.round(enchantSuccessRate(char.row.equipped[slot]!.enchant ?? 0) * 100)
-                    }}%</template
-                  >
-                </button>
                 <button class="slot-remove" :disabled="onExpedition" @click="doUnequip(slot)">
                   Retirer
                 </button>
@@ -716,21 +679,6 @@
             <div class="shop-head">
               <div class="shop-title font-display">🎒 Sac ({{ bagCount }})</div>
               <button class="shop-x" aria-label="Fermer" @click="bagOpen = false">✕</button>
-            </div>
-            <!-- Enchant : rappel des ressources + option protection (⚡ boutons sur chaque objet). -->
-            <div class="ench-bar">
-              <span
-                >⚡ Enchant : <b>📜 {{ char.row.enchant_scrolls }}</b> ·
-                <b>🛡️ {{ char.row.protections }}</b></span
-              >
-              <label class="ench-prot" :class="{ off: char.row.protections < 1 }">
-                <input
-                  v-model="enchantUseProtection"
-                  type="checkbox"
-                  :disabled="char.row.protections < 1"
-                />
-                🛡️ Protéger l'échec
-              </label>
             </div>
             <template v-if="bagCount">
               <!-- Bannière du filtre « mieux au sac » (posé via le badge d'un item équipé). -->
@@ -809,9 +757,6 @@
                       @click="helpTopic = 'quality'"
                       >{{ itemQuality(it) }}</span
                     >
-                    <span v-if="(it.enchant ?? 0) > 0"
-                      ><span class="ii-dot">·</span> <b class="ii-ench">+{{ it.enchant }}</b></span
-                    >
                     <span class="ii-dot">·</span> {{ SLOT_LABEL[it.slot] }}
                     <span v-if="it.setId" class="gpill set">🧩 Set</span>
                   </div>
@@ -847,8 +792,7 @@
                       <span v-else class="ii-cmp-val dim">— emplacement libre</span>
                     </div>
                   </div>
-                  <!-- PUISSANCE si équipé : lecture GRADE-FAIR (à enchant égal) + « tel quel »
-                       si le candidat est moins enchanté que l'équipé (ticket 8314ede9). -->
+                  <!-- PUISSANCE si équipé (rang + qualité) vs l'objet équipé du même slot. -->
                   <div class="ii-cmp2">
                     <span class="ii-cmp2-ic">⚔️</span>
                     <span
@@ -856,38 +800,13 @@
                       :class="powerIfEquip(it) >= combatPowerVal ? 'up' : 'down'"
                     >
                       <b>{{ fmtDelta(combatPowerVal, powerIfEquip(it)) }}</b
-                      ><i>{{
-                        equippedInSlot(it.slot)
-                          ? enchantGap(it)
-                            ? 'à enchant égal'
-                            : 'vs équipé'
-                          : 'emplacement libre'
-                      }}</i>
-                    </span>
-                    <span
-                      v-if="enchantGap(it)"
-                      class="ii-cmp2-chip"
-                      :class="powerIfEquipNow(it) >= combatPowerVal ? 'up' : 'down'"
-                    >
-                      <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(it)) }}</b
-                      ><i>tel quel (+{{ it.enchant ?? 0 }})</i>
+                      ><i>{{ equippedInSlot(it.slot) ? 'vs équipé' : 'emplacement libre' }}</i>
                     </span>
                   </div>
-                  <!-- Actions : Équiper · ⚡ Enchanter · icônes vendre/lock -->
+                  <!-- Actions : Équiper · icônes vendre/lock -->
                   <div class="ii-actions">
                     <button class="equip-btn" @click="doEquip(it.id)">
                       {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
-                    </button>
-                    <button
-                      class="equip-btn ghost"
-                      :disabled="
-                        onExpedition || !canEnchant(it.enchant ?? 0) || char.row.enchant_scrolls < 1
-                      "
-                      :title="enchantTitle(it)"
-                      @click="doEnchant(it.id)"
-                    >
-                      📜<span class="gu-up">↑</span> +{{ (it.enchant ?? 0) + 1 }} ·
-                      {{ Math.round(enchantSuccessRate(it.enchant ?? 0) * 100) }}%
                     </button>
                     <button
                       class="ii-ic"
@@ -1263,11 +1182,7 @@
             <div class="salv-main">
               <div class="salv-name">
                 {{ replaceTarget.name }}
-                <span class="rarity"
-                  >{{ RARITY_LABEL[replaceTarget.rarity] }} · +{{
-                    replaceTarget.enchant ?? 0
-                  }}</span
-                >
+                <span class="rarity">{{ RARITY_LABEL[replaceTarget.rarity] }}</span>
               </div>
               <div class="salv-eff">
                 {{ SLOT_LABEL[replaceTarget.slot] }} · {{ itemEffects(replaceTarget) }}
@@ -1287,11 +1202,9 @@
             <div class="salv-main">
               <div class="salv-name">
                 {{ equippedInSlot(replaceTarget.slot)!.name }}
-                <span class="rarity"
-                  >{{ RARITY_LABEL[equippedInSlot(replaceTarget.slot)!.rarity] }} · +{{
-                    equippedInSlot(replaceTarget.slot)!.enchant ?? 0
-                  }}</span
-                >
+                <span class="rarity">{{
+                  RARITY_LABEL[equippedInSlot(replaceTarget.slot)!.rarity]
+                }}</span>
               </div>
               <div class="salv-eff">{{ itemEffects(equippedInSlot(replaceTarget.slot)!) }}</div>
             </div>
@@ -1395,7 +1308,6 @@
               <div class="im-haul">
                 <span v-if="m.gold">🪙 +{{ m.gold }}</span>
                 <span v-if="m.energy">⚡ +{{ m.energy }}</span>
-                <span v-if="m.enchantScrolls">📜 +{{ m.enchantScrolls }}</span>
                 <span v-if="m.key">🗝️ +{{ m.key }}</span>
               </div>
               <!-- Objet gagné : détail complet (rareté / niveau / effet). -->
@@ -1406,8 +1318,7 @@
                     {{ m.item.name }}<span v-if="m.item.setId" class="im-loot-set"> 🧩</span>
                   </div>
                   <div class="im-loot-sub">
-                    <span :class="'p-' + m.item.rarity">{{ RARITY_LABEL[m.item.rarity] }}</span>
-                    <template v-if="(m.item.enchant ?? 0) > 0"> · +{{ m.item.enchant }}</template> ·
+                    <span :class="'p-' + m.item.rarity">{{ RARITY_LABEL[m.item.rarity] }}</span> ·
                     {{ SLOT_LABEL[m.item.slot] }}
                   </div>
                   <div class="im-loot-eff">{{ itemEffects(m.item) }}</div>
@@ -1628,9 +1539,7 @@
         <div class="drops-title font-display">{{ setInfo.set.emoji }} {{ setInfo.set.name }}</div>
         <div class="set-theme">{{ setInfo.set.theme }}</div>
         <div class="drops-sub">
-          Bonus par paliers<span v-if="setInfo.avgEnch > 0">
-            (à +{{ Math.round(setInfo.avgEnch) }} moyen)</span
-          >
+          Bonus par paliers<span v-if="setInfo.pieces.length"> (scalé au rang de tes pièces)</span>
         </div>
         <div class="set-tiers">
           <span
@@ -1640,7 +1549,7 @@
             :class="{ on: setInfo.count >= t.pieces }"
           >
             {{ t.pieces }} pièces :
-            {{ enchantEffectLabel({ type: t.type, value: t.base }, setInfo.avgEnch) }}
+            {{ setTierLabel(t.type, t.base, setInfo.pieces) }}
           </span>
         </div>
         <div class="drops-note">
@@ -1676,9 +1585,6 @@
               <div class="rc-main">
                 <div class="rc-name">{{ cand.item.name }}</div>
                 <div class="rc-pills">
-                  <span v-if="(cand.item.enchant ?? 0) > 0" class="rc-pill lvl"
-                    >+{{ cand.item.enchant }}</span
-                  >
                   <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
                     RARITY_LABEL[cand.item.rarity]
                   }}</span>
@@ -1775,18 +1681,6 @@
                   title="Pierres d’invocation (pour affronter les boss)"
                   >+{{ run.summonStones }} 🔮</span
                 >
-                <span
-                  v-if="run.enchantScrolls"
-                  class="gain-pill scroll"
-                  title="Parchemins d'enchantement (carburant de l'enchant +N)"
-                  >+{{ run.enchantScrolls }} 📜</span
-                >
-                <span
-                  v-if="run.protections"
-                  class="gain-pill protect"
-                  title="Protections (évitent le retour à +0 sur un échec d'enchant)"
-                  >+{{ run.protections }} 🛡️</span
-                >
               </span>
             </div>
             <div class="result-sub">
@@ -1822,7 +1716,6 @@
               <div class="inv-main">
                 <div class="inv-name">{{ d.name }}</div>
                 <div class="pills">
-                  <span v-if="(d.enchant ?? 0) > 0" class="gpill lvl">+{{ d.enchant }}</span>
                   <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
                   <span
                     v-if="itemQuality(d)"
@@ -1836,8 +1729,7 @@
                 <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}</div>
                 <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
                   <span
-                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} +{{
-                      equippedInSlot(d.slot)!.enchant ?? 0
+                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity]
                     }}<span v-if="equippedInSlot(d.slot)!.setId" title="Pièce de set"> 🧩</span> ·
                     {{ itemEffects(equippedInSlot(d.slot)!) }}</span
                   >
@@ -1846,7 +1738,7 @@
                   }}</span>
                 </div>
                 <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
-                <!-- Puissance : GRADE-FAIR (à enchant égal) + « tel quel » (un drop est à +0). -->
+                <!-- Puissance si équipé (rang + qualité) vs l'objet équipé du même slot. -->
                 <div class="ii-cmp2">
                   <span class="ii-cmp2-ic">⚔️</span>
                   <span
@@ -1854,21 +1746,7 @@
                     :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
                   >
                     <b>{{ fmtDelta(combatPowerVal, powerIfEquip(d)) }}</b
-                    ><i>{{
-                      equippedInSlot(d.slot)
-                        ? enchantGap(d)
-                          ? 'à enchant égal'
-                          : 'vs équipé'
-                        : 'emplacement libre'
-                    }}</i>
-                  </span>
-                  <span
-                    v-if="enchantGap(d)"
-                    class="ii-cmp2-chip"
-                    :class="powerIfEquipNow(d) >= combatPowerVal ? 'up' : 'down'"
-                  >
-                    <b>{{ fmtDelta(combatPowerVal, powerIfEquipNow(d)) }}</b
-                    ><i>tel quel (+{{ d.enchant ?? 0 }})</i>
+                    ><i>{{ equippedInSlot(d.slot) ? 'vs équipé' : 'emplacement libre' }}</i>
                   </span>
                 </div>
                 <div v-if="dropState(d) === 'equipped'" class="drop-done">
@@ -1937,9 +1815,6 @@
                   <div class="rc-main">
                     <div class="rc-name">{{ cand.item.name }}</div>
                     <div class="rc-pills">
-                      <span v-if="(cand.item.enchant ?? 0) > 0" class="rc-pill lvl"
-                        >+{{ cand.item.enchant }}</span
-                      >
                       <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
                         RARITY_LABEL[cand.item.rarity]
                       }}</span>
@@ -2049,12 +1924,9 @@ import {
   aggregateEffects,
   rollDrop,
   rollSetPiece,
-  enchantEffectLabel,
+  effectLabelFor,
+  setTierLabel,
   rollStars,
-  canEnchant,
-  enchantSuccessRate,
-  ENCHANT_MAX,
-  ENCHANT_SAFE,
   sellValue,
   isFamiliar,
   FAMILIAR_SLOT,
@@ -2321,15 +2193,6 @@ function equippedEnchant(slot: ItemSlot): number {
 // enchanté). C'est aussi la lecture utilisée par « Tout casser » (ne casse pas un meilleur grade).
 function powerIfEquip(it: Item): number {
   return powerAtEnchant(it, Math.max(it.enchant ?? 0, equippedEnchant(it.slot)));
-}
-// 2e lecture = TEL QUEL (à son enchant actuel) : ce que ça donne SI équipé maintenant.
-function powerIfEquipNow(it: Item): number {
-  return powerAtEnchant(it, it.enchant ?? 0);
-}
-// La lecture « tel quel » n'apporte quelque chose que si le candidat est MOINS enchanté
-// que l'équipé (sinon les deux lectures sont identiques).
-function enchantGap(it: Item): boolean {
-  return (it.enchant ?? 0) < equippedEnchant(it.slot);
 }
 
 // Estimation live du % de victoire par donjon/boss selon les stats + le stuff
@@ -2942,10 +2805,7 @@ const activeSets = computed(() => {
   const counts = setCounts(eq);
   return ITEM_SETS.filter((s) => (counts[s.id] ?? 0) >= 1).map((s) => {
     const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === s.id);
-    // Le bonus de set est scalé par l'ENCHANT MOYEN des pièces (cf. setEffects), plus le niveau.
-    const avgEnch = pieces.length
-      ? pieces.reduce((a, it) => a + (it.enchant ?? 0), 0) / pieces.length
-      : 0;
+    // Le bonus de set est scalé par le RANG moyen des pièces (cf. setEffects, #3).
     return {
       id: s.id,
       name: s.name,
@@ -2954,7 +2814,7 @@ const activeSets = computed(() => {
       count: counts[s.id] ?? 0,
       tiers: s.tiers.map((t) => ({
         pieces: t.pieces,
-        label: enchantEffectLabel({ type: t.type, value: t.base }, avgEnch),
+        label: setTierLabel(t.type, t.base, pieces),
       })),
     };
   });
@@ -3193,10 +3053,10 @@ function bossSet(b: MilestoneBoss) {
 // Libellé des 2 stats d'un objet (primaire · secondaire). Les anciens objets
 // (1 stat) n'affichent que la primaire.
 function itemEffects(it: Omit<Item, 'id'>): string {
-  // OBJETS ET FAMILIERS : magnitude = grade × ENCHANT.
-  const n = it.enchant ?? 0;
-  const a = enchantEffectLabel(it.effect, n);
-  return it.effect2 ? `${a} · ${enchantEffectLabel(it.effect2, n)}` : a;
+  // OBJETS ET FAMILIERS : magnitude 100 % définie par le drop (grade × qualité, bakée
+  // dans effect.value) → libellé direct, 1 décimale (la qualité reste visible, #6).
+  const a = effectLabelFor(it.effect.type, it.effect.value);
+  return it.effect2 ? `${a} · ${effectLabelFor(it.effect2.type, it.effect2.value)}` : a;
 }
 // Qualité du roll en étoiles pleines/vides (« ★★★★☆ ») ; vide si objet legacy (pas de roll).
 // Qualité en CHIFFRE (1→5, 5 = meilleur) affiché à côté du rang, code couleur
@@ -3216,18 +3076,15 @@ function bossSetCount(b: MilestoneBoss): number {
 // Aperçu du bonus de set d'un boss (modale ouverte au clic sur la ligne de set).
 const setInfo = ref<{
   set: ReturnType<typeof bossSet>;
-  avgEnch: number;
+  pieces: Item[];
   count: number;
 } | null>(null);
 function openSetInfo(b: MilestoneBoss) {
-  // Enchant moyen des pièces de ce set déjà équipées (0 si aucune) → le bonus affiché
-  // reflète ta puissance de set réelle (cf. setEffects, scalé par l'enchant).
+  // Pièces de ce set déjà équipées → le bonus affiché reflète ta puissance de set réelle
+  // (cf. setEffects, scalé par le RANG des pièces, #3).
   const eq = char.row?.equipped ?? {};
   const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === b.setId);
-  const avgEnch = pieces.length
-    ? pieces.reduce((a, it) => a + (it.enchant ?? 0), 0) / pieces.length
-    : 0;
-  setInfo.value = { set: bossSet(b), avgEnch, count: bossSetCount(b) };
+  setInfo.value = { set: bossSet(b), pieces, count: bossSetCount(b) };
 }
 
 // Slots d'un set déjà possédés (équipé + sac) → pour le ciblage anti-doublon de l'Autel.
@@ -3724,17 +3581,14 @@ function celebrateSetTier(setId: string | undefined, before: number, after: numb
   const crossed = set.tiers.filter((t) => before < t.pieces && after >= t.pieces);
   if (!crossed.length) return;
   const top = crossed[crossed.length - 1]!;
-  // Enchant moyen des pièces de set équipées (le bonus est scalé par l'enchant, cf. setEffects).
+  // Pièces de set équipées (le bonus est scalé par leur RANG, cf. setEffects, #3).
   const eq = char.row?.equipped ?? {};
   const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === setId);
-  const avgEnch = pieces.length
-    ? pieces.reduce((a, it) => a + (it.enchant ?? 0), 0) / pieces.length
-    : 0;
   gameFx.celebrate({
     kind: 'unlock',
     emoji: set.emoji,
     title: `${set.emoji} ${set.name} — ${after}/4 pièces`,
-    subtitle: `Bonus ${top.pieces} pièces : ${enchantEffectLabel({ type: top.type, value: top.base }, avgEnch)}`,
+    subtitle: `Bonus ${top.pieces} pièces : ${setTierLabel(top.type, top.base, pieces)}`,
     rarity: top.pieces >= 4 ? 'divin' : top.pieces >= 3 ? 'legendary' : 'epic',
   });
 }
@@ -3771,62 +3625,6 @@ function confirmReplace(disposal: 'sell' | 'keep') {
 }
 function doUnequip(slot: ItemSlot) {
   withUid((uid) => char.unequip(uid, slot), 'Impossible de déséquiper.');
-}
-// Infobulle d'un bouton d'enchant : taux + avertissement de zone de danger.
-function enchantTitle(it: Item): string {
-  const n = it.enchant ?? 0;
-  if (!canEnchant(n)) return `Enchant au maximum (+${ENCHANT_MAX})`;
-  const rate = Math.round(enchantSuccessRate(n) * 100);
-  const danger =
-    n >= ENCHANT_SAFE
-      ? ' · ⚠️ échec = retour à +0 (protège avec 🛡️)'
-      : ' · échec sans conséquence (reste à +' + n + ')';
-  return `Tenter +${n + 1} (${rate} %)${danger} — 1 parchemin 📜`;
-}
-// ENCHANT (gamble façon L2) : tente +1 sur un objet (consomme 1 parchemin 📜). Si
-// `enchantUseProtection`, une protection 🛡️ absorbe un échec en zone de danger.
-const enchantUseProtection = ref(false);
-function doEnchant(itemId: string) {
-  const uid = auth.user?.id;
-  if (!uid || expeBlocked()) return; // gelé pendant une expédition (héros parti avec son barda)
-  void char.enchantItem(uid, itemId, enchantUseProtection.value).then((r) => {
-    if (!r) {
-      $q.notify({
-        type: 'warning',
-        message: 'Enchant impossible (cap +12 ou plus de parchemin 📜).',
-      });
-      return;
-    }
-    if (r.success) {
-      gameFx.celebrate({
-        kind: 'generic',
-        emoji: '⚡',
-        title: `Enchant réussi → +${r.enchant} !`,
-        subtitle: 'Magnitude augmentée',
-        rarity: fxRarity('A'),
-      });
-    } else if (r.resetTo0) {
-      $q.notify({
-        type: 'negative',
-        message: '💥 Échec ! L’objet est retombé à +0.',
-        position: 'top',
-      });
-    } else if (r.protectionUsed) {
-      $q.notify({
-        type: 'info',
-        message: '🛡️ Échec absorbé par une protection — enchant conservé.',
-        position: 'top',
-      });
-    } else {
-      // Échec SOUS la zone de danger (objet ≤ +3) : la tentative peut rater (taux < 100 %
-      // dès +2) mais l'enchant est CONSERVÉ — le retour à +0 ne commence qu'à partir de +4.
-      $q.notify({
-        type: 'warning',
-        message: `Échec — rien perdu (reste à +${r.enchant}). Le retour à +0 ne concerne que les tentatives à partir de +4.`,
-        position: 'top',
-      });
-    }
-  });
 }
 
 function doSell(it: Item) {

@@ -186,14 +186,13 @@ describe('recyclage / vente', () => {
     expect(salvageValue(high)).toBeGreaterThan(salvageValue(low));
     expect(sellValue(high)).toBeGreaterThan(sellValue(low));
   });
-  it('recyclage : rang + petit bonus d’ENCHANT (plus de niveau)', () => {
+  it('recyclage/vente : poussière & or ∝ RANG (enchant retiré)', () => {
     const rarity = 'D' as const;
     const base = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, rarity });
-    const enchanted = item({ ...base, enchant: 5 });
-    expect(salvageValue(enchanted)).toBeGreaterThan(salvageValue(base)); // enchant → un peu plus
-    // rang plus haut → plus de poussière (base de rang)
+    // rang plus haut → plus de poussière ET plus d'or (base de rang, plus d'axe enchant)
     const higher = item({ ...base, rarity: 'S' });
     expect(salvageValue(higher)).toBeGreaterThan(salvageValue(base));
+    expect(sellValue(higher)).toBeGreaterThan(sellValue(base));
   });
 });
 
@@ -360,16 +359,16 @@ describe('sets d’équipement', () => {
     expect(e.critAdd).toBeGreaterThan(0);
     expect(e.lifesteal).toBeGreaterThan(0);
   });
-  it('le bonus de set grandit avec l’ENCHANT des pièces', () => {
-    const e0: Equipped = {
-      weapon: { ...dragonPiece('weapon'), enchant: 0 },
-      armor: { ...dragonPiece('armor'), enchant: 0 },
+  it('le bonus de set grandit avec le RANG des pièces (#3, boss plus profond)', () => {
+    const low: Equipped = {
+      weapon: { ...dragonPiece('weapon'), rarity: 'D' },
+      armor: { ...dragonPiece('armor'), rarity: 'D' },
     };
-    const e8: Equipped = {
-      weapon: { ...dragonPiece('weapon'), enchant: 8 },
-      armor: { ...dragonPiece('armor'), enchant: 8 },
+    const high: Equipped = {
+      weapon: { ...dragonPiece('weapon'), rarity: 'S' },
+      armor: { ...dragonPiece('armor'), rarity: 'S' },
     };
-    expect(setEffects(e8).damagePct).toBeGreaterThan(setEffects(e0).damagePct);
+    expect(setEffects(high).damagePct).toBeGreaterThan(setEffects(low).damagePct);
   });
   it('rollSetPiece produit toujours une pièce du set, au NIVEAU 1 (refonte C)', () => {
     const piece = rollSetPiece(() => 0.3, { setId: 'dragon', level: 10 });

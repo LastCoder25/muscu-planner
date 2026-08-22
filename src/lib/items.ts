@@ -1,6 +1,6 @@
 // items.ts — équipement RPG (Phase 2c). RÈGLE : l'équipement ne donne PAS de
 // stats (elles viennent du sport) — il donne des EFFETS de gameplay. Pur/testable.
-import { playerCombatant, type Combatant } from './combat';
+import { playerCombatant, combatPower, type Combatant } from './combat';
 import type { FamiliarSpecies } from '@/data/familiars';
 import { PROCEDURAL } from '@/lib/proceduralContent';
 
@@ -203,12 +203,17 @@ export function effectiveValue(effect: ItemEffect, level: number): number {
 export function rankIndex(r: Rarity): number {
   return Math.max(0, RANK_ORDER.indexOf(r));
 }
+/** Arrondit une magnitude d'effet à 1 décimale (au lieu d'un entier) → la qualité
+ *  (+2,5 %/★) reste visible sur les petites stats (ticket df3feade). */
+const round1 = (x: number): number => Math.round(x * 10) / 10;
 // Poussière/or de base par rang (croissance géométrique douce, ~×1,5 et ×1,6 par rang).
 const DUST_BY_RARITY: Record<Rarity, number> = Object.fromEntries(
   RANK_ORDER.map((r, i) => [r, Math.round(4 * Math.pow(1.5, i))]),
 ) as Record<Rarity, number>;
+// Or de vente : base + ratio relevés (ticket b63f2211) → vendre un doublon de haut rang
+// rapporte une somme qui COMPTE face aux runs (A ≈ 730, SSS ≈ 3550), pas 134.
 const GOLD_BY_RARITY: Record<Rarity, number> = Object.fromEntries(
-  RANK_ORDER.map((r, i) => [r, Math.round(8 * Math.pow(1.6, i))]),
+  RANK_ORDER.map((r, i) => [r, Math.round(30 * Math.pow(1.7, i))]),
 ) as Record<Rarity, number>;
 // Le coût d'amélioration monte avec le rang (un rang haut = puits plus profond).
 // ADOUCI (infusion = progression verticale obligatoire, pas un luxe) : sans ça, tout
@@ -249,11 +254,11 @@ export function investedDust(it: Item): number {
  *  objet DROPPÉ au niv.N se recycle comme un niv.1 INFUSÉ →N (fin de l'incohérence).
  *  Faucet-free car tout drop part du niveau 1 (coût(1→1)=0). */
 export function salvageValue(it: Item): number {
-  return DUST_BY_RARITY[it.rarity] + (it.enchant ?? 0) * 4; // rang + petit bonus d'enchant
+  return DUST_BY_RARITY[it.rarity];
 }
-/** Or obtenu en vendant un objet. */
+/** Or obtenu en vendant un objet (∝ rang). */
 export function sellValue(it: Item): number {
-  return GOLD_BY_RARITY[it.rarity] + (it.enchant ?? 0) * 8;
+  return GOLD_BY_RARITY[it.rarity];
 }
 /** Peut-on améliorer cet objet ? (poussière suffisante + pas au plafond). */
 export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean {
@@ -413,29 +418,35 @@ const RARITY_ADJ: Record<Rarity, string> = {
   SSS: 'divin',
 };
 
-/** Libellé d'un effet à partir de sa VALEUR déjà calculée (utilisé pour l'enchant). */
+/** Formate une valeur d'effet avec 1 décimale au plus (trim .0) → la qualité (+2,5 %/★)
+ *  reste visible même sur les petites stats (ex. B★1 vs B★5, ticket df3feade). */
+export function fmtEffectValue(v: number): string {
+  return (Math.round(v * 10) / 10).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+}
+/** Libellé d'un effet à partir de sa VALEUR déjà calculée. */
 export function effectLabelFor(type: EffectType, v: number): string {
+  const s = fmtEffectValue(v);
   switch (type) {
     case 'damage_pct':
-      return `+${v}% dégâts`;
+      return `+${s}% dégâts`;
     case 'crit_pct':
-      return `+${v}% critique`;
+      return `+${s}% critique`;
     case 'lifesteal_pct':
-      return `+${v}% vol de vie`;
+      return `+${s}% vol de vie`;
     case 'dmg_reduction_pct':
-      return `−${v}% dégâts reçus`;
+      return `−${s}% dégâts reçus`;
     case 'max_pv_pct':
-      return `+${v}% PV`;
+      return `+${s}% PV`;
     case 'gold_pct':
-      return `+${v}% or`;
+      return `+${s}% or`;
     case 'execute_pct':
-      return `+${v}% dégâts (ennemi < 25% PV)`;
+      return `+${s}% dégâts (ennemi < 25% PV)`;
     case 'rage_pct':
-      return `+${v}% dégâts (toi < 30% PV)`;
+      return `+${s}% dégâts (toi < 30% PV)`;
     case 'momentum_pct':
-      return `+${v}% dégâts/coup (cumul)`;
+      return `+${s}% dégâts/coup (cumul)`;
     case 'thorns_pct':
-      return `renvoie ${v}% des dégâts reçus`;
+      return `renvoie ${s}% des dégâts reçus`;
   }
 }
 /** Libellé de l'effet d'un objet ENCHANTÉ +N (magnitude = grade × enchant). */
@@ -624,7 +635,7 @@ export function rollDrop(
   // de multiplicateur de magnitude par niveau ici (sinon deux objets même rang mais
   // profondeurs différentes auraient des valeurs différentes → chevauchement).
   const vf = starQualityMult(quality);
-  const rollValue = (b: number) => Math.max(1, Math.round(b * RARITY_MULT[rarity] * vf));
+  const rollValue = (b: number) => Math.max(1, round1(b * RARITY_MULT[rarity] * vf));
   const value = rollValue(chosen.base);
   // Objet à effet SIGNATURE → nom évocateur (« Guillotine ») ; sinon nom + adjectif.
   const sigNames = SIGNATURE_NAMES[chosen.type];
@@ -674,7 +685,7 @@ export function rollSetPiece(
   const { rank: rarity, quality, roll } = rollTier(rng, opts.level, opts.luck ?? 0, floorTiers);
   const chosen = pick(rng, SLOT_EFFECTS[slot]);
   const vf = starQualityMult(quality);
-  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity] * vf));
+  const value = Math.max(1, round1(chosen.base * RARITY_MULT[rarity] * vf));
   const noun = pick(rng, NAMES[slot]);
   const level = 1; // REFONTE C : la pièce de set arrive niv.1 (identité) → à infuser
   return {
@@ -748,14 +759,14 @@ export function rollFamiliar(
     quality = t.quality;
   }
   const vf = starQualityMult(quality);
-  const value = Math.max(1, Math.round(species.base * RARITY_MULT[rarity] * vf));
+  const value = Math.max(1, round1(species.base * RARITY_MULT[rarity] * vf));
   const level = 1; // REFONTE C : le familier arrive niv.1 (identité de race) → à infuser
   let effect2: ItemEffect | undefined;
   if (rng() < familiarSigChance(rarity)) {
     const sig = FAMILIAR_SIGNATURE[Math.floor(rng() * FAMILIAR_SIGNATURE.length)]!;
     effect2 = {
       type: sig.type,
-      value: Math.max(1, Math.round(sig.base * RARITY_MULT[rarity] * vf)),
+      value: Math.max(1, round1(sig.base * RARITY_MULT[rarity] * vf)),
     };
   }
   return {
@@ -892,7 +903,7 @@ export function forgeItem(
   // rangs cohérents avec ta profondeur, jamais du SSS gratuit.
   const rarity = rollRarity(rng, opts.luck ?? 0.25, level);
   const chosen = pick(rng, availableEffects(slot, level));
-  const value = Math.max(1, Math.round(chosen.base * RARITY_MULT[rarity]));
+  const value = Math.max(1, round1(chosen.base * RARITY_MULT[rarity]));
   return {
     slot,
     name: `${pick(rng, NAMES[slot])} forgé`,
@@ -1089,6 +1100,21 @@ export const SET_BY_ID: Record<string, ItemSet> = Object.fromEntries(
   ITEM_SETS.map((s) => [s.id, s]),
 );
 
+/** Multiplicateur de bonus de set scalé par le RANG moyen des pièces (#3, ticket 8bfe5130) :
+ *  les pièces d'un boss plus profond ont un rang plus haut → bonus de set plus fort → on
+ *  veut faire les boss suivants. Ancré au rang C (RARITY_MULT.C) → un set C ≈ base d'origine,
+ *  les sets plus hauts montent, les plus bas baissent un peu. */
+export function setBonusMult(pieces: Item[]): number {
+  if (!pieces.length) return 1;
+  const avg =
+    pieces.reduce((s, i) => s + (RARITY_MULT[i.rarity] ?? RARITY_MULT.C), 0) / pieces.length;
+  return avg / RARITY_MULT.C;
+}
+/** Libellé d'un palier de set, scalé par le rang des pièces équipées de ce set. */
+export function setTierLabel(type: EffectType, base: number, pieces: Item[]): string {
+  return effectLabelFor(type, base * setBonusMult(pieces));
+}
+
 /** Nombre de pièces équipées par set. */
 export function setCounts(equipped: Equipped): Record<string, number> {
   const out: Record<string, number> = {};
@@ -1111,12 +1137,10 @@ export function setEffects(equipped: Equipped): AggregatedEffects {
   for (const [id, items] of Object.entries(groups)) {
     const def = SET_BY_ID[id];
     if (!def || items.length < 2) continue;
-    // Bonus de set scalé par l'ENCHANT moyen des pièces (remplace l'ancien niveau moyen).
-    const avgEnch = items.reduce((s, i) => s + (i.enchant ?? 0), 0) / items.length;
-    const mult = enchantMult(avgEnch);
+    const mult = setBonusMult(items);
     for (const t of def.tiers) {
       if (items.length < t.pieces) continue;
-      applyEffect(a, t.type, Math.max(1, Math.round(t.base * mult)) / 100);
+      applyEffect(a, t.type, Math.max(1, round1(t.base * mult)) / 100);
     }
   }
   a.dmgReduction = Math.min(0.5, a.dmgReduction);
@@ -1131,18 +1155,19 @@ export function aggregateEffects(equipped: Equipped): AggregatedEffects {
   for (const slot of SLOTS) {
     const it = equipped[slot];
     if (!it) continue;
-    const n = it.enchant ?? 0; // OBJETS : magnitude = grade × ENCHANT (plus de niveau)
-    // Valeur PRÉCISE (float, pas d'arrondi par objet) → les petits gains de qualité (+2,5 %/★)
-    // comptent vraiment dans la puissance de combat au lieu d'être arrondis à zéro (ticket 71dfd9da).
-    applyEffect(a, it.effect.type, (it.effect.value * enchantMult(n)) / 100);
-    if (it.effect2) applyEffect(a, it.effect2.type, (it.effect2.value * enchantMult(n)) / 100);
+    // OBJETS : magnitude 100 % définie par le DROP (rang × qualité, déjà bakée dans
+    // effect.value). Plus d'axe enchant (retiré, ticket 7acb1e7c) — les objets sont des
+    // drops purs. Valeur PRÉCISE (float, pas d'arrondi par objet) → les petits gains de
+    // qualité (+2,5 %/★) comptent vraiment dans la puissance (ticket 71dfd9da).
+    applyEffect(a, it.effect.type, it.effect.value / 100);
+    if (it.effect2) applyEffect(a, it.effect2.type, it.effect2.value / 100);
   }
-  // Familier (slot parallèle, hors SLOTS) : comme les objets → magnitude = grade × ENCHANT.
+  // Familier (slot parallèle, hors SLOTS) : magnitude bakée (grade × qualité, re-scalée
+  // à l'infusion). Pas d'enchant non plus.
   const fam = equipped[FAMILIAR_SLOT];
   if (fam) {
-    const fn = fam.enchant ?? 0;
-    applyEffect(a, fam.effect.type, (fam.effect.value * enchantMult(fn)) / 100);
-    if (fam.effect2) applyEffect(a, fam.effect2.type, (fam.effect2.value * enchantMult(fn)) / 100);
+    applyEffect(a, fam.effect.type, fam.effect.value / 100);
+    if (fam.effect2) applyEffect(a, fam.effect2.type, fam.effect2.value / 100);
   }
   // Bonus de set (2/3/4 pièces) — ajoutés par-dessus les effets d'objet.
   const s = setEffects(equipped);
@@ -1200,4 +1225,71 @@ export function playerWithGear(
     momentum: e.momentumPct + (extra.momentumPct ?? 0),
     thorns: e.thornsPct + (extra.thornsPct ?? 0),
   };
+}
+
+/** OPTIMISEUR D'ÉQUIPEMENT (ticket 6d69c2fc) : cherche, parmi l'équipé + le sac, la
+ *  meilleure combinaison des 4 slots de gear (bonus de SET inclus) qui maximise la
+ *  puissance de combat. Le familier équipé est conservé (slot parallèle, choisi à part).
+ *  Brute-force BORNÉ : top-K candidats/slot par puissance solo + TOUTES les pièces de set
+ *  (pour permettre la complétion) → au plus ~12⁴ combos évalués (combatPower est bon marché).
+ *  Retourne la map d'équipement optimale (les 4 slots gear + le familier actuel). */
+export function bestGearLoadout(
+  name: string,
+  stats: { puissance: number; endurance: number; agilite: number },
+  equipped: Equipped,
+  inventory: Item[],
+  level = 1,
+): Equipped {
+  const familiar = equipped[FAMILIAR_SLOT];
+  const bySlot: Record<ItemSlot, Item[]> = {
+    weapon: [],
+    armor: [],
+    accessory: [],
+    relic: [],
+    familiar: [],
+  };
+  for (const s of SLOTS) {
+    const cur = equipped[s];
+    if (cur) bySlot[s].push(cur);
+  }
+  for (const it of inventory) if (SLOTS.includes(it.slot)) bySlot[it.slot].push(it);
+  const soloPower = (it: Item): number => {
+    const one: Equipped = {};
+    one[it.slot] = it;
+    return combatPower(playerWithGear(name, stats, one, {}, level));
+  };
+  // Candidats retenus par slot : top-K solo + toutes les pièces de set (cap 12) + slot vide.
+  const K = 6;
+  const trim = (arr: Item[]): (Item | undefined)[] => {
+    const scored = arr.map((it) => ({ it, p: soloPower(it) })).sort((a, b) => b.p - a.p);
+    const keep = new Map<string, Item>();
+    for (const { it } of scored.slice(0, K)) keep.set(it.id, it);
+    for (const { it } of scored) if (it.setId && keep.size < 12) keep.set(it.id, it);
+    return [...keep.values(), undefined];
+  };
+  const cand: Record<'weapon' | 'armor' | 'accessory' | 'relic', (Item | undefined)[]> = {
+    weapon: trim(bySlot.weapon),
+    armor: trim(bySlot.armor),
+    accessory: trim(bySlot.accessory),
+    relic: trim(bySlot.relic),
+  };
+  let best: Equipped = { ...equipped };
+  let bestP = -1;
+  for (const w of cand.weapon)
+    for (const a of cand.armor)
+      for (const ac of cand.accessory)
+        for (const r of cand.relic) {
+          const combo: Equipped = {};
+          if (w) combo.weapon = w;
+          if (a) combo.armor = a;
+          if (ac) combo.accessory = ac;
+          if (r) combo.relic = r;
+          if (familiar) combo.familiar = familiar;
+          const p = combatPower(playerWithGear(name, stats, combo, {}, level));
+          if (p > bestP) {
+            bestP = p;
+            best = combo;
+          }
+        }
+  return best;
 }

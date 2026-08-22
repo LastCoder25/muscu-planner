@@ -379,7 +379,6 @@
         <div class="coll-text">{{ lastOutcome.text }}</div>
         <div class="coll-haul">
           <span v-if="lastOutcome.gold">🪙 +{{ lastOutcome.gold }}</span>
-          <span v-if="lastOutcome.enchantScrolls">📜 +{{ lastOutcome.enchantScrolls }}</span>
           <span v-if="lastOutcome.key">🗝️ +{{ lastOutcome.key }}</span>
           <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item">
             <ItemIcon :item="it" :size="26" :show-stars="false" />{{ it.name }}</span

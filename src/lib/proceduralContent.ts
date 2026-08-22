@@ -8,7 +8,7 @@
 // N'affecte pas l'existant : ces entités sont AJOUTÉES aux tableaux exportés
 // (MONSTERS/DUNGEONS/BOSSES/REGIONS) ; le contenu à la main reste la source de
 // vérité pour les premiers niveaux.
-import { playerCombatant, type Combatant } from './combat';
+import { playerCombatant, combatPower, type Combatant } from './combat';
 import type { Monster } from '@/data/monsters';
 import type { Dungeon, StatKey } from '@/data/dungeons';
 import type { Region } from '@/lib/regions';
@@ -31,6 +31,13 @@ export function refBalancedStat(L: number): number {
 export function refFighter(L: number): Combatant {
   const s = refBalancedStat(L);
   return playerCombatant('ref', { puissance: s, endurance: s, agilite: s }, L);
+}
+/** PUISSANCE CONSEILLÉE pour un contenu de niveau reco (ticket 6abe4429) : la puissance
+ *  du build ÉQUILIBRÉ de référence à ce niveau — celui contre lequel le contenu est
+ *  calibré (clear ~88-90 %). STABLE (statique par contenu) → remplace le % de victoire
+ *  Monte-Carlo qui « bougeait tout le temps ». Le joueur compare SA puissance à celle-ci. */
+export function recommendedPower(recoLevel: number): number {
+  return combatPower(refFighter(Math.max(1, recoLevel)));
 }
 
 // Coefficients de calibration (fittés par simulation, cf. proceduralContent.test) :
