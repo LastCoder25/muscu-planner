@@ -409,6 +409,14 @@
                     <span class="q-badge" :class="'q-' + t.quality">{{ t.quality }}</span>
                   </div>
                   <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
+                  <!-- Comparateur de puissance (ticket 25091d45) : gain si on équipe ce talent. -->
+                  <div
+                    v-if="!t.equipped"
+                    class="tal-cmp"
+                    :class="talPowerIfEquip(t.inst) >= combatPowerVal ? 'up' : 'down'"
+                  >
+                    ⚔️ si équipé {{ fmtDelta(combatPowerVal, talPowerIfEquip(t.inst)) }}
+                  </div>
                 </div>
                 <div class="tal-actions">
                   <button
@@ -496,6 +504,16 @@
                     <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
                   </div>
                   <div class="tal-eff">{{ itemEffects(f) }}</div>
+                  <!-- Comparateur de puissance (ticket 25091d45) : gain si on équipe ce familier. -->
+                  <div
+                    v-if="!f.equipped"
+                    class="tal-cmp"
+                    :class="famPowerIfEquip(f) >= combatPowerVal ? 'up' : 'down'"
+                  >
+                    ⚔️ {{ fmtPow(combatPowerVal) }} → {{ fmtPow(famPowerIfEquip(f)) }} ({{
+                      fmtDelta(combatPowerVal, famPowerIfEquip(f))
+                    }})
+                  </div>
                 </div>
                 <div class="tal-actions">
                   <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
@@ -2219,6 +2237,30 @@ const fighter = computed(() =>
   ),
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
+// Comparateur de puissance pour talents & familiers (ticket 25091d45), comme les objets.
+// Familier : puissance si on l'équipe à la place de l'actuel.
+function famPowerIfEquip(f: Item): number {
+  const eq = { ...(char.row?.equipped ?? {}), [FAMILIAR_SLOT]: f };
+  return combatPower(
+    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level),
+  );
+}
+// Talent : puissance si on l'ajoute à l'ensemble équipé (valeur du talent, même si au cap).
+function talPowerIfEquip(inst: TalentInstance): number {
+  const talents = [
+    ...(char.row?.talents ?? []).filter((t) => t.id !== inst.id),
+    { ...inst, equipped: true },
+  ];
+  return combatPower(
+    playerWithGear(
+      char.row?.pseudo ?? 'Toi',
+      c.value,
+      char.row?.equipped ?? {},
+      talentEffects(talents),
+      c.value.level.level,
+    ),
+  );
+}
 // PUISSANCE CONSEILLÉE (ticket 6abe4429) : remplace le 🎯 % de victoire (qui « bougeait »)
 // par une cible STABLE — la puissance du build équilibré de référence contre lequel le
 // contenu est calibré. Le joueur compare SA puissance (combatPowerVal) à celle-ci.
@@ -4691,6 +4733,17 @@ onUnmounted(() => {
   font-weight: 600;
   color: var(--accent);
   margin-top: 1px;
+}
+.tal-cmp {
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.tal-cmp.up {
+  color: var(--d1);
+}
+.tal-cmp.down {
+  color: var(--d4);
 }
 .tal-xp {
   height: 4px;
