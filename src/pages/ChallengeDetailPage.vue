@@ -265,23 +265,36 @@
           </template>
         </div>
 
-        <!-- Projection segmentée : 1 segment par jour pour visualiser l'avancement.
-             Taper un jour PASSÉ/aujourd'hui → corriger sa valeur (erreur de saisie). -->
-        <div v-if="ch.format !== 'cumulative'" class="sec-h">
-          Projection · {{ ch.duration_days }} jours
-          <span class="sec-hint">— touche un jour pour corriger</span>
-        </div>
-        <div v-if="ch.format !== 'cumulative'" class="seg-strip">
-          <button
-            v-for="(t, d) in ch.daily_targets"
-            :key="d"
-            class="seg"
-            :class="segState(d)"
-            :disabled="d > dayIndex"
-            :title="`J${d + 1} : ${fmtV(doneOf(d))} / ${fmtV(t)}${dayXpOf(d) > 0 ? ' · +' + dayXpOf(d) + ' XP' : ''}`"
-            @click="editDay(d)"
-          />
-        </div>
+        <!-- Mode SÉRIES : UNE barre = total séries faites / visées sur tout le défi
+             (ticket c4699e8b). Mode Reps/Durée : projection segmentée par JOUR. -->
+        <template v-if="ch.format !== 'cumulative' && isSetsMode">
+          <div class="sec-h">Progression · séries</div>
+          <div class="series-total-bar">
+            <div class="stb-fill" :style="{ width: seriesPct + '%' }" />
+          </div>
+          <div class="stb-label">
+            <b>{{ seriesProgress.done }}</b> / {{ seriesProgress.target }} séries
+          </div>
+        </template>
+        <template v-else-if="ch.format !== 'cumulative'">
+          <!-- Projection segmentée : 1 segment par jour. Taper un jour passé/aujourd'hui
+               → corriger sa valeur (erreur de saisie). -->
+          <div class="sec-h">
+            Projection · {{ ch.duration_days }} jours
+            <span class="sec-hint">— touche un jour pour corriger</span>
+          </div>
+          <div class="seg-strip">
+            <button
+              v-for="(t, d) in ch.daily_targets"
+              :key="d"
+              class="seg"
+              :class="segState(d)"
+              :disabled="d > dayIndex"
+              :title="`J${d + 1} : ${fmtV(doneOf(d))} / ${fmtV(t)}${dayXpOf(d) > 0 ? ' · +' + dayXpOf(d) + ' XP' : ''}`"
+              @click="editDay(d)"
+            />
+          </div>
+        </template>
         <!-- Gains cumulés (XP = énergie, 1:1) + note surplus -->
         <div v-if="ch.format !== 'cumulative'" class="gains-line">
           <span class="gain-xp">+{{ earnedXp }} XP</span>
@@ -722,6 +735,19 @@ async function goSuccess() {
 // Mode 'sets' : done = nb de séries. Mode 'reps' : la série ajoute ses reps à done
 // ET garde le détail (poids → tonnage) ; bouton « ＋ série (poids) » secondaire.
 const isSetsMode = computed(() => ch.value?.config.count_mode === 'sets');
+// Mode SÉRIES : progression globale en séries (total faites / visées) → une seule barre
+// pour tout le défi, au lieu de la frise par jour (ticket c4699e8b).
+const seriesProgress = computed(() => {
+  const c = ch.value;
+  if (!c) return { done: 0, target: 0 };
+  const target = c.daily_targets.reduce((a, b) => a + b, 0);
+  const done = c.progress.reduce((a, d) => a + (d.sets?.length ?? 0), 0);
+  return { done, target };
+});
+const seriesPct = computed(() => {
+  const { done, target } = seriesProgress.value;
+  return target > 0 ? Math.min(100, Math.round((done / target) * 100)) : 0;
+});
 const todaySets = computed<ChallengeSet[]>(() => entryOf(dayIndex.value)?.sets ?? []);
 // Séries de DURÉE du jour (gainage) : une par pause du chrono (champ `sec`).
 const timeSets = computed<ChallengeSet[]>(() =>
@@ -1822,6 +1848,27 @@ onBeforeUnmount(() => {
   height: 16px;
   border-radius: 6px;
   overflow: hidden;
+}
+/* Mode SÉRIES : barre de progression globale (total séries faites / visées). */
+.series-total-bar {
+  height: 16px;
+  border-radius: 8px;
+  background: var(--line);
+  overflow: hidden;
+}
+.series-total-bar .stb-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 8px;
+  transition: width 0.25s ease;
+}
+.stb-label {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.stb-label b {
+  color: var(--text);
 }
 .seg {
   flex: 1;
