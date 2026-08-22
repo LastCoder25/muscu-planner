@@ -5,16 +5,11 @@ import { supabase } from '@/lib/supabase';
 import { normalizePseudo, levelUpEnergy } from '@/lib/character';
 import {
   sellValue,
+  sellValueForRarity,
   levelToEnchant,
   enchantMult,
   round1,
   normRank,
-  isFamiliar,
-  tierIndexOf,
-  tierStepCost,
-  gradeCapForTier,
-  familiarInfuseXp,
-  infuseFamiliar as applyFamiliarInfusion,
   swapLoadoutGear,
   bestGearLoadout,
   mergeEffects,
@@ -32,9 +27,7 @@ import {
   talentsEarned,
   talentEffects,
   talentTier,
-  talentTierFloor,
-  talentTierStepCost,
-  talentRecycleYield,
+  talentRank,
   type TalentInstance,
 } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
@@ -453,16 +446,6 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
-  function findOwned(cur: CharacterRow, itemId: string): { item: Item; slot?: ItemSlot } | null {
-    const inv = cur.inventory.find((i) => i.id === itemId);
-    if (inv) return { item: inv };
-    for (const slot of Object.keys(cur.equipped) as ItemSlot[]) {
-      const it = cur.equipped[slot];
-      if (it?.id === itemId) return { item: it, slot };
-    }
-    return null;
-  }
-
   // Verrouille/déverrouille un objet du sac (🔒 protégé de la casse/vente).
   async function toggleLock(userId: string, itemId: string) {
     const cur = row.value;
@@ -589,78 +572,22 @@ export const useCharacterStore = defineStore('character', () => {
     const talents = cur.talents.map((t) => ({ ...t, equipped: keep.has(t.id) }));
     return persistOptimistic(userId, { talents });
   }
-  // ── RECYCLAGE des SURPLUS → ressource dédiée (perte 2:1 : recycler rend ~la moitié de ce
-  // qu'il faut pour build), dépensée pour infuser la QUALITÉ (★1→★5) d'un gardé DANS son rang
-  // de drop. Familiers → POUSSIÈRE D'ÂME (`fragments`) ; talents → POUSSIÈRE D'ENCRE
-  // (`ink_dust`). Le RANG vient des drops (l'infusion plafonne à ★5 du rang, cf.
-  // `gradeCapForTier`). L'ENCHANT (+N, parchemins) reste un axe SÉPARÉ. ──
-  // Recycle un familier NON équipé et NON verrouillé du sac → poussière d'âme (∝ grade).
-  async function recycleFamiliar(userId: string, familiarId: string): Promise<number> {
-    const cur = row.value;
-    if (!cur) return 0;
-    const fam = cur.inventory.find((i) => i.id === familiarId);
-    if (!fam || !isFamiliar(fam) || fam.locked) return 0;
-    const gain = familiarInfuseXp(fam); // 1 + tier
-    await persistOptimistic(userId, {
-      fragments: cur.fragments + gain,
-      inventory: cur.inventory.filter((i) => i.id !== familiarId),
-    });
-    return gain;
-  }
-  // Recycle un talent NON équipé → poussière d'encre (∝ grade).
-  async function recycleTalent(userId: string, talentId: string): Promise<number> {
+  // ── ÉCONOMIE SIMPLIFIÉE (ticket 0ec48637) : plus de recyclage ni d'infusion de grade des
+  // talents/familiers (les poussières d'âme/d'encre sont retirées du gameplay). Objets,
+  // talents ET familiers = drops purs → on VEND les surplus contre de l'OR. (Les objets et
+  // familiers passent par `sell`/`sellMany` — ce sont des Item du sac ; les talents ci-dessous.)
+  // Vend un talent NON équipé du sac → or (∝ rang). Renvoie l'or gagné.
+  async function sellTalent(userId: string, talentId: string): Promise<number> {
     const cur = row.value;
     if (!cur) return 0;
     const t = cur.talents.find((x) => x.id === talentId);
     if (!t || t.equipped) return 0;
-    const gain = talentRecycleYield(t); // 1 + tier
+    const gain = sellValueForRarity(talentRank(talentTier(t.xp)));
     await persistOptimistic(userId, {
-      ink_dust: cur.ink_dust + gain,
+      gold: cur.gold + gain,
       talents: cur.talents.filter((x) => x.id !== talentId),
     });
     return gain;
-  }
-  // Infuse +1 cran de QUALITÉ un familier (équipé ou au sac) en dépensant la poussière
-  // d'âme, plafonné à ★5 du rang de DROP (le rang vient des drops). La magnitude est
-  // re-scalée (applyFamiliarInfusion). Renvoie le familier à jour, ou null si impossible.
-  async function infuseFamiliarGrade(userId: string, familiarId: string): Promise<Item | null> {
-    const cur = row.value;
-    if (!cur) return null;
-    const found = findOwned(cur, familiarId);
-    if (!found || !isFamiliar(found.item)) return null;
-    const { item, slot } = found;
-    const cap = gradeCapForTier(tierIndexOf(item));
-    if (tierIndexOf(item) >= cap) return null; // grade déjà au plafond du niveau
-    const cost = tierStepCost(tierIndexOf(item));
-    if (cur.fragments < cost) return null;
-    const updated = applyFamiliarInfusion({ ...item, fxp: 0 }, cost, cap);
-    const patch: Partial<CharacterRow> = { fragments: cur.fragments - cost };
-    if (slot) patch.equipped = { ...cur.equipped, [slot]: updated };
-    else patch.inventory = cur.inventory.map((i) => (i.id === familiarId ? updated : i));
-    await persistOptimistic(userId, patch);
-    return updated;
-  }
-  // Infuse +1 cran de QUALITÉ un talent (équipé ou au sac) en dépensant la poussière d'encre,
-  // plafonné à ★5 du rang de DROP (le rang vient des drops). Renvoie l'instance à jour, ou null.
-  async function infuseTalentGrade(
-    userId: string,
-    talentId: string,
-  ): Promise<TalentInstance | null> {
-    const cur = row.value;
-    if (!cur) return null;
-    const t = cur.talents.find((x) => x.id === talentId);
-    if (!t) return null;
-    const tier = talentTier(t.xp);
-    const cap = gradeCapForTier(tier);
-    if (tier >= cap) return null; // grade déjà au plafond
-    const cost = talentTierStepCost(tier);
-    if (cur.ink_dust < cost) return null;
-    const updated: TalentInstance = { ...t, xp: talentTierFloor(tier + 1) };
-    await persistOptimistic(userId, {
-      ink_dust: cur.ink_dust - cost,
-      talents: cur.talents.map((x) => (x.id === talentId ? updated : x)),
-    });
-    return updated;
   }
 
   async function equip(userId: string, itemId: string) {
@@ -952,10 +879,7 @@ export const useCharacterStore = defineStore('character', () => {
     equipTalent,
     unequipTalent,
     setEquippedTalents,
-    recycleFamiliar,
-    recycleTalent,
-    infuseFamiliarGrade,
-    infuseTalentGrade,
+    sellTalent,
     sell,
     sellMany,
     toggleLock,

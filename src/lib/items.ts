@@ -206,6 +206,10 @@ export function salvageValue(it: Item): number {
 export function sellValue(it: Item): number {
   return GOLD_BY_RARITY[it.rarity];
 }
+/** Or de vente pour un RANG donné (talents/familiers qui n'ont pas de forme Item). */
+export function sellValueForRarity(rank: Rarity): number {
+  return GOLD_BY_RARITY[rank];
+}
 /** Peut-on améliorer cet objet ? (poussière suffisante + pas au plafond). */
 export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean {
   return it.level < playerLevel && dust >= upgradeCost(it.level, it.rarity);

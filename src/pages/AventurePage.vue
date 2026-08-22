@@ -64,18 +64,6 @@
             >
             <span class="tb-sep" aria-hidden="true"></span>
             <span
-              v-if="char.row.fragments"
-              class="tb-r frag"
-              title="Poussière d'âme — infuse le GRADE des familiers"
-              ><DustIcon variant="soul" /> {{ char.row.fragments }}</span
-            >
-            <span
-              v-if="char.row.ink_dust"
-              class="tb-r ink"
-              title="Poussière d'encre — infuse le GRADE des talents"
-              ><DustIcon variant="ink" /> {{ char.row.ink_dust }}</span
-            >
-            <span
               v-if="char.row.summon_stones"
               class="tb-r summon"
               title="Pierres d’invocation — tenter un boss de palier"
@@ -430,10 +418,8 @@
               Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
             </div>
             <div class="sec-hint">
-              Les talents <b>droppent à un grade</b> (rang + qualité). Équipe-en
-              {{ talentSlots }} (change quand tu veux). Monte le <b>🔧 grade</b> (rang/qualité) en
-              recyclant les surplus → <b><DustIcon variant="ink" /> poussière d'encre</b> (tu as
-              {{ char.row.ink_dust }}) → infuse le grade jusqu'au plafond de ton niveau.
+              Les talents <b>droppent à un grade</b> (rang + qualité) fixé au drop. Équipe-en
+              {{ talentSlots }} (change quand tu veux) ; vends les surplus pour de l'or.
             </div>
 
             <div v-if="!char.row.talents.length" class="talents-empty">
@@ -500,34 +486,8 @@
                     {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
                   </button>
                   <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
-                  <!-- ⭐↑ Qualité +1 (dans le rang) : poussière d'encre. Plafond = ★5 du rang de drop. -->
-                  <button
-                    class="tal-b ghost"
-                    :disabled="
-                      talentGradeCapped(t.tier) || char.row.ink_dust < talGradeCost(t.tier)
-                    "
-                    :title="
-                      talentGradeCapped(t.tier)
-                        ? 'Qualité ★5 max de ce rang — drop un rang supérieur pour monter'
-                        : 'Monter la qualité (★) dans le rang — poussière d’encre'
-                    "
-                    @click="doInfuseTalentGrade(t.id)"
-                  >
-                    <template v-if="talentGradeCapped(t.tier)"
-                      >⭐<span class="gu-up">↑</span> Max</template
-                    >
-                    <template v-else
-                      >⭐<span class="gu-up">↑</span> +1·{{ talGradeCost(t.tier)
-                      }}<DustIcon variant="ink"
-                    /></template>
-                  </button>
-                  <button
-                    v-if="!t.equipped"
-                    class="tal-b ghost"
-                    title="Recycler ce talent → poussière d'encre (pour infuser le grade)"
-                    @click="doRecycleTalent(t.id)"
-                  >
-                    ♻️<DustIcon variant="ink" />
+                  <button v-if="!t.equipped" class="tal-b ghost" @click="doSellTalent(t.id)">
+                    🪙 Vendre
                   </button>
                 </div>
               </div>
@@ -545,10 +505,9 @@
               🐾 Familiers <span class="tal-slots">{{ equippedFamiliar ? 1 : 0 }}/1</span>
             </div>
             <div class="sec-hint">
-              Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Équipe-en 1.
-              Monte le <b>🔧 grade</b> (rang/qualité) en recyclant les familiers en trop →
-              <b><DustIcon variant="soul" /> poussière d'âme</b> (tu as {{ char.row.fragments }}) →
-              infuse le grade jusqu'au plafond de ton niveau (ou <b>vends 🪙</b>).
+              Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Les familiers
+              <b>droppent à un grade</b> fixé au drop ; équipe-en un ; vends les surplus pour de
+              l'or.
             </div>
 
             <div v-if="!allFamiliars.length" class="talents-empty">
@@ -589,31 +548,6 @@
                     Retirer
                   </button>
                   <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
-                  <!-- ⭐↑ Qualité +1 (dans le rang) : poussière d'âme. Plafond = ★5 du rang de drop. -->
-                  <button
-                    class="tal-b ghost"
-                    :disabled="gradeCapped(f) || char.row.fragments < gradeStepCost(f)"
-                    :title="
-                      gradeCapped(f)
-                        ? 'Qualité ★5 max de ce rang — drop un rang supérieur pour monter'
-                        : 'Monter la qualité (★) dans le rang — poussière d’âme'
-                    "
-                    @click="doInfuseFamiliarGrade(f)"
-                  >
-                    <template v-if="gradeCapped(f)">⭐<span class="gu-up">↑</span> Max</template>
-                    <template v-else
-                      >⭐<span class="gu-up">↑</span> +1·{{ gradeStepCost(f)
-                      }}<DustIcon variant="soul"
-                    /></template>
-                  </button>
-                  <button
-                    v-if="!f.equipped && !f.locked"
-                    class="tal-b ghost"
-                    title="Recycler ce familier → poussière d'âme (pour infuser le grade)"
-                    @click="doRecycleFamiliar(f.id)"
-                  >
-                    ♻️<DustIcon variant="soul" />
-                  </button>
                   <button
                     v-if="!f.equipped"
                     class="tal-b ghost"
@@ -2063,7 +1997,6 @@ import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
-import DustIcon from '@/components/DustIcon.vue';
 import {
   simulateDungeon,
   simulateCombat,
@@ -2093,7 +2026,6 @@ import {
   isFamiliar,
   FAMILIAR_SLOT,
   tierIndexOf,
-  tierStepCost,
   rollTier,
   dropBand,
   dropBandLabel,
@@ -2123,7 +2055,6 @@ import {
   talentRankOf,
   talentQuality,
   talentValue,
-  talentTierStepCost,
   rollTalentDrop,
   type TalentInstance,
 } from '@/lib/talents';
@@ -2636,9 +2567,8 @@ function explainTalent(t: (typeof talentsView.value)[number]) {
     message:
       `Améliore : <b>${d.desc}</b> — actuellement <b>+${t.effLabel}</b> ` +
       `(rang ${RARITY_LABEL[t.rarity]}${t.quality}).<br><br>` +
-      `Son <b>rang</b> est fixé au drop (trouve mieux en explorant plus profond) ; tu montes sa ` +
-      `<b>qualité (★)</b> DANS le rang en l'<b>🔧 infusant</b> — sacrifie d'autres talents pour ` +
-      `de la poussière d'encre 🖋️, jusqu'à ★5 du rang.`,
+      `Son <b>grade</b> (rang + qualité) est fixé au drop : trouve mieux en explorant plus ` +
+      `profond ; vends les surplus pour de l'or.`,
   });
 }
 // Un talent de ce CODE est-il déjà équipé ? (loadout à effets distincts). Sert à
@@ -3890,50 +3820,13 @@ function doEquipFamiliar(itemId: string) {
 function doUnequipFamiliar() {
   withUid((uid) => char.unequip(uid, FAMILIAR_SLOT), 'Impossible de déséquiper.');
 }
-// Recycle un familier/talent en trop → poussière d'âme / d'encre (sert à infuser le
-// GRADE, ticket 9b62342c). Notif du gain.
-function doRecycleFamiliar(id: string) {
-  withUid(
-    (uid) =>
-      char.recycleFamiliar(uid, id).then((g: number) => {
-        if (g)
-          $q.notify({ type: 'positive', message: `♻️ +${g} poussière d'âme`, position: 'top' });
-      }),
-    'Recyclage impossible.',
-  );
-}
-function doRecycleTalent(id: string) {
-  withUid(
-    (uid) =>
-      char.recycleTalent(uid, id).then((g: number) => {
-        if (g)
-          $q.notify({ type: 'positive', message: `♻️ +${g} poussière d'encre`, position: 'top' });
-      }),
-    'Recyclage impossible.',
-  );
-}
-// Infuse +1 cran de QUALITÉ (★1→★5) un familier/talent avec la poussière dédiée, plafonné
-// à ★5 de son RANG de drop (le rang vient des drops). Jamais d'éclat de rang (l'infusion ne
-// franchit plus un rang).
-function gradeStepCost(f: Item): number {
-  return tierStepCost(tierIndexOf(f));
-}
-// Plafond atteint = qualité ★5 du rang courant (cran % 5 === 4).
-function gradeCapped(f: Item): boolean {
-  return tierIndexOf(f) % 5 === 4;
-}
-function talentGradeCapped(tier: number): boolean {
-  return tier % 5 === 4;
-}
-function talGradeCost(tier: number): number {
-  return talentTierStepCost(tier);
-}
-// L'infusion ne monte QUE la qualité (dans le rang) → pas d'éclat de rang.
-function doInfuseFamiliarGrade(f: Item) {
-  withUid((uid) => char.infuseFamiliarGrade(uid, f.id), 'Infusion impossible.');
-}
-function doInfuseTalentGrade(id: string) {
-  withUid((uid) => char.infuseTalentGrade(uid, id), 'Infusion impossible.');
+// Talents & familiers en trop se VENDENT contre de l'or (ticket 0ec48637 : plus de recyclage
+// ni d'infusion de grade — le grade est fixé au drop, on trouve mieux en explorant).
+function doSellTalent(id: string) {
+  withUid(async (uid) => {
+    const g = await char.sellTalent(uid, id);
+    if (g) $q.notify({ type: 'positive', message: `🪙 Talent vendu (+${g} or)` });
+  }, 'Vente impossible.');
 }
 // Animation de PALIER DE SET : si équiper `setId` a fait franchir un palier (2/3/4
 // pièces), on célèbre en montrant le set + le bonus tout juste débloqué.
