@@ -1738,6 +1738,7 @@
                     >{{ itemQuality(cand.item) }}</span
                   >
                   <span v-if="cand.item.setId" class="rc-pill set">🧩 Set</span>
+                  <span v-if="rewardFitsVoie(cand.item)" class="rc-pill voie">🧭 ta voie</span>
                 </div>
                 <div class="rc-eff">
                   {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
@@ -1975,6 +1976,7 @@
                         >{{ itemQuality(cand.item) }}</span
                       >
                       <span v-if="cand.item.setId" class="rc-pill set">🧩 Set</span>
+                      <span v-if="rewardFitsVoie(cand.item)" class="rc-pill voie">🧭 ta voie</span>
                     </div>
                     <div class="rc-eff">
                       {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
@@ -3158,9 +3160,15 @@ function rewardScore(cand: RewardCandidate): number {
     return base + cand.gold * 0.01;
   }
   const it = cand.item;
-  let s = powerIfEquip(it); // puissance si équipé (grade + enchant, fixe)
+  let s = powerIfEquip(it); // puissance si équipé (inclut le passif de voie via activeFx)
   if (it.setId && !rewardDupNote(it)) s += base * 0.05; // petit bonus « avance un set »
+  if (rewardFitsVoie(it)) s += base * 0.03; // petit bonus « colle à ta voie » (départage, ticket 59e45386)
   return s;
+}
+// L'effet de l'objet correspond-il aux stats de la voie choisie ? (indicateur + départage)
+function rewardFitsVoie(it: Item): boolean {
+  const v = currentVoie.value;
+  return !!v && v.preferred.includes(it.effect.type);
 }
 // Index du candidat conseillé (meilleur score). -1 si pas de récompense en attente.
 const recommendedRewardIndex = computed(() => {
@@ -6380,6 +6388,11 @@ onUnmounted(() => {
   color: var(--dark, #15120e);
   background: var(--accent);
   border-color: var(--accent);
+}
+.rc-pill.voie {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 /* Emplacement cliquable : hint « gérer » */
 .slot-manage {
