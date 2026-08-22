@@ -328,6 +328,10 @@
         >
           <q-icon name="tune" size="16px" /> Ajuster la difficulté
         </button>
+        <!-- Couper l'auto-ajustement pour CE défi (ticket b17d933d). -->
+        <button v-if="!statusDone && adaptiveOn" class="adjust" @click="disableAdaptive">
+          <q-icon name="lock_open" size="16px" /> Désactiver la difficulté auto
+        </button>
         <button v-if="!statusDone" class="abandon" @click="confirmAbandon">
           Abandonner le challenge
         </button>
@@ -1038,6 +1042,21 @@ async function applyRecal(refNew: number) {
     c.config = config;
     dismissRecal();
     $q.notify({ type: 'positive', message: 'Difficulté ajustée pour les jours restants 💪' });
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
+  } finally {
+    $q.loading.hide();
+  }
+}
+// Désactive la difficulté auto pour CE défi (ticket b17d933d) : les objectifs des jours
+// restants ne s'ajusteront plus tout seuls après chaque journée. Conserve le plan actuel.
+async function disableAdaptive() {
+  const c = ch.value;
+  if (!c || !c.config.adaptive) return;
+  try {
+    $q.loading.show();
+    await store.updatePlan(id, c.daily_targets, { ...c.config, adaptive: false });
+    $q.notify({ type: 'positive', message: 'Difficulté auto désactivée — objectifs figés.' });
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
   } finally {

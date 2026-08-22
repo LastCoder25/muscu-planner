@@ -266,8 +266,9 @@
             <span class="lbl" style="margin: 0">Difficulté automatique</span>
           </div>
           <div class="carry-note">
-            On part d'une estimation pour ton niveau ({{ levelLabel }}). Après chaque journée
-            validée, tu donnes ton ressenti et la suite s'ajuste toute seule.
+            On part d'une estimation pour ton niveau ({{ levelLabel }}) et les objectifs des jours
+            restants s'ajustent tout seuls selon tes résultats. Laisse décoché pour des objectifs
+            fixes que tu règles toi-même.
           </div>
         </div>
 
@@ -567,7 +568,7 @@ function setObjMode(m: 'reps' | 'sets' | 'time') {
 const reminderOn = ref(false);
 const reminderTime = ref('18:00');
 const carryOver = ref(false);
-const adaptiveMode = ref(true); // difficulté auto (calibration implicite + ressenti)
+const adaptiveMode = ref(false); // difficulté auto OFF par défaut (ticket b17d933d) — opt-in
 const creating = ref(false);
 
 const level = computed<Level>(() => profileStore.profile?.experience?.level ?? 'intermediaire');
