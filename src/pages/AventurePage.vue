@@ -152,8 +152,53 @@
           <!-- PORTRAIT HÉROS : le perso au centre d'un cercle teinté par le RANG ; couronne
                d'ÉTOILES (pleines = gagnées) au premier plan sur l'anneau. Niveau (bas-gauche)
                et Puissance (bas-droite) flanquent le cercle sur la même ligne. -->
+          <!-- CARRÉ : perso au centre, 4 cercles aux COINS (gauche alignés, haut calés sur le
+               bas → carré). Voie ↖ · Prestige ↗ · Niveau ↙ · Puissance ↘. -->
           <div class="portrait" :style="{ '--rank-c': rank.color }">
-            <div class="pt-main">
+            <div class="pt-square">
+              <!-- ↖ VOIE (spécialisation) -->
+              <button
+                class="pt-mini corner tl voie"
+                type="button"
+                :title="currentVoie ? `Voie : ${currentVoie.name}` : 'Choisir une voie'"
+                @click="voieOpen = true"
+              >
+                <svg viewBox="0 0 44 44" aria-hidden="true">
+                  <circle class="ptm-track full" cx="22" cy="22" r="18" />
+                  <text
+                    class="ptm-emo"
+                    x="22"
+                    y="23"
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                  >
+                    {{ currentVoie ? currentVoie.emoji : '—' }}
+                  </text>
+                </svg>
+                <span class="ptm-ic">🧭</span>
+              </button>
+              <!-- ↗ PRESTIGE (rang cosmétique) -->
+              <button
+                class="pt-mini corner tr prestige"
+                type="button"
+                :title="`${rank.name} · ${rank.star}/5 ★ — voir tous les rangs`"
+                @click="ranksOpen = true"
+              >
+                <svg viewBox="0 0 44 44" aria-hidden="true">
+                  <circle class="ptm-track full" cx="22" cy="22" r="18" />
+                  <text
+                    class="ptm-emo"
+                    x="22"
+                    y="23"
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                  >
+                    {{ rank.emoji }}
+                  </text>
+                </svg>
+                <span class="ptm-ic txt font-display">{{ rank.star }}★</span>
+              </button>
+
               <div class="pt-frame" :title="`${rank.name} ${rank.star}/5`">
                 <AventureAvatar
                   class="pt-avatar"
@@ -174,11 +219,12 @@
                   />
                 </svg>
               </div>
-            </div>
-            <!-- Ligne du rang : Niveau (gauche, anneau de PROGRESSION + « LvL ») · nom du rang
-                 (centre) · Puissance (droite, anneau plein + ⚔️), au niveau de « Argent ». -->
-            <div class="pt-footer">
-              <div class="pt-mini lvl" :title="`Niveau ${c.level.level} · ${c.level.progressPct}%`">
+
+              <!-- ↙ NIVEAU (anneau de progression) -->
+              <div
+                class="pt-mini corner bl lvl"
+                :title="`Niveau ${c.level.level} · ${c.level.progressPct}%`"
+              >
                 <svg viewBox="0 0 44 44" aria-hidden="true">
                   <circle class="ptm-track" cx="22" cy="22" r="18" />
                   <circle
@@ -202,15 +248,8 @@
                 </svg>
                 <span class="ptm-ic txt font-display">LvL</span>
               </div>
-              <button
-                class="pt-rank font-display"
-                type="button"
-                title="Voir tous les rangs de prestige"
-                @click="ranksOpen = true"
-              >
-                {{ rank.name }}
-              </button>
-              <div class="pt-mini pow" :title="`Puissance ${fmtPow(combatPowerVal)}`">
+              <!-- ↘ PUISSANCE -->
+              <div class="pt-mini corner br pow" :title="`Puissance ${fmtPow(combatPowerVal)}`">
                 <svg viewBox="0 0 44 44" aria-hidden="true">
                   <circle class="ptm-track full" cx="22" cy="22" r="18" />
                   <text
@@ -226,6 +265,15 @@
                 <span class="ptm-ic">⚔️</span>
               </div>
             </div>
+            <!-- Nom du rang sous le carré (clic → tous les rangs). -->
+            <button
+              class="pt-rank font-display"
+              type="button"
+              title="Voir tous les rangs de prestige"
+              @click="ranksOpen = true"
+            >
+              {{ rank.name }}
+            </button>
           </div>
 
           <!-- Tous les rangs de prestige (clic sur le nom du rang). Cosmétique, dérivé du niveau. -->
@@ -4618,34 +4666,64 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 /* Bloc central : cercle centré + Niveau (bas-gauche) / Puissance (bas-droite). */
-.pt-main {
+/* CARRÉ : le cadre du perso au centre, 4 médaillons aux COINS (absolus). Les coins
+   gauches partagent `left:0` (alignés verticalement), les coins hauts partagent `top:0`
+   (alignés horizontalement) → un carré parfait autour du perso. */
+.pt-square {
   position: relative;
-  width: 100%;
+  width: 280px;
+  max-width: 90vw;
+  aspect-ratio: 1;
+  margin: 4px auto 2px;
   display: flex;
+  align-items: center;
   justify-content: center;
 }
-/* Ligne du rang : nom du rang au centre, mini-médaillons Niveau (gauche) / Puissance
-   (droite) CENTRÉS chacun dans leur moitié. Grille 1fr·auto·1fr → les minis flottent au
-   milieu de leur colonne (pas collés au bord), avec un écart : bord de l'écran (padding),
-   cercle au-dessus (margin-top) et tuiles de stats en dessous (margin-bottom). */
-.pt-footer {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  width: 100%;
-  padding: 0 6px;
-  margin-top: 12px;
-  margin-bottom: 8px;
+.pt-square .pt-frame {
+  /* légèrement réduit pour laisser respirer les coins */
+  width: 150px;
+  height: 150px;
 }
-.pt-footer > .pt-mini,
-.pt-footer > .pt-rank {
-  justify-self: center;
+.pt-mini.corner {
+  position: absolute;
+  width: 68px;
+  height: 68px;
+}
+.corner.tl {
+  top: 0;
+  left: 0;
+}
+.corner.tr {
+  top: 0;
+  right: 0;
+}
+.corner.bl {
+  bottom: 0;
+  left: 0;
+}
+.corner.br {
+  bottom: 0;
+  right: 0;
+}
+/* Les coins « bouton » (voie / prestige) : pas de style bouton par défaut. */
+button.pt-mini {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+button.pt-mini:active {
+  transform: scale(0.96);
 }
 .pt-mini {
   position: relative;
   flex: 0 0 auto;
   width: 80px;
   height: 80px;
+}
+/* Emoji central des médaillons Voie / Prestige. */
+.ptm-emo {
+  font-size: 17px;
 }
 .pt-mini svg {
   width: 100%;
