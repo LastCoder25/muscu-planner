@@ -7,6 +7,7 @@ import {
   sellValue,
   levelToEnchant,
   enchantMult,
+  round1,
   normRank,
   isFamiliar,
   tierIndexOf,
@@ -131,12 +132,9 @@ export const useCharacterStore = defineStore('character', () => {
       const ench = it.enchant ?? levelToEnchant(it.level);
       if (!ench) return { ...it, rarity, enchant: 0 };
       const m = enchantMult(ench);
-      const effect = {
-        ...it.effect,
-        value: Math.max(1, Math.round(it.effect.value * m * 10) / 10),
-      };
+      const effect = { ...it.effect, value: Math.max(1, round1(it.effect.value * m)) };
       const effect2 = it.effect2
-        ? { ...it.effect2, value: Math.max(1, Math.round(it.effect2.value * m * 10) / 10) }
+        ? { ...it.effect2, value: Math.max(1, round1(it.effect2.value * m)) }
         : undefined;
       return { ...it, rarity, enchant: 0, effect, ...(effect2 ? { effect2 } : {}) };
     };

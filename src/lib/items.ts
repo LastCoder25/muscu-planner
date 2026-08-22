@@ -111,76 +111,21 @@ export function itemLevelMult(level: number): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ENCHANT (façon Lineage 2) — MOTEUR (étape 1). Couche de magnitude « +N » par-dessus
-// le GRADE (rang+qualité). Destinée à REMPLACER l'axe « niveau » (chantier en cours :
-// ce moteur est pur/testé et pas encore branché sur le combat/UI). GAMBLE : réussite
-// décroissante, échec en ZONE DE DANGER (> SAFE) = retour à +0, SAUF protection 🛡️.
-// Plafond du +N lié au NIVEAU DE SPORT (« seul le sport rend plus fort »). Pur/testable.
-// ─────────────────────────────────────────────────────────────────────────────
-export const ENCHANT_SAFE = 3; // ≤ +3 : zone SANS RESET (un échec ne retombe pas à +0)
-// Zone où la RÉUSSITE est garantie (100 %). Séparée de ENCHANT_SAFE (2026‑08‑20, ticket
-// cc4f2e2d) : seul +1 est gratuit, le taux devient DÉGRESSIF dès +2 (91 %, 82 %…) — mais
-// tant qu'on est ≤ ENCHANT_SAFE un échec ne fait PAS retomber à +0 (juste on n'avance pas).
-const ENCHANT_RATE_SAFE = 1;
-// Cap FIXE (façon L2 : ~+9/+12), PAS lié au niveau du joueur : le sport plafonne déjà la
-// puissance via le GRADE (rang √-gaté par la profondeur) ; l'enchant est une couche polish
-// modeste, pas un puits « un seul objet toute sa vie ». +12 = ×2,2 de magnitude (cf. mult).
-export const ENCHANT_MAX = 12;
-// STEP calé pour PRÉSERVER l'échelle de l'ancien axe « niveau » (pas de recalibrage du
-// contenu) : +3 (zone sûre GARANTIE) ≈ ×2 (= vieux gear mid-game) ; +12 (rare) ≈ ×4,96
-// (≈ vieux plafond). Une migration au chargement mappe level→enchant (magnitude préservée).
-const ENCHANT_STEP = 0.33; // +N → × (1 + 0,33·N) : +3 = ×1,99, +12 = ×4,96
-const ENCHANT_FAIL_SLOPE = 0.09; // −9 pts de réussite par cran au-delà de la zone sûre
-const ENCHANT_MIN_RATE = 0.15; // plancher de réussite (jamais 0 → toujours tentable)
-
-/** Multiplicateur de magnitude d'un objet enchanté +N (grade × enchant = puissance). */
+// ENCHANT — VESTIGE DE MIGRATION UNIQUEMENT. L'axe enchant des OBJETS est retiré
+// (ticket 7acb1e7c) : ne restent que les 2 helpers appelés au CHARGEMENT pour baker
+// l'ancien enchant / niveau dans `effect.value` (character.normalizeRow), plus `enchantMult`
+// réutilisé par l'échelle des talents (talents.ts). Le moteur « gamble » (attemptEnchant/
+// canEnchant/enchantSuccessRate/enchantedValue) a été supprimé avec l'UI d'enchant.
+export const ENCHANT_MAX = 12; // plafond historique (préserve l'échelle à la migration)
+const ENCHANT_STEP = 0.33; // +N → × (1 + 0,33·N)
+/** Multiplicateur de magnitude d'un +N (migration des sauvegardes + échelle des talents). */
 export function enchantMult(enchant: number): number {
   return 1 + Math.max(0, Math.min(ENCHANT_MAX, enchant)) * ENCHANT_STEP;
 }
-/** Chance (0..1) de réussir la tentative +cur → +(cur+1). 100 % en zone sûre, puis décroît. */
-export function enchantSuccessRate(current: number): number {
-  if (current < ENCHANT_RATE_SAFE) return 1; // +1 garanti ; dégressif dès la tentative de +2
-  return Math.max(ENCHANT_MIN_RATE, 1 - (current - ENCHANT_RATE_SAFE + 1) * ENCHANT_FAIL_SLOPE);
-}
-/** L'objet peut-il encore être enchanté ? (pas au cap FIXE). */
-export function canEnchant(enchant: number): boolean {
-  return enchant < ENCHANT_MAX;
-}
-/** MIGRATION : convertit un ancien NIVEAU d'objet en ENCHANT équivalent (magnitude
- *  préservée : enchantMult(enchant) ≈ itemLevelMult(level)). Plafonné au cap fixe. */
+/** MIGRATION : ancien NIVEAU d'objet → ENCHANT équivalent (magnitude préservée). */
 export function levelToEnchant(level: number): number {
   const target = itemLevelMult(Math.max(1, level)) - 1; // gain relatif de l'ancien niveau
   return Math.max(0, Math.min(ENCHANT_MAX, Math.round(target / ENCHANT_STEP)));
-}
-/** Magnitude réelle d'un effet à un enchant donné (remplacera `effectiveValue`/niveau). */
-export function enchantedValue(effect: ItemEffect, enchant: number): number {
-  return Math.max(1, Math.round(effect.value * enchantMult(enchant)));
-}
-
-export interface EnchantOutcome {
-  success: boolean;
-  enchant: number; // enchant APRÈS la tentative
-  resetTo0: boolean; // échec en zone de danger, non protégé → retombé à +0
-  protectionUsed: boolean; // une protection 🛡️ a absorbé l'échec (enchant conservé)
-}
-/** Tente d'enchanter +1 (seedé). Réussite → +1. Échec : en zone SÛRE rien ne bouge ;
- *  en zone de DANGER → retour à +0, SAUF `hasProtection` (conserve l'enchant, consomme
- *  la protection). Jamais de destruction (choix : saveur « intermédiaire + protection »). */
-export function attemptEnchant(
-  rng: () => number,
-  current: number,
-  hasProtection: boolean,
-): EnchantOutcome {
-  if (rng() < enchantSuccessRate(current)) {
-    return { success: true, enchant: current + 1, resetTo0: false, protectionUsed: false };
-  }
-  if (current < ENCHANT_SAFE) {
-    return { success: false, enchant: current, resetTo0: false, protectionUsed: false };
-  }
-  if (hasProtection) {
-    return { success: false, enchant: current, resetTo0: false, protectionUsed: true };
-  }
-  return { success: false, enchant: 0, resetTo0: true, protectionUsed: false };
 }
 
 // CHASSE AU LOOT (2026‑08‑15, ticket 355753d2) : la MAGNITUDE DE BASE d'un drop
@@ -204,8 +149,9 @@ export function rankIndex(r: Rarity): number {
   return Math.max(0, RANK_ORDER.indexOf(r));
 }
 /** Arrondit une magnitude d'effet à 1 décimale (au lieu d'un entier) → la qualité
- *  (+2,5 %/★) reste visible sur les petites stats (ticket df3feade). */
-const round1 = (x: number): number => Math.round(x * 10) / 10;
+ *  (+2,5 %/★) reste visible sur les petites stats (ticket df3feade). Partagé avec la
+ *  migration des sauvegardes (character.normalizeRow) pour une précision cohérente. */
+export const round1 = (x: number): number => Math.round(x * 10) / 10;
 // Poussière/or de base par rang (croissance géométrique douce, ~×1,5 et ×1,6 par rang).
 const DUST_BY_RARITY: Record<Rarity, number> = Object.fromEntries(
   RANK_ORDER.map((r, i) => [r, Math.round(4 * Math.pow(1.5, i))]),
@@ -448,10 +394,6 @@ export function effectLabelFor(type: EffectType, v: number): string {
     case 'thorns_pct':
       return `renvoie ${s}% des dégâts reçus`;
   }
-}
-/** Libellé de l'effet d'un objet ENCHANTÉ +N (magnitude = grade × enchant). */
-export function enchantEffectLabel(e: ItemEffect, enchant: number): string {
-  return effectLabelFor(e.type, enchantedValue(e, enchant));
 }
 /** Libellé de l'effet à un niveau d'objet donné (valeur réelle) — legacy (familiers). */
 export function effectLabel(e: ItemEffect, level = 1): string {
@@ -871,8 +813,12 @@ export function infuseFamiliar(fam: Item, addXp: number, maxTierIndex: number): 
     rarity: rank,
     roll: (quality - 0.5) / 5,
     fxp,
-    effect: { ...fam.effect, value: effVal },
-    ...(fam.effect2 && eff2Val != null ? { effect2: { ...fam.effect2, value: eff2Val } } : {}),
+    // Accumulation en float (anti-blocage), mais valeur FINALE à 1 décimale comme un drop
+    // (`round1`) → un familier infusé ≈ un familier droppé au même tier (ticket cohérence).
+    effect: { ...fam.effect, value: round1(effVal) },
+    ...(fam.effect2 && eff2Val != null
+      ? { effect2: { ...fam.effect2, value: round1(eff2Val) } }
+      : {}),
   };
 }
 
@@ -1231,7 +1177,8 @@ export function playerWithGear(
  *  meilleure combinaison des 4 slots de gear (bonus de SET inclus) qui maximise la
  *  puissance de combat. Le familier équipé est conservé (slot parallèle, choisi à part).
  *  Brute-force BORNÉ : top-K candidats/slot par puissance solo + TOUTES les pièces de set
- *  (pour permettre la complétion) → au plus ~12⁴ combos évalués (combatPower est bon marché).
+ *  (pour permettre la complétion, cap 12 + slot vide = ≤13/slot) → au plus ~13⁴ combos
+ *  évalués sur un clic (combatPower est bon marché), pas un chemin chaud.
  *  Retourne la map d'équipement optimale (les 4 slots gear + le familier actuel). */
 export function bestGearLoadout(
   name: string,

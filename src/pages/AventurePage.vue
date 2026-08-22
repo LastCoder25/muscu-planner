@@ -2240,10 +2240,7 @@ const combatPowerVal = computed(() => combatPower(fighter.value));
 // Comparateur de puissance pour talents & familiers (ticket 25091d45), comme les objets.
 // Familier : puissance si on l'équipe à la place de l'actuel.
 function famPowerIfEquip(f: Item): number {
-  const eq = { ...(char.row?.equipped ?? {}), [FAMILIAR_SLOT]: f };
-  return combatPower(
-    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level),
-  );
+  return powerWith({ ...(char.row?.equipped ?? {}), [FAMILIAR_SLOT]: f });
 }
 // Talent : puissance si on l'ajoute à l'ensemble équipé (valeur du talent, même si au cap).
 function talPowerIfEquip(inst: TalentInstance): number {
@@ -2251,21 +2248,21 @@ function talPowerIfEquip(inst: TalentInstance): number {
     ...(char.row?.talents ?? []).filter((t) => t.id !== inst.id),
     { ...inst, equipped: true },
   ];
-  return combatPower(
-    playerWithGear(
-      char.row?.pseudo ?? 'Toi',
-      c.value,
-      char.row?.equipped ?? {},
-      talentEffects(talents),
-      c.value.level.level,
-    ),
-  );
+  return powerWith(char.row?.equipped ?? {}, talentEffects(talents));
 }
 // PUISSANCE CONSEILLÉE (ticket 6abe4429) : remplace le 🎯 % de victoire (qui « bougeait »)
 // par une cible STABLE — la puissance du build équilibré de référence contre lequel le
 // contenu est calibré. Le joueur compare SA puissance (combatPowerVal) à celle-ci.
+// Mémoïsée : `recommendedPower` (reconstruit un combattant de référence) est STATIQUE par
+// niveau, mais recoPow est appelée ~3×/ligne de donjon/boss à chaque rendu → cache par niveau.
+const recoPowCache = new Map<number, number>();
 function recoPow(recoLevel: number): number {
-  return recommendedPower(recoLevel);
+  let v = recoPowCache.get(recoLevel);
+  if (v === undefined) {
+    v = recommendedPower(recoLevel);
+    recoPowCache.set(recoLevel, v);
+  }
+  return v;
 }
 // Vert si tu atteins la puissance conseillée, orange si proche (≥ 80 %), rouge sinon.
 function powClass(recoLevel: number): string {
@@ -2307,57 +2304,52 @@ const baseFighter = computed(() =>
   playerWithGear(char.row?.pseudo ?? 'Toi', c.value, {}, {}, c.value.level.level),
 );
 const pctA = (x?: number) => Math.round((x ?? 0) * 100) + '%';
-// Puissance de combat SI on équipe `it` (à son ENCHANT actuel). Un objet a une puissance
-// Puissance de combat si `it` remplaçait la pièce du même slot, ÉVALUÉ à un enchant donné.
-function powerAtEnchant(it: Item, enchant: number): number {
-  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: { ...it, enchant } };
+// Puissance de combat avec un ensemble d'équipement donné (+ effets extra = talents).
+// Helper UNIQUE derrière toutes les comparaisons (objet/familier/talent/loadout) → plus de
+// plomberie pseudo/niveau/talentFx dupliquée (revue /simplify).
+function powerWith(eq: Equipped, fx: Partial<AggregatedEffects> = talentFx.value): number {
   return combatPower(
-    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level),
+    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, fx, c.value.level.level),
   );
 }
-function equippedEnchant(slot: ItemSlot): number {
-  return char.row?.equipped?.[slot]?.enchant ?? 0;
-}
-// COMPARAISON PRINCIPALE = GRADE-FAIR (ticket 1f4de847/8314ede9) : on évalue l'objet à
-// enchant ÉGAL à la pièce équipée du slot → c'est le RANG + la QUALITÉ qui décident, pas
-// l'écart d'enchant (sinon un grade C fraîchement droppé paraît « pire » qu'un grade G déjà
-// enchanté). C'est aussi la lecture utilisée par « Tout casser » (ne casse pas un meilleur grade).
+// Puissance si `it` remplaçait la pièce du même slot. La magnitude vient du DROP (rang ×
+// qualité, bakée dans effect.value) — plus d'axe enchant → comparaison directe.
 function powerIfEquip(it: Item): number {
-  return powerAtEnchant(it, Math.max(it.enchant ?? 0, equippedEnchant(it.slot)));
+  return powerWith({ ...(char.row?.equipped ?? {}), [it.slot]: it });
 }
 
 // Estimation live du % de victoire par donjon/boss selon les stats + le stuff
 // ÉQUIPÉ actuel (Monte-Carlo seedé). Recalculé quand le perso/l'équipement change
 // → on peut swapper du gear et voir l'effet. Clé : 'd:<id>' / 'b:<id>'.
 const WINPCT_SEEDS = 40;
-const winPct = computed<Record<string, number>>(() => {
-  const stats = c.value;
-  const eq = char.row?.equipped ?? {};
-  const name = char.row?.pseudo ?? 'Toi';
-  // Le % reflète ta VRAIE puissance (stats + gear plafonné + talents) SANS les
-  // consommables (2026‑08‑12) : ils gonflaient le % affiché et faussaient la lecture
-  // « ce contenu est-il à ma portée ». Les consommables restent appliqués au run réel.
-  const fx = talentFx.value;
-  const lvl = c.value.level.level;
-  const out: Record<string, number> = {};
-  for (const d of DUNGEONS) {
+// % de victoire (Monte-Carlo seedé) — calculé À LA DEMANDE pour le DERNIER run seulement
+// (le seul consommateur est canSkipStage). Avant on simulait les 22 contenus × 40 seeds à
+// chaque changement de stuff (~880 combats, ~95 % jetés depuis que l'affichage est passé à
+// la « puissance conseillée »). `combat.ts` est pur → on peut réutiliser le combattant.
+function runWinPct(): number {
+  const p = playerWithGear(
+    char.row?.pseudo ?? 'Toi',
+    c.value,
+    char.row?.equipped ?? {},
+    talentFx.value,
+    c.value.level.level,
+  );
+  const d = lastDungeon.value;
+  if (d) {
     let w = 0;
-    for (let s = 0; s < WINPCT_SEEDS; s++) {
-      const p = playerWithGear(name, stats, eq, fx, lvl);
+    for (let s = 0; s < WINPCT_SEEDS; s++)
       if (simulateDungeon(p, dungeonFoes(d), { seed: s * 97 + 1 }).cleared) w++;
-    }
-    out['d:' + d.id] = Math.round((w / WINPCT_SEEDS) * 100);
+    return Math.round((w / WINPCT_SEEDS) * 100);
   }
-  for (const b of BOSSES) {
+  const b = lastBoss.value;
+  if (b) {
     let w = 0;
-    for (let s = 0; s < WINPCT_SEEDS; s++) {
-      const p = playerWithGear(name, stats, eq, fx, lvl);
+    for (let s = 0; s < WINPCT_SEEDS; s++)
       if (simulateCombat(p, b.combatant, { seed: s * 97 + 3, goldOnWin: 0 }).win) w++;
-    }
-    out['b:' + b.id] = Math.round((w / WINPCT_SEEDS) * 100);
+    return Math.round((w / WINPCT_SEEDS) * 100);
   }
-  return out;
-});
+  return 0;
+}
 
 // ── Récompense de connexion quotidienne ──
 const today = logicalToday();
@@ -2473,10 +2465,10 @@ function explainTalent(t: (typeof talentsView.value)[number]) {
     html: true,
     message:
       `Améliore : <b>${d.desc}</b> — actuellement <b>+${t.effLabel}</b> ` +
-      `(rang ${RARITY_LABEL[t.rarity]}${t.quality} · +${t.enchant}).<br><br>` +
-      `Comme les objets : son <b>grade (rang + qualité)</b> est fixé au drop (trouve mieux en ` +
-      `explorant plus profond) et tu montes sa puissance en l'<b>⚡ enchantant</b> ` +
-      `(parchemins 📜 / protections 🛡️, gamble).`,
+      `(rang ${RARITY_LABEL[t.rarity]}${t.quality}).<br><br>` +
+      `Son <b>rang</b> est fixé au drop (trouve mieux en explorant plus profond) ; tu montes sa ` +
+      `<b>qualité (★)</b> DANS le rang en l'<b>🔧 infusant</b> — sacrifie d'autres talents pour ` +
+      `de la poussière d'encre 🖋️, jusqu'à ★5 du rang.`,
   });
 }
 // Un talent de ce CODE est-il déjà équipé ? (loadout à effets distincts). Sert à
@@ -2836,13 +2828,7 @@ function openReport() {
 }
 // « Passer l'animation » quand la victoire était quasi acquise (≥ 90 %) — donjon
 // OU boss (mêmes règles). Le 1er passage reste animé (cf. lastRunFirstVisit).
-const canSkipStage = computed(() => {
-  const d = lastDungeon.value;
-  if (d) return (winPct.value['d:' + d.id] ?? 0) >= 90;
-  const b = lastBoss.value;
-  if (b) return (winPct.value['b:' + b.id] ?? 0) >= 90;
-  return false;
-});
+const canSkipStage = computed(() => runWinPct() >= 90);
 // Dernier lieu combattu → « Réattaquer » relance exactement le même run.
 const lastDungeon = ref<Dungeon | null>(null);
 const lastBoss = ref<MilestoneBoss | null>(null);
@@ -3652,10 +3638,7 @@ const hasEquippedGear = computed(() => SLOTS.some((s) => !!char.row?.equipped[s]
 // Puissance SI on équipe ce loadout : ses 4 objets gear + le FAMILIER actuel (non rangé).
 function loadoutPower(items: Equipped): number {
   const fam = char.row?.equipped[FAMILIAR_SLOT];
-  const eq: Equipped = { ...items, ...(fam ? { [FAMILIAR_SLOT]: fam } : {}) };
-  return combatPower(
-    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, talentFx.value, c.value.level.level),
-  );
+  return powerWith({ ...items, ...(fam ? { [FAMILIAR_SLOT]: fam } : {}) });
 }
 const loadoutsView = computed(() => {
   const los = char.row?.loadouts ?? [];

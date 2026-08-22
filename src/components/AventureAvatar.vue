@@ -22,18 +22,18 @@
 
     <!-- Aura de profil (respire) -->
     <circle class="aura" cx="60" cy="70" r="48" />
-    <!-- Aura d'ENCHANT : de plus en plus visible selon l'enchant le plus haut de
-         l'équipement (façon L2), teintée par palier, halo + anneaux + étincelles. -->
+    <!-- Aura de PUISSANCE : de plus en plus visible selon le RANG le plus haut de
+         l'équipement, teintée par palier, halo + anneaux + étincelles. -->
     <g
-      v-if="maxEnchant > 0"
+      v-if="maxRankIdx >= 0"
       class="ench-aura"
       :class="'e-' + enchTier"
       :style="{ '--ei': enchIntensity }"
     >
-      <circle class="ench-glow" cx="60" cy="72" :r="40 + maxEnchant * 1.8" />
-      <circle class="ench-ring" cx="60" cy="72" :r="44 + maxEnchant * 1.4" />
-      <circle class="ench-ring r2" cx="60" cy="72" :r="50 + maxEnchant * 1.2" />
-      <g v-if="maxEnchant >= 8" class="ench-sparks">
+      <circle class="ench-glow" cx="60" cy="72" :r="40 + maxRankIdx * 2.4" />
+      <circle class="ench-ring" cx="60" cy="72" :r="44 + maxRankIdx * 1.9" />
+      <circle class="ench-ring r2" cx="60" cy="72" :r="50 + maxRankIdx * 1.6" />
+      <g v-if="maxRankIdx >= 7" class="ench-sparks">
         <circle class="spark" cx="60" cy="20" r="2" />
         <circle class="spark" cx="100" cy="72" r="2" />
         <circle class="spark" cx="20" cy="72" r="2" />
@@ -178,6 +178,7 @@ import {
   SLOT_LABEL,
   FAMILIAR_SLOT,
   RANK_COLOR,
+  RANK_ORDER,
   type Equipped,
   type ItemSlot,
   type Rarity,
@@ -199,16 +200,20 @@ const gear = computed(() => ({
   accessory: props.equipped.accessory,
   relic: props.equipped.relic,
 }));
-// Enchant le PLUS HAUT parmi l'équipement (les 4 slots gear) → pilote l'aura d'enchant.
-const maxEnchant = computed(() => {
-  let m = 0;
-  for (const slot of SLOTS) m = Math.max(m, props.equipped[slot]?.enchant ?? 0);
-  return m;
+// RANG le plus haut parmi l'équipement (les 4 slots gear) → pilote l'aura de puissance.
+// (Remplace l'ancien pilotage par l'enchant, retiré : l'aura suit maintenant le grade.)
+const maxRankIdx = computed(() => {
+  let m = -1;
+  for (const slot of SLOTS) {
+    const r = props.equipped[slot]?.rarity;
+    if (r) m = Math.max(m, RANK_ORDER.indexOf(r));
+  }
+  return m; // -1 si nu, sinon 0 (G) … 9 (SSS)
 });
-const enchIntensity = computed(() => Math.min(1, maxEnchant.value / 12));
+const enchIntensity = computed(() => Math.min(1, Math.max(0, maxRankIdx.value) / 9));
 const enchTier = computed(() => {
-  if (maxEnchant.value >= 9) return 'high';
-  return maxEnchant.value >= 4 ? 'mid' : 'low';
+  if (maxRankIdx.value >= 7) return 'high'; // S / SS / SSS
+  return maxRankIdx.value >= 4 ? 'mid' : 'low'; // C / B / A
 });
 // Compagnon (familier équipé) : emoji + teinte de la race, s'il y en a un.
 const companion = computed(() => {

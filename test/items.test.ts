@@ -34,9 +34,6 @@ import {
   type Item,
   type Equipped,
   enchantMult,
-  enchantSuccessRate,
-  canEnchant,
-  attemptEnchant,
   ENCHANT_MAX,
 } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
@@ -505,55 +502,11 @@ describe('swapLoadoutGear — ranger / échanger un set (4 slots gear, familier 
   });
 });
 
-describe('enchant (moteur L2) — étape 1', () => {
+describe('enchant — vestige de migration (moteur retiré, ticket 7acb1e7c)', () => {
   it('enchantMult : croît linéairement, plafonné au cap FIXE', () => {
     expect(enchantMult(0)).toBe(1);
     expect(enchantMult(3)).toBeCloseTo(1.99, 2); // zone sûre garantie ≈ ×2 (baseline)
     expect(enchantMult(5)).toBeGreaterThan(enchantMult(3));
     expect(enchantMult(ENCHANT_MAX + 5)).toBe(enchantMult(ENCHANT_MAX)); // clampé
-  });
-  it('canEnchant : possible tant qu’on n’est pas au cap FIXE', () => {
-    expect(canEnchant(0)).toBe(true);
-    expect(canEnchant(ENCHANT_MAX - 1)).toBe(true);
-    expect(canEnchant(ENCHANT_MAX)).toBe(false);
-  });
-  it('enchantSuccessRate : +1 garanti, DÉGRESSIF dès +2, plancher > 0', () => {
-    expect(enchantSuccessRate(0)).toBe(1); // atteindre +1 = garanti
-    expect(enchantSuccessRate(1)).toBeLessThan(1); // atteindre +2 = dégressif (ticket cc4f2e2d)
-    expect(enchantSuccessRate(2)).toBeLessThan(enchantSuccessRate(1)); // continue de décroître
-    expect(enchantSuccessRate(6)).toBeLessThan(enchantSuccessRate(4));
-    expect(enchantSuccessRate(50)).toBeGreaterThan(0); // jamais 0 → toujours tentable
-  });
-  it('attemptEnchant : réussite → +1', () => {
-    // rng qui renvoie 0 → toujours < taux → réussite garantie.
-    const r = attemptEnchant(() => 0, 5, false);
-    expect(r.success).toBe(true);
-    expect(r.enchant).toBe(6);
-    expect(r.resetTo0).toBe(false);
-  });
-  it('attemptEnchant : +1 garanti (rng défavorable → succès quand même)', () => {
-    const r = attemptEnchant(() => 0.999, 0, false); // atteindre +1 = 100 %
-    expect(r.success).toBe(true);
-    expect(r.enchant).toBe(1);
-  });
-  it('attemptEnchant : échec en zone SANS RESET (≤ +3) → reste, pas de +0', () => {
-    const r = attemptEnchant(() => 0.999, 2, false); // +2 : dégressif → échec, mais pas de reset
-    expect(r.success).toBe(false);
-    expect(r.enchant).toBe(2); // reste (échec hors zone de danger)
-    expect(r.resetTo0).toBe(false);
-  });
-  it('attemptEnchant : échec en DANGER non protégé → +0', () => {
-    const r = attemptEnchant(() => 0.999, 8, false); // +8 : taux < 1 → échec
-    expect(r.success).toBe(false);
-    expect(r.enchant).toBe(0);
-    expect(r.resetTo0).toBe(true);
-    expect(r.protectionUsed).toBe(false);
-  });
-  it('attemptEnchant : échec en DANGER PROTÉGÉ → conserve l’enchant, consomme la protection', () => {
-    const r = attemptEnchant(() => 0.999, 8, true);
-    expect(r.success).toBe(false);
-    expect(r.enchant).toBe(8); // conservé
-    expect(r.resetTo0).toBe(false);
-    expect(r.protectionUsed).toBe(true);
   });
 });
