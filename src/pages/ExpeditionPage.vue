@@ -443,7 +443,6 @@ import {
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
-import { voiePreferred, type VoieId } from '@/lib/voies';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
@@ -547,8 +546,6 @@ const canStart = computed(
 
 // ── Ladder de paliers : chaque palier se débloque en nettoyant le précédent. ──
 const clearedSet = computed(() => char.row?.cleared_dungeons ?? []);
-// Stats privilégiées par la voie (biais des drops du Labyrinthe).
-const voiePref = computed(() => voiePreferred(char.row?.voie as VoieId | null));
 const tiers = computed(() =>
   LABYRINTHS.map((l) => ({
     laby: l,
@@ -843,7 +840,6 @@ function openChest(id: number) {
       level,
       luck,
       spread: 1,
-      preferred: voiePref.value,
     });
   const item = drop ? { ...drop, id: crypto.randomUUID() } : null;
   dust.value += 3 + grade.dustBonus;
@@ -899,7 +895,6 @@ function openVault(id: number) {
       defeated: 1,
       level: runDropLevel() + 2,
       luck: Math.min(1, runLuck() + 0.35),
-      preferred: voiePref.value,
     });
     if (d && (!best || RARITY_RANK[d.rarity] > RARITY_RANK[best.rarity])) best = d;
   }
@@ -1063,7 +1058,6 @@ function rollTreasure(): Item | null {
       level: lvl,
       luck,
       spread: 0,
-      preferred: voiePref.value,
     });
     if (cand && (!best || tierIndexOf(cand) > tierIndexOf(best))) best = cand;
   }
@@ -1270,7 +1264,6 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
       const fam = rollActivityFamiliar(famRng, {
         level: runDropLevel(),
         luck: runLuck(),
-        preferred: voiePref.value,
       });
       loot.value.push({ ...fam, id: crypto.randomUUID() });
       gameFx.celebrate({

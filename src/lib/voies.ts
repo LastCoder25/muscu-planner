@@ -55,11 +55,6 @@ export const VOIES: Voie[] = [
 
 export const VOIE_BY_ID: Record<string, Voie> = Object.fromEntries(VOIES.map((v) => [v.id, v]));
 
-/** Types de stats préférés d'une voie (vide si aucune voie) → biais de drop. */
-export function voiePreferred(voie: VoieId | null | undefined): EffectType[] {
-  return voie ? (VOIE_BY_ID[voie]?.preferred ?? []) : [];
-}
-
 /** Passif d'une voie sous forme d'agrégat d'effets (vide si aucune voie). */
 export function voiePassiveEffects(voie: VoieId | null | undefined): AggregatedEffects {
   const v = voie ? VOIE_BY_ID[voie] : undefined;

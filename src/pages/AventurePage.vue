@@ -2067,7 +2067,7 @@ import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
 import { BOSSES, bossSummonCost, type MilestoneBoss } from '@/data/bosses';
 import { recommendedPower } from '@/lib/proceduralContent';
-import { VOIES, VOIE_BY_ID, voiePreferred, voiePassiveEffects, type VoieId } from '@/lib/voies';
+import { VOIES, VOIE_BY_ID, voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { endlessFoe, endlessEnergy, endlessGold, endlessDropLevel } from '@/data/endless';
 import {
   playerWithGear,
@@ -2293,8 +2293,6 @@ const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
 const activeFx = computed(() =>
   mergeEffects(talentFx.value, voiePassiveEffects(char.row?.voie as VoieId | null)),
 );
-// Stats privilégiées par la voie (biais des drops génériques).
-const voiePref = computed(() => voiePreferred(char.row?.voie as VoieId | null));
 // ── Voie (spécialisation) : sélecteur + libellés ──
 const voieOpen = ref(false);
 const currentVoie = computed(() => VOIES.find((v) => v.id === char.row?.voie) ?? null);
@@ -3193,7 +3191,6 @@ async function explore(d: Dungeon) {
       level: d.dropLevel,
       spread: 1, // le donjon peut lâcher un cran sous son niveau (fourrage à upgrader)
       luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
-      preferred: voiePref.value, // biais de spécialisation (voie)
     });
     if (rolled) {
       const dr: Item = { ...rolled, id: crypto.randomUUID() };
@@ -3217,7 +3214,6 @@ async function explore(d: Dungeon) {
               level: d.dropLevel,
               luck: d.dropLuck,
               idSeed: seed,
-              preferred: voiePref.value,
             }),
           ])
         : [];
@@ -3388,7 +3384,6 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
           level: b.dropLevel,
           luck,
           rollFloor,
-          preferred: voiePref.value,
         });
       const p = d ?? rollSetPiece(rng, setOpts);
       out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
@@ -3457,7 +3452,6 @@ async function fightBoss(b: MilestoneBoss) {
               level: b.dropLevel,
               luck: 0.6,
               idSeed: seed,
-              preferred: voiePref.value,
             }),
           ])
         : [];
@@ -3574,7 +3568,6 @@ async function fightEndless() {
           defeated: 1,
           level: endlessDropLevel(tier),
           luck: Math.min(1, 0.6 + (lucky ? 0.4 : 0)),
-          preferred: voiePref.value,
         });
       }
       if (rolled) {

@@ -8,7 +8,7 @@
 // poussière), droppées dans les mêmes lieux que les familiers (Labyrinthe + un peu
 // partout). Le compagnon s'affiche à côté du personnage (AventureAvatar).
 
-import { rollFamiliar, weightedPick, VOIE_WEIGHT, type EffectType, type Item } from '@/lib/items';
+import { rollFamiliar, type EffectType, type Item } from '@/lib/items';
 
 // Biomes = lieu d'obtention privilégié (thématise le drop du trésor de Labyrinthe /
 // des régions). `any` = peut tomber n'importe où (voie diffuse par pierres).
@@ -95,17 +95,10 @@ export function familiarSpecies(id: string): FamiliarSpecies | undefined {
 
 /** Choisit une race : privilégie le `biome` du lieu (Labyrinthe/région), sinon au
  *  hasard. `rng` déterministe (pas de Math.random ici → testable). */
-export function pickFamiliarSpecies(
-  rng: () => number,
-  biome?: FamiliarBiome,
-  preferred?: EffectType[],
-): FamiliarSpecies {
+export function pickFamiliarSpecies(rng: () => number, biome?: FamiliarBiome): FamiliarSpecies {
   const pool = biome ? FAMILIAR_SPECIES.filter((s) => s.biome === biome) : FAMILIAR_SPECIES;
   const arr = pool.length ? pool : FAMILIAR_SPECIES;
-  // Biais DOUX de voie : les races dont le bonus est privilégié tombent + souvent (toutes
-  // restent possibles → familiers variés, la voie oriente juste vers ton build).
-  if (preferred?.length)
-    return weightedPick(rng, arr, (s) => (preferred.includes(s.effect) ? VOIE_WEIGHT : 1));
+  // Tirage UNIFORME (toutes les races/voies équitablement — la voie n'oriente pas les drops).
   return arr[Math.floor(rng() * arr.length)]!;
 }
 
@@ -113,9 +106,9 @@ export function pickFamiliarSpecies(
  *  la roule au niveau/chance donnés. Utilisé par le butin des activités. */
 export function rollActivityFamiliar(
   rng: () => number,
-  opts: { level: number; luck?: number; biome?: FamiliarBiome; preferred?: EffectType[] },
+  opts: { level: number; luck?: number; biome?: FamiliarBiome },
 ): Omit<Item, 'id'> {
-  return rollFamiliar(rng, pickFamiliarSpecies(rng, opts.biome, opts.preferred), {
+  return rollFamiliar(rng, pickFamiliarSpecies(rng, opts.biome), {
     level: opts.level,
     ...(opts.luck !== undefined ? { luck: opts.luck } : {}),
   });

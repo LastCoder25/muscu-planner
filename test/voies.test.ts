@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { VOIES, VOIE_BY_ID, voiePreferred, voiePassiveEffects } from '@/lib/voies';
+import { VOIES, VOIE_BY_ID, voiePassiveEffects } from '@/lib/voies';
 
 describe('voies (spécialisation)', () => {
   it('catalogue cohérent : id unique, preferred non vide, passif défini', () => {
@@ -10,11 +10,6 @@ describe('voies (spécialisation)', () => {
       expect(v.passive.base).toBeGreaterThan(0);
       expect(VOIE_BY_ID[v.id]).toBe(v);
     }
-  });
-  it('voiePreferred : stats de la voie, vide si aucune', () => {
-    expect(voiePreferred('berserker')).toContain('damage_pct');
-    expect(voiePreferred(null)).toEqual([]);
-    expect(voiePreferred(undefined)).toEqual([]);
   });
   it('voiePassiveEffects : applique le passif (fraction), neutre si aucune voie', () => {
     const berserk = voiePassiveEffects('berserker'); // +6% dégâts
