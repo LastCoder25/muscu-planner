@@ -565,6 +565,7 @@ export function rollDrop(
     spread?: number;
     luck?: number;
     rollFloor?: number; // 0..1 : plancher de qualité de roll (Autel des boss) → meilleures étoiles
+    preferred?: EffectType[]; // biais de VOIE : privilégie ces stats si dispo dans le slot
   },
 ): Omit<Item, 'id'> | null {
   if (opts.defeated <= 0) return null;
@@ -581,7 +582,11 @@ export function rollDrop(
   // Pool de stats PROGRESSIF : au début, seules les stats basiques (dégâts/PV)
   // tombent ; les stats exotiques se débloquent en montant (cf. EFFECT_MIN_LEVEL).
   const pool = availableEffects(slot, lvl);
-  const chosen = pick(rng, pool);
+  // BIAIS DE VOIE (ticket spé) : si une voie privilégie des stats présentes dans ce slot,
+  // on tire dans ce sous-pool ~70 % du temps → tes drops soutiennent ton archétype (sans
+  // exclure les autres : la variété/le hasard restent). Sinon pool normal.
+  const pref = opts.preferred?.length ? pool.filter((e) => opts.preferred!.includes(e.type)) : [];
+  const chosen = pref.length && rng() < 0.7 ? pick(rng, pref) : pick(rng, pool);
   // value = base × RANG × QUALITÉ. La PROFONDEUR est encodée par le RANG (gate) → plus
   // de multiplicateur de magnitude par niveau ici (sinon deux objets même rang mais
   // profondeurs différentes auraient des valeurs différentes → chevauchement).
@@ -976,6 +981,32 @@ function applyEffect(a: AggregatedEffects, type: EffectType, v: number): void {
       a.thornsPct += v;
       break;
   }
+}
+
+/** Agrégat ne contenant qu'un effet (pct → fraction) — pour un passif ponctuel (ex. Voie). */
+export function effectAsAggregate(type: EffectType, pct: number): AggregatedEffects {
+  const a = emptyEffects();
+  applyEffect(a, type, pct / 100);
+  return a;
+}
+/** Somme de plusieurs agrégats d'effets (réduction de dégâts NON re-plafonnée ici : le
+ *  plafond 50 % est appliqué en aval par playerWithGear). */
+export function mergeEffects(...list: AggregatedEffects[]): AggregatedEffects {
+  const a = emptyEffects();
+  for (const e of list) {
+    a.damagePct += e.damagePct;
+    a.critAdd += e.critAdd;
+    a.dodgeAdd += e.dodgeAdd;
+    a.lifesteal += e.lifesteal;
+    a.dmgReduction += e.dmgReduction;
+    a.maxPvPct += e.maxPvPct;
+    a.goldPct += e.goldPct;
+    a.executePct += e.executePct;
+    a.ragePct += e.ragePct;
+    a.momentumPct += e.momentumPct;
+    a.thornsPct += e.thornsPct;
+  }
+  return a;
 }
 
 // ── Sets d'équipement (bonus à 2 / 3 / 4 pièces) ──

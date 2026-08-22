@@ -94,6 +94,7 @@ export interface CharacterRow {
   buildings: Building[]; // filons de production passive (village)
   set_pieces_seen: Record<string, string[]>; // codex : slots de set déjà obtenus par setId
   loadouts: Loadout[]; // sets d'équipement rangés (max 3, migr. 0051)
+  voie: string | null; // spécialisation/archétype choisi (migr. 0055 ; null = aucune)
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -112,7 +113,7 @@ export const useCharacterStore = defineStore('character', () => {
   const loaded = ref(false);
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -168,6 +169,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.ink_dust !== 'number') r.ink_dust = 0; // poussière d'encre (migr. 0053)
     if (typeof r.enchant_scrolls !== 'number') r.enchant_scrolls = 0; // migr. 0054
     if (typeof r.protections !== 'number') r.protections = 0; // migr. 0054
+    if (r.voie === undefined) r.voie = null; // migr. 0055 (spécialisation)
     if (!r.expedition || typeof r.expedition !== 'object') r.expedition = null;
     if (!r.expedition_map || typeof r.expedition_map !== 'object') r.expedition_map = null;
     return r;
@@ -732,6 +734,12 @@ export const useCharacterStore = defineStore('character', () => {
     return gold;
   }
 
+  // Choisit/retire la VOIE (spécialisation) — biaise les drops + petit passif. Réversible.
+  async function setVoie(userId: string, voie: string | null) {
+    if (!row.value) return;
+    await persistOptimistic(userId, { voie });
+  }
+
   // OPTIMISEUR D'ÉQUIPEMENT (ticket 6d69c2fc) : équipe d'un coup la meilleure combinaison
   // des 4 slots de gear (sets inclus) trouvée dans l'équipé + le sac ; les objets écartés
   // retournent au sac. Le familier n'est pas touché. Renvoie true si quelque chose a changé.
@@ -924,6 +932,7 @@ export const useCharacterStore = defineStore('character', () => {
     unpackLoadout,
     sellLoadout,
     optimizeGear,
+    setVoie,
     equipReplacing,
     unequip,
     equipTalent,

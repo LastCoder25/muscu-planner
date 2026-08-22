@@ -363,7 +363,65 @@
             Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
             effets (→).
           </div>
+
+          <!-- VOIE (spécialisation) : oriente les drops + petit passif. Réversible. -->
+          <div class="sec-title" style="margin-top: 16px">
+            🧭 Voie <span class="sec-hint">— spécialisation</span>
+          </div>
+          <button class="voie-card" @click="voieOpen = true">
+            <template v-if="currentVoie">
+              <span class="vc-emo">{{ currentVoie.emoji }}</span>
+              <div class="vc-main">
+                <div class="vc-name font-display">{{ currentVoie.name }}</div>
+                <div class="vc-blurb">{{ currentVoie.blurb }}</div>
+              </div>
+            </template>
+            <template v-else>
+              <span class="vc-emo">➕</span>
+              <div class="vc-main">
+                <div class="vc-name font-display">Choisir une voie</div>
+                <div class="vc-blurb">Oriente tes drops vers un archétype (+ petit passif).</div>
+              </div>
+            </template>
+            <span class="vc-go">›</span>
+          </button>
         </template>
+
+        <!-- Sélecteur de VOIE -->
+        <q-dialog v-model="voieOpen" position="bottom">
+          <q-card class="adv-modal">
+            <button class="adv-modal-x" aria-label="Fermer" @click="voieOpen = false">✕</button>
+            <div class="sec-title">🧭 Choisis ta voie</div>
+            <div class="sec-hint">
+              Ta voie <b>oriente tes drops</b> vers ses stats (les autres tombent moins souvent) et
+              ajoute un <b>petit passif</b>. Changement libre à tout moment.
+            </div>
+            <div class="voie-list">
+              <button
+                v-for="v in VOIES"
+                :key="v.id"
+                class="voie-opt"
+                :class="{ on: char.row.voie === v.id }"
+                @click="doSetVoie(v.id)"
+              >
+                <span class="vo-emo">{{ v.emoji }}</span>
+                <div class="vo-main">
+                  <div class="vo-name font-display">
+                    {{ v.name }}
+                    <span v-if="char.row.voie === v.id" class="vo-eq">✓ Active</span>
+                  </div>
+                  <div class="vo-blurb">{{ v.blurb }}</div>
+                  <div class="vo-stats">
+                    Stats : {{ voieStatsLabel(v.id) }} · passif {{ voiePassiveLabel(v.id) }}
+                  </div>
+                </div>
+              </button>
+            </div>
+            <button v-if="char.row.voie" class="voie-clear" @click="doSetVoie(null)">
+              Retirer ma voie (drops génériques)
+            </button>
+          </q-card>
+        </q-dialog>
 
         <q-dialog v-model="talentsOpen" position="bottom">
           <q-card class="adv-modal">
@@ -2009,12 +2067,14 @@ import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
 import { BOSSES, bossSummonCost, type MilestoneBoss } from '@/data/bosses';
 import { recommendedPower } from '@/lib/proceduralContent';
+import { VOIES, VOIE_BY_ID, voiePreferred, voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { endlessFoe, endlessEnergy, endlessGold, endlessDropLevel } from '@/data/endless';
 import {
   playerWithGear,
   aggregateEffects,
   rollDrop,
   rollSetPiece,
+  mergeEffects,
   effectLabelFor,
   setTierLabel,
   rollStars,
@@ -2228,13 +2288,46 @@ const c = computed(() =>
 );
 // Effets cumulés des talents choisis.
 const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
-// Combattant complet (stats + équipement + talents) → puissance de combat affichée.
+// Effets « hors équipement » actifs = talents + PASSIF DE VOIE (spécialisation) → comptés
+// partout dans le combat/la puissance (fighter, powerWith, winPct, runExtra).
+const activeFx = computed(() =>
+  mergeEffects(talentFx.value, voiePassiveEffects(char.row?.voie as VoieId | null)),
+);
+// Stats privilégiées par la voie (biais des drops génériques).
+const voiePref = computed(() => voiePreferred(char.row?.voie as VoieId | null));
+// ── Voie (spécialisation) : sélecteur + libellés ──
+const voieOpen = ref(false);
+const currentVoie = computed(() => VOIES.find((v) => v.id === char.row?.voie) ?? null);
+function doSetVoie(id: VoieId | null) {
+  withUid((uid) => char.setVoie(uid, id), 'Impossible de changer de voie.');
+  voieOpen.value = false;
+}
+const EFFECT_SHORT: Record<string, string> = {
+  damage_pct: 'dégâts',
+  crit_pct: 'crit',
+  lifesteal_pct: 'vol de vie',
+  dmg_reduction_pct: 'réduction',
+  max_pv_pct: 'PV',
+  gold_pct: 'or',
+  execute_pct: 'exécution',
+  rage_pct: 'rage',
+  momentum_pct: 'élan',
+  thorns_pct: 'épines',
+};
+function voieStatsLabel(id: VoieId): string {
+  return (VOIE_BY_ID[id]?.preferred ?? []).map((t) => EFFECT_SHORT[t] ?? t).join(' / ');
+}
+function voiePassiveLabel(id: VoieId): string {
+  const p = VOIE_BY_ID[id]?.passive;
+  return p ? `+${p.base}% ${EFFECT_SHORT[p.type] ?? p.type}` : '';
+}
+// Combattant complet (stats + équipement + talents + voie) → puissance de combat affichée.
 const fighter = computed(() =>
   playerWithGear(
     char.row?.pseudo ?? 'Toi',
     c.value,
     char.row?.equipped ?? {},
-    talentFx.value,
+    activeFx.value,
     c.value.level.level,
   ),
 );
@@ -2325,7 +2418,7 @@ const pctA = (x?: number) => Math.round((x ?? 0) * 100) + '%';
 // Puissance de combat avec un ensemble d'équipement donné (+ effets extra = talents).
 // Helper UNIQUE derrière toutes les comparaisons (objet/familier/talent/loadout) → plus de
 // plomberie pseudo/niveau/talentFx dupliquée (revue /simplify).
-function powerWith(eq: Equipped, fx: Partial<AggregatedEffects> = talentFx.value): number {
+function powerWith(eq: Equipped, fx: Partial<AggregatedEffects> = activeFx.value): number {
   return combatPower(
     playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, fx, c.value.level.level),
   );
@@ -2349,7 +2442,7 @@ function runWinPct(): number {
     char.row?.pseudo ?? 'Toi',
     c.value,
     char.row?.equipped ?? {},
-    talentFx.value,
+    activeFx.value,
     c.value.level.level,
   );
   const d = lastDungeon.value;
@@ -2417,7 +2510,7 @@ async function claimLogin() {
 // PV bonus (équipement + talents) — affiché à titre indicatif.
 const bonusPv = computed(() => {
   if (!char.row) return 0;
-  const pct = aggregateEffects(char.row.equipped).maxPvPct + talentFx.value.maxPvPct;
+  const pct = aggregateEffects(char.row.equipped).maxPvPct + activeFx.value.maxPvPct;
   return Math.round(c.value.pv * pct);
 });
 
@@ -2932,7 +3025,7 @@ function itemState(it: { dungeon?: Dungeon; boss?: MilestoneBoss }): 'done' | 'a
 // été retirés — code inatteignable). `lucky` conservé (toujours false) pour la signature
 // des runs (drops / récompenses de boss).
 function runExtra(): { extra: AggregatedEffects; lucky: boolean } {
-  return { extra: { ...talentFx.value }, lucky: false };
+  return { extra: { ...activeFx.value }, lucky: false }; // talents + passif de voie
 }
 
 // Butin géré directement dans la carte de résultat (pas de va-et-vient vers le sac).
@@ -3100,6 +3193,7 @@ async function explore(d: Dungeon) {
       level: d.dropLevel,
       spread: 1, // le donjon peut lâcher un cran sous son niveau (fourrage à upgrader)
       luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
+      preferred: voiePref.value, // biais de spécialisation (voie)
     });
     if (rolled) {
       const dr: Item = { ...rolled, id: crypto.randomUUID() };
@@ -3283,7 +3377,14 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
     } else if (roll < 0.8) {
       let d: ReturnType<typeof rollDrop> = null;
       for (let i = 0; i < 5 && !d; i++)
-        d = rollDrop(rng, { cleared: true, defeated: 1, level: b.dropLevel, luck, rollFloor });
+        d = rollDrop(rng, {
+          cleared: true,
+          defeated: 1,
+          level: b.dropLevel,
+          luck,
+          rollFloor,
+          preferred: voiePref.value,
+        });
       const p = d ?? rollSetPiece(rng, setOpts);
       out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
     } else {
@@ -3463,6 +3564,7 @@ async function fightEndless() {
           defeated: 1,
           level: endlessDropLevel(tier),
           luck: Math.min(1, 0.6 + (lucky ? 0.4 : 0)),
+          preferred: voiePref.value,
         });
       }
       if (rolled) {
@@ -4753,6 +4855,100 @@ onUnmounted(() => {
 .cmp-pill.down {
   color: var(--d4);
   background: color-mix(in srgb, var(--d4) 18%, transparent);
+}
+/* Voie (spécialisation) */
+.voie-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.voie-card:active {
+  transform: scale(0.99);
+}
+.vc-emo {
+  font-size: 26px;
+}
+.vc-main {
+  flex: 1;
+  min-width: 0;
+}
+.vc-name {
+  font-weight: 700;
+  font-size: 15px;
+}
+.vc-blurb {
+  font-size: 12px;
+  color: var(--dim);
+}
+.vc-go {
+  color: var(--dim);
+  font-size: 22px;
+}
+.voie-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.voie-opt {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.voie-opt.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.vo-emo {
+  font-size: 24px;
+}
+.vo-main {
+  flex: 1;
+  min-width: 0;
+}
+.vo-name {
+  font-weight: 700;
+  font-size: 14.5px;
+}
+.vo-eq {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--accent);
+}
+.vo-blurb {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 2px 0;
+}
+.vo-stats {
+  font-size: 11.5px;
+  color: var(--text);
+}
+.voie-clear {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-size: 12.5px;
+  cursor: pointer;
 }
 .tal-xp {
   height: 4px;
