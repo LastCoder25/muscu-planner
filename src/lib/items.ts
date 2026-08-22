@@ -463,7 +463,7 @@ export function cappedDropLevel(contentLevel: number, playerLevel?: number): num
   return playerLevel == null ? contentLevel : Math.min(contentLevel, playerLevel + LEVEL_MARGIN);
 }
 /** CRAN de grade MAX DROPPABLE (0..49 = rang×5 + qualité−1) à un niveau donné = rang √-gaté,
- *  qualité 5. (L'infusion, elle, plafonne à ★5 du rang de DROP — cf. `gradeCapForTier`.) */
+ *  qualité 5. (Talents/familiers sont des drops purs — plus d'infusion de grade.) */
 export function maxGradeCran(level: number): number {
   return rankCeilingForLevel(level) * 5 + 4;
 }
@@ -773,94 +773,6 @@ export function rollFamiliar(
 /** Tier 0..49 d'un familier/objet = rang×5 + (qualité−1). */
 export function tierIndexOf(it: { rarity: Rarity; roll?: number }): number {
   return rankIndex(it.rarity) * 5 + (Math.max(1, rollStars(it.roll)) - 1);
-}
-// ── Infusion de grade (talents & familiers), modèle « polissage de qualité » (2026‑08‑21) ──
-// L'infusion ne fait plus QUE monter la QUALITÉ à l'intérieur du rang de DROP (★1→★5) ; le
-// RANG vient uniquement des drops (contenu plus profond). Coûts/gains adossés à la valeur
-// d'un cran (RARITY_MULT × qualité) avec une PERTE 2:1 : bâtir ★1→★5 coûte 200 mais un ★5
-// sacrifié ne rend que ~la moitié → pas d'infusion sans perte (on nourrit un gardé avec du
-// surplus, on ne recycle jamais un objet monté pour du profit).
-const QUALITY_STEP_COST = [30, 45, 60, 65]; // ★1→2, ★2→3, ★3→4, ★4→5 (cumul = 200, à mult 1)
-const QUALITY_BUILD = [0, 30, 75, 135, 200]; // coût cumulé de build par qualité (★1..★5)
-const RECYCLE_FLOOR = 15; // gain plancher d'un ★1 brut (matière première)
-const RECYCLE_LOSS = 0.5; // on ne récupère que la moitié de l'investissement qualité
-
-/** Plafond de cran atteignable par infusion = ★5 du rang COURANT (= rang de drop, car
- *  l'infusion ne franchit jamais un rang). `floor(tier/5)*5 + 4`. */
-export function gradeCapForTier(tier: number): number {
-  return Math.floor(Math.max(0, tier) / 5) * 5 + 4;
-}
-/** Coût (ink_dust/fragments) d'UN pas de qualité depuis `tier`, scalé par le rang (polir un
- *  rang haut coûte plus). ★5 (plafond) → renvoie le coût du dernier pas (jamais dépensé : le
- *  garde-fou de plafond bloque avant). */
-export function gradeStepCost(tier: number): number {
-  const t = Math.max(0, tier);
-  const p = t % 5; // 0..4 = position de qualité (0 = ★1)
-  const step = QUALITY_STEP_COST[Math.min(3, p)]!;
-  return Math.round(step * RARITY_MULT[RANK_ORDER[Math.floor(t / 5)]!]);
-}
-/** XP d'infusion rendue en RECYCLANT un talent/familier de `tier` = plancher + moitié de son
- *  investissement qualité, scalé par le rang. → perte 2:1 vs le coût de build. */
-export function gradeRecycleYield(tier: number): number {
-  const t = Math.max(0, tier);
-  const q = t % 5; // 0..4 = qualité-1
-  return Math.round(
-    RARITY_MULT[RANK_ORDER[Math.floor(t / 5)]!] *
-      (RECYCLE_FLOOR + RECYCLE_LOSS * QUALITY_BUILD[q]!),
-  );
-}
-/** XP d'infusion qu'un familier SACRIFIÉ rend (valeur du cran, perte 2:1). */
-export function familiarInfuseXp(fam: { rarity: Rarity; roll?: number }): number {
-  return gradeRecycleYield(tierIndexOf(fam));
-}
-/** Coût en fragments d'un pas de GRADE (qualité) d'un familier — cf. `gradeStepCost`. */
-export function tierStepCost(tier: number): number {
-  return gradeStepCost(tier);
-}
-/** XP totale déjà accumulée + le seuil du prochain pas → barre de progression. */
-export function familiarTierProgress(fam: Item): { xp: number; cost: number } {
-  return { xp: fam.fxp ?? 0, cost: tierStepCost(tierIndexOf(fam)) };
-}
-/** Applique `addXp` d'infusion à un familier : monte son tier (qualité → rang),
- *  plafonné au rang d'index `maxRankIndex` (Incubateur). La magnitude de l'effet
- *  (et de la signature) est re-scalée par le ratio des multiplicateurs de tier →
- *  un familier infusé = un familier droppé au même tier. Renvoie le familier à jour. */
-export function infuseFamiliar(fam: Item, addXp: number, maxTierIndex: number): Item {
-  let fxp = (fam.fxp ?? 0) + Math.max(0, addXp);
-  let rank = fam.rarity;
-  let quality = Math.max(1, rollStars(fam.roll));
-  let effVal = fam.effect.value;
-  let eff2Val = fam.effect2?.value;
-  const cap = Math.min(49, maxTierIndex); // CRAN max débloqué par l'Incubateur (rang+qualité)
-  for (;;) {
-    const tier = rankIndex(rank) * 5 + (quality - 1);
-    if (tier >= cap) break; // cran cible non débloqué (ou SSS★5 max)
-    const nextRankIdx = Math.floor((tier + 1) / 5);
-    const cost = tierStepCost(tier);
-    if (fxp < cost) break;
-    fxp -= cost;
-    const oldMult = RARITY_MULT[rank] * starQualityMult(quality);
-    rank = RANK_ORDER[nextRankIdx]!;
-    quality = ((tier + 1) % 5) + 1;
-    const ratio = (RARITY_MULT[rank] * starQualityMult(quality)) / oldMult;
-    // Valeur gardée en FLOAT (pas d'arrondi par pas) : un pas de qualité (+2,5 %) est petit et
-    // s'arrondissait à « aucun changement » sur les petites stats → la valeur restait BLOQUÉE
-    // (ticket 71dfd9da). En float, chaque pas s'accumule (visible sur la puissance de combat).
-    effVal = Math.max(1, effVal * ratio);
-    if (eff2Val != null) eff2Val = Math.max(1, eff2Val * ratio);
-  }
-  return {
-    ...fam,
-    rarity: rank,
-    roll: (quality - 0.5) / 5,
-    fxp,
-    // Accumulation en float (anti-blocage), mais valeur FINALE à 1 décimale comme un drop
-    // (`round1`) → un familier infusé ≈ un familier droppé au même tier (ticket cohérence).
-    effect: { ...fam.effect, value: round1(effVal) },
-    ...(fam.effect2 && eff2Val != null
-      ? { effect2: { ...fam.effect2, value: round1(eff2Val) } }
-      : {}),
-  };
 }
 
 // ── Atelier de poussière (dust sinks) : forge / reroll / craft de set ──

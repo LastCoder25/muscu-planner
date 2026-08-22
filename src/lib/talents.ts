@@ -10,8 +10,6 @@ import {
   starQualityMult,
   rollTier,
   cappedDropLevel,
-  gradeStepCost,
-  gradeRecycleYield,
   type AggregatedEffects,
   type Rarity,
 } from './items';
@@ -203,18 +201,7 @@ export function talentsEarned(playerLevel: number): number {
   return Math.floor(playerLevel / 5);
 }
 
-// ── INFUSION DE GRADE (2026‑08‑20) : recycler les talents en trop → POUSSIÈRE D'ENCRE,
-// dépensée pour monter la QUALITÉ (★1→★5) d'un talent gardé DANS son rang de drop (le rang
-// vient des drops). Coûts/gains partagés avec les familiers (`gradeStepCost`/`gradeRecycleYield`,
-// perte 2:1). Plafond = ★5 du rang de drop (`gradeCapForTier`). L'enchant (+N) reste à part. ──
-/** Coût en poussière d'encre pour infuser +1 cran de qualité depuis le tier `tier`. */
-export function talentTierStepCost(tier: number): number {
-  return gradeStepCost(tier);
-}
-/** Poussière d'encre rendue en RECYCLANT un talent (valeur du cran, perte 2:1). */
-export function talentRecycleYield(inst: TalentInstance): number {
-  return gradeRecycleYield(talentTier(inst.xp));
-}
+// (Infusion de grade retirée, ticket 0ec48637 : talents = drops purs, vendus en or.)
 
 // ── Normalisation (rétro-compat) : ancien `string[]` de codes → instances équipées
 // (tier 0, +0). Les anciennes instances gardent leur xp (tier) ; leur `level`

@@ -6,8 +6,6 @@ import {
   nextRarity,
   rollStars,
   tierIndexOf,
-  familiarInfuseXp,
-  infuseFamiliar,
   aggregateEffects,
   playerWithGear,
   effectiveValue,
@@ -184,32 +182,5 @@ describe('familiers — infusion (incubateur)', () => {
     expect(tierIndexOf(fam('G', 5))).toBe(4);
     expect(tierIndexOf(fam('F', 1))).toBe(5);
     expect(tierIndexOf(fam('SSS', 5))).toBe(49);
-  });
-  it('familiarInfuseXp : valeur du cran (rang × qualité), perte 2:1', () => {
-    // Un ★1 brut rend le plancher ; un ★5 rend nettement plus ; scaling rang + qualité.
-    expect(familiarInfuseXp(fam('G', 1))).toBeGreaterThan(0);
-    expect(familiarInfuseXp(fam('SSS', 5))).toBeGreaterThan(familiarInfuseXp(fam('G', 1)) * 20);
-    expect(familiarInfuseXp(fam('C', 3))).toBeGreaterThan(familiarInfuseXp(fam('G', 3))); // rang
-    expect(familiarInfuseXp(fam('C', 5))).toBeGreaterThan(familiarInfuseXp(fam('C', 1))); // qualité
-  });
-  it('infuseFamiliar : assez d’XP → monte qualité puis rang, plafonné au CRAN passé', () => {
-    // Beaucoup d'XP, plafond au CRAN 14 (E★5) → grimpe jusqu'à E★5 puis bloque.
-    const up = infuseFamiliar(fam('G', 1), 1200, 14);
-    expect(tierIndexOf(up)).toBe(14); // E★5 = 2×5+4
-    expect(up.rarity).toBe('E');
-    expect(rollStars(up.roll)).toBe(5);
-    // Effet re-scalé vers le haut (tier plus élevé = plus fort).
-    expect(up.effect.value).toBeGreaterThan(10);
-  });
-  it('infuseFamiliar : le CRAN plafonne finement (un cran à la fois)', () => {
-    // Cap au cran 2 (G★3) → même avec beaucoup d'XP on ne dépasse pas G★3.
-    const up = infuseFamiliar(fam('G', 1), 500, 2);
-    expect(tierIndexOf(up)).toBe(2);
-    expect(up.rarity).toBe('G');
-  });
-  it('infuseFamiliar : XP insuffisante → reste au même tier, accumule fxp', () => {
-    const up = infuseFamiliar(fam('G', 1), 1, 49);
-    expect(tierIndexOf(up)).toBe(0);
-    expect(up.fxp).toBe(1);
   });
 });
