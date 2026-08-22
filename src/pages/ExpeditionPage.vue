@@ -95,7 +95,15 @@
 
       <div class="bag">
         <span class="bag-chip">🪙 {{ gold }}</span>
-        <span class="bag-chip">🎒 {{ loot.length }}</span>
+        <button
+          type="button"
+          class="bag-chip bag-chip-btn"
+          :disabled="!loot.length"
+          title="Voir le butin ramassé"
+          @click="lootOpen = true"
+        >
+          🎒 {{ loot.length }}
+        </button>
       </div>
 
       <!-- Bandeau AUTO : le run se joue seul → indicateur + bouton pour reprendre la main. -->
@@ -348,6 +356,42 @@
       </q-card>
     </q-dialog>
 
+    <!-- Butin ramassé EN COURS de run (clic sur le 🎒 de la topbar, ticket 8a43ca8c) -->
+    <q-dialog v-model="lootOpen" position="bottom">
+      <q-card class="fx-loot-card">
+        <div class="ol-title">
+          🎒 Butin ramassé <span class="ol-hint">(tape pour le détail)</span>
+        </div>
+        <div v-if="!loot.length" class="ol-hint">Rien pour l'instant — explore les coffres 📦.</div>
+        <button
+          v-for="(it, i) in loot"
+          :key="i"
+          type="button"
+          class="ol-item"
+          :class="'r-' + it.rarity"
+          @click="detailItem = it"
+        >
+          <ItemIcon :item="it" :size="38" />
+          <div class="ol-main">
+            <span class="ol-name">{{ it.name }}</span>
+            <span class="ol-meta"
+              >{{ RARITY_LABEL[it.rarity] }} · {{ effectLabel(it.effect, it.level) }}</span
+            >
+          </div>
+          <span class="ol-chevron">›</span>
+        </button>
+        <q-btn
+          class="fx-cta"
+          color="primary"
+          text-color="dark"
+          no-caps
+          unelevated
+          label="Fermer"
+          @click="lootOpen = false"
+        />
+      </q-card>
+    </q-dialog>
+
     <!-- Détail d'un objet rapporté (clic sur le récap de butin) -->
     <q-dialog :model-value="!!detailItem" @update:model-value="detailItem = null">
       <q-card v-if="detailItem" class="fx-loot-card im-card" :class="'r-' + detailItem.rarity">
@@ -577,6 +621,7 @@ const scrollsGained = ref(0); // parchemins d'enchant 📜 crédités (récap de
 const loot = ref<Item[]>([]);
 // Détail d'un objet du récap de butin (modale au clic).
 const detailItem = ref<Item | null>(null);
+const lootOpen = ref(false); // modale « butin ramassé » en cours de run (ticket 8a43ca8c)
 function setName(id?: string): string {
   return id ? (ITEM_SETS.find((s) => s.id === id)?.name ?? 'Set') : '';
 }
@@ -1526,6 +1571,16 @@ function replayAuto() {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 3px 10px;
+}
+.bag-chip-btn {
+  cursor: pointer;
+}
+.bag-chip-btn:not(:disabled):hover {
+  border-color: var(--primary);
+}
+.bag-chip-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 .map-wrap {
   background: var(--bg);

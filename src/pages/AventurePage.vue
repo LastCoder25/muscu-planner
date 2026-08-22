@@ -713,6 +713,25 @@
                   {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
                 </button>
               </div>
+              <!-- Filtre par SET (ticket 986a50b6) — visible seulement si le sac contient des pièces de set. -->
+              <div v-if="bagSets.length" class="inv-filter inv-filter-set">
+                <button
+                  class="if-chip"
+                  :class="{ on: invSetFilter === 'all' }"
+                  @click="invSetFilter = 'all'"
+                >
+                  🧩 Tous sets
+                </button>
+                <button
+                  v-for="s in bagSets"
+                  :key="s.id"
+                  class="if-chip"
+                  :class="{ on: invSetFilter === s.id }"
+                  @click="invSetFilter = s.id"
+                >
+                  {{ s.emoji }} {{ s.name }}
+                </button>
+              </div>
               <!-- Casse/vente en masse : objets qui n'améliorent pas ta puissance (pas
                meilleurs que l'équipé du même emplacement, MÊME montés à ton niveau).
                Les pépites potentielles et le 🔒 sont protégés. Respecte le filtre type. -->
@@ -2129,6 +2148,7 @@ const bagOpen = ref(false);
 const loadoutOpen = ref(false);
 function openBag() {
   betterFilterSlot.value = null; // ouverture directe = pas de filtre « upgrades »
+  invSetFilter.value = 'all'; // pas de filtre set au départ
   bagOpen.value = true;
 }
 // Filtre « seulement les objets du sac au potentiel supérieur » pour un slot donné
@@ -3512,9 +3532,20 @@ const POI_MSG_LABEL: Record<string, string> = {
 
 // ── Sac : filtre par type d'objet + tri (meilleurs d'abord) ──
 const invFilter = ref<ItemSlot | 'all'>('all');
+const invSetFilter = ref<string | 'all'>('all'); // filtre par SET (ticket 986a50b6)
 function bagCountForSlot(slot: ItemSlot): number {
   return (char.row?.inventory ?? []).filter((i) => i.slot === slot).length;
 }
+// Sets présents dans le sac (pour les chips de filtre par set) → id + nom + emoji.
+const bagSets = computed(() => {
+  const seen = new Map<string, { id: string; name: string; emoji: string }>();
+  for (const i of char.row?.inventory ?? []) {
+    if (isFamiliar(i) || !i.setId || seen.has(i.setId)) continue;
+    const def = SET_BY_ID[i.setId];
+    seen.set(i.setId, { id: i.setId, name: def?.name ?? i.setId, emoji: def?.emoji ?? '🧩' });
+  }
+  return [...seen.values()];
+});
 const filteredInventory = computed<Item[]>(() => {
   const inv = (char.row?.inventory ?? []).filter((i) => !isFamiliar(i));
   const bf = betterFilterSlot.value;
@@ -3526,8 +3557,11 @@ const filteredInventory = computed<Item[]>(() => {
   } else {
     list = inv.filter((i) => invFilter.value === 'all' || i.slot === invFilter.value);
   }
+  if (invSetFilter.value !== 'all') list = list.filter((i) => i.setId === invSetFilter.value);
   return list.sort(
-    (a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || (b.enchant ?? 0) - (a.enchant ?? 0),
+    (a, b) =>
+      RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] ||
+      rollStars(b.roll ?? 0) - rollStars(a.roll ?? 0),
   );
 });
 // Objets du sac (même slot) MEILLEURS si équipés (puissance fixe grade+enchant) → badge
@@ -5277,6 +5311,11 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 10px;
+}
+.inv-filter-set {
+  margin-top: -4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
 }
 .if-chip {
   border: 1px solid var(--line);
