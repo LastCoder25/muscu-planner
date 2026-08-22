@@ -569,6 +569,14 @@
         <div class="gear-head">
           <div class="sec-title gh-title">Équipement</div>
           <div class="gear-icons">
+            <button
+              class="gi-b"
+              :disabled="onExpedition"
+              title="Équipement conseillé — équipe automatiquement la meilleure combinaison de ton stuff (sets inclus)"
+              @click="doOptimizeGear()"
+            >
+              🪄
+            </button>
             <button class="gi-b" title="Sac — ton butin" @click="openBag()">
               🎒<span v-if="bagCount" class="gi-badge">{{ bagCount }}</span>
             </button>
@@ -1006,8 +1014,9 @@
               <span
                 v-if="dungeonUnlocked(it.dungeon)"
                 class="dgn-chip winpct"
-                :class="winClass(winPct['d:' + it.dungeon.id] ?? 0)"
-                >🎯 {{ winPct['d:' + it.dungeon.id] ?? 0 }}%</span
+                :class="powClass(it.dungeon.recoLevel)"
+                :title="powTitle(it.dungeon.recoLevel)"
+                >⚔️ {{ fmtPow(recoPow(it.dungeon.recoLevel)) }}</span
               >
               <span
                 v-if="dungeonUnlocked(it.dungeon)"
@@ -1128,8 +1137,9 @@
               <span
                 v-if="bossUnlocked(b)"
                 class="dgn-chip winpct"
-                :class="winClass(winPct['b:' + b.id] ?? 0)"
-                >🎯 {{ winPct['b:' + b.id] ?? 0 }}%</span
+                :class="powClass(b.unlockLevel)"
+                :title="powTitle(b.unlockLevel)"
+                >⚔️ {{ fmtPow(recoPow(b.unlockLevel)) }}</span
               >
             </div>
 
@@ -1918,6 +1928,7 @@ import CombatStage from '@/components/CombatStage.vue';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
 import { BOSSES, bossSummonCost, type MilestoneBoss } from '@/data/bosses';
+import { recommendedPower } from '@/lib/proceduralContent';
 import { endlessFoe, endlessEnergy, endlessGold, endlessDropLevel } from '@/data/endless';
 import {
   playerWithGear,
@@ -2147,6 +2158,23 @@ const fighter = computed(() =>
   ),
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
+// PUISSANCE CONSEILLÉE (ticket 6abe4429) : remplace le 🎯 % de victoire (qui « bougeait »)
+// par une cible STABLE — la puissance du build équilibré de référence contre lequel le
+// contenu est calibré. Le joueur compare SA puissance (combatPowerVal) à celle-ci.
+function recoPow(recoLevel: number): number {
+  return recommendedPower(recoLevel);
+}
+// Vert si tu atteins la puissance conseillée, orange si proche (≥ 80 %), rouge sinon.
+function powClass(recoLevel: number): string {
+  const r = recoPow(recoLevel);
+  const mine = combatPowerVal.value;
+  if (mine >= r) return 'wp-good';
+  if (mine >= r * 0.8) return 'wp-mid';
+  return 'wp-bad';
+}
+function powTitle(recoLevel: number): string {
+  return `Puissance conseillée ${fmtPow(recoPow(recoLevel))} · la tienne ${fmtPow(combatPowerVal.value)}`;
+}
 // Rang de PRESTIGE (cosmétique, dérivé du niveau) — n'affecte pas le combat.
 const rank = computed(() => characterRank(c.value.level.level));
 // Couronne d'étoiles du portrait : 5 étoiles en ARC HAUT sur l'anneau (viewBox 100×100).
@@ -2227,11 +2255,6 @@ const winPct = computed<Record<string, number>>(() => {
   }
   return out;
 });
-function winClass(pct: number): string {
-  if (pct >= 70) return 'wp-good';
-  if (pct >= 30) return 'wp-mid';
-  return 'wp-bad';
-}
 
 // ── Récompense de connexion quotidienne ──
 const today = logicalToday();
@@ -3602,6 +3625,24 @@ async function equipWithSetFx(uid: string, itemId: string) {
 }
 function doEquip(itemId: string) {
   withUid((uid) => equipWithSetFx(uid, itemId), 'Impossible d’équiper.');
+}
+// OPTIMISEUR (ticket 6d69c2fc) : équipe d'un coup la meilleure combi (sets inclus) de
+// tout ton stuff (équipé + sac) ; les écartés retournent au sac. Familier inchangé.
+function doOptimizeGear() {
+  withUid(async (uid) => {
+    const changed = await char.optimizeGear(
+      uid,
+      c.value,
+      c.value.level.level,
+      char.row?.pseudo ?? 'Toi',
+    );
+    $q.notify({
+      type: changed ? 'positive' : 'info',
+      message: changed
+        ? '🪄 Équipement optimisé — meilleure combinaison équipée !'
+        : 'Ton équipement est déjà optimal. 👍',
+    });
+  }, 'Optimisation impossible.');
 }
 // Remplacement d'un objet équipé : le joueur choisit dans une modale ce qu'il
 // advient de l'ancien (garder au sac / recycler → poussière / vendre → or).
