@@ -576,7 +576,6 @@ const gold = ref(0);
 const dust = ref(0);
 const scrollsGained = ref(0); // parchemins d'enchant 📜 crédités (récap de fin)
 const loot = ref<Item[]>([]);
-let lootN = 0;
 // Détail d'un objet du récap de butin (modale au clic).
 const detailItem = ref<Item | null>(null);
 function setName(id?: string): string {
@@ -792,7 +791,7 @@ function openChest(id: number) {
   let drop: Omit<Item, 'id'> | null = null;
   for (let k = 0; k < tries && !drop; k++)
     drop = rollDrop(rng, { cleared: true, defeated: 1, level, luck, spread: 1 });
-  const item = drop ? { ...drop, id: `exp_${lootN++}` } : null;
+  const item = drop ? { ...drop, id: crypto.randomUUID() } : null;
   dust.value += 3 + grade.dustBonus;
   if (item) loot.value.push(item);
   const bits = [item?.name].filter(Boolean).join(' + ');
@@ -849,7 +848,7 @@ function openVault(id: number) {
     });
     if (d && (!best || RARITY_RANK[d.rarity] > RARITY_RANK[best.rarity])) best = d;
   }
-  const item = best ? { ...best, id: `exp_${lootN++}` } : null;
+  const item = best ? { ...best, id: crypto.randomUUID() } : null;
   const gGold = 30 + Math.round(heroLevel.value * 6);
   const gDust = 20 + Math.round(heroLevel.value * 0.8);
   gold.value += gGold;
@@ -997,7 +996,7 @@ function rollTreasure(): Item | null {
   if (rng() < 0.25 && ITEM_SETS.length) {
     const set = ITEM_SETS[Math.floor(rng() * ITEM_SETS.length)]!;
     const piece = rollSetPiece(rng, { setId: set.id, level: lvl, luck });
-    return { ...piece, id: `exp_t_${lootN++}` };
+    return { ...piece, id: crypto.randomUUID() };
   }
   // Garde le MEILLEUR tier (rang+qualité) sur plusieurs tirages → « belle récompense »
   // RELATIVE à la profondeur du PALIER (plus le palier est profond, plus le rang monte).
@@ -1006,7 +1005,7 @@ function rollTreasure(): Item | null {
     const cand = rollDrop(rng, { cleared: true, defeated: 1, level: lvl, luck, spread: 0 });
     if (cand && (!best || tierIndexOf(cand) > tierIndexOf(best))) best = cand;
   }
-  return best ? { ...best, id: `exp_t_${lootN++}` } : null;
+  return best ? { ...best, id: crypto.randomUUID() } : null;
 }
 
 // (Ré)initialise un run sur la carte courante avec les VRAIS PV du perso.
@@ -1017,7 +1016,6 @@ function freshRun() {
   dust.value = 0;
   scrollsGained.value = 0;
   loot.value = [];
-  lootN = 0;
   lastEvent.value = null;
   over.value = false;
 }
@@ -1208,7 +1206,7 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
       // haut que le PALIER est profond (level+luck du palier → raretés croissantes).
       const famRng = mulberry32((seed.value * 131 + 91) >>> 0 || 1);
       const fam = rollActivityFamiliar(famRng, { level: runDropLevel(), luck: runLuck() });
-      loot.value.push({ ...fam, id: `exp_f_${lootN++}` });
+      loot.value.push({ ...fam, id: crypto.randomUUID() });
       gameFx.celebrate({
         kind: 'familiar',
         emoji: fam.emoji,
