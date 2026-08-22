@@ -140,7 +140,7 @@ import {
   type ComboLeg,
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
-import { logicalToday, addDaysIso } from '@/lib/challenges';
+import { logicalToday, addDaysIso, suggestSetFromHistory } from '@/lib/challenges';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 
 const router = useRouter();
@@ -197,9 +197,23 @@ const setInitAssisted = ref(false);
 function openSet(leg: ComboLeg, count: number) {
   setLeg.value = leg;
   setCount.value = count;
-  setInitReps.value = legLastReps(leg);
-  setInitWeight.value = legLastWeight(leg);
-  setInitAssisted.value = legLastAssisted(leg);
+  const last = legSets(leg);
+  if (last.length) {
+    setInitReps.value = legLastReps(leg);
+    setInitWeight.value = legLastWeight(leg);
+    setInitAssisted.value = legLastAssisted(leg);
+  } else {
+    // Aucune série encore sur cet exo dans ce 360 → conseil dérivé de l'historique de
+    // l'exo (tous les 360, ticket 5f5bad0f) pour pré-remplir poids + reps.
+    const hist = combo.list
+      .flatMap((cc) => cc.legs)
+      .filter((l) => l.exercise_id === leg.exercise_id)
+      .flatMap((l) => legSets(l));
+    const sug = suggestSetFromHistory(hist);
+    setInitReps.value = sug?.repMax ?? legLastReps(leg);
+    setInitWeight.value = sug?.weight ?? legLastWeight(leg);
+    setInitAssisted.value = false;
+  }
   setOpen.value = true;
 }
 function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }) {

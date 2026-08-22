@@ -47,6 +47,40 @@ export interface ChallengeSet {
   sec?: number; // exo au TEMPS (chrono) : durée de cette « série » (secondes). reps = 0.
 }
 
+/** Conseil de série dérivé de l'HISTORIQUE d'un exo (poids médian + fourchette de reps)
+ *  → pré-remplit/oriente la saisie de série (ticket 5f5bad0f). `null` si pas d'historique. */
+export interface SetSuggestion {
+  weight: number | null; // poids conseillé (médian des séries chargées) ; null = poids du corps
+  repMin: number;
+  repMax: number;
+  samples: number; // nb de séries analysées
+}
+const percentile = (sorted: number[], p: number): number =>
+  sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(p * (sorted.length - 1)))]! : 0;
+/** Analyse jusqu'aux `max` séries les plus RÉCENTES (reps > 0) d'un exo → poids médian +
+ *  fourchette de reps (p20–p80 ; min/max si peu d'échantillons). */
+export function suggestSetFromHistory(
+  sets: { reps: number; weight?: number | null }[],
+  max = 24,
+): SetSuggestion | null {
+  const withReps = sets.filter((s) => (s.reps ?? 0) > 0).slice(-max);
+  if (!withReps.length) return null;
+  const reps = withReps.map((s) => s.reps).sort((a, b) => a - b);
+  const weights = withReps
+    .map((s) => s.weight ?? 0)
+    .filter((w) => w > 0)
+    .sort((a, b) => a - b);
+  const weight = weights.length ? Math.round(percentile(weights, 0.5) * 2) / 2 : null; // médiane (pas de 0,5 kg)
+  const lo = withReps.length >= 4 ? percentile(reps, 0.2) : reps[0]!;
+  const hi = withReps.length >= 4 ? percentile(reps, 0.8) : reps[reps.length - 1]!;
+  return {
+    weight,
+    repMin: Math.round(lo),
+    repMax: Math.max(Math.round(hi), Math.round(lo)),
+    samples: withReps.length,
+  };
+}
+
 // Progressif basé sur le MAX (cf. formule) : J1 = start_coef × MAX,
 // puis chaque jour + (inc_pct % de MAX), minimum +1.
 export function progressiveDefaults(level: Level): { start_coef: number; inc_pct: number } {

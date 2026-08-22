@@ -13,11 +13,38 @@ import {
   isBodyweightExercise,
   activeDaysOf,
   extendChallenge,
+  suggestSetFromHistory,
   type Challenge,
   type ChallengeConfig,
 } from '@/lib/challenges';
 
 const cfg = (over: Partial<ChallengeConfig> = {}): ChallengeConfig => ({ start: 10, ...over });
+
+describe('suggestSetFromHistory (conseil poids/reps)', () => {
+  it('renvoie null sans historique', () => {
+    expect(suggestSetFromHistory([])).toBeNull();
+    expect(suggestSetFromHistory([{ reps: 0, sec: 30 } as never])).toBeNull();
+  });
+  it('poids médian + fourchette de reps', () => {
+    const s = suggestSetFromHistory([
+      { reps: 8, weight: 20 },
+      { reps: 10, weight: 20 },
+      { reps: 12, weight: 22 },
+      { reps: 10, weight: 20 },
+      { reps: 9, weight: 20 },
+    ]);
+    expect(s).not.toBeNull();
+    expect(s!.weight).toBe(20); // médiane
+    expect(s!.repMin).toBeLessThanOrEqual(s!.repMax);
+    expect(s!.samples).toBe(5);
+  });
+  it('poids du corps → weight null', () => {
+    const s = suggestSetFromHistory([{ reps: 15 }, { reps: 20 }, { reps: 18 }]);
+    expect(s!.weight).toBeNull();
+    expect(s!.repMin).toBe(15);
+    expect(s!.repMax).toBe(20);
+  });
+});
 
 describe('extendChallenge : l’affichage des jours s’adapte', () => {
   const mk = (over: Partial<Challenge> = {}): Challenge =>

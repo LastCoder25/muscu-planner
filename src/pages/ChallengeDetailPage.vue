@@ -210,6 +210,14 @@
                 <!-- Reps / Séries : PAS de chrono (ticket 9e9cfc67) — le chrono est réservé au
                      temps (gainage/conditionnement, bloc ci-dessus). -->
 
+                <!-- Conseil dérivé de l'historique de cet exo (ticket 5f5bad0f). -->
+                <div v-if="setSuggestion" class="set-advice">
+                  💡 Conseil :
+                  <b v-if="setSuggestion.weight">{{ setSuggestion.weight }} kg · </b>
+                  <b>{{ setSuggestion.repMin }}–{{ setSuggestion.repMax }} reps</b>
+                  <span class="sa-src">(sur {{ setSuggestion.samples }} séries)</span>
+                </div>
+
                 <!-- Séries : un seul bouton ＋ 1 série → fenêtre reps + poids (harmonisé 360) -->
                 <button v-if="isSetsMode" class="add-set" @click="openAddSet(1)">
                   ＋ 1 série (reps + poids)
@@ -407,6 +415,7 @@ import {
   scaleRemaining,
   extendChallenge,
   addDaysIso,
+  suggestSetFromHistory,
   type Challenge,
   type DayProgress,
   type ChallengeSet,
@@ -753,13 +762,26 @@ const setOpen = ref(false);
 const setInitReps = ref(10);
 const setInitWeight = ref<number | null>(null);
 const setInitAssisted = ref(false);
+// CONSEIL de série (ticket 5f5bad0f) : poids médian + fourchette de reps analysés sur
+// l'HISTORIQUE de CET exo dans TOUS tes challenges (dont les séries déjà faites ici) →
+// pré-remplit la saisie et s'affiche avant de faire la série. Poids du corps → pas de poids.
+const setSuggestion = computed(() => {
+  const c = ch.value;
+  if (!c) return null;
+  const hist = store.list
+    .filter((x) => x.exercise_id === c.exercise_id)
+    .flatMap((x) => x.progress.flatMap((d) => d.sets ?? []));
+  return suggestSetFromHistory(hist);
+});
 // Nombre de séries à ajouter d'un coup (mode Séries : boutons ＋1/＋2/… ; mode Reps : 1).
 const setCount = ref(1);
 function openAddSet(count = 1) {
   setCount.value = Math.max(1, count);
   const last = todaySets.value[todaySets.value.length - 1];
-  setInitReps.value = last?.reps ?? quickAdds.value[0] ?? 10;
-  setInitWeight.value = last?.weight ?? null;
+  const sug = setSuggestion.value;
+  // Priorité : dernière série du jour (cohérence intra-séance) → sinon conseil historique.
+  setInitReps.value = last?.reps ?? sug?.repMax ?? quickAdds.value[0] ?? 10;
+  setInitWeight.value = last?.weight ?? sug?.weight ?? null;
   setInitAssisted.value = last?.assisted ?? false;
   setOpen.value = true;
 }
@@ -1480,6 +1502,20 @@ onBeforeUnmount(() => {
   letter-spacing: 0.5px;
   text-transform: uppercase;
   cursor: pointer;
+}
+.set-advice {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  font-size: 13px;
+  color: var(--text);
+}
+.set-advice .sa-src {
+  color: var(--dim);
+  font-size: 11.5px;
+  margin-left: 4px;
 }
 .add-set {
   margin-top: 8px;
