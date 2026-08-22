@@ -409,14 +409,16 @@
                     <span class="q-badge" :class="'q-' + t.quality">{{ t.quality }}</span>
                   </div>
                   <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
-                  <!-- Comparateur de puissance (ticket 25091d45) : gain si on équipe ce talent. -->
-                  <div
-                    v-if="!t.equipped"
-                    class="tal-cmp"
-                    :class="talPowerIfEquip(t.inst) >= combatPowerVal ? 'up' : 'down'"
+                  <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
+                       équipé. Rien si +0 ou déjà équipé. -->
+                  <span
+                    v-if="talDeltaMap.get(t.id)"
+                    class="cmp-pill"
+                    :class="talDeltaMap.get(t.id)! > 0 ? 'up' : 'down'"
                   >
-                    ⚔️ si équipé {{ fmtDelta(combatPowerVal, talPowerIfEquip(t.inst)) }}
-                  </div>
+                    {{ talDeltaMap.get(t.id)! > 0 ? '+' : '−'
+                    }}{{ fmtPow(Math.abs(talDeltaMap.get(t.id)!)) }}
+                  </span>
                 </div>
                 <div class="tal-actions">
                   <button
@@ -504,16 +506,16 @@
                     <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
                   </div>
                   <div class="tal-eff">{{ itemEffects(f) }}</div>
-                  <!-- Comparateur de puissance (ticket 25091d45) : gain si on équipe ce familier. -->
-                  <div
-                    v-if="!f.equipped"
-                    class="tal-cmp"
-                    :class="famPowerIfEquip(f) >= combatPowerVal ? 'up' : 'down'"
+                  <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
+                       équipé à la place du familier actuel. Rien si +0 ou déjà équipé. -->
+                  <span
+                    v-if="famDeltaMap.get(f.id)"
+                    class="cmp-pill"
+                    :class="famDeltaMap.get(f.id)! > 0 ? 'up' : 'down'"
                   >
-                    ⚔️ {{ fmtPow(combatPowerVal) }} → {{ fmtPow(famPowerIfEquip(f)) }} ({{
-                      fmtDelta(combatPowerVal, famPowerIfEquip(f))
-                    }})
-                  </div>
+                    {{ famDeltaMap.get(f.id)! > 0 ? '+' : '−'
+                    }}{{ fmtPow(Math.abs(famDeltaMap.get(f.id)!)) }}
+                  </span>
                 </div>
                 <div class="tal-actions">
                   <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
@@ -2250,6 +2252,22 @@ function talPowerIfEquip(inst: TalentInstance): number {
   ];
   return powerWith(char.row?.equipped ?? {}, talentEffects(talents));
 }
+// Deltas de puissance (arrondis) des familiers/talents NON équipés → pastille +/−.
+// Mémoïsés (recalculés seulement quand le perso/l'équipement change), pas par rendu×ligne.
+const famDeltaMap = computed(() => {
+  const cur = combatPowerVal.value;
+  const m = new Map<string, number>();
+  for (const f of allFamiliars.value)
+    if (!f.equipped) m.set(f.id, Math.round(famPowerIfEquip(f) - cur));
+  return m;
+});
+const talDeltaMap = computed(() => {
+  const cur = combatPowerVal.value;
+  const m = new Map<string, number>();
+  for (const t of talentsView.value)
+    if (!t.equipped) m.set(t.id, Math.round(talPowerIfEquip(t.inst) - cur));
+  return m;
+});
 // PUISSANCE CONSEILLÉE (ticket 6abe4429) : remplace le 🎯 % de victoire (qui « bougeait »)
 // par une cible STABLE — la puissance du build équilibré de référence contre lequel le
 // contenu est calibré. Le joueur compare SA puissance (combatPowerVal) à celle-ci.
@@ -4717,16 +4735,24 @@ onUnmounted(() => {
   color: var(--accent);
   margin-top: 1px;
 }
-.tal-cmp {
-  font-size: 11px;
+/* Pastille de comparaison de puissance (familiers/talents) : +vert / −rouge. */
+.cmp-pill {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-family: var(--font-display);
   font-weight: 700;
-  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.5;
 }
-.tal-cmp.up {
+.cmp-pill.up {
   color: var(--d1);
+  background: color-mix(in srgb, var(--d1) 18%, transparent);
 }
-.tal-cmp.down {
+.cmp-pill.down {
   color: var(--d4);
+  background: color-mix(in srgb, var(--d4) 18%, transparent);
 }
 .tal-xp {
   height: 4px;
