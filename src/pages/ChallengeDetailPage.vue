@@ -584,12 +584,19 @@ const pct = computed(() =>
 );
 // Séparateurs de l'anneau (tous les 10 %) pour lire l'avancement des défis en
 // temps (gainage) — 10 traits radiaux au bord de la bande (r 52, épaisseur 8).
-const RING_TICKS = Array.from({ length: 10 }, (_, i) => {
-  const a = (i * 36 * Math.PI) / 180;
-  const c = Math.cos(a);
-  const s = Math.sin(a);
-  return { x1: 60 + c * 47, y1: 60 + s * 47, x2: 60 + c * 57, y2: 60 + s * 57 };
-});
+// Repères du cercle : en mode SÉRIES, un repère PAR SÉRIE à faire aujourd'hui (2..16) →
+// le cercle est « découpé » selon le nombre de séries. Sinon 10 (repères %). Ticket 3c51883b.
+const ringSegments = computed(() =>
+  isSetsMode.value && todayTarget.value >= 2 && todayTarget.value <= 16 ? todayTarget.value : 10,
+);
+const RING_TICKS = computed(() =>
+  Array.from({ length: ringSegments.value }, (_, i) => {
+    const a = (i * (360 / ringSegments.value) * Math.PI) / 180;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    return { x1: 60 + c * 47, y1: 60 + s * 47, x2: 60 + c * 57, y2: 60 + s * 57 };
+  }),
+);
 const chronoSec = computed(() => entryOf(dayIndex.value)?.elapsed_sec ?? 0);
 const chronoDisplay = computed(
   () => `${Math.floor(chronoSec.value / 60)}:${String(chronoSec.value % 60).padStart(2, '0')}`,

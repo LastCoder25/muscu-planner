@@ -126,8 +126,13 @@
                 <span class="cc-today" :class="st(c).isDoneToday ? 'done' : 'todo'">{{
                   st(c).isDoneToday ? '✓ À jour' : '● À faire'
                 }}</span>
-                <div class="bar">
-                  <div class="fill" :style="{ width: st(c).completionPct + '%' }" />
+                <div class="seg-line" :style="{ '--n': challengeSegs(c).n }">
+                  <span
+                    v-for="i in challengeSegs(c).n"
+                    :key="i"
+                    class="seg-cell"
+                    :class="{ on: i <= challengeSegs(c).on }"
+                  />
                 </div>
                 <div class="ct-sub">
                   {{ st(c).completionPct }}% · j{{
@@ -164,7 +169,14 @@
             <span class="cc-badge" :class="c.status">{{ statusLabel(c) }}</span>
           </div>
           <div class="cc-meta">{{ fmtName(c.format) }} · {{ c.duration_days }} j</div>
-          <div class="bar"><div class="fill" :style="{ width: st(c).completionPct + '%' }" /></div>
+          <div class="seg-line" :style="{ '--n': challengeSegs(c).n }">
+            <span
+              v-for="i in challengeSegs(c).n"
+              :key="i"
+              class="seg-cell"
+              :class="{ on: i <= challengeSegs(c).on }"
+            />
+          </div>
           <div class="cc-sub">
             {{ st(c).completionPct }}% · {{ st(c).totalDone }}
             {{ isSetsMode(c) ? 'séries' : unitOf(c)
@@ -735,6 +747,16 @@ function unitOf(c: Challenge) {
 // Mode Séries : le total est en séries → on affiche AUSSI le total de reps (fa798da3).
 function isSetsMode(c: Challenge) {
   return c.config.count_mode === 'sets';
+}
+// Barre de progression SEGMENTÉE (ticket 3c51883b) : découpée par SÉRIES (mode séries) ou
+// par JOURS (reps/durée), plafonnée à 30 segments pour rester lisible.
+function challengeSegs(c: Challenge): { n: number; on: number } {
+  const total = isSetsMode(c)
+    ? c.daily_targets.reduce((a, b) => a + b, 0) // total de séries
+    : c.duration_days; // nb de jours
+  const n = Math.min(30, Math.max(1, total));
+  const on = Math.min(n, Math.round((st(c).completionPct / 100) * n));
+  return { n, on };
 }
 function totalRepsOf(c: Challenge) {
   return challengeTotalReps(c);
@@ -1576,6 +1598,21 @@ onMounted(async () => {
   height: 100%;
   background: var(--accent);
   border-radius: 5px;
+}
+/* Barre SEGMENTÉE : un segment par série (mode séries) ou par jour (reps/durée). */
+.seg-line {
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  gap: 2px;
+  height: 8px;
+  margin: 9px 0 6px;
+}
+.seg-cell {
+  background: var(--surface-2);
+  border-radius: 2px;
+}
+.seg-cell.on {
+  background: var(--accent);
 }
 .cc-sub {
   font-size: 11.5px;
