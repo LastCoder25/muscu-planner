@@ -2433,31 +2433,34 @@ const firstTalentIcon = computed(() => {
 const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.value);
 // Vue enrichie : équipés d'abord, puis par grade (tier) puis enchant décroissants.
 const talentsView = computed(() => {
-  return (char.row?.talents ?? [])
-    .map((inst) => {
-      const def = talentByCode(inst.code);
-      if (!def) return null;
-      const tier = tierOf(inst); // rang + qualité (grade fixé au drop)
-      const enchant = inst.enchant ?? 0; // +N magnitude (gamble)
-      return {
-        id: inst.id,
-        inst,
-        def,
-        tier,
-        enchant,
-        rarity: talentRank(tier),
-        quality: talentQuality(tier),
-        // 1 décimale : les bonus de talent sont petits (armure 4,5 %…) et la courbe de
-        // grade est plate → l'arrondi entier faisait paraître D5 et E3 identiques
-        // (ticket f7e389e4) alors que leurs valeurs diffèrent (6,2 % vs 5,6 %).
-        effLabel: (talentValue(def, tier, enchant) * 100).toFixed(1).replace('.', ',') + ' %',
-        equipped: !!inst.equipped,
-      };
-    })
-    .filter((t): t is NonNullable<typeof t> => !!t)
-    .sort(
-      (a, b) => Number(b.equipped) - Number(a.equipped) || b.tier - a.tier || b.enchant - a.enchant,
-    );
+  return (
+    (char.row?.talents ?? [])
+      .map((inst) => {
+        const def = talentByCode(inst.code);
+        if (!def) return null;
+        const tier = tierOf(inst); // rang + qualité (grade fixé au drop)
+        const enchant = inst.enchant ?? 0; // +N magnitude (gamble)
+        return {
+          id: inst.id,
+          inst,
+          def,
+          tier,
+          enchant,
+          rarity: talentRank(tier),
+          quality: talentQuality(tier),
+          // 1 décimale : les bonus de talent sont petits (armure 4,5 %…) et la courbe de
+          // grade est plate → l'arrondi entier faisait paraître D5 et E3 identiques
+          // (ticket f7e389e4) alors que leurs valeurs diffèrent (6,2 % vs 5,6 %).
+          effLabel: (talentValue(def, tier, enchant) * 100).toFixed(1).replace('.', ',') + ' %',
+          equipped: !!inst.equipped,
+        };
+      })
+      .filter((t): t is NonNullable<typeof t> => !!t)
+      // Équipés d'abord, puis par NOM (ticket b552b16f) → liste stable, facile à retrouver.
+      .sort(
+        (a, b) => Number(b.equipped) - Number(a.equipped) || a.def.name.localeCompare(b.def.name),
+      )
+  );
 });
 function talentName(inst: TalentInstance): string {
   return talentByCode(inst.code)?.name ?? 'Talent';
@@ -3649,7 +3652,8 @@ const equippedFamiliar = computed<Item | null>(() => char.row?.equipped[FAMILIAR
 const bagFamiliars = computed<Item[]>(() =>
   (char.row?.inventory ?? [])
     .filter((i) => isFamiliar(i))
-    .sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || b.level - a.level),
+    // Par NOM (ticket b552b16f) → liste stable (l'équipé est mis en tête par allFamiliars).
+    .sort((a, b) => a.name.localeCompare(b.name)),
 );
 // TOUS les familiers (équipé d'abord, puis le sac) → une seule grille de cartes, comme
 // les talents. `equipped` marque celui porté (au plus 1). Affichage homogène avec Talents.

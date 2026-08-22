@@ -190,7 +190,7 @@ export const useCharacterStore = defineStore('character', () => {
       if (error.code === '23505') throw new PseudoTakenError();
       throw error;
     }
-    row.value = data;
+    row.value = normalizeRow(data);
     return data;
   }
 
@@ -202,7 +202,10 @@ export const useCharacterStore = defineStore('character', () => {
       .select(COLS)
       .single();
     if (error) throw error;
-    row.value = data;
+    // NORMALISE comme fetchMine (migration rangs/enchant/roll) : sans ça, la ligne relue
+    // après un write repartait BRUTE → valeurs (rang/qualité/puissance) potentiellement
+    // différentes de l'état chargé → chiffres qui « bougent » (cf. tickets combat).
+    row.value = normalizeRow(data);
     return data;
   }
 
