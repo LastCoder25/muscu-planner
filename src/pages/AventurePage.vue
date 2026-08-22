@@ -1892,6 +1892,11 @@
                     <div class="rc-eff">
                       {{ SLOT_LABEL[cand.item.slot] }} · {{ itemEffects(cand.item) }}
                     </div>
+                    <!-- Effet de l'objet ÉQUIPÉ du même slot (ticket 68ed2250) — masqué si
+                         même effet que le candidat (le delta de puissance suffit). -->
+                    <div v-if="rewardCmpEquipped(cand.item)" class="drop-cmp rc-cmp">
+                      Équipé : {{ rewardCmpEquipped(cand.item) }}
+                    </div>
                     <div class="pow-cmp">
                       ⚔️ vs équipé {{ fmtPow(combatPowerVal) }} →
                       <b :class="powerIfEquip(cand.item) >= combatPowerVal ? 'up' : 'down'"
@@ -2922,6 +2927,15 @@ const activeSets = computed(() => {
 // Avertit si une pièce de set proposée en récompense fait DOUBLON : soit le slot
 // porte déjà cette pièce de set (aucun gain de palier), soit une copie traîne déjà
 // dans le sac. Évite de « choisir un doublon sans le savoir ».
+// Effet de l'objet ÉQUIPÉ du même slot, pour comparer à un candidat de récompense
+// (ticket 68ed2250). Vide si aucun objet équipé, OU si l'équipé porte le MÊME effet
+// que le candidat (alors le delta de puissance suffit → pas de redite).
+function rewardCmpEquipped(item: Item): string {
+  const eq = equippedInSlot(item.slot);
+  if (!eq) return '';
+  if (eq.effect.type === item.effect.type) return '';
+  return `${RARITY_LABEL[eq.rarity]} · ${itemEffects(eq)}`;
+}
 function rewardDupNote(item: Item): string {
   if (!item.setId) return '';
   const eq = equippedInSlot(item.slot);
@@ -3532,7 +3546,7 @@ const POI_MSG_LABEL: Record<string, string> = {
 
 // ── Sac : filtre par type d'objet + tri (meilleurs d'abord) ──
 const invFilter = ref<ItemSlot | 'all'>('all');
-const invSetFilter = ref<string | 'all'>('all'); // filtre par SET (ticket 986a50b6)
+const invSetFilter = ref<string>('all'); // filtre par SET ('all' ou un setId, ticket 986a50b6)
 function bagCountForSlot(slot: ItemSlot): number {
   return (char.row?.inventory ?? []).filter((i) => i.slot === slot).length;
 }
@@ -4694,13 +4708,14 @@ onUnmounted(() => {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px; /* espacé (ticket 8bfe2262) → moins de taps accidentels */
 }
 .tal-b {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
-  padding: 4px 8px;
-  border-radius: 7px;
+  min-height: 34px; /* cible tactile confortable */
+  padding: 6px 11px;
+  border-radius: 8px;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--text);
@@ -4711,8 +4726,11 @@ onUnmounted(() => {
   opacity: 0.4;
   cursor: default;
 }
+/* Actions de gestion (grade / recycle) : séparées visuellement de l'action primaire
+   (Équiper/Retirer) par un liseré discret → on ne recycle plus par erreur (8bfe2262). */
 .tal-b.ghost {
   color: var(--dim);
+  border-style: dashed;
 }
 .talents-empty {
   font-size: 12px;
