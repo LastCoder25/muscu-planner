@@ -1478,6 +1478,25 @@
                   : '📦 Ranger mon stuff (nu)'
               }}
             </button>
+            <!-- Gestion d'un loadout rangé : vider vers le sac (46488974) ou vendre (53a6d487). -->
+            <div v-if="lo.count" class="lo-actions">
+              <button
+                class="lo-mini"
+                :disabled="busy"
+                title="Remettre ces objets dans le sac"
+                @click="doUnpackLoadout(i)"
+              >
+                🎒 Vider
+              </button>
+              <button
+                class="lo-mini sell"
+                :disabled="busy"
+                :title="'Vendre ces objets (' + fmtPow(lo.sellGold) + ' or)'"
+                @click="doSellLoadout(i)"
+              >
+                🪙 Vendre ({{ lo.sellGold }})
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1787,6 +1806,13 @@
           <div v-if="stageDone && run.talentDrops?.length" class="drops talent-drops">
             <div class="drops-lbl">
               🧠 {{ run.talentDrops.length > 1 ? 'Talents trouvés' : 'Talent trouvé' }}
+              <button
+                class="drops-goto"
+                title="Ouvrir la collection Talents"
+                @click="goTalentsFromReport"
+              >
+                🧠 Voir mes talents →
+              </button>
             </div>
             <div
               v-for="(t, ti) in run.talentDrops"
@@ -1879,12 +1905,15 @@
             v-if="stageDone && !char.row?.pending_reward"
             class="rm-btn rm-btn-primary"
             :disabled="!canReattack"
-            title="Réattaquer"
+            :title="`Réattaquer — coûte ${reattackCost} ${reattackCostIcon}, tu as ${reattackStock} en stock`"
             aria-label="Réattaquer"
             @click="reattackLast"
           >
             <span class="rm-ic">⚔️</span>
-            <span class="rm-cost">{{ reattackCost }} {{ reattackCostIcon }}</span>
+            <span class="rm-cost"
+              >{{ reattackCost }} {{ reattackCostIcon }}
+              <small class="rm-stock">/ {{ reattackStock }}</small></span
+            >
           </button>
           <button
             class="rm-btn rm-icon"
@@ -2760,6 +2789,11 @@ const reattackCost = computed(() => {
 // La ressource dépend du type de run : le boss se paie en pierres d'invocation 🔮,
 // donjon/faille en énergie ⚡ → le logo du bouton Réattaquer suit.
 const reattackCostIcon = computed(() => (lastBoss.value ? '🔮' : '⚡'));
+// Stock de la ressource nécessaire pour relancer (ticket c6697d9c) → affiché sur le
+// bouton « cost / stock » : on voit d'un coup d'œil combien de runs on peut encore lancer.
+const reattackStock = computed(() =>
+  lastBoss.value ? (char.row?.summon_stones ?? 0) : Math.floor(c.value.energy),
+);
 const canReattack = computed(() => {
   if (busy.value || char.row?.pending_reward) return false;
   const have = lastBoss.value ? (char.row?.summon_stones ?? 0) : c.value.energy;
@@ -2778,6 +2812,12 @@ function goInventoryFromReport() {
   tab.value = 'gear';
   betterFilterSlot.value = null;
   bagOpen.value = true; // ouvre directement la modale Sac
+}
+// Depuis le rapport, quand un talent est tombé → ouvre la collection Talents (ticket bb384013).
+function goTalentsFromReport() {
+  reportOpen.value = false;
+  tab.value = 'hero';
+  talentsOpen.value = true;
 }
 
 // Butin possible d'un donjon (affiché à la demande via 🎁).
@@ -3533,13 +3573,28 @@ const loadoutsView = computed(() => {
     const stored = los[i]?.items ?? {};
     const items = SLOTS.map((s) => stored[s]).filter((it): it is Item => !!it);
     const power = items.length ? loadoutPower(stored) : 0;
-    return { items, count: items.length, power, delta: power - combatPowerVal.value };
+    const sellGold = items.reduce((s, it) => s + sellValue(it), 0);
+    return { items, count: items.length, power, delta: power - combatPowerVal.value, sellGold };
   });
 });
 async function doSwapLoadout(i: number) {
   const uid = auth.user?.id;
   if (!uid || busy.value || expeBlocked()) return; // gelé en expédition (héros parti avec son stuff)
   await char.swapLoadout(uid, i);
+}
+// Vider un loadout rangé → ses objets retournent dans le sac (ticket 46488974).
+function doUnpackLoadout(i: number) {
+  withUid(async (uid) => {
+    const n = await char.unpackLoadout(uid, i);
+    if (n) $q.notify({ type: 'positive', message: `🎒 ${n} objet(s) remis dans le sac.` });
+  }, 'Impossible de vider le loadout.');
+}
+// Vendre un loadout rangé → or (ticket 53a6d487).
+function doSellLoadout(i: number) {
+  withUid(async (uid) => {
+    const gold = await char.sellLoadout(uid, i);
+    if (gold) $q.notify({ type: 'positive', message: `🪙 Loadout vendu (+${gold} or).` });
+  }, 'Impossible de vendre le loadout.');
 }
 
 // ── Familier (compagnon) ──
@@ -5083,6 +5138,31 @@ onUnmounted(() => {
   color: var(--dim);
 }
 .lo-btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+.lo-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 5px;
+}
+.lo-mini {
+  flex: 1;
+  padding: 6px 0;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.lo-mini.sell {
+  color: var(--text);
+}
+.lo-mini:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.lo-mini:not(:disabled):active {
   transform: scale(0.98);
 }
 .slot-x {
@@ -6830,6 +6910,20 @@ onUnmounted(() => {
   font-weight: 700;
   font-size: 13px;
   color: var(--accent);
+}
+.drops-goto {
+  margin-left: 8px;
+  padding: 3px 9px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+}
+.rm-stock {
+  opacity: 0.65;
+  font-size: 0.82em;
 }
 .drops .drop {
   align-items: flex-start;

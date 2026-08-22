@@ -709,6 +709,31 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { equipped, loadouts });
   }
 
+  // Vide un loadout rangé : ses objets retournent au sac, le slot de loadout est vidé.
+  // Renvoie le nombre d'objets remis (ticket 46488974).
+  async function unpackLoadout(userId: string, i: number): Promise<number> {
+    const cur = row.value;
+    if (!cur || i < 0 || i >= MAX_LOADOUTS) return 0;
+    const lo = cur.loadouts[i];
+    const items = lo ? SLOTS.map((s) => lo.items[s]).filter((it): it is Item => !!it) : [];
+    if (!items.length) return 0;
+    const loadouts = cur.loadouts.map((l, k) => (k === i ? { items: {} } : l));
+    await persist(userId, { inventory: [...cur.inventory, ...items], loadouts });
+    return items.length;
+  }
+  // Vend un loadout rangé : ses objets → or, le slot est vidé. Renvoie l'or gagné (ticket 53a6d487).
+  async function sellLoadout(userId: string, i: number): Promise<number> {
+    const cur = row.value;
+    if (!cur || i < 0 || i >= MAX_LOADOUTS) return 0;
+    const lo = cur.loadouts[i];
+    const items = lo ? SLOTS.map((s) => lo.items[s]).filter((it): it is Item => !!it) : [];
+    if (!items.length) return 0;
+    const gold = items.reduce((s, it) => s + sellValue(it), 0);
+    const loadouts = cur.loadouts.map((l, k) => (k === i ? { items: {} } : l));
+    await persist(userId, { gold: cur.gold + gold, loadouts });
+    return gold;
+  }
+
   // OPTIMISEUR D'ÉQUIPEMENT (ticket 6d69c2fc) : équipe d'un coup la meilleure combinaison
   // des 4 slots de gear (sets inclus) trouvée dans l'équipé + le sac ; les objets écartés
   // retournent au sac. Le familier n'est pas touché. Renvoie true si quelque chose a changé.
@@ -898,6 +923,8 @@ export const useCharacterStore = defineStore('character', () => {
     applyExpedition,
     equip,
     swapLoadout,
+    unpackLoadout,
+    sellLoadout,
     optimizeGear,
     equipReplacing,
     unequip,
