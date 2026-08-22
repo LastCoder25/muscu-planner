@@ -3213,7 +3213,12 @@ async function explore(d: Dungeon) {
     const talentDrops =
       r.cleared && dropRng() < 0.06
         ? autoEquipTalentDrops([
-            rollTalentDrop(dropRng, { level: d.dropLevel, luck: d.dropLuck, idSeed: seed }),
+            rollTalentDrop(dropRng, {
+              level: d.dropLevel,
+              luck: d.dropLuck,
+              idSeed: seed,
+              preferred: voiePref.value,
+            }),
           ])
         : [];
     await char.applyRun(uid, {
@@ -3448,7 +3453,12 @@ async function fightBoss(b: MilestoneBoss) {
     const talentDrops =
       win && bossTalentRng() < 0.25
         ? autoEquipTalentDrops([
-            rollTalentDrop(bossTalentRng, { level: b.dropLevel, luck: 0.6, idSeed: seed }),
+            rollTalentDrop(bossTalentRng, {
+              level: b.dropLevel,
+              luck: 0.6,
+              idSeed: seed,
+              preferred: voiePref.value,
+            }),
           ])
         : [];
     await char.applyBossWin(uid, {

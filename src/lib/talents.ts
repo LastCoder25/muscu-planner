@@ -11,7 +11,11 @@ import {
   rollTier,
   gradeStepCost,
   gradeRecycleYield,
+  weightedPick,
+  VOIE_WEIGHT,
+  EFFECT_KEY,
   type AggregatedEffects,
+  type EffectType,
   type Rarity,
 } from './items';
 
@@ -258,9 +262,19 @@ export function talentEffects(raw: unknown): AggregatedEffects {
 // l'ENCHANTANT. Non équipé par défaut. ──
 export function rollTalentDrop(
   rng: () => number,
-  opts: { level?: number; luck?: number; floorBonus?: number; idSeed?: number } = {},
+  opts: {
+    level?: number;
+    luck?: number;
+    floorBonus?: number;
+    idSeed?: number;
+    preferred?: EffectType[]; // biais DOUX de voie : ces effets tombent + souvent (tous restent possibles)
+  } = {},
 ): TalentInstance {
-  const def = TALENTS[Math.floor(rng() * TALENTS.length)]!;
+  // Orientation de voie : les talents dont l'effet est privilégié sont pondérés ×VOIE_WEIGHT.
+  const prefKeys = new Set((opts.preferred ?? []).map((t) => EFFECT_KEY[t]));
+  const def = prefKeys.size
+    ? weightedPick(rng, TALENTS, (t) => (prefKeys.has(t.effectKey) ? VOIE_WEIGHT : 1))
+    : TALENTS[Math.floor(rng() * TALENTS.length)]!;
   const { rank, quality } = rollTier(rng, opts.level ?? 1, opts.luck ?? 0, opts.floorBonus ?? 0);
   const tier = RANK_ORDER.indexOf(rank) * 5 + (quality - 1);
   return {

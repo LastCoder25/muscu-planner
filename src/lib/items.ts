@@ -441,6 +441,34 @@ export function itemScore(it: Item): number {
 function pick<T>(rng: () => number, arr: T[]): T {
   return arr[Math.floor(rng() * arr.length)]!;
 }
+/** Tirage PONDÉRÉ : chaque élément a un poids ; tous restent possibles (variété), mais
+ *  ceux de poids élevé tombent plus souvent. Sert au « biais doux » de la Voie. */
+export function weightedPick<T>(rng: () => number, arr: T[], weightOf: (x: T) => number): T {
+  const w = arr.map((x) => Math.max(0.0001, weightOf(x)));
+  const total = w.reduce((a, b) => a + b, 0);
+  let r = rng() * total;
+  for (let i = 0; i < arr.length; i++) {
+    r -= w[i]!;
+    if (r < 0) return arr[i]!;
+  }
+  return arr[arr.length - 1]!;
+}
+/** Poids d'orientation d'une VOIE : ×`VOIE_WEIGHT` si la stat est privilégiée, sinon ×1.
+ *  Doux → toutes les stats tombent encore (drops variés), la voie tombe juste + souvent. */
+export const VOIE_WEIGHT = 2.5;
+/** Correspondance EffectType → clé d'AggregatedEffects (pour biaiser les talents). */
+export const EFFECT_KEY: Record<EffectType, keyof AggregatedEffects> = {
+  damage_pct: 'damagePct',
+  crit_pct: 'critAdd',
+  lifesteal_pct: 'lifesteal',
+  dmg_reduction_pct: 'dmgReduction',
+  max_pv_pct: 'maxPvPct',
+  gold_pct: 'goldPct',
+  execute_pct: 'executePct',
+  rage_pct: 'ragePct',
+  momentum_pct: 'momentumPct',
+  thorns_pct: 'thornsPct',
+};
 
 // ── Tirage de RANG (gaté par la profondeur) ──
 // Plafond de rang selon le NIVEAU du contenu (racine → RAPIDE tôt, LENT tard) : le
@@ -582,11 +610,12 @@ export function rollDrop(
   // Pool de stats PROGRESSIF : au début, seules les stats basiques (dégâts/PV)
   // tombent ; les stats exotiques se débloquent en montant (cf. EFFECT_MIN_LEVEL).
   const pool = availableEffects(slot, lvl);
-  // BIAIS DE VOIE (ticket spé) : si une voie privilégie des stats présentes dans ce slot,
-  // on tire dans ce sous-pool ~70 % du temps → tes drops soutiennent ton archétype (sans
-  // exclure les autres : la variété/le hasard restent). Sinon pool normal.
-  const pref = opts.preferred?.length ? pool.filter((e) => opts.preferred!.includes(e.type)) : [];
-  const chosen = pref.length && rng() < 0.7 ? pick(rng, pref) : pick(rng, pool);
+  // BIAIS DOUX DE VOIE (ticket spé) : TOUTES les stats restent possibles (drops variés) ;
+  // celles de ta voie sont juste PONDÉRÉES plus fort (×VOIE_WEIGHT) → orientation, pas filtre.
+  const pref = opts.preferred;
+  const chosen = pref?.length
+    ? weightedPick(rng, pool, (e) => (pref.includes(e.type) ? VOIE_WEIGHT : 1))
+    : pick(rng, pool);
   // value = base × RANG × QUALITÉ. La PROFONDEUR est encodée par le RANG (gate) → plus
   // de multiplicateur de magnitude par niveau ici (sinon deux objets même rang mais
   // profondeurs différentes auraient des valeurs différentes → chevauchement).

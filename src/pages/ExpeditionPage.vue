@@ -1267,7 +1267,11 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
       // SIGNATURE du Labyrinthe : un FAMILIER garanti au clear, de rang d'autant plus
       // haut que le PALIER est profond (level+luck du palier → raretés croissantes).
       const famRng = mulberry32((seed.value * 131 + 91) >>> 0 || 1);
-      const fam = rollActivityFamiliar(famRng, { level: runDropLevel(), luck: runLuck() });
+      const fam = rollActivityFamiliar(famRng, {
+        level: runDropLevel(),
+        luck: runLuck(),
+        preferred: voiePref.value,
+      });
       loot.value.push({ ...fam, id: crypto.randomUUID() });
       gameFx.celebrate({
         kind: 'familiar',
