@@ -106,10 +106,11 @@ export function pickFamiliarSpecies(rng: () => number, biome?: FamiliarBiome): F
  *  la roule au niveau/chance donnés. Utilisé par le butin des activités. */
 export function rollActivityFamiliar(
   rng: () => number,
-  opts: { level: number; luck?: number; biome?: FamiliarBiome },
+  opts: { level: number; luck?: number; biome?: FamiliarBiome; playerLevel?: number },
 ): Omit<Item, 'id'> {
   return rollFamiliar(rng, pickFamiliarSpecies(rng, opts.biome), {
     level: opts.level,
     ...(opts.luck !== undefined ? { luck: opts.luck } : {}),
+    ...(opts.playerLevel !== undefined ? { playerLevel: opts.playerLevel } : {}),
   });
 }

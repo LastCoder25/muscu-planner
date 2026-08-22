@@ -481,6 +481,7 @@ import { rollChestGrade, pickLabyTrap, type ChestGrade, type LabyTrap } from '@/
 import { talentEffects } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
+import { refFighter } from '@/lib/proceduralContent';
 import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
 import ChestIcon from '@/components/ChestIcon.vue';
@@ -751,13 +752,18 @@ function roomLit(r: Room): boolean {
   return run.value.visited.includes(r.id) && isVisible(floor.value, run.value, r.id);
 }
 
-// Monstre = baseline (pv/dégâts scalés au joueur + profondeur) MODULÉE par l'archétype
-// de la créature tirée (assassin/brute/colosse/sangsue/vif) → même fourchette de
-// difficulté, mais un FEEL différent à chaque combat. Nom/emoji viennent du roster du palier.
+// Niveau de calibration ABSOLU du palier = son niveau conseillé (comme les donjons).
+// → la difficulté ne dépend PLUS de ta puissance : un palier profond est objectivement
+// dur, un bas-niveau sur-équipé n'y survit pas (ticket anti-runaway, difficulté absolue).
+const palierLevel = computed(() => selectedLaby.value?.recoLevel ?? heroLevel.value);
+
+// Monstre = baseline ABSOLUE calibrée sur le build de RÉFÉRENCE du palier (refFighter au
+// niveau du palier) + profondeur, MODULÉE par l'archétype de la créature (assassin/brute/
+// colosse/sangsue/vif) → un FEEL différent à chaque combat. Nom/emoji viennent du roster.
 function makeMonster(isBoss: boolean, depth: number, foe: LabyFoe): Combatant {
-  const f = fighter.value;
-  const pTurn = f.damage * (f.strikes ?? 1) * (1 + f.crit); // dégâts/tour approx du joueur
-  const P = f.pv;
+  const ref = refFighter(palierLevel.value); // combattant de référence du PALIER (absolu)
+  const pTurn = ref.damage * (ref.strikes ?? 1) * (1 + ref.crit); // dégâts/tour de la référence
+  const P = ref.pv;
   const d = 0.85 + 0.55 * depth; // 0.85 (surface) → 1.4 (fond)
   const a = foe.arch;
   // Baseline coriace : ~3 tours (salle) / ~6,5 tours (gardien) ; dégâts ~5,5 % / ~9 % des PV.
@@ -849,6 +855,7 @@ function openChest(id: number) {
       level,
       luck,
       spread: 1,
+      playerLevel: heroLevel.value,
     });
   const item = drop ? { ...drop, id: crypto.randomUUID() } : null;
   dust.value += 3 + grade.dustBonus;
@@ -904,6 +911,7 @@ function openVault(id: number) {
       defeated: 1,
       level: runDropLevel() + 2,
       luck: Math.min(1, runLuck() + 0.35),
+      playerLevel: heroLevel.value,
     });
     if (d && (!best || RARITY_RANK[d.rarity] > RARITY_RANK[best.rarity])) best = d;
   }
@@ -1054,7 +1062,12 @@ function rollTreasure(): Item | null {
   const luck = runLuck();
   if (rng() < 0.25 && ITEM_SETS.length) {
     const set = ITEM_SETS[Math.floor(rng() * ITEM_SETS.length)]!;
-    const piece = rollSetPiece(rng, { setId: set.id, level: lvl, luck });
+    const piece = rollSetPiece(rng, {
+      setId: set.id,
+      level: lvl,
+      luck,
+      playerLevel: heroLevel.value,
+    });
     return { ...piece, id: crypto.randomUUID() };
   }
   // Garde le MEILLEUR tier (rang+qualité) sur plusieurs tirages → « belle récompense »
@@ -1067,6 +1080,7 @@ function rollTreasure(): Item | null {
       level: lvl,
       luck,
       spread: 0,
+      playerLevel: heroLevel.value,
     });
     if (cand && (!best || tierIndexOf(cand) > tierIndexOf(best))) best = cand;
   }
@@ -1273,6 +1287,7 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
       const fam = rollActivityFamiliar(famRng, {
         level: runDropLevel(),
         luck: runLuck(),
+        playerLevel: heroLevel.value,
       });
       loot.value.push({ ...fam, id: crypto.randomUUID() });
       gameFx.celebrate({

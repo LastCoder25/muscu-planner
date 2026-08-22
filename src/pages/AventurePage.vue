@@ -3258,6 +3258,7 @@ async function explore(d: Dungeon) {
       level: d.dropLevel,
       spread: 1, // le donjon peut lâcher un cran sous son niveau (fourrage à upgrader)
       luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
+      playerLevel: c.value.level.level,
     });
     if (rolled) {
       const dr: Item = { ...rolled, id: crypto.randomUUID() };
@@ -3281,6 +3282,7 @@ async function explore(d: Dungeon) {
               level: d.dropLevel,
               luck: d.dropLuck,
               idSeed: seed,
+              playerLevel: c.value.level.level,
             }),
           ])
         : [];
@@ -3433,6 +3435,7 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
     level: b.dropLevel,
     luck,
     rollFloor,
+    playerLevel: c.value.level.level,
     ...(preferSlot ? { preferSlot } : {}),
   };
   const out: RewardCandidate[] = [];
@@ -3451,6 +3454,7 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
           level: b.dropLevel,
           luck,
           rollFloor,
+          playerLevel: c.value.level.level,
         });
       const p = d ?? rollSetPiece(rng, setOpts);
       out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
@@ -3519,6 +3523,7 @@ async function fightBoss(b: MilestoneBoss) {
               level: b.dropLevel,
               luck: 0.6,
               idSeed: seed,
+              playerLevel: c.value.level.level,
             }),
           ])
         : [];
@@ -3635,6 +3640,7 @@ async function fightEndless() {
           defeated: 1,
           level: endlessDropLevel(tier),
           luck: Math.min(1, 0.6 + (lucky ? 0.4 : 0)),
+          playerLevel: c.value.level.level,
         });
       }
       if (rolled) {

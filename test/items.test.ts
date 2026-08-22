@@ -8,6 +8,7 @@ import {
   dropBand,
   dropBandLabel,
   rankCeilingForLevel,
+  LEVEL_MARGIN,
   RANK_ORDER,
   RARITY_MULT,
   RARITY_RANK,
@@ -89,6 +90,33 @@ describe('rollTier : gate de profondeur', () => {
         expect(RARITY_RANK[rank]).toBeLessThanOrEqual(ceil);
       }
     }
+  });
+  it('CAP anti-runaway : le rang d’un drop est plafonné par niveauJoueur + marge', () => {
+    // Contenu très profond (85) mais joueur bas niveau (19) → rang capé à ceiling(19+marge).
+    const playerLevel = 19;
+    const capCeil = rankCeilingForLevel(playerLevel + LEVEL_MARGIN);
+    for (let s = 1; s <= 120; s++) {
+      const d = rollDrop(mulberry32(s * 13 + 1), {
+        cleared: true,
+        defeated: 1,
+        level: 85,
+        luck: 1,
+        playerLevel,
+      });
+      if (d) expect(RARITY_RANK[d.rarity]).toBeLessThanOrEqual(capCeil);
+    }
+    // Sans playerLevel (legacy/tests) → pas de cap (peut monter au plafond du contenu).
+    let sawAbove = false;
+    for (let s = 1; s <= 120; s++) {
+      const d = rollDrop(mulberry32(s * 13 + 1), {
+        cleared: true,
+        defeated: 1,
+        level: 85,
+        luck: 1,
+      });
+      if (d && RARITY_RANK[d.rarity] > capCeil) sawAbove = true;
+    }
+    expect(sawAbove).toBe(true);
   });
   it('contenu PROFOND → rangs plus hauts que contenu peu profond', () => {
     const avg = (level: number) => {

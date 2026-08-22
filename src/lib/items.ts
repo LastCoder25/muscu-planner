@@ -449,6 +449,15 @@ function pick<T>(rng: () => number, arr: T[]): T {
 export function rankCeilingForLevel(level: number): number {
   return Math.min(9, Math.max(0, Math.floor(Math.sqrt(Math.max(0, level)) * 1.03)));
 }
+/** MARGE d'avance : on peut farmer/obtenir du rang jusqu'à `niveauJoueur + LEVEL_MARGIN`.
+ *  Au-delà, le rang d'un drop est CAPÉ par ton niveau → le sport reste le vrai plafond,
+ *  mais un overshoot modéré (récompense du farm) reste possible. Ticket anti-runaway. */
+export const LEVEL_MARGIN = 5;
+/** Niveau EFFECTIF d'un drop = min(niveau du contenu, niveau joueur + marge). Si `playerLevel`
+ *  n'est pas fourni (contexte legacy/tests), pas de cap. Centralise la règle pour TOUS les tirages. */
+export function cappedDropLevel(contentLevel: number, playerLevel?: number): number {
+  return playerLevel == null ? contentLevel : Math.min(contentLevel, playerLevel + LEVEL_MARGIN);
+}
 /** CRAN de grade MAX DROPPABLE (0..49 = rang×5 + qualité−1) à un niveau donné = rang √-gaté,
  *  qualité 5. (L'infusion, elle, plafonne à ★5 du rang de DROP — cf. `gradeCapForTier`.) */
 export function maxGradeCran(level: number): number {
@@ -565,6 +574,7 @@ export function rollDrop(
     spread?: number;
     luck?: number;
     rollFloor?: number; // 0..1 : plancher de qualité de roll (Autel des boss) → meilleures étoiles
+    playerLevel?: number; // cap anti-runaway : le rang est plafonné à playerLevel + marge
   },
 ): Omit<Item, 'id'> | null {
   if (opts.defeated <= 0) return null;
@@ -572,7 +582,7 @@ export function rollDrop(
   if (rng() >= chance) return null;
 
   const slot = pick(rng, SLOTS);
-  const lvl = opts.level ?? 1;
+  const lvl = cappedDropLevel(opts.level ?? 1, opts.playerLevel);
   // RANG + QUALITÉ gatés par la PROFONDEUR du contenu (rollTier) : le donjon plafonne
   // le rang droppable, la `luck` (profondeur/fiole) et `rollFloor` (Autel) remontent la
   // cloche. Un perso haut niveau dans un donjon bas ne trouve QUE du bas rang.
@@ -627,15 +637,23 @@ export function rollDrop(
  */
 export function rollSetPiece(
   rng: () => number,
-  opts: { setId: string; level: number; luck?: number; preferSlot?: ItemSlot; rollFloor?: number },
+  opts: {
+    setId: string;
+    level: number;
+    luck?: number;
+    preferSlot?: ItemSlot;
+    rollFloor?: number;
+    playerLevel?: number; // cap anti-runaway : rang plafonné à playerLevel + marge
+  },
 ): Omit<Item, 'id'> {
   const set = SET_BY_ID[opts.setId];
   const slot = opts.preferSlot ?? pick(rng, SLOTS);
   // Le RANG d'une pièce de set est gaté par le niveau du PALIER du boss (rollTier),
   // remonté d'un cran (les boss sont une source solide) + `rollFloor` (Autel). La
   // qualité vient du même tirage → un set haut palier bat un set bas palier.
+  const lvl = cappedDropLevel(opts.level, opts.playerLevel);
   const floorTiers = Math.round(Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 8) + 3; // +3 : boss généreux
-  const { rank: rarity, quality, roll } = rollTier(rng, opts.level, opts.luck ?? 0, floorTiers);
+  const { rank: rarity, quality, roll } = rollTier(rng, lvl, opts.luck ?? 0, floorTiers);
   const vf = starQualityMult(quality);
   // STAT DE LA PIÈCE = tirée dans le THÈME DU SET (types de ses paliers), pas dans le pool
   // générique du slot → un set a des stats COHÉRENTES avec son identité (ex. Écailles du
@@ -704,7 +722,7 @@ function familiarSigChance(rarity: Rarity): number {
 export function rollFamiliar(
   rng: () => number,
   species: FamiliarSpecies,
-  opts: { level: number; luck?: number; rarity?: Rarity },
+  opts: { level: number; luck?: number; rarity?: Rarity; playerLevel?: number },
 ): Omit<Item, 'id'> {
   // RANG + QUALITÉ comme les objets : tous deux via rollTier → la LUCK (élevée dans les
   // labyrinthes profonds) pousse aussi la QUALITÉ vers le haut (avant : rang biaisé par la
@@ -715,7 +733,7 @@ export function rollFamiliar(
     rarity = opts.rarity;
     quality = 1 + Math.floor(rng() * 5); // 1..5 uniforme
   } else {
-    const t = rollTier(rng, opts.level, opts.luck ?? 0);
+    const t = rollTier(rng, cappedDropLevel(opts.level, opts.playerLevel), opts.luck ?? 0);
     rarity = t.rank;
     quality = t.quality;
   }
