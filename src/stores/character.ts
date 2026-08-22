@@ -581,6 +581,14 @@ export const useCharacterStore = defineStore('character', () => {
     const talents = cur.talents.map((t) => (t.id === id ? { ...t, equipped: false } : t));
     return persistOptimistic(userId, { talents });
   }
+  // Équipe EXACTEMENT l'ensemble d'ids fourni (talents conseillés) en une écriture.
+  async function setEquippedTalents(userId: string, ids: string[]) {
+    const cur = row.value;
+    if (!cur) return;
+    const keep = new Set(ids);
+    const talents = cur.talents.map((t) => ({ ...t, equipped: keep.has(t.id) }));
+    return persistOptimistic(userId, { talents });
+  }
   // ── RECYCLAGE des SURPLUS → ressource dédiée (perte 2:1 : recycler rend ~la moitié de ce
   // qu'il faut pour build), dépensée pour infuser la QUALITÉ (★1→★5) d'un gardé DANS son rang
   // de drop. Familiers → POUSSIÈRE D'ÂME (`fragments`) ; talents → POUSSIÈRE D'ENCRE
@@ -943,6 +951,7 @@ export const useCharacterStore = defineStore('character', () => {
     unequip,
     equipTalent,
     unequipTalent,
+    setEquippedTalents,
     recycleFamiliar,
     recycleTalent,
     infuseFamiliarGrade,

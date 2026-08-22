@@ -439,12 +439,21 @@
             <div v-if="!char.row.talents.length" class="talents-empty">
               Aucun talent pour l'instant — vaincs des donjons pour en faire tomber.
             </div>
-            <div v-else class="talents-grid">
+            <!-- Talents conseillés (ticket 9f2c6a42) : équipe d'un coup la meilleure combi
+                 pour ta puissance ; ils sont encadrés en doré dans la liste (08b10b7f). -->
+            <button
+              v-if="char.row.talents.length"
+              class="voie-btn talent-reco-btn"
+              @click="doEquipRecommendedTalents"
+            >
+              🪄 Équiper les talents conseillés
+            </button>
+            <div v-if="char.row.talents.length" class="talents-grid">
               <div
                 v-for="t in talentsView"
                 :key="t.id"
                 class="tal-card"
-                :class="['p-' + t.rarity, { eq: t.equipped }]"
+                :class="['p-' + t.rarity, { eq: t.equipped, reco: recommendedTalentIds.has(t.id) }]"
               >
                 <button
                   class="tal-emo"
@@ -2521,6 +2530,56 @@ const firstTalentIcon = computed(() => {
   return eq ? (talentByCode(eq.code)?.icon ?? '') : '';
 });
 const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.value);
+// TALENTS CONSEILLÉS (tickets 9f2c6a42 / 08b10b7f) : la meilleure combinaison de talents
+// à équiper pour MAXIMISER la puissance (build réel = gear équipé + passif de voie).
+// 1 seule instance par code (le meilleur grade), puis choix GREEDY jusqu'au nb de slots
+// (chaque effet de talent est positif → on ajoute à chaque tour celui qui augmente le +).
+const recommendedTalentIds = computed<Set<string>>(() => {
+  const owned = char.row?.talents ?? [];
+  if (!owned.length) return new Set();
+  const byCode = new Map<string, TalentInstance>();
+  for (const t of owned) {
+    const cur = byCode.get(t.code);
+    if (!cur || tierOf(t) > tierOf(cur)) byCode.set(t.code, t);
+  }
+  const pool = [...byCode.values()];
+  const N = Math.min(talentSlots.value, pool.length);
+  const voieFx = voiePassiveEffects(char.row?.voie as VoieId);
+  const eq = char.row?.equipped ?? {};
+  const name = char.row?.pseudo ?? 'Toi';
+  const lvl = c.value.level.level;
+  const powerOf = (combo: TalentInstance[]) =>
+    combatPower(
+      playerWithGear(
+        name,
+        c.value,
+        eq,
+        mergeEffects(talentEffects(combo.map((t) => ({ ...t, equipped: true }))), voieFx),
+        lvl,
+      ),
+    );
+  const chosen: TalentInstance[] = [];
+  while (chosen.length < N && pool.length) {
+    let bestI = -1;
+    let bestP = -1;
+    for (let i = 0; i < pool.length; i++) {
+      const p = powerOf([...chosen, pool[i]!]);
+      if (p > bestP) {
+        bestP = p;
+        bestI = i;
+      }
+    }
+    if (bestI < 0) break;
+    chosen.push(pool.splice(bestI, 1)[0]!);
+  }
+  return new Set(chosen.map((t) => t.id));
+});
+function doEquipRecommendedTalents() {
+  withUid(
+    (uid) => char.setEquippedTalents(uid, [...recommendedTalentIds.value]),
+    'Impossible d’équiper les talents conseillés.',
+  );
+}
 // Vue enrichie : équipés d'abord, puis par grade (tier) puis enchant décroissants.
 const talentsView = computed(() => {
   return (
@@ -4952,6 +5011,24 @@ onUnmounted(() => {
   color: var(--dim);
   font-size: 12.5px;
   cursor: pointer;
+}
+.talent-reco-btn {
+  width: 100%;
+  margin: 4px 0 12px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+/* Talent conseillé (maximise la puissance) : liseré doré (ticket 08b10b7f). */
+.tal-card.reco {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
 }
 .tal-xp {
   height: 4px;
