@@ -327,6 +327,15 @@ const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
   familiar: [{ type: 'damage_pct', base: 6 }],
 };
 
+/** Base canonique par type d'effet (1re occurrence dans SLOT_EFFECTS) → sert à valoriser
+ *  une stat de SET choisie par THÈME (indépendante du slot). Dérivée pour éviter la dérive. */
+const EFFECT_BASE: Record<EffectType, number> = (() => {
+  const m = {} as Record<EffectType, number>;
+  for (const slot of Object.keys(SLOT_EFFECTS) as ItemSlot[])
+    for (const e of SLOT_EFFECTS[slot]) if (m[e.type] === undefined) m[e.type] = e.base;
+  return m;
+})();
+
 /** Effets réellement disponibles pour un slot À CE NIVEAU (pool progressif — les
  *  effets exotiques/signature ne se débloquent qu'en profondeur via EFFECT_MIN_LEVEL).
  *  Fallback PV si rien n'est débloqué. Partagé par rollDrop / forge / reroll. */
@@ -625,9 +634,17 @@ export function rollSetPiece(
   // qualité vient du même tirage → un set haut palier bat un set bas palier.
   const floorTiers = Math.round(Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 8) + 3; // +3 : boss généreux
   const { rank: rarity, quality, roll } = rollTier(rng, opts.level, opts.luck ?? 0, floorTiers);
-  const chosen = pick(rng, SLOT_EFFECTS[slot]);
   const vf = starQualityMult(quality);
-  const value = Math.max(1, round1(chosen.base * RARITY_MULT[rarity] * vf));
+  // STAT DE LA PIÈCE = tirée dans le THÈME DU SET (types de ses paliers), pas dans le pool
+  // générique du slot → un set a des stats COHÉRENTES avec son identité (ex. Écailles du
+  // Dragon = dégâts/crit/vol de vie sur toutes ses pièces), au lieu de stats aléatoires
+  // hors-thème. Déterministe par slot (chaque emplacement du set = une stat stable du thème).
+  const theme = set ? [...new Set(set.tiers.map((t) => t.type))] : [];
+  const chosenType: EffectType = theme.length
+    ? theme[SLOTS.indexOf(slot) % theme.length]!
+    : pick(rng, SLOT_EFFECTS[slot]).type;
+  const base = EFFECT_BASE[chosenType] ?? 8;
+  const value = Math.max(1, round1(base * RARITY_MULT[rarity] * vf));
   const noun = pick(rng, NAMES[slot]);
   const level = 1; // REFONTE C : la pièce de set arrive niv.1 (identité) → à infuser
   return {
@@ -637,7 +654,7 @@ export function rollSetPiece(
     rarity,
     level,
     baseLevel: level,
-    effect: { type: chosen.type, value }, // 1 stat + la synergie de set (bonus 2/3/4 pièces)
+    effect: { type: chosenType, value }, // 1 stat COHÉRENTE au set + synergie (bonus 2/3/4 pièces)
     ...(set ? { setId: opts.setId } : {}),
     roll,
   };

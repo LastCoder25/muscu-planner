@@ -380,6 +380,14 @@ describe('sets d’équipement', () => {
     const piece = rollSetPiece(() => 0.3, { setId: 'dragon', level: 10, preferSlot: 'relic' });
     expect(piece.slot).toBe('relic');
   });
+  it('la stat d’une pièce appartient au THÈME du set (pas aléatoire hors-thème)', () => {
+    const dragon = ITEM_SETS.find((s) => s.id === 'dragon')!;
+    const theme = new Set(dragon.tiers.map((t) => t.type)); // dégâts / crit / vol de vie
+    for (const slot of ['weapon', 'armor', 'accessory', 'relic'] as const) {
+      const piece = rollSetPiece(() => 0.5, { setId: 'dragon', level: 20, preferSlot: slot });
+      expect(theme.has(piece.effect.type)).toBe(true);
+    }
+  });
 });
 
 describe('atelier de poussière (forge / reroll / craft)', () => {
