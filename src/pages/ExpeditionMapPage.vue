@@ -415,7 +415,7 @@ import GameLoader from '@/components/GameLoader.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
-import { playerWithGear, RARITY_RANK } from '@/lib/items';
+import { playerWithGear, mergeEffects, RARITY_RANK } from '@/lib/items';
 import {
   BUILDING_TYPES,
   buildingType,
@@ -443,6 +443,7 @@ import {
   type BuildingUnlock,
 } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
+import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { simulateCombat, type Combatant } from '@/lib/combat';
 import {
   EXPE,
@@ -513,7 +514,10 @@ const fighter = computed<Combatant>(() =>
     char.row?.pseudo ?? 'Toi',
     character.value,
     char.row?.equipped ?? {},
-    talentEffects(char.row?.talents ?? []),
+    mergeEffects(
+      talentEffects(char.row?.talents ?? []),
+      voiePassiveEffects(char.row?.voie as VoieId),
+    ),
     heroLevel.value,
   ),
 );

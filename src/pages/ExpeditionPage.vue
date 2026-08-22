@@ -470,6 +470,7 @@ import {
   tierIndexOf,
   dropBand,
   dropBandLabel,
+  mergeEffects,
   SLOT_LABEL,
   type Item,
   type Rarity,
@@ -478,6 +479,7 @@ import { rollActivityFamiliar } from '@/data/familiars';
 import { pickLabyFoe, type LabyFoe } from '@/data/labyrinthFoes';
 import { rollChestGrade, pickLabyTrap, type ChestGrade, type LabyTrap } from '@/data/labyrinthLoot';
 import { talentEffects } from '@/lib/talents';
+import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
 import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
@@ -575,7 +577,14 @@ const character = computed(() =>
     char.row?.energy_spent ?? 0,
   ),
 );
-const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
+// Effets actifs = talents + passif de VOIE (comme la fiche Héros) → le Labyrinthe combat
+// avec ta vraie puissance de build.
+const talentFx = computed(() =>
+  mergeEffects(
+    talentEffects(char.row?.talents ?? []),
+    voiePassiveEffects(char.row?.voie as VoieId),
+  ),
+);
 const fighter = computed<Combatant>(() =>
   playerWithGear(
     char.row?.pseudo ?? 'Toi',

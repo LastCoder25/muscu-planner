@@ -1231,6 +1231,7 @@ export function bestGearLoadout(
   equipped: Equipped,
   inventory: Item[],
   level = 1,
+  extra: Partial<AggregatedEffects> = {}, // talents + passif de voie → optimise POUR ton build réel
 ): Equipped {
   const familiar = equipped[FAMILIAR_SLOT];
   const bySlot: Record<ItemSlot, Item[]> = {
@@ -1248,7 +1249,7 @@ export function bestGearLoadout(
   const soloPower = (it: Item): number => {
     const one: Equipped = {};
     one[it.slot] = it;
-    return combatPower(playerWithGear(name, stats, one, {}, level));
+    return combatPower(playerWithGear(name, stats, one, extra, level));
   };
   // Candidats retenus par slot : top-K solo + toutes les pièces de set (cap 12) + slot vide.
   const K = 6;
@@ -1277,7 +1278,7 @@ export function bestGearLoadout(
           if (ac) combo.accessory = ac;
           if (r) combo.relic = r;
           if (familiar) combo.familiar = familiar;
-          const p = combatPower(playerWithGear(name, stats, combo, {}, level));
+          const p = combatPower(playerWithGear(name, stats, combo, extra, level));
           if (p > bestP) {
             bestP = p;
             best = combo;

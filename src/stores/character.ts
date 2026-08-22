@@ -17,6 +17,7 @@ import {
   infuseFamiliar as applyFamiliarInfusion,
   swapLoadoutGear,
   bestGearLoadout,
+  mergeEffects,
   SLOTS,
   MAX_LOADOUTS,
   type Item,
@@ -29,12 +30,14 @@ import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStre
 import {
   normalizeTalents,
   talentsEarned,
+  talentEffects,
   talentTier,
   talentTierFloor,
   talentTierStepCost,
   talentRecycleYield,
   type TalentInstance,
 } from '@/lib/talents';
+import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import {
   createMap,
   advanceWorld,
@@ -751,7 +754,10 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<boolean> {
     const cur = row.value;
     if (!cur) return false;
-    const best = bestGearLoadout(name, stats, cur.equipped, cur.inventory, level);
+    // Optimise POUR le build réel : inclut les effets de talents + le passif de voie
+    // (combatPower est non-linéaire → le meilleur gear dépend de ces bonus).
+    const extra = mergeEffects(talentEffects(cur.talents), voiePassiveEffects(cur.voie as VoieId));
+    const best = bestGearLoadout(name, stats, cur.equipped, cur.inventory, level, extra);
     const already = SLOTS.every((s) => (cur.equipped[s]?.id ?? null) === (best[s]?.id ?? null));
     if (already) return false; // déjà optimal → ne rien faire
     const chosen = new Set(SLOTS.map((s) => best[s]?.id).filter((x): x is string => !!x));
