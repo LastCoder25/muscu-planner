@@ -399,31 +399,9 @@
             Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
             effets (→).
           </div>
-
-          <!-- VOIE (spécialisation) : oriente les drops + petit passif. Réversible. -->
-          <div class="sec-title" style="margin-top: 16px">
-            🧭 Voie <span class="sec-hint">— spécialisation</span>
-          </div>
-          <button class="voie-card" @click="voieOpen = true">
-            <template v-if="currentVoie">
-              <span class="vc-emo">{{ currentVoie.emoji }}</span>
-              <div class="vc-main">
-                <div class="vc-name font-display">{{ currentVoie.name }}</div>
-                <div class="vc-blurb">{{ currentVoie.blurb }}</div>
-              </div>
-            </template>
-            <template v-else>
-              <span class="vc-emo">➕</span>
-              <div class="vc-main">
-                <div class="vc-name font-display">Choisir une voie</div>
-                <div class="vc-blurb">Oriente tes drops vers un archétype (+ petit passif).</div>
-              </div>
-            </template>
-            <span class="vc-go">›</span>
-          </button>
         </template>
 
-        <!-- Sélecteur de VOIE -->
+        <!-- Sélecteur de VOIE (ouvert depuis le cercle 🧭 en haut-gauche du carré) -->
         <q-dialog v-model="voieOpen" position="bottom">
           <q-card class="adv-modal">
             <button class="adv-modal-x" aria-label="Fermer" @click="voieOpen = false">✕</button>
@@ -4903,43 +4881,7 @@ button.pt-mini:active {
   color: var(--d4);
   background: color-mix(in srgb, var(--d4) 18%, transparent);
 }
-/* Voie (spécialisation) */
-.voie-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  margin-top: 6px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-}
-.voie-card:active {
-  transform: scale(0.99);
-}
-.vc-emo {
-  font-size: 26px;
-}
-.vc-main {
-  flex: 1;
-  min-width: 0;
-}
-.vc-name {
-  font-weight: 700;
-  font-size: 15px;
-}
-.vc-blurb {
-  font-size: 12px;
-  color: var(--dim);
-}
-.vc-go {
-  color: var(--dim);
-  font-size: 22px;
-}
+/* Voie (spécialisation) — sélecteur ouvert depuis le cercle 🧭 du carré. */
 .voie-list {
   display: flex;
   flex-direction: column;
