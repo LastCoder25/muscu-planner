@@ -1101,9 +1101,12 @@
               <span
                 v-if="dungeonUnlocked(it.dungeon)"
                 class="dgn-chip band"
-                :class="'p-' + dropBand(it.dungeon.dropLevel, it.dungeon.dropLuck).hi.rank"
-                title="Rangs★qualité de butin typiques (bande de drop)"
-                >🎖️ {{ dropBandLabel(it.dungeon.dropLevel, it.dungeon.dropLuck) }}</span
+                :class="
+                  'p-' + dropBand(it.dungeon.dropLevel, it.dungeon.dropLuck, 0, heroLevel).hi.rank
+                "
+                title="Rangs de butin typiques — pyramide centrée sur TON niveau"
+                >🎖️
+                {{ dropBandLabel(it.dungeon.dropLevel, it.dungeon.dropLuck, 0, heroLevel) }}</span
               >
               <button
                 v-if="dungeonUnlocked(it.dungeon)"
@@ -1170,11 +1173,14 @@
         </div>
         <div class="sec-title mboss-title">👑 Boss de palier</div>
         <div class="sec-hint">
-          Un boss tous les 5 niveaux — chacun lâche une pièce de son <b>set</b> unique. Débloqués en
-          chaîne (bats le précédent). Tenter un boss coûte des <b>pierres d’invocation 🔮</b>
-          <b>farmées dans les donjons</b> (drop au nettoyage) — c'est ce qui relie le farm de donjon
-          aux boss.
+          Un boss tous les 5 niveaux — chacun lâche une <b>pièce de set de voie</b> (au hasard parmi
+          les 8). Complète le set de <b>ta voie</b> pour débloquer son capstone. Débloqués en chaîne
+          (bats le précédent). Tenter un boss coûte des <b>pierres d’invocation 🔮</b>
+          <b>farmées dans les donjons</b>.
         </div>
+        <button class="sets-catalog-btn" @click="setsCatalogOpen = true">
+          📖 Voir les 8 sets de voie et leurs bonus
+        </button>
         <div v-if="hasBossAltar" class="summon-forge">
           <span class="sf-have">🔮 {{ char.row.summon_stones }} pierre(s) d’invocation</span>
         </div>
@@ -1622,19 +1628,19 @@
       <q-card v-if="dropInfo" class="drops-card">
         <div class="drops-title font-display">{{ dropInfo.emoji }} Butin — {{ dropInfo.name }}</div>
         <div class="drops-row">
-          <span class="drops-k">Niveau des objets</span>
-          <span class="drops-v"
-            >{{ Math.max(1, dropInfo.dropLevel - 1) }}–{{ dropInfo.dropLevel }}</span
-          >
+          <span class="drops-k">Rangs typiques</span>
+          <span class="drops-v">{{
+            dropBandLabel(dropInfo.dropLevel, dropInfo.dropLuck, 0, heroLevel)
+          }}</span>
         </div>
         <div class="drops-row">
           <span class="drops-k">Récompenses</span>
           <span class="drops-v">jusqu'à {{ dungeonGold(dropInfo) }} 🪙</span>
         </div>
-        <div class="drops-sub">Chances de rareté</div>
+        <div class="drops-sub">Chances de rang (selon TON niveau)</div>
         <div class="odds">
           <div
-            v-for="o in rarityOdds(dropInfo.dropLuck, dropInfo.dropLevel)"
+            v-for="o in rarityOdds(dropInfo.dropLuck, dropInfo.dropLevel, heroLevel)"
             :key="o.label"
             class="odd"
             :class="o.cls"
@@ -1644,13 +1650,45 @@
           </div>
         </div>
         <div class="drops-note">
-          Chaque objet a <b>1 stat</b> (dégâts / PV / critique / vol de vie / réduction). Le
-          <b>Divin</b> (rose) est la rareté ultime — 1 stat très puissante, infusable mais coûteuse.
-          Les <b>pièces de set</b> ne tombent que sur les <b>boss de palier</b>.
+          Le <b>rang</b> (G→SSS) est tiré en <b>pyramide centrée sur ton niveau</b> : surtout ton
+          rang, parfois <b>un cran au-dessus</b> (jackpot, ↑ avec la luck). La <b>qualité</b> (roll)
+          varie en continu → farme le meilleur « jet ». Les <b>pièces de set</b> (de voie) tombent
+          sur les <b>boss de palier</b>.
         </div>
         <button class="drops-close" @click="dropInfo = null">Fermer</button>
       </q-card>
     </q-dialog>
+
+    <!-- CATALOGUE des 8 SETS DE VOIE (accès depuis l'onglet Boss) -->
+    <div v-if="setsCatalogOpen" class="shop-backdrop" @click.self="setsCatalogOpen = false">
+      <div class="shop-card sets-cat-card">
+        <div class="shop-head">
+          <div class="shop-title font-display">📖 Sets de voie (8)</div>
+          <button class="shop-x" aria-label="Fermer" @click="setsCatalogOpen = false">✕</button>
+        </div>
+        <div class="sets-cat-sub">
+          Les boss droppent une pièce de <b>n'importe quel</b> set. Complète les 4 pièces du set de
+          <b>ta voie</b> pour débloquer son <b>capstone</b> ⭐. Bonus indiqués à leur valeur de base
+          (ils montent avec le rang de tes pièces).
+        </div>
+        <div class="sets-cat-list">
+          <div v-for="s in voieSetsCatalog" :key="s.id" class="setcard" :class="{ full: s.mine }">
+            <div class="set-top">
+              <span class="set-name">{{ s.emoji }} {{ s.name }}</span>
+              <span v-if="s.mine" class="set-mine">🧭 ta voie</span>
+            </div>
+            <div class="set-theme">{{ s.theme }}</div>
+            <div class="set-tiers">
+              <span v-for="t in s.tiers" :key="t.pieces" class="set-tier on">
+                {{ t.pieces }} pièces : {{ t.label
+                }}<template v-if="t.capstone"> ⭐ capstone (voie {{ s.voieName }})</template>
+              </span>
+            </div>
+          </div>
+        </div>
+        <button class="drops-close" @click="setsCatalogOpen = false">Fermer</button>
+      </div>
+    </div>
 
     <!-- Récompense de boss AU CHOIX : 3 candidats, on en garde 1. Fallback (reprise
          d'une récompense non choisie) — sinon le CHOIX se fait dans le rapport de
@@ -2260,6 +2298,9 @@ const c = computed(() =>
     char.row?.energy_spent ?? 0,
   ),
 );
+// Niveau du héros (= niveau global de fond) — alias pratique pour les affichages de drop
+// centrés sur le joueur (pyramide) + comparaisons.
+const heroLevel = computed(() => c.value.level.level);
 // Effets cumulés des talents choisis.
 const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
 // Effets « hors équipement » actifs = talents + PASSIF DE VOIE (spécialisation) → comptés
@@ -2814,6 +2855,26 @@ const setsList = computed(() =>
 // Sets de VOIE : lien set↔voie (id = `voie:<id>`).
 const isMySetId = (setId: string) => !!char.row?.voie && setId === voieSetId(char.row.voie);
 const setVoieName = (setId: string) => VOIE_BY_ID[setId.replace(/^voie:/, '')]?.name ?? '';
+
+// Catalogue des 8 SETS DE VOIE (détail complet, accessible côté Boss) : chaque set avec
+// ses 3 paliers (2/3/4 pièces), le 4-pièces = capstone gaté par la voie. Bonus affichés à
+// leur valeur de BASE (rang C de référence, cf. setBonusMult). Ma voie surlignée.
+const setsCatalogOpen = ref(false);
+const voieSetsCatalog = computed(() =>
+  ITEM_SETS.map((s) => ({
+    id: s.id,
+    emoji: s.emoji,
+    name: s.name,
+    theme: s.theme,
+    voieName: setVoieName(s.id),
+    mine: isMySetId(s.id),
+    tiers: s.tiers.map((t) => ({
+      pieces: t.pieces,
+      label: effectLabelFor(t.type, t.base),
+      capstone: t.pieces >= 4,
+    })),
+  })),
+);
 // Déblocages franchis lors du dernier level-up (from → to) → affichés sur l'écran
 // de montée de niveau. Peut couvrir plusieurs niveaux d'un coup.
 const levelBurstUnlocks = computed(() => {
@@ -3056,12 +3117,12 @@ function openDrops(d: Dungeon) {
 // Distribution des RANGS d'un drop selon la chance ET le niveau du donjon (Monte-Carlo
 // sur rollTier → toujours en phase avec le modèle). Ne montre que les rangs qui
 // apparaissent (≥1 %), du plus bas au plus haut.
-function rarityOdds(luck: number, level = 1) {
-  const rng = mulberry32((Math.round(level * 131 + luck * 997) >>> 0) + 1);
+function rarityOdds(luck: number, level = 1, playerLevel?: number) {
+  const rng = mulberry32((Math.round(level * 131 + luck * 997 + (playerLevel ?? 0) * 7) >>> 0) + 1);
   const N = 600;
   const counts = new Array(10).fill(0) as number[];
   for (let i = 0; i < N; i++) {
-    const idx = RARITY_RANK[rollTier(rng, level, luck).rank];
+    const idx = RARITY_RANK[rollTier(rng, level, luck, 0, playerLevel).rank];
     counts[idx] = (counts[idx] ?? 0) + 1;
   }
   return RANK_ORDER.map((r, i) => ({
@@ -5436,6 +5497,35 @@ button.pt-mini:active {
   padding: 1px 6px;
   margin-left: auto;
   margin-right: 6px;
+}
+/* Bouton « voir les 8 sets » + catalogue (onglet Boss) */
+.sets-catalog-btn {
+  width: 100%;
+  margin: 4px 0 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sets-catalog-btn:hover {
+  border-color: var(--accent);
+}
+.sets-cat-sub {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 8px;
+  line-height: 1.35;
+}
+.sets-cat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 /* ── Loadouts (sets d'équipement rangés) ── */
 .loadouts {

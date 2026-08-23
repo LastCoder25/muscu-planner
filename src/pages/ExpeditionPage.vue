@@ -49,9 +49,11 @@
               ·
               <span
                 class="lt-band"
-                :style="{ color: RANK_COLOR[dropBand(t.laby.dropLevel, t.laby.luck).hi.rank] }"
-                title="Rangs★qualité de butin typiques (coffres/trésor)"
-                >🎖️ {{ dropBandLabel(t.laby.dropLevel, t.laby.luck) }}</span
+                :style="{
+                  color: RANK_COLOR[dropBand(t.laby.dropLevel, t.laby.luck, 0, heroLevel).hi.rank],
+                }"
+                title="Rangs de butin typiques — pyramide centrée sur ton niveau"
+                >🎖️ {{ dropBandLabel(t.laby.dropLevel, t.laby.luck, 0, heroLevel) }}</span
               >
               · <span class="lt-death">💀 garde {{ t.deathKeep }}%</span>
             </div>
