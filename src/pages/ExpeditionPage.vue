@@ -50,9 +50,7 @@
                 >⚔️ conseillé {{ fmtPow(recommendedPower(t.laby.recoLevel)) }}</span
               >
               ·
-              <span class="lt-fam"
-                >🐾 familier rang <b>{{ t.laby.rank }}</b></span
-              >
+              <span class="lt-fam">🐾 familier garanti</span>
               · <span class="lt-death">💀 garde {{ t.deathKeep }}%</span>
             </div>
             <div v-if="!t.unlocked" class="lt-lock">
