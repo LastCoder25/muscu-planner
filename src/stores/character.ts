@@ -30,7 +30,7 @@ import {
   talentRank,
   type TalentInstance,
 } from '@/lib/talents';
-import { voiePassiveEffects, type VoieId } from '@/lib/voies';
+import { voiePassiveEffects, VOIES, type VoieId } from '@/lib/voies';
 import {
   createMap,
   advanceWorld,
@@ -672,7 +672,31 @@ export const useCharacterStore = defineStore('character', () => {
     return gold;
   }
 
-  // Choisit/retire la VOIE (spécialisation) — biaise les drops + petit passif. Réversible.
+  // Range une PIÈCE DE SET du sac dans le loadout de SA voie (loadout i ↔ VOIES[i]) : l'objet
+  // quitte le sac pour le slot correspondant du bon loadout ; s'il y avait déjà une pièce sur
+  // ce slot du loadout, elle repart au sac (swap). Renvoie l'index du loadout, ou -1 si KO.
+  async function stashSetPiece(userId: string, itemId: string): Promise<number> {
+    const cur = row.value;
+    if (!cur) return -1;
+    const item = cur.inventory.find((it) => it.id === itemId);
+    if (!item?.setId?.startsWith('voie:')) return -1;
+    const idx = VOIES.findIndex((v) => v.id === item.setId!.slice('voie:'.length));
+    if (idx < 0 || idx >= MAX_LOADOUTS) return -1;
+    const loadouts: Loadout[] = Array.from(
+      { length: MAX_LOADOUTS },
+      (_, k) => cur.loadouts[k] ?? { items: {} },
+    );
+    const items = { ...loadouts[idx]!.items };
+    const displaced = items[item.slot]; // pièce déjà rangée sur ce slot → repart au sac
+    items[item.slot] = item;
+    loadouts[idx] = { items };
+    const inventory = cur.inventory.filter((it) => it.id !== itemId);
+    if (displaced) inventory.push(displaced);
+    await persist(userId, { inventory, loadouts });
+    return idx;
+  }
+
+  // Choisit/retire la VOIE (spécialisation) — petit passif + capstone du set de la voie. Réversible.
   async function setVoie(userId: string, voie: string | null) {
     if (!row.value) return;
     await persistOptimistic(userId, { voie });
@@ -873,6 +897,7 @@ export const useCharacterStore = defineStore('character', () => {
     swapLoadout,
     unpackLoadout,
     sellLoadout,
+    stashSetPiece,
     optimizeGear,
     setVoie,
     equipReplacing,

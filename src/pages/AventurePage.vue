@@ -907,6 +907,14 @@
                     >
                       {{ it.locked ? '🔒' : '🔓' }}
                     </button>
+                    <button
+                      v-if="isVoieSetItem(it)"
+                      class="ii-ic"
+                      :title="'Ranger dans le loadout ' + setVoieName(it.setId!)"
+                      @click="doStashSetPiece(it)"
+                    >
+                      📦
+                    </button>
                   </div>
                 </div>
               </div>
@@ -4025,6 +4033,18 @@ function doSell(it: Item) {
 }
 function doToggleLock(it: Item) {
   withUid((uid) => char.toggleLock(uid, it.id), 'Action impossible.');
+}
+// Pièce de set (de voie) → bouton 📦 pour la ranger dans le loadout de SA voie (loadout i↔voie i).
+const isVoieSetItem = (it: Item) => !!it.setId && it.setId.startsWith('voie:');
+function doStashSetPiece(it: Item) {
+  withUid(async (uid) => {
+    const idx = await char.stashSetPiece(uid, it.id);
+    if (idx >= 0)
+      $q.notify({
+        type: 'positive',
+        message: `📦 Rangé dans le loadout ${VOIES[idx]?.name ?? ''}.`,
+      });
+  }, 'Impossible de ranger cette pièce.');
 }
 // Nettoyage en masse : objets du sac moins rares que l'équipé du même slot.
 // Slot ciblé par le nettoyage en masse = le filtre du sac actif (sinon tous).
