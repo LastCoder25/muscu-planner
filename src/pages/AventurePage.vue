@@ -1802,6 +1802,13 @@
                 <div v-if="rewardDupNote(cand.item)" class="rc-dup">
                   {{ rewardDupNote(cand.item) }}
                 </div>
+                <div
+                  v-if="rewardLoadoutCmp(cand.item)"
+                  class="rc-loadcmp"
+                  :class="rewardLoadoutCmp(cand.item)!.cls"
+                >
+                  {{ rewardLoadoutCmp(cand.item)!.text }}
+                </div>
               </div>
             </template>
             <template v-else>
@@ -2034,6 +2041,13 @@
                     </div>
                     <div v-if="rewardDupNote(cand.item)" class="rc-dup">
                       {{ rewardDupNote(cand.item) }}
+                    </div>
+                    <div
+                      v-if="rewardLoadoutCmp(cand.item)"
+                      class="rc-loadcmp"
+                      :class="rewardLoadoutCmp(cand.item)!.cls"
+                    >
+                      {{ rewardLoadoutCmp(cand.item)!.text }}
                     </div>
                   </div>
                 </template>
@@ -3299,6 +3313,19 @@ function rewardScore(cand: RewardCandidate): number {
 function rewardFitsVoie(it: Item): boolean {
   const v = currentVoie.value;
   return !!v && v.preferred.includes(it.effect.type);
+}
+// Comparaison d'une pièce de set (candidat de récompense) vs son ÉQUIVALENT dans le loadout
+// de sa voie → dit ce qui se passera si on la choisit (rangée / remplace / vendue). Même
+// logique que chooseReward (magnitude d'effet). Null si ce n'est pas une pièce de set de voie.
+function rewardLoadoutCmp(it: Item): { text: string; cls: string } | null {
+  if (!it.setId?.startsWith('voie:')) return null;
+  const idx = VOIES.findIndex((v) => v.id === it.setId!.slice('voie:'.length));
+  if (idx < 0) return null;
+  const existing = char.row?.loadouts?.[idx]?.items?.[it.slot];
+  if (!existing) return { text: '📦 emplacement libre → rangée', cls: 'good' };
+  return (it.effect?.value ?? 0) > (existing.effect?.value ?? 0)
+    ? { text: '📦 meilleure que ta pièce rangée → remplace', cls: 'good' }
+    : { text: '📦 ≤ ta pièce rangée → sera vendue', cls: 'bad' };
 }
 // Index du candidat conseillé (meilleur score). -1 si pas de récompense en attente.
 const recommendedRewardIndex = computed(() => {
@@ -6581,6 +6608,17 @@ button.pt-mini:active {
   font-size: 10.5px;
   font-weight: 700;
   color: var(--d4);
+}
+.rc-loadcmp {
+  margin-top: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.rc-loadcmp.good {
+  color: var(--d1);
+}
+.rc-loadcmp.bad {
+  color: var(--dim);
 }
 .rc-pills {
   display: flex;

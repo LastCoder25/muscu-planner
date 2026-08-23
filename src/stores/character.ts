@@ -367,6 +367,42 @@ export const useCharacterStore = defineStore('character', () => {
     const cand = cur?.pending_reward?.candidates[index];
     if (!cur || !cand) return;
     if (cand.kind === 'item') {
+      const item = cand.item;
+      // Pièce de SET DE VOIE → filée AUTOMATIQUEMENT dans le loadout de sa voie (≤ 1 set/loadout) :
+      // emplacement libre → rangée ; loadout meilleur (ou égal) → drop vendu ; drop meilleur →
+      // remplace, ancien vendu (ou au sac si 🔒). Comparaison par magnitude d'effet (même
+      // set + même slot → même type d'effet → value monotone avec la puissance).
+      if (item.setId?.startsWith('voie:')) {
+        const idx = VOIES.findIndex((v) => v.id === item.setId!.slice('voie:'.length));
+        if (idx >= 0 && idx < MAX_LOADOUTS) {
+          const loadouts: Loadout[] = Array.from(
+            { length: MAX_LOADOUTS },
+            (_, k) => cur.loadouts[k] ?? { items: {} },
+          );
+          const items = { ...loadouts[idx]!.items };
+          const existing = items[item.slot];
+          let gold = cur.gold;
+          let inventory = cur.inventory;
+          if (!existing) {
+            items[item.slot] = item; // emplacement libre → rangé
+          } else if ((existing.effect?.value ?? 0) >= (item.effect?.value ?? 0)) {
+            gold += sellValue(item); // loadout meilleur (ou égal) → drop vendu
+          } else {
+            items[item.slot] = item; // drop meilleur → remplace
+            if (existing.locked)
+              inventory = [...inventory, existing]; // 🔒 → au sac
+            else gold += sellValue(existing); // sinon ancien vendu
+          }
+          loadouts[idx] = { items };
+          return persist(userId, {
+            loadouts,
+            gold,
+            inventory,
+            set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, [item]),
+            pending_reward: null,
+          });
+        }
+      }
       const dist = distributeItems(cur.equipped, cur.inventory, [cand.item]);
       return persist(userId, {
         equipped: dist.equipped,
