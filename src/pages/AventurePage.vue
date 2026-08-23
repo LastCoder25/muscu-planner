@@ -541,12 +541,19 @@
             <div v-if="!allFamiliars.length" class="talents-empty">
               Aucun familier — <b>clear le Labyrinthe 🗝️</b> pour en trouver un garanti.
             </div>
-            <div v-else class="talents-grid">
+            <button
+              v-if="allFamiliars.length"
+              class="voie-btn talent-reco-btn"
+              @click="doEquipRecommendedFamiliar"
+            >
+              🪄 Équiper le familier conseillé
+            </button>
+            <div v-if="allFamiliars.length" class="talents-grid">
               <div
                 v-for="f in allFamiliars"
                 :key="f.id"
                 class="tal-card"
-                :class="['p-' + f.rarity, { eq: f.equipped }]"
+                :class="['p-' + f.rarity, { eq: f.equipped, reco: recommendedFamiliarId === f.id }]"
               >
                 <ItemIcon :item="f" :size="40" role="img" :aria-label="f.name" />
                 <div class="tal-body">
@@ -645,6 +652,10 @@
         </div>
         <div class="sec-hint">
           Ton stuff équipé. Ton butin est dans le <b>🎒 Sac</b> (icône en haut à droite).
+        </div>
+        <div v-if="equippedSet" class="equipped-set-banner">
+          🧭 Set <b>{{ equippedSet.emoji }} {{ equippedSet.name }}</b> en cours ·
+          {{ equippedSet.count }}/4 pièces
         </div>
         <div class="gear">
           <div
@@ -1522,7 +1533,7 @@
             v-for="(lo, i) in loadoutsView"
             :key="i"
             class="loadout"
-            :class="{ empty: !lo.count }"
+            :class="{ empty: !lo.count, active: equippedSet?.idx === i }"
           >
             <div class="lo-head">
               <span
@@ -1533,6 +1544,7 @@
                   >{{ loadoutVoie(i)!.emoji }} {{ loadoutVoie(i)!.name }}</template
                 >
                 <template v-else>Loadout {{ i + 1 }}</template>
+                <span v-if="equippedSet?.idx === i" class="lo-active">✓ en cours</span>
               </span>
               <span
                 v-if="lo.count"
@@ -2430,6 +2442,30 @@ const famDeltaMap = computed(() => {
     if (!f.equipped) m.set(f.id, Math.round(famPowerIfEquip(f) - cur));
   return m;
 });
+// FAMILIER CONSEILLÉ (comme les talents) : celui qui MAXIMISE la puissance de combat une
+// fois équipé (famPowerIfEquip → powerWith inclut la voie). Renvoie l'id du meilleur parmi
+// les familiers possédés (équipé inclus) → si l'équipé est déjà le meilleur, c'est lui.
+const recommendedFamiliarId = computed<string | null>(() => {
+  let bestId: string | null = null;
+  let bestP = -1;
+  for (const f of allFamiliars.value) {
+    const p = famPowerIfEquip(f);
+    if (p > bestP) {
+      bestP = p;
+      bestId = f.id;
+    }
+  }
+  return bestId;
+});
+function doEquipRecommendedFamiliar() {
+  const id = recommendedFamiliarId.value;
+  if (!id) return;
+  if (equippedFamiliar.value?.id === id) {
+    $q.notify({ message: '🐾 Ton familier est déjà le meilleur pour ta puissance.' });
+    return;
+  }
+  withUid((uid) => char.equip(uid, id), 'Impossible d’équiper le familier conseillé.');
+}
 const talDeltaMap = computed(() => {
   const cur = combatPowerVal.value;
   const m = new Map<string, number>();
@@ -3971,6 +4007,24 @@ const bagCount = computed(() => (char.row?.inventory ?? []).filter((i) => !isFam
 // Slot i ↔ voie i : chaque loadout est l'endroit où ranger le set de cette voie.
 const loadoutVoie = (i: number): (typeof VOIES)[number] | null => VOIES[i] ?? null;
 const hasEquippedGear = computed(() => SLOTS.some((s) => !!char.row?.equipped[s]));
+// SET DE VOIE ACTUELLEMENT ÉQUIPÉ (≥2 pièces) → marque le loadout correspondant « en cours »
+// + bannière dans la vue Équipement. Dominant parmi les 4 slots gear équipés.
+const equippedSet = computed<{ idx: number; name: string; emoji: string; count: number } | null>(
+  () => {
+    const counts = setCounts(char.row?.equipped ?? {});
+    let bestId = '';
+    let bestN = 0;
+    for (const [id, n] of Object.entries(counts))
+      if (id.startsWith('voie:') && n > bestN) {
+        bestN = n;
+        bestId = id;
+      }
+    if (bestN < 2) return null; // moins de 2 pièces → pas de set « en cours »
+    const v = VOIE_BY_ID[bestId.slice('voie:'.length)];
+    const idx = VOIES.findIndex((x) => `voie:${x.id}` === bestId);
+    return v ? { idx, name: v.name, emoji: v.emoji, count: bestN } : null;
+  },
+);
 // Puissance SI on équipe ce loadout : ses 4 objets gear + le FAMILIER actuel (non rangé).
 function loadoutPower(items: Equipped): number {
   const fam = char.row?.equipped[FAMILIAR_SLOT];
@@ -5741,6 +5795,29 @@ button.pt-mini:active {
 }
 .lo-name.mine {
   color: var(--accent);
+}
+.loadout.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.lo-active {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 6px;
+  padding: 1px 6px;
+  vertical-align: middle;
+}
+.equipped-set-banner {
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
 }
 .lo-power {
   font-size: 12px;
