@@ -141,7 +141,7 @@ const pPct = computed(() => Math.round((playerPv.value / Math.max(1, props.playe
 const CHUNK_MIN_PV = 1500;
 const monMaxPv = computed(() => Math.max(1, foe.value?.maxPv ?? 1));
 const mBars = computed(() =>
-  monMaxPv.value < CHUNK_MIN_PV ? 1 : Math.min(6, Math.max(2, Math.round(monMaxPv.value / 1200))),
+  monMaxPv.value < CHUNK_MIN_PV ? 1 : Math.min(3, Math.max(2, Math.round(monMaxPv.value / 1200))),
 );
 const mChunk = computed(() => monMaxPv.value / mBars.value);
 const mBarsLeft = computed(() =>

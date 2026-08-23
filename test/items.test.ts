@@ -182,7 +182,8 @@ describe('rollTier : pyramide de rareté centrée sur le niveau', () => {
     expect(typeof dropBandLabel(12, 0.5)).toBe('string');
   });
   it('dropPeakRank = rang le plus probable (pic = ceiling de min(contenu, joueur))', () => {
-    for (const lv of [10, 20, 40, 60]) expect(dropPeakRank(lv)).toBe(RANK_ORDER[rankCeilingForLevel(lv)]);
+    for (const lv of [10, 20, 40, 60])
+      expect(dropPeakRank(lv)).toBe(RANK_ORDER[rankCeilingForLevel(lv)]);
     // capé par le joueur : contenu profond, joueur bas → pic sur le rang du JOUEUR
     expect(dropPeakRank(85, 0, 0, 20)).toBe(RANK_ORDER[rankCeilingForLevel(20)]);
   });
