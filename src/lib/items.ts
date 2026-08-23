@@ -555,6 +555,18 @@ export function dropBandLabel(
   const { lo, hi } = dropBand(level, luck, floorBonus, playerLevel);
   return lo.rank === hi.rank ? lo.rank : `${lo.rank} → ${hi.rank}`;
 }
+/** Rang le PLUS PROBABLE d'un drop (pic de la pyramide) — pour l'affichage : TOUS les rangs
+ *  restent droppables, seuls les % varient (cf. rarityOdds), donc on montre le pic, pas une
+ *  fausse borne min→max. */
+export function dropPeakRank(
+  level: number,
+  luck = 0,
+  floorBonus = 0,
+  playerLevel?: number,
+): Rarity {
+  const { center, cap } = rankBell(level, luck, floorBonus, playerLevel);
+  return RANK_ORDER[Math.min(9, Math.max(0, Math.min(cap, Math.round(center))))]!;
+}
 /** Rang seul (utilitaires forge/familier qui n'ont pas besoin de la qualité fine). */
 export function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {
   return rollTier(rng, level, luck).rank;

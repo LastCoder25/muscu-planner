@@ -1104,11 +1104,12 @@
                 v-if="dungeonUnlocked(it.dungeon)"
                 class="dgn-chip band"
                 :class="
-                  'p-' + dropBand(it.dungeon.dropLevel, it.dungeon.dropLuck, 0, heroLevel).hi.rank
+                  'p-' + dropPeakRank(it.dungeon.dropLevel, it.dungeon.dropLuck, 0, heroLevel)
                 "
-                title="Rangs de butin typiques — pyramide centrée sur TON niveau"
-                >🎖️
-                {{ dropBandLabel(it.dungeon.dropLevel, it.dungeon.dropLuck, 0, heroLevel) }}</span
+                title="Rang le plus probable — TOUS les rangs peuvent tomber, seuls les % varient (touche 🎁 pour le détail)"
+                >🎖️ ~{{
+                  dropPeakRank(it.dungeon.dropLevel, it.dungeon.dropLuck, 0, heroLevel)
+                }}</span
               >
               <button
                 v-if="dungeonUnlocked(it.dungeon)"
@@ -1630,10 +1631,10 @@
       <q-card v-if="dropInfo" class="drops-card">
         <div class="drops-title font-display">{{ dropInfo.emoji }} Butin — {{ dropInfo.name }}</div>
         <div class="drops-row">
-          <span class="drops-k">Rangs typiques</span>
-          <span class="drops-v">{{
-            dropBandLabel(dropInfo.dropLevel, dropInfo.dropLuck, 0, heroLevel)
-          }}</span>
+          <span class="drops-k">Rang le plus probable</span>
+          <span class="drops-v"
+            >~{{ dropPeakRank(dropInfo.dropLevel, dropInfo.dropLuck, 0, heroLevel) }}</span
+          >
         </div>
         <div class="drops-row">
           <span class="drops-k">Récompenses</span>
@@ -2099,8 +2100,7 @@ import {
   FAMILIAR_SLOT,
   tierIndexOf,
   rollTier,
-  dropBand,
-  dropBandLabel,
+  dropPeakRank,
   RANK_ORDER,
   SLOTS,
   SLOT_LABEL,
@@ -2822,7 +2822,10 @@ watch(
     // Uniquement une fois ARMÉ (perso chargé) ET sur un vrai changement de zone. On
     // DIFFÈRE toujours à la fermeture du rapport (cf. watch reportOpen) — le watcher peut
     // s'exécuter avant/après openReport selon l'ordre des microtâches.
-    if (revealReady.value && id !== lastRegionId) {
+    // JAMAIS pour la zone de BASE (index 0, « Terres de l'Aube ») : elle est débloquée
+    // d'entrée → un reveal dessus est toujours parasite (course au chargement/reset).
+    const idx = REGIONS.findIndex((r) => r.id === id);
+    if (revealReady.value && id !== lastRegionId && idx > 0) {
       const r = curRegion.value;
       pendingRegionReveal.value = {
         id,

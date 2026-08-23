@@ -7,6 +7,7 @@ import {
   rollTier,
   dropBand,
   dropBandLabel,
+  dropPeakRank,
   rankCeilingForLevel,
   RANK_ORDER,
   RARITY_MULT,
@@ -179,6 +180,11 @@ describe('rollTier : pyramide de rareté centrée sur le niveau', () => {
     expect(ri(dropBand(30, 0.4).hi.rank)).toBeGreaterThan(ri(dropBand(12, 0.4).hi.rank));
     expect(ri(dropBand(20, 0.9).hi.rank)).toBeGreaterThanOrEqual(ri(dropBand(20, 0).hi.rank));
     expect(typeof dropBandLabel(12, 0.5)).toBe('string');
+  });
+  it('dropPeakRank = rang le plus probable (pic = ceiling de min(contenu, joueur))', () => {
+    for (const lv of [10, 20, 40, 60]) expect(dropPeakRank(lv)).toBe(RANK_ORDER[rankCeilingForLevel(lv)]);
+    // capé par le joueur : contenu profond, joueur bas → pic sur le rang du JOUEUR
+    expect(dropPeakRank(85, 0, 0, 20)).toBe(RANK_ORDER[rankCeilingForLevel(20)]);
   });
 });
 

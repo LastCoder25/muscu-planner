@@ -132,12 +132,17 @@ const lastWin = ref(false);
 const foe = computed(() => props.fights[fightIdx.value] ?? null);
 const foeArchetype = computed(() => foe.value?.archetype ?? 'normal');
 const pPct = computed(() => Math.round((playerPv.value / Math.max(1, props.playerMaxPv)) * 100));
-// BARRES CHUNKÉES pour les gros PV (ticket 30457173) : un monstre à énorme PV bougeait à
+// BARRES CHUNKÉES pour les GROS PV (ticket 30457173) : un monstre à énorme PV bougeait à
 // peine au début (chaque coup = 1 % de barre). On découpe sa vie en `mBars` barres et on
 // n'affiche qu'UNE barre (celle du chunk courant) + un « ×N » qui descend à chaque barre
-// perdue → le début du combat est enfin lisible. 1 barre pour les petits monstres.
+// perdue → le début du combat devient lisible. Seuil ÉLEVÉ (CHUNK_MIN_PV) : les monstres à
+// PEU de vie (bestiaire de base ≤ ~560, tout ce qui n'est pas boss/monstre tanky) gardent
+// UNE seule barre ; le multiplicateur reste MODESTE (2→6 max, ~1200 PV/barre).
+const CHUNK_MIN_PV = 1500;
 const monMaxPv = computed(() => Math.max(1, foe.value?.maxPv ?? 1));
-const mBars = computed(() => Math.min(8, Math.max(1, Math.round(monMaxPv.value / 220))));
+const mBars = computed(() =>
+  monMaxPv.value < CHUNK_MIN_PV ? 1 : Math.min(6, Math.max(2, Math.round(monMaxPv.value / 1200))),
+);
 const mChunk = computed(() => monMaxPv.value / mBars.value);
 const mBarsLeft = computed(() =>
   monsterPv.value > 0 ? Math.ceil(monsterPv.value / mChunk.value) : 0,
