@@ -13,10 +13,10 @@ describe('advUnlocks — calendrier des déblocages', () => {
     expect(kinds.has('talent')).toBe(true);
     expect(kinds.has('effect')).toBe(true);
     expect(kinds.has('expedition')).toBe(true);
-    // Le boss du palier 5 est le Golem, avec son set.
+    // Le boss du palier 5 est le Golem ; il lâche des pièces de set (de voie).
     const boss = unlocksAtLevel(5).find((u) => u.kind === 'boss');
     expect(boss?.title).toContain('Golem');
-    expect(boss?.detail).toContain('Rempart du Golem');
+    expect(boss?.detail).toContain('set');
   });
 
   it('niveau 8 = uniquement l’effet vol de vie', () => {

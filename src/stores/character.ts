@@ -692,7 +692,8 @@ export const useCharacterStore = defineStore('character', () => {
     // Optimise POUR le build réel : inclut les effets de talents + le passif de voie
     // (combatPower est non-linéaire → le meilleur gear dépend de ces bonus).
     const extra = mergeEffects(talentEffects(cur.talents), voiePassiveEffects(cur.voie as VoieId));
-    const best = bestGearLoadout(name, stats, cur.equipped, cur.inventory, level, extra);
+    // `cur.voie` gate le capstone (4-pièces) → l'optimiseur valorise ton set de voie complet.
+    const best = bestGearLoadout(name, stats, cur.equipped, cur.inventory, level, extra, cur.voie);
     const already = SLOTS.every((s) => (cur.equipped[s]?.id ?? null) === (best[s]?.id ?? null));
     if (already) return false; // déjà optimal → ne rien faire
     const chosen = new Set(SLOTS.map((s) => best[s]?.id).filter((x): x is string => !!x));

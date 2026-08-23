@@ -593,6 +593,7 @@ const fighter = computed<Combatant>(() =>
     char.row?.equipped ?? {},
     talentFx.value,
     character.value.level.level,
+    char.row?.voie,
   ),
 );
 const heroLevel = computed(() => character.value.level.level);

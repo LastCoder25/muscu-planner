@@ -34,47 +34,44 @@ describe('codex — bestiaire', () => {
   });
 });
 
-describe('codex — journal des sets', () => {
-  it('rien possédé → 0/4, non complet, boss non vaincu', () => {
-    const sets = setCollection({}, [], []);
-    const dragon = sets.find((s) => s.set.id === 'dragon')!;
-    expect(dragon.owned).toBe(0);
-    expect(dragon.complete).toBe(false);
-    expect(dragon.bossDefeated).toBe(false);
-    expect(dragon.bossId).toBe('dragon_primordial');
+describe('codex — journal des sets (voie)', () => {
+  const BERS = 'voie:berserker';
+  it('rien possédé → 0/4, non complet', () => {
+    const sets = setCollection({}, []);
+    const bers = sets.find((s) => s.set.id === BERS)!;
+    expect(bers.owned).toBe(0);
+    expect(bers.complete).toBe(false);
   });
 
-  it('4 slots distincts d’un set → complet ; boss vaincu reconnu', () => {
+  it('4 slots distincts d’un set → complet', () => {
     const inv = [
-      setItem('weapon', 'dragon'),
-      setItem('armor', 'dragon'),
-      setItem('accessory', 'dragon'),
-      setItem('relic', 'dragon'),
+      setItem('weapon', BERS),
+      setItem('armor', BERS),
+      setItem('accessory', BERS),
+      setItem('relic', BERS),
     ];
-    const sets = setCollection({}, inv, ['dragon_primordial']);
-    const dragon = sets.find((s) => s.set.id === 'dragon')!;
-    expect(dragon.owned).toBe(4);
-    expect(dragon.complete).toBe(true);
-    expect(dragon.bossDefeated).toBe(true);
+    const bers = setCollection({}, inv).find((s) => s.set.id === BERS)!;
+    expect(bers.owned).toBe(4);
+    expect(bers.complete).toBe(true);
   });
 
   it('doublons de slot ne comptent qu’une fois (slots DISTINCTS)', () => {
-    const inv = [setItem('weapon', 'dragon'), setItem('weapon', 'dragon')];
-    const dragon = setCollection({}, inv, []).find((s) => s.set.id === 'dragon')!;
-    expect(dragon.owned).toBe(1);
+    const inv = [setItem('weapon', BERS), setItem('weapon', BERS)];
+    const bers = setCollection({}, inv).find((s) => s.set.id === BERS)!;
+    expect(bers.owned).toBe(1);
   });
 
   it('compte les pièces équipées ET du sac', () => {
-    const equipped = { weapon: setItem('weapon', 'golem') };
-    const inv = [setItem('armor', 'golem')];
-    const golem = setCollection(equipped, inv, []).find((s) => s.set.id === 'golem')!;
-    expect(golem.owned).toBe(2);
+    const equipped = { weapon: setItem('weapon', 'voie:gardien') };
+    const inv = [setItem('armor', 'voie:gardien')];
+    const gardien = setCollection(equipped, inv).find((s) => s.set.id === 'voie:gardien')!;
+    expect(gardien.owned).toBe(2);
   });
 });
 
 describe('codex — résumé', () => {
   it('agrège monstres trouvés et sets complets', () => {
-    const s = codexSummary(['clairiere'], {}, [], []);
+    const s = codexSummary(['clairiere'], {}, []);
     expect(s.monstersFound).toBe(1);
     expect(s.monstersTotal).toBe(MONSTERS.length);
     expect(s.setsComplete).toBe(0);

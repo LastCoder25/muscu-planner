@@ -219,11 +219,12 @@ export type Equipped = Partial<Record<ItemSlot, Item>>;
 
 // Loadout : un « set » d'équipement rangé (les 4 slots gear uniquement — le familier
 // n'est jamais rangé). Ranger déplace le stuff équipé dans un loadout (joueur nu) ; les
-// objets rangés ne sont ni dans le sac ni pris en compte au combat. Max 3 loadouts.
+// objets rangés ne sont ni dans le sac ni pris en compte au combat. 8 loadouts (v0.565) =
+// 1 par VOIE → un endroit pour ranger le set de chaque voie à mesure qu'on le collecte.
 export interface Loadout {
   items: Equipped;
 }
-export const MAX_LOADOUTS = 3;
+export const MAX_LOADOUTS = 8;
 
 /** Échange les 4 slots gear (weapon/armor/accessory/relic) entre l'équipement et un
  *  loadout → renvoie le nouvel équipement + les items du loadout. Le familier reste
@@ -1033,10 +1034,119 @@ const HAND_SETS: ItemSet[] = [
     ],
   },
 ];
-// Sets complets = écrits à la main (5 boss de palier) + PROCÉDURAUX (boss 30→100).
-export const ITEM_SETS: ItemSet[] = [...HAND_SETS, ...PROCEDURAL.sets];
+// ── SETS DE VOIE (v0.565, 2026‑08‑23) : 1 set PAR VOIE, thème = ses stats. ──
+// Refonte : un set = l'expression LONG-TERME d'une voie (plus « 1 set par boss » qui
+// devenait obsolète au palier suivant). Le MÊME set existe de G à SSS → on monte le RANG
+// de son set en battant des boss plus profonds, on ne le jette jamais. Le 4-pièces est un
+// CAPSTONE gaté par la voie (cf. setEffects) : il ne s'applique QUE si la voie du joueur
+// correspond au set → « set complet de ta voie » = accomplir l'archétype. Les 2/3-pièces
+// (stats brutes) s'appliquent pour tout le monde. id = `voie:<voieId>` (lien avec voies.ts
+// par convention, garanti par un test — pas d'import pour éviter le cycle voies↔items).
+// stats = [PRIMAIRE (=capstone 4pc), secondaire (3pc), tertiaire (2pc)].
+const VOIE_SET_DEFS: {
+  voie: string;
+  name: string;
+  emoji: string;
+  theme: string;
+  stats: [EffectType, EffectType, EffectType];
+}[] = [
+  {
+    voie: 'berserker',
+    name: 'Fureur du Berserker',
+    emoji: '💥',
+    theme: 'Dégâts bruts et exécution — le set qui frappe.',
+    stats: ['damage_pct', 'execute_pct', 'lifesteal_pct'],
+  },
+  {
+    voie: 'gardien',
+    name: 'Rempart du Gardien',
+    emoji: '🛡️',
+    theme: 'Le mur qui frappe : encaisse tout et tient.',
+    stats: ['dmg_reduction_pct', 'max_pv_pct', 'damage_pct'],
+  },
+  {
+    voie: 'assassin',
+    name: 'Ombre de l’Assassin',
+    emoji: '🗡️',
+    theme: 'Critiques qui achèvent, un vol de vie pour durer.',
+    stats: ['crit_pct', 'execute_pct', 'lifesteal_pct'],
+  },
+  {
+    voie: 'vampire',
+    name: 'Soif du Vampire',
+    emoji: '🩸',
+    theme: 'Vole la vie et se déchaîne au bord de la mort.',
+    stats: ['lifesteal_pct', 'damage_pct', 'rage_pct'],
+  },
+  {
+    voie: 'colosse',
+    name: 'Carcasse du Colosse',
+    emoji: '🪨',
+    theme: 'Réservoir de PV qui cogne dans la durée.',
+    stats: ['max_pv_pct', 'dmg_reduction_pct', 'damage_pct'],
+  },
+  {
+    voie: 'duelliste',
+    name: 'Élégance du Duelliste',
+    emoji: '🎯',
+    theme: 'Précision létale adossée à des PV.',
+    stats: ['crit_pct', 'damage_pct', 'max_pv_pct'],
+  },
+  {
+    voie: 'epineux',
+    name: 'Carapace de l’Épineux',
+    emoji: '🌵',
+    theme: 'Encaisse, renvoie les coups, frappe en retour.',
+    stats: ['thorns_pct', 'max_pv_pct', 'damage_pct'],
+  },
+  {
+    voie: 'frenetique',
+    name: 'Transe du Frénétique',
+    emoji: '🌀',
+    theme: 'Monte en puissance au fil du combat.',
+    stats: ['momentum_pct', 'damage_pct', 'lifesteal_pct'],
+  },
+];
+export const VOIE_SETS: ItemSet[] = VOIE_SET_DEFS.map((d) => ({
+  id: `voie:${d.voie}`,
+  name: d.name,
+  emoji: d.emoji,
+  theme: d.theme,
+  tiers: [
+    {
+      pieces: 2,
+      type: d.stats[2],
+      base: Math.max(1, round1((EFFECT_BASE[d.stats[2]] ?? 8) * 0.7)),
+    },
+    {
+      pieces: 3,
+      type: d.stats[1],
+      base: Math.max(1, round1((EFFECT_BASE[d.stats[1]] ?? 8) * 1.0)),
+    },
+    // 4-pièces = CAPSTONE (gaté par la voie) : la stat IDENTITÉ, amplifiée.
+    {
+      pieces: 4,
+      type: d.stats[0],
+      base: Math.max(1, round1((EFFECT_BASE[d.stats[0]] ?? 8) * 1.6)),
+    },
+  ],
+}));
+export const VOIE_SET_IDS: string[] = VOIE_SETS.map((s) => s.id);
+/** id du set d'une voie (`voie:<id>`) — source unique du lien voie↔set. */
+export function voieSetId(voie: string | null | undefined): string {
+  return `voie:${voie ?? ''}`;
+}
+/** Tire un set de voie AU HASARD (les boss droppent tous les sets, pas seulement le tien). */
+export function randomVoieSetId(rng: () => number): string {
+  return VOIE_SET_IDS[Math.floor(rng() * VOIE_SET_IDS.length)]!;
+}
+
+// ITEM_SETS = les sets DROPPABLES/affichés (les 8 voie-sets). SET_BY_ID résout AUSSI les
+// anciens sets (boss/procéduraux) → les pièces legacy gardent leurs 2/3-pièces (jamais le
+// capstone, faute de voie correspondante) le temps d'être remplacées par des sets de voie.
+export const ITEM_SETS: ItemSet[] = VOIE_SETS;
 export const SET_BY_ID: Record<string, ItemSet> = Object.fromEntries(
-  ITEM_SETS.map((s) => [s.id, s]),
+  [...VOIE_SETS, ...HAND_SETS, ...PROCEDURAL.sets].map((s) => [s.id, s]),
 );
 
 /** Multiplicateur de bonus de set scalé par le RANG moyen des pièces (#3, ticket 8bfe5130) :
@@ -1064,21 +1174,26 @@ export function setCounts(equipped: Equipped): Record<string, number> {
   return out;
 }
 
-/** Effets cumulés des SETS actifs (≥2 pièces), scalés par le niveau moyen des pièces.
- *  `capLevel` (optionnel) plafonne le niveau effectif des pièces au niveau du joueur. */
-export function setEffects(equipped: Equipped): AggregatedEffects {
+/** Effets cumulés des SETS actifs (≥2 pièces), scalés par le rang moyen des pièces.
+ *  Le CAPSTONE (4-pièces) ne s'applique QUE si `voie` correspond au set (`voie:<voie>`) →
+ *  compléter le set de SA voie = accomplir l'archétype. Les 2/3-pièces valent pour tous. */
+export function setEffects(equipped: Equipped, voie?: string | null): AggregatedEffects {
   const a = emptyEffects();
   const groups: Record<string, Item[]> = {};
   for (const slot of SLOTS) {
     const it = equipped[slot];
     if (it?.setId) (groups[it.setId] ??= []).push(it);
   }
+  const capstoneId = voieSetId(voie);
   for (const [id, items] of Object.entries(groups)) {
     const def = SET_BY_ID[id];
     if (!def || items.length < 2) continue;
     const mult = setBonusMult(items);
     for (const t of def.tiers) {
       if (items.length < t.pieces) continue;
+      // 4-pièces = CAPSTONE : gaté par la voie (l'archétype). Un set complet HORS voie
+      // ne donne que ses 2/3-pièces (stats brutes), pas la signature amplifiée.
+      if (t.pieces >= 4 && id !== capstoneId) continue;
       applyEffect(a, t.type, Math.max(1, round1(t.base * mult)) / 100);
     }
   }
@@ -1089,7 +1204,7 @@ export function setEffects(equipped: Equipped): AggregatedEffects {
 // `capLevel` plafonne le niveau EFFECTIF de chaque objet au niveau du joueur (comme
 // l'upgrade) → un objet sur-leveled ne donne que la puissance de TON niveau (anti
 // « bas niveau en gear trop haut qui punch 3 tiers au-dessus », cf. simulation 2026‑08‑12).
-export function aggregateEffects(equipped: Equipped): AggregatedEffects {
+export function aggregateEffects(equipped: Equipped, voie?: string | null): AggregatedEffects {
   const a = emptyEffects();
   for (const slot of SLOTS) {
     const it = equipped[slot];
@@ -1108,8 +1223,8 @@ export function aggregateEffects(equipped: Equipped): AggregatedEffects {
     applyEffect(a, fam.effect.type, fam.effect.value / 100);
     if (fam.effect2) applyEffect(a, fam.effect2.type, fam.effect2.value / 100);
   }
-  // Bonus de set (2/3/4 pièces) — ajoutés par-dessus les effets d'objet.
-  const s = setEffects(equipped);
+  // Bonus de set (2/3 pièces pour tous ; 4-pièces capstone si la voie correspond).
+  const s = setEffects(equipped, voie);
   a.damagePct += s.damagePct;
   a.critAdd += s.critAdd;
   a.dodgeAdd += s.dodgeAdd;
@@ -1132,10 +1247,11 @@ export function playerWithGear(
   equipped: Equipped,
   extra: Partial<AggregatedEffects> = {},
   level = 1,
+  voie?: string | null,
 ): Combatant {
   const base = playerCombatant(name, stats, level);
-  // Plafonne le niveau effectif du gear au niveau du joueur (anti sur-leveling).
-  const e = aggregateEffects(equipped);
+  // `voie` gate le capstone (4-pièces) du set de la voie (cf. setEffects).
+  const e = aggregateEffects(equipped, voie);
   const damagePct = e.damagePct + (extra.damagePct ?? 0);
   const maxPvPct = e.maxPvPct + (extra.maxPvPct ?? 0);
   const critAdd = e.critAdd + (extra.critAdd ?? 0);
@@ -1180,6 +1296,7 @@ export function bestGearLoadout(
   inventory: Item[],
   level = 1,
   extra: Partial<AggregatedEffects> = {}, // talents + passif de voie → optimise POUR ton build réel
+  voie?: string | null, // gate le capstone du set de voie → l'optimiseur valorise ton set complet
 ): Equipped {
   const familiar = equipped[FAMILIAR_SLOT];
   const bySlot: Record<ItemSlot, Item[]> = {
@@ -1197,7 +1314,7 @@ export function bestGearLoadout(
   const soloPower = (it: Item): number => {
     const one: Equipped = {};
     one[it.slot] = it;
-    return combatPower(playerWithGear(name, stats, one, extra, level));
+    return combatPower(playerWithGear(name, stats, one, extra, level, voie));
   };
   // Candidats retenus par slot : top-K solo + toutes les pièces de set (cap 12) + slot vide.
   const K = 6;
@@ -1226,7 +1343,7 @@ export function bestGearLoadout(
           if (ac) combo.accessory = ac;
           if (r) combo.relic = r;
           if (familiar) combo.familiar = familiar;
-          const p = combatPower(playerWithGear(name, stats, combo, extra, level));
+          const p = combatPower(playerWithGear(name, stats, combo, extra, level, voie));
           if (p > bestP) {
             bestP = p;
             best = combo;

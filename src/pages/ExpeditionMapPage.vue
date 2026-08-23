@@ -519,6 +519,7 @@ const fighter = computed<Combatant>(() =>
       voiePassiveEffects(char.row?.voie as VoieId),
     ),
     heroLevel.value,
+    char.row?.voie,
   ),
 );
 

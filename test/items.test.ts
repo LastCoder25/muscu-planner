@@ -38,6 +38,7 @@ import {
   ENCHANT_MAX,
 } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
+import { VOIES } from '@/lib/voies';
 
 describe('rangs G→SSS : bandes disjointes', () => {
   it('RANK_MULT strictement croissant (un rang supérieur vaut toujours plus)', () => {
@@ -358,70 +359,89 @@ describe('itemScore', () => {
   });
 });
 
-describe('sets d’équipement', () => {
-  const dragonPiece = (slot: Item['slot']): Item =>
+// Sets de VOIE (v0.565) : 8 sets, thème = stats de la voie ; le 4-pièces est un CAPSTONE
+// gaté par la voie du joueur. Le set Berserker = [damage(capstone/4pc), execute(3pc), lifesteal(2pc)].
+describe('sets d’équipement (voie)', () => {
+  const BERS = 'voie:berserker';
+  const bersPiece = (slot: Item['slot']): Item =>
     item({
-      id: `d-${slot}`,
+      id: `b-${slot}`,
       slot,
       rarity: 'B',
       effect: { type: 'damage_pct', value: 10 },
-      setId: 'dragon',
+      setId: BERS,
     });
+  const fullBers = (): Equipped => ({
+    weapon: bersPiece('weapon'),
+    armor: bersPiece('armor'),
+    accessory: bersPiece('accessory'),
+    relic: bersPiece('relic'),
+  });
 
   it('setCounts compte les pièces par set', () => {
-    const eq: Equipped = { weapon: dragonPiece('weapon'), armor: dragonPiece('armor') };
-    expect(setCounts(eq).dragon).toBe(2);
+    const eq: Equipped = { weapon: bersPiece('weapon'), armor: bersPiece('armor') };
+    expect(setCounts(eq)[BERS]).toBe(2);
   });
   it('aucun bonus de set en dessous de 2 pièces', () => {
-    expect(setEffects({ weapon: dragonPiece('weapon') }).damagePct).toBe(0);
+    const e = setEffects({ weapon: bersPiece('weapon') }, 'berserker');
+    expect(e.damagePct + e.lifesteal + e.executePct).toBe(0);
   });
-  it('2 pièces → 1er palier actif (Dragon : +dégâts)', () => {
-    const e = setEffects({ weapon: dragonPiece('weapon'), armor: dragonPiece('armor') });
-    expect(e.damagePct).toBeGreaterThan(0);
-    expect(e.critAdd).toBe(0);
-  });
-  it('4 pièces → tous les paliers Dragon actifs', () => {
-    const e = setEffects({
-      weapon: dragonPiece('weapon'),
-      armor: dragonPiece('armor'),
-      accessory: dragonPiece('accessory'),
-      relic: dragonPiece('relic'),
-    });
-    expect(e.damagePct).toBeGreaterThan(0);
-    expect(e.critAdd).toBeGreaterThan(0);
+  it('2 pièces → 1er palier actif (2-pièces = vol de vie)', () => {
+    const e = setEffects({ weapon: bersPiece('weapon'), armor: bersPiece('armor') }, 'berserker');
     expect(e.lifesteal).toBeGreaterThan(0);
+    expect(e.damagePct).toBe(0); // le capstone (4pc) n'est pas encore là
   });
-  it('le bonus de set grandit avec le RANG des pièces (#3, boss plus profond)', () => {
+  it('4 pièces + voie CORRESPONDANTE → capstone (4pc dégâts) actif', () => {
+    const e = setEffects(fullBers(), 'berserker');
+    expect(e.lifesteal).toBeGreaterThan(0); // 2pc
+    expect(e.executePct).toBeGreaterThan(0); // 3pc
+    expect(e.damagePct).toBeGreaterThan(0); // 4pc CAPSTONE
+  });
+  it('4 pièces mais voie DIFFÉRENTE → capstone NON appliqué (2/3pc seulement)', () => {
+    const e = setEffects(fullBers(), 'gardien');
+    expect(e.lifesteal).toBeGreaterThan(0); // 2pc (stats brutes pour tous)
+    expect(e.executePct).toBeGreaterThan(0); // 3pc
+    expect(e.damagePct).toBe(0); // capstone gaté par la voie → rien
+  });
+  it('sans voie → capstone jamais appliqué', () => {
+    expect(setEffects(fullBers()).damagePct).toBe(0);
+  });
+  it('le bonus de set grandit avec le RANG des pièces (boss plus profond)', () => {
     const low: Equipped = {
-      weapon: { ...dragonPiece('weapon'), rarity: 'D' },
-      armor: { ...dragonPiece('armor'), rarity: 'D' },
+      weapon: { ...bersPiece('weapon'), rarity: 'D' },
+      armor: { ...bersPiece('armor'), rarity: 'D' },
     };
     const high: Equipped = {
-      weapon: { ...dragonPiece('weapon'), rarity: 'S' },
-      armor: { ...dragonPiece('armor'), rarity: 'S' },
+      weapon: { ...bersPiece('weapon'), rarity: 'S' },
+      armor: { ...bersPiece('armor'), rarity: 'S' },
     };
-    expect(setEffects(high).damagePct).toBeGreaterThan(setEffects(low).damagePct);
+    expect(setEffects(high, 'berserker').lifesteal).toBeGreaterThan(
+      setEffects(low, 'berserker').lifesteal,
+    );
   });
   it('rollSetPiece produit toujours une pièce du set, au NIVEAU 1 (refonte C)', () => {
-    const piece = rollSetPiece(() => 0.3, { setId: 'dragon', level: 10 });
-    expect(piece.setId).toBe('dragon');
+    const piece = rollSetPiece(() => 0.3, { setId: BERS, level: 10 });
+    expect(piece.setId).toBe(BERS);
     expect(piece.level).toBe(1);
     expect(piece.baseLevel).toBe(1);
-    expect(piece.name).toContain('Dragon');
-    expect(piece.effect2).toBeUndefined();
-    expect(ITEM_SETS.some((s) => s.id === 'dragon')).toBe(true);
+    expect(piece.name).toContain('Berserker');
+    expect(ITEM_SETS.some((s) => s.id === BERS)).toBe(true);
   });
   it('anti-doublon : preferSlot force le slot manquant', () => {
-    const piece = rollSetPiece(() => 0.3, { setId: 'dragon', level: 10, preferSlot: 'relic' });
+    const piece = rollSetPiece(() => 0.3, { setId: BERS, level: 10, preferSlot: 'relic' });
     expect(piece.slot).toBe('relic');
   });
   it('la stat d’une pièce appartient au THÈME du set (pas aléatoire hors-thème)', () => {
-    const dragon = ITEM_SETS.find((s) => s.id === 'dragon')!;
-    const theme = new Set(dragon.tiers.map((t) => t.type)); // dégâts / crit / vol de vie
+    const bers = ITEM_SETS.find((s) => s.id === BERS)!;
+    const theme = new Set(bers.tiers.map((t) => t.type));
     for (const slot of ['weapon', 'armor', 'accessory', 'relic'] as const) {
-      const piece = rollSetPiece(() => 0.5, { setId: 'dragon', level: 20, preferSlot: slot });
+      const piece = rollSetPiece(() => 0.5, { setId: BERS, level: 20, preferSlot: slot });
       expect(theme.has(piece.effect.type)).toBe(true);
     }
+  });
+  it('un set de voie existe pour CHAQUE voie (lien voie↔set, ids `voie:<id>`)', () => {
+    for (const v of VOIES) expect(ITEM_SETS.some((s) => s.id === `voie:${v.id}`)).toBe(true);
+    expect(ITEM_SETS).toHaveLength(VOIES.length);
   });
 });
 

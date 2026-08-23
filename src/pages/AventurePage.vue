@@ -709,9 +709,15 @@
         <!-- Sets d'équipement (bonus 2/3/4 pièces) — rattachés à l'équipement -->
         <template v-if="activeSets.length">
           <div class="sec-title">Sets</div>
-          <div v-for="s in activeSets" :key="s.id" class="setcard" :class="{ full: s.count >= 4 }">
+          <div
+            v-for="s in activeSets"
+            :key="s.id"
+            class="setcard"
+            :class="{ full: s.count >= 4 && s.mine }"
+          >
             <div class="set-top">
               <span class="set-name">{{ s.emoji }} {{ s.name }}</span>
+              <span v-if="s.mine" class="set-mine">🧭 ta voie</span>
               <span class="set-count font-display">{{ s.count }}/4</span>
             </div>
             <div class="set-theme">{{ s.theme }}</div>
@@ -720,9 +726,10 @@
                 v-for="t in s.tiers"
                 :key="t.pieces"
                 class="set-tier"
-                :class="{ on: s.count >= t.pieces }"
+                :class="{ on: t.on, locked: t.locked }"
               >
-                {{ t.pieces }} pièces : {{ t.label }}
+                {{ t.pieces }} pièces : {{ t.label }}<template v-if="t.capstone"> ⭐</template>
+                <template v-if="t.locked"> 🔒 voie</template>
               </span>
             </div>
           </div>
@@ -1216,10 +1223,9 @@
               >
             </div>
 
-            <button class="mboss-set" @click="openSetInfo(b)">
-              {{ bossSet(b).emoji }} {{ bossSet(b).name }} · <b>{{ bossSetCount(b) }}/4</b> pièces
-              <span class="mboss-set-info">ⓘ bonus</span>
-            </button>
+            <div class="mboss-set">
+              🧩 Butin : une <b>pièce de set de voie</b> au hasard (complète le set de ta voie)
+            </div>
             <div v-if="bossUnlocked(b)" class="dgn-hint">{{ b.hint }}</div>
             <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(b) }}</div>
 
@@ -1470,8 +1476,11 @@
                     <span v-if="s.complete" class="setj-badge">✓ complet</span>
                   </div>
                   <div class="setj-theme">{{ s.set.theme }}</div>
-                  <div v-if="!s.bossDefeated" class="setj-lock">
-                    🔒 Bats « {{ bossNameById(s.bossId) }} » pour débloquer ce set.
+                  <div class="setj-voie" :class="{ mine: isMySetId(s.set.id) }">
+                    <template v-if="isMySetId(s.set.id)"
+                      >🧭 Ta voie — complète-le (4/4) pour ta signature</template
+                    >
+                    <template v-else>🧭 Voie {{ setVoieName(s.set.id) }}</template>
                   </div>
                 </div>
                 <div class="setj-pips">
@@ -1510,7 +1519,15 @@
             :class="{ empty: !lo.count }"
           >
             <div class="lo-head">
-              <span class="lo-name font-display">Loadout {{ i + 1 }}</span>
+              <span
+                class="lo-name font-display"
+                :class="{ mine: loadoutVoie(i) && char.row?.voie === loadoutVoie(i)!.id }"
+              >
+                <template v-if="loadoutVoie(i)"
+                  >{{ loadoutVoie(i)!.emoji }} {{ loadoutVoie(i)!.name }}</template
+                >
+                <template v-else>Loadout {{ i + 1 }}</template>
+              </span>
               <span
                 v-if="lo.count"
                 class="lo-power"
@@ -1632,33 +1649,6 @@
           Les <b>pièces de set</b> ne tombent que sur les <b>boss de palier</b>.
         </div>
         <button class="drops-close" @click="dropInfo = null">Fermer</button>
-      </q-card>
-    </q-dialog>
-
-    <!-- Bonus de SET d'un boss (au clic sur la ligne de set de la tuile) -->
-    <q-dialog :model-value="!!setInfo" position="bottom" @update:model-value="setInfo = null">
-      <q-card v-if="setInfo" class="drops-card">
-        <div class="drops-title font-display">{{ setInfo.set.emoji }} {{ setInfo.set.name }}</div>
-        <div class="set-theme">{{ setInfo.set.theme }}</div>
-        <div class="drops-sub">
-          Bonus par paliers<span v-if="setInfo.pieces.length"> (scalé au rang de tes pièces)</span>
-        </div>
-        <div class="set-tiers">
-          <span
-            v-for="t in setInfo.set.tiers"
-            :key="t.pieces"
-            class="set-tier"
-            :class="{ on: setInfo.count >= t.pieces }"
-          >
-            {{ t.pieces }} pièces :
-            {{ setTierLabel(t.type, t.base, setInfo.pieces) }}
-          </span>
-        </div>
-        <div class="drops-note">
-          Tu as <b>{{ setInfo.count }}/4</b> pièces. Chaque victoire sur ce boss lâche une pièce
-          (emplacement aléatoire) au niveau du palier.
-        </div>
-        <button class="drops-close" @click="setInfo = null">Fermer</button>
       </q-card>
     </q-dialog>
 
@@ -2057,6 +2047,9 @@ import {
   aggregateEffects,
   rollDrop,
   rollSetPiece,
+  randomVoieSetId,
+  voieSetId,
+  MAX_LOADOUTS,
   mergeEffects,
   effectLabelFor,
   setTierLabel,
@@ -2308,6 +2301,7 @@ const fighter = computed(() =>
     char.row?.equipped ?? {},
     activeFx.value,
     c.value.level.level,
+    char.row?.voie,
   ),
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
@@ -2399,7 +2393,7 @@ const pctA = (x?: number) => Math.round((x ?? 0) * 100) + '%';
 // plomberie pseudo/niveau/talentFx dupliquée (revue /simplify).
 function powerWith(eq: Equipped, fx: Partial<AggregatedEffects> = activeFx.value): number {
   return combatPower(
-    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, fx, c.value.level.level),
+    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, fx, c.value.level.level, char.row?.voie),
   );
 }
 // Puissance si `it` remplaçait la pièce du même slot. La magnitude vient du DROP (rang ×
@@ -2423,6 +2417,7 @@ function runWinPct(): number {
     char.row?.equipped ?? {},
     activeFx.value,
     c.value.level.level,
+    char.row?.voie,
   );
   const d = lastDungeon.value;
   if (d) {
@@ -2528,6 +2523,7 @@ const recommendedTalentIds = computed<Set<string>>(() => {
         eq,
         mergeEffects(talentEffects(combo.map((t) => ({ ...t, equipped: true }))), voieFx),
         lvl,
+        char.row?.voie,
       ),
     );
   const chosen: TalentInstance[] = [];
@@ -2804,7 +2800,6 @@ const codexSum = computed(() =>
     clearedIds.value,
     char.row?.equipped ?? {},
     char.row?.inventory ?? [],
-    char.row?.defeated_bosses ?? [],
     char.row?.set_pieces_seen ?? {},
   ),
 );
@@ -2813,11 +2808,12 @@ const setsList = computed(() =>
   setCollection(
     char.row?.equipped ?? {},
     char.row?.inventory ?? [],
-    char.row?.defeated_bosses ?? [],
     char.row?.set_pieces_seen ?? {},
   ),
 );
-const bossNameById = (id: string | undefined) => BOSSES.find((b) => b.id === id)?.name ?? '';
+// Sets de VOIE : lien set↔voie (id = `voie:<id>`).
+const isMySetId = (setId: string) => !!char.row?.voie && setId === voieSetId(char.row.voie);
+const setVoieName = (setId: string) => VOIE_BY_ID[setId.replace(/^voie:/, '')]?.name ?? '';
 // Déblocages franchis lors du dernier level-up (from → to) → affichés sur l'écran
 // de montée de niveau. Peut couvrir plusieurs niveaux d'un coup.
 const levelBurstUnlocks = computed(() => {
@@ -3113,19 +3109,32 @@ function equippedInSlot(slot: ItemSlot): Item | undefined {
 const activeSets = computed(() => {
   const eq = char.row?.equipped ?? {};
   const counts = setCounts(eq);
+  const myVoie = char.row?.voie ?? null;
   return ITEM_SETS.filter((s) => (counts[s.id] ?? 0) >= 1).map((s) => {
     const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === s.id);
-    // Le bonus de set est scalé par le RANG moyen des pièces (cf. setEffects, #3).
+    const count = counts[s.id] ?? 0;
+    // Ce set est-il celui de MA voie ? (→ le capstone 4-pièces s'active).
+    const mine = !!myVoie && s.id === voieSetId(myVoie);
     return {
       id: s.id,
       name: s.name,
       emoji: s.emoji,
       theme: s.theme,
-      count: counts[s.id] ?? 0,
-      tiers: s.tiers.map((t) => ({
-        pieces: t.pieces,
-        label: setTierLabel(t.type, t.base, pieces),
-      })),
+      count,
+      mine,
+      // Le bonus de set est scalé par le RANG moyen des pièces (cf. setEffects, #3).
+      tiers: s.tiers.map((t) => {
+        const capstone = t.pieces >= 4;
+        return {
+          pieces: t.pieces,
+          label: setTierLabel(t.type, t.base, pieces),
+          capstone,
+          // 2/3-pièces : actif dès le compte atteint. 4-pièces (capstone) : + voie correspondante.
+          on: count >= t.pieces && (!capstone || mine),
+          // capstone atteint en pièces mais bloqué faute de la bonne voie.
+          locked: capstone && count >= t.pieces && !mine,
+        };
+      }),
     };
   });
 });
@@ -3254,6 +3263,7 @@ async function explore(d: Dungeon) {
       char.row.equipped,
       extra,
       c.value.level.level,
+      char.row.voie,
     );
     const r = simulateDungeon(player, dungeonFoes(d), { seed });
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
@@ -3377,10 +3387,6 @@ function bossLockReason(b: MilestoneBoss): string {
   const i = order.findIndex((x) => x.id === b.id);
   return i > 0 ? `Bats d’abord « ${order[i - 1]!.name} »` : '';
 }
-function bossSet(b: MilestoneBoss) {
-  return SET_BY_ID[b.setId]!; // garanti par les données (cf. test bosses.test.ts)
-}
-
 // Libellé des 2 stats d'un objet (primaire · secondaire). Les anciens objets
 // (1 stat) n'affichent que la primaire.
 function itemEffects(it: Omit<Item, 'id'>): string {
@@ -3395,29 +3401,6 @@ function itemEffects(it: Omit<Item, 'id'>): string {
 function itemQuality(it: { roll?: number } | null | undefined): number {
   return rollStars(it?.roll);
 }
-// Nombre de pièces du set d'un boss possédées (équipées + sac).
-// Pièces du set du boss ACTUELLEMENT ÉQUIPÉES (≤ 4 slots) — pas celles du sac,
-// pour que le compteur colle aux paliers 2/3/4 (jamais « 6/4 »).
-function bossSetCount(b: MilestoneBoss): number {
-  const r = char.row;
-  if (!r) return 0;
-  return SLOTS.map((s) => r.equipped[s]).filter((it) => it?.setId === b.setId).length;
-}
-
-// Aperçu du bonus de set d'un boss (modale ouverte au clic sur la ligne de set).
-const setInfo = ref<{
-  set: ReturnType<typeof bossSet>;
-  pieces: Item[];
-  count: number;
-} | null>(null);
-function openSetInfo(b: MilestoneBoss) {
-  // Pièces de ce set déjà équipées → le bonus affiché reflète ta puissance de set réelle
-  // (cf. setEffects, scalé par le RANG des pièces, #3).
-  const eq = char.row?.equipped ?? {};
-  const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === b.setId);
-  setInfo.value = { set: bossSet(b), pieces, count: bossSetCount(b) };
-}
-
 // Slots d'un set déjà possédés (équipé + sac) → pour le ciblage anti-doublon de l'Autel.
 function ownedSetSlots(setId: string): Set<ItemSlot> {
   const s = new Set<ItemSlot>();
@@ -3436,24 +3419,29 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
   const rollFloor = bossAltarRollFloor(buildings);
   const count = bossRewardCount(buildings);
   const targeting = bossTargetingUnlocked(buildings);
-  // Slot de set visé (un manquant) si le ciblage est débloqué.
-  const missing = targeting ? SLOTS.filter((s) => !ownedSetSlots(b.setId).has(s)) : [];
-  const preferSlot = missing.length ? missing[Math.floor(rng() * missing.length)] : undefined;
-  const setOpts = {
-    setId: b.setId,
-    level: b.dropLevel,
-    luck,
-    rollFloor,
-    playerLevel: c.value.level.level,
-    ...(preferSlot ? { preferSlot } : {}),
+  // Les boss droppent TOUS les sets (de voie) au hasard → on chasse/complète son set de
+  // voie au fil des boss ; changer de voie exploite ce qu'on a accumulé (v0.565).
+  const rollAnySet = (): RewardCandidate => {
+    const setId = randomVoieSetId(rng);
+    // Ciblage (Autel) : vise un slot MANQUANT de CE set → aide à compléter.
+    const missing = targeting ? SLOTS.filter((s) => !ownedSetSlots(setId).has(s)) : [];
+    const preferSlot = missing.length ? missing[Math.floor(rng() * missing.length)] : undefined;
+    const p = rollSetPiece(rng, {
+      setId,
+      level: b.dropLevel,
+      luck,
+      rollFloor,
+      playerLevel: c.value.level.level,
+      ...(preferSlot ? { preferSlot } : {}),
+    });
+    return { kind: 'item', item: { ...p, id: crypto.randomUUID() } };
   };
   const out: RewardCandidate[] = [];
   for (let n = 0; n < count; n++) {
     const roll = rng();
     // Proba de SET réduite (0.4) : une pièce de set est un butin rare et important.
     if (roll < 0.4) {
-      const p = rollSetPiece(rng, setOpts);
-      out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
+      out.push(rollAnySet());
     } else if (roll < 0.8) {
       let d: ReturnType<typeof rollDrop> = null;
       for (let i = 0; i < 5 && !d; i++)
@@ -3465,8 +3453,8 @@ function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): R
           rollFloor,
           playerLevel: c.value.level.level,
         });
-      const p = d ?? rollSetPiece(rng, setOpts);
-      out.push({ kind: 'item', item: { ...p, id: crypto.randomUUID() } });
+      if (d) out.push({ kind: 'item', item: { ...d, id: crypto.randomUUID() } });
+      else out.push(rollAnySet());
     } else {
       // Cache d'OR : doit rivaliser avec une pièce d'équipement (or plein du palier).
       out.push({ kind: 'gold', gold: b.gold });
@@ -3508,6 +3496,7 @@ async function fightBoss(b: MilestoneBoss) {
       char.row.equipped,
       extra,
       c.value.level.level,
+      char.row.voie,
     );
     const r = simulateCombat(player, b.combatant, { seed, goldOnWin: b.gold });
     const win = r.win;
@@ -3633,6 +3622,7 @@ async function fightEndless() {
       char.row.equipped,
       extra,
       c.value.level.level,
+      char.row.voie,
     );
     const foe = endlessFoe(tier);
     const r = simulateCombat(player, foe, { seed, goldOnWin: endlessGold(tier) });
@@ -3838,7 +3828,9 @@ function setInvFilter(f: ItemSlot | 'all') {
 // → sinon le badge « Sac » comptait un familier fantôme (ticket e3d61676).
 const bagCount = computed(() => (char.row?.inventory ?? []).filter((i) => !isFamiliar(i)).length);
 
-// ── Loadouts (sets d'équipement rangés) ──
+// ── Loadouts (sets d'équipement rangés) — 1 par VOIE (8 slots) ──
+// Slot i ↔ voie i : chaque loadout est l'endroit où ranger le set de cette voie.
+const loadoutVoie = (i: number): (typeof VOIES)[number] | null => VOIES[i] ?? null;
 const hasEquippedGear = computed(() => SLOTS.some((s) => !!char.row?.equipped[s]));
 // Puissance SI on équipe ce loadout : ses 4 objets gear + le FAMILIER actuel (non rangé).
 function loadoutPower(items: Equipped): number {
@@ -3847,7 +3839,7 @@ function loadoutPower(items: Equipped): number {
 }
 const loadoutsView = computed(() => {
   const los = char.row?.loadouts ?? [];
-  return Array.from({ length: 3 }, (_, i) => {
+  return Array.from({ length: MAX_LOADOUTS }, (_, i) => {
     const stored = los[i]?.items ?? {};
     const items = SLOTS.map((s) => stored[s]).filter((it): it is Item => !!it);
     const power = items.length ? loadoutPower(stored) : 0;
@@ -5430,6 +5422,21 @@ button.pt-mini:active {
   opacity: 1;
   font-weight: 600;
 }
+/* Capstone (4-pièces) atteint en pièces mais bloqué faute de la bonne voie. */
+.set-tier.locked {
+  color: var(--d4);
+  opacity: 0.8;
+}
+.set-mine {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-radius: 6px;
+  padding: 1px 6px;
+  margin-left: auto;
+  margin-right: 6px;
+}
 /* ── Loadouts (sets d'équipement rangés) ── */
 .loadouts {
   display: flex;
@@ -5456,6 +5463,9 @@ button.pt-mini:active {
   font-weight: 700;
   font-size: 13px;
   color: var(--text);
+}
+.lo-name.mine {
+  color: var(--accent);
 }
 .lo-power {
   font-size: 12px;
@@ -6923,34 +6933,19 @@ button.pt-mini:active {
   font-size: 19px;
 }
 .mboss-set {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
   width: 100%;
   text-align: left;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 12.5px;
-  color: var(--accent);
-  font-weight: 600;
+  font-size: 11.5px;
+  color: var(--dim);
   margin-top: 4px;
   padding: 4px 0;
+  line-height: 1.3;
 }
-.mboss-set-info {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--bg);
-  background: var(--accent);
-  border-radius: 999px;
-  padding: 1px 7px;
+.mboss-set b {
+  color: var(--accent);
 }
 .mboss.locked .mboss-set {
-  color: var(--dim);
-}
-.mboss.locked .mboss-set-info {
-  background: var(--dim);
+  opacity: 0.7;
 }
 .mboss-badge {
   font-size: 13px;
@@ -8168,10 +8163,14 @@ button.pt-mini:active {
   color: var(--dim);
   line-height: 1.25;
 }
-.setj-lock {
+.setj-voie {
   font-size: 11px;
-  color: var(--d3);
+  color: var(--dim);
   margin-top: 2px;
+}
+.setj-voie.mine {
+  color: var(--accent);
+  font-weight: 600;
 }
 .setj-pips {
   flex: none;

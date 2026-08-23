@@ -6,7 +6,6 @@
 // ITEM_SETS) + des paliers codés en dur ailleurs (talents 5/5, EFFECT_MIN_LEVEL,
 // floorsForLevel). Aucune dépendance Vue/Supabase.
 import { BOSSES } from '@/data/bosses';
-import { ITEM_SETS } from './items';
 
 export type AdvUnlockKind = 'boss' | 'talent' | 'expedition' | 'effect' | 'endless';
 
@@ -21,17 +20,14 @@ export interface AdvUnlock {
 function buildSchedule(): AdvUnlock[] {
   const out: AdvUnlock[] = [];
 
-  // Boss de palier (+ set associé) — src/data/bosses.ts.
+  // Boss de palier — src/data/bosses.ts. Les boss droppent des pièces de set (de voie).
   for (const b of BOSSES) {
-    const set = ITEM_SETS.find((s) => s.id === b.setId);
     out.push({
       level: b.unlockLevel,
       kind: 'boss',
       emoji: b.emoji,
       title: `Boss : ${b.name}`,
-      detail: set
-        ? `Nouveau boss de palier — bats-le pour une pièce du set ${set.emoji} ${set.name}.`
-        : 'Nouveau boss de palier à affronter.',
+      detail: 'Nouveau boss de palier — bats-le pour des pièces de set (de voie).',
     });
   }
 
