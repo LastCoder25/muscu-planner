@@ -1684,6 +1684,62 @@
       </div>
     </div>
 
+    <!-- CONFLIT de rangement de set : le slot du loadout est déjà pris → comparer & choisir. -->
+    <q-dialog :model-value="!!stashConflict" @update:model-value="stashConflict = null">
+      <q-card v-if="stashConflict" class="drops-card stash-card">
+        <div class="drops-title font-display">
+          📦 {{ SLOT_LABEL[stashConflict.incoming.slot] }} · {{ VOIES[stashConflict.idx]?.name }}
+        </div>
+        <div class="stash-sub">
+          Ce loadout a déjà une pièce sur cet emplacement (1 set max). Garde la meilleure.
+        </div>
+        <div class="stash-cmp">
+          <div
+            class="stash-side"
+            :class="{
+              best: powerIfEquip(stashConflict.incoming) >= powerIfEquip(stashConflict.stored),
+            }"
+          >
+            <div class="stash-lbl">Nouvelle</div>
+            <div class="stash-nm">
+              {{ stashConflict.incoming.emoji }} {{ stashConflict.incoming.rarity }}
+              <span class="stash-q">★{{ itemQuality(stashConflict.incoming) }}</span>
+            </div>
+            <div class="stash-eff">{{ itemEffects(stashConflict.incoming) }}</div>
+            <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.incoming)) }}</div>
+          </div>
+          <div
+            class="stash-side"
+            :class="{
+              best: powerIfEquip(stashConflict.stored) > powerIfEquip(stashConflict.incoming),
+            }"
+          >
+            <div class="stash-lbl">Rangée <span v-if="stashConflict.stored.locked">🔒</span></div>
+            <div class="stash-nm">
+              {{ stashConflict.stored.emoji }} {{ stashConflict.stored.rarity }}
+              <span class="stash-q">★{{ itemQuality(stashConflict.stored) }}</span>
+            </div>
+            <div class="stash-eff">{{ itemEffects(stashConflict.stored) }}</div>
+            <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.stored)) }}</div>
+          </div>
+        </div>
+        <div class="stash-actions">
+          <button class="drops-close accent" @click="stashReplace">
+            Remplacer —
+            {{
+              stashConflict.stored.locked
+                ? 'ancienne → sac 🔒'
+                : 'vendre l’ancienne 🪙 ' + sellValue(stashConflict.stored)
+            }}
+          </button>
+          <button class="drops-close" @click="stashSellIncoming">
+            Vendre la nouvelle 🪙 {{ sellValue(stashConflict.incoming) }}
+          </button>
+          <button class="drops-close ghost" @click="stashConflict = null">Ne rien faire</button>
+        </div>
+      </q-card>
+    </q-dialog>
+
     <!-- Récompense de boss AU CHOIX : 3 candidats, on en garde 1. Fallback (reprise
          d'une récompense non choisie) — sinon le CHOIX se fait dans le rapport de
          combat ci-dessous, tant qu'il est ouvert. -->
@@ -4036,15 +4092,48 @@ function doToggleLock(it: Item) {
 }
 // Pièce de set (de voie) → bouton 📦 pour la ranger dans le loadout de SA voie (loadout i↔voie i).
 const isVoieSetItem = (it: Item) => !!it.setId && it.setId.startsWith('voie:');
+// Conflit de rangement : le slot visé du loadout est déjà occupé → on compare et on choisit.
+const stashConflict = ref<{ incoming: Item; stored: Item; idx: number } | null>(null);
+function loadoutTargetFor(it: Item): { idx: number; stored: Item | undefined } {
+  const idx = VOIES.findIndex((v) => v.id === (it.setId ?? '').slice('voie:'.length));
+  const stored = idx >= 0 ? char.row?.loadouts?.[idx]?.items?.[it.slot] : undefined;
+  return { idx, stored };
+}
 function doStashSetPiece(it: Item) {
+  const { idx, stored } = loadoutTargetFor(it);
+  if (idx < 0) return;
+  if (stored) {
+    // Emplacement déjà occupé (≤ 1 set complet/loadout) → comparatif + choix.
+    stashConflict.value = { incoming: it, stored, idx };
+    return;
+  }
   withUid(async (uid) => {
-    const idx = await char.stashSetPiece(uid, it.id);
-    if (idx >= 0)
-      $q.notify({
-        type: 'positive',
-        message: `📦 Rangé dans le loadout ${VOIES[idx]?.name ?? ''}.`,
-      });
+    await char.stashSetPiece(uid, it.id);
+    $q.notify({ type: 'positive', message: `📦 Rangé dans le loadout ${VOIES[idx]?.name ?? ''}.` });
   }, 'Impossible de ranger cette pièce.');
+}
+// Remplacer : range la nouvelle, vend l'ancienne (ou la renvoie au sac si 🔒).
+function stashReplace() {
+  const cf = stashConflict.value;
+  if (!cf) return;
+  const locked = cf.stored.locked;
+  withUid(async (uid) => {
+    await char.stashSetPiece(uid, cf.incoming.id, true);
+    $q.notify({
+      type: 'positive',
+      message: locked
+        ? '📦 Rangée — ancienne 🔒 renvoyée au sac.'
+        : '📦 Rangée — ancienne vendue 🪙.',
+    });
+  }, 'Action impossible.');
+  stashConflict.value = null;
+}
+// Garder la rangée, vendre la nouvelle.
+function stashSellIncoming() {
+  const cf = stashConflict.value;
+  if (!cf) return;
+  withUid((uid) => char.sell(uid, cf.incoming.id), 'Vente impossible.');
+  stashConflict.value = null;
 }
 // Nettoyage en masse : objets du sac moins rares que l'équipé du même slot.
 // Slot ciblé par le nettoyage en masse = le filtre du sac actif (sinon tous).
@@ -5533,6 +5622,68 @@ button.pt-mini:active {
   gap: 8px;
   max-height: 60vh;
   overflow-y: auto;
+}
+/* Conflit de rangement de set (comparatif nouvelle vs rangée) */
+.stash-sub {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+.stash-cmp {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.stash-side {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--surface);
+}
+.stash-side.best {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.stash-lbl {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+.stash-nm {
+  font-weight: 700;
+  font-size: 13px;
+  margin-top: 2px;
+}
+.stash-q {
+  color: var(--accent);
+  font-weight: 800;
+}
+.stash-eff {
+  font-size: 11.5px;
+  color: var(--text);
+  margin-top: 2px;
+}
+.stash-pow {
+  font-size: 12px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  margin-top: 3px;
+}
+.stash-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stash-actions .drops-close.accent {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+}
+.stash-actions .drops-close.ghost {
+  background: none;
+  color: var(--dim);
 }
 /* ── Loadouts (sets d'équipement rangés) ── */
 .loadouts {

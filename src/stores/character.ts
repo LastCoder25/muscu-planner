@@ -673,9 +673,15 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   // Range une PIÈCE DE SET du sac dans le loadout de SA voie (loadout i ↔ VOIES[i]) : l'objet
-  // quitte le sac pour le slot correspondant du bon loadout ; s'il y avait déjà une pièce sur
-  // ce slot du loadout, elle repart au sac (swap). Renvoie l'index du loadout, ou -1 si KO.
-  async function stashSetPiece(userId: string, itemId: string): Promise<number> {
+  // quitte le sac pour le slot correspondant du bon loadout (≤ 1 pièce/emplacement → au plus
+  // 1 set complet). Si une pièce occupait déjà ce slot du loadout, elle est VENDUE quand
+  // `sellDisplaced` (et non verrouillée) ; sinon elle repart au sac. Renvoie l'index du
+  // loadout, ou -1 si KO.
+  async function stashSetPiece(
+    userId: string,
+    itemId: string,
+    sellDisplaced = false,
+  ): Promise<number> {
     const cur = row.value;
     if (!cur) return -1;
     const item = cur.inventory.find((it) => it.id === itemId);
@@ -687,12 +693,16 @@ export const useCharacterStore = defineStore('character', () => {
       (_, k) => cur.loadouts[k] ?? { items: {} },
     );
     const items = { ...loadouts[idx]!.items };
-    const displaced = items[item.slot]; // pièce déjà rangée sur ce slot → repart au sac
+    const displaced = items[item.slot]; // pièce déjà rangée sur ce slot
     items[item.slot] = item;
     loadouts[idx] = { items };
-    const inventory = cur.inventory.filter((it) => it.id !== itemId);
-    if (displaced) inventory.push(displaced);
-    await persist(userId, { inventory, loadouts });
+    let inventory = cur.inventory.filter((it) => it.id !== itemId);
+    let gold = cur.gold;
+    if (displaced) {
+      if (sellDisplaced && !displaced.locked) gold += sellValue(displaced);
+      else inventory = [...inventory, displaced]; // verrouillée ou pas de vente → retour au sac
+    }
+    await persist(userId, { inventory, loadouts, gold });
     return idx;
   }
 
