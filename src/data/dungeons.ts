@@ -262,8 +262,21 @@ export const DUNGEONS: Dungeon[] = [...HAND_DUNGEONS, ...PROCEDURAL.dungeons].ma
 // Calibré par simulation « stuff RÉEL accumulé aux taux de drop actuels » : nu échoue
 // dès reco 3-4, stuff basique ~55-70 % (galère), stuff épique/lég ~cruise. La luck et
 // l'or NE sont PAS touchés (seuls PV/dégâts scalent). Le 🎯 % live reflète auto la rampe.
+// Rampe EARLY (×1 → ×2 de reco 2 à ~5, inchangée) PLUS une composante PROFONDE (reco > 24)
+// qui continue de MONTER (2026‑08‑23, ticket bilan #3) : la puissance d'un build équipé
+// croît plus vite que ×2 en fin de jeu (double affixe SS/SSS + 12→20 talents + sets) → sans
+// ça, le contenu profond devenait trivial (100 % clear). La composante profonde recale la
+// difficulté sur un build ÉQUIPÉ-à-son-niveau. (Le contenu NU reste calibré à part, cf.
+// proceduralContent.test — la rampe est la couche gear-gated live appliquée par dungeonFoes.)
 export function dungeonDifficultyMult(recoLevel: number): number {
-  return 1 + Math.min(1.0, Math.max(0, recoLevel - 2) * 0.3);
+  // EARLY (amorçage) : ×1 au 1er donjon → ×1.6 vers reco 5 (assez pour rendre le gear utile,
+  // pas assez pour bloquer un build équipé — l'ancien ×2 rendait le early injouable même
+  // équipé, cf. bilan). DEEP : monte régulièrement dès reco 20 puis PLATEAU ~×8, calibré
+  // par sweep pour maintenir ~70 % de clear d'un build ÉQUIPÉ-à-son-niveau (le gear scale
+  // ~×8 sur le nu en fin de jeu → sans ça, le contenu profond était trivial à 100 %).
+  const early = 1 + Math.min(0.5, Math.max(0, recoLevel - 2) * 0.15);
+  const deep = Math.min(6.5, Math.max(0, recoLevel - 20) * 0.145);
+  return early + deep;
 }
 
 /** Convertit les ids de monstres d'un donjon en adversaires pour le moteur (PV/dégâts
