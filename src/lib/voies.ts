@@ -26,69 +26,73 @@ export interface Voie {
   passive: { type: EffectType; base: number };
 }
 
+// Chaque voie porte son IDENTITÉ (1re stat) MAIS ses `preferred` couvrent offense ET survie :
+// un build 100 % mono‑axe est non viable (le combat exige les deux — validé par simulation
+// 2026‑08‑23). L'identité reste lisible (stat dominante + passif) ; l'ancre de survie/offense
+// évite les builds « verre » (tout dégâts = meurt) ou « inerte » (tout défense = ne tue pas).
 export const VOIES: Voie[] = [
   {
     id: 'berserker',
     name: 'Berserker',
     emoji: '💥',
-    blurb: 'Dégâts bruts et exécution : frappe le plus fort possible.',
-    preferred: ['damage_pct', 'execute_pct', 'momentum_pct'],
+    blurb: 'Dégâts bruts et exécution — frappe fort, se soigne en tapant.',
+    preferred: ['damage_pct', 'execute_pct', 'lifesteal_pct'],
     passive: { type: 'damage_pct', base: 6 },
   },
   {
     id: 'gardien',
     name: 'Gardien',
     emoji: '🛡️',
-    blurb: 'Encaisse tout et punit : mur increvable qui renvoie les coups.',
-    preferred: ['dmg_reduction_pct', 'max_pv_pct', 'thorns_pct'],
+    blurb: 'Mur qui frappe : encaisse tout et rend les coups.',
+    preferred: ['dmg_reduction_pct', 'max_pv_pct', 'damage_pct'],
     passive: { type: 'dmg_reduction_pct', base: 5 },
   },
   {
     id: 'assassin',
     name: 'Assassin',
     emoji: '🗡️',
-    blurb: 'Critiques et tempo : multiplie les coups décisifs.',
-    preferred: ['crit_pct', 'momentum_pct'],
+    blurb: 'Critiques qui achèvent, et un vol de vie pour tenir.',
+    preferred: ['crit_pct', 'execute_pct', 'lifesteal_pct'],
     passive: { type: 'crit_pct', base: 5 },
   },
   {
     id: 'vampire',
     name: 'Vampire',
     emoji: '🩸',
-    blurb: 'Vole la vie et se déchaîne au bord de la mort.',
-    preferred: ['lifesteal_pct', 'rage_pct'],
+    blurb: 'Vole la vie en frappant fort et se déchaîne au bord de la mort.',
+    preferred: ['lifesteal_pct', 'damage_pct', 'rage_pct'],
     passive: { type: 'lifesteal_pct', base: 5 },
   },
   {
     id: 'colosse',
     name: 'Colosse',
     emoji: '🪨',
-    blurb: 'Réservoir de PV increvable qui se régénère en tapant.',
-    preferred: ['max_pv_pct', 'dmg_reduction_pct', 'lifesteal_pct'],
+    blurb: 'Réservoir de PV qui encaisse et cogne dans la durée.',
+    preferred: ['max_pv_pct', 'dmg_reduction_pct', 'damage_pct'],
     passive: { type: 'max_pv_pct', base: 8 },
   },
   {
     id: 'duelliste',
     name: 'Duelliste',
     emoji: '🎯',
-    blurb: 'Précision létale : critiques qui achèvent l’ennemi.',
-    preferred: ['crit_pct', 'execute_pct', 'damage_pct'],
+    blurb: 'Précision létale, adossée à des PV pour durer.',
+    preferred: ['crit_pct', 'damage_pct', 'max_pv_pct'],
     passive: { type: 'crit_pct', base: 5 },
   },
   {
     id: 'epineux',
     name: 'Épineux',
     emoji: '🌵',
-    blurb: 'Mur qui punit : encaisse et renvoie les dégâts reçus.',
-    preferred: ['thorns_pct', 'dmg_reduction_pct', 'max_pv_pct'],
+    blurb: 'Encaisse, renvoie les coups et frappe en retour.',
+    preferred: ['thorns_pct', 'max_pv_pct', 'damage_pct'],
     passive: { type: 'thorns_pct', base: 8 },
   },
   {
     id: 'frenetique',
     name: 'Frénétique',
     emoji: '🌀',
-    blurb: 'Monte en puissance au fil du combat, plus fort à chaque coup.',
-    preferred: ['momentum_pct', 'rage_pct', 'damage_pct'],
+    blurb: 'Monte en puissance au fil du combat, et se soigne en frappant.',
+    preferred: ['momentum_pct', 'damage_pct', 'lifesteal_pct'],
     passive: { type: 'momentum_pct', base: 4 },
   },
 ];

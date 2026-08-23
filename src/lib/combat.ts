@@ -92,20 +92,23 @@ export function playerCombatant(
 
 /** Indice synthétique de puissance de combat (offense × survie) — pour l'UI. */
 export function combatPower(c: Combatant): number {
-  // Les effets signature (conditionnels) sont pondérés par une valeur MOYENNE
-  // attendue sur un combat (ils ne s'appliquent pas tout le temps).
+  // Effets CONDITIONNELS pondérés par leur valeur MOYENNE réellement attendue sur un
+  // combat (recalibré 2026‑08‑23 : les anciens poids sur‑valuaient l'offense conditionnelle
+  // → un build tout‑execute/rage/momentum affichait une grosse « puissance » mais mourait
+  // en vrai combat). execute ne s'applique qu'à l'ennemi < 25 % PV ; rage qu'à TOI < 30 % PV
+  // (rare dans un combat gagné) ; momentum ne ramp qu'à moitié en moyenne (fights courts).
   const sig =
     1 +
-    0.35 * (c.execute ?? 0) +
-    0.3 * (c.rage ?? 0) +
-    (c.momentum ?? 0) * (COMBAT.momentumMaxStacks * 0.5);
+    0.12 * (c.execute ?? 0) +
+    0.1 * (c.rage ?? 0) +
+    (c.momentum ?? 0) * (COMBAT.momentumMaxStacks * 0.25);
   const offense =
     c.damage *
     (c.strikes ?? 1) *
     (1 + c.crit) *
     (1 + (c.lifesteal ?? 0)) *
     sig *
-    (1 + 0.5 * (c.thorns ?? 0));
+    (1 + 0.25 * (c.thorns ?? 0)); // épines = offense conditionnelle (ne déclenche que si frappé)
   const survie = c.pv / 100 / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0));
   // offense×survie croît ≈ niveau⁴ → chiffres énormes (dizaines de milliers dès le
   // début). On prend la RACINE : indice toujours monotone/comparable mais à échelle
