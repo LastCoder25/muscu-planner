@@ -1988,6 +1988,19 @@
               <small class="rm-stock">/ {{ reattackStock }}</small></span
             >
           </button>
+          <!-- Combat SUIVANT (donjon/boss suivant de la chaîne, s'il est débloqué) — à droite
+               de Réattaquer, avec son coût. Absent pour la Faille (Réattaquer avance déjà). -->
+          <button
+            v-if="stageDone && !char.row?.pending_reward && nextContent"
+            class="rm-btn rm-btn-next"
+            :disabled="!nextContent.affordable || busy"
+            :title="`Combat suivant : ${nextContent.name} — coûte ${nextContent.cost} ${nextContent.icon}`"
+            aria-label="Combat suivant"
+            @click="launchNext"
+          >
+            <span class="rm-ic">⏭️</span>
+            <span class="rm-cost">{{ nextContent.cost }} {{ nextContent.icon }}</span>
+          </button>
           <button
             class="rm-btn rm-icon"
             title="Inventaire"
@@ -2985,6 +2998,46 @@ function reattackLast() {
   if (lastEndless.value) void fightEndless();
   else if (lastBoss.value) void fightBoss(lastBoss.value);
   else if (lastDungeon.value) void explore(lastDungeon.value);
+}
+// « Combat suivant » : le contenu APRÈS le dernier combattu (donjon/boss suivant de la
+// chaîne, s'il est DÉBLOQUÉ = le courant vient d'être nettoyé/vaincu). La Faille sans fin
+// n'a pas de « suivant » (Réattaquer avance déjà de palier) → null.
+const nextContent = computed(() => {
+  if (lastEndless.value) return null;
+  if (lastBoss.value) {
+    const order = bossChain.value;
+    const nb = order[order.findIndex((x) => x.id === lastBoss.value!.id) + 1];
+    if (!nb || !bossUnlocked(nb)) return null;
+    const cost = summonCostFor(nb);
+    return {
+      kind: 'boss' as const,
+      boss: nb,
+      name: nb.name,
+      cost,
+      icon: '🔮',
+      affordable: (char.row?.summon_stones ?? 0) >= cost,
+    };
+  }
+  if (lastDungeon.value) {
+    const order = dungeonChain.value;
+    const nd = order[order.findIndex((x) => x.id === lastDungeon.value!.id) + 1];
+    if (!nd || !dungeonUnlocked(nd)) return null;
+    return {
+      kind: 'dungeon' as const,
+      dungeon: nd,
+      name: nd.name,
+      cost: nd.energyCost,
+      icon: '⚡',
+      affordable: c.value.energy >= nd.energyCost,
+    };
+  }
+  return null;
+});
+function launchNext() {
+  const n = nextContent.value;
+  if (!n) return;
+  if (n.kind === 'dungeon') void explore(n.dungeon);
+  else void fightBoss(n.boss);
 }
 function goInventoryFromReport() {
   reportOpen.value = false;
@@ -7097,6 +7150,11 @@ button.pt-mini:active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
+}
+/* Combat suivant = action secondaire à droite de Réattaquer (contour discret). */
+.rm-btn-next {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
 }
 .rm-ic {
   font-size: 18px;
