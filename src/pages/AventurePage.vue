@@ -7045,8 +7045,11 @@ button.pt-mini:active {
 .report-modal {
   width: 420px;
   max-width: 92vw;
-  /* CENTRÉE + hauteur AJUSTÉE au contenu (bornée) → l'animation de combat puis le
-     rapport/butin restent centrés à l'écran (le corps scrolle si besoin). */
+  /* HAUTEUR FIXE (82vh) → la carte ne change PAS de taille selon le butin (0 ou 5 objets) :
+     la ligne d'actions en bas (Réattaquer / suivant) reste TOUJOURS à la même position, on
+     peut la spammer sans qu'elle bouge (ticket bc329a0b). Le corps (rm-body) scrolle si besoin.
+     `rm-compact` (choix de récompense de boss) repasse en auto. */
+  height: 82vh;
   max-height: 82vh;
   display: flex;
   flex-direction: column;
