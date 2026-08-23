@@ -53,15 +53,6 @@
               <span class="lt-fam"
                 >🐾 familier rang <b>{{ t.laby.rank }}</b></span
               >
-              ·
-              <span
-                class="lt-band"
-                :style="{
-                  color: RANK_COLOR[dropPeakRank(t.laby.dropLevel, t.laby.luck, 0, heroLevel)],
-                }"
-                title="Rang le plus probable — tous les rangs peuvent tomber, seuls les % varient"
-                >🎖️ ~{{ dropPeakRank(t.laby.dropLevel, t.laby.luck, 0, heroLevel) }}</span
-              >
               · <span class="lt-death">💀 garde {{ t.deathKeep }}%</span>
             </div>
             <div v-if="!t.unlocked" class="lt-lock">
@@ -477,7 +468,6 @@ import {
   RANK_ORDER,
   rollStars,
   tierIndexOf,
-  dropPeakRank,
   mergeEffects,
   SLOT_LABEL,
   type Item,

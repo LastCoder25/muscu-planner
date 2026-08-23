@@ -1100,17 +1100,6 @@
                 :title="powTitle(it.dungeon.recoLevel)"
                 >⚔️ {{ fmtPow(recoPow(it.dungeon.recoLevel)) }}</span
               >
-              <span
-                v-if="dungeonUnlocked(it.dungeon)"
-                class="dgn-chip band"
-                :class="
-                  'p-' + dropPeakRank(it.dungeon.dropLevel, it.dungeon.dropLuck, 0, heroLevel)
-                "
-                title="Rang le plus probable — TOUS les rangs peuvent tomber, seuls les % varient (touche 🎁 pour le détail)"
-                >🎖️ ~{{
-                  dropPeakRank(it.dungeon.dropLevel, it.dungeon.dropLuck, 0, heroLevel)
-                }}</span
-              >
               <button
                 v-if="dungeonUnlocked(it.dungeon)"
                 class="dgn-loot"
@@ -1631,12 +1620,6 @@
       <q-card v-if="dropInfo" class="drops-card">
         <div class="drops-title font-display">{{ dropInfo.emoji }} Butin — {{ dropInfo.name }}</div>
         <div class="drops-row">
-          <span class="drops-k">Rang le plus probable</span>
-          <span class="drops-v"
-            >~{{ dropPeakRank(dropInfo.dropLevel, dropInfo.dropLuck, 0, heroLevel) }}</span
-          >
-        </div>
-        <div class="drops-row">
           <span class="drops-k">Récompenses</span>
           <span class="drops-v">jusqu'à {{ dungeonGold(dropInfo) }} 🪙</span>
         </div>
@@ -2100,7 +2083,6 @@ import {
   FAMILIAR_SLOT,
   tierIndexOf,
   rollTier,
-  dropPeakRank,
   RANK_ORDER,
   SLOTS,
   SLOT_LABEL,
