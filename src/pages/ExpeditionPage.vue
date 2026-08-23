@@ -44,10 +44,11 @@
             <div class="lt-meta">
               Niv {{ t.laby.recoLevel }} · {{ t.laby.floors }} étages ·
               <span
+                v-if="t.unlocked"
                 class="lt-pow"
-                :class="{ ok: myPow >= recommendedPower(t.laby.recoLevel) }"
-                title="Puissance conseillée pour ce palier — compare à la tienne"
-                >⚔️ conseillé {{ fmtPow(recommendedPower(t.laby.recoLevel)) }}</span
+                :class="pctClass(labyClearPct[t.laby.id] ?? 0)"
+                title="Chance de nettoyer ce palier avec ton stuff actuel (attrition incluse)"
+                >🎯 {{ labyClearPct[t.laby.id] ?? 0 }}% de réussite</span
               >
               ·
               <span class="lt-fam">🐾 familier garanti</span>
@@ -87,7 +88,7 @@
         </div>
         <div class="hud-pv">
           <div class="pv-bar"><div class="pv-fill" :style="{ width: pvPct + '%' }" /></div>
-          <span class="pv-txt">❤️ {{ run.pv }}/{{ run.maxPv }}</span>
+          <span class="pv-txt">❤️ {{ displayedPv }}/{{ run.maxPv }}</span>
         </div>
       </div>
 
@@ -220,7 +221,7 @@
             :fights="stageFights"
             :player-profile="playerProfile"
             :player-equipped="playerEquipped"
-            @done="fxDone = true"
+            @done="onFxDone"
           />
           <template v-if="fxDone">
             <div class="fx-result" :class="roomFx.win ? 'good' : 'bad'">
@@ -422,7 +423,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   generateDungeon,
@@ -476,15 +477,8 @@ import { pickLabyFoe, type LabyFoe } from '@/data/labyrinthFoes';
 import { rollChestGrade, pickLabyTrap, type ChestGrade, type LabyTrap } from '@/data/labyrinthLoot';
 import { talentEffects } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
-import {
-  simulateCombat,
-  mulberry32,
-  combatPower,
-  fmtPow,
-  type Combatant,
-  type CombatEvent,
-} from '@/lib/combat';
-import { refFighter, recommendedPower } from '@/lib/proceduralContent';
+import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
+import { refFighter } from '@/lib/proceduralContent';
 import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
 import ChestIcon from '@/components/ChestIcon.vue';
@@ -600,8 +594,84 @@ const fighter = computed<Combatant>(() =>
   ),
 );
 const heroLevel = computed(() => character.value.level.level);
-// Puissance de combat du joueur → comparée à la « puissance conseillée » de chaque palier.
-const myPow = computed(() => combatPower(fighter.value));
+
+// ── % DE RÉUSSITE d'un palier (Monte-Carlo du CRAWL avec ton stuff réel) ──
+// Le labyrinthe est un crawl d'ATTRITION → une « puissance conseillée » (single-fight)
+// mentait (au vert mais 0 % clear). On simule le crawl complet (≈2 combats/étage + boss,
+// PV reportés, lifesteal ×0.3, régén ~9 %) avec le combattant RÉEL → un % honnête. Modèle
+// d'estimation (archétype neutre) aligné sur makeMonster/la calibration.
+function estimMon(refMon: Combatant, isBoss: boolean, depth: number, level: number): Combatant {
+  const pTurn = refMon.damage * (refMon.strikes ?? 1) * (1 + refMon.crit);
+  const P = refMon.pv;
+  const d = 0.85 + 0.55 * depth;
+  const lowEase = 0.5 + 0.5 * Math.min(1, level / 18);
+  return {
+    name: 'm',
+    pv: Math.max(10, Math.round(pTurn * (isBoss ? 5.5 : 2.8) * d)),
+    damage: Math.max(1, Math.round(P * (isBoss ? 0.07 : 0.05) * d * lowEase)),
+    crit: 0.05 + 0.03 * depth,
+    dodge: 0.05 + 0.02 * depth,
+    initiative: isBoss ? 14 : 8,
+    strikes: 1,
+  };
+}
+function estimateLabyClear(laby: Labyrinth): number {
+  const player = fighter.value;
+  const refMon = refFighter(laby.recoLevel);
+  const floors = laby.floors;
+  const N = 50;
+  let wins = 0;
+  for (let s = 1; s <= N; s++) {
+    let pv = player.pv;
+    const maxPv = player.pv;
+    let seed = s * 131 + laby.recoLevel * 7 + 1;
+    let dead = false;
+    for (let f = 0; f < floors && !dead; f++) {
+      const depth = floors > 1 ? f / (floors - 1) : 0;
+      for (let r = 0; r < 2 && !dead; r++) {
+        const cf: Combatant = {
+          ...player,
+          pv,
+          lifesteal: (player.lifesteal ?? 0) * LABY_LIFESTEAL,
+        };
+        const res = simulateCombat(cf, estimMon(refMon, false, depth, laby.recoLevel), {
+          seed: seed++,
+          goldOnWin: 0,
+          startPlayerPv: pv,
+        });
+        pv = res.log.length ? res.log[res.log.length - 1]!.playerPv : pv;
+        if (pv <= 0) dead = true;
+        else {
+          pv = Math.max(0, pv - Math.round(maxPv * 0.05)); // ~1 piège/étage
+          pv = Math.min(maxPv, pv + Math.round(maxPv * 0.09)); // salles sûres
+        }
+      }
+      if (!dead && f === floors - 1) {
+        const cf: Combatant = {
+          ...player,
+          pv,
+          lifesteal: (player.lifesteal ?? 0) * LABY_LIFESTEAL,
+        };
+        const res = simulateCombat(cf, estimMon(refMon, true, 1, laby.recoLevel), {
+          seed: seed++,
+          goldOnWin: 0,
+          startPlayerPv: pv,
+        });
+        pv = res.log.length ? res.log[res.log.length - 1]!.playerPv : pv;
+        if (pv <= 0) dead = true;
+      }
+    }
+    if (!dead) wins++;
+  }
+  return Math.round((wins / N) * 100);
+}
+// Mémoïsé : recalculé seulement quand le combattant (stuff/stats) change, pas à chaque rendu.
+const labyClearPct = computed<Record<string, number>>(() => {
+  void fighter.value; // dépendance explicite
+  return Object.fromEntries(LABYRINTHS.map((l) => [l.id, estimateLabyClear(l)]));
+});
+// Couleur du % de réussite : vert ≥70, orange 40-69, rouge <40.
+const pctClass = (pct: number) => (pct >= 70 ? 'ok' : pct >= 40 ? 'mid' : 'bad');
 
 const CELL = 66;
 const SIZE = 46; // côté d'une salle (carré arrondi) ; salles alignées sur la grille
@@ -683,7 +753,23 @@ onMounted(async () => {
 const floor = computed(() => dungeon.value[run.value.floor]!);
 const cols = computed(() => floor.value.cols);
 const rows = computed(() => floor.value.rows);
-const pvPct = computed(() => Math.round((run.value.pv / run.value.maxPv) * 100));
+// ANTI-SPOIL : la barre de PV au-dessus de la carte suit `displayedPv`, qui LAGGE `run.pv`
+// pendant l'animation d'un combat (sinon la barre affiche le résultat avant la fin de
+// l'anim → spoil). Elle se resynchronise à la fin du combat (onFxDone). Hors combat, elle
+// suit `run.pv` immédiatement (régén, pièges, descente).
+const displayedPv = ref(run.value.pv);
+watch(
+  () => run.value.pv,
+  (v) => {
+    if (roomFx.value?.kind === 'combat' && !fxDone.value) return; // combat en cours → on attend
+    displayedPv.value = v;
+  },
+);
+function onFxDone() {
+  fxDone.value = true;
+  displayedPv.value = run.value.pv; // combat fini → la barre de la carte peut se mettre à jour
+}
+const pvPct = computed(() => Math.round((displayedPv.value / run.value.maxPv) * 100));
 const currentRoom = computed(() => floor.value.rooms[run.value.current]!);
 const onStairs = computed(
   () => currentRoom.value.type === 'stairs' && run.value.status === 'exploring',
@@ -772,9 +858,13 @@ function makeMonster(isBoss: boolean, depth: number, foe: LabyFoe): Combatant {
   const P = ref.pv;
   const d = 0.85 + 0.55 * depth; // 0.85 (surface) → 1.4 (fond)
   const a = foe.arch;
-  // Baseline coriace : ~3 tours (salle) / ~6,5 tours (gardien) ; dégâts ~5,5 % / ~9 % des PV.
-  const basePv = pTurn * (isBoss ? 6.5 : 3) * d;
-  const baseDmg = P * (isBoss ? 0.09 : 0.055) * d;
+  // CALIBRATION (2026, simulée) : baseline allégée (fights un peu plus courts, boss moins
+  // létal) + CUSHION bas-niveau sur les dégâts — à bas palier, les petits nombres + la
+  // variance rendaient l'attrition mortelle (0 % au niveau conseillé). lowEase adoucit les
+  // dégâts jusqu'à ~L18 (0,5 à L1 → 1,0 à L18+). Au-delà, calibration inchangée.
+  const lowEase = 0.5 + 0.5 * Math.min(1, palierLevel.value / 18);
+  const basePv = pTurn * (isBoss ? 5.5 : 2.8) * d;
+  const baseDmg = P * (isBoss ? 0.07 : 0.05) * d * lowEase;
   return {
     name: foe.name,
     pv: Math.max(10, Math.round(basePv * a.pvMult)),
@@ -1014,11 +1104,11 @@ function onRoomClick(id: number) {
       break;
     case 'chest':
       openChest(id);
-      regen(0.06); // le repos d'un coffre soigne un peu
+      regen(0.09); // le repos d'un coffre soigne un peu
       break;
     case 'vault':
       openVault(id);
-      regen(0.1); // planque sûre → on souffle un peu
+      regen(0.12); // planque sûre → on souffle un peu
       break;
     case 'stairs':
       lastEvent.value = { kind: 'good', text: '🔽 Escalier — descends à l’étage suivant' };
@@ -1475,11 +1565,17 @@ function replayAuto() {
   color: color-mix(in srgb, var(--accent) 70%, var(--dim));
 }
 .lt-pow {
-  color: color-mix(in srgb, #ff6a45 55%, var(--dim));
   font-variant-numeric: tabular-nums;
+  color: var(--dim);
 }
 .lt-pow.ok {
-  color: color-mix(in srgb, #7bc86c 75%, var(--dim));
+  color: color-mix(in srgb, #7bc86c 78%, var(--dim));
+}
+.lt-pow.mid {
+  color: color-mix(in srgb, #ffb23f 78%, var(--dim));
+}
+.lt-pow.bad {
+  color: color-mix(in srgb, #ff6a45 70%, var(--dim));
 }
 .lt-death {
   color: color-mix(in srgb, #ff6a45 60%, var(--dim));
