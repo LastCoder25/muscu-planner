@@ -76,11 +76,17 @@ export function chestGradeIndexForRank(rank: Rarity): number {
   return 3;
 }
 
-/** Grade d'un coffre : on tire un rang via la MÊME frise glissante que le loot
- *  (`rollTier`), puis on le range en 4 grades → le grade se décale bronze→platine avec
- *  le niveau du palier, exactement comme les rangs de familiers/objets. Seedé. */
-export function rollChestGrade(rng: () => number, level: number, luck = 0): ChestGrade {
-  const { rank } = rollTier(rng, level, luck);
+/** Grade d'un coffre : on tire un rang via la MÊME pyramide que le loot (`rollTier`),
+ *  puis on le range en 4 grades → le grade se décale bronze→platine avec le niveau du
+ *  palier (centré sur min(palier, joueur)), exactement comme les rangs de familiers/objets.
+ *  `playerLevel` (optionnel) plafonne le grade au niveau du joueur (anti-runaway). Seedé. */
+export function rollChestGrade(
+  rng: () => number,
+  level: number,
+  luck = 0,
+  playerLevel?: number,
+): ChestGrade {
+  const { rank } = rollTier(rng, level, luck, 0, playerLevel);
   return CHEST_GRADES[chestGradeIndexForRank(rank)]!;
 }
 

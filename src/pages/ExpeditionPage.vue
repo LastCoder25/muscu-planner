@@ -838,7 +838,12 @@ function fightRoom(id: number, isBoss: boolean) {
 // butin), dérivé de la frise glissante (rollChestGrade) → se décale avec le niveau du
 // palier. Déterministe → identique entre l'ouverture et l'affichage sur la carte.
 function chestGradeOf(id: number): ChestGrade {
-  return rollChestGrade(mulberry32((roomSeed(id) ^ 0xc0ffee) >>> 0), runDropLevel(), runLuck());
+  return rollChestGrade(
+    mulberry32((roomSeed(id) ^ 0xc0ffee) >>> 0),
+    runDropLevel(),
+    runLuck(),
+    heroLevel.value,
+  );
 }
 function openChest(id: number) {
   const grade = chestGradeOf(id);

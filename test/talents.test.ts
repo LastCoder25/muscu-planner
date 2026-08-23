@@ -143,12 +143,17 @@ describe('drop', () => {
     expect(t.equipped).toBeFalsy();
   });
 
-  it('rollTalentDrop : le RANG est gaté par le niveau du contenu', () => {
-    // niveau bas → rang plafonné bas (jamais au-dessus du plafond de profondeur)
-    const ceilLow = rankCeilingForLevel(4);
-    for (let s = 0; s < 40; s++) {
-      const t = rollTalentDrop(mulberry32(s * 7 + 1), { level: 4, luck: 0.4, idSeed: s });
-      expect(RANK_ORDER.indexOf(talentRankOf(t))).toBeLessThanOrEqual(ceilLow);
+  it('rollTalentDrop : pyramide centrée niveau + cap anti-runaway (playerLevel)', () => {
+    // joueur bas niveau en contenu profond → rang centré sur le joueur, plafonné ceiling(4)+2
+    const cap = Math.min(9, rankCeilingForLevel(4) + 2);
+    for (let s = 0; s < 80; s++) {
+      const t = rollTalentDrop(mulberry32(s * 7 + 1), {
+        level: 40,
+        luck: 1,
+        idSeed: s,
+        playerLevel: 4,
+      });
+      expect(RANK_ORDER.indexOf(talentRankOf(t))).toBeLessThanOrEqual(cap);
     }
     // niveau haut + luck → dépasse le rang G (progression réelle)
     const highMax = Math.max(

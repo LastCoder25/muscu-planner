@@ -474,83 +474,85 @@ function gaussian(rng: () => number): number {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-// ── FRISE CONTINUE de crans (2026‑08‑19) ──
-// Rangs + qualités forment UNE seule échelle de 50 crans (tier = rang×5 + (qualité−1)).
-// Le drop est une FENÊTRE GLISSANTE sur cette frise : son centre avance CONTINÛMENT avec
-// le niveau (≈ 1 cran/niveau tôt, ralentit en √ → SSS reste end‑game) → la QUALITÉ monte
-// à l'intérieur d'un rang à mesure qu'on progresse (ex. F★1 tôt → F★5 en fin de bande),
-// puis on bascule sur le rang suivant avec chevauchement (encore un peu de l'ancien rang,
-// du bas du nouveau). Asymétrique : longue traîne BASSE (fourrage à infuser), courte
-// pointe HAUTE (drop chanceux) que la `luck` épaissit et pousse vers le haut.
-// NB : c'est un changement de DISTRIBUTION de tirage — la valeur d'un cran (RARITY_MULT ×
-// starQualityMult) est inchangée → équilibrage combat intact.
+// ── DISTRIBUTION de RANG : PYRAMIDE centrée sur le NIVEAU (2026‑08‑23) ──
+// Le rang d'un drop suit une CLOCHE dont le PIC = le rang de min(niveauContenu, niveauJoueur)
+// (rankCeilingForLevel). Traîne BASSE large (LO_WIDTH_RANK → fourrage/or, rangs inférieurs à
+// revendre), pointe HAUTE raide (hiWidth → jackpot rare d'un rang supérieur, façon ARPG « on
+// peut drop plus haut que sa ligue »), épaissie et poussée par la `luck` (profondeur/fiole)
+// et le `floorBonus` (Autel des boss). Plus de « frise » à cran ni de cap dur systématique :
+// l'anti-runaway vient (1) du centre calé sur ton NIVEAU (min contenu/joueur → le sport reste
+// le plafond) et (2) d'un plafond de rang à niveauJoueur+marge quand `playerLevel` est fourni.
+// La QUALITÉ est un roll CONTINU [0,1] (qualityMult) → une fois à ton rang plafond, tu farmes
+// le meilleur « jet ». Bandes de valeur DISJOINTES (qualité ±10 % < écart de rang +16,6 %) :
+// un rang supérieur gagne toujours, mais le roll continu fait durer le farm.
 
-/** Plafond de cran CONTINU (0..49) — version fine du plafond de rang (même courbe √). */
-export function tierCeilForLevel(level: number): number {
-  return Math.min(49, Math.max(0, Math.sqrt(Math.max(0, level)) * 1.03 * 5 + 4));
+/** Multiplicateur de QUALITÉ CONTINU (roll 0..1 → ×1,00 → ×1,10). Remplace les 5 crans
+ *  discrets côté OBJETS/FAMILIERS → on peut chasser le roll parfait dans son rang. */
+export function qualityMult(roll: number): number {
+  return 1 + Math.min(1, Math.max(0, roll)) * 0.1;
 }
 
-const TIER_LO_WIDTH = 4; // traîne basse ≈ 0,8 rang (fourrage à infuser)
+const LO_WIDTH_RANK = 1.8; // écart-type BAS (rangs sous le pic) — large : fourrage
 
-/** Paramètres de la fenêtre glissante pour un contenu donné (source UNIQUE partagée par
- *  `rollTier` et `dropBand` → l'affichage de la bande de drop suit toujours le tirage réel).
- *  - `mode` : pic, calé sur le BAS du rang courant + fraction (PAS de +4) → au bas d'un rang
- *    le pic est à ★1, en haut de bande à ★5 (la qualité monte dans la bande), avance ≈ 1
- *    cran/niveau tôt puis ralentit en √ ; petit coup de pouce luck ;
- *  - `hiWidth` : pointe haute, épaissie par la luck (re-pondère vers la droite) ;
- *  - `hardCap` : plafond DUR de rang (√) — ni la luck ni la traîne ne le passent. */
-function tierWindow(level: number, luck: number, floorBonus: number) {
+/** Paramètres de la cloche de rang pour un contenu (source UNIQUE : rollTier + dropBand →
+ *  l'affichage de la bande suit toujours le tirage réel).
+ *  - `center` : rang-pic = rankCeilingForLevel(min(contenu, joueur)) + floorBonus (Autel) ;
+ *  - `loWidth`/`hiWidth` : écarts-types bas (large, fourrage) / haut (raide, jackpot, dopé luck) ;
+ *  - `cap` : clamp DOUX (+2 rangs) qui borne le jackpot sans créer d'empilement disgracieux.
+ *  ANTI-RUNAWAY : c'est le `center = min(contenu, joueur)` qui garantit qu'un bas-niveau ne
+ *  drope jamais du rang très supérieur (un pic sur SON rang, +1 rare, +2 exceptionnel) — pas
+ *  un plafond dur (qui empilait toute la traîne haute sur un rang → 61 % + jackpot incohérent). */
+function rankBell(level: number, luck: number, floorBonus: number, playerLevel?: number) {
   const l = Math.min(1, Math.max(0, luck));
-  const hardCap = rankCeilingForLevel(level) * 5 + 4;
-  const center = Math.sqrt(Math.max(0, level)) * 1.03 * 5;
-  const mode = Math.min(hardCap, center + l * 1.2 + Math.max(0, floorBonus));
-  return { mode, loWidth: TIER_LO_WIDTH, hiWidth: 1.6 + l * 2.2, hardCap };
+  const eff = playerLevel == null ? level : Math.min(level, playerLevel);
+  const center = rankCeilingForLevel(eff) + Math.max(0, floorBonus);
+  const hiWidth = 0.42 + l * 1.1; // pointe haute raide (jackpot), épaissie par la luck
+  const cap = Math.min(9, Math.round(center) + 2); // borne douce : +2 rangs max
+  return { center, loWidth: LO_WIDTH_RANK, hiWidth, cap };
 }
 
-/** Tire un PALIER (0..49) = rang×5 + (qualité-1) via la fenêtre glissante ci‑dessus.
- *  - `level` : niveau du CONTENU (donjon/boss/labyrinthe) → position de la fenêtre ;
- *  - `luck` (0..1) : épaissit la pointe haute (favorise la droite), sans passer le plafond ;
- *  - `floorBonus` : décale le pic vers le haut (Autel des boss), en crans.
- *  Renvoie { rank, quality, roll } où roll∈[0,1] encode la qualité (rollStars le relit). */
+/** Tire un { rank, quality, roll } : rang via la cloche (pyramide centrée niveau), qualité
+ *  = roll CONTINU [0,1]. `level` = niveau du CONTENU ; `playerLevel` (optionnel) cale le centre
+ *  sur min(contenu, joueur) et plafonne le rang (anti-runaway). `floorBonus` en RANGS. */
 export function rollTier(
   rng: () => number,
   level: number,
   luck = 0,
   floorBonus = 0,
+  playerLevel?: number,
 ): { rank: Rarity; quality: number; roll: number } {
-  const { mode, loWidth, hiWidth, hardCap } = tierWindow(level, luck, floorBonus);
+  const { center, loWidth, hiWidth, cap } = rankBell(level, luck, floorBonus, playerLevel);
   const g = gaussian(rng);
-  let tier = Math.round(mode + (g >= 0 ? g * hiWidth : g * loWidth));
-  tier = Math.min(hardCap, Math.max(0, tier)); // plafond dur + plancher mou (0)
-  return tierToRankQ(tier);
+  let idx = Math.round(center + (g >= 0 ? g * hiWidth : g * loWidth));
+  idx = Math.min(9, Math.max(0, Math.min(cap, idx)));
+  const roll = rng(); // qualité continue (chasse au meilleur jet)
+  return { rank: RANK_ORDER[idx]!, quality: rollStars(roll), roll };
 }
 
-/** Convertit un cran 0..49 → { rank, quality, roll } (roll encode la qualité). */
-export function tierToRankQ(tier: number): { rank: Rarity; quality: number; roll: number } {
-  const t = Math.min(49, Math.max(0, Math.round(tier)));
-  const quality = (t % 5) + 1;
-  return { rank: RANK_ORDER[Math.floor(t / 5)]!, quality, roll: (quality - 0.5) / 5 };
-}
-
-/** Bande de drop TYPIQUE d'un contenu (≈ 10e→90e centile de la fenêtre) → pour afficher
- *  « ce donjon drop E★3 → D★1 ». Déterministe (analytique, pas de rng). */
+/** Bande de rang TYPIQUE d'un contenu (≈ 10e→90e centile de la cloche) → affiche « D → A ».
+ *  Déterministe (analytique, pas de rng). La qualité affichée est indicative (roll continu). */
 export function dropBand(
   level: number,
   luck = 0,
   floorBonus = 0,
+  playerLevel?: number,
 ): { lo: { rank: Rarity; quality: number }; hi: { rank: Rarity; quality: number } } {
-  const { mode, loWidth, hiWidth, hardCap } = tierWindow(level, luck, floorBonus);
-  const clamp = (t: number) => Math.min(hardCap, Math.max(0, Math.round(t)));
-  const lo = tierToRankQ(clamp(mode - 1.3 * loWidth));
-  const hi = tierToRankQ(clamp(mode + 1.3 * hiWidth));
-  return { lo: { rank: lo.rank, quality: lo.quality }, hi: { rank: hi.rank, quality: hi.quality } };
+  const { center, loWidth, hiWidth, cap } = rankBell(level, luck, floorBonus, playerLevel);
+  const clamp = (x: number) => Math.min(9, Math.max(0, Math.min(cap, Math.round(x))));
+  const loI = clamp(center - 1.3 * loWidth);
+  const hiI = clamp(center + 1.3 * hiWidth);
+  return { lo: { rank: RANK_ORDER[loI]!, quality: 3 }, hi: { rank: RANK_ORDER[hiI]!, quality: 3 } };
 }
 
-/** Libellé compact de la bande de drop : « E★3 → D★1 » (ou « E★2 → E★5 » même rang). */
-export function dropBandLabel(level: number, luck = 0, floorBonus = 0): string {
-  const { lo, hi } = dropBand(level, luck, floorBonus);
-  const f = (x: { rank: Rarity; quality: number }) => `${x.rank}★${x.quality}`;
-  return lo.rank === hi.rank && lo.quality === hi.quality ? f(lo) : `${f(lo)} → ${f(hi)}`;
+/** Libellé compact de la bande de drop : « D → A » (ou « C » si un seul rang). */
+export function dropBandLabel(
+  level: number,
+  luck = 0,
+  floorBonus = 0,
+  playerLevel?: number,
+): string {
+  const { lo, hi } = dropBand(level, luck, floorBonus, playerLevel);
+  return lo.rank === hi.rank ? lo.rank : `${lo.rank} → ${hi.rank}`;
 }
 /** Rang seul (utilitaires forge/familier qui n'ont pas besoin de la qualité fine). */
 export function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {
@@ -587,21 +589,28 @@ export function rollDrop(
 
   const slot = pick(rng, SLOTS);
   const lvl = cappedDropLevel(opts.level ?? 1, opts.playerLevel);
-  // RANG + QUALITÉ gatés par la PROFONDEUR du contenu (rollTier) : le donjon plafonne
-  // le rang droppable, la `luck` (profondeur/fiole) et `rollFloor` (Autel) remontent la
-  // cloche. Un perso haut niveau dans un donjon bas ne trouve QUE du bas rang.
-  const floorTiers = Math.round(Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 8); // 0..8 paliers
-  const { rank: rarity, quality, roll } = rollTier(rng, lvl, opts.luck ?? 0, floorTiers);
+  // RANG = PYRAMIDE centrée sur min(niveau contenu, niveau joueur) : le pic est ton rang,
+  // traîne basse (fourrage) et pointe haute rare (jackpot d'un rang au-dessus) dopée par la
+  // `luck` (profondeur/fiole) et `rollFloor` (Autel). Un bas-niveau en donjon profond reste
+  // centré sur SON rang (anti-runaway). La QUALITÉ est un roll continu → farm du meilleur jet.
+  const floorRanks = Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 1.6; // 0..1,6 rang
+  const { rank: rarity, roll } = rollTier(
+    rng,
+    opts.level ?? 1,
+    opts.luck ?? 0,
+    floorRanks,
+    opts.playerLevel,
+  );
   // Pool de stats PROGRESSIF : au début, seules les stats basiques (dégâts/PV)
   // tombent ; les stats exotiques se débloquent en montant (cf. EFFECT_MIN_LEVEL).
   const pool = availableEffects(slot, lvl);
   // Tirage UNIFORME : toutes les voies/stats tombent équitablement (la voie n'oriente PAS
   // les drops — c'est le loot accumulé qui te fait choisir/switcher de voie, ticket spé v2).
   const chosen = pick(rng, pool);
-  // value = base × RANG × QUALITÉ. La PROFONDEUR est encodée par le RANG (gate) → plus
-  // de multiplicateur de magnitude par niveau ici (sinon deux objets même rang mais
-  // profondeurs différentes auraient des valeurs différentes → chevauchement).
-  const vf = starQualityMult(quality);
+  // value = base × RANG × QUALITÉ (roll continu). La PROFONDEUR est encodée par le RANG
+  // (la pyramide) → pas de multiplicateur de magnitude par niveau ici (sinon deux objets
+  // même rang mais profondeurs différentes auraient des valeurs différentes → chevauchement).
+  const vf = qualityMult(roll);
   const rollValue = (b: number) => Math.max(1, round1(b * RARITY_MULT[rarity] * vf));
   const value = rollValue(chosen.base);
   // Objet à effet SIGNATURE → nom évocateur (« Guillotine ») ; sinon nom + adjectif.
@@ -652,13 +661,18 @@ export function rollSetPiece(
 ): Omit<Item, 'id'> {
   const set = SET_BY_ID[opts.setId];
   const slot = opts.preferSlot ?? pick(rng, SLOTS);
-  // Le RANG d'une pièce de set est gaté par le niveau du PALIER du boss (rollTier),
-  // remonté d'un cran (les boss sont une source solide) + `rollFloor` (Autel). La
-  // qualité vient du même tirage → un set haut palier bat un set bas palier.
-  const lvl = cappedDropLevel(opts.level, opts.playerLevel);
-  const floorTiers = Math.round(Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 8) + 3; // +3 : boss généreux
-  const { rank: rarity, quality, roll } = rollTier(rng, lvl, opts.luck ?? 0, floorTiers);
-  const vf = starQualityMult(quality);
+  // Le RANG d'une pièce de set = pyramide centrée sur le PALIER du boss, remontée (+0,6 rang :
+  // les boss sont une source solide) + `rollFloor` (Autel). La qualité vient du même tirage
+  // (roll continu) → un set haut palier bat un set bas palier, et on farme le meilleur jet.
+  const floorRanks = Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 1.6 + 0.6; // boss généreux
+  const { rank: rarity, roll } = rollTier(
+    rng,
+    opts.level,
+    opts.luck ?? 0,
+    floorRanks,
+    opts.playerLevel,
+  );
+  const vf = qualityMult(roll);
   // STAT DE LA PIÈCE = tirée dans le THÈME DU SET (types de ses paliers), pas dans le pool
   // générique du slot → un set a des stats COHÉRENTES avec son identité (ex. Écailles du
   // Dragon = dégâts/crit/vol de vie sur toutes ses pièces), au lieu de stats aléatoires
@@ -732,16 +746,16 @@ export function rollFamiliar(
   // labyrinthes profonds) pousse aussi la QUALITÉ vers le haut (avant : rang biaisé par la
   // luck mais qualité uniforme 20 %). Rareté forcée (fusion) → qualité uniforme.
   let rarity: Rarity;
-  let quality: number;
+  let roll: number;
   if (opts.rarity) {
     rarity = opts.rarity;
-    quality = 1 + Math.floor(rng() * 5); // 1..5 uniforme
+    roll = rng(); // qualité continue uniforme (fusion : rareté forcée)
   } else {
-    const t = rollTier(rng, cappedDropLevel(opts.level, opts.playerLevel), opts.luck ?? 0);
+    const t = rollTier(rng, opts.level, opts.luck ?? 0, 0, opts.playerLevel);
     rarity = t.rank;
-    quality = t.quality;
+    roll = t.roll;
   }
-  const vf = starQualityMult(quality);
+  const vf = qualityMult(roll);
   const value = Math.max(1, round1(species.base * RARITY_MULT[rarity] * vf));
   const level = 1; // REFONTE C : le familier arrive niv.1 (identité de race) → à infuser
   let effect2: ItemEffect | undefined;
@@ -762,7 +776,7 @@ export function rollFamiliar(
     effect: { type: species.effect, value },
     ...(effect2 ? { effect2 } : {}),
     species: species.id,
-    roll: (quality - 0.5) / 5, // qualité relue par rollStars (comme les objets)
+    roll, // roll CONTINU relu par rollStars/qualityMult (comme les objets)
   };
 }
 

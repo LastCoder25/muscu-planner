@@ -9,7 +9,6 @@ import {
   RARITY_MULT,
   starQualityMult,
   rollTier,
-  cappedDropLevel,
   type AggregatedEffects,
   type Rarity,
 } from './items';
@@ -256,8 +255,15 @@ export function rollTalentDrop(
 ): TalentInstance {
   // Tirage UNIFORME (toutes les voies équitablement — la voie n'oriente pas les drops).
   const def = TALENTS[Math.floor(rng() * TALENTS.length)]!;
-  const lvl = cappedDropLevel(opts.level ?? 1, opts.playerLevel);
-  const { rank, quality } = rollTier(rng, lvl, opts.luck ?? 0, opts.floorBonus ?? 0);
+  // RANG = pyramide centrée sur min(niveau contenu, niveau joueur) → `playerLevel` cale le
+  // centre et plafonne le rang (anti-runaway) ; la qualité vient du roll continu.
+  const { rank, quality } = rollTier(
+    rng,
+    opts.level ?? 1,
+    opts.luck ?? 0,
+    opts.floorBonus ?? 0,
+    opts.playerLevel,
+  );
   const tier = RANK_ORDER.indexOf(rank) * 5 + (quality - 1);
   return {
     id: `tal_${opts.idSeed ?? Math.floor(rng() * 1e9)}`,

@@ -8,7 +8,6 @@ import {
   dropBand,
   dropBandLabel,
   rankCeilingForLevel,
-  LEVEL_MARGIN,
   RANK_ORDER,
   RARITY_MULT,
   RARITY_RANK,
@@ -30,6 +29,7 @@ import {
   craftSetCost,
   rerolledQuality,
   starQualityMult,
+  qualityMult,
   rollStars,
   swapLoadoutGear,
   type Item,
@@ -75,27 +75,42 @@ describe('qualité (sous-rang 1→5)', () => {
   });
 });
 
-describe('rollTier : gate de profondeur', () => {
+describe('rollTier : pyramide de rareté centrée sur le niveau', () => {
   it('rankCeilingForLevel : racine (rapide tôt, lent tard), SSS très tardif', () => {
     expect(rankCeilingForLevel(1)).toBe(1); // F
     expect(rankCeilingForLevel(6)).toBeGreaterThanOrEqual(2);
     expect(RANK_ORDER[rankCeilingForLevel(90)]).toBe('SSS');
     expect(rankCeilingForLevel(20)).toBeLessThan(9); // pas de SSS avant le très long terme
   });
-  it('le rang tiré ne dépasse JAMAIS le plafond de la profondeur', () => {
-    for (let level = 1; level <= 100; level += 7) {
-      const ceil = rankCeilingForLevel(level);
-      for (let s = 1; s <= 60; s++) {
-        const { rank } = rollTier(mulberry32(s), level, 1, 0);
-        expect(RARITY_RANK[rank]).toBeLessThanOrEqual(ceil);
-      }
+  it('PIC de la pyramide = rang du niveau (mode = rankCeilingForLevel)', () => {
+    for (const lv of [10, 20, 40, 60]) {
+      const c = new Array(10).fill(0) as number[];
+      for (let s = 1; s <= 3000; s++) c[RARITY_RANK[rollTier(mulberry32(s * 7 + lv), lv).rank]]!++;
+      const modal = c.indexOf(Math.max(...c));
+      expect(modal).toBe(rankCeilingForLevel(lv));
     }
   });
-  it('CAP anti-runaway : le rang d’un drop est plafonné par niveauJoueur + marge', () => {
-    // Contenu très profond (85) mais joueur bas niveau (19) → rang capé à ceiling(19+marge).
+  it('pyramide : traîne BASSE (fourrage) large ET pointe HAUTE (jackpot) rare autour du pic', () => {
+    const lv = 40;
+    const center = rankCeilingForLevel(lv);
+    let below = 0;
+    let above = 0;
+    const N = 4000;
+    for (let s = 1; s <= N; s++) {
+      const r = RARITY_RANK[rollTier(mulberry32(s * 3 + 1), lv, 0.3).rank];
+      if (r < center) below++;
+      if (r > center) above++;
+    }
+    expect(below / N).toBeGreaterThan(0.15); // fourrage présent (rangs inférieurs)
+    expect(above / N).toBeGreaterThan(0.02); // on PEUT drop au-dessus (façon ARPG)
+    expect(below).toBeGreaterThan(above); // traîne basse plus large que la pointe haute
+  });
+  it('CAP anti-runaway : le rang reste centré sur le JOUEUR (+2 max), pas sur le donjon', () => {
+    // Contenu très profond (85) mais joueur bas niveau (19) → le centre = min(85,19) = 19,
+    // le rang ne peut dépasser ceiling(19) + 2 (borne douce du jackpot), jamais SSS.
     const playerLevel = 19;
-    const capCeil = rankCeilingForLevel(playerLevel + LEVEL_MARGIN);
-    for (let s = 1; s <= 120; s++) {
+    const capCeil = Math.min(9, rankCeilingForLevel(playerLevel) + 2);
+    for (let s = 1; s <= 200; s++) {
       const d = rollDrop(mulberry32(s * 13 + 1), {
         cleared: true,
         defeated: 1,
@@ -105,18 +120,20 @@ describe('rollTier : gate de profondeur', () => {
       });
       if (d) expect(RARITY_RANK[d.rarity]).toBeLessThanOrEqual(capCeil);
     }
-    // Sans playerLevel (legacy/tests) → pas de cap (peut monter au plafond du contenu).
-    let sawAbove = false;
-    for (let s = 1; s <= 120; s++) {
-      const d = rollDrop(mulberry32(s * 13 + 1), {
+    // Le centre suit le JOUEUR (min contenu/joueur) : un bas-niveau en donjon profond
+    // reste centré sur SON rang (le pic ≈ ceiling(joueur)), pas sur celui du donjon.
+    const c = new Array(10).fill(0) as number[];
+    for (let s = 1; s <= 2000; s++) {
+      const d = rollDrop(mulberry32(s * 5 + 7), {
         cleared: true,
         defeated: 1,
         level: 85,
-        luck: 1,
+        luck: 0.3,
+        playerLevel,
       });
-      if (d && RARITY_RANK[d.rarity] > capCeil) sawAbove = true;
+      if (d) c[RARITY_RANK[d.rarity]]!++;
     }
-    expect(sawAbove).toBe(true);
+    expect(c.indexOf(Math.max(...c))).toBe(rankCeilingForLevel(playerLevel));
   });
   it('contenu PROFOND → rangs plus hauts que contenu peu profond', () => {
     const avg = (level: number) => {
@@ -128,50 +145,38 @@ describe('rollTier : gate de profondeur', () => {
     expect(avg(60)).toBeGreaterThan(avg(20));
     expect(avg(20)).toBeGreaterThan(avg(6));
   });
-  it('frise glissante : le cran moyen (rang+qualité) monte CONTINÛMENT avec le niveau', () => {
-    const meanTier = (level: number, luck = 0.3) => {
-      let sum = 0;
-      const N = 4000;
-      for (let s = 1; s <= N; s++) {
-        const { rank, quality } = rollTier(mulberry32(s * 31 + level), level, luck);
-        sum += RARITY_RANK[rank] * 5 + (quality - 1);
-      }
-      return sum / N;
-    };
-    // Dans une même bande de rang (E ≈ niv 4→8), la QUALITÉ moyenne monte avec le niveau.
-    expect(meanTier(8)).toBeGreaterThan(meanTier(4));
-    // Et le glissement est continu entre niveaux adjacents (pas de palier plat).
-    expect(meanTier(6)).toBeGreaterThan(meanTier(5));
-    expect(meanTier(13)).toBeGreaterThan(meanTier(11));
+  it('qualité CONTINUE : le roll varie continûment (chasse au meilleur jet)', () => {
+    const rolls = new Set<number>();
+    for (let s = 1; s <= 200; s++) rolls.add(rollTier(mulberry32(s * 5 + 1), 30, 0.3).roll);
+    expect(rolls.size).toBeGreaterThan(150); // pas 5 valeurs discrètes → vraiment continu
+    expect(qualityMult(0)).toBe(1);
+    expect(qualityMult(1)).toBeCloseTo(1.1);
+    expect(qualityMult(0.5)).toBeCloseTo(1.05);
   });
-  it('luck : re-pondère vers le HAUT (plus de 5★) sans passer le plafond dur', () => {
-    const fiveStarRate = (luck: number) => {
-      let five = 0;
+  it('luck : épaissit la pointe HAUTE (plus de sur-rang) sans casser le cap joueur', () => {
+    const overRate = (luck: number) => {
+      const lv = 30;
+      const center = rankCeilingForLevel(lv);
+      let over = 0;
       const N = 4000;
-      for (let s = 1; s <= N; s++) {
-        const { quality } = rollTier(mulberry32(s * 17 + 3), 20, luck);
-        if (quality === 5) five++;
-      }
-      return five / N;
+      for (let s = 1; s <= N; s++)
+        if (RARITY_RANK[rollTier(mulberry32(s * 11 + 1), lv, luck).rank] > center) over++;
+      return over / N;
     };
-    expect(fiveStarRate(0.6)).toBeGreaterThan(fiveStarRate(0));
-    // gate : même à luck 1, jamais au-dessus du plafond de rang du niveau
-    const ceil = rankCeilingForLevel(20);
+    expect(overRate(0.8)).toBeGreaterThan(overRate(0));
+    // centre joueur respecté même à luck 1 (contenu profond, joueur bas) : ≤ ceiling(20)+2
+    const cap = Math.min(9, rankCeilingForLevel(20) + 2);
     for (let s = 1; s <= 300; s++)
-      expect(RARITY_RANK[rollTier(mulberry32(s), 20, 1).rank]).toBeLessThanOrEqual(ceil);
+      expect(RARITY_RANK[rollTier(mulberry32(s), 40, 1, 0, 20).rank]).toBeLessThanOrEqual(cap);
   });
-  it('dropBand : bande cohérente (lo ≤ hi ≤ plafond) et qui monte avec le niveau', () => {
-    const tier = (x: { rank: string; quality: number }) =>
-      RARITY_RANK[x.rank as keyof typeof RARITY_RANK] * 5 + (x.quality - 1);
+  it('dropBand : bande cohérente (lo ≤ hi) et qui monte avec le niveau', () => {
+    const ri = (r: string) => RARITY_RANK[r as keyof typeof RARITY_RANK];
     for (const lv of [4, 12, 25, 60]) {
       const b = dropBand(lv, 0.4);
-      expect(tier(b.lo)).toBeLessThanOrEqual(tier(b.hi));
-      expect(RARITY_RANK[b.hi.rank]).toBeLessThanOrEqual(rankCeilingForLevel(lv));
+      expect(ri(b.lo.rank)).toBeLessThanOrEqual(ri(b.hi.rank));
     }
-    // la bande glisse vers le haut avec le niveau
-    expect(tier(dropBand(30, 0.4).hi)).toBeGreaterThan(tier(dropBand(12, 0.4).hi));
-    // luck pousse le haut de bande (ou égal si déjà au plafond)
-    expect(tier(dropBand(20, 0.9).hi)).toBeGreaterThanOrEqual(tier(dropBand(20, 0).hi));
+    expect(ri(dropBand(30, 0.4).hi.rank)).toBeGreaterThan(ri(dropBand(12, 0.4).hi.rank));
+    expect(ri(dropBand(20, 0.9).hi.rank)).toBeGreaterThanOrEqual(ri(dropBand(20, 0).hi.rank));
     expect(typeof dropBandLabel(12, 0.5)).toBe('string');
   });
 });
@@ -296,12 +301,14 @@ describe('rollDrop', () => {
   it('rng haut → pas de drop', () => {
     expect(rollDrop(() => 0.99, { cleared: true, defeated: 3 })).toBeNull();
   });
-  it('drop toujours NIVEAU 1 (refonte C), rang plafonné par la profondeur', () => {
-    const d = rollDrop(() => 0, { cleared: true, defeated: 3, level: 6 });
+  it('drop toujours NIVEAU 1 (refonte C), rang plafonné (anti-runaway)', () => {
+    let d: Item | null = null;
+    for (let s = 1; d == null && s <= 50; s++)
+      d = rollDrop(mulberry32(s), { cleared: true, defeated: 3, level: 6, playerLevel: 6 });
     expect(d).not.toBeNull();
     expect(d!.level).toBe(1);
     expect(d!.baseLevel).toBe(1);
-    expect(RARITY_RANK[d!.rarity]).toBeLessThanOrEqual(rankCeilingForLevel(6));
+    expect(RARITY_RANK[d!.rarity]).toBeLessThanOrEqual(Math.min(9, rankCeilingForLevel(6) + 2));
   });
   it('un objet de donjon a UNE seule stat (le set fait la différence)', () => {
     const d = rollDrop(() => 0.2, { cleared: true, defeated: 1, level: 5 });

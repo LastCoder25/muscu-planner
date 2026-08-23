@@ -8,7 +8,6 @@ import {
   tierIndexOf,
   aggregateEffects,
   playerWithGear,
-  effectiveValue,
   FAMILIAR_SLOT,
   type Item,
 } from '@/lib/items';
@@ -74,7 +73,9 @@ describe('familiers — effet compté dans le combat', () => {
   it('aggregateEffects prend en compte le familier équipé', () => {
     const f = makeFam(wolf, 5);
     const withFam = aggregateEffects({ familiar: f });
-    const expected = effectiveValue(f.effect, f.level) / 100;
+    // aggregateEffects lit la valeur BAKÉE (1 décimale, round1) telle quelle — la qualité
+    // continue reste visible sur les petites stats (pas de ré-arrondi entier).
+    const expected = f.effect.value / 100;
     expect(withFam.damagePct).toBeCloseTo(expected, 6);
     expect(aggregateEffects({}).damagePct).toBe(0);
   });
