@@ -1,8 +1,8 @@
 // voies.ts — SPÉCIALISATION du perso (« Voie » / archétype). Pur/testé.
-// Une voie ne donne PAS de puissance brute massive (le sport reste la source) : elle
-// (1) BIAISE les drops génériques vers les stats de l'archétype → ton loot soutient TON
-// build (fin de « toujours les mêmes stats ») ; (2) accorde un PETIT passif de saveur.
-// Réversible à tout moment (comme les talents). Les pièces de SET gardent leur thème.
+// Une voie ne donne PAS de puissance brute massive (le sport reste la source) et ne biaise
+// PLUS les drops (uniformes) : elle (1) accorde un PETIT passif de saveur ; (2) débloque le
+// CAPSTONE (4-pièces) du SET de sa voie (`voie:<id>` dans items.ts) → compléter le set de
+// SA voie = accomplir l'archétype. Réversible à tout moment (comme les talents).
 import { effectAsAggregate, type EffectType, type AggregatedEffects } from './items';
 
 export type VoieId =
@@ -20,7 +20,8 @@ export interface Voie {
   name: string;
   emoji: string;
   blurb: string;
-  /** Stats vers lesquelles les drops génériques sont biaisés. */
+  /** Stats de FOCUS de l'archétype (= le thème de son set de voie). Descriptif (les drops
+   *  ne sont plus biaisés) : sert au libellé UI + à générer le thème du set. */
   preferred: EffectType[];
   /** Petit passif constant (type + magnitude en %). */
   passive: { type: EffectType; base: number };

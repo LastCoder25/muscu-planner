@@ -49,10 +49,12 @@
           }}</span>
         </div>
         <div class="cs-bar">
-          <span class="ghost gm" :style="{ width: mPct + '%' }" />
-          <span class="m" :style="{ width: mPct + '%' }" />
+          <span v-if="mBars <= 1" class="ghost gm" :style="{ width: mChunkPct + '%' }" />
+          <span class="m" :style="{ width: mChunkPct + '%' }" />
         </div>
-        <div class="cs-pv">{{ monsterPv }}</div>
+        <div class="cs-pv">
+          {{ monsterPv }}<span v-if="mBars > 1" class="cs-mult">×{{ mBarsLeft }}</span>
+        </div>
         <div v-if="pop && pop.side === 'monster'" class="cs-pop" :class="pop.kind">
           {{ pop.text }}
         </div>
@@ -130,9 +132,22 @@ const lastWin = ref(false);
 const foe = computed(() => props.fights[fightIdx.value] ?? null);
 const foeArchetype = computed(() => foe.value?.archetype ?? 'normal');
 const pPct = computed(() => Math.round((playerPv.value / Math.max(1, props.playerMaxPv)) * 100));
-const mPct = computed(() =>
-  Math.round((monsterPv.value / Math.max(1, foe.value?.maxPv ?? 1)) * 100),
+// BARRES CHUNKÉES pour les gros PV (ticket 30457173) : un monstre à énorme PV bougeait à
+// peine au début (chaque coup = 1 % de barre). On découpe sa vie en `mBars` barres et on
+// n'affiche qu'UNE barre (celle du chunk courant) + un « ×N » qui descend à chaque barre
+// perdue → le début du combat est enfin lisible. 1 barre pour les petits monstres.
+const monMaxPv = computed(() => Math.max(1, foe.value?.maxPv ?? 1));
+const mBars = computed(() => Math.min(8, Math.max(1, Math.round(monMaxPv.value / 220))));
+const mChunk = computed(() => monMaxPv.value / mBars.value);
+const mBarsLeft = computed(() =>
+  monsterPv.value > 0 ? Math.ceil(monsterPv.value / mChunk.value) : 0,
 );
+// Remplissage de la barre COURANTE (0..100) : la vie dans le chunk actuel.
+const mChunkPct = computed(() => {
+  if (monsterPv.value <= 0) return 0;
+  const within = monsterPv.value - (mBarsLeft.value - 1) * mChunk.value;
+  return Math.round((within / mChunk.value) * 100);
+});
 
 let timer: ReturnType<typeof setInterval> | undefined;
 let popTimer: ReturnType<typeof setTimeout> | undefined;
@@ -538,6 +553,17 @@ onBeforeUnmount(() => {
   font-size: 11px;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+}
+/* « ×N » de barres restantes (monstre à gros PV, barres chunkées). */
+.cs-mult {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 10.5px;
+  color: var(--bg);
+  background: var(--accent);
+  vertical-align: middle;
 }
 .cs-mid {
   align-self: center;

@@ -750,11 +750,17 @@ function isSetsMode(c: Challenge) {
 }
 // Barre de progression SEGMENTÉE (ticket 3c51883b) : découpée par SÉRIES (mode séries) ou
 // par JOURS (reps/durée), plafonnée à 30 segments pour rester lisible.
+// Mode SÉRIES : le remplissage suit les SÉRIES FAITES / total de séries (ticket 38b10eea) —
+// PAS le % de jours complétés (sinon la barre n'était pas divisée par le nb de séries).
 function challengeSegs(c: Challenge): { n: number; on: number } {
-  const total = isSetsMode(c)
-    ? c.daily_targets.reduce((a, b) => a + b, 0) // total de séries
-    : c.duration_days; // nb de jours
-  const n = Math.min(30, Math.max(1, total));
+  if (isSetsMode(c)) {
+    const total = c.daily_targets.reduce((a, b) => a + b, 0); // total de séries à faire
+    const done = st(c).totalDone; // séries réellement faites
+    const n = Math.min(30, Math.max(1, total));
+    const on = Math.min(n, Math.round((total ? done / total : 0) * n));
+    return { n, on };
+  }
+  const n = Math.min(30, Math.max(1, c.duration_days)); // nb de jours
   const on = Math.min(n, Math.round((st(c).completionPct / 100) * n));
   return { n, on };
 }

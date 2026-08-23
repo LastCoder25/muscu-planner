@@ -407,8 +407,10 @@
             <button class="adv-modal-x" aria-label="Fermer" @click="voieOpen = false">✕</button>
             <div class="sec-title">🧭 Choisis ta voie</div>
             <div class="sec-hint">
-              Ta voie <b>oriente tes drops</b> vers ses stats (les autres tombent moins souvent) et
-              ajoute un <b>petit passif</b>. Changement libre à tout moment.
+              Ta voie ajoute un <b>petit passif</b> et débloque le <b>capstone (4-pièces)</b> du set
+              de sa voie. Les drops ne sont <b>pas biaisés</b> : c'est le
+              <b>set que tu complètes</b>
+              qui définit ton build. Changement libre à tout moment.
             </div>
             <div class="voie-list">
               <button
@@ -432,7 +434,7 @@
               </button>
             </div>
             <button v-if="char.row.voie" class="voie-clear" @click="doSetVoie(null)">
-              Retirer ma voie (drops génériques)
+              Retirer ma voie (aucun passif ni capstone)
             </button>
           </q-card>
         </q-dialog>

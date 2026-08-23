@@ -43,6 +43,13 @@
             </div>
             <div class="lt-meta">
               Niv {{ t.laby.recoLevel }} · {{ t.laby.floors }} étages ·
+              <span
+                class="lt-pow"
+                :class="{ ok: myPow >= recommendedPower(t.laby.recoLevel) }"
+                title="Puissance conseillée pour ce palier — compare à la tienne"
+                >⚔️ conseillé {{ fmtPow(recommendedPower(t.laby.recoLevel)) }}</span
+              >
+              ·
               <span class="lt-fam"
                 >🐾 familier rang <b>{{ t.laby.rank }}</b></span
               >
@@ -482,8 +489,15 @@ import { pickLabyFoe, type LabyFoe } from '@/data/labyrinthFoes';
 import { rollChestGrade, pickLabyTrap, type ChestGrade, type LabyTrap } from '@/data/labyrinthLoot';
 import { talentEffects } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
-import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
-import { refFighter } from '@/lib/proceduralContent';
+import {
+  simulateCombat,
+  mulberry32,
+  combatPower,
+  fmtPow,
+  type Combatant,
+  type CombatEvent,
+} from '@/lib/combat';
+import { refFighter, recommendedPower } from '@/lib/proceduralContent';
 import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
 import ChestIcon from '@/components/ChestIcon.vue';
@@ -599,6 +613,8 @@ const fighter = computed<Combatant>(() =>
   ),
 );
 const heroLevel = computed(() => character.value.level.level);
+// Puissance de combat du joueur → comparée à la « puissance conseillée » de chaque palier.
+const myPow = computed(() => combatPower(fighter.value));
 
 const CELL = 66;
 const SIZE = 46; // côté d'une salle (carré arrondi) ; salles alignées sur la grille
@@ -1470,6 +1486,13 @@ function replayAuto() {
 }
 .lt-fam {
   color: color-mix(in srgb, var(--accent) 70%, var(--dim));
+}
+.lt-pow {
+  color: color-mix(in srgb, #ff6a45 55%, var(--dim));
+  font-variant-numeric: tabular-nums;
+}
+.lt-pow.ok {
+  color: color-mix(in srgb, #7bc86c 75%, var(--dim));
 }
 .lt-death {
   color: color-mix(in srgb, #ff6a45 60%, var(--dim));
