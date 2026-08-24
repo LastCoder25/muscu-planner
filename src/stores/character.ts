@@ -352,10 +352,35 @@ export const useCharacterStore = defineStore('character', () => {
     // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~6 % ensuite sur les
     // réaffrontements (raréfié 2026‑08‑18) → pas de flux de clés en spammant un boss.
     const keyGain = firstDefeat ? 1 : input.defeated && Math.random() < 0.06 ? 1 : 0;
-    // Butin comme un donjon : distribué (auto-équipe si slot libre/meilleur, sinon au sac).
+    // Butin de boss. Les pièces de SET DE VOIE sont filées DIRECTEMENT dans le loadout de
+    // leur voie (1 set/loadout) : emplacement LIBRE → rangée ; OCCUPÉ → laissée au SAC et
+    // signalée en CONFLIT → l'UI demande au joueur laquelle garder (l'autre est vendue).
+    // Les autres drops (lots hors-set, rares) suivent le flux donjon (équipe si mieux / sac).
     const drops = input.drops ?? [];
-    const dist = distributeItems(cur.equipped, cur.inventory, drops);
-    return persist(userId, {
+    const loadouts: Loadout[] = Array.from(
+      { length: MAX_LOADOUTS },
+      (_, k) => cur.loadouts[k] ?? { items: {} },
+    );
+    const conflicts: Item[] = [];
+    let inv = cur.inventory;
+    const otherDrops: Item[] = [];
+    for (const d of drops) {
+      const vi = d.setId?.startsWith('voie:')
+        ? VOIES.findIndex((v) => v.id === d.setId!.slice('voie:'.length))
+        : -1;
+      if (vi >= 0 && vi < MAX_LOADOUTS) {
+        const items = { ...loadouts[vi]!.items };
+        if (!items[d.slot]) {
+          items[d.slot] = d; // emplacement libre → rangée dans le loadout de la voie
+          loadouts[vi] = { items };
+        } else {
+          inv = [...inv, d]; // occupé → au sac, en attente du choix du joueur (conflit UI)
+          conflicts.push(d);
+        }
+      } else otherDrops.push(d);
+    }
+    const dist = distributeItems(cur.equipped, inv, otherDrops);
+    await persist(userId, {
       gold: cur.gold + input.gold,
       stones: cur.stones + (input.defeated ? (input.stones ?? 0) : 0),
       parchemins: cur.parchemins + (input.defeated ? (input.parchemins ?? 0) : 0),
@@ -364,10 +389,12 @@ export const useCharacterStore = defineStore('character', () => {
       defeated_bosses: defeated,
       equipped: dist.equipped,
       inventory: dist.inventory,
+      loadouts,
       set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, drops),
       keys: cur.keys + keyGain,
       ...(input.talentDrops?.length ? { talents: [...cur.talents, ...input.talentDrops] } : {}),
     });
+    return { conflicts };
   }
 
   // Choisit une récompense parmi les candidats en attente → l'applique et purge.

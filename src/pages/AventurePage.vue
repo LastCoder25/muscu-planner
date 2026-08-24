@@ -62,11 +62,9 @@
             <span class="tb-r gold" title="Or — expéditions et construction des bâtiments"
               >🪙 {{ char.row.gold }}</span
             >
-            <span class="tb-sep" aria-hidden="true"></span>
             <span
-              v-if="char.row.summon_stones"
               class="tb-r summon"
-              title="Pierres d’invocation — tenter un boss de palier"
+              title="Pierres d’invocation — tenter un boss de palier (gagnées en nettoyant des donjons)"
               >🔮 {{ char.row.summon_stones }}</span
             >
           </div>
@@ -2052,42 +2050,51 @@
                     {{ ln }}
                   </div>
                 </div>
-                <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
-                  <span
-                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} · niv
-                    {{ equippedInSlot(d.slot)!.level
-                    }}<span v-if="equippedInSlot(d.slot)!.setId" title="Pièce de set"> 🧩</span> ·
-                    {{ itemEffects(equippedInSlot(d.slot)!) }}</span
-                  >
-                  <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
-                    rarityVerdict(d).label
-                  }}</span>
+                <!-- Pièce de set d'un BOSS : filée au loadout de sa voie (pas au sac). En cas de
+                     conflit (emplacement occupé), le dialogue de choix s'ouvre par-dessus. -->
+                <div v-if="run.kind === 'boss' && d.setId" class="drop-done">
+                  🧩 → Loadout {{ setVoieName(d.setId) }}
                 </div>
-                <div v-else class="drop-cmp"><span class="rarity-verdict up">slot libre</span></div>
-                <!-- Puissance si équipé (rang + qualité) vs l'objet équipé du même slot. -->
-                <div class="ii-cmp2">
-                  <span class="ii-cmp2-ic">⚔️</span>
-                  <span
-                    class="ii-cmp2-chip"
-                    :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
-                  >
-                    <b>{{ fmtDelta(combatPowerVal, powerIfEquip(d)) }}</b
-                    ><i>{{ equippedInSlot(d.slot) ? 'vs équipé' : 'emplacement libre' }}</i>
-                  </span>
-                </div>
-                <div v-if="dropState(d) === 'equipped'" class="drop-done">
-                  ⚔️ Auto-équipé (slot vide)
-                </div>
-                <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
-                <div v-else class="inv-actions">
-                  <button
-                    class="equip-btn"
-                    @click="equippedInSlot(d.slot) ? openReplace(d) : doEquip(d.id)"
-                  >
-                    {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
-                  </button>
-                  <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
-                </div>
+                <template v-else>
+                  <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
+                    <span
+                      >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} · niv
+                      {{ equippedInSlot(d.slot)!.level
+                      }}<span v-if="equippedInSlot(d.slot)!.setId" title="Pièce de set"> 🧩</span> ·
+                      {{ itemEffects(equippedInSlot(d.slot)!) }}</span
+                    >
+                    <span class="rarity-verdict" :class="rarityVerdict(d).cls">{{
+                      rarityVerdict(d).label
+                    }}</span>
+                  </div>
+                  <div v-else class="drop-cmp">
+                    <span class="rarity-verdict up">slot libre</span>
+                  </div>
+                  <!-- Puissance si équipé (rang + qualité) vs l'objet équipé du même slot. -->
+                  <div class="ii-cmp2">
+                    <span class="ii-cmp2-ic">⚔️</span>
+                    <span
+                      class="ii-cmp2-chip"
+                      :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
+                    >
+                      <b>{{ fmtDelta(combatPowerVal, powerIfEquip(d)) }}</b
+                      ><i>{{ equippedInSlot(d.slot) ? 'vs équipé' : 'emplacement libre' }}</i>
+                    </span>
+                  </div>
+                  <div v-if="dropState(d) === 'equipped'" class="drop-done">
+                    ⚔️ Auto-équipé (slot vide)
+                  </div>
+                  <div v-else-if="dropState(d) === 'gone'" class="drop-done">✓ Retiré du sac</div>
+                  <div v-else class="inv-actions">
+                    <button
+                      class="equip-btn"
+                      @click="equippedInSlot(d.slot) ? openReplace(d) : doEquip(d.id)"
+                    >
+                      {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
+                    </button>
+                    <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
@@ -3934,7 +3941,7 @@ async function fightBoss(b: MilestoneBoss) {
             }),
           ])
         : [];
-    await char.applyBossWin(uid, {
+    const bossRes = await char.applyBossWin(uid, {
       bossId: b.id,
       summonCost,
       gold,
@@ -3942,6 +3949,14 @@ async function fightBoss(b: MilestoneBoss) {
       drops,
       ...(talentDrops.length ? { talentDrops } : {}),
     });
+    // Pièce de set → filée au loadout de sa voie. Si l'emplacement était OCCUPÉ, la pièce
+    // est au sac et on demande au joueur laquelle garder (comparatif côte à côte ; l'autre
+    // est vendue) — même dialogue que le rangement manuel (stashConflict).
+    const conflict = bossRes?.conflicts?.[0];
+    if (conflict) {
+      const { idx, stored } = loadoutTargetFor(conflict);
+      if (stored) stashConflict.value = { incoming: conflict, stored, idx };
+    }
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!));
     run.value = {
       name: b.name,
