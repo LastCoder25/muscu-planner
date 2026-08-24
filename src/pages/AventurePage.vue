@@ -503,6 +503,12 @@
                   >
                     {{ talDeltaMap.get(t.id)! > 0 ? '+' : '−'
                     }}{{ fmtPow(Math.abs(talDeltaMap.get(t.id)!)) }}
+                    <span
+                      v-if="talDeltaMap.get(t.id)! > 0 && replacedTalentIcon(t.def.code)"
+                      class="repl-ic"
+                      title="Remplacerait ce talent"
+                      >⟵ {{ replacedTalentIcon(t.def.code) }}</span
+                    >
                   </span>
                 </div>
                 <div class="tal-actions">
@@ -2856,6 +2862,12 @@ function talentName(inst: TalentInstance): string {
 }
 function talentIcon(inst: TalentInstance): string {
   return talentByCode(inst.code)?.icon ?? '✨';
+}
+// Icône du talent du MÊME code actuellement équipé (celui qu'un talent du sac
+// REMPLACERAIT). null si aucun même-code équipé (ajout sur un slot libre → rien à remplacer).
+function replacedTalentIcon(code: string): string | null {
+  const same = (char.row?.talents ?? []).find((t) => t.equipped && t.code === code);
+  return same ? talentIcon(same) : null;
 }
 // JET (0..100 %) d'un talent tombé, pour le rapport de combat.
 function talentDropQuality(inst: TalentInstance): number {
@@ -5329,6 +5341,13 @@ button.pt-mini:active {
 .cmp-pill.down {
   color: var(--d4);
   background: color-mix(in srgb, var(--d4) 18%, transparent);
+}
+/* Icône du talent remplacé, dans la pastille de gain de puissance. */
+.repl-ic {
+  margin-left: 4px;
+  font-family: var(--font-body);
+  font-weight: 400;
+  opacity: 0.85;
 }
 /* Voie (spécialisation) — sélecteur ouvert depuis le cercle 🧭 du carré. */
 .voie-list {
