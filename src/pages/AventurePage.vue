@@ -462,6 +462,13 @@
             >
               🪄 Équiper les talents conseillés
             </button>
+            <button
+              v-if="surplusTalentIds.size"
+              class="voie-btn talent-dup-btn"
+              @click="doSellDuplicateTalents"
+            >
+              🪙 Vendre les doublons ({{ surplusTalentIds.size }})
+            </button>
             <div v-if="char.row.talents.length" class="talents-grid">
               <div
                 v-for="t in talentsView"
@@ -492,6 +499,12 @@
                       :title="'Rang ' + RARITY_LABEL[t.rarity]"
                       >{{ t.rarity }}</span
                     >
+                    <span
+                      v-if="t.dup"
+                      class="dup-badge"
+                      title="Tu as un meilleur exemplaire de ce talent — vendable"
+                      >doublon</span
+                    >
                   </div>
                   <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
                   <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
@@ -512,16 +525,29 @@
                   </span>
                 </div>
                 <div class="tal-actions">
+                  <!-- Équiper : emplacement libre (rien à remplacer). -->
                   <button
-                    v-if="!t.equipped"
+                    v-if="!t.equipped && !talReplaceId(t.id) && canEquipMore"
                     class="tal-b"
-                    :disabled="!talReplaceId(t.id) && !canEquipMore"
-                    :title="talReplaceId(t.id) ? 'Remplacer le talent indiqué' : ''"
-                    @click="talReplaceId(t.id) ? doSwapTalent(t.id) : doEquipTalent(t.id)"
+                    @click="doEquipTalent(t.id)"
                   >
-                    {{ talReplaceId(t.id) ? 'Remplacer' : 'Équiper' }}
+                    Équiper
                   </button>
-                  <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
+                  <!-- Remplacer : UNIQUEMENT si le swap AUGMENTE la puissance (sinon rien —
+                       inutile de proposer un remplacement qui baisse la puissance). -->
+                  <button
+                    v-else-if="
+                      !t.equipped && talReplaceId(t.id) && (talDeltaMap.get(t.id) ?? 0) > 0
+                    "
+                    class="tal-b"
+                    title="Remplacer le talent indiqué (⟵ sur la pastille)"
+                    @click="doSwapTalent(t.id)"
+                  >
+                    Remplacer
+                  </button>
+                  <button v-if="t.equipped" class="tal-b" @click="doUnequipTalent(t.id)">
+                    Retirer
+                  </button>
                   <button v-if="!t.equipped" class="tal-b ghost" @click="doSellTalent(t.id)">
                     🪙 Vendre
                   </button>
@@ -2808,7 +2834,9 @@ const recommendedTalentIds = computed<Set<string>>(() => {
   const byCode = new Map<string, TalentInstance>();
   for (const t of owned) {
     const cur = byCode.get(t.code);
-    if (!cur || tierOf(t) > tierOf(cur)) byCode.set(t.code, t);
+    // Comparaison par MAGNITUDE réelle (inclut le jet), pas juste le tier → on garde vraiment
+    // le meilleur exemplaire d'un code, pas le premier vu à rang égal (ticket auto-équip).
+    if (!cur || talentMag(t) > talentMag(cur)) byCode.set(t.code, t);
   }
   const pool = [...byCode.values()];
   const N = Math.min(talentSlots.value, pool.length);
@@ -2849,6 +2877,29 @@ function doEquipRecommendedTalents() {
     'Impossible d’équiper les talents conseillés.',
   );
 }
+// Magnitude RÉELLE d'un talent (base × intervalle du rang selon le JET × enchant) → sert à
+// comparer deux exemplaires du même code (le meilleur = plus haute magnitude).
+function talentMag(t: TalentInstance): number {
+  const def = talentByCode(t.code);
+  return def ? talentValue(def, tierOf(t), t.enchant ?? 0, talentRollOf(t)) : 0;
+}
+// Meilleur exemplaire (id) par CODE → sert à repérer les DOUBLONS (exemplaires inférieurs).
+const bestTalentByCode = computed(() => {
+  const m = new Map<string, { id: string; mag: number }>();
+  for (const t of char.row?.talents ?? []) {
+    const cur = m.get(t.code);
+    const mag = talentMag(t);
+    if (!cur || mag > cur.mag) m.set(t.code, { id: t.id, mag });
+  }
+  return m;
+});
+// Ids des talents en SURPLUS (un même code, exemplaire NON meilleur, non équipé) → vendables.
+const surplusTalentIds = computed(() => {
+  const s = new Set<string>();
+  for (const t of char.row?.talents ?? [])
+    if (!t.equipped && bestTalentByCode.value.get(t.code)?.id !== t.id) s.add(t.id);
+  return s;
+});
 // Vue enrichie : équipés d'abord, puis par grade (tier) puis enchant décroissants.
 const talentsView = computed(() => {
   return (
@@ -2872,6 +2923,7 @@ const talentsView = computed(() => {
               .toFixed(1)
               .replace('.', ',') + ' %',
           equipped: !!inst.equipped,
+          dup: surplusTalentIds.value.has(inst.id), // exemplaire en surplus (vendable)
         };
       })
       .filter((t): t is NonNullable<typeof t> => !!t)
@@ -4258,6 +4310,28 @@ function doSellTalent(id: string) {
     if (g) $q.notify({ type: 'positive', message: `🪙 Talent vendu (+${g} or)` });
   }, 'Vente impossible.');
 }
+// Vend TOUS les doublons (exemplaires non-meilleurs d'un code, non équipés) → on garde le
+// meilleur de chaque type + les équipés.
+function doSellDuplicateTalents() {
+  const ids = [...surplusTalentIds.value];
+  if (!ids.length) return;
+  $q.dialog({
+    title: 'Vendre les doublons ?',
+    message: `${ids.length} talent(s) en surplus seront vendus (tu gardes le MEILLEUR de chaque type + les équipés).`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Vendre', color: 'primary' },
+  }).onOk(() => {
+    withUid(async (uid) => {
+      let total = 0;
+      for (const id of ids) total += await char.sellTalent(uid, id);
+      if (total)
+        $q.notify({
+          type: 'positive',
+          message: `🪙 ${ids.length} doublon(s) vendu(s) (+${total} or)`,
+        });
+    }, 'Vente impossible.');
+  });
+}
 // Animation de PALIER DE SET : si équiper `setId` a fait franchir un palier (2/3/4
 // pièces), on célèbre en montrant le set + le bonus tout juste débloqué.
 function celebrateSetTier(setId: string | undefined, before: number, after: number) {
@@ -5259,6 +5333,21 @@ button.pt-mini:active {
   letter-spacing: 0.3px;
   white-space: nowrap;
 }
+/* Badge « doublon » : exemplaire en surplus d'un talent (vendable). */
+.dup-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--dim);
+  color: var(--dim);
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
 /* Badge « effet signature » (✦) sur une carte familier, harmonisé avec les talents. */
 .fam-sig-badge {
   flex: 0 0 auto;
@@ -5435,6 +5524,20 @@ button.pt-mini:active {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 13px;
+  cursor: pointer;
+}
+/* Bouton « Vendre les doublons » — discret (bordure grise, pas accent). */
+.talent-dup-btn {
+  width: 100%;
+  margin: -6px 0 12px;
+  padding: 9px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12.5px;
   cursor: pointer;
 }
 /* Talent conseillé (maximise la puissance) : liseré doré (ticket 08b10b7f). */
