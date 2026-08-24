@@ -67,12 +67,12 @@ describe('magnitude = grade × enchant (uniforme avec les objets)', () => {
     const def = talentByCode('t_dmg')!;
     expect(talentValue(def, 12, 4) / talentValue(def, 12, 0)).toBeCloseTo(enchantMult(4));
   });
-  it('MAX (SSS5, +12) ≈ ancien plafond (~×9,8 de la base) → équilibrage préservé', () => {
+  it('MAX (SSS, jet 100 %, +12) ≈ ancien plafond → équilibrage préservé', () => {
     const def = talentByCode('t_dmg')!;
-    const ratio = talentValue(def, 49, ENCHANT_MAX) / def.base;
-    // (base/2) × RARITY_MULT[SSS] × qualité5 × enchantMult(12) ≈ ×9,87
-    expect(ratio).toBeGreaterThan(9);
-    expect(ratio).toBeLessThan(10.5);
+    // (base/2) × rankRollMult(SSS, jet 1) × enchantMult(12) ≈ ×10,5
+    const ratio = talentValue(def, 49, ENCHANT_MAX, 1) / def.base;
+    expect(ratio).toBeGreaterThan(9.5);
+    expect(ratio).toBeLessThan(11);
   });
   it('grades NETTEMENT séparés — D5 > E3, distincts (ticket f7e389e4)', () => {
     const def = talentByCode('t_armor')!; // Cuirasse : base petite → cas du bug

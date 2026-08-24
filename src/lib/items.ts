@@ -85,22 +85,13 @@ export interface Item {
   enchant?: number; // ENCHANT +N (façon L2) — magnitude par-dessus le grade. Défaut 0. (étape 1)
 }
 
-// Qualité de roll → nombre d'ÉTOILES (1..5) : où l'effet est tombé dans la bande de
-// variance ±20 %. 5★ = roll quasi max (proche du +20 %), 1★ = bas de fourchette.
-// Aide le joueur à juger « bon roll ou pas » sans calcul.
-export function rollStars(roll: number | undefined): number {
-  if (roll == null) return 0; // objet legacy sans roll → pas d'étoiles
-  return Math.min(5, 1 + Math.floor(Math.max(0, Math.min(1, roll)) * 5));
-}
-// QUALITÉ = SOUS-RANG (1→5) dans la bande du rang. Multiplicateur DISCRET, de 1,0
-// (qualité 1 = plancher du rang) à 1,10 (qualité 5 = presque le rang suivant). La
-// bande NE DÉBORDE JAMAIS sur le rang au-dessus : l'écart entre rangs est +16,6 %
-// (RANK_MULT), la qualité n'en consomme que ~10 % → il reste un saut de rang ressenti
-// (+6 %). Ainsi qualité 1→5 = petite montée continue, et le passage de rang = vrai
-// palier. La qualité est figée au drop puis suit le niveau (effectiveValue).
-export function starQualityMult(stars: number): number {
-  const s = Math.min(5, Math.max(1, Math.round(stars)));
-  return 1 + (s - 1) * 0.025; // Q1 1,000 · Q2 1,025 · Q3 1,050 · Q4 1,075 · Q5 1,100
+// JET du roll (0..100 %) — REFONTE v0.574 : fini les qualités ★1-5. Le `roll` (0..1, figé au
+// drop) est le « jet » = position CONTINUE de la stat dans l'INTERVALLE du rang (cf.
+// rankRollMult). 100 % = haut de l'intervalle (frôle le rang suivant), 0 % = plancher du rang.
+// On farme le meilleur jet à son rang. Affiché « jet 79 % ». (objet legacy sans roll → 0.)
+export function rollJet(roll: number | undefined): number {
+  if (roll == null) return 0;
+  return Math.round(Math.min(1, Math.max(0, roll)) * 100);
 }
 
 // L'effet grandit de +5 % de la base par niveau au-dessus de 1. Pente VOLONTAIREMENT
@@ -278,13 +269,23 @@ export const RARITY_RANK: Record<Rarity, number> = Object.fromEntries(
   RANK_ORDER.map((r, i) => [r, i]),
 ) as Record<Rarity, number>;
 
-// Multiplicateur de magnitude par RANG (plancher de la bande = qualité 1). Géométrique
-// (ratio 1,166) : SSS×qualité5 (×1,10) ≈ 3,98 → plafond de puissance ≈ divin d'avant,
-// et les bandes restent DISJOINTES (1,166 > qualité max 1,10 → un rang > toujours
-// meilleur, avec un saut de +6 % au passage). Calibré par simulation (2026‑08‑18).
+// PLANCHER de magnitude par RANG. Géométrique (ratio 1,166). REFONTE v0.574 : plus de
+// qualité ★1-5 — chaque rang a un INTERVALLE de stat COMPLET, du plancher du rang au
+// plancher du rang SUIVANT (`rankRollMult`), parcouru par le « jet » (roll 0..1). Un jet
+// parfait d'un rang frôle donc le plancher du rang au-dessus (chevauchement voulu : on
+// peut avoir un excellent bas-rang ≈ un mauvais rang supérieur → farm du meilleur jet).
 export const RARITY_MULT: Record<Rarity, number> = Object.fromEntries(
   RANK_ORDER.map((r, i) => [r, Math.round(0.908 * Math.pow(1.166, i) * 1000) / 1000]),
 ) as Record<Rarity, number>;
+// Multiplicateur de magnitude = interpolation dans l'intervalle du RANG selon le jet (roll).
+// [plancher du rang → plancher du rang suivant] (SSS extrapolé d'un cran). Remplace
+// RARITY_MULT[rang] × starQualityMult(qualité) : le roll balaie tout l'intervalle du rang.
+export function rankRollMult(rank: Rarity, roll = 0): number {
+  const i = Math.max(0, RANK_ORDER.indexOf(rank));
+  const lo = RARITY_MULT[rank];
+  const hi = i < RANK_ORDER.length - 1 ? RARITY_MULT[RANK_ORDER[i + 1]!] : lo * 1.166;
+  return lo + (hi - lo) * Math.min(1, Math.max(0, roll));
+}
 
 // Effet possible par slot + valeur de base (avant rareté/niveau).
 // Niveau minimum pour qu'une stat « exotique » puisse tomber sur un drop (pool
@@ -483,15 +484,9 @@ function gaussian(rng: () => number): number {
 // et le `floorBonus` (Autel des boss). Plus de « frise » à cran ni de cap dur systématique :
 // l'anti-runaway vient (1) du centre calé sur ton NIVEAU (min contenu/joueur → le sport reste
 // le plafond) et (2) d'un plafond de rang à niveauJoueur+marge quand `playerLevel` est fourni.
-// La QUALITÉ est un roll CONTINU [0,1] (qualityMult) → une fois à ton rang plafond, tu farmes
-// le meilleur « jet ». Bandes de valeur DISJOINTES (qualité ±10 % < écart de rang +16,6 %) :
-// un rang supérieur gagne toujours, mais le roll continu fait durer le farm.
-
-/** Multiplicateur de QUALITÉ CONTINU (roll 0..1 → ×1,00 → ×1,10). Remplace les 5 crans
- *  discrets côté OBJETS/FAMILIERS → on peut chasser le roll parfait dans son rang. */
-export function qualityMult(roll: number): number {
-  return 1 + Math.min(1, Math.max(0, roll)) * 0.1;
-}
+// Le « jet » est un roll CONTINU [0,1] (rankRollMult) qui balaie TOUT l'intervalle du rang →
+// on farme le meilleur jet à son rang. Plus de qualité ★ : un jet parfait frôle le rang
+// au-dessus (chevauchement voulu).
 
 const LO_WIDTH_RANK = 1.8; // écart-type BAS (rangs sous le pic) — large : fourrage
 
@@ -512,22 +507,21 @@ function rankBell(level: number, luck: number, floorBonus: number, playerLevel?:
   return { center, loWidth: LO_WIDTH_RANK, hiWidth, cap };
 }
 
-/** Tire un { rank, quality, roll } : rang via la cloche (pyramide centrée niveau), qualité
- *  = roll CONTINU [0,1]. `level` = niveau du CONTENU ; `playerLevel` (optionnel) cale le centre
- *  sur min(contenu, joueur) et plafonne le rang (anti-runaway). `floorBonus` en RANGS. */
+/** Tire un { rank, roll } : rang via la cloche (pyramide centrée niveau), `roll` = JET CONTINU
+ *  [0,1] (position dans l'intervalle du rang). `level` = niveau du CONTENU ; `playerLevel`
+ *  (optionnel) cale le centre sur min(contenu, joueur) et plafonne le rang. `floorBonus` en RANGS. */
 export function rollTier(
   rng: () => number,
   level: number,
   luck = 0,
   floorBonus = 0,
   playerLevel?: number,
-): { rank: Rarity; quality: number; roll: number } {
+): { rank: Rarity; roll: number } {
   const { center, loWidth, hiWidth, cap } = rankBell(level, luck, floorBonus, playerLevel);
   const g = gaussian(rng);
   let idx = Math.round(center + (g >= 0 ? g * hiWidth : g * loWidth));
   idx = Math.min(9, Math.max(0, Math.min(cap, idx)));
-  const roll = rng(); // qualité continue (chasse au meilleur jet)
-  return { rank: RANK_ORDER[idx]!, quality: rollStars(roll), roll };
+  return { rank: RANK_ORDER[idx]!, roll: rng() }; // roll = jet (chasse au meilleur)
 }
 
 /** Bande de rang TYPIQUE d'un contenu (≈ 10e→90e centile de la cloche) → affiche « D → A ».
@@ -620,11 +614,9 @@ export function rollDrop(
   // Tirage UNIFORME : toutes les voies/stats tombent équitablement (la voie n'oriente PAS
   // les drops — c'est le loot accumulé qui te fait choisir/switcher de voie, ticket spé v2).
   const chosen = pick(rng, pool);
-  // value = base × RANG × QUALITÉ (roll continu). La PROFONDEUR est encodée par le RANG
-  // (la pyramide) → pas de multiplicateur de magnitude par niveau ici (sinon deux objets
-  // même rang mais profondeurs différentes auraient des valeurs différentes → chevauchement).
-  const vf = qualityMult(roll);
-  const rollValue = (b: number) => Math.max(1, round1(b * RARITY_MULT[rarity] * vf));
+  // value = base × intervalle du RANG selon le JET (rankRollMult). La PROFONDEUR est encodée
+  // par le RANG (pyramide) ; le jet (roll) balaie tout l'intervalle du rang → chasse au bon jet.
+  const rollValue = (b: number) => Math.max(1, round1(b * rankRollMult(rarity, roll)));
   const value = rollValue(chosen.base);
   // Objet à effet SIGNATURE → nom évocateur (« Guillotine ») ; sinon nom + adjectif.
   const sigNames = SIGNATURE_NAMES[chosen.type];
@@ -685,7 +677,6 @@ export function rollSetPiece(
     floorRanks,
     opts.playerLevel,
   );
-  const vf = qualityMult(roll);
   // STAT DE LA PIÈCE = tirée dans le THÈME DU SET (types de ses paliers), pas dans le pool
   // générique du slot → un set a des stats COHÉRENTES avec son identité (ex. Écailles du
   // Dragon = dégâts/crit/vol de vie sur toutes ses pièces), au lieu de stats aléatoires
@@ -695,7 +686,7 @@ export function rollSetPiece(
     ? theme[SLOTS.indexOf(slot) % theme.length]!
     : pick(rng, SLOT_EFFECTS[slot]).type;
   const base = EFFECT_BASE[chosenType] ?? 8;
-  const value = Math.max(1, round1(base * RARITY_MULT[rarity] * vf));
+  const value = Math.max(1, round1(base * rankRollMult(rarity, roll)));
   const noun = pick(rng, NAMES[slot]);
   const level = 1; // REFONTE C : la pièce de set arrive niv.1 (identité) → à infuser
   return {
@@ -768,15 +759,14 @@ export function rollFamiliar(
     rarity = t.rank;
     roll = t.roll;
   }
-  const vf = qualityMult(roll);
-  const value = Math.max(1, round1(species.base * RARITY_MULT[rarity] * vf));
+  const value = Math.max(1, round1(species.base * rankRollMult(rarity, roll)));
   const level = 1; // REFONTE C : le familier arrive niv.1 (identité de race) → à infuser
   let effect2: ItemEffect | undefined;
   if (rng() < familiarSigChance(rarity)) {
     const sig = FAMILIAR_SIGNATURE[Math.floor(rng() * FAMILIAR_SIGNATURE.length)]!;
     effect2 = {
       type: sig.type,
-      value: Math.max(1, round1(sig.base * RARITY_MULT[rarity] * vf)),
+      value: Math.max(1, round1(sig.base * rankRollMult(rarity, roll))),
     };
   }
   return {
@@ -789,7 +779,7 @@ export function rollFamiliar(
     effect: { type: species.effect, value },
     ...(effect2 ? { effect2 } : {}),
     species: species.id,
-    roll, // roll CONTINU relu par rollStars/qualityMult (comme les objets)
+    roll, // jet CONTINU (rankRollMult / rollJet), comme les objets
   };
 }
 
@@ -797,9 +787,9 @@ export function rollFamiliar(
 // familiers (le tier grimpe = qualité d'abord, puis saut de rang). Le NIVEAU reste
 // piloté par les pierres 💎 (familiarStoneCost). Cf. ticket f93c219b. ──
 
-/** Tier 0..49 d'un familier/objet = rang×5 + (qualité−1). */
+/** Score de tri d'un familier/objet : rang DOMINANT puis jet (rang×100 + jet 0..100). */
 export function tierIndexOf(it: { rarity: Rarity; roll?: number }): number {
-  return rankIndex(it.rarity) * 5 + (Math.max(1, rollStars(it.roll)) - 1);
+  return rankIndex(it.rarity) * 100 + rollJet(it.roll);
 }
 
 // ── Atelier de poussière (dust sinks) : forge / reroll / craft de set ──
@@ -845,20 +835,17 @@ export function forgeItem(
 export function rerollCost(item: Item): number {
   return Math.round((40 + item.level * 15) * rarityStep(item.rarity));
 }
-// Reroll de QUALITÉ (étoiles) : re-tire la QUALITÉ de l'objet en gardant le TYPE
-// d'effet, la RARETÉ et le NIVEAU. Ne touche JAMAIS la rareté → aucun risque de perdre
-// un divin ; sert à retenter une meilleure qualité (ex. un 1★). On rescale la valeur
-// par le rapport des multiplicateurs de qualité (préserve base × rareté × magnitude),
-// et on met à jour `roll` → les étoiles restent cohérentes avec la valeur.
+// Reroll du JET : re-tire le `roll` de l'objet en gardant le TYPE d'effet, le RANG et le
+// NIVEAU. Ne touche JAMAIS le rang ; sert à retenter un meilleur jet. On rescale la valeur
+// par le rapport des multiplicateurs d'intervalle (rankRollMult) → la valeur reste cohérente
+// avec le nouveau jet.
 export function rerolledQuality(
   rng: () => number,
   item: Item,
 ): { effect: ItemEffect; effect2?: ItemEffect; roll: number } {
-  const oldStars = rollStars(item.roll);
-  const oldVf = oldStars ? starQualityMult(oldStars) : 1; // legacy sans roll → base
-  const stars = rollStars(rng());
-  const newVf = starQualityMult(stars);
-  const ratio = newVf / oldVf;
+  const oldRoll = item.roll ?? 0.5;
+  const newRoll = rng();
+  const ratio = rankRollMult(item.rarity, newRoll) / rankRollMult(item.rarity, oldRoll);
   const scale = (e: ItemEffect): ItemEffect => ({
     type: e.type,
     value: Math.max(1, Math.round(e.value * ratio)),
@@ -866,7 +853,7 @@ export function rerolledQuality(
   return {
     effect: scale(item.effect),
     ...(item.effect2 ? { effect2: scale(item.effect2) } : {}),
-    roll: (stars - 0.5) / 5, // roll cohérent avec les étoiles (rollStars le relit)
+    roll: newRoll,
   };
 }
 

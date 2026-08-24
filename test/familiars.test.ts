@@ -4,7 +4,7 @@ import {
   familiarStoneCost,
   isFamiliar,
   nextRarity,
-  rollStars,
+  rollJet,
   tierIndexOf,
   aggregateEffects,
   playerWithGear,
@@ -46,12 +46,12 @@ describe('familiers — roll & identité', () => {
       expect(f.effect.type).toBe(s.effect);
     }
   });
-  it('familier = rang + QUALITÉ (1→5) comme un objet (ticket f93c219b)', () => {
+  it('familier = rang + JET (0..100 %) comme un objet (refonte v0.574)', () => {
     for (let s = 1; s <= 30; s++) {
       const f = rollFamiliar(mulberry32(s), wolf, { level: 5 });
-      const stars = rollStars(f.roll);
-      expect(stars).toBeGreaterThanOrEqual(1);
-      expect(stars).toBeLessThanOrEqual(5);
+      const jet = rollJet(f.roll);
+      expect(jet).toBeGreaterThanOrEqual(0);
+      expect(jet).toBeLessThanOrEqual(100);
     }
   });
   it('isFamiliar : faux pour un objet normal', () => {
@@ -178,10 +178,13 @@ describe('familiers — infusion (incubateur)', () => {
     roll: (quality - 0.5) / 5,
     species: 'wolf',
   });
-  it('tierIndexOf : rang×5 + (qualité−1)', () => {
-    expect(tierIndexOf(fam('G', 1))).toBe(0);
-    expect(tierIndexOf(fam('G', 5))).toBe(4);
-    expect(tierIndexOf(fam('F', 1))).toBe(5);
-    expect(tierIndexOf(fam('SSS', 5))).toBe(49);
+  it('tierIndexOf : tri par rang DOMINANT puis jet (rang×100 + jet)', () => {
+    // fam(rank, q) → roll = (q-0.5)/5 → jet = round(roll*100).
+    expect(tierIndexOf(fam('G', 1))).toBe(10); // G, jet 10
+    expect(tierIndexOf(fam('G', 5))).toBe(90); // G, jet 90
+    expect(tierIndexOf(fam('F', 1))).toBe(110); // F(1)×100 + jet 10
+    expect(tierIndexOf(fam('SSS', 5))).toBe(990); // SSS(9)×100 + jet 90
+    // rang dominant : un F au pire jet bat un G au meilleur jet
+    expect(tierIndexOf(fam('F', 1))).toBeGreaterThan(tierIndexOf(fam('G', 5)));
   });
 });

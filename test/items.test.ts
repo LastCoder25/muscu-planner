@@ -29,9 +29,8 @@ import {
   rerollCost,
   craftSetCost,
   rerolledQuality,
-  starQualityMult,
-  qualityMult,
-  rollStars,
+  rankRollMult,
+  rollJet,
   swapLoadoutGear,
   type Item,
   type Equipped,
@@ -41,21 +40,23 @@ import {
 import { mulberry32 } from '@/lib/combat';
 import { VOIES } from '@/lib/voies';
 
-describe('rangs G→SSS : bandes disjointes', () => {
-  it('RANK_MULT strictement croissant (un rang supérieur vaut toujours plus)', () => {
+describe('rangs G→SSS + intervalle de jet (refonte v0.574)', () => {
+  it('RANK_MULT strictement croissant (plancher d’un rang < plancher du suivant)', () => {
     for (let i = 1; i < RANK_ORDER.length; i++)
       expect(RARITY_MULT[RANK_ORDER[i]!]).toBeGreaterThan(RARITY_MULT[RANK_ORDER[i - 1]!]);
   });
-  it('bandes DISJOINTES : meilleure qualité d’un rang < pire qualité du rang au-dessus', () => {
-    for (let i = 1; i < RANK_ORDER.length; i++) {
-      const topOfLower = RARITY_MULT[RANK_ORDER[i - 1]!] * starQualityMult(5);
-      const bottomOfUpper = RARITY_MULT[RANK_ORDER[i]!] * starQualityMult(1);
-      expect(bottomOfUpper).toBeGreaterThan(topOfLower);
+  it('rankRollMult : le jet balaie TOUT l’intervalle du rang (plancher → plancher suivant)', () => {
+    for (let i = 0; i < RANK_ORDER.length - 1; i++) {
+      const r = RANK_ORDER[i]!;
+      expect(rankRollMult(r, 0)).toBeCloseTo(RARITY_MULT[r]); // jet 0 = plancher du rang
+      // jet 100 % ≈ plancher du rang SUIVANT (chevauchement voulu : excellent bas-rang ≈ mauvais rang+1)
+      expect(rankRollMult(r, 1)).toBeCloseTo(RARITY_MULT[RANK_ORDER[i + 1]!]);
+      expect(rankRollMult(r, 0.5)).toBeGreaterThan(rankRollMult(r, 0)); // monotone en jet
     }
   });
-  it('plafond SSS×qualité5 ≈ 3,98 (plafond de puissance ≈ divin d’avant)', () => {
-    expect(RARITY_MULT.SSS * starQualityMult(5)).toBeGreaterThan(3.8);
-    expect(RARITY_MULT.SSS * starQualityMult(5)).toBeLessThan(4.1);
+  it('plafond SSS (jet 100 %) ≈ 4,2 (plafond de puissance)', () => {
+    expect(rankRollMult('SSS', 1)).toBeGreaterThan(4);
+    expect(rankRollMult('SSS', 1)).toBeLessThan(4.5);
   });
   it('normRank : mappe les anciennes raretés vers des rangs valides', () => {
     expect(normRank('divin')).toBe('SSS');
@@ -65,15 +66,12 @@ describe('rangs G→SSS : bandes disjointes', () => {
   });
 });
 
-describe('qualité (sous-rang 1→5)', () => {
-  it('starQualityMult strictement croissant, de 1,0 à 1,10', () => {
-    expect(starQualityMult(1)).toBe(1);
-    expect(starQualityMult(5)).toBeCloseTo(1.1);
-    for (let s = 2; s <= 5; s++) expect(starQualityMult(s)).toBeGreaterThan(starQualityMult(s - 1));
-  });
-  it('rollStars cohérent (roll → étoile)', () => {
-    expect(rollStars(0.1)).toBe(1);
-    expect(rollStars(0.9)).toBe(5);
+describe('jet (0..100 %)', () => {
+  it('rollJet : roll → pourcentage', () => {
+    expect(rollJet(0)).toBe(0);
+    expect(rollJet(0.79)).toBe(79);
+    expect(rollJet(1)).toBe(100);
+    expect(rollJet(undefined)).toBe(0);
   });
 });
 
@@ -147,13 +145,10 @@ describe('rollTier : pyramide de rareté centrée sur le niveau', () => {
     expect(avg(60)).toBeGreaterThan(avg(20));
     expect(avg(20)).toBeGreaterThan(avg(6));
   });
-  it('qualité CONTINUE : le roll varie continûment (chasse au meilleur jet)', () => {
+  it('jet CONTINU : le roll varie continûment (chasse au meilleur jet)', () => {
     const rolls = new Set<number>();
     for (let s = 1; s <= 200; s++) rolls.add(rollTier(mulberry32(s * 5 + 1), 30, 0.3).roll);
-    expect(rolls.size).toBeGreaterThan(150); // pas 5 valeurs discrètes → vraiment continu
-    expect(qualityMult(0)).toBe(1);
-    expect(qualityMult(1)).toBeCloseTo(1.1);
-    expect(qualityMult(0.5)).toBeCloseTo(1.05);
+    expect(rolls.size).toBeGreaterThan(150); // continu (pas de crans discrets)
   });
   it('luck : épaissit la pointe HAUTE (plus de sur-rang) sans casser le cap joueur', () => {
     const overRate = (luck: number) => {
@@ -463,7 +458,7 @@ describe('atelier de poussière (forge / reroll / craft)', () => {
     expect(it.level).toBe(8);
     expect(it.effect.value).toBeGreaterThan(0);
   });
-  it('reroll de QUALITÉ : garde le type + le rang, ne touche que la valeur/étoiles', () => {
+  it('reroll du JET : garde le type + le rang, ne touche que la valeur/le jet', () => {
     const sword = item({
       slot: 'weapon',
       effect: { type: 'damage_pct', value: 8 },
@@ -474,7 +469,8 @@ describe('atelier de poussière (forge / reroll / craft)', () => {
     const rq = rerolledQuality(mulberry32(2), sword);
     expect(rq.effect.type).toBe('damage_pct');
     expect(rq.effect.value).toBeGreaterThan(0);
-    expect(rollStars(rq.roll)).toBeGreaterThanOrEqual(1);
+    expect(rq.roll).toBeGreaterThanOrEqual(0);
+    expect(rq.roll).toBeLessThanOrEqual(1);
   });
   it('craft de set : coût élevé qui monte avec le niveau', () => {
     expect(craftSetCost(10)).toBeGreaterThan(200);

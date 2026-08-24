@@ -398,8 +398,8 @@
         <div class="fl-name">{{ detailItem.name }}</div>
         <div class="fl-meta">
           {{ RARITY_LABEL[detailItem.rarity]
-          }}<template v-if="rollStars(detailItem.roll)">
-            · qualité {{ rollStars(detailItem.roll) }}/5</template
+          }}<template v-if="detailItem.roll != null">
+            · jet {{ rollJet(detailItem.roll) }}%</template
           >
           · {{ SLOT_LABEL[detailItem.slot] }} · niv {{ detailItem.level }}
         </div>
@@ -465,7 +465,7 @@ import {
   RARITY_RANK,
   RANK_COLOR,
   RANK_ORDER,
-  rollStars,
+  rollJet,
   tierIndexOf,
   mergeEffects,
   SLOT_LABEL,

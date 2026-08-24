@@ -487,7 +487,9 @@
                       :title="'Rang ' + RARITY_LABEL[t.rarity]"
                       >{{ t.rarity }}</span
                     >
-                    <span class="q-badge" :class="'q-' + t.quality">{{ t.quality }}</span>
+                    <span class="q-badge" :class="jetTier(t.jet)" :title="'Jet ' + t.jet + '%'"
+                      >{{ t.jet }}%</span
+                    >
                   </div>
                   <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
                   <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
@@ -561,7 +563,7 @@
                     <span class="tal-nm">{{ f.name }}</span>
                     <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
                     <span class="rk-badge" :class="'p-' + f.rarity">{{ f.rarity }}</span>
-                    <span v-if="itemQuality(f)" class="q-badge" :class="'q-' + itemQuality(f)">{{
+                    <span v-if="itemQuality(f)" class="q-badge" :class="jetTier(itemQuality(f))">{{
                       itemQuality(f)
                     }}</span>
                     <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
@@ -685,7 +687,7 @@
                 <span
                   v-if="itemQuality(char.row.equipped[slot])"
                   class="q-badge"
-                  :class="'q-' + itemQuality(char.row.equipped[slot])"
+                  :class="jetTier(itemQuality(char.row.equipped[slot]))"
                   title="Qualité (5 = meilleur)"
                   >{{ itemQuality(char.row.equipped[slot]) }}</span
                 >
@@ -845,7 +847,7 @@
                     <span
                       v-if="itemQuality(it)"
                       class="q-badge clk"
-                      :class="'q-' + itemQuality(it)"
+                      :class="jetTier(itemQuality(it))"
                       role="button"
                       title="Qu’est-ce que la qualité ?"
                       @click="helpTopic = 'quality'"
@@ -864,7 +866,7 @@
                       <span
                         v-if="itemQuality(it)"
                         class="q-badge"
-                        :class="'q-' + itemQuality(it)"
+                        :class="jetTier(itemQuality(it))"
                         >{{ itemQuality(it) }}</span
                       >
                       <span class="ii-cmp-val">{{ itemEffects(it) }}</span>
@@ -878,7 +880,7 @@
                         <span
                           v-if="itemQuality(equippedInSlot(it.slot))"
                           class="q-badge"
-                          :class="'q-' + itemQuality(equippedInSlot(it.slot))"
+                          :class="jetTier(itemQuality(equippedInSlot(it.slot)))"
                           >{{ itemQuality(equippedInSlot(it.slot)) }}</span
                         >
                         <span class="ii-cmp-val">{{ itemEffects(equippedInSlot(it.slot)!) }}</span>
@@ -1715,7 +1717,7 @@
             <div class="stash-lbl">Nouvelle</div>
             <div class="stash-nm">
               {{ stashConflict.incoming.emoji }} {{ stashConflict.incoming.rarity }}
-              <span class="stash-q">★{{ itemQuality(stashConflict.incoming) }}</span>
+              <span class="stash-q">jet {{ itemQuality(stashConflict.incoming) }}%</span>
             </div>
             <div class="stash-eff">{{ itemEffects(stashConflict.incoming) }}</div>
             <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.incoming)) }}</div>
@@ -1729,7 +1731,7 @@
             <div class="stash-lbl">Rangée <span v-if="stashConflict.stored.locked">🔒</span></div>
             <div class="stash-nm">
               {{ stashConflict.stored.emoji }} {{ stashConflict.stored.rarity }}
-              <span class="stash-q">★{{ itemQuality(stashConflict.stored) }}</span>
+              <span class="stash-q">jet {{ itemQuality(stashConflict.stored) }}%</span>
             </div>
             <div class="stash-eff">{{ itemEffects(stashConflict.stored) }}</div>
             <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.stored)) }}</div>
@@ -1783,7 +1785,7 @@
                   <span
                     v-if="itemQuality(cand.item)"
                     class="q-badge"
-                    :class="'q-' + itemQuality(cand.item)"
+                    :class="jetTier(itemQuality(cand.item))"
                     title="Qualité (5 = meilleur)"
                     >{{ itemQuality(cand.item) }}</span
                   >
@@ -1920,7 +1922,7 @@
                   <span
                     v-if="itemQuality(d)"
                     class="q-badge"
-                    :class="'q-' + itemQuality(d)"
+                    :class="jetTier(itemQuality(d))"
                     title="Qualité (5 = meilleur)"
                     >{{ itemQuality(d) }}</span
                   >
@@ -1992,9 +1994,9 @@
                   <span class="rk-badge" :class="'p-' + talentRankOf(t)">{{
                     talentRankOf(t)
                   }}</span>
-                  <span class="q-badge" :class="'q-' + talentDropQuality(t)">{{
-                    talentDropQuality(t)
-                  }}</span>
+                  <span class="q-badge" :class="jetTier(talentDropQuality(t))"
+                    >{{ talentDropQuality(t) }}%</span
+                  >
                   <span class="gpill">→ collection Talents</span>
                 </div>
               </div>
@@ -2028,7 +2030,7 @@
                       <span
                         v-if="itemQuality(cand.item)"
                         class="q-badge"
-                        :class="'q-' + itemQuality(cand.item)"
+                        :class="jetTier(itemQuality(cand.item))"
                         title="Qualité (5 = meilleur)"
                         >{{ itemQuality(cand.item) }}</span
                       >
@@ -2167,7 +2169,7 @@ import {
   mergeEffects,
   effectLabelFor,
   setTierLabel,
-  rollStars,
+  rollJet,
   sellValue,
   isFamiliar,
   FAMILIAR_SLOT,
@@ -2197,7 +2199,8 @@ import {
   tierOf,
   talentRank,
   talentRankOf,
-  talentQuality,
+  talentJetOf,
+  talentRollOf,
   talentValue,
   rollTalentDrop,
   type TalentInstance,
@@ -2703,21 +2706,22 @@ const talentsView = computed(() => {
           tier,
           enchant,
           rarity: talentRank(tier),
-          quality: talentQuality(tier),
-          // 1 décimale : les bonus de talent sont petits (armure 4,5 %…) et la courbe de
-          // grade est plate → l'arrondi entier faisait paraître D5 et E3 identiques
-          // (ticket f7e389e4) alors que leurs valeurs diffèrent (6,2 % vs 5,6 %).
-          effLabel: (talentValue(def, tier, enchant) * 100).toFixed(1).replace('.', ',') + ' %',
+          jet: talentJetOf(inst), // JET (0..100 %) au lieu de la qualité ★
+          // 1 décimale : les bonus de talent sont petits → l'arrondi entier masquait les écarts.
+          effLabel:
+            (talentValue(def, tier, enchant, talentRollOf(inst)) * 100)
+              .toFixed(1)
+              .replace('.', ',') + ' %',
           equipped: !!inst.equipped,
         };
       })
       .filter((t): t is NonNullable<typeof t> => !!t)
-      // Équipés d'abord, puis par RANG/QUALITÉ décroissant, puis par NOM (tickets
-      // b552b16f + tri rang) → les meilleurs talents en tête, liste stable.
+      // Équipés d'abord, puis par RANG puis JET décroissant, puis par NOM → meilleurs en tête.
       .sort(
         (a, b) =>
           Number(b.equipped) - Number(a.equipped) ||
           b.tier - a.tier ||
+          b.jet - a.jet ||
           a.def.name.localeCompare(b.def.name),
       )
   );
@@ -2728,9 +2732,9 @@ function talentName(inst: TalentInstance): string {
 function talentIcon(inst: TalentInstance): string {
   return talentByCode(inst.code)?.icon ?? '✨';
 }
-// Qualité (1..5) d'un talent tombé, pour le rapport de combat.
+// JET (0..100 %) d'un talent tombé, pour le rapport de combat.
 function talentDropQuality(inst: TalentInstance): number {
-  return talentQuality(tierOf(inst));
+  return talentJetOf(inst);
 }
 // Explique un talent (nature de l'effet + comment il monte) au tap sur son icône.
 function explainTalent(t: (typeof talentsView.value)[number]) {
@@ -2740,7 +2744,7 @@ function explainTalent(t: (typeof talentsView.value)[number]) {
     html: true,
     message:
       `Améliore : <b>${d.desc}</b> — actuellement <b>+${t.effLabel}</b> ` +
-      `(rang ${RARITY_LABEL[t.rarity]}${t.quality}).<br><br>` +
+      `(rang ${RARITY_LABEL[t.rarity]} · jet ${t.jet}%).<br><br>` +
       `Son <b>grade</b> (rang + qualité) est fixé au drop : trouve mieux en explorant plus ` +
       `profond ; vends les surplus pour de l'or.`,
   });
@@ -3573,8 +3577,14 @@ function itemEffects(it: Omit<Item, 'id'>): string {
 // Qualité du roll en étoiles pleines/vides (« ★★★★☆ ») ; vide si objet legacy (pas de roll).
 // Qualité en CHIFFRE (1→5, 5 = meilleur) affiché à côté du rang, code couleur
 // rouge (1) → vert (5) via la classe `.q-<n>`. 0 = objet legacy sans roll (masqué).
+// JET d'un objet (0..100 %) = position de sa stat dans l'intervalle du rang. Remplace la
+// qualité ★1-5 (refonte v0.574) : « affiche ton jet ».
 function itemQuality(it: { roll?: number } | null | undefined): number {
-  return rollStars(it?.roll);
+  return rollJet(it?.roll);
+}
+// Classe de couleur du jet (rouge → vert) pour la pastille.
+function jetTier(pct: number): string {
+  return pct >= 80 ? 'jet-hi' : pct >= 45 ? 'jet-mid' : 'jet-lo';
 }
 // Slots d'un set déjà possédés (équipé + sac) → pour le ciblage anti-doublon de l'Autel.
 function ownedSetSlots(setId: string): Set<ItemSlot> {
@@ -3971,9 +3981,7 @@ const filteredInventory = computed<Item[]>(() => {
   }
   if (invSetFilter.value !== 'all') list = list.filter((i) => i.setId === invSetFilter.value);
   return list.sort(
-    (a, b) =>
-      RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] ||
-      rollStars(b.roll ?? 0) - rollStars(a.roll ?? 0),
+    (a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || rollJet(b.roll) - rollJet(a.roll),
   );
 });
 // Objets du sac (même slot) MEILLEURS si équipés (puissance fixe grade+enchant) → badge
@@ -6431,6 +6439,17 @@ button.pt-mini:active {
   font-size: 11px;
   line-height: 1;
   color: #15120e;
+  background: var(--dim); /* défaut (jet inconnu) ; surchargé par .jet-lo/mid/hi */
+}
+/* JET (0..100 %) : rouge (faible) → vert (proche du max du rang). Remplace la qualité ★. */
+.q-badge.jet-lo {
+  background: #ff8a5b;
+}
+.q-badge.jet-mid {
+  background: #ffd23f;
+}
+.q-badge.jet-hi {
+  background: #7bc86c;
 }
 /* Rang en pastille ronde (comme la qualité), fond = couleur du rang --rk. */
 .rk-badge {

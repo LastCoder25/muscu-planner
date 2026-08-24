@@ -7,15 +7,15 @@
 
     <span v-if="setId" class="ii-badge set" title="Pièce de set">🧩</span>
 
-    <span v-if="showStars && stars" class="ii-stars" :title="`Qualité ${stars}/5`">
-      <i v-for="n in 5" :key="n" class="ii-star" :class="{ on: n <= stars }">★</i>
-    </span>
+    <span v-if="showStars && item.roll != null" class="ii-jet" :title="`Jet ${jet}%`"
+      >{{ jet }}%</span
+    >
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { RANK_COLOR, rollStars, FAMILIAR_SLOT, type Item } from '@/lib/items';
+import { RANK_COLOR, rollJet, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import { itemIconName } from '@/data/itemIcons';
 
 // `id` non requis : on affiche aussi des objets « sans id » (butin d'un message d'expédition).
@@ -27,7 +27,7 @@ const props = withDefaults(
 const rankColor = computed(() => RANK_COLOR[props.item.rarity] ?? '#9a8f7e');
 const isFamiliar = computed(() => props.item.slot === FAMILIAR_SLOT);
 const icon = computed(() => itemIconName(props.item.slot, props.item.effect?.type));
-const stars = computed(() => rollStars(props.item.roll));
+const jet = computed(() => rollJet(props.item.roll)); // jet 0..100 % (position dans l'intervalle du rang)
 const setId = computed(() => props.item.setId);
 const glyphSize = computed(() => Math.round(props.size * 0.56));
 const frameStyle = computed(() => ({
@@ -80,25 +80,18 @@ const frameStyle = computed(() => ({
 .ii-badge.set {
   left: -5px;
 }
-/* Étoiles de qualité, collées au bas de la tuile. */
-.ii-stars {
+/* Jet (0..100 %) collé au bas de la tuile. */
+.ii-jet {
   position: absolute;
-  bottom: -3px;
+  bottom: -4px;
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  gap: 0.5px;
-  background: color-mix(in srgb, var(--surface) 82%, transparent);
-  border-radius: 999px;
-  padding: 0 2px;
-}
-.ii-star {
-  font-size: 7px;
+  font-size: 8px;
+  font-weight: 800;
   line-height: 1;
-  font-style: normal;
-  color: var(--line);
-}
-.ii-star.on {
   color: color-mix(in srgb, var(--rk) 80%, #fff);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border-radius: 999px;
+  padding: 1px 3px;
 }
 </style>

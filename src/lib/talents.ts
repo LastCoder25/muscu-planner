@@ -6,8 +6,8 @@ import {
   emptyEffects,
   enchantMult,
   RANK_ORDER,
-  RARITY_MULT,
-  starQualityMult,
+  rankRollMult,
+  rollJet,
   rollTier,
   type AggregatedEffects,
   type Rarity,
@@ -127,7 +127,8 @@ export function talentByCode(code: string): TalentDef | undefined {
 export interface TalentInstance {
   id: string;
   code: string;
-  xp: number; // encode le TIER (rang + qualité), fixé au drop
+  xp: number; // encode le RANG (via le tier ; la part qualité est vestigiale) — fixé au drop
+  roll?: number; // JET (0..1) : position de la stat dans l'intervalle du rang (refonte v0.574)
   enchant?: number; // +N magnitude (gamble), défaut 0
   equipped?: boolean;
 }
@@ -172,6 +173,14 @@ export function talentRankOf(inst: TalentInstance): Rarity {
 export function talentQualityOf(inst: TalentInstance): number {
   return talentQuality(tierOf(inst));
 }
+// JET du talent (0..1) : `roll` s'il existe, sinon dérivé de l'ancienne qualité (rétro-compat).
+export function talentRollOf(inst: TalentInstance): number {
+  return inst.roll ?? (talentQuality(tierOf(inst)) - 0.5) / 5;
+}
+/** Jet affiché (0..100 %) du talent. */
+export function talentJetOf(inst: TalentInstance): number {
+  return rollJet(talentRollOf(inst));
+}
 export function enchantOf(inst: TalentInstance): number {
   return Math.max(0, inst.enchant ?? 0);
 }
@@ -185,14 +194,10 @@ export function enchantOf(inst: TalentInstance): number {
 // sont plus faibles (comme un objet G), ce qui donne du sens à la chasse au grade. ──
 // Facteur qui divise les `base` du catalogue (gardées lisibles) pour préserver le plafond.
 const GRADE_BASE_SCALE = 0.5;
-export function talentValue(def: TalentDef, tier: number, enchant: number): number {
-  return (
-    def.base *
-    GRADE_BASE_SCALE *
-    RARITY_MULT[talentRank(tier)] *
-    starQualityMult(talentQuality(tier)) *
-    enchantMult(enchant)
-  );
+// Magnitude = base × intervalle du RANG selon le JET (rankRollMult) × enchant — UNIFORME
+// avec les objets/familiers (refonte v0.574 : plus de qualité ★, le jet balaie l'intervalle).
+export function talentValue(def: TalentDef, tier: number, enchant: number, roll = 0): number {
+  return def.base * GRADE_BASE_SCALE * rankRollMult(talentRank(tier), roll) * enchantMult(enchant);
 }
 
 /** Nombre d'emplacements de talents ÉQUIPÉS (1 tous les 5 niveaux JOUEUR). */
@@ -216,10 +221,13 @@ export function normalizeTalents(raw: unknown): TalentInstance[] {
       if (typeof t === 'string')
         return { id: `legacy_${i}_${t}`, code: t, xp: 0, enchant: 0, equipped: true };
       const o = t as Partial<TalentInstance> & { level?: number };
+      const xp = o.xp ?? 0;
       return {
         id: o.id ?? `t_${i}`,
         code: o.code ?? '',
-        xp: o.xp ?? 0,
+        xp,
+        // JET : `roll` s'il existe ; sinon dérivé de l'ancienne qualité (rétro-compat).
+        roll: o.roll ?? (talentQuality(talentTier(xp)) - 0.5) / 5,
         enchant: o.enchant ?? (o.level !== undefined ? talentLevelToEnchant(o.level) : 0),
         equipped: o.equipped,
       };
@@ -234,7 +242,7 @@ export function talentEffects(raw: unknown): AggregatedEffects {
     if (inst.equipped === false) continue; // seuls les équipés comptent
     const def = BY_CODE.get(inst.code);
     if (!def) continue;
-    a[def.effectKey] += talentValue(def, tierOf(inst), enchantOf(inst));
+    a[def.effectKey] += talentValue(def, tierOf(inst), enchantOf(inst), talentRollOf(inst));
   }
   return a;
 }
@@ -256,19 +264,19 @@ export function rollTalentDrop(
   // Tirage UNIFORME (toutes les voies équitablement — la voie n'oriente pas les drops).
   const def = TALENTS[Math.floor(rng() * TALENTS.length)]!;
   // RANG = pyramide centrée sur min(niveau contenu, niveau joueur) → `playerLevel` cale le
-  // centre et plafonne le rang (anti-runaway) ; la qualité vient du roll continu.
-  const { rank, quality } = rollTier(
+  // centre et plafonne le rang (anti-runaway) ; le JET (roll) balaie l'intervalle du rang.
+  const { rank, roll } = rollTier(
     rng,
     opts.level ?? 1,
     opts.luck ?? 0,
     opts.floorBonus ?? 0,
     opts.playerLevel,
   );
-  const tier = RANK_ORDER.indexOf(rank) * 5 + (quality - 1);
   return {
     id: `tal_${opts.idSeed ?? Math.floor(rng() * 1e9)}`,
     code: def.code,
-    xp: talentTierFloor(tier),
+    xp: talentTierFloor(RANK_ORDER.indexOf(rank) * 5), // encode le RANG (part qualité vestigiale)
+    roll, // JET fixé au drop
     enchant: 0,
   };
 }
