@@ -692,8 +692,21 @@ function rankBell(level: number, luck: number, floorBonus: number, playerLevel?:
   return { center, loWidth: LO_WIDTH_RANK, hiWidth, cap };
 }
 
+// JET biaisé vers le BAS (comme la rareté : un HAUT jet se mérite). Transformation puissance
+// `rng()^exp` (exp > 1 → hauts jets rares). La `luck` (magic find/profondeur/Autel) réduit
+// l'exposant → aplatit puis favorise les hauts jets (3ᵉ loterie dopée par la luck, avec le
+// rang et l'ilvl). Impact magnitude MODÉRÉ (le jet ne couvre qu'une bande de +21,9 % dans le
+// rang) : jet moyen ~0,31 (luck 0) → ~0,56 (luck 1) vs 0,5 uniforme.
+const BASE_JET_EXP = 2.2;
+export function jetExp(luck = 0): number {
+  return Math.max(0.8, BASE_JET_EXP - Math.min(1, Math.max(0, luck)) * 1.6);
+}
+/** Jet continu [0,1] biaisé bas (haut jet rare), dopé par la luck. */
+export function rollJetValue(rng: () => number, luck = 0): number {
+  return Math.pow(rng(), jetExp(luck));
+}
 /** Tire un { rank, roll } : rang via la cloche (pyramide centrée niveau), `roll` = JET CONTINU
- *  [0,1] (position dans l'intervalle du rang). `level` = niveau du CONTENU ; `playerLevel`
+ *  [0,1] BIAISÉ BAS (haut jet rare, cf. rollJetValue). `level` = niveau du CONTENU ; `playerLevel`
  *  (optionnel) cale le centre sur min(contenu, joueur) et plafonne le rang. `floorBonus` en RANGS. */
 export function rollTier(
   rng: () => number,
@@ -706,7 +719,7 @@ export function rollTier(
   const g = gaussian(rng);
   let idx = Math.round(center + (g >= 0 ? g * hiWidth : g * loWidth));
   idx = Math.min(RANK_ORDER.length - 1, Math.max(0, Math.min(cap, idx)));
-  return { rank: RANK_ORDER[idx]!, roll: rng() }; // roll = jet (chasse au meilleur)
+  return { rank: RANK_ORDER[idx]!, roll: rollJetValue(rng, luck) }; // jet biaisé bas
 }
 
 // NIVEAU D'OBJET = pyramide centrée sur `center = min(niveau perso, niveau donjon)` (v0.583).
@@ -976,7 +989,7 @@ export function rollFamiliar(
   let roll: number;
   if (opts.rarity) {
     rarity = opts.rarity;
-    roll = rng(); // qualité continue uniforme (fusion : rareté forcée)
+    roll = rollJetValue(rng, opts.luck ?? 0); // jet biaisé bas (comme les drops)
   } else {
     const t = rollTier(rng, opts.level, opts.luck ?? 0, 0, opts.playerLevel);
     rarity = t.rank;

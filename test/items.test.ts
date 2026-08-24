@@ -14,6 +14,8 @@ import {
   RARITY_RANK,
   affixCountForRarity,
   rollItemLevel,
+  rollJetValue,
+  jetExp,
   rollLegendaryProc,
   legendaryOf,
   aggregateLegendaries,
@@ -82,6 +84,35 @@ describe('jet (0..100 %)', () => {
     expect(rollJet(0.79)).toBe(79);
     expect(rollJet(1)).toBe(100);
     expect(rollJet(undefined)).toBe(0);
+  });
+});
+
+describe('jet biaisé bas (haut jet rare, comme la rareté)', () => {
+  it('rollJetValue : les jets BAS dominent, les hauts sont rares (sans luck)', () => {
+    let hi = 0;
+    let lo = 0;
+    const N = 5000;
+    for (let s = 1; s <= N; s++) {
+      const j = rollJetValue(mulberry32(s * 3 + 1), 0);
+      if (j >= 0.9) hi++;
+      if (j <= 0.2) lo++;
+    }
+    expect(lo).toBeGreaterThan(hi * 2); // fourrage bas bien plus fréquent
+    expect(hi / N).toBeLessThan(0.08); // jet ≥ 90 % rare (< 8 %, vs 10 % uniforme)
+  });
+  it('la luck augmente la fréquence des hauts jets', () => {
+    const hiRate = (luck: number) => {
+      let hi = 0;
+      const N = 5000;
+      for (let s = 1; s <= N; s++) if (rollJetValue(mulberry32(s * 7 + 1), luck) >= 0.8) hi++;
+      return hi / N;
+    };
+    expect(hiRate(1)).toBeGreaterThan(hiRate(0));
+  });
+  it('jetExp : décroît avec la luck, borné ≥ 0,8', () => {
+    expect(jetExp(0)).toBeGreaterThan(jetExp(1));
+    expect(jetExp(1)).toBeGreaterThanOrEqual(0.8);
+    expect(jetExp(0)).toBeGreaterThan(1); // sans luck, biais bas (exp > 1)
   });
 });
 
