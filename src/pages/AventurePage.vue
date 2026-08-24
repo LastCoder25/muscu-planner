@@ -664,18 +664,20 @@
             v-for="slot in SLOTS"
             :key="slot"
             class="slot"
-            :class="char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty'"
+            :class="[
+              char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty',
+              { clickable: !!char.row.equipped[slot] },
+            ]"
+            :role="char.row.equipped[slot] ? 'button' : undefined"
+            :title="char.row.equipped[slot] ? 'Voir le détail' : undefined"
+            @click="char.row.equipped[slot] && (inspectItem = char.row.equipped[slot]!)"
           >
             <div class="slot-head">
-              <button
+              <ItemIcon
                 v-if="char.row.equipped[slot]"
-                type="button"
-                class="slot-icon-btn"
-                title="Voir le détail"
-                @click="inspectItem = char.row.equipped[slot]!"
-              >
-                <ItemIcon :item="char.row.equipped[slot]!" :size="38" />
-              </button>
+                :item="char.row.equipped[slot]!"
+                :size="38"
+              />
               <span v-else class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
               <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
             </div>
@@ -693,7 +695,7 @@
               <div class="slot-eff">{{ itemEffects(char.row.equipped[slot]!) }}</div>
               <!-- Actions ancrées EN BAS (slot-eff flexible) → alignées d'une carte à l'autre. -->
               <div class="slot-actions">
-                <button class="slot-remove" :disabled="onExpedition" @click="doUnequip(slot)">
+                <button class="slot-remove" :disabled="onExpedition" @click.stop="doUnequip(slot)">
                   Retirer
                 </button>
               </div>
@@ -703,7 +705,7 @@
                 v-if="betterInBagCount(slot) > 0"
                 class="slot-better"
                 :title="betterInBagCount(slot) + ' objet(s) du sac meilleur(s) si équipé(s) — voir'"
-                @click="showBetterForSlot(slot)"
+                @click.stop="showBetterForSlot(slot)"
               >
                 <span class="sb-n">{{ betterInBagCount(slot) }}</span>
               </button>
@@ -839,15 +841,8 @@
                       @click="helpTopic = 'rank'"
                       >{{ RARITY_LABEL[it.rarity] }}</span
                     >
-                    <span
-                      v-if="itemQuality(it)"
-                      class="q-badge clk"
-                      :class="jetTier(itemQuality(it))"
-                      role="button"
-                      title="Qu’est-ce que la qualité ?"
-                      @click="helpTopic = 'quality'"
-                      >{{ itemQuality(it) }}</span
-                    >
+                    <!-- Jet porté par l'icône (badge bas) + les lignes de comparaison ci-dessous ;
+                         plus de badge de qualité redondant à côté du rang (ticket UI). -->
                     <span class="ii-dot">·</span> {{ SLOT_LABEL[it.slot] }}
                     <span v-if="it.setId" class="gpill set">🧩 Set</span>
                   </div>
@@ -5447,17 +5442,11 @@ button.pt-mini:active {
   align-items: center;
   gap: 6px;
 }
-.slot-icon-btn {
-  background: none;
-  border: 0;
-  padding: 0;
-  margin: 0;
+.slot.clickable {
   cursor: pointer;
-  display: inline-flex;
-  border-radius: 12px;
 }
-.slot-icon-btn:active {
-  transform: scale(0.94);
+.slot.clickable:active {
+  transform: scale(0.98);
 }
 .slot-emo {
   font-size: 18px;
