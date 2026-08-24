@@ -469,14 +469,19 @@
                 class="tal-card"
                 :class="['p-' + t.rarity, { eq: t.equipped, reco: recommendedTalentIds.has(t.id) }]"
               >
-                <button
-                  class="tal-emo"
-                  title="Explication du talent"
-                  aria-label="Expliquer ce talent"
-                  @click="explainTalent(t)"
-                >
-                  {{ t.def.icon }}
-                </button>
+                <div class="tal-icon">
+                  <button
+                    class="tal-emo"
+                    title="Explication du talent"
+                    aria-label="Expliquer ce talent"
+                    @click="explainTalent(t)"
+                  >
+                    {{ t.def.icon }}
+                  </button>
+                  <span class="ic-jet" :class="jetTier(t.jet)" :title="'Jet ' + t.jet + '%'"
+                    >{{ t.jet }}%</span
+                  >
+                </div>
                 <div class="tal-body">
                   <div class="tal-name font-display">
                     <span class="tal-nm">{{ t.def.name }}</span>
@@ -486,9 +491,6 @@
                       :class="'p-' + t.rarity"
                       :title="'Rang ' + RARITY_LABEL[t.rarity]"
                       >{{ t.rarity }}</span
-                    >
-                    <span class="q-badge" :class="jetTier(t.jet)" :title="'Jet ' + t.jet + '%'"
-                      >{{ t.jet }}%</span
                     >
                   </div>
                   <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
@@ -507,13 +509,19 @@
                   <button
                     v-if="!t.equipped"
                     class="tal-b"
-                    :disabled="!canEquipMore || talentCodeEquipped(t.def.code)"
+                    :disabled="!talentCodeEquipped(t.def.code) && !canEquipMore"
                     :title="
-                      talentCodeEquipped(t.def.code) ? 'Un talent de ce type est déjà équipé' : ''
+                      talentCodeEquipped(t.def.code)
+                        ? 'Remplacer le talent de ce type déjà équipé'
+                        : ''
                     "
-                    @click="doEquipTalent(t.id)"
+                    @click="
+                      talentCodeEquipped(t.def.code)
+                        ? doReplaceTalent(t.id, t.def.code)
+                        : doEquipTalent(t.id)
+                    "
                   >
-                    {{ talentCodeEquipped(t.def.code) ? 'Déjà équipé' : 'Équiper' }}
+                    {{ talentCodeEquipped(t.def.code) ? 'Remplacer' : 'Équiper' }}
                   </button>
                   <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
                   <button v-if="!t.equipped" class="tal-b ghost" @click="doSellTalent(t.id)">
@@ -563,9 +571,6 @@
                     <span class="tal-nm">{{ f.name }}</span>
                     <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
                     <span class="rk-badge" :class="'p-' + f.rarity">{{ f.rarity }}</span>
-                    <span v-if="itemQuality(f)" class="q-badge" :class="jetTier(itemQuality(f))">{{
-                      itemQuality(f)
-                    }}</span>
                     <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
                   </div>
                   <div class="tal-eff">{{ itemEffects(f) }}</div>
@@ -874,8 +879,13 @@
                         >
                       </div>
                       <div class="cmp-stats">
-                        <div v-for="(ln, li) in itemStatLines(it)" :key="li" class="stat-line">
-                          {{ ln }}
+                        <div
+                          v-for="(s, li) in itemStatCmp(it, equippedInSlot(it.slot))"
+                          :key="li"
+                          class="stat-line"
+                          :class="s.cls"
+                        >
+                          {{ s.text }}
                         </div>
                       </div>
                     </div>
@@ -898,11 +908,12 @@
                       </div>
                       <div v-if="equippedInSlot(it.slot)" class="cmp-stats">
                         <div
-                          v-for="(ln, li) in itemStatLines(equippedInSlot(it.slot)!)"
+                          v-for="(s, li) in itemStatCmp(equippedInSlot(it.slot)!, it)"
                           :key="li"
                           class="stat-line eq"
+                          :class="s.cls"
                         >
-                          {{ ln }}
+                          {{ s.text }}
                         </div>
                       </div>
                     </div>
@@ -1793,10 +1804,11 @@
             </div>
             <div class="stash-eff">
               <span
-                v-for="(ln, li) in itemStatLines(stashConflict.incoming)"
+                v-for="(s, li) in itemStatCmp(stashConflict.incoming, stashConflict.stored)"
                 :key="li"
                 class="stat-line"
-                >{{ ln }}</span
+                :class="s.cls"
+                >{{ s.text }}</span
               >
             </div>
             <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.incoming)) }}</div>
@@ -1815,10 +1827,11 @@
             </div>
             <div class="stash-eff">
               <span
-                v-for="(ln, li) in itemStatLines(stashConflict.stored)"
+                v-for="(s, li) in itemStatCmp(stashConflict.stored, stashConflict.incoming)"
                 :key="li"
                 class="stat-line"
-                >{{ ln }}</span
+                :class="s.cls"
+                >{{ s.text }}</span
               >
             </div>
             <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.stored)) }}</div>
@@ -2538,8 +2551,12 @@ function famPowerIfEquip(f: Item): number {
 }
 // Talent : puissance si on l'ajoute à l'ensemble équipé (valeur du talent, même si au cap).
 function talPowerIfEquip(inst: TalentInstance): number {
+  // Si un talent du MÊME code est déjà équipé, on le DÉSÉQUIPE dans l'hypothèse (effets
+  // distincts) → le delta reflète le SWAP vs le talent du même type, pas l'ajout des deux.
   const talents = [
-    ...(char.row?.talents ?? []).filter((t) => t.id !== inst.id),
+    ...(char.row?.talents ?? [])
+      .filter((t) => t.id !== inst.id)
+      .map((t) => (t.equipped && t.code === inst.code ? { ...t, equipped: false } : t)),
     { ...inst, equipped: true },
   ];
   return powerWith(char.row?.equipped ?? {}, talentEffects(talents));
@@ -2894,6 +2911,15 @@ async function doUnequipTalent(id: string) {
   const uid = auth.user?.id;
   if (!uid || expeBlocked()) return;
   await char.unequipTalent(uid, id);
+}
+// REMPLACER : un talent du même code est équipé → on le retire et on équipe celui-ci
+// (swap direct, sans passer par « Retirer » puis « Équiper »).
+async function doReplaceTalent(id: string, code: string) {
+  const uid = auth.user?.id;
+  if (!uid || expeBlocked()) return;
+  const same = (char.row?.talents ?? []).find((t) => t.equipped && t.code === code);
+  if (same) await char.unequipTalent(uid, same.id);
+  await char.equipTalent(uid, id, c.value.level.level);
 }
 // Régions / biomes (onglet Donjons) : bandeau de la région courante + teaser de la
 // suivante → sensation de « découvrir de nouveaux mondes ».
@@ -3694,6 +3720,39 @@ function itemStatLines(it: Omit<Item, 'id'>): string[] {
   const leg = legendaryOf(it);
   if (leg) lines.push(`${leg.emoji} ${leg.name}`);
   return lines;
+}
+// Valeurs d'affixe (scalées au niveau) d'un objet, indexées par TYPE de stat.
+function affixValues(it: Omit<Item, 'id'>): Map<string, number> {
+  const m = new Map<string, number>();
+  const add = (e?: { type: string; value: number }) => {
+    if (e) m.set(e.type, round1(e.value * itemLevelMult(it.level)));
+  };
+  add(it.effect);
+  add(it.effect2);
+  add(it.effect3);
+  return m;
+}
+// Stats d'un objet, chacune COMPARÉE au stat du même type de `other` → vert si supérieure,
+// rouge si inférieure (toutes les stats sont « + haut = mieux »). Le proc légendaire = neutre.
+function itemStatCmp(
+  it: Omit<Item, 'id'>,
+  other?: Omit<Item, 'id'> | null,
+): { text: string; cls: string }[] {
+  const om = other ? affixValues(other) : new Map<string, number>();
+  const out: { text: string; cls: string }[] = [];
+  const push = (e?: { type: Parameters<typeof effectLabelFor>[0]; value: number }) => {
+    if (!e) return;
+    const v = round1(e.value * itemLevelMult(it.level));
+    const ov = om.get(e.type);
+    const cls = ov == null || v > ov ? 'up' : v < ov ? 'down' : '';
+    out.push({ text: effectLabelFor(e.type, v), cls });
+  };
+  push(it.effect);
+  push(it.effect2);
+  push(it.effect3);
+  const leg = legendaryOf(it);
+  if (leg) out.push({ text: `${leg.emoji} ${leg.name}`, cls: '' });
+  return out;
 }
 // Qualité du roll en étoiles pleines/vides (« ★★★★☆ ») ; vide si objet legacy (pas de roll).
 // Qualité en CHIFFRE (1→5, 5 = meilleur) affiché à côté du rang, code couleur
@@ -5177,6 +5236,35 @@ button.pt-mini:active {
   font-weight: 800;
   font-size: 12px;
 }
+/* Icône de talent + pastille de JET dessous (comme les items). */
+.tal-icon {
+  position: relative;
+  flex: 0 0 auto;
+  padding-bottom: 6px;
+}
+.ic-jet {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 999px;
+  color: #15120e;
+  background: var(--dim);
+  white-space: nowrap;
+}
+.ic-jet.jet-lo {
+  background: #ff8a5b;
+}
+.ic-jet.jet-mid {
+  background: #ffd23f;
+}
+.ic-jet.jet-hi {
+  background: #7bc86c;
+}
 .tal-emo {
   flex: 0 0 auto;
   display: grid;
@@ -6324,9 +6412,18 @@ button.pt-mini:active {
   padding-left: 2px;
 }
 /* L'objet du sac = mis en avant (accent) ; l'équipé = plus discret. */
-.cmp-item.eq .stat-line.eq {
+.cmp-item.eq .stat-line {
   color: var(--text);
   font-weight: 600;
+}
+/* Comparaison stat par stat : vert si supérieure, rouge si inférieure (les 2 côtés). */
+.stat-line.up,
+.cmp-item.eq .stat-line.up {
+  color: #7bc86c;
+}
+.stat-line.down,
+.cmp-item.eq .stat-line.down {
+  color: #ff6a45;
 }
 /* Rang / qualité CLIQUABLES (méta) → curseur + affordance discrète. */
 .clk {
