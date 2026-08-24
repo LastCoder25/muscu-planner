@@ -121,7 +121,29 @@
           <span class="se-name">{{ exo.exercise_name }}</span>
           <span v-if="exo.weight_kg" class="se-kg">{{ exo.weight_kg }} kg</span>
         </div>
-        <div class="se-sets">
+        <!-- Exo de DURÉE (gainage) : chrono (chaque pause valide une série) au lieu de reps. -->
+        <div v-if="exo.time" class="se-sets">
+          <button
+            class="exo-chrono"
+            :class="{ running: timerExo === i }"
+            @click="toggleExoTimer(i)"
+          >
+            <q-icon :name="timerExo === i ? 'pause' : 'play_arrow'" size="18px" />
+            {{ timerExo === i ? 'Pause' : 'Démarrer' }}
+            <span class="ec-time">{{ timerLabel(i) }}</span>
+          </button>
+          <span class="ec-prog">{{ doneCount(i) }}/{{ exo.sets.length }} séries</span>
+          <button class="s-adj" title="Une série de plus" @click="addSetSlot(i)">＋</button>
+          <button
+            class="s-adj"
+            :disabled="!canRemoveSlot(i)"
+            title="Retirer la dernière série (non faite)"
+            @click="removeSetSlot(i)"
+          >
+            −
+          </button>
+        </div>
+        <div v-else class="se-sets">
           <button
             v-for="(reps, j) in exo.sets"
             :key="j"
@@ -333,6 +355,49 @@ function onLogSave(v: { reps: number; weight: number | null; assisted: boolean }
   }
 }
 
+// ── Chrono des exos de DURÉE (gainage) : chaque pause valide une série (secondes) ──
+const timerExo = ref<number | null>(null);
+const timerSec = ref(0);
+let timerTick: ReturnType<typeof setInterval> | undefined;
+function doneCount(i: number): number {
+  const exo = session.value[i];
+  if (!exo) return 0;
+  return exo.sets.filter((_v: number, j: number) => isDone(i, j)).length;
+}
+function timerLabel(i: number): string {
+  const s = timerExo.value === i ? timerSec.value : 0;
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+// Valide la prochaine série NON faite de l'exo `i` avec `sec` secondes (reps = secondes).
+function validateTimeSet(i: number, sec: number) {
+  const exo = session.value[i];
+  if (!exo || sec <= 0) return;
+  let j = exo.sets.findIndex((_v: number, k: number) => !isDone(i, k));
+  if (j < 0) {
+    exo.sets.push(sec); // toutes faites → série bonus
+    j = exo.sets.length - 1;
+  }
+  logged.value = { ...logged.value, [`${i}-${j}`]: { reps: sec, weight: null, assisted: false } };
+  restLeft.value = restSec.value;
+  if (validatedCount.value >= totalSets.value)
+    $q.notify({ type: 'positive', message: 'Toutes les séries faites 💪' });
+}
+function toggleExoTimer(i: number) {
+  if (timerExo.value === i) {
+    validateTimeSet(i, timerSec.value); // Pause → enregistre la série
+    clearInterval(timerTick);
+    timerTick = undefined;
+    timerExo.value = null;
+    timerSec.value = 0;
+    return;
+  }
+  if (timerExo.value != null && timerSec.value > 0) validateTimeSet(timerExo.value, timerSec.value);
+  clearInterval(timerTick);
+  timerExo.value = i;
+  timerSec.value = 0;
+  timerTick = setInterval(() => (timerSec.value += 1), 1000);
+}
+
 // Enregistre au défi toutes les séries validées localement (à la fin / au choix).
 function commitLogged() {
   const today = logicalToday();
@@ -381,7 +446,10 @@ onMounted(async () => {
   if (!combo.loaded) await combo.fetchMine().catch(() => undefined);
   initCounts(); // amorce les compteurs par exo (défaut ~2/exo)
 });
-onUnmounted(() => clearInterval(tick));
+onUnmounted(() => {
+  clearInterval(tick);
+  clearInterval(timerTick);
+});
 </script>
 
 <style scoped lang="scss">
@@ -582,7 +650,36 @@ onUnmounted(() => clearInterval(tick));
 .se-sets {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+}
+/* Chrono d'un exo de durée (gainage) dans le runner. */
+.exo-chrono {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+}
+.exo-chrono.running {
+  background: var(--accent);
+  color: var(--bg);
+}
+.ec-time {
+  font-variant-numeric: tabular-nums;
+}
+.ec-prog {
+  font-size: 12.5px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
 }
 .s-set {
   min-width: 52px;

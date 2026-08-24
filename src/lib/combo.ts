@@ -265,7 +265,8 @@ export interface ComboSessionExo {
   exercise_id: string;
   exercise_name: string;
   weight_kg?: number | null;
-  sets: number[]; // reps par série
+  sets: number[]; // reps par série (ou SECONDES si `time`)
+  time?: boolean; // exo de DURÉE (gainage) → chrono au lieu de reps/poids
 }
 
 export const COMBO_EXEC_SEC = 40; // durée d'exécution moyenne d'une série
@@ -324,6 +325,7 @@ export function buildComboSession(
       exercise_name: e.leg.exercise_name,
       weight_kg: legLastWeight(e.leg),
       sets: e.sets,
+      time: legMode(e.leg) === 'time',
     }));
 }
 
@@ -344,6 +346,7 @@ export function buildComboSessionFromCounts(
       exercise_name: l.exercise_name,
       weight_kg: legLastWeight(l),
       sets: Array.from({ length: n }, () => reps),
+      time: legMode(l) === 'time',
     });
   }
   return out;
