@@ -637,7 +637,10 @@ function rankBell(level: number, luck: number, floorBonus: number, playerLevel?:
   const l = Math.min(1, Math.max(0, luck));
   const eff = playerLevel == null ? level : Math.min(level, playerLevel);
   const center = rankCeilingForLevel(eff) + Math.max(0, floorBonus);
-  const hiWidth = 0.42 + l * 1.1; // pointe haute raide (jackpot), épaissie par la luck
+  // Pointe haute RESSERRÉE (v0.579) : le « +1 rang » au-dessus de ton niveau tombe de ~22 %
+  // à ~9 % → les hauts rangs (dont Légendaire+) redeviennent un vrai score, pas la moitié des
+  // drops. La luck l'épaissit encore (jackpot façon ARPG). Baisser encore (0,16+0,4·l) = ~4 %.
+  const hiWidth = 0.22 + l * 0.5;
   const cap = Math.min(RANK_ORDER.length - 1, Math.round(center) + 2); // borne douce : +2 rangs max
   return { center, loWidth: LO_WIDTH_RANK, hiWidth, cap };
 }

@@ -667,30 +667,25 @@
             :class="char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty'"
           >
             <div class="slot-head">
-              <ItemIcon
+              <button
                 v-if="char.row.equipped[slot]"
-                :item="char.row.equipped[slot]!"
-                :size="38"
-                :show-stars="false"
-              />
+                type="button"
+                class="slot-icon-btn"
+                title="Voir le détail"
+                @click="inspectItem = char.row.equipped[slot]!"
+              >
+                <ItemIcon :item="char.row.equipped[slot]!" :size="38" />
+              </button>
               <span v-else class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
               <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
             </div>
             <template v-if="char.row.equipped[slot]">
               <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
-              <!-- Méta : rang · qualité · (+enchant) · (🧩 set). Ligne UNIQUE (nowrap) → la
-                   présence/absence d'un badge ne décale pas la carte (ticket layout). -->
+              <!-- Méta : rang · (🧩 set). La QUALITÉ (jet) est portée par l'icône (badge bas). -->
               <div class="pills">
                 <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
                   RARITY_LABEL[char.row.equipped[slot]!.rarity]
                 }}</span>
-                <span
-                  v-if="itemQuality(char.row.equipped[slot])"
-                  class="q-badge"
-                  :class="jetTier(itemQuality(char.row.equipped[slot]))"
-                  title="Qualité (5 = meilleur)"
-                  >{{ itemQuality(char.row.equipped[slot]) }}</span
-                >
                 <span v-if="char.row.equipped[slot]!.setId" class="gpill set" title="Pièce de set"
                   >🧩</span
                 >
@@ -1605,6 +1600,52 @@
       </div>
     </div>
 
+    <!-- Détail d'un objet (clic sur un item équipé) -->
+    <q-dialog
+      :model-value="!!inspectItem"
+      position="bottom"
+      @update:model-value="inspectItem = null"
+    >
+      <q-card v-if="inspectItem" class="insp-card">
+        <div class="insp-head">
+          <ItemIcon :item="inspectItem" :size="52" />
+          <div class="insp-id">
+            <div class="insp-name">{{ inspectItem.name }}</div>
+            <div class="insp-meta">
+              <span class="gpill" :class="'p-' + inspectItem.rarity">{{
+                RARITY_LABEL[inspectItem.rarity]
+              }}</span>
+              <span
+                v-if="itemQuality(inspectItem)"
+                class="q-badge"
+                :class="jetTier(itemQuality(inspectItem))"
+                title="Pureté (jet de qualité, 100 % = parfait)"
+                >{{ itemQuality(inspectItem) }}% pureté</span
+              >
+              <span class="insp-slot">· {{ SLOT_LABEL[inspectItem.slot] }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="insp-affixes">
+          <div v-for="(ln, i) in itemAffixLines(inspectItem)" :key="i" class="insp-eff">
+            ✦ {{ ln }}
+          </div>
+        </div>
+        <div v-if="legendaryOf(inspectItem)" class="insp-leg">
+          <span class="insp-leg-name"
+            >{{ legendaryOf(inspectItem)!.emoji }} {{ legendaryOf(inspectItem)!.name }}</span
+          >
+          <span class="insp-leg-desc">{{ legendaryOf(inspectItem)!.desc }}</span>
+        </div>
+        <div v-if="inspectItem.setId && SET_BY_ID[inspectItem.setId]" class="insp-set">
+          🧩 {{ SET_BY_ID[inspectItem.setId]!.emoji }} {{ SET_BY_ID[inspectItem.setId]!.name }}
+        </div>
+        <div class="insp-actions">
+          <q-btn flat no-caps dense label="Fermer" @click="inspectItem = null" />
+        </div>
+      </q-card>
+    </q-dialog>
+
     <!-- Butin possible d'un donjon -->
     <!-- Explication RANG / QUALITÉ (clic sur la pastille de rang ou le chiffre de qualité). -->
     <q-dialog :model-value="!!helpTopic" position="bottom" @update:model-value="helpTopic = null">
@@ -2273,6 +2314,15 @@ const gameFx = useGameFx();
 // Explication « rang » / « qualité » (ouverte en cliquant le pastille de rang ou le
 // chiffre de qualité d'un objet — ticket d094eac6). Les 10 rangs pour l'échelle visuelle.
 const helpTopic = ref<'rank' | 'quality' | null>(null);
+// Détail d'un objet (clic sur un item équipé → modale d'inspection).
+const inspectItem = ref<Item | null>(null);
+// Affixes (1→3) d'un objet, en lignes séparées pour le détail.
+function itemAffixLines(it: Item): string[] {
+  const lines = [effectLabelFor(it.effect.type, it.effect.value)];
+  if (it.effect2) lines.push(effectLabelFor(it.effect2.type, it.effect2.value));
+  if (it.effect3) lines.push(effectLabelFor(it.effect3.type, it.effect3.value));
+  return lines;
+}
 // Rang d'objet (G..SSS) → intensité d'animation (5 crans de GameFx). Les hauts rangs
 // déclenchent l'explosion « divin ».
 type FxRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'divin';
@@ -5397,6 +5447,18 @@ button.pt-mini:active {
   align-items: center;
   gap: 6px;
 }
+.slot-icon-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  display: inline-flex;
+  border-radius: 12px;
+}
+.slot-icon-btn:active {
+  transform: scale(0.94);
+}
 .slot-emo {
   font-size: 18px;
 }
@@ -6180,6 +6242,77 @@ button.pt-mini:active {
   border-radius: 16px 16px 0 0;
   padding: 16px 16px 14px;
   color: var(--text);
+}
+/* Détail d'un objet (inspection) */
+.insp-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  padding: 16px;
+  color: var(--text);
+}
+.insp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.insp-name {
+  font-size: 15px;
+  font-weight: 800;
+}
+.insp-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+  font-size: 11px;
+}
+.insp-slot {
+  color: var(--dim);
+}
+.insp-affixes {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.insp-eff {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.insp-leg {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #ff9e3f 45%, var(--line));
+  background: color-mix(in srgb, #ff9e3f 10%, var(--surface));
+}
+.insp-leg-name {
+  display: block;
+  font-weight: 800;
+  color: #ff9e3f;
+  font-size: 13px;
+}
+.insp-leg-desc {
+  display: block;
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+.insp-set {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.insp-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
 }
 .help-title {
   font-size: 17px;
