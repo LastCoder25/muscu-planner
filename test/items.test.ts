@@ -13,6 +13,12 @@ import {
   RARITY_MULT,
   RARITY_RANK,
   affixCountForRarity,
+  rollLegendaryProc,
+  legendaryOf,
+  aggregateLegendaries,
+  LEGENDARY_PROCS,
+  LEGENDARY_MIN_RANK,
+  SLOTS,
   normRank,
   fullInfuseCost,
   infuseToMaxCost,
@@ -599,5 +605,60 @@ describe('enchant — vestige de migration (moteur retiré, ticket 7acb1e7c)', (
     expect(enchantMult(3)).toBeCloseTo(1.99, 2); // zone sûre garantie ≈ ×2 (baseline)
     expect(enchantMult(5)).toBeGreaterThan(enchantMult(3));
     expect(enchantMult(ENCHANT_MAX + 5)).toBe(enchantMult(ENCHANT_MAX)); // clampé
+  });
+});
+
+describe('effets légendaires (Phase 3)', () => {
+  it('rollLegendaryProc : renvoie un proc dont les slots incluent le slot demandé', () => {
+    for (const slot of SLOTS) {
+      const id = rollLegendaryProc(mulberry32(3), slot);
+      expect(id).toBeTruthy();
+      const proc = LEGENDARY_PROCS.find((p) => p.id === id)!;
+      expect(proc.slots).toContain(slot);
+    }
+  });
+  it('seuls les objets Légendaire+ portent un proc légendaire', () => {
+    let legendaries = 0;
+    for (let s = 1; s <= 600; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 3, level: 90, luck: 1 });
+      if (!d) continue;
+      if (d.legendary) {
+        legendaries++;
+        expect(RARITY_RANK[d.rarity]).toBeGreaterThanOrEqual(LEGENDARY_MIN_RANK);
+        expect(legendaryOf(d)).toBeTruthy();
+      } else {
+        // pas de proc → soit rareté < Légendaire, soit tirage sans proc (aucun n'existe hors slot)
+        // (tous les slots ont ≥1 proc → un Légendaire+ a TOUJOURS un proc)
+        expect(RARITY_RANK[d.rarity]).toBeLessThan(LEGENDARY_MIN_RANK);
+      }
+    }
+    expect(legendaries).toBeGreaterThan(0); // un contenu profond en produit
+  });
+  it('aggregateLegendaries : collecte les procs de l’équipement + playerWithGear les propage', () => {
+    const wpn: Item = {
+      id: 'w',
+      slot: 'weapon',
+      name: 'Lame',
+      emoji: '⚔️',
+      rarity: 'legendaire',
+      level: 1,
+      baseLevel: 1,
+      effect: { type: 'damage_pct', value: 10 },
+      legendary: 'initiative',
+    };
+    const set = aggregateLegendaries({ weapon: wpn });
+    expect(set.has('initiative')).toBe(true);
+    const c = playerWithGear(
+      'X',
+      { puissance: 30, endurance: 20, agilite: 10 },
+      { weapon: wpn },
+      {},
+      8,
+    );
+    expect(c.procs?.has('initiative')).toBe(true);
+    // équipement sans légendaire → pas de procs
+    expect(
+      playerWithGear('X', { puissance: 30, endurance: 20, agilite: 10 }, {}, {}, 8).procs,
+    ).toBeUndefined();
   });
 });

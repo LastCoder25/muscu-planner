@@ -29,7 +29,25 @@ export interface Combatant {
   rage?: number; // + dégâts quand TOI tu es bas (< rageThreshold PV)
   momentum?: number; // + dégâts par coup consécutif porté dans le combat (cumul plafonné)
   thorns?: number; // 0..1 : part des dégâts reçus renvoyée à l'attaquant (épines, joueur)
+  // Procs LÉGENDAIRES (objets Légendaire+, joueur uniquement) — effets NON-scalants,
+  // one-shot par combat. Cf. LEGENDARY_PROCS (items.ts) pour les ids/libellés.
+  procs?: ReadonlySet<string>;
 }
+
+// Catégorisation des procs légendaires pour la pondération de `combatPower` (l'implémentation
+// combat vit dans simulateCombat). La méta (nom/emoji/slot) est dans items.ts.
+export const LEG_OFFENSE: ReadonlySet<string> = new Set([
+  'initiative',
+  'executioner',
+  'predator_eye',
+  'vampiric',
+]);
+export const LEG_DEFENSE: ReadonlySet<string> = new Set([
+  'aegis',
+  'retort',
+  'phoenix',
+  'secondwind',
+]);
 
 // Coefficients d'équilibrage (ajustables en un endroit).
 // MODÈLE (2026‑08‑09) : chaque sport nourrit 1 offense + 1 survie → l'équilibré
@@ -64,6 +82,13 @@ export const COMBAT = {
   executeThreshold: 0.25, // « Exécution » active si l'ennemi est sous 25 % PV
   rageThreshold: 0.3, // « Rage » active si le joueur est sous 30 % PV
   momentumMaxStacks: 6, // « Déferlante » : cumul plafonné à 6 coups
+  // Procs légendaires (non-scalants).
+  initiativeMult: 2, // Initiative : 1er coup ×2 (inesquivable)
+  vampiricHealPct: 0.5, // Vampirisme : soin = 50 % des dégâts d'un crit
+  executeKillThreshold: 0.15, // Bourreau : exécute un ennemi sous 15 % PV
+  secondWindThreshold: 0.3, // Second souffle : déclenche sous 30 % PV
+  secondWindHealPct: 0.25, // Second souffle : soigne 25 % des PV max
+  legendaryPowerWeight: 0.06, // pondération d'un proc dans combatPower (offense/survie)
 };
 
 /** Construit le combattant du joueur à partir de ses 3 stats et de son NIVEAU. */
@@ -110,10 +135,19 @@ export function combatPower(c: Combatant): number {
     sig *
     (1 + 0.25 * (c.thorns ?? 0)); // épines = offense conditionnelle (ne déclenche que si frappé)
   const survie = c.pv / 100 / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0));
+  // Procs LÉGENDAIRES (non-scalants) : petit bonus fixe par proc, réparti offense/survie,
+  // pour qu'équiper un objet légendaire améliore la puissance affichée/comparée.
+  let procOff = 1;
+  let procSurv = 1;
+  if (c.procs)
+    for (const p of c.procs) {
+      if (LEG_OFFENSE.has(p)) procOff += COMBAT.legendaryPowerWeight;
+      else if (LEG_DEFENSE.has(p)) procSurv += COMBAT.legendaryPowerWeight;
+    }
   // offense×survie croît ≈ niveau⁴ → chiffres énormes (dizaines de milliers dès le
   // début). On prend la RACINE : indice toujours monotone/comparable mais à échelle
   // humaine (~niveau², qq centaines au milieu de jeu au lieu de dizaines de milliers).
-  return Math.round(Math.sqrt(offense * survie));
+  return Math.round(Math.sqrt(offense * procOff * survie * procSurv));
 }
 
 /** Format compact d'une puissance de combat (≈ niveau⁴ → jusqu'aux millions).
@@ -163,6 +197,13 @@ export function simulateCombat(
   const monsterMaxPv = monster.pv;
   let pStacks = 0; // Déferlante : coups consécutifs du joueur dans CE combat
 
+  // Procs légendaires du JOUEUR (non-scalants, one-shot par combat).
+  const has = (p: string): boolean => player.procs?.has(p) ?? false;
+  let pFirstStrike = true; // tout 1er coup PORTÉ par le joueur (Initiative / Œil)
+  let mFirstLanded = true; // 1re attaque ennemie qui TOUCHE le joueur (Égide / Rétorsion)
+  let phoenixReady = has('phoenix');
+  let secondWindReady = has('secondwind');
+
   // Nombre de frappes d'un tour (Vitesse) : partie entière + reste probabiliste.
   const strikeCount = (c: Combatant): number => {
     const s = c.strikes ?? 1;
@@ -176,41 +217,83 @@ export function simulateCombat(
     const def = turn === 'player' ? monster : player;
     const hits = Math.max(1, strikeCount(atk));
     for (let h = 0; h < hits && pPv > 0 && mPv > 0; h++) {
-      if (rng() < def.dodge) {
-        log.push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
-        continue;
-      }
-      const crit = rng() < atk.crit;
-      const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
-      let dmg = Math.max(1, Math.round(atk.damage * (crit ? 2 : 1) * variance));
-      // Effets signature du JOUEUR : bonus de dégâts conditionnels (avant réduction).
       if (turn === 'player') {
+        // ── Attaque du JOUEUR ──
+        const first = pFirstStrike;
+        const unavoidable = first && has('initiative'); // Initiative : 1er coup inesquivable
+        if (!unavoidable && rng() < def.dodge) {
+          log.push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
+          continue;
+        }
+        let crit = rng() < atk.crit;
+        if (first && has('predator_eye')) crit = true; // Œil : 1er coup crit garanti
+        const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
+        let dmg = Math.max(1, Math.round(atk.damage * (crit ? 2 : 1) * variance));
+        if (first && has('initiative')) dmg = Math.round(dmg * COMBAT.initiativeMult);
+        // Effets signature (conditionnels), avant réduction.
         let mult = 1;
         if (atk.execute && mPv / monsterMaxPv < COMBAT.executeThreshold) mult += atk.execute;
         if (atk.rage && pPv / maxPPv < COMBAT.rageThreshold) mult += atk.rage;
         if (atk.momentum) mult += Math.min(COMBAT.momentumMaxStacks, pStacks) * atk.momentum;
         if (mult !== 1) dmg = Math.max(1, Math.round(dmg * mult));
-      }
-      if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
-      if (turn === 'player') {
+        if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
         mPv = Math.max(0, mPv - dmg);
-        pStacks++; // Déferlante : le joueur a porté un coup → cumul
+        pStacks++; // Déferlante : coup porté
         if (atk.lifesteal) pPv = Math.min(maxPPv, pPv + Math.round(dmg * atk.lifesteal));
+        // Vampirisme : les crits soignent.
+        if (crit && has('vampiric'))
+          pPv = Math.min(maxPPv, pPv + Math.round(dmg * COMBAT.vampiricHealPct));
+        // Bourreau : exécute un ennemi tombé très bas.
+        if (mPv > 0 && has('executioner') && mPv / monsterMaxPv < COMBAT.executeKillThreshold)
+          mPv = 0;
+        pFirstStrike = false;
+        log.push({
+          round,
+          who: turn,
+          type: crit ? 'crit' : 'hit',
+          damage: dmg,
+          playerPv: pPv,
+          monsterPv: mPv,
+        });
       } else {
+        // ── Attaque du MONSTRE ──
+        if (rng() < def.dodge) {
+          log.push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
+          continue;
+        }
+        const crit = rng() < atk.crit;
+        const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
+        let dmg = Math.max(1, Math.round(atk.damage * (crit ? 2 : 1) * variance));
+        if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
+        const firstEnemy = mFirstLanded;
+        // Rétorsion : renvoie le 1er coup ennemi (avant l'annulation par l'Égide).
+        if (firstEnemy && has('retort') && dmg > 0) mPv = Math.max(0, mPv - dmg);
+        // Égide : annule la 1re attaque ennemie.
+        if (firstEnemy && has('aegis')) dmg = 0;
+        mFirstLanded = false;
         pPv = Math.max(0, pPv - dmg);
+        // Phénix : survivre à 1 PV une fois.
+        if (pPv <= 0 && phoenixReady) {
+          pPv = 1;
+          phoenixReady = false;
+        } else if (pPv > 0 && secondWindReady && pPv / maxPPv < COMBAT.secondWindThreshold) {
+          // Second souffle : sous 30 % PV pour la 1re fois → soin.
+          pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * COMBAT.secondWindHealPct));
+          secondWindReady = false;
+        }
         if (atk.lifesteal) mPv = Math.min(monster.pv, mPv + Math.round(dmg * atk.lifesteal));
         // Épines : le joueur (défenseur) renvoie une part des dégâts reçus.
         if (def.thorns && dmg > 0)
           mPv = Math.max(0, mPv - Math.max(1, Math.round(dmg * def.thorns)));
+        log.push({
+          round,
+          who: turn,
+          type: crit ? 'crit' : 'hit',
+          damage: dmg,
+          playerPv: pPv,
+          monsterPv: mPv,
+        });
       }
-      log.push({
-        round,
-        who: turn,
-        type: crit ? 'crit' : 'hit',
-        damage: dmg,
-        playerPv: pPv,
-        monsterPv: mPv,
-      });
     }
     turn = turn === 'player' ? 'monster' : 'player';
   }

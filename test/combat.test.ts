@@ -63,6 +63,131 @@ describe('épines (thorns)', () => {
   });
 });
 
+describe('procs légendaires (Phase 3)', () => {
+  const pl = (procs: string[], over: Record<string, unknown> = {}) => ({
+    name: 'P',
+    pv: 200,
+    damage: 20,
+    crit: 0,
+    dodge: 0,
+    initiative: 10,
+    strikes: 1,
+    procs: new Set(procs),
+    ...over,
+  });
+  const mon = (over: Record<string, unknown> = {}) => ({
+    name: 'M',
+    pv: 500,
+    damage: 40,
+    crit: 0,
+    dodge: 0,
+    initiative: 1,
+    strikes: 1,
+    ...over,
+  });
+
+  it('Égide annule la 1re attaque ennemie (dégât 0)', () => {
+    const m = mon({ initiative: 99 }); // le monstre frappe en premier
+    const firstMonDmg = (procs: string[]) =>
+      simulateCombat(pl(procs), m, { seed: 5, goldOnWin: 0 }).log.find(
+        (e) => e.who === 'monster' && e.type === 'hit',
+      )!.damage;
+    expect(firstMonDmg(['aegis'])).toBe(0);
+    expect(firstMonDmg([])).toBeGreaterThan(0);
+  });
+
+  it('Rétorsion renvoie le 1er coup ennemi au monstre', () => {
+    const m = mon({ initiative: 99, pv: 5000 });
+    const monPvAtFirstHit = (procs: string[]) =>
+      simulateCombat(pl(procs, { damage: 1 }), m, { seed: 3, goldOnWin: 0 }).log.find(
+        (e) => e.who === 'monster' && e.type === 'hit',
+      )!.monsterPv;
+    expect(monPvAtFirstHit(['retort'])).toBeLessThan(monPvAtFirstHit([]));
+  });
+
+  it('Phénix : survivre à un coup fatal change l’issue', () => {
+    const oneShot = mon({ pv: 30, damage: 1000, initiative: 1 });
+    let withP = 0;
+    let without = 0;
+    for (let s = 0; s < 30; s++) {
+      if (
+        simulateCombat(pl(['phoenix'], { pv: 50 }), oneShot, { seed: s * 7 + 1, goldOnWin: 0 }).win
+      )
+        withP++;
+      if (simulateCombat(pl([], { pv: 50 }), oneShot, { seed: s * 7 + 1, goldOnWin: 0 }).win)
+        without++;
+    }
+    expect(withP).toBeGreaterThan(without);
+  });
+
+  it('Initiative : 1er coup inesquivable (ignore une esquive à 100 %)', () => {
+    const dodgy = mon({ dodge: 1, damage: 5 });
+    const first = (procs: string[]) =>
+      simulateCombat(pl(procs), dodgy, { seed: 2, goldOnWin: 0 }).log.find(
+        (e) => e.who === 'player',
+      )!;
+    expect(first(['initiative']).type).not.toBe('dodge');
+    expect(first(['initiative']).damage).toBeGreaterThan(0);
+    expect(first([]).type).toBe('dodge'); // sans le proc, l'esquive garantie bloque
+  });
+
+  it('Œil du prédateur : 1er coup critique garanti', () => {
+    const m = mon({ damage: 0 });
+    const first = simulateCombat(pl(['predator_eye']), m, { seed: 4, goldOnWin: 0 }).log.find(
+      (e) => e.who === 'player',
+    )!;
+    expect(first.type).toBe('crit');
+  });
+
+  it('Vampirisme : les crits soignent', () => {
+    const m = mon({ damage: 0, pv: 5000 });
+    const firstPlayerPv = (procs: string[]) =>
+      simulateCombat({ ...pl(procs, { crit: 1 }) }, m, {
+        seed: 9,
+        goldOnWin: 0,
+        startPlayerPv: 10,
+      }).log.find((e) => e.who === 'player')!.playerPv;
+    expect(firstPlayerPv(['vampiric'])).toBeGreaterThan(10);
+    expect(firstPlayerPv([])).toBe(10); // monstre à 0 dégât → sans soin, PV figés
+  });
+
+  it('Bourreau : exécute un ennemi bas → moins de coups pour tuer', () => {
+    const m = mon({ damage: 0, pv: 100 });
+    const hits = (procs: string[]) => {
+      let n = 0;
+      for (let s = 0; s < 40; s++)
+        n += simulateCombat(pl(procs, { damage: 18 }), m, {
+          seed: s * 11 + 1,
+          goldOnWin: 0,
+        }).log.filter((e) => e.who === 'player' && e.type !== 'dodge').length;
+      return n;
+    };
+    expect(hits(['executioner'])).toBeLessThan(hits([]));
+  });
+
+  it('combatPower valorise les procs (offense & survie)', () => {
+    const base = playerCombatant('X', { puissance: 40, endurance: 30, agilite: 20 }, 8);
+    expect(combatPower({ ...base, procs: new Set(['executioner']) })).toBeGreaterThan(
+      combatPower(base),
+    );
+    expect(combatPower({ ...base, procs: new Set(['phoenix']) })).toBeGreaterThan(
+      combatPower(base),
+    );
+    expect(combatPower({ ...base, procs: new Set(['secondwind']) })).toBeGreaterThan(
+      combatPower(base),
+    );
+  });
+
+  it('sans procs, le combat est byte-identique à l’ancien moteur (déterminisme préservé)', () => {
+    const p = playerCombatant('Old', { puissance: 50, endurance: 40, agilite: 25 }, 9);
+    const m = mon({ pv: 800, damage: 55, crit: 0.1, dodge: 0.08 });
+    const a = simulateCombat(p, m, { seed: 12345, goldOnWin: 100 });
+    const b = simulateCombat({ ...p }, m, { seed: 12345, goldOnWin: 100 });
+    expect(a.log.length).toBe(b.log.length);
+    expect(a.win).toBe(b.win);
+  });
+});
+
 describe('fmtPow / fmtDelta', () => {
   it('entier jusqu’à 9999, puis compact k/M (1 déc. k, 2 déc. M)', () => {
     expect(fmtPow(950)).toBe('950');

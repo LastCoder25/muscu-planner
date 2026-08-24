@@ -410,6 +410,10 @@
         <div v-if="detailItem.effect3" class="fl-eff">
           ✦ {{ effectLabel(detailItem.effect3, detailItem.level) }}
         </div>
+        <div v-if="legendaryOf(detailItem)" class="fl-leg">
+          {{ legendaryOf(detailItem)!.emoji }} {{ legendaryOf(detailItem)!.name }} —
+          {{ legendaryOf(detailItem)!.desc }}
+        </div>
         <div v-if="detailItem.setId" class="fl-set">🧩 {{ setName(detailItem.setId) }}</div>
         <q-btn
           class="fx-cta"
@@ -469,6 +473,7 @@ import {
   RANK_COLOR,
   RANK_ORDER,
   rollJet,
+  legendaryOf,
   tierIndexOf,
   mergeEffects,
   SLOT_LABEL,
@@ -1995,6 +2000,13 @@ function replayAuto() {
   font-size: 11.5px;
   color: var(--accent);
   margin-top: 4px;
+}
+.fl-leg {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ff9e3f;
+  margin-top: 6px;
+  line-height: 1.35;
 }
 /* Raretés (8) : couleur portée par --rk. */
 .r-commun {

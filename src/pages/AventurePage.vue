@@ -2170,6 +2170,7 @@ import {
   effectLabelFor,
   setTierLabel,
   rollJet,
+  legendaryOf,
   sellValue,
   isFamiliar,
   FAMILIAR_SLOT,
@@ -3571,6 +3572,8 @@ function itemEffects(it: Omit<Item, 'id'>): string {
   const parts = [effectLabelFor(it.effect.type, it.effect.value)];
   if (it.effect2) parts.push(effectLabelFor(it.effect2.type, it.effect2.value));
   if (it.effect3) parts.push(effectLabelFor(it.effect3.type, it.effect3.value));
+  const leg = legendaryOf(it);
+  if (leg) parts.push(`${leg.emoji} ${leg.name}`);
   return parts.join(' · ');
 }
 // Qualité du roll en étoiles pleines/vides (« ★★★★☆ ») ; vide si objet legacy (pas de roll).

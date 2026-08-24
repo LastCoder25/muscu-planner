@@ -105,6 +105,7 @@ export interface Item {
   roll?: number; // qualité du roll de l'effet principal (0..1 dans la bande ±20 %) → étoiles
   fxp?: number; // familier : progression d'INFUSION vers le prochain pas de tier (rang+qualité)
   enchant?: number; // ENCHANT +N (façon L2) — magnitude par-dessus le grade. Défaut 0. (étape 1)
+  legendary?: string; // proc LÉGENDAIRE (id, cf. LEGENDARY_PROCS) — Légendaire+ uniquement, non-scalant
 }
 
 // JET du roll (0..100 %) — REFONTE v0.574 : fini les qualités ★1-5. Le `roll` (0..1, figé au
@@ -303,6 +304,103 @@ export const RARITY_RANK: Record<Rarity, number> = Object.fromEntries(
 export function affixCountForRarity(rarity: Rarity): number {
   const i = RARITY_RANK[rarity] ?? 0;
   return i <= 1 ? 1 : i <= 3 ? 2 : 3;
+}
+
+// ─── EFFETS LÉGENDAIRES (Phase 3, façon Diablo) ──────────────────────────────
+// Procs NON-scalants (une valeur fixe, pas d'axe niveau/jet), 1 par objet Légendaire+,
+// thématisés par SLOT. Ils s'appliquent dans simulateCombat (cf. combat.ts). C'est la
+// 2ᵉ voie d'end-game à côté du set de voie : mixer pièces de set + objets légendaires.
+export interface LegendaryProc {
+  id: string;
+  name: string;
+  emoji: string;
+  slots: ItemSlot[];
+  desc: string;
+}
+export const LEGENDARY_PROCS: LegendaryProc[] = [
+  {
+    id: 'initiative',
+    name: 'Initiative',
+    emoji: '⚡',
+    slots: ['weapon'],
+    desc: 'Ton 1er coup du combat est inesquivable et inflige le double.',
+  },
+  {
+    id: 'executioner',
+    name: 'Bourreau',
+    emoji: '🪓',
+    slots: ['weapon'],
+    desc: 'Un ennemi tombé sous 15 % PV est exécuté sur-le-champ.',
+  },
+  {
+    id: 'aegis',
+    name: 'Égide',
+    emoji: '🛡️',
+    slots: ['armor'],
+    desc: 'Annule entièrement la 1re attaque ennemie du combat.',
+  },
+  {
+    id: 'retort',
+    name: 'Rétorsion',
+    emoji: '🔁',
+    slots: ['armor'],
+    desc: 'Renvoie intégralement le 1er coup ennemi reçu.',
+  },
+  {
+    id: 'vampiric',
+    name: 'Vampirisme',
+    emoji: '🩸',
+    slots: ['accessory'],
+    desc: 'Tes coups critiques te soignent de la moitié de leurs dégâts.',
+  },
+  {
+    id: 'predator_eye',
+    name: 'Œil du prédateur',
+    emoji: '👁️',
+    slots: ['accessory'],
+    desc: 'Ton 1er coup du combat est un critique garanti.',
+  },
+  {
+    id: 'phoenix',
+    name: 'Phénix',
+    emoji: '🔥',
+    slots: ['relic'],
+    desc: 'La 1re fois qu’un coup te tuerait, tu survis à 1 PV.',
+  },
+  {
+    id: 'secondwind',
+    name: 'Second souffle',
+    emoji: '💨',
+    slots: ['relic'],
+    desc: 'La 1re fois que tu passes sous 30 % PV, récupère 25 % de tes PV max.',
+  },
+];
+export const LEGENDARY_BY_ID: Record<string, LegendaryProc> = Object.fromEntries(
+  LEGENDARY_PROCS.map((p) => [p.id, p]),
+);
+// Rang minimal pour porter un proc légendaire (Légendaire = index 5).
+export const LEGENDARY_MIN_RANK = RARITY_RANK.legendaire;
+
+/** Tire un proc légendaire adapté au slot (undefined si aucun pour ce slot). */
+export function rollLegendaryProc(rng: () => number, slot: ItemSlot): string | undefined {
+  const pool = LEGENDARY_PROCS.filter((p) => p.slots.includes(slot));
+  if (!pool.length) return undefined;
+  return pool[Math.floor(rng() * pool.length)]!.id;
+}
+/** Métadonnée du proc légendaire d'un objet (undefined si pas légendaire). */
+export function legendaryOf(it: { legendary?: string }): LegendaryProc | undefined {
+  return it.legendary ? LEGENDARY_BY_ID[it.legendary] : undefined;
+}
+/** Ensemble des procs légendaires actifs de l'équipement (pour le combattant). */
+export function aggregateLegendaries(equipped: Equipped): Set<string> {
+  const s = new Set<string>();
+  for (const slot of SLOTS) {
+    const it = equipped[slot];
+    if (it?.legendary) s.add(it.legendary);
+  }
+  const fam = equipped[FAMILIAR_SLOT];
+  if (fam?.legendary) s.add(fam.legendary);
+  return s;
 }
 
 // PLANCHER de magnitude par RANG. Géométrique (ratio 1,166). REFONTE v0.574 : plus de
@@ -674,6 +772,9 @@ export function rollDrop(
   // REFONTE C : tout drop part du NIVEAU 1 (identité pure = rang + affixe). Toute la
   // puissance se construit ensuite à la poussière jusqu'au niveau du joueur.
   const level = 1;
+  // PROC LÉGENDAIRE (Phase 3) : un objet Légendaire+ porte un effet non-scalant (thème du slot).
+  const legendary =
+    RARITY_RANK[rarity] >= LEGENDARY_MIN_RANK ? rollLegendaryProc(rng, slot) : undefined;
   return {
     slot,
     name,
@@ -684,6 +785,7 @@ export function rollDrop(
     effect: chosen, // affixe primaire (multi-affixe selon la rareté, cf. affixCountForRarity)
     ...(effect2 ? { effect2 } : {}),
     ...(effect3 ? { effect3 } : {}),
+    ...(legendary ? { legendary } : {}),
     roll,
   };
 }
@@ -730,6 +832,9 @@ export function rollSetPiece(
   const value = Math.max(1, round1(base * rankRollMult(rarity, roll)));
   const noun = pick(rng, NAMES[slot]);
   const level = 1; // REFONTE C : la pièce de set arrive niv.1 (identité) → à infuser
+  // Une pièce de set Légendaire+ porte AUSSI un proc légendaire (rareté orthogonale au set).
+  const legendary =
+    RARITY_RANK[rarity] >= LEGENDARY_MIN_RANK ? rollLegendaryProc(rng, slot) : undefined;
   return {
     slot,
     name: set ? `${noun} · ${set.name}` : `${noun} ${RARITY_ADJ[rarity]}`,
@@ -739,6 +844,7 @@ export function rollSetPiece(
     baseLevel: level,
     effect: { type: chosenType, value }, // 1 stat COHÉRENTE au set + synergie (bonus 2/3/4 pièces)
     ...(set ? { setId: opts.setId } : {}),
+    ...(legendary ? { legendary } : {}),
     roll,
   };
 }
@@ -1307,6 +1413,8 @@ export function playerWithGear(
   // talent + set + familier) et, avec le multi-frappe, rendait le sustain quasi
   // infini. Borné → build sustain fort mais pas increvable (ticket adab525d).
   const lifesteal = Math.min(0.5, e.lifesteal + (extra.lifesteal ?? 0));
+  // Procs LÉGENDAIRES (non-scalants) portés par l'équipement.
+  const procs = aggregateLegendaries(equipped);
   return {
     name,
     pv: Math.round(base.pv * (1 + maxPvPct)),
@@ -1321,6 +1429,7 @@ export function playerWithGear(
     rage: e.ragePct + (extra.ragePct ?? 0),
     momentum: e.momentumPct + (extra.momentumPct ?? 0),
     thorns: e.thornsPct + (extra.thornsPct ?? 0),
+    ...(procs.size ? { procs } : {}),
   };
 }
 
