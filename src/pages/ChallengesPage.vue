@@ -390,17 +390,16 @@
                 />
               </div>
               <div class="cl-actions">
-                <template v-if="legMode(leg) === 'time'">
-                  <button
-                    v-for="s in [30, 60]"
-                    :key="s"
-                    class="cl-add"
-                    title="Ajouter des secondes de gainage"
-                    @click="doAddSeconds(leg, s)"
-                  >
-                    ＋{{ s }}s
-                  </button>
-                </template>
+                <!-- Mode DURÉE : chrono (Démarrer/Pause → série de la durée réelle). -->
+                <button
+                  v-if="legMode(leg) === 'time'"
+                  class="cl-chrono"
+                  :class="{ running: isChronoOn(leg) }"
+                  title="Chrono : Démarrer puis Pause pour enregistrer la durée"
+                  @click="toggleChrono(leg)"
+                >
+                  {{ isChronoOn(leg) ? '⏸' : '▶' }} {{ chronoDisplay(leg) }}
+                </button>
                 <button v-else class="cl-add" title="Ajouter une série" @click="openSet(leg, 1)">
                   ＋ 1
                 </button>
@@ -487,7 +486,7 @@
 
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>();
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import {
@@ -634,13 +633,50 @@ function saveSet() {
   setOpen.value = false;
   if (before !== 'done' && activeCombo.value.status === 'done') celebrateCombo();
 }
-// Mode DURÉE (gainage) : ajoute directement N secondes (dans le champ reps, pas de poids).
+// Mode DURÉE : ajoute directement N secondes (dans le champ reps, pas de poids).
 function doAddSeconds(leg: ComboLeg, sec: number) {
   if (!activeCombo.value) return;
   const before = activeCombo.value.status;
   comboStore.addSet(activeCombo.value.id, leg.exercise_id, logicalToday(), sec, null, false);
   if (before !== 'done' && activeCombo.value.status === 'done') celebrateCombo();
 }
+// ── Chrono des exos de DURÉE (comme les challenges) : Démarrer → décompte ; Pause →
+// enregistre une série de la durée RÉELLE écoulée. Un seul chrono actif à la fois. ──
+const chronoLegKey = ref<string | null>(null);
+const chronoSec = ref(0);
+const chronoRunning = ref(false);
+let chronoTick: ReturnType<typeof setInterval> | undefined;
+function isChronoOn(leg: ComboLeg): boolean {
+  return chronoRunning.value && chronoLegKey.value === leg.exercise_id;
+}
+function chronoDisplay(leg: ComboLeg): string {
+  const s = chronoLegKey.value === leg.exercise_id ? chronoSec.value : 0;
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function logChrono(legKey: string) {
+  clearInterval(chronoTick);
+  chronoTick = undefined;
+  chronoRunning.value = false;
+  const leg = activeCombo.value?.legs.find((l: ComboLeg) => l.exercise_id === legKey);
+  if (leg && chronoSec.value > 0) doAddSeconds(leg, chronoSec.value);
+  chronoSec.value = 0;
+  chronoLegKey.value = null;
+}
+function toggleChrono(leg: ComboLeg) {
+  if (isChronoOn(leg)) {
+    logChrono(leg.exercise_id);
+    return;
+  }
+  if (chronoLegKey.value && chronoLegKey.value !== leg.exercise_id) logChrono(chronoLegKey.value);
+  chronoLegKey.value = leg.exercise_id;
+  chronoSec.value = 0;
+  chronoRunning.value = true;
+  chronoTick = setInterval(() => (chronoSec.value += 1), 1000);
+}
+onBeforeUnmount(() => {
+  if (chronoLegKey.value) logChrono(chronoLegKey.value);
+  else clearInterval(chronoTick);
+});
 function undoSet(leg: ComboLeg) {
   if (!activeCombo.value) return;
   const sets = legSets(leg);
@@ -758,10 +794,15 @@ function isSetsMode(c: Challenge) {
 function challengeSegs(c: Challenge): { n: number; on: number } {
   if (isSetsMode(c)) {
     const total = c.daily_targets.reduce((a, b) => a + b, 0); // total de séries à faire
-    const done = st(c).totalDone; // séries réellement faites
-    const n = Math.min(30, Math.max(1, total));
-    const on = Math.min(n, Math.round((total ? done / total : 0) * n));
-    return { n, on };
+    // Si le total de séries est connu (> 0) on segmente par SÉRIE ; sinon (daily_targets à 0
+    // pour certains défis Séries) on retombe sur une segmentation par JOURS → jamais 1 seule
+    // cellule continue (ticket 034b714e).
+    if (total > 0) {
+      const done = st(c).totalDone; // séries réellement faites
+      const n = Math.min(30, Math.max(1, total));
+      const on = Math.min(n, Math.round((done / total) * n));
+      return { n, on };
+    }
   }
   const n = Math.min(30, Math.max(1, c.duration_days)); // nb de jours
   const on = Math.min(n, Math.round((st(c).completionPct / 100) * n));
@@ -1355,6 +1396,23 @@ onMounted(async () => {
 .cl-add.neg {
   border-color: var(--d4);
   color: var(--d4);
+}
+/* Chrono d'un exo de durée (Défi 360, liste). */
+.cl-chrono {
+  padding: 6px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.cl-chrono.running {
+  background: var(--accent);
+  color: var(--bg);
 }
 .cl-corr {
   flex: none;
