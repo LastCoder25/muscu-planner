@@ -52,6 +52,27 @@ const CALIB = {
   role: { weak: 0.72, mid: 1, strong: 1.32 } as Record<string, number>,
 } as const;
 
+// ── ATTENTE D'ÉQUIPEMENT (v0.600) — le contenu suppose un joueur ÉQUIPÉ ──
+// Mesuré par simulation (test de calibration) : par rapport au joueur NU de référence,
+// un joueur ÉQUIPÉ de son niveau gagne ~×1,3→2,3 d'OFFENSE (dégâts/frappes/crit) et
+// ~×1,9→3,6 de SURVIE effective (PV via max_pv%, réduction, vol de vie), et cet écart
+// CROÎT avec le niveau (plus d'affixes/rangs débloqués). Sans en tenir compte, un joueur
+// équipé roulait sur du contenu +15 niveaux à 100 % → le SPORT n'était plus le plafond.
+// On calibre donc les monstres contre cette référence ÉQUIPÉE : PV ∝ boost d'offense (le
+// monstre survit aux frappes du joueur), dégâts ∝ boost de survie (il menace ses PV). Le
+// facteur suit le niveau → un joueur reste dans sa ligue (~clear à SON niveau, mur à +8/+10),
+// quel que soit son niveau. C'est l'ancre de l'anti-runaway côté DIFFICULTÉ (le côté DROP
+// est géré par la pyramide de rang centrée niveau).
+export function gearExpect(level: number): { off: number; pv: number } {
+  const L = Math.max(1, level);
+  // Fittés sur la courbe de boost MOYENNÉE (cf. test de calibration) : off ~1,2→2,0,
+  // effPV ~2,5→3,8. La survie (max_pv%/réduction/vol de vie) domine dès le bas niveau.
+  return {
+    off: Math.min(1.8, 1.0 + Math.max(0, L - 8) * 0.011),
+    pv: Math.min(2.3, 1.2 + Math.max(0, L - 8) * 0.022),
+  };
+}
+
 export type MonsterRole = 'weak' | 'mid' | 'strong';
 
 // Offense/tour attendue du joueur de référence (dégâts × frappes × (1+crit)).
@@ -81,8 +102,11 @@ const PROC_MONSTERS: { emoji: string; name: string }[] = [
 export function proceduralMonster(reco: number, role: MonsterRole, seedIdx: number): Monster {
   const f = refFighter(reco);
   const roleMult = CALIB.role[role] ?? 1;
-  const pv = Math.round(refOffensePerRound(f) * CALIB.kpv * roleMult);
-  const damage = Math.round(f.pv * CALIB.kdmg * roleMult);
+  const ge = gearExpect(reco);
+  // PV ∝ boost d'OFFENSE du joueur équipé (survit à ses frappes) ; dégâts ∝ boost de SURVIE
+  // (menace ses PV gonflés). Le contenu suppose un joueur de SON niveau ÉQUIPÉ (cf. gearExpect).
+  const pv = Math.round(refOffensePerRound(f) * CALIB.kpv * roleMult * ge.off);
+  const damage = Math.round(f.pv * CALIB.kdmg * roleMult * ge.pv);
   const skin =
     PROC_MONSTERS[
       ((seedIdx % PROC_MONSTERS.length) + PROC_MONSTERS.length) % PROC_MONSTERS.length
@@ -231,13 +255,17 @@ const BOSS_CALIB = { kpv: 11, kdmg: 0.28 } as const;
 // niv.10, ~1,7× au 50, ~2,7× au 80). Un boss dérivé du combattant NU était donc
 // trivialisé (100 % équipé). On scale ses PV/dégâts par ce facteur (≈ gearRatio^0,72)
 // → boss ~50-60 % ÉQUIPÉ au palier (challenge réel, télégraphié par le winPct live).
-function bossGearMult(level: number): number {
-  // ADOUCI (2026‑08‑18) : 0.006L+0.0001L² → 0.004L+0.00006L². Les boss de fin étaient
-  // un MUR de puissance unique (chaîne franchie d'un coup) ; une rampe plus douce en
-  // fait des checkpoints graduels, beatables plus près de leur palier avec du gear
-  // générique (le winPct live prévient toujours si c'est perdu d'avance).
+// ATTENTE D'ÉQUIPEMENT des BOSS (v0.600) — un boss est un combat SOLO (pas d'attrition
+// de trio), donc plus « single-target burst » : la survie du joueur (max_pv%/vol de vie)
+// pèse encore plus. On calibre plus RAIDE que les donjons (gearExpect) pour que le boss
+// challenge un joueur équipé à SON palier (~55-70 %) et MURE un joueur sous-niveau. Appliqué
+// UNIFORMÉMENT à tous les boss (main + procéduraux) dans bosses.ts (BOSSES.map).
+export function bossGearExpect(level: number): { off: number; pv: number } {
   const L = Math.max(1, level);
-  return 1 + 0.004 * L + 0.00006 * L * L;
+  return {
+    off: Math.min(3.4, 1.0 + Math.max(0, L - 5) * 0.035),
+    pv: Math.min(7, 1.0 + Math.max(0, L - 5) * 0.1),
+  };
 }
 
 const BOSS_SKINS: { emoji: string; name: string }[] = [
@@ -306,9 +334,10 @@ export function proceduralSet(milestone: number, index: number): ItemSet {
 export function proceduralBoss(milestone: number, index: number): MilestoneBoss {
   const f = refFighter(milestone);
   const skin = BOSS_SKINS[index % BOSS_SKINS.length]!;
-  const g = bossGearMult(milestone); // le boss se joue équipé → on scale au gear du palier
-  const pv = Math.round(refOffensePerRound(f) * BOSS_CALIB.kpv * g);
-  const damage = Math.round(f.pv * BOSS_CALIB.kdmg * g);
+  // Baseline NU (refFighter) ; l'attente d'équipement (bossGearExpect) est appliquée
+  // UNIFORMÉMENT à tous les boss dans bosses.ts (BOSSES.map) → main + proc cohérents.
+  const pv = Math.round(refOffensePerRound(f) * BOSS_CALIB.kpv);
+  const damage = Math.round(f.pv * BOSS_CALIB.kdmg);
   return {
     id: `proc_boss_${milestone}`,
     name: skin.name,

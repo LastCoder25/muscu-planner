@@ -5,7 +5,7 @@
 // rareté 0..1) → les donjons durs récompensent mieux.
 import type { DungeonFoe } from '@/lib/combat';
 import { MONSTERS } from '@/data/monsters';
-import { PROCEDURAL } from '@/lib/proceduralContent';
+import { PROCEDURAL, gearExpect } from '@/lib/proceduralContent';
 
 export type StatKey = 'puissance' | 'endurance' | 'agilite';
 
@@ -269,26 +269,28 @@ export const DUNGEONS: Dungeon[] = [...HAND_DUNGEONS, ...PROCEDURAL.dungeons].ma
 // difficulté sur un build ÉQUIPÉ-à-son-niveau. (Le contenu NU reste calibré à part, cf.
 // proceduralContent.test — la rampe est la couche gear-gated live appliquée par dungeonFoes.)
 export function dungeonDifficultyMult(recoLevel: number): number {
-  // EARLY (amorçage) : ×1 au 1er donjon → ×1.6 vers reco 5 (assez pour rendre le gear utile,
-  // pas assez pour bloquer un build équipé — l'ancien ×2 rendait le early injouable même
-  // équipé, cf. bilan). DEEP : monte régulièrement dès reco 20 puis PLATEAU ~×8, calibré
-  // par sweep pour maintenir ~70 % de clear d'un build ÉQUIPÉ-à-son-niveau (le gear scale
-  // ~×8 sur le nu en fin de jeu → sans ça, le contenu profond était trivial à 100 %).
-  const early = 1 + Math.min(0.5, Math.max(0, recoLevel - 2) * 0.15);
-  const deep = Math.min(6.5, Math.max(0, recoLevel - 20) * 0.145);
-  return early + deep;
+  // EARLY (amorçage) UNIQUEMENT : ×1 au 1er donjon → ×1.5 vers reco 5 (assez pour rendre
+  // le gear utile sans bloquer un build équipé). L'ancienne composante « deep » (×8) qui
+  // grossissait la difficulté en profondeur est REMPLACÉE par l'attente d'équipement
+  // `gearExpect` (v0.600), appliquée aux PV/dégâts dans dungeonFoes → même modèle que le
+  // contenu procédural/boss/labyrinthe (offense pour les PV, survie pour les dégâts).
+  return 1 + Math.min(0.5, Math.max(0, recoLevel - 2) * 0.15);
 }
 
-/** Convertit les ids de monstres d'un donjon en adversaires pour le moteur (PV/dégâts
- *  mis à l'échelle par la rampe gear-gated ; l'or reste inchangé). */
+/** Convertit les ids de monstres d'un donjon en adversaires pour le moteur. PV/dégâts mis
+ *  à l'échelle par (1) la rampe d'amorçage `dungeonDifficultyMult` et (2) l'ATTENTE
+ *  D'ÉQUIPEMENT `gearExpect` (PV ∝ boost d'offense du joueur équipé, dégâts ∝ boost de
+ *  survie) → un joueur SOUS-niveau est muré (le sport reste le plafond). L'or est inchangé. */
 export function dungeonFoes(d: Dungeon): DungeonFoe[] {
-  const mult = dungeonDifficultyMult(d.recoLevel);
+  const early = dungeonDifficultyMult(d.recoLevel);
+  const ge = gearExpect(d.recoLevel);
+  const pvMult = early * ge.off;
+  const dmgMult = early * ge.pv;
   return d.monsterIds
     .map((id) => MONSTERS.find((m) => m.id === id))
     .filter((m): m is (typeof MONSTERS)[number] => !!m)
     .map((m) => ({
-      combatant:
-        mult === 1 ? m : { ...m, pv: Math.round(m.pv * mult), damage: Math.round(m.damage * mult) },
+      combatant: { ...m, pv: Math.round(m.pv * pvMult), damage: Math.round(m.damage * dmgMult) },
       gold: m.gold,
     }));
 }

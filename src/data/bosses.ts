@@ -12,7 +12,7 @@
 // dégâts élevés = check de SURVIE (pas un mur de PV qui tuerait le coureur).
 // Distinct du boss communautaire hebdo (world boss).
 import type { Combatant } from '@/lib/combat';
-import { PROCEDURAL } from '@/lib/proceduralContent';
+import { PROCEDURAL, bossGearExpect } from '@/lib/proceduralContent';
 import { DUNGEONS, dungeonGold } from '@/data/dungeons';
 
 export interface MilestoneBoss {
@@ -154,11 +154,23 @@ const BOSS_ENERGY_CAP = 48;
 // Boss complets = écrits à la main (paliers 5→25) + PROCÉDURAUX (30→100). L'or
 // statique/procédural est REMPLACÉ par la valeur dérivée du donjon du palier, et le
 // coût d'énergie est plafonné.
-export const BOSSES: MilestoneBoss[] = [...HAND_BOSSES, ...PROCEDURAL.bosses].map((b) => ({
-  ...b,
-  gold: bossGoldForLevel(b.unlockLevel),
-  energyCost: Math.min(BOSS_ENERGY_CAP, b.energyCost),
-}));
+export const BOSSES: MilestoneBoss[] = [...HAND_BOSSES, ...PROCEDURAL.bosses].map((b) => {
+  // ATTENTE D'ÉQUIPEMENT (v0.600) : un boss se joue ÉQUIPÉ → on scale PV (∝ boost d'offense)
+  // et dégâts (∝ boost de survie) du joueur du palier, UNIFORMÉMENT (main + proc). Sans ça,
+  // un joueur SOUS-niveau battait des boss très au-dessus de sa ligue (le sport n'était plus
+  // le plafond). Baseline early ×1 (boss d'amorçage jouables nu), montée avec le palier.
+  const ge = bossGearExpect(b.unlockLevel);
+  return {
+    ...b,
+    combatant: {
+      ...b.combatant,
+      pv: Math.round(b.combatant.pv * ge.off),
+      damage: Math.round(b.combatant.damage * ge.pv),
+    },
+    gold: bossGoldForLevel(b.unlockLevel),
+    energyCost: Math.min(BOSS_ENERGY_CAP, b.energyCost),
+  };
+});
 
 // Coût en PIERRES D'INVOCATION 🔮 d'une tentative de boss (win ou lose). Croît avec
 // le palier → tenter un boss très au-dessus de sa ligue coûte cher (soft-gate

@@ -491,7 +491,7 @@ import { rollChestGrade, pickLabyTrap, type ChestGrade, type LabyTrap } from '@/
 import { talentEffects } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
-import { refFighter } from '@/lib/proceduralContent';
+import { refFighter, gearExpect } from '@/lib/proceduralContent';
 import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
 import ChestIcon from '@/components/ChestIcon.vue';
@@ -620,10 +620,11 @@ function estimMon(refMon: Combatant, isBoss: boolean, depth: number, level: numb
   const P = refMon.pv;
   const d = 0.85 + 0.55 * depth;
   const lowEase = 0.5 + 0.5 * Math.min(1, level / 18);
+  const ge = gearExpect(level); // même attente d'équipement que makeMonster (cohérence estimation)
   return {
     name: 'm',
-    pv: Math.max(10, Math.round(pTurn * (isBoss ? 5.5 : 2.8) * d)),
-    damage: Math.max(1, Math.round(P * (isBoss ? 0.07 : 0.05) * d * lowEase)),
+    pv: Math.max(10, Math.round(pTurn * (isBoss ? 5.5 : 2.8) * d * ge.off)),
+    damage: Math.max(1, Math.round(P * (isBoss ? 0.07 : 0.05) * d * lowEase * ge.pv)),
     crit: 0.05 + 0.03 * depth,
     dodge: 0.05 + 0.02 * depth,
     initiative: isBoss ? 14 : 8,
@@ -877,8 +878,12 @@ function makeMonster(isBoss: boolean, depth: number, foe: LabyFoe): Combatant {
   // variance rendaient l'attrition mortelle (0 % au niveau conseillé). lowEase adoucit les
   // dégâts jusqu'à ~L18 (0,5 à L1 → 1,0 à L18+). Au-delà, calibration inchangée.
   const lowEase = 0.5 + 0.5 * Math.min(1, palierLevel.value / 18);
-  const basePv = pTurn * (isBoss ? 5.5 : 2.8) * d;
-  const baseDmg = P * (isBoss ? 0.07 : 0.05) * d * lowEase;
+  // Attente d'équipement (v0.600) : le Labyrinthe est une attrition (série de combats) →
+  // même calibration ÉQUIPÉE que les donjons (gearExpect). Un joueur sous-niveau à un palier
+  // profond (ex. astral au niv.20) est ainsi muré : le sport reste le plafond.
+  const ge = gearExpect(palierLevel.value);
+  const basePv = pTurn * (isBoss ? 5.5 : 2.8) * d * ge.off;
+  const baseDmg = P * (isBoss ? 0.07 : 0.05) * d * lowEase * ge.pv;
   return {
     name: foe.name,
     pv: Math.max(10, Math.round(basePv * a.pvMult)),

@@ -79,6 +79,12 @@ export const COMBAT = {
   varianceSpan: 0.3,
   maxRounds: 400, // garde-fou anti-boucle (multi-frappe → combats plus courts en tours)
   dungeonHealPct: 0.15, // PV régénérés entre deux combats d'un donjon (% du max)
+  // Vol de vie : PLAFOND de soin par TOUR (% des PV max de l'attaquant). Le vol de vie
+  // s'applique par frappe et le multi-frappe (Agilité) le démultipliait → un build pouvait
+  // se soigner à FOND chaque tour = mur increvable qu'aucune calibration de dégâts monstre
+  // ne pouvait franchir (le sport n'était plus le plafond). Borné ici → le sustain reste fort
+  // mais un monstre de ta ligue finit par percer (v0.600, ticket anti-runaway difficulté).
+  lifestealRoundCap: 0.08,
   // Effets signature (conditionnels) — seuils & plafond.
   executeThreshold: 0.25, // « Exécution » active si l'ennemi est sous 25 % PV
   rageThreshold: 0.3, // « Rage » active si le joueur est sous 30 % PV
@@ -217,6 +223,17 @@ export function simulateCombat(
     const atk = turn === 'player' ? player : monster;
     const def = turn === 'player' ? monster : player;
     const hits = Math.max(1, strikeCount(atk));
+    // Soin de vol de vie de CE tour, plafonné à une fraction des PV max de l'attaquant
+    // (empêche le multi-frappe de rendre le sustain infini — cf. COMBAT.lifestealRoundCap).
+    let roundHeal = 0;
+    const healCap = Math.round(
+      (turn === 'player' ? maxPPv : monsterMaxPv) * COMBAT.lifestealRoundCap,
+    );
+    const gainHeal = (raw: number): number => {
+      const h = Math.max(0, Math.min(raw, healCap - roundHeal));
+      roundHeal += h;
+      return h;
+    };
     for (let h = 0; h < hits && pPv > 0 && mPv > 0; h++) {
       if (turn === 'player') {
         // ── Attaque du JOUEUR ──
@@ -240,10 +257,10 @@ export function simulateCombat(
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
         mPv = Math.max(0, mPv - dmg);
         pStacks++; // Déferlante : coup porté
-        if (atk.lifesteal) pPv = Math.min(maxPPv, pPv + Math.round(dmg * atk.lifesteal));
-        // Vampirisme : les crits soignent.
+        if (atk.lifesteal) pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * atk.lifesteal)));
+        // Vampirisme : les crits soignent (compte dans le plafond de soin du tour).
         if (crit && has('vampiric'))
-          pPv = Math.min(maxPPv, pPv + Math.round(dmg * COMBAT.vampiricHealPct));
+          pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * COMBAT.vampiricHealPct)));
         // Bourreau : exécute un ennemi tombé très bas.
         if (mPv > 0 && has('executioner') && mPv / monsterMaxPv < COMBAT.executeKillThreshold)
           mPv = 0;
@@ -282,7 +299,8 @@ export function simulateCombat(
           pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * COMBAT.secondWindHealPct));
           secondWindReady = false;
         }
-        if (atk.lifesteal) mPv = Math.min(monster.pv, mPv + Math.round(dmg * atk.lifesteal));
+        if (atk.lifesteal)
+          mPv = Math.min(monster.pv, mPv + gainHeal(Math.round(dmg * atk.lifesteal)));
         // Épines : le joueur (défenseur) renvoie une part des dégâts reçus.
         if (def.thorns && dmg > 0)
           mPv = Math.max(0, mPv - Math.max(1, Math.round(dmg * def.thorns)));

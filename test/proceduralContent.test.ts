@@ -79,16 +79,18 @@ describe('procedural — calibration (clear ~systématique au reco)', () => {
     for (let s = 0; s < n; s++) if (simulateDungeon(p, foes, { seed: s * 211 + 5 }).cleared) c++;
     return c / n;
   }
-  it('un build équilibré nu clear ~systématiquement (≥ 78 %) à son recoLevel (25→94)', () => {
-    // Référence NUE : un joueur équipé fait nettement mieux. La courbe vise ~85-95 %.
-    for (const reco of [25, 34, 46, 58, 70, 82, 94]) {
-      expect(clearPct(reco, reco)).toBeGreaterThanOrEqual(0.78);
+  it('GEAR-GATÉ (v0.600) : un build NU ne clear PLUS à son reco — il faut de l’équipement', () => {
+    // Le contenu suppose désormais un joueur ÉQUIPÉ (gearExpect appliqué à proceduralMonster) :
+    // un joueur NU de son niveau est GATÉ (clear bas). C'est l'ancre de « sport = plafond »
+    // côté difficulté — le gear fait la différence, pas le simple niveau. (Un joueur équipé de
+    // son niveau clear ~65-85 %, cf. harnais de calibration hors-suite.)
+    for (const reco of [25, 40, 60, 85]) {
+      expect(clearPct(reco, reco)).toBeLessThan(0.5);
     }
   });
-  it('mur en début de courbe : bien plus dur 2 niveaux en dessous', () => {
-    // Au bas de la courbe (variation de puissance encore marquée sur 2 niveaux).
-    expect(clearPct(25, 23)).toBeLessThan(clearPct(25, 25));
-    expect(clearPct(34, 32)).toBeLessThan(clearPct(34, 34));
+  it('mur sous-niveau : plus dur 2 niveaux en dessous (monotone)', () => {
+    expect(clearPct(25, 23)).toBeLessThanOrEqual(clearPct(25, 25));
+    expect(clearPct(34, 32)).toBeLessThanOrEqual(clearPct(34, 34));
   });
 });
 
@@ -109,10 +111,10 @@ describe('procedural — boss de palier + sets', () => {
     const s = proceduralSet(30, 0);
     expect(s.tiers.map((t) => t.pieces)).toEqual([2, 3, 4]);
   });
-  it('boss calibré ÉQUIPÉ (bossGearMult) : très dur NU, PV/dégâts croissants', () => {
-    // Les boss se jouent équipés → ils sont calibrés contre le gear du palier
-    // (bossGearMult) donc TRÈS durs nu (simulation globale 2026‑08‑15). On vérifie
-    // juste la cohérence : stats strictement croissantes avec le palier.
+  it('proceduralBoss : baseline NU croissante (l’attente d’équipement est appliquée dans BOSSES)', () => {
+    // v0.600 : proceduralBoss rend une baseline NUE (refFighter) ; l'attente d'équipement
+    // (bossGearExpect) est appliquée UNIFORMÉMENT dans bosses.ts (BOSSES.map). On vérifie ici
+    // la cohérence du générateur : stats strictement croissantes avec le palier, dur nu.
     const b30 = proceduralBoss(30, 0).combatant;
     const b60 = proceduralBoss(60, 0).combatant;
     const b100 = proceduralBoss(100, 0).combatant;
