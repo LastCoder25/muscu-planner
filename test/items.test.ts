@@ -13,6 +13,7 @@ import {
   RARITY_MULT,
   RARITY_RANK,
   affixCountForRarity,
+  rollItemLevel,
   rollLegendaryProc,
   legendaryOf,
   aggregateLegendaries,
@@ -204,10 +205,11 @@ const item = (over: Partial<Item> & Pick<Item, 'slot' | 'effect'>): Item => ({
 });
 
 describe('niveaux d’objet', () => {
-  it('effectiveValue grandit avec le niveau (+5 %/niv)', () => {
+  it('effectiveValue grandit avec le niveau de l’objet (ilvl, +0,6 %/niv)', () => {
     const eff = { type: 'damage_pct' as const, value: 10 };
     expect(effectiveValue(eff, 1)).toBe(10);
-    expect(effectiveValue(eff, 6)).toBe(Math.round(10 * (1 + 5 * 0.05))); // 13
+    expect(effectiveValue(eff, 51)).toBe(Math.round(10 * (1 + 50 * 0.006))); // 13
+    expect(effectiveValue(eff, 100)).toBeGreaterThan(effectiveValue(eff, 50)); // monotone
   });
   it('upgradeCost croît avec le niveau ET le rang', () => {
     expect(upgradeCost(1, 'commun')).toBeLessThan(upgradeCost(5, 'commun'));
@@ -324,14 +326,16 @@ describe('rollDrop', () => {
   it('rng haut → pas de drop', () => {
     expect(rollDrop(() => 0.99, { cleared: true, defeated: 3 })).toBeNull();
   });
-  it('drop toujours NIVEAU 1 (refonte C), rang plafonné (anti-runaway)', () => {
+  it('rang plafonné (anti-runaway) + ilvl cohérent (pyramide bornée)', () => {
     let d: Item | null = null;
     for (let s = 1; d == null && s <= 50; s++)
       d = rollDrop(mulberry32(s), { cleared: true, defeated: 3, level: 6, playerLevel: 6 });
     expect(d).not.toBeNull();
-    expect(d!.level).toBe(1);
-    expect(d!.baseLevel).toBe(1);
     expect(RARITY_RANK[d!.rarity]).toBeLessThanOrEqual(Math.min(9, rankCeilingForLevel(6) + 2));
+    // ilvl = pyramide centrée sur min(6,6)=6, bornée à +9 max (luck) et floorée à 1.
+    expect(d!.level).toBeGreaterThanOrEqual(1);
+    expect(d!.level).toBeLessThanOrEqual(6 + 9);
+    expect(d!.baseLevel).toBe(d!.level);
   });
   it('nombre d’affixes = affixCountForRarity (multi-affixe, Phase 2)', () => {
     for (let s = 1; s <= 200; s++) {
@@ -345,13 +349,19 @@ describe('rollDrop', () => {
       expect(new Set(types).size).toBe(types.length);
     }
   });
-  it('tout drop part du niveau 1, quel que soit le niveau du contenu', () => {
+  it('ilvl = pyramide centrée sur min(contenu, joueur), bornée', () => {
     for (const level of [1, 8, 20, 40]) {
       for (let s = 1; s <= 12; s++) {
-        const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level });
+        const d = rollDrop(mulberry32(s), {
+          cleared: true,
+          defeated: 1,
+          level,
+          playerLevel: level,
+        });
         if (d) {
-          expect(d.level).toBe(1);
-          expect(d.baseLevel).toBe(1);
+          expect(d.level).toBeGreaterThanOrEqual(1);
+          expect(d.level).toBeLessThanOrEqual(level + 9); // borne haute (luck max)
+          expect(d.baseLevel).toBe(d.level);
         }
       }
     }
@@ -468,11 +478,12 @@ describe('sets d’équipement (voie)', () => {
       setEffects(low, 'berserker').lifesteal,
     );
   });
-  it('rollSetPiece produit toujours une pièce du set, au NIVEAU 1 (refonte C)', () => {
-    const piece = rollSetPiece(() => 0.3, { setId: BERS, level: 10 });
+  it('rollSetPiece produit toujours une pièce du set (ilvl pyramide)', () => {
+    const piece = rollSetPiece(() => 0.3, { setId: BERS, level: 10, playerLevel: 10 });
     expect(piece.setId).toBe(BERS);
-    expect(piece.level).toBe(1);
-    expect(piece.baseLevel).toBe(1);
+    expect(piece.level).toBeGreaterThanOrEqual(1);
+    expect(piece.level).toBeLessThanOrEqual(10 + 9); // ilvl borné
+    expect(piece.baseLevel).toBe(piece.level);
     expect(piece.name).toContain('Berserker');
     expect(ITEM_SETS.some((s) => s.id === BERS)).toBe(true);
   });
@@ -629,6 +640,52 @@ describe('enchant — vestige de migration (moteur retiré, ticket 7acb1e7c)', (
     expect(enchantMult(3)).toBeCloseTo(1.99, 2); // zone sûre garantie ≈ ×2 (baseline)
     expect(enchantMult(5)).toBeGreaterThan(enchantMult(3));
     expect(enchantMult(ENCHANT_MAX + 5)).toBe(enchantMult(ENCHANT_MAX)); // clampé
+  });
+});
+
+describe('niveau d’objet — 3ᵉ axe de magnitude (v0.583)', () => {
+  it('rollItemLevel : pyramide centrée sur le niveau, bornée (jamais loin au-dessus)', () => {
+    const center = 30;
+    let below = 0;
+    let above = 0;
+    let hiMax = 0;
+    const N = 4000;
+    for (let s = 1; s <= N; s++) {
+      const il = rollItemLevel(mulberry32(s * 7 + 1), center, 0.3);
+      expect(il).toBeGreaterThanOrEqual(1);
+      expect(il).toBeLessThanOrEqual(center + 9); // borne haute dure
+      if (il < center) below++;
+      if (il > center) above++;
+      hiMax = Math.max(hiMax, il);
+    }
+    expect(below).toBeGreaterThan(0); // fourrage (sous ton niveau)
+    expect(above).toBeGreaterThan(0); // chance (au-dessus)
+    expect(below).toBeGreaterThan(above); // traîne basse plus large que la pointe haute
+  });
+  it('la luck (magic find) épaissit la pointe HAUTE de l’ilvl', () => {
+    const center = 30;
+    const meanIl = (luck: number) => {
+      let sum = 0;
+      const N = 3000;
+      for (let s = 1; s <= N; s++) sum += rollItemLevel(mulberry32(s * 11 + 1), center, luck);
+      return sum / N;
+    };
+    expect(meanIl(1)).toBeGreaterThan(meanIl(0));
+  });
+  it('un objet de MÊME rareté/jet mais d’ilvl supérieur donne une stat plus forte', () => {
+    const mk = (level: number): Item => ({
+      id: 'x',
+      slot: 'weapon',
+      name: 'Lame',
+      emoji: '⚔️',
+      rarity: 'legendaire',
+      level,
+      baseLevel: level,
+      effect: { type: 'damage_pct', value: 20 },
+    });
+    const low = aggregateEffects({ weapon: mk(20) }).damagePct;
+    const high = aggregateEffects({ weapon: mk(60) }).damagePct;
+    expect(high).toBeGreaterThan(low); // ilvl plus haut = plus fort (re-farm profond = upgrade)
   });
 });
 

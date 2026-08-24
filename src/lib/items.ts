@@ -125,8 +125,14 @@ export function rollJet(roll: number | undefined): number {
 // L'effet grandit de +5 % de la base par niveau au-dessus de 1. Pente VOLONTAIREMENT
 // douce (2026‑08‑08) : le gear reste un GATE progressif (plus j'ai de bon gear,
 // plus mon % monte) et n'explose pas en multiplicateur ×2 qui trivialise les boss.
+// NIVEAU D'OBJET = 3ᵉ axe de magnitude (v0.583) : re-farmer plus profond donne un objet
+// de MÊME rareté mais plus fort. `k = 0,006` (×1,6 au niv.100) → assez fort pour qu'un
+// donjon ~10-15 niveaux plus profond batte un écart de jet (upgrade réel), assez borné
+// pour un recalibrage modéré. Le niveau d'un drop = `min(niveau perso, niveau donjon)`
+// tiré sur une PYRAMIDE (cf. rollItemLevel) → chance d'un ilvl un peu au-dessus.
+export const LEVEL_MULT_K = 0.006;
 export function itemLevelMult(level: number): number {
-  return 1 + Math.max(0, level - 1) * 0.05;
+  return 1 + Math.max(0, level - 1) * LEVEL_MULT_K;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -703,6 +709,21 @@ export function rollTier(
   return { rank: RANK_ORDER[idx]!, roll: rng() }; // roll = jet (chasse au meilleur)
 }
 
+// NIVEAU D'OBJET = pyramide centrée sur `center = min(niveau perso, niveau donjon)` (v0.583).
+// Traîne BASSE (fourrage, objets un peu sous ton niveau), pointe HAUTE chanceuse dopée par la
+// `luck`/magic find (ilvl un peu AU-DESSUS = beau drop), BORNÉE (anti-runaway : jamais loin
+// au-dessus de ton niveau → le multiplicateur de niveau reste sous contrôle).
+const ILVL_LO_WIDTH = 2.5; // écart-type bas (fourrage)
+export function rollItemLevel(rng: () => number, center: number, luck = 0): number {
+  const l = Math.min(1, Math.max(0, luck));
+  const g = gaussian(rng);
+  const hiWidth = 1.2 + l * 2.5; // pointe haute (chance), épaissie par le magic find
+  const raw = center + (g >= 0 ? g * hiWidth : g * ILVL_LO_WIDTH);
+  const hi = center + Math.round(4 + l * 5); // borne haute : +4 (luck 0) → +9 (luck 1)
+  const lo = Math.max(1, center - 6);
+  return Math.max(lo, Math.min(hi, Math.round(raw)));
+}
+
 /** Bande de rang TYPIQUE d'un contenu (≈ 10e→90e centile de la cloche) → affiche « D → A ».
  *  Déterministe (analytique, pas de rng). La qualité affichée est indicative (roll continu). */
 export function dropBand(
@@ -777,7 +798,11 @@ export function rollDrop(
   if (rng() >= chance) return null;
 
   const slot = pick(rng, SLOTS);
-  const lvl = cappedDropLevel(opts.level ?? 1, opts.playerLevel);
+  // NIVEAU D'OBJET (ilvl) = PYRAMIDE centrée sur min(niveau donjon, niveau perso) → mostly
+  // à ton niveau, parfois un peu au-dessus (chance, dopée magic find), borné (anti-runaway).
+  const ilvlCenter =
+    opts.playerLevel != null ? Math.min(opts.level ?? 1, opts.playerLevel) : (opts.level ?? 1);
+  const lvl = rollItemLevel(rng, ilvlCenter, opts.luck ?? 0);
   // RANG = PYRAMIDE centrée sur min(niveau contenu, niveau joueur) : le pic est ton rang,
   // traîne basse (fourrage) et pointe haute rare (jackpot d'un rang au-dessus) dopée par la
   // `luck` (profondeur/fiole) et `rollFloor` (Autel). Un bas-niveau en donjon profond reste
@@ -801,7 +826,9 @@ export function rollDrop(
   const affixCount = affixCountForRarity(rarity);
   const affixes: ItemEffect[] = [];
   for (let a = 0; a < affixCount; a++) {
-    const p = tierPool(TIER_ORDER[a]!, lvl);
+    // Gate des affixes = ton NIVEAU RÉEL (ilvlCenter), pas l'ilvl chanceux → un drop lucky
+    // gagne de la MAGNITUDE (levelMult), pas des affixes exotiques hors de ta ligue.
+    const p = tierPool(TIER_ORDER[a]!, ilvlCenter);
     if (!p.length) continue; // tier vide (ne devrait pas arriver) → on saute cet affixe
     const type = pick(rng, p);
     affixes.push({ type, value: rollValue(type) });
@@ -815,9 +842,10 @@ export function rollDrop(
   const name = sigAffix
     ? pick(rng, SIGNATURE_NAMES[sigAffix.type]!)
     : `${pick(rng, NAMES[slot])} ${RARITY_ADJ[rarity]}`;
-  // REFONTE C : tout drop part du NIVEAU 1 (identité pure = rang + affixe). Toute la
-  // puissance se construit ensuite à la poussière jusqu'au niveau du joueur.
-  const level = 1;
+  // NIVEAU D'OBJET (v0.583) = ilvl tiré ci-dessus → 3ᵉ axe de magnitude (itemLevelMult).
+  // La valeur des affixes reste level-indépendante ; le multiplicateur de niveau est appliqué
+  // en aval (aggregateEffects/effectiveValue) → un même objet à ilvl plus haut est plus fort.
+  const level = lvl;
   // PROC LÉGENDAIRE (Phase 3) : un objet Légendaire+ porte un effet non-scalant (thème du slot).
   const legendary =
     RARITY_RANK[rarity] >= LEGENDARY_MIN_RANK ? rollLegendaryProc(rng, slot) : undefined;
@@ -877,7 +905,9 @@ export function rollSetPiece(
   const base = EFFECT_BASE[chosenType] ?? 8;
   const value = Math.max(1, round1(base * rankRollMult(rarity, roll)));
   const noun = pick(rng, NAMES[slot]);
-  const level = 1; // REFONTE C : la pièce de set arrive niv.1 (identité) → à infuser
+  // NIVEAU D'OBJET (ilvl) de la pièce de set = pyramide centrée sur min(palier, perso).
+  const setCenter = opts.playerLevel != null ? Math.min(opts.level, opts.playerLevel) : opts.level;
+  const level = rollItemLevel(rng, setCenter, opts.luck ?? 0);
   // Une pièce de set Légendaire+ porte AUSSI un proc légendaire (rareté orthogonale au set).
   const legendary =
     RARITY_RANK[rarity] >= LEGENDARY_MIN_RANK ? rollLegendaryProc(rng, slot) : undefined;
@@ -1421,13 +1451,12 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
   for (const slot of SLOTS) {
     const it = equipped[slot];
     if (!it) continue;
-    // OBJETS : magnitude 100 % définie par le DROP (rang × qualité, déjà bakée dans
-    // effect.value). Plus d'axe enchant (retiré, ticket 7acb1e7c) — les objets sont des
-    // drops purs. Valeur PRÉCISE (float, pas d'arrondi par objet) → les petits gains de
-    // qualité (+2,5 %/★) comptent vraiment dans la puissance (ticket 71dfd9da).
-    applyEffect(a, it.effect.type, it.effect.value / 100);
-    if (it.effect2) applyEffect(a, it.effect2.type, it.effect2.value / 100);
-    if (it.effect3) applyEffect(a, it.effect3.type, it.effect3.value / 100);
+    // OBJETS : magnitude = valeur bakée (rareté × jet) × MULTIPLICATEUR DE NIVEAU (ilvl,
+    // v0.583) → un même objet farmé plus profond est plus fort. Valeur PRÉCISE (float).
+    const lm = itemLevelMult(it.level);
+    applyEffect(a, it.effect.type, (it.effect.value * lm) / 100);
+    if (it.effect2) applyEffect(a, it.effect2.type, (it.effect2.value * lm) / 100);
+    if (it.effect3) applyEffect(a, it.effect3.type, (it.effect3.value * lm) / 100);
   }
   // Familier (slot parallèle, hors SLOTS) : magnitude bakée (grade × qualité, re-scalée
   // à l'infusion). Pas d'enchant non plus.

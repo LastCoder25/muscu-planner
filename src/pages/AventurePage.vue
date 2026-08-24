@@ -688,6 +688,7 @@
                 <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
                   RARITY_LABEL[char.row.equipped[slot]!.rarity]
                 }}</span>
+                <span class="gpill lvl">niv {{ char.row.equipped[slot]!.level }}</span>
                 <span v-if="char.row.equipped[slot]!.setId" class="gpill set" title="Pièce de set"
                   >🧩</span
                 >
@@ -844,6 +845,7 @@
                     <!-- Jet porté par l'icône (badge bas) + les lignes de comparaison ci-dessous ;
                          plus de badge de qualité redondant à côté du rang (ticket UI). -->
                     <span class="ii-dot">·</span> {{ SLOT_LABEL[it.slot] }}
+                    <span class="ii-dot">·</span> niv {{ it.level }}
                     <span v-if="it.setId" class="gpill set">🧩 Set</span>
                   </div>
                   <!-- Comparaison : rang + qualité + effet, cet objet vs l'équipé (ticket 50f593a2). -->
@@ -1617,7 +1619,9 @@
                 title="Pureté (jet de qualité, 100 % = parfait)"
                 >{{ itemQuality(inspectItem) }}% pureté</span
               >
-              <span class="insp-slot">· {{ SLOT_LABEL[inspectItem.slot] }}</span>
+              <span class="insp-slot"
+                >· {{ SLOT_LABEL[inspectItem.slot] }} · niv {{ inspectItem.level }}</span
+              >
             </div>
           </div>
         </div>
@@ -2208,6 +2212,8 @@ import {
   rollJet,
   legendaryOf,
   magicFindLuck,
+  itemLevelMult,
+  round1,
   sellValue,
   isFamiliar,
   FAMILIAR_SLOT,
@@ -2317,10 +2323,17 @@ function mfLuck(): number {
 // Détail d'un objet (clic sur un item équipé → modale d'inspection).
 const inspectItem = ref<Item | null>(null);
 // Affixes (1→3) d'un objet, en lignes séparées pour le détail.
+// Valeur d'un affixe AFFICHÉE = valeur bakée × multiplicateur de niveau de l'objet (ilvl).
+function affixText(
+  it: { level: number },
+  e: { type: Parameters<typeof effectLabelFor>[0]; value: number },
+): string {
+  return effectLabelFor(e.type, round1(e.value * itemLevelMult(it.level)));
+}
 function itemAffixLines(it: Item): string[] {
-  const lines = [effectLabelFor(it.effect.type, it.effect.value)];
-  if (it.effect2) lines.push(effectLabelFor(it.effect2.type, it.effect2.value));
-  if (it.effect3) lines.push(effectLabelFor(it.effect3.type, it.effect3.value));
+  const lines = [affixText(it, it.effect)];
+  if (it.effect2) lines.push(affixText(it, it.effect2));
+  if (it.effect3) lines.push(affixText(it, it.effect3));
   return lines;
 }
 // Rang d'objet (G..SSS) → intensité d'animation (5 crans de GameFx). Les hauts rangs
@@ -3619,9 +3632,9 @@ function bossLockReason(b: MilestoneBoss): string {
 function itemEffects(it: Omit<Item, 'id'>): string {
   // OBJETS ET FAMILIERS : magnitude 100 % définie par le drop (grade × qualité, bakée
   // dans effect.value) → libellé direct, 1 décimale (la qualité reste visible, #6).
-  const parts = [effectLabelFor(it.effect.type, it.effect.value)];
-  if (it.effect2) parts.push(effectLabelFor(it.effect2.type, it.effect2.value));
-  if (it.effect3) parts.push(effectLabelFor(it.effect3.type, it.effect3.value));
+  const parts = [affixText(it, it.effect)];
+  if (it.effect2) parts.push(affixText(it, it.effect2));
+  if (it.effect3) parts.push(affixText(it, it.effect3));
   const leg = legendaryOf(it);
   if (leg) parts.push(`${leg.emoji} ${leg.name}`);
   return parts.join(' · ');
@@ -5996,6 +6009,11 @@ button.pt-mini:active {
   color: var(--dark, #15120e);
   background: var(--accent);
   border-color: var(--accent);
+}
+.gpill.lvl {
+  color: var(--dim);
+  border-color: var(--line);
+  font-variant-numeric: tabular-nums;
 }
 .gpill.sig {
   color: #ffd23f;
