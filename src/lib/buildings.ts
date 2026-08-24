@@ -139,10 +139,9 @@ export const BUILDING_TYPES: BuildingType[] = [
     },
     desc: 'Débloque le Labyrinthe. Chaque niveau enrichit le butin des coffres (+4 %).',
   },
-  // Utilitaire UNIQUE : l'AUTEL DES BOSS améliore les RÉCOMPENSES de boss (il ne les
-  // gate pas). Le construire débloque D'EMBLÉE le 4ᵉ candidat + le ciblage du slot de
-  // set manquant (perks binaires = l'identité du bâtiment, pas des paliers) ; le
-  // NIVEAU, lui, ne fait que scaler la qualité de roll (continu, pas de palier).
+  // Utilitaire UNIQUE : l'AUTEL DES BOSS améliore la RÉCOMPENSE de boss (drop unique
+  // garanti). Chaque niveau augmente la CHANCE d'un bon roll (jet) via `bossRollFloor`
+  // (plancher de qualité, continu) et réduit le coût en pierres d'invocation.
   {
     id: 'boss_altar',
     label: 'Autel des boss',
@@ -152,7 +151,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     buildGold: 700,
     unlockLevel: 4,
     unique: true,
-    desc: 'Récompenses de boss : ciblage du set manquant (dès la construction) + plus de CHOIX en montant l’Autel (2 → 3 au niv.10 → 4 au niv.20 → 5 au niv.30). Chaque niveau : +qualité de roll, −coût en pierres d’invocation 🔮.',
+    desc: 'Récompenses de boss : chaque niveau augmente la chance d’un BON roll (jet) du drop, et réduit le coût en pierres d’invocation 🔮.',
   },
 ];
 

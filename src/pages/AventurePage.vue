@@ -2377,8 +2377,6 @@ interface RunView {
   drops: Item[];
   talentDrops?: TalentInstance[]; // talents tombés (affichés dans le rapport)
   summonStones?: number; // pierres d'invocation 🔮 gagnées (donjon → aller aux boss)
-  enchantScrolls?: number; // 📜 parchemins d'enchantement gagnés (carburant de l'enchant)
-  protections?: number; // 🛡️ protections d'enchant gagnées
 }
 
 // `embedded` : rendu dans le VOLET droit du cockpit (Z Fold déplié) → racine <div>
@@ -3686,9 +3684,6 @@ async function explore(d: Dungeon) {
     // Pierres d'invocation 🔮 : lot au NETTOYAGE, ∝ profondeur du donjon → farmer plus
     // profond finance des boss plus hauts. Un boss de palier coûte ~2-6 pierres → 2-6 runs.
     const summonStones = r.cleared ? 1 + Math.floor(d.recoLevel / 8) : 0;
-    // Parchemins d'ENCHANT 📜 : le carburant des tentatives d'enchant, filet régulier au
-    // nettoyage (∝ profondeur). Source principale avec les boss (qui donnent aussi 🛡️).
-    const enchantScrolls = r.cleared ? 2 + Math.floor(d.recoLevel / 4) : 0;
     // Drop de TALENT (drop-only) : ~6 % sur un donjon nettoyé ; RANG gaté par le niveau
     // du donjon (`dropLevel`), biaisé par sa luck → farmer profond = talents plus hauts.
     const talentDrops =
@@ -3707,7 +3702,6 @@ async function explore(d: Dungeon) {
       gold,
       drops,
       summonStones,
-      enchantScrolls,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
     });
@@ -3736,7 +3730,6 @@ async function explore(d: Dungeon) {
       drops,
       ...(talentDrops.length ? { talentDrops } : {}),
       ...(summonStones ? { summonStones } : {}),
-      ...(enchantScrolls ? { enchantScrolls } : {}),
     };
     // 1er nettoyage d'un donjon (débloque le suivant) = moment de progression →
     // éclat, mais SEULEMENT à la fin de l'animation de combat (sinon il recouvre
@@ -3929,8 +3922,6 @@ async function fightBoss(b: MilestoneBoss) {
       gold,
       defeated: win,
       drops,
-      enchantScrolls: 4 + Math.floor(b.unlockLevel / 4), // jalon boss → parchemins d'enchant 📜
-      protections: 1 + Math.floor(b.unlockLevel / 10), // 🛡️ protections — la source précieuse
       ...(talentDrops.length ? { talentDrops } : {}),
     });
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!));
@@ -3956,8 +3947,6 @@ async function fightBoss(b: MilestoneBoss) {
       ],
       drops,
       ...(talentDrops.length ? { talentDrops } : {}),
-      ...(win ? { enchantScrolls: 4 + Math.floor(b.unlockLevel / 4) } : {}),
-      ...(win ? { protections: 1 + Math.floor(b.unlockLevel / 10) } : {}),
     };
     // Victoire de boss de palier = jalon MAJEUR → célébration centrale (gros éclat),
     // DIFFÉRÉE à la fin de l'animation de combat.
