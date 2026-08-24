@@ -1574,13 +1574,13 @@
     <div v-if="loadoutOpen" class="shop-backdrop" @click.self="loadoutOpen = false">
       <div class="shop-card">
         <div class="shop-head">
-          <div class="shop-title font-display">📦 Loadouts</div>
+          <div class="shop-title font-display">🧩 Mes sets</div>
           <button class="shop-x" aria-label="Fermer" @click="loadoutOpen = false">✕</button>
         </div>
         <div class="sec-hint">
-          Range ton stuff équipé (arme / armure / accessoire / relique — le <b>familier reste</b>)
-          pour garder un set pendant que tu en testes un autre. Les objets rangés ne sont
-          <b>pas</b> dans le sac.
+          Un set par <b>voie</b> — les pièces des boss se rangent ici, pièce par pièce.
+          <b>Porter</b> un set = passer à sa voie et équiper au mieux (les emplacements manquants
+          sont complétés par tes meilleurs objets du sac). Le <b>familier reste</b>.
         </div>
         <div class="loadouts">
           <div
@@ -1598,6 +1598,12 @@
                   >{{ loadoutVoie(i)!.emoji }} {{ loadoutVoie(i)!.name }}</template
                 >
                 <template v-else>Loadout {{ i + 1 }}</template>
+                <span
+                  class="lo-count"
+                  :class="{ full: voieOwnedCount(i) >= 4 }"
+                  title="Pièces de set possédées pour cette voie (équipées, rangées ou au sac)"
+                  >{{ voieOwnedCount(i) }}/4</span
+                >
                 <span v-if="equippedSet?.idx === i" class="lo-active">✓ en cours</span>
               </span>
               <span
@@ -1624,20 +1630,16 @@
               </button>
             </div>
             <div v-if="lo.count" class="lo-hint">Touche un objet pour voir ses stats</div>
+            <!-- Porter = passer à cette voie + optimiser (le set + les meilleurs objets du sac).
+                 Grisé si on ne possède aucune pièce de cette voie. -->
             <button
               class="lo-btn"
-              :disabled="(!lo.count && !hasEquippedGear) || busy"
-              @click="doSwapLoadout(i)"
+              :disabled="voieOwnedCount(i) === 0 || busy || equippedSet?.idx === i"
+              @click="doWearVoieSet(i)"
             >
-              {{
-                lo.count
-                  ? hasEquippedGear
-                    ? '🔄 Échanger'
-                    : '⬆️ Équiper'
-                  : '📦 Ranger mon stuff (nu)'
-              }}
+              {{ equippedSet?.idx === i ? '✓ Set porté' : '⬆️ Porter ce set' }}
             </button>
-            <!-- Gestion d'un loadout rangé : vider vers le sac (46488974) ou vendre (53a6d487). -->
+            <!-- Gestion des pièces rangées : vider vers le sac (46488974) ou vendre (53a6d487). -->
             <div v-if="lo.count" class="lo-actions">
               <button
                 class="lo-mini"
@@ -4249,7 +4251,6 @@ const bagCount = computed(() => (char.row?.inventory ?? []).filter((i) => !isFam
 // ── Loadouts (sets d'équipement rangés) — 1 par VOIE (8 slots) ──
 // Slot i ↔ voie i : chaque loadout est l'endroit où ranger le set de cette voie.
 const loadoutVoie = (i: number): (typeof VOIES)[number] | null => VOIES[i] ?? null;
-const hasEquippedGear = computed(() => SLOTS.some((s) => !!char.row?.equipped[s]));
 // SET DE VOIE ACTUELLEMENT ÉQUIPÉ (≥2 pièces) → marque le loadout correspondant « en cours »
 // + bannière dans la vue Équipement. Dominant parmi les 4 slots gear équipés.
 const equippedSet = computed<{ idx: number; name: string; emoji: string; count: number } | null>(
@@ -4283,10 +4284,41 @@ const loadoutsView = computed(() => {
     return { items, count: items.length, power, delta: power - combatPowerVal.value, sellGold };
   });
 });
-async function doSwapLoadout(i: number) {
-  const uid = auth.user?.id;
-  if (!uid || busy.value || expeBlocked()) return; // gelé en expédition (héros parti avec son stuff)
-  await char.swapLoadout(uid, i);
+// Nb de pièces de set POSSÉDÉES pour la voie i (équipées + rangées dans la réserve + au sac)
+// → complétion x/4 (distinctes par emplacement, où qu'elles soient).
+const voieOwnedCount = (i: number): number => {
+  const vid = `voie:${loadoutVoie(i)?.id ?? ''}`;
+  const slots = new Set<ItemSlot>();
+  const scan = (eq?: Equipped) => {
+    if (!eq) return;
+    for (const s of SLOTS) if (eq[s]?.setId === vid) slots.add(s);
+  };
+  scan(char.row?.equipped);
+  scan(char.row?.loadouts?.[i]?.items);
+  for (const it of char.row?.inventory ?? [])
+    if (it.setId === vid && SLOTS.includes(it.slot)) slots.add(it.slot);
+  return slots.size;
+};
+// Porter le set d'une voie : passe à cette voie (si besoin) puis OPTIMISE (l'optimiseur voit
+// désormais la réserve de la voie courante → il porte le set en complétant avec le sac).
+function doWearVoieSet(i: number) {
+  const v = loadoutVoie(i);
+  if (!v || busy.value || expeBlocked()) return; // gelé en expédition (héros parti avec son stuff)
+  withUid(async (uid) => {
+    if (char.row?.voie !== v.id) await char.setVoie(uid, v.id);
+    const changed = await char.optimizeGear(
+      uid,
+      c.value,
+      c.value.level.level,
+      char.row?.pseudo ?? 'Toi',
+    );
+    $q.notify({
+      type: 'positive',
+      message: changed
+        ? `⬆️ Set ${v.name} porté (complété au mieux).`
+        : `Déjà au mieux pour ${v.name}. 👍`,
+    });
+  }, 'Impossible de porter ce set.');
 }
 // Vider un loadout rangé → ses objets retournent dans le sac (ticket 46488974).
 function doUnpackLoadout(i: number) {

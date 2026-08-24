@@ -783,9 +783,12 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, { voie });
   }
 
-  // OPTIMISEUR D'ÉQUIPEMENT (ticket 6d69c2fc) : équipe d'un coup la meilleure combinaison
-  // des 4 slots de gear (sets inclus) trouvée dans l'équipé + le sac ; les objets écartés
-  // retournent au sac. Le familier n'est pas touché. Renvoie true si quelque chose a changé.
+  // OPTIMISEUR D'ÉQUIPEMENT (v0.603) : équipe la MEILLEURE combinaison des 4 slots trouvée
+  // dans l'équipé + le sac + la RÉSERVE DE TA VOIE (loadout = pièces de set collectées) →
+  // il mélange librement set + loose (bonus de set + capstone compris via combatPower). Les
+  // réserves des AUTRES voies restent archivées, intactes. Après optimisation, les pièces
+  // non retenues sont RE-RANGÉES : pièce de set → réserve de sa voie (meilleure/slot) ; loose
+  // → sac. Le familier n'est pas touché. Renvoie true si l'équipement a changé.
   async function optimizeGear(
     userId: string,
     stats: { puissance: number; endurance: number; agilite: number },
@@ -794,20 +797,48 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<boolean> {
     const cur = row.value;
     if (!cur) return false;
-    // Optimise POUR le build réel : inclut les effets de talents + le passif de voie
-    // (combatPower est non-linéaire → le meilleur gear dépend de ces bonus).
     const extra = mergeEffects(talentEffects(cur.talents), voiePassiveEffects(cur.voie as VoieId));
-    // `cur.voie` gate le capstone (4-pièces) → l'optimiseur valorise ton set de voie complet.
-    const best = bestGearLoadout(name, stats, cur.equipped, cur.inventory, level, extra, cur.voie);
+    const voieIdx = VOIES.findIndex((v) => v.id === cur.voie);
+    const loadouts0: Loadout[] = Array.from(
+      { length: MAX_LOADOUTS },
+      (_, k) => cur.loadouts[k] ?? { items: {} },
+    );
+    // Réserve de TA voie versée dans le pool (l'optimiseur peut porter ton set).
+    const voieReserve =
+      voieIdx >= 0 ? Object.values(loadouts0[voieIdx]!.items).filter(Boolean) : [];
+    const pool = [...cur.inventory, ...voieReserve];
+    const best = bestGearLoadout(name, stats, cur.equipped, pool, level, extra, cur.voie);
     const already = SLOTS.every((s) => (cur.equipped[s]?.id ?? null) === (best[s]?.id ?? null));
-    if (already) return false; // déjà optimal → ne rien faire
+    if (already) return false;
     const chosen = new Set(SLOTS.map((s) => best[s]?.id).filter((x): x is string => !!x));
     const equippedGear = SLOTS.map((s) => cur.equipped[s]).filter((x): x is Item => !!x);
-    // Tout le gear (équipé + sac) non retenu retourne au sac ; les familiers du sac passent tels quels.
-    const inventory = [...equippedGear, ...cur.inventory].filter((it) => !chosen.has(it.id));
+    // Réserves reconstruites : celle de ta voie repart VIDE (ses pièces sont dans le pool) ;
+    // les autres voies restent telles quelles. On re-range ensuite les non-retenus.
+    const loadouts = loadouts0.map((lo, k) =>
+      k === voieIdx ? { items: {} } : { items: { ...lo.items } },
+    );
+    const leftovers = [...equippedGear, ...pool].filter((it) => !chosen.has(it.id));
+    const sac: Item[] = [];
+    for (const it of leftovers) {
+      const vi = it.setId?.startsWith('voie:')
+        ? VOIES.findIndex((v) => v.id === it.setId!.slice('voie:'.length))
+        : -1;
+      if (vi >= 0 && vi < MAX_LOADOUTS) {
+        const items = loadouts[vi]!.items;
+        const held = items[it.slot];
+        if (!held)
+          items[it.slot] = it; // réserve de sa voie (slot libre)
+        else if ((held.effect?.value ?? 0) >= (it.effect?.value ?? 0))
+          sac.push(it); // réserve déjà mieux
+        else {
+          sac.push(held); // leftover meilleur → prend la réserve, ancien au sac
+          items[it.slot] = it;
+        }
+      } else sac.push(it); // loose / familier → sac
+    }
     const equipped: Equipped = { ...cur.equipped };
     for (const s of SLOTS) equipped[s] = best[s];
-    await persist(userId, { equipped, inventory });
+    await persist(userId, { equipped, inventory: sac, loadouts });
     return true;
   }
 
