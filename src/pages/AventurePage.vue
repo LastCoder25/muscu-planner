@@ -856,49 +856,55 @@
                     <span class="lvl-badge">Nv {{ it.level }}</span>
                     <span v-if="it.setId" class="gpill set">🧩 Set</span>
                   </div>
-                  <!-- Comparaison : rang + qualité + effet, cet objet vs l'équipé (ticket 50f593a2). -->
+                  <!-- Comparaison : cet objet vs l'équipé — en-tête (rang/niv/jet) puis stats
+                       une par ligne dessous (ticket lisibilité). -->
                   <div class="ii-compare">
-                    <div class="ii-cmp-row this">
-                      <span class="ii-cmp-lbl">Cet objet</span>
-                      <span class="ii-rar" :class="'p-' + it.rarity">{{
-                        RARITY_LABEL[it.rarity]
-                      }}</span>
-                      <span
-                        v-if="itemQuality(it)"
-                        class="q-badge"
-                        :class="jetTier(itemQuality(it))"
-                        >{{ itemQuality(it) }}</span
-                      >
-                      <span class="lvl-badge">Nv {{ it.level }}</span>
-                      <span class="ii-cmp-val">
-                        <span v-for="(ln, li) in itemStatLines(it)" :key="li" class="cmp-stat">{{
-                          ln
+                    <div class="cmp-item this">
+                      <div class="cmp-head">
+                        <span class="cmp-lbl">Cet objet</span>
+                        <span class="ii-rar" :class="'p-' + it.rarity">{{
+                          RARITY_LABEL[it.rarity]
                         }}</span>
-                      </span>
-                    </div>
-                    <div class="ii-cmp-row eq">
-                      <span class="ii-cmp-lbl">Équipé</span>
-                      <template v-if="equippedInSlot(it.slot)">
-                        <span class="ii-rar" :class="'p-' + equippedInSlot(it.slot)!.rarity">{{
-                          RARITY_LABEL[equippedInSlot(it.slot)!.rarity]
-                        }}</span>
+                        <span class="lvl-badge">Nv {{ it.level }}</span>
                         <span
-                          v-if="itemQuality(equippedInSlot(it.slot))"
+                          v-if="itemQuality(it)"
                           class="q-badge"
-                          :class="jetTier(itemQuality(equippedInSlot(it.slot)))"
-                          >{{ itemQuality(equippedInSlot(it.slot)) }}</span
+                          :class="jetTier(itemQuality(it))"
+                          >{{ itemQuality(it) }}%</span
                         >
-                        <span class="lvl-badge">Nv {{ equippedInSlot(it.slot)!.level }}</span>
-                        <span class="ii-cmp-val">
+                      </div>
+                      <div class="cmp-stats">
+                        <div v-for="(ln, li) in itemStatLines(it)" :key="li" class="stat-line">
+                          {{ ln }}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="cmp-item eq">
+                      <div class="cmp-head">
+                        <span class="cmp-lbl">Équipé</span>
+                        <template v-if="equippedInSlot(it.slot)">
+                          <span class="ii-rar" :class="'p-' + equippedInSlot(it.slot)!.rarity">{{
+                            RARITY_LABEL[equippedInSlot(it.slot)!.rarity]
+                          }}</span>
+                          <span class="lvl-badge">Nv {{ equippedInSlot(it.slot)!.level }}</span>
                           <span
-                            v-for="(ln, li) in itemStatLines(equippedInSlot(it.slot)!)"
-                            :key="li"
-                            class="cmp-stat"
-                            >{{ ln }}</span
+                            v-if="itemQuality(equippedInSlot(it.slot))"
+                            class="q-badge"
+                            :class="jetTier(itemQuality(equippedInSlot(it.slot)))"
+                            >{{ itemQuality(equippedInSlot(it.slot)) }}%</span
                           >
-                        </span>
-                      </template>
-                      <span v-else class="ii-cmp-val dim">— emplacement libre</span>
+                        </template>
+                        <span v-else class="cmp-free">— emplacement libre</span>
+                      </div>
+                      <div v-if="equippedInSlot(it.slot)" class="cmp-stats">
+                        <div
+                          v-for="(ln, li) in itemStatLines(equippedInSlot(it.slot)!)"
+                          :key="li"
+                          class="stat-line eq"
+                        >
+                          {{ ln }}
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <!-- PUISSANCE si équipé (rang + qualité) vs l'objet équipé du même slot. -->
@@ -1789,7 +1795,7 @@
               <span
                 v-for="(ln, li) in itemStatLines(stashConflict.incoming)"
                 :key="li"
-                class="cmp-stat"
+                class="stat-line"
                 >{{ ln }}</span
               >
             </div>
@@ -1811,7 +1817,7 @@
               <span
                 v-for="(ln, li) in itemStatLines(stashConflict.stored)"
                 :key="li"
-                class="cmp-stat"
+                class="stat-line"
                 >{{ ln }}</span
               >
             </div>
@@ -5819,9 +5825,12 @@ button.pt-mini:active {
   font-weight: 800;
 }
 .stash-eff {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-size: 11.5px;
   color: var(--text);
-  margin-top: 2px;
+  margin-top: 4px;
 }
 .stash-pow {
   font-size: 12px;
@@ -6276,44 +6285,48 @@ button.pt-mini:active {
 .ii-compare {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 8px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--line) 22%, transparent);
 }
-.ii-cmp-row {
+/* Un bloc par objet : en-tête (label + rang + niv + jet) puis stats sous-jacentes. */
+.cmp-item {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 12.5px;
+  flex-direction: column;
+  gap: 3px;
 }
-.ii-cmp-lbl {
-  flex: none;
-  width: 62px;
+.cmp-item.eq {
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+.cmp-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cmp-lbl {
   font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--dim);
 }
-.ii-cmp-row.this .ii-cmp-val {
-  font-weight: 800;
-  color: var(--accent); /* l'objet du sac = mis en avant */
-}
-.ii-cmp-row.eq .ii-cmp-val {
-  color: var(--text);
-}
-.ii-cmp-val.dim {
+.cmp-free {
+  font-size: 12px;
   color: var(--dim);
 }
-.ii-cmp-val {
-  flex: 1;
+.cmp-stats {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+  padding-left: 2px;
 }
-.cmp-stat {
-  line-height: 1.25;
+/* L'objet du sac = mis en avant (accent) ; l'équipé = plus discret. */
+.cmp-item.eq .stat-line.eq {
+  color: var(--text);
+  font-weight: 600;
 }
 /* Rang / qualité CLIQUABLES (méta) → curseur + affordance discrète. */
 .clk {
