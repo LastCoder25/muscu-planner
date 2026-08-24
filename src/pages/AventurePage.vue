@@ -1017,9 +1017,7 @@
                   )
                 }}
               </template>
-              <template v-else
-                >Expéditions (or) + filons de production ⛏️💎 autour de la ville</template
-              >
+              <template v-else>Expéditions (or) + bâtiments 🏛️ autour de la ville</template>
             </span>
           </span>
           <span class="expe-go">›</span>
@@ -7979,6 +7977,21 @@ button.pt-mini:active {
   opacity: 0.4;
   cursor: not-allowed;
 }
+/* Écrans étroits (téléphones, Samsung Z Fold PLIÉ ~344 px → modale ≈ 316 px) : les 4 boutons
+   d'action (Réattaquer + coût, Combat suivant + coût, Inventaire, Fermer) sont tassés sur une
+   seule ligne. On passe en GRILLE 2×2 (chaque bouton ≈ 50 %) → cibles tactiles confortables,
+   coûts lisibles. Au-dessus de 440 px (tablette, Z Fold DÉPLIÉ), la ligne unique est conservée. */
+@media (max-width: 440px) {
+  .rm-actions-row {
+    flex-wrap: wrap;
+  }
+  .rm-actions-row .rm-btn {
+    flex: 1 1 calc(50% - 4px);
+  }
+  .rm-actions-row .rm-btn.rm-icon {
+    width: auto;
+  }
+}
 
 /* Résultat de run */
 .result {
@@ -7998,6 +8011,7 @@ button.pt-mini:active {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  flex-wrap: wrap; /* écran étroit (Z Fold plié) : les gains passent sous le titre au lieu de se tasser */
   gap: 8px;
   font-family: var(--font-display);
   font-weight: 700;
@@ -8077,6 +8091,11 @@ button.pt-mini:active {
 .fight-row .fr-name {
   color: var(--text);
   font-weight: 600;
+  flex: 1 1 auto; /* nom long → tronqué (…) plutôt que d'écraser l'issue/les tours sur écran étroit */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .fight-row .fr-out {
   font-weight: 600;

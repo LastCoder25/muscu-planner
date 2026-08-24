@@ -249,7 +249,10 @@
                   >Niv {{ selectedPlot.building.level }} ·
                   {{ filonProdLabel(selectedPlot.building) }}</template
                 >
-                <template v-else>Construis un filon (production passive de ressources).</template>
+                <template v-else
+                  >Construis un bâtiment : débloque une activité ou améliore tes
+                  récompenses.</template
+                >
               </div>
             </div>
             <button class="sh-x" @click="selectedSlot = null">✕</button>
@@ -435,7 +438,7 @@ import {
   travelTimeMult,
   labyrinthLuckBonus,
   bossAltarRollFloor,
-  bossRewardCount,
+  bossSummonDiscount,
   BUILD,
   type Building,
   type BuildingType,
@@ -682,10 +685,10 @@ function plotUnlockLevel(slot: number): number {
   return slotUnlockLevel(slot);
 }
 function filonEmoji(b: Building): string {
-  return buildingType(b.typeId)?.emoji ?? '⛏️';
+  return buildingType(b.typeId)?.emoji ?? '🏛️';
 }
 function filonLabel(b: Building): string {
-  return buildingType(b.typeId)?.label ?? 'Filon';
+  return buildingType(b.typeId)?.label ?? 'Bâtiment';
 }
 const RES_EMOJI: Record<string, string> = {
   dust: '✨',
@@ -815,16 +818,14 @@ function typeLockReason(t: BuildingType): string {
 function isUtility(b: Building): boolean {
   return buildingType(b.typeId)?.category === 'utility';
 }
-// Libellé d'effet d'un utilitaire (pour l'instant : l'entrepôt = +stockage).
+// Libellé d'effet d'un bâtiment utilitaire (ce que rapporte son niveau actuel/suivant).
 function utilityEffectLabel(b: Building): string {
-  const pct = Math.round((storageMult([b]) - 1) * 100);
-  if (pct > 0) return `+${pct}% stockage de tous les filons`;
   if (b.typeId === 'outpost')
     return `−${Math.round((1 - travelTimeMult([b])) * 100)}% temps de trajet`;
   if (b.typeId === 'labyrinth_gate')
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')
-    return `${bossRewardCount([b])} choix de récompense · ciblage du set · +${Math.round(bossAltarRollFloor([b]) * 100)}% qualité de roll`;
+    return `+${Math.round(bossAltarRollFloor([b]) * 100)}% qualité de roll (jet) · −${Math.round(bossSummonDiscount([b]) * 100)}% coût en pierres 🔮`;
   return buildingType(b.typeId)?.desc ?? ''; // autres utilitaires : description
 }
 

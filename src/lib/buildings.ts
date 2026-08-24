@@ -1,18 +1,18 @@
-// buildings.ts — FILONS de production passive (pur/testable). Le joueur construit
-// des bâtiments sur des emplacements autour de la ville (carte d'expédition) : ils
-// PRODUISENT des ressources rares (poussière/pierres) en temps réel, financés par
-// l'OR (construction + upgrades = le vrai puits d'or). Dimensionné par simulation.
+// buildings.ts — BÂTIMENTS du village (pur/testable). Le joueur construit des bâtiments
+// sur des emplacements autour de la ville (carte d'expédition), financés par l'OR
+// (construction + upgrades = le vrai puits d'or). Dimensionné par simulation.
 //
-// GARDE-FOUS (cf. mémoire filons-production-passive) :
-//  - Plafonné par le SPORT : niveau d'un filon ≤ niveau du joueur → la prod passive
-//    aide à ATTEINDRE son cap plus vite, jamais à le dépasser (« seul le sport rend
-//    plus fort »).
-//  - COMPLÉMENT, pas remplaçant : débit modeste (~1/4 du farm actif, cf. sim).
-//  - Zéro culpabilité : STOCKAGE plafonné (la prod s'accumule puis sature) → louper
-//    un jour ne coûte quasi rien. 100 % déterministe (timestamps, hors-ligne).
+// ÉTAT ACTUEL (v0.599) : 3 bâtiments UTILITAIRES (Avant-poste, Porte du Labyrinthe,
+// Autel des boss) qui DÉBLOQUENT/AMÉLIORENT une activité. Les anciens PRODUCTEURS de
+// ressources (Dynamo ⚡, Entrepôt 🏬, filons…) ont été retirés du registre ; la
+// machinerie de production (`prodPerHrPerLvl`/`storageMult`/`collectable`…) reste
+// présente mais DORMANTE (aucun type ne l'utilise), conservée au cas où un producteur
+// serait réintroduit.
 //
-// EXTENSIBLE : un bâtiment = une entrée du registre `BUILDING_TYPES`. Ajouter un
-// nouveau type (autre ressource, ou plus tard une autre `category`) = une entrée.
+// GARDE-FOUS : plafonné par le SPORT (niveau d'un bâtiment ≤ niveau du joueur) ; 100 %
+// déterministe (timestamps passés par l'appelant, hors-ligne).
+//
+// EXTENSIBLE : un bâtiment = une entrée du registre `BUILDING_TYPES`.
 //
 // NB : `Date.now()` n'est PAS utilisé ici — le `now` (ms epoch) est toujours passé
 // par l'appelant → fonctions pures et testables.
