@@ -97,12 +97,11 @@ describe('normalizeTalents (rétro-compat)', () => {
     expect(n[0]!.equipped).toBe(true);
     expect(n[0]!.enchant).toBe(0);
   });
-  it('migre l’ancien axe `level` en enchant équivalent', () => {
-    // level 1 → +0 ; un level élevé → un enchant > 0 (magnitude préservée, plafonnée à 12)
-    expect(normalizeTalents([{ id: 'a', code: 't_dmg', xp: 0, level: 1 }])[0]!.enchant).toBe(0);
-    const migrated = normalizeTalents([{ id: 'b', code: 't_dmg', xp: 0, level: 50 }])[0]!.enchant!;
-    expect(migrated).toBeGreaterThan(0);
-    expect(migrated).toBeLessThanOrEqual(ENCHANT_MAX);
+  it('préserve le niveau d’objet (ilvl) ; enchant reste 0 (vestige)', () => {
+    expect(normalizeTalents([{ id: 'a', code: 't_dmg', xp: 0, level: 1 }])[0]!.level).toBe(1);
+    const n = normalizeTalents([{ id: 'b', code: 't_dmg', xp: 0, level: 50 }])[0]!;
+    expect(n.level).toBe(50); // ilvl conservé (v0.592)
+    expect(n.enchant).toBe(0);
   });
   it('filtre les codes inconnus et tolère le non-tableau', () => {
     expect(normalizeTalents(['nope', 't_crit'])).toHaveLength(1);

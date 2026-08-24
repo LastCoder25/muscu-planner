@@ -8,6 +8,7 @@ import {
   tierIndexOf,
   aggregateEffects,
   playerWithGear,
+  itemLevelMult,
   FAMILIAR_SLOT,
   type Item,
 } from '@/lib/items';
@@ -32,7 +33,8 @@ describe('familiers — roll & identité', () => {
     expect(f.slot).toBe(FAMILIAR_SLOT);
     expect(f.effect.type).toBe(wolf.effect); // damage_pct
     expect(f.species).toBe('wolf');
-    expect(f.level).toBe(1); // REFONTE C : le familier arrive niv.1 → à infuser
+    expect(f.level).toBeGreaterThanOrEqual(1); // ilvl (pyramide) comme les objets (v0.592)
+    expect(f.level).toBeLessThanOrEqual(8 + 9);
     expect(isFamiliar(f)).toBe(true);
   });
   it('déterministe : même seed/race/niveau → même familier', () => {
@@ -73,9 +75,8 @@ describe('familiers — effet compté dans le combat', () => {
   it('aggregateEffects prend en compte le familier équipé', () => {
     const f = makeFam(wolf, 5);
     const withFam = aggregateEffects({ familiar: f });
-    // aggregateEffects lit la valeur BAKÉE (1 décimale, round1) telle quelle — la qualité
-    // continue reste visible sur les petites stats (pas de ré-arrondi entier).
-    const expected = f.effect.value / 100;
+    // valeur bakée × multiplicateur de NIVEAU (ilvl) — comme les objets (v0.592).
+    const expected = (f.effect.value * itemLevelMult(f.level)) / 100;
     expect(withFam.damagePct).toBeCloseTo(expected, 6);
     expect(aggregateEffects({}).damagePct).toBe(0);
   });
@@ -152,7 +153,7 @@ describe('familiers — pierres magiques & sélection', () => {
     const f = rollActivityFamiliar(mulberry32(11), { level: 7, luck: 0.5 });
     expect(f.slot).toBe(FAMILIAR_SLOT);
     expect(f.species).toBeTruthy();
-    expect(f.level).toBe(1); // REFONTE C
+    expect(f.level).toBeGreaterThanOrEqual(1); // ilvl (pyramide) v0.592
   });
   it('rollActivityFamiliar : biome forcé → race de ce biome', () => {
     const f = rollActivityFamiliar(mulberry32(2), { level: 5, biome: 'plain' });

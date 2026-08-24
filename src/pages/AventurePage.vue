@@ -499,6 +499,7 @@
                       :title="'Rang ' + RARITY_LABEL[t.rarity]"
                       >{{ t.rarity }}</span
                     >
+                    <span class="lvl-badge">Nv {{ t.level }}</span>
                     <span
                       v-if="t.dup"
                       class="dup-badge"
@@ -595,6 +596,7 @@
                     <span class="tal-nm">{{ f.name }}</span>
                     <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
                     <span class="rk-badge" :class="'p-' + f.rarity">{{ f.rarity }}</span>
+                    <span class="lvl-badge">Nv {{ f.level }}</span>
                     <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
                   </div>
                   <div class="tal-eff">{{ itemEffects(f) }}</div>
@@ -2881,7 +2883,7 @@ function doEquipRecommendedTalents() {
 // comparer deux exemplaires du même code (le meilleur = plus haute magnitude).
 function talentMag(t: TalentInstance): number {
   const def = talentByCode(t.code);
-  return def ? talentValue(def, tierOf(t), t.enchant ?? 0, talentRollOf(t)) : 0;
+  return def ? talentValue(def, tierOf(t), t.enchant ?? 0, talentRollOf(t), t.level ?? 1) : 0;
 }
 // Meilleur exemplaire (id) par CODE → sert à repérer les DOUBLONS (exemplaires inférieurs).
 const bestTalentByCode = computed(() => {
@@ -2917,9 +2919,10 @@ const talentsView = computed(() => {
           enchant,
           rarity: talentRank(tier),
           jet: talentJetOf(inst), // JET (0..100 %) au lieu de la qualité ★
+          level: inst.level ?? 1, // NIVEAU d'objet (ilvl)
           // 1 décimale : les bonus de talent sont petits → l'arrondi entier masquait les écarts.
           effLabel:
-            (talentValue(def, tier, enchant, talentRollOf(inst)) * 100)
+            (talentValue(def, tier, enchant, talentRollOf(inst), inst.level ?? 1) * 100)
               .toFixed(1)
               .replace('.', ',') + ' %',
           equipped: !!inst.equipped,

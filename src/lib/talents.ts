@@ -5,6 +5,8 @@
 import {
   emptyEffects,
   enchantMult,
+  itemLevelMult,
+  rollItemLevel,
   RANK_ORDER,
   rankRollMult,
   rollJet,
@@ -129,7 +131,8 @@ export interface TalentInstance {
   code: string;
   xp: number; // encode le RANG (via le tier ; la part qualité est vestigiale) — fixé au drop
   roll?: number; // JET (0..1) : position de la stat dans l'intervalle du rang (refonte v0.574)
-  enchant?: number; // +N magnitude (gamble), défaut 0
+  enchant?: number; // +N magnitude (gamble), défaut 0 — vestige (plus utilisé)
+  level?: number; // NIVEAU d'objet (ilvl) : magnitude scalée comme les objets (v0.592), défaut 1
   equipped?: boolean;
 }
 
@@ -196,8 +199,20 @@ export function enchantOf(inst: TalentInstance): number {
 const GRADE_BASE_SCALE = 0.5;
 // Magnitude = base × intervalle du RANG selon le JET (rankRollMult) × enchant — UNIFORME
 // avec les objets/familiers (refonte v0.574 : plus de qualité ★, le jet balaie l'intervalle).
-export function talentValue(def: TalentDef, tier: number, enchant: number, roll = 0): number {
-  return def.base * GRADE_BASE_SCALE * rankRollMult(talentRank(tier), roll) * enchantMult(enchant);
+export function talentValue(
+  def: TalentDef,
+  tier: number,
+  enchant: number,
+  roll = 0,
+  level = 1,
+): number {
+  return (
+    def.base *
+    GRADE_BASE_SCALE *
+    rankRollMult(talentRank(tier), roll) *
+    enchantMult(enchant) *
+    itemLevelMult(level) // ilvl : farmé plus profond = plus fort (comme les objets)
+  );
 }
 
 /** Nombre d'emplacements de talents ÉQUIPÉS (1 tous les 5 niveaux JOUEUR). */
@@ -207,13 +222,8 @@ export function talentsEarned(playerLevel: number): number {
 
 // (Infusion de grade retirée, ticket 0ec48637 : talents = drops purs, vendus en or.)
 
-// ── Normalisation (rétro-compat) : ancien `string[]` de codes → instances équipées
-// (tier 0, +0). Les anciennes instances gardent leur xp (tier) ; leur `level`
-// (ancien axe parchemins) est CONVERTI en enchant équivalent (magnitude préservée). ──
-function talentLevelToEnchant(level: number): number {
-  // Ancien mult de niveau valait 1 + (level−1)×0,03 ; enchant vaut 1 + N×0,33.
-  return Math.max(0, Math.min(12, Math.round(((Math.max(1, level) - 1) * 0.03) / 0.33)));
-}
+// ── Normalisation (rétro-compat) : ancien `string[]` de codes → instances équipées.
+// Les anciennes instances gardent leur xp (tier) et leur roll (jet). ──
 export function normalizeTalents(raw: unknown): TalentInstance[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -228,7 +238,10 @@ export function normalizeTalents(raw: unknown): TalentInstance[] {
         xp,
         // JET : `roll` s'il existe ; sinon dérivé de l'ancienne qualité (rétro-compat).
         roll: o.roll ?? (talentQuality(talentTier(xp)) - 0.5) / 5,
-        enchant: o.enchant ?? (o.level !== undefined ? talentLevelToEnchant(o.level) : 0),
+        enchant: o.enchant ?? 0, // vestige (l'infusion talents a été retirée)
+        // NIVEAU d'objet (ilvl, v0.592) : réutilise le champ `level` (l'ancien axe parchemins,
+        // retiré depuis longtemps, ne coexiste plus). Défaut 1 pour les talents pré-ilvl.
+        level: o.level ?? 1,
         equipped: o.equipped,
       };
     })
@@ -242,7 +255,13 @@ export function talentEffects(raw: unknown): AggregatedEffects {
     if (inst.equipped === false) continue; // seuls les équipés comptent
     const def = BY_CODE.get(inst.code);
     if (!def) continue;
-    a[def.effectKey] += talentValue(def, tierOf(inst), enchantOf(inst), talentRollOf(inst));
+    a[def.effectKey] += talentValue(
+      def,
+      tierOf(inst),
+      enchantOf(inst),
+      talentRollOf(inst),
+      inst.level ?? 1,
+    );
   }
   return a;
 }
@@ -272,11 +291,15 @@ export function rollTalentDrop(
     opts.floorBonus ?? 0,
     opts.playerLevel,
   );
+  // NIVEAU d'objet (ilvl) comme les objets/familiers : pyramide centrée sur min(contenu, joueur).
+  const center =
+    opts.playerLevel != null ? Math.min(opts.level ?? 1, opts.playerLevel) : (opts.level ?? 1);
   return {
     id: `tal_${opts.idSeed ?? Math.floor(rng() * 1e9)}`,
     code: def.code,
     xp: talentTierFloor(RANK_ORDER.indexOf(rank) * 5), // encode le RANG (part qualité vestigiale)
     roll, // JET fixé au drop
     enchant: 0,
+    level: rollItemLevel(rng, center, opts.luck ?? 0),
   };
 }

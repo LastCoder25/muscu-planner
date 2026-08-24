@@ -996,7 +996,10 @@ export function rollFamiliar(
     roll = t.roll;
   }
   const value = Math.max(1, round1(species.base * rankRollMult(rarity, roll)));
-  const level = 1; // REFONTE C : le familier arrive niv.1 (identité de race) → à infuser
+  // NIVEAU D'OBJET (ilvl) comme les objets : pyramide centrée sur min(contenu, joueur) →
+  // un familier farmé plus profond est plus fort même à rareté/jet égale. (v0.592)
+  const center = opts.playerLevel != null ? Math.min(opts.level, opts.playerLevel) : opts.level;
+  const level = rollItemLevel(rng, center, opts.luck ?? 0);
   let effect2: ItemEffect | undefined;
   if (rng() < familiarSigChance(rarity)) {
     const sig = FAMILIAR_SIGNATURE[Math.floor(rng() * FAMILIAR_SIGNATURE.length)]!;
@@ -1471,12 +1474,13 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
     if (it.effect2) applyEffect(a, it.effect2.type, (it.effect2.value * lm) / 100);
     if (it.effect3) applyEffect(a, it.effect3.type, (it.effect3.value * lm) / 100);
   }
-  // Familier (slot parallèle, hors SLOTS) : magnitude bakée (grade × qualité, re-scalée
-  // à l'infusion). Pas d'enchant non plus.
+  // Familier (slot parallèle, hors SLOTS) : magnitude = grade × jet × MULTIPLICATEUR DE
+  // NIVEAU (ilvl, v0.592) → comme les objets, un familier plus haut niveau est plus fort.
   const fam = equipped[FAMILIAR_SLOT];
   if (fam) {
-    applyEffect(a, fam.effect.type, fam.effect.value / 100);
-    if (fam.effect2) applyEffect(a, fam.effect2.type, fam.effect2.value / 100);
+    const flm = itemLevelMult(fam.level);
+    applyEffect(a, fam.effect.type, (fam.effect.value * flm) / 100);
+    if (fam.effect2) applyEffect(a, fam.effect2.type, (fam.effect2.value * flm) / 100);
   }
   // Bonus de set (2/3 pièces pour tous ; 4-pièces capstone si la voie correspond).
   const s = setEffects(equipped, voie);
