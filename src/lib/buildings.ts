@@ -70,22 +70,6 @@ export interface Building {
 
 // ── Registre des bâtiments (le socle extensible) ──
 export const BUILDING_TYPES: BuildingType[] = [
-  // Producteur d'ÉNERGIE : convertit l'or (surabondant en fin de partie) en énergie
-  // de JEU → adoucit le pincement d'énergie au niveau élevé (le coût des runs monte
-  // plus vite que l'énergie/séance). Reste borné (stockage 18 h + niveau ≤ joueur) →
-  // complément, jamais un substitut au sport (qui seul fait le NIVEAU et les STATS).
-  {
-    id: 'energy_font',
-    label: 'Dynamo de faille',
-    emoji: '⚡',
-    category: 'producer',
-    resource: 'energy',
-    prodPerHrPerLvl: 0.8, // niv.20 ≈ 16/h → ~288 ⚡/jour (cap 18 h) = quelques runs
-    buildGold: 1200, // plus cher qu'un filon : c'est un vrai puits d'or
-    unlockLevel: 1, // dispo dès le niv.1 (production de base) — cf. ordre des emplacements
-    unique: true,
-    desc: 'Convertit l’or en énergie ⚡ de jeu (pour lancer plus de donjons).',
-  },
   // Utilitaire UNIQUE : l'AVANT-POSTE débloque les expéditions (idle) et chaque
   // niveau réduit les temps de trajet → on revient chercher le butin plus vite.
   // Extensible (socle des futurs déblocages d'activités via bâtiment).
@@ -106,19 +90,6 @@ export const BUILDING_TYPES: BuildingType[] = [
       where: 'Ici, sur la carte : choisis un lieu et envoie ton héros l’explorer.',
     },
     desc: 'Débloque les expéditions. Chaque niveau réduit les temps de trajet (−1,5 %).',
-  },
-  // Utilitaire UNIQUE : augmente le STOCKAGE de tous les filons (tu peux louper
-  // plus de jours sans saturer). Débloqué niv.7 (offset des boss). +15 %/niveau.
-  {
-    id: 'warehouse',
-    label: 'Entrepôt',
-    emoji: '🏬',
-    category: 'utility',
-    effect: { storageMultPerLvl: 0.15 },
-    buildGold: 1500,
-    unlockLevel: 1, // production de base dispo dès le niv.1 (cf. ordre des emplacements)
-    unique: true,
-    desc: 'Augmente le stockage de tous tes filons (+15 %/niveau).',
   },
   // Utilitaire UNIQUE : la PORTE DU LABYRINTHE débloque le Labyrinthe (donjon à
   // étages, source unique des familiers). Chaque niveau AMÉLIORE la qualité du butin
@@ -162,7 +133,7 @@ export function buildingType(id: string): BuildingType | undefined {
 
 // ── Constantes de dimensionnement (validées par simulation) ──
 export const BUILD = {
-  plotCap: 6, // emplacements max (= 5 types de bâtiments + 1 marge → moins de spots vides)
+  plotCap: 3, // emplacements max = les 3 types restants (Avant-poste, Porte du Labyrinthe, Autel des boss) — minimum, aucun spot vide
   upBase: 220, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   upExp: 2.6, // puits d'or RAIDE (2→2.6) : l'or de fin de partie n'a plus de puits sinon
   storageHours: 18, // heures de production stockables (puis saturation)

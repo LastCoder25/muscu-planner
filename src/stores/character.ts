@@ -163,8 +163,13 @@ export const useCharacterStore = defineStore('character', () => {
       });
     r.messages = arr<ExpeditionMessage>(r.messages);
     // Bâtiments (migr. 0046). On DROPPE les types disparus du registre (ex. l'ancien
-    // 'fragment_vein', fusionné dans l'Incubateur) → pas d'emplacement fantôme.
-    r.buildings = arr<Building>(r.buildings).filter((b) => !!buildingType(b.typeId));
+    // 'fragment_vein' ; 'energy_font'/'warehouse' retirés v0.599) → pas d'emplacement
+    // fantôme, puis on RE-PACK les slots à 0..n-1 (triés par slot d'origine) pour que les
+    // bâtiments restants tiennent dans le nombre d'emplacements réduit (plotCap).
+    r.buildings = arr<Building>(r.buildings)
+      .filter((b) => !!buildingType(b.typeId))
+      .sort((a, b) => a.slot - b.slot)
+      .map((b, i) => ({ ...b, slot: i }));
     r.set_pieces_seen = obj<Record<string, string[]>>(r.set_pieces_seen); // migr. 0047
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
@@ -311,7 +316,6 @@ export const useCharacterStore = defineStore('character', () => {
       summon_stones: cur.summon_stones + (input.summonStones ?? 0),
       parchemins: cur.parchemins + (input.parchemins ?? 0),
       ink_dust: cur.ink_dust + (input.inkDust ?? 0),
-      enchant_scrolls: cur.enchant_scrolls + (input.enchantScrolls ?? 0),
       energy_spent: cur.energy_spent + input.energyCost,
       equipped: dist.equipped,
       inventory: dist.inventory,
@@ -356,8 +360,6 @@ export const useCharacterStore = defineStore('character', () => {
       stones: cur.stones + (input.defeated ? (input.stones ?? 0) : 0),
       parchemins: cur.parchemins + (input.defeated ? (input.parchemins ?? 0) : 0),
       ink_dust: cur.ink_dust + (input.defeated ? (input.inkDust ?? 0) : 0),
-      enchant_scrolls: cur.enchant_scrolls + (input.defeated ? (input.enchantScrolls ?? 0) : 0),
-      protections: cur.protections + (input.defeated ? (input.protections ?? 0) : 0),
       summon_stones: Math.max(0, cur.summon_stones - input.summonCost),
       defeated_bosses: defeated,
       equipped: dist.equipped,
@@ -481,7 +483,6 @@ export const useCharacterStore = defineStore('character', () => {
         : cur.cleared_dungeons;
     return persist(userId, {
       gold: cur.gold + input.gold,
-      enchant_scrolls: cur.enchant_scrolls + (input.enchantScrolls ?? 0),
       equipped: dist.equipped,
       inventory: dist.inventory,
       cleared_dungeons: cleared,
@@ -847,7 +848,6 @@ export const useCharacterStore = defineStore('character', () => {
       : [buildMessage({ ...exp, reported: true }), ...cur.messages].slice(0, 20);
     await persist(userId, {
       gold: cur.gold + o.gold,
-      enchant_scrolls: cur.enchant_scrolls + (o.enchantScrolls ?? 0),
       login_energy: cur.login_energy + (o.energy ?? 0), // ⚡ mine → énergie de jeu
       keys: cur.keys + o.key,
       inventory,

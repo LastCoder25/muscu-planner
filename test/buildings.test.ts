@@ -4,16 +4,11 @@ import {
   slotUnlockLevel,
   buildingUpgradeCost,
   canUpgradeBuilding,
-  buildingScales,
   buildingProdPerHour,
-  buildingStorageCap,
-  buildingAccrued,
   nextCollectedAt,
-  collectable,
   buildingType,
   buildingUnlockLevel,
   canBuildType,
-  storageMult,
   expeditionsUnlocked,
   travelTimeMult,
   outpostLevel,
@@ -25,7 +20,6 @@ import {
 } from '@/lib/buildings';
 import { bossSummonCost } from '@/data/bosses';
 
-const H = 3_600_000;
 const mk = (typeId: string, level: number, collectedAt = 0, slot = 0): Building => ({
   typeId,
   level,
@@ -34,15 +28,18 @@ const mk = (typeId: string, level: number, collectedAt = 0, slot = 0): Building 
 });
 
 describe('buildings — emplacements & coûts', () => {
-  it('plotsForLevel : UN emplacement par niveau (le joueur priorise), plafonné', () => {
+  it('plotsForLevel : UN emplacement par niveau (le joueur priorise), plafonné à plotCap', () => {
     expect(plotsForLevel(1)).toBe(1);
     expect(plotsForLevel(2)).toBe(2);
-    expect(plotsForLevel(5)).toBe(5);
     expect(plotsForLevel(BUILD.plotCap)).toBe(BUILD.plotCap);
     expect(plotsForLevel(40)).toBe(BUILD.plotCap); // plafonné
   });
-  it('slotUnlockLevel : inverse cohérent de plotsForLevel', () => {
-    for (const slot of [0, 1, 2, 3, 4, 5]) {
+  it('plotCap = minimum : un emplacement par type de bâtiment restant (aucun spot vide)', () => {
+    expect(BUILD.plotCap).toBe(BUILDING_TYPES.length);
+    expect(BUILDING_TYPES.length).toBe(3); // Avant-poste, Porte du Labyrinthe, Autel des boss
+  });
+  it('slotUnlockLevel : inverse cohérent de plotsForLevel (dans la limite de plotCap)', () => {
+    for (let slot = 0; slot < BUILD.plotCap; slot++) {
       const lvl = slotUnlockLevel(slot);
       expect(plotsForLevel(lvl)).toBeGreaterThanOrEqual(slot + 1); // débloqué à ce niveau
       if (lvl > 1) expect(plotsForLevel(lvl - 1)).toBeLessThanOrEqual(slot); // pas avant
@@ -53,56 +50,21 @@ describe('buildings — emplacements & coûts', () => {
     expect(buildingUpgradeCost(10)).toBeGreaterThan(buildingUpgradeCost(5) * 2);
   });
   it('canUpgradeBuilding : plafonné au niveau joueur', () => {
-    expect(canUpgradeBuilding(mk('energy_font', 4), 10)).toBe(true);
-    expect(canUpgradeBuilding(mk('energy_font', 10), 10)).toBe(false);
+    expect(canUpgradeBuilding(mk('boss_altar', 4), 10)).toBe(true);
+    expect(canUpgradeBuilding(mk('boss_altar', 10), 10)).toBe(false);
   });
 });
 
-describe('buildings — production', () => {
-  it('prod/h et stockage croissent avec le niveau', () => {
-    expect(buildingProdPerHour(mk('energy_font', 10))).toBeGreaterThan(
-      buildingProdPerHour(mk('energy_font', 3)),
+describe('buildings — registre (3 utilitaires, plus de producteurs)', () => {
+  it('les 3 types restants sont des utilitaires (aucun producteur)', () => {
+    expect(BUILDING_TYPES.map((t) => t.id).sort()).toEqual(
+      ['boss_altar', 'labyrinth_gate', 'outpost'].sort(),
     );
-    expect(buildingStorageCap(mk('energy_font', 5))).toBe(
-      buildingProdPerHour(mk('energy_font', 5)) * BUILD.storageHours,
-    );
+    for (const t of BUILDING_TYPES) expect(t.category).toBe('utility');
   });
-  it('accumulation dans le temps, PLAFONNÉE au stockage', () => {
-    const b = mk('energy_font', 10, 0);
-    const perHr = buildingProdPerHour(b);
-    // Après 5 h : ~5×perHr.
-    expect(buildingAccrued(b, 5 * H)).toBe(Math.floor(perHr * 5));
-    // Après 1000 h : saturé au stockage (pas de perte punitive au-delà).
-    expect(buildingAccrued(b, 1000 * H)).toBe(Math.floor(buildingStorageCap(b)));
-  });
-  it('déterministe (même building + même now → même accumulation)', () => {
-    const b = mk('energy_font', 7, 123);
-    expect(buildingAccrued(b, 123 + 3 * H)).toBe(buildingAccrued(b, 123 + 3 * H));
-  });
-  it('collectable : agrège la production par ressource', () => {
-    const now = 20 * H;
-    const bs = [mk('energy_font', 8, 0)];
-    const c = collectable(bs, now);
-    expect(c.energy).toBe(buildingAccrued(bs[0]!, now));
-    expect(c.dust).toBe(0); // ressource retirée du jeu → jamais produite
-  });
-  it('type inconnu → prod 0 (robustesse)', () => {
+  it('un utilitaire ne produit rien (prod 0) et un type inconnu aussi (robustesse)', () => {
+    for (const t of BUILDING_TYPES) expect(buildingProdPerHour(mk(t.id, 10))).toBe(0);
     expect(buildingProdPerHour(mk('inexistant', 5))).toBe(0);
-    expect(collectable([mk('inexistant', 5)], 100 * H)).toEqual({
-      dust: 0,
-      stone: 0,
-      energy: 0,
-      parchemins: 0,
-      fragments: 0,
-      ink_dust: 0,
-    });
-  });
-});
-
-describe('buildings — registre extensible', () => {
-  it('filons de base : producteurs, débloqués dès le début', () => {
-    expect(buildingType('energy_font')?.resource).toBe('energy');
-    expect(buildingUnlockLevel('energy_font')).toBe(1);
   });
 });
 
@@ -111,56 +73,22 @@ describe('buildings — déblocage & unicité (utilitaires)', () => {
     expect(buildingUnlockLevel('boss_altar')).toBe(4);
     expect(canBuildType('boss_altar', 3, [])).toBe(false);
     expect(canBuildType('boss_altar', 4, [])).toBe(true);
-    // Production de base dispo dès le niv.1 (nouvel ordre des emplacements).
-    expect(buildingUnlockLevel('warehouse')).toBe(1);
-    expect(buildingUnlockLevel('energy_font')).toBe(1);
+    expect(buildingUnlockLevel('labyrinth_gate')).toBe(2);
+    expect(buildingUnlockLevel('outpost')).toBe(3);
   });
   it('canBuildType : bâtiment UNIQUE non re-constructible', () => {
-    const wh: Building = mk('warehouse', 1, 0, 3);
-    expect(canBuildType('warehouse', 10, [])).toBe(true);
-    expect(canBuildType('warehouse', 10, [wh])).toBe(false); // déjà posé
-  });
-  it('filons UNIQUES : 1 de chaque type sur la carte', () => {
-    expect(canBuildType('energy_font', 5, [])).toBe(true);
-    expect(canBuildType('energy_font', 5, [mk('energy_font', 3, 0, 0)])).toBe(false); // déjà posé
+    const gate: Building = mk('labyrinth_gate', 1, 0, 0);
+    expect(canBuildType('labyrinth_gate', 10, [])).toBe(true);
+    expect(canBuildType('labyrinth_gate', 10, [gate])).toBe(false); // déjà posé
     // Un autre type reste constructible.
-    expect(canBuildType('warehouse', 5, [mk('energy_font', 3, 0, 0)])).toBe(true);
-  });
-});
-
-describe('buildings — Entrepôt : effet stockage global', () => {
-  it("l'entrepôt augmente le stockage des filons (+15%/niveau), pas la prod", () => {
-    const wh = mk('warehouse', 4, 0, 5); // +60 % stockage
-    expect(storageMult([wh])).toBeCloseTo(1.6, 5);
-    expect(buildingProdPerHour(wh)).toBe(0); // un utilitaire ne produit rien
-    const dust = mk('energy_font', 10, 0, 0);
-    expect(buildingStorageCap(dust, storageMult([wh]))).toBeCloseTo(
-      buildingStorageCap(dust) * 1.6,
-      3,
-    );
-  });
-  it("collectable applique le bonus d'entrepôt et ignore les utilitaires", () => {
-    const now = 1000 * H; // saturé
-    const dust = mk('energy_font', 10, 0, 0);
-    const wh = mk('warehouse', 4, 0, 1);
-    const base = collectable([dust], now).energy;
-    const boosted = collectable([dust, wh], now).energy;
-    expect(boosted).toBeGreaterThan(base); // stockage plus grand → plus récolté à saturation
-    expect(collectable([wh], now)).toEqual({
-      dust: 0,
-      stone: 0,
-      energy: 0,
-      parchemins: 0,
-      fragments: 0,
-      ink_dust: 0,
-    }); // l'entrepôt ne produit rien
+    expect(canBuildType('boss_altar', 10, [gate])).toBe(true);
   });
 });
 
 describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
   it('expeditionsUnlocked = true seulement avec un avant-poste', () => {
     expect(expeditionsUnlocked([])).toBe(false);
-    expect(expeditionsUnlocked([mk('energy_font', 5)])).toBe(false);
+    expect(expeditionsUnlocked([mk('boss_altar', 5)])).toBe(false);
     expect(expeditionsUnlocked([mk('outpost', 1)])).toBe(true);
   });
   it('travelTimeMult < 1 et décroît avec le niveau (−1,5 %/niv, plancher −60 % au niv.40)', () => {
@@ -171,38 +99,6 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
     expect(travelTimeMult([mk('outpost', 60)])).toBeCloseTo(0.4, 5); // reste plafonné
     expect(outpostLevel([mk('outpost', 3)])).toBe(3);
   });
-});
-
-describe('filons — report du reliquat à la récolte', () => {
-  it('la fraction non récoltée est conservée (pas remise à zéro)', () => {
-    const b = mk('energy_font', 6, 0); // prod fractionnaire à l'heure → teste le report du reliquat
-    const perHr = buildingProdPerHour(b);
-    const whole = Math.floor(perHr);
-    const now = H;
-    expect(buildingAccrued(b, now, 1)).toBe(whole);
-    const nca = nextCollectedAt(b, now, 1);
-    // Le reliquat reporté = la fraction non entière (et non 0) : le stock ne repart pas de zéro.
-    const carriedUnits = (perHr * (now - nca)) / H;
-    expect(carriedUnits).toBeCloseTo(perHr - whole, 6);
-    // Re-récolte immédiate = 0 (moins d’une unité entière en stock).
-    expect(buildingAccrued({ ...b, collectedAt: nca }, now, 1)).toBe(0);
-  });
-
-  it('un filon lent n’est pas affamé par des récoltes fréquentes', () => {
-    let b = mk('energy_font', 1, 0);
-    let total = 0;
-    const step = 0.5 * H; // récolte toutes les 30 min (< 1 unité/récolte → test du report)
-    // Fenêtre sous le plafond de stockage (18 h) → la récolte unique n'est pas saturée.
-    for (let now = step; now <= 12 * H; now += step) {
-      total += buildingAccrued(b, now, 1);
-      b = { ...b, collectedAt: nextCollectedAt(b, now, 1) };
-    }
-    // Le report du reliquat → on récupère le même total qu'une récolte unique sur 12 h
-    // (et non 0 comme avec l’ancien reset à `now`).
-    expect(total).toBe(buildingAccrued(mk('energy_font', 1, 0), 12 * H, 1));
-    expect(total).toBeGreaterThan(0);
-  });
-
   it('un utilitaire (perHr = 0) garde son collectedAt', () => {
     expect(nextCollectedAt(mk('boss_altar', 5, 123), 999_999)).toBe(123);
   });

@@ -715,10 +715,9 @@ const over = ref(false);
 // Butin cumulé du run (Phase 3b : affiché ; persistance/récompense = Phase 3c).
 const gold = ref(0);
 // Compteur INTERNE de richesse du run (monstres/coffres/vault − pièges) : plus une devise
-// affichée (la poussière a été retirée du jeu) → sert uniquement de proxy au faucet de
-// parchemins d'enchant 📜 en fin de run (cf. `scrolls = dust.value / 8`).
+// affichée ni créditée (poussière + parchemins d'enchant retirés du jeu) → conservé comme
+// proxy de progression du run (intensité des FX de fin, etc.).
 const dust = ref(0);
-const scrollsGained = ref(0); // parchemins d'enchant 📜 crédités (récap de fin)
 const loot = ref<Item[]>([]);
 // Détail d'un objet du récap de butin (modale au clic).
 const detailItem = ref<Item | null>(null);
@@ -1212,7 +1211,6 @@ function freshRun() {
   run.value = startRun(floorsWanted.value, dungeon.value[0]!, fighter.value.pv || 140);
   gold.value = 0;
   dust.value = 0;
-  scrollsGained.value = 0;
   loot.value = [];
   lastEvent.value = null;
   over.value = false;
@@ -1417,11 +1415,6 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
         rarity: fxRarity(fam.rarity),
       });
     }
-    // Parchemins d'enchant 📜 (carburant de l'enchant) : faucet SECONDAIRE ∝ progression
-    // du run (`dust.value` = compteur INTERNE de richesse du run — salles/monstres/coffres,
-    // plus affiché — sert de proxy), PLAFONNÉ + bonus de clear.
-    const scrolls =
-      Math.min(10, Math.max(1, Math.round(dust.value / 8))) + (outcome === 'cleared' ? 2 : 0);
     // MORT : on garde une FRACTION des gains liée à la profondeur du palier non terminé
     // (profond = pardonne moins). Les objets restent perdus. Retraite/clear = tout gardé.
     const keep = outcome === 'dead' ? deathKeepFraction(selectedLaby.value?.id ?? '') : 1;
@@ -1429,17 +1422,15 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
     if (uid)
       await char.applyExpedition(uid, {
         gold: Math.floor(gold.value * keep),
-        enchantScrolls: Math.floor(scrolls * keep),
         drops: outcome === 'dead' ? [] : loot.value,
         // Nettoyage → débloque le palier suivant (mort/retraite ne débloquent pas).
         ...(outcome === 'cleared' && selectedLaby.value
           ? { clearedDungeonId: labyClearId(selectedLaby.value.id) }
           : {}),
       });
-    // Recale les compteurs affichés sur les montants RÉELLEMENT crédités (fraction gardée
+    // Recale le compteur affiché sur le montant RÉELLEMENT crédité (fraction gardée
     // en cas de mort) → le récap ne ment pas.
     gold.value = Math.floor(gold.value * keep);
-    scrollsGained.value = Math.floor(scrolls * keep);
   }
   stopAuto(); // fin de run → coupe l'auto (la relance depuis la modale est manuelle)
   over.value = true;
