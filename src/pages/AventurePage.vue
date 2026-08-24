@@ -504,10 +504,10 @@
                     {{ talDeltaMap.get(t.id)! > 0 ? '+' : '−'
                     }}{{ fmtPow(Math.abs(talDeltaMap.get(t.id)!)) }}
                     <span
-                      v-if="talDeltaMap.get(t.id)! > 0 && replacedTalentIcon(t.def.code)"
+                      v-if="talDeltaMap.get(t.id)! > 0 && talReplaceIcon(t.id)"
                       class="repl-ic"
                       title="Remplacerait ce talent"
-                      >⟵ {{ replacedTalentIcon(t.def.code) }}</span
+                      >⟵ {{ talReplaceIcon(t.id) }}</span
                     >
                   </span>
                 </div>
@@ -515,19 +515,11 @@
                   <button
                     v-if="!t.equipped"
                     class="tal-b"
-                    :disabled="!talentCodeEquipped(t.def.code) && !canEquipMore"
-                    :title="
-                      talentCodeEquipped(t.def.code)
-                        ? 'Remplacer le talent de ce type déjà équipé'
-                        : ''
-                    "
-                    @click="
-                      talentCodeEquipped(t.def.code)
-                        ? doReplaceTalent(t.id, t.def.code)
-                        : doEquipTalent(t.id)
-                    "
+                    :disabled="!talReplaceId(t.id) && !canEquipMore"
+                    :title="talReplaceId(t.id) ? 'Remplacer le talent indiqué' : ''"
+                    @click="talReplaceId(t.id) ? doSwapTalent(t.id) : doEquipTalent(t.id)"
                   >
-                    {{ talentCodeEquipped(t.def.code) ? 'Remplacer' : 'Équiper' }}
+                    {{ talReplaceId(t.id) ? 'Remplacer' : 'Équiper' }}
                   </button>
                   <button v-else class="tal-b" @click="doUnequipTalent(t.id)">Retirer</button>
                   <button v-if="!t.equipped" class="tal-b ghost" @click="doSellTalent(t.id)">
@@ -2556,16 +2548,33 @@ function famPowerIfEquip(f: Item): number {
   return powerWith({ ...(char.row?.equipped ?? {}), [FAMILIAR_SLOT]: f });
 }
 // Talent : puissance si on l'ajoute à l'ensemble équipé (valeur du talent, même si au cap).
-function talPowerIfEquip(inst: TalentInstance): number {
-  // Si un talent du MÊME code est déjà équipé, on le DÉSÉQUIPE dans l'hypothèse (effets
-  // distincts) → le delta reflète le SWAP vs le talent du même type, pas l'ajout des deux.
-  const talents = [
-    ...(char.row?.talents ?? [])
-      .filter((t) => t.id !== inst.id)
-      .map((t) => (t.equipped && t.code === inst.code ? { ...t, equipped: false } : t)),
-    { ...inst, equipped: true },
-  ];
-  return powerWith(char.row?.equipped ?? {}, talentEffects(talents));
+// Meilleure façon d'équiper `inst` : renvoie la puissance obtenue ET le talent qu'il faut
+// RETIRER (replacedId) pour y arriver.
+//  - même code équipé → remplacement FORCÉ de ce talent (effets distincts) ;
+//  - slot libre → simple ajout (rien à retirer, replacedId null) ;
+//  - slots PLEINS (codes différents) → on teste le retrait de chaque équipé et on garde le
+//    meilleur swap → replacedId = le talent à enlever pour ce gain.
+function bestTalentSwap(inst: TalentInstance): { power: number; replacedId: string | null } {
+  const all = char.row?.talents ?? [];
+  const equipped = all.filter((t) => t.equipped);
+  const powerOf = (unequipId?: string) => {
+    const list = [
+      ...all
+        .filter((t) => t.id !== inst.id)
+        .map((t) => (unequipId && t.id === unequipId ? { ...t, equipped: false } : t)),
+      { ...inst, equipped: true },
+    ];
+    return powerWith(char.row?.equipped ?? {}, talentEffects(list));
+  };
+  const sameCode = equipped.find((t) => t.code === inst.code);
+  if (sameCode) return { power: powerOf(sameCode.id), replacedId: sameCode.id };
+  if (equipped.length < talentSlots.value) return { power: powerOf(), replacedId: null };
+  let best = { power: -1, replacedId: null as string | null };
+  for (const e of equipped) {
+    const p = powerOf(e.id);
+    if (p > best.power) best = { power: p, replacedId: e.id };
+  }
+  return best;
 }
 // Deltas de puissance (arrondis) des familiers/talents NON équipés → pastille +/−.
 // Mémoïsés (recalculés seulement quand le perso/l'équipement change), pas par rendu×ligne.
@@ -2600,13 +2609,32 @@ function doEquipRecommendedFamiliar() {
   }
   withUid((uid) => char.equip(uid, id), 'Impossible d’équiper le familier conseillé.');
 }
-const talDeltaMap = computed(() => {
+// Pour chaque talent NON équipé : gain de puissance du meilleur swap + le talent à retirer.
+const talSwapMap = computed(() => {
   const cur = combatPowerVal.value;
-  const m = new Map<string, number>();
+  const m = new Map<string, { delta: number; replacedId: string | null }>();
   for (const t of talentsView.value)
-    if (!t.equipped) m.set(t.id, Math.round(talPowerIfEquip(t.inst) - cur));
+    if (!t.equipped) {
+      const s = bestTalentSwap(t.inst);
+      m.set(t.id, { delta: Math.round(s.power - cur), replacedId: s.replacedId });
+    }
   return m;
 });
+const talDeltaMap = computed(() => {
+  const m = new Map<string, number>();
+  for (const [id, s] of talSwapMap.value) m.set(id, s.delta);
+  return m;
+});
+// Icône du talent que `id` remplacerait (null si ajout sur slot libre).
+function talReplaceIcon(id: string): string | null {
+  const rid = talSwapMap.value.get(id)?.replacedId;
+  if (!rid) return null;
+  const t = (char.row?.talents ?? []).find((x) => x.id === rid);
+  return t ? talentIcon(t) : null;
+}
+function talReplaceId(id: string): string | null {
+  return talSwapMap.value.get(id)?.replacedId ?? null;
+}
 // PUISSANCE CONSEILLÉE (ticket 6abe4429) : remplace le 🎯 % de victoire (qui « bougeait »)
 // par une cible STABLE — la puissance du build équilibré de référence contre lequel le
 // contenu est calibré. Le joueur compare SA puissance (combatPowerVal) à celle-ci.
@@ -2863,12 +2891,6 @@ function talentName(inst: TalentInstance): string {
 function talentIcon(inst: TalentInstance): string {
   return talentByCode(inst.code)?.icon ?? '✨';
 }
-// Icône du talent du MÊME code actuellement équipé (celui qu'un talent du sac
-// REMPLACERAIT). null si aucun même-code équipé (ajout sur un slot libre → rien à remplacer).
-function replacedTalentIcon(code: string): string | null {
-  const same = (char.row?.talents ?? []).find((t) => t.equipped && t.code === code);
-  return same ? talentIcon(same) : null;
-}
 // JET (0..100 %) d'un talent tombé, pour le rapport de combat.
 function talentDropQuality(inst: TalentInstance): number {
   return talentJetOf(inst);
@@ -2885,11 +2907,6 @@ function explainTalent(t: (typeof talentsView.value)[number]) {
       `Son <b>grade</b> (rang + qualité) est fixé au drop : trouve mieux en explorant plus ` +
       `profond ; vends les surplus pour de l'or.`,
   });
-}
-// Un talent de ce CODE est-il déjà équipé ? (loadout à effets distincts). Sert à
-// désactiver « Équiper » sur un doublon d'un talent déjà porté.
-function talentCodeEquipped(code: string, exceptId?: string): boolean {
-  return (char.row?.talents ?? []).some((t) => t.equipped && t.code === code && t.id !== exceptId);
 }
 // Auto-équipe un talent DROPPÉ si un emplacement est libre et qu'aucun talent du même
 // code n'est déjà équipé (comme l'auto-équipement des objets/familiers sur un slot vide,
@@ -2924,13 +2941,13 @@ async function doUnequipTalent(id: string) {
   if (!uid || expeBlocked()) return;
   await char.unequipTalent(uid, id);
 }
-// REMPLACER : un talent du même code est équipé → on le retire et on équipe celui-ci
-// (swap direct, sans passer par « Retirer » puis « Équiper »).
-async function doReplaceTalent(id: string, code: string) {
+// REMPLACER : retire le talent désigné par le meilleur swap (même code, ou le moins utile
+// si les emplacements sont pleins) puis équipe celui-ci — swap direct.
+async function doSwapTalent(id: string) {
   const uid = auth.user?.id;
   if (!uid || expeBlocked()) return;
-  const same = (char.row?.talents ?? []).find((t) => t.equipped && t.code === code);
-  if (same) await char.unequipTalent(uid, same.id);
+  const rid = talReplaceId(id);
+  if (rid) await char.unequipTalent(uid, rid);
   await char.equipTalent(uid, id, c.value.level.level);
 }
 // Régions / biomes (onglet Donjons) : bandeau de la région courante + teaser de la
