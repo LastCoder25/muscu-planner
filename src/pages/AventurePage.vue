@@ -3568,8 +3568,10 @@ function bossLockReason(b: MilestoneBoss): string {
 function itemEffects(it: Omit<Item, 'id'>): string {
   // OBJETS ET FAMILIERS : magnitude 100 % définie par le drop (grade × qualité, bakée
   // dans effect.value) → libellé direct, 1 décimale (la qualité reste visible, #6).
-  const a = effectLabelFor(it.effect.type, it.effect.value);
-  return it.effect2 ? `${a} · ${effectLabelFor(it.effect2.type, it.effect2.value)}` : a;
+  const parts = [effectLabelFor(it.effect.type, it.effect.value)];
+  if (it.effect2) parts.push(effectLabelFor(it.effect2.type, it.effect2.value));
+  if (it.effect3) parts.push(effectLabelFor(it.effect3.type, it.effect3.value));
+  return parts.join(' · ');
 }
 // Qualité du roll en étoiles pleines/vides (« ★★★★☆ ») ; vide si objet legacy (pas de roll).
 // Qualité en CHIFFRE (1→5, 5 = meilleur) affiché à côté du rang, code couleur

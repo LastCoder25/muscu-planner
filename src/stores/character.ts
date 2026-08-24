@@ -16,6 +16,7 @@ import {
   SLOTS,
   MAX_LOADOUTS,
   type Item,
+  type ItemEffect,
   type ItemSlot,
   type Equipped,
   type Loadout,
@@ -129,11 +130,18 @@ export const useCharacterStore = defineStore('character', () => {
       const ench = it.enchant ?? levelToEnchant(it.level);
       if (!ench) return { ...it, rarity, enchant: 0 };
       const m = enchantMult(ench);
-      const effect = { ...it.effect, value: Math.max(1, round1(it.effect.value * m)) };
-      const effect2 = it.effect2
-        ? { ...it.effect2, value: Math.max(1, round1(it.effect2.value * m)) }
-        : undefined;
-      return { ...it, rarity, enchant: 0, effect, ...(effect2 ? { effect2 } : {}) };
+      const bake = (e: ItemEffect) => ({ ...e, value: Math.max(1, round1(e.value * m)) });
+      const effect = bake(it.effect);
+      const effect2 = it.effect2 ? bake(it.effect2) : undefined;
+      const effect3 = it.effect3 ? bake(it.effect3) : undefined;
+      return {
+        ...it,
+        rarity,
+        enchant: 0,
+        effect,
+        ...(effect2 ? { effect2 } : {}),
+        ...(effect3 ? { effect3 } : {}),
+      };
     };
     r.inventory = arr<Item>(r.inventory).map(fixItem);
     r.cleared_dungeons = arr<string>(r.cleared_dungeons);

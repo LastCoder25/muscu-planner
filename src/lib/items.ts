@@ -96,8 +96,9 @@ export interface Item {
   rarity: Rarity;
   level: number; // niveau ACTUEL (monté via la Poussière d'évolution, ≤ niveau du joueur)
   baseLevel: number; // niveau à l'obtention (drop) → sert au remboursement au recyclage
-  effect: ItemEffect; // effet UNIQUE. value = magnitude de BASE (niv.1) ; grandit avec le niveau
-  effect2?: ItemEffect; // LEGACY : anciens objets 2-stats (les nouveaux n'en ont plus) — encore appliqué
+  effect: ItemEffect; // affixe PRIMAIRE (toujours présent)
+  effect2?: ItemEffect; // 2ᵉ affixe (raretés Magique+, cf. affixCountForRarity)
+  effect3?: ItemEffect; // 3ᵉ affixe (raretés Épique+)
   setId?: string; // appartenance à un SET (bonus à 2/3/4 pièces) — cf. ITEM_SETS
   locked?: boolean; // 🔒 protégé : exclu de la casse/vente (en masse ET individuelle)
   species?: string; // slot 'familiar' uniquement : id de la RACE (cf. FAMILIAR_SPECIES)
@@ -297,6 +298,13 @@ export const RARITY_RANK: Record<Rarity, number> = Object.fromEntries(
   RANK_ORDER.map((r, i) => [r, i]),
 ) as Record<Rarity, number>;
 
+// NOMBRE D'AFFIXES (stats) par rareté (Phase 2, v0.577, façon Diablo) : plus la rareté est
+// haute, plus l'objet porte de stats. Commun/Inhabituel 1 · Magique/Rare 2 · Épique+ 3.
+export function affixCountForRarity(rarity: Rarity): number {
+  const i = RARITY_RANK[rarity] ?? 0;
+  return i <= 1 ? 1 : i <= 3 ? 2 : 3;
+}
+
 // PLANCHER de magnitude par RANG. Géométrique (ratio 1,166). REFONTE v0.574 : plus de
 // qualité ★1-5 — chaque rang a un INTERVALLE de stat COMPLET, du plancher du rang au
 // plancher du rang SUIVANT (`rankRollMult`), parcouru par le « jet » (roll 0..1). Un jet
@@ -464,10 +472,12 @@ export function effectLabel(e: ItemEffect, level = 1): string {
   }
 }
 
-/** Puissance indicative d'un objet (2 stats au niveau courant) → compare deux objets. */
+/** Puissance indicative d'un objet (somme des affixes au niveau courant) → compare deux objets. */
 export function itemScore(it: Item): number {
   return (
-    effectiveValue(it.effect, it.level) + (it.effect2 ? effectiveValue(it.effect2, it.level) : 0)
+    effectiveValue(it.effect, it.level) +
+    (it.effect2 ? effectiveValue(it.effect2, it.level) : 0) +
+    (it.effect3 ? effectiveValue(it.effect3, it.level) : 0)
   );
 }
 
@@ -641,30 +651,29 @@ export function rollDrop(
   // Pool de stats PROGRESSIF : au début, seules les stats basiques (dégâts/PV)
   // tombent ; les stats exotiques se débloquent en montant (cf. EFFECT_MIN_LEVEL).
   const pool = availableEffects(slot, lvl);
-  // Tirage UNIFORME : toutes les voies/stats tombent équitablement (la voie n'oriente PAS
-  // les drops — c'est le loot accumulé qui te fait choisir/switcher de voie, ticket spé v2).
-  const chosen = pick(rng, pool);
   // value = base × intervalle du RANG selon le JET (rankRollMult). La PROFONDEUR est encodée
   // par le RANG (pyramide) ; le jet (roll) balaie tout l'intervalle du rang → chasse au bon jet.
   const rollValue = (b: number) => Math.max(1, round1(b * rankRollMult(rarity, roll)));
-  const value = rollValue(chosen.base);
+  // MULTI-AFFIXE (Phase 2, façon Diablo) : la rareté donne 1→3 stats DISTINCTES.
+  // Tirage UNIFORME : toutes les voies/stats tombent équitablement (la voie n'oriente PAS
+  // les drops — c'est le loot accumulé qui te fait choisir/switcher de voie, ticket spé v2).
+  const affixCount = Math.min(affixCountForRarity(rarity), pool.length);
+  const affixes: ItemEffect[] = [];
+  const remaining = [...pool];
+  for (let a = 0; a < affixCount; a++) {
+    const idx = Math.floor(rng() * remaining.length);
+    const e = remaining.splice(idx, 1)[0]!;
+    affixes.push({ type: e.type, value: rollValue(e.base) });
+  }
+  const chosen = affixes[0]!;
+  const effect2 = affixes[1];
+  const effect3 = affixes[2];
   // Objet à effet SIGNATURE → nom évocateur (« Guillotine ») ; sinon nom + adjectif.
   const sigNames = SIGNATURE_NAMES[chosen.type];
   const name = sigNames ? pick(rng, sigNames) : `${pick(rng, NAMES[slot])} ${RARITY_ADJ[rarity]}`;
   // REFONTE C : tout drop part du NIVEAU 1 (identité pure = rang + affixe). Toute la
   // puissance se construit ensuite à la poussière jusqu'au niveau du joueur.
   const level = 1;
-  // PAYOFF HAUT-RANG : Mythique/Primordial (index ≥ 6) roulent un DEUXIÈME effet distinct
-  // → un objet de très haut rang est « waouh » (double affixe). (Le multi-affixe complet
-  // par rareté viendra en Phase 2.)
-  let effect2: ItemEffect | undefined;
-  if (rankIndex(rarity) >= 6) {
-    const others = pool.filter((e) => e.type !== chosen.type);
-    if (others.length) {
-      const second = pick(rng, others);
-      effect2 = { type: second.type, value: rollValue(second.base) };
-    }
-  }
   return {
     slot,
     name,
@@ -672,8 +681,9 @@ export function rollDrop(
     rarity,
     level,
     baseLevel: level,
-    effect: { type: chosen.type, value }, // 1 stat (le set fait la synergie) — sauf haut rang (2 effets)
+    effect: chosen, // affixe primaire (multi-affixe selon la rareté, cf. affixCountForRarity)
     ...(effect2 ? { effect2 } : {}),
+    ...(effect3 ? { effect3 } : {}),
     roll,
   };
 }
@@ -873,7 +883,7 @@ export function rerollCost(item: Item): number {
 export function rerolledQuality(
   rng: () => number,
   item: Item,
-): { effect: ItemEffect; effect2?: ItemEffect; roll: number } {
+): { effect: ItemEffect; effect2?: ItemEffect; effect3?: ItemEffect; roll: number } {
   const oldRoll = item.roll ?? 0.5;
   const newRoll = rng();
   const ratio = rankRollMult(item.rarity, newRoll) / rankRollMult(item.rarity, oldRoll);
@@ -884,6 +894,7 @@ export function rerolledQuality(
   return {
     effect: scale(item.effect),
     ...(item.effect2 ? { effect2: scale(item.effect2) } : {}),
+    ...(item.effect3 ? { effect3: scale(item.effect3) } : {}),
     roll: newRoll,
   };
 }
@@ -1245,6 +1256,7 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
     // qualité (+2,5 %/★) comptent vraiment dans la puissance (ticket 71dfd9da).
     applyEffect(a, it.effect.type, it.effect.value / 100);
     if (it.effect2) applyEffect(a, it.effect2.type, it.effect2.value / 100);
+    if (it.effect3) applyEffect(a, it.effect3.type, it.effect3.value / 100);
   }
   // Familier (slot parallèle, hors SLOTS) : magnitude bakée (grade × qualité, re-scalée
   // à l'infusion). Pas d'enchant non plus.

@@ -12,6 +12,7 @@ import {
   RANK_ORDER,
   RARITY_MULT,
   RARITY_RANK,
+  affixCountForRarity,
   normRank,
   fullInfuseCost,
   infuseToMaxCost,
@@ -325,11 +326,17 @@ describe('rollDrop', () => {
     expect(d!.baseLevel).toBe(1);
     expect(RARITY_RANK[d!.rarity]).toBeLessThanOrEqual(Math.min(9, rankCeilingForLevel(6) + 2));
   });
-  it('un objet de donjon a UNE seule stat (le set fait la différence)', () => {
-    const d = rollDrop(() => 0.2, { cleared: true, defeated: 1, level: 5 });
-    expect(d).not.toBeNull();
-    expect(d!.effect).toBeDefined();
-    expect(d!.effect2).toBeUndefined();
+  it('nombre d’affixes = affixCountForRarity (multi-affixe, Phase 2)', () => {
+    for (let s = 1; s <= 200; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 3, level: 60, luck: 1 });
+      if (!d) continue;
+      const n = affixCountForRarity(d.rarity);
+      const got = 1 + (d.effect2 ? 1 : 0) + (d.effect3 ? 1 : 0);
+      expect(got).toBe(n);
+      // affixes distincts
+      const types = [d.effect.type, d.effect2?.type, d.effect3?.type].filter(Boolean);
+      expect(new Set(types).size).toBe(types.length);
+    }
   });
   it('tout drop part du niveau 1, quel que soit le niveau du contenu', () => {
     for (const level of [1, 8, 20, 40]) {
@@ -506,13 +513,19 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
     }
     return drops;
   }
-  it('un objet Mythique/Primordial roule un 2ᵉ effet distinct ; les raretés inférieures non', () => {
-    const drops = scan(80, 1); // contenu très profond → Mythique/Primordial possibles
-    const high = drops.find((d) => RARITY_RANK[d.rarity] >= 6);
-    expect(high).toBeTruthy();
-    expect(high!.effect2).toBeTruthy();
-    expect(high!.effect2!.type).not.toBe(high!.effect.type);
-    for (const d of drops) if (RARITY_RANK[d.rarity] < 6) expect(d.effect2).toBeUndefined();
+  it('affixes selon la rareté : Commun/Inhabituel 1, Magique/Rare 2, Épique+ 3', () => {
+    const drops = scan(80, 1); // large éventail de raretés
+    for (const d of drops) {
+      const got = 1 + (d.effect2 ? 1 : 0) + (d.effect3 ? 1 : 0);
+      expect(got).toBe(affixCountForRarity(d.rarity));
+      if (d.effect2) expect(d.effect2.type).not.toBe(d.effect.type);
+      if (d.effect3) {
+        expect(d.effect3.type).not.toBe(d.effect.type);
+        expect(d.effect3.type).not.toBe(d.effect2!.type);
+      }
+    }
+    // il existe bien des objets à 3 affixes (Épique+) dans un contenu profond.
+    expect(drops.some((d) => d.effect3)).toBe(true);
   });
   it('les effets signature n’apparaissent qu’en profondeur (gate de niveau)', () => {
     const SIG = new Set(['execute_pct', 'rage_pct', 'momentum_pct']);

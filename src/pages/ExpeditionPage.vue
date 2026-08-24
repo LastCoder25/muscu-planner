@@ -407,6 +407,9 @@
         <div v-if="detailItem.effect2" class="fl-eff">
           ✦ {{ effectLabel(detailItem.effect2, detailItem.level) }}
         </div>
+        <div v-if="detailItem.effect3" class="fl-eff">
+          ✦ {{ effectLabel(detailItem.effect3, detailItem.level) }}
+        </div>
         <div v-if="detailItem.setId" class="fl-set">🧩 {{ setName(detailItem.setId) }}</div>
         <q-btn
           class="fx-cta"
