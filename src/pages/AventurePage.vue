@@ -1572,15 +1572,19 @@
               <span v-else class="lo-empty-tag">vide</span>
             </div>
             <div v-if="lo.count" class="lo-items">
-              <span
+              <button
                 v-for="it in lo.items"
                 :key="it.slot"
+                type="button"
                 class="lo-item"
                 :class="'r-' + it.rarity"
-                :title="SLOT_LABEL[it.slot] + ' · ' + it.name"
-                >{{ SLOT_EMOJI[it.slot] }}</span
+                :title="SLOT_LABEL[it.slot] + ' · ' + it.name + ' — voir les stats'"
+                @click="inspectItem = it"
               >
+                {{ SLOT_EMOJI[it.slot] }}
+              </button>
             </div>
+            <div v-if="lo.count" class="lo-hint">Touche un objet pour voir ses stats</div>
             <button
               class="lo-btn"
               :disabled="(!lo.count && !hasEquippedGear) || busy"
@@ -5913,8 +5917,8 @@ button.pt-mini:active {
   margin: 7px 0;
 }
 .lo-item {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5922,6 +5926,16 @@ button.pt-mini:active {
   border-radius: 8px;
   border: 1px solid var(--rk, var(--line));
   background: color-mix(in srgb, var(--rk, var(--line)) 12%, var(--surface));
+  cursor: pointer;
+  padding: 0;
+}
+.lo-item:active {
+  transform: scale(0.92);
+}
+.lo-hint {
+  font-size: 10.5px;
+  color: var(--dim);
+  margin: -2px 0 6px;
 }
 .lo-btn {
   width: 100%;
