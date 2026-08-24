@@ -503,6 +503,7 @@ import { computeLevel } from '@/lib/levels';
 import { formatOption } from '@/data/challengeFormats';
 import { exerciseImage } from '@/data/exerciseImages';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
+import { isCardioChallengeExercise } from '@/data/cardio';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
 import { useGameFx } from '@/composables/useGameFx';
@@ -740,8 +741,10 @@ function bal(c: Challenge) {
   return challengeLiveBalance(c);
 }
 function unitOf(c: Challenge) {
-  // cardio en temps = minutes ; gainage en temps = secondes.
-  if (c.unit === 'time') return isCardioChallengeRow(c) ? 'min' : 'sec';
+  // Temps : VRAIE sortie cardio (marche/course/vélo) = minutes ; gainage ET conditionnement
+  // (corde à sauter, burpees…) = SECONDES au chrono → isCardioChallengeExercise, pas
+  // isCardioChallengeRow (qui inclut le conditionnement dans la PISTE cardio). Ticket unité.
+  if (c.unit === 'time') return isCardioChallengeExercise(c.exercise_id) ? 'min' : 'sec';
   return c.unit === 'distance' ? 'km' : 'reps';
 }
 // Mode Séries : le total est en séries → on affiche AUSSI le total de reps (fa798da3).

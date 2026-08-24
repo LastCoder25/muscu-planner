@@ -73,8 +73,9 @@
             :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }"
           />
         </div>
-        <!-- Mode DURÉE : chrono (comme les challenges) + ajout rapide de secondes. -->
-        <template v-if="legMode(leg) === 'time'">
+        <!-- Mode DURÉE (gainage) : UNIQUEMENT le chrono (comme les challenges). Démarrer →
+             décompte ; Pause → enregistre une série de la durée RÉELLE écoulée. -->
+        <div v-if="legMode(leg) === 'time'" class="leg-actions">
           <button
             class="chrono-cta"
             :class="{ running: isChronoOn(leg) }"
@@ -84,18 +85,8 @@
             {{ isChronoOn(leg) ? 'Pause' : 'Démarrer' }}
             <span class="cc-time">{{ chronoDisplay(leg) }}</span>
           </button>
-          <div class="leg-actions">
-            <button
-              v-for="s in [20, 30, 45, 60]"
-              :key="s"
-              class="add"
-              @click="doAddSeconds(leg, s)"
-            >
-              +{{ s }}s
-            </button>
-            <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
-          </div>
-        </template>
+          <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
+        </div>
         <div v-else class="leg-actions">
           <button class="add" @click="openSet(leg, 1)">＋ 1 série</button>
           <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
