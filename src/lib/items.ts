@@ -683,12 +683,20 @@ const LO_WIDTH_RANK = 1.8; // écart-type BAS (rangs sous le pic) — large : fo
 function rankBell(level: number, luck: number, floorBonus: number, playerLevel?: number) {
   const l = Math.min(1, Math.max(0, luck));
   const eff = playerLevel == null ? level : Math.min(level, playerLevel);
-  const center = rankCeilingForLevel(eff) + Math.max(0, floorBonus);
+  // Pic NATUREL = rang de ton niveau (min contenu/joueur). Le `floorBonus` (Autel/générosité
+  // boss) DÉCALE le centre vers le haut (meilleures ODDS dans ta ligue) mais NE relève PAS le
+  // plafond (cf. plus bas) → il améliore la chance d'un bon roll, il ne fait pas leapfrog.
+  const baseCeil = rankCeilingForLevel(eff);
+  const center = baseCeil + Math.max(0, floorBonus);
   // Pointe haute RESSERRÉE (v0.579) : le « +1 rang » au-dessus de ton niveau tombe de ~22 %
   // à ~9 % → les hauts rangs (dont Légendaire+) redeviennent un vrai score, pas la moitié des
   // drops. La luck l'épaissit encore (jackpot façon ARPG). Baisser encore (0,16+0,4·l) = ~4 %.
   const hiWidth = 0.22 + l * 0.5;
-  const cap = Math.min(RANK_ORDER.length - 1, Math.round(center) + 2); // borne douce : +2 rangs max
+  // ANTI-RUNAWAY (v0.598) : le plafond est ANCRÉ au pic NATUREL (baseCeil + 2), PAS au centre
+  // gonflé par `floorBonus`. Avant, la générosité boss (+0,6) et l'Autel poussaient le cap →
+  // un joueur niv.20 (ceiling épique) dropait du Primordial (+3 rangs). Désormais floorBonus/luck
+  // ne biaisent QUE la distribution sous ce plafond : le sport reste le vrai plafond (+2 max).
+  const cap = Math.min(RANK_ORDER.length - 1, baseCeil + 2); // borne douce : +2 rangs sur le pic naturel
   return { center, loWidth: LO_WIDTH_RANK, hiWidth, cap };
 }
 

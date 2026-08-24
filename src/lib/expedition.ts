@@ -395,7 +395,12 @@ const WIN_TEXT: Record<PoiType, string[]> = {
 };
 
 /** Calcule l'issue d'une expédition (seedée). Le butin est crédité au RETOUR. */
-export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): ExpeditionOutcome {
+export function resolveOutcome(
+  hero: Combatant,
+  poi: Poi,
+  seed: number,
+  playerLevel?: number, // cap anti-runaway : rang des drops plafonné à min(contenu, joueur)
+): ExpeditionOutcome {
   const rng = mulberry32(seed >>> 0 || 1);
   const cost = goldCost(poi.type, poi.level);
 
@@ -430,6 +435,7 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
         level: poi.level,
         luck: Math.min(0.95, 0.35 + waves * 0.05 + i * 0.04),
         spread: 0,
+        playerLevel,
       });
       if (d) items.push(d);
     }
@@ -508,10 +514,17 @@ export function resolveOutcome(hero: Combatant, poi: Poi, seed: number): Expedit
   let item: Omit<Item, 'id'> | null = null;
   let key = 0;
   if (poi.type === 'lair' && poi.setId) {
-    item = rollSetPiece(rng, { setId: poi.setId, level: poi.level, luck: 0.6 });
+    item = rollSetPiece(rng, { setId: poi.setId, level: poi.level, luck: 0.6, playerLevel });
     key = rng() < 0.2 ? 1 : 0;
   } else if (poi.type === 'camp') {
-    item = rollDrop(rng, { cleared: true, defeated: 1, level: poi.level, luck: 0.4, spread: 1 });
+    item = rollDrop(rng, {
+      cleared: true,
+      defeated: 1,
+      level: poi.level,
+      luck: 0.4,
+      spread: 1,
+      playerLevel,
+    });
     key = rng() < 0.1 ? 1 : 0;
   }
   let gold = goldHaul;
@@ -691,6 +704,7 @@ export function startExpedition(
   now: number,
   seed: number,
   travelMult = 1,
+  playerLevel?: number, // cap anti-runaway sur le rang des drops
 ): ActiveExpedition {
   const oneWayMs = Math.round(travelOneWayMin(poi.level, poi.distNorm) * 60_000 * travelMult);
   return {
@@ -700,6 +714,6 @@ export function startExpedition(
     returnAt: now + oneWayMs * 2,
     goldCost: goldCost(poi.type, poi.level),
     seed: seed >>> 0 || 1,
-    outcome: resolveOutcome(hero, poi, seed),
+    outcome: resolveOutcome(hero, poi, seed, playerLevel),
   };
 }

@@ -813,6 +813,7 @@ export const useCharacterStore = defineStore('character', () => {
       now,
       (now ^ (poi.level * 2654435761)) >>> 0 || 1,
       travelTimeMult(cur.buildings),
+      level,
     );
     const baseMap = cur.expedition_map ?? createMap(newSeed(now), now, level);
     const map: ExpeditionMap = { ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) };

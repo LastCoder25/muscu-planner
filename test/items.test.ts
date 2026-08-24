@@ -206,6 +206,14 @@ describe('rollTier : pyramide de rareté centrée sur le niveau', () => {
     const cap = Math.min(9, rankCeilingForLevel(20) + 2);
     for (let s = 1; s <= 300; s++)
       expect(RARITY_RANK[rollTier(mulberry32(s), 40, 1, 0, 20).rank]).toBeLessThanOrEqual(cap);
+    // ANTI-RUNAWAY (v0.598) : le floorBonus (générosité boss +0,6, Autel jusqu'à ~2,2) DÉCALE la
+    // distribution mais NE relève PAS le cap — un joueur niv.20 ne drope JAMAIS au-delà de
+    // ceiling(20)+2 (mythique), même luck 1 + floorBonus 2,2 (avant : Primordial, ticket runaway).
+    for (const fb of [0.6, 1.4, 2.2])
+      for (let s = 1; s <= 400; s++)
+        expect(
+          RARITY_RANK[rollTier(mulberry32(s * 13 + 1), 55, 1, fb, 20).rank],
+        ).toBeLessThanOrEqual(cap);
   });
   it('dropBand : bande cohérente (lo ≤ hi) et qui monte avec le niveau', () => {
     const ri = (r: string) => RARITY_RANK[r as keyof typeof RARITY_RANK];
