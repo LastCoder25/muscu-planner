@@ -324,7 +324,7 @@ export const useCharacterStore = defineStore('character', () => {
       summonCost: number; // pierres d'invocation dépensées (win ou lose)
       gold: number;
       defeated: boolean;
-      pending?: PendingReward | null;
+      drops?: Item[]; // butin (comme un donjon) — distribué (auto-équipe si slot libre/meilleur)
       stones?: number; // pierres magiques 💎 (jalon boss)
       parchemins?: number; // parchemins 📜 (jalon boss, niveau des talents)
       inkDust?: number; // poussière d'encre (jalon boss, RANG des talents)
@@ -340,11 +340,9 @@ export const useCharacterStore = defineStore('character', () => {
     // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~6 % ensuite sur les
     // réaffrontements (raréfié 2026‑08‑18) → pas de flux de clés en spammant un boss.
     const keyGain = firstDefeat ? 1 : input.defeated && Math.random() < 0.06 ? 1 : 0;
-    // Codex : on « croise » les sets des candidats de récompense PROPOSÉS (même sans
-    // les garder) → le glossaire les enregistre à la rencontre, pas à la possession.
-    const crossedSetItems = (input.pending?.candidates ?? [])
-      .map((cnd) => (cnd.kind === 'item' ? cnd.item : null))
-      .filter((it): it is Item => !!it);
+    // Butin comme un donjon : distribué (auto-équipe si slot libre/meilleur, sinon au sac).
+    const drops = input.drops ?? [];
+    const dist = distributeItems(cur.equipped, cur.inventory, drops);
     return persist(userId, {
       gold: cur.gold + input.gold,
       stones: cur.stones + (input.defeated ? (input.stones ?? 0) : 0),
@@ -354,8 +352,9 @@ export const useCharacterStore = defineStore('character', () => {
       protections: cur.protections + (input.defeated ? (input.protections ?? 0) : 0),
       summon_stones: Math.max(0, cur.summon_stones - input.summonCost),
       defeated_bosses: defeated,
-      pending_reward: input.pending ?? cur.pending_reward ?? null,
-      set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, crossedSetItems),
+      equipped: dist.equipped,
+      inventory: dist.inventory,
+      set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, drops),
       keys: cur.keys + keyGain,
       ...(input.talentDrops?.length ? { talents: [...cur.talents, ...input.talentDrops] } : {}),
     });

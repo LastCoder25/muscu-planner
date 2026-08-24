@@ -2190,7 +2190,6 @@ import {
   type Rarity,
   type AggregatedEffects,
   type RewardCandidate,
-  type PendingReward,
 } from '@/lib/items';
 import {
   talentsEarned,
@@ -2211,8 +2210,6 @@ import {
   labyrinthUnlocked,
   bossAltarBuilt,
   bossAltarRollFloor,
-  bossRewardCount,
-  bossTargetingUnlocked,
   summonCostWith,
 } from '@/lib/buildings';
 import {
@@ -3586,68 +3583,6 @@ function itemQuality(it: { roll?: number } | null | undefined): number {
 function jetTier(pct: number): string {
   return pct >= 80 ? 'jet-hi' : pct >= 45 ? 'jet-mid' : 'jet-lo';
 }
-// Slots d'un set déjà possédés (équipé + sac) → pour le ciblage anti-doublon de l'Autel.
-function ownedSetSlots(setId: string): Set<ItemSlot> {
-  const s = new Set<ItemSlot>();
-  for (const slot of SLOTS) if (char.row?.equipped[slot]?.setId === setId) s.add(slot);
-  for (const it of char.row?.inventory ?? [])
-    if (it.setId === setId && (SLOTS as string[]).includes(it.slot)) s.add(it.slot);
-  return s;
-}
-// Tire les récompenses au CHOIX d'un boss (mixte : pièce de set / objet de donjon /
-// lot or+poussière), aléatoire complet et seedé (anti-reroll). L'AUTEL DES BOSS
-// améliore : nombre de candidats, plancher de qualité de roll, et ciblage du slot
-// de set MANQUANT (anti-doublon → on complète le set plus vite).
-function rollBossRewards(b: MilestoneBoss, rng: () => number, lucky: boolean): RewardCandidate[] {
-  const luck = Math.min(1, 0.3 + (lucky ? 0.5 : 0));
-  const buildings = char.row?.buildings ?? [];
-  const rollFloor = bossAltarRollFloor(buildings);
-  const count = bossRewardCount(buildings);
-  const targeting = bossTargetingUnlocked(buildings);
-  // Les boss droppent TOUS les sets (de voie) au hasard → on chasse/complète son set de
-  // voie au fil des boss ; changer de voie exploite ce qu'on a accumulé (v0.565).
-  const rollAnySet = (): RewardCandidate => {
-    const setId = randomVoieSetId(rng);
-    // Ciblage (Autel) : vise un slot MANQUANT de CE set → aide à compléter.
-    const missing = targeting ? SLOTS.filter((s) => !ownedSetSlots(setId).has(s)) : [];
-    const preferSlot = missing.length ? missing[Math.floor(rng() * missing.length)] : undefined;
-    const p = rollSetPiece(rng, {
-      setId,
-      level: b.dropLevel,
-      luck,
-      rollFloor,
-      playerLevel: c.value.level.level,
-      ...(preferSlot ? { preferSlot } : {}),
-    });
-    return { kind: 'item', item: { ...p, id: crypto.randomUUID() } };
-  };
-  const out: RewardCandidate[] = [];
-  for (let n = 0; n < count; n++) {
-    const roll = rng();
-    // Proba de SET réduite (0.4) : une pièce de set est un butin rare et important.
-    if (roll < 0.4) {
-      out.push(rollAnySet());
-    } else if (roll < 0.8) {
-      let d: ReturnType<typeof rollDrop> = null;
-      for (let i = 0; i < 5 && !d; i++)
-        d = rollDrop(rng, {
-          cleared: true,
-          defeated: 1,
-          level: b.dropLevel,
-          luck,
-          rollFloor,
-          playerLevel: c.value.level.level,
-        });
-      if (d) out.push({ kind: 'item', item: { ...d, id: crypto.randomUUID() } });
-      else out.push(rollAnySet());
-    } else {
-      // Cache d'OR : doit rivaliser avec une pièce d'équipement (or plein du palier).
-      out.push({ kind: 'gold', gold: b.gold });
-    }
-  }
-  return out;
-}
-
 async function fightBoss(b: MilestoneBoss) {
   const uid = auth.user?.id;
   if (expeBlocked()) return;
@@ -3673,7 +3608,7 @@ async function fightBoss(b: MilestoneBoss) {
   lastRunFirstVisit.value = !defeatedBossSet.value.has(b.id);
   busy.value = true;
   try {
-    const { extra, lucky } = runExtra();
+    const { extra } = runExtra();
     const seed = Math.floor(Math.random() * 1e9);
     const player = playerWithGear(
       char.row.pseudo,
@@ -3687,13 +3622,23 @@ async function fightBoss(b: MilestoneBoss) {
     const win = r.win;
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
     const gold = win ? Math.round(b.gold * (1 + goldPct)) : 0;
-    // Victoire → 3 récompenses au CHOIX (posées en attente ; réclamées via la modale).
-    const pending: PendingReward | null = win
-      ? {
-          source: `boss:${b.id}`,
-          candidates: rollBossRewards(b, mulberry32((seed ^ 0x9e3779b9) >>> 0), lucky),
-        }
-      : null;
+    // Victoire → UN drop (pièce de set de voie au hasard), comme un donjon (rapport standard,
+    // Équiper/Casser/Vendre inline). Plus de choix à 3 candidats ni de lot or-seul.
+    const dropRng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+    const rollFloor = bossAltarRollFloor(char.row?.buildings ?? []);
+    const drops: Item[] = [];
+    if (win) {
+      const piece = rollSetPiece(dropRng, {
+        setId: randomVoieSetId(dropRng),
+        level: b.dropLevel,
+        luck: 0.6, // boss généreux
+        rollFloor,
+        playerLevel: c.value.level.level,
+      });
+      const dr: Item = { ...piece, id: crypto.randomUUID() };
+      drops.push(dr);
+      queueFx(() => celebrateRareDrop(dr));
+    }
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
     // Drop de TALENT au boss (source plus généreuse que les donjons) : ~25 % à la
     // victoire, RANG gaté par le palier du boss (`dropLevel`) et luck rehaussée (0.6) —
@@ -3715,7 +3660,7 @@ async function fightBoss(b: MilestoneBoss) {
       summonCost,
       gold,
       defeated: win,
-      pending,
+      drops,
       enchantScrolls: 4 + Math.floor(b.unlockLevel / 4), // jalon boss → parchemins d'enchant 📜
       protections: 1 + Math.floor(b.unlockLevel / 10), // 🛡️ protections — la source précieuse
       ...(talentDrops.length ? { talentDrops } : {}),
@@ -3741,7 +3686,7 @@ async function fightBoss(b: MilestoneBoss) {
           log: r.log,
         },
       ],
-      drops: [],
+      drops,
       ...(talentDrops.length ? { talentDrops } : {}),
       ...(win ? { enchantScrolls: 4 + Math.floor(b.unlockLevel / 4) } : {}),
       ...(win ? { protections: 1 + Math.floor(b.unlockLevel / 10) } : {}),
