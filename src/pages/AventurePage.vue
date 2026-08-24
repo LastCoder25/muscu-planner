@@ -2877,6 +2877,26 @@ function doEquipRecommendedTalents() {
     'Impossible d’équiper les talents conseillés.',
   );
 }
+// AUTO-CORRECTION : si PLUS de talents sont équipés que d'emplacements (ex. le niveau a
+// baissé après suppression de séances → `talentSlots` réduit, mais les talents restent
+// équipés), `talentEffects` les comptait TOUS → puissance GONFLÉE, et l'auto-équip (qui
+// n'en garde que N) faisait « chuter » la puissance (tickets 863c4f04 / 6f3c49a6). On retire
+// donc l'excédent (on garde les N meilleurs) → puissance affichée toujours LÉGALE.
+watch(
+  [() => char.row?.talents, talentSlots],
+  () => {
+    const uid = auth.user?.id;
+    if (!uid) return;
+    const eq = (char.row?.talents ?? []).filter((t) => t.equipped);
+    if (eq.length <= talentSlots.value) return;
+    const keep = [...eq]
+      .sort((a, b) => talentMag(b) - talentMag(a))
+      .slice(0, talentSlots.value)
+      .map((t) => t.id);
+    void char.setEquippedTalents(uid, keep);
+  },
+  { immediate: true },
+);
 // Magnitude RÉELLE d'un talent (base × intervalle du rang selon le JET × enchant) → sert à
 // comparer deux exemplaires du même code (le meilleur = plus haute magnitude).
 function talentMag(t: TalentInstance): number {

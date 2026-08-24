@@ -223,6 +223,10 @@
             :player-equipped="playerEquipped"
             @done="onFxDone"
           />
+          <!-- Reprendre la main MÊME pendant le combat (le bandeau auto est masqué par la modale). -->
+          <button v-if="autoMode" type="button" class="fx-stop-auto" @click="stopAuto">
+            ✋ Reprendre la main
+          </button>
           <template v-if="fxDone">
             <div class="fx-result" :class="roomFx.win ? 'good' : 'bad'">
               {{ roomFx.win ? '🏆 Victoire !' : '💀 Défaite…' }}
@@ -1933,6 +1937,20 @@ function replayAuto() {
   height: 48px;
   border-radius: 12px;
   font-weight: 700;
+}
+/* Reprendre la main pendant le combat (dans la modale, auto actif). */
+.fx-stop-auto {
+  margin-top: 12px;
+  width: 100%;
+  padding: 9px 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
 }
 /* Coffre : rebond + ouverture */
 .chest-anim {
