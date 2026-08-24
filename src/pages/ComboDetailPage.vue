@@ -73,13 +73,29 @@
             :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }"
           />
         </div>
-        <!-- Mode DURÉE : ajout rapide de secondes ; sinon +séries (dialogue reps+poids). -->
-        <div v-if="legMode(leg) === 'time'" class="leg-actions">
-          <button v-for="s in [20, 30, 45, 60]" :key="s" class="add" @click="doAddSeconds(leg, s)">
-            +{{ s }}s
+        <!-- Mode DURÉE : chrono (comme les challenges) + ajout rapide de secondes. -->
+        <template v-if="legMode(leg) === 'time'">
+          <button
+            class="chrono-cta"
+            :class="{ running: isChronoOn(leg) }"
+            @click="toggleChrono(leg)"
+          >
+            <q-icon :name="isChronoOn(leg) ? 'pause' : 'play_arrow'" size="18px" />
+            {{ isChronoOn(leg) ? 'Pause' : 'Démarrer' }}
+            <span class="cc-time">{{ chronoDisplay(leg) }}</span>
           </button>
-          <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
-        </div>
+          <div class="leg-actions">
+            <button
+              v-for="s in [20, 30, 45, 60]"
+              :key="s"
+              class="add"
+              @click="doAddSeconds(leg, s)"
+            >
+              +{{ s }}s
+            </button>
+            <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
+          </div>
+        </template>
         <div v-else class="leg-actions">
           <button class="add" @click="openSet(leg, 1)">＋ 1 série</button>
           <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
@@ -119,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -252,6 +268,46 @@ function doAddSeconds(leg: ComboLeg, sec: number) {
 function undoSet(leg: ComboLeg) {
   combo.removeLastSet(id, leg.exercise_id);
 }
+
+// ── Chrono des exos de DURÉE (gainage) — comme dans les challenges ──
+// Démarrer → décompte (mm:ss) ; Pause → enregistre une SÉRIE de N secondes et remet à 0.
+// Un seul chrono actif à la fois (démarrer un autre exo enregistre d'abord le décompte courant).
+const chronoLegKey = ref<string | null>(null);
+const chronoSec = ref(0);
+const chronoRunning = ref(false);
+let chronoTick: ReturnType<typeof setInterval> | undefined;
+function isChronoOn(leg: ComboLeg): boolean {
+  return chronoRunning.value && chronoLegKey.value === leg.exercise_id;
+}
+function chronoDisplay(leg: ComboLeg): string {
+  const s = chronoLegKey.value === leg.exercise_id ? chronoSec.value : 0;
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function logChrono(legKey: string) {
+  clearInterval(chronoTick);
+  chronoTick = undefined;
+  chronoRunning.value = false;
+  const leg = c.value?.legs.find((l) => l.exercise_id === legKey);
+  if (leg && chronoSec.value > 0) doAddSeconds(leg, chronoSec.value);
+  chronoSec.value = 0;
+  chronoLegKey.value = null;
+}
+function toggleChrono(leg: ComboLeg) {
+  if (isChronoOn(leg)) {
+    logChrono(leg.exercise_id); // Pause → enregistre la série
+    return;
+  }
+  // Démarrer : enregistre d'abord un décompte laissé en cours sur un AUTRE exo.
+  if (chronoLegKey.value && chronoLegKey.value !== leg.exercise_id) logChrono(chronoLegKey.value);
+  chronoLegKey.value = leg.exercise_id;
+  chronoSec.value = 0;
+  chronoRunning.value = true;
+  chronoTick = setInterval(() => (chronoSec.value += 1), 1000);
+}
+onBeforeUnmount(() => {
+  if (chronoLegKey.value) logChrono(chronoLegKey.value);
+  else clearInterval(chronoTick);
+});
 function abandon() {
   $q.dialog({
     title: 'Abandonner le Défi 360 ?',
@@ -468,6 +524,33 @@ onMounted(async () => {
 .leg-actions {
   display: flex;
   gap: 6px;
+}
+/* Chrono des exos de durée (gainage) — cohérent avec le chrono des challenges. */
+.chrono-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 11px 0;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+}
+.chrono-cta.running {
+  background: var(--accent);
+  color: var(--bg);
+}
+.chrono-cta .cc-time {
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+  opacity: 0.9;
 }
 /* Détail des séries faites : petites puces reps×poids sous les boutons. */
 .leg-sets {
