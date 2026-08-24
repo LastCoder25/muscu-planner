@@ -688,12 +688,20 @@
                 <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
                   RARITY_LABEL[char.row.equipped[slot]!.rarity]
                 }}</span>
-                <span class="gpill lvl">niv {{ char.row.equipped[slot]!.level }}</span>
+                <span class="lvl-badge">Nv {{ char.row.equipped[slot]!.level }}</span>
                 <span v-if="char.row.equipped[slot]!.setId" class="gpill set" title="Pièce de set"
                   >🧩</span
                 >
               </div>
-              <div class="slot-eff">{{ itemEffects(char.row.equipped[slot]!) }}</div>
+              <div class="slot-eff">
+                <div
+                  v-for="(ln, si) in itemStatLines(char.row.equipped[slot]!)"
+                  :key="si"
+                  class="stat-line"
+                >
+                  {{ ln }}
+                </div>
+              </div>
               <!-- Actions ancrées EN BAS (slot-eff flexible) → alignées d'une carte à l'autre. -->
               <div class="slot-actions">
                 <button class="slot-remove" :disabled="onExpedition" @click.stop="doUnequip(slot)">
@@ -845,7 +853,7 @@
                     <!-- Jet porté par l'icône (badge bas) + les lignes de comparaison ci-dessous ;
                          plus de badge de qualité redondant à côté du rang (ticket UI). -->
                     <span class="ii-dot">·</span> {{ SLOT_LABEL[it.slot] }}
-                    <span class="ii-dot">·</span> niv {{ it.level }}
+                    <span class="lvl-badge">Nv {{ it.level }}</span>
                     <span v-if="it.setId" class="gpill set">🧩 Set</span>
                   </div>
                   <!-- Comparaison : rang + qualité + effet, cet objet vs l'équipé (ticket 50f593a2). -->
@@ -861,7 +869,12 @@
                         :class="jetTier(itemQuality(it))"
                         >{{ itemQuality(it) }}</span
                       >
-                      <span class="ii-cmp-val">{{ itemEffects(it) }}</span>
+                      <span class="lvl-badge">Nv {{ it.level }}</span>
+                      <span class="ii-cmp-val">
+                        <span v-for="(ln, li) in itemStatLines(it)" :key="li" class="cmp-stat">{{
+                          ln
+                        }}</span>
+                      </span>
                     </div>
                     <div class="ii-cmp-row eq">
                       <span class="ii-cmp-lbl">Équipé</span>
@@ -875,7 +888,15 @@
                           :class="jetTier(itemQuality(equippedInSlot(it.slot)))"
                           >{{ itemQuality(equippedInSlot(it.slot)) }}</span
                         >
-                        <span class="ii-cmp-val">{{ itemEffects(equippedInSlot(it.slot)!) }}</span>
+                        <span class="lvl-badge">Nv {{ equippedInSlot(it.slot)!.level }}</span>
+                        <span class="ii-cmp-val">
+                          <span
+                            v-for="(ln, li) in itemStatLines(equippedInSlot(it.slot)!)"
+                            :key="li"
+                            class="cmp-stat"
+                            >{{ ln }}</span
+                          >
+                        </span>
                       </template>
                       <span v-else class="ii-cmp-val dim">— emplacement libre</span>
                     </div>
@@ -1757,9 +1778,17 @@
             <div class="stash-lbl">Nouvelle</div>
             <div class="stash-nm">
               {{ stashConflict.incoming.emoji }} {{ stashConflict.incoming.rarity }}
+              <span class="lvl-badge">Nv {{ stashConflict.incoming.level }}</span>
               <span class="stash-q">jet {{ itemQuality(stashConflict.incoming) }}%</span>
             </div>
-            <div class="stash-eff">{{ itemEffects(stashConflict.incoming) }}</div>
+            <div class="stash-eff">
+              <span
+                v-for="(ln, li) in itemStatLines(stashConflict.incoming)"
+                :key="li"
+                class="cmp-stat"
+                >{{ ln }}</span
+              >
+            </div>
             <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.incoming)) }}</div>
           </div>
           <div
@@ -1771,9 +1800,17 @@
             <div class="stash-lbl">Rangée <span v-if="stashConflict.stored.locked">🔒</span></div>
             <div class="stash-nm">
               {{ stashConflict.stored.emoji }} {{ stashConflict.stored.rarity }}
+              <span class="lvl-badge">Nv {{ stashConflict.stored.level }}</span>
               <span class="stash-q">jet {{ itemQuality(stashConflict.stored) }}%</span>
             </div>
-            <div class="stash-eff">{{ itemEffects(stashConflict.stored) }}</div>
+            <div class="stash-eff">
+              <span
+                v-for="(ln, li) in itemStatLines(stashConflict.stored)"
+                :key="li"
+                class="cmp-stat"
+                >{{ ln }}</span
+              >
+            </div>
             <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.stored)) }}</div>
           </div>
         </div>
@@ -1959,19 +1996,19 @@
                 <div class="inv-name">{{ d.name }}</div>
                 <div class="pills">
                   <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
-                  <span
-                    v-if="itemQuality(d)"
-                    class="q-badge"
-                    :class="jetTier(itemQuality(d))"
-                    title="Qualité (5 = meilleur)"
-                    >{{ itemQuality(d) }}</span
-                  >
+                  <span class="lvl-badge">Nv {{ d.level }}</span>
                   <span v-if="d.setId" class="gpill set">🧩 Set</span>
                 </div>
-                <div class="inv-eff">{{ SLOT_LABEL[d.slot] }} · {{ itemEffects(d) }}</div>
+                <div class="inv-slot">{{ SLOT_LABEL[d.slot] }}</div>
+                <div class="stat-lines">
+                  <div v-for="(ln, si) in itemStatLines(d)" :key="si" class="stat-line">
+                    {{ ln }}
+                  </div>
+                </div>
                 <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
                   <span
-                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity]
+                    >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} · niv
+                    {{ equippedInSlot(d.slot)!.level
                     }}<span v-if="equippedInSlot(d.slot)!.setId" title="Pièce de set"> 🧩</span> ·
                     {{ itemEffects(equippedInSlot(d.slot)!) }}</span
                   >
@@ -3638,6 +3675,15 @@ function itemEffects(it: Omit<Item, 'id'>): string {
   const leg = legendaryOf(it);
   if (leg) parts.push(`${leg.emoji} ${leg.name}`);
   return parts.join(' · ');
+}
+// Stats d'un objet en LIGNES séparées (une stat par ligne) + proc légendaire → affichage clair.
+function itemStatLines(it: Omit<Item, 'id'>): string[] {
+  const lines = [affixText(it, it.effect)];
+  if (it.effect2) lines.push(affixText(it, it.effect2));
+  if (it.effect3) lines.push(affixText(it, it.effect3));
+  const leg = legendaryOf(it);
+  if (leg) lines.push(`${leg.emoji} ${leg.name}`);
+  return lines;
 }
 // Qualité du roll en étoiles pleines/vides (« ★★★★☆ ») ; vide si objet legacy (pas de roll).
 // Qualité en CHIFFRE (1→5, 5 = meilleur) affiché à côté du rang, code couleur
@@ -5956,8 +6002,32 @@ button.pt-mini:active {
   color: var(--dim);
   background: var(--surface);
 }
-.gpill.lvl {
-  color: var(--text);
+/* Pastille de NIVEAU d'objet — mise en avant (accent). */
+.lvl-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #15120e;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  letter-spacing: 0.2px;
+}
+/* Stats d'un objet, une par ligne (affichage clair). */
+.stat-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+.stat-line {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  line-height: 1.3;
 }
 /* Pastille d'enchant +N (objet). */
 .gpill.ench {
@@ -6009,11 +6079,6 @@ button.pt-mini:active {
   color: var(--dark, #15120e);
   background: var(--accent);
   border-color: var(--accent);
-}
-.gpill.lvl {
-  color: var(--dim);
-  border-color: var(--line);
-  font-variant-numeric: tabular-nums;
 }
 .gpill.sig {
   color: #ffd23f;
@@ -6229,6 +6294,12 @@ button.pt-mini:active {
 }
 .ii-cmp-val {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cmp-stat {
+  line-height: 1.25;
 }
 /* Rang / qualité CLIQUABLES (méta) → curseur + affordance discrète. */
 .clk {

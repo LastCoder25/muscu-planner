@@ -163,7 +163,7 @@ export function buildingType(id: string): BuildingType | undefined {
 
 // ── Constantes de dimensionnement (validées par simulation) ──
 export const BUILD = {
-  plotCap: 12, // emplacements max (≥ nb de types de bâtiments → on peut tous les poser)
+  plotCap: 6, // emplacements max (= 5 types de bâtiments + 1 marge → moins de spots vides)
   upBase: 220, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   upExp: 2.6, // puits d'or RAIDE (2→2.6) : l'or de fin de partie n'a plus de puits sinon
   storageHours: 18, // heures de production stockables (puis saturation)

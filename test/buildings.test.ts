@@ -38,11 +38,11 @@ describe('buildings — emplacements & coûts', () => {
     expect(plotsForLevel(1)).toBe(1);
     expect(plotsForLevel(2)).toBe(2);
     expect(plotsForLevel(5)).toBe(5);
-    expect(plotsForLevel(9)).toBe(9);
+    expect(plotsForLevel(BUILD.plotCap)).toBe(BUILD.plotCap);
     expect(plotsForLevel(40)).toBe(BUILD.plotCap); // plafonné
   });
   it('slotUnlockLevel : inverse cohérent de plotsForLevel', () => {
-    for (const slot of [0, 1, 2, 3, 4, 5, 8]) {
+    for (const slot of [0, 1, 2, 3, 4, 5]) {
       const lvl = slotUnlockLevel(slot);
       expect(plotsForLevel(lvl)).toBeGreaterThanOrEqual(slot + 1); // débloqué à ce niveau
       if (lvl > 1) expect(plotsForLevel(lvl - 1)).toBeLessThanOrEqual(slot); // pas avant
