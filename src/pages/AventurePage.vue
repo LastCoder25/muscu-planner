@@ -3744,7 +3744,8 @@ function itemStatCmp(
     if (!e) return;
     const v = round1(e.value * itemLevelMult(it.level));
     const ov = om.get(e.type);
-    const cls = ov == null || v > ov ? 'up' : v < ov ? 'down' : '';
+    // Stat absente en face → NEUTRE (pas de vert) ; sinon vert si supérieure, rouge si inférieure.
+    const cls = ov == null ? '' : v > ov ? 'up' : v < ov ? 'down' : '';
     out.push({ text: effectLabelFor(e.type, v), cls });
   };
   push(it.effect);
