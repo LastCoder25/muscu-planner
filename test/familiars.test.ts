@@ -60,7 +60,7 @@ describe('familiers — roll & identité', () => {
       slot: 'weapon',
       name: 'Lame',
       emoji: '⚔️',
-      rarity: 'G',
+      rarity: 'commun',
       level: 1,
       baseLevel: 1,
       effect: { type: 'damage_pct', value: 8 },
@@ -101,14 +101,14 @@ describe('familiers — effet compté dans le combat', () => {
 describe('familiers — effet signature (buff constant + option)', () => {
   it('un familier de rang bas (G) ne roule jamais de signature (effect2)', () => {
     for (let s = 0; s < 40; s++) {
-      const f = rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'G' });
+      const f = rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'commun' });
       expect(f.effect2).toBeUndefined();
     }
   });
   it('un familier SSS roule parfois une signature (execute/rage/momentum)', () => {
     let found = 0;
     for (let s = 0; s < 60; s++) {
-      const f = rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'SSS' });
+      const f = rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'primordial' });
       if (f.effect2) {
         found++;
         expect(['execute_pct', 'rage_pct', 'momentum_pct']).toContain(f.effect2.type);
@@ -120,7 +120,10 @@ describe('familiers — effet signature (buff constant + option)', () => {
     // Cherche un seed qui donne un familier divin AVEC signature.
     let fam: Item | null = null;
     for (let s = 0; s < 60 && !fam; s++) {
-      const f = { id: 'f', ...rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'SSS' }) };
+      const f = {
+        id: 'f',
+        ...rollFamiliar(mulberry32(s), wolf, { level: 5, rarity: 'primordial' }),
+      };
       if (f.effect2) fam = f;
     }
     expect(fam).not.toBeNull();
@@ -133,8 +136,8 @@ describe('familiers — effet signature (buff constant + option)', () => {
 
 describe('familiers — pierres magiques & sélection', () => {
   it('familiarStoneCost croît avec le niveau et la rareté', () => {
-    expect(familiarStoneCost(1, 'G')).toBeLessThan(familiarStoneCost(10, 'G'));
-    expect(familiarStoneCost(5, 'G')).toBeLessThan(familiarStoneCost(5, 'S'));
+    expect(familiarStoneCost(1, 'commun')).toBeLessThan(familiarStoneCost(10, 'commun'));
+    expect(familiarStoneCost(5, 'commun')).toBeLessThan(familiarStoneCost(5, 'legendaire'));
   });
   it('pickFamiliarSpecies : respecte le biome quand fourni', () => {
     // marmotte = biome 'plain' (seule de ce biome) → toujours choisie.
@@ -159,12 +162,12 @@ describe('familiers — pierres magiques & sélection', () => {
 
 describe('familiers — infusion (incubateur)', () => {
   it('nextRarity : rang juste au-dessus, null au max (SSS)', () => {
-    expect(nextRarity('G')).toBe('F');
-    expect(nextRarity('SSS')).toBeNull();
+    expect(nextRarity('commun')).toBe('inhabituel');
+    expect(nextRarity('primordial')).toBeNull();
   });
   it('rollFamiliar : rang forçable', () => {
-    const f = rollFamiliar(mulberry32(1), wolf, { level: 1, rarity: 'B' });
-    expect(f.rarity).toBe('B');
+    const f = rollFamiliar(mulberry32(1), wolf, { level: 1, rarity: 'epique' });
+    expect(f.rarity).toBe('epique');
   });
   const fam = (rarity: Item['rarity'], quality: number): Item => ({
     id: 'f',
@@ -180,11 +183,11 @@ describe('familiers — infusion (incubateur)', () => {
   });
   it('tierIndexOf : tri par rang DOMINANT puis jet (rang×100 + jet)', () => {
     // fam(rank, q) → roll = (q-0.5)/5 → jet = round(roll*100).
-    expect(tierIndexOf(fam('G', 1))).toBe(10); // G, jet 10
-    expect(tierIndexOf(fam('G', 5))).toBe(90); // G, jet 90
-    expect(tierIndexOf(fam('F', 1))).toBe(110); // F(1)×100 + jet 10
-    expect(tierIndexOf(fam('SSS', 5))).toBe(990); // SSS(9)×100 + jet 90
+    expect(tierIndexOf(fam('commun', 1))).toBe(10); // G, jet 10
+    expect(tierIndexOf(fam('commun', 5))).toBe(90); // G, jet 90
+    expect(tierIndexOf(fam('inhabituel', 1))).toBe(110); // inhabituel(1)×100 + jet 10
+    expect(tierIndexOf(fam('primordial', 5))).toBe(790); // primordial(7)×100 + jet 90
     // rang dominant : un F au pire jet bat un G au meilleur jet
-    expect(tierIndexOf(fam('F', 1))).toBeGreaterThan(tierIndexOf(fam('G', 5)));
+    expect(tierIndexOf(fam('inhabituel', 1))).toBeGreaterThan(tierIndexOf(fam('commun', 5)));
   });
 });

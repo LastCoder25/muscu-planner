@@ -5920,16 +5920,14 @@ button.pt-mini:active {
   opacity: 0.5;
   cursor: default;
 }
-.gpill.p-G,
-.gpill.p-F,
-.gpill.p-E,
-.gpill.p-D,
-.gpill.p-C,
-.gpill.p-B,
-.gpill.p-A,
-.gpill.p-S,
-.gpill.p-SS,
-.gpill.p-SSS {
+.gpill.p-commun,
+.gpill.p-inhabituel,
+.gpill.p-magique,
+.gpill.p-rare,
+.gpill.p-epique,
+.gpill.p-legendaire,
+.gpill.p-mythique,
+.gpill.p-primordial {
   color: var(--rk);
   border-color: var(--rk);
 }
@@ -6449,57 +6447,47 @@ button.pt-mini:active {
 /* ── Rangs G→SSS : une couleur unique par rang, portée par la variable --rk
    (posée par les classes de rang r- et p-). Les consommateurs (liseré, texte,
    pastilles) lisent var(--rk) → plus besoin d'une règle par rang et par composant. ── */
-.r-G,
-.p-G {
+.r-commun,
+.p-commun {
   --rk: #9a8f7e;
 }
-.r-F,
-.p-F {
-  --rk: #8f9c86;
+.r-inhabituel,
+.p-inhabituel {
+  --rk: #c7ccd6;
 }
-.r-E,
-.p-E {
-  --rk: #6bd18a;
+.r-magique,
+.p-magique {
+  --rk: #4ea3ff;
 }
-.r-D,
-.p-D {
-  --rk: #4ec6d6;
+.r-rare,
+.p-rare {
+  --rk: #ffd23f;
 }
-.r-C,
-.p-C {
-  --rk: #5a9bff;
-}
-.r-B,
-.p-B {
+.r-epique,
+.p-epique {
   --rk: #b07cff;
 }
-.r-A,
-.p-A {
-  --rk: var(--accent);
-}
-.r-S,
-.p-S {
+.r-legendaire,
+.p-legendaire {
   --rk: #ff9a3f;
 }
-.r-SS,
-.p-SS {
+.r-mythique,
+.p-mythique {
   --rk: #ff5b5b;
 }
-.r-SSS,
-.p-SSS {
-  --rk: #ff5cd8;
+.r-primordial,
+.p-primordial {
+  --rk: #ffcf5c;
 }
-/* Cartes à liseré gauche (r-*) : le bord suit le rang ; le texte .rarity aussi. */
-.r-G,
-.r-F,
-.r-E,
-.r-D,
-.r-C,
-.r-B,
-.r-A,
-.r-S,
-.r-SS,
-.r-SSS {
+/* Cartes à liseré gauche (r-*) : le bord suit la rareté ; le texte .rarity aussi. */
+.r-commun,
+.r-inhabituel,
+.r-magique,
+.r-rare,
+.r-epique,
+.r-legendaire,
+.r-mythique,
+.r-primordial {
   border-left-color: var(--rk);
 }
 .rarity {

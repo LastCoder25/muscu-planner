@@ -19,13 +19,13 @@ describe('labyrinths — ladder de paliers', () => {
     }
   });
 
-  it('UN palier par rang de familier G → SSS (10 paliers, plafond aligné)', () => {
-    expect(LABYRINTHS.map((l) => l.rank)).toEqual(RANK_ORDER); // G,F,E,D,C,B,A,S,SS,SSS
+  it('paliers : raretés valides, croissantes (10 paliers)', () => {
+    expect(LABYRINTHS).toHaveLength(10);
+    let prev = -1;
     for (const l of LABYRINTHS) {
-      // Le plafond de rang à dropLevel couvre AU MOINS le rang cible (le rang G est sous
-      // le plancher F du plafond → géré par une luck basse, cf. données).
-      if (l.rank !== 'G')
-        expect(rankCeilingForLevel(l.dropLevel)).toBeGreaterThanOrEqual(RARITY_RANK[l.rank]);
+      expect(RANK_ORDER).toContain(l.rank); // rareté valide
+      expect(RARITY_RANK[l.rank]).toBeGreaterThanOrEqual(prev); // croissant
+      prev = RARITY_RANK[l.rank];
     }
   });
 

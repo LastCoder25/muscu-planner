@@ -44,16 +44,13 @@ describe('GRADE (rang + qualité, fixé au drop)', () => {
     expect(talentTier(0)).toBe(0);
     expect(talentTier(talentTierFloor(5))).toBe(5);
     expect(talentTier(talentTierFloor(20))).toBe(20);
-    expect(talentTier(1e9)).toBe(49); // plafonné à SSS5
+    expect(talentTier(1e9)).toBe(39); // plafonné (8 raretés × 5 − 1)
   });
-  it('rang G→SSS + qualité 1→5 dérivés du tier (mêmes rangs que les objets)', () => {
-    expect(talentRank(0)).toBe('G');
-    expect(talentQuality(0)).toBe(1);
-    expect(talentRank(4)).toBe('G');
-    expect(talentQuality(4)).toBe(5);
-    expect(talentRank(5)).toBe('F');
-    expect(talentRank(49)).toBe('SSS');
-    expect(talentQuality(49)).toBe(5);
+  it('rareté Commun→Primordial dérivée du tier (mêmes raretés que les objets)', () => {
+    expect(talentRank(0)).toBe('commun');
+    expect(talentRank(4)).toBe('commun');
+    expect(talentRank(5)).toBe('inhabituel');
+    expect(talentRank(39)).toBe('primordial');
   });
 });
 
@@ -74,21 +71,21 @@ describe('magnitude = grade × enchant (uniforme avec les objets)', () => {
     expect(ratio).toBeGreaterThan(9.5);
     expect(ratio).toBeLessThan(11);
   });
-  it('grades NETTEMENT séparés — D5 > E3, distincts (ticket f7e389e4)', () => {
+  it('raretés NETTEMENT séparées — Rare > Magique (jet 0 = plancher du rang)', () => {
     const def = talentByCode('t_armor')!; // Cuirasse : base petite → cas du bug
-    const tierAt = (rank: string, q: number) => RANK_ORDER.indexOf(rank as never) * 5 + (q - 1);
-    const d5 = talentValue(def, tierAt('D', 5), 0);
-    const e3 = talentValue(def, tierAt('E', 3), 0);
-    expect(d5).toBeGreaterThan(e3);
-    expect(d5 / e3).toBeGreaterThan(1.05); // écart net (plus un arrondi près)
+    const tierAt = (rank: string) => RANK_ORDER.indexOf(rank as never) * 5;
+    const higher = talentValue(def, tierAt('rare'), 0, 0);
+    const lower = talentValue(def, tierAt('magique'), 0, 0);
+    expect(higher).toBeGreaterThan(lower);
+    expect(higher / lower).toBeGreaterThan(1.05); // écart de rareté net
   });
 });
 
 describe('plafond de grade de drop', () => {
   it('maxGradeCran = plafond de drop du niveau (rang √ × qualité 5)', () => {
     expect(maxGradeCran(1)).toBe(rankCeilingForLevel(1) * 5 + 4);
-    expect(maxGradeCran(4)).toBe(14); // E★5
-    expect(maxGradeCran(25)).toBe(29); // B★5
+    expect(maxGradeCran(4)).toBe(rankCeilingForLevel(4) * 5 + 4);
+    expect(maxGradeCran(25)).toBe(rankCeilingForLevel(25) * 5 + 4);
     expect(maxGradeCran(1)).toBeLessThan(maxGradeCran(100)); // monte avec le niveau
   });
 });

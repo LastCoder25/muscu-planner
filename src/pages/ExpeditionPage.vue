@@ -834,11 +834,11 @@ function chestColorOf(id: number): string {
 // des PV max du joueur (⇒ attrition réelle). Deeper = plus dur (push-your-luck).
 // Index de rang du palier courant (0=G … 9=SSS) → thème du roster de monstres.
 const labyTierIndex = computed(() =>
-  Math.max(0, RANK_ORDER.indexOf(selectedLaby.value?.rank ?? 'G')),
+  Math.max(0, RANK_ORDER.indexOf(selectedLaby.value?.rank ?? 'commun')),
 );
 // Teinte d'ambiance de l'étage = couleur du RANG du palier (G→SSS) → chaque palier a
 // son atmosphère de fond sur la carte.
-const ambianceColor = computed(() => RANK_COLOR[selectedLaby.value?.rank ?? 'G']);
+const ambianceColor = computed(() => RANK_COLOR[selectedLaby.value?.rank ?? 'commun']);
 // Torches : les salles VISITÉES sont « éclairées » (2 flammes) ; le reste est sombre.
 function roomLit(r: Room): boolean {
   return run.value.visited.includes(r.id) && isVisible(floor.value, run.value, r.id);
@@ -1993,36 +1993,30 @@ function replayAuto() {
   color: var(--accent);
   margin-top: 4px;
 }
-/* Rangs G→SSS : couleur portée par --rk (voir défs communes plus bas). */
-.r-G {
+/* Raretés (8) : couleur portée par --rk. */
+.r-commun {
   --rk: #9a8f7e;
 }
-.r-F {
-  --rk: #8f9c86;
+.r-inhabituel {
+  --rk: #c7ccd6;
 }
-.r-E {
-  --rk: #6bd18a;
+.r-magique {
+  --rk: #4ea3ff;
 }
-.r-D {
-  --rk: #4ec6d6;
+.r-rare {
+  --rk: #ffd23f;
 }
-.r-C {
-  --rk: #5a9bff;
-}
-.r-B {
+.r-epique {
   --rk: #b07cff;
 }
-.r-A {
-  --rk: var(--accent);
-}
-.r-S {
+.r-legendaire {
   --rk: #ff9a3f;
 }
-.r-SS {
+.r-mythique {
   --rk: #ff5b5b;
 }
-.r-SSS {
-  --rk: #ff5cd8;
+.r-primordial {
+  --rk: #ffcf5c;
 }
 .fx-loot-card[class*='r-'] {
   border-color: var(--rk, var(--line));

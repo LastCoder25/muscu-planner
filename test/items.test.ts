@@ -55,14 +55,15 @@ describe('rangs G→SSS + intervalle de jet (refonte v0.574)', () => {
     }
   });
   it('plafond SSS (jet 100 %) ≈ 4,2 (plafond de puissance)', () => {
-    expect(rankRollMult('SSS', 1)).toBeGreaterThan(4);
-    expect(rankRollMult('SSS', 1)).toBeLessThan(4.5);
+    expect(rankRollMult('primordial', 1)).toBeGreaterThan(4);
+    expect(rankRollMult('primordial', 1)).toBeLessThan(4.5);
   });
   it('normRank : mappe les anciennes raretés vers des rangs valides', () => {
-    expect(normRank('divin')).toBe('SSS');
-    expect(normRank('common')).toBe('F');
-    expect(normRank('A')).toBe('A');
-    expect(normRank(undefined)).toBe('G');
+    expect(normRank('divin')).toBe('primordial');
+    expect(normRank('common')).toBe('commun');
+    expect(normRank('SSS')).toBe('primordial'); // legacy rang → rareté
+    expect(normRank('legendaire')).toBe('legendaire');
+    expect(normRank(undefined)).toBe('commun');
   });
 });
 
@@ -76,11 +77,11 @@ describe('jet (0..100 %)', () => {
 });
 
 describe('rollTier : pyramide de rareté centrée sur le niveau', () => {
-  it('rankCeilingForLevel : racine (rapide tôt, lent tard), SSS très tardif', () => {
-    expect(rankCeilingForLevel(1)).toBe(1); // F
-    expect(rankCeilingForLevel(6)).toBeGreaterThanOrEqual(2);
-    expect(RANK_ORDER[rankCeilingForLevel(90)]).toBe('SSS');
-    expect(rankCeilingForLevel(20)).toBeLessThan(9); // pas de SSS avant le très long terme
+  it('rankCeilingForLevel : racine (rapide tôt, lent tard), Primordial très tardif', () => {
+    expect(rankCeilingForLevel(1)).toBe(0); // Commun
+    expect(rankCeilingForLevel(20)).toBeGreaterThanOrEqual(3);
+    expect(RANK_ORDER[rankCeilingForLevel(90)]).toBe('primordial');
+    expect(rankCeilingForLevel(20)).toBeLessThan(7); // pas de Primordial avant le très long terme
   });
   it('PIC de la pyramide = rang du niveau (mode = rankCeilingForLevel)', () => {
     for (const lv of [10, 20, 40, 60]) {
@@ -188,7 +189,7 @@ const item = (over: Partial<Item> & Pick<Item, 'slot' | 'effect'>): Item => ({
   id: over.id ?? 'i',
   name: 'X',
   emoji: '❔',
-  rarity: over.rarity ?? 'G',
+  rarity: over.rarity ?? 'commun',
   level: over.level ?? 1,
   baseLevel: over.baseLevel ?? 1,
   ...over,
@@ -201,29 +202,37 @@ describe('niveaux d’objet', () => {
     expect(effectiveValue(eff, 6)).toBe(Math.round(10 * (1 + 5 * 0.05))); // 13
   });
   it('upgradeCost croît avec le niveau ET le rang', () => {
-    expect(upgradeCost(1, 'G')).toBeLessThan(upgradeCost(5, 'G'));
-    expect(upgradeCost(3, 'S')).toBeGreaterThan(upgradeCost(3, 'G'));
+    expect(upgradeCost(1, 'commun')).toBeLessThan(upgradeCost(5, 'commun'));
+    expect(upgradeCost(3, 'legendaire')).toBeGreaterThan(upgradeCost(3, 'commun'));
   });
   it('canUpgrade : faux si poussière insuffisante ou au plafond', () => {
     const it = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, level: 2 });
-    expect(canUpgrade(it, upgradeCost(2, 'G'), 10)).toBe(true);
-    expect(canUpgrade(it, upgradeCost(2, 'G') - 1, 10)).toBe(false);
+    expect(canUpgrade(it, upgradeCost(2, 'commun'), 10)).toBe(true);
+    expect(canUpgrade(it, upgradeCost(2, 'commun') - 1, 10)).toBe(false);
     expect(canUpgrade({ ...it, level: 5 }, 9999, 5)).toBe(false); // au plafond
   });
 });
 
 describe('recyclage / vente', () => {
   it('poussière et or croissent avec le rang', () => {
-    const low = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, rarity: 'G' });
-    const high = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 28 }, rarity: 'S' });
+    const low = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 8 },
+      rarity: 'commun',
+    });
+    const high = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 28 },
+      rarity: 'legendaire',
+    });
     expect(salvageValue(high)).toBeGreaterThan(salvageValue(low));
     expect(sellValue(high)).toBeGreaterThan(sellValue(low));
   });
   it('recyclage/vente : poussière & or ∝ RANG (enchant retiré)', () => {
-    const rarity = 'D' as const;
+    const rarity = 'magique' as const;
     const base = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, rarity });
     // rang plus haut → plus de poussière ET plus d'or (base de rang, plus d'axe enchant)
-    const higher = item({ ...base, rarity: 'S' });
+    const higher = item({ ...base, rarity: 'legendaire' });
     expect(salvageValue(higher)).toBeGreaterThan(salvageValue(base));
     expect(sellValue(higher)).toBeGreaterThan(sellValue(base));
   });
@@ -231,24 +240,27 @@ describe('recyclage / vente', () => {
 
 describe('économie — infusion & coûts', () => {
   it('fullInfuseCost(1) = 0 et croît avec le niveau cible', () => {
-    expect(fullInfuseCost(1, 'D')).toBe(0);
-    expect(fullInfuseCost(5, 'D')).toBe(
-      upgradeCost(1, 'D') + upgradeCost(2, 'D') + upgradeCost(3, 'D') + upgradeCost(4, 'D'),
+    expect(fullInfuseCost(1, 'magique')).toBe(0);
+    expect(fullInfuseCost(5, 'magique')).toBe(
+      upgradeCost(1, 'magique') +
+        upgradeCost(2, 'magique') +
+        upgradeCost(3, 'magique') +
+        upgradeCost(4, 'magique'),
     );
-    expect(fullInfuseCost(10, 'D')).toBeGreaterThan(fullInfuseCost(5, 'D'));
+    expect(fullInfuseCost(10, 'magique')).toBeGreaterThan(fullInfuseCost(5, 'magique'));
   });
   it('infuseToMaxCost : du niveau actuel jusqu’au cap joueur', () => {
     const lvl1 = item({
       slot: 'weapon',
       effect: { type: 'damage_pct', value: 8 },
-      rarity: 'G',
+      rarity: 'commun',
       baseLevel: 1,
       level: 1,
     });
     expect(infuseToMaxCost(lvl1, 1)).toBe(0);
-    expect(infuseToMaxCost(lvl1, 5)).toBe(fullInfuseCost(5, 'G'));
+    expect(infuseToMaxCost(lvl1, 5)).toBe(fullInfuseCost(5, 'commun'));
     expect(infuseToMaxCost({ ...lvl1, level: 3 }, 5)).toBe(
-      upgradeCost(3, 'G') + upgradeCost(4, 'G'),
+      upgradeCost(3, 'commun') + upgradeCost(4, 'commun'),
     );
   });
 });
@@ -369,7 +381,7 @@ describe('sets d’équipement (voie)', () => {
     item({
       id: `b-${slot}`,
       slot,
-      rarity: 'B',
+      rarity: 'epique',
       effect: { type: 'damage_pct', value: 10 },
       setId: BERS,
     });
@@ -410,12 +422,12 @@ describe('sets d’équipement (voie)', () => {
   });
   it('le bonus de set grandit avec le RANG des pièces (boss plus profond)', () => {
     const low: Equipped = {
-      weapon: { ...bersPiece('weapon'), rarity: 'D' },
-      armor: { ...bersPiece('armor'), rarity: 'D' },
+      weapon: { ...bersPiece('weapon'), rarity: 'magique' },
+      armor: { ...bersPiece('armor'), rarity: 'magique' },
     };
     const high: Equipped = {
-      weapon: { ...bersPiece('weapon'), rarity: 'S' },
-      armor: { ...bersPiece('armor'), rarity: 'S' },
+      weapon: { ...bersPiece('weapon'), rarity: 'legendaire' },
+      armor: { ...bersPiece('armor'), rarity: 'legendaire' },
     };
     expect(setEffects(high, 'berserker').lifesteal).toBeGreaterThan(
       setEffects(low, 'berserker').lifesteal,
@@ -480,7 +492,7 @@ describe('atelier de poussière (forge / reroll / craft)', () => {
     const lo = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, level: 3 });
     const hi = item({ ...lo, level: 20 });
     expect(rerollCost(hi)).toBeGreaterThan(rerollCost(lo));
-    const high = item({ ...lo, rarity: 'A' });
+    const high = item({ ...lo, rarity: 'legendaire' });
     expect(rerollCost(high)).toBeGreaterThan(rerollCost(lo));
   });
 });
@@ -494,13 +506,13 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
     }
     return drops;
   }
-  it('un objet SS/SSS roule un 2ᵉ effet distinct ; les rangs inférieurs non', () => {
-    const drops = scan(80, 1); // contenu très profond → rangs SS/SSS possibles
-    const high = drops.find((d) => RARITY_RANK[d.rarity] >= 8);
+  it('un objet Mythique/Primordial roule un 2ᵉ effet distinct ; les raretés inférieures non', () => {
+    const drops = scan(80, 1); // contenu très profond → Mythique/Primordial possibles
+    const high = drops.find((d) => RARITY_RANK[d.rarity] >= 6);
     expect(high).toBeTruthy();
     expect(high!.effect2).toBeTruthy();
     expect(high!.effect2!.type).not.toBe(high!.effect.type);
-    for (const d of drops) if (RARITY_RANK[d.rarity] < 8) expect(d.effect2).toBeUndefined();
+    for (const d of drops) if (RARITY_RANK[d.rarity] < 6) expect(d.effect2).toBeUndefined();
   });
   it('les effets signature n’apparaissent qu’en profondeur (gate de niveau)', () => {
     const SIG = new Set(['execute_pct', 'rage_pct', 'momentum_pct']);
@@ -536,7 +548,7 @@ describe('swapLoadoutGear — ranger / échanger un set (4 slots gear, familier 
       slot,
       name,
       emoji: '🗡️',
-      rarity: 'D',
+      rarity: 'magique',
       level: 1,
       effect: { type: 'damage_pct', value: 10 },
     }) as unknown as Item;
@@ -544,16 +556,16 @@ describe('swapLoadoutGear — ranger / échanger un set (4 slots gear, familier 
   it('loadout vide + équipé plein → « ranger » : le joueur devient nu, le loadout garde le stuff', () => {
     const equipped: Equipped = {
       weapon: mk('weapon', 'W'),
-      armor: mk('armor', 'A'),
-      familiar: mk('familiar', 'F'),
+      armor: mk('armor', 'legendaire'),
+      familiar: mk('familiar', 'inhabituel'),
     };
     const { equipped: eq, loadoutItems: lo } = swapLoadoutGear(equipped, {});
     // Les 4 slots gear sont vidés, le familier RESTE équipé.
     expect(eq.weapon).toBeUndefined();
     expect(eq.armor).toBeUndefined();
-    expect(eq.familiar?.name).toBe('F');
+    expect(eq.familiar?.name).toBe('inhabituel');
     expect(lo.weapon?.name).toBe('W');
-    expect(lo.armor?.name).toBe('A');
+    expect(lo.armor?.name).toBe('legendaire');
     expect(lo.familiar).toBeUndefined(); // le familier n'est jamais rangé
   });
 

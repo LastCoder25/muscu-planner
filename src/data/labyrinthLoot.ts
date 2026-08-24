@@ -67,12 +67,13 @@ export const CHEST_GRADES: ChestGrade[] = [
   },
 ];
 
-/** Rang G→SSS → index de grade (G F E → bronze · D C → argent · B A → or · S SS SSS → platine). */
+/** Rareté → index de grade de coffre (Commun/Inhabituel → bronze · Magique/Rare → argent ·
+ *  Épique/Légendaire → or · Mythique/Primordial → platine). 8 raretés (index 0..7). */
 export function chestGradeIndexForRank(rank: Rarity): number {
   const i = RARITY_RANK[rank];
-  if (i <= 2) return 0;
-  if (i <= 4) return 1;
-  if (i <= 6) return 2;
+  if (i <= 1) return 0;
+  if (i <= 3) return 1;
+  if (i <= 5) return 2;
   return 3;
 }
 

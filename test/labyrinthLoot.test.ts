@@ -18,15 +18,15 @@ describe('labyrinthLoot — coffres', () => {
     }
   });
 
-  it('rang → grade : G F E → bronze · D C → argent · B A → or · S SS SSS → platine', () => {
-    expect(chestGradeIndexForRank('G')).toBe(0);
-    expect(chestGradeIndexForRank('E')).toBe(0);
-    expect(chestGradeIndexForRank('D')).toBe(1);
-    expect(chestGradeIndexForRank('C')).toBe(1);
-    expect(chestGradeIndexForRank('B')).toBe(2);
-    expect(chestGradeIndexForRank('A')).toBe(2);
-    expect(chestGradeIndexForRank('S')).toBe(3);
-    expect(chestGradeIndexForRank('SSS')).toBe(3);
+  it('rareté → grade : Commun/Inhabituel bronze · Magique/Rare argent · Épique/Légendaire or · Mythique/Primordial platine', () => {
+    expect(chestGradeIndexForRank('commun')).toBe(0);
+    expect(chestGradeIndexForRank('inhabituel')).toBe(0);
+    expect(chestGradeIndexForRank('magique')).toBe(1);
+    expect(chestGradeIndexForRank('rare')).toBe(1);
+    expect(chestGradeIndexForRank('epique')).toBe(2);
+    expect(chestGradeIndexForRank('legendaire')).toBe(2);
+    expect(chestGradeIndexForRank('mythique')).toBe(3);
+    expect(chestGradeIndexForRank('primordial')).toBe(3);
   });
 
   it('grade moyen MONTE avec le niveau du contenu (frise glissante)', () => {
@@ -60,4 +60,4 @@ describe('labyrinthLoot — pièges', () => {
 });
 
 // garde-fou : RANK_ORDER couvre bien les 10 rangs utilisés par le mapping
-it('RANK_ORDER complet', () => expect(RANK_ORDER).toHaveLength(10));
+it('RANK_ORDER complet', () => expect(RANK_ORDER).toHaveLength(8));

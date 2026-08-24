@@ -564,35 +564,29 @@ const label = computed(
 .pip.off {
   fill: var(--line, #3a332a);
 }
-.pip.on.r-G {
+.pip.on.r-commun {
   --rk: #9a8f7e;
 }
-.pip.on.r-F {
-  --rk: #8f9c86;
+.pip.on.r-inhabituel {
+  --rk: #c7ccd6;
 }
-.pip.on.r-E {
-  --rk: #6bd18a;
+.pip.on.r-magique {
+  --rk: #4ea3ff;
 }
-.pip.on.r-D {
-  --rk: #4ec6d6;
+.pip.on.r-rare {
+  --rk: #ffd23f;
 }
-.pip.on.r-C {
-  --rk: #5a9bff;
-}
-.pip.on.r-B {
+.pip.on.r-epique {
   --rk: #b07cff;
 }
-.pip.on.r-A {
-  --rk: var(--accent);
-}
-.pip.on.r-S {
+.pip.on.r-legendaire {
   --rk: #ff9a3f;
 }
-.pip.on.r-SS {
+.pip.on.r-mythique {
   --rk: #ff5b5b;
 }
-.pip.on.r-SSS {
-  --rk: #ff5cd8;
+.pip.on.r-primordial {
+  --rk: #ffcf5c;
 }
 .pip.on[class*='r-'] {
   fill: var(--rk, var(--dim));

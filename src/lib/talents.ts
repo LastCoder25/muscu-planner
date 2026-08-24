@@ -135,7 +135,7 @@ export interface TalentInstance {
 
 // ── GRADE : `xp` (fixé au drop) → tier 0..49 = rang×5 + (qualité−1). Mêmes 50 tiers
 // que les objets/familiers. Le tier ne bouge plus après le drop. ──
-const MAX_TIER = 49;
+const MAX_TIER = RANK_ORDER.length * 5 - 1; // 8 raretés × 5 crans − 1
 /** XP pour passer du tier `tier` au suivant — sert à ENCODER le tier de drop. */
 export function talentXpForNextTier(tier: number): number {
   return 12 + Math.max(0, tier) * 4;
@@ -158,7 +158,7 @@ export function talentTier(xp: number): number {
 }
 /** Rang (G→SSS) d'un tier — mêmes rangs que les objets. */
 export function talentRank(tier: number): Rarity {
-  return RANK_ORDER[Math.min(9, Math.floor(Math.max(0, tier) / 5))]!;
+  return RANK_ORDER[Math.min(RANK_ORDER.length - 1, Math.floor(Math.max(0, tier) / 5))]!;
 }
 /** Qualité (1→5) d'un tier. */
 export function talentQuality(tier: number): number {

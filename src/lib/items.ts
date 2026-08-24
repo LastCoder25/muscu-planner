@@ -8,42 +8,63 @@ import { PROCEDURAL } from '@/lib/proceduralContent';
 // mais EXCLU de SLOTS (donc des drops normaux / sets / forge). Cf. src/data/familiars.ts.
 export type ItemSlot = 'weapon' | 'armor' | 'accessory' | 'relic' | 'familiar';
 export const FAMILIAR_SLOT: ItemSlot = 'familiar';
-// RANGS façon manga (2026‑08‑18) : 10 rangs G (le plus bas) → SSS (le graal), qui
-// remplacent les 5 anciennes raretés. Chaque rang a une bande de valeur DISJOINTE
-// (un rang supérieur est TOUJOURS meilleur) et une couleur propre. La QUALITÉ (1→5,
-// cf. rollStars) est un SOUS-RANG dans la bande — petite progression continue avant
-// le saut de rang. Le rang droppable est gaté par la PROFONDEUR du contenu (le sport
-// gate le niveau → le niveau gate le rang), SSS réservé au très long terme.
-// NB : on garde le NOM de type `Rarity` et le champ `rarity` (moins de churn) ; ce
-// sont désormais des rangs. RANK_ORDER = du plus bas au plus haut.
-export type Rarity = 'G' | 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S' | 'SS' | 'SSS';
-export const RANK_ORDER: Rarity[] = ['G', 'F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
-// Couleur par rang (source unique JS ; le CSS miroir pose --rk par classe .r-*/.p-*).
+// RARETÉS NOMMÉES (refonte v0.576) : 8 tiers Commun → Primordial, façon Diablo. Chaque
+// rareté a un INTERVALLE de stat (le « jet » le balaie, cf. rankRollMult) et une couleur.
+// La rareté droppable est gatée par la PROFONDEUR (min(niveau, activité)) via la pyramide
+// (rankCeilingForLevel) → le sport gate le niveau qui gate la rareté ; Primordial = graal.
+// Légendaire+ portera un EFFET LÉGENDAIRE (proc, Phase 3). RANK_ORDER = du plus bas au plus haut.
+// (Le type garde le NOM `Rarity` ; les VALEURS sont les codes de rareté.)
+export type Rarity =
+  | 'commun'
+  | 'inhabituel'
+  | 'magique'
+  | 'rare'
+  | 'epique'
+  | 'legendaire'
+  | 'mythique'
+  | 'primordial';
+export const RANK_ORDER: Rarity[] = [
+  'commun',
+  'inhabituel',
+  'magique',
+  'rare',
+  'epique',
+  'legendaire',
+  'mythique',
+  'primordial',
+];
+// Couleur par rareté (source unique JS ; le CSS miroir pose --rk par classe .r-*/.p-*).
 export const RANK_COLOR: Record<Rarity, string> = {
-  G: '#9a8f7e',
-  F: '#8f9c86',
-  E: '#6bd18a',
-  D: '#4ec6d6',
-  C: '#5a9bff',
-  B: '#b07cff',
-  A: '#ffd23f',
-  S: '#ff9a3f',
-  SS: '#ff5b5b',
-  SSS: '#ff5cd8',
+  commun: '#9a8f7e',
+  inhabituel: '#c7ccd6',
+  magique: '#4ea3ff',
+  rare: '#ffd23f',
+  epique: '#b07cff',
+  legendaire: '#ff9a3f',
+  mythique: '#ff5b5b',
+  primordial: '#ffcf5c',
 };
-// Mapping des ANCIENNES raretés (objets sauvegardés en JSONB) vers les nouveaux rangs,
-// calé sur la proximité de multiplicateur (divin≈SSS, légendaire≈S, épique≈B, rare≈D,
-// commun≈F). `normRank` normalise n'importe quelle chaîne en un rang valide.
+// Mapping des ANCIENNES valeurs sauvegardées (10 rangs G→SSS + 5 vieilles raretés) vers les
+// 8 nouvelles raretés, par proximité de puissance. `normRank` normalise toute chaîne.
 const LEGACY_RANK: Record<string, Rarity> = {
-  common: 'F',
-  rare: 'D',
-  epic: 'B',
-  legendary: 'S',
-  divin: 'SSS',
+  G: 'commun',
+  F: 'inhabituel',
+  E: 'magique',
+  D: 'magique',
+  C: 'rare',
+  B: 'epique',
+  A: 'legendaire',
+  S: 'legendaire',
+  SS: 'mythique',
+  SSS: 'primordial',
+  common: 'commun',
+  epic: 'epique',
+  legendary: 'legendaire',
+  divin: 'primordial',
 };
 export function normRank(r: string | undefined | null): Rarity {
   if (r && (RANK_ORDER as string[]).includes(r)) return r as Rarity;
-  return (r && LEGACY_RANK[r]) || 'G';
+  return (r && LEGACY_RANK[r]) || 'commun';
 }
 
 // Effets « signature » (un par objet). value en points de %. RÈGLE : tous les
@@ -259,12 +280,19 @@ export const SLOT_EMOJI: Record<ItemSlot, string> = {
   relic: '🔮',
   familiar: '🐾',
 };
-// Libellé = la lettre du rang elle-même (identité manga : « G », « SSS »).
-export const RARITY_LABEL: Record<Rarity, string> = Object.fromEntries(
-  RANK_ORDER.map((r) => [r, r]),
-) as Record<Rarity, string>;
+// Libellé FR de la rareté (Commun, Épique, Légendaire, Primordial…).
+export const RARITY_LABEL: Record<Rarity, string> = {
+  commun: 'Commun',
+  inhabituel: 'Inhabituel',
+  magique: 'Magique',
+  rare: 'Rare',
+  epique: 'Épique',
+  legendaire: 'Légendaire',
+  mythique: 'Mythique',
+  primordial: 'Primordial',
+};
 
-// Rang numérique (0..9) pour comparer deux objets (potentiel à niveau égal).
+// Index numérique (0..7) pour comparer deux objets (potentiel à niveau égal).
 export const RARITY_RANK: Record<Rarity, number> = Object.fromEntries(
   RANK_ORDER.map((r, i) => [r, i]),
 ) as Record<Rarity, number>;
@@ -274,8 +302,9 @@ export const RARITY_RANK: Record<Rarity, number> = Object.fromEntries(
 // plancher du rang SUIVANT (`rankRollMult`), parcouru par le « jet » (roll 0..1). Un jet
 // parfait d'un rang frôle donc le plancher du rang au-dessus (chevauchement voulu : on
 // peut avoir un excellent bas-rang ≈ un mauvais rang supérieur → farm du meilleur jet).
+// 8 tiers : ratio 1,219 → Primordial ≈ ×4,05 (plafond de puissance préservé).
 export const RARITY_MULT: Record<Rarity, number> = Object.fromEntries(
-  RANK_ORDER.map((r, i) => [r, Math.round(0.908 * Math.pow(1.166, i) * 1000) / 1000]),
+  RANK_ORDER.map((r, i) => [r, Math.round(0.9 * Math.pow(1.219, i) * 1000) / 1000]),
 ) as Record<Rarity, number>;
 // Multiplicateur de magnitude = interpolation dans l'intervalle du RANG selon le jet (roll).
 // [plancher du rang → plancher du rang suivant] (SSS extrapolé d'un cran). Remplace
@@ -367,16 +396,14 @@ const NAMES: Record<ItemSlot, string[]> = {
   familiar: ['Compagnon'], // nom réel = nom de la race (cf. rollFamiliar)
 };
 const RARITY_ADJ: Record<Rarity, string> = {
-  G: 'brut',
-  F: 'usé',
-  E: 'affûté',
-  D: 'aiguisé',
-  C: 'runique',
-  B: 'enchanté',
-  A: 'héroïque',
-  S: 'mythique',
-  SS: 'légendaire',
-  SSS: 'divin',
+  commun: 'brut',
+  inhabituel: 'affûté',
+  magique: 'runique',
+  rare: 'enchanté',
+  epique: 'héroïque',
+  legendaire: 'légendaire',
+  mythique: 'mythique',
+  primordial: 'primordial',
 };
 
 /** Formate une valeur d'effet avec 1 décimale au plus (trim .0) → la qualité (+2,5 %/★)
@@ -448,12 +475,12 @@ function pick<T>(rng: () => number, arr: T[]): T {
   return arr[Math.floor(rng() * arr.length)]!;
 }
 
-// ── Tirage de RANG (gaté par la profondeur) ──
-// Plafond de rang selon le NIVEAU du contenu (racine → RAPIDE tôt, LENT tard) : le
-// 1er mois on traverse G→D, puis chaque rang haut coûte de plus en plus de niveaux
-// (SSS ≈ niv.90 → graal long terme). Calibré par simulation (2026‑08‑18).
+// ── Tirage de RARETÉ (gatée par la profondeur) ──
+// Plafond de rareté selon le NIVEAU du contenu (racine → RAPIDE tôt, LENT tard) : Commun→Rare
+// le 1er mois, puis chaque tier coûte de plus en plus (Légendaire ≈ niv.36, Primordial ≈ niv.64
+// → graal long terme). 8 tiers (index 0..7). Calibré par simulation.
 export function rankCeilingForLevel(level: number): number {
-  return Math.min(9, Math.max(0, Math.floor(Math.sqrt(Math.max(0, level)) * 1.03)));
+  return Math.min(7, Math.max(0, Math.floor(Math.sqrt(Math.max(0, level)) * 0.9)));
 }
 /** MARGE d'avance : on peut farmer/obtenir du rang jusqu'à `niveauJoueur + LEVEL_MARGIN`.
  *  Au-delà, le rang d'un drop est CAPÉ par ton niveau → le sport reste le vrai plafond,
@@ -503,7 +530,7 @@ function rankBell(level: number, luck: number, floorBonus: number, playerLevel?:
   const eff = playerLevel == null ? level : Math.min(level, playerLevel);
   const center = rankCeilingForLevel(eff) + Math.max(0, floorBonus);
   const hiWidth = 0.42 + l * 1.1; // pointe haute raide (jackpot), épaissie par la luck
-  const cap = Math.min(9, Math.round(center) + 2); // borne douce : +2 rangs max
+  const cap = Math.min(RANK_ORDER.length - 1, Math.round(center) + 2); // borne douce : +2 rangs max
   return { center, loWidth: LO_WIDTH_RANK, hiWidth, cap };
 }
 
@@ -520,7 +547,7 @@ export function rollTier(
   const { center, loWidth, hiWidth, cap } = rankBell(level, luck, floorBonus, playerLevel);
   const g = gaussian(rng);
   let idx = Math.round(center + (g >= 0 ? g * hiWidth : g * loWidth));
-  idx = Math.min(9, Math.max(0, Math.min(cap, idx)));
+  idx = Math.min(RANK_ORDER.length - 1, Math.max(0, Math.min(cap, idx)));
   return { rank: RANK_ORDER[idx]!, roll: rng() }; // roll = jet (chasse au meilleur)
 }
 
@@ -533,7 +560,8 @@ export function dropBand(
   playerLevel?: number,
 ): { lo: { rank: Rarity; quality: number }; hi: { rank: Rarity; quality: number } } {
   const { center, loWidth, hiWidth, cap } = rankBell(level, luck, floorBonus, playerLevel);
-  const clamp = (x: number) => Math.min(9, Math.max(0, Math.min(cap, Math.round(x))));
+  const clamp = (x: number) =>
+    Math.min(RANK_ORDER.length - 1, Math.max(0, Math.min(cap, Math.round(x))));
   const loI = clamp(center - 1.3 * loWidth);
   const hiI = clamp(center + 1.3 * hiWidth);
   return { lo: { rank: RANK_ORDER[loI]!, quality: 3 }, hi: { rank: RANK_ORDER[hiI]!, quality: 3 } };
@@ -559,7 +587,9 @@ export function dropPeakRank(
   playerLevel?: number,
 ): Rarity {
   const { center, cap } = rankBell(level, luck, floorBonus, playerLevel);
-  return RANK_ORDER[Math.min(9, Math.max(0, Math.min(cap, Math.round(center))))]!;
+  return RANK_ORDER[
+    Math.min(RANK_ORDER.length - 1, Math.max(0, Math.min(cap, Math.round(center))))
+  ]!;
 }
 /** Rang seul (utilitaires forge/familier qui n'ont pas besoin de la qualité fine). */
 export function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {
@@ -624,10 +654,11 @@ export function rollDrop(
   // REFONTE C : tout drop part du NIVEAU 1 (identité pure = rang + affixe). Toute la
   // puissance se construit ensuite à la poussière jusqu'au niveau du joueur.
   const level = 1;
-  // PAYOFF HAUT-RANG : SS/SSS (index ≥ 8) roulent un DEUXIÈME effet distinct → un objet
-  // de très haut rang est « waouh » (double affixe), pas juste un ×magnitude de plus.
+  // PAYOFF HAUT-RANG : Mythique/Primordial (index ≥ 6) roulent un DEUXIÈME effet distinct
+  // → un objet de très haut rang est « waouh » (double affixe). (Le multi-affixe complet
+  // par rareté viendra en Phase 2.)
   let effect2: ItemEffect | undefined;
-  if (rankIndex(rarity) >= 8) {
+  if (rankIndex(rarity) >= 6) {
     const others = pool.filter((e) => e.type !== chosen.type);
     if (others.length) {
       const second = pick(rng, others);
@@ -1150,13 +1181,13 @@ export const SET_BY_ID: Record<string, ItemSet> = Object.fromEntries(
 
 /** Multiplicateur de bonus de set scalé par le RANG moyen des pièces (#3, ticket 8bfe5130) :
  *  les pièces d'un boss plus profond ont un rang plus haut → bonus de set plus fort → on
- *  veut faire les boss suivants. Ancré au rang C (RARITY_MULT.C) → un set C ≈ base d'origine,
+ *  veut faire les boss suivants. Ancré au rang MOYEN (Rare) → un set Rare ≈ base d'origine,
  *  les sets plus hauts montent, les plus bas baissent un peu. */
 export function setBonusMult(pieces: Item[]): number {
   if (!pieces.length) return 1;
-  const avg =
-    pieces.reduce((s, i) => s + (RARITY_MULT[i.rarity] ?? RARITY_MULT.C), 0) / pieces.length;
-  return avg / RARITY_MULT.C;
+  const anchor = RARITY_MULT.rare;
+  const avg = pieces.reduce((s, i) => s + (RARITY_MULT[i.rarity] ?? anchor), 0) / pieces.length;
+  return avg / anchor;
 }
 /** Libellé d'un palier de set, scalé par le rang des pièces équipées de ce set. */
 export function setTierLabel(type: EffectType, base: number, pieces: Item[]): string {
