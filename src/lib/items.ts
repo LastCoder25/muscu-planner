@@ -71,17 +71,22 @@ export function normRank(r: string | undefined | null): Rarity {
 // effets doivent GRANDIR avec le niveau de l'objet (pas d'effet « drapeau »
 // binaire — ils ne récompenseraient pas la montée en niveau).
 export type EffectType =
-  | 'damage_pct' // arme : + dégâts
-  | 'crit_pct' // arme/relique : + chance de critique
-  | 'lifesteal_pct' // arme : vol de vie
-  | 'dmg_reduction_pct' // armure : dégâts reçus réduits
-  | 'max_pv_pct' // armure : + PV max
-  | 'gold_pct' // accessoire : + or gagné
-  // Effets SIGNATURE (conditionnels, débloqués tard → nouveauté de haut niveau).
-  | 'execute_pct' // arme : + dégâts quand l'ennemi est bas (< 25 % PV)
-  | 'rage_pct' // relique : + dégâts quand TU es bas (< 30 % PV)
-  | 'momentum_pct' // arme : + dégâts par coup consécutif porté (cumul)
-  | 'thorns_pct'; // armure : renvoie une part des dégâts reçus à l'attaquant (épines)
+  // ── TIER MAJEUR (affixe #1) : stats de combat qui DÉFINISSENT l'objet ──
+  | 'damage_pct' // + dégâts
+  | 'crit_pct' // + chance de critique
+  | 'dmg_reduction_pct' // dégâts reçus réduits
+  | 'max_pv_pct' // + PV max
+  // ── TIER SECONDAIRE (affixe #2, Magique+) : soutien de combat + signatures ──
+  | 'lifesteal_pct' // vol de vie
+  | 'thorns_pct' // renvoie une part des dégâts reçus (épines)
+  | 'execute_pct' // SIGNATURE : + dégâts quand l'ennemi est bas (< 25 % PV)
+  | 'rage_pct' // SIGNATURE : + dégâts quand TU es bas (< 30 % PV)
+  | 'momentum_pct' // SIGNATURE : + dégâts par coup consécutif porté (cumul)
+  // ── TIER MINEUR (affixe #3, Épique+) : bonus « light » d'éco/confort (hors puissance brute) ──
+  | 'gold_pct' // + or gagné par run
+  | 'magic_find_pct' // + chance de meilleur loot (luck bornée → ne franchit jamais ta ligue)
+  | 'regen_pct' // + PV régénérés entre deux combats d'un donjon/labyrinthe
+  | 'initiative_pct'; // + initiative (commence le combat en premier plus souvent)
 
 export interface ItemEffect {
   type: EffectType;
@@ -422,21 +427,31 @@ export function rankRollMult(rank: Rarity, roll = 0): number {
   return lo + (hi - lo) * Math.min(1, Math.max(0, roll));
 }
 
-// Effet possible par slot + valeur de base (avant rareté/niveau).
-// Niveau minimum pour qu'une stat « exotique » puisse tomber sur un drop (pool
-// progressif) : le début est simple (dégâts/PV/or), la profondeur ajoute crit,
-// vol de vie puis réduction. Les stats absentes d'ici tombent dès le niveau 1.
+// Niveau minimum pour qu'une stat « exotique/signature » puisse tomber (pool
+// progressif → il reste des choses à découvrir en profondeur). Les stats de base
+// (majeures + soutien de base + mineures) tombent dès le niveau 1. Depuis le
+// passage aux TIERS d'affixe, seules les SIGNATURES et les épines restent gatées
+// (chaque tier garde toujours des options non gatées → jamais de tier vide).
 const EFFECT_MIN_LEVEL: Partial<Record<EffectType, number>> = {
-  crit_pct: 5,
-  lifesteal_pct: 8,
-  dmg_reduction_pct: 10,
-  // Effets SIGNATURE : débloqués TARD → il reste des choses à découvrir passé le
-  // niv.10 (le pool basique se tarissait sinon). Rares (haut niveau de donjon).
   execute_pct: 12,
   momentum_pct: 18,
   rage_pct: 15,
   thorns_pct: 9, // épines : build défensif « qui pique » → débloqué en profondeur
 };
+
+// ── TIERS D'AFFIXE (multi-affixe façon Diablo, v0.581) ──────────────────────────
+// Un drop tire 1 stat par TIER selon sa rareté (affixCountForRarity) : #1 = majeur,
+// #2 = secondaire, #3 = mineur. Du plus IMPACTANT (dégâts/PV) au plus LIGHT (or/loot).
+export type AffixTier = 'major' | 'secondary' | 'minor';
+const AFFIX_TIERS: Record<AffixTier, EffectType[]> = {
+  // Majeur : la grosse stat de combat qui définit l'objet.
+  major: ['damage_pct', 'max_pv_pct', 'dmg_reduction_pct', 'crit_pct'],
+  // Secondaire : soutien de combat + signatures conditionnelles (gatées en profondeur).
+  secondary: ['lifesteal_pct', 'thorns_pct', 'execute_pct', 'rage_pct', 'momentum_pct'],
+  // Mineur : bonus « light » d'éco/confort — n'augmentent PAS la puissance de combat brute.
+  minor: ['gold_pct', 'magic_find_pct', 'regen_pct', 'initiative_pct'],
+};
+const TIER_ORDER: AffixTier[] = ['major', 'secondary', 'minor'];
 
 const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
   weapon: [
@@ -468,14 +483,28 @@ const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
   familiar: [{ type: 'damage_pct', base: 6 }],
 };
 
-/** Base canonique par type d'effet (1re occurrence dans SLOT_EFFECTS) → sert à valoriser
- *  une stat de SET choisie par THÈME (indépendante du slot). Dérivée pour éviter la dérive. */
+/** Base canonique par type d'effet (1re occurrence dans SLOT_EFFECTS + bases explicites
+ *  des stats MINEURES, absentes des pools de slot). Sert à valoriser un affixe (tier) et
+ *  une stat de SET choisie par THÈME. */
 const EFFECT_BASE: Record<EffectType, number> = (() => {
-  const m = {} as Record<EffectType, number>;
+  // Bases explicites des stats mineures (light) — volontairement basses vs les stats de
+  // combat pour ne pas gonfler itemScore ni voler la vedette aux affixes majeurs.
+  const m = {
+    gold_pct: 14,
+    magic_find_pct: 6,
+    regen_pct: 8,
+    initiative_pct: 10,
+  } as Record<EffectType, number>;
   for (const slot of Object.keys(SLOT_EFFECTS) as ItemSlot[])
     for (const e of SLOT_EFFECTS[slot]) if (m[e.type] === undefined) m[e.type] = e.base;
   return m;
 })();
+
+/** Stats d'un TIER réellement disponibles à ce niveau (gate des signatures). Jamais vide
+ *  (chaque tier a des options non gatées) → un affixe de tier trouve toujours une stat. */
+function tierPool(tier: AffixTier, level: number): EffectType[] {
+  return AFFIX_TIERS[tier].filter((t) => (EFFECT_MIN_LEVEL[t] ?? 1) <= level);
+}
 
 /** Effets réellement disponibles pour un slot À CE NIVEAU (pool progressif — les
  *  effets exotiques/signature ne se débloquent qu'en profondeur via EFFECT_MIN_LEVEL).
@@ -533,6 +562,12 @@ export function effectLabelFor(type: EffectType, v: number): string {
       return `+${s}% PV`;
     case 'gold_pct':
       return `+${s}% or`;
+    case 'magic_find_pct':
+      return `+${s}% butin (loot)`;
+    case 'regen_pct':
+      return `+${s}% régén entre combats`;
+    case 'initiative_pct':
+      return `+${s}% initiative`;
     case 'execute_pct':
       return `+${s}% dégâts (ennemi < 25% PV)`;
     case 'rage_pct':
@@ -559,6 +594,12 @@ export function effectLabel(e: ItemEffect, level = 1): string {
       return `+${v}% PV`;
     case 'gold_pct':
       return `+${v}% or`;
+    case 'magic_find_pct':
+      return `+${v}% butin (loot)`;
+    case 'regen_pct':
+      return `+${v}% régén entre combats`;
+    case 'initiative_pct':
+      return `+${v}% initiative`;
     case 'execute_pct':
       return `+${v}% dégâts (ennemi < 25% PV)`;
     case 'rage_pct':
@@ -749,29 +790,31 @@ export function rollDrop(
     floorRanks,
     opts.playerLevel,
   );
-  // Pool de stats PROGRESSIF : au début, seules les stats basiques (dégâts/PV)
-  // tombent ; les stats exotiques se débloquent en montant (cf. EFFECT_MIN_LEVEL).
-  const pool = availableEffects(slot, lvl);
   // value = base × intervalle du RANG selon le JET (rankRollMult). La PROFONDEUR est encodée
   // par le RANG (pyramide) ; le jet (roll) balaie tout l'intervalle du rang → chasse au bon jet.
-  const rollValue = (b: number) => Math.max(1, round1(b * rankRollMult(rarity, roll)));
-  // MULTI-AFFIXE (Phase 2, façon Diablo) : la rareté donne 1→3 stats DISTINCTES.
-  // Tirage UNIFORME : toutes les voies/stats tombent équitablement (la voie n'oriente PAS
-  // les drops — c'est le loot accumulé qui te fait choisir/switcher de voie, ticket spé v2).
-  const affixCount = Math.min(affixCountForRarity(rarity), pool.length);
+  const rollValue = (t: EffectType) =>
+    Math.max(1, round1(EFFECT_BASE[t] * rankRollMult(rarity, roll)));
+  // MULTI-AFFIXE PAR TIER (v0.581, façon Diablo) : la rareté donne 1→3 affixes, tirés
+  // UN PAR TIER (majeur → secondaire → mineur). Plus la rareté est haute, plus on descend
+  // l'échelle d'impact (une grosse stat + du soutien + un bonus light). Tiers disjoints →
+  // pas de doublon de type. Tirage UNIFORME dans chaque tier (la voie n'oriente PAS les drops).
+  const affixCount = affixCountForRarity(rarity);
   const affixes: ItemEffect[] = [];
-  const remaining = [...pool];
   for (let a = 0; a < affixCount; a++) {
-    const idx = Math.floor(rng() * remaining.length);
-    const e = remaining.splice(idx, 1)[0]!;
-    affixes.push({ type: e.type, value: rollValue(e.base) });
+    const p = tierPool(TIER_ORDER[a]!, lvl);
+    if (!p.length) continue; // tier vide (ne devrait pas arriver) → on saute cet affixe
+    const type = pick(rng, p);
+    affixes.push({ type, value: rollValue(type) });
   }
   const chosen = affixes[0]!;
   const effect2 = affixes[1];
   const effect3 = affixes[2];
-  // Objet à effet SIGNATURE → nom évocateur (« Guillotine ») ; sinon nom + adjectif.
-  const sigNames = SIGNATURE_NAMES[chosen.type];
-  const name = sigNames ? pick(rng, sigNames) : `${pick(rng, NAMES[slot])} ${RARITY_ADJ[rarity]}`;
+  // Objet portant un affixe SIGNATURE (n'importe quel tier) → nom évocateur (« Guillotine ») ;
+  // sinon nom + adjectif de rareté.
+  const sigAffix = affixes.find((e) => SIGNATURE_NAMES[e.type]);
+  const name = sigAffix
+    ? pick(rng, SIGNATURE_NAMES[sigAffix.type]!)
+    : `${pick(rng, NAMES[slot])} ${RARITY_ADJ[rarity]}`;
   // REFONTE C : tout drop part du NIVEAU 1 (identité pure = rang + affixe). Toute la
   // puissance se construit ensuite à la poussière jusqu'au niveau du joueur.
   const level = 1;
@@ -1025,6 +1068,10 @@ export interface AggregatedEffects {
   ragePct: number; // signature : + dégâts si joueur bas
   momentumPct: number; // signature : + dégâts/coup cumulé
   thornsPct: number; // épines : fraction des dégâts reçus renvoyée à l'attaquant
+  // Stats MINEURES (light) — hors puissance de combat brute.
+  magicFindPct: number; // fraction : + luck de drop (bornée en aval → jamais hors ligue)
+  regenPct: number; // fraction : + PV régénérés entre combats de donjon
+  initiativePct: number; // fraction : + initiative (qui commence)
 }
 
 export function emptyEffects(): AggregatedEffects {
@@ -1040,6 +1087,9 @@ export function emptyEffects(): AggregatedEffects {
     ragePct: 0,
     momentumPct: 0,
     thornsPct: 0,
+    magicFindPct: 0,
+    regenPct: 0,
+    initiativePct: 0,
   };
 }
 
@@ -1076,6 +1126,15 @@ function applyEffect(a: AggregatedEffects, type: EffectType, v: number): void {
     case 'thorns_pct':
       a.thornsPct += v;
       break;
+    case 'magic_find_pct':
+      a.magicFindPct += v;
+      break;
+    case 'regen_pct':
+      a.regenPct += v;
+      break;
+    case 'initiative_pct':
+      a.initiativePct += v;
+      break;
   }
 }
 
@@ -1101,6 +1160,9 @@ export function mergeEffects(...list: AggregatedEffects[]): AggregatedEffects {
     a.ragePct += e.ragePct;
     a.momentumPct += e.momentumPct;
     a.thornsPct += e.thornsPct;
+    a.magicFindPct += e.magicFindPct;
+    a.regenPct += e.regenPct;
+    a.initiativePct += e.initiativePct;
   }
   return a;
 }
@@ -1387,6 +1449,9 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
   a.ragePct += s.ragePct;
   a.momentumPct += s.momentumPct;
   a.thornsPct += s.thornsPct;
+  a.magicFindPct += s.magicFindPct;
+  a.regenPct += s.regenPct;
+  a.initiativePct += s.initiativePct;
   a.dmgReduction = Math.min(0.5, a.dmgReduction); // plafond 50 %
   return a;
 }
@@ -1418,13 +1483,16 @@ export function playerWithGear(
   const lifesteal = Math.min(0.5, e.lifesteal + (extra.lifesteal ?? 0));
   // Procs LÉGENDAIRES (non-scalants) portés par l'équipement.
   const procs = aggregateLegendaries(equipped);
+  // Stats MINEURES de combat : initiative (multiplicatif, léger) + régén de donjon (borné +30 %).
+  const initiativePct = e.initiativePct + (extra.initiativePct ?? 0);
+  const regen = Math.min(0.3, e.regenPct + (extra.regenPct ?? 0));
   return {
     name,
     pv: Math.round(base.pv * (1 + maxPvPct)),
     damage: Math.max(1, Math.round(base.damage * (1 + damagePct))),
     crit: Math.min(0.6, base.crit + critAdd),
     dodge: Math.min(0.4, base.dodge + dodgeAdd),
-    initiative: base.initiative,
+    initiative: base.initiative * (1 + initiativePct),
     dmgReduction,
     lifesteal,
     strikes: base.strikes ?? 1,
@@ -1432,8 +1500,17 @@ export function playerWithGear(
     rage: e.ragePct + (extra.ragePct ?? 0),
     momentum: e.momentumPct + (extra.momentumPct ?? 0),
     thorns: e.thornsPct + (extra.thornsPct ?? 0),
+    ...(regen > 0 ? { regen } : {}),
     ...(procs.size ? { procs } : {}),
   };
+}
+/** Bonus de LUCK apporté par le magic find de l'équipement (borné → jamais hors ligue).
+ *  À ajouter à la `luck` passée à rollDrop au moment du butin d'un run. */
+export function magicFindLuck(equipped: Equipped, voie?: string | null): number {
+  // magicFindPct est une fraction (ex. 0,30 = +30 %). On la convertit en luck avec un
+  // facteur faible et un plafond → au mieux ~+0,25 de luck (épaissit un peu la pointe
+  // haute de la pyramide, ne peut PAS franchir le cap +2 rangs de ta ligue).
+  return Math.min(0.25, aggregateEffects(equipped, voie).magicFindPct * 0.5);
 }
 
 /** OPTIMISEUR D'ÉQUIPEMENT (ticket 6d69c2fc) : cherche, parmi l'équipé + le sac, la

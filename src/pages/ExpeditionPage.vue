@@ -474,6 +474,7 @@ import {
   RANK_ORDER,
   rollJet,
   legendaryOf,
+  magicFindLuck,
   tierIndexOf,
   mergeEffects,
   SLOT_LABEL,
@@ -602,6 +603,8 @@ const fighter = computed<Combatant>(() =>
   ),
 );
 const heroLevel = computed(() => character.value.level.level);
+// Magic find (stat mineure) de l'équipement → luck bonus sur les coffres du labyrinthe.
+const mfLuck = computed(() => magicFindLuck(char.row?.equipped ?? {}, char.row?.voie));
 
 // ── % DE RÉUSSITE d'un palier (Monte-Carlo du CRAWL avec ton stuff réel) ──
 // Le labyrinthe est un crawl d'ATTRITION → une « puissance conseillée » (single-fight)
@@ -953,7 +956,10 @@ function openChest(id: number) {
   const grade = chestGradeOf(id);
   const rng = mulberry32(roomSeed(id));
   // Le GRADE du coffre pilote le contenu : luck (rareté), niveau, ressources, objet garanti.
-  const luck = Math.min(1, 0.35 + 0.45 * depthOf() + labyLuck.value + grade.luckBonus);
+  const luck = Math.min(
+    1,
+    0.35 + 0.45 * depthOf() + labyLuck.value + grade.luckBonus + mfLuck.value,
+  );
   const level = Math.max(1, heroLevel.value + grade.levelBonus);
   const tries = grade.guaranteed ? 8 : 4;
   let drop: Omit<Item, 'id'> | null = null;
@@ -1157,7 +1163,7 @@ function runDropLevel(): number {
   return selectedLaby.value?.dropLevel ?? heroLevel.value + 1;
 }
 function runLuck(): number {
-  return Math.min(1, (selectedLaby.value?.luck ?? 0.5) + labyLuck.value);
+  return Math.min(1, (selectedLaby.value?.luck ?? 0.5) + labyLuck.value + mfLuck.value);
 }
 // Trésor final garanti à la victoire (haute chance + haute rareté). ~15 % de
 // chance que ce soit une PIÈCE DE SET (2e voie d'accès aux sets, cf. ticket) —

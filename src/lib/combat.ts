@@ -29,6 +29,7 @@ export interface Combatant {
   rage?: number; // + dégâts quand TOI tu es bas (< rageThreshold PV)
   momentum?: number; // + dégâts par coup consécutif porté dans le combat (cumul plafonné)
   thorns?: number; // 0..1 : part des dégâts reçus renvoyée à l'attaquant (épines, joueur)
+  regen?: number; // 0..1 : BONUS de PV régénérés entre 2 combats d'un donjon (stat mineure, joueur)
   // Procs LÉGENDAIRES (objets Légendaire+, joueur uniquement) — effets NON-scalants,
   // one-shot par combat. Cf. LEGENDARY_PROCS (items.ts) pour les ids/libellés.
   procs?: ReadonlySet<string>;
@@ -354,7 +355,9 @@ export function simulateDungeon(
     if (!r.win) break;
     gold += r.gold;
     defeated++;
-    pv = Math.min(player.pv, pv + Math.round(player.pv * COMBAT.dungeonHealPct));
+    // Régén entre combats = base + bonus « régén » de l'équipement (stat mineure, borné).
+    const healPct = COMBAT.dungeonHealPct + (player.regen ?? 0);
+    pv = Math.min(player.pv, pv + Math.round(player.pv * healPct));
   }
   return {
     cleared: defeated === foes.length,

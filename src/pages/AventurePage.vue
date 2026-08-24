@@ -2207,6 +2207,7 @@ import {
   setTierLabel,
   rollJet,
   legendaryOf,
+  magicFindLuck,
   sellValue,
   isFamiliar,
   FAMILIAR_SLOT,
@@ -2309,6 +2310,10 @@ const gameFx = useGameFx();
 // Explication « rang » / « qualité » (ouverte en cliquant le pastille de rang ou le
 // chiffre de qualité d'un objet — ticket d094eac6). Les 10 rangs pour l'échelle visuelle.
 const helpTopic = ref<'rank' | 'quality' | null>(null);
+// Bonus de luck du magic find (stat mineure) apporté par l'équipement actuel.
+function mfLuck(): number {
+  return char.row ? magicFindLuck(char.row.equipped, char.row.voie) : 0;
+}
 // Détail d'un objet (clic sur un item équipé → modale d'inspection).
 const inspectItem = ref<Item | null>(null);
 // Affixes (1→3) d'un objet, en lignes séparées pour le détail.
@@ -3498,7 +3503,7 @@ async function explore(d: Dungeon) {
       defeated: r.defeated,
       level: d.dropLevel,
       spread: 1, // le donjon peut lâcher un cran sous son niveau (fourrage à upgrader)
-      luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0)),
+      luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0) + mfLuck()),
       playerLevel: c.value.level.level,
     });
     if (rolled) {
@@ -3681,7 +3686,7 @@ async function fightBoss(b: MilestoneBoss) {
       const piece = rollSetPiece(dropRng, {
         setId: randomVoieSetId(dropRng),
         level: b.dropLevel,
-        luck: 0.6, // boss généreux
+        luck: Math.min(1, 0.6 + mfLuck()), // boss généreux (+ magic find)
         rollFloor,
         playerLevel: c.value.level.level,
       });
@@ -3818,7 +3823,7 @@ async function fightEndless() {
           cleared: true,
           defeated: 1,
           level: endlessDropLevel(tier),
-          luck: Math.min(1, 0.6 + (lucky ? 0.4 : 0)),
+          luck: Math.min(1, 0.6 + (lucky ? 0.4 : 0) + mfLuck()),
           playerLevel: c.value.level.level,
         });
       }

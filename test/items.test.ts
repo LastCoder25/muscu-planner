@@ -18,6 +18,7 @@ import {
   aggregateLegendaries,
   LEGENDARY_PROCS,
   LEGENDARY_MIN_RANK,
+  magicFindLuck,
   SLOTS,
   normRank,
   fullInfuseCost,
@@ -361,20 +362,41 @@ describe('rollDrop', () => {
     expect(RARITY_RANK[deep.rarity]).toBeGreaterThan(RARITY_RANK[shallow.rarity]);
     expect(deep.effect.value).toBeGreaterThan(shallow.effect.value);
   });
-  it('pool progressif : au niveau 1, aucune stat exotique (crit/vol de vie/réduction)', () => {
-    const exotic = new Set(['crit_pct', 'lifesteal_pct', 'dmg_reduction_pct']);
-    for (let s = 1; s <= 80; s++) {
-      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 1 });
-      if (d) expect(exotic.has(d.effect.type)).toBe(false);
+  it('tiers d’affixe : #1 toujours MAJEUR, #2 SECONDAIRE, #3 MINEUR', () => {
+    const MAJOR = new Set(['damage_pct', 'max_pv_pct', 'dmg_reduction_pct', 'crit_pct']);
+    const SECONDARY = new Set([
+      'lifesteal_pct',
+      'thorns_pct',
+      'execute_pct',
+      'rage_pct',
+      'momentum_pct',
+    ]);
+    const MINOR = new Set(['gold_pct', 'magic_find_pct', 'regen_pct', 'initiative_pct']);
+    for (let s = 1; s <= 400; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 60, luck: 1 });
+      if (!d) continue;
+      expect(MAJOR.has(d.effect.type)).toBe(true); // affixe #1 = majeur
+      if (d.effect2) expect(SECONDARY.has(d.effect2.type)).toBe(true); // #2 = secondaire
+      if (d.effect3) expect(MINOR.has(d.effect3.type)).toBe(true); // #3 = mineur
     }
   });
-  it('pool progressif : le crit peut tomber une fois débloqué (niv ≥ 5)', () => {
-    let sawCrit = false;
-    for (let s = 1; s <= 300 && !sawCrit; s++) {
-      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 10, luck: 1 });
-      if (d?.effect.type === 'crit_pct') sawCrit = true;
+  it('tier majeur dispo dès le niveau 1 (crit/réduction ne sont plus gatés)', () => {
+    const seen = new Set<string>();
+    for (let s = 1; s <= 400; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 1, luck: 1 });
+      if (d) seen.add(d.effect.type);
     }
-    expect(sawCrit).toBe(true);
+    // au niveau 1, on voit plusieurs stats majeures (dont crit/réduction, désormais du core).
+    expect(seen.size).toBeGreaterThanOrEqual(2);
+  });
+  it('les stats MINEURES ne tombent que sur l’affixe #3 (Épique+), jamais en #1/#2', () => {
+    const MINOR = new Set(['gold_pct', 'magic_find_pct', 'regen_pct', 'initiative_pct']);
+    for (let s = 1; s <= 400; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 60, luck: 1 });
+      if (!d) continue;
+      expect(MINOR.has(d.effect.type)).toBe(false);
+      if (d.effect2) expect(MINOR.has(d.effect2.type)).toBe(false);
+    }
   });
 });
 
@@ -535,8 +557,9 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
   });
   it('les effets signature n’apparaissent qu’en profondeur (gate de niveau)', () => {
     const SIG = new Set(['execute_pct', 'rage_pct', 'momentum_pct']);
-    const low = scan(3, 1).filter((d) => SIG.has(d.effect.type));
-    const deep = scan(20, 1).filter((d) => SIG.has(d.effect.type));
+    const hasSig = (d: Item) => [d.effect, d.effect2, d.effect3].some((e) => e && SIG.has(e.type));
+    const low = scan(3, 1).filter(hasSig);
+    const deep = scan(20, 1).filter(hasSig);
     expect(low).toHaveLength(0);
     expect(deep.length).toBeGreaterThan(0);
   });
@@ -552,8 +575,9 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
       'Fureur Écarlate',
       'Rage du Damné',
     ];
+    const SIG = ['execute_pct', 'rage_pct', 'momentum_pct'];
     const sig = scan(20, 1).find((d) =>
-      ['execute_pct', 'rage_pct', 'momentum_pct'].includes(d.effect.type),
+      [d.effect, d.effect2, d.effect3].some((e) => e && SIG.includes(e.type)),
     );
     expect(sig).toBeTruthy();
     expect(NAMED).toContain(sig!.name);
@@ -605,6 +629,48 @@ describe('enchant — vestige de migration (moteur retiré, ticket 7acb1e7c)', (
     expect(enchantMult(3)).toBeCloseTo(1.99, 2); // zone sûre garantie ≈ ×2 (baseline)
     expect(enchantMult(5)).toBeGreaterThan(enchantMult(3));
     expect(enchantMult(ENCHANT_MAX + 5)).toBe(enchantMult(ENCHANT_MAX)); // clampé
+  });
+});
+
+describe('stats mineures (tier « or », v0.581)', () => {
+  const mk = (type: Item['effect']['type'], value: number): Item => ({
+    id: 'x',
+    slot: 'accessory',
+    name: 'A',
+    emoji: '💍',
+    rarity: 'epique',
+    level: 1,
+    baseLevel: 1,
+    effect: { type, value },
+  });
+  it('magicFindLuck : borné (≤ 0,25) même avec beaucoup de magic find', () => {
+    const eq = { weapon: mk('magic_find_pct', 200) };
+    expect(magicFindLuck(eq)).toBeLessThanOrEqual(0.25);
+    expect(magicFindLuck(eq)).toBeGreaterThan(0);
+    expect(magicFindLuck({})).toBe(0);
+  });
+  it('régén : plafonnée à +30 % et posée sur le combattant', () => {
+    const eq = { armor: mk('regen_pct', 500) };
+    const c = playerWithGear('X', { puissance: 20, endurance: 20, agilite: 10 }, eq, {}, 8);
+    expect(c.regen).toBe(0.3); // plafond
+    expect(
+      playerWithGear('X', { puissance: 20, endurance: 20, agilite: 10 }, {}, {}, 8).regen,
+    ).toBeUndefined();
+  });
+  it('initiative : multiplie l’initiative de base', () => {
+    const stats = { puissance: 20, endurance: 20, agilite: 30 };
+    const bare = playerWithGear('X', stats, {}, {}, 8);
+    const withInit = playerWithGear('X', stats, { relic: mk('initiative_pct', 50) }, {}, 8);
+    expect(withInit.initiative).toBeGreaterThan(bare.initiative);
+  });
+  it('les stats mineures n’augmentent PAS la puissance de combat brute', () => {
+    const stats = { puissance: 40, endurance: 30, agilite: 20 };
+    const bare = playerWithGear('X', stats, {}, {}, 8);
+    const gold = playerWithGear('X', stats, { accessory: mk('gold_pct', 40) }, {}, 8);
+    // or = pur éco → pv/dégâts/crit identiques (pas de gonflage de puissance).
+    expect(gold.pv).toBe(bare.pv);
+    expect(gold.damage).toBe(bare.damage);
+    expect(gold.crit).toBe(bare.crit);
   });
 });
 
