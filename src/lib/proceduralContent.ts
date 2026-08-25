@@ -32,12 +32,18 @@ export function refFighter(L: number): Combatant {
   const s = refBalancedStat(L);
   return playerCombatant('ref', { puissance: s, endurance: s, agilite: s }, L);
 }
-/** PUISSANCE CONSEILLÉE pour un contenu de niveau reco (ticket 6abe4429) : la puissance
- *  du build ÉQUILIBRÉ de référence à ce niveau — celui contre lequel le contenu est
- *  calibré (clear ~88-90 %). STABLE (statique par contenu) → remplace le % de victoire
- *  Monte-Carlo qui « bougeait tout le temps ». Le joueur compare SA puissance à celle-ci. */
-export function recommendedPower(recoLevel: number): number {
-  return combatPower(refFighter(Math.max(1, recoLevel)));
+/** PUISSANCE CONSEILLÉE pour un contenu de niveau reco. Depuis v0.600 le contenu suppose un
+ *  joueur ÉQUIPÉ (gearExpect/bossGearExpect) : la conseillée doit donc être la puissance d'un
+ *  joueur ÉQUIPÉ de ce niveau, pas du build NU de référence (sinon elle sous-estimait — un
+ *  joueur à 1084 « perdait » contre un boss affiché 707). On multiplie la puissance nue par le
+ *  gain de combatPower qu'apporte l'équipement = √(off × pv) des facteurs d'attente d'équipement
+ *  (combatPower = √(offense × survie) → un boost O sur l'offense et S sur la survie multiplie la
+ *  puissance par √(O·S)). `boss` = attente STEEP (combat solo) ; sinon attente donjon (attrition). */
+export function recommendedPower(recoLevel: number, boss = false): number {
+  const L = Math.max(1, recoLevel);
+  const base = combatPower(refFighter(L));
+  const ge = boss ? bossGearExpect(L) : gearExpect(L);
+  return Math.round(base * Math.sqrt(ge.off * ge.pv));
 }
 
 // Coefficients de calibration (fittés par simulation, cf. proceduralContent.test) :

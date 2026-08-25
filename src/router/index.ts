@@ -45,12 +45,22 @@ export default defineRouter((/* { store, ssrContext } */) => {
     /error loading dynamically imported module/i.test(msg) ||
     /importing a module script failed/i.test(msg);
 
+  // DESTINATION en cours de navigation : sur un `vite:preloadError` (le chunk de la route
+  // ciblée a 404), l'event ne porte PAS la cible → on la mémorise ici pour recharger VERS
+  // elle (et non recharger la page COURANTE, qui laissait le joueur sur place — « ça recharge
+  // au lieu d'y aller » sur Aventure/Labyrinthe après un redéploiement).
+  let pendingTarget = typeof window !== 'undefined' ? window.location.pathname : '/';
+  Router.beforeEach((to) => {
+    pendingTarget = to.fullPath;
+    return true;
+  });
+
   Router.onError((err, to) => {
     const msg = err instanceof Error ? err.message : String(err);
     if (!isChunkError(msg)) return;
     if (sessionStorage.getItem(RELOAD_KEY)) return; // déjà retenté → évite la boucle
     sessionStorage.setItem(RELOAD_KEY, '1');
-    window.location.assign(to?.fullPath ?? window.location.pathname);
+    window.location.assign(to?.fullPath ?? pendingTarget);
   });
   // Nettoie le garde après une navigation réussie (chunk chargé) → un futur
   // redéploiement pourra à nouveau déclencher un rechargement.
@@ -61,7 +71,9 @@ export default defineRouter((/* { store, ssrContext } */) => {
       if (sessionStorage.getItem(RELOAD_KEY)) return;
       sessionStorage.setItem(RELOAD_KEY, '1');
       e.preventDefault();
-      window.location.reload();
+      // Recharge VERS la destination en cours (pas la page courante) → on arrive bien sur
+      // l'écran demandé (Aventure/Labyrinthe) au lieu de rester là où on était.
+      window.location.assign(pendingTarget);
     });
   }
 

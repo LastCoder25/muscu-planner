@@ -964,7 +964,7 @@
                     <button
                       v-if="isVoieSetItem(it)"
                       class="ii-ic"
-                      :title="'Ranger dans le loadout ' + setVoieName(it.setId!)"
+                      :title="'Ranger dans mon set ' + setVoieName(it.setId!)"
                       @click="doStashSetPiece(it)"
                     >
                       📦
@@ -1275,9 +1275,9 @@
               <span
                 v-if="bossUnlocked(b)"
                 class="dgn-chip winpct"
-                :class="powClass(b.unlockLevel)"
-                :title="powTitle(b.unlockLevel)"
-                >⚔️ {{ fmtPow(recoPow(b.unlockLevel)) }}</span
+                :class="powClass(b.unlockLevel, true)"
+                :title="powTitle(b.unlockLevel, true)"
+                >⚔️ {{ fmtPow(recoPow(b.unlockLevel, true)) }}</span
               >
             </div>
 
@@ -1584,7 +1584,7 @@
                 <template v-if="loadoutVoie(i)"
                   >{{ loadoutVoie(i)!.emoji }} {{ loadoutVoie(i)!.name }}</template
                 >
-                <template v-else>Loadout {{ i + 1 }}</template>
+                <template v-else>Set {{ i + 1 }}</template>
                 <span
                   class="lo-count"
                   :class="{ full: voieOwnedCount(i) >= 4 }"
@@ -1597,7 +1597,7 @@
                 v-if="lo.count"
                 class="lo-power"
                 :class="lo.delta >= 0 ? 'up' : 'down'"
-                title="Puissance si tu équipes ce loadout (familier actuel conservé)"
+                title="Puissance si tu portes ce set (familier actuel conservé)"
               >
                 ⚔️ {{ fmtPow(lo.power) }} <b>({{ fmtDelta(combatPowerVal, lo.power) }})</b>
               </span>
@@ -1798,7 +1798,7 @@
           📦 {{ SLOT_LABEL[stashConflict.incoming.slot] }} · {{ VOIES[stashConflict.idx]?.name }}
         </div>
         <div class="stash-sub">
-          Ce loadout a déjà une pièce sur cet emplacement (1 set max). Garde la meilleure.
+          Ton set a déjà une pièce sur cet emplacement (1 par emplacement). Garde la meilleure.
         </div>
         <div class="stash-cmp">
           <div
@@ -2039,11 +2039,25 @@
                     {{ ln }}
                   </div>
                 </div>
-                <!-- Pièce de set d'un BOSS : filée au loadout de sa voie (pas au sac). En cas de
-                     conflit (emplacement occupé), le dialogue de choix s'ouvre par-dessus. -->
-                <div v-if="run.kind === 'boss' && d.setId" class="drop-done">
-                  🧩 → Loadout {{ setVoieName(d.setId) }}
-                </div>
+                <!-- Pièce de set d'un BOSS : filée à ton set de voie (pas au sac). On montre
+                     quand même si elle est intéressante (Δ puissance si équipée) + où elle est
+                     rangée. Conflit (emplacement occupé) → dialogue de choix par-dessus. -->
+                <template v-if="run.kind === 'boss' && d.setId">
+                  <div class="ii-cmp2">
+                    <span class="ii-cmp2-ic">⚔️</span>
+                    <span
+                      class="ii-cmp2-chip"
+                      :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
+                    >
+                      <b>{{ fmtDelta(combatPowerVal, powerIfEquip(d)) }}</b
+                      ><i>si équipée seule</i>
+                    </span>
+                  </div>
+                  <div class="drop-done set-note">
+                    🧩 Rangée dans ton set <b>{{ setVoieName(d.setId) }}</b> — porte-le via «
+                    Mes&nbsp;sets »
+                  </div>
+                </template>
                 <template v-else>
                   <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
                     <span
@@ -2659,25 +2673,28 @@ function talReplaceId(id: string): string | null {
 // contenu est calibré. Le joueur compare SA puissance (combatPowerVal) à celle-ci.
 // Mémoïsée : `recommendedPower` (reconstruit un combattant de référence) est STATIQUE par
 // niveau, mais recoPow est appelée ~3×/ligne de donjon/boss à chaque rendu → cache par niveau.
-const recoPowCache = new Map<number, number>();
-function recoPow(recoLevel: number): number {
-  let v = recoPowCache.get(recoLevel);
+// Cache par (niveau, boss) : les boss supposent un joueur plus fortement équipé → conseillée
+// STEEP (bossGearExpect) ; les donjons = attente d'attrition (gearExpect). Cf. recommendedPower.
+const recoPowCache = new Map<string, number>();
+function recoPow(recoLevel: number, boss = false): number {
+  const key = (boss ? 'b' : 'd') + recoLevel;
+  let v = recoPowCache.get(key);
   if (v === undefined) {
-    v = recommendedPower(recoLevel);
-    recoPowCache.set(recoLevel, v);
+    v = recommendedPower(recoLevel, boss);
+    recoPowCache.set(key, v);
   }
   return v;
 }
 // Vert si tu atteins la puissance conseillée, orange si proche (≥ 80 %), rouge sinon.
-function powClass(recoLevel: number): string {
-  const r = recoPow(recoLevel);
+function powClass(recoLevel: number, boss = false): string {
+  const r = recoPow(recoLevel, boss);
   const mine = combatPowerVal.value;
   if (mine >= r) return 'wp-good';
   if (mine >= r * 0.8) return 'wp-mid';
   return 'wp-bad';
 }
-function powTitle(recoLevel: number): string {
-  return `Puissance conseillée ${fmtPow(recoPow(recoLevel))} · la tienne ${fmtPow(combatPowerVal.value)}`;
+function powTitle(recoLevel: number, boss = false): string {
+  return `Puissance conseillée ${fmtPow(recoPow(recoLevel, boss))} · la tienne ${fmtPow(combatPowerVal.value)}`;
 }
 // Rang de PRESTIGE (cosmétique, dérivé du niveau) — n'affecte pas le combat.
 const rank = computed(() => characterRank(c.value.level.level));
@@ -4487,7 +4504,7 @@ function doStashSetPiece(it: Item) {
   }
   withUid(async (uid) => {
     await char.stashSetPiece(uid, it.id);
-    $q.notify({ type: 'positive', message: `📦 Rangé dans le loadout ${VOIES[idx]?.name ?? ''}.` });
+    $q.notify({ type: 'positive', message: `🧩 Rangée dans ton set ${VOIES[idx]?.name ?? ''}.` });
   }, 'Impossible de ranger cette pièce.');
 }
 // Remplacer : range la nouvelle, vend l'ancienne (ou la renvoie au sac si 🔒).

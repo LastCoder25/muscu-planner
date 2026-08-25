@@ -105,22 +105,24 @@
         </button>
       </div>
 
-      <!-- Bandeau AUTO : le run se joue seul → indicateur + bouton pour reprendre la main. -->
-      <div v-if="autoMode" class="auto-banner">
-        <span class="ab-txt"><span class="ab-dot" /> ⚡ Auto — le héros explore seul</span>
-        <button
-          type="button"
-          class="ab-speed"
-          :class="{ on: autoSpeed === 2 }"
-          :title="
-            autoSpeed === 2 ? 'Vitesse ×2 (touche pour ×1)' : 'Vitesse normale (touche pour ×2)'
-          "
-          @click="toggleSpeed"
-        >
-          ⏩ ×{{ autoSpeed }}
-        </button>
-        <button type="button" class="ab-stop" @click="stopAuto">✋ Reprendre la main</button>
-      </div>
+      <!-- Contrôles AUTO flottants (téléportés au body → TOUJOURS au-dessus des modales de
+           combat/coffre/piège). Vitesse ⏩ ×1→×5 (recliquer redescend) + reprendre la main,
+           accessibles quel que soit l'écran (ticket labyrinthe). -->
+      <Teleport to="body">
+        <div v-if="autoMode" class="auto-float">
+          <span class="af-txt">⚡ Auto</span>
+          <button
+            type="button"
+            class="af-speed"
+            :class="{ on: autoSpeed > 1 }"
+            title="Vitesse de l'auto (touche pour accélérer ; ×5 → retour ×1)"
+            @click="toggleSpeed"
+          >
+            ⏩ ×{{ autoSpeed }}
+          </button>
+          <button type="button" class="af-stop" @click="stopAuto">✋ Reprendre la main</button>
+        </div>
+      </Teleport>
 
       <div class="map-wrap">
         <!-- Marge : les salles sont décalées aléatoirement (aspect organique) → padding
@@ -234,10 +236,6 @@
             :player-equipped="playerEquipped"
             @done="onFxDone"
           />
-          <!-- Reprendre la main MÊME pendant le combat (le bandeau auto est masqué par la modale). -->
-          <button v-if="autoMode" type="button" class="fx-stop-auto" @click="stopAuto">
-            ✋ Reprendre la main
-          </button>
           <template v-if="fxDone">
             <div class="fx-result" :class="roomFx.win ? 'good' : 'bad'">
               {{ roomFx.win ? '🏆 Victoire !' : '💀 Défaite…' }}
@@ -588,18 +586,20 @@ const selectedLaby = ref<Labyrinth | null>(null);
 const autoMode = ref(false);
 let autoTimer: ReturnType<typeof setTimeout> | undefined;
 const AUTO_STEP_MS = 550;
-// Vitesse de l'auto-run / des déplacements (1 = normal, 2 = rapide). Mémorisée par compte
-// (localStorage) → l'option persiste entre les runs (ticket 06376fe4).
-const autoSpeed = ref<1 | 2>(readSpeed());
-function readSpeed(): 1 | 2 {
+// Vitesse de l'auto-run / des déplacements : 1..5. Chaque tap monte d'un cran, ×5 → retour
+// à ×1. Mémorisée par compte (localStorage) → persiste entre les runs (ticket 06376fe4).
+const SPEED_MAX = 5;
+const autoSpeed = ref<number>(readSpeed());
+function readSpeed(): number {
   try {
-    return localStorage.getItem('muscu:laby:speed') === '2' ? 2 : 1;
+    const n = parseInt(localStorage.getItem('muscu:laby:speed') ?? '1', 10);
+    return n >= 1 && n <= SPEED_MAX ? n : 1;
   } catch {
     return 1;
   }
 }
 function toggleSpeed() {
-  autoSpeed.value = autoSpeed.value === 2 ? 1 : 2;
+  autoSpeed.value = autoSpeed.value >= SPEED_MAX ? 1 : autoSpeed.value + 1;
   try {
     localStorage.setItem('muscu:laby:speed', String(autoSpeed.value));
   } catch {
@@ -997,7 +997,10 @@ function openChest(id: number) {
     1,
     0.35 + 0.45 * depthOf() + labyLuck.value + grade.luckBonus + mfLuck.value,
   );
-  const level = Math.max(1, heroLevel.value + grade.levelBonus);
+  // Niveau du butin = niveau du PALIER (runDropLevel) + bonus de grade du coffre — PAS le
+  // niveau du joueur (bug : les coffres des premiers paliers droppaient au niv. joueur, ex.
+  // ilvl 22/24 au niv.20). `playerLevel` plafonne ensuite via rollDrop (min(contenu, joueur)).
+  const level = Math.max(1, runDropLevel() + grade.levelBonus);
   const tries = grade.guaranteed ? 8 : 4;
   let drop: Omit<Item, 'id'> | null = null;
   for (let k = 0; k < tries && !drop; k++)
@@ -1658,71 +1661,43 @@ function replayAuto() {
   transform: scale(0.96);
 }
 /* Bandeau AUTO pendant un run auto. */
-.auto-banner {
+/* Contrôles AUTO flottants (téléportés au body) : TOUJOURS au-dessus des modales
+   (q-dialog ~6000 → z-index 7000). Barre compacte en haut, centrée. */
+.auto-float {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7000;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 6px 0 10px;
-  padding: 8px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  max-width: 94vw;
 }
-.ab-txt {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.af-txt {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--text);
-}
-.ab-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: ab-pulse 1s ease-in-out infinite;
-}
-@keyframes ab-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ab-dot {
-    animation: none;
-  }
-}
-.ab-stop {
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--text);
-  border-radius: 9px;
-  padding: 5px 10px;
-  font-weight: 700;
+  font-weight: 800;
   font-size: 12px;
-  cursor: pointer;
+  color: var(--accent);
 }
-/* Bascule de vitesse ×1/×2 de l'auto-run (ticket 06376fe4). Accent quand ×2 actif. */
-.ab-speed {
+.af-speed,
+.af-stop {
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--text);
-  border-radius: 9px;
+  border-radius: 999px;
   padding: 5px 10px;
   font-weight: 800;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
-.ab-speed.on {
+.af-speed.on {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
@@ -1979,20 +1954,6 @@ function replayAuto() {
   height: 48px;
   border-radius: 12px;
   font-weight: 700;
-}
-/* Reprendre la main pendant le combat (dans la modale, auto actif). */
-.fx-stop-auto {
-  margin-top: 12px;
-  width: 100%;
-  padding: 9px 0;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--dim);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
 }
 /* Coffre : rebond + ouverture */
 .chest-anim {
