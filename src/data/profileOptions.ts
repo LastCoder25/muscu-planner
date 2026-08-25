@@ -95,6 +95,7 @@ export const SPORTS = [
   'Football',
   'Basket',
   'Tennis',
+  'Tennis de table',
   'Boxe',
   'Rugby',
   'Yoga',
