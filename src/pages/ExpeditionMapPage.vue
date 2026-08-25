@@ -174,10 +174,13 @@
         <button class="zoom-b" aria-label="Zoomer" @click="zoom(1)">+</button>
       </div>
 
-      <!-- Récolte des filons (visible dès qu'il y a quelque chose à récolter) -->
-      <button v-if="readyTotal.energy > 0" class="collect-pill" @click="collectAll">
+      <!-- Récolte des producteurs (visible dès qu'il y a quelque chose à récolter) -->
+      <button v-if="readySum > 0" class="collect-pill" @click="collectAll">
         🧺 Récolter
+        <span v-if="readyTotal.gold" class="cp-r">🪙{{ readyTotal.gold }}</span>
         <span v-if="readyTotal.energy" class="cp-r">⚡{{ readyTotal.energy }}</span>
+        <span v-if="readyTotal.summon" class="cp-r">🔮{{ readyTotal.summon }}</span>
+        <span v-if="readyTotal.keys" class="cp-r">🗝️{{ readyTotal.keys }}</span>
       </button>
     </div>
 
@@ -305,8 +308,8 @@
                 {{ nextEffectLabel(selectedPlot.building) }}
               </span>
             </div>
-            <!-- Filon : récolte (accumulation fractionnaire visible même quand < 1) -->
-            <div v-if="!isUtility(selectedPlot.building)" class="pm-ready">
+            <!-- Producteur/hybride : récolte (accumulation fractionnaire visible même quand < 1) -->
+            <div v-if="buildingProduces(selectedPlot.building)" class="pm-ready">
               <span>
                 En stock :
                 <b
@@ -318,7 +321,7 @@
             </div>
             <div class="pm-actions">
               <button
-                v-if="!isUtility(selectedPlot.building)"
+                v-if="buildingProduces(selectedPlot.building)"
                 class="pm-collect"
                 :disabled="plotAccrued(selectedPlot.building) < 1"
                 @click="collectAll"
@@ -671,6 +674,9 @@ const plots = computed<PlotView[]>(() => {
   });
 });
 const readyTotal = computed(() => collectable(char.row?.buildings ?? [], now.value));
+const readySum = computed(() =>
+  (Object.values(readyTotal.value)).reduce((a, b) => a + b, 0),
+);
 const selectedSlot = ref<number | null>(null);
 const selectedPlot = computed<PlotView | null>(() =>
   selectedSlot.value === null
@@ -697,18 +703,30 @@ const RES_EMOJI: Record<string, string> = {
   parchemins: '📜',
   fragments: '🫧', // poussière d'âme
   ink_dust: '🖋️', // poussière d'encre
+  gold: '🪙',
+  summon: '🔮',
+  keys: '🗝️',
 };
 // Emoji de la ressource produite par un bâtiment (✨/💎/⚡) — remplace l'ancien binaire.
 function filonResEmoji(b: Building): string {
   return RES_EMOJI[buildingType(b.typeId)?.resource ?? 'dust'] ?? '✨';
 }
-// Effet/production d'un bâtiment À UN NIVEAU donné (producteur → prod/h ; utilitaire → effet).
+// Effet/production d'un bâtiment À UN NIVEAU donné. Producteur pur → prod/h. Utilitaire pur →
+// effet. HYBRIDE (effet + resource, ex. Autel/Porte) → effet · prod/h.
 function buildingEffectAt(b: Building, level: number): string {
   const t = buildingType(b.typeId);
   if (!t) return '';
   const at: Building = { ...b, level };
-  if (t.category === 'utility') return utilityEffectLabel(at);
-  return `${buildingProdPerHour(at).toFixed(1)} ${RES_EMOJI[t.resource ?? 'dust'] ?? '✨'}/h`;
+  const prod = t.resource
+    ? `${buildingProdPerHour(at).toFixed(1)} ${RES_EMOJI[t.resource] ?? '✨'}/h`
+    : '';
+  if (t.category === 'producer') return prod;
+  const eff = utilityEffectLabel(at);
+  return prod ? `${eff} · ${prod}` : eff; // hybride : effet + production
+}
+// Un bâtiment produit-il une ressource (à récolter) ? (producteur OU hybride). */
+function buildingProduces(b: Building): boolean {
+  return !!buildingType(b.typeId)?.resource;
 }
 function filonProdLabel(b: Building): string {
   return buildingEffectAt(b, b.level);
@@ -815,9 +833,6 @@ function typeLockReason(t: BuildingType): string {
     return 'déjà construit';
   return '';
 }
-function isUtility(b: Building): boolean {
-  return buildingType(b.typeId)?.category === 'utility';
-}
 // Libellé d'effet d'un bâtiment utilitaire (ce que rapporte son niveau actuel/suivant).
 function utilityEffectLabel(b: Building): string {
   if (b.typeId === 'outpost')
@@ -826,6 +841,8 @@ function utilityEffectLabel(b: Building): string {
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')
     return `+${Math.round(bossAltarRollFloor([b]) * 100)}% qualité de roll (jet) · −${Math.round(bossSummonDiscount([b]) * 100)}% coût en pierres 🔮`;
+  if (b.typeId === 'warehouse')
+    return `+${Math.round((storageMult([b]) - 1) * 100)}% stockage des producteurs`;
   return buildingType(b.typeId)?.desc ?? ''; // autres utilitaires : description
 }
 

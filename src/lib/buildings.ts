@@ -2,12 +2,13 @@
 // sur des emplacements autour de la ville (carte d'expédition), financés par l'OR
 // (construction + upgrades = le vrai puits d'or). Dimensionné par simulation.
 //
-// ÉTAT ACTUEL (v0.599) : 3 bâtiments UTILITAIRES (Avant-poste, Porte du Labyrinthe,
-// Autel des boss) qui DÉBLOQUENT/AMÉLIORENT une activité. Les anciens PRODUCTEURS de
-// ressources (Dynamo ⚡, Entrepôt 🏬, filons…) ont été retirés du registre ; la
-// machinerie de production (`prodPerHrPerLvl`/`storageMult`/`collectable`…) reste
-// présente mais DORMANTE (aucun type ne l'utilise), conservée au cas où un producteur
-// serait réintroduit.
+// ÉTAT ACTUEL (v0.612) : 6 bâtiments (1 par emplacement, plotCap 6).
+//  • UTILITAIRES : Avant-poste (débloque expéditions + vitesse) · Entrepôt (stockage).
+//  • PRODUCTEURS : Mine d'or 🪙 · Dynamo ⚡ (énergie de jeu).
+//  • HYBRIDES (effet + production) : Porte du Labyrinthe (débloque + luck coffres, PRODUIT
+//    des clés 🗝️) · Autel des boss (jet/coût, PRODUIT des pierres d'invocation 🔮).
+// La production est passive, à RÉCOLTER (collectable/collectFilons), bornée par le stockage
+// (18 h × bonus Entrepôt) → complément à l'actif, jamais un substitut au sport.
 //
 // GARDE-FOUS : plafonné par le SPORT (niveau d'un bâtiment ≤ niveau du joueur) ; 100 %
 // déterministe (timestamps passés par l'appelant, hors-ligne).
@@ -20,7 +21,16 @@
 // Ressource produite (union extensible : on pourra ajouter 'gold', …).
 // `fragments` = poussière d'âme (rang des familiers) ; `ink_dust` = poussière d'encre
 // (rang des talents). Noms de colonnes conservés (`fragments`) ; libellés UI = « poussière ».
-export type BuildResource = 'dust' | 'stone' | 'energy' | 'parchemins' | 'fragments' | 'ink_dust';
+export type BuildResource =
+  | 'dust'
+  | 'stone'
+  | 'energy'
+  | 'parchemins'
+  | 'fragments'
+  | 'ink_dust'
+  | 'gold' // 🪙 or (Mine d'or)
+  | 'summon' // 🔮 pierres d'invocation (Autel des boss)
+  | 'keys'; // 🗝️ clés de labyrinthe (Porte du Labyrinthe)
 
 // Catégorie d'un bâtiment. `producer` = filon de ressource ; `utility` = bâtiment
 // à EFFET global (entrepôt, tour de reconnaissance…). Extensible.
@@ -94,12 +104,16 @@ export const BUILDING_TYPES: BuildingType[] = [
   // Utilitaire UNIQUE : la PORTE DU LABYRINTHE débloque le Labyrinthe (donjon à
   // étages, source unique des familiers). Chaque niveau AMÉLIORE la qualité du butin
   // des coffres (+4 % de chance de rareté) → investir de l'or rend les runs plus riches.
+  // HYBRIDE : débloque le Labyrinthe + améliore le butin des coffres, ET PRODUIT des clés 🗝️
+  // (source passive de clés de labyrinthe, en plus des drops de donjon/boss/faille).
   {
     id: 'labyrinth_gate',
     label: 'Porte du Labyrinthe',
     emoji: '🚪',
     category: 'utility',
     effect: { labyLuckPerLvl: 0.04 },
+    resource: 'keys',
+    prodPerHrPerLvl: 0.025, // niv.20 ≈ 0,5/h → ~9 clés / 18 h (complément, pas la source)
     buildGold: 500,
     unlockLevel: 2,
     unique: true,
@@ -108,21 +122,62 @@ export const BUILDING_TYPES: BuildingType[] = [
       where: 'Aventure › onglet Donjons › 🗝️ Labyrinthe.',
       route: '/expedition',
     },
-    desc: 'Débloque le Labyrinthe. Chaque niveau enrichit le butin des coffres (+4 %).',
+    desc: 'Débloque le Labyrinthe (+4 %/niv de butin des coffres) et produit des clés 🗝️.',
   },
-  // Utilitaire UNIQUE : l'AUTEL DES BOSS améliore la RÉCOMPENSE de boss (drop unique
-  // garanti). Chaque niveau augmente la CHANCE d'un bon roll (jet) via `bossRollFloor`
-  // (plancher de qualité, continu) et réduit le coût en pierres d'invocation.
+  // HYBRIDE : améliore la récompense de boss (jet + coût en pierres) ET PRODUIT des pierres
+  // d'invocation 🔮 (source passive, en plus des nettoyages de donjon).
   {
     id: 'boss_altar',
     label: 'Autel des boss',
     emoji: '🔮',
     category: 'utility',
     effect: { bossRollFloorPerLvl: 0.03, summonCostRedPerLvl: 0.04 },
+    resource: 'summon',
+    prodPerHrPerLvl: 0.03, // niv.20 ≈ 0,6/h → ~10 pierres / 18 h (complément)
     buildGold: 700,
     unlockLevel: 4,
     unique: true,
-    desc: 'Récompenses de boss : chaque niveau augmente la chance d’un BON roll (jet) du drop, et réduit le coût en pierres d’invocation 🔮.',
+    desc: 'Boss : +chance d’un bon jet, −coût en pierres 🔮, et produit des pierres d’invocation 🔮.',
+  },
+  // PRODUCTEUR : Mine d'or → OR passif (puits d'or restant : construction/expéditions).
+  {
+    id: 'gold_mine',
+    label: 'Mine d’or',
+    emoji: '🪙',
+    category: 'producer',
+    resource: 'gold',
+    prodPerHrPerLvl: 25, // niv.20 ≈ 500/h → ~9 000 or / 18 h (modeste vs coûts de bâtiments)
+    buildGold: 600,
+    unlockLevel: 2,
+    unique: true,
+    desc: 'Produit de l’or 🪙 en continu (à récolter).',
+  },
+  // PRODUCTEUR : Dynamo de faille → ÉNERGIE de jeu (convertit le temps en runs). Bornée
+  // par le stockage → complément, jamais un substitut au sport (qui seul fait le niveau).
+  {
+    id: 'energy_font',
+    label: 'Dynamo de faille',
+    emoji: '⚡',
+    category: 'producer',
+    resource: 'energy',
+    prodPerHrPerLvl: 0.8, // niv.20 ≈ 16/h → ~288 ⚡ / 18 h (quelques runs)
+    buildGold: 800,
+    unlockLevel: 3,
+    unique: true,
+    desc: 'Produit de l’énergie ⚡ de jeu (pour lancer plus de donjons).',
+  },
+  // UTILITAIRE : l'ENTREPÔT augmente le STOCKAGE de tous les producteurs (+15 %/niveau)
+  // → tu peux t'absenter plus longtemps sans saturer.
+  {
+    id: 'warehouse',
+    label: 'Entrepôt',
+    emoji: '🏬',
+    category: 'utility',
+    effect: { storageMultPerLvl: 0.15 },
+    buildGold: 900,
+    unlockLevel: 3,
+    unique: true,
+    desc: 'Augmente le stockage de tous tes producteurs (+15 %/niveau).',
   },
 ];
 
@@ -133,7 +188,7 @@ export function buildingType(id: string): BuildingType | undefined {
 
 // ── Constantes de dimensionnement (validées par simulation) ──
 export const BUILD = {
-  plotCap: 3, // emplacements max = les 3 types restants (Avant-poste, Porte du Labyrinthe, Autel des boss) — minimum, aucun spot vide
+  plotCap: 6, // emplacements max = 1 par type de bâtiment (Avant-poste, Porte, Autel, Mine, Dynamo, Entrepôt)
   upBase: 220, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   upExp: 2.6, // puits d'or RAIDE (2→2.6) : l'or de fin de partie n'a plus de puits sinon
   storageHours: 18, // heures de production stockables (puis saturation)
@@ -297,6 +352,9 @@ export function collectable(buildings: Building[], now: number): Record<BuildRes
     parchemins: 0,
     fragments: 0,
     ink_dust: 0,
+    gold: 0,
+    summon: 0,
+    keys: 0,
   };
   const mult = storageMult(buildings);
   for (const b of buildings) {

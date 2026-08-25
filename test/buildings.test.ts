@@ -5,6 +5,9 @@ import {
   buildingUpgradeCost,
   canUpgradeBuilding,
   buildingProdPerHour,
+  buildingStorageCap,
+  collectable,
+  storageMult,
   nextCollectedAt,
   buildingType,
   buildingUnlockLevel,
@@ -20,6 +23,7 @@ import {
 } from '@/lib/buildings';
 import { bossSummonCost } from '@/data/bosses';
 
+const H = 3_600_000;
 const mk = (typeId: string, level: number, collectedAt = 0, slot = 0): Building => ({
   typeId,
   level,
@@ -34,9 +38,9 @@ describe('buildings — emplacements & coûts', () => {
     expect(plotsForLevel(BUILD.plotCap)).toBe(BUILD.plotCap);
     expect(plotsForLevel(40)).toBe(BUILD.plotCap); // plafonné
   });
-  it('plotCap = minimum : un emplacement par type de bâtiment restant (aucun spot vide)', () => {
+  it('plotCap = un emplacement par type de bâtiment (aucun spot vide)', () => {
     expect(BUILD.plotCap).toBe(BUILDING_TYPES.length);
-    expect(BUILDING_TYPES.length).toBe(3); // Avant-poste, Porte du Labyrinthe, Autel des boss
+    expect(BUILDING_TYPES.length).toBe(6); // outpost, porte, autel, mine, dynamo, entrepôt
   });
   it('slotUnlockLevel : inverse cohérent de plotsForLevel (dans la limite de plotCap)', () => {
     for (let slot = 0; slot < BUILD.plotCap; slot++) {
@@ -55,16 +59,44 @@ describe('buildings — emplacements & coûts', () => {
   });
 });
 
-describe('buildings — registre (3 utilitaires, plus de producteurs)', () => {
-  it('les 3 types restants sont des utilitaires (aucun producteur)', () => {
+describe('buildings — registre (production passive)', () => {
+  it('roster complet : outpost, porte, autel, mine, dynamo, entrepôt', () => {
     expect(BUILDING_TYPES.map((t) => t.id).sort()).toEqual(
-      ['boss_altar', 'labyrinth_gate', 'outpost'].sort(),
+      ['boss_altar', 'energy_font', 'gold_mine', 'labyrinth_gate', 'outpost', 'warehouse'].sort(),
     );
-    for (const t of BUILDING_TYPES) expect(t.category).toBe('utility');
   });
-  it('un utilitaire ne produit rien (prod 0) et un type inconnu aussi (robustesse)', () => {
-    for (const t of BUILDING_TYPES) expect(buildingProdPerHour(mk(t.id, 10))).toBe(0);
-    expect(buildingProdPerHour(mk('inexistant', 5))).toBe(0);
+  it('producteurs & hybrides produisent une ressource ; outpost/entrepôt non', () => {
+    expect(buildingProdPerHour(mk('gold_mine', 10))).toBeGreaterThan(0); // or
+    expect(buildingProdPerHour(mk('energy_font', 10))).toBeGreaterThan(0); // énergie
+    expect(buildingProdPerHour(mk('boss_altar', 10))).toBeGreaterThan(0); // hybride → pierres
+    expect(buildingProdPerHour(mk('labyrinth_gate', 10))).toBeGreaterThan(0); // hybride → clés
+    expect(buildingProdPerHour(mk('outpost', 10))).toBe(0); // utilitaire pur
+    expect(buildingProdPerHour(mk('warehouse', 10))).toBe(0); // utilitaire pur
+    expect(buildingProdPerHour(mk('inexistant', 5))).toBe(0); // robustesse
+  });
+  it('collectable agrège par ressource (or / énergie / pierres / clés)', () => {
+    const now = 100 * H;
+    const c = collectable(
+      [
+        mk('gold_mine', 10, 0),
+        mk('energy_font', 10, 0),
+        mk('boss_altar', 10, 0),
+        mk('labyrinth_gate', 10, 0),
+      ],
+      now,
+    );
+    expect(c.gold).toBeGreaterThan(0);
+    expect(c.energy).toBeGreaterThan(0);
+    expect(c.summon).toBeGreaterThan(0);
+    expect(c.keys).toBeGreaterThan(0);
+  });
+  it('Entrepôt augmente le stockage des producteurs (+15 %/niveau)', () => {
+    expect(storageMult([mk('warehouse', 4)])).toBeCloseTo(1.6, 5); // +60 %
+    const mine = mk('gold_mine', 10, 0);
+    expect(buildingStorageCap(mine, storageMult([mk('warehouse', 4)]))).toBeCloseTo(
+      buildingStorageCap(mine) * 1.6,
+      3,
+    );
   });
 });
 
@@ -99,8 +131,8 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
     expect(travelTimeMult([mk('outpost', 60)])).toBeCloseTo(0.4, 5); // reste plafonné
     expect(outpostLevel([mk('outpost', 3)])).toBe(3);
   });
-  it('un utilitaire (perHr = 0) garde son collectedAt', () => {
-    expect(nextCollectedAt(mk('boss_altar', 5, 123), 999_999)).toBe(123);
+  it('un utilitaire pur (perHr = 0) garde son collectedAt', () => {
+    expect(nextCollectedAt(mk('outpost', 5, 123), 999_999)).toBe(123);
   });
 });
 
