@@ -2233,7 +2233,7 @@
           <button
             v-if="stageDone && !char.row?.pending_reward && nextContent"
             class="rm-btn rm-btn-next"
-            :disabled="!nextContent.affordable || busy"
+            :disabled="!nextContent.affordable || busy || conflictPending"
             :title="`Combat suivant : ${nextContent.name} — coûte ${nextContent.cost} ${nextContent.icon}`"
             aria-label="Combat suivant"
             @click="launchNext"
@@ -3407,7 +3407,7 @@ const reattackStock = computed(() =>
   lastBoss.value ? (char.row?.summon_stones ?? 0) : Math.floor(c.value.energy),
 );
 const canReattack = computed(() => {
-  if (busy.value || char.row?.pending_reward) return false;
+  if (busy.value || char.row?.pending_reward || conflictPending.value) return false;
   const have = lastBoss.value ? (char.row?.summon_stones ?? 0) : c.value.energy;
   return have >= reattackCost.value;
 });
@@ -3454,6 +3454,7 @@ const nextContent = computed(() => {
   return null;
 });
 function launchNext() {
+  if (conflictPending.value) return; // gère d'abord le comparatif de set en attente
   const n = nextContent.value;
   if (!n) return;
   if (n.kind === 'dungeon') void explore(n.dungeon);
@@ -3979,13 +3980,14 @@ async function fightBoss(b: MilestoneBoss) {
       drops,
       ...(talentDrops.length ? { talentDrops } : {}),
     });
-    // Pièce de set → filée au loadout de sa voie. Si l'emplacement était OCCUPÉ, la pièce
-    // est au sac et on demande au joueur laquelle garder (comparatif côte à côte ; l'autre
-    // est vendue) — même dialogue que le rangement manuel (stashConflict).
+    // Pièce de set → filée au loadout de sa voie. Emplacement OCCUPÉ → conflit : on garde le
+    // comparatif EN ATTENTE et on l'ouvre à la RÉVÉLATION du drop (cf. watch stageDone), pour
+    // qu'il s'affiche par-dessus le rapport (pas derrière). Réattaquer est bloqué tant qu'il
+    // n'est pas traité (conflictPending) → pas d'empilement de pièces non comparées.
     const conflict = bossRes?.conflicts?.[0];
     if (conflict) {
       const { idx, stored } = loadoutTargetFor(conflict);
-      if (stored) stashConflict.value = { incoming: conflict, stored, idx };
+      if (stored) pendingBossConflict.value = { incoming: conflict, stored, idx };
     }
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!));
     run.value = {
@@ -4286,17 +4288,24 @@ const equippedSet = computed<{ idx: number; name: string; emoji: string; count: 
     return v ? { idx, name: v.name, emoji: v.emoji, count: bestN } : null;
   },
 );
-// Puissance SI on équipe ce loadout : ses 4 objets gear + le FAMILIER actuel (non rangé).
-function loadoutPower(items: Equipped): number {
+// Puissance SI on porte ce set : ses 4 objets gear + le FAMILIER actuel, ET la VOIE DU SET
+// (voieId) — car porter le set équipe aussi sa voie → on prend en compte son passif + son
+// CAPSTONE (4-pièces). La comparaison au combatPower actuel reflète donc le vrai gain « set +
+// bascule de voie » (la voie qui remplacera l'actuelle).
+function loadoutPower(items: Equipped, voieId: string | null): number {
   const fam = char.row?.equipped[FAMILIAR_SLOT];
-  return powerWith({ ...items, ...(fam ? { [FAMILIAR_SLOT]: fam } : {}) });
+  const eq: Equipped = { ...items, ...(fam ? { [FAMILIAR_SLOT]: fam } : {}) };
+  const fx = mergeEffects(talentFx.value, voiePassiveEffects(voieId as VoieId | null));
+  return combatPower(
+    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, fx, c.value.level.level, voieId),
+  );
 }
 const loadoutsView = computed(() => {
   const los = char.row?.loadouts ?? [];
   return Array.from({ length: MAX_LOADOUTS }, (_, i) => {
     const stored = los[i]?.items ?? {};
     const items = SLOTS.map((s) => stored[s]).filter((it): it is Item => !!it);
-    const power = items.length ? loadoutPower(stored) : 0;
+    const power = items.length ? loadoutPower(stored, loadoutVoie(i)?.id ?? null) : 0;
     const sellGold = items.reduce((s, it) => s + sellValue(it), 0);
     return { items, count: items.length, power, delta: power - combatPowerVal.value, sellGold };
   });
@@ -4494,6 +4503,21 @@ function doToggleLock(it: Item) {
 const isVoieSetItem = (it: Item) => !!it.setId && it.setId.startsWith('voie:');
 // Conflit de rangement : le slot visé du loadout est déjà occupé → on compare et on choisit.
 const stashConflict = ref<{ incoming: Item; stored: Item; idx: number } | null>(null);
+// Conflit de drop de BOSS en attente : on ne l'ouvre PAS tout de suite (sinon il se retrouve
+// DERRIÈRE le rapport de combat et n'apparaît qu'à sa fermeture). On le garde ici et on
+// l'ouvre au moment où le drop est RÉVÉLÉ (fin d'animation, stageDone) → il s'affiche par-dessus
+// le rapport, juste après le drop.
+const pendingBossConflict = ref<{ incoming: Item; stored: Item; idx: number } | null>(null);
+// Un conflit est-il à traiter ? → bloque Réattaquer / Combat suivant (on gère AVANT de relancer,
+// sinon un 2e drop empilerait un 2e conflit et la 1re pièce resterait au sac non comparée).
+const conflictPending = computed(() => !!stashConflict.value || !!pendingBossConflict.value);
+// À la révélation du drop (fin d'anim OU skip), on ouvre le comparatif par-dessus le rapport.
+watch(stageDone, (done) => {
+  if (done && pendingBossConflict.value && reportOpen.value) {
+    stashConflict.value = pendingBossConflict.value;
+    pendingBossConflict.value = null;
+  }
+});
 function loadoutTargetFor(it: Item): { idx: number; stored: Item | undefined } {
   const idx = VOIES.findIndex((v) => v.id === (it.setId ?? '').slice('voie:'.length));
   const stored = idx >= 0 ? char.row?.loadouts?.[idx]?.items?.[it.slot] : undefined;

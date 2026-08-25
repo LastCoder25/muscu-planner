@@ -106,21 +106,31 @@
       </div>
 
       <!-- Contrôles AUTO flottants (téléportés au body → TOUJOURS au-dessus des modales de
-           combat/coffre/piège). Vitesse ⏩ ×1→×5 (recliquer redescend) + reprendre la main,
-           accessibles quel que soit l'écran (ticket labyrinthe). -->
+           combat/coffre/piège). Vitesse ⏩ + stop en mode AUTO ; en mode MANUEL (après avoir
+           repris la main), bouton pour RELANCER l'auto (si le palier est nettoyé). -->
       <Teleport to="body">
-        <div v-if="autoMode" class="auto-float">
-          <span class="af-txt">⚡ Auto</span>
+        <div v-if="phase === 'running' && !over" class="auto-float">
           <button
             type="button"
             class="af-speed"
             :class="{ on: autoSpeed > 1 }"
-            title="Vitesse de l'auto (touche pour accélérer ; ×5 → retour ×1)"
+            title="Vitesse de l'auto (touche pour accélérer ; jusqu'à ×20 → retour ×1)"
             @click="toggleSpeed"
           >
             ⏩ ×{{ autoSpeed }}
           </button>
-          <button type="button" class="af-stop" @click="stopAuto">✋ Reprendre la main</button>
+          <template v-if="autoMode">
+            <span class="af-txt">⚡ Auto</span>
+            <button type="button" class="af-stop" @click="stopAuto">✋ Reprendre la main</button>
+          </template>
+          <button
+            v-else-if="labyrinthCleared(selectedLaby?.id ?? '', clearedSet)"
+            type="button"
+            class="af-stop af-resume"
+            @click="resumeAuto"
+          >
+            ⚡ Relancer l'auto
+          </button>
         </div>
       </Teleport>
 
@@ -428,6 +438,25 @@
           {{ legendaryOf(detailItem)!.desc }}
         </div>
         <div v-if="detailItem.setId" class="fl-set">🧩 {{ setName(detailItem.setId) }}</div>
+        <!-- Comparatif avec l'objet ÉQUIPÉ du même emplacement + Δ de puissance si équipé. -->
+        <div class="fl-cmp">
+          <template v-if="detailEquipped">
+            <div class="fl-cmp-eq">
+              Équipé : {{ RARITY_LABEL[detailEquipped.rarity] }} · niv {{ detailEquipped.level }} ·
+              {{ effectLabel(detailEquipped.effect, detailEquipped.level) }}
+            </div>
+          </template>
+          <div v-else class="fl-cmp-eq dim">
+            Emplacement {{ SLOT_LABEL[detailItem.slot] }} libre
+          </div>
+          <div
+            v-if="detailPowerDelta != null"
+            class="fl-cmp-delta"
+            :class="detailPowerDelta >= 0 ? 'up' : 'down'"
+          >
+            ⚔️ {{ detailPowerDelta >= 0 ? '+' : '' }}{{ detailPowerDelta }} puissance si équipé
+          </div>
+        </div>
         <q-btn
           class="fx-cta"
           color="primary"
@@ -499,7 +528,13 @@ import { pickLabyFoe, type LabyFoe } from '@/data/labyrinthFoes';
 import { rollChestGrade, pickLabyTrap, type ChestGrade, type LabyTrap } from '@/data/labyrinthLoot';
 import { talentEffects } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
-import { simulateCombat, mulberry32, type Combatant, type CombatEvent } from '@/lib/combat';
+import {
+  simulateCombat,
+  combatPower,
+  mulberry32,
+  type Combatant,
+  type CombatEvent,
+} from '@/lib/combat';
 import { refFighter, gearExpect } from '@/lib/proceduralContent';
 import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
@@ -586,20 +621,23 @@ const selectedLaby = ref<Labyrinth | null>(null);
 const autoMode = ref(false);
 let autoTimer: ReturnType<typeof setTimeout> | undefined;
 const AUTO_STEP_MS = 550;
-// Vitesse de l'auto-run / des déplacements : 1..5. Chaque tap monte d'un cran, ×5 → retour
+// Vitesse de l'auto-run / des déplacements : paliers 1→20. Chaque tap monte d'un cran, retour
 // à ×1. Mémorisée par compte (localStorage) → persiste entre les runs (ticket 06376fe4).
-const SPEED_MAX = 5;
+// Paliers de vitesse : chaque tap monte au suivant, boucle après le dernier. Va jusqu'à ×20
+// (auto-run quasi instantané pour re-farmer un palier connu très vite).
+const SPEED_STEPS = [1, 2, 3, 5, 8, 12, 20];
 const autoSpeed = ref<number>(readSpeed());
 function readSpeed(): number {
   try {
     const n = parseInt(localStorage.getItem('muscu:laby:speed') ?? '1', 10);
-    return n >= 1 && n <= SPEED_MAX ? n : 1;
+    return SPEED_STEPS.includes(n) ? n : 1;
   } catch {
     return 1;
   }
 }
 function toggleSpeed() {
-  autoSpeed.value = autoSpeed.value >= SPEED_MAX ? 1 : autoSpeed.value + 1;
+  const i = SPEED_STEPS.indexOf(autoSpeed.value);
+  autoSpeed.value = SPEED_STEPS[(i + 1) % SPEED_STEPS.length] ?? 1;
   try {
     localStorage.setItem('muscu:laby:speed', String(autoSpeed.value));
   } catch {
@@ -638,6 +676,29 @@ const fighter = computed<Combatant>(() =>
 const heroLevel = computed(() => character.value.level.level);
 // Magic find (stat mineure) de l'équipement → luck bonus sur les coffres du labyrinthe.
 const mfLuck = computed(() => magicFindLuck(char.row?.equipped ?? {}, char.row?.voie));
+
+// ── Comparatif d'un objet (coffre/sac) avec l'ÉQUIPÉ du même emplacement ──
+// Objet actuellement équipé sur l'emplacement de l'objet détaillé (pour la comparaison).
+const detailEquipped = computed(() =>
+  detailItem.value ? (char.row?.equipped?.[detailItem.value.slot] ?? null) : null,
+);
+// Δ de puissance de combat si on équipait l'objet détaillé (vs l'équipement actuel).
+const detailPowerDelta = computed<number | null>(() => {
+  const it = detailItem.value;
+  if (!it) return null;
+  const eq = { ...(char.row?.equipped ?? {}), [it.slot]: it };
+  const withIt = combatPower(
+    playerWithGear(
+      char.row?.pseudo ?? 'Toi',
+      character.value,
+      eq,
+      talentFx.value,
+      character.value.level.level,
+      char.row?.voie,
+    ),
+  );
+  return Math.round(withIt - combatPower(fighter.value));
+});
 
 // ── % DE RÉUSSITE d'un palier (Monte-Carlo du CRAWL avec ton stuff réel) ──
 // Le labyrinthe est un crawl d'ATTRITION → une « puissance conseillée » (single-fight)
@@ -1287,6 +1348,14 @@ function stopAuto() {
   if (autoTimer) clearTimeout(autoTimer);
   autoTimer = undefined;
 }
+// Reprend l'AUTO sur le run EN COURS (après « reprendre la main ») → re-enclenche la boucle
+// (sans fermer/relancer le run). Dispo si le palier est déjà nettoyé (auto-éligible).
+function resumeAuto() {
+  if (over.value || phase.value !== 'running') return;
+  if (!labyrinthCleared(selectedLaby.value?.id ?? '', clearedSet.value)) return;
+  autoMode.value = true;
+  scheduleAuto(200);
+}
 function scheduleAuto(ms = AUTO_STEP_MS) {
   if (autoTimer) clearTimeout(autoTimer);
   autoTimer = setTimeout(autoTick, Math.round(ms / autoSpeed.value)); // ÷ vitesse (x2 = 2× plus rapide)
@@ -1710,6 +1779,12 @@ function returnToLobby() {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
 }
+.af-resume {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-weight: 800;
+}
 /* En auto, les salles ne sont pas cliquables → curseur neutre. */
 .room.auto {
   cursor: default;
@@ -2042,6 +2117,33 @@ function returnToLobby() {
   color: #ff9e3f;
   margin-top: 6px;
   line-height: 1.35;
+}
+/* Comparatif avec l'équipé du même emplacement. */
+.fl-cmp {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  width: 100%;
+}
+.fl-cmp-eq {
+  font-size: 11.5px;
+  color: var(--text);
+}
+.fl-cmp-eq.dim {
+  color: var(--dim);
+}
+.fl-cmp-delta {
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.fl-cmp-delta.up {
+  color: var(--d1);
+}
+.fl-cmp-delta.down {
+  color: var(--d4);
 }
 /* Raretés (8) : couleur portée par --rk. */
 .r-commun {

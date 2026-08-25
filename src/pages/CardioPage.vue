@@ -393,6 +393,9 @@ async function save() {
     dminus.value = null;
     rpe.value = null;
     comment.value = '';
+    // Sortie enregistrée → retour à l'accueil (l'animation d'XP est un overlay global, elle
+    // continue par-dessus). Le joueur revient à son tableau de bord après la saisie.
+    void router.push('/');
   } catch (e) {
     $q.notify({
       type: 'negative',

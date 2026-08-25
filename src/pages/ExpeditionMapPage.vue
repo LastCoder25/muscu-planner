@@ -647,7 +647,7 @@ const lastOutcomeItems = computed(() => {
 });
 
 // ── Filons de production (village autour de la ville) ──
-const PLOT_R = 22; // rayon des emplacements autour de la ville (< distMin des POI)
+const PLOT_R = 15; // rayon des emplacements autour de la ville (rapprochés — < distMin des POI)
 interface PlotView {
   slot: number;
   x: number;
@@ -674,9 +674,7 @@ const plots = computed<PlotView[]>(() => {
   });
 });
 const readyTotal = computed(() => collectable(char.row?.buildings ?? [], now.value));
-const readySum = computed(() =>
-  (Object.values(readyTotal.value)).reduce((a, b) => a + b, 0),
-);
+const readySum = computed(() => Object.values(readyTotal.value).reduce((a, b) => a + b, 0));
 const selectedSlot = ref<number | null>(null);
 const selectedPlot = computed<PlotView | null>(() =>
   selectedSlot.value === null
