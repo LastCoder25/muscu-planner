@@ -399,13 +399,20 @@ const SPORT_OPTIONS = [
   'Autre',
 ];
 // Recherche dans le sélecteur de sport.
+// Alias de recherche : noms alternatifs → l'entrée canonique reste (signature de stats
+// indexée par le nom). Ex. « ping pong » retrouve « Tennis de table ».
+const SPORT_ALIASES: Record<string, string[]> = {
+  'Tennis de table': ['ping', 'pong', 'ping-pong', 'ping pong', 'tt'],
+};
+function sportMatches(s: string, n: string): boolean {
+  if (s.toLowerCase().includes(n)) return true;
+  return (SPORT_ALIASES[s] ?? []).some((a) => a.includes(n) || n.includes(a));
+}
 const filteredSports = ref<string[]>([...SPORT_OPTIONS]);
 function filterSports(val: string, update: (fn: () => void) => void) {
   update(() => {
-    const n = (val || '').toLowerCase();
-    filteredSports.value = n
-      ? SPORT_OPTIONS.filter((s) => s.toLowerCase().includes(n))
-      : [...SPORT_OPTIONS];
+    const n = (val || '').toLowerCase().trim();
+    filteredSports.value = n ? SPORT_OPTIONS.filter((s) => sportMatches(s, n)) : [...SPORT_OPTIONS];
   });
 }
 const pickerOpen = ref(false);
