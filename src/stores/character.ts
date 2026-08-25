@@ -12,6 +12,7 @@ import {
   normRank,
   swapLoadoutGear,
   bestGearLoadout,
+  playerWithGear,
   mergeEffects,
   SLOTS,
   MAX_LOADOUTS,
@@ -31,7 +32,7 @@ import {
   talentRank,
   type TalentInstance,
 } from '@/lib/talents';
-import { voiePassiveEffects, VOIES, type VoieId } from '@/lib/voies';
+import { voiePassiveEffects, VOIES } from '@/lib/voies';
 import {
   createMap,
   advanceWorld,
@@ -56,7 +57,7 @@ import {
   travelTimeMult,
   type Building,
 } from '@/lib/buildings';
-import type { Combatant } from '@/lib/combat';
+import { combatPower, type Combatant } from '@/lib/combat';
 
 export interface CharacterRow {
   user_id: string;
@@ -783,62 +784,107 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, { voie });
   }
 
-  // OPTIMISEUR D'ÉQUIPEMENT (v0.603) : équipe la MEILLEURE combinaison des 4 slots trouvée
-  // dans l'équipé + le sac + la RÉSERVE DE TA VOIE (loadout = pièces de set collectées) →
-  // il mélange librement set + loose (bonus de set + capstone compris via combatPower). Les
-  // réserves des AUTRES voies restent archivées, intactes. Après optimisation, les pièces
-  // non retenues sont RE-RANGÉES : pièce de set → réserve de sa voie (meilleure/slot) ; loose
-  // → sac. Le familier n'est pas touché. Renvoie true si l'équipement a changé.
+  // OPTIMISEUR D'ÉQUIPEMENT (v0.607) : trouve la MEILLEURE combinaison (voie + 4 slots) parmi
+  // l'équipé + le sac + les réserves de set. Il ÉVALUE PLUSIEURS VOIES : la voie actuelle et
+  // toute voie dont on possède ≥3 pièces de set (assez pour viser son capstone 4-pièces). Pour
+  // chaque voie candidate, il verse SA réserve dans le pool, calcule le meilleur loadout (bonus
+  // de set + capstone gaté par cette voie), et retient la voie qui donne la plus forte puissance.
+  // Si la meilleure voie diffère de l'actuelle, il CHANGE de voie automatiquement. Les non-retenus
+  // sont re-rangés (pièce de set → réserve de sa voie ; loose → sac). Le familier n'est pas touché.
   async function optimizeGear(
     userId: string,
     stats: { puissance: number; endurance: number; agilite: number },
     level: number,
     name: string,
+    forceVoie?: string | null, // « Porter ce set » : impose cette voie (pas de choix auto)
   ): Promise<boolean> {
     const cur = row.value;
     if (!cur) return false;
-    const extra = mergeEffects(talentEffects(cur.talents), voiePassiveEffects(cur.voie as VoieId));
-    const voieIdx = VOIES.findIndex((v) => v.id === cur.voie);
+    const talFx = talentEffects(cur.talents);
     const loadouts0: Loadout[] = Array.from(
       { length: MAX_LOADOUTS },
       (_, k) => cur.loadouts[k] ?? { items: {} },
     );
-    // Réserve de TA voie versée dans le pool (l'optimiseur peut porter ton set).
-    const voieReserve =
-      voieIdx >= 0 ? Object.values(loadouts0[voieIdx]!.items).filter(Boolean) : [];
-    const pool = [...cur.inventory, ...voieReserve];
-    const best = bestGearLoadout(name, stats, cur.equipped, pool, level, extra, cur.voie);
-    const already = SLOTS.every((s) => (cur.equipped[s]?.id ?? null) === (best[s]?.id ?? null));
-    if (already) return false;
-    const chosen = new Set(SLOTS.map((s) => best[s]?.id).filter((x): x is string => !!x));
-    const equippedGear = SLOTS.map((s) => cur.equipped[s]).filter((x): x is Item => !!x);
-    // Réserves reconstruites : celle de ta voie repart VIDE (ses pièces sont dans le pool) ;
-    // les autres voies restent telles quelles. On re-range ensuite les non-retenus.
-    const loadouts = loadouts0.map((lo, k) =>
-      k === voieIdx ? { items: {} } : { items: { ...lo.items } },
-    );
-    const leftovers = [...equippedGear, ...pool].filter((it) => !chosen.has(it.id));
-    const sac: Item[] = [];
-    for (const it of leftovers) {
-      const vi = it.setId?.startsWith('voie:')
-        ? VOIES.findIndex((v) => v.id === it.setId!.slice('voie:'.length))
-        : -1;
-      if (vi >= 0 && vi < MAX_LOADOUTS) {
-        const items = loadouts[vi]!.items;
-        const held = items[it.slot];
-        if (!held)
-          items[it.slot] = it; // réserve de sa voie (slot libre)
-        else if ((held.effect?.value ?? 0) >= (it.effect?.value ?? 0))
-          sac.push(it); // réserve déjà mieux
-        else {
-          sac.push(held); // leftover meilleur → prend la réserve, ancien au sac
-          items[it.slot] = it;
-        }
-      } else sac.push(it); // loose / familier → sac
+    const reserveOf = (k: number): Item[] =>
+      k >= 0 && k < MAX_LOADOUTS ? Object.values(loadouts0[k]!.items).filter(Boolean) : [];
+
+    // Plan complet pour une voie candidate (vIdx = index VOIES, -1 = aucune voie).
+    type Plan = {
+      equipped: Equipped;
+      sac: Item[];
+      loadouts: Loadout[];
+      score: number;
+      voie: string | null;
+    };
+    function planFor(vIdx: number): Plan {
+      const voie = vIdx >= 0 ? VOIES[vIdx]!.id : null;
+      const extra = mergeEffects(talFx, voiePassiveEffects(voie));
+      const pool = [...cur!.inventory, ...reserveOf(vIdx)]; // la réserve de CETTE voie est portable
+      const best = bestGearLoadout(name, stats, cur!.equipped, pool, level, extra, voie);
+      const chosen = new Set(SLOTS.map((s) => best[s]?.id).filter((x): x is string => !!x));
+      const equippedGear = SLOTS.map((s) => cur!.equipped[s]).filter((x): x is Item => !!x);
+      // Réserves : celle de la voie choisie repart VIDE (ses pièces sont dans le pool) ; les
+      // autres intactes. On re-range ensuite les non-retenus.
+      const loadouts = loadouts0.map((lo, k) =>
+        k === vIdx ? { items: {} } : { items: { ...lo.items } },
+      );
+      const leftovers = [...equippedGear, ...pool].filter((it) => !chosen.has(it.id));
+      const sac: Item[] = [];
+      for (const it of leftovers) {
+        const li = it.setId?.startsWith('voie:')
+          ? VOIES.findIndex((v) => v.id === it.setId!.slice('voie:'.length))
+          : -1;
+        if (li >= 0 && li < MAX_LOADOUTS) {
+          const items = loadouts[li]!.items;
+          const held = items[it.slot];
+          if (!held) items[it.slot] = it;
+          else if ((held.effect?.value ?? 0) >= (it.effect?.value ?? 0)) sac.push(it);
+          else {
+            sac.push(held);
+            items[it.slot] = it;
+          }
+        } else sac.push(it);
+      }
+      const equipped: Equipped = { ...cur!.equipped };
+      for (const s of SLOTS) equipped[s] = best[s];
+      const score = combatPower(playerWithGear(name, stats, equipped, extra, level, voie));
+      return { equipped, sac, loadouts, score, voie };
     }
-    const equipped: Equipped = { ...cur.equipped };
-    for (const s of SLOTS) equipped[s] = best[s];
-    await persist(userId, { equipped, inventory: sac, loadouts });
+
+    // Voies candidates. `forceVoie` (Porter ce set) → cette voie UNIQUEMENT. Sinon : l'actuelle
+    // + toute voie dont on possède ≥3 pièces (réserve) → on peut switcher pour le capstone.
+    const cand = new Set<number>();
+    if (forceVoie !== undefined) {
+      cand.add(forceVoie === null ? -1 : VOIES.findIndex((v) => v.id === forceVoie));
+    } else {
+      const curIdx = VOIES.findIndex((v) => v.id === cur.voie);
+      if (curIdx >= 0) cand.add(curIdx);
+      loadouts0.forEach((lo, k) => {
+        if (Object.values(lo.items).filter(Boolean).length >= 3) cand.add(k);
+      });
+      if (cand.size === 0) cand.add(-1); // aucune voie ni set → plan sans voie
+    }
+
+    let best: Plan | null = null;
+    for (const vi of cand) {
+      const p = planFor(vi);
+      if (!best || p.score > best.score) best = p;
+    }
+    if (!best) return false;
+
+    // No-op si RIEN ne change (même gear ET même voie).
+    const sameGear = SLOTS.every(
+      (s) => (cur.equipped[s]?.id ?? null) === (best.equipped[s]?.id ?? null),
+    );
+    const sameVoie = (cur.voie ?? null) === (best.voie ?? null);
+    if (sameGear && sameVoie) return false;
+
+    await persist(userId, {
+      equipped: best.equipped,
+      inventory: best.sac,
+      loadouts: best.loadouts,
+      voie: best.voie,
+    });
     return true;
   }
 

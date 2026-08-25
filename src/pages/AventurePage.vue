@@ -4316,18 +4316,18 @@ const voieOwnedCount = (i: number): number => {
     if (it.setId === vid && SLOTS.includes(it.slot)) slots.add(it.slot);
   return slots.size;
 };
-// Porter le set d'une voie : passe à cette voie (si besoin) puis OPTIMISE (l'optimiseur voit
-// désormais la réserve de la voie courante → il porte le set en complétant avec le sac).
+// Porter le set d'une voie : FORCE cette voie (l'optimiseur ne re-choisit pas) et équipe son
+// set complété au mieux avec le sac (un seul appel, capstone de la voie inclus).
 function doWearVoieSet(i: number) {
   const v = loadoutVoie(i);
   if (!v || busy.value || expeBlocked()) return; // gelé en expédition (héros parti avec son stuff)
   withUid(async (uid) => {
-    if (char.row?.voie !== v.id) await char.setVoie(uid, v.id);
     const changed = await char.optimizeGear(
       uid,
       c.value,
       c.value.level.level,
       char.row?.pseudo ?? 'Toi',
+      v.id,
     );
     $q.notify({
       type: 'positive',
@@ -4441,16 +4441,21 @@ function doEquip(itemId: string) {
 // tout ton stuff (équipé + sac) ; les écartés retournent au sac. Familier inchangé.
 function doOptimizeGear() {
   withUid(async (uid) => {
+    const voieBefore = char.row?.voie ?? null;
     const changed = await char.optimizeGear(
       uid,
       c.value,
       c.value.level.level,
       char.row?.pseudo ?? 'Toi',
     );
+    // L'optimiseur peut CHANGER de voie s'il trouve un set d'une autre voie plus fort.
+    const switched = changed && (char.row?.voie ?? null) !== voieBefore;
     $q.notify({
       type: changed ? 'positive' : 'info',
       message: changed
-        ? '🪄 Équipement optimisé — meilleure combinaison équipée !'
+        ? switched
+          ? `🪄 Optimisé — voie ${currentVoie.value?.name ?? ''} + son set équipés !`
+          : '🪄 Équipement optimisé — meilleure combinaison équipée !'
         : 'Ton équipement est déjà optimal. 👍',
     });
   }, 'Optimisation impossible.');
