@@ -15,7 +15,22 @@
           <span class="hc-days">{{ daysLeftLabel }}</span>
         </div>
         <div class="hc-week">📅 Semaine du {{ comboWeek }}</div>
-        <div class="hc-bar"><span :style="{ width: pct + '%' }" /></div>
+        <div class="hc-bar">
+          <span :style="{ width: pct + '%' }" />
+          <!-- Repère 🎯 : où tu devrais être pour finir dans les temps (rythme régulier). -->
+          <i
+            v-if="showOnTime"
+            class="hc-ontime"
+            :style="{ left: onTimePct + '%' }"
+            :title="`Pour être dans les temps : ${onTimePct}%`"
+          />
+        </div>
+        <div v-if="showOnTime" class="hc-pace" :class="onTimeState">
+          🎯 Dans les temps : <b>{{ onTimePct }}%</b>
+          <span class="hc-pace-tag">{{
+            onTimeState === 'ahead' ? '✓ en avance' : `⏳ en retard (tu es à ${pct}%)`
+          }}</span>
+        </div>
         <div v-if="c.status === 'done'" class="hc-done">🎉 Défi 360 bouclé — bravo !</div>
         <div v-if="over.bonusXp > 0" class="hc-over">
           🔥 Dépassement : +{{ over.bonusXp }} XP
@@ -190,6 +205,25 @@ const daysLeftLabel = computed(() => {
   }
   return `${n} j restant${n > 1 ? 's' : ''}`;
 });
+
+// % THÉORIQUE « dans les temps » : à un rythme régulier, la part que tu devrais avoir faite
+// pour finir pile le dernier jour = jours écoulés (aujourd'hui inclus) / durée. Marqueur 🎯
+// sur la barre → tu vois d'un coup d'œil si tu es en avance (barre au-delà) ou en retard.
+const onTimePct = computed(() => {
+  if (!c.value) return 0;
+  const today = logicalToday();
+  if (today < c.value.start_date) return 0;
+  let elapsed = 0;
+  for (let d = 0; d < c.value.duration_days; d++) {
+    if (addDaysIso(c.value.start_date, d) <= today) elapsed++;
+  }
+  return Math.min(100, Math.round((elapsed / c.value.duration_days) * 100));
+});
+// Marqueur affiché tant que le défi est actif et dans la fenêtre (sinon 100 % = redondant).
+const showOnTime = computed(
+  () => !!c.value && c.value.status === 'active' && onTimePct.value > 0 && onTimePct.value < 100,
+);
+const onTimeState = computed(() => (pct.value >= onTimePct.value ? 'ahead' : 'behind'));
 
 function slotEmoji(key: string) {
   return comboSlot(key)?.emoji ?? '💪';
@@ -392,6 +426,7 @@ onMounted(async () => {
   margin: 2px 0 8px;
 }
 .hc-bar {
+  position: relative;
   height: 10px;
   background: var(--surface-2);
   border-radius: 6px;
@@ -402,6 +437,36 @@ onMounted(async () => {
   display: block;
   height: 100%;
   background: var(--accent);
+}
+/* Repère « dans les temps » : trait vertical à la position théorique attendue. */
+.hc-ontime {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.hc-pace {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dim);
+}
+.hc-pace b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.hc-pace-tag {
+  margin-left: 6px;
+  font-weight: 700;
+}
+.hc-pace.ahead .hc-pace-tag {
+  color: var(--d1);
+}
+.hc-pace.behind .hc-pace-tag {
+  color: var(--d3);
 }
 .hc-done {
   margin-top: 8px;
