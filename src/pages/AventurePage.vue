@@ -3276,13 +3276,25 @@ function queueFx(fn: () => void) {
 watch(reportOpen, (open) => {
   if (!open) {
     pendingCelebrations.value = [];
-    // Le rapport se ferme → si le dernier donjon d'une zone vient d'être nettoyé,
-    // on joue MAINTENANT le reveal de la nouvelle zone (slide + explosion sur la carte).
-    if (pendingRegionReveal.value) {
+    // Le rapport se ferme → si une nouvelle zone vient d'être débloquée, on joue le reveal
+    // (slide + explosion sur la carte) UNIQUEMENT si on reste sur l'onglet Explorer (fermeture
+    // normale). Si le joueur a cliqué Sac/Talents (tab déjà changé), on GARDE le reveal en
+    // attente → il se jouera à son retour sur la carte des donjons (cf. watch ci-dessous) et
+    // n'écrase PAS sa navigation (bug : le reveal ramenait le joueur sur la carte).
+    if (pendingRegionReveal.value && tab.value === 'explore') {
       const rev = pendingRegionReveal.value;
       pendingRegionReveal.value = null;
       triggerRegionReveal(rev);
     }
+  }
+});
+// Reveal DIFFÉRÉ : si le joueur avait quitté le rapport vers le Sac/Talents, on joue le
+// reveal de zone quand il revient sur la carte des donjons (Explorer › Donjons).
+watch([tab, exploreSub], ([t, sub]) => {
+  if (t === 'explore' && sub === 'donjons' && !reportOpen.value && pendingRegionReveal.value) {
+    const rev = pendingRegionReveal.value;
+    pendingRegionReveal.value = null;
+    triggerRegionReveal(rev);
   }
 });
 function flushCelebrations() {
@@ -3430,7 +3442,11 @@ function launchNext() {
   if (n.kind === 'dungeon') void explore(n.dungeon);
   else void fightBoss(n.boss);
 }
+// Où revenir quand on ferme le Sac/Talents ouvert DEPUIS le rapport (on ne « largue » pas
+// le joueur sur l'onglet Équipement/Héros : il retourne à l'écran d'où il venait, ex. Donjons).
+const reportNavReturn = ref<{ tab: typeof tab.value; sub: typeof exploreSub.value } | null>(null);
 function goInventoryFromReport() {
+  reportNavReturn.value = { tab: tab.value, sub: exploreSub.value }; // mémorise l'origine (ex. Donjons)
   reportOpen.value = false;
   tab.value = 'gear';
   betterFilterSlot.value = null;
@@ -3438,10 +3454,19 @@ function goInventoryFromReport() {
 }
 // Depuis le rapport, quand un talent est tombé → ouvre la collection Talents (ticket bb384013).
 function goTalentsFromReport() {
+  reportNavReturn.value = { tab: tab.value, sub: exploreSub.value };
   reportOpen.value = false;
   tab.value = 'hero';
   talentsOpen.value = true;
 }
+// Fermeture du Sac/Talents ouvert depuis le rapport → on RESTAURE l'écran d'origine.
+watch([bagOpen, talentsOpen], ([bag, tal]) => {
+  if (!bag && !tal && reportNavReturn.value) {
+    tab.value = reportNavReturn.value.tab;
+    exploreSub.value = reportNavReturn.value.sub;
+    reportNavReturn.value = null;
+  }
+});
 
 // Butin possible d'un donjon (affiché à la demande via 🎁).
 const dropInfo = ref<Dungeon | null>(null);
