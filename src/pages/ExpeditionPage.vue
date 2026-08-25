@@ -108,6 +108,17 @@
       <!-- Bandeau AUTO : le run se joue seul → indicateur + bouton pour reprendre la main. -->
       <div v-if="autoMode" class="auto-banner">
         <span class="ab-txt"><span class="ab-dot" /> ⚡ Auto — le héros explore seul</span>
+        <button
+          type="button"
+          class="ab-speed"
+          :class="{ on: autoSpeed === 2 }"
+          :title="
+            autoSpeed === 2 ? 'Vitesse ×2 (touche pour ×1)' : 'Vitesse normale (touche pour ×2)'
+          "
+          @click="toggleSpeed"
+        >
+          ⏩ ×{{ autoSpeed }}
+        </button>
         <button type="button" class="ab-stop" @click="stopAuto">✋ Reprendre la main</button>
       </div>
 
@@ -577,6 +588,24 @@ const selectedLaby = ref<Labyrinth | null>(null);
 const autoMode = ref(false);
 let autoTimer: ReturnType<typeof setTimeout> | undefined;
 const AUTO_STEP_MS = 550;
+// Vitesse de l'auto-run / des déplacements (1 = normal, 2 = rapide). Mémorisée par compte
+// (localStorage) → l'option persiste entre les runs (ticket 06376fe4).
+const autoSpeed = ref<1 | 2>(readSpeed());
+function readSpeed(): 1 | 2 {
+  try {
+    return localStorage.getItem('muscu:laby:speed') === '2' ? 2 : 1;
+  } catch {
+    return 1;
+  }
+}
+function toggleSpeed() {
+  autoSpeed.value = autoSpeed.value === 2 ? 1 : 2;
+  try {
+    localStorage.setItem('muscu:laby:speed', String(autoSpeed.value));
+  } catch {
+    /* stockage indispo → on garde la valeur en mémoire seulement */
+  }
+}
 
 // Perso réel (stats de fond + équipement + talents) → combattant.
 const character = computed(() =>
@@ -1093,7 +1122,7 @@ function walkTo(path: number[]) {
     run.value = enterRoom(run.value, floor.value, id);
     lastEvent.value = null;
     i++;
-    walkTimer = setTimeout(step, WALK_STEP_MS);
+    walkTimer = setTimeout(step, Math.round(WALK_STEP_MS / autoSpeed.value)); // ÷ vitesse
   };
   step();
 }
@@ -1257,7 +1286,7 @@ function stopAuto() {
 }
 function scheduleAuto(ms = AUTO_STEP_MS) {
   if (autoTimer) clearTimeout(autoTimer);
-  autoTimer = setTimeout(autoTick, ms);
+  autoTimer = setTimeout(autoTick, Math.round(ms / autoSpeed.value)); // ÷ vitesse (x2 = 2× plus rapide)
 }
 // Seuil de PV bas : en dessous, si une SORTIE sûre est trouvée, l'auto sort (retraite)
 // plutôt que de risquer la mort (qui fait perdre les objets).
@@ -1680,6 +1709,23 @@ function replayAuto() {
   font-weight: 700;
   font-size: 12px;
   cursor: pointer;
+}
+/* Bascule de vitesse ×1/×2 de l'auto-run (ticket 06376fe4). Accent quand ×2 actif. */
+.ab-speed {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 5px 10px;
+  font-weight: 800;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.ab-speed.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
 }
 /* En auto, les salles ne sont pas cliquables → curseur neutre. */
 .room.auto {

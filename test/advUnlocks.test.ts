@@ -7,31 +7,48 @@ describe('advUnlocks — calendrier des déblocages', () => {
       expect(ADV_SCHEDULE[i]!.level).toBeGreaterThanOrEqual(ADV_SCHEDULE[i - 1]!.level);
   });
 
-  it('niveau 5 = gros palier : boss + talent + effet crit + étage d’expédition', () => {
+  it('niveau 5 : boss (Golem) + emplacement de talent + palier de rareté', () => {
     const kinds = new Set(unlocksAtLevel(5).map((u) => u.kind));
     expect(kinds.has('boss')).toBe(true);
     expect(kinds.has('talent')).toBe(true);
-    expect(kinds.has('effect')).toBe(true);
-    expect(kinds.has('expedition')).toBe(true);
-    // Le boss du palier 5 est le Golem ; il lâche des pièces de set (de voie).
+    expect(kinds.has('rarity')).toBe(true);
     const boss = unlocksAtLevel(5).find((u) => u.kind === 'boss');
     expect(boss?.title).toContain('Golem');
     expect(boss?.detail).toContain('set');
   });
 
-  it('niveau 8 = uniquement l’effet vol de vie', () => {
-    const at8 = unlocksAtLevel(8);
-    expect(at8).toHaveLength(1);
-    expect(at8[0]!.kind).toBe('effect');
-    expect(at8[0]!.title).toContain('Vol de vie');
+  it('emplacement de talent = un SLOT (drop-based), pas un choix 1-parmi-3', () => {
+    const tal = unlocksAtLevel(5).find((u) => u.kind === 'talent');
+    expect(tal?.title).toContain('Emplacement');
+    expect(tal?.detail).toContain('droppent');
   });
 
-  it('niveau 10 débloque le Dragon et la réduction de dégâts', () => {
-    const titles = unlocksAtLevel(10)
-      .map((u) => u.title)
-      .join(' | ');
-    expect(titles).toContain('Dragon');
-    expect(titles).toContain('Réduction');
+  it('niveau 9 = uniquement l’effet Épines', () => {
+    const at9 = unlocksAtLevel(9);
+    expect(at9).toHaveLength(1);
+    expect(at9[0]!.kind).toBe('effect');
+    expect(at9[0]!.title).toContain('Épines');
+  });
+
+  it('niveau 20 : boss (Titan) + talent + rareté Épique', () => {
+    const at20 = unlocksAtLevel(20);
+    expect(at20.some((u) => u.kind === 'boss' && u.title.includes('Titan'))).toBe(true);
+    expect(at20.some((u) => u.kind === 'talent')).toBe(true);
+    const rar = at20.find((u) => u.kind === 'rarity');
+    expect(rar?.title.toLowerCase()).toContain('épique');
+  });
+
+  it('les signatures sont gatées en profondeur (Exécution 12 / Rage 15 / Déferlante 18)', () => {
+    expect(unlocksAtLevel(12).some((u) => u.title.includes('Exécution'))).toBe(true);
+    expect(unlocksAtLevel(15).some((u) => u.title.includes('Rage'))).toBe(true);
+    expect(unlocksAtLevel(18).some((u) => u.title.includes('Déferlante'))).toBe(true);
+  });
+
+  it('crit / vol de vie / réduction ne sont PLUS annoncés (dégatés)', () => {
+    const titles = ADV_SCHEDULE.map((u) => u.title).join(' | ');
+    expect(titles).not.toContain('Critique');
+    expect(titles).not.toContain('Vol de vie');
+    expect(titles).not.toContain('Réduction');
   });
 
   it('niveau sans déblocage → liste vide', () => {
@@ -46,7 +63,6 @@ describe('advUnlocks — calendrier des déblocages', () => {
   });
 
   it('upcomingUnlocks tease le contenu procédural (boss jusqu’au niv.100)', () => {
-    // Depuis le contenu procédural, il reste des déblocages (boss de palier) après 25.
     expect(upcomingUnlocks(25).length).toBeGreaterThan(0);
     for (const u of upcomingUnlocks(25)) expect(u.level).toBeGreaterThan(25);
   });

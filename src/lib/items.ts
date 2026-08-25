@@ -904,10 +904,13 @@ export function rollSetPiece(
 ): Omit<Item, 'id'> {
   const set = SET_BY_ID[opts.setId];
   const slot = opts.preferSlot ?? pick(rng, SLOTS);
-  // Le RANG d'une pièce de set = pyramide centrée sur le PALIER du boss, remontée (+0,6 rang :
-  // les boss sont une source solide) + `rollFloor` (Autel). La qualité vient du même tirage
-  // (roll continu) → un set haut palier bat un set bas palier, et on farme le meilleur jet.
-  const floorRanks = Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 1.6 + 0.6; // boss généreux
+  // Le RANG d'une pièce de set = pyramide centrée sur le PALIER du boss, LÉGÈREMENT remontée
+  // (+0,35 rang : les boss restent une source solide, un cran au-dessus des donjons) + `rollFloor`
+  // (Autel). Baisse v0.604 (+0,6 → +0,35) : à +0,6, un boss de bas niveau centrait ses drops
+  // à mi-chemin du rang SUPÉRIEUR → ~50 % de Légendaires (donc de PROCS légendaires) dès le
+  // niv.20, bien avant que Légendaire soit ton rang naturel (~niv.31). Désormais le boss donne
+  // surtout TON rang, Légendaire restant un beau +1 (aligné sur la courbe de rareté).
+  const floorRanks = Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 1.6 + 0.35;
   const { rank: rarity, roll } = rollTier(
     rng,
     opts.level,

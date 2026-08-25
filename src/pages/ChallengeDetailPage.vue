@@ -440,6 +440,7 @@ import { useCardioStore } from '@/stores/cardio';
 import { useAuthStore } from '@/stores/auth';
 import ChallengeCelebration from '@/components/ChallengeCelebration.vue';
 import SetLogDialog from '@/components/SetLogDialog.vue';
+import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import { exerciseInstructions } from '@/data/exerciseInstructions';
@@ -812,14 +813,16 @@ function openAddSet(count = 1) {
   setCount.value = Math.max(1, count);
   const last = todaySets.value[todaySets.value.length - 1];
   const sug = setSuggestion.value;
-  // Priorité : dernière série du jour (cohérence intra-séance) → sinon conseil historique.
+  // Priorité : dernière série du jour (cohérence intra-séance) → poids mémorisé pour cet exo
+  // (toutes activités, ticket efa49f4f) → conseil historique.
   setInitReps.value = last?.reps ?? sug?.repMax ?? quickAdds.value[0] ?? 10;
-  setInitWeight.value = last?.weight ?? sug?.weight ?? null;
+  setInitWeight.value = last?.weight ?? recallWeight(ch.value?.exercise_id) ?? sug?.weight ?? null;
   setInitAssisted.value = last?.assisted ?? false;
   setOpen.value = true;
 }
 function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }) {
   if (!inToday.value || !ch.value) return;
+  rememberWeight(ch.value.exercise_id, v.weight); // mémorise le poids pour cet exo (efa49f4f)
   const e = ensureToday();
   if (!e.sets) e.sets = [];
   for (let k = 0; k < setCount.value; k++) {

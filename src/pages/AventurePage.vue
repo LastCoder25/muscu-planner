@@ -701,6 +701,14 @@
             :title="char.row.equipped[slot] ? 'Voir le détail' : undefined"
             @click="char.row.equipped[slot] && (inspectItem = char.row.equipped[slot]!)"
           >
+            <!-- Pièce de set → badge 🧩 en HAUT À DROITE de la tuile (ne rentre pas sur la
+                 ligne des pastilles rareté/niveau, ticket c0b3547f). -->
+            <span
+              v-if="char.row.equipped[slot]?.setId"
+              class="slot-set-corner"
+              :title="'Pièce de set — ' + setVoieName(char.row.equipped[slot]?.setId ?? '')"
+              >🧩</span
+            >
             <div class="slot-head">
               <ItemIcon
                 v-if="char.row.equipped[slot]"
@@ -712,15 +720,12 @@
             </div>
             <template v-if="char.row.equipped[slot]">
               <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
-              <!-- Méta : rang · (🧩 set). La QUALITÉ (jet) est portée par l'icône (badge bas). -->
+              <!-- Méta : rang · niveau. Le set = badge coin ; le jet = icône (badge bas). -->
               <div class="pills">
                 <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
                   RARITY_LABEL[char.row.equipped[slot]!.rarity]
                 }}</span>
                 <span class="lvl-badge">Nv {{ char.row.equipped[slot]!.level }}</span>
-                <span v-if="char.row.equipped[slot]!.setId" class="gpill set" title="Pièce de set"
-                  >🧩</span
-                >
               </div>
               <div class="slot-eff">
                 <div
@@ -818,24 +823,6 @@
                 </button>
               </div>
               <!-- Filtre par SET (ticket 986a50b6) — visible seulement si le sac contient des pièces de set. -->
-              <div v-if="bagSets.length" class="inv-filter inv-filter-set">
-                <button
-                  class="if-chip"
-                  :class="{ on: invSetFilter === 'all' }"
-                  @click="invSetFilter = 'all'"
-                >
-                  🧩 Tous sets
-                </button>
-                <button
-                  v-for="s in bagSets"
-                  :key="s.id"
-                  class="if-chip"
-                  :class="{ on: invSetFilter === s.id }"
-                  @click="invSetFilter = s.id"
-                >
-                  {{ s.emoji }} {{ s.name }}
-                </button>
-              </div>
               <!-- Casse/vente en masse : objets qui n'améliorent pas ta puissance (pas
                meilleurs que l'équipé du même emplacement, MÊME montés à ton niveau).
                Les pépites potentielles et le 🔒 sont protégés. Respecte le filtre type. -->
@@ -2474,7 +2461,6 @@ const bagOpen = ref(false);
 const loadoutOpen = ref(false);
 function openBag() {
   betterFilterSlot.value = null; // ouverture directe = pas de filtre « upgrades »
-  invSetFilter.value = 'all'; // pas de filtre set au départ
   bagOpen.value = true;
 }
 // Filtre « seulement les objets du sac au potentiel supérieur » pour un slot donné
@@ -4191,20 +4177,10 @@ const POI_MSG_LABEL: Record<string, string> = {
 
 // ── Sac : filtre par type d'objet + tri (meilleurs d'abord) ──
 const invFilter = ref<ItemSlot | 'all'>('all');
-const invSetFilter = ref<string>('all'); // filtre par SET ('all' ou un setId, ticket 986a50b6)
 function bagCountForSlot(slot: ItemSlot): number {
   return (char.row?.inventory ?? []).filter((i) => i.slot === slot).length;
 }
-// Sets présents dans le sac (pour les chips de filtre par set) → id + nom + emoji.
-const bagSets = computed(() => {
-  const seen = new Map<string, { id: string; name: string; emoji: string }>();
-  for (const i of char.row?.inventory ?? []) {
-    if (isFamiliar(i) || !i.setId || seen.has(i.setId)) continue;
-    const def = SET_BY_ID[i.setId];
-    seen.set(i.setId, { id: i.setId, name: def?.name ?? i.setId, emoji: def?.emoji ?? '🧩' });
-  }
-  return [...seen.values()];
-});
+// (Filtre par SET retiré du sac — les pièces de set vivent dans « Mes sets », plus au sac.)
 const filteredInventory = computed<Item[]>(() => {
   const inv = (char.row?.inventory ?? []).filter((i) => !isFamiliar(i));
   const bf = betterFilterSlot.value;
@@ -4216,7 +4192,6 @@ const filteredInventory = computed<Item[]>(() => {
   } else {
     list = inv.filter((i) => invFilter.value === 'all' || i.slot === invFilter.value);
   }
-  if (invSetFilter.value !== 'all') list = list.filter((i) => i.setId === invSetFilter.value);
   return list.sort(
     (a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || rollJet(b.roll) - rollJet(a.roll),
   );
@@ -6388,6 +6363,17 @@ button.pt-mini:active {
   background: var(--accent);
   border-color: var(--accent);
 }
+/* Badge « pièce de set » 🧩 en HAUT À DROITE de la tuile d'équipement (ticket c0b3547f) :
+   libère la ligne des pastilles (rareté/niveau) qui débordait. */
+.slot-set-corner {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 14px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+  pointer-events: none;
+}
 .gpill.sig {
   color: #ffd23f;
   border-color: #ffd23f;
@@ -6412,11 +6398,6 @@ button.pt-mini:active {
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 10px;
-}
-.inv-filter-set {
-  margin-top: -4px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--line);
 }
 .if-chip {
   border: 1px solid var(--line);
