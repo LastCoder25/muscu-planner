@@ -363,7 +363,7 @@
             :disable="!canStart"
             @click="replayAuto"
           />
-          <q-btn flat no-caps label="Sortir" @click="back()" />
+          <q-btn flat no-caps label="Retour aux paliers" @click="returnToLobby" />
         </div>
       </q-card>
     </q-dialog>
@@ -1481,6 +1481,14 @@ function replay() {
 function replayAuto() {
   over.value = false;
   if (selectedLaby.value) void startAuto(selectedLaby.value);
+}
+// Ferme le rapport de fin → RETOUR AU CHOIX DES PALIERS (on reste sur la page du labyrinthe,
+// le palier qu'on vient de finir est à jour). Le bouton ‹ du header sert à sortir vers l'Aventure.
+function returnToLobby() {
+  stopAuto();
+  over.value = false;
+  phase.value = 'lobby';
+  selectedLaby.value = null;
 }
 </script>
 
