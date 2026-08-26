@@ -858,8 +858,14 @@ export function isBodyweightExercise(
 
 /** VRAI poids du corps : AUCUN matériel requis (equipment_required vide) → pompes, gainage,
  *  squat, abdos… Plus STRICT que isBodyweightExercise (qui tolère élastique / barre de
- *  traction). Sert à distinguer visuellement les exos « zéro matériel » (défis / Défi 360). */
-export function isNoEquipmentExercise(equipmentRequired?: string[] | null): boolean {
+ *  traction). Sert à distinguer visuellement les exos « zéro matériel » (défis / Défi 360).
+ *  Exclut les activités CARDIO (course/marche/vélo, tag `cardio`) : ce ne sont pas des exos
+ *  « poids du corps » (le vélo demande un vélo) → pas de badge dessus. */
+export function isNoEquipmentExercise(
+  equipmentRequired?: string[] | null,
+  tags?: string[] | null,
+): boolean {
+  if ((tags ?? []).includes('cardio')) return false;
   return (equipmentRequired ?? []).length === 0;
 }
 

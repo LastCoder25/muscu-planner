@@ -588,7 +588,7 @@ async function loadEquip() {
   try {
     const rows = await library.fetchByIds(ids);
     const set = new Set<string>();
-    for (const r of rows) if (isNoEquipmentExercise(r.equipment_required)) set.add(r.id);
+    for (const r of rows) if (isNoEquipmentExercise(r.equipment_required, r.tags)) set.add(r.id);
     noEquipIds.value = set;
   } catch {
     /* non bloquant */

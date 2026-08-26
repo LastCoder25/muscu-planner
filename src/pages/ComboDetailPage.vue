@@ -379,7 +379,7 @@ async function loadEquip() {
   if (!ids.length) return;
   const rows = await library.fetchByIds(ids).catch(() => []);
   noEquipIds.value = new Set(
-    rows.filter((r) => isNoEquipmentExercise(r.equipment_required)).map((r) => r.id),
+    rows.filter((r) => isNoEquipmentExercise(r.equipment_required, r.tags)).map((r) => r.id),
   );
 }
 onMounted(async () => {

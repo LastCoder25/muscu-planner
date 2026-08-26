@@ -83,7 +83,10 @@
             :key="e.id"
             type="button"
             class="ex-row"
-            :class="{ sel: exercise?.id === e.id, bw: isNoEquipmentExercise(e.equipment_required) }"
+            :class="{
+              sel: exercise?.id === e.id,
+              bw: isNoEquipmentExercise(e.equipment_required, e.tags),
+            }"
             @click="pickExercise(e)"
           >
             <q-icon v-if="favSet.has(e.id)" name="star" size="16px" color="primary" class="fav" />
@@ -97,7 +100,7 @@
             <div class="ex-main">
               <div class="ex-name">
                 {{ e.name }}
-                <span v-if="isNoEquipmentExercise(e.equipment_required)" class="bw-badge"
+                <span v-if="isNoEquipmentExercise(e.equipment_required, e.tags)" class="bw-badge"
                   >🤸 Poids du corps</span
                 >
               </div>

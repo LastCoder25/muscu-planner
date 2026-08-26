@@ -169,7 +169,7 @@
               class="dtile"
               :class="{
                 on: isSelected(curKey, e.id),
-                bw: isNoEquipmentExercise(e.equipment_required),
+                bw: isNoEquipmentExercise(e.equipment_required, e.tags),
                 muted:
                   variantBlocked(curKey, e.id) ||
                   (atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1),
@@ -195,7 +195,7 @@
                 ≈ variante déjà choisie
               </div>
               <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
-              <div v-if="isNoEquipmentExercise(e.equipment_required)" class="dtile-bw">
+              <div v-if="isNoEquipmentExercise(e.equipment_required, e.tags)" class="dtile-bw">
                 🤸 Poids du corps
               </div>
             </button>
@@ -213,7 +213,7 @@
               class="dtile"
               :class="{
                 on: isSelected(curKey, e.id),
-                bw: isNoEquipmentExercise(e.equipment_required),
+                bw: isNoEquipmentExercise(e.equipment_required, e.tags),
                 muted:
                   variantBlocked(curKey, e.id) ||
                   (atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1),
@@ -239,7 +239,7 @@
                 ≈ variante déjà choisie
               </div>
               <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
-              <div v-if="isNoEquipmentExercise(e.equipment_required)" class="dtile-bw">
+              <div v-if="isNoEquipmentExercise(e.equipment_required, e.tags)" class="dtile-bw">
                 🤸 Poids du corps
               </div>
             </button>

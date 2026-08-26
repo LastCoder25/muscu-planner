@@ -77,7 +77,7 @@ export const useLibraryStore = defineStore('library', () => {
     if (ids.length === 0) return [];
     const { data, error } = await supabase
       .from('exercises')
-      .select('id, name, muscle_primary, equipment')
+      .select('id, name, muscle_primary, equipment, equipment_required, tags')
       .in('id', ids);
     if (error) throw error;
     return (data as ExerciseRow[]) ?? [];
