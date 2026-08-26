@@ -57,14 +57,17 @@
         class="leg"
         :class="{ ok: legComplete(leg) }"
       >
+        <span
+          v-if="noEquipIds.has(leg.exercise_id)"
+          class="bw-ic"
+          title="Poids du corps (aucun matériel)"
+          >🤸</span
+        >
         <div class="leg-top">
           <span class="leg-emo">{{ slotEmoji(leg.slot) }}</span>
           <div class="leg-main">
             <div class="leg-name">
               {{ leg.exercise_name }}
-              <span v-if="noEquipIds.has(leg.exercise_id)" class="leg-bw-badge"
-                >🤸 Poids du corps</span
-              >
               <span v-if="leg.weight_kg" class="leg-kg">{{ leg.weight_kg }} kg</span>
             </div>
             <div class="leg-sub">
@@ -521,6 +524,7 @@ onMounted(async () => {
   margin-top: 1px;
 }
 .leg {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: 14px;
@@ -529,6 +533,23 @@ onMounted(async () => {
 }
 .leg.ok {
   border-color: var(--d1);
+}
+/* Icône « poids du corps » (aucun matériel) — pastille ronde cyan, coin haut-droit. */
+.bw-ic {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 50%;
+  background: rgba(95, 208, 224, 0.15);
+  border: 1px solid #5fd0e0;
+  z-index: 1;
 }
 .leg-top {
   display: flex;
@@ -551,19 +572,6 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--dim);
   margin-left: 4px;
-}
-/* Badge « poids du corps » (aucun matériel) — cyan, lisible, distinct du vert « atteint ». */
-.leg-bw-badge {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 700;
-  color: #5fd0e0;
-  border: 1px solid #5fd0e0;
-  border-radius: 999px;
-  padding: 0 7px;
-  margin-left: 6px;
-  vertical-align: middle;
-  white-space: nowrap;
 }
 .leg-sub {
   font-size: 12px;

@@ -185,6 +185,12 @@
                 <img v-else-if="exImg(e.id)" :src="exImg(e.id)" :alt="e.name" loading="lazy" />
                 <span v-else class="dtile-badge"><q-icon name="fitness_center" size="24px" /></span>
                 <q-icon v-if="favSet.has(e.id)" name="star" size="15px" class="dtile-fav" />
+                <span
+                  v-if="isNoEquipmentExercise(e.equipment_required, e.tags)"
+                  class="bw-ic"
+                  title="Poids du corps (aucun matériel)"
+                  >🤸</span
+                >
                 <div v-if="isSelected(curKey, e.id)" class="dtile-check">
                   <q-icon name="check_circle" size="22px" />
                 </div>
@@ -194,9 +200,6 @@
                 ≈ variante déjà choisie
               </div>
               <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
-              <div v-if="isNoEquipmentExercise(e.equipment_required, e.tags)" class="dtile-bw">
-                🤸 Poids du corps
-              </div>
             </button>
           </div>
         </template>
@@ -228,6 +231,12 @@
                 <img v-else-if="exImg(e.id)" :src="exImg(e.id)" :alt="e.name" loading="lazy" />
                 <span v-else class="dtile-badge"><q-icon name="fitness_center" size="24px" /></span>
                 <q-icon v-if="favSet.has(e.id)" name="star" size="15px" class="dtile-fav" />
+                <span
+                  v-if="isNoEquipmentExercise(e.equipment_required, e.tags)"
+                  class="bw-ic"
+                  title="Poids du corps (aucun matériel)"
+                  >🤸</span
+                >
                 <div v-if="isSelected(curKey, e.id)" class="dtile-check">
                   <q-icon name="check_circle" size="22px" />
                 </div>
@@ -237,9 +246,6 @@
                 ≈ variante déjà choisie
               </div>
               <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
-              <div v-if="isNoEquipmentExercise(e.equipment_required, e.tags)" class="dtile-bw">
-                🤸 Poids du corps
-              </div>
             </button>
           </div>
         </template>
@@ -1005,17 +1011,22 @@ onMounted(async () => {
   color: var(--d3);
   font-weight: 600;
 }
-/* Badge « poids du corps » (aucun matériel) sur les tuiles de choix — cyan. */
-.dtile-bw {
-  display: inline-block;
-  margin-top: 3px;
-  font-size: 9px;
-  font-weight: 700;
-  color: #5fd0e0;
+/* Icône « poids du corps » (aucun matériel) — pastille ronde cyan, coin de la tuile. */
+.dtile-media .bw-ic {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 50%;
+  background: rgba(20, 18, 14, 0.72);
   border: 1px solid #5fd0e0;
-  border-radius: 999px;
-  padding: 0 6px;
-  line-height: 1.5;
+  z-index: 2;
 }
 .draft-nav,
 .draft-skip {
