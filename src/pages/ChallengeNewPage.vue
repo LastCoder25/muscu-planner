@@ -83,7 +83,7 @@
             :key="e.id"
             type="button"
             class="ex-row"
-            :class="{ sel: exercise?.id === e.id }"
+            :class="{ sel: exercise?.id === e.id, bw: isNoEquipmentExercise(e.equipment_required) }"
             @click="pickExercise(e)"
           >
             <q-icon v-if="favSet.has(e.id)" name="star" size="16px" color="primary" class="fav" />
@@ -481,6 +481,7 @@ import {
   logicalToday,
   repWeightFromExercise,
   isBodyweightExercise,
+  isNoEquipmentExercise,
   type ChallengeFormat,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -1118,6 +1119,11 @@ onMounted(async () => {
   &.full {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+  /* Exo 100 % poids du corps (aucun matériel) → liseré cyan à gauche. */
+  &.bw {
+    border-left-width: 3px;
+    border-left-color: #5fd0e0;
   }
 }
 .ex-lock {

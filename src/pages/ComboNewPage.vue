@@ -169,6 +169,7 @@
               class="dtile"
               :class="{
                 on: isSelected(curKey, e.id),
+                bw: isNoEquipmentExercise(e.equipment_required),
                 muted:
                   variantBlocked(curKey, e.id) ||
                   (atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1),
@@ -209,6 +210,7 @@
               class="dtile"
               :class="{
                 on: isSelected(curKey, e.id),
+                bw: isNoEquipmentExercise(e.equipment_required),
                 muted:
                   variantBlocked(curKey, e.id) ||
                   (atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1),
@@ -368,7 +370,12 @@ import {
   type ComboLeg,
   type ComboCountMode,
 } from '@/lib/combo';
-import { repWeightFromExercise, isBodyweightExercise, logicalToday } from '@/lib/challenges';
+import {
+  repWeightFromExercise,
+  isBodyweightExercise,
+  isNoEquipmentExercise,
+  logicalToday,
+} from '@/lib/challenges';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
 import type { Level } from '@/lib/types';
@@ -944,6 +951,11 @@ onMounted(async () => {
 .dtile.on {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+/* Exo 100 % poids du corps (aucun matériel) → liseré cyan à gauche. */
+.dtile.bw {
+  border-left-width: 5px;
+  border-left-color: #5fd0e0;
 }
 .dtile-media {
   position: relative;

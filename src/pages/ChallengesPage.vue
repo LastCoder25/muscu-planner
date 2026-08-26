@@ -105,7 +105,7 @@
                 v-for="c in grp.list"
                 :key="c.id"
                 class="ch-tile"
-                :class="{ expiring: expiring(c) }"
+                :class="{ expiring: expiring(c), bw: noEquipIds.has(c.exercise_id) }"
                 @click="goDetail(c.id)"
               >
                 <div v-if="expiring(c)" class="ct-expire">⏳ Expire bientôt</div>
@@ -131,7 +131,10 @@
                     v-for="i in challengeSegs(c).n"
                     :key="i"
                     class="seg-cell"
-                    :class="{ on: i <= challengeSegs(c).on }"
+                    :class="{
+                      on: i <= challengeSegs(c).on,
+                      behind: i > challengeSegs(c).on && i <= challengeSegs(c).expected,
+                    }"
                   />
                 </div>
                 <div class="ct-sub">
@@ -141,8 +144,8 @@
                   }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} reps</template>
                 </div>
                 <div v-if="bal(c) !== 0" class="cc-bal" :class="bal(c) > 0 ? 'ahead' : 'behind'">
-                  <template v-if="bal(c) > 0">▲ +{{ bal(c) }} {{ unitOf(c) }}</template>
-                  <template v-else>▼ −{{ -bal(c) }} {{ unitOf(c) }}</template>
+                  <template v-if="bal(c) > 0">▲ +{{ bal(c) }} {{ balUnit(c) }}</template>
+                  <template v-else>▼ −{{ -bal(c) }} {{ balUnit(c) }}</template>
                 </div>
               </button>
             </div>
@@ -159,7 +162,13 @@
               : 'Aucun challenge abandonné.'
           }}
         </div>
-        <button v-for="c in shown" :key="c.id" class="ch-card" @click="goDetail(c.id)">
+        <button
+          v-for="c in shown"
+          :key="c.id"
+          class="ch-card"
+          :class="{ bw: noEquipIds.has(c.exercise_id) }"
+          @click="goDetail(c.id)"
+        >
           <div class="cc-top">
             <span class="ch-ic">
               <img v-if="exerciseImage(c.exercise_id)" :src="exerciseImage(c.exercise_id)" alt="" />
@@ -174,7 +183,10 @@
               v-for="i in challengeSegs(c).n"
               :key="i"
               class="seg-cell"
-              :class="{ on: i <= challengeSegs(c).on }"
+              :class="{
+                on: i <= challengeSegs(c).on,
+                behind: i > challengeSegs(c).on && i <= challengeSegs(c).expected,
+              }"
             />
           </div>
           <div class="cc-sub">
@@ -496,6 +508,7 @@ import {
   challengeLiveBalance,
   challengeTotalReps,
   evaluateAchievements,
+  isNoEquipmentExercise,
   type Challenge,
 } from '@/lib/challenges';
 import { computeLevel } from '@/lib/levels';
@@ -534,6 +547,7 @@ import {
 import { REP_XP, assistMult } from '@/lib/athlete';
 import { useProgress } from '@/composables/useProgress';
 import { useCharacterStore } from '@/stores/character';
+import { useLibraryStore } from '@/stores/library';
 
 const router = useRouter();
 const route = useRoute();
@@ -553,7 +567,23 @@ function celebrateCombo() {
 }
 const progress = useProgress();
 const character = useCharacterStore();
+const library = useLibraryStore();
 const loading = ref(true);
+
+// Exos SANS aucun matériel (poids du corps) → encadrement distinct sur les cartes.
+const noEquipIds = ref<Set<string>>(new Set());
+async function loadEquip() {
+  const ids = [...new Set(store.list.map((c) => c.exercise_id))];
+  if (!ids.length) return;
+  try {
+    const rows = await library.fetchByIds(ids);
+    const set = new Set<string>();
+    for (const r of rows) if (isNoEquipmentExercise(r.equipment_required)) set.add(r.id);
+    noEquipIds.value = set;
+  } catch {
+    /* non bloquant */
+  }
+}
 
 // Énergie d'aventure dispo (peut être négative = déficit). ENERGY_PER_XP = 1.
 const availableEnergy = computed(
@@ -787,11 +817,19 @@ function unitOf(c: Challenge) {
 function isSetsMode(c: Challenge) {
   return c.config.count_mode === 'sets';
 }
+// Unité de l'avance/retard : SÉRIES en mode Séries (le solde se compte en séries),
+// sinon l'unité de l'exo (reps / sec / min / km).
+function balUnit(c: Challenge) {
+  return isSetsMode(c) ? 'séries' : unitOf(c);
+}
 // Barre de progression SEGMENTÉE (ticket 3c51883b) : découpée par SÉRIES (mode séries) ou
 // par JOURS (reps/durée), plafonnée à 30 segments pour rester lisible.
 // Mode SÉRIES : le remplissage suit les SÉRIES FAITES / total de séries (ticket 38b10eea) —
 // PAS le % de jours complétés (sinon la barre n'était pas divisée par le nb de séries).
-function challengeSegs(c: Challenge): { n: number; on: number } {
+// n = nb de cellules, on = cellules FAITES (jaune), expected = cellules où l'on
+// DEVRAIT en être pour tenir les temps (le retard, rose : de `on`+1 à `expected`).
+function challengeSegs(c: Challenge): { n: number; on: number; expected: number } {
+  const behind = Math.max(0, -bal(c)); // retard, dans l'unité de segmentation (séries ou reps)
   if (isSetsMode(c)) {
     const total = c.daily_targets.reduce((a, b) => a + b, 0); // total de séries à faire
     // Si le total de séries est connu (> 0) on segmente par SÉRIE ; sinon (daily_targets à 0
@@ -801,12 +839,15 @@ function challengeSegs(c: Challenge): { n: number; on: number } {
       const done = st(c).totalDone; // séries réellement faites
       const n = Math.min(30, Math.max(1, total));
       const on = Math.min(n, Math.round((done / total) * n));
-      return { n, on };
+      const expected = Math.min(n, on + Math.round((behind / total) * n));
+      return { n, on, expected };
     }
   }
+  const total = c.daily_targets.reduce((a, b) => a + b, 0);
   const n = Math.min(30, Math.max(1, c.duration_days)); // nb de jours
   const on = Math.min(n, Math.round((st(c).completionPct / 100) * n));
-  return { n, on };
+  const expected = total > 0 ? Math.min(n, on + Math.round((behind / total) * n)) : on;
+  return { n, on, expected };
 }
 function totalRepsOf(c: Challenge) {
   return challengeTotalReps(c);
@@ -886,6 +927,7 @@ onMounted(async () => {
     await comboStore.fetchMine().catch(() => undefined);
     await character.fetchMine().catch(() => undefined); // pour l'énergie (garde-fou déficit)
     await store.fetchAchievements();
+    void loadEquip();
     // Rattrapage : débloque les succès mérités mais pas encore enregistrés.
     await store.unlock(evaluateAchievements(store.list));
   } catch (e) {
@@ -1506,6 +1548,12 @@ onMounted(async () => {
 .ch-tile:active {
   transform: scale(0.99);
 }
+/* Exo 100 % poids du corps (aucun matériel) → liseré cyan à gauche. */
+.ch-tile.bw:not(.expiring),
+.ch-card.bw {
+  border-left-width: 3px;
+  border-left-color: #5fd0e0;
+}
 /* Défi bientôt expiré et pas fini → encadré rouge d'alerte. */
 .ch-tile.expiring {
   border-color: var(--d4);
@@ -1680,6 +1728,10 @@ onMounted(async () => {
 }
 .seg-cell.on {
   background: var(--accent);
+}
+/* Retard : les cellules où l'on devrait déjà en être (rose). */
+.seg-cell.behind {
+  background: #ff6a9c;
 }
 .cc-sub {
   font-size: 11.5px;

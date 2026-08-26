@@ -270,10 +270,13 @@
         <template v-if="ch.format !== 'cumulative' && isSetsMode">
           <div class="sec-h">Progression · séries</div>
           <div class="series-total-bar">
+            <!-- Rose : là où l'on DEVRAIT en être (retard) ; jaune (par-dessus) : fait. -->
+            <div class="stb-behind" :style="{ width: seriesExpectedPct + '%' }" />
             <div class="stb-fill" :style="{ width: seriesPct + '%' }" />
           </div>
           <div class="stb-label">
             <b>{{ seriesProgress.done }}</b> / {{ seriesProgress.target }} séries
+            <span v-if="liveBalance < 0" class="stb-late">· {{ -liveBalance }} de retard</span>
           </div>
         </template>
         <template v-else-if="ch.format !== 'cumulative'">
@@ -755,6 +758,14 @@ const seriesProgress = computed(() => {
 const seriesPct = computed(() => {
   const { done, target } = seriesProgress.value;
   return target > 0 ? Math.min(100, Math.round((done / target) * 100)) : 0;
+});
+// Position ATTENDUE (« dans les temps ») en % : séries faites + le retard courant.
+// Jamais sous la position faite (une avance ne fait pas de rose).
+const seriesExpectedPct = computed(() => {
+  const { done, target } = seriesProgress.value;
+  if (target <= 0) return 0;
+  const expected = done - liveBalance.value; // liveBalance < 0 = retard → expected > done
+  return Math.min(100, Math.max(seriesPct.value, Math.round((expected / target) * 100)));
 });
 const todaySets = computed<ChallengeSet[]>(() => entryOf(dayIndex.value)?.sets ?? []);
 // Séries de DURÉE du jour (gainage) : une par pause du chrono (champ `sec`).
@@ -1861,16 +1872,30 @@ onBeforeUnmount(() => {
 }
 /* Mode SÉRIES : barre de progression globale (total séries faites / visées). */
 .series-total-bar {
+  position: relative;
   height: 16px;
   border-radius: 8px;
   background: var(--line);
   overflow: hidden;
 }
+.series-total-bar .stb-behind,
 .series-total-bar .stb-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
-  background: var(--accent);
   border-radius: 8px;
   transition: width 0.25s ease;
+}
+/* Rose = position attendue (retard), sous le jaune. */
+.series-total-bar .stb-behind {
+  background: #ff6a9c;
+}
+.series-total-bar .stb-fill {
+  background: var(--accent);
+}
+.stb-late {
+  color: #ff6a9c;
 }
 .stb-label {
   margin-top: 4px;

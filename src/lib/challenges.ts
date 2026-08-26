@@ -856,6 +856,13 @@ export function isBodyweightExercise(
   return !(equipmentRequired ?? []).some((e) => LOADED_EQUIPMENT.includes(e));
 }
 
+/** VRAI poids du corps : AUCUN matériel requis (equipment_required vide) → pompes, gainage,
+ *  squat, abdos… Plus STRICT que isBodyweightExercise (qui tolère élastique / barre de
+ *  traction). Sert à distinguer visuellement les exos « zéro matériel » (défis / Défi 360). */
+export function isNoEquipmentExercise(equipmentRequired?: string[] | null): boolean {
+  return (equipmentRequired ?? []).length === 0;
+}
+
 /**
  * Poids d'une rep selon l'exo (XP juste) : facteur muscles (isolation vs composé,
  * via le nb de muscles travaillés) × facteur charge (résisté ou poids du corps).

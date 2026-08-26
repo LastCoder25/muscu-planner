@@ -55,7 +55,8 @@
         v-for="leg in c.legs"
         :key="leg.exercise_id"
         class="leg"
-        :class="{ ok: legComplete(leg) }"
+        :class="{ ok: legComplete(leg), bw: noEquipIds.has(leg.exercise_id) }"
+        :title="noEquipIds.has(leg.exercise_id) ? 'Aucun matériel (poids du corps)' : undefined"
       >
         <div class="leg-top">
           <span class="leg-emo">{{ slotEmoji(leg.slot) }}</span>
@@ -162,15 +163,22 @@ import {
   type ComboLeg,
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
-import { logicalToday, addDaysIso, suggestSetFromHistory } from '@/lib/challenges';
+import {
+  logicalToday,
+  addDaysIso,
+  suggestSetFromHistory,
+  isNoEquipmentExercise,
+} from '@/lib/challenges';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
+import { useLibraryStore } from '@/stores/library';
 
 const router = useRouter();
 const route = useRoute();
 const $q = useQuasar();
 const auth = useAuthStore();
 const combo = useComboStore();
+const library = useLibraryStore();
 const gameFx = useGameFx();
 
 const id = String(route.params.id);
@@ -361,8 +369,19 @@ function confirmRemove() {
   });
 }
 
+// Exos SANS AUCUN matériel (poids du corps pur : pompes, gainage…) → liseré distinct.
+const noEquipIds = ref<Set<string>>(new Set());
+async function loadEquip() {
+  const ids = [...new Set((c.value?.legs ?? []).map((l) => l.exercise_id))];
+  if (!ids.length) return;
+  const rows = await library.fetchByIds(ids).catch(() => []);
+  noEquipIds.value = new Set(
+    rows.filter((r) => isNoEquipmentExercise(r.equipment_required)).map((r) => r.id),
+  );
+}
 onMounted(async () => {
   if (!combo.loaded) await combo.fetchMine().catch(() => undefined);
+  await loadEquip();
 });
 </script>
 
@@ -496,6 +515,11 @@ onMounted(async () => {
 }
 .leg.ok {
   border-color: var(--d1);
+}
+/* Exo SANS AUCUN matériel (poids du corps pur : pompes, gainage…) → liseré gauche cyan. */
+.leg.bw {
+  border-left-width: 3px;
+  border-left-color: #5fd0e0;
 }
 .leg-top {
   display: flex;
