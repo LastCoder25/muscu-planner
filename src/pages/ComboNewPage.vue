@@ -195,6 +195,9 @@
                 ≈ variante déjà choisie
               </div>
               <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
+              <div v-if="isNoEquipmentExercise(e.equipment_required)" class="dtile-bw">
+                🤸 Poids du corps
+              </div>
             </button>
           </div>
         </template>
@@ -236,6 +239,9 @@
                 ≈ variante déjà choisie
               </div>
               <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
+              <div v-if="isNoEquipmentExercise(e.equipment_required)" class="dtile-bw">
+                🤸 Poids du corps
+              </div>
             </button>
           </div>
         </template>
@@ -1005,6 +1011,18 @@ onMounted(async () => {
 .dtile-mus.variant {
   color: var(--d3);
   font-weight: 600;
+}
+/* Badge « poids du corps » (aucun matériel) sur les tuiles de choix — cyan. */
+.dtile-bw {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #5fd0e0;
+  border: 1px solid #5fd0e0;
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 1.5;
 }
 .draft-nav,
 .draft-skip {

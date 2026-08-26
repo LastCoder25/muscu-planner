@@ -95,7 +95,12 @@
               class="fav"
             />
             <div class="ex-main">
-              <div class="ex-name">{{ e.name }}</div>
+              <div class="ex-name">
+                {{ e.name }}
+                <span v-if="isNoEquipmentExercise(e.equipment_required)" class="bw-badge"
+                  >🤸 Poids du corps</span
+                >
+              </div>
               <div class="ex-meta">
                 {{ e.muscle_primary }} · {{ e.unit === 'time' ? 'temps' : 'reps' }}
               </div>
@@ -1233,6 +1238,20 @@ onMounted(async () => {
   font-size: 11.5px;
   color: var(--dim);
   text-transform: capitalize;
+}
+/* Badge « poids du corps » (aucun matériel) — cyan, lisible. */
+.bw-badge {
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #5fd0e0;
+  border: 1px solid #5fd0e0;
+  border-radius: 999px;
+  padding: 0 6px;
+  margin-left: 6px;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 .fav {
   flex: none;

@@ -119,6 +119,9 @@
                     <q-icon v-else name="fitness_center" size="15px" />
                   </span>
                   <span class="ct-name">{{ c.exercise_name }}</span>
+                  <span v-if="noEquipIds.has(c.exercise_id)" class="bw-badge"
+                    >🤸 Poids du corps</span
+                  >
                 </div>
                 <span class="ct-cost" :class="{ accessoire: cardCostLabel(c) === 'accessoire' }">{{
                   cardCostLabel(c)
@@ -181,7 +184,10 @@
             <div class="cc-name">{{ c.exercise_name }}</div>
             <span class="cc-badge" :class="c.status">{{ statusLabel(c) }}</span>
           </div>
-          <div class="cc-meta">{{ fmtName(c.format) }} · {{ c.duration_days }} j</div>
+          <div class="cc-meta">
+            {{ fmtName(c.format) }} · {{ c.duration_days }} j
+            <span v-if="noEquipIds.has(c.exercise_id)" class="bw-badge">🤸 Poids du corps</span>
+          </div>
           <div class="seg-line" :style="{ '--n': challengeSegs(c).n }">
             <span
               v-for="i in challengeSegs(c).n"
@@ -1727,6 +1733,21 @@ onMounted(async () => {
   color: var(--dim);
   text-transform: capitalize;
   margin-top: 4px;
+}
+/* Badge « poids du corps » (aucun matériel) — cyan, lisible. */
+.bw-badge {
+  flex: none;
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #5fd0e0;
+  border: 1px solid #5fd0e0;
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-transform: none;
+  vertical-align: middle;
 }
 .bar {
   height: 8px;
