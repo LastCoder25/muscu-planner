@@ -59,6 +59,7 @@ import {
   type Building,
 } from '@/lib/buildings';
 import { combatPower, type Combatant } from '@/lib/combat';
+import { useGoldFx } from '@/composables/useGoldFx';
 
 export interface CharacterRow {
   user_id: string;
@@ -110,6 +111,7 @@ export class PseudoTakenError extends Error {
 export const useCharacterStore = defineStore('character', () => {
   const row = ref<CharacterRow | null>(null);
   const loaded = ref(false);
+  const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
     'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie';
@@ -534,10 +536,13 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur) return;
     const item = cur.inventory.find((i) => i.id === itemId);
     if (!item || item.locked) return; // 🔒 protégé
-    return persist(userId, {
-      gold: cur.gold + sellValue(item),
+    const gain = sellValue(item);
+    const res = await persist(userId, {
+      gold: cur.gold + gain,
       inventory: cur.inventory.filter((i) => i.id !== itemId),
     });
+    goldFx.gain(gain);
+    return res;
   }
 
   // Vend EN MASSE une liste d'objets du sac (par id) → or.
@@ -553,6 +558,7 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold + gain,
       inventory: cur.inventory.filter((i) => !rm.has(i.id)),
     });
+    goldFx.gain(gain);
     return targets.length;
   }
 
@@ -661,6 +667,7 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold + gain,
       talents: cur.talents.filter((x) => x.id !== talentId),
     });
+    goldFx.gain(gain);
     return gain;
   }
 
@@ -689,10 +696,15 @@ export const useCharacterStore = defineStore('character', () => {
     const prev = equipped[item.slot];
     equipped[item.slot] = item;
     const patch: Partial<CharacterRow> = { equipped };
-    if (prev && disposal === 'sell') patch.gold = cur.gold + sellValue(prev);
-    else if (prev) inventory.push(prev); // keep
+    let sold = 0;
+    if (prev && disposal === 'sell') {
+      sold = sellValue(prev);
+      patch.gold = cur.gold + sold;
+    } else if (prev) inventory.push(prev); // keep
     patch.inventory = inventory;
-    return persist(userId, patch);
+    const res = await persist(userId, patch);
+    if (sold > 0) goldFx.gain(sold);
+    return res;
   }
 
   async function unequip(userId: string, slot: ItemSlot) {
@@ -743,6 +755,7 @@ export const useCharacterStore = defineStore('character', () => {
     const gold = items.reduce((s, it) => s + sellValue(it), 0);
     const loadouts = cur.loadouts.map((l, k) => (k === i ? { items: {} } : l));
     await persist(userId, { gold: cur.gold + gold, loadouts });
+    goldFx.gain(gold);
     return gold;
   }
 

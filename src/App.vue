@@ -4,6 +4,7 @@
   <VersionBadge />
   <GameFxOverlay />
   <XpGainOverlay />
+  <GoldGainOverlay />
 </template>
 
 <script setup lang="ts">
@@ -12,6 +13,7 @@ import VersionBadge from '@/components/VersionBadge.vue';
 import FeedbackFab from '@/components/FeedbackFab.vue';
 import GameFxOverlay from '@/components/GameFxOverlay.vue';
 import XpGainOverlay from '@/components/XpGainOverlay.vue';
+import GoldGainOverlay from '@/components/GoldGainOverlay.vue';
 import { useBodyReminder } from '@/composables/useBodyReminder';
 import { useChallengeReminder } from '@/composables/useChallengeReminder';
 
