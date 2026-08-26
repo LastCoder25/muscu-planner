@@ -143,9 +143,13 @@
                   }}/{{ c.duration_days
                   }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} reps</template>
                 </div>
-                <div v-if="bal(c) !== 0" class="cc-bal" :class="bal(c) > 0 ? 'ahead' : 'behind'">
-                  <template v-if="bal(c) > 0">▲ +{{ bal(c) }} {{ balUnit(c) }}</template>
-                  <template v-else>▼ −{{ -bal(c) }} {{ balUnit(c) }}</template>
+                <div
+                  v-if="balShown(c) !== 0"
+                  class="cc-bal"
+                  :class="balShown(c) > 0 ? 'ahead' : 'behind'"
+                >
+                  <template v-if="balShown(c) > 0">▲ +{{ balShown(c) }} {{ balUnit(c) }}</template>
+                  <template v-else>▼ −{{ -balShown(c) }} {{ balUnit(c) }}</template>
                 </div>
               </button>
             </div>
@@ -822,14 +826,35 @@ function isSetsMode(c: Challenge) {
 function balUnit(c: Challenge) {
   return isSetsMode(c) ? 'séries' : unitOf(c);
 }
+// Badge affiché : RETARD du jour (cible d'aujourd'hui non atteinte) prioritaire,
+// sinon l'AVANCE (surplus) de challengeLiveBalance. Cohérent avec le rose de la barre.
+function balShown(c: Challenge) {
+  const d = challengeDeficit(c);
+  return d > 0 ? -d : Math.max(0, bal(c));
+}
 // Barre de progression SEGMENTÉE (ticket 3c51883b) : découpée par SÉRIES (mode séries) ou
 // par JOURS (reps/durée), plafonnée à 30 segments pour rester lisible.
 // Mode SÉRIES : le remplissage suit les SÉRIES FAITES / total de séries (ticket 38b10eea) —
 // PAS le % de jours complétés (sinon la barre n'était pas divisée par le nb de séries).
+// Ce qu'on DEVRAIT avoir fait pour tenir la cible d'AUJOURD'HUI (jour inclus) −
+// ce qui est fait. Sert au repère « où je devrais en être » (rose). Contrairement à
+// challengeLiveBalance (qui ne pénalise pas la journée en cours), on compte la cible
+// du jour tout de suite → le sportif voit son objectif du jour restant.
+function challengeDeficit(c: Challenge): number {
+  if (c.format === 'cumulative') return Math.max(0, -bal(c)); // cumulé : cible prorata déjà calculée
+  const s = st(c);
+  const di = Math.min(Math.max(0, s.dayIndex), c.duration_days - 1);
+  const expected = c.daily_targets.slice(0, di + 1).reduce((a, b) => a + b, 0);
+  return Math.max(0, expected - s.totalDone);
+}
 // n = nb de cellules, on = cellules FAITES (jaune), expected = cellules où l'on
 // DEVRAIT en être pour tenir les temps (le retard, rose : de `on`+1 à `expected`).
+// Le retard/le fait sont ramenés à l'échelle du défi ; on force AU MOINS 1 cellule
+// dès qu'il y a du fait / du retard pour qu'un petit écart reste VISIBLE.
 function challengeSegs(c: Challenge): { n: number; on: number; expected: number } {
-  const behind = Math.max(0, -bal(c)); // retard, dans l'unité de segmentation (séries ou reps)
+  const behind = challengeDeficit(c); // retard du jour, dans l'unité de segmentation
+  const cells = (val: number, total: number, n: number) =>
+    val > 0 ? Math.min(n, Math.max(1, Math.round((val / total) * n))) : 0;
   if (isSetsMode(c)) {
     const total = c.daily_targets.reduce((a, b) => a + b, 0); // total de séries à faire
     // Si le total de séries est connu (> 0) on segmente par SÉRIE ; sinon (daily_targets à 0
@@ -838,15 +863,15 @@ function challengeSegs(c: Challenge): { n: number; on: number; expected: number 
     if (total > 0) {
       const done = st(c).totalDone; // séries réellement faites
       const n = Math.min(30, Math.max(1, total));
-      const on = Math.min(n, Math.round((done / total) * n));
-      const expected = Math.min(n, on + Math.round((behind / total) * n));
+      const on = cells(done, total, n);
+      const expected = Math.min(n, on + cells(behind, total, n));
       return { n, on, expected };
     }
   }
   const total = c.daily_targets.reduce((a, b) => a + b, 0);
   const n = Math.min(30, Math.max(1, c.duration_days)); // nb de jours
   const on = Math.min(n, Math.round((st(c).completionPct / 100) * n));
-  const expected = total > 0 ? Math.min(n, on + Math.round((behind / total) * n)) : on;
+  const expected = total > 0 ? Math.min(n, on + cells(behind, total, n)) : on;
   return { n, on, expected };
 }
 function totalRepsOf(c: Challenge) {

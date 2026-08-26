@@ -82,13 +82,13 @@
         <div
           v-if="showBalance"
           class="carry-badge"
-          :class="liveBalance > 0 ? 'ahead' : liveBalance < 0 ? 'behind' : 'even'"
+          :class="balDisplay > 0 ? 'ahead' : balDisplay < 0 ? 'behind' : 'even'"
         >
-          <template v-if="liveBalance > 0"
-            >{{ carryOn ? 'Réserve' : 'Avance' }} +{{ show(liveBalance) }}</template
+          <template v-if="balDisplay > 0"
+            >{{ carryOn ? 'Réserve' : 'Avance' }} +{{ show(balDisplay) }}</template
           >
-          <template v-else-if="liveBalance < 0"
-            >{{ carryOn ? 'Dette' : 'Retard' }} −{{ show(-liveBalance) }}</template
+          <template v-else-if="balDisplay < 0"
+            >{{ carryOn ? 'Dette' : 'Retard' }} −{{ show(-balDisplay) }}</template
           >
           <template v-else>Dans les temps</template>
         </div>
@@ -276,7 +276,7 @@
           </div>
           <div class="stb-label">
             <b>{{ seriesProgress.done }}</b> / {{ seriesProgress.target }} séries
-            <span v-if="liveBalance < 0" class="stb-late">· {{ -liveBalance }} de retard</span>
+            <span v-if="todayDeficit > 0" class="stb-late">· {{ todayDeficit }} de retard</span>
           </div>
         </template>
         <template v-else-if="ch.format !== 'cumulative'">
@@ -560,6 +560,23 @@ const carryOn = computed(() => !!ch.value?.config.carry_over && ch.value.format 
 const adaptiveOn = computed(() => !!ch.value?.config.adaptive);
 // Avance/retard « en direct » (inclut le surplus du jour) → affiché à l'utilisateur.
 const liveBalance = computed(() => (ch.value ? challengeLiveBalance(ch.value, today) : 0));
+// Retard « du jour » : cible cumulée jusqu'à AUJOURD'HUI (jour inclus) − fait. On
+// compte la cible du jour tout de suite (≠ liveBalance qui l'ignore le matin) → le
+// sportif voit son objectif du jour restant (repère rose « où je devrais en être »).
+const todayDeficit = computed(() => {
+  const c = ch.value;
+  if (!c) return 0;
+  if (c.format === 'cumulative') return Math.max(0, -liveBalance.value);
+  const di = Math.min(Math.max(0, dayIndex.value), c.duration_days - 1);
+  const expected = c.daily_targets.slice(0, di + 1).reduce((a, b) => a + b, 0);
+  const sets = c.config.count_mode === 'sets';
+  const done = c.progress.reduce((a, p) => a + (sets ? (p.sets?.length ?? 0) : p.done || 0), 0);
+  return Math.max(0, expected - done);
+});
+// Solde affiché : le retard du jour est prioritaire ; sinon l'avance (surplus).
+const balDisplay = computed(() =>
+  todayDeficit.value > 0 ? -todayDeficit.value : Math.max(0, liveBalance.value),
+);
 // Visible dès que le défi a commencé (y compris les jours de repos, où l'on peut
 // prendre de l'avance sans que le panneau « objectif du jour » s'affiche).
 const showBalance = computed(() => !!ch.value && dayIndex.value >= 0);
@@ -760,12 +777,13 @@ const seriesPct = computed(() => {
   return target > 0 ? Math.min(100, Math.round((done / target) * 100)) : 0;
 });
 // Position ATTENDUE (« dans les temps ») en % : séries faites + le retard courant.
-// Jamais sous la position faite (une avance ne fait pas de rose).
+// Pas de rose si l'on est à jour/en avance ; sinon on garantit une bande rose
+// VISIBLE (min +6 %) même pour un petit retard sur un gros total.
 const seriesExpectedPct = computed(() => {
   const { done, target } = seriesProgress.value;
-  if (target <= 0) return 0;
-  const expected = done - liveBalance.value; // liveBalance < 0 = retard → expected > done
-  return Math.min(100, Math.max(seriesPct.value, Math.round((expected / target) * 100)));
+  if (target <= 0 || todayDeficit.value <= 0) return seriesPct.value;
+  const raw = Math.round(((done + todayDeficit.value) / target) * 100);
+  return Math.min(100, Math.max(seriesPct.value + 6, raw));
 });
 const todaySets = computed<ChallengeSet[]>(() => entryOf(dayIndex.value)?.sets ?? []);
 // Séries de DURÉE du jour (gainage) : une par pause du chrono (champ `sec`).
