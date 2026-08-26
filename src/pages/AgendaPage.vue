@@ -29,9 +29,20 @@
         </div>
         <div v-if="!d.entries.length" class="day-empty">—</div>
         <div v-else class="day-entries">
-          <div v-for="(e, i) in d.entries" :key="i" class="entry" :class="'k-' + e.kind">
+          <component
+            :is="e.link ? 'button' : 'div'"
+            v-for="(e, i) in d.entries"
+            :key="i"
+            class="entry"
+            :class="['k-' + e.kind, { clickable: !!e.link }]"
+            @click="goEntry(e)"
+          >
             <q-icon :name="e.icon" size="20px" class="entry-ic" />
             <div class="entry-main">
+              <div class="entry-top">
+                <span class="entry-src" :class="'src-' + e.kind">{{ e.source }}</span>
+                <q-icon v-if="e.link" name="chevron_right" size="16px" class="entry-go" />
+              </div>
               <div class="entry-title">{{ e.title }}</div>
               <div v-if="e.meta" class="entry-meta">{{ e.meta }}</div>
               <div v-if="e.xp > 0" class="entry-gain">
@@ -39,7 +50,7 @@
                 <span v-if="e.energy > 0" class="eg-en">+{{ e.energy }} ⚡</span>
               </div>
             </div>
-          </div>
+          </component>
         </div>
       </div>
     </template>
@@ -49,17 +60,22 @@
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useLogsStore } from '@/stores/logs';
 import { useTennisStore } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore } from '@/stores/challenges';
+import { useComboStore } from '@/stores/combo';
 import { challengeDayXp } from '@/lib/challenges';
+import { legSets, legMode, type ComboSet } from '@/lib/combo';
 import {
   sessionXp,
   otherSportXp,
   cardioSessionXp,
   drillSessionXp,
   estimateKm,
+  REP_XP,
+  assistMult,
 } from '@/lib/athlete';
 import { ACTIVITY_LABELS, ACTIVITY_ICONS, paceLabel, isCardioOutingChallenge } from '@/data/cardio';
 
@@ -67,20 +83,28 @@ import { ACTIVITY_LABELS, ACTIVITY_ICONS, paceLabel, isCardioOutingChallenge } f
 // PAS l'énergie d'aventure (fond = muscu + cardio + autre sport uniquement).
 const SPECIFIQUE_DISC = new Set(['crossfit', 'hyrox', 'mobilite', 'prepa_physique']);
 
+const router = useRouter();
 const logs = useLogsStore();
 const tennis = useTennisStore();
 const cardio = useCardioStore();
 const challenges = useChallengesStore();
+const combo = useComboStore();
 const loading = ref(true);
 
 interface Entry {
   ts: number;
-  kind: 'muscu' | 'tennis' | 'cardio' | 'challenge';
+  kind: 'muscu' | 'tennis' | 'cardio' | 'challenge' | 'combo';
   icon: string;
   title: string;
   meta: string;
   xp: number; // XP gagnée par l'activité
   energy: number; // énergie d'aventure gagnée (= XP si activité de fond, 0 sinon)
+  source: string; // libellé de la provenance (chip) : Séance / Cardio / Challenge / Défi 360…
+  link?: string; // route ouverte au clic (le défi/la séance correspondante)
+}
+
+function goEntry(e: Entry): void {
+  if (e.link) void router.push(e.link);
 }
 
 function fmtDur(min?: number): string {
@@ -131,6 +155,9 @@ const entries = computed<Entry[]>(() => {
       meta: bits.join(' · '),
       xp,
       energy: SPECIFIQUE_DISC.has(disc) ? 0 : xp, // spécifique = XP mais pas d'énergie
+      source:
+        disc === 'autre_sport' ? 'Autre sport' : disc === 'prepa_physique' ? 'Prépa' : 'Séance',
+      link: `/bilan/${r.id}?h=1`,
     });
   }
   for (const r of tennis.logs) {
@@ -142,6 +169,8 @@ const entries = computed<Entry[]>(() => {
       meta: fmtDur(r.payload.duration_min),
       xp: drillSessionXp(r.payload),
       energy: 0, // tennis exclu de l'énergie d'aventure
+      source: 'Tennis',
+      link: `/court/bilan/${r.id}?h=1`,
     });
   }
   // DÉDUP anti-doublon : une sortie MIROIR (créée depuis un défi) ne s'affiche pas
@@ -182,6 +211,9 @@ const entries = computed<Entry[]>(() => {
       meta: bits.join(' · '),
       xp,
       energy: xp,
+      // Sortie miroir (issue d'un défi) → ouvre le défi ; sinon la page Cardio.
+      source: p.challenge_id ? 'Challenge' : 'Cardio',
+      link: p.challenge_id ? `/challenges/${p.challenge_id}` : '/cardio',
     });
   }
   // Reps de défis jour par jour, SAUF les vraies sorties cardio (marche/course/
@@ -209,7 +241,56 @@ const entries = computed<Entry[]>(() => {
         meta,
         xp,
         energy: xp, // défis muscu/cardio → comptent dans le fond → énergie
+        source: 'Challenge',
+        link: `/challenges/${c.id}`,
       });
+    }
+  }
+  // Défi 360 (combo) : les séries/reps de CHAQUE exo, jour par jour → visibles dans
+  // l'agenda et cliquables vers le détail du 360.
+  for (const c of combo.list) {
+    for (const leg of c.legs) {
+      const sets = legSets(leg);
+      if (!sets.length) continue;
+      const mode = legMode(leg);
+      const byDay = new Map<string, ComboSet[]>();
+      for (const s of sets) {
+        if (!s.date) continue;
+        (byDay.get(s.date) ?? byDay.set(s.date, []).get(s.date)!).push(s);
+      }
+      for (const [date, daySets] of byDay) {
+        const [y, m, dd] = date.split('-').map(Number);
+        const ts = new Date(y!, (m ?? 1) - 1, dd ?? 1, 12).getTime();
+        const reps = daySets.reduce((a, s) => a + (s.reps || 0), 0);
+        // XP « détail » du jour (façon séance) : reps × poids-de-rep (assisté ×0,6) + tonnage.
+        let xp = 0;
+        for (const s of daySets) {
+          const r = s.reps || 0;
+          xp += r * REP_XP * (leg.rep_weight || 1) * assistMult(s.assisted);
+          if (s.weight) xp += (r * s.weight) / 500;
+        }
+        xp = Math.round(xp);
+        const repsList = daySets.map((s) => s.reps).filter((r) => r > 0);
+        const meta =
+          mode === 'time'
+            ? `${reps} s`
+            : mode === 'reps'
+              ? `${reps} reps`
+              : `${daySets.length} série${daySets.length > 1 ? 's' : ''}${
+                  repsList.length ? ' · ' + repsList.join('/') + ' reps' : ''
+                }`;
+        out.push({
+          ts,
+          kind: 'combo',
+          icon: 'track_changes',
+          title: leg.exercise_name,
+          meta,
+          xp,
+          energy: xp, // le Défi 360 alimente la piste Muscu → énergie
+          source: 'Défi 360',
+          link: `/combo/${c.id}`,
+        });
+      }
     }
   }
   return out.filter((e) => e.ts >= weekStart.value && e.ts < weekEnd.value);
@@ -239,6 +320,7 @@ onMounted(async () => {
       tennis.fetchLogs().catch(() => undefined),
       cardio.fetchLogs().catch(() => undefined),
       challenges.list.length ? Promise.resolve() : challenges.fetchMine().catch(() => undefined),
+      combo.list.length ? Promise.resolve() : combo.fetchMine().catch(() => undefined),
     ]);
   } finally {
     loading.value = false;
@@ -344,15 +426,60 @@ onMounted(async () => {
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--src-c, var(--accent));
   border-radius: 12px;
   background: var(--surface);
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.entry.clickable {
+  cursor: pointer;
+}
+.entry.clickable:active {
+  transform: scale(0.99);
+}
+/* Couleur de source (liseré + puce + icône) par provenance. */
+.entry.k-muscu {
+  --src-c: var(--accent);
+}
+.entry.k-tennis {
+  --src-c: #5fd0e0;
+}
+.entry.k-cardio {
+  --src-c: #ff9d4d;
 }
 .entry.k-challenge {
-  border-left-color: var(--d2, #c6d24a);
+  --src-c: var(--d2, #c6d24a);
+}
+.entry.k-combo {
+  --src-c: #b98cff;
 }
 .entry-ic {
-  color: var(--accent);
+  color: var(--src-c, var(--accent));
+}
+.entry-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 1px;
+}
+.entry-src {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--src-c, var(--accent));
+  border: 1px solid var(--src-c, var(--accent));
+  border-radius: 999px;
+  padding: 1px 7px;
+  line-height: 1.5;
+}
+.entry-go {
+  color: var(--dim);
+  flex: none;
 }
 .entry-main {
   flex: 1;
