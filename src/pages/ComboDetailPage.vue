@@ -112,7 +112,7 @@
           <span v-for="(s, i) in legSets(leg)" :key="i" class="leg-set-chip">
             <template v-if="legMode(leg) === 'time'">{{ s.reps }} s</template>
             <template v-else
-              >{{ s.reps }}<template v-if="s.weight">×{{ s.weight }}</template
+              >{{ s.reps }}<template v-if="s.weight">×{{ s.weight }} kg</template
               ><template v-if="s.assisted"> ·a</template></template
             >
           </span>
