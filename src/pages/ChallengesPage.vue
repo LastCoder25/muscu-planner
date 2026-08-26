@@ -105,7 +105,7 @@
                 v-for="c in grp.list"
                 :key="c.id"
                 class="ch-tile"
-                :class="{ expiring: expiring(c), bw: noEquipIds.has(c.exercise_id) }"
+                :class="{ expiring: expiring(c) }"
                 @click="goDetail(c.id)"
               >
                 <div v-if="expiring(c)" class="ct-expire">⏳ Expire bientôt</div>
@@ -169,13 +169,7 @@
               : 'Aucun challenge abandonné.'
           }}
         </div>
-        <button
-          v-for="c in shown"
-          :key="c.id"
-          class="ch-card"
-          :class="{ bw: noEquipIds.has(c.exercise_id) }"
-          @click="goDetail(c.id)"
-        >
+        <button v-for="c in shown" :key="c.id" class="ch-card" @click="goDetail(c.id)">
           <div class="cc-top">
             <span class="ch-ic">
               <img v-if="exerciseImage(c.exercise_id)" :src="exerciseImage(c.exercise_id)" alt="" />
@@ -1579,12 +1573,6 @@ onMounted(async () => {
 }
 .ch-tile:active {
   transform: scale(0.99);
-}
-/* Exo 100 % poids du corps (aucun matériel) → liseré cyan à gauche. */
-.ch-tile.bw:not(.expiring),
-.ch-card.bw {
-  border-left-width: 3px;
-  border-left-color: #5fd0e0;
 }
 /* Défi bientôt expiré et pas fini → encadré rouge d'alerte. */
 .ch-tile.expiring {

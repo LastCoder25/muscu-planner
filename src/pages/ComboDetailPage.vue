@@ -55,8 +55,7 @@
         v-for="leg in c.legs"
         :key="leg.exercise_id"
         class="leg"
-        :class="{ ok: legComplete(leg), bw: noEquipIds.has(leg.exercise_id) }"
-        :title="noEquipIds.has(leg.exercise_id) ? 'Aucun matériel (poids du corps)' : undefined"
+        :class="{ ok: legComplete(leg) }"
       >
         <div class="leg-top">
           <span class="leg-emo">{{ slotEmoji(leg.slot) }}</span>
@@ -518,11 +517,6 @@ onMounted(async () => {
 }
 .leg.ok {
   border-color: var(--d1);
-}
-/* Exo SANS AUCUN matériel (poids du corps pur : pompes, gainage…) → liseré gauche cyan. */
-.leg.bw {
-  border-left-width: 3px;
-  border-left-color: #5fd0e0;
 }
 .leg-top {
   display: flex;
