@@ -63,6 +63,9 @@
           <div class="leg-main">
             <div class="leg-name">
               {{ leg.exercise_name }}
+              <span v-if="noEquipIds.has(leg.exercise_id)" class="leg-bw-badge"
+                >🤸 Poids du corps</span
+              >
               <span v-if="leg.weight_kg" class="leg-kg">{{ leg.weight_kg }} kg</span>
             </div>
             <div class="leg-sub">
@@ -542,6 +545,19 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--dim);
   margin-left: 4px;
+}
+/* Badge « poids du corps » (aucun matériel) — cyan, lisible, distinct du vert « atteint ». */
+.leg-bw-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #5fd0e0;
+  border: 1px solid #5fd0e0;
+  border-radius: 999px;
+  padding: 0 7px;
+  margin-left: 6px;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 .leg-sub {
   font-size: 12px;
