@@ -181,11 +181,15 @@ export const round1 = (x: number): number => Math.round(x * 10) / 10;
 const DUST_BY_RARITY: Record<Rarity, number> = Object.fromEntries(
   RANK_ORDER.map((r, i) => [r, Math.round(4 * Math.pow(1.5, i))]),
 ) as Record<Rarity, number>;
-// Or de vente : base + ratio relevés (ticket b63f2211) → vendre un doublon de haut rang
-// rapporte une somme qui COMPTE face aux runs (A ≈ 730, SSS ≈ 3550), pas 134.
+// Or de vente PAR RANG (v0.614) : base + ratio RELEVÉS pour que vendre ait un VRAI intérêt
+// face à l'économie (donjons/bâtiments en milliers d'or). Courbe RAIDE (×1,8/rang) → la
+// rareté pèse fort : commun 70 → primordial ≈ 4 300. Le JET et le NIVEAU d'objet ajoutent
+// par-dessus (cf. sellValueOf) → deux mêmes rangs ne valent pas pareil.
 const GOLD_BY_RARITY: Record<Rarity, number> = Object.fromEntries(
-  RANK_ORDER.map((r, i) => [r, Math.round(30 * Math.pow(1.7, i))]),
+  RANK_ORDER.map((r, i) => [r, Math.round(70 * Math.pow(1.8, i))]),
 ) as Record<Rarity, number>;
+// Le JET (0..1) rapporte jusqu'à +70 % du prix (un jet parfait = objet bien plus vendable).
+const SELL_JET_BONUS = 0.7;
 // Le coût d'amélioration monte avec le rang (un rang haut = puits plus profond).
 // ADOUCI (infusion = progression verticale obligatoire, pas un luxe) : sans ça, tout
 // monter à son niveau serait un mur de grind. Linéaire léger sur 10 rangs.
@@ -227,11 +231,19 @@ export function investedDust(it: Item): number {
 export function salvageValue(it: Item): number {
   return DUST_BY_RARITY[it.rarity];
 }
-/** Or obtenu en vendant un objet (∝ rang). */
-export function sellValue(it: Item): number {
-  return GOLD_BY_RARITY[it.rarity];
+/** Or de vente d'un drop selon RANG + JET + NIVEAU d'objet (source unique objets/talents/
+ *  familiers). Rang = base RAIDE (×1,8/rang) ; jet = jusqu'à +70 % ; ilvl = bonus de niveau
+ *  (objet farmé plus profond = plus cher). → deux mêmes rangs ne valent pas pareil, et vendre
+ *  du haut rang COMPTE face aux runs/bâtiments. */
+export function sellValueOf(rank: Rarity, roll = 0, level = 1): number {
+  const jet = 1 + Math.min(1, Math.max(0, roll)) * SELL_JET_BONUS;
+  return Math.round(GOLD_BY_RARITY[rank] * jet * itemLevelMult(level));
 }
-/** Or de vente pour un RANG donné (talents/familiers qui n'ont pas de forme Item). */
+/** Or obtenu en vendant un objet (rang + jet + niveau). */
+export function sellValue(it: Item): number {
+  return sellValueOf(it.rarity, it.roll ?? 0, it.level);
+}
+/** Or de vente pour un RANG seul (rétro-compat ; préférer sellValueOf avec jet + niveau). */
 export function sellValueForRarity(rank: Rarity): number {
   return GOLD_BY_RARITY[rank];
 }

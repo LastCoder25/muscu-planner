@@ -285,6 +285,20 @@ describe('recyclage / vente', () => {
     expect(salvageValue(higher)).toBeGreaterThan(salvageValue(base));
     expect(sellValue(higher)).toBeGreaterThan(sellValue(base));
   });
+  it('vente : le JET et le NIVEAU impactent le prix (même rang)', () => {
+    const r = 'legendaire' as const;
+    const lowJet = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 20 },
+      rarity: r,
+      roll: 0.1,
+      level: 20,
+    });
+    const highJet = item({ ...lowJet, roll: 0.95 });
+    expect(sellValue(highJet)).toBeGreaterThan(sellValue(lowJet)); // jet ↑ → prix ↑
+    const deep = item({ ...lowJet, level: 60 });
+    expect(sellValue(deep)).toBeGreaterThan(sellValue(lowJet)); // niveau d'objet ↑ → prix ↑
+  });
 });
 
 describe('économie — infusion & coûts', () => {

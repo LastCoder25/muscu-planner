@@ -236,7 +236,9 @@
     <q-dialog :model-value="!!roomFx" persistent>
       <q-card class="fx-card">
         <template v-if="roomFx?.kind === 'combat'">
+          <!-- Animation sautée en AUTO rapide (combatSkipped) → résultat direct, on enchaîne. -->
           <CombatStage
+            v-if="!combatSkipped"
             :key="run.current"
             :player-name="char.row?.pseudo ?? 'Toi'"
             :player-max-pv="run.maxPv"
@@ -836,6 +838,7 @@ const roomFx = ref<{
 const stageFights = ref<StageFight[]>([]);
 const stageStartPv = ref(0); // PV du joueur AU DÉBUT du combat animé (attrition)
 const fxDone = ref(false); // combat : résultat révélé à la fin de l'animation
+const combatSkipped = ref(false); // AUTO rapide : animation de combat sautée (résultat direct)
 const playerProfile = computed(() => character.value.profile);
 const playerEquipped = computed(() => char.row?.equipped ?? {});
 
@@ -1036,7 +1039,11 @@ function fightRoom(id: number, isBoss: boolean) {
       log: res.log,
     },
   ];
-  fxDone.value = false;
+  // En AUTO à vitesse élevée (≥ ×3), on SAUTE l'animation de combat (le vrai goulot au ×20 :
+  // le pacing entre salles était accéléré mais pas le rejeu) → résultat direct, on enchaîne.
+  const skip = autoMode.value && autoSpeed.value >= 3;
+  combatSkipped.value = skip;
+  fxDone.value = skip; // skip → résultat déjà « révélé » → autoTick ferme tout de suite
   roomFx.value = { kind: 'combat', win: res.win };
 }
 // Grade d'un coffre (bronze→platine) : seed SÉPARÉ (n'interfère pas avec le tirage du

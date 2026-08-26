@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { normalizePseudo, levelUpEnergy } from '@/lib/character';
 import {
   sellValue,
-  sellValueForRarity,
+  sellValueOf,
   levelToEnchant,
   enchantMult,
   round1,
@@ -30,6 +30,7 @@ import {
   talentEffects,
   talentTier,
   talentRank,
+  talentRollOf,
   type TalentInstance,
 } from '@/lib/talents';
 import { voiePassiveEffects, VOIES } from '@/lib/voies';
@@ -654,7 +655,8 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur) return 0;
     const t = cur.talents.find((x) => x.id === talentId);
     if (!t || t.equipped) return 0;
-    const gain = sellValueForRarity(talentRank(talentTier(t.xp)));
+    // Rang + JET + niveau du talent → même barème que les objets (vente qui compte).
+    const gain = sellValueOf(talentRank(talentTier(t.xp)), talentRollOf(t), t.level ?? 1);
     await persistOptimistic(userId, {
       gold: cur.gold + gain,
       talents: cur.talents.filter((x) => x.id !== talentId),
