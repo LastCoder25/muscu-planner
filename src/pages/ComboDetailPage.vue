@@ -52,7 +52,7 @@
       />
 
       <div
-        v-for="leg in c.legs"
+        v-for="leg in orderedLegs"
         :key="leg.exercise_id"
         class="leg"
         :class="{ ok: legComplete(leg) }"
@@ -189,6 +189,18 @@ const pct = computed(() => (c.value ? comboProgressPct(c.value) : 0));
 const over = computed(() =>
   c.value ? comboOverachievement(c.value) : { bonusXp: 0, legsOver: 0, totalLegs: 0 },
 );
+// Ordre d'affichage : les plus PROCHES de la complétude en haut, les autres par
+// avancement décroissant, les TERMINÉS relégués en bas.
+const orderedLegs = computed(() => {
+  const legs = c.value?.legs ?? [];
+  const frac = (l: ComboLeg) => (l.target > 0 ? legDone(l) / l.target : 0);
+  return [...legs].sort((a, b) => {
+    const ca = legComplete(a) ? 1 : 0;
+    const cb = legComplete(b) ? 1 : 0;
+    if (ca !== cb) return ca - cb; // non terminés d'abord, terminés en bas
+    return frac(b) - frac(a); // le plus proche de la complétude en haut
+  });
+});
 
 function fmtDM(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
