@@ -847,32 +847,33 @@ function challengeDeficit(c: Challenge): number {
   const expected = c.daily_targets.slice(0, di + 1).reduce((a, b) => a + b, 0);
   return Math.max(0, expected - s.totalDone);
 }
+// Total de référence du défi (dans l'unité de progression) : cumulé → config.total,
+// sinon la somme des cibles quotidiennes.
+function challengeRefTotal(c: Challenge): number {
+  if (c.format === 'cumulative') return c.config.total ?? 0;
+  return c.daily_targets.reduce((a, b) => a + b, 0);
+}
 // n = nb de cellules, on = cellules FAITES (jaune), expected = cellules où l'on
 // DEVRAIT en être pour tenir les temps (le retard, rose : de `on`+1 à `expected`).
 // Le retard/le fait sont ramenés à l'échelle du défi ; on force AU MOINS 1 cellule
 // dès qu'il y a du fait / du retard pour qu'un petit écart reste VISIBLE.
 function challengeSegs(c: Challenge): { n: number; on: number; expected: number } {
-  const behind = challengeDeficit(c); // retard du jour, dans l'unité de segmentation
+  const behind = challengeDeficit(c); // retard du jour, dans l'unité de progression
   const cells = (val: number, total: number, n: number) =>
     val > 0 ? Math.min(n, Math.max(1, Math.round((val / total) * n))) : 0;
-  if (isSetsMode(c)) {
-    const total = c.daily_targets.reduce((a, b) => a + b, 0); // total de séries à faire
-    // Si le total de séries est connu (> 0) on segmente par SÉRIE ; sinon (daily_targets à 0
-    // pour certains défis Séries) on retombe sur une segmentation par JOURS → jamais 1 seule
-    // cellule continue (ticket 034b714e).
-    if (total > 0) {
-      const done = st(c).totalDone; // séries réellement faites
-      const n = Math.min(30, Math.max(1, total));
-      const on = cells(done, total, n);
-      const expected = Math.min(n, on + cells(behind, total, n));
-      return { n, on, expected };
-    }
+  // Cumulé OU défi X/jour : on segmente par UNITÉ (série/rep) tant qu'un total est
+  // connu ; sinon (rien de chiffré) on retombe sur une segmentation par JOURS.
+  const total = challengeRefTotal(c);
+  if (total > 0) {
+    const done = st(c).totalDone; // fait, même unité que le total
+    const n = Math.min(30, Math.max(1, total));
+    const on = cells(done, total, n);
+    const expected = Math.min(n, on + cells(behind, total, n));
+    return { n, on, expected };
   }
-  const total = c.daily_targets.reduce((a, b) => a + b, 0);
   const n = Math.min(30, Math.max(1, c.duration_days)); // nb de jours
   const on = Math.min(n, Math.round((st(c).completionPct / 100) * n));
-  const expected = total > 0 ? Math.min(n, on + cells(behind, total, n)) : on;
-  return { n, on, expected };
+  return { n, on, expected: on };
 }
 function totalRepsOf(c: Challenge) {
   return challengeTotalReps(c);

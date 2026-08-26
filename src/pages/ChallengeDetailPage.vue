@@ -118,6 +118,16 @@
           <div class="ring-wrap">
             <svg viewBox="0 0 120 120" class="ring">
               <circle class="rbg" cx="60" cy="60" r="52" />
+              <!-- Rose : où l'on devrait en être (retard) — sous le jaune. -->
+              <circle
+                v-if="ringExpectedPct > pct"
+                class="rexp"
+                cx="60"
+                cy="60"
+                r="52"
+                stroke-dasharray="327"
+                :stroke-dashoffset="327 * (1 - ringExpectedPct)"
+              />
               <circle
                 class="rfg"
                 cx="60"
@@ -603,6 +613,14 @@ const isCumulative = computed(() => ch.value?.format === 'cumulative');
 const pct = computed(() =>
   todayTarget.value ? Math.min(1, doneToday.value / todayTarget.value) : 0,
 );
+// Position ATTENDUE sur l'anneau (« où je devrais en être », rose). Pour le cumulé
+// l'anneau = total fait / cible totale → on ajoute le retard prorata du jour. (Les
+// défis X/jour n'ont pas de rose ici : leur anneau représente l'objectif du jour.)
+const ringExpectedPct = computed(() => {
+  const c = ch.value;
+  if (!c || !isCumulative.value || todayDeficit.value <= 0) return pct.value;
+  return Math.min(1, (stats.value.totalDone + todayDeficit.value) / (c.config.total || 1));
+});
 // Séparateurs de l'anneau (tous les 10 %) pour lire l'avancement des défis en
 // temps (gainage) — 10 traits radiaux au bord de la bande (r 52, épaisseur 8).
 // Repères du cercle : en mode SÉRIES, un repère PAR SÉRIE à faire aujourd'hui (2..16) →
@@ -1488,6 +1506,14 @@ onBeforeUnmount(() => {
 .rfg {
   fill: none;
   stroke: var(--accent);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.4s;
+}
+/* Position attendue (« où je devrais en être ») en rose, sous le jaune. */
+.rexp {
+  fill: none;
+  stroke: #ff6a9c;
   stroke-width: 8;
   stroke-linecap: round;
   transition: stroke-dashoffset 0.4s;
