@@ -378,6 +378,12 @@
             <div class="cl-top">
               <button class="cl-name" @click="openHistory(leg)">
                 {{ leg.exercise_name }}
+                <span
+                  v-if="noEquipIds.has(leg.exercise_id)"
+                  class="bw-ic"
+                  title="Poids du corps (aucun matériel)"
+                  >🤸</span
+                >
                 <span v-if="leg.weight_kg" class="cl-kg">{{ leg.weight_kg }} kg</span>
                 <q-icon name="history" size="14px" class="cl-hist-ic" />
               </button>
@@ -577,7 +583,9 @@ const loading = ref(true);
 // Exos SANS aucun matériel (poids du corps) → encadrement distinct sur les cartes.
 const noEquipIds = ref<Set<string>>(new Set());
 async function loadEquip() {
-  const ids = [...new Set(store.list.map((c) => c.exercise_id))];
+  // Challenges solo + exos du Défi 360 (les legs du combo actif) → une seule requête.
+  const comboIds = comboStore.list.flatMap((c) => c.legs.map((l) => l.exercise_id));
+  const ids = [...new Set([...store.list.map((c) => c.exercise_id), ...comboIds])];
   if (!ids.length) return;
   try {
     const rows = await library.fetchByIds(ids);
@@ -1736,6 +1744,22 @@ onMounted(async () => {
   white-space: nowrap;
   text-transform: none;
   vertical-align: middle;
+}
+/* Pastille ronde 🤸 (poids du corps) — exos du Défi 360. */
+.bw-ic {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  line-height: 1;
+  border-radius: 50%;
+  background: rgba(95, 208, 224, 0.15);
+  border: 1px solid #5fd0e0;
+  vertical-align: middle;
+  margin-left: 5px;
 }
 .bar {
   height: 8px;
