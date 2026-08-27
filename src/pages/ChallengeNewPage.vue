@@ -97,8 +97,11 @@
             <div class="ex-main">
               <div class="ex-name">
                 {{ e.name }}
-                <span v-if="isNoEquipmentExercise(e.equipment_required, e.tags)" class="bw-badge"
-                  >🤸 Poids du corps</span
+                <span
+                  v-if="isNoEquipmentExercise(e.equipment_required, e.tags)"
+                  class="bw-ic"
+                  title="Poids du corps (aucun matériel)"
+                  >🤸</span
                 >
               </div>
               <div class="ex-meta">
@@ -1234,18 +1237,19 @@ onMounted(async () => {
   color: var(--dim);
   text-transform: capitalize;
 }
-/* Badge « poids du corps » (aucun matériel) — cyan, lisible. */
-.bw-badge {
-  display: inline-block;
-  font-size: 9.5px;
-  font-weight: 700;
-  color: #5fd0e0;
+/* Pastille ronde 🤸 (poids du corps, aucun matériel) — cyan. */
+.bw-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  line-height: 1;
+  border-radius: 50%;
+  background: rgba(95, 208, 224, 0.15);
   border: 1px solid #5fd0e0;
-  border-radius: 999px;
-  padding: 0 6px;
   margin-left: 6px;
-  line-height: 1.5;
-  white-space: nowrap;
   vertical-align: middle;
 }
 .fav {

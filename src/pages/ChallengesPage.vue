@@ -119,8 +119,11 @@
                     <q-icon v-else name="fitness_center" size="15px" />
                   </span>
                   <span class="ct-name">{{ c.exercise_name }}</span>
-                  <span v-if="noEquipIds.has(c.exercise_id)" class="bw-badge"
-                    >🤸 Poids du corps</span
+                  <span
+                    v-if="noEquipIds.has(c.exercise_id)"
+                    class="bw-ic"
+                    title="Poids du corps (aucun matériel)"
+                    >🤸</span
                   >
                 </div>
                 <span class="ct-cost" :class="{ accessoire: cardCostLabel(c) === 'accessoire' }">{{
@@ -180,7 +183,12 @@
           </div>
           <div class="cc-meta">
             {{ fmtName(c.format) }} · {{ c.duration_days }} j
-            <span v-if="noEquipIds.has(c.exercise_id)" class="bw-badge">🤸 Poids du corps</span>
+            <span
+              v-if="noEquipIds.has(c.exercise_id)"
+              class="bw-ic"
+              title="Poids du corps (aucun matériel)"
+              >🤸</span
+            >
           </div>
           <div class="seg-line" :style="{ '--n': challengeSegs(c).n }">
             <span
@@ -1731,21 +1739,7 @@ onMounted(async () => {
   margin-top: 4px;
 }
 /* Badge « poids du corps » (aucun matériel) — cyan, lisible. */
-.bw-badge {
-  flex: none;
-  display: inline-block;
-  font-size: 9.5px;
-  font-weight: 700;
-  color: #5fd0e0;
-  border: 1px solid #5fd0e0;
-  border-radius: 999px;
-  padding: 0 6px;
-  line-height: 1.5;
-  white-space: nowrap;
-  text-transform: none;
-  vertical-align: middle;
-}
-/* Pastille ronde 🤸 (poids du corps) — exos du Défi 360. */
+/* Pastille ronde 🤸 (poids du corps, aucun matériel) — challenges + Défi 360. */
 .bw-ic {
   flex: none;
   display: inline-flex;
