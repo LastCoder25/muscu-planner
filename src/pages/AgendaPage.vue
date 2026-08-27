@@ -40,7 +40,7 @@
             <q-icon :name="e.icon" size="20px" class="entry-ic" />
             <div class="entry-main">
               <div class="entry-top">
-                <span class="entry-src" :class="'src-' + e.kind">{{ e.source }}</span>
+                <span class="entry-src">{{ e.source }}</span>
                 <q-icon v-if="e.link" name="chevron_right" size="16px" class="entry-go" />
               </div>
               <div class="entry-title">{{ e.title }}</div>
@@ -342,9 +342,6 @@ onMounted(async () => {
   font-weight: 700;
   color: var(--text);
   margin: 0;
-}
-.page-sub {
-  margin: 4px 0 20px;
 }
 .text-dim {
   color: var(--dim);

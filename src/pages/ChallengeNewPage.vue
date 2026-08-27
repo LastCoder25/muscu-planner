@@ -1129,14 +1129,6 @@ onMounted(async () => {
     cursor: not-allowed;
   }
 }
-.ex-lock {
-  flex: none;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--dim);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
 /* Jauge d'espace des défis (bannière étape 1) */
 .cap-card {
   margin-bottom: 12px;

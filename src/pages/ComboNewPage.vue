@@ -1198,11 +1198,6 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 12px;
 }
-.foot-info {
-  flex: 1;
-  font-size: 12.5px;
-  color: var(--dim);
-}
 .cta-bar {
   padding-top: 12px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom));

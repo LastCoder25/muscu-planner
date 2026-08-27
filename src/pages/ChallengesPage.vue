@@ -1125,49 +1125,11 @@ onMounted(async () => {
   color: var(--dim);
   margin-top: 4px;
 }
-.cc-cost {
-  color: var(--accent);
-}
 .cap-num {
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
   min-width: 30px;
-}
-/* Bannière Défi 360 */
-.combo-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  text-align: left;
-  margin-bottom: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid var(--accent);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-}
-.combo-banner.ghost {
-  border-style: dashed;
-  border-color: var(--line);
-  background: var(--surface);
-}
-.cb-emo {
-  font-size: 24px;
-}
-.cb-main {
-  flex: 1;
-  min-width: 0;
-}
-.cb-title {
-  font-weight: 700;
-  font-size: 15px;
-}
-.cb-sub {
-  font-size: 12px;
-  color: var(--dim);
 }
 
 /* Segmenté Solo / Défi 360 */
@@ -1299,13 +1261,6 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
-}
-.link-btn {
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 12.5px;
-  cursor: pointer;
 }
 .combo-leg {
   background: var(--surface);
@@ -1453,13 +1408,6 @@ onMounted(async () => {
   color: #15120e;
   background: var(--d1);
   border-color: var(--d1);
-}
-.cl-add-lbl {
-  margin-top: 8px;
-  font-size: 11px;
-  color: var(--dim);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
 }
 .cl-actions {
   flex: none;
