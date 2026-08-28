@@ -190,6 +190,11 @@ describe('expedition — résolution', () => {
     expect(o.enchantScrolls).toBeGreaterThan(0);
     expect(o.energy).toBeGreaterThan(0); // les mines rendent un peu d'énergie
   });
+  it('énergie de mine BORNÉE : jamais plus de mineEnergyMax même profonde/lointaine (ticket a0d16472)', () => {
+    const deepFar: Poi = { ...mine, level: 80, distNorm: 0.99 };
+    const o = resolveOutcome(strong, deepFar, 7);
+    expect(o.energy).toBeLessThanOrEqual(EXPE.mineEnergyMax);
+  });
   it('camp/repaire : PAS d’énergie (mines uniquement)', () => {
     expect(resolveOutcome(strong, lair, 3).energy).toBe(0);
   });

@@ -129,6 +129,12 @@ export const EXPE = {
   goldCostBase: { mine: 22, camp: 65, lair: 155, arena: 240 },
   goldCostExp: 1.6,
   failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
+  // ÉNERGIE des mines : BORNÉE (ticket a0d16472). Le facteur temps `tf` n'est pas
+  // plafonné (un trajet long × haut niveau donnait ~1300 ⚡ pour une seule expé, ce qui
+  // contredit « l'énergie est un complément, jamais un substitut au sport »). On limite
+  // le tf pris en compte ET on cape la valeur finale à ~1 run.
+  mineEnergyTfCap: 2.5, // l'énergie ne profite pas des longs trajets comme le loot
+  mineEnergyMax: 60, // plafond dur par expédition (≈ 1 run)
 } as const;
 
 // Arène : survie par vagues, SANS fin fixe. La difficulté croît de façon
@@ -533,7 +539,13 @@ export function resolveOutcome(
   // ÉNERGIE : les MINES rendent un peu d'énergie de jeu (∝ niveau × temps de trajet)
   // → un revenu d'énergie passif, complément du sport, qui adoucit le pincement de
   // fin de partie (le coût des runs monte plus vite que l'énergie/séance). Mines seules.
-  const energy = poi.type === 'mine' ? Math.round((4 + poi.level * 1.5) * tf) : 0;
+  const energy =
+    poi.type === 'mine'
+      ? Math.min(
+          EXPE.mineEnergyMax,
+          Math.round((4 + poi.level * 1.5) * Math.min(tf, EXPE.mineEnergyTfCap)),
+        )
+      : 0;
   let text = pick(rng, WIN_TEXT[poi.type]);
   // EMBUSCADE sur le trajet (seedée) : ~35 % de chance d'un combat rapide en chemin.
   // Gagné → butin renforcé ; subi (héros trop faible) → butin écorné. Risque/reward.

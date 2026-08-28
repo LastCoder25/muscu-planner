@@ -3383,6 +3383,10 @@ function openReport() {
   if (stageDone.value) {
     flushCelebrations(); // pas d'animation → célébrations tout de suite
     revealDrops();
+    // Pas d'anim (skip/reduced-motion/pas de log) → le watch(stageDone) ne se
+    // déclenche pas (stageDone déjà à true) : on promeut le conflit ici, sinon il
+    // reste bloqué et Réattaquer/Combat suivant restent grisés (ticket 8dba6b98).
+    promotePendingConflict();
   }
 }
 // « Passer l'animation » quand la victoire était quasi acquise (≥ 90 %) — donjon
@@ -4511,9 +4515,23 @@ const pendingBossConflict = ref<{ incoming: Item; stored: Item; idx: number } | 
 // Un conflit est-il à traiter ? → bloque Réattaquer / Combat suivant (on gère AVANT de relancer,
 // sinon un 2e drop empilerait un 2e conflit et la 1re pièce resterait au sac non comparée).
 const conflictPending = computed(() => !!stashConflict.value || !!pendingBossConflict.value);
-// À la révélation du drop (fin d'anim OU skip), on ouvre le comparatif par-dessus le rapport.
+// À la révélation du drop (fin d'anim OU skip), on ouvre le comparatif par-dessus le
+// rapport. Appelé par le watch (fin d'animation) ET par openReport (révélation
+// immédiate quand l'anim est passée) → jamais de conflit orphelin qui bloque la réattaque.
+function promotePendingConflict() {
+  if (pendingBossConflict.value && reportOpen.value) {
+    stashConflict.value = pendingBossConflict.value;
+    pendingBossConflict.value = null;
+  }
+}
 watch(stageDone, (done) => {
-  if (done && pendingBossConflict.value && reportOpen.value) {
+  if (done) promotePendingConflict();
+});
+// Filet de sécurité : si le rapport est fermé alors qu'un conflit n'a pas été révélé
+// (animation coupée en cours), on ouvre quand même le comparatif → jamais de conflit
+// orphelin qui garde Réattaquer grisé au run suivant (ticket 8dba6b98).
+watch(reportOpen, (open) => {
+  if (!open && pendingBossConflict.value) {
     stashConflict.value = pendingBossConflict.value;
     pendingBossConflict.value = null;
   }
