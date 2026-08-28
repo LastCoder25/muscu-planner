@@ -17,6 +17,19 @@
       </button>
     </div>
 
+    <!-- Filtre par sport : consulter l'historique d'un sport dans l'agenda. -->
+    <div class="filters">
+      <button
+        v-for="f in FILTERS"
+        :key="f.key"
+        class="flt"
+        :class="{ on: filter === f.key }"
+        @click="filter = f.key"
+      >
+        {{ f.label }}
+      </button>
+    </div>
+
     <div v-if="loading" class="column items-center q-mt-xl">
       <q-spinner color="primary" size="32px" />
     </div>
@@ -296,13 +309,27 @@ const entries = computed<Entry[]>(() => {
   return out.filter((e) => e.ts >= weekStart.value && e.ts < weekEnd.value);
 });
 
-const total = computed(() => entries.value.length);
+// Filtre par sport → consulter l'historique d'un sport dans l'agenda.
+type FilterKey = 'all' | Entry['kind'];
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: 'all', label: 'Tous' },
+  { key: 'muscu', label: '💪 Muscu' },
+  { key: 'cardio', label: '🏃 Cardio' },
+  { key: 'tennis', label: '🎾 Tennis' },
+  { key: 'challenge', label: '🏆 Défis' },
+  { key: 'combo', label: '🎯 360' },
+];
+const filter = ref<FilterKey>('all');
+const filteredEntries = computed(() =>
+  filter.value === 'all' ? entries.value : entries.value.filter((e) => e.kind === filter.value),
+);
+const total = computed(() => filteredEntries.value.length);
 
 const days = computed(() => {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart.value + i * 86400000);
     const iso = isoDay(d);
-    const dayEntries = entries.value
+    const dayEntries = filteredEntries.value
       .filter((e) => isoDay(new Date(e.ts)) === iso)
       .sort((a, b) => a.ts - b.ts);
     return {
@@ -350,7 +377,29 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 8px 0 20px;
+  margin: 8px 0 12px;
+}
+/* Filtres par sport : puces défilables horizontalement. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.flt {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.flt.on {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  color: var(--text);
 }
 .wk-btn {
   width: 40px;

@@ -12,7 +12,7 @@
           <span class="hsq-ic"><q-icon name="calendar_month" size="20px" /></span>
           <span class="hsq-l">Agenda</span>
         </button>
-        <button class="hsq" aria-label="Mon aventurier" @click="goAventure">
+        <button class="hsq aventure" aria-label="Mon aventurier" @click="goAventure">
           <span class="hsq-ic">⚔️</span>
           <span class="hsq-l">Aventure</span>
         </button>
@@ -705,6 +705,14 @@ async function saveAutre() {
 .glvl {
   background: var(--surface-2);
   border-color: var(--accent);
+}
+/* Aventure : cadre coloré + halo pour la faire ressortir parmi les raccourcis. */
+.hsq.aventure {
+  background: var(--surface-2);
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px var(--accent) inset,
+    0 0 10px rgba(255, 210, 63, 0.28);
 }
 .hsq-ic {
   font-size: 20px;
