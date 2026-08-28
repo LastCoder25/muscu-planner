@@ -159,28 +159,69 @@ export function comboOverachievement(c: ComboChallenge): {
   return { extraXp, legsOver, totalLegs, balance, bonusXp };
 }
 
-/** Base de la prime de bouclage = reps RÉELLES des séries comptées (jusqu'à l'objectif)
- *  × poids-de-rep, au lieu de `target × COMBO_PLAN_REPS` figé. Corrige la sous-évaluation
- *  du 360 (2026‑08‑15, ticket 135fa252) : avant, faire 20 reps/série au lieu de 10 ne
- *  changeait pas la prime → l'XP/rep chutait. Désormais symétrique avec les petits défis
- *  (prime ∝ effort réel). Fallback COMBO_PLAN_REPS pour une série sans reps saisies /
- *  un objectif non encore couvert (le helper n'est utilisé qu'au bouclage). */
+// ── Objectifs À PALIERS (secondaire / principal / maximal) ────────────────────
+// Un exo a 3 paliers dérivés de sa cible (= le PRINCIPAL) : SECONDAIRE (plancher, une
+// semaine chargée) et MAXIMAL (ambition). Chaque palier atteint débloque une part
+// CUMULÉE de la prime de bouclage de cet exo → le principal en porte l'essentiel (80 %),
+// le secondaire et le maximal motivent (fini le tout-ou-rien ; un exo à la traîne ne
+// bloque plus les autres). Le dépassement est FUSIONNÉ dans le maximal.
+export const COMBO_TIER_SECONDARY = 0.8; // secondaire = 80 % de la cible
+export const COMBO_TIER_MAX = 1.2; // maximal = 120 % de la cible
+// Parts CUMULÉES de la prime d'un exo selon le palier atteint (secondaire 15 %,
+// principal +80 % → 95 %, maximal +5 % → 100 %).
+export const COMBO_TIER_SHARE = { none: 0, secondary: 0.15, principal: 0.95, max: 1 } as const;
+export type ComboTier = keyof typeof COMBO_TIER_SHARE;
+
+/** Palier atteint par un exo d'après son avancement (fait / cible). */
+export function legTier(l: ComboLeg): ComboTier {
+  if (l.target <= 0) return 'none';
+  const frac = legDone(l) / l.target;
+  if (frac >= COMBO_TIER_MAX) return 'max';
+  if (frac >= 1) return 'principal';
+  if (frac >= COMBO_TIER_SECONDARY) return 'secondary';
+  return 'none';
+}
+/** Part CUMULÉE de la prime de l'exo débloquée par le palier atteint (0..1). */
+export function legTierShare(l: ComboLeg): number {
+  return COMBO_TIER_SHARE[legTier(l)];
+}
+
+/** Effort PLANIFIÉ d'un exo jusqu'à sa cible (base de sa part de prime) = reps réelles
+ *  des séries comptées × poids-de-rep, plan figé (COMBO_PLAN_REPS) pour les séries
+ *  manquantes. Correctif 135fa252 : symétrique avec les petits défis (prime ∝ effort réel). */
+export function legPlannedEffort(l: ComboLeg): number {
+  const sets = legSets(l);
+  if (legMode(l) !== 'sets') {
+    // Mode REPS/DURÉE : effort = reps (ou secondes) réalisées jusqu'à l'objectif.
+    const reps = legReps(l);
+    return Math.min(reps, l.target > 0 ? l.target : reps) * (l.rep_weight ?? 1);
+  }
+  const counted = l.target > 0 ? sets.slice(0, l.target) : sets;
+  const reps = counted.reduce((a, s) => a + (s.reps || COMBO_PLAN_REPS), 0);
+  const missing = Math.max(0, l.target - counted.length);
+  return (reps + missing * COMBO_PLAN_REPS) * (l.rep_weight ?? 1);
+}
+
+/** Effort planifié total du 360 (somme des exos jusqu'à leur cible). */
 export function comboTargetEffort(c: ComboChallenge): number {
   let sum = 0;
   for (const l of c.legs) {
-    const sets = legSets(l);
-    if (legMode(l) !== 'sets') {
-      // Mode REPS/DURÉE : effort = reps (ou secondes) réalisées jusqu'à l'objectif.
-      const reps = legReps(l);
-      sum += Math.min(reps, l.target > 0 ? l.target : reps) * (l.rep_weight ?? 1);
-    } else {
-      const counted = l.target > 0 ? sets.slice(0, l.target) : sets;
-      const reps = counted.reduce((a, s) => a + (s.reps || COMBO_PLAN_REPS), 0);
-      const missing = Math.max(0, l.target - counted.length);
-      sum += (reps + missing * COMBO_PLAN_REPS) * (l.rep_weight ?? 1);
-    }
+    sum += legPlannedEffort(l);
   }
   return sum;
+}
+
+/** Prime de bouclage À PALIERS (pré-XP_MULT). Par exo : sa part de prime `0,25 ×
+ *  effort planifié` × la part CUMULÉE du palier atteint (15 / 95 / 100 %). Remplace
+ *  l'ancienne prime tout-ou-rien ET le bonus de dépassement (fusionné dans le maximal).
+ *  Un 360 entièrement bouclé « en avance » est amplifié par (1 + fraction d'avance). */
+export function comboTieredBonus(c: ComboChallenge): number {
+  const early = 1 + comboEarlyFraction(c);
+  let sum = 0;
+  for (const l of c.legs) {
+    sum += 0.25 * legPlannedEffort(l) * legTierShare(l);
+  }
+  return sum * early;
 }
 
 // Minutes de séance créditées par SÉRIE comptée (jusqu'à l'objectif). Le Défi 360
@@ -228,8 +269,9 @@ export function comboXpBreakdown(c: ComboChallenge): {
       tonnage += (s.reps || 0) * (s.weight ?? l.weight_kg ?? 0);
     }
   }
-  const bonus = comboComplete(c) ? 0.25 * comboTargetEffort(c) * (1 + comboEarlyFraction(c)) : 0;
-  const over = comboOverachievement(c);
+  // Prime À PALIERS (le dépassement est fusionné dans le palier maximal → plus de
+  // terme `surpass` séparé, conservé à 0 pour la rétro-compat de l'interface).
+  const bonus = comboTieredBonus(c);
   const durationXp = Math.round(comboImpliedMinutes(c) * MUSCU_MIN_XP * XP_MULT);
   const repsXp = Math.round((reps + tonnage / 500) * XP_MULT);
   const bonusXp = Math.round(bonus * XP_MULT);
@@ -237,8 +279,8 @@ export function comboXpBreakdown(c: ComboChallenge): {
     reps: repsXp,
     duration: durationXp,
     bonus: bonusXp,
-    surpass: over.bonusXp,
-    total: repsXp + durationXp + bonusXp + over.bonusXp,
+    surpass: 0,
+    total: repsXp + durationXp + bonusXp,
   };
 }
 
@@ -254,10 +296,9 @@ export function comboXpPoints(combos: ComboChallenge[]): number {
       }
     }
     const duration = comboImpliedMinutes(c) * MUSCU_MIN_XP;
-    const bonus = comboComplete(c) ? 0.25 * comboTargetEffort(c) * (1 + comboEarlyFraction(c)) : 0;
-    const over = comboOverachievement(c);
-    const surpass = COMBO_SURPASS_MULT * over.extraXp * over.balance;
-    return a + Math.round((reps + tonnage / 500 + duration + bonus + surpass) * XP_MULT);
+    // Prime À PALIERS (bouclage partiel récompensé + dépassement fusionné dans le maximal).
+    const bonus = comboTieredBonus(c);
+    return a + Math.round((reps + tonnage / 500 + duration + bonus) * XP_MULT);
   }, 0);
 }
 

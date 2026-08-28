@@ -17,6 +17,9 @@ import {
   comboImpliedMinutes,
   COMBO_SET_MIN,
   comboOverachievement,
+  legTier,
+  legTierShare,
+  comboTieredBonus,
   suggestComboTarget,
   suggestComboTargetFromHistory,
   suggestFullBodyPlan,
@@ -241,6 +244,35 @@ describe('comboOverachievement', () => {
     expect(comboOverachievement(bothOver).bonusXp).toBeGreaterThan(
       comboOverachievement(oneOfTwo).bonusXp,
     );
+  });
+});
+
+describe('paliers du Défi 360 (secondaire 80 % / principal 100 % / maximal 120 %)', () => {
+  const l10 = (reps: number) => leg({ count_mode: 'reps', target: 10, sets: [set(reps)] });
+  it('palier atteint selon fait/cible', () => {
+    expect(legTier(l10(7))).toBe('none'); // < 80 %
+    expect(legTier(l10(8))).toBe('secondary'); // 80 %
+    expect(legTier(l10(10))).toBe('principal'); // 100 %
+    expect(legTier(l10(12))).toBe('max'); // 120 %
+  });
+  it('parts cumulées 15 / 95 / 100 % — le PRINCIPAL porte 80 %, le maximal +5 %', () => {
+    expect(legTierShare(l10(7))).toBe(0);
+    expect(legTierShare(l10(8))).toBeCloseTo(0.15);
+    expect(legTierShare(l10(10))).toBeCloseTo(0.95);
+    expect(legTierShare(l10(12))).toBeCloseTo(1);
+    // Le principal ajoute 80 %, le maximal 5 % (design « 80 % pour le principal »).
+    expect(legTierShare(l10(10)) - legTierShare(l10(8))).toBeCloseTo(0.8);
+    expect(legTierShare(l10(12)) - legTierShare(l10(10))).toBeCloseTo(0.05);
+  });
+  it('bouclage PARTIEL rapporte désormais une prime (fini le tout-ou-rien)', () => {
+    // Un exo au principal + un seulement au secondaire → prime > 0 (avant : 0 si non complet).
+    const partial = combo([
+      leg({ slot: 'push', exercise_id: 'a', count_mode: 'reps', target: 10, sets: [set(10)] }),
+      leg({ slot: 'pull', exercise_id: 'b', count_mode: 'reps', target: 10, sets: [set(8)] }),
+    ]);
+    expect(comboTieredBonus(partial)).toBeGreaterThan(0);
+    // Atteindre le principal rapporte plus que rester au secondaire (même exo).
+    expect(comboTieredBonus(combo([l10(10)]))).toBeGreaterThan(comboTieredBonus(combo([l10(8)])));
   });
 });
 

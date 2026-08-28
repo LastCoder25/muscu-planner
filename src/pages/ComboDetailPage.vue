@@ -32,11 +32,9 @@
           }}</span>
         </div>
         <div v-if="c.status === 'done'" class="hc-done">🎉 Défi 360 bouclé — bravo !</div>
-        <div v-if="over.bonusXp > 0" class="hc-over">
-          🔥 Dépassement : +{{ over.bonusXp }} XP
-          <span class="hc-over-sub"
-            >{{ over.legsOver }}/{{ over.totalLegs }} exos au-delà de l'objectif</span
-          >
+        <div v-if="legsAtMax > 0" class="hc-over">
+          🔥 {{ legsAtMax }} exo{{ legsAtMax > 1 ? 's' : '' }} au <b>maximal</b> !
+          <span class="hc-over-sub">objectif ambition dépassé</span>
         </div>
       </div>
 
@@ -78,6 +76,19 @@
               >
             </div>
           </div>
+        </div>
+        <!-- 3 paliers (secondaire / principal / maximal) : toujours un prochain jalon à viser.
+             Le palier atteint s'allume ; le principal = ta cible (porte l'essentiel du bonus). -->
+        <div class="leg-tiers">
+          <span class="tier-pill" :class="{ on: tierRank(leg) >= 1 }">
+            <span class="tp-lbl">Sec.</span> {{ tierMarks(leg).sec }}
+          </span>
+          <span class="tier-pill principal" :class="{ on: tierRank(leg) >= 2 }">
+            <span class="tp-lbl">Principal</span> {{ leg.target }}
+          </span>
+          <span class="tier-pill max" :class="{ on: tierRank(leg) >= 3 }">
+            <span class="tp-lbl">Max</span> {{ tierMarks(leg).max }}
+          </span>
         </div>
         <!-- Mode séries : segments par série ; mode reps : barre de progression simple. -->
         <div v-if="legMode(leg) === 'sets'" class="seg-bar" :style="{ '--cols': leg.target }">
@@ -161,7 +172,9 @@ import { useComboStore } from '@/stores/combo';
 import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
-  comboOverachievement,
+  legTier,
+  COMBO_TIER_SECONDARY,
+  COMBO_TIER_MAX,
   legSetsDone,
   legDone,
   legComplete,
@@ -195,9 +208,18 @@ const gameFx = useGameFx();
 const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 const pct = computed(() => (c.value ? comboProgressPct(c.value) : 0));
-const over = computed(() =>
-  c.value ? comboOverachievement(c.value) : { bonusXp: 0, legsOver: 0, totalLegs: 0 },
-);
+// Paliers (secondaire / principal / maximal) par exo — repères + motivation.
+const TIER_RANK: Record<string, number> = { none: 0, secondary: 1, principal: 2, max: 3 };
+function tierRank(l: ComboLeg): number {
+  return TIER_RANK[legTier(l)] ?? 0;
+}
+function tierMarks(l: ComboLeg): { sec: number; max: number } {
+  return {
+    sec: Math.max(1, Math.round(l.target * COMBO_TIER_SECONDARY)),
+    max: Math.round(l.target * COMBO_TIER_MAX),
+  };
+}
+const legsAtMax = computed(() => c.value?.legs.filter((l) => legTier(l) === 'max').length ?? 0);
 // Ordre d'affichage : les plus PROCHES de la complétude en haut, les autres par
 // avancement décroissant, les TERMINÉS relégués en bas.
 const orderedLegs = computed(() => {
@@ -590,6 +612,43 @@ onMounted(async () => {
 }
 .leg-ok {
   color: var(--d1);
+}
+/* 3 paliers (secondaire / principal / maximal) — repères toujours visibles, allumés
+   quand atteints. Le principal est mis en avant (c'est la cible). */
+.leg-tiers {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.tier-pill {
+  flex: 1;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dim);
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 3px 4px;
+  white-space: nowrap;
+}
+.tier-pill .tp-lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  opacity: 0.8;
+}
+.tier-pill.principal {
+  font-weight: 700;
+}
+.tier-pill.on {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.tier-pill.max.on {
+  background: var(--d3, #ffb23f);
+  border-color: var(--d3, #ffb23f);
 }
 .bar {
   height: 8px;
