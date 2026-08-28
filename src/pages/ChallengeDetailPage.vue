@@ -176,6 +176,14 @@
               <div class="chrono-hint">
                 ⏸️ Chaque <b>pause</b> enregistre une série (sa durée) dans le journal du jour.
               </div>
+              <!-- Ajout MANUEL d'une durée (sans chrono) — utile si on a tenu sans lancer
+                   le chrono (ticket 9ecad885). Caché pendant que le chrono tourne. -->
+              <div v-if="!running" class="dur-adds">
+                <span class="da-lbl">Ajouter :</span>
+                <button v-for="s in DUR_QUICK_ADDS" :key="s" class="da-btn" @click="addDuration(s)">
+                  +{{ fmtDur(s) }}
+                </button>
+              </div>
             </div>
             <!-- Journal des « séries » de durée du jour (une par pause), comme les reps/série. -->
             <div v-if="timeSets.length" class="sets-log">
@@ -345,9 +353,16 @@
         <div class="cal">
           <div v-for="(t, d) in ch.daily_targets" :key="d" class="cell" :class="dayState(d)">
             <span class="c-d">J{{ d + 1 }}</span>
-            <span class="c-t">{{
-              ch.format === 'cumulative' ? (doneOf(d) ? fmtV(doneOf(d)) : '·') : t ? fmtV(t) : '💤'
-            }}</span>
+            <!-- Jour passé/en cours (hors repos) → fait/cible « x/y » ; jour à venir → la
+                 cible seule ; repos → 💤 ; cumulé → total fait (pas de cible par jour). -->
+            <span class="c-t">
+              <template v-if="ch.format === 'cumulative'">{{
+                doneOf(d) ? fmtV(doneOf(d)) : '·'
+              }}</template>
+              <template v-else-if="!t">💤</template>
+              <template v-else-if="d <= dayIndex">{{ fmtV(doneOf(d)) }}/{{ fmtV(t) }}</template>
+              <template v-else>{{ fmtV(t) }}</template>
+            </span>
             <span v-if="dayXpOf(d) > 0" class="c-xp">+{{ dayXpOf(d) }} ⚡</span>
           </div>
         </div>
@@ -891,6 +906,20 @@ function undoLastSet() {
   } else {
     e.done = isSetsMode.value ? e.sets.length : Math.max(0, e.done - (removed.reps || 0));
   }
+  syncComplete(e);
+  void afterChange();
+}
+// Ajouts rapides de durée (gainage) sans passer par le chrono.
+const DUR_QUICK_ADDS = [15, 30, 60] as const;
+// Enregistre MANUELLEMENT une série de durée `sec` (comme une pause de chrono) →
+// bump du total + du chrono, journal alimenté. Interdit pendant que le chrono tourne
+// (sinon la prochaine pause recompterait la durée ajoutée).
+function addDuration(sec: number) {
+  if (!inToday.value || running.value || sec <= 0) return;
+  const e = ensureToday();
+  e.elapsed_sec += sec;
+  e.done = e.elapsed_sec;
+  (e.sets ??= []).push({ reps: 0, sec });
   syncComplete(e);
   void afterChange();
 }
@@ -1698,6 +1727,33 @@ onBeforeUnmount(() => {
   font-size: 11px;
   color: var(--dim);
   text-align: center;
+}
+/* Ajout manuel de durée (gainage) — pastilles compactes sous le chrono. */
+.dur-adds {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.da-lbl {
+  font-size: 11px;
+  color: var(--dim);
+}
+.da-btn {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.da-btn:active {
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 .quick-row {
   display: flex;

@@ -94,8 +94,7 @@
             :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }"
           />
         </div>
-        <!-- Mode DURÉE (gainage) : UNIQUEMENT le chrono (comme les challenges). Démarrer →
-             décompte ; Pause → enregistre une série de la durée RÉELLE écoulée. -->
+        <!-- Mode DURÉE (gainage) : chrono OU ajout manuel d'une durée (ticket 9ecad885). -->
         <div v-if="legMode(leg) === 'time'" class="leg-actions">
           <button
             class="chrono-cta"
@@ -108,7 +107,14 @@
           </button>
           <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
         </div>
-        <div v-else class="leg-actions">
+        <!-- Ajout manuel d'une durée sans chrono — caché pendant que ce chrono tourne. -->
+        <div v-if="legMode(leg) === 'time' && !isChronoOn(leg)" class="dur-adds">
+          <span class="da-lbl">Ajouter :</span>
+          <button v-for="s in DUR_QUICK_ADDS" :key="s" class="da-btn" @click="doAddSeconds(leg, s)">
+            +{{ fmtDurShort(s) }}
+          </button>
+        </div>
+        <div v-else-if="legMode(leg) !== 'time'" class="leg-actions">
           <button class="add" @click="openSet(leg, 1)">＋ 1 série</button>
           <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
         </div>
@@ -300,6 +306,11 @@ function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }
       rarity: 'divin',
     });
   }
+}
+// Ajouts rapides de durée (gainage) sans chrono (ticket 9ecad885).
+const DUR_QUICK_ADDS = [15, 30, 60] as const;
+function fmtDurShort(sec: number): string {
+  return sec >= 60 ? `${Math.round(sec / 60)} min` : `${sec} s`;
 }
 // Mode DURÉE (gainage) : ajoute directement une « série » de N secondes (stockées dans
 // le champ reps ; pas de poids) → pas de dialogue reps+poids inadapté au gainage.
@@ -636,6 +647,32 @@ onMounted(async () => {
 .leg-actions {
   display: flex;
   gap: 6px;
+}
+/* Ajout manuel de durée (gainage) sans chrono — pastilles compactes. */
+.dur-adds {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.da-lbl {
+  font-size: 11px;
+  color: var(--dim);
+}
+.da-btn {
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.da-btn:active {
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 /* Chrono des exos de durée (gainage) — cohérent avec le chrono des challenges. */
 .chrono-cta {

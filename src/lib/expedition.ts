@@ -378,7 +378,7 @@ export function heroPosition(
 const FAIL_TEXT: Record<PoiType, string[]> = {
   lair: [
     'Le gardien était trop coriace. En battant en retraite, ton héros a détaché une clé rouillée d’un cadavre.',
-    'Repli sous le feu. Dans la fuite, il a raflé une poignée de poussière et un peu d’or.',
+    'Repli sous le feu. Dans la fuite, il a raflé un peu d’or et une babiole.',
     'Vaincu mais vivant : il ressort couvert de blessures… et de notes sur les défenses du repaire.',
   ],
   camp: [

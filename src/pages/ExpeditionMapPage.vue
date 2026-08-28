@@ -385,6 +385,7 @@
         <div class="coll-text">{{ lastOutcome.text }}</div>
         <div class="coll-haul">
           <span v-if="lastOutcome.gold">🪙 +{{ lastOutcome.gold }}</span>
+          <span v-if="lastOutcome.energy">⚡ +{{ lastOutcome.energy }}</span>
           <span v-if="lastOutcome.key">🗝️ +{{ lastOutcome.key }}</span>
           <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item">
             <ItemIcon :item="it" :size="26" :show-stars="false" />{{ it.name }}</span
@@ -881,10 +882,12 @@ const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? [
 const travelMult = computed(() => travelTimeMult(char.row?.buildings ?? []));
 const roundTripMin = (p: Poi) =>
   Math.round(travelOneWayMin(p.level, p.distNorm) * 2 * travelMult.value);
+// Ce que le POI rapporte VRAIMENT (crédité par expeCollect) : or, énergie (mines),
+// objets, clés. La poussière n'existe plus (refonte drops-only) → on ne l'annonce plus.
 function poiRewardLabel(p: Poi): string {
-  if (p.type === 'mine') return 'Or + poussière (récolte)';
-  if (p.type === 'camp') return 'Poussière + un objet';
-  if (p.type === 'arena') return 'Survie par vagues — PLUSIEURS objets + poussière ∝ vagues 🌊';
+  if (p.type === 'mine') return 'Or 🪙 + énergie ⚡ (récolte)';
+  if (p.type === 'camp') return 'Or 🪙 + un objet 🎁';
+  if (p.type === 'arena') return 'Survie par vagues 🌊 — PLUSIEURS objets ∝ vagues';
   return 'Pièce de set garantie sur réussite 🧩';
 }
 
