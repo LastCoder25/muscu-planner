@@ -1295,12 +1295,12 @@
             >
               ⚔️ {{ isBossBeaten(b) ? 'Réaffronter' : 'Combattre' }} ({{ summonCostFor(b) }} 🔮)
             </button>
-            <!-- Pas assez de pierres → on dit d'où elles viennent (farm de donjon / forge). -->
+            <!-- Pas assez de pierres → on dit d'où elles viennent (nettoyage de donjon). -->
             <div
               v-if="bossUnlocked(b) && (char.row?.summon_stones ?? 0) < summonCostFor(b)"
               class="dgn-hint summon-hint"
             >
-              🔮 Farme les donjons (drop au nettoyage) ou forge à la poussière ↓
+              🔮 Nettoie des donjons pour gagner des pierres d'invocation ↓
             </div>
             <!-- Verrouillé par l'Autel manquant → bouton qui EMMÈNE le construire. -->
             <button

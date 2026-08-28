@@ -16,7 +16,7 @@
       <p class="lobby-txt">
         Un donjon à <b>étages</b> à explorer : salles, coffres, pièges, boss. Tes
         <b>PV se reportent</b> entre les salles — c'est l'attrition qui te met en danger. À la mort
-        tu <b>perds les objets trouvés</b> et une part des gains (or/poussière/pierres) qui
+        tu <b>perds les objets trouvés</b> et une part des gains (or et ressources) qui
         <b>grandit avec la profondeur du palier</b>. La <b>retraite</b> banque tout le ramassé.
       </p>
       <p class="lobby-txt dim">Les clés 🗝️ tombent sur les donjons, les boss et la faille.</p>
@@ -330,7 +330,7 @@
         <div class="over-sub">
           <template v-if="run.status === 'cleared'"> Butin crédité (+ trésor final) 🎉 </template>
           <template v-else>
-            Tu es tombé : l'or et la poussière sont gardés, les objets restent au donjon.
+            Tu es tombé : l'or et les ressources sont gardés, les objets restent au donjon.
           </template>
         </div>
 
@@ -560,7 +560,7 @@ function back() {
     $q.dialog({
       title: 'Quitter le labyrinthe ?',
       message:
-        'Le run en cours sera <b>abandonné</b> : tu perds tout le butin ramassé (or, poussière, objets). Le butin n’est crédité qu’<b>à la fin du palier</b>. Pour le garder, utilise « 🚪 Sortir en gardant le butin » sur un escalier.',
+        'Le run en cours sera <b>abandonné</b> : tu perds tout le butin ramassé (or, ressources, objets). Le butin n’est crédité qu’<b>à la fin du palier</b>. Pour le garder, utilise « 🚪 Sortir en gardant le butin » sur un escalier.',
       html: true,
       cancel: { label: 'Rester', flat: true },
       ok: { label: 'Quitter (perdre le butin)', color: 'negative' },
