@@ -73,9 +73,18 @@ export function gearExpect(level: number): { off: number; pv: number } {
   const L = Math.max(1, level);
   // Fittés sur la courbe de boost MOYENNÉE (cf. test de calibration) : off ~1,2→2,0,
   // effPV ~2,5→3,8. La survie (max_pv%/réduction/vol de vie) domine dès le bas niveau.
+  // Recalibré v0.622 par SIMULATION (cf. calibration geared clear rate). L'ancienne courbe
+  // (off ≤1,8 / pv ≤2,3) PLAFONNAIT alors que la puissance du gear CONTINUE de monter avec le
+  // niveau (itemLevelMult + raretés hautes) → RUNAWAY dès ~niv.50 (un joueur équipé roulait
+  // sur du contenu +15 à ~90-100 %). La pente est volontairement PLUS RAIDE que le boost brut
+  // mesuré (offense ~1,5→2,9, survie ~1,6→2,2 de niv.10 à 100) : comme le gear monte lentement
+  // PAR NIVEAU mais DOMINE la puissance, il faut que l'attente du contenu profond DÉPASSE le
+  // gear d'un joueur sous-niveau, sinon pas de mur. Résultat (sim, joueur bien équipé) : clear
+  // à SON niveau ~systématique, MUR à +12/15 (clear +15 : 0-15 % à tous les niveaux, vs 92-100 %
+  // avant). Bornes hautes (6,0 / 5,0) = garde-fou fin de partie.
   return {
-    off: Math.min(1.8, 1.0 + Math.max(0, L - 8) * 0.011),
-    pv: Math.min(2.3, 1.2 + Math.max(0, L - 8) * 0.022),
+    off: Math.min(6.0, 1.35 + Math.max(0, L - 8) * 0.035),
+    pv: Math.min(5.0, 1.45 + Math.max(0, L - 8) * 0.03),
   };
 }
 

@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { simulateCombat, simulateDungeon, type DungeonFoe } from '@/lib/combat';
+import { simulateCombat, simulateDungeon, type DungeonFoe, type Combatant } from '@/lib/combat';
+import { rollDrop, bestGearLoadout, playerWithGear, type Item } from '@/lib/items';
 import {
   cumXpForLevel,
+  refBalancedStat,
   refFighter,
   proceduralMonster,
   proceduralDungeon,
@@ -91,6 +93,47 @@ describe('procedural — calibration (clear ~systématique au reco)', () => {
   it('mur sous-niveau : plus dur 2 niveaux en dessous (monotone)', () => {
     expect(clearPct(25, 23)).toBeLessThanOrEqual(clearPct(25, 25));
     expect(clearPct(34, 32)).toBeLessThanOrEqual(clearPct(34, 34));
+  });
+});
+
+describe('procedural — anti-runaway ÉQUIPÉ (v0.622, « sport = plafond »)', () => {
+  function mulberry32(seed: number) {
+    let a = seed >>> 0;
+    return () => {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  // Joueur ÉQUIPÉ réaliste : farme ~60 objets à son niveau et garde le meilleur loadout.
+  function gearedFighter(L: number, seed = 1): Combatant {
+    const rng = mulberry32(seed * 7919 + L);
+    const inv: Item[] = [];
+    for (let i = 0; i < 60; i++) {
+      const d = rollDrop(rng, { cleared: true, defeated: 1, level: L, luck: 0.4, playerLevel: L });
+      if (d) inv.push({ ...d, id: 'i' + i });
+    }
+    const s = refBalancedStat(L);
+    const stats = { puissance: s, endurance: s, agilite: s };
+    return playerWithGear('geared', stats, bestGearLoadout('g', stats, {}, inv, L), {}, L);
+  }
+  function gearedClearPct(reco: number, playerLevel: number, n = 60): number {
+    const foes: DungeonFoe[] = proceduralDungeonMonsters(reco).map((m) => ({
+      combatant: m,
+      gold: m.gold,
+    }));
+    const p = gearedFighter(playerLevel);
+    let c = 0;
+    for (let s = 0; s < n; s++) if (simulateDungeon(p, foes, { seed: s * 211 + 5 }).cleared) c++;
+    return c / n;
+  }
+  it('un joueur ÉQUIPÉ ne roule PLUS sur du contenu +15 (mur restauré)', () => {
+    for (const L of [50, 80]) expect(gearedClearPct(L + 15, L)).toBeLessThan(0.4);
+  });
+  it('mais il clear encore SON niveau (le gear reste le levier, pas un plafond dur)', () => {
+    for (const L of [50, 80]) expect(gearedClearPct(L, L)).toBeGreaterThan(0.6);
   });
 });
 
