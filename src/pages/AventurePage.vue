@@ -4520,8 +4520,15 @@ const conflictPending = computed(() => !!stashConflict.value || !!pendingBossCon
 // immédiate quand l'anim est passée) → jamais de conflit orphelin qui bloque la réattaque.
 function promotePendingConflict() {
   if (pendingBossConflict.value && reportOpen.value) {
-    stashConflict.value = pendingBossConflict.value;
+    const cf = pendingBossConflict.value;
     pendingBossConflict.value = null;
+    // Ouvrir le comparatif au TICK SUIVANT : sinon (rapport ouvert dans le même flush,
+    // ex. anim passée) Quasar assigne un z-index plus bas à ce dialogue (déclaré AVANT le
+    // rapport dans le template) → il s'ouvre DERRIÈRE. En différant d'un tick il s'enregistre
+    // après le rapport → z-index supérieur → il passe DEVANT (ticket suivi 8dba6b98).
+    void nextTick(() => {
+      stashConflict.value = cf;
+    });
   }
 }
 watch(stageDone, (done) => {

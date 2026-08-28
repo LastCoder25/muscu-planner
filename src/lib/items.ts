@@ -1617,22 +1617,27 @@ export function bestGearLoadout(
     return combatPower(playerWithGear(name, stats, one, extra, level, voie));
   };
   // Candidats retenus par slot : top-K solo + toutes les pièces de set (cap 12) + slot vide.
+  // On garde TOUJOURS l'objet actuel du slot (même s'il est médiocre en solo mais fort en
+  // combo, ou hors top-K) → l'optimiseur ne peut jamais retirer une pièce sans candidat qui
+  // fait mieux, donc jamais de PERTE de puissance (bug auto-équip).
   const K = 6;
-  const trim = (arr: Item[]): (Item | undefined)[] => {
+  const trim = (arr: Item[], keepCur?: Item): (Item | undefined)[] => {
     const scored = arr.map((it) => ({ it, p: soloPower(it) })).sort((a, b) => b.p - a.p);
     const keep = new Map<string, Item>();
+    if (keepCur) keep.set(keepCur.id, keepCur);
     for (const { it } of scored.slice(0, K)) keep.set(it.id, it);
     for (const { it } of scored) if (it.setId && keep.size < 12) keep.set(it.id, it);
     return [...keep.values(), undefined];
   };
   const cand: Record<'weapon' | 'armor' | 'accessory' | 'relic', (Item | undefined)[]> = {
-    weapon: trim(bySlot.weapon),
-    armor: trim(bySlot.armor),
-    accessory: trim(bySlot.accessory),
-    relic: trim(bySlot.relic),
+    weapon: trim(bySlot.weapon, equipped.weapon),
+    armor: trim(bySlot.armor, equipped.armor),
+    accessory: trim(bySlot.accessory, equipped.accessory),
+    relic: trim(bySlot.relic, equipped.relic),
   };
+  // Base = le loadout ACTUEL : l'optimiseur ne le remplace que par STRICTEMENT mieux.
   let best: Equipped = { ...equipped };
-  let bestP = -1;
+  let bestP = combatPower(playerWithGear(name, stats, best, extra, level, voie));
   for (const w of cand.weapon)
     for (const a of cand.armor)
       for (const ac of cand.accessory)

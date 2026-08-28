@@ -43,12 +43,13 @@ import {
   rankRollMult,
   rollJet,
   swapLoadoutGear,
+  bestGearLoadout,
   type Item,
   type Equipped,
   enchantMult,
   ENCHANT_MAX,
 } from '@/lib/items';
-import { mulberry32 } from '@/lib/combat';
+import { mulberry32, combatPower } from '@/lib/combat';
 import { VOIES } from '@/lib/voies';
 
 describe('rangs G→SSS + intervalle de jet (refonte v0.574)', () => {
@@ -781,6 +782,41 @@ describe('stats mineures (tier « or », v0.581)', () => {
     expect(gold.pv).toBe(bare.pv);
     expect(gold.damage).toBe(bare.damage);
     expect(gold.crit).toBe(bare.crit);
+  });
+});
+
+describe('bestGearLoadout — jamais de PERTE de puissance (auto-équip)', () => {
+  const g = (
+    slot: Item['slot'],
+    id: string,
+    type: Item['effect']['type'],
+    value: number,
+  ): Item => ({
+    id,
+    slot,
+    name: id,
+    emoji: '🗡️',
+    rarity: 'rare',
+    level: 10,
+    baseLevel: 10,
+    effect: { type, value },
+  });
+  it('la puissance optimisée est ≥ la puissance actuelle, même avec un gros sac de candidats', () => {
+    const stats = { puissance: 40, endurance: 40, agilite: 20 };
+    const equipped: Equipped = {
+      weapon: g('weapon', 'W_cur', 'max_pv_pct', 0.5),
+      armor: g('armor', 'A_cur', 'dmg_reduction_pct', 0.35),
+    };
+    // 8 candidats par slot → l'objet équipé pourrait être « trimé » hors des top-K solo.
+    const pool: Item[] = [];
+    for (let i = 0; i < 8; i++) {
+      pool.push(g('weapon', 'w' + i, 'damage_pct', 0.12 + i * 0.01));
+      pool.push(g('armor', 'a' + i, 'crit_pct', 0.06 + i * 0.005));
+    }
+    const before = combatPower(playerWithGear('X', stats, equipped, {}, 10));
+    const opt = bestGearLoadout('X', stats, equipped, pool, 10);
+    const after = combatPower(playerWithGear('X', stats, opt, {}, 10));
+    expect(after).toBeGreaterThanOrEqual(before);
   });
 });
 
