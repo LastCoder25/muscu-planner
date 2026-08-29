@@ -19,6 +19,7 @@ export interface ExerciseDef {
   unit?: string | null; // 'reps' (défaut) ou 'time' (secondes)
   unilateral?: boolean | null; // travaillé un côté à la fois (fentes, rowing 1 bras…)
   challenge_only?: boolean | null; // réservé aux défis → jamais dans un programme généré
+  category?: string | null; // 'musculation' (défaut) ou 'prepa_physique' (exclu du muscu)
 }
 
 // Groupes musculaires primaires présents dans la bibliothèque.
@@ -376,4 +377,86 @@ export function buildProgram(
       };
       return session;
     });
+}
+
+/**
+ * Génère UNE séance de renforcement DÉBUTANT full-body, calée sur le temps dispo,
+ * au poids du corps OU avec des haltères. Choisit 1 exo par groupe (gros muscles
+ * d'abord, difficulté ≤ 2, pas de doublon de mouvement), jusqu'au budget de temps.
+ * Pure/testable — retourne une `Session` prête à insérer (source 'engine').
+ */
+export function buildBeginnerSession(
+  library: ExerciseDef[],
+  opts: { minutes: number; equipment: 'bodyweight' | 'dumbbells' },
+): Session {
+  // Poids du corps → aucun atome dispo (seuls les exos sans matériel passent) ;
+  // haltères → on ajoute 'dumbbells' (les exos au poids du corps restent éligibles).
+  const available = new Set<string>(opts.equipment === 'dumbbells' ? ['dumbbells'] : []);
+  // Ordre full-body (gros groupes d'abord) → couverture équilibrée en temps limité.
+  const order: Muscle[] = [
+    'quadriceps',
+    'pectoraux',
+    'dos',
+    'ischio-jambiers',
+    'épaules',
+    'abdominaux',
+    'triceps',
+    'biceps',
+    'mollets',
+  ];
+  // ~5 min/exo (3 séries × exécution + repos) → nb d'exos selon le temps (3..8).
+  const nExos = clamp(Math.round((opts.minutes || 30) / 5), 3, 8);
+  const rest = 60; // le débutant a besoin de récupérer entre les séries
+  const chosen: PlannedExercise[] = [];
+  const usedKeys = new Set<string>();
+  for (const muscle of order) {
+    if (chosen.length >= nExos) break;
+    const pick = library
+      .filter(
+        (e) =>
+          e.muscle_primary === muscle &&
+          !e.challenge_only &&
+          e.category !== 'prepa_physique' &&
+          (e.difficulty ?? 1) <= 2 &&
+          (e.equipment_required ?? []).every((req) => available.has(req)),
+      )
+      .sort((a, b) => (b.muscle_secondary?.length ?? 0) - (a.muscle_secondary?.length ?? 0))
+      .find((e) => !usedKeys.has(movementKey(e.name)));
+    if (!pick) continue;
+    usedKeys.add(movementKey(pick.name));
+    const bodyweight = pick.equipment === 'poids_du_corps';
+    let target: PlannedExercise['target'];
+    if (pick.unit === 'time') {
+      target = { sets: 3, reps_min: 30, reps_max: 45, unit: 'time', load: 'bodyweight' };
+    } else if (bodyweight) {
+      target = { sets: 3, reps_min: 10, reps_max: 15, load: 'bodyweight' };
+    } else {
+      target = { sets: 3, reps_min: 8, reps_max: 12, load_kg: 0 };
+    }
+    const ex: PlannedExercise = {
+      id: pick.id,
+      name: pick.name,
+      muscle_primary: pick.muscle_primary ?? muscle,
+      muscle_secondary: pick.muscle_secondary ?? [],
+      equipment: pick.equipment ?? undefined,
+      progression: pick.unit === 'time' ? 'fixed' : 'linear',
+      rest_seconds: rest,
+      target,
+    };
+    if (pick.unilateral) ex.unilateral = true;
+    chosen.push(ex);
+  }
+  const estDuration = chosen.reduce((a, e) => a + e.target.sets * ((e.rest_seconds + 40) / 60), 0);
+  return {
+    schema_version: SCHEMA_VERSION,
+    type: 'session',
+    id: crypto.randomUUID(),
+    name: `Renfo débutant · ${opts.equipment === 'dumbbells' ? 'haltères' : 'poids du corps'}`,
+    objective: 'remise_en_forme',
+    level: 'debutant',
+    estimated_duration_min: Math.round(estDuration) || opts.minutes,
+    source: 'engine',
+    created_at: new Date().toISOString(),
+    exercises: chosen,
+  };
 }

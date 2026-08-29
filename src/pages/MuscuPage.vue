@@ -13,6 +13,11 @@
     </div>
 
     <div v-if="tab === 'act'" class="tiles">
+      <button class="tile" @click="renfoOpen = true">
+        <q-icon name="auto_awesome" size="30px" />
+        <span>Renfo débutant</span>
+        <small>Générée selon ton temps</small>
+      </button>
       <button class="tile" @click="go('/free')">
         <q-icon name="bolt" size="30px" />
         <span>Séance libre</span>
@@ -134,6 +139,59 @@
       </div>
       <!-- Les défis ne sont PAS listés ici (doublon) : ils ont leur écran dédié (Challenges). -->
     </template>
+
+    <!-- Générateur de séance renfo débutant : temps dispo + matériel → séance générée. -->
+    <q-dialog v-model="renfoOpen" position="bottom">
+      <q-card class="renfo-card">
+        <div class="renfo-title font-display">Renfo débutant 🌱</div>
+        <div class="renfo-desc">
+          Une séance full-body générée selon ton temps et ton matériel — au poids du corps ou avec
+          des haltères.
+        </div>
+
+        <div class="renfo-lbl">Temps dispo</div>
+        <div class="renfo-chips">
+          <button
+            v-for="t in RENFO_TIMES"
+            :key="t"
+            class="renfo-chip"
+            :class="{ on: renfoMinutes === t }"
+            @click="renfoMinutes = t"
+          >
+            {{ t }} min
+          </button>
+        </div>
+
+        <div class="renfo-lbl">Matériel</div>
+        <div class="renfo-chips">
+          <button
+            class="renfo-chip"
+            :class="{ on: renfoEquip === 'bodyweight' }"
+            @click="renfoEquip = 'bodyweight'"
+          >
+            🤸 Poids du corps
+          </button>
+          <button
+            class="renfo-chip"
+            :class="{ on: renfoEquip === 'dumbbells' }"
+            @click="renfoEquip = 'dumbbells'"
+          >
+            🏋️ Haltères
+          </button>
+        </div>
+
+        <q-btn
+          class="renfo-cta"
+          color="primary"
+          text-color="dark"
+          no-caps
+          unelevated
+          :loading="renfoBusy"
+          label="Générer ma séance"
+          @click="generateRenfo"
+        />
+      </q-card>
+    </q-dialog>
   </component>
 </template>
 
@@ -146,7 +204,9 @@ import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useSessionsStore } from '@/stores/sessions';
+import { useLibraryStore } from '@/stores/library';
 import { useAuthStore } from '@/stores/auth';
+import { buildBeginnerSession } from '@/lib/programBuilder';
 import { sessionXp, otherSportXp } from '@/lib/athlete';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
 
@@ -173,8 +233,44 @@ function isSpecifiqueLog(r: LogRow): boolean {
   return !!r.payload.session_id && specifiqueSessionIds.value.has(r.payload.session_id);
 }
 const auth = useAuthStore();
+const library = useLibraryStore();
 const progress = useProgress();
 const xpFx = useXpFx();
+
+// ── Générateur de séance renfo débutant (poids du corps / haltères, calé sur le temps) ──
+const renfoOpen = ref(false);
+const renfoMinutes = ref(30);
+const renfoEquip = ref<'bodyweight' | 'dumbbells'>('bodyweight');
+const renfoBusy = ref(false);
+const RENFO_TIMES = [15, 20, 30, 45] as const;
+async function generateRenfo() {
+  if (!auth.user?.id || renfoBusy.value) return;
+  renfoBusy.value = true;
+  try {
+    const lib = await library.fetchAll();
+    const session = buildBeginnerSession(lib, {
+      minutes: renfoMinutes.value,
+      equipment: renfoEquip.value,
+    });
+    if (!session.exercises.length) {
+      $q.notify({
+        type: 'warning',
+        message: 'Aucun exercice disponible pour cette configuration.',
+      });
+      return;
+    }
+    const id = await sessions.insert(auth.user.id, session);
+    renfoOpen.value = false;
+    await router.push(`/session/${id}/detail`);
+  } catch (e) {
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Génération impossible.',
+    });
+  } finally {
+    renfoBusy.value = false;
+  }
+}
 
 const tab = ref<'act' | 'hist'>('act');
 const loading = ref(false);
@@ -493,6 +589,59 @@ onMounted(() => {
   border-color: var(--accent);
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+/* Dialogue « Renfo débutant » (temps + matériel → génération). */
+.renfo-card {
+  width: 100%;
+  max-width: 480px;
+  padding: 20px 18px 24px;
+  border-radius: 18px 18px 0 0;
+  background: var(--surface);
+}
+.renfo-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+.renfo-desc {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.4;
+  margin: 4px 0 6px;
+}
+.renfo-lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--dim);
+  margin: 16px 0 8px;
+}
+.renfo-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.renfo-chip {
+  padding: 9px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.renfo-chip.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.renfo-cta {
+  width: 100%;
+  height: 50px;
+  margin-top: 22px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 15px;
 }
 .tile {
   display: flex;
