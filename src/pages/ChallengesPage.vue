@@ -371,7 +371,15 @@
               <span class="c3-pct font-display">{{ comboPct }}%</span>
               <span class="c3-week">📅 {{ comboWeek }}</span>
             </div>
-            <div class="bar"><div class="fill" :style="{ width: comboPct + '%' }" /></div>
+            <!-- Dégradé unique : vert (actuel) → rose (théorique si en retard) → piste. -->
+            <div class="bar" :style="comboBarStyle">
+              <i
+                v-if="comboShowOnTime"
+                class="c3-mark"
+                :style="{ left: comboOnTimePct + '%' }"
+                :title="`Pour être dans les temps : ${comboOnTimePct}%`"
+              />
+            </div>
           </div>
           <q-btn
             class="full-width q-mb-sm"
@@ -653,6 +661,32 @@ const comboWeek = computed(() => {
   const c = activeCombo.value;
   if (!c) return '';
   return `${fmtDM(c.start_date)} → ${fmtDM(addDaysLocal(c.start_date, c.duration_days - 1))}`;
+});
+// Avancement THÉORIQUE « dans les temps » = jours écoulés (aujourd'hui inclus) / durée.
+// Affiché en ROSE derrière le vert (actuel) sur la barre globale → on voit le retard.
+const comboOnTimePct = computed(() => {
+  const c = activeCombo.value;
+  if (!c) return 0;
+  const today = logicalToday();
+  if (today < c.start_date) return 0;
+  const ms = Date.parse(`${today}T00:00:00Z`) - Date.parse(`${c.start_date}T00:00:00Z`);
+  const elapsed = Math.round(ms / 86400000) + 1;
+  const e = Math.max(0, Math.min(c.duration_days, elapsed));
+  return Math.round((e / c.duration_days) * 100);
+});
+const comboShowOnTime = computed(
+  () => comboOnTimePct.value > 0 && comboOnTimePct.value < 100 && comboPct.value < 100,
+);
+// Fond de barre = un seul dégradé (pas d'empilement) : vert (actuel) → rose (théorique
+// si en retard) → piste.
+const comboBarStyle = computed(() => {
+  const p = Math.max(0, Math.min(100, comboPct.value));
+  const ot = comboOnTimePct.value;
+  const stops =
+    comboShowOnTime.value && ot > p
+      ? `var(--accent) 0 ${p}%, #ff6a9c ${p}% ${ot}%, var(--surface-2) ${ot}% 100%`
+      : `var(--accent) 0 ${p}%, var(--surface-2) ${p}% 100%`;
+  return { background: `linear-gradient(to right, ${stops})` };
 });
 
 // Saisie d'une série (reps + poids), préremplie avec la dernière série de l'exo.
@@ -1704,16 +1738,23 @@ onMounted(async () => {
   margin-left: 5px;
 }
 .bar {
+  position: relative;
   height: 8px;
   background: var(--surface-2);
   border-radius: 5px;
   overflow: hidden;
   margin: 9px 0 6px;
 }
-.fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 5px;
+/* Repère « dans les temps » : trait vertical à la position théorique. */
+.c3-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
 }
 /* Barre SEGMENTÉE : un segment par série (mode séries) ou par jour (reps/durée). */
 .seg-line {
