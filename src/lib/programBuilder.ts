@@ -408,7 +408,9 @@ export function buildBeginnerSession(
   const nExos = clamp(Math.round((opts.minutes || 30) / 5), 3, 8);
   const rest = 60; // le débutant a besoin de récupérer entre les séries
   const chosen: PlannedExercise[] = [];
-  const usedKeys = new Set<string>();
+  // 1 exo par groupe (chaque itération = un muscle distinct) → pas de dédup de mouvement
+  // ici : un débutant sans matériel a besoin des variantes (ex. pompes piquées pour les
+  // épaules) pour couvrir tout le corps, sinon des groupes restent sans exo.
   for (const muscle of order) {
     if (chosen.length >= nExos) break;
     const pick = library
@@ -420,10 +422,15 @@ export function buildBeginnerSession(
           (e.difficulty ?? 1) <= 2 &&
           (e.equipment_required ?? []).every((req) => available.has(req)),
       )
-      .sort((a, b) => (b.muscle_secondary?.length ?? 0) - (a.muscle_secondary?.length ?? 0))
-      .find((e) => !usedKeys.has(movementKey(e.name)));
+      // Débutant : le plus FACILE d'abord (difficulté), puis BILATÉRAL avant unilatéral
+      // (moins d'équilibre à gérer, ex. squat avant fentes), puis polyarticulaire.
+      .sort(
+        (a, b) =>
+          (a.difficulty ?? 1) - (b.difficulty ?? 1) ||
+          (a.unilateral ? 1 : 0) - (b.unilateral ? 1 : 0) ||
+          (b.muscle_secondary?.length ?? 0) - (a.muscle_secondary?.length ?? 0),
+      )[0];
     if (!pick) continue;
-    usedKeys.add(movementKey(pick.name));
     const bodyweight = pick.equipment === 'poids_du_corps';
     let target: PlannedExercise['target'];
     if (pick.unit === 'time') {
