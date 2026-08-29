@@ -15,12 +15,10 @@
           <span class="hc-days">{{ daysLeftLabel }}</span>
         </div>
         <div class="hc-week">📅 Semaine du {{ comboWeek }}</div>
-        <div class="hc-bar">
-          <!-- Rose : avancement THÉORIQUE (où l'on devrait en être) — sous le vert (actuel).
-               Quand on est en retard il dépasse le vert et devient visible. -->
-          <span v-if="showOnTime" class="hc-behind" :style="{ width: onTimePct + '%' }" />
-          <span class="hc-fill" :style="{ width: pct + '%' }" />
-          <!-- Repère 🎯 : trait à la position théorique attendue (rythme régulier). -->
+        <!-- Barre = dégradé unique (bulletproof, pas d'empilement) : vert (actuel) → rose
+             (avancement THÉORIQUE = où l'on devrait en être) → piste. Le rose n'apparaît
+             que si l'on est en retard (théorique > actuel). Trait 🎯 par-dessus. -->
+        <div class="hc-bar" :style="barStyle">
           <i
             v-if="showOnTime"
             class="hc-ontime"
@@ -269,17 +267,30 @@ const onTimePct = computed(() => {
   if (!c.value) return 0;
   const today = logicalToday();
   if (today < c.value.start_date) return 0;
-  let elapsed = 0;
-  for (let d = 0; d < c.value.duration_days; d++) {
-    if (addDaysIso(c.value.start_date, d) <= today) elapsed++;
-  }
-  return Math.min(100, Math.round((elapsed / c.value.duration_days) * 100));
+  // Jours écoulés (aujourd'hui inclus). On parse les 2 dates en UTC explicite pour éviter
+  // l'écart local/UTC (addDaysIso passe par toISOString → décalait d'un jour en France).
+  const ms = Date.parse(`${today}T00:00:00Z`) - Date.parse(`${c.value.start_date}T00:00:00Z`);
+  const elapsed = Math.round(ms / 86400000) + 1;
+  const e = Math.max(0, Math.min(c.value.duration_days, elapsed));
+  return Math.round((e / c.value.duration_days) * 100);
 });
 // Marqueur affiché tant que le défi est actif et dans la fenêtre (sinon 100 % = redondant).
 const showOnTime = computed(
   () => !!c.value && c.value.status === 'active' && onTimePct.value > 0 && onTimePct.value < 100,
 );
 const onTimeState = computed(() => (pct.value >= onTimePct.value ? 'ahead' : 'behind'));
+
+// Fond de la barre = un seul dégradé (aucun empilement / z-index) : vert (actuel) →
+// rose (théorique, si en retard) → piste. Bulletproof côté rendu.
+const barStyle = computed(() => {
+  const p = Math.max(0, Math.min(100, pct.value));
+  const ot = onTimePct.value;
+  const stops =
+    showOnTime.value && ot > p
+      ? `var(--accent) 0 ${p}%, #ff6a9c ${p}% ${ot}%, var(--surface-2) ${ot}% 100%`
+      : `var(--accent) 0 ${p}%, var(--surface-2) ${p}% 100%`;
+  return { background: `linear-gradient(to right, ${stops})` };
+});
 
 function slotEmoji(key: string) {
   return comboSlot(key)?.emoji ?? '💪';
@@ -504,22 +515,6 @@ onMounted(async () => {
   border-radius: 6px;
   overflow: hidden;
   margin-top: 8px;
-}
-.hc-bar span {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  border-radius: 6px;
-}
-/* Actuel (vert/accent) par-dessus le théorique (rose). */
-.hc-bar .hc-fill {
-  background: var(--accent);
-  z-index: 1;
-}
-.hc-bar .hc-behind {
-  background: #ff6a9c;
-  z-index: 0;
 }
 /* Repère « dans les temps » : trait vertical à la position théorique attendue. */
 .hc-ontime {
