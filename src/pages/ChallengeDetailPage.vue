@@ -370,10 +370,10 @@
           </div>
         </div>
 
-        <!-- Terminer maintenant : quand on a de l'avance (ou que le total est atteint) →
-             clôturer pour lancer un autre défi (ticket avance/clôture). -->
+        <!-- Terminer : UNIQUEMENT si accompli avant la fin (total atteint) → clôturer pour
+             lancer un autre défi. Sinon, « Abandonner » sert à arrêter en cours. -->
         <button v-if="canFinishNow" class="finish-now" @click="confirmFinishNow">
-          🏁 {{ finalizes ? 'Terminer — défi accompli' : 'Terminer maintenant' }}
+          🏁 Terminer — défi accompli
         </button>
         <button v-if="ch.status !== 'abandoned'" class="adjust" @click="extendDialog">
           <q-icon name="add" size="16px" /> Prolonger le défi
@@ -645,10 +645,9 @@ const totalRemaining = computed(() => {
 const finalizes = computed(
   () => !!ch.value && (totalRemaining.value <= 0 || isChallengeComplete(ch.value)),
 );
-// Bouton « Terminer maintenant » : dispo dès qu'on a de l'AVANCE (ou que c'est accompli).
-const canFinishNow = computed(
-  () => ch.value?.status === 'active' && (liveBalance.value > 0 || finalizes.value),
-);
+// Bouton « Terminer » : UNIQUEMENT si le défi est ACCOMPLI avant la fin (tout le volume
+// atteint). Pour arrêter un défi non terminé, il y a « Abandonner ».
+const canFinishNow = computed(() => ch.value?.status === 'active' && finalizes.value);
 // Visible dès que le défi a commencé (y compris les jours de repos, où l'on peut
 // prendre de l'avance sans que le panneau « objectif du jour » s'affiche).
 const showBalance = computed(() => !!ch.value && dayIndex.value >= 0);
@@ -797,18 +796,13 @@ async function afterChange() {
 // lancer un autre. Si le TOTAL est atteint c'est une complétion (prime + célébration) ;
 // sinon on confirme que les jours restants ne seront pas crédités.
 function confirmFinishNow() {
-  const c = ch.value;
-  if (!c) return;
-  const done = finalizes.value;
-  const msg = done
-    ? 'Tu as fait tout le volume du défi (même en avance) — on le marque comme accompli 🎉'
-    : `Tu es en avance (couvre ≈ ${advanceDays.value} jour${advanceDays.value > 1 ? 's' : ''}), mais il reste <b>${show(totalRemaining.value)}</b> pour boucler le total. Le terminer maintenant le clôture : les jours restants ne seront pas crédités (pas de prime de complétion).`;
+  if (!ch.value) return;
   $q.dialog({
-    title: done ? 'Défi accompli ?' : 'Terminer maintenant ?',
-    message: msg,
-    html: true,
+    title: 'Défi accompli ?',
+    message:
+      'Tu as fait tout le volume du défi, même en avance sur le calendrier — on le marque comme accompli 🎉',
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: done ? 'Terminer 🎉' : 'Terminer quand même', color: 'primary' },
+    ok: { label: 'Terminer 🎉', color: 'primary' },
   }).onOk(() => void finishNow());
 }
 async function finishNow() {
