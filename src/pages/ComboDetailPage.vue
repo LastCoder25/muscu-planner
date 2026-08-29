@@ -16,8 +16,11 @@
         </div>
         <div class="hc-week">📅 Semaine du {{ comboWeek }}</div>
         <div class="hc-bar">
-          <span :style="{ width: pct + '%' }" />
-          <!-- Repère 🎯 : où tu devrais être pour finir dans les temps (rythme régulier). -->
+          <!-- Rose : avancement THÉORIQUE (où l'on devrait en être) — sous le vert (actuel).
+               Quand on est en retard il dépasse le vert et devient visible. -->
+          <span v-if="showOnTime" class="hc-behind" :style="{ width: onTimePct + '%' }" />
+          <span class="hc-fill" :style="{ width: pct + '%' }" />
+          <!-- Repère 🎯 : trait à la position théorique attendue (rythme régulier). -->
           <i
             v-if="showOnTime"
             class="hc-ontime"
@@ -503,9 +506,20 @@ onMounted(async () => {
   margin-top: 8px;
 }
 .hc-bar span {
-  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
+  border-radius: 6px;
+}
+/* Actuel (vert/accent) par-dessus le théorique (rose). */
+.hc-bar .hc-fill {
   background: var(--accent);
+  z-index: 1;
+}
+.hc-bar .hc-behind {
+  background: #ff6a9c;
+  z-index: 0;
 }
 /* Repère « dans les temps » : trait vertical à la position théorique attendue. */
 .hc-ontime {
@@ -517,6 +531,7 @@ onMounted(async () => {
   background: var(--text);
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
   pointer-events: none;
+  z-index: 2;
 }
 .hc-pace {
   margin-top: 6px;
