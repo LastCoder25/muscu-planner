@@ -85,7 +85,10 @@
           :class="balDisplay > 0 ? 'ahead' : balDisplay < 0 ? 'behind' : 'even'"
         >
           <template v-if="balDisplay > 0"
-            >{{ carryOn ? 'Réserve' : 'Avance' }} +{{ show(balDisplay) }}</template
+            >{{ carryOn ? 'Réserve' : 'Avance' }} +{{ show(balDisplay)
+            }}<span v-if="advanceDays > 0" class="cb-days">
+              · couvre ≈ {{ advanceDays }} jour{{ advanceDays > 1 ? 's' : '' }}</span
+            ></template
           >
           <template v-else-if="balDisplay < 0"
             >{{ carryOn ? 'Dette' : 'Retard' }} −{{ show(-balDisplay) }}</template
@@ -367,6 +370,11 @@
           </div>
         </div>
 
+        <!-- Terminer maintenant : quand on a de l'avance (ou que le total est atteint) →
+             clôturer pour lancer un autre défi (ticket avance/clôture). -->
+        <button v-if="canFinishNow" class="finish-now" @click="confirmFinishNow">
+          🏁 {{ finalizes ? 'Terminer — défi accompli' : 'Terminer maintenant' }}
+        </button>
         <button v-if="ch.status !== 'abandoned'" class="adjust" @click="extendDialog">
           <q-icon name="add" size="16px" /> Prolonger le défi
         </button>
@@ -602,6 +610,45 @@ const todayDeficit = computed(() => {
 const balDisplay = computed(() =>
   todayDeficit.value > 0 ? -todayDeficit.value : Math.max(0, liveBalance.value),
 );
+// Combien de jours FUTURS l'avance couvre déjà (elle pré-paie les prochaines cibles).
+const advanceDays = computed(() => {
+  const c = ch.value;
+  if (!c || c.format === 'cumulative') return 0;
+  let remaining = Math.max(0, liveBalance.value);
+  if (remaining <= 0) return 0;
+  let days = 0;
+  for (let d = dayIndex.value + 1; d < c.duration_days; d++) {
+    const t = c.daily_targets[d] ?? 0;
+    if (t <= 0) continue; // jour de repos
+    if (remaining + 1e-6 >= t) {
+      remaining -= t;
+      days++;
+    } else break;
+  }
+  return days;
+});
+// Total du défi vs total réalisé → « accompli » quand tout le volume est atteint (même
+// en avance sur le calendrier). Le clôturer alors = complétion (prime créditée).
+const totalTarget = computed(() => {
+  const c = ch.value;
+  if (!c) return 0;
+  return c.format === 'cumulative'
+    ? (c.config.total ?? 0)
+    : c.daily_targets.reduce((a, b) => a + b, 0);
+});
+const totalRemaining = computed(() => {
+  const c = ch.value;
+  if (!c) return 0;
+  const done = c.progress.reduce((a, p) => a + (p.done || 0), 0);
+  return Math.max(0, totalTarget.value - done);
+});
+const finalizes = computed(
+  () => !!ch.value && (totalRemaining.value <= 0 || isChallengeComplete(ch.value)),
+);
+// Bouton « Terminer maintenant » : dispo dès qu'on a de l'AVANCE (ou que c'est accompli).
+const canFinishNow = computed(
+  () => ch.value?.status === 'active' && (liveBalance.value > 0 || finalizes.value),
+);
 // Visible dès que le défi a commencé (y compris les jours de repos, où l'on peut
 // prendre de l'avance sans que le panneau « objectif du jour » s'affiche).
 const showBalance = computed(() => !!ch.value && dayIndex.value >= 0);
@@ -746,6 +793,39 @@ async function afterChange() {
   }
 }
 
+// Terminer le défi MAINTENANT (avance suffisante / accompli) → le clôturer pour en
+// lancer un autre. Si le TOTAL est atteint c'est une complétion (prime + célébration) ;
+// sinon on confirme que les jours restants ne seront pas crédités.
+function confirmFinishNow() {
+  const c = ch.value;
+  if (!c) return;
+  const done = finalizes.value;
+  const msg = done
+    ? 'Tu as fait tout le volume du défi (même en avance) — on le marque comme accompli 🎉'
+    : `Tu es en avance (couvre ≈ ${advanceDays.value} jour${advanceDays.value > 1 ? 's' : ''}), mais il reste <b>${show(totalRemaining.value)}</b> pour boucler le total. Le terminer maintenant le clôture : les jours restants ne seront pas crédités (pas de prime de complétion).`;
+  $q.dialog({
+    title: done ? 'Défi accompli ?' : 'Terminer maintenant ?',
+    message: msg,
+    html: true,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: done ? 'Terminer 🎉' : 'Terminer quand même', color: 'primary' },
+  }).onOk(() => void finishNow());
+}
+async function finishNow() {
+  const c = ch.value;
+  if (!c || c.status === 'done') return;
+  c.status = 'done';
+  running.value = false;
+  clearInterval(tick);
+  await persist('done');
+  await mirrorCardio();
+  try {
+    celebrateCodes.value = await store.unlock(evaluateAchievements(store.list));
+  } catch {
+    celebrateCodes.value = [];
+  }
+  celebrate.value = true;
+}
 // Saisie d'une sortie cardio (comme les tuiles d'accueil) → l'écran Cardio
 // pré-sélectionne l'activité du défi ; la sortie est reportée auto dans le défi.
 function goLogCardio() {
@@ -2167,6 +2247,28 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 6px;
+}
+/* Terminer maintenant : CTA accent (clôturer un défi en avance / accompli). */
+.finish-now {
+  width: 100%;
+  margin-top: 20px;
+  height: 46px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.finish-now:active {
+  opacity: 0.9;
+}
+/* « couvre ≈ N jours » dans le badge d'avance. */
+.cb-days {
+  opacity: 0.85;
+  font-weight: 500;
 }
 .adjust:active {
   border-color: var(--accent);
