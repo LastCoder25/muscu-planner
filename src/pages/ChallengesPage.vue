@@ -413,13 +413,17 @@
             <!-- Barre + actions sur la MÊME ligne → lignes d'exo plus compactes (plus
                  d'exos visibles à l'écran). -->
             <div class="cl-bottom">
-              <div v-if="legMode(leg) === 'sets'" class="seg-bar" :style="{ '--cols': leg.target }">
+              <div v-if="legMode(leg) === 'sets'" class="seg-bar">
                 <span
                   v-for="n in Math.max(leg.target, legDone(leg))"
                   :key="n"
                   class="seg"
                   :class="{ on: n <= legDone(leg), extra: n > leg.target }"
-                />
+                >
+                  <template v-if="n <= legDone(leg)">{{
+                    segSetLabel(legSets(leg)[n - 1])
+                  }}</template>
+                </span>
               </div>
               <div v-else class="reps-bar">
                 <span
@@ -560,6 +564,7 @@ import {
   legSets,
   type ComboChallenge,
   type ComboLeg,
+  type ComboSet,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
 import {
@@ -688,6 +693,14 @@ const comboBarStyle = computed(() => {
       : `var(--accent) 0 ${p}%, var(--surface-2) ${p}% 100%`;
   return { background: `linear-gradient(to right, ${stops})` };
 });
+
+// Détail d'une série affiché DANS sa cellule jaune : « 12×15kg » (ou « 12 » au poids
+// du corps, « 12·a » si assisté). Vide si la série n'existe pas encore.
+function segSetLabel(s: ComboSet | undefined): string {
+  if (!s) return '';
+  const base = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
+  return s.assisted ? `${base}·a` : base;
+}
 
 // Saisie d'une série (reps + poids), préremplie avec la dernière série de l'exo.
 const setOpen = ref(false);
@@ -1333,25 +1346,38 @@ onMounted(async () => {
   background: var(--accent);
   border-radius: 4px;
 }
-/* Segments de TAILLE FIXE : exactement `--cols` (l'objectif) par ligne ; les
-   séries en plus créent de nouvelles lignes de même taille (ex. 22 séries pour
-   un objectif de 9 → 3 lignes de 9). */
+/* Cellules « série » : chaque cellule faite (jaune) affiche son détail « 12×15kg ».
+   Elles s'élargissent selon le contenu et passent à la ligne ; les cases à faire
+   restent des repères vides teintés. */
 .seg {
-  flex: 0 0 calc((100% - (var(--cols, 10) - 1) * 3px) / var(--cols, 10));
-  height: 11px;
-  border-radius: 3px;
+  flex: 0 0 auto;
+  min-width: 26px;
+  min-height: 22px;
+  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
   /* Série À FAIRE : plus visible (fond légèrement teinté + liseré) au lieu de noir sur noir. */
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  color: var(--dim);
 }
 .seg.on {
   background: var(--accent);
   border-color: var(--accent);
+  color: var(--accent-ink);
 }
 /* Série faite au-delà de l'objectif → vert « en plus ». */
 .seg.extra.on {
   background: var(--d1);
   border-color: var(--d1);
+  color: #10231a;
 }
 .cl-extra {
   margin-left: 6px;
