@@ -1772,6 +1772,20 @@ onMounted(async () => {
   overflow: hidden;
   margin: 9px 0 6px;
 }
+/* Graduation tous les 5 % (segmente la barre pour lire la position d'un coup d'œil). */
+.bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(5% - 1.5px),
+    rgba(0, 0, 0, 0.32) calc(5% - 1.5px),
+    rgba(0, 0, 0, 0.32) 5%
+  );
+}
 /* Repère « dans les temps » : trait vertical à la position théorique. */
 .c3-mark {
   position: absolute;
