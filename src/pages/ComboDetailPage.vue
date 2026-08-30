@@ -92,13 +92,15 @@
           </span>
         </div>
         <!-- Mode séries : segments par série ; mode reps : barre de progression simple. -->
-        <div v-if="legMode(leg) === 'sets'" class="seg-bar" :style="{ '--cols': leg.target }">
+        <div v-if="legMode(leg) === 'sets'" class="seg-bar">
           <span
             v-for="n in Math.max(leg.target, legDone(leg))"
             :key="n"
             class="seg"
             :class="{ on: n <= legDone(leg), extra: n > leg.target }"
-          />
+          >
+            <template v-if="n <= legDone(leg)">{{ segSetLabel(legSets(leg)[n - 1]) }}</template>
+          </span>
         </div>
         <div v-else class="reps-bar">
           <span
@@ -130,8 +132,9 @@
           <button class="add" @click="openSet(leg, 1)">＋ 1 série</button>
           <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
         </div>
-        <!-- Détail des séries faites (reps × poids, ou secondes en mode durée). -->
-        <div v-if="legSets(leg).length" class="leg-sets">
+        <!-- Détail des séries faites (secondes en durée / reps en mode reps). En mode
+             séries, le détail est DANS les cellules jaunes → on ne le répète pas ici. -->
+        <div v-if="legSets(leg).length && legMode(leg) !== 'sets'" class="leg-sets">
           <span v-for="(s, i) in legSets(leg)" :key="i" class="leg-set-chip">
             <template v-if="legMode(leg) === 'time'">{{ s.reps }} s</template>
             <template v-else
@@ -186,6 +189,7 @@ import {
   legLastWeight,
   legLastAssisted,
   type ComboLeg,
+  type ComboSet,
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
 import {
@@ -294,6 +298,13 @@ const barStyle = computed(() => {
 
 function slotEmoji(key: string) {
   return comboSlot(key)?.emoji ?? '💪';
+}
+// Détail d'une série affiché DANS sa cellule jaune : « 12×15kg » (ou « 12 » au poids
+// du corps, « 12·a » si assisté). Vide si la série n'existe pas (cellule à faire).
+function segSetLabel(s: ComboSet | undefined): string {
+  if (!s) return '';
+  const base = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
+  return s.assisted ? `${base}·a` : base;
 }
 
 // Saisie d'une série via le dialogue partagé, préremplie avec la dernière série.
@@ -692,20 +703,37 @@ onMounted(async () => {
   background: var(--accent);
   border-radius: 4px;
 }
-/* Segments de TAILLE FIXE : `--cols` (l'objectif) par ligne ; les séries en plus
-   ajoutent des lignes de même taille (ex. 22 pour un objectif de 9 → 3 lignes de 9). */
+/* Cellules « série » : chaque cellule faite (jaune) affiche son détail « 12×15kg ».
+   Elles s'élargissent selon le contenu et passent à la ligne ; les cases à faire
+   restent des repères vides. */
 .seg {
-  flex: 0 0 calc((100% - (var(--cols, 10) - 1) * 3px) / var(--cols, 10));
-  height: 8px;
-  border-radius: 3px;
+  flex: 0 0 auto;
+  min-width: 30px;
+  min-height: 24px;
+  padding: 3px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
   background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--dim);
+  white-space: nowrap;
 }
 .seg.on {
   background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
 }
 /* Série faite AU-DELÀ de l'objectif → couleur distincte (vert « en plus »). */
 .seg.extra.on {
   background: var(--d1);
+  border-color: var(--d1);
+  color: #10231a;
 }
 .leg-extra {
   margin-left: 6px;
