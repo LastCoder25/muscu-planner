@@ -3723,21 +3723,26 @@ async function explore(d: Dungeon) {
     const r = simulateDungeon(player, dungeonFoes(d), { seed });
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
     const gold = Math.round(r.gold * (1 + goldPct));
-    // Butin (RNG dérivé du seed du run).
+    // Butin (RNG dérivé du seed du run). UN drop possible PAR MONSTRE VAINCU (comme le
+    // Labyrinthe) : chaque monstre battu tente un butin (chance interne de rollDrop) → farmer
+    // un donjon rapporte plus d'objets, proportionnel au nombre de monstres nettoyés.
     const dropRng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
     const drops: Item[] = [];
-    const rolled = rollDrop(dropRng, {
-      cleared: r.cleared,
-      defeated: r.defeated,
-      level: d.dropLevel,
-      spread: 1, // le donjon peut lâcher un cran sous son niveau (fourrage à upgrader)
-      luck: Math.min(1, d.dropLuck + (lucky ? 0.5 : 0) + mfLuck()),
-      playerLevel: c.value.level.level,
-    });
-    if (rolled) {
-      const dr: Item = { ...rolled, id: crypto.randomUUID() };
-      drops.push(dr);
-      queueFx(() => celebrateRareDrop(dr));
+    const dropLuck = Math.min(1, d.dropLuck + (lucky ? 0.5 : 0) + mfLuck());
+    for (let i = 0; i < r.defeated; i++) {
+      const rolled = rollDrop(dropRng, {
+        cleared: r.cleared,
+        defeated: 1,
+        level: d.dropLevel,
+        spread: 1, // le donjon peut lâcher un cran sous son niveau (fourrage à upgrader)
+        luck: dropLuck,
+        playerLevel: c.value.level.level,
+      });
+      if (rolled) {
+        const dr: Item = { ...rolled, id: crypto.randomUUID() };
+        drops.push(dr);
+        queueFx(() => celebrateRareDrop(dr));
+      }
     }
     // (Les familiers ne tombent PLUS dans les donjons — uniquement au Labyrinthe.)
     // (Les consommables ne DROPPENT plus — peu utiles ; restent achetables en boutique.)
