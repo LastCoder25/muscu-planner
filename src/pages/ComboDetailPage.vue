@@ -683,10 +683,12 @@ onMounted(async () => {
   height: 100%;
   background: var(--accent);
 }
+/* Grille de cellules UNIFORMES (mêmes dimensions pour faites/à faire) qui se
+   répartissent proprement sur plusieurs lignes ; chaque colonne accueille « 12×15kg ». */
 .seg-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 4px;
   margin: 9px 0;
 }
 /* Mode reps : barre de progression continue (l'objectif en reps peut être élevé). */
@@ -707,10 +709,8 @@ onMounted(async () => {
    Elles s'élargissent selon le contenu et passent à la ligne ; les cases à faire
    restent des repères vides. */
 .seg {
-  flex: 0 0 auto;
-  min-width: 30px;
   min-height: 24px;
-  padding: 3px 7px;
+  padding: 3px 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -723,6 +723,7 @@ onMounted(async () => {
   line-height: 1;
   color: var(--dim);
   white-space: nowrap;
+  overflow: hidden;
 }
 .seg.on {
   background: var(--accent);

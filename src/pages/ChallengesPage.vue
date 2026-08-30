@@ -1324,12 +1324,14 @@ onMounted(async () => {
   margin-top: 5px;
 }
 /* Barre segmentée : une case par série (cible + supplémentaires, sur plusieurs lignes) */
+/* Grille de cellules UNIFORMES (mêmes dimensions faites/à faire) réparties
+   proprement sur plusieurs lignes ; chaque colonne accueille « 12×15kg ». */
 .seg-bar {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 4px;
 }
 /* Mode reps : barre continue (l'objectif en reps peut être élevé → pas de segments). */
 .reps-bar {
@@ -1350,10 +1352,8 @@ onMounted(async () => {
    Elles s'élargissent selon le contenu et passent à la ligne ; les cases à faire
    restent des repères vides teintés. */
 .seg {
-  flex: 0 0 auto;
-  min-width: 26px;
   min-height: 22px;
-  padding: 2px 6px;
+  padding: 2px 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1363,6 +1363,7 @@ onMounted(async () => {
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
+  overflow: hidden;
   /* Série À FAIRE : plus visible (fond légèrement teinté + liseré) au lieu de noir sur noir. */
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
