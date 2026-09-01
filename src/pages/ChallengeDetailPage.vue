@@ -195,7 +195,7 @@
                 <span class="si-n">Série {{ i + 1 }}</span>
                 <span class="si-v">{{ fmtDur(s.sec ?? 0) }}</span>
               </div>
-              <button v-if="!todayClosed" class="corr-link" @click="undoLastSet">
+              <button v-if="!todayClosed" class="corr-link danger" @click="undoLastSet">
                 ↩ Retirer la dernière
               </button>
             </div>
@@ -277,7 +277,7 @@
                       ><template v-if="s.assisted"> · assisté</template></span
                     >
                   </div>
-                  <button v-if="todaySets.length" class="corr-link" @click="undoLastSet">
+                  <button v-if="todaySets.length" class="corr-link danger" @click="undoLastSet">
                     ↩ Retirer la dernière{{ isCumulative ? ' (aujourd’hui)' : '' }}
                   </button>
                 </div>
@@ -970,18 +970,28 @@ function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }
   void afterChange();
 }
 function undoLastSet() {
-  const e = ensureToday();
-  if (!e.sets?.length) return;
-  const removed = e.sets.pop()!;
-  if (removed.sec) {
-    // Série de DURÉE (gainage) : on retire sa durée du total ET du chrono.
-    e.elapsed_sec = Math.max(0, e.elapsed_sec - removed.sec);
-    e.done = Math.max(0, e.done - removed.sec);
-  } else {
-    e.done = isSetsMode.value ? e.sets.length : Math.max(0, e.done - (removed.reps || 0));
-  }
-  syncComplete(e);
-  void afterChange();
+  const e0 = ensureToday();
+  if (!e0.sets?.length) return;
+  // Confirmation avant de retirer (évite les retraits par fausse manipulation).
+  $q.dialog({
+    title: 'Retirer la dernière série ?',
+    message: 'Retirer la dernière série enregistrée aujourd’hui ?',
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Retirer', color: 'negative' },
+  }).onOk(() => {
+    const e = ensureToday();
+    if (!e.sets?.length) return;
+    const removed = e.sets.pop()!;
+    if (removed.sec) {
+      // Série de DURÉE (gainage) : on retire sa durée du total ET du chrono.
+      e.elapsed_sec = Math.max(0, e.elapsed_sec - removed.sec);
+      e.done = Math.max(0, e.done - removed.sec);
+    } else {
+      e.done = isSetsMode.value ? e.sets.length : Math.max(0, e.done - (removed.reps || 0));
+    }
+    syncComplete(e);
+    void afterChange();
+  });
 }
 // Ajouts rapides de durée (gainage) sans passer par le chrono.
 const DUR_QUICK_ADDS = [15, 30, 60] as const;
@@ -1967,6 +1977,11 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+}
+/* Retrait de série = action destructive → en rouge (évite les fausses manips). */
+.corr-link.danger {
+  border-color: var(--d4);
+  color: var(--d4);
 }
 .rpe {
   margin: 6px 0 4px;

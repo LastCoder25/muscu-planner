@@ -784,17 +784,15 @@ function undoSet(leg: ComboLeg) {
     : 0;
   const wouldDeficit = availableEnergy.value - setEnergy < 0;
   const doRemove = () => comboStore.removeLastSet(activeCombo.value!.id, leg.exercise_id);
-  if (wouldDeficit) {
-    $q.dialog({
-      title: 'Retirer cette série ?',
-      message:
-        "Tu as déjà dépensé l'énergie gagnée avec cette série. La retirer te mettra en déficit d'énergie : il faudra refaire du sport avant de rejouer à l'aventure.",
-      cancel: { label: 'Annuler', flat: true },
-      ok: { label: 'Retirer quand même', color: 'negative' },
-    }).onOk(doRemove);
-  } else {
-    doRemove();
-  }
+  // Confirmation SYSTÉMATIQUE (évite les retraits par fausse manipulation).
+  $q.dialog({
+    title: 'Retirer la dernière série ?',
+    message: wouldDeficit
+      ? "Tu as déjà dépensé l'énergie gagnée avec cette série. La retirer te mettra en déficit d'énergie : il faudra refaire du sport avant de rejouer à l'aventure."
+      : `Retirer la dernière série de « ${leg.exercise_name} » ?`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Retirer', color: 'negative' },
+  }).onOk(doRemove);
 }
 
 // Historique des séries d'un exo.
@@ -1512,9 +1510,9 @@ onMounted(async () => {
   width: 38px;
   align-self: stretch;
   border-radius: 9px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--d4);
   background: transparent;
-  color: var(--dim);
+  color: var(--d4);
   font-weight: 700;
   font-size: 15px;
   cursor: pointer;

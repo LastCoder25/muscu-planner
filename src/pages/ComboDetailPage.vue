@@ -376,7 +376,13 @@ function doAddSeconds(leg: ComboLeg, sec: number) {
   }
 }
 function undoSet(leg: ComboLeg) {
-  combo.removeLastSet(id, leg.exercise_id);
+  // Confirmation avant de retirer (évite les retraits par fausse manipulation).
+  $q.dialog({
+    title: 'Retirer la dernière série ?',
+    message: `Retirer la dernière série de « ${leg.exercise_name} » ?`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Retirer', color: 'negative' },
+  }).onOk(() => combo.removeLastSet(id, leg.exercise_id));
 }
 
 // ── Chrono des exos de DURÉE (gainage) — comme dans les challenges ──
@@ -847,8 +853,8 @@ onMounted(async () => {
 .add.corr {
   flex: none;
   width: 48px;
-  border-color: var(--line);
-  color: var(--dim);
+  border-color: var(--d4);
+  color: var(--d4);
   font-size: 16px;
 }
 .add.corr:disabled {
