@@ -53,9 +53,13 @@
                a une infobulle expliquant ce qu'elle fait monter. -->
           <div class="tb-tray">
             <span
-              class="tb-r energy"
+              class="tb-r energy clickable"
               :class="{ deficit: c.energy < 0 }"
-              title="Énergie — dépensée pour lancer donjons, labyrinthe et expéditions (gagnée en faisant du sport)"
+              role="button"
+              tabindex="0"
+              title="Énergie — appuie pour voir l'historique des 3 derniers jours (gagnée en faisant du sport)"
+              @click="energyHistOpen = true"
+              @keyup.enter="energyHistOpen = true"
               >⚡ {{ c.energy }}</span
             >
             <!-- Boutique retirée pour le moment (ticket dc7c746d) : la puce or est un simple indicateur. -->
@@ -1698,6 +1702,31 @@
       </q-card>
     </q-dialog>
 
+    <!-- Historique d'énergie (clic sur la puce ⚡) : énergie GAGNÉE par le sport, 3 derniers jours. -->
+    <q-dialog v-model="energyHistOpen" position="bottom">
+      <q-card class="adv-modal">
+        <button
+          class="adv-modal-x"
+          aria-label="Fermer"
+          type="button"
+          @click="energyHistOpen = false"
+        >
+          ✕
+        </button>
+        <div class="sec-title">⚡ Énergie — 3 derniers jours</div>
+        <div class="sec-hint">
+          Énergie <b>gagnée par le sport</b> chaque jour (mêmes chiffres qu'à l'Agenda). Solde
+          actuel : <b>{{ c.energy }} ⚡</b>.
+        </div>
+        <div class="enh-list">
+          <div v-for="d in energyHist" :key="d.date" class="enh-row">
+            <span class="enh-day">{{ d.label }}</span>
+            <span class="enh-val" :class="{ zero: d.earned === 0 }">+{{ d.earned }} ⚡</span>
+          </div>
+        </div>
+      </q-card>
+    </q-dialog>
+
     <!-- Butin possible d'un donjon -->
     <!-- Explication RANG / QUALITÉ (clic sur la pastille de rang ou le chiffre de qualité). -->
     <q-dialog :model-value="!!helpTopic" position="bottom" @update:model-value="helpTopic = null">
@@ -2270,6 +2299,7 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
+import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
@@ -2487,6 +2517,9 @@ const persoSub = ref<'perso'>('perso');
 const talentsOpen = ref(false);
 const familiarsOpen = ref(false);
 const ranksOpen = ref(false);
+// Historique d'énergie gagnée (sport) sur 3 jours — modale au clic sur la puce ⚡.
+const energyHistOpen = ref(false);
+const energyHist = useEnergyHistory(3);
 // Liste des 10 rangs de prestige (cosmétiques, dérivés du niveau) : 1 rang = 10 niveaux
 // (5 étoiles × 2 niveaux). Marque le rang courant + sa plage de niveaux.
 const rankList = computed(() =>
@@ -4875,6 +4908,42 @@ onUnmounted(() => {
 }
 .tb-r.energy.deficit {
   color: var(--d4, #ff6a45);
+}
+/* Puce ⚡ cliquable → historique d'énergie (léger repère : souligné pointillé + curseur). */
+.tb-r.clickable {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+/* Historique d'énergie (modale) : une ligne par jour. */
+.enh-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.enh-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+}
+.enh-day {
+  font-weight: 600;
+  color: var(--text);
+  text-transform: capitalize;
+}
+.enh-val {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: #8fd0ff;
+  font-variant-numeric: tabular-nums;
+}
+.enh-val.zero {
+  color: var(--dim);
 }
 /* Bouton messages : action distincte des ressources (self-stylé, ex-.tb-chip). */
 .inbox-btn {
