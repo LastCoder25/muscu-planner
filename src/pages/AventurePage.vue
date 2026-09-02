@@ -1719,9 +1719,18 @@
           actuel : <b>{{ c.energy }} ⚡</b>.
         </div>
         <div class="enh-list">
-          <div v-for="d in energyHist" :key="d.date" class="enh-row">
-            <span class="enh-day">{{ d.label }}</span>
-            <span class="enh-val" :class="{ zero: d.earned === 0 }">+{{ d.earned }} ⚡</span>
+          <div v-for="d in energyHist" :key="d.date" class="enh-day-block">
+            <div class="enh-day-head">
+              <span class="enh-day">{{ d.label }}</span>
+              <span class="enh-val" :class="{ zero: d.earned === 0 }">+{{ d.earned }} ⚡</span>
+            </div>
+            <div v-if="d.items.length" class="enh-items">
+              <div v-for="(it, i) in d.items" :key="i" class="enh-item">
+                <span class="enh-item-lbl">{{ it.emoji }} {{ it.label }}</span>
+                <span class="enh-item-val">+{{ it.energy }} ⚡</span>
+              </div>
+            </div>
+            <div v-else class="enh-empty">— aucune activité</div>
           </div>
         </div>
       </q-card>
@@ -4915,24 +4924,28 @@ onUnmounted(() => {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }
-/* Historique d'énergie (modale) : une ligne par jour. */
+/* Historique d'énergie (modale) : un bloc par jour, détail par activité dedans. */
 .enh-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   margin-top: 10px;
 }
-.enh-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
+.enh-day-block {
   border-radius: 10px;
   background: var(--surface-2);
   border: 1px solid var(--line-soft);
+  padding: 8px 12px 10px;
+}
+.enh-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line-soft);
 }
 .enh-day {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text);
   text-transform: capitalize;
 }
@@ -4943,6 +4956,36 @@ onUnmounted(() => {
   font-variant-numeric: tabular-nums;
 }
 .enh-val.zero {
+  color: var(--dim);
+}
+.enh-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+}
+.enh-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.enh-item-lbl {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.enh-item-val {
+  color: #8fd0ff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.enh-empty {
+  margin-top: 6px;
+  font-size: 12.5px;
   color: var(--dim);
 }
 /* Bouton messages : action distincte des ressources (self-stylé, ex-.tb-chip). */
