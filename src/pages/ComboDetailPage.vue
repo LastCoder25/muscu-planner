@@ -39,16 +39,26 @@
         </div>
       </div>
 
-      <q-btn
-        v-if="c.status === 'active'"
-        class="full-width q-mb-md"
-        outline
-        color="primary"
-        no-caps
-        icon="fitness_center"
-        label="Générer une séance"
-        :to="`/combo/${c.id}/session`"
-      />
+      <div v-if="c.status === 'active'" class="cta-row q-mb-md">
+        <q-btn
+          class="cta-grow"
+          outline
+          color="primary"
+          no-caps
+          icon="fitness_center"
+          label="Générer une séance"
+          :to="`/combo/${c.id}/session`"
+        />
+        <q-btn
+          outline
+          color="primary"
+          no-caps
+          icon="ios_share"
+          label="Exporter"
+          title="Exporter le Défi 360 complet détaillé"
+          @click="exportCombo"
+        />
+      </div>
 
       <div
         v-for="leg in orderedLegs"
@@ -385,6 +395,59 @@ function undoSet(leg: ComboLeg) {
   }).onOk(() => combo.removeLastSet(id, leg.exercise_id));
 }
 
+// Export TEXTE détaillé du Défi 360 complet : entête (semaine, %, théorique) + chaque
+// exo (cible/réalisé, paliers) avec le DÉTAIL de chaque série faite (reps×poids / secondes).
+function buildComboExport(): string {
+  const cc = c.value;
+  if (!cc) return '';
+  const L: string[] = [];
+  L.push(`🎯 Défi 360 — Semaine du ${comboWeek.value}`);
+  L.push(
+    `Progression : ${pct.value}%` +
+      (showOnTime.value ? ` (théorique ${onTimePct.value}%)` : '') +
+      (cc.status === 'done' ? ' — bouclé ✅' : ''),
+  );
+  L.push('');
+  for (const leg of orderedLegs.value) {
+    const done = legDone(leg);
+    const t = tierMarks(leg);
+    L.push(
+      `• ${leg.exercise_name}${leg.weight_kg ? ` (${leg.weight_kg} kg)` : ''} — ` +
+        `${done}/${leg.target} ${legUnitLabel(leg)}${legComplete(leg) ? ' ✓' : ''}` +
+        (done > leg.target ? ` (+${done - leg.target} en plus)` : ''),
+    );
+    L.push(`   paliers : sec. ${t.sec} · principal ${leg.target} · max ${t.max}`);
+    const sets = legSets(leg);
+    if (sets.length) {
+      const detail =
+        legMode(leg) === 'time'
+          ? sets.map((s) => `${s.reps}s`).join(', ')
+          : sets.map((s) => segSetLabel(s)).join(', ');
+      L.push(`   séries : ${detail}`);
+    }
+  }
+  return L.join('\n');
+}
+// Exporte : partage natif (mobile) si dispo, sinon copie dans le presse-papier.
+async function exportCombo() {
+  const text = buildComboExport();
+  if (!text) return;
+  if (typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title: 'Défi 360', text });
+    } catch {
+      /* partage annulé */
+    }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    $q.notify({ type: 'positive', message: 'Défi 360 copié dans le presse-papier.' });
+  } catch {
+    $q.notify({ type: 'negative', message: 'Copie impossible sur cet appareil.' });
+  }
+}
+
 // ── Chrono des exos de DURÉE (gainage) — comme dans les challenges ──
 // Démarrer → décompte (mm:ss) ; Pause → enregistre une SÉRIE de N secondes et remet à 0.
 // Un seul chrono actif à la fois (démarrer un autre exo enregistre d'abord le décompte courant).
@@ -596,6 +659,15 @@ onMounted(async () => {
   font-weight: 500;
   color: var(--dim);
   margin-top: 1px;
+}
+/* Ligne d'actions : « Générer une séance » (extensible) + « Exporter ». */
+.cta-row {
+  display: flex;
+  gap: 8px;
+}
+.cta-grow {
+  flex: 1;
+  min-width: 0;
 }
 .leg {
   position: relative;
