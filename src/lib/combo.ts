@@ -597,3 +597,62 @@ export function suggestFullBodyPlan(
     return { slot: s.key, active: true, nExos, weeklySets, setsPerExo };
   });
 }
+
+// ── Export TEXTE détaillé d'un Défi 360 complet (partagé par ComboDetailPage ET
+//    l'onglet Défi 360 de ChallengesPage → une seule source, pas de divergence). ──
+function fmtDM(iso: string): string {
+  const [, m, d] = iso.split('-');
+  return `${d}/${m}`;
+}
+function addDaysUtc(iso: string, n: number): string {
+  return new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+}
+/** Texte détaillé du défi complet : entête (semaine, %, théorique) + chaque exo
+ *  (cible/réalisé, paliers) avec le détail de chaque série faite (reps×poids / secondes).
+ *  `today` = jour logique courant (pour l'avancement théorique). */
+export function comboExportText(c: ComboChallenge, today: string): string {
+  const end = addDaysUtc(c.start_date, c.duration_days - 1);
+  const pct = comboProgressPct(c);
+  let onTime = 0;
+  if (today >= c.start_date && c.duration_days > 0) {
+    const elapsed =
+      Math.round(
+        (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${c.start_date}T00:00:00Z`)) / 86400000,
+      ) + 1;
+    onTime = Math.round((Math.max(0, Math.min(c.duration_days, elapsed)) / c.duration_days) * 100);
+  }
+  const showOnTime = c.status === 'active' && onTime > 0 && onTime < 100;
+  const L: string[] = [];
+  L.push(`🎯 Défi 360 — Semaine du ${fmtDM(c.start_date)} → ${fmtDM(end)}`);
+  L.push(
+    `Progression : ${pct}%` +
+      (showOnTime ? ` (théorique ${onTime}%)` : '') +
+      (c.status === 'done' ? ' — bouclé ✅' : ''),
+  );
+  L.push('');
+  for (const leg of c.legs) {
+    const done = legDone(leg);
+    const sec = Math.round(leg.target * COMBO_TIER_SECONDARY);
+    const max = Math.round(leg.target * COMBO_TIER_MAX);
+    L.push(
+      `• ${leg.exercise_name}${leg.weight_kg ? ` (${leg.weight_kg} kg)` : ''} — ` +
+        `${done}/${leg.target} ${legUnitLabel(leg)}${legComplete(leg) ? ' ✓' : ''}` +
+        (done > leg.target ? ` (+${done - leg.target} en plus)` : ''),
+    );
+    L.push(`   paliers : sec. ${sec} · principal ${leg.target} · max ${max}`);
+    const sets = legSets(leg);
+    if (sets.length) {
+      const detail =
+        legMode(leg) === 'time'
+          ? sets.map((s) => `${s.reps}s`).join(', ')
+          : sets
+              .map((s) => {
+                const b = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
+                return s.assisted ? `${b}·a` : b;
+              })
+              .join(', ');
+      L.push(`   séries : ${detail}`);
+    }
+  }
+  return L.join('\n');
+}

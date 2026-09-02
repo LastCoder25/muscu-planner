@@ -198,6 +198,7 @@ import {
   legLastReps,
   legLastWeight,
   legLastAssisted,
+  comboExportText,
   type ComboLeg,
   type ComboSet,
 } from '@/lib/combo';
@@ -395,43 +396,11 @@ function undoSet(leg: ComboLeg) {
   }).onOk(() => combo.removeLastSet(id, leg.exercise_id));
 }
 
-// Export TEXTE détaillé du Défi 360 complet : entête (semaine, %, théorique) + chaque
-// exo (cible/réalisé, paliers) avec le DÉTAIL de chaque série faite (reps×poids / secondes).
-function buildComboExport(): string {
-  const cc = c.value;
-  if (!cc) return '';
-  const L: string[] = [];
-  L.push(`🎯 Défi 360 — Semaine du ${comboWeek.value}`);
-  L.push(
-    `Progression : ${pct.value}%` +
-      (showOnTime.value ? ` (théorique ${onTimePct.value}%)` : '') +
-      (cc.status === 'done' ? ' — bouclé ✅' : ''),
-  );
-  L.push('');
-  for (const leg of orderedLegs.value) {
-    const done = legDone(leg);
-    const t = tierMarks(leg);
-    L.push(
-      `• ${leg.exercise_name}${leg.weight_kg ? ` (${leg.weight_kg} kg)` : ''} — ` +
-        `${done}/${leg.target} ${legUnitLabel(leg)}${legComplete(leg) ? ' ✓' : ''}` +
-        (done > leg.target ? ` (+${done - leg.target} en plus)` : ''),
-    );
-    L.push(`   paliers : sec. ${t.sec} · principal ${leg.target} · max ${t.max}`);
-    const sets = legSets(leg);
-    if (sets.length) {
-      const detail =
-        legMode(leg) === 'time'
-          ? sets.map((s) => `${s.reps}s`).join(', ')
-          : sets.map((s) => segSetLabel(s)).join(', ');
-      L.push(`   séries : ${detail}`);
-    }
-  }
-  return L.join('\n');
-}
 // Exporte : partage natif (mobile) si dispo, sinon copie dans le presse-papier.
+// Le texte détaillé est construit par la lib partagée (même rendu sur les 2 écrans).
 async function exportCombo() {
-  const text = buildComboExport();
-  if (!text) return;
+  if (!c.value) return;
+  const text = comboExportText(c.value, logicalToday());
   if (typeof navigator.share === 'function') {
     try {
       await navigator.share({ title: 'Défi 360', text });

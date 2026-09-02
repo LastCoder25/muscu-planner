@@ -381,15 +381,26 @@
               />
             </div>
           </div>
-          <q-btn
-            class="full-width q-mb-sm"
-            outline
-            color="primary"
-            no-caps
-            icon="fitness_center"
-            label="Générer une séance"
-            :to="`/combo/${activeCombo.id}/session`"
-          />
+          <div class="c3-cta-row q-mb-sm">
+            <q-btn
+              class="c3-cta-grow"
+              outline
+              color="primary"
+              no-caps
+              icon="fitness_center"
+              label="Générer une séance"
+              :to="`/combo/${activeCombo.id}/session`"
+            />
+            <q-btn
+              outline
+              color="primary"
+              no-caps
+              icon="ios_share"
+              label="Exporter"
+              title="Exporter le Défi 360 complet détaillé"
+              @click="exportCombo"
+            />
+          </div>
           <div v-for="leg in activeComboLegs" :key="leg.exercise_id" class="combo-leg">
             <div class="cl-top">
               <button class="cl-name" @click="openHistory(leg)">
@@ -563,6 +574,7 @@ import {
   legLastAssisted,
   legSets,
   type ComboChallenge,
+  comboExportText,
   type ComboLeg,
   type ComboSet,
 } from '@/lib/combo';
@@ -774,6 +786,25 @@ onBeforeUnmount(() => {
   if (chronoLegKey.value) logChrono(chronoLegKey.value);
   else clearInterval(chronoTick);
 });
+// Exporte le Défi 360 complet détaillé : partage natif (mobile) sinon presse-papier.
+async function exportCombo() {
+  if (!activeCombo.value) return;
+  const text = comboExportText(activeCombo.value, logicalToday());
+  if (typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title: 'Défi 360', text });
+    } catch {
+      /* partage annulé */
+    }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    $q.notify({ type: 'positive', message: 'Défi 360 copié dans le presse-papier.' });
+  } catch {
+    $q.notify({ type: 'negative', message: 'Copie impossible sur cet appareil.' });
+  }
+}
 function undoSet(leg: ComboLeg) {
   if (!activeCombo.value) return;
   const sets = legSets(leg);
@@ -1306,6 +1337,15 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
+}
+/* Ligne d'actions du Défi 360 : « Générer une séance » (extensible) + « Exporter ». */
+.c3-cta-row {
+  display: flex;
+  gap: 8px;
+}
+.c3-cta-grow {
+  flex: 1;
+  min-width: 0;
 }
 .combo-leg {
   background: var(--surface);
