@@ -105,7 +105,7 @@ export interface CharacterRow {
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
 // premiers donjons) → le joueur n'est pas bloqué à 0 énergie au départ.
-const WELCOME_ENERGY = 300;
+const WELCOME_ENERGY = 400;
 
 // Jour calendaire LOCAL (YYYY-MM-DD) à l'instant `ms` — utilisé pour horodater les
 // entrées du journal d'énergie hors-sport (energy_log).
@@ -224,7 +224,15 @@ export const useCharacterStore = defineStore('character', () => {
       pseudo,
       updated_at: new Date().toISOString(),
     };
-    if (isNew) patch.login_energy = WELCOME_ENERGY;
+    if (isNew) {
+      patch.login_energy = WELCOME_ENERGY;
+      patch.energy_log = pushEnergyLog(undefined, {
+        date: isoDayLocal(Date.now()),
+        emoji: '🎉',
+        label: 'Pécule de bienvenue',
+        amount: WELCOME_ENERGY,
+      });
+    }
     const { data, error } = await supabase.from('characters').upsert(patch).select(COLS).single();
     if (error) {
       if (error.code === '23505') throw new PseudoTakenError();
