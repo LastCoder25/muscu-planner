@@ -6,6 +6,18 @@
         <h1 class="home-name font-display">
           {{ profileStore.profile?.identity.name || 'Athlète' }}
         </h1>
+        <!-- Météo du jour (Open-Meteo, sans clé) : « il fait quoi dehors ? » avant de
+             décider de sortir courir. Absente si la géoloc est refusée. -->
+        <div
+          v-if="weather"
+          class="home-weather"
+          :title="`Ressenti ${weather.feelsLikeC}° · ${weather.label}`"
+        >
+          <span class="hw-ic">{{ weather.emoji }}</span>
+          <span class="hw-t font-display">{{ weather.tempC }}°</span>
+          <span class="hw-l">{{ weather.label }}</span>
+          <span v-if="weather.city" class="hw-c">· {{ weather.city }}</span>
+        </div>
       </div>
       <div class="head-actions">
         <button class="hsq" aria-label="Agenda" @click="goAgenda">
@@ -267,6 +279,7 @@ import { useLiveCourtStore } from '@/stores/liveCourt';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx } from '@/composables/useXpFx';
+import { useWeather } from '@/composables/useWeather';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeStats, logicalToday } from '@/lib/challenges';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
@@ -286,6 +299,8 @@ const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
 const progress = useProgress();
 const xpFx = useXpFx();
+// Météo du jour (tuile informative sous le titre) — absente si géoloc refusée.
+const { weather } = useWeather();
 const challenges = useChallengesStore();
 // Défis actifs dont l'objectif du jour reste à faire (badge sur l'icône Challenges).
 const challengesDueToday = computed(() => {
@@ -755,6 +770,31 @@ async function saveAutre() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Météo du jour sous le prénom : une ligne discrète, informative. */
+.home-weather {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hw-ic {
+  font-size: 15px;
+  line-height: 1;
+}
+.hw-t {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.hw-c {
+  color: var(--dim-2);
 }
 .text-dim {
   color: var(--dim);
