@@ -75,6 +75,27 @@ export function levelUpEnergy(level: number): number {
   return 30 + Math.max(0, level) * 12;
 }
 
+// ── Journal d'énergie HORS-SPORT (ticket : la Dynamo n'apparaissait pas dans le
+//    détail par jour) — une entrée par gain (bonus de connexion, montée de niveau,
+//    Dynamo de faille), horodatée, pour permettre un historique jour par jour comme
+//    pour le sport (useEnergyHistory). Les sources SPORT restent recalculées depuis
+//    les logs/défis existants (pas besoin de les journaliser). ──
+export interface EnergyLogEntry {
+  date: string; // YYYY-MM-DD (jour calendaire local)
+  emoji: string;
+  label: string;
+  amount: number; // ⚡ gagnés
+}
+const ENERGY_LOG_CAP = 40; // largement assez pour quelques jours d'historique
+/** Ajoute une entrée en tête du journal (plus récent d'abord), tronqué à ENERGY_LOG_CAP. */
+export function pushEnergyLog(
+  log: EnergyLogEntry[] | undefined,
+  entry: EnergyLogEntry,
+): EnergyLogEntry[] {
+  if (entry.amount <= 0) return log ?? [];
+  return [entry, ...(log ?? [])].slice(0, ENERGY_LOG_CAP);
+}
+
 // Validation d'un pseudo d'aventurier (unicité gérée en base par contrainte).
 export function normalizePseudo(raw: string): string {
   return raw.trim().replace(/\s+/g, ' ');

@@ -7,7 +7,6 @@ import { useCharacterStore } from '@/stores/character';
 import { sessionXp, otherSportXp, cardioSessionXp, REP_XP, assistMult } from '@/lib/athlete';
 import { challengeDayXp } from '@/lib/challenges';
 import { legSets } from '@/lib/combo';
-import { dailyLoginEnergy } from '@/lib/loginStreak';
 import { ACTIVITY_LABELS, isCardioOutingChallenge } from '@/data/cardio';
 
 // Énergie de FOND (sport) : muscu + cardio + autre sport + défis muscu/cardio. Le
@@ -33,12 +32,11 @@ export interface EnergyDay {
 }
 
 /** Énergie GAGNÉE par jour + le DÉTAIL par source (sport ET hors-sport : bonus de
- *  connexion, expéditions), sur les `nDays` derniers jours (aujourd'hui inclus), du plus
- *  récent au plus ancien. `getLevel` = niveau global (pour estimer le bonus de connexion).
- *  Lit les stores déjà chargés. NB : certaines sources hors-sport ne sont pas horodatées
- *  (Dynamo de faille, montées de niveau) → non ventilables par jour ; elles restent dans
- *  le solde global mais n'apparaissent pas ici. */
-export function useEnergyHistory(getLevel: () => number, nDays = 3) {
+ *  connexion, montées de niveau, Dynamo de faille, expéditions), sur les `nDays`
+ *  derniers jours (aujourd'hui inclus), du plus récent au plus ancien. Le hors-sport
+ *  vient du journal `energy_log` (migr. 0057, horodaté à chaque gain) ; les expéditions
+ *  (mines) restent dérivées des messages (déjà horodatés). Lit les stores déjà chargés. */
+export function useEnergyHistory(nDays = 3) {
   const logs = useLogsStore();
   const cardio = useCardioStore();
   const challenges = useChallengesStore();
@@ -99,17 +97,10 @@ export function useEnergyHistory(getLevel: () => number, nDays = 3) {
       for (const [date, xp] of perDay) push(date, '🎯', 'Défi 360', xp);
     }
 
-    // ── HORS-SPORT (datables) ──
+    // ── HORS-SPORT ──
     const row = char.row;
-    // Bonus de connexion quotidien (dernier claim = last_login_date).
-    if (row?.last_login_date) {
-      push(
-        row.last_login_date,
-        '🎁',
-        'Bonus de connexion',
-        dailyLoginEnergy(row.login_streak, getLevel()),
-      );
-    }
+    // Journal d'énergie (bonus de connexion, montées de niveau, Dynamo de faille…).
+    for (const e of row?.energy_log ?? []) push(e.date, e.emoji, e.label, e.amount);
     // Expéditions (mines) : messages horodatés portant de l'énergie.
     for (const m of row?.messages ?? []) {
       if (m.energy > 0) push(isoDay(new Date(m.resolvedAt)), '⛏️', 'Expédition (mine)', m.energy);

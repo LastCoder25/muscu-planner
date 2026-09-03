@@ -2,7 +2,12 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import { normalizePseudo, levelUpEnergy } from '@/lib/character';
+import {
+  normalizePseudo,
+  levelUpEnergy,
+  pushEnergyLog,
+  type EnergyLogEntry,
+} from '@/lib/character';
 import {
   sellValue,
   sellValueOf,
@@ -95,11 +100,21 @@ export interface CharacterRow {
   set_pieces_seen: Record<string, string[]>; // codex : slots de set déjà obtenus par setId
   loadouts: Loadout[]; // sets d'équipement rangés (max 3, migr. 0051)
   voie: string | null; // spécialisation/archétype choisi (migr. 0055 ; null = aucune)
+  energy_log: EnergyLogEntry[]; // journal d'énergie hors-sport horodaté (migr. 0057)
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
 // premiers donjons) → le joueur n'est pas bloqué à 0 énergie au départ.
 const WELCOME_ENERGY = 300;
+
+// Jour calendaire LOCAL (YYYY-MM-DD) à l'instant `ms` — utilisé pour horodater les
+// entrées du journal d'énergie hors-sport (energy_log).
+function isoDayLocal(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate(),
+  ).padStart(2, '0')}`;
+}
 
 export class PseudoTakenError extends Error {
   constructor() {
@@ -114,7 +129,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -166,6 +181,7 @@ export const useCharacterStore = defineStore('character', () => {
         return { items };
       });
     r.messages = arr<ExpeditionMessage>(r.messages);
+    r.energy_log = arr<EnergyLogEntry>(r.energy_log);
     // Bâtiments (migr. 0046). On DROPPE les types disparus du registre (ex. l'ancien
     // 'fragment_vein' ; 'energy_font'/'warehouse' retirés v0.599) → pas d'emplacement
     // fantôme, puis on RE-PACK les slots à 0..n-1 (triés par slot d'origine) pour que les
@@ -584,6 +600,12 @@ export const useCharacterStore = defineStore('character', () => {
       login_grace_used: next.graceUsed,
       last_login_date: todayIso,
       login_energy: cur.login_energy + energy,
+      energy_log: pushEnergyLog(cur.energy_log, {
+        date: todayIso,
+        emoji: '🎁',
+        label: 'Bonus de connexion',
+        amount: energy,
+      }),
     });
     return { streak: next.streak, energy, usedGrace };
   }
@@ -614,6 +636,15 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       reward_level: currentLevel,
       login_energy: cur.login_energy + energy,
+      energy_log: pushEnergyLog(cur.energy_log, {
+        date: isoDayLocal(Date.now()),
+        emoji: '⭐',
+        label:
+          currentLevel > prev + 1
+            ? `Niveaux ${prev + 1}–${currentLevel}`
+            : `Niveau ${currentLevel}`,
+        amount: energy,
+      }),
     });
     return { from: prev, to: currentLevel, energy };
   }
@@ -1049,6 +1080,12 @@ export const useCharacterStore = defineStore('character', () => {
       fragments: cur.fragments + got.fragments,
       ink_dust: cur.ink_dust + got.ink_dust,
       buildings: cur.buildings.map((b) => ({ ...b, collectedAt: nextCollectedAt(b, now, mult) })),
+      energy_log: pushEnergyLog(cur.energy_log, {
+        date: isoDayLocal(now),
+        emoji: '⚡',
+        label: 'Dynamo de faille',
+        amount: got.energy,
+      }),
     });
     return got;
   }

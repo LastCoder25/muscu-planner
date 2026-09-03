@@ -2573,7 +2573,7 @@ const c = computed(() =>
 // centrés sur le joueur (pyramide) + comparaisons.
 const heroLevel = computed(() => c.value.level.level);
 // Détail de l'énergie (toutes sources datables) sur 3 jours — modale au clic sur ⚡.
-const energyHist = useEnergyHistory(() => heroLevel.value, 3);
+const energyHist = useEnergyHistory(3);
 // Effets cumulés des talents choisis.
 const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
 // Effets « hors équipement » actifs = talents + PASSIF DE VOIE (spécialisation) → comptés
