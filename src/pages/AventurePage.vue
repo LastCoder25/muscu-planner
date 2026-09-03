@@ -1715,8 +1715,8 @@
         </button>
         <div class="sec-title">⚡ Énergie — 3 derniers jours</div>
         <div class="sec-hint">
-          Énergie <b>gagnée par le sport</b> chaque jour (mêmes chiffres qu'à l'Agenda). Solde
-          actuel : <b>{{ c.energy }} ⚡</b>.
+          Énergie <b>gagnée</b> chaque jour, toutes sources : sport, bonus de connexion,
+          expéditions. Solde actuel : <b>{{ c.energy }} ⚡</b>.
         </div>
         <div class="enh-list">
           <div v-for="d in energyHist" :key="d.date" class="enh-day-block">
@@ -2526,9 +2526,9 @@ const persoSub = ref<'perso'>('perso');
 const talentsOpen = ref(false);
 const familiarsOpen = ref(false);
 const ranksOpen = ref(false);
-// Historique d'énergie gagnée (sport) sur 3 jours — modale au clic sur la puce ⚡.
+// Historique d'énergie gagnée sur 3 jours — modale au clic sur la puce ⚡ (energyHist
+// défini plus bas, après `c`/`heroLevel`).
 const energyHistOpen = ref(false);
-const energyHist = useEnergyHistory(3);
 // Liste des 10 rangs de prestige (cosmétiques, dérivés du niveau) : 1 rang = 10 niveaux
 // (5 étoiles × 2 niveaux). Marque le rang courant + sa plage de niveaux.
 const rankList = computed(() =>
@@ -2572,6 +2572,8 @@ const c = computed(() =>
 // Niveau du héros (= niveau global de fond) — alias pratique pour les affichages de drop
 // centrés sur le joueur (pyramide) + comparaisons.
 const heroLevel = computed(() => c.value.level.level);
+// Détail de l'énergie (toutes sources datables) sur 3 jours — modale au clic sur ⚡.
+const energyHist = useEnergyHistory(() => heroLevel.value, 3);
 // Effets cumulés des talents choisis.
 const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
 // Effets « hors équipement » actifs = talents + PASSIF DE VOIE (spécialisation) → comptés
