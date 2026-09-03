@@ -1,48 +1,44 @@
-// Météo du jour — tuile PUREMENT informative sur l'accueil (« il fait quoi dehors
-// avant de sortir courir ? »). Aucune clé API : Open-Meteo (prévisions, gratuit,
-// sans clé, CORS) + BigDataCloud (reverse-geocoding, gratuit, sans clé) pour le nom
-// de ville. Géolocalisation navigateur ; refus/échec → tuile simplement absente
-// (non-intrusif, pas de toast d'erreur pour une info secondaire).
-import { ref } from 'vue';
-import { weatherIcon } from '@/lib/weather';
+// Météo — accueil. Aucune clé API : Open-Meteo (prévisions + géocodage, gratuit,
+// CORS) + BigDataCloud (reverse-geocoding) pour nommer « ma position ».
+//   • Lieu = ma position (géoloc navigateur) OU une ville choisie (recherche).
+//   • Favoris (villes ★) et lieu courant persistés en localStorage (confort par
+//     appareil, pas de sync compte — info secondaire).
+//   • Un seul appel : actuel + heure par heure (10 j) + 10 jours ; cache 30 min PAR lieu.
+//   • Géoloc refusée / réseau KO → on garde le cache s'il existe, sinon tuile absente
+//     (non-intrusif, pas de toast pour une info secondaire).
+import { ref, computed } from 'vue';
+import {
+  parseForecast,
+  placeLabel,
+  type RawForecast,
+  type WeatherData,
+  type WeatherPlace,
+} from '@/lib/weather';
 
-export interface WeatherHour {
-  time: string; // « 14h »
-  tempC: number;
-  rainPct: number; // probabilité de précipitations (0..100)
-  emoji: string;
-}
-export interface WeatherNow {
-  tempC: number;
-  feelsLikeC: number;
-  code: number;
-  windKmh: number;
-  precipMm: number; // précipitations de l'heure en cours
-  city: string | null;
-  emoji: string;
-  label: string;
-  hours: WeatherHour[]; // prochaines heures (« je sors maintenant ou plus tard ? »)
-}
-
-const CACHE_KEY = 'muscu:weather:v2'; // v2 : + vent/précip/prochaines heures (l'ancien cache est ignoré)
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min : assez frais, évite un géoloc+fetch à chaque visite
+const PLACE_KEY = 'muscu:weather:place'; // lieu courant (null = ma position)
+const FAVS_KEY = 'muscu:weather:favs';
+const cacheKey = (id: string) => `muscu:weather:v3:${id}`;
+const CACHE_TTL_MS = 30 * 60 * 1000;
+const FORECAST_DAYS = 10;
+export const GEO_ID = 'geo';
 
 interface WeatherCache {
   fetchedAt: number;
-  data: WeatherNow;
+  data: WeatherData;
+  city: string | null;
 }
 
-function readCache(): WeatherCache | null {
+function readJson<T>(key: string): T | null {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    return raw ? (JSON.parse(raw) as WeatherCache) : null;
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
   } catch {
-    return null; // stockage indisponible (navigation privée…) → pas de cache, tant pis
+    return null; // stockage indisponible (navigation privée…)
   }
 }
-function writeCache(data: WeatherNow) {
+function writeJson(key: string, v: unknown) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data }));
+    localStorage.setItem(key, JSON.stringify(v));
   } catch {
     /* idem */
   }
@@ -57,12 +53,12 @@ function getPosition(): Promise<GeolocationPosition> {
     navigator.geolocation.getCurrentPosition(resolve, reject, {
       enableHighAccuracy: false,
       timeout: 8000,
-      maximumAge: 15 * 60 * 1000, // position OS récente acceptée telle quelle
+      maximumAge: 15 * 60 * 1000,
     });
   });
 }
 
-// Best-effort : le nom de ville est un bonus d'affichage, jamais bloquant pour la météo.
+// Best-effort : nom de « ma position », jamais bloquant.
 async function reverseGeocodeCity(lat: number, lon: number): Promise<string | null> {
   try {
     const r = await fetch(
@@ -80,84 +76,124 @@ async function reverseGeocodeCity(lat: number, lon: number): Promise<string | nu
   }
 }
 
-const HOURS_AHEAD = 8; // prochaines heures affichées dans le panneau
-
-// Un seul appel : conditions actuelles + prévision horaire des prochaines heures.
-async function fetchForecast(
-  lat: number,
-  lon: number,
-): Promise<Omit<WeatherNow, 'city' | 'emoji' | 'label'>> {
+async function fetchForecast(lat: number, lon: number): Promise<WeatherData> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation` +
-    `&hourly=temperature_2m,precipitation_probability,weather_code` +
-    `&forecast_hours=${HOURS_AHEAD + 1}&timezone=auto`;
+    `&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m` +
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max` +
+    `&forecast_days=${FORECAST_DAYS}&timezone=auto`;
   const r = await fetch(url);
   if (!r.ok) throw new Error('Météo indisponible.');
-  const d = (await r.json()) as {
-    current: {
-      temperature_2m: number;
-      apparent_temperature: number;
-      weather_code: number;
-      wind_speed_10m: number;
-      precipitation: number;
+  return parseForecast((await r.json()) as RawForecast);
+}
+
+/** Recherche de villes (géocodage Open-Meteo, sans clé). */
+export async function searchCities(q: string): Promise<WeatherPlace[]> {
+  const name = q.trim();
+  if (name.length < 2) return [];
+  try {
+    const r = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=8&language=fr&format=json`,
+    );
+    if (!r.ok) return [];
+    const d = (await r.json()) as {
+      results?: {
+        id: number;
+        name: string;
+        admin1?: string;
+        country?: string;
+        latitude: number;
+        longitude: number;
+      }[];
     };
-    hourly: {
-      time: string[]; // ISO local « 2026-09-03T14:00 »
-      temperature_2m: number[];
-      precipitation_probability: (number | null)[];
-      weather_code: number[];
-    };
-  };
-  // forecast_hours part de l'heure COURANTE → on saute l'index 0 (déjà dans `current`).
-  const hours: WeatherHour[] = d.hourly.time.slice(1, HOURS_AHEAD + 1).map((t, i) => ({
-    time: `${t.slice(11, 13)}h`,
-    tempC: Math.round(d.hourly.temperature_2m[i + 1] ?? 0),
-    rainPct: Math.round(d.hourly.precipitation_probability[i + 1] ?? 0),
-    emoji: weatherIcon(d.hourly.weather_code[i + 1] ?? 0).emoji,
-  }));
-  return {
-    tempC: Math.round(d.current.temperature_2m),
-    feelsLikeC: Math.round(d.current.apparent_temperature),
-    code: d.current.weather_code,
-    windKmh: Math.round(d.current.wind_speed_10m),
-    precipMm: Math.round(d.current.precipitation * 10) / 10,
-    hours,
-  };
+    return (d.results ?? []).map((x) => ({
+      id: String(x.id),
+      name: x.name,
+      ...(x.admin1 ? { admin1: x.admin1 } : {}),
+      ...(x.country ? { country: x.country } : {}),
+      lat: x.latitude,
+      lon: x.longitude,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export function useWeather() {
-  const weather = ref<WeatherNow | null>(null);
+  const place = ref<WeatherPlace | null>(readJson<WeatherPlace>(PLACE_KEY));
+  const favorites = ref<WeatherPlace[]>(readJson<WeatherPlace[]>(FAVS_KEY) ?? []);
+  const weather = ref<WeatherData | null>(null);
+  const geoCity = ref<string | null>(null); // nom de « ma position » (reverse geocode)
   const loading = ref(false);
 
+  /** Nom affiché du lieu courant. */
+  const city = computed(() => (place.value ? placeLabel(place.value) : geoCity.value));
+  const isFavorite = (p: WeatherPlace | null) => !!p && favorites.value.some((f) => f.id === p.id);
+
   async function load(force = false) {
+    const id = place.value?.id ?? GEO_ID;
     if (!force) {
-      const cached = readCache();
+      const cached = readJson<WeatherCache>(cacheKey(id));
       if (cached) {
-        weather.value = cached.data; // affiché tout de suite (frais ou pas) → pas d'écran vide
-        if (Date.now() - cached.fetchedAt < CACHE_TTL_MS) return; // assez frais, pas de refresh
+        weather.value = cached.data; // affiché tout de suite (frais ou pas)
+        if (!place.value) geoCity.value = cached.city;
+        if (Date.now() - cached.fetchedAt < CACHE_TTL_MS) return;
       }
     }
     loading.value = true;
     try {
-      const pos = await getPosition();
-      const { latitude: lat, longitude: lon } = pos.coords;
-      const [base, city] = await Promise.all([
-        fetchForecast(lat, lon),
-        reverseGeocodeCity(lat, lon),
-      ]);
-      const icon = weatherIcon(base.code);
-      const data: WeatherNow = { ...base, city, emoji: icon.emoji, label: icon.label };
+      let data: WeatherData;
+      let cityName: string | null = null;
+      if (place.value) {
+        data = await fetchForecast(place.value.lat, place.value.lon);
+      } else {
+        const { latitude: lat, longitude: lon } = (await getPosition()).coords;
+        [data, cityName] = await Promise.all([
+          fetchForecast(lat, lon),
+          reverseGeocodeCity(lat, lon),
+        ]);
+        geoCity.value = cityName;
+      }
+      // Garde-fou : si le lieu a changé pendant le fetch, on n'écrase pas l'affichage.
+      if ((place.value?.id ?? GEO_ID) !== id) return;
       weather.value = data;
-      writeCache(data);
+      writeJson(cacheKey(id), {
+        fetchedAt: Date.now(),
+        data,
+        city: cityName,
+      } satisfies WeatherCache);
     } catch {
-      // Géoloc refusée/indisponible ou météo injoignable → on garde le cache s'il y en
-      // avait un (déjà affiché ci-dessus) ; sinon la tuile reste simplement absente.
+      /* géoloc refusée / réseau KO → cache déjà affiché s'il existait, sinon rien */
     } finally {
       loading.value = false;
     }
   }
 
+  /** Change de lieu (null = ma position) et recharge. */
+  function selectPlace(p: WeatherPlace | null) {
+    place.value = p;
+    writeJson(PLACE_KEY, p);
+    weather.value = null; // évite d'afficher la météo de l'ancien lieu pendant le chargement
+    void load();
+  }
+  function toggleFavorite(p: WeatherPlace) {
+    favorites.value = isFavorite(p)
+      ? favorites.value.filter((f) => f.id !== p.id)
+      : [...favorites.value, p];
+    writeJson(FAVS_KEY, favorites.value);
+  }
+
   void load();
-  return { weather, loading, refresh: () => load(true) };
+  return {
+    weather,
+    city,
+    place,
+    favorites,
+    loading,
+    isFavorite,
+    selectPlace,
+    toggleFavorite,
+    refresh: () => load(true),
+  };
 }

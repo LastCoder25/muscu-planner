@@ -9,63 +9,209 @@
         <!-- Météo du jour (Open-Meteo, sans clé) : « il fait quoi dehors ? » avant de
              décider de sortir courir. Absente si la géoloc est refusée. -->
         <button
-          v-if="weather"
+          v-if="weather || place"
           class="home-weather"
           type="button"
-          :title="`Ressenti ${weather.feelsLikeC}° · ${weather.label} — appuie pour le détail`"
+          :title="
+            weather
+              ? `Ressenti ${weather.current.feelsLikeC}° · ${weather.current.label} — appuie pour le détail`
+              : 'Météo — appuie pour choisir un lieu'
+          "
           @click="weatherOpen = true"
         >
-          <span class="hw-ic">{{ weather.emoji }}</span>
-          <span class="hw-t font-display">{{ weather.tempC }}°</span>
-          <span class="hw-l">{{ weather.label }}</span>
-          <span v-if="weather.city" class="hw-c">· {{ weather.city }}</span>
+          <template v-if="weather">
+            <span class="hw-ic">{{ weather.current.emoji }}</span>
+            <span class="hw-t font-display">{{ weather.current.tempC }}°</span>
+            <span class="hw-l">{{ weather.current.label }}</span>
+            <span v-if="city" class="hw-c">· {{ city }}</span>
+          </template>
+          <template v-else><span class="hw-ic">🌡️</span><span class="hw-l">Météo…</span></template>
         </button>
       </div>
 
-      <!-- Panneau météo (tap sur la ligne) : « je sors maintenant ou plus tard ? » -->
+      <!-- Panneau météo (tap sur la ligne) : lieu (ma position / favoris / recherche),
+           actuel, heure par heure PAR JOUR, 10 jours. « Je sors maintenant ou plus tard ? » -->
       <q-dialog v-model="weatherOpen" position="bottom">
-        <q-card v-if="weather" class="wx-card">
-          <div class="wx-head">
-            <span class="wx-big">{{ weather.emoji }}</span>
-            <div class="wx-main">
-              <div class="wx-temp font-display">{{ weather.tempC }}°</div>
-              <div class="wx-lbl">
-                {{ weather.label }}<template v-if="weather.city"> · {{ weather.city }}</template>
-              </div>
-            </div>
+        <q-card class="wx-card">
+          <!-- Lieu : ma position, favoris ★, recherche -->
+          <div class="wx-places">
             <button
-              class="wx-refresh"
+              class="wx-chip"
+              :class="{ on: !place }"
               type="button"
-              :disabled="weatherLoading"
-              aria-label="Actualiser"
-              @click="refreshWeather"
+              @click="selectPlace(null)"
             >
-              <q-icon name="refresh" size="20px" :class="{ spin: weatherLoading }" />
+              📍 Ma position
+            </button>
+            <button
+              v-for="f in favorites"
+              :key="f.id"
+              class="wx-chip"
+              :class="{ on: place?.id === f.id }"
+              type="button"
+              @click="selectPlace(f)"
+            >
+              ★ {{ f.name }}
+            </button>
+            <button
+              class="wx-chip ghost"
+              :class="{ on: searchOpen }"
+              type="button"
+              @click="toggleSearch"
+            >
+              🔍 Ville
             </button>
           </div>
-          <div class="wx-stats">
-            <div class="wx-stat">
-              <span class="wx-k">Ressenti</span>
-              <span class="wx-v font-display">{{ weather.feelsLikeC }}°</span>
+          <div v-if="searchOpen" class="wx-search">
+            <input
+              ref="searchEl"
+              v-model="query"
+              class="wx-input"
+              type="search"
+              placeholder="Rechercher une ville…"
+              autocomplete="off"
+              @input="onQuery"
+            />
+            <div v-if="results.length" class="wx-results">
+              <button
+                v-for="r in results"
+                :key="r.id"
+                class="wx-result"
+                type="button"
+                @click="pickPlace(r)"
+              >
+                <span class="wx-r-name">{{ placeLabel(r) }}</span>
+                <span v-if="r.country" class="wx-r-c">{{ r.country }}</span>
+              </button>
             </div>
-            <div class="wx-stat">
-              <span class="wx-k">Vent</span>
-              <span class="wx-v font-display">{{ weather.windKmh }} km/h</span>
-            </div>
-            <div class="wx-stat">
-              <span class="wx-k">Pluie</span>
-              <span class="wx-v font-display">{{ weather.precipMm }} mm</span>
+            <div v-else-if="query.trim().length >= 2 && !searching" class="wx-empty">
+              Aucune ville trouvée.
             </div>
           </div>
-          <div v-if="weather.hours.length" class="wx-sub">Prochaines heures</div>
-          <div v-if="weather.hours.length" class="wx-hours">
-            <div v-for="h in weather.hours" :key="h.time" class="wx-h">
-              <span class="wx-h-t">{{ h.time }}</span>
-              <span class="wx-h-ic">{{ h.emoji }}</span>
-              <span class="wx-h-temp font-display">{{ h.tempC }}°</span>
-              <span class="wx-h-rain" :class="{ wet: h.rainPct >= 40 }">💧{{ h.rainPct }}%</span>
+
+          <template v-if="weather">
+            <!-- Actuel -->
+            <div class="wx-head">
+              <span class="wx-big">{{ weather.current.emoji }}</span>
+              <div class="wx-main">
+                <div class="wx-temp font-display">{{ weather.current.tempC }}°</div>
+                <div class="wx-lbl">
+                  {{ weather.current.label }}<template v-if="city"> · {{ city }}</template>
+                </div>
+              </div>
+              <button
+                v-if="place"
+                class="wx-icbtn"
+                :class="{ fav: isFavorite(place) }"
+                type="button"
+                :aria-label="isFavorite(place) ? 'Retirer des favoris' : 'Ajouter aux favoris'"
+                :title="isFavorite(place) ? 'Retirer des favoris' : 'Ajouter aux favoris'"
+                @click="toggleFavorite(place)"
+              >
+                {{ isFavorite(place) ? '★' : '☆' }}
+              </button>
+              <button
+                class="wx-icbtn"
+                type="button"
+                :disabled="weatherLoading"
+                aria-label="Actualiser"
+                title="Actualiser"
+                @click="refreshWeather"
+              >
+                <q-icon name="refresh" size="20px" :class="{ spin: weatherLoading }" />
+              </button>
             </div>
+            <div class="wx-stats">
+              <div class="wx-stat">
+                <span class="wx-k">Ressenti</span>
+                <span class="wx-v font-display">{{ weather.current.feelsLikeC }}°</span>
+              </div>
+              <div class="wx-stat">
+                <span class="wx-k">Vent</span>
+                <span class="wx-v font-display">{{ weather.current.windKmh }} km/h</span>
+              </div>
+              <div class="wx-stat">
+                <span class="wx-k">Pluie</span>
+                <span class="wx-v font-display">{{ weather.current.precipMm }} mm</span>
+              </div>
+            </div>
+
+            <!-- Onglets : heure par heure (par jour) / N jours -->
+            <div class="wx-tabs">
+              <button
+                class="wx-tab"
+                :class="{ on: tab === 'hours' }"
+                type="button"
+                @click="tab = 'hours'"
+              >
+                Heure par heure
+              </button>
+              <button
+                class="wx-tab"
+                :class="{ on: tab === 'days' }"
+                type="button"
+                @click="tab = 'days'"
+              >
+                {{ weather.days.length }} jours
+              </button>
+            </div>
+
+            <template v-if="tab === 'hours'">
+              <div class="wx-daystrip">
+                <button
+                  v-for="d in weather.days"
+                  :key="d.date"
+                  class="wx-dchip"
+                  :class="{ on: selDay === d.date }"
+                  type="button"
+                  @click="selDay = d.date"
+                >
+                  <span class="wx-dchip-l">{{ dayLabel(d.date, todayIso) }}</span>
+                  <span class="wx-dchip-ic">{{ d.emoji }}</span>
+                  <span class="wx-dchip-t">{{ d.maxC }}°</span>
+                </button>
+              </div>
+              <div class="wx-list">
+                <div v-for="h in dayHours" :key="h.hour" class="wx-row">
+                  <span class="wx-row-h">{{ h.hour }}</span>
+                  <span class="wx-row-ic">{{ h.emoji }}</span>
+                  <span class="wx-row-t font-display">{{ h.tempC }}°</span>
+                  <span class="wx-row-r" :class="{ wet: h.rainPct >= 40 }"
+                    >💧 {{ h.rainPct }}%</span
+                  >
+                  <span class="wx-row-w">💨 {{ h.windKmh }}</span>
+                </div>
+                <div v-if="!dayHours.length" class="wx-empty">
+                  Pas encore de détail pour ce jour.
+                </div>
+              </div>
+            </template>
+
+            <div v-else class="wx-list">
+              <button
+                v-for="d in weather.days"
+                :key="d.date"
+                class="wx-row wx-row-day"
+                type="button"
+                @click="openDay(d.date)"
+              >
+                <span class="wx-row-h">{{ dayLabel(d.date, todayIso) }}</span>
+                <span class="wx-row-ic">{{ d.emoji }}</span>
+                <span class="wx-row-t font-display"
+                  >{{ d.maxC }}° <small>/ {{ d.minC }}°</small></span
+                >
+                <span class="wx-row-r" :class="{ wet: d.rainPct >= 40 }">💧 {{ d.rainPct }}%</span>
+                <span class="wx-row-w">💨 {{ d.windKmh }}</span>
+              </button>
+            </div>
+          </template>
+          <div v-else class="wx-empty wx-loading">
+            <q-spinner v-if="weatherLoading" color="primary" size="22px" />
+            <template v-else
+              >Météo indisponible ici — autorise la localisation ou choisis une ville.</template
+            >
           </div>
+
           <div class="wx-src">Open-Meteo · modèle Météo-France sur la France</div>
         </q-card>
       </q-dialog>
@@ -318,7 +464,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue';
+import { ref, onMounted, computed, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useProfileStore } from '@/stores/profile';
@@ -329,7 +475,8 @@ import { useLiveCourtStore } from '@/stores/liveCourt';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx } from '@/composables/useXpFx';
-import { useWeather } from '@/composables/useWeather';
+import { useWeather, searchCities } from '@/composables/useWeather';
+import { placeLabel, dayLabel, hoursOfDay, type WeatherPlace } from '@/lib/weather';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeStats, logicalToday } from '@/lib/challenges';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
@@ -349,10 +496,76 @@ const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
 const progress = useProgress();
 const xpFx = useXpFx();
-// Météo du jour (tuile sous le titre) — absente si géoloc refusée. Tap → panneau
-// détaillé (ressenti, vent, précip, prochaines heures) + Actualiser.
-const { weather, loading: weatherLoading, refresh: refreshWeather } = useWeather();
+// Météo (ligne sous le prénom) → panneau : lieu (ma position / favoris / recherche),
+// actuel, heure par heure PAR JOUR, 10 jours.
+const {
+  weather,
+  city,
+  place,
+  favorites,
+  loading: weatherLoading,
+  isFavorite,
+  selectPlace,
+  toggleFavorite,
+  refresh: refreshWeather,
+} = useWeather();
 const weatherOpen = ref(false);
+const tab = ref<'hours' | 'days'>('hours');
+const todayIso = (() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate(),
+  ).padStart(2, '0')}`;
+})();
+// Jour sélectionné pour l'heure par heure (défaut : aujourd'hui / 1er jour prévu).
+const selDay = ref(todayIso);
+watch(
+  () => weather.value?.days[0]?.date,
+  (first) => {
+    if (!first) return;
+    if (!weather.value?.days.some((d) => d.date === selDay.value)) selDay.value = first;
+  },
+  { immediate: true },
+);
+const dayHours = computed(() =>
+  weather.value ? hoursOfDay(weather.value.hours, selDay.value) : [],
+);
+function openDay(date: string) {
+  selDay.value = date;
+  tab.value = 'hours';
+}
+// Recherche de ville (géocodage Open-Meteo), debounce léger.
+const searchOpen = ref(false);
+const searchEl = ref<HTMLInputElement | null>(null);
+const query = ref('');
+const results = ref<WeatherPlace[]>([]);
+const searching = ref(false);
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+function toggleSearch() {
+  searchOpen.value = !searchOpen.value;
+  if (searchOpen.value) void nextTick(() => searchEl.value?.focus());
+}
+function onQuery() {
+  if (searchTimer) clearTimeout(searchTimer);
+  const q = query.value;
+  if (q.trim().length < 2) {
+    results.value = [];
+    return;
+  }
+  searching.value = true;
+  searchTimer = setTimeout(() => {
+    void searchCities(q).then((r) => {
+      if (query.value === q) results.value = r; // ignore les réponses périmées
+      searching.value = false;
+    });
+  }, 300);
+}
+function pickPlace(p: WeatherPlace) {
+  selectPlace(p);
+  searchOpen.value = false;
+  query.value = '';
+  results.value = [];
+}
 const challenges = useChallengesStore();
 // Défis actifs dont l'objectif du jour reste à faire (badge sur l'icône Challenges).
 const challengesDueToday = computed(() => {
@@ -845,19 +1058,101 @@ async function saveAutre() {
 .home-weather:active {
   opacity: 0.7;
 }
-/* Panneau météo (bottom sheet). */
+/* Panneau météo (bottom sheet, scrollable). */
 .wx-card {
   width: 100%;
   max-width: 560px;
+  max-height: 86vh;
+  overflow-y: auto;
   border-radius: 18px 18px 0 0;
   background: var(--surface);
   color: var(--text);
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+}
+/* Lieux : chips défilantes (ma position / favoris / recherche). */
+.wx-places {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.wx-places::-webkit-scrollbar {
+  display: none;
+}
+.wx-chip {
+  flex: none;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.wx-chip.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  color: var(--accent);
+}
+.wx-chip.ghost {
+  border-style: dashed;
+  color: var(--dim);
+}
+.wx-search {
+  margin-top: 8px;
+}
+.wx-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.wx-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.wx-results {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wx-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.wx-result:active {
+  border-color: var(--accent);
+}
+.wx-r-c {
+  font-size: 11px;
+  color: var(--dim-2);
 }
 .wx-head {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-top: 12px;
 }
 .wx-big {
   font-size: 40px;
@@ -877,23 +1172,28 @@ async function saveAutre() {
   color: var(--dim);
   margin-top: 4px;
 }
-.wx-refresh {
+.wx-icbtn {
   width: 40px;
   height: 40px;
   border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--text);
+  font-size: 20px;
   display: grid;
   place-items: center;
   cursor: pointer;
   flex: none;
 }
-.wx-refresh:disabled {
+.wx-icbtn.fav {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.wx-icbtn:disabled {
   opacity: 0.5;
   cursor: default;
 }
-.wx-refresh .spin {
+.wx-icbtn .spin {
   animation: wx-spin 0.9s linear infinite;
 }
 @keyframes wx-spin {
@@ -905,7 +1205,7 @@ async function saveAutre() {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 .wx-stat {
   background: var(--surface-2);
@@ -927,56 +1227,149 @@ async function saveAutre() {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.wx-sub {
-  font-size: 11px;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--dim);
-  margin: 14px 0 6px;
+/* Onglets heure par heure / N jours */
+.wx-tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--surface-2);
 }
-.wx-hours {
+.wx-tab {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wx-tab.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+/* Bande des jours (sélecteur pour l'heure par heure) */
+.wx-daystrip {
   display: flex;
   gap: 6px;
   overflow-x: auto;
-  padding-bottom: 4px;
   scrollbar-width: none;
+  margin-top: 10px;
+  padding-bottom: 2px;
 }
-.wx-hours::-webkit-scrollbar {
+.wx-daystrip::-webkit-scrollbar {
   display: none;
 }
-.wx-h {
+.wx-dchip {
   flex: 0 0 auto;
-  min-width: 56px;
-  background: var(--surface-2);
-  border: 1px solid var(--line-soft);
+  min-width: 64px;
+  padding: 7px 6px;
   border-radius: 12px;
-  padding: 8px 6px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
+  cursor: pointer;
 }
-.wx-h-t {
-  font-size: 11px;
+.wx-dchip.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+}
+.wx-dchip-l {
+  font-size: 10.5px;
   color: var(--dim);
+  text-transform: capitalize;
+  white-space: nowrap;
 }
-.wx-h-ic {
+.wx-dchip-ic {
   font-size: 18px;
   line-height: 1;
 }
-.wx-h-temp {
-  font-size: 14px;
+.wx-dchip-t {
+  font-size: 12.5px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.wx-h-rain {
-  font-size: 10.5px;
-  color: var(--dim-2);
+/* Listes (heures / jours) */
+.wx-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.wx-row {
+  display: grid;
+  grid-template-columns: 74px 28px 1fr 64px 56px;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  font-size: 13px;
+  color: var(--text);
+}
+.wx-row-day {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.wx-row-day:active {
+  border-color: var(--accent);
+}
+.wx-row-h {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wx-row-ic {
+  font-size: 17px;
+  line-height: 1;
+  text-align: center;
+}
+.wx-row-t {
+  font-size: 15px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.wx-h-rain.wet {
+.wx-row-t small {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dim);
+}
+.wx-row-r,
+.wx-row-w {
+  font-size: 12px;
+  color: var(--dim-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+.wx-row-r.wet {
   color: #8fd0ff;
   font-weight: 600;
+}
+.wx-empty {
+  padding: 12px 0;
+  font-size: 12.5px;
+  color: var(--dim);
+  text-align: center;
+}
+.wx-loading {
+  padding: 24px 0;
 }
 .wx-src {
   margin-top: 12px;
@@ -985,7 +1378,7 @@ async function saveAutre() {
   text-align: center;
 }
 @media (prefers-reduced-motion: reduce) {
-  .wx-refresh .spin {
+  .wx-icbtn .spin {
     animation: none;
   }
 }
