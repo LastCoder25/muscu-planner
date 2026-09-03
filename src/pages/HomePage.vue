@@ -8,17 +8,67 @@
         </h1>
         <!-- Météo du jour (Open-Meteo, sans clé) : « il fait quoi dehors ? » avant de
              décider de sortir courir. Absente si la géoloc est refusée. -->
-        <div
+        <button
           v-if="weather"
           class="home-weather"
-          :title="`Ressenti ${weather.feelsLikeC}° · ${weather.label}`"
+          type="button"
+          :title="`Ressenti ${weather.feelsLikeC}° · ${weather.label} — appuie pour le détail`"
+          @click="weatherOpen = true"
         >
           <span class="hw-ic">{{ weather.emoji }}</span>
           <span class="hw-t font-display">{{ weather.tempC }}°</span>
           <span class="hw-l">{{ weather.label }}</span>
           <span v-if="weather.city" class="hw-c">· {{ weather.city }}</span>
-        </div>
+        </button>
       </div>
+
+      <!-- Panneau météo (tap sur la ligne) : « je sors maintenant ou plus tard ? » -->
+      <q-dialog v-model="weatherOpen" position="bottom">
+        <q-card v-if="weather" class="wx-card">
+          <div class="wx-head">
+            <span class="wx-big">{{ weather.emoji }}</span>
+            <div class="wx-main">
+              <div class="wx-temp font-display">{{ weather.tempC }}°</div>
+              <div class="wx-lbl">
+                {{ weather.label }}<template v-if="weather.city"> · {{ weather.city }}</template>
+              </div>
+            </div>
+            <button
+              class="wx-refresh"
+              type="button"
+              :disabled="weatherLoading"
+              aria-label="Actualiser"
+              @click="refreshWeather"
+            >
+              <q-icon name="refresh" size="20px" :class="{ spin: weatherLoading }" />
+            </button>
+          </div>
+          <div class="wx-stats">
+            <div class="wx-stat">
+              <span class="wx-k">Ressenti</span>
+              <span class="wx-v font-display">{{ weather.feelsLikeC }}°</span>
+            </div>
+            <div class="wx-stat">
+              <span class="wx-k">Vent</span>
+              <span class="wx-v font-display">{{ weather.windKmh }} km/h</span>
+            </div>
+            <div class="wx-stat">
+              <span class="wx-k">Pluie</span>
+              <span class="wx-v font-display">{{ weather.precipMm }} mm</span>
+            </div>
+          </div>
+          <div v-if="weather.hours.length" class="wx-sub">Prochaines heures</div>
+          <div v-if="weather.hours.length" class="wx-hours">
+            <div v-for="h in weather.hours" :key="h.time" class="wx-h">
+              <span class="wx-h-t">{{ h.time }}</span>
+              <span class="wx-h-ic">{{ h.emoji }}</span>
+              <span class="wx-h-temp font-display">{{ h.tempC }}°</span>
+              <span class="wx-h-rain" :class="{ wet: h.rainPct >= 40 }">💧{{ h.rainPct }}%</span>
+            </div>
+          </div>
+          <div class="wx-src">Open-Meteo · modèle Météo-France sur la France</div>
+        </q-card>
+      </q-dialog>
       <div class="head-actions">
         <button class="hsq" aria-label="Agenda" @click="goAgenda">
           <span class="hsq-ic"><q-icon name="calendar_month" size="20px" /></span>
@@ -299,8 +349,10 @@ const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
 const progress = useProgress();
 const xpFx = useXpFx();
-// Météo du jour (tuile informative sous le titre) — absente si géoloc refusée.
-const { weather } = useWeather();
+// Météo du jour (tuile sous le titre) — absente si géoloc refusée. Tap → panneau
+// détaillé (ressenti, vent, précip, prochaines heures) + Actualiser.
+const { weather, loading: weatherLoading, refresh: refreshWeather } = useWeather();
+const weatherOpen = ref(false);
 const challenges = useChallengesStore();
 // Défis actifs dont l'objectif du jour reste à faire (badge sur l'icône Challenges).
 const challengesDueToday = computed(() => {
@@ -771,17 +823,171 @@ async function saveAutre() {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Météo du jour sous le prénom : une ligne discrète, informative. */
+/* Météo du jour sous le prénom : une ligne discrète, tappable (→ panneau détaillé). */
 .home-weather {
   display: flex;
   align-items: baseline;
   gap: 5px;
   margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
   font-size: 12.5px;
   color: var(--dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+  text-align: left;
+  max-width: 100%;
+}
+.home-weather:active {
+  opacity: 0.7;
+}
+/* Panneau météo (bottom sheet). */
+.wx-card {
+  width: 100%;
+  max-width: 560px;
+  border-radius: 18px 18px 0 0;
+  background: var(--surface);
+  color: var(--text);
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+}
+.wx-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.wx-big {
+  font-size: 40px;
+  line-height: 1;
+}
+.wx-main {
+  flex: 1;
+  min-width: 0;
+}
+.wx-temp {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+}
+.wx-lbl {
+  font-size: 13px;
+  color: var(--dim);
+  margin-top: 4px;
+}
+.wx-refresh {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+}
+.wx-refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.wx-refresh .spin {
+  animation: wx-spin 0.9s linear infinite;
+}
+@keyframes wx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.wx-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+.wx-stat {
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wx-k {
+  font-size: 10.5px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--dim-2);
+}
+.wx-v {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.wx-sub {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 14px 0 6px;
+}
+.wx-hours {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.wx-hours::-webkit-scrollbar {
+  display: none;
+}
+.wx-h {
+  flex: 0 0 auto;
+  min-width: 56px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.wx-h-t {
+  font-size: 11px;
+  color: var(--dim);
+}
+.wx-h-ic {
+  font-size: 18px;
+  line-height: 1;
+}
+.wx-h-temp {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.wx-h-rain {
+  font-size: 10.5px;
+  color: var(--dim-2);
+  font-variant-numeric: tabular-nums;
+}
+.wx-h-rain.wet {
+  color: #8fd0ff;
+  font-weight: 600;
+}
+.wx-src {
+  margin-top: 12px;
+  font-size: 10.5px;
+  color: var(--dim-2);
+  text-align: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wx-refresh .spin {
+    animation: none;
+  }
 }
 .hw-ic {
   font-size: 15px;

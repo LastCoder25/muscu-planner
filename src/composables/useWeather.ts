@@ -6,16 +6,25 @@
 import { ref } from 'vue';
 import { weatherIcon } from '@/lib/weather';
 
+export interface WeatherHour {
+  time: string; // « 14h »
+  tempC: number;
+  rainPct: number; // probabilité de précipitations (0..100)
+  emoji: string;
+}
 export interface WeatherNow {
   tempC: number;
   feelsLikeC: number;
   code: number;
+  windKmh: number;
+  precipMm: number; // précipitations de l'heure en cours
   city: string | null;
   emoji: string;
   label: string;
+  hours: WeatherHour[]; // prochaines heures (« je sors maintenant ou plus tard ? »)
 }
 
-const CACHE_KEY = 'muscu:weather';
+const CACHE_KEY = 'muscu:weather:v2'; // v2 : + vent/précip/prochaines heures (l'ancien cache est ignoré)
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min : assez frais, évite un géoloc+fetch à chaque visite
 
 interface WeatherCache {
@@ -71,20 +80,49 @@ async function reverseGeocodeCity(lat: number, lon: number): Promise<string | nu
   }
 }
 
-async function fetchCurrent(
+const HOURS_AHEAD = 8; // prochaines heures affichées dans le panneau
+
+// Un seul appel : conditions actuelles + prévision horaire des prochaines heures.
+async function fetchForecast(
   lat: number,
   lon: number,
-): Promise<{ tempC: number; feelsLikeC: number; code: number }> {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,weather_code&timezone=auto`;
+): Promise<Omit<WeatherNow, 'city' | 'emoji' | 'label'>> {
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation` +
+    `&hourly=temperature_2m,precipitation_probability,weather_code` +
+    `&forecast_hours=${HOURS_AHEAD + 1}&timezone=auto`;
   const r = await fetch(url);
   if (!r.ok) throw new Error('Météo indisponible.');
   const d = (await r.json()) as {
-    current: { temperature_2m: number; apparent_temperature: number; weather_code: number };
+    current: {
+      temperature_2m: number;
+      apparent_temperature: number;
+      weather_code: number;
+      wind_speed_10m: number;
+      precipitation: number;
+    };
+    hourly: {
+      time: string[]; // ISO local « 2026-09-03T14:00 »
+      temperature_2m: number[];
+      precipitation_probability: (number | null)[];
+      weather_code: number[];
+    };
   };
+  // forecast_hours part de l'heure COURANTE → on saute l'index 0 (déjà dans `current`).
+  const hours: WeatherHour[] = d.hourly.time.slice(1, HOURS_AHEAD + 1).map((t, i) => ({
+    time: `${t.slice(11, 13)}h`,
+    tempC: Math.round(d.hourly.temperature_2m[i + 1] ?? 0),
+    rainPct: Math.round(d.hourly.precipitation_probability[i + 1] ?? 0),
+    emoji: weatherIcon(d.hourly.weather_code[i + 1] ?? 0).emoji,
+  }));
   return {
     tempC: Math.round(d.current.temperature_2m),
     feelsLikeC: Math.round(d.current.apparent_temperature),
     code: d.current.weather_code,
+    windKmh: Math.round(d.current.wind_speed_10m),
+    precipMm: Math.round(d.current.precipitation * 10) / 10,
+    hours,
   };
 }
 
@@ -105,7 +143,7 @@ export function useWeather() {
       const pos = await getPosition();
       const { latitude: lat, longitude: lon } = pos.coords;
       const [base, city] = await Promise.all([
-        fetchCurrent(lat, lon),
+        fetchForecast(lat, lon),
         reverseGeocodeCity(lat, lon),
       ]);
       const icon = weatherIcon(base.code);
