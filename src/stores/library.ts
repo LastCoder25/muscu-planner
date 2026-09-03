@@ -15,6 +15,9 @@ export interface ExerciseRow {
   challenge_only?: boolean | null; // exo réservé aux défis (exclu du générateur)
   category?: string | null; // 'musculation' (défaut) ou 'prepa_physique'
   tags?: string[] | null; // tags libres (tennis, agilite, pliometrie…)
+  retired?: boolean | null; // exclu des NOUVELLES sélections (doublon, ex. variante
+  // assistée remplacée par le toggle « assisté » à la saisie) — reste résolvable par
+  // id (fetchOne/fetchByIds) pour l'historique/les défis/360 qui le référencent déjà.
 }
 
 export interface ExerciseFull extends ExerciseRow {
@@ -39,12 +42,15 @@ export const useLibraryStore = defineStore('library', () => {
     return (data as ExerciseFull) ?? null;
   }
 
+  // Exclut les exos `retired` (doublons retirés des NOUVELLES sélections) : c'est la
+  // source de TOUT générateur/wizard (programme, challenge, 360, séance renfo…).
   async function fetchAll() {
     const { data, error } = await supabase
       .from('exercises')
       .select(
-        'id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, unilateral, challenge_only, category, tags',
-      );
+        'id, name, muscle_primary, muscle_secondary, equipment, equipment_required, difficulty, unit, unilateral, challenge_only, category, tags, retired',
+      )
+      .eq('retired', false);
     if (error) throw error;
     return (data as ExerciseRow[]) ?? [];
   }
@@ -64,11 +70,13 @@ export const useLibraryStore = defineStore('library', () => {
     return (data as ExerciseRow[]) ?? [];
   }
 
+  // Utilisée par le swap (« Suggestions ») → nouvelle sélection → exclut les retired.
   async function fetchByMuscle(muscle: string) {
     const { data, error } = await supabase
       .from('exercises')
       .select('id, name, muscle_primary, equipment')
-      .eq('muscle_primary', muscle);
+      .eq('muscle_primary', muscle)
+      .eq('retired', false);
     if (error) throw error;
     return (data as ExerciseRow[]) ?? [];
   }
