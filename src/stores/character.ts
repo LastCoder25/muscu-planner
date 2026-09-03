@@ -105,7 +105,7 @@ export interface CharacterRow {
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
 // premiers donjons) → le joueur n'est pas bloqué à 0 énergie au départ.
-const WELCOME_ENERGY = 400;
+export const WELCOME_ENERGY = 400;
 
 // Jour calendaire LOCAL (YYYY-MM-DD) à l'instant `ms` — utilisé pour horodater les
 // entrées du journal d'énergie hors-sport (energy_log).

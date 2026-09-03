@@ -2306,7 +2306,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
-import { useCharacterStore, PseudoTakenError } from '@/stores/character';
+import { useCharacterStore, PseudoTakenError, WELCOME_ENERGY } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
@@ -4672,9 +4672,21 @@ async function savePseudo() {
   if (!uid || !isValidPseudo(pseudoInput.value)) return;
   saving.value = true;
   pseudoError.value = '';
+  const isFirstCreation = !char.row; // avant l'appel : pas encore de perso = 1re création
   try {
     await char.setPseudo(uid, pseudoInput.value);
     $q.notify({ type: 'positive', message: 'Aventurier créé — bon voyage !' });
+    // Pécule de bienvenue (énergie offerte à la 1re création) : animation dédiée pour
+    // que le joueur comprenne d'où vient son énergie de départ.
+    if (isFirstCreation) {
+      gameFx.celebrate({
+        kind: 'generic',
+        emoji: '⚡',
+        title: `+${WELCOME_ENERGY} ⚡`,
+        subtitle: 'Pécule de bienvenue — de quoi lancer tes premiers donjons !',
+        rarity: 'legendary',
+      });
+    }
   } catch (e) {
     pseudoError.value =
       e instanceof PseudoTakenError
