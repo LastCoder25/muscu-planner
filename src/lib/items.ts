@@ -1,6 +1,6 @@
 // items.ts — équipement RPG (Phase 2c). RÈGLE : l'équipement ne donne PAS de
 // stats (elles viennent du sport) — il donne des EFFETS de gameplay. Pur/testable.
-import { playerCombatant, combatPower, type Combatant } from './combat';
+import { playerCombatant, combatPower, mulberry32, type Combatant } from './combat';
 import type { FamiliarSpecies } from '@/data/familiars';
 import { PROCEDURAL } from '@/lib/proceduralContent';
 
@@ -324,6 +324,47 @@ export const RARITY_RANK: Record<Rarity, number> = Object.fromEntries(
 
 // NOMBRE D'AFFIXES (stats) par rareté (Phase 2, v0.577, façon Diablo) : plus la rareté est
 // haute, plus l'objet porte de stats. Commun/Inhabituel 1 · Magique/Rare 2 · Épique+ 3.
+/** Complète une pièce de set LEGACY (tirée avant le correctif multi-affixe) avec les
+ *  affixes qui lui manquent pour sa rareté. Déterministe : la graine vient de l'id de
+ *  l'objet → même objet, mêmes affixes à chaque chargement (pas de re-tirage au refresh).
+ *  Idempotent : une pièce déjà complète est renvoyée telle quelle. Ne touche QUE les
+ *  pièces de set — les drops normaux se renouvellent naturellement par le farm, alors
+ *  qu'un set est rare, gaté par les boss et patiemment constitué. */
+export function fillSetPieceAffixes(it: Item): Item {
+  if (!it.setId) return it;
+  const want = affixCountForRarity(normRank(it.rarity));
+  const have = [it.effect, it.effect2, it.effect3].filter(Boolean).length;
+  if (have >= want) return it;
+  let h = 2166136261 >>> 0; // FNV-1a sur l'id → graine stable
+  for (let i = 0; i < it.id.length; i++) {
+    h ^= it.id.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  const rng = mulberry32(h || 1);
+  const rarity = normRank(it.rarity);
+  const roll = it.roll ?? 0.5;
+  const affixes: ItemEffect[] = [it.effect, it.effect2, it.effect3].filter(
+    (e): e is ItemEffect => !!e,
+  );
+  for (let a = affixes.length; a < want; a++) {
+    const pool = tierPool(TIER_ORDER[a]!, it.level ?? 1).filter(
+      (t) => !affixes.some((x) => x.type === t),
+    );
+    if (!pool.length) continue;
+    const t = pick(rng, pool);
+    affixes.push({
+      type: t,
+      value: Math.max(1, round1((EFFECT_BASE[t] ?? 8) * rankRollMult(rarity, roll))),
+    });
+  }
+  return {
+    ...it,
+    effect: affixes[0]!,
+    ...(affixes[1] ? { effect2: affixes[1] } : {}),
+    ...(affixes[2] ? { effect3: affixes[2] } : {}),
+  };
+}
+
 export function affixCountForRarity(rarity: Rarity): number {
   const i = RARITY_RANK[rarity] ?? 0;
   return i <= 1 ? 1 : i <= 3 ? 2 : 3;
@@ -944,6 +985,24 @@ export function rollSetPiece(
   // NIVEAU D'OBJET (ilvl) de la pièce de set = pyramide centrée sur min(palier, perso).
   const setCenter = opts.playerLevel != null ? Math.min(opts.level, opts.playerLevel) : opts.level;
   const level = rollItemLevel(rng, setCenter, opts.luck ?? 0);
+  // MULTI-AFFIXE (correctif) : une pièce de set porte le MÊME NOMBRE d'affixes qu'un drop
+  // de sa rareté (1→3). Sans ça, la refonte multi-affixe (v0.577-0.581) avait laissé les
+  // sets à UNE stat pendant que les drops en gagnaient trois → un set complet (4 stats +
+  // paliers) perdait systématiquement contre du stuff mixte (12 stats), et les bonus de
+  // set ne rattrapaient pas l'écart. L'affixe #1 reste le THÈME du set (identité), les
+  // suivants viennent des tiers secondaire/mineur comme un drop.
+  const affixes: ItemEffect[] = [{ type: chosenType, value }];
+  for (let a = 1; a < affixCountForRarity(rarity); a++) {
+    const pool = tierPool(TIER_ORDER[a]!, setCenter).filter(
+      (t) => !affixes.some((x) => x.type === t),
+    );
+    if (!pool.length) continue;
+    const t = pick(rng, pool);
+    affixes.push({
+      type: t,
+      value: Math.max(1, round1((EFFECT_BASE[t] ?? 8) * rankRollMult(rarity, roll))),
+    });
+  }
   // Une pièce de set Légendaire+ porte AUSSI un proc légendaire (rareté orthogonale au set).
   const legendary =
     RARITY_RANK[rarity] >= LEGENDARY_MIN_RANK ? rollLegendaryProc(rng, slot) : undefined;
@@ -954,7 +1013,9 @@ export function rollSetPiece(
     rarity,
     level,
     baseLevel: level,
-    effect: { type: chosenType, value }, // 1 stat COHÉRENTE au set + synergie (bonus 2/3/4 pièces)
+    effect: affixes[0]!, // stat COHÉRENTE au set (identité) + synergie (bonus 2/3/4 pièces)
+    ...(affixes[1] ? { effect2: affixes[1] } : {}),
+    ...(affixes[2] ? { effect3: affixes[2] } : {}),
     ...(set ? { setId: opts.setId } : {}),
     ...(legendary ? { legendary } : {}),
     roll,

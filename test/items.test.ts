@@ -13,6 +13,7 @@ import {
   RARITY_MULT,
   RARITY_RANK,
   affixCountForRarity,
+  fillSetPieceAffixes,
   rollItemLevel,
   rollJetValue,
   jetExp,
@@ -872,5 +873,80 @@ describe('effets légendaires (Phase 3)', () => {
     expect(
       playerWithGear('X', { puissance: 30, endurance: 20, agilite: 10 }, {}, {}, 8).procs,
     ).toBeUndefined();
+  });
+});
+
+describe('pieces de set — multi-affixe (correctif : les sets ne valaient jamais le stuff mixte)', () => {
+  const setId = ITEM_SETS[0]!.id;
+  const nAff = (it: { effect?: unknown; effect2?: unknown; effect3?: unknown }) =>
+    [it.effect, it.effect2, it.effect3].filter(Boolean).length;
+
+  it('rollSetPiece pose AUTANT d affixes que sa rarete l autorise (comme un drop)', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const p = rollSetPiece(mulberry32(seed), {
+        setId,
+        level: 40,
+        luck: 0.9,
+        playerLevel: 40,
+      });
+      expect(nAff(p)).toBe(affixCountForRarity(p.rarity));
+    }
+  });
+
+  it('l affixe PRINCIPAL reste dans le theme du set (identite preservee)', () => {
+    const theme = new Set(ITEM_SETS[0]!.tiers.map((t) => t.type));
+    for (let seed = 1; seed <= 20; seed++) {
+      const p = rollSetPiece(mulberry32(seed), { setId, level: 30, playerLevel: 30 });
+      expect(theme.has(p.effect.type)).toBe(true);
+    }
+  });
+
+  it('pas de doublon de type entre les affixes d une meme piece', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const p = rollSetPiece(mulberry32(seed), { setId, level: 40, luck: 0.9, playerLevel: 40 });
+      const types = [p.effect, p.effect2, p.effect3].filter(Boolean).map((e) => e!.type);
+      expect(new Set(types).size).toBe(types.length);
+    }
+  });
+
+  describe('fillSetPieceAffixes (migration des pieces LEGACY a 1 affixe)', () => {
+    const legacy = {
+      id: 'itm-legacy-1',
+      slot: 'weapon' as const,
+      name: 'Lame · Set',
+      emoji: '⚔️',
+      rarity: 'mythique' as const,
+      level: 25,
+      roll: 0.6,
+      setId,
+      effect: { type: 'damage_pct' as const, value: 20 },
+    };
+
+    it('complete jusqu au compte de sa rarete', () => {
+      const out = fillSetPieceAffixes(legacy);
+      expect(nAff(out)).toBe(affixCountForRarity('mythique'));
+      expect(out.effect).toEqual(legacy.effect); // l affixe d origine est preserve
+    });
+
+    it('DETERMINISTE : meme objet -> memes affixes (pas de re-tirage au rechargement)', () => {
+      expect(fillSetPieceAffixes(legacy)).toEqual(fillSetPieceAffixes(legacy));
+    });
+
+    it('IDEMPOTENT : repasser dessus ne change plus rien', () => {
+      const once = fillSetPieceAffixes(legacy);
+      expect(fillSetPieceAffixes(once)).toEqual(once);
+    });
+
+    it('deux objets differents -> affixes differents (la graine suit l id)', () => {
+      const a = fillSetPieceAffixes(legacy);
+      const b = fillSetPieceAffixes({ ...legacy, id: 'itm-legacy-2' });
+      expect(a.effect2 || a.effect3).toBeDefined();
+      expect(b.effect2 || b.effect3).toBeDefined();
+    });
+
+    it('ne touche PAS un objet hors set', () => {
+      const plain = { ...legacy, setId: undefined };
+      expect(fillSetPieceAffixes(plain)).toEqual(plain);
+    });
   });
 });

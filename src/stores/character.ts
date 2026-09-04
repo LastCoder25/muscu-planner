@@ -15,6 +15,7 @@ import {
   enchantMult,
   round1,
   normRank,
+  fillSetPieceAffixes,
   swapLoadoutGear,
   bestGearLoadout,
   playerWithGear,
@@ -143,6 +144,10 @@ export const useCharacterStore = defineStore('character', () => {
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
     const fixItem = (it: Item): Item => {
       const rarity = normRank(it.rarity);
+      // Pièces de set d'AVANT le correctif multi-affixe : on complète leurs affixes
+      // manquants (déterministe par id) — sinon un set patiemment constitué reste à
+      // 1 stat/pièce et ne vaudra jamais du stuff mixte à 3 stats.
+      it = fillSetPieceAffixes(it);
       // MIGRATION enchant → valeur (ticket 7acb1e7c) : l'axe enchant des OBJETS est retiré.
       // Tout enchant existant (ou dérivé de l'ancien « niveau ») est BAKÉ dans effect.value
       // (magnitude préservée), puis enchant remis à 0. Idempotent (enchant 0 → ×1, no-op).
