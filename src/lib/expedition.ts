@@ -135,6 +135,7 @@ export const EXPE = {
   // le tf pris en compte ET on cape la valeur finale à ~1 run.
   mineEnergyTfCap: 2.5, // l'énergie ne profite pas des longs trajets comme le loot
   mineEnergyMax: 60, // plafond dur par expédition (≈ 1 run)
+  arenaMaxItems: 8, // garde-fou d'inventaire : une run très longue ne noie pas le sac
 } as const;
 
 // Arène : survie par vagues, SANS fin fixe. La difficulté croît de façon
@@ -429,17 +430,18 @@ export function resolveOutcome(
     // principale) — ∝ vagues tenues, sans le multiplicateur de trajet (déjà encodé par
     // les vagues). NB : quantités ex-« pierres » (rares) volontairement réduites.
     const enchantScrolls = 2 + Math.floor(waves / 2);
-    // BUTIN MULTIPLE (2026‑08‑18) : l'arène (gauntlet de survie) lâche PLUSIEURS objets
-    // — 1 par palier de 5 vagues (3-9 vagues → 1, 10-14 → 2, … plafonné à 5) — la
-    // qualité montant avec les vagues + le rang de l'objet. Seule source de « tas de loot ».
-    const nItems = waves >= 3 ? Math.min(5, Math.max(1, Math.floor(waves / 5))) : 0;
+    // BUTIN : un TIRAGE PAR VAGUE TENUE (même principe qu'un donjon, qui tire une fois
+    // par monstre vaincu). `cleared: false` → ~30 %/vague : tenir 10 vagues rapporte ~3
+    // objets, 20 vagues ~6 — plus généreux que l'ancien palier de 5 vagues (1 objet/5),
+    // sans inonder le sac. La luck monte avec les vagues → tenir longtemps paie en QUALITÉ
+    // autant qu'en quantité. Plafond dur = garde-fou d'inventaire sur les très longues runs.
     const items: Omit<Item, 'id'>[] = [];
-    for (let i = 0; i < nItems; i++) {
+    for (let w = 0; w < waves && items.length < EXPE.arenaMaxItems; w++) {
       const d = rollDrop(rng, {
-        cleared: true,
+        cleared: false, // ≈ 30 % par vague
         defeated: 1,
         level: poi.level,
-        luck: Math.min(0.95, 0.35 + waves * 0.05 + i * 0.04),
+        luck: Math.min(0.95, 0.35 + w * 0.05),
         spread: 0,
         playerLevel,
       });
@@ -517,6 +519,9 @@ export function resolveOutcome(
         ? 1.5 + poi.level * 0.1
         : 1 + poi.level * 0.08) * tf,
   );
+  // `items` porte TOUT le butin (prise principale + éventuel butin d'embuscade) ;
+  // `item` reste la prise principale, pour l'affichage du rapport.
+  const items: Omit<Item, 'id'>[] = [];
   let item: Omit<Item, 'id'> | null = null;
   let key = 0;
   if (poi.type === 'lair' && poi.setId) {
@@ -533,6 +538,7 @@ export function resolveOutcome(
     });
     key = rng() < 0.1 ? 1 : 0;
   }
+  if (item) items.push(item);
   let gold = goldHaul;
   let dust = dustHaul;
   let enchantScrolls = scrollHaul;
@@ -558,14 +564,40 @@ export function resolveOutcome(
       gold = Math.round(gold * 1.25);
       dust = Math.round(dust * 1.3);
       enchantScrolls = Math.round(enchantScrolls * 1.3);
-      text += ' ⚔️ Embuscade repoussée en chemin — butin renforcé !';
+      // Un assaillant vaincu = un tirage d'objet, comme un monstre de donjon. Niveau de
+      // l'embuscade (poi.level − 1) : la dépouille vaut ce que valait l'adversaire.
+      const spoil = rollDrop(rng, {
+        cleared: true,
+        defeated: 1,
+        level: Math.max(1, poi.level - 1),
+        luck: 0.35,
+        spread: 1,
+        playerLevel,
+      });
+      text += ' ⚔️ Embuscade repoussée en chemin — butin renforcé';
+      if (spoil) {
+        items.push(spoil);
+        text += ` (+ ${spoil.name} sur la dépouille)`;
+      }
+      text += ' !';
     } else {
       gold = Math.round(gold * 0.7);
       dust = Math.round(dust * 0.7);
       text += ' 🩸 Embuscade subie sur le trajet — butin écorné.';
     }
   }
-  return { win: true, gold, dust, energy, enchantScrolls, item, key, reconBonus: 0, text };
+  return {
+    win: true,
+    gold,
+    dust,
+    energy,
+    enchantScrolls,
+    item: items[0] ?? null,
+    items,
+    key,
+    reconBonus: 0,
+    text,
+  };
 }
 
 // ── Fond de carte : PARCHEMIN dessiné à l'encre (style « livre d'aventure ») ──

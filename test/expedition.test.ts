@@ -253,3 +253,88 @@ describe('expedition — résolution', () => {
     expect(e.outcome).toBeTruthy();
   });
 });
+
+describe('expedition — butin par ennemi vaincu (arene / embuscade)', () => {
+  const hero = playerCombatant('Heros', { puissance: 300, endurance: 260, agilite: 120 }, 20);
+  const arena: Poi = {
+    id: 'a',
+    type: 'arena',
+    level: 10,
+    x: 50,
+    y: 50,
+    distNorm: 0.9,
+    spawnedAt: 0,
+    expiresAt: 999 * H,
+  };
+  const camp: Poi = {
+    id: 'c2',
+    type: 'camp',
+    level: 8,
+    x: 30,
+    y: 30,
+    distNorm: 0.3,
+    spawnedAt: 0,
+    expiresAt: 999 * H,
+  };
+
+  it('arene : le butin suit les VAGUES tenues (plus de vagues -> plus d objets, en moyenne)', () => {
+    // Moyenne sur plusieurs graines : le lien vagues -> objets doit ressortir du bruit.
+    let lowWaves = 0;
+    let lowItems = 0;
+    let hiWaves = 0;
+    let hiItems = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const o = resolveOutcome(hero, arena, seed, 20);
+      const n = o.items?.length ?? 0;
+      if ((o.waves ?? 0) <= 4) {
+        lowWaves++;
+        lowItems += n;
+      } else {
+        hiWaves++;
+        hiItems += n;
+      }
+    }
+    // Il faut des cas dans les deux groupes pour que la comparaison ait un sens.
+    if (lowWaves > 0 && hiWaves > 0) {
+      expect(hiItems / hiWaves).toBeGreaterThan(lowItems / lowWaves);
+    }
+  });
+
+  it('arene : jamais plus que le plafond d inventaire', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const o = resolveOutcome(hero, arena, seed, 20);
+      expect(o.items?.length ?? 0).toBeLessThanOrEqual(EXPE.arenaMaxItems);
+    }
+  });
+
+  it('arene : 0 vague tenue -> aucun objet', () => {
+    const feeble = playerCombatant('Faiblard', { puissance: 1, endurance: 1, agilite: 1 }, 1);
+    const hard: Poi = { ...arena, level: 90 };
+    const o = resolveOutcome(feeble, hard, 5, 1);
+    expect(o.waves).toBe(0);
+    expect(o.items?.length ?? 0).toBe(0);
+  });
+
+  it('embuscade repoussee : un objet EN PLUS de la prise principale', () => {
+    // On cherche une graine ou le rapport mentionne une embuscade repoussee.
+    let withSpoil = 0;
+    let seen = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const o = resolveOutcome(hero, camp, seed, 20);
+      if (!o.text.includes('Embuscade repoussée')) continue;
+      seen++;
+      // items contient TOUT le butin ; item reste la prise principale.
+      expect(o.items).toBeDefined();
+      expect(o.item).toBe(o.items![0] ?? null);
+      if (o.text.includes('sur la dépouille')) {
+        withSpoil++;
+        // La dépouille est le DERNIER objet ajouté au butin (la prise principale du camp,
+        // elle, peut être nulle : rollDrop ne rend pas toujours un objet).
+        const last = o.items![o.items!.length - 1]!;
+        expect(o.text).toContain(last.name);
+      }
+    }
+    expect(seen).toBeGreaterThan(0); // les embuscades arrivent (~35 %)
+    expect(withSpoil).toBeGreaterThan(0); // et certaines laissent une dépouille
+  });
+});
