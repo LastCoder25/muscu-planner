@@ -154,6 +154,14 @@
               >
                 {{ weather.days.length }} jours
               </button>
+              <button
+                class="wx-tab"
+                :class="{ on: tab === 'rel' }"
+                type="button"
+                @click="tab = 'rel'"
+              >
+                Fiabilité
+              </button>
             </div>
 
             <template v-if="tab === 'hours'">
@@ -187,7 +195,7 @@
               </div>
             </template>
 
-            <div v-else class="wx-list">
+            <div v-else-if="tab === 'days'" class="wx-list">
               <button
                 v-for="d in weather.days"
                 :key="d.date"
@@ -203,6 +211,76 @@
                 <span class="wx-row-r" :class="{ wet: d.rainPct >= 40 }">💧 {{ d.rainPct }}%</span>
                 <span class="wx-row-w">💨 {{ d.windKmh }}</span>
               </button>
+            </div>
+
+            <!-- Fiabilité des sources : prévu (runs passés) vs réalisé (ERA5), par modèle
+                 et par horizon. Calculé à la demande, cache 24 h par lieu. -->
+            <div v-else class="wx-rel">
+              <div v-if="relLoading" class="wx-empty wx-loading">
+                <q-spinner color="primary" size="22px" />
+                <div class="wx-rel-note">Reconstruction de 45 jours de prévisions…</div>
+              </div>
+              <div v-else-if="relError" class="wx-empty">
+                Comparaison indisponible pour le moment.
+              </div>
+              <template v-else-if="relResult">
+                <div class="wx-rel-best">
+                  <span v-for="l in LEADS" :key="l" class="wx-rel-bchip">
+                    <span class="wx-rel-bl">J+{{ l }}</span>
+                    <b>{{ relResult.best[l] ? modelLabel(relResult.best[l]!) : '—' }}</b>
+                  </span>
+                </div>
+                <div class="wx-leadstrip">
+                  <button
+                    v-for="l in LEADS"
+                    :key="l"
+                    class="wx-dchip wx-lchip"
+                    :class="{ on: relLead === l }"
+                    type="button"
+                    @click="relLead = l"
+                  >
+                    J+{{ l }}
+                  </button>
+                </div>
+                <div class="wx-list">
+                  <div
+                    v-for="r in relRows"
+                    :key="r.model"
+                    class="wx-rrow"
+                    :class="{ top: r.model === relResult.best[relLead] }"
+                  >
+                    <div class="wx-rrow-head">
+                      <span class="wx-rrow-m">{{ modelLabel(r.model) }}</span>
+                      <span class="wx-rrow-s font-display" :class="scoreClass(r.score)">{{
+                        r.score == null ? '—' : r.score + ' %'
+                      }}</span>
+                    </div>
+                    <div class="wx-rrow-stats">
+                      <span
+                        >🌡️ ±{{ r.tMae }}° <small>{{ fmtBias(r.tBias) }}</small></span
+                      >
+                      <span
+                        >💧 {{ Math.round(r.rainHit * 100) }} %
+                        <small>±{{ r.rainMae }} mm</small></span
+                      >
+                      <span v-if="r.windMae != null">💨 ±{{ r.windMae }}</span>
+                      <span class="wx-rrow-n"
+                        >n={{ r.n }}<template v-if="r.indicative"> · indicatif</template></span
+                      >
+                    </div>
+                  </div>
+                  <div v-if="!relRows.length" class="wx-empty">
+                    Pas de données à J+{{ relLead }} (horizon non couvert par ces modèles).
+                  </div>
+                </div>
+                <div class="wx-rel-note">
+                  Prévu à J-{{ relLead }} (runs passés) vs réalisé ERA5 (réanalyse, maille ~10 km) ·
+                  {{ relResult.truthDays }} jours du {{ fmtDM(relResult.from) }} au
+                  {{ fmtDM(relResult.to) }} · score = T 50 % · pluie 35 % · vent 15 % · 🌡️ = MAE
+                  max/min (biais signé : + = surchauffe) · 💧 = « pluie oui/non » juste (seuil 1
+                  mm).
+                </div>
+              </template>
             </div>
           </template>
           <div v-else class="wx-empty wx-loading">
@@ -477,6 +555,8 @@ import { useProgress } from '@/composables/useProgress';
 import { useXpFx } from '@/composables/useXpFx';
 import { useWeather, searchCities } from '@/composables/useWeather';
 import { placeLabel, dayLabel, hoursOfDay, type WeatherPlace } from '@/lib/weather';
+import { useWeatherReliability } from '@/composables/useWeatherReliability';
+import { LEADS, modelLabel, type Lead } from '@/lib/weatherReliability';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeStats, logicalToday } from '@/lib/challenges';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
@@ -501,6 +581,8 @@ const xpFx = useXpFx();
 const {
   weather,
   city,
+  coords,
+  placeId,
   place,
   favorites,
   loading: weatherLoading,
@@ -510,7 +592,32 @@ const {
   refresh: refreshWeather,
 } = useWeather();
 const weatherOpen = ref(false);
-const tab = ref<'hours' | 'days'>('hours');
+const tab = ref<'hours' | 'days' | 'rel'>('hours');
+// Fiabilité des sources (onglet) : chargée seulement quand on l'ouvre, pour le lieu courant.
+const {
+  result: relResult,
+  loading: relLoading,
+  error: relError,
+  load: relLoad,
+} = useWeatherReliability();
+const relLead = ref<Lead>(1);
+const relRows = computed(() =>
+  (relResult.value?.rows ?? []).filter((r) => r.lead === relLead.value),
+);
+watch([tab, placeId, coords], () => {
+  if (tab.value !== 'rel' || !coords.value) return;
+  void relLoad(placeId.value, coords.value.lat, coords.value.lon);
+});
+function scoreClass(s: number | null): string {
+  if (s == null) return '';
+  return s >= 75 ? 'good' : s >= 55 ? 'mid' : 'bad';
+}
+function fmtBias(b: number): string {
+  return `${b > 0 ? '+' : ''}${b}°`;
+}
+function fmtDM(iso: string): string {
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+}
 const todayIso = (() => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
@@ -1370,6 +1477,99 @@ async function saveAutre() {
 }
 .wx-loading {
   padding: 24px 0;
+}
+/* Onglet Fiabilité */
+.wx-rel {
+  margin-top: 10px;
+}
+.wx-rel-best {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.wx-rel-bchip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  font-size: 12.5px;
+}
+.wx-rel-bl {
+  font-size: 10.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.wx-leadstrip {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+.wx-lchip {
+  min-width: 0;
+  flex: 1;
+  padding: 8px 0;
+  font-weight: 700;
+  font-size: 13px;
+}
+.wx-rrow {
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.wx-rrow.top {
+  border-color: var(--accent);
+}
+.wx-rrow-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.wx-rrow-m {
+  font-weight: 700;
+}
+.wx-rrow-s {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.wx-rrow-s.good {
+  color: var(--d1);
+}
+.wx-rrow-s.mid {
+  color: var(--d3);
+}
+.wx-rrow-s.bad {
+  color: var(--d4);
+}
+.wx-rrow-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.wx-rrow-stats small {
+  color: var(--dim-2);
+}
+.wx-rrow-n {
+  margin-left: auto;
+  color: var(--dim-2);
+}
+.wx-rel-note {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--dim-2);
+  line-height: 1.4;
 }
 .wx-src {
   margin-top: 12px;

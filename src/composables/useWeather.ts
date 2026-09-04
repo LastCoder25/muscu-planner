@@ -26,6 +26,7 @@ interface WeatherCache {
   fetchedAt: number;
   data: WeatherData;
   city: string | null;
+  coords?: { lat: number; lon: number }; // pour la fiabilité (« ma position »)
 }
 
 function readJson<T>(key: string): T | null {
@@ -125,6 +126,8 @@ export function useWeather() {
   const favorites = ref<WeatherPlace[]>(readJson<WeatherPlace[]>(FAVS_KEY) ?? []);
   const weather = ref<WeatherData | null>(null);
   const geoCity = ref<string | null>(null); // nom de « ma position » (reverse geocode)
+  const coords = ref<{ lat: number; lon: number } | null>(null); // lieu résolu (fiabilité)
+  const placeId = computed(() => place.value?.id ?? GEO_ID);
   const loading = ref(false);
 
   /** Nom affiché du lieu courant. */
@@ -138,6 +141,9 @@ export function useWeather() {
       if (cached) {
         weather.value = cached.data; // affiché tout de suite (frais ou pas)
         if (!place.value) geoCity.value = cached.city;
+        coords.value = place.value
+          ? { lat: place.value.lat, lon: place.value.lon }
+          : (cached.coords ?? null);
         if (Date.now() - cached.fetchedAt < CACHE_TTL_MS) return;
       }
     }
@@ -145,10 +151,13 @@ export function useWeather() {
     try {
       let data: WeatherData;
       let cityName: string | null = null;
+      let at: { lat: number; lon: number };
       if (place.value) {
-        data = await fetchForecast(place.value.lat, place.value.lon);
+        at = { lat: place.value.lat, lon: place.value.lon };
+        data = await fetchForecast(at.lat, at.lon);
       } else {
         const { latitude: lat, longitude: lon } = (await getPosition()).coords;
+        at = { lat, lon };
         [data, cityName] = await Promise.all([
           fetchForecast(lat, lon),
           reverseGeocodeCity(lat, lon),
@@ -158,10 +167,12 @@ export function useWeather() {
       // Garde-fou : si le lieu a changé pendant le fetch, on n'écrase pas l'affichage.
       if ((place.value?.id ?? GEO_ID) !== id) return;
       weather.value = data;
+      coords.value = at;
       writeJson(cacheKey(id), {
         fetchedAt: Date.now(),
         data,
         city: cityName,
+        coords: at,
       } satisfies WeatherCache);
     } catch {
       /* géoloc refusée / réseau KO → cache déjà affiché s'il existait, sinon rien */
@@ -175,6 +186,7 @@ export function useWeather() {
     place.value = p;
     writeJson(PLACE_KEY, p);
     weather.value = null; // évite d'afficher la météo de l'ancien lieu pendant le chargement
+    coords.value = p ? { lat: p.lat, lon: p.lon } : null;
     void load();
   }
   function toggleFavorite(p: WeatherPlace) {
@@ -188,6 +200,8 @@ export function useWeather() {
   return {
     weather,
     city,
+    coords,
+    placeId,
     place,
     favorites,
     loading,
