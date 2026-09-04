@@ -6,27 +6,6 @@
         <h1 class="home-name font-display">
           {{ profileStore.profile?.identity.name || 'Athlète' }}
         </h1>
-        <!-- Météo du jour (Open-Meteo, sans clé) : « il fait quoi dehors ? » avant de
-             décider de sortir courir. Absente si la géoloc est refusée. -->
-        <button
-          v-if="weather || place"
-          class="home-weather"
-          type="button"
-          :title="
-            weather
-              ? `Ressenti ${weather.current.feelsLikeC}° · ${weather.current.label} — appuie pour le détail`
-              : 'Météo — appuie pour choisir un lieu'
-          "
-          @click="weatherOpen = true"
-        >
-          <template v-if="weather">
-            <span class="hw-ic">{{ weather.current.emoji }}</span>
-            <span class="hw-t font-display">{{ weather.current.tempC }}°</span>
-            <span class="hw-l">{{ weather.current.label }}</span>
-            <span v-if="city" class="hw-c">· {{ city }}</span>
-          </template>
-          <template v-else><span class="hw-ic">🌡️</span><span class="hw-l">Météo…</span></template>
-        </button>
       </div>
 
       <!-- Panneau météo (tap sur la ligne) : lieu (ma position / favoris / recherche),
@@ -316,6 +295,30 @@
         </button>
       </div>
     </header>
+
+    <!-- Météo du jour (Open-Meteo, sans clé) : « il fait quoi dehors ? » avant de décider
+         de sortir courir. Ligne DÉDIÉE, pleine largeur (dans le header elle était écrasée
+         par les tuiles de raccourcis). Absente si la géoloc est refusée. -->
+    <button
+      v-if="weather || place"
+      class="home-weather"
+      type="button"
+      :title="
+        weather
+          ? `Ressenti ${weather.current.feelsLikeC}° · ${weather.current.label} — appuie pour le détail`
+          : 'Météo — appuie pour choisir un lieu'
+      "
+      @click="weatherOpen = true"
+    >
+      <template v-if="weather">
+        <span class="hw-ic">{{ weather.current.emoji }}</span>
+        <span class="hw-t font-display">{{ weather.current.tempC }}°</span>
+        <span class="hw-l">{{ weather.current.label }}</span>
+        <span v-if="city" class="hw-c">· {{ city }}</span>
+        <span class="hw-more" aria-hidden="true">›</span>
+      </template>
+      <template v-else><span class="hw-ic">🌡️</span><span class="hw-l">Météo…</span></template>
+    </button>
 
     <div v-if="loading" class="column items-center q-mt-xl">
       <q-spinner color="primary" size="32px" />
@@ -1143,24 +1146,34 @@ async function saveAutre() {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Météo du jour sous le prénom : une ligne discrète, tappable (→ panneau détaillé). */
+/* Météo : ligne DÉDIÉE pleine largeur sous le header (tappable → panneau détaillé).
+   Marge haute négative pour absorber les 24 px de marge basse du header → ~10 px
+   sous le prénom, sans toucher au header (qui garde son espacement sans météo). */
 .home-weather {
   display: flex;
   align-items: baseline;
-  gap: 5px;
-  margin-top: 4px;
-  padding: 0;
-  border: none;
-  background: none;
+  gap: 6px;
+  width: 100%;
+  margin: -14px 0 18px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--surface);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   cursor: pointer;
   text-align: left;
-  max-width: 100%;
+}
+/* La ville seule tronque : température et libellé restent toujours lisibles. */
+.hw-l {
+  white-space: nowrap;
+}
+.hw-more {
+  margin-left: auto;
+  color: var(--dim-2);
+  font-size: 16px;
+  line-height: 1;
 }
 .home-weather:active {
   opacity: 0.7;
@@ -1594,6 +1607,10 @@ async function saveAutre() {
 }
 .hw-c {
   color: var(--dim-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .text-dim {
   color: var(--dim);
