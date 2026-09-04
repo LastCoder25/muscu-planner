@@ -199,6 +199,7 @@ import {
   legLastWeight,
   legLastAssisted,
   comboExportText,
+  comboBonusXp,
   type ComboLeg,
   type ComboSet,
 } from '@/lib/combo';
@@ -360,7 +361,7 @@ function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }
       kind: 'generic',
       emoji: '🎯',
       title: 'Défi 360 bouclé !',
-      subtitle: 'Full-body complété — bravo 💪',
+      subtitle: `Full-body complété — prime de bouclage +${comboBonusXp(c.value)} ⚡`,
       rarity: 'divin',
     });
   }
@@ -381,7 +382,7 @@ function doAddSeconds(leg: ComboLeg, sec: number) {
       kind: 'generic',
       emoji: '🎯',
       title: 'Défi 360 bouclé !',
-      subtitle: 'Full-body complété — bravo 💪',
+      subtitle: `Full-body complété — prime de bouclage +${comboBonusXp(c.value)} ⚡`,
       rarity: 'divin',
     });
   }

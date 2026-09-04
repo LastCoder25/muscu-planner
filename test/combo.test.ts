@@ -20,6 +20,8 @@ import {
   legTier,
   legTierShare,
   comboTieredBonus,
+  comboBonusXp,
+  comboXpByDay,
   suggestComboTarget,
   suggestComboTargetFromHistory,
   suggestFullBodyPlan,
@@ -515,5 +517,43 @@ describe('comboMuscleInZone (haut / bas / tronc)', () => {
     expect(comboMuscleInZone('abdominaux', 'bas')).toBe(true); // tronc
     expect(comboMuscleInZone('pectoraux', 'bas')).toBe(false);
     expect(comboMuscleInZone('épaules', 'bas')).toBe(false);
+  });
+});
+
+describe('comboXpByDay — ventilation par jour (historique energie)', () => {
+  const c = combo([
+    leg({ target: 2, sets: [set(10, 20, '2026-01-05'), set(10, 20, '2026-01-07')] }),
+    leg({
+      exercise_id: 'ex_row',
+      target: 2,
+      sets: [set(8, 30, '2026-01-05'), set(8, 30, '2026-01-05')],
+    }),
+  ]);
+
+  it('la somme vaut EXACTEMENT comboXpPoints (invariant : rien ne se perd)', () => {
+    const days = comboXpByDay(c);
+    const sum = days.reduce((a, d) => a + d.effort + d.bonus, 0);
+    expect(sum).toBe(comboXpPoints([c]));
+  });
+
+  it('un jour par date de serie, triees, prime UNIQUEMENT sur le dernier jour actif', () => {
+    const days = comboXpByDay(c);
+    expect(days.map((d) => d.date)).toEqual(['2026-01-05', '2026-01-07']);
+    expect(days[0]!.bonus).toBe(0);
+    expect(days[1]!.bonus).toBe(comboBonusXp(c));
+    expect(comboBonusXp(c)).toBeGreaterThan(0);
+  });
+
+  it('effort au prorata des series (3 le 05, 1 le 07)', () => {
+    const days = comboXpByDay(c);
+    expect(days[0]!.effort).toBeGreaterThan(days[1]!.effort);
+  });
+
+  it('sans aucune serie : aucun jour', () => {
+    expect(comboXpByDay(combo([leg({ target: 3, sets: [] })]))).toEqual([]);
+  });
+
+  it('la prime est celle deja incluse dans le total (comboTieredBonus x XP_MULT)', () => {
+    expect(comboBonusXp(c)).toBe(Math.round(comboTieredBonus(c) * 2));
   });
 });

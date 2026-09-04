@@ -254,6 +254,48 @@ export function comboImpliedMinutes(c: ComboChallenge): number {
 /** Décompose l'XP d'UN Défi 360 : durée (volume bouclé), reps (+ tonnage), prime de
  *  bouclage, dépassement (pour l'affichage sur les défis terminés). Mêmes formules que
  *  comboXpPoints. */
+/** Prime de bouclage (paliers) en XP — la MÊME valeur que celle déjà incluse dans
+ *  comboXpPoints, isolée pour pouvoir l'AFFICHER (célébration de fin, historique
+ *  d'énergie) au lieu de la noyer dans le total. */
+export function comboBonusXp(c: ComboChallenge): number {
+  return Math.round(comboTieredBonus(c) * XP_MULT);
+}
+
+export interface ComboDayXp {
+  date: string; // YYYY-MM-DD
+  effort: number; // reps + tonnage + durée impliquée, au prorata des séries du jour
+  bonus: number; // prime de bouclage — portée par le DERNIER jour actif
+}
+
+/** Ventile l'XP d'un Défi 360 par JOUR (pour l'historique d'énergie, qui est journalier).
+ *  L'effort est réparti au prorata des séries faites chaque jour ; la PRIME est portée par
+ *  le dernier jour actif (c'est là qu'elle est acquise). La somme vaut EXACTEMENT
+ *  comboXpPoints([c]) — le reliquat d'arrondi est soldé sur le dernier jour. */
+export function comboXpByDay(c: ComboChallenge): ComboDayXp[] {
+  const setsPerDay = new Map<string, number>();
+  for (const l of c.legs)
+    for (const s of legSets(l)) {
+      if (!s.date) continue;
+      setsPerDay.set(s.date, (setsPerDay.get(s.date) ?? 0) + 1);
+    }
+  const dates = [...setsPerDay.keys()].sort();
+  if (!dates.length) return [];
+  const totalSets = [...setsPerDay.values()].reduce((a, b) => a + b, 0);
+  const bonus = comboBonusXp(c);
+  const effortTotal = Math.max(0, comboXpPoints([c]) - bonus);
+  const out: ComboDayXp[] = [];
+  let acc = 0;
+  dates.forEach((date, i) => {
+    const last = i === dates.length - 1;
+    const effort = last
+      ? effortTotal - acc // solde le reliquat d'arrondi
+      : Math.round((effortTotal * setsPerDay.get(date)!) / totalSets);
+    acc += effort;
+    out.push({ date, effort, bonus: last ? bonus : 0 });
+  });
+  return out;
+}
+
 export function comboXpBreakdown(c: ComboChallenge): {
   reps: number;
   duration: number;

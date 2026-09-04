@@ -4,9 +4,9 @@ import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
 import { useCharacterStore } from '@/stores/character';
-import { sessionXp, otherSportXp, cardioSessionXp, REP_XP, assistMult } from '@/lib/athlete';
+import { sessionXp, otherSportXp, cardioSessionXp } from '@/lib/athlete';
 import { challengeDayXp } from '@/lib/challenges';
-import { legSets } from '@/lib/combo';
+import { comboXpByDay } from '@/lib/combo';
 import { ACTIVITY_LABELS, isCardioOutingChallenge } from '@/data/cardio';
 
 // Énergie de FOND (sport) : muscu + cardio + autre sport + défis muscu/cardio. Le
@@ -82,19 +82,14 @@ export function useEnergyHistory(nDays = 3) {
         if (p.done > 0) push(p.date, '🏆', c.exercise_name, challengeDayXp(c, p));
       }
     }
-    // Défi 360 : l'énergie de tous les exos d'un jour regroupée en une ligne.
+    // Défi 360 : ventilation par jour via la lib (effort au prorata des séries + PRIME
+    // de bouclage isolée sur le dernier jour). La somme colle à comboXpPoints — l'ancien
+    // calcul local oubliait × XP_MULT, la durée impliquée ET la prime (≈ 10× trop bas).
     for (const c of combo.list) {
-      const perDay = new Map<string, number>();
-      for (const leg of c.legs) {
-        for (const s of legSets(leg)) {
-          if (!s.date) continue;
-          const reps = s.reps || 0;
-          let xp = reps * REP_XP * (leg.rep_weight || 1) * assistMult(s.assisted);
-          if (s.weight) xp += (reps * s.weight) / 500;
-          perDay.set(s.date, (perDay.get(s.date) ?? 0) + xp);
-        }
+      for (const d of comboXpByDay(c)) {
+        push(d.date, '🎯', 'Défi 360', d.effort);
+        push(d.date, '🏅', 'Défi 360 — prime de bouclage', d.bonus);
       }
-      for (const [date, xp] of perDay) push(date, '🎯', 'Défi 360', xp);
     }
 
     // ── HORS-SPORT ──

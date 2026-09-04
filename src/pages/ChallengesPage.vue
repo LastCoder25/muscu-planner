@@ -575,6 +575,7 @@ import {
   legSets,
   type ComboChallenge,
   comboExportText,
+  comboBonusXp,
   type ComboLeg,
   type ComboSet,
 } from '@/lib/combo';
@@ -599,12 +600,12 @@ const store = useChallengesStore();
 const comboStore = useComboStore();
 const gameFx = useGameFx();
 // Grosse animation centrale à la complétion d'un Défi 360 (full-body bouclé).
-function celebrateCombo() {
+function celebrateCombo(c: ComboChallenge) {
   gameFx.celebrate({
     kind: 'generic',
     emoji: '🎯',
     title: 'Défi 360 bouclé !',
-    subtitle: 'Full-body complété — bravo 💪',
+    subtitle: `Full-body complété — prime de bouclage +${comboBonusXp(c)} ⚡`,
     rarity: 'divin',
   });
 }
@@ -740,14 +741,14 @@ function saveSet() {
     comboStore.addSet(activeCombo.value.id, leg.exercise_id, logicalToday(), reps, w, asst);
   }
   setOpen.value = false;
-  if (before !== 'done' && activeCombo.value.status === 'done') celebrateCombo();
+  if (before !== 'done' && activeCombo.value.status === 'done') celebrateCombo(activeCombo.value);
 }
 // Mode DURÉE : ajoute directement N secondes (dans le champ reps, pas de poids).
 function doAddSeconds(leg: ComboLeg, sec: number) {
   if (!activeCombo.value) return;
   const before = activeCombo.value.status;
   comboStore.addSet(activeCombo.value.id, leg.exercise_id, logicalToday(), sec, null, false);
-  if (before !== 'done' && activeCombo.value.status === 'done') celebrateCombo();
+  if (before !== 'done' && activeCombo.value.status === 'done') celebrateCombo(activeCombo.value);
 }
 // ── Chrono des exos de DURÉE (comme les challenges) : Démarrer → décompte ; Pause →
 // enregistre une série de la durée RÉELLE écoulée. Un seul chrono actif à la fois. ──
