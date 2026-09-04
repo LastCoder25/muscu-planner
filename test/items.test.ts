@@ -51,6 +51,7 @@ import {
   ENCHANT_MAX,
 } from '@/lib/items';
 import { mulberry32, combatPower } from '@/lib/combat';
+import { pickBestTalents } from '@/lib/talents';
 import { VOIES } from '@/lib/voies';
 
 describe('rangs G→SSS + intervalle de jet (refonte v0.574)', () => {
@@ -948,5 +949,69 @@ describe('pieces de set — multi-affixe (correctif : les sets ne valaient jamai
       const plain = { ...legacy, setId: undefined };
       expect(fillSetPieceAffixes(plain)).toEqual(plain);
     });
+  });
+});
+
+describe('bestGearLoadout — le FAMILIER est optimise lui aussi', () => {
+  const stats = { puissance: 200, endurance: 200, agilite: 150 };
+  const mkFam = (id: string, value: number) => ({
+    id,
+    slot: 'familiar' as const,
+    name: 'Fam ' + id,
+    emoji: '🐺',
+    rarity: 'rare' as const,
+    level: 10,
+    roll: 0.5,
+    effect: { type: 'damage_pct' as const, value },
+  });
+
+  it('remplace un familier faible par un meilleur present dans le sac', () => {
+    const weak = mkFam('f-weak', 2);
+    const strong = mkFam('f-strong', 40);
+    const out = bestGearLoadout('H', stats, { familiar: weak }, [strong], 20);
+    expect(out.familiar?.id).toBe('f-strong');
+  });
+
+  it('garde le familier porte si le sac ne fait pas mieux (jamais de perte)', () => {
+    const strong = mkFam('f-strong', 40);
+    const weak = mkFam('f-weak', 2);
+    const out = bestGearLoadout('H', stats, { familiar: strong }, [weak], 20);
+    expect(out.familiar?.id).toBe('f-strong');
+  });
+
+  it('equipe un familier meme si aucun n etait porte', () => {
+    const fam = mkFam('f1', 30);
+    const out = bestGearLoadout('H', stats, {}, [fam], 20);
+    expect(out.familiar?.id).toBe('f1');
+  });
+});
+
+describe('pickBestTalents', () => {
+  const mk = (id: string, code: string) => ({ id, code, xp: 0, equipped: false });
+
+  it('choisit les meilleurs, dans la limite des emplacements', () => {
+    const talents = [mk('a', 't_dmg'), mk('b', 't_pv'), mk('c', 't_crit')];
+    const value: Record<string, number> = { a: 10, b: 5, c: 1 };
+    const score = (ids: string[]) => ids.reduce((t, i) => t + (value[i] ?? 0), 0);
+    expect(pickBestTalents(talents, 2, score).sort()).toEqual(['a', 'b']);
+  });
+
+  it('un seul talent par CODE (effets distincts)', () => {
+    const talents = [mk('a1', 't_dmg'), mk('a2', 't_dmg'), mk('b', 't_pv')];
+    const value: Record<string, number> = { a1: 10, a2: 9, b: 1 };
+    const score = (ids: string[]) => ids.reduce((t, i) => t + (value[i] ?? 0), 0);
+    const got = pickBestTalents(talents, 3, score);
+    expect(got).toContain('a1');
+    expect(got).not.toContain('a2'); // meme code que a1
+    expect(got).toContain('b');
+  });
+
+  it('laisse des emplacements vides si rien n ameliore', () => {
+    const talents = [mk('a', 't_dmg'), mk('b', 't_pv')];
+    expect(pickBestTalents(talents, 2, () => 0)).toEqual([]);
+  });
+
+  it('aucun emplacement -> aucun talent', () => {
+    expect(pickBestTalents([mk('a', 't_dmg')], 0, () => 99)).toEqual([]);
   });
 });

@@ -1659,7 +1659,6 @@ export function bestGearLoadout(
   extra: Partial<AggregatedEffects> = {}, // talents + passif de voie → optimise POUR ton build réel
   voie?: string | null, // gate le capstone du set de voie → l'optimiseur valorise ton set complet
 ): Equipped {
-  const familiar = equipped[FAMILIAR_SLOT];
   const bySlot: Record<ItemSlot, Item[]> = {
     weapon: [],
     armor: [],
@@ -1671,7 +1670,14 @@ export function bestGearLoadout(
     const cur = equipped[s];
     if (cur) bySlot[s].push(cur);
   }
-  for (const it of inventory) if (SLOTS.includes(it.slot)) bySlot[it.slot].push(it);
+  // Le FAMILIER est un slot parallèle (hors SLOTS) : on l'alimente à part, sinon il
+  // restait figé sur celui porté et n'était jamais comparé à ceux du sac.
+  const curFam = equipped[FAMILIAR_SLOT];
+  if (curFam) bySlot[FAMILIAR_SLOT].push(curFam);
+  for (const it of inventory) {
+    if (SLOTS.includes(it.slot)) bySlot[it.slot].push(it);
+    else if (it.slot === FAMILIAR_SLOT) bySlot[FAMILIAR_SLOT].push(it);
+  }
   const soloPower = (it: Item): number => {
     const one: Equipped = {};
     one[it.slot] = it;
@@ -1696,24 +1702,49 @@ export function bestGearLoadout(
     accessory: trim(bySlot.accessory, equipped.accessory),
     relic: trim(bySlot.relic, equipped.relic),
   };
+  // Candidats FAMILIER : le porté + les meilleurs du sac (pas de synergie de set sur ce
+  // slot → un top-K solo suffit). `undefined` = aucun familier, si c'est mieux.
+  const famCand = trim(bySlot[FAMILIAR_SLOT], curFam);
+
   // Base = le loadout ACTUEL : l'optimiseur ne le remplace que par STRICTEMENT mieux.
   let best: Equipped = { ...equipped };
   let bestP = combatPower(playerWithGear(name, stats, best, extra, level, voie));
-  for (const w of cand.weapon)
-    for (const a of cand.armor)
-      for (const ac of cand.accessory)
-        for (const r of cand.relic) {
-          const combo: Equipped = {};
-          if (w) combo.weapon = w;
-          if (a) combo.armor = a;
-          if (ac) combo.accessory = ac;
-          if (r) combo.relic = r;
-          if (familiar) combo.familiar = familiar;
-          const p = combatPower(playerWithGear(name, stats, combo, extra, level, voie));
-          if (p > bestP) {
-            bestP = p;
-            best = combo;
+  // Recherche exhaustive sur les 4 slots de gear, à familier FIXÉ ; le familier est
+  // optimisé entre deux passes (ascension par coordonnées). Un produit à 5 dimensions
+  // exploserait (13^5 × 8 voies), alors que 2 passes convergent : le meilleur familier
+  // dépend très peu du gear (ses effets s'additionnent au reste).
+  const sweepGear = (fam: Item | undefined) => {
+    for (const w of cand.weapon)
+      for (const a of cand.armor)
+        for (const ac of cand.accessory)
+          for (const r of cand.relic) {
+            const combo: Equipped = {};
+            if (w) combo.weapon = w;
+            if (a) combo.armor = a;
+            if (ac) combo.accessory = ac;
+            if (r) combo.relic = r;
+            if (fam) combo.familiar = fam;
+            const p = combatPower(playerWithGear(name, stats, combo, extra, level, voie));
+            if (p > bestP) {
+              bestP = p;
+              best = combo;
+            }
           }
-        }
+  };
+  sweepGear(curFam);
+  // Meilleur familier POUR ce gear, puis re-balayage du gear s'il a changé.
+  let bestFam = best[FAMILIAR_SLOT];
+  for (const fam of famCand) {
+    const combo: Equipped = { ...best };
+    if (fam) combo[FAMILIAR_SLOT] = fam;
+    else delete combo[FAMILIAR_SLOT];
+    const p = combatPower(playerWithGear(name, stats, combo, extra, level, voie));
+    if (p > bestP) {
+      bestP = p;
+      best = combo;
+      bestFam = fam;
+    }
+  }
+  if ((bestFam?.id ?? null) !== (curFam?.id ?? null)) sweepGear(bestFam);
   return best;
 }

@@ -303,3 +303,38 @@ export function rollTalentDrop(
     level: rollItemLevel(rng, center, opts.luck ?? 0),
   };
 }
+
+/** Choisit les MEILLEURS talents à équiper (au plus `maxSlots`), en maximisant un score
+ *  fourni par l'appelant (la puissance de combat du build). Glouton : à chaque tour on
+ *  ajoute le talent qui fait le plus progresser le score, et on s'arrête dès qu'aucun
+ *  n'apporte plus rien. Un seul talent par CODE (règle d'équipement : effets distincts).
+ *  Pur — le scoring est injecté, donc pas de dépendance vers items/combat. */
+export function pickBestTalents(
+  talents: TalentInstance[],
+  maxSlots: number,
+  score: (ids: string[]) => number,
+): string[] {
+  if (maxSlots <= 0) return [];
+  const pool = normalizeTalents(talents);
+  const chosen: string[] = [];
+  const usedCodes = new Set<string>();
+  let cur = score([]);
+  while (chosen.length < maxSlots) {
+    let bestId: string | null = null;
+    let bestScore = cur;
+    for (const t of pool) {
+      if (usedCodes.has(t.code) || chosen.includes(t.id)) continue;
+      const p = score([...chosen, t.id]);
+      if (p > bestScore) {
+        bestScore = p;
+        bestId = t.id;
+      }
+    }
+    if (!bestId) break; // plus rien n'améliore → on laisse des emplacements vides
+    const t = pool.find((x) => x.id === bestId)!;
+    chosen.push(bestId);
+    usedCodes.add(t.code);
+    cur = bestScore;
+  }
+  return chosen;
+}

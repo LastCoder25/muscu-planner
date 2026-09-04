@@ -21,6 +21,7 @@ import {
   playerWithGear,
   mergeEffects,
   SLOTS,
+  FAMILIAR_SLOT,
   MAX_LOADOUTS,
   type Item,
   type ItemEffect,
@@ -33,6 +34,7 @@ import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStre
 import {
   normalizeTalents,
   talentsEarned,
+  pickBestTalents,
   talentEffects,
   talentTier,
   talentRank,
@@ -859,7 +861,11 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<boolean> {
     const cur = row.value;
     if (!cur) return false;
-    const talFx = talentEffects(cur.talents);
+    // Les TALENTS entrent dans l'optimisation : on ne part plus de ceux déjà équipés,
+    // ils sont choisis pour le build. `withEquipped` marque un sous-ensemble comme équipé.
+    const maxTal = talentsEarned(level);
+    const withEquipped = (ids: string[]): TalentInstance[] =>
+      normalizeTalents(cur.talents).map((t) => ({ ...t, equipped: ids.includes(t.id) }));
     const loadouts0: Loadout[] = Array.from(
       { length: MAX_LOADOUTS },
       (_, k) => cur.loadouts[k] ?? { items: {} },
@@ -874,14 +880,34 @@ export const useCharacterStore = defineStore('character', () => {
       loadouts: Loadout[];
       score: number;
       voie: string | null;
+      talents: TalentInstance[]; // talents équipés retenus pour ce plan
     };
     function planFor(vIdx: number): Plan {
       const voie = vIdx >= 0 ? VOIES[vIdx]!.id : null;
-      const extra = mergeEffects(talFx, voiePassiveEffects(voie));
       const pool = [...cur!.inventory, ...reserveOf(vIdx)]; // la réserve de CETTE voie est portable
-      const best = bestGearLoadout(name, stats, cur!.equipped, pool, level, extra, voie);
-      const chosen = new Set(SLOTS.map((s) => best[s]?.id).filter((x): x is string => !!x));
-      const equippedGear = SLOTS.map((s) => cur!.equipped[s]).filter((x): x is Item => !!x);
+      const fxOf = (ids: string[]) =>
+        mergeEffects(talentEffects(withEquipped(ids)), voiePassiveEffects(voie));
+      // Ascension par coordonnées talents ↔ gear : les meilleurs talents dépendent du gear
+      // (et réciproquement). Deux passes suffisent en pratique — on part des talents déjà
+      // équipés, on optimise le gear, on re-choisit les talents POUR ce gear, on refait le
+      // gear. Chaque étape ne peut qu'améliorer le score, donc ça converge.
+      let talIds = normalizeTalents(cur!.talents)
+        .filter((t) => t.equipped !== false)
+        .slice(0, maxTal)
+        .map((t) => t.id);
+      let best: Equipped = cur!.equipped;
+      for (let pass = 0; pass < 2; pass++) {
+        best = bestGearLoadout(name, stats, cur!.equipped, pool, level, fxOf(talIds), voie);
+        talIds = pickBestTalents(cur!.talents, maxTal, (ids) =>
+          combatPower(playerWithGear(name, stats, best, fxOf(ids), level, voie)),
+        );
+      }
+      const extra = fxOf(talIds);
+      // FAMILIAR_SLOT inclus : le familier est désormais optimisé lui aussi, donc celui
+      // retenu ne doit pas être considéré comme un « non-retenu » à ranger.
+      const allSlots = [...SLOTS, FAMILIAR_SLOT];
+      const chosen = new Set(allSlots.map((s) => best[s]?.id).filter((x): x is string => !!x));
+      const equippedGear = allSlots.map((s) => cur!.equipped[s]).filter((x): x is Item => !!x);
       // Réserves : celle de la voie choisie repart VIDE (ses pièces sont dans le pool) ; les
       // autres intactes. On re-range ensuite les non-retenus.
       const loadouts = loadouts0.map((lo, k) =>
@@ -905,9 +931,9 @@ export const useCharacterStore = defineStore('character', () => {
         } else sac.push(it);
       }
       const equipped: Equipped = { ...cur!.equipped };
-      for (const s of SLOTS) equipped[s] = best[s];
+      for (const s of allSlots) equipped[s] = best[s];
       const score = combatPower(playerWithGear(name, stats, equipped, extra, level, voie));
-      return { equipped, sac, loadouts, score, voie };
+      return { equipped, sac, loadouts, score, voie, talents: withEquipped(talIds) };
     }
 
     // Voies candidates. `forceVoie` (Porter ce set) → cette voie UNIQUEMENT. Sinon : l'actuelle
@@ -930,19 +956,44 @@ export const useCharacterStore = defineStore('character', () => {
       if (!best || p.score > best.score) best = p;
     }
     if (!best) return false;
+    // GARDE-FOU ANTI-REGRESSION : on ne remplace le build actuel que par du STRICTEMENT
+    // meilleur. Sans ca, un changement de regle (ex. plafond de talents abaisse) pourrait
+    // faire PERDRE de la puissance a un clic sur « equipement automatique ».
+    const curScore = combatPower(
+      playerWithGear(
+        name,
+        stats,
+        cur.equipped,
+        mergeEffects(
+          talentEffects(cur.talents),
+          voiePassiveEffects(cur.voie as Parameters<typeof voiePassiveEffects>[0]),
+        ),
+        level,
+        cur.voie,
+      ),
+    );
+    if (best.score <= curScore) return false;
 
     // No-op si RIEN ne change (même gear ET même voie).
-    const sameGear = SLOTS.every(
+    const sameGear = [...SLOTS, FAMILIAR_SLOT].every(
       (s) => (cur.equipped[s]?.id ?? null) === (best.equipped[s]?.id ?? null),
     );
     const sameVoie = (cur.voie ?? null) === (best.voie ?? null);
-    if (sameGear && sameVoie) return false;
+    const eqIds = (ts: TalentInstance[]) =>
+      ts
+        .filter((t) => t.equipped)
+        .map((t) => t.id)
+        .sort()
+        .join(',');
+    const sameTal = eqIds(normalizeTalents(cur.talents)) === eqIds(best.talents);
+    if (sameGear && sameVoie && sameTal) return false;
 
     await persist(userId, {
       equipped: best.equipped,
       inventory: best.sac,
       loadouts: best.loadouts,
       voie: best.voie,
+      talents: best.talents,
     });
     return true;
   }
