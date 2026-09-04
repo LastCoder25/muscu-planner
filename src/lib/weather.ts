@@ -70,6 +70,7 @@ export interface WeatherCurrent {
 export interface WeatherHour {
   date: string; // YYYY-MM-DD (local)
   hour: string; // « 14h »
+  h24: number; // 0..23 (filtrage par plage horaire)
   tempC: number;
   rainPct: number; // 0..100
   windKmh: number;
@@ -129,6 +130,7 @@ export function parseForecast(raw: RawForecast): WeatherData {
     return {
       date: t.slice(0, 10),
       hour: `${t.slice(11, 13)}h`,
+      h24: Number(t.slice(11, 13)),
       tempC: r0(raw.hourly.temperature_2m[i]),
       rainPct: r0(raw.hourly.precipitation_probability[i]),
       windKmh: r0(raw.hourly.wind_speed_10m[i]),
@@ -163,6 +165,41 @@ export function parseForecast(raw: RawForecast): WeatherData {
     hours,
     days,
   };
+}
+
+// ── Plage horaire affichée (préférence : on ne veut souvent voir que ses créneaux
+//    de sortie, matin et/ou soir, pas les 24 heures). ──
+export interface HourPreset {
+  id: string;
+  label: string;
+  from: number; // heure de début incluse (0..23)
+  to: number; // heure de fin incluse (0..23)
+}
+export const HOUR_PRESETS: HourPreset[] = [
+  { id: 'all', label: 'Tout', from: 0, to: 23 },
+  { id: 'morning', label: 'Matin', from: 6, to: 12 },
+  { id: 'midday', label: 'Midi', from: 11, to: 15 },
+  { id: 'evening', label: 'Soir', from: 17, to: 22 },
+];
+export const FULL_DAY: HourPreset = HOUR_PRESETS[0]!;
+
+/** Garde les heures dans [from, to] (bornes incluses ; ordre indifférent). */
+export function filterHours(hours: WeatherHour[], from: number, to: number): WeatherHour[] {
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  return hours.filter((h) => h.h24 >= lo && h.h24 <= hi);
+}
+/** Id du preset correspondant exactement à la plage, sinon null (= plage perso). */
+export function presetIdFor(from: number, to: number): string | null {
+  return HOUR_PRESETS.find((p) => p.from === from && p.to === to)?.id ?? null;
+}
+/** « Toute la journée » ou « 06h → 12h ». */
+export function rangeLabel(from: number, to: number): string {
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  if (lo === 0 && hi === 23) return 'Toute la journée';
+  const p = (h: number) => String(h).padStart(2, '0');
+  return `${p(lo)}h → ${p(hi)}h`;
 }
 
 /** Heures d'un jour donné (pour l'onglet « heure par heure »). */

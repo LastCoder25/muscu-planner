@@ -3,6 +3,10 @@ import {
   weatherIcon,
   parseForecast,
   hoursOfDay,
+  filterHours,
+  presetIdFor,
+  rangeLabel,
+  HOUR_PRESETS,
   dayLabel,
   placeLabel,
   type RawForecast,
@@ -65,7 +69,13 @@ describe('parseForecast', () => {
   });
   it('découpe les heures avec date + libellé d’heure, null → 0', () => {
     expect(d.hours).toHaveLength(3);
-    expect(d.hours[0]).toMatchObject({ date: '2026-09-03', hour: '22h', tempC: 20, rainPct: 10 });
+    expect(d.hours[0]).toMatchObject({
+      date: '2026-09-03',
+      hour: '22h',
+      h24: 22,
+      tempC: 20,
+      rainPct: 10,
+    });
     expect(d.hours[2]).toMatchObject({ date: '2026-09-04', hour: '00h', tempC: 0, emoji: '🌧️' });
   });
   it('construit les jours (min/max/pluie max/vent max)', () => {
@@ -104,5 +114,26 @@ describe('placeLabel', () => {
     );
     expect(placeLabel({ id: '2', name: 'Paris', admin1: 'Paris', lat: 0, lon: 0 })).toBe('Paris');
     expect(placeLabel({ id: '3', name: 'Nice', lat: 0, lon: 0 })).toBe('Nice');
+  });
+});
+
+describe('plage horaire', () => {
+  const d = parseForecast(RAW);
+  it('filterHours garde les bornes incluses, ordre indifférent', () => {
+    expect(filterHours(d.hours, 22, 23).map((h) => h.hour)).toEqual(['22h', '23h']);
+    expect(filterHours(d.hours, 23, 22).map((h) => h.hour)).toEqual(['22h', '23h']); // inversé
+    expect(filterHours(d.hours, 0, 0).map((h) => h.hour)).toEqual(['00h']);
+    expect(filterHours(d.hours, 8, 12)).toEqual([]);
+  });
+  it('presetIdFor reconnaît un preset exact, sinon null (plage perso)', () => {
+    const m = HOUR_PRESETS.find((p) => p.id === 'morning')!;
+    expect(presetIdFor(m.from, m.to)).toBe('morning');
+    expect(presetIdFor(0, 23)).toBe('all');
+    expect(presetIdFor(7, 9)).toBeNull();
+  });
+  it('rangeLabel : journée entière ou bornes zéro-paddées', () => {
+    expect(rangeLabel(0, 23)).toBe('Toute la journée');
+    expect(rangeLabel(6, 12)).toBe('06h → 12h');
+    expect(rangeLabel(12, 6)).toBe('06h → 12h'); // normalisé
   });
 });

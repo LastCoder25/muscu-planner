@@ -158,6 +158,48 @@
                   <span class="wx-dchip-t">{{ d.maxC }}°</span>
                 </button>
               </div>
+              <!-- Plage horaire : presets + bornes perso (préférence persistée). -->
+              <div class="wx-range">
+                <div class="wx-range-chips">
+                  <button
+                    v-for="p in HOUR_PRESETS"
+                    :key="p.id"
+                    class="wx-chip"
+                    :class="{ on: activePreset === p.id }"
+                    type="button"
+                    @click="applyPreset(p)"
+                  >
+                    {{ p.label }}
+                  </button>
+                  <span class="wx-range-lbl">{{ hourRangeLabel }}</span>
+                </div>
+                <div class="wx-range-sel">
+                  <label
+                    >De
+                    <select
+                      class="wx-sel"
+                      :value="hourFrom"
+                      @change="onFrom(Number(($event.target as HTMLSelectElement).value))"
+                    >
+                      <option v-for="h in HOURS_24" :key="h" :value="h">
+                        {{ String(h).padStart(2, '0') }}h
+                      </option>
+                    </select>
+                  </label>
+                  <label
+                    >à
+                    <select
+                      class="wx-sel"
+                      :value="hourTo"
+                      @change="onTo(Number(($event.target as HTMLSelectElement).value))"
+                    >
+                      <option v-for="h in HOURS_24" :key="h" :value="h">
+                        {{ String(h).padStart(2, '0') }}h
+                      </option>
+                    </select>
+                  </label>
+                </div>
+              </div>
               <div class="wx-list">
                 <div v-for="h in dayHours" :key="h.hour" class="wx-row">
                   <span class="wx-row-h">{{ h.hour }}</span>
@@ -169,7 +211,7 @@
                   <span class="wx-row-w">💨 {{ h.windKmh }}</span>
                 </div>
                 <div v-if="!dayHours.length" class="wx-empty">
-                  Pas encore de détail pour ce jour.
+                  Aucune heure dans la plage {{ hourRangeLabel }} pour ce jour.
                 </div>
               </div>
             </template>
@@ -557,7 +599,17 @@ import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx } from '@/composables/useXpFx';
 import { useWeather, searchCities } from '@/composables/useWeather';
-import { placeLabel, dayLabel, hoursOfDay, type WeatherPlace } from '@/lib/weather';
+import {
+  placeLabel,
+  dayLabel,
+  hoursOfDay,
+  filterHours,
+  presetIdFor,
+  rangeLabel,
+  HOUR_PRESETS,
+  FULL_DAY,
+  type WeatherPlace,
+} from '@/lib/weather';
 import { useWeatherReliability } from '@/composables/useWeatherReliability';
 import { LEADS, modelLabel, type Lead } from '@/lib/weatherReliability';
 import { useChallengesStore } from '@/stores/challenges';
@@ -637,8 +689,48 @@ watch(
   },
   { immediate: true },
 );
+// Plage horaire affichée (préférence persistée par appareil) : on ne veut souvent voir
+// que ses créneaux de sortie (matin / soir), pas les 24 heures.
+const HOURS_KEY = 'muscu:weather:hours';
+const hourFrom = ref(FULL_DAY.from);
+const hourTo = ref(FULL_DAY.to);
+try {
+  const raw = localStorage.getItem(HOURS_KEY);
+  if (raw) {
+    const v = JSON.parse(raw) as { from?: number; to?: number };
+    if (typeof v.from === 'number') hourFrom.value = Math.min(23, Math.max(0, v.from));
+    if (typeof v.to === 'number') hourTo.value = Math.min(23, Math.max(0, v.to));
+  }
+} catch {
+  /* stockage indisponible → plage par défaut */
+}
+watch([hourFrom, hourTo], ([from, to]) => {
+  try {
+    localStorage.setItem(HOURS_KEY, JSON.stringify({ from, to }));
+  } catch {
+    /* idem */
+  }
+});
+const HOURS_24 = Array.from({ length: 24 }, (_, i) => i);
+const activePreset = computed(() => presetIdFor(hourFrom.value, hourTo.value));
+const hourRangeLabel = computed(() => rangeLabel(hourFrom.value, hourTo.value));
+function applyPreset(p: { from: number; to: number }) {
+  hourFrom.value = p.from;
+  hourTo.value = p.to;
+}
+// Début après fin → on pousse l'autre borne (plage toujours cohérente).
+function onFrom(v: number) {
+  hourFrom.value = v;
+  if (hourTo.value < v) hourTo.value = v;
+}
+function onTo(v: number) {
+  hourTo.value = v;
+  if (hourFrom.value > v) hourFrom.value = v;
+}
 const dayHours = computed(() =>
-  weather.value ? hoursOfDay(weather.value.hours, selDay.value) : [],
+  weather.value
+    ? filterHours(hoursOfDay(weather.value.hours, selDay.value), hourFrom.value, hourTo.value)
+    : [],
 );
 function openDay(date: string) {
   selDay.value = date;
@@ -1490,6 +1582,42 @@ async function saveAutre() {
 }
 .wx-loading {
   padding: 24px 0;
+}
+/* Plage horaire (onglet Heure par heure) */
+.wx-range {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wx-range-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.wx-range-lbl {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--dim-2);
+  font-variant-numeric: tabular-nums;
+}
+.wx-range-sel {
+  display: flex;
+  gap: 14px;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.wx-sel {
+  margin-left: 4px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
 }
 /* Onglet Fiabilité */
 .wx-rel {
