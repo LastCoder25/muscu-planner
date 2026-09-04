@@ -1713,10 +1713,30 @@
         >
           ✕
         </button>
-        <div class="sec-title">⚡ Énergie — 3 derniers jours</div>
-        <div class="sec-hint">
-          Énergie <b>gagnée</b> chaque jour, toutes sources : sport, bonus de connexion,
-          expéditions. Solde actuel : <b>{{ c.energy }} ⚡</b>.
+        <div class="sec-title">⚡ Énergie</div>
+        <!-- Composition du SOLDE : il cumule TOUT depuis le début, dépenses comprises →
+             sans ça, « j'ai gagné 1205 aujourd'hui mais j'affiche 431 » semble faux. -->
+        <div class="enh-bal">
+          <div class="enh-brow">
+            <span>🏃 Gagné par le sport <small>(depuis le début)</small></span>
+            <b class="pos">+{{ energyEarnedTotal }}</b>
+          </div>
+          <div class="enh-brow">
+            <span>🎁 Bonus & bâtiments</span>
+            <b class="pos">+{{ energyBonusTotal }}</b>
+          </div>
+          <div class="enh-brow">
+            <span>⚔️ Dépensé en aventure</span>
+            <b class="neg">−{{ energySpentTotal }}</b>
+          </div>
+          <div class="enh-brow total">
+            <span>Solde disponible</span>
+            <b :class="{ neg: c.energy < 0 }">{{ c.energy }} ⚡</b>
+          </div>
+        </div>
+        <div class="sec-hint enh-sub">
+          Gagné ces <b>3 derniers jours</b>, toutes sources (sport, bonus, expéditions) — à ne pas
+          confondre avec le solde ci-dessus, qui déduit tout ce que tu as déjà dépensé.
         </div>
         <div class="enh-list">
           <div v-for="d in energyHist" :key="d.date" class="enh-day-block">
@@ -2574,6 +2594,11 @@ const c = computed(() =>
 const heroLevel = computed(() => c.value.level.level);
 // Détail de l'énergie (toutes sources datables) sur 3 jours — modale au clic sur ⚡.
 const energyHist = useEnergyHistory(3);
+// Composition du solde d'énergie (mêmes sources que `c`) : gagné par le sport,
+// bonus/bâtiments (login_energy), et dépensé (energy_spent) — tous CUMULÉS.
+const energyEarnedTotal = computed(() => progress.energyEarned.value);
+const energyBonusTotal = computed(() => char.row?.login_energy ?? 0);
+const energySpentTotal = computed(() => char.row?.energy_spent ?? 0);
 // Effets cumulés des talents choisis.
 const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
 // Effets « hors équipement » actifs = talents + PASSIF DE VOIE (spécialisation) → comptés
@@ -4937,6 +4962,52 @@ onUnmounted(() => {
   cursor: pointer;
   text-decoration: underline dotted;
   text-underline-offset: 3px;
+}
+/* Composition du solde (en tête de la modale énergie). */
+.enh-bal {
+  margin-top: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 4px 12px;
+}
+.enh-brow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+  color: var(--dim);
+}
+.enh-brow + .enh-brow {
+  border-top: 1px solid var(--line-soft);
+}
+.enh-brow small {
+  color: var(--dim-2);
+}
+.enh-brow b {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+.enh-brow b.pos {
+  color: #8fd0ff;
+}
+.enh-brow b.neg {
+  color: var(--d4);
+}
+.enh-brow.total {
+  color: var(--text);
+  font-weight: 700;
+}
+.enh-brow.total b {
+  font-size: 18px;
+  color: var(--accent);
+}
+.enh-sub {
+  margin-top: 14px;
 }
 /* Historique d'énergie (modale) : un bloc par jour, détail par activité dedans. */
 .enh-list {

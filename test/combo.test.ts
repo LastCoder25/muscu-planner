@@ -536,17 +536,21 @@ describe('comboXpByDay — ventilation par jour (historique energie)', () => {
     expect(sum).toBe(comboXpPoints([c]));
   });
 
-  it('un jour par date de serie, triees, prime UNIQUEMENT sur le dernier jour actif', () => {
+  it('un jour par date de serie, triees ; la prime suit les PALIERS franchis', () => {
     const days = comboXpByDay(c);
     expect(days.map((d) => d.date)).toEqual(['2026-01-05', '2026-01-07']);
-    expect(days[0]!.bonus).toBe(0);
-    expect(days[1]!.bonus).toBe(comboBonusXp(c));
+    // Le 05, le rowing atteint deja sa cible (2/2) -> une part de prime tombe ce jour-la,
+    // PAS a la fin : la prime a paliers est versee au fur et a mesure.
+    expect(days[0]!.bonus).toBeGreaterThan(0);
+    // La somme des primes journalieres = la prime totale du defi.
+    expect(days.reduce((a, d) => a + d.bonus, 0)).toBe(comboBonusXp(c));
     expect(comboBonusXp(c)).toBeGreaterThan(0);
   });
 
-  it('effort au prorata des series (3 le 05, 1 le 07)', () => {
+  it('effort reparti sur les jours actifs', () => {
     const days = comboXpByDay(c);
-    expect(days[0]!.effort).toBeGreaterThan(days[1]!.effort);
+    expect(days[0]!.effort).toBeGreaterThan(0);
+    expect(days[1]!.effort).toBeGreaterThan(0);
   });
 
   it('sans aucune serie : aucun jour', () => {

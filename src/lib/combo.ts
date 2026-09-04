@@ -267,32 +267,38 @@ export interface ComboDayXp {
   bonus: number; // prime de bouclage — portée par le DERNIER jour actif
 }
 
-/** Ventile l'XP d'un Défi 360 par JOUR (pour l'historique d'énergie, qui est journalier).
- *  L'effort est réparti au prorata des séries faites chaque jour ; la PRIME est portée par
- *  le dernier jour actif (c'est là qu'elle est acquise). La somme vaut EXACTEMENT
- *  comboXpPoints([c]) — le reliquat d'arrondi est soldé sur le dernier jour. */
+/** Copie du défi ne gardant que les séries faites JUSQU'AU jour `date` inclus. */
+function comboUpTo(c: ComboChallenge, date: string): ComboChallenge {
+  return {
+    ...c,
+    legs: c.legs.map((l) => ({ ...l, sets: legSets(l).filter((s) => s.date <= date) })),
+  };
+}
+
+/** Ventile l'XP d'un Défi 360 par JOUR (l'historique d'énergie est journalier).
+ *  Méthode : on REJOUE l'état du défi jour après jour et on prend le DELTA. C'est la
+ *  seule attribution fidèle, car la prime à paliers n'est PAS versée à la fin : chaque
+ *  exo débloque sa part dès qu'il franchit un palier (80 % → 15 %, 100 % → 95 %), et le
+ *  multiplicateur « fini en avance » ne tombe qu'au bouclage. La somme des jours vaut
+ *  donc exactement comboXpPoints([c]).
+ *  NB : un delta peut être négatif (une série sous les reps supposées baisse l'effort
+ *  planifié) — l'appelant filtre les valeurs ≤ 0 à l'affichage. */
 export function comboXpByDay(c: ComboChallenge): ComboDayXp[] {
-  const setsPerDay = new Map<string, number>();
-  for (const l of c.legs)
-    for (const s of legSets(l)) {
-      if (!s.date) continue;
-      setsPerDay.set(s.date, (setsPerDay.get(s.date) ?? 0) + 1);
-    }
-  const dates = [...setsPerDay.keys()].sort();
+  const dates = [...new Set(c.legs.flatMap((l) => legSets(l).map((s) => s.date))).values()]
+    .filter(Boolean)
+    .sort();
   if (!dates.length) return [];
-  const totalSets = [...setsPerDay.values()].reduce((a, b) => a + b, 0);
-  const bonus = comboBonusXp(c);
-  const effortTotal = Math.max(0, comboXpPoints([c]) - bonus);
   const out: ComboDayXp[] = [];
-  let acc = 0;
-  dates.forEach((date, i) => {
-    const last = i === dates.length - 1;
-    const effort = last
-      ? effortTotal - acc // solde le reliquat d'arrondi
-      : Math.round((effortTotal * setsPerDay.get(date)!) / totalSets);
-    acc += effort;
-    out.push({ date, effort, bonus: last ? bonus : 0 });
-  });
+  let prevTotal = 0;
+  let prevBonus = 0;
+  for (const date of dates) {
+    const upTo = comboUpTo(c, date);
+    const total = comboXpPoints([upTo]);
+    const bonus = comboBonusXp(upTo);
+    out.push({ date, effort: total - prevTotal - (bonus - prevBonus), bonus: bonus - prevBonus });
+    prevTotal = total;
+    prevBonus = bonus;
+  }
   return out;
 }
 
