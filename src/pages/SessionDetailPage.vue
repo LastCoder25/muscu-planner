@@ -51,7 +51,10 @@
           @click="openExercise(ex.id)"
         >
           <div class="ex-top">
-            <div class="ex-idx font-display">{{ i + 1 }}</div>
+            <div class="ex-thumb">
+              <img v-if="exerciseImage(ex.id)" :src="exerciseImage(ex.id)" alt="" loading="lazy" />
+              <span class="ex-idx font-display">{{ i + 1 }}</span>
+            </div>
             <div class="ex-main">
               <div class="ex-name">{{ ex.name }}</div>
               <div class="ex-muscles">
@@ -90,6 +93,7 @@ import { useQuasar } from 'quasar';
 import type { Session, Objective, PrescribedSet, PlannedExercise } from '@/lib/types';
 import { estimateDurationMin } from '@/lib/estimates';
 import { plannedSetsByMuscle, muscleColor } from '@/lib/volume';
+import { exerciseImage } from '@/data/exerciseImages';
 import { useSessionsStore } from '@/stores/sessions';
 import { useAuthStore } from '@/stores/auth';
 
@@ -334,17 +338,44 @@ onMounted(async () => {
   align-items: flex-start;
   gap: 12px;
 }
-.ex-idx {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+/* Vignette de l'exo (image fixe) avec le numéro en pastille. Sans illustration,
+   la vignette se réduit au numéro seul — l'ancien rendu. */
+.ex-thumb {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 11px;
+  overflow: hidden;
+  background: var(--surface-2);
   display: grid;
   place-items: center;
+  flex: none;
+}
+.ex-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ex-idx {
   font-weight: 600;
   font-size: 15px;
-  background: var(--surface-2);
   color: var(--accent);
-  flex: none;
+}
+/* Avec image : le numéro passe en pastille lisible dans le coin. */
+.ex-thumb img + .ex-idx {
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  background: rgba(0, 0, 0, 0.66);
+  color: var(--accent);
 }
 .ex-main {
   flex: 1;

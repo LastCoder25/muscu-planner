@@ -31,6 +31,14 @@
         <!-- Exercice courant -->
         <div class="exo">
           <div class="exo-top">
+            <ExerciseAnim
+              v-if="exAnim"
+              class="exo-anim"
+              :exercise-id="ex.id"
+              :size="72"
+              :title="ex.name"
+            />
+            <img v-else-if="exImg" class="exo-anim" :src="exImg" alt="" />
             <div class="exo-name font-display">{{ ex.name }}</div>
             <div class="exo-actions">
               <button class="swap" @click="swapOpen = true">⇄ Changer</button>
@@ -305,6 +313,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import ExerciseAnim from '@/components/ExerciseAnim.vue';
+import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -336,6 +346,9 @@ const DIFFS = [
 
 const run = computed(() => live.run);
 const ex = computed(() => live.current);
+// Visuel du mouvement pour l'exo courant : animation si les 2 poses existent, sinon image fixe.
+const exAnim = computed(() => (ex.value ? !!exerciseFrames(ex.value.id) : false));
+const exImg = computed(() => (ex.value ? exerciseImage(ex.value.id) : undefined));
 const curSetIndex = computed(() => ex.value?.sets.findIndex((s) => !s.done) ?? -1);
 const curSet = computed(() => (curSetIndex.value >= 0 ? ex.value!.sets[curSetIndex.value]! : null));
 const volume = computed(() =>
@@ -736,6 +749,16 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+}
+/* Visuel du mouvement à côté du nom : animation si les 2 poses existent, sinon
+   image fixe, sinon rien (pas de trou dans la mise en page). */
+.exo-anim {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  object-fit: cover;
+  flex: none;
+  background: var(--surface-2);
 }
 .exo-name {
   font-weight: 700;
