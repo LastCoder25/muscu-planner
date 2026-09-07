@@ -32,7 +32,8 @@ export default defineBoot(async ({ router, store }) => {
     if (to.path === '/login') return { path: '/' };
 
     // Pages réservées aux admins (la RLS Postgres fait aussi autorité).
-    if ((to.path === '/backlog' || to.path === '/formulas') && !auth.isAdmin) return { path: '/' };
+    const ADMIN_ONLY = ['/backlog', '/formulas', '/labo'];
+    if (ADMIN_ONLY.includes(to.path) && !auth.isAdmin) return { path: '/' };
 
     // S'assure d'avoir tenté de charger le profil au moins une fois.
     if (!profile.loaded) {
