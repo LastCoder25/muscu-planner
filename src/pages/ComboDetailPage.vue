@@ -118,10 +118,16 @@
           </span>
         </div>
         <div v-else class="reps-bar">
+          <!-- Zone BONUS encore possible (de l'objectif au palier maximal) : hachures vertes.
+               Équivalent des cases pointillées du mode séries — la marge se voit AVANT d'être
+               prise, alors qu'avant la barre était écrêtée à 100 % et ne montrait rien. -->
+          <span class="reps-bonus" :style="{ left: bar(leg).objPct + '%' }" />
+          <span class="reps-fill" :style="{ width: bar(leg).fillPct + '%' }" />
           <span
-            class="reps-fill"
-            :style="{ width: Math.min(100, (legDone(leg) / leg.target) * 100) + '%' }"
+            class="reps-over"
+            :style="{ left: bar(leg).objPct + '%', width: bar(leg).overPct + '%' }"
           />
+          <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
         </div>
         <!-- Mode DURÉE (gainage) : chrono OU ajout manuel d'une durée (ticket 9ecad885). -->
         <div v-if="legMode(leg) === 'time'" class="leg-actions">
@@ -193,6 +199,7 @@ import {
   comboProgressPct,
   legTier,
   legTierMarks,
+  legBarGeometry,
   legSetsDone,
   legDone,
   legComplete,
@@ -236,6 +243,10 @@ function tierRank(l: ComboLeg): number {
 }
 // Nombre de cases affichées : jusqu'au palier MAXIMAL (et au-delà si déjà dépassé).
 // Sans ça, la barre s'arrêtait à l'objectif → rien ne montrait qu'on pouvait aller plus loin.
+// Géométrie de la barre continue (reps/durée) → montre la marge de dépassement.
+function bar(l: ComboLeg): { objPct: number; fillPct: number; overPct: number } {
+  return legBarGeometry(l);
+}
 function segCount(l: ComboLeg): number {
   return Math.max(legTierMarks(l).max, legDone(l));
 }
@@ -766,7 +777,37 @@ onMounted(async () => {
   background: var(--surface-2);
   overflow: hidden;
   margin: 9px 0;
+  position: relative; /* les repères de dépassement sont positionnés dessus */
 }
+/* Repères de dépassement de la barre continue (reps / durée). */
+.reps-bonus {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--d1) 26%, transparent) 0 3px,
+    transparent 3px 6px
+  );
+}
+/* Part réalisée AU-DELÀ de l'objectif → vert plein, comme les cases bonus des séries. */
+.reps-over {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--d1);
+}
+/* Trait de l'objectif : on voit où finit la cible et où commence le bonus. */
+.reps-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--text);
+  opacity: 0.5;
+}
+
 .reps-fill {
   display: block;
   height: 100%;

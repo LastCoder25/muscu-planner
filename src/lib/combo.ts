@@ -207,6 +207,25 @@ export function legTierMarks(l: ComboLeg): { sec: number; principal: number; max
   };
 }
 
+/** Géométrie de la barre continue (modes REPS et DURÉE), rapportée au palier MAXIMAL.
+ *
+ *  Le mode séries montre ses cases bonus en pointillé ; la barre continue, elle, était
+ *  écrêtée à 100 % → un exo de gainage ne laissait RIEN voir de la marge de dépassement,
+ *  alors que le dépassement lui rapporte exactement comme aux autres modes (`legTier` et
+ *  le crédit-durée sont mode-agnostiques). L'échelle va donc jusqu'au maximal (au-delà si
+ *  déjà dépassé) : `fillPct` = la part faite jusqu'à l'objectif, `overPct` = la part faite
+ *  au-delà, `objPct` = où se situe l'objectif sur l'échelle. */
+export function legBarGeometry(l: ComboLeg): {
+  objPct: number;
+  fillPct: number;
+  overPct: number;
+} {
+  const scale = Math.max(legTierMarks(l).max, legDone(l), 1);
+  const objPct = Math.min(100, (Math.max(0, l.target) / scale) * 100);
+  const donePct = Math.min(100, (Math.max(0, legDone(l)) / scale) * 100);
+  return { objPct, fillPct: Math.min(donePct, objPct), overPct: Math.max(0, donePct - objPct) };
+}
+
 /** Effort PLANIFIÉ d'un exo jusqu'à sa cible (base de sa part de prime) = reps réelles
  *  des séries comptées × poids-de-rep, plan figé (COMBO_PLAN_REPS) pour les séries
  *  manquantes. Correctif 135fa252 : symétrique avec les petits défis (prime ∝ effort réel). */

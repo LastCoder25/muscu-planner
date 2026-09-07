@@ -19,6 +19,7 @@ import {
   comboOverachievement,
   legTier,
   legTierMarks,
+  legBarGeometry,
   legTierShare,
   comboTieredBonus,
   comboBonusXp,
@@ -620,6 +621,46 @@ describe('legTierMarks', () => {
       const m = legTierMarks(leg(t, 0));
       expect(m.sec).toBeLessThanOrEqual(m.principal);
       expect(m.principal).toBeLessThan(m.max);
+    }
+  });
+});
+
+describe('legBarGeometry (barre continue : reps et durée)', () => {
+  // Exo de DURÉE (gainage) : objectif 120 s.
+  const timeLeg = (done: number) =>
+    ({
+      slot: 'core',
+      exercise_id: 'ex_plank',
+      rep_weight: 1,
+      target: 120,
+      count_mode: 'time',
+      sets: [{ date: '2026-09-01', reps: done }],
+      progress: [],
+    }) as unknown as Parameters<typeof legBarGeometry>[0];
+
+  it('laisse voir la marge de dépassement : l’objectif n’est PAS en bout de barre', () => {
+    const g = legBarGeometry(timeLeg(0));
+    expect(g.objPct).toBeGreaterThan(0);
+    expect(g.objPct).toBeLessThan(100); // ← avant, la barre s'arrêtait à l'objectif
+    expect(g.objPct).toBeCloseTo((120 / 144) * 100, 5); // maximal = 120 %
+  });
+
+  it('sépare la part faite avant et après l’objectif', () => {
+    const avant = legBarGeometry(timeLeg(60));
+    expect(avant.overPct).toBe(0);
+    expect(avant.fillPct).toBeGreaterThan(0);
+
+    const apres = legBarGeometry(timeLeg(132)); // 110 % de l'objectif
+    expect(apres.fillPct).toBeCloseTo(apres.objPct, 5); // saturé jusqu'à la cible
+    expect(apres.overPct).toBeGreaterThan(0); // …et du vert au-delà
+  });
+
+  it('ne déborde jamais de la barre, même très au-delà du maximal', () => {
+    for (const done of [0, 1, 119, 120, 144, 400, 5000]) {
+      const g = legBarGeometry(timeLeg(done));
+      expect(g.fillPct + g.overPct).toBeLessThanOrEqual(100.0001);
+      expect(g.objPct).toBeGreaterThanOrEqual(0);
+      expect(g.objPct).toBeLessThanOrEqual(100);
     }
   });
 });
