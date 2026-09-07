@@ -2036,6 +2036,7 @@
       >
         <div class="rm-head">
           <div class="rm-title font-display">{{ run.name }}</div>
+          <button v-if="!stageDone" class="rm-skip" @click="skipStage">⏩ Passer</button>
         </div>
         <!-- Corps scrollable : la carte garde une HAUTEUR FIXE → la tête (avec le
              bouton Réattaquer) et les actions ne bougent pas selon le contenu
@@ -3442,6 +3443,12 @@ const stageWasReward = ref(false);
 // Passer l'animation des combats gagnés d'avance : plus de switch dans l'UI —
 // appliqué D'OFFICE pour le compte testeur (admin), qui relance des runs en boucle.
 const autoSkipEasy = computed(() => auth.isAdmin);
+// Coupe le rejeu en cours : `stageSkipped` démonte CombatStage (donc son interval)
+// au lieu de le laisser tourner sous le résultat révélé.
+function skipStage() {
+  stageSkipped.value = true;
+  stageFinish();
+}
 function stageFinish() {
   stageDone.value = true;
   flushCelebrations();
@@ -8363,6 +8370,16 @@ button.pt-mini:active {
 }
 .report-modal.lose {
   border-top-color: var(--d4);
+}
+.rm-skip {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
 }
 .rm-head {
   display: flex;
