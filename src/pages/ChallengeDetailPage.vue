@@ -57,6 +57,24 @@
           </div>
         </div>
 
+        <!-- Défi PARTAGÉ : la comparaison est la raison d'être de la feature — on la
+             met juste sous les stats, pas en bas de page. -->
+        <div v-if="peer" class="shared-cmp">
+          <span class="sc-ic">🤝</span>
+          <span class="sc-txt"
+            >Défi partagé avec <b>{{ peer.pseudo }}</b></span
+          >
+          <span class="sc-scores">
+            <span class="sc-me" :class="{ lead: stats.completionPct >= peer.pct }"
+              >toi {{ stats.completionPct }} %</span
+            >
+            <span class="sc-vs">·</span>
+            <span class="sc-them" :class="{ lead: peer.pct > stats.completionPct }"
+              >{{ peer.pseudo }} {{ peer.pct }} %</span
+            >
+          </span>
+        </div>
+
         <!-- Suggestion de recalibrage (dépassement OU sous-performance répétés) -->
         <div v-if="showRecal && recalSuggest" class="recal" :class="recalSuggest.dir">
           <div class="recal-txt">
@@ -375,6 +393,13 @@
         <button v-if="canFinishNow" class="finish-now" @click="confirmFinishNow">
           🏁 Terminer — défi accompli
         </button>
+        <button
+          v-if="!statusDone && !ch.shared_id && friends.accepted.length"
+          class="adjust"
+          @click="proposeToFriend"
+        >
+          <q-icon name="group_add" size="16px" /> Proposer à un ami
+        </button>
         <button v-if="ch.status !== 'abandoned'" class="adjust" @click="extendDialog">
           <q-icon name="add" size="16px" /> Prolonger le défi
         </button>
@@ -474,6 +499,7 @@ import { isCardioChallengeExercise, defaultActivityForChallenge } from '@/data/c
 import { useChallengesStore } from '@/stores/challenges';
 import { useCardioStore } from '@/stores/cardio';
 import { useAuthStore } from '@/stores/auth';
+import { useFriendsStore } from '@/stores/friends';
 import ChallengeCelebration from '@/components/ChallengeCelebration.vue';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
@@ -487,6 +513,9 @@ const $q = useQuasar();
 const store = useChallengesStore();
 const cardio = useCardioStore();
 const auth = useAuthStore();
+const friends = useFriendsStore();
+// Défi partagé : l'avancement du jumeau, chargé une fois la page prête.
+const peer = ref<{ pseudo: string; pct: number } | null>(null);
 
 const id = String(route.params.id);
 const loading = ref(true);
@@ -1341,6 +1370,53 @@ async function back() {
   else await router.push('/challenges');
 }
 
+/** Charge le contexte « défi partagé » : la liste d'amis (pour pouvoir proposer) et,
+ *  si ce défi est déjà partagé, l'avancement du jumeau. Silencieux : c'est un bonus,
+ *  son échec ne doit pas gêner le suivi du défi lui-même. */
+async function loadShared() {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  try {
+    if (!friends.loaded) await friends.fetchMine(uid);
+    const sharedId = ch.value?.shared_id;
+    if (!sharedId) return;
+    const twin = await friends.fetchSharedPeer(sharedId, uid);
+    if (!twin) return;
+    peer.value = {
+      pseudo: friends.accepted.find((v) => v.userId === twin.user_id)?.pseudo ?? 'Ton ami',
+      pct: challengeStats(twin, today).completionPct,
+    };
+  } catch {
+    /* bonus : on n'ennuie pas l'utilisateur si ça échoue */
+  }
+}
+
+function proposeToFriend() {
+  const uid = auth.user?.id;
+  if (!uid || !ch.value) return;
+  $q.dialog({
+    title: 'Proposer ce défi',
+    message: 'Vous le ferez chacun de votre côté, avec les mêmes objectifs.',
+    options: {
+      type: 'radio',
+      model: '',
+      items: friends.accepted.map((v) => ({ label: v.pseudo, value: v.userId })),
+    },
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Proposer' },
+  }).onOk((friendId: string) => {
+    if (!friendId || !ch.value) return;
+    void friends
+      .proposeShared(uid, friendId, ch.value)
+      .then(async (sh) => {
+        await store.setShared(ch.value!.id, sh.id);
+        if (ch.value) ch.value.shared_id = sh.id;
+        $q.notify({ type: 'positive', message: 'Proposition envoyée.' });
+      })
+      .catch(() => $q.notify({ type: 'negative', message: 'Envoi impossible.' }));
+  });
+}
+
 onMounted(async () => {
   try {
     if (store.list.length === 0) await store.fetchMine();
@@ -1357,6 +1433,7 @@ onMounted(async () => {
     maybeCoverByReserve();
     await autoCloseElapsedDays(); // clôture auto des journées écoulées (plus de bouton manuel)
     await store.fetchAchievements();
+    await loadShared();
   } catch (e) {
     $q.notify({
       type: 'negative',
@@ -1373,6 +1450,46 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
+/* Comparatif du défi partagé : deux scores côte à côte, celui qui mène est mis en
+   avant. Volontairement sobre — c'est un rappel motivant, pas un tableau de match. */
+.shared-cmp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+}
+.sc-ic {
+  font-size: 16px;
+}
+.sc-txt {
+  color: var(--dim);
+}
+.sc-scores {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+.sc-me,
+.sc-them {
+  color: var(--dim);
+}
+.sc-me.lead,
+.sc-them.lead {
+  color: var(--accent);
+}
+.sc-vs {
+  color: var(--line);
+}
+
 .cd-page {
   background: var(--bg);
   min-height: 100vh;

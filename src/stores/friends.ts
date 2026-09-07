@@ -8,7 +8,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
-import type { Challenge } from '@/lib/challenges';
+import type { Challenge, ChallengeConfig, ChallengeFormat } from '@/lib/challenges';
 import type { ComboChallenge } from '@/lib/combo';
 import type { FriendTraining, RowStamps } from '@/lib/friendFeed';
 
@@ -22,6 +22,26 @@ export interface Friendship {
   responded_at: string | null;
 }
 /** Une relation vue depuis MOI : qui est l'autre, et de quel côté vient la demande. */
+/** DÉFINITION d'un défi partagé + son invitation (table `shared_challenges`).
+ *  Ce n'est PAS un défi : chaque ami garde le sien, relié par `challenges.shared_id`. */
+export interface SharedChallenge {
+  id: string;
+  created_by: string;
+  invited_user: string;
+  exercise_id: string;
+  exercise_name: string;
+  muscle_primary: string | null;
+  rep_weight: number | null;
+  unit: 'reps' | 'time' | 'distance';
+  format: ChallengeFormat;
+  duration_days: number;
+  start_date: string;
+  config: ChallengeConfig;
+  same_targets: boolean;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string;
+}
+
 export interface FriendView {
   userId: string;
   pseudo: string;
@@ -62,6 +82,7 @@ function readSeen(): Set<string> {
 export const useFriendsStore = defineStore('friends', () => {
   const links = ref<Friendship[]>([]);
   const pseudos = ref<Record<string, string>>({}); // user_id → pseudo
+  const shared = ref<SharedChallenge[]>([]);
   const loading = ref(false);
   const loaded = ref(false);
   const me = ref<string | null>(null);
@@ -91,7 +112,13 @@ export const useFriendsStore = defineStore('friends', () => {
     views.value.filter((v) => v.status === 'accepted' && !v.incoming && !seen.value.has(v.userId)),
   );
   /** Total à traiter ou à annoncer (badge de la cloche). */
-  const notifCount = computed(() => incoming.value.length + newlyAccepted.value.length);
+  /** Propositions de défi partagé REÇUES et pas encore tranchées. */
+  const sharedInvites = computed(() =>
+    shared.value.filter((s) => s.status === 'pending' && s.invited_user === me.value),
+  );
+  const notifCount = computed(
+    () => incoming.value.length + newlyAccepted.value.length + sharedInvites.value.length,
+  );
 
   /** Acquitte les acceptations. On REMPLACE l'ensemble par les amis actuels : les
    *  entrées d'ex-amis disparaissent, donc un ré-ajout notifiera de nouveau. */
@@ -176,6 +203,72 @@ export const useFriendsStore = defineStore('friends', () => {
   /** Entraînement de TOUS les amis en 2 requêtes, pour le fil d'activité.
    *  Aucune table dédiée : on relit les défis que les policies `*_read_friends`
    *  autorisent déjà, et `buildFriendFeed` en dérive les événements. */
+  async function fetchShared(userId: string) {
+    me.value = userId;
+    const { data, error } = await supabase
+      .from('shared_challenges')
+      .select('*')
+      .or('created_by.eq.' + userId + ',invited_user.eq.' + userId);
+    if (error) throw error;
+    shared.value = (data ?? []) as SharedChallenge[];
+  }
+
+  /** Propose SON défi à un ami. On n'écrit QUE la définition : les RLS sont own-only
+   *  en insertion, donc c'est le client de l'ami qui créera ensuite son propre défi. */
+  async function proposeShared(
+    userId: string,
+    friendId: string,
+    ch: Challenge,
+  ): Promise<SharedChallenge> {
+    const { data, error } = await supabase
+      .from('shared_challenges')
+      .insert({
+        created_by: userId,
+        invited_user: friendId,
+        exercise_id: ch.exercise_id,
+        exercise_name: ch.exercise_name,
+        muscle_primary: ch.muscle_primary ?? null,
+        rep_weight: ch.rep_weight ?? null,
+        unit: ch.unit,
+        format: ch.format,
+        duration_days: ch.duration_days,
+        config: ch.config,
+        start_date: ch.start_date,
+        same_targets: true, // v1 : mêmes objectifs des deux côtés
+      })
+      .select('*')
+      .single();
+    if (error) throw error;
+    shared.value.push(data as SharedChallenge);
+    return data as SharedChallenge;
+  }
+
+  /** Le défi JUMEAU de l'ami sur la même définition partagée. Lisible grâce à
+   *  `challenges_read_friends` (migr. 0058) — aucune policy supplémentaire. */
+  async function fetchSharedPeer(
+    sharedId: string,
+    myId: string,
+  ): Promise<(Challenge & { user_id: string }) | null> {
+    const { data, error } = await supabase
+      .from('challenges')
+      .select('*')
+      .eq('shared_id', sharedId)
+      .neq('user_id', myId)
+      .limit(1);
+    if (error) throw error;
+    return ((data ?? [])[0] as (Challenge & { user_id: string }) | undefined) ?? null;
+  }
+
+  async function respondShared(id: string, accept: boolean) {
+    const { error } = await supabase
+      .from('shared_challenges')
+      .update({ status: accept ? 'accepted' : 'declined', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+    const row = shared.value.find((s) => s.id === id);
+    if (row) row.status = accept ? 'accepted' : 'declined';
+  }
+
   async function fetchFeed(): Promise<FriendTraining[]> {
     const ids = accepted.value.map((v) => v.userId);
     if (!ids.length) return [];
@@ -230,6 +323,12 @@ export const useFriendsStore = defineStore('friends', () => {
     remove,
     fetchFriendTraining,
     fetchFeed,
+    shared,
+    sharedInvites,
+    fetchShared,
+    proposeShared,
+    respondShared,
+    fetchSharedPeer,
   };
 });
 

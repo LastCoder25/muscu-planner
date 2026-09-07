@@ -43,7 +43,7 @@ export class ChallengeLimitError extends Error {
 }
 
 const COLS =
-  'id, exercise_id, exercise_name, muscle_primary, rep_weight, unit, format, duration_days, start_date, config, daily_targets, progress, status';
+  'id, exercise_id, exercise_name, muscle_primary, rep_weight, unit, format, duration_days, start_date, config, daily_targets, progress, status, shared_id';
 
 export interface NewChallenge {
   exercise_id: string;
@@ -72,6 +72,17 @@ export const useChallengesStore = defineStore('challenges', () => {
     list.value = data ?? [];
     loaded.value = true;
     return list.value;
+  }
+
+  /** Rattache MON défi à une définition partagée (défi partagé avec un ami). */
+  async function setShared(id: string, sharedId: string) {
+    const { error } = await supabase
+      .from('challenges')
+      .update({ shared_id: sharedId })
+      .eq('id', id);
+    if (error) throw error;
+    const row = list.value.find((c) => c.id === id);
+    if (row) (row as Challenge & { shared_id?: string | null }).shared_id = sharedId;
   }
 
   async function create(input: NewChallenge): Promise<Challenge> {
@@ -283,6 +294,7 @@ export const useChallengesStore = defineStore('challenges', () => {
     loaded,
     fetchMine,
     create,
+    setShared,
     updateProgress,
     updatePlan,
     updateDuration,

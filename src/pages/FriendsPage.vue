@@ -57,6 +57,27 @@
           </div>
         </section>
 
+        <!-- Défis partagés proposés : accepter CRÉE mon propre défi (les RLS sont
+             own-only en insertion, l'ami n'a pas pu l'écrire pour moi). -->
+        <section v-if="friends.sharedInvites.length" class="fr-sec">
+          <div class="fr-sec-t">Défis partagés</div>
+          <div v-for="s in friends.sharedInvites" :key="s.id" class="fr-row sh-row">
+            <span class="fr-av">🤝</span>
+            <span class="sh-main">
+              <span class="fr-name">{{ pseudoOf(s.created_by) }}</span>
+              <span class="sh-what"
+                >te propose « {{ s.exercise_name }} » · {{ s.duration_days }} jours</span
+              >
+            </span>
+            <button class="fr-btn sm" :disabled="busyShared" @click="acceptShared(s)">
+              Relever
+            </button>
+            <button class="fr-btn sm ghost" :disabled="busyShared" @click="declineShared(s)">
+              Refuser
+            </button>
+          </div>
+        </section>
+
         <!-- Fil d'activité : DÉRIVÉ des défis déjà lisibles (aucune table dédiée).
              C'est la raison d'ouvrir cet onglet — sans lui la page ne dit rien de neuf. -->
         <section v-if="feed.length" class="fr-sec">
@@ -116,7 +137,9 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useFriendsStore, PseudoNotFoundError, AlreadyLinkedError } from '@/stores/friends';
 import { buildFriendFeed, feedWhen, type FeedItem } from '@/lib/friendFeed';
-import { logicalToday } from '@/lib/challenges';
+import { logicalToday, computeDailyTargets } from '@/lib/challenges';
+import { useChallengesStore } from '@/stores/challenges';
+import type { SharedChallenge } from '@/stores/friends';
 
 defineProps<{ embedded?: boolean }>();
 
@@ -125,6 +148,7 @@ const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
 const friends = useFriendsStore();
+const challenges = useChallengesStore();
 
 const myPseudo = computed(() => char.row?.pseudo ?? '');
 const query = ref('');
@@ -135,6 +159,8 @@ const searchBad = ref(false);
 const found = ref<{ user_id: string; pseudo: string } | null>(null);
 const feed = ref<FeedItem[]>([]);
 const now = ref(new Date().toISOString());
+const busyShared = ref(false);
+const pseudoOf = (id: string) => friends.accepted.find((v) => v.userId === id)?.pseudo ?? 'Un ami';
 
 onMounted(async () => {
   const uid = auth.user?.id;
@@ -142,6 +168,8 @@ onMounted(async () => {
   try {
     if (!char.loaded) await char.fetchMine();
     await friends.fetchMine(uid);
+    await friends.fetchShared(uid);
+    if (!challenges.loaded) await challenges.fetchMine();
   } catch {
     /* silencieux : la page reste utilisable, l'action réessaiera */
   }
@@ -153,6 +181,53 @@ onMounted(async () => {
     /* le fil est un bonus : son échec ne doit pas priver du reste de la page */
   }
 });
+
+/** Relever un défi partagé = créer MON défi, lié à la définition commune.
+ *  Il démarre AUJOURD'HUI (pas à la date du proposant) : sinon on hériterait de
+ *  journées déjà manquées avant même d'avoir accepté. */
+async function acceptShared(s: SharedChallenge) {
+  if (busyShared.value) return;
+  busyShared.value = true;
+  try {
+    const start = logicalToday();
+    const created = await challenges.create({
+      exercise_id: s.exercise_id,
+      exercise_name: s.exercise_name,
+      muscle_primary: s.muscle_primary,
+      rep_weight: s.rep_weight,
+      unit: s.unit,
+      format: s.format,
+      duration_days: s.duration_days,
+      start_date: start,
+      config: s.config,
+      daily_targets: computeDailyTargets(s.format, s.config, s.duration_days, start),
+    });
+    await challenges.setShared(created.id, s.id);
+    await friends.respondShared(s.id, true);
+    $q.notify({ type: 'positive', message: 'Défi relevé — bon courage à vous deux !' });
+  } catch (e) {
+    // Le plus courant : plus de place dans la voie (budget de jetons) → le message
+    // du store est explicite, on le laisse parler.
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Impossible de relever ce défi.',
+    });
+  } finally {
+    busyShared.value = false;
+  }
+}
+
+async function declineShared(s: SharedChallenge) {
+  if (busyShared.value) return;
+  busyShared.value = true;
+  try {
+    await friends.respondShared(s.id, false);
+  } catch {
+    $q.notify({ type: 'negative', message: 'Action impossible.' });
+  } finally {
+    busyShared.value = false;
+  }
+}
 
 async function doSearch() {
   const uid = auth.user?.id;
@@ -238,6 +313,20 @@ async function goAventure() {
 </script>
 
 <style scoped lang="scss">
+.sh-row {
+  flex-wrap: wrap;
+}
+.sh-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.sh-what {
+  font-size: 12px;
+  color: var(--dim);
+}
+
 /* Fil d'activité : une ligne = un fait, lisible d'un coup d'œil, tapable pour ouvrir
    l'avancement de l'ami concerné. */
 .fd-row {

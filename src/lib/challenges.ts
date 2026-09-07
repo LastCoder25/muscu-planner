@@ -138,6 +138,10 @@ export interface Challenge {
   daily_targets: number[];
   progress: DayProgress[];
   status: ChallengeStatus;
+  // Défi PARTAGÉ avec un ami : pointe la définition commune (`shared_challenges`).
+  // Chacun garde SON défi — le partage n'est qu'un lien, la comparaison se fait à la
+  // lecture. null / absent = défi solo.
+  shared_id?: string | null;
 }
 
 // ── Dates (sans fuseau : dates « locales » à minuit) ────
