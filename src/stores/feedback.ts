@@ -2,6 +2,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/auth';
 
 export type FeedbackKind = 'bug' | 'idea' | 'other';
 
@@ -70,9 +71,18 @@ export const useFeedbackStore = defineStore('feedback', () => {
   }
 
   async function fetchMine() {
+    // Filtre explicite : la RLS `feedback_read_admin` (migr. 0014) élargit la lecture aux
+    // admins → sans ce `.eq`, « mes tickets » montrait ceux de TOUT LE MONDE aux admins.
+    // Même piège que challenges/combo : la RLS borne le DROIT de lire, pas l'intention.
+    const uid = useAuthStore().user?.id;
+    if (!uid) {
+      mine.value = [];
+      return mine.value;
+    }
     const { data, error } = await supabase
       .from('feedback')
       .select(COLS)
+      .eq('user_id', uid)
       .order('created_at', { ascending: false });
     if (error) throw error;
     mine.value = data ?? [];

@@ -30,9 +30,22 @@ export const useComboStore = defineStore('combo', () => {
   const loaded = ref(false);
 
   async function fetchMine() {
+    // ⚠️ FILTRE EXPLICITE OBLIGATOIRE. Cette requête s'appuyait sur la RLS own-only
+    // comme filtre — jusqu'à ce que la migr. 0058 ajoute `combo_read_friends` : depuis,
+    // un `select` nu renvoie MES lignes ET celles de tous mes amis. `activeOne()` prenant
+    // le 1er actif trié par date, un ami voyait le 360 du plus récemment créé (le mien)
+    // à la place du sien, et son XP comptait mon historique.
+    // RÈGLE : ne JAMAIS se reposer sur la RLS pour filtrer côté client — elle borne ce
+    // qu'on a le DROIT de lire, pas ce qu'on VEUT lire.
+    const uid = useAuthStore().user?.id;
+    if (!uid) {
+      list.value = [];
+      return list.value;
+    }
     const { data, error } = await supabase
       .from('combo_challenges')
       .select(COLS)
+      .eq('user_id', uid)
       .order('created_at', { ascending: false });
     if (error) throw error;
     list.value = data ?? [];

@@ -2,6 +2,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/auth';
 import {
   addContribution,
   removeContribution,
@@ -64,9 +65,20 @@ export const useChallengesStore = defineStore('challenges', () => {
   const loaded = ref(false); // vrai après le 1er fetchMine (base pour la montée de rang)
 
   async function fetchMine() {
+    // ⚠️ FILTRE EXPLICITE OBLIGATOIRE — même piège que `combo.fetchMine` : cette requête
+    // se reposait sur la RLS own-only, or `challenges_read_friends` (migr. 0058) l'a
+    // élargie. Sans ce `.eq`, la liste contient les défis des amis → budget de jetons
+    // faussé, XP « Challenges » gonflée de leur historique, défis d'autrui affichés.
+    // RÈGLE : la RLS borne ce qu'on a le DROIT de lire, jamais ce qu'on VEUT lire.
+    const uid = useAuthStore().user?.id;
+    if (!uid) {
+      list.value = [];
+      return list.value;
+    }
     const { data, error } = await supabase
       .from('challenges')
       .select(COLS)
+      .eq('user_id', uid)
       .order('created_at', { ascending: false });
     if (error) throw error;
     list.value = data ?? [];
