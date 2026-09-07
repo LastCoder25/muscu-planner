@@ -991,8 +991,11 @@
           <button class="gs-b" @click="exploreSub = 'boss'">👑 Boss de palier</button>
         </div>
         <!-- Arène : mode DIRECT (on lance, on regarde les vagues). Complète l'arène
-             idle de la carte, qui ne rend qu'un nombre sans rien à voir. -->
+             idle de la carte, qui ne rend qu'un nombre sans rien à voir.
+             MASQUÉE pour l'instant (cf. ARENA_ENABLED) — le mini-jeu ne convainc pas
+             encore. Tout le code reste en place : repasser le drapeau à true suffit. -->
         <button
+          v-if="ARENA_ENABLED"
           class="expe-card arena-card"
           :disabled="c.energy < arenaCost || busy"
           @click="enterArena"
@@ -3843,6 +3846,12 @@ function prevDungeonName(d: Dungeon): string {
   const i = order.findIndex((x) => x.id === d.id);
   return i > 0 ? order[i - 1]!.name : '';
 }
+
+// ⚔️ ARÈNE — MASQUÉE (v0.654). Le mini-jeu plein écran ne convainc pas encore, on
+// retire l'entrée plutôt que le code : la simulation (`runArena`), la mise en scène
+// (`arenaStage.ts`), le plateau (`ArenaStage.vue`) et leurs tests restent intacts.
+// Pour la rouvrir : repasser ce drapeau à `true`, rien d'autre.
+const ARENA_ENABLED = false;
 
 // Arène : on rejoue les vagues dans le MÊME rapport que les donjons (donc le rejeu
 // animé, les PV reportés et l'affichage du butin sont acquis sans rien réécrire).
