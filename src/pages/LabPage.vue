@@ -1,48 +1,30 @@
 <template>
   <component :is="embedded ? 'div' : 'q-page'" class="lab-page" :class="{ embedded }">
-    <header class="lab-head">
+    <header>
       <h1 class="lab-title font-display">🧪 Labo</h1>
       <p class="lab-sub">
-        Page de test <b>admin</b>, référencée nulle part — accessible seulement en tapant
-        <code>/labo</code>. Rien ici n'est promis au reste de l'app.
+        Page de test <b>admin</b>, hors navigation publique. Rien ici n'est promis au reste de
+        l'app.
       </p>
     </header>
 
-    <!-- ── Expérience : héros en 3D ── -->
     <section class="lab-exp">
-      <div class="lab-exp-t">Héros 3D <span class="lab-tag">three.js</span></div>
+      <div class="lab-exp-t">Héros 3D <span class="lab-tag">paper-doll</span></div>
       <p class="lab-note">
-        Silhouette dérivée des stats (épaules ← 💪, épaisseur ← ❤️, élancement ← ⚡) et pièces
-        colorées par rareté. Personnage <b>procédural</b> : aucun modèle 3D à charger.
+        Corps riggé + pièces d'équipement greffées sur le <b>même squelette</b>. Modèles Quaternius
+        (CC0).
       </p>
 
       <Suspense>
-        <Hero3D :spec="spec" :height="340" @unsupported="webglKo = true" />
-        <template #fallback>
-          <div class="lab-loading">Chargement de la 3D…</div>
-        </template>
+        <HeroModel :plan="plan" :height="380" :arm-drop="armDrop" />
+        <template #fallback><div class="lab-loading">Chargement de la 3D…</div></template>
       </Suspense>
-      <div v-if="webglKo" class="lab-warn">
-        WebGL indisponible ici — dans l'app réelle on retomberait sur l'avatar SVG.
-      </div>
-
-      <div class="lab-ctrl">
-        <label v-for="s in STATS" :key="s.key" class="lab-row">
-          <span class="lab-lbl">{{ s.emoji }} {{ s.label }}</span>
-          <input v-model.number="stats[s.key]" type="range" min="0" max="100" step="1" />
-          <b class="lab-val">{{ stats[s.key] }}</b>
-        </label>
-        <div class="lab-shape">
-          épaules {{ spec.build.shoulders.toFixed(2) }} · épaisseur
-          {{ spec.build.bulk.toFixed(2) }} · élancement {{ spec.build.height.toFixed(2) }}
-        </div>
-      </div>
 
       <div class="lab-ctrl">
         <div class="lab-lbl2">Équipement — tape pour changer la rareté</div>
         <div class="lab-slots">
           <button
-            v-for="sl in ALL_SLOTS"
+            v-for="sl in SLOTS_UI"
             :key="sl"
             class="lab-slot"
             :style="slotStyle(sl)"
@@ -52,6 +34,21 @@
             <span class="ls-r">{{ gear[sl] ? RARITY_LABEL[gear[sl]!] : 'vide' }}</span>
           </button>
         </div>
+        <div class="lab-shape">
+          tenue : <b>{{ plan.tier ?? 'aucune' }}</b> · {{ plan.parts.length }} pièce(s)
+        </div>
+        <div v-if="plan.missing.length" class="lab-warn">
+          ⚠️ Non représentable avec ce pack :
+          {{ plan.missing.map((m) => SLOT_LABEL[m]).join(', ') }}
+          — il ne contient aucun modèle d'arme.
+        </div>
+
+        <label class="lab-row">
+          <span class="lab-lbl">Bras (pose)</span>
+          <input v-model.number="armDrop" type="range" min="0" max="1.2" step="0.01" />
+          <b class="lab-val">{{ armDrop.toFixed(2) }}</b>
+        </label>
+
         <div class="lab-acts">
           <button class="lab-btn" @click="loadMine">Charger mon équipement</button>
           <button class="lab-btn ghost" @click="clearGear">Tout vider</button>
@@ -62,50 +59,42 @@
 </template>
 
 <script setup lang="ts">
-// LabPage — banc d'essai ADMIN, volontairement hors navigation (aucune entrée de menu,
-// aucun lien). Sert à éprouver une idée sur l'appareil réel sans l'imposer à l'app :
-// ici, le héros 3D. La route est gardée dans `boot/auth.ts` comme /backlog.
+// LabPage — banc d'essai ADMIN, volontairement hors navigation. Entrée « Labo (admin) »
+// dans le menu ⋮ (gardée par isAdmin) : l'app installée n'a pas de barre d'URL, une page
+// joignable seulement en tapant /labo y serait inatteignable.
 //
-// C'est aussi ce qui rend Three.js acceptable : chargé UNIQUEMENT sur cette route
-// (composant async → chunk séparé), il ne pèse rien pour les autres écrans — d'autant
-// que le service worker ne cache rien et que tout est retéléchargé à chaque visite.
+// Three.js n'entre QUE par cette route (composant async → chunk séparé), et les modèles
+// sont servis depuis public/hero/ (bundle slim dérivé, cf. scripts/build-hero-assets.mjs).
 import { ref, computed, reactive, defineAsyncComponent } from 'vue';
 import { useCharacterStore } from '@/stores/character';
-import { buildHeroSpec } from '@/lib/hero3d';
+import { planHeroParts } from '@/lib/heroModel';
 import { RANK_ORDER, RARITY_LABEL, RANK_COLOR, type Equipped, type Rarity } from '@/lib/items';
 
 defineProps<{ embedded?: boolean }>();
 
-const Hero3D = defineAsyncComponent(() => import('@/components/Hero3D.vue'));
+const HeroModel = defineAsyncComponent(() => import('@/components/HeroModel.vue'));
 const char = useCharacterStore();
-const webglKo = ref(false);
-
-const STATS = [
-  { key: 'puissance', emoji: '💪', label: 'Puissance' },
-  { key: 'endurance', emoji: '❤️', label: 'Endurance' },
-  { key: 'agilite', emoji: '⚡', label: 'Agilité' },
-] as const;
 
 const SLOT_LABEL: Record<string, string> = {
   weapon: 'Arme',
   armor: 'Armure',
   accessory: 'Accessoire',
   relic: 'Relique',
-  familiar: 'Familier',
 };
-const ALL_SLOTS = ['weapon', 'armor', 'accessory', 'relic', 'familiar'] as const;
-type SlotKey = (typeof ALL_SLOTS)[number];
+const SLOTS_UI = ['armor', 'accessory', 'relic', 'weapon'] as const;
+type SlotKey = (typeof SLOTS_UI)[number];
 
-const stats = reactive({ puissance: 50, endurance: 50, agilite: 50 });
+// Bras rabattus : le pack ne fournit aucune animation, et selon la pose de repos du
+// modèle il faut parfois corriger un peu — réglable ici plutôt que codé en dur.
+const armDrop = ref(0);
+
 const gear = reactive<Record<SlotKey, Rarity | null>>({
-  weapon: 'rare',
-  armor: 'epique',
+  armor: 'rare',
   accessory: null,
-  relic: 'legendaire',
-  familiar: null,
+  relic: null,
+  weapon: null,
 });
 
-/** Cycle vide → commun → … → primordial → vide. */
 function cycle(slot: SlotKey) {
   const cur = gear[slot];
   if (!cur) {
@@ -116,26 +105,19 @@ function cycle(slot: SlotKey) {
   gear[slot] = i >= RANK_ORDER.length - 1 ? null : RANK_ORDER[i + 1]!;
 }
 function clearGear() {
-  for (const s of ALL_SLOTS) gear[s] = null;
+  for (const s of SLOTS_UI) gear[s] = null;
 }
 function loadMine() {
-  const eq = char.row?.equipped ?? {};
-  for (const s of ALL_SLOTS) gear[s] = (eq as Equipped)[s]?.rarity ?? null;
+  const eq = (char.row?.equipped ?? {}) as Equipped;
+  for (const s of SLOTS_UI) gear[s] = eq[s]?.rarity ?? null;
 }
 
 const equipped = computed(() => {
   const out: Record<string, { rarity: Rarity }> = {};
-  for (const s of ALL_SLOTS) if (gear[s]) out[s] = { rarity: gear[s] };
+  for (const s of SLOTS_UI) if (gear[s]) out[s] = { rarity: gear[s] };
   return out;
 });
-const profile = computed(() =>
-  stats.puissance >= stats.agilite * 1.3
-    ? 'puissant'
-    : stats.agilite >= stats.puissance * 1.3
-      ? 'agile'
-      : 'polyvalent',
-);
-const spec = computed(() => buildHeroSpec(stats, profile.value, equipped.value));
+const plan = computed(() => planHeroParts(equipped.value));
 
 function slotStyle(sl: SlotKey) {
   const r = gear[sl];
@@ -160,11 +142,6 @@ function slotStyle(sl: SlotKey) {
   color: var(--dim);
   line-height: 1.5;
 }
-.lab-sub code {
-  background: var(--surface);
-  padding: 1px 5px;
-  border-radius: 4px;
-}
 .lab-exp {
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -178,7 +155,6 @@ function slotStyle(sl: SlotKey) {
   margin-bottom: 4px;
 }
 .lab-tag {
-  font-family: var(--font-body, inherit);
   font-size: 11px;
   font-weight: 600;
   color: var(--dim);
@@ -193,48 +169,17 @@ function slotStyle(sl: SlotKey) {
   color: var(--dim);
   line-height: 1.5;
 }
-.lab-loading,
-.lab-warn {
+.lab-loading {
   display: grid;
   place-items: center;
-  height: 120px;
+  height: 160px;
   font-size: 13px;
   color: var(--dim);
-}
-.lab-warn {
-  height: auto;
-  padding: 8px;
-  color: var(--d3);
 }
 .lab-ctrl {
   margin-top: 12px;
   display: grid;
-  gap: 8px;
-}
-.lab-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.lab-lbl {
-  flex: 0 0 108px;
-  font-size: 13px;
-}
-.lab-row input {
-  flex: 1;
-  min-width: 0;
-  accent-color: var(--accent);
-}
-.lab-val {
-  flex: 0 0 34px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-size: 13px;
-}
-.lab-shape {
-  font-size: 11.5px;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
+  gap: 9px;
 }
 .lab-lbl2 {
   font-size: 12px;
@@ -263,6 +208,35 @@ function slotStyle(sl: SlotKey) {
 .ls-r {
   font-size: 10.5px;
   opacity: 0.85;
+}
+.lab-shape {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.lab-warn {
+  font-size: 11.5px;
+  color: var(--d3);
+  line-height: 1.45;
+}
+.lab-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.lab-lbl {
+  flex: 0 0 96px;
+  font-size: 13px;
+}
+.lab-row input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+.lab-val {
+  flex: 0 0 40px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
 }
 .lab-acts {
   display: flex;

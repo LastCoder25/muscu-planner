@@ -32,3 +32,7 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 *.log
+
+# Packs 3D bruts (Quaternius CC0) : ~419 Mo de sources FBX + textures 4K.
+# JAMAIS committes — on ne versionne que le bundle SLIM derive (public/hero/).
+/public/models/

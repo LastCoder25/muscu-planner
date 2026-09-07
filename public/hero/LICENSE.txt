@@ -1,0 +1,6 @@
+Modèles 3D : Quaternius — https://quaternius.com
+Packs « Universal Base Characters » et « Modular Character Outfits - Fantasy ».
+Licence CC0 : libre en usage personnel, éducatif et commercial, sans attribution.
+
+Fichiers dérivés des sources par scripts/build-hero-assets.mjs
+(textures redimensionnées et converties en WebP, glTF réécrits).

@@ -1,0 +1,15 @@
+{
+  "base": "base.gltf",
+  "parts": {
+    "Male_Peasant_Arms": "Male_Peasant_Arms.gltf",
+    "Male_Peasant_Body": "Male_Peasant_Body.gltf",
+    "Male_Peasant_Feet": "Male_Peasant_Feet.gltf",
+    "Male_Peasant_Legs": "Male_Peasant_Legs.gltf",
+    "Male_Ranger_Acc_Pauldron": "Male_Ranger_Acc_Pauldron.gltf",
+    "Male_Ranger_Arms": "Male_Ranger_Arms.gltf",
+    "Male_Ranger_Body": "Male_Ranger_Body.gltf",
+    "Male_Ranger_Feet_Boots": "Male_Ranger_Feet_Boots.gltf",
+    "Male_Ranger_Head_Hood": "Male_Ranger_Head_Hood.gltf",
+    "Male_Ranger_Legs": "Male_Ranger_Legs.gltf"
+  }
+}
