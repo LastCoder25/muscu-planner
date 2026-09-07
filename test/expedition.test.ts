@@ -12,6 +12,10 @@ import {
   startExpedition,
   expeditionTerrain,
   simulateArena,
+  runArena,
+  arenaEnergyCost,
+  arenaRewards,
+  ARENA_PLAY,
   ARENA,
   type ActiveExpedition,
   type Poi,
@@ -336,5 +340,55 @@ describe('expedition — butin par ennemi vaincu (arene / embuscade)', () => {
     }
     expect(seen).toBeGreaterThan(0); // les embuscades arrivent (~35 %)
     expect(withSpoil).toBeGreaterThan(0); // et certaines laissent une dépouille
+  });
+});
+
+describe('arene jouable', () => {
+  const hero = playerCombatant('H', { puissance: 220, endurance: 220, agilite: 160 }, 20);
+
+  it('runArena est la SEULE simulation : simulateArena en derive exactement', () => {
+    for (const seed of [1, 42, 777]) {
+      expect(simulateArena(hero, 8, seed)).toBe(runArena(hero, 8, seed).waves);
+    }
+  });
+
+  it('conserve un combat par vague livree, la derniere etant PERDUE', () => {
+    const r = runArena(hero, 8, 42);
+    expect(r.fights.length).toBe(r.waves + 1); // les vagues tenues + celle qui tue
+    expect(r.fights.at(-1)!.win).toBe(false);
+    expect(r.fights.slice(0, -1).every((f) => f.win)).toBe(true);
+    expect(r.fights.map((f) => f.wave)).toEqual(r.fights.map((_, i) => i + 1));
+  });
+
+  it('chaque vague porte de quoi la rejouer', () => {
+    const f = runArena(hero, 8, 42).fights[0]!;
+    expect(f.log.length).toBeGreaterThan(0);
+    expect(f.maxPv).toBeGreaterThan(0);
+    expect(f.startPv).toBeGreaterThan(0);
+    expect(f.monster).toContain('vague');
+  });
+
+  it('les vagues sont de plus en plus dures (PV du monstre croissants)', () => {
+    const f = runArena(hero, 8, 42).fights;
+    if (f.length > 1) expect(f.at(-1)!.maxPv).toBeGreaterThan(f[0]!.maxPv);
+  });
+
+  it('finit toujours par la mort (jamais le cap de securite)', () => {
+    expect(runArena(hero, 1, 5).fights.length).toBeLessThan(ARENA.maxWaves);
+  });
+
+  it('cout d entree croissant mais PLAFONNE', () => {
+    expect(arenaEnergyCost(1)).toBeLessThan(arenaEnergyCost(20));
+    expect(arenaEnergyCost(500)).toBe(ARENA_PLAY.energyCap);
+  });
+
+  it('recompenses : rien sans vague, un drop tous les N paliers, luck croissante', () => {
+    expect(arenaRewards(0, 20)).toMatchObject({ gold: 0, drops: 0 });
+    expect(arenaRewards(ARENA_PLAY.dropEvery - 1, 20).drops).toBe(0);
+    expect(arenaRewards(ARENA_PLAY.dropEvery, 20).drops).toBe(1);
+    expect(arenaRewards(ARENA_PLAY.dropEvery * 3, 20).drops).toBe(3);
+    expect(arenaRewards(10, 20).gold).toBeGreaterThan(arenaRewards(5, 20).gold);
+    expect(arenaRewards(10, 40).gold).toBeGreaterThan(arenaRewards(10, 10).gold);
+    expect(arenaRewards(100, 20).luck).toBeLessThanOrEqual(1);
   });
 });

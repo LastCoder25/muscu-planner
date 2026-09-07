@@ -6,7 +6,7 @@
 //
 // NB Date.now() n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures, testables.
-import { mulberry32, simulateCombat, type Combatant } from './combat';
+import { mulberry32, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, rollSetPiece, ITEM_SETS, type Item } from './items';
 
 // ── Types ──
@@ -214,21 +214,87 @@ export function arenaWaveCombatant(level: number, wave: number): Combatant {
 /** Simule une arène : vagues consécutives (difficulté exponentielle), PV reportés
  *  (+ petite régén), jusqu'à la MORT (le cap n'est qu'un garde-fou anti-boucle).
  *  Renvoie le nombre de vagues TENUES (vaincues). Seedé/pur. */
-export function simulateArena(hero: Combatant, level: number, seed: number): number {
+/** Une vague livrée, avec de quoi la REJOUER (log seedé). */
+export interface ArenaFight {
+  wave: number; // 1-based
+  monster: string;
+  maxPv: number;
+  win: boolean;
+  rounds: number;
+  startPv: number; // PV du héros au DÉBUT de la vague (attrition)
+  log: CombatEvent[];
+}
+export interface ArenaRun {
+  waves: number; // vagues TENUES (gagnées)
+  fights: ArenaFight[]; // toutes les vagues livrées, la dernière étant perdue
+  finalPv: number;
+}
+
+/** Enchaîne les vagues jusqu'à la mort, en CONSERVANT chaque combat (pour le rejeu).
+ *  PV reportés d'une vague à l'autre + régén partielle : l'Endurance compte. La rampe
+ *  géométrique garantit que la mort finit toujours par arriver. */
+export function runArena(hero: Combatant, level: number, seed: number): ArenaRun {
   let pv = hero.pv;
   let waves = 0;
+  const fights: ArenaFight[] = [];
   for (let w = 0; w < ARENA.maxWaves; w++) {
-    const r = simulateCombat(hero, arenaWaveCombatant(level, w), {
+    const foe = arenaWaveCombatant(level, w);
+    const startPv = pv;
+    const r = simulateCombat(hero, foe, {
       seed: seed + w * 1009,
       goldOnWin: 0,
       startPlayerPv: pv,
     });
     pv = r.log.length ? r.log[r.log.length - 1]!.playerPv : pv;
+    fights.push({
+      wave: w + 1,
+      monster: foe.name,
+      maxPv: foe.pv,
+      win: r.win,
+      rounds: r.rounds,
+      startPv,
+      log: r.log,
+    });
     if (!r.win) break;
     waves++;
     pv = Math.min(hero.pv, pv + Math.round(hero.pv * ARENA.healPct));
   }
-  return waves;
+  return { waves, fights, finalPv: Math.max(0, pv) };
+}
+
+/** Compte de vagues seul (POI d'expédition idle) — même simulation, pas de copie. */
+export function simulateArena(hero: Combatant, level: number, seed: number): number {
+  return runArena(hero, level, seed).waves;
+}
+
+// ── Arène JOUABLE (mode direct d'Aventure) : coût en énergie et récompenses ──
+export const ARENA_PLAY = {
+  energyBase: 12, // coût d'entrée à bas niveau
+  energyPerLevel: 0.6,
+  energyCap: 30, // plafonné comme les donjons : le jeu ne rationne pas l'effort sportif
+  goldPerWave: 14, // or par vague tenue, mis à l'échelle du niveau
+  dropEvery: 3, // un tirage de butin tous les N paliers de vagues
+} as const;
+
+/** Coût d'entrée dans l'arène (plafonné). */
+export function arenaEnergyCost(level: number): number {
+  return Math.min(
+    ARENA_PLAY.energyCap,
+    Math.round(ARENA_PLAY.energyBase + Math.max(0, level) * ARENA_PLAY.energyPerLevel),
+  );
+}
+/** Récompenses d'une run : or ∝ vagues×niveau, et un tirage de butin tous les
+ *  `dropEvery` paliers — la `luck` monte avec les vagues (aller loin paie). */
+export function arenaRewards(
+  waves: number,
+  level: number,
+): { gold: number; drops: number; luck: number } {
+  const w = Math.max(0, waves);
+  return {
+    gold: Math.round(w * ARENA_PLAY.goldPerWave * (1 + Math.max(0, level) * 0.12)),
+    drops: Math.floor(w / ARENA_PLAY.dropEvery),
+    luck: Math.min(1, w * 0.05),
+  };
 }
 
 function clamp01(x: number): number {

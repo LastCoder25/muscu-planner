@@ -990,6 +990,23 @@
           <button class="gs-b on" @click="exploreSub = 'donjons'">🗺️ Donjons</button>
           <button class="gs-b" @click="exploreSub = 'boss'">👑 Boss de palier</button>
         </div>
+        <!-- Arène : mode DIRECT (on lance, on regarde les vagues). Complète l'arène
+             idle de la carte, qui ne rend qu'un nombre sans rien à voir. -->
+        <button
+          class="expe-card arena-card"
+          :disabled="c.energy < arenaCost || busy"
+          @click="enterArena"
+        >
+          <span class="expe-emo">⚔️</span>
+          <span class="expe-main">
+            <span class="expe-name font-display">Arène</span>
+            <span class="expe-sub">
+              Vagues sans fin, de plus en plus dures — tu tiens jusqu'à la mort. Butin tous les
+              {{ ARENA_PLAY.dropEvery }} paliers.
+            </span>
+          </span>
+          <span class="expe-go">{{ arenaCost }} ⚡</span>
+        </button>
         <!-- Expédition (mode idle : envoyer le héros explorer la carte) -->
         <button class="expe-card expe-idle" @click="openGame('/expedition-map')">
           <span class="expe-emo">🗺️</span>
@@ -2012,7 +2029,10 @@
       <q-card
         v-if="run"
         class="report-modal"
-        :class="[run.cleared ? 'win' : 'lose', { 'rm-compact': rewardChoiceMode }]"
+        :class="[
+          run.cleared || (run.kind === 'arena' && run.defeated > 0) ? 'win' : 'lose',
+          { 'rm-compact': rewardChoiceMode },
+        ]"
       >
         <div class="rm-head">
           <div class="rm-title font-display">{{ run.name }}</div>
@@ -2042,7 +2062,15 @@
           <template v-if="stageDone">
             <div class="result-head">
               <span>{{
-                run.cleared ? (run.kind === 'boss' ? '🏆 Vaincu !' : '🏆 Nettoyé !') : '💀 Échec'
+                run.kind === 'arena'
+                  ? `🌊 ${run.defeated} vague${run.defeated > 1 ? 's' : ''} tenue${
+                      run.defeated > 1 ? 's' : ''
+                    }`
+                  : run.cleared
+                    ? run.kind === 'boss'
+                      ? '🏆 Vaincu !'
+                      : '🏆 Nettoyé !'
+                    : '💀 Échec'
               }}</span>
               <span class="result-gains">
                 <span class="gain-pill gold">+{{ run.gold }} 🪙</span>
@@ -2057,6 +2085,9 @@
             <div class="result-sub">
               <template v-if="run.kind === 'dungeon'"
                 >{{ run.defeated }}/{{ run.total }} monstres ·
+              </template>
+              <template v-else-if="run.kind === 'arena'"
+                >vaincu à la vague {{ run.total }} ·
               </template>
               PV restants {{ run.finalPv }}
             </div>
@@ -2419,7 +2450,13 @@ import {
   type Region,
 } from '@/lib/regions';
 import { bestiary, setCollection, codexSummary } from '@/lib/codex';
-import { heroPosition } from '@/lib/expedition';
+import {
+  heroPosition,
+  runArena,
+  arenaEnergyCost,
+  arenaRewards,
+  ARENA_PLAY,
+} from '@/lib/expedition';
 import { logicalToday } from '@/lib/challenges';
 
 interface RunFight {
@@ -2433,7 +2470,7 @@ interface RunFight {
 }
 interface RunView {
   name: string;
-  kind: 'dungeon' | 'boss';
+  kind: 'dungeon' | 'boss' | 'arena';
   cleared: boolean;
   defeated: number;
   total: number;
@@ -3464,8 +3501,10 @@ const canSkipStage = computed(() => runWinPct() >= 90);
 // Dernier lieu combattu → « Réattaquer » relance exactement le même run.
 const lastDungeon = ref<Dungeon | null>(null);
 const lastBoss = ref<MilestoneBoss | null>(null);
-const lastEndless = ref(false); // dernier run = Faille sans fin
+const lastEndless = ref(false);
+const lastArena = ref(false); // dernier run = Faille sans fin
 const reattackCost = computed(() => {
+  if (lastArena.value) return arenaCost.value;
   if (lastEndless.value) return endlessEnergy(nextEndlessTier.value);
   if (lastBoss.value) return summonCostFor(lastBoss.value); // boss = pierres d'invocation 🔮
   if (lastDungeon.value) return lastDungeon.value.energyCost;
@@ -3488,7 +3527,8 @@ const canReattack = computed(() => {
 // spammer le bouton icône). Les gardes énergie/déblocage/récompense sont dans les
 // fonctions de run.
 function reattackLast() {
-  if (lastEndless.value) void fightEndless();
+  if (lastArena.value) void enterArena();
+  else if (lastEndless.value) void fightEndless();
   else if (lastBoss.value) void fightBoss(lastBoss.value);
   else if (lastDungeon.value) void explore(lastDungeon.value);
 }
@@ -3762,6 +3802,87 @@ function prevDungeonName(d: Dungeon): string {
   return i > 0 ? order[i - 1]!.name : '';
 }
 
+// Arène : on rejoue les vagues dans le MÊME rapport que les donjons (donc le rejeu
+// animé, les PV reportés et l'affichage du butin sont acquis sans rien réécrire).
+const arenaCost = computed(() => arenaEnergyCost(c.value.level.level));
+async function enterArena() {
+  const uid = auth.user?.id;
+  if (expeBlocked()) return;
+  if (!uid || !char.row || busy.value || c.value.energy < arenaCost.value) return;
+  if (char.row.pending_reward) {
+    $q.notify({ type: 'warning', message: 'Choisis d’abord ta récompense en attente.' });
+    return;
+  }
+  lastDungeon.value = null;
+  lastBoss.value = null;
+  lastEndless.value = false;
+  lastArena.value = true;
+  busy.value = true;
+  try {
+    const { extra, lucky } = runExtra();
+    const seed = Math.floor(Math.random() * 1e9);
+    const player = playerWithGear(
+      char.row.pseudo,
+      c.value,
+      char.row.equipped,
+      extra,
+      c.value.level.level,
+      char.row.voie,
+    );
+    const r = runArena(player, c.value.level.level, seed);
+    const rw = arenaRewards(r.waves, c.value.level.level);
+    const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
+    const gold = Math.round(rw.gold * (1 + goldPct));
+    // Un tirage par palier de vagues franchi ; la luck monte avec les vagues tenues.
+    const dropRng = mulberry32((seed ^ 0x5bf03635) >>> 0);
+    const drops: Item[] = [];
+    for (let i = 0; i < rw.drops; i++) {
+      const rolled = rollDrop(dropRng, {
+        cleared: true,
+        defeated: 1,
+        level: c.value.level.level,
+        spread: 1,
+        luck: Math.min(1, rw.luck + (lucky ? 0.5 : 0) + mfLuck()),
+        playerLevel: c.value.level.level,
+      });
+      if (rolled) {
+        const dr: Item = { ...rolled, id: crypto.randomUUID() };
+        drops.push(dr);
+        queueFx(() => celebrateRareDrop(dr));
+      }
+    }
+    await char.applyRun(uid, { energyCost: arenaCost.value, gold, drops });
+    run.value = {
+      name: `Arène — ${r.waves} vague${r.waves > 1 ? 's' : ''}`,
+      kind: 'arena',
+      cleared: false, // on meurt toujours : c'est le principe
+      defeated: r.waves,
+      total: r.fights.length,
+      gold,
+      finalPv: r.finalPv,
+      playerMaxPv: player.pv,
+      fights: r.fights.map((f) => ({
+        monster: f.monster,
+        emoji: '👹',
+        win: f.win,
+        rounds: f.rounds,
+        maxPv: f.maxPv,
+        archetype: 'brute',
+        log: f.log,
+      })),
+      drops,
+    };
+    openReport();
+  } catch (e) {
+    $q.notify({
+      type: 'negative',
+      message: e instanceof Error ? e.message : 'Arène indisponible.',
+    });
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function explore(d: Dungeon) {
   const uid = auth.user?.id;
   if (expeBlocked()) return;
@@ -3774,6 +3895,7 @@ async function explore(d: Dungeon) {
   lastDungeon.value = d;
   lastBoss.value = null;
   lastEndless.value = false;
+  lastArena.value = false;
   // 1re visite ? (capturé AVANT applyRun, qui va ajouter d.id à cleared_dungeons).
   lastRunFirstVisit.value = !clearedSet.value.has(d.id);
   busy.value = true;
@@ -3998,6 +4120,7 @@ async function fightBoss(b: MilestoneBoss) {
   lastBoss.value = b;
   lastDungeon.value = null;
   lastEndless.value = false;
+  lastArena.value = false;
   // 1re fois sur ce boss ? (capturé AVANT applyBossWin qui l'ajoute à defeated_bosses)
   // → 1er passage toujours animé, réaffrontements gagnés d'avance = skip.
   lastRunFirstVisit.value = !defeatedBossSet.value.has(b.id);
@@ -4142,6 +4265,7 @@ async function fightEndless() {
   lastBoss.value = null;
   lastDungeon.value = null;
   lastEndless.value = true;
+  lastArena.value = false;
   busy.value = true;
   try {
     const { extra, lucky } = runExtra();
@@ -4848,6 +4972,14 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
+/* Arène : même gabarit que la carte d'expédition, teintée pour la distinguer. */
+.arena-card {
+  border-color: color-mix(in srgb, var(--d4) 45%, var(--line));
+}
+.arena-card:disabled {
+  opacity: 0.55;
+}
+
 .adv-page {
   background: var(--bg);
   min-height: 100vh;
