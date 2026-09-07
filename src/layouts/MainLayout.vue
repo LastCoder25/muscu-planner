@@ -26,13 +26,74 @@
             feedback.openCount
           }}</q-badge>
         </q-btn>
+        <!-- Notifications d'amis : n'apparaît que s'il y a à traiter ou à annoncer.
+             Avant, l'info était enfouie dans le menu ⋮, donc invisible. -->
+        <q-btn
+          v-if="friends.notifCount > 0"
+          flat
+          round
+          dense
+          icon="notifications"
+          aria-label="Notifications"
+        >
+          <q-badge color="primary" text-color="dark" floating>{{ friends.notifCount }}</q-badge>
+          <q-menu anchor="bottom right" self="top right" @show="onNotifOpen">
+            <q-list class="app-menu" style="min-width: 270px">
+              <q-item v-for="v in friends.incoming" :key="'in-' + v.userId">
+                <q-item-section>
+                  <q-item-label
+                    ><b>{{ v.pseudo }}</b> veut être ton ami</q-item-label
+                  >
+                  <q-item-label caption>Vous verriez vos avancements respectifs</q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <div class="nf-acts">
+                    <q-btn
+                      dense
+                      flat
+                      color="primary"
+                      label="Accepter"
+                      @click="answer(v.userId, true)"
+                    />
+                    <q-btn
+                      dense
+                      flat
+                      color="grey"
+                      label="Refuser"
+                      @click="answer(v.userId, false)"
+                    />
+                  </div>
+                </q-item-section>
+              </q-item>
+              <q-item
+                v-for="v in friends.newlyAccepted"
+                :key="'ok-' + v.userId"
+                v-close-popup
+                clickable
+                @click="goFriends"
+              >
+                <q-item-section avatar
+                  ><q-icon name="how_to_reg" color="positive"
+                /></q-item-section>
+                <q-item-section>
+                  <q-item-label
+                    ><b>{{ v.pseudo }}</b> a accepté ta demande</q-item-label
+                  >
+                  <q-item-label caption>Vous pouvez suivre vos avancements</q-item-label>
+                </q-item-section>
+              </q-item>
+              <q-separator />
+              <q-item v-close-popup clickable @click="goFriends">
+                <q-item-section avatar><q-icon name="group" /></q-item-section>
+                <q-item-section>Voir mes amis</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+        </q-btn>
+        <q-btn flat round dense icon="group" aria-label="Amis" @click="goFriends" />
         <q-btn flat round dense icon="more_vert" aria-label="Menu">
           <q-menu anchor="bottom right" self="top right">
             <q-list class="app-menu" style="min-width: 180px">
-              <q-item v-close-popup clickable @click="goAgenda">
-                <q-item-section avatar><q-icon name="calendar_month" /></q-item-section>
-                <q-item-section>Agenda</q-item-section>
-              </q-item>
               <q-item v-close-popup clickable @click="goHistory">
                 <q-item-section avatar><q-icon name="history" /></q-item-section>
                 <q-item-section>Historique</q-item-section>
@@ -41,40 +102,13 @@
                 <q-item-section avatar><q-icon name="monitor_weight" /></q-item-section>
                 <q-item-section>Suivi corporel</q-item-section>
               </q-item>
-              <q-item v-close-popup clickable @click="goStats">
-                <q-item-section avatar><q-icon name="bar_chart" /></q-item-section>
-                <q-item-section>Statistiques</q-item-section>
-              </q-item>
               <q-item v-close-popup clickable @click="goTrophies">
                 <q-item-section avatar><q-icon name="emoji_events" /></q-item-section>
                 <q-item-section>Trophées</q-item-section>
               </q-item>
-              <q-item v-close-popup clickable @click="goChallenges">
-                <q-item-section avatar><q-icon name="emoji_events" /></q-item-section>
-                <q-item-section>Challenges</q-item-section>
-              </q-item>
-              <q-item v-if="!isCockpit" v-close-popup clickable @click="goAventure">
-                <q-item-section avatar><q-icon name="shield" /></q-item-section>
-                <q-item-section>Aventure</q-item-section>
-              </q-item>
-              <q-item v-close-popup clickable @click="goFriends">
-                <q-item-section avatar><q-icon name="group" /></q-item-section>
-                <q-item-section>Amis</q-item-section>
-                <q-item-section v-if="friendReqs" side
-                  ><q-badge color="primary" text-color="dark" :label="friendReqs"
-                /></q-item-section>
-              </q-item>
               <q-item v-close-popup clickable @click="goLeaderboard">
                 <q-item-section avatar><q-icon name="leaderboard" /></q-item-section>
                 <q-item-section>Classement</q-item-section>
-              </q-item>
-              <q-item v-close-popup clickable @click="goTennis">
-                <q-item-section avatar><q-icon name="sports_tennis" /></q-item-section>
-                <q-item-section>Tennis</q-item-section>
-              </q-item>
-              <q-item v-close-popup clickable @click="goCardio">
-                <q-item-section avatar><q-icon name="directions_run" /></q-item-section>
-                <q-item-section>Cardio</q-item-section>
               </q-item>
               <q-item v-close-popup clickable @click="goProfile">
                 <q-item-section avatar><q-icon name="fitness_center" /></q-item-section>
@@ -191,9 +225,6 @@ const GAME_PANES = {
 };
 const gamePaneComponent = computed(() => GAME_PANES[gameView.value]);
 
-// Badge « demandes d'ami en attente » dans le menu.
-const friendReqs = computed(() => friends.incoming.length);
-
 onMounted(() => {
   if (auth.isAdmin) feedback.fetchOpenCount().catch(() => undefined);
   const uid = auth.user?.id;
@@ -233,38 +264,41 @@ async function goProfile() {
 async function goSettings() {
   await router.push('/settings');
 }
-async function goAgenda() {
-  await router.push('/agenda');
-}
 async function goHistory() {
   await router.push('/history');
 }
 async function goBody() {
   await router.push('/body');
 }
-async function goStats() {
-  await router.push('/stats');
-}
 async function goTrophies() {
   await router.push('/trophies');
-}
-async function goChallenges() {
-  await router.push('/challenges');
-}
-async function goAventure() {
-  await router.push('/aventure');
 }
 async function goFriends() {
   await router.push('/friends');
 }
+// À l'ouverture : on RAFRAÎCHIT d'abord (les demandes arrivées depuis le montage
+// n'étaient pas visibles), puis on acquitte les acceptations. Les demandes reçues,
+// elles, restent tant qu'on n'y a pas répondu.
+function onNotifOpen() {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  friends
+    .fetchMine(uid)
+    .catch(() => undefined)
+    .finally(() => friends.markAcceptedSeen());
+}
+async function answer(otherId: string, accept: boolean) {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  try {
+    await friends.respond(uid, otherId, accept);
+    $q.notify({ type: 'positive', message: accept ? 'Ami ajouté !' : 'Demande refusée.' });
+  } catch {
+    $q.notify({ type: 'negative', message: 'Échec.' });
+  }
+}
 async function goLeaderboard() {
   await router.push('/leaderboard');
-}
-async function goTennis() {
-  await router.push('/tennis');
-}
-async function goCardio() {
-  await router.push('/cardio');
 }
 async function goBacklog() {
   await router.push('/backlog');
@@ -280,6 +314,12 @@ async function logout() {
 </script>
 
 <style scoped lang="scss">
+/* Actions Accepter/Refuser dans la notification d'ami. */
+.nf-acts {
+  display: flex;
+  gap: 2px;
+}
+
 .app-header {
   background: var(--bg);
   border-bottom: 1px solid var(--line);

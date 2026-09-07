@@ -44,12 +44,27 @@ export class AlreadyLinkedError extends Error {
 
 const COLS = 'requester_id, addressee_id, status, created_at, responded_at';
 
+// Acceptations DÉJÀ VUES. Volontairement en localStorage plutôt qu'en base : une
+// notification est un état d'affichage éphémère, pas une donnée métier — l'alternative
+// (colonne « vu par le demandeur ») imposerait une policy d'écriture de plus sur
+// friendships pour un gain nul. Contrepartie assumée : le « vu » est par appareil.
+const SEEN_KEY = 'muscu:friends:seen';
+function readSeen(): Set<string> {
+  try {
+    const raw = localStorage.getItem(SEEN_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
 export const useFriendsStore = defineStore('friends', () => {
   const links = ref<Friendship[]>([]);
   const pseudos = ref<Record<string, string>>({}); // user_id → pseudo
   const loading = ref(false);
   const loaded = ref(false);
   const me = ref<string | null>(null);
+  const seen = ref<Set<string>>(readSeen());
 
   /** Relations vues depuis moi (l'« autre » côté résolu, pseudo inclus). */
   const views = computed<FriendView[]>(() =>
@@ -70,6 +85,23 @@ export const useFriendsStore = defineStore('friends', () => {
   const incoming = computed(() => views.value.filter((v) => v.status === 'pending' && v.incoming));
   /** Demandes ENVOYÉES en attente. */
   const outgoing = computed(() => views.value.filter((v) => v.status === 'pending' && !v.incoming));
+  /** MES demandes qui viennent d'être acceptées et que je n'ai pas encore vues. */
+  const newlyAccepted = computed(() =>
+    views.value.filter((v) => v.status === 'accepted' && !v.incoming && !seen.value.has(v.userId)),
+  );
+  /** Total à traiter ou à annoncer (badge de la cloche). */
+  const notifCount = computed(() => incoming.value.length + newlyAccepted.value.length);
+
+  /** Acquitte les acceptations. On REMPLACE l'ensemble par les amis actuels : les
+   *  entrées d'ex-amis disparaissent, donc un ré-ajout notifiera de nouveau. */
+  function markAcceptedSeen() {
+    seen.value = new Set(accepted.value.map((v) => v.userId));
+    try {
+      localStorage.setItem(SEEN_KEY, JSON.stringify([...seen.value]));
+    } catch {
+      /* stockage indisponible → on renotifiera, sans gravité */
+    }
+  }
 
   async function fetchMine(userId: string) {
     me.value = userId;
@@ -162,6 +194,9 @@ export const useFriendsStore = defineStore('friends', () => {
     accepted,
     incoming,
     outgoing,
+    newlyAccepted,
+    notifCount,
+    markAcceptedSeen,
     fetchMine,
     findByPseudo,
     request,
