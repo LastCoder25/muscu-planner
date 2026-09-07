@@ -57,6 +57,14 @@
           </div>
         </div>
 
+        <div v-if="notStarted" class="not-started">
+          <span>📅</span>
+          <span
+            >Démarre <b>{{ startTxt }}</b></span
+          >
+          <span class="ns-sub">rien à faire d'ici là</span>
+        </div>
+
         <!-- Défi PARTAGÉ : la comparaison est la raison d'être de la feature — on la
              met juste sous les stats, pas en bas de page. -->
         <div v-if="peer" class="shared-cmp">
@@ -500,6 +508,7 @@ import { useChallengesStore } from '@/stores/challenges';
 import { useCardioStore } from '@/stores/cardio';
 import { useAuthStore } from '@/stores/auth';
 import { useFriendsStore } from '@/stores/friends';
+import { startLabel } from '@/lib/startDate';
 import ChallengeCelebration from '@/components/ChallengeCelebration.vue';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
@@ -516,6 +525,9 @@ const auth = useAuthStore();
 const friends = useFriendsStore();
 // Défi partagé : l'avancement du jumeau, chargé une fois la page prête.
 const peer = ref<{ pseudo: string; pct: number } | null>(null);
+// Le défi peut être programmé pour plus tard : on le dit, sinon il a l'air en panne.
+const notStarted = computed(() => !!ch.value && today < ch.value.start_date);
+const startTxt = computed(() => (ch.value ? startLabel(ch.value.start_date, today) : ''));
 
 const id = String(route.params.id);
 const loading = ref(true);
@@ -1450,6 +1462,25 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
+/* Défi pas encore commencé : sans ça, il ressemble à un défi en panne (0 %, rien à
+   faire, aucune explication). */
+.not-started {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  font-size: 13px;
+}
+.ns-sub {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 12px;
+}
+
 /* Comparatif du défi partagé : deux scores côte à côte, celui qui mène est mis en
    avant. Volontairement sobre — c'est un rappel motivant, pas un tableau de match. */
 .shared-cmp {

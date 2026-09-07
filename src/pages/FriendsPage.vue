@@ -183,13 +183,17 @@ onMounted(async () => {
 });
 
 /** Relever un défi partagé = créer MON défi, lié à la définition commune.
- *  Il démarre AUJOURD'HUI (pas à la date du proposant) : sinon on hériterait de
- *  journées déjà manquées avant même d'avoir accepté. */
+ *
+ *  Départ : on HONORE la date du proposant tant qu'elle est à venir — un défi calé
+ *  sur lundi doit démarrer lundi POUR LES DEUX, sinon le comparatif oppose deux
+ *  calendriers décalés. En revanche on ne reprend jamais une date passée : on
+ *  hériterait de journées déjà manquées avant même d'avoir accepté. */
 async function acceptShared(s: SharedChallenge) {
   if (busyShared.value) return;
   busyShared.value = true;
   try {
-    const start = logicalToday();
+    const t = logicalToday();
+    const start = s.start_date > t ? s.start_date : t;
     const created = await challenges.create({
       exercise_id: s.exercise_id,
       exercise_name: s.exercise_name,

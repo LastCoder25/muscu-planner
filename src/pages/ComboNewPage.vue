@@ -99,6 +99,36 @@
             </div>
           </template>
 
+          <!-- Départ : caler le 360 sur un lundi, ou attendre la fin du précédent.
+               Jamais dans le passé (les jours écoulés compteraient comme perdus). -->
+          <div class="start-block">
+            <div class="start-lbl">Départ</div>
+            <div class="start-row">
+              <button
+                v-for="o in startChoices"
+                :key="o.id"
+                class="opt-tile start-chip"
+                :class="{ on: startDate === o.date }"
+                type="button"
+                @click="pickStart(o.date)"
+              >
+                {{ o.label }}
+              </button>
+              <input
+                class="start-input"
+                type="date"
+                :value="startDate"
+                :min="today"
+                :max="startMax"
+                @change="pickStart(($event.target as HTMLInputElement).value)"
+              />
+            </div>
+            <div v-if="startDate !== today" class="start-note">
+              📅 Ce Défi 360 démarrera <b>{{ startTxt }}</b
+              >.
+            </div>
+          </div>
+
           <div class="vol-summary">
             🎯 <b>{{ activeCount }}</b> groupes musculaires ·
             <b>~{{ suggestedTotalExos }}</b> exercices · <b>{{ totalSets }}</b> séries / semaine
@@ -356,6 +386,13 @@
 </template>
 
 <script setup lang="ts">
+import {
+  startOptions,
+  startLabel,
+  isStartAllowed,
+  addDaysUtcIso,
+  START_MAX_AHEAD_DAYS,
+} from '@/lib/startDate';
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -418,6 +455,16 @@ const tileMedia = 104;
 
 // Wizard : réglages → draft (choix des exos, un emplacement à la fois) → récap.
 const step = ref<'setup' | 'draft' | 'recap'>('setup');
+
+// Date de DÉBUT choisie (défaut : aujourd'hui).
+const today = logicalToday();
+const startDate = ref(today);
+const startChoices = computed(() => startOptions(today));
+const startTxt = computed(() => startLabel(startDate.value, today));
+const startMax = addDaysUtcIso(today, START_MAX_AHEAD_DAYS);
+function pickStart(d: string) {
+  if (isStartAllowed(d, today)) startDate.value = d;
+}
 
 // Réglages : zone (full/haut/bas) + volume (séries/groupe) + variété (exos/groupe).
 const zone = ref<ComboZone>('full');
@@ -738,7 +785,7 @@ async function createCombo() {
   try {
     const c = await combo.create({
       name: 'Défi 360',
-      start_date: logicalToday(),
+      start_date: startDate.value,
       duration_days: 7,
       legs,
     });
@@ -773,6 +820,46 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
+/* Choix du départ : tuiles compactes (réutilise .opt-tile). */
+.start-chip {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 999px;
+}
+
+.start-block {
+  margin-top: 14px;
+}
+.start-lbl {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 5px;
+}
+.start-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.start-input {
+  flex: 1;
+  min-width: 132px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.start-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
 .combo-new {
   background: var(--bg);
   min-height: 100vh;

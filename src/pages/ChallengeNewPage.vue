@@ -225,6 +225,33 @@
             défi en cours.
           </template>
         </div>
+        <!-- Départ : on peut caler le défi sur un lundi, ou attendre la fin d'un autre.
+             Jamais dans le PASSÉ (les jours écoulés seraient clôturés comme manqués). -->
+        <div class="start-block">
+          <div class="start-lbl">Départ</div>
+          <div class="start-row">
+            <button
+              v-for="o in startChoices"
+              :key="o.id"
+              class="choice sm"
+              :class="{ active: startDate === o.date }"
+              @click="pickStart(o.date)"
+            >
+              {{ o.label }}
+            </button>
+            <input
+              class="start-input"
+              type="date"
+              :value="startDate"
+              :min="today"
+              :max="startMax"
+              @change="pickStart(($event.target as HTMLInputElement).value)"
+            />
+          </div>
+          <div v-if="!startIsToday" class="start-note">
+            📅 Ce défi démarrera <b>{{ startTxt }}</b> — rien à faire d'ici là.
+          </div>
+        </div>
         <div class="dur-note">
           ~30 jours = idéal pour ancrer une habitude sans forcer. Plus court pour tester, plus long
           pour les confirmés.
@@ -426,6 +453,9 @@
           <div class="recap-row">
             <span>Durée</span><b>{{ durationDays }} jours</b>
           </div>
+          <div class="rc-line">
+            <span>Départ</span><b>{{ startTxt }}</b>
+          </div>
           <div class="recap-row" v-if="restDays.length">
             <span>Repos</span><b>{{ restDays.length }} j/sem</b>
           </div>
@@ -473,6 +503,13 @@
 </template>
 
 <script setup lang="ts">
+import {
+  startOptions,
+  startLabel,
+  isStartAllowed,
+  addDaysUtcIso,
+  START_MAX_AHEAD_DAYS,
+} from '@/lib/startDate';
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -916,13 +953,23 @@ function toggleRest(w: number) {
   else restDays.value.push(w);
 }
 
-const startDate = logicalToday();
+// Date de DÉBUT choisie (défaut : aujourd'hui). Réactive → l'aperçu des objectifs se
+// recalcule, car les jours de repos dépendent du jour de la semaine du départ.
+const today = logicalToday();
+const startDate = ref(today);
+const startChoices = computed(() => startOptions(today));
+const startIsToday = computed(() => startDate.value === today);
+const startTxt = computed(() => startLabel(startDate.value, today));
+const startMax = addDaysUtcIso(today, START_MAX_AHEAD_DAYS);
+function pickStart(d: string) {
+  if (isStartAllowed(d, today)) startDate.value = d;
+}
 const previewTargets = computed(() =>
   computeDailyTargets(
     format.value,
     { ...config.value, rest_weekdays: restDays.value },
     durationDays.value,
-    startDate,
+    startDate.value,
   ),
 );
 const maxTarget = computed(() => Math.max(1, ...previewTargets.value));
@@ -963,7 +1010,7 @@ async function createChallenge() {
     if (unit.value === 'reps' && countMode.value === 'sets') cfg.count_mode = 'sets';
     if (isBodyweightExercise(exercise.value.equipment_required, exercise.value.name))
       cfg.bodyweight = true;
-    const daily = computeDailyTargets(format.value, cfg, durationDays.value, startDate);
+    const daily = computeDailyTargets(format.value, cfg, durationDays.value, startDate.value);
     if (adaptiveMode.value) {
       cfg.adaptive = true;
       cfg.capacity = format.value === 'cumulative' ? (cfg.total ?? 0) : Math.max(1, ...daily);
@@ -980,7 +1027,7 @@ async function createChallenge() {
       unit: unit.value,
       format: format.value,
       duration_days: durationDays.value,
-      start_date: startDate,
+      start_date: startDate.value,
       config: cfg,
       daily_targets: daily,
     });
@@ -1022,6 +1069,42 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
+/* Choix du départ : repères rapides + date libre, dans l'étape Durée. */
+.start-block {
+  margin-top: 12px;
+}
+.start-lbl {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 5px;
+}
+.start-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.choice.sm {
+  padding: 7px 11px;
+  font-size: 13px;
+}
+.start-input {
+  flex: 1;
+  min-width: 132px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.start-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
 .cn-page {
   background: var(--bg);
   min-height: 100vh;

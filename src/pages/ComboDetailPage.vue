@@ -26,6 +26,13 @@
             :title="`Pour être dans les temps : ${onTimePct}%`"
           />
         </div>
+        <div v-if="notStarted" class="not-started">
+          <span>📅</span>
+          <span
+            >Démarre <b>{{ startTxt }}</b></span
+          >
+          <span class="ns-sub">rien à faire d'ici là</span>
+        </div>
         <div v-if="showOnTime" class="hc-pace" :class="onTimeState">
           🎯 Dans les temps : <b>{{ onTimePct }}%</b>
           <span class="hc-pace-tag">{{
@@ -189,6 +196,7 @@
 </template>
 
 <script setup lang="ts">
+import { startLabel } from '@/lib/startDate';
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -296,6 +304,9 @@ const daysLeftLabel = computed(() => {
 // % THÉORIQUE « dans les temps » : à un rythme régulier, la part que tu devrais avoir faite
 // pour finir pile le dernier jour = jours écoulés (aujourd'hui inclus) / durée. Marqueur 🎯
 // sur la barre → tu vois d'un coup d'œil si tu es en avance (barre au-delà) ou en retard.
+// Un 360 peut être programmé pour plus tard (départ choisi à la création).
+const notStarted = computed(() => !!c.value && logicalToday() < c.value.start_date);
+const startTxt = computed(() => (c.value ? startLabel(c.value.start_date, logicalToday()) : ''));
 const onTimePct = computed(() => {
   if (!c.value) return 0;
   const today = logicalToday();
@@ -517,6 +528,25 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
+/* Défi pas encore commencé : sans ça, il ressemble à un défi en panne (0 %, rien à
+   faire, aucune explication). */
+.not-started {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  font-size: 13px;
+}
+.ns-sub {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 12px;
+}
+
 .combo-detail {
   background: var(--bg);
   min-height: 100vh;
