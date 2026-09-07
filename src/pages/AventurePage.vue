@@ -1001,8 +1001,8 @@
           <span class="expe-main">
             <span class="expe-name font-display">Arène</span>
             <span class="expe-sub">
-              Vagues sans fin, de plus en plus dures — tu tiens jusqu'à la mort. Butin tous les
-              {{ ARENA_PLAY.dropEvery }} paliers.
+              Des monstres surgissent tout autour de toi, vague après vague. Tu tiens jusqu'à la
+              mort. Butin tous les {{ ARENA_PLAY.dropEvery }} paliers.
             </span>
           </span>
           <span class="expe-go">{{ arenaCost }} ⚡</span>
@@ -2047,10 +2047,22 @@
           <!-- Boss : une fois l'animation finie et le CHOIX de récompense affiché, on
              masque l'arène (sinon elle reste ouverte au-dessus du choix). -->
           <div
-            v-if="stageFights.length && !(stageDone && (stageWasReward || stageSkipped))"
+            v-if="hasStage && !(stageDone && (stageWasReward || stageSkipped))"
             class="rm-stage-wrap"
           >
+            <!-- Arène : plateau PHYSIQUE (le héros se déplace, les corps surgissent
+                 autour de lui). Même log, autre mise en scène. -->
+            <ArenaStage
+              v-if="run.kind === 'arena' && arenaWaves"
+              :key="'a' + runSeq"
+              :waves="arenaWaves"
+              :player-max-pv="run.playerMaxPv ?? 100"
+              :player-profile="c.profile"
+              :player-equipped="char.row?.equipped ?? {}"
+              @done="stageFinish"
+            />
             <CombatStage
+              v-else
               :key="runSeq"
               :player-name="char.row?.pseudo ?? 'Toi'"
               :player-max-pv="run.playerMaxPv ?? 100"
@@ -2377,6 +2389,8 @@ import {
   type CombatEvent,
 } from '@/lib/combat';
 import CombatStage from '@/components/CombatStage.vue';
+import ArenaStage from '@/components/ArenaStage.vue';
+import { buildArenaStage, type StageWave } from '@/lib/arenaStage';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
 import { BOSSES, bossSummonCost, type MilestoneBoss } from '@/data/bosses';
@@ -3468,6 +3482,12 @@ function revealDrops() {
     );
   });
 }
+// Chorégraphie spatiale de la dernière run d'arène (null pour les autres modes).
+const arenaWaves = ref<StageWave[] | null>(null);
+// Y a-t-il quelque chose à rejouer ? (plateau d'arène OU duel de donjon/boss)
+const hasStage = computed(() =>
+  run.value?.kind === 'arena' ? !!arenaWaves.value?.length : stageFights.value.length > 0,
+);
 // Combats rejouables (avec log détaillé) → alimente CombatStage.
 const stageFights = computed(() =>
   (run.value?.fights ?? [])
@@ -3491,7 +3511,7 @@ function openReport() {
   const skipAll = autoSkipEasy.value && canSkipStage.value && !lastRunFirstVisit.value;
   stageSkipped.value = skipAll;
   stageWasReward.value = !!char.row?.pending_reward; // boss : latch pour ne pas rejouer
-  stageDone.value = !stageFights.value.length || skipAll;
+  stageDone.value = !hasStage.value || skipAll;
   reportOpen.value = true;
   if (stageDone.value) {
     flushCelebrations(); // pas d'animation → célébrations tout de suite
@@ -3837,6 +3857,8 @@ async function enterArena() {
       char.row.voie,
     );
     const r = runArena(player, c.value.level.level, seed);
+    // Mise en scène spatiale : purement dérivée de `r`, elle ne change aucun résultat.
+    arenaWaves.value = buildArenaStage(r, seed, c.value.level.level);
     const rw = arenaRewards(r.waves, c.value.level.level);
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
     const gold = Math.round(rw.gold * (1 + goldPct));
@@ -3903,6 +3925,7 @@ async function explore(d: Dungeon) {
   lastBoss.value = null;
   lastEndless.value = false;
   lastArena.value = false;
+  arenaWaves.value = null;
   // 1re visite ? (capturé AVANT applyRun, qui va ajouter d.id à cleared_dungeons).
   lastRunFirstVisit.value = !clearedSet.value.has(d.id);
   busy.value = true;
@@ -4128,6 +4151,7 @@ async function fightBoss(b: MilestoneBoss) {
   lastDungeon.value = null;
   lastEndless.value = false;
   lastArena.value = false;
+  arenaWaves.value = null;
   // 1re fois sur ce boss ? (capturé AVANT applyBossWin qui l'ajoute à defeated_bosses)
   // → 1er passage toujours animé, réaffrontements gagnés d'avance = skip.
   lastRunFirstVisit.value = !defeatedBossSet.value.has(b.id);
@@ -4273,6 +4297,7 @@ async function fightEndless() {
   lastDungeon.value = null;
   lastEndless.value = true;
   lastArena.value = false;
+  arenaWaves.value = null;
   busy.value = true;
   try {
     const { extra, lucky } = runExtra();
