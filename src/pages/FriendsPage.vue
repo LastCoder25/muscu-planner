@@ -57,6 +57,24 @@
           </div>
         </section>
 
+        <!-- Fil d'activité : DÉRIVÉ des défis déjà lisibles (aucune table dédiée).
+             C'est la raison d'ouvrir cet onglet — sans lui la page ne dit rien de neuf. -->
+        <section v-if="feed.length" class="fr-sec">
+          <div class="fr-sec-t">Fil d'activité</div>
+          <button v-for="it in feed" :key="it.id" class="fd-row" @click="openFriend(it.userId)">
+            <span class="fd-emo">{{ it.emoji }}</span>
+            <span class="fd-main">
+              <span class="fd-txt"
+                ><b>{{ it.pseudo }}</b> {{ it.text }}</span
+              >
+              <span class="fd-when">{{ feedWhen(it.at, now) }}</span>
+            </span>
+            <span v-if="it.pct !== null" class="fd-pct" :class="{ done: it.kind === 'done' }"
+              >{{ it.pct }} %</span
+            >
+          </button>
+        </section>
+
         <section v-if="friends.outgoing.length" class="fr-sec">
           <div class="fr-sec-t">Demandes envoyées</div>
           <div v-for="v in friends.outgoing" :key="v.userId" class="fr-row">
@@ -97,6 +115,8 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useFriendsStore, PseudoNotFoundError, AlreadyLinkedError } from '@/stores/friends';
+import { buildFriendFeed, feedWhen, type FeedItem } from '@/lib/friendFeed';
+import { logicalToday } from '@/lib/challenges';
 
 defineProps<{ embedded?: boolean }>();
 
@@ -113,6 +133,8 @@ const sending = ref(false);
 const searchMsg = ref('');
 const searchBad = ref(false);
 const found = ref<{ user_id: string; pseudo: string } | null>(null);
+const feed = ref<FeedItem[]>([]);
+const now = ref(new Date().toISOString());
 
 onMounted(async () => {
   const uid = auth.user?.id;
@@ -122,6 +144,13 @@ onMounted(async () => {
     await friends.fetchMine(uid);
   } catch {
     /* silencieux : la page reste utilisable, l'action réessaiera */
+  }
+  try {
+    const data = await friends.fetchFeed();
+    now.value = new Date().toISOString();
+    feed.value = buildFriendFeed(data, now.value, logicalToday());
+  } catch {
+    /* le fil est un bonus : son échec ne doit pas priver du reste de la page */
   }
 });
 
@@ -209,6 +238,53 @@ async function goAventure() {
 </script>
 
 <style scoped lang="scss">
+/* Fil d'activité : une ligne = un fait, lisible d'un coup d'œil, tapable pour ouvrir
+   l'avancement de l'ami concerné. */
+.fd-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 2px;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fd-row:first-of-type {
+  border-top: 0;
+}
+.fd-emo {
+  font-size: 17px;
+  line-height: 1;
+}
+.fd-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.fd-txt {
+  font-size: 13px;
+  color: var(--text);
+}
+.fd-when {
+  font-size: 11px;
+  color: var(--dim);
+}
+.fd-pct {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.fd-pct.done {
+  color: var(--d1);
+}
+
 .friends-page {
   padding: 16px 16px 40px;
 }

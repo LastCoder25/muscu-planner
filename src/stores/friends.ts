@@ -10,6 +10,7 @@ import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Challenge } from '@/lib/challenges';
 import type { ComboChallenge } from '@/lib/combo';
+import type { FriendTraining, RowStamps } from '@/lib/friendFeed';
 
 export type FriendStatus = 'pending' | 'accepted' | 'declined';
 
@@ -172,6 +173,31 @@ export const useFriendsStore = defineStore('friends', () => {
   }
 
   /** Entraînement d'un ami — lecture autorisée par la RLS, pas par ce code. */
+  /** Entraînement de TOUS les amis en 2 requêtes, pour le fil d'activité.
+   *  Aucune table dédiée : on relit les défis que les policies `*_read_friends`
+   *  autorisent déjà, et `buildFriendFeed` en dérive les événements. */
+  async function fetchFeed(): Promise<FriendTraining[]> {
+    const ids = accepted.value.map((v) => v.userId);
+    if (!ids.length) return [];
+    const [ch, co] = await Promise.all([
+      supabase.from('challenges').select('*').in('user_id', ids),
+      supabase.from('combo_challenges').select('*').in('user_id', ids),
+    ]);
+    if (ch.error) throw ch.error;
+    if (co.error) throw co.error;
+    const byId = new Map<string, FriendTraining>(
+      accepted.value.map((v) => [
+        v.userId,
+        { userId: v.userId, pseudo: v.pseudo, challenges: [], combos: [] },
+      ]),
+    );
+    for (const r of (ch.data ?? []) as (Challenge & RowStamps & { user_id: string })[])
+      byId.get(r.user_id)?.challenges.push(r);
+    for (const r of (co.data ?? []) as (ComboChallenge & RowStamps & { user_id: string })[])
+      byId.get(r.user_id)?.combos.push(r);
+    return [...byId.values()];
+  }
+
   async function fetchFriendTraining(friendId: string) {
     const [ch, co] = await Promise.all([
       supabase.from('challenges').select('*').eq('user_id', friendId),
@@ -203,6 +229,7 @@ export const useFriendsStore = defineStore('friends', () => {
     respond,
     remove,
     fetchFriendTraining,
+    fetchFeed,
   };
 });
 
