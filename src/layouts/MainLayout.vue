@@ -57,6 +57,13 @@
                 <q-item-section avatar><q-icon name="shield" /></q-item-section>
                 <q-item-section>Aventure</q-item-section>
               </q-item>
+              <q-item v-close-popup clickable @click="goFriends">
+                <q-item-section avatar><q-icon name="group" /></q-item-section>
+                <q-item-section>Amis</q-item-section>
+                <q-item-section v-if="friendReqs" side
+                  ><q-badge color="primary" text-color="dark" :label="friendReqs"
+                /></q-item-section>
+              </q-item>
               <q-item v-close-popup clickable @click="goLeaderboard">
                 <q-item-section avatar><q-icon name="leaderboard" /></q-item-section>
                 <q-item-section>Classement</q-item-section>
@@ -136,6 +143,7 @@ const ExpeditionPage = defineAsyncComponent(() => import('@/pages/ExpeditionPage
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useFeedbackStore } from '@/stores/feedback';
+import { useFriendsStore } from '@/stores/friends';
 import { useInstallPrompt } from '@/composables/useInstallPrompt';
 import { useGamePanel } from '@/composables/useGamePanel';
 
@@ -143,6 +151,7 @@ const $q = useQuasar();
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const friends = useFriendsStore();
 const profileStore = useProfileStore();
 const feedback = useFeedbackStore();
 const { isIOS, isStandalone, hasNativePrompt, promptInstall } = useInstallPrompt();
@@ -182,8 +191,13 @@ const GAME_PANES = {
 };
 const gamePaneComponent = computed(() => GAME_PANES[gameView.value]);
 
+// Badge « demandes d'ami en attente » dans le menu.
+const friendReqs = computed(() => friends.incoming.length);
+
 onMounted(() => {
   if (auth.isAdmin) feedback.fetchOpenCount().catch(() => undefined);
+  const uid = auth.user?.id;
+  if (uid) friends.fetchMine(uid).catch(() => undefined);
 });
 
 // En cockpit, l'Aventure est déjà affichée à droite → si on route vers /aventure
@@ -239,6 +253,9 @@ async function goChallenges() {
 }
 async function goAventure() {
   await router.push('/aventure');
+}
+async function goFriends() {
+  await router.push('/friends');
 }
 async function goLeaderboard() {
   await router.push('/leaderboard');
