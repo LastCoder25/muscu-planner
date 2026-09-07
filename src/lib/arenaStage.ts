@@ -37,6 +37,10 @@ export interface StageBeat {
   dealt: number;
   /** Corps concerné : celui que le héros frappe, ou celui qui frappe le héros. */
   foeIdx: number;
+  /** Corps qui TOMBENT sur ce beat. Dérivé des bornes cumulées, donc toujours d'accord
+   *  avec les barres de vie — le rendu peut en faire un événement (éclat de mort,
+   *  ralenti sur le dernier corps d'une vague) sans rien recalculer de son côté. */
+  kills: number[];
 }
 
 export interface StageWave {
@@ -112,9 +116,15 @@ export function buildArenaStage(run: ArenaRun, seed: number, level: number): Sta
     const beats: StageBeat[] = f.log.map((e) => {
       // Monotone : les épines peuvent faire remonter le PV du pool ; on ne ressuscite
       // jamais un corps tombé (le cosmétique cède devant la cohérence).
+      const prev = dealt;
       dealt = Math.max(dealt, totalPv - e.monsterPv);
       const alive: number[] = [];
-      for (let i = 0; i < n; i++) if (dealt < cuts[i]!) alive.push(i);
+      const kills: number[] = [];
+      for (let i = 0; i < n; i++) {
+        const nowAlive = dealt < cuts[i]!;
+        if (nowAlive) alive.push(i);
+        else if (prev < cuts[i]!) kills.push(i); // debout avant ce beat, à terre après
+      }
       let foeIdx: number;
       if (e.who === 'player') {
         // Le héros s'en prend au premier corps encore debout : sa cible courante.
@@ -122,7 +132,15 @@ export function buildArenaStage(run: ArenaRun, seed: number, level: number): Sta
       } else {
         foeIdx = alive.length ? alive[biter++ % alive.length]! : (alive[0] ?? n - 1);
       }
-      return { who: e.who, type: e.type, damage: e.damage, heroPv: e.playerPv, dealt, foeIdx };
+      return {
+        who: e.who,
+        type: e.type,
+        damage: e.damage,
+        heroPv: e.playerPv,
+        dealt,
+        foeIdx,
+        kills,
+      };
     });
 
     return { wave: f.wave, foes, beats, totalPv, cleared: f.win, cuts };

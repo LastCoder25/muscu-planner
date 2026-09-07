@@ -2023,6 +2023,23 @@
       </q-card>
     </q-dialog>
 
+    <!-- ARÈNE en PLEIN ÉCRAN : c'est un mini-jeu, pas une vignette. `persistent` car
+         le plateau a son propre « Passer » et son écran de fin — on ne veut pas qu'un
+         tap à côté coupe le combat avant d'avoir vu le score. -->
+    <q-dialog v-model="arenaOpen" maximized persistent>
+      <div class="arena-full">
+        <ArenaStage
+          v-if="arenaWaves && run"
+          :key="'a' + runSeq"
+          :waves="arenaWaves"
+          :player-max-pv="run.playerMaxPv ?? 100"
+          :player-profile="c.profile"
+          :player-equipped="char.row?.equipped ?? {}"
+          @done="onArenaDone"
+        />
+      </div>
+    </q-dialog>
+
     <!-- Rapport de combat (post-run) en MODALE : toutes les infos + réattaquer /
          inventaire / fermer -->
     <q-dialog v-model="reportOpen" :persistent="!stageDone">
@@ -2050,19 +2067,9 @@
             v-if="hasStage && !(stageDone && (stageWasReward || stageSkipped))"
             class="rm-stage-wrap"
           >
-            <!-- Arène : plateau PHYSIQUE (le héros se déplace, les corps surgissent
-                 autour de lui). Même log, autre mise en scène. -->
-            <ArenaStage
-              v-if="run.kind === 'arena' && arenaWaves"
-              :key="'a' + runSeq"
-              :waves="arenaWaves"
-              :player-max-pv="run.playerMaxPv ?? 100"
-              :player-profile="c.profile"
-              :player-equipped="char.row?.equipped ?? {}"
-              @done="stageFinish"
-            />
+            <!-- L'arène ne passe PAS ici : elle se joue en plein écran (cf. la modale
+                 `arenaOpen` plus bas), et n'ouvre ce rapport qu'une fois finie. -->
             <CombatStage
-              v-else
               :key="runSeq"
               :player-name="char.row?.pseudo ?? 'Toi'"
               :player-max-pv="run.playerMaxPv ?? 100"
@@ -3485,8 +3492,16 @@ function revealDrops() {
 // Chorégraphie spatiale de la dernière run d'arène (null pour les autres modes).
 const arenaWaves = ref<StageWave[] | null>(null);
 // Y a-t-il quelque chose à rejouer ? (plateau d'arène OU duel de donjon/boss)
+// Plein écran de l'arène : le combat s'y joue, le rapport ne vient qu'après.
+const arenaOpen = ref(false);
+function onArenaDone() {
+  arenaOpen.value = false;
+  openReport();
+}
+// L'arène est TOUJOURS jouée en plein écran → le rapport ne la rejoue jamais ; il
+// s'ouvre directement sur le résultat et le butin.
 const hasStage = computed(() =>
-  run.value?.kind === 'arena' ? !!arenaWaves.value?.length : stageFights.value.length > 0,
+  run.value?.kind === 'arena' ? false : stageFights.value.length > 0,
 );
 // Combats rejouables (avec log détaillé) → alimente CombatStage.
 const stageFights = computed(() =>
@@ -3901,7 +3916,12 @@ async function enterArena() {
       })),
       drops,
     };
-    openReport();
+    // L'arène se joue en PLEIN ÉCRAN, pas dans la modale de rapport (qui la bridait à
+    // 244 px de haut). Le rapport — butin, or, réattaque — s'ouvre à la fin du combat.
+    // On bump `runSeq` ICI : c'est la clé du plateau, sans quoi un « Réattaquer »
+    // réutiliserait le composant monté et l'animation ne repartirait pas.
+    runSeq.value++;
+    arenaOpen.value = true;
   } catch (e) {
     $q.notify({
       type: 'negative',
@@ -5004,6 +5024,14 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
+/* Plein écran de l'arène : le plateau prend TOUT, sans carte ni gouttière — c'est un
+   mini-jeu, il ne doit pas ressembler à une boîte de dialogue. */
+.arena-full {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh; /* mobile : évite que la barre d'URL rogne le bas du terrain */
+  background: var(--bg);
+}
 /* Arène : même gabarit que la carte d'expédition, teintée pour la distinguer. */
 .arena-card {
   border-color: color-mix(in srgb, var(--d4) 45%, var(--line));

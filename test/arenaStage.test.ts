@@ -115,6 +115,26 @@ describe('buildArenaStage', () => {
     expect(runArena(h.fighter, h.level, 4242).waves).toBe(run.waves);
   });
 
+  it('les morts annoncées collent exactement aux barres de vie', () => {
+    for (const w of stageOf().stage) {
+      let prevDealt = 0;
+      const tombes = new Set<number>();
+      for (const b of w.beats) {
+        for (const k of b.kills) {
+          // Annoncé mort → il était debout AVANT ce beat, il ne l'est plus APRÈS.
+          expect(foePvAt(w, k, prevDealt)).toBeGreaterThan(0);
+          expect(foePvAt(w, k, b.dealt)).toBe(0);
+          expect(tombes.has(k)).toBe(false); // jamais annoncé deux fois
+          tombes.add(k);
+        }
+        prevDealt = b.dealt;
+      }
+      // Une vague gagnée annonce la chute de TOUS ses corps, ni plus ni moins.
+      if (w.cleared) expect(tombes.size).toBe(w.foes.length);
+      else expect(tombes.size).toBeLessThan(w.foes.length);
+    }
+  });
+
   it('est déterministe : même seed → même chorégraphie', () => {
     const a = stageOf(30, 77).stage;
     const b = stageOf(30, 77).stage;
