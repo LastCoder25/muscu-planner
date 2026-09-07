@@ -126,6 +126,13 @@
                 <q-item-section avatar><q-icon name="functions" /></q-item-section>
                 <q-item-section>Calculs XP (admin)</q-item-section>
               </q-item>
+              <!-- Banc d'essai : l'app installée n'a pas de barre d'URL, une page
+                   « accessible en tapant /labo » y serait donc inatteignable. Gardée par
+                   isAdmin → elle reste invisible pour tout le monde d'autre. -->
+              <q-item v-if="auth.isAdmin" v-close-popup clickable @click="goLab">
+                <q-item-section avatar><q-icon name="science" /></q-item-section>
+                <q-item-section>Labo (admin)</q-item-section>
+              </q-item>
               <q-separator />
               <q-item v-close-popup clickable @click="logout">
                 <q-item-section avatar><q-icon name="logout" /></q-item-section>
@@ -305,6 +312,9 @@ async function goBacklog() {
 }
 async function goFormulas() {
   await router.push('/formulas');
+}
+async function goLab() {
+  await router.push('/labo');
 }
 async function logout() {
   await auth.signOut();
