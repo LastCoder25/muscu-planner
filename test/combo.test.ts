@@ -217,12 +217,16 @@ describe('terme de durée (parité avec les séances)', () => {
     expect(comboImpliedMinutes(c)).toBe(3 * COMBO_SET_MIN);
     expect(comboXpBreakdown(c).duration).toBeGreaterThan(0);
   });
-  it('la durée est PLAFONNÉE à l’objectif (pas de farm de séries vides)', () => {
+  it('la durée est plafonnée au palier MAXIMAL, plus à l’objectif (anti-farm conservé)', () => {
     const exact = combo([leg({ target: 2, sets: [set(10), set(10)] })]);
-    const spam = combo([leg({ target: 2, sets: [set(1), set(1), set(1), set(1), set(1)] })]);
-    // 5 séries mais objectif 2 → durée créditée identique (capée à 2).
-    expect(comboImpliedMinutes(spam)).toBe(comboImpliedMinutes(exact));
-    expect(comboXpBreakdown(spam).duration).toBe(comboXpBreakdown(exact).duration);
+    const atMax = combo([leg({ target: 2, sets: [set(10), set(10), set(10)] })]);
+    const spam = combo([leg({ target: 2, sets: Array.from({ length: 8 }, () => set(1)) })]);
+    // Une série EN PLUS est du vrai travail → elle compte…
+    expect(comboImpliedMinutes(atMax)).toBeGreaterThan(comboImpliedMinutes(exact));
+    // …mais le crédit s'arrête au palier maximal : 8 séries pour un objectif de 2 ne
+    // créditent pas plus que 3 → le farm de séries vides reste sans intérêt.
+    expect(comboImpliedMinutes(spam)).toBe(comboImpliedMinutes(atMax));
+    expect(comboXpBreakdown(spam).duration).toBe(comboXpBreakdown(atMax).duration);
   });
   it('la durée domine → un 360 bouclé au poids du corps reste rentable', () => {
     // Sans le terme de durée, un 360 100 % poids du corps ne touchait quasi rien.
@@ -258,14 +262,36 @@ describe('paliers du Défi 360 (secondaire 80 % / principal 100 % / maximal 120 
     expect(legTier(l10(10))).toBe('principal'); // 100 %
     expect(legTier(l10(12))).toBe('max'); // 120 %
   });
-  it('parts cumulées 15 / 95 / 100 % — le PRINCIPAL porte 80 %, le maximal +5 %', () => {
+  it('parts cumulées 15 / 95 / 120 % — le principal porte 80 %, le maximal PRIME', () => {
     expect(legTierShare(l10(7))).toBe(0);
     expect(legTierShare(l10(8))).toBeCloseTo(0.15);
     expect(legTierShare(l10(10))).toBeCloseTo(0.95);
-    expect(legTierShare(l10(12))).toBeCloseTo(1);
-    // Le principal ajoute 80 %, le maximal 5 % (design « 80 % pour le principal »).
+    expect(legTierShare(l10(12))).toBeCloseTo(1.2);
+    // Le principal (la cible) reste le gros du bonus…
     expect(legTierShare(l10(10)) - legTierShare(l10(8))).toBeCloseTo(0.8);
-    expect(legTierShare(l10(12)) - legTierShare(l10(10))).toBeCloseTo(0.05);
+    // …et le maximal DÉPASSE 1 : franchir 120 % rapporte plus qu'un bouclage pile.
+    expect(legTierShare(l10(12))).toBeGreaterThan(1);
+    expect(legTierShare(l10(12)) - legTierShare(l10(10))).toBeCloseTo(0.25);
+  });
+
+  it('une série en plus vaut autant qu’une série normale, mais seulement jusqu’au maximal', () => {
+    const at = (n: number) =>
+      comboXpPoints([combo([leg({ target: 10, sets: Array.from({ length: n }, () => set(10)) })])]);
+    const normale = at(9) - at(8); // avant l'objectif (aucun palier franchi)
+    const enPlus = at(11) - at(10); // 1re série au-delà de l'objectif
+    const horsZone = at(14) - at(13); // au-delà de 120 % : plus de crédit-durée
+    expect(enPlus).toBe(normale);
+    expect(horsZone).toBeLessThan(normale / 2);
+  });
+
+  it('le détail isole ce que rapporte le dépassement', () => {
+    const pile = combo([leg({ target: 10, sets: Array.from({ length: 10 }, () => set(10)) })]);
+    const max = combo([leg({ target: 10, sets: Array.from({ length: 12 }, () => set(10)) })]);
+    expect(comboXpBreakdown(pile).surpass).toBe(0);
+    expect(comboXpBreakdown(max).surpass).toBeGreaterThan(0);
+    // bonus + dépassement = la prime réelle (pas deux arrondis qui divergent).
+    const b = comboXpBreakdown(max);
+    expect(b.total).toBe(b.reps + b.duration + b.bonus + b.surpass);
   });
   it('bouclage PARTIEL rapporte désormais une prime (fini le tout-ou-rien)', () => {
     // Un exo au principal + un seulement au secondaire → prime > 0 (avant : 0 si non complet).

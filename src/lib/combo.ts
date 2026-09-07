@@ -169,7 +169,10 @@ export const COMBO_TIER_SECONDARY = 0.8; // secondaire = 80 % de la cible
 export const COMBO_TIER_MAX = 1.2; // maximal = 120 % de la cible
 // Parts CUMULÉES de la prime d'un exo selon le palier atteint (secondaire 15 %,
 // principal +80 % → 95 %, maximal +5 % → 100 %).
-export const COMBO_TIER_SHARE = { none: 0, secondary: 0.15, principal: 0.95, max: 1 } as const;
+// Parts CUMULÉES de la prime de bouclage d'un exo par palier. Le principal (la cible)
+// porte l'essentiel ; le maximal dépasse 1 volontairement : franchir 120 % rapporte
+// PLUS qu'un bouclage pile — c'est la prime de dépassement, bornée par le palier.
+export const COMBO_TIER_SHARE = { none: 0, secondary: 0.15, principal: 0.95, max: 1.2 } as const;
 export type ComboTier = keyof typeof COMBO_TIER_SHARE;
 
 /** Palier atteint par un exo d'après son avancement (fait / cible). */
@@ -233,11 +236,14 @@ export function comboTargetEffort(c: ComboChallenge): number {
  *  effort planifié` × la part CUMULÉE du palier atteint (15 / 95 / 100 %). Remplace
  *  l'ancienne prime tout-ou-rien ET le bonus de dépassement (fusionné dans le maximal).
  *  Un 360 entièrement bouclé « en avance » est amplifié par (1 + fraction d'avance). */
-export function comboTieredBonus(c: ComboChallenge): number {
+export function comboTieredBonus(
+  c: ComboChallenge,
+  shareOf: (l: ComboLeg) => number = legTierShare,
+): number {
   const early = 1 + comboEarlyFraction(c);
   let sum = 0;
   for (const l of c.legs) {
-    sum += 0.25 * legPlannedEffort(l) * legTierShare(l);
+    sum += 0.25 * legPlannedEffort(l) * shareOf(l);
   }
   return sum * early;
 }
@@ -258,8 +264,15 @@ export function comboCountedSets(c: ComboChallenge): number {
   for (const l of c.legs) {
     const byCount = legMode(l) !== 'sets'; // reps ou durée → convertit en « séries » équivalentes
     const done = byCount ? Math.ceil(legReps(l) / COMBO_PLAN_REPS) : legSetsDone(l);
-    const targetSets = byCount ? Math.ceil(l.target / COMBO_PLAN_REPS) : l.target;
-    n += targetSets > 0 ? Math.min(done, targetSets) : done;
+    // Plafond du crédit-durée = palier MAXIMAL (120 %), et non plus l'objectif. Une
+    // série faite en plus est du VRAI travail (même exécution, même repos) : la couper
+    // du terme de durée la ramenait à ~1/6 d'une série normale. Le garde-fou contre le
+    // farm de séries vides demeure — il se déplace au sommet de la zone récompensée,
+    // au-delà de laquelle seules les reps brutes comptent encore.
+    const cap = byCount
+      ? Math.ceil((l.target * COMBO_TIER_MAX) / COMBO_PLAN_REPS)
+      : legTierMarks(l).max;
+    n += l.target > 0 ? Math.min(done, cap) : done;
   }
   return n;
 }
@@ -335,18 +348,22 @@ export function comboXpBreakdown(c: ComboChallenge): {
       tonnage += (s.reps || 0) * (s.weight ?? l.weight_kg ?? 0);
     }
   }
-  // Prime À PALIERS (le dépassement est fusionné dans le palier maximal → plus de
-  // terme `surpass` séparé, conservé à 0 pour la rétro-compat de l'interface).
-  const bonus = comboTieredBonus(c);
+  // Prime à paliers, dont on ISOLE le premium du palier maximal (part au-delà du
+  // principal) → l'UI peut annoncer ce que le dépassement rapporte vraiment.
+  const bonusBase = comboTieredBonus(c, (l) =>
+    Math.min(legTierShare(l), COMBO_TIER_SHARE.principal),
+  );
   const durationXp = Math.round(comboImpliedMinutes(c) * MUSCU_MIN_XP * XP_MULT);
   const repsXp = Math.round((reps + tonnage / 500) * XP_MULT);
-  const bonusXp = Math.round(bonus * XP_MULT);
+  const bonusXp = Math.round(bonusBase * XP_MULT);
+  // Soustraction (et non 2 arrondis indépendants) → bonus + surpass = la prime réelle.
+  const surpassXp = Math.round(comboTieredBonus(c) * XP_MULT) - bonusXp;
   return {
     reps: repsXp,
     duration: durationXp,
     bonus: bonusXp,
-    surpass: 0,
-    total: repsXp + durationXp + bonusXp,
+    surpass: surpassXp,
+    total: repsXp + durationXp + bonusXp + surpassXp,
   };
 }
 

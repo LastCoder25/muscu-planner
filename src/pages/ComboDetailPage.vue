@@ -35,7 +35,7 @@
         <div v-if="c.status === 'done'" class="hc-done">🎉 Défi 360 bouclé — bravo !</div>
         <div v-if="legsAtMax > 0" class="hc-over">
           🔥 {{ legsAtMax }} exo{{ legsAtMax > 1 ? 's' : '' }} au <b>maximal</b> !
-          <span class="hc-over-sub">objectif ambition dépassé</span>
+          <span class="hc-over-sub">prime de dépassement débloquée</span>
         </div>
       </div>
 
