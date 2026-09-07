@@ -104,12 +104,17 @@
         <!-- Mode séries : segments par série ; mode reps : barre de progression simple. -->
         <div v-if="legMode(leg) === 'sets'" class="seg-bar">
           <span
-            v-for="n in Math.max(leg.target, legDone(leg))"
+            v-for="n in segCount(leg)"
             :key="n"
             class="seg"
-            :class="{ on: n <= legDone(leg), extra: n > leg.target }"
+            :class="{
+              on: n <= legDone(leg),
+              extra: n > leg.target,
+              possible: n > leg.target && n > legDone(leg),
+            }"
           >
             <template v-if="n <= legDone(leg)">{{ segSetLabel(legSets(leg)[n - 1]) }}</template>
+            <template v-else-if="n > leg.target">+</template>
           </span>
         </div>
         <div v-else class="reps-bar">
@@ -187,8 +192,7 @@ import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
   legTier,
-  COMBO_TIER_SECONDARY,
-  COMBO_TIER_MAX,
+  legTierMarks,
   legSetsDone,
   legDone,
   legComplete,
@@ -230,11 +234,13 @@ const TIER_RANK: Record<string, number> = { none: 0, secondary: 1, principal: 2,
 function tierRank(l: ComboLeg): number {
   return TIER_RANK[legTier(l)] ?? 0;
 }
+// Nombre de cases affichées : jusqu'au palier MAXIMAL (et au-delà si déjà dépassé).
+// Sans ça, la barre s'arrêtait à l'objectif → rien ne montrait qu'on pouvait aller plus loin.
+function segCount(l: ComboLeg): number {
+  return Math.max(legTierMarks(l).max, legDone(l));
+}
 function tierMarks(l: ComboLeg): { sec: number; max: number } {
-  return {
-    sec: Math.max(1, Math.round(l.target * COMBO_TIER_SECONDARY)),
-    max: Math.round(l.target * COMBO_TIER_MAX),
-  };
+  return legTierMarks(l);
 }
 const legsAtMax = computed(() => c.value?.legs.filter((l) => legTier(l) === 'max').length ?? 0);
 // Ordre d'affichage : les plus PROCHES de la complétude en haut, les autres par
@@ -797,6 +803,15 @@ onMounted(async () => {
   background: var(--d1);
   border-color: var(--d1);
   color: #10231a;
+}
+/* Série BONUS encore POSSIBLE (au-delà de l'objectif, pas encore faite) : contour vert
+   pointillé + « + ». On voit la marge de dépassement AVANT de l'avoir prise — sans ça,
+   rien n'indiquait qu'on pouvait aller plus loin que l'objectif. */
+.seg.possible {
+  background: transparent;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
+  color: color-mix(in srgb, var(--d1) 75%, var(--dim));
 }
 .leg-extra {
   margin-left: 6px;

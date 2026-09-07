@@ -426,14 +426,19 @@
             <div class="cl-bottom">
               <div v-if="legMode(leg) === 'sets'" class="seg-bar">
                 <span
-                  v-for="n in Math.max(leg.target, legDone(leg))"
+                  v-for="n in segCount(leg)"
                   :key="n"
                   class="seg"
-                  :class="{ on: n <= legDone(leg), extra: n > leg.target }"
+                  :class="{
+                    on: n <= legDone(leg),
+                    extra: n > leg.target,
+                    possible: n > leg.target && n > legDone(leg),
+                  }"
                 >
                   <template v-if="n <= legDone(leg)">{{
                     segSetLabel(legSets(leg)[n - 1])
                   }}</template>
+                  <template v-else-if="n > leg.target">+</template>
                 </span>
               </div>
               <div v-else class="reps-bar">
@@ -566,6 +571,7 @@ import {
   legSetsDone,
   legDone,
   legComplete,
+  legTierMarks,
   legRemaining,
   legMode,
   legUnitLabel,
@@ -645,6 +651,11 @@ const comboTab = ref<string>('active');
 const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
 // Ordre d'affichage des exos du Défi 360 : les MOINS avancés d'abord (moins de restant),
 // les TERMINÉS relégués en bas → on voit tout de suite ce qu'il reste à faire.
+// Nombre de cases affichées : jusqu'au palier MAXIMAL (et au-delà si déjà dépassé).
+// Sans ça, la barre s'arrêtait à l'objectif → rien ne montrait qu'on pouvait aller plus loin.
+function segCount(l: ComboLeg): number {
+  return Math.max(legTierMarks(l).max, legDone(l));
+}
 const activeComboLegs = computed(() => {
   const legs = activeCombo.value?.legs ?? [];
   return [...legs].sort((a, b) => {
@@ -1418,6 +1429,15 @@ onMounted(async () => {
   background: var(--d1);
   border-color: var(--d1);
   color: #10231a;
+}
+/* Série BONUS encore POSSIBLE (au-delà de l'objectif, pas encore faite) : contour vert
+   pointillé + « + ». On voit la marge de dépassement AVANT de l'avoir prise — sans ça,
+   rien n'indiquait qu'on pouvait aller plus loin que l'objectif. */
+.seg.possible {
+  background: transparent;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
+  color: color-mix(in srgb, var(--d1) 75%, var(--dim));
 }
 .cl-extra {
   margin-left: 6px;

@@ -18,6 +18,7 @@ import {
   COMBO_SET_MIN,
   comboOverachievement,
   legTier,
+  legTierMarks,
   legTierShare,
   comboTieredBonus,
   comboBonusXp,
@@ -559,5 +560,40 @@ describe('comboXpByDay — ventilation par jour (historique energie)', () => {
 
   it('la prime est celle deja incluse dans le total (comboTieredBonus x XP_MULT)', () => {
     expect(comboBonusXp(c)).toBe(Math.round(comboTieredBonus(c) * 2));
+  });
+});
+
+describe('legTierMarks', () => {
+  const leg = (target: number, done: number) =>
+    ({
+      slot: 'push',
+      exercise_id: 'ex',
+      rep_weight: 1,
+      target,
+      count_mode: 'sets',
+      sets: Array.from({ length: done }, () => ({ date: '2026-09-01', reps: 10 })),
+      progress: [],
+    }) as unknown as Parameters<typeof legTier>[0];
+
+  it('atteindre le repère affiché décroche VRAIMENT le palier (toutes les cibles)', () => {
+    const RANK = { none: 0, secondary: 1, principal: 2, max: 3 } as const;
+    for (let t = 1; t <= 80; t++) {
+      const m = legTierMarks(leg(t, 0));
+      expect(RANK[legTier(leg(t, m.sec))]).toBeGreaterThanOrEqual(RANK.secondary);
+      expect(RANK[legTier(leg(t, m.principal))]).toBeGreaterThanOrEqual(RANK.principal);
+      expect(RANK[legTier(leg(t, m.max))]).toBe(RANK.max);
+    }
+  });
+
+  it('le maximal laisse toujours au moins une série de marge au-dessus de l’objectif', () => {
+    for (let t = 1; t <= 80; t++) expect(legTierMarks(leg(t, 0)).max).toBeGreaterThan(t);
+  });
+
+  it('les repères sont ordonnés', () => {
+    for (let t = 1; t <= 80; t++) {
+      const m = legTierMarks(leg(t, 0));
+      expect(m.sec).toBeLessThanOrEqual(m.principal);
+      expect(m.principal).toBeLessThan(m.max);
+    }
   });
 });

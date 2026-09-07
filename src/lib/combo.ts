@@ -186,6 +186,24 @@ export function legTierShare(l: ComboLeg): number {
   return COMBO_TIER_SHARE[legTier(l)];
 }
 
+/** Repères AFFICHÉS des trois paliers d'un exo (nombre de séries/reps à atteindre).
+ *
+ *  `ceil` et NON `round` : atteindre le nombre affiché doit RÉELLEMENT décrocher le
+ *  palier. Avec `round`, 32 objectifs sur 40 mentaient — un objectif de 9 affichait
+ *  « Sec. 7 » alors que 7/9 = 78 % < 80 %, donc la pastille restait éteinte alors que
+ *  le joueur avait fait le chiffre demandé.
+ *
+ *  Le maximal garde en plus au moins une série de marge au-dessus de l'objectif :
+ *  sinon un objectif de 1 ou 2 affichait un « Max » égal à l'objectif lui-même. */
+export function legTierMarks(l: ComboLeg): { sec: number; principal: number; max: number } {
+  const t = Math.max(0, l.target);
+  return {
+    sec: Math.max(1, Math.ceil(t * COMBO_TIER_SECONDARY)),
+    principal: t,
+    max: Math.max(t + 1, Math.ceil(t * COMBO_TIER_MAX)),
+  };
+}
+
 /** Effort PLANIFIÉ d'un exo jusqu'à sa cible (base de sa part de prime) = reps réelles
  *  des séries comptées × poids-de-rep, plan figé (COMBO_PLAN_REPS) pour les séries
  *  manquantes. Correctif 135fa252 : symétrique avec les petits défis (prime ∝ effort réel). */
