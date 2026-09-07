@@ -4433,6 +4433,20 @@ function doUnpackLoadout(i: number) {
 }
 // Vendre un loadout rangé → or (ticket 53a6d487).
 function doSellLoadout(i: number) {
+  const items = Object.values(char.row?.loadouts?.[i]?.items ?? {}).filter(Boolean) as Item[];
+  if (!items.length) return;
+  const gold = items.reduce((a, it) => a + sellValue(it), 0);
+  $q.dialog({
+    title: 'Vendre tout ce set ?',
+    message:
+      `${items.length} pièce(s) seront définitivement vendues contre ${gold} 🪙 : ` +
+      items.map((it) => it.name).join(', ') +
+      '.',
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: `Vendre (+${gold} 🪙)`, color: 'negative' },
+  }).onOk(() => doSellLoadoutConfirmed(i));
+}
+function doSellLoadoutConfirmed(i: number) {
   withUid(async (uid) => {
     const gold = await char.sellLoadout(uid, i);
     if (gold) $q.notify({ type: 'positive', message: `🪙 Loadout vendu (+${gold} or).` });
@@ -4572,7 +4586,12 @@ function doUnequip(slot: ItemSlot) {
 }
 
 function doSell(it: Item) {
-  withUid((uid) => char.sell(uid, it.id), 'Vente impossible.');
+  $q.dialog({
+    title: 'Vendre cet objet ?',
+    message: `« ${it.name} » sera définitivement vendu contre ${sellValue(it)} 🪙.`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: `Vendre (+${sellValue(it)} 🪙)`, color: 'negative' },
+  }).onOk(() => withUid((uid) => char.sell(uid, it.id), 'Vente impossible.'));
 }
 function doToggleLock(it: Item) {
   withUid((uid) => char.toggleLock(uid, it.id), 'Action impossible.');
