@@ -138,6 +138,51 @@ describe('rythme de la carte', () => {
   it('le plancher reste sous le plafond (réglage cohérent)', () => {
     expect(EXPE.poiFloor).toBeLessThan(EXPE.poiCap);
   });
+
+  it('la carte offre TOUJOURS du proche, du moyen et du lointain', () => {
+    // Un tirage de distance uniforme ne GARANTIT aucune répartition : avec ~6 POI à
+    // l'écran, 10 % des cartes n'offraient aucune option proche et 22 % seulement deux
+    // bandes sur trois — d'où l'impression que « tout est très loin ». Les spawns
+    // parcourent donc les trois tiers à tour de rôle (cf. `placePoi`), ce qui ne change
+    // PAS la moyenne (donc ni les temps de trajet ni l'économie) mais garantit le mélange.
+    const T = EXPE.town;
+    const third = (EXPE.distMax - EXPE.distMin) / 3;
+    let snaps = 0;
+    let sansProche = 0;
+    let troisBandes = 0;
+    for (let s = 1; s <= 30; s++) {
+      let map = createMap(s * 7919, 0, 26);
+      for (let t = 0; t <= 7 * 24 * HOUR; t += 3 * HOUR) {
+        map = advanceWorld(map, t, 26);
+        if (!map.pois.length) continue;
+        snaps++;
+        const bands = new Set(
+          map.pois.map((p) =>
+            Math.min(
+              2,
+              Math.max(0, Math.floor((Math.hypot(p.x - T.x, p.y - T.y) - EXPE.distMin) / third)),
+            ),
+          ),
+        );
+        if (!bands.has(0)) sansProche++;
+        if (bands.size === 3) troisBandes++;
+      }
+    }
+    expect(troisBandes / snaps, 'cartes offrant les trois bandes').toBeGreaterThan(0.9);
+    expect(sansProche / snaps, 'cartes sans aucune option proche').toBeLessThan(0.05);
+  });
+
+  it('la ville n’est plus entourée d’un trou : des POI existent tout près', () => {
+    // `distMin` valait 30 tant que l'anneau de bâtiments occupait cette couronne ; son
+    // départ pour l'écran « Ma base » y a laissé un vide et la ville semblait isolée.
+    expect(EXPE.distMin).toBeLessThan(25);
+    let map = createMap(4242, 0, 26);
+    for (let t = 0; t <= 3 * 24 * HOUR; t += 3 * HOUR) map = advanceWorld(map, t, 26);
+    const nearest = Math.min(
+      ...map.pois.map((p) => Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y)),
+    );
+    expect(nearest).toBeLessThan(45);
+  });
 });
 
 describe('difficulté des POI de combat', () => {

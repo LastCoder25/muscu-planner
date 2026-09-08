@@ -173,7 +173,10 @@ export const EXPE = {
   poiFloor: 5,
   perilousChance: 0.18, // ~1 POI sur 5 signalé « route dangereuse » avant l'envoi
   minDistPoi: 20, // écart mini entre POI (placement espacé)
-  distMin: 30, // distance mini ville↔POI (coord ; la ville est au centre)
+  distBands: 3, // bandes de distance parcourues à tour de rôle (cf. placePoi)
+  // 30 → 18 (v0.667) : l'anneau de bâtiments occupait cette couronne, son départ pour
+  // l'écran « Ma base » y a laissé un trou et la ville avait l'air isolée.
+  distMin: 18, // distance mini ville↔POI (coord ; la ville est au centre)
   distMax: 88, // distance maxi (rayon → POI tout autour, 360°)
   spawnMinMs: 2 * 3600_000, // intervalle de spawn : 2 h..4 h (jitter)
   spawnJitterMs: 2 * 3600_000,
@@ -397,13 +400,30 @@ function pick<T>(rng: () => number, arr: readonly T[]): T {
 
 // Placement espacé (reject-sampling) d'un POI TOUT AUTOUR de la ville (360°).
 // `minFrac` (0..1) force une distance MINIMALE (l'arène spawn loin → trajet de nuit).
-function placePoi(rng: () => number, minFrac = 0): { x: number; y: number; distNorm: number } {
+/** Place un POI autour de la ville.
+ *
+ *  `band` (0 = proche, 1 = intermédiaire, 2 = lointain) STRATIFIE le tirage : les spawns
+ *  parcourent les trois tiers à tour de rôle au lieu de tirer une distance au hasard.
+ *  Pourquoi : un tirage uniforme ne GARANTIT aucune répartition — avec 6 POI à l'écran on
+ *  pouvait n'avoir que du lointain (mesuré : 7 % seulement à moins de 35 de la ville, un
+ *  aller-retour médian de 4 h 42). Comme les bandes se succèdent, la moyenne reste celle
+ *  d'un tirage uniforme : la carte se répartit visiblement, **sans que les temps de trajet
+ *  ni l'économie ne bougent**. `minFrac` (l'arène, qu'on veut loin) prime sur la bande. */
+function placePoi(
+  rng: () => number,
+  minFrac = 0,
+  band?: number,
+): { x: number; y: number; distNorm: number } {
   const { town, distMin, distMax, mapSize } = EXPE;
   const pad = 10;
   const lo = distMin + clamp01(minFrac) * (distMax - distMin);
+  // Tiers visé (ignoré si un plancher explicite a déjà resserré la fenêtre).
+  const nb = EXPE.distBands;
+  const b = band === undefined || minFrac > 0 ? null : ((band % nb) + nb) % nb;
   for (let tries = 0; tries < 40; tries++) {
     const ang = rng() * Math.PI * 2; // angle libre → POI dans tous les sens
-    const dd = lo + rng() * (distMax - lo);
+    const span = distMax - lo;
+    const dd = b === null ? lo + rng() * span : lo + ((b + rng()) / nb) * span;
     const x = Math.round(town.x + Math.cos(ang) * dd);
     const y = Math.round(town.y + Math.sin(ang) * dd);
     if (x < pad || x > mapSize - pad || y < pad || y > mapSize - pad) continue;
@@ -463,12 +483,14 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   const level = win.min + Math.min(span - 1, Math.floor(rng() * rng() * span));
   // L'arène spawn LOIN (trajet long, fait pour la nuit) ; les autres, n'importe où.
   const minFrac = type === 'arena' ? 0.8 : 0;
-  let pos = placePoi(rng, minFrac);
+  // La bande tourne avec le compteur de spawns → proche, moyen, lointain à tour de rôle.
+  const band = map.spawnCount;
+  let pos = placePoi(rng, minFrac, band);
   // Espacement : re-tire si trop proche d'un POI existant (quelques essais).
   for (let k = 0; k < 6; k++) {
     const tooClose = map.pois.some((p) => dist(p.x, p.y, pos.x, pos.y) < EXPE.minDistPoi);
     if (!tooClose) break;
-    pos = placePoi(rng, minFrac);
+    pos = placePoi(rng, minFrac, band);
   }
   // Route dangereuse : tirée AU SPAWN pour être annoncée avant l'envoi (télégraphiée).
   const perilous = rng() < EXPE.perilousChance;
