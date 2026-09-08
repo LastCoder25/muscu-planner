@@ -400,39 +400,51 @@
         <p v-if="heroLevel < defenseUnlockLevel" class="s-cap">
           🔒 L’enceinte se débloque au niveau {{ defenseUnlockLevel }}.
         </p>
-      </q-card>
-    </q-dialog>
 
-    <!-- ── Chenil : la garnison ── -->
-    <div v-if="kennelLevel" class="panel">
-      <div class="p-title">🐾 Chenil — {{ garrisoned.length }}/{{ GARRISON_SLOTS }} postés</div>
-      <p>
-        L’<b>espèce</b> décide de ce que le familier apporte au mur. Il reste dans ton sac : poster
-        n’est pas ranger.
-      </p>
-      <button v-if="famPool.length" class="cta ghost" @click="doAutoGarrison">
-        ✨ Poster automatiquement les meilleurs
-      </button>
-      <p v-if="!famPool.length" class="dim-note">
-        Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
-      </p>
-      <div v-for="f in famPool" :key="f.id" class="fam" :class="{ on: isPosted(f.id) }">
-        <span class="fam-emo">{{ f.emoji }}</span>
-        <div class="fam-main">
-          <div class="fam-name">
-            {{ f.name }}
-            <span v-if="isFatiguedNow(f)" class="fam-tired">au repos</span>
+        <!-- ── LA GARNISON, DANS LA FEUILLE DU CHENIL ──────────────────────
+             Elle vivait dans un panneau séparé, plus bas sur la page : on cliquait la
+             niche et il ne s'y passait rien, il fallait deviner qu'il fallait faire
+             défiler. Le bâtiment qui abrite les familiers est l'endroit où on les
+             poste. -->
+        <div v-if="defSel.id === 'kennel' && kennelLevel" class="sh-garrison">
+          <div class="sh-gtitle">
+            🐾 Garnison — {{ garrisoned.length }}/{{ slots }} postés
+            <span class="sh-gnext">· +1 place au niveau {{ nextSlotLevel }}</span>
           </div>
-          <div class="fam-role">
-            {{ roleLabel(f) }} · défense niv. {{ defLvl(f) }}
-            <span class="fam-atk">· attaque niv. {{ atkLvl(f) }}</span>
+          <p class="sh-gnote">
+            L’<b>espèce</b> décide de ce que le familier apporte au mur. Il reste dans ton sac :
+            poster n’est pas ranger.
+          </p>
+          <div v-if="garrisonSummary.length" class="sh-gsum">
+            <span v-for="(g, i) in garrisonSummary" :key="i" class="sh-gchip">{{ g }}</span>
+          </div>
+          <button v-if="famPool.length" class="cta ghost" @click="doAutoGarrison">
+            ✨ Poster automatiquement les meilleurs
+          </button>
+          <p v-if="!famPool.length" class="dim-note">
+            Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
+          </p>
+          <div v-for="f in famPool" :key="f.id" class="fam" :class="{ on: isPosted(f.id) }">
+            <span class="fam-emo">{{ f.emoji }}</span>
+            <div class="fam-main">
+              <div class="fam-name">
+                {{ f.name }}
+                <span v-if="isFatiguedNow(f)" class="fam-tired">au repos</span>
+              </div>
+              <div class="fam-eff">{{ famEffect(f) }}</div>
+              <div class="fam-role">
+                {{ roleLabel(f) }} · dressage défense {{ defLvl(f) }} · attaque
+                {{ atkLvl(f) }}
+                <span v-if="isFatiguedNow(f)"> · effet de moitié tant qu’il récupère</span>
+              </div>
+            </div>
+            <button class="btn" @click="doToggleGarrison(f.id)">
+              {{ isPosted(f.id) ? 'Retirer' : 'Poster' }}
+            </button>
           </div>
         </div>
-        <button class="btn" @click="doToggleGarrison(f.id)">
-          {{ isPosted(f.id) ? 'Retirer' : 'Poster' }}
-        </button>
-      </div>
-    </div>
+      </q-card>
+    </q-dialog>
 
     <!-- ── Dernier siège ── -->
     <div v-if="lastReport" class="panel">
@@ -482,11 +494,12 @@ import {
   defenseUpgradeCost,
   defenseUpgradeScrap,
   garrisonBonus,
+  garrisonSlots,
+  GARRISON_CAP,
   isFatigued,
   isWounded,
   healCost,
   woundRemainingMs,
-  GARRISON_SLOTS,
   GARRISON_ROLE,
   ROLE_LABEL,
   type DefenseId,
@@ -574,7 +587,13 @@ const garrisoned = computed(() => {
   const ids = new Set(base.value?.garrison ?? []);
   return famPool.value.filter((f) => ids.has(f.id));
 });
-const garrison = computed(() => garrisonBonus(garrisoned.value, now.value, kennelLevel.value));
+/** Places de garnison : elles grandissent avec le personnage (une de plus tous les 5
+ *  niveaux). Le chenil suit donc le joueur au lieu de rester figé. */
+const slots = computed(() => garrisonSlots(heroLevel.value));
+const nextSlotLevel = computed(() => (Math.floor(heroLevel.value / 5) + 1) * 5);
+const garrison = computed(() =>
+  garrisonBonus(garrisoned.value, now.value, kennelLevel.value, slots.value),
+);
 function isPosted(id: string): boolean {
   return (base.value?.garrison ?? []).includes(id);
 }
@@ -590,6 +609,25 @@ function atkLvl(f: Item): number {
 function roleLabel(f: Item): string {
   const r = GARRISON_ROLE[f.effect.type];
   return r ? ROLE_LABEL[r] : 'Aucun rôle à la base';
+}
+const pct = (v: number) => (Math.round(v * 10) / 10).toString().replace('.', ',');
+/** Ce que CE familier apporte, en clair et en chiffres. ⚠️ Calculé par `garrisonBonus`
+ *  lui-même, appliqué à ce seul familier : l'étiquette ne peut donc pas mentir ni
+ *  dériver du combat — c'est la même fonction qui décide de l'un et de l'autre.
+ *  « Renseignement » et « Fouille » n'y sont ni bridés ni plafonnés : ce ne sont pas
+ *  des stats de combat. */
+function famEffect(f: Item): string {
+  const role = GARRISON_ROLE[f.effect.type];
+  if (!role) return 'Aucun effet au mur — son bonus ne sert qu’au héros.';
+  const b = garrisonBonus([f], now.value, Math.max(1, kennelLevel.value), 1);
+  if (role === 'damage') return `+${pct(b.damagePct ?? 0)} % de dégâts des défenseurs`;
+  if (role === 'pv') return `+${pct(b.maxPvPct ?? 0)} % de PV à l’enceinte`;
+  if (role === 'armor')
+    return `−${pct((b.dmgReduction ?? 0) * 100)} % de dégâts subis (plafond ${GARRISON_CAP.dmgReduction * 100} %)`;
+  if (role === 'regen')
+    return `+${pct((b.regen ?? 0) * 100)} % de PV rendus entre deux vagues (plafond ${GARRISON_CAP.regen * 100} %)`;
+  if (role === 'scout') return '+1 palier de renseignement sur l’armée qui vient';
+  return `+${pct(b.lootPct ?? 0)} % de butin sur les cadavres`;
 }
 /** Ce que coûte le retour à la normale : remettre l'enceinte en état relance aussi la
  *  production (le gel est la conséquence de la casse, pas une punition séparée). */
@@ -608,6 +646,19 @@ const siegeOpen = computed({
   },
 });
 const garrisonEmojis = computed(() => garrisoned.value.map((f) => f.emoji));
+/** Le total effectivement appliqué au siège — plafonds compris. C'est le seul chiffre
+ *  qui compte au moment de l'assaut, et il n'était affiché nulle part. */
+const garrisonSummary = computed(() => {
+  const b = garrison.value;
+  const out: string[] = [];
+  if (b.damagePct) out.push(`⚔️ +${pct(b.damagePct)} % dégâts`);
+  if (b.maxPvPct) out.push(`❤️ +${pct(b.maxPvPct)} % PV`);
+  if (b.dmgReduction) out.push(`🛡️ −${pct(b.dmgReduction * 100)} % subis`);
+  if (b.regen) out.push(`🩸 +${pct(b.regen * 100)} % régén`);
+  if (b.scoutBonus) out.push(`🦅 +${b.scoutBonus} renseignement`);
+  if (b.lootPct) out.push(`🦫 +${pct(b.lootPct)} % butin`);
+  return out;
+});
 function replaySiege() {
   if (!lastReport.value) return;
   siegeKey.value++;
@@ -901,8 +952,9 @@ const doRepairAll = () =>
   });
 const doSend = () => guard(() => char.sendScavengers(uid.value, Date.now()));
 const doToggleGarrison = (id: string) =>
-  guard(() => char.toggleGarrison(uid.value, id, Date.now()));
-const doAutoGarrison = () => guard(() => char.autoAssignGarrison(uid.value, Date.now()));
+  guard(() => char.toggleGarrison(uid.value, id, Date.now(), heroLevel.value));
+const doAutoGarrison = () =>
+  guard(() => char.autoAssignGarrison(uid.value, Date.now(), heroLevel.value));
 const doHeal = () =>
   guard(async () => {
     const cost = await char.healHero(uid.value, Date.now());
@@ -1189,6 +1241,37 @@ const doCollect = () =>
   color: var(--dim);
   text-align: center;
   font-style: italic;
+}
+.sh-gsum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.sh-gchip {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.fam-eff {
+  font-size: 12.5px;
+  color: var(--accent);
+}
+.sh-garrison {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.sh-gtitle {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.sh-gnote {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 0 0 8px;
 }
 .def-sheet {
   width: 100%;

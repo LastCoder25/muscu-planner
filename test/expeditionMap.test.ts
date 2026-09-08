@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  travelFactor,
+  TRAVEL_REF_H,
+  TRAVEL_CAP_H,
   isClaimable,
   type ExpeditionMessage,
   haulPills,
@@ -137,25 +140,45 @@ function mkPoi(type: PoiType, x: number, y: number): Poi {
 }
 
 describe('rythme de la carte', () => {
-  it('respire au lieu d’être saturée : le nombre de POI reste dans une bande étroite', () => {
+  it('la carte reste PEUPLÉE en permanence — 20 POI, plancher = plafond', () => {
+    // ⚠️ RENVERSEMENT ASSUMÉ d'une décision antérieure. On cherchait auparavant une carte
+    // qui « respire » (elle se vidait un peu, ce qui créait un arbitrage de rareté). Ce
+    // n'est plus le sujet depuis que le NIVEAU d'un POI découle de sa DISTANCE : c'est la
+    // DENSITÉ qui rend le dégradé lisible — il faut du monde à toutes les distances pour
+    // qu'on voie la pente, et l'arbitrage est devenu « près et facile » contre « loin et
+    // payant », pas « en prendre un avant qu'il disparaisse ».
+    expect(EXPE.poiFloor).toBe(EXPE.poiCap);
     let map = createMap(1234, 0, 26);
-    const counts: number[] = [];
-    // Une semaine, relevé toutes les 2 h.
     for (let t = 0; t <= 7 * 24 * HOUR; t += 2 * HOUR) {
       map = advanceWorld(map, t, 26);
-      counts.push(map.pois.length);
+      expect(map.pois.length).toBe(EXPE.poiCap);
     }
-    const min = Math.min(...counts);
-    const max = Math.max(...counts);
-    expect(min).toBeGreaterThanOrEqual(EXPE.poiFloor); // jamais à sec
-    expect(max).toBeLessThanOrEqual(EXPE.poiCap); // jamais une soupe
-    // …et la carte ne colle PAS en permanence au plafond (sinon aucun arbitrage).
-    const auPlafond = counts.filter((c) => c >= EXPE.poiCap).length / counts.length;
-    expect(auPlafond, `${Math.round(auPlafond * 100)} % du temps au plafond`).toBeLessThan(0.85);
   });
 
-  it('le plancher reste sous le plafond (réglage cohérent)', () => {
-    expect(EXPE.poiFloor).toBeLessThan(EXPE.poiCap);
+  it('⚠️ LE NIVEAU SE LIT SUR LA CARTE : près = faible, loin = fort', () => {
+    // La règle qui donne son sens au choix d'un POI. Avant, le niveau était tiré
+    // indépendamment : un repaire +10 pouvait se poser à deux pas de la ville, et la
+    // carte ne disait rien de ce qu'elle proposait.
+    let map = createMap(4242, 0, 26);
+    for (let t = 0; t <= 3 * 24 * HOUR; t += 2 * HOUR) map = advanceWorld(map, t, 26);
+    const pts = map.pois.map((p) => ({ d: p.distNorm, l: p.level }));
+    expect(pts.length).toBeGreaterThan(10);
+    // Corrélation de Pearson distance ↔ niveau : forte et positive.
+    const md = pts.reduce((a, x) => a + x.d, 0) / pts.length;
+    const ml = pts.reduce((a, x) => a + x.l, 0) / pts.length;
+    const cov = pts.reduce((a, x) => a + (x.d - md) * (x.l - ml), 0);
+    const sd = Math.sqrt(pts.reduce((a, x) => a + (x.d - md) ** 2, 0));
+    const sl = Math.sqrt(pts.reduce((a, x) => a + (x.l - ml) ** 2, 0));
+    const r = cov / (sd * sl || 1);
+    expect(r, `corrélation distance/niveau = ${r.toFixed(2)}`).toBeGreaterThan(0.9);
+    // Concrètement : le tiers le plus proche est strictement plus faible que le plus loin.
+    const tri = [...pts].sort((a, b) => a.d - b.d);
+    const n = Math.floor(tri.length / 3);
+    const proche = tri.slice(0, n).reduce((a, x) => a + x.l, 0) / n;
+    const loin = tri.slice(-n).reduce((a, x) => a + x.l, 0) / n;
+    expect(loin, `proches ${proche.toFixed(1)} vs lointains ${loin.toFixed(1)}`).toBeGreaterThan(
+      proche + 3,
+    );
   });
 
   it('⚠️ l’ESPACEMENT suit la DENSITÉ : les POI ne s’empilent jamais', () => {
@@ -509,5 +532,33 @@ describe('butin à RÉCUPÉRER (et pas deux fois)', () => {
     const m = msg({ claimAt: undefined });
     expect(isClaimable(m, 999)).toBe(false);
     expect(isClaimable(m, 1000)).toBe(true);
+  });
+});
+
+describe('aller loin doit VRAIMENT payer', () => {
+  it('⚠️ le rendement par HEURE croît avec la durée du trajet (super-linéaire)', () => {
+    // La règle : tant que la récompense montait proportionnellement au trajet, la
+    // distance n'était qu'une taxe de temps — deux POI proches rapportaient autant qu'un
+    // lointain dans le même délai, et rien ne justifiait jamais d'aller loin.
+    const perHour = (h: number) => travelFactor(h) / h;
+    const near = perHour(2);
+    const mid = perHour(4);
+    const far = perHour(8);
+    expect(mid, `2 h → ${near.toFixed(2)}/h, 4 h → ${mid.toFixed(2)}/h`).toBeGreaterThan(near);
+    expect(far, `4 h → ${mid.toFixed(2)}/h, 8 h → ${far.toFixed(2)}/h`).toBeGreaterThan(mid);
+    expect(far / near, `loin/proche = ${(far / near).toFixed(2)}×`).toBeGreaterThan(1.3);
+  });
+
+  it('⚠️ SANS INFLATER l’économie : au voyage de référence, la valeur est l’ancienne', () => {
+    // Le facteur est CALÉ sur `TRAVEL_REF_H` : en deçà on gagne un peu moins, au-delà
+    // nettement plus. C'est un arbitrage qu'on crée, pas un cadeau — sinon toute
+    // l'économie (ferraille comprise, qu'on vient de calibrer) dériverait d'un coup.
+    expect(travelFactor(TRAVEL_REF_H)).toBeCloseTo(0.5 + TRAVEL_REF_H, 6);
+    expect(travelFactor(1.5)).toBeLessThan(0.5 + 1.5);
+    expect(travelFactor(6)).toBeGreaterThan(0.5 + 6);
+  });
+
+  it('reste borné : un trajet interminable ne multiplie pas tout', () => {
+    expect(travelFactor(50)).toBe(travelFactor(TRAVEL_CAP_H));
   });
 });

@@ -90,10 +90,10 @@ import {
   totalRepairCost,
   garrisonBonus,
   autoGarrison,
+  garrisonSlots,
   fatigueMsFor,
   healCost,
   woundRemainingMs,
-  GARRISON_SLOTS,
   SCAV,
   type BaseState,
   type DefenseId,
@@ -1348,7 +1348,7 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /** Poste ou retire un familier du chenil. */
-  async function toggleGarrison(userId: string, famId: string, now: number) {
+  async function toggleGarrison(userId: string, famId: string, now: number, playerLevel: number) {
     const cur = row.value;
     if (!cur) return;
     const base = baseOf(cur, now);
@@ -1357,20 +1357,22 @@ export const useCharacterStore = defineStore('character', () => {
     const cur_ = base.garrison ?? [];
     const next = cur_.includes(famId)
       ? cur_.filter((x) => x !== famId)
-      : [...cur_, famId].slice(-GARRISON_SLOTS);
+      : [...cur_, famId].slice(-garrisonSlots(playerLevel));
     await persistOptimistic(userId, { base: { ...base, garrison: next } });
   }
 
   /** Poste automatiquement les meilleurs défenseurs — le geste qu'on veut faire une
    *  fois, pas avant chaque siège. */
-  async function autoAssignGarrison(userId: string, now: number) {
+  async function autoAssignGarrison(userId: string, now: number, playerLevel: number) {
     const cur = row.value;
     if (!cur) return;
     const base = baseOf(cur, now);
     if (defenseLevel(base.defenses, 'kennel') <= 0)
       throw new Error('Construis un Chenil pour poster des familiers.');
     const pool = cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT);
-    await persistOptimistic(userId, { base: { ...base, garrison: autoGarrison(pool) } });
+    await persistOptimistic(userId, {
+      base: { ...base, garrison: autoGarrison(pool, garrisonSlots(playerLevel)) },
+    });
   }
 
   /** Construit une structure de l'enceinte (or + ferraille). Hors des 6 emplacements de

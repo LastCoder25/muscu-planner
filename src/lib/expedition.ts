@@ -234,14 +234,20 @@ export const EXPE = {
   // sur 7 jours × 40 graines. Elle ne colle toujours JAMAIS au plafond (0 % du temps) :
   // des POI expirent encore avant qu'on les fasse, donc choisir reste un vrai arbitrage.
   // ⚠️ Doubler le nombre OBLIGE à resserrer `minDistPoi` — cf. la note sur cette clé.
+  // 20 POI en permanence : la carte est toujours peuplée, et comme le NIVEAU découle
+  // désormais de la distance, cette densité est ce qui rend le dégradé lisible — il faut
+  // du monde à toutes les distances pour qu'on voie la pente.
   poiCap: 20,
-  poiFloor: 10,
+  poiFloor: 20,
   perilousChance: 0.18, // ~1 POI sur 5 signalé « route dangereuse » avant l'envoi
   // ⚠️ L'écart mini doit SUIVRE la densité. À 20 POI dans la couronne (rayon 18→64), un
   // écart de 20 occuperait 53 % de la surface : le placement aléatoire échouerait ses
   // 6 essais et les POI se poseraient les uns sur les autres. À 14, on retombe à 26 %.
   minDistPoi: 14, // écart mini entre POI (placement espacé)
-  distBands: 3, // bandes de distance parcourues à tour de rôle (cf. placePoi)
+  // Bandes de distance : on en cycle 5 au lieu de 3. Le niveau suivant la distance, la
+  // granularité des bandes EST la granularité de la difficulté proposée — 3 bandes ne
+  // donnaient que trois marches sur toute la fenêtre de niveaux.
+  distBands: 5, // bandes de distance parcourues à tour de rôle (cf. placePoi)
   // 30 → 18 (v0.667) : l'anneau de bâtiments occupait cette couronne, son départ pour
   // l'écran « Ma base » y a laissé un trou et la ville avait l'air isolée.
   distMin: 18, // distance mini ville↔POI (coord ; la ville est au centre)
@@ -325,6 +331,27 @@ export function spawnWindow(playerLevel: number): { min: number; max: number } {
 /** Coût en OR pour envoyer une expédition = base × niveau^1.6 (vrai puits d'or). */
 export function goldCost(type: PoiType, level: number): number {
   return Math.round(EXPE.goldCostBase[type] * Math.pow(Math.max(1, level), EXPE.goldCostExp));
+}
+
+/** ⚠️ FACTEUR DE VOYAGE — **SUPER-LINÉAIRE**, et c'est tout l'objet de cette fonction.
+ *  Tant que la récompense montait proportionnellement au trajet, la distance n'était
+ *  qu'une taxe de temps : deux POI proches rapportaient autant qu'un lointain, dans le
+ *  même délai, et rien ne justifiait jamais d'aller loin. Ici le rendement par heure
+ *  CROÎT avec la durée.
+ *  **Calé sur un voyage de référence** (`TRAVEL_REF_H`) pour ne PAS inflater l'économie :
+ *  à cette durée la valeur est exactement l'ancienne (0,5 + h). En deçà on gagne un peu
+ *  moins, au-delà nettement plus — mesuré, un aller-retour de 6 h rend ~39 % de plus
+ *  qu'avant, un de 1,5 h ~20 % de moins. Le total moyen ne bouge donc quasiment pas :
+ *  c'est un ARBITRAGE qu'on crée, pas un cadeau.
+ *  Le plafond existe toujours (un trajet interminable ne doit pas tout multiplier), mais
+ *  il est repoussé — à 6 h il écrasait justement le haut de la courbe qu'on veut valoriser. */
+export const TRAVEL_EXP = 1.4;
+export const TRAVEL_REF_H = 3;
+export const TRAVEL_CAP_H = 9;
+export function travelFactor(roundTripH: number): number {
+  const h = Math.min(Math.max(0, roundTripH), TRAVEL_CAP_H);
+  const ref = 0.5 + TRAVEL_REF_H;
+  return ref * Math.pow((0.5 + h) / ref, TRAVEL_EXP);
 }
 
 /** Trajet ALLER (minutes) selon distance + niveau. Round-trip = 2×. */
@@ -546,13 +573,6 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
   const win = spawnWindow(playerLevel);
-  // Tirage BIAISÉ vers le bas de la fenêtre (rng², moyenne ≈ +1/3 de la plage) et non
-  // uniforme. Mesuré : un héros peu équipé gagne 42 % d'un repaire à son niveau mais
-  // 0 % à +5 — une fenêtre [niveau, niveau+10] tirée uniformément ne lui proposerait
-  // presque que des POI perdus d'avance. Le haut de la fenêtre reste atteignable, mais
-  // devient l'exception qu'on vise, pas la norme qu'on subit.
-  const span = win.max - win.min + 1;
-  const level = win.min + Math.min(span - 1, Math.floor(rng() * rng() * span));
   // L'arène spawn LOIN (trajet long, fait pour la nuit) ; les autres, n'importe où.
   const minFrac = type === 'arena' ? 0.8 : 0;
   // La bande tourne avec le compteur de spawns → proche, moyen, lointain à tour de rôle.
@@ -575,6 +595,18 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
       pos = cand;
     }
   }
+  // ⚠️ LE NIVEAU SE LIT SUR LA CARTE : il DÉCOULE de la distance à la ville, il n'est
+  // plus tiré à part. Le plus proche est le plus faible, le plus lointain le plus fort —
+  // si bien que choisir un POI, c'est arbitrer un trajet contre une difficulté, en le
+  // VOYANT. Avant, un tirage indépendant (rng², biaisé bas) pouvait poser un repaire
+  // +10 à deux pas de la ville : la carte ne disait rien de ce qu'elle proposait.
+  // Une gigue d'un demi-cran casse l'alignement parfait sans brouiller la lecture, et
+  // le biais vers le bas de la fenêtre survit — il vient maintenant du fait que les
+  // bandes de distance proches sont aussi fréquentes que les lointaines.
+  const span = win.max - win.min;
+  const jitter = (rng() - 0.5) * 0.12;
+  const frac = Math.min(1, Math.max(0, pos.distNorm + jitter));
+  const level = win.min + Math.round(frac * span);
   // Route dangereuse : tirée AU SPAWN pour être annoncée avant l'envoi (télégraphiée).
   const perilous = rng() < EXPE.perilousChance;
   const poi: Poi = {
@@ -887,7 +919,7 @@ export function resolveOutcome(
   // ne peut structurellement plus produire au-dessus d'un joueur bien équipé.
   if (HARVEST_TYPES.has(poi.type) && poi.type !== 'mine') {
     const rthH = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
-    const tfH = Math.min(0.5 + rthH, 6); // borné : un trajet interminable ne doit pas tout multiplier
+    const tfH = travelFactor(rthH); // super-linéaire : aller loin paie PLUS que proportionnellement
     const L = poi.level;
     let energy = 0;
     let summonStones = 0;
@@ -936,12 +968,12 @@ export function resolveOutcome(
   // Chère en or (puits) + trajet long, mais paie beaucoup en poussière/pierres/gear.
   if (poi.type === 'arena') {
     const rthA = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
-    const tfA = 0.5 + rthA;
+    const tfA = travelFactor(rthA);
     const waves = simulateArena(hero, poi.level, seed + 17);
     const good = waves >= 6; // « belle performance » (pour le ton du rapport / notif)
     // Or : on rend une part du coût (sink net) mais la vraie paie est en ressources.
     const gold =
-      Math.round((poi.level * 12 + waves * poi.level * 7) * (1 + rthA * 0.4)) +
+      Math.round((poi.level * 12 + waves * poi.level * 7) * (1 + (tfA - 0.5) * 0.4)) +
       Math.round(cost * 0.25);
     // Récompense par vague RELEVÉE (2026‑08‑18, ticket arène) : l'arène était strictement
     // dominée par un camp (moins de poussière pour un coût d'or 4× plus élevé). Tenir
@@ -1039,7 +1071,7 @@ export function resolveOutcome(
   // trajet court → on ne se sent plus « volé ». Reste sous la mine en or/coût.
   const goldHaul =
     poi.type === 'mine'
-      ? Math.round(cost * (1.8 + rth)) // reine de l'or : ~2,3×..~5× le coût
+      ? Math.round(cost * (1.3 + travelFactor(rth))) // reine de l'or, et d'autant plus loin
       : Math.round(cost * (1.0 + rth * 0.1)); // camp/repaire : ≥ équilibre (+3..+65 %), item = le vrai gain, reste SOUS la mine
   const dustHaul = Math.round((poi.type === 'mine' ? 14 + poi.level * 4 : 9 + poi.level * 3) * tf);
   // Parchemins d'enchant : faucet SECONDAIRE (le donjon reste la source principale).

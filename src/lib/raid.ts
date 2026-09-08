@@ -670,8 +670,17 @@ export const ROLE_LABEL: Record<GarrisonRole, string> = {
   loot: 'Fouille des corps',
 };
 
-/** Emplacements de garnison. **3** — dimensionné sur la réserve réelle d'un joueur
- *  avancé (mesuré : 4 familiers au sac sur 36 objets). Un chenil à 8 places serait vide. */
+/** Emplacements de garnison : **un de plus tous les 5 niveaux, à partir de 1**. Le chenil
+ *  grandit donc avec le joueur au lieu de rester figé à 3 — et comme les familiers ne
+ *  viennent que du Labyrinthe, la réserve suit le même rythme que les places.
+ *  ⚠️ Le nombre de places multiplie l'apport de la garnison : les canaux de COMBAT sont
+ *  donc plafonnés (`GARRISON_CAP`), faute de quoi une garnison de dix rendrait la base
+ *  imprenable. Seuls le renseignement et la fouille, qui ne sont pas des stats de combat,
+ *  s'additionnent librement. */
+export function garrisonSlots(playerLevel: number): number {
+  return 1 + Math.floor(Math.max(1, playerLevel) / 5);
+}
+/** Repli quand le niveau n'est pas connu (anciens appels). */
 export const GARRISON_SLOTS = 3;
 
 /** Une structure ENDOMMAGÉE ne rend que la moitié de son effet ; un familier FATIGUÉ
@@ -695,7 +704,12 @@ export const GARRISON_K = 0.4;
 /** Plafonds par canal. La RÉGÉNÉRATION est plafonnée le plus bas parce qu'elle est la
  *  seule à COMPOSER : elle s'applique entre chaque groupe, donc quatre ou cinq fois par
  *  siège — 15 % de soin par groupe rend une base quasi increvable. */
-export const GARRISON_CAP = { dmgReduction: 0.15, regen: 0.06 } as const;
+export const GARRISON_CAP = {
+  damagePct: 30,
+  maxPvPct: 25,
+  dmgReduction: 0.15,
+  regen: 0.06,
+} as const;
 
 /** Le repos qu'il reste à un familier sorti d'un siège. L'Infirmerie l'abrège. */
 export function fatigueMsFor(infirmaryLevel: number): number {
@@ -708,10 +722,15 @@ export function isFatigued(fam: { fatigueUntil?: number }, now: number): boolean
 /** Bonus de la garnison. Chaque familier apporte SON effet, amplifié par son dressage
  *  DÉFENSIF (jamais offensif : les deux carrières sont contextuelles), et réduit de
  *  moitié s'il est encore fatigué. */
-export function garrisonBonus(familiars: Item[], now: number, kennelLevel: number): GarrisonBonus {
+export function garrisonBonus(
+  familiars: Item[],
+  now: number,
+  kennelLevel: number,
+  slots = GARRISON_SLOTS,
+): GarrisonBonus {
   const out: GarrisonBonus = {};
   if (kennelLevel <= 0) return out;
-  for (const f of familiars.slice(0, GARRISON_SLOTS)) {
+  for (const f of familiars.slice(0, Math.max(1, slots))) {
     const role = GARRISON_ROLE[f.effect.type];
     if (!role) continue;
     const mult =
@@ -726,6 +745,11 @@ export function garrisonBonus(familiars: Item[], now: number, kennelLevel: numbe
     else if (role === 'scout') out.scoutBonus = (out.scoutBonus ?? 0) + 1;
     else out.lootPct = (out.lootPct ?? 0) + f.effect.value * famDefMult(famLevel(f.defXp));
   }
+  // ⚠️ TOUS les canaux de combat sont plafonnés, pas seulement deux. Avec des places qui
+  // se multiplient par 4 sur la courbe, laisser dégâts et PV s'additionner librement
+  // ferait de la garnison le vrai mur — et le chenil, un bouton « gagner ».
+  if (out.damagePct) out.damagePct = Math.min(GARRISON_CAP.damagePct, out.damagePct);
+  if (out.maxPvPct) out.maxPvPct = Math.min(GARRISON_CAP.maxPvPct, out.maxPvPct);
   if (out.dmgReduction) out.dmgReduction = Math.min(GARRISON_CAP.dmgReduction, out.dmgReduction);
   if (out.regen) out.regen = Math.min(GARRISON_CAP.regen, out.regen);
   return out;
@@ -733,7 +757,7 @@ export function garrisonBonus(familiars: Item[], now: number, kennelLevel: numbe
 
 /** Choisit automatiquement les meilleurs défenseurs — le geste qu'on veut faire une
  *  fois, pas trois fois par siège. On classe par la valeur RÉELLE apportée au mur. */
-export function autoGarrison(familiars: Item[], slots = GARRISON_SLOTS): string[] {
+export function autoGarrison(familiars: Item[], slots: number = GARRISON_SLOTS): string[] {
   return [...familiars]
     .filter((f) => GARRISON_ROLE[f.effect.type])
     .sort(

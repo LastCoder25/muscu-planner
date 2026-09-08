@@ -56,6 +56,7 @@
               <span class="pb-main">
                 <span class="pb-name">{{ t.label }}</span>
                 <span class="pb-desc">{{ t.desc }}</span>
+                <span class="pb-perlv">⬆️ par niveau : {{ perLevelLabel(t) }}</span>
               </span>
               <span class="pb-cost">
                 {{ typeBuildable(t) ? '🪙' + t.buildGold : typeLockReason(t) }}
@@ -73,6 +74,9 @@
             >
             <span v-if="effectNext(selectedPlot.building)" class="pm-next">
               ⬆️ Niv {{ selectedPlot.building.level + 1 }} · {{ effectNext(selectedPlot.building) }}
+            </span>
+            <span v-if="perLevelOf(selectedPlot.building)" class="pm-perlv">
+              Chaque niveau : {{ perLevelOf(selectedPlot.building) }}
             </span>
           </div>
           <div v-if="produces(selectedPlot.building)" class="pm-ready">
@@ -129,6 +133,7 @@ import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
 import {
+  perLevelLabel,
   BUILD,
   BUILDING_TYPES,
   buildingType,
@@ -248,6 +253,10 @@ function effectAt(b: Building, level: number): string {
   if (t.category === 'producer') return prod;
   const eff = utilityEffectLabel(at);
   return prod ? `${eff} · ${prod}` : eff;
+}
+function perLevelOf(b: Building): string {
+  const t = buildingType(b.typeId);
+  return t ? perLevelLabel(t) : '';
 }
 function effectNow(b: Building): string {
   return effectAt(b, b.level);
@@ -495,6 +504,14 @@ function collectAll() {
   display: block;
   font-size: 13px;
   font-weight: 600;
+}
+.pb-perlv {
+  font-size: 11.5px;
+  color: var(--accent);
+}
+.pm-perlv {
+  font-size: 12px;
+  color: var(--dim);
 }
 .pb-desc {
   display: block;

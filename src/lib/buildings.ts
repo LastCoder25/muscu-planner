@@ -69,6 +69,10 @@ export interface BuildingType {
   unique?: boolean; // un seul exemplaire autorisé (tous les types : 1 de chaque sur la carte)
   unlock?: BuildingUnlock; // activité débloquée (annoncée à la construction)
   desc: string;
+  /** Ce qu'un NIVEAU ajoute, côté effet UTILITAIRE. ⚠️ La part PRODUCTION n'est pas
+   *  écrite ici : `perLevelLabel` la dérive de `prodPerHrPerLvl`, faute de quoi les deux
+   *  divergeraient au premier réglage. Laisser vide pour un producteur pur. */
+  perLevelNote?: string;
 }
 
 // Un bâtiment POSÉ par le joueur sur un emplacement.
@@ -86,6 +90,7 @@ export const BUILDING_TYPES: BuildingType[] = [
   // Extensible (socle des futurs déblocages d'activités via bâtiment).
   {
     id: 'outpost',
+    perLevelNote: '−1,5 % de temps de trajet (jusqu’à −60 % au niveau 40)',
     label: 'Avant-poste d’expédition',
     emoji: '🧭',
     category: 'utility',
@@ -109,6 +114,7 @@ export const BUILDING_TYPES: BuildingType[] = [
   // (source passive de clés de labyrinthe, en plus des drops de donjon/boss/faille).
   {
     id: 'labyrinth_gate',
+    perLevelNote: '+4 % de butin dans les coffres du Labyrinthe',
     label: 'Porte du Labyrinthe',
     emoji: '🚪',
     category: 'utility',
@@ -129,6 +135,8 @@ export const BUILDING_TYPES: BuildingType[] = [
   // d'invocation 🔮 (source passive, en plus des nettoyages de donjon).
   {
     id: 'boss_altar',
+    perLevelNote:
+      'meilleur jet garanti sur les drops de boss, et −4 % de pierres 🔮 par invocation (jusqu’à −50 %)',
     label: 'Autel des boss',
     emoji: '🔮',
     category: 'utility',
@@ -188,6 +196,7 @@ export const BUILDING_TYPES: BuildingType[] = [
   },
   {
     id: 'warehouse',
+    perLevelNote: '+15 % de stockage sur TOUS tes producteurs',
     label: 'Entrepôt',
     emoji: '🏬',
     category: 'utility',
@@ -198,6 +207,35 @@ export const BUILDING_TYPES: BuildingType[] = [
     desc: 'Augmente le stockage de tous tes producteurs (+15 %/niveau).',
   },
 ];
+
+/** **Ce qu'un niveau de plus apporte**, en une ligne — la question qu'on se pose devant
+ *  le bouton « Améliorer », et à laquelle les descriptions ne répondaient pas : elles
+ *  disaient ce que le bâtiment FAIT, jamais ce que le niveau CHANGE. La part production
+ *  est dérivée des données (jamais recopiée), la part utilitaire vient de `perLevelNote`.
+ *  Un test vérifie que CHAQUE type en produit une : ajouter un bâtiment muet est une
+ *  régression, pas un oubli anodin. */
+export function perLevelLabel(t: BuildingType): string {
+  const parts: string[] = [];
+  if (t.perLevelNote) parts.push(t.perLevelNote);
+  if (t.resource && t.prodPerHrPerLvl)
+    parts.push(`+${t.prodPerHrPerLvl} ${RESOURCE_EMOJI[t.resource]}/h`);
+  return parts.join(' · ');
+}
+
+/** Emoji de chaque ressource produite — source unique, partagée par l'UI. */
+export const RESOURCE_EMOJI: Record<BuildResource, string> = {
+  gold: '🪙',
+  scrap: '🔩',
+  energy: '⚡',
+  keys: '🗝️',
+  summon: '🔮',
+  // Devises historiques, conservées pour les anciennes lignes (plus produites).
+  dust: '✨',
+  stone: '💎',
+  parchemins: '📜',
+  fragments: '🧩',
+  ink_dust: '🖋️',
+};
 
 const BY_ID = new Map(BUILDING_TYPES.map((t) => [t.id, t]));
 export function buildingType(id: string): BuildingType | undefined {

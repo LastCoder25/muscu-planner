@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  perLevelLabel,
   plotsForLevel,
   slotUnlockLevel,
   buildingUpgradeCost,
@@ -183,5 +184,25 @@ describe('boss — pierres d’invocation 🔮', () => {
     expect(summonCostWith(6, [mk('boss_altar', 5)])).toBe(5); // 6×0,8 = 4,8 → 5
     expect(summonCostWith(2, [mk('boss_altar', 30)])).toBe(1); // 2×0,5 = 1
     expect(summonCostWith(1, [mk('boss_altar', 30)])).toBe(1); // plancher 1
+  });
+});
+
+describe('ce qu’un NIVEAU change, dit explicitement', () => {
+  it('⚠️ AUCUN bâtiment muet : chaque type dit ce qu’un niveau lui apporte', () => {
+    // Les descriptions disaient ce que le bâtiment FAIT, jamais ce que le niveau CHANGE —
+    // or c'est exactement la question qu'on se pose devant le bouton « Améliorer ».
+    // Ajouter un type sans le renseigner est une régression, pas un oubli anodin.
+    for (const t of BUILDING_TYPES) {
+      const label = perLevelLabel(t);
+      expect(label, `${t.label} ne dit pas ce qu’un niveau apporte`).not.toBe('');
+    }
+  });
+
+  it('la part PRODUCTION est dérivée des données, jamais recopiée', () => {
+    // Un producteur doit annoncer exactement son débit par niveau : si `prodPerHrPerLvl`
+    // change, l'étiquette suit toute seule.
+    for (const t of BUILDING_TYPES.filter((x) => x.resource && x.prodPerHrPerLvl)) {
+      expect(perLevelLabel(t)).toContain(String(t.prodPerHrPerLvl));
+    }
   });
 });

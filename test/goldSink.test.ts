@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildingUpgradeCost } from '@/lib/buildings';
-import { goldCost, travelOneWayMin } from '@/lib/expedition';
+import { goldCost, travelOneWayMin, travelFactor } from '@/lib/expedition';
 import { DUNGEONS, dungeonGold } from '@/data/dungeons';
 
 /** Net d'une mine à distance moyenne : la meilleure source d'or RÉGULIÈRE du jeu.
@@ -8,7 +8,7 @@ import { DUNGEONS, dungeonGold } from '@/data/dungeons';
 function mineNet(level: number): number {
   const rth = (2 * travelOneWayMin(level, 0.5)) / 60; // heures aller-retour
   const cost = goldCost('mine', level);
-  return Math.round(cost * (1.8 + rth)) - cost;
+  return Math.round(cost * (1.3 + travelFactor(rth))) - cost;
 }
 
 const LEVELS = [5, 10, 15, 20, 26, 35, 50, 70, 100];
