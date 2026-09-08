@@ -173,9 +173,6 @@ export function tierOf(inst: TalentInstance): number {
 export function talentRankOf(inst: TalentInstance): Rarity {
   return talentRank(tierOf(inst));
 }
-export function talentQualityOf(inst: TalentInstance): number {
-  return talentQuality(tierOf(inst));
-}
 // JET du talent (0..1) : `roll` s'il existe, sinon dérivé de l'ancienne qualité (rétro-compat).
 export function talentRollOf(inst: TalentInstance): number {
   return inst.roll ?? (talentQuality(tierOf(inst)) - 0.5) / 5;

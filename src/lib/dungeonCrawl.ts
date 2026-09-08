@@ -168,11 +168,6 @@ export function generateDungeon(seed: number, floors: number): Floor[] {
   return Array.from({ length: Math.max(1, floors) }, (_, i) => generateFloor(seed, i, floors));
 }
 
-/** Salles adjacentes (par couloir) d'une salle — pour révéler le « brouillard ». */
-export function adjacentRooms(floor: Floor, roomId: number): number[] {
-  return floor.rooms[roomId]?.links ?? [];
-}
-
 export const ROOM_EMOJI: Record<RoomType, string> = {
   start: '🚪',
   monster: '👾',

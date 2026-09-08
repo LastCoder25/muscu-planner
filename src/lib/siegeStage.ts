@@ -211,20 +211,3 @@ export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeS
     held: report.held,
   };
 }
-
-/** Un corps est-il encore debout à ce stade de l'animation ? Dérivé des bornes, donc
- *  toujours d'accord avec les morts annoncées par les beats. */
-export function bodyAliveAt(
-  stage: SiegeStage,
-  groups: RaidGroup[],
-  bodyIndex: number,
-  beatIndex: number,
-): boolean {
-  const b = stage.bodies[bodyIndex];
-  if (!b) return false;
-  for (let i = beatIndex; i >= 0; i--) {
-    if (stage.beats[i]?.kills.includes(bodyIndex)) return false;
-  }
-  void groups;
-  return true;
-}

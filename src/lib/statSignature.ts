@@ -138,4 +138,3 @@ export const DEFAULT_SPORT_SIG: StatWeights = directionOf(DEFAULT_SPORT_BENEFIT)
 
 /** Table (nom → bénéfices) pour l'affichage pédagogique (page admin Formules). */
 export const SPORT_BENEFITS = SPORT_BENEFIT;
-export const SPORT_SIGNATURES = SPORT_BENEFIT; // rétro-compat (affichage)

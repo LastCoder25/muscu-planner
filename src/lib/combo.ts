@@ -242,15 +242,6 @@ export function legPlannedEffort(l: ComboLeg): number {
   return (reps + missing * COMBO_PLAN_REPS) * (l.rep_weight ?? 1);
 }
 
-/** Effort planifié total du 360 (somme des exos jusqu'à leur cible). */
-export function comboTargetEffort(c: ComboChallenge): number {
-  let sum = 0;
-  for (const l of c.legs) {
-    sum += legPlannedEffort(l);
-  }
-  return sum;
-}
-
 /** Prime de bouclage À PALIERS (pré-XP_MULT). Par exo : sa part de prime `0,25 ×
  *  effort planifié` × la part CUMULÉE du palier atteint (15 / 95 / 100 %). Remplace
  *  l'ancienne prime tout-ou-rien ET le bonus de dépassement (fusionné dans le maximal).

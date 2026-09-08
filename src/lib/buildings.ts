@@ -357,20 +357,6 @@ export function bossAltarRollFloor(buildings: Building[]): number {
   const per = buildingType(BOSS_ALTAR_ID)?.effect?.bossRollFloorPerLvl ?? 0;
   return Math.min(BOSS_ROLL_FLOOR_CAP, lvl * per);
 }
-/** Nombre de candidats de récompense de boss, selon le NIVEAU de l'Autel (2026‑08‑18) :
- *  2 choix dès le niveau 1, 3 au niveau 10, 4 au niveau 20, 5 au niveau 30 → monter
- *  l'Autel = plus d'agency sur les récompenses. (Sans Autel les boss sont verrouillés.) */
-export function bossRewardCount(buildings: Building[]): number {
-  const lvl = bossAltarLevel(buildings);
-  if (lvl >= 30) return 5;
-  if (lvl >= 20) return 4;
-  if (lvl >= 10) return 3;
-  return 2;
-}
-/** Ciblage : la pièce de set d'un boss vise un slot MANQUANT (dès l'Autel construit). */
-export function bossTargetingUnlocked(buildings: Building[]): boolean {
-  return bossAltarBuilt(buildings);
-}
 const SUMMON_COST_RED_CAP = 0.5; // −50 % max sur le coût en pierres d'invocation
 /** Réduction (0..1) du coût en pierres d'invocation 🔮 des boss, selon le NIVEAU
  *  de l'Autel des boss (−4 %/niveau, plafond −50 % au niveau ~12). */

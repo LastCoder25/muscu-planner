@@ -69,11 +69,6 @@ export function regionOfDungeon(dungeonId: string): Region | undefined {
   return REGIONS.find((r) => r.dungeonIds.includes(dungeonId));
 }
 
-/** Index de région d'un donjon (−1 si inconnu). */
-export function regionIndexOfDungeon(dungeonId: string): number {
-  return REGIONS.findIndex((r) => r.dungeonIds.includes(dungeonId));
-}
-
 /** Donjon « frontière » = 1er donjon non nettoyé dans l'ordre (celui en cours).
  *  Si tout est nettoyé, renvoie le dernier. */
 export function frontierDungeonId(clearedIds: string[]): string {

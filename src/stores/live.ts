@@ -208,12 +208,6 @@ export const useLiveStore = defineStore('live', () => {
     persist();
   }
 
-  function removeExercise(i: number) {
-    if (!run.value) return;
-    run.value.exercises.splice(i, 1);
-    persist();
-  }
-
   function goToExercise(i: number) {
     if (!run.value) return;
     run.value.exIndex = Math.min(Math.max(0, i), run.value.exercises.length - 1);
@@ -325,7 +319,6 @@ export const useLiveStore = defineStore('live', () => {
     discardSaved,
     startFree,
     addExercise,
-    removeExercise,
     goToExercise,
     addSet,
     removeSet,

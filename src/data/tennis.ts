@@ -30,14 +30,6 @@ export const DRILL_PATTERN_LABELS: Record<string, string> = {
   montee_volee: 'Montée-volée',
 };
 
-export const DRILL_FOCUS_LABELS: Record<string, string> = {
-  technique: 'Technique',
-  tactique: 'Tactique',
-  physique: 'Physique',
-  regularite: 'Régularité',
-  puissance: 'Puissance',
-};
-
 // Thèmes proposés au wizard. `id` doit correspondre à THEME_SPECS (src/lib/drills.ts).
 export interface ThemeOption {
   id: string;

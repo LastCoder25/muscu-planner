@@ -29,12 +29,6 @@ export function characterProfile(puissance: number, agilite: number): CharacterP
   return 'polyvalent';
 }
 
-export const PROFILE_LABEL: Record<CharacterProfile, string> = {
-  puissant: 'cogneur',
-  agile: 'coureur',
-  polyvalent: 'polyvalent',
-};
-
 /**
  * Construit le personnage à partir des 3 RÉSERVOIRS d'XP (alimentés par chaque
  * sport selon sa signature, cf. statSignature.ts) et de l'énergie disponible.

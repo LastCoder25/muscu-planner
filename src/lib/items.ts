@@ -158,22 +158,6 @@ export function famLevel(xp: number | undefined, kind: 'atk' | 'def' = 'def'): n
   const k = kind === 'atk' ? FAM_TRAIN.atkXpPerLevel : FAM_TRAIN.defXpPerLevel;
   return Math.floor(Math.sqrt(Math.max(0, xp ?? 0) / k));
 }
-/** Progression vers le niveau suivant — pour la barre de l'UI. */
-export function famXpProgress(
-  xp: number | undefined,
-  playerLevel: number,
-  kind: 'atk' | 'def' = 'def',
-): { level: number; into: number; need: number; capped: boolean } {
-  const level = Math.min(famLevel(xp, kind), Math.max(0, playerLevel));
-  const cur = famXpForLevel(level, kind);
-  const next = famXpForLevel(level + 1, kind);
-  return {
-    level,
-    into: Math.max(0, (xp ?? 0) - cur),
-    need: next - cur,
-    capped: level >= playerLevel,
-  };
-}
 export function famAtkMult(level: number): number {
   return 1 + Math.max(0, level) * FAM_TRAIN.atkK;
 }
@@ -300,12 +284,6 @@ export function infuseToMaxCost(it: Item, playerLevel: number): number {
   for (let k = it.level; k < playerLevel; k++) sum += upgradeCost(k, it.rarity);
   return sum;
 }
-/** Poussière déjà investie dans un objet (des niveaux payés : baseLevel → level). */
-export function investedDust(it: Item): number {
-  let sum = 0;
-  for (let k = it.baseLevel ?? 1; k < it.level; k++) sum += upgradeCost(k, it.rarity);
-  return sum;
-}
 /** Casser un objet → base de rareté + une FRACTION du coût de construction 1→niveau.
  *  HISTORY-INDEPENDENT (refonte C) : ne dépend QUE de rareté + niveau actuel, donc un
  *  objet DROPPÉ au niv.N se recycle comme un niv.1 INFUSÉ →N (fin de l'incohérence).
@@ -324,10 +302,6 @@ export function sellValueOf(rank: Rarity, roll = 0, level = 1): number {
 /** Or obtenu en vendant un objet (rang + jet + niveau). */
 export function sellValue(it: Item): number {
   return sellValueOf(it.rarity, it.roll ?? 0, it.level);
-}
-/** Or de vente pour un RANG seul (rétro-compat ; préférer sellValueOf avec jet + niveau). */
-export function sellValueForRarity(rank: Rarity): number {
-  return GOLD_BY_RARITY[rank];
 }
 
 // ── ♻️ RECYCLAGE EN FERRAILLE 🔩 ────────────────────────────────────────────────────
@@ -817,11 +791,6 @@ export function rankCeilingForLevel(level: number): number {
  *  Au-delà, le rang d'un drop est CAPÉ par ton niveau → le sport reste le vrai plafond,
  *  mais un overshoot modéré (récompense du farm) reste possible. Ticket anti-runaway. */
 export const LEVEL_MARGIN = 5;
-/** Niveau EFFECTIF d'un drop = min(niveau du contenu, niveau joueur + marge). Si `playerLevel`
- *  n'est pas fourni (contexte legacy/tests), pas de cap. Centralise la règle pour TOUS les tirages. */
-export function cappedDropLevel(contentLevel: number, playerLevel?: number): number {
-  return playerLevel == null ? contentLevel : Math.min(contentLevel, playerLevel + LEVEL_MARGIN);
-}
 /** CRAN de grade MAX DROPPABLE (0..49 = rang×5 + qualité−1) à un niveau donné = rang √-gaté,
  *  qualité 5. (Talents/familiers sont des drops purs — plus d'infusion de grade.) */
 export function maxGradeCran(level: number): number {

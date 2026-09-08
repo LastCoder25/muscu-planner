@@ -9,10 +9,6 @@ export interface BossSpec {
   weekEnd: string; // ISO
 }
 
-// Coût en énergie d'une frappe (dégâts = puissance de combat du joueur).
-export const BOSS_HIT_ENERGY = 20;
-
-// Rotation de boss (nom/emoji/PV). Les PV montent un peu au fil de la rotation.
 const ROTATION = [
   { name: 'Gnaeus le Colosse', emoji: '👹', hp: 3000 },
   { name: 'Vermoriginal', emoji: '🐉', hp: 4000 },

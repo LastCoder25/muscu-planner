@@ -30,10 +30,6 @@ export function endlessEnergy(tier: number): number {
 export function endlessGold(tier: number): number {
   return Math.round(1500 * Math.pow(1.18, Math.max(1, tier) - 1));
 }
-/** Poussière gagnée à la victoire. */
-export function endlessDust(tier: number): number {
-  return 20 + (Math.max(1, tier) - 1) * 8;
-}
 /** Niveau des objets lâchés : 24 + palier → seule source de gear au-delà du niveau 25. */
 export function endlessDropLevel(tier: number): number {
   return 24 + Math.max(1, tier);

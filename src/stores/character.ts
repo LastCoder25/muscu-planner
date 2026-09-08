@@ -18,7 +18,6 @@ import {
   round1,
   normRank,
   fillSetPieceAffixes,
-  swapLoadoutGear,
   bestGearLoadout,
   playerWithGear,
   mergeEffects,
@@ -716,13 +715,6 @@ export const useCharacterStore = defineStore('character', () => {
     return { streak: next.streak, energy, usedGrace };
   }
 
-  // Dépense de l'énergie (ex. frappe du boss communautaire) sans autre effet local.
-  async function spendEnergy(userId: string, amount: number) {
-    const cur = row.value;
-    if (!cur || amount <= 0) return;
-    return persist(userId, { energy_spent: cur.energy_spent + amount });
-  }
-
   // Bonus de passage de niveau (global). Verse l'énergie de chaque niveau franchi
   // depuis le dernier récompensé (croissant). reward_level=0 = jamais initialisé →
   // on cale la base au niveau actuel SANS bonus rétroactif. Renvoie l'événement à
@@ -851,22 +843,6 @@ export const useCharacterStore = defineStore('character', () => {
     const equipped: Equipped = { ...cur.equipped };
     delete equipped[slot];
     return persist(userId, { equipped, inventory: [...cur.inventory, item] });
-  }
-
-  // Échange le stuff équipé (4 slots gear, familier NON touché) avec le loadout `i` :
-  // loadout vide → « ranger » (le joueur se retrouve nu, le stuff part en réserve) ;
-  // loadout plein → swap (on porte le loadout, il garde l'ancien stuff). Les objets
-  // rangés ne sont PAS dans le sac et n'affectent pas le combat.
-  async function swapLoadout(userId: string, i: number) {
-    const cur = row.value;
-    if (!cur || i < 0 || i >= MAX_LOADOUTS) return;
-    const loadouts: Loadout[] = Array.from(
-      { length: MAX_LOADOUTS },
-      (_, k) => cur.loadouts[k] ?? { items: {} },
-    );
-    const { equipped, loadoutItems } = swapLoadoutGear(cur.equipped, loadouts[i]!.items);
-    loadouts[i] = { items: loadoutItems };
-    return persist(userId, { equipped, loadouts });
   }
 
   // Vide un loadout rangé : ses objets retournent au sac, le slot de loadout est vidé.
@@ -1678,7 +1654,6 @@ export const useCharacterStore = defineStore('character', () => {
     spendKey,
     applyExpedition,
     equip,
-    swapLoadout,
     unpackLoadout,
     recycleLoadout,
     stashSetPiece,
@@ -1696,7 +1671,6 @@ export const useCharacterStore = defineStore('character', () => {
     recycle,
     recycleMany,
     toggleLock,
-    spendEnergy,
     claimDailyLogin,
     claimLevelUps,
   };
