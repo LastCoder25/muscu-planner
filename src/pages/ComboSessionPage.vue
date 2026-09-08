@@ -195,6 +195,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { backOrReplace } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useComboStore } from '@/stores/combo';
 import {
@@ -415,12 +416,12 @@ function finish() {
   const n = validatedCount.value;
   if (n > 0) commitLogged();
   $q.notify({ type: 'positive', message: `Séance terminée · ${n} série${n > 1 ? 's' : ''}` });
-  void router.replace(`/combo/${id}`);
+  backOrReplace(router, `/combo/${id}`);
 }
 function cancel() {
   const n = validatedCount.value;
   if (n === 0) {
-    void router.replace(`/combo/${id}`);
+    backOrReplace(router, `/combo/${id}`);
     return;
   }
   $q.dialog({
@@ -435,10 +436,10 @@ function cancel() {
         type: 'positive',
         message: `${n} série${n > 1 ? 's' : ''} conservée${n > 1 ? 's' : ''}`,
       });
-      void router.replace(`/combo/${id}`);
+      backOrReplace(router, `/combo/${id}`);
     })
     .onCancel(() => {
-      void router.replace(`/combo/${id}`);
+      backOrReplace(router, `/combo/${id}`);
     });
 }
 

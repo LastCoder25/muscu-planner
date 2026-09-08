@@ -208,9 +208,7 @@
         </div>
         <div class="coll-text">{{ lastOutcome.text }}</div>
         <div class="coll-haul">
-          <span v-if="lastOutcome.gold">🪙 +{{ lastOutcome.gold }}</span>
-          <span v-if="lastOutcome.energy">⚡ +{{ lastOutcome.energy }}</span>
-          <span v-if="lastOutcome.key">🗝️ +{{ lastOutcome.key }}</span>
+          <span v-for="p in haulPills(lastOutcome)" :key="p.emoji">{{ p.emoji }} +{{ p.n }}</span>
           <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item">
             <ItemIcon :item="it" :size="26" :show-stars="false" />{{ it.name }}</span
           >
@@ -252,6 +250,7 @@ import { talentEffects } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { simulateCombat, type Combatant } from '@/lib/combat';
 import {
+  haulPills,
   EXPE,
   heroPosition,
   poiCombatant,
@@ -503,6 +502,9 @@ function poiRewardLabel(p: Poi): string {
   if (p.type === 'well') return 'Énergie ⚡ en quantité (récolte, sans combat)';
   if (p.type === 'shrine') return "Pierres d'invocation 🔮 (récolte, sans combat)";
   if (p.type === 'archive') return 'Fragments 🧩 + poussière d’encre 🖋️ (récolte)';
+  // ⚠️ Sans cette ligne, l'épave tombait dans le cas par défaut et s'annonçait comme un
+  // REPAIRE (« pièce de set + pierres ») — l'inverse de ce qu'elle donne vraiment.
+  if (p.type === 'wreck') return 'Ferraille 🔩 en quantité (récolte, sans combat)';
   if (p.type === 'camp') return 'Or 🪙 + un objet 🎁';
   if (p.type === 'arena') return 'Survie par vagues 🌊 — objets + pierres 🔮 ∝ vagues';
   return 'Pièce de set 🧩 + pierres d’invocation 🔮';

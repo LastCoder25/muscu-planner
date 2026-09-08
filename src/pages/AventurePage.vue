@@ -71,6 +71,14 @@
               title="Pierres d’invocation — tenter un boss de palier (gagnées en nettoyant des donjons)"
               >🔮 {{ char.row.summon_stones }}</span
             >
+            <!-- La ferraille se dépense (réparer, bâtir) et se gagne (épaves, Fonderie,
+                 recyclage du sac) DEPUIS PLUSIEURS ÉCRANS : sa place est ici, avec les
+                 autres devises, et non sur le seul écran de la base. -->
+            <span
+              class="tb-r scrap"
+              title="Ferraille — réparer et bâtir l’enceinte (épaves, Fonderie, recyclage du sac)"
+              >🔩 {{ char.row.scrap }}</span
+            >
           </div>
         </div>
       </div>
@@ -1489,9 +1497,7 @@
               </div>
               <div class="im-text">{{ m.text }}</div>
               <div class="im-haul">
-                <span v-if="m.gold">🪙 +{{ m.gold }}</span>
-                <span v-if="m.energy">⚡ +{{ m.energy }}</span>
-                <span v-if="m.key">🗝️ +{{ m.key }}</span>
+                <span v-for="p in haulPills(m)" :key="p.emoji">{{ p.emoji }} +{{ p.n }}</span>
               </div>
               <!-- Objet gagné : détail complet (rareté / niveau / effet). -->
               <div v-if="m.item" class="im-loot" :class="'p-' + m.item.rarity">
@@ -2495,6 +2501,7 @@ import {
 } from '@/lib/regions';
 import { bestiary, setCollection, codexSummary } from '@/lib/codex';
 import {
+  haulPills,
   heroPosition,
   runArena,
   arenaEnergyCost,
@@ -5318,6 +5325,9 @@ onUnmounted(() => {
 }
 .tb-r.summon {
   color: #e08bd8;
+}
+.tb-r.scrap {
+  color: #b9a68c;
 }
 .tb-r.energy.deficit {
   color: var(--d4, #ff6a45);

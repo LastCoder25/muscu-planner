@@ -120,6 +120,35 @@ export interface ExpeditionMessage {
   read: boolean;
 }
 
+/** Ce qu'une expédition a rapporté, prêt à afficher. ⚠️ SOURCE UNIQUE des deux écrans
+ *  (modale de collecte ET boîte à messages 📬) : chacun listait ses devises à la main, et
+ *  les deux avaient été oubliées lors de l'ajout des POI de RÉCOLTE (v0.658) — une épave
+ *  affichait donc un butin VIDE, alors qu'elle est la seule source de ferraille du jeu.
+ *  Ajouter une devise ici la fait apparaître partout. */
+export function haulPills(o: {
+  gold?: number;
+  energy?: number;
+  scrap?: number;
+  summonStones?: number;
+  fragments?: number;
+  inkDust?: number;
+  key?: number;
+}): { emoji: string; n: number }[] {
+  return (
+    [
+      { emoji: '🪙', n: o.gold ?? 0 },
+      { emoji: '⚡', n: o.energy ?? 0 },
+      { emoji: '🔩', n: o.scrap ?? 0 },
+      { emoji: '🔮', n: o.summonStones ?? 0 },
+      { emoji: '🧩', n: o.fragments ?? 0 },
+      { emoji: '🖋️', n: o.inkDust ?? 0 },
+      { emoji: '🗝️', n: o.key ?? 0 },
+    ] as const
+  )
+    .filter((p) => p.n > 0)
+    .map((p) => ({ emoji: p.emoji, n: p.n }));
+}
+
 /** Construit le message de rapport d'une expédition (déposé à l'arrivée à l'objectif). */
 export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
   const o = exp.outcome;

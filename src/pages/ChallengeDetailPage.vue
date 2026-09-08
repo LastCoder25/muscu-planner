@@ -493,6 +493,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { backOrReplace } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import {
   challengeStats,
@@ -1249,12 +1250,14 @@ function confirmAbandon() {
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Abandonner', color: 'negative' },
   }).onOk(() => {
-    // replace (pas push) : le détail abandonné sort de l'historique → le
-    // retour arrière ne retombe pas dessus.
+    // Le détail abandonné sort de l'historique → le retour arrière ne retombe pas
+    // dessus. ⚠️ Via `backOrReplace` et non `replace` : si l'on VENAIT de la liste,
+    // remplacer y laisserait deux entrées identiques côte à côte et le bouton retour
+    // paraîtrait mort (il faudrait appuyer deux fois). Cf. `src/lib/nav.ts`.
     $q.loading.show({ message: 'Abandon…' });
     store
       .setStatus(id, 'abandoned')
-      .then(() => router.replace('/challenges'))
+      .then(() => backOrReplace(router, '/challenges'))
       .catch((e) =>
         $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' }),
       )
@@ -1274,11 +1277,11 @@ function confirmDelete() {
     cancel: { label: 'Annuler', flat: true },
     ok: { label: hasDone ? 'Abandonner' : 'Supprimer', color: 'negative' },
   }).onOk(() => {
-    // replace (pas push) : le détail sort de l'historique actif → pas de retour
-    // arrière vers un challenge introuvable.
+    // Le détail sort de l'historique actif → pas de retour arrière vers un challenge
+    // introuvable (et pas de doublon d'entrée si l'on venait de la liste, cf. nav.ts).
     $q.loading.show({ message: hasDone ? 'Abandon…' : 'Suppression…' });
     (hasDone ? store.setStatus(id, 'abandoned') : store.remove(id))
-      .then(() => router.replace('/challenges'))
+      .then(() => backOrReplace(router, '/challenges'))
       .catch((e) =>
         $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' }),
       )
@@ -1474,7 +1477,7 @@ onMounted(async () => {
     }
     if (!ch.value) {
       // Cas normal après suppression : on repart sur la liste sans erreur bruyante.
-      await router.replace('/challenges');
+      backOrReplace(router, '/challenges');
       return;
     }
     maybeCoverByReserve();

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  haulPills,
   spawnWindow,
   createMap,
   advanceWorld,
@@ -439,5 +440,26 @@ describe('route dangereuse (télégraphiée)', () => {
       vu += map.pois.filter((p) => p.perilous).length;
     }
     expect(vu, 'aucun POI dangereux généré en 30 jours').toBeGreaterThan(0);
+  });
+});
+
+describe('butin affiché — source unique des deux écrans', () => {
+  it('⚠️ une ÉPAVE ne doit plus afficher un butin VIDE', () => {
+    // Le défaut réel : la modale de collecte et la boîte 📬 listaient leurs devises à la
+    // main (or / énergie / clé) et n'ont pas suivi l'ajout des POI de RÉCOLTE (v0.658).
+    // Une épave — seule source de ferraille du jeu — ne montrait donc RIEN.
+    expect(haulPills({ scrap: 87 })).toEqual([{ emoji: '🔩', n: 87 }]);
+    expect(haulPills({ summonStones: 6 })).toEqual([{ emoji: '🔮', n: 6 }]);
+    expect(haulPills({ fragments: 40, inkDust: 31 })).toEqual([
+      { emoji: '🧩', n: 40 },
+      { emoji: '🖋️', n: 31 },
+    ]);
+  });
+  it('n’affiche que ce qui a VRAIMENT été gagné, dans un ordre stable', () => {
+    expect(haulPills({ gold: 0, energy: 12, key: 1 })).toEqual([
+      { emoji: '⚡', n: 12 },
+      { emoji: '🗝️', n: 1 },
+    ]);
+    expect(haulPills({})).toEqual([]);
   });
 });

@@ -12,9 +12,10 @@
       <div class="iconbtn" />
     </header>
 
+    <!-- ⚠️ Ni l'or ni la ferraille ici : la barre de l'Aventure, juste au-dessus, les
+         affiche déjà. Les répéter volait de la place à ce que cette barre est SEULE à
+         savoir dire — le niveau (qui plafonne les bâtiments) et où se trouve le héros. -->
     <div class="bar">
-      <span class="bar-chip">🪙 {{ char.row?.gold ?? 0 }}</span>
-      <span class="bar-chip">🔩 {{ char.row?.scrap ?? 0 }}</span>
       <span class="bar-chip">Niv. {{ heroLevel }}</span>
       <span v-if="wounded" class="bar-chip hurt">🤕 Héros à l’infirmerie — {{ healIn }}</span>
       <span v-else-if="heroHome" class="bar-chip home">🦸 Héros à la base</span>
