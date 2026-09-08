@@ -2,6 +2,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from './auth';
 import {
   normalizePseudo,
   levelUpEnergy,
@@ -253,7 +254,22 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   async function fetchMine() {
-    const { data, error } = await supabase.from('characters').select(COLS).maybeSingle();
+    // ⚠️ FILTRE EXPLICITE OBLIGATOIRE (v0.699) — la RLS borne ce qu'on a le DROIT de lire,
+    // jamais ce qu'on VEUT lire. Ici l'enjeu est double : `maybeSingle()` LÈVE une erreur si
+    // plusieurs lignes reviennent, donc l'ajout d'une policy SELECT élargie sur `characters`
+    // (voir `challenges_read_friends`, migr. 0058) ne dégraderait pas l'Aventure — il la
+    // casserait. Le `.eq` est un no-op tant que la policy reste own-only ; c'est le but.
+    const uid = useAuthStore().user?.id;
+    if (!uid) {
+      row.value = null;
+      loaded.value = true;
+      return null;
+    }
+    const { data, error } = await supabase
+      .from('characters')
+      .select(COLS)
+      .eq('user_id', uid)
+      .maybeSingle();
     if (error) throw error;
     row.value = normalizeRow(data ?? null);
     loaded.value = true;

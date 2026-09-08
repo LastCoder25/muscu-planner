@@ -5,6 +5,7 @@ import { ref } from 'vue';
 import type { DrillSession, DrillLog } from '@/lib/types';
 import type { DrillDef } from '@/lib/drills';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from './auth';
 
 export interface DrillSessionRow {
   id: string;
@@ -37,9 +38,20 @@ export const useTennisStore = defineStore('tennis', () => {
   }
 
   async function fetchMine() {
+    // ⚠️ FILTRE EXPLICITE OBLIGATOIRE (v0.699) — la RLS borne ce qu'on a le DROIT de lire,
+    // jamais ce qu'on VEUT lire. Ce `.eq` est un no-op tant que la policy reste own-only ;
+    // il existe pour que l'ajout d'une policy SELECT élargie (comme `challenges_read_friends`,
+    // migr. 0058, qui a fait fuiter les défis des amis dans « mes défis ») ne puisse plus
+    // transformer cette liste en celle de tout le monde.
+    const uid = useAuthStore().user?.id;
+    if (!uid) {
+      sessions.value = [];
+      return sessions.value;
+    }
     const { data, error } = await supabase
       .from('drill_sessions')
       .select('id, name, payload, created_at')
+      .eq('user_id', uid)
       .order('created_at', { ascending: false });
     if (error) throw error;
     sessions.value = data ?? [];

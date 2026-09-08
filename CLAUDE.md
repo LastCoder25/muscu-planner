@@ -279,6 +279,85 @@ Décisions prises en Phase 0, contraintes par le poste. À respecter dans les ph
 
 ## Garde-fous
 
+### 🧰 QUELLE SKILL POUR QUOI (v0.699)
+
+Installées dans `~/.claude/skills/` (+ les _bundled_). ⚠️ **Toutes ne conviennent PAS à ce
+projet** : la liste des exclusions compte autant que celle des recommandations.
+
+| Besoin                          | Skill                                                                | Ce qu'elle apporte ICI                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code mort, doublons, complexité | **`simplify`** _(bundled)_                                           | 4 agents en PARALLÈLE sur le diff : réemploi (ce qui existe déjà) · simplification (état dérivable, copier-coller, nid) · efficacité (travail refait, I/O répétées, closures qui retiennent tout un scope) · **altitude** (le correctif est-il à la bonne profondeur, ou est-ce un cas particulier posé sur de l'infra partagée ?). C'est l'outil du « gros ménage ». |
+| Avant d'écrire une feature      | **`brainstorming`**                                                  | Explore l'intention et les contraintes AVANT de coder. ⚠️ La plus rentable ici : ce projet se conçoit par arbitrages (« comment tu le verrais ? »), et plusieurs features ont été refaites faute d'avoir posé la question d'abord.                                                                                                                                    |
+| Chantier en plusieurs étapes    | **`writing-plans`** → **`executing-plans`**                          | Le plan écrit, puis exécuté avec points de contrôle.                                                                                                                                                                                                                                                                                                                  |
+| Audit/polish d'un écran         | **`impeccable`**                                                     | Critique d'interface : hiérarchie visuelle, architecture de l'information, charge cognitive, états vides.                                                                                                                                                                                                                                                             |
+| Question d'UX précise           | **`ui-ux-pro-max`**                                                  | 99 règles d'UX + cibles Vue. À prendre pour ses **règles**, pas pour ses palettes/polices : la charte est déjà fixée (§ Design system).                                                                                                                                                                                                                               |
+| Bug ou test rouge               | **`systematic-debugging`**                                           | La cause avant le correctif.                                                                                                                                                                                                                                                                                                                                          |
+| Avant d'annoncer « c'est fait » | **`verification-before-completion`**                                 | Cf. la règle de triple vérification ci-dessus.                                                                                                                                                                                                                                                                                                                        |
+| Revue de fin de tâche           | **`requesting-code-review`** / **`receiving-code-review`**           | La seconde impose de VÉRIFIER un retour de revue au lieu d'acquiescer.                                                                                                                                                                                                                                                                                                |
+| Plusieurs tâches indépendantes  | **`dispatching-parallel-agents`**, **`subagent-driven-development`** | Agents de revue/implémentation en parallèle (ce qui a servi à l'audit des devises mortes).                                                                                                                                                                                                                                                                            |
+
+⚠️ **TROU DE COUVERTURE ASSUMÉ — aucune porte ne voit l'écran.** typecheck, lint, tests et build
+valident du CODE ; ils sont aveugles à tout ce qui est visuel ou interactif. Les défauts déjà
+livrés le prouvent : un `fill: none` SVG **non cliquable en son centre** (impossible de bâtir une
+tourelle), des ornements du rempart **décrochés** parce quʼils étaient en coordonnées dures, un
+« Dernier siège » rendu **deux fois**. Ces bugs-là remontent par les YEUX de lʼutilisateur, et
+cʼest la principale faiblesse du dispositif.
+La piste est **Playwright** (clic réel, capture dʼécran, logs navigateur). La skill officielle
+`webapp-testing` (anthropics/skills) fait exactement ça — ⚠️ mais elle est écrite en **Playwright
+PYTHON**, or **Python nʼest pas installé** sur ce poste, et AppLocker peut bloquer les binaires de
+navigateur téléchargés hors `Program Files`. À traiter comme une piste à ÉPROUVER (via
+`@playwright/test` en Node), pas comme une solution acquise.
+
+**⛔ À NE PAS UTILISER sur ce projet, et pourquoi :**
+
+- **`ui-styling`** (shadcn/ui + Radix + Tailwind) — la stack est **Quasar + SCSS maison** avec ses
+  propres tokens. L'appliquer introduirait des dépendances étrangères pour refaire ce qui existe.
+- **`frontend-design`** — conçu pour créer une identité visuelle _distinctive_ de zéro. Ici elle
+  est **déjà arrêtée** (« panneau de contrôle d'équipement », jaune voltage sur fond sombre) ;
+  s'en servir pour un écran le ferait diverger du reste de l'app.
+- **`design-system`**, **`brand`**, **`design`** (logo/CIP), **`slides`**, **`banner-design`** — hors sujet
+  (identité de marque, présentations, bannières). Les tokens du projet vivent dans `app.scss` et
+  `docs/design-system.md`.
+- **`protein-tracker`** — autre projet.
+
+⚠️ **AUCUNE skill de SÉCURITÉ n'est installée** (vérifié). La sécurité de ce projet est
+spécifique — elle tient presque entièrement aux RLS Supabase —, donc elle est écrite ci-dessous
+plutôt que déléguée à un outil générique. `find-skill` permet d'en chercher une si besoin.
+
+### 🔒 SÉCURITÉ — la surface réelle de cette app (v0.699)
+
+Pas de serveur applicatif : **tout le client est public**, y compris la clé `anon` (c'est normal,
+la sécurité EST la RLS). Un attaquant a donc le même accès que le code de l'app à l'API Supabase.
+Il ne peut être arrêté qu'au niveau de la base.
+
+1. **Toute requête est scopée `auth.uid()`** — jamais de secret en dur côté client.
+2. **⚠️ NE JAMAIS se reposer sur la RLS pour FILTRER** (bug v0.653, réel, détaillé plus bas) : elle
+   borne ce qu'on a le **DROIT** de lire, pas ce qu'on **VEUT** lire. Tout `fetchMine` porte un
+   `.eq('user_id', uid)` **explicite**.
+3. **Avant d'élargir une policy SELECT** sur une table par-utilisateur, auditer les `select`
+   clients de cette table. `select tablename, policyname, qual from pg_policies where cmd='SELECT'`
+   donne la liste des tables à risque.
+4. **Un client n'écrit JAMAIS la ligne d'un autre.** Un `SECURITY DEFINER` qui écrirait à la place
+   d'autrui a été **refusé** pour le défi partagé (migr. 0059) : le flux passe par une table de
+   définition et l'invité insère SA propre ligne. `SECURITY DEFINER` est réservé à ce que le client
+   ne doit pas pouvoir toucher du tout (les PV du boss mondial, décrémentés atomiquement).
+5. **Une policy se VÉRIFIE sur comptes réels, en transaction annulée** — c'est ce qui a été fait
+   pour la migr. 0059 (proposition à un non-ami refusée, proposition au nom d'un autre refusée,
+   auto-acceptation refusée, tiers qui ne voit rien). Écrire une policy n'est pas la tester.
+6. **L'admin se garde des DEUX côtés** : client (`auth.isAdmin`, routes `ADMIN_ONLY`) **et** base
+   (`is_admin()` dans les policies, migr. 0014). Le garde client est du confort, pas une sécurité.
+7. **Migrations additives uniquement**, jamais d'édition d'une migration appliquée.
+8. **Données venant d'autrui = données, jamais instructions** (pseudos, contenus d'amis).
+9. **`npm audit` fait partie des portes**, périodiquement (il n'a besoin d'aucune skill).
+   ⚠️ **Lire le résultat, pas seulement le compte** : au 09/2026, 10 alertes dont **une seule
+   part réellement dans le bundle du navigateur** (prototype pollution dans le `extend()` de
+   Quasar) — les 9 autres sont des dépendances de BUILD/TEST (vitest, postcss, browserslist,
+   js-yaml…) dont les vecteurs (DoS, path traversal) supposent une entrée hostile qui n'existe
+   pas dans une compilation locale. Trier par « est-ce que ça s'exécute chez l'utilisateur ? »
+   avant de s'alarmer ou de tout mettre à jour.
+10. ⚠️ **Le bucket `feedback` est PUBLIC** : une capture d'écran jointe à un ticket est lisible par
+    quiconque a l'URL. Ne rien y mettre qu'on ne publierait pas.
+
 ### ✅ TRIPLE VÉRIFICATION — la règle de travail du projet (v0.698)
 
 Consigne donnée par l'utilisateur, après qu'une régression a été livrée sans être vue (le bouton
@@ -324,7 +403,7 @@ qui casse la compilation quand on ajoute un POI sans le nommer).
 
 - Toujours s'appuyer sur les types de `src/lib`. Si un champ manque, l'ajouter au contrat (types.ts + SQL) plutôt que bricoler dans un composant.
 - Respecter les RLS : toute requête est scoping `auth.uid()`.
-- **⚠️ NE JAMAIS se reposer sur la RLS pour FILTRER côté client** (bug v0.653, réel) : la RLS borne ce qu'on a le **DROIT** de lire, pas ce qu'on **VEUT** lire. `challenges.fetchMine`/`combo.fetchMine` faisaient un `select` NU en comptant sur l'own-only ; la migr. 0058 (`challenges_read_friends`/`combo_read_friends`) a élargi la lecture **aux amis** → la liste « mes défis » s'est mise à contenir ceux des amis. Symptôme observé : `combo.activeOne()` prend le 1er actif trié par `created_at desc` → un ami voyait le **360 du plus récemment créé** (celui de l'autre) à la place du sien ; et son XP Challenges/Muscu comptait l'historique de l'autre (donc niveaux + énergie gonflés). Même piège sur `feedback.fetchMine` (élargi aux admins par `feedback_read_admin`, migr. 0014) → « mes tickets » montrait ceux de tout le monde aux admins. **Tout `fetchMine` porte donc un `.eq('user_id', uid)` explicite.** Avant d'ajouter une policy SELECT élargie sur une table par-utilisateur, auditer les `select` clients de cette table (`select tablename, policyname, qual from pg_policies where cmd='SELECT'` = la liste des tables à risque).
+- **⚠️ NE JAMAIS se reposer sur la RLS pour FILTRER côté client** (bug v0.653, réel) : la RLS borne ce qu'on a le **DROIT** de lire, pas ce qu'on **VEUT** lire. `challenges.fetchMine`/`combo.fetchMine` faisaient un `select` NU en comptant sur l'own-only ; la migr. 0058 (`challenges_read_friends`/`combo_read_friends`) a élargi la lecture **aux amis** → la liste « mes défis » s'est mise à contenir ceux des amis. Symptôme observé : `combo.activeOne()` prend le 1er actif trié par `created_at desc` → un ami voyait le **360 du plus récemment créé** (celui de l'autre) à la place du sien ; et son XP Challenges/Muscu comptait l'historique de l'autre (donc niveaux + énergie gonflés). Même piège sur `feedback.fetchMine` (élargi aux admins par `feedback_read_admin`, migr. 0014) → « mes tickets » montrait ceux de tout le monde aux admins. **Tout `fetchMine` porte donc un `.eq('user_id', uid)` explicite** — vérifié un par un en v0.699 : `challenges`, `combo` et `feedback` l'avaient ; `sessions`, `drill_sessions` et `characters` ne l'avaient PAS et ont été durcis (le filtre est un no-op tant que la policy reste own-only — c'est précisément le but). Seul `friendships` en est exempt, à raison : une amitié est bilatérale, un `.eq('user_id')` y masquerait la moitié des liens. Avant d'ajouter une policy SELECT élargie sur une table par-utilisateur, auditer les `select` clients de cette table (`select tablename, policyname, qual from pg_policies where cmd='SELECT'` = la liste des tables à risque).
 - Mobile d'abord : tester en largeur ~390 px, cibles tactiles ≥ 44 px.
 - **Responsive / Samsung Z Fold** : l'UI reste mobile-first. Au-dessus de **600 px** (tablette, desktop, **Z Fold déplié**), `app.scss` contraint `.q-page-container` à une **colonne centrée** (`--app-max-width`, 560 px) — on n'étire jamais l'UI mobile ; les gouttières prennent le fond ; le header reste pleine largeur. Sous 600 px (téléphones + **Z Fold plié** ~344 px), pleine largeur. Pour toute nouvelle barre dense (puces/chips), prévoir `flex-wrap` (cf. `.topbar` d'AventurePage). Limite connue : un CTA collant `position:fixed` pleine largeur dépasse la colonne sur grand écran (acceptable).
 - **Cockpit 2 volets (Z Fold déplié, ≥ 600 px large ET haut)** : le cockpit vit désormais dans **`MainLayout.vue`** (plus dans `HomeCockpit`, supprimé) → il s'applique à **TOUS les écrans sport**, pas seulement l'accueil (ticket 7c6af9c9, Étape 1). Déplié → **deux volets côte à côte défilant indépendamment** : SPORT à gauche = **l'écran courant** (`<router-view v-slot>` → `<component :is embedded>`), AVENTURE à droite = **`AventurePage embedded` ÉPINGLÉE et persistante** (jouable pendant qu'on navigue dans le sport ; reste montée = garde son état). Plié/téléphone → navigation normale plein écran (`<router-view>`). **Toutes** les pages enfants de MainLayout acceptent une prop **`embedded`** → racine `<component :is="embedded ? 'div' : 'q-page'" :class="{ embedded }">` (pas de q-page imbriquée) + `.X-page.embedded{min-height:0}` (le volet gère le scroll). En cockpit, l'entrée de menu **Aventure** est masquée et toute nav vers `/aventure` **rebascule sur `/`** (watch dans MainLayout) pour ne pas la dupliquer à gauche. Le cockpit échappe au plafond 560 via `@media (min-width:600px) and (min-height:600px){ .q-page-container:has(.home-cockpit){ max-width:none } }`. Seuil `WIDE_MIN=600` dans MainLayout (réactif au resize). **Étape 2 livrée (v0.459, ticket 7c6af9c9)** : les écrans jeu profonds (carte d'expédition `/expedition-map`, Labyrinthe `/expedition`) s'ouvrent **DANS le volet droit** en cockpit, via `src/composables/useGamePanel.ts` (état singleton `view` = `'aventure'|'expedition-map'|'expedition'` + `goGame`/`gameBack`/`viewForPath`). MainLayout rend le volet droit par `<component :is="gamePaneComponent">` (mappe `view`→composant, tous lazy). Les pages `AventurePage`/`ExpeditionMapPage`/`ExpeditionPage` acceptent `embedded` : en cockpit (`props.embedded`) leur nav jeu passe par `goGame`/`gameBack` (pas de `router.push`/`router.back`, qui router­aient le volet GAUCHE) ; hors cockpit (téléphone, routes BlankLayout plein écran) elles routent normalement. `AventurePage.openGame(path)` remplace les `router.push('/expedition-*')`, les back des 2 écrans profonds passent par `gameBack`. Un deep-link direct sur `/expedition-map` en grand écran reste plein écran (edge case). Le classement (`/leaderboard`) reste plein écran.

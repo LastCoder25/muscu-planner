@@ -4,6 +4,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import type { Session } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from './auth';
 
 export interface SessionRow {
   id: string;
@@ -16,9 +17,20 @@ export const useSessionsStore = defineStore('sessions', () => {
   const list = ref<SessionRow[]>([]);
 
   async function fetchMine() {
+    // ⚠️ FILTRE EXPLICITE OBLIGATOIRE (v0.699) — la RLS borne ce qu'on a le DROIT de lire,
+    // jamais ce qu'on VEUT lire. Ce `.eq` est un no-op tant que la policy reste own-only ;
+    // il existe pour que l'ajout d'une policy SELECT élargie (comme `challenges_read_friends`,
+    // migr. 0058, qui a fait fuiter les défis des amis dans « mes défis ») ne puisse plus
+    // transformer cette liste en celle de tout le monde.
+    const uid = useAuthStore().user?.id;
+    if (!uid) {
+      list.value = [];
+      return list.value;
+    }
     const { data, error } = await supabase
       .from('sessions')
       .select('id, name, payload, created_at')
+      .eq('user_id', uid)
       .order('created_at', { ascending: false });
     if (error) throw error;
     list.value = data ?? [];
