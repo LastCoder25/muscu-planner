@@ -418,14 +418,7 @@ import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import { computeCharacter } from '@/lib/character';
 import { playerWithGear, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
-import {
-  BUILD,
-  buildingAccrued,
-  buildingType,
-  buildingUpgradeCost,
-  plotsForLevel,
-  storageMult,
-} from '@/lib/buildings';
+import { BUILD, buildingAccrued, buildingType, plotsForLevel, storageMult } from '@/lib/buildings';
 import {
   DEFENSE_TYPES,
   FACTION_EMOJI,
@@ -444,6 +437,8 @@ import {
   turretCount,
   remainingCorpses,
   totalRepairCost,
+  defenseUpgradeCost,
+  defenseUpgradeScrap,
   garrisonBonus,
   isFatigued,
   isWounded,
@@ -712,7 +707,12 @@ const scoutHint = computed(() => {
 const forecastPct = computed(() => {
   const r = raid.value;
   if (!r) return 0;
-  const def = baseCombatant(defenses.value, heroHome.value ? hero.value : null, garrison.value);
+  const def = baseCombatant(
+    defenses.value,
+    heroLevel.value,
+    heroHome.value ? hero.value : null,
+    garrison.value,
+  );
   let held = 0;
   for (let i = 0; i < 40; i++) {
     if (resolveRaid(def, { ...r, seed: r.seed + i * 7919 }, 0, heroHome.value).held) held++;
@@ -772,7 +772,7 @@ function damagedOf(id: DefenseId): boolean {
 }
 function upCost(id: DefenseId): { gold: number; scrap: number } {
   const l = Math.max(1, lvlOf(id));
-  return { gold: buildingUpgradeCost(l), scrap: repairCost(l) };
+  return { gold: defenseUpgradeCost(l), scrap: defenseUpgradeScrap(l) };
 }
 function canBuild(id: DefenseId): boolean {
   const t = DEFENSE_TYPES.find((x) => x.id === id);

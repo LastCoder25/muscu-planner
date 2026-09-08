@@ -78,6 +78,8 @@ import {
   defenseLevel,
   ownedLevel,
   repairCost,
+  defenseUpgradeCost,
+  defenseUpgradeScrap,
   scavengerCount,
   pickScavengeTargets,
   lootCorpses,
@@ -1240,6 +1242,7 @@ export const useCharacterStore = defineStore('character', () => {
     const report = resolveRaid(
       baseCombatant(
         t.base.defenses,
+        ctx.playerLevel,
         home ? ctx.hero : null,
         garrisonBonus(
           cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT && posted.has(it.id)),
@@ -1349,8 +1352,8 @@ export const useCharacterStore = defineStore('character', () => {
     const t = defenseType(typeId);
     if (!d || !t) return;
     if (d.level >= playerLevel) throw new Error('Niveau plafonné par ton niveau de personnage.');
-    const gold = buildingUpgradeCost(d.level);
-    const scrap = repairCost(d.level);
+    const gold = defenseUpgradeCost(d.level);
+    const scrap = defenseUpgradeScrap(d.level);
     if (cur.gold < gold) throw new Error('Pas assez d’or.');
     if (cur.scrap < scrap) throw new Error('Pas assez de ferraille 🔩.');
     void now;

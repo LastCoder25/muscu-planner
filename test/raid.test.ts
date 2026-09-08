@@ -21,6 +21,8 @@ import {
   pickScavengeTargets,
   turretCount,
   repairCost,
+  defenseUpgradeCost,
+  defenseUpgradeScrap,
   TURRET_SLOTS,
   RAID,
   repairStructure,
@@ -75,7 +77,11 @@ function holdRate(playerLevel: number, defLevel: number, heroHome: boolean, n = 
   let held = 0;
   for (let i = 0; i < n; i++) {
     const raid = rollRaid(i * 7919 + 13, playerLevel, 0, 0);
-    const base = baseCombatant(defs(defLevel, defLevel), heroHome ? hero(playerLevel) : null);
+    const base = baseCombatant(
+      defs(defLevel, defLevel),
+      playerLevel,
+      heroHome ? hero(playerLevel) : null,
+    );
     if (resolveRaid(base, raid, 0, heroHome).held) held++;
   }
   return (held / n) * 100;
@@ -146,7 +152,7 @@ describe('silhouette de faction', () => {
         const raid = rollRaid(i * 7919 + 13, 26, 0, 0);
         if (raid.faction !== f) continue;
         n++;
-        if (resolveRaid(baseCombatant(defs(26, 26), null), raid, 0, false).held) held++;
+        if (resolveRaid(baseCombatant(defs(26, 26), 26, null), raid, 0, false).held) held++;
       }
       rates[f] = (held / n) * 100;
     }
@@ -172,8 +178,43 @@ describe('calibration du siège', () => {
       expect(holdRate(L, L - 5, false), `niveau ${L}, défenses en retard`).toBeLessThan(
         holdRate(L, L, false),
       );
-      expect(holdRate(L, L + 3, false), `niveau ${L}, sur-investi`).toBeGreaterThan(75);
+      // ⚠️ On ne teste PLUS un scénario « sur-investi » (défenses au-dessus du niveau du
+      // joueur) : il est inatteignable en jeu — `upgradeDefense` refuse de dépasser ton
+      // niveau, exactement comme les bâtiments. Bâtir À son niveau EST le maximum.
     }
+  });
+
+  it('la défense DÉGRADE en pente, pas en falaise', () => {
+    // Calculée sur le refFighter de la STRUCTURE, l'enceinte payait l'écart de façon
+    // exponentielle (l'offense d'un refFighter croît en ~L⁴) : mesuré, 0 % de tenue
+    // jusqu'à 19, 24 % à 22, 78 % à 26 — une falaise. Elle vaut désormais une FRACTION
+    // de ce que le niveau du joueur justifie, donc une enceinte à moitié montée vaut
+    // à peu près la moitié.
+    const L = 26;
+    const demi = holdRate(L, Math.round(L * 0.5), true);
+    const troisQuarts = holdRate(L, Math.round(L * 0.75), true);
+    const plein = holdRate(L, L, true);
+    expect(demi, 'à moitié montée, on a une vraie chance').toBeGreaterThan(15);
+    expect(troisQuarts).toBeGreaterThan(demi);
+    expect(plein).toBeGreaterThan(troisQuarts);
+    // …et l'écart entre deux paliers reste mesuré (pas de marche d'escalier).
+    expect(plein - troisQuarts).toBeLessThan(45);
+  });
+
+  it('💰 l’enceinte est PAYABLE : elle n’a pas la courbe des bâtiments de production', () => {
+    // Réutiliser `buildingUpgradeCost` (calée sur des bâtiments financés par toute
+    // l'économie) demandait 1,82 M d'or pour monter mur + tourelles au niveau 26 : le
+    // système était injouable. Cible : ~10 récoltes de mine.
+    let or = 0;
+    let fer = 0;
+    for (let l = 1; l < 26; l++) {
+      or += defenseUpgradeCost(l);
+      fer += defenseUpgradeScrap(l);
+    }
+    expect(2 * or, 'or pour mur + tourelles jusqu’au niveau 26').toBeLessThan(400_000);
+    expect(2 * or).toBeGreaterThan(80_000); // …mais ça reste un vrai investissement
+    expect(2 * fer, 'ferraille pour la même montée').toBeLessThan(1200);
+    expect(defenseUpgradeCost(20)).toBeGreaterThan(defenseUpgradeCost(5)); // strictement croissant
   });
 
   it('la difficulté ne s’ÉTEINT PAS en fin de partie', () => {
@@ -205,10 +246,10 @@ describe('calibration du siège', () => {
     let held = 0;
     for (let i = 0; i < 200; i++) {
       const raid = rollRaid(i * 7919 + 13, 26, 0, 0);
-      if (resolveRaid(baseCombatant(broken, hero(26)), raid, 0, true).held) held++;
+      if (resolveRaid(baseCombatant(broken, 26, hero(26)), raid, 0, true).held) held++;
     }
     expect((held / 200) * 100).toBeGreaterThan(25);
-    expect(baseCombatant(broken, null).pv).toBeGreaterThan(0);
+    expect(baseCombatant(broken, 26, null).pv).toBeGreaterThan(0);
   });
 
   it('une déroute complète est nécessaire pour perdre plus que le mur', () => {
@@ -333,7 +374,7 @@ describe('cycle de vie', () => {
   it('une victoire ne coûte RIEN et sème quand même un champ de cadavres', () => {
     const b = base(0);
     const raid = rollRaid(555, 26, 0, 0);
-    const rep = resolveRaid(baseCombatant(defs(40, 40), hero(40)), raid, 0, true);
+    const rep = resolveRaid(baseCombatant(defs(40, 40), 40, hero(40)), raid, 0, true);
     expect(rep.held).toBe(true);
     const { base: nb, damage } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, 0);
     expect(damage).toEqual({ stockStolen: false, damaged: [], freeze: false });
@@ -499,7 +540,7 @@ describe('chenil : la garnison', () => {
       let held = 0;
       for (let i = 0; i < 200; i++) {
         const raid = rollRaid(i * 7919 + 13, 26, 0, 0);
-        if (resolveRaid(baseCombatant(defs(26, 26), null, bonus), raid, 0, false).held) held++;
+        if (resolveRaid(baseCombatant(defs(26, 26), 26, null, bonus), raid, 0, false).held) held++;
       }
       return (held / 200) * 100;
     }
@@ -550,7 +591,7 @@ describe('blessure du héros', () => {
     const raid = rollRaid(77, 26, 0, 0);
     const lost = { ...raid, groups: raid.groups } as never;
     const report = {
-      ...resolveRaid(baseCombatant([], null), lost, 0, true),
+      ...resolveRaid(baseCombatant([], 26, null), lost, 0, true),
       held: false,
       heroHome: true,
     };
@@ -576,7 +617,7 @@ describe('blessure du héros', () => {
     const b = emptyBase(1, 0);
     b.defenses = defs(40, 40);
     const raid = rollRaid(555, 26, 0, 0);
-    const rep = resolveRaid(baseCombatant(defs(40, 40), hero(40)), raid, 0, true);
+    const rep = resolveRaid(baseCombatant(defs(40, 40), 40, hero(40)), raid, 0, true);
     expect(rep.held).toBe(true);
     const { base: nb } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, 0);
     expect(nb.wound).toBeNull();

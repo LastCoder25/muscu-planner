@@ -314,6 +314,10 @@ export const RAID = {
   // ligne de 8 tourelles vaut ~0,84 en équivalent) : le mur encaisse, les tourelles
   // tuent. Il ne s'agit que d'écarter le zéro absolu.
   wallDmgK: 0.055,
+
+  // Coûts propres à la défense (cf. defenseUpgradeCost).
+  upBase: 28,
+  upExp: 1.9,
   turretDmgK: 0.105,
   // Le héros présent prête une part de sa force. Dosé pour transformer un siège serré en
   // victoire probable — pas pour le rendre acquis : mesuré à 0,55/0,35, sa seule présence
@@ -729,27 +733,44 @@ export function autoGarrison(familiars: Item[], slots = GARRISON_SLOTS): string[
 
 /** La BASE en défenseur : la muraille encaisse, les tourelles tirent, le héros présent
  *  prête une part de sa force. Une structure ENDOMMAGÉE ne compte pas (defenseLevel). */
+/** La BASE en défenseur.
+ *
+ *  ⚠️ `playerLevel` n'est pas décoratif : l'enceinte vaut une FRACTION de ce que ton
+ *  niveau justifie (`niveau de la structure / ton niveau`), et non la valeur absolue d'un
+ *  combattant de son propre niveau. Sans ça, l'écart se paie de façon EXPONENTIELLE —
+ *  l'offense d'un `refFighter` croît en ~L⁴, si bien qu'une enceinte à 4 niveaux de retard
+ *  ne valait pas « un peu moins » mais RIEN : mesuré, 0 % de tenue jusqu'à 19, 24 % à 22,
+ *  78 % à 26. Une falaise, pas une pente. Proportionnelle, une enceinte à moitié montée
+ *  vaut la moitié — ce que le joueur attend, et ce qui rend le rattrapage lisible. */
 export function baseCombatant(
   defenses: DefenseStructure[],
+  playerLevel: number,
   hero?: Combatant | null,
   garrison?: GarrisonBonus,
 ): Combatant {
   const wl = defenseLevel(defenses, 'wall');
   const tl = defenseLevel(defenses, 'turret');
+  const L = Math.max(1, playerLevel);
+  const ref = refFighter(L);
+  const refOff = offensePerRound(ref);
+  /** Part de l'enceinte réellement bâtie, bornée à 1 : sur-monter au-delà de son niveau
+   *  ne donne rien de plus (le sport reste le plafond). */
+  const share = (lvl: number) => Math.min(1, Math.max(0, lvl) / L);
 
-  let pv = wl > 0 ? refFighter(wl).pv * RAID.wallPvK * defenseEfficiency(defenses, 'wall') : 0;
+  let pv = wl > 0 ? ref.pv * RAID.wallPvK * share(wl) * defenseEfficiency(defenses, 'wall') : 0;
   // ⚠️ DÉGÂTS DE LA MURAILLE — surtout pas zéro quand il n'y a pas de tourelle. Sans
   // ce plancher, une base sans tourelle inflige LITTÉRALEMENT 0 dégât : elle ne peut
   // tuer personne, donc elle perd quel que soit son niveau de mur (mesuré : 0 % de tenue
   // avec une muraille 26, contre 72 % avec les tourelles). Or c'est la MURAILLE qui
   // active les sièges — le joueur était donc puni d'avoir fait le premier pas. Les
   // défenseurs sur les remparts tirent : modestement, mais ils tirent.
-  let damage = wl > 0 ? offensePerRound(refFighter(wl)) * RAID.wallDmgK : 0;
+  let damage = wl > 0 ? refOff * RAID.wallDmgK * share(wl) : 0;
   if (tl > 0) {
     damage +=
-      offensePerRound(refFighter(tl)) *
+      refOff *
       RAID.turretDmgK *
       turretCount(tl) *
+      share(tl) *
       defenseEfficiency(defenses, 'turret');
   }
   if (hero) {
@@ -844,6 +865,22 @@ export function raidDamage(report: RaidReport): RaidDamage {
 /** Coût de remise en service, en FERRAILLE (jamais en or : l'or est déjà tendu par les
  *  bâtiments de production — mesuré, un niveau de mine coûte ~100 k au niveau 25 — et
  *  une réparation ne doit pas entrer en concurrence avec eux). */
+/** Coût en OR pour monter une structure d'un niveau.
+ *  ⚠️ NE PAS réutiliser `buildingUpgradeCost` : cette courbe est calée sur les bâtiments
+ *  de PRODUCTION, financés par toute l'économie. Appliquée à la défense, elle demandait
+ *  **1,82 M d'or** pour monter mur + tourelles jusqu'au niveau 26 — hors d'atteinte, donc
+ *  un système injouable. Ici la cible est ~10 récoltes de mine pour l'enceinte complète.
+ *  Même forme (L^1.9) pour que la pente reste familière, coefficient divisé par 8. */
+export function defenseUpgradeCost(level: number): number {
+  return Math.round(RAID.upBase * Math.pow(Math.max(1, level), RAID.upExp));
+}
+
+/** Ferraille pour monter une structure d'un niveau. Plus douce que la réparation : on ne
+ *  doit pas passer plus de temps à chercher du métal qu'à bâtir. */
+export function defenseUpgradeScrap(level: number): number {
+  return 4 + Math.max(1, level);
+}
+
 export function repairCost(level: number): number {
   return 10 + Math.round(Math.max(1, level) * 2.5);
 }
