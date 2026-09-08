@@ -111,6 +111,22 @@ const PROC_MONSTERS: { emoji: string; name: string }[] = [
   { emoji: '🔮', name: 'Oracle dévorant' },
 ];
 
+// ── OR : la suite de la courbe écrite à la main, pas une échelle neuve ────────────────
+// ⚠️ LE DÉFAUT QU'ON CORRIGE ICI (mesuré). La formule était `2500 + reco × 180` : un socle
+// PLAT qui ne devait rien au contenu précédent. Résultat, une FALAISE à la jointure — le
+// donjon reco 22 (écrit à la main) rendait 7 120 or, le reco 25 (procédural) en rendait
+// **21 180**, soit ×2,97 en un pas là où toute la courbe monte de ×1,05 à ×1,25. Rapporté
+// au coût d'un niveau de bâtiment, l'économie devenait 2,3× plus lâche à partir du niveau
+// 25 (ratio 0,091 → 0,213) puis se resserrait lentement : un plateau d'or facile posé
+// exactement là où le joueur arrive en fin de contenu écrit.
+// On repart donc du DERNIER monstre écrit et on continue linéairement. Mesuré : le saut à
+// la jointure tombe à ×1,39 (dans la bande des pas voisins) et le ratio or/coût descend
+// régulièrement de 0,099 à 0,049 — sans plateau. ⚠️ La fin de courbe est INCHANGÉE
+// (reco 94 : 59 970 contre 58 936) : on ne rabote pas l'end-game, on supprime la falaise.
+const HAND_LAST_RECO = 22; // dernier donjon écrit à la main (faille_chaos)
+const HAND_LAST_GOLD = 2540; // or de son monstre le plus profond (MONSTERS, tier 17)
+const PROC_GOLD_SLOPE = 240; // or gagné par niveau de reco au-delà (calé par simulation)
+
 /** Monstre procédural pour un donjon de reco `reco` et un rôle dans le trio. Stats
  *  calibrées relativement au joueur de référence du niveau. `seedIdx` sélectionne le
  *  skin (emoji/nom) de façon déterministe. */
@@ -139,7 +155,7 @@ export function proceduralMonster(reco: number, role: MonsterRole, seedIdx: numb
     dodge: 0.05,
     initiative: 16,
     energyCost: 100 + reco * 4,
-    gold: Math.round(2500 + reco * 180 * roleMult),
+    gold: Math.round((HAND_LAST_GOLD + (reco - HAND_LAST_RECO) * PROC_GOLD_SLOPE) * roleMult),
     hint: 'Contenu profond : build complet, tout au max.',
   };
 }
