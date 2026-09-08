@@ -1898,6 +1898,137 @@
     </div>
 
     <!-- CONFLIT de rangement de set : le slot du loadout est déjà pris → comparer & choisir. -->
+    <!-- ── REVUE DE L'ÉQUIPEMENT CONSEILLÉ ───────────────────────────────────
+         Une PROPOSITION, pas un décret : chaque remplacement se lit en détail et
+         s'accepte séparément. Le bandeau de puissance et le gain de chaque ligne se
+         RECALCULENT à chaque bascule — le plan est un tout cohérent, refuser une ligne
+         change la valeur des autres. -->
+    <q-dialog v-model="planOpen" position="bottom">
+      <q-card class="plan-card">
+        <div class="plan-head">
+          <div class="plan-title font-display">🪄 Équipement conseillé</div>
+          <button class="sh-x" @click="gearPlan = null">✕</button>
+        </div>
+        <div class="plan-power">
+          <span class="pp-cur">⚔️ {{ fmtPow(planPowerNow) }}</span>
+          <span class="pp-arrow">→</span>
+          <span class="pp-new">{{ fmtPow(planPowerSel) }}</span>
+          <span class="pp-delta" :class="planPowerSel >= planPowerNow ? 'up' : 'down'">
+            {{ fmtDelta(planPowerNow, planPowerSel) }}
+          </span>
+        </div>
+
+        <div class="plan-rows">
+          <div
+            v-for="row in planRows"
+            :key="row.key"
+            class="plan-row"
+            :class="{ off: planOff.has(row.key) }"
+          >
+            <button
+              class="plan-check"
+              :aria-pressed="!planOff.has(row.key)"
+              @click="togglePlanRow(row.key)"
+            >
+              {{ planOff.has(row.key) ? '☐' : '☑' }}
+            </button>
+            <div class="plan-main">
+              <div class="plan-lbl">
+                <span class="plan-kind">{{ row.label }}</span>
+                <span class="plan-gain" :class="rowGain(row.key) >= 0 ? 'up' : 'down'">
+                  {{ fmtDelta(0, rowGain(row.key)) }}
+                </span>
+              </div>
+
+              <!-- OBJET / FAMILIER : l'actuel à gauche, le proposé à droite -->
+              <div v-if="row.slot" class="plan-cmp">
+                <div class="plan-side">
+                  <div class="plan-side-lbl">Actuel</div>
+                  <template v-if="row.fromItem">
+                    <div class="plan-nm">
+                      {{ row.fromItem.emoji }} {{ row.fromItem.name }}
+                      <span class="ii-rar" :class="'p-' + row.fromItem.rarity">{{
+                        RARITY_LABEL[row.fromItem.rarity]
+                      }}</span>
+                    </div>
+                    <div class="plan-sub">
+                      Nv {{ row.fromItem.level }} · jet {{ itemQuality(row.fromItem) }}%
+                    </div>
+                    <div class="plan-eff">
+                      <span
+                        v-for="(st, li) in itemStatCmp(row.fromItem, row.toItem ?? null)"
+                        :key="li"
+                        class="stat-line"
+                        :class="st.cls"
+                        >{{ st.text }}</span
+                      >
+                    </div>
+                  </template>
+                  <div v-else class="plan-empty">emplacement vide</div>
+                </div>
+                <div class="plan-side new">
+                  <div class="plan-side-lbl">Proposé</div>
+                  <template v-if="row.toItem">
+                    <div class="plan-nm">
+                      {{ row.toItem.emoji }} {{ row.toItem.name }}
+                      <span class="ii-rar" :class="'p-' + row.toItem.rarity">{{
+                        RARITY_LABEL[row.toItem.rarity]
+                      }}</span>
+                    </div>
+                    <div class="plan-sub">
+                      Nv {{ row.toItem.level }} · jet {{ itemQuality(row.toItem) }}%
+                    </div>
+                    <div class="plan-eff">
+                      <span
+                        v-for="(st, li) in itemStatCmp(row.toItem, row.fromItem ?? null)"
+                        :key="li"
+                        class="stat-line"
+                        :class="st.cls"
+                        >{{ st.text }}</span
+                      >
+                    </div>
+                  </template>
+                  <div v-else class="plan-empty">retiré</div>
+                </div>
+              </div>
+
+              <!-- TALENT : un échange 1 pour 1, donc refuser une ligne ne déséquilibre rien -->
+              <div v-else-if="row.kind === 'talent'" class="plan-cmp">
+                <div class="plan-side">
+                  <div class="plan-side-lbl">Retiré</div>
+                  <div v-if="row.fromTalent" class="plan-nm">
+                    {{ talentIcon(row.fromTalent) }} {{ talentName(row.fromTalent) }}
+                  </div>
+                  <div v-else class="plan-empty">—</div>
+                </div>
+                <div class="plan-side new">
+                  <div class="plan-side-lbl">Équipé</div>
+                  <div v-if="row.toTalent" class="plan-nm">
+                    {{ talentIcon(row.toTalent) }} {{ talentName(row.toTalent) }}
+                  </div>
+                  <div v-else class="plan-empty">—</div>
+                </div>
+              </div>
+
+              <!-- VOIE : elle conditionne le capstone 4-pièces, donc elle se décide aussi -->
+              <div v-else class="plan-voie">
+                {{ currentVoie?.name ?? 'aucune voie' }} →
+                <b>{{ VOIE_BY_ID[row.voie as VoieId]?.name ?? 'aucune voie' }}</b>
+                <div class="plan-sub">Le 4-pièces ne s’applique qu’à la voie du set porté.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="plan-actions">
+          <button class="drops-close accent" :disabled="!planAccepted" @click="applyPlan">
+            Appliquer {{ planAccepted }} changement{{ planAccepted > 1 ? 's' : '' }}
+          </button>
+          <button class="drops-close ghost" @click="gearPlan = null">Annuler</button>
+        </div>
+      </q-card>
+    </q-dialog>
+
     <q-dialog :model-value="!!stashConflict" @update:model-value="stashConflict = null">
       <q-card v-if="stashConflict" class="drops-card stash-card">
         <div class="drops-title font-display">
@@ -2516,6 +2647,7 @@ import {
 import {
   talentsEarned,
   talentEffects,
+  normalizeTalents,
   talentByCode,
   tierOf,
   talentRank,
@@ -4897,28 +5029,155 @@ async function equipWithSetFx(uid: string, itemId: string) {
 function doEquip(itemId: string) {
   withUid((uid) => equipWithSetFx(uid, itemId), 'Impossible d’équiper.');
 }
-// OPTIMISEUR (ticket 6d69c2fc) : équipe d'un coup la meilleure combi (sets inclus) de
-// tout ton stuff (équipé + sac) ; les écartés retournent au sac. Familier inchangé.
-function doOptimizeGear() {
-  withUid(async (uid) => {
-    const voieBefore = char.row?.voie ?? null;
-    const changed = await char.optimizeGear(
-      uid,
-      c.value,
-      c.value.level.level,
-      char.row?.pseudo ?? 'Toi',
-    );
-    // L'optimiseur peut CHANGER de voie s'il trouve un set d'une autre voie plus fort.
-    const switched = changed && (char.row?.voie ?? null) !== voieBefore;
-    $q.notify({
-      type: changed ? 'positive' : 'info',
-      message: changed
-        ? switched
-          ? `🪄 Optimisé — voie ${currentVoie.value?.name ?? ''} + son set équipés !`
-          : '🪄 Équipement optimisé — meilleure combinaison équipée !'
-        : 'Ton équipement est déjà optimal. 👍',
+// ── OPTIMISEUR : PROPOSITION, PAS DÉCRET (v0.688) ────────────────────────────────
+// Le geste était un fait accompli : un clic, tout changeait, et on découvrait après coup
+// ce qui avait bougé. On propose désormais chaque remplacement, avec son détail et son
+// gain, et le joueur accepte ligne par ligne.
+//
+// ⚠️ LE GAIN DE CHAQUE LIGNE EST RECALCULÉ, jamais figé. Le plan de l'optimiseur est un
+// TOUT COHÉRENT — les talents sont choisis POUR ce gear, la voie POUR son capstone — donc
+// refuser une ligne change la valeur de toutes les autres. Afficher un « +312 » calculé
+// une fois pour toutes serait un mensonge dès le premier refus.
+type PlanRow = {
+  key: string;
+  kind: 'gear' | 'familiar' | 'talent' | 'voie';
+  label: string;
+  slot?: ItemSlot;
+  fromItem?: Item | null;
+  toItem?: Item | null;
+  fromTalent?: TalentInstance | null;
+  toTalent?: TalentInstance | null;
+  voie?: string | null;
+};
+const gearPlan = ref<{ equipped: Equipped; talentIds: string[]; voie: string | null } | null>(null);
+/** Lignes REFUSÉES (tout est accepté par défaut : le plan proposé est le meilleur). */
+const planOff = ref<Set<string>>(new Set());
+const planOpen = computed({
+  get: () => !!gearPlan.value,
+  set: (v: boolean) => {
+    if (!v) gearPlan.value = null;
+  },
+});
+
+const planRows = computed<PlanRow[]>(() => {
+  const plan = gearPlan.value;
+  const r = char.row;
+  if (!plan || !r) return [];
+  const rows: PlanRow[] = [];
+  for (const slot of [...SLOTS, FAMILIAR_SLOT] as ItemSlot[]) {
+    const from = r.equipped[slot] ?? null;
+    const to = plan.equipped[slot] ?? null;
+    if ((from?.id ?? null) === (to?.id ?? null)) continue;
+    rows.push({
+      key: 's:' + slot,
+      kind: slot === FAMILIAR_SLOT ? 'familiar' : 'gear',
+      label: SLOT_LABEL[slot],
+      slot,
+      fromItem: from,
+      toItem: to,
     });
-  }, 'Optimisation impossible.');
+  }
+  // TALENTS : on apparie sorties et entrées → chaque ligne est un échange 1 pour 1, donc
+  // en refuser une ne déséquilibre jamais le nombre d'emplacements.
+  const all = normalizeTalents(r.talents);
+  const nowIds = new Set(all.filter((t) => t.equipped).map((t) => t.id));
+  const outs = all.filter((t) => nowIds.has(t.id) && !plan.talentIds.includes(t.id));
+  const ins = all.filter((t) => !nowIds.has(t.id) && plan.talentIds.includes(t.id));
+  const n = Math.max(outs.length, ins.length);
+  for (let i = 0; i < n; i++) {
+    const o = outs[i] ?? null;
+    const t = ins[i] ?? null;
+    rows.push({
+      key: 't:' + (t?.id ?? o?.id ?? i),
+      kind: 'talent',
+      label: 'Talent',
+      fromTalent: o,
+      toTalent: t,
+    });
+  }
+  if ((r.voie ?? null) !== (plan.voie ?? null))
+    rows.push({ key: 'voie', kind: 'voie', label: 'Voie', voie: plan.voie });
+  return rows;
+});
+
+/** L'ÉTAT RETENU : l'équipement, les talents et la voie tels que les lignes acceptées
+ *  les définissent. C'est lui qu'on applique, et c'est sur lui qu'on mesure. */
+function planStateWithout(skip?: string) {
+  const r = char.row;
+  const plan = gearPlan.value;
+  const equipped: Equipped = { ...(r?.equipped ?? {}) };
+  let talentIds = normalizeTalents(r?.talents ?? [])
+    .filter((t) => t.equipped)
+    .map((t) => t.id);
+  let voie = r?.voie ?? null;
+  if (!plan || !r) return { equipped, talentIds, voie };
+  for (const row of planRows.value) {
+    if (planOff.value.has(row.key) || row.key === skip) continue;
+    if (row.slot) equipped[row.slot] = row.toItem ?? undefined;
+    else if (row.kind === 'talent') {
+      talentIds = talentIds.filter((id) => id !== row.fromTalent?.id);
+      if (row.toTalent) talentIds = [...talentIds, row.toTalent.id];
+    } else if (row.kind === 'voie') voie = row.voie ?? null;
+  }
+  return { equipped, talentIds, voie };
+}
+function planPowerOf(st: { equipped: Equipped; talentIds: string[]; voie: string | null }): number {
+  const talents = normalizeTalents(char.row?.talents ?? []).map((t) => ({
+    ...t,
+    equipped: st.talentIds.includes(t.id),
+  }));
+  const fx = mergeEffects(talentEffects(talents), voiePassiveEffects(st.voie as VoieId | null));
+  return combatPower(
+    playerWithGear(
+      char.row?.pseudo ?? 'Toi',
+      c.value,
+      st.equipped,
+      fx,
+      c.value.level.level,
+      st.voie,
+    ),
+  );
+}
+const planPowerNow = computed(() => planPowerOf(planStateWithout('__all__')));
+const planPowerSel = computed(() => planPowerOf(planStateWithout()));
+/** Ce que CETTE ligne apporte, dans le contexte des lignes actuellement acceptées. */
+function rowGain(key: string): number {
+  if (planOff.value.has(key)) {
+    // Refusée : on mesure ce qu'elle apporterait si on l'acceptait.
+    const off = new Set(planOff.value);
+    off.delete(key);
+    const saved = planOff.value;
+    planOff.value = off;
+    const withIt = planPowerOf(planStateWithout());
+    planOff.value = saved;
+    return withIt - planPowerSel.value;
+  }
+  return planPowerSel.value - planPowerOf(planStateWithout(key));
+}
+function togglePlanRow(key: string) {
+  const next = new Set(planOff.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  planOff.value = next;
+}
+const planAccepted = computed(() => planRows.value.filter((r) => !planOff.value.has(r.key)).length);
+
+function doOptimizeGear() {
+  const plan = char.previewGearPlan(c.value, c.value.level.level, char.row?.pseudo ?? 'Toi');
+  if (!plan) {
+    $q.notify({ type: 'info', message: 'Ton équipement est déjà optimal. 👍' });
+    return;
+  }
+  planOff.value = new Set();
+  gearPlan.value = { equipped: plan.equipped, talentIds: plan.talentIds, voie: plan.voie };
+}
+function applyPlan() {
+  const st = planStateWithout();
+  gearPlan.value = null;
+  withUid(async (uid) => {
+    await char.applyGearPlan(uid, st);
+    $q.notify({ type: 'positive', message: '🪄 Build mis à jour.' });
+  }, 'Application impossible.');
 }
 // Remplacement d'un objet équipé : le joueur choisit dans une modale ce qu'il
 // advient de l'ancien (garder au sac / recycler → poussière / vendre → or).
@@ -6820,6 +7079,160 @@ button.pt-mini:active {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-bottom: 10px;
+}
+/* ── Revue de l'équipement conseillé ──────────────────────────────────────
+   Une ligne = un remplacement. Colonne gauche l'actuel, droite le proposé, et le
+   GAIN de la ligne en tête : c'est lui qu'on lit d'abord. */
+.plan-card {
+  width: 100%;
+  max-width: 560px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  padding: 14px;
+  border-radius: 16px 16px 0 0;
+}
+.plan-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plan-title {
+  flex: 1;
+  font-size: 17px;
+}
+.plan-power {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg);
+  font-variant-numeric: tabular-nums;
+}
+.pp-cur {
+  color: var(--dim);
+}
+.pp-arrow {
+  color: var(--dim-2);
+}
+.pp-new {
+  font-family: var(--font-display, inherit);
+  font-size: 22px;
+  color: var(--accent);
+}
+.pp-delta {
+  margin-left: auto;
+  font-weight: 700;
+}
+.pp-delta.up,
+.plan-gain.up {
+  color: var(--d1, #7bc86c);
+}
+.pp-delta.down,
+.plan-gain.down {
+  color: var(--d4, #ff6a45);
+}
+.plan-rows {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+}
+.plan-row {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.plan-row.off {
+  opacity: 0.45;
+}
+.plan-check {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.plan-main {
+  flex: 1;
+  min-width: 0;
+}
+.plan-lbl {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.plan-kind {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+}
+.plan-gain {
+  margin-left: auto;
+  font-weight: 700;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.plan-cmp {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.plan-side {
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid transparent;
+}
+.plan-side.new {
+  border-color: var(--accent);
+}
+.plan-side-lbl {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dim-2);
+  margin-bottom: 2px;
+}
+.plan-nm {
+  font-size: 12.5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: baseline;
+}
+.plan-sub {
+  font-size: 11px;
+  color: var(--dim);
+}
+.plan-eff {
+  display: grid;
+  gap: 1px;
+  margin-top: 3px;
+}
+.plan-empty {
+  font-size: 12px;
+  color: var(--dim-2);
+  font-style: italic;
+}
+.plan-voie {
+  font-size: 13px;
+}
+.plan-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
 }
 .stash-side {
   border: 1px solid var(--line);

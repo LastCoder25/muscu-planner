@@ -959,15 +959,19 @@ export const useCharacterStore = defineStore('character', () => {
   // de set + capstone gaté par cette voie), et retient la voie qui donne la plus forte puissance.
   // Si la meilleure voie diffère de l'actuelle, il CHANGE de voie automatiquement. Les non-retenus
   // sont re-rangés (pièce de set → réserve de sa voie ; loose → sac). Le familier n'est pas touché.
-  async function optimizeGear(
-    userId: string,
+  /** Le PLAN proposé par l'optimiseur, sans rien appliquer. ⚠️ C'est un TOUT COHÉRENT :
+   *  les talents sont choisis POUR ce gear, la voie POUR son capstone. Accepter une partie
+   *  seulement donne donc un autre build — c'est pourquoi `applyGearPlan` **recalcule**
+   *  au lieu d'appliquer des morceaux, et pourquoi l'écran de revue doit recalculer le
+   *  gain de chaque ligne au lieu d'afficher un chiffre figé. */
+  function computeGearPlan(
     stats: { puissance: number; endurance: number; agilite: number },
     level: number,
     name: string,
     forceVoie?: string | null, // « Porter ce set » : impose cette voie (pas de choix auto)
-  ): Promise<boolean> {
+  ): { equipped: Equipped; talentIds: string[]; voie: string | null; score: number } | null {
     const cur = row.value;
-    if (!cur) return false;
+    if (!cur) return null;
     // Les TALENTS entrent dans l'optimisation : on ne part plus de ceux déjà équipés,
     // ils sont choisis pour le build. `withEquipped` marque un sous-ensemble comme équipé.
     const maxTal = talentsEarned(level);
@@ -1062,7 +1066,7 @@ export const useCharacterStore = defineStore('character', () => {
       const p = planFor(vi);
       if (!best || p.score > best.score) best = p;
     }
-    if (!best) return false;
+    if (!best) return null;
     // GARDE-FOU ANTI-REGRESSION : on ne remplace le build actuel que par du STRICTEMENT
     // meilleur. Sans ca, un changement de regle (ex. plafond de talents abaisse) pourrait
     // faire PERDRE de la puissance a un clic sur « equipement automatique ».
@@ -1079,30 +1083,95 @@ export const useCharacterStore = defineStore('character', () => {
         cur.voie,
       ),
     );
-    if (best.score <= curScore) return false;
-
-    // No-op si RIEN ne change (même gear ET même voie).
-    const sameGear = [...SLOTS, FAMILIAR_SLOT].every(
-      (s) => (cur.equipped[s]?.id ?? null) === (best.equipped[s]?.id ?? null),
-    );
-    const sameVoie = (cur.voie ?? null) === (best.voie ?? null);
-    const eqIds = (ts: TalentInstance[]) =>
-      ts
-        .filter((t) => t.equipped)
-        .map((t) => t.id)
-        .sort()
-        .join(',');
-    const sameTal = eqIds(normalizeTalents(cur.talents)) === eqIds(best.talents);
-    if (sameGear && sameVoie && sameTal) return false;
-
-    await persist(userId, {
+    if (best.score <= curScore) return null;
+    return {
       equipped: best.equipped,
-      inventory: best.sac,
-      loadouts: best.loadouts,
+      talentIds: best.talents.filter((t) => t.equipped).map((t) => t.id),
       voie: best.voie,
-      talents: best.talents,
+      score: best.score,
+    };
+  }
+
+  /** Le plan proposé, SANS rien appliquer — c'est ce que l'écran de revue affiche. */
+  function previewGearPlan(
+    stats: { puissance: number; endurance: number; agilite: number },
+    level: number,
+    name: string,
+  ) {
+    return computeGearPlan(stats, level, name);
+  }
+
+  /** Applique un build CHOISI (tout ou partie du plan). ⚠️ On ne « pose » pas des morceaux :
+   *  on repart de l'équipement cible et on RECONSTRUIT le rangement (sac + réserves de set)
+   *  à partir de tout ce qu'on possède. Sans ça, refuser une ligne laisserait une pièce
+   *  orpheline — ni portée, ni au sac, ni en réserve. */
+  async function applyGearPlan(
+    userId: string,
+    target: { equipped: Equipped; talentIds: string[]; voie: string | null },
+  ): Promise<boolean> {
+    const cur = row.value;
+    if (!cur) return false;
+    const allSlots = [...SLOTS, FAMILIAR_SLOT];
+    const loadouts0: Loadout[] = Array.from(
+      { length: MAX_LOADOUTS },
+      (_, k) => cur.loadouts[k] ?? { items: {} },
+    );
+    // Tout ce qu'on possède : porté + sac + toutes les réserves.
+    const owned: Item[] = [
+      ...allSlots.map((sl) => cur.equipped[sl]).filter((x): x is Item => !!x),
+      ...cur.inventory,
+      ...loadouts0.flatMap((lo) => Object.values(lo.items).filter((x): x is Item => !!x)),
+    ];
+    const kept = new Set(
+      allSlots.map((sl) => target.equipped[sl]?.id).filter((x): x is string => !!x),
+    );
+    // Les réserves repartent vides : on re-range TOUT ce qui n'est pas porté.
+    const loadouts: Loadout[] = Array.from({ length: MAX_LOADOUTS }, () => ({ items: {} }));
+    const sac: Item[] = [];
+    const seen = new Set<string>();
+    for (const it of owned) {
+      if (kept.has(it.id) || seen.has(it.id)) continue;
+      seen.add(it.id);
+      const li = it.setId?.startsWith('voie:')
+        ? VOIES.findIndex((v) => v.id === it.setId!.slice('voie:'.length))
+        : -1;
+      if (li >= 0 && li < MAX_LOADOUTS) {
+        const items = loadouts[li]!.items;
+        const held = items[it.slot];
+        if (!held) items[it.slot] = it;
+        else if ((held.effect?.value ?? 0) >= (it.effect?.value ?? 0)) sac.push(it);
+        else {
+          sac.push(held);
+          items[it.slot] = it;
+        }
+      } else sac.push(it);
+    }
+    const talents = normalizeTalents(cur.talents).map((t) => ({
+      ...t,
+      equipped: target.talentIds.includes(t.id),
+    }));
+    await persist(userId, {
+      equipped: target.equipped,
+      inventory: sac,
+      loadouts,
+      voie: target.voie,
+      talents,
     });
     return true;
+  }
+
+  /** Ancien geste « tout appliquer d'un coup » — conservé pour « Porter ce set », qui
+   *  impose une voie et n'a pas à passer par un écran de revue. */
+  async function optimizeGear(
+    userId: string,
+    stats: { puissance: number; endurance: number; agilite: number },
+    level: number,
+    name: string,
+    forceVoie?: string | null,
+  ): Promise<boolean> {
+    const plan = computeGearPlan(stats, level, name, forceVoie);
+    if (!plan) return false;
+    return applyGearPlan(userId, plan);
   }
 
   // ── Mode idle « Expédition » (carte + héros temporisé) ──
@@ -1601,6 +1670,8 @@ export const useCharacterStore = defineStore('character', () => {
     sellLoadout,
     stashSetPiece,
     optimizeGear,
+    previewGearPlan,
+    applyGearPlan,
     setVoie,
     equipReplacing,
     unequip,

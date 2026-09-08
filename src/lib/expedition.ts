@@ -251,6 +251,9 @@ export const EXPE = {
   // granularité des bandes EST la granularité de la difficulté proposée — 3 bandes ne
   // donnaient que trois marches sur toute la fenêtre de niveaux.
   distBands: 5, // bandes de distance parcourues à tour de rôle (cf. placePoi)
+  /** Écart de niveau toléré au-dessus de ce que la distance justifie, avant de considérer
+   *  un POI comme incohérent (la gigue du tirage vaut ±6 % de la fenêtre). */
+  levelFitTolerance: 3,
   // 30 → 18 (v0.667) : l'anneau de bâtiments occupait cette couronne, son départ pour
   // l'écran « Ma base » y a laissé un trou et la ville avait l'air isolée.
   distMin: 18, // distance mini ville↔POI (coord ; la ville est au centre)
@@ -627,6 +630,22 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   map.pois.push(poi);
 }
 
+/** Un POI garde-t-il un niveau COHÉRENT avec sa distance ? (auto-guérison, v0.688)
+ *
+ *  ⚠️ On ne prune que vers le HAUT, et c'est essentiel. Une carte sauvegardée avant que le
+ *  niveau ne découle de la distance (v0.683) porte des POI tirés indépendamment : un
+ *  repaire +10 pouvait se poser à deux pas de la ville, et il survivrait jusqu'à 26 h en
+ *  contredisant la règle que la carte est censée rendre lisible. Mais un POI apparu quand
+ *  le joueur était PLUS BAS a légitimement un niveau inférieur à ce que sa distance
+ *  justifierait aujourd'hui — le pruner serait une régression. D'où l'asymétrie : trop
+ *  FORT pour sa distance = incohérent, trop faible = simplement ancien.
+ *  Même politique que `withinLand` : on corrige le CODE, la donnée se répare au chargement. */
+function levelFitsDistance(poi: Poi, playerLevel: number): boolean {
+  const win = spawnWindow(playerLevel);
+  const attendu = win.min + Math.round(clamp01(poi.distNorm) * (win.max - win.min));
+  return poi.level <= attendu + EXPE.levelFitTolerance;
+}
+
 /** Fait avancer le monde jusqu'à `now` : expire les POI périmés (sauf la cible d'une
  *  expédition en cours) et fait apparaître au plus 1 POI si l'heure est venue. Pur. */
 export function advanceWorld(
@@ -645,7 +664,11 @@ export function advanceWorld(
     // au chargement — même politique que les bâtiments dont le type a disparu du
     // registre. La cible d'une expédition EN COURS est toujours préservée : le héros y
     // est physiquement, on ne la fait pas disparaître sous ses pieds.
-    pois: map.pois.filter((p) => p.id === protectedPoiId || (p.expiresAt > now && withinLand(p))),
+    pois: map.pois.filter(
+      (p) =>
+        p.id === protectedPoiId ||
+        (p.expiresAt > now && withinLand(p) && levelFitsDistance(p, playerLevel)),
+    ),
   };
   // Rattrapage : après une longue absence, l'heure de spawn a pu être dépassée
   // PLUSIEURS fois → on fait apparaître autant de POI que d'intervalles écoulés

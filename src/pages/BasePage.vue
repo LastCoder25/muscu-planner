@@ -453,18 +453,6 @@
         </div>
       </q-card>
     </q-dialog>
-
-    <!-- ── Dernier siège ── -->
-    <div v-if="lastReport" class="panel">
-      <div class="p-title">
-        {{ lastReport.held ? '🏆 Dernier siège — repoussé' : '💥 Dernier siège — enceinte forcée' }}
-      </div>
-      <p>
-        {{ FACTION_EMOJI[lastReport.faction] }} {{ FACTION_LABEL[lastReport.faction] }} ·
-        {{ lastReport.defeated }}/{{ lastReport.total }} groupes repoussés ·
-        {{ lastReport.heroHome ? 'héros présent' : 'héros absent' }}
-      </p>
-    </div>
   </component>
 </template>
 
