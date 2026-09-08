@@ -432,9 +432,9 @@ export const FACTION_EMOJI: Record<RaidFaction, string> = {
  *  sait ce qu'on farme. ⚠️ Aucune ne lâche de FERRAILLE : trouver des plaques d'acier
  *  sur un loup n'aurait aucun sens (la ferraille se ramasse sur les épaves de la carte). */
 export const FACTION_LOOT: Record<RaidFaction, string> = {
-  bandits: '🪙 or et butin volé',
-  betes: '🧩 poussière d’âme',
-  mortsvivants: '🖋️ poussière d’encre',
+  bandits: '🪙 or et équipement',
+  betes: '🗝️ clés du Labyrinthe',
+  mortsvivants: '🔮 pierres d’invocation',
 };
 
 function pick<T>(rng: () => number, arr: readonly T[]): T {

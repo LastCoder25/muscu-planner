@@ -1252,11 +1252,10 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold + m.gold,
       login_energy: cur.login_energy + (m.energy ?? 0), // ⚡ mine/source → énergie de jeu
       keys: cur.keys + (m.key ?? 0),
-      // Devises VIVANTES des POI de récolte (v0.658). On ne crédite plus de poussière ni
-      // de parchemins d'enchant : ces deux-là n'ont plus aucun site de dépense.
+      // ⚠️ DEVISES VIVANTES UNIQUEMENT. Le commentaire qui tenait ici affirmait qu'on ne
+      // créditait plus de monnaie morte — et les deux lignes suivantes créditaient des
+      // fragments 🧩 et de l'encre 🖋️. Un commentaire ne vérifie rien ; un test si.
       summon_stones: cur.summon_stones + (m.summonStones ?? 0),
-      fragments: cur.fragments + (m.fragments ?? 0),
-      ink_dust: cur.ink_dust + (m.inkDust ?? 0),
       scrap: cur.scrap + (m.scrap ?? 0), // 🔩 épaves → réparation de l’enceinte
       inventory,
       messages: cur.messages.map((x) =>

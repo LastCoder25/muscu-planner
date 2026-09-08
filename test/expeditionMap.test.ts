@@ -91,21 +91,26 @@ describe('POI de récolte', () => {
     // que la poussière et les parchemins. Les archives rendent des CLÉS.
     const arch = resolveOutcome(hero, poi('archive'), 7, 26);
     expect(arch.key).toBeGreaterThan(0);
-    expect(arch.fragments).toBe(0);
-    expect(arch.inkDust).toBe(0);
     expect(arch.energy).toBe(0);
   });
 
-  it('ne versent AUCUNE devise morte — la LISTE COMPLÈTE, pas deux exemples', () => {
+  it('⚠️ le TYPE lui-même ne connaît plus aucune devise morte', () => {
+    // Bien plus fort que d'affirmer « elles valent 0 » : ces champs N'EXISTENT PLUS sur
+    // `ExpeditionOutcome`. Un test qui vérifiait des zéros a laissé passer la fuite de
+    // l'arène pendant tout ce temps, faute d'énumérer le bon type — ici, produire une
+    // devise morte ne compile même pas. On garde une vérification à l'exécution pour les
+    // objets construits dynamiquement (anciens rapports relus depuis la base).
     for (const t of types) {
-      const o = resolveOutcome(hero, poi(t), 3, 26);
-      // ⚠️ Ce test ne connaissait que la poussière et les parchemins — il a donc laissé
-      // passer les fragments et l'encre pendant tout le temps où ces deux-là sont
-      // devenues mortes. On énumère désormais TOUTES les devises sans site de dépense.
-      expect(o.dust, t + ' : poussière').toBe(0);
-      expect(o.enchantScrolls, t + " : parchemins d'enchant").toBe(0);
-      expect(o.fragments, t + ' : fragments').toBe(0);
-      expect(o.inkDust, t + " : poussière d'encre").toBe(0);
+      const o = resolveOutcome(hero, poi(t), 3, 26) as unknown as Record<string, unknown>;
+      for (const morte of [
+        'dust',
+        'enchantScrolls',
+        'fragments',
+        'inkDust',
+        'stones',
+        'parchemins',
+      ])
+        expect(o[morte], `${t} : ${morte}`).toBeUndefined();
     }
   });
 
@@ -486,9 +491,12 @@ describe('butin affiché — source unique des deux écrans', () => {
     // Une épave — seule source de ferraille du jeu — ne montrait donc RIEN.
     expect(haulPills({ scrap: 87 })).toEqual([{ emoji: '🔩', n: 87 }]);
     expect(haulPills({ summonStones: 6 })).toEqual([{ emoji: '🔮', n: 6 }]);
-    expect(haulPills({ fragments: 40, inkDust: 31 })).toEqual([
-      { emoji: '🧩', n: 40 },
-      { emoji: '🖋️', n: 31 },
+    // ⚠️ RÉÉCRIT : ce test exigeait que les pastilles AFFICHENT fragments et encre — il
+    // verrouillait donc la promesse faite au joueur d'une monnaie qu'il ne peut pas
+    // dépenser. `haulPills` ne connaît plus ces devises.
+    expect(haulPills({ summonStones: 6, key: 2 })).toEqual([
+      { emoji: '🔮', n: 6 },
+      { emoji: '🗝️', n: 2 },
     ]);
   });
   it('n’affiche que ce qui a VRAIMENT été gagné, dans un ordre stable', () => {
@@ -593,7 +601,19 @@ describe('la carte ne paie JAMAIS en monnaie morte', () => {
   } as never;
 
   it('AUCUN type de POI ne verse fragments 🧩 ni encre 🖋️', () => {
-    const types: PoiType[] = ['mine', 'well', 'shrine', 'archive', 'wreck', 'camp', 'lair'];
+    // ⚠️ 'arena' EST DANS LA LISTE, et il n'y était pas : c'est très exactement par là que
+    // la fuite passait (l'arène versait fragments + encre, seule production non nulle qui
+    // restait). Un filet troué est pire qu'aucun filet — il rassure.
+    const types: PoiType[] = [
+      'mine',
+      'well',
+      'shrine',
+      'archive',
+      'wreck',
+      'camp',
+      'lair',
+      'arena',
+    ];
     for (const type of types) {
       for (let s = 1; s <= 30; s++) {
         const poi = {
@@ -606,9 +626,10 @@ describe('la carte ne paie JAMAIS en monnaie morte', () => {
           spawnedAt: 0,
           expiresAt: 9e15,
         } as never;
-        const o = resolveOutcome(hero, poi, s * 97 + 3, 26);
-        expect(o.fragments, `${type} verse des fragments`).toBe(0);
-        expect(o.inkDust, `${type} verse de l’encre`).toBe(0);
+        const o = resolveOutcome(hero, poi, s * 97 + 3, 26) as unknown as Record<string, unknown>;
+        // Les champs n’existent plus sur le type : on vérifie qu’aucun ne réapparaît.
+        expect(o.fragments, `${type} verse des fragments`).toBeUndefined();
+        expect(o.inkDust, `${type} verse de l’encre`).toBeUndefined();
       }
     }
   });

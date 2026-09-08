@@ -82,12 +82,8 @@ export interface ExpeditionMap {
 export interface ExpeditionOutcome {
   win: boolean;
   gold: number; // crédité au RETOUR
-  dust: number;
   energy: number; // ⚡ énergie de jeu (mines uniquement) → crédite login_energy
-  enchantScrolls: number; // 📜 legacy : devise MORTE (plus aucun site de dépense) — conservé pour ne pas casser les anciens messages
   summonStones: number; // 🔮 pierres d'invocation → coût des boss de palier
-  fragments: number; // 🧩 infusion de grade des familiers
-  inkDust: number; // 🖋️ infusion de grade des talents
   scrap: number; // 🔩 ferraille : répare l'enceinte (épaves uniquement)
   item: Omit<Item, 'id'> | null; // la « prise » principale (pièce de set / objet) ou null
   items?: Omit<Item, 'id'>[]; // ARÈNE : plusieurs objets (1 par palier de vagues) ; `item` = le 1er
@@ -120,12 +116,8 @@ export interface ExpeditionMessage {
   win: boolean;
   text: string;
   gold: number;
-  dust: number;
   energy: number; // ⚡ énergie gagnée (mines)
-  enchantScrolls: number; // legacy (devise morte) — conservé pour les anciens messages
   summonStones?: number; // 🔮
-  fragments?: number; // 🧩
-  inkDust?: number; // 🖋️
   scrap?: number; // 🔩 ferraille
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
@@ -160,8 +152,6 @@ export function haulPills(o: {
   energy?: number;
   scrap?: number;
   summonStones?: number;
-  fragments?: number;
-  inkDust?: number;
   key?: number;
 }): { emoji: string; n: number }[] {
   return (
@@ -170,8 +160,6 @@ export function haulPills(o: {
       { emoji: '⚡', n: o.energy ?? 0 },
       { emoji: '🔩', n: o.scrap ?? 0 },
       { emoji: '🔮', n: o.summonStones ?? 0 },
-      { emoji: '🧩', n: o.fragments ?? 0 },
-      { emoji: '🖋️', n: o.inkDust ?? 0 },
       { emoji: '🗝️', n: o.key ?? 0 },
     ] as const
   )
@@ -190,12 +178,8 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     win: o.win,
     text: o.text,
     gold: o.gold,
-    dust: o.dust,
     energy: o.energy,
-    enchantScrolls: o.enchantScrolls,
     ...(o.summonStones ? { summonStones: o.summonStones } : {}),
-    ...(o.fragments ? { fragments: o.fragments } : {}),
-    ...(o.inkDust ? { inkDust: o.inkDust } : {}),
     ...(o.scrap ? { scrap: o.scrap } : {}),
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
@@ -976,15 +960,11 @@ export function resolveOutcome(
     return {
       win: true,
       gold: Math.round(cost * 0.35 * tr.goldMult), // symbolique : la paie est en ressources
-      dust: 0,
       // Le plafond s'applique APRÈS le bonus de trajet : « complément, jamais
       // substitut au sport » est un invariant, pas une valeur de base qu'un bon
       // voyage pourrait dépasser.
       energy: Math.min(HARVEST.wellEnergyMax, Math.round(energy * k)),
-      enchantScrolls: 0,
       summonStones: Math.round(summonStones * k),
-      fragments: 0, // devise MORTE : plus jamais versée (champ gardé pour les vieux rapports)
-      inkDust: 0, // idem
       scrap: Math.round(scrap * k),
       item: tr.drops[0] ?? null,
       items: tr.drops,
@@ -1009,11 +989,9 @@ export function resolveOutcome(
     // Récompense par vague RELEVÉE (2026‑08‑18, ticket arène) : l'arène était strictement
     // dominée par un camp (moins de poussière pour un coût d'or 4× plus élevé). Tenir
     // longtemps devient une VRAIE grosse paie de ressources → justifie la dépense d'or.
-    const dust = Math.round((20 + waves * 15) * tfA);
     // Parchemins d'enchant : faucet SECONDAIRE et modeste (le donjon reste la source
     // principale) — ∝ vagues tenues, sans le multiplicateur de trajet (déjà encodé par
     // les vagues). NB : quantités ex-« pierres » (rares) volontairement réduites.
-    const enchantScrolls = 2 + Math.floor(waves / 2);
     // BUTIN : un TIRAGE PAR VAGUE TENUE (même principe qu'un donjon, qui tire une fois
     // par monstre vaincu). `cleared: false` → ~30 %/vague : tenir 10 vagues rapporte ~3
     // objets, 20 vagues ~6 — plus généreux que l'ancien palier de 5 vagues (1 objet/5),
@@ -1039,13 +1017,13 @@ export function resolveOutcome(
     return {
       win: good,
       gold,
-      dust,
       scrap: 0,
       energy: 0,
-      enchantScrolls,
-      summonStones: 3 + Math.floor(waves * 0.8),
-      fragments: Math.round(waves * 3 * tfA),
-      inkDust: Math.round(waves * 2.5 * tfA),
+      // ⚠️ L'arène versait des fragments 🧩 et de l'encre 🖋️ — devises MORTES. C'était la
+      // SEULE fuite réelle qui restait : produite ici, recopiée dans le message, affichée
+      // au joueur, puis créditée par `expeClaim`. Elle paie désormais en pierres
+      // d'invocation, qui se dépensent (les boss).
+      summonStones: 3 + Math.floor(waves * 0.8) + Math.round(waves * 0.6),
       item: items[0] ?? null,
       items,
       key,
@@ -1078,11 +1056,7 @@ export function resolveOutcome(
       gold: Math.round(cost * EXPE.failRefund), // < coût → jamais un profit
       scrap: 0,
       summonStones: 0,
-      fragments: 0,
-      inkDust: 0,
-      dust: Math.round(poi.level * 1.5),
       energy: 0,
-      enchantScrolls: 1 + Math.floor(poi.level / 15), // consolation modeste sur un échec
       item: null,
       key,
       reconBonus: 0.08,
@@ -1104,17 +1078,7 @@ export function resolveOutcome(
     poi.type === 'mine'
       ? Math.round(cost * (1.3 + travelFactor(rth))) // reine de l'or, et d'autant plus loin
       : Math.round(cost * (1.0 + rth * 0.1)); // camp/repaire : ≥ équilibre (+3..+65 %), item = le vrai gain, reste SOUS la mine
-  const dustHaul = Math.round((poi.type === 'mine' ? 14 + poi.level * 4 : 9 + poi.level * 3) * tf);
   // Parchemins d'enchant : faucet SECONDAIRE (le donjon reste la source principale).
-  // Coefficients FORTEMENT réduits vs l'ex-« pierres » (~×10) → une expédition rend
-  // une poignée de parchemins, pas des dizaines.
-  const scrollHaul = Math.round(
-    (poi.type === 'lair'
-      ? 2 + poi.level * 0.12
-      : poi.type === 'mine'
-        ? 1.5 + poi.level * 0.1
-        : 1 + poi.level * 0.08) * tf,
-  );
   // `items` porte TOUT le butin (prise principale + éventuel butin d'embuscade) ;
   // `item` reste la prise principale, pour l'affichage du rapport.
   const items: Omit<Item, 'id'>[] = [];
@@ -1136,8 +1100,6 @@ export function resolveOutcome(
   }
   if (item) items.push(item);
   let gold = goldHaul;
-  let dust = dustHaul;
-  let enchantScrolls = scrollHaul;
   // ÉNERGIE : les MINES rendent un peu d'énergie de jeu (∝ niveau × temps de trajet)
   // → un revenu d'énergie passif, complément du sport, qui adoucit le pincement de
   // fin de partie (le coût des runs monte plus vite que l'énergie/séance). Mines seules.
@@ -1153,8 +1115,6 @@ export function resolveOutcome(
   // maintenir deux fois la même règle.
   const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
   gold = Math.round(gold * tr.goldMult);
-  dust = Math.round(dust * tr.resMult);
-  enchantScrolls = Math.round(enchantScrolls * tr.resMult);
   returnMult = tr.returnMult;
   items.push(...tr.drops);
   key += tr.keys;
@@ -1162,17 +1122,13 @@ export function resolveOutcome(
   return {
     win: true,
     gold,
-    dust,
     scrap: 0,
     energy,
-    enchantScrolls,
     // Les devises vivantes viennent surtout des POI DÉDIÉS (well/shrine/archive) : ici
     // un simple filet, pour que ces sorties ne soient pas totalement muettes.
     summonStones: poi.type === 'lair' ? 1 + Math.floor(poi.level / 12) : 0,
     // ⚠️ La MINE versait des fragments 🧩 : devise MORTE (plus aucune fonction ne la
     // dépense depuis le retrait des infusions). Elle paie en or et en énergie, point.
-    fragments: 0,
-    inkDust: 0,
     item: items[0] ?? null,
     items,
     key,

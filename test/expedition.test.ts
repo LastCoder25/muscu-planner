@@ -188,13 +188,14 @@ describe('expedition — résolution', () => {
     expiresAt: 999 * H,
   };
 
-  it('mine : toujours réussie + gain NET d’or + poussière + parchemins + énergie', () => {
+  it('mine : toujours réussie + gain NET d’or + énergie', () => {
+    // ⚠️ RÉÉCRIT : ce test exigeait de la poussière ✨ et des parchemins d'enchant 📜 — il
+    // verrouillait donc la PRODUCTION de deux devises qu'aucune fonction ne dépense plus.
+    // La mine paie en or et en énergie, point.
     const o = resolveOutcome(strong, mine, 1);
     expect(o.win).toBe(true);
     // Vrai gain net : la mine rend NETTEMENT plus que son coût (investissement + temps).
     expect(o.gold).toBeGreaterThan(goldCost('mine', mine.level) * 2);
-    expect(o.dust).toBeGreaterThan(0);
-    expect(o.enchantScrolls).toBeGreaterThan(0);
     expect(o.energy).toBeGreaterThan(0); // les mines rendent un peu d'énergie
   });
   it('énergie de mine BORNÉE : jamais plus de mineEnergyMax même profonde/lointaine (ticket a0d16472)', () => {
@@ -208,9 +209,6 @@ describe('expedition — résolution', () => {
   it('haul scalé au TEMPS de trajet : un POI plus loin rend plus (même niveau)', () => {
     const near: Poi = { ...mine, distNorm: 0.1 };
     const far: Poi = { ...mine, distNorm: 0.95 };
-    expect(resolveOutcome(strong, far, 2).dust).toBeGreaterThan(
-      resolveOutcome(strong, near, 2).dust,
-    );
     expect(resolveOutcome(strong, far, 2).gold).toBeGreaterThan(
       resolveOutcome(strong, near, 2).gold,
     );
