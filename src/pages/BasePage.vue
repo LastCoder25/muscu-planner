@@ -1331,10 +1331,6 @@ const doCollect = () =>
   stroke-width: 1.6;
   stroke-dasharray: 4 3;
 }
-.empty-hint {
-  font-size: 8px;
-  fill: var(--dim);
-}
 .corpse {
   font-size: 11px;
   opacity: 0.9;
@@ -1500,17 +1496,6 @@ const doCollect = () =>
   border-top: 1px solid var(--line);
   padding: 10px 0 4px;
 }
-.s-head {
-  display: flex;
-  gap: 10px;
-}
-.s-emo {
-  font-size: 22px;
-}
-.s-label {
-  font-size: 14px;
-  font-weight: 600;
-}
 .s-lvl {
   color: var(--accent, #ffd23f);
   font-size: 12px;
@@ -1520,11 +1505,6 @@ const doCollect = () =>
   color: #ff6a45;
   font-size: 11px;
   margin-left: 6px;
-}
-.s-desc {
-  font-size: 12px;
-  color: var(--dim);
-  line-height: 1.4;
 }
 .s-actions {
   display: flex;
@@ -1536,9 +1516,6 @@ const doCollect = () =>
   font-size: 11px;
   color: var(--dim);
   margin-top: 5px;
-}
-.s-gate {
-  margin-top: 10px !important;
 }
 .btn,
 .cta {
@@ -1622,9 +1599,6 @@ const doCollect = () =>
 .fam-role {
   font-size: 12px;
   color: var(--dim);
-}
-.fam-atk {
-  opacity: 0.7;
 }
 .scav-back {
   margin-top: 8px;

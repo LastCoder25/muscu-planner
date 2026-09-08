@@ -2077,57 +2077,19 @@ onMounted(async () => {
 .level-card {
   --rank: var(--dim);
   background: var(--surface-2);
-  border: 1px solid var(--rank);
+  /* ⚠️ Repli EXPLICITE. Les 9 variantes `.rank-f` … `.rank-sss` qui définissaient
+     `--rank` ont été retirées avec les rangs F→SSS ; la variable n'était donc plus
+     jamais posée et cette bordure ne s'affichait pas du tout. */
+  border: 1px solid var(--rank, var(--accent));
   border-radius: 16px;
   padding: 14px 16px;
   margin-bottom: 14px;
 }
-.level-card.rank-f {
-  --rank: #8a8a8a;
-}
-.level-card.rank-e {
-  --rank: #7bc86c;
-}
-.level-card.rank-d {
-  --rank: #4db6ac;
-}
-.level-card.rank-c {
-  --rank: #5aa9e6;
-}
-.level-card.rank-b {
-  --rank: #b57bff;
-}
-.level-card.rank-a {
-  --rank: #ffb23f;
-}
-.level-card.rank-s {
-  --rank: #ff6a45;
-}
-.level-card.rank-ss {
-  --rank: #ffd23f;
-}
-.level-card.rank-sss {
-  --rank: #ffd23f;
-  box-shadow: 0 0 24px rgba(255, 210, 63, 0.3);
-}
+
 .lvl-top {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-.rank-badge {
-  width: 52px;
-  height: 52px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 14px;
-  border: 2px solid var(--rank);
-  background: color-mix(in srgb, var(--rank) 18%, transparent);
-  color: var(--rank);
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
 }
 .rank-info {
   flex: 1;

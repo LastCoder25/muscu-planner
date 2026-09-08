@@ -1059,48 +1059,6 @@ function fmtMin(min: number): string {
   max-width: 360px;
   border: 1px solid var(--accent);
 }
-.unlock-emo {
-  font-size: 46px;
-}
-.unlock-title {
-  font-size: 19px;
-  font-weight: 800;
-  margin: 6px 0 12px;
-  color: var(--accent);
-}
-.unlock-act {
-  font-size: 15px;
-  margin-bottom: 8px;
-}
-.unlock-where {
-  font-size: 13px;
-  color: var(--dim);
-  line-height: 1.4;
-  margin-bottom: 18px;
-}
-.unlock-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-.unlock-go {
-  border: none;
-  background: var(--accent);
-  color: var(--dark, #15120e);
-  font-weight: 800;
-  border-radius: 10px;
-  padding: 10px 18px;
-  cursor: pointer;
-}
-.unlock-ok {
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--text);
-  font-weight: 700;
-  border-radius: 10px;
-  padding: 10px 18px;
-  cursor: pointer;
-}
 .coll-emo {
   font-size: 48px;
 }

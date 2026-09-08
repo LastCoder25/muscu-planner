@@ -5495,12 +5495,6 @@ onUnmounted(() => {
   border-radius: 999px;
   padding: 4px 12px;
 }
-.tb-sep {
-  width: 1px;
-  align-self: stretch;
-  min-height: 14px;
-  background: var(--line);
-}
 .tb-r {
   font-size: 13px;
   font-weight: 700;
@@ -5788,15 +5782,6 @@ onUnmounted(() => {
 .gs-b.on {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--accent);
-}
-.gs-badge {
-  margin-left: 4px;
-  background: var(--accent);
-  color: var(--accent-ink, #15120e);
-  border-radius: 999px;
-  font-size: 10px;
-  padding: 0 5px;
-  font-family: var(--font-display);
 }
 
 /* Modale d'aventure (Talents / Familier ouverts par clic sur l'avatar). */
@@ -6472,13 +6457,6 @@ button.pt-mini:active {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent) inset;
 }
-.tal-xp {
-  height: 4px;
-  border-radius: 2px;
-  background: var(--line);
-  margin-top: 5px;
-  overflow: hidden;
-}
 .tal-xp span {
   display: block;
   height: 100%;
@@ -6687,11 +6665,6 @@ button.pt-mini:active {
   color: var(--dim);
   flex: 1;
 }
-.slot-nv {
-  color: var(--accent);
-  font-weight: 700;
-  font-size: 11px;
-}
 .slot-actions,
 .inv-actions {
   display: flex;
@@ -6730,24 +6703,6 @@ button.pt-mini:active {
   opacity: 0.35;
   cursor: not-allowed;
 }
-.reset-btn {
-  background: none;
-  border: 1px solid var(--line);
-  color: var(--dim);
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 11px;
-  cursor: pointer;
-}
-.reset-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.inv-nv {
-  font-size: 10px;
-  color: var(--accent);
-  font-weight: 700;
-}
 .slot-name {
   font-size: 13px;
   font-weight: 600;
@@ -6755,10 +6710,6 @@ button.pt-mini:active {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.slot-rarity {
-  margin-top: 1px;
-  margin-bottom: 2px;
 }
 /* Effet flexible + clampé à 2 lignes → hauteur stable, pousse les actions en bas. */
 .slot-eff {
@@ -6778,17 +6729,6 @@ button.pt-mini:active {
   align-items: center;
   gap: 8px;
   margin-top: auto;
-}
-.slot-up {
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 11px;
-  cursor: pointer;
 }
 /* Flèche ↑ du bouton de grade (⭐↑) : hérite de la couleur du texte, collée à l'étoile. */
 .gu-up {
@@ -6817,12 +6757,6 @@ button.pt-mini:active {
   color: var(--accent);
   font-weight: 700;
 }
-.slot-up:disabled {
-  border-color: var(--line);
-  background: transparent;
-  color: var(--dim);
-  cursor: not-allowed;
-}
 .slot-remove {
   border: none;
   background: none;
@@ -6840,17 +6774,6 @@ button.pt-mini:active {
   font-size: 12px;
   color: var(--dim);
   opacity: 0.7;
-}
-.fam-incub-locked {
-  width: 100%;
-  text-align: left;
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
-  border: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent);
-  border-radius: 10px;
-  padding: 10px 12px;
-  color: var(--text);
-  font-size: 12.5px;
-  cursor: pointer;
 }
 /* Sets d'équipement */
 .setcard {
@@ -6947,12 +6870,6 @@ button.pt-mini:active {
   font-size: 12px;
   color: var(--dim);
   margin-bottom: 8px;
-}
-.stash-cmp {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 10px;
 }
 /* ── Revue de l'équipement conseillé ──────────────────────────────────────
    Une ligne = un remplacement. Colonne gauche l'actuel, droite le proposé, et le
@@ -7108,38 +7025,9 @@ button.pt-mini:active {
   gap: 8px;
   margin-top: 12px;
 }
-.stash-side {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: var(--surface);
-}
 .stash-side.best {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent) inset;
-}
-.stash-lbl {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--dim);
-}
-.stash-nm {
-  font-weight: 700;
-  font-size: 13px;
-  margin-top: 2px;
-}
-.stash-q {
-  color: var(--accent);
-  font-weight: 800;
-}
-.stash-eff {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 11.5px;
-  color: var(--text);
-  margin-top: 4px;
 }
 /* La PUISSANCE est le verdict de cette modale : elle se lit avant tout le reste. */
 .stash-pow {
@@ -7156,20 +7044,11 @@ button.pt-mini:active {
 .stash-side.best .stash-pow {
   color: var(--accent);
 }
-.stash-delta {
-  font-size: 12px;
-  font-weight: 700;
-}
 .stash-delta.up {
   color: var(--d1, #7bc86c);
 }
 .stash-delta.down {
   color: var(--d4, #ff6a45);
-}
-.stash-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
 .stash-actions .drops-close.accent {
   background: var(--accent);
@@ -7321,13 +7200,6 @@ button.pt-mini:active {
 .lo-mini:not(:disabled):active {
   transform: scale(0.98);
 }
-.slot-x {
-  background: none;
-  border: none;
-  color: var(--dim);
-  cursor: pointer;
-  font-size: 13px;
-}
 
 /* Sac / inventaire */
 /* Pastilles génériques rareté / niveau (équipé + sac) */
@@ -7387,9 +7259,6 @@ button.pt-mini:active {
   border-color: var(--accent);
   font-weight: 800;
 }
-.ii-ench {
-  color: var(--accent);
-}
 /* Barre d'enchant en tête du sac : ressources + toggle protection. */
 .ench-bar {
   display: flex;
@@ -7403,13 +7272,6 @@ button.pt-mini:active {
   padding: 8px 12px;
   margin: 4px 0 10px;
   font-size: 13px;
-}
-.ench-prot {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-weight: 600;
 }
 .ench-prot.off {
   opacity: 0.5;
@@ -7610,9 +7472,6 @@ button.pt-mini:active {
 .inv-lock.on {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-.inv-lock:active {
-  transform: scale(0.92);
 }
 /* Ligne 3 : EFFET mis en avant (ce que l'objet fait). */
 /* Comparaison d'EFFET : cet objet vs équipé, en 2 lignes alignées et lisibles. */
@@ -7872,10 +7731,6 @@ button.pt-mini:active {
 .ii-be.ok {
   color: var(--d1);
 }
-.ii-be-have {
-  font-weight: 400;
-  color: var(--dim);
-}
 /* Actions : Équiper (+ Infuser puis équiper) · icônes casser/vendre/lock · ⋯. */
 .ii-actions {
   display: flex;
@@ -7953,10 +7808,6 @@ button.pt-mini:active {
 }
 .bulk-b:active {
   border-color: var(--accent);
-}
-.inv-eff {
-  font-size: 11px;
-  color: var(--dim);
 }
 /* Qualité en chiffre (1→5) collé au rang : pastille ronde colorée rouge→vert. */
 .q-badge {
@@ -8170,29 +8021,6 @@ button.pt-mini:active {
   padding: 16px 18px;
   color: var(--text);
 }
-.fight-title {
-  font-weight: 700;
-  font-size: 16px;
-  margin-bottom: 12px;
-}
-.fight-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 55vh;
-  overflow-y: auto;
-}
-.fight-close {
-  width: 100%;
-  margin-top: 14px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--text);
-  border-radius: 10px;
-  padding: 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
 .reward-cand:active {
   transform: scale(0.98);
 }
@@ -8209,11 +8037,6 @@ button.pt-mini:active {
 }
 .rc-name {
   font-weight: 600;
-}
-.rc-nv {
-  font-size: 11px;
-  color: var(--dim);
-  margin-left: 4px;
 }
 .rc-eff {
   font-size: 12px;
@@ -8259,16 +8082,12 @@ button.pt-mini:active {
 .rc-pill.lvl {
   color: var(--text);
 }
-.rc-pill.p-G,
-.rc-pill.p-F,
-.rc-pill.p-E,
-.rc-pill.p-D,
-.rc-pill.p-C,
-.rc-pill.p-B,
-.rc-pill.p-A,
-.rc-pill.p-S,
-.rc-pill.p-SS,
-.rc-pill.p-SSS {
+/* ⚠️ CE N'ÉTAIT PAS QUE DE LA CSS MORTE, C'ÉTAIT UN BUG. La règle énumérait les DIX
+   anciens rangs G→SSS, remplacés depuis par les 8 raretés nommées (`RANK_ORDER`) : elle
+   ne matchait donc plus RIEN, et les pastilles de récompense de boss avaient perdu leur
+   couleur de rareté sans que personne ne le voie. On cible désormais la présence d'une
+   classe `p-*` — laquelle pose `--rk` — au lieu de réénumérer des valeurs qui changent. */
+.rc-pill[class*='p-'] {
   color: var(--rk);
   border-color: var(--rk);
 }
@@ -8299,81 +8118,6 @@ button.pt-mini:active {
   color: var(--text);
   max-height: 82vh;
   overflow-y: auto;
-}
-.manage-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--accent);
-  margin-bottom: 12px;
-}
-.manage-eq,
-.manage-cand {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-left-width: 3px;
-  border-radius: 12px;
-  padding: 12px 14px;
-}
-.manage-eq {
-  border-color: var(--accent);
-  border-left-color: var(--accent);
-  position: relative;
-}
-.manage-eq-tag {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--accent);
-  font-weight: 700;
-}
-.manage-empty-eq {
-  color: var(--dim);
-  font-size: 13px;
-  padding: 6px 2px;
-}
-.manage-sub {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--dim);
-  margin: 14px 0 8px;
-}
-.manage-none {
-  color: var(--dim);
-  font-size: 13px;
-  padding: 4px 2px;
-}
-.manage-cand {
-  margin-bottom: 8px;
-}
-.manage-eq-actions,
-.manage-cand-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-.manage-eq-hint {
-  font-size: 10.5px;
-  color: var(--dim);
-}
-.manage-close {
-  width: 100%;
-  margin-top: 8px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--text);
-  border-radius: 10px;
-  padding: 10px;
-  font-weight: 600;
-  cursor: pointer;
 }
 .drops-title {
   font-size: 18px;
@@ -8476,18 +8220,6 @@ button.pt-mini:active {
 .lvl-pill.locked {
   background: var(--line);
   color: var(--dim);
-}
-.expand-btn {
-  width: 100%;
-  border: 1px dashed var(--line);
-  background: transparent;
-  color: var(--dim);
-  border-radius: 10px;
-  padding: 9px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  margin-top: 2px;
 }
 /* Carte donjon/boss : layout EN COLONNE (en-tête · chips · conseil · bouton) */
 .dgn {
@@ -8625,10 +8357,6 @@ button.pt-mini:active {
   border-color: var(--line);
   opacity: 0.75;
 }
-.expe-idle {
-  background: color-mix(in srgb, #4a9eff 12%, var(--surface)) !important;
-  border-color: #4a9eff !important;
-}
 /* Boîte à messages (topbar) */
 .inbox-dot {
   position: absolute;
@@ -8735,10 +8463,6 @@ button.pt-mini:active {
   border-radius: 10px;
   background: var(--surface);
   border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
-}
-.im-loot-emo {
-  font-size: 22px;
-  flex: none;
 }
 .im-loot-main {
   flex: 1;
@@ -9031,17 +8755,6 @@ button.pt-mini:active {
   border-radius: 12px;
   background: var(--bg);
 }
-.rm-stage-btn {
-  width: 100%;
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-}
 .rm-actions-row {
   display: flex;
   gap: 8px;
@@ -9146,9 +8859,6 @@ button.pt-mini:active {
 .result.lose .result-head {
   color: var(--d4);
 }
-.result-gold {
-  color: var(--accent);
-}
 /* Gains en pastilles colorées (or / poussière / 🔮 / 💎), empilables sur petit écran. */
 .result-gains {
   display: flex;
@@ -9193,13 +8903,6 @@ button.pt-mini:active {
   flex-direction: column;
   gap: 3px;
   margin-top: 10px;
-}
-.log-lbl {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--dim);
-  margin-bottom: 2px;
 }
 .fight-row {
   display: flex;
@@ -9317,15 +9020,6 @@ button.pt-mini:active {
   font-weight: 600;
   color: var(--accent);
 }
-.cons-drop {
-  margin-top: 10px;
-  padding: 9px 12px;
-  border-radius: 10px;
-  background: var(--surface-2);
-  border: 1px solid var(--line-soft);
-  font-size: 12.5px;
-  color: var(--text);
-}
 .cons-drop b {
   color: var(--accent);
 }
@@ -9338,34 +9032,10 @@ button.pt-mini:active {
   padding: 16px;
   margin-bottom: 18px;
 }
-.boss-card.dead {
-  border-color: var(--d1);
-}
-.boss-top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-.boss-emo {
-  font-size: 40px;
-  line-height: 1;
-}
 .boss-name {
   font-size: 20px;
   font-weight: 700;
   color: var(--text);
-}
-.boss-sub {
-  font-size: 12px;
-  color: var(--dim);
-}
-.boss-hpbar {
-  height: 14px;
-  border-radius: 999px;
-  background: #000;
-  border: 1px solid var(--line);
-  overflow: hidden;
 }
 .boss-hpbar > span {
   display: block;
@@ -9377,56 +9047,8 @@ button.pt-mini:active {
 .boss-card.dead .boss-hpbar > span {
   background: var(--d1);
 }
-.boss-hptext {
-  text-align: center;
-  font-size: 13px;
-  color: var(--dim);
-  margin-top: 6px;
-  font-variant-numeric: tabular-nums;
-}
-.boss-dead {
-  text-align: center;
-  color: var(--d1);
-  font-weight: 600;
-  margin-top: 12px;
-}
-.ladder {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 18px;
-}
-.ladder-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  font-size: 13px;
-}
 .ladder-row.me {
   border-color: var(--accent);
-}
-.lad-rank {
-  width: 20px;
-  color: var(--dim);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.lad-name {
-  flex: 1;
-  color: var(--text);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.lad-dmg {
-  color: var(--d4);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
 .foot {
   font-size: 11.5px;

@@ -1628,16 +1628,6 @@ function returnToLobby() {
   color: var(--dim);
   font-size: 12.5px;
 }
-.lobby-cta {
-  margin-top: 20px;
-  min-height: 54px;
-  height: auto;
-  border-radius: 14px;
-  font-size: 16px;
-  font-weight: 700;
-  min-width: 260px;
-  padding: 10px 18px;
-}
 /* Le libellé (avec le nombre de clés) peut être long → il s'enroule proprement au
    lieu de déborder sous le bouton (hauteur auto). */
 .lobby-cta :deep(.q-btn__content) {
@@ -2318,9 +2308,6 @@ function returnToLobby() {
 .im-card {
   min-width: 260px;
   max-width: 92vw;
-}
-.ol-emo {
-  font-size: 18px;
 }
 .ol-main {
   display: flex;
