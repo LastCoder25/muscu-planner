@@ -235,7 +235,13 @@ const gamePaneComponent = computed(() => GAME_PANES[gameView.value]);
 onMounted(() => {
   if (auth.isAdmin) feedback.fetchOpenCount().catch(() => undefined);
   const uid = auth.user?.id;
-  if (uid) friends.fetchMine(uid).catch(() => undefined);
+  if (!uid) return;
+  friends.fetchMine(uid).catch(() => undefined);
+  // ⚠️ Les propositions de DÉFI PARTAGÉ aussi : `notifCount` les compte (badge de la
+  // cloche), mais elles n'étaient chargées que par FriendsPage — il fallait donc déjà
+  // être sur la page qui les affiche pour apprendre qu'on avait été invité. La boucle
+  // ne pouvait pas se fermer (mesuré : zéro défi partagé créé depuis la livraison).
+  friends.fetchShared(uid).catch(() => undefined);
 });
 
 // En cockpit, l'Aventure est déjà affichée à droite → si on route vers /aventure
