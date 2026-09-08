@@ -206,6 +206,33 @@
       <p class="keep-hint">Touche un bâtiment pour le construire, l’améliorer ou récolter.</p>
     </div>
 
+    <!-- ── LE REJEU DU SIÈGE, en plein écran ──────────────────────────────
+         S'ouvre TOUT SEUL à la résolution : découvrir l'issue par une notification
+         retirerait tout enjeu à l'animation. -->
+    <q-dialog v-model="siegeOpen" maximized persistent>
+      <SiegeStage
+        v-if="siegeShown"
+        :key="siegeKey"
+        :report="siegeShown"
+        :turret-level="turretLevel"
+        :familiars="garrisonEmojis"
+        @done="closeSiege"
+      />
+    </q-dialog>
+
+    <!-- Revoir le dernier assaut -->
+    <div v-if="lastReport" class="panel">
+      <div class="p-title">
+        {{ lastReport.held ? '🏆 Dernier siège — repoussé' : '💥 Dernier siège — enceinte forcée' }}
+      </div>
+      <p>
+        {{ FACTION_EMOJI[lastReport.faction] }} {{ FACTION_LABEL[lastReport.faction] }} ·
+        {{ lastReport.defeated }}/{{ lastReport.total }} groupes repoussés ·
+        {{ lastReport.heroHome ? 'héros présent' : 'héros absent' }}
+      </p>
+      <button class="cta ghost" @click="replaySiege">▶ Revoir l’assaut</button>
+    </div>
+
     <!-- ── Héros à l'infirmerie ── -->
     <div v-if="wounded" class="panel warn">
       <div class="p-title">🤕 Ton héros est à l’infirmerie</div>
@@ -426,6 +453,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
+import SiegeStage from '@/components/SiegeStage.vue';
 import { computeCharacter } from '@/lib/character';
 import { playerWithGear, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import { BUILD, buildingAccrued, buildingType, plotsForLevel, storageMult } from '@/lib/buildings';
@@ -458,6 +486,7 @@ import {
   GARRISON_ROLE,
   ROLE_LABEL,
   type DefenseId,
+  type RaidReport,
   type ScoutReport,
 } from '@/lib/raid';
 
@@ -466,7 +495,8 @@ import {
  *  Mesuré, un joueur trop tôt ne tenait aucun siège même en bâtissant à son niveau. */
 const defenseUnlockLevel = Math.min(...DEFENSE_TYPES.map((t) => t.unlockLevel));
 
-const props = defineProps<{ embedded?: boolean; inTab?: boolean }>();
+const props = defineProps<{ embedded?: boolean; inTab?: boolean; siege?: RaidReport | null }>();
+const emit = defineEmits<{ 'siege-seen': [] }>();
 const inTab = computed(() => !!props.inTab);
 const router = useRouter();
 const $q = useQuasar();
@@ -560,6 +590,29 @@ function roleLabel(f: Item): string {
 /** Ce que coûte le retour à la normale : remettre l'enceinte en état relance aussi la
  *  production (le gel est la conséquence de la casse, pas une punition séparée). */
 const repairAllCost = computed(() => (base.value ? totalRepairCost(base.value) : 0));
+
+// ── Rejeu du siège ──
+/** Rapport en cours de rejeu. Posé par le parent à la résolution (`siege` prop) ou par
+ *  le bouton « Revoir l'assaut ». */
+const replay = ref<RaidReport | null>(null);
+const siegeShown = computed(() => replay.value ?? props.siege ?? null);
+const siegeKey = ref(0);
+const siegeOpen = computed({
+  get: () => !!siegeShown.value,
+  set: (v: boolean) => {
+    if (!v) closeSiege();
+  },
+});
+const garrisonEmojis = computed(() => garrisoned.value.map((f) => f.emoji));
+function replaySiege() {
+  if (!lastReport.value) return;
+  siegeKey.value++;
+  replay.value = lastReport.value;
+}
+function closeSiege() {
+  replay.value = null;
+  emit('siege-seen');
+}
 
 // ── Géométrie de l'enceinte : un octogone dont les 8 sommets sont les emplacements
 // de tourelle. TURRET_SLOTS vaut 8 précisément pour que le compte tombe juste.

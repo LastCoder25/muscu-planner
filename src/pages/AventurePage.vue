@@ -1328,7 +1328,12 @@
            `in-tab` : elle n'affiche pas son propre en-tête, la barre de navigation
            de l'Aventure suffit. -->
       <template v-else-if="tab === 'base'">
-        <BasePage in-tab :embedded="embedded" />
+        <BasePage
+          in-tab
+          :embedded="embedded"
+          :siege="siegeReport"
+          @siege-seen="siegeReport = null"
+        />
       </template>
     </template>
 
@@ -2376,7 +2381,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
-import { remainingCorpses, isWounded, woundRemainingMs } from '@/lib/raid';
+import { remainingCorpses, isWounded, woundRemainingMs, type RaidReport } from '@/lib/raid';
 const BasePage = defineAsyncComponent(() => import('@/pages/BasePage.vue'));
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
@@ -4476,6 +4481,9 @@ const baseCorpses = computed(() => remainingCorpses(char.row?.base?.field ?? nul
 const baseFrozen = computed(() => !!char.row?.base?.freeze);
 /** Ce qui doit se voir SANS ouvrir l'onglet : une armée en route, des corps à
  *  dépouiller avant qu'ils ne pourrissent, une production à l'arrêt. */
+/** Rapport dont l'assaut n'a pas encore été REJOUÉ. Tant qu'il est posé, le plateau
+ *  s'ouvre : on découvre l'issue par l'animation, jamais par une notification. */
+const siegeReport = ref<RaidReport | null>(null);
 const baseAlert = computed(
   () => !!baseRaid.value || baseCorpses.value > 0 || baseFrozen.value || heroWounded.value,
 );
@@ -4511,13 +4519,13 @@ async function baseLifecycle() {
           Math.max(0, r.detected.arrivesAt - Date.now()),
         )}`,
       });
-    if (r.report)
-      $q.notify({
-        type: r.report.held ? 'positive' : 'negative',
-        message: r.report.held
-          ? `🏆 Assaut repoussé ! ${r.report.defeated}/${r.report.total} groupes abattus.`
-          : `💥 L'enceinte a cédé (${r.report.defeated}/${r.report.total} repoussés).`,
-      });
+    // ⚠️ SURTOUT PAS de notification annonçant l'issue : elle spoilerait le siège et
+    // retirerait tout enjeu au rejeu. On ouvre le plateau, qui révèle le résultat à la
+    // fin. C'est aussi pour ça que l'animation se lance d'office, sans le demander.
+    if (r.report) {
+      siegeReport.value = r.report;
+      tab.value = 'base';
+    }
   } finally {
     baseBusy = false;
   }
