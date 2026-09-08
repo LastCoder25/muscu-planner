@@ -159,7 +159,13 @@ export interface DefenseType {
   label: string;
   emoji: string;
   buildGold: number;
-  buildScrap: number; // ferraille (ramassée sur les épaves de la carte)
+  // ⚠️ Ferraille exigée à la CONSTRUCTION — 0 partout, à dessein. La ferraille ne vient
+  // que des épaves de la carte et de la Fonderie ; en exiger pour BÂTIR enfermait le
+  // joueur dans un œuf et la poule : la 1re tourelle coûtait 20 🔩 qu'il n'avait pas, et
+  // la Fonderie niv.1 met 166 h à les produire. Le 1er niveau se paie donc en OR seul ;
+  // la ferraille sert aux AMÉLIORATIONS et aux RÉPARATIONS. Le champ reste pour qu'une
+  // future structure puisse en demander en connaissance de cause.
+  buildScrap: number;
   unlockLevel: number;
   desc: string;
 }
@@ -179,7 +185,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     label: 'Tourelles',
     emoji: '🏹',
     buildGold: 700,
-    buildScrap: 20,
+    buildScrap: 0,
     unlockLevel: 12,
     desc: 'Elles tirent. Chaque niveau ajoute de la puissance de feu, et une tourelle de plus sur le mur (jusqu’à 8).',
   },
@@ -188,7 +194,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     label: 'Tour de guet',
     emoji: '🗼',
     buildGold: 600,
-    buildScrap: 15,
+    buildScrap: 0,
     unlockLevel: 12,
     desc: 'Elle renseigne : plus elle est haute, plus tu en sais sur l’armée qui vient — et plus tôt tu l’apprends.',
   },
@@ -197,7 +203,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     label: 'Chantier de fouille',
     emoji: '🦴',
     buildGold: 650,
-    buildScrap: 25,
+    buildScrap: 0,
     unlockLevel: 12,
     desc: 'Envoie des fouilleurs dépouiller les corps après la bataille. Chaque niveau = des fouilleurs en plus par vague.',
   },
@@ -206,7 +212,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     label: 'Chenil',
     emoji: '🐾',
     buildGold: 750,
-    buildScrap: 20,
+    buildScrap: 0,
     unlockLevel: 12,
     desc: 'Poste tes familiers à la défense. Leur ESPÈCE décide de ce qu’ils apportent au mur.',
   },
@@ -215,7 +221,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     label: 'Infirmerie',
     emoji: '⛑️',
     buildGold: 700,
-    buildScrap: 18,
+    buildScrap: 0,
     unlockLevel: 12,
     desc: 'Soigne le héros blessé et remet les familiers fatigués sur pied plus vite.',
   },
@@ -304,6 +310,10 @@ export const RAID = {
   // ennemis. Avec `damage` seul, la défense suivait ~L² face à des PV en ~L⁴ : mesuré,
   // elle s'effondrait à 0 % de tenue dès le niveau 60 quel que soit l'investissement.
   wallPvK: 3.4,
+  // Les hommes postés sur le rempart. Volontairement FAIBLE devant les tourelles (une
+  // ligne de 8 tourelles vaut ~0,84 en équivalent) : le mur encaisse, les tourelles
+  // tuent. Il ne s'agit que d'écarter le zéro absolu.
+  wallDmgK: 0.055,
   turretDmgK: 0.105,
   // Le héros présent prête une part de sa force. Dosé pour transformer un siège serré en
   // victoire probable — pas pour le rendre acquis : mesuré à 0,55/0,35, sa seule présence
@@ -728,13 +738,20 @@ export function baseCombatant(
   const tl = defenseLevel(defenses, 'turret');
 
   let pv = wl > 0 ? refFighter(wl).pv * RAID.wallPvK * defenseEfficiency(defenses, 'wall') : 0;
-  let damage =
-    tl > 0
-      ? offensePerRound(refFighter(tl)) *
-        RAID.turretDmgK *
-        turretCount(tl) *
-        defenseEfficiency(defenses, 'turret')
-      : 0;
+  // ⚠️ DÉGÂTS DE LA MURAILLE — surtout pas zéro quand il n'y a pas de tourelle. Sans
+  // ce plancher, une base sans tourelle inflige LITTÉRALEMENT 0 dégât : elle ne peut
+  // tuer personne, donc elle perd quel que soit son niveau de mur (mesuré : 0 % de tenue
+  // avec une muraille 26, contre 72 % avec les tourelles). Or c'est la MURAILLE qui
+  // active les sièges — le joueur était donc puni d'avoir fait le premier pas. Les
+  // défenseurs sur les remparts tirent : modestement, mais ils tirent.
+  let damage = wl > 0 ? offensePerRound(refFighter(wl)) * RAID.wallDmgK : 0;
+  if (tl > 0) {
+    damage +=
+      offensePerRound(refFighter(tl)) *
+      RAID.turretDmgK *
+      turretCount(tl) *
+      defenseEfficiency(defenses, 'turret');
+  }
   if (hero) {
     pv += hero.pv * RAID.heroPvShare;
     damage += hero.damage * (hero.strikes ?? 1) * RAID.heroDmgShare;
