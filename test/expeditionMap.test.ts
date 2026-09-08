@@ -155,6 +155,32 @@ describe('rythme de la carte', () => {
     expect(EXPE.poiFloor).toBeLessThan(EXPE.poiCap);
   });
 
+  it('⚠️ l’ESPACEMENT suit la DENSITÉ : les POI ne s’empilent jamais', () => {
+    // Couplage facile à casser en silence : monter `poiCap` sans toucher `minDistPoi`
+    // sature la couronne, le placement échoue ses 6 essais et pose les POI les uns sur
+    // les autres. À 20 POI avec l'ancien écart de 20, l'occupation atteignait 53 %.
+    const aire = Math.PI * (EXPE.distMax ** 2 - EXPE.distMin ** 2);
+    const occupe = EXPE.poiCap * Math.PI * (EXPE.minDistPoi / 2) ** 2;
+    expect(occupe / aire, 'occupation de la couronne au plafond').toBeLessThan(0.35);
+
+    // …et vérification sur le terrain : aucune paire ne se chevauche visuellement.
+    let pires = 0;
+    for (let s = 1; s <= 20; s++) {
+      let map = createMap(s * 331, 0, 26);
+      for (let t = 0; t <= 5 * 24 * HOUR; t += 3 * HOUR) {
+        map = advanceWorld(map, t, 26);
+        for (let i = 0; i < map.pois.length; i++) {
+          for (let j = i + 1; j < map.pois.length; j++) {
+            const a = map.pois[i]!;
+            const b = map.pois[j]!;
+            if (Math.hypot(a.x - b.x, a.y - b.y) < 10) pires++;
+          }
+        }
+      }
+    }
+    expect(pires, 'paires de POI qui se chevauchent').toBe(0);
+  });
+
   it('la carte offre TOUJOURS du proche, du moyen et du lointain', () => {
     // Un tirage de distance uniforme ne GARANTIT aucune répartition : avec ~6 POI à
     // l'écran, 10 % des cartes n'offraient aucune option proche et 22 % seulement deux

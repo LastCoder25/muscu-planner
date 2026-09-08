@@ -162,17 +162,21 @@ export const HARVEST = {
 export const EXPE = {
   mapSize: 200, // côté de la carte (coord 0..mapSize) — GRANDE, on pan/zoom dessus
   town: { x: 100, y: 100 }, // ville de départ (CENTRE de la carte)
-  // Rythme, deux fois recalibré. v0.658 : avec 10 POI au plancher et des durées de vie de
-  // 12→48 h, la carte était TOUJOURS pleine — aucune rareté, aucun arbitrage — d'où une
-  // forte réduction (bande 3-6, moyenne 4,2). v0.665 : la carte ayant perdu son anneau de
-  // bâtiments (déménagé sur l'écran « Ma base »), elle paraissait vide ; on remonte donc
-  // la densité à une bande **5-9, moyenne 6,4**, mesurée sur 14 jours simulés à tous les
-  // niveaux. Elle ne colle JAMAIS au plafond (0 % du temps) : des POI expirent encore
-  // avant qu'on les fasse, donc choisir reste un vrai arbitrage.
-  poiCap: 11,
-  poiFloor: 5,
+  // Rythme, TROIS fois recalibré. v0.658 : avec 10 POI au plancher et des durées de vie
+  // de 12→48 h, la carte était TOUJOURS pleine — aucune rareté, aucun arbitrage — d'où
+  // une forte réduction (bande 3-6, moyenne 4,2). v0.665 : la carte ayant perdu son
+  // anneau de bâtiments (déménagé sur l'écran « Ma base »), elle paraissait vide → bande
+  // 5-9, moyenne 6,4. v0.671 : densité DOUBLÉE → bande **10-18, moyenne 11,9**, mesurée
+  // sur 7 jours × 40 graines. Elle ne colle toujours JAMAIS au plafond (0 % du temps) :
+  // des POI expirent encore avant qu'on les fasse, donc choisir reste un vrai arbitrage.
+  // ⚠️ Doubler le nombre OBLIGE à resserrer `minDistPoi` — cf. la note sur cette clé.
+  poiCap: 20,
+  poiFloor: 10,
   perilousChance: 0.18, // ~1 POI sur 5 signalé « route dangereuse » avant l'envoi
-  minDistPoi: 20, // écart mini entre POI (placement espacé)
+  // ⚠️ L'écart mini doit SUIVRE la densité. À 20 POI dans la couronne (rayon 18→64), un
+  // écart de 20 occuperait 53 % de la surface : le placement aléatoire échouerait ses
+  // 6 essais et les POI se poseraient les uns sur les autres. À 14, on retombe à 26 %.
+  minDistPoi: 14, // écart mini entre POI (placement espacé)
   distBands: 3, // bandes de distance parcourues à tour de rôle (cf. placePoi)
   // 30 → 18 (v0.667) : l'anneau de bâtiments occupait cette couronne, son départ pour
   // l'écran « Ma base » y a laissé un trou et la ville avait l'air isolée.
@@ -182,8 +186,8 @@ export const EXPE = {
   // retrouvaient donc dessinés en pleine mer. Cf. `landRadius()`, qui donne le rayon
   // garanti de terre ferme, et le test qui vérifie que distMax reste dessous.
   distMax: 64, // distance maxi (rayon → POI tout autour, 360°)
-  spawnMinMs: 2 * 3600_000, // intervalle de spawn : 2 h..4 h (jitter)
-  spawnJitterMs: 2 * 3600_000,
+  spawnMinMs: 3600_000, // intervalle de spawn : 1 h..2 h (jitter)
+  spawnJitterMs: 3600_000,
   lifespanMs: {
     mine: 20 * 3600_000,
     camp: 10 * 3600_000,
@@ -489,12 +493,23 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   const minFrac = type === 'arena' ? 0.8 : 0;
   // La bande tourne avec le compteur de spawns → proche, moyen, lointain à tour de rôle.
   const band = map.spawnCount;
+  // Espacement. ⚠️ Deux corrections d'un même défaut : la boucle abandonnait au bout de
+  // 6 essais ET reprenait le DERNIER tirage — donc un tirage qui venait justement d'être
+  // rejeté. Sur une carte dense, elle posait ainsi des POI les uns sur les autres
+  // (mesuré : 17 paires chevauchantes sur quelques jours de simulation). On tente plus
+  // longtemps, et surtout on GARDE LE MEILLEUR candidat : à défaut d'un emplacement
+  // parfait, on prend le moins mauvais au lieu du dernier venu.
   let pos = placePoi(rng, minFrac, band);
-  // Espacement : re-tire si trop proche d'un POI existant (quelques essais).
-  for (let k = 0; k < 6; k++) {
-    const tooClose = map.pois.some((p) => dist(p.x, p.y, pos.x, pos.y) < EXPE.minDistPoi);
-    if (!tooClose) break;
-    pos = placePoi(rng, minFrac, band);
+  const clearance = (p: { x: number; y: number }) =>
+    map.pois.length ? Math.min(...map.pois.map((q) => dist(q.x, q.y, p.x, p.y))) : Infinity;
+  let best = clearance(pos);
+  for (let k = 0; k < 24 && best < EXPE.minDistPoi; k++) {
+    const cand = placePoi(rng, minFrac, band);
+    const gap = clearance(cand);
+    if (gap > best) {
+      best = gap;
+      pos = cand;
+    }
   }
   // Route dangereuse : tirée AU SPAWN pour être annoncée avant l'envoi (télégraphiée).
   const perilous = rng() < EXPE.perilousChance;
