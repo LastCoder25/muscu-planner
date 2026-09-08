@@ -915,7 +915,9 @@ export const useCharacterStore = defineStore('character', () => {
   async function stashSetPiece(
     userId: string,
     itemId: string,
-    sellDisplaced = false,
+    /** Que faire de la pièce DÉPLACÉE : la garder au sac, la vendre, ou la recycler.
+     *  ⚠️ Une pièce 🔒 revient TOUJOURS au sac, quelle que soit la consigne. */
+    displaced: 'keep' | 'sell' | 'recycle' = 'keep',
   ): Promise<number> {
     const cur = row.value;
     if (!cur) return -1;
@@ -928,16 +930,19 @@ export const useCharacterStore = defineStore('character', () => {
       (_, k) => cur.loadouts[k] ?? { items: {} },
     );
     const items = { ...loadouts[idx]!.items };
-    const displaced = items[item.slot]; // pièce déjà rangée sur ce slot
+    const displacedItem = items[item.slot]; // pièce déjà rangée sur ce slot
     items[item.slot] = item;
     loadouts[idx] = { items };
     let inventory = cur.inventory.filter((it) => it.id !== itemId);
     let gold = cur.gold;
-    if (displaced) {
-      if (sellDisplaced && !displaced.locked) gold += sellValue(displaced);
-      else inventory = [...inventory, displaced]; // verrouillée ou pas de vente → retour au sac
+    let scrap = cur.scrap;
+    const old = displacedItem;
+    if (old) {
+      if (displaced === 'sell' && !old.locked) gold += sellValue(old);
+      else if (displaced === 'recycle' && canRecycle(old)) scrap += scrapValue(old);
+      else inventory = [...inventory, old]; // verrouillée ou « garder » → retour au sac
     }
-    await persist(userId, { inventory, loadouts, gold });
+    await persist(userId, { inventory, loadouts, gold, scrap });
     return idx;
   }
 

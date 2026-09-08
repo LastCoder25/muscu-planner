@@ -289,7 +289,7 @@ export const RAID = {
   // et croît moins vite que le joueur, pour que la difficulté ne s'éteigne pas.
   spanEarly: 0.6,
   spanFlat: 7,
-  spanLate: 0.3,
+  spanLate: 0.45,
   // Effectif quasi PLAT sur toute la partie (6 au début → 12 au niveau 100). Il ne suit
   // volontairement pas le niveau : un champ de 100 cadavres qu'on ne peut pas dépouiller
   // serait frustrant, et l'effectif est aussi ce qui déséquilibre le siège (les dégâts
@@ -458,9 +458,20 @@ export function raidSize(playerLevel: number, faction?: RaidFaction): number {
  *  d'investissement écrasé (18 % à −5 contre 40 % à niveau → construire ne paie plus).
  *
  *  D'où deux régimes dont on prend le MINIMUM : `EARLY` (60 % du niveau) borne le début
- *  de partie, `LATE` (7 + 30 % du niveau) prend le relais vers le niveau ~23 et croît
- *  moins vite que le joueur. Résultat mesuré : la tenue à défenses-à-niveau reste
- *  ~70-75 % de bout en bout, au lieu de dériver de 57 % à 96 %. */
+ *  de partie, `LATE` prend le relais vers le niveau ~23.
+ *
+ *  ⚠️ **PENTE LATE RELEVÉE 0,30 → 0,45 (v0.687, re-mesuré).** À 0,30 le span croissait
+ *  bien moins vite que le joueur, donc l'écart RELATIF entre l'armée et la base se
+ *  refermait : la difficulté S'ÉTEIGNAIT en fin de partie. Mesuré sur les trois profils —
+ *  enceinte à moitié montée, la tenue passait de **34 % au niveau 12 à 76 % au niveau
+ *  100**, et à 75 % d'enceinte de 86 % à 98 %. Plus on avançait, plus c'était facile.
+ *  Le déclencheur est l'élargissement du CHENIL (une place tous les 5 niveaux, v0.683) :
+ *  la garnison apporte désormais un bonus qui sature ses plafonds dès le niveau 60.
+ *  À 0,45, ces deux courbes redeviennent PLATES (34 → 51 % et 86 → 83 %), le gradient
+ *  d'investissement reste net à tout niveau (50 % / 75 % / 100 % d'enceinte → 51 / 83 /
+ *  96 % de tenue au niveau 100) et le héros retrouve du poids en fin de partie (96 %
+ *  avec lui, 55 % sans). ⚠️ Ne pas aller au-delà : à 0,60 (proportionnel pur) la doc
+ *  d'origine mesurait 40 % de tenue en bâtissant pourtant à son niveau. */
 export function levelSpanFor(playerLevel: number): number {
   const L = Math.max(1, playerLevel);
   return Math.max(3, Math.round(Math.min(L * RAID.spanEarly, RAID.spanFlat + L * RAID.spanLate)));

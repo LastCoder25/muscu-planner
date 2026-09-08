@@ -1914,6 +1914,24 @@
             }"
           >
             <div class="stash-lbl">Nouvelle</div>
+            <!-- ⚠️ LA PUISSANCE D'ABORD, et en gros. C'est LE chiffre qui tranche — il
+                 était relégué en 12 px grisé sous les stats, quand tout le reste (rareté,
+                 jet, niveau) ne sert qu'à l'expliquer. L'écart signé dit le verdict d'un
+                 coup d'œil, sans avoir à comparer deux nombres à quatre chiffres. -->
+            <div class="stash-pow">
+              ⚔️ {{ fmtPow(powerIfEquip(stashConflict.incoming)) }}
+              <span
+                class="stash-delta"
+                :class="
+                  powerIfEquip(stashConflict.incoming) >= powerIfEquip(stashConflict.stored)
+                    ? 'up'
+                    : 'down'
+                "
+                >{{
+                  fmtDelta(powerIfEquip(stashConflict.stored), powerIfEquip(stashConflict.incoming))
+                }}</span
+              >
+            </div>
             <div class="stash-nm">
               {{ stashConflict.incoming.emoji }} {{ stashConflict.incoming.rarity }}
               <span class="lvl-badge">Nv {{ stashConflict.incoming.level }}</span>
@@ -1928,7 +1946,6 @@
                 >{{ s.text }}</span
               >
             </div>
-            <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.incoming)) }}</div>
           </div>
           <div
             class="stash-side"
@@ -1937,6 +1954,7 @@
             }"
           >
             <div class="stash-lbl">Rangée <span v-if="stashConflict.stored.locked">🔒</span></div>
+            <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.stored)) }}</div>
             <div class="stash-nm">
               {{ stashConflict.stored.emoji }} {{ stashConflict.stored.rarity }}
               <span class="lvl-badge">Nv {{ stashConflict.stored.level }}</span>
@@ -1951,11 +1969,13 @@
                 >{{ s.text }}</span
               >
             </div>
-            <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.stored)) }}</div>
           </div>
         </div>
+        <!-- Chaque camp a ses DEUX sorties : le marchand ou la forge. L'or et la
+             ferraille ne se remplacent pas — c'est l'arbitrage, il doit être offert ici
+             comme il l'est dans le sac. Une pièce 🔒 revient toujours au sac. -->
         <div class="stash-actions">
-          <button class="drops-close accent" @click="stashReplace">
+          <button class="drops-close accent" @click="stashReplace('sell')">
             Remplacer —
             {{
               stashConflict.stored.locked
@@ -1963,8 +1983,22 @@
                 : 'vendre l’ancienne 🪙 ' + sellValue(stashConflict.stored)
             }}
           </button>
+          <button
+            v-if="!stashConflict.stored.locked && scrapValue(stashConflict.stored) > 0"
+            class="drops-close"
+            @click="stashReplace('recycle')"
+          >
+            Remplacer — recycler l’ancienne 🔩 {{ scrapValue(stashConflict.stored) }}
+          </button>
           <button class="drops-close" @click="stashSellIncoming">
             Vendre la nouvelle 🪙 {{ sellValue(stashConflict.incoming) }}
+          </button>
+          <button
+            v-if="scrapValue(stashConflict.incoming) > 0"
+            class="drops-close"
+            @click="stashRecycleIncoming"
+          >
+            Recycler la nouvelle 🔩 {{ scrapValue(stashConflict.incoming) }}
           </button>
           <button class="drops-close ghost" @click="stashConflict = null">Ne rien faire</button>
         </div>
@@ -4996,17 +5030,21 @@ function doStashSetPiece(it: Item) {
   }, 'Impossible de ranger cette pièce.');
 }
 // Remplacer : range la nouvelle, vend l'ancienne (ou la renvoie au sac si 🔒).
-function stashReplace() {
+function stashReplace(disposal: 'sell' | 'recycle') {
   const cf = stashConflict.value;
   if (!cf) return;
   const locked = cf.stored.locked;
+  const gain =
+    disposal === 'recycle'
+      ? `recyclée 🔩 +${scrapValue(cf.stored)}`
+      : `vendue 🪙 +${sellValue(cf.stored)}`;
   withUid(async (uid) => {
-    await char.stashSetPiece(uid, cf.incoming.id, true);
+    await char.stashSetPiece(uid, cf.incoming.id, disposal);
     $q.notify({
       type: 'positive',
       message: locked
         ? '📦 Rangée — ancienne 🔒 renvoyée au sac.'
-        : '📦 Rangée — ancienne vendue 🪙.',
+        : `📦 Rangée — ancienne ${gain}.`,
     });
   }, 'Action impossible.');
   stashConflict.value = null;
@@ -5016,6 +5054,16 @@ function stashSellIncoming() {
   const cf = stashConflict.value;
   if (!cf) return;
   withUid((uid) => char.sell(uid, cf.incoming.id), 'Vente impossible.');
+  stashConflict.value = null;
+}
+// Garder la rangée, envoyer la nouvelle à la forge.
+function stashRecycleIncoming() {
+  const cf = stashConflict.value;
+  if (!cf) return;
+  withUid(async (uid) => {
+    const g = await char.recycle(uid, cf.incoming.id);
+    if (g) $q.notify({ type: 'positive', message: `🔩 +${g} ferraille` });
+  }, 'Recyclage impossible.');
   stashConflict.value = null;
 }
 // Nettoyage en masse : objets du sac moins rares que l'équipé du même slot.
@@ -6806,11 +6854,30 @@ button.pt-mini:active {
   color: var(--text);
   margin-top: 4px;
 }
+/* La PUISSANCE est le verdict de cette modale : elle se lit avant tout le reste. */
 .stash-pow {
-  font-size: 12px;
-  color: var(--dim);
+  font-family: var(--font-display, inherit);
+  font-size: 20px;
+  line-height: 1.1;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
-  margin-top: 3px;
+  margin: 2px 0 5px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.stash-side.best .stash-pow {
+  color: var(--accent);
+}
+.stash-delta {
+  font-size: 12px;
+  font-weight: 700;
+}
+.stash-delta.up {
+  color: var(--d1, #7bc86c);
+}
+.stash-delta.down {
+  color: var(--d4, #ff6a45);
 }
 .stash-actions {
   display: flex;
