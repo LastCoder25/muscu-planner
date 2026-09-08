@@ -171,7 +171,7 @@
              ruelle relie la porte (sud) au corps de garde (nord) — l'axe que l'enceinte
              dessine déjà, rendu visible. -->
         <polygon :points="innerPoints" class="yard-ground" />
-        <path :d="`M100 ${WALL_BOTTOM - 13} L100 ${WALL_TOP + 13}`" class="yard-lane" />
+        <circle cx="100" cy="100" r="9" class="yard-plaza" />
 
         <!-- ── LA COUR ──────────────────────────────────────────────────────
              Deux rangées de bâtiments de production + une rangée de services.
@@ -768,22 +768,24 @@ interface YardCell {
 // une grille 4×2 laisserait un trou béant au dernier rang, alors que 4 + 3 centré se lit
 // comme un village qui épouse l'octogone. ⚠️ Le nombre de cases suit `BUILD.plotCap` (un
 // test le verrouille) : ajouter un type de bâtiment demande une position de plus ici.
-// Les 7 ATELIERS : un en tête d'axe, puis deux colonnes de trois qui encadrent
-// l'artère. Symétrique par rapport à l'axe porte↔corps de garde, donc lisible d'un
-// coup d'œil — et le regard suit la rue au lieu de balayer une grille.
-const PLOT_POS: { x: number; y: number }[] = [
-  { x: 100, y: 66 },
-  { x: 75, y: 88 },
-  { x: 125, y: 88 },
-  { x: 75, y: 110 },
-  { x: 125, y: 110 },
-  { x: 75, y: 132 },
-  { x: 125, y: 132 },
-];
-// Les 3 SERVICES s'alignent SUR l'artère : chenil, infirmerie, chantier forment
-// l'épine civile de la ville, entre les deux rangées d'ateliers.
-const SVC_X = [100, 100, 100];
-const SVC_Y_EACH = [92, 114, 136];
+// ── LA VILLE EN DEUX ANNEAUX ──────────────────────────────────────────────────
+// Les 7 ATELIERS contre les remparts (r = 43), les 3 SERVICES autour de la place
+// centrale (r = 16), le cœur laissé LIBRE. Positions calculées, pas posées à l'œil :
+// une recherche sur les deux rayons et l'orientation a retenu celle qui MAXIMISE
+// l'écart minimum entre deux tuiles — **27,3 unités**, contre 20 pour la disposition
+// en colonnes (où les cibles tactiles se touchaient). Le coin de tuile le plus éloigné
+// tombe à 55,7 pour un apothème intérieur de 57,2.
+// ⚠️ Contrainte tenue par la recherche : **aucun atelier dans les 24° autour du bas**,
+// sinon un bâtiment se posait pile devant la porte. Les deux plus bas sont à x = 81 et
+// 119, ce qui laisse le couloir d'entrée libre.
+const RING = (n: number, r: number, off: number) =>
+  Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * 2 * Math.PI - Math.PI / 2 + off;
+    return { x: 100 + Math.cos(a) * r, y: 100 + Math.sin(a) * r };
+  });
+const PLOT_POS = RING(7, 43, 0);
+// Services : un vers la porte, deux vers le corps de garde — ils encadrent la place.
+const SVC_POS = RING(3, 16, Math.PI);
 const YARD_HALF = 9; // demi-côté DESSINÉ
 // Cible tactile plus large que le dessin, sans chevauchement (elle vaut exactement l'écart
 // entre deux colonnes) → ~37 px sur un téléphone, contre 33 pour la tuile visible seule.
@@ -820,8 +822,8 @@ const yard = computed<YardCell[]>(() => {
     cells.push({
       key: id,
       service: true,
-      x: SVC_X[i]!,
-      y: SVC_Y_EACH[i]!,
+      x: SVC_POS[i]!.x,
+      y: SVC_POS[i]!.y,
       emoji: t.emoji,
       built: lvlOf(id) > 0,
       locked: heroLevel.value < t.unlockLevel,
@@ -1185,12 +1187,10 @@ const doCollect = () =>
   stroke-width: 1;
   pointer-events: none;
 }
-/* L'ARTÈRE : une vraie rue pavée, de la porte au corps de garde, sur laquelle
-   s'alignent les services. C'est elle qui donne un axe au dessin. */
-.yard-lane {
-  stroke: #2d2619;
-  stroke-width: 26;
-  stroke-linecap: round;
+/* LA PLACE : le cœur laissé libre par les deux anneaux. C'est le vide qui compose —
+   sans lui, dix tuiles réparties ne seraient qu'un semis. */
+.yard-plaza {
+  fill: #2d2619;
   pointer-events: none;
 }
 .yard.svc .yard-pad {

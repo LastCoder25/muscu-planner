@@ -1411,11 +1411,11 @@
               <span class="repl-choice-lbl">Garder</span>
               <small>au sac</small>
             </button>
-            <button class="repl-choice" @click="confirmReplace('sell')">
-              <span class="repl-choice-emo">🪙</span>
-              <span class="repl-choice-lbl">Vendre</span>
+            <button class="repl-choice" @click="confirmReplace('recycle')">
+              <span class="repl-choice-emo">🔩</span>
+              <span class="repl-choice-lbl">Recycler</span>
               <small v-if="equippedInSlot(replaceTarget.slot)"
-                >+{{ sellValue(equippedInSlot(replaceTarget.slot)!) }} or</small
+                >+{{ scrapValue(equippedInSlot(replaceTarget.slot)!) }} ferraille</small
               >
             </button>
           </div>
@@ -1694,10 +1694,10 @@
               <button
                 class="lo-mini sell"
                 :disabled="busy"
-                :title="'Vendre ces objets (' + fmtPow(lo.sellGold) + ' or)'"
+                :title="'Fondre ces objets (' + lo.sellGold + ' 🔩)'"
                 @click="doSellLoadout(i)"
               >
-                🪙 Vendre ({{ lo.sellGold }})
+                🔩 Recycler ({{ lo.sellGold }})
               </button>
             </div>
           </div>
@@ -2436,7 +2436,7 @@
           <button
             v-if="stageDone && !char.row?.pending_reward && nextContent"
             class="rm-btn rm-btn-next"
-            :disabled="!nextContent.affordable || busy || conflictPending"
+            :disabled="!nextContent.affordable || busy"
             :title="`Combat suivant : ${nextContent.name} — coûte ${nextContent.cost} ${nextContent.icon}`"
             aria-label="Combat suivant"
             @click="launchNext"
@@ -2517,7 +2517,6 @@ import {
   magicFindLuck,
   itemLevelMult,
   round1,
-  sellValue,
   scrapValue,
   canRecycle,
   isFamiliar,
@@ -3670,7 +3669,7 @@ const reattackStock = computed(() =>
   lastBoss.value ? (char.row?.summon_stones ?? 0) : Math.floor(c.value.energy),
 );
 const canReattack = computed(() => {
-  if (busy.value || char.row?.pending_reward || conflictPending.value) return false;
+  if (busy.value || char.row?.pending_reward) return false;
   const have = lastBoss.value ? (char.row?.summon_stones ?? 0) : c.value.energy;
   return have >= reattackCost.value;
 });
@@ -3718,7 +3717,6 @@ const nextContent = computed(() => {
   return null;
 });
 function launchNext() {
-  if (conflictPending.value) return; // gère d'abord le comparatif de set en attente
   const n = nextContent.value;
   if (!n) return;
   if (n.kind === 'dungeon') void explore(n.dungeon);
@@ -4359,15 +4357,12 @@ async function fightBoss(b: MilestoneBoss) {
       famAtkXp: (4 + b.unlockLevel) * (win ? 2 : 1),
       playerLevel: c.value.level.level,
     });
-    // Pièce de set → filée au loadout de sa voie. Emplacement OCCUPÉ → conflit : on garde le
-    // comparatif EN ATTENTE et on l'ouvre à la RÉVÉLATION du drop (cf. watch stageDone), pour
-    // qu'il s'affiche par-dessus le rapport (pas derrière). Réattaquer est bloqué tant qu'il
-    // n'est pas traité (conflictPending) → pas d'empilement de pièces non comparées.
+    // Pièce de set → rangée dans le loadout de sa voie. On attend la RÉVÉLATION du drop
+    // pour le faire : l'éclat de remplacement ne doit pas partir pendant qu'on regarde
+    // encore le combat. Le rangement se tranche tout seul (la meilleure reste), donc plus
+    // rien ne bloque « Réattaquer » — c'était le défaut du comparatif en attente.
     const conflict = bossRes?.conflicts?.[0];
-    if (conflict) {
-      const { idx, stored } = loadoutTargetFor(conflict);
-      if (stored) pendingBossConflict.value = { incoming: conflict, stored, idx };
-    }
+    if (conflict) pendingBossStash.value = conflict;
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!));
     run.value = {
       name: b.name,
@@ -4771,7 +4766,7 @@ const loadoutsView = computed(() => {
     const stored = los[i]?.items ?? {};
     const items = SLOTS.map((s) => stored[s]).filter((it): it is Item => !!it);
     const power = items.length ? loadoutPower(stored, loadoutVoie(i)?.id ?? null) : 0;
-    const sellGold = items.reduce((s, it) => s + sellValue(it), 0);
+    const sellGold = items.reduce((s, it) => s + scrapValue(it), 0);
     return { items, count: items.length, power, delta: power - combatPowerVal.value, sellGold };
   });
 });
@@ -4822,22 +4817,22 @@ function doUnpackLoadout(i: number) {
 function doSellLoadout(i: number) {
   const items = Object.values(char.row?.loadouts?.[i]?.items ?? {}).filter(Boolean) as Item[];
   if (!items.length) return;
-  const gold = items.reduce((a, it) => a + sellValue(it), 0);
+  const gain = items.reduce((a, it) => a + scrapValue(it), 0);
   $q.dialog({
-    title: 'Vendre tout ce set ?',
+    title: 'Fondre tout ce set ?',
     message:
-      `${items.length} pièce(s) seront définitivement vendues contre ${gold} 🪙 : ` +
+      `${items.length} pièce(s) partiront à la forge pour ${gain} 🔩 : ` +
       items.map((it) => it.name).join(', ') +
-      '.',
+      '. Les pièces 🔒 repartent au sac.',
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: `Vendre (+${gold} 🪙)`, color: 'negative' },
+    ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
   }).onOk(() => doSellLoadoutConfirmed(i));
 }
 function doSellLoadoutConfirmed(i: number) {
   withUid(async (uid) => {
-    const gold = await char.sellLoadout(uid, i);
-    if (gold) $q.notify({ type: 'positive', message: `🪙 Loadout vendu (+${gold} or).` });
-  }, 'Impossible de vendre le loadout.');
+    const g = await char.recycleLoadout(uid, i);
+    if (g) $q.notify({ type: 'positive', message: `🔩 Set fondu (+${g} ferraille).` });
+  }, 'Impossible de recycler ce set.');
 }
 
 // ── Familier (compagnon) ──
@@ -5081,7 +5076,7 @@ const replaceTarget = ref<Item | null>(null);
 function openReplace(drop: Item) {
   replaceTarget.value = drop;
 }
-function confirmReplace(disposal: 'sell' | 'keep') {
+function confirmReplace(disposal: 'recycle' | 'keep') {
   const drop = replaceTarget.value;
   if (!drop) return;
   replaceTarget.value = null;
@@ -5121,42 +5116,23 @@ function doToggleLock(it: Item) {
 // Pièce de set (de voie) → bouton 📦 pour la ranger dans le loadout de SA voie (loadout i↔voie i).
 const isVoieSetItem = (it: Item) => !!it.setId && it.setId.startsWith('voie:');
 // Conflit de rangement : le slot visé du loadout est déjà occupé → on compare et on choisit.
-const stashConflict = ref<{ incoming: Item; stored: Item; idx: number } | null>(null);
-// Conflit de drop de BOSS en attente : on ne l'ouvre PAS tout de suite (sinon il se retrouve
-// DERRIÈRE le rapport de combat et n'apparaît qu'à sa fermeture). On le garde ici et on
-// l'ouvre au moment où le drop est RÉVÉLÉ (fin d'animation, stageDone) → il s'affiche par-dessus
-// le rapport, juste après le drop.
-const pendingBossConflict = ref<{ incoming: Item; stored: Item; idx: number } | null>(null);
-// Un conflit est-il à traiter ? → bloque Réattaquer / Combat suivant (on gère AVANT de relancer,
-// sinon un 2e drop empilerait un 2e conflit et la 1re pièce resterait au sac non comparée).
-const conflictPending = computed(() => !!stashConflict.value || !!pendingBossConflict.value);
-// À la révélation du drop (fin d'anim OU skip), on ouvre le comparatif par-dessus le
-// rapport. Appelé par le watch (fin d'animation) ET par openReport (révélation
-// immédiate quand l'anim est passée) → jamais de conflit orphelin qui bloque la réattaque.
+// La pièce de set gagnée sur un boss, en attente d'être rangée. ⚠️ On ne la range pas
+// tout de suite : on attend la RÉVÉLATION du drop (fin d'animation), pour que l'éclat de
+// remplacement ne parte pas pendant qu'on regarde encore le combat.
+const pendingBossStash = ref<Item | null>(null);
 function promotePendingConflict() {
-  if (pendingBossConflict.value && reportOpen.value) {
-    const cf = pendingBossConflict.value;
-    pendingBossConflict.value = null;
-    // Ouvrir le comparatif au TICK SUIVANT : sinon (rapport ouvert dans le même flush,
-    // ex. anim passée) Quasar assigne un z-index plus bas à ce dialogue (déclaré AVANT le
-    // rapport dans le template) → il s'ouvre DERRIÈRE. En différant d'un tick il s'enregistre
-    // après le rapport → z-index supérieur → il passe DEVANT (ticket suivi 8dba6b98).
-    void nextTick(() => {
-      stashConflict.value = cf;
-    });
-  }
+  const it = pendingBossStash.value;
+  if (!it) return;
+  pendingBossStash.value = null;
+  doStashSetPiece(it); // se tranche tout seul : la meilleure reste, l'autre fond
 }
 watch(stageDone, (done) => {
   if (done) promotePendingConflict();
 });
-// Filet de sécurité : si le rapport est fermé alors qu'un conflit n'a pas été révélé
-// (animation coupée en cours), on ouvre quand même le comparatif → jamais de conflit
-// orphelin qui garde Réattaquer grisé au run suivant (ticket 8dba6b98).
+// Filet : rapport fermé sans que le drop ait été révélé (animation coupée) → on range
+// quand même, sinon la pièce resterait indéfiniment au sac.
 watch(reportOpen, (open) => {
-  if (!open && pendingBossConflict.value) {
-    stashConflict.value = pendingBossConflict.value;
-    pendingBossConflict.value = null;
-  }
+  if (!open) promotePendingConflict();
 });
 function loadoutTargetFor(it: Item): { idx: number; stored: Item | undefined } {
   const idx = VOIES.findIndex((v) => v.id === (it.setId ?? '').slice('voie:'.length));
@@ -5175,7 +5151,10 @@ function doStashSetPiece(it: Item) {
   if (!stored) {
     withUid(async (uid) => {
       await char.stashSetPiece(uid, it.id);
-      $q.notify({ type: 'positive', message: `🧩 Rangée dans ton set ${setName}.` });
+      $q.notify({
+        type: 'positive',
+        message: `🧩 Ajoutée à ton set ${setName} — l'emplacement était libre.`,
+      });
     }, 'Impossible de ranger cette pièce.');
     return;
   }

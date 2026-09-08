@@ -9,7 +9,6 @@ import {
   type EnergyLogEntry,
 } from '@/lib/character';
 import {
-  sellValue,
   scrapValue,
   canRecycle,
   sellValueOf,
@@ -515,22 +514,25 @@ export const useCharacterStore = defineStore('character', () => {
           );
           const items = { ...loadouts[idx]!.items };
           const existing = items[item.slot];
-          let gold = cur.gold;
+          // Plus de marchand : la pièce écartée part à la FORGE (au sac si elle est 🔒).
+          let scrap = cur.scrap;
           let inventory = cur.inventory;
+          const jeter = (it: Item) => {
+            if (canRecycle(it)) scrap += scrapValue(it);
+            else inventory = [...inventory, it]; // 🔒 → au sac, le verrou protège de tout
+          };
           if (!existing) {
             items[item.slot] = item; // emplacement libre → rangé
           } else if ((existing.effect?.value ?? 0) >= (item.effect?.value ?? 0)) {
-            gold += sellValue(item); // loadout meilleur (ou égal) → drop vendu
+            jeter(item); // la rangée est meilleure (ou égale) → le drop fond
           } else {
             items[item.slot] = item; // drop meilleur → remplace
-            if (existing.locked)
-              inventory = [...inventory, existing]; // 🔒 → au sac
-            else gold += sellValue(existing); // sinon ancien vendu
+            jeter(existing);
           }
           loadouts[idx] = { items };
           return persist(userId, {
             loadouts,
-            gold,
+            scrap,
             inventory,
             set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, [item]),
             pending_reward: null,
@@ -628,38 +630,6 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, {
       inventory: cur.inventory.map((i) => (i.id === itemId ? { ...i, locked: !i.locked } : i)),
     });
-  }
-
-  // Vend un objet du sac → or.
-  async function sell(userId: string, itemId: string) {
-    const cur = row.value;
-    if (!cur) return;
-    const item = cur.inventory.find((i) => i.id === itemId);
-    if (!item || item.locked) return; // 🔒 protégé
-    const gain = sellValue(item);
-    const res = await persist(userId, {
-      gold: cur.gold + gain,
-      inventory: cur.inventory.filter((i) => i.id !== itemId),
-    });
-    goldFx.gain(gain);
-    return res;
-  }
-
-  // Vend EN MASSE une liste d'objets du sac (par id) → or.
-  async function sellMany(userId: string, ids: string[]): Promise<number> {
-    const cur = row.value;
-    if (!cur || !ids.length) return 0;
-    const set = new Set(ids);
-    const targets = cur.inventory.filter((i) => set.has(i.id) && !i.locked);
-    if (!targets.length) return 0;
-    const rm = new Set(targets.map((t) => t.id)); // ne retire QUE les non-verrouillés
-    const gain = targets.reduce((a, it) => a + sellValue(it), 0);
-    await persist(userId, {
-      gold: cur.gold + gain,
-      inventory: cur.inventory.filter((i) => !rm.has(i.id)),
-    });
-    goldFx.gain(gain);
-    return targets.length;
   }
 
   // ♻️ Envoie un objet du sac À LA FORGE → ferraille 🔩 (réparations et défenses).
@@ -834,7 +804,7 @@ export const useCharacterStore = defineStore('character', () => {
 
   // Équipe un objet du sac ET dispose de l'objet remplacé (vend → or / garde → sac) en
   // UNE écriture. Évite l'aller-retour par le sac.
-  async function equipReplacing(userId: string, itemId: string, disposal: 'sell' | 'keep') {
+  async function equipReplacing(userId: string, itemId: string, disposal: 'recycle' | 'keep') {
     const cur = row.value;
     if (!cur) return;
     const item = cur.inventory.find((i) => i.id === itemId);
@@ -845,13 +815,12 @@ export const useCharacterStore = defineStore('character', () => {
     equipped[item.slot] = item;
     const patch: Partial<CharacterRow> = { equipped };
     let sold = 0;
-    if (prev && disposal === 'sell') {
-      sold = sellValue(prev);
-      patch.gold = cur.gold + sold;
-    } else if (prev) inventory.push(prev); // keep
+    if (prev && disposal === 'recycle' && canRecycle(prev)) {
+      sold = scrapValue(prev);
+      patch.scrap = cur.scrap + sold;
+    } else if (prev) inventory.push(prev); // keep (ou pièce 🔒 : le verrou protège)
     patch.inventory = inventory;
     const res = await persist(userId, patch);
-    if (sold > 0) goldFx.gain(sold);
     return res;
   }
 
@@ -894,17 +863,24 @@ export const useCharacterStore = defineStore('character', () => {
     return items.length;
   }
   // Vend un loadout rangé : ses objets → or, le slot est vidé. Renvoie l'or gagné (ticket 53a6d487).
-  async function sellLoadout(userId: string, i: number): Promise<number> {
+  async function recycleLoadout(userId: string, i: number): Promise<number> {
     const cur = row.value;
     if (!cur || i < 0 || i >= MAX_LOADOUTS) return 0;
     const lo = cur.loadouts[i];
     const items = lo ? SLOTS.map((s) => lo.items[s]).filter((it): it is Item => !!it) : [];
     if (!items.length) return 0;
-    const gold = items.reduce((s, it) => s + sellValue(it), 0);
+    // ⚠️ Les pièces 🔒 ne fondent pas : elles repartent au sac. Le verrou protège de
+    // TOUTES les sorties, pas seulement de celle qu'on avait en tête en l'écrivant.
+    const fondues = items.filter((it) => canRecycle(it));
+    const gardees = items.filter((it) => !canRecycle(it));
+    const gain = fondues.reduce((s, it) => s + scrapValue(it), 0);
     const loadouts = cur.loadouts.map((l, k) => (k === i ? { items: {} } : l));
-    await persist(userId, { gold: cur.gold + gold, loadouts });
-    goldFx.gain(gold);
-    return gold;
+    await persist(userId, {
+      scrap: cur.scrap + gain,
+      inventory: gardees.length ? [...cur.inventory, ...gardees] : cur.inventory,
+      loadouts,
+    });
+    return gain;
   }
 
   // Range une PIÈCE DE SET du sac dans le loadout de SA voie (loadout i ↔ VOIES[i]) : l'objet
@@ -915,9 +891,9 @@ export const useCharacterStore = defineStore('character', () => {
   async function stashSetPiece(
     userId: string,
     itemId: string,
-    /** Que faire de la pièce DÉPLACÉE : la garder au sac, la vendre, ou la recycler.
+    /** Que faire de la pièce DÉPLACÉE : la garder au sac ou la fondre.
      *  ⚠️ Une pièce 🔒 revient TOUJOURS au sac, quelle que soit la consigne. */
-    displaced: 'keep' | 'sell' | 'recycle' = 'keep',
+    displaced: 'keep' | 'recycle' = 'keep',
   ): Promise<number> {
     const cur = row.value;
     if (!cur) return -1;
@@ -934,12 +910,11 @@ export const useCharacterStore = defineStore('character', () => {
     items[item.slot] = item;
     loadouts[idx] = { items };
     let inventory = cur.inventory.filter((it) => it.id !== itemId);
-    let gold = cur.gold;
+    const gold = cur.gold;
     let scrap = cur.scrap;
     const old = displacedItem;
     if (old) {
-      if (displaced === 'sell' && !old.locked) gold += sellValue(old);
-      else if (displaced === 'recycle' && canRecycle(old)) scrap += scrapValue(old);
+      if (displaced === 'recycle' && canRecycle(old)) scrap += scrapValue(old);
       else inventory = [...inventory, old]; // verrouillée ou « garder » → retour au sac
     }
     await persist(userId, { inventory, loadouts, gold, scrap });
@@ -1667,7 +1642,7 @@ export const useCharacterStore = defineStore('character', () => {
     equip,
     swapLoadout,
     unpackLoadout,
-    sellLoadout,
+    recycleLoadout,
     stashSetPiece,
     optimizeGear,
     previewGearPlan,
@@ -1679,8 +1654,6 @@ export const useCharacterStore = defineStore('character', () => {
     unequipTalent,
     setEquippedTalents,
     sellTalent,
-    sell,
-    sellMany,
     recycle,
     recycleMany,
     toggleLock,
