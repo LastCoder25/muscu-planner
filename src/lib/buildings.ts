@@ -252,7 +252,17 @@ export const BUILD = {
   // emplacement par niveau, alors que plusieurs types sont déjà déblocables → on décide
   // de l'ORDRE. Ajouter un type ouvre son emplacement tout seul ; un test le verrouille.
   plotCap: BUILDING_TYPES.length,
-  upBase: 220, // upgrade L→L+1 (or) = round(upBase × L^upExp)
+  // ⚠️ COEFFICIENT ×6 (220 → 1320), EXPOSANT INCHANGÉ — et c'est tout le point.
+  // Mesuré sur un an et trois profils : à 220 le joueur avait TOUT au plafond de son
+  // niveau dès le 2e mois, et n'en dépensait ensuite que ~20 % de son or (149 M en banque
+  // à un an pour le profil muscu). Le plafond effectif n'était plus l'or mais le NIVEAU :
+  // l'or n'avait plus de destination. À 1320 il court après ses derniers niveaux toute
+  // l'année (55 % → 90 % du plafond) et dépense ~100 % de ce qu'il gagne.
+  // ⚠️ NE PAS faire ça en montant l'EXPOSANT : les revenus suivent L^1.6, donc un coût en
+  // L^2.35 diverge et recrée le MUR de la v0.657 (mesuré alors : 115 expéditions pour UN
+  // niveau au niveau 100, les bâtiments gelaient). Un coefficient déplace la courbe sans
+  // la déformer : le ratio coût/revenu reste PLAT sur 1→100, ce que le test verrouille.
+  upBase: 1320, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
   // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
   // `L^1.6` (coût ET gain d'expédition), donc un coût en `L^2.6` diverge linéairement :

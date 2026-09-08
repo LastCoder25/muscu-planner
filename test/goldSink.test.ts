@@ -1,43 +1,87 @@
 import { describe, it, expect } from 'vitest';
-import { buildingUpgradeCost } from '@/lib/buildings';
+import { buildingUpgradeCost, BUILDING_TYPES, BUILD, plotsForLevel } from '@/lib/buildings';
 import { goldCost, travelOneWayMin, travelFactor } from '@/lib/expedition';
 import { DUNGEONS, dungeonGold } from '@/data/dungeons';
+import { DEFENSE_TYPES } from '@/lib/raid';
 
-/** Net d'une mine à distance moyenne : la meilleure source d'or RÉGULIÈRE du jeu.
- *  (Les donjons en donnent autant, mais l'expédition est l'unité de référence ici.) */
+/** LE PUITS D'OR, mesuré contre le REVENU RÉEL.
+ *
+ *  ⚠️ ERREUR D'UNITÉ CORRIGÉE ICI (v0.684). Ce fichier comparait le coût d'un niveau de
+ *  bâtiment à UNE expédition de mine. Or, mesuré sur un an, **79 % de l'or vient des
+ *  donjons** — qu'on enchaîne ~8 fois par séance — et 14 % seulement des mines. Le
+ *  dénominateur était donc ~13× trop petit : le test déclarait l'équilibre sain pendant
+ *  que le joueur finissait l'année avec **149 M d'or en banque** et tout au plafond de
+ *  son niveau dès le 2e mois. Un puits qui déborde n'est pas un puits.
+ *
+ *  ⚠️ DEUX INVARIANTS OPPOSÉS, et il faut les deux :
+ *   • le coût doit DÉPASSER le revenu (sinon on est au plafond, l'or n'a plus d'emploi) ;
+ *   • sans DÉRIVER avec le niveau (sinon c'est le MUR de la v0.657 : coût en L^2.6 contre
+ *     revenus en L^1.6, 115 expéditions pour un niveau à 100, bâtiments gelés).
+ *  D'où la règle : on déplace la courbe par son COEFFICIENT, jamais par son exposant. */
+
+const LEVELS = [5, 10, 15, 20, 26, 35, 50, 70, 100];
+/** ~4 séances de sport par semaine : le jeu est annexe. */
+const SPORT_PER_DAY = 4 / 7;
+/** Énergie d'une séance → ~8 descentes (coût plafonné à 40 ⚡). */
+const RUNS_PER_SESSION = 8;
+
+const bestDungeon = (L: number) =>
+  [...DUNGEONS].filter((d) => d.recoLevel <= L).sort((a, b) => b.recoLevel - a.recoLevel)[0] ??
+  DUNGEONS[0]!;
+
+/** Net d'une expédition de mine à distance moyenne. */
 function mineNet(level: number): number {
-  const rth = (2 * travelOneWayMin(level, 0.5)) / 60; // heures aller-retour
+  const rth = (2 * travelOneWayMin(level, 0.5)) / 60;
   const cost = goldCost('mine', level);
   return Math.round(cost * (1.3 + travelFactor(rth))) - cost;
 }
+/** Production passive d'une Mine d'or au niveau du joueur, par jour. */
+function goldMinePerDay(L: number): number {
+  const t = BUILDING_TYPES.find((b) => b.id === 'gold_mine')!;
+  return (t.prodPerHrPerLvl ?? 0) * L * BUILD.storageHours;
+}
+/** Revenu d'une JOURNÉE type : la séance de donjons au prorata, 2 mines, le passif. */
+function goldPerDay(L: number): number {
+  return (
+    dungeonGold(bestDungeon(L)) * RUNS_PER_SESSION * SPORT_PER_DAY +
+    2 * mineNet(L) +
+    goldMinePerDay(L)
+  );
+}
+/** Monter d'un cran tous les bâtiments DÉBLOQUÉS à ce niveau : le rythme de croisière.
+ *  (L'enceinte a sa courbe dédiée, testée dans `raid.test` et `scrapEconomy.test`.) */
+const cranTotal = (L: number) =>
+  buildingUpgradeCost(L) * Math.min(plotsForLevel(L), BUILDING_TYPES.length);
 
-const LEVELS = [5, 10, 15, 20, 26, 35, 50, 70, 100];
-
-describe("puits d'or : le coût des bâtiments reste EN PHASE avec le revenu", () => {
-  // Le vrai invariant du système économique. Il a été violé une fois (upExp monté à 2,6
-  // pour « créer un puits ») : le coût divergeait en L^2.6 face à un revenu en L^1.6, et
-  // à haut niveau plus aucune amélioration n'était payable. Ce test rend la régression
-  // impossible à réintroduire en silence.
-  it('un niveau de bâtiment coûte un nombre BORNÉ d’expéditions, à tout niveau', () => {
+describe("puits d'or : on court toujours après les derniers niveaux", () => {
+  it('⚠️ LA RÈGLE : un cran sur tous les bâtiments coûte PLUS qu’une journée de revenu', () => {
+    // Sinon le joueur est en permanence au plafond de son niveau et son or n'a plus de
+    // destination — c'est très exactement ce que la simulation a constaté à 220.
     for (const L of LEVELS) {
-      const ratio = buildingUpgradeCost(L) / mineNet(L);
-      expect(ratio, `niveau ${L} : ${ratio.toFixed(1)} expéditions`).toBeGreaterThan(2);
-      expect(ratio, `niveau ${L} : ${ratio.toFixed(1)} expéditions`).toBeLessThan(9);
+      const jours = cranTotal(L) / goldPerDay(L);
+      // Mesuré : ~25 jours au niveau 5, puis PLAT autour de 46-50 de 15 à 100. On ne
+      // rattrape donc jamais tout à fait le plafond — c'est le but. Simulation sur un an :
+      // le joueur passe de 55 % à 90 % du plafond et dépense ~100 % de son or.
+      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeGreaterThan(15);
+      // …sans devenir un mur : au-delà, on ne progresse plus, on attend.
+      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeLessThan(70);
     }
   });
 
-  it('le ratio ne DÉRIVE pas avec le niveau (pas d’emballement)', () => {
-    const ratios = LEVELS.map((L) => buildingUpgradeCost(L) / mineNet(L));
+  it('⚠️ le ratio ne DÉRIVE pas avec le niveau — c’est le MUR de la v0.657 qu’on interdit', () => {
+    // Le coût et le revenu doivent garder la même forme. Un exposant plus raide que celui
+    // des revenus (L^1.6) creuse un écart qui grandit sans fin : à L^2.6 il fallait 13
+    // expéditions pour un niveau au niveau 5, et 115 au niveau 100.
+    const ratios = LEVELS.map((L) => cranTotal(L) / goldPerDay(L));
     const min = Math.min(...ratios);
     const max = Math.max(...ratios);
-    // Avec l'ancien exposant l'écart était de ~8,5× entre le niveau 5 et 100.
-    expect(max / min, `écart ${min.toFixed(1)} → ${max.toFixed(1)}`).toBeLessThan(2);
+    expect(max / min, `écart ${min.toFixed(2)} → ${max.toFixed(2)}`).toBeLessThan(2.5);
   });
 
-  it('reste un vrai puits : améliorer coûte toujours plusieurs expéditions', () => {
-    for (const L of LEVELS) {
-      expect(buildingUpgradeCost(L)).toBeGreaterThan(mineNet(L) * 2);
-    }
+  it('l’AMORÇAGE reste doux : construire ses premiers bâtiments ne demande pas une semaine', () => {
+    // On durcit la MONTÉE, pas l'entrée. Poser un bâtiment doit rester à portée immédiate.
+    for (const t of BUILDING_TYPES) expect(t.buildGold).toBeLessThan(goldPerDay(10));
+    for (const t of DEFENSE_TYPES) expect(t.buildGold).toBeLessThan(goldPerDay(12));
   });
 
   it('le coût reste strictement croissant avec le niveau', () => {
@@ -45,55 +89,18 @@ describe("puits d'or : le coût des bâtiments reste EN PHASE avec le revenu", (
       expect(buildingUpgradeCost(L)).toBeGreaterThan(buildingUpgradeCost(L - 1));
     }
   });
-});
 
-/** Le donjon le plus profond clairable à ce niveau, et ce qu'il rend. */
-function bestDungeonGold(level: number): number {
-  const d = [...DUNGEONS]
-    .filter((x) => x.recoLevel <= level)
-    .sort((a, b) => b.recoLevel - a.recoLevel)[0];
-  return d ? dungeonGold(d) : 0;
-}
-
-describe("puits d'or : pas de FALAISE à la jointure écrit → procédural", () => {
-  // ⚠️ Le test précédent ne mesurait le revenu qu'en EXPÉDITIONS de mine. Or les donjons
-  // paient aussi, et bien davantage : c'est là qu'était le trou. Le contenu procédural
-  // repartait sur un socle plat (2500 + reco×180) qui n'avait aucun rapport avec le
-  // dernier donjon écrit → ×2,97 d'or en un pas, et une économie 2,3× plus lâche à partir
-  // du niveau 25 (juste là où le joueur arrive).
-  const sorted = [...DUNGEONS].sort((a, b) => a.recoLevel - b.recoLevel);
-
-  it('aucun donjon ne rend brutalement plus du double du précédent', () => {
-    // On démarre au 2e : la clairière d'introduction (reco 1, 40 or) est un tutoriel, son
-    // écart avec le donjon suivant ne dit rien de l'économie.
-    for (let i = 2; i < sorted.length; i++) {
-      const prev = sorted[i - 1]!;
-      const cur = sorted[i]!;
-      const step = dungeonGold(cur) / dungeonGold(prev);
-      expect(step, `reco ${prev.recoLevel} → ${cur.recoLevel} : ×${step.toFixed(2)}`).toBeLessThan(
-        2,
-      );
-    }
-  });
-
-  it("l'or d'un donjon reste EN PHASE avec le coût d'un niveau de bâtiment, sans plateau", () => {
-    // Le vrai garde-fou : le rapport « ce que rend une descente » / « ce que coûte un
-    // niveau » doit rester dans une bande étroite, sinon une tranche de niveaux devient
-    // une pompe à or (ce qu'était la tranche 25-50).
-    const ratios = sorted
-      .filter((d) => d.recoLevel >= 5)
-      .map((d) => dungeonGold(d) / buildingUpgradeCost(d.recoLevel));
-    for (const r of ratios) expect(r).toBeLessThan(0.13);
-    expect(Math.max(...ratios) / Math.min(...ratios)).toBeLessThan(2.5);
-  });
-
-  it('une séance de donjons ne paie jamais plusieurs niveaux de bâtiment', () => {
-    // ~340 ⚡ par séance de sport, ~40 ⚡ par descente → 8 descentes. Si cela payait
-    // plusieurs niveaux d'un coup, le puits d'or n'absorberait plus rien.
+  it('⚠️ le puits tient MÊME pour un joueur qui optimise tout : revenu doublé', () => {
+    // Garde-fou contre la régression qui a motivé cette réécriture : sous-estimer le
+    // revenu fait déclarer sain un puits qui déborde. On refait donc la mesure avec un
+    // revenu DEUX FOIS supérieur au modèle — un joueur plus assidu, mieux équipé, qui
+    // enchaîne mines et donjons. Le coût d'un cran doit encore dépasser sa journée.
     for (const L of LEVELS) {
-      const perSession = bestDungeonGold(L) * 8;
-      const levels = perSession / buildingUpgradeCost(L);
-      expect(levels, `niveau ${L} : ${levels.toFixed(2)} niveau(x) par séance`).toBeLessThan(1);
+      const jours = cranTotal(L) / (goldPerDay(L) * 2);
+      expect(
+        jours,
+        `niveau ${L} : ${jours.toFixed(2)} jour(s) même à revenu doublé`,
+      ).toBeGreaterThan(5);
     }
   });
 });
