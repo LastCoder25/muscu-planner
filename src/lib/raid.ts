@@ -86,7 +86,7 @@ export interface Corpse {
 export interface BattleField {
   corpses: Corpse[];
   expiresAt: number; // les corps pourrissent
-  dispatchUntil?: number; // fouilleurs en route : fin de la vague (ms epoch)
+  dispatchUntil?: number; // fossoyeurs en route : fin de la vague (ms epoch)
   dispatchIds?: string[]; // corps réservés par la vague en cours
 }
 
@@ -200,12 +200,12 @@ export const DEFENSE_TYPES: DefenseType[] = [
   },
   {
     id: 'salvage',
-    label: 'Chantier de fouille',
+    label: 'Fosse commune',
     emoji: '🦴',
     buildGold: 650,
     buildScrap: 0,
     unlockLevel: 12,
-    desc: 'Envoie des fouilleurs dépouiller les corps après la bataille. Chaque niveau = des fouilleurs en plus par vague.',
+    desc: 'Envoie des fossoyeurs dépouiller les corps après la bataille. Chaque niveau = des fossoyeurs en plus par vague.',
   },
   {
     id: 'kennel',
@@ -357,15 +357,15 @@ export const RAID = {
   clarityMax: 5,
 } as const;
 
-/** Le chantier de fouille : capacité PAR VAGUE, renouvelable tant que les corps sont
- *  frais. On peut renvoyer les fouilleurs autant de fois qu'on veut dans les 24 h → un
+/** Le fosse commune : capacité PAR VAGUE, renouvelable tant que les corps sont
+ *  frais. On peut renvoyer les fossoyeurs autant de fois qu'on veut dans les 24 h → un
  *  petit chantier fait plusieurs allers-retours, il ne condamne pas le butin. */
 export const SCAV = {
   fieldMs: 24 * 3600_000, // les corps pourrissent au bout de 24 h
   dispatchMs: 40 * 60_000, // durée d'une vague de fouille
 } as const;
 
-/** Fouilleurs envoyés PAR VAGUE — le seul effet du niveau du chantier. Il répond à une
+/** Fossoyeurs envoyés PAR VAGUE — le seul effet du niveau du chantier. Il répond à une
  *  question unique et lisible : « combien j'en ramasse d'un coup ». */
 export function scavengerCount(level: number): number {
   return level <= 0 ? 0 : 1 + Math.floor(level / 2);
@@ -1009,8 +1009,10 @@ export function corpsesFrom(raid: Raid, report: RaidReport, seed: number): Corps
 
 export interface CorpseLoot {
   gold: number;
-  fragments: number;
-  inkDust: number;
+  /** 🔮 pierres d'invocation — ce que laissent les MORTS-VIVANTS. */
+  summonStones: number;
+  /** 🗝️ clés du Labyrinthe — ce que traînent les BÊTES venues des profondeurs. */
+  keys: number;
   items: Omit<Item, 'id'>[];
 }
 
@@ -1026,13 +1028,21 @@ export function lootCorpses(
   lootPct = 0,
 ): CorpseLoot {
   const rng = mulberry32((seed ^ 0x2545f491) >>> 0 || 1);
-  const loot: CorpseLoot = { gold: 0, fragments: 0, inkDust: 0, items: [] };
+  const loot: CorpseLoot = { gold: 0, summonStones: 0, keys: 0, items: [] };
+  // ⚠️ DEVISES VIVANTES UNIQUEMENT. Les fossoyeurs payaient en fragments 🧩 et poussière
+  // d'encre 🖋️ pour deux factions sur trois — or plus aucune fonction ne les dépense
+  // depuis le retrait des infusions de grade. Deux tiers du butin de siège étaient donc
+  // de la monnaie de singe, exactement le défaut corrigé sur la carte. Chaque faction
+  // paie désormais dans quelque chose qui se consomme, et de façon THÉMATIQUE : les
+  // bandits ont de l'or sur eux, les morts-vivants laissent de quoi rappeler un boss,
+  // les bêtes des profondeurs traînent des clés du Labyrinthe d'où elles sortent.
+  let keyOdds = 0;
   for (const c of corpses) {
     const L = Math.max(1, c.level);
     const mult = c.champion ? 4 : 1;
     if (faction === 'bandits') loot.gold += Math.round((14 + L * 5.5) * mult);
-    else if (faction === 'betes') loot.fragments += Math.round((1 + L * 0.22) * mult);
-    else loot.inkDust += Math.round((1 + L * 0.22) * mult);
+    else if (faction === 'mortsvivants') loot.summonStones += Math.round((0.35 + L * 0.045) * mult);
+    else keyOdds += (0.05 + L * 0.004) * mult; // bêtes : la clé est RARE, on cumule les chances
     // Un peu d'or partout : même une bête traîne ce qu'elle a pris au village.
     if (faction !== 'bandits') loot.gold += Math.round((5 + L * 1.8) * mult);
 
@@ -1050,8 +1060,10 @@ export function lootCorpses(
   // sur la rareté des objets — l'anti-runaway ne se contourne pas par le chenil.
   const k = 1 + Math.max(0, lootPct) / 100;
   loot.gold = Math.round(loot.gold * k);
-  loot.fragments = Math.round(loot.fragments * k);
-  loot.inkDust = Math.round(loot.inkDust * k);
+  loot.summonStones = Math.round(loot.summonStones * k);
+  // Les clés se tirent sur le CUMUL des chances : une vague de bêtes en rend une de
+  // temps en temps, jamais une par corps.
+  loot.keys = Math.floor(keyOdds * k) + (rng() < (keyOdds * k) % 1 ? 1 : 0);
   return loot;
 }
 

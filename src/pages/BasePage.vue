@@ -335,22 +335,51 @@
     <div v-if="field" class="panel loot">
       <div class="p-title">🦴 Champ de bataille — {{ remaining }} corps</div>
       <p v-if="!salvageLevel">
-        Construis un <b>Chantier de fouille</b> pour dépouiller les corps avant qu’ils ne
-        pourrissent ({{ rotIn }}).
+        Construis un <b>Fosse commune</b> pour dépouiller les corps avant qu’ils ne pourrissent ({{
+          rotIn
+        }}).
       </p>
       <template v-else>
         <p>
-          {{ scavCap }} fouilleurs par vague · les corps pourrissent {{ rotIn }}. Tu peux les
+          {{ scavCap }} fossoyeurs par vague · les corps pourrissent {{ rotIn }}. Tu peux les
           renvoyer autant de fois qu’il le faut.
         </p>
-        <button v-if="scavReady" class="cta" @click="doCollect">
-          📦 Récupérer le butin de la vague
-        </button>
+        <!-- ── LES FOUILLEURS SONT RENTRÉS ─────────────────────────────────
+             On DÉTAILLE ce qu'ils rapportent AVANT de le ramasser : un bouton qui
+             crédite en silence et laisse un toast ne donne rien à regarder, alors
+             que c'est le paiement du siège. ⚠️ L'aperçu et la récupération partagent
+             la MÊME graine (l'heure de départ) : ce qui est montré est exactement ce
+             qui sera crédité. -->
+        <div v-if="scavReady && scavLoot" class="scav-back">
+          <div class="scav-title">
+            🎒 Les fossoyeurs sont rentrés — {{ scavLoot.corpses }} corps dépouillés
+          </div>
+          <div v-if="scavPills.length" class="scav-pills">
+            <span v-for="(b, i) in scavPills" :key="i" class="scav-pill">{{ b }}</span>
+          </div>
+          <div v-if="scavLoot.items.length" class="scav-items">
+            <div v-for="(it, i) in scavLoot.items" :key="i" class="scav-item">
+              <span class="scav-emo">{{ it.emoji }}</span>
+              <span class="scav-nm">{{ it.name }}</span>
+              <span class="scav-rar" :class="'p-' + it.rarity">{{ RARITY_LABEL[it.rarity] }}</span>
+              <span class="scav-lvl">Nv {{ it.level }}</span>
+            </div>
+          </div>
+          <p v-if="!scavPills.length && !scavLoot.items.length" class="dim-note">
+            Rien de valeur sur ces corps.
+          </p>
+          <button class="cta" @click="doCollect">
+            🎒 Tout ramasser<span v-if="scavLoot.items.length">
+              — {{ scavLoot.items.length }} objet{{ scavLoot.items.length > 1 ? 's' : '' }} au
+              sac</span
+            >
+          </button>
+        </div>
         <button v-else-if="scavBusy" class="cta ghost" disabled>
-          ⏳ Fouilleurs sur le terrain — {{ scavIn }}
+          ⏳ Fossoyeurs sur le terrain — {{ scavIn }}
         </button>
         <button v-else-if="remaining > 0" class="cta" @click="doSend">
-          🦴 Envoyer les fouilleurs ({{ Math.min(scavCap, remaining) }} corps)
+          🦴 Envoyer les fossoyeurs ({{ Math.min(scavCap, remaining) }} corps)
         </button>
         <p v-else class="done">Le champ est entièrement dépouillé.</p>
       </template>
@@ -999,19 +1028,29 @@ const doHeal = () =>
     const cost = await char.healHero(uid.value, Date.now());
     if (cost) $q.notify({ type: 'positive', message: '⛑️ Ton héros est de nouveau sur pied.' });
   });
+/** Ce que les fossoyeurs rapportent, AVANT de le ramasser. Recalculé à chaque tick,
+ *  mais déterministe : la graine est celle du départ. */
+const scavLoot = computed(() =>
+  scavReady.value ? char.previewScavengers(now.value, heroLevel.value) : null,
+);
+const scavPills = computed(() => {
+  const l = scavLoot.value;
+  if (!l) return [];
+  return [
+    l.gold ? `🪙 +${l.gold}` : '',
+    l.summonStones ? `🔮 +${l.summonStones}` : '',
+    l.keys ? `🗝️ +${l.keys}` : '',
+  ].filter(Boolean);
+});
 const doCollect = () =>
   guard(async () => {
     const got = await char.collectScavengers(uid.value, Date.now(), heroLevel.value);
     if (!got) return;
-    const bits = [
-      got.gold ? `🪙 ${got.gold}` : '',
-      got.fragments ? `🧩 ${got.fragments}` : '',
-      got.inkDust ? `🖋️ ${got.inkDust}` : '',
-      got.items.length ? `🎁 ${got.items.length} objet${got.items.length > 1 ? 's' : ''}` : '',
-    ].filter(Boolean);
     $q.notify({
       type: 'positive',
-      message: `${got.corpses} corps dépouillés — ${bits.join(' · ') || 'rien de valeur'}`,
+      message: got.items.length
+        ? `🎒 Butin ramassé — ${got.items.length} objet${got.items.length > 1 ? 's' : ''} au sac.`
+        : '🎒 Butin ramassé.',
     });
   });
 </script>
@@ -1568,5 +1607,49 @@ const doCollect = () =>
 }
 .fam-atk {
   opacity: 0.7;
+}
+.scav-back {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.scav-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.scav-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.scav-pill {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.scav-items {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.scav-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.scav-rar {
+  color: var(--rk, var(--dim));
+  font-size: 11px;
+}
+.scav-lvl {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--dim);
 }
 </style>

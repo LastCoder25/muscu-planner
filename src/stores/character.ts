@@ -9,6 +9,7 @@ import {
   type EnergyLogEntry,
 } from '@/lib/character';
 import {
+  sellValue,
   scrapValue,
   canRecycle,
   sellValueOf,
@@ -662,6 +663,24 @@ export const useCharacterStore = defineStore('character', () => {
       scrap: cur.scrap + gain,
       inventory: cur.inventory.filter((i) => !rm.has(i.id)),
     });
+    return gain;
+  }
+
+  /** Cède un FAMILIER contre de l'or. ⚠️ **La seule vente qui subsiste**, et c'est
+   *  cohérent : on ne fond pas un animal à la forge — `scrapValue` rend d'ailleurs 0 pour
+   *  le slot familier, si bien que le brancher sur le recyclage rendait le bouton inerte.
+   *  Un familier dont on ne veut plus se cède ; un objet se refond. */
+  async function sellFamiliar(userId: string, itemId: string): Promise<number> {
+    const cur = row.value;
+    if (!cur) return 0;
+    const fam = cur.inventory.find((i) => i.id === itemId && i.slot === FAMILIAR_SLOT);
+    if (!fam || fam.locked) return 0;
+    const gain = sellValue(fam);
+    await persist(userId, {
+      gold: cur.gold + gain,
+      inventory: cur.inventory.filter((i) => i.id !== itemId),
+    });
+    goldFx.gain(gain);
     return gain;
   }
 
@@ -1515,7 +1534,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur?.base || !field) return;
     if (field.dispatchUntil && now < field.dispatchUntil) return; // vague déjà en route
     const cap = scavengerCount(defenseLevel(cur.base.defenses, 'salvage'));
-    if (cap <= 0) throw new Error('Construis un Chantier de fouille pour dépouiller les corps.');
+    if (cap <= 0) throw new Error('Construis un Fosse commune pour dépouiller les corps.');
     const targets = pickScavengeTargets(field, cap);
     if (!targets.length) return;
     await persistOptimistic(userId, {
@@ -1532,6 +1551,25 @@ export const useCharacterStore = defineStore('character', () => {
 
   /** Récupère ce que la vague a ramené. La richesse vient du NIVEAU DES CORPS, et la
    *  rareté des objets reste plafonnée par le niveau du joueur (anti-runaway). */
+  /** Ce que les fouilleurs RAPPORTENT, sans rien créditer — l'aperçu qu'on montre avant
+   *  de ramasser. ⚠️ La graine est celle du DÉPART (`dispatchUntil`), pas `now` : sinon
+   *  l'aperçu et la récupération tireraient deux butins différents, et l'écran mentirait. */
+  function previewScavengers(now: number, playerLevel: number) {
+    const cur = row.value;
+    const field = cur?.base?.field;
+    if (!cur?.base || !field?.dispatchUntil || now < field.dispatchUntil) return null;
+    const ids = new Set(field.dispatchIds ?? []);
+    const taken = field.corpses.filter((c) => ids.has(c.id) && !c.looted);
+    const loot = lootCorpses(
+      taken,
+      cur.base.lastReport?.faction ?? 'bandits',
+      playerLevel,
+      (field.dispatchUntil ^ cur.base.seed) >>> 0 || 1,
+      garrisonFor(cur, now).lootPct ?? 0,
+    );
+    return { ...loot, corpses: taken.length };
+  }
+
   async function collectScavengers(userId: string, now: number, playerLevel: number) {
     const cur = row.value;
     const field = cur?.base?.field;
@@ -1543,14 +1581,14 @@ export const useCharacterStore = defineStore('character', () => {
       taken,
       faction,
       playerLevel,
-      (now ^ cur.base.seed) >>> 0 || 1,
+      (field.dispatchUntil ^ cur.base.seed) >>> 0 || 1,
       garrisonFor(cur, now).lootPct ?? 0,
     );
     const drops = loot.items.map((it) => ({ ...it, id: crypto.randomUUID() }));
     await persistOptimistic(userId, {
       gold: cur.gold + loot.gold,
-      fragments: cur.fragments + loot.fragments,
-      ink_dust: cur.ink_dust + loot.inkDust,
+      summon_stones: cur.summon_stones + loot.summonStones,
+      keys: cur.keys + loot.keys,
       inventory: drops.length ? [...cur.inventory, ...drops] : cur.inventory,
       set_pieces_seen: drops.length
         ? mergeSetSeen(cur.set_pieces_seen, drops)
@@ -1625,6 +1663,7 @@ export const useCharacterStore = defineStore('character', () => {
     repairDefense,
     repairAll,
     sendScavengers,
+    previewScavengers,
     collectScavengers,
     toggleGarrison,
     autoAssignGarrison,
@@ -1654,6 +1693,7 @@ export const useCharacterStore = defineStore('character', () => {
     unequipTalent,
     setEquippedTalents,
     sellTalent,
+    sellFamiliar,
     recycle,
     recycleMany,
     toggleLock,

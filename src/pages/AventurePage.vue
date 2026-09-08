@@ -646,10 +646,10 @@
                   <button
                     v-if="!f.equipped"
                     class="tal-b ghost"
-                    title="Recycler en ferraille"
-                    @click="doRecycle(f)"
+                    title="Céder ce familier contre de l’or"
+                    @click="doSellFamiliar(f)"
                   >
-                    🔩{{ scrapValue(f) }}
+                    🪙{{ sellValue(f) }}
                   </button>
                 </div>
               </div>
@@ -2501,6 +2501,7 @@ import { recommendedPower } from '@/lib/proceduralContent';
 import { VOIES, VOIE_BY_ID, voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { endlessFoe, endlessEnergy, endlessGold, endlessDropLevel } from '@/data/endless';
 import {
+  sellValue,
   famLevel,
   playerWithGear,
   aggregateEffects,
@@ -5096,6 +5097,22 @@ function doUnequip(slot: ItemSlot) {
 
 // ♻️ L'autre porte de sortie du sac : la forge. On vend OU on recycle, jamais les deux —
 // le dialogue le dit, parce que 1 141 or et 16 🔩 ne se comparent pas d'instinct.
+/** ⚠️ Un familier se CÈDE, il ne se fond pas : `scrapValue` rend 0 pour ce slot, donc
+ *  le brancher sur le recyclage rendait le bouton inerte. C'est la seule vente du jeu. */
+function doSellFamiliar(f: Item) {
+  const gain = sellValue(f);
+  $q.dialog({
+    title: 'Céder ce familier ?',
+    message: `« ${f.name} » partira définitivement contre ${gain} 🪙.`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: `Céder (+${gain} 🪙)`, color: 'negative' },
+  }).onOk(() =>
+    withUid(async (uid) => {
+      const g = await char.sellFamiliar(uid, f.id);
+      if (g) $q.notify({ type: 'positive', message: `🪙 +${g} or` });
+    }, 'Cession impossible.'),
+  );
+}
 function doRecycle(it: Item) {
   const gain = scrapValue(it);
   $q.dialog({

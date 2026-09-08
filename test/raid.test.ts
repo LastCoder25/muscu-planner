@@ -443,10 +443,36 @@ describe('champ de bataille', () => {
     const betes = lootCorpses(corpses, 'betes', 26, 1);
     const morts = lootCorpses(corpses, 'mortsvivants', 26, 1);
     expect(bandits.gold).toBeGreaterThan(betes.gold);
-    expect(betes.fragments).toBeGreaterThan(0);
-    expect(betes.inkDust).toBe(0);
-    expect(morts.inkDust).toBeGreaterThan(0);
-    expect(morts.fragments).toBe(0);
+    // ⚠️ RÉÉCRIT : ce test exigeait des fragments 🧩 et de la poussière d'encre 🖋️ — il
+    // verrouillait donc le défaut. Ces deux devises sont MORTES (plus aucune fonction ne
+    // les dépense depuis le retrait des infusions de grade), si bien que DEUX factions sur
+    // trois payaient le siège en monnaie de singe. Chacune paie désormais dans quelque
+    // chose qui se consomme : or, pierres d'invocation, clés du Labyrinthe.
+    expect(
+      morts.summonStones,
+      'les morts-vivants laissent de quoi rappeler un boss',
+    ).toBeGreaterThan(0);
+    expect(bandits.summonStones).toBe(0);
+    expect(morts.keys).toBe(0);
+  });
+
+  it('⚠️ AUCUNE devise MORTE dans le butin d’un siège', () => {
+    // Le garde-fou générique : si une devise cesse d'avoir un site de dépense, ce test
+    // doit être élargi — pas contourné.
+    const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
+    for (const f of ['bandits', 'betes', 'mortsvivants'] as const) {
+      const l = lootCorpses(corpses, f, 26, 1) as unknown as Record<string, number>;
+      expect(l.fragments, f + ' : fragments').toBeUndefined();
+      expect(l.inkDust, f + ' : encre').toBeUndefined();
+    }
+  });
+
+  it('les BÊTES rapportent des clés — rarement, et sur le cumul de la vague', () => {
+    // Une clé par corps ferait du Labyrinthe un farm ; on cumule les chances sur la vague.
+    const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
+    const betes = lootCorpses(corpses, 'betes', 26, 1);
+    expect(betes.keys).toBeLessThanOrEqual(corpses.length);
+    expect(betes.gold, 'même une bête traîne ce qu’elle a pris au village').toBeGreaterThan(0);
   });
 
   it('⛔ ANTI-RUNAWAY : la rareté reste plafonnée par le NIVEAU DU JOUEUR', () => {
