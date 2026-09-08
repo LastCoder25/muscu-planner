@@ -125,9 +125,17 @@ export interface Item {
 // familier qui grandit en restant assis au chenil serait un robinet gratuit qui
 // contournerait la perte 2:1 de l'infusion de grade.
 export const FAM_TRAIN = {
-  // XP cumulée pour le niveau L = xpPerLevel × L². Repère : ~200 XP par siège au
-  // niveau 26 → une carrière de défense se bâtit sur des dizaines de sièges.
-  xpPerLevel: 12,
+  // XP cumulée pour le niveau L = xpPerLevel × L². ⚠️ **DEUX CONSTANTES, pas une**
+  // (v0.689) : les deux carrières ne tiquent PAS au même rythme, donc une constante
+  // partagée en rendait forcément une aberrante. Mesuré : l'ATTAQUE gagne ~648 XP par
+  // séance de sport (8 descentes × (2 + reco) × 3 monstres) quand la DÉFENSE gagne
+  // ~216 XP par siège, soit environ un par jour. À 12 partagé, un familier posté
+  // atteignait « défense 5 » en DEUX sièges — la doc promettait « des dizaines », le
+  // chiffre affiché n'avait donc aucun sens et ne récompensait rien.
+  // Recalé : niveau 5 ≈ 10 séances en attaque, ≈ 8 sièges en défense ; niveau 10 ≈ 40
+  // séances / 30 sièges. Une carrière se bâtit, elle ne se ramasse pas.
+  atkXpPerLevel: 260,
+  defXpPerLevel: 65,
   // ATTAQUE : la même pente que l'ilvl (LEVEL_MULT_K) — « un familier dressé vaut un
   // familier d'un cran d'ilvl au-dessus ». Avare À DESSEIN : le combat du héros est
   // calibré au serré (gearExpect/bossGearExpect), un 4ᵉ multiplicateur généreux y
@@ -139,23 +147,26 @@ export const FAM_TRAIN = {
 } as const;
 
 /** XP cumulée nécessaire pour atteindre le niveau `level`. */
-export function famXpForLevel(level: number): number {
-  return FAM_TRAIN.xpPerLevel * Math.max(0, level) ** 2;
+export function famXpForLevel(level: number, kind: 'atk' | 'def' = 'def'): number {
+  const k = kind === 'atk' ? FAM_TRAIN.atkXpPerLevel : FAM_TRAIN.defXpPerLevel;
+  return k * Math.max(0, level) ** 2;
 }
 /** Niveau de dressage correspondant à une XP. ⚠️ Le PLAFOND (niveau du joueur) est
  *  appliqué à l'ATTRIBUTION de l'XP (`grantFamiliarXp`), pas ici : ainsi ni
  *  `aggregateEffects` ni la garnison n'ont besoin de connaître le niveau du joueur. */
-export function famLevel(xp: number | undefined): number {
-  return Math.floor(Math.sqrt(Math.max(0, xp ?? 0) / FAM_TRAIN.xpPerLevel));
+export function famLevel(xp: number | undefined, kind: 'atk' | 'def' = 'def'): number {
+  const k = kind === 'atk' ? FAM_TRAIN.atkXpPerLevel : FAM_TRAIN.defXpPerLevel;
+  return Math.floor(Math.sqrt(Math.max(0, xp ?? 0) / k));
 }
 /** Progression vers le niveau suivant — pour la barre de l'UI. */
 export function famXpProgress(
   xp: number | undefined,
   playerLevel: number,
+  kind: 'atk' | 'def' = 'def',
 ): { level: number; into: number; need: number; capped: boolean } {
-  const level = Math.min(famLevel(xp), Math.max(0, playerLevel));
-  const cur = famXpForLevel(level);
-  const next = famXpForLevel(level + 1);
+  const level = Math.min(famLevel(xp, kind), Math.max(0, playerLevel));
+  const cur = famXpForLevel(level, kind);
+  const next = famXpForLevel(level + 1, kind);
   return {
     level,
     into: Math.max(0, (xp ?? 0) - cur),
@@ -179,7 +190,7 @@ export function grantFamiliarXp(
 ): Item {
   if (amount <= 0) return it;
   const key = kind === 'atk' ? 'atkXp' : 'defXp';
-  const cap = famXpForLevel(Math.max(0, playerLevel) + 1) - 1;
+  const cap = famXpForLevel(Math.max(0, playerLevel) + 1, kind) - 1;
   const next = Math.min(cap, (it[key] ?? 0) + amount);
   return next === (it[key] ?? 0) ? it : { ...it, [key]: next };
 }
@@ -1677,7 +1688,7 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
     // × son DRESSAGE D'ATTAQUE (4ᵉ axe, borné) : un compagnon qui t'a suivi en donjon
     // frappe un peu plus fort. Son dressage de DÉFENSE ne compte pas ici — il ne vaut
     // qu'à la base (cf. garrisonBonus) : les deux carrières sont contextuelles.
-    const flm = itemLevelMult(fam.level) * famAtkMult(famLevel(fam.atkXp));
+    const flm = itemLevelMult(fam.level) * famAtkMult(famLevel(fam.atkXp, 'atk'));
     applyEffect(a, fam.effect.type, (fam.effect.value * flm) / 100);
     if (fam.effect2) applyEffect(a, fam.effect2.type, (fam.effect2.value * flm) / 100);
   }

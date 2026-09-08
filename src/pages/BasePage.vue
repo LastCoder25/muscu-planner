@@ -437,13 +437,17 @@
             <div class="fam-main">
               <div class="fam-name">
                 {{ f.name }}
+                <span class="fam-rar" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
+                <span class="fam-lvl" title="Dressage de défense">🛡️ {{ defLvl(f) }}</span>
                 <span v-if="isFatiguedNow(f)" class="fam-tired">au repos</span>
               </div>
               <div class="fam-eff">{{ famEffect(f) }}</div>
               <div class="fam-role">
-                {{ roleLabel(f) }} · dressage défense {{ defLvl(f) }} · attaque
-                {{ atkLvl(f) }}
+                {{ roleLabel(f) }}
                 <span v-if="isFatiguedNow(f)"> · effet de moitié tant qu’il récupère</span>
+                <span v-if="defLvlRaw(f) > defLvl(f)" class="fam-capped">
+                  · bridé par le Chenil (niv. {{ kennelLevel }})</span
+                >
               </div>
             </div>
             <button class="btn" @click="doToggleGarrison(f.id)">
@@ -467,9 +471,17 @@ import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import SiegeStage from '@/components/SiegeStage.vue';
 import { computeCharacter } from '@/lib/character';
-import { playerWithGear, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
+import {
+  RARITY_LABEL,
+  famDefMult,
+  playerWithGear,
+  famLevel,
+  FAMILIAR_SLOT,
+  type Item,
+} from '@/lib/items';
 import { BUILD, buildingAccrued, buildingType, plotsForLevel, storageMult } from '@/lib/buildings';
 import {
+  garrisonLevel,
   DEFENSE_TYPES,
   FACTION_EMOJI,
   FACTION_LABEL,
@@ -576,9 +588,25 @@ const wounded = computed(() => isWounded(base.value, now.value));
 
 /** Tous les familiers en réserve (le familier ÉQUIPÉ n'est pas postable : il ne peut
  *  pas être à deux endroits à la fois — c'est ce qui fait diverger les deux carrières). */
-const famPool = computed(() =>
+const famPoolRaw = computed(() =>
   (char.row?.inventory ?? []).filter((it) => it.slot === FAMILIAR_SLOT),
 );
+/** Ce qu'un familier apporte VRAIMENT au mur — sert au tri, donc à ce que le joueur voit
+ *  en premier. Même lecture que le combat : effet × dressage (plafonné par le Chenil). */
+function famWeight(f: Item): number {
+  return (f.effect?.value ?? 0) * famDefMult(garrisonLevel(f, kennelLevel.value));
+}
+/** LES POSTÉS D'ABORD, puis les meilleurs. Une liste dans l'ordre du sac obligeait à
+ *  relire dix lignes pour retrouver qui est en poste. */
+const famPool = computed(() => {
+  const ids = new Set(base.value?.garrison ?? []);
+  return [...famPoolRaw.value].sort((a, b) => {
+    const pa = ids.has(a.id) ? 1 : 0;
+    const pb = ids.has(b.id) ? 1 : 0;
+    if (pa !== pb) return pb - pa;
+    return famWeight(b) - famWeight(a);
+  });
+});
 const garrisoned = computed(() => {
   const ids = new Set(base.value?.garrison ?? []);
   return famPool.value.filter((f) => ids.has(f.id));
@@ -596,12 +624,16 @@ function isPosted(id: string): boolean {
 function isFatiguedNow(f: Item): boolean {
   return isFatigued(f, now.value);
 }
+/** Le niveau de dressage RÉELLEMENT appliqué au mur — plafonné par le Chenil, comme
+ *  dans le combat. Afficher le niveau brut mentirait dès que le chenil est en retard. */
 function defLvl(f: Item): number {
-  return famLevel(f.defXp);
+  return garrisonLevel(f, kennelLevel.value);
 }
-function atkLvl(f: Item): number {
-  return famLevel(f.atkXp);
+/** Le niveau brut, pour dire « bridé par le chenil » quand les deux diffèrent. */
+function defLvlRaw(f: Item): number {
+  return famLevel(f.defXp, 'def');
 }
+
 function roleLabel(f: Item): string {
   const r = GARRISON_ROLE[f.effect.type];
   return r ? ROLE_LABEL[r] : 'Aucun rôle à la base';
@@ -1509,6 +1541,21 @@ const doCollect = () =>
 .fam-name {
   font-size: 13px;
   font-weight: 600;
+}
+.fam-rar {
+  font-size: 10.5px;
+  color: var(--rk, var(--dim));
+}
+.fam-lvl {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.fam-capped {
+  color: var(--d3, #ffb23f);
 }
 .fam-tired {
   color: var(--dim);

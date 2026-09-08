@@ -614,6 +614,17 @@
                     <span class="rk-badge" :class="'p-' + f.rarity">{{ f.rarity }}</span>
                     <span class="lvl-badge">Nv {{ f.level }}</span>
                     <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
+                    <span v-if="f.equipped" class="fam-train" title="Dressage d’attaque"
+                      >⚔️ {{ famLevel(f.atkXp, 'atk') }}</span
+                    >
+                    <template v-else>
+                      <span class="fam-train" title="Dressage d’attaque"
+                        >⚔️ {{ famLevel(f.atkXp, 'atk') }}</span
+                      >
+                      <span class="fam-train" title="Dressage de défense (au Chenil)"
+                        >🛡️ {{ famLevel(f.defXp, 'def') }}</span
+                      >
+                    </template>
                   </div>
                   <div class="tal-eff">{{ itemEffects(f) }}</div>
                   <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
@@ -635,10 +646,10 @@
                   <button
                     v-if="!f.equipped"
                     class="tal-b ghost"
-                    title="Vendre contre de l'or"
-                    @click="doSell(f)"
+                    title="Recycler en ferraille"
+                    @click="doRecycle(f)"
                   >
-                    🪙{{ sellValue(f) }}
+                    🔩{{ scrapValue(f) }}
                   </button>
                 </div>
               </div>
@@ -854,9 +865,6 @@
                      TRANCHE (or ou métal ?). Un bouton qui comptait les objets et
                      l'autre la ferraille laissait croire à deux barèmes différents. -->
                 <div class="bulk-btns">
-                  <button class="bulk-b" @click="doSellBelow">
-                    🪙 Tout vendre (+{{ belowGold }})
-                  </button>
                   <button v-if="belowScrap > 0" class="bulk-b" @click="doRecycleBelow">
                     🔩 Tout recycler (+{{ belowScrap }})
                   </button>
@@ -970,14 +978,9 @@
                     <button class="equip-btn" @click="doEquip(it.id)">
                       {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
                     </button>
-                    <button
-                      class="ii-ic"
-                      :disabled="it.locked"
-                      :title="'Vendre → or (' + sellValue(it) + '🪙)'"
-                      @click="doSell(it)"
-                    >
-                      🪙
-                    </button>
+                    <!-- ⚠️ PLUS DE VENTE : le jeu n'a pas de marchand, seulement une forge.
+                         Un objet dont on ne veut plus part donc en ferraille — c'est la
+                         seule sortie qui ait un sens dans ce monde. -->
                     <button
                       v-if="scrapValue(it) > 0"
                       class="ii-ic"
@@ -2029,113 +2032,6 @@
       </q-card>
     </q-dialog>
 
-    <q-dialog :model-value="!!stashConflict" @update:model-value="stashConflict = null">
-      <q-card v-if="stashConflict" class="drops-card stash-card">
-        <div class="drops-title font-display">
-          📦 {{ SLOT_LABEL[stashConflict.incoming.slot] }} · {{ VOIES[stashConflict.idx]?.name }}
-        </div>
-        <div class="stash-sub">
-          Ton set a déjà une pièce sur cet emplacement (1 par emplacement). Garde la meilleure.
-        </div>
-        <div class="stash-cmp">
-          <div
-            class="stash-side"
-            :class="{
-              best: powerIfEquip(stashConflict.incoming) >= powerIfEquip(stashConflict.stored),
-            }"
-          >
-            <div class="stash-lbl">Nouvelle</div>
-            <!-- ⚠️ LA PUISSANCE D'ABORD, et en gros. C'est LE chiffre qui tranche — il
-                 était relégué en 12 px grisé sous les stats, quand tout le reste (rareté,
-                 jet, niveau) ne sert qu'à l'expliquer. L'écart signé dit le verdict d'un
-                 coup d'œil, sans avoir à comparer deux nombres à quatre chiffres. -->
-            <div class="stash-pow">
-              ⚔️ {{ fmtPow(powerIfEquip(stashConflict.incoming)) }}
-              <span
-                class="stash-delta"
-                :class="
-                  powerIfEquip(stashConflict.incoming) >= powerIfEquip(stashConflict.stored)
-                    ? 'up'
-                    : 'down'
-                "
-                >{{
-                  fmtDelta(powerIfEquip(stashConflict.stored), powerIfEquip(stashConflict.incoming))
-                }}</span
-              >
-            </div>
-            <div class="stash-nm">
-              {{ stashConflict.incoming.emoji }} {{ stashConflict.incoming.rarity }}
-              <span class="lvl-badge">Nv {{ stashConflict.incoming.level }}</span>
-              <span class="stash-q">jet {{ itemQuality(stashConflict.incoming) }}%</span>
-            </div>
-            <div class="stash-eff">
-              <span
-                v-for="(s, li) in itemStatCmp(stashConflict.incoming, stashConflict.stored)"
-                :key="li"
-                class="stat-line"
-                :class="s.cls"
-                >{{ s.text }}</span
-              >
-            </div>
-          </div>
-          <div
-            class="stash-side"
-            :class="{
-              best: powerIfEquip(stashConflict.stored) > powerIfEquip(stashConflict.incoming),
-            }"
-          >
-            <div class="stash-lbl">Rangée <span v-if="stashConflict.stored.locked">🔒</span></div>
-            <div class="stash-pow">⚔️ {{ fmtPow(powerIfEquip(stashConflict.stored)) }}</div>
-            <div class="stash-nm">
-              {{ stashConflict.stored.emoji }} {{ stashConflict.stored.rarity }}
-              <span class="lvl-badge">Nv {{ stashConflict.stored.level }}</span>
-              <span class="stash-q">jet {{ itemQuality(stashConflict.stored) }}%</span>
-            </div>
-            <div class="stash-eff">
-              <span
-                v-for="(s, li) in itemStatCmp(stashConflict.stored, stashConflict.incoming)"
-                :key="li"
-                class="stat-line"
-                :class="s.cls"
-                >{{ s.text }}</span
-              >
-            </div>
-          </div>
-        </div>
-        <!-- Chaque camp a ses DEUX sorties : le marchand ou la forge. L'or et la
-             ferraille ne se remplacent pas — c'est l'arbitrage, il doit être offert ici
-             comme il l'est dans le sac. Une pièce 🔒 revient toujours au sac. -->
-        <div class="stash-actions">
-          <button class="drops-close accent" @click="stashReplace('sell')">
-            Remplacer —
-            {{
-              stashConflict.stored.locked
-                ? 'ancienne → sac 🔒'
-                : 'vendre l’ancienne 🪙 ' + sellValue(stashConflict.stored)
-            }}
-          </button>
-          <button
-            v-if="!stashConflict.stored.locked && scrapValue(stashConflict.stored) > 0"
-            class="drops-close"
-            @click="stashReplace('recycle')"
-          >
-            Remplacer — recycler l’ancienne 🔩 {{ scrapValue(stashConflict.stored) }}
-          </button>
-          <button class="drops-close" @click="stashSellIncoming">
-            Vendre la nouvelle 🪙 {{ sellValue(stashConflict.incoming) }}
-          </button>
-          <button
-            v-if="scrapValue(stashConflict.incoming) > 0"
-            class="drops-close"
-            @click="stashRecycleIncoming"
-          >
-            Recycler la nouvelle 🔩 {{ scrapValue(stashConflict.incoming) }}
-          </button>
-          <button class="drops-close ghost" @click="stashConflict = null">Ne rien faire</button>
-        </div>
-      </q-card>
-    </q-dialog>
-
     <!-- Récompense de boss AU CHOIX : 3 candidats, on en garde 1. Fallback (reprise
          d'une récompense non choisie) — sinon le CHOIX se fait dans le rapport de
          combat ci-dessous, tant qu'il est ouvert. -->
@@ -2400,7 +2296,6 @@
                     >
                       {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
                     </button>
-                    <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
                     <button v-if="scrapValue(d) > 0" class="link-btn" @click="doRecycle(d)">
                       Recycler 🔩{{ scrapValue(d) }}
                     </button>
@@ -2606,6 +2501,7 @@ import { recommendedPower } from '@/lib/proceduralContent';
 import { VOIES, VOIE_BY_ID, voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { endlessFoe, endlessEnergy, endlessGold, endlessDropLevel } from '@/data/endless';
 import {
+  famLevel,
   playerWithGear,
   aggregateEffects,
   rollDrop,
@@ -5203,21 +5099,13 @@ function doUnequip(slot: ItemSlot) {
   withUid((uid) => char.unequip(uid, slot), 'Impossible de déséquiper.');
 }
 
-function doSell(it: Item) {
-  $q.dialog({
-    title: 'Vendre cet objet ?',
-    message: `« ${it.name} » sera définitivement vendu contre ${sellValue(it)} 🪙.`,
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: `Vendre (+${sellValue(it)} 🪙)`, color: 'negative' },
-  }).onOk(() => withUid((uid) => char.sell(uid, it.id), 'Vente impossible.'));
-}
 // ♻️ L'autre porte de sortie du sac : la forge. On vend OU on recycle, jamais les deux —
 // le dialogue le dit, parce que 1 141 or et 16 🔩 ne se comparent pas d'instinct.
 function doRecycle(it: Item) {
   const gain = scrapValue(it);
   $q.dialog({
     title: 'Envoyer à la forge ?',
-    message: `« ${it.name} » sera fondu en ${gain} 🔩 (réparations et défenses de la base). Tu renonces donc à le vendre ${sellValue(it)} 🪙.`,
+    message: `« ${it.name} » sera fondu en ${gain} 🔩 — réparations et défenses de la base.`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
   }).onOk(() =>
@@ -5275,55 +5163,50 @@ function loadoutTargetFor(it: Item): { idx: number; stored: Item | undefined } {
   const stored = idx >= 0 ? char.row?.loadouts?.[idx]?.items?.[it.slot] : undefined;
   return { idx, stored };
 }
+// ⚠️ PLUS DE MODALE DE CHOIX : la comparaison se TRANCHE toute seule. Deux pièces du
+// même set sur le même emplacement, l'une est objectivement plus puissante que l'autre —
+// il n'y avait rien à arbitrer, seulement un dialogue à fermer. La meilleure est rangée,
+// l'autre part à la forge (au sac si elle est 🔒 : le verrou protège de tout). Une
+// notification dit ce qui a changé ET ce que ça rapporte, sinon le geste serait invisible.
 function doStashSetPiece(it: Item) {
   const { idx, stored } = loadoutTargetFor(it);
   if (idx < 0) return;
-  if (stored) {
-    // Emplacement déjà occupé (≤ 1 set complet/loadout) → comparatif + choix.
-    stashConflict.value = { incoming: it, stored, idx };
+  const setName = VOIES[idx]?.name ?? '';
+  if (!stored) {
+    withUid(async (uid) => {
+      await char.stashSetPiece(uid, it.id);
+      $q.notify({ type: 'positive', message: `🧩 Rangée dans ton set ${setName}.` });
+    }, 'Impossible de ranger cette pièce.');
+    return;
+  }
+  const gain = powerIfEquip(it) - powerIfEquip(stored);
+  if (gain <= 0) {
+    // La nouvelle ne vaut pas la rangée : elle part directement à la forge.
+    withUid(async (uid) => {
+      const g = await char.recycle(uid, it.id);
+      $q.notify({
+        type: 'info',
+        message: `🔩 « ${stored.name} » reste dans ton set ${setName} — la nouvelle fondue (+${g} 🔩).`,
+      });
+    }, 'Recyclage impossible.');
     return;
   }
   withUid(async (uid) => {
-    await char.stashSetPiece(uid, it.id);
-    $q.notify({ type: 'positive', message: `🧩 Rangée dans ton set ${VOIES[idx]?.name ?? ''}.` });
-  }, 'Impossible de ranger cette pièce.');
-}
-// Remplacer : range la nouvelle, vend l'ancienne (ou la renvoie au sac si 🔒).
-function stashReplace(disposal: 'sell' | 'recycle') {
-  const cf = stashConflict.value;
-  if (!cf) return;
-  const locked = cf.stored.locked;
-  const gain =
-    disposal === 'recycle'
-      ? `recyclée 🔩 +${scrapValue(cf.stored)}`
-      : `vendue 🪙 +${sellValue(cf.stored)}`;
-  withUid(async (uid) => {
-    await char.stashSetPiece(uid, cf.incoming.id, disposal);
+    await char.stashSetPiece(uid, it.id, stored.locked ? 'keep' : 'recycle');
+    gameFx.celebrate({
+      kind: 'drop',
+      emoji: it.emoji,
+      title: `Set ${setName} renforcé`,
+      subtitle: `${it.name} · ⚔️ ${fmtDelta(0, gain)} de puissance`,
+      rarity: fxRarity(it.rarity),
+    });
     $q.notify({
       type: 'positive',
-      message: locked
-        ? '📦 Rangée — ancienne 🔒 renvoyée au sac.'
-        : `📦 Rangée — ancienne ${gain}.`,
+      message: stored.locked
+        ? `🧩 Remplacée — l'ancienne 🔒 renvoyée au sac.`
+        : `🧩 Remplacée — ancienne fondue (+${scrapValue(stored)} 🔩).`,
     });
-  }, 'Action impossible.');
-  stashConflict.value = null;
-}
-// Garder la rangée, vendre la nouvelle.
-function stashSellIncoming() {
-  const cf = stashConflict.value;
-  if (!cf) return;
-  withUid((uid) => char.sell(uid, cf.incoming.id), 'Vente impossible.');
-  stashConflict.value = null;
-}
-// Garder la rangée, envoyer la nouvelle à la forge.
-function stashRecycleIncoming() {
-  const cf = stashConflict.value;
-  if (!cf) return;
-  withUid(async (uid) => {
-    const g = await char.recycle(uid, cf.incoming.id);
-    if (g) $q.notify({ type: 'positive', message: `🔩 +${g} ferraille` });
-  }, 'Recyclage impossible.');
-  stashConflict.value = null;
+  }, 'Impossible de ranger cette pièce.');
 }
 // Nettoyage en masse : objets du sac moins rares que l'équipé du même slot.
 // Slot ciblé par le nettoyage en masse = le filtre du sac actif (sinon tous).
@@ -5346,9 +5229,8 @@ const powerLossItems = computed<Item[]>(() => {
   });
 });
 const belowCount = computed(() => powerLossItems.value.length);
-// Ce que rendrait la purge, dans les DEUX monnaies. Affichés côte à côte sur les
-// boutons : c'est en voyant les deux nombres qu'on arbitre, pas en devinant.
-const belowGold = computed(() => powerLossItems.value.reduce((a, i) => a + sellValue(i), 0));
+// Ce que rendrait la purge, en ferraille. La vente n'existe plus : le jeu n'a pas de
+// marchand, seulement une forge.
 // Même liste que belowGold, sans filtre divergent : les deux nombres doivent décrire
 // EXACTEMENT le même lot, sinon les comparer n'a pas de sens. (Un objet non recyclable
 // rendrait 0, cf. scrapValue.)
@@ -5362,7 +5244,7 @@ function doRecycleBelow() {
   const gain = powerLossItems.value.filter(canRecycle).reduce((a, i) => a + scrapValue(i), 0);
   $q.dialog({
     title: 'Tout recycler',
-    message: `Fondre les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} en ${gain} 🔩 ? Tu renonces donc à ${belowGold.value} 🪙. Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
+    message: `Fondre les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} en ${gain} 🔩 ? Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: `Tout recycler (+${gain} 🔩)`, color: 'negative' },
   }).onOk(() =>
@@ -5371,16 +5253,6 @@ function doRecycleBelow() {
       if (g) $q.notify({ type: 'positive', message: `🔩 +${g} ferraille` });
     }, 'Recyclage impossible.'),
   );
-}
-function doSellBelow() {
-  const ids = powerLossItems.value.map((i) => i.id);
-  const gain = belowGold.value;
-  $q.dialog({
-    title: 'Tout vendre',
-    message: `Vendre les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} contre ${gain} 🪙 ? Tu renonces donc à ${belowScrap.value} 🔩. Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: `Tout vendre (+${gain} 🪙)`, color: 'negative' },
-  }).onOk(() => withUid((uid) => char.sellMany(uid, ids), 'Vente impossible.'));
 }
 async function savePseudo() {
   const uid = auth.user?.id;
@@ -6402,6 +6274,14 @@ button.pt-mini:active {
   white-space: nowrap;
 }
 /* Badge « effet signature » (✦) sur une carte familier, harmonisé avec les talents. */
+.fam-train {
+  font-size: 10.5px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
 .fam-sig-badge {
   flex: 0 0 auto;
   color: #ffd23f;

@@ -730,6 +730,15 @@ export function isFatigued(fam: { fatigueUntil?: number }, now: number): boolean
   return !!fam.fatigueUntil && now < fam.fatigueUntil;
 }
 
+/** Niveau de dressage DÉFENSIF effectif d'un familier posté. ⚠️ **Plafonné par le
+ *  CHENIL** : c'est le bâtiment qui entraîne, un familier ne peut pas dépasser l'école
+ *  qui le forme. Sans ce plafond, le chenil de niveau 1 vaudrait le chenil de niveau 20
+ *  dès que les familiers auraient tourné quelques sièges — le bâtiment n'aurait servi
+ *  qu'à ouvrir des places. */
+export function garrisonLevel(fam: Item, kennelLevel: number): number {
+  return Math.min(famLevel(fam.defXp, 'def'), Math.max(0, kennelLevel));
+}
+
 /** Bonus de la garnison. Chaque familier apporte SON effet, amplifié par son dressage
  *  DÉFENSIF (jamais offensif : les deux carrières sont contextuelles), et réduit de
  *  moitié s'il est encore fatigué. */
@@ -745,7 +754,9 @@ export function garrisonBonus(
     const role = GARRISON_ROLE[f.effect.type];
     if (!role) continue;
     const mult =
-      GARRISON_K * famDefMult(famLevel(f.defXp)) * (isFatigued(f, now) ? DAMAGED_EFFICIENCY : 1);
+      GARRISON_K *
+      famDefMult(garrisonLevel(f, kennelLevel)) *
+      (isFatigued(f, now) ? DAMAGED_EFFICIENCY : 1);
     const v = f.effect.value * mult;
     if (role === 'damage') out.damagePct = (out.damagePct ?? 0) + v;
     else if (role === 'pv') out.maxPvPct = (out.maxPvPct ?? 0) + v;
@@ -754,7 +765,8 @@ export function garrisonBonus(
     // Le renseignement et la fouille ne sont PAS des stats de combat : ni bridés par
     // GARRISON_K, ni plafonnés — un faucon voit loin, un point c'est tout.
     else if (role === 'scout') out.scoutBonus = (out.scoutBonus ?? 0) + 1;
-    else out.lootPct = (out.lootPct ?? 0) + f.effect.value * famDefMult(famLevel(f.defXp));
+    else
+      out.lootPct = (out.lootPct ?? 0) + f.effect.value * famDefMult(garrisonLevel(f, kennelLevel));
   }
   // ⚠️ TOUS les canaux de combat sont plafonnés, pas seulement deux. Avec des places qui
   // se multiplient par 4 sur la courbe, laisser dégâts et PV s'additionner librement
