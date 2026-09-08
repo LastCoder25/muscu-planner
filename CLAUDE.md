@@ -279,6 +279,49 @@ Décisions prises en Phase 0, contraintes par le poste. À respecter dans les ph
 
 ## Garde-fous
 
+### ✅ TRIPLE VÉRIFICATION — la règle de travail du projet (v0.698)
+
+Consigne donnée par l'utilisateur, après qu'une régression a été livrée sans être vue (le bouton
+« Réattaquer » grisé à vie : la modale de conflit avait été retirée mais `stashConflict` était
+encore posé, donc `conflictPending` restait vrai pour toujours). Elle n'est pas facultative.
+
+**Skills à invoquer** (installées dans `~/.claude/skills/`) : `verification-before-completion`
+(preuve avant affirmation), `systematic-debugging` (la cause avant le correctif),
+`test-driven-development`, `requesting-code-review`. Pour les gros chantiers,
+`dispatching-parallel-agents` / `subagent-driven-development` (agents de revue en parallèle).
+
+**AUCUNE annonce de complétion sans avoir lancé la commande ET lu sa sortie.** Les 4 portes,
+dans cet ordre — une seule ignorée invalide l'annonce :
+
+```
+npm run typecheck   ·   npm run lint   ·   node node_modules/vitest/vitest.mjs run
+node node_modules/@quasar/app-vite/bin/quasar.js build
+```
+
+Rapporter fidèlement : un test rouge se dit avec sa sortie, une étape sautée se dit.
+
+**⚠️ Un test VERT ne prouve rien tant qu'il n'a pas été vu ROUGE.** Pour toute logique de calcul
+(`src/lib/`), casser volontairement le code sur chacune des garanties annoncées et vérifier
+qu'un test tombe **à chaque fois**. C'est ce qui a démontré que le tri des doublons de familiers
+tenait vraiment ses 3 axes (v0.697), et c'est ce qui manquait aux tests qui ont laissé passer :
+la devise morte de l'arène (le test omettait `'arena'`), l'archive qui payait en fragments
+(le test l'**affirmait**), et le puits d'or qui débordait (mauvaise unité au dénominateur).
+
+**⚠️ MESURER, JAMAIS AFFIRMER.** Tout réglage d'équilibrage se justifie par une sonde qui
+utilise les VRAIES libs, puis la sonde est supprimée et le chiffre mesuré part dans le commit.
+⚠️ **Le piège récurrent est l'UNITÉ**, deux fois de suite : comparer « N séances de sport » à
+« N jours » (ferraille vs or), et mesurer un coût de bâtiment contre UNE expédition de mine
+quand **79 % de l'or vient des donjons**. Les deux ont produit des conclusions inverses de la
+réalité, avec un test vert par-dessus. Nommer l'unité à voix haute avant de conclure.
+
+**Les tests périmés se RÉÉCRIVENT, ils ne se suppriment pas** : plusieurs verrouillaient
+activement le défaut qu'ils auraient dû attraper — les supprimer aurait effacé la trace.
+
+**Un test troué est pire que pas de test** : il donne le vert de la confiance sans la couvrir.
+Quand une table, une union ou une liste de cas est énumérée dans un test, vérifier qu'elle est
+EXHAUSTIVE (ou mieux : la rendre exhaustive par construction — cf. `Record<PoiType, string>`,
+qui casse la compilation quand on ajoute un POI sans le nommer).
+
 - Toujours s'appuyer sur les types de `src/lib`. Si un champ manque, l'ajouter au contrat (types.ts + SQL) plutôt que bricoler dans un composant.
 - Respecter les RLS : toute requête est scoping `auth.uid()`.
 - **⚠️ NE JAMAIS se reposer sur la RLS pour FILTRER côté client** (bug v0.653, réel) : la RLS borne ce qu'on a le **DROIT** de lire, pas ce qu'on **VEUT** lire. `challenges.fetchMine`/`combo.fetchMine` faisaient un `select` NU en comptant sur l'own-only ; la migr. 0058 (`challenges_read_friends`/`combo_read_friends`) a élargi la lecture **aux amis** → la liste « mes défis » s'est mise à contenir ceux des amis. Symptôme observé : `combo.activeOne()` prend le 1er actif trié par `created_at desc` → un ami voyait le **360 du plus récemment créé** (celui de l'autre) à la place du sien ; et son XP Challenges/Muscu comptait l'historique de l'autre (donc niveaux + énergie gonflés). Même piège sur `feedback.fetchMine` (élargi aux admins par `feedback_read_admin`, migr. 0014) → « mes tickets » montrait ceux de tout le monde aux admins. **Tout `fetchMine` porte donc un `.eq('user_id', uid)` explicite.** Avant d'ajouter une policy SELECT élargie sur une table par-utilisateur, auditer les `select` clients de cette table (`select tablename, policyname, qual from pg_policies where cmd='SELECT'` = la liste des tables à risque).
