@@ -232,7 +232,12 @@ export const RAID = {
   // Composition
   minGroups: 3,
   maxGroups: 5,
-  levelSpan: 15, // fenêtre [niveau perso, +15]
+  // Fenêtre de niveau : cf. `levelSpanFor`. Deux régimes dont on prend le minimum —
+  // `spanEarly` borne le début de partie, `spanFlat + spanLate × niveau` prend le relais
+  // et croît moins vite que le joueur, pour que la difficulté ne s'éteigne pas.
+  spanEarly: 0.6,
+  spanFlat: 7,
+  spanLate: 0.3,
   // Effectif quasi PLAT sur toute la partie (6 au début → 12 au niveau 100). Il ne suit
   // volontairement pas le niveau : un champ de 100 cadavres qu'on ne peut pas dépouiller
   // serait frustrant, et l'effectif est aussi ce qui déséquilibre le siège (les dégâts
@@ -370,13 +375,24 @@ export function raidSize(playerLevel: number, faction?: RaidFaction): number {
   return Math.max(3, Math.round(base * (faction ? FACTION_PROFILE[faction].countMult : 1)));
 }
 
-/** Largeur RÉELLE de la fenêtre de niveau. `RAID.levelSpan` (+15) est la cible, mais un
- *  +15 fixe est bien plus violent tôt que tard : au niveau 10 il double le niveau de
- *  l'armée, au niveau 90 il l'augmente de 17 %. Mesuré, un joueur de niveau 10 tenait
- *  0 % de ses sièges même avec des défenses à son niveau. On ouvre donc la fenêtre
- *  progressivement — elle atteint +15 vers le niveau 25 et n'y touche plus. */
+/** Largeur RÉELLE de la fenêtre de niveau — le plus petit de deux régimes.
+ *
+ *  Un écart FIXE ne peut pas marcher aux deux bouts : +15 double le niveau d'une armée
+ *  au niveau 10, mais ne l'augmente que de 17 % au niveau 90. Mesuré dans les deux sens :
+ *  à +15 fixe, un joueur de niveau 10 tenait 0 % de ses sièges, tandis qu'au niveau 90 il
+ *  en tenait **96 %** — le siège s'éteignait en fin de partie.
+ *
+ *  Mais un span strictement proportionnel (60 % du niveau) bascule dans l'excès inverse :
+ *  40 % de tenue au niveau 90 en bâtissant pourtant à son niveau, et un gradient
+ *  d'investissement écrasé (18 % à −5 contre 40 % à niveau → construire ne paie plus).
+ *
+ *  D'où deux régimes dont on prend le MINIMUM : `EARLY` (60 % du niveau) borne le début
+ *  de partie, `LATE` (7 + 30 % du niveau) prend le relais vers le niveau ~23 et croît
+ *  moins vite que le joueur. Résultat mesuré : la tenue à défenses-à-niveau reste
+ *  ~70-75 % de bout en bout, au lieu de dériver de 57 % à 96 %. */
 export function levelSpanFor(playerLevel: number): number {
-  return Math.min(RAID.levelSpan, Math.max(3, Math.round(Math.max(1, playerLevel) * 0.6)));
+  const L = Math.max(1, playerLevel);
+  return Math.max(3, Math.round(Math.min(L * RAID.spanEarly, RAID.spanFlat + L * RAID.spanLate)));
 }
 
 /** Tire une armée. Les niveaux se répartissent dans [niveau perso, +15] avec un biais
@@ -645,6 +661,25 @@ export function raidDamage(report: RaidReport): RaidDamage {
  *  une réparation ne doit pas entrer en concurrence avec eux). */
 export function repairCost(level: number): number {
   return 10 + Math.round(Math.max(1, level) * 2.5);
+}
+
+/** Remet une structure en service — et RELANCE LA PRODUCTION si plus rien n'est
+ *  endommagé. Le gel n'est pas une punition à part : c'est la conséquence d'une base
+ *  cassée. Réparer l'enceinte suffit donc à la lever, la ferraille étant le levier
+ *  commun aux deux. Les deux voies GRATUITES restent ouvertes (une séance de sport, ou
+ *  l'échéance des 24 h, cf. `advanceBase`) : la ferraille achète l'immédiateté, elle ne
+ *  la rançonne pas. */
+export function repairStructure(base: BaseState, id: DefenseId): BaseState {
+  const defenses = base.defenses.map((d) =>
+    d.typeId === id ? { typeId: d.typeId, level: d.level } : d,
+  );
+  return { ...base, defenses, freeze: defenses.some((d) => d.damaged) ? base.freeze : null };
+}
+
+/** Ferraille nécessaire pour tout remettre en état — c'est le chiffre à afficher au
+ *  joueur quand sa production est gelée : il dit ce que coûte le retour à la normale. */
+export function totalRepairCost(base: BaseState): number {
+  return base.defenses.filter((d) => d.damaged).reduce((s, d) => s + repairCost(d.level), 0);
 }
 
 // ── Champ de bataille ──

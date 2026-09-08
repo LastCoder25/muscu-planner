@@ -23,6 +23,8 @@ import {
   repairCost,
   TURRET_SLOTS,
   RAID,
+  repairStructure,
+  totalRepairCost,
   SCAV,
   FACTION_PROFILE,
   type BaseState,
@@ -75,11 +77,17 @@ describe('composition de l’armée', () => {
     }
   });
 
-  it('reste dans la fenêtre [niveau, niveau + span] et l’ouvre progressivement', () => {
-    // Un +15 FIXE double le niveau de l'armée au niveau 10 mais ne l'augmente que de
-    // 17 % au niveau 90 : mesuré, un joueur de niveau 10 tenait 0 % de ses sièges.
-    expect(levelSpanFor(10)).toBeLessThan(RAID.levelSpan);
-    expect(levelSpanFor(30)).toBe(RAID.levelSpan);
+  it('reste dans la fenêtre [niveau, niveau + span], qui croît MOINS VITE que le joueur', () => {
+    // Un écart FIXE ne peut pas marcher aux deux bouts. Mesuré dans les deux sens : à
+    // +15 fixe, un joueur de niveau 10 tenait 0 % de ses sièges et un niveau 90 en tenait
+    // 96 % (le siège s'éteignait) ; à 60 % du niveau, le niveau 90 tombait à 40 % même en
+    // bâtissant à son niveau. La fenêtre doit donc grandir, mais sous-linéairement.
+    expect(levelSpanFor(10)).toBeLessThan(levelSpanFor(26));
+    expect(levelSpanFor(26)).toBeLessThan(levelSpanFor(90));
+    // Sous-linéaire : elle représente une part DÉCROISSANTE du niveau.
+    expect(levelSpanFor(90) / 90).toBeLessThan(levelSpanFor(26) / 26);
+    // …et reste bornée : jamais une armée deux fois au-dessus du joueur.
+    for (const L of [1, 12, 26, 60, 100]) expect(levelSpanFor(L)).toBeLessThan(L + 10);
     for (const L of [12, 26, 60]) {
       for (let s = 1; s < 40; s++) {
         const r = rollRaid(s * 977, L, 0, 0);
@@ -140,13 +148,23 @@ describe('silhouette de faction', () => {
 
 describe('calibration du siège', () => {
   it('bâtir à son niveau tient le plus souvent ; négliger ses murs se paie', () => {
-    for (const L of [15, 20, 26, 40, 60]) {
+    for (const L of [15, 20, 26, 40, 60, 90]) {
       expect(holdRate(L, L, false), `niveau ${L}, défenses à niveau`).toBeGreaterThan(50);
       expect(holdRate(L, L - 5, false), `niveau ${L}, défenses en retard`).toBeLessThan(
         holdRate(L, L, false),
       );
-      expect(holdRate(L, L + 3, false), `niveau ${L}, sur-investi`).toBeGreaterThan(90);
+      expect(holdRate(L, L + 3, false), `niveau ${L}, sur-investi`).toBeGreaterThan(75);
     }
+  });
+
+  it('la difficulté ne s’ÉTEINT PAS en fin de partie', () => {
+    // Le défaut d'un écart de niveau FIXE : mesuré, la tenue à défenses-à-niveau montait
+    // de 57 % (niveau 15) à 96 % (niveau 60) — passé un cap, on ne perdait plus jamais et
+    // le système cessait d'exister. La fenêtre qui s'élargit maintient la tension.
+    const late = [40, 60, 90].map((L) => holdRate(L, L, false));
+    for (const v of late) expect(v).toBeLessThan(85);
+    // Et sur-investir ne doit pas non plus rendre la fin de partie triviale.
+    expect(holdRate(90, 93, false)).toBeLessThan(92);
   });
 
   it('le héros présent AIDE nettement, sans rendre l’enceinte inutile', () => {
@@ -377,6 +395,29 @@ describe('économie de la défense', () => {
   it('réparer coûte de la ferraille, proportionnellement au niveau', () => {
     expect(repairCost(1)).toBeGreaterThan(0);
     expect(repairCost(30)).toBeGreaterThan(repairCost(10));
+  });
+
+  it('réparer l’enceinte RELANCE la production', () => {
+    // Le gel n'est pas une punition séparée : c'est la conséquence d'une base cassée.
+    // La ferraille est donc le levier commun aux deux — mais elle achète l'immédiateté,
+    // elle ne la rançonne pas (la séance de sport et les 24 h restent gratuites).
+    const b = emptyBase(1, 0);
+    b.defenses = [
+      { typeId: 'wall', level: 20, damaged: true },
+      { typeId: 'turret', level: 18, damaged: true },
+    ];
+    b.freeze = { until: 24 * H, atXp: 100 };
+    expect(totalRepairCost(b)).toBe(repairCost(20) + repairCost(18));
+
+    // Tant qu'il reste une brèche, la production reste à l'arrêt…
+    const half = repairStructure(b, 'wall');
+    expect(half.defenses.find((d) => d.typeId === 'wall')!.damaged).toBeUndefined();
+    expect(half.freeze).not.toBeNull();
+    // …et elle repart dès que tout est en état.
+    const whole = repairStructure(half, 'turret');
+    expect(whole.defenses.some((d) => d.damaged)).toBe(false);
+    expect(whole.freeze).toBeNull();
+    expect(totalRepairCost(whole)).toBe(0);
   });
 
   it('un groupe nombreux est une éponge à PV, pas un pic de dégâts', () => {

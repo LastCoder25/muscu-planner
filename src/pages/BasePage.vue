@@ -98,10 +98,19 @@
     <div v-if="freeze" class="panel warn">
       <div class="p-title">❄️ Production gelée</div>
       <p>
-        Tes filons sont à l’arrêt après l’assaut.
-        <b>Une séance de sport les relance tout de suite</b> — sinon les ouvriers reprennent
-        d’eux-mêmes {{ freezeIn }}.
+        Tes filons sont à l’arrêt tant que l’enceinte est en ruine.
+        <b>Répare-la et la production repart.</b>
+        Sinon, une séance de sport la relance aussi — ou les ouvriers s’y remettent seuls
+        {{ freezeIn }}.
       </p>
+      <button
+        v-if="repairAllCost > 0"
+        class="cta"
+        :disabled="(char.row?.scrap ?? 0) < repairAllCost"
+        @click="doRepairAll"
+      >
+        🔩 Tout réparer · {{ repairAllCost }} ferraille
+      </button>
     </div>
 
     <!-- ── Menace en approche ── -->
@@ -267,6 +276,7 @@ import {
   scoutReport,
   turretCount,
   remainingCorpses,
+  totalRepairCost,
   type DefenseId,
   type ScoutReport,
 } from '@/lib/raid';
@@ -318,6 +328,9 @@ const watchDamaged = computed(() => isDamaged(defenses.value, 'watchtower'));
 const turretsDamaged = computed(() => isDamaged(defenses.value, 'turret'));
 const turretsBuilt = computed(() => turretCount(defenseLevel(defenses.value, 'turret')));
 const scavCap = computed(() => scavengerCount(salvageLevel.value));
+/** Ce que coûte le retour à la normale : remettre l'enceinte en état relance aussi la
+ *  production (le gel est la conséquence de la casse, pas une punition séparée). */
+const repairAllCost = computed(() => (base.value ? totalRepairCost(base.value) : 0));
 
 // ── Géométrie de l'enceinte : un octogone dont les 8 sommets sont les emplacements
 // de tourelle. TURRET_SLOTS vaut 8 précisément pour que le compte tombe juste.
@@ -456,6 +469,12 @@ const doBuild = (id: DefenseId) =>
 const doUpgrade = (id: DefenseId) =>
   guard(() => char.upgradeDefense(uid.value, id, heroLevel.value, Date.now()));
 const doRepair = (id: DefenseId) => guard(() => char.repairDefense(uid.value, id));
+const doRepairAll = () =>
+  guard(async () => {
+    const cost = await char.repairAll(uid.value);
+    if (cost)
+      $q.notify({ type: 'positive', message: '🔩 Enceinte réparée — la production repart.' });
+  });
 const doSend = () => guard(() => char.sendScavengers(uid.value, Date.now()));
 const doCollect = () =>
   guard(async () => {

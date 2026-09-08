@@ -80,6 +80,8 @@ import {
   scavengerCount,
   pickScavengeTargets,
   lootCorpses,
+  repairStructure,
+  totalRepairCost,
   SCAV,
   type BaseState,
   type DefenseId,
@@ -1260,15 +1262,26 @@ export const useCharacterStore = defineStore('character', () => {
     if (!d?.damaged) return;
     const cost = repairCost(d.level);
     if (cur.scrap < cost) throw new Error('Pas assez de ferraille 🔩.');
+    // `repairStructure` relance aussi la PRODUCTION quand plus rien n'est endommagé :
+    // le gel est la conséquence d'une base cassée, pas une punition séparée.
     await persistOptimistic(userId, {
       scrap: cur.scrap - cost,
-      base: {
-        ...cur.base,
-        defenses: cur.base.defenses.map((x) =>
-          x.typeId === typeId ? { typeId: x.typeId, level: x.level } : x,
-        ),
-      },
+      base: repairStructure(cur.base, typeId),
     });
+  }
+
+  /** Répare TOUT d'un coup — le geste qu'on veut faire quand la production est gelée. */
+  async function repairAll(userId: string) {
+    const cur = row.value;
+    if (!cur?.base) return;
+    const cost = totalRepairCost(cur.base);
+    if (cost <= 0) return;
+    if (cur.scrap < cost) throw new Error(`Il te faut ${cost} 🔩 pour tout remettre en état.`);
+    let base = cur.base;
+    for (const d of cur.base.defenses.filter((x) => x.damaged))
+      base = repairStructure(base, d.typeId);
+    await persistOptimistic(userId, { scrap: cur.scrap - cost, base });
+    return cost;
   }
 
   /** Envoie une vague de fouilleurs sur le champ de bataille. Renouvelable autant de fois
@@ -1379,6 +1392,7 @@ export const useCharacterStore = defineStore('character', () => {
     buildDefense,
     upgradeDefense,
     repairDefense,
+    repairAll,
     sendScavengers,
     collectScavengers,
     heroIsHome,
