@@ -491,10 +491,10 @@ const roundTripMin = (p: Poi) =>
 // Ce que le POI rapporte VRAIMENT (crédité par expeCollect) : or, énergie (mines),
 // objets, clés. La poussière n'existe plus (refonte drops-only) → on ne l'annonce plus.
 function poiRewardLabel(p: Poi): string {
-  if (p.type === 'mine') return 'Or 🪙 + énergie ⚡ + fragments 🧩 (récolte)';
+  if (p.type === 'mine') return 'Or 🪙 + énergie ⚡ (récolte)';
   if (p.type === 'well') return 'Énergie ⚡ en quantité (récolte, sans combat)';
   if (p.type === 'shrine') return "Pierres d'invocation 🔮 (récolte, sans combat)";
-  if (p.type === 'archive') return 'Fragments 🧩 + poussière d’encre 🖋️ (récolte)';
+  if (p.type === 'archive') return 'Clés du Labyrinthe 🗝️ (récolte, sans combat)';
   // ⚠️ Sans cette ligne, l'épave tombait dans le cas par défaut et s'annonçait comme un
   // REPAIRE (« pièce de set + pierres ») — l'inverse de ce qu'elle donne vraiment.
   if (p.type === 'wreck') return 'Ferraille 🔩 en quantité (récolte, sans combat)';

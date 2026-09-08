@@ -84,17 +84,28 @@ describe('POI de récolte', () => {
     expect(shrine.summonStones).toBeGreaterThanOrEqual(2);
     expect(shrine.energy).toBe(0);
 
+    // ⚠️ RÉÉCRIT : ce test affirmait que l'archive paie en fragments 🧩 et encre 🖋️ —
+    // il verrouillait donc précisément le défaut. Ces deux devises sont MORTES (plus
+    // aucune fonction ne les dépense depuis le retrait des infusions de grade), ce que
+    // le test voisin sur les « devises mortes » ne vérifiait pas : il ne connaissait
+    // que la poussière et les parchemins. Les archives rendent des CLÉS.
     const arch = resolveOutcome(hero, poi('archive'), 7, 26);
-    expect(arch.fragments).toBeGreaterThan(0);
-    expect(arch.inkDust).toBeGreaterThan(0);
+    expect(arch.key).toBeGreaterThan(0);
+    expect(arch.fragments).toBe(0);
+    expect(arch.inkDust).toBe(0);
     expect(arch.energy).toBe(0);
   });
 
-  it('ne versent AUCUNE devise morte (poussière, parchemins d’enchant)', () => {
+  it('ne versent AUCUNE devise morte — la LISTE COMPLÈTE, pas deux exemples', () => {
     for (const t of types) {
       const o = resolveOutcome(hero, poi(t), 3, 26);
-      expect(o.dust, t).toBe(0);
-      expect(o.enchantScrolls, t).toBe(0);
+      // ⚠️ Ce test ne connaissait que la poussière et les parchemins — il a donc laissé
+      // passer les fragments et l'encre pendant tout le temps où ces deux-là sont
+      // devenues mortes. On énumère désormais TOUTES les devises sans site de dépense.
+      expect(o.dust, t + ' : poussière').toBe(0);
+      expect(o.enchantScrolls, t + " : parchemins d'enchant").toBe(0);
+      expect(o.fragments, t + ' : fragments').toBe(0);
+      expect(o.inkDust, t + " : poussière d'encre").toBe(0);
     }
   });
 
@@ -560,5 +571,69 @@ describe('aller loin doit VRAIMENT payer', () => {
 
   it('reste borné : un trajet interminable ne multiplie pas tout', () => {
     expect(travelFactor(50)).toBe(travelFactor(TRAVEL_CAP_H));
+  });
+});
+
+describe('la carte ne paie JAMAIS en monnaie morte', () => {
+  // ⚠️ Le défaut réel, signalé par l'utilisateur : les ARCHIVES 📖 versaient des
+  // fragments 🧩 et de la poussière d'encre 🖋️, et la MINE des fragments — or plus
+  // aucune fonction ne dépense ces devises depuis le retrait des infusions de grade.
+  // Un POI entier payait donc en monnaie de singe, ce que la v0.658 prétendait avoir
+  // corrigé (elle avait retiré la poussière ✨ et les parchemins 📜, puis introduit
+  // l'archive avec le même défaut). Les archives rendent désormais des CLÉS 🗝️.
+  const hero = {
+    name: 'h',
+    pv: 5000,
+    maxPv: 5000,
+    damage: 400,
+    crit: 0.1,
+    dodge: 0.05,
+    initiative: 10,
+    strikes: 1,
+  } as never;
+
+  it('AUCUN type de POI ne verse fragments 🧩 ni encre 🖋️', () => {
+    const types: PoiType[] = ['mine', 'well', 'shrine', 'archive', 'wreck', 'camp', 'lair'];
+    for (const type of types) {
+      for (let s = 1; s <= 30; s++) {
+        const poi = {
+          id: 'p',
+          type,
+          level: 26,
+          x: 100,
+          y: 60,
+          distNorm: 0.5,
+          spawnedAt: 0,
+          expiresAt: 9e15,
+        } as never;
+        const o = resolveOutcome(hero, poi, s * 97 + 3, 26);
+        expect(o.fragments, `${type} verse des fragments`).toBe(0);
+        expect(o.inkDust, `${type} verse de l’encre`).toBe(0);
+      }
+    }
+  });
+
+  it('les ARCHIVES rendent des CLÉS, et davantage quand on va loin', () => {
+    const at = (distNorm: number) => {
+      let total = 0;
+      for (let s = 1; s <= 40; s++) {
+        const poi = {
+          id: 'p',
+          type: 'archive' as PoiType,
+          level: 26,
+          x: 100,
+          y: 60,
+          distNorm,
+          spawnedAt: 0,
+          expiresAt: 9e15,
+        } as never;
+        total += resolveOutcome(hero, poi, s * 61 + 7, 26).key;
+      }
+      return total / 40;
+    };
+    const proche = at(0.1);
+    const loin = at(1);
+    expect(proche, `archive proche : ${proche.toFixed(2)} clé(s)`).toBeGreaterThanOrEqual(1);
+    expect(loin, `proche ${proche.toFixed(2)} vs loin ${loin.toFixed(2)}`).toBeGreaterThan(proche);
   });
 });

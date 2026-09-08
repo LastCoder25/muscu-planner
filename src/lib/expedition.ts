@@ -216,6 +216,9 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
 export const HARVEST = {
   wellEnergyMax: 200, // ~5 runs de donjon : un complément net, pas une séance de sport
   keyChance: 0.12, // clé de Labyrinthe en prime occasionnelle
+  /** Trajet (facteur de voyage) à partir duquel une archive rend une 2ᵉ clé : aller loin
+   *  paie plus, ici aussi. */
+  archiveFarKeyAt: 6,
   // Ferraille d'une épave. Dimensionnée pour qu'UNE visite couvre largement la remise
   // en service d'une enceinte de son niveau (cf. repairCost, raid.ts) : réparer doit
   // être une formalité qu’on accomplit, jamais un mur qui enferme dans la défaite.
@@ -893,8 +896,8 @@ const WIN_TEXT: Record<PoiType, string[]> = {
     '🔮 Les runes ont cédé leurs pierres.',
   ],
   archive: [
-    '📖 Archives fouillées — fragments et encre rapportés.',
-    '📖 Les rayonnages ont livré leurs restes.',
+    '📖 Archives fouillées — des clés oubliées dans un tiroir.',
+    '📖 Les rayonnages ont livré leurs secrets… et leurs clés.',
   ],
   wreck: [
     '🔩 Épave démontée — ferraille chargée sur la carriole.',
@@ -913,18 +916,21 @@ export function resolveOutcome(
   const rng = mulberry32(seed >>> 0 || 1);
   const cost = goldCost(poi.type, poi.level);
 
-  // ── RÉCOLTE DE RESSOURCES (well / shrine / archive) : aucun combat, jamais d'échec. ──
-  // Ces POI paient en devises VIVANTES — celles qui se consomment encore à tout niveau
-  // (énergie, pierres d'invocation, fragments, encre) — et JAMAIS en butin, que la carte
-  // ne peut structurellement plus produire au-dessus d'un joueur bien équipé.
+  // ── RÉCOLTE DE RESSOURCES (well / shrine / archive / wreck) : aucun combat, jamais
+  // d'échec. Ces POI paient en devises VIVANTES — celles qui se DÉPENSENT encore quelque
+  // part — et JAMAIS en butin, que la carte ne peut structurellement plus produire.
+  // ⚠️ VIVANTES = ⚡ énergie, 🔮 pierres d'invocation, 🗝️ clés, 🔩 ferraille, 🪙 or.
+  // MORTES = ✨ poussière, 📜 parchemins, 💎 pierres, 🧩 fragments, 🖋️ encre : plus aucune
+  // fonction ne les dépense. Les ARCHIVES payaient justement en 🧩 + 🖋️ — un POI entier
+  // qui versait de la monnaie de singe, ce que la v0.658 prétendait avoir corrigé. Elles
+  // rendent désormais des CLÉS, qui n'avaient aucune source dédiée. Un test l'interdit.
   if (HARVEST_TYPES.has(poi.type) && poi.type !== 'mine') {
     const rthH = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
     const tfH = travelFactor(rthH); // super-linéaire : aller loin paie PLUS que proportionnellement
     const L = poi.level;
     let energy = 0;
     let summonStones = 0;
-    let fragments = 0;
-    let inkDust = 0;
+    let keys = 0;
     let scrap = 0;
     if (poi.type === 'well') {
       // Complément d'énergie, jamais un substitut au sport : borné à ~5 runs de donjon.
@@ -935,8 +941,10 @@ export function resolveOutcome(
     } else if (poi.type === 'wreck') {
       scrap = Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * tfH);
     } else {
-      fragments = Math.round((6 + L * 1.2) * tfH);
-      inkDust = Math.round((5 + L) * tfH);
+      // ARCHIVES → 🗝️ clés du Labyrinthe. Elles n'avaient aucune source dédiée (drops
+      // rares + la Porte), et le Labyrinthe est la SEULE source de familiers : un robinet
+      // modeste, télégraphié, qui récompense le trajet — deux clés si l'on va loin.
+      keys = 1 + (tfH >= HARVEST.archiveFarKeyAt ? 1 : 0);
     }
     // Une récolte sans aléa n'est qu'un distributeur : les rencontres de trajet lui
     // rendent de la variance, et sont la SEULE voie par laquelle elle peut lâcher un objet.
@@ -952,12 +960,12 @@ export function resolveOutcome(
       energy: Math.min(HARVEST.wellEnergyMax, Math.round(energy * k)),
       enchantScrolls: 0,
       summonStones: Math.round(summonStones * k),
-      fragments: Math.round(fragments * k),
-      inkDust: Math.round(inkDust * k),
+      fragments: 0, // devise MORTE : plus jamais versée (champ gardé pour les vieux rapports)
+      inkDust: 0, // idem
       scrap: Math.round(scrap * k),
       item: tr.drops[0] ?? null,
       items: tr.drops,
-      key: (rng() < HARVEST.keyChance ? 1 : 0) + tr.keys,
+      key: keys + (rng() < HARVEST.keyChance ? 1 : 0) + tr.keys,
       reconBonus: 0,
       returnMult: tr.returnMult,
       text: pick(rng, WIN_TEXT[poi.type]) + tr.text,
@@ -1138,7 +1146,9 @@ export function resolveOutcome(
     // Les devises vivantes viennent surtout des POI DÉDIÉS (well/shrine/archive) : ici
     // un simple filet, pour que ces sorties ne soient pas totalement muettes.
     summonStones: poi.type === 'lair' ? 1 + Math.floor(poi.level / 12) : 0,
-    fragments: poi.type === 'mine' ? Math.round((3 + poi.level * 0.4) * tf) : 0,
+    // ⚠️ La MINE versait des fragments 🧩 : devise MORTE (plus aucune fonction ne la
+    // dépense depuis le retrait des infusions). Elle paie en or et en énergie, point.
+    fragments: 0,
     inkDust: 0,
     item: items[0] ?? null,
     items,

@@ -172,7 +172,6 @@
              dessine déjà, rendu visible. -->
         <polygon :points="innerPoints" class="yard-ground" />
         <path :d="`M100 ${WALL_BOTTOM - 13} L100 ${WALL_TOP + 13}`" class="yard-lane" />
-        <circle cx="100" cy="126" r="24" class="yard-quarter" />
 
         <!-- ── LA COUR ──────────────────────────────────────────────────────
              Deux rangées de bâtiments de production + une rangée de services.
@@ -201,14 +200,7 @@
             rx="5"
             class="yard-pad"
           />
-          <!-- Toit : c'est lui qui transforme un carré en petite maison. Seulement sur
-               les emplacements BÂTIS — un terrain vide n'a pas de toit. -->
-          <path
-            v-if="y.built"
-            :d="`M${y.x - YARD_HALF - 1.5} ${y.y - YARD_HALF + 1} L${y.x} ${y.y - YARD_HALF - 5} L${y.x + YARD_HALF + 1.5} ${y.y - YARD_HALF + 1} Z`"
-            class="yard-roof"
-          />
-          <text v-if="y.built" :x="y.x" :y="y.y + 5" class="yard-emo">{{ y.emoji }}</text>
+          <text v-if="y.built" :x="y.x" :y="y.y + 4" class="yard-emo">{{ y.emoji }}</text>
           <text v-else :x="y.x" :y="y.y + 4" class="yard-plus">{{ y.locked ? '🔒' : '＋' }}</text>
           <g v-if="y.built" class="lvl-badge">
             <circle :cx="y.x + 7.5" :cy="y.y - 7.5" r="4.6" />
@@ -756,17 +748,22 @@ interface YardCell {
 // une grille 4×2 laisserait un trou béant au dernier rang, alors que 4 + 3 centré se lit
 // comme un village qui épouse l'octogone. ⚠️ Le nombre de cases suit `BUILD.plotCap` (un
 // test le verrouille) : ajouter un type de bâtiment demande une position de plus ici.
+// Les 7 ATELIERS : un en tête d'axe, puis deux colonnes de trois qui encadrent
+// l'artère. Symétrique par rapport à l'axe porte↔corps de garde, donc lisible d'un
+// coup d'œil — et le regard suit la rue au lieu de balayer une grille.
 const PLOT_POS: { x: number; y: number }[] = [
-  { x: 69, y: 74 },
-  { x: 90, y: 74 },
-  { x: 110, y: 74 },
-  { x: 131, y: 74 },
-  { x: 78, y: 100 },
-  { x: 100, y: 100 },
-  { x: 122, y: 100 },
+  { x: 100, y: 66 },
+  { x: 75, y: 88 },
+  { x: 125, y: 88 },
+  { x: 75, y: 110 },
+  { x: 125, y: 110 },
+  { x: 75, y: 132 },
+  { x: 125, y: 132 },
 ];
-const SVC_X = [78, 100, 122];
-const SVC_Y = 126;
+// Les 3 SERVICES s'alignent SUR l'artère : chenil, infirmerie, chantier forment
+// l'épine civile de la ville, entre les deux rangées d'ateliers.
+const SVC_X = [100, 100, 100];
+const SVC_Y_EACH = [92, 114, 136];
 const YARD_HALF = 9; // demi-côté DESSINÉ
 // Cible tactile plus large que le dessin, sans chevauchement (elle vaut exactement l'écart
 // entre deux colonnes) → ~37 px sur un téléphone, contre 33 pour la tuile visible seule.
@@ -804,7 +801,7 @@ const yard = computed<YardCell[]>(() => {
       key: id,
       service: true,
       x: SVC_X[i]!,
-      y: SVC_Y,
+      y: SVC_Y_EACH[i]!,
       emoji: t.emoji,
       built: lvlOf(id) > 0,
       locked: heroLevel.value < t.unlockLevel,
@@ -1168,22 +1165,13 @@ const doCollect = () =>
   stroke-width: 1;
   pointer-events: none;
 }
+/* L'ARTÈRE : une vraie rue pavée, de la porte au corps de garde, sur laquelle
+   s'alignent les services. C'est elle qui donne un axe au dessin. */
 .yard-lane {
-  stroke: #362d20;
-  stroke-width: 9;
+  stroke: #2d2619;
+  stroke-width: 26;
   stroke-linecap: round;
   pointer-events: none;
-}
-.yard-quarter {
-  fill: #262017;
-  pointer-events: none;
-}
-.yard-roof {
-  fill: #6b5a3f;
-  pointer-events: none;
-}
-.yard.svc .yard-roof {
-  fill: #4f5a63;
 }
 .yard.svc .yard-pad {
   fill: #33302a;
