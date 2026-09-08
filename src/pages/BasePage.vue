@@ -165,6 +165,15 @@
           <text x="100" :y="gateLabelY" class="gate-label">Expéditions</text>
         </g>
 
+        <!-- ── LE SOL DE LA COUR ────────────────────────────────────────────
+             Sans lui, les tuiles flottaient sur le même fond que l'extérieur : on ne
+             voyait pas qu'on était DEDANS. Le pavage arrête le regard aux murs, et la
+             ruelle relie la porte (sud) au corps de garde (nord) — l'axe que l'enceinte
+             dessine déjà, rendu visible. -->
+        <polygon :points="innerPoints" class="yard-ground" />
+        <path :d="`M100 ${WALL_BOTTOM - 13} L100 ${WALL_TOP + 13}`" class="yard-lane" />
+        <circle cx="100" cy="126" r="24" class="yard-quarter" />
+
         <!-- ── LA COUR ──────────────────────────────────────────────────────
              Deux rangées de bâtiments de production + une rangée de services.
              Chacun est une TUILE cliquable : emoji, pastille de niveau, point de
@@ -174,7 +183,7 @@
           v-for="y in yard"
           :key="y.key"
           class="yard hit"
-          :class="{ empty: !y.built, ready: y.ready, broken: y.damaged }"
+          :class="{ empty: !y.built, ready: y.ready, broken: y.damaged, svc: y.service }"
           @click="y.onClick()"
         >
           <rect
@@ -192,7 +201,14 @@
             rx="5"
             class="yard-pad"
           />
-          <text v-if="y.built" :x="y.x" :y="y.y + 4" class="yard-emo">{{ y.emoji }}</text>
+          <!-- Toit : c'est lui qui transforme un carré en petite maison. Seulement sur
+               les emplacements BÂTIS — un terrain vide n'a pas de toit. -->
+          <path
+            v-if="y.built"
+            :d="`M${y.x - YARD_HALF - 1.5} ${y.y - YARD_HALF + 1} L${y.x} ${y.y - YARD_HALF - 5} L${y.x + YARD_HALF + 1.5} ${y.y - YARD_HALF + 1} Z`"
+            class="yard-roof"
+          />
+          <text v-if="y.built" :x="y.x" :y="y.y + 5" class="yard-emo">{{ y.emoji }}</text>
           <text v-else :x="y.x" :y="y.y + 4" class="yard-plus">{{ y.locked ? '🔒' : '＋' }}</text>
           <g v-if="y.built" class="lvl-badge">
             <circle :cx="y.x + 7.5" :cy="y.y - 7.5" r="4.6" />
@@ -723,6 +739,9 @@ const innerPoints = computed(() =>
  *  est confortable, elle l'était beaucoup moins avec 5 colonnes (61,4 pour 63,6). */
 interface YardCell {
   key: string;
+  /** Service de l'enceinte (chenil, infirmerie, chantier) plutôt qu'atelier de
+   *  production : teinte « civile », pour qu'on lise deux quartiers et non dix carrés. */
+  service?: boolean;
   x: number;
   y: number;
   emoji: string;
@@ -738,16 +757,16 @@ interface YardCell {
 // comme un village qui épouse l'octogone. ⚠️ Le nombre de cases suit `BUILD.plotCap` (un
 // test le verrouille) : ajouter un type de bâtiment demande une position de plus ici.
 const PLOT_POS: { x: number; y: number }[] = [
-  { x: 70, y: 80 },
-  { x: 90, y: 80 },
-  { x: 110, y: 80 },
-  { x: 130, y: 80 },
-  { x: 80, y: 102 },
-  { x: 100, y: 102 },
-  { x: 120, y: 102 },
+  { x: 69, y: 74 },
+  { x: 90, y: 74 },
+  { x: 110, y: 74 },
+  { x: 131, y: 74 },
+  { x: 78, y: 100 },
+  { x: 100, y: 100 },
+  { x: 122, y: 100 },
 ];
-const SVC_X = [80, 100, 120];
-const SVC_Y = 124;
+const SVC_X = [78, 100, 122];
+const SVC_Y = 126;
 const YARD_HALF = 9; // demi-côté DESSINÉ
 // Cible tactile plus large que le dessin, sans chevauchement (elle vaut exactement l'écart
 // entre deux colonnes) → ~37 px sur un téléphone, contre 33 pour la tuile visible seule.
@@ -783,6 +802,7 @@ const yard = computed<YardCell[]>(() => {
     const t = DEFENSE_TYPES.find((d) => d.id === id)!;
     cells.push({
       key: id,
+      service: true,
       x: SVC_X[i]!,
       y: SVC_Y,
       emoji: t.emoji,
@@ -1141,6 +1161,33 @@ const doCollect = () =>
 /* ── La cour : chaque bâtiment est une TUILE cliquable ── */
 .hit {
   cursor: pointer;
+}
+.yard-ground {
+  fill: #221c14;
+  stroke: #3a3125;
+  stroke-width: 1;
+  pointer-events: none;
+}
+.yard-lane {
+  stroke: #362d20;
+  stroke-width: 9;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+.yard-quarter {
+  fill: #262017;
+  pointer-events: none;
+}
+.yard-roof {
+  fill: #6b5a3f;
+  pointer-events: none;
+}
+.yard.svc .yard-roof {
+  fill: #4f5a63;
+}
+.yard.svc .yard-pad {
+  fill: #33302a;
+  stroke: #5d6168;
 }
 .yard-hit {
   fill: transparent;
