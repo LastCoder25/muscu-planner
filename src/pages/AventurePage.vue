@@ -687,7 +687,6 @@
           <div class="gear-icons">
             <button
               class="gi-b"
-              :disabled="onExpedition"
               title="Équipement conseillé — équipe automatiquement la meilleure combinaison de ton stuff (sets inclus)"
               @click="doOptimizeGear()"
             >
@@ -698,7 +697,6 @@
             </button>
             <button
               class="gi-b"
-              :disabled="onExpedition"
               :title="
                 onExpedition
                   ? '🧭 Indisponible en expédition'
@@ -767,9 +765,7 @@
               </div>
               <!-- Actions ancrées EN BAS (slot-eff flexible) → alignées d'une carte à l'autre. -->
               <div class="slot-actions">
-                <button class="slot-remove" :disabled="onExpedition" @click.stop="doUnequip(slot)">
-                  Retirer
-                </button>
+                <button class="slot-remove" @click.stop="doUnequip(slot)">Retirer</button>
               </div>
               <!-- Badge : nb d'objets du SAC (même slot) au potentiel supérieur. Tap →
                      filtre le sac dessus. Cercle avec le 🎒 en fond. -->
@@ -3246,7 +3242,7 @@ function autoEquipTalentDrops(drops: TalentInstance[]): TalentInstance[] {
 }
 async function doEquipTalent(id: string) {
   const uid = auth.user?.id;
-  if (!uid || expeBlocked()) return; // loadout (dont talents) gelé en expédition
+  if (!uid) return; // intendance : rien à voir avec la présence du héros
   const res = await char.equipTalent(uid, id, c.value.level.level);
   if (res === 'dup')
     $q.notify({
@@ -3258,14 +3254,14 @@ async function doEquipTalent(id: string) {
 }
 async function doUnequipTalent(id: string) {
   const uid = auth.user?.id;
-  if (!uid || expeBlocked()) return;
+  if (!uid) return;
   await char.unequipTalent(uid, id);
 }
 // REMPLACER : retire le talent désigné par le meilleur swap (même code, ou le moins utile
 // si les emplacements sont pleins) puis équipe celui-ci — swap direct.
 async function doSwapTalent(id: string) {
   const uid = auth.user?.id;
-  if (!uid || expeBlocked()) return;
+  if (!uid) return;
   const rid = talReplaceId(id);
   if (rid) await char.unequipTalent(uid, rid);
   await char.equipTalent(uid, id, c.value.level.level);
@@ -4531,14 +4527,16 @@ async function fightEndless() {
   }
 }
 
+/** ⚠️ NE GÈLE PLUS RIEN pendant une expédition. **Les stocks sont en VILLE, pas sur le
+ *  héros** : trier son sac, verrouiller une pièce, recycler du fourrage, céder un familier
+ *  ou changer ses talents sont des gestes d'intendance qui n'exigent la présence de
+ *  personne. Les geler ne protégeait aucune règle — ça bloquait le joueur pendant des
+ *  heures, précisément sur l'écran où il a le plus de choses à faire en attendant.
+ *  Ce qui reste interdit, c'est ce qui demande le HÉROS lui-même : donjons, boss, faille,
+ *  arène, Labyrinthe, nouvelle expédition. Un seul garde pour ça : `expeBlocked`. */
 function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
   const uid = auth.user?.id;
   if (!uid) return;
-  // Héros en expédition = équipement GELÉ (il est parti avec son barda).
-  if (onExpedition.value) {
-    $q.notify({ type: 'warning', message: '🧭 Ton héros est en expédition — indisponible.' });
-    return;
-  }
   fn(uid).catch(() => $q.notify({ type: 'negative', message: errMsg }));
 }
 
@@ -4790,7 +4788,7 @@ const voieOwnedCount = (i: number): number => {
 // set complété au mieux avec le sac (un seul appel, capstone de la voie inclus).
 function doWearVoieSet(i: number) {
   const v = loadoutVoie(i);
-  if (!v || busy.value || expeBlocked()) return; // gelé en expédition (héros parti avec son stuff)
+  if (!v || busy.value) return; // porter un set rangé : de l'intendance, pas une sortie
   withUid(async (uid) => {
     const changed = await char.optimizeGear(
       uid,
