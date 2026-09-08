@@ -495,6 +495,7 @@ const POI_EMO: Record<PoiType, string> = {
   well: '💧',
   shrine: '🔮',
   archive: '📖',
+  wreck: '🔩',
 };
 const POI_LABEL: Record<PoiType, string> = {
   mine: 'Mine',
@@ -504,6 +505,7 @@ const POI_LABEL: Record<PoiType, string> = {
   well: 'Source de faille',
   shrine: "Sanctuaire d'invocation",
   archive: 'Archives englouties',
+  wreck: 'Épave de convoi',
 };
 
 const now = ref(Date.now());

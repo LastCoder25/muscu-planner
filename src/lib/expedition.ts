@@ -18,7 +18,18 @@ import { rollDrop, rollSetPiece, ITEM_SETS, type Item } from './items';
 // on n'y touche pas. Les ressources, elles, ne se périment JAMAIS : elles se consomment
 // à tout niveau. La carte cesse donc d'être une loterie à butin pour devenir une source
 // de ressources en temps réel, complémentaire des donjons qui, eux, donnent le stuff.
-export type PoiType = 'mine' | 'camp' | 'lair' | 'arena' | 'well' | 'shrine' | 'archive';
+export type PoiType =
+  | 'mine'
+  | 'camp'
+  | 'lair'
+  | 'arena'
+  | 'well'
+  | 'shrine'
+  | 'archive'
+  // 🔩 ÉPAVE : la SEULE source de ferraille (réparation de l'enceinte, cf. raid.ts).
+  // Le butin d'un siège paie dans la devise de la faction, jamais en ferraille : en
+  // trouver sur un loup ou un revenant n'aurait aucun sens.
+  | 'wreck';
 
 /** POI de récolte pure : aucun combat, on ramasse et on rentre (comme la mine). */
 export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
@@ -26,6 +37,7 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
   'well',
   'shrine',
   'archive',
+  'wreck',
 ]);
 
 export interface Poi {
@@ -60,6 +72,7 @@ export interface ExpeditionOutcome {
   summonStones: number; // 🔮 pierres d'invocation → coût des boss de palier
   fragments: number; // 🧩 infusion de grade des familiers
   inkDust: number; // 🖋️ infusion de grade des talents
+  scrap: number; // 🔩 ferraille : répare l'enceinte (épaves uniquement)
   item: Omit<Item, 'id'> | null; // la « prise » principale (pièce de set / objet) ou null
   items?: Omit<Item, 'id'>[]; // ARÈNE : plusieurs objets (1 par palier de vagues) ; `item` = le 1er
   key: number; // clé de Labyrinthe (consolation rare)
@@ -97,6 +110,7 @@ export interface ExpeditionMessage {
   summonStones?: number; // 🔮
   fragments?: number; // 🧩
   inkDust?: number; // 🖋️
+  scrap?: number; // 🔩 ferraille
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
   itemCount?: number; // ARÈNE : nombre total d'objets ramenés (> 1) — le reste va au sac
@@ -123,6 +137,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     ...(o.summonStones ? { summonStones: o.summonStones } : {}),
     ...(o.fragments ? { fragments: o.fragments } : {}),
     ...(o.inkDust ? { inkDust: o.inkDust } : {}),
+    ...(o.scrap ? { scrap: o.scrap } : {}),
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
     key: o.key,
@@ -137,6 +152,11 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
 export const HARVEST = {
   wellEnergyMax: 200, // ~5 runs de donjon : un complément net, pas une séance de sport
   keyChance: 0.12, // clé de Labyrinthe en prime occasionnelle
+  // Ferraille d'une épave. Dimensionnée pour qu'UNE visite couvre largement la remise
+  // en service d'une enceinte de son niveau (cf. repairCost, raid.ts) : réparer doit
+  // être une formalité qu’on accomplit, jamais un mur qui enferme dans la défaite.
+  scrapBase: 18,
+  scrapPerLevel: 1.6,
 } as const;
 
 export const EXPE = {
@@ -163,6 +183,7 @@ export const EXPE = {
     well: 14 * 3600_000,
     shrine: 16 * 3600_000,
     archive: 14 * 3600_000,
+    wreck: 18 * 3600_000,
   },
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
@@ -173,7 +194,16 @@ export const EXPE = {
   // (le plus cher), placée LOIN (trajet long) et récompense grasse (∝ vagues).
   // Les POI de ressources coûtent peu d'or : leur intérêt est ce qu'ils RAPPORTENT en
   // devises vivantes, pas un pari sur du butin.
-  goldCostBase: { mine: 22, camp: 65, lair: 155, arena: 240, well: 30, shrine: 48, archive: 34 },
+  goldCostBase: {
+    mine: 22,
+    camp: 65,
+    lair: 155,
+    arena: 240,
+    well: 30,
+    shrine: 48,
+    archive: 34,
+    wreck: 26,
+  },
   goldCostExp: 1.6,
   failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
   // ÉNERGIE des mines : BORNÉE (ticket a0d16472). Le facteur temps `tf` n'est pas
@@ -414,6 +444,10 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
     'shrine',
     'archive',
     'archive',
+    // 🔩 ÉPAVE : bien représentée, car c'est l'UNIQUE source de ferraille et qu'une
+    // enceinte endommagée ne doit jamais rester bloquée faute de matière.
+    'wreck',
+    'wreck',
   ] as const);
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
@@ -699,6 +733,7 @@ const FAIL_TEXT: Record<PoiType, string[]> = {
   well: ['La faille s’est refermée avant l’extraction.'],
   shrine: ['Le sanctuaire est resté muet.'],
   archive: ['Les galeries se sont effondrées avant la salle de lecture.'],
+  wreck: ['L’épave s’est enfoncée avant qu’on ait pu la démonter.'],
 };
 const WIN_TEXT: Record<PoiType, string[]> = {
   lair: [
@@ -715,6 +750,10 @@ const WIN_TEXT: Record<PoiType, string[]> = {
   archive: [
     '📖 Archives fouillées — fragments et encre rapportés.',
     '📖 Les rayonnages ont livré leurs restes.',
+  ],
+  wreck: [
+    '🔩 Épave démontée — ferraille chargée sur la carriole.',
+    '🔩 La carcasse a rendu tout son métal.',
   ],
   arena: ['🏟️ L’arène acclame ton champion !'],
 };
@@ -741,12 +780,15 @@ export function resolveOutcome(
     let summonStones = 0;
     let fragments = 0;
     let inkDust = 0;
+    let scrap = 0;
     if (poi.type === 'well') {
       // Complément d'énergie, jamais un substitut au sport : borné à ~5 runs de donjon.
       energy = Math.min(HARVEST.wellEnergyMax, Math.round((8 + L * 2) * tfH));
     } else if (poi.type === 'shrine') {
       // Calé sur le coût d'un boss (`1 + ⌊niv/5⌋`) → une visite ≈ une tentative et demie.
       summonStones = Math.max(2, Math.round((1 + L / 5) * (0.8 + tfH * 0.25)));
+    } else if (poi.type === 'wreck') {
+      scrap = Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * tfH);
     } else {
       fragments = Math.round((6 + L * 1.2) * tfH);
       inkDust = Math.round((5 + L) * tfH);
@@ -767,6 +809,7 @@ export function resolveOutcome(
       summonStones: Math.round(summonStones * k),
       fragments: Math.round(fragments * k),
       inkDust: Math.round(inkDust * k),
+      scrap: Math.round(scrap * k),
       item: tr.drops[0] ?? null,
       items: tr.drops,
       key: (rng() < HARVEST.keyChance ? 1 : 0) + tr.keys,
@@ -821,6 +864,7 @@ export function resolveOutcome(
       win: good,
       gold,
       dust,
+      scrap: 0,
       energy: 0,
       enchantScrolls,
       summonStones: 3 + Math.floor(waves * 0.8),
@@ -856,6 +900,7 @@ export function resolveOutcome(
     return {
       win: false,
       gold: Math.round(cost * EXPE.failRefund), // < coût → jamais un profit
+      scrap: 0,
       summonStones: 0,
       fragments: 0,
       inkDust: 0,
@@ -942,6 +987,7 @@ export function resolveOutcome(
     win: true,
     gold,
     dust,
+    scrap: 0,
     energy,
     enchantScrolls,
     // Les devises vivantes viennent surtout des POI DÉDIÉS (well/shrine/archive) : ici

@@ -147,7 +147,9 @@ describe('difficulté des POI de combat', () => {
     expect(foe.damage).toBeGreaterThan(0);
   });
   it('HARVEST_TYPES contient bien les récoltes et pas les combats', () => {
-    expect([...HARVEST_TYPES].sort()).toEqual(['archive', 'mine', 'shrine', 'well']);
+    // `wreck` (épave) rejoint la famille en v0.661 : c'est une récolte pure — aucun
+    // combat, aucun échec — et l'UNIQUE source de ferraille (réparation de l'enceinte).
+    expect([...HARVEST_TYPES].sort()).toEqual(['archive', 'mine', 'shrine', 'well', 'wreck']);
     expect(HARVEST_TYPES.has('lair')).toBe(false);
     expect(HARVEST_TYPES.has('arena')).toBe(false);
   });

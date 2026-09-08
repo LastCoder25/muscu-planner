@@ -1032,6 +1032,28 @@
           <span class="expe-go">›</span>
         </button>
 
+        <!-- Ma base (enceinte, sièges). La menace est TÉLÉGRAPHIÉE ici : on doit pouvoir
+             voir qu'une armée approche sans ouvrir l'écran. -->
+        <button class="expe-card" :class="{ threat: !!baseRaid }" @click="openGame('/base')">
+          <span class="expe-emo">🏰</span>
+          <span class="expe-main">
+            <span class="expe-name font-display">Ma base</span>
+            <span class="expe-sub">
+              <template v-if="baseRaid">
+                ⚠️ Une armée approche — {{ fmtExpeMs(Math.max(0, baseRaid.arrivesAt - nowMs)) }}
+              </template>
+              <template v-else-if="baseCorpses > 0">
+                🦴 {{ baseCorpses }} corps à dépouiller sur le champ de bataille
+              </template>
+              <template v-else-if="baseFrozen"
+                >❄️ Production gelée — une séance la relance</template
+              >
+              <template v-else>Muraille, tourelles et guet 🧱</template>
+            </span>
+          </span>
+          <span class="expe-go">›</span>
+        </button>
+
         <!-- Labyrinthe (donjon à étages exploré, débloqué par la Porte du Labyrinthe) -->
         <button
           class="expe-card"
@@ -2385,6 +2407,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
+import { remainingCorpses } from '@/lib/raid';
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -4447,6 +4470,57 @@ function openInbox() {
   const uid = auth.user?.id;
   if (uid) void char.expeMarkRead(uid);
 }
+// ── DÉFENSE DE LA BASE ──
+// Le siège se résout par HORLOGE, comme les expéditions : le tick d'une seconde suffit,
+// et si l'app est restée fermée, la première ouverture rattrape tout d'un coup.
+const nowMs = computed(() => expeNow.value);
+const baseRaid = computed(() => char.row?.base?.raid ?? null);
+const baseCorpses = computed(() => remainingCorpses(char.row?.base?.field ?? null));
+const baseFrozen = computed(() => !!char.row?.base?.freeze);
+
+/** Jours RÉELLEMENT actifs sur les 7 derniers — c'est ce qui règle la fréquence des
+ *  sièges. « Plus tu t'entraînes, plus ta base attire » : un siège étant un robinet
+ *  (butin, cadavres, ferraille), plus d'activité = plus de contenu, jamais une punition. */
+const activeDays7 = computed(() => {
+  const from = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
+  const days = new Set<string>();
+  for (const e of progress.sportEntries.value) if (e.date && e.date >= from) days.add(e.date);
+  return days.size;
+});
+
+let baseBusy = false;
+async function baseLifecycle() {
+  const uid = auth.user?.id;
+  if (!uid || baseBusy || !char.row) return;
+  baseBusy = true;
+  try {
+    const r = await char.baseTick(uid, Date.now(), {
+      playerLevel: c.value.level.level,
+      activeDays7: activeDays7.value,
+      // XP de fond : strictement croissante, donc « a-t-il fait du sport depuis ? » se lit
+      // d'une simple comparaison — c'est ce qui dégèle la production.
+      globalXp: progress.energyEarned.value,
+      hero: fighter.value,
+    });
+    if (r.detected)
+      $q.notify({
+        type: 'warning',
+        message: `⚠️ Une armée approche de ta base — ${fmtExpeMs(
+          Math.max(0, r.detected.arrivesAt - Date.now()),
+        )}`,
+      });
+    if (r.report)
+      $q.notify({
+        type: r.report.held ? 'positive' : 'negative',
+        message: r.report.held
+          ? `🏆 Assaut repoussé ! ${r.report.defeated}/${r.report.total} groupes abattus.`
+          : `💥 L'enceinte a cédé (${r.report.defeated}/${r.report.total} repoussés).`,
+      });
+  } finally {
+    baseBusy = false;
+  }
+}
+
 let expeBusy = false;
 async function expeLifecycle() {
   const uid = auth.user?.id;
@@ -4466,6 +4540,7 @@ async function expeLifecycle() {
         message: `🎉 Héros rentré ! +${o.gold} 🪙${o.item ? ' · ' + o.item.name : ''}`,
       });
     await char.expeSyncMap(uid, Date.now(), c.value.level.level);
+    await baseLifecycle();
   } finally {
     expeBusy = false;
   }

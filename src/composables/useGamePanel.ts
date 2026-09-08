@@ -5,13 +5,14 @@
 // utilisent le routeur normal (plein écran) — cf. la prop `embedded` de chaque page.
 import { ref } from 'vue';
 
-export type GameView = 'aventure' | 'expedition-map' | 'expedition';
+export type GameView = 'aventure' | 'expedition-map' | 'expedition' | 'base';
 
 // Correspondance route ↔ vue du volet (pour réutiliser les liens existants).
 const PATH_TO_VIEW: Record<string, GameView> = {
   '/aventure': 'aventure',
   '/expedition-map': 'expedition-map',
   '/expedition': 'expedition',
+  '/base': 'base',
 };
 
 const view = ref<GameView>('aventure');

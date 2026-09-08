@@ -181,6 +181,7 @@ import { useQuasar } from 'quasar';
 const AventurePage = defineAsyncComponent(() => import('@/pages/AventurePage.vue'));
 const ExpeditionMapPage = defineAsyncComponent(() => import('@/pages/ExpeditionMapPage.vue'));
 const ExpeditionPage = defineAsyncComponent(() => import('@/pages/ExpeditionPage.vue'));
+const BasePage = defineAsyncComponent(() => import('@/pages/BasePage.vue'));
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useFeedbackStore } from '@/stores/feedback';
@@ -229,6 +230,7 @@ const GAME_PANES = {
   aventure: AventurePage,
   'expedition-map': ExpeditionMapPage,
   expedition: ExpeditionPage,
+  base: BasePage,
 };
 const gamePaneComponent = computed(() => GAME_PANES[gameView.value]);
 

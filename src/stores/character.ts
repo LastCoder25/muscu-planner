@@ -67,6 +67,26 @@ import {
   type Building,
 } from '@/lib/buildings';
 import { combatPower, type Combatant } from '@/lib/combat';
+import {
+  advanceBase,
+  applyRaidOutcome,
+  baseCombatant,
+  resolveRaid,
+  emptyBase,
+  defenseType,
+  defenseLevel,
+  ownedLevel,
+  repairCost,
+  scavengerCount,
+  pickScavengeTargets,
+  lootCorpses,
+  SCAV,
+  type BaseState,
+  type DefenseId,
+  type DefenseStructure,
+  type Raid,
+  type RaidReport,
+} from '@/lib/raid';
 import { useGoldFx } from '@/composables/useGoldFx';
 
 export interface CharacterRow {
@@ -103,7 +123,9 @@ export interface CharacterRow {
   set_pieces_seen: Record<string, string[]>; // codex : slots de set déjà obtenus par setId
   loadouts: Loadout[]; // sets d'équipement rangés (max 3, migr. 0051)
   voie: string | null; // spécialisation/archétype choisi (migr. 0055 ; null = aucune)
-  energy_log: EnergyLogEntry[]; // journal d'énergie hors-sport horodaté (migr. 0057)
+  energy_log: EnergyLogEntry[]; // journal d’énergie hors-sport horodaté (migr. 0057)
+  base: BaseState | null; // défense de la base : enceinte, siège, champ de bataille (migr. 0060)
+  scrap: number; // 🔩 ferraille : répare l’enceinte (migr. 0060) // journal d'énergie hors-sport horodaté (migr. 0057)
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -132,7 +154,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -206,6 +228,12 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.enchant_scrolls !== 'number') r.enchant_scrolls = 0; // migr. 0054
     if (typeof r.protections !== 'number') r.protections = 0; // migr. 0054
     if (r.voie === undefined) r.voie = null; // migr. 0055 (spécialisation)
+    if (typeof r.scrap !== 'number') r.scrap = 0; // colonne récente (migr. 0060)
+    if (!r.base || typeof r.base !== 'object' || Array.isArray(r.base)) r.base = null;
+    // Une structure dont le type a disparu du registre est DROPPÉE (même politique que
+    // les bâtiments) → pas d'enceinte fantôme après un renommage de type.
+    if (r.base)
+      r.base.defenses = arr<DefenseStructure>(r.base.defenses).filter((d) => defenseType(d.typeId));
     if (!r.expedition || typeof r.expedition !== 'object') r.expedition = null;
     if (!r.expedition_map || typeof r.expedition_map !== 'object') r.expedition_map = null;
     return r;
@@ -1069,6 +1097,7 @@ export const useCharacterStore = defineStore('character', () => {
       summon_stones: cur.summon_stones + (o.summonStones ?? 0),
       fragments: cur.fragments + (o.fragments ?? 0),
       ink_dust: cur.ink_dust + (o.inkDust ?? 0),
+      scrap: cur.scrap + (o.scrap ?? 0), // 🔩 épaves → réparation de l’enceinte
       inventory,
       messages,
       set_pieces_seen: drops.length
@@ -1121,6 +1150,181 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
   // Récolte TOUS les filons : crédite poussière/pierres accumulées, réinitialise l'horloge.
+  // ── DÉFENSE DE LA BASE (sièges) ──
+  // Le domaine (src/lib/raid.ts) est pur : il planifie, détecte et tranche. Le store ne
+  // fait que lui fournir ce qu'il ne peut pas connaître — le héros, l'activité sportive,
+  // l'XP — et persister ce qu'il rend.
+
+  function baseOf(cur: CharacterRow, now: number): BaseState {
+    return cur.base ?? emptyBase(newSeed(now), now);
+  }
+
+  /** Le héros défend-il ? Il n'est là que s'il n'est pas parti en expédition. C'est le
+   *  seul coût de sa présence : rester, c'est renoncer au revenu d'une expédition. */
+  function heroIsHome(cur: CharacterRow): boolean {
+    return !cur.expedition;
+  }
+
+  /** Tick de la base. Avance l'état, et RÉSOUT le siège s'il est à échéance — avec les
+   *  défenses telles qu'elles sont À CET INSTANT : ce que tu as construit avant la
+   *  deadline est ce qui se bat. Renvoie le rapport si une bataille vient d'avoir lieu. */
+  async function baseTick(
+    userId: string,
+    now: number,
+    ctx: { playerLevel: number; activeDays7: number; globalXp: number; hero: Combatant | null },
+  ): Promise<{ detected: Raid | null; report: RaidReport | null }> {
+    const cur = row.value;
+    if (!cur) return { detected: null, report: null };
+    const start = baseOf(cur, now);
+    const t = advanceBase(start, ctx, now);
+    if (!t.dueRaid) {
+      if (t.changed) await persist(userId, { base: t.base });
+      return { detected: t.detected, report: null };
+    }
+
+    const home = heroIsHome(cur);
+    const report = resolveRaid(
+      baseCombatant(t.base.defenses, home ? ctx.hero : null),
+      t.dueRaid,
+      now,
+      home,
+    );
+    const { base: nb, damage } = applyRaidOutcome(t.base, t.dueRaid, report, ctx, now);
+    const patch: Record<string, unknown> = { base: nb };
+    // Stock VOLÉ = la production accumulée non récoltée. On remet simplement les
+    // compteurs à l'heure : on ne peut donc perdre que ce qu'on n'avait pas ramassé,
+    // et récolter souvent suffit à ne rien risquer — sans jamais y être obligé.
+    if (damage.stockStolen && cur.buildings.length)
+      patch.buildings = cur.buildings.map((b) => ({ ...b, collectedAt: now }));
+    await persist(userId, patch);
+    return { detected: t.detected, report };
+  }
+
+  /** Construit une structure de l'enceinte (or + ferraille). Hors des 6 emplacements de
+   *  la carte : on ne sacrifie jamais une mine pour un mur. */
+  async function buildDefense(userId: string, typeId: DefenseId, playerLevel: number, now: number) {
+    const cur = row.value;
+    if (!cur) return;
+    const t = defenseType(typeId);
+    if (!t) throw new Error('Structure inconnue.');
+    const base = baseOf(cur, now);
+    if (base.defenses.some((d) => d.typeId === typeId))
+      throw new Error('Cette structure existe déjà.');
+    if (playerLevel < t.unlockLevel) throw new Error(`Débloqué au niveau ${t.unlockLevel}.`);
+    if (cur.gold < t.buildGold) throw new Error('Pas assez d’or.');
+    if (cur.scrap < t.buildScrap) throw new Error('Pas assez de ferraille 🔩.');
+    await persistOptimistic(userId, {
+      gold: cur.gold - t.buildGold,
+      scrap: cur.scrap - t.buildScrap,
+      base: { ...base, defenses: [...base.defenses, { typeId, level: 1 }] },
+    });
+  }
+
+  /** Monte une structure d'un niveau. Plafonnée au NIVEAU DU JOUEUR, comme les bâtiments :
+   *  le sport reste le plafond, y compris pour la défense. */
+  async function upgradeDefense(
+    userId: string,
+    typeId: DefenseId,
+    playerLevel: number,
+    now: number,
+  ) {
+    const cur = row.value;
+    if (!cur?.base) return;
+    const d = cur.base.defenses.find((x) => x.typeId === typeId);
+    const t = defenseType(typeId);
+    if (!d || !t) return;
+    if (d.level >= playerLevel) throw new Error('Niveau plafonné par ton niveau de personnage.');
+    const gold = buildingUpgradeCost(d.level);
+    const scrap = repairCost(d.level);
+    if (cur.gold < gold) throw new Error('Pas assez d’or.');
+    if (cur.scrap < scrap) throw new Error('Pas assez de ferraille 🔩.');
+    void now;
+    await persistOptimistic(userId, {
+      gold: cur.gold - gold,
+      scrap: cur.scrap - scrap,
+      base: {
+        ...cur.base,
+        defenses: cur.base.defenses.map((x) =>
+          x.typeId === typeId ? { ...x, level: x.level + 1 } : x,
+        ),
+      },
+    });
+  }
+
+  /** Remet une structure en service. En FERRAILLE uniquement : l'or est déjà tendu par
+   *  les bâtiments de production, une réparation ne doit pas leur faire concurrence. */
+  async function repairDefense(userId: string, typeId: DefenseId) {
+    const cur = row.value;
+    if (!cur?.base) return;
+    const d = cur.base.defenses.find((x) => x.typeId === typeId);
+    if (!d?.damaged) return;
+    const cost = repairCost(d.level);
+    if (cur.scrap < cost) throw new Error('Pas assez de ferraille 🔩.');
+    await persistOptimistic(userId, {
+      scrap: cur.scrap - cost,
+      base: {
+        ...cur.base,
+        defenses: cur.base.defenses.map((x) =>
+          x.typeId === typeId ? { typeId: x.typeId, level: x.level } : x,
+        ),
+      },
+    });
+  }
+
+  /** Envoie une vague de fouilleurs sur le champ de bataille. Renouvelable autant de fois
+   *  qu'on veut tant que les corps sont frais : un petit chantier fait plusieurs
+   *  allers-retours, il ne condamne pas le butin. */
+  async function sendScavengers(userId: string, now: number) {
+    const cur = row.value;
+    const field = cur?.base?.field;
+    if (!cur?.base || !field) return;
+    if (field.dispatchUntil && now < field.dispatchUntil) return; // vague déjà en route
+    const cap = scavengerCount(defenseLevel(cur.base.defenses, 'salvage'));
+    if (cap <= 0) throw new Error('Construis un Chantier de fouille pour dépouiller les corps.');
+    const targets = pickScavengeTargets(field, cap);
+    if (!targets.length) return;
+    await persistOptimistic(userId, {
+      base: {
+        ...cur.base,
+        field: {
+          ...field,
+          dispatchUntil: now + SCAV.dispatchMs,
+          dispatchIds: targets.map((c) => c.id),
+        },
+      },
+    });
+  }
+
+  /** Récupère ce que la vague a ramené. La richesse vient du NIVEAU DES CORPS, et la
+   *  rareté des objets reste plafonnée par le niveau du joueur (anti-runaway). */
+  async function collectScavengers(userId: string, now: number, playerLevel: number) {
+    const cur = row.value;
+    const field = cur?.base?.field;
+    if (!cur?.base || !field?.dispatchUntil || now < field.dispatchUntil) return null;
+    const ids = new Set(field.dispatchIds ?? []);
+    const taken = field.corpses.filter((c) => ids.has(c.id) && !c.looted);
+    const faction = cur.base.lastReport?.faction ?? 'bandits';
+    const loot = lootCorpses(taken, faction, playerLevel, (now ^ cur.base.seed) >>> 0 || 1);
+    const drops = loot.items.map((it) => ({ ...it, id: crypto.randomUUID() }));
+    await persistOptimistic(userId, {
+      gold: cur.gold + loot.gold,
+      fragments: cur.fragments + loot.fragments,
+      ink_dust: cur.ink_dust + loot.inkDust,
+      inventory: drops.length ? [...cur.inventory, ...drops] : cur.inventory,
+      set_pieces_seen: drops.length
+        ? mergeSetSeen(cur.set_pieces_seen, drops)
+        : cur.set_pieces_seen,
+      base: {
+        ...cur.base,
+        field: {
+          corpses: field.corpses.map((c) => (ids.has(c.id) ? { ...c, looted: true } : c)),
+          expiresAt: field.expiresAt,
+        },
+      },
+    });
+    return { ...loot, items: drops, corpses: taken.length };
+  }
+
   async function collectFilons(userId: string, now: number) {
     const cur = row.value;
     if (!cur || !cur.buildings.length) return null;
@@ -1171,6 +1375,14 @@ export const useCharacterStore = defineStore('character', () => {
     buildFilon,
     upgradeFilon,
     collectFilons,
+    baseTick,
+    buildDefense,
+    upgradeDefense,
+    repairDefense,
+    sendScavengers,
+    collectScavengers,
+    heroIsHome,
+    ownedLevel,
     applyRun,
     applyBossWin,
     chooseReward,
