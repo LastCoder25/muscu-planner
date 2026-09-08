@@ -55,10 +55,14 @@
              de garde. Les 8 sommets restent les 8 emplacements de tourelle. -->
         <polygon
           :points="wallPoints"
-          class="wall hit"
+          class="wall"
           :class="{ absent: !wallLevel, damaged: wallDamaged }"
-          @click="openDef('wall')"
         />
+        <!-- ⚠️ Zone cliquable de la muraille : sa BANDE seulement (`pointer-events: stroke`).
+             Le polygone peint, lui, ne capte plus rien : son fond couvrait tout l'octogone,
+             si bien qu'un clic sur un emplacement de tourelle VIDE (fill: none, donc non
+             cliquable en son centre) le traversait et ouvrait la muraille. -->
+        <polygon :points="wallPoints" class="wall-hit" @click="openDef('wall')" />
         <rect
           v-for="(m, i) in merlons"
           :key="'m' + i"
@@ -75,7 +79,10 @@
         <!-- ── LES TOURELLES (sur les 8 sommets) ────────────────────────────
              Fût, couronne crénelée et meurtrière. Les emplacements vides restent
              tracés en pointillés : ils disent ce qu'on pourrait avoir. -->
-        <g v-for="(p, i) in octagon" :key="'t' + i" class="hit" @click="openDef('turret')">
+        <g v-for="(p, i) in octagon" :key="'t' + i" class="hit" @click.stop="openDef('turret')">
+          <!-- Pastille de capture : un `fill: none` n'est PAS cliquable en son centre —
+               d'où un disque transparent, lui, qui l'est. -->
+          <circle :cx="p.x" :cy="p.y" r="11" class="tur-hit" />
           <template v-if="i < turretsBuilt">
             <rect
               :x="p.x - 6.5"
@@ -98,7 +105,14 @@
             />
             <rect :x="p.x - 1" :y="p.y - 3.5" width="2" height="7" rx="1" class="tur-slit" />
           </template>
-          <circle v-else :cx="p.x" :cy="p.y" r="7.5" class="tur-empty" />
+          <circle
+            v-else
+            :cx="p.x"
+            :cy="p.y"
+            r="7.5"
+            class="tur-empty"
+            :class="{ next: i === turretsBuilt && nextTurretLevel > 0 }"
+          />
         </g>
         <!-- Pastille de niveau des tourelles, sur la 1re tour -->
         <g v-if="turretsBuilt" class="lvl-badge">
@@ -325,6 +339,13 @@
               <span v-if="damagedOf(defSel.id)" class="s-dmg">endommagée</span>
             </div>
             <div class="sh-sub">{{ defSel.desc }}</div>
+            <div v-if="defSel.id === 'turret' && lvlOf('turret')" class="sh-note">
+              {{ turretsBuilt }}/{{ TURRET_SLOTS }} tourelles sur le mur ·
+              <template v-if="nextTurretLevel"
+                >une de plus au niveau {{ nextTurretLevel }}</template
+              >
+              <template v-else>le rempart est garni</template>
+            </div>
           </div>
           <button class="sh-x" @click="defOpen = null">✕</button>
         </div>
@@ -566,6 +587,17 @@ const octagon = computed(() =>
   }),
 );
 const turretLevel = computed(() => defenseLevel(defenses.value, 'turret'));
+/** Niveau auquel une tourelle DE PLUS apparaît (0 si le rempart est déjà garni).
+ *  `turretCount` = 1 + niveau/3 : une tourelle tous les 3 niveaux, ajoutée dans l'ordre
+ *  des emplacements. Les tourelles sont UNE structure, pas huit — cliquer un rond n'en
+ *  bâtit donc pas une « à cet endroit », et le signaler vaut mieux que le laisser deviner. */
+const nextTurretLevel = computed(() => {
+  const lvl = turretLevel.value;
+  const n = turretsBuilt.value;
+  if (n >= TURRET_SLOTS) return 0;
+  return Math.max(lvl + 1, 3 * n);
+});
+
 /** La porte : une arche percée au MILIEU du pan sud. Avec l'octogone décalé d'un demi-pas,
  *  les milieux de pans tombent pile au nord et au sud — le corps de garde en haut, la
  *  sortie en bas. */
@@ -921,6 +953,21 @@ const doCollect = () =>
   stroke: #ff6a45;
   stroke-dasharray: 16 8;
 }
+.wall,
+.merlon,
+.courtyard {
+  pointer-events: none; /* purement peints : la capture se fait par .wall-hit */
+}
+.wall-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.tur-hit {
+  fill: transparent; /* transparent SE clique ; `none` non */
+}
 .merlon {
   fill: #7a6a4f;
 }
@@ -955,6 +1002,16 @@ const doCollect = () =>
   stroke: #4a4133;
   stroke-width: 1.6;
   stroke-dasharray: 3 3;
+}
+/* Le prochain emplacement à se garnir : on voit OÙ l'amélioration ira se poser. */
+.tur-empty.next {
+  stroke: var(--accent, #ffd23f);
+  stroke-width: 2;
+}
+.sh-note {
+  font-size: 12px;
+  color: var(--accent, #ffd23f);
+  margin-top: 4px;
 }
 /* Tour de guet */
 .watch-body,
