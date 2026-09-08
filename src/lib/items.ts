@@ -111,6 +111,77 @@ export interface Item {
   fxp?: number; // familier : progression d'INFUSION vers le prochain pas de tier (rang+qualité)
   enchant?: number; // ENCHANT +N (façon L2) — magnitude par-dessus le grade. Défaut 0. (étape 1)
   legendary?: string; // proc LÉGENDAIRE (id, cf. LEGENDARY_PROCS) — Légendaire+ uniquement, non-scalant
+  // ── DRESSAGE (familiers uniquement, cf. FAM_TRAIN) : DEUX carrières séparées.
+  // Un familier ne pouvant pas être à deux endroits à la fois, les deux XP divergent
+  // toutes seules — aucune règle d’exclusivité n’est nécessaire.
+  atkXp?: number; // gagnée ÉQUIPÉ, en donjon → amplifie son effet au combat
+  defXp?: number; // gagnée POSTÉ au chenil, en siège → renforce la garnison
+  fatigueUntil?: number; // ms epoch : sorti d’un siège, il souffle (effet réduit, jamais perdu)
+}
+
+// ── DRESSAGE DES FAMILIERS ──
+// Un 4ᵉ axe, VOLONTAIREMENT à part des trois autres (rang, jet, ilvl) : il ne touche
+// à aucun d'eux, il est BORNÉ et il est CONTEXTUEL. Sans ces trois garde-fous, un
+// familier qui grandit en restant assis au chenil serait un robinet gratuit qui
+// contournerait la perte 2:1 de l'infusion de grade.
+export const FAM_TRAIN = {
+  // XP cumulée pour le niveau L = xpPerLevel × L². Repère : ~200 XP par siège au
+  // niveau 26 → une carrière de défense se bâtit sur des dizaines de sièges.
+  xpPerLevel: 12,
+  // ATTAQUE : la même pente que l'ilvl (LEVEL_MULT_K) — « un familier dressé vaut un
+  // familier d'un cran d'ilvl au-dessus ». Avare À DESSEIN : le combat du héros est
+  // calibré au serré (gearExpect/bossGearExpect), un 4ᵉ multiplicateur généreux y
+  // ferait des dégâts.
+  atkK: 0.006,
+  // DÉFENSE : généreux, parce que la base est un système neuf où rien n'est calibré —
+  // c'est ce qui doit donner envie de garnir le chenil.
+  defK: 0.04,
+} as const;
+
+/** XP cumulée nécessaire pour atteindre le niveau `level`. */
+export function famXpForLevel(level: number): number {
+  return FAM_TRAIN.xpPerLevel * Math.max(0, level) ** 2;
+}
+/** Niveau de dressage correspondant à une XP. ⚠️ Le PLAFOND (niveau du joueur) est
+ *  appliqué à l'ATTRIBUTION de l'XP (`grantFamiliarXp`), pas ici : ainsi ni
+ *  `aggregateEffects` ni la garnison n'ont besoin de connaître le niveau du joueur. */
+export function famLevel(xp: number | undefined): number {
+  return Math.floor(Math.sqrt(Math.max(0, xp ?? 0) / FAM_TRAIN.xpPerLevel));
+}
+/** Progression vers le niveau suivant — pour la barre de l'UI. */
+export function famXpProgress(
+  xp: number | undefined,
+  playerLevel: number,
+): { level: number; into: number; need: number; capped: boolean } {
+  const level = Math.min(famLevel(xp), Math.max(0, playerLevel));
+  const cur = famXpForLevel(level);
+  const next = famXpForLevel(level + 1);
+  return {
+    level,
+    into: Math.max(0, (xp ?? 0) - cur),
+    need: next - cur,
+    capped: level >= playerLevel,
+  };
+}
+export function famAtkMult(level: number): number {
+  return 1 + Math.max(0, level) * FAM_TRAIN.atkK;
+}
+export function famDefMult(level: number): number {
+  return 1 + Math.max(0, level) * FAM_TRAIN.defK;
+}
+/** Crédite de l'XP à une carrière, PLAFONNÉE au niveau du joueur — « le sport est le
+ *  plafond » vaut aussi pour les compagnons. Rend l'objet inchangé si rien ne bouge. */
+export function grantFamiliarXp(
+  it: Item,
+  kind: 'atk' | 'def',
+  amount: number,
+  playerLevel: number,
+): Item {
+  if (amount <= 0) return it;
+  const key = kind === 'atk' ? 'atkXp' : 'defXp';
+  const cap = famXpForLevel(Math.max(0, playerLevel) + 1) - 1;
+  const next = Math.min(cap, (it[key] ?? 0) + amount);
+  return next === (it[key] ?? 0) ? it : { ...it, [key]: next };
 }
 
 // JET du roll (0..100 %) — REFONTE v0.574 : fini les qualités ★1-5. Le `roll` (0..1, figé au
@@ -1562,7 +1633,10 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
   // NIVEAU (ilvl, v0.592) → comme les objets, un familier plus haut niveau est plus fort.
   const fam = equipped[FAMILIAR_SLOT];
   if (fam) {
-    const flm = itemLevelMult(fam.level);
+    // × son DRESSAGE D'ATTAQUE (4ᵉ axe, borné) : un compagnon qui t'a suivi en donjon
+    // frappe un peu plus fort. Son dressage de DÉFENSE ne compte pas ici — il ne vaut
+    // qu'à la base (cf. garrisonBonus) : les deux carrières sont contextuelles.
+    const flm = itemLevelMult(fam.level) * famAtkMult(famLevel(fam.atkXp));
     applyEffect(a, fam.effect.type, (fam.effect.value * flm) / 100);
     if (fam.effect2) applyEffect(a, fam.effect2.type, (fam.effect2.value * flm) / 100);
   }

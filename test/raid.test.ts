@@ -25,6 +25,14 @@ import {
   RAID,
   repairStructure,
   totalRepairCost,
+  garrisonBonus,
+  autoGarrison,
+  fatigueMsFor,
+  woundEffects,
+  woundMsFor,
+  isWounded,
+  GARRISON_SLOTS,
+  GARRISON_CAP,
   SCAV,
   FACTION_PROFILE,
   type BaseState,
@@ -32,7 +40,15 @@ import {
   type RaidFaction,
 } from '@/lib/raid';
 import { refFighter, gearExpect } from '@/lib/proceduralContent';
-import { rankCeilingForLevel, RANK_ORDER } from '@/lib/items';
+import {
+  rankCeilingForLevel,
+  RANK_ORDER,
+  famLevel,
+  famAtkMult,
+  famXpForLevel,
+  grantFamiliarXp,
+  type Item,
+} from '@/lib/items';
 import type { Combatant } from '@/lib/combat';
 
 const H = 3600_000;
@@ -388,6 +404,182 @@ describe('champ de bataille', () => {
         expect(RANK_ORDER.indexOf(it.rarity)).toBeLessThanOrEqual(ceil + 2);
       }
     }
+  });
+});
+
+describe('chenil : la garnison', () => {
+  function fam(id: string, effect: string, value: number, defXp = 0): Item {
+    return {
+      id,
+      slot: 'familiar',
+      name: id,
+      emoji: '🐺',
+      rarity: 'rare',
+      level: 10,
+      baseLevel: 10,
+      effect: { type: effect as never, value },
+      defXp,
+    };
+  }
+
+  it('l’ESPÈCE décide du rôle : poster un ours ou un loup ne donne pas la même bataille', () => {
+    const k = 5;
+    const loup = garrisonBonus([fam('a', 'damage_pct', 20)], 0, k);
+    const ours = garrisonBonus([fam('b', 'dmg_reduction_pct', 20)], 0, k);
+    const cerf = garrisonBonus([fam('c', 'max_pv_pct', 20)], 0, k);
+    expect(loup.damagePct).toBeGreaterThan(0);
+    expect(loup.maxPvPct).toBeUndefined();
+    expect(ours.dmgReduction).toBeGreaterThan(0);
+    expect(cerf.maxPvPct).toBeGreaterThan(0);
+    // Rôles HORS combat : le faucon renseigne, la marmotte fouille.
+    expect(garrisonBonus([fam('d', 'crit_pct', 20)], 0, k).scoutBonus).toBe(1);
+    expect(garrisonBonus([fam('e', 'gold_pct', 20)], 0, k).lootPct).toBeGreaterThan(0);
+  });
+
+  it('sans Chenil, la garnison n’apporte rien', () => {
+    expect(garrisonBonus([fam('a', 'damage_pct', 20)], 0, 0)).toEqual({});
+  });
+
+  it('le dressage DÉFENSIF renforce la garnison, et ne dépasse jamais le niveau du joueur', () => {
+    const brut = garrisonBonus([fam('a', 'damage_pct', 20, 0)], 0, 5);
+    const dresse = garrisonBonus([fam('a', 'damage_pct', 20, famXpForLevel(10))], 0, 5);
+    expect(dresse.damagePct!).toBeGreaterThan(brut.damagePct!);
+    // Le plafond s'applique à l'ATTRIBUTION : on ne peut pas dépasser son niveau.
+    const it0 = fam('a', 'damage_pct', 20);
+    const gorged = grantFamiliarXp(it0, 'def', 1_000_000, 8);
+    expect(famLevel(gorged.defXp)).toBeLessThanOrEqual(8);
+  });
+
+  it('les deux carrières sont SÉPARÉES et CONTEXTUELLES', () => {
+    // Un familier ne pouvant être à deux endroits à la fois, elles divergent seules.
+    const base = fam('a', 'damage_pct', 20);
+    const guerrier = grantFamiliarXp(base, 'atk', 5000, 99);
+    expect(famLevel(guerrier.atkXp)).toBeGreaterThan(0);
+    expect(famLevel(guerrier.defXp)).toBe(0);
+    // Le dressage d'attaque ne vaut RIEN au mur…
+    expect(garrisonBonus([guerrier], 0, 5).damagePct).toBeCloseTo(
+      garrisonBonus([base], 0, 5).damagePct!,
+      5,
+    );
+    // …et l'axe d'attaque reste MODESTE : le combat du héros est calibré au serré.
+    expect(famAtkMult(famLevel(guerrier.atkXp))).toBeLessThan(1.2);
+  });
+
+  it('un familier fatigué est DIMINUÉ, jamais perdu ni blessé', () => {
+    // S'il pouvait être perdu, personne ne posterait ses bons familiers et le chenil
+    // resterait vide le jour où la mécanique se déclenche.
+    const tired: Item = { ...fam('a', 'damage_pct', 20), fatigueUntil: 10 * H };
+    const rested = garrisonBonus([{ ...tired, fatigueUntil: 0 }], 5 * H, 5);
+    const weary = garrisonBonus([tired], 5 * H, 5);
+    expect(weary.damagePct!).toBeLessThan(rested.damagePct!);
+    expect(weary.damagePct!).toBeGreaterThan(0);
+    // L'Infirmerie abrège le repos, sans jamais l'annuler.
+    expect(fatigueMsFor(10)).toBeLessThan(fatigueMsFor(0));
+    expect(fatigueMsFor(999)).toBeGreaterThan(0);
+  });
+
+  it('⛔ la garnison AIDE sans devenir un bouton « gagner »', () => {
+    // Mesuré sur une garnison réelle de trois légendaires : à pleine valeur, elle faisait
+    // passer la tenue de 72 % à 90 % dès le dressage 0 et à 100 % au maximum — le chenil
+    // annulait tout le travail sur la fenêtre de niveau. D'où GARRISON_K et les plafonds.
+    const real = [
+      fam('loup', 'damage_pct', 23.4),
+      fam('salamandre', 'lifesteal_pct', 14.7),
+      fam('ours', 'dmg_reduction_pct', 9.4),
+    ];
+    function rate(g: Item[], defLvl: number): number {
+      const bonus = garrisonBonus(
+        g.map((f) => ({ ...f, defXp: famXpForLevel(defLvl) })),
+        0,
+        10,
+      );
+      let held = 0;
+      for (let i = 0; i < 200; i++) {
+        const raid = rollRaid(i * 7919 + 13, 26, 0, 0);
+        if (resolveRaid(baseCombatant(defs(26, 26), null, bonus), raid, 0, false).held) held++;
+      }
+      return (held / 200) * 100;
+    }
+    const nu = rate([], 0);
+    const garni = rate(real, 0);
+    const dresse = rate(real, 26);
+    expect(garni).toBeGreaterThan(nu); // elle sert vraiment…
+    expect(garni - nu).toBeLessThan(20); // …sans renverser la table
+    expect(dresse).toBeGreaterThan(garni); // le dressage se sent…
+    expect(dresse).toBeLessThan(95); // …et ne rend jamais la base imprenable
+  });
+
+  it('la régénération est plafonnée PLUS BAS que le reste (elle compose)', () => {
+    // Seule stat qui s'applique entre CHAQUE groupe, donc 4-5 fois par siège : 15 % de
+    // soin par groupe rendrait la base quasi increvable.
+    const gros = garrisonBonus(
+      [fam('a', 'lifesteal_pct', 40), fam('b', 'lifesteal_pct', 40)],
+      0,
+      20,
+    );
+    expect(gros.regen).toBeLessThanOrEqual(GARRISON_CAP.regen);
+    const mur = garrisonBonus(
+      [fam('a', 'dmg_reduction_pct', 60), fam('b', 'dmg_reduction_pct', 60)],
+      0,
+      20,
+    );
+    expect(mur.dmgReduction).toBeLessThanOrEqual(GARRISON_CAP.dmgReduction);
+  });
+
+  it('l’assignation automatique prend les meilleurs, dans la limite des places', () => {
+    const pool = [
+      fam('faible', 'damage_pct', 5),
+      fam('fort', 'damage_pct', 40),
+      fam('moyen', 'damage_pct', 20),
+      fam('autre', 'max_pv_pct', 30),
+    ];
+    const picked = autoGarrison(pool);
+    expect(picked).toHaveLength(GARRISON_SLOTS);
+    expect(picked[0]).toBe('fort');
+    expect(picked).not.toContain('faible');
+  });
+});
+
+describe('blessure du héros', () => {
+  it('un siège PERDU avec le héros présent le blesse — mais ne le BLOQUE jamais', () => {
+    const b = emptyBase(1, 0);
+    b.defenses = defs(20, 20);
+    const raid = rollRaid(77, 26, 0, 0);
+    const lost = { ...raid, groups: raid.groups } as never;
+    const report = {
+      ...resolveRaid(baseCombatant([], null), lost, 0, true),
+      held: false,
+      heroHome: true,
+    };
+    const { base: nb } = applyRaidOutcome(b, raid, report, { activeDays7: 7, globalXp: 0 }, 0);
+    expect(nb.wound).not.toBeNull();
+    // C'est un DÉBUFF : des dégâts en moins, jamais une porte fermée.
+    const fx = woundEffects(nb.wound, 0);
+    expect(fx.damagePct).toBeLessThan(0);
+    expect(isWounded(nb, 0)).toBe(true);
+    // …et il guérit tout seul.
+    expect(isWounded(nb, nb.wound!.until + 1)).toBe(false);
+    const healed = advanceBase(
+      nb,
+      { playerLevel: 26, activeDays7: 7, globalXp: 0 },
+      nb.wound!.until,
+    );
+    expect(healed.base.wound).toBeNull();
+  });
+
+  it('une VICTOIRE ne blesse personne : la présence du héros reste un pari gagnant', () => {
+    const b = emptyBase(1, 0);
+    b.defenses = defs(40, 40);
+    const raid = rollRaid(555, 26, 0, 0);
+    const rep = resolveRaid(baseCombatant(defs(40, 40), hero(40)), raid, 0, true);
+    expect(rep.held).toBe(true);
+    const { base: nb } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, 0);
+    expect(nb.wound).toBeNull();
+  });
+
+  it('l’Infirmerie abrège la convalescence', () => {
+    expect(woundMsFor(10)).toBeLessThan(woundMsFor(0));
+    expect(woundMsFor(999)).toBeGreaterThan(0); // jamais instantané
   });
 });
 

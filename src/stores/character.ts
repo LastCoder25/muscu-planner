@@ -23,6 +23,7 @@ import {
   SLOTS,
   FAMILIAR_SLOT,
   MAX_LOADOUTS,
+  grantFamiliarXp,
   type Item,
   type ItemEffect,
   type ItemSlot,
@@ -82,6 +83,10 @@ import {
   lootCorpses,
   repairStructure,
   totalRepairCost,
+  garrisonBonus,
+  autoGarrison,
+  fatigueMsFor,
+  GARRISON_SLOTS,
   SCAV,
   type BaseState,
   type DefenseId,
@@ -362,6 +367,10 @@ export const useCharacterStore = defineStore('character', () => {
       inkDust?: number; // poussière d'encre (filet de donjon nettoyé, RANG des talents)
       enchantScrolls?: number; // 📜 parchemins d'enchantement (filet de donjon nettoyé)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
+      // Dressage d'ATTAQUE du familier ÉQUIPÉ : le compagnon qui t'a suivi au donjon
+      // progresse. Contextuel : cette XP ne vaut qu'équipé, jamais au chenil.
+      famAtkXp?: number;
+      playerLevel?: number; // plafond du dressage (le sport reste le plafond)
     },
   ) {
     const cur = row.value;
@@ -372,6 +381,13 @@ export const useCharacterStore = defineStore('character', () => {
         ? [...cur.cleared_dungeons, input.clearedDungeonId]
         : cur.cleared_dungeons;
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
+    // Le familier ÉQUIPÉ encaisse son XP d'attaque APRÈS la distribution du butin :
+    // sinon un drop de familier auto-équipé écraserait le gain de celui qui a couru.
+    const runFam = dist.equipped[FAMILIAR_SLOT];
+    if (runFam && input.famAtkXp) {
+      const trained = grantFamiliarXp(runFam, 'atk', input.famAtkXp, input.playerLevel ?? 1);
+      if (trained !== runFam) dist.equipped = { ...dist.equipped, [FAMILIAR_SLOT]: trained };
+    }
     // Clé d'expédition : ~2 % sur un donjon NETTOYÉ (raréfié 2026‑08‑18 : les gros
     // volumes de runs inondaient les clés → le Labyrinthe redevient un événement rare).
     const gotKey = input.clearedDungeonId && Math.random() < 0.02 ? 1 : 0;
@@ -1161,6 +1177,23 @@ export const useCharacterStore = defineStore('character', () => {
     return cur.base ?? emptyBase(newSeed(now), now);
   }
 
+  /** Les familiers POSTÉS au chenil. Ils restent dans le sac : poster n'est pas ranger,
+   *  c'est affecter — et un familier posté ne peut évidemment pas être équipé, d'où le
+   *  filtre sur l'inventaire seul. */
+  function garrisonedFamiliars(cur: CharacterRow): Item[] {
+    const ids = new Set(cur.base?.garrison ?? []);
+    return cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT && ids.has(it.id));
+  }
+
+  /** Bonus que la garnison apporte au mur (rôle par ESPÈCE, cf. GARRISON_ROLE). */
+  function garrisonFor(cur: CharacterRow, now: number) {
+    return garrisonBonus(
+      garrisonedFamiliars(cur),
+      now,
+      defenseLevel(baseOf(cur, now).defenses, 'kennel'),
+    );
+  }
+
   /** Le héros défend-il ? Il n'est là que s'il n'est pas parti en expédition. C'est le
    *  seul coût de sa présence : rester, c'est renoncer au revenu d'une expédition. */
   function heroIsHome(cur: CharacterRow): boolean {
@@ -1185,14 +1218,35 @@ export const useCharacterStore = defineStore('character', () => {
     }
 
     const home = heroIsHome(cur);
+    const posted = new Set(t.base.garrison ?? []);
     const report = resolveRaid(
-      baseCombatant(t.base.defenses, home ? ctx.hero : null),
+      baseCombatant(
+        t.base.defenses,
+        home ? ctx.hero : null,
+        garrisonBonus(
+          cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT && posted.has(it.id)),
+          now,
+          defenseLevel(t.base.defenses, 'kennel'),
+        ),
+      ),
       t.dueRaid,
       now,
       home,
     );
     const { base: nb, damage } = applyRaidOutcome(t.base, t.dueRaid, report, ctx, now);
     const patch: Record<string, unknown> = { base: nb };
+    // Les familiers postés SORTENT du siège : ils gagnent de l'XP de DÉFENSE (∝ ce
+    // qu'ils ont repoussé) et soufflent un moment. Jamais blessés, jamais perdus —
+    // sinon personne ne posterait ses bons familiers et le chenil resterait vide.
+    if (posted.size) {
+      const gain = report.groups.slice(0, report.defeated).reduce((a, g) => a + g.level * 2, 0);
+      const rest = now + fatigueMsFor(defenseLevel(t.base.defenses, 'infirmary'));
+      patch.inventory = cur.inventory.map((it) =>
+        posted.has(it.id)
+          ? { ...grantFamiliarXp(it, 'def', gain, ctx.playerLevel), fatigueUntil: rest }
+          : it,
+      );
+    }
     // Stock VOLÉ = la production accumulée non récoltée. On remet simplement les
     // compteurs à l'heure : on ne peut donc perdre que ce qu'on n'avait pas ramassé,
     // et récolter souvent suffit à ne rien risquer — sans jamais y être obligé.
@@ -1200,6 +1254,32 @@ export const useCharacterStore = defineStore('character', () => {
       patch.buildings = cur.buildings.map((b) => ({ ...b, collectedAt: now }));
     await persist(userId, patch);
     return { detected: t.detected, report };
+  }
+
+  /** Poste ou retire un familier du chenil. */
+  async function toggleGarrison(userId: string, famId: string, now: number) {
+    const cur = row.value;
+    if (!cur) return;
+    const base = baseOf(cur, now);
+    if (defenseLevel(base.defenses, 'kennel') <= 0)
+      throw new Error('Construis un Chenil pour poster des familiers.');
+    const cur_ = base.garrison ?? [];
+    const next = cur_.includes(famId)
+      ? cur_.filter((x) => x !== famId)
+      : [...cur_, famId].slice(-GARRISON_SLOTS);
+    await persistOptimistic(userId, { base: { ...base, garrison: next } });
+  }
+
+  /** Poste automatiquement les meilleurs défenseurs — le geste qu'on veut faire une
+   *  fois, pas avant chaque siège. */
+  async function autoAssignGarrison(userId: string, now: number) {
+    const cur = row.value;
+    if (!cur) return;
+    const base = baseOf(cur, now);
+    if (defenseLevel(base.defenses, 'kennel') <= 0)
+      throw new Error('Construis un Chenil pour poster des familiers.');
+    const pool = cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT);
+    await persistOptimistic(userId, { base: { ...base, garrison: autoGarrison(pool) } });
   }
 
   /** Construit une structure de l'enceinte (or + ferraille). Hors des 6 emplacements de
@@ -1317,7 +1397,13 @@ export const useCharacterStore = defineStore('character', () => {
     const ids = new Set(field.dispatchIds ?? []);
     const taken = field.corpses.filter((c) => ids.has(c.id) && !c.looted);
     const faction = cur.base.lastReport?.faction ?? 'bandits';
-    const loot = lootCorpses(taken, faction, playerLevel, (now ^ cur.base.seed) >>> 0 || 1);
+    const loot = lootCorpses(
+      taken,
+      faction,
+      playerLevel,
+      (now ^ cur.base.seed) >>> 0 || 1,
+      garrisonFor(cur, now).lootPct ?? 0,
+    );
     const drops = loot.items.map((it) => ({ ...it, id: crypto.randomUUID() }));
     await persistOptimistic(userId, {
       gold: cur.gold + loot.gold,
@@ -1395,6 +1481,10 @@ export const useCharacterStore = defineStore('character', () => {
     repairAll,
     sendScavengers,
     collectScavengers,
+    toggleGarrison,
+    autoAssignGarrison,
+    garrisonedFamiliars,
+    garrisonFor,
     heroIsHome,
     ownedLevel,
     applyRun,

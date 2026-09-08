@@ -10,7 +10,8 @@
       <span class="bar-chip">🪙 {{ char.row?.gold ?? 0 }}</span>
       <span class="bar-chip">🔩 {{ char.row?.scrap ?? 0 }}</span>
       <span class="bar-chip">Niv. {{ heroLevel }}</span>
-      <span v-if="heroHome" class="bar-chip home">🦸 Héros à la base</span>
+      <span v-if="wounded" class="bar-chip hurt">🤕 Héros blessé — {{ healIn }}</span>
+      <span v-else-if="heroHome" class="bar-chip home">🦸 Héros à la base</span>
       <span v-else class="bar-chip away">🧭 Héros en expédition</span>
     </div>
 
@@ -185,6 +186,37 @@
       </template>
     </div>
 
+    <!-- ── Chenil : la garnison ── -->
+    <div v-if="kennelLevel" class="panel">
+      <div class="p-title">🐾 Chenil — {{ garrisoned.length }}/{{ GARRISON_SLOTS }} postés</div>
+      <p>
+        L’<b>espèce</b> décide de ce que le familier apporte au mur. Il reste dans ton sac : poster
+        n’est pas ranger.
+      </p>
+      <button v-if="famPool.length" class="cta ghost" @click="doAutoGarrison">
+        ✨ Poster automatiquement les meilleurs
+      </button>
+      <p v-if="!famPool.length" class="dim-note">
+        Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
+      </p>
+      <div v-for="f in famPool" :key="f.id" class="fam" :class="{ on: isPosted(f.id) }">
+        <span class="fam-emo">{{ f.emoji }}</span>
+        <div class="fam-main">
+          <div class="fam-name">
+            {{ f.name }}
+            <span v-if="isFatiguedNow(f)" class="fam-tired">au repos</span>
+          </div>
+          <div class="fam-role">
+            {{ roleLabel(f) }} · défense niv. {{ defLvl(f) }}
+            <span class="fam-atk">· attaque niv. {{ atkLvl(f) }}</span>
+          </div>
+        </div>
+        <button class="btn" @click="doToggleGarrison(f.id)">
+          {{ isPosted(f.id) ? 'Retirer' : 'Poster' }}
+        </button>
+      </div>
+    </div>
+
     <!-- ── Structures ── -->
     <div class="panel">
       <div class="p-title">🛠️ Enceinte</div>
@@ -257,7 +289,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { computeCharacter } from '@/lib/character';
-import { playerWithGear } from '@/lib/items';
+import { playerWithGear, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import { buildingType, buildingUpgradeCost } from '@/lib/buildings';
 import {
   DEFENSE_TYPES,
@@ -277,6 +309,12 @@ import {
   turretCount,
   remainingCorpses,
   totalRepairCost,
+  garrisonBonus,
+  isFatigued,
+  isWounded,
+  GARRISON_SLOTS,
+  GARRISON_ROLE,
+  ROLE_LABEL,
   type DefenseId,
   type ScoutReport,
 } from '@/lib/raid';
@@ -328,6 +366,35 @@ const watchDamaged = computed(() => isDamaged(defenses.value, 'watchtower'));
 const turretsDamaged = computed(() => isDamaged(defenses.value, 'turret'));
 const turretsBuilt = computed(() => turretCount(defenseLevel(defenses.value, 'turret')));
 const scavCap = computed(() => scavengerCount(salvageLevel.value));
+const kennelLevel = computed(() => defenseLevel(defenses.value, 'kennel'));
+const wounded = computed(() => isWounded(base.value, now.value));
+
+/** Tous les familiers en réserve (le familier ÉQUIPÉ n'est pas postable : il ne peut
+ *  pas être à deux endroits à la fois — c'est ce qui fait diverger les deux carrières). */
+const famPool = computed(() =>
+  (char.row?.inventory ?? []).filter((it) => it.slot === FAMILIAR_SLOT),
+);
+const garrisoned = computed(() => {
+  const ids = new Set(base.value?.garrison ?? []);
+  return famPool.value.filter((f) => ids.has(f.id));
+});
+const garrison = computed(() => garrisonBonus(garrisoned.value, now.value, kennelLevel.value));
+function isPosted(id: string): boolean {
+  return (base.value?.garrison ?? []).includes(id);
+}
+function isFatiguedNow(f: Item): boolean {
+  return isFatigued(f, now.value);
+}
+function defLvl(f: Item): number {
+  return famLevel(f.defXp);
+}
+function atkLvl(f: Item): number {
+  return famLevel(f.atkXp);
+}
+function roleLabel(f: Item): string {
+  const r = GARRISON_ROLE[f.effect.type];
+  return r ? ROLE_LABEL[r] : 'Aucun rôle à la base';
+}
 /** Ce que coûte le retour à la normale : remettre l'enceinte en état relance aussi la
  *  production (le gel est la conséquence de la casse, pas une punition séparée). */
 const repairAllCost = computed(() => (base.value ? totalRepairCost(base.value) : 0));
@@ -371,7 +438,15 @@ const EMPTY_SCOUT: ScoutReport = {
 };
 const scout = computed(() => (raid.value ? scoutReport(raid.value, clarity.value) : EMPTY_SCOUT));
 const clarity = computed(() =>
-  raid.value ? scoutClarity(scoutLevel(defenses.value), raid.value.level, heroLevel.value) : 0,
+  raid.value
+    ? scoutClarity(
+        scoutLevel(defenses.value),
+        raid.value.level,
+        heroLevel.value,
+        // Un faucon posté au chenil voit plus loin : la garnison a des rôles hors combat.
+        garrison.value.scoutBonus ?? 0,
+      )
+    : 0,
 );
 const scoutHint = computed(() => {
   if (!watchLevel.value) return 'Sans Tour de guet, tu ne sais rien de ce qui arrive.';
@@ -384,7 +459,7 @@ const scoutHint = computed(() => {
 const forecastPct = computed(() => {
   const r = raid.value;
   if (!r) return 0;
-  const def = baseCombatant(defenses.value, heroHome.value ? hero.value : null);
+  const def = baseCombatant(defenses.value, heroHome.value ? hero.value : null, garrison.value);
   let held = 0;
   for (let i = 0; i < 40; i++) {
     if (resolveRaid(def, { ...r, seed: r.seed + i * 7919 }, 0, heroHome.value).held) held++;
@@ -419,6 +494,9 @@ const nextRaidIn = computed(() =>
 );
 const freezeIn = computed(() => (freeze.value ? fmtDelay(freeze.value.until - now.value) : ''));
 const rotIn = computed(() => (field.value ? fmtDelay(field.value.expiresAt - now.value) : ''));
+const healIn = computed(() =>
+  base.value?.wound ? fmtDelay(base.value.wound.until - now.value) : '',
+);
 const scavBusy = computed(
   () => !!field.value?.dispatchUntil && now.value < field.value.dispatchUntil,
 );
@@ -476,6 +554,9 @@ const doRepairAll = () =>
       $q.notify({ type: 'positive', message: '🔩 Enceinte réparée — la production repart.' });
   });
 const doSend = () => guard(() => char.sendScavengers(uid.value, Date.now()));
+const doToggleGarrison = (id: string) =>
+  guard(() => char.toggleGarrison(uid.value, id, Date.now()));
+const doAutoGarrison = () => guard(() => char.autoAssignGarrison(uid.value, Date.now()));
 const doCollect = () =>
   guard(async () => {
     const got = await char.collectScavengers(uid.value, Date.now(), heroLevel.value);
@@ -772,5 +853,46 @@ const doCollect = () =>
 .cta.ghost {
   border-color: var(--line);
   color: var(--dim);
+}
+.bar-chip.hurt {
+  border-color: #ff6a45;
+  color: #ff6a45;
+}
+.dim-note {
+  font-style: italic;
+}
+.fam {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 9px 0;
+}
+.fam.on {
+  border-left: 3px solid var(--accent, #ffd23f);
+  padding-left: 8px;
+}
+.fam-emo {
+  font-size: 22px;
+}
+.fam-main {
+  flex: 1;
+  min-width: 0;
+}
+.fam-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.fam-tired {
+  color: var(--dim);
+  font-size: 11px;
+  margin-left: 6px;
+}
+.fam-role {
+  font-size: 12px;
+  color: var(--dim);
+}
+.fam-atk {
+  opacity: 0.7;
 }
 </style>

@@ -1045,9 +1045,8 @@
               <template v-else-if="baseCorpses > 0">
                 🦴 {{ baseCorpses }} corps à dépouiller sur le champ de bataille
               </template>
-              <template v-else-if="baseFrozen"
-                >❄️ Production gelée — une séance la relance</template
-              >
+              <template v-else-if="baseFrozen">❄️ Production gelée — répare l’enceinte 🔩</template>
+              <template v-else-if="heroWounded">🤕 Héros blessé — dégâts réduits</template>
               <template v-else>Muraille, tourelles et guet 🧱</template>
             </span>
           </span>
@@ -2407,7 +2406,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
-import { remainingCorpses } from '@/lib/raid';
+import { remainingCorpses, woundEffects, isWounded } from '@/lib/raid';
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -2688,9 +2687,17 @@ const energySpentTotal = computed(() => char.row?.energy_spent ?? 0);
 const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
 // Effets « hors équipement » actifs = talents + PASSIF DE VOIE (spécialisation) → comptés
 // partout dans le combat/la puissance (fighter, powerWith, winPct, runExtra).
+// Un héros BLESSÉ (siège perdu alors qu'il défendait) traîne un malus le temps de se
+// remettre. On le fond ici, dans les effets actifs : c'est le point unique par lequel
+// passent `fighter`, `powerWith`, `runWinPct` et `runExtra` — inutile de threader un
+// paramètre dans chaque site de combat.
 const activeFx = computed(() =>
-  mergeEffects(talentFx.value, voiePassiveEffects(char.row?.voie as VoieId | null)),
+  mergeEffects(
+    mergeEffects(talentFx.value, voiePassiveEffects(char.row?.voie as VoieId | null)),
+    woundEffects(char.row?.base?.wound, expeNow.value),
+  ),
 );
+const heroWounded = computed(() => isWounded(char.row?.base, expeNow.value));
 // ── Voie (spécialisation) : sélecteur + libellés ──
 const voieOpen = ref(false);
 const currentVoie = computed(() => VOIES.find((v) => v.id === char.row?.voie) ?? null);
@@ -4042,6 +4049,9 @@ async function explore(d: Dungeon) {
       summonStones,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
+      // Dressage d'ATTAQUE : ∝ la profondeur du donjon et ce qu'on y a abattu.
+      famAtkXp: (2 + d.recoLevel) * Math.max(1, r.defeated),
+      playerLevel: c.value.level.level,
     });
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!));
     run.value = {

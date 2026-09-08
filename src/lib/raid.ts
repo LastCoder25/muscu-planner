@@ -7,9 +7,13 @@
 //  1. On ne perd JAMAIS parce qu'on n'a pas ouvert l'app. Le siège se résout tout seul,
 //     un seul en attente à la fois, et rien de ce que le SPORT a payé (niveau, stats,
 //     objets) n'est en jeu — on ne risque que le rendement passif de la base.
-//  2. Le héros n'est jamais un enjeu : sa présence est un BONUS, pas un risque. S'il
-//     l'était, la stratégie optimale serait de l'envoyer en expédition les soirs de
-//     raid, et la mécanique se retournerait contre elle-même.
+//  2. Le héros n'est jamais BLOQUÉ. Il sort meurtri d'un siège perdu (`HeroWound`,
+//     −25 % de dégâts le temps de se remettre, plus vite avec l'Infirmerie), mais il
+//     peut toujours jouer : le seul salaire du sport dans cette app est de pouvoir
+//     jouer, et un héros hors service ferait qu'une séance n'aurait rien rapporté.
+//     La blessure ne survient que sur une DÉFAITE, donc sa présence reste un pari
+//     gagnant — sinon la stratégie optimale serait de l'envoyer en expédition les
+//     soirs de raid, et la mécanique se retournerait contre elle-même.
 //  3. C'est OPT-IN : pas de muraille → pas d'attaque (cf. `raidsEnabled`).
 //  4. Le siège est FINI et GAGNABLE. Une armée a un effectif : on la tient en entier ou
 //     elle passe. (C'est la différence avec l'arène, dont la rampe géométrique garantit
@@ -19,7 +23,14 @@
 // l'appelant → fonctions pures et testables, résolution déterministe hors-ligne.
 import { mulberry32, simulateDungeon, type Combatant, type DungeonFight } from './combat';
 import { refFighter } from './proceduralContent';
-import { rollDrop, type Item } from './items';
+import {
+  rollDrop,
+  famLevel,
+  famDefMult,
+  emptyEffects,
+  type AggregatedEffects,
+  type Item,
+} from './items';
 
 // ── Types ──
 
@@ -52,7 +63,7 @@ export interface Raid {
   arrivesAt: number; // ms epoch : la bataille se résout
 }
 
-export type DefenseId = 'wall' | 'turret' | 'watchtower' | 'salvage';
+export type DefenseId = 'wall' | 'turret' | 'watchtower' | 'salvage' | 'kennel' | 'infirmary';
 
 /** Une structure de l'enceinte. `damaged` = niveau CONSERVÉ mais efficacité réduite de
  *  moitié jusqu'à réparation — on ne rétrograde jamais un investissement (cf.
@@ -94,8 +105,21 @@ export interface ProductionFreeze {
   atXp: number;
 }
 
+/** Le héros sort meurtri d'un siège PERDU. ⚠️ C'est un DÉBUFF, jamais un blocage : il
+ *  peut toujours dépenser son énergie, lancer un donjon, jouer. Le seul salaire du sport
+ *  dans cette app est de pouvoir jouer — un héros mis hors service ferait que s'entraîner
+ *  n'aurait rien rapporté ce jour-là, ce que le projet s'interdit partout ailleurs.
+ *  Il ne se produit QUE sur une défaite : être présent reste donc strictement payant. */
+export interface HeroWound {
+  until: number;
+}
+
 export interface BaseState {
   defenses: DefenseStructure[];
+  /** Ids des familiers POSTÉS au chenil (max `GARRISON_SLOTS`). Ils restent dans le sac :
+   *  poster n'est pas ranger, c'est affecter. */
+  garrison?: string[];
+  wound?: HeroWound | null;
   raid: Raid | null;
   nextRaidAt: number;
   field: BattleField | null;
@@ -176,6 +200,24 @@ export const DEFENSE_TYPES: DefenseType[] = [
     buildScrap: 25,
     unlockLevel: 12,
     desc: 'Envoie des fouilleurs dépouiller les corps après la bataille. Chaque niveau = des fouilleurs en plus par vague.',
+  },
+  {
+    id: 'kennel',
+    label: 'Chenil',
+    emoji: '🐾',
+    buildGold: 750,
+    buildScrap: 20,
+    unlockLevel: 12,
+    desc: 'Poste tes familiers à la défense. Leur ESPÈCE décide de ce qu’ils apportent au mur.',
+  },
+  {
+    id: 'infirmary',
+    label: 'Infirmerie',
+    emoji: '⛑️',
+    buildGold: 700,
+    buildScrap: 18,
+    unlockLevel: 12,
+    desc: 'Soigne le héros blessé et remet les familiers fatigués sur pied plus vite.',
   },
 ];
 
@@ -278,6 +320,8 @@ export const RAID = {
   intervalIdleMs: 72 * 3600_000, // 0 jour actif
   intervalJitter: 0.25,
   freezeMs: 24 * 3600_000, // dégel automatique (le sport est le raccourci, pas la rançon)
+  woundMs: 8 * 3600_000, // le héros boite un moment après une défaite (débuff, jamais blocage)
+  woundDamagePct: -25, // −25 % de dégâts tant qu’il est blessé
 
   // Espionnage
   scoutLeadBaseMs: 3600_000, // 1 h de préavis sans Tour de guet…
@@ -566,13 +610,107 @@ export function raidFoes(raid: Raid): { combatant: Combatant; gold: number }[] {
   return raid.groups.map((g) => ({ combatant: groupCombatant(g), gold: 0 }));
 }
 
-/** Bonus apportés par la garnison de familiers (V2). Déclaré ici pour que
- *  `baseCombatant` ait sa forme définitive dès la V1. */
+/** Ce que la garnison apporte au mur. Les quatre premiers champs alimentent le
+ *  `Combatant` de la base ; les deux derniers sortent du combat (renseignement, fouille)
+ *  — c'est ce qui donne un rôle non-combattant à des espèces qui n'en auraient pas. */
 export interface GarrisonBonus {
   damagePct?: number;
   maxPvPct?: number;
   dmgReduction?: number; // 0..1
   regen?: number; // 0..1
+  scoutBonus?: number; // + clarté d'espionnage (le faucon voit loin)
+  lootPct?: number; // + butin sur les cadavres (la marmotte fouille bien)
+}
+
+/** ESPÈCE → RÔLE au mur. On lit l'effet que le familier porte DÉJÀ (le loup fait des
+ *  dégâts, l'ours réduit, etc.) plutôt que d'inventer une seconde table : poster un ours
+ *  ou un loup ne donne donc pas la même bataille, sans un seul concept en plus. */
+export type GarrisonRole = 'damage' | 'pv' | 'armor' | 'regen' | 'scout' | 'loot';
+export const GARRISON_ROLE: Record<string, GarrisonRole> = {
+  damage_pct: 'damage',
+  max_pv_pct: 'pv',
+  dmg_reduction_pct: 'armor',
+  lifesteal_pct: 'regen', // le sang qu'il rend à la ville entre deux assauts
+  crit_pct: 'scout', // le faucon : il voit venir
+  gold_pct: 'loot', // la marmotte : elle fouille mieux les corps
+};
+export const ROLE_LABEL: Record<GarrisonRole, string> = {
+  damage: 'Dégâts du mur',
+  pv: 'Solidité de la ville',
+  armor: 'Encaisse mieux',
+  regen: 'Souffle entre deux assauts',
+  scout: 'Renseignement',
+  loot: 'Fouille des corps',
+};
+
+/** Emplacements de garnison. **3** — dimensionné sur la réserve réelle d'un joueur
+ *  avancé (mesuré : 4 familiers au sac sur 36 objets). Un chenil à 8 places serait vide. */
+export const GARRISON_SLOTS = 3;
+
+/** Une structure ENDOMMAGÉE ne rend que la moitié de son effet ; un familier FATIGUÉ
+ *  aussi. Il n'est jamais perdu ni blessé : sinon personne ne posterait ses bons
+ *  familiers, et la mécanique mourrait le jour où elle se déclenche. */
+export const FATIGUE_MS = 6 * 3600_000;
+
+/** Part de son effet qu'un familier apporte au MUR.
+ *  ⚠️ Pas 100 % : mesuré sur une garnison réelle de trois légendaires (loup +23,4 %,
+ *  salamandre 14,7 %, ours 9,4 %), la valeur pleine faisait passer la tenue de 72 % à
+ *  **90 %** dès le dressage 0, et à **100 %** au dressage maximal — le chenil devenait un
+ *  bouton « gagner » et annulait tout le travail sur la fenêtre de niveau. La garnison
+ *  doit être un levier, pas un verrou. */
+export const GARRISON_K = 0.4;
+
+/** Plafonds par canal. La RÉGÉNÉRATION est plafonnée le plus bas parce qu'elle est la
+ *  seule à COMPOSER : elle s'applique entre chaque groupe, donc quatre ou cinq fois par
+ *  siège — 15 % de soin par groupe rend une base quasi increvable. */
+export const GARRISON_CAP = { dmgReduction: 0.15, regen: 0.06 } as const;
+
+/** Le repos qu'il reste à un familier sorti d'un siège. L'Infirmerie l'abrège. */
+export function fatigueMsFor(infirmaryLevel: number): number {
+  return Math.round(FATIGUE_MS * Math.max(0.25, 1 - Math.max(0, infirmaryLevel) * 0.05));
+}
+export function isFatigued(fam: { fatigueUntil?: number }, now: number): boolean {
+  return !!fam.fatigueUntil && now < fam.fatigueUntil;
+}
+
+/** Bonus de la garnison. Chaque familier apporte SON effet, amplifié par son dressage
+ *  DÉFENSIF (jamais offensif : les deux carrières sont contextuelles), et réduit de
+ *  moitié s'il est encore fatigué. */
+export function garrisonBonus(familiars: Item[], now: number, kennelLevel: number): GarrisonBonus {
+  const out: GarrisonBonus = {};
+  if (kennelLevel <= 0) return out;
+  for (const f of familiars.slice(0, GARRISON_SLOTS)) {
+    const role = GARRISON_ROLE[f.effect.type];
+    if (!role) continue;
+    const mult =
+      GARRISON_K * famDefMult(famLevel(f.defXp)) * (isFatigued(f, now) ? DAMAGED_EFFICIENCY : 1);
+    const v = f.effect.value * mult;
+    if (role === 'damage') out.damagePct = (out.damagePct ?? 0) + v;
+    else if (role === 'pv') out.maxPvPct = (out.maxPvPct ?? 0) + v;
+    else if (role === 'armor') out.dmgReduction = (out.dmgReduction ?? 0) + v / 100;
+    else if (role === 'regen') out.regen = (out.regen ?? 0) + v / 100;
+    // Le renseignement et la fouille ne sont PAS des stats de combat : ni bridés par
+    // GARRISON_K, ni plafonnés — un faucon voit loin, un point c'est tout.
+    else if (role === 'scout') out.scoutBonus = (out.scoutBonus ?? 0) + 1;
+    else out.lootPct = (out.lootPct ?? 0) + f.effect.value * famDefMult(famLevel(f.defXp));
+  }
+  if (out.dmgReduction) out.dmgReduction = Math.min(GARRISON_CAP.dmgReduction, out.dmgReduction);
+  if (out.regen) out.regen = Math.min(GARRISON_CAP.regen, out.regen);
+  return out;
+}
+
+/** Choisit automatiquement les meilleurs défenseurs — le geste qu'on veut faire une
+ *  fois, pas trois fois par siège. On classe par la valeur RÉELLE apportée au mur. */
+export function autoGarrison(familiars: Item[], slots = GARRISON_SLOTS): string[] {
+  return [...familiars]
+    .filter((f) => GARRISON_ROLE[f.effect.type])
+    .sort(
+      (a, b) =>
+        b.effect.value * famDefMult(famLevel(b.defXp)) -
+        a.effect.value * famDefMult(famLevel(a.defXp)),
+    )
+    .slice(0, slots)
+    .map((f) => f.id);
 }
 
 /** La BASE en défenseur : la muraille encaisse, les tourelles tirent, le héros présent
@@ -611,6 +749,22 @@ export function baseCombatant(
     strikes: 1,
     regen: RAID.regenPct + (garrison?.regen ?? 0),
   };
+}
+
+/** Le malus d'un héros blessé, sous la forme d'un `AggregatedEffects` partiel — c'est
+ *  ainsi qu'il se fond dans `activeFx` (talents + voie) sans avoir à threader un
+ *  paramètre dans chaque site de combat. */
+export function woundEffects(wound: HeroWound | null | undefined, now: number): AggregatedEffects {
+  const e = emptyEffects();
+  if (wound && now < wound.until) e.damagePct = RAID.woundDamagePct;
+  return e;
+}
+export function isWounded(base: BaseState | null | undefined, now: number): boolean {
+  return !!base?.wound && now < base.wound.until;
+}
+/** Repos restant avant guérison. L'Infirmerie l'abrège au moment où l'on est blessé. */
+export function woundMsFor(infirmaryLevel: number): number {
+  return Math.round(RAID.woundMs * Math.max(0.25, 1 - Math.max(0, infirmaryLevel) * 0.06));
 }
 
 // ── Résolution ──
@@ -724,6 +878,7 @@ export function lootCorpses(
   faction: RaidFaction,
   playerLevel: number,
   seed: number,
+  lootPct = 0,
 ): CorpseLoot {
   const rng = mulberry32((seed ^ 0x2545f491) >>> 0 || 1);
   const loot: CorpseLoot = { gold: 0, fragments: 0, inkDust: 0, items: [] };
@@ -746,6 +901,12 @@ export function lootCorpses(
     // Un simple soldat lâche rarement ; le champion, souvent.
     if (drop && (c.champion || rng() < 0.22)) loot.items.push(drop);
   }
+  // Bonus de fouille de la garnison (marmotte) : il porte sur les RESSOURCES, jamais
+  // sur la rareté des objets — l'anti-runaway ne se contourne pas par le chenil.
+  const k = 1 + Math.max(0, lootPct) / 100;
+  loot.gold = Math.round(loot.gold * k);
+  loot.fragments = Math.round(loot.fragments * k);
+  loot.inkDust = Math.round(loot.inkDust * k);
   return loot;
 }
 
@@ -754,6 +915,8 @@ export function lootCorpses(
 export function emptyBase(seed: number, now: number): BaseState {
   return {
     defenses: [],
+    garrison: [],
+    wound: null,
     raid: null,
     nextRaidAt: now + RAID.intervalIdleMs,
     field: null,
@@ -792,6 +955,12 @@ export function advanceBase(
   // Dégel : une séance de sport (XP en hausse) ou l'échéance des 24 h.
   if (b.freeze && (now >= b.freeze.until || ctx.globalXp > b.freeze.atXp)) {
     b = { ...b, freeze: null };
+    changed = true;
+  }
+
+  // Le héros finit de se remettre.
+  if (b.wound && now >= b.wound.until) {
+    b = { ...b, wound: null };
     changed = true;
   }
 
@@ -847,6 +1016,12 @@ export function applyRaidOutcome(
       defenses,
       raid: null,
       lastReport: report,
+      // Le héros présent ne sort meurtri que d'une DÉFAITE : sa présence reste un pari
+      // gagnant (il fait fortement monter les chances de tenir, et ne paie que si ça rate).
+      wound:
+        !report.held && report.heroHome
+          ? { until: now + woundMsFor(defenseLevel(base.defenses, 'infirmary')) }
+          : (base.wound ?? null),
       nextRaidAt: now + raidIntervalMs(ctx.activeDays7, rng),
       field: corpses.length ? { corpses, expiresAt: now + SCAV.fieldMs } : null,
       freeze: dmg.freeze ? { until: now + RAID.freezeMs, atXp: ctx.globalXp } : null,
