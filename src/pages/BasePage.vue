@@ -1,6 +1,12 @@
 <template>
-  <component :is="embedded ? 'div' : 'q-page'" class="base-page" :class="{ embedded }">
-    <header class="top">
+  <component
+    :is="embedded || inTab ? 'div' : 'q-page'"
+    class="base-page"
+    :class="{ embedded, 'in-tab': inTab }"
+  >
+    <!-- En-tête seulement en écran AUTONOME : dans l'onglet Aventure, la barre de
+         navigation est déjà celle de la page parente. -->
+    <header v-if="!inTab" class="top">
       <button class="iconbtn" aria-label="Retour" @click="back()">‹</button>
       <div class="top-title font-display">Ma base</div>
       <div class="iconbtn" />
@@ -429,7 +435,8 @@ import {
  *  Mesuré, un joueur trop tôt ne tenait aucun siège même en bâtissant à son niveau. */
 const defenseUnlockLevel = Math.min(...DEFENSE_TYPES.map((t) => t.unlockLevel));
 
-const props = defineProps<{ embedded?: boolean }>();
+const props = defineProps<{ embedded?: boolean; inTab?: boolean }>();
+const inTab = computed(() => !!props.inTab);
 const router = useRouter();
 const $q = useQuasar();
 const char = useCharacterStore();
@@ -778,6 +785,10 @@ const doCollect = () =>
 <style scoped>
 .base-page {
   padding: 0 12px 28px;
+}
+/* En onglet, la page parente porte déjà les gouttières et le défilement. */
+.base-page.in-tab {
+  padding: 0 0 12px;
 }
 .base-page.embedded {
   min-height: 0;

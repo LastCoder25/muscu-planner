@@ -145,6 +145,12 @@
         <button class="seg-b" :class="{ on: tab === 'explore' }" @click="tab = 'explore'">
           <q-icon name="castle" size="18px" /> Explorer
         </button>
+        <button class="seg-b" :class="{ on: tab === 'base' }" @click="tab = 'base'">
+          <q-icon name="shield" size="18px" /> Base
+          <!-- Pastille d'alerte : une armée en route, des corps à fouiller ou une
+               production gelée doivent se voir SANS ouvrir l'onglet. -->
+          <span v-if="baseAlert" class="seg-dot" :class="{ warn: !!baseRaid }" />
+        </button>
       </div>
 
       <!-- ONGLET HÉROS — accès Talents/Familier UNIQUEMENT par clic sur l'avatar
@@ -1032,27 +1038,6 @@
           <span class="expe-go">›</span>
         </button>
 
-        <!-- Ma base (enceinte, sièges). La menace est TÉLÉGRAPHIÉE ici : on doit pouvoir
-             voir qu'une armée approche sans ouvrir l'écran. -->
-        <button class="expe-card" :class="{ threat: !!baseRaid }" @click="openGame('/base')">
-          <span class="expe-emo">🏰</span>
-          <span class="expe-main">
-            <span class="expe-name font-display">Ma base</span>
-            <span class="expe-sub">
-              <template v-if="baseRaid">
-                ⚠️ Une armée approche — {{ fmtExpeMs(Math.max(0, baseRaid.arrivesAt - nowMs)) }}
-              </template>
-              <template v-else-if="baseCorpses > 0">
-                🦴 {{ baseCorpses }} corps à dépouiller sur le champ de bataille
-              </template>
-              <template v-else-if="baseFrozen">❄️ Production gelée — répare l’enceinte 🔩</template>
-              <template v-else-if="heroWounded">🤕 Héros blessé — dégâts réduits</template>
-              <template v-else>Muraille, tourelles et guet 🧱</template>
-            </span>
-          </span>
-          <span class="expe-go">›</span>
-        </button>
-
         <!-- Labyrinthe (donjon à étages exploré, débloqué par la Porte du Labyrinthe) -->
         <button
           class="expe-card"
@@ -1282,7 +1267,7 @@
           <span class="sf-have">🔮 {{ char.row.summon_stones }} pierre(s) d’invocation</span>
         </div>
         <!-- Prérequis : les boss exigent l'Autel des boss (bâtiment) → CTA « où aller ». -->
-        <button v-if="!hasBossAltar" class="boss-gate-cta" @click="openGame('/base')">
+        <button v-if="!hasBossAltar" class="boss-gate-cta" @click="tab = 'base'">
           <span class="bg-emo">🔮</span>
           <span class="bg-txt">
             <b>Les boss sont verrouillés</b> — construis l’<b>Autel des boss</b> dans ton village
@@ -1351,7 +1336,7 @@
             <button
               v-else-if="!hasBossAltar"
               class="fight mboss-fight lock-go"
-              @click="openGame('/base')"
+              @click="tab = 'base'"
             >
               🔮 Construire l’Autel →
             </button>
@@ -1359,6 +1344,13 @@
             <button v-else class="fight mboss-fight" disabled>🔒 {{ bossLockReason(b) }}</button>
           </div>
         </div>
+      </template>
+
+      <!-- ONGLET BASE — l'enceinte, le village et les sièges. La page vit ici en
+           `in-tab` : elle n'affiche pas son propre en-tête, la barre de navigation
+           de l'Aventure suffit. -->
+      <template v-else-if="tab === 'base'">
+        <BasePage in-tab :embedded="embedded" />
       </template>
     </template>
 
@@ -2397,7 +2389,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -2407,6 +2399,7 @@ import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { remainingCorpses, isWounded, woundRemainingMs } from '@/lib/raid';
+const BasePage = defineAsyncComponent(() => import('@/pages/BasePage.vue'));
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -2611,7 +2604,7 @@ const pseudoInput = ref('');
 const pseudoError = ref('');
 // Nav « par activité » : 3 onglets — Héros (fiche+stats+talents+familier) /
 // Équipement (équipé+sac) / Explorer (donjons+boss de palier).
-const tab = ref<'hero' | 'gear' | 'explore'>('hero');
+const tab = ref<'hero' | 'gear' | 'explore' | 'base'>('hero');
 // Équipement : plus de sous-onglets. Sac / Loadouts ouvrent des modales
 // (les stats de combat « Force » vivent sur la fiche Héros).
 const bagOpen = ref(false);
@@ -2658,7 +2651,7 @@ function openLabyrinth() {
       type: 'warning',
       message: 'Construis la 🚪 Porte du Labyrinthe dans ton village pour le débloquer.',
     });
-    return void openGame('/base');
+    return void (tab.value = 'base');
   }
   void openGame('/expedition');
 }
@@ -4205,7 +4198,7 @@ async function fightBoss(b: MilestoneBoss) {
       type: 'warning',
       message: 'Construis l’Autel des boss (dans ton village) pour affronter les boss.',
     });
-    return void openGame('/base');
+    return void (tab.value = 'base');
   }
   if (!bossUnlocked(b)) return;
   if (char.row.pending_reward) {
@@ -4500,10 +4493,14 @@ function openInbox() {
 // ── DÉFENSE DE LA BASE ──
 // Le siège se résout par HORLOGE, comme les expéditions : le tick d'une seconde suffit,
 // et si l'app est restée fermée, la première ouverture rattrape tout d'un coup.
-const nowMs = computed(() => expeNow.value);
 const baseRaid = computed(() => char.row?.base?.raid ?? null);
 const baseCorpses = computed(() => remainingCorpses(char.row?.base?.field ?? null));
 const baseFrozen = computed(() => !!char.row?.base?.freeze);
+/** Ce qui doit se voir SANS ouvrir l'onglet : une armée en route, des corps à
+ *  dépouiller avant qu'ils ne pourrissent, une production à l'arrêt. */
+const baseAlert = computed(
+  () => !!baseRaid.value || baseCorpses.value > 0 || baseFrozen.value || heroWounded.value,
+);
 
 /** Jours RÉELLEMENT actifs sur les 7 derniers — c'est ce qui règle la fréquence des
  *  sièges. « Plus tu t'entraînes, plus ta base attire » : un siège étant un robinet
@@ -5465,9 +5462,23 @@ onUnmounted(() => {
   padding: 4px;
   margin-bottom: 18px;
 }
+/* Pastille d'alerte de l'onglet Base : accent pour « il y a à faire », orange pour
+   « une armée arrive » — la seule des deux qui ait une échéance. */
+.seg-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #ffd23f);
+  flex: none;
+}
+.seg-dot.warn {
+  background: #ffb23f;
+  box-shadow: 0 0 0 3px rgba(255, 178, 63, 0.25);
+}
 .seg-b {
   flex: 1;
   min-width: 0;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
