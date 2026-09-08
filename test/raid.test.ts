@@ -721,3 +721,31 @@ describe('économie de la défense', () => {
     expect(many.damage).toBeGreaterThan(one.damage);
   });
 });
+
+describe('ce qu’on trouve sur un corps dépend de QUI attaquait', () => {
+  it('⚔️ les BANDITS laissent de l’équipement, les bêtes presque pas', () => {
+    // Réalisme : un homme en armes porte une arme et une armure ; un loup ne porte rien,
+    // un revenant ce qu'il reste de son linceul. La faction décide donc de la DEVISE
+    // (or / pierres / clés) ET de ce qu'on ramasse.
+    const raid = rollRaid(31, 26, 0, 0);
+    const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
+    let bandits = 0;
+    let betes = 0;
+    for (let s = 1; s <= 40; s++) {
+      bandits += lootCorpses(corpses, 'bandits', 26, s * 13 + 1).items.length;
+      betes += lootCorpses(corpses, 'betes', 26, s * 13 + 1).items.length;
+    }
+    expect(bandits, `bandits ${bandits} vs bêtes ${betes}`).toBeGreaterThan(betes * 2);
+    expect(betes, 'une bête traîne quand même parfois une pièce prise au village').toBeGreaterThan(
+      0,
+    );
+  });
+
+  it('l’or reste la marque des bandits, l’équipement ne le remplace pas', () => {
+    const raid = rollRaid(31, 26, 0, 0);
+    const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
+    expect(lootCorpses(corpses, 'bandits', 26, 5).gold).toBeGreaterThan(
+      lootCorpses(corpses, 'betes', 26, 5).gold,
+    );
+  });
+});

@@ -322,12 +322,24 @@
       <p v-if="!wallLevel">
         Sans <b>muraille</b>, personne ne vient t’attaquer. C’est à toi d’ouvrir le bal.
       </p>
+      <!-- ⚠️ ON N'ANNONCE PLUS QUAND. L'écran affichait le compte à rebours vers
+           `nextRaidAt` avant même toute détection : il divulguait donc l'horaire que la
+           TOUR DE GUET est précisément censée vendre. Une armée qui prévient de son
+           arrivée n'est pas une menace, c'est un rendez-vous. On ne dit ici que ce qu'on
+           peut honnêtement savoir : rien — sauf le PRÉAVIS que la Tour donnera le jour
+           où elle repérera quelque chose. C'est ça qu'on achète en la montant. -->
       <p v-else>
-        Une armée se mettra en marche <b>{{ nextRaidIn }}</b> — plus tu t’entraînes, plus ta base
-        prospère et plus elle attire. D’ici là, monte tes murs :
-        <b>{{ turretsBuilt }} tourelle{{ turretsBuilt > 1 ? 's' : '' }}</b> et une muraille de
-        niveau <b>{{ wallLevel }}</b
-        >, c’est ce qui se battra pour toi.
+        Rien à l’horizon. Une armée finira par se mettre en marche — plus tu t’entraînes, plus ta
+        base prospère et plus elle attire —, mais tu ne sauras pas quand.
+      </p>
+      <p v-if="wallLevel" class="calm-watch">
+        <template v-if="watchLevel">
+          🗼 Ta <b>Tour de guet</b> te préviendra <b>{{ scoutLeadLabel }}</b> avant l’assaut.
+        </template>
+        <template v-else>
+          🗼 Sans <b>Tour de guet</b>, tu les verras arriver au dernier moment. C’est elle qui
+          achète du temps de réaction.
+        </template>
       </p>
     </div>
 
@@ -510,6 +522,7 @@ import {
 } from '@/lib/items';
 import { BUILD, buildingAccrued, buildingType, plotsForLevel, storageMult } from '@/lib/buildings';
 import {
+  scoutLeadMs,
   garrisonLevel,
   DEFENSE_TYPES,
   FACTION_EMOJI,
@@ -948,9 +961,14 @@ function fmtDelay(ms: number): string {
   return `dans ${h} h ${String(m % 60).padStart(2, '0')}`;
 }
 const arriveIn = computed(() => (raid.value ? fmtDelay(raid.value.arrivesAt - now.value) : ''));
-const nextRaidIn = computed(() =>
-  base.value ? fmtDelay(base.value.nextRaidAt - now.value) : 'plus tard',
-);
+/** Le préavis que la Tour donnera — la SEULE chose qu'on ait le droit d'annoncer avant
+ *  qu'une armée soit repérée. `nextRaidIn` (le compte à rebours vers l'assaut) a été
+ *  retiré : il rendait gratuit ce que ce bâtiment fait payer. */
+const scoutLeadLabel = computed(() => {
+  const ms = scoutLeadMs(scoutLevel(defenses.value));
+  const m = Math.round(ms / 60000);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) : ''}`;
+});
 const freezeIn = computed(() => (freeze.value ? fmtDelay(freeze.value.until - now.value) : ''));
 const rotIn = computed(() => (field.value ? fmtDelay(field.value.expiresAt - now.value) : ''));
 const healIn = computed(() =>
@@ -1650,6 +1668,10 @@ const doCollect = () =>
 .scav-lvl {
   margin-left: auto;
   font-size: 11px;
+  color: var(--dim);
+}
+.calm-watch {
+  font-size: 12.5px;
   color: var(--dim);
 }
 </style>

@@ -330,6 +330,10 @@ export const RAID = {
   // (à tout niveau), et la Fonderie seule met 6 à 10 jours : elle complète, elle ne
   // remplace plus. Ne pas monter plus haut : à 1,45 la fin de partie demandait 4,5 épaves
   // et 16 jours de production passive par cran — de la corvée, pas un arbitrage.
+  // Chance qu'un corps ORDINAIRE laisse une pièce d'équipement (un champion en laisse
+  // toujours une). Les bandits sont équipés, les bêtes et les morts-vivants beaucoup moins.
+  gearDropBandits: 0.5,
+  gearDropOther: 0.12,
   scrapBase: 6,
   scrapExp: 1.45,
   turretDmgK: 0.105,
@@ -1053,8 +1057,12 @@ export function lootCorpses(
       luck: c.champion ? 0.45 : 0.1,
       playerLevel,
     });
-    // Un simple soldat lâche rarement ; le champion, souvent.
-    if (drop && (c.champion || rng() < 0.22)) loot.items.push(drop);
+    // ⚠️ LES BANDITS LÂCHENT DE L'ÉQUIPEMENT, les bêtes presque pas — parce que c'est ce
+    // qu'on trouve sur eux. Un homme en armes porte une arme et une armure ; un loup ne
+    // porte rien, et un revenant ce qu'il reste de son linceul. La faction ne décide donc
+    // pas seulement de la DEVISE, mais aussi de ce qu'on ramasse.
+    const chance = faction === 'bandits' ? RAID.gearDropBandits : RAID.gearDropOther;
+    if (drop && (c.champion || rng() < chance)) loot.items.push(drop);
   }
   // Bonus de fouille de la garnison (marmotte) : il porte sur les RESSOURCES, jamais
   // sur la rareté des objets — l'anti-runaway ne se contourne pas par le chenil.
