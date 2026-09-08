@@ -1282,13 +1282,13 @@
           <span class="sf-have">🔮 {{ char.row.summon_stones }} pierre(s) d’invocation</span>
         </div>
         <!-- Prérequis : les boss exigent l'Autel des boss (bâtiment) → CTA « où aller ». -->
-        <button v-if="!hasBossAltar" class="boss-gate-cta" @click="openGame('/expedition-map')">
+        <button v-if="!hasBossAltar" class="boss-gate-cta" @click="openGame('/base')">
           <span class="bg-emo">🔮</span>
           <span class="bg-txt">
-            <b>Les boss sont verrouillés</b> — construis l’<b>Autel des boss</b> sur la carte
-            d’expédition pour les affronter.
+            <b>Les boss sont verrouillés</b> — construis l’<b>Autel des boss</b> dans ton village
+            pour les affronter.
           </span>
-          <span class="bg-go">Aller à la carte →</span>
+          <span class="bg-go">Aller à ma base →</span>
         </button>
         <div class="dungeons">
           <div
@@ -1351,7 +1351,7 @@
             <button
               v-else-if="!hasBossAltar"
               class="fight mboss-fight lock-go"
-              @click="openGame('/expedition-map')"
+              @click="openGame('/base')"
             >
               🔮 Construire l’Autel →
             </button>
@@ -2406,7 +2406,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
-import { remainingCorpses, woundEffects, isWounded } from '@/lib/raid';
+import { remainingCorpses, isWounded, woundRemainingMs } from '@/lib/raid';
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -2656,9 +2656,9 @@ function openLabyrinth() {
   if (!hasLabyGate.value) {
     $q.notify({
       type: 'warning',
-      message: 'Construis la 🚪 Porte du Labyrinthe sur la carte pour le débloquer.',
+      message: 'Construis la 🚪 Porte du Labyrinthe dans ton village pour le débloquer.',
     });
-    return void openGame('/expedition-map');
+    return void openGame('/base');
   }
   void openGame('/expedition');
 }
@@ -2687,17 +2687,14 @@ const energySpentTotal = computed(() => char.row?.energy_spent ?? 0);
 const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
 // Effets « hors équipement » actifs = talents + PASSIF DE VOIE (spécialisation) → comptés
 // partout dans le combat/la puissance (fighter, powerWith, winPct, runExtra).
-// Un héros BLESSÉ (siège perdu alors qu'il défendait) traîne un malus le temps de se
-// remettre. On le fond ici, dans les effets actifs : c'est le point unique par lequel
-// passent `fighter`, `powerWith`, `runWinPct` et `runExtra` — inutile de threader un
-// paramètre dans chaque site de combat.
 const activeFx = computed(() =>
-  mergeEffects(
-    mergeEffects(talentFx.value, voiePassiveEffects(char.row?.voie as VoieId | null)),
-    woundEffects(char.row?.base?.wound, expeNow.value),
-  ),
+  mergeEffects(talentFx.value, voiePassiveEffects(char.row?.voie as VoieId | null)),
 );
+// Un siège PERDU envoie le héros à l'infirmerie : il est indisponible, comme s'il était
+// parti en expédition. Un simple malus de dégâts avait été essayé d'abord — sans mordant,
+// puisqu'on farme surtout du contenu qu'on domine largement.
 const heroWounded = computed(() => isWounded(char.row?.base, expeNow.value));
+const heroHealIn = computed(() => woundRemainingMs(char.row?.base, expeNow.value));
 // ── Voie (spécialisation) : sélecteur + libellés ──
 const voieOpen = ref(false);
 const currentVoie = computed(() => VOIES.find((v) => v.id === char.row?.voie) ?? null);
@@ -3934,7 +3931,13 @@ async function enterArena() {
         queueFx(() => celebrateRareDrop(dr));
       }
     }
-    await char.applyRun(uid, { energyCost: arenaCost.value, gold, drops });
+    await char.applyRun(uid, {
+      energyCost: arenaCost.value,
+      gold,
+      drops,
+      famAtkXp: 3 + r.waves * 2,
+      playerLevel: c.value.level.level,
+    });
     run.value = {
       name: `Arène — ${r.waves} vague${r.waves > 1 ? 's' : ''}`,
       kind: 'arena',
@@ -4200,9 +4203,9 @@ async function fightBoss(b: MilestoneBoss) {
   if (!hasBossAltar.value) {
     $q.notify({
       type: 'warning',
-      message: 'Construis l’Autel des boss (carte d’expédition) pour affronter les boss.',
+      message: 'Construis l’Autel des boss (dans ton village) pour affronter les boss.',
     });
-    return void openGame('/expedition-map');
+    return void openGame('/base');
   }
   if (!bossUnlocked(b)) return;
   if (char.row.pending_reward) {
@@ -4273,6 +4276,9 @@ async function fightBoss(b: MilestoneBoss) {
       defeated: win,
       drops,
       ...(talentDrops.length ? { talentDrops } : {}),
+      // Dressage d'ATTAQUE : le familier se bat aussi contre les boss.
+      famAtkXp: (4 + b.unlockLevel) * (win ? 2 : 1),
+      playerLevel: c.value.level.level,
     });
     // Pièce de set → filée au loadout de sa voie. Emplacement OCCUPÉ → conflit : on garde le
     // comparatif EN ATTENTE et on l'ouvre à la RÉVÉLATION du drop (cf. watch stageDone), pour
@@ -4405,6 +4411,8 @@ async function fightEndless() {
       gold,
       drops,
       cleared: win,
+      famAtkXp: 4 + tier * 2,
+      playerLevel: c.value.level.level,
     });
     // Nouveau palier RECORD de la Faille → célébration (progression end-game),
     // différée à la fin de l'animation de combat.
@@ -4461,7 +4469,16 @@ function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
 
 // ── Mode idle « Expédition » : gel des autres modes + cycle de vie + messagerie ──
 const onExpedition = computed(() => !!char.row?.expedition);
+/** Le héros est-il indisponible ? Deux causes, un seul garde — tous les modes de jeu
+ *  passent déjà par lui, la convalescence s'y greffe donc sans toucher un call site. */
 function expeBlocked(): boolean {
+  if (heroWounded.value) {
+    $q.notify({
+      type: 'warning',
+      message: `🤕 Ton héros est à l’infirmerie — de retour dans ${fmtExpeMs(heroHealIn.value)}.`,
+    });
+    return true;
+  }
   if (!onExpedition.value) return false;
   $q.notify({
     type: 'warning',

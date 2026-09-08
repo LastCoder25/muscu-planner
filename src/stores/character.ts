@@ -86,6 +86,8 @@ import {
   garrisonBonus,
   autoGarrison,
   fatigueMsFor,
+  healCost,
+  woundRemainingMs,
   GARRISON_SLOTS,
   SCAV,
   type BaseState,
@@ -354,6 +356,20 @@ export const useCharacterStore = defineStore('character', () => {
 
   // Applique un run de donjon : dépense l'énergie, encaisse or + poussière, range
   // le butin (auto-équipe si le slot est vide, sinon au sac).
+  /** Crédite l'XP d'ATTAQUE au familier ÉQUIPÉ. Appelé par TOUS les modes où le
+   *  familier booste le héros (donjon, boss, faille, Labyrinthe, arène) — c'est là qu'il
+   *  se bat, donc c'est là qu'il apprend. Appliqué APRÈS la distribution du butin : sinon
+   *  un drop de familier auto-équipé écraserait le gain de celui qui a couru. */
+  function trainRunFamiliar(
+    dist: { equipped: Equipped; inventory: Item[] },
+    input: { famAtkXp?: number; playerLevel?: number },
+  ) {
+    const fam = dist.equipped[FAMILIAR_SLOT];
+    if (!fam || !input.famAtkXp) return;
+    const trained = grantFamiliarXp(fam, 'atk', input.famAtkXp, input.playerLevel ?? 1);
+    if (trained !== fam) dist.equipped = { ...dist.equipped, [FAMILIAR_SLOT]: trained };
+  }
+
   async function applyRun(
     userId: string,
     input: {
@@ -381,13 +397,7 @@ export const useCharacterStore = defineStore('character', () => {
         ? [...cur.cleared_dungeons, input.clearedDungeonId]
         : cur.cleared_dungeons;
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
-    // Le familier ÉQUIPÉ encaisse son XP d'attaque APRÈS la distribution du butin :
-    // sinon un drop de familier auto-équipé écraserait le gain de celui qui a couru.
-    const runFam = dist.equipped[FAMILIAR_SLOT];
-    if (runFam && input.famAtkXp) {
-      const trained = grantFamiliarXp(runFam, 'atk', input.famAtkXp, input.playerLevel ?? 1);
-      if (trained !== runFam) dist.equipped = { ...dist.equipped, [FAMILIAR_SLOT]: trained };
-    }
+    trainRunFamiliar(dist, input);
     // Clé d'expédition : ~2 % sur un donjon NETTOYÉ (raréfié 2026‑08‑18 : les gros
     // volumes de runs inondaient les clés → le Labyrinthe redevient un événement rare).
     const gotKey = input.clearedDungeonId && Math.random() < 0.02 ? 1 : 0;
@@ -424,6 +434,8 @@ export const useCharacterStore = defineStore('character', () => {
       enchantScrolls?: number; // 📜 parchemins d'enchantement (jalon boss)
       protections?: number; // 🛡️ protections d'enchant (jalon boss — la source précieuse)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
+      famAtkXp?: number; // dressage d'attaque du familier équipé
+      playerLevel?: number;
     },
   ) {
     const cur = row.value;
@@ -541,6 +553,8 @@ export const useCharacterStore = defineStore('character', () => {
     input: {
       tier: number;
       energyCost: number;
+      famAtkXp?: number;
+      playerLevel?: number;
       gold: number;
       drops: Item[];
       cleared: boolean;
@@ -550,6 +564,7 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return;
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
+    trainRunFamiliar(dist, input);
     return persist(userId, {
       gold: cur.gold + input.gold,
       stones: cur.stones + (input.stones ?? 0),
@@ -577,6 +592,8 @@ export const useCharacterStore = defineStore('character', () => {
     input: {
       gold: number;
       drops: Item[];
+      famAtkXp?: number;
+      playerLevel?: number;
       enchantScrolls?: number;
       clearedDungeonId?: string; // palier de Labyrinthe nettoyé (préfixe `laby:…`)
     },
@@ -589,6 +606,7 @@ export const useCharacterStore = defineStore('character', () => {
       input.clearedDungeonId && !cur.cleared_dungeons.includes(input.clearedDungeonId)
         ? [...cur.cleared_dungeons, input.clearedDungeonId]
         : cur.cleared_dungeons;
+    trainRunFamiliar(dist, input);
     return persist(userId, {
       gold: cur.gold + input.gold,
       equipped: dist.equipped,
@@ -1256,6 +1274,21 @@ export const useCharacterStore = defineStore('character', () => {
     return { detected: t.detected, report };
   }
 
+  /** Soins d'urgence : remet le héros sur pied TOUT DE SUITE, contre de la ferraille
+   *  proportionnelle au repos qu'il reste. Il y a donc toujours une porte de sortie —
+   *  attendre reste gratuit, payer ne fait qu'acheter l'immédiateté. */
+  async function healHero(userId: string, now: number) {
+    const cur = row.value;
+    if (!cur?.base?.wound) return;
+    const cost = healCost(woundRemainingMs(cur.base, now));
+    if (cur.scrap < cost) throw new Error(`Il te faut ${cost} 🔩 pour des soins d'urgence.`);
+    await persistOptimistic(userId, {
+      scrap: cur.scrap - cost,
+      base: { ...cur.base, wound: null },
+    });
+    return cost;
+  }
+
   /** Poste ou retire un familier du chenil. */
   async function toggleGarrison(userId: string, famId: string, now: number) {
     const cur = row.value;
@@ -1483,6 +1516,7 @@ export const useCharacterStore = defineStore('character', () => {
     collectScavengers,
     toggleGarrison,
     autoAssignGarrison,
+    healHero,
     garrisonedFamiliars,
     garrisonFor,
     heroIsHome,

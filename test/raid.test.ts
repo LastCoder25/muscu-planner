@@ -28,9 +28,12 @@ import {
   garrisonBonus,
   autoGarrison,
   fatigueMsFor,
-  woundEffects,
   woundMsFor,
+  woundRemainingMs,
+  heroAvailable,
+  healCost,
   isWounded,
+  WOUND_MAX_MS,
   GARRISON_SLOTS,
   GARRISON_CAP,
   SCAV,
@@ -553,12 +556,14 @@ describe('blessure du héros', () => {
     };
     const { base: nb } = applyRaidOutcome(b, raid, report, { activeDays7: 7, globalXp: 0 }, 0);
     expect(nb.wound).not.toBeNull();
-    // C'est un DÉBUFF : des dégâts en moins, jamais une porte fermée.
-    const fx = woundEffects(nb.wound, 0);
-    expect(fx.damagePct).toBeLessThan(0);
+    // Il part à l'INFIRMERIE : plus de donjon, de faille ni d'expédition le temps qu'il
+    // se remette. (Un simple malus de dégâts avait été essayé : sans mordant, puisqu'on
+    // farme surtout du contenu qu’on domine largement — il ne changeait rien.)
     expect(isWounded(nb, 0)).toBe(true);
-    // …et il guérit tout seul.
-    expect(isWounded(nb, nb.wound!.until + 1)).toBe(false);
+    expect(heroAvailable(nb, 0)).toBe(false);
+    expect(woundRemainingMs(nb, 0)).toBeGreaterThan(0);
+    // …et il se remet tout seul.
+    expect(heroAvailable(nb, nb.wound!.until + 1)).toBe(true);
     const healed = advanceBase(
       nb,
       { playerLevel: 26, activeDays7: 7, globalXp: 0 },
@@ -577,9 +582,22 @@ describe('blessure du héros', () => {
     expect(nb.wound).toBeNull();
   });
 
-  it('l’Infirmerie abrège la convalescence', () => {
+  it('l’Infirmerie abrège la convalescence, qui reste COURTE devant deux sièges', () => {
     expect(woundMsFor(10)).toBeLessThan(woundMsFor(0));
     expect(woundMsFor(999)).toBeGreaterThan(0); // jamais instantané
+    // Sinon un héros encore alité manquerait la défense suivante, qu'il perdrait donc
+    // plus probablement, ce qui le renverrait à l’infirmerie : la spirale, encore.
+    for (const inf of [0, 1, 10, 50]) {
+      expect(woundMsFor(inf)).toBeLessThanOrEqual(WOUND_MAX_MS);
+      expect(woundMsFor(inf)).toBeLessThan(RAID.intervalActiveMs);
+    }
+  });
+
+  it('il y a TOUJOURS une porte de sortie : des soins d’urgence en ferraille', () => {
+    // Attendre reste gratuit ; payer n'achète que l'immédiateté, à un prix qui suit le
+    // repos restant — écourter la fin est donc une bricole.
+    expect(healCost(6 * H)).toBeGreaterThan(healCost(1 * H));
+    expect(healCost(0)).toBeGreaterThan(0);
   });
 });
 

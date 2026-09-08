@@ -7,13 +7,14 @@
 //  1. On ne perd JAMAIS parce qu'on n'a pas ouvert l'app. Le siège se résout tout seul,
 //     un seul en attente à la fois, et rien de ce que le SPORT a payé (niveau, stats,
 //     objets) n'est en jeu — on ne risque que le rendement passif de la base.
-//  2. Le héros n'est jamais BLOQUÉ. Il sort meurtri d'un siège perdu (`HeroWound`,
-//     −25 % de dégâts le temps de se remettre, plus vite avec l'Infirmerie), mais il
-//     peut toujours jouer : le seul salaire du sport dans cette app est de pouvoir
-//     jouer, et un héros hors service ferait qu'une séance n'aurait rien rapporté.
-//     La blessure ne survient que sur une DÉFAITE, donc sa présence reste un pari
-//     gagnant — sinon la stratégie optimale serait de l'envoyer en expédition les
-//     soirs de raid, et la mécanique se retournerait contre elle-même.
+//  2. Un siège PERDU envoie le héros à l'infirmerie : il est indisponible quelques
+//     heures (`HeroWound`, abrégé par l'Infirmerie, et on peut toujours payer des soins
+//     d'urgence en ferraille). Un simple malus de dégâts avait été essayé — sans mordant,
+//     parce qu'on farme surtout du contenu qu'on domine. Ce que ça ne casse pas :
+//     l'énergie ne se périme pas, donc une séance faite pendant la convalescence est
+//     différée, jamais perdue. La blessure ne survient que sur une DÉFAITE, donc sa
+//     présence au mur reste un pari gagnant — sinon la stratégie optimale serait de
+//     l'envoyer en expédition les soirs de raid, et la mécanique se retournerait.
 //  3. C'est OPT-IN : pas de muraille → pas d'attaque (cf. `raidsEnabled`).
 //  4. Le siège est FINI et GAGNABLE. Une armée a un effectif : on la tient en entier ou
 //     elle passe. (C'est la différence avec l'arène, dont la rampe géométrique garantit
@@ -23,14 +24,7 @@
 // l'appelant → fonctions pures et testables, résolution déterministe hors-ligne.
 import { mulberry32, simulateDungeon, type Combatant, type DungeonFight } from './combat';
 import { refFighter } from './proceduralContent';
-import {
-  rollDrop,
-  famLevel,
-  famDefMult,
-  emptyEffects,
-  type AggregatedEffects,
-  type Item,
-} from './items';
+import { rollDrop, famLevel, famDefMult, type Item } from './items';
 
 // ── Types ──
 
@@ -105,11 +99,17 @@ export interface ProductionFreeze {
   atXp: number;
 }
 
-/** Le héros sort meurtri d'un siège PERDU. ⚠️ C'est un DÉBUFF, jamais un blocage : il
- *  peut toujours dépenser son énergie, lancer un donjon, jouer. Le seul salaire du sport
- *  dans cette app est de pouvoir jouer — un héros mis hors service ferait que s'entraîner
- *  n'aurait rien rapporté ce jour-là, ce que le projet s'interdit partout ailleurs.
- *  Il ne se produit QUE sur une défaite : être présent reste donc strictement payant. */
+/** Le héros sort meurtri d'un siège PERDU et PART À L'INFIRMERIE : il est indisponible
+ *  jusqu'à `until` (ni donjon, ni boss, ni faille, ni Labyrinthe, ni expédition).
+ *
+ *  ⚠️ Un simple malus de dégâts avait été essayé d'abord : sans mordant, parce qu'on farme
+ *  surtout du contenu qu'on domine largement — il ne changeait rien. Une indisponibilité,
+ *  elle, se sent.
+ *
+ *  Ce que ça ne casse PAS : l'énergie ne se périme pas, donc une séance faite pendant la
+ *  convalescence n'est jamais perdue, seulement différée. Et la durée reste très courte
+ *  devant l'intervalle entre deux sièges (cf. `WOUND_MAX_MS` vs `intervalActiveMs`), sans
+ *  quoi un héros à l'infirmerie manquerait la défense suivante — la spirale, encore. */
 export interface HeroWound {
   until: number;
 }
@@ -320,8 +320,7 @@ export const RAID = {
   intervalIdleMs: 72 * 3600_000, // 0 jour actif
   intervalJitter: 0.25,
   freezeMs: 24 * 3600_000, // dégel automatique (le sport est le raccourci, pas la rançon)
-  woundMs: 8 * 3600_000, // le héros boite un moment après une défaite (débuff, jamais blocage)
-  woundDamagePct: -25, // −25 % de dégâts tant qu’il est blessé
+  woundMs: 6 * 3600_000, // convalescence de base après une défaite (abrégée par l’Infirmerie)
 
   // Espionnage
   scoutLeadBaseMs: 3600_000, // 1 h de préavis sans Tour de guet…
@@ -652,6 +651,11 @@ export const GARRISON_SLOTS = 3;
  *  familiers, et la mécanique mourrait le jour où elle se déclenche. */
 export const FATIGUE_MS = 6 * 3600_000;
 
+/** Plafond DUR de la convalescence. Il doit rester très en deçà de l'intervalle entre
+ *  deux sièges (24 h au plus serré) : un héros encore alité au siège suivant ne pourrait
+ *  pas défendre, la défaite entraînerait la défaite. */
+export const WOUND_MAX_MS = 8 * 3600_000;
+
 /** Part de son effet qu'un familier apporte au MUR.
  *  ⚠️ Pas 100 % : mesuré sur une garnison réelle de trois légendaires (loup +23,4 %,
  *  salamandre 14,7 %, ours 9,4 %), la valeur pleine faisait passer la tenue de 72 % à
@@ -751,20 +755,30 @@ export function baseCombatant(
   };
 }
 
-/** Le malus d'un héros blessé, sous la forme d'un `AggregatedEffects` partiel — c'est
- *  ainsi qu'il se fond dans `activeFx` (talents + voie) sans avoir à threader un
- *  paramètre dans chaque site de combat. */
-export function woundEffects(wound: HeroWound | null | undefined, now: number): AggregatedEffects {
-  const e = emptyEffects();
-  if (wound && now < wound.until) e.damagePct = RAID.woundDamagePct;
-  return e;
-}
 export function isWounded(base: BaseState | null | undefined, now: number): boolean {
   return !!base?.wound && now < base.wound.until;
 }
-/** Repos restant avant guérison. L'Infirmerie l'abrège au moment où l'on est blessé. */
+/** Le héros peut-il partir en donjon / boss / faille / Labyrinthe / expédition ? */
+export function heroAvailable(base: BaseState | null | undefined, now: number): boolean {
+  return !isWounded(base, now);
+}
+export function woundRemainingMs(base: BaseState | null | undefined, now: number): number {
+  return isWounded(base, now) ? base!.wound!.until - now : 0;
+}
+/** Convalescence. L'Infirmerie l'abrège — c'est tout son intérêt. ⚠️ Bornée à
+ *  `WOUND_MAX_MS` : elle doit rester COURTE devant l'intervalle entre deux sièges, sinon
+ *  un héros encore alité manquerait la défense suivante et la défaite s'auto-entretiendrait. */
 export function woundMsFor(infirmaryLevel: number): number {
-  return Math.round(RAID.woundMs * Math.max(0.25, 1 - Math.max(0, infirmaryLevel) * 0.06));
+  return Math.min(
+    WOUND_MAX_MS,
+    Math.round(RAID.woundMs * Math.max(0.2, 1 - Math.max(0, infirmaryLevel) * 0.06)),
+  );
+}
+/** Soins d'urgence : on peut toujours le remettre sur pied tout de suite, en ferraille.
+ *  ∝ au repos qu'il reste → écourter la fin coûte une bricole, sauter toute la
+ *  convalescence se paie. Il y a donc toujours une porte de sortie. */
+export function healCost(remainingMs: number): number {
+  return Math.max(1, Math.ceil((remainingMs / 3600_000) * 12));
 }
 
 // ── Résolution ──

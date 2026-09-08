@@ -10,7 +10,7 @@
       <span class="bar-chip">🪙 {{ char.row?.gold ?? 0 }}</span>
       <span class="bar-chip">🔩 {{ char.row?.scrap ?? 0 }}</span>
       <span class="bar-chip">Niv. {{ heroLevel }}</span>
-      <span v-if="wounded" class="bar-chip hurt">🤕 Héros blessé — {{ healIn }}</span>
+      <span v-if="wounded" class="bar-chip hurt">🤕 Héros à l’infirmerie — {{ healIn }}</span>
       <span v-else-if="heroHome" class="bar-chip home">🦸 Héros à la base</span>
       <span v-else class="bar-chip away">🧭 Héros en expédition</span>
     </div>
@@ -43,47 +43,114 @@
           </text>
         </g>
 
-        <!-- Le mur -->
+        <!-- ── LA MURAILLE ──────────────────────────────────────────────────
+             Enceinte octogonale à CRÉNEAUX : le mur est dessiné, pas suggéré par
+             un trait. Ses 8 sommets sont les 8 emplacements de tourelle, si bien
+             que le compte tombe juste par construction. -->
         <polygon
           :points="wallPoints"
           class="wall"
           :class="{ absent: !wallLevel, damaged: wallDamaged }"
         />
-        <polygon :points="innerPoints" class="inner" />
+        <rect
+          v-for="(m, i) in merlons"
+          :key="'m' + i"
+          :x="m.x - 3.1"
+          :y="m.y - 3.1"
+          width="6.2"
+          height="6.2"
+          :transform="`rotate(${m.a} ${m.x} ${m.y})`"
+          class="merlon"
+          :class="{ absent: !wallLevel, damaged: wallDamaged }"
+        />
+        <polygon :points="innerPoints" class="courtyard" />
 
-        <!-- Emplacements de tourelle (8 sommets) -->
-        <g v-for="(p, i) in octagon" :key="`t${i}`">
-          <circle
-            :cx="p.x"
-            :cy="p.y"
-            r="11"
-            class="turret"
-            :class="{ on: i < turretsBuilt, damaged: turretsDamaged && i < turretsBuilt }"
-          />
-          <text v-if="i < turretsBuilt" :x="p.x" :y="p.y + 4.5" class="turret-emo">🏹</text>
+        <!-- ── LES TOURELLES ────────────────────────────────────────────────
+             Une vraie tour : fût, couronne crénelée et meurtrière. Les
+             emplacements vides restent tracés en pointillés — ils disent au
+             joueur ce qu'il pourrait avoir. -->
+        <g v-for="(p, i) in octagon" :key="'t' + i" class="turret-g">
+          <template v-if="i < turretsBuilt">
+            <rect
+              :x="p.x - 7"
+              :y="p.y - 9"
+              width="14"
+              height="18"
+              rx="1.5"
+              class="tur-body"
+              :class="{ damaged: turretsDamaged }"
+            />
+            <rect
+              v-for="k in 3"
+              :key="k"
+              :x="p.x - 7 + (k - 1) * 5"
+              :y="p.y - 12"
+              width="4"
+              height="4"
+              class="tur-crown"
+              :class="{ damaged: turretsDamaged }"
+            />
+            <rect :x="p.x - 1.1" :y="p.y - 4" width="2.2" height="8" rx="1" class="tur-slit" />
+          </template>
+          <circle v-else :cx="p.x" :cy="p.y" r="8" class="tur-empty" />
         </g>
 
-        <!-- Tour de guet : plantée sur le mur, au nord -->
-        <g v-if="watchLevel">
+        <!-- ── LA TOUR DE GUET ──────────────────────────────────────────────
+             Plus haute que les tourelles, coiffée d'une bannière : c'est elle
+             qui voit venir. -->
+        <g v-if="watchLevel" class="watch-g">
           <rect
-            x="92"
-            y="18"
-            width="16"
-            height="26"
-            rx="3"
-            class="tower"
+            x="91"
+            y="8"
+            width="18"
+            height="30"
+            rx="2"
+            class="watch-body"
             :class="{ damaged: watchDamaged }"
           />
-          <text x="100" y="37" class="tower-emo">🗼</text>
+          <rect
+            v-for="k in 4"
+            :key="k"
+            :x="91 + (k - 1) * 5"
+            y="5"
+            width="3.5"
+            height="4"
+            class="watch-crown"
+            :class="{ damaged: watchDamaged }"
+          />
+          <rect x="99" y="-6" width="1.6" height="12" class="watch-mast" />
+          <path d="M100.6 -6 L110 -3 L100.6 0 Z" class="watch-flag" />
+          <circle cx="100" cy="20" r="3.6" class="watch-eye" />
         </g>
 
-        <!-- Bâtiments à L'INTÉRIEUR -->
+        <!-- ── LES BÂTIMENTS DE SERVICE, dans la cour ──────────────────────
+             Chacun sa silhouette : croix rouge pour l'infirmerie, niche pour le
+             chenil, tas de gravats pour le chantier de fouille. -->
+        <g v-if="infirmaryLevel" class="svc">
+          <rect x="60" y="118" width="20" height="15" rx="2" class="svc-body" />
+          <path d="M60 118 L70 111 L80 118 Z" class="svc-roof" />
+          <rect x="68.6" y="122" width="2.8" height="8" class="svc-cross" />
+          <rect x="66" y="124.6" width="8" height="2.8" class="svc-cross" />
+        </g>
+        <g v-if="kennelLevel" class="svc">
+          <rect x="120" y="118" width="20" height="15" rx="2" class="svc-body" />
+          <path d="M120 118 L130 111 L140 118 Z" class="svc-roof kennel" />
+          <ellipse cx="130" cy="127" rx="5" ry="6" class="svc-hole" />
+        </g>
+        <g v-if="salvageLevel" class="svc">
+          <path d="M84 133 L92 120 L100 133 Z" class="svc-body" />
+          <path d="M100 133 L107 123 L114 133 Z" class="svc-body" />
+          <rect x="82" y="132" width="34" height="3" rx="1.5" class="svc-ground" />
+        </g>
+
+        <!-- Bâtiments de production (le village), à l'abri des murs -->
         <g v-for="(b, i) in innerBuildings" :key="b.typeId">
+          <circle :cx="innerSpot(i).x" :cy="innerSpot(i).y - 4" r="10" class="bld-bg" />
           <text :x="innerSpot(i).x" :y="innerSpot(i).y" class="bld" text-anchor="middle">
             {{ b.emoji }}
           </text>
         </g>
-        <text v-if="!innerBuildings.length" x="100" y="105" class="empty-hint" text-anchor="middle">
+        <text v-if="!innerBuildings.length" x="100" y="100" class="empty-hint" text-anchor="middle">
           rien à protéger encore
         </text>
       </svg>
@@ -93,6 +160,20 @@
         <span>🏹 {{ turretsBuilt }}/{{ TURRET_SLOTS }} tourelles</span>
         <span>🗼 Guet {{ watchLevel || '—' }}</span>
       </div>
+    </div>
+
+    <!-- ── Héros à l'infirmerie ── -->
+    <div v-if="wounded" class="panel warn">
+      <div class="p-title">🤕 Ton héros est à l’infirmerie</div>
+      <p>
+        Il s’est fait déborder en défendant la ville. Il ne repartira ni en donjon, ni au
+        Labyrinthe, ni en expédition avant {{ healIn }}.
+        <b>Ton énergie, elle, ne se périme pas</b> — rien de ce que tu gagnes en attendant n’est
+        perdu.
+      </p>
+      <button class="cta" :disabled="(char.row?.scrap ?? 0) < healPrice" @click="doHeal">
+        ⛑️ Soins d’urgence · {{ healPrice }} ferraille
+      </button>
     </div>
 
     <!-- ── Production gelée ── -->
@@ -184,6 +265,13 @@
         </button>
         <p v-else class="done">Le champ est entièrement dépouillé.</p>
       </template>
+    </div>
+
+    <!-- ── Le village (emplacements de production) ──
+         Déplacé de la carte d'expédition (v0.664) : la carte n'a plus qu'un métier,
+         choisir où envoyer le héros ; tout ce qui se GÈRE vit ici. -->
+    <div class="panel">
+      <VillagePlots :hero-level="heroLevel" :now="now" />
     </div>
 
     <!-- ── Chenil : la garnison ── -->
@@ -288,6 +376,7 @@ import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
+import VillagePlots from '@/components/VillagePlots.vue';
 import { computeCharacter } from '@/lib/character';
 import { playerWithGear, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import { buildingType, buildingUpgradeCost } from '@/lib/buildings';
@@ -312,6 +401,8 @@ import {
   garrisonBonus,
   isFatigued,
   isWounded,
+  healCost,
+  woundRemainingMs,
   GARRISON_SLOTS,
   GARRISON_ROLE,
   ROLE_LABEL,
@@ -367,6 +458,19 @@ const turretsDamaged = computed(() => isDamaged(defenses.value, 'turret'));
 const turretsBuilt = computed(() => turretCount(defenseLevel(defenses.value, 'turret')));
 const scavCap = computed(() => scavengerCount(salvageLevel.value));
 const kennelLevel = computed(() => defenseLevel(defenses.value, 'kennel'));
+const infirmaryLevel = computed(() => defenseLevel(defenses.value, 'infirmary'));
+/** Créneaux : un merlon au MILIEU de chaque pan de mur, orienté comme lui — c'est ce qui
+ *  fait lire « rempart » plutôt que « polygone ». */
+const merlons = computed(() =>
+  octagon.value.map((p, i) => {
+    const q = octagon.value[(i + 1) % octagon.value.length]!;
+    return {
+      x: (p.x + q.x) / 2,
+      y: (p.y + q.y) / 2,
+      a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI,
+    };
+  }),
+);
 const wounded = computed(() => isWounded(base.value, now.value));
 
 /** Tous les familiers en réserve (le familier ÉQUIPÉ n'est pas postable : il ne peut
@@ -421,8 +525,8 @@ const innerBuildings = computed(() =>
 );
 function innerSpot(i: number): { x: number; y: number } {
   const cols = 3;
-  const x = 68 + (i % cols) * 32;
-  const y = 88 + Math.floor(i / cols) * 30;
+  const x = 70 + (i % cols) * 30;
+  const y = 82 + Math.floor(i / cols) * 26;
   return { x, y };
 }
 
@@ -497,6 +601,9 @@ const rotIn = computed(() => (field.value ? fmtDelay(field.value.expiresAt - now
 const healIn = computed(() =>
   base.value?.wound ? fmtDelay(base.value.wound.until - now.value) : '',
 );
+/** Prix des soins ∝ au repos restant : écourter la fin est une bricole, sauter toute la
+ *  convalescence se paie. Attendre reste gratuit — on n'achète que l'immédiateté. */
+const healPrice = computed(() => healCost(woundRemainingMs(base.value, now.value)));
 const scavBusy = computed(
   () => !!field.value?.dispatchUntil && now.value < field.value.dispatchUntil,
 );
@@ -557,6 +664,11 @@ const doSend = () => guard(() => char.sendScavengers(uid.value, Date.now()));
 const doToggleGarrison = (id: string) =>
   guard(() => char.toggleGarrison(uid.value, id, Date.now()));
 const doAutoGarrison = () => guard(() => char.autoAssignGarrison(uid.value, Date.now()));
+const doHeal = () =>
+  guard(async () => {
+    const cost = await char.healHero(uid.value, Date.now());
+    if (cost) $q.notify({ type: 'positive', message: '⛑️ Ton héros est de nouveau sur pied.' });
+  });
 const doCollect = () =>
   guard(async () => {
     const got = await char.collectScavengers(uid.value, Date.now(), heroLevel.value);
@@ -637,10 +749,11 @@ const doCollect = () =>
   display: block;
   border-radius: 10px;
 }
+/* ── L'enceinte ── */
 .wall {
-  fill: #241f18;
-  stroke: #6b5c45;
-  stroke-width: 7;
+  fill: #2a231a;
+  stroke: #7a6a4f;
+  stroke-width: 8;
   stroke-linejoin: round;
 }
 .wall.absent {
@@ -650,45 +763,94 @@ const doCollect = () =>
 }
 .wall.damaged {
   stroke: #ff6a45;
-  stroke-dasharray: 14 7;
+  stroke-dasharray: 16 8;
 }
-.inner {
-  fill: #2b2419;
-  stroke: #3a332a;
+.merlon {
+  fill: #7a6a4f;
+}
+.merlon.absent {
+  fill: #3a332a;
+}
+.merlon.damaged {
+  fill: #ff6a45;
+}
+.courtyard {
+  fill: #332b1e;
+  stroke: #453b2c;
   stroke-width: 1.5;
 }
-.turret {
-  fill: #1d1913;
-  stroke: #3a332a;
-  stroke-width: 2;
+/* Tourelles */
+.tur-body,
+.tur-crown {
+  fill: #8a7856;
+  stroke: #5a4c36;
+  stroke-width: 1;
+}
+.tur-body.damaged,
+.tur-crown.damaged {
+  fill: #6b4234;
+  stroke: #ff6a45;
+}
+.tur-slit {
+  fill: #14110c;
+}
+.tur-empty {
+  fill: none;
+  stroke: #4a4133;
+  stroke-width: 1.6;
   stroke-dasharray: 3 3;
 }
-.turret.on {
-  fill: #3a2f1c;
-  stroke: var(--accent, #ffd23f);
-  stroke-dasharray: none;
+/* Tour de guet */
+.watch-body,
+.watch-crown {
+  fill: #9a8760;
+  stroke: #5a4c36;
+  stroke-width: 1;
 }
-.turret.damaged {
+.watch-body.damaged,
+.watch-crown.damaged {
+  fill: #6b4234;
   stroke: #ff6a45;
 }
-.turret-emo {
-  font-size: 11px;
-  text-anchor: middle;
+.watch-mast {
+  fill: #5a4c36;
 }
-.tower {
-  fill: #3a2f1c;
-  stroke: var(--accent, #ffd23f);
-  stroke-width: 2;
+.watch-flag {
+  fill: var(--accent, #ffd23f);
 }
-.tower.damaged {
-  stroke: #ff6a45;
+.watch-eye {
+  fill: var(--accent, #ffd23f);
+  opacity: 0.85;
 }
-.tower-emo {
-  font-size: 12px;
-  text-anchor: middle;
+/* Bâtiments de service */
+.svc-body {
+  fill: #6b5c45;
+  stroke: #4a3f2f;
+  stroke-width: 1;
+}
+.svc-roof {
+  fill: #b25a4a;
+}
+.svc-roof.kennel {
+  fill: #7f9a5c;
+}
+.svc-cross {
+  fill: #f3eee6;
+}
+.svc-hole {
+  fill: #201a12;
+}
+.svc-ground {
+  fill: #4a3f2f;
+}
+/* Village */
+.bld-bg {
+  fill: #241f18;
+  stroke: #453b2c;
+  stroke-width: 1;
 }
 .bld {
-  font-size: 17px;
+  font-size: 14px;
 }
 .empty-hint {
   font-size: 8px;
