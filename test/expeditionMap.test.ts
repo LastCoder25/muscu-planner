@@ -13,6 +13,7 @@ import {
   startExpedition,
   TRAVEL,
   landRadius,
+  type ExpeditionMap,
   type Poi,
   type PoiType,
 } from '@/lib/expedition';
@@ -118,6 +119,20 @@ describe('POI de récolte', () => {
   });
 });
 
+/** POI minimal pour les scénarios de carte périmée. */
+function mkPoi(type: PoiType, x: number, y: number): Poi {
+  return {
+    id: `p_${type}_${x}_${y}`,
+    type,
+    level: 26,
+    x,
+    y,
+    distNorm: 0.5,
+    spawnedAt: 0,
+    expiresAt: 99 * HOUR,
+  };
+}
+
 describe('rythme de la carte', () => {
   it('respire au lieu d’être saturée : le nombre de POI reste dans une bande étroite', () => {
     let map = createMap(1234, 0, 26);
@@ -190,6 +205,43 @@ describe('rythme de la carte', () => {
         }
       }
     }
+  });
+
+  it('une carte SAUVEGARDÉE avant le recadrage se soigne au chargement', () => {
+    // Sans ça, un joueur garde jusqu'à 48 h des POI dessinés en pleine mer : ils sont
+    // valides (non expirés), donc `advanceWorld` les conservait. On les périme au
+    // chargement, comme on droppe un bâtiment dont le type a disparu du registre.
+    const stale: ExpeditionMap = {
+      seed: 1234,
+      spawnCount: 200,
+      nextSpawnAt: 10 * HOUR,
+      pois: [
+        // Placés à l'ancienne fenêtre (jusqu'à 88) → au large aujourd'hui.
+        { ...mkPoi('mine', 20, 103), expiresAt: 99 * HOUR },
+        { ...mkPoi('lair', 145, 48), expiresAt: 99 * HOUR },
+        { ...mkPoi('mine', 131, 29), expiresAt: 99 * HOUR },
+      ],
+    };
+    const fresh = advanceWorld(stale, HOUR, 26);
+    for (const p of fresh.pois) {
+      const d = Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y);
+      expect(d, 'aucun rescapé au large').toBeLessThanOrEqual(EXPE.distMax + 1);
+    }
+    // …et le plancher les remplace aussitôt : la carte ne se vide pas.
+    expect(fresh.pois.length).toBeGreaterThanOrEqual(EXPE.poiFloor);
+  });
+
+  it('mais la cible d’une expédition EN COURS est préservée', () => {
+    // Le héros y est physiquement : on ne la fait pas disparaître sous ses pieds.
+    const target = { ...mkPoi('lair', 145, 48), id: 'cible', expiresAt: 99 * HOUR };
+    const stale: ExpeditionMap = {
+      seed: 7,
+      spawnCount: 3,
+      nextSpawnAt: 10 * HOUR,
+      pois: [target],
+    };
+    const fresh = advanceWorld(stale, HOUR, 26, 'cible');
+    expect(fresh.pois.some((p) => p.id === 'cible')).toBe(true);
   });
 
   it('la ville n’est plus entourée d’un trou : des POI existent tout près', () => {

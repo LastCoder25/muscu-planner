@@ -525,7 +525,13 @@ export function advanceWorld(
     seed: map.seed,
     spawnCount: map.spawnCount,
     nextSpawnAt: map.nextSpawnAt,
-    pois: map.pois.filter((p) => p.id === protectedPoiId || p.expiresAt > now),
+    // On écarte les POI expirés ET ceux qui ne tiennent plus dans la carte : une carte
+    // sauvegardée avant que `distMax` ne soit borné par le littoral (v0.668) porte des
+    // POI dessinés en pleine mer, et ils survivraient jusqu'à 48 h. On les périme donc
+    // au chargement — même politique que les bâtiments dont le type a disparu du
+    // registre. La cible d'une expédition EN COURS est toujours préservée : le héros y
+    // est physiquement, on ne la fait pas disparaître sous ses pieds.
+    pois: map.pois.filter((p) => p.id === protectedPoiId || (p.expiresAt > now && withinLand(p))),
   };
   // Rattrapage : après une longue absence, l'heure de spawn a pu être dépassée
   // PLUSIEURS fois → on fait apparaître autant de POI que d'intervalles écoulés
@@ -1118,6 +1124,14 @@ export const COAST = { r: 0.44, min: 0.86, span: 0.28, pinch: 0.988 } as const;
  *  plancher entre deux points bas : `pinch` l'encaisse. Tout POI doit tenir là-dedans. */
 export function landRadius(): number {
   return EXPE.mapSize * COAST.r * COAST.min * COAST.pinch;
+}
+
+/** Un POI tient-il dans la fenêtre de la carte ? Sert à PÉRIMER les POI des cartes
+ *  sauvegardées avant que `distMax` ne soit borné par le littoral (v0.668) : sans ça, un
+ *  joueur garderait jusqu'à 48 h des POI dessinés en pleine mer. Petite tolérance pour ne
+ *  pas balayer un POI parfaitement légitime posé pile sur la limite. */
+export function withinLand(p: { x: number; y: number }): boolean {
+  return Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y) <= EXPE.distMax + 1;
 }
 
 /** Terrain de la carte (déterministe pour un `seed`) : côte + reliefs + rivières (encre). */
