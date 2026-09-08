@@ -213,13 +213,12 @@ describe('calibration du siège', () => {
     }
     expect(2 * or, 'or pour mur + tourelles jusqu’au niveau 26').toBeLessThan(400_000);
     expect(2 * or).toBeGreaterThan(80_000); // …mais ça reste un vrai investissement
-    // ⚠️ PLAFOND RELEVÉ (1 200 → 2 500 en v0.681, mesuré). L'ancienne borne verrouillait
-    // une ferraille qui ne freinait RIEN : monter les six structures d'un cran coûtait
-    // alors 0,6 épave, et la Fonderie seule payait ce cran en 2,4 jours. La ferraille est
-    // le SECOND verrou de l'enceinte — il faut être allé la chercher — donc son budget
-    // devait monter avec le reste. Le plancher dit l'autre moitié : elle doit coûter.
-    // Cf. `scrapEconomy.test.ts` pour l'encadrement complet (épaves / Fonderie / sac).
-    expect(2 * fer, 'ferraille pour la même montée').toBeLessThan(2500);
+    // ⚠️ FOURCHETTE LARGE, ET C'EST VOULU. Ce test dit seulement que la ferraille est un
+    // coût RÉEL sans être un mur ; l'équilibre fin — « plus dure à obtenir que l'or » —
+    // appartient à `scrapEconomy.test.ts`, qui le mesure en jours réels avec les vraies
+    // sources. Une borne serrée ici ne verrouillerait rien d'utile : elle se contenterait
+    // de casser à chaque réglage (elle était à 1 200 quand la ferraille ne freinait rien).
+    expect(2 * fer, 'ferraille pour la même montée').toBeLessThan(4000);
     expect(2 * fer, 'ferraille pour la même montée').toBeGreaterThan(1500);
     expect(defenseUpgradeCost(20)).toBeGreaterThan(defenseUpgradeCost(5)); // strictement croissant
   });

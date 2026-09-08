@@ -340,7 +340,7 @@ const SCRAP_BY_SLOT: Record<ItemSlot, number> = {
  *  (~20 objets) rende l'ordre de grandeur d'UNE épave, pas de dix : le POI reste la
  *  source de POINTE, le recyclage un filet régulier — même relation que la Fonderie avec
  *  l'épave, ou la Mine d'or avec les expéditions. */
-const SCRAP_BASE = 8;
+const SCRAP_BASE = 4;
 /** La rareté monte DOUCEMENT (×1 → ×2,75), très loin de la courbe de l'or (×1,8 par
  *  rang) : les puits de ferraille (réparer, monter une structure) croissent avec le
  *  NIVEAU des défenses, pas de façon géométrique. Un sac de haut rang ne doit pas rendre

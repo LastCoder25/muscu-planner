@@ -219,8 +219,8 @@ export const HARVEST = {
   // Ferraille d'une épave. Dimensionnée pour qu'UNE visite couvre largement la remise
   // en service d'une enceinte de son niveau (cf. repairCost, raid.ts) : réparer doit
   // être une formalité qu’on accomplit, jamais un mur qui enferme dans la défaite.
-  scrapBase: 18,
-  scrapPerLevel: 1.6,
+  scrapBase: 9,
+  scrapPerLevel: 0.8,
 } as const;
 
 export const EXPE = {

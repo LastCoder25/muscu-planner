@@ -331,7 +331,7 @@ export const RAID = {
   // remplace plus. Ne pas monter plus haut : à 1,45 la fin de partie demandait 4,5 épaves
   // et 16 jours de production passive par cran — de la corvée, pas un arbitrage.
   scrapBase: 6,
-  scrapExp: 1.35,
+  scrapExp: 1.45,
   turretDmgK: 0.105,
   // Le héros présent prête une part de sa force. Dosé pour transformer un siège serré en
   // victoire probable — pas pour le rendre acquis : mesuré à 0,55/0,35, sa seule présence

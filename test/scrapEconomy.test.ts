@@ -1,94 +1,119 @@
 import { describe, it, expect } from 'vitest';
-import { defenseUpgradeScrap, repairCost, DEFENSE_TYPES } from '@/lib/raid';
+import { defenseUpgradeScrap, defenseUpgradeCost, repairCost, DEFENSE_TYPES } from '@/lib/raid';
 import { HARVEST, travelOneWayMin } from '@/lib/expedition';
 import { BUILDING_TYPES } from '@/lib/buildings';
-import { scrapValue, RANK_ORDER, SLOTS, type Item } from '@/lib/items';
+import { DUNGEONS, dungeonFoes, dungeonGold } from '@/data/dungeons';
+import { scrapValue, rollDrop, type Item } from '@/lib/items';
+import { mulberry32 } from '@/lib/combat';
 
-/** L'économie de la FERRAILLE, mesurée de bout en bout : ce qu'il faut en dépenser pour
- *  monter l'enceinte, face à ce que chaque source en produit vraiment.
+/** L'économie de la FERRAILLE, mesurée de bout en bout, en JOURS RÉELS.
  *
- *  ⚠️ CE QUE CES TESTS EMPÊCHENT DE REVENIR. Avec l'ancien coût linéaire (`4 + niveau`),
- *  monter les 6 structures d'un cran coûtait **0,6 à 0,7 épave** à tous les niveaux, et la
- *  **Fonderie seule** couvrait ce cran en 2,2 à 2,8 jours. La ferraille tombait donc toute
- *  seule : elle n'était un frein nulle part, et le joueur n'avait aucune raison d'aller la
- *  chercher. L'or restait le seul verrou réel de l'enceinte. */
+ *  ⚠️ RÈGLE DE CONCEPTION (décidée avec l'utilisateur) : **la ferraille doit être PLUS
+ *  DURE à obtenir que l'or.** L'or mesure le volume de jeu — il tombe des donjons qu'on
+ *  fait de toute façon ; la ferraille mesure qu'on est allé la CHERCHER. Si les deux
+ *  avancent au même rythme, l'enceinte n'a qu'un seul verrou et le second est décoratif.
+ *
+ *  ⚠️ PIÈGE D'UNITÉ, qui a fait conclure l'inverse une première fois : comparer « N séances
+ *  de sport » à « N jours » n'a aucun sens. Une séance n'arrive pas tous les jours — on
+ *  ramène donc TOUT en jours, avec un rythme sportif réaliste. Sous cette lecture, la
+ *  ferraille était en réalité ~1,7× plus RAPIDE que l'or (compte réel : 1 327 🔩 en banque
+ *  pour 6 634 🪙, avec un sac vidé à 5 objets). */
 
 const N_STRUCT = DEFENSE_TYPES.length;
-const LEVELS = [12, 20, 26, 40, 60, 100];
+/** ~4 séances de sport par semaine : le jeu est annexe, il ne se joue pas tous les jours. */
+const SPORT_PER_DAY = 4 / 7;
+/** Niveaux où la règle s'applique. ⚠️ Le niveau 12 (déblocage de la défense) en est
+ *  EXCLU volontairement : l'amorçage doit rester doux, même politique que le premier
+ *  niveau de chaque structure, qui ne coûte déjà aucune ferraille. */
+const LEVELS = [20, 26, 40, 60, 100];
 
-/** Coût en ferraille pour monter TOUTES les structures d'un cran (le rythme de croisière). */
-const perLevel = (L: number) => defenseUpgradeScrap(L) * N_STRUCT;
+const bestDungeon = (L: number) =>
+  [...DUNGEONS].filter((d) => d.recoLevel <= L).sort((a, b) => b.recoLevel - a.recoLevel)[0]!;
 
-/** Ce que rend UNE visite d'épave à ce niveau (trajet moyen) — la source de POINTE. */
+/** Une visite d'épave — la source qu'on va CHERCHER (une expédition entière y passe). */
 function wreckYield(L: number): number {
   const rthH = (2 * travelOneWayMin(L, 0.5)) / 60;
   return Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * Math.min(0.5 + rthH, 6));
 }
-/** Production PASSIVE d'une Fonderie de niveau `lvl`, par jour, récoltée sans saturer. */
-function foundryPerDay(lvl: number): number {
+/** Fonderie : la production PASSIVE, par jour. */
+function foundryPerDay(L: number): number {
   const t = BUILDING_TYPES.find((b) => b.id === 'foundry')!;
-  return (t.prodPerHrPerLvl ?? 0) * lvl * 24;
+  return (t.prodPerHrPerLvl ?? 0) * L * 24;
 }
-/** Recyclage d'un fond de sac : 20 objets autour de la ligue du joueur. */
-function purgeOf20(L: number): number {
-  const item = (slot: string, rarity: string): Item =>
-    ({
-      id: 'x',
-      name: 'n',
-      slot,
-      emoji: '',
-      rarity,
-      level: L,
-      baseLevel: L,
-      effect: { type: 'damage_pct', value: 1 },
-      roll: 0.5,
-    }) as never;
-  let t = 0;
-  for (let i = 0; i < 20; i++) {
-    const rank = RANK_ORDER[Math.max(0, Math.min(RANK_ORDER.length - 1, 3 + ((i % 5) - 2)))]!;
-    t += scrapValue(item(SLOTS[i % 4]!, rank));
+/** Ferraille tirée du butin RÉEL d'une séance de 8 descentes, tout recyclé. */
+function sessionRecycled(L: number): number {
+  const d = bestDungeon(L);
+  const foes = dungeonFoes(d).length;
+  let sc = 0;
+  const T = 300;
+  for (let t = 0; t < T; t++) {
+    const rng = mulberry32((t * 7919 + 13) >>> 0);
+    for (let r = 0; r < 8; r++)
+      for (let i = 0; i < foes; i++) {
+        const it = rollDrop(rng, {
+          cleared: true,
+          defeated: 1,
+          level: d.dropLevel,
+          spread: 1,
+          luck: d.dropLuck,
+          playerLevel: L,
+        });
+        if (it) sc += scrapValue({ ...it, id: 'x' } as Item);
+      }
   }
-  return t;
+  return sc / T;
 }
+/** Journée type : le butin recyclé de la séance (au prorata), UNE épave, la Fonderie. */
+const scrapPerDay = (L: number) =>
+  sessionRecycled(L) * SPORT_PER_DAY + wreckYield(L) + foundryPerDay(L);
+const goldPerDay = (L: number) => dungeonGold(bestDungeon(L)) * 8 * SPORT_PER_DAY;
+/** Monter TOUTES les structures d'un cran : le rythme de croisière. */
+const cranScrap = (L: number) => defenseUpgradeScrap(L) * N_STRUCT;
+const cranGold = (L: number) => defenseUpgradeCost(L) * N_STRUCT;
 
-describe('ferraille : il faut ALLER la chercher', () => {
-  it('un cran d’enceinte coûte PLUSIEURS visites d’épave, à tout niveau', () => {
+describe('ferraille : plus dure à obtenir que l’or', () => {
+  it('⚠️ LA RÈGLE : à niveau égal, un cran d’enceinte prend PLUS de jours en ferraille qu’en or', () => {
     for (const L of LEVELS) {
-      const wrecks = perLevel(L) / wreckYield(L);
-      expect(wrecks, `niveau ${L} : ${wrecks.toFixed(1)} épave(s)`).toBeGreaterThan(1.2);
-      // …sans devenir une corvée : au-delà de ~4 visites par cran, on ne choisit plus, on subit.
-      expect(wrecks, `niveau ${L} : ${wrecks.toFixed(1)} épave(s)`).toBeLessThan(4);
+      const daysScrap = cranScrap(L) / scrapPerDay(L);
+      const daysGold = cranGold(L) / goldPerDay(L);
+      const ratio = daysScrap / daysGold;
+      expect(
+        ratio,
+        `niveau ${L} : ${daysScrap.toFixed(2)} j de ferraille contre ${daysGold.toFixed(2)} j d’or`,
+      ).toBeGreaterThan(1.1);
+      // …sans virer au mur : au-delà, l'enceinte n'attendrait plus que le métal.
+      expect(ratio, `niveau ${L} : ratio ${ratio.toFixed(2)}`).toBeLessThan(2.2);
+    }
+  });
+
+  it('la source qu’on va CHERCHER domine le débit — pas les sources passives', () => {
+    // C'est ce qui donne son sens au geste : l'épave doit peser plus que le recyclage du
+    // butin (qui tombe de toute façon) et que la Fonderie (qui tourne seule) réunis.
+    for (const L of LEVELS) {
+      const part = wreckYield(L) / scrapPerDay(L);
+      expect(
+        part,
+        `niveau ${L} : l’épave ne pèse que ${(part * 100).toFixed(0)} %`,
+      ).toBeGreaterThan(0.45);
     }
   });
 
   it('⚠️ la Fonderie COMPLÈTE, elle ne remplace pas : jamais un cran en moins de 5 jours', () => {
-    // Le défaut d'origine : 2,2 à 2,8 jours de production passive suffisaient à payer un
-    // cran complet — la source qui ne demande RIEN couvrait à elle seule le besoin.
+    // Défaut d'origine : 2,2 à 2,8 jours de production passive suffisaient à payer un cran
+    // complet — la source qui ne demande RIEN couvrait à elle seule le besoin.
     for (const L of LEVELS) {
-      const days = perLevel(L) / foundryPerDay(L);
+      const days = cranScrap(L) / foundryPerDay(L);
       expect(days, `niveau ${L} : ${days.toFixed(1)} jours`).toBeGreaterThan(5);
     }
   });
 
-  it('le recyclage du sac pèse vraiment, sans suffire non plus', () => {
-    for (const L of LEVELS) {
-      const purges = perLevel(L) / purgeOf20(L);
-      expect(purges, `niveau ${L} : ${purges.toFixed(1)} purge(s)`).toBeGreaterThan(0.9);
-    }
-  });
-
   it('RÉPARER reste bon marché : un siège perdu ne se paie pas en corvée', () => {
-    // Les deux dépenses sont de natures différentes. Remettre en état après une défaite
-    // doit rester à portée d'UNE journée de Fonderie, sinon l'échec devient une punition
-    // (et la spirale que tout le système de siège s'attache à éviter).
+    // Améliorer et réparer sont deux dépenses de natures différentes. Remettre l'enceinte
+    // en état après une défaite doit rester à portée d'un jour de Fonderie, sinon l'échec
+    // devient une punition — la spirale que tout le système de siège s'attache à éviter.
     for (const L of LEVELS) {
-      const allDamaged = repairCost(L) * N_STRUCT;
-      // Pire cas (les 6 structures touchées) : jamais plus cher que de PROGRESSER d'un cran.
-      expect(allDamaged, `niveau ${L}`).toBeLessThan(perLevel(L) * 1.5);
-      // ⚠️ Au-delà du tout début, réparer coûte moins que d'améliorer. En dessous du
-      // niveau ~14 c'est l'inverse, mais sans conséquence : le socle plat de repairCost
-      // (10) domine alors, et les deux montants tiennent dans une seule épave.
-      if (L >= 20) expect(repairCost(L)).toBeLessThan(defenseUpgradeScrap(L));
+      expect(repairCost(L)).toBeLessThan(foundryPerDay(L) * 1.5);
+      expect(repairCost(L) * N_STRUCT).toBeLessThan(cranScrap(L)); // tout réparer < progresser
     }
   });
 
