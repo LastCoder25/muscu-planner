@@ -1469,7 +1469,8 @@ export const useCharacterStore = defineStore('character', () => {
       got.ink_dust +
       got.gold +
       got.summon +
-      got.keys;
+      got.keys +
+      got.scrap;
     if (total <= 0) return null;
     // Report du reliquat : chaque filon n'avance son `collectedAt` que du temps des
     // unités ENTIÈRES récoltées → pas de perte de fraction, un filon lent n'est plus
@@ -1480,6 +1481,7 @@ export const useCharacterStore = defineStore('character', () => {
       login_energy: cur.login_energy + got.energy, // ⚡ Dynamo → énergie de jeu
       summon_stones: cur.summon_stones + got.summon, // 🔮 Autel des boss
       keys: cur.keys + got.keys, // 🗝️ Porte du Labyrinthe
+      scrap: cur.scrap + got.scrap, // 🔩 Fonderie → réparation de l’enceinte
       stones: cur.stones + got.stone,
       parchemins: cur.parchemins + got.parchemins,
       fragments: cur.fragments + got.fragments,

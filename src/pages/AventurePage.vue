@@ -1016,28 +1016,6 @@
           </span>
           <span class="expe-go">{{ arenaCost }} ⚡</span>
         </button>
-        <!-- Expédition (mode idle : envoyer le héros explorer la carte) -->
-        <button class="expe-card expe-idle" @click="openGame('/expedition-map')">
-          <span class="expe-emo">🗺️</span>
-          <span class="expe-main">
-            <span class="expe-name font-display">Carte & village</span>
-            <span class="expe-sub">
-              <template v-if="onExpedition && expeHero">
-                🧭 En cours — {{ expeHero.phase === 'return' ? 'retour' : 'arrivée' }} dans
-                {{
-                  fmtExpeMs(
-                    expeHero.phase === 'return'
-                      ? expeHero.remainTotalMs
-                      : expeHero.remainToObjectiveMs,
-                  )
-                }}
-              </template>
-              <template v-else>Expéditions (or) + bâtiments 🏛️ autour de la ville</template>
-            </span>
-          </span>
-          <span class="expe-go">›</span>
-        </button>
-
         <!-- Labyrinthe (donjon à étages exploré, débloqué par la Porte du Labyrinthe) -->
         <button
           class="expe-card"

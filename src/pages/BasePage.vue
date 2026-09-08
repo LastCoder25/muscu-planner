@@ -113,7 +113,7 @@
           <template v-if="watchLevel">
             <rect
               x="91"
-              y="10"
+              y="14"
               width="18"
               height="30"
               rx="2"
@@ -124,21 +124,34 @@
               v-for="k in 4"
               :key="k"
               :x="91 + (k - 1) * 5"
-              y="6"
+              y="10"
               width="3.5"
               height="4.5"
               class="watch-crown"
               :class="{ damaged: watchDamaged }"
             />
-            <rect x="99.2" y="-4" width="1.6" height="11" class="watch-mast" />
-            <path d="M100.8 -4 L110 -1.2 L100.8 1.6 Z" class="watch-flag" />
-            <circle cx="100" cy="22" r="3.4" class="watch-eye" />
+            <!-- Mât et bannière : redescendus, ils sortaient du cadre (y négatif) et se
+                 faisaient rogner par le viewBox. -->
+            <rect x="99.2" y="1" width="1.6" height="12" class="watch-mast" />
+            <path d="M100.8 1 L110 4 L100.8 6.8 Z" class="watch-flag" />
+            <circle cx="100" cy="26" r="3.4" class="watch-eye" />
             <g class="lvl-badge">
-              <circle cx="112" cy="14" r="5" />
-              <text x="112" y="15.8">{{ watchLevel }}</text>
+              <circle cx="112" cy="18" r="5" />
+              <text x="112" y="19.8">{{ watchLevel }}</text>
             </g>
           </template>
-          <rect v-else x="91" y="10" width="18" height="30" rx="2" class="slot-empty" />
+          <rect v-else x="91" y="14" width="18" height="30" rx="2" class="slot-empty" />
+        </g>
+
+        <!-- ── LA PORTE (rempart sud) ───────────────────────────────────────
+             C'est par là qu'on sort : elle ouvre la carte des expéditions. Placée
+             au milieu du pan SUD, à l'opposé du corps de garde — l'enceinte a donc
+             un point d'entrée et un point de sortie, ce qui se lit d'un coup d'œil. -->
+        <g class="hit gate" @click="openMap">
+          <path :d="gatePath" class="gate-arch" />
+          <path :d="gatePath" class="gate-mouth" />
+          <path d="M100 168 L100 180 M95 175 L100 180 L105 175" class="gate-arrow" />
+          <text x="100" y="192" class="gate-label">Expéditions</text>
         </g>
 
         <!-- ── LA COUR ──────────────────────────────────────────────────────
@@ -154,20 +167,27 @@
           @click="y.onClick()"
         >
           <rect
+            :x="y.x - YARD_HIT"
+            :y="y.y - YARD_HIT"
+            :width="YARD_HIT * 2"
+            :height="YARD_HIT * 2"
+            class="yard-hit"
+          />
+          <rect
             :x="y.x - YARD_HALF"
             :y="y.y - YARD_HALF"
             :width="YARD_HALF * 2"
             :height="YARD_HALF * 2"
-            rx="6"
+            rx="5"
             class="yard-pad"
           />
-          <text v-if="y.built" :x="y.x" :y="y.y + 5" class="yard-emo">{{ y.emoji }}</text>
-          <text v-else :x="y.x" :y="y.y + 5" class="yard-plus">{{ y.locked ? '🔒' : '＋' }}</text>
+          <text v-if="y.built" :x="y.x" :y="y.y + 4" class="yard-emo">{{ y.emoji }}</text>
+          <text v-else :x="y.x" :y="y.y + 4" class="yard-plus">{{ y.locked ? '🔒' : '＋' }}</text>
           <g v-if="y.built" class="lvl-badge">
-            <circle :cx="y.x + 9.5" :cy="y.y - 9.5" r="5.2" />
-            <text :x="y.x + 9.5" :y="y.y - 7.7">{{ y.level }}</text>
+            <circle :cx="y.x + 7.5" :cy="y.y - 7.5" r="4.6" />
+            <text :x="y.x + 7.5" :y="y.y - 5.9">{{ y.level }}</text>
           </g>
-          <circle v-if="y.ready" :cx="y.x - 9.5" :cy="y.y - 9.5" r="3" class="yard-ready" />
+          <circle v-if="y.ready" :cx="y.x - 7.5" :cy="y.y - 7.5" r="2.6" class="yard-ready" />
         </g>
       </svg>
 
@@ -256,7 +276,13 @@
       <p v-if="!wallLevel">
         Sans <b>muraille</b>, personne ne vient t’attaquer. C’est à toi d’ouvrir le bal.
       </p>
-      <p v-else>Prochaine alerte {{ nextRaidIn }}. Ta base prospère : elle attire.</p>
+      <p v-else>
+        Une armée se mettra en marche <b>{{ nextRaidIn }}</b> — plus tu t’entraînes, plus ta base
+        prospère et plus elle attire. D’ici là, monte tes murs :
+        <b>{{ turretsBuilt }} tourelle{{ turretsBuilt > 1 ? 's' : '' }}</b> et une muraille de
+        niveau <b>{{ wallLevel }}</b
+        >, c’est ce qui se battra pour toi.
+      </p>
     </div>
 
     <!-- ── Champ de bataille ── -->
@@ -442,11 +468,18 @@ const $q = useQuasar();
 const char = useCharacterStore();
 const auth = useAuthStore();
 const progress = useProgress();
-const { gameBack } = useGamePanel();
+const { gameBack, goGame, viewForPath } = useGamePanel();
 
 function back() {
   if (props.embedded) gameBack();
   else router.back();
+}
+/** Sortir de la base → la carte des expéditions. En cockpit, elle prend le volet droit ;
+ *  sinon c'est une route plein écran. */
+function openMap() {
+  const v = props.embedded ? viewForPath('/expedition-map') : null;
+  if (v) return goGame(v);
+  void router.push('/expedition-map');
 }
 
 // Horloge : tout l'état de la base est dérivé de timestamps (aucun cron, hors-ligne).
@@ -525,16 +558,27 @@ const repairAllCost = computed(() => (base.value ? totalRepairCost(base.value) :
 
 // ── Géométrie de l'enceinte : un octogone dont les 8 sommets sont les emplacements
 // de tourelle. TURRET_SLOTS vaut 8 précisément pour que le compte tombe juste.
+/** Rayon de l'enceinte. Agrandi de 72 à 80 pour loger 5 colonnes de bâtiments : ce qui
+ *  manquait était la place, pas les emplacements. */
+const WALL_R = 80;
 const octagon = computed(() =>
   Array.from({ length: TURRET_SLOTS }, (_, i) => {
     // Décalage d'un DEMI-PAS (+π/8) : sans lui, un sommet tombe pile en haut et le
     // corps de garde s'y superposerait. Décalé, le haut de l'enceinte est un PAN de
     // mur, ce qui lui laisse la place.
     const a = (i / TURRET_SLOTS) * Math.PI * 2 - Math.PI / 2 + Math.PI / TURRET_SLOTS;
-    return { x: 100 + Math.cos(a) * 72, y: 100 + Math.sin(a) * 72 };
+    return { x: 100 + Math.cos(a) * WALL_R, y: 100 + Math.sin(a) * WALL_R };
   }),
 );
 const turretLevel = computed(() => defenseLevel(defenses.value, 'turret'));
+/** La porte : une arche percée au MILIEU du pan sud. Avec l'octogone décalé d'un demi-pas,
+ *  les milieux de pans tombent pile au nord et au sud — le corps de garde en haut, la
+ *  sortie en bas. */
+const gatePath = computed(() => {
+  const apo = WALL_R * Math.cos(Math.PI / 8); // distance centre → milieu d'un pan
+  const y = 100 + apo;
+  return `M90 ${y + 6} L90 ${y - 2} A10 10 0 0 1 110 ${y - 2} L110 ${y + 6} Z`;
+});
 const wallPoints = computed(() => octagon.value.map((p) => `${p.x},${p.y}`).join(' '));
 const innerPoints = computed(() =>
   octagon.value.map((p) => `${100 + (p.x - 100) * 0.86},${100 + (p.y - 100) * 0.86}`).join(' '),
@@ -561,9 +605,20 @@ interface YardCell {
   damaged: boolean;
   onClick: () => void;
 }
-const YARD_X = [72, 100, 128];
-const YARD_Y = [76, 101, 126];
-const YARD_HALF = 12; // demi-côté d'une tuile
+// 4 colonnes × 2 rangées pour les 8 emplacements de production, puis une rangée de
+// services. ⚠️ Vérifié contre l'apothème de l'octogone intérieur (~57) : le coin le plus
+// éloigné d'une tuile tombe à 51, il reste donc de la marge au mur.
+// 5 colonnes × 2 rangées pour les 10 emplacements, puis une rangée de services.
+// ⚠️ Vérifié contre l'apothème de l'octogone intérieur (63,6) : le coin le plus éloigné
+// d'une tuile tombe à 61,4 — c'est SERRÉ, ne pas élargir la grille sans re-vérifier.
+const YARD_X = [60, 80, 100, 120, 140];
+const YARD_Y = [72, 96];
+const SVC_X = [70, 100, 130];
+const SVC_Y = 120;
+const YARD_HALF = 9; // demi-côté DESSINÉ
+// Cible tactile plus large que le dessin, sans chevauchement (elle vaut exactement l'écart
+// entre deux colonnes) → ~37 px sur un téléphone, contre 33 pour la tuile visible seule.
+const YARD_HIT = 10;
 /** Les services occupent la rangée du bas ; la Tour de guet, elle, reste SUR le mur
  *  (c'est un ouvrage de rempart, pas un bâtiment de cour). */
 const YARD_SERVICES: DefenseId[] = ['kennel', 'infirmary', 'salvage'];
@@ -576,10 +631,11 @@ const yard = computed<YardCell[]>(() => {
   // Rangées 1-2 : les emplacements du village.
   for (let i = 0; i < BUILD.plotCap; i++) {
     const b = bs.find((x) => x.slot === i) ?? null;
+    const cols = YARD_X.length;
     cells.push({
       key: 'plot' + i,
-      x: YARD_X[i % 3]!,
-      y: YARD_Y[Math.floor(i / 3)]!,
+      x: YARD_X[i % cols]!,
+      y: YARD_Y[Math.floor(i / cols)]!,
       emoji: b ? (buildingType(b.typeId)?.emoji ?? '🏠') : '',
       built: !!b,
       locked: i >= unlocked,
@@ -594,8 +650,8 @@ const yard = computed<YardCell[]>(() => {
     const t = DEFENSE_TYPES.find((d) => d.id === id)!;
     cells.push({
       key: id,
-      x: YARD_X[i]!,
-      y: YARD_Y[2]!,
+      x: SVC_X[i]!,
+      y: SVC_Y,
       emoji: t.emoji,
       built: lvlOf(id) > 0,
       locked: heroLevel.value < t.unlockLevel,
@@ -927,6 +983,9 @@ const doCollect = () =>
 .hit {
   cursor: pointer;
 }
+.yard-hit {
+  fill: transparent;
+}
 .yard-pad {
   fill: #3d3324;
   stroke: #5a4c36;
@@ -944,7 +1003,7 @@ const doCollect = () =>
   stroke: #ff6a45;
 }
 .yard-emo {
-  font-size: 15px;
+  font-size: 12px;
   text-anchor: middle;
 }
 .yard-plus {
@@ -968,6 +1027,33 @@ const doCollect = () =>
   font-weight: 700;
 }
 /* Emplacement de structure encore vide (corps de garde) */
+/* La porte : une arche sombre percée dans le rempart, avec sa flèche de sortie. */
+.gate-arch {
+  fill: #8a7856;
+  stroke: #5a4c36;
+  stroke-width: 1.5;
+}
+.gate-mouth {
+  fill: #14110c;
+  transform: scale(0.72);
+  transform-origin: 100px 166px;
+}
+.gate-arrow {
+  fill: none;
+  stroke: var(--accent, #ffd23f);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.gate-label {
+  font-size: 8px;
+  text-anchor: middle;
+  fill: var(--accent, #ffd23f);
+  font-weight: 700;
+}
+.gate:active .gate-arrow {
+  stroke: #fff;
+}
 .slot-empty {
   fill: #241f18;
   stroke: #4a4133;

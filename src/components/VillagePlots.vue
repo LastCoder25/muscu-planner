@@ -212,6 +212,7 @@ const RES_EMOJI: Record<string, string> = {
   gold: '🪙',
   summon: '🔮',
   keys: '🗝️',
+  scrap: '🔩',
 };
 function emojiOf(b: Building): string {
   return buildingType(b.typeId)?.emoji ?? '🏛️';

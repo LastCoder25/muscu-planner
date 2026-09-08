@@ -38,9 +38,13 @@ describe('buildings — emplacements & coûts', () => {
     expect(plotsForLevel(BUILD.plotCap)).toBe(BUILD.plotCap);
     expect(plotsForLevel(40)).toBe(BUILD.plotCap); // plafonné
   });
-  it('plotCap = un emplacement par type de bâtiment (aucun spot vide)', () => {
-    expect(BUILD.plotCap).toBe(BUILDING_TYPES.length);
-    expect(BUILDING_TYPES.length).toBe(6); // outpost, porte, autel, mine, dynamo, entrepôt
+  it('plus d’EMPLACEMENTS que de TYPES : construire est un choix, pas une liste', () => {
+    // Tant que les deux étaient ÉGAUX (6 et 6), aucun emplacement n'était jamais libre :
+    // construire n'était pas une décision, c'était une liste de courses qu'on cochait. Il
+    // faut du mou pour qu'un emplacement vide propose vraiment un choix.
+    expect(BUILD.plotCap).toBeGreaterThan(BUILDING_TYPES.length);
+    // 7 types : outpost, porte, autel, mine, dynamo, fonderie, entrepôt.
+    expect(BUILDING_TYPES.length).toBe(7);
   });
   it('slotUnlockLevel : inverse cohérent de plotsForLevel (dans la limite de plotCap)', () => {
     for (let slot = 0; slot < BUILD.plotCap; slot++) {
@@ -60,10 +64,27 @@ describe('buildings — emplacements & coûts', () => {
 });
 
 describe('buildings — registre (production passive)', () => {
-  it('roster complet : outpost, porte, autel, mine, dynamo, entrepôt', () => {
+  it('roster complet : outpost, porte, autel, mine, dynamo, fonderie, entrepôt', () => {
     expect(BUILDING_TYPES.map((t) => t.id).sort()).toEqual(
-      ['boss_altar', 'energy_font', 'gold_mine', 'labyrinth_gate', 'outpost', 'warehouse'].sort(),
+      [
+        'boss_altar',
+        'energy_font',
+        'foundry',
+        'gold_mine',
+        'labyrinth_gate',
+        'outpost',
+        'warehouse',
+      ].sort(),
     );
+  });
+
+  it('la Fonderie produit la FERRAILLE, sans détrôner les épaves de la carte', () => {
+    // Elle est le filet régulier ; les épaves restent la source de pointe (une visite
+    // vaut 2 à 3 récoltes) — même relation que la Mine d'or avec les expéditions.
+    expect(buildingProdPerHour(mk('foundry', 25))).toBeGreaterThan(0);
+    const parRecolte = buildingProdPerHour(mk('foundry', 25)) * BUILD.storageHours;
+    expect(parRecolte, 'une récolte doit couvrir une remise en état').toBeGreaterThan(40);
+    expect(parRecolte, 'sans rendre les épaves inutiles').toBeLessThan(120);
   });
   it('producteurs & hybrides produisent une ressource ; outpost/entrepôt non', () => {
     expect(buildingProdPerHour(mk('gold_mine', 10))).toBeGreaterThan(0); // or

@@ -854,6 +854,10 @@ export function totalRepairCost(base: BaseState): number {
 
 /** Les corps des groupes REPOUSSÉS. Une défaite en laisse moins, jamais zéro : on repart
  *  toujours avec quelque chose, ce qui garde l'échec agaçant sans être punitif. */
+/** Anneau (en % de la demi-largeur du champ) où tombent les corps : au-delà des murs et
+ *  de leurs tourelles, en deçà du bord du dessin. */
+export const CORPSE_RING = { min: 45, max: 48.5 } as const;
+
 export function corpsesFrom(raid: Raid, report: RaidReport, seed: number): Corpse[] {
   const rng = mulberry32((seed ^ 0x5bf03635) >>> 0 || 1);
   const out: Corpse[] = [];
@@ -861,7 +865,10 @@ export function corpsesFrom(raid: Raid, report: RaidReport, seed: number): Corps
     const g = raid.groups[gi]!;
     for (let i = 0; i < g.count; i++) {
       const a = rng() * Math.PI * 2;
-      const rad = 26 + rng() * 22;
+      // ⚠️ Anneau EXTÉRIEUR à l'enceinte. À 26-48 (avec un aplatissement vertical), la
+      // moitié des corps se retrouvait dessinée DANS la cour — l'armée mourait chez
+      // l'habitant. Le champ de bataille est dehors, par définition.
+      const rad = CORPSE_RING.min + rng() * (CORPSE_RING.max - CORPSE_RING.min);
       out.push({
         id: `c_${seed}_${gi}_${i}`,
         emoji: g.emoji,
@@ -869,7 +876,7 @@ export function corpsesFrom(raid: Raid, report: RaidReport, seed: number): Corps
         level: g.level,
         ...(g.champion ? { champion: true } : {}),
         x: 50 + Math.cos(a) * rad,
-        y: 50 + Math.sin(a) * rad * 0.62,
+        y: 50 + Math.sin(a) * rad,
       });
     }
   }
@@ -992,6 +999,17 @@ export function advanceBase(
       changed = true;
     }
     return { base: b, changed, detected: null, dueRaid: null };
+  }
+
+  // PREMIÈRE alerte : `emptyBase` pose une échéance à 72 h (le délai d'un joueur
+  // inactif) parce qu'il ne connaît pas encore l'activité sportive. Une fois la muraille
+  // debout, on la RAPPROCHE à l'intervalle qui correspond vraiment au joueur — sinon un
+  // joueur assidu venait de bâtir son enceinte et lisait « prochaine alerte dans 70 h »,
+  // ce qui n'a aucun sens. On ne repousse jamais, on ne fait que rapprocher.
+  const due = now + raidIntervalMs(ctx.activeDays7);
+  if (!b.raid && b.nextRaidAt > due) {
+    b = { ...b, nextRaidAt: due };
+    changed = true;
   }
 
   // Détection : le raid se matérialise quand la Tour le voit venir.

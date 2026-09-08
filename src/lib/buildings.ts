@@ -2,9 +2,9 @@
 // sur des emplacements autour de la ville (carte d'expédition), financés par l'OR
 // (construction + upgrades = le vrai puits d'or). Dimensionné par simulation.
 //
-// ÉTAT ACTUEL (v0.612) : 6 bâtiments (1 par emplacement, plotCap 6).
+// ÉTAT ACTUEL (v0.670) : 7 bâtiments pour 8 emplacements (cf. BUILD.plotCap).
 //  • UTILITAIRES : Avant-poste (débloque expéditions + vitesse) · Entrepôt (stockage).
-//  • PRODUCTEURS : Mine d'or 🪙 · Dynamo ⚡ (énergie de jeu).
+//  • PRODUCTEURS : Mine d'or 🪙 · Dynamo ⚡ (énergie de jeu) · Fonderie ⚙️ (ferraille 🔩).
 //  • HYBRIDES (effet + production) : Porte du Labyrinthe (débloque + luck coffres, PRODUIT
 //    des clés 🗝️) · Autel des boss (jet/coût, PRODUIT des pierres d'invocation 🔮).
 // La production est passive, à RÉCOLTER (collectable/collectFilons), bornée par le stockage
@@ -30,7 +30,8 @@ export type BuildResource =
   | 'ink_dust'
   | 'gold' // 🪙 or (Mine d'or)
   | 'summon' // 🔮 pierres d'invocation (Autel des boss)
-  | 'keys'; // 🗝️ clés de labyrinthe (Porte du Labyrinthe)
+  | 'keys' // 🗝️ clés de labyrinthe (Porte du Labyrinthe)
+  | 'scrap'; // 🔩 ferraille (Fonderie) — répare l'enceinte
 
 // Catégorie d'un bâtiment. `producer` = filon de ressource ; `utility` = bâtiment
 // à EFFET global (entrepôt, tour de reconnaissance…). Extensible.
@@ -168,6 +169,23 @@ export const BUILDING_TYPES: BuildingType[] = [
   },
   // UTILITAIRE : l'ENTREPÔT augmente le STOCKAGE de tous les producteurs (+15 %/niveau)
   // → tu peux t'absenter plus longtemps sans saturer.
+  // PRODUCTEUR : la FONDERIE bat la ferraille 🔩, qui répare l'enceinte. ⚠️ Elle ne
+  // remplace pas les ÉPAVES de la carte : celles-ci restent la source de POINTE (une
+  // visite ≈ 2 à 3 récoltes de fonderie), la fonderie n'étant que le filet régulier —
+  // même relation que la Mine d'or avec les expéditions. C'est ce qui garantit qu'on ne
+  // reste jamais bloqué faute de matière pour réparer, sans vider la carte de son intérêt.
+  {
+    id: 'foundry',
+    label: 'Fonderie',
+    emoji: '⚙️',
+    category: 'producer',
+    resource: 'scrap',
+    prodPerHrPerLvl: 0.12, // niv.25 ≈ 3/h → ~54 🔩 / 18 h, soit environ une remise en état
+    buildGold: 850,
+    unlockLevel: 10,
+    unique: true,
+    desc: 'Bat de la ferraille 🔩 en continu (réparation de l’enceinte).',
+  },
   {
     id: 'warehouse',
     label: 'Entrepôt',
@@ -188,7 +206,10 @@ export function buildingType(id: string): BuildingType | undefined {
 
 // ── Constantes de dimensionnement (validées par simulation) ──
 export const BUILD = {
-  plotCap: 6, // emplacements max = 1 par type de bâtiment (Avant-poste, Porte, Autel, Mine, Dynamo, Entrepôt)
+  // ⚠️ INVARIANT : plus d'emplacements que de TYPES. Tant que les deux étaient égaux (6
+  // et 6), construire n'était pas une décision mais une liste de courses : aucun
+  // emplacement n'était jamais libre, donc le choix n'existait pas. Un test le verrouille.
+  plotCap: 10, // emplacements max (7 types + 3 de réserve pour la suite)
   upBase: 220, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
   // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
@@ -363,6 +384,7 @@ export function collectable(buildings: Building[], now: number): Record<BuildRes
     gold: 0,
     summon: 0,
     keys: 0,
+    scrap: 0,
   };
   const mult = storageMult(buildings);
   for (const b of buildings) {
