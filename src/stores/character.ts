@@ -670,14 +670,25 @@ export const useCharacterStore = defineStore('character', () => {
    *  le slot familier, si bien que le brancher sur le recyclage rendait le bouton inerte.
    *  Un familier dont on ne veut plus se cède ; un objet se refond. */
   async function sellFamiliar(userId: string, itemId: string): Promise<number> {
+    return sellFamiliars(userId, [itemId]);
+  }
+
+  /** Vente GROUPÉE de familiers (les doublons). Une seule écriture, une seule animation
+   *  d'or : vendre huit compagnons ne doit pas déclencher huit allers-retours réseau ni
+   *  huit pièces qui volent. Le 🔒 protège ici comme partout ailleurs. */
+  async function sellFamiliars(userId: string, itemIds: string[]): Promise<number> {
     const cur = row.value;
-    if (!cur) return 0;
-    const fam = cur.inventory.find((i) => i.id === itemId && i.slot === FAMILIAR_SLOT);
-    if (!fam || fam.locked) return 0;
-    const gain = sellValue(fam);
+    if (!cur || !itemIds.length) return 0;
+    const wanted = new Set(itemIds);
+    const sold = cur.inventory.filter(
+      (i) => wanted.has(i.id) && i.slot === FAMILIAR_SLOT && !i.locked,
+    );
+    if (!sold.length) return 0;
+    const gain = sold.reduce((s, i) => s + sellValue(i), 0);
+    const gone = new Set(sold.map((i) => i.id));
     await persist(userId, {
       gold: cur.gold + gain,
-      inventory: cur.inventory.filter((i) => i.id !== itemId),
+      inventory: cur.inventory.filter((i) => !gone.has(i.id)),
     });
     goldFx.gain(gain);
     return gain;
@@ -1668,6 +1679,7 @@ export const useCharacterStore = defineStore('character', () => {
     setEquippedTalents,
     sellTalent,
     sellFamiliar,
+    sellFamiliars,
     recycle,
     recycleMany,
     toggleLock,

@@ -28,6 +28,8 @@ import {
   repairStructure,
   totalRepairCost,
   garrisonBonus,
+  duplicateFamiliars,
+  garrisonSlots,
   autoGarrison,
   fatigueMsFor,
   woundMsFor,
@@ -747,5 +749,102 @@ describe('ce qu’on trouve sur un corps dépend de QUI attaquait', () => {
     expect(lootCorpses(corpses, 'bandits', 26, 5).gold).toBeGreaterThan(
       lootCorpses(corpses, 'betes', 26, 5).gold,
     );
+  });
+});
+
+describe('doublons de familiers : on ne cède que l’inemployable', () => {
+  // ⚠️ garrisonSlots grandit avec le niveau : on garde slots + 1 par effet. À niveau 1
+  // ça fait 2, ce qui rend les cas lisibles — un 3e exemplaire est alors un doublon.
+  const L = 1;
+  const KEEP = garrisonSlots(L) + 1;
+
+  function fam(id: string, effect: string, value: number, extra: Partial<Item> = {}): Item {
+    return {
+      id,
+      slot: 'familiar',
+      name: id,
+      emoji: '🐺',
+      rarity: 'rare',
+      level: 10,
+      baseLevel: 10,
+      effect: { type: effect as never, value },
+      ...extra,
+    } as Item;
+  }
+
+  it('garde les meilleurs et ne cède que le surplus du même effet', () => {
+    const list = [
+      fam('fort', 'damage_pct', 30),
+      fam('moyen', 'damage_pct', 20),
+      fam('faible', 'damage_pct', 5),
+    ];
+    const dup = duplicateFamiliars(list, L, {});
+    expect(dup.map((f) => f.id)).toEqual(['faible']);
+  });
+
+  it('⚠️ un EFFET UNIQUE n’est jamais un doublon, même écrasé en puissance brute', () => {
+    // Le régression qu’on interdit : vendre son seul faucon (renseignement) parce qu’un
+    // loup tape six fois plus fort. Les rôles au mur ne se remplacent pas entre eux.
+    const list = [
+      fam('loup1', 'damage_pct', 60),
+      fam('loup2', 'damage_pct', 55),
+      fam('loup3', 'damage_pct', 50),
+      fam('faucon', 'crit_pct', 2),
+      fam('marmotte', 'gold_pct', 3),
+    ];
+    const ids = duplicateFamiliars(list, L, {}).map((f) => f.id);
+    expect(ids).not.toContain('faucon');
+    expect(ids).not.toContain('marmotte');
+    expect(ids).toContain('loup3');
+  });
+
+  it('⚠️ un BON DÉFENSEUR survit même s’il est mauvais à l’attaque (les 2 axes)', () => {
+    // Les carrières ⚔️ et 🛡️ divergent : classer sur la seule attaque braderait le mur.
+    const list = [
+      fam('a', 'damage_pct', 30, { atkXp: 999999 }),
+      fam('b', 'damage_pct', 29, { atkXp: 999999 }),
+      fam('mur', 'damage_pct', 28, { defXp: 999999 }),
+      fam('rien', 'damage_pct', 27),
+    ];
+    const ids = duplicateFamiliars(list, L, {}).map((f) => f.id);
+    expect(ids).toEqual(['rien']);
+  });
+
+  it('⚠️ une SIGNATURE ✦ protège : un effet conditionnel ne se remplace par rien', () => {
+    const list = [
+      fam('a', 'damage_pct', 40),
+      fam('b', 'damage_pct', 35),
+      fam('sig', 'damage_pct', 1, { effect2: { type: 'execute_pct' as never, value: 12 } }),
+    ];
+    expect(duplicateFamiliars(list, L, {}).map((f) => f.id)).toEqual([]);
+  });
+
+  it('l’équipé, les postés au chenil et les 🔒 ne partent JAMAIS', () => {
+    const list = [
+      fam('top1', 'damage_pct', 40),
+      fam('top2', 'damage_pct', 39),
+      fam('porte', 'damage_pct', 3),
+      fam('poste', 'damage_pct', 2),
+      fam('verrou', 'damage_pct', 1, { locked: true }),
+      fam('jetable', 'damage_pct', 4),
+    ];
+    const ids = duplicateFamiliars(list, L, {
+      equippedId: 'porte',
+      postedIds: ['poste'],
+    }).map((f) => f.id);
+    expect(ids).toEqual(['jetable']);
+  });
+
+  it('la réserve suit les places : plus de niveau = plus de familiers gardés', () => {
+    const list = Array.from({ length: 30 }, (_, i) => fam('f' + i, 'damage_pct', 30 - i));
+    const bas = duplicateFamiliars(list, 1, {}).length;
+    const haut = duplicateFamiliars(list, 100, {}).length;
+    expect(list.length - bas).toBe(KEEP);
+    expect(haut).toBeLessThan(bas);
+  });
+
+  it('rien à vendre quand la réserve tient dans les places', () => {
+    expect(duplicateFamiliars([fam('a', 'damage_pct', 10)], L, {})).toEqual([]);
+    expect(duplicateFamiliars([], L, {})).toEqual([]);
   });
 });

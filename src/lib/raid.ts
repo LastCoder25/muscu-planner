@@ -24,7 +24,7 @@
 // l'appelant → fonctions pures et testables, résolution déterministe hors-ligne.
 import { mulberry32, simulateDungeon, type Combatant, type DungeonFight } from './combat';
 import { refFighter } from './proceduralContent';
-import { rollDrop, famLevel, famDefMult, type Item } from './items';
+import { rollDrop, famLevel, famAtkMult, famDefMult, type Item } from './items';
 
 // ── Types ──
 
@@ -1217,4 +1217,57 @@ export function pickScavengeTargets(field: BattleField, capacity: number): Corps
 
 export function remainingCorpses(field: BattleField | null): number {
   return field ? field.corpses.filter((c) => !c.looted).length : 0;
+}
+
+/** DOUBLONS de familiers : ceux qu’AUCUNE configuration ne pourra jamais employer.
+ *
+ *  ⚠️ Un familier n’est pas un objet : il sert sur DEUX fronts qui ne se classent pas de
+ *  la même façon — l’attaque (un seul équipé, dressage ⚔️) et le mur (jusqu’à
+ *  `garrisonSlots` postés, dressage 🛡️). Un compagnon médiocre au combat peut être un
+ *  excellent défenseur, et l’inverse. On ne cède donc que ceux qui sont DOMINÉS SUR LES
+ *  TROIS AXES à la fois : attaque, mur, et signature ✦ (un effet conditionnel ne se
+ *  remplace par rien).
+ *
+ *  ⚠️ Et on raisonne PAR EFFET PORTÉ, jamais sur la puissance brute. C’est l’effet qui
+ *  décide du rôle au mur (`GARRISON_ROLE`) : le faucon qui renseigne et la marmotte qui
+ *  fouille ne se remplacent pas, même si un loup les écrase en dégâts. Vendre tous ses
+ *  faucons parce qu’ils tapent peu, ce serait perdre l’espionnage — exactement le regret
+ *  qu’un bouton « tout vendre » doit rendre impossible.
+ *
+ *  Gardés par effet = `garrisonSlots(niveau) + 1` : la garnison pleine d’un seul rôle,
+ *  plus celui qu’on porte. Au-delà, la copie est inemployable par construction.
+ *  Le dressage défensif est lu NON PLAFONNÉ par le chenil (comme `autoGarrison`) : le
+ *  chenil se monte, on ne brade pas un bon défenseur parce que son école est en retard. */
+export function duplicateFamiliars(
+  familiars: Item[],
+  playerLevel: number,
+  opts: { equippedId?: string | null; postedIds?: string[] } = {},
+): Item[] {
+  const keep = garrisonSlots(playerLevel) + 1;
+  const posted = new Set(opts.postedIds ?? []);
+  const groups = new Map<string, Item[]>();
+  for (const f of familiars) {
+    const g = groups.get(f.effect.type);
+    if (g) g.push(f);
+    else groups.set(f.effect.type, [f]);
+  }
+  // Trois lectures de la même réserve. Un familier survit dès qu’il est dans le haut du
+  // panier d’UNE d’elles — l’union protège, elle ne sélectionne pas.
+  const axes: ((f: Item) => number)[] = [
+    (f) => f.effect.value * famAtkMult(famLevel(f.atkXp, 'atk')),
+    (f) => f.effect.value * famDefMult(famLevel(f.defXp, 'def')),
+    (f) => f.effect2?.value ?? 0,
+  ];
+  const safe = new Set<string>();
+  for (const group of groups.values()) {
+    for (const score of axes) {
+      [...group]
+        .sort((a, b) => score(b) - score(a))
+        .slice(0, keep)
+        .forEach((f) => safe.add(f.id));
+    }
+  }
+  return familiars.filter(
+    (f) => !safe.has(f.id) && !f.locked && !posted.has(f.id) && f.id !== opts.equippedId,
+  );
 }

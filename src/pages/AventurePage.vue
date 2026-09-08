@@ -599,6 +599,17 @@
             >
               🪄 Équiper le familier conseillé
             </button>
+            <button
+              v-if="duplicateFams.length"
+              class="voie-btn talent-reco-btn ghost"
+              :title="duplicateHint"
+              @click="doSellDuplicateFamiliars"
+            >
+              🪙 Vendre {{ duplicateFams.length }} doublon{{
+                duplicateFams.length > 1 ? 's' : ''
+              }}
+              — +{{ duplicateGold }} or
+            </button>
             <div v-if="allFamiliars.length" class="talents-grid">
               <div
                 v-for="f in allFamiliars"
@@ -2472,7 +2483,14 @@ import { useProgress } from '@/composables/useProgress';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
-import { remainingCorpses, isWounded, woundRemainingMs, type RaidReport } from '@/lib/raid';
+import {
+  remainingCorpses,
+  isWounded,
+  woundRemainingMs,
+  duplicateFamiliars,
+  garrisonSlots,
+  type RaidReport,
+} from '@/lib/raid';
 const BasePage = defineAsyncComponent(() => import('@/pages/BasePage.vue'));
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
@@ -4858,6 +4876,42 @@ function doEquipFamiliar(itemId: string) {
 function doUnequipFamiliar() {
   withUid((uid) => char.unequip(uid, FAMILIAR_SLOT), 'Impossible de déséquiper.');
 }
+// DOUBLONS de familiers : ceux qu'aucune configuration ne peut employer. La règle vit
+// dans `raid.ts` (dominé sur les TROIS axes ⚔️/🛡️/✦, et par effet porté) — ici on ne
+// fait que lui passer l'état réel : l'équipé et les postés au chenil sont hors-jeu, le
+// 🔒 protège. On garde `garrisonSlots(niveau) + 1` exemplaires de chaque effet.
+const duplicateFams = computed<Item[]>(() =>
+  duplicateFamiliars(bagFamiliars.value, c.value.level.level, {
+    equippedId: equippedFamiliar.value?.id ?? null,
+    postedIds: char.row?.base?.garrison ?? [],
+  }),
+);
+const duplicateGold = computed(() => duplicateFams.value.reduce((sum, f) => sum + sellValue(f), 0));
+const duplicateHint = computed(
+  () =>
+    `On garde les ${garrisonSlots(c.value.level.level) + 1} meilleurs de chaque effet, sur ⚔️ attaque, 🛡️ mur et ✦ signature. L'équipé, les postés au chenil et les 🔒 ne partent jamais.`,
+);
+function doSellDuplicateFamiliars() {
+  const list = duplicateFams.value;
+  if (!list.length) return;
+  const gold = duplicateGold.value;
+  $q.dialog({
+    title: 'Vendre les doublons',
+    message: `${list.length} familier(s) qu'aucune configuration ne peut employer — ${list
+      .map((f) => f.name)
+      .join(', ')}. Tu récupères ${gold} 🪙.`,
+    cancel: true,
+    persistent: false,
+  }).onOk(() => {
+    withUid(async (uid) => {
+      const g = await char.sellFamiliars(
+        uid,
+        list.map((f) => f.id),
+      );
+      $q.notify({ type: 'positive', message: `🪙 ${list.length} doublon(s) cédé(s) — +${g} or.` });
+    }, 'Vente impossible.');
+  });
+}
 // Talents & familiers en trop se VENDENT contre de l'or (ticket 0ec48637 : plus de recyclage
 // ni d'infusion de grade — le grade est fixé au drop, on trouve mieux en explorant).
 function doSellTalent(id: string) {
@@ -5175,14 +5229,12 @@ function doStashSetPiece(it: Item) {
   }
   const gain = powerIfEquip(it) - powerIfEquip(stored);
   if (gain <= 0) {
-    // La nouvelle ne vaut pas la rangée : elle part directement à la forge.
-    withUid(async (uid) => {
-      const g = await char.recycle(uid, it.id);
-      $q.notify({
-        type: 'info',
-        message: `🔩 « ${stored.name} » reste dans ton set ${setName} — la nouvelle fondue (+${g} 🔩).`,
-      });
-    }, 'Recyclage impossible.');
+    // La nouvelle ne vaut pas la rangée : elle part à la forge, EN SILENCE.
+    // ⚠️ Pas de notification ici (v0.696) : annoncer « ta pièce était moins bonne »
+    // à chaque boss transformait une bonne nouvelle — un boss vaincu — en reproche,
+    // et c'est le cas le plus FRÉQUENT une fois le set bien avancé. On ne notifie que
+    // ce qui a changé en mieux ; la ferraille gagnée se lit dans le rapport de run.
+    withUid((uid) => char.recycle(uid, it.id), 'Recyclage impossible.');
     return;
   }
   withUid(async (uid) => {
