@@ -10,6 +10,8 @@ import {
   poiCombatant,
   ambushCombatant,
   rollTravelEncounters,
+  startExpedition,
+  TRAVEL,
   type Poi,
   type PoiType,
 } from '@/lib/expedition';
@@ -183,12 +185,12 @@ describe('rencontres de trajet', () => {
     for (let s = 1; s < 300; s++) {
       const r = rollTravelEncounters(mulberry32(s), hero, poi('well'), s, 26);
       const amb = r.encounters.filter((e) => e.kind === 'ambush');
-      if (!amb.length || r.encounters.some((e) => e.kind === 'cache')) continue;
+      if (!amb.length || r.encounters.some((e) => e.kind !== 'ambush')) continue;
       if (amb.every((e) => e.won)) {
-        expect(r.mult).toBeGreaterThan(1);
+        expect(r.resMult).toBeGreaterThan(1);
         vu.win = true;
       } else if (amb.every((e) => !e.won)) {
-        expect(r.mult).toBeLessThan(1);
+        expect(r.resMult).toBeLessThan(1);
         vu.lose = true;
       }
     }
@@ -198,8 +200,99 @@ describe('rencontres de trajet', () => {
   it('le multiplicateur reste dans des bornes saines (jamais de jackpot ni de ruine)', () => {
     for (let s = 1; s < 400; s++) {
       const r = rollTravelEncounters(mulberry32(s), hero, poi('shrine'), s, 26);
-      expect(r.mult).toBeGreaterThan(0.4);
-      expect(r.mult).toBeLessThan(2);
+      expect(r.resMult).toBeGreaterThan(0.2);
+      expect(r.resMult).toBeLessThan(3);
+      expect(r.goldMult).toBeGreaterThan(0.2);
+      expect(r.returnMult).toBeGreaterThan(0.2);
+      expect(r.returnMult).toBeLessThanOrEqual(1); // le retour n'est jamais RALENTI
     }
+  });
+});
+
+describe('rencontres qui jouent sur le TEMPS', () => {
+  it('un passage ou un contretemps RACCOURCIT le retour, jamais l’aller', () => {
+    let vuCourt = false;
+    for (let s = 1; s < 400; s++) {
+      const r = rollTravelEncounters(mulberry32(s), hero, poi('well'), s, 26);
+      const temps = r.encounters.filter((e) => e.kind === 'shortcut' || e.kind === 'setback');
+      if (!temps.length) {
+        expect(r.returnMult).toBe(1);
+      } else {
+        expect(r.returnMult).toBeLessThan(1);
+        vuCourt = true;
+      }
+    }
+    expect(vuCourt, 'aucun raccourci observé').toBe(true);
+  });
+
+  it('le décalage arrive jusqu’au calendrier de l’expédition', () => {
+    // De bout en bout : l'aller (midAt) ne bouge JAMAIS, seul le retour se resserre.
+    let vuDecale = false;
+    for (let s = 1; s < 300; s++) {
+      const p = poi('well');
+      const exp = startExpedition(hero, p, 0, s, 1, 26);
+      const aller = exp.midAt - exp.sentAt;
+      const retour = exp.returnAt - exp.midAt;
+      expect(aller).toBeGreaterThan(0);
+      expect(retour).toBeLessThanOrEqual(aller + 1);
+      if (retour < aller * 0.95) vuDecale = true;
+      // Le retour reste cohérent avec le multiplicateur annoncé par l'issue.
+      expect(Math.abs(retour - aller * exp.outcome.returnMult)).toBeLessThanOrEqual(2);
+    }
+    expect(vuDecale, 'aucune expédition écourtée sur 300 tirages').toBe(true);
+  });
+
+  it('un contretemps coûte la moitié de la cargaison — le temps se paie', () => {
+    for (let s = 1; s < 400; s++) {
+      const r = rollTravelEncounters(mulberry32(s), hero, poi('shrine'), s, 26);
+      if (r.encounters.length === 1 && r.encounters[0]!.kind === 'setback') {
+        expect(r.resMult).toBeCloseTo(TRAVEL.setbackHaulMult, 5);
+        expect(r.returnMult).toBeCloseTo(TRAVEL.setbackReturnMult, 5);
+        return;
+      }
+    }
+  });
+
+  it('le marchand ÉCHANGE : moins d’or, plus de ressources', () => {
+    for (let s = 1; s < 400; s++) {
+      const r = rollTravelEncounters(mulberry32(s), hero, poi('archive'), s, 26);
+      if (r.encounters.length === 1 && r.encounters[0]!.kind === 'merchant') {
+        expect(r.goldMult).toBeLessThan(1);
+        expect(r.resMult).toBeGreaterThan(1);
+        expect(r.returnMult).toBe(1); // il ne fait pas gagner de temps
+        return;
+      }
+    }
+  });
+});
+
+describe('route dangereuse (télégraphiée)', () => {
+  it('double les embuscades ET renforce le gain quand on les repousse', () => {
+    const calme = poi('well');
+    const risque = { ...poi('well'), perilous: true } as Poi;
+    let nCalme = 0;
+    let nRisque = 0;
+    let gainCalme = 0;
+    let gainRisque = 0;
+    for (let s = 1; s < 600; s++) {
+      const a = rollTravelEncounters(mulberry32(s), hero, calme, s, 26);
+      const b = rollTravelEncounters(mulberry32(s), hero, risque, s, 26);
+      nCalme += a.encounters.filter((e) => e.kind === 'ambush').length;
+      nRisque += b.encounters.filter((e) => e.kind === 'ambush').length;
+      gainCalme += a.resMult;
+      gainRisque += b.resMult;
+    }
+    expect(nRisque).toBeGreaterThan(nCalme * 1.5);
+    expect(gainRisque).toBeGreaterThan(gainCalme); // le risque PAIE en moyenne
+  });
+
+  it('est posée au spawn, donc annonçable avant l’envoi', () => {
+    let map = createMap(4242, 0, 26);
+    let vu = 0;
+    for (let t = 0; t <= 30 * 24 * HOUR; t += 3 * HOUR) {
+      map = advanceWorld(map, t, 26);
+      vu += map.pois.filter((p) => p.perilous).length;
+    }
+    expect(vu, 'aucun POI dangereux généré en 30 jours').toBeGreaterThan(0);
   });
 });

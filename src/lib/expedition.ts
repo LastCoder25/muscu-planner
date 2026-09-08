@@ -31,6 +31,10 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
 export interface Poi {
   id: string;
   type: PoiType;
+  /** Route dangereuse, TÉLÉGRAPHIÉE dans l'UI avant l'envoi : plus d'embuscades, mais
+   *  une récompense renforcée quand on les repousse. Le choix du POI cesse d'être
+   *  « le plus proche » pour devenir un vrai arbitrage risque/gain. */
+  perilous?: boolean;
   setId?: string; // 'lair' uniquement : set ciblé
   level: number;
   x: number; // coord carte (0..100)
@@ -60,6 +64,9 @@ export interface ExpeditionOutcome {
   items?: Omit<Item, 'id'>[]; // ARÈNE : plusieurs objets (1 par palier de vagues) ; `item` = le 1er
   key: number; // clé de Labyrinthe (consolation rare)
   reconBonus: number; // +fraction de réussite au prochain essai (échec)
+  /** Multiplicateur sur la jambe RETOUR (1 = normal). Un passage découvert ou un
+   *  contretemps ramènent le héros plus tôt — le seul effet qui joue sur le TEMPS. */
+  returnMult: number;
   waves?: number; // 'arena' uniquement : nombre de vagues tenues
   text: string; // texte du rapport
 }
@@ -142,6 +149,7 @@ export const EXPE = {
   // redevient réel. Le plancher garde une poignée d'activités pour ne jamais tomber à sec.
   poiCap: 7,
   poiFloor: 3,
+  perilousChance: 0.18, // ~1 POI sur 5 signalé « route dangereuse » avant l'envoi
   minDistPoi: 20, // écart mini entre POI (placement espacé)
   distMin: 30, // distance mini ville↔POI (coord ; la ville est au centre)
   distMax: 88, // distance maxi (rayon → POI tout autour, 360°)
@@ -426,9 +434,12 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
     if (!tooClose) break;
     pos = placePoi(rng, minFrac);
   }
+  // Route dangereuse : tirée AU SPAWN pour être annoncée avant l'envoi (télégraphiée).
+  const perilous = rng() < EXPE.perilousChance;
   const poi: Poi = {
     id: `poi_${map.seed}_${map.spawnCount}`,
     type,
+    ...(perilous ? { perilous: true } : {}),
     ...(type === 'lair' && ITEM_SETS.length ? { setId: pick(rng, ITEM_SETS).id } : {}),
     level,
     x: pos.x,
@@ -513,11 +524,28 @@ export function heroPosition(
 
 /** Réglages des rencontres de TRAJET (aller / retour). */
 export const TRAVEL = {
-  ambushChance: 0.3, // par jambe de trajet
-  cacheChance: 0.12, // trouvaille pacifique (pas de combat)
-  winMult: 1.25, // butin renforcé si l'embuscade est repoussée
+  // Probabilités PAR JAMBE de trajet. Calibrées pour qu'une rencontre reste une ÉPICE :
+  // au premier réglage, 91 % des expéditions en portaient une et le butin moyen montait
+  // à ×1,23 — autrement dit un bonus permanent de 23 % déguisé en aléa. Ici ~45 % des
+  // voyages se passent sans rien, et la moyenne des gains retombe près de 1 : ce sont
+  // les écarts qui font l'intérêt, pas un cadeau systématique.
+  ambushChance: 0.14,
+  cacheChance: 0.05, // trouvaille pacifique (pas de combat)
+  merchantChance: 0.05, // marchand errant : troque ton or contre des vivres
+  shortcutChance: 0.04, // passage découvert : retour raccourci, sans perte
+  setbackChance: 0.05, // contretemps : demi-cargaison, mais retour bien plus tôt
+  winMult: 1.2, // butin renforcé si l'embuscade est repoussée
   loseMult: 0.7, // butin écorné si elle est subie
-  cacheMult: 1.2,
+  cacheMult: 1.15,
+  merchantGoldMult: 0.55, // il achète ton or…
+  merchantResMult: 1.4, // …et paie en ressources (puits d'or supplémentaire)
+  shortcutReturnMult: 0.7, // jambe RETOUR raccourcie
+  setbackReturnMult: 0.5,
+  setbackHaulMult: 0.5, // on rentre vite, mais à moitié chargé
+  // Route dangereuse (télégraphiée au départ) : deux fois plus d'embuscades, et une
+  // récompense doublée quand on les repousse → le choix du POI redevient un arbitrage.
+  perilAmbushMult: 2,
+  perilRewardBonus: 0.5, // +50 % sur le gain d'une embuscade repoussée
   // Le rôdeur est calibré RELATIVEMENT au héros (même principe que le Labyrinthe), et
   // non en échelle absolue. Avec un `poiCombatant` (PV ~L³), l'embuscade était
   // ARITHMÉTIQUEMENT imbattable sans équipement — mesuré : 0 % de victoire nu, 100 %
@@ -542,10 +570,11 @@ export function ambushCombatant(hero: Combatant, level: number): Combatant {
 }
 
 export type TravelLeg = 'out' | 'back';
+export type TravelKind = 'ambush' | 'cache' | 'merchant' | 'shortcut' | 'setback';
 export interface TravelEncounter {
   leg: TravelLeg;
-  kind: 'ambush' | 'cache';
-  won: boolean; // 'cache' → toujours true
+  kind: TravelKind;
+  won: boolean; // hors 'ambush' → toujours true
 }
 
 /** Rencontres sur la route, tirées au DÉPART comme le reste (déterministe, hors-ligne).
@@ -565,28 +594,38 @@ export function rollTravelEncounters(
   legs: TravelLeg[] = ['out', 'back'],
 ): {
   encounters: TravelEncounter[];
-  mult: number;
+  goldMult: number;
+  resMult: number;
+  returnMult: number;
   drops: Omit<Item, 'id'>[];
   keys: number;
   text: string;
 } {
   const encounters: TravelEncounter[] = [];
   const drops: Omit<Item, 'id'>[] = [];
-  let mult = 1;
+  let goldMult = 1;
+  let resMult = 1;
+  let returnMult = 1;
   let keys = 0;
   let text = '';
   const LEG_FR: Record<TravelLeg, string> = { out: "à l'aller", back: 'au retour' };
+  const peril = !!poi.perilous;
+  const ambushP = TRAVEL.ambushChance * (peril ? TRAVEL.perilAmbushMult : 1);
+  const both = (k: number) => {
+    goldMult *= k;
+    resMult *= k;
+  };
 
   legs.forEach((leg, i) => {
     const roll = rng();
-    if (roll < TRAVEL.ambushChance) {
+    if (roll < ambushP) {
       const won = simulateCombat(hero, ambushCombatant(hero, poi.level), {
         seed: seed + 31 + i * 17,
         goldOnWin: 0,
       }).win;
       encounters.push({ leg, kind: 'ambush', won });
       if (won) {
-        mult *= TRAVEL.winMult;
+        both(TRAVEL.winMult + (peril ? TRAVEL.perilRewardBonus : 0));
         // Un assaillant vaincu = un tirage d'objet, comme un monstre de donjon. Au niveau
         // de l'embuscade (poi.level − 1) : la dépouille vaut ce que valait l'adversaire.
         const spoil = rollDrop(rng, {
@@ -604,19 +643,41 @@ export function rollTravelEncounters(
         }
         text += ' !';
       } else {
-        mult *= TRAVEL.loseMult;
+        both(TRAVEL.loseMult);
         text += ` 🩸 Embuscade subie ${LEG_FR[leg]} — cargaison écornée.`;
       }
-    } else if (roll < TRAVEL.ambushChance + TRAVEL.cacheChance) {
+      return;
+    }
+    // Les autres rencontres se partagent la probabilité restante, en cascade.
+    let acc = ambushP;
+    if (roll < (acc += TRAVEL.cacheChance)) {
       // Trouvaille pacifique : pas de combat, juste une bonne surprise.
       encounters.push({ leg, kind: 'cache', won: true });
-      mult *= TRAVEL.cacheMult;
+      both(TRAVEL.cacheMult);
       keys += 1;
       text += ` 🗝️ Cache oubliée repérée ${LEG_FR[leg]} — clé et vivres récupérés.`;
+    } else if (roll < (acc += TRAVEL.merchantChance)) {
+      // Marchand errant : convertit de l'or en ressources → puits d'or de plus.
+      encounters.push({ leg, kind: 'merchant', won: true });
+      goldMult *= TRAVEL.merchantGoldMult;
+      resMult *= TRAVEL.merchantResMult;
+      text += ` 🧺 Marchand errant croisé ${LEG_FR[leg]} — de l'or troqué contre des vivres.`;
+    } else if (roll < (acc += TRAVEL.shortcutChance)) {
+      // Passage découvert : pur gain de TEMPS, sans contrepartie.
+      encounters.push({ leg, kind: 'shortcut', won: true });
+      returnMult *= TRAVEL.shortcutReturnMult;
+      text += ` 🧭 Passage découvert ${LEG_FR[leg]} — le retour sera plus court.`;
+    } else if (roll < acc + TRAVEL.setbackChance) {
+      // Contretemps : on écourte le voyage. Moitié moins de cargaison, mais le héros
+      // est de nouveau disponible bien plus tôt — un mal pour un bien quand on enchaîne.
+      encounters.push({ leg, kind: 'setback', won: false });
+      both(TRAVEL.setbackHaulMult);
+      returnMult *= TRAVEL.setbackReturnMult;
+      text += ` ⛈️ Contretemps ${LEG_FR[leg]} — demi-cargaison, mais retour anticipé.`;
     }
   });
 
-  return { encounters, mult, drops, keys, text };
+  return { encounters, goldMult, resMult, returnMult, drops, keys, text };
 }
 
 // ── Résolution (au DÉPART, seedée → révélée/créditée aux timestamps) ──
@@ -693,12 +754,15 @@ export function resolveOutcome(
     // Une récolte sans aléa n'est qu'un distributeur : les rencontres de trajet lui
     // rendent de la variance, et sont la SEULE voie par laquelle elle peut lâcher un objet.
     const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
-    const k = tr.mult;
+    const k = tr.resMult;
     return {
       win: true,
-      gold: Math.round(cost * 0.35 * k), // symbolique : la paie est en ressources
+      gold: Math.round(cost * 0.35 * tr.goldMult), // symbolique : la paie est en ressources
       dust: 0,
-      energy: Math.round(energy * k),
+      // Le plafond s'applique APRÈS le bonus de trajet : « complément, jamais
+      // substitut au sport » est un invariant, pas une valeur de base qu'un bon
+      // voyage pourrait dépasser.
+      energy: Math.min(HARVEST.wellEnergyMax, Math.round(energy * k)),
       enchantScrolls: 0,
       summonStones: Math.round(summonStones * k),
       fragments: Math.round(fragments * k),
@@ -707,6 +771,7 @@ export function resolveOutcome(
       items: tr.drops,
       key: (rng() < HARVEST.keyChance ? 1 : 0) + tr.keys,
       reconBonus: 0,
+      returnMult: tr.returnMult,
       text: pick(rng, WIN_TEXT[poi.type]) + tr.text,
     };
   }
@@ -765,6 +830,7 @@ export function resolveOutcome(
       items,
       key,
       reconBonus: 0,
+      returnMult: 1,
       waves,
       text,
     };
@@ -799,10 +865,13 @@ export function resolveOutcome(
       item: null,
       key,
       reconBonus: 0.08,
+      returnMult: 1, // un échec ne raccourcit rien : le héros rentre au pas
       text: pick(rng, FAIL_TEXT[poi.type]),
     };
   }
 
+  // Décalage de la jambe RETOUR, posé par une rencontre de trajet (passage / contretemps).
+  let returnMult = 1;
   // Réussite : HAUL (or + poussière + pierres) + PRISE éventuelle.
   // MINE = INVESTISSEMENT D'OR (+ temps réel) → doit rapporter nettement plus que le coût.
   // Rendement = coût × (1,8 + heures A/R) : ~2,3× pour un trajet court, ~3,3× pour ~1,5 h,
@@ -862,9 +931,10 @@ export function resolveOutcome(
   // Rencontres de trajet — MÊME helper que les récoltes (aller ET retour), pour ne pas
   // maintenir deux fois la même règle.
   const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
-  gold = Math.round(gold * tr.mult);
-  dust = Math.round(dust * tr.mult);
-  enchantScrolls = Math.round(enchantScrolls * tr.mult);
+  gold = Math.round(gold * tr.goldMult);
+  dust = Math.round(dust * tr.resMult);
+  enchantScrolls = Math.round(enchantScrolls * tr.resMult);
+  returnMult = tr.returnMult;
   items.push(...tr.drops);
   key += tr.keys;
   text += tr.text;
@@ -883,6 +953,7 @@ export function resolveOutcome(
     items,
     key,
     reconBonus: 0,
+    returnMult,
     text,
   };
 }
@@ -1038,13 +1109,17 @@ export function startExpedition(
   playerLevel?: number, // cap anti-runaway sur le rang des drops
 ): ActiveExpedition {
   const oneWayMs = Math.round(travelOneWayMin(poi.level, poi.distNorm) * 60_000 * travelMult);
+  const outcome = resolveOutcome(hero, poi, seed, playerLevel);
+  // Seule la jambe RETOUR bouge : l'aller et le dépôt du rapport (midAt) restent intacts,
+  // le héros a bien atteint l'objectif avant que la route ne décide de sa vitesse.
+  const backMs = Math.round(oneWayMs * (outcome.returnMult || 1));
   return {
     poi,
     sentAt: now,
     midAt: now + oneWayMs,
-    returnAt: now + oneWayMs * 2,
+    returnAt: now + oneWayMs + backMs,
     goldCost: goldCost(poi.type, poi.level),
     seed: seed >>> 0 || 1,
-    outcome: resolveOutcome(hero, poi, seed, playerLevel),
+    outcome,
   };
 }

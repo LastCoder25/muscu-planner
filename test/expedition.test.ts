@@ -253,11 +253,20 @@ describe('expedition — résolution', () => {
     expect(simulateArena(strong, 1, 9)).toBeLessThanOrEqual(ARENA.maxWaves);
   });
 
-  it('startExpedition : aller/retour symétriques, coût cohérent', () => {
-    const e = startExpedition(strong, lair, 1000, 42);
-    expect(e.midAt - e.sentAt).toBe(e.returnAt - e.midAt);
-    expect(e.goldCost).toBe(goldCost('lair', lair.level));
-    expect(e.outcome).toBeTruthy();
+  it('startExpedition : l’ALLER est fixe, le RETOUR peut être écourté, coût cohérent', () => {
+    // Une rencontre de trajet (passage découvert / contretemps) raccourcit la jambe
+    // retour — jamais l'aller, sinon le héros n'aurait pas atteint l'objectif et le
+    // rapport déposé à `midAt` n'aurait aucun sens.
+    for (const seed of [42, 7, 1234, 99, 5150]) {
+      const e = startExpedition(strong, lair, 1000, seed);
+      const aller = e.midAt - e.sentAt;
+      const retour = e.returnAt - e.midAt;
+      expect(aller).toBeGreaterThan(0);
+      expect(retour).toBeLessThanOrEqual(aller + 1); // jamais RALENTI
+      expect(Math.abs(retour - aller * e.outcome.returnMult)).toBeLessThanOrEqual(2);
+      expect(e.goldCost).toBe(goldCost('lair', lair.level));
+      expect(e.outcome).toBeTruthy();
+    }
   });
 });
 

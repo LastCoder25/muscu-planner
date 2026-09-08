@@ -219,6 +219,9 @@
           <span class="sh-chip">⏱️ {{ fmtMin(roundTripMin(selected)) }}</span>
           <span class="sh-chip">🪙 {{ costOf(selected) }}</span>
           <span v-if="selected.type === 'arena'" class="sh-chip">🌊 ~{{ arenaWaves }} vagues</span>
+          <span v-if="selected.perilous" class="sh-chip peril"
+            >⚠️ Route dangereuse — embuscades doublées, butin renforcé</span
+          >
           <span v-else-if="selected.type !== 'mine'" class="sh-chip" :class="winClass(winPct)"
             >🎯 {{ winPct }}%</span
           >
@@ -1012,6 +1015,13 @@ function fmtMin(min: number): string {
 </script>
 
 <style scoped lang="scss">
+/* Route dangereuse : télégraphiée AVANT l'envoi → le choix du POI devient un arbitrage
+   risque/gain, au lieu de « le plus proche ». */
+.sh-chip.peril {
+  border-color: var(--d3);
+  color: var(--d3);
+}
+
 .emap {
   background: var(--bg);
   min-height: 100vh;
