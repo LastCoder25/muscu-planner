@@ -1062,8 +1062,13 @@ export const useCharacterStore = defineStore('character', () => {
       : [buildMessage({ ...exp, reported: true }), ...cur.messages].slice(0, 20);
     await persist(userId, {
       gold: cur.gold + o.gold,
-      login_energy: cur.login_energy + (o.energy ?? 0), // ⚡ mine → énergie de jeu
+      login_energy: cur.login_energy + (o.energy ?? 0), // ⚡ mine/source → énergie de jeu
       keys: cur.keys + o.key,
+      // Devises VIVANTES des POI de récolte (v0.658). On ne crédite plus de poussière ni
+      // de parchemins d'enchant : ces deux-là n'ont plus aucun site de dépense.
+      summon_stones: cur.summon_stones + (o.summonStones ?? 0),
+      fragments: cur.fragments + (o.fragments ?? 0),
+      ink_dust: cur.ink_dust + (o.inkDust ?? 0),
       inventory,
       messages,
       set_pieces_seen: drops.length

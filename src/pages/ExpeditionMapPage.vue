@@ -462,6 +462,7 @@ import {
   expeditionTerrain,
   type Poi,
   type PoiType,
+  HARVEST_TYPES,
   type ExpeditionOutcome,
 } from '@/lib/expedition';
 
@@ -483,12 +484,23 @@ const flashSlot = ref<number | null>(null);
 
 const TOWN = EXPE.town;
 const MAP = EXPE.mapSize;
-const POI_EMO: Record<PoiType, string> = { mine: '⛏️', camp: '🏕️', lair: '👹', arena: '🏟️' };
+const POI_EMO: Record<PoiType, string> = {
+  mine: '⛏️',
+  camp: '🏕️',
+  lair: '👹',
+  arena: '🏟️',
+  well: '💧',
+  shrine: '🔮',
+  archive: '📖',
+};
 const POI_LABEL: Record<PoiType, string> = {
   mine: 'Mine',
   camp: 'Camp',
   lair: 'Repaire',
   arena: 'Arène',
+  well: 'Source de faille',
+  shrine: "Sanctuaire d'invocation",
+  archive: 'Archives englouties',
 };
 
 const now = ref(Date.now());
@@ -853,7 +865,7 @@ function selectPoi(p: Poi) {
 // % de victoire (Monte-Carlo) contre l'adversaire du POI.
 const winPct = computed(() => {
   const p = selected.value;
-  if (!p || p.type === 'mine' || p.type === 'arena') return 100;
+  if (!p || HARVEST_TYPES.has(p.type) || p.type === 'arena') return 100; // récolte : pas de combat
   const foe = poiCombatant(p.level, p.type);
   let w = 0;
   for (let s = 0; s < 40; s++)
@@ -885,10 +897,13 @@ const roundTripMin = (p: Poi) =>
 // Ce que le POI rapporte VRAIMENT (crédité par expeCollect) : or, énergie (mines),
 // objets, clés. La poussière n'existe plus (refonte drops-only) → on ne l'annonce plus.
 function poiRewardLabel(p: Poi): string {
-  if (p.type === 'mine') return 'Or 🪙 + énergie ⚡ (récolte)';
+  if (p.type === 'mine') return 'Or 🪙 + énergie ⚡ + fragments 🧩 (récolte)';
+  if (p.type === 'well') return 'Énergie ⚡ en quantité (récolte, sans combat)';
+  if (p.type === 'shrine') return "Pierres d'invocation 🔮 (récolte, sans combat)";
+  if (p.type === 'archive') return 'Fragments 🧩 + poussière d’encre 🖋️ (récolte)';
   if (p.type === 'camp') return 'Or 🪙 + un objet 🎁';
-  if (p.type === 'arena') return 'Survie par vagues 🌊 — PLUSIEURS objets ∝ vagues';
-  return 'Pièce de set garantie sur réussite 🧩';
+  if (p.type === 'arena') return 'Survie par vagues 🌊 — objets + pierres 🔮 ∝ vagues';
+  return 'Pièce de set 🧩 + pierres d’invocation 🔮';
 }
 
 const canSend = computed(

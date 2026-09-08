@@ -12,7 +12,21 @@ import { rollDrop, rollSetPiece, ITEM_SETS, type Item } from './items';
 // ── Types ──
 // 'arena' = survie par VAGUES : le héros tient le plus longtemps possible contre des
 // vagues de plus en plus fortes (PV reportés) → récompense ∝ vagues tenues.
-export type PoiType = 'mine' | 'camp' | 'lair' | 'arena';
+// 'well'/'shrine'/'archive' = POI de RESSOURCES (v0.658). Pourquoi : mesure faite, le
+// butin de la carte n'améliore plus un joueur bien équipé (0 % d'upgrade) car la rareté
+// d'un drop est plafonnée par le NIVEAU du joueur — et ce plafond, c'est l'anti-runaway,
+// on n'y touche pas. Les ressources, elles, ne se périment JAMAIS : elles se consomment
+// à tout niveau. La carte cesse donc d'être une loterie à butin pour devenir une source
+// de ressources en temps réel, complémentaire des donjons qui, eux, donnent le stuff.
+export type PoiType = 'mine' | 'camp' | 'lair' | 'arena' | 'well' | 'shrine' | 'archive';
+
+/** POI de récolte pure : aucun combat, on ramasse et on rentre (comme la mine). */
+export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
+  'mine',
+  'well',
+  'shrine',
+  'archive',
+]);
 
 export interface Poi {
   id: string;
@@ -38,7 +52,10 @@ export interface ExpeditionOutcome {
   gold: number; // crédité au RETOUR
   dust: number;
   energy: number; // ⚡ énergie de jeu (mines uniquement) → crédite login_energy
-  enchantScrolls: number; // 📜 parchemins d'enchantement (carburant de l'enchant)
+  enchantScrolls: number; // 📜 legacy : devise MORTE (plus aucun site de dépense) — conservé pour ne pas casser les anciens messages
+  summonStones: number; // 🔮 pierres d'invocation → coût des boss de palier
+  fragments: number; // 🧩 infusion de grade des familiers
+  inkDust: number; // 🖋️ infusion de grade des talents
   item: Omit<Item, 'id'> | null; // la « prise » principale (pièce de set / objet) ou null
   items?: Omit<Item, 'id'>[]; // ARÈNE : plusieurs objets (1 par palier de vagues) ; `item` = le 1er
   key: number; // clé de Labyrinthe (consolation rare)
@@ -69,7 +86,10 @@ export interface ExpeditionMessage {
   gold: number;
   dust: number;
   energy: number; // ⚡ énergie gagnée (mines)
-  enchantScrolls: number;
+  enchantScrolls: number; // legacy (devise morte) — conservé pour les anciens messages
+  summonStones?: number; // 🔮
+  fragments?: number; // 🧩
+  inkDust?: number; // 🖋️
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
   itemCount?: number; // ARÈNE : nombre total d'objets ramenés (> 1) — le reste va au sac
@@ -93,6 +113,9 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     dust: o.dust,
     energy: o.energy,
     enchantScrolls: o.enchantScrolls,
+    ...(o.summonStones ? { summonStones: o.summonStones } : {}),
+    ...(o.fragments ? { fragments: o.fragments } : {}),
+    ...(o.inkDust ? { inkDust: o.inkDust } : {}),
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
     key: o.key,
@@ -103,21 +126,35 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
 }
 
 // ── Constantes (tunables ; éco chiffrée affinée par simulation en phase 6) ──
+/** Réglages des POI de RÉCOLTE (devises vivantes). Premier calage : à ajuster à l'usage. */
+export const HARVEST = {
+  wellEnergyMax: 200, // ~5 runs de donjon : un complément net, pas une séance de sport
+  keyChance: 0.12, // clé de Labyrinthe en prime occasionnelle
+} as const;
+
 export const EXPE = {
   mapSize: 200, // côté de la carte (coord 0..mapSize) — GRANDE, on pan/zoom dessus
   town: { x: 100, y: 100 }, // ville de départ (CENTRE de la carte)
-  poiCap: 12,
-  poiFloor: 10, // PLANCHER : ~une dizaine d'activités en permanence (jamais vide)
+  // Rythme RECALIBRÉ (v0.658). Avec 10 POI au plancher et des durées de vie de 12→48 h,
+  // la carte était TOUJOURS pleine : aucune rareté, aucune urgence, on ne choisissait
+  // rien. À l'équilibre (durée de vie moyenne ÷ intervalle de spawn) la carte respire
+  // maintenant autour de 4-5 POI : certains expirent avant qu'on les fasse, et l'arbitrage
+  // redevient réel. Le plancher garde une poignée d'activités pour ne jamais tomber à sec.
+  poiCap: 7,
+  poiFloor: 3,
   minDistPoi: 20, // écart mini entre POI (placement espacé)
   distMin: 30, // distance mini ville↔POI (coord ; la ville est au centre)
   distMax: 88, // distance maxi (rayon → POI tout autour, 360°)
-  spawnMinMs: 2 * 3600_000, // intervalle de spawn : 2 h..4 h (jitter)
-  spawnJitterMs: 2 * 3600_000,
+  spawnMinMs: 3 * 3600_000, // intervalle de spawn : 3 h..6 h (jitter)
+  spawnJitterMs: 3 * 3600_000,
   lifespanMs: {
-    mine: 24 * 3600_000,
-    camp: 12 * 3600_000,
-    lair: 30 * 3600_000,
-    arena: 48 * 3600_000,
+    mine: 20 * 3600_000,
+    camp: 10 * 3600_000,
+    lair: 26 * 3600_000,
+    arena: 48 * 3600_000, // l'arène reste l'événement long (fait pour la nuit)
+    well: 14 * 3600_000,
+    shrine: 16 * 3600_000,
+    archive: 14 * 3600_000,
   },
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
@@ -126,7 +163,9 @@ export const EXPE = {
   // (niv20) = plusieurs runs de donjon pour une pièce de set (l'or s'écoule).
   // ARÈNE (ticket 2d616665) : événement RARE fait pour la nuit → coût d'or ÉLEVÉ
   // (le plus cher), placée LOIN (trajet long) et récompense grasse (∝ vagues).
-  goldCostBase: { mine: 22, camp: 65, lair: 155, arena: 240 },
+  // Les POI de ressources coûtent peu d'or : leur intérêt est ce qu'ils RAPPORTENT en
+  // devises vivantes, pas un pari sur du butin.
+  goldCostBase: { mine: 22, camp: 65, lair: 155, arena: 240, well: 30, shrine: 48, archive: 34 },
   goldCostExp: 1.6,
   failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
   // ÉNERGIE des mines : BORNÉE (ticket a0d16472). Le facteur temps `tf` n'est pas
@@ -154,9 +193,18 @@ export const ARENA = {
   dmgGrow: 1.14, // ×1,14 de dégâts par vague → attrition qui accélère → fin garantie
 } as const;
 
-/** Fenêtre de niveaux de spawn autour du joueur : [niveau−5, niveau+3] (min 1). */
+/** Fenêtre de niveaux de spawn : **[niveau, niveau+10]** (v0.658).
+ *
+ *  L'ancienne fenêtre `[niveau−5, niveau+3]` remplissait la carte de POI qu'un joueur
+ *  équipé écrase sans y penser. Mesuré : le taux de victoire est de **100 % à TOUS les
+ *  écarts, jusqu'à +10** — le combat de POI n'est pas un risque, donc rien ne justifiait
+ *  de brider vers le bas. Monter le plancher et le plafond augmente le RENDEMENT (or,
+ *  poussière, ressources suivent `poi.level`) sans rendre quoi que ce soit inatteignable.
+ *  ⚠️ Ça n'améliore PAS la rareté du butin : elle reste centrée sur `min(contenu, joueur)`
+ *  — c'est l'anti-runaway, et il est intentionnel. */
 export function spawnWindow(playerLevel: number): { min: number; max: number } {
-  return { min: Math.max(1, playerLevel - 5), max: Math.max(1, playerLevel + 3) };
+  const base = Math.max(1, playerLevel);
+  return { min: base, max: base + 10 };
 }
 
 /** Coût en OR pour envoyer une expédition = base × niveau^1.6 (vrai puits d'or). */
@@ -342,7 +390,23 @@ export function createMap(
 function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   const rng = mulberry32((map.seed + map.spawnCount * 2654435761) >>> 0);
   map.spawnCount++;
-  let type = pick(rng, ['mine', 'mine', 'camp', 'camp', 'camp', 'lair', 'arena'] as const); // pondéré (arène rare)
+  // Pondération : la MOITIÉ des spawns sont des POI de RESSOURCES (v0.658). C'est le
+  // cœur du correctif : à haut niveau la carte ne peut plus produire de butin utile,
+  // mais elle peut toujours produire des devises qui, elles, ne se périment pas.
+  let type = pick(rng, [
+    'mine',
+    'mine',
+    'camp',
+    'camp',
+    'lair',
+    'arena',
+    'well',
+    'well',
+    'shrine',
+    'shrine',
+    'archive',
+    'archive',
+  ] as const);
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
   const win = spawnWindow(playerLevel);
@@ -456,6 +520,10 @@ const FAIL_TEXT: Record<PoiType, string[]> = {
     'Le filon s’est effondré avant l’extraction complète. Ton héros remonte les mains presque vides.',
   ],
   arena: ['La foule gronde : ton héros est tombé dès les premières vagues.'],
+  // Récolte : pas de combat, donc jamais d'échec — entrées présentes pour l'exhaustivité.
+  well: ['La faille s’est refermée avant l’extraction.'],
+  shrine: ['Le sanctuaire est resté muet.'],
+  archive: ['Les galeries se sont effondrées avant la salle de lecture.'],
 };
 const WIN_TEXT: Record<PoiType, string[]> = {
   lair: [
@@ -464,6 +532,15 @@ const WIN_TEXT: Record<PoiType, string[]> = {
   ],
   camp: ['🏆 Camp dispersé ! Butin ramassé.', '🏆 Victoire nette au camp.'],
   mine: ['⛏️ Filon exploité — ressources chargées.', '⛏️ Extraction réussie.'],
+  well: ['💧 Faille canalisée — énergie siphonnée.', '💧 La source a rendu sa charge.'],
+  shrine: [
+    '🔮 Sanctuaire honoré — pierres d’invocation récupérées.',
+    '🔮 Les runes ont cédé leurs pierres.',
+  ],
+  archive: [
+    '📖 Archives fouillées — fragments et encre rapportés.',
+    '📖 Les rayonnages ont livré leurs restes.',
+  ],
   arena: ['🏟️ L’arène acclame ton champion !'],
 };
 
@@ -476,6 +553,45 @@ export function resolveOutcome(
 ): ExpeditionOutcome {
   const rng = mulberry32(seed >>> 0 || 1);
   const cost = goldCost(poi.type, poi.level);
+
+  // ── RÉCOLTE DE RESSOURCES (well / shrine / archive) : aucun combat, jamais d'échec. ──
+  // Ces POI paient en devises VIVANTES — celles qui se consomment encore à tout niveau
+  // (énergie, pierres d'invocation, fragments, encre) — et JAMAIS en butin, que la carte
+  // ne peut structurellement plus produire au-dessus d'un joueur bien équipé.
+  if (HARVEST_TYPES.has(poi.type) && poi.type !== 'mine') {
+    const rthH = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
+    const tfH = Math.min(0.5 + rthH, 6); // borné : un trajet interminable ne doit pas tout multiplier
+    const L = poi.level;
+    let energy = 0;
+    let summonStones = 0;
+    let fragments = 0;
+    let inkDust = 0;
+    if (poi.type === 'well') {
+      // Complément d'énergie, jamais un substitut au sport : borné à ~5 runs de donjon.
+      energy = Math.min(HARVEST.wellEnergyMax, Math.round((8 + L * 2) * tfH));
+    } else if (poi.type === 'shrine') {
+      // Calé sur le coût d'un boss (`1 + ⌊niv/5⌋`) → une visite ≈ une tentative et demie.
+      summonStones = Math.max(2, Math.round((1 + L / 5) * (0.8 + tfH * 0.25)));
+    } else {
+      fragments = Math.round((6 + L * 1.2) * tfH);
+      inkDust = Math.round((5 + L) * tfH);
+    }
+    return {
+      win: true,
+      gold: Math.round(cost * 0.35), // symbolique : la paie est en ressources
+      dust: 0,
+      energy,
+      enchantScrolls: 0,
+      summonStones,
+      fragments,
+      inkDust,
+      item: null,
+      items: [],
+      key: rng() < HARVEST.keyChance ? 1 : 0,
+      reconBonus: 0,
+      text: pick(rng, WIN_TEXT[poi.type]),
+    };
+  }
 
   // ── ARÈNE : gauntlet de survie par vagues (nuit) → RÉCOMPENSE GRASSE ∝ vagues. ──
   // Chère en or (puits) + trajet long, mais paie beaucoup en poussière/pierres/gear.
@@ -524,6 +640,9 @@ export function resolveOutcome(
       dust,
       energy: 0,
       enchantScrolls,
+      summonStones: 3 + Math.floor(waves * 0.8),
+      fragments: Math.round(waves * 3 * tfA),
+      inkDust: Math.round(waves * 2.5 * tfA),
       item: items[0] ?? null,
       items,
       key,
@@ -553,6 +672,9 @@ export function resolveOutcome(
     return {
       win: false,
       gold: Math.round(cost * EXPE.failRefund), // < coût → jamais un profit
+      summonStones: 0,
+      fragments: 0,
+      inkDust: 0,
       dust: Math.round(poi.level * 1.5),
       energy: 0,
       enchantScrolls: 1 + Math.floor(poi.level / 15), // consolation modeste sur un échec
@@ -658,6 +780,11 @@ export function resolveOutcome(
     dust,
     energy,
     enchantScrolls,
+    // Les devises vivantes viennent surtout des POI DÉDIÉS (well/shrine/archive) : ici
+    // un simple filet, pour que ces sorties ne soient pas totalement muettes.
+    summonStones: poi.type === 'lair' ? 1 + Math.floor(poi.level / 12) : 0,
+    fragments: poi.type === 'mine' ? Math.round((3 + poi.level * 0.4) * tf) : 0,
+    inkDust: 0,
     item: items[0] ?? null,
     items,
     key,

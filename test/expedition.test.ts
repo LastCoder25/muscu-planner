@@ -24,9 +24,12 @@ import {
 const H = 3600_000;
 
 describe('expedition — éco & géométrie', () => {
-  it('spawnWindow : [niveau−5, niveau+3], planché à 1', () => {
-    expect(spawnWindow(10)).toEqual({ min: 5, max: 13 });
-    expect(spawnWindow(2)).toEqual({ min: 1, max: 5 });
+  it('spawnWindow : [niveau, niveau+10] — plus rien EN DESSOUS du joueur', () => {
+    // L'ancienne fenêtre descendait à niveau−5, ce qui remplissait la carte de POI qu'un
+    // joueur équipé écrase sans y penser (100 % de victoire mesuré jusqu'à +10).
+    expect(spawnWindow(10)).toEqual({ min: 10, max: 20 });
+    expect(spawnWindow(2)).toEqual({ min: 2, max: 12 });
+    expect(spawnWindow(0).min).toBe(1); // planché à 1
   });
   it('goldCost : croît avec le niveau et le type (mine < camp < repaire)', () => {
     expect(goldCost('mine', 10)).toBeLessThan(goldCost('camp', 10));
