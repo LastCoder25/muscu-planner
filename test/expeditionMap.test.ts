@@ -12,6 +12,7 @@ import {
   rollTravelEncounters,
   startExpedition,
   TRAVEL,
+  landRadius,
   type Poi,
   type PoiType,
 } from '@/lib/expedition';
@@ -170,6 +171,25 @@ describe('rythme de la carte', () => {
     }
     expect(troisBandes / snaps, 'cartes offrant les trois bandes').toBeGreaterThan(0.9);
     expect(sansProche / snaps, 'cartes sans aucune option proche').toBeLessThan(0.05);
+  });
+
+  it('⚓ aucun POI ne finit à la MER : ils tiennent dans la terre ferme garantie', () => {
+    // `distMax` valait 88 = le rayon NOMINAL du littoral. Or la côte est irrégulière et
+    // pince par endroits : un POI tombé dans un renfoncement se retrouvait dessiné en
+    // pleine mer. Le maxi est donc désormais borné par `landRadius()` — le rayon sous
+    // lequel il y a de la terre quelle que soit la graine du terrain.
+    const GLYPH = 6; // demi-largeur du pictogramme + sa pastille de niveau
+    expect(EXPE.distMax + GLYPH).toBeLessThan(landRadius());
+    for (let s = 1; s <= 25; s++) {
+      let map = createMap(s * 613, 0, 26);
+      for (let t = 0; t <= 5 * 24 * HOUR; t += 3 * HOUR) {
+        map = advanceWorld(map, t, 26);
+        for (const p of map.pois) {
+          const d = Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y);
+          expect(d + GLYPH, `POI ${p.type} à ${d.toFixed(0)} du centre`).toBeLessThan(landRadius());
+        }
+      }
+    }
   });
 
   it('la ville n’est plus entourée d’un trou : des POI existent tout près', () => {

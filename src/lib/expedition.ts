@@ -177,7 +177,11 @@ export const EXPE = {
   // 30 → 18 (v0.667) : l'anneau de bâtiments occupait cette couronne, son départ pour
   // l'écran « Ma base » y a laissé un trou et la ville avait l'air isolée.
   distMin: 18, // distance mini ville↔POI (coord ; la ville est au centre)
-  distMax: 88, // distance maxi (rayon → POI tout autour, 360°)
+  // ⚠️ Le maxi est BORNÉ PAR LA CÔTE, pas choisi librement : à 88 il valait le rayon
+  // NOMINAL du littoral, qui pince par endroits — les POI d'un renfoncement se
+  // retrouvaient donc dessinés en pleine mer. Cf. `landRadius()`, qui donne le rayon
+  // garanti de terre ferme, et le test qui vérifie que distMax reste dessous.
+  distMax: 64, // distance maxi (rayon → POI tout autour, 360°)
   spawnMinMs: 2 * 3600_000, // intervalle de spawn : 2 h..4 h (jitter)
   spawnJitterMs: 2 * 3600_000,
   lifespanMs: {
@@ -1045,11 +1049,15 @@ export interface Terrain {
 const f1 = (v: number) => v.toFixed(1);
 
 // Blob organique fermé (lissé) autour de (cx,cy).
+/** Contour irrégulier fermé. ⚠️ Son rayon ne descend JAMAIS sous `r × COAST.min` : c'est
+ *  ce plancher qui garantit que les POI restent sur la terre ferme (cf. `landRadius`).
+ *  Avant, le rayon variait de 0,74 à 1,20 × r — la côte pinçait donc jusqu'à ~65 alors
+ *  que les POI allaient jusqu'à 88 : ceux tombés dans un renfoncement flottaient en mer. */
 function blobPath(rng: () => number, cx: number, cy: number, r: number, n: number): string {
   const pts: [number, number][] = [];
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
-    const rr = r * (0.74 + rng() * 0.46);
+    const rr = r * (COAST.min + rng() * COAST.span);
     pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
   }
   const mid = (i: number): [number, number] => {
@@ -1100,12 +1108,24 @@ function riverPath(rng: () => number, x: number, y: number, dir: number, len: nu
   return d;
 }
 
+/** Réglages du littoral. `min`/`span` = fraction du rayon nominal : le contour va donc de
+ *  `min` à `min + span`. Le PLANCHER est ce qui compte — c'est lui qui garantit la terre
+ *  ferme sous les POI. */
+export const COAST = { r: 0.44, min: 0.86, span: 0.28, pinch: 0.988 } as const;
+
+/** Rayon de terre ferme GARANTI autour de la ville. La courbe de côte étant tracée en
+ *  Bézier par les milieux des points de contrôle, elle passe légèrement en deçà du
+ *  plancher entre deux points bas : `pinch` l'encaisse. Tout POI doit tenir là-dedans. */
+export function landRadius(): number {
+  return EXPE.mapSize * COAST.r * COAST.min * COAST.pinch;
+}
+
 /** Terrain de la carte (déterministe pour un `seed`) : côte + reliefs + rivières (encre). */
 export function expeditionTerrain(seed: number): Terrain {
   const rng = mulberry32(seed >>> 0 || 1);
   const C = EXPE.mapSize / 2; // centre de la carte
   // Continent : grand contour irrégulier, très découpé (détaillé).
-  const coast = blobPath(rng, C, C, EXPE.mapSize * 0.44, 20);
+  const coast = blobPath(rng, C, C, EXPE.mapSize * COAST.r, 20);
   const features: Motif[] = [];
   const rivers: string[] = [];
   const push = (kind: MotifKind, x: number, y: number, s: number) => {
