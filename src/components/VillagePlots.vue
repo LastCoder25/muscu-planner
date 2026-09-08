@@ -343,79 +343,12 @@ function collectAll() {
 </script>
 
 <style scoped>
-.vp-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.p-title {
-  font-weight: 600;
-  font-size: 14px;
-}
-.vp-collect {
-  min-height: 34px;
-  border-radius: 999px;
-  border: 1px solid var(--accent, #ffd23f);
-  background: none;
-  color: var(--accent, #ffd23f);
-  font-size: 12px;
-  padding: 0 12px;
-  cursor: pointer;
-}
-.vp-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-top: 10px;
-}
-.vp-tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  min-height: 76px;
-  padding: 8px 4px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: #1d1913;
-  color: var(--text);
-  cursor: pointer;
-}
-.vp-tile.empty {
-  border-style: dashed;
-  color: var(--dim);
-}
 .vp-tile.locked {
   opacity: 0.45;
   cursor: default;
 }
 .vp-tile.ready {
   border-color: var(--accent, #ffd23f);
-}
-.vp-emo {
-  font-size: 22px;
-  line-height: 1.1;
-}
-.vp-name {
-  font-size: 10.5px;
-  text-align: center;
-  line-height: 1.15;
-  color: var(--dim);
-}
-.vp-lvl {
-  font-size: 11px;
-  color: var(--accent, #ffd23f);
-}
-.vp-dot {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent, #ffd23f);
 }
 
 /* Feuille */

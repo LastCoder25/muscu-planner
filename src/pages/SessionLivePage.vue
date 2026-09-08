@@ -706,22 +706,6 @@ onBeforeUnmount(() => {
   color: #e5544b;
   border: 1px solid #e5544b55;
 }
-.set-tiles {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-  margin-top: 11px;
-}
-.stile {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 12px;
-}
 .stile.done {
   background: var(--d1);
   color: var(--accent-ink);
@@ -1071,17 +1055,6 @@ onBeforeUnmount(() => {
 .set.up {
   opacity: 0.5;
 }
-.set-idx {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  font-weight: 600;
-  font-size: 17px;
-  background: var(--surface-2);
-  color: var(--dim);
-}
 .set.cur .set-idx {
   background: var(--accent);
   color: var(--accent-ink);
@@ -1191,17 +1164,6 @@ onBeforeUnmount(() => {
   cursor: pointer;
   border: none;
 }
-.okedit {
-  justify-self: end;
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 700;
-  cursor: pointer;
-}
 .load-step {
   display: flex;
   align-items: center;
@@ -1282,51 +1244,9 @@ onBeforeUnmount(() => {
   border-color: var(--line);
   margin-left: auto;
 }
-.comment-mini {
-  grid-column: 2/5;
-  font-size: 11.5px;
-  color: var(--dim);
-  font-style: italic;
-}
-.set-tonnage {
-  grid-column: 2/5;
-  font-size: 11px;
-  color: var(--dim-2);
-  letter-spacing: 0.3px;
-}
-.addset {
-  width: 100%;
-  height: 44px;
-  border-radius: 13px;
-  border: 1px dashed var(--line);
-  background: transparent;
-  color: var(--dim);
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  margin-top: 2px;
-}
 
 .comment {
   margin-top: 22px;
-}
-.comment-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 11px;
-  span {
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 1.8px;
-    text-transform: uppercase;
-    color: var(--dim);
-  }
-  em {
-    font-style: normal;
-    font-size: 11px;
-    color: var(--dim-2);
-  }
 }
 .diff-row {
   display: grid;

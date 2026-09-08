@@ -1063,90 +1063,14 @@ async function saveAutre() {
   justify-content: space-between;
   gap: 12px;
 }
-.home-badges {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-}
-.ath-home {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-.ath-home-tier {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.xp-strip {
-  --tier: var(--accent);
-  width: 100%;
-  display: block;
-  text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--line-soft);
-  border-radius: 12px;
-  padding: 10px 12px;
-  margin-bottom: 16px;
-  cursor: pointer;
-}
-.xp-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-.xp-lvl {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--tier);
-}
 .xp-lvl.next {
   color: var(--dim);
-}
-.xp-frac {
-  font-size: 12px;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-}
-.xp-bar {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  overflow: hidden;
-  margin-top: 7px;
-}
-.xp-fill {
-  height: 100%;
-  background: var(--tier);
-  border-radius: 999px;
-  transition: width 0.4s ease;
 }
 .head-actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-}
-.head-ic {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  background: var(--surface);
-  border: 1px solid var(--line-soft);
-  border-radius: 14px;
-  color: var(--text);
-  cursor: pointer;
 }
 .ic-badge {
   position: absolute;
@@ -1787,72 +1711,6 @@ async function saveAutre() {
   font-size: 13px;
   cursor: pointer;
 }
-.last-card {
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 14px 16px;
-  margin-bottom: 20px;
-  cursor: pointer;
-}
-.last-lbl {
-  font-size: 11px;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--dim);
-}
-.last-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-top: 6px;
-}
-.last-name {
-  font-weight: 600;
-  font-size: 16px;
-  color: var(--text);
-}
-.last-stat {
-  font-family: var(--font-display);
-  font-size: 14px;
-  color: var(--accent);
-}
-.section-h {
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
-  margin: 0;
-}
-.empty {
-  color: var(--dim);
-  padding: 24px 0;
-}
-.session-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 16px;
-  margin-bottom: 12px;
-  cursor: pointer;
-  transition: border-color 0.12s;
-}
-.session-card:hover {
-  border-color: var(--line);
-}
-.session-card:active {
-  border-color: var(--accent);
-}
-.session-name {
-  font-weight: 600;
-  font-size: 17px;
-  color: var(--text);
-}
-.session-meta {
-  color: var(--dim);
-  font-size: 13px;
-  margin-top: 4px;
-}
 /* Force / Endurance / Agilité : 3 CERCLES sur une ligne (anneau = progression). */
 .pillars {
   display: grid;
@@ -1927,10 +1785,6 @@ async function saveAutre() {
   margin: 0 2px 8px;
   font-weight: 600;
 }
-.group-lvl {
-  color: var(--accent);
-  font-weight: 700;
-}
 /* Grande ligne Challenges (au-dessus des sports) */
 .challenge-row {
   display: flex;
@@ -1945,71 +1799,6 @@ async function saveAutre() {
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
-}
-.challenge-row:active {
-  transform: scale(0.99);
-}
-.cr-ic {
-  font-size: 30px;
-}
-.cr-main {
-  flex: 1;
-  min-width: 0;
-}
-.cr-title {
-  font-weight: 800;
-  font-size: 18px;
-}
-.cr-sub {
-  font-size: 12px;
-  color: var(--dim);
-}
-.cr-badge {
-  flex: none;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-ink, #15120e);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 12px;
-}
-.adv-tile {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  margin-bottom: 14px;
-  border-radius: 16px;
-  border: 1px solid var(--accent);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface));
-  color: var(--text);
-  cursor: pointer;
-  transition: transform 0.12s;
-}
-.adv-tile:active {
-  transform: scale(0.98);
-}
-.adv-ic {
-  font-size: 26px;
-  line-height: 1;
-}
-.adv-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
-.adv-name {
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: 0.3px;
-}
-.adv-sub {
-  font-size: 12px;
-  color: var(--dim);
 }
 .adv-tile .q-icon {
   color: var(--accent);
@@ -2040,18 +1829,6 @@ async function saveAutre() {
 .mtile:active {
   transform: scale(0.97);
   border-color: var(--c);
-}
-.t-muscu {
-  --c: var(--accent);
-}
-.t-cardio {
-  --c: var(--d3);
-}
-.t-tennis {
-  --c: var(--d1);
-}
-.t-autre {
-  --c: var(--d2, #c6d24a);
 }
 .add-session {
   margin-bottom: 14px;

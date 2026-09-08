@@ -615,24 +615,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--dim);
 }
-.cs-result {
-  font-weight: 700;
-  font-size: 14px;
-}
 .cs-result.win {
   color: var(--d1);
-}
-.cs-result.lose {
-  color: var(--d4);
-}
-.cs-replay {
-  border: 1px solid var(--accent);
-  background: transparent;
-  color: var(--accent);
-  border-radius: 999px;
-  padding: 5px 12px;
-  font-weight: 600;
-  font-size: 12px;
-  cursor: pointer;
 }
 </style>

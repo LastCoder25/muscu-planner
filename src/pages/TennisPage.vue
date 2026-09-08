@@ -941,15 +941,4 @@ function remove(id: string) {
   opacity: 0.72;
   position: relative;
 }
-.soon-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--accent-ink);
-  background: var(--accent);
-  border-radius: 999px;
-  padding: 3px 10px;
-}
 </style>

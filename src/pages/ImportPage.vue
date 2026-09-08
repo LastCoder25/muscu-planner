@@ -187,18 +187,6 @@ onMounted(async () => {
   font-size: 13px;
   margin-bottom: 10px;
 }
-.prompt-box {
-  background: var(--surface);
-  border: 1px solid var(--line-soft);
-  border-radius: 12px;
-  padding: 12px;
-  font-size: 11.5px;
-  color: var(--dim);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 200px;
-  overflow: auto;
-}
 .paste {
   width: 100%;
   min-height: 140px;
