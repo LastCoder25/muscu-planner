@@ -11,32 +11,6 @@
 -->
 <template>
   <div class="vp">
-    <div class="vp-head">
-      <div class="p-title">🏛️ Village — {{ builtCount }}/{{ plotCount }} emplacements</div>
-      <button v-if="readySum > 0" class="vp-collect" @click="collectAll">🧺 Tout récolter</button>
-    </div>
-
-    <div class="vp-grid">
-      <button
-        v-for="pl in plots"
-        :key="pl.slot"
-        class="vp-tile"
-        :class="{ locked: !pl.unlocked, empty: pl.unlocked && !pl.building, ready: pl.ready }"
-        @click="selectedSlot = pl.slot"
-      >
-        <span class="vp-emo">
-          {{ pl.unlocked ? (pl.building ? emojiOf(pl.building) : '＋') : '🔒' }}
-        </span>
-        <span class="vp-name">
-          <template v-if="!pl.unlocked">niv {{ slotUnlockLevel(pl.slot) }}</template>
-          <template v-else-if="pl.building">{{ labelOf(pl.building) }}</template>
-          <template v-else>Libre</template>
-        </span>
-        <span v-if="pl.building" class="vp-lvl">niv {{ pl.building.level }}</span>
-        <span v-if="pl.ready" class="vp-dot" />
-      </button>
-    </div>
-
     <!-- Feuille de gestion d'un emplacement -->
     <q-dialog v-model="sheetOpen" position="bottom">
       <q-card v-if="selectedPlot" class="vp-sheet">
@@ -166,7 +140,6 @@ import {
   buildingScales,
   canBuildType,
   canUpgradeBuilding,
-  collectable,
   plotsForLevel,
   slotUnlockLevel,
   storageMult,
@@ -180,7 +153,8 @@ import {
   type BuildingUnlock,
 } from '@/lib/buildings';
 
-const props = defineProps<{ heroLevel: number; now: number }>();
+const props = defineProps<{ heroLevel: number; now: number; slot: number | null }>();
+const emit = defineEmits<{ 'update:slot': [number | null] }>();
 const char = useCharacterStore();
 const auth = useAuthStore();
 const gameFx = useGameFx();
@@ -208,12 +182,13 @@ const plots = computed<PlotView[]>(() => {
     };
   });
 });
-const builtCount = computed(() => buildings.value.length);
-const readySum = computed(() =>
-  Object.values(collectable(buildings.value, props.now)).reduce((a, b) => a + b, 0),
-);
 
-const selectedSlot = ref<number | null>(null);
+/** L'emplacement ouvert est piloté par le PARENT : c'est le dessin de l'enceinte qui
+ *  sert de sélecteur (comme l'anneau de la carte le faisait avant). */
+const selectedSlot = computed({
+  get: () => props.slot,
+  set: (v: number | null) => emit('update:slot', v),
+});
 const selectedPlot = computed(() =>
   selectedSlot.value === null
     ? null

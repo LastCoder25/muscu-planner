@@ -44,13 +44,14 @@
         </g>
 
         <!-- ── LA MURAILLE ──────────────────────────────────────────────────
-             Enceinte octogonale à CRÉNEAUX : le mur est dessiné, pas suggéré par
-             un trait. Ses 8 sommets sont les 8 emplacements de tourelle, si bien
-             que le compte tombe juste par construction. -->
+             Octogone à CRÉNEAUX, décalé d'un demi-pas : le haut de l'enceinte est
+             donc un PAN de mur (et non un sommet), ce qui laisse la place au corps
+             de garde. Les 8 sommets restent les 8 emplacements de tourelle. -->
         <polygon
           :points="wallPoints"
-          class="wall"
+          class="wall hit"
           :class="{ absent: !wallLevel, damaged: wallDamaged }"
+          @click="openDef('wall')"
         />
         <rect
           v-for="(m, i) in merlons"
@@ -65,17 +66,16 @@
         />
         <polygon :points="innerPoints" class="courtyard" />
 
-        <!-- ── LES TOURELLES ────────────────────────────────────────────────
-             Une vraie tour : fût, couronne crénelée et meurtrière. Les
-             emplacements vides restent tracés en pointillés — ils disent au
-             joueur ce qu'il pourrait avoir. -->
-        <g v-for="(p, i) in octagon" :key="'t' + i" class="turret-g">
+        <!-- ── LES TOURELLES (sur les 8 sommets) ────────────────────────────
+             Fût, couronne crénelée et meurtrière. Les emplacements vides restent
+             tracés en pointillés : ils disent ce qu'on pourrait avoir. -->
+        <g v-for="(p, i) in octagon" :key="'t' + i" class="hit" @click="openDef('turret')">
           <template v-if="i < turretsBuilt">
             <rect
-              :x="p.x - 7"
-              :y="p.y - 9"
-              width="14"
-              height="18"
+              :x="p.x - 6.5"
+              :y="p.y - 8"
+              width="13"
+              height="16"
               rx="1.5"
               class="tur-body"
               :class="{ damaged: turretsDamaged }"
@@ -83,76 +83,86 @@
             <rect
               v-for="k in 3"
               :key="k"
-              :x="p.x - 7 + (k - 1) * 5"
-              :y="p.y - 12"
-              width="4"
-              height="4"
+              :x="p.x - 6.5 + (k - 1) * 4.7"
+              :y="p.y - 11"
+              width="3.6"
+              height="3.6"
               class="tur-crown"
               :class="{ damaged: turretsDamaged }"
             />
-            <rect :x="p.x - 1.1" :y="p.y - 4" width="2.2" height="8" rx="1" class="tur-slit" />
+            <rect :x="p.x - 1" :y="p.y - 3.5" width="2" height="7" rx="1" class="tur-slit" />
           </template>
-          <circle v-else :cx="p.x" :cy="p.y" r="8" class="tur-empty" />
+          <circle v-else :cx="p.x" :cy="p.y" r="7.5" class="tur-empty" />
+        </g>
+        <!-- Pastille de niveau des tourelles, sur la 1re tour -->
+        <g v-if="turretsBuilt" class="lvl-badge">
+          <circle :cx="octagon[0]!.x + 7" :cy="octagon[0]!.y - 8" r="5" />
+          <text :x="octagon[0]!.x + 7" :y="octagon[0]!.y - 6.2">{{ turretLevel }}</text>
         </g>
 
-        <!-- ── LA TOUR DE GUET ──────────────────────────────────────────────
-             Plus haute que les tourelles, coiffée d'une bannière : c'est elle
-             qui voit venir. -->
-        <g v-if="watchLevel" class="watch-g">
+        <!-- ── LE CORPS DE GARDE (Tour de guet), au milieu du pan nord ──────
+             Plus haut que les tourelles, coiffé d'une bannière : c'est lui qui
+             voit venir. Vide → silhouette en pointillés, cliquable pour bâtir. -->
+        <g class="hit" @click="openDef('watchtower')">
+          <template v-if="watchLevel">
+            <rect
+              x="91"
+              y="10"
+              width="18"
+              height="30"
+              rx="2"
+              class="watch-body"
+              :class="{ damaged: watchDamaged }"
+            />
+            <rect
+              v-for="k in 4"
+              :key="k"
+              :x="91 + (k - 1) * 5"
+              y="6"
+              width="3.5"
+              height="4.5"
+              class="watch-crown"
+              :class="{ damaged: watchDamaged }"
+            />
+            <rect x="99.2" y="-4" width="1.6" height="11" class="watch-mast" />
+            <path d="M100.8 -4 L110 -1.2 L100.8 1.6 Z" class="watch-flag" />
+            <circle cx="100" cy="22" r="3.4" class="watch-eye" />
+            <g class="lvl-badge">
+              <circle cx="112" cy="14" r="5" />
+              <text x="112" y="15.8">{{ watchLevel }}</text>
+            </g>
+          </template>
+          <rect v-else x="91" y="10" width="18" height="30" rx="2" class="slot-empty" />
+        </g>
+
+        <!-- ── LA COUR ──────────────────────────────────────────────────────
+             Deux rangées de bâtiments de production + une rangée de services.
+             Chacun est une TUILE cliquable : emoji, pastille de niveau, point de
+             récolte — exactement ce que faisait l'anneau de la carte, mais à
+             l'abri des murs et avec une vraie cible tactile. -->
+        <g
+          v-for="y in yard"
+          :key="y.key"
+          class="yard hit"
+          :class="{ empty: !y.built, ready: y.ready, broken: y.damaged }"
+          @click="y.onClick()"
+        >
           <rect
-            x="91"
-            y="8"
-            width="18"
-            height="30"
-            rx="2"
-            class="watch-body"
-            :class="{ damaged: watchDamaged }"
+            :x="y.x - YARD_HALF"
+            :y="y.y - YARD_HALF"
+            :width="YARD_HALF * 2"
+            :height="YARD_HALF * 2"
+            rx="6"
+            class="yard-pad"
           />
-          <rect
-            v-for="k in 4"
-            :key="k"
-            :x="91 + (k - 1) * 5"
-            y="5"
-            width="3.5"
-            height="4"
-            class="watch-crown"
-            :class="{ damaged: watchDamaged }"
-          />
-          <rect x="99" y="-6" width="1.6" height="12" class="watch-mast" />
-          <path d="M100.6 -6 L110 -3 L100.6 0 Z" class="watch-flag" />
-          <circle cx="100" cy="20" r="3.6" class="watch-eye" />
+          <text v-if="y.built" :x="y.x" :y="y.y + 5" class="yard-emo">{{ y.emoji }}</text>
+          <text v-else :x="y.x" :y="y.y + 5" class="yard-plus">{{ y.locked ? '🔒' : '＋' }}</text>
+          <g v-if="y.built" class="lvl-badge">
+            <circle :cx="y.x + 9.5" :cy="y.y - 9.5" r="5.2" />
+            <text :x="y.x + 9.5" :y="y.y - 7.7">{{ y.level }}</text>
+          </g>
+          <circle v-if="y.ready" :cx="y.x - 9.5" :cy="y.y - 9.5" r="3" class="yard-ready" />
         </g>
-
-        <!-- ── LES BÂTIMENTS DE SERVICE, dans la cour ──────────────────────
-             Chacun sa silhouette : croix rouge pour l'infirmerie, niche pour le
-             chenil, tas de gravats pour le chantier de fouille. -->
-        <g v-if="infirmaryLevel" class="svc">
-          <rect x="60" y="118" width="20" height="15" rx="2" class="svc-body" />
-          <path d="M60 118 L70 111 L80 118 Z" class="svc-roof" />
-          <rect x="68.6" y="122" width="2.8" height="8" class="svc-cross" />
-          <rect x="66" y="124.6" width="8" height="2.8" class="svc-cross" />
-        </g>
-        <g v-if="kennelLevel" class="svc">
-          <rect x="120" y="118" width="20" height="15" rx="2" class="svc-body" />
-          <path d="M120 118 L130 111 L140 118 Z" class="svc-roof kennel" />
-          <ellipse cx="130" cy="127" rx="5" ry="6" class="svc-hole" />
-        </g>
-        <g v-if="salvageLevel" class="svc">
-          <path d="M84 133 L92 120 L100 133 Z" class="svc-body" />
-          <path d="M100 133 L107 123 L114 133 Z" class="svc-body" />
-          <rect x="82" y="132" width="34" height="3" rx="1.5" class="svc-ground" />
-        </g>
-
-        <!-- Bâtiments de production (le village), à l'abri des murs -->
-        <g v-for="(b, i) in innerBuildings" :key="b.typeId">
-          <circle :cx="innerSpot(i).x" :cy="innerSpot(i).y - 4" r="10" class="bld-bg" />
-          <text :x="innerSpot(i).x" :y="innerSpot(i).y" class="bld" text-anchor="middle">
-            {{ b.emoji }}
-          </text>
-        </g>
-        <text v-if="!innerBuildings.length" x="100" y="100" class="empty-hint" text-anchor="middle">
-          rien à protéger encore
-        </text>
       </svg>
 
       <div class="keep-legend">
@@ -160,6 +170,7 @@
         <span>🏹 {{ turretsBuilt }}/{{ TURRET_SLOTS }} tourelles</span>
         <span>🗼 Guet {{ watchLevel || '—' }}</span>
       </div>
+      <p class="keep-hint">Touche un bâtiment pour le construire, l’améliorer ou récolter.</p>
     </div>
 
     <!-- ── Héros à l'infirmerie ── -->
@@ -267,12 +278,57 @@
       </template>
     </div>
 
-    <!-- ── Le village (emplacements de production) ──
-         Déplacé de la carte d'expédition (v0.664) : la carte n'a plus qu'un métier,
-         choisir où envoyer le héros ; tout ce qui se GÈRE vit ici. -->
-    <div class="panel">
-      <VillagePlots :hero-level="heroLevel" :now="now" />
-    </div>
+    <!-- Feuille des emplacements de production, ouverte depuis le dessin. -->
+    <VillagePlots v-model:slot="plotSlot" :hero-level="heroLevel" :now="now" />
+
+    <!-- Feuille d'une structure de défense, ouverte depuis le dessin. -->
+    <q-dialog v-model="defSheetOpen" position="bottom">
+      <q-card v-if="defSel" class="def-sheet">
+        <div class="sh-head">
+          <span class="sh-emo">{{ defSel.emoji }}</span>
+          <div class="sh-main">
+            <div class="sh-title font-display">
+              {{ defSel.label }}
+              <span v-if="lvlOf(defSel.id)" class="s-lvl">niv. {{ lvlOf(defSel.id) }}</span>
+              <span v-if="damagedOf(defSel.id)" class="s-dmg">endommagée</span>
+            </div>
+            <div class="sh-sub">{{ defSel.desc }}</div>
+          </div>
+          <button class="sh-x" @click="defOpen = null">✕</button>
+        </div>
+        <div class="s-actions">
+          <button
+            v-if="!lvlOf(defSel.id)"
+            class="btn"
+            :disabled="!canBuild(defSel.id)"
+            @click="doBuild(defSel.id)"
+          >
+            Construire · {{ defSel.buildGold }} 🪙<span v-if="defSel.buildScrap">
+              + {{ defSel.buildScrap }} 🔩</span
+            >
+          </button>
+          <template v-else>
+            <button
+              v-if="damagedOf(defSel.id)"
+              class="btn fix"
+              :disabled="!canRepair(defSel.id)"
+              @click="doRepair(defSel.id)"
+            >
+              Réparer · {{ repairCost(lvlOf(defSel.id)) }} 🔩
+            </button>
+            <button class="btn" :disabled="!canUpgrade(defSel.id)" @click="doUpgrade(defSel.id)">
+              Améliorer · {{ upCost(defSel.id).gold }} 🪙 + {{ upCost(defSel.id).scrap }} 🔩
+            </button>
+          </template>
+        </div>
+        <p v-if="lvlOf(defSel.id) >= heroLevel" class="s-cap">
+          Plafonné par ton niveau de personnage — le sport reste le plafond.
+        </p>
+        <p v-if="heroLevel < defenseUnlockLevel" class="s-cap">
+          🔒 L’enceinte se débloque au niveau {{ defenseUnlockLevel }}.
+        </p>
+      </q-card>
+    </q-dialog>
 
     <!-- ── Chenil : la garnison ── -->
     <div v-if="kennelLevel" class="panel">
@@ -305,55 +361,6 @@
       </div>
     </div>
 
-    <!-- ── Structures ── -->
-    <div class="panel">
-      <div class="p-title">🛠️ Enceinte</div>
-      <div v-for="t in DEFENSE_TYPES" :key="t.id" class="struct">
-        <div class="s-head">
-          <span class="s-emo">{{ t.emoji }}</span>
-          <div class="s-id">
-            <div class="s-label">
-              {{ t.label }}
-              <span v-if="lvlOf(t.id)" class="s-lvl">niv. {{ lvlOf(t.id) }}</span>
-              <span v-if="damagedOf(t.id)" class="s-dmg">endommagée</span>
-            </div>
-            <div class="s-desc">{{ t.desc }}</div>
-          </div>
-        </div>
-        <div class="s-actions">
-          <button
-            v-if="!lvlOf(t.id)"
-            class="btn"
-            :disabled="!canBuild(t.id)"
-            @click="doBuild(t.id)"
-          >
-            Construire · {{ t.buildGold }} 🪙<span v-if="t.buildScrap">
-              + {{ t.buildScrap }} 🔩</span
-            >
-          </button>
-          <template v-else>
-            <button
-              v-if="damagedOf(t.id)"
-              class="btn fix"
-              :disabled="!canRepair(t.id)"
-              @click="doRepair(t.id)"
-            >
-              Réparer · {{ repairCost(lvlOf(t.id)) }} 🔩
-            </button>
-            <button class="btn" :disabled="!canUpgrade(t.id)" @click="doUpgrade(t.id)">
-              Améliorer · {{ upCost(t.id).gold }} 🪙 + {{ upCost(t.id).scrap }} 🔩
-            </button>
-          </template>
-        </div>
-        <div v-if="lvlOf(t.id) >= heroLevel" class="s-cap">
-          Plafonné par ton niveau de personnage — le sport reste le plafond.
-        </div>
-      </div>
-      <p v-if="heroLevel < defenseUnlockLevel" class="s-gate">
-        🔒 L’enceinte se débloque au niveau {{ defenseUnlockLevel }}.
-      </p>
-    </div>
-
     <!-- ── Dernier siège ── -->
     <div v-if="lastReport" class="panel">
       <div class="p-title">
@@ -379,7 +386,14 @@ import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import { computeCharacter } from '@/lib/character';
 import { playerWithGear, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
-import { buildingType, buildingUpgradeCost } from '@/lib/buildings';
+import {
+  BUILD,
+  buildingAccrued,
+  buildingType,
+  buildingUpgradeCost,
+  plotsForLevel,
+  storageMult,
+} from '@/lib/buildings';
 import {
   DEFENSE_TYPES,
   FACTION_EMOJI,
@@ -458,7 +472,6 @@ const turretsDamaged = computed(() => isDamaged(defenses.value, 'turret'));
 const turretsBuilt = computed(() => turretCount(defenseLevel(defenses.value, 'turret')));
 const scavCap = computed(() => scavengerCount(salvageLevel.value));
 const kennelLevel = computed(() => defenseLevel(defenses.value, 'kennel'));
-const infirmaryLevel = computed(() => defenseLevel(defenses.value, 'infirmary'));
 /** Créneaux : un merlon au MILIEU de chaque pan de mur, orienté comme lui — c'est ce qui
  *  fait lire « rempart » plutôt que « polygone ». */
 const merlons = computed(() =>
@@ -507,27 +520,100 @@ const repairAllCost = computed(() => (base.value ? totalRepairCost(base.value) :
 // de tourelle. TURRET_SLOTS vaut 8 précisément pour que le compte tombe juste.
 const octagon = computed(() =>
   Array.from({ length: TURRET_SLOTS }, (_, i) => {
-    const a = (i / TURRET_SLOTS) * Math.PI * 2 - Math.PI / 2;
+    // Décalage d'un DEMI-PAS (+π/8) : sans lui, un sommet tombe pile en haut et le
+    // corps de garde s'y superposerait. Décalé, le haut de l'enceinte est un PAN de
+    // mur, ce qui lui laisse la place.
+    const a = (i / TURRET_SLOTS) * Math.PI * 2 - Math.PI / 2 + Math.PI / TURRET_SLOTS;
     return { x: 100 + Math.cos(a) * 72, y: 100 + Math.sin(a) * 72 };
   }),
 );
+const turretLevel = computed(() => defenseLevel(defenses.value, 'turret'));
 const wallPoints = computed(() => octagon.value.map((p) => `${p.x},${p.y}`).join(' '));
 const innerPoints = computed(() =>
   octagon.value.map((p) => `${100 + (p.x - 100) * 0.86},${100 + (p.y - 100) * 0.86}`).join(' '),
 );
 
-/** Les bâtiments de production, à l'intérieur des murs — c'est ce qu'on défend. */
-const innerBuildings = computed(() =>
-  (char.row?.buildings ?? []).map((b) => ({
-    typeId: b.typeId,
-    emoji: buildingType(b.typeId)?.emoji ?? '🏠',
-  })),
-);
-function innerSpot(i: number): { x: number; y: number } {
-  const cols = 3;
-  const x = 70 + (i % cols) * 30;
-  const y = 82 + Math.floor(i / cols) * 26;
-  return { x, y };
+/** LA COUR. Deux rangées de bâtiments de PRODUCTION (les 6 emplacements du village,
+ *  rapatriés de la carte) et une rangée de SERVICES (chenil, infirmerie, chantier).
+ *  Chaque case est cliquable : c'est le dessin qui sert de sélecteur, comme l'anneau de
+ *  la carte le faisait avant — emoji, pastille de niveau, point de récolte.
+ *  ⚠️ Grille calée dans l'octogone INTÉRIEUR, dont ce qui compte n'est pas le rayon
+ *  (62) mais l'APOTHÈME — la distance au milieu d'un pan, soit 62·cos(22,5°) ≈ 57.
+ *  Une tuile est carrée : c'est son COIN qui touche le mur en premier, à
+ *  √(dx²+dy²) + demi-diagonale. Avec la grille d'origine, le coin bas-droit sortait
+ *  de ~2 unités. Resserrée, il reste ~2 unités de marge. */
+interface YardCell {
+  key: string;
+  x: number;
+  y: number;
+  emoji: string;
+  built: boolean;
+  locked: boolean;
+  level: number;
+  ready: boolean;
+  damaged: boolean;
+  onClick: () => void;
+}
+const YARD_X = [72, 100, 128];
+const YARD_Y = [76, 101, 126];
+const YARD_HALF = 12; // demi-côté d'une tuile
+/** Les services occupent la rangée du bas ; la Tour de guet, elle, reste SUR le mur
+ *  (c'est un ouvrage de rempart, pas un bâtiment de cour). */
+const YARD_SERVICES: DefenseId[] = ['kennel', 'infirmary', 'salvage'];
+
+const yard = computed<YardCell[]>(() => {
+  const cells: YardCell[] = [];
+  const unlocked = plotsForLevel(heroLevel.value);
+  const bs = char.row?.buildings ?? [];
+  const mult = storageMult(bs);
+  // Rangées 1-2 : les emplacements du village.
+  for (let i = 0; i < BUILD.plotCap; i++) {
+    const b = bs.find((x) => x.slot === i) ?? null;
+    cells.push({
+      key: 'plot' + i,
+      x: YARD_X[i % 3]!,
+      y: YARD_Y[Math.floor(i / 3)]!,
+      emoji: b ? (buildingType(b.typeId)?.emoji ?? '🏠') : '',
+      built: !!b,
+      locked: i >= unlocked,
+      level: b?.level ?? 0,
+      ready: b ? buildingAccrued(b, now.value, mult) > 0 : false,
+      damaged: false,
+      onClick: () => (plotSlot.value = i),
+    });
+  }
+  // Rangée 3 : les services de l'enceinte.
+  YARD_SERVICES.forEach((id, i) => {
+    const t = DEFENSE_TYPES.find((d) => d.id === id)!;
+    cells.push({
+      key: id,
+      x: YARD_X[i]!,
+      y: YARD_Y[2]!,
+      emoji: t.emoji,
+      built: lvlOf(id) > 0,
+      locked: heroLevel.value < t.unlockLevel,
+      level: lvlOf(id),
+      ready: false,
+      damaged: damagedOf(id),
+      onClick: () => openDef(id),
+    });
+  });
+  return cells;
+});
+
+// ── Feuilles ouvertes depuis le dessin ──
+const plotSlot = ref<number | null>(null);
+const defOpen = ref<DefenseId | null>(null);
+const defSel = computed(() => DEFENSE_TYPES.find((d) => d.id === defOpen.value) ?? null);
+const defSheetOpen = computed({
+  get: () => defOpen.value !== null,
+  set: (v: boolean) => {
+    if (!v) defOpen.value = null;
+  },
+});
+function openDef(id: DefenseId) {
+  plotSlot.value = null;
+  defOpen.value = id;
 }
 
 // ── Renseignement ──
@@ -650,7 +736,10 @@ async function guard(fn: () => Promise<unknown>) {
 }
 const uid = computed(() => auth.user?.id ?? '');
 const doBuild = (id: DefenseId) =>
-  guard(() => char.buildDefense(uid.value, id, heroLevel.value, Date.now()));
+  guard(async () => {
+    await char.buildDefense(uid.value, id, heroLevel.value, Date.now());
+    defOpen.value = null;
+  });
 const doUpgrade = (id: DefenseId) =>
   guard(() => char.upgradeDefense(uid.value, id, heroLevel.value, Date.now()));
 const doRepair = (id: DefenseId) => guard(() => char.repairDefense(uid.value, id));
@@ -823,34 +912,56 @@ const doCollect = () =>
   opacity: 0.85;
 }
 /* Bâtiments de service */
-.svc-body {
-  fill: #6b5c45;
-  stroke: #4a3f2f;
-  stroke-width: 1;
+/* ── La cour : chaque bâtiment est une TUILE cliquable ── */
+.hit {
+  cursor: pointer;
 }
-.svc-roof {
-  fill: #b25a4a;
+.yard-pad {
+  fill: #3d3324;
+  stroke: #5a4c36;
+  stroke-width: 1.5;
 }
-.svc-roof.kennel {
-  fill: #7f9a5c;
-}
-.svc-cross {
-  fill: #f3eee6;
-}
-.svc-hole {
-  fill: #201a12;
-}
-.svc-ground {
-  fill: #4a3f2f;
-}
-/* Village */
-.bld-bg {
+.yard.empty .yard-pad {
   fill: #241f18;
-  stroke: #453b2c;
-  stroke-width: 1;
+  stroke: #4a4133;
+  stroke-dasharray: 3 3;
 }
-.bld {
-  font-size: 14px;
+.yard.ready .yard-pad {
+  stroke: var(--accent, #ffd23f);
+}
+.yard.broken .yard-pad {
+  stroke: #ff6a45;
+}
+.yard-emo {
+  font-size: 15px;
+  text-anchor: middle;
+}
+.yard-plus {
+  font-size: 13px;
+  text-anchor: middle;
+  fill: var(--dim);
+}
+.yard-ready {
+  fill: var(--accent, #ffd23f);
+}
+/* Pastille de niveau, lisible sur n'importe quel fond */
+.lvl-badge circle {
+  fill: #14110c;
+  stroke: var(--accent, #ffd23f);
+  stroke-width: 1.2;
+}
+.lvl-badge text {
+  font-size: 7px;
+  text-anchor: middle;
+  fill: var(--accent, #ffd23f);
+  font-weight: 700;
+}
+/* Emplacement de structure encore vide (corps de garde) */
+.slot-empty {
+  fill: #241f18;
+  stroke: #4a4133;
+  stroke-width: 1.6;
+  stroke-dasharray: 4 3;
 }
 .empty-hint {
   font-size: 8px;
@@ -867,6 +978,50 @@ const doCollect = () =>
 }
 .corpse.champ {
   font-size: 15px;
+}
+.keep-hint {
+  margin: 2px 0 4px;
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+  font-style: italic;
+}
+.def-sheet {
+  width: 100%;
+  max-width: 560px;
+  background: var(--surface);
+  border-radius: 16px 16px 0 0;
+  padding: 14px;
+  color: var(--text);
+}
+.def-sheet .sh-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.def-sheet .sh-emo {
+  font-size: 26px;
+}
+.def-sheet .sh-main {
+  flex: 1;
+  min-width: 0;
+}
+.def-sheet .sh-title {
+  font-size: 16px;
+}
+.def-sheet .sh-sub {
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.4;
+}
+.def-sheet .sh-x {
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-size: 18px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
 }
 .keep-legend {
   display: flex;

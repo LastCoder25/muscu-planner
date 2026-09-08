@@ -162,19 +162,21 @@ export const HARVEST = {
 export const EXPE = {
   mapSize: 200, // côté de la carte (coord 0..mapSize) — GRANDE, on pan/zoom dessus
   town: { x: 100, y: 100 }, // ville de départ (CENTRE de la carte)
-  // Rythme RECALIBRÉ (v0.658). Avec 10 POI au plancher et des durées de vie de 12→48 h,
-  // la carte était TOUJOURS pleine : aucune rareté, aucune urgence, on ne choisissait
-  // rien. À l'équilibre (durée de vie moyenne ÷ intervalle de spawn) la carte respire
-  // maintenant autour de 4-5 POI : certains expirent avant qu'on les fasse, et l'arbitrage
-  // redevient réel. Le plancher garde une poignée d'activités pour ne jamais tomber à sec.
-  poiCap: 7,
-  poiFloor: 3,
+  // Rythme, deux fois recalibré. v0.658 : avec 10 POI au plancher et des durées de vie de
+  // 12→48 h, la carte était TOUJOURS pleine — aucune rareté, aucun arbitrage — d'où une
+  // forte réduction (bande 3-6, moyenne 4,2). v0.665 : la carte ayant perdu son anneau de
+  // bâtiments (déménagé sur l'écran « Ma base »), elle paraissait vide ; on remonte donc
+  // la densité à une bande **5-9, moyenne 6,4**, mesurée sur 14 jours simulés à tous les
+  // niveaux. Elle ne colle JAMAIS au plafond (0 % du temps) : des POI expirent encore
+  // avant qu'on les fasse, donc choisir reste un vrai arbitrage.
+  poiCap: 11,
+  poiFloor: 5,
   perilousChance: 0.18, // ~1 POI sur 5 signalé « route dangereuse » avant l'envoi
   minDistPoi: 20, // écart mini entre POI (placement espacé)
   distMin: 30, // distance mini ville↔POI (coord ; la ville est au centre)
   distMax: 88, // distance maxi (rayon → POI tout autour, 360°)
-  spawnMinMs: 3 * 3600_000, // intervalle de spawn : 3 h..6 h (jitter)
-  spawnJitterMs: 3 * 3600_000,
+  spawnMinMs: 2 * 3600_000, // intervalle de spawn : 2 h..4 h (jitter)
+  spawnJitterMs: 2 * 3600_000,
   lifespanMs: {
     mine: 20 * 3600_000,
     camp: 10 * 3600_000,
