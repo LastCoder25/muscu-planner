@@ -8,13 +8,15 @@ import {
   HARVEST,
   EXPE,
   poiCombatant,
+  ambushCombatant,
+  rollTravelEncounters,
   type Poi,
   type PoiType,
 } from '@/lib/expedition';
-import { playerCombatant } from '@/lib/combat';
+import { playerCombatant, mulberry32 } from '@/lib/combat';
 
 const HOUR = 3_600_000;
-const hero = playerCombatant({ puissance: 60, endurance: 60, agilite: 60 }, 26);
+const hero = playerCombatant('Héros', { puissance: 600, endurance: 500, agilite: 400 }, 26);
 
 function poi(type: PoiType, level = 26, distNorm = 0.5): Poi {
   return {
@@ -42,15 +44,25 @@ describe('fenêtre de niveaux', () => {
 describe('POI de récolte', () => {
   const types: PoiType[] = ['well', 'shrine', 'archive'];
 
-  it('ne perdent jamais et ne rendent JAMAIS de butin (la carte ne sait plus en produire)', () => {
+  it('ne perdent jamais : il n’y a pas de combat au bout du voyage', () => {
     for (const t of types) {
-      for (let s = 1; s < 40; s++) {
+      for (let s = 1; s < 60; s++) expect(resolveOutcome(hero, poi(t), s, 26).win, t).toBe(true);
+    }
+  });
+
+  it('leur SEUL butin vient d’une rencontre de trajet, jamais de la récolte elle-même', () => {
+    let avecObjet = 0;
+    for (const t of types) {
+      for (let s = 1; s < 120; s++) {
         const o = resolveOutcome(hero, poi(t), s, 26);
-        expect(o.win, t).toBe(true);
-        expect(o.item, t).toBeNull();
-        expect(o.items ?? [], t).toEqual([]);
+        if ((o.items?.length ?? 0) > 0) {
+          avecObjet++;
+          // Un objet ne peut apparaître QUE si le rapport mentionne l'embuscade qui l'a produit.
+          expect(o.text, `${t}/${s}`).toMatch(/Embuscade repoussée/);
+        }
       }
     }
+    expect(avecObjet, 'aucune embuscade n’a jamais rapporté d’objet').toBeGreaterThan(0);
   });
 
   it('paient chacun SA ressource vivante, et rien d’autre', () => {
@@ -91,12 +103,15 @@ describe('POI de récolte', () => {
     }
   });
 
-  it('aucun combat : la récolte est indépendante de la puissance du héros', () => {
-    const faible = playerCombatant({ puissance: 1, endurance: 1, agilite: 1 }, 1);
-    const a = resolveOutcome(hero, poi('shrine'), 9, 26);
-    const b = resolveOutcome(faible, poi('shrine'), 9, 26);
-    expect(b.summonStones).toBe(a.summonStones);
-    expect(b.win).toBe(true);
+  it('un héros faible récolte quand même : il rentre écorné, jamais bredouille', () => {
+    // La récolte elle-même n'a pas de combat. Depuis les rencontres de trajet, le butin
+    // n'est plus indépendant du héros — mais le voyage ne peut pas ÉCHOUER pour autant.
+    const faible = playerCombatant('Faible', { puissance: 1, endurance: 1, agilite: 1 }, 1);
+    for (let s = 1; s < 60; s++) {
+      const o = resolveOutcome(faible, poi('shrine'), s, 26);
+      expect(o.win).toBe(true);
+      expect(o.summonStones).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -133,5 +148,58 @@ describe('difficulté des POI de combat', () => {
     expect([...HARVEST_TYPES].sort()).toEqual(['archive', 'mine', 'shrine', 'well']);
     expect(HARVEST_TYPES.has('lair')).toBe(false);
     expect(HARVEST_TYPES.has('arena')).toBe(false);
+  });
+});
+
+describe('rencontres de trajet', () => {
+  it('un rôdeur est calibré sur le HÉROS : franchissable quel que soit l’équipement', () => {
+    // Le calibrage absolu (`poiCombatant`, PV ~L³) rendait l'embuscade arithmétiquement
+    // imbattable sans stuff — un héros peu équipé rentrait écorné à TOUS les coups.
+    const faible = playerCombatant('Faible', { puissance: 5, endurance: 5, agilite: 5 }, 3);
+    const fort = playerCombatant('Fort', { puissance: 900, endurance: 700, agilite: 500 }, 40);
+    for (const [nom, h] of [
+      ['faible', faible],
+      ['fort', fort],
+    ] as const) {
+      const foe = ambushCombatant(h, 26);
+      // Le rôdeur meurt en ~2-3 tours de dégâts du héros, et mord une fraction de ses PV.
+      expect(foe.pv, nom).toBeLessThan(h.damage * (h.strikes ?? 1) * 4);
+      expect(foe.damage, nom).toBeLessThan(h.pv * 0.2);
+      expect(foe.pv, nom).toBeGreaterThan(0);
+    }
+  });
+
+  it('les deux jambes de trajet peuvent porter une rencontre', () => {
+    const legs = new Set<string>();
+    for (let s = 1; s < 200; s++) {
+      const r = rollTravelEncounters(mulberry32(s), hero, poi('well'), s, 26);
+      for (const e of r.encounters) legs.add(e.leg);
+    }
+    expect([...legs].sort()).toEqual(['back', 'out']);
+  });
+
+  it('une embuscade repoussée enrichit, une embuscade subie écorne', () => {
+    let vu = { win: false, lose: false };
+    for (let s = 1; s < 300; s++) {
+      const r = rollTravelEncounters(mulberry32(s), hero, poi('well'), s, 26);
+      const amb = r.encounters.filter((e) => e.kind === 'ambush');
+      if (!amb.length || r.encounters.some((e) => e.kind === 'cache')) continue;
+      if (amb.every((e) => e.won)) {
+        expect(r.mult).toBeGreaterThan(1);
+        vu.win = true;
+      } else if (amb.every((e) => !e.won)) {
+        expect(r.mult).toBeLessThan(1);
+        vu.lose = true;
+      }
+    }
+    expect(vu.win, 'aucune embuscade gagnée observée').toBe(true);
+  });
+
+  it('le multiplicateur reste dans des bornes saines (jamais de jackpot ni de ruine)', () => {
+    for (let s = 1; s < 400; s++) {
+      const r = rollTravelEncounters(mulberry32(s), hero, poi('shrine'), s, 26);
+      expect(r.mult).toBeGreaterThan(0.4);
+      expect(r.mult).toBeLessThan(2);
+    }
   });
 });

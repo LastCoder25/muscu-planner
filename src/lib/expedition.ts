@@ -410,7 +410,13 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
   const win = spawnWindow(playerLevel);
-  const level = win.min + Math.floor(rng() * (win.max - win.min + 1));
+  // Tirage BIAISÉ vers le bas de la fenêtre (rng², moyenne ≈ +1/3 de la plage) et non
+  // uniforme. Mesuré : un héros peu équipé gagne 42 % d'un repaire à son niveau mais
+  // 0 % à +5 — une fenêtre [niveau, niveau+10] tirée uniformément ne lui proposerait
+  // presque que des POI perdus d'avance. Le haut de la fenêtre reste atteignable, mais
+  // devient l'exception qu'on vise, pas la norme qu'on subit.
+  const span = win.max - win.min + 1;
+  const level = win.min + Math.min(span - 1, Math.floor(rng() * rng() * span));
   // L'arène spawn LOIN (trajet long, fait pour la nuit) ; les autres, n'importe où.
   const minFrac = type === 'arena' ? 0.8 : 0;
   let pos = placePoi(rng, minFrac);
@@ -505,6 +511,114 @@ export function heroPosition(
   return { x: town.x, y: town.y, phase: 'done', frac: 1, remainToObjectiveMs: 0, remainTotalMs: 0 };
 }
 
+/** Réglages des rencontres de TRAJET (aller / retour). */
+export const TRAVEL = {
+  ambushChance: 0.3, // par jambe de trajet
+  cacheChance: 0.12, // trouvaille pacifique (pas de combat)
+  winMult: 1.25, // butin renforcé si l'embuscade est repoussée
+  loseMult: 0.7, // butin écorné si elle est subie
+  cacheMult: 1.2,
+  // Le rôdeur est calibré RELATIVEMENT au héros (même principe que le Labyrinthe), et
+  // non en échelle absolue. Avec un `poiCombatant` (PV ~L³), l'embuscade était
+  // ARITHMÉTIQUEMENT imbattable sans équipement — mesuré : 0 % de victoire nu, 100 %
+  // équipé. Un héros peu équipé rentrait donc la cargaison écornée à TOUS les coups, et
+  // deux fois depuis qu'il y a deux jambes de trajet. Une rencontre de route est un
+  // ralentisseur, pas un mur : le vrai risque vit dans le POI lui-même.
+  foePvTurns: 2.4, // PV du rôdeur ≈ 2,4 tours de dégâts du héros
+  foeDmgPctPv: 0.07, // il mord ~7 % des PV max du héros par coup
+} as const;
+
+/** Assaillant de trajet, calibré sur le HÉROS : toujours un vrai obstacle, jamais un mur.
+ *  Un build franchement bancal peut encore perdre — mais ce n'est plus mécanique. */
+export function ambushCombatant(hero: Combatant, level: number): Combatant {
+  const base = poiCombatant(Math.max(1, level - 1), 'camp');
+  const perTurn = Math.max(1, hero.damage * (hero.strikes ?? 1));
+  return {
+    ...base,
+    name: 'Rôdeur embusqué',
+    pv: Math.max(1, Math.round(perTurn * TRAVEL.foePvTurns)),
+    damage: Math.max(1, Math.round(hero.pv * TRAVEL.foeDmgPctPv)),
+  };
+}
+
+export type TravelLeg = 'out' | 'back';
+export interface TravelEncounter {
+  leg: TravelLeg;
+  kind: 'ambush' | 'cache';
+  won: boolean; // 'cache' → toujours true
+}
+
+/** Rencontres sur la route, tirées au DÉPART comme le reste (déterministe, hors-ligne).
+ *
+ *  Une expédition sans aléa n'est qu'un distributeur : c'est ce qui rendait les POI de
+ *  récolte plats. Ces rencontres redonnent de la variance ET la seule voie par laquelle
+ *  une récolte peut lâcher un objet — sans toucher à la récompense de base.
+ *
+ *  Le multiplicateur s'applique à TOUT le butin (or comme ressources) : une jambe de
+ *  trajet ratée écorne la cargaison, une embuscade repoussée l'enrichit. */
+export function rollTravelEncounters(
+  rng: () => number,
+  hero: Combatant,
+  poi: Poi,
+  seed: number,
+  playerLevel?: number,
+  legs: TravelLeg[] = ['out', 'back'],
+): {
+  encounters: TravelEncounter[];
+  mult: number;
+  drops: Omit<Item, 'id'>[];
+  keys: number;
+  text: string;
+} {
+  const encounters: TravelEncounter[] = [];
+  const drops: Omit<Item, 'id'>[] = [];
+  let mult = 1;
+  let keys = 0;
+  let text = '';
+  const LEG_FR: Record<TravelLeg, string> = { out: "à l'aller", back: 'au retour' };
+
+  legs.forEach((leg, i) => {
+    const roll = rng();
+    if (roll < TRAVEL.ambushChance) {
+      const won = simulateCombat(hero, ambushCombatant(hero, poi.level), {
+        seed: seed + 31 + i * 17,
+        goldOnWin: 0,
+      }).win;
+      encounters.push({ leg, kind: 'ambush', won });
+      if (won) {
+        mult *= TRAVEL.winMult;
+        // Un assaillant vaincu = un tirage d'objet, comme un monstre de donjon. Au niveau
+        // de l'embuscade (poi.level − 1) : la dépouille vaut ce que valait l'adversaire.
+        const spoil = rollDrop(rng, {
+          cleared: true,
+          defeated: 1,
+          level: Math.max(1, poi.level - 1),
+          luck: 0.35,
+          spread: 1,
+          playerLevel,
+        });
+        text += ` ⚔️ Embuscade repoussée ${LEG_FR[leg]}`;
+        if (spoil) {
+          drops.push(spoil);
+          text += ` (+ ${spoil.name} sur la dépouille)`;
+        }
+        text += ' !';
+      } else {
+        mult *= TRAVEL.loseMult;
+        text += ` 🩸 Embuscade subie ${LEG_FR[leg]} — cargaison écornée.`;
+      }
+    } else if (roll < TRAVEL.ambushChance + TRAVEL.cacheChance) {
+      // Trouvaille pacifique : pas de combat, juste une bonne surprise.
+      encounters.push({ leg, kind: 'cache', won: true });
+      mult *= TRAVEL.cacheMult;
+      keys += 1;
+      text += ` 🗝️ Cache oubliée repérée ${LEG_FR[leg]} — clé et vivres récupérés.`;
+    }
+  });
+
+  return { encounters, mult, drops, keys, text };
+}
+
 // ── Résolution (au DÉPART, seedée → révélée/créditée aux timestamps) ──
 const FAIL_TEXT: Record<PoiType, string[]> = {
   lair: [
@@ -576,20 +690,24 @@ export function resolveOutcome(
       fragments = Math.round((6 + L * 1.2) * tfH);
       inkDust = Math.round((5 + L) * tfH);
     }
+    // Une récolte sans aléa n'est qu'un distributeur : les rencontres de trajet lui
+    // rendent de la variance, et sont la SEULE voie par laquelle elle peut lâcher un objet.
+    const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
+    const k = tr.mult;
     return {
       win: true,
-      gold: Math.round(cost * 0.35), // symbolique : la paie est en ressources
+      gold: Math.round(cost * 0.35 * k), // symbolique : la paie est en ressources
       dust: 0,
-      energy,
+      energy: Math.round(energy * k),
       enchantScrolls: 0,
-      summonStones,
-      fragments,
-      inkDust,
-      item: null,
-      items: [],
-      key: rng() < HARVEST.keyChance ? 1 : 0,
+      summonStones: Math.round(summonStones * k),
+      fragments: Math.round(fragments * k),
+      inkDust: Math.round(inkDust * k),
+      item: tr.drops[0] ?? null,
+      items: tr.drops,
+      key: (rng() < HARVEST.keyChance ? 1 : 0) + tr.keys,
       reconBonus: 0,
-      text: pick(rng, WIN_TEXT[poi.type]),
+      text: pick(rng, WIN_TEXT[poi.type]) + tr.text,
     };
   }
 
@@ -741,39 +859,15 @@ export function resolveOutcome(
         )
       : 0;
   let text = pick(rng, WIN_TEXT[poi.type]);
-  // EMBUSCADE sur le trajet (seedée) : ~35 % de chance d'un combat rapide en chemin.
-  // Gagné → butin renforcé ; subi (héros trop faible) → butin écorné. Risque/reward.
-  if (rng() < 0.35) {
-    const ambushWon = simulateCombat(hero, poiCombatant(Math.max(1, poi.level - 1), 'camp'), {
-      seed: seed + 31,
-      goldOnWin: 0,
-    }).win;
-    if (ambushWon) {
-      gold = Math.round(gold * 1.25);
-      dust = Math.round(dust * 1.3);
-      enchantScrolls = Math.round(enchantScrolls * 1.3);
-      // Un assaillant vaincu = un tirage d'objet, comme un monstre de donjon. Niveau de
-      // l'embuscade (poi.level − 1) : la dépouille vaut ce que valait l'adversaire.
-      const spoil = rollDrop(rng, {
-        cleared: true,
-        defeated: 1,
-        level: Math.max(1, poi.level - 1),
-        luck: 0.35,
-        spread: 1,
-        playerLevel,
-      });
-      text += ' ⚔️ Embuscade repoussée en chemin — butin renforcé';
-      if (spoil) {
-        items.push(spoil);
-        text += ` (+ ${spoil.name} sur la dépouille)`;
-      }
-      text += ' !';
-    } else {
-      gold = Math.round(gold * 0.7);
-      dust = Math.round(dust * 0.7);
-      text += ' 🩸 Embuscade subie sur le trajet — butin écorné.';
-    }
-  }
+  // Rencontres de trajet — MÊME helper que les récoltes (aller ET retour), pour ne pas
+  // maintenir deux fois la même règle.
+  const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
+  gold = Math.round(gold * tr.mult);
+  dust = Math.round(dust * tr.mult);
+  enchantScrolls = Math.round(enchantScrolls * tr.mult);
+  items.push(...tr.drops);
+  key += tr.keys;
+  text += tr.text;
   return {
     win: true,
     gold,
