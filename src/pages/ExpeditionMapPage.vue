@@ -218,8 +218,8 @@
           text-color="dark"
           no-caps
           unelevated
-          label="Super"
-          @click="collectOpen = false"
+          :label="lastPending ? '🎁 Récupérer le butin' : 'Super'"
+          @click="lastPending ? doClaim() : (collectOpen = false)"
         />
       </q-card>
     </q-dialog>
@@ -250,6 +250,8 @@ import { talentEffects } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { simulateCombat, type Combatant } from '@/lib/combat';
 import {
+  POI_LABEL,
+  type ExpeditionMessage,
   haulPills,
   EXPE,
   heroPosition,
@@ -261,7 +263,6 @@ import {
   type Poi,
   type PoiType,
   HARVEST_TYPES,
-  type ExpeditionOutcome,
 } from '@/lib/expedition';
 
 const props = defineProps<{ embedded?: boolean }>();
@@ -289,16 +290,6 @@ const POI_EMO: Record<PoiType, string> = {
   shrine: '🔮',
   archive: '📖',
   wreck: '🔩',
-};
-const POI_LABEL: Record<PoiType, string> = {
-  mine: 'Mine',
-  camp: 'Camp',
-  lair: 'Repaire',
-  arena: 'Arène',
-  well: 'Source de faille',
-  shrine: "Sanctuaire d'invocation",
-  archive: 'Archives englouties',
-  wreck: 'Épave de convoi',
 };
 
 const now = ref(Date.now());
@@ -449,13 +440,15 @@ const edgeIndicators = computed(() => {
 
 const selected = ref<Poi | null>(null);
 const collectOpen = ref(false);
-const lastOutcome = ref<ExpeditionOutcome | null>(null);
+const lastOutcome = ref<ExpeditionMessage | null>(null);
 // Objets ramenés (l'arène en rend PLUSIEURS via `items`, les autres un seul via `item`).
 const lastOutcomeItems = computed(() => {
   const o = lastOutcome.value;
   if (!o) return [];
   return o.items && o.items.length ? o.items : o.item ? [o.item] : [];
 });
+/** Le rapport ouvert attend-il d'être encaissé ? (sinon la modale n'est qu'un compte rendu) */
+const lastPending = computed(() => !!lastOutcome.value && lastOutcome.value.claimed === false);
 
 // ── Filons de production (village autour de la ville) ──
 function selectPoi(p: Poi) {
@@ -552,31 +545,41 @@ async function lifecycle() {
         type: msg.win ? 'positive' : 'warning',
         message: `📬 ${msg.win ? 'Rapport : victoire' : 'Rapport : échec'} — le héros rentre.`,
       });
-    const o = await char.expeCollect(uid, Date.now());
-    if (o) {
-      lastOutcome.value = o;
+    // Le héros rentre : il redevient disponible, mais son chargement reste à ENCAISSER.
+    const settled = await char.expeSettle(uid, Date.now());
+    if (settled) {
+      lastOutcome.value = settled;
       collectOpen.value = true;
-      // Butin d'expédition légendaire/divin → éclat central (gros moment). L'arène peut
-      // en ramener plusieurs → on célèbre le PLUS RARE.
-      const drops = o.items && o.items.length ? o.items : o.item ? [o.item] : [];
-      const rk = (r: string) => RARITY_RANK[r as keyof typeof RARITY_RANK] ?? 0;
-      const top = drops.slice().sort((a, b) => rk(b.rarity) - rk(a.rarity))[0];
-      if (top && rk(top.rarity) >= 7)
-        gameFx.celebrate({
-          kind: 'drop',
-          emoji: top.emoji,
-          title: rk(top.rarity) >= 9 ? 'DROP RANG SSS !' : `Butin rang ${top.rarity} !`,
-          subtitle:
-            drops.length > 1
-              ? `${top.name} (+${drops.length - 1} autre${drops.length > 2 ? 's' : ''})`
-              : top.name,
-          rarity: rk(top.rarity) >= 9 ? 'divin' : rk(top.rarity) >= 8 ? 'legendary' : 'epic',
-        });
     }
     await char.expeSyncMap(uid, Date.now(), progressionLevel.value);
   } finally {
     busy = false;
   }
+}
+
+/** Encaisse le rapport ouvert. La CÉLÉBRATION est ici et non au retour : le butin se
+ *  découvre au moment où on le prend, pas pendant qu'on regardait ailleurs. */
+async function doClaim() {
+  const uid = auth.user?.id;
+  const m = lastOutcome.value;
+  if (!uid || !m) return;
+  const done = await char.expeClaim(uid, m.id, Date.now());
+  collectOpen.value = false;
+  if (!done) return;
+  const drops = done.items && done.items.length ? done.items : done.item ? [done.item] : [];
+  const rk = (r: string) => RARITY_RANK[r as keyof typeof RARITY_RANK] ?? 0;
+  const top = drops.slice().sort((a, b) => rk(b.rarity) - rk(a.rarity))[0];
+  if (top && rk(top.rarity) >= 7)
+    gameFx.celebrate({
+      kind: 'drop',
+      emoji: top.emoji,
+      title: rk(top.rarity) >= 9 ? 'DROP RANG SSS !' : `Butin rang ${top.rarity} !`,
+      subtitle:
+        drops.length > 1
+          ? `${top.name} (+${drops.length - 1} autre${drops.length > 2 ? 's' : ''})`
+          : top.name,
+      rarity: rk(top.rarity) >= 9 ? 'divin' : rk(top.rarity) >= 8 ? 'legendary' : 'epic',
+    });
 }
 
 // Écran de chargement thématique bref à l'ouverture de la carte (immersion).

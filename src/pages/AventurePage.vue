@@ -1493,11 +1493,21 @@
             >
               <div class="im-head">
                 <span class="im-emo">{{ m.win ? '🏆' : '💀' }}</span>
-                <span class="im-title">{{ POI_MSG_LABEL[m.poiType] }} · niv {{ m.level }}</span>
+                <span class="im-title">{{ POI_LABEL[m.poiType] }} · niv {{ m.level }}</span>
               </div>
               <div class="im-text">{{ m.text }}</div>
               <div class="im-haul">
                 <span v-for="p in haulPills(m)" :key="p.emoji">{{ p.emoji }} +{{ p.n }}</span>
+              </div>
+              <!-- Butin à ENCAISSER. Tant qu'on n'a pas cliqué, rien n'est crédité : c'est
+                   le geste qui donne au retour d'expédition un moment à lui. Un rapport
+                   d'avant la récupération manuelle n'a pas de `claimed` → déjà crédité. -->
+              <button v-if="isClaimable(m, expeNow)" class="im-claim" @click="doClaimMsg(m)">
+                🎁 Récupérer le butin
+              </button>
+              <div v-else-if="m.claimed === false" class="im-wait">
+                🧭 Le héros est encore sur la route — retour dans
+                {{ fmtExpeMs((m.claimAt ?? m.resolvedAt) - expeNow) }}
               </div>
               <!-- Objet gagné : détail complet (rareté / niveau / effet). -->
               <div v-if="m.item" class="im-loot" :class="'p-' + m.item.rarity">
@@ -2501,6 +2511,9 @@ import {
 } from '@/lib/regions';
 import { bestiary, setCollection, codexSummary } from '@/lib/codex';
 import {
+  POI_LABEL,
+  isClaimable,
+  type ExpeditionMessage,
   haulPills,
   heroPosition,
   runArena,
@@ -4494,7 +4507,9 @@ const expeNow = ref(Date.now());
 const expeHero = computed(() =>
   char.row?.expedition ? heroPosition(char.row.expedition, expeNow.value) : null,
 );
-const unreadMessages = computed(() => (char.row?.messages ?? []).filter((m) => !m.read).length);
+const unreadMessages = computed(
+  () => (char.row?.messages ?? []).filter((m) => !m.read || isClaimable(m, expeNow.value)).length,
+);
 const inboxOpen = ref(false);
 function openInbox() {
   inboxOpen.value = true;
@@ -4571,11 +4586,13 @@ async function expeLifecycle() {
         type: msg.win ? 'positive' : 'warning',
         message: '📬 Nouveau rapport d’expédition.',
       });
-    const o = await char.expeCollect(uid, Date.now());
-    if (o)
+    // Le héros rentre : il redevient disponible tout de suite, mais son chargement
+    // ATTEND dans la boîte 📬 qu'on vienne le prendre (`doClaim`).
+    const settled = await char.expeSettle(uid, Date.now());
+    if (settled)
       $q.notify({
         type: 'positive',
-        message: `🎉 Héros rentré ! +${o.gold} 🪙${o.item ? ' · ' + o.item.name : ''}`,
+        message: '🎉 Héros rentré — son butin t’attend dans 📬.',
       });
     await char.expeSyncMap(uid, Date.now(), c.value.level.level);
     await baseLifecycle();
@@ -4583,17 +4600,27 @@ async function expeLifecycle() {
     expeBusy = false;
   }
 }
+/** Encaisse le butin d'un rapport. La célébration est ici : c'est en prenant le butin
+ *  qu'on le découvre, pas pendant qu'on regardait un autre écran. */
+async function doClaimMsg(m: ExpeditionMessage) {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  const done = await char.expeClaim(uid, m.id, Date.now());
+  if (!done) return;
+  const haul = haulPills(done)
+    .map((h) => `${h.emoji} +${h.n}`)
+    .join(' · ');
+  $q.notify({ type: 'positive', message: `🎁 Butin récupéré ! ${haul || '—'}` });
+  const drops = done.items && done.items.length ? done.items : done.item ? [done.item] : [];
+  const top = drops.slice().sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity])[0];
+  if (top) celebrateRareDrop({ ...top, id: '' }); // même éclat que les drops de donjon
+}
+
 function fmtExpeMs(ms: number): string {
   const m = Math.max(0, Math.round(ms / 60000));
   if (m < 60) return `${m} min`;
   return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
 }
-const POI_MSG_LABEL: Record<string, string> = {
-  mine: 'Mine',
-  camp: 'Camp',
-  lair: 'Repaire',
-  arena: 'Arène',
-};
 
 // ── Sac : filtre par type d'objet + tri (meilleurs d'abord) ──
 const invFilter = ref<ItemSlot | 'all'>('all');
@@ -8316,6 +8343,23 @@ button.pt-mini:active {
   color: var(--dim);
   margin: 4px 0;
   line-height: 1.3;
+}
+.im-claim {
+  margin-top: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.im-wait {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dim);
 }
 .im-haul {
   display: flex;

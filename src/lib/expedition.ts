@@ -31,6 +31,22 @@ export type PoiType =
   // trouver sur un loup ou un revenant n'aurait aucun sens.
   | 'wreck';
 
+/** Nom d'un POI. ⚠️ `Record<PoiType, …>` : TypeScript exige donc une entrée par type, et
+ *  ajouter un POI casse la compilation tant qu'on ne l'a pas nommé. La boîte à messages
+ *  avait sa PROPRE table, elle, déclarée `Record<string, string>` — non exhaustive, donc
+ *  restée à 4 entrées quand les POI de récolte sont arrivés : un rapport d'épave, de
+ *  source, de sanctuaire ou d'archives s'affichait SANS TITRE. Une seule table, désormais. */
+export const POI_LABEL: Record<PoiType, string> = {
+  mine: 'Mine',
+  camp: 'Camp',
+  lair: 'Repaire',
+  arena: 'Arène',
+  well: 'Source de faille',
+  shrine: "Sanctuaire d'invocation",
+  archive: 'Archives englouties',
+  wreck: 'Épave de convoi',
+};
+
 /** POI de récolte pure : aucun combat, on ramasse et on rentre (comme la mine). */
 export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
   'mine',
@@ -114,10 +130,24 @@ export interface ExpeditionMessage {
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
   itemCount?: number; // ARÈNE : nombre total d'objets ramenés (> 1) — le reste va au sac
+  items?: Omit<Item, 'id'>[]; // TOUS les objets ramenés : c'est le message qui les porte
   key: number;
   waves?: number; // 'arena' : vagues tenues
   resolvedAt: number; // ms epoch (midAt)
+  /** À partir de quand le butin peut être récupéré = le retour en ville. Avant, le héros
+   *  est encore sur la route : on lit le rapport, on ne touche pas au chargement. */
+  claimAt?: number;
+  /** ⚠️ `undefined` signifie DÉJÀ CRÉDITÉ, jamais « à récupérer ». Les messages écrits
+   *  avant le passage en récupération manuelle ont été crédités automatiquement ; les
+   *  traiter comme non réclamés offrirait leur butin une seconde fois. Seuls les messages
+   *  écrits depuis portent `false` explicitement. */
+  claimed?: boolean;
   read: boolean;
+}
+
+/** Le butin de ce message est-il à récupérer ? (cf. la note sur `claimed`.) */
+export function isClaimable(m: ExpeditionMessage, now: number): boolean {
+  return m.claimed === false && now >= (m.claimAt ?? m.resolvedAt);
 }
 
 /** Ce qu'une expédition a rapporté, prêt à afficher. ⚠️ SOURCE UNIQUE des deux écrans
@@ -169,9 +199,14 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     ...(o.scrap ? { scrap: o.scrap } : {}),
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
+    // Les objets vivent DANS le message : c'est lui qui sera encaissé, donc c'est lui
+    // qui doit tout porter (l'arène en rend plusieurs).
+    ...(o.items && o.items.length ? { items: o.items } : o.item ? { items: [o.item] } : {}),
     key: o.key,
     ...(o.waves !== undefined ? { waves: o.waves } : {}),
     resolvedAt: exp.midAt,
+    claimAt: exp.returnAt,
+    claimed: false,
     read: false,
   };
 }

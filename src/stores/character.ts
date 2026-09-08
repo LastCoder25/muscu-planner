@@ -46,6 +46,7 @@ import {
 } from '@/lib/talents';
 import { voiePassiveEffects, VOIES } from '@/lib/voies';
 import {
+  isClaimable,
   createMap,
   advanceWorld,
   startExpedition,
@@ -1146,39 +1147,58 @@ export const useCharacterStore = defineStore('character', () => {
     return msg;
   }
   // Au retour en ville : crédite le butin (or/poussière/objet/clé) et libère le héros.
-  async function expeCollect(userId: string, now: number) {
+  /** RETOUR EN VILLE. Le héros rentre — il est de nouveau disponible — mais **son
+   *  chargement reste dans la sacoche** : c'est le joueur qui l'encaisse, depuis la boîte
+   *  📬 (`expeClaim`). ⚠️ Le héros est libéré SANS condition : le bloquer jusqu'à ce qu'on
+   *  vienne cliquer punirait l'absence, ce que le jeu ne fait jamais. Le butin, lui, ne se
+   *  périme pas : il attend dans la boîte aussi longtemps qu'il faut. */
+  async function expeSettle(userId: string, now: number): Promise<ExpeditionMessage | null> {
     const cur = row.value;
     const exp = cur?.expedition;
     if (!cur || !exp || now < exp.returnAt) return null;
-    const o = exp.outcome;
-    // Objets ramenés : l'arène en rend PLUSIEURS (o.items) ; les autres POI un seul (o.item).
-    const drops = (o.items && o.items.length ? o.items : o.item ? [o.item] : []).map((it) => ({
+    // Le rapport a pu être déposé à l'arrivée sur l'objectif (`expeTick`) ; sinon (app
+    // fermée tout du long) on le dépose maintenant. Dans les deux cas il porte le butin.
+    const msg = buildMessage({ ...exp, reported: true });
+    const messages = exp.reported
+      ? cur.messages.map((m) => (m.id === msg.id ? msg : m))
+      : [msg, ...cur.messages].slice(0, 20);
+    await persist(userId, { messages, expedition: null });
+    return msg;
+  }
+
+  /** Encaisse le butin d'UN rapport. Idempotent par construction : `claimed` passe à
+   *  `true` dans la même écriture que le crédit, et un message déjà encaissé (ou légué de
+   *  l'époque du crédit automatique, donc sans `claimed`) est refusé. */
+  async function expeClaim(userId: string, messageId: string, now: number) {
+    const cur = row.value;
+    if (!cur) return null;
+    const m = cur.messages.find((x) => x.id === messageId);
+    if (!m || !isClaimable(m, now)) return null;
+    // Objets ramenés : l'arène en rend PLUSIEURS ; `item` seul = messages d'avant `items`.
+    const drops = (m.items && m.items.length ? m.items : m.item ? [m.item] : []).map((it) => ({
       ...it,
       id: crypto.randomUUID(),
     }));
     const inventory = drops.length ? [...cur.inventory, ...drops] : cur.inventory;
-    // Si le rapport n'a jamais été déposé (app fermée tout du long), on le dépose aussi.
-    const messages = exp.reported
-      ? cur.messages
-      : [buildMessage({ ...exp, reported: true }), ...cur.messages].slice(0, 20);
     await persist(userId, {
-      gold: cur.gold + o.gold,
-      login_energy: cur.login_energy + (o.energy ?? 0), // ⚡ mine/source → énergie de jeu
-      keys: cur.keys + o.key,
+      gold: cur.gold + m.gold,
+      login_energy: cur.login_energy + (m.energy ?? 0), // ⚡ mine/source → énergie de jeu
+      keys: cur.keys + (m.key ?? 0),
       // Devises VIVANTES des POI de récolte (v0.658). On ne crédite plus de poussière ni
       // de parchemins d'enchant : ces deux-là n'ont plus aucun site de dépense.
-      summon_stones: cur.summon_stones + (o.summonStones ?? 0),
-      fragments: cur.fragments + (o.fragments ?? 0),
-      ink_dust: cur.ink_dust + (o.inkDust ?? 0),
-      scrap: cur.scrap + (o.scrap ?? 0), // 🔩 épaves → réparation de l’enceinte
+      summon_stones: cur.summon_stones + (m.summonStones ?? 0),
+      fragments: cur.fragments + (m.fragments ?? 0),
+      ink_dust: cur.ink_dust + (m.inkDust ?? 0),
+      scrap: cur.scrap + (m.scrap ?? 0), // 🔩 épaves → réparation de l’enceinte
       inventory,
-      messages,
+      messages: cur.messages.map((x) =>
+        x.id === messageId ? { ...x, claimed: true, read: true } : x,
+      ),
       set_pieces_seen: drops.length
         ? mergeSetSeen(cur.set_pieces_seen, drops)
         : cur.set_pieces_seen,
-      expedition: null,
     });
-    return o;
+    return m;
   }
   async function expeMarkRead(userId: string) {
     const cur = row.value;
@@ -1542,7 +1562,8 @@ export const useCharacterStore = defineStore('character', () => {
     expeSyncMap,
     expeSend,
     expeTick,
-    expeCollect,
+    expeSettle,
+    expeClaim,
     expeMarkRead,
     buildFilon,
     upgradeFilon,

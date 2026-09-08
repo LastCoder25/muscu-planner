@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  isClaimable,
+  type ExpeditionMessage,
   haulPills,
   spawnWindow,
   createMap,
@@ -461,5 +463,51 @@ describe('butin affiché — source unique des deux écrans', () => {
       { emoji: '🗝️', n: 1 },
     ]);
     expect(haulPills({})).toEqual([]);
+  });
+});
+
+describe('butin à RÉCUPÉRER (et pas deux fois)', () => {
+  const msg = (over: Partial<ExpeditionMessage> = {}): ExpeditionMessage =>
+    ({
+      id: 'm1',
+      poiType: 'wreck',
+      level: 26,
+      win: true,
+      text: '',
+      gold: 0,
+      dust: 0,
+      energy: 0,
+      enchantScrolls: 0,
+      scrap: 90,
+      key: 0,
+      resolvedAt: 1000,
+      claimAt: 5000,
+      claimed: false,
+      read: false,
+      ...over,
+    }) as ExpeditionMessage;
+
+  it('⚠️ un rapport d’AVANT la récupération manuelle est déjà crédité — jamais réclamable', () => {
+    // La propriété qui protège le joueur ET l'économie : `claimed` absent signifie
+    // « déjà encaissé automatiquement ». Le traiter comme « à récupérer » offrirait une
+    // seconde fois le butin de chaque expédition déjà faite.
+    const legacy = msg();
+    delete (legacy as { claimed?: boolean }).claimed;
+    expect(isClaimable(legacy, 9e9)).toBe(false);
+  });
+
+  it('rien à prendre tant que le héros est sur la route du retour', () => {
+    expect(isClaimable(msg(), 4999)).toBe(false); // rapport lu, héros pas rentré
+    expect(isClaimable(msg(), 5000)).toBe(true);
+  });
+
+  it('une fois encaissé, il ne l’est plus jamais', () => {
+    expect(isClaimable(msg({ claimed: true }), 9e9)).toBe(false);
+  });
+
+  it('un vieux rapport sans claimAt retombe sur l’heure de résolution', () => {
+    const m = msg({ claimAt: undefined });
+    expect(isClaimable(m, 999)).toBe(false);
+    expect(isClaimable(m, 1000)).toBe(true);
   });
 });
