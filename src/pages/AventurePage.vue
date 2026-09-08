@@ -841,12 +841,16 @@
                   >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} sans intérêt
                   <span class="bulk-note">(≤ ton équipement ; pépites &amp; 🔒 gardés)</span></span
                 >
+                <!-- ⚠️ Les deux boutons annoncent le GAIN, jamais le compte : le nombre
+                     d'objets est déjà dit juste au-dessus, et c'est le montant qui
+                     TRANCHE (or ou métal ?). Un bouton qui comptait les objets et
+                     l'autre la ferraille laissait croire à deux barèmes différents. -->
                 <div class="bulk-btns">
                   <button class="bulk-b" @click="doSellBelow">
-                    🪙 Tout vendre ({{ belowCount }})
+                    🪙 Tout vendre (+{{ belowGold }})
                   </button>
                   <button v-if="belowScrap > 0" class="bulk-b" @click="doRecycleBelow">
-                    🔩 Tout recycler ({{ belowScrap }})
+                    🔩 Tout recycler (+{{ belowScrap }})
                   </button>
                 </div>
               </div>
@@ -5001,11 +5005,13 @@ const powerLossItems = computed<Item[]>(() => {
   });
 });
 const belowCount = computed(() => powerLossItems.value.length);
-// Ferraille que rendrait la même purge. Affichée sur le bouton : le joueur arbitre
-// entre l'or et le métal en voyant les DEUX nombres, pas en devinant.
-const belowScrap = computed(() =>
-  powerLossItems.value.filter(canRecycle).reduce((a, i) => a + scrapValue(i), 0),
-);
+// Ce que rendrait la purge, dans les DEUX monnaies. Affichés côte à côte sur les
+// boutons : c'est en voyant les deux nombres qu'on arbitre, pas en devinant.
+const belowGold = computed(() => powerLossItems.value.reduce((a, i) => a + sellValue(i), 0));
+// Même liste que belowGold, sans filtre divergent : les deux nombres doivent décrire
+// EXACTEMENT le même lot, sinon les comparer n'a pas de sens. (Un objet non recyclable
+// rendrait 0, cf. scrapValue.)
+const belowScrap = computed(() => powerLossItems.value.reduce((a, i) => a + scrapValue(i), 0));
 // Libellé du périmètre (« du sac » ou « [type] ») pour être explicite.
 const bulkScope = computed(() =>
   bulkSlot.value ? SLOT_LABEL[bulkSlot.value].toLowerCase() : 'ton sac',
@@ -5015,7 +5021,7 @@ function doRecycleBelow() {
   const gain = powerLossItems.value.filter(canRecycle).reduce((a, i) => a + scrapValue(i), 0);
   $q.dialog({
     title: 'Tout recycler',
-    message: `Fondre les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} en ${gain} 🔩 ? Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
+    message: `Fondre les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} en ${gain} 🔩 ? Tu renonces donc à ${belowGold.value} 🪙. Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: `Tout recycler (+${gain} 🔩)`, color: 'negative' },
   }).onOk(() =>
@@ -5027,11 +5033,12 @@ function doRecycleBelow() {
 }
 function doSellBelow() {
   const ids = powerLossItems.value.map((i) => i.id);
+  const gain = belowGold.value;
   $q.dialog({
     title: 'Tout vendre',
-    message: `Vendre les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} → or ? Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
+    message: `Vendre les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} contre ${gain} 🪙 ? Tu renonces donc à ${belowScrap.value} 🔩. Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Tout vendre', color: 'negative' },
+    ok: { label: `Tout vendre (+${gain} 🪙)`, color: 'negative' },
   }).onOk(() => withUid((uid) => char.sellMany(uid, ids), 'Vente impossible.'));
 }
 async function savePseudo() {
