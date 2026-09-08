@@ -265,11 +265,19 @@ describe('calibration du siège', () => {
     });
   });
 
-  it('les tourelles visibles sont bornées aux emplacements du mur', () => {
+  it('les tourelles sont TOUTES là, ou aucune — et montent ensemble', () => {
+    // Elles apparaissaient une par une (1 + niveau/3) : la défense croissait en NOMBRE ×
+    // PUISSANCE (quadratique), et le rempart restait à moitié nu sans qu'on comprenne —
+    // cliquer un emplacement vide n'y bâtissait rien, l'ordre de remplissage étant imposé.
+    // Un rempart se garnit d'un coup ; c'est le NIVEAU, partagé, qui porte la puissance.
     expect(turretCount(0)).toBe(0);
-    for (let l = 1; l <= 120; l++) expect(turretCount(l)).toBeLessThanOrEqual(TURRET_SLOTS);
-    expect(turretCount(1)).toBeGreaterThan(0);
-    expect(turretCount(60)).toBe(TURRET_SLOTS);
+    for (const l of [1, 3, 12, 60, 120]) expect(turretCount(l)).toBe(TURRET_SLOTS);
+    // ⚠️ La puissance de feu au niveau MAXIMAL est inchangée par ce passage (8 × K dans
+    // les deux modèles) : le combat à niveau ne bouge pas, seule la montée devient linéaire.
+    const plein = baseCombatant(defs(26, 26), 26, null).damage;
+    const demi = baseCombatant(defs(26, 13), 26, null).damage;
+    expect(demi).toBeLessThan(plein);
+    expect(demi).toBeGreaterThan(plein * 0.35); // linéaire, pas quadratique
   });
 });
 

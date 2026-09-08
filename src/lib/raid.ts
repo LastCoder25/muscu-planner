@@ -265,12 +265,16 @@ export function isDamaged(defenses: DefenseStructure[], id: DefenseId): boolean 
  *  emplacements vides se voient, et disent au joueur ce qu'il pourrait avoir. */
 export const TURRET_SLOTS = 8;
 
-/** Tourelles réellement en place. Plafonné à `TURRET_SLOTS` : au-delà du niveau ~21,
- *  seule la puissance de feu unitaire progresse — sinon la défense croîtrait de façon
- *  quadratique (nombre × puissance) et finirait par trivialiser tout le contenu. */
+/** Tourelles en place : TOUTES dès que la structure existe, AUCUNE sinon.
+ *
+ *  ⚠️ Elles apparaissaient auparavant une par une (1 + niveau/3), ce qui donnait une
+ *  défense croissant en NOMBRE × PUISSANCE — quadratique — et un rempart à moitié nu qu'on
+ *  ne comprenait pas : cliquer un emplacement vide n'y bâtissait rien, puisque l'ordre de
+ *  remplissage était imposé. Un rempart se garnit d'un coup ; c'est le NIVEAU, partagé par
+ *  toutes les tours, qui porte la puissance de feu. La montée redevient donc LINÉAIRE, et
+ *  la puissance au niveau maximal est inchangée (8 × turretDmgK dans les deux modèles). */
 export function turretCount(level: number): number {
-  if (level <= 0) return 0;
-  return Math.min(TURRET_SLOTS, 1 + Math.floor(level / 3));
+  return level > 0 ? TURRET_SLOTS : 0;
 }
 
 // ── Constantes de dimensionnement ──
