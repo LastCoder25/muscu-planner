@@ -38,13 +38,21 @@ describe('buildings — emplacements & coûts', () => {
     expect(plotsForLevel(BUILD.plotCap)).toBe(BUILD.plotCap);
     expect(plotsForLevel(40)).toBe(BUILD.plotCap); // plafonné
   });
-  it('plus d’EMPLACEMENTS que de TYPES : construire est un choix, pas une liste', () => {
-    // Tant que les deux étaient ÉGAUX (6 et 6), aucun emplacement n'était jamais libre :
-    // construire n'était pas une décision, c'était une liste de courses qu'on cochait. Il
-    // faut du mou pour qu'un emplacement vide propose vraiment un choix.
-    expect(BUILD.plotCap).toBeGreaterThan(BUILDING_TYPES.length);
+  it('AUCUN emplacement mort : autant d’emplacements que de types (tous uniques)', () => {
+    // ⚠️ Tous les types sont `unique` → un emplacement au-delà de leur nombre ne peut
+    // JAMAIS être rempli : ce n'est pas de la réserve, c'est un trou permanent dans la
+    // cour. C'est ce que donnaient les 10 emplacements pour 7 bâtiments.
+    expect(BUILDING_TYPES.every((t) => t.unique)).toBe(true);
+    expect(BUILD.plotCap).toBe(BUILDING_TYPES.length);
     // 7 types : outpost, porte, autel, mine, dynamo, fonderie, entrepôt.
     expect(BUILDING_TYPES.length).toBe(7);
+  });
+  it('le CHOIX vit dans plotsForLevel, pas dans le mou : moins d’emplacements que de types déblocables', () => {
+    // À bas niveau on a moins d'emplacements que de bâtiments déjà déblocables → on
+    // décide de l'ORDRE. C'est là (et seulement là) que construire est une décision.
+    const buildableAt = (lvl) => BUILDING_TYPES.filter((t) => (t.unlockLevel ?? 1) <= lvl).length;
+    expect(plotsForLevel(3)).toBeLessThan(buildableAt(3));
+    expect(plotsForLevel(4)).toBeLessThan(buildableAt(4));
   });
   it('slotUnlockLevel : inverse cohérent de plotsForLevel (dans la limite de plotCap)', () => {
     for (let slot = 0; slot < BUILD.plotCap; slot++) {

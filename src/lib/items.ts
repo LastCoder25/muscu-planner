@@ -318,6 +318,47 @@ export function sellValue(it: Item): number {
 export function sellValueForRarity(rank: Rarity): number {
   return GOLD_BY_RARITY[rank];
 }
+
+// ── ♻️ RECYCLAGE EN FERRAILLE 🔩 ────────────────────────────────────────────────────
+// Un objet dont on ne veut plus peut partir à la FORGE au lieu du marchand : le sac
+// devient une source de ferraille, donc de réparations et de défenses. C'est une vraie
+// ALTERNATIVE à la vente (l'objet est consommé une fois, pas deux) — l'or et le métal ne
+// se remplacent pas, on arbitre.
+//
+// ⚠️ LE RATIO VIENT DE LA MASSE DE MÉTAL de la pièce, pas de sa puissance : c'est la
+// seule lecture qui se comprenne sans notice. Une cuirasse, c'est des plaques ; une
+// épée, une lame et une garde ; une relique, surtout de la pierre et de l'os ; un
+// collier, une pincée. Un FAMILIER ne se recycle pas — on ne démonte pas un animal.
+const SCRAP_BY_SLOT: Record<ItemSlot, number> = {
+  armor: 1, // la plus grosse pièce de métal du stuff
+  weapon: 0.85,
+  relic: 0.45,
+  accessory: 0.3,
+  familiar: 0, // jamais (garde-fou aussi côté store)
+};
+/** Ferraille de base d'une pièce moyenne. ⚠️ Calé pour que vider un sac de bric-à-brac
+ *  (~20 objets) rende l'ordre de grandeur d'UNE épave, pas de dix : le POI reste la
+ *  source de POINTE, le recyclage un filet régulier — même relation que la Fonderie avec
+ *  l'épave, ou la Mine d'or avec les expéditions. */
+const SCRAP_BASE = 8;
+/** La rareté monte DOUCEMENT (×1 → ×2,75), très loin de la courbe de l'or (×1,8 par
+ *  rang) : les puits de ferraille (réparer, monter une structure) croissent avec le
+ *  NIVEAU des défenses, pas de façon géométrique. Un sac de haut rang ne doit pas rendre
+ *  l'enceinte gratuite. */
+const SCRAP_RARITY_STEP = 0.25;
+
+/** Ferraille rendue par le recyclage d'un objet. 0 pour un familier. */
+export function scrapValue(it: Item): number {
+  const slotMult = SCRAP_BY_SLOT[it.slot] ?? 0;
+  if (!slotMult) return 0;
+  const rarityMult = 1 + RANK_ORDER.indexOf(it.rarity) * SCRAP_RARITY_STEP;
+  const v = SCRAP_BASE * slotMult * rarityMult * itemLevelMult(it.level);
+  return Math.max(1, Math.round(v)); // une pièce recyclable rend toujours quelque chose
+}
+/** Un objet peut-il partir à la forge ? (jamais un familier, jamais un objet 🔒.) */
+export function canRecycle(it: Item): boolean {
+  return !it.locked && scrapValue(it) > 0;
+}
 /** Peut-on améliorer cet objet ? (poussière suffisante + pas au plafond). */
 export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean {
   return it.level < playerLevel && dust >= upgradeCost(it.level, it.rarity);

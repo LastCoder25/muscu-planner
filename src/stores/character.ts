@@ -10,6 +10,8 @@ import {
 } from '@/lib/character';
 import {
   sellValue,
+  scrapValue,
+  canRecycle,
   sellValueOf,
   levelToEnchant,
   enchantMult,
@@ -657,6 +659,39 @@ export const useCharacterStore = defineStore('character', () => {
     });
     goldFx.gain(gain);
     return targets.length;
+  }
+
+  // ♻️ Envoie un objet du sac À LA FORGE → ferraille 🔩 (réparations et défenses).
+  // ⚠️ ALTERNATIVE à la vente, pas un bonus : l'objet est consommé une fois. Un familier
+  // ne se recycle jamais (`canRecycle`), un objet 🔒 non plus — mêmes garde-fous que la
+  // vente, sinon le verrou ne protégerait que d'une des deux portes.
+  async function recycle(userId: string, itemId: string): Promise<number> {
+    const cur = row.value;
+    if (!cur) return 0;
+    const item = cur.inventory.find((i) => i.id === itemId);
+    if (!item || !canRecycle(item)) return 0;
+    const gain = scrapValue(item);
+    await persist(userId, {
+      scrap: cur.scrap + gain,
+      inventory: cur.inventory.filter((i) => i.id !== itemId),
+    });
+    return gain;
+  }
+
+  // Recycle EN MASSE une liste d'objets du sac (par id) → ferraille. Renvoie le total.
+  async function recycleMany(userId: string, ids: string[]): Promise<number> {
+    const cur = row.value;
+    if (!cur || !ids.length) return 0;
+    const set = new Set(ids);
+    const targets = cur.inventory.filter((i) => set.has(i.id) && canRecycle(i));
+    if (!targets.length) return 0;
+    const rm = new Set(targets.map((t) => t.id)); // ne retire QUE les recyclables
+    const gain = targets.reduce((a, it) => a + scrapValue(it), 0);
+    await persist(userId, {
+      scrap: cur.scrap + gain,
+      inventory: cur.inventory.filter((i) => !rm.has(i.id)),
+    });
+    return gain;
   }
 
   // (Enchant d'objets retiré, ticket 7acb1e7c : les objets sont des drops purs — leur
@@ -1547,6 +1582,8 @@ export const useCharacterStore = defineStore('character', () => {
     sellTalent,
     sell,
     sellMany,
+    recycle,
+    recycleMany,
     toggleLock,
     spendEnergy,
     claimDailyLogin,

@@ -62,9 +62,11 @@ export interface SiegeStage {
 }
 
 export const SIEGE_STAGE = {
-  /** Anneau d'arrivée des assaillants (unités du dessin, centre = 100,100). */
-  spawnMin: 92,
-  spawnMax: 104,
+  /** Anneau d'arrivée des assaillants (unités du dessin, centre = 100,100). Calé sur
+   *  l'enceinte (rayon 72, apothème 66,5) : ils surgissent hors champ de tir et marchent
+   *  vers le mur. Si le rayon de l'enceinte bouge, cet anneau le suit. */
+  spawnMin: 84,
+  spawnMax: 96,
   /** Ouverture de l'arc d'assaut : une armée arrive d'un CÔTÉ, pas de partout — sinon
    *  elle a l'air de pleuvoir plutôt que de marcher sur la ville. */
   arc: Math.PI * 1.15,

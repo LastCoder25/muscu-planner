@@ -180,7 +180,9 @@ const stage = computed(() => buildSiegeStage(props.report, turretCount(props.tur
 const hasTurrets = computed(() => props.turretLevel > 0);
 
 // ── Géométrie : la MÊME que l'écran « Ma base », pour qu'on reconnaisse son enceinte ──
-const WALL_R = 80;
+// ⚠️ Ces deux valeurs doivent rester d'accord : si l'enceinte change de taille là-bas,
+// elle change ici, sans quoi on ne reconnaît plus sa propre base au moment du verdict.
+const WALL_R = 72;
 const octagon = computed(() =>
   Array.from({ length: TURRET_SLOTS }, (_, i) => {
     const a = (i / TURRET_SLOTS) * Math.PI * 2 - Math.PI / 2 + Math.PI / TURRET_SLOTS;

@@ -120,7 +120,7 @@
           <template v-if="watchLevel">
             <rect
               x="91"
-              y="14"
+              :y="WALL_TOP - 12"
               width="18"
               height="30"
               rx="2"
@@ -131,23 +131,26 @@
               v-for="k in 4"
               :key="k"
               :x="91 + (k - 1) * 5"
-              y="10"
+              :y="WALL_TOP - 16"
               width="3.5"
               height="4.5"
               class="watch-crown"
               :class="{ damaged: watchDamaged }"
             />
-            <!-- Mât et bannière : redescendus, ils sortaient du cadre (y négatif) et se
-                 faisaient rogner par le viewBox. -->
-            <rect x="99.2" y="1" width="1.6" height="12" class="watch-mast" />
-            <path d="M100.8 1 L110 4 L100.8 6.8 Z" class="watch-flag" />
-            <circle cx="100" cy="26" r="3.4" class="watch-eye" />
+            <!-- Mât et bannière. ⚠️ Tout est posé PAR RAPPORT au pan nord : en dur, ils
+                 sortaient du cadre (y négatif) et se faisaient rogner par le viewBox. -->
+            <rect x="99.2" :y="WALL_TOP - 25" width="1.6" height="12" class="watch-mast" />
+            <path
+              :d="`M100.8 ${WALL_TOP - 25} L110 ${WALL_TOP - 22} L100.8 ${WALL_TOP - 19.2} Z`"
+              class="watch-flag"
+            />
+            <circle cx="100" :cy="WALL_TOP" r="3.4" class="watch-eye" />
             <g class="lvl-badge">
-              <circle cx="112" cy="18" r="5" />
-              <text x="112" y="19.8">{{ watchLevel }}</text>
+              <circle cx="112" :cy="WALL_TOP - 8" r="5" />
+              <text x="112" :y="WALL_TOP - 6.2">{{ watchLevel }}</text>
             </g>
           </template>
-          <rect v-else x="91" y="14" width="18" height="30" rx="2" class="slot-empty" />
+          <rect v-else x="91" :y="WALL_TOP - 12" width="18" height="30" rx="2" class="slot-empty" />
         </g>
 
         <!-- ── LA PORTE (rempart sud) ───────────────────────────────────────
@@ -157,8 +160,8 @@
         <g class="hit gate" @click="openMap">
           <path :d="gatePath" class="gate-arch" />
           <path :d="gatePath" class="gate-mouth" />
-          <path d="M100 168 L100 180 M95 175 L100 180 L105 175" class="gate-arrow" />
-          <text x="100" y="192" class="gate-label">Expéditions</text>
+          <path :d="gateArrow" class="gate-arrow" />
+          <text x="100" :y="gateLabelY" class="gate-label">Expéditions</text>
         </g>
 
         <!-- ── LA COUR ──────────────────────────────────────────────────────
@@ -616,9 +619,18 @@ function closeSiege() {
 
 // ── Géométrie de l'enceinte : un octogone dont les 8 sommets sont les emplacements
 // de tourelle. TURRET_SLOTS vaut 8 précisément pour que le compte tombe juste.
-/** Rayon de l'enceinte. Agrandi de 72 à 80 pour loger 5 colonnes de bâtiments : ce qui
- *  manquait était la place, pas les emplacements. */
-const WALL_R = 80;
+/** Rayon de l'enceinte. **La cour dicte les murs, pas l'inverse** : elle avait été portée
+ *  à 80 pour loger 5 colonnes quand on comptait 10 emplacements ; il n'y en a plus que 7
+ *  (autant que de types de bâtiments, cf. `BUILD.plotCap`), donc elle redescend à 72 —
+ *  sinon l'enceinte enferme surtout du vide. Toute la géométrie qui s'y accroche (corps de
+ *  garde, porte, cour) en est DÉRIVÉE : changer ce nombre suffit. */
+const WALL_R = 72;
+/** Distance du centre au MILIEU d'un pan. C'est elle — pas le rayon — qui borne la cour
+ *  (le mur passe plus près au milieu d'un pan qu'à un sommet) et qui porte le corps de
+ *  garde au nord comme la porte au sud. */
+const APOTHEM = WALL_R * Math.cos(Math.PI / TURRET_SLOTS);
+const WALL_TOP = 100 - APOTHEM;
+const WALL_BOTTOM = 100 + APOTHEM;
 const octagon = computed(() =>
   Array.from({ length: TURRET_SLOTS }, (_, i) => {
     // Décalage d'un DEMI-PAS (+π/8) : sans lui, un sommet tombe pile en haut et le
@@ -633,24 +645,30 @@ const turretLevel = computed(() => defenseLevel(defenses.value, 'turret'));
  *  les milieux de pans tombent pile au nord et au sud — le corps de garde en haut, la
  *  sortie en bas. */
 const gatePath = computed(() => {
-  const apo = WALL_R * Math.cos(Math.PI / 8); // distance centre → milieu d'un pan
-  const y = 100 + apo;
+  const y = WALL_BOTTOM;
   return `M90 ${y + 6} L90 ${y - 2} A10 10 0 0 1 110 ${y - 2} L110 ${y + 6} Z`;
 });
+/** La flèche de sortie vit DANS l'ouverture, le libellé juste en dessous : dérivés eux
+ *  aussi, sinon ils flottent hors de la porte au premier changement de rayon. */
+const gateArrow = computed(() => {
+  const y = WALL_BOTTOM + 1.5;
+  return `M100 ${y} L100 ${y + 12} M95 ${y + 7} L100 ${y + 12} L105 ${y + 7}`;
+});
+const gateLabelY = computed(() => WALL_BOTTOM + 25.5);
 const wallPoints = computed(() => octagon.value.map((p) => `${p.x},${p.y}`).join(' '));
 const innerPoints = computed(() =>
   octagon.value.map((p) => `${100 + (p.x - 100) * 0.86},${100 + (p.y - 100) * 0.86}`).join(' '),
 );
 
-/** LA COUR. Deux rangées de bâtiments de PRODUCTION (les 6 emplacements du village,
+/** LA COUR. Deux rangées de bâtiments de PRODUCTION (les 7 emplacements du village,
  *  rapatriés de la carte) et une rangée de SERVICES (chenil, infirmerie, chantier).
  *  Chaque case est cliquable : c'est le dessin qui sert de sélecteur, comme l'anneau de
  *  la carte le faisait avant — emoji, pastille de niveau, point de récolte.
  *  ⚠️ Grille calée dans l'octogone INTÉRIEUR, dont ce qui compte n'est pas le rayon
- *  (62) mais l'APOTHÈME — la distance au milieu d'un pan, soit 62·cos(22,5°) ≈ 57.
+ *  (72 × 0,86 ≈ 62) mais l'APOTHÈME — la distance au milieu d'un pan, soit ≈ 57,2.
  *  Une tuile est carrée : c'est son COIN qui touche le mur en premier, à
- *  √(dx²+dy²) + demi-diagonale. Avec la grille d'origine, le coin bas-droit sortait
- *  de ~2 unités. Resserrée, il reste ~2 unités de marge. */
+ *  √(dx²+dy²) + demi-diagonale (12,7). Le coin le plus éloigné tombe à 48,8 : la marge
+ *  est confortable, elle l'était beaucoup moins avec 5 colonnes (61,4 pour 63,6). */
 interface YardCell {
   key: string;
   x: number;
@@ -663,16 +681,21 @@ interface YardCell {
   damaged: boolean;
   onClick: () => void;
 }
-// 4 colonnes × 2 rangées pour les 8 emplacements de production, puis une rangée de
-// services. ⚠️ Vérifié contre l'apothème de l'octogone intérieur (~57) : le coin le plus
-// éloigné d'une tuile tombe à 51, il reste donc de la marge au mur.
-// 5 colonnes × 2 rangées pour les 10 emplacements, puis une rangée de services.
-// ⚠️ Vérifié contre l'apothème de l'octogone intérieur (63,6) : le coin le plus éloigné
-// d'une tuile tombe à 61,4 — c'est SERRÉ, ne pas élargir la grille sans re-vérifier.
-const YARD_X = [60, 80, 100, 120, 140];
-const YARD_Y = [72, 96];
-const SVC_X = [70, 100, 130];
-const SVC_Y = 120;
+// Les 7 emplacements de production en 4 + 3, la seconde rangée DÉCALÉE d'un demi-pas :
+// une grille 4×2 laisserait un trou béant au dernier rang, alors que 4 + 3 centré se lit
+// comme un village qui épouse l'octogone. ⚠️ Le nombre de cases suit `BUILD.plotCap` (un
+// test le verrouille) : ajouter un type de bâtiment demande une position de plus ici.
+const PLOT_POS: { x: number; y: number }[] = [
+  { x: 70, y: 80 },
+  { x: 90, y: 80 },
+  { x: 110, y: 80 },
+  { x: 130, y: 80 },
+  { x: 80, y: 102 },
+  { x: 100, y: 102 },
+  { x: 120, y: 102 },
+];
+const SVC_X = [80, 100, 120];
+const SVC_Y = 124;
 const YARD_HALF = 9; // demi-côté DESSINÉ
 // Cible tactile plus large que le dessin, sans chevauchement (elle vaut exactement l'écart
 // entre deux colonnes) → ~37 px sur un téléphone, contre 33 pour la tuile visible seule.
@@ -689,11 +712,11 @@ const yard = computed<YardCell[]>(() => {
   // Rangées 1-2 : les emplacements du village.
   for (let i = 0; i < BUILD.plotCap; i++) {
     const b = bs.find((x) => x.slot === i) ?? null;
-    const cols = YARD_X.length;
+    const pos = PLOT_POS[i] ?? PLOT_POS[PLOT_POS.length - 1]!;
     cells.push({
       key: 'plot' + i,
-      x: YARD_X[i % cols]!,
-      y: YARD_Y[Math.floor(i / cols)]!,
+      x: pos.x,
+      y: pos.y,
       emoji: b ? (buildingType(b.typeId)?.emoji ?? '🏠') : '',
       built: !!b,
       locked: i >= unlocked,

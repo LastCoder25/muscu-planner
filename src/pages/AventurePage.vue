@@ -845,6 +845,9 @@
                   <button class="bulk-b" @click="doSellBelow">
                     🪙 Tout vendre ({{ belowCount }})
                   </button>
+                  <button v-if="belowScrap > 0" class="bulk-b" @click="doRecycleBelow">
+                    🔩 Tout recycler ({{ belowScrap }})
+                  </button>
                 </div>
               </div>
               <div v-if="!filteredInventory.length" class="inv-empty-filter">
@@ -962,6 +965,15 @@
                       @click="doSell(it)"
                     >
                       🪙
+                    </button>
+                    <button
+                      v-if="scrapValue(it) > 0"
+                      class="ii-ic"
+                      :disabled="it.locked"
+                      :title="'Recycler → ferraille (' + scrapValue(it) + '🔩)'"
+                      @click="doRecycle(it)"
+                    >
+                      🔩
                     </button>
                     <button
                       class="ii-ic lock"
@@ -2204,6 +2216,9 @@
                       {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
                     </button>
                     <button class="link-btn" @click="doSell(d)">Vendre 🪙{{ sellValue(d) }}</button>
+                    <button v-if="scrapValue(d) > 0" class="link-btn" @click="doRecycle(d)">
+                      Recycler 🔩{{ scrapValue(d) }}
+                    </button>
                   </div>
                 </template>
               </div>
@@ -2422,6 +2437,8 @@ import {
   itemLevelMult,
   round1,
   sellValue,
+  scrapValue,
+  canRecycle,
   isFamiliar,
   FAMILIAR_SLOT,
   tierIndexOf,
@@ -4863,6 +4880,22 @@ function doSell(it: Item) {
     ok: { label: `Vendre (+${sellValue(it)} 🪙)`, color: 'negative' },
   }).onOk(() => withUid((uid) => char.sell(uid, it.id), 'Vente impossible.'));
 }
+// ♻️ L'autre porte de sortie du sac : la forge. On vend OU on recycle, jamais les deux —
+// le dialogue le dit, parce que 1 141 or et 16 🔩 ne se comparent pas d'instinct.
+function doRecycle(it: Item) {
+  const gain = scrapValue(it);
+  $q.dialog({
+    title: 'Envoyer à la forge ?',
+    message: `« ${it.name} » sera fondu en ${gain} 🔩 (réparations et défenses de la base). Tu renonces donc à le vendre ${sellValue(it)} 🪙.`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
+  }).onOk(() =>
+    withUid(async (uid) => {
+      const g = await char.recycle(uid, it.id);
+      if (g) $q.notify({ type: 'positive', message: `🔩 +${g} ferraille` });
+    }, 'Recyclage impossible.'),
+  );
+}
 function doToggleLock(it: Item) {
   withUid((uid) => char.toggleLock(uid, it.id), 'Action impossible.');
 }
@@ -4968,10 +5001,30 @@ const powerLossItems = computed<Item[]>(() => {
   });
 });
 const belowCount = computed(() => powerLossItems.value.length);
+// Ferraille que rendrait la même purge. Affichée sur le bouton : le joueur arbitre
+// entre l'or et le métal en voyant les DEUX nombres, pas en devinant.
+const belowScrap = computed(() =>
+  powerLossItems.value.filter(canRecycle).reduce((a, i) => a + scrapValue(i), 0),
+);
 // Libellé du périmètre (« du sac » ou « [type] ») pour être explicite.
 const bulkScope = computed(() =>
   bulkSlot.value ? SLOT_LABEL[bulkSlot.value].toLowerCase() : 'ton sac',
 );
+function doRecycleBelow() {
+  const ids = powerLossItems.value.filter(canRecycle).map((i) => i.id);
+  const gain = powerLossItems.value.filter(canRecycle).reduce((a, i) => a + scrapValue(i), 0);
+  $q.dialog({
+    title: 'Tout recycler',
+    message: `Fondre les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} en ${gain} 🔩 ? Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: `Tout recycler (+${gain} 🔩)`, color: 'negative' },
+  }).onOk(() =>
+    withUid(async (uid) => {
+      const g = await char.recycleMany(uid, ids);
+      if (g) $q.notify({ type: 'positive', message: `🔩 +${g} ferraille` });
+    }, 'Recyclage impossible.'),
+  );
+}
 function doSellBelow() {
   const ids = powerLossItems.value.map((i) => i.id);
   $q.dialog({

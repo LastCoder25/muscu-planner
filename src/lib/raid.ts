@@ -914,7 +914,11 @@ export function totalRepairCost(base: BaseState): number {
  *  toujours avec quelque chose, ce qui garde l'échec agaçant sans être punitif. */
 /** Anneau (en % de la demi-largeur du champ) où tombent les corps : au-delà des murs et
  *  de leurs tourelles, en deçà du bord du dessin. */
-export const CORPSE_RING = { min: 45, max: 48.5 } as const;
+// ⚠️ En % de la DEMI-LARGEUR du champ : le dessin multiplie par 2 → 41 tombe à 82 du
+// centre, soit juste au-delà des tourelles (rayon 72 + 7,5 de fût). Resserré avec
+// l'enceinte (80 → 72) : laissé à 45-48,5, l'armée mourait dans un no man's land à dix
+// unités du mur qu'elle assiégeait.
+export const CORPSE_RING = { min: 41, max: 44.5 } as const;
 
 export function corpsesFrom(raid: Raid, report: RaidReport, seed: number): Corpse[] {
   const rng = mulberry32((seed ^ 0x5bf03635) >>> 0 || 1);

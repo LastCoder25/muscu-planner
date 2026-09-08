@@ -2,7 +2,7 @@
 // sur des emplacements autour de la ville (carte d'expédition), financés par l'OR
 // (construction + upgrades = le vrai puits d'or). Dimensionné par simulation.
 //
-// ÉTAT ACTUEL (v0.670) : 7 bâtiments pour 8 emplacements (cf. BUILD.plotCap).
+// ÉTAT ACTUEL : 7 bâtiments pour 7 emplacements — `BUILD.plotCap` est DÉRIVÉ du registre.
 //  • UTILITAIRES : Avant-poste (débloque expéditions + vitesse) · Entrepôt (stockage).
 //  • PRODUCTEURS : Mine d'or 🪙 · Dynamo ⚡ (énergie de jeu) · Fonderie ⚙️ (ferraille 🔩).
 //  • HYBRIDES (effet + production) : Porte du Labyrinthe (débloque + luck coffres, PRODUIT
@@ -206,10 +206,14 @@ export function buildingType(id: string): BuildingType | undefined {
 
 // ── Constantes de dimensionnement (validées par simulation) ──
 export const BUILD = {
-  // ⚠️ INVARIANT : plus d'emplacements que de TYPES. Tant que les deux étaient égaux (6
-  // et 6), construire n'était pas une décision mais une liste de courses : aucun
-  // emplacement n'était jamais libre, donc le choix n'existait pas. Un test le verrouille.
-  plotCap: 10, // emplacements max (7 types + 3 de réserve pour la suite)
+  // ⚠️ AUTANT D'EMPLACEMENTS QUE DE TYPES, et pas un de plus — DÉRIVÉ, jamais saisi à la
+  // main. **Tous les types sont `unique`** (un seul exemplaire de chacun) : un emplacement
+  // au-delà du nombre de types ne peut donc JAMAIS être rempli. Ce n'est pas de la réserve,
+  // c'est un TROU permanent dans la cour — c'est ce que donnaient les 10 emplacements pour
+  // 7 bâtiments. Le vrai choix n'a jamais vécu ici mais dans `plotsForLevel` : un
+  // emplacement par niveau, alors que plusieurs types sont déjà déblocables → on décide
+  // de l'ORDRE. Ajouter un type ouvre son emplacement tout seul ; un test le verrouille.
+  plotCap: BUILDING_TYPES.length,
   upBase: 220, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
   // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
