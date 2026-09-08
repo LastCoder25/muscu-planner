@@ -82,6 +82,29 @@
                   <q-item-label caption>Vous pouvez suivre vos avancements</q-item-label>
                 </q-item-section>
               </q-item>
+              <!-- Réponses à MES propositions de défi. Sans cette ligne, avoir proposé
+                   un défi ne donnait jamais aucun retour : ni relevé, ni refusé. -->
+              <q-item
+                v-for="s in friends.sharedAnswered"
+                :key="'sh-' + s.id"
+                v-close-popup
+                clickable
+                @click="goFriends"
+              >
+                <q-item-section avatar>
+                  <q-icon
+                    :name="s.status === 'accepted' ? 'handshake' : 'do_not_disturb_on'"
+                    :color="s.status === 'accepted' ? 'positive' : 'grey'"
+                  />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>
+                    <b>{{ friendPseudo(s.invited_user) }}</b>
+                    {{ s.status === 'accepted' ? 'a relevé ton défi' : 'a décliné ton défi' }}
+                  </q-item-label>
+                  <q-item-label caption>« {{ s.exercise_name }} »</q-item-label>
+                </q-item-section>
+              </q-item>
               <q-separator />
               <q-item v-close-popup clickable @click="goFriends">
                 <q-item-section avatar><q-icon name="group" /></q-item-section>
@@ -295,11 +318,17 @@ async function goFriends() {
 function onNotifOpen() {
   const uid = auth.user?.id;
   if (!uid) return;
+  void friends.fetchShared(uid).catch(() => undefined); // une réponse a pu tomber depuis
   friends
     .fetchMine(uid)
     .catch(() => undefined)
-    .finally(() => friends.markAcceptedSeen());
+    .finally(() => {
+      friends.markAcceptedSeen();
+      friends.markSharedAnswersSeen(); // les réponses sont AFFICHÉES ici, donc acquittées ici
+    });
 }
+const friendPseudo = (id: string) =>
+  friends.accepted.find((v) => v.userId === id)?.pseudo ?? 'Un ami';
 async function answer(otherId: string, accept: boolean) {
   const uid = auth.user?.id;
   if (!uid) return;

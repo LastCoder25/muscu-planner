@@ -10,7 +10,7 @@ import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Challenge, ChallengeConfig, ChallengeFormat } from '@/lib/challenges';
 import type { ComboChallenge } from '@/lib/combo';
-import type { FriendTraining, RowStamps } from '@/lib/friendFeed';
+import { FEED_RECENT_DAYS, type FriendTraining, type RowStamps } from '@/lib/friendFeed';
 
 export type FriendStatus = 'pending' | 'accepted' | 'declined';
 
@@ -40,6 +40,7 @@ export interface SharedChallenge {
   same_targets: boolean;
   status: 'pending' | 'accepted' | 'declined';
   created_at: string;
+  updated_at: string; // horodate la RÉPONSE : c'est elle qui date l'acceptation/le refus
 }
 
 export interface FriendView {
@@ -70,12 +71,22 @@ const COLS = 'requester_id, addressee_id, status, created_at, responded_at';
 // (colonne « vu par le demandeur ») imposerait une policy d'écriture de plus sur
 // friendships pour un gain nul. Contrepartie assumée : le « vu » est par appareil.
 const SEEN_KEY = 'muscu:friends:seen';
-function readSeen(): Set<string> {
+// Idem pour les RÉPONSES à mes propositions de défi partagé : « relevé » ou « refusé »
+// est une notification, pas une donnée métier (le statut, lui, vit en base).
+const SEEN_SHARED_KEY = 'muscu:friends:seen-shared';
+function readSeen(key: string): Set<string> {
   try {
-    const raw = localStorage.getItem(SEEN_KEY);
+    const raw = localStorage.getItem(key);
     return new Set(raw ? (JSON.parse(raw) as string[]) : []);
   } catch {
     return new Set();
+  }
+}
+function writeSeen(key: string, ids: Set<string>): void {
+  try {
+    localStorage.setItem(key, JSON.stringify([...ids]));
+  } catch {
+    /* stockage indisponible → on renotifiera, sans gravité */
   }
 }
 
@@ -86,7 +97,8 @@ export const useFriendsStore = defineStore('friends', () => {
   const loading = ref(false);
   const loaded = ref(false);
   const me = ref<string | null>(null);
-  const seen = ref<Set<string>>(readSeen());
+  const seen = ref<Set<string>>(readSeen(SEEN_KEY));
+  const seenShared = ref<Set<string>>(readSeen(SEEN_SHARED_KEY));
 
   /** Relations vues depuis moi (l'« autre » côté résolu, pseudo inclus). */
   const views = computed<FriendView[]>(() =>
@@ -116,19 +128,40 @@ export const useFriendsStore = defineStore('friends', () => {
   const sharedInvites = computed(() =>
     shared.value.filter((s) => s.status === 'pending' && s.invited_user === me.value),
   );
-  const notifCount = computed(
-    () => incoming.value.length + newlyAccepted.value.length + sharedInvites.value.length,
+  /** MES propositions — symétrique de `outgoing` pour les demandes d'ami, qui manquait :
+   *  une invitation lancée disparaissait de l'écran, et rien ne disait jamais si l'ami
+   *  l'avait relevée, refusée, ou pas encore ouverte. On garde les EN ATTENTE toujours
+   *  (c'est une question sans réponse) et les réponses `FEED_RECENT_DAYS` jours (c'est
+   *  la réponse à cette question — passé ce délai, le défi lui-même la porte). */
+  const sharedSent = computed(() => {
+    const floor = Date.now() - FEED_RECENT_DAYS * 86400000;
+    return shared.value
+      .filter((s) => s.created_by === me.value)
+      .filter((s) => s.status === 'pending' || Date.parse(s.updated_at) >= floor)
+      .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+  });
+  /** Réponses reçues à MES propositions et pas encore vues (badge de la cloche). */
+  const sharedAnswered = computed(() =>
+    sharedSent.value.filter((s) => s.status !== 'pending' && !seenShared.value.has(s.id)),
   );
+  const notifCount = computed(
+    () =>
+      incoming.value.length +
+      newlyAccepted.value.length +
+      sharedInvites.value.length +
+      sharedAnswered.value.length,
+  );
+  /** Acquitte les réponses à mes propositions (même geste que `markAcceptedSeen`). */
+  function markSharedAnswersSeen() {
+    seenShared.value = new Set(sharedSent.value.map((s) => s.id));
+    writeSeen(SEEN_SHARED_KEY, seenShared.value);
+  }
 
   /** Acquitte les acceptations. On REMPLACE l'ensemble par les amis actuels : les
    *  entrées d'ex-amis disparaissent, donc un ré-ajout notifiera de nouveau. */
   function markAcceptedSeen() {
     seen.value = new Set(accepted.value.map((v) => v.userId));
-    try {
-      localStorage.setItem(SEEN_KEY, JSON.stringify([...seen.value]));
-    } catch {
-      /* stockage indisponible → on renotifiera, sans gravité */
-    }
+    writeSeen(SEEN_KEY, seen.value);
   }
 
   async function fetchMine(userId: string) {
@@ -325,6 +358,9 @@ export const useFriendsStore = defineStore('friends', () => {
     fetchFeed,
     shared,
     sharedInvites,
+    sharedSent,
+    sharedAnswered,
+    markSharedAnswersSeen,
     fetchShared,
     proposeShared,
     respondShared,

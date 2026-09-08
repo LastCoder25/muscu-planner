@@ -96,6 +96,21 @@
           </button>
         </section>
 
+        <!-- MES propositions de défi. Symétrique de « Demandes envoyées » : sans elle,
+             une invitation lancée disparaissait de l'écran et rien ne disait jamais si
+             l'ami l'avait relevée, refusée, ou pas encore ouverte. -->
+        <section v-if="friends.sharedSent.length" class="fr-sec">
+          <div class="fr-sec-t">Défis proposés</div>
+          <div v-for="s in friends.sharedSent" :key="s.id" class="fr-row sh-row">
+            <span class="fr-av">🤝</span>
+            <span class="sh-main">
+              <span class="fr-name">{{ pseudoOf(s.invited_user) }}</span>
+              <span class="sh-what">« {{ s.exercise_name }} » · {{ s.duration_days }} jours</span>
+            </span>
+            <span class="sh-state" :class="s.status">{{ sharedStateLabel(s) }}</span>
+          </div>
+        </section>
+
         <section v-if="friends.outgoing.length" class="fr-sec">
           <div class="fr-sec-t">Demandes envoyées</div>
           <div v-for="v in friends.outgoing" :key="v.userId" class="fr-row">
@@ -161,6 +176,13 @@ const feed = ref<FeedItem[]>([]);
 const now = ref(new Date().toISOString());
 const busyShared = ref(false);
 const pseudoOf = (id: string) => friends.accepted.find((v) => v.userId === id)?.pseudo ?? 'Un ami';
+/** État d'une proposition que J'AI envoyée, dit du point de vue de l'ami : « en attente »
+ *  n'apprend rien, « relevé »/« refusé » répond à la question qu'on se pose. */
+function sharedStateLabel(s: SharedChallenge): string {
+  if (s.status === 'accepted') return '✅ relevé';
+  if (s.status === 'declined') return '✖️ refusé';
+  return '⏳ en attente';
+}
 
 onMounted(async () => {
   const uid = auth.user?.id;
@@ -329,6 +351,17 @@ async function goAventure() {
 .sh-what {
   font-size: 12px;
   color: var(--dim);
+}
+.sh-state {
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--dim-2);
+}
+.sh-state.accepted {
+  color: var(--d1);
+}
+.sh-state.declined {
+  color: var(--d4);
 }
 
 /* Fil d'activité : une ligne = un fait, lisible d'un coup d'œil, tapable pour ouvrir

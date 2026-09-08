@@ -83,6 +83,22 @@
           </span>
         </div>
 
+        <!-- Proposé mais pas encore relevé : la comparaison ci-dessus n'existe qu'une
+             fois l'ami engagé. Sans ce bandeau, avoir proposé un défi ne se voyait NULLE
+             PART — le bouton « Proposer » disparaissait, et c'était tout. -->
+        <div v-if="!peer && sharedRow" class="shared-wait" :class="sharedRow.status">
+          <span class="sc-ic">{{ sharedRow.status === 'declined' ? '✖️' : '⏳' }}</span>
+          <span class="sc-txt">
+            <template v-if="sharedRow.status === 'declined'"
+              ><b>{{ sharedPeerName }}</b> a décliné — tu peux le proposer à quelqu'un
+              d'autre.</template
+            >
+            <template v-else
+              >Proposé à <b>{{ sharedPeerName }}</b> — en attente de sa réponse.</template
+            >
+          </span>
+        </div>
+
         <!-- Suggestion de recalibrage (dépassement OU sous-performance répétés) -->
         <div v-if="showRecal && recalSuggest" class="recal" :class="recalSuggest.dir">
           <div class="recal-txt">
@@ -401,11 +417,7 @@
         <button v-if="canFinishNow" class="finish-now" @click="confirmFinishNow">
           🏁 Terminer — défi accompli
         </button>
-        <button
-          v-if="!statusDone && !ch.shared_id && friends.accepted.length"
-          class="adjust"
-          @click="proposeToFriend"
-        >
+        <button v-if="canPropose" class="adjust" @click="proposeToFriend">
           <q-icon name="group_add" size="16px" /> Proposer à un ami
         </button>
         <button v-if="ch.status !== 'abandoned'" class="adjust" @click="extendDialog">
@@ -1392,6 +1404,9 @@ async function loadShared() {
     if (!friends.loaded) await friends.fetchMine(uid);
     const sharedId = ch.value?.shared_id;
     if (!sharedId) return;
+    // La DÉFINITION porte le statut (en attente / relevé / décliné) ; le jumeau, lui,
+    // n'existe qu'après acceptation. Il faut donc les deux pour tout dire au joueur.
+    if (!friends.shared.some((x) => x.id === sharedId)) await friends.fetchShared(uid);
     const twin = await friends.fetchSharedPeer(sharedId, uid);
     if (!twin) return;
     peer.value = {
@@ -1402,6 +1417,26 @@ async function loadShared() {
     /* bonus : on n'ennuie pas l'utilisateur si ça échoue */
   }
 }
+
+/** La DÉFINITION partagée rattachée à ce défi (statut compris). `peer` ne dit que
+ *  l'après : tant que l'ami n'a pas relevé, il n'existe pas de jumeau à lire. */
+const sharedRow = computed(() =>
+  ch.value?.shared_id ? (friends.shared.find((s) => s.id === ch.value!.shared_id) ?? null) : null,
+);
+const sharedPeerName = computed(() =>
+  sharedRow.value
+    ? (friends.accepted.find((v) => v.userId === sharedRow.value!.invited_user)?.pseudo ??
+      'Ton ami')
+    : '',
+);
+/** ⚠️ Un REFUS ne condamne pas le défi : sans cette porte de sortie, `shared_id` restait
+ *  posé pour toujours et le défi ne pouvait plus jamais être proposé à personne. */
+const canPropose = computed(
+  () =>
+    !statusDone.value &&
+    friends.accepted.length > 0 &&
+    (!ch.value?.shared_id || sharedRow.value?.status === 'declined'),
+);
 
 function proposeToFriend() {
   const uid = auth.user?.id;
@@ -1483,6 +1518,23 @@ onBeforeUnmount(() => {
 
 /* Comparatif du défi partagé : deux scores côte à côte, celui qui mène est mis en
    avant. Volontairement sobre — c'est un rappel motivant, pas un tableau de match. */
+/* Attente/refus : même gabarit que la comparaison, en plus discret — c'est le MÊME
+   emplacement qui portera les scores une fois le défi relevé. */
+.shared-wait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.shared-wait.declined {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--d4) 40%, var(--line));
+}
 .shared-cmp {
   display: flex;
   align-items: center;
