@@ -322,6 +322,16 @@ export const RAID = {
   // Coûts propres à la défense (cf. defenseUpgradeCost).
   upBase: 28,
   upExp: 1.9,
+  // Ferraille d'une amélioration : socle + puissance. ⚠️ MESURÉ (v0.681). L'ancien
+  // `4 + niveau` était linéaire quand tout le reste croît en puissance : monter les 6
+  // structures d'un cran coûtait **0,6 à 0,7 épave** à TOUS les niveaux, et la Fonderie
+  // seule couvrait ce cran en 2,2 à 2,8 jours — autrement dit la ferraille tombait toute
+  // seule et n'était un frein nulle part. À 1,35 il faut **1,5 à 2,8 épaves** par cran
+  // (à tout niveau), et la Fonderie seule met 6 à 10 jours : elle complète, elle ne
+  // remplace plus. Ne pas monter plus haut : à 1,45 la fin de partie demandait 4,5 épaves
+  // et 16 jours de production passive par cran — de la corvée, pas un arbitrage.
+  scrapBase: 6,
+  scrapExp: 1.35,
   turretDmgK: 0.105,
   // Le héros présent prête une part de sa force. Dosé pour transformer un siège serré en
   // victoire probable — pas pour le rendre acquis : mesuré à 0,55/0,35, sa seule présence
@@ -879,10 +889,15 @@ export function defenseUpgradeCost(level: number): number {
   return Math.round(RAID.upBase * Math.pow(Math.max(1, level), RAID.upExp));
 }
 
-/** Ferraille pour monter une structure d'un niveau. Plus douce que la réparation : on ne
- *  doit pas passer plus de temps à chercher du métal qu'à bâtir. */
+/** Ferraille pour monter une structure d'un niveau. **C'est le SECOND verrou de
+ *  l'enceinte**, à côté de l'or : l'or mesure le volume de jeu (donjons, expéditions), la
+ *  ferraille mesure qu'on est allé la CHERCHER — épaves de la carte, recyclage du sac,
+ *  Fonderie. Les deux doivent mordre ; l'un sans l'autre n'est pas un choix.
+ *  ⚠️ La RÉPARATION, elle, reste bon marché et linéaire (`repairCost`) : remettre en
+ *  état après un siège perdu ne doit jamais devenir une punition — un jour de Fonderie y
+ *  suffit encore. Ce sont deux dépenses de natures différentes. */
 export function defenseUpgradeScrap(level: number): number {
-  return 4 + Math.max(1, level);
+  return Math.round(RAID.scrapBase + Math.pow(Math.max(1, level), RAID.scrapExp));
 }
 
 export function repairCost(level: number): number {
