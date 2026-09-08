@@ -190,7 +190,15 @@ export function buildingType(id: string): BuildingType | undefined {
 export const BUILD = {
   plotCap: 6, // emplacements max = 1 par type de bâtiment (Avant-poste, Porte, Autel, Mine, Dynamo, Entrepôt)
   upBase: 220, // upgrade L→L+1 (or) = round(upBase × L^upExp)
-  upExp: 2.6, // puits d'or RAIDE (2→2.6) : l'or de fin de partie n'a plus de puits sinon
+  // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
+  // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
+  // `L^1.6` (coût ET gain d'expédition), donc un coût en `L^2.6` diverge linéairement :
+  // mesuré, le nombre d'expéditions de mine pour payer UN niveau de bâtiment passait de
+  // 13 (niv.5) à 54 (niv.26) puis 115 (niv.100) — à ce stade l'or ne s'écoule plus, il
+  // s'entasse, et les bâtiments gèlent. Un puits où l'on ne peut rien verser n'absorbe
+  // rien. À 1,9 le ratio reste PLAT (4,6 → 5,5 expéditions) sur toute la courbe 1→100.
+  // Ne pas remonter cet exposant sans re-simuler le ratio coût/revenu (test dédié).
+  upExp: 1.9,
   storageHours: 18, // heures de production stockables (puis saturation)
   hourMs: 3_600_000,
 } as const;
