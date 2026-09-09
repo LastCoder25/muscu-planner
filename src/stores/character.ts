@@ -33,6 +33,7 @@ import {
   type Loadout,
   type PendingReward,
   itemScore,
+  voieSetRoster,
 } from '@/lib/items';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import {
@@ -967,6 +968,12 @@ export const useCharacterStore = defineStore('character', () => {
     level: number,
     name: string,
     forceVoie?: string | null, // « Porter ce set » : impose cette voie (pas de choix auto)
+    /** « Porter ce set » : impose AUSSI ses pièces, pas seulement sa voie.
+     *  ⚠️ Sans ça, le bouton lançait l'optimiseur voie forcée mais stuff LIBRE — il rendait
+     *  donc le meilleur build sur cette voie, souvent sans une seule pièce du set demandé
+     *  (constaté : « Porter le set Frénétique » → 2 Gardien + 1 Duelliste + 1 Berserker).
+     *  Le chiffre annoncé était juste ; c'est le bouton qui ne tenait pas sa promesse. */
+    forceSetId?: string,
   ): { equipped: Equipped; talentIds: string[]; voie: string | null; score: number } | null {
     const cur = row.value;
     if (!cur) return null;
@@ -1012,9 +1019,20 @@ export const useCharacterStore = defineStore('character', () => {
         .filter((t) => t.equipped !== false)
         .slice(0, maxTal)
         .map((t) => t.id);
+      // Pièces IMPOSÉES : la meilleure possédée pour chaque emplacement du set demandé.
+      // On réutilise `voieSetRoster`, donc exactement ce que « Mes sets » affiche — le
+      // bouton porte ce que la carte montre, sans seconde règle qui pourrait diverger.
+      const pin = forceSetId
+        ? (() => {
+            const r = voieSetRoster(forceSetId, cur!.equipped, undefined, pool);
+            const out: Partial<Record<ItemSlot, Item>> = {};
+            for (const sl of SLOTS) if (r[sl]) out[sl] = r[sl].item;
+            return Object.keys(out).length ? out : undefined;
+          })()
+        : undefined;
       let best: Equipped = cur!.equipped;
       for (let pass = 0; pass < 2; pass++) {
-        best = bestGearLoadout(name, stats, cur!.equipped, pool, level, fxOf(talIds), voie);
+        best = bestGearLoadout(name, stats, cur!.equipped, pool, level, fxOf(talIds), voie, pin);
         talIds = pickBestTalents(cur!.talents, maxTal, (ids) =>
           combatPower(playerWithGear(name, stats, best, fxOf(ids), level, voie)),
         );
@@ -1091,7 +1109,10 @@ export const useCharacterStore = defineStore('character', () => {
         cur.voie,
       ),
     );
-    if (best.score <= curScore) return null;
+    // ⚠️ Le garde-fou protège l'équipement AUTOMATIQUE d'une perte accidentelle. Il ne
+    // s'applique PAS à « Porter ce set » : là, le joueur choisit une identité, et il a le
+    // droit de payer ce choix — l'aperçu lui annonce l'écart avant qu'il n'appuie.
+    if (!forceSetId && best.score <= curScore) return null;
     return {
       equipped: best.equipped,
       talentIds: best.talents.filter((t) => t.equipped).map((t) => t.id),
@@ -1176,8 +1197,9 @@ export const useCharacterStore = defineStore('character', () => {
     level: number,
     name: string,
     forceVoie?: string | null,
+    forceSetId?: string,
   ): Promise<boolean> {
-    const plan = computeGearPlan(stats, level, name, forceVoie);
+    const plan = computeGearPlan(stats, level, name, forceVoie, forceSetId);
     if (!plan) return false;
     return applyGearPlan(userId, plan);
   }

@@ -1854,6 +1854,13 @@ export function bestGearLoadout(
   level = 1,
   extra: Partial<AggregatedEffects> = {}, // talents + passif de voie → optimise POUR ton build réel
   voie?: string | null, // gate le capstone du set de voie → l'optimiseur valorise ton set complet
+  /** Emplacements IMPOSÉS : ces pièces sont portées, l'optimisation ne touche que le reste.
+   *  ⚠️ C'est ce qui distingue « Porter ce set » (un CHOIX du joueur, qui peut coûter de la
+   *  puissance) de l'équipement conseillé (une recherche du maximum). Sans ce paramètre,
+   *  « Porter ce set » lançait l'optimiseur avec la voie forcée mais le stuff libre : il
+   *  rendait le meilleur build sur cette voie, souvent SANS aucune pièce du set demandé —
+   *  un bouton qui ne fait pas ce qu'il annonce. */
+  pin?: Partial<Record<ItemSlot, Item>>,
 ): Equipped {
   const bySlot: Record<ItemSlot, Item[]> = {
     weapon: [],
@@ -1910,19 +1917,23 @@ export function bestGearLoadout(
       }
     return [...keep.values(), undefined];
   };
+  const listFor = (s: 'weapon' | 'armor' | 'accessory' | 'relic'): (Item | undefined)[] =>
+    pin?.[s] ? [pin[s]] : trim(bySlot[s], equipped[s]);
   const cand: Record<'weapon' | 'armor' | 'accessory' | 'relic', (Item | undefined)[]> = {
-    weapon: trim(bySlot.weapon, equipped.weapon),
-    armor: trim(bySlot.armor, equipped.armor),
-    accessory: trim(bySlot.accessory, equipped.accessory),
-    relic: trim(bySlot.relic, equipped.relic),
+    weapon: listFor('weapon'),
+    armor: listFor('armor'),
+    accessory: listFor('accessory'),
+    relic: listFor('relic'),
   };
   // Candidats FAMILIER : le porté + les meilleurs du sac (pas de synergie de set sur ce
   // slot → un top-K solo suffit). `undefined` = aucun familier, si c'est mieux.
   const famCand = trim(bySlot[FAMILIAR_SLOT], curFam);
 
   // Base = le loadout ACTUEL : l'optimiseur ne le remplace que par STRICTEMENT mieux.
-  let best: Equipped = { ...equipped };
-  let bestP = combatPower(playerWithGear(name, stats, best, extra, level, voie));
+  // ⚠️ SAUF si des emplacements sont IMPOSÉS : la base actuelle ne les respecte pas, donc
+  // la garder comme référence ferait échouer l'imposition dès qu'elle est plus puissante.
+  let best: Equipped = pin ? {} : { ...equipped };
+  let bestP = pin ? -Infinity : combatPower(playerWithGear(name, stats, best, extra, level, voie));
   // Recherche exhaustive sur les 4 slots de gear, à familier FIXÉ ; le familier est
   // optimisé entre deux passes (ascension par coordonnées). Un produit à 5 dimensions
   // exploserait (13^5 × 8 voies), alors que 2 passes convergent : le meilleur familier

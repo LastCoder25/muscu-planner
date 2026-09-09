@@ -1393,3 +1393,88 @@ describe('optimiseur : TOUTES les combinaisons, bonus de set et de voie compris 
     expect(best.weapon?.id).toBe('porte');
   });
 });
+
+describe('« Porter ce set » : les pièces du set sont IMPOSÉES (v0.711)', () => {
+  // ⚠️ RÉGRESSION CORRIGÉE. En ouvrant le pool à toutes les réserves (v0.710), « Porter ce
+  // set » — qui ne forçait que la VOIE — s'est mis à rendre le meilleur build sur cette
+  // voie, souvent sans une seule pièce du set demandé. Constaté sur un compte réel :
+  // « Porter le set Frénétique » a équipé 2 Gardien + 1 Duelliste + 1 Berserker. Le chiffre
+  // annoncé était juste ; c'est le bouton qui ne tenait pas sa promesse.
+  const stats = { puissance: 60, endurance: 50, agilite: 30 };
+  const mkI = (slot: ItemSlot, value: number, setId?: string, id?: string): Item =>
+    ({
+      id: id ?? `${slot}-${setId ?? 'nu'}-${value}`,
+      slot,
+      name: 'x',
+      emoji: '⚔️',
+      rarity: 'rare',
+      level: 20,
+      baseLevel: 20,
+      effect: { type: 'damage_pct', value },
+      ...(setId ? { setId } : {}),
+    }) as Item;
+  const SET = 'voie:frenetique';
+  // Le set est VOLONTAIREMENT plus faible pièce à pièce que les objets nus : c'est le seul
+  // cas qui prouve l'imposition — si le set gagnait, l'optimiseur le prendrait tout seul.
+  const pool: Item[] = [
+    mkI('weapon', 8, SET),
+    mkI('armor', 8, SET),
+    mkI('accessory', 8, SET),
+    mkI('relic', 8, SET),
+    mkI('weapon', 40),
+    mkI('armor', 40),
+    mkI('accessory', 40),
+    mkI('relic', 40),
+  ];
+
+  it('⚠️ le set demandé est PORTÉ, même s’il est moins puissant', () => {
+    const pin: Partial<Record<ItemSlot, Item>> = {};
+    for (const sl of SLOTS) pin[sl] = pool.find((i) => i.slot === sl && i.setId === SET)!;
+    const best = bestGearLoadout('T', stats, {}, pool, 20, {}, 'frenetique', pin);
+    for (const sl of SLOTS) expect(best[sl]?.setId, `emplacement ${sl}`).toBe(SET);
+  });
+
+  it('sans imposition, l’optimiseur prend LIBREMENT le plus puissant', () => {
+    // Le contraste qui donne son sens au test précédent : la même recherche sans `pin`
+    // écarte le set. C'est exactement ce qui se passait sur le bouton.
+    const best = bestGearLoadout('T', stats, {}, pool, 20, {}, 'frenetique');
+    expect(SLOTS.every((sl) => best[sl]?.setId === SET)).toBe(false);
+  });
+
+  it('⚠️ le set s’impose MÊME quand l’équipement actuel est plus fort', () => {
+    // Le cas RÉEL : le joueur porte déjà du bon stuff. Si la recherche garde le loadout
+    // ACTUEL comme référence, elle le conserve — et le set demandé n'arrive jamais.
+    const porte: Equipped = {};
+    for (const sl of SLOTS) porte[sl] = mkI(sl, 60, undefined, 'fort-' + sl);
+    const pin: Partial<Record<ItemSlot, Item>> = {};
+    for (const sl of SLOTS) pin[sl] = pool.find((i) => i.slot === sl && i.setId === SET)!;
+    const best = bestGearLoadout(
+      'T',
+      stats,
+      porte,
+      [...pool, ...(Object.values(porte) as Item[])],
+      20,
+      {},
+      'frenetique',
+      pin,
+    );
+    for (const sl of SLOTS) expect(best[sl]?.setId, 'emplacement ' + sl).toBe(SET);
+  });
+
+  it('les emplacements NON couverts par le set restent optimisés', () => {
+    const partiel = [
+      mkI('weapon', 8, SET),
+      mkI('armor', 8, SET),
+      mkI('accessory', 40),
+      mkI('relic', 40),
+      mkI('accessory', 5),
+      mkI('relic', 5),
+    ];
+    const pin = { weapon: partiel[0]!, armor: partiel[1]! };
+    const best = bestGearLoadout('T', stats, {}, partiel, 20, {}, 'frenetique', pin);
+    expect(best.weapon?.setId).toBe(SET);
+    expect(best.armor?.setId).toBe(SET);
+    expect(best.accessory?.effect.value).toBe(40); // le reste au mieux
+    expect(best.relic?.effect.value).toBe(40);
+  });
+});

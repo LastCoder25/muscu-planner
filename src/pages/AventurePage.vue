@@ -1659,7 +1659,7 @@
                 v-if="lo.count"
                 class="lo-power"
                 :class="lo.delta >= 0 ? 'up' : 'down'"
-                title="Puissance APRÈS avoir appuyé sur « Porter ce set » : le set, complété au mieux avec ton sac, sur la voie du set."
+                title="Puissance APRÈS « Porter ce set » : SES pièces imposées, les emplacements restants complétés au mieux, sur sa voie."
               >
                 ⚔️ {{ fmtPow(lo.power) }} <b>({{ fmtDelta(combatPowerVal, lo.power) }})</b>
               </span>
@@ -4825,6 +4825,13 @@ function loadoutPower(voieId: string | null): number {
       (lo) => SLOTS.map((s) => lo.items?.[s]).filter(Boolean) as Item[],
     ),
   ];
+  // ⚠️ Les pièces du SET sont IMPOSÉES, comme le fait le bouton. Sans ce pin, l'aperçu
+  // annonçait le meilleur build sur cette VOIE — un chiffre juste, mais qui ne décrivait
+  // pas « porter ce set » : on pouvait lire « +558 » et se retrouver équipé de trois
+  // autres sets. Le nombre et le libellé doivent parler du même build.
+  const r = voieSetRoster(`voie:${voieId ?? ''}`, row.equipped, undefined, pool);
+  const pin: Partial<Record<ItemSlot, Item>> = {};
+  for (const sl of SLOTS) if (r[sl]) pin[sl] = r[sl].item;
   const best = bestGearLoadout(
     row.pseudo ?? 'Toi',
     c.value,
@@ -4833,6 +4840,7 @@ function loadoutPower(voieId: string | null): number {
     c.value.level.level,
     fx,
     voieId,
+    Object.keys(pin).length ? pin : undefined,
   );
   return combatPower(
     playerWithGear(row.pseudo ?? 'Toi', c.value, best, fx, c.value.level.level, voieId),
@@ -4886,6 +4894,7 @@ function doWearVoieSet(i: number) {
       c.value.level.level,
       char.row?.pseudo ?? 'Toi',
       v.id,
+      `voie:${v.id}`, // ⚠️ le SET est imposé, pas seulement sa voie — cf. computeGearPlan
     );
     $q.notify({
       type: 'positive',
