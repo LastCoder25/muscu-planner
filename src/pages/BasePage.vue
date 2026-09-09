@@ -98,28 +98,24 @@
           <!-- Pastille de capture : un `fill: none` n'est PAS cliquable en son centre —
                d'où un disque transparent, lui, qui l'est. -->
           <circle :cx="p.x" :cy="p.y" r="11" class="tur-hit" />
-          <template v-if="i < turretsBuilt">
-            <rect
-              :x="p.x - 6.5"
-              :y="p.y - 8"
-              width="13"
-              height="16"
-              rx="1.5"
-              class="tur-body"
-              :class="{ damaged: turretsDamaged }"
-            />
-            <rect
-              v-for="k in 3"
-              :key="k"
-              :x="p.x - 6.5 + (k - 1) * 4.7"
-              :y="p.y - 11"
-              width="3.6"
-              height="3.6"
-              class="tur-crown"
-              :class="{ damaged: turretsDamaged }"
-            />
-            <rect :x="p.x - 1" :y="p.y - 3.5" width="2" height="7" rx="1" class="tur-slit" />
-          </template>
+          <!-- BALISTE. Tout est dessiné autour de (0,0) et pointé vers le HAUT, puis
+               translaté/pivoté : une seule silhouette à régler, et les 8 visent dehors. -->
+          <g
+            v-if="i < turretsBuilt"
+            :transform="`translate(${p.x} ${p.y}) rotate(${p.rot})`"
+            :class="{ damaged: turretsDamaged }"
+          >
+            <!-- Plateforme tournante : elle donne la MASSE qui pose la pièce sur le mur.
+                 Sans elle, l'ensemble flottait et se lisait comme une croix. -->
+            <path d="M -7 7 L 7 7 L 5.5 0 L -5.5 0 Z" class="tur-base" />
+            <!-- Bras d'arc. ⚠️ En clair, pas dans le brun de la pierre : au premier essai
+                 il avait la teinte du rempart et devenait invisible dessus. -->
+            <path d="M -7.5 -0.5 Q 0 -5.5 7.5 -0.5" class="tur-bow" />
+            <path d="M -6.5 -0.8 L 0 1.6 L 6.5 -0.8" class="tur-string" />
+            <!-- Trait engagé, COURT : plus long, il transformait la silhouette en croix. -->
+            <path d="M 0 3.5 L 0 -7" class="tur-bolt" />
+            <path d="M 0 -9 L -2 -6.2 L 2 -6.2 Z" class="tur-head" />
+          </g>
           <circle v-else :cx="p.x" :cy="p.y" r="7.5" class="tur-empty" />
         </g>
         <!-- Pastille de niveau des tourelles, sur la 1re tour -->
@@ -791,7 +787,15 @@ const octagon = computed(() =>
     // corps de garde s'y superposerait. Décalé, le haut de l'enceinte est un PAN de
     // mur, ce qui lui laisse la place.
     const a = (i / TURRET_SLOTS) * Math.PI * 2 - Math.PI / 2 + Math.PI / TURRET_SLOTS;
-    return { x: 100 + Math.cos(a) * WALL_R, y: 100 + Math.sin(a) * WALL_R };
+    // ⚠️ On garde l'ANGLE, pas seulement le point. C'est lui qui fait POINTER chaque
+    // baliste vers l'extérieur : dessinées toutes dans le même sens, les 8 tourelles
+    // ressemblaient à des cheminées posées sur un mur, pas à des pièces qui tirent.
+    // L'art est dessiné « vers le haut » (−Y), d'où le +90°.
+    return {
+      x: 100 + Math.cos(a) * WALL_R,
+      y: 100 + Math.sin(a) * WALL_R,
+      rot: (a * 180) / Math.PI + 90,
+    };
   }),
 );
 const turretLevel = computed(() => defenseLevel(defenses.value, 'turret'));
@@ -1303,19 +1307,50 @@ const doCollect = () =>
   stroke-width: 1.5;
 }
 /* Tourelles */
-.tur-body,
-.tur-crown {
-  fill: #8a7856;
-  stroke: #5a4c36;
+/* ── Baliste ──────────────────────────────────────────────────────────────
+   Pièce de siège, pas tourelle d'habitation : plateforme, arc, trait engagé.
+   Les couleurs restent celles de la pierre et du bois de l'enceinte. */
+.tur-base {
+  fill: #9a8768;
+  stroke: #4a3d2b;
   stroke-width: 1;
 }
-.tur-body.damaged,
-.tur-crown.damaged {
+.tur-bow {
+  fill: none;
+  stroke: #d8c9a4;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.tur-string {
+  fill: none;
+  stroke: #8a7856;
+  stroke-width: 0.9;
+}
+.tur-bolt {
+  stroke: #f3eee6;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+/* Pointe en jaune voltage : le seul accent de l'enceinte, et il dit « armé ». */
+.tur-head {
+  fill: #ffd23f;
+}
+/* Endommagée : la pièce rougeoie, l'arc est rompu (traits interrompus). */
+.damaged .tur-base {
   fill: #6b4234;
   stroke: #ff6a45;
 }
-.tur-slit {
-  fill: #14110c;
+.damaged .tur-bow {
+  stroke: #ff6a45;
+  stroke-dasharray: 3 2.5;
+}
+.damaged .tur-string {
+  stroke: #ff6a45;
+  opacity: 0.5;
+}
+.damaged .tur-bolt,
+.damaged .tur-head {
+  opacity: 0.35;
 }
 .tur-empty {
   fill: none;
