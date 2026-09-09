@@ -156,6 +156,7 @@ import {
   type BuildingCategory,
   type BuildingType,
   type BuildingUnlock,
+  RESOURCE_EMOJI,
 } from '@/lib/buildings';
 
 const props = defineProps<{ heroLevel: number; now: number; slot: number | null }>();
@@ -207,18 +208,9 @@ const sheetOpen = computed({
 });
 
 // ── Libellés (tout dérivé de buildings.ts : aucune formule réécrite ici) ──
-const RES_EMOJI: Record<string, string> = {
-  dust: '✨',
-  stone: '💎',
-  energy: '⚡',
-  parchemins: '📜',
-  fragments: '🫧',
-  ink_dust: '🖋️',
-  gold: '🪙',
-  summon: '🔮',
-  keys: '🗝️',
-  scrap: '🔩',
-};
+// ⚠️ La table d'emojis vivait EN DOUBLE ici et dans buildings.ts, et les deux avaient
+// divergé (fragments : 🫧 contre 🧩). On lit la source unique.
+const RES_EMOJI: Record<string, string> = RESOURCE_EMOJI;
 function emojiOf(b: Building): string {
   return buildingType(b.typeId)?.emoji ?? '🏛️';
 }

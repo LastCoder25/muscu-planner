@@ -12,14 +12,28 @@
       <div class="iconbtn" />
     </header>
 
-    <!-- ⚠️ Ni l'or ni la ferraille ici : la barre de l'Aventure, juste au-dessus, les
-         affiche déjà. Les répéter volait de la place à ce que cette barre est SEULE à
-         savoir dire — le niveau (qui plafonne les bâtiments) et où se trouve le héros. -->
+    <!-- ⚠️ Cette barre ne dit QUE ce qu'aucune autre ne dit. Le niveau du personnage et
+         « héros en expédition » vivaient ici alors que la barre de l'Aventure, juste
+         au-dessus, les affiche déjà — deux lignes pour la même information. Elle porte
+         désormais la RÉCOLTE : ce que les bâtiments ont produit et qui attend, la seule
+         chose qu'on vient vérifier sur cet écran et qui se périme si on l'oublie (un
+         siège perdu vole le stock non ramassé). L'infirmerie, elle, reste : c'est une
+         échéance propre à la base, et elle bloque le héros. -->
     <div class="bar">
-      <span class="bar-chip">Niv. {{ heroLevel }}</span>
+      <button
+        v-for="p in prodPills"
+        :key="p.res"
+        class="bar-chip prod"
+        :class="{ ready: p.ready > 0 }"
+        :title="p.title"
+        :disabled="!anyReady"
+        @click="doHarvest"
+      >
+        {{ p.emoji }} {{ p.ready }}<small>/{{ p.rate }} h⁻¹</small>
+      </button>
+      <button v-if="anyReady" class="bar-chip harvest" @click="doHarvest">🧺 Récolter</button>
+      <span v-if="!prodPills.length" class="bar-chip dim">Aucun bâtiment de production</span>
       <span v-if="wounded" class="bar-chip hurt">🤕 Héros à l’infirmerie — {{ healIn }}</span>
-      <span v-else-if="heroHome" class="bar-chip home">🦸 Héros à la base</span>
-      <span v-else class="bar-chip away">🧭 Héros en expédition</span>
     </div>
 
     <!-- ── L'ENCEINTE ────────────────────────────────────────────────────────
@@ -520,7 +534,17 @@ import {
   FAMILIAR_SLOT,
   type Item,
 } from '@/lib/items';
-import { BUILD, buildingAccrued, buildingType, plotsForLevel, storageMult } from '@/lib/buildings';
+import {
+  BUILD,
+  buildingAccrued,
+  buildingProdPerHour,
+  buildingType,
+  collectable,
+  plotsForLevel,
+  storageMult,
+  RESOURCE_EMOJI,
+  type BuildResource,
+} from '@/lib/buildings';
 import {
   scoutLeadMs,
   garrisonLevel,
@@ -1058,8 +1082,47 @@ const scavPills = computed(() => {
     l.gold ? `🪙 +${l.gold}` : '',
     l.summonStones ? `🔮 +${l.summonStones}` : '',
     l.keys ? `🗝️ +${l.keys}` : '',
+    // 🔩 l'acier de l'armée repoussée (v0.702) — sans cette ligne, la ferraille était
+    // bien créditée mais invisible dans le récapitulatif de fouille.
+    l.scrap ? `🔩 +${l.scrap}` : '',
   ].filter(Boolean);
 });
+/** RÉCOLTE des bâtiments — ce que la barre du haut affiche.
+ *
+ *  ⚠️ Tout est DÉRIVÉ de `buildings.ts` (`collectable`, `buildingProdPerHour`,
+ *  `RESOURCE_EMOJI`) : aucune formule n'est réécrite ici, sinon l'affichage finirait par
+ *  mentir sur ce que la récolte crédite vraiment. Une seule ressource par bâtiment, mais
+ *  plusieurs bâtiments peuvent produire la même — on cumule par ressource.
+ *
+ *  Le stock en attente est ce qu'un siège perdu VOLE (`stockStolen`) : le montrer en tête
+ *  d'écran, c'est montrer ce qu'on risque à ne pas passer. */
+const prodPills = computed(() => {
+  const bs = char.row?.buildings ?? [];
+  // ⚠️ `now` (horloge réactive de la page) et non `Date.now()` : dans un computed, ce
+  // dernier ne serait lu qu’une fois et le stock en attente resterait figé à l’écran.
+  const ready = collectable(bs, now.value);
+  const rate = new Map<string, number>();
+  for (const b of bs) {
+    const t = buildingType(b.typeId);
+    if (!t?.resource) continue;
+    rate.set(t.resource, (rate.get(t.resource) ?? 0) + buildingProdPerHour(b));
+  }
+  return [...rate.entries()].map(([res, r]) => ({
+    res,
+    emoji: RESOURCE_EMOJI[res as BuildResource] ?? '✨',
+    ready: ready[res as BuildResource] ?? 0,
+    rate: r.toFixed(1),
+    title: `${ready[res as BuildResource] ?? 0} en attente · ${r.toFixed(1)}/h — un siège perdu vole ce qui n’est pas ramassé.`,
+  }));
+});
+const anyReady = computed(() => prodPills.value.some((p) => p.ready > 0));
+function doHarvest() {
+  if (!anyReady.value) return;
+  void guard(async () => {
+    await char.collectFilons(uid.value, Date.now());
+    $q.notify({ type: 'positive', message: '🧺 Récolte encaissée.' });
+  });
+}
 const doCollect = () =>
   guard(async () => {
     const got = await char.collectScavengers(uid.value, Date.now(), heroLevel.value);
@@ -1119,11 +1182,35 @@ const doCollect = () =>
   padding: 3px 10px;
   font-size: 12px;
 }
-.bar-chip.home {
-  border-color: #7bc86c;
-  color: #7bc86c;
+/* Pastilles de RÉCOLTE. Au repos elles informent (stock / débit) ; dès qu'il y a
+   quelque chose à prendre, elles s'allument et deviennent cliquables — le geste est
+   là où l'information est, sans détour par une autre vue. */
+.bar-chip.prod {
+  font: inherit;
+  font-size: 12px;
+  color: var(--dim);
+  cursor: default;
+  font-variant-numeric: tabular-nums;
 }
-.bar-chip.away {
+.bar-chip.prod small {
+  opacity: 0.55;
+  margin-left: 2px;
+}
+.bar-chip.prod.ready {
+  color: var(--text);
+  border-color: var(--accent, #ffd23f);
+  cursor: pointer;
+}
+.bar-chip.harvest {
+  font: inherit;
+  font-size: 12px;
+  background: var(--accent, #ffd23f);
+  border-color: var(--accent, #ffd23f);
+  color: #15120e;
+  font-weight: 600;
+  cursor: pointer;
+}
+.bar-chip.dim {
   color: var(--dim);
 }
 
