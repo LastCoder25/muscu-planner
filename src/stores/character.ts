@@ -1024,7 +1024,22 @@ export const useCharacterStore = defineStore('character', () => {
       // bouton porte ce que la carte montre, sans seconde règle qui pourrait diverger.
       const pin = forceSetId
         ? (() => {
-            const r = voieSetRoster(forceSetId, cur!.equipped, undefined, pool);
+            // Même arbitre que l'écran : la pièce épinglée est celle que la carte montre.
+            const r = voieSetRoster(forceSetId, cur!.equipped, undefined, pool, (it) =>
+              combatPower(
+                // ⚠️ `fxOf(talIds)` et NON `extra` : `extra` est déclaré plus bas, et cette
+                // IIFE s'exécute immédiatement — le lire ici lèverait un ReferenceError
+                // que le typecheck ne voit pas (accès dans une closure).
+                playerWithGear(
+                  name,
+                  stats,
+                  { ...cur!.equipped, [it.slot]: it },
+                  fxOf(talIds),
+                  level,
+                  voie,
+                ),
+              ),
+            );
             const out: Partial<Record<ItemSlot, Item>> = {};
             for (const sl of SLOTS) if (r[sl]) out[sl] = r[sl].item;
             return Object.keys(out).length ? out : undefined;

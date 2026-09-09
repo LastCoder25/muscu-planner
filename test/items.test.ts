@@ -1478,3 +1478,48 @@ describe('« Porter ce set » : les pièces du set sont IMPOSÉES (v0.711)', () 
     expect(best.relic?.effect.value).toBe(40);
   });
 });
+
+describe('roster : le barème est celui du JEU, pas une somme d’affixes (v0.712)', () => {
+  // ⚠️ CONSTATÉ SUR UN COMPTE RÉEL. `itemScore` additionne les affixes ; `combatPower`
+  // arbitre tout le reste du jeu. Les deux se contredisent : une Lame à 107 d'itemScore
+  // était PORTÉE par l'optimiseur à la place d'une Hache à 115, parce qu'elle vaut plus en
+  // combat. La carte du set, qui classait à l'itemScore, mettait donc en avant la pièce que
+  // l'optimiseur venait d'écarter — et celle qu'on porte semblait absente de son set.
+  const SET = 'voie:duelliste';
+  const mk = (slot: ItemSlot, type: string, value: number, id: string): Item =>
+    ({
+      id,
+      slot,
+      name: id,
+      emoji: '🗡️',
+      rarity: 'rare',
+      level: 20,
+      baseLevel: 20,
+      effect: { type, value },
+      setId: SET,
+    }) as Item;
+
+  it('⚠️ la pièce que le barème du jeu préfère l’emporte, même à itemScore plus BAS', () => {
+    // « grosse somme » gagne à l'itemScore ; « utile » gagne au barème fourni.
+    const grosseSomme = mk('weapon', 'gold_pct', 60, 'somme');
+    const utile = mk('weapon', 'damage_pct', 30, 'utile');
+    expect(itemScore(grosseSomme)).toBeGreaterThan(itemScore(utile));
+
+    const parDefaut = voieSetRoster(SET, { weapon: utile }, { weapon: grosseSomme }, []);
+    expect(parDefaut.weapon?.item.id, 'barème par défaut = itemScore').toBe('somme');
+
+    // Barème « puissance » : ici on déclare simplement que `utile` vaut plus.
+    const parPuissance = voieSetRoster(SET, { weapon: utile }, { weapon: grosseSomme }, [], (it) =>
+      it.id === 'utile' ? 100 : 1,
+    );
+    expect(parPuissance.weapon?.item.id).toBe('utile');
+    expect(parPuissance.weapon?.worn, 'et elle est marquée PORTÉE').toBe(true);
+  });
+
+  it('le barème sert aussi à départager deux pièces en réserve', () => {
+    const a = mk('armor', 'damage_pct', 10, 'a');
+    const b = mk('armor', 'damage_pct', 10, 'b');
+    const r = voieSetRoster(SET, {}, { armor: a }, [b], (it) => (it.id === 'b' ? 2 : 1));
+    expect(r.armor?.item.id).toBe('b');
+  });
+});

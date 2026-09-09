@@ -4855,7 +4855,10 @@ const loadoutsView = computed(() => {
   const inv = char.row?.inventory ?? [];
   return Array.from({ length: MAX_LOADOUTS }, (_, i) => {
     const vid = `voie:${loadoutVoie(i)?.id ?? ''}`;
-    const roster = voieSetRoster(vid, eq, los[i]?.items, inv);
+    // ⚠️ `powerIfEquip` et non le score d'objet : c'est l'arbitre du jeu, et c'est lui
+    // qui a décidé de ce qu'on porte. Sans ça, la carte pouvait mettre en avant une pièce
+    // que l'optimiseur avait justement écartée, et faire disparaître celle qu'on a sur soi.
+    const roster = voieSetRoster(vid, eq, los[i]?.items, inv, powerIfEquip);
     const entries = SLOTS.map((s) => roster[s]).filter((e): e is SetRosterEntry => !!e);
     // Puissance « si je porte ce set » : calculée sur le ROSTER complet, donc sur ce
     // qu'on possède vraiment de mieux — l'ancienne version ignorait les pièces portées

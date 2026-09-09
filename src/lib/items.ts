@@ -2009,6 +2009,14 @@ export function voieSetRoster(
   equipped: Equipped,
   stored: Equipped | undefined,
   inventory: Item[] = [],
+  /** Barème de comparaison. ⚠️ Par défaut `itemScore` — une somme d'affixes — mais le
+   *  jeu tranche PARTOUT à `combatPower` (« l'arbitre unique »), et les deux peuvent se
+   *  contredire : constaté sur un compte réel, une Lame à 107 d'itemScore était portée par
+   *  l'optimiseur À LA PLACE d'une Hache à 115, parce qu'elle vaut davantage EN COMBAT.
+   *  La carte affichait donc la Hache, et la pièce réellement portée semblait absente du
+   *  set. L'écran doit se ranger derrière le même arbitre que le jeu : il lui passe un
+   *  barème fondé sur la puissance. */
+  score: (it: Item) => number = itemScore,
 ): Partial<Record<ItemSlot, SetRosterEntry>> {
   const out: Partial<Record<ItemSlot, SetRosterEntry>> = {};
   const consider = (it: Item | undefined, worn: boolean) => {
@@ -2016,7 +2024,7 @@ export function voieSetRoster(
     const cur = out[it.slot];
     // Strictement meilleure pour remplacer : à score égal on garde la première vue, et
     // l'ordre de balayage commence par l'ÉQUIPÉ — un doublon exact reste donc marqué porté.
-    if (!cur || itemScore(it) > itemScore(cur.item)) out[it.slot] = { item: it, worn };
+    if (!cur || score(it) > score(cur.item)) out[it.slot] = { item: it, worn };
   };
   for (const s of SLOTS) consider(equipped[s], true);
   for (const s of SLOTS) consider(stored?.[s], false);
