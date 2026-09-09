@@ -9,6 +9,8 @@ import {
   HOUR_PRESETS,
   dayLabel,
   placeLabel,
+  outdoorRating,
+  OUTDOOR,
   type RawForecast,
 } from '@/lib/weather';
 
@@ -135,5 +137,77 @@ describe('plage horaire', () => {
     expect(rangeLabel(0, 23)).toBe('Toute la journée');
     expect(rangeLabel(6, 12)).toBe('06h → 12h');
     expect(rangeLabel(12, 6)).toBe('06h → 12h'); // normalisé
+  });
+});
+
+/** Le verdict « sport dehors » d'un créneau.
+ *
+ *  ⚠️ Ce n'est PAS « quel temps il fait » mais « est-ce que je peux courir ». D'où deux
+ *  partis pris que ces tests verrouillent : on juge sur le RESSENTI (l'humidité et le vent
+ *  décident de l'effort bien plus que le thermomètre) et un créneau déclassé dit TOUJOURS
+ *  pourquoi — une couleur sans motif laisse deviner, et on devine mal. */
+describe('outdoorRating', () => {
+  const beau = { tempC: 18, feelsC: 18, rainPct: 5, windKmh: 10, code: 0 };
+
+  it('un beau créneau est bon, et sans motif', () => {
+    expect(outdoorRating(beau)).toEqual({ verdict: 'good', reason: '' });
+  });
+
+  it("⚠️ l'orage passe AVANT tout le reste : par 18 °C au sec, c'est quand même non", () => {
+    for (const code of OUTDOOR.stormCodes) {
+      expect(outdoorRating({ ...beau, code }), `code ${code}`).toEqual({
+        verdict: 'bad',
+        reason: 'orage',
+      });
+    }
+  });
+
+  it('la chaleur déclasse en deux temps', () => {
+    expect(outdoorRating({ ...beau, feelsC: OUTDOOR.hotOk - 1 }).verdict).toBe('good');
+    expect(outdoorRating({ ...beau, feelsC: OUTDOOR.hotOk }).verdict).toBe('ok');
+    expect(outdoorRating({ ...beau, feelsC: OUTDOOR.hotBad }).verdict).toBe('bad');
+  });
+
+  it('le froid aussi', () => {
+    expect(outdoorRating({ ...beau, feelsC: OUTDOOR.coldOk + 1 }).verdict).toBe('good');
+    expect(outdoorRating({ ...beau, feelsC: OUTDOOR.coldOk }).verdict).toBe('ok');
+    expect(outdoorRating({ ...beau, feelsC: OUTDOOR.coldBad }).verdict).toBe('bad');
+  });
+
+  it('la pluie et le vent ont leurs propres seuils', () => {
+    expect(outdoorRating({ ...beau, rainPct: OUTDOOR.rainOk }).verdict).toBe('ok');
+    expect(outdoorRating({ ...beau, rainPct: OUTDOOR.rainBad }).verdict).toBe('bad');
+    expect(outdoorRating({ ...beau, windKmh: OUTDOOR.windOk }).verdict).toBe('ok');
+    expect(outdoorRating({ ...beau, windKmh: OUTDOOR.windBad }).verdict).toBe('bad');
+  });
+
+  it('⚠️ c’est le RESSENTI qui tranche, pas le thermomètre', () => {
+    // 30 °C à l'ombre mais 34 ressentis (humidité) : l'effort se paie au ressenti.
+    expect(outdoorRating({ ...beau, tempC: 30, feelsC: 34 }).verdict).toBe('bad');
+    // …et l'inverse : 33 °C secs et ventés qui n'en font que 26.
+    expect(outdoorRating({ ...beau, tempC: 33, feelsC: 26 }).verdict).toBe('good');
+  });
+
+  it('sans ressenti fourni, on retombe sur la température (aucun créneau muet)', () => {
+    const { feelsC: _omis, ...sansRessenti } = { ...beau, tempC: 35 };
+    expect(outdoorRating(sansRessenti).verdict).toBe('bad');
+  });
+
+  it('⚠️ tout créneau déclassé PORTE son motif — la couleur seule ne suffit pas', () => {
+    const cas = [
+      { ...beau, code: 95 },
+      { ...beau, feelsC: 35 },
+      { ...beau, feelsC: -5 },
+      { ...beau, rainPct: 80 },
+      { ...beau, windKmh: 60 },
+      { ...beau, feelsC: 29 },
+      { ...beau, rainPct: 40 },
+      { ...beau, windKmh: 40 },
+    ];
+    for (const h of cas) {
+      const r = outdoorRating(h);
+      expect(r.verdict, JSON.stringify(h)).not.toBe('good');
+      expect(r.reason, JSON.stringify(h)).not.toBe('');
+    }
   });
 });

@@ -621,7 +621,11 @@ export interface ScoutReport {
   avgLevel: number | null; // ≥ 3
   hasChampion: boolean | null; // ≥ 3
   groups: RaidGroup[] | null; // ≥ 4
-  forecast: boolean; // ≥ 5 : le pronostic chiffré est autorisé
+  /** ⚠️ PLUS DE PRONOSTIC CHIFFRÉ (v0.718). L'espionnage disait « 87 % de chances de
+   *  tenir » : le siège n'avait plus rien à raconter, on lisait le résultat avant la
+   *  bataille. La Tour renseigne sur l'ENNEMI (faction, effectif, niveaux, composition)
+   *  et achète du PRÉAVIS ; elle ne prédit pas l'issue. Le doute est le sujet. */
+  fullRead: boolean; // ≥ 5 : composition lue sans zone d'ombre
 }
 
 /** Ce que tu sais réellement de l'armée qui vient. Chaque palier de clarté ouvre une
@@ -638,7 +642,7 @@ export function scoutReport(raid: Raid, clarity: number): ScoutReport {
     avgLevel: clarity >= 3 ? avg : null,
     hasChampion: clarity >= 3 ? raid.groups.some((g) => g.champion) : null,
     groups: clarity >= 4 ? raid.groups : null,
-    forecast: clarity >= 5,
+    fullRead: clarity >= 5,
   };
 }
 

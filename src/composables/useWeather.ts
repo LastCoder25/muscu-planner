@@ -81,7 +81,7 @@ async function fetchForecast(lat: number, lon: number): Promise<WeatherData> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation` +
-    `&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m` +
+    `&hourly=temperature_2m,apparent_temperature,precipitation_probability,weather_code,wind_speed_10m` +
     `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max` +
     `&forecast_days=${FORECAST_DAYS}&timezone=auto`;
   const r = await fetch(url);

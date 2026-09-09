@@ -314,8 +314,13 @@
                       >Série {{ i + 1
                       }}<template v-if="s.date"> · {{ fmtSetDay(s.date) }}</template></span
                     >
+                    <!-- ⚠️ Le champ s'appelle `reps` mais porte des SECONDES sur un défi
+                         au chrono (gainage, corde, burpees…). Écrire « 45 reps » là où le
+                         joueur a tenu 45 secondes, c'est mentir sur son effort. `show`
+                         formate déjà selon l'unité du défi (sec ou min:sec au choix). -->
                     <span class="si-v"
-                      >{{ s.reps }} reps<template v-if="s.weight"> · {{ s.weight }} kg</template
+                      >{{ isGainageTime ? show(s.reps) : s.reps + ' reps'
+                      }}<template v-if="s.weight"> · {{ s.weight }} kg</template
                       ><template v-if="s.assisted"> · assisté</template></span
                     >
                   </div>

@@ -319,9 +319,6 @@
             {{ g.emoji }} ×{{ g.count }} · niv {{ g.level }}
           </span>
         </div>
-        <div v-if="scout.forecast" class="forecast">
-          🎯 Pronostic : <b>{{ forecastPct }} %</b> de chances de tenir
-        </div>
       </div>
       <p class="scout-hint">
         {{ scoutHint }}
@@ -584,15 +581,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import SiegeStage from '@/components/SiegeStage.vue';
-import { computeCharacter } from '@/lib/character';
-import {
-  RARITY_LABEL,
-  famDefMult,
-  playerWithGear,
-  famLevel,
-  FAMILIAR_SLOT,
-  type Item,
-} from '@/lib/items';
+import { RARITY_LABEL, famDefMult, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import {
   BUILD,
   buildingAccrued,
@@ -613,11 +602,9 @@ import {
   FACTION_LABEL,
   FACTION_LOOT,
   TURRET_SLOTS,
-  baseCombatant,
   defenseLevel,
   isDamaged,
   repairCost,
-  resolveRaid,
   scavengerCount,
   scoutClarity,
   scoutLevel,
@@ -687,7 +674,6 @@ const freeze = computed(() => base.value?.freeze ?? null);
 const lastReport = computed(() => base.value?.lastReport ?? null);
 const corpses = computed(() => field.value?.corpses ?? []);
 const remaining = computed(() => remainingCorpses(field.value));
-const heroHome = computed(() => !char.row?.expedition);
 
 const wallLevel = computed(() => defenseLevel(defenses.value, 'wall'));
 const watchLevel = computed(() => defenseLevel(defenses.value, 'watchtower'));
@@ -1039,7 +1025,7 @@ const EMPTY_SCOUT: ScoutReport = {
   avgLevel: null,
   hasChampion: null,
   groups: null,
-  forecast: false,
+  fullRead: false,
 };
 const scout = computed(() => (raid.value ? scoutReport(raid.value, clarity.value) : EMPTY_SCOUT));
 const clarity = computed(() =>
@@ -1055,40 +1041,13 @@ const clarity = computed(() =>
 );
 const scoutHint = computed(() => {
   if (!watchLevel.value) return 'Sans Tour de guet, tu ne sais rien de ce qui arrive.';
-  if (clarity.value >= 5) return 'Ta tour lit l’armée à livre ouvert.';
+  if (clarity.value >= 5)
+    return 'Ta tour lit l’armée à livre ouvert — l’issue, elle, se joue au mur.';
   return 'Monte la Tour de guet pour en savoir plus — et être prévenu plus tôt.';
 });
 
 /** Pronostic : Monte-Carlo seedé sur les défenses RÉELLES, comme le 🎯 % des donjons.
  *  Réservé à la clarté maximale : c'est la dernière chose que le renseignement achète. */
-const forecastPct = computed(() => {
-  const r = raid.value;
-  if (!r) return 0;
-  const def = baseCombatant(
-    defenses.value,
-    heroLevel.value,
-    heroHome.value ? hero.value : null,
-    garrison.value,
-  );
-  let held = 0;
-  for (let i = 0; i < 40; i++) {
-    if (resolveRaid(def, { ...r, seed: r.seed + i * 7919 }, 0, heroHome.value).held) held++;
-  }
-  return Math.round((held / 40) * 100);
-});
-
-const hero = computed(() => {
-  const c = char.row;
-  if (!c) return null;
-  const st = computeCharacter(
-    progress.powerXp.value,
-    progress.enduranceXp.value,
-    progress.agilityXp.value,
-    progress.energyEarned.value + c.login_energy,
-    c.energy_spent,
-  );
-  return playerWithGear(c.pseudo, st, c.equipped, {}, st.level.level, c.voie);
-});
 
 // ── Compteurs ──
 function fmtDelay(ms: number): string {
@@ -1864,10 +1823,6 @@ const doCollect = () =>
 .grp.champ {
   border-color: #ffb23f;
   color: #ffb23f;
-}
-.forecast {
-  margin-top: 8px;
-  font-size: 13px;
 }
 .scout-hint {
   font-style: italic;

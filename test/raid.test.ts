@@ -308,7 +308,12 @@ describe('espionnage', () => {
     expect(seen[3]!.avgLevel).toBeGreaterThan(0);
     expect(seen[3]!.groups).toBeNull();
     expect(seen[4]!.groups).toHaveLength(raid.groups.length);
-    expect(seen[5]!.forecast).toBe(true);
+    // ⚠️ RÉÉCRIT en v0.718 : le palier 5 ne donne plus de PRONOSTIC chiffré — il disait
+    // « 87 % de chances de tenir », donc l'issue avant la bataille. Il marque désormais
+    // une lecture SANS ZONE D’OMBRE de l’ennemi ; ce qu’on ignore encore, c’est le
+    // résultat, et c’est voulu.
+    expect(seen[5]!.fullRead).toBe(true);
+    expect('forecast' in seen[5]!).toBe(false);
   });
 
   it('le préavis croît avec la Tour et reste borné', () => {

@@ -72,6 +72,7 @@ export interface WeatherHour {
   hour: string; // « 14h »
   h24: number; // 0..23 (filtrage par plage horaire)
   tempC: number;
+  feelsC: number; // ressentie (humidité + vent) — la seule qui vaille pour l'effort
   rainPct: number; // 0..100
   windKmh: number;
   code: number;
@@ -105,6 +106,10 @@ export interface RawForecast {
   hourly: {
     time: string[]; // ISO local « 2026-09-03T14:00 »
     temperature_2m: (number | null)[];
+    /** ⚠️ RESSENTIE, et c'est elle qui compte pour l'effort : elle intègre l'humidité et
+     *  le vent. À 30 °C secs on court ; à 30 °C sous 80 % d'humidité, le corps n'évacue
+     *  plus. Juger sur la température brute sous-estimerait systématiquement le risque. */
+    apparent_temperature?: (number | null)[];
     precipitation_probability: (number | null)[];
     weather_code: (number | null)[];
     wind_speed_10m: (number | null)[];
@@ -132,6 +137,7 @@ export function parseForecast(raw: RawForecast): WeatherData {
       hour: `${t.slice(11, 13)}h`,
       h24: Number(t.slice(11, 13)),
       tempC: r0(raw.hourly.temperature_2m[i]),
+      feelsC: r0(raw.hourly.apparent_temperature?.[i] ?? raw.hourly.temperature_2m[i]),
       rainPct: r0(raw.hourly.precipitation_probability[i]),
       windKmh: r0(raw.hourly.wind_speed_10m[i]),
       code,
@@ -221,4 +227,59 @@ export function dayLabel(date: string, todayIso: string): string {
     day: 'numeric',
     month: 'short',
   });
+}
+
+// ── Sport en extérieur : le créneau est-il jouable ? ───────────────────────────
+//
+// ⚠️ SUR QUOI ON SE BASE, ET POURQUOI. Quatre facteurs, dans cet ordre de gravité :
+//  1. L'ORAGE — un veto absolu. Aucune fenêtre de température ne rend un orage jouable.
+//  2. La TEMPÉRATURE RESSENTIE, jamais la brute : elle intègre humidité et vent. À 30 °C
+//     secs on court ; à 30 °C sous forte humidité le corps n'évacue plus. Repères de
+//     physiologie de l'effort : au-delà de ~28 °C ressentis la performance chute et le
+//     risque monte, au-delà de ~32 °C l'effort soutenu est déconseillé ; en dessous de
+//     ~0 °C, voies respiratoires et adhérence deviennent le problème.
+//  3. La PLUIE en probabilité — au-delà de ~60 % on se mouille, ce n'est pas un danger
+//     mais c'est ce qui fait renoncer.
+//  4. Le VENT — au-delà de ~35 km/h une sortie devient pénible, au-delà de ~50 risquée.
+//
+// ⚠️ On rend un VERDICT + SA RAISON, pas un score. « 62 » ne dit pas quoi faire ; « trop
+// chaud » si. Et on ne fusionne pas les facteurs en une moyenne : un orage ne se compense
+// pas par une jolie température.
+export type OutdoorVerdict = 'good' | 'ok' | 'bad';
+export interface OutdoorRating {
+  verdict: OutdoorVerdict;
+  /** Motif du DÉCLASSEMENT, vide si le créneau est bon. */
+  reason: string;
+}
+export const OUTDOOR = {
+  stormCodes: [95, 96, 97, 98, 99],
+  hotBad: 32, // ressenti : effort soutenu déconseillé
+  hotOk: 28, // ressenti : ça pique
+  coldBad: -2,
+  coldOk: 3,
+  rainBad: 60, // %
+  rainOk: 35,
+  windBad: 50, // km/h
+  windOk: 35,
+} as const;
+
+/** Le créneau est-il bon pour du sport dehors ? */
+export function outdoorRating(h: {
+  feelsC?: number;
+  tempC: number;
+  rainPct: number;
+  windKmh: number;
+  code: number;
+}): OutdoorRating {
+  const t = h.feelsC ?? h.tempC;
+  if (OUTDOOR.stormCodes.includes(h.code as never)) return { verdict: 'bad', reason: 'orage' };
+  if (t >= OUTDOOR.hotBad) return { verdict: 'bad', reason: `${t} °C ressentis` };
+  if (t <= OUTDOOR.coldBad) return { verdict: 'bad', reason: `${t} °C ressentis` };
+  if (h.rainPct >= OUTDOOR.rainBad) return { verdict: 'bad', reason: `pluie ${h.rainPct} %` };
+  if (h.windKmh >= OUTDOOR.windBad) return { verdict: 'bad', reason: `vent ${h.windKmh} km/h` };
+  if (t >= OUTDOOR.hotOk) return { verdict: 'ok', reason: `${t} °C ressentis` };
+  if (t <= OUTDOOR.coldOk) return { verdict: 'ok', reason: `${t} °C ressentis` };
+  if (h.rainPct >= OUTDOOR.rainOk) return { verdict: 'ok', reason: `pluie ${h.rainPct} %` };
+  if (h.windKmh >= OUTDOOR.windOk) return { verdict: 'ok', reason: `vent ${h.windKmh} km/h` };
+  return { verdict: 'good', reason: '' };
 }

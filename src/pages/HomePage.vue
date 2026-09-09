@@ -201,7 +201,16 @@
                 </div>
               </div>
               <div class="wx-list">
-                <div v-for="h in dayHours" :key="h.hour" class="wx-row">
+                <!-- ⚠️ La ligne dit si le créneau est BON POUR SORTIR, pas seulement quel
+                     temps il fait. Rouge = déconseillé, orange = passable, et le MOTIF est
+                     écrit : « orage », « 33 °C ressentis », « pluie 70 % ». Une couleur
+                     sans raison laisse deviner, et on devine mal. -->
+                <div
+                  v-for="h in dayHours"
+                  :key="h.hour"
+                  class="wx-row"
+                  :class="'out-' + outdoor(h).verdict"
+                >
                   <span class="wx-row-h">{{ h.hour }}</span>
                   <span class="wx-row-ic">{{ h.emoji }}</span>
                   <span class="wx-row-t font-display">{{ h.tempC }}°</span>
@@ -209,6 +218,7 @@
                     >💧 {{ h.rainPct }}%</span
                   >
                   <span class="wx-row-w">💨 {{ h.windKmh }}</span>
+                  <span v-if="outdoor(h).reason" class="wx-row-bad">{{ outdoor(h).reason }}</span>
                 </div>
                 <div v-if="!dayHours.length" class="wx-empty">
                   Aucune heure dans la plage {{ hourRangeLabel }} pour ce jour.
@@ -603,6 +613,7 @@ import {
   placeLabel,
   dayLabel,
   hoursOfDay,
+  outdoorRating,
   filterHours,
   presetIdFor,
   rangeLabel,
@@ -727,6 +738,10 @@ function onTo(v: number) {
   hourTo.value = v;
   if (hourFrom.value > v) hourFrom.value = v;
 }
+/** Verdict « sport dehors » d'un créneau — la règle vit dans la lib (`outdoorRating`),
+ *  l'écran ne fait que la peindre. */
+const outdoor = (h: Parameters<typeof outdoorRating>[0]) => outdoorRating(h);
+
 const dayHours = computed(() =>
   weather.value
     ? filterHours(hoursOfDay(weather.value.hours, selDay.value), hourFrom.value, hourTo.value)
@@ -1441,6 +1456,25 @@ async function saveAutre() {
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+/* Créneaux de sport extérieur : rouge = déconseillé, orange = passable. La couleur
+   porte sur la LIGNE entière (liseré gauche), pas sur un seul chiffre : c'est le
+   créneau qu'on juge, pas la température. */
+.wx-row.out-bad {
+  border-left: 3px solid #ff6a45;
+  background: rgba(255, 106, 69, 0.07);
+}
+.wx-row.out-ok {
+  border-left: 3px solid #ffb23f;
+}
+.wx-row-bad {
+  font-size: 11px;
+  color: #ff6a45;
+  margin-left: auto;
+  padding-left: 8px;
+}
+.wx-row.out-ok .wx-row-bad {
+  color: #ffb23f;
 }
 .wx-row {
   display: grid;

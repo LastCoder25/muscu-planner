@@ -147,7 +147,9 @@
                   {{ st(c).completionPct }}% · j{{
                     Math.min(Math.max(1, st(c).dayIndex + 1), c.duration_days)
                   }}/{{ c.duration_days
-                  }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} reps</template>
+                  }}<template v-if="isSetsMode(c)">
+                    · {{ totalRepsOf(c) }} {{ repUnitOf(c) }}</template
+                  >
                 </div>
                 <div
                   v-if="balShown(c) !== 0"
@@ -204,7 +206,7 @@
           <div class="cc-sub">
             {{ st(c).completionPct }}% · {{ st(c).totalDone }}
             {{ isSetsMode(c) ? 'séries' : unitOf(c)
-            }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} reps</template>
+            }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} {{ repUnitOf(c) }}</template>
           </div>
           <div v-if="c.status === 'done'" class="cc-xp">
             <span v-if="xpb(c).reps > 0" class="xp-pill reps"
@@ -989,6 +991,12 @@ function challengeSegs(c: Challenge): { n: number; on: number; expected: number 
   const n = Math.min(30, Math.max(1, c.duration_days)); // nb de jours
   const on = Math.min(n, Math.round((st(c).completionPct / 100) * n));
   return { n, on, expected: on };
+}
+/** Unité du CUMUL des séries. ⚠️ Le champ s'appelle `reps` partout, mais il porte des
+ *  SECONDES sur un défi au chrono (gainage, corde, burpees…). Afficher « 240 reps » là
+ *  où le joueur a tenu 4 minutes, c'est mentir sur son effort. */
+function repUnitOf(c: Challenge) {
+  return c.unit === 'time' ? 'sec' : 'reps';
 }
 function totalRepsOf(c: Challenge) {
   return challengeTotalReps(c);
