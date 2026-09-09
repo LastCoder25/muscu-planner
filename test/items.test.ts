@@ -1276,3 +1276,120 @@ describe('roster : la pièce PORTÉE ne disparaît jamais (v0.708)', () => {
     expect(r.armor?.wornItem).toBeUndefined();
   });
 });
+
+describe('optimiseur : TOUTES les combinaisons, bonus de set et de voie compris (v0.710)', () => {
+  // ⚠️ CE QUI EST VERROUILLÉ. L'utilisateur demandait que le meilleur stuff soit cherché en
+  // tenant compte des bonus de SET et de VOIE — donc mono-set, bi-set (2+2, 3+1), demi-sets
+  // croisés, ou mélange avec des objets hors set. Le balayage des 4 emplacements est
+  // exhaustif, mais seulement PARMI LES CANDIDATS RETENUS : c'est le filtre qui décide de
+  // ce qui est atteignable. Le test compare donc l'optimiseur à une FORCE BRUTE sur le même
+  // pool — s'ils divergent, c'est que le filtre a jeté l'optimum.
+  const stats = { puissance: 60, endurance: 50, agilite: 30 };
+  const mkI = (slot: ItemSlot, type: string, value: number, setId?: string, id?: string): Item =>
+    ({
+      id: id ?? `${slot}-${setId ?? 'nu'}-${value}`,
+      slot,
+      name: 'x',
+      emoji: '⚔️',
+      rarity: 'rare',
+      level: 20,
+      baseLevel: 20,
+      effect: { type, value },
+      ...(setId ? { setId } : {}),
+    }) as Item;
+
+  /** Meilleure puissance atteignable, tous assemblages confondus (référence honnête). */
+  function bruteForce(pool: Item[], voie: string | null): number {
+    const by: Record<string, (Item | undefined)[]> = {};
+    for (const s of SLOTS) by[s] = [...pool.filter((i) => i.slot === s), undefined];
+    let best = 0;
+    for (const w of by.weapon!)
+      for (const a of by.armor!)
+        for (const ac of by.accessory!)
+          for (const r of by.relic!) {
+            const eq: Equipped = {};
+            if (w) eq.weapon = w;
+            if (a) eq.armor = a;
+            if (ac) eq.accessory = ac;
+            if (r) eq.relic = r;
+            best = Math.max(best, combatPower(playerWithGear('T', stats, eq, {}, 20, voie)));
+          }
+    return best;
+  }
+
+  it('⚠️ atteint l’OPTIMUM : aucun assemblage possible ne bat sa réponse', () => {
+    // Pool volontairement piégeux : deux sets complets + des objets nus parfois meilleurs
+    // pièce à pièce. La bonne réponse n'est évidente sur aucun emplacement isolé.
+    const A = 'voie:berserker';
+    const B = 'voie:gardien';
+    const pool: Item[] = [
+      mkI('weapon', 'damage_pct', 22, A),
+      mkI('armor', 'max_pv_pct', 20, A),
+      mkI('accessory', 'crit_pct', 14, A),
+      mkI('relic', 'damage_pct', 18, A),
+      mkI('weapon', 'damage_pct', 20, B),
+      mkI('armor', 'dmg_reduction_pct', 16, B),
+      mkI('accessory', 'crit_pct', 15, B),
+      mkI('relic', 'max_pv_pct', 22, B),
+      mkI('weapon', 'damage_pct', 26),
+      mkI('armor', 'max_pv_pct', 25),
+      mkI('accessory', 'crit_pct', 17),
+      mkI('relic', 'damage_pct', 21),
+    ];
+    for (const voie of ['berserker', 'gardien', null]) {
+      const best = bestGearLoadout('T', stats, {}, pool, 20, {}, voie);
+      const got = combatPower(playerWithGear('T', stats, best, {}, 20, voie));
+      expect(got, `voie ${voie}`).toBe(bruteForce(pool, voie));
+    }
+  });
+
+  it('⚠️ un DEMI-SET croisé est trouvé quand il bat le set complet', () => {
+    // 2 pièces de A + 2 de B : deux bonus 2-pièces, contre un seul set dont le capstone est
+    // gaté par la voie. Sans un candidat de CHAQUE set sur CHAQUE emplacement, cet
+    // assemblage serait tout simplement inatteignable.
+    const A = 'voie:berserker';
+    const B = 'voie:gardien';
+    const pool: Item[] = [
+      mkI('weapon', 'damage_pct', 20, A),
+      mkI('armor', 'damage_pct', 20, A),
+      mkI('accessory', 'damage_pct', 20, B),
+      mkI('relic', 'damage_pct', 20, B),
+    ];
+    // On joue une TROISIÈME voie : aucun capstone ne s'applique, seuls les 2-pièces comptent.
+    const best = bestGearLoadout('T', stats, {}, pool, 20, {}, 'assassin');
+    const sets = new Set(SLOTS.map((s) => best[s]?.setId).filter(Boolean));
+    expect(sets.size, 'les deux moitiés doivent être portées').toBe(2);
+    expect(combatPower(playerWithGear('T', stats, best, {}, 20, 'assassin'))).toBe(
+      bruteForce(pool, 'assassin'),
+    );
+  });
+
+  it('la MEILLEURE pièce de chaque set survit au filtre, même avec beaucoup de sets', () => {
+    // Le filtre gardait « jusqu'à 12 pièces de set » par ordre de puissance solo : au-delà,
+    // des sets entiers pouvaient n'être représentés sur aucun emplacement.
+    const pool: Item[] = [];
+    for (const v of VOIE_SETS) {
+      pool.push(mkI('weapon', 'damage_pct', 10, v.id, `w-${v.id}`));
+      pool.push(mkI('weapon', 'damage_pct', 4, v.id, `w2-${v.id}`)); // doublon plus faible
+    }
+    const best = bestGearLoadout('T', stats, {}, pool, 20, {}, null);
+    expect(best.weapon).toBeDefined();
+    expect(combatPower(playerWithGear('T', stats, best, {}, 20, null))).toBe(
+      bruteForce(pool, null),
+    );
+  });
+
+  it('ne retire jamais une pièce sans mieux : l’auto-équip ne peut pas faire PERDRE', () => {
+    const worn = mkI('weapon', 'damage_pct', 40, undefined, 'porte');
+    const best = bestGearLoadout(
+      'T',
+      stats,
+      { weapon: worn },
+      [mkI('weapon', 'damage_pct', 5)],
+      20,
+      {},
+      null,
+    );
+    expect(best.weapon?.id).toBe('porte');
+  });
+});

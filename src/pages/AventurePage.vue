@@ -4812,11 +4812,19 @@ const equippedSet = computed<{ idx: number; name: string; emoji: string; count: 
  *  Restant volontairement pessimiste d'un cheveu : l'action re-choisit aussi les TALENTS
  *  pour ce gear, ce qu'on ne refait pas ici (coût). Le résultat réel ne peut donc qu'être
  *  ≥ à ce qu'on annonce — jamais l'inverse. */
-function loadoutPower(reserve: Equipped | undefined, voieId: string | null): number {
+function loadoutPower(voieId: string | null): number {
   const row = char.row;
   if (!row) return 0;
   const fx = mergeEffects(talentFx.value, voiePassiveEffects(voieId as VoieId | null));
-  const pool = [...row.inventory, ...(SLOTS.map((s) => reserve?.[s]).filter(Boolean) as Item[])];
+  // ⚠️ TOUTES les réserves, comme l'action : depuis que l'optimiseur peut croiser deux
+  // demi-sets venus de deux réserves différentes, un aperçu limité à une seule réserve
+  // recommencerait à annoncer autre chose que ce que le bouton fait.
+  const pool = [
+    ...row.inventory,
+    ...(row.loadouts ?? []).flatMap(
+      (lo) => SLOTS.map((s) => lo.items?.[s]).filter(Boolean) as Item[],
+    ),
+  ];
   const best = bestGearLoadout(
     row.pseudo ?? 'Toi',
     c.value,
@@ -4844,7 +4852,7 @@ const loadoutsView = computed(() => {
     // Puissance « si je porte ce set » : calculée sur le ROSTER complet, donc sur ce
     // qu'on possède vraiment de mieux — l'ancienne version ignorait les pièces portées
     // et sous-estimait donc systématiquement le set en cours.
-    const power = entries.length ? loadoutPower(los[i]?.items, loadoutVoie(i)?.id ?? null) : 0;
+    const power = entries.length ? loadoutPower(loadoutVoie(i)?.id ?? null) : 0;
     // Vendre / vider ne concernent QUE la réserve : on ne brade pas ce qu’on porte.
     const storedItems = SLOTS.map((s) => los[i]?.items?.[s]).filter((it): it is Item => !!it);
     return {

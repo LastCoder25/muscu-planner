@@ -1879,17 +1879,35 @@ export function bestGearLoadout(
     one[it.slot] = it;
     return combatPower(playerWithGear(name, stats, one, extra, level, voie));
   };
-  // Candidats retenus par slot : top-K solo + toutes les pièces de set (cap 12) + slot vide.
-  // On garde TOUJOURS l'objet actuel du slot (même s'il est médiocre en solo mais fort en
-  // combo, ou hors top-K) → l'optimiseur ne peut jamais retirer une pièce sans candidat qui
-  // fait mieux, donc jamais de PERTE de puissance (bug auto-équip).
+  // Candidats par slot : la MEILLEURE pièce de CHAQUE set + les top-K SANS set + l'objet
+  // actuel + le slot vide.
+  //
+  // ⚠️ Le « meilleur de chaque set » n'est pas un détail de perf : c'est LUI qui rend les
+  // demi-sets trouvables. Le balayage des 4 emplacements est exhaustif, donc toute
+  // combinaison 1/2/3/4 pièces, mono-set, bi-set (2+2, 3+1) ou mixte avec des objets hors
+  // set est évaluée AVEC ses bonus de set — mais seulement parmi les candidats retenus.
+  // L'ancien filtre gardait « jusqu'à 12 pièces de set » dans l'ordre de puissance SOLO :
+  // au-delà de 12, des sets entiers pouvaient ne jamais être représentés sur un slot, donc
+  // certains demi-sets étaient inatteignables sans qu'on le sache.
+  //
+  // On garde TOUJOURS l'objet actuel du slot (même médiocre en solo mais fort en combo) →
+  // l'optimiseur ne peut jamais retirer une pièce sans candidat qui fait mieux, donc jamais
+  // de PERTE de puissance (bug auto-équip).
   const K = 6;
   const trim = (arr: Item[], keepCur?: Item): (Item | undefined)[] => {
     const scored = arr.map((it) => ({ it, p: soloPower(it) })).sort((a, b) => b.p - a.p);
     const keep = new Map<string, Item>();
     if (keepCur) keep.set(keepCur.id, keepCur);
-    for (const { it } of scored.slice(0, K)) keep.set(it.id, it);
-    for (const { it } of scored) if (it.setId && keep.size < 12) keep.set(it.id, it);
+    const bestOfSet = new Map<string, Item>();
+    for (const { it } of scored)
+      if (it.setId && !bestOfSet.has(it.setId)) bestOfSet.set(it.setId, it);
+    for (const it of bestOfSet.values()) keep.set(it.id, it);
+    let n = 0;
+    for (const { it } of scored)
+      if (!it.setId && n < K) {
+        keep.set(it.id, it);
+        n++;
+      }
     return [...keep.values(), undefined];
   };
   const cand: Record<'weapon' | 'armor' | 'accessory' | 'relic', (Item | undefined)[]> = {
