@@ -2547,6 +2547,9 @@
         >
           Laisser cet emplacement vide
         </button>
+        <p v-if="!talChoices.length" class="talents-empty">
+          Tous tes talents sont déjà équipés — libère un emplacement pour en déplacer un.
+        </p>
         <div class="talents-grid">
           <button
             v-for="t in talChoices"
@@ -3234,17 +3237,23 @@ const talentSummary = computed(() => {
   if (e.initiativePct) out.push(`⚡ +${p(e.initiativePct * 100)} % initiative`);
   return out;
 });
-/** Talents proposés pour une case : tous, les plus utiles d'abord (même ordre que la liste). */
-const talChoices = computed(() => talentsView.value);
+/** Talents proposés pour une case : les DISPONIBLES seulement, plus celui qui occupe déjà
+ *  cette case — même règle qu'au chenil. Proposer un talent équipé ailleurs n'aurait mené
+ *  qu'à un refus du store : un emplacement ne se remplit qu'avec ce qui est libre. */
+const talChoices = computed(() => {
+  const here = talPick.value === null ? undefined : talentSlotsView.value[talPick.value]?.id;
+  return talentsView.value.filter((t) => !t.equipped || t.id === here);
+});
 /** Un talent déjà équipé sur une AUTRE case, ou un doublon de code déjà porté : le store
  *  refuse les deux, autant le dire avant le clic plutôt qu'après. */
-function talBlocked(t: { id: string; inst: { code: string }; equipped: boolean }): string {
+function talBlocked(t: { id: string; inst: { code: string } }): string {
   const i = talPick.value;
   if (i === null) return '';
   const here = talentSlotsView.value[i];
   if (here?.id === t.id) return '';
-  if (t.equipped) return 'déjà équipé sur une autre case';
-  // Le store refuse deux talents du MÊME code : autant le dire avant le clic.
+  // Seul cas restant : un talent du MÊME TYPE est déjà porté ailleurs. Le store le refuse ;
+  // on le dit AVANT le clic plutôt que par une notification après. (« Déjà équipé » n'a
+  // plus lieu d'être : le sélecteur ne propose que des talents libres.)
   if (equippedTalents.value.some((x) => x.code === t.inst.code && x.id !== here?.id))
     return 'tu portes déjà un talent de ce type';
   return '';

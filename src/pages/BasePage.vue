@@ -540,7 +540,11 @@
           Laisser ce poste vide
         </button>
         <p v-if="!famChoices.length" class="dim-note">
-          Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
+          {{
+            famPoolRaw.length
+              ? 'Tous tes familiers sont déjà postés — libère un poste pour en déplacer un.'
+              : 'Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.'
+          }}
         </p>
         <button
           v-for="f in famChoices"
@@ -562,9 +566,6 @@
             <span class="fp-eff">{{ famEffect(f) }}</span>
             <span v-if="defLvlRaw(f) > defLvl(f)" class="fp-capped">
               dressage bridé par le Chenil (niv. {{ kennelLevel }}) — il vaut {{ defLvlRaw(f) }}
-            </span>
-            <span v-if="postedElsewhere(f.id)" class="fp-swap">
-              déjà posté ailleurs — le choisir ÉCHANGE les deux postes
             </span>
           </span>
         </button>
@@ -740,7 +741,12 @@ const garrisonIds = computed(() => base.value?.garrison ?? []);
  *  voit plus combien de places restent à pourvoir. */
 const garrisonSlotsView = computed(() => {
   const byId = new Map(famPoolRaw.value.map((f) => [f.id, f]));
-  return Array.from({ length: slots.value }, (_, i) => byId.get(garrisonIds.value[i] ?? ''));
+  // ⚠️ DÉDOUBLONNÉ à la lecture : un même familier ne peut pas tenir deux postes. Le store
+  // l'interdit déjà à l'écriture, mais une ligne écrite par une version antérieure
+  // afficherait sinon la même bête sur deux cases — un état que le combat ne connaît pas.
+  const vus = new Set<string>();
+  const ids = garrisonIds.value.filter((id) => (vus.has(id) ? false : (vus.add(id), true)));
+  return Array.from({ length: slots.value }, (_, i) => byId.get(ids[i] ?? ''));
 });
 /** Case en cours d'édition (index), ou null. */
 const famPick = ref<number | null>(null);
@@ -751,29 +757,27 @@ const famPickOpen = computed({
     if (!v) famPick.value = null;
   },
 });
-/** Familiers proposés pour une case : tous ceux qu'on possède, les meilleurs d'abord,
- *  ceux déjà postés AILLEURS marqués — on ne les cache pas, on dit pourquoi. */
-const famChoices = computed(() =>
-  [...famPoolRaw.value].sort((a, b) => famWeight(b) - famWeight(a)),
-);
-function postedElsewhere(id: string): boolean {
-  return (
-    famPick.value !== null &&
-    garrisonIds.value.includes(id) &&
-    garrisonIds.value[famPick.value] !== id
-  );
-}
+/** Familiers proposés pour une case : les DISPONIBLES seulement, plus celui qui occupe
+ *  déjà cette case. Les meilleurs d’abord.
+ *
+ *  ⚠️ On ne propose PAS ceux postés ailleurs. Les afficher « marqués » invitait à un
+ *  échange de postes, alors qu’un même familier ne peut évidemment pas défendre deux
+ *  endroits à la fois : mieux vaut que le doublon soit IMPOSSIBLE à l’écran que rattrapé
+ *  par le store. */
+const famChoices = computed(() => {
+  const here = famPick.value === null ? undefined : garrisonSlotsView.value[famPick.value]?.id;
+  const pris = new Set(garrisonIds.value.filter((id) => id !== here));
+  return famPoolRaw.value
+    .filter((f) => !pris.has(f.id))
+    .sort((a, b) => famWeight(b) - famWeight(a));
+});
 /** Place `id` sur la case en cours (ou la vide si `null`). Une SEULE écriture : échanger
  *  deux familiers via deux bascules laisserait un état intermédiaire vide à l'écran. */
 function pickFamiliar(id: string | null) {
   const i = famPick.value;
   if (i === null) return;
-  const next = Array.from({ length: slots.value }, (_, k) => garrisonIds.value[k] ?? '');
-  if (id) {
-    const from = next.indexOf(id);
-    if (from >= 0) next[from] = next[i] ?? ''; // échange : l'occupant part à sa place
-    next[i] = id;
-  } else next[i] = '';
+  const next = Array.from({ length: slots.value }, (_, k) => garrisonSlotsView.value[k]?.id ?? '');
+  next[i] = id ?? ''; // le sélecteur ne propose que des familiers LIBRES : rien à échanger
   famPick.value = null;
   void guard(() => char.setGarrison(uid.value, next.filter(Boolean), Date.now(), heroLevel.value));
 }
@@ -1748,10 +1752,6 @@ const doCollect = () =>
 .fp-capped {
   font-size: 11px;
   color: var(--dim);
-}
-.fp-swap {
-  font-size: 11px;
-  color: #ffd23f;
 }
 .btn.full {
   width: 100%;
