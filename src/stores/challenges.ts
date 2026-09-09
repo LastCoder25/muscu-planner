@@ -274,10 +274,34 @@ export const useChallengesStore = defineStore('challenges', () => {
     if (c) c.status = status;
   }
 
+  /** Supprime un defi — ET retire la PROPOSITION partagee qui pendait encore.
+   *
+   *  ⚠️ Un defi propose a un ami vit dans DEUX lignes : le defi lui-meme et sa
+   *  DEFINITION (`shared_challenges`), qui porte l invitation. Supprimer le premier
+   *  laissait la seconde : l ami continuait de voir « Releve ce defi » pour quelque
+   *  chose qui n existait plus, et l accepter aurait cree un defi jumeau sans jumeau.
+   *
+   *  ⚠️ Seulement tant que l invitation est EN ATTENTE. Une fois acceptee, l ami a SON
+   *  propre defi rattache a cette definition : la supprimer casserait son comparatif
+   *  pour une decision qui n est pas la sienne. Abandonner le sien ne doit jamais
+   *  effacer le sien a lui.
+   *
+   *  ⚠️ `.eq(created_by, uid)` explicite, comme partout : la RLS borne ce qu on a le
+   *  DROIT de supprimer, pas ce qu on VEUT supprimer. */
   async function remove(id: string) {
+    const sharedId = list.value.find((c) => c.id === id)?.shared_id ?? null;
     const { error } = await supabase.from('challenges').delete().eq('id', id);
     if (error) throw error;
     list.value = list.value.filter((c) => c.id !== id);
+    const uid = useAuthStore().user?.id;
+    if (sharedId && uid) {
+      await supabase
+        .from('shared_challenges')
+        .delete()
+        .eq('id', sharedId)
+        .eq('created_by', uid)
+        .eq('status', 'pending');
+    }
   }
 
   async function fetchAchievements() {

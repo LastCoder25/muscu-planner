@@ -44,6 +44,10 @@ export interface RaidGroup {
    *  vaut moins qu'un brigand, mais elles arrivent en nombre. Portée par le groupe pour
    *  que `groupCombatant` reste autonome (la mise en scène lit la même valeur). */
   unitMult?: number;
+  /** Facteur par lequel l'effectif de CE groupe a été gonflé au-delà de la calibration
+   *  (cf. `RAID.massMult`). Ses assaillants sont d’autant plus faibles et leurs corps
+   *  d’autant moins riches. **1 pour le champion**, qui n’est pas gonflé. */
+  massMult?: number;
 }
 
 export interface Raid {
@@ -77,6 +81,10 @@ export interface Corpse {
   level: number;
   champion?: boolean;
   looted?: boolean;
+  /** Dilution de masse HÉRITÉE de son groupe : ce corps est un parmi ~2,5× trop nombreux,
+   *  il est donc d'autant moins riche (cf. `RAID.massMult`). Absent = 1 (le champion, et
+   *  les champs sauvegardés avant la v0.720). */
+  massMult?: number;
   /** Position sur le champ (0..100), posée au tirage → stable d'un rendu à l'autre. */
   x: number;
   y: number;
@@ -362,6 +370,25 @@ export const RAID = {
   // les sources bornées par l'horloge ne peuvent pas suivre quand les sièges se
   // multiplient), et non au jugé : au premier réglage, un siège rendait 585 🔩 contre 62
   // pour une épave — il aurait détrôné la source de pointe, que le test verrouille.
+  /** ⚠️ MASSE VISIBLE ≠ MENACE. Mesuré : une armée comptait `10 + ⌊niveau/10⌋` corps,
+   *  soit **8 brigands au niveau 26 et 20 au niveau 100** — une bande, pas un siège.
+   *  Pire, l'effectif ne DOUBLAIT qu'entre le niveau 12 et 100, quand la puissance du
+   *  joueur croît en ~L⁴ : toute la difficulté passait par le NIVEAU des assaillants,
+   *  jamais par la masse. Et le motif du plafond (« un champ de 100 cadavres qu'on ne
+   *  pourrait pas dépouiller ») avait cessé d'être vrai : les fossoyeurs ramassent
+   *  `1 + ⌊niveau/2⌋` corps PAR VAGUE renouvelable, soit 1,4 vague pour tout prendre au
+   *  niveau 26 et 0,7 au niveau 100 — la capacité de fouille dépasse l'armée entière.
+   *
+   *  L'armée est donc ~2,5× plus nombreuse, mais chaque assaillant est d'autant plus
+   *  FAIBLE et son cadavre d'autant moins RICHE : **la menace et le butin d'un siège
+   *  sont inchangés, seule la foule change.** Même relation que `siegeStage` avec la
+   *  simulation — la mise en scène ne décide rien.
+   *
+   *  ⚠️ La dilution est portée PAR GROUPE (`RaidGroup.massMult`), jamais appliquée comme
+   *  une constante globale : le CHAMPION est seul (count 1), il n'est donc pas gonflé —
+   *  le diluer le rendrait 2,5× plus faible que la calibration. Même raison que son
+   *  `unitMult: 1` : une élite ne suit pas la dilution de sa horde. */
+  massMult: 2.5,
   corpseScrapBase: 0,
   corpseScrapPerLevel: 0.16,
   intervalFloorMs: 3 * 3600_000, // plancher : en deçà, un siège n'est plus un événement
@@ -389,7 +416,11 @@ export const SCAV = {
 /** Fossoyeurs envoyés PAR VAGUE — le seul effet du niveau du chantier. Il répond à une
  *  question unique et lisible : « combien j'en ramasse d'un coup ». */
 export function scavengerCount(level: number): number {
-  return level <= 0 ? 0 : 1 + Math.floor(level / 2);
+  // ⚠️ La capacite suit la MASSE (`RAID.massMult`) : il y a ~2,5x plus de corps, chacun
+  // ~2,5x moins riche, donc il faut pouvoir en ramasser ~2,5x plus dun coup. Sans cela, la
+  // meme valeur de champ de bataille aurait demande 7 allers-retours au lieu de 3 : la
+  // foule serait devenue une corvee, alors quelle ne doit rien changer a leffort.
+  return level <= 0 ? 0 : Math.round((1 + Math.floor(level / 2)) * RAID.massMult);
 }
 
 // ── Rosters par faction ──
@@ -460,11 +491,18 @@ function pick<T>(rng: () => number, arr: readonly T[]): T {
 
 // ── Composition de l'armée ──
 
-/** Effectif total d'une armée. Volontairement BORNÉ et à croissance lente : un champ de
- *  100 cadavres qu'on ne pourrait pas dépouiller serait frustrant, pas impressionnant. */
-export function raidSize(playerLevel: number, faction?: RaidFaction): number {
+/** Effectif de CALIBRATION : celui sur lequel toute la difficulté des sièges a été
+ *  mesurée (v0.661 → v0.687). Il n'est ni affiché ni dépouillé — il ne sert qu'à savoir
+ *  de combien l'armée VISIBLE a été gonflée, donc de combien la diluer. */
+export function raidThreatSize(playerLevel: number, faction?: RaidFaction): number {
   const base = RAID.foesBase + Math.floor(Math.max(1, playerLevel) / RAID.foesPerLevel);
   return Math.max(3, Math.round(base * (faction ? FACTION_PROFILE[faction].countMult : 1)));
+}
+
+/** Effectif RÉEL : ce qui marche sur la ville, se dessine et se dépouille.
+ *  ⚠️ Plus nombreux ne veut PAS dire plus dangereux — cf. `RAID.massMult`. */
+export function raidSize(playerLevel: number, faction?: RaidFaction): number {
+  return Math.max(3, Math.round(raidThreatSize(playerLevel, faction) * RAID.massMult));
 }
 
 /** Largeur RÉELLE de la fenêtre de niveau — le plus petit de deux régimes.
@@ -530,6 +568,11 @@ export function rollRaid(
   // Effectifs : le champion est SEUL (c'est une élite) ; le reste se répartit.
   const groups: RaidGroup[] = [];
   const troops = Math.max(nGroups - 1, total - 1);
+  // ⚠️ Dilution EXACTE, et non la constante : les arrondis et le champion (toujours seul,
+  // donc jamais gonflé) font que la troupe n'a pas été multipliée par pile `massMult`.
+  // On mesure le gonflement réellement subi → la menace est conservée au bit près.
+  const troopsRef = Math.max(nGroups - 1, raidThreatSize(L, faction) - 1);
+  const massMult = troops / troopsRef;
   let left = troops;
   for (let i = 0; i < nGroups - 1; i++) {
     const remaining = nGroups - 1 - i;
@@ -542,6 +585,7 @@ export function rollRaid(
       count: share,
       level: levels[i]!,
       unitMult,
+      massMult,
     });
   }
   const champSkin = roster[roster.length - 1]!;
@@ -551,9 +595,11 @@ export function rollRaid(
     count: 1,
     level: championLevel,
     champion: true,
-    // Le champion est une élite, pas un membre de la horde : sa force ne suit pas la
-    // dilution de sa faction (sinon un chef de meute serait plus faible qu'un brigand).
+    // Le champion est une élite, pas un membre de la horde : sa force ne suit ni la
+    // dilution de sa faction (sinon un chef de meute serait plus faible qu'un brigand),
+    // ni celle de la MASSE — il est seul, il n'a pas été gonflé.
     unitMult: 1,
+    massMult: 1,
   });
 
   return {
@@ -661,10 +707,15 @@ export function groupCombatant(g: RaidGroup): Combatant {
   const champDmg = g.champion ? RAID.championDmgMult : 1;
   const unitPv = offensePerRound(ref) * RAID.foePvK * champPv * um;
   const unitDmg = ref.pv * RAID.foeDmgK * champDmg * um;
+  // ⚠️ EFFECTIF DE CALIBRATION : la foule visible est ramenée au nombre sur lequel la
+  // difficulté a été mesurée. Les PV suivent l’effectif, les dégâts sa RACINE — la
+  // dilution doit donc emprunter le MÊME chemin, sans quoi une armée plus nombreuse
+  // frapperait moins fort (√ oblige) tout en encaissant pareil.
+  const eff = g.count / (g.massMult ?? 1);
   return {
     name: `${g.emoji} ${g.species}${g.count > 1 ? ` ×${g.count}` : ''}`,
-    pv: Math.max(1, Math.round(unitPv * g.count)),
-    damage: Math.max(1, Math.round(unitDmg * Math.pow(g.count, RAID.groupDmgExp))),
+    pv: Math.max(1, Math.round(unitPv * eff)),
+    damage: Math.max(1, Math.round(unitDmg * Math.pow(eff, RAID.groupDmgExp))),
     crit: g.champion ? 0.15 : 0.05,
     dodge: 0,
     initiative: g.level,
@@ -1064,6 +1115,7 @@ export function corpsesFrom(raid: Raid, report: RaidReport, seed: number): Corps
         name: g.species,
         level: g.level,
         ...(g.champion ? { champion: true } : {}),
+        ...(g.massMult && g.massMult !== 1 ? { massMult: g.massMult } : {}),
         x: 50 + Math.cos(a) * rad,
         y: 50 + Math.sin(a) * rad,
       });
@@ -1096,6 +1148,14 @@ export function lootCorpses(
 ): CorpseLoot {
   const rng = mulberry32((seed ^ 0x2545f491) >>> 0 || 1);
   const loot: CorpseLoot = { gold: 0, summonStones: 0, keys: 0, scrap: 0, items: [] };
+  // ⚠️ ACCUMULATION EN FLOTTANT, arrondie UNE SEULE fois a la fin. Arrondir la part de
+  // CHAQUE corps biaise vers le haut des que cette part passe sous l unite — ce qui
+  // arrive precisement depuis la dilution de masse (0,6 pierre ou 1,7 ferraille par
+  // corps). Mesure : +11 % de ferraille et +25 % de pierres, assez pour faire tomber
+  // la regle « la ferraille est plus dure a obtenir que l or ».
+  let gold = 0;
+  let stones = 0;
+  let scrap = 0;
   // ⚠️ DEVISES VIVANTES UNIQUEMENT. Les fossoyeurs payaient en fragments 🧩 et poussière
   // d'encre 🖋️ pour deux factions sur trois — or plus aucune fonction ne les dépense
   // depuis le retrait des infusions de grade. Deux tiers du butin de siège étaient donc
@@ -1106,12 +1166,16 @@ export function lootCorpses(
   let keyOdds = 0;
   for (const c of corpses) {
     const L = Math.max(1, c.level);
-    const mult = c.champion ? 4 : 1;
-    if (faction === 'bandits') loot.gold += Math.round((14 + L * 5.5) * mult);
-    else if (faction === 'mortsvivants') loot.summonStones += Math.round((0.35 + L * 0.045) * mult);
+    // ⚠️ Un corps est d'autant moins riche que l'armée a été gonflée : il y a ~2,5× plus
+    // de cadavres, la valeur TOTALE du champ de bataille est donc inchangée. Sans cette
+    // division, défendre deviendrait un farm 2,5× meilleur — et la ferraille des corps
+    // ferait sauter la règle « l'épave reste la source de pointe », que son test verrouille.
+    const mult = (c.champion ? 4 : 1) / (c.massMult ?? 1);
+    if (faction === 'bandits') gold += (14 + L * 5.5) * mult;
+    else if (faction === 'mortsvivants') stones += (0.35 + L * 0.045) * mult;
     else keyOdds += (0.05 + L * 0.004) * mult; // bêtes : la clé est RARE, on cumule les chances
     // Un peu d'or partout : même une bête traîne ce qu'elle a pris au village.
-    if (faction !== 'bandits') loot.gold += Math.round((5 + L * 1.8) * mult);
+    if (faction !== 'bandits') gold += (5 + L * 1.8) * mult;
     // 🔩 L'ACIER D'UNE ARMÉE (v0.702). ⚠️ Ceci PRÉCISE, sans la renier, la règle « les
     // cadavres ne donnent jamais de ferraille » : son motif était qu'on n'en trouve pas
     // sur un LOUP. Une troupe humaine ou un mort-vivant en armes, si — lames, plaques,
@@ -1125,8 +1189,7 @@ export function lootCorpses(
     // réparer, donc plus rien monter. Le siège devient le maillon qui fait suivre le
     // métal au rythme du sport. ⚠️ Calibré pour rester SOUS l'épave par événement :
     // elle demeure la source de pointe, celle qui coûte un geste.
-    if (faction !== 'betes')
-      loot.scrap += Math.round((RAID.corpseScrapBase + L * RAID.corpseScrapPerLevel) * mult);
+    if (faction !== 'betes') scrap += (RAID.corpseScrapBase + L * RAID.corpseScrapPerLevel) * mult;
 
     const drop = rollDrop(rng, {
       cleared: true,
@@ -1140,13 +1203,15 @@ export function lootCorpses(
     // porte rien, et un revenant ce qu'il reste de son linceul. La faction ne décide donc
     // pas seulement de la DEVISE, mais aussi de ce qu'on ramasse.
     const chance = faction === 'bandits' ? RAID.gearDropBandits : RAID.gearDropOther;
-    if (drop && (c.champion || rng() < chance)) loot.items.push(drop);
+    // Même dilution sur les OBJETS : ~2,5× plus de tirages, chacun ~2,5× moins probable.
+    if (drop && (c.champion || rng() < chance / (c.massMult ?? 1))) loot.items.push(drop);
   }
   // Bonus de fouille de la garnison (marmotte) : il porte sur les RESSOURCES, jamais
   // sur la rareté des objets — l'anti-runaway ne se contourne pas par le chenil.
   const k = 1 + Math.max(0, lootPct) / 100;
-  loot.gold = Math.round(loot.gold * k);
-  loot.summonStones = Math.round(loot.summonStones * k);
+  loot.gold = Math.round(gold * k);
+  loot.summonStones = Math.round(stones * k);
+  loot.scrap = Math.round(scrap);
   // Les clés se tirent sur le CUMUL des chances : une vague de bêtes en rend une de
   // temps en temps, jamais une par corps.
   loot.keys = Math.floor(keyOdds * k) + (rng() < (keyOdds * k) % 1 ? 1 : 0);

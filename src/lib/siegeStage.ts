@@ -69,7 +69,16 @@ export const SIEGE_STAGE = {
   spawnMax: 96,
   /** Ouverture de l'arc d'assaut : une armée arrive d'un CÔTÉ, pas de partout — sinon
    *  elle a l'air de pleuvoir plutôt que de marcher sur la ville. */
-  arc: Math.PI * 1.15,
+  arc: Math.PI * 1.35,
+  /** ⚠️ Une armee nombreuse marche EN PROFONDEUR. Depuis que la masse visible a ete
+   *  multipliee (cf. `RAID.massMult`), un siege aligne 50 a 80 corps : sur un arc
+   *  unique ils se chevauchent et ne se lisent plus comme une troupe, mais comme un
+   *  trait. On les repartit donc sur plusieurs RANGS, espaces vers l exterieur — ce
+   *  qui est aussi la facon dont une armee aborde reellement un rempart.
+   *  ⚠️ Purement VISUEL : le nombre de rangs ne touche ni les beats, ni les bornes
+   *  cumulees, ni l issue — ce module ne decide rien du combat. */
+  perRank: 20,
+  maxRanks: 3,
 } as const;
 
 /** Générateur déterministe local (même famille que `mulberry32`, sans dépendance). */
@@ -92,10 +101,21 @@ export function placeBodies(groups: RaidGroup[], seed: number): SiegeBody[] {
   if (!total) return out;
   // L'arc démarre à une orientation seedée : deux sièges ne se ressemblent pas.
   const start = rng() * Math.PI * 2;
+  // Assez de rangs pour que chacun reste lisible, sans depasser le fond du champ.
+  const ranks = Math.min(SIEGE_STAGE.maxRanks, Math.max(1, Math.ceil(total / SIEGE_STAGE.perRank)));
+  const perRank = Math.ceil(total / ranks);
+  // ⚠️ Les rangs se partagent la bande de spawn EXISTANTE, ils ne la debordent pas :
+  // au-dela de `spawnMax` on sort du dessin, en deca de `spawnMin` on se retrouve
+  // dans les tourelles. La profondeur vient du partage, pas d un eloignement.
+  const slice = (SIEGE_STAGE.spawnMax - SIEGE_STAGE.spawnMin) / ranks;
   let placed = 0;
   groups.forEach((g, gi) => {
     for (let m = 0; m < g.count; m++) {
-      const t = (placed + 0.5) / total;
+      // Position DANS son rang : chaque rang re-etale l arc entier, sinon les rangs
+      // arriere heriteraient du resserrement que l on corrige.
+      const rank = Math.floor(placed / perRank);
+      const rankSize = Math.min(perRank, total - rank * perRank);
+      const t = ((placed % perRank) + 0.5) / rankSize;
       out.push({
         id: `b${gi}_${m}`,
         group: gi,
@@ -105,7 +125,7 @@ export function placeBodies(groups: RaidGroup[], seed: number): SiegeBody[] {
         level: g.level,
         champion: !!g.champion,
         angle: start + (t - 0.5) * SIEGE_STAGE.arc + (rng() - 0.5) * 0.12,
-        dist: SIEGE_STAGE.spawnMin + rng() * (SIEGE_STAGE.spawnMax - SIEGE_STAGE.spawnMin),
+        dist: SIEGE_STAGE.spawnMin + rank * slice + rng() * slice,
       });
       placed++;
     }

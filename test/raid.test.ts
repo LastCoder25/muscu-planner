@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { HARVEST } from '@/lib/expedition';
 import {
   rollRaid,
@@ -31,6 +31,8 @@ import {
   garrisonBonus,
   duplicateFamiliars,
   garrisonSlots,
+  raidThreatSize,
+  type RaidReport,
   autoGarrison,
   dedupeGarrisonRoles,
   fatigueMsFor,
@@ -722,6 +724,121 @@ describe('chenil : la garnison', () => {
   });
 });
 
+/** ⚠️ MASSE VISIBLE ≠ MENACE (v0.720). Une armee comptait 8 brigands au niveau 26 : une
+ *  bande, pas un siege. Elle est ~2,5x plus nombreuse, mais chaque assaillant est
+ *  d autant plus faible et son cadavre d autant moins riche.
+ *
+ *  Ces tests comparent le modele A/B en forcant `RAID.massMult` a 1, ce qui reproduit
+ *  EXACTEMENT l ancien comportement : c est la seule facon de prouver qu on n a change
+ *  que la foule. Sans eux, un futur reglage de la masse deplacerait silencieusement la
+ *  difficulte ou l economie du champ de bataille. */
+describe('masse visible contre menace', () => {
+  const M = RAID as unknown as { massMult: number };
+  const REF = M.massMult;
+  afterEach(() => {
+    M.massMult = REF;
+  });
+
+  /** Menace TOTALE d une armee : PV et degats de tous ses groupes. */
+  function threat(L: number, seed: number) {
+    const raid = rollRaid(seed, L, 0, 0);
+    let pv = 0;
+    let dmg = 0;
+    for (const g of raid.groups) {
+      const c = groupCombatant(g);
+      pv += c.pv;
+      dmg += c.damage;
+    }
+    return { pv, dmg, count: raid.groups.reduce((a, g) => a + g.count, 0) };
+  }
+
+  it('l armee VISIBLE est bien plus nombreuse que l effectif de calibration', () => {
+    for (const L of [12, 26, 60, 100]) {
+      expect(raidSize(L, undefined)).toBeGreaterThan(raidThreatSize(L, undefined));
+      expect(raidSize(L, 'bandits')).toBeGreaterThanOrEqual(
+        Math.round(raidThreatSize(L, 'bandits') * REF) - 1,
+      );
+    }
+  });
+
+  it('⚠️ la MENACE ne bouge pas : plus de monde, chacun plus faible', () => {
+    for (const L of [12, 26, 60, 100]) {
+      for (const seed of [3, 91, 404]) {
+        M.massMult = 1;
+        const avant = threat(L, seed);
+        M.massMult = REF;
+        const apres = threat(L, seed);
+        // La foule, elle, a bien grossi — sinon le test ne prouverait rien.
+        expect(apres.count).toBeGreaterThan(avant.count * 1.8);
+        // Les PV suivent l effectif, les degats sa RACINE : les deux doivent survivre
+        // a la dilution, sinon une armee plus nombreuse frapperait moins fort.
+        expect(apres.pv / avant.pv).toBeGreaterThan(0.95);
+        expect(apres.pv / avant.pv).toBeLessThan(1.05);
+        expect(apres.dmg / avant.dmg).toBeGreaterThan(0.95);
+        expect(apres.dmg / avant.dmg).toBeLessThan(1.05);
+      }
+    }
+  });
+
+  it('⚠️ le CHAMPION n est pas dilue — il est seul, il n a pas ete gonfle', () => {
+    const raid = rollRaid(77, 40, 0, 0);
+    const champ = raid.groups.find((g) => g.champion)!;
+    expect(champ.count).toBe(1);
+    expect(champ.massMult ?? 1).toBe(1);
+    M.massMult = 1;
+    const seul = groupCombatant({ ...champ, massMult: 1 });
+    M.massMult = REF;
+    expect(groupCombatant(champ).pv).toBe(seul.pv);
+    expect(groupCombatant(champ).damage).toBe(seul.damage);
+  });
+
+  it('⚠️ le BUTIN du champ de bataille est conserve : 2,5x plus de corps, chacun moins riche', () => {
+    function field(L: number) {
+      let gold = 0;
+      let scrap = 0;
+      let stones = 0;
+      let corps = 0;
+      for (let s = 0; s < 40; s++) {
+        const raid = rollRaid(s * 7919 + 5, L, 0, 0);
+        const rep = { defeated: raid.groups.length } as RaidReport;
+        const c = corpsesFrom(raid, rep, s);
+        const loot = lootCorpses(c, raid.faction, L, s);
+        corps += c.length;
+        gold += loot.gold;
+        scrap += loot.scrap;
+        stones += loot.summonStones;
+      }
+      return { gold, scrap, stones, corps };
+    }
+    for (const L of [26, 60]) {
+      M.massMult = 1;
+      const a = field(L);
+      M.massMult = REF;
+      const b = field(L);
+      expect(b.corps).toBeGreaterThan(a.corps * 1.8); // la foule a grossi
+      // ⚠️ Marge SERREE : c est ici qu un arrondi par corps se voyait. Arrondir la part
+      // de chaque cadavre biaisait de +11 % la ferraille et +25 % les pierres, assez
+      // pour faire tomber la regle « la ferraille est plus dure a obtenir que l or ».
+      expect(b.gold / a.gold).toBeGreaterThan(0.95);
+      expect(b.gold / a.gold).toBeLessThan(1.05);
+      expect(b.scrap / a.scrap).toBeGreaterThan(0.95);
+      expect(b.scrap / a.scrap).toBeLessThan(1.05);
+      expect(b.stones / a.stones).toBeGreaterThan(0.95);
+      expect(b.stones / a.stones).toBeLessThan(1.05);
+    }
+  });
+
+  it('⚠️ la FOUILLE demande le meme nombre de vagues qu avant', () => {
+    for (const L of [12, 26, 60, 90]) {
+      M.massMult = 1;
+      const avant = raidSize(L, 'betes') / scavengerCount(L);
+      M.massMult = REF;
+      const apres = raidSize(L, 'betes') / scavengerCount(L);
+      // Sinon la foule devient une corvee : meme butin, 2,5x plus d allers-retours.
+      expect(apres).toBeCloseTo(avant, 1);
+    }
+  });
+});
 describe('blessure du héros', () => {
   it('un siège PERDU avec le héros présent le blesse — mais ne le BLOQUE jamais', () => {
     const b = emptyBase(1, 0);

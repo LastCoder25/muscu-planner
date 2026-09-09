@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RAID, raidSize } from '@/lib/raid';
+import { rollRaid, corpsesFrom, lootCorpses, type RaidReport } from '@/lib/raid';
 import { defenseUpgradeScrap, defenseUpgradeCost, repairCost, DEFENSE_TYPES } from '@/lib/raid';
 import { HARVEST, travelOneWayMin } from '@/lib/expedition';
 import { BUILDING_TYPES } from '@/lib/buildings';
@@ -70,9 +70,26 @@ function sessionRecycled(L: number): number {
  *  laissé les deux invariants ci-dessous verts en ne regardant qu'une partie du débit —
  *  précisément le « test troué » qu'on s'interdit. Deux factions sur trois en laissent
  *  (les bêtes, jamais), et on ne fouille pas tous les corps avant péremption. */
+/** ⚠️ On APPELLE `lootCorpses`, on ne recopie pas sa formule.
+ *
+ *  Ce test refaisait le calcul a la main (`raidSize × valeur par corps`). Les deux
+ *  copies ont diverge des que la masse visible des armees a ete multipliee (v0.720) :
+ *  le nombre de corps a ete multiplie mais pas la dilution de chacun, donc le test a
+ *  cru que les sieges rendaient 2,5x plus de ferraille et a declare l economie cassee
+ *  alors qu elle etait intacte. Deux copies d une regle divergent toujours.
+ *
+ *  Moyenne sur plusieurs graines : la faction est tiree au sort et les BETES ne
+ *  laissent aucune ferraille. */
 const siegeScrapPerDay = (L: number) => {
-  const corpses = raidSize(L);
-  const perSiege = corpses * Math.round(RAID.corpseScrapBase + L * RAID.corpseScrapPerLevel);
+  const N = 60;
+  let total = 0;
+  for (let s = 0; s < N; s++) {
+    const raid = rollRaid(s * 7919 + 5, L, 0, 0);
+    // Siege REPOUSSE : toute l armee tombe, c est le champ de bataille de reference.
+    const rep = { defeated: raid.groups.length } as RaidReport;
+    total += lootCorpses(corpsesFrom(raid, rep, s), raid.faction, L, s).scrap;
+  }
+  const perSiege = total / N;
   return SPORT_PER_DAY * (2 / 3) * perSiege * 0.7;
 };
 /** Journée type : le butin recyclé de la séance (au prorata), UNE épave, la Fonderie,
