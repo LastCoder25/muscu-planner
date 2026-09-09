@@ -24,12 +24,12 @@
         v-for="p in prodPills"
         :key="p.res"
         class="bar-chip prod"
-        :class="{ ready: p.ready > 0 }"
+        :class="{ ready: p.ready > 0, full: p.full }"
         :title="p.title"
         :disabled="!anyReady"
         @click="doHarvest"
       >
-        {{ p.emoji }} {{ p.ready }}<small>/{{ p.rate }} h⁻¹</small>
+        {{ p.emoji }} {{ p.ready }}<small>/{{ p.max }}</small>
       </button>
       <button v-if="anyReady" class="bar-chip harvest" @click="doHarvest">🧺 Récolter</button>
       <span v-if="!prodPills.length" class="bar-chip dim">Aucun bâtiment de production</span>
@@ -538,6 +538,7 @@ import {
   BUILD,
   buildingAccrued,
   buildingProdPerHour,
+  buildingStorageCap,
   buildingType,
   collectable,
   plotsForLevel,
@@ -1101,19 +1102,36 @@ const prodPills = computed(() => {
   // ⚠️ `now` (horloge réactive de la page) et non `Date.now()` : dans un computed, ce
   // dernier ne serait lu qu’une fois et le stock en attente resterait figé à l’écran.
   const ready = collectable(bs, now.value);
+  const mult = storageMult(bs);
   const rate = new Map<string, number>();
+  const cap = new Map<string, number>();
   for (const b of bs) {
     const t = buildingType(b.typeId);
     if (!t?.resource) continue;
     rate.set(t.resource, (rate.get(t.resource) ?? 0) + buildingProdPerHour(b));
+    // ⚠️ La capacité vient de `buildingStorageCap`, jamais recalculée ici : c'est elle
+    // qui plafonne réellement `buildingAccrued`. Une capacité affichée « à peu près »
+    // mentirait exactement au moment où elle compte — quand on sature.
+    cap.set(t.resource, (cap.get(t.resource) ?? 0) + buildingStorageCap(b, mult));
   }
-  return [...rate.entries()].map(([res, r]) => ({
-    res,
-    emoji: RESOURCE_EMOJI[res as BuildResource] ?? '✨',
-    ready: ready[res as BuildResource] ?? 0,
-    rate: r.toFixed(1),
-    title: `${ready[res as BuildResource] ?? 0} en attente · ${r.toFixed(1)}/h — un siège perdu vole ce qui n’est pas ramassé.`,
-  }));
+  return [...rate.entries()].map(([res, r]) => {
+    const n = ready[res as BuildResource] ?? 0;
+    const max = Math.floor(cap.get(res) ?? 0);
+    // SATURÉ = les bâtiments tournent dans le vide depuis un moment. C’est la seule vraie
+    // urgence de cet écran : tout ce qu’ils produisent est perdu tant qu’on ne ramasse pas.
+    const full = max > 0 && n >= max;
+    return {
+      res,
+      emoji: RESOURCE_EMOJI[res as BuildResource] ?? '✨',
+      ready: n,
+      max,
+      full,
+      rate: r.toFixed(1),
+      title: `${n} / ${max} stockables · ${r.toFixed(1)}/h${
+        full ? ' — STOCK PLEIN, la production est perdue.' : ''
+      } Un siège perdu vole ce qui n’est pas ramassé.`,
+    };
+  });
 });
 const anyReady = computed(() => prodPills.value.some((p) => p.ready > 0));
 function doHarvest() {
@@ -1195,6 +1213,11 @@ const doCollect = () =>
 .bar-chip.prod small {
   opacity: 0.55;
   margin-left: 2px;
+}
+.bar-chip.prod.full {
+  color: #ff6a45;
+  border-color: #ff6a45;
+  cursor: pointer;
 }
 .bar-chip.prod.ready {
   color: var(--text);

@@ -428,10 +428,35 @@ export function useProgress() {
     return out;
   });
 
+  /** SÉANCES des `days` derniers jours — la définition qui pilote la FRÉQUENCE DES
+   *  SIÈGES (`raidIntervalMs` : une séance, un siège).
+   *
+   *  ⚠️ DÉFINITION DÉDIÉE, et pas `sportEntries`. Cette dernière est construite pour les
+   *  SUCCÈS sportifs : s'en servir ici a fait manquer les séances de TENNIS sur le court
+   *  (elles nourrissent pourtant l'XP, les stats et les tuiles d'accueil). Piloter une
+   *  mécanique avec la structure d'une autre, c'est hériter de ses trous en silence.
+   *
+   *  COMPTE : une séance enregistrée (muscu, séance libre, log rapide, prépa physique),
+   *  une sortie cardio saisie à la main, une séance de tennis sur le court.
+   *  NE COMPTE PAS : les journées de défi et le Défi 360 — ils n'enregistrent pas de
+   *  séance, et une série de pompes glissée dans la journée n'est pas une séance. Les
+   *  sorties cardio « miroir » d'un défi sont exclues explicitement : elles dupliquent un
+   *  effort déjà compté ailleurs, les recompter gonflerait la fréquence sans effort réel. */
+  function sessionsInLastDays(days = 7): number {
+    const from = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
+    const on = (iso: string | null | undefined) => !!iso && iso.slice(0, 10) >= from;
+    return (
+      logs.all.filter((r) => on(r.performed_at)).length +
+      cardio.logs.filter((r) => !r.payload.challenge_id && on(r.performed_at)).length +
+      tennis.logs.filter((r) => on(r.performed_at)).length
+    );
+  }
+
   return {
     ready,
     sportTiles,
     sportEntries,
+    sessionsInLastDays,
     global: computed(() => computeLevel(globalXp.value)),
     general: computed(() => computeLevel(generalXp.value)),
     specifique: computed(() => computeLevel(tennisXp.value)),

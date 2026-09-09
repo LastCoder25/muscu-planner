@@ -4613,10 +4613,7 @@ const baseAlert = computed(
  *  bouge une fois par jour, et tout son volume supplémentaire ne lui rapportait aucun
  *  contenu. Le siège étant un ROBINET (butin, cadavres, ferraille), « plus actif = plus
  *  attaqué » se lit comme plus de jeu, jamais comme une punition de l'entraînement. */
-const sessions7 = computed(() => {
-  const from = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
-  return progress.sportEntries.value.filter((e) => e.date && e.date >= from).length;
-});
+const sessions7 = computed(() => progress.sessionsInLastDays(7));
 
 let baseBusy = false;
 async function baseLifecycle() {
