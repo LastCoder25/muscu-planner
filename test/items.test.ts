@@ -53,6 +53,7 @@ import {
   ENCHANT_MAX,
   VOIE_SETS,
   rollSetLegendaryProc,
+  voieSetRoster,
 } from '@/lib/items';
 import { mulberry32, combatPower } from '@/lib/combat';
 import { pickBestTalents } from '@/lib/talents';
@@ -1149,5 +1150,62 @@ describe('procs légendaires des pièces de SET — cohérents avec le thème (v
   it('un set INCONNU retombe sur le pool de l’emplacement au lieu de rester sans proc', () => {
     const id = rollSetLegendaryProc(mulberry32(1), 'weapon', []);
     expect(LEGENDARY_PROCS.find((p) => p.id === id)!.slots).toContain('weapon');
+  });
+});
+
+describe('roster d’un set de voie — la COLLECTION, pas ce qu’on ne porte pas (v0.707)', () => {
+  // ⚠️ LE DÉFAUT CORRIGÉ. « Mes sets » listait la seule RÉSERVE, c'est-à-dire très
+  // exactement les pièces qu'on ne portait PAS : un joueur équipé de deux pièces de sa
+  // voie voyait son set amputé de ce qu'il avait de mieux. Et le compteur « x/4 » à côté,
+  // lui, comptait DÉJÀ partout — la liste et le chiffre se contredisaient à l'écran.
+  const SET = 'voie:berserker';
+  const mk = (slot: ItemSlot, value: number, setId = SET, id = slot + value): Item =>
+    ({
+      id, slot, name: id, emoji: '🗡️', rarity: 'rare', level: 10, baseLevel: 10,
+      effect: { type: 'damage_pct', value }, setId,
+    }) as Item;
+
+  it('⚠️ une pièce PORTÉE figure dans le roster, et elle est marquée', () => {
+    const r = voieSetRoster(SET, { weapon: mk('weapon', 20) }, undefined, []);
+    expect(r.weapon?.worn).toBe(true);
+    expect(r.weapon?.item.id).toBe('weapon20');
+  });
+
+  it('la MEILLEURE pièce gagne, où qu’elle soit — portée, en réserve ou au sac', () => {
+    const porte = voieSetRoster(SET, { weapon: mk('weapon', 30) }, { weapon: mk('weapon', 10) }, []);
+    expect(porte.weapon?.item.id).toBe('weapon30');
+    expect(porte.weapon?.worn).toBe(true);
+    // …et l'inverse : une meilleure pièce en réserve prime, non marquée portée. C'est le
+    // signal « tu portes moins bien que ce que tu as », qui n'existait pas avant.
+    const reserve = voieSetRoster(SET, { weapon: mk('weapon', 10) }, { weapon: mk('weapon', 30) }, []);
+    expect(reserve.weapon?.item.id).toBe('weapon30');
+    expect(reserve.weapon?.worn).toBe(false);
+    const sac = voieSetRoster(SET, {}, undefined, [mk('armor', 25)]);
+    expect(sac.armor?.item.id).toBe('armor25');
+  });
+
+  it('⚠️ le COMPTE est la taille du roster — liste et compteur ne peuvent plus diverger', () => {
+    const r = voieSetRoster(
+      SET,
+      { weapon: mk('weapon', 20), armor: mk('armor', 15) },
+      { relic: mk('relic', 12) },
+      [mk('accessory', 9)],
+    );
+    expect(Object.keys(r).length).toBe(4); // 4/4 affiché ⇒ 4 objets listés
+    expect(SLOTS.every((s) => !!r[s])).toBe(true);
+  });
+
+  it('les pièces d’un AUTRE set, et le familier, n’y entrent jamais', () => {
+    const r = voieSetRoster(
+      SET,
+      { weapon: mk('weapon', 99, 'voie:gardien') },
+      undefined,
+      [mk('familiar' as ItemSlot, 99), { ...mk('armor', 50, 'voie:vampire') }],
+    );
+    expect(Object.keys(r)).toEqual([]);
+  });
+
+  it('un set dont on ne possède rien rend un roster vide (et non une erreur)', () => {
+    expect(voieSetRoster('voie:inconnue', {}, undefined, [])).toEqual({});
   });
 });

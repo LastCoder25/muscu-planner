@@ -1650,7 +1650,7 @@
                 <span
                   class="lo-count"
                   :class="{ full: voieOwnedCount(i) >= 4 }"
-                  title="Pièces de set possédées pour cette voie (équipées, rangées ou au sac)"
+                  title="Pièces POSSÉDÉES pour cette voie (portées, en réserve ou au sac). Seules les pièces PORTÉES donnent le bonus."
                   >{{ voieOwnedCount(i) }}/4</span
                 >
                 <span v-if="equippedSet?.idx === i" class="lo-active">✓ en cours</span>
@@ -1667,18 +1667,40 @@
             </div>
             <div v-if="lo.count" class="lo-items">
               <button
-                v-for="it in lo.items"
-                :key="it.slot"
+                v-for="e in lo.entries"
+                :key="e.item.slot"
                 type="button"
                 class="lo-item"
-                :class="'r-' + it.rarity"
-                :title="SLOT_LABEL[it.slot] + ' · ' + it.name + ' — voir les stats'"
-                @click="inspectItem = it"
+                :class="['r-' + e.item.rarity, { worn: e.worn }]"
+                :title="
+                  SLOT_LABEL[e.item.slot] +
+                  ' · ' +
+                  e.item.name +
+                  (e.worn ? ' — PORTÉE (compte pour le bonus)' : ' — en réserve') +
+                  ' · voir les stats'
+                "
+                @click="inspectItem = e.item"
               >
-                {{ SLOT_EMOJI[it.slot] }}
+                {{ SLOT_EMOJI[e.item.slot] }}
+                <span v-if="e.worn" class="lo-worn" aria-label="portée">✓</span>
               </button>
             </div>
-            <div v-if="lo.count" class="lo-hint">Touche un objet pour voir ses stats</div>
+            <!-- ⚠️ SEULES les pièces PORTÉES donnent le bonus (cf. setEffects). Le dire ici
+                 évite le contresens le plus naturel : croire qu'un set « complet » dans la
+                 collection est un set actif. -->
+            <div v-if="lo.count" class="lo-hint">
+              <template v-if="lo.wornCount >= 2">
+                <b class="lo-ok">{{ lo.wornCount }} portée{{ lo.wornCount > 1 ? 's' : '' }}</b> —
+                bonus actif.
+              </template>
+              <template v-else-if="lo.wornCount === 1">
+                1 seule portée — <b>il en faut 2 du même set</b> pour un bonus.
+              </template>
+              <template v-else
+                >Aucune portée — ce set ne donne aucun bonus pour l’instant.</template
+              >
+              Touche un objet pour ses stats.
+            </div>
             <!-- Porter = passer à cette voie + optimiser (le set + les meilleurs objets du sac).
                  Grisé si on ne possède aucune pièce de cette voie. -->
             <button
@@ -1689,7 +1711,8 @@
               {{ equippedSet?.idx === i ? '✓ Set porté' : '⬆️ Porter ce set' }}
             </button>
             <!-- Gestion des pièces rangées : vider vers le sac (46488974) ou vendre (53a6d487). -->
-            <div v-if="lo.count" class="lo-actions">
+            <!-- Vider / vendre ne touchent QUE la réserve : masqués si tout est porté. -->
+            <div v-if="lo.storedCount" class="lo-actions">
               <button
                 class="lo-mini"
                 :disabled="busy"
@@ -2547,6 +2570,8 @@ import {
   ITEM_SETS,
   SET_BY_ID,
   setCounts,
+  voieSetRoster,
+  type SetRosterEntry,
   type Item,
   type ItemSlot,
   type Equipped,
@@ -4777,31 +4802,42 @@ function loadoutPower(items: Equipped, voieId: string | null): number {
     playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, fx, c.value.level.level, voieId),
   );
 }
+/** Une carte de « Mes sets » = le ROSTER de la voie (meilleure pièce possédée par
+ *  emplacement, portée ou non), et non plus la seule RÉSERVE. Voir `voieSetRoster` :
+ *  lister ce qu'on ne porte PAS était l'exact contraire d'une collection. */
 const loadoutsView = computed(() => {
   const los = char.row?.loadouts ?? [];
+  const eq = char.row?.equipped ?? {};
+  const inv = char.row?.inventory ?? [];
   return Array.from({ length: MAX_LOADOUTS }, (_, i) => {
-    const stored = los[i]?.items ?? {};
-    const items = SLOTS.map((s) => stored[s]).filter((it): it is Item => !!it);
-    const power = items.length ? loadoutPower(stored, loadoutVoie(i)?.id ?? null) : 0;
-    const sellGold = items.reduce((s, it) => s + scrapValue(it), 0);
-    return { items, count: items.length, power, delta: power - combatPowerVal.value, sellGold };
+    const vid = `voie:${loadoutVoie(i)?.id ?? ''}`;
+    const roster = voieSetRoster(vid, eq, los[i]?.items, inv);
+    const entries = SLOTS.map((s) => roster[s]).filter((e): e is SetRosterEntry => !!e);
+    // Puissance « si je porte ce set » : calculée sur le ROSTER complet, donc sur ce
+    // qu'on possède vraiment de mieux — l'ancienne version ignorait les pièces portées
+    // et sous-estimait donc systématiquement le set en cours.
+    const items: Equipped = {};
+    for (const e of entries) items[e.item.slot] = e.item;
+    const power = entries.length ? loadoutPower(items, loadoutVoie(i)?.id ?? null) : 0;
+    // Vendre / vider ne concernent QUE la réserve : on ne brade pas ce qu’on porte.
+    const storedItems = SLOTS.map((s) => los[i]?.items?.[s]).filter((it): it is Item => !!it);
+    return {
+      entries,
+      count: entries.length,
+      storedCount: storedItems.length,
+      wornCount: entries.filter((e) => e.worn).length,
+      power,
+      delta: power - combatPowerVal.value,
+      sellGold: storedItems.reduce((s, it) => s + scrapValue(it), 0),
+    };
   });
 });
 // Nb de pièces de set POSSÉDÉES pour la voie i (équipées + rangées dans la réserve + au sac)
 // → complétion x/4 (distinctes par emplacement, où qu'elles soient).
-const voieOwnedCount = (i: number): number => {
-  const vid = `voie:${loadoutVoie(i)?.id ?? ''}`;
-  const slots = new Set<ItemSlot>();
-  const scan = (eq?: Equipped) => {
-    if (!eq) return;
-    for (const s of SLOTS) if (eq[s]?.setId === vid) slots.add(s);
-  };
-  scan(char.row?.equipped);
-  scan(char.row?.loadouts?.[i]?.items);
-  for (const it of char.row?.inventory ?? [])
-    if (it.setId === vid && SLOTS.includes(it.slot)) slots.add(it.slot);
-  return slots.size;
-};
+// ⚠️ DÉRIVÉ du roster affiché, jamais recompté à part : c'est la divergence entre ce
+// compteur (qui comptait partout) et la liste (qui ne montrait que la réserve) qui rendait
+// « Mes sets » illisible — 4/4 annoncé au-dessus de deux objets.
+const voieOwnedCount = (i: number): number => loadoutsView.value[i]?.count ?? 0;
 // Porter le set d'une voie : FORCE cette voie (l'optimiseur ne re-choisit pas) et équipe son
 // set complété au mieux avec le sac (un seul appel, capstone de la voie inclus).
 function doWearVoieSet(i: number) {
@@ -7185,6 +7221,7 @@ button.pt-mini:active {
   margin: 7px 0;
 }
 .lo-item {
+  position: relative;
   width: 34px;
   height: 34px;
   display: flex;
@@ -7199,6 +7236,19 @@ button.pt-mini:active {
 }
 .lo-item:active {
   transform: scale(0.92);
+}
+.lo-item.worn {
+  box-shadow: 0 0 0 2px #7bc86c inset;
+}
+.lo-worn {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  font-size: 9px;
+  color: #7bc86c;
+}
+.lo-ok {
+  color: #7bc86c;
 }
 .lo-hint {
   font-size: 10.5px;

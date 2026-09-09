@@ -1944,3 +1944,45 @@ export function bestGearLoadout(
   if ((bestFam?.id ?? null) !== (curFam?.id ?? null)) sweepGear(bestFam);
   return best;
 }
+
+/** Une pièce du roster d'un set, et OÙ elle se trouve. */
+export interface SetRosterEntry {
+  item: Item;
+  /** Portée en ce moment — c'est elle (et elle seule) qui compte pour le bonus de set. */
+  worn: boolean;
+}
+
+/** ROSTER d'un set de voie : la MEILLEURE pièce possédée pour chaque emplacement, qu'elle
+ *  soit portée, rangée en réserve ou au sac.
+ *
+ *  ⚠️ Pourquoi ça existe (v0.707). « Mes sets » listait uniquement la RÉSERVE — donc,
+ *  très exactement, les pièces qu'on ne portait PAS. Un joueur équipé de deux pièces de
+ *  sa voie voyait un set amputé de ce qu'il avait de mieux, et une épée de réserve à côté
+ *  d'une meilleure épée portée : impossible de lire sa collection. Pire, le compteur
+ *  « x/4 » à côté, lui, comptait DÉJÀ partout — la liste et le chiffre se contredisaient
+ *  ouvertement (4/4 affiché au-dessus de deux objets).
+ *
+ *  Le roster est donc la source UNIQUE des deux : le compte, c'est le nombre d'entrées.
+ *  Ils ne peuvent plus diverger.
+ *
+ *  ⚠️ Ceci ne change RIEN au combat : le bonus de set ne compte que `equipped`
+ *  (cf. `setEffects`). Le drapeau `worn` sert à le dire à l'écran, pas à l'altérer. */
+export function voieSetRoster(
+  setId: string,
+  equipped: Equipped,
+  stored: Equipped | undefined,
+  inventory: Item[] = [],
+): Partial<Record<ItemSlot, SetRosterEntry>> {
+  const out: Partial<Record<ItemSlot, SetRosterEntry>> = {};
+  const consider = (it: Item | undefined, worn: boolean) => {
+    if (!it || it.setId !== setId || !SLOTS.includes(it.slot)) return;
+    const cur = out[it.slot];
+    // Strictement meilleure pour remplacer : à score égal on garde la première vue, et
+    // l'ordre de balayage commence par l'ÉQUIPÉ — un doublon exact reste donc marqué porté.
+    if (!cur || itemScore(it) > itemScore(cur.item)) out[it.slot] = { item: it, worn };
+  };
+  for (const s of SLOTS) consider(equipped[s], true);
+  for (const s of SLOTS) consider(stored?.[s], false);
+  for (const it of inventory) consider(it, false);
+  return out;
+}
