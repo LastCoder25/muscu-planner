@@ -51,6 +51,8 @@ import {
   type Equipped,
   enchantMult,
   ENCHANT_MAX,
+  VOIE_SETS,
+  rollSetLegendaryProc,
 } from '@/lib/items';
 import { mulberry32, combatPower } from '@/lib/combat';
 import { pickBestTalents } from '@/lib/talents';
@@ -1072,5 +1074,80 @@ describe('pickBestTalents', () => {
 
   it('aucun emplacement -> aucun talent', () => {
     expect(pickBestTalents([mk('a', 't_dmg')], 0, () => 99)).toEqual([]);
+  });
+});
+
+describe('procs légendaires des pièces de SET — cohérents avec le thème (v0.701)', () => {
+  // ⚠️ CE QUI EST VERROUILLÉ ICI. Jusqu'en v0.700, une pièce de set tirait son proc en ne
+  // regardant que son EMPLACEMENT : mesuré, 94 % des pièces de set sont Légendaire+ au
+  // niveau 70 (le proc est la norme) et 34 % seulement prolongeaient le thème du set. La
+  // correction ne passe PAS par un assouplissement du tirage — laisser le thème primer sur
+  // le slot donnait 87 % de sets avec un doublon, or `aggregateLegendaries` déduplique :
+  // un nerf déguisé. Elle passe par un CATALOGUE complet : un proc par famille de stats et
+  // par emplacement. Ces tests gardent cette complétude.
+  it('⚠️ chaque proc DÉCLARE son écho — sans quoi il ne tomberait jamais sur un set', () => {
+    for (const p of LEGENDARY_PROCS) {
+      expect(p.echo.length, `${p.name} n’a pas d’écho`).toBeGreaterThan(0);
+      expect(p.slots.length, `${p.name} n’a pas d’emplacement`).toBeGreaterThan(0);
+    }
+  });
+
+  it('⚠️ AUCUN TROU : chaque (set × emplacement) a un proc dans son thème', () => {
+    // C'est LA garantie. La matrice comptait 16 trous sur 32 avant la v0.701, et deux stats
+    // de set n'avaient aucun proc : `damage_pct` (7 sets sur 8 !) et `momentum_pct`.
+    const trous: string[] = [];
+    for (const set of VOIE_SETS) {
+      const stats = set.tiers.map((t) => t.type);
+      for (const slot of SLOTS) {
+        const ok = LEGENDARY_PROCS.some(
+          (p) => p.slots.includes(slot) && p.echo.some((t) => stats.includes(t)),
+        );
+        if (!ok) trous.push(`${set.name} / ${slot}`);
+      }
+    }
+    expect(trous, `trous : ${trous.join(' · ')}`).toEqual([]);
+  });
+
+  it('toute stat de set est couverte par au moins un proc', () => {
+    const couvertes = new Set(LEGENDARY_PROCS.flatMap((p) => p.echo));
+    for (const set of VOIE_SETS)
+      for (const t of set.tiers.map((x) => x.type))
+        expect(couvertes.has(t), `aucun proc ne prolonge ${t} (${set.name})`).toBe(true);
+  });
+
+  it('le proc tiré est TOUJOURS dans le thème du set, à tous les emplacements', () => {
+    for (const set of VOIE_SETS) {
+      const stats = set.tiers.map((t) => t.type);
+      for (const slot of SLOTS) {
+        for (let seed = 0; seed < 40; seed++) {
+          const id = rollSetLegendaryProc(mulberry32(seed), slot, stats);
+          const proc = LEGENDARY_PROCS.find((p) => p.id === id)!;
+          expect(proc.slots).toContain(slot);
+          expect(
+            proc.echo.some((t) => stats.includes(t)),
+            `${set.name}/${slot} → ${proc.name} hors thème`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('⚠️ un set COMPLET donne 4 procs DISTINCTS — les doublons s’annuleraient', () => {
+    // `aggregateLegendaries` renvoie un Set : deux pièces au même proc n'en valent qu'une.
+    // C'est la raison pour laquelle on garde la liaison au slot (pools disjoints).
+    for (const set of VOIE_SETS) {
+      const stats = set.tiers.map((t) => t.type);
+      for (let seed = 0; seed < 30; seed++) {
+        const ids = SLOTS.map((slot) =>
+          rollSetLegendaryProc(mulberry32(seed * 31 + 7), slot, stats),
+        );
+        expect(new Set(ids).size, `${set.name} (graine ${seed})`).toBe(SLOTS.length);
+      }
+    }
+  });
+
+  it('un set INCONNU retombe sur le pool de l’emplacement au lieu de rester sans proc', () => {
+    const id = rollSetLegendaryProc(mulberry32(1), 'weapon', []);
+    expect(LEGENDARY_PROCS.find((p) => p.id === id)!.slots).toContain('weapon');
   });
 });

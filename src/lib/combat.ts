@@ -42,12 +42,18 @@ export const LEG_OFFENSE: ReadonlySet<string> = new Set([
   'executioner',
   'predator_eye',
   'vampiric',
+  'charge',
+  'cadence',
+  'whetted',
 ]);
 export const LEG_DEFENSE: ReadonlySet<string> = new Set([
   'aegis',
   'retort',
   'phoenix',
   'secondwind',
+  'thirst',
+  'endurance',
+  'quarry',
 ]);
 
 // Coefficients d'équilibrage (ajustables en un endroit).
@@ -95,6 +101,18 @@ export const COMBAT = {
   executeKillThreshold: 0.15, // Bourreau : exécute un ennemi sous 15 % PV
   secondWindThreshold: 0.3, // Second souffle : déclenche sous 30 % PV
   secondWindHealPct: 0.25, // Second souffle : soigne 25 % des PV max
+  // Procs de SET (v0.701) — même famille : non-scalants, et AUCUN ne consomme de rng.
+  chargeHits: 3, // Charge : les 3 premiers coups portés…
+  chargeMult: 1.35, // …infligent +35 %
+  cadenceFrom: 5, // Cadence : à partir du 5ᵉ coup porté…
+  cadenceMult: 1.5, // …+50 % de dégâts
+  thirstThreshold: 0.5, // Soif : déclenche en passant sous 50 % PV
+  thirstDrainPct: 0.12, // Soif : draine 12 % des PV max de l'ennemi (dégâts ET soin)
+  whettedHits: 2, // Riposte affûtée : 2 coups critiques garantis après le 1er coup encaissé
+  enduranceThreshold: 0.5, // Endurance : active sous 50 % PV
+  enduranceReduction: 0.2, // Endurance : −20 % de dégâts subis en plus
+  quarryThreshold: 0.3, // Curée : déclenche quand l'ennemi passe sous 30 % PV
+  quarryHealPct: 0.15, // Curée : soigne 15 % des PV max du joueur (1× par combat)
   legendaryPowerWeight: 0.06, // pondération d'un proc dans combatPower (offense/survie)
 };
 
@@ -210,6 +228,12 @@ export function simulateCombat(
   let mFirstLanded = true; // 1re attaque ennemie qui TOUCHE le joueur (Égide / Rétorsion)
   let phoenixReady = has('phoenix');
   let secondWindReady = has('secondwind');
+  // Procs de SET (v0.701). ⚠️ Tous DÉTERMINISTES : aucun n'appelle `rng`, sinon deux objets
+  // de procs différents feraient diverger un combat seedé — et tous les rejeux animés avec.
+  let thirstReady = has('thirst'); // Soif : draine une fois, au passage sous 50 % PV
+  let quarryReady = has('quarry'); // Curée : soigne une fois, quand l'ennemi passe sous 30 %
+  let pHits = 0; // coups PORTÉS par le joueur (Charge, Cadence)
+  let whettedLeft = 0; // crits garantis restants (Riposte affûtée)
 
   // Nombre de frappes d'un tour (Vitesse) : partie entière + reste probabiliste.
   const strikeCount = (c: Combatant): number => {
@@ -245,9 +269,19 @@ export function simulateCombat(
         }
         let crit = rng() < atk.crit;
         if (first && has('predator_eye')) crit = true; // Œil : 1er coup crit garanti
+        // Riposte affûtée : les coups qui suivent la 1re attaque encaissée sont critiques.
+        if (whettedLeft > 0) {
+          crit = true;
+          whettedLeft--;
+        }
         const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
         let dmg = Math.max(1, Math.round(atk.damage * (crit ? 2 : 1) * variance));
         if (first && has('initiative')) dmg = Math.round(dmg * COMBAT.initiativeMult);
+        // Charge : ouverture brutale, sur les tout premiers coups.
+        if (has('charge') && pHits < COMBAT.chargeHits) dmg = Math.round(dmg * COMBAT.chargeMult);
+        // Cadence : récompense au contraire la DURÉE — l'élan, pas l'ouverture.
+        if (has('cadence') && pHits >= COMBAT.cadenceFrom - 1)
+          dmg = Math.round(dmg * COMBAT.cadenceMult);
         // Effets signature (conditionnels), avant réduction.
         let mult = 1;
         if (atk.execute && mPv / monsterMaxPv < COMBAT.executeThreshold) mult += atk.execute;
@@ -264,6 +298,13 @@ export function simulateCombat(
         // Bourreau : exécute un ennemi tombé très bas.
         if (mPv > 0 && has('executioner') && mPv / monsterMaxPv < COMBAT.executeKillThreshold)
           mPv = 0;
+        // Curée : la mise à mort qui approche te remet en selle (hors plafond de soin du
+        // tour — c'est un proc one-shot, pas du vol de vie répété).
+        if (quarryReady && mPv > 0 && mPv / monsterMaxPv < COMBAT.quarryThreshold) {
+          pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * COMBAT.quarryHealPct));
+          quarryReady = false;
+        }
+        pHits++;
         pFirstStrike = false;
         log.push({
           round,
@@ -283,13 +324,25 @@ export function simulateCombat(
         const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
         let dmg = Math.max(1, Math.round(atk.damage * (crit ? 2 : 1) * variance));
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
+        // Endurance : le colosse se raidit quand il saigne. S'applique APRÈS la réduction
+        // ordinaire (elle s'y ajoute au lieu de la remplacer) et reste bornée par elle.
+        if (has('endurance') && pPv / maxPPv < COMBAT.enduranceThreshold)
+          dmg = Math.max(1, Math.round(dmg * (1 - COMBAT.enduranceReduction)));
         const firstEnemy = mFirstLanded;
         // Rétorsion : renvoie le 1er coup ennemi (avant l'annulation par l'Égide).
         if (firstEnemy && has('retort') && dmg > 0) mPv = Math.max(0, mPv - dmg);
         // Égide : annule la 1re attaque ennemie.
         if (firstEnemy && has('aegis')) dmg = 0;
+        if (firstEnemy && has('whetted')) whettedLeft = COMBAT.whettedHits;
         mFirstLanded = false;
         pPv = Math.max(0, pPv - dmg);
+        // Soif : au passage sous 50 % PV, on arrache à l'ennemi de quoi tenir.
+        if (thirstReady && pPv > 0 && pPv / maxPPv < COMBAT.thirstThreshold) {
+          const drain = Math.max(1, Math.round(monsterMaxPv * COMBAT.thirstDrainPct));
+          mPv = Math.max(0, mPv - drain);
+          pPv = Math.min(maxPPv, pPv + drain);
+          thirstReady = false;
+        }
         // Phénix : survivre à 1 PV une fois.
         if (pPv <= 0 && phoenixReady) {
           pPv = 1;

@@ -477,6 +477,11 @@ export interface LegendaryProc {
   emoji: string;
   slots: ItemSlot[];
   desc: string;
+  /** ⚠️ ÉCHO — la ou les stats que ce proc PROLONGE mécaniquement. C'est ce champ, et non
+   *  un jugement au cas par cas, qui permet à une pièce de set de tirer un proc COHÉRENT
+   *  avec son thème (cf. `rollSetLegendaryProc`). Le renseigner est OBLIGATOIRE : un proc
+   *  sans écho ne pourra jamais tomber sur une pièce de set. */
+  echo: EffectType[];
 }
 export const LEGENDARY_PROCS: LegendaryProc[] = [
   {
@@ -485,6 +490,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '⚡',
     slots: ['weapon'],
     desc: 'Ton 1er coup du combat est inesquivable et inflige le double.',
+    echo: ['crit_pct', 'damage_pct'],
   },
   {
     id: 'executioner',
@@ -492,6 +498,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '🪓',
     slots: ['weapon'],
     desc: 'Un ennemi tombé sous 15 % PV est exécuté sur-le-champ.',
+    echo: ['execute_pct', 'damage_pct'],
   },
   {
     id: 'aegis',
@@ -499,6 +506,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '🛡️',
     slots: ['armor'],
     desc: 'Annule entièrement la 1re attaque ennemie du combat.',
+    echo: ['dmg_reduction_pct'],
   },
   {
     id: 'retort',
@@ -506,6 +514,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '🔁',
     slots: ['armor'],
     desc: 'Renvoie intégralement le 1er coup ennemi reçu.',
+    echo: ['thorns_pct'],
   },
   {
     id: 'vampiric',
@@ -513,6 +522,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '🩸',
     slots: ['accessory'],
     desc: 'Tes coups critiques te soignent de la moitié de leurs dégâts.',
+    echo: ['lifesteal_pct', 'crit_pct'],
   },
   {
     id: 'predator_eye',
@@ -520,6 +530,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '👁️',
     slots: ['accessory'],
     desc: 'Ton 1er coup du combat est un critique garanti.',
+    echo: ['crit_pct'],
   },
   {
     id: 'phoenix',
@@ -527,6 +538,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '🔥',
     slots: ['relic'],
     desc: 'La 1re fois qu’un coup te tuerait, tu survis à 1 PV.',
+    echo: ['max_pv_pct'],
   },
   {
     id: 'secondwind',
@@ -534,6 +546,60 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '💨',
     slots: ['relic'],
     desc: 'La 1re fois que tu passes sous 30 % PV, récupère 25 % de tes PV max.',
+    echo: ['max_pv_pct', 'rage_pct'],
+  },
+  // ── Ajoutés en v0.701 pour que les pièces de SET portent un proc cohérent avec leur
+  // thème. La matrice voie × emplacement comptait 16 trous sur 32, et deux stats de set
+  // n'avaient AUCUN proc : `damage_pct` (présent dans 7 sets sur 8) et `momentum_pct`
+  // (l'identité même du Frénétique). ⚠️ Aucun de ces procs ne consomme de `rng` — la règle
+  // « sans proc, rng byte-identique » doit valoir aussi ENTRE deux procs différents.
+  {
+    id: 'charge',
+    name: 'Charge',
+    emoji: '🐗',
+    slots: ['weapon'],
+    desc: 'Tes 3 premiers coups du combat infligent +35 %.',
+    echo: ['damage_pct'],
+  },
+  {
+    id: 'cadence',
+    name: 'Cadence',
+    emoji: '🌀',
+    slots: ['weapon'],
+    desc: 'À partir de ton 5ᵉ coup porté, tes coups infligent +50 %.',
+    echo: ['momentum_pct'],
+  },
+  {
+    id: 'thirst',
+    name: 'Soif',
+    emoji: '🩸',
+    slots: ['armor'],
+    desc: 'La 1re fois que tu passes sous 50 % PV, tu draines 12 % des PV max de l’ennemi.',
+    echo: ['lifesteal_pct'],
+  },
+  {
+    id: 'whetted',
+    name: 'Riposte affûtée',
+    emoji: '⚔️',
+    slots: ['armor'],
+    desc: 'Après la 1re attaque ennemie encaissée, tes 2 coups suivants sont critiques.',
+    echo: ['crit_pct'],
+  },
+  {
+    id: 'endurance',
+    name: 'Endurance',
+    emoji: '🪨',
+    slots: ['accessory'],
+    desc: 'Sous 50 % PV, tu réduis de 20 % supplémentaires les dégâts subis.',
+    echo: ['max_pv_pct', 'dmg_reduction_pct'],
+  },
+  {
+    id: 'quarry',
+    name: 'Curée',
+    emoji: '⚖️',
+    slots: ['relic'],
+    desc: 'Quand l’ennemi passe sous 30 % PV, tu récupères 15 % de tes PV max (1× par combat).',
+    echo: ['execute_pct', 'lifesteal_pct'],
   },
 ];
 export const LEGENDARY_BY_ID: Record<string, LegendaryProc> = Object.fromEntries(
@@ -547,6 +613,39 @@ export function rollLegendaryProc(rng: () => number, slot: ItemSlot): string | u
   const pool = LEGENDARY_PROCS.filter((p) => p.slots.includes(slot));
   if (!pool.length) return undefined;
   return pool[Math.floor(rng() * pool.length)]!.id;
+}
+/** Tire un proc légendaire pour une PIÈCE DE SET — cohérent avec le thème du set.
+ *
+ *  ⚠️ Pourquoi ce tirage existe : jusqu'en v0.700 une pièce de set tirait comme un drop
+ *  ordinaire, en ne regardant que son EMPLACEMENT. Mesuré : au niveau 70, **94 % des pièces
+ *  de set sont Légendaire+** (le proc est donc la norme) et **34 % seulement** prolongeaient
+ *  réellement le thème de leur set. On voyait des procs offensifs sur du Gardien et l'inverse.
+ *
+ *  ⚠️ LA LIAISON AU SLOT EST CONSERVÉE, et ce n’est pas un détail. Laisser le thème primer
+ *  sur l’emplacement donnait bien 100 % de cohérence, mais **87 % des sets complets se
+ *  retrouvaient avec un DOUBLON** (2,78 procs distincts sur 4) — or `aggregateLegendaries`
+ *  dédoublonne, donc les copies s’annulent : un nerf déguisé en amélioration. Les pools étant
+ *  disjoints par emplacement, garder le slot GARANTIT 4 procs distincts sur un set complet.
+ *  La cohérence vient donc du CATALOGUE (un proc par famille de stats et par emplacement),
+ *  pas d’un assouplissement du tirage.
+ *
+ *  Repli sur le pool du slot si aucun proc n’échoue le thème — impossible avec le catalogue
+ *  actuel (test dédié), mais un set ajouté plus tard ne doit pas se retrouver sans proc. */
+export function rollSetLegendaryProc(
+  rng: () => number,
+  slot: ItemSlot,
+  setStats: EffectType[],
+): string | undefined {
+  const pool = LEGENDARY_PROCS.filter((p) => p.slots.includes(slot));
+  if (!pool.length) return undefined;
+  const onTheme = pool.filter((p) => p.echo.some((t) => setStats.includes(t)));
+  const use = onTheme.length ? onTheme : pool;
+  return use[Math.floor(rng() * use.length)]!.id;
+}
+/** Les 3 stats du thème d’un set (source unique : ses paliers). */
+export function setThemeStats(setId: string | undefined): EffectType[] {
+  const s = setId ? SET_BY_ID[setId] : undefined;
+  return s ? s.tiers.map((t) => t.type) : [];
 }
 /** Métadonnée du proc légendaire d'un objet (undefined si pas légendaire). */
 export function legendaryOf(it: { legendary?: string }): LegendaryProc | undefined {
@@ -1097,7 +1196,9 @@ export function rollSetPiece(
   }
   // Une pièce de set Légendaire+ porte AUSSI un proc légendaire (rareté orthogonale au set).
   const legendary =
-    RARITY_RANK[rarity] >= LEGENDARY_MIN_RANK ? rollLegendaryProc(rng, slot) : undefined;
+    RARITY_RANK[rarity] >= LEGENDARY_MIN_RANK
+      ? rollSetLegendaryProc(rng, slot, setThemeStats(opts.setId))
+      : undefined;
   return {
     slot,
     name: set ? `${noun} · ${set.name}` : `${noun} ${RARITY_ADJ[rarity]}`,

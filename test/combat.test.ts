@@ -382,3 +382,98 @@ describe('effets signature (execute / rage / momentum)', () => {
     expect(a.win).toBe(b.win);
   });
 });
+
+describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
+  // ⚠️ Un proc qui ne modifie rien serait du décor : ces tests comparent le MÊME combat,
+  // à la MÊME graine, avec et sans le proc. Ils tiennent parce qu'aucun de ces procs ne
+  // consomme de `rng` — la variance tirée est donc identique des deux côtés. Si l'un d'eux
+  // se mettait à tirer un aléa, ces tests deviendraient instables : c'est voulu, ils
+  // servent aussi de garde-fou au déterminisme.
+  const pl = (procs: string[], over: Record<string, unknown> = {}) => ({
+    name: 'P',
+    pv: 200,
+    damage: 20,
+    crit: 0,
+    dodge: 0,
+    initiative: 10,
+    strikes: 1,
+    procs: new Set(procs),
+    ...over,
+  });
+  const mon = (over: Record<string, unknown> = {}) => ({
+    name: 'M',
+    pv: 5000,
+    damage: 40,
+    crit: 0,
+    dodge: 0,
+    initiative: 1,
+    strikes: 1,
+    ...over,
+  });
+  const playerHits = (procs: string[], m = mon(), opts = {}) =>
+    simulateCombat(pl(procs), m, { seed: 11, goldOnWin: 0, ...opts }).log.filter(
+      (e) => e.who === 'player' && (e.type === 'hit' || e.type === 'crit'),
+    );
+
+  it('Charge : les 3 premiers coups frappent plus fort, pas les suivants', () => {
+    const avec = playerHits(['charge']);
+    const sans = playerHits([]);
+    expect(avec[0]!.damage).toBeGreaterThan(sans[0]!.damage);
+    expect(avec[2]!.damage).toBeGreaterThan(sans[2]!.damage);
+    expect(avec[3]!.damage).toBe(sans[3]!.damage); // le 4e est redevenu normal
+  });
+
+  it('Cadence : rien au début, puis le gain s’installe — l’inverse de la Charge', () => {
+    const avec = playerHits(['cadence']);
+    const sans = playerHits([]);
+    expect(avec[0]!.damage).toBe(sans[0]!.damage); // pas d'ouverture
+    expect(avec[5]!.damage).toBeGreaterThan(sans[5]!.damage); // l'élan, lui, paie
+  });
+
+  it('Riposte affûtée : les 2 coups suivant la 1re attaque encaissée sont critiques', () => {
+    const m = mon({ initiative: 99 }); // le monstre ouvre
+    const avec = playerHits(['whetted'], m);
+    const sans = playerHits([], m);
+    expect(avec.slice(0, 2).every((e) => e.type === 'crit')).toBe(true);
+    expect(avec[2]!.type).toBe('hit'); // et ça s'arrête à 2
+    expect(sans.slice(0, 3).every((e) => e.type === 'hit')).toBe(true);
+  });
+
+  it('Endurance : sous 50 % PV, on encaisse moins', () => {
+    const m = mon({ initiative: 99 });
+    const firstTaken = (procs: string[]) =>
+      simulateCombat(pl(procs), m, { seed: 3, goldOnWin: 0, startPlayerPv: 50 }).log.find(
+        (e) => e.who === 'monster' && e.type === 'hit',
+      )!.damage;
+    expect(firstTaken(['endurance'])).toBeLessThan(firstTaken([]));
+  });
+
+  it('Soif : au passage sous 50 % PV, on draine l’ennemi (soin ET dégâts)', () => {
+    const m = mon({ initiative: 99, pv: 5000 });
+    const run = (procs: string[]) =>
+      simulateCombat(pl(procs), m, { seed: 4, goldOnWin: 0, startPlayerPv: 110 }).log.find(
+        (e) => e.who === 'monster' && e.type === 'hit',
+      )!;
+    const avec = run(['thirst']);
+    const sans = run([]);
+    expect(avec.playerPv).toBeGreaterThan(sans.playerPv); // soigné
+    expect(avec.monsterPv).toBeLessThan(sans.monsterPv); // et l'ennemi a payé
+  });
+
+  it('Curée : quand l’ennemi passe sous 30 % PV, on récupère des PV', () => {
+    const m = mon({ pv: 100, damage: 5 });
+    const run = (procs: string[]) =>
+      simulateCombat(pl(procs), m, { seed: 9, goldOnWin: 0, startPlayerPv: 100 }).log;
+    const low = (log: ReturnType<typeof run>) =>
+      log.find((e) => e.who === 'player' && e.monsterPv > 0 && e.monsterPv / 100 < 0.3);
+    expect(low(run(['quarry']))!.playerPv).toBeGreaterThan(low(run([]))!.playerPv);
+  });
+
+  it('⚠️ un objet SANS proc laisse le combat rigoureusement identique', () => {
+    // La règle « sans proc, rng byte-identique » doit valoir même après l'ajout de 6 procs.
+    const a = simulateCombat(pl([]), mon(), { seed: 42, goldOnWin: 0 });
+    const b = simulateCombat(pl([]), mon(), { seed: 42, goldOnWin: 0 });
+    expect(a.log).toEqual(b.log);
+    expect(a.rounds).toBe(b.rounds);
+  });
+});
