@@ -1947,9 +1947,17 @@ export function bestGearLoadout(
 
 /** Une pièce du roster d'un set, et OÙ elle se trouve. */
 export interface SetRosterEntry {
+  /** La MEILLEURE pièce possédée pour cet emplacement. */
   item: Item;
-  /** Portée en ce moment — c'est elle (et elle seule) qui compte pour le bonus de set. */
+  /** `item` est-elle celle qu'on porte ? */
   worn: boolean;
+  /** ⚠️ La pièce de ce set RÉELLEMENT PORTÉE sur cet emplacement, quand ce n'est PAS la
+   *  meilleure. Sans ce champ, une meilleure pièce en réserve faisait DISPARAÎTRE de
+   *  l'écran celle qu'on a sur le dos (constaté sur un compte réel : plastron Légendaire
+   *  porté, Cotte Mythique en réserve → le set affichait une pièce non marquée et le
+   *  joueur ne retrouvait plus son objet équipé). Un écran qui montre la collection doit
+   *  pouvoir dire « tu portes ceci, tu as mieux là » — pas escamoter l'un des deux. */
+  wornItem?: Item;
 }
 
 /** ROSTER d'un set de voie : la MEILLEURE pièce possédée pour chaque emplacement, qu'elle
@@ -1984,5 +1992,12 @@ export function voieSetRoster(
   for (const s of SLOTS) consider(equipped[s], true);
   for (const s of SLOTS) consider(stored?.[s], false);
   for (const it of inventory) consider(it, false);
+  // La pièce PORTÉE ne disparaît jamais : si une meilleure l'a supplantée dans l'affichage,
+  // elle reste attachée à l'entrée. C'est ce couple qui rend l'écart LISIBLE.
+  for (const sl of SLOTS) {
+    const w = equipped[sl];
+    const e = out[sl];
+    if (e && !e.worn && w && w.setId === setId) e.wornItem = w;
+  }
   return out;
 }

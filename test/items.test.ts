@@ -1161,8 +1161,15 @@ describe('roster d’un set de voie — la COLLECTION, pas ce qu’on ne porte p
   const SET = 'voie:berserker';
   const mk = (slot: ItemSlot, value: number, setId = SET, id = slot + value): Item =>
     ({
-      id, slot, name: id, emoji: '🗡️', rarity: 'rare', level: 10, baseLevel: 10,
-      effect: { type: 'damage_pct', value }, setId,
+      id,
+      slot,
+      name: id,
+      emoji: '🗡️',
+      rarity: 'rare',
+      level: 10,
+      baseLevel: 10,
+      effect: { type: 'damage_pct', value },
+      setId,
     }) as Item;
 
   it('⚠️ une pièce PORTÉE figure dans le roster, et elle est marquée', () => {
@@ -1172,12 +1179,22 @@ describe('roster d’un set de voie — la COLLECTION, pas ce qu’on ne porte p
   });
 
   it('la MEILLEURE pièce gagne, où qu’elle soit — portée, en réserve ou au sac', () => {
-    const porte = voieSetRoster(SET, { weapon: mk('weapon', 30) }, { weapon: mk('weapon', 10) }, []);
+    const porte = voieSetRoster(
+      SET,
+      { weapon: mk('weapon', 30) },
+      { weapon: mk('weapon', 10) },
+      [],
+    );
     expect(porte.weapon?.item.id).toBe('weapon30');
     expect(porte.weapon?.worn).toBe(true);
     // …et l'inverse : une meilleure pièce en réserve prime, non marquée portée. C'est le
     // signal « tu portes moins bien que ce que tu as », qui n'existait pas avant.
-    const reserve = voieSetRoster(SET, { weapon: mk('weapon', 10) }, { weapon: mk('weapon', 30) }, []);
+    const reserve = voieSetRoster(
+      SET,
+      { weapon: mk('weapon', 10) },
+      { weapon: mk('weapon', 30) },
+      [],
+    );
     expect(reserve.weapon?.item.id).toBe('weapon30');
     expect(reserve.weapon?.worn).toBe(false);
     const sac = voieSetRoster(SET, {}, undefined, [mk('armor', 25)]);
@@ -1196,16 +1213,54 @@ describe('roster d’un set de voie — la COLLECTION, pas ce qu’on ne porte p
   });
 
   it('les pièces d’un AUTRE set, et le familier, n’y entrent jamais', () => {
-    const r = voieSetRoster(
-      SET,
-      { weapon: mk('weapon', 99, 'voie:gardien') },
-      undefined,
-      [mk('familiar' as ItemSlot, 99), { ...mk('armor', 50, 'voie:vampire') }],
-    );
+    const r = voieSetRoster(SET, { weapon: mk('weapon', 99, 'voie:gardien') }, undefined, [
+      mk('familiar' as ItemSlot, 99),
+      { ...mk('armor', 50, 'voie:vampire') },
+    ]);
     expect(Object.keys(r)).toEqual([]);
   });
 
   it('un set dont on ne possède rien rend un roster vide (et non une erreur)', () => {
     expect(voieSetRoster('voie:inconnue', {}, undefined, [])).toEqual({});
+  });
+});
+
+describe('roster : la pièce PORTÉE ne disparaît jamais (v0.708)', () => {
+  // ⚠️ DÉFAUT CONSTATÉ SUR UN COMPTE RÉEL. Plastron Légendaire du Gardien PORTÉ, Cotte
+  // Mythique du même set en RÉSERVE : la meilleure gagnait l'affichage et la pièce
+  // équipée disparaissait purement et simplement de la carte. Le joueur voyait une pièce
+  // non marquée et ne retrouvait plus son objet. Un écran de collection doit pouvoir dire
+  // « tu portes ceci, tu as mieux là » — pas escamoter l'un des deux.
+  const SET = 'voie:gardien';
+  const mk = (slot: ItemSlot, value: number, id: string): Item =>
+    ({
+      id, slot, name: id, emoji: '🛡️', rarity: 'rare', level: 10, baseLevel: 10,
+      effect: { type: 'damage_pct', value }, setId: SET,
+    }) as Item;
+
+  it('⚠️ une meilleure pièce en réserve n’efface pas celle qu’on porte', () => {
+    const porte = mk('armor', 10, 'plastron-porte');
+    const r = voieSetRoster(SET, { armor: porte }, { armor: mk('armor', 30, 'cotte-reserve') }, []);
+    expect(r.armor?.item.id).toBe('cotte-reserve'); // la meilleure s'affiche…
+    expect(r.armor?.worn).toBe(false);
+    expect(r.armor?.wornItem?.id).toBe('plastron-porte'); // …sans perdre l'équipée
+  });
+
+  it('pas d’écart à signaler quand c’est bien la portée qui est la meilleure', () => {
+    const r = voieSetRoster(SET, { armor: mk('armor', 30, 'bonne') }, { armor: mk('armor', 10, 'moins') }, []);
+    expect(r.armor?.worn).toBe(true);
+    expect(r.armor?.wornItem).toBeUndefined();
+  });
+
+  it('ni quand on ne porte rien de ce set sur l’emplacement', () => {
+    const r = voieSetRoster(SET, {}, { armor: mk('armor', 30, 'reserve') }, []);
+    expect(r.armor?.worn).toBe(false);
+    expect(r.armor?.wornItem).toBeUndefined();
+  });
+
+  it('une pièce portée d’un AUTRE set ne se fait pas passer pour l’écart', () => {
+    const autre = { ...mk('armor', 99, 'ailleurs'), setId: 'voie:vampire' } as Item;
+    const r = voieSetRoster(SET, { armor: autre }, { armor: mk('armor', 10, 'reserve') }, []);
+    expect(r.armor?.wornItem).toBeUndefined();
   });
 });

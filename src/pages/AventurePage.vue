@@ -1699,6 +1699,10 @@
               <template v-else
                 >Aucune portée — ce set ne donne aucun bonus pour l’instant.</template
               >
+              <template v-if="lo.upgradable">
+                <b class="lo-up-note">↑ {{ lo.upgradable }}</b> emplacement(s) où tu portes moins
+                bien que ta réserve.
+              </template>
               Touche un objet pour ses stats.
             </div>
             <!-- Porter = passer à cette voie + optimiser (le set + les meilleurs objets du sac).
@@ -4826,6 +4830,8 @@ const loadoutsView = computed(() => {
       count: entries.length,
       storedCount: storedItems.length,
       wornCount: entries.filter((e) => e.worn).length,
+      // Emplacements où l'on porte une pièce de ce set MOINS bonne que celle de la réserve.
+      upgradable: entries.filter((e) => !e.worn && e.wornItem).length,
       power,
       delta: power - combatPowerVal.value,
       sellGold: storedItems.reduce((s, it) => s + scrapValue(it), 0),
