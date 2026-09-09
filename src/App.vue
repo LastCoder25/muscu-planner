@@ -16,9 +16,12 @@ import XpGainOverlay from '@/components/XpGainOverlay.vue';
 import GoldGainOverlay from '@/components/GoldGainOverlay.vue';
 import { useBodyReminder } from '@/composables/useBodyReminder';
 import { useChallengeReminder } from '@/composables/useChallengeReminder';
+import { useComboChest } from '@/composables/useComboChest';
 
 useBodyReminder();
 useChallengeReminder();
+// Coffre de fin de Défi 360 : un seul observateur, monté en permanence.
+useComboChest();
 
 // Retire l'écran de lancement (index.html) une fois l'app montée (fondu).
 onMounted(() => {

@@ -4830,7 +4830,10 @@ const sessions7 = computed(() => progress.sessionsInLastDays(7));
  *  plafonnées au palier maximal) : pas de second barème, donc pas de divergence possible. */
 async function grantPendingComboChests() {
   const uid = auth.user?.id;
-  if (!uid || !char.row) return;
+  // ⚠️ `progress.ready` est OBLIGATOIRE ici : le niveau vient de l'XP de fond, chargée en
+  // tâche de fond. Sans cette garde, un balayage au montage versait un coffre de NIVEAU 1
+  // — et le versement étant idempotent, l'erreur ne se serait jamais rattrapée.
+  if (!uid || !char.row || !progress.ready.value) return;
   try {
     await combo.fetchMine();
     // ⚠️ `co` et non `c` : `c` est DÉJÀ le personnage dans cette page. Réutiliser le nom
@@ -5669,6 +5672,9 @@ watch(
     const uid = auth.user?.id;
     if (!rdy || !char.row || lvl < 1 || claimingLevel || !uid) return;
     claimingLevel = true;
+    // Filet des coffres de Défi 360 : ceux bouclés avant cette version, ou pendant que
+    // l'app n'était pas ouverte. Idempotent, donc repasser ne coûte rien.
+    void grantPendingComboChests();
     try {
       const r = await char.claimLevelUps(uid, lvl);
       if (r) {
@@ -5714,7 +5720,6 @@ function dismissIntro() {
 }
 
 onMounted(async () => {
-  void grantPendingComboChests(); // coffres de Defi 360 en attente
   try {
     await char.fetchMine();
   } catch {

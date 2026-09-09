@@ -29,6 +29,10 @@ export const useComboStore = defineStore('combo', () => {
   const list = ref<ComboRow[]>([]);
   const loaded = ref(false);
 
+  /** Id du Défi 360 qui vient de se boucler — remis à null par celui qui l'a traité.
+   *  C'est le déclencheur du coffre de fin de défi. */
+  const justCompleted = ref<string | null>(null);
+
   async function fetchMine() {
     // ⚠️ FILTRE EXPLICITE OBLIGATOIRE. Cette requête s'appuyait sur la RLS own-only
     // comme filtre — jusqu'à ce que la migr. 0058 ajoute `combo_read_friends` : depuis,
@@ -102,8 +106,15 @@ export const useComboStore = defineStore('combo', () => {
     if (!leg.sets) leg.sets = []; // migration : ancien format sans `sets`
     leg.sets.push({ date, reps, weight: weight ?? null, assisted });
     if (weight != null) leg.weight_kg = weight; // dernier poids → préremplissage
+    // ⚠️ On SIGNALE la transition vers « terminé ». Le coffre de fin de 360 doit tomber à
+    // l'instant même où le défi se boucle — or le store ne connaît ni le niveau du joueur
+    // ni la boîte à messages. Plutôt que de brancher le versement sur les quatre écrans
+    // qui peuvent valider une série (donc quatre endroits où l'oublier), on émet ici et
+    // un seul observateur, monté en permanence, s'en charge (`useComboChest`).
+    const etait = c.status;
     if (comboComplete(c)) c.status = 'done';
     else if (c.status === 'done') c.status = 'active';
+    if (etait !== 'done' && c.status === 'done') justCompleted.value = c.id;
     void supabase
       .from('combo_challenges')
       .update({ legs: c.legs, status: c.status, updated_at: new Date().toISOString() })
@@ -160,6 +171,7 @@ export const useComboStore = defineStore('combo', () => {
   return {
     list,
     loaded,
+    justCompleted,
     fetchMine,
     activeOne,
     create,
