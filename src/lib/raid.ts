@@ -1086,6 +1086,125 @@ export function totalRepairCost(base: BaseState): number {
   return base.defenses.filter((d) => d.damaged).reduce((s, d) => s + repairCost(d.level), 0);
 }
 
+/** Durée courte, lisible : « 6 h », « 5 h 38 », « 42 min ». */
+export function fmtSpan(ms: number): string {
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? `${h} h ${String(r).padStart(2, '0')}` : `${h} h`;
+}
+
+/** Ce qu’un niveau de PLUS change sur une structure de l’enceinte — « actuel → suivant ».
+ *
+ *  ⚠️ Les descriptions disaient ce que la structure FAIT, jamais ce qu’un niveau CHANGE :
+ *  or c’est exactement la question qu’on se pose devant « Améliorer ». Les bâtiments de
+ *  production avaient déjà leur `perLevelLabel` (v0.683) ; l’enceinte, non.
+ *
+ *  ⚠️ **DÉRIVÉ, jamais recopié.** Chaque libellé appelle la VRAIE fonction à `niveau` puis
+ *  à `niveau + 1` et affiche l’écart. Une étiquette qui réécrirait la formule finirait par
+ *  mentir — c’est précisément ce qui vient d’arriver à `scrapEconomy.test` (v0.720).
+ *
+ *  ⚠️ Le `switch` est EXHAUSTIF (garde `never`) : ajouter une structure muette casse la
+ *  compilation au lieu de passer inaperçu. */
+/** Prochain niveau ou `f` change VRAIMENT de valeur, ou `null` si plus jamais.
+ *  ⚠️ Plusieurs effets avancent par PALIERS (`⌊niveau/2⌋`) : un niveau sur deux
+ *  n'apporte rien. Annoncer « +0 » est honnete mais inutilisable — ce qu'on veut
+ *  savoir, c'est jusqu'ou il faut monter pour que ca bouge. */
+function nextStepLevel(f: (n: number) => number, from: number, lookahead = 12): number | null {
+  const cur = f(from);
+  for (let n = from + 1; n <= from + lookahead; n++) if (f(n) !== cur) return n;
+  return null;
+}
+
+export function defensePerLevelLabel(
+  id: DefenseId,
+  level: number,
+  ctx: { playerLevel: number; defenses: DefenseStructure[]; intervalMs?: number },
+): string {
+  const l = Math.max(0, level);
+  const next = l + 1;
+  const withLevel = (lv: number): DefenseStructure[] => [
+    ...ctx.defenses.filter((d) => d.typeId !== id),
+    { typeId: id, level: lv },
+  ];
+  switch (id) {
+    case 'wall': {
+      // On interroge le combattant RÉEL de la base : la muraille ne vaut qu’une FRACTION
+      // de ce que le niveau du joueur justifie, une formule recopiée l’oublierait.
+      const a = baseCombatant(withLevel(l), ctx.playerLevel).pv;
+      const b = baseCombatant(withLevel(next), ctx.playerLevel).pv;
+      return b > a
+        ? `Niveau ${next} : ${a} → ${b} PV de muraille (+${b - a})`
+        : 'Déjà au niveau de ton personnage — c’est le sport qui débloque la suite.';
+    }
+    case 'turret': {
+      const a = baseCombatant(withLevel(l), ctx.playerLevel).damage;
+      const b = baseCombatant(withLevel(next), ctx.playerLevel).damage;
+      return b > a
+        ? `Niveau ${next} : ${a} → ${b} dégâts par tour, sur les ${TURRET_SLOTS} tourelles (+${b - a})`
+        : 'Déjà au niveau de ton personnage — c’est le sport qui débloque la suite.';
+    }
+    case 'watchtower': {
+      // ⚠️ CLAMPÉE comme `scoutClarity`. Sans cela le libellé promettait « 7/5 » crans de
+      // renseignement à une tour de niveau 13 : une étiquette qui dépasse le plafond de la
+      // fonction qu’elle décrit ment, et fait payer des niveaux pour rien.
+      const clarte = (n: number) => Math.min(RAID.clarityMax, Math.floor(n / 2));
+      const cl = clarte(l);
+      const cn = clarte(next);
+      const leadPlein = scoutLeadMs(next) === scoutLeadMs(l);
+      const lead = leadPlein
+        ? `préavis ${fmtSpan(scoutLeadMs(l))} (déjà au maximum)`
+        : `préavis ${fmtSpan(scoutLeadMs(l))} → ${fmtSpan(scoutLeadMs(next))}`;
+      if (cn > cl)
+        return `Niveau ${next} : ${lead}, et un cran de renseignement en plus (${cl} → ${cn}/${RAID.clarityMax})`;
+      if (cl >= RAID.clarityMax)
+        return `Niveau ${next} : ${lead}. Renseignement déjà au maximum (${cl}/${RAID.clarityMax}).`;
+      const step = nextStepLevel(clarte, l);
+      return step
+        ? `Niveau ${next} : ${lead}. Le cran de renseignement suivant est au niveau ${step}.`
+        : `Niveau ${next} : ${lead}`;
+    }
+    case 'salvage': {
+      const a = scavengerCount(l);
+      const b = scavengerCount(next);
+      if (b > a) return `Niveau ${next} : ${a} → ${b} corps fouillés par vague (+${b - a})`;
+      const step = nextStepLevel(scavengerCount, l);
+      return step
+        ? `${a} corps par vague. Ce palier-ci ne change rien — le prochain gain est au niveau ${step} (${scavengerCount(step)}).`
+        : `${a} corps par vague — déjà au maximum.`;
+    }
+    case 'kennel':
+      // ⚠️ Le chenil ne donne PAS de places (elles suivent le niveau du personnage) : il
+      // plafonne le DRESSAGE défensif. Le dire, sinon on l’améliore en attendant un slot.
+      return `Niveau ${next} : dressage de défense plafonné à ${next} (les places, elles, viennent de ton niveau)`;
+    case 'infirmary': {
+      const wa = woundMsFor(l, ctx.intervalMs);
+      const wb = woundMsFor(next, ctx.intervalMs);
+      const fa = fatigueMsFor(l);
+      const fb = fatigueMsFor(next);
+      const fam = `familiers fatigués ${fmtSpan(fa)} → ${fmtSpan(fb)}`;
+      if (wb < wa)
+        return `Niveau ${next} : convalescence du héros ${fmtSpan(wa)} → ${fmtSpan(wb)}, ${fam}`;
+      // ⚠️ DEUX plafonds distincts, et il ne faut surtout pas les confondre : le
+      // PLANCHER de la structure (−80 %, atteint vers le niveau 14) et le RYTHME des
+      // sièges (`WOUND_INTERVAL_SHARE`, quand on court les séances). Annoncer le mauvais
+      // motif enverrait le joueur réduire son entraînement pour un gain imaginaire.
+      const brutBouge = woundMsFor(next) < woundMsFor(l);
+      const motif = brutBouge
+        ? `bornée par ton rythme de sièges (elle ne dépasse jamais ${Math.round(WOUND_INTERVAL_SHARE * 100)} % de l’intervalle) — la monter n’y changera rien`
+        : `déjà à son plancher — elle ne descendra pas plus bas`;
+      const tete = `La convalescence du héros (${fmtSpan(wa)}) est ${motif}.`;
+      return fb < fa
+        ? `Niveau ${next} : ${fam}. ${tete}`
+        : `${tete} Les familiers (${fmtSpan(fa)}) aussi : cette structure est au maximum.`;
+    }
+    default: {
+      const jamais: never = id;
+      return jamais;
+    }
+  }
+}
 // ── Champ de bataille ──
 
 /** Les corps des groupes REPOUSSÉS. Une défaite en laisse moins, jamais zéro : on repart

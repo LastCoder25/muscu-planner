@@ -419,6 +419,10 @@
               <span v-if="damagedOf(defSel.id)" class="s-dmg">endommagée</span>
             </div>
             <div class="sh-sub">{{ defSel.desc }}</div>
+            <!-- ⚠️ La description dit ce que la structure FAIT ; celle-ci dit ce qu’un
+                 NIVEAU CHANGE — la seule question qu’on se pose devant « Améliorer ».
+                 Chiffres DÉRIVÉS des vraies fonctions, jamais recopiés. -->
+            <div v-if="lvlOf(defSel.id)" class="sh-gain">{{ perLevel(defSel.id) }}</div>
             <div v-if="defSel.id === 'turret' && lvlOf('turret')" class="sh-note">
               Les {{ TURRET_SLOTS }} tourelles montent ensemble — un seul niveau les arme toutes.
             </div>
@@ -612,6 +616,8 @@ import {
   totalRepairCost,
   defenseUpgradeCost,
   defenseUpgradeScrap,
+  defensePerLevelLabel,
+  raidIntervalMs,
   garrisonBonus,
   garrisonSlots,
   GARRISON_CAP,
@@ -1037,6 +1043,16 @@ const yard = computed<YardCell[]>(() => {
 const plotSlot = ref<number | null>(null);
 const defOpen = ref<DefenseId | null>(null);
 const defSel = computed(() => DEFENSE_TYPES.find((d) => d.id === defOpen.value) ?? null);
+/** Ce qu’un niveau de plus apporte à CETTE structure. ⚠️ On passe l’intervalle RÉEL
+ *  entre deux sièges : la convalescence en dépend, et sans lui l’Infirmerie
+ *  promettrait un gain que le rythme d’entraînement annule déjà. */
+function perLevel(id: DefenseId): string {
+  return defensePerLevelLabel(id, lvlOf(id), {
+    playerLevel: heroLevel.value,
+    defenses: defenses.value,
+    intervalMs: raidIntervalMs(progress.sessionsInLastDays(7)),
+  });
+}
 const defSheetOpen = computed({
   get: () => defOpen.value !== null,
   set: (v: boolean) => {
@@ -1608,6 +1624,13 @@ const doCollect = () =>
 .fam-eff {
   font-size: 12.5px;
   color: var(--accent);
+}
+/* Le gain du prochain niveau : accent, parce que c’est sur ce chiffre qu’on décide. */
+.sh-gain {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--accent, #ffd23f);
 }
 .sh-garrison {
   margin-top: 14px;

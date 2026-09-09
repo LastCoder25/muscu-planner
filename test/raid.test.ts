@@ -33,6 +33,10 @@ import {
   garrisonSlots,
   raidThreatSize,
   type RaidReport,
+  defensePerLevelLabel,
+  fmtSpan,
+  DEFENSE_TYPES,
+  type DefenseId,
   autoGarrison,
   dedupeGarrisonRoles,
   fatigueMsFor,
@@ -837,6 +841,92 @@ describe('masse visible contre menace', () => {
       // Sinon la foule devient une corvee : meme butin, 2,5x plus d allers-retours.
       expect(apres).toBeCloseTo(avant, 1);
     }
+  });
+});
+
+/** ⚠️ CHAQUE STRUCTURE DIT CE QU'UN NIVEAU CHANGE (v0.721). Les descriptions disaient ce
+ *  que la structure FAIT, jamais ce qu'un niveau APPORTE — or c'est la seule question
+ *  qu'on se pose devant « Améliorer ». Les bâtiments de production l'avaient depuis la
+ *  v0.683 ; l'enceinte, non. */
+describe('ce qu’un niveau de défense apporte', () => {
+  const ctx = (lvl: number, id: DefenseId, intervalMs?: number) => ({
+    playerLevel: 40,
+    defenses: [{ typeId: id, level: lvl }] as DefenseStructure[],
+    ...(intervalMs ? { intervalMs } : {}),
+  });
+
+  it('⚠️ AUCUNE structure muette — en ajouter une sans le dire est une régression', () => {
+    for (const t of DEFENSE_TYPES) {
+      const txt = defensePerLevelLabel(t.id, 5, ctx(5, t.id));
+      expect(txt.length, t.id).toBeGreaterThan(20);
+    }
+  });
+
+  it('l’INFIRMERIE chiffre la convalescence ET la fatigue', () => {
+    const txt = defensePerLevelLabel('infirmary', 3, ctx(3, 'infirmary'));
+    expect(txt).toContain(fmtSpan(woundMsFor(3)));
+    expect(txt).toContain(fmtSpan(woundMsFor(4)));
+    expect(txt).toContain(fmtSpan(fatigueMsFor(3)));
+    expect(txt).toContain(fmtSpan(fatigueMsFor(4)));
+  });
+
+  it('⚠️ elle AVOUE quand le rythme des sièges annule déjà le gain', () => {
+    // La convalescence est bornée par l'intervalle (`WOUND_INTERVAL_SHARE`). Quand on
+    // s'entraîne beaucoup, ce plafond mord : monter l'Infirmerie ne change RIEN au
+    // héros. Le taire ferait payer un niveau inutile.
+    const serre = 3 * 3600_000; // un siège toutes les 3 h : le plancher du jeu
+    expect(woundMsFor(3, serre)).toBe(woundMsFor(4, serre)); // le cap mord bien
+    const txt = defensePerLevelLabel('infirmary', 3, ctx(3, 'infirmary', serre));
+    expect(txt).toMatch(/rythme de sièges/);
+  });
+
+  it('⚠️ les chiffres sont DÉRIVÉS des vraies fonctions, pas recopiés', () => {
+    // Une étiquette qui réécrirait la formule finirait par mentir. On vérifie donc
+    // qu’elle bouge quand la fonction bouge.
+    // ⚠️ Niveaux choisis pour que les deux valeurs DIFFERENT : a 4 et 5 la capacite
+    // est la meme, et le test passait alors meme en recopiant un chiffre au hasard.
+    expect(scavengerCount(9)).not.toBe(scavengerCount(10));
+    const a = defensePerLevelLabel('salvage', 9, ctx(9, 'salvage'));
+    expect(a).toContain(String(scavengerCount(9)));
+    expect(a).toContain(String(scavengerCount(10)));
+    const w = defensePerLevelLabel('watchtower', 2, ctx(2, 'watchtower'));
+    expect(w).toContain(fmtSpan(scoutLeadMs(3)));
+  });
+
+  it('⚠️ elle distingue le PLANCHER de la structure du RYTHME des sièges', () => {
+    // Deux plafonds differents, deux motifs differents. Annoncer le mauvais enverrait le
+    // joueur reduire son entrainement pour un gain qui ne viendrait jamais.
+    const plancher = defensePerLevelLabel('infirmary', 20, ctx(20, 'infirmary'));
+    expect(plancher).toMatch(/plancher/);
+    expect(plancher).not.toMatch(/rythme/);
+    const serre = 3 * 3600_000;
+    const rythme = defensePerLevelLabel('infirmary', 3, ctx(3, 'infirmary', serre));
+    expect(rythme).toMatch(/rythme de sièges/);
+    expect(rythme).not.toMatch(/plancher/);
+  });
+
+  it('⚠️ la clarté annoncée ne dépasse JAMAIS le plafond de scoutClarity', () => {
+    // Le libelle promettait « 7/5 » crans a une tour de niveau 13 : une etiquette qui
+    // depasse le plafond de la fonction quelle decrit ment, et fait payer pour rien.
+    for (let lvl = 1; lvl <= 30; lvl++) {
+      const txt = defensePerLevelLabel('watchtower', lvl, ctx(lvl, 'watchtower'));
+      const m = /(\d+)\/(\d+)\)/.exec(txt);
+      if (m) expect(Number(m[1]), `niveau ${lvl} : ${txt}`).toBeLessThanOrEqual(Number(m[2]));
+    }
+  });
+
+  it('⚠️ un palier SANS gain dit à quel niveau ça bougera', () => {
+    // « +0 » est honnete mais inutilisable : ce quon veut savoir, cest jusquou monter.
+    expect(scavengerCount(6)).toBe(scavengerCount(7)); // ce palier ne donne rien
+    const txt = defensePerLevelLabel('salvage', 6, ctx(6, 'salvage'));
+    expect(txt).toMatch(/niveau 8/);
+    expect(txt).not.toMatch(/\+0/);
+  });
+  it('la MURAILLE et les TOURELLES annoncent un gain réel, puis le plafond du sport', () => {
+    expect(defensePerLevelLabel('wall', 10, ctx(10, 'wall'))).toMatch(/PV de muraille/);
+    expect(defensePerLevelLabel('turret', 10, ctx(10, 'turret'))).toMatch(/dégâts par tour/);
+    // Au niveau du personnage, un cran de plus ne vaut rien : le sport est le plafond.
+    expect(defensePerLevelLabel('wall', 40, ctx(40, 'wall'))).toMatch(/sport/);
   });
 });
 describe('blessure du héros', () => {
