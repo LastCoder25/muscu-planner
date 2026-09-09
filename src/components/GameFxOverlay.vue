@@ -11,7 +11,19 @@
           class="fx-particle"
           :style="{ '--a': (p / particles) * 360 + 'deg', '--d': (p % 3) * 0.05 + 's' }"
         />
-        <div class="fx-emoji">{{ cur.emoji }}</div>
+        <!-- COFFRE : dessiné, pas un emoji — un emoji ne s'ouvre pas. Le couvercle
+             pivote sur sa charnière, un faisceau sort de la caisse. -->
+        <svg v-if="cur.kind === 'chest'" class="fx-chest" viewBox="0 0 100 84" aria-hidden="true">
+          <path class="fx-beam" d="M30 46 L18 0 L82 0 L70 46 Z" />
+          <rect class="fx-box" x="14" y="42" width="72" height="38" rx="4" />
+          <rect class="fx-band" x="44" y="42" width="12" height="38" />
+          <g class="fx-lid">
+            <path class="fx-box" d="M14 46 A36 24 0 0 1 86 46 Z" />
+            <rect class="fx-band" x="44" y="28" width="12" height="18" />
+          </g>
+          <rect class="fx-lock" x="46" y="54" width="8" height="9" rx="2" />
+        </svg>
+        <div v-else class="fx-emoji">{{ cur.emoji }}</div>
         <div class="fx-title font-display">{{ cur.title }}</div>
         <div v-if="cur.subtitle" class="fx-sub">{{ cur.subtitle }}</div>
       </div>
@@ -142,6 +154,74 @@ onBeforeUnmount(() => {
   100% {
     opacity: 0;
     transform: rotate(var(--a)) translateY(-140px) scale(0.4);
+  }
+}
+/* ── Coffre qui s’ouvre ─────────────────────────────────────────────────
+   Le couvercle pivote sur sa CHARNIÈRE (transform-origin en bas), pas sur son
+   centre : c’est ce détail qui fait la différence entre un couvercle et une
+   forme qui tourne. Le faisceau ne sort qu’APRÈS l’ouverture. */
+.fx-chest {
+  width: 132px;
+  height: 111px;
+  display: block;
+  margin: 0 auto 6px;
+  overflow: visible;
+}
+.fx-box {
+  fill: #8a7856;
+  stroke: #4a3d2b;
+  stroke-width: 2;
+}
+.fx-band {
+  fill: #5a4c36;
+}
+.fx-lock {
+  fill: var(--fx-color, #ffd23f);
+}
+.fx-lid {
+  transform-origin: 14px 46px;
+  animation: chest-open 0.75s cubic-bezier(0.3, 1.6, 0.5, 1) 0.35s both;
+}
+.fx-beam {
+  fill: var(--fx-color, #ffd23f);
+  opacity: 0;
+  transform-origin: 50px 46px;
+  animation: chest-beam 1.1s ease-out 0.75s both;
+}
+@keyframes chest-open {
+  0% {
+    transform: rotate(0deg);
+  }
+  35% {
+    transform: rotate(6deg);
+  }
+  100% {
+    transform: rotate(-104deg);
+  }
+}
+@keyframes chest-beam {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.2);
+  }
+  40% {
+    opacity: 0.3;
+    transform: scaleY(1);
+  }
+  100% {
+    opacity: 0.12;
+    transform: scaleY(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* État FINAL direct : le coffre est ouvert, sans le mouvement. */
+  .fx-lid {
+    animation: none;
+    transform: rotate(-104deg);
+  }
+  .fx-beam {
+    animation: none;
+    opacity: 0.12;
   }
 }
 .fx-emoji {

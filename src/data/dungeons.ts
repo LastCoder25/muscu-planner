@@ -299,3 +299,14 @@ export function dungeonFoes(d: Dungeon): DungeonFoe[] {
 export function dungeonGold(d: Dungeon): number {
   return dungeonFoes(d).reduce((a, f) => a + f.gold, 0);
 }
+
+/** 🔮 PIERRES D'INVOCATION rendues par un donjon NETTOYÉ — ∝ à sa profondeur : farmer
+ *  plus profond finance des boss plus hauts.
+ *
+ *  ⚠️ Cette règle vivait en dur dans `AventurePage` (`1 + Math.floor(reco / 8)`). Toute
+ *  autre partie du jeu qui voulait raisonner sur le rendement d'une séance devait la
+ *  recopier — et deux copies d'une même règle finissent toujours par diverger (cf. la
+ *  table d'emojis de ressources, ou `itemScore` contre `combatPower`). Source unique. */
+export function dungeonSummonStones(d: Dungeon): number {
+  return 1 + Math.floor(d.recoLevel / 8);
+}

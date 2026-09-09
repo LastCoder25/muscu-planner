@@ -110,7 +110,15 @@ export interface ActiveExpedition {
 // Rapport déposé dans la boîte à messages 📬 à l'arrivée à l'objectif.
 export interface ExpeditionMessage {
   id: string;
-  poiType: PoiType;
+  /** ⚠️ OPTIONNEL depuis que la boîte porte AUSSI le coffre de Défi 360 (v0.715) : un
+   *  coffre ne vient d'aucun point d'intérêt. Lui inventer un type de POI bidon aurait
+   *  mis un mensonge dans la donnée pour éviter un point d’interrogation dans le type —
+   *  et l'écran aurait affiché « Puits » sur un coffre. */
+  poiType?: PoiType;
+  /** Titre imposé (le coffre). Sinon le libellé vient de POI_LABEL. */
+  title?: string;
+  /** Coffre de fin de Défi 360 : change l’icône, le titre et l’animation d’ouverture. */
+  chest?: boolean;
   setId?: string;
   level: number;
   win: boolean;
@@ -138,6 +146,11 @@ export interface ExpeditionMessage {
 }
 
 /** Le butin de ce message est-il à récupérer ? (cf. la note sur `claimed`.) */
+/** Titre d'un message de la boîte. ⚠️ Source unique : la boîte lisait POI_LABEL[poiType]
+ *  directement, ce qui rendait tout message SANS POI impossible à nommer. */
+export function messageTitle(m: ExpeditionMessage): string {
+  return m.title ?? (m.poiType ? POI_LABEL[m.poiType] : 'Rapport');
+}
 export function isClaimable(m: ExpeditionMessage, now: number): boolean {
   return m.claimed === false && now >= (m.claimAt ?? m.resolvedAt);
 }

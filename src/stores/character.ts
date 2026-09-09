@@ -1,4 +1,5 @@
 // Store character — personnage RPG (Phase 1 : pseudo unique). Accès Supabase centralisé.
+import { comboChestReward } from '@/lib/comboChest';
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
@@ -1288,6 +1289,50 @@ export const useCharacterStore = defineStore('character', () => {
   /** Encaisse le butin d'UN rapport. Idempotent par construction : `claimed` passe à
    *  `true` dans la même écriture que le crédit, et un message déjà encaissé (ou légué de
    *  l'époque du crédit automatique, donc sans `claimed`) est refusé. */
+  /** COFFRE DE FIN DE DÉFI 360 — déposé dans la boîte 📬, à ouvrir à la main.
+   *
+   *  ⚠️ IDEMPOTENT par construction : l’id du message est dérivé de celui du défi, donc
+   *  un second appel ne peut pas créer un doublon. C’est indispensable ici — le déclencheur
+   *  est un BALAYAGE (à chaque ouverture de l’Aventure on cherche les 360 terminés sans
+   *  coffre), donc il repasse forcément plusieurs fois sur le même défi.
+   *
+   *  ⚠️ Rien n’est crédité ici : le coffre attend, comme un rapport d’expédition, et
+   *  c’est `expeClaim` qui verse tout — une seule voie de crédit, donc pas deux endroits
+   *  où une devise pourrait être oubliée. */
+  async function grantComboChest(
+    userId: string,
+    comboId: string,
+    comboName: string,
+    sets: number,
+    playerLevel: number,
+    now: number,
+  ): Promise<boolean> {
+    const cur = row.value;
+    if (!cur) return false;
+    const id = `chest:${comboId}`;
+    if (cur.messages.some((m) => m.id === id)) return false;
+    const r = comboChestReward(sets, playerLevel);
+    const msg: ExpeditionMessage = {
+      id,
+      chest: true,
+      title: '🎁 Coffre du Défi 360',
+      level: playerLevel,
+      win: true,
+      text: `${comboName} — ${sets} séries. Le village a vu ta semaine.`,
+      gold: r.gold,
+      energy: r.energy,
+      summonStones: r.summonStones,
+      scrap: r.scrap,
+      key: r.keys,
+      resolvedAt: now,
+      claimAt: now, // pas de route à faire : le coffre est déjà là
+      claimed: false,
+      read: false,
+    };
+    await persist(userId, { messages: [msg, ...cur.messages].slice(0, 30) });
+    return true;
+  }
+
   async function expeClaim(userId: string, messageId: string, now: number) {
     const cur = row.value;
     if (!cur) return null;
@@ -1728,6 +1773,7 @@ export const useCharacterStore = defineStore('character', () => {
     expeSend,
     expeTick,
     expeSettle,
+    grantComboChest,
     expeClaim,
     expeMarkRead,
     buildFilon,

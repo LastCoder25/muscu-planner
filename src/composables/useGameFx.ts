@@ -7,7 +7,14 @@
 // l'overlay global (GameFxOverlay, monté dans App.vue) joue les fx une par une.
 import { ref } from 'vue';
 
-export type GameFxKind = 'drop' | 'familiar' | 'levelup' | 'unlock' | 'building' | 'generic';
+export type GameFxKind =
+  | 'drop'
+  | 'familiar'
+  | 'levelup'
+  | 'unlock'
+  | 'building'
+  | 'chest' // coffre de fin de Défi 360 : couvercle qui s'ouvre, butin qui jaillit
+  | 'generic';
 
 export interface GameFx {
   id: number;

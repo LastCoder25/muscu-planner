@@ -1536,8 +1536,10 @@
               :class="m.win ? 'win' : 'lose'"
             >
               <div class="im-head">
-                <span class="im-emo">{{ m.win ? '🏆' : '💀' }}</span>
-                <span class="im-title">{{ POI_LABEL[m.poiType] }} · niv {{ m.level }}</span>
+                <span class="im-emo">{{ m.chest ? '🎁' : m.win ? '🏆' : '💀' }}</span>
+                <span class="im-title">
+                  {{ messageTitle(m) }}<template v-if="!m.chest"> · niv {{ m.level }}</template>
+                </span>
               </div>
               <div class="im-text">{{ m.text }}</div>
               <div class="im-haul">
@@ -1547,7 +1549,7 @@
                    le geste qui donne au retour d'expédition un moment à lui. Un rapport
                    d'avant la récupération manuelle n'a pas de `claimed` → déjà crédité. -->
               <button v-if="isClaimable(m, expeNow)" class="im-claim" @click="doClaimMsg(m)">
-                🎁 Récupérer le butin
+                {{ m.chest ? '🎁 Ouvrir le coffre' : '🎁 Récupérer le butin' }}
               </button>
               <div v-else-if="m.claimed === false" class="im-wait">
                 🧭 Le héros est encore sur la route — retour dans
@@ -2589,6 +2591,8 @@ import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError, WELCOME_ENERGY } from '@/stores/character';
+import { useComboStore } from '@/stores/combo';
+import { comboCountedSets } from '@/lib/combo';
 import { useProgress } from '@/composables/useProgress';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
@@ -2619,7 +2623,13 @@ import CombatStage from '@/components/CombatStage.vue';
 import ArenaStage from '@/components/ArenaStage.vue';
 import { buildArenaStage, type StageWave } from '@/lib/arenaStage';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
-import { DUNGEONS, dungeonFoes, dungeonGold, type Dungeon } from '@/data/dungeons';
+import {
+  DUNGEONS,
+  dungeonFoes,
+  dungeonGold,
+  dungeonSummonStones,
+  type Dungeon,
+} from '@/data/dungeons';
 import { BOSSES, bossSummonCost, type MilestoneBoss } from '@/data/bosses';
 import { recommendedPower } from '@/lib/proceduralContent';
 import { VOIES, VOIE_BY_ID, voiePassiveEffects, type VoieId } from '@/lib/voies';
@@ -2700,7 +2710,7 @@ import {
 } from '@/lib/regions';
 import { bestiary, setCollection, codexSummary } from '@/lib/codex';
 import {
-  POI_LABEL,
+  messageTitle,
   isClaimable,
   type ExpeditionMessage,
   haulPills,
@@ -2752,6 +2762,7 @@ function openGame(path: string) {
 }
 const auth = useAuthStore();
 const char = useCharacterStore();
+const combo = useComboStore();
 const progress = useProgress();
 const gameFx = useGameFx();
 // Explication « rang » / « qualité » (ouverte en cliquant le pastille de rang ou le
@@ -4315,7 +4326,7 @@ async function explore(d: Dungeon) {
     // (Les consommables ne DROPPENT plus — peu utiles ; restent achetables en boutique.)
     // Pierres d'invocation 🔮 : lot au NETTOYAGE, ∝ profondeur du donjon → farmer plus
     // profond finance des boss plus hauts. Un boss de palier coûte ~2-6 pierres → 2-6 runs.
-    const summonStones = r.cleared ? 1 + Math.floor(d.recoLevel / 8) : 0;
+    const summonStones = r.cleared ? dungeonSummonStones(d) : 0;
     // Drop de TALENT (drop-only) : ~6 % sur un donjon nettoyé ; RANG gaté par le niveau
     // du donjon (`dropLevel`), biaisé par sa luck → farmer profond = talents plus hauts.
     const talentDrops =
@@ -4807,6 +4818,39 @@ const baseAlert = computed(
  *  attaqué » se lit comme plus de jeu, jamais comme une punition de l'entraînement. */
 const sessions7 = computed(() => progress.sessionsInLastDays(7));
 
+/** Dépose le coffre des Défis 360 terminés qui n'en ont pas encore.
+ *
+ *  ⚠️ Un BALAYAGE, pas un événement. Un 360 peut se boucler depuis trois écrans
+ *  différents (détail, onglet, séance générée), et le coffre vit dans la boîte de
+ *  l'Aventure : accrocher le versement à un seul de ces chemins en aurait fait perdre.
+ *  On repasse donc en revue à chaque ouverture — `grantComboChest` étant idempotent
+ *  (l'id du message dérive de celui du défi), repasser ne coûte rien.
+ *
+ *  Les séries comptées sont celles que le jeu compte DÉJÀ pour l'XP (`comboCountedSets`,
+ *  plafonnées au palier maximal) : pas de second barème, donc pas de divergence possible. */
+async function grantPendingComboChests() {
+  const uid = auth.user?.id;
+  if (!uid || !char.row) return;
+  try {
+    await combo.fetchMine();
+    // ⚠️ `co` et non `c` : `c` est DÉJÀ le personnage dans cette page. Réutiliser le nom
+    // aurait masqué le niveau du héros par un Défi 360 — une erreur muette.
+    for (const co of combo.list) {
+      if (co.status !== 'done') continue;
+      await char.grantComboChest(
+        uid,
+        co.id,
+        co.name || 'Défi 360',
+        comboCountedSets(co),
+        c.value.level.level,
+        Date.now(),
+      );
+    }
+  } catch (e) {
+    console.error('coffre 360', e);
+  }
+}
+
 let baseBusy = false;
 async function baseLifecycle() {
   const uid = auth.user?.id;
@@ -4876,7 +4920,20 @@ async function doClaimMsg(m: ExpeditionMessage) {
   const haul = haulPills(done)
     .map((h) => `${h.emoji} +${h.n}`)
     .join(' · ');
-  $q.notify({ type: 'positive', message: `🎁 Butin récupéré ! ${haul || '—'}` });
+  if (done.chest) {
+    // ⚠️ L'animation appartient à l'OUVERTURE, pas à la livraison : le coffre attend dans
+    // la boîte, et c'est le geste du joueur qui le déballe. Le butin est dans le
+    // sous-titre — un coffre qui s'ouvre sur rien ne raconte rien.
+    gameFx.celebrate({
+      kind: 'chest',
+      emoji: '🎁',
+      title: 'Coffre du Défi 360',
+      subtitle: haul || undefined,
+      rarity: 'legendary',
+    });
+  } else {
+    $q.notify({ type: 'positive', message: `🎁 Butin récupéré ! ${haul || '—'}` });
+  }
   const drops = done.items && done.items.length ? done.items : done.item ? [done.item] : [];
   const top = drops.slice().sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity])[0];
   if (top) celebrateRareDrop({ ...top, id: '' }); // même éclat que les drops de donjon
@@ -5657,6 +5714,7 @@ function dismissIntro() {
 }
 
 onMounted(async () => {
+  void grantPendingComboChests(); // coffres de Defi 360 en attente
   try {
     await char.fetchMine();
   } catch {
