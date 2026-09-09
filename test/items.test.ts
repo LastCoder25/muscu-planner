@@ -1234,8 +1234,15 @@ describe('roster : la pièce PORTÉE ne disparaît jamais (v0.708)', () => {
   const SET = 'voie:gardien';
   const mk = (slot: ItemSlot, value: number, id: string): Item =>
     ({
-      id, slot, name: id, emoji: '🛡️', rarity: 'rare', level: 10, baseLevel: 10,
-      effect: { type: 'damage_pct', value }, setId: SET,
+      id,
+      slot,
+      name: id,
+      emoji: '🛡️',
+      rarity: 'rare',
+      level: 10,
+      baseLevel: 10,
+      effect: { type: 'damage_pct', value },
+      setId: SET,
     }) as Item;
 
   it('⚠️ une meilleure pièce en réserve n’efface pas celle qu’on porte', () => {
@@ -1247,7 +1254,12 @@ describe('roster : la pièce PORTÉE ne disparaît jamais (v0.708)', () => {
   });
 
   it('pas d’écart à signaler quand c’est bien la portée qui est la meilleure', () => {
-    const r = voieSetRoster(SET, { armor: mk('armor', 30, 'bonne') }, { armor: mk('armor', 10, 'moins') }, []);
+    const r = voieSetRoster(
+      SET,
+      { armor: mk('armor', 30, 'bonne') },
+      { armor: mk('armor', 10, 'moins') },
+      [],
+    );
     expect(r.armor?.worn).toBe(true);
     expect(r.armor?.wornItem).toBeUndefined();
   });

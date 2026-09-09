@@ -1659,7 +1659,7 @@
                 v-if="lo.count"
                 class="lo-power"
                 :class="lo.delta >= 0 ? 'up' : 'down'"
-                title="Puissance si tu portes ce set (familier actuel conservé)"
+                title="Puissance APRÈS avoir appuyé sur « Porter ce set » : le set, complété au mieux avec ton sac, sur la voie du set."
               >
                 ⚔️ {{ fmtPow(lo.power) }} <b>({{ fmtDelta(combatPowerVal, lo.power) }})</b>
               </span>
@@ -2582,6 +2582,7 @@ import {
   type Rarity,
   type AggregatedEffects,
   type RewardCandidate,
+  bestGearLoadout,
 } from '@/lib/items';
 import {
   talentsEarned,
@@ -4798,12 +4799,35 @@ const equippedSet = computed<{ idx: number; name: string; emoji: string; count: 
 // (voieId) — car porter le set équipe aussi sa voie → on prend en compte son passif + son
 // CAPSTONE (4-pièces). La comparaison au combatPower actuel reflète donc le vrai gain « set +
 // bascule de voie » (la voie qui remplacera l'actuelle).
-function loadoutPower(items: Equipped, voieId: string | null): number {
-  const fam = char.row?.equipped[FAMILIAR_SLOT];
-  const eq: Equipped = { ...items, ...(fam ? { [FAMILIAR_SLOT]: fam } : {}) };
+/** Puissance SI on appuie sur « Porter ce set ».
+ *
+ *  ⚠️ ELLE DOIT SIMULER L'ACTION, PAS LE SET NU. La version précédente n'évaluait que les
+ *  4 pièces du set (+ le familier) : elle jetait donc les bons objets HORS set que le
+ *  joueur porte, alors que le bouton, lui, lance l'optimiseur qui COMPLÈTE au mieux avec
+ *  le sac et la réserve de la voie. Mesuré sur un compte réel : l'aperçu annonçait −890 à
+ *  −3798 quand l'action donnait −232 à **+122**. Trois sets affichés comme des pertes
+ *  étaient en fait des GAINS. Un aperçu qui dissuade d'une action bénéfique est pire que
+ *  pas d'aperçu du tout.
+ *
+ *  Restant volontairement pessimiste d'un cheveu : l'action re-choisit aussi les TALENTS
+ *  pour ce gear, ce qu'on ne refait pas ici (coût). Le résultat réel ne peut donc qu'être
+ *  ≥ à ce qu'on annonce — jamais l'inverse. */
+function loadoutPower(reserve: Equipped | undefined, voieId: string | null): number {
+  const row = char.row;
+  if (!row) return 0;
   const fx = mergeEffects(talentFx.value, voiePassiveEffects(voieId as VoieId | null));
+  const pool = [...row.inventory, ...(SLOTS.map((s) => reserve?.[s]).filter(Boolean) as Item[])];
+  const best = bestGearLoadout(
+    row.pseudo ?? 'Toi',
+    c.value,
+    row.equipped,
+    pool,
+    c.value.level.level,
+    fx,
+    voieId,
+  );
   return combatPower(
-    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, fx, c.value.level.level, voieId),
+    playerWithGear(row.pseudo ?? 'Toi', c.value, best, fx, c.value.level.level, voieId),
   );
 }
 /** Une carte de « Mes sets » = le ROSTER de la voie (meilleure pièce possédée par
@@ -4820,9 +4844,7 @@ const loadoutsView = computed(() => {
     // Puissance « si je porte ce set » : calculée sur le ROSTER complet, donc sur ce
     // qu'on possède vraiment de mieux — l'ancienne version ignorait les pièces portées
     // et sous-estimait donc systématiquement le set en cours.
-    const items: Equipped = {};
-    for (const e of entries) items[e.item.slot] = e.item;
-    const power = entries.length ? loadoutPower(items, loadoutVoie(i)?.id ?? null) : 0;
+    const power = entries.length ? loadoutPower(los[i]?.items, loadoutVoie(i)?.id ?? null) : 0;
     // Vendre / vider ne concernent QUE la réserve : on ne brade pas ce qu’on porte.
     const storedItems = SLOTS.map((s) => los[i]?.items?.[s]).filter((it): it is Item => !!it);
     return {
