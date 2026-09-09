@@ -39,6 +39,7 @@ import {
   type ComboChallenge,
   type ComboLeg,
   type ComboSet,
+  comboEnded,
 } from '@/lib/combo';
 
 const set = (reps: number, weight?: number, date = '2026-01-05'): ComboSet => ({
@@ -662,5 +663,62 @@ describe('legBarGeometry (barre continue : reps et durée)', () => {
       expect(g.objPct).toBeGreaterThanOrEqual(0);
       expect(g.objPct).toBeLessThanOrEqual(100);
     }
+  });
+});
+
+describe('prime du 360 : versée à la FIN, jamais au fil des séries (v0.717)', () => {
+  // ⚠️ CE QUI EST VERROUILLÉ, ET LE PIÈGE ÉVITÉ. La prime tombait par petits bouts à chaque
+  // série qui décrochait un palier : l'énergie montait en continu et le bouclage n'était
+  // plus un moment. Mais la corriger en ne payant QU'À LA COMPLÉTION l'aurait rendue
+  // tout-ou-rien — annulant la v0.621, qui avait justement fait en sorte qu'un exo à la
+  // traîne ne fasse plus perdre les autres. « La fin » = bouclé OU période écoulée.
+  const leg = (target: number, done: number): ComboLeg =>
+    ({
+      slot: 'push',
+      exercise_id: 'e' + target,
+      exercise_name: 'x',
+      count_mode: 'sets',
+      target,
+      rep_weight: 1,
+      sets: Array.from({ length: done }, () => ({ date: '2026-01-01', reps: 10, weight: null })),
+    }) as ComboLeg;
+  const mk = (legs: ComboLeg[]): ComboChallenge =>
+    ({
+      id: 'c',
+      name: 'n',
+      start_date: '2026-01-01',
+      duration_days: 7,
+      status: 'active',
+      legs,
+    }) as ComboChallenge;
+
+  it('⚠️ EN COURS et non bouclé : prime NULLE, même avec des paliers atteints', () => {
+    const c = mk([leg(10, 10), leg(10, 3)]); // 1er exo au principal, 2e à la traîne
+    expect(comboEnded(c, '2026-01-03')).toBe(false);
+    expect(comboTieredBonus(c, undefined, '2026-01-03')).toBe(0);
+  });
+
+  it('⚠️ PÉRIODE ÉCOULÉE sans bouclage : la prime des paliers atteints EST versée', () => {
+    // Le cas qui interdit le retour au tout-ou-rien : la semaine est finie, un exo n'a pas
+    // suivi, mais tout le travail fait compte.
+    const c = mk([leg(10, 10), leg(10, 3)]);
+    expect(comboEnded(c, '2026-01-09')).toBe(true);
+    expect(comboTieredBonus(c, undefined, '2026-01-09')).toBeGreaterThan(0);
+  });
+
+  it('BOUCLÉ avant la fin : la prime tombe tout de suite', () => {
+    const c = mk([leg(10, 10), leg(10, 10)]);
+    expect(comboEnded(c, '2026-01-03')).toBe(true);
+    expect(comboTieredBonus(c, undefined, '2026-01-03')).toBeGreaterThan(0);
+  });
+
+  it('plus on a atteint de paliers, plus la prime est grosse — à durée égale', () => {
+    const fin = '2026-01-09';
+    const faible = mk([leg(10, 3), leg(10, 3)]);
+    const fort = mk([leg(10, 10), leg(10, 10)]);
+    expect(comboEnded(faible, fin)).toBe(true);
+    expect(comboTieredBonus(fort, undefined, fin)).toBeGreaterThan(
+      comboTieredBonus(faible, undefined, fin),
+    );
   });
 });

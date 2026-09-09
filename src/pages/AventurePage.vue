@@ -4836,10 +4836,22 @@ async function grantPendingComboChests() {
   if (!uid || !char.row || !progress.ready.value) return;
   try {
     await combo.fetchMine();
-    // ⚠️ `co` et non `c` : `c` est DÉJÀ le personnage dans cette page. Réutiliser le nom
-    // aurait masqué le niveau du héros par un Défi 360 — une erreur muette.
+    // ⚠️ FENÊTRE COURTE, ET C'EST LE CŒUR DU CORRECTIF. Sans borne, ce filet a raflé
+    // TOUT l'historique : cinq 360 terminés bien avant que le coffre n'existe ont produit
+    // cinq coffres d'un coup (~1 600 🔩 et 190 🔮 d'aubaine). Un défi bouclé avant la
+    // règle n'a rien gagné sous cette règle. Le filet ne sert qu'à rattraper un versement
+    // qui vient d'échouer (réseau coupé au moment de la dernière série) — pas à récompenser
+    // le passé. Le chemin normal est le signal immédiat (`useComboChest`).
+    // On date le défi par sa DERNIÈRE SÉRIE — l'instant où il s'est réellement bouclé.
+    // (`updated_at` existe en base mais pas dans le type métier : la date des séries est
+    // à la fois disponible et plus juste.)
+    const JOURS = 2;
+    const limite = new Date(Date.now() - JOURS * 86400_000).toISOString().slice(0, 10);
     for (const co of combo.list) {
       if (co.status !== 'done') continue;
+      const dates = co.legs.flatMap((l) => (l.sets ?? []).map((x) => x.date)).filter(Boolean);
+      const derniere = dates.length ? dates.reduce((m, d) => (d > m ? d : m)) : '';
+      if (derniere < limite) continue;
       await char.grantComboChest(
         uid,
         co.id,

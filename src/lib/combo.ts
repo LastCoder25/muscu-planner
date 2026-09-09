@@ -246,10 +246,38 @@ export function legPlannedEffort(l: ComboLeg): number {
  *  effort planifié` × la part CUMULÉE du palier atteint (15 / 95 / 100 %). Remplace
  *  l'ancienne prime tout-ou-rien ET le bonus de dépassement (fusionné dans le maximal).
  *  Un 360 entièrement bouclé « en avance » est amplifié par (1 + fraction d'avance). */
+/** Le défi est-il TERMINÉ — bouclé, ou sa période écoulée ? C'est ce moment qui déclenche
+ *  le versement de la prime, et lui seul. `today` est passé pour rester pur (le projet
+ *  s'est déjà fait piéger par un aller-retour local↔UTC sur les dates de défi). */
+export function comboEnded(
+  c: ComboChallenge,
+  today = new Date().toISOString().slice(0, 10),
+): boolean {
+  if (comboComplete(c)) return true;
+  if (c.duration_days <= 0) return false;
+  return today > addDaysUtc(c.start_date, c.duration_days - 1);
+}
+
 export function comboTieredBonus(
   c: ComboChallenge,
   shareOf: (l: ComboLeg) => number = legTierShare,
+  /** ⚠️ Jour courant, EXPLICITE. La prime dépend désormais de la date (elle ne tombe qu'à
+   *  la fin du défi) : laisser la fonction lire l'horloge en douce la rendrait impossible
+   *  à tester et sensible au fuseau — deux pièges que ce projet a déjà payés. Le défaut
+   *  reste la date du jour pour les appelants qui n'ont rien à décider. */
+  today = new Date().toISOString().slice(0, 10),
 ): number {
+  // ⚠️ VERSÉE À LA FIN DU DÉFI (v0.717), pas au fil des séries. Avant, la prime tombait
+  // par petits bouts à chaque série qui décrochait un palier : l'énergie montait en
+  // continu et le bouclage n'était plus un moment, juste la dernière miette d'un
+  // versement étalé.
+  //
+  // ⚠️ « LA FIN » = bouclé OU période écoulée — surtout pas « bouclé » seul. Un premier
+  // essai ne payait qu'à la complétion : il rendait la prime TOUT-OU-RIEN et annulait
+  // exactement ce que la v0.621 avait corrigé (un exo à la traîne faisait perdre tous les
+  // autres). Deux tests l'ont refusé, à juste titre. Le bouclage PARTIEL reste donc
+  // récompensé : à la fin de la semaine, on touche la prime des paliers atteints.
+  if (!comboEnded(c, today)) return 0;
   const early = 1 + comboEarlyFraction(c);
   let sum = 0;
   for (const l of c.legs) {
