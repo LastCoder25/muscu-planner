@@ -296,17 +296,35 @@ projet** : la liste des exclusions compte autant que celle des recommandations.
 | Revue de fin de tâche           | **`requesting-code-review`** / **`receiving-code-review`**           | La seconde impose de VÉRIFIER un retour de revue au lieu d'acquiescer.                                                                                                                                                                                                                                                                                                |
 | Plusieurs tâches indépendantes  | **`dispatching-parallel-agents`**, **`subagent-driven-development`** | Agents de revue/implémentation en parallèle (ce qui a servi à l'audit des devises mortes).                                                                                                                                                                                                                                                                            |
 
-⚠️ **TROU DE COUVERTURE ASSUMÉ — aucune porte ne voit l'écran.** typecheck, lint, tests et build
-valident du CODE ; ils sont aveugles à tout ce qui est visuel ou interactif. Les défauts déjà
-livrés le prouvent : un `fill: none` SVG **non cliquable en son centre** (impossible de bâtir une
-tourelle), des ornements du rempart **décrochés** parce quʼils étaient en coordonnées dures, un
-« Dernier siège » rendu **deux fois**. Ces bugs-là remontent par les YEUX de lʼutilisateur, et
-cʼest la principale faiblesse du dispositif.
-La piste est **Playwright** (clic réel, capture dʼécran, logs navigateur). La skill officielle
-`webapp-testing` (anthropics/skills) fait exactement ça — ⚠️ mais elle est écrite en **Playwright
-PYTHON**, or **Python nʼest pas installé** sur ce poste, et AppLocker peut bloquer les binaires de
-navigateur téléchargés hors `Program Files`. À traiter comme une piste à ÉPROUVER (via
-`@playwright/test` en Node), pas comme une solution acquise.
+### 👁️ SMOKE UI — la seule porte qui REGARDE l'écran (v0.700)
+
+`npm run smoke` (après `npm run build`) — `scripts/smoke-ui.mjs`, Playwright en **Node**.
+
+⚠️ **Pourquoi elle existe** : typecheck, lint, tests et build valident du CODE et sont AVEUGLES
+au rendu. Trois défauts livrés le prouvent — un `fill: none` SVG **non cliquable en son centre**
+(impossible de bâtir une tourelle), des ornements du rempart **décrochés** parce qu'ils étaient
+en coordonnées dures, un panneau « Dernier siège » rendu **deux fois**. Aucun ne pouvait être vu
+sans ouvrir un navigateur ; ils sont tous remontés par les yeux de l'utilisateur.
+
+Elle sert `dist/spa` sur un serveur local (avec le repli SPA de Vercel), ouvre Chromium à
+**344 / 390 / 600 px** — les seuils que le projet documente déjà (Z Fold plié · téléphone ·
+bascule cockpit) — et échoue sur : HTTP ≠ 200, **toute** erreur console ou `pageerror`,
+**débordement horizontal** (garde-fou explicite du § Responsive), page quasi vide. Captures dans
+`dist/smoke/` (déjà gitignoré via `/dist`).
+
+⚠️ **PORTÉE HONNÊTE — elle ne dépasse pas l’écran de connexion.** Sans identifiants Supabase elle
+attrape le boot cassé, le chunk manquant, l’erreur au démarrage et le débordement ; **PAS** la
+géométrie de la base ni les écrans de jeu, qui sont précisément là où les défauts cités sont nés.
+Aller plus loin demanderait un compte de test dédié — **jamais d'identifiants dans le dépôt**.
+
+⚠️ **Vérifiée par MUTATION, comme le veut la règle** : un débordement injecté et une erreur JS
+injectée dans le build la font échouer toutes les deux. Une porte jamais vue rouge ne prouve rien.
+
+**Environnement (contraintes du poste, déjà éprouvées)** : le binaire Chromium vit dans
+`%LOCALAPPDATA%ms-playwright` — **AppLocker ne le bloque PAS** (testé). `npx` restant bloqué,
+l'installation passe par node, UNE fois : `node node_modules/playwright-core/cli.js install
+chromium`. Dépendance : **`playwright-core` seul** (pas `@playwright/test` : son lanceur de tests
+n'est pas utilisé), en devDependency — rien ne part dans le bundle.
 
 **⛔ À NE PAS UTILISER sur ce projet, et pourquoi :**
 
@@ -374,7 +392,7 @@ dans cet ordre — une seule ignorée invalide l'annonce :
 
 ```
 npm run typecheck   ·   npm run lint   ·   node node_modules/vitest/vitest.mjs run
-node node_modules/@quasar/app-vite/bin/quasar.js build
+node node_modules/@quasar/app-vite/bin/quasar.js build   ·   npm run smoke   (5e porte, voit l’écran)
 ```
 
 Rapporter fidèlement : un test rouge se dit avec sa sortie, une étape sautée se dit.
