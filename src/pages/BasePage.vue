@@ -505,7 +505,14 @@
                 >
               </div>
             </div>
-            <button class="btn" @click="doToggleGarrison(f.id)">
+            <!-- La COULEUR dit l'action, pas l'état : vert on ajoute au mur, rouge on le
+                 dégarnit. Dans une liste où posté et disponible se mélangent, le libellé
+                 seul demande de lire ligne à ligne. -->
+            <button
+              class="btn"
+              :class="isPosted(f.id) ? 'unpost' : 'post'"
+              @click="doToggleGarrison(f.id)"
+            >
               {{ isPosted(f.id) ? 'Retirer' : 'Poster' }}
             </button>
           </div>
@@ -1644,6 +1651,16 @@ const doCollect = () =>
   cursor: default;
 }
 .btn.fix {
+  border-color: #ff6a45;
+  color: #ff6a45;
+}
+/* Garnison : couleurs de la charte (d1 vert / d4 rouge), les mêmes que les notes
+   d'effort — on n'introduit pas une seconde palette pour deux boutons. */
+.btn.post {
+  border-color: #7bc86c;
+  color: #7bc86c;
+}
+.btn.unpost {
   border-color: #ff6a45;
   color: #ff6a45;
 }
