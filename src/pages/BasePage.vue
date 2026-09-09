@@ -467,52 +467,107 @@
              poste. -->
         <div v-if="defSel.id === 'kennel' && kennelLevel" class="sh-garrison">
           <div class="sh-gtitle">
-            🐾 Garnison — {{ garrisoned.length }}/{{ slots }} postés
+            🐾 Garnison — {{ garrisonIds.length }}/{{ slots }} postés
             <span class="sh-gnext">· +1 place au niveau {{ nextSlotLevel }}</span>
           </div>
+
+          <!-- ── LES CASES ────────────────────────────────────────────────────
+               Une case par place, occupée ou vide. La LISTE de tous les familiers
+               obligeait à la parcourir pour savoir qui était en poste ; ici l'état
+               se lit d'un coup d'œil, et retirer un familier laisse un TROU visible
+               au lieu de faire remonter la liste. -->
+          <div class="gslots">
+            <button
+              v-for="(f, i) in garrisonSlotsView"
+              :key="i"
+              type="button"
+              class="gslot"
+              :class="[f ? 'p-' + f.rarity : 'empty', { tired: f && isFatiguedNow(f) }]"
+              :title="
+                f ? f.name + ' — toucher pour remplacer' : 'Emplacement libre — toucher pour poster'
+              "
+              @click="famPick = i"
+            >
+              <template v-if="f">
+                <span class="gs-emo">{{ f.emoji }}</span>
+                <span class="gs-def">🛡️{{ defLvl(f) }}</span>
+                <span v-if="isFatiguedNow(f)" class="gs-tired" title="au repos">😴</span>
+              </template>
+              <span v-else class="gs-plus">＋</span>
+            </button>
+          </div>
+
+          <!-- ── CE QUE ÇA DONNE ──────────────────────────────────────────────
+               Le total RÉELLEMENT appliqué, plafonds compris : c'est le seul chiffre
+               qui compte au moment de l'assaut, et il ne vivait nulle part. -->
+          <div class="gbonus">
+            <div class="gb-h">Ce que la garnison apporte au mur</div>
+            <div v-if="garrisonSummary.length" class="gb-list">
+              <span v-for="(g, i) in garrisonSummary" :key="i" class="gb-chip">{{ g }}</span>
+            </div>
+            <p v-else class="gb-empty">Aucun familier posté — l’enceinte se défend seule.</p>
+          </div>
+
+          <button v-if="famPoolRaw.length" class="cta ghost" @click="doAutoGarrison">
+            ✨ Poster automatiquement les meilleurs
+          </button>
+          <p v-if="!famPoolRaw.length" class="dim-note">
+            Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
+          </p>
           <p class="sh-gnote">
             L’<b>espèce</b> décide de ce que le familier apporte au mur. Il reste dans ton sac :
             poster n’est pas ranger.
           </p>
-          <div v-if="garrisonSummary.length" class="sh-gsum">
-            <span v-for="(g, i) in garrisonSummary" :key="i" class="sh-gchip">{{ g }}</span>
-          </div>
-          <button v-if="famPool.length" class="cta ghost" @click="doAutoGarrison">
-            ✨ Poster automatiquement les meilleurs
-          </button>
-          <p v-if="!famPool.length" class="dim-note">
-            Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
-          </p>
-          <div v-for="f in famPool" :key="f.id" class="fam" :class="{ on: isPosted(f.id) }">
-            <span class="fam-emo">{{ f.emoji }}</span>
-            <div class="fam-main">
-              <div class="fam-name">
-                {{ f.name }}
-                <span class="fam-rar" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
-                <span class="fam-lvl" title="Dressage de défense">🛡️ {{ defLvl(f) }}</span>
-                <span v-if="isFatiguedNow(f)" class="fam-tired">au repos</span>
-              </div>
-              <div class="fam-eff">{{ famEffect(f) }}</div>
-              <div class="fam-role">
-                {{ roleLabel(f) }}
-                <span v-if="isFatiguedNow(f)"> · effet de moitié tant qu’il récupère</span>
-                <span v-if="defLvlRaw(f) > defLvl(f)" class="fam-capped">
-                  · bridé par le Chenil (niv. {{ kennelLevel }})</span
-                >
-              </div>
-            </div>
-            <!-- La COULEUR dit l'action, pas l'état : vert on ajoute au mur, rouge on le
-                 dégarnit. Dans une liste où posté et disponible se mélangent, le libellé
-                 seul demande de lire ligne à ligne. -->
-            <button
-              class="btn"
-              :class="isPosted(f.id) ? 'unpost' : 'post'"
-              @click="doToggleGarrison(f.id)"
-            >
-              {{ isPosted(f.id) ? 'Retirer' : 'Poster' }}
-            </button>
-          </div>
         </div>
+      </q-card>
+    </q-dialog>
+
+    <!-- ── SÉLECTEUR DE FAMILIER (une case du chenil) ─────────────────────────
+         Ouvert en touchant une case. On montre TOUS les familiers possédés, les plus
+         utiles au mur d'abord ; ceux déjà postés ailleurs sont marqués plutôt que
+         cachés — les masquer donnerait l'impression de les avoir perdus. -->
+    <q-dialog v-model="famPickOpen" position="bottom">
+      <q-card class="sheet">
+        <div class="sh-head">
+          <div class="sh-title font-display">🐾 Poste {{ (famPick ?? 0) + 1 }}</div>
+          <button class="iconbtn" aria-label="Fermer" @click="famPick = null">✕</button>
+        </div>
+        <button
+          v-if="famPick !== null && garrisonSlotsView[famPick]"
+          class="btn unpost full"
+          @click="pickFamiliar(null)"
+        >
+          Laisser ce poste vide
+        </button>
+        <p v-if="!famChoices.length" class="dim-note">
+          Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
+        </p>
+        <button
+          v-for="f in famChoices"
+          :key="f.id"
+          type="button"
+          class="fpick"
+          :class="{ here: famPick !== null && garrisonSlotsView[famPick]?.id === f.id }"
+          @click="pickFamiliar(f.id)"
+        >
+          <span class="fp-emo">{{ f.emoji }}</span>
+          <span class="fp-main">
+            <span class="fp-name">
+              {{ f.name }}
+              <span class="fam-rar" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
+              <span class="fam-lvl" title="Dressage de défense">🛡️ {{ defLvl(f) }}</span>
+              <span v-if="isFatiguedNow(f)" class="fam-tired">au repos</span>
+            </span>
+            <span class="fp-role">{{ roleLabel(f) }}</span>
+            <span class="fp-eff">{{ famEffect(f) }}</span>
+            <span v-if="defLvlRaw(f) > defLvl(f)" class="fp-capped">
+              dressage bridé par le Chenil (niv. {{ kennelLevel }}) — il vaut {{ defLvlRaw(f) }}
+            </span>
+            <span v-if="postedElsewhere(f.id)" class="fp-swap">
+              déjà posté ailleurs — le choisir ÉCHANGE les deux postes
+            </span>
+          </span>
+        </button>
       </q-card>
     </q-dialog>
   </component>
@@ -677,6 +732,52 @@ const famPool = computed(() => {
     return famWeight(b) - famWeight(a);
   });
 });
+/** Les ids POSTÉS, dans leur ordre de rangement — c'est lui qui décide quelle case
+ *  occupe quel familier. `garrisoned` trie pour le calcul du bonus ; ici l'ordre compte. */
+const garrisonIds = computed(() => base.value?.garrison ?? []);
+/** Une entrée par PLACE : le familier posté, ou `undefined` pour une case vide.
+ *  ⚠️ Retirer un familier laisse un TROU au lieu de faire remonter la liste — sinon on ne
+ *  voit plus combien de places restent à pourvoir. */
+const garrisonSlotsView = computed(() => {
+  const byId = new Map(famPoolRaw.value.map((f) => [f.id, f]));
+  return Array.from({ length: slots.value }, (_, i) => byId.get(garrisonIds.value[i] ?? ''));
+});
+/** Case en cours d'édition (index), ou null. */
+const famPick = ref<number | null>(null);
+// q-dialog veut un booleen ; la SOURCE reste l'index, pour savoir QUELLE case on edite.
+const famPickOpen = computed({
+  get: () => famPick.value !== null,
+  set: (v: boolean) => {
+    if (!v) famPick.value = null;
+  },
+});
+/** Familiers proposés pour une case : tous ceux qu'on possède, les meilleurs d'abord,
+ *  ceux déjà postés AILLEURS marqués — on ne les cache pas, on dit pourquoi. */
+const famChoices = computed(() =>
+  [...famPoolRaw.value].sort((a, b) => famWeight(b) - famWeight(a)),
+);
+function postedElsewhere(id: string): boolean {
+  return (
+    famPick.value !== null &&
+    garrisonIds.value.includes(id) &&
+    garrisonIds.value[famPick.value] !== id
+  );
+}
+/** Place `id` sur la case en cours (ou la vide si `null`). Une SEULE écriture : échanger
+ *  deux familiers via deux bascules laisserait un état intermédiaire vide à l'écran. */
+function pickFamiliar(id: string | null) {
+  const i = famPick.value;
+  if (i === null) return;
+  const next = Array.from({ length: slots.value }, (_, k) => garrisonIds.value[k] ?? '');
+  if (id) {
+    const from = next.indexOf(id);
+    if (from >= 0) next[from] = next[i] ?? ''; // échange : l'occupant part à sa place
+    next[i] = id;
+  } else next[i] = '';
+  famPick.value = null;
+  void guard(() => char.setGarrison(uid.value, next.filter(Boolean), Date.now(), heroLevel.value));
+}
+
 const garrisoned = computed(() => {
   const ids = new Set(base.value?.garrison ?? []);
   return famPool.value.filter((f) => ids.has(f.id));
@@ -688,9 +789,6 @@ const nextSlotLevel = computed(() => (Math.floor(heroLevel.value / 5) + 1) * 5);
 const garrison = computed(() =>
   garrisonBonus(garrisoned.value, now.value, kennelLevel.value, slots.value),
 );
-function isPosted(id: string): boolean {
-  return (base.value?.garrison ?? []).includes(id);
-}
 function isFatiguedNow(f: Item): boolean {
   return isFatigued(f, now.value);
 }
@@ -1073,8 +1171,6 @@ const doRepairAll = () =>
       $q.notify({ type: 'positive', message: '🔩 Enceinte réparée — la production repart.' });
   });
 const doSend = () => guard(() => char.sendScavengers(uid.value, Date.now()));
-const doToggleGarrison = (id: string) =>
-  guard(() => char.toggleGarrison(uid.value, id, Date.now(), heroLevel.value));
 const doAutoGarrison = () =>
   guard(() => char.autoAssignGarrison(uid.value, Date.now(), heroLevel.value));
 const doHeal = () =>
@@ -1523,6 +1619,143 @@ const doCollect = () =>
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
+}
+/* ── Chenil : cases de garnison ─────────────────────────────────────────
+   Des CASES, pas une liste : l'état se lit d'un coup d'œil et un poste vide
+   reste visible. La couleur du liseré est la rareté (mêmes classes .p-* que
+   partout ailleurs), le fond dit occupé/libre. */
+.gslots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+.gslot {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  border-radius: 12px;
+  border: 2px solid var(--rk, var(--line));
+  background: #1d1913;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.gslot.empty {
+  border-style: dashed;
+  border-color: var(--line);
+  background: transparent;
+}
+.gslot.tired {
+  opacity: 0.6;
+}
+.gs-emo {
+  font-size: 26px;
+  line-height: 1;
+}
+.gs-plus {
+  font-size: 22px;
+  color: var(--dim);
+}
+.gs-def {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font-size: 9px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.gs-tired {
+  position: absolute;
+  left: 2px;
+  top: 1px;
+  font-size: 11px;
+}
+/* Zone de bonus : le seul chiffre qui compte le jour du siège. */
+.gbonus {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #1a1611;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.gb-h {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.gb-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gb-chip {
+  border: 1px solid #7bc86c;
+  color: #7bc86c;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.gb-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+/* Sélecteur de familier */
+.fpick {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  align-items: flex-start;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  color: var(--text);
+  cursor: pointer;
+}
+.fpick.here {
+  border-color: #7bc86c;
+}
+.fp-emo {
+  font-size: 24px;
+}
+.fp-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.fp-name {
+  font-size: 13px;
+}
+.fp-role {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ffd23f;
+}
+.fp-eff {
+  font-size: 12px;
+  color: var(--dim);
+}
+.fp-capped {
+  font-size: 11px;
+  color: var(--dim);
+}
+.fp-swap {
+  font-size: 11px;
+  color: #ffd23f;
+}
+.btn.full {
+  width: 100%;
+  margin-bottom: 8px;
 }
 .sh-gtitle {
   font-weight: 700;

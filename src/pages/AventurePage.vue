@@ -469,6 +469,40 @@
             <div v-if="!char.row.talents.length" class="talents-empty">
               Aucun talent pour l'instant — vaincs des donjons pour en faire tomber.
             </div>
+
+            <!-- ── LES CASES ────────────────────────────────────────────────────
+                 Une case par emplacement, occupée ou vide, comme au chenil. La liste
+                 seule obligeait à la parcourir pour savoir ce qu'on portait ; ici
+                 l'état se lit d'un coup, et une case libérée reste VISIBLE. -->
+            <div v-if="char.row.talents.length" class="tslots">
+              <button
+                v-for="(t, i) in talentSlotsView"
+                :key="i"
+                type="button"
+                class="tslot"
+                :class="t ? 'p-' + t.rarity : 'empty'"
+                :title="
+                  t
+                    ? t.def.name + ' — toucher pour remplacer'
+                    : 'Emplacement libre — toucher pour équiper'
+                "
+                @click="talPick = i"
+              >
+                <span v-if="t" class="ts-emo">{{ t.def.icon }}</span>
+                <span v-else class="ts-plus">＋</span>
+              </button>
+            </div>
+
+            <!-- ── CE QUE ÇA DONNE ──────────────────────────────────────────────
+                 La SOMME des talents équipés. Chaque talent était bien décrit, mais
+                 leur total n'apparaissait nulle part — or c'est lui qui entre en combat. -->
+            <div v-if="char.row.talents.length" class="tbonus">
+              <div class="tb-h">Ce que tes talents équipés apportent</div>
+              <div v-if="talentSummary.length" class="tb-list">
+                <span v-for="(g, i) in talentSummary" :key="i" class="tb-chip">{{ g }}</span>
+              </div>
+              <p v-else class="tb-empty">Aucun talent équipé — les cases ci-dessus sont libres.</p>
+            </div>
             <!-- Talents conseillés (ticket 9f2c6a42) : équipe d'un coup la meilleure combi
                  pour ta puissance ; ils sont encadrés en doré dans la liste (08b10b7f). -->
             <button
@@ -2497,6 +2531,52 @@
         </div>
       </q-card>
     </q-dialog>
+
+    <!-- ── SÉLECTEUR DE TALENT (une case) ─────────────────────────────────────
+         On montre TOUT ce qu'on possède, les plus utiles d'abord ; ce qui ne peut
+         pas être posé est marqué avec sa raison plutôt que masqué — un talent absent
+         sans explication se lit comme un talent perdu. -->
+    <q-dialog v-model="talPickOpen" position="bottom">
+      <q-card class="adv-modal">
+        <button class="adv-modal-x" aria-label="Fermer" @click="talPick = null">✕</button>
+        <div class="sec-title">Emplacement {{ (talPick ?? 0) + 1 }}</div>
+        <button
+          v-if="talPick !== null && talentSlotsView[talPick]"
+          class="voie-btn talent-dup-btn"
+          @click="pickTalent(null)"
+        >
+          Laisser cet emplacement vide
+        </button>
+        <div class="talents-grid">
+          <button
+            v-for="t in talChoices"
+            :key="t.id"
+            type="button"
+            class="tpick"
+            :class="[
+              'p-' + t.rarity,
+              {
+                here: talPick !== null && talentSlotsView[talPick]?.id === t.id,
+                off: !!talBlocked(t),
+              },
+            ]"
+            :disabled="!!talBlocked(t)"
+            @click="pickTalent(t.id)"
+          >
+            <span class="tp-emo">{{ t.def.icon }}</span>
+            <span class="tp-main">
+              <span class="tp-name">
+                {{ t.def.name }}
+                <span class="rk-badge" :class="'p-' + t.rarity">{{ t.rarity }}</span>
+                <span class="lvl-badge">Nv {{ t.level }}</span>
+              </span>
+              <span class="tp-eff">+{{ t.effLabel }} {{ t.def.desc }}</span>
+              <span v-if="talBlocked(t)" class="tp-off">{{ talBlocked(t) }}</span>
+            </span>
+          </button>
+        </div>
+      </q-card>
+    </q-dialog>
   </component>
 </template>
 
@@ -3114,6 +3194,79 @@ const firstTalentIcon = computed(() => {
   const eq = equippedTalents.value[0];
   return eq ? (talentByCode(eq.code)?.icon ?? '') : '';
 });
+/** Une entrée par EMPLACEMENT de talent : l'équipé, ou `undefined` pour une case vide.
+ *  ⚠️ Même parti pris qu'au chenil : des CASES, pas une liste. La liste obligeait à la
+ *  parcourir pour savoir ce qu'on portait, et retirer un talent faisait remonter les
+ *  suivants au lieu de laisser un trou visible. */
+const talentSlotsView = computed(() => {
+  // ⚠️ On prend les entrées ENRICHIES (`talentsView`) et non les instances brutes : la
+  // case doit afficher l'icône, le rang et le niveau, qui n'existent que là.
+  const eq = talentsView.value.filter((t) => t.equipped);
+  return Array.from({ length: talentSlots.value }, (_, i) => eq[i]);
+});
+/** Case de talent en cours d'édition, ou null. */
+const talPick = ref<number | null>(null);
+const talPickOpen = computed({
+  get: () => talPick.value !== null,
+  set: (v: boolean) => {
+    if (!v) talPick.value = null;
+  },
+});
+/** Ce que les talents ÉQUIPÉS donnent, en clair. ⚠️ Ce total n'était affiché nulle part :
+ *  on voyait bien chaque talent, jamais leur somme — or c'est elle qui entre en combat. */
+const talentSummary = computed(() => {
+  const e = talentFx.value;
+  const out: string[] = [];
+  const p = (n: number) => Math.round(n * 10) / 10;
+  if (e.damagePct) out.push(`⚔️ +${p(e.damagePct)} % dégâts`);
+  if (e.maxPvPct) out.push(`❤️ +${p(e.maxPvPct * 100)} % PV`);
+  if (e.critAdd) out.push(`🎯 +${p(e.critAdd * 100)} % crit`);
+  if (e.dodgeAdd) out.push(`💨 +${p(e.dodgeAdd * 100)} % esquive`);
+  if (e.dmgReduction) out.push(`🛡️ −${p(e.dmgReduction * 100)} % subis`);
+  if (e.lifesteal) out.push(`🩸 +${p(e.lifesteal * 100)} % vol de vie`);
+  if (e.thornsPct) out.push(`🌵 +${p(e.thornsPct * 100)} % épines`);
+  if (e.executePct) out.push(`🪓 +${p(e.executePct)} % exécution`);
+  if (e.ragePct) out.push(`💢 +${p(e.ragePct)} % rage`);
+  if (e.momentumPct) out.push(`🌀 +${p(e.momentumPct)} % élan`);
+  if (e.goldPct) out.push(`🪙 +${p(e.goldPct * 100)} % or`);
+  if (e.magicFindPct) out.push(`🍀 +${p(e.magicFindPct * 100)} % trouvaille`);
+  if (e.regenPct) out.push(`💧 +${p(e.regenPct * 100)} % régén`);
+  if (e.initiativePct) out.push(`⚡ +${p(e.initiativePct * 100)} % initiative`);
+  return out;
+});
+/** Talents proposés pour une case : tous, les plus utiles d'abord (même ordre que la liste). */
+const talChoices = computed(() => talentsView.value);
+/** Un talent déjà équipé sur une AUTRE case, ou un doublon de code déjà porté : le store
+ *  refuse les deux, autant le dire avant le clic plutôt qu'après. */
+function talBlocked(t: { id: string; inst: { code: string }; equipped: boolean }): string {
+  const i = talPick.value;
+  if (i === null) return '';
+  const here = talentSlotsView.value[i];
+  if (here?.id === t.id) return '';
+  if (t.equipped) return 'déjà équipé sur une autre case';
+  // Le store refuse deux talents du MÊME code : autant le dire avant le clic.
+  if (equippedTalents.value.some((x) => x.code === t.inst.code && x.id !== here?.id))
+    return 'tu portes déjà un talent de ce type';
+  return '';
+}
+/** Pose `id` sur la case en cours (ou la vide si `null`). */
+function pickTalent(id: string | null) {
+  const i = talPick.value;
+  if (i === null) return;
+  const here = talentSlotsView.value[i];
+  talPick.value = null;
+  withUid(async (uid) => {
+    // On libère d'abord la case : sans ça, `equipTalent` bute sur « emplacements pleins ».
+    if (here) await char.unequipTalent(uid, here.id);
+    if (id) {
+      const r = await char.equipTalent(uid, id, c.value.level.level);
+      if (r === 'dup')
+        $q.notify({ type: 'warning', message: 'Tu portes déjà un talent de ce type.' });
+      else if (r === 'full') $q.notify({ type: 'warning', message: 'Plus d’emplacement libre.' });
+    }
+  }, 'Impossible de changer ce talent.');
+}
+
 const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.value);
 // TALENTS CONSEILLÉS (tickets 9f2c6a42 / 08b10b7f) : la meilleure combinaison de talents
 // à équiper pour MAXIMISER la puissance (build réel = gear équipé + passif de voie).
@@ -6326,6 +6479,115 @@ button.pt-mini:active {
 }
 
 /* Talents */
+/* ── Talents : cases d'emplacement ──────────────────────────────────────
+   Même langage visuel que le chenil : des CASES, liseré à la rareté, une case
+   vide reste dessinée en pointillés pour qu'on voie ce qui reste à pourvoir. */
+.tslots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+.tslot {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+  border: 2px solid var(--rk, var(--line));
+  background: #1d1913;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.tslot.empty {
+  border-style: dashed;
+  border-color: var(--line);
+  background: transparent;
+}
+.ts-emo {
+  font-size: 24px;
+  line-height: 1;
+}
+.ts-plus {
+  font-size: 20px;
+  color: var(--dim);
+}
+/* La SOMME des talents équipés — elle n'était affichée nulle part. */
+.tbonus {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #1a1611;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.tb-h {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.tb-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tb-chip {
+  border: 1px solid #7bc86c;
+  color: #7bc86c;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.tb-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+/* Sélecteur de talent */
+.tpick {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  align-items: flex-start;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--rk, var(--line));
+  border-radius: 12px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  color: var(--text);
+  cursor: pointer;
+}
+.tpick.here {
+  box-shadow: 0 0 0 2px #7bc86c inset;
+}
+.tpick.off {
+  opacity: 0.45;
+  cursor: default;
+}
+.tp-emo {
+  font-size: 22px;
+}
+.tp-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.tp-name {
+  font-size: 13px;
+}
+.tp-eff {
+  font-size: 12px;
+  color: var(--dim);
+}
+.tp-off {
+  font-size: 11px;
+  color: #ff6a45;
+}
 .tal-slots {
   font-family: var(--font-display);
   font-size: 13px;

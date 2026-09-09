@@ -1479,6 +1479,29 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, { base: { ...base, garrison: next } });
   }
 
+  /** Remplace la garnison EN BLOC. ⚠️ Une seule écriture : l'écran par emplacements
+   *  échange un familier contre un autre (retirer + poster), et enchaîner deux `toggle`
+   *  ferait deux allers-retours réseau pour un seul geste — avec un état intermédiaire
+   *  visible où l'emplacement est vide. Le tri conserve l'ordre donné : c'est lui qui
+   *  décide de quelle case occupe quel familier à l'écran. */
+  async function setGarrison(userId: string, ids: string[], now: number, playerLevel: number) {
+    const cur = row.value;
+    if (!cur) return;
+    const base = baseOf(cur, now);
+    if (defenseLevel(base.defenses, 'kennel') <= 0)
+      throw new Error('Construis un Chenil pour poster des familiers.');
+    const owned = new Set(
+      cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT).map((it) => it.id),
+    );
+    // On ne garde que des familiers RÉELLEMENT possédés, sans doublon, dans la limite des
+    // places : l'écran ne doit pas pouvoir écrire un état que le combat refuserait.
+    const next = [...new Set(ids.filter((id) => owned.has(id)))].slice(
+      0,
+      garrisonSlots(playerLevel),
+    );
+    await persistOptimistic(userId, { base: { ...base, garrison: next } });
+  }
+
   /** Poste automatiquement les meilleurs défenseurs — le geste qu'on veut faire une
    *  fois, pas avant chaque siège. */
   async function autoAssignGarrison(userId: string, now: number, playerLevel: number) {
@@ -1719,6 +1742,7 @@ export const useCharacterStore = defineStore('character', () => {
     previewScavengers,
     collectScavengers,
     toggleGarrison,
+    setGarrison,
     autoAssignGarrison,
     healHero,
     garrisonedFamiliars,
