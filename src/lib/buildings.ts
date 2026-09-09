@@ -188,7 +188,12 @@ export const BUILDING_TYPES: BuildingType[] = [
     emoji: '⚙️',
     category: 'producer',
     resource: 'scrap',
-    prodPerHrPerLvl: 0.12, // niv.25 ≈ 3/h → ~54 🔩 / 18 h, soit environ une remise en état
+    prodPerHrPerLvl: 0.09, // ⚠️ 0,12 → 0,09 en v0.702 : ce n'est PAS un nerf sec mais un
+    // TROC. Les sièges suivant désormais le NOMBRE DE SÉANCES, ils rapportent de l'acier — et
+    // sans compensation la ferraille devenait aussi facile que l'or (mesuré : ratio 1,05 au
+    // niveau 20, sous le plancher de 1,1 que verrouille scrapEconomy.test). On a donc déplacé
+    // du débit de l'HORLOGE vers l'ENTRAÎNEMENT, à total ~constant pour un joueur régulier :
+    // la Fonderie tourne toute seule, elle devait céder la place à ce qui se mérite.
     buildGold: 850,
     unlockLevel: 10,
     unique: true,

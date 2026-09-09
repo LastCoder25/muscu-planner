@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { RAID, raidSize } from '@/lib/raid';
 import { defenseUpgradeScrap, defenseUpgradeCost, repairCost, DEFENSE_TYPES } from '@/lib/raid';
 import { HARVEST, travelOneWayMin } from '@/lib/expedition';
 import { BUILDING_TYPES } from '@/lib/buildings';
@@ -63,9 +64,21 @@ function sessionRecycled(L: number): number {
   }
   return sc / T;
 }
-/** Journée type : le butin recyclé de la séance (au prorata), UNE épave, la Fonderie. */
+/** L'acier d'une armée repoussée. ⚠️ AJOUTÉ en v0.702, sans quoi ce fichier mesurait une
+ *  économie qui n'existe plus : depuis que la fréquence des sièges suit le NOMBRE DE
+ *  SÉANCES, un siège tombe à chaque entraînement et laisse du métal. L'omettre aurait
+ *  laissé les deux invariants ci-dessous verts en ne regardant qu'une partie du débit —
+ *  précisément le « test troué » qu'on s'interdit. Deux factions sur trois en laissent
+ *  (les bêtes, jamais), et on ne fouille pas tous les corps avant péremption. */
+const siegeScrapPerDay = (L: number) => {
+  const corpses = raidSize(L);
+  const perSiege = corpses * Math.round(RAID.corpseScrapBase + L * RAID.corpseScrapPerLevel);
+  return SPORT_PER_DAY * (2 / 3) * perSiege * 0.7;
+};
+/** Journée type : le butin recyclé de la séance (au prorata), UNE épave, la Fonderie,
+ *  et l'acier du siège que cette séance a attiré. */
 const scrapPerDay = (L: number) =>
-  sessionRecycled(L) * SPORT_PER_DAY + wreckYield(L) + foundryPerDay(L);
+  sessionRecycled(L) * SPORT_PER_DAY + wreckYield(L) + foundryPerDay(L) + siegeScrapPerDay(L);
 const goldPerDay = (L: number) => dungeonGold(bestDungeon(L)) * 8 * SPORT_PER_DAY;
 /** Monter TOUTES les structures d'un cran : le rythme de croisière. */
 const cranScrap = (L: number) => defenseUpgradeScrap(L) * N_STRUCT;

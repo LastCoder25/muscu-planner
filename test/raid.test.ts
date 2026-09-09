@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { HARVEST } from '@/lib/expedition';
 import {
   rollRaid,
   raidSize,
@@ -318,11 +319,32 @@ describe('espionnage', () => {
 });
 
 describe('rythme', () => {
-  it('plus on s’entraîne, plus la base attire — dans des bornes connues', () => {
-    expect(raidIntervalMs(7)).toBe(RAID.intervalActiveMs);
-    expect(raidIntervalMs(0)).toBe(RAID.intervalIdleMs);
-    expect(raidIntervalMs(7)).toBeLessThan(raidIntervalMs(3));
-    expect(raidIntervalMs(3)).toBeLessThan(raidIntervalMs(0));
+  it('⚠️ UNE SÉANCE = UN SIÈGE, sans plafond au nombre de séances', () => {
+    // RÉÉCRIT en v0.702. L'ancienne version verrouillait le défaut : la fréquence lisait
+    // les JOURS ACTIFS, donc elle plafonnait à un siège / 24 h — quelqu'un qui s'entraîne
+    // trois fois par jour était au même régime que quelqu'un qui bouge une fois par jour.
+    const H = 3600_000;
+    const D = 24 * H;
+    expect(raidIntervalMs(7)).toBe(D); // un par jour
+    expect(raidIntervalMs(2)).toBe(3.5 * D); // deux séances, deux sièges
+    expect(raidIntervalMs(1)).toBe(7 * D); // une séance, un siège
+    // ⚠️ C'est ICI que l'ancien modèle s'arrêtait : au-delà de 7, il ne se passait plus rien.
+    expect(raidIntervalMs(14)).toBe(12 * H);
+    expect(raidIntervalMs(21)).toBe(8 * H);
+    expect(raidIntervalMs(14)).toBeLessThan(raidIntervalMs(7));
+  });
+
+  it('le rythme reste borné aux deux bouts — un siège doit rester un événement', () => {
+    // Plancher : même en s'entraînant sans arrêt, on ne descend pas sous 3 h.
+    expect(raidIntervalMs(500)).toBe(RAID.intervalFloorMs);
+    // Plafond : une seule séance ne déclenche pas un siège par heure ni l'inverse.
+    expect(raidIntervalMs(0.2)).toBe(RAID.intervalMaxMs);
+    expect(raidIntervalMs(0)).toBe(RAID.intervalIdleMs); // garde-fou, raidsEnabled a déjà coupé
+    for (const n of [0, 1, 2, 7, 14, 21, 100, 500]) {
+      const v = raidIntervalMs(n);
+      expect(v).toBeGreaterThanOrEqual(RAID.intervalFloorMs);
+      expect(Number.isFinite(v)).toBe(true);
+    }
   });
 });
 
@@ -336,7 +358,7 @@ describe('cycle de vie', () => {
   it('sans muraille, AUCUNE attaque — le système est opt-in', () => {
     const b = emptyBase(7, 0);
     expect(raidsEnabled(b, 7)).toBe(false);
-    const r = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 0 }, 10 * 24 * H);
+    const r = advanceBase(b, { playerLevel: 26, sessions7: 7, globalXp: 0 }, 10 * 24 * H);
     expect(r.detected).toBeNull();
     expect(r.dueRaid).toBeNull();
   });
@@ -344,9 +366,9 @@ describe('cycle de vie', () => {
   it('un joueur inactif n’est pas attaqué, et ne trouve PAS d’arriéré au retour', () => {
     // Règle fondatrice : on ne perd jamais pour ne pas avoir ouvert l'app.
     let b = base(0);
-    const ctx = { playerLevel: 26, activeDays7: 0, globalXp: 0 };
+    const ctx = { playerLevel: 26, sessions7: 0, globalXp: 0 };
     for (let d = 1; d <= 21; d++) b = advanceBase(b, ctx, d * 24 * H).base;
-    const back = advanceBase(b, { ...ctx, activeDays7: 5 }, 22 * 24 * H);
+    const back = advanceBase(b, { ...ctx, sessions7: 5 }, 22 * 24 * H);
     expect(back.dueRaid).toBeNull(); // rien n'a pu s'accumuler
   });
 
@@ -354,7 +376,7 @@ describe('cycle de vie', () => {
     const now = 0;
     let b = base(now);
     b.nextRaidAt = now + 10 * H;
-    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0 };
+    const ctx = { playerLevel: 26, sessions7: 7, globalXp: 0 };
     expect(advanceBase(b, ctx, now).detected).toBeNull(); // trop tôt
     const lead = scoutLeadMs(6);
     const det = advanceBase(b, ctx, b.nextRaidAt - lead + 1);
@@ -367,7 +389,7 @@ describe('cycle de vie', () => {
   it('un seul siège en attente à la fois', () => {
     let b = base(0);
     b.nextRaidAt = 0;
-    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0 };
+    const ctx = { playerLevel: 26, sessions7: 7, globalXp: 0 };
     b = advanceBase(b, ctx, 0).base;
     const first = b.raid;
     for (let d = 1; d < 10; d++) b = advanceBase(b, ctx, d * 24 * H).base;
@@ -377,13 +399,13 @@ describe('cycle de vie', () => {
   it('la production gelée se dégèle par une SÉANCE, ou toute seule', () => {
     const b = base(0);
     b.freeze = { until: 10 * H, atXp: 500 };
-    const still = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 500 }, H);
+    const still = advanceBase(b, { playerLevel: 26, sessions7: 7, globalXp: 500 }, H);
     expect(still.base.freeze).not.toBeNull();
     // Une séance de sport (XP en hausse) lève le gel immédiatement…
-    const bySport = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 620 }, H);
+    const bySport = advanceBase(b, { playerLevel: 26, sessions7: 7, globalXp: 620 }, H);
     expect(bySport.base.freeze).toBeNull();
     // …et l'échéance le lève de toute façon : l'app ne réclame jamais d'entraînement.
-    const byTime = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 500 }, 11 * H);
+    const byTime = advanceBase(b, { playerLevel: 26, sessions7: 7, globalXp: 500 }, 11 * H);
     expect(byTime.base.freeze).toBeNull();
   });
 
@@ -392,7 +414,7 @@ describe('cycle de vie', () => {
     const raid = rollRaid(555, 26, 0, 0);
     const rep = resolveRaid(baseCombatant(defs(40, 40), 40, hero(40)), raid, 0, true);
     expect(rep.held).toBe(true);
-    const { base: nb, damage } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, 0);
+    const { base: nb, damage } = applyRaidOutcome(b, raid, rep, { sessions7: 7, globalXp: 0 }, 0);
     expect(damage).toEqual({ stockStolen: false, damaged: [], freeze: false });
     expect(nb.freeze).toBeNull();
     expect(nb.raid).toBeNull();
@@ -406,7 +428,7 @@ describe('cycle de vie', () => {
       corpses: corpsesFrom(rollRaid(1, 26, 0, 0), { defeated: 2 } as never, 1),
       expiresAt: 5 * H,
     };
-    b = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 0 }, 6 * H).base;
+    b = advanceBase(b, { playerLevel: 26, sessions7: 7, globalXp: 0 }, 6 * H).base;
     expect(b.field).toBeNull();
   });
 });
@@ -637,7 +659,7 @@ describe('blessure du héros', () => {
       held: false,
       heroHome: true,
     };
-    const { base: nb } = applyRaidOutcome(b, raid, report, { activeDays7: 7, globalXp: 0 }, 0);
+    const { base: nb } = applyRaidOutcome(b, raid, report, { sessions7: 7, globalXp: 0 }, 0);
     expect(nb.wound).not.toBeNull();
     // Il part à l'INFIRMERIE : plus de donjon, de faille ni d'expédition le temps qu'il
     // se remette. (Un simple malus de dégâts avait été essayé : sans mordant, puisqu'on
@@ -647,11 +669,7 @@ describe('blessure du héros', () => {
     expect(woundRemainingMs(nb, 0)).toBeGreaterThan(0);
     // …et il se remet tout seul.
     expect(heroAvailable(nb, nb.wound!.until + 1)).toBe(true);
-    const healed = advanceBase(
-      nb,
-      { playerLevel: 26, activeDays7: 7, globalXp: 0 },
-      nb.wound!.until,
-    );
+    const healed = advanceBase(nb, { playerLevel: 26, sessions7: 7, globalXp: 0 }, nb.wound!.until);
     expect(healed.base.wound).toBeNull();
   });
 
@@ -661,7 +679,7 @@ describe('blessure du héros', () => {
     const raid = rollRaid(555, 26, 0, 0);
     const rep = resolveRaid(baseCombatant(defs(40, 40), 40, hero(40)), raid, 0, true);
     expect(rep.held).toBe(true);
-    const { base: nb } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, 0);
+    const { base: nb } = applyRaidOutcome(b, raid, rep, { sessions7: 7, globalXp: 0 }, 0);
     expect(nb.wound).toBeNull();
   });
 
@@ -672,7 +690,13 @@ describe('blessure du héros', () => {
     // plus probablement, ce qui le renverrait à l’infirmerie : la spirale, encore.
     for (const inf of [0, 1, 10, 50]) {
       expect(woundMsFor(inf)).toBeLessThanOrEqual(WOUND_MAX_MS);
-      expect(woundMsFor(inf)).toBeLessThan(RAID.intervalActiveMs);
+      // ⚠️ RÉÉCRIT en v0.702 : la référence n'est plus une constante (l'intervalle « actif »
+      // n'existe plus) mais le RYTHME RÉEL. Un siège toutes les 3 h avec 6 h d'infirmerie
+      // ferait manquer la défense suivante — la spirale que tout le système évite.
+      for (const sessions of [1, 7, 21, 500]) {
+        const iv = raidIntervalMs(sessions);
+        expect(woundMsFor(inf, iv)).toBeLessThan(iv);
+      }
     }
   });
 
@@ -846,5 +870,61 @@ describe('doublons de familiers : on ne cède que l’inemployable', () => {
   it('rien à vendre quand la réserve tient dans les places', () => {
     expect(duplicateFamiliars([fam('a', 'damage_pct', 10)], L, {})).toEqual([]);
     expect(duplicateFamiliars([], L, {})).toEqual([]);
+  });
+});
+
+describe('🔩 l’acier d’une armée en déroute (v0.702)', () => {
+  const corpse = (level: number, champion = false) => ({
+    id: 'c' + level + (champion ? 'x' : ''),
+    level,
+    champion,
+    looted: false,
+    species: 'X',
+    emoji: '💀',
+    at: 0,
+  });
+  const loot = (faction: 'bandits' | 'betes' | 'mortsvivants', n = 8, L = 40) =>
+    lootCorpses(
+      Array.from({ length: n }, (_, i) => corpse(L, i === n - 1)) as never,
+      faction,
+      L,
+      7,
+    );
+
+  it('⚠️ les BÊTES n’en laissent aucune — on ne démonte pas un loup', () => {
+    // Ceci PRÉCISE la règle « les cadavres ne donnent jamais de ferraille » au lieu de la
+    // renier : son motif était l'absurdité d'en trouver sur un animal. Une troupe en armes,
+    // elle, laisse ses lames et ses plaques.
+    expect(loot('betes').scrap).toBe(0);
+    expect(loot('bandits').scrap).toBeGreaterThan(0);
+    expect(loot('mortsvivants').scrap).toBeGreaterThan(0);
+  });
+
+  it('⚠️ l’ÉPAVE reste la source de POINTE — le siège complète, il ne remplace pas', () => {
+    // Une épave coûte un geste (choisir, envoyer, attendre le trajet) ; un siège vient à
+    // toi. Le premier doit donc rester le plus payant par événement, comme la Mine d'or
+    // face aux expéditions.
+    const L = 40;
+    const parSiege = loot('bandits', 12, L).scrap;
+    const parEpave = Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * 1.5);
+    expect(parSiege).toBeLessThan(parEpave * 3);
+    expect(parSiege).toBeGreaterThan(parEpave / 4); // ni dérisoire…
+  });
+
+  it('la récolte suit le NIVEAU du corps, et le champion pèse plus', () => {
+    expect(loot('bandits', 6, 60).scrap).toBeGreaterThan(loot('bandits', 6, 20).scrap);
+    const sansChamp = lootCorpses(
+      Array.from({ length: 4 }, () => corpse(40)) as never,
+      'bandits',
+      40,
+      7,
+    ).scrap;
+    const avecChamp = lootCorpses(
+      [corpse(40), corpse(40), corpse(40), corpse(40, true)] as never,
+      'bandits',
+      40,
+      7,
+    ).scrap;
+    expect(avecChamp).toBeGreaterThan(sansChamp);
   });
 });

@@ -4605,14 +4605,17 @@ const baseAlert = computed(
   () => !!baseRaid.value || baseCorpses.value > 0 || baseFrozen.value || heroWounded.value,
 );
 
-/** Jours RÉELLEMENT actifs sur les 7 derniers — c'est ce qui règle la fréquence des
- *  sièges. « Plus tu t'entraînes, plus ta base attire » : un siège étant un robinet
- *  (butin, cadavres, ferraille), plus d'activité = plus de contenu, jamais une punition. */
-const activeDays7 = computed(() => {
+/** SÉANCES des 7 derniers jours — c'est ce qui règle la fréquence des sièges : une
+ *  séance, un siège (`raidIntervalMs`).
+ *
+ *  ⚠️ On compte les SÉANCES, plus les JOURS DISTINCTS. L'ancien calcul plafonnait à 7 :
+ *  quelqu'un qui s'entraîne trois fois par jour était au même régime que quelqu'un qui
+ *  bouge une fois par jour, et tout son volume supplémentaire ne lui rapportait aucun
+ *  contenu. Le siège étant un ROBINET (butin, cadavres, ferraille), « plus actif = plus
+ *  attaqué » se lit comme plus de jeu, jamais comme une punition de l'entraînement. */
+const sessions7 = computed(() => {
   const from = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
-  const days = new Set<string>();
-  for (const e of progress.sportEntries.value) if (e.date && e.date >= from) days.add(e.date);
-  return days.size;
+  return progress.sportEntries.value.filter((e) => e.date && e.date >= from).length;
 });
 
 let baseBusy = false;
@@ -4623,7 +4626,7 @@ async function baseLifecycle() {
   try {
     const r = await char.baseTick(uid, Date.now(), {
       playerLevel: c.value.level.level,
-      activeDays7: activeDays7.value,
+      sessions7: sessions7.value,
       // XP de fond : strictement croissante, donc « a-t-il fait du sport depuis ? » se lit
       // d'une simple comparaison — c'est ce qui dégèle la production.
       globalXp: progress.energyEarned.value,

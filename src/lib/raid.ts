@@ -280,6 +280,8 @@ export function turretCount(level: number): number {
 // ── Constantes de dimensionnement ──
 // Calibration RELATIVE au combattant de référence du niveau (`refFighter`), comme le
 // contenu procédural : pas de polynôme à re-fitter quand les stats de base bougent.
+const WEEK_MS = 7 * 24 * 3600_000;
+
 export const RAID = {
   // Composition
   minGroups: 3,
@@ -348,8 +350,23 @@ export const RAID = {
   // Rythme : plus tu t'entraînes, plus ta base prospère — et plus elle attire. Un siège
   // étant un ROBINET (butin, cadavres), « plus actif = plus attaqué » se lit comme plus
   // de contenu, jamais comme une punition de l'entraînement.
-  intervalActiveMs: 24 * 3600_000, // 7 jours actifs sur 7
-  intervalIdleMs: 72 * 3600_000, // 0 jour actif
+  // ⚠️ UNE SÉANCE = UN SIÈGE (v0.702). Avant, la fréquence lisait le nombre de JOURS
+  // ACTIFS sur 7 — donc elle PLAFONNAIT : quelqu'un qui s'entraîne trois fois par jour
+  // était au même régime (un siège / 24 h) que quelqu'un qui bouge une fois par jour.
+  // Tout le volume au-delà du premier effort quotidien ne rapportait aucun contenu.
+  // Désormais l'intervalle est `semaine / nombre de séances` : 2 séances → 2 sièges,
+  // 7 → un par jour, 21 → un toutes les 8 h. Le siège étant un ROBINET (butin, cadavres,
+  // ferraille), « plus actif = plus attaqué » se lit comme plus de jeu, jamais comme une
+  // punition de l'entraînement.
+  // 🔩 Acier laissé par un corps ARMÉ. ⚠️ Calibré sur le BESOIN mesuré (combler ce que
+  // les sources bornées par l'horloge ne peuvent pas suivre quand les sièges se
+  // multiplient), et non au jugé : au premier réglage, un siège rendait 585 🔩 contre 62
+  // pour une épave — il aurait détrôné la source de pointe, que le test verrouille.
+  corpseScrapBase: 0,
+  corpseScrapPerLevel: 0.16,
+  intervalFloorMs: 3 * 3600_000, // plancher : en deçà, un siège n'est plus un événement
+  intervalMaxMs: 7 * 24 * 3600_000, // 1 séance par semaine → 1 siège par semaine
+  intervalIdleMs: 72 * 3600_000, // repli quand on ne sait rien de l'activité
   intervalJitter: 0.25,
   freezeMs: 24 * 3600_000, // dégel automatique (le sport est le raccourci, pas la rançon)
   woundMs: 6 * 3600_000, // convalescence de base après une défaite (abrégée par l’Infirmerie)
@@ -553,12 +570,15 @@ export function rollRaid(
 // ── Rythme ──
 
 /** Délai jusqu'au prochain siège, selon l'ACTIVITÉ SPORTIVE (jours actifs sur 7). */
-export function raidIntervalMs(activeDays7: number, rng?: () => number): number {
-  const t = Math.min(1, Math.max(0, activeDays7 / 7));
-  const base = RAID.intervalIdleMs + (RAID.intervalActiveMs - RAID.intervalIdleMs) * t;
-  if (!rng) return Math.round(base);
+export function raidIntervalMs(sessions7: number, rng?: () => number): number {
+  const s = Math.max(0, sessions7);
+  // 0 séance → la garde `raidsEnabled` a déjà coupé les sièges ; on rend l'échéance
+  // lointaine par sécurité plutôt que d'improviser une division par zéro.
+  const base = s <= 0 ? RAID.intervalIdleMs : WEEK_MS / s;
+  const clamped = Math.min(RAID.intervalMaxMs, Math.max(RAID.intervalFloorMs, base));
+  if (!rng) return Math.round(clamped);
   const j = 1 + (rng() * 2 - 1) * RAID.intervalJitter;
-  return Math.round(base * j);
+  return Math.round(clamped * j);
 }
 
 // ── Espionnage ──
@@ -707,6 +727,8 @@ export const FATIGUE_MS = 6 * 3600_000;
  *  deux sièges (24 h au plus serré) : un héros encore alité au siège suivant ne pourrait
  *  pas défendre, la défaite entraînerait la défaite. */
 export const WOUND_MAX_MS = 8 * 3600_000;
+/** Part maximale de l'intervalle entre deux sièges que la convalescence peut occuper. */
+export const WOUND_INTERVAL_SHARE = 0.4;
 
 /** Part de son effet qu'un familier apporte au MUR.
  *  ⚠️ Pas 100 % : mesuré sur une garnison réelle de trois légendaires (loup +23,4 %,
@@ -871,11 +893,18 @@ export function woundRemainingMs(base: BaseState | null | undefined, now: number
 /** Convalescence. L'Infirmerie l'abrège — c'est tout son intérêt. ⚠️ Bornée à
  *  `WOUND_MAX_MS` : elle doit rester COURTE devant l'intervalle entre deux sièges, sinon
  *  un héros encore alité manquerait la défense suivante et la défaite s'auto-entretiendrait. */
-export function woundMsFor(infirmaryLevel: number): number {
-  return Math.min(
+export function woundMsFor(infirmaryLevel: number, intervalMs?: number): number {
+  const base = Math.min(
     WOUND_MAX_MS,
     Math.round(RAID.woundMs * Math.max(0.2, 1 - Math.max(0, infirmaryLevel) * 0.06)),
   );
+  // ⚠️ BORNÉE PAR LE RYTHME RÉEL DES SIÈGES (v0.702). Tant que la fréquence était plafonnée
+  // à un siège / 24 h, une convalescence de 6-8 h restait courte devant l'intervalle. Depuis
+  // qu'elle suit le nombre de SÉANCES, l'intervalle descend à 3 h — un héros blessé
+  // manquerait alors la défense suivante, puis la suivante : très exactement la spirale que
+  // tout le système de siège s'attache à éviter. La convalescence ne peut donc jamais
+  // dépasser une fraction de l'intervalle courant.
+  return intervalMs ? Math.min(base, Math.round(intervalMs * WOUND_INTERVAL_SHARE)) : base;
 }
 /** Soins d'urgence : on peut toujours le remettre sur pied tout de suite, en ferraille.
  *  ∝ au repos qu'il reste → écourter la fin coûte une bricole, sauter toute la
@@ -1017,6 +1046,8 @@ export interface CorpseLoot {
   summonStones: number;
   /** 🗝️ clés du Labyrinthe — ce que traînent les BÊTES venues des profondeurs. */
   keys: number;
+  /** 🔩 ferraille — l'ACIER d'une armée en déroute (voir `lootCorpses`). */
+  scrap: number;
   items: Omit<Item, 'id'>[];
 }
 
@@ -1032,7 +1063,7 @@ export function lootCorpses(
   lootPct = 0,
 ): CorpseLoot {
   const rng = mulberry32((seed ^ 0x2545f491) >>> 0 || 1);
-  const loot: CorpseLoot = { gold: 0, summonStones: 0, keys: 0, items: [] };
+  const loot: CorpseLoot = { gold: 0, summonStones: 0, keys: 0, scrap: 0, items: [] };
   // ⚠️ DEVISES VIVANTES UNIQUEMENT. Les fossoyeurs payaient en fragments 🧩 et poussière
   // d'encre 🖋️ pour deux factions sur trois — or plus aucune fonction ne les dépense
   // depuis le retrait des infusions de grade. Deux tiers du butin de siège étaient donc
@@ -1049,6 +1080,21 @@ export function lootCorpses(
     else keyOdds += (0.05 + L * 0.004) * mult; // bêtes : la clé est RARE, on cumule les chances
     // Un peu d'or partout : même une bête traîne ce qu'elle a pris au village.
     if (faction !== 'bandits') loot.gold += Math.round((5 + L * 1.8) * mult);
+    // 🔩 L'ACIER D'UNE ARMÉE (v0.702). ⚠️ Ceci PRÉCISE, sans la renier, la règle « les
+    // cadavres ne donnent jamais de ferraille » : son motif était qu'on n'en trouve pas
+    // sur un LOUP. Une troupe humaine ou un mort-vivant en armes, si — lames, plaques,
+    // pièces de siège. Les BÊTES n'en laissent donc toujours aucune.
+    //
+    // Sans cette source, le passage à « une séance = un siège » (v0.702) était
+    // INTENABLE, et c'est mesuré : ~93 % de la ferraille vient d'endroits bornés par
+    // l'HORLOGE (les épaves, une expédition à la fois ; la Fonderie, à l'heure) et non
+    // par l'entraînement. À 21 séances par semaine, les réparations dépassaient les
+    // rentrées et le bilan devenait NÉGATIF dès le niveau 40 : on ne pouvait plus
+    // réparer, donc plus rien monter. Le siège devient le maillon qui fait suivre le
+    // métal au rythme du sport. ⚠️ Calibré pour rester SOUS l'épave par événement :
+    // elle demeure la source de pointe, celle qui coûte un geste.
+    if (faction !== 'betes')
+      loot.scrap += Math.round((RAID.corpseScrapBase + L * RAID.corpseScrapPerLevel) * mult);
 
     const drop = rollDrop(rng, {
       cleared: true,
@@ -1094,8 +1140,8 @@ export function emptyBase(seed: number, now: number): BaseState {
 /** Les sièges sont OPT-IN et réservés à un joueur qui joue : il faut une MURAILLE et une
  *  activité sportive récente. Un joueur revenu après trois semaines ne trouve donc pas
  *  une armée sur le pas de sa porte. */
-export function raidsEnabled(base: BaseState, activeDays7: number): boolean {
-  return ownedLevel(base.defenses, 'wall') > 0 && activeDays7 >= 1;
+export function raidsEnabled(base: BaseState, sessions7: number): boolean {
+  return ownedLevel(base.defenses, 'wall') > 0 && sessions7 >= 1;
 }
 
 export interface BaseTickResult {
@@ -1110,7 +1156,7 @@ export interface BaseTickResult {
  *  là et ce que vaut la garnison ; il le signale via `dueRaid`. */
 export function advanceBase(
   base: BaseState,
-  ctx: { playerLevel: number; activeDays7: number; globalXp: number },
+  ctx: { playerLevel: number; sessions7: number; globalXp: number },
   now: number,
 ): BaseTickResult {
   let b: BaseState = { ...base };
@@ -1135,7 +1181,7 @@ export function advanceBase(
     changed = true;
   }
 
-  if (!raidsEnabled(b, ctx.activeDays7)) {
+  if (!raidsEnabled(b, ctx.sessions7)) {
     // Pas de muraille (ou joueur inactif) : on repousse l'échéance pour ne JAMAIS
     // accumuler un arriéré pendant l'absence.
     if (b.nextRaidAt < now) {
@@ -1150,7 +1196,7 @@ export function advanceBase(
   // debout, on la RAPPROCHE à l'intervalle qui correspond vraiment au joueur — sinon un
   // joueur assidu venait de bâtir son enceinte et lisait « prochaine alerte dans 70 h »,
   // ce qui n'a aucun sens. On ne repousse jamais, on ne fait que rapprocher.
-  const due = now + raidIntervalMs(ctx.activeDays7);
+  const due = now + raidIntervalMs(ctx.sessions7);
   if (!b.raid && b.nextRaidAt > due) {
     b = { ...b, nextRaidAt: due };
     changed = true;
@@ -1177,7 +1223,7 @@ export function applyRaidOutcome(
   base: BaseState,
   raid: Raid,
   report: RaidReport,
-  ctx: { activeDays7: number; globalXp: number },
+  ctx: { sessions7: number; globalXp: number },
   now: number,
 ): { base: BaseState; damage: RaidDamage } {
   const dmg = raidDamage(report);
@@ -1196,9 +1242,13 @@ export function applyRaidOutcome(
       // gagnant (il fait fortement monter les chances de tenir, et ne paie que si ça rate).
       wound:
         !report.held && report.heroHome
-          ? { until: now + woundMsFor(defenseLevel(base.defenses, 'infirmary')) }
+          ? {
+              until:
+                now +
+                woundMsFor(defenseLevel(base.defenses, 'infirmary'), raidIntervalMs(ctx.sessions7)),
+            }
           : (base.wound ?? null),
-      nextRaidAt: now + raidIntervalMs(ctx.activeDays7, rng),
+      nextRaidAt: now + raidIntervalMs(ctx.sessions7, rng),
       field: corpses.length ? { corpses, expiresAt: now + SCAV.fieldMs } : null,
       freeze: dmg.freeze ? { until: now + RAID.freezeMs, atXp: ctx.globalXp } : null,
     },

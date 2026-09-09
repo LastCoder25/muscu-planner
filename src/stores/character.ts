@@ -1351,7 +1351,7 @@ export const useCharacterStore = defineStore('character', () => {
   async function baseTick(
     userId: string,
     now: number,
-    ctx: { playerLevel: number; activeDays7: number; globalXp: number; hero: Combatant | null },
+    ctx: { playerLevel: number; sessions7: number; globalXp: number; hero: Combatant | null },
   ): Promise<{ detected: Raid | null; report: RaidReport | null }> {
     const cur = row.value;
     if (!cur) return { detected: null, report: null };
@@ -1591,6 +1591,9 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold + loot.gold,
       summon_stones: cur.summon_stones + loot.summonStones,
       keys: cur.keys + loot.keys,
+      // 🔩 L'acier d'une armée en déroute — c'est lui qui fait suivre la ferraille au
+      // rythme des séances depuis que la fréquence des sièges en dépend (v0.702).
+      scrap: cur.scrap + loot.scrap,
       inventory: drops.length ? [...cur.inventory, ...drops] : cur.inventory,
       set_pieces_seen: drops.length
         ? mergeSetSeen(cur.set_pieces_seen, drops)
