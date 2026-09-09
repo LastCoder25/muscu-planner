@@ -94,6 +94,7 @@ import {
   garrisonBonus,
   autoGarrison,
   garrisonSlots,
+  dedupeGarrisonRoles,
   fatigueMsFor,
   healCost,
   woundRemainingMs,
@@ -1538,12 +1539,17 @@ export const useCharacterStore = defineStore('character', () => {
     const owned = new Set(
       cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT).map((it) => it.id),
     );
-    // On ne garde que des familiers RÉELLEMENT possédés, sans doublon, dans la limite des
-    // places : l'écran ne doit pas pouvoir écrire un état que le combat refuserait.
-    const next = [...new Set(ids.filter((id) => owned.has(id)))].slice(
-      0,
-      garrisonSlots(playerLevel),
-    );
+    // On ne garde que des familiers RÉELLEMENT possédés, un seul par RÔLE, dans la limite
+    // des places. ⚠️ Le dédoublonnage par rôle passe par la lib (`dedupeGarrisonRoles`),
+    // la même que le combat : l'écran ne doit jamais pouvoir écrire un état que le mur
+    // arbitrerait autrement.
+    const byId = new Map(cur.inventory.map((it) => [it.id, it]));
+    const voulus = [...new Set(ids.filter((id) => owned.has(id)))]
+      .map((id) => byId.get(id))
+      .filter((it): it is Item => !!it);
+    const next = dedupeGarrisonRoles(voulus)
+      .slice(0, garrisonSlots(playerLevel))
+      .map((it) => it.id);
     await persistOptimistic(userId, { base: { ...base, garrison: next } });
   }
 

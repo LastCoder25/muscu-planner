@@ -536,12 +536,10 @@
         >
           Laisser ce poste vide
         </button>
-        <p v-if="!famChoices.length" class="dim-note">
-          {{
-            famPoolRaw.length
-              ? 'Tous tes familiers sont déjà postés — libère un poste pour en déplacer un.'
-              : 'Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.'
-          }}
+        <p v-if="!famChoices.length" class="dim-note">{{ famEmptyNote }}</p>
+        <p v-else-if="famRoleHidden" class="dim-note">
+          ⚠️ Un rôle par poste : {{ famRoleHidden }} de tes familiers n'apparaissent pas, leur
+          spécialité est déjà tenue au mur.
         </p>
         <button
           v-for="f in famChoices"
@@ -753,10 +751,43 @@ const famPickOpen = computed({
 const famChoices = computed(() => {
   const here = famPick.value === null ? undefined : garrisonSlotsView.value[famPick.value]?.id;
   const pris = new Set(garrisonIds.value.filter((id) => id !== here));
+  // ⚠️ ET on écarte les RÔLES déjà tenus par une autre case : deux loups tombent dans le
+  // même canal, déjà plafonné — le second n'apporterait qu'un reliquat en occupant une
+  // place. La lib arbitre pareil ; l'écran ne fait que ne pas proposer l'impossible.
+  const roles = new Set(
+    famPoolRaw.value
+      .filter((f) => pris.has(f.id))
+      .map((f) => GARRISON_ROLE[f.effect.type])
+      .filter(Boolean),
+  );
   return famPoolRaw.value
-    .filter((f) => !pris.has(f.id))
+    .filter((f) => !pris.has(f.id) && !roles.has(GARRISON_ROLE[f.effect.type]))
     .sort((a, b) => famWeight(b) - famWeight(a));
 });
+/** Combien de familiers le filtre par RÔLE écarte — l'écran doit dire POURQUOI un
+ *  familier de la réserve n'est pas proposé, sinon la liste a juste l'air incomplète. */
+const famRoleHidden = computed(() => {
+  const here = famPick.value === null ? undefined : garrisonSlotsView.value[famPick.value]?.id;
+  const pris = new Set(garrisonIds.value.filter((id) => id !== here));
+  const roles = new Set(
+    famPoolRaw.value
+      .filter((f) => pris.has(f.id))
+      .map((f) => GARRISON_ROLE[f.effect.type])
+      .filter(Boolean),
+  );
+  return famPoolRaw.value.filter((f) => !pris.has(f.id) && roles.has(GARRISON_ROLE[f.effect.type]))
+    .length;
+});
+/** Les trois raisons d'une liste vide, distinguées : rien en réserve, tout posté, ou tous
+ *  les rôles déjà tenus. « Aucun choix » sans motif se lit comme un bug. */
+const famEmptyNote = computed(() => {
+  if (!famPoolRaw.value.length)
+    return 'Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.';
+  if (famRoleHidden.value)
+    return 'Un rôle par poste : les familiers qui restent ont tous une spécialité déjà tenue au mur. Varie les espèces pour couvrir un rôle de plus.';
+  return 'Tous tes familiers sont déjà postés — libère un poste pour en déplacer un.';
+});
+
 /** Place `id` sur la case en cours (ou la vide si `null`). Une SEULE écriture : échanger
  *  deux familiers via deux bascules laisserait un état intermédiaire vide à l'écran. */
 function pickFamiliar(id: string | null) {

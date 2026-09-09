@@ -769,6 +769,38 @@ export function garrisonLevel(fam: Item, kennelLevel: number): number {
   return Math.min(famLevel(fam.defXp, 'def'), Math.max(0, kennelLevel));
 }
 
+/** Valeur RÉELLE qu'un familier apporte au mur : son effet × son dressage DÉFENSIF.
+ *  Une seule lecture, partagée par le tri automatique et le dédoublonnage — sans quoi
+ *  « le meilleur » ne voudrait pas dire la même chose aux deux endroits. */
+function defWeight(f: Item): number {
+  return f.effect.value * famDefMult(famLevel(f.defXp));
+}
+
+/** ⚠️ UN SEUL FAMILIER PAR RÔLE AU MUR — on garde le meilleur de chaque, on écarte les
+ *  copies. Deux loups, ce n'est pas deux fois la même bataille : leurs bonus tombent dans
+ *  le MÊME canal (`GARRISON_ROLE`), déjà plafonné (`GARRISON_CAP`), donc le second
+ *  n'apportait qu'un reliquat tout en occupant une place qu'un autre rôle aurait remplie.
+ *  Une garnison est un ensemble de rôles COMPLÉMENTAIRES : dégâts, solidité, encaisse,
+ *  souffle, renseignement, fouille.
+ *
+ *  ⚠️ Le tri se fait sur la VALEUR, pas sur l'ordre reçu : l'appelant passe souvent les
+ *  familiers dans l'ordre du SAC (`garrisonedFamiliars` filtre l'inventaire) — garder
+ *  « le premier » y désignerait un familier au hasard.
+ *
+ *  Appliqué au CALCUL DU COMBAT autant qu'à l'écriture : une garnison rangée par une
+ *  version antérieure se soigne donc toute seule, sans migration — même politique que les
+ *  POI périmés d'`advanceWorld`. */
+export function dedupeGarrisonRoles(familiars: Item[]): Item[] {
+  const best = new Map<GarrisonRole, Item>();
+  for (const f of familiars) {
+    const role = GARRISON_ROLE[f.effect.type];
+    if (!role) continue;
+    const cur = best.get(role);
+    if (!cur || defWeight(f) > defWeight(cur)) best.set(role, f);
+  }
+  return [...best.values()].sort((a, b) => defWeight(b) - defWeight(a));
+}
+
 /** Bonus de la garnison. Chaque familier apporte SON effet, amplifié par son dressage
  *  DÉFENSIF (jamais offensif : les deux carrières sont contextuelles), et réduit de
  *  moitié s'il est encore fatigué. */
@@ -780,9 +812,10 @@ export function garrisonBonus(
 ): GarrisonBonus {
   const out: GarrisonBonus = {};
   if (kennelLevel <= 0) return out;
-  for (const f of familiars.slice(0, Math.max(1, slots))) {
-    const role = GARRISON_ROLE[f.effect.type];
-    if (!role) continue;
+  // ⚠️ DÉDOUBLONNÉ AVANT la coupe : la place qu'une copie écartée libère revient à un
+  // autre rôle, elle ne se perd pas.
+  for (const f of dedupeGarrisonRoles(familiars).slice(0, Math.max(1, slots))) {
+    const role = GARRISON_ROLE[f.effect.type]!;
     const mult =
       GARRISON_K *
       famDefMult(garrisonLevel(f, kennelLevel)) *
@@ -811,13 +844,8 @@ export function garrisonBonus(
 /** Choisit automatiquement les meilleurs défenseurs — le geste qu'on veut faire une
  *  fois, pas trois fois par siège. On classe par la valeur RÉELLE apportée au mur. */
 export function autoGarrison(familiars: Item[], slots: number = GARRISON_SLOTS): string[] {
-  return [...familiars]
-    .filter((f) => GARRISON_ROLE[f.effect.type])
-    .sort(
-      (a, b) =>
-        b.effect.value * famDefMult(famLevel(b.defXp)) -
-        a.effect.value * famDefMult(famLevel(a.defXp)),
-    )
+  // Un rôle par place : `dedupeGarrisonRoles` classe déjà par valeur réelle au mur.
+  return dedupeGarrisonRoles(familiars)
     .slice(0, slots)
     .map((f) => f.id);
 }

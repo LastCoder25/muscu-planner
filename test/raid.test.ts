@@ -32,6 +32,7 @@ import {
   duplicateFamiliars,
   garrisonSlots,
   autoGarrison,
+  dedupeGarrisonRoles,
   fatigueMsFor,
   woundMsFor,
   woundRemainingMs,
@@ -640,16 +641,84 @@ describe('chenil : la garnison', () => {
   });
 
   it('l’assignation automatique prend les meilleurs, dans la limite des places', () => {
+    // ⚠️ Réécrit en v0.719 : le pool d'origine était fait de TROIS familiers à dégâts,
+    // dont deux étaient postés côte à côte. C'est précisément ce que la règle « un rôle
+    // par poste » interdit désormais — le test verrouillait le défaut.
     const pool = [
       fam('faible', 'damage_pct', 5),
       fam('fort', 'damage_pct', 40),
-      fam('moyen', 'damage_pct', 20),
-      fam('autre', 'max_pv_pct', 30),
+      fam('cerf', 'max_pv_pct', 30),
+      fam('ours', 'dmg_reduction_pct', 12),
     ];
     const picked = autoGarrison(pool);
     expect(picked).toHaveLength(GARRISON_SLOTS);
     expect(picked[0]).toBe('fort');
     expect(picked).not.toContain('faible');
+  });
+
+  /** ⚠️ UN SEUL FAMILIER PAR RÔLE AU MUR (v0.719, demandé par l'utilisateur : « normalement
+   *  c'est un max de chaque type »). Deux loups tombent dans le MÊME canal, déjà plafonné
+   *  par GARRISON_CAP : le second n'apportait qu'un reliquat en occupant une place qu'un
+   *  autre rôle aurait remplie. La garnison est un jeu de rôles complémentaires. */
+  describe('un seul familier par rôle', () => {
+    it('deux loups ne peuvent pas tenir le mur ensemble — on garde le meilleur', () => {
+      const gardes = dedupeGarrisonRoles([
+        fam('loup1', 'damage_pct', 12),
+        fam('loup2', 'damage_pct', 30),
+        fam('cerf', 'max_pv_pct', 20),
+      ]);
+      expect(gardes.map((f) => f.id)).toEqual(['loup2', 'cerf']);
+    });
+
+    it('⚠️ « le meilleur » se juge sur l’effet ET le dressage, pas sur l’ordre reçu', () => {
+      // L'appelant passe les familiers dans l'ordre du SAC : garder « le premier »
+      // désignerait un familier au hasard. Ici le 2e a un effet plus FAIBLE mais un
+      // dressage qui le rattrape largement.
+      const gardes = dedupeGarrisonRoles([
+        fam('brut', 'damage_pct', 20, 0),
+        fam('dresse', 'damage_pct', 14, famXpForLevel(20)),
+      ]);
+      expect(gardes.map((f) => f.id)).toEqual(['dresse']);
+    });
+
+    it('⚠️ la place libérée par une copie revient à un AUTRE rôle, elle ne se perd pas', () => {
+      const bonus = garrisonBonus(
+        [
+          fam('loup1', 'damage_pct', 30),
+          fam('loup2', 'damage_pct', 30),
+          fam('cerf', 'max_pv_pct', 30),
+        ],
+        0,
+        20,
+        2, // deux places seulement
+      );
+      // Dédoublonner AVANT la coupe : sinon les deux loups mangeaient les deux places et
+      // le cerf, seul autre rôle disponible, restait dehors.
+      expect(bonus.maxPvPct).toBeGreaterThan(0);
+    });
+
+    it('le combat lui-même l’arbitre → une garnison ancienne se soigne sans migration', () => {
+      const deux = garrisonBonus(
+        [fam('loup1', 'damage_pct', 30), fam('loup2', 'damage_pct', 30)],
+        0,
+        20,
+        4,
+      );
+      const un = garrisonBonus([fam('loup1', 'damage_pct', 30)], 0, 20, 4);
+      expect(deux.damagePct).toBeCloseTo(un.damagePct!, 6);
+    });
+
+    it('les rôles DIFFÉRENTS cohabitent toujours — ce n’est pas un plafond déguisé', () => {
+      const gardes = dedupeGarrisonRoles([
+        fam('loup', 'damage_pct', 10),
+        fam('cerf', 'max_pv_pct', 10),
+        fam('ours', 'dmg_reduction_pct', 10),
+        fam('sala', 'lifesteal_pct', 10),
+        fam('faucon', 'crit_pct', 10),
+        fam('marmotte', 'gold_pct', 10),
+      ]);
+      expect(gardes).toHaveLength(6);
+    });
   });
 });
 
