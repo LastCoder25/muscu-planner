@@ -5,6 +5,7 @@ import {
   caravanHurtMs,
   caravanLegMin,
   caravanSlots,
+  poiOffers,
   caravanSlowFor,
   caravanWages,
   escortCombatant,
@@ -347,5 +348,31 @@ describe('⚠️ un convoi VOYAGE comme le héros', () => {
     for (let i = 1; i <= 10; i++) {
       expect(d((van.midAt * i) / 10)).toBeLessThan(d((van.midAt * (i - 1)) / 10));
     }
+  });
+});
+
+describe('⚠️ un convoi part SANS le héros', () => {
+  // Le panneau d'envoi de la carte était entièrement gardé par « le héros est
+  // disponible » : dès qu'il partait en expédition, on ne pouvait plus ni sélectionner
+  // un lieu, ni lancer un convoi. C'est l'exact inverse de l'intention — un convoi est
+  // une voie PARALLÈLE, sa raison d'être est de jouer quand le héros ne peut pas.
+  const recolte = poi({ type: 'well' });
+  const combat = poi({ type: 'camp' });
+
+  it('⚠️ l’offre de convoi NE DÉPEND PAS de la disponibilité du héros', () => {
+    for (const heroAway of [true, false]) {
+      expect(poiOffers(recolte, { heroAway, comptoirLevel: 3 }).caravan, `héros absent=${heroAway}`)
+        .toBe(true);
+    }
+  });
+
+  it('le HÉROS, lui, ne peut pas être à deux endroits', () => {
+    expect(poiOffers(recolte, { heroAway: false, comptoirLevel: 3 }).hero).toBe(true);
+    expect(poiOffers(recolte, { heroAway: true, comptoirLevel: 3 }).hero).toBe(false);
+  });
+
+  it('un convoi n’exploite que les lieux de RÉCOLTE, et exige un Comptoir', () => {
+    expect(poiOffers(combat, { heroAway: false, comptoirLevel: 3 }).caravan).toBe(false);
+    expect(poiOffers(recolte, { heroAway: false, comptoirLevel: 0 }).caravan).toBe(false);
   });
 });

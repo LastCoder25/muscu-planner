@@ -198,7 +198,7 @@
       </div>
     </div>
     <transition name="sheet">
-      <div v-if="selected && !active" class="sheet">
+      <div v-if="selected" class="sheet">
         <div class="sh-head">
           <span class="sh-emo">{{ POI_EMO[selected.type] }}</span>
           <div class="sh-main">
@@ -209,25 +209,32 @@
           </div>
           <button class="sh-x" @click="selected = null">✕</button>
         </div>
-        <div class="sh-row">
-          <span class="sh-chip">⏱️ {{ fmtMin(roundTripMin(selected)) }}</span>
-          <span class="sh-chip">🪙 {{ costOf(selected) }}</span>
-          <span v-if="selected.type === 'arena'" class="sh-chip">🌊 ~{{ arenaWaves }} vagues</span>
-          <span v-if="selected.perilous" class="sh-chip peril"
-            >⚠️ Route dangereuse — embuscades doublées, butin renforcé</span
-          >
-          <span v-else-if="selected.type !== 'mine'" class="sh-chip" :class="winClass(winPct)"
-            >🎯 {{ winPct }}%</span
-          >
+        <template v-if="offers.hero">
+          <div class="sh-row">
+            <span class="sh-chip">⏱️ {{ fmtMin(roundTripMin(selected)) }}</span>
+            <span class="sh-chip">🪙 {{ costOf(selected) }}</span>
+            <span v-if="selected.type === 'arena'" class="sh-chip"
+              >🌊 ~{{ arenaWaves }} vagues</span
+            >
+            <span v-if="selected.perilous" class="sh-chip peril"
+              >⚠️ Route dangereuse — embuscades doublées, butin renforcé</span
+            >
+            <span v-else-if="selected.type !== 'mine'" class="sh-chip" :class="winClass(winPct)"
+              >🎯 {{ winPct }}%</span
+            >
+          </div>
+          <button class="sh-send" :disabled="!canSend" @click="send">
+            {{ sendLabel }}
+          </button>
+        </template>
+        <div v-else class="sh-away">
+          🧭 Ton héros est en expédition — un convoi, lui, peut partir sans lui.
         </div>
-        <button class="sh-send" :disabled="!canSend" @click="send">
-          {{ sendLabel }}
-        </button>
         <!-- ⚠️ La caravane ne s’affiche que sur les lieux de RÉCOLTE : le héros se bat,
              les convois exploitent. Elle ne coûte AUCUNE énergie — c’est tout son intérêt
              pour un joueur qui s’entraîne peu — mais elle immobilise ses aventuriers. -->
-        <template v-if="canOfferCaravan">
-          <div class="car-sep">ou bien</div>
+        <template v-if="offers.caravan">
+          <div v-if="offers.hero" class="car-sep">ou bien</div>
           <div class="car-row">
             <span class="sh-chip">🐫 {{ fmtMin(caravanMin) }}</span>
             <span class="sh-chip">⚡ 0</span>
@@ -249,6 +256,9 @@
             🐫 Envoyer une caravane ({{ escort.length }})
           </button>
         </template>
+        <div v-if="!offers.hero && !offers.caravan" class="sh-away">
+          🐫 Les convois ne vont que sur les lieux de récolte — puits, sanctuaire, archives, épave.
+        </div>
       </div>
     </transition>
 
@@ -329,7 +339,7 @@ import {
   HARVEST_TYPES,
 } from '@/lib/expedition';
 import { advAvailable, advTitle } from '@/lib/adventurers';
-import { CARAVAN, caravanLegMin, caravanSlots, isCaravanClaimable } from '@/lib/caravan';
+import { CARAVAN, caravanLegMin, caravanSlots, isCaravanClaimable, poiOffers } from '@/lib/caravan';
 
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
@@ -516,8 +526,13 @@ const vansLeft = computed(
     caravanSlots(char.comptoirLevel) -
     char.caravanList.filter((c) => now.value < c.returnAt).length,
 );
-const canOfferCaravan = computed(
-  () => !!selected.value && char.comptoirLevel > 0 && HARVEST_TYPES.has(selected.value.type),
+/** Ce que ce lieu accepte MAINTENANT — la regle vit dans `caravan.ts`, pas dans un v-if.
+ *  Le panneau etait entierement garde par « le heros est disponible », donc un convoi
+ *  devenait impossible des que le heros partait : exactement quand on en a besoin. */
+const offers = computed(() =>
+  selected.value
+    ? poiOffers(selected.value, { heroAway: !!active.value, comptoirLevel: char.comptoirLevel })
+    : { hero: false, caravan: false },
 );
 const caravanMin = computed(() =>
   selected.value
@@ -592,7 +607,8 @@ const lastPending = computed(() => !!lastOutcome.value && lastOutcome.value.clai
 
 // ── Filons de production (village autour de la ville) ──
 function selectPoi(p: Poi) {
-  if (active.value) return;
+  // ⚠️ On sélectionne MÊME si le héros est en expédition : un convoi part sans lui.
+  // Ce qui est ouvert ou non se décide dans la feuille, via `poiOffers`.
   selected.value = p;
 }
 
@@ -760,6 +776,14 @@ function fmtMin(min: number): string {
 
 <style scoped lang="scss">
 /* ── Caravanes : la seconde offre d’un lieu de récolte ── */
+.sh-away {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  line-height: 1.4;
+}
 .car-sep {
   margin: 10px 0 6px;
   font-size: 11px;

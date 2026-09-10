@@ -298,6 +298,27 @@ export function caravanSlowFor(comptoirLevel: number): number {
 }
 
 /** Une caravane peut-elle partir vers ce POI ? Récolte uniquement, escorte non vide. */
+/** Ce qu'on peut encore lancer vers ce lieu, selon qui est disponible.
+ *
+ *  ⚠️ `caravan` NE DÉPEND PAS de la disponibilité du héros, et c'est tout l'objet de
+ *  cette fonction. L'écran gardait l'ENSEMBLE du panneau derrière « le héros est là »,
+ *  donc envoyer un convoi devenait impossible dès que le héros partait en expédition —
+ *  exactement la situation où l'on en a le plus besoin. Un convoi est une voie
+ *  PARALLÈLE : c'est sa raison d'être pour qui s'entraîne peu.
+ *
+ *  ⚠️ En revanche `hero` en dépend : le héros ne peut mener qu'une expédition à la
+ *  fois, il est physiquement parti. */
+export function poiOffers(
+  poi: Poi,
+  opts: { heroAway: boolean; comptoirLevel: number },
+): { hero: boolean; caravan: boolean } {
+  return {
+    hero: !opts.heroAway,
+    // Les convois n'exploitent que les lieux de RÉCOLTE : le héros se bat, eux ramassent.
+    caravan: opts.comptoirLevel > 0 && HARVEST_TYPES.has(poi.type),
+  };
+}
+
 export function canSendCaravan(poi: Poi, escort: Adventurer[]): boolean {
   return HARVEST_TYPES.has(poi.type) && escort.length > 0 && escort.length <= CARAVAN.escortMax;
 }
