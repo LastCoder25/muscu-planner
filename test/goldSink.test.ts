@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildingUpgradeCost, BUILDING_TYPES, BUILD, plotsForLevel } from '@/lib/buildings';
-import { goldCost, travelOneWayMin, travelFactor } from '@/lib/expedition';
+import { goldCost, resolveOutcome, travelOneWayMin, travelFactor } from '@/lib/expedition';
+import { refFighter } from '@/lib/proceduralContent';
 import { computeLevel } from '@/lib/levels';
 import { DUNGEONS, dungeonGold } from '@/data/dungeons';
 import { DEFENSE_TYPES } from '@/lib/raid';
@@ -30,9 +31,16 @@ const bestDungeon = (L: number) =>
   [...DUNGEONS].filter((d) => d.recoLevel <= L).sort((a, b) => b.recoLevel - a.recoLevel)[0] ??
   DUNGEONS[0]!;
 
-/** Net d'une expédition de mine à distance moyenne. */
+/** Net d'une expédition de mine LOINTAINE — ce que joue un joueur qui optimise.
+ *  ⚠️ ÉTAIT à distance MOYENNE (0,5), et c'est ce qui a fait SOUS-ESTIMER le revenu d'un
+ *  facteur ~3 : depuis la v0.683 la récompense est SUPER-LINÉAIRE en temps de trajet
+ *  (`TRAVEL_EXP` 1,4), donc aller loin paie bien plus que proportionnellement. Mesuré au
+ *  niveau 28 : 24 707 or par mine moyenne contre 87 361 par mine lointaine.
+ *  ⚠️ Sous-estimer le revenu fait déclarer sain un puits qui déborde — c'est la
+ *  régression que ce fichier a DÉJÀ connue une fois (v0.684, mauvais dénominateur). */
+const MINE_DIST = 0.9;
 function mineNet(level: number): number {
-  const rth = (2 * travelOneWayMin(level, 0.5)) / 60;
+  const rth = (2 * travelOneWayMin(level, MINE_DIST)) / 60;
   const cost = goldCost('mine', level);
   return Math.round(cost * (1.3 + travelFactor(rth))) - cost;
 }
@@ -41,7 +49,10 @@ function goldMinePerDay(L: number): number {
   const t = BUILDING_TYPES.find((b) => b.id === 'gold_mine')!;
   return (t.prodPerHrPerLvl ?? 0) * L * BUILD.storageHours;
 }
-/** Revenu d'une JOURNÉE type : la séance de donjons au prorata, 2 mines, le passif. */
+/** Revenu d'une JOURNÉE type : la séance de donjons au prorata, 2 mines LOINTAINES, le
+ *  passif. Deux expéditions = ce que lance un joueur qui ouvre l'app matin et soir ; le
+ *  héros n'en menant qu'UNE à la fois (~7 h de trajet au niveau 28), c'est aussi à peu
+ *  près le plafond pratique. */
 function goldPerDay(L: number): number {
   return (
     dungeonGold(bestDungeon(L)) * RUNS_PER_SESSION * SPORT_PER_DAY +
@@ -132,6 +143,54 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
       ).toBeGreaterThan(0.5);
     }
   });
+  it('⚠️ LE MODÈLE DE REVENU NE DOIT PAS DÉRIVER DU JEU', () => {
+    // ⚠️ CE TEST FERME LE TROU QUI A PRODUIT LES DEUX RÉGRESSIONS DE CE FICHIER.
+    // Le reste du fichier compare des coûts à `goldPerDay` — une HYPOTHÈSE. Si elle
+    // s'écarte du jeu, tout ce qui s'appuie dessus devient faux SANS qu'aucun test ne
+    // rougisse : c'est ainsi qu'un puits qui débordait (v0.684, mauvais dénominateur)
+    // puis un puits devenu mur (v0.733, mines à distance moyenne) sont passés au vert.
+    // Vérifié par mutation : sans ce test, ramener MINE_DIST à 0,5 ne casse RIEN.
+
+    // 1. Le net d'une mine doit être CELUI QUE LE JEU PAIE, pas une formule recopiée.
+    //    Une mine est une récolte : aucun combat, donc le combattant n'influe pas.
+    //    ⚠️ On compare des MOYENNES : `resolveOutcome` tire des rencontres de trajet
+    //    (v0.659), donc un seul tirage s'écarte de 33 % sans rien prouver.
+    for (const lv of [10, 28, 60]) {
+      const p = {
+        id: 'm',
+        type: 'mine' as const,
+        level: lv,
+        x: 0,
+        y: 0,
+        dist: MINE_DIST,
+        distNorm: MINE_DIST,
+        spawnAt: 0,
+        expireAt: 9e15,
+        perilous: false,
+      };
+      let somme = 0;
+      for (let s = 1; s <= 300; s++)
+        somme += resolveOutcome(refFighter(lv), p as never, s, lv).gold;
+      const reel = somme / 300 - goldCost('mine', lv);
+      const ecart = mineNet(lv) / reel;
+      // Le modèle peut être un peu SOUS le jeu (il ignore les rencontres, d'espérance
+      // légèrement positive) — jamais AU-DESSUS, et jamais d'un facteur.
+      expect(
+        ecart,
+        `niveau ${lv} : modèle ${Math.round(mineNet(lv))} vs jeu ${Math.round(reel)}`,
+      ).toBeGreaterThan(0.75);
+      expect(
+        ecart,
+        `niveau ${lv} : modèle ${Math.round(mineNet(lv))} vs jeu ${Math.round(reel)}`,
+      ).toBeLessThan(1.1);
+    }
+
+    // 2. On modélise le joueur qui OPTIMISE, pas le joueur moyen : un puits calibré sur
+    //    le second déborde pour le premier. La récompense étant super-linéaire en temps
+    //    de trajet (v0.683), « optimiser » veut dire viser LOIN.
+    expect(MINE_DIST).toBeGreaterThanOrEqual(0.8);
+  });
+
   it('⚠️ SIMULATION SUR UN AN : le puits ne déborde pas, et n’est pas un mur non plus', () => {
     // ⚠️ CE TEST EXISTE PARCE QUE SON ABSENCE A COÛTÉ CHER. La v0.684 avait fixé
     // `upBase` PAR SIMULATION, puis écrit la conclusion dans un commentaire — sans
