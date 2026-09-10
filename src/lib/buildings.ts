@@ -294,6 +294,12 @@ export const RESOURCE_EMOJI: Record<BuildResource, string> = {
 };
 
 const BY_ID = new Map(BUILDING_TYPES.map((t) => [t.id, t]));
+/** Niveau d'un bâtiment POSÉ, 0 s'il ne l'est pas. Les helpers dédiés (`outpostLevel`,
+ *  `bossAltarLevel`…) refont ce `find` chacun de leur côté ; celui-ci est le générique. */
+export function buildingLevel(buildings: Building[], typeId: string): number {
+  return buildings.find((x) => x.typeId === typeId)?.level ?? 0;
+}
+
 export function buildingType(id: string): BuildingType | undefined {
   return BY_ID.get(id);
 }

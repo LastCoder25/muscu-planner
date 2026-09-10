@@ -1,7 +1,7 @@
 // Store character — personnage RPG (Phase 1 : pseudo unique). Accès Supabase centralisé.
 import { comboChestReward } from '@/lib/comboChest';
 import { defineStore, acceptHMRUpdate } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from './auth';
 import {
@@ -72,6 +72,7 @@ import {
   expeditionsUnlocked,
   travelTimeMult,
   type Building,
+  buildingLevel,
 } from '@/lib/buildings';
 import { combatPower, type Combatant } from '@/lib/combat';
 import {
@@ -105,6 +106,23 @@ import {
   type Raid,
   type RaidReport,
 } from '@/lib/raid';
+import {
+  advAvailable,
+  canPromote,
+  classChoices,
+  grantAdvXp,
+  guildRoster,
+  recruitCost,
+  type Adventurer,
+} from '@/lib/adventurers';
+import {
+  canSendCaravan,
+  caravanHurtMs,
+  caravanSlots,
+  isCaravanClaimable,
+  startCaravan,
+  type Caravan,
+} from '@/lib/caravan';
 import { useGoldFx } from '@/composables/useGoldFx';
 
 export interface CharacterRow {
@@ -144,6 +162,8 @@ export interface CharacterRow {
   energy_log: EnergyLogEntry[]; // journal d’énergie hors-sport horodaté (migr. 0057)
   base: BaseState | null; // défense de la base : enceinte, siège, champ de bataille (migr. 0060)
   scrap: number; // 🔩 ferraille : répare l’enceinte (migr. 0060) // journal d'énergie hors-sport horodaté (migr. 0057)
+  adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
+  caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -172,7 +192,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, adventurers, caravans';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -183,6 +203,9 @@ export const useCharacterStore = defineStore('character', () => {
     const obj = <T>(v: unknown): T =>
       v && typeof v === 'object' && !Array.isArray(v) ? (v as T) : ({} as T);
     r.talents = normalizeTalents(r.talents); // legacy string[] → instances (rétro-compat)
+    // Aventuriers/convois : un jsonb malformé ne doit jamais faire planter la page.
+    r.adventurers = arr<Adventurer>(r.adventurers);
+    r.caravans = arr<Caravan>(r.caravans);
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
     const fixItem = (it: Item): Item => {
       const rarity = normRank(it.rarity);
@@ -1770,6 +1793,128 @@ export const useCharacterStore = defineStore('character', () => {
     });
     return got;
   }
+  // ── CARAVANES & AVENTURIERS (migr. 0061) ────────────────────────────────────
+  // Le domaine (`adventurers.ts` / `caravan.ts`) est pur : il décide des classes, des
+  // rencontres et de la cargaison. Le store ne fait que persister et arbitrer ce que le
+  // domaine ne peut pas savoir — l'or disponible, le niveau des bâtiments, l'horloge.
+  const advList = computed<Adventurer[]>(() => row.value?.adventurers ?? []);
+  const caravanList = computed<Caravan[]>(() => row.value?.caravans ?? []);
+  const guildLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'guild'));
+  const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'caravanserail'));
+  const trainingLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'training'));
+
+  /** Les 3 classes de DÉPART proposées à une nouvelle recrue. Tirées sur une graine
+   *  figée à l'avance pour que l'écran affiche exactement ce qui sera recruté. */
+  function recruitChoices(seed: number) {
+    return classChoices({ id: '', name: '', seed, path: [], level: 1, xp: 0 }, 0);
+  }
+
+  /** Recrute un aventurier dans la classe choisie. ⚠️ La Guilde plafonne l'EFFECTIF ; le
+   *  coût croît avec le vivier déjà en place, sinon on le remplit d'un coup et « qui
+   *  j'élève » cesse d'être une décision. */
+  async function recruitAdventurer(userId: string, seed: number, classId: string, name: string) {
+    const cur = row.value;
+    if (!cur) return false;
+    if (guildLevel.value <= 0) return false;
+    const roster = advList.value;
+    if (roster.length >= guildRoster(guildLevel.value)) return false;
+    if (!recruitChoices(seed).some((c) => c.id === classId)) return false; // pas dans l'offre
+    const cost = recruitCost(roster.length, guildLevel.value);
+    if (cur.gold < cost) return false;
+    const adv: Adventurer = {
+      id: `adv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      seed,
+      path: [classId],
+      level: 1,
+      xp: 0,
+    };
+    await persist(userId, { gold: cur.gold - cost, adventurers: [...roster, adv] });
+    return true;
+  }
+
+  /** Valide une promotion au Centre de formation. ⚠️ Le Centre n'est requis QU'À PARTIR de
+   *  la 2e strate : la classe de départ se choisit au recrutement, donc un débutant n'a
+   *  besoin que de la Guilde et du Comptoir pour lancer la boucle. */
+  async function promoteAdventurer(userId: string, advId: string, classId: string) {
+    const cur = row.value;
+    const adv = advList.value.find((a) => a.id === advId);
+    if (!cur || !adv) return false;
+    if (trainingLevel.value <= 0) return false;
+    if (!canPromote(adv, guildLevel.value)) return false;
+    if (!classChoices(adv).some((c) => c.id === classId)) return false;
+    const next = { ...adv, path: [...adv.path, classId] };
+    await persist(userId, {
+      adventurers: advList.value.map((a) => (a.id === advId ? next : a)),
+    });
+    return true;
+  }
+
+  /** Envoie un convoi. ⚠️ Le POI est RETIRÉ de la carte au départ, exactement comme pour
+   *  le héros — c'est ce qui fait que caravanes et héros se disputent les mêmes lieux. */
+  async function sendCaravan(userId: string, poi: Poi, escortIds: string[]) {
+    const cur = row.value;
+    if (!cur) return false;
+    if (comptoirLevel.value <= 0) return false;
+    const now = Date.now();
+    const running = caravanList.value.filter((c) => now < c.returnAt).length;
+    if (running >= caravanSlots(comptoirLevel.value)) return false;
+    const escort = escortIds
+      .map((id) => advList.value.find((a) => a.id === id))
+      .filter((a): a is Adventurer => !!a && advAvailable(a, now));
+    if (escort.length !== escortIds.length || !canSendCaravan(poi, escort)) return false;
+
+    const seed = (now ^ (poi.id.length * 2654435761)) >>> 0 || 1;
+    const van = startCaravan(`car_${now.toString(36)}`, poi, escort, now, seed);
+    const busy = new Set(escortIds);
+    await persist(userId, {
+      caravans: [...caravanList.value, van],
+      adventurers: advList.value.map((a) =>
+        busy.has(a.id) ? { ...a, busyUntil: van.returnAt } : a,
+      ),
+      expedition_map: cur.expedition_map
+        ? { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
+        : cur.expedition_map,
+    });
+    return true;
+  }
+
+  /** Encaisse la cargaison d'un convoi rentré : devises, XP par aventurier, blessés.
+   *  ⚠️ L'XP est versée QUEL QUE SOIT le résultat et même sans combat — sinon un débutant
+   *  à un seul aventurier, qui perd toutes ses embuscades, ne progresserait jamais. */
+  async function claimCaravan(userId: string, caravanId: string) {
+    const cur = row.value;
+    const van = caravanList.value.find((c) => c.id === caravanId);
+    if (!cur || !van || !isCaravanClaimable(van, Date.now())) return false;
+    const o = van.outcome;
+    const hurtMs = caravanHurtMs(
+      van.escort
+        .map((id) => advList.value.find((a) => a.id === id))
+        .filter((a): a is Adventurer => !!a),
+      defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
+    );
+    const hurtUntil = Date.now() + hurtMs;
+    const hurt = new Set(o.hurt);
+    const advs = advList.value.map((a) => {
+      const gain = o.xp[a.id];
+      if (gain === undefined) return a;
+      const next = grantAdvXp(a, gain, guildLevel.value);
+      return hurt.has(a.id) ? { ...next, hurtUntil } : next;
+    });
+    await persist(userId, {
+      // Les salaires sont déduits ICI, à l'encaissement : l'aventurier est payé au retour.
+      gold: Math.max(0, cur.gold + o.gold - o.wages),
+      login_energy: cur.login_energy + o.energy,
+      summon_stones: cur.summon_stones + o.summonStones,
+      scrap: cur.scrap + o.scrap,
+      keys: cur.keys + o.keys,
+      adventurers: advs,
+      caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
+    });
+    if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);
+    return true;
+  }
+
   return {
     row,
     loaded,
@@ -1806,6 +1951,16 @@ export const useCharacterStore = defineStore('character', () => {
     chooseReward,
     applyEndless,
     spendKey,
+    advList,
+    caravanList,
+    guildLevel,
+    comptoirLevel,
+    trainingLevel,
+    recruitChoices,
+    recruitAdventurer,
+    promoteAdventurer,
+    sendCaravan,
+    claimCaravan,
     applyExpedition,
     equip,
     unpackLoadout,

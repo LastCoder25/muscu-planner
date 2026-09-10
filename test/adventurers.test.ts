@@ -18,6 +18,9 @@ import {
   advRankProgress,
   advNextStarLevel,
   advXpToNext,
+  guildRoster,
+  recruitCost,
+  grantAdvXp,
   type Adventurer,
 } from '@/lib/adventurers';
 import { RANK_ORDER } from '@/lib/items';
@@ -272,6 +275,45 @@ describe('la BARRE de progression vers l’étoile suivante', () => {
     for (const l of [1, 2, 4, 7, 12]) {
       const suivant = advNextStarLevel(at(l));
       expect(characterRank(suivant).tier).toBe(characterRank(l).tier + 1);
+    }
+  });
+});
+
+describe('Guilde : effectif, coût de recrutement, XP', () => {
+  it('l’effectif croît avec la Guilde — donc avec le sport, mais LINÉAIREMENT', () => {
+    // C'est ce qui rend la boucle accessible : la puissance du héros croît en ~L⁴, là où
+    // l'effectif d'une Guilde suit son niveau tout doucement.
+    expect(guildRoster(0)).toBe(1);
+    expect(guildRoster(2)).toBe(2);
+    expect(guildRoster(20)).toBe(11);
+    for (let l = 0; l < 60; l++) expect(guildRoster(l + 1)).toBeGreaterThanOrEqual(guildRoster(l));
+  });
+  it('⚠️ recruter coûte de plus en plus cher — sinon on remplit la Guilde d’un coup', () => {
+    // Et « qui j'élève » cesse d'être une décision : c'est tout l'intérêt de la feature
+    // pour un joueur qui n'a pas beaucoup d'or.
+    expect(recruitCost(3, 10)).toBeGreaterThan(recruitCost(0, 10));
+    expect(recruitCost(0, 30)).toBeGreaterThan(recruitCost(0, 5));
+  });
+  it('l’XP fait monter PLUSIEURS niveaux d’un coup si le voyage était gros', () => {
+    const a = make({ level: 1, xp: 0 });
+    const gros = advXpToNext(1) + advXpToNext(2) + advXpToNext(3);
+    expect(grantAdvXp(a, gros, 99).level).toBe(4);
+  });
+  it('⚠️ au plafond, l’XP excédentaire est CONSERVÉE, jamais jetée', () => {
+    // Sinon le joueur peu sportif — celui dont le plafond bouge le plus lentement, donc
+    // exactement la cible — travaillerait des semaines pour rien.
+    const bloque = grantAdvXp(make({ level: 3, xp: 0 }), 10_000, 3);
+    expect(bloque.level).toBe(3);
+    expect(bloque.xp).toBe(10_000);
+    // …et quand la Guilde monte, il encaisse aussitôt ce qu’il avait accumulé.
+    expect(grantAdvXp(bloque, 0, 20).level).toBeGreaterThan(3);
+  });
+  it('ne perd jamais d’XP ni ne recule', () => {
+    for (const l of [1, 5, 12]) {
+      const a = make({ level: l, xp: 17 });
+      const n = grantAdvXp(a, 0, 99);
+      expect(n.level).toBeGreaterThanOrEqual(a.level);
+      expect(n.xp).toBeGreaterThanOrEqual(0);
     }
   });
 });

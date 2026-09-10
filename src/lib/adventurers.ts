@@ -704,6 +704,38 @@ export function advRoles(adv: Adventurer): AdvRole[] {
   return adv.path.map((id) => advClass(id)?.role).filter((r): r is AdvRole => !!r);
 }
 
+/** Effectif que la Guilde peut entretenir : 1 de base, +1 tous les 2 niveaux.
+ *  ⚠️ Le niveau de la Guilde étant lui-même plafonné par celui du joueur, l’effectif
+ *  reste indexé sur le SPORT — mais linéairement, là où la puissance du héros croît en
+ *  ~L⁴. C’est précisément ce qui rend la boucle accessible à un joueur peu sportif. */
+export function guildRoster(guildLevel: number): number {
+  return 1 + Math.floor(Math.max(0, guildLevel) / 2);
+}
+
+/** Coût de recrutement : il CROÎT avec l’effectif déjà en place, sinon on remplit la
+ *  Guilde d’un coup et le choix de qui l’on élève n’existe plus. */
+export function recruitCost(rosterSize: number, guildLevel: number): number {
+  return Math.round(220 * (1 + rosterSize) * Math.max(1, guildLevel) ** 0.6);
+}
+
+/** Applique l’XP gagnée : montées de niveau EN CHAÎNE (un gros voyage peut en donner
+ *  plusieurs), plafonnées par la Guilde.
+ *
+ *  ⚠️ Au plafond, l’XP EXCÉDENTAIRE EST CONSERVÉE et non jetée : quand la Guilde monte,
+ *  l’aventurier récupère aussitôt ce qu’il avait accumulé. Sinon un joueur peu sportif —
+ *  celui dont le plafond bouge le plus lentement, donc exactement la cible de la
+ *  feature — travaillerait des semaines pour rien. Pur : rend un NOUVEL aventurier. */
+export function grantAdvXp(adv: Adventurer, xp: number, guildLevel: number): Adventurer {
+  const cap = Math.max(1, guildLevel);
+  let level = adv.level;
+  let pool = Math.max(0, adv.xp) + Math.max(0, Math.round(xp));
+  while (level < cap && pool >= advXpToNext(level)) {
+    pool -= advXpToNext(level);
+    level++;
+  }
+  return { ...adv, level, xp: pool };
+}
+
 /** Disponible ? Ni en mission, ni en formation, ni à l'infirmerie. */
 export function advAvailable(adv: Adventurer, now: number): boolean {
   return (adv.busyUntil ?? 0) <= now && (adv.hurtUntil ?? 0) <= now;
