@@ -324,7 +324,14 @@ export const BUILD = {
   // L^2.35 diverge et recrée le MUR de la v0.657 (mesuré alors : 115 expéditions pour UN
   // niveau au niveau 100, les bâtiments gelaient). Un coefficient déplace la courbe sans
   // la déformer : le ratio coût/revenu reste PLAT sur 1→100, ce que le test verrouille.
-  upBase: 1320, // upgrade L→L+1 (or) = round(upBase × L^upExp)
+  // ⚠️ 1320 → 450 (v0.733, mesuré). La valeur 1320 avait été calée en v0.684 sur un
+  // roster de SEPT bâtiments ; il en compte DIX depuis les caravanes (v0.727), donc le
+  // puits s'est approfondi de 43 % tout seul, sans que personne le re-mesure — le test
+  // s'est contenté de relâcher sa borne (70 → 80 jours). Simulé sur un an, le joueur
+  // le plus actif ne tenait plus que 44 % du plafond, et le compte réel (niveau 28,
+  // 38 jours) portait 312 jours de revenu de retard. À 450 : 63-76 % du plafond sur
+  // l'année, et un cran retombe de 6,3 à 2,0 jours de revenu.
+  upBase: 450, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
   // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
   // `L^1.6` (coût ET gain d'expédition), donc un coût en `L^2.6` diverge linéairement :

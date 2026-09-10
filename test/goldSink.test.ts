@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildingUpgradeCost, BUILDING_TYPES, BUILD, plotsForLevel } from '@/lib/buildings';
 import { goldCost, travelOneWayMin, travelFactor } from '@/lib/expedition';
+import { computeLevel } from '@/lib/levels';
 import { DUNGEONS, dungeonGold } from '@/data/dungeons';
 import { DEFENSE_TYPES } from '@/lib/raid';
 
@@ -54,23 +55,22 @@ const cranTotal = (L: number) =>
   buildingUpgradeCost(L) * Math.min(plotsForLevel(L), BUILDING_TYPES.length);
 
 describe("puits d'or : on court toujours après les derniers niveaux", () => {
-  it('⚠️ LA RÈGLE : un cran sur tous les bâtiments coûte PLUS qu’une journée de revenu', () => {
-    // Sinon le joueur est en permanence au plafond de son niveau et son or n'a plus de
-    // destination — c'est très exactement ce que la simulation a constaté à 220.
+  it('⚠️ LA RÈGLE : un cran coûte PLUS qu’une journée de revenu, sans devenir un mur', () => {
+    // ⚠️ MESURÉ PAR BÂTIMENT, plus sur « un cran sur TOUS ». Cette assertion portait sur
+    // le total, qui mélange deux phénomènes — la forme de la courbe (ce qu'on veut
+    // tester) et la montée de `plotsForLevel` — exactement le défaut que le test suivant
+    // avait déjà corrigé de son côté. Le total faisait apparaître le niveau 5 comme une
+    // anomalie (8,7 jours) alors qu'il a simplement 5 emplacements ouverts au lieu de 10.
+    // Par bâtiment, la courbe est PLATE : 1,7 jour au niveau 5, 2,0 à 28, 2,4 à 100.
     for (const L of LEVELS) {
-      const jours = cranTotal(L) / goldPerDay(L);
-      // Mesuré : ~25 jours au niveau 5, puis PLAT autour de 46-50 de 15 à 100. On ne
-      // rattrape donc jamais tout à fait le plafond — c'est le but. Simulation sur un an :
-      // le joueur passe de 55 % à 90 % du plafond et dépense ~100 % de son or.
-      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeGreaterThan(15);
-      // …sans devenir un mur : au-delà, on ne progresse plus, on attend.
-      // ⚠️ BORNE RELEVÉE 70 → 80 en v0.727, et c’est une conséquence ARITHMÉTIQUE assumée :
-      // le roster est passé de 7 à 10 bâtiments (Comptoir, Guilde, Centre de formation),
-      // donc « un cran sur TOUS » coûte mécaniquement 10/7 de plus. Mesuré : ~49 → ~68-71
-      // jours, uniformément. Ce qui compte est intact — le ratio reste PLAT (61,8 → 71,6,
-      // test suivant) et l’AMORÇAGE ne bouge pas (test dédié ci-dessous). Ne pas relever
-      // cette borne pour une autre raison qu’un roster qui grandit.
-      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeLessThan(80);
+      const jours = buildingUpgradeCost(L) / goldPerDay(L);
+      // Sous une journée, on est en permanence au plafond de son niveau et l'or n'a
+      // plus de destination.
+      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeGreaterThan(1);
+      // Au-delà de quelques jours, on ne progresse plus, on attend. ⚠️ C'est ce qui
+      // était livré : à `upBase` 1320, un seul cran coûtait 6,3 jours de revenu au
+      // niveau 28, et le compte réel portait 312 jours de retard.
+      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeLessThan(4);
     }
   });
 
@@ -123,13 +123,71 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     // Garde-fou contre la régression qui a motivé cette réécriture : sous-estimer le
     // revenu fait déclarer sain un puits qui déborde. On refait donc la mesure avec un
     // revenu DEUX FOIS supérieur au modèle — un joueur plus assidu, mieux équipé, qui
-    // enchaîne mines et donjons. Le coût d'un cran doit encore dépasser sa journée.
+    // enchaîne mines et donjons. Un cran doit encore coûter une demi-journée.
     for (const L of LEVELS) {
-      const jours = cranTotal(L) / (goldPerDay(L) * 2);
+      const jours = buildingUpgradeCost(L) / (goldPerDay(L) * 2);
       expect(
         jours,
         `niveau ${L} : ${jours.toFixed(2)} jour(s) même à revenu doublé`,
-      ).toBeGreaterThan(5);
+      ).toBeGreaterThan(0.5);
+    }
+  });
+  it('⚠️ SIMULATION SUR UN AN : le puits ne déborde pas, et n’est pas un mur non plus', () => {
+    // ⚠️ CE TEST EXISTE PARCE QUE SON ABSENCE A COÛTÉ CHER. La v0.684 avait fixé
+    // `upBase` PAR SIMULATION, puis écrit la conclusion dans un commentaire — sans
+    // l’encoder. Quand le roster est passé de 7 à 10 bâtiments (v0.727), le puits s’est
+    // approfondi de 43 % tout seul ; le seul test en place mesurait un PROXY (jours de
+    // revenu par cran), et on s’est contenté d’en relâcher la borne (70 → 80). Résultat
+    // mesuré un an plus tard : le joueur le plus actif ne tenait plus que 44 % du
+    // plafond, et le compte réel portait 312 jours de revenu de retard.
+    // On mesure donc désormais LA CHOSE ELLE-MÊME.
+    const PROFILS: [string, number][] = [
+      ['tranquille', 400],
+      ['régulier', 700],
+      ['très actif', 1066], // XP/jour mesurée sur un compte réel très assidu
+    ];
+    for (const [nom, xpParJour] of PROFILS) {
+      const niv = BUILDING_TYPES.map(() => 0);
+      let or = 0;
+      let xp = 0;
+      for (let j = 0; j < 365; j++) {
+        xp += xpParJour;
+        const L = computeLevel(xp).level;
+        or += goldPerDay(L);
+        const plots = Math.min(plotsForLevel(L), BUILDING_TYPES.length);
+        // Le joueur achète ce qu'il peut, du moins cher au plus cher : il rattrape
+        // d'abord ce qui est le plus en retard. Jamais au-dessus de son niveau.
+        for (;;) {
+          let best = -1;
+          let bestC = Infinity;
+          for (let i = 0; i < plots; i++) {
+            if (niv[i]! >= L) continue;
+            const c =
+              niv[i] === 0 ? (BUILDING_TYPES[i]!.buildGold ?? 500) : buildingUpgradeCost(niv[i]!);
+            if (c < bestC) {
+              bestC = c;
+              best = i;
+            }
+          }
+          if (best < 0 || bestC > or) break;
+          or -= bestC;
+          niv[best]!++;
+        }
+      }
+      const L = computeLevel(xp).level;
+      const plots = Math.min(plotsForLevel(L), BUILDING_TYPES.length);
+      const part = niv.slice(0, plots).reduce((a, b) => a + b, 0) / (plots * L);
+      // PLANCHER : sous ~55 %, les bâtiments restent à la moitié de ton niveau pour
+      // toujours — ils cessent d'être un objectif et deviennent du décor. C'est très
+      // exactement l'état livré à 1320 (44-53 % mesurés).
+      expect(part, `${nom} : ${(part * 100).toFixed(0)} % du plafond après un an`).toBeGreaterThan(
+        0.55,
+      );
+      // PLAFOND : au-dessus de ~90 %, on a tout, et l'or n'a plus de destination —
+      // le débordement que la v0.684 corrigeait.
+      expect(part, `${nom} : ${(part * 100).toFixed(0)} % du plafond après un an`).toBeLessThan(
+        0.9,
+      );
     }
   });
 });
