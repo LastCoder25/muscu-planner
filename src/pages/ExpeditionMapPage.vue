@@ -83,6 +83,27 @@
             />
           </template>
 
+          <!-- Trajets des CONVOIS : même tracé aller/retour que le héros, en violet et
+             en pointillés — la couleur seule ne suffit pas à distinguer deux routes. -->
+          <template v-for="v in vansOnMap" :key="'vt' + v.id">
+            <line
+              :x1="v.poi.x"
+              :y1="v.poi.y"
+              :x2="v.at.x"
+              :y2="v.at.y"
+              class="trail van"
+              :class="v.at.phase === 'return' ? 'done' : 'todo'"
+            />
+            <line
+              :x1="TOWN.x"
+              :y1="TOWN.y"
+              :x2="v.at.x"
+              :y2="v.at.y"
+              class="trail van"
+              :class="v.at.phase === 'return' ? 'todo' : 'done'"
+            />
+          </template>
+
           <!-- POI -->
           <g
             v-for="p in pois"
@@ -105,6 +126,11 @@
           </g>
 
           <!-- Héros -->
+          <g v-for="v in vansOnMap" :key="'vm' + v.id">
+            <circle :cx="v.at.x" :cy="v.at.y" r="3" class="van-mark" />
+            <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">🐫</text>
+          </g>
+
           <g v-if="active && hero">
             <circle :cx="hero.x" :cy="hero.y" r="3.4" class="hero" />
             <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
@@ -292,7 +318,7 @@ import {
   type ExpeditionMessage,
   haulPills,
   EXPE,
-  heroPosition,
+  travelPosition,
   poiCombatant,
   simulateArena,
   goldCost,
@@ -379,7 +405,7 @@ const terrain = computed(() =>
     ? expeditionTerrain(char.row.expedition_map.seed)
     : { coast: '', features: [], rivers: [] },
 );
-const hero = computed(() => (active.value ? heroPosition(active.value, now.value) : null));
+const hero = computed(() => (active.value ? travelPosition(active.value, now.value) : null));
 
 // Chevrons de direction le long du segment RESTANT (héros → cible du moment :
 // l'objectif à l'aller, la ville au retour). Ils s'allument un à un du héros vers
@@ -484,13 +510,11 @@ const selected = ref<Poi | null>(null);
 // Un convoi part vers un lieu de RÉCOLTE, ne coûte aucune énergie, et immobilise son
 // escorte. Il CONSOMME le lieu comme le ferait le héros : les deux se disputent la carte.
 const escort = ref<string[]>([]);
-const nowMs = ref(Date.now());
-setInterval(() => (nowMs.value = Date.now()), 30_000);
-const freeAdvs = computed(() => char.advList.filter((a) => advAvailable(a, nowMs.value)));
+const freeAdvs = computed(() => char.advList.filter((a) => advAvailable(a, now.value)));
 const vansLeft = computed(
   () =>
     caravanSlots(char.comptoirLevel) -
-    char.caravanList.filter((c) => nowMs.value < c.returnAt).length,
+    char.caravanList.filter((c) => now.value < c.returnAt).length,
 );
 const canOfferCaravan = computed(
   () => !!selected.value && char.comptoirLevel > 0 && HARVEST_TYPES.has(selected.value.type),
@@ -507,10 +531,16 @@ const caravanMin = computed(() =>
 const canSendCaravanNow = computed(
   () => escort.value.length > 0 && vansLeft.value > 0 && !busyCaravan.value,
 );
-const busyCaravan = ref(false);
-const claimable = computed(() =>
-  char.caravanList.filter((c) => isCaravanClaimable(c, nowMs.value)),
+/** Les convois EN ROUTE, situés par la même interpolation que le héros
+ *  (`travelPosition`) : un convoi part, atteint son lieu, et revient — on doit le voir
+ *  faire, sinon la seule trace d'une caravane est une carte « 🎁 Récupérer ». */
+const vansOnMap = computed(() =>
+  char.caravanList
+    .filter((c) => now.value < c.returnAt)
+    .map((c) => ({ id: c.id, poi: c.poi, at: travelPosition(c, now.value) })),
 );
+const busyCaravan = ref(false);
+const claimable = computed(() => char.caravanList.filter((c) => isCaravanClaimable(c, now.value)));
 async function doClaimCaravan(id: string) {
   const uid = auth.user?.id;
   if (!uid || busyCaravan.value) return;
@@ -1034,6 +1064,31 @@ function fmtMin(min: number): string {
   stroke: #4a9eff;
   filter: drop-shadow(0 0 1px rgba(74, 158, 255, 0.6));
 }
+/* Convois : violet, distinct du bleu du héros ET de l'accent jaune (sélection/cible),
+   et hors de la gamme vert/orange/rouge qui code la difficulté des lieux. Pointillé
+   pour rester lisible sans la couleur. */
+.trail.van {
+  stroke-width: 1;
+  stroke-dasharray: 2 2.2;
+}
+.trail.van.done {
+  stroke: rgba(181, 123, 255, 0.32);
+}
+.trail.van.todo {
+  stroke: #b57bff;
+  filter: drop-shadow(0 0 1px rgba(181, 123, 255, 0.55));
+}
+.van-mark {
+  fill: var(--surface);
+  stroke: #b57bff;
+  stroke-width: 0.8;
+}
+.van-emo {
+  font-size: 3px;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
 /* Chevrons de direction : s'allument un à un (délai croissant héros→cible) puis
    s'éteignent → sensation de flux dans le sens du déplacement. En boucle. */
 .dir-arrow {

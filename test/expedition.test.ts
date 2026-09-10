@@ -7,7 +7,7 @@ import {
   travelOneWayMin,
   createMap,
   advanceWorld,
-  heroPosition,
+  travelPosition,
   resolveOutcome,
   startExpedition,
   expeditionTerrain,
@@ -147,18 +147,18 @@ describe('expedition — héros / trajet', () => {
   };
   it('aller : part de la ville, arrive à l’objectif à mi-parcours', () => {
     const t = EXPE.town;
-    const start = heroPosition(exp, 0);
+    const start = travelPosition(exp, 0);
     expect(start.phase).toBe('outbound');
     expect(start.x).toBeCloseTo(t.x, 5);
-    const mid = heroPosition(exp, 2 * H - 1);
+    const mid = travelPosition(exp, 2 * H - 1);
     expect(mid.x).toBeCloseTo(poi.x, 0);
   });
   it('retour : de l’objectif vers la ville ; compteurs cohérents', () => {
-    const r = heroPosition(exp, 3 * H);
+    const r = travelPosition(exp, 3 * H);
     expect(r.phase).toBe('return');
     expect(r.remainToObjectiveMs).toBe(0);
     expect(r.remainTotalMs).toBe(1 * H);
-    const done = heroPosition(exp, 5 * H);
+    const done = travelPosition(exp, 5 * H);
     expect(done.phase).toBe('done');
   });
 });

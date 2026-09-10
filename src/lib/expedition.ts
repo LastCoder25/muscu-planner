@@ -685,8 +685,20 @@ export function advanceWorld(
 }
 
 /** Position interpolée du héros + compteurs, selon la phase (aller/retour). */
-export function heroPosition(
-  exp: ActiveExpedition,
+/** Ce qu'il faut pour situer un voyageur sur la carte : une destination et trois
+ *  horodatages. ⚠️ Volontairement STRUCTUREL, et non `ActiveExpedition` : un convoi
+ *  (`Caravan`) fait exactement le même aller-retour, et deux copies de cette
+ *  interpolation divergeraient à la première retouche. */
+export interface Voyage {
+  poi: Poi;
+  sentAt: number;
+  midAt: number;
+  returnAt: number;
+}
+
+/** Position d'un voyageur (héros OU convoi) à l'instant `now`. */
+export function travelPosition(
+  exp: Voyage,
   now: number,
 ): {
   x: number;

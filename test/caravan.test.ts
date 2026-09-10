@@ -20,6 +20,8 @@ import {
 import { type Adventurer } from '@/lib/adventurers';
 import { simulateCombat } from '@/lib/combat';
 import {
+  EXPE,
+  travelPosition,
   harvestYield,
   travelFactor,
   travelOneWayMin,
@@ -309,5 +311,41 @@ describe('⚠️ le bonus d’XP suit les combats RÉELS, pas l’étiquette', (
     const a = refAdventurer(20);
     expect(missionXp(a, poi({ perilous: true }), 0)).toBe(missionXp(a, poi(), 0));
     expect(missionXp(a, poi({ perilous: true }), 3)).toBeGreaterThan(missionXp(a, poi(), 0));
+  });
+});
+
+describe('⚠️ un convoi VOYAGE comme le héros', () => {
+  // Le convoi est situé sur la carte par la MÊME fonction que le héros
+  // (`travelPosition`) : deux copies de cette interpolation divergeraient à la
+  // première retouche — c'est le piège des libellés de POI, déjà rencontré deux fois.
+  const van = startCaravan('v1', poi({ x: 60, y: 20 }), team(3), 0, 7);
+
+  it('part de la ville, atteint son lieu, et en revient', () => {
+    expect(travelPosition(van, van.sentAt)).toMatchObject({ ...EXPE.town, phase: 'outbound' });
+    const arrive = travelPosition(van, van.midAt - 1);
+    expect(arrive.phase).toBe('outbound');
+    expect(arrive.x).toBeCloseTo(van.poi.x, 1);
+    expect(arrive.y).toBeCloseTo(van.poi.y, 1);
+    expect(travelPosition(van, van.midAt).phase).toBe('return');
+    expect(travelPosition(van, van.returnAt)).toMatchObject({ ...EXPE.town, phase: 'done' });
+  });
+
+  it('⚠️ le RETOUR revient bien vers la ville, il ne repart pas', () => {
+    // Sans ça, un signe inversé donnerait un convoi qui s'éloigne au retour.
+    const tot = van.returnAt - van.midAt;
+    const tiers = travelPosition(van, van.midAt + tot / 3);
+    const deuxTiers = travelPosition(van, van.midAt + (2 * tot) / 3);
+    const d = (p: { x: number; y: number }) => Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y);
+    expect(d(deuxTiers)).toBeLessThan(d(tiers));
+  });
+
+  it('avance de façon MONOTONE vers son lieu à l’aller', () => {
+    const d = (t: number) => {
+      const p = travelPosition(van, t);
+      return Math.hypot(p.x - van.poi.x, p.y - van.poi.y);
+    };
+    for (let i = 1; i <= 10; i++) {
+      expect(d((van.midAt * i) / 10)).toBeLessThan(d((van.midAt * (i - 1)) / 10));
+    }
   });
 });

@@ -2714,7 +2714,7 @@ import {
   isClaimable,
   type ExpeditionMessage,
   haulPills,
-  heroPosition,
+  travelPosition,
   runArena,
   arenaEnergyCost,
   arenaRewards,
@@ -4782,7 +4782,7 @@ function expeBlocked(): boolean {
 }
 const expeNow = ref(Date.now());
 const expeHero = computed(() =>
-  char.row?.expedition ? heroPosition(char.row.expedition, expeNow.value) : null,
+  char.row?.expedition ? travelPosition(char.row.expedition, expeNow.value) : null,
 );
 const unreadMessages = computed(
   () => (char.row?.messages ?? []).filter((m) => !m.read || isClaimable(m, expeNow.value)).length,
