@@ -1270,3 +1270,79 @@ describe('les défenses sont un système de DÉBUT de partie', () => {
     expect([...levels][0]).toBe(3);
   });
 });
+
+// ── ESPIONNAGE : la Tour achète une PROBABILITÉ, plus une certitude ───────────────
+describe('renseignement — du mystère, à tous les niveaux', () => {
+  /** Distribution de clarté sur N raids réels, tour à une part donnée du niveau. */
+  function clarities(L: number, towerShare: number, n = 300): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const seed = i * 7919 + 11;
+      const r = rollRaid(seed, L, 0, 0);
+      out.push(scoutClarity(Math.round(L * towerShare), r.level, L, 0, seed));
+    }
+    return out;
+  }
+
+  it('⚠️ LE DÉFAUT D’ORIGINE : la clarté maximale n’est plus SYSTÉMATIQUE', () => {
+    // Avant : dès le niveau 20, tour à niveau → 100 % des raids en clarté 5, et ça ne
+    // redescendait jamais (le terme `⌊tour/2⌋` valait 50 au niveau 100 pour un cap de 5,
+    // donc l'opacité était noyée). Une armée qu'on lit toujours entièrement n'a plus rien
+    // d'une menace.
+    for (const L of [20, 40, 70, 100]) {
+      const max = clarities(L, 1).filter((c) => c === RAID.clarityMax).length;
+      expect(max / 300, `niveau ${L}`).toBeLessThan(0.3);
+    }
+  });
+  it('mais l’échelle entière reste ATTEIGNABLE — le haut n’est pas du contenu mort', () => {
+    const all = [20, 40, 70, 100].flatMap((L) => clarities(L, 1));
+    expect(all.some((c) => c === RAID.clarityMax)).toBe(true);
+  });
+  it('la TOUR vaut sa PART du niveau joueur : un débutant à niveau n’est plus plafonné', () => {
+    // Avant, `⌊tour/2⌋` bornait un joueur de niveau 3 à 1 cran quoi qu'il bâtisse, tandis
+    // qu'un vétéran voyait tout : la courbe était à l'envers.
+    const petit = clarities(3, 1);
+    const moyenne = petit.reduce((a, b) => a + b, 0) / petit.length;
+    expect(moyenne).toBeGreaterThan(2);
+  });
+  it('l’opacité est RELATIVE à la fenêtre : même position = même lecture à tout niveau', () => {
+    // Armée au sommet de la fenêtre, tour à niveau, aucun aléa : le résultat ne doit pas
+    // dépendre de l'échelle absolue des niveaux.
+    const auSommet = (L: number) => scoutClarity(L, L + levelSpanFor(L), L);
+    expect(auSommet(20)).toBe(auSommet(100));
+    expect(auSommet(12)).toBe(auSommet(40));
+    // Et une armée à TON niveau se lit mieux qu'une armée au sommet.
+    for (const L of [12, 40]) expect(scoutClarity(L, L, L)).toBeGreaterThan(auSommet(L));
+  });
+  it('l’aléa est déterministe par graine — même armée, même lecture', () => {
+    // ⚠️ Deux appels ne suffisent PAS : l’aléa ne vaut que 0 ou 1 cran, donc un tirage
+    // vraiment aléatoire collisionnerait une fois sur deux. On répète largement.
+    const ref = scoutClarity(40, 44, 40, 0, 12345);
+    for (let i = 0; i < 50; i++) expect(scoutClarity(40, 44, 40, 0, 12345)).toBe(ref);
+  });
+  it('…mais il VARIE d’un raid à l’autre (sinon ce n’est pas de l’aléa)', () => {
+    const vals = new Set(
+      Array.from({ length: 40 }, (_, i) => scoutClarity(40, 44, 40, 0, i * 977 + 3)),
+    );
+    expect(vals.size).toBeGreaterThan(1);
+  });
+  it('sur-monter la Tour au-delà de son niveau n’achète RIEN — le sport reste le plafond', () => {
+    // ⚠️ Le clamp final masque une part non bornée tant que l’opacité est faible : il faut
+    // une armée en HAUT de fenêtre pour que la différence apparaisse.
+    for (const L of [12, 26, 60]) {
+      const haut = L + levelSpanFor(L);
+      expect(scoutClarity(L * 8, haut, L)).toBe(scoutClarity(L, haut, L));
+    }
+  });
+  it('sans graine, aucun bruit : les comparaisons de la fiche restent stables', () => {
+    expect(scoutClarity(40, 40, 40)).toBe(scoutClarity(40, 40, 40, 0, 0));
+  });
+  it('sans Tour de guet on ne voit rien, à tout niveau', () => {
+    for (const L of [3, 20, 100]) expect(clarities(L, 0).every((c) => c === 0)).toBe(true);
+  });
+  it('le faucon posté rachète un cran', () => {
+    const sans = scoutClarity(20, 24, 20, 0);
+    const avec = scoutClarity(20, 24, 20, 1);
+    expect(avec).toBeGreaterThanOrEqual(sans);
+  });
+});

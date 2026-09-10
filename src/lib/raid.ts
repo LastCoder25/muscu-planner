@@ -411,6 +411,19 @@ export const RAID = {
   scoutLeadPerLevelMs: 20 * 60_000, // …+20 min par niveau
   scoutLeadCapMs: 8 * 3600_000,
   clarityMax: 5,
+  // ⚠️ OPACITÉ RELATIVE À LA FENÊTRE, et non à l’écart brut de niveaux. L’ancien
+  // `⌊écart/3⌋` était absolu face à un terme de tour NON BORNÉ (`⌊tour/2⌋` vaut 50 au
+  // niveau 100 pour un plafond de 5) : la soustraction était noyée, et la clarté
+  // maximale tombait sur **100 %** des raids dès le niveau 20 — mesuré, et jamais
+  // redescendu ensuite. Rapportée à `levelSpanFor`, elle mord à TOUS les niveaux. La
+  // part mange au plus la MOITIÉ de l’échelle : au-delà, un joueur pleinement investi
+  // devenait aveugle en début de partie (mesuré 27 % de clarté 0 à 0,6).
+  scoutOpacity: 0.5,
+  // Les éclaireurs ratent parfois. Tiré sur la graine du RAID → déterministe et
+  // hors-ligne comme tout le reste, mais imprévisible pour le joueur : la Tour achète
+  // une PROBABILITÉ, plus une certitude. À 2 crans la clarté maximale devenait
+  // inatteignable (le haut de l’échelle serait du contenu mort).
+  scoutNoise: 1,
 } as const;
 
 /** Le fosse commune : capacité PAR VAGUE, renouvelable tant que les corps sont
@@ -662,10 +675,30 @@ export function scoutClarity(
   raidLevel: number,
   playerLevel: number,
   falconBonus = 0,
+  raidSeed = 0,
 ): number {
-  const gap = Math.max(0, raidLevel - Math.max(1, playerLevel));
-  const c = Math.floor(Math.max(0, watchtowerLevel) / 2) - Math.floor(gap / 3) + falconBonus;
+  const L = Math.max(1, playerLevel);
+  // La TOUR vaut sa PART du niveau du joueur — comme toute structure de l’enceinte
+  // (cf. `baseCombatant`). Avec l’ancien `⌊tour/2⌋`, un débutant plafonnait à 1 cran
+  // quoi qu’il bâtisse tandis qu’un vétéran voyait tout : la courbe était à l’envers.
+  const base = RAID.clarityMax * Math.min(1, Math.max(0, watchtowerLevel) / L);
+  // L’OPACITÉ : où l’armée se situe DANS la fenêtre de niveaux qui peut te viser.
+  const gap = Math.max(0, raidLevel - L);
+  const opacity =
+    RAID.clarityMax * RAID.scoutOpacity * Math.min(1, gap / Math.max(1, levelSpanFor(L)));
+  const c = Math.round(base - opacity) - scoutNoise(raidSeed) + falconBonus;
   return Math.min(RAID.clarityMax, Math.max(0, c));
+}
+
+/** Crans perdus par l’aléa du renseignement, tirés sur la graine du raid (0 = pas de
+ *  graine fournie → aucun bruit, ce qui garde les comparaisons de la fiche déterministes). */
+function scoutNoise(raidSeed: number): number {
+  if (!raidSeed || RAID.scoutNoise <= 0) return 0;
+  let h = raidSeed >>> 0;
+  h ^= h << 13;
+  h ^= h >>> 17;
+  h ^= h << 5;
+  return (h >>> 0) % (RAID.scoutNoise + 1);
 }
 
 export interface ScoutReport {
@@ -1157,7 +1190,10 @@ export function defensePerLevelLabel(
       // ⚠️ CLAMPÉE comme `scoutClarity`. Sans cela le libellé promettait « 7/5 » crans de
       // renseignement à une tour de niveau 13 : une étiquette qui dépasse le plafond de la
       // fonction qu’elle décrit ment, et fait payer des niveaux pour rien.
-      const clarte = (n: number) => Math.min(RAID.clarityMax, Math.floor(n / 2));
+      // ⚠️ On APPELLE `scoutClarity` (armée à ton niveau, sans aléa) au lieu de recopier
+      // sa règle : la copie `⌊n/2⌋` a survécu à deux refontes de la formule et aurait
+      // menti dès celle-ci. Une règle recopiée diverge toujours.
+      const clarte = (n: number) => scoutClarity(n, ctx.playerLevel, ctx.playerLevel);
       const cl = clarte(l);
       const cn = clarte(next);
       const leadPlein = scoutLeadMs(next) === scoutLeadMs(l);

@@ -1097,6 +1097,9 @@ const clarity = computed(() =>
         heroLevel.value,
         // Un faucon posté au chenil voit plus loin : la garnison a des rôles hors combat.
         garrison.value.scoutBonus ?? 0,
+        // La graine du raid porte l’aléa du renseignement : même armée = même lecture,
+        // mais on ne peut pas la prédire avant qu’elle apparaisse.
+        raid.value.seed,
       )
     : 0,
 );
