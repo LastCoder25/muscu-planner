@@ -43,11 +43,14 @@
           <button class="edit" aria-label="Renommer" @click="renamePseudo">
             <q-icon name="edit" size="14px" />
           </button>
-        </div>
-        <div class="tb-right">
+          <!-- ⚠️ La boîte vit avec les ACTIONS (crayon), pas avec les ressources : elle
+               était dans le même groupe que le plateau, donc AJOUTER une devise la
+               déplaçait. Ici, aucune puce ne peut plus la bouger. -->
           <button class="inbox-btn" aria-label="Messages" @click="openInbox">
             📬<span v-if="unreadMessages" class="inbox-dot">{{ unreadMessages }}</span>
           </button>
+        </div>
+        <div class="tb-right">
           <!-- Plateau de ressources : jauges (⚡ or) · séparateur · matériaux d'amélioration.
                Une seule bordure = groupe lisible au lieu de 8 puces éparses. Chaque ressource
                a une infobulle expliquant ce qu'elle fait monter. -->
@@ -5857,6 +5860,7 @@ onUnmounted(() => {
   margin-bottom: 14px;
 }
 .tb-left {
+  flex-wrap: wrap;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -5891,6 +5895,7 @@ onUnmounted(() => {
 .tb-right {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 6px;
 }

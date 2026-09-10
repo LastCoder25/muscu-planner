@@ -8,6 +8,7 @@ import {
   createMap,
   advanceWorld,
   travelPosition,
+  voyageProgress,
   resolveOutcome,
   startExpedition,
   expeditionTerrain,
@@ -400,5 +401,30 @@ describe('arene jouable', () => {
     expect(arenaRewards(10, 20).gold).toBeGreaterThan(arenaRewards(5, 20).gold);
     expect(arenaRewards(10, 40).gold).toBeGreaterThan(arenaRewards(10, 10).gold);
     expect(arenaRewards(100, 20).luck).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('⚠️ avancement d’un voyage sur sa durée TOTALE', () => {
+  const v = { poi: { x: 10, y: 10 } as never, sentAt: 0, midAt: 2 * H, returnAt: 5 * H };
+
+  it('la barre ne RECULE JAMAIS, même au demi-tour', () => {
+    // `travelPosition().frac` repart à zéro quand la phase change : une barre pilotée
+    // par lui reculerait en plein milieu du trajet, ce qui se lit comme un bug.
+    let prev = -1;
+    for (let t = 0; t <= 5 * H; t += H / 4) {
+      const p = voyageProgress(v, t).overall;
+      expect(p, `t=${t / H} h`).toBeGreaterThanOrEqual(prev);
+      prev = p;
+    }
+  });
+
+  it('l’objectif tombe au bon endroit de la barre', () => {
+    expect(voyageProgress(v, 0).mid).toBeCloseTo(0.4, 6); // 2 h sur 5 h
+    expect(voyageProgress(v, 2 * H).overall).toBeCloseTo(0.4, 6); // on y est
+  });
+
+  it('reste borné à [0,1]', () => {
+    expect(voyageProgress(v, -H).overall).toBe(0);
+    expect(voyageProgress(v, 99 * H).overall).toBe(1);
   });
 });

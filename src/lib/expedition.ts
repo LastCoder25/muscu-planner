@@ -696,6 +696,18 @@ export interface Voyage {
   returnAt: number;
 }
 
+/** Avancement d’un voyage sur SA DURÉE TOTALE (aller + retour), et l’endroit où tombe
+ *  l’objectif. ⚠️ Distinct de `travelPosition().frac`, qui n’avance que DANS la phase
+ *  courante et repart donc à zéro au demi-tour : une barre pilotée par lui reculerait
+ *  en plein milieu du trajet, ce qui se lit comme un bug. */
+export function voyageProgress(v: Voyage, now: number): { overall: number; mid: number } {
+  const total = Math.max(1, v.returnAt - v.sentAt);
+  return {
+    overall: clamp01((now - v.sentAt) / total),
+    mid: clamp01((v.midAt - v.sentAt) / total),
+  };
+}
+
 /** Position d'un voyageur (héros OU convoi) à l'instant `now`. */
 export function travelPosition(
   exp: Voyage,

@@ -173,6 +173,15 @@
         <div class="ac-title font-display">
           {{ POI_LABEL[active.poi.type] }} niv {{ active.poi.level }}
         </div>
+        <!-- Barre de voyage : ville ──●── objectif ──── ville. Le repère fixe marque
+             l'objectif, le point marque où en est le voyageur. ⚠️ Pilotée par
+             `voyageProgress` (durée TOTALE) et non par la fraction de phase, qui
+             repart à zéro au demi-tour et ferait RECULER la barre à mi-chemin. -->
+        <div v-if="hero" class="vg-bar" :class="{ back: hero.phase === 'return' }">
+          <div class="vg-fill" :style="{ width: heroProg.overall * 100 + '%' }"></div>
+          <div class="vg-mid" :style="{ left: heroProg.mid * 100 + '%' }"></div>
+          <div class="vg-dot" :style="{ left: heroProg.overall * 100 + '%' }"></div>
+        </div>
         <div class="ac-timers" v-if="hero && hero.phase !== 'done'">
           <span v-if="hero.phase === 'outbound'"
             >🎯 Arrivée dans {{ fmtMs(hero.remainToObjectiveMs) }}</span
@@ -193,6 +202,15 @@
         <div class="ac-title font-display">
           {{ POI_LABEL[v.poi.type] }} niv {{ v.poi.level }}
           <span class="vc-esc">· escorte {{ v.escort }}</span>
+        </div>
+        <!-- Barre de voyage : ville ──●── objectif ──── ville. Le repère fixe marque
+             l'objectif, le point marque où en est le voyageur. ⚠️ Pilotée par
+             `voyageProgress` (durée TOTALE) et non par la fraction de phase, qui
+             repart à zéro au demi-tour et ferait RECULER la barre à mi-chemin. -->
+        <div class="vg-bar" :class="{ back: v.at.phase === 'return' }">
+          <div class="vg-fill" :style="{ width: v.prog.overall * 100 + '%' }"></div>
+          <div class="vg-mid" :style="{ left: v.prog.mid * 100 + '%' }"></div>
+          <div class="vg-dot" :style="{ left: v.prog.overall * 100 + '%' }"></div>
         </div>
         <div class="ac-timers">
           <span v-if="v.at.phase === 'outbound'">
@@ -349,6 +367,7 @@ import {
   haulPills,
   EXPE,
   travelPosition,
+  voyageProgress,
   poiCombatant,
   simulateArena,
   goldCost,
@@ -436,6 +455,9 @@ const terrain = computed(() =>
     : { coast: '', features: [], rivers: [] },
 );
 const hero = computed(() => (active.value ? travelPosition(active.value, now.value) : null));
+const heroProg = computed(() =>
+  active.value ? voyageProgress(active.value, now.value) : { overall: 0, mid: 0.5 },
+);
 
 // Chevrons de direction le long du segment RESTANT (héros → cible du moment :
 // l'objectif à l'aller, la ville au retour). Ils s'allument un à un du héros vers
@@ -577,6 +599,7 @@ const vansOnMap = computed(() =>
       poi: c.poi,
       escort: c.escort.length,
       at: travelPosition(c, now.value),
+      prog: voyageProgress(c, now.value),
     })),
 );
 const busyCaravan = ref(false);
@@ -801,9 +824,6 @@ function fmtMin(min: number): string {
 
 <style scoped lang="scss">
 /* ── Caravanes : la seconde offre d’un lieu de récolte ── */
-.van-card {
-  border-left: 3px solid #b57bff;
-}
 .vc-esc {
   font-size: 12px;
   color: var(--dim);
@@ -1231,8 +1251,70 @@ function fmtMin(min: number): string {
 .active-card {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  padding: 14px 16px;
   border-color: var(--accent);
+}
+.van-card {
+  border-color: #b57bff;
+}
+.van-card .vg-fill,
+.van-card .vg-dot {
+  background: #b57bff;
+}
+.van-card .vg-bar.back .vg-fill,
+.van-card .vg-bar.back .vg-dot {
+  background: #7bc86c;
+}
+.active-card + .active-card {
+  margin-top: 8px;
+}
+.ac-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+/* Barre de voyage : ville → objectif → ville, en une lecture. */
+.vg-bar {
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+}
+.vg-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.6s linear;
+}
+/* Au RETOUR, la teinte change : on rentre, on ne va plus. */
+.vg-bar.back .vg-fill {
+  background: #7bc86c;
+}
+.vg-mid {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 10px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--dim);
+}
+.vg-dot {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+  transition: left 0.6s linear;
+}
+.vg-bar.back .vg-dot {
+  background: #7bc86c;
 }
 .ac-emo {
   font-size: 26px;
@@ -1242,6 +1324,9 @@ function fmtMin(min: number): string {
   font-weight: 800;
 }
 .ac-timers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   font-size: 12.5px;
   color: var(--text);
   font-weight: 600;
