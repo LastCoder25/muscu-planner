@@ -111,6 +111,16 @@
             </div>
           </div>
           <div class="pm-actions">
+            <!-- ⚠️ Le vivier se gère DEPUIS SON BÂTIMENT. Il vivait dans une carte en bas
+                 de la base, loin de la Guilde qu'on venait de monter : on cherchait ses
+                 aventuriers là où ils n'étaient pas. Un bâtiment, un endroit. -->
+            <button
+              v-if="selectedPlot.building.typeId === 'guild'"
+              class="pm-btn open"
+              @click="emit('open-guild')"
+            >
+              ⚔️ Voir mes aventuriers
+            </button>
             <button
               v-if="produces(selectedPlot.building)"
               class="pm-btn"
@@ -182,7 +192,7 @@ import {
 import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 
 const props = defineProps<{ heroLevel: number; now: number; slot: number | null }>();
-const emit = defineEmits<{ 'update:slot': [number | null] }>();
+const emit = defineEmits<{ 'update:slot': [number | null]; 'open-guild': [] }>();
 const char = useCharacterStore();
 const auth = useAuthStore();
 const gameFx = useGameFx();
@@ -429,6 +439,11 @@ function collectAll() {
 }
 .pp-tag {
   font-size: 10px;
+  color: var(--accent);
+}
+.pm-btn.open {
+  background: var(--surface);
+  border-color: var(--accent);
   color: var(--accent);
 }
 .vp-sheet {

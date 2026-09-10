@@ -4934,6 +4934,9 @@ async function baseLifecycle() {
     }
     // Un tick a pu déplacer l’échéance du prochain siège → on réaligne.
     void syncPush(!!r.detected || !!r.report);
+    // Les formations arrivées à terme se concluent ici : sans ça, une promotion
+    // n’aboutirait qu’à la prochaine action touchant le vivier — donc peut-être jamais.
+    void char.settleAdventurers(uid);
   } finally {
     baseBusy = false;
   }

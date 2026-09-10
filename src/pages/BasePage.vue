@@ -217,6 +217,11 @@
             <text :x="y.x + 7.5" :y="y.y - 5.9">{{ y.level }}</text>
           </g>
           <circle v-if="y.ready" :cx="y.x - 7.5" :cy="y.y - 7.5" r="2.6" class="yard-ready" />
+          <!-- ⚠️ Le signal « une promotion attend » vivait sur la carte d'entrée du
+               vivier, en bas de la base. Celle-ci a disparu (on gère les aventuriers
+               DEPUIS la Guilde) : sans ce report, on perdrait l'information au lieu de
+               la déplacer. -->
+          <text v-if="y.star" :x="y.x - 6.5" :y="y.y + 9.5" class="yard-star">⭐</text>
         </g>
       </svg>
 
@@ -452,28 +457,15 @@
       </template>
     </div>
 
-    <!-- ⚠️ La Guilde a DEUX métiers : un bâtiment qu’on monte (feuille d’emplacement) et
-         un vivier qu’on gère. Les mêler dans la feuille rendrait celle-ci illisible, et
-         cacher le vivier derrière un bâtiment le rendrait introuvable — d’où cette carte,
-         qui n’apparaît que si la Guilde est debout. -->
-    <button v-if="guildLevel > 0" class="panel guild-entry" @click="guildOpen = true">
-      <span class="ge-emo">⚔️</span>
-      <span class="ge-main">
-        <span class="ge-title">Guilde d’aventuriers</span>
-        <span class="ge-sub">
-          {{ char.advList.length }}/{{ guildRoster(guildLevel) }} aventuriers
-          <template v-if="advReady">
-            · {{ advReady }} disponible{{ advReady > 1 ? 's' : '' }}</template
-          >
-        </span>
-      </span>
-      <span v-if="promoAvailable" class="ge-badge">⭐ {{ promoAvailable }}</span>
-      <span class="ge-go">›</span>
-    </button>
     <GuildPanel :open="guildOpen" @close="guildOpen = false" />
 
     <!-- Feuille des emplacements de production, ouverte depuis le dessin. -->
-    <VillagePlots v-model:slot="plotSlot" :hero-level="heroLevel" :now="now" />
+    <VillagePlots
+      v-model:slot="plotSlot"
+      :hero-level="heroLevel"
+      :now="now"
+      @open-guild="guildOpen = true"
+    />
 
     <!-- Feuille d'une structure de défense, ouverte depuis le dessin. -->
     <q-dialog v-model="defSheetOpen" position="bottom">
@@ -651,7 +643,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
-import { advAvailable, canPromote, guildRoster } from '@/lib/adventurers';
+import { canPromote } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
 import { RARITY_LABEL, famDefMult, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import {
@@ -1077,6 +1069,8 @@ interface YardCell {
   level: number;
   ready: boolean;
   damaged: boolean;
+  /** ⭐ Quelque chose attend une décision DANS ce bâtiment (une promotion, aujourd'hui). */
+  star?: boolean;
   onClick: () => void;
 }
 // ── LA VILLE EN DEUX ANNEAUX ──────────────────────────────────────────────────
@@ -1138,6 +1132,7 @@ const yard = computed<YardCell[]>(() => {
       level: b?.level ?? 0,
       ready: b ? buildingAccrued(b, now.value, mult) > 0 : false,
       damaged: false,
+      star: b?.typeId === 'guild' && promoAvailable.value > 0,
       onClick: () => (plotSlot.value = i),
     });
   }
@@ -1167,11 +1162,11 @@ const plotSlot = ref<number | null>(null);
 // ── Guilde d’aventuriers ──
 const guildOpen = ref(false);
 const guildLevel = computed(() => char.guildLevel);
-/** Combien sont prêts à repartir — le seul chiffre qui décide si on ouvre le panneau. */
-const advReady = computed(() => char.advList.filter((a) => advAvailable(a, now.value)).length);
-/** Promotions en attente : un jalon qu’on ne doit pas rater, donc une pastille. */
+/** Promotions en attente : un jalon qu'on ne doit pas rater, donc une ⭐ sur la Guilde.
+ *  ⚠️ Une formation EN COURS n'en est pas une : la décision est déjà prise, et proposer
+ *  de promouvoir quelqu'un qui est justement en train de l'être n'aurait aucun sens. */
 const promoAvailable = computed(
-  () => char.advList.filter((a) => canPromote(a, guildLevel.value)).length,
+  () => char.advList.filter((a) => !a.training && canPromote(a, guildLevel.value)).length,
 );
 const defOpen = ref<DefenseId | null>(null);
 const defSel = computed(() => DEFENSE_TYPES.find((d) => d.id === defOpen.value) ?? null);
@@ -1990,6 +1985,12 @@ const doCollect = () =>
   width: 36px;
   height: 36px;
   cursor: pointer;
+}
+/* ⭐ « il y a une décision à prendre ici » — discret mais repérable au coup d'œil. */
+.yard-star {
+  font-size: 7px;
+  text-anchor: middle;
+  pointer-events: none;
 }
 .keep-legend {
   display: flex;

@@ -4,6 +4,10 @@ import {
   PROMO_LEVELS,
   PROMO_CHOICES,
   STRATUM_BUDGET,
+  advAvailable,
+  advTrainingLeftMs,
+  settleTraining,
+  settleAllTraining,
   advClass,
   advRarity,
   advStats,
@@ -315,5 +319,63 @@ describe('Guilde : effectif, coût de recrutement, XP', () => {
       expect(n.level).toBeGreaterThanOrEqual(a.level);
       expect(n.xp).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe('⚠️ une promotion se PAIE en temps de formation', () => {
+  // Le Centre de formation annonce « formations plus courtes à chaque niveau » ; la
+  // promotion était pourtant INSTANTANÉE, donc son niveau ne changeait rien et sa
+  // promesse était creuse. C'est aussi ce que l'utilisateur a constaté : deux
+  // aventuriers promus, aucun timer.
+  const base = (): Adventurer => ({
+    id: 'a',
+    name: 'A',
+    seed: 1,
+    path: ['guerrier'],
+    level: 5,
+    xp: 0,
+  });
+  const enForm = (until: number): Adventurer => ({
+    ...base(),
+    training: { classId: 'epeiste', until },
+  });
+
+  it('⚠️ la classe n’entre PAS dans le chemin avant l’échéance', () => {
+    // Sinon l'aventurier profiterait de ses nouvelles stats pendant sa formation.
+    const a = settleTraining(enForm(1000), 999);
+    expect(a.path).toEqual(['guerrier']);
+    expect(a.training).toBeTruthy();
+  });
+
+  it('à l’échéance, la classe est appliquée et la formation disparaît', () => {
+    const a = settleTraining(enForm(1000), 1000);
+    expect(a.path).toEqual(['guerrier', 'epeiste']);
+    expect(a.training).toBeUndefined();
+  });
+
+  it('⚠️ IDEMPOTENT : rejouer le règlement ne promeut pas deux fois', () => {
+    // Il tourne à chaque tick — s'il n'était pas idempotent, un aventurier gagnerait
+    // une classe par seconde.
+    const a = settleTraining(enForm(1000), 5000);
+    expect(settleTraining(a, 9000)).toEqual(a);
+    expect(settleTraining(a, 9000).path).toHaveLength(2);
+  });
+
+  it('⚠️ un aventurier EN FORMATION est indisponible — c’est le coût de la promotion', () => {
+    expect(advAvailable(enForm(2000), 1000)).toBe(false);
+    expect(advAvailable(enForm(2000), 2000)).toBe(true);
+    expect(advTrainingLeftMs(enForm(2000), 1500)).toBe(500);
+    expect(advTrainingLeftMs(base(), 1500)).toBe(0);
+  });
+
+  it('une formation court PENDANT une convalescence — on ne fait pas attendre deux fois', () => {
+    const blesse = { ...enForm(2000), hurtUntil: 9000 };
+    expect(settleTraining(blesse, 2000).path).toHaveLength(2);
+  });
+
+  it('le règlement en masse ne recopie le vivier que s’il a bougé', () => {
+    const l = [base(), enForm(5000)];
+    expect(settleAllTraining(l, 1000)).toEqual({ list: l, changed: false });
+    expect(settleAllTraining(l, 5000).changed).toBe(true);
   });
 });

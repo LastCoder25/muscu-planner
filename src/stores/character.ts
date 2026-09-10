@@ -108,6 +108,7 @@ import {
 } from '@/lib/raid';
 import {
   advAvailable,
+  settleAllTraining,
   canPromote,
   classChoices,
   grantAdvXp,
@@ -119,6 +120,7 @@ import {
   canSendCaravan,
   caravanHurtMs,
   caravanSlots,
+  trainMsFor,
   isCaravanClaimable,
   startCaravan,
   type Caravan,
@@ -1843,7 +1845,16 @@ export const useCharacterStore = defineStore('character', () => {
     if (trainingLevel.value <= 0) return false;
     if (!canPromote(adv, guildLevel.value)) return false;
     if (!classChoices(adv).some((c) => c.id === classId)) return false;
-    const next = { ...adv, path: [...adv.path, classId] };
+    // ⚠️ On n'applique PAS la classe tout de suite : on engage une FORMATION. C'est le
+    // temps passé au Centre qui la paie, et c'est ce que son niveau raccourcit — sinon
+    // son `perLevelNote` (« formations plus courtes ») promet ce que rien ne tient.
+    // ⚠️ Une formation peut courir PENDANT une convalescence : c'est même le bon moment,
+    // et on ne punit jamais un blessé en lui faisant attendre deux fois.
+    if (adv.training) return false; // une seule à la fois
+    const next: Adventurer = {
+      ...adv,
+      training: { classId, until: Date.now() + trainMsFor(trainingLevel.value) },
+    };
     await persist(userId, {
       adventurers: advList.value.map((a) => (a.id === advId ? next : a)),
     });
@@ -1852,6 +1863,16 @@ export const useCharacterStore = defineStore('character', () => {
 
   /** Envoie un convoi. ⚠️ Le POI est RETIRÉ de la carte au départ, exactement comme pour
    *  le héros — c'est ce qui fait que caravanes et héros se disputent les mêmes lieux. */
+  /** Applique les formations arrivées à terme. ⚠️ Appelé par le tick de base (qui
+   *  tourne déjà) : sans ça, une promotion ne se conclurait qu'à la prochaine action
+   *  touchant le vivier, donc peut-être jamais. */
+  async function settleAdventurers(userId: string, now = Date.now()) {
+    const r = settleAllTraining(advList.value, now);
+    if (!r.changed) return false;
+    await persist(userId, { adventurers: r.list });
+    return true;
+  }
+
   async function sendCaravan(userId: string, poi: Poi, escortIds: string[]) {
     const cur = row.value;
     if (!cur) return false;
@@ -1966,6 +1987,7 @@ export const useCharacterStore = defineStore('character', () => {
     recruitChoices,
     recruitAdventurer,
     promoteAdventurer,
+    settleAdventurers,
     sendCaravan,
     claimCaravan,
     applyExpedition,

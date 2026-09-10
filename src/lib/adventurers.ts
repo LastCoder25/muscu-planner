@@ -556,6 +556,11 @@ export interface Adventurer {
   busyUntil?: number;
   /** Blessé jusqu'à — ms epoch. Soigné plus vite par l'Infirmerie, comme le héros. */
   hurtUntil?: number;
+  /** Promotion EN COURS au Centre de formation. ⚠️ Une promotion n'est pas instantanée :
+   *  c'est le temps passé au Centre qui la paie, et c'est ce que son niveau raccourcit.
+   *  Le `classId` n'est PAS encore dans `path` — il n'y entre qu'à l'échéance, sinon
+   *  l'aventurier profiterait de ses nouvelles stats pendant sa formation. */
+  training?: { classId: string; until: number };
 }
 
 function mulberry32(seed: number): () => number {
@@ -738,5 +743,40 @@ export function grantAdvXp(adv: Adventurer, xp: number, guildLevel: number): Adv
 
 /** Disponible ? Ni en mission, ni en formation, ni à l'infirmerie. */
 export function advAvailable(adv: Adventurer, now: number): boolean {
-  return (adv.busyUntil ?? 0) <= now && (adv.hurtUntil ?? 0) <= now;
+  // ⚠️ La formation IMMOBILISE, et c'est tout son coût : promouvoir maintenant, c'est
+  // renoncer à cet aventurier pour les prochains convois. Sans ça, une promotion serait
+  // gratuite et il n'y aurait aucune décision.
+  return (
+    (adv.busyUntil ?? 0) <= now && (adv.hurtUntil ?? 0) <= now && (adv.training?.until ?? 0) <= now
+  );
+}
+
+/** Une promotion arrivée à terme est APPLIQUÉE ; sinon l'aventurier est rendu tel quel.
+ *  ⚠️ Pur et idempotent : on peut l'appeler à chaque tick sans rien dupliquer. */
+export function settleTraining(adv: Adventurer, now: number): Adventurer {
+  const t = adv.training;
+  if (!t || t.until > now) return adv;
+  const reste = { ...adv, path: [...adv.path, t.classId] };
+  delete reste.training; // la formation est CONSOMMÉE : la laisser la rejouerait
+  return reste;
+}
+
+/** Idem sur un vivier entier. Rend le MÊME tableau si rien n'a bougé, pour que
+ *  l'appelant sache s'il doit persister. */
+export function settleAllTraining(
+  list: Adventurer[],
+  now: number,
+): { list: Adventurer[]; changed: boolean } {
+  let changed = false;
+  const next = list.map((a) => {
+    const s = settleTraining(a, now);
+    if (s !== a) changed = true;
+    return s;
+  });
+  return changed ? { list: next, changed } : { list, changed: false };
+}
+
+/** Temps restant de formation (0 si aucune). */
+export function advTrainingLeftMs(adv: Adventurer, now: number): number {
+  return Math.max(0, (adv.training?.until ?? 0) - now);
 }

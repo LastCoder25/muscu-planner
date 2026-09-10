@@ -37,12 +37,22 @@
               <span class="adv-fill" :style="{ width: Math.round(progressOf(a) * 100) + '%' }" />
             </div>
             <div class="adv-state">
-              <template v-if="hurtOf(a)">🛏️ à l’infirmerie · {{ leftOf(hurtOf(a)) }}</template>
+              <!-- ⚠️ La formation passe AVANT la convalescence : les deux peuvent courir
+                   ensemble, et c'est celle qu'on vient de lancer qu'on cherche des yeux. -->
+              <template v-if="trainOf(a)">
+                🎓 en formation ({{ trainNameOf(a) }}) · {{ leftOf(trainOf(a)) }}
+              </template>
+              <template v-else-if="hurtOf(a)">🛏️ à l’infirmerie · {{ leftOf(hurtOf(a)) }}</template>
               <template v-else-if="busyOf(a)">🐫 en route · {{ leftOf(busyOf(a)) }}</template>
               <template v-else>✅ disponible</template>
             </div>
           </div>
-          <button v-if="canPromoteOne(a)" class="adv-promo" :disabled="busy" @click="openPromo(a)">
+          <button
+            v-if="canPromoteOne(a) && !trainOf(a)"
+            class="adv-promo"
+            :disabled="busy"
+            @click="openPromo(a)"
+          >
             ⭐ Promouvoir
           </button>
         </div>
@@ -121,6 +131,7 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import {
+  ADV_CLASSES,
   advAvailable,
   advNextStarLevel,
   advRank,
@@ -171,6 +182,11 @@ const stars = (s: number) => rankStarStr(s);
 const isFree = (a: Adventurer) => advAvailable(a, now.value);
 const busyOf = (a: Adventurer) => ((a.busyUntil ?? 0) > now.value ? a.busyUntil! : 0);
 const hurtOf = (a: Adventurer) => ((a.hurtUntil ?? 0) > now.value ? a.hurtUntil! : 0);
+/** Formation en cours (0 si aucune). ⚠️ Elle IMMOBILISE : c'est tout le coût d'une
+ *  promotion, et le Centre de formation est ce qui l'abrège. */
+const trainOf = (a: Adventurer) => ((a.training?.until ?? 0) > now.value ? a.training!.until : 0);
+const trainNameOf = (a: Adventurer) =>
+  a.training ? (ADV_CLASSES.find((c) => c.id === a.training!.classId)?.label ?? '?') : '';
 const canPromoteOne = (a: Adventurer) => canPromote(a, guildLevel.value);
 function leftOf(at: number): string {
   const m = Math.max(0, Math.round((at - now.value) / 60_000));
