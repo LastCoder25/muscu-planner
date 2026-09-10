@@ -418,6 +418,9 @@
               </button>
               <span class="cl-sub" :class="{ ok: legComplete(leg) }">
                 {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
+                <!-- Même consigne d’exécution que la fiche du 360 : c’est souvent ICI
+                     qu’on consulte son défi en cours, pas sur /combo/:id. -->
+                <span class="cl-range">🎯 {{ legRangeLabel(leg) }}</span>
                 <span v-if="legDone(leg) > leg.target" class="cl-extra"
                   >+{{ legDone(leg) - leg.target }} en plus</span
                 >
@@ -572,6 +575,8 @@ import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { isCardioChallengeExercise } from '@/data/cardio';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
+import { useProfileStore } from '@/stores/profile';
+import { repRangeLabel } from '@/lib/repScheme';
 import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
@@ -588,6 +593,7 @@ import {
   legLastWeight,
   legLastAssisted,
   legSets,
+  legRepRange,
   type ComboChallenge,
   comboExportText,
   comboBonusXp,
@@ -613,6 +619,12 @@ const route = useRoute();
 const $q = useQuasar();
 const store = useChallengesStore();
 const comboStore = useComboStore();
+const profileStore = useProfileStore();
+// Fourchette conseillée d’un exo, telle que figée à la création. L’objectif du profil
+// ne sert que de repli pour les 360 créés avant qu’elle existe.
+function legRangeLabel(leg: ComboLeg): string {
+  return repRangeLabel(legRepRange(leg, profileStore.profile?.objective), legMode(leg) === 'time');
+}
 const gameFx = useGameFx();
 // Grosse animation centrale à la complétion d'un Défi 360 (full-body bouclé).
 function celebrateCombo(c: ComboChallenge) {
@@ -1560,6 +1572,11 @@ onMounted(async () => {
   color: var(--dim);
 }
 /* Pastille séries faites/à faire, en haut à droite de la ligne. */
+.cl-range {
+  color: var(--accent);
+  margin-left: 6px;
+  white-space: nowrap;
+}
 .cl-sub {
   flex: none;
   align-self: flex-start;
