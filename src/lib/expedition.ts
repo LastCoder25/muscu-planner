@@ -927,6 +927,39 @@ const WIN_TEXT: Record<PoiType, string[]> = {
 };
 
 /** Calcule l'issue d'une expédition (seedée). Le butin est crédité au RETOUR. */
+/** Ce que RAPPORTE un POI de récolte, hors rencontres de trajet. `tfH` = `travelFactor`
+ *  du trajet (super-linéaire : aller loin paie plus que proportionnellement).
+ *
+ *  ⚠️ SOURCE UNIQUE : le héros ET les caravanes lisent cette table. Une copie aurait
+ *  divergé au premier réglage — c${A}est exactement le piège des libellés de POI et du
+ *  test de ferraille, deux fois rencontré dans ce projet. */
+export function harvestYield(
+  type: PoiType,
+  level: number,
+  tfH: number,
+): { energy: number; summonStones: number; scrap: number; keys: number } {
+  const L = Math.max(1, level);
+  let energy = 0;
+  let summonStones = 0;
+  let keys = 0;
+  let scrap = 0;
+  if (type === 'well') {
+    // Complément d'énergie, jamais un substitut au sport : borné à ~5 runs de donjon.
+    energy = Math.min(HARVEST.wellEnergyMax, Math.round((8 + L * 2) * tfH));
+  } else if (type === 'shrine') {
+    // Calé sur le coût d'un boss (`1 + ⌊niv/5⌋`) → une visite ≈ une tentative et demie.
+    summonStones = Math.max(2, Math.round((1 + L / 5) * (0.8 + tfH * 0.25)));
+  } else if (type === 'wreck') {
+    scrap = Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * tfH);
+  } else if (type === 'archive') {
+    // ARCHIVES → 🗝️ clés du Labyrinthe. Elles n'avaient aucune source dédiée (drops
+    // rares + la Porte), et le Labyrinthe est la SEULE source de familiers : un robinet
+    // modeste, télégraphié, qui récompense le trajet — deux clés si l'on va loin.
+    keys = 1 + (tfH >= HARVEST.archiveFarKeyAt ? 1 : 0);
+  }
+  return { energy, summonStones, scrap, keys };
+}
+
 export function resolveOutcome(
   hero: Combatant,
   poi: Poi,
@@ -947,25 +980,7 @@ export function resolveOutcome(
   if (HARVEST_TYPES.has(poi.type) && poi.type !== 'mine') {
     const rthH = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
     const tfH = travelFactor(rthH); // super-linéaire : aller loin paie PLUS que proportionnellement
-    const L = poi.level;
-    let energy = 0;
-    let summonStones = 0;
-    let keys = 0;
-    let scrap = 0;
-    if (poi.type === 'well') {
-      // Complément d'énergie, jamais un substitut au sport : borné à ~5 runs de donjon.
-      energy = Math.min(HARVEST.wellEnergyMax, Math.round((8 + L * 2) * tfH));
-    } else if (poi.type === 'shrine') {
-      // Calé sur le coût d'un boss (`1 + ⌊niv/5⌋`) → une visite ≈ une tentative et demie.
-      summonStones = Math.max(2, Math.round((1 + L / 5) * (0.8 + tfH * 0.25)));
-    } else if (poi.type === 'wreck') {
-      scrap = Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * tfH);
-    } else {
-      // ARCHIVES → 🗝️ clés du Labyrinthe. Elles n'avaient aucune source dédiée (drops
-      // rares + la Porte), et le Labyrinthe est la SEULE source de familiers : un robinet
-      // modeste, télégraphié, qui récompense le trajet — deux clés si l'on va loin.
-      keys = 1 + (tfH >= HARVEST.archiveFarKeyAt ? 1 : 0);
-    }
+    const { energy, summonStones, scrap, keys } = harvestYield(poi.type, poi.level, tfH);
     // Une récolte sans aléa n'est qu'un distributeur : les rencontres de trajet lui
     // rendent de la variance, et sont la SEULE voie par laquelle elle peut lâcher un objet.
     const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
