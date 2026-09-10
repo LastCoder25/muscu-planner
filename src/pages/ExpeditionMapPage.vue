@@ -159,6 +159,18 @@
     </div>
 
     <!-- Panneau POI sélectionné -->
+    <!-- ⚠️ La cargaison ne se verse pas toute seule : on vient la prendre, comme pour
+         les rapports d’expédition. Le convoi, lui, est déjà rentré — on ne bloque jamais
+         les aventuriers en attendant que le joueur clique. -->
+    <div v-if="claimable.length" class="panel vans">
+      <div v-for="c in claimable" :key="c.id" class="van">
+        <span>🐫</span>
+        <span>Convoi rentré de {{ POI_LABEL[c.poi.type] }}</span>
+        <button class="van-go" :disabled="busyCaravan" @click="doClaimCaravan(c.id)">
+          🎁 Récupérer
+        </button>
+      </div>
+    </div>
     <transition name="sheet">
       <div v-if="selected && !active" class="sheet">
         <div class="sh-head">
@@ -185,6 +197,32 @@
         <button class="sh-send" :disabled="!canSend" @click="send">
           {{ sendLabel }}
         </button>
+        <!-- ⚠️ La caravane ne s’affiche que sur les lieux de RÉCOLTE : le héros se bat,
+             les convois exploitent. Elle ne coûte AUCUNE énergie — c’est tout son intérêt
+             pour un joueur qui s’entraîne peu — mais elle immobilise ses aventuriers. -->
+        <template v-if="canOfferCaravan">
+          <div class="car-sep">ou bien</div>
+          <div class="car-row">
+            <span class="sh-chip">🐫 {{ fmtMin(caravanMin) }}</span>
+            <span class="sh-chip">⚡ 0</span>
+            <span class="sh-chip">{{ freeAdvs.length }} dispo · {{ vansLeft }} convoi(s)</span>
+          </div>
+          <div class="car-pick">
+            <button
+              v-for="a in freeAdvs"
+              :key="a.id"
+              class="car-adv"
+              :class="{ on: escort.includes(a.id) }"
+              @click="toggleEscort(a.id)"
+            >
+              <span class="ca-emo">{{ advTitle(a)?.emoji ?? '🧑' }}</span>
+              <span class="ca-name">{{ a.name }}</span>
+            </button>
+          </div>
+          <button class="sh-send car-send" :disabled="!canSendCaravanNow" @click="doSendCaravan">
+            🐫 Envoyer une caravane ({{ escort.length }})
+          </button>
+        </template>
       </div>
     </transition>
 
@@ -264,6 +302,8 @@ import {
   type PoiType,
   HARVEST_TYPES,
 } from '@/lib/expedition';
+import { advAvailable, advTitle } from '@/lib/adventurers';
+import { CARAVAN, caravanLegMin, caravanSlots, isCaravanClaimable } from '@/lib/caravan';
 
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
@@ -439,6 +479,76 @@ const edgeIndicators = computed(() => {
 });
 
 const selected = ref<Poi | null>(null);
+
+// ── CARAVANES ──────────────────────────────────────────────────────────────
+// Un convoi part vers un lieu de RÉCOLTE, ne coûte aucune énergie, et immobilise son
+// escorte. Il CONSOMME le lieu comme le ferait le héros : les deux se disputent la carte.
+const escort = ref<string[]>([]);
+const nowMs = ref(Date.now());
+setInterval(() => (nowMs.value = Date.now()), 30_000);
+const freeAdvs = computed(() => char.advList.filter((a) => advAvailable(a, nowMs.value)));
+const vansLeft = computed(
+  () =>
+    caravanSlots(char.comptoirLevel) -
+    char.caravanList.filter((c) => nowMs.value < c.returnAt).length,
+);
+const canOfferCaravan = computed(
+  () => !!selected.value && char.comptoirLevel > 0 && HARVEST_TYPES.has(selected.value.type),
+);
+const caravanMin = computed(() =>
+  selected.value
+    ? 2 *
+      caravanLegMin(
+        selected.value,
+        freeAdvs.value.filter((a) => escort.value.includes(a.id)),
+      )
+    : 0,
+);
+const canSendCaravanNow = computed(
+  () => escort.value.length > 0 && vansLeft.value > 0 && !busyCaravan.value,
+);
+const busyCaravan = ref(false);
+const claimable = computed(() =>
+  char.caravanList.filter((c) => isCaravanClaimable(c, nowMs.value)),
+);
+async function doClaimCaravan(id: string) {
+  const uid = auth.user?.id;
+  if (!uid || busyCaravan.value) return;
+  busyCaravan.value = true;
+  try {
+    const ok = await char.claimCaravan(uid, id);
+    if (ok) $q.notify({ type: 'positive', message: 'Cargaison récupérée.' });
+  } finally {
+    busyCaravan.value = false;
+  }
+}
+function toggleEscort(id: string) {
+  escort.value = escort.value.includes(id)
+    ? escort.value.filter((x) => x !== id)
+    : escort.value.length < CARAVAN.escortMax
+      ? [...escort.value, id]
+      : escort.value;
+}
+async function doSendCaravan() {
+  const uid = auth.user?.id;
+  const poi = selected.value;
+  if (!uid || !poi || busyCaravan.value) return;
+  busyCaravan.value = true;
+  try {
+    const ok = await char.sendCaravan(uid, poi, escort.value);
+    if (ok) {
+      selected.value = null;
+      escort.value = [];
+    }
+    $q.notify(
+      ok
+        ? { type: 'positive', message: 'Le convoi est parti.' }
+        : { type: 'negative', message: 'Envoi impossible (place, escorte ou Comptoir).' },
+    );
+  } finally {
+    busyCaravan.value = false;
+  }
+}
 const collectOpen = ref(false);
 const lastOutcome = ref<ExpeditionMessage | null>(null);
 // Objets ramenés (l'arène en rend PLUSIEURS via `items`, les autres un seul via `item`).
@@ -619,6 +729,76 @@ function fmtMin(min: number): string {
 </script>
 
 <style scoped lang="scss">
+/* ── Caravanes : la seconde offre d’un lieu de récolte ── */
+.car-sep {
+  margin: 10px 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-align: center;
+}
+.car-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+/* Grille fluide : l’escorte peut compter jusqu’à quatre noms sur un écran plié. */
+.car-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.car-adv {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 7px 4px;
+  background: #1d1913;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  min-height: 44px;
+}
+.car-adv.on {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(255, 210, 63, 0.16), #1d1913 65%);
+}
+.ca-emo {
+  font-size: 20px;
+}
+.ca-name {
+  font-size: 11px;
+  color: var(--dim);
+}
+.car-send {
+  margin-top: 2px;
+}
+/* Convois rentrés : la cargaison se récupère À LA MAIN, comme les expéditions. */
+.vans {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.van {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.van-go {
+  margin-left: auto;
+  background: var(--accent);
+  color: #15120e;
+  border: none;
+  border-radius: 9px;
+  padding: 7px 11px;
+  font-weight: 700;
+  min-height: 36px;
+}
 /* Route dangereuse : télégraphiée AVANT l'envoi → le choix du POI devient un arbitrage
    risque/gain, au lieu de « le plus proche ». */
 .sh-chip.peril {

@@ -439,6 +439,26 @@
       </template>
     </div>
 
+    <!-- ⚠️ La Guilde a DEUX métiers : un bâtiment qu’on monte (feuille d’emplacement) et
+         un vivier qu’on gère. Les mêler dans la feuille rendrait celle-ci illisible, et
+         cacher le vivier derrière un bâtiment le rendrait introuvable — d’où cette carte,
+         qui n’apparaît que si la Guilde est debout. -->
+    <button v-if="guildLevel > 0" class="panel guild-entry" @click="guildOpen = true">
+      <span class="ge-emo">⚔️</span>
+      <span class="ge-main">
+        <span class="ge-title">Guilde d’aventuriers</span>
+        <span class="ge-sub">
+          {{ char.advList.length }}/{{ guildRoster(guildLevel) }} aventuriers
+          <template v-if="advReady">
+            · {{ advReady }} disponible{{ advReady > 1 ? 's' : '' }}</template
+          >
+        </span>
+      </span>
+      <span v-if="promoAvailable" class="ge-badge">⭐ {{ promoAvailable }}</span>
+      <span class="ge-go">›</span>
+    </button>
+    <GuildPanel :open="guildOpen" @close="guildOpen = false" />
+
     <!-- Feuille des emplacements de production, ouverte depuis le dessin. -->
     <VillagePlots v-model:slot="plotSlot" :hero-level="heroLevel" :now="now" />
 
@@ -617,6 +637,8 @@ import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
+import GuildPanel from '@/components/GuildPanel.vue';
+import { advAvailable, canPromote, guildRoster } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
 import { RARITY_LABEL, famDefMult, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import {
@@ -1094,6 +1116,16 @@ const yard = computed<YardCell[]>(() => {
 
 // ── Feuilles ouvertes depuis le dessin ──
 const plotSlot = ref<number | null>(null);
+
+// ── Guilde d’aventuriers ──
+const guildOpen = ref(false);
+const guildLevel = computed(() => char.guildLevel);
+/** Combien sont prêts à repartir — le seul chiffre qui décide si on ouvre le panneau. */
+const advReady = computed(() => char.advList.filter((a) => advAvailable(a, now.value)).length);
+/** Promotions en attente : un jalon qu’on ne doit pas rater, donc une pastille. */
+const promoAvailable = computed(
+  () => char.advList.filter((a) => canPromote(a, guildLevel.value)).length,
+);
 const defOpen = ref<DefenseId | null>(null);
 const defSel = computed(() => DEFENSE_TYPES.find((d) => d.id === defOpen.value) ?? null);
 /** Ce qu’un niveau de plus apporte à CETTE structure. ⚠️ On passe l’intervalle RÉEL
@@ -1834,6 +1866,46 @@ const doCollect = () =>
   font-size: 12px;
   color: var(--dim);
   margin: 0 0 8px;
+}
+/* Carte d’entrée de la Guilde : une ligne cliquable, pas un panneau de plus. */
+.guild-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  min-height: 44px;
+  cursor: pointer;
+}
+.ge-emo {
+  font-size: 24px;
+}
+.ge-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ge-title {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.ge-sub {
+  font-size: 12px;
+  color: var(--dim);
+}
+.ge-badge {
+  background: var(--accent);
+  color: #15120e;
+  border-radius: 10px;
+  padding: 2px 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.ge-go {
+  color: var(--dim);
+  font-size: 20px;
 }
 .def-sheet {
   width: 100%;
