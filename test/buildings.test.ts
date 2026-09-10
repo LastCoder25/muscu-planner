@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { CARAVAN, caravanSlots, caravanSlowFor, trainMsFor } from '@/lib/caravan';
+import { guildRoster } from '@/lib/adventurers';
 import {
   perLevelLabel,
   plotsForLevel,
@@ -17,6 +19,8 @@ import {
   travelTimeMult,
   outpostLevel,
   bossSummonDiscount,
+  labyrinthLuckBonus,
+  bossAltarRollFloor,
   summonCostWith,
   BUILDING_TYPES,
   BUILD,
@@ -163,7 +167,13 @@ describe('buildings — Avant-poste : gate + vitesse des expéditions', () => {
     expect(travelTimeMult([mk('outpost', 1)])).toBeCloseTo(0.985, 5); // −1,5 %
     expect(travelTimeMult([mk('outpost', 13)])).toBeCloseTo(0.805, 5); // −19,5 %
     expect(travelTimeMult([mk('outpost', 40)])).toBeCloseTo(0.4, 5); // plafonné −60 % au niv.40
-    expect(travelTimeMult([mk('outpost', 60)])).toBeCloseTo(0.4, 5); // reste plafonné
+    // Au-dela du 40, on PROLONGE au lieu de plafonner (regle « aucun niveau mort ») :
+    // la queue asymptotique gratte encore, sans jamais rendre un trajet instantane.
+    expect(travelTimeMult([mk('outpost', 60)])).toBeLessThan(0.4);
+    expect(travelTimeMult([mk('outpost', 60)])).toBeGreaterThan(
+      travelTimeMult([mk('outpost', 61)]),
+    );
+    expect(travelTimeMult([mk('outpost', 999)])).toBeGreaterThan(0.1);
     expect(outpostLevel([mk('outpost', 3)])).toBe(3);
   });
   it('un utilitaire pur (perHr = 0) garde son collectedAt', () => {
@@ -182,7 +192,11 @@ describe('boss — pierres d’invocation 🔮', () => {
     expect(bossSummonDiscount([])).toBe(0);
     expect(bossSummonDiscount([mk('boss_altar', 1)])).toBeCloseTo(0.04, 5);
     expect(bossSummonDiscount([mk('boss_altar', 5)])).toBeCloseTo(0.2, 5);
-    expect(bossSummonDiscount([mk('boss_altar', 30)])).toBe(0.5); // plafonné
+    // Le palier du niveau 12 est INCHANGE (on ne nerfe personne), mais au-dela la
+    // remise continue de grandir en s'approchant d'une limite : un boss se paie toujours.
+    expect(bossSummonDiscount([mk('boss_altar', 12)])).toBeCloseTo(0.48, 6);
+    expect(bossSummonDiscount([mk('boss_altar', 30)])).toBeGreaterThan(0.5);
+    expect(bossSummonDiscount([mk('boss_altar', 999)])).toBeLessThan(0.9);
   });
   it('summonCostWith applique la remise (arrondi haut, plancher 1)', () => {
     expect(summonCostWith(6, [])).toBe(6); // sans Autel
@@ -254,5 +268,90 @@ describe('⚠️ la cour suit le roster — la porte reste dégagée', () => {
         );
       }
     }
+  });
+});
+
+describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
+  // Règle de conception : un niveau qu'on paie doit apporter quelque chose. Sinon on vend
+  // du vide — et les coûts étant quadratiques, on le vend cher. L'audit initial a trouvé
+  // 90 paliers morts sur la Porte du Labyrinthe, 97 sur le Comptoir, 81 sur le Centre.
+  const one = (typeId: string, level: number): Building[] => [
+    { typeId, level, slot: 0 } as Building,
+  ];
+
+  /** L'effet NUMÉRIQUE de chaque bâtiment. ⚠️ Un `Record` couvrant TOUS les types : si
+   *  quelqu'un ajoute un bâtiment sans dire ce que son niveau change, le test tombe —
+   *  c'est une décision, pas un oubli. Quand un bâtiment a PLUSIEURS effets, on les
+   *  combine (échelles séparées) : il suffit qu'UN d'entre eux bouge. */
+  const EFFECT: Record<string, (l: number) => number> = {
+    gold_mine: (l) => 25 * l,
+    energy_font: (l) => 0.8 * l,
+    foundry: (l) => 0.12 * l,
+    warehouse: (l) => storageMult(one('warehouse', l)),
+    outpost: (l) => -travelTimeMult(one('outpost', l)),
+    labyrinth_gate: (l) => labyrinthLuckBonus(one('labyrinth_gate', l)),
+    boss_altar: (l) =>
+      bossAltarRollFloor(one('boss_altar', l)) * 1000 + bossSummonDiscount(one('boss_altar', l)),
+    // Nombre de convois ET vitesse : le nombre reste borné par le vivier, la vitesse continue.
+    caravanserail: (l) => caravanSlots(l) * 1000 + (2 - caravanSlowFor(l)) * 100,
+    // Effectif ET rang maximal des aventuriers (le rang suit le niveau, donc continu).
+    guild: (l) => guildRoster(l) * 1000 + l,
+    training: (l) => -trainMsFor(l),
+  };
+
+  it('chaque type de bâtiment déclare ce que son niveau change', () => {
+    for (const t of BUILDING_TYPES) {
+      expect(EFFECT[t.id], `${t.id} : effet non déclaré`).toBeTypeOf('function');
+    }
+  });
+
+  it('chaque niveau de 1 à 100 apporte STRICTEMENT plus que le précédent', () => {
+    for (const t of BUILDING_TYPES) {
+      const f = EFFECT[t.id]!;
+      for (let l = 1; l <= 100; l++) {
+        expect(
+          f(l),
+          `${t.id} : le niveau ${l} n’apporte rien de plus que ${l - 1}`,
+        ).toBeGreaterThan(f(l - 1));
+      }
+    }
+  });
+
+  it('⚠️ les effets BORNÉS par nature approchent leur limite sans jamais l’atteindre', () => {
+    // Un temps de trajet ne peut pas devenir nul, un roll parfait ne doit pas être garanti,
+    // un boss doit toujours se payer. La queue asymptotique donne « encore un peu » à
+    // chaque niveau tout en restant du bon côté de l'absurde.
+    expect(travelTimeMult(one('outpost', 100))).toBeGreaterThan(0.15);
+    expect(travelTimeMult(one('outpost', 999))).toBeGreaterThan(0.1);
+    expect(bossAltarRollFloor(one('boss_altar', 999))).toBeLessThan(1);
+    expect(bossSummonDiscount(one('boss_altar', 999))).toBeLessThan(0.9);
+    expect(caravanSlowFor(999)).toBeGreaterThan(1); // jamais plus rapide que le héros
+    expect(trainMsFor(999)).toBeGreaterThan(0); // une formation dure toujours
+  });
+
+  it('⚠️ on PROLONGE sans NERFER : la valeur au plafond d’origine est inchangée', () => {
+    // Personne ne doit se réveiller avec un bâtiment moins bon qu'hier.
+    expect(travelTimeMult(one('outpost', 40))).toBeCloseTo(0.4, 6);
+    expect(labyrinthLuckBonus(one('labyrinth_gate', 10))).toBeCloseTo(0.4, 6);
+    expect(bossSummonDiscount(one('boss_altar', 12))).toBeCloseTo(0.48, 6);
+  });
+
+  it('⚠️ chaque convoi peut être ESCORTÉ, et par une vraie ÉQUIPE une fois lancé', () => {
+    // La contrainte posée : le nombre de convois doit rester cohérent avec le vivier.
+    // Posséder des convois qu'on ne peut pas escorter ne serait pas une récompense.
+    // Mesuré, aventuriers PAR CONVOI : 1,00 au niveau 1 · 2,50 au 9 · 3,33 au 18 ·
+    // 3,83 au 45 · 4,50 au 70 · 4,25 au 100 — de l'escorte solitaire du débutant à
+    // l'équipe complète (CARAVAN.escortMax = 4), avec de quoi faire tourner les blessés.
+    for (let l = 1; l <= 100; l++) {
+      expect(
+        guildRoster(l),
+        `niveau ${l} : plus de convois que d'aventuriers`,
+      ).toBeGreaterThanOrEqual(caravanSlots(l));
+    }
+    for (let l = 18; l <= 100; l++) {
+      expect(guildRoster(l) / caravanSlots(l), `niveau ${l}`).toBeGreaterThanOrEqual(3);
+    }
+    // Et le vivier finit par couvrir une escorte PLEINE sur chaque convoi.
+    expect(guildRoster(100)).toBeGreaterThanOrEqual(caravanSlots(100) * CARAVAN.escortMax);
   });
 });

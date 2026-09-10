@@ -5,6 +5,7 @@ import {
   caravanHurtMs,
   caravanLegMin,
   caravanSlots,
+  caravanSlowFor,
   caravanWages,
   escortCombatant,
   heroEquivalentFactor,
@@ -191,11 +192,19 @@ describe('salaires, XP et garde-fous', () => {
     // …et une route à son niveau reste pleine.
     expect(missionXp(refAdventurer(5), facile)).toBe(missionXp(refAdventurer(3), facile));
   });
-  it('⚠️ le NOMBRE de convois est plafonné — c’est lui qui multiplie l’inflation', () => {
+  it('⚠️ le nombre de convois monte SANS FIN mais reste bridé par le vivier', () => {
+    // Le plafond dur (4) a sauté avec la règle « aucun niveau mort » : un Comptoir de
+    // niveau 100 doit apporter quelque chose. Ce qui empêche l'inflation n'est donc plus
+    // un cap, mais deux freins qui, eux, ne cèdent jamais : le nombre d'aventuriers
+    // recrutables (cf. `buildings.test`) et la LENTEUR du convoi, asymptotique.
     expect(caravanSlots(0)).toBe(1);
     expect(caravanSlots(1)).toBe(1);
-    expect(caravanSlots(999)).toBe(CARAVAN.slotsMax);
-    for (let l = 0; l < 60; l++) expect(caravanSlots(l)).toBeLessThanOrEqual(CARAVAN.slotsMax);
+    expect(caravanSlots(999)).toBeGreaterThan(caravanSlots(100));
+    // Un cran de Comptoir coûte cher : il ne doit jamais offrir un convoi de plus.
+    for (let l = 1; l <= 200; l++)
+      expect(caravanSlots(l) - caravanSlots(l - 1)).toBeLessThanOrEqual(1);
+    // Et le convoi reste TOUJOURS plus lent que le héros — sinon la caravane le remplace.
+    for (const l of [0, 9, 45, 100, 999]) expect(caravanSlowFor(l)).toBeGreaterThan(1);
   });
 });
 

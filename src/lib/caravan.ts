@@ -63,6 +63,10 @@ export const CARAVAN = {
   carePerRole: 0.25,
   /** Repos d'un aventurier blessé. */
   hurtMs: 6 * 3600_000,
+  /** Formation d'une promotion, et ce que le Centre peut en retirer (asymptotiquement). */
+  trainMs: 8 * 3600_000,
+  trainMaxGain: 0.8,
+  trainHalf: 30,
   /** Paie par aventurier : socle × strate × niveau du POI^0,7. C'est un PUITS D'OR, mais
    *  calibré pour valoir ~60 % de l'or rapporté — à 26, les salaires valaient 2,6× l'or
    *  brut et le convoi était absurdement déficitaire. La caravane paie en RESSOURCES ;
@@ -76,8 +80,14 @@ export const CARAVAN = {
    *  convois plafonné, les caravanes COMPLÈTENT l'épave du héros au lieu de la remplacer.
    *  ⚠️ Ne pas monter sans re-mesurer `scrapEconomy`. */
   yieldShare: 0.5,
-  /** Plafond dur de convois simultanés. */
-  slotsMax: 4,
+  /** Un convoi de plus tous les N niveaux de Comptoir. ⚠️ Calé sur le vivier : la Guilde
+   *  donne 1 aventurier tous les 2 niveaux, donc ~L/6 escortes de 3 au niveau L — le
+   *  nombre de convois doit rester SOUS ce plafond humain, sinon on possède des convois
+   *  qu'on ne peut pas armer. À 1 tous les 9 niveaux : 12 convois au niveau 100 pour
+   *  17 escortes possibles. */
+  slotEvery: 9,
+  /** Niveaux de Comptoir pour gagner la MOITIÉ de l’accélération possible. */
+  speedHalf: 35,
   /** Ce qu'une embuscade RÉELLEMENT traversée ajoute à l'XP, par combat (gagné OU perdu).
    *  ⚠️ Remplace un +30 % forfaitaire versé dès que la route était étiquetée « périlleuse » :
    *  mesuré, l'XP était identique (49) qu'il y ait eu 1, 2 ou 3 embuscades — on payait
@@ -231,10 +241,10 @@ export function roadFoe(poi: Poi): Combatant {
 
 /** Trajet ALLER d'une caravane, en minutes : celui d'un héros, ralenti, puis raccourci
  *  par les rôles 🧭 de l'escorte. */
-export function caravanLegMin(poi: Poi, escort: Adventurer[]): number {
+export function caravanLegMin(poi: Poi, escort: Adventurer[], comptoirLevel = 0): number {
   const hero = travelOneWayMin(poi.level, poi.distNorm);
   const speed = Math.min(CARAVAN.speedMax, countRole(escort, 'speed') * CARAVAN.speedPerRole);
-  return Math.max(1, Math.round(hero * CARAVAN.slow * (1 - speed)));
+  return Math.max(1, Math.round(hero * caravanSlowFor(comptoirLevel) * (1 - speed)));
 }
 
 /** ⚠️ LA CARGAISON SE PAIE SUR LA DURÉE QU'UN HÉROS AURAIT MISE, pas sur celle de la
@@ -270,7 +280,21 @@ export function missionXp(adv: Adventurer, poi: Poi, fights = 0): number {
  *  Un débutant en a un seul ; le plafond reste bas, et le niveau du Comptoir est lui-même
  *  plafonné par celui du joueur — donc par le sport. */
 export function caravanSlots(comptoirLevel: number): number {
-  return Math.max(1, Math.min(CARAVAN.slotsMax, 1 + Math.floor(Math.max(0, comptoirLevel) / 6)));
+  return Math.max(1, 1 + Math.floor(Math.max(0, comptoirLevel) / CARAVAN.slotEvery));
+}
+
+/** Ce que le Comptoir apporte ENTRE deux convois gagnés : il accélère les convois.
+ *
+ *  ⚠️ C'est la réponse à « aucun niveau mort » pour un bâtiment dont la grandeur
+ *  naturelle (le nombre de convois) doit rester bornée — on ne veut pas de caravanes par
+ *  dizaines. Le NOMBRE monte lentement, la VITESSE continue sans fin. Et elle est
+ *  ASYMPTOTIQUE : la caravane se rapproche du temps du héros **sans jamais l'atteindre**,
+ *  parce que « plus lente que le héros » est son identité — la rendre plus rapide
+ *  retirerait toute raison d'envoyer le héros lui-même. */
+export function caravanSlowFor(comptoirLevel: number): number {
+  const l = Math.max(0, comptoirLevel);
+  const gagne = (CARAVAN.slow - 1) * (l / (l + CARAVAN.speedHalf));
+  return CARAVAN.slow - gagne;
 }
 
 /** Une caravane peut-elle partir vers ce POI ? Récolte uniquement, escorte non vide. */
@@ -349,6 +373,16 @@ export function resolveCaravan(poi: Poi, escort: Adventurer[], seed: number): Ca
   };
 }
 
+/** Temps de formation d'une promotion, raccourci par le Centre. ⚠️ ASYMPTOTIQUE : chaque
+ *  niveau retire encore un peu, de moins en moins, et une formation garde TOUJOURS une
+ *  durée — un Centre de niveau 100 ne doit pas rendre les promotions instantanées.
+ *  L'ancien `1 − 0,04 × niveau` plafonnait à 0,25 dès le niveau 20 : 81 niveaux morts. */
+export function trainMsFor(trainingLevel: number): number {
+  const l = Math.max(0, trainingLevel);
+  const gain = CARAVAN.trainMaxGain * (l / (l + CARAVAN.trainHalf));
+  return Math.round(CARAVAN.trainMs * (1 - gain));
+}
+
 /** Durée de convalescence d'un blessé, raccourcie par les 🩺 de l'escorte ET par
  *  l'Infirmerie (le même bâtiment qui soigne le héros et les familiers). */
 export function caravanHurtMs(escort: Adventurer[], infirmaryLevel = 0): number {
@@ -364,8 +398,9 @@ export function startCaravan(
   escort: Adventurer[],
   now: number,
   seed: number,
+  comptoirLevel = 0,
 ): Caravan {
-  const leg = caravanLegMin(poi, escort) * 60_000;
+  const leg = caravanLegMin(poi, escort, comptoirLevel) * 60_000;
   return {
     id,
     poi,

@@ -1865,7 +1865,14 @@ export const useCharacterStore = defineStore('character', () => {
     if (escort.length !== escortIds.length || !canSendCaravan(poi, escort)) return false;
 
     const seed = (now ^ (poi.id.length * 2654435761)) >>> 0 || 1;
-    const van = startCaravan(`car_${now.toString(36)}`, poi, escort, now, seed);
+    const van = startCaravan(
+      `car_${now.toString(36)}`,
+      poi,
+      escort,
+      now,
+      seed,
+      comptoirLevel.value,
+    );
     const busy = new Set(escortIds);
     await persist(userId, {
       caravans: [...caravanList.value, van],

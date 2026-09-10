@@ -93,7 +93,7 @@ export const BUILDING_TYPES: BuildingType[] = [
   // Extensible (socle des futurs déblocages d'activités via bâtiment).
   {
     id: 'outpost',
-    perLevelNote: '−1,5 % de temps de trajet (jusqu’à −60 % au niveau 40)',
+    perLevelNote: '−1,5 % de temps de trajet, puis un gain qui continue en s’amenuisant',
     label: 'Avant-poste d’expédition',
     emoji: '🧭',
     category: 'utility',
@@ -224,7 +224,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     emoji: '🐫',
     category: 'utility',
     effect: { caravanSlotPer6Lvl: true },
-    perLevelNote: '+1 convoi simultané tous les 6 niveaux (4 au maximum)',
+    perLevelNote: 'convois plus rapides à chaque niveau, +1 convoi tous les 9 niveaux',
     buildGold: 500,
     unlockLevel: 3,
     unique: true,
@@ -256,7 +256,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     emoji: '📚',
     category: 'utility',
     effect: { trainSpeedPerLvl: 0.04 },
-    perLevelNote: '−4 % de temps de formation par niveau',
+    perLevelNote: 'formations plus courtes à chaque niveau (de moins en moins)',
     buildGold: 650,
     unlockLevel: 4,
     unique: true,
@@ -393,11 +393,33 @@ export function labyrinthUnlocked(buildings: Building[]): boolean {
   return buildings.some((b) => b.typeId === LABY_GATE_ID);
 }
 /** Bonus de chance (luck 0..1) sur le butin des coffres du Labyrinthe, selon la Porte. */
+/** **AUCUN NIVEAU MORT, DE 0 À 100.** Règle de conception : un niveau qu'on paie doit
+ *  apporter quelque chose, sinon on vend du vide. L'audit en a trouvé beaucoup — la Porte
+ *  du Labyrinthe était morte **dès le niveau 11** (90 paliers sur 100 sans effet), l'Autel
+ *  à partir de 30, l'Avant-poste de 41.
+ *
+ *  ⚠️ On PROLONGE, on ne redistribue pas : jusqu'au plafond d'origine la valeur est
+ *  strictement inchangée — aucun joueur n'est nerfé, et aucun équilibrage déjà mesuré
+ *  n'est remis en cause. Au-delà, une QUEUE asymptotique ajoute de moins en moins, sans
+ *  jamais atteindre sa borne : c'est ce qui permet à un effet borné par nature (un temps
+ *  de trajet ne peut pas devenir nul) de continuer à récompenser cent niveaux.
+ *  `tailHalf` = combien de niveaux au-delà du plafond pour toucher la moitié de la queue. */
+export function beyondCap(
+  level: number,
+  capLevel: number,
+  tailMax: number,
+  tailHalf: number,
+): number {
+  const over = Math.max(0, level - capLevel);
+  return over > 0 ? (tailMax * over) / (over + tailHalf) : 0;
+}
+
 export function labyrinthLuckBonus(buildings: Building[]): number {
   const b = buildings.find((x) => x.typeId === LABY_GATE_ID);
   if (!b) return 0;
   const per = buildingType(LABY_GATE_ID)?.effect?.labyLuckPerLvl ?? 0;
-  return Math.min(LABY_LUCK_CAP, b.level * per);
+  const capLevel = per > 0 ? LABY_LUCK_CAP / per : 0;
+  return Math.min(LABY_LUCK_CAP, b.level * per) + beyondCap(b.level, capLevel, 0.25, 45);
 }
 // ── Autel des boss (qualité des récompenses de boss) ──
 const BOSS_ALTAR_ID = 'boss_altar';
@@ -417,7 +439,9 @@ export function bossAltarBuilt(buildings: Building[]): boolean {
 export function bossAltarRollFloor(buildings: Building[]): number {
   const lvl = bossAltarLevel(buildings);
   const per = buildingType(BOSS_ALTAR_ID)?.effect?.bossRollFloorPerLvl ?? 0;
-  return Math.min(BOSS_ROLL_FLOOR_CAP, lvl * per);
+  const capLevel = per > 0 ? BOSS_ROLL_FLOOR_CAP / per : 0;
+  // La queue reste SOUS 1 : un roll parfait ne doit jamais être garanti.
+  return Math.min(BOSS_ROLL_FLOOR_CAP, lvl * per) + beyondCap(lvl, capLevel, 0.12, 55);
 }
 const SUMMON_COST_RED_CAP = 0.5; // −50 % max sur le coût en pierres d'invocation
 /** Réduction (0..1) du coût en pierres d'invocation 🔮 des boss, selon le NIVEAU
@@ -425,7 +449,9 @@ const SUMMON_COST_RED_CAP = 0.5; // −50 % max sur le coût en pierres d'invoca
 export function bossSummonDiscount(buildings: Building[]): number {
   const lvl = bossAltarLevel(buildings);
   const per = buildingType(BOSS_ALTAR_ID)?.effect?.summonCostRedPerLvl ?? 0;
-  return Math.min(SUMMON_COST_RED_CAP, lvl * per);
+  const capLevel = per > 0 ? SUMMON_COST_RED_CAP / per : 0;
+  // Bornée bien avant la gratuité : un boss se paie toujours.
+  return Math.min(SUMMON_COST_RED_CAP, lvl * per) + beyondCap(lvl, capLevel, 0.25, 60);
 }
 /** Coût effectif en pierres d'invocation 🔮 d'un boss (base réduite par l'Autel). */
 export function summonCostWith(baseCost: number, buildings: Building[]): number {
@@ -435,7 +461,9 @@ export function summonCostWith(baseCost: number, buildings: Building[]): number 
 export function travelTimeMult(buildings: Building[]): number {
   const lvl = outpostLevel(buildings);
   const per = buildingType(OUTPOST_ID)?.effect?.expeSpeedPerLvl ?? 0;
-  return 1 - Math.min(TRAVEL_REDUCTION_CAP, lvl * per);
+  const capLevel = per > 0 ? TRAVEL_REDUCTION_CAP / per : 0;
+  // La queue approche sans l’atteindre : un trajet garde toujours une durée.
+  return 1 - Math.min(TRAVEL_REDUCTION_CAP, lvl * per) - beyondCap(lvl, capLevel, 0.25, 70);
 }
 
 /** Coût en OR pour améliorer un filon du niveau `level` au suivant (puits d'or steep). */
