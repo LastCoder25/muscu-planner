@@ -5,6 +5,13 @@
 import { REP_XP, assistMult, XP_MULT, MUSCU_MIN_XP } from './athlete';
 import { daysBetweenIso } from './loginStreak';
 import type { Level, Objective, SportPractice } from './types';
+import {
+  repRangeFor,
+  repRangeForExercise,
+  prescribedReps,
+  TIME_RANGE,
+  type RepRange,
+} from './repScheme';
 
 export interface ComboSet {
   date: string; // YYYY-MM-DD
@@ -31,6 +38,14 @@ export interface ComboLeg {
   target: number; // objectif : SÉRIES (mode 'sets') OU total REPS (mode 'reps') sur la sem
   count_mode?: ComboCountMode; // défaut 'sets' (rétro-compat)
   weight_kg?: number | null; // dernier poids utilisé → préremplissage de la prochaine série
+  // Fourchette de reps CONSEILLÉE pour cet exo, FIGÉE à la création depuis l’objectif
+  // d’entraînement (force / hypertrophie / endurance…) et corrigée par la nature de
+  // l’exo (gainage → secondes, isolation → plancher relevé). Figée, et non relue du
+  // profil à l’affichage : un 360 est le contrat de la semaine, il ne doit pas changer
+  // sous les pieds du joueur qui édite son objectif en cours de route. Absente des 360
+  // créés avant — cf. le repli de legRepRange.
+  rep_min?: number;
+  rep_max?: number;
   assistable?: boolean; // exo au poids du corps → propose l'option « assisté »
   sets?: ComboSet[]; // séries réalisées (modèle courant)
   progress?: ComboLegEntry[]; // legacy (migration)
@@ -97,6 +112,20 @@ export function legLastReps(leg: ComboLeg, fallback = COMBO_PLAN_REPS): number {
 export function legLastAssisted(leg: ComboLeg): boolean {
   const s = legSets(leg);
   return s.length ? !!s[s.length - 1]!.assisted : false;
+}
+
+/** Fourchette de reps conseillée d’un exo. Repli pour les 360 créés avant qu’elle
+ *  existe : on recalcule depuis l’objectif passé en second (sinon le défaut du schéma).
+ *  Ne renvoie JAMAIS null → aucun écran n’a de cas particulier à gérer. */
+export function legRepRange(leg: ComboLeg, objective?: Objective | null): RepRange {
+  const time = legMode(leg) === 'time';
+  if (leg.rep_min != null && leg.rep_max != null)
+    return {
+      min: leg.rep_min,
+      max: leg.rep_max,
+      rest: (time ? TIME_RANGE : repRangeFor(objective)).rest,
+    };
+  return repRangeForExercise(objective, { time, muscle_primary: leg.muscle_primary });
 }
 
 /** Avancement global = MOYENNE des fractions de complétion par exo (mode-neutre :
@@ -429,6 +458,8 @@ export interface ComboSessionExo {
   weight_kg?: number | null;
   sets: number[]; // reps par série (ou SECONDES si `time`)
   time?: boolean; // exo de DURÉE (gainage) → chrono au lieu de reps/poids
+  rep_min: number; // fourchette conseillée — affichée AVANT la série, sur l’en-tête de l’exo
+  rep_max: number;
 }
 
 export const COMBO_EXEC_SEC = 40; // durée d'exécution moyenne d'une série
@@ -450,11 +481,20 @@ export function comboSessionDurationMin(sets: number, restSec: number): number {
  * Génère une SÉANCE à partir des SÉRIES restantes : on ne dump pas tout — on
  * remplit un BUDGET de séries (soit choisi directement via `sets`, soit déduit
  * d'un temps `minutes`), réparti en round-robin sur les exos dont il reste des
- * séries. Chaque série reprend les reps de la dernière faite (ou un défaut). Pur/testable.
+ * séries. Chaque série reprend les reps de la dernière faite, sinon le HAUT de la
+ * fourchette conseillée de l’exo (`legRepRange`) — c’est le seul écran du 360 qui
+ * annonce un nombre de reps AVANT l’effort, il ne doit pas annoncer un chiffre
+ * arbitraire. `objective` ne sert qu’au repli des 360 créés sans fourchette.
  */
 export function buildComboSession(
   c: ComboChallenge,
-  opts: { minutes?: number; restSec: number; sets?: number; includeIds?: string[] },
+  opts: {
+    minutes?: number;
+    restSec: number;
+    sets?: number;
+    includeIds?: string[];
+    objective?: Objective | null;
+  },
 ): ComboSessionExo[] {
   const budget = opts.sets ?? comboSessionSetBudget(opts.minutes ?? 30, opts.restSec);
   // Sélection manuelle éventuelle : ne garder que les exos choisis (sinon tous).
@@ -462,12 +502,14 @@ export function buildComboSession(
   const exos = c.legs
     .filter((l) => !include || include.has(l.exercise_id))
     .map((l) => {
-      const reps = legLastReps(l);
+      const range = legRepRange(l, opts.objective);
+      // Dernière série faite (cohérence : on continue ce qu’on fait) → sinon la cible.
+      const reps = legLastReps(l, prescribedReps(range));
       // Séries restantes à générer : direct en mode 'sets' ; en mode 'reps' on
       // convertit les reps restantes en nb de séries (à ~reps/série).
       const remaining =
         legMode(l) !== 'sets' ? Math.ceil(legRemaining(l) / Math.max(1, reps)) : legRemaining(l);
-      return { leg: l, remaining, reps, sets: [] as number[] };
+      return { leg: l, remaining, reps, range, sets: [] as number[] };
     })
     .filter((e) => e.remaining > 0);
   let placed = 0;
@@ -488,27 +530,34 @@ export function buildComboSession(
       weight_kg: legLastWeight(e.leg),
       sets: e.sets,
       time: legMode(e.leg) === 'time',
+      rep_min: e.range.min,
+      rep_max: e.range.max,
     }));
 }
 
 /** Construit une séance à partir d'un nombre de séries CHOISI PAR EXO (indépendant).
  *  `counts` = { exercise_id: nb de séries }. Chaque série reprend les reps de la
- *  dernière faite (ou un défaut). Ordre = celui des legs du défi. Pur/testable. */
+ *  dernière faite, sinon le haut de la fourchette conseillée. Ordre = celui des legs
+ *  du défi. Pur/testable. */
 export function buildComboSessionFromCounts(
   c: ComboChallenge,
   counts: Record<string, number>,
+  objective?: Objective | null,
 ): ComboSessionExo[] {
   const out: ComboSessionExo[] = [];
   for (const l of c.legs) {
     const n = Math.max(0, Math.floor(counts[l.exercise_id] ?? 0));
     if (n <= 0) continue;
-    const reps = legLastReps(l);
+    const range = legRepRange(l, objective);
+    const reps = legLastReps(l, prescribedReps(range));
     out.push({
       exercise_id: l.exercise_id,
       exercise_name: l.exercise_name,
       weight_kg: legLastWeight(l),
       sets: Array.from({ length: n }, () => reps),
       time: legMode(l) === 'time',
+      rep_min: range.min,
+      rep_max: range.max,
     });
   }
   return out;

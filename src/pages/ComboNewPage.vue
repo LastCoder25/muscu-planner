@@ -50,17 +50,21 @@
           <div class="vol-lbl vl-mt">Ton objectif</div>
           <div class="opt-tiles">
             <button
-              v-for="o in GOAL_OPTS"
+              v-for="o in OBJ_OPTS"
               :key="o.id"
               type="button"
               class="opt-tile"
-              :class="{ on: goal === o.id }"
-              @click="goal = o.id"
+              :class="{ on: objective === o.id }"
+              @click="objective = o.id"
             >
               <span class="ot-emo">{{ o.emoji }}</span>
               <span class="ot-lbl">{{ o.label }}</span>
               <span class="ot-sub">{{ o.sub }}</span>
             </button>
+          </div>
+          <div class="zone-hint">
+            🎯 Séries visées : <b>{{ repRangeLabel(objRange) }}</b> — repos ~{{ objRange.rest }} s.
+            La fourchette est rappelée sur chaque exo pendant le défi.
           </div>
           <div v-if="sportsHint" class="zone-hint">
             Adapté à tes sports ({{ sportsHint }}) : on allège les groupes déjà sollicités.
@@ -350,6 +354,7 @@
                 <button type="button" @click="bumpTarget(key, 1)">+</button>
               </div>
             </div>
+            <div class="cfg-range">🎯 {{ slotRangeLabel(key) }} par série</div>
             <div v-if="pickCount(key) > 1" class="cfg-split">
               ≈ {{ perExo(key) }} {{ picks[key]?.count_mode === 'reps' ? 'reps' : 'séries' }} / exo
             </div>
@@ -410,13 +415,19 @@ import {
   objectiveToGoal,
   suggestComboTargetFromHistory,
   COMBO_PLAN_REPS,
-  type ComboGoal,
   type ComboVolume,
   type ComboVariety,
   type ComboZone,
   type ComboLeg,
   type ComboCountMode,
 } from '@/lib/combo';
+import {
+  repRangeFor,
+  repRangeForExercise,
+  repRangeLabel,
+  DEFAULT_OBJECTIVE,
+} from '@/lib/repScheme';
+import type { Objective } from '@/lib/types';
 import {
   repWeightFromExercise,
   isBodyweightExercise,
@@ -470,19 +481,33 @@ function pickStart(d: string) {
 const zone = ref<ComboZone>('full');
 const volume = ref<ComboVolume>('moderate');
 const variety = ref<ComboVariety>('med');
-// Objectif du défi : pré-réglé depuis le profil (modifiable ici). Module le volume
-// par groupe (sculpter = haut/bras/fessiers ; perf = chaîne postérieure/gainage).
-const goal = ref<ComboGoal>('balanced');
-const GOAL_OPTS: { id: ComboGoal; emoji: string; label: string; sub: string }[] = [
-  { id: 'sculpt', emoji: '🏛️', label: 'Me sculpter', sub: 'esthétique — haut & bras' },
-  { id: 'perf', emoji: '🏃', label: 'Booster mes sports', sub: 'fonctionnel — chaîne & gainage' },
-  { id: 'balanced', emoji: '⚖️', label: 'Équilibré', sub: 'tout le corps à parts égales' },
+// Objectif du défi : pré-réglé depuis le profil (modifiable ici). Il pilote DEUX
+// choses — le volume par groupe (via objectiveToGoal : sculpter = haut/bras, perf =
+// chaîne postérieure) ET la FOURCHETTE DE REPS conseillée par exo.
+// ⚠️ On choisit ici l’objectif RÉEL (5 valeurs), pas le triplet sculpt/perf/équilibré :
+// objectiveToGoal écrase force ET endurance dans 'perf', or c’est exactement la
+// distinction qui décide de la fourchette (4-6 contre 15-20). Le triplet reste utilisé
+// pour le volume, dérivé de ce choix.
+const objective = ref<Objective>(DEFAULT_OBJECTIVE);
+const OBJ_OPTS: { id: Objective; emoji: string; label: string; sub: string }[] = [
+  { id: 'hypertrophie', emoji: '🏛️', label: 'Me sculpter', sub: 'prise de muscle' },
+  { id: 'force', emoji: '🥋', label: 'Gagner en force', sub: 'lourd, peu de reps' },
+  { id: 'endurance', emoji: '🏃', label: 'Booster mes sports', sub: 'léger, beaucoup de reps' },
+  { id: 'perte_de_gras', emoji: '🔥', label: 'Perdre du gras', sub: 'volume et peu de repos' },
+  {
+    id: 'remise_en_forme',
+    emoji: '⚖️',
+    label: 'Me remettre en forme',
+    sub: 'tout le corps, en douceur',
+  },
 ];
+// La fourchette suit le choix en direct → on VOIT ce que l’objectif change.
+const objRange = computed(() => repRangeFor(objective.value));
 // Sports pratiqués + muscles prioritaires (profil) → complémentarité (allège les
 // groupes déjà sollicités, renforce les prioritaires). Recalculé à chaque changement.
 const emphasis = computed(() =>
   comboEmphasis(
-    goal.value,
+    objectiveToGoal(objective.value),
     profileStore.profile?.sports ?? null,
     profileStore.profile?.preferences?.priority_muscles ?? null,
   ),
@@ -612,6 +637,18 @@ function selectedExos(key: string): ExerciseRow[] {
   const ids = picks[key]?.exercise_ids ?? [];
   return ids.map((id) => lib.value.find((e) => e.id === id)).filter((e): e is ExerciseRow => !!e);
 }
+// Fourchette conseillée d’un emplacement au récap. Les exos d’un emplacement partagent
+// l’objectif ; seule l’isolation relève son plancher → on prend le 1er exo, représentatif
+// (un emplacement 'arms' ne mélange pas composé et isolation).
+function slotRangeLabel(key: string): string {
+  const e = selectedExos(key)[0];
+  const time = e?.unit === 'time';
+  const r = repRangeForExercise(objective.value, {
+    time,
+    muscle_primary: e?.muscle_primary ?? null,
+  });
+  return repRangeLabel(r, time);
+}
 function isSelected(key: string, exId: string): boolean {
   return picks[key]?.exercise_ids.includes(exId) ?? false;
 }
@@ -735,7 +772,7 @@ function applyPlan() {
   }
 }
 
-watch([level, zone, volume, variety, goal], applyPlan);
+watch([level, zone, volume, variety, objective], applyPlan);
 
 async function createCombo() {
   const uid = auth.user?.id;
@@ -766,6 +803,12 @@ async function createCombo() {
       if (!e) continue;
       // Exo au TEMPS (gainage) → mode DURÉE : objectif en SECONDES (~40 s / série visée).
       const isTime = e.unit === 'time';
+      // Fourchette FIGÉE ici : l’objectif choisi, corrigé par la nature de l’exo
+      // (gainage → secondes, isolation → plancher relevé).
+      const range = repRangeForExercise(objective.value, {
+        time: isTime,
+        muscle_primary: e.muscle_primary,
+      });
       legs.push({
         slot: slot.key,
         exercise_id: e.id,
@@ -776,6 +819,8 @@ async function createCombo() {
         count_mode: isTime ? 'time' : p.count_mode,
         weight_kg: isTime ? null : p.weight_kg || null,
         assistable: !isTime && isBodyweightExercise(e.equipment_required, e.name),
+        rep_min: range.min,
+        rep_max: range.max,
         sets: [],
       });
     }
@@ -806,7 +851,7 @@ onMounted(async () => {
     if (combo.list.length === 0) await combo.fetchMine();
     lib.value = await library.fetchAll();
     level.value = profileStore.profile?.experience?.level ?? 'intermediaire';
-    goal.value = objectiveToGoal(profileStore.profile?.objective);
+    objective.value = profileStore.profile?.objective ?? DEFAULT_OBJECTIVE;
     applyPlan();
   } catch (e) {
     $q.notify({
@@ -1231,6 +1276,13 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--dim);
   text-align: right;
+}
+/* Fourchette conseillée : consigne d’exécution → accent, pas la grisaille des notes. */
+.cfg-range {
+  font-size: 12px;
+  color: var(--accent);
+  text-align: right;
+  margin-top: 2px;
 }
 .mode-toggle {
   display: inline-flex;

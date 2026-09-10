@@ -7,6 +7,7 @@
 import type { Profile, Session, PlannedExercise, Objective, Level } from './types';
 import { SCHEMA_VERSION } from './types';
 import { defaultSplit, type SplitOption, type MuscleKey } from '@/data/splits';
+import { repRangeFor } from './repScheme';
 
 export interface ExerciseDef {
   id: string;
@@ -49,15 +50,15 @@ const MUSCLE_WEIGHT: Record<Muscle, number> = {
   abdominaux: 0.6,
 };
 
-const OBJECTIVE_CFG: Record<
-  Objective,
-  { reps_min: number; reps_max: number; rest: number; volume: number }
-> = {
-  force: { reps_min: 4, reps_max: 6, rest: 180, volume: 0.85 },
-  hypertrophie: { reps_min: 8, reps_max: 12, rest: 90, volume: 1 },
-  endurance: { reps_min: 15, reps_max: 20, rest: 45, volume: 0.9 },
-  remise_en_forme: { reps_min: 10, reps_max: 15, rest: 75, volume: 0.7 },
-  perte_de_gras: { reps_min: 12, reps_max: 15, rest: 60, volume: 0.9 },
+// Part de VOLUME par objectif — propre au générateur de programme. La FOURCHETTE
+// de reps, elle, vit dans repScheme.ts : elle est partagée avec le Défi 360, et
+// une table recopiée diverge à la première retouche.
+const OBJECTIVE_VOLUME: Record<Objective, number> = {
+  force: 0.85,
+  hypertrophie: 1,
+  endurance: 0.9,
+  remise_en_forme: 0.7,
+  perte_de_gras: 0.9,
 };
 
 const LEVEL_FACTOR: Record<Level, number> = { debutant: 0.7, intermediaire: 1, avance: 1.2 };
@@ -116,12 +117,12 @@ function clamp(n: number, lo: number, hi: number) {
 
 /** Volume cible (séries hebdo) par muscle, après objectif/niveau/sports/priorités. */
 export function computeMuscleTargets(profile: Profile): Record<Muscle, number> {
-  const obj = OBJECTIVE_CFG[profile.objective];
+  const volume = OBJECTIVE_VOLUME[profile.objective];
   const lvl = LEVEL_FACTOR[profile.experience.level];
 
   const target = {} as Record<Muscle, number>;
   for (const m of MUSCLES) {
-    target[m] = BASE_SETS * obj.volume * lvl * MUSCLE_WEIGHT[m];
+    target[m] = BASE_SETS * volume * lvl * MUSCLE_WEIGHT[m];
   }
 
   // 1) Réduction selon les sports pratiqués.
@@ -162,8 +163,8 @@ export function computeMuscleTargets(profile: Profile): Record<Muscle, number> {
 }
 
 function repsAndRest(objective: Objective) {
-  const o = OBJECTIVE_CFG[objective];
-  return { reps_min: o.reps_min, reps_max: o.reps_max, rest: o.rest };
+  const r = repRangeFor(objective);
+  return { reps_min: r.min, reps_max: r.max, rest: r.rest };
 }
 
 /** Sélectionne les exos d'un muscle, filtrés par matériel, polyarticulaires d'abord. */

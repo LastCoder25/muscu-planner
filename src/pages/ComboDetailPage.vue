@@ -88,6 +88,9 @@
             </div>
             <div class="leg-sub">
               {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
+              <!-- Fourchette conseillée : la seule consigne d’EXÉCUTION du 360 (le reste
+                   compte des séries). Visible en permanence — pas de survol sur mobile. -->
+              <span class="leg-range">🎯 {{ rangeLabel(leg) }}</span>
               <span v-if="legComplete(leg)" class="leg-ok">✓</span>
               <span v-if="legDone(leg) > leg.target" class="leg-extra"
                 >+{{ legDone(leg) - leg.target }} en plus</span
@@ -187,6 +190,7 @@
       :title="setLeg?.exercise_name ?? ''"
       :desc="`${setCount > 1 ? setCount + ' séries' : '1 série'} · reps & poids`"
       :assistable="setLeg?.assistable"
+      :hint="setLeg ? rangeLabel(setLeg) : undefined"
       :initial-reps="setInitReps"
       :initial-weight="setInitWeight"
       :initial-assisted="setInitAssisted"
@@ -217,6 +221,7 @@ import {
   legLastReps,
   legLastWeight,
   legLastAssisted,
+  legRepRange,
   comboExportText,
   comboBonusXp,
   type ComboLeg,
@@ -232,6 +237,8 @@ import {
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import { useLibraryStore } from '@/stores/library';
+import { repRangeLabel, prescribedReps } from '@/lib/repScheme';
+import { useProfileStore } from '@/stores/profile';
 
 const router = useRouter();
 const route = useRoute();
@@ -239,6 +246,7 @@ const $q = useQuasar();
 const auth = useAuthStore();
 const combo = useComboStore();
 const library = useLibraryStore();
+const profileStore = useProfileStore();
 const gameFx = useGameFx();
 
 const id = String(route.params.id);
@@ -336,6 +344,15 @@ const barStyle = computed(() => {
   return { background: `linear-gradient(to right, ${stops})` };
 });
 
+// Fourchette de reps conseillée d’un exo, telle qu’elle a été figée à la création du
+// défi. L’objectif du profil ne sert que de repli pour les 360 créés avant qu’elle existe.
+function legRange(leg: ComboLeg) {
+  return legRepRange(leg, profileStore.profile?.objective);
+}
+function rangeLabel(leg: ComboLeg): string {
+  return repRangeLabel(legRange(leg), legMode(leg) === 'time');
+}
+
 function slotEmoji(key: string) {
   return comboSlot(key)?.emoji ?? '💪';
 }
@@ -370,7 +387,7 @@ function openSet(leg: ComboLeg, count: number) {
       .filter((l) => l.exercise_id === leg.exercise_id)
       .flatMap((l) => legSets(l));
     const sug = suggestSetFromHistory(hist);
-    setInitReps.value = sug?.repMax ?? legLastReps(leg);
+    setInitReps.value = sug?.repMax ?? legLastReps(leg, prescribedReps(legRange(leg)));
     setInitWeight.value = recallWeight(leg.exercise_id) ?? sug?.weight ?? legLastWeight(leg);
     setInitAssisted.value = false;
   }
@@ -739,6 +756,12 @@ onMounted(async () => {
 .leg-sub {
   font-size: 12px;
   color: var(--dim);
+}
+/* Consigne d’exécution → accent : c’est ce qu’on lit AVANT de faire la série. */
+.leg-range {
+  color: var(--accent);
+  margin-left: 6px;
+  white-space: nowrap;
 }
 .leg-ok {
   color: var(--d1);

@@ -36,6 +36,7 @@ import {
   comboSessionDurationMin,
   buildComboSessionFromCounts,
   legSets,
+  legRepRange,
   type ComboChallenge,
   type ComboLeg,
   type ComboSet,
@@ -720,5 +721,62 @@ describe('prime du 360 : versée à la FIN, jamais au fil des séries (v0.717)',
     expect(comboTieredBonus(fort, undefined, fin)).toBeGreaterThan(
       comboTieredBonus(faible, undefined, fin),
     );
+  });
+});
+
+// ── Fourchette de reps conseillée (intégration du repère « objectif » au 360) ──
+describe('legRepRange — la fourchette figée au leg', () => {
+  it('lit la fourchette FIGÉE à la création, sans relire l’objectif du profil', () => {
+    const l = leg({ rep_min: 4, rep_max: 6 });
+    // Même si le profil est passé à « endurance » entre-temps : le 360 est le
+    // contrat de la semaine, il ne change pas sous les pieds du joueur.
+    expect(legRepRange(l, 'endurance')).toMatchObject({ min: 4, max: 6 });
+  });
+  it('360 créé AVANT la fourchette → repli sur l’objectif, jamais null', () => {
+    const l = leg(); // ni rep_min ni rep_max
+    expect(legRepRange(l, 'force')).toMatchObject({ min: 4, max: 6 });
+    expect(legRepRange(l, 'endurance')).toMatchObject({ min: 15, max: 20 });
+    expect(legRepRange(l, null)).toMatchObject({ min: 8, max: 12 }); // défaut
+  });
+  it('repli d’un exo au TEMPS → secondes (pas les reps de l’objectif)', () => {
+    const l = leg({ count_mode: 'time', target: 120 });
+    expect(legRepRange(l, 'force')).toMatchObject({ min: 30, max: 60 });
+  });
+  it('repli d’un exo d’isolation → plancher relevé', () => {
+    const l = leg({ muscle_primary: 'biceps' });
+    expect(legRepRange(l, 'force')).toMatchObject({ min: 8, max: 12 });
+  });
+});
+
+describe('séance générée — les reps annoncées AVANT la série', () => {
+  it('prescrit le haut de la fourchette de l’exo, pas un 10 arbitraire', () => {
+    const c = combo([
+      leg({ exercise_id: 'a', target: 3, rep_min: 4, rep_max: 6 }),
+      leg({ exercise_id: 'b', slot: 'pull', target: 3, rep_min: 15, rep_max: 20 }),
+    ]);
+    const s = buildComboSession(c, { sets: 6, restSec: 60 });
+    expect(s.find((e) => e.exercise_id === 'a')!.sets).toEqual([6, 6, 6]);
+    expect(s.find((e) => e.exercise_id === 'b')!.sets).toEqual([20, 20, 20]);
+  });
+  it('une série déjà faite prime : on continue ce qu’on fait', () => {
+    const c = combo([leg({ target: 3, rep_min: 4, rep_max: 6, sets: [set(9, 40)] })]);
+    expect(buildComboSession(c, { sets: 2, restSec: 60 })[0]!.sets).toEqual([9, 9]);
+  });
+  it('la fourchette voyage jusqu’au runner (les deux constructeurs)', () => {
+    const c = combo([leg({ target: 3, rep_min: 8, rep_max: 12 })]);
+    expect(buildComboSession(c, { sets: 2, restSec: 60 })[0]).toMatchObject({
+      rep_min: 8,
+      rep_max: 12,
+    });
+    expect(buildComboSessionFromCounts(c, { ex_pushup: 2 })[0]).toMatchObject({
+      rep_min: 8,
+      rep_max: 12,
+    });
+  });
+  it('360 sans fourchette ni objectif → le haut du défaut (12), plus le 10 en dur', () => {
+    // Le repli n’est plus COMBO_PLAN_REPS mais le haut de la fourchette par défaut
+    // (hypertrophie 8–12) : même famille de chiffre, mais dérivé d’une règle.
+    const c = combo([leg({ target: 2 })]);
+    expect(buildComboSession(c, { sets: 2, restSec: 60 })[0]!.sets).toEqual([12, 12]);
   });
 });

@@ -119,6 +119,9 @@
       <div v-for="(exo, i) in session" :key="exo.exercise_id" class="s-exo">
         <div class="se-head">
           <span class="se-name">{{ exo.exercise_name }}</span>
+          <!-- Fourchette conseillée : c’est ICI qu’elle compte — le seul moment du 360 où
+               on lit une consigne AVANT de faire la série. -->
+          <span class="se-range">🎯 {{ exoRangeLabel(exo) }}</span>
           <span v-if="exo.weight_kg" class="se-kg">{{ exo.weight_kg }} kg</span>
         </div>
         <!-- Exo de DURÉE (gainage) : chrono (chaque pause valide une série) au lieu de reps. -->
@@ -184,6 +187,7 @@
       v-model="logOpen"
       :title="logExoName"
       :assistable="logAssistable"
+      :hint="logHint"
       :initial-reps="logReps"
       :initial-weight="logWeight"
       :initial-assisted="logAssisted"
@@ -209,12 +213,15 @@ import {
   type ComboSessionExo,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
+import { repRangeLabel, prescribedReps } from '@/lib/repScheme';
+import { useProfileStore } from '@/stores/profile';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 
 const router = useRouter();
 const route = useRoute();
 const $q = useQuasar();
 const combo = useComboStore();
+const profileStore = useProfileStore();
 
 const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
@@ -268,7 +275,9 @@ const buildCounts = computed<Record<string, number>>(() => {
 
 // Aperçu (avant de commencer) — d'après les compteurs par exo.
 const previewSession = computed(() =>
-  c.value ? buildComboSessionFromCounts(c.value, buildCounts.value) : [],
+  c.value
+    ? buildComboSessionFromCounts(c.value, buildCounts.value, profileStore.profile?.objective)
+    : [],
 );
 const previewSets = computed(() => previewSession.value.reduce((a, e) => a + e.sets.length, 0));
 const previewMinutes = computed(() => comboSessionDurationMin(previewSets.value, restSec.value));
@@ -277,6 +286,10 @@ const previewExos = computed(() => previewSession.value.length);
 // Séance générée au démarrage. Les séries validées sont accumulées LOCALEMENT
 // (pas d'enregistrement en direct) → on ne commite qu'à la fin (ou au choix à
 // l'annulation). Le nb de séries par exo est ajustable pendant la séance.
+function exoRangeLabel(e: ComboSessionExo): string {
+  return repRangeLabel({ min: e.rep_min, max: e.rep_max }, e.time);
+}
+
 const session = ref<ComboSessionExo[]>([]);
 // Séries validées, clé `i-j` → { reps, weight, assisted } saisis par l'utilisateur.
 const logged = ref<Record<string, { reps: number; weight: number | null; assisted: boolean }>>({});
@@ -330,6 +343,7 @@ const logReps = ref(10);
 const logWeight = ref<number | null>(null);
 const logAssisted = ref(false);
 const logAssistable = ref(false);
+const logHint = ref('');
 
 function validate(i: number, j: number, reps: number) {
   const exo = session.value[i];
@@ -338,10 +352,11 @@ function validate(i: number, j: number, reps: number) {
   const prev = logged.value[`${i}-${j}`];
   logSlot.value = { i, j };
   logExoName.value = exo.exercise_name;
-  logReps.value = prev?.reps ?? reps;
+  logReps.value = prev?.reps ?? reps ?? prescribedReps({ min: exo.rep_min, max: exo.rep_max });
   logWeight.value = prev?.weight ?? exo.weight_kg ?? null;
   logAssisted.value = prev?.assisted ?? false;
   logAssistable.value = !!leg?.assistable;
+  logHint.value = exoRangeLabel(exo);
   logOpen.value = true;
 }
 function onLogSave(v: { reps: number; weight: number | null; assisted: boolean }) {
@@ -633,16 +648,26 @@ onUnmounted(() => {
   padding: 12px 14px;
   margin-bottom: 8px;
 }
+/* 3 éléments (nom, fourchette, charge) : wrap obligatoire — un nom d’exo long tient
+   mal à côté des deux sur un écran plié (~344 px). */
 .se-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2px 8px;
   margin-bottom: 8px;
 }
 .se-name {
+  flex: 1 1 auto;
   font-weight: 600;
   font-size: 14.5px;
   color: var(--text);
+}
+.se-range {
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
 }
 .se-kg {
   font-size: 11px;

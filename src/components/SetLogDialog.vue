@@ -3,6 +3,10 @@
     <q-card class="setlog-card">
       <div class="sl-title font-display">{{ title }}</div>
       <div class="sl-desc">{{ desc || 'reps & poids' }}</div>
+      <!-- Fourchette conseillée : rappel de la consigne au moment de saisir. Elle est
+           surtout affichée AVANT la série (fiche du 360, séance générée) ; ici elle
+           justifie la valeur préremplie et sert de repère pour la série suivante. -->
+      <div v-if="hint" class="sl-goal">🎯 {{ hint }}</div>
       <div class="sl-row">
         <span class="sl-lbl">Reps</span>
         <q-input v-model.number="reps" type="number" filled dense style="max-width: 110px" />
@@ -34,7 +38,7 @@
 
 <script setup lang="ts">
 // Dialogue de saisie d'une SÉRIE (reps + poids + assisté), partagé par le Défi 360
-// (ComboDetailPage) et les défis simples en mode Séries (ChallengeDetailPage).
+// (fiche + séance générée) et les défis simples en mode Séries (ChallengeDetailPage).
 import { ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -42,6 +46,7 @@ const props = defineProps<{
   title: string;
   desc?: string;
   assistable?: boolean;
+  hint?: string; // ex. « 8–12 reps » — fourchette conseillée pour cet exo
   initialReps?: number;
   initialWeight?: number | null;
   initialAssisted?: boolean;
@@ -90,7 +95,12 @@ function save() {
 .sl-desc {
   font-size: 12.5px;
   color: var(--dim);
-  margin: 4px 0 14px;
+  margin: 4px 0 6px;
+}
+.sl-goal {
+  font-size: 13px;
+  color: var(--accent);
+  margin: 0 0 14px;
 }
 .sl-row {
   display: flex;
