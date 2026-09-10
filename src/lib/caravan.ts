@@ -78,6 +78,13 @@ export const CARAVAN = {
   yieldShare: 0.5,
   /** Plafond dur de convois simultanés. */
   slotsMax: 4,
+  /** Ce qu'une embuscade RÉELLEMENT traversée ajoute à l'XP, par combat (gagné OU perdu).
+   *  ⚠️ Remplace un +30 % forfaitaire versé dès que la route était étiquetée « périlleuse » :
+   *  mesuré, l'XP était identique (49) qu'il y ait eu 1, 2 ou 3 embuscades — on payait
+   *  l'étiquette, pas l'épreuve. Une route périlleuse tirant deux fois plus de rencontres,
+   *  elle reste naturellement plus formatrice, mais parce qu'il s'y passe quelque chose. */
+  xpPerFight: 0.2,
+  xpFightMax: 0.6,
   /** Part de la valeur d'un convoi qu'une embuscade perdue emporte. */
   lossKeep: 0.55,
 } as const;
@@ -99,8 +106,12 @@ export interface CaravanOutcome {
   keys: number;
   /** Salaires versés à l'escorte — déduits à part, c'est une DÉPENSE assumée. */
   wages: number;
-  /** XP gagnée par CHAQUE membre de l'escorte. */
-  xp: number;
+  /** XP gagnée, PAR AVENTURIER (id → XP).
+   *  ⚠️ C'était une MOYENNE : mesuré, un vétéran de niveau 30 passait de 1 à 11 XP sur une
+   *  route triviale rien qu'en emmenant trois recrues — le rendement décroissant, qui
+   *  existe précisément pour empêcher de farmer le trajet le plus court, se contournait
+   *  en ajoutant des passagers. */
+  xp: Record<string, number>;
   /** Ids des aventuriers blessés (→ infirmerie). */
   hurt: string[];
   events: CaravanEvent[];
@@ -247,10 +258,11 @@ export function caravanWages(escort: Adventurer[], poi: Poi): number {
 /** XP gagnée par chaque membre. ⚠️ RENDEMENT DÉCROISSANT quand la route est très en
  *  dessous du niveau de l'aventurier : sans ça on farme le trajet le plus court à
  *  l'infini et le choix de destination meurt. */
-export function missionXp(adv: Adventurer, poi: Poi): number {
+export function missionXp(adv: Adventurer, poi: Poi, fights = 0): number {
   const ratio = Math.max(0.15, Math.min(2, poi.level / Math.max(1, adv.level)));
   const base = 6 + poi.level * 1.6;
-  return Math.max(1, Math.round(base * Math.min(1, ratio) ** 1.5 * (poi.perilous ? 1.3 : 1)));
+  const learned = 1 + Math.min(CARAVAN.xpFightMax, Math.max(0, fights) * CARAVAN.xpPerFight);
+  return Math.max(1, Math.round(base * Math.min(1, ratio) ** 1.5 * learned));
 }
 
 /** Convois simultanés qu'autorise le Comptoir. ⚠️ SECOND garde-fou de l'inflation :
@@ -259,13 +271,6 @@ export function missionXp(adv: Adventurer, poi: Poi): number {
  *  plafonné par celui du joueur — donc par le sport. */
 export function caravanSlots(comptoirLevel: number): number {
   return Math.max(1, Math.min(CARAVAN.slotsMax, 1 + Math.floor(Math.max(0, comptoirLevel) / 6)));
-}
-
-/** XP nécessaire pour passer du niveau `level` au suivant. Mesuré avec `missionXp` : ~8
- *  missions pour le niveau 2, 38 pour le 5, 118 pour le 8, 255 pour le 23 — soit environ
- *  3 mois à 3 convois par jour pour élever un aventurier à fond. */
-export function advXpToNext(level: number): number {
-  return 40 + Math.max(1, level) * 22;
 }
 
 /** Une caravane peut-elle partir vers ce POI ? Récolte uniquement, escorte non vide. */
@@ -324,9 +329,9 @@ export function resolveCaravan(poi: Poi, escort: Adventurer[], seed: number): Ca
     keys: raw.keys,
   };
   const wages = caravanWages(escort, poi);
-  const xp = escort.length
-    ? Math.round(escort.reduce((s, a) => s + missionXp(a, poi), 0) / escort.length)
-    : 0;
+  const fights = events.filter((e) => e.kind === 'bandits').length;
+  const xp: Record<string, number> = {};
+  for (const a of escort) xp[a.id] = missionXp(a, poi, fights);
 
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais

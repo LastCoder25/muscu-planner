@@ -228,3 +228,77 @@ describe('le convoi lui-même', () => {
     expect(isCaravanClaimable(c, c.returnAt)).toBe(true);
   });
 });
+
+describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
+  const vet = (id: string) => ({ ...refAdventurer(30), id });
+  const bleu = (id: string) => ({ ...refAdventurer(5), id });
+
+  it('chacun reçoit SON dû — un vétéran ne se paie pas en emmenant des recrues', () => {
+    // C'était une MOYENNE : mesuré, le vétéran passait de 1 à 11 XP sur une route de
+    // niveau 5 rien qu'en ajoutant trois recrues. Le rendement décroissant — le garde-fou
+    // qui empêche de farmer le trajet le plus court — se contournait avec des passagers.
+    const facile = poi({ level: 5 });
+    const seul = resolveCaravan(facile, [vet('v')], 42);
+    const accompagne = resolveCaravan(facile, [vet('v'), bleu('r1'), bleu('r2'), bleu('r3')], 42);
+    expect(accompagne.xp['v']).toBe(seul.xp['v']);
+    // …et la recrue touche bien plus que lui sur cette route-là.
+    expect(accompagne.xp['r1']!).toBeGreaterThan(accompagne.xp['v']!);
+  });
+  it('tout le monde en reçoit, personne n’est oublié', () => {
+    const o = resolveCaravan(poi(), [vet('v'), bleu('r')], 7);
+    expect(Object.keys(o.xp).sort()).toEqual(['r', 'v']);
+    for (const v of Object.values(o.xp)) expect(v).toBeGreaterThan(0);
+  });
+  it('⚠️ l’XP tombe MÊME SANS COMBAT et QUEL QUE SOIT le résultat', () => {
+    // Sans ça, un débutant à un seul aventurier — qui perd toutes ses embuscades — ne
+    // progresserait jamais ; et perdre punirait deux fois (cargaison, blessé, rien appris).
+    let sansCombat = 0;
+    let perdu = 0;
+    for (let s = 0; s < 200; s++) {
+      const o = resolveCaravan(poi(), [bleu('r')], s * 977 + 1);
+      const fights = o.events.filter((e) => e.kind === 'bandits');
+      expect(o.xp['r']!).toBeGreaterThan(0);
+      if (!fights.length) sansCombat++;
+      if (fights.some((f) => !f.won)) perdu++;
+    }
+    expect(sansCombat, 'aucun voyage sans combat : le test ne prouve rien').toBeGreaterThan(0);
+    expect(perdu, 'aucune embuscade perdue : le test ne prouve rien').toBeGreaterThan(0);
+  });
+  it('elle ne dépend QUE du nombre d’épreuves, jamais de leur ISSUE', () => {
+    // ⚠️ Assertion DIRECTE : « XP > 0 » laissait passer une version qui ne comptait que
+    // les combats GAGNÉS — un débutant qui perd tout aurait alors stagné pour toujours.
+    const p = poi();
+    const a = bleu('r');
+    let defaites = 0;
+    for (let s = 0; s < 200; s++) {
+      const o = resolveCaravan(p, [a], s * 977 + 1);
+      const f = o.events.filter((e) => e.kind === 'bandits');
+      expect(o.xp['r']).toBe(missionXp(a, p, f.length));
+      if (f.some((x) => !x.won)) defaites++;
+    }
+    expect(defaites, 'aucune défaite dans le lot : le test ne prouve rien').toBeGreaterThan(0);
+  });
+});
+
+describe('⚠️ le bonus d’XP suit les combats RÉELS, pas l’étiquette', () => {
+  it('plus d’embuscades traversées = plus d’XP', () => {
+    const p = poi();
+    const a = refAdventurer(20);
+    expect(missionXp(a, p, 2)).toBeGreaterThan(missionXp(a, p, 0));
+    expect(missionXp(a, p, 3)).toBeGreaterThan(missionXp(a, p, 1));
+  });
+  it('le bonus est BORNÉ — une route infestée ne devient pas une pompe à XP', () => {
+    const p = poi();
+    const a = refAdventurer(20);
+    expect(missionXp(a, p, 99)).toBeLessThanOrEqual(
+      Math.round(missionXp(a, p, 0) * (1 + CARAVAN.xpFightMax) + 1),
+    );
+  });
+  it('une route périlleuse SANS embuscade ne paie plus le simple risque', () => {
+    // Mesuré avant : XP identique (49) qu'il y ait eu 1, 2 ou 3 embuscades — on payait
+    // l'étiquette. Elle reste plus formatrice, mais parce qu'il s'y passe quelque chose.
+    const a = refAdventurer(20);
+    expect(missionXp(a, poi({ perilous: true }), 0)).toBe(missionXp(a, poi(), 0));
+    expect(missionXp(a, poi({ perilous: true }), 3)).toBeGreaterThan(missionXp(a, poi(), 0));
+  });
+});

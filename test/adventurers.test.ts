@@ -15,9 +15,13 @@ import {
   nextStratum,
   pathTags,
   promoLevel,
+  advRankProgress,
+  advNextStarLevel,
+  advXpToNext,
   type Adventurer,
 } from '@/lib/adventurers';
 import { RANK_ORDER } from '@/lib/items';
+import { characterRank } from '@/lib/characterRank';
 
 const make = (over: Partial<Adventurer> = {}): Adventurer => ({
   id: 'a1',
@@ -230,6 +234,44 @@ describe('profondeur RÉELLEMENT écrite du vivier', () => {
     for (let s = 0; s <= 3; s++) {
       const n = ADV_CLASSES.filter((c) => c.stratum === s).length;
       expect(n, `strate ${s}`).toBeGreaterThanOrEqual(PROMO_CHOICES);
+    }
+  });
+});
+
+describe('la BARRE de progression vers l’étoile suivante', () => {
+  const at = (level: number, xp = 0) => make({ level, xp });
+
+  it('avance avec l’XP, pas seulement au passage de niveau', () => {
+    // Le niveau est CACHÉ : sans ça, un aventurier peut travailler deux niveaux entiers
+    // sans le moindre retour visible.
+    const a = advRankProgress(at(3, 0));
+    const b = advRankProgress(at(3, advXpToNext(3) / 2));
+    expect(b).toBeGreaterThan(a);
+  });
+  it('reste bornée à [0, 1]', () => {
+    for (const l of [1, 2, 5, 23, 99]) {
+      for (const f of [0, 0.5, 1, 5]) {
+        const p = advRankProgress(at(l, advXpToNext(l) * f));
+        expect(p).toBeGreaterThanOrEqual(0);
+        expect(p).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+  it('boucle à chaque étoile — elle ne s’étire pas sur tout le rang', () => {
+    // 1 étoile = 2 niveaux : la barre repart de bas à chaque étoile gagnée, sinon elle
+    // bougerait de 10 % par niveau et ne dirait plus rien.
+    expect(advRankProgress(at(1, 0))).toBe(0);
+    expect(advRankProgress(at(3, 0))).toBe(0); // niveau 3 = nouvelle étoile
+    // ⚠️ Valeur EXACTE, pas « > 0 » : une barre étirée sur tout le rang (10 niveaux)
+    // passait le test précédent en rendant 0,1 au lieu de 0,5.
+    expect(advRankProgress(at(2, 0))).toBeCloseTo(0.5, 6);
+    expect(advRankProgress(at(1, advXpToNext(1)))).toBeCloseTo(0.5, 6);
+  });
+  it('est cohérente avec le rang affiché', () => {
+    // Quand la barre est pleine, l'étoile suivante est bien celle qu'annonce l'échelle.
+    for (const l of [1, 2, 4, 7, 12]) {
+      const suivant = advNextStarLevel(at(l));
+      expect(characterRank(suivant).tier).toBe(characterRank(l).tier + 1);
     }
   });
 });

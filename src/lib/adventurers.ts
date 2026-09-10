@@ -17,7 +17,13 @@
 // 9 840. Les branches re-convergent naturellement (« Maître épéiste » est atteignable
 // depuis Épéiste comme depuis Bretteur : on ne l'écrit qu'une fois).
 import { RANK_ORDER, type EffectType, type Rarity } from './items';
-import { characterRank, rankStarStr, type CharacterRank } from './characterRank';
+import {
+  characterRank,
+  rankProgress,
+  rankStarStr,
+  nextStarLevel,
+  type CharacterRank,
+} from './characterRank';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
@@ -655,6 +661,26 @@ export function advRarity(adv: Adventurer): Rarity {
  *  le rang se lit. Une seule échelle de prestige dans tout le jeu. */
 export function advRank(adv: Adventurer): CharacterRank {
   return characterRank(Math.max(1, adv.level));
+}
+
+/** XP nécessaire pour passer du niveau `level` au suivant. Mesuré avec `missionXp` :
+ *  ~8 missions pour le niveau 2, 38 pour le 5, 118 pour le 8, 255 pour le 23 — soit
+ *  environ 3 mois à 3 convois par jour pour élever un aventurier à fond.
+ *  ⚠️ Vit ICI et non dans `caravan.ts` : c'est la courbe de l'AVENTURIER, pas celle du
+ *  convoi. Les caravanes ne sont qu'une des sources d'XP (la formation en est une autre). */
+export function advXpToNext(level: number): number {
+  return 40 + Math.max(1, level) * 22;
+}
+
+/** Avancement vers l'étoile suivante (0..1) — la BARRE. Le niveau étant caché, c'est
+ *  le seul retour visible entre deux étoiles, et il bouge à chaque mission. */
+export function advRankProgress(adv: Adventurer): number {
+  return rankProgress(adv.level, Math.max(0, adv.xp) / advXpToNext(adv.level));
+}
+
+/** Niveau auquel l'aventurier gagnera son étoile suivante (info-bulle de la barre). */
+export function advNextStarLevel(adv: Adventurer): number {
+  return nextStarLevel(adv.level);
 }
 
 /** « ⚪ Argent ★★★☆☆ » — libellé prêt à afficher. */
