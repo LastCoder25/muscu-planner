@@ -45,6 +45,9 @@ export interface BuildingEffect {
   labyLuckPerLvl?: number; // Porte du Labyrinthe : +X à la chance de butin des coffres / niveau
   bossRollFloorPerLvl?: number; // Autel des boss : +X au plancher de qualité de roll / niveau
   summonCostRedPerLvl?: number; // Autel des boss : −X% du coût en pierres d'invocation / niveau
+  caravanSlotPer6Lvl?: boolean; // Comptoir : +1 convoi simultané tous les 6 niveaux (cf. caravanSlots)
+  guildRosterPerLvl?: number; // Guilde : +X aventuriers recrutables / niveau
+  trainSpeedPerLvl?: number; // Centre de formation : −X% de temps de formation / niveau
 }
 
 // Ce qu'un bâtiment DÉBLOQUE (activité/fonctionnalité) → affiché au joueur à la
@@ -210,6 +213,54 @@ export const BUILDING_TYPES: BuildingType[] = [
     unlockLevel: 3,
     unique: true,
     desc: 'Augmente le stockage de tous tes producteurs (+15 %/niveau).',
+  },
+  // UTILITAIRE : le COMPTOIR débloque les caravanes et fixe combien partent EN MÊME TEMPS.
+  // ⚠️ Son niveau ne fait qu'UNE chose (le nombre de convois), comme le Chantier de fouille :
+  // c'est ce qui rend un niveau lisible. Et c'est le second garde-fou de l'inflation de
+  // ressources — le rendement par convoi est bridé, mais c'est le NOMBRE qui multiplie.
+  {
+    id: 'caravanserail',
+    label: 'Comptoir de caravanes',
+    emoji: '🐫',
+    category: 'utility',
+    effect: { caravanSlotPer6Lvl: true },
+    perLevelNote: '+1 convoi simultané tous les 6 niveaux (4 au maximum)',
+    buildGold: 500,
+    unlockLevel: 3,
+    unique: true,
+    unlock: { activity: 'Les caravanes', where: 'sur la carte d’expédition' },
+    desc: 'Envoie des convois récolter à ta place — du temps réel, zéro énergie. Ils ne vont que sur les lieux de RÉCOLTE.',
+  },
+  // UTILITAIRE : la GUILDE loge et recrute les aventuriers. Son niveau plafonne leur RANG
+  // (donc le sport reste le plafond) et le nombre qu’on peut entretenir.
+  {
+    id: 'guild',
+    label: 'Guilde d’aventuriers',
+    emoji: '⚔️',
+    category: 'utility',
+    effect: { guildRosterPerLvl: 0.5 },
+    perLevelNote: '+1 aventurier recrutable tous les 2 niveaux, et un rang maximal plus haut',
+    buildGold: 700,
+    unlockLevel: 3,
+    unique: true,
+    unlock: { activity: 'Les aventuriers', where: 'sur ta base' },
+    desc: 'Recrute des aventuriers et fixe leur rang maximal. Ils escortent tes caravanes — et se font payer.',
+  },
+  // UTILITAIRE : le CENTRE DE FORMATION est où l’on VALIDE une promotion (l’aventurier y
+  // apprend sa nouvelle classe). ⚠️ Il n’est PAS nécessaire pour démarrer : la classe de
+  // DÉPART se choisit au recrutement, à la Guilde. Il ne devient utile qu’à la 2e strate
+  // → le mur d’entrée d’un débutant reste à DEUX bâtiments.
+  {
+    id: 'training',
+    label: 'Centre de formation',
+    emoji: '📚',
+    category: 'utility',
+    effect: { trainSpeedPerLvl: 0.04 },
+    perLevelNote: '−4 % de temps de formation par niveau',
+    buildGold: 650,
+    unlockLevel: 4,
+    unique: true,
+    desc: 'Un aventurier promu y apprend sa nouvelle classe. Sans lui, il plafonne à sa classe de départ.',
   },
 ];
 

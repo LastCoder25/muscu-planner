@@ -64,7 +64,13 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
       // le joueur passe de 55 % à 90 % du plafond et dépense ~100 % de son or.
       expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeGreaterThan(15);
       // …sans devenir un mur : au-delà, on ne progresse plus, on attend.
-      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeLessThan(70);
+      // ⚠️ BORNE RELEVÉE 70 → 80 en v0.727, et c’est une conséquence ARITHMÉTIQUE assumée :
+      // le roster est passé de 7 à 10 bâtiments (Comptoir, Guilde, Centre de formation),
+      // donc « un cran sur TOUS » coûte mécaniquement 10/7 de plus. Mesuré : ~49 → ~68-71
+      // jours, uniformément. Ce qui compte est intact — le ratio reste PLAT (61,8 → 71,6,
+      // test suivant) et l’AMORÇAGE ne bouge pas (test dédié ci-dessous). Ne pas relever
+      // cette borne pour une autre raison qu’un roster qui grandit.
+      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeLessThan(80);
     }
   });
 
@@ -72,12 +78,35 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     // Le coût et le revenu doivent garder la même forme. Un exposant plus raide que celui
     // des revenus (L^1.6) creuse un écart qui grandit sans fin : à L^2.6 il fallait 13
     // expéditions pour un niveau au niveau 5, et 115 au niveau 100.
-    const ratios = LEVELS.map((L) => cranTotal(L) / goldPerDay(L));
+    // ⚠️ ON MESURE UN SEUL BÂTIMENT, pas « un cran sur tous ». Cette assertion portait sur
+    // le total, qui mélange DEUX phénomènes : la forme de la courbe (ce qu’on veut tester)
+    // et la montée de `plotsForLevel` (1 emplacement par niveau, jusqu’au roster). Passer
+    // le roster de 7 à 10 a fait bondir l’écart de 1,96 à 2,80 — sans que l’exposant ait
+    // bougé d’un iota. Le test accusait donc la courbe d’un défaut qui n’était pas le sien.
+    const ratios = LEVELS.map((L) => buildingUpgradeCost(L) / goldPerDay(L));
     const min = Math.min(...ratios);
     const max = Math.max(...ratios);
     expect(max / min, `écart ${min.toFixed(2)} → ${max.toFixed(2)}`).toBeLessThan(2.5);
+
+    // …et une fois TOUS les emplacements ouverts, le total ne dérive pas non plus.
+    const pleins = LEVELS.filter((L) => plotsForLevel(L) >= BUILDING_TYPES.length).map(
+      (L) => cranTotal(L) / goldPerDay(L),
+    );
+    expect(Math.max(...pleins) / Math.min(...pleins)).toBeLessThan(2.5);
   });
 
+  it('⚠️ POSER le Comptoir et la Guilde reste à portée d’un DÉBUTANT', () => {
+    // C’est le seul chiffre qui décide si la feature caravanes existe pour le joueur
+    // qu’elle vise. Le puits d’or s’est approfondi avec le roster ; l’ENTRÉE, elle, ne
+    // doit pas bouger. Mesuré : 1 200 or, soit ~0,5 jour de revenu au niveau 3.
+    const entree = ['caravanserail', 'guild'].reduce(
+      (s, id) => s + (BUILDING_TYPES.find((t) => t.id === id)?.buildGold ?? 0),
+      0,
+    );
+    for (const L of [3, 5, 8]) {
+      expect(entree / goldPerDay(L), `niveau ${L}`).toBeLessThan(1);
+    }
+  });
   it('l’AMORÇAGE reste doux : construire ses premiers bâtiments ne demande pas une semaine', () => {
     // On durcit la MONTÉE, pas l'entrée. Poser un bâtiment doit rester à portée immédiate.
     for (const t of BUILDING_TYPES) expect(t.buildGold).toBeLessThan(goldPerDay(10));

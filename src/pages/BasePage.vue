@@ -1010,12 +1010,8 @@ interface YardCell {
   damaged: boolean;
   onClick: () => void;
 }
-// Les 7 emplacements de production en 4 + 3, la seconde rangée DÉCALÉE d'un demi-pas :
-// une grille 4×2 laisserait un trou béant au dernier rang, alors que 4 + 3 centré se lit
-// comme un village qui épouse l'octogone. ⚠️ Le nombre de cases suit `BUILD.plotCap` (un
-// test le verrouille) : ajouter un type de bâtiment demande une position de plus ici.
 // ── LA VILLE EN DEUX ANNEAUX ──────────────────────────────────────────────────
-// Les 7 ATELIERS contre les remparts (r = 43), les 3 SERVICES autour de la place
+// Les ATELIERS contre les remparts (r = 43), autant que de types de bâtiments, les 3 SERVICES autour de la place
 // centrale (r = 16), le cœur laissé LIBRE. Positions calculées, pas posées à l'œil :
 // une recherche sur les deux rayons et l'orientation a retenu celle qui MAXIMISE
 // l'écart minimum entre deux tuiles — **27,3 unités**, contre 20 pour la disposition
@@ -1029,7 +1025,21 @@ const RING = (n: number, r: number, off: number) =>
     const a = (i / n) * 2 * Math.PI - Math.PI / 2 + off;
     return { x: 100 + Math.cos(a) * r, y: 100 + Math.sin(a) * r };
   });
-const PLOT_POS = RING(7, 43, 0);
+/** Décalage angulaire qui met le MILIEU D’UN VIDE en bas de l’anneau, quel que soit le
+ *  nombre d’emplacements → le couloir de la porte reste toujours dégagé, et il l’est au
+ *  maximum possible (la moitié du pas angulaire).
+ *  ⚠️ Les positions étaient calées sur SEPT emplacements avec un décalage de 0 ; passer à
+ *  dix aurait posé une tuile pile devant la porte, et les trois surnuméraires se seraient
+ *  empilées sur la dernière (le tableau était plus court que `plotCap`). La formule
+ *  redonne exactement 0 pour 7 — donc la disposition actuelle est préservée — et 18° pour
+ *  10. Ajouter un bâtiment replace la cour tout seul.
+ *  Vérifié par recherche : à r = 43 et dix tuiles, l’écart minimum vaut 26,6 pour une cible
+ *  tactile de 20, et le coin le plus éloigné 55,7 pour un apothème de 57,2. */
+const gateOffset = (n: number) => {
+  const step = (2 * Math.PI) / n;
+  return (Math.PI * (n + 1)) / n - Math.round((n + 1) / 2) * step;
+};
+const PLOT_POS = RING(BUILD.plotCap, 43, gateOffset(BUILD.plotCap));
 // Services : un vers la porte, deux vers le corps de garde — ils encadrent la place.
 const SVC_POS = RING(3, 16, Math.PI);
 const YARD_HALF = 9; // demi-côté DESSINÉ

@@ -45,8 +45,10 @@ describe('buildings — emplacements & coûts', () => {
     // cour. C'est ce que donnaient les 10 emplacements pour 7 bâtiments.
     expect(BUILDING_TYPES.every((t) => t.unique)).toBe(true);
     expect(BUILD.plotCap).toBe(BUILDING_TYPES.length);
-    // 7 types : outpost, porte, autel, mine, dynamo, fonderie, entrepôt.
-    expect(BUILDING_TYPES.length).toBe(7);
+    // 10 types depuis les caravanes (v0.727) : les 7 d’origine + Comptoir, Guilde,
+    // Centre de formation. ⚠️ Le littéral est là pour qu’ajouter un type soit une
+    // DÉCISION (il ouvre un emplacement et approfondit le puits d’or de 1/N), pas un effet de bord.
+    expect(BUILDING_TYPES.length).toBe(10);
   });
   it('le CHOIX vit dans plotsForLevel, pas dans le mou : moins d’emplacements que de types déblocables', () => {
     // À bas niveau on a moins d'emplacements que de bâtiments déjà déblocables → on
@@ -73,7 +75,7 @@ describe('buildings — emplacements & coûts', () => {
 });
 
 describe('buildings — registre (production passive)', () => {
-  it('roster complet : outpost, porte, autel, mine, dynamo, fonderie, entrepôt', () => {
+  it('roster complet : les 7 d’origine + comptoir, guilde, centre de formation', () => {
     expect(BUILDING_TYPES.map((t) => t.id).sort()).toEqual(
       [
         'boss_altar',
@@ -83,6 +85,9 @@ describe('buildings — registre (production passive)', () => {
         'labyrinth_gate',
         'outpost',
         'warehouse',
+        'caravanserail',
+        'guild',
+        'training',
       ].sort(),
     );
   });
@@ -203,6 +208,51 @@ describe('ce qu’un NIVEAU change, dit explicitement', () => {
     // change, l'étiquette suit toute seule.
     for (const t of BUILDING_TYPES.filter((x) => x.resource && x.prodPerHrPerLvl)) {
       expect(perLevelLabel(t)).toContain(String(t.prodPerHrPerLvl));
+    }
+  });
+});
+
+describe('⚠️ la cour suit le roster — la porte reste dégagée', () => {
+  /** La formule de BasePage, reproduite pour être testable (le composant n'est pas
+   *  importable ici). Elle doit rester d'accord avec lui. */
+  const gateOffset = (n: number) => {
+    const step = (2 * Math.PI) / n;
+    return (Math.PI * (n + 1)) / n - Math.round((n + 1) / 2) * step;
+  };
+  const ring = (n: number, r: number, off: number) =>
+    Array.from({ length: n }, (_, i) => {
+      const a = (i / n) * 2 * Math.PI - Math.PI / 2 + off;
+      return { x: 100 + Math.cos(a) * r, y: 100 + Math.sin(a) * r };
+    });
+  /** Écart angulaire au BAS de l'anneau (la porte est au sud). */
+  const toGate = (p: { x: number; y: number }) => {
+    const a = (Math.atan2(p.y - 100, p.x - 100) * 180) / Math.PI;
+    return Math.abs(((a - 90 + 540) % 360) - 180);
+  };
+
+  it('aucun atelier ne se pose devant la porte, quel que soit le nombre', () => {
+    // Le décalage valait 0, calé à la main sur SEPT emplacements. À dix, une tuile
+    // tombait pile au sud et bouchait le couloir d'entrée.
+    for (let n = 3; n <= 16; n++) {
+      const clair = Math.min(...ring(n, 43, gateOffset(n)).map(toGate));
+      expect(clair, `${n} emplacements`).toBeGreaterThan(360 / n / 2 - 1);
+    }
+  });
+  it('elle redonne EXACTEMENT la disposition d’avant pour 7', () => {
+    expect(gateOffset(7)).toBeCloseTo(0, 9);
+  });
+  it('les tuiles ne se chevauchent jamais et tiennent dans l’enceinte', () => {
+    const HIT = 10; // demi-cible tactile
+    const CORNER = Math.SQRT2 * 9; // du centre au coin de la tuile dessinée
+    const APOTHEM = 62 * Math.cos(Math.PI / 8);
+    const pos = ring(BUILD.plotCap, 43, gateOffset(BUILD.plotCap));
+    for (let i = 0; i < pos.length; i++) {
+      expect(Math.hypot(pos[i]!.x - 100, pos[i]!.y - 100) + CORNER).toBeLessThan(APOTHEM);
+      for (let j = i + 1; j < pos.length; j++) {
+        expect(Math.hypot(pos[i]!.x - pos[j]!.x, pos[i]!.y - pos[j]!.y)).toBeGreaterThanOrEqual(
+          2 * HIT,
+        );
+      }
     }
   });
 });
