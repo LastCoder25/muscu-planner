@@ -15,7 +15,7 @@
 //     différée, jamais perdue. La blessure ne survient que sur une DÉFAITE, donc sa
 //     présence au mur reste un pari gagnant — sinon la stratégie optimale serait de
 //     l'envoyer en expédition les soirs de raid, et la mécanique se retournerait.
-//  3. C'est OPT-IN : pas de muraille → pas d'attaque (cf. `raidsEnabled`).
+//  3. C'est OPT-IN : pas d'enceinte PRÊTE → pas d'attaque (cf. `raidsEnabled`).
 //  4. Le siège est FINI et GAGNABLE. Une armée a un effectif : on la tient en entier ou
 //     elle passe. (C'est la différence avec l'arène, dont la rampe géométrique garantit
 //     la mort — un contresens ici, où investir doit pouvoir payer par une victoire nette.)
@@ -185,8 +185,8 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '🧱',
     buildGold: 500,
     buildScrap: 0, // le 1er niveau ne coûte pas de ferraille : c'est le déblocage
-    unlockLevel: 12,
-    desc: 'L’enceinte encaisse les assauts. Sans elle, personne ne vient t’attaquer.',
+    unlockLevel: 3,
+    desc: 'L’enceinte encaisse les assauts. Tant qu’elle et les tourelles ne suivent pas ton niveau, personne ne vient t’attaquer.',
   },
   {
     id: 'turret',
@@ -194,7 +194,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '🏹',
     buildGold: 700,
     buildScrap: 0,
-    unlockLevel: 12,
+    unlockLevel: 3,
     desc: 'Elles tirent. Chaque niveau ajoute de la puissance de feu, et une tourelle de plus sur le mur (jusqu’à 8).',
   },
   {
@@ -203,7 +203,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '🗼',
     buildGold: 600,
     buildScrap: 0,
-    unlockLevel: 12,
+    unlockLevel: 3,
     desc: 'Elle renseigne : plus elle est haute, plus tu en sais sur l’armée qui vient — et plus tôt tu l’apprends.',
   },
   {
@@ -212,7 +212,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '🦴',
     buildGold: 650,
     buildScrap: 0,
-    unlockLevel: 12,
+    unlockLevel: 3,
     desc: 'Envoie des fossoyeurs dépouiller les corps après la bataille. Chaque niveau = des fossoyeurs en plus par vague.',
   },
   {
@@ -221,7 +221,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '🐾',
     buildGold: 750,
     buildScrap: 0,
-    unlockLevel: 12,
+    unlockLevel: 3,
     desc: 'Poste tes familiers à la défense. Leur ESPÈCE décide de ce qu’ils apportent au mur.',
   },
   {
@@ -230,7 +230,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '⛑️',
     buildGold: 700,
     buildScrap: 0,
-    unlockLevel: 12,
+    unlockLevel: 3,
     desc: 'Soigne le héros blessé et remet les familiers fatigués sur pied plus vite.',
   },
 ];
@@ -327,6 +327,14 @@ export const RAID = {
   // Les hommes postés sur le rempart. Volontairement FAIBLE devant les tourelles (une
   // ligne de 8 tourelles vaut ~0,84 en équivalent) : le mur encaisse, les tourelles
   // tuent. Il ne s'agit que d'écarter le zéro absolu.
+  // ⚠️ SEUIL DE DÉCLENCHEMENT des sièges — part de l’enceinte réellement bâtie, mur ET
+  // tourelles (cf. `defenseReadiness`). Mesuré : une enceinte à MOITIÉ ne tient rien à
+  // AUCUN niveau (1-13 %), et une muraille à niveau SANS tourelle tient 0 % partout — le
+  // plancher `wallDmgK` ci-dessous a supprimé le zéro arithmétique, pas le zéro pratique.
+  // Allumer les sièges dès `wall > 0` revenait donc à punir le joueur d’avoir fait le
+  // premier pas. À 0,85 on tient 54 à 100 % (héros présent) du niveau 3 au niveau 70, et
+  // l’enceinte garde 2 à 7 niveaux de marge avant que les sièges se coupent d’eux-mêmes.
+  enableShare: 0.85,
   wallDmgK: 0.055,
 
   // Coûts propres à la défense (cf. defenseUpgradeCost).
@@ -1356,8 +1364,33 @@ export function emptyBase(seed: number, now: number): BaseState {
 /** Les sièges sont OPT-IN et réservés à un joueur qui joue : il faut une MURAILLE et une
  *  activité sportive récente. Un joueur revenu après trois semaines ne trouve donc pas
  *  une armée sur le pas de sa porte. */
-export function raidsEnabled(base: BaseState, sessions7: number): boolean {
-  return ownedLevel(base.defenses, 'wall') > 0 && sessions7 >= 1;
+/** Part de l’enceinte réellement PRÊTE : le MINIMUM des parts du mur et des tourelles,
+ *  rapportées au niveau du joueur. Le minimum, et non la moyenne, parce que les deux ont
+ *  des métiers distincts et non substituables — le mur encaisse, les tourelles tuent : une
+ *  muraille parfaite sans tourelle tient 0 % (mesuré, à TOUS les niveaux). Bornée à 1 :
+ *  sur-monter au-delà de son niveau ne compte pas, comme dans `baseCombatant`. */
+export function defenseReadiness(defenses: DefenseStructure[], playerLevel: number): number {
+  const L = Math.max(1, playerLevel);
+  const part = (id: DefenseId) => Math.min(1, ownedLevel(defenses, id) / L);
+  return Math.min(part('wall'), part('turret'));
+}
+
+/** Les sièges sont-ils actifs ? OPT-IN à deux conditions : une enceinte réellement
+ *  PRÊTE (`RAID.enableShare`) et un joueur qui s’entraîne.
+ *
+ *  ⚠️ Le déclencheur regardait `wall > 0` — n’importe quelle muraille, fût-elle de
+ *  niveau 1 chez un joueur de niveau 12. Or à cette part-là on tient 0 % : construire
+ *  sa première muraille ALLUMAIT les sièges et les faisait perdre tous. Ce n’est pas un
+ *  défaut de bas niveau mais du modèle en fraction (effet quadratique) : à moitié montée,
+ *  une enceinte ne tient rien à AUCUN niveau. Le sens visé est « ta ville devient une
+ *  cible quand elle vaut la peine d’être attaquée », pas « dès que tu poses une pierre ».
+ *
+ *  Conséquence assumée : monter de niveau sans suivre côté enceinte SUSPEND les sièges,
+ *  et ils reprennent tout seuls une fois rattrapé. C’est cohérent avec la règle 1 (on ne
+ *  punit jamais) — et sans exploit, un siège étant un ROBINET (butin, cadavres, ferraille) :
+ *  s’en priver coûte du contenu, ça n’achète pas de la sécurité. */
+export function raidsEnabled(base: BaseState, sessions7: number, playerLevel: number): boolean {
+  return defenseReadiness(base.defenses, playerLevel) >= RAID.enableShare && sessions7 >= 1;
 }
 
 export interface BaseTickResult {
@@ -1397,8 +1430,8 @@ export function advanceBase(
     changed = true;
   }
 
-  if (!raidsEnabled(b, ctx.sessions7)) {
-    // Pas de muraille (ou joueur inactif) : on repousse l'échéance pour ne JAMAIS
+  if (!raidsEnabled(b, ctx.sessions7, ctx.playerLevel)) {
+    // Enceinte pas prête (ou joueur inactif) : on repousse l'échéance pour ne JAMAIS
     // accumuler un arriéré pendant l'absence.
     if (b.nextRaidAt < now) {
       b = { ...b, nextRaidAt: now + RAID.intervalIdleMs };

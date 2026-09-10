@@ -18,6 +18,7 @@ import {
   applyRaidOutcome,
   emptyBase,
   raidsEnabled,
+  defenseReadiness,
   scavengerCount,
   pickScavengeTargets,
   turretCount,
@@ -363,13 +364,13 @@ describe('rythme', () => {
 describe('cycle de vie', () => {
   function base(now: number): BaseState {
     const b = emptyBase(1234, now);
-    b.defenses = defs(20, 20, 6);
+    b.defenses = defs(26, 26, 6); // enceinte PRÊTE (le joueur du fixture est niveau 26)
     return b;
   }
 
   it('sans muraille, AUCUNE attaque — le système est opt-in', () => {
     const b = emptyBase(7, 0);
-    expect(raidsEnabled(b, 7)).toBe(false);
+    expect(raidsEnabled(b, 7, 26)).toBe(false);
     const r = advanceBase(b, { playerLevel: 26, sessions7: 7, globalXp: 0 }, 10 * 24 * H);
     expect(r.detected).toBeNull();
     expect(r.dueRaid).toBeNull();
@@ -1207,5 +1208,65 @@ describe('🔩 l’acier d’une armée en déroute (v0.702)', () => {
       7,
     ).scrap;
     expect(avecChamp).toBeGreaterThan(sansChamp);
+  });
+});
+
+// ── Le DÉCLENCHEUR : une enceinte doit être PRÊTE, pas seulement exister ──────────
+describe('seuil de déclenchement des sièges', () => {
+  const ready = (b: BaseState, L: number) => raidsEnabled(b, 4, L);
+  const withDefs = (wall: number, turret: number): BaseState => {
+    const b = emptyBase(9, 0);
+    b.defenses = defs(wall, turret);
+    return b;
+  };
+
+  it('une muraille de niveau 1 chez un joueur de niveau 12 n’allume RIEN', () => {
+    // C'est le cas qui punissait le joueur d'avoir fait le premier pas : à cette part,
+    // la tenue mesurée est de 0 %.
+    expect(ready(withDefs(1, 1), 12)).toBe(false);
+  });
+  it('une enceinte à MOITIÉ n’allume rien non plus — ce n’est pas un défaut de bas niveau', () => {
+    for (const L of [4, 12, 40, 100])
+      expect(ready(withDefs(Math.round(L / 2), Math.round(L / 2)), L)).toBe(false);
+  });
+  it('⚠️ le MINIMUM, pas la moyenne : une muraille parfaite SANS tourelle n’allume rien', () => {
+    // Mesuré : mur à niveau + zéro tourelle = 0 % de tenue à TOUS les niveaux. Une
+    // moyenne (0,5) laisserait passer ce cas ; le minimum le refuse.
+    expect(ready(withDefs(12, 0), 12)).toBe(false);
+    expect(ready(withDefs(0, 12), 12)).toBe(false);
+  });
+  it('une enceinte à niveau, chez un joueur qui s’entraîne, allume les sièges', () => {
+    for (const L of [3, 12, 40, 100]) expect(ready(withDefs(L, L), L)).toBe(true);
+  });
+  it('le seuil laisse une marge : on n’a pas besoin d’être EXACTEMENT à niveau', () => {
+    const L = 20;
+    const at = Math.ceil(L * RAID.enableShare);
+    expect(ready(withDefs(at, at), L)).toBe(true);
+    expect(ready(withDefs(at - 1, at - 1), L)).toBe(false);
+  });
+  it('un joueur inactif n’est jamais attaqué, même enceinte prête', () => {
+    expect(raidsEnabled(withDefs(12, 12), 0, 12)).toBe(false);
+  });
+  it('monter de niveau sans suivre SUSPEND les sièges — et ils reprennent au rattrapage', () => {
+    const b = withDefs(12, 12);
+    expect(ready(b, 12)).toBe(true);
+    expect(ready(b, 20)).toBe(false); // le joueur a filé, l'enceinte est restée
+    b.defenses = defs(20, 20);
+    expect(ready(b, 20)).toBe(true); // rattrapé → ça repart, sans arriéré
+  });
+  it('defenseReadiness est bornée à 1 : sur-monter au-delà de son niveau ne compte pas', () => {
+    expect(defenseReadiness(defs(50, 50), 10)).toBe(1);
+    expect(defenseReadiness(defs(5, 10), 10)).toBe(0.5); // le minimum des deux
+  });
+});
+
+describe('les défenses sont un système de DÉBUT de partie', () => {
+  it('les 6 structures se débloquent ENSEMBLE, et tôt', () => {
+    // 12 protégeait d'un défaut corrigé depuis (v0.672/674/687) : mesuré, un joueur de
+    // niveau 8 avec une enceinte à niveau tient 88 %, pas les « 0-20 % » d'alors. Et
+    // atteindre 12 demande ~3 mois à un joueur tranquille.
+    const levels = new Set(DEFENSE_TYPES.map((t) => t.unlockLevel));
+    expect(levels.size).toBe(1);
+    expect([...levels][0]).toBe(3);
   });
 });

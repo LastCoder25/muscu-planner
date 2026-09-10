@@ -326,8 +326,14 @@
     </div>
     <div v-else class="panel calm">
       <div class="p-title">🕊️ Aucune menace en vue</div>
-      <p v-if="!wallLevel">
-        Sans <b>muraille</b>, personne ne vient t’attaquer. C’est à toi d’ouvrir le bal.
+      <!-- ⚠️ On dit CE QUI MANQUE, pas seulement qu’il manque quelque chose : le seuil
+           porte sur le mur ET les tourelles, et une enceinte à moitié ne tient rien. -->
+      <p v-if="!raidsReady">
+        Ta ville n’attire personne tant que son enceinte ne vaut pas la peine d’être attaquée. Il te
+        faut <b>muraille</b> et <b>tourelles</b> au niveau <b>{{ readyLevel }}</b> —
+        <span :class="{ miss: wallLevel < readyLevel }">muraille {{ wallLevel }}</span> ·
+        <span :class="{ miss: turretLevel < readyLevel }">tourelles {{ turretLevel }}</span
+        >.
       </p>
       <!-- ⚠️ ON N'ANNONCE PLUS QUAND. L'écran affichait le compte à rebours vers
            `nextRaidAt` avant même toute détection : il divulguait donc l'horaire que la
@@ -339,7 +345,7 @@
         Rien à l’horizon. Une armée finira par se mettre en marche — plus tu t’entraînes, plus ta
         base prospère et plus elle attire —, mais tu ne sauras pas quand.
       </p>
-      <p v-if="wallLevel" class="calm-watch">
+      <p v-if="raidsReady" class="calm-watch">
         <template v-if="watchLevel">
           🗼 Ta <b>Tour de guet</b> te préviendra <b>{{ scoutLeadLabel }}</b> avant l’assaut.
         </template>
@@ -612,6 +618,8 @@ import {
   scoutLevel,
   scoutReport,
   turretCount,
+  defenseReadiness,
+  RAID,
   remainingCorpses,
   totalRepairCost,
   defenseUpgradeCost,
@@ -682,6 +690,12 @@ const remaining = computed(() => remainingCorpses(field.value));
 const wallLevel = computed(() => defenseLevel(defenses.value, 'wall'));
 const watchLevel = computed(() => defenseLevel(defenses.value, 'watchtower'));
 const salvageLevel = computed(() => defenseLevel(defenses.value, 'salvage'));
+// Les sièges ne s’allument qu’avec une enceinte PRÊTE (mur ET tourelles). On affiche le
+// niveau requis plutôt que la part : c’est ce sur quoi le joueur peut agir.
+const raidsReady = computed(
+  () => defenseReadiness(defenses.value, heroLevel.value) >= RAID.enableShare,
+);
+const readyLevel = computed(() => Math.max(1, Math.ceil(heroLevel.value * RAID.enableShare)));
 const wallDamaged = computed(() => isDamaged(defenses.value, 'wall'));
 const watchDamaged = computed(() => isDamaged(defenses.value, 'watchtower'));
 const turretsDamaged = computed(() => isDamaged(defenses.value, 'turret'));
@@ -2047,6 +2061,11 @@ const doCollect = () =>
   margin-left: auto;
   font-size: 11px;
   color: var(--dim);
+}
+/* Ce qui MANQUE se voit : le reste de la phrase reste lisible. */
+.miss {
+  color: var(--d4);
+  font-weight: 600;
 }
 .calm-watch {
   font-size: 12.5px;
