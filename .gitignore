@@ -36,3 +36,5 @@ Thumbs.db
 # Packs 3D bruts (Quaternius CC0) : ~419 Mo de sources FBX + textures 4K.
 # JAMAIS committes — on ne versionne que le bundle SLIM derive (public/hero/).
 /public/models/
+vapid.json
+.push-cron-secret

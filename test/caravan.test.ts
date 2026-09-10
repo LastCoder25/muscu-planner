@@ -361,8 +361,10 @@ describe('⚠️ un convoi part SANS le héros', () => {
 
   it('⚠️ l’offre de convoi NE DÉPEND PAS de la disponibilité du héros', () => {
     for (const heroAway of [true, false]) {
-      expect(poiOffers(recolte, { heroAway, comptoirLevel: 3 }).caravan, `héros absent=${heroAway}`)
-        .toBe(true);
+      expect(
+        poiOffers(recolte, { heroAway, comptoirLevel: 3 }).caravan,
+        `héros absent=${heroAway}`,
+      ).toBe(true);
     }
   });
 

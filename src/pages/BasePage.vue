@@ -243,6 +243,19 @@
     </q-dialog>
 
     <!-- Revoir le dernier assaut -->
+    <!-- ⚠️ Sans notification, le PRÉAVIS que la Tour de guet fait payer ne sert qu'à
+         ceux qui ouvraient l'app de toute façon. C'est l'objet de cet interrupteur. -->
+    <div v-if="pushOk" class="panel push-panel">
+      <div class="p-title font-display">🔔 Me prévenir</div>
+      <div class="p-sub">
+        Armée repérée, assaut résolu, héros ou convoi rentré — même app fermée.
+      </div>
+      <button class="push-btn" :disabled="pushBusy" @click="togglePush">
+        {{ pushOn ? 'Désactiver les notifications' : 'Activer les notifications' }}
+      </button>
+      <div v-if="pushNote" class="p-sub push-note">{{ pushNote }}</div>
+    </div>
+
     <div v-if="lastReport" class="panel">
       <div class="p-title">
         {{ lastReport.held ? '🏆 Dernier siège — repoussé' : '💥 Dernier siège — enceinte forcée' }}
@@ -690,6 +703,7 @@ import {
   type RaidReport,
   type ScoutReport,
 } from '@/lib/raid';
+import { usePush, pushSupported } from '@/composables/usePush';
 
 /** Niveau d'accès à l'enceinte. La défense est un système de mi-partie : elle suppose une
  *  économie derrière elle (or, ferraille) et une base qui vaille la peine d'être défendue.
@@ -735,6 +749,25 @@ const raid = computed(() => base.value?.raid ?? null);
 const field = computed(() => base.value?.field ?? null);
 const freeze = computed(() => base.value?.freeze ?? null);
 const lastReport = computed(() => base.value?.lastReport ?? null);
+// 🔔 Notifications. ⚠️ Sur iOS, le push n'existe QUE si l'app a été ajoutée à l'écran
+// d'accueil — d'où le message explicite plutôt qu'un bouton qui ne ferait rien.
+const pushOk = pushSupported();
+const { enabled: pushOn, busy: pushBusy, refresh: pushRefresh, enable, disable } = usePush();
+const pushNote = ref('');
+void pushRefresh();
+async function togglePush() {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  pushNote.value = '';
+  if (pushOn.value) {
+    await disable();
+    return;
+  }
+  const ok = await enable(uid);
+  pushNote.value = ok
+    ? '✅ C’est actif sur cet appareil.'
+    : '⚠️ Refusé par le navigateur. Sur iPhone, il faut d’abord ajouter l’app à l’écran d’accueil.';
+}
 const corpses = computed(() => field.value?.corpses ?? []);
 const remaining = computed(() => remainingCorpses(field.value));
 

@@ -8,6 +8,10 @@
   // Réplique les exclusions de base + `test/` (les tests Vitest sont transpilés
   // par esbuild, pas type-checkés par vue-tsc). `exclude` REMPLACE le parent.
   "exclude": [
+    // ⚠️ Code DENO (edge functions) : autre runtime, autres globales (`Deno`,
+    // specificateurs `npm:`). Le compiler avec la config de l'app ne prouverait rien
+    // et echouerait toujours. Meme politique que `test/`.
+    "supabase",
     "dist",
     "node_modules",
     "src-capacitor",

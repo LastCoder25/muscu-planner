@@ -79,6 +79,15 @@
               title="Ferraille — réparer et bâtir l’enceinte (épaves, Fonderie, recyclage du sac)"
               >🔩 {{ char.row.scrap }}</span
             >
+            <!-- ⚠️ Les CLÉS 🗝️ manquaient au plateau alors qu'elles gardent le
+                 Labyrinthe — seule source de familiers — et qu'elles se gagnent sur
+                 plusieurs écrans (archives, coffres, boss). Une devise qu'on dépense
+                 sans jamais voir sa réserve force à aller la chercher ailleurs. -->
+            <span
+              class="tb-r keys"
+              title="Clés — entrer dans le Labyrinthe (archives de la carte, coffres, boss)"
+              >🗝️ {{ char.row.keys }}</span
+            >
           </div>
         </div>
       </div>
@@ -2604,7 +2613,9 @@ import {
   duplicateFamiliars,
   garrisonSlots,
   type RaidReport,
+  defenseLevel,
 } from '@/lib/raid';
+import { usePush } from '@/composables/usePush';
 const BasePage = defineAsyncComponent(() => import('@/pages/BasePage.vue'));
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
@@ -4866,6 +4877,30 @@ async function grantPendingComboChests() {
   }
 }
 
+/** Aligne les notifications programmées sur l’état du jeu.
+ *  ⚠️ FREINÉ : `baseLifecycle` tourne à la seconde, or synchroniser écrit en base.
+ *  Toutes les 5 min suffit — les échéances qu’on annonce se comptent en heures. */
+const push = usePush();
+let lastPushSync = 0;
+const PUSH_SYNC_MS = 5 * 60_000;
+async function syncPush(force = false) {
+  const uid = auth.user?.id;
+  if (!uid || !char.row) return;
+  const now = Date.now();
+  if (!force && now - lastPushSync < PUSH_SYNC_MS) return;
+  lastPushSync = now;
+  await push
+    .sync(uid, {
+      base: char.row.base ?? null,
+      expedition: char.row.expedition ? { returnAt: char.row.expedition.returnAt } : null,
+      caravans: char.caravanList,
+      watchtowerLevel: defenseLevel(char.row.base?.defenses ?? [], 'watchtower'),
+      activeDays7: sessions7.value,
+      playerLevel: c.value.level.level,
+    })
+    .catch((e) => console.error('push sync', e));
+}
+
 let baseBusy = false;
 async function baseLifecycle() {
   const uid = auth.user?.id;
@@ -4894,6 +4929,8 @@ async function baseLifecycle() {
       siegeReport.value = r.report;
       tab.value = 'base';
     }
+    // Un tick a pu déplacer l’échéance du prochain siège → on réaligne.
+    void syncPush(!!r.detected || !!r.report);
   } finally {
     baseBusy = false;
   }
@@ -5892,6 +5929,9 @@ onUnmounted(() => {
 }
 .tb-r.summon {
   color: #e08bd8;
+}
+.tb-r.keys {
+  color: #d9c48a;
 }
 .tb-r.scrap {
   color: #b9a68c;

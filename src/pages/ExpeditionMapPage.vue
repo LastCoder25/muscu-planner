@@ -184,6 +184,26 @@
       </div>
     </div>
 
+    <!-- ⚠️ Un convoi en route n’avait AUCUNE information : un tracé sur la carte, et
+         rien d’autre — ni destination, ni escorte, ni heure de retour. Le héros, lui,
+         a sa carte depuis toujours. Mêmes compteurs, même langage. -->
+    <div v-for="v in vansOnMap" :key="'vc' + v.id" class="active-card van-card">
+      <div class="ac-emo">🐫</div>
+      <div class="ac-main">
+        <div class="ac-title font-display">
+          {{ POI_LABEL[v.poi.type] }} niv {{ v.poi.level }}
+          <span class="vc-esc">· escorte {{ v.escort }}</span>
+        </div>
+        <div class="ac-timers">
+          <span v-if="v.at.phase === 'outbound'">
+            🎯 Arrivée dans {{ fmtMs(v.at.remainToObjectiveMs) }}
+          </span>
+          <span v-else>🏰 Retour dans {{ fmtMs(v.at.remainTotalMs) }}</span>
+          <span class="ac-total">· total {{ fmtMs(v.at.remainTotalMs) }}</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Panneau POI sélectionné -->
     <!-- ⚠️ La cargaison ne se verse pas toute seule : on vient la prendre, comme pour
          les rapports d’expédition. Le convoi, lui, est déjà rentré — on ne bloque jamais
@@ -552,7 +572,12 @@ const canSendCaravanNow = computed(
 const vansOnMap = computed(() =>
   char.caravanList
     .filter((c) => now.value < c.returnAt)
-    .map((c) => ({ id: c.id, poi: c.poi, at: travelPosition(c, now.value) })),
+    .map((c) => ({
+      id: c.id,
+      poi: c.poi,
+      escort: c.escort.length,
+      at: travelPosition(c, now.value),
+    })),
 );
 const busyCaravan = ref(false);
 const claimable = computed(() => char.caravanList.filter((c) => isCaravanClaimable(c, now.value)));
@@ -776,6 +801,13 @@ function fmtMin(min: number): string {
 
 <style scoped lang="scss">
 /* ── Caravanes : la seconde offre d’un lieu de récolte ── */
+.van-card {
+  border-left: 3px solid #b57bff;
+}
+.vc-esc {
+  font-size: 12px;
+  color: var(--dim);
+}
 .sh-away {
   padding: 10px 12px;
   font-size: 13px;
