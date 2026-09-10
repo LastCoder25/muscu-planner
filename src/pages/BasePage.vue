@@ -314,11 +314,40 @@
           <span class="k">Niveau moyen</span>
           <span class="v">{{ scout.avgLevel ?? '???' }}</span>
         </div>
-        <div v-if="scout.groups" class="scout-groups">
-          <span v-for="(g, i) in scout.groups" :key="i" class="grp" :class="{ champ: g.champion }">
-            {{ g.emoji }} ×{{ g.count }} · niv {{ g.level }}
-          </span>
-        </div>
+        <!-- La COMPOSITION est ce qu’on vient lire ici : elle mérite mieux qu’une ligne
+             de puces de 12 px. Une carte par groupe — icône lisible, effectif, niveau —
+             et le champion se reconnaît sans lire. Visible à partir de la clarté 4. -->
+        <template v-if="scout.groups">
+          <div class="foes-h">Composition</div>
+          <div class="foes">
+            <div v-for="(g, i) in scout.groups" :key="i" class="foe" :class="{ champ: g.champion }">
+              <span v-if="g.champion" class="foe-crown" title="Champion">👑</span>
+              <span class="foe-emo">{{ g.emoji }}</span>
+              <span class="foe-n font-display">×{{ g.count }}</span>
+              <span class="foe-lvl">niv {{ g.level }}</span>
+            </div>
+          </div>
+        </template>
+        <!-- Clarté 2-3 : on connaît l’effectif mais pas la répartition. On le DIT dans le
+             même langage visuel plutôt que de laisser un vide — et sans rien inventer :
+             une seule silhouette, le total, et le niveau moyen s’il est connu. -->
+        <template v-else-if="scout.size">
+          <div class="foes-h">Composition</div>
+          <div class="foes">
+            <div class="foe unknown">
+              <span class="foe-emo">❓</span>
+              <span class="foe-n font-display">×{{ scout.size }}</span>
+              <span class="foe-lvl">{{
+                scout.avgLevel ? `niv ~${scout.avgLevel}` : 'niveau ?'
+              }}</span>
+            </div>
+          </div>
+          <p class="foes-blind">
+            Tes éclaireurs comptent les silhouettes sans distinguer les rangs.
+            <template v-if="watchLevel">Une <b>Tour</b> plus haute y verrait clair.</template>
+            <template v-else>Une <b>Tour de guet</b> y verrait clair.</template>
+          </p>
+        </template>
       </div>
       <p class="scout-hint">
         {{ scoutHint }}
@@ -1878,22 +1907,69 @@ const doCollect = () =>
 .scout-line .k {
   color: var(--dim);
 }
-.scout-groups {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 8px;
+.foes-h {
+  margin: 12px 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
 }
-.grp {
+/* Grille FLUIDE : 3 colonnes dès 344 px (Z Fold plié), plus au large. Jamais de
+   débordement horizontal — les cartes se réorganisent, elles ne se compriment pas. */
+.foes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+.foe {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 10px 6px 8px;
   background: #1d1913;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 2px 7px;
-  font-size: 12px;
+  border-radius: 12px;
 }
-.grp.champ {
+.foe-emo {
+  font-size: 30px;
+  line-height: 1.15;
+}
+.foe-n {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text);
+}
+.foe-lvl {
+  font-size: 11px;
+  color: var(--dim);
+}
+/* Le champion se lit SANS lire : couronne, liseré et fond chaud. */
+.foe.champ {
   border-color: #ffb23f;
+  background: linear-gradient(180deg, rgba(255, 178, 63, 0.14), #1d1913 62%);
+}
+.foe.champ .foe-n {
   color: #ffb23f;
+}
+/* Composition inconnue : même carte, mais éteinte — on montre l’ignorance, on ne la cache pas. */
+.foe.unknown {
+  border-style: dashed;
+  opacity: 0.75;
+}
+.foe.unknown .foe-emo {
+  filter: grayscale(1);
+}
+.foes-blind {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.foe-crown {
+  position: absolute;
+  top: -8px;
+  right: -3px;
+  font-size: 15px;
 }
 .scout-hint {
   font-style: italic;
