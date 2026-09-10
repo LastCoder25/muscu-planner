@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { planPushes, livePushKeys, type PushContext } from '@/lib/push';
+import { __stampFrom } from '@/composables/useAppUpdate';
 import {
   FACTION_LABEL,
   scoutLeadMs,
@@ -147,5 +148,32 @@ describe('notifications push — ce qu’on programme', () => {
       expect(p.title.length, p.kind).toBeGreaterThan(0);
       expect(p.body.length, p.kind).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('⚠️ détection d’une nouvelle version déployée', () => {
+  // Ce projet déploie plusieurs fois par jour et un onglet resté ouvert fait tourner
+  // l'ANCIEN code indéfiniment. Sans signal, un correctif livré est signalé comme
+  // « toujours cassé » — c'est arrivé trois fois de suite.
+  it('reconnaît l’empreinte du build dans le HTML servi', () => {
+    expect(__stampFrom('<script src="/assets/index-BbgJ_Q-I.js"></script>')).toBe(
+      'assets/index-BbgJ_Q-I.js',
+    );
+    expect(__stampFrom('<script type="module" src="/assets/index.a1b2c3.js">')).toBe(
+      'assets/index.a1b2c3.js',
+    );
+  });
+
+  it('⚠️ deux builds DIFFÉRENTS donnent des empreintes différentes', () => {
+    // C'est toute la comparaison : si le haché ne bougeait pas, on ne verrait jamais
+    // le nouveau déploiement.
+    const a = __stampFrom('<script src="/assets/index-AAAA.js">');
+    const b = __stampFrom('<script src="/assets/index-BBBB.js">');
+    expect(a).not.toBe(b);
+  });
+
+  it('ne se trompe pas de chunk : seul celui d’ENTRÉE compte', () => {
+    // Les chunks paresseux changent aussi, mais tous ne sont pas chargés partout.
+    expect(__stampFrom('<script src="/assets/ExpeditionMapPage-XYZ.js">')).toBeNull();
   });
 });

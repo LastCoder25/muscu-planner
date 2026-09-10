@@ -36,6 +36,29 @@ export function pushSupported(): boolean {
   );
 }
 
+/** Pourquoi ça n'a pas marché. ⚠️ On rend une RAISON et non un booléen : un bouton qui
+ *  échoue en silence est le pire cas — c'est exactement ce qui s'est produit à la
+ *  livraison, l'utilisateur cliquait et il ne se passait littéralement rien. */
+export type PushFail = 'unsupported' | 'denied' | 'blocked' | 'no_sw' | 'subscribe' | 'db' | 'ok';
+
+/** Le service worker, enregistré au besoin, avec une LIMITE DE TEMPS.
+ *  ⚠️ `navigator.serviceWorker.ready` ne se résout JAMAIS s'il n'y a aucun enregistrement
+ *  actif — et `boot/pwa.ts` avale les échecs d'enregistrement (`.catch(() => undefined)`)
+ *  et ne l'enregistre qu'en PRODUCTION. Sans cette limite, le bouton restait bloqué en
+ *  « occupé » pour toujours, sans un mot. */
+async function readyRegistration(): Promise<ServiceWorkerRegistration | null> {
+  try {
+    const existante = await navigator.serviceWorker.getRegistration();
+    if (!existante) await navigator.serviceWorker.register('/pwa-sw.js');
+  } catch {
+    return null;
+  }
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((r) => setTimeout(() => r(null), 8000)),
+  ]);
+}
+
 const busy = ref(false);
 const enabled = ref(false);
 
@@ -46,21 +69,34 @@ export function usePush() {
     enabled.value = !!(await reg?.pushManager.getSubscription());
   }
 
-  /** Demande la permission, s'abonne, et enregistre l'appareil. */
-  async function enable(userId: string): Promise<boolean> {
-    if (!pushSupported() || busy.value) return false;
+  /** Demande la permission, s'abonne, enregistre l'appareil. Rend la RAISON de
+   *  l'échec le cas échéant — jamais un simple `false` muet. */
+  async function enable(userId: string): Promise<PushFail> {
+    if (!pushSupported()) return 'unsupported';
+    if (busy.value) return 'ok';
     busy.value = true;
     try {
-      if ((await Notification.requestPermission()) !== 'granted') return false;
-      const reg = await navigator.serviceWorker.ready;
-      const sub =
-        (await reg.pushManager.getSubscription()) ??
-        (await reg.pushManager.subscribe({
-          userVisibleOnly: true, // exigé par les navigateurs : pas de push silencieux
-          applicationServerKey: b64ToBytes(VAPID_PUBLIC),
-        }));
+      // ⚠️ Une permission REFUSÉE une fois ne re-demande plus rien : le navigateur
+      // renvoie 'denied' sans afficher la moindre invite. Il faut le dire, sinon le
+      // clic paraît sans effet.
+      if (Notification.permission === 'denied') return 'blocked';
+      if ((await Notification.requestPermission()) !== 'granted') return 'denied';
+      const reg = await readyRegistration();
+      if (!reg) return 'no_sw';
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        try {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true, // exigé par les navigateurs : pas de push silencieux
+            applicationServerKey: b64ToBytes(VAPID_PUBLIC),
+          });
+        } catch (e) {
+          console.error('push subscribe', e);
+          return 'subscribe';
+        }
+      }
       const j = sub.toJSON() as { endpoint?: string; keys?: { p256dh: string; auth: string } };
-      if (!j.endpoint || !j.keys) return false;
+      if (!j.endpoint || !j.keys) return 'subscribe';
       // ⚠️ Upsert sur `endpoint` : le navigateur peut re-souscrire au MÊME sans
       // prévenir, et deux lignes identiques enverraient deux fois chaque message.
       const { error } = await supabase
@@ -69,14 +105,20 @@ export function usePush() {
           { user_id: userId, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth },
           { onConflict: 'endpoint' },
         );
-      if (error) return false;
+      if (error) {
+        console.error('push upsert', error);
+        return 'db';
+      }
       enabled.value = true;
-      return true;
+      return 'ok';
+    } catch (e) {
+      // Filet : sans lui, la moindre exception laissait le bouton sans réaction.
+      console.error('push enable', e);
+      return 'subscribe';
     } finally {
       busy.value = false;
     }
   }
-
   async function disable(): Promise<void> {
     if (!pushSupported() || busy.value) return;
     busy.value = true;

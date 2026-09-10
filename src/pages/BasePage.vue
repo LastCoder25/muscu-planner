@@ -703,7 +703,7 @@ import {
   type RaidReport,
   type ScoutReport,
 } from '@/lib/raid';
-import { usePush, pushSupported } from '@/composables/usePush';
+import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
 
 /** Niveau d'accès à l'enceinte. La défense est un système de mi-partie : elle suppose une
  *  économie derrière elle (or, ferraille) et une base qui vaille la peine d'être défendue.
@@ -755,6 +755,22 @@ const pushOk = pushSupported();
 const { enabled: pushOn, busy: pushBusy, refresh: pushRefresh, enable, disable } = usePush();
 const pushNote = ref('');
 void pushRefresh();
+/** ⚠️ CHAQUE issue a son message. Un bouton qui échoue en silence est le pire cas :
+ *  à la livraison, cliquer ne produisait littéralement RIEN — ni invite, ni erreur.
+ *  Les deux causes trouvées : une permission déjà refusée (le navigateur ne
+ *  redemande alors plus rien) et `serviceWorker.ready` qui ne se résout jamais faute
+ *  d'enregistrement actif. */
+const PUSH_MSG: Record<PushFail, string> = {
+  ok: '✅ C’est actif sur cet appareil.',
+  unsupported: '⚠️ Ce navigateur ne gère pas les notifications.',
+  denied: '⚠️ Permission refusée. Tu peux réessayer et accepter l’invite.',
+  blocked:
+    '⚠️ Les notifications sont BLOQUÉES pour ce site. Le navigateur ne redemandera plus : autorise-les dans ses réglages (🔒 dans la barre d’adresse).',
+  no_sw:
+    '⚠️ Service worker indisponible. Sur iPhone, ajoute d’abord l’app à ton écran d’accueil ; sinon recharge la page.',
+  subscribe: '⚠️ L’abonnement a échoué. Recharge la page et réessaie.',
+  db: '⚠️ L’appareil n’a pas pu être enregistré. Réessaie dans un instant.',
+};
 async function togglePush() {
   const uid = auth.user?.id;
   if (!uid) return;
@@ -763,11 +779,9 @@ async function togglePush() {
     await disable();
     return;
   }
-  const ok = await enable(uid);
-  pushNote.value = ok
-    ? '✅ C’est actif sur cet appareil.'
-    : '⚠️ Refusé par le navigateur. Sur iPhone, il faut d’abord ajouter l’app à l’écran d’accueil.';
+  pushNote.value = PUSH_MSG[await enable(uid)];
 }
+
 const corpses = computed(() => field.value?.corpses ?? []);
 const remaining = computed(() => remainingCorpses(field.value));
 
