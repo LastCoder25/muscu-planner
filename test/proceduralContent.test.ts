@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { simulateCombat, simulateDungeon, type DungeonFoe, type Combatant } from '@/lib/combat';
+import { DUNGEONS, dungeonFoes } from '@/data/dungeons';
 import { rollDrop, bestGearLoadout, playerWithGear, type Item } from '@/lib/items';
 import {
   cumXpForLevel,
@@ -71,8 +72,17 @@ describe('procedural — génération', () => {
 });
 
 describe('procedural — calibration (clear ~systématique au reco)', () => {
+  /** ⚠️ ON MESURE PAR `dungeonFoes`, LE VRAI CHEMIN. Ce harnais lisait
+   *  `proceduralDungeonMonsters` en direct — un chemin que le JEU n’emprunte jamais : il
+   *  saute la rampe de difficulté ET l’attente d’équipement, toutes deux appliquées par
+   *  `dungeonFoes`. Résultat, il a validé pendant des mois une calibration qui murait tout
+   *  le contenu au-delà du niveau ~22 (gearExpect appliqué DEUX fois pour les seuls
+   *  monstres procéduraux). Mesurer la bonne formule sur le mauvais objet ne prouve rien.
+   *  Cf. le même piège d’unité sur la ferraille et le puits d’or. */
   function trioFoes(reco: number): DungeonFoe[] {
-    return proceduralDungeonMonsters(reco).map((m) => ({ combatant: m, gold: m.gold }));
+    const d = DUNGEONS.find((x) => x.recoLevel === reco);
+    if (!d) throw new Error(`aucun donjon au reco ${reco}`);
+    return dungeonFoes(d);
   }
   function clearPct(reco: number, atLevel: number, n = 100): number {
     const foes = trioFoes(reco);
@@ -86,7 +96,7 @@ describe('procedural — calibration (clear ~systématique au reco)', () => {
     // un joueur NU de son niveau est GATÉ (clear bas). C'est l'ancre de « sport = plafond »
     // côté difficulté — le gear fait la différence, pas le simple niveau. (Un joueur équipé de
     // son niveau clear ~65-85 %, cf. harnais de calibration hors-suite.)
-    for (const reco of [25, 40, 60, 85]) {
+    for (const reco of proceduralRecos().filter((r) => [25, 40, 61, 85].includes(r))) {
       expect(clearPct(reco, reco)).toBeLessThan(0.5);
     }
   });
@@ -119,21 +129,35 @@ describe('procedural — anti-runaway ÉQUIPÉ (v0.622, « sport = plafond »)',
     const stats = { puissance: s, endurance: s, agilite: s };
     return playerWithGear('geared', stats, bestGearLoadout('g', stats, {}, inv, L), {}, L);
   }
-  function gearedClearPct(reco: number, playerLevel: number, n = 60): number {
-    const foes: DungeonFoe[] = proceduralDungeonMonsters(reco).map((m) => ({
-      combatant: m,
-      gold: m.gold,
-    }));
-    const p = gearedFighter(playerLevel);
-    let c = 0;
-    for (let s = 0; s < n; s++) if (simulateDungeon(p, foes, { seed: s * 211 + 5 }).cleared) c++;
-    return c / n;
+  /** ⚠️ Par `dungeonFoes`, comme ci-dessus : le VRAI chemin, rampe et attente
+   *  d’équipement comprises. */
+  /** ⚠️ MOYENNÉ SUR PLUSIEURS TIRAGES DE GEAR. Avec un seul, ce harnais mesurait une
+   *  ANECDOTE : au même niveau et sur le même donjon, huit tirages donnent de 25 % à
+   *  100 % de clear. Un test calé sur une seule graine bascule donc au moindre
+   *  changement de RNG, et il l’a fait — il a rendu 32 % là où la moyenne vaut 80 %.
+   *  On mesure le JOUEUR MÉDIAN, pas celui qui a eu de la chance. */
+  function gearedClearPct(reco: number, playerLevel: number, seeds = 8, n = 40): number {
+    const d = DUNGEONS.find((x) => x.recoLevel === reco);
+    if (!d) throw new Error(`aucun donjon au reco ${reco}`);
+    const foes: DungeonFoe[] = dungeonFoes(d);
+    let tot = 0;
+    for (let g = 1; g <= seeds; g++) {
+      const p = gearedFighter(playerLevel, g);
+      let c = 0;
+      for (let s = 0; s < n; s++) if (simulateDungeon(p, foes, { seed: s * 211 + 5 }).cleared) c++;
+      tot += c / n;
+    }
+    return tot / seeds;
   }
   it('un joueur ÉQUIPÉ ne roule PLUS sur du contenu +15 (mur restauré)', () => {
-    for (const L of [50, 80]) expect(gearedClearPct(L + 15, L)).toBeLessThan(0.4);
+    // Les recos procéduraux vont de 3 en 3 : on prend le donjon réel le plus proche de +15.
+    const near = (t: number) =>
+      proceduralRecos().reduce((a, b) => (Math.abs(b - t) < Math.abs(a - t) ? b : a));
+    for (const L of [49, 79]) expect(gearedClearPct(near(L + 15), L)).toBeLessThan(0.4);
   });
   it('mais il clear encore SON niveau (le gear reste le levier, pas un plafond dur)', () => {
-    for (const L of [50, 80]) expect(gearedClearPct(L, L)).toBeGreaterThan(0.6);
+    // Mesuré après le retrait de la double application : 51 à 92 % selon la profondeur.
+    for (const L of [49, 79]) expect(gearedClearPct(L, L)).toBeGreaterThan(0.5);
   });
 });
 

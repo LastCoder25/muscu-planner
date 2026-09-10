@@ -133,11 +133,18 @@ const PROC_GOLD_SLOPE = 240; // or gagné par niveau de reco au-delà (calé par
 export function proceduralMonster(reco: number, role: MonsterRole, seedIdx: number): Monster {
   const f = refFighter(reco);
   const roleMult = CALIB.role[role] ?? 1;
-  const ge = gearExpect(reco);
-  // PV ∝ boost d'OFFENSE du joueur équipé (survit à ses frappes) ; dégâts ∝ boost de SURVIE
-  // (menace ses PV gonflés). Le contenu suppose un joueur de SON niveau ÉQUIPÉ (cf. gearExpect).
-  const pv = Math.round(refOffensePerRound(f) * CALIB.kpv * roleMult * ge.off);
-  const damage = Math.round(f.pv * CALIB.kdmg * roleMult * ge.pv);
+  // ⚠️ PAS de `gearExpect` ICI. L’attente d’équipement est appliquée par `dungeonFoes`,
+  // qui est le point de passage UNIQUE de tous les donjons — écrits à la main comme
+  // procéduraux. L’appliquer aussi à la génération la faisait compter DEUX FOIS pour les
+  // seuls monstres procéduraux : mesuré, un joueur équilibré et ÉQUIPÉ DE SON NIVEAU
+  // clearait 0 % à reco 25, 6 % à 28, 0 % à 40 et 0 % à 79 — tout le contenu au-delà du
+  // niveau ~22 était muré, alors que la calibration v0.622 annonçait « clear à son
+  // niveau ». Une seule application redonne 73 à 98 %.
+  // ⚠️ Le test officiel ne pouvait pas l’attraper : il mesure `proceduralDungeonMonsters`
+  // en direct, un chemin que le jeu n’emprunte jamais (ni la 2e application, ni la rampe
+  // de difficulté). Il mesure désormais via `dungeonFoes`, le vrai chemin.
+  const pv = Math.round(refOffensePerRound(f) * CALIB.kpv * roleMult);
+  const damage = Math.round(f.pv * CALIB.kdmg * roleMult);
   const skin =
     PROC_MONSTERS[
       ((seedIdx % PROC_MONSTERS.length) + PROC_MONSTERS.length) % PROC_MONSTERS.length
