@@ -378,3 +378,32 @@ describe('⚠️ un convoi part SANS le héros', () => {
     expect(poiOffers(recolte, { heroAway: false, comptoirLevel: 0 }).caravan).toBe(false);
   });
 });
+
+describe('⚠️ ce qui est GRISÉ sur la carte', () => {
+  // Le gris doit dire « rien ne peut y aller », jamais « le héros est occupé ».
+  // La carte grisait TOUT dès son départ, y compris les lieux de récolte où un convoi
+  // peut parfaitement aller : elle annonçait indisponibles des lieux disponibles, et
+  // l'utilisateur a logiquement cessé d'essayer de cliquer.
+  const gris = (p: Poi, heroAway: boolean, comptoirLevel: number) => {
+    const o = poiOffers(p, { heroAway, comptoirLevel });
+    return !o.hero && !o.caravan;
+  };
+
+  it('⚠️ un lieu de RÉCOLTE reste vif quand le héros est parti', () => {
+    expect(gris(poi({ type: 'well' }), true, 3)).toBe(false);
+  });
+
+  it('un lieu de COMBAT se grise quand le héros est parti — là, rien ne peut y aller', () => {
+    expect(gris(poi({ type: 'camp' }), true, 3)).toBe(true);
+  });
+
+  it('sans Comptoir, tout se grise pendant l’absence du héros', () => {
+    expect(gris(poi({ type: 'well' }), true, 0)).toBe(true);
+  });
+
+  it('héros disponible : rien n’est grisé', () => {
+    for (const t of ['well', 'camp', 'lair', 'mine'] as const) {
+      expect(gris(poi({ type: t }), false, 0), t).toBe(false);
+    }
+  });
+});

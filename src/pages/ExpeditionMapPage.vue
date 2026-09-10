@@ -109,7 +109,7 @@
             v-for="p in pois"
             :key="p.id"
             class="poi"
-            :class="[diffClass(p), { sel: selected?.id === p.id, dim: !!active }]"
+            :class="[diffClass(p), { sel: selected?.id === p.id, dim: dimmed(p) }]"
             @click="selectPoi(p)"
           >
             <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" />
@@ -236,7 +236,7 @@
       </div>
     </div>
     <transition name="sheet">
-      <div v-if="selected" class="sheet">
+      <div v-if="selected" ref="sheetEl" class="sheet">
         <div class="sh-head">
           <span class="sh-emo">{{ POI_EMO[selected.type] }}</span>
           <div class="sh-main">
@@ -557,6 +557,7 @@ const edgeIndicators = computed(() => {
 });
 
 const selected = ref<Poi | null>(null);
+const sheetEl = ref<HTMLElement | null>(null);
 
 // ── CARAVANES ──────────────────────────────────────────────────────────────
 // Un convoi part vers un lieu de RÉCOLTE, ne coûte aucune énergie, et immobilise son
@@ -654,10 +655,23 @@ const lastOutcomeItems = computed(() => {
 const lastPending = computed(() => !!lastOutcome.value && lastOutcome.value.claimed === false);
 
 // ── Filons de production (village autour de la ville) ──
+/** Un lieu est GRISÉ quand plus rien ne peut y être envoyé — jamais parce que le
+ *  héros est simplement occupé. ⚠️ La carte grisait TOUT dès son départ, y compris les
+ *  lieux de récolte où un convoi peut parfaitement aller : le gris disait « indisponible »
+ *  d'endroits disponibles, et l'utilisateur a logiquement cessé d'essayer de cliquer.
+ *  Même source que la feuille (`poiOffers`) : les deux ne peuvent pas se contredire. */
+function dimmed(p: Poi): boolean {
+  const o = poiOffers(p, { heroAway: !!active.value, comptoirLevel: char.comptoirLevel });
+  return !o.hero && !o.caravan;
+}
+
 function selectPoi(p: Poi) {
   // ⚠️ On sélectionne MÊME si le héros est en expédition : un convoi part sans lui.
   // Ce qui est ouvert ou non se décide dans la feuille, via `poiOffers`.
   selected.value = p;
+  // ⚠️ La carte occupe 62vh et la feuille vit SOUS elle, dans le flux : sur un téléphone
+  // elle s'ouvre donc hors écran, et cliquer un lieu semble ne rien faire.
+  void nextTick(() => sheetEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
 }
 
 // % de victoire (Monte-Carlo) contre l'adversaire du POI.

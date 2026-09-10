@@ -89,6 +89,27 @@
             </span>
             <span class="pm-cap">/ {{ Math.floor(storageOf(selectedPlot.building)) }} max</span>
           </div>
+          <!-- ⚠️ « Convois plus rapides à chaque niveau » ne permet pas de décider d'un
+               investissement qui se compte en centaines de milliers d'or. On montre les
+               CHIFFRES des prochains paliers — calculés par les fonctions du jeu, donc
+               ils ne peuvent pas mentir. -->
+          <div v-if="preview.length" class="pm-prev">
+            <div class="pm-prev-t">Aux prochains niveaux</div>
+            <div
+              v-for="r in preview"
+              :key="r.level"
+              class="pm-prev-r"
+              :class="{ now: r.level === selectedPlot.building.level, step: r.milestone }"
+            >
+              <span class="pp-lv">niv {{ r.level }}</span>
+              <span class="pp-tx">{{ r.text }}</span>
+              <span v-if="r.level === selectedPlot.building.level" class="pp-tag">actuel</span>
+            </div>
+            <div v-if="milestone" class="pm-prev-r step far">
+              <span class="pp-lv">niv {{ milestone.level }}</span>
+              <span class="pp-tx">{{ milestone.text }}</span>
+            </div>
+          </div>
           <div class="pm-actions">
             <button
               v-if="produces(selectedPlot.building)"
@@ -158,6 +179,7 @@ import {
   type BuildingUnlock,
   RESOURCE_EMOJI,
 } from '@/lib/buildings';
+import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 
 const props = defineProps<{ heroLevel: number; now: number; slot: number | null }>();
 const emit = defineEmits<{ 'update:slot': [number | null] }>();
@@ -200,6 +222,22 @@ const selectedPlot = computed(() =>
     ? null
     : (plots.value.find((p) => p.slot === selectedSlot.value) ?? null),
 );
+/** Les prochains niveaux, chiffrés. Voir l'horizon est l'intérêt : savoir qu'un convoi
+ *  de plus arrive au niveau 18 aide à décider AUJOURD'HUI. */
+const preview = computed(() =>
+  selectedPlot.value?.building
+    ? buildingPreview(selectedPlot.value.building.typeId, selectedPlot.value.building.level, 5)
+    : [],
+);
+/** Le prochain palier quand il tombe HORS de l'aperçu — sinon on croit qu'il n'arrivera
+ *  jamais. Masqué s'il est déjà listé. */
+const milestone = computed(() => {
+  const b = selectedPlot.value?.building;
+  if (!b) return null;
+  const m = nextMilestone(b.typeId, b.level);
+  return m && !preview.value.some((r) => r.level === m.level) ? m : null;
+});
+
 const sheetOpen = computed({
   get: () => selectedSlot.value !== null,
   set: (v: boolean) => {
@@ -344,6 +382,55 @@ function collectAll() {
 }
 
 /* Feuille */
+/* Aperçu des prochains niveaux : une ligne par palier, le niveau ACTUEL en repère. */
+.pm-prev {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.pm-prev-t {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.pm-prev-r {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.pm-prev-r.now {
+  color: var(--text);
+  font-weight: 700;
+}
+/* Un PALIER (un convoi de plus, un aventurier de plus) se distingue d’une simple
+   continuation : c’est lui qu’on vise. */
+.pm-prev-r.step .pp-tx {
+  color: var(--accent);
+}
+.pm-prev-r.far {
+  margin-top: 4px;
+  border-top: 1px dashed var(--line);
+  padding-top: 6px;
+}
+.pp-lv {
+  flex: 0 0 46px;
+  font-variant-numeric: tabular-nums;
+}
+.pp-tx {
+  flex: 1;
+  min-width: 0;
+}
+.pp-tag {
+  font-size: 10px;
+  color: var(--accent);
+}
 .vp-sheet {
   width: 100%;
   max-width: 560px;
