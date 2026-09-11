@@ -4,6 +4,7 @@ import { __stampFrom } from '@/composables/useAppUpdate';
 import {
   FACTION_LABEL,
   scoutLeadMs,
+  raidIntervalMs,
   type BaseState,
   type DefenseId,
   type DefenseStructure,
@@ -44,7 +45,8 @@ describe('notifications push — ce qu’on programme', () => {
     const c = ctx();
     const p = planPushes(c, NOW).find((x) => x.kind === 'siege')!;
     expect(p).toBeTruthy();
-    expect(p.sendAt).toBe(c.base!.nextRaidAt - scoutLeadMs(28));
+    // ⚠️ Le préavis est une PART de l'intervalle : il se lit donc avec le rythme.
+    expect(p.sendAt).toBe(c.base!.nextRaidAt - scoutLeadMs(28, raidIntervalMs(c.activeDays7)));
     expect(p.sendAt).toBeLessThan(c.base!.nextRaidAt);
   });
 

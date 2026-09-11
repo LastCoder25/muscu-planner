@@ -12,7 +12,7 @@
 // faction ou l'effectif offrirait gratuitement ce qu'elle fait payer. Les messages sont
 // donc volontairement AVARES — ils annoncent qu'il se passe quelque chose, pas quoi.
 
-import { raidsEnabled, scoutLeadMs, type BaseState } from './raid';
+import { raidIntervalMs, raidsEnabled, scoutLeadMs, type BaseState } from './raid';
 
 type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'convoy_home';
 
@@ -69,7 +69,9 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
   // aucune armée ne vient (règle 3 des sièges, `raidsEnabled`) : annoncer un assaut qui
   // n'aura pas lieu serait un mensonge, et une inquiétude gratuite.
   if (b && raidsEnabled(b, ctx.activeDays7, ctx.playerLevel)) {
-    const lead = scoutLeadMs(ctx.watchtowerLevel);
+    // ⚠️ Le préavis est une PART de l’intervalle : sans lui, on programmerait la
+    // détection à une heure qui ne correspond à aucun rythme.
+    const lead = scoutLeadMs(ctx.watchtowerLevel, raidIntervalMs(ctx.activeDays7));
     const detecte = b.nextRaidAt - lead;
     // Le raid n'existe pas encore comme objet — il naît à la détection, quand l'app
     // tourne. On ne connaît donc QUE son heure, et c'est très bien : le message reste

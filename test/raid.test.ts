@@ -6,6 +6,7 @@ import {
   levelSpanFor,
   raidIntervalMs,
   scoutLeadMs,
+  scoutLeadShare,
   scoutClarity,
   scoutReport,
   baseCombatant,
@@ -377,10 +378,34 @@ describe('espionnage', () => {
     expect('forecast' in seen[5]!).toBe(false);
   });
 
-  it('le préavis croît avec la Tour et reste borné', () => {
-    expect(scoutLeadMs(0)).toBe(RAID.scoutLeadBaseMs);
-    expect(scoutLeadMs(10)).toBeGreaterThan(scoutLeadMs(3));
-    expect(scoutLeadMs(999)).toBe(RAID.scoutLeadCapMs);
+  it('⚠️ LE PRÉAVIS GRANDIT À CHAQUE NIVEAU, de 1 à 100', () => {
+    // ⚠️ RÉÉCRIT. L'ancien épinglait une durée ABSOLUE et son PLAFOND — exactement ce
+    // qu'on supprime : la Tour mourait au niveau 21, soit 79 niveaux payés pour rien.
+    // Demandé par l'utilisateur : « qu'elle soit de plus en plus performante jusqu'au
+    // 100, quitte à baisser sa performance à bas lvl ».
+    const iv = raidIntervalMs(7);
+    for (let l = 1; l <= 100; l++)
+      expect(scoutLeadMs(l, iv), `niveau ${l}`).toBeGreaterThan(scoutLeadMs(l - 1, iv));
+  });
+
+  it('⚠️ C’EST UNE PART DE L’INTERVALLE, pas une durée', () => {
+    // Une durée fixe ne veut pas dire la même chose selon le rythme : 8 h valent un
+    // tiers du cycle à 24 h d'intervalle, et 5 % à sept jours. La part, elle, veut
+    // dire la même chose partout — c'est ce qui la rend lisible à tous les rythmes.
+    for (const l of [0, 5, 30, 100])
+      // Tolérance de 1 ms : on arrondit une fois à gauche, deux fois à droite.
+      expect(
+        Math.abs(scoutLeadMs(l, 2 * 24 * 3600_000) - 2 * scoutLeadMs(l, 24 * 3600_000)),
+      ).toBeLessThanOrEqual(2);
+  });
+
+  it('⚠️ ON N’EST JAMAIS PRÉVENU À 100 % — asymptote, pas pente', () => {
+    // Un préavis qui couvrirait tout l'intervalle voudrait dire « toujours au
+    // courant », et la Tour cesserait d'acheter quoi que ce soit.
+    expect(scoutLeadShare(100_000)).toBeLessThanOrEqual(RAID.scoutLeadShareMax);
+    expect(scoutLeadShare(100)).toBeLessThan(RAID.scoutLeadShareMax);
+    // …et sans Tour il reste un filet, jamais zéro : on voit la poussière à l'horizon.
+    expect(scoutLeadShare(0)).toBeGreaterThan(0);
   });
 });
 
@@ -444,7 +469,7 @@ describe('cycle de vie', () => {
     b.nextRaidAt = now + 10 * H;
     const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0 };
     expect(advanceBase(b, ctx, now).detected).toBeNull(); // trop tôt
-    const lead = scoutLeadMs(6);
+    const lead = scoutLeadMs(6, raidIntervalMs(ctx.activeDays7));
     const det = advanceBase(b, ctx, b.nextRaidAt - lead + 1);
     expect(det.detected).not.toBeNull();
     expect(det.dueRaid).toBeNull(); // détecté ≠ arrivé : il reste du temps pour se préparer

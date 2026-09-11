@@ -494,9 +494,17 @@ export const RAID = {
   woundMs: 6 * 3600_000, // convalescence de base après une défaite (abrégée par l’Infirmerie)
 
   // Espionnage
-  scoutLeadBaseMs: 3600_000, // 1 h de préavis sans Tour de guet…
-  scoutLeadPerLevelMs: 20 * 60_000, // …+20 min par niveau
-  scoutLeadCapMs: 8 * 3600_000,
+  /** ⚠️ LE PRÉAVIS EST UNE PART DE L’INTERVALLE, plus une durée absolue (v0.776).
+   *  Une durée fixe ne veut pas dire la même chose selon le rythme : 8 h valent un
+   *  tiers du cycle à 24 h d’intervalle et 5 % à sept jours. Et elle plafonnait au
+   *  niveau 21 → 79 niveaux morts, payés au prix quadratique.
+   *  Part SANS Tour — un filet, pas un service. */
+  scoutLeadShareMin: 0.03,
+  /** Part ASYMPTOTIQUE, jamais atteinte : être prévenu tout le temps tuerait la
+   *  mécanique, la Tour doit toujours laisser une part d’imprévu. */
+  scoutLeadShareMax: 0.85,
+  /** Niveau où la Tour a rendu la MOITIÉ de ce qu’elle peut rendre. */
+  scoutLeadShareHalf: 30,
   clarityMax: 5,
   // ⚠️ OPACITÉ RELATIVE À LA FENÊTRE, et non à l’écart brut de niveaux. L’ancien
   // `⌊écart/3⌋` était absolu face à un terme de tour NON BORNÉ (`⌊tour/2⌋` vaut 50 au
@@ -805,14 +813,35 @@ export function scoutLevel(defenses: DefenseStructure[]): number {
   return defenseLevel(defenses, 'watchtower') * defenseEfficiency(defenses, 'watchtower');
 }
 
-/** Préavis offert par la Tour de guet. C'est lui qui rend la préparation possible — et
- *  c'est à la DÉTECTION que part la notification, pas à l'impact : monter la Tour achète
- *  donc littéralement du temps de réaction. */
-export function scoutLeadMs(watchtowerLevel: number): number {
-  return Math.min(
-    RAID.scoutLeadCapMs,
-    RAID.scoutLeadBaseMs + Math.max(0, watchtowerLevel) * RAID.scoutLeadPerLevelMs,
-  );
+/** Part de l’intervalle que la Tour donne d’avance. Croît à CHAQUE niveau, de 1 à 100,
+ *  sans jamais atteindre son plafond. */
+export function scoutLeadShare(watchtowerLevel: number): number {
+  const l = Math.max(0, watchtowerLevel);
+  const { scoutLeadShareMin: lo, scoutLeadShareMax: hi, scoutLeadShareHalf: half } = RAID;
+  return lo + (hi - lo) * (l / (l + half));
+}
+
+/** ⏱️ PRÉAVIS OFFERT PAR LA TOUR DE GUET — c’est lui qui rend la préparation possible,
+ *  et c’est à la DÉTECTION que part la notification, pas à l’impact : monter la Tour
+ *  achète littéralement du temps de réaction.
+ *
+ *  ⚠️ EXPRIMÉ EN PART DE L’INTERVALLE, plus en durée absolue (demandé par l’utilisateur :
+ *  « il faut qu’elle soit de plus en plus performante jusqu’au 100, quitte à baisser sa
+ *  performance à bas niveau »). Deux raisons, et la première seule suffisait :
+ *  (1) l’ancienne formule PLAFONNAIT au niveau 21 → **79 niveaux morts** ;
+ *  (2) une durée fixe ne signifie rien hors de son rythme — 8 h valent un tiers du
+ *  cycle quand on s’entraîne tous les jours, et 5 % quand on vient une fois par
+ *  semaine. La part, elle, veut dire la même chose partout.
+ *
+ *  ⚠️ REDISTRIBUTION ASSUMÉE, et c’est une EXCEPTION explicitement autorisée à la règle
+ *  « on prolonge, on ne redistribue pas » (v0.731) : les bas niveaux rendent moins
+ *  qu’avant pour que les hauts rendent davantage. Sans cette permission, il n’y avait
+ *  pas de courbe possible.
+ *
+ *  ⚠️ ASYMPTOTIQUE : on n’est JAMAIS prévenu à 100 %. Un préavis qui couvre tout
+ *  l’intervalle voudrait dire « toujours au courant » et tuerait la mécanique. */
+export function scoutLeadMs(watchtowerLevel: number, intervalMs: number): number {
+  return Math.round(Math.max(0, intervalMs) * scoutLeadShare(watchtowerLevel));
 }
 
 /** Clarté du renseignement (0..5). Elle dépend de la Tour ET de la force de l'armée : une
@@ -2251,7 +2280,14 @@ function nextStepLevel(f: (n: number) => number, from: number, lookahead = 12): 
 export function defensePerLevelLabel(
   id: DefenseId,
   level: number,
-  ctx: { playerLevel: number; defenses: DefenseStructure[]; intervalMs?: number },
+  ctx: {
+    playerLevel: number;
+    defenses: DefenseStructure[];
+    /** ⚠️ REQUIS depuis que le préavis de la Tour est une PART de l’intervalle : sans
+     *  lui, on annoncerait une durée qui ne correspond à aucun rythme. L’oublier ne
+     *  compile plus — c’est la seule garantie qui tienne. */
+    intervalMs: number;
+  },
 ): string {
   const l = Math.max(0, level);
   const next = l + 1;
@@ -2289,10 +2325,11 @@ export function defensePerLevelLabel(
       const clarte = (n: number) => scoutClarity(n, ctx.playerLevel, ctx.playerLevel);
       const cl = clarte(l);
       const cn = clarte(next);
-      const leadPlein = scoutLeadMs(next) === scoutLeadMs(l);
-      const lead = leadPlein
-        ? `préavis ${fmtSpan(scoutLeadMs(l))} (déjà au maximum)`
-        : `préavis ${fmtSpan(scoutLeadMs(l))} → ${fmtSpan(scoutLeadMs(next))}`;
+      // ⚠️ Plus de branche « déjà au maximum » : la Tour n’a plus de plafond, chaque
+      // niveau raccourcit encore l’attente. Un chemin inatteignable finit par mentir.
+      const lead = `préavis ${fmtSpan(scoutLeadMs(l, ctx.intervalMs))} → ${fmtSpan(
+        scoutLeadMs(next, ctx.intervalMs),
+      )}`;
       if (cn > cl)
         return `Niveau ${next} : ${lead}, et un cran de renseignement en plus (${cl} → ${cn}/${RAID.clarityMax})`;
       if (cl >= RAID.clarityMax)
@@ -2595,7 +2632,7 @@ export function advanceBase(
   }
 
   // Détection : le raid se matérialise quand la Tour le voit venir.
-  const lead = scoutLeadMs(scoutLevel(b.defenses));
+  const lead = scoutLeadMs(scoutLevel(b.defenses), raidIntervalMs(ctx.activeDays7));
   if (!b.raid && now >= b.nextRaidAt - lead) {
     const seed = (b.seed + Math.floor(b.nextRaidAt / 60_000)) >>> 0 || 1;
     const raid = rollRaid(seed, ctx.playerLevel, b.nextRaidAt, lead);
