@@ -310,6 +310,15 @@ export function turretCount(level: number): number {
 const WEEK_MS = 7 * 24 * 3600_000;
 
 export const RAID = {
+  /** Sièges simulés pour annoncer une tenue (cf. `siegeHoldChance`). Mesuré : ~0,55 ms
+   *  par siège. En deçà le % sautille d’un rendu à l’autre, au-delà on paie sans rien
+   *  gagner en lisibilité — la conduite du combat varie peu à composition fixée. */
+  oddsSamples: 24,
+  /** Armées différentes tirées pour le repère « face à une armée type » (cf.
+   *  `referenceHold`). ⚠️ Mesuré : à composition FIXE la conduite du combat varie peu,
+   *  mais d’une armée à l’autre la tenue va de 8 % à 78 % au même niveau — c’est donc sur
+   *  les ARMÉES qu’il faut moyenner, pas sur les déroulés. */
+  typicalArmies: 6,
   // XP de défense des aventuriers (cf. `siegeXp`)
   xpBase: 8,
   xpPerLevel: 2,
@@ -1181,14 +1190,58 @@ function defenseCombatant(
   };
 }
 
-/** Puissance de DÉFENSE de la base, dans l’unité de tout le jeu. */
-export function defensePower(
+/** ⚖️ COMBIEN DE FOIS SUR CENT LA BASE TIENT — MESURÉ SUR LE MOTEUR, jamais estimé.
+ *
+ *  ⚠️ POURQUOI ON A ARRÊTÉ D’ESTIMER. Le pronostic passait par un PROXY : un rapport de
+ *  deux « puissances » comparé à des seuils calibrés une fois pour toutes. En branchant
+ *  le moteur en deux phases (v0.763), les tourelles sont devenues des unités qu’on peut
+ *  réduire au silence — donc elles ont des PV, qui se sont ajoutés à ceux du mur. La
+ *  survie affichée a gonflé sans que la difficulté bouge : un joueur a signalé sa défense
+ *  passée de 1900 à 3000 sans rien avoir changé. On avait mesuré l’équivalence de TENUE ;
+ *  la jauge, non.
+ *
+ *  ⚠️ ET CE N’ÉTAIT PAS RATTRAPABLE PAR UNE CONSTANTE. Mesuré sur 72 configurations ×
+ *  60 sièges : le ratio saute à 1,26-2,39 quand la jauge sature dès 1,05, « Tu tiens
+ *  largement » recouvrait des tenues réelles de 13 % à 100 %, et le seuil d’équilibre
+ *  DÉRIVAIT avec le niveau (1,15 au niveau 12 → 1,55 au niveau 80) — or c’est la
+ *  platitude de cette courbe qui autorisait une jauge unique. Il n’y avait plus de
+ *  constante à recalibrer.
+ *
+ *  ⚠️ UN PRONOSTIC SIMULÉ NE PEUT PAS DIVERGER DE LA BATAILLE, par construction — c’est
+ *  toute la raison de ce changement, et c’est déjà ce que font le 🎯 % des donjons et le
+ *  « ~N vagues » de l’arène. Le jour où l’équilibrage du siège bougera, le pronostic
+ *  suivra sans que personne n’ait à s’en souvenir.
+ *
+ *  ⚠️ ON NE REJOUE JAMAIS LA GRAINE RÉELLE : le siège qui vient est déjà écrit, la rejouer
+ *  révélerait son issue. On tire des graines DÉRIVÉES — déterministes, donc le pronostic
+ *  ne sautille pas d’un rendu à l’autre — et toutes différentes de celle de la vraie
+ *  bataille. Le % dit « sur des batailles comparables », jamais « sur CELLE-ci ».
+ *
+ *  ⚠️ LA COMPOSITION, ELLE, EST FIXE : seule la conduite du combat varie. Faire varier
+ *  l’armée reviendrait à pronostiquer sur une autre armée que celle qui arrive. Mesuré,
+ *  cette variance-là est faible (8 % contre 5 % entre 24 et 200 tirages) : c’est l’ARMÉE
+ *  qui fait la différence, pas le déroulé — d’où un pronostic net, et 24 tirages qui
+ *  suffisent. */
+export function siegeHoldChance(
   defenses: DefenseStructure[],
   playerLevel: number,
-  hero?: Combatant | null,
-  guard: GuardUnit[] = [],
+  hero: Combatant | null,
+  guard: GuardUnit[],
+  raid: Raid,
+  samples: number = RAID.oddsSamples,
 ): number {
-  return combatPower(defenseCombatant(defenses, playerLevel, hero ?? null, guard));
+  // ⚠️ Les trois entrées sont construites UNE fois : `simulateSiege` copie ce qu’on lui
+  // donne (`att.map(u => ({ ...u }))`), donc les rejouer est sûr — et les rebâtir à chaque
+  // tirage coûterait plus cher que la bataille elle-même.
+  const wall = siegeWallOf(defenses, playerLevel);
+  const att = siegeAttackers(raid);
+  const def = siegeDefenders(defenses, playerLevel, hero, guard);
+  const n = Math.max(1, samples);
+  let held = 0;
+  for (let i = 1; i <= n; i++) {
+    if (simulateSiege(att, def, wall, (raid.seed ^ (i * 0x9e3779b1)) >>> 0 || 1).held) held++;
+  }
+  return held / n;
 }
 /** L'armée ramenée à UN combattant équivalent.
  *  ⚠️ PV CUMULÉS (elle se bat en séquence, la base les encaisse tous) et dégâts moyens
@@ -1229,8 +1282,10 @@ export interface DefenseShare {
   id: 'wall' | 'turret' | 'garrison' | 'hero';
   label: string;
   emoji: string;
-  /** Puissance perdue si ce contributeur disparaissait (≥ 0). */
-  power: number;
+  /** POINTS DE TENUE perdus si ce contributeur disparaissait (0..1, ≥ 0).
+   *  ⚠️ C’était une « puissance » — un proxy. C’est désormais ce que le joueur risque
+   *  vraiment : « sans les tourelles, tu tombes de 88 % à 12 % ». */
+  holdLoss: number;
   /** Présent aujourd'hui ? (un héros parti, une garnison vide) */
   active: boolean;
   /** ⚠️ CE QU'IL FAIT, séparément : 🛡️ ce qu'il fait TENIR (PV × réduction) et ⚔️ ce
@@ -1261,23 +1316,28 @@ function defenseFacets(c: Combatant): { def: number; atk: number } {
   };
 }
 
+/** ⚠️ LA DÉCOMPOSITION PARLE DE TA BASE, PAS DU SIÈGE DU JOUR — et c’est délibéré. On
+ *  vient ici pour savoir ce que chaque structure APPORTE, y compris quand rien n’est en
+ *  vue ; l’adosser à l’armée en approche l’aurait rendue muette les trois quarts du temps
+ *  et aurait fait bouger les parts à chaque nouvelle armée, sans qu’on ait rien touché.
+ *  Elle se mesure donc contre le repère (`referenceHold`) ; le pronostic, lui, reste sur
+ *  le vrai raid. */
 export function defenseBreakdown(
   defenses: DefenseStructure[],
   playerLevel: number,
   hero: Combatant | null,
-  guard: GuardUnit[] = [],
-): { total: number; parts: DefenseShare[] } {
-  const base = defenseCombatant(defenses, playerLevel, hero, guard);
-  const total = combatPower(base);
-  const full = defenseFacets(base);
-  /** Ce qu’un contributeur apporte — puissance, tenue et feu — par UNE SEULE ablation.
-   *  ⚠️ Le combattant amputé est construit une fois et les trois valeurs en dérivent :
-   *  deux ablations séparées doublaient le travail ET pouvaient diverger. */
+  guard: GuardUnit[],
+  now: number,
+): { hold: number; parts: DefenseShare[] } {
+  const chance = (d: DefenseStructure[], h: Combatant | null, g: GuardUnit[]) =>
+    referenceHold(d, playerLevel, h, g, now);
+  const hold = chance(defenses, hero, guard);
+  const full = defenseFacets(defenseCombatant(defenses, playerLevel, hero, guard));
+  /** Ce qu’un contributeur apporte — tenue, encaisse et feu — par UNE SEULE ablation. */
   const contrib = (d: DefenseStructure[], h: Combatant | null, g: GuardUnit[]) => {
-    const cc = defenseCombatant(d, playerLevel, h, g);
-    const f = defenseFacets(cc);
+    const f = defenseFacets(defenseCombatant(d, playerLevel, h, g));
     return {
-      power: Math.max(0, total - combatPower(cc)),
+      holdLoss: Math.max(0, hold - chance(d, h, g)),
       def: Math.max(0, full.def - f.def),
       atk: Math.max(0, full.atk - f.atk),
     };
@@ -1302,9 +1362,9 @@ export function defenseBreakdown(
       ...contrib(drop('turret'), hero, guard),
       active: defenseLevel(defenses, 'turret') > 0,
     },
-    // ⚠️ LA GARNISON EST UNE LIGNE À PART, et c’est nouveau : les aventuriers défendent
-    // depuis le branchement du moteur, et rien ne le disait. C’est aussi la ligne qui
-    // rend lisible « qui est parti » — un convoi en route, c’est autant de moins ici.
+    // ⚠️ LA GARNISON EST UNE LIGNE À PART : les aventuriers défendent depuis le
+    // branchement du moteur, et rien ne le disait. C’est aussi la ligne qui rend lisible
+    // « qui est parti » — un convoi en route, c’est autant de moins ici.
     {
       id: 'garrison',
       label: 'Garnison',
@@ -1316,11 +1376,11 @@ export function defenseBreakdown(
       id: 'hero',
       label: 'Héros',
       emoji: '🦸',
-      ...(hero ? contrib(defenses, null, guard) : { power: 0, def: 0, atk: 0 }),
+      ...(hero ? contrib(defenses, null, guard) : { holdLoss: 0, def: 0, atk: 0 }),
       active: !!hero,
     },
   ];
-  return { total, parts };
+  return { hold, parts };
 }
 
 /**
@@ -1334,44 +1394,57 @@ export function defenseBreakdown(
  * ⚠️ On passe le vivier ENTIER et le héros supposé présent : c’est un PLAFOND, pas une
  * prévision. Les blessés en font partie — ils rentreront.
  */
-export function defensePotential(
+/** 📐 LE REPÈRE PERMANENT : ce que vaut ta base FACE À UNE ARMÉE TYPE DE TON NIVEAU.
+ *
+ *  ⚠️ POURQUOI IL EXISTE. Le pronostic ne parle que de l’armée qui arrive ; or on vient
+ *  sur cet écran pour savoir « est-ce que mon enceinte tient la route ? », y compris
+ *  quand rien n’est en vue. Sans repère, le panneau serait muet les trois quarts du temps
+ *  — et c’est justement au calme qu’on décide d’améliorer une structure.
+ *
+ *  ⚠️ IL NE COURT-CIRCUITE PAS L’ESPIONNAGE : il ne dit rien de l’armée en approche (ni
+ *  faction, ni effectif, ni niveau), seulement ce que vaut la base dans l’absolu. La Tour
+ *  de guet garde donc l’exclusivité du pronostic sur CE siège-là.
+ *
+ *  ⚠️ ON MOYENNE SUR PLUSIEURS ARMÉES, pas sur une graine fixe : mesuré, deux armées du
+ *  même niveau donnent 8 % et 78 % de tenue. Une seule armée de référence serait un tirage
+ *  au sort déguisé en repère. */
+export function referenceHold(
   defenses: DefenseStructure[],
   playerLevel: number,
   hero: Combatant | null,
-  guardComplet: GuardUnit[],
+  guard: GuardUnit[],
+  now: number,
 ): number {
-  return combatPower(defenseCombatant(defenses, playerLevel, hero, guardComplet));
-}
-/** Le pronostic, en bandes CALIBRÉES sur la sonde ci-dessus — jamais un pourcentage
- *  inventé. ⚠️ On ne donne pas un chiffre de victoire : la sonde mesure des moyennes sur
- *  60 graines, un « 72 % » afficherait une précision qu'on n'a pas. */
-/** ⚠️ LE SEUIL D'ÉQUILIBRE N'EST PAS À PARITÉ, et c'est ce qui rend deux nombres côte
- *  à côte TROMPEURS : mesuré, on tient une fois sur deux vers un rapport de **0,88**,
- *  pas 1,00 (les défenseurs tirent en premier et régénèrent entre deux groupes). Un
- *  joueur qui lit « 1741 contre 1926 » conclut qu'il perd, alors qu'il tient à ~72 %.
- *  La jauge se REPÈRE donc sur ce seuil au lieu de laisser comparer deux nombres bruts. */
-export const SIEGE_EVEN = 0.88;
-
-/** Position sur la jauge, 0..1, avec l'ÉQUILIBRE pile au milieu — c'est ce qui permet de
- *  lire « à gauche ça cède, à droite je tiens » sans connaître le seuil. */
-export function siegeGauge(ratio: number): number {
-  const r = Math.max(0, ratio);
-  // En dessous de l'équilibre on occupe la moitié gauche, au-dessus la moitié droite ;
-  // au-delà de deux fois l'équilibre, on est collé à la butée (la jauge sature, elle
-  // ne ment pas : « largement » est largement).
-  return r <= SIEGE_EVEN
-    ? 0.5 * (r / SIEGE_EVEN)
-    : 0.5 + 0.5 * Math.min(1, (r - SIEGE_EVEN) / SIEGE_EVEN);
+  const k = Math.max(1, RAID.typicalArmies);
+  const par = Math.max(1, Math.round(RAID.oddsSamples / k));
+  let sum = 0;
+  for (let i = 0; i < k; i++) {
+    // Graines FIXES : le repère ne doit pas bouger d’un rendu à l’autre alors que rien
+    // n’a changé — on compare sa base à elle-même d’un jour sur l’autre.
+    const raid = rollRaid((0x5eed + i * 0x9e37) >>> 0, playerLevel, now, 0);
+    sum += siegeHoldChance(defenses, playerLevel, hero, guard, raid, par);
+  }
+  return sum / k;
 }
 
+/** ⚠️ PLUS DE JAUGE À SEUIL, et c’est le cœur du changement. Tant que le pronostic
+ *  passait par un rapport de puissances, il lui fallait un repère (`SIEGE_EVEN` = 0,88,
+ *  mesuré une fois) et une fonction pour placer ce repère au milieu d’une barre. La TENUE
+ *  n’en a pas besoin : elle EST déjà une position de 0 à 1, et « 7 fois sur 10 » se lit
+ *  sans connaître aucun seuil. `siegeGauge` et `SIEGE_EVEN` sont donc SUPPRIMÉS, pas
+ *  recalibrés — il n’y avait plus de constante à régler. */
 export type SiegeOdds = 'perdu' | 'risque' | 'serre' | 'favorable' | 'large';
-export function siegeOdds(ratio: number): SiegeOdds {
-  if (ratio < 0.55) return 'perdu';
-  if (ratio < 0.72) return 'risque';
-  if (ratio < 0.88) return 'serre';
-  if (ratio < 1.05) return 'favorable';
+/** Les bandes, en TENUE MESURÉE. ⚠️ Elles ne se calibrent plus : ce sont des tranches
+ *  d’une probabilité, pas des seuils sur un proxy. Un changement d’équilibrage déplace
+ *  les joueurs d’une bande à l’autre, il ne rend jamais les bandes fausses. */
+export function siegeOdds(hold: number): SiegeOdds {
+  if (hold < 0.2) return 'perdu';
+  if (hold < 0.45) return 'risque';
+  if (hold < 0.65) return 'serre';
+  if (hold < 0.85) return 'favorable';
   return 'large';
 }
+
 export const ODDS_LABEL: Record<SiegeOdds, string> = {
   perdu: 'L’enceinte cède',
   risque: 'Très risqué',
@@ -1428,7 +1501,7 @@ export function heroDefends(
 export function departureRisk(
   defenses: DefenseStructure[],
   playerLevel: number,
-  assault: number,
+  raid: Raid,
   avant: { hero: Combatant | null; guard: GuardUnit[] },
   apres: { hero: Combatant | null; guard: GuardUnit[] },
   /** QUAND ils rentrent, et QUAND l’armée frappe. Omis = on ne sait pas, donc on alerte. */
@@ -1436,6 +1509,9 @@ export function departureRisk(
 ): {
   before: SiegeOdds;
   after: SiegeOdds;
+  /** Les tenues mesurées, pour dire de combien ça bouge et pas seulement que ça bouge. */
+  holdBefore: number;
+  holdAfter: number;
   worsens: boolean;
   risky: boolean;
   /** Ils sont RENTRÉS avant que l’armée ne frappe : le départ ne coûte rien au siège. */
@@ -1444,10 +1520,12 @@ export function departureRisk(
    *  condition où il vaut la peine de le DIRE : le silence, sinon, ressemble à un oubli. */
   covered: boolean;
 } {
-  const odds = (x: { hero: Combatant | null; guard: GuardUnit[] }) =>
-    siegeOdds(assault > 0 ? defensePower(defenses, playerLevel, x.hero, x.guard) / assault : 99);
-  const before = odds(avant);
-  const after = odds(apres);
+  const chance = (x: { hero: Combatant | null; guard: GuardUnit[] }) =>
+    siegeHoldChance(defenses, playerLevel, x.hero, x.guard, raid);
+  const holdBefore = chance(avant);
+  const holdAfter = chance(apres);
+  const before = siegeOdds(holdBefore);
+  const after = siegeOdds(holdAfter);
   // ⚠️ UN VOYAGE QUI SE TERMINE AVANT L’ASSAUT NE COÛTE RIEN (signalé par l’utilisateur).
   // La défense qui compte est celle du MOMENT OÙ L’ARMÉE FRAPPE, jamais celle de l’instant
   // du départ : un convoi de deux heures face à un siège dans huit n’enlève personne.
@@ -1456,12 +1534,14 @@ export function departureRisk(
   // ⚠️ La règle vit ICI, pas dans un écran : deux boutons envoient du monde (convoi et
   // héros), et le second finirait par l’oublier.
   const inTime = !!timing && timing.backAt <= timing.raidAt;
-  // « Ça empire » se lit sur l’ORDRE des bandes, pas sur le ratio : c’est ce que le
-  // joueur voit, et deux ratios différents dans la même bande ne changent rien pour lui.
+  // « Ça empire » se lit sur l’ORDRE des bandes, pas sur la tenue brute : c’est ce que le
+  // joueur voit, et deux tenues voisines dans la même bande ne changent rien pour lui.
   const degrade = ODDS_ORDER.indexOf(after) < ODDS_ORDER.indexOf(before);
   return {
     before,
     after,
+    holdBefore,
+    holdAfter,
     worsens: !inTime && degrade,
     risky: !inTime && isOddsRisky(after),
     inTime,

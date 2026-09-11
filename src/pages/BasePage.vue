@@ -375,8 +375,9 @@
       <div class="panel forces">
         <div class="f-head">
           <div class="f-side">
-            <div class="f-lab">🛡️ Ma défense</div>
-            <div class="f-val font-display">{{ forces.total }}</div>
+            <div class="f-lab">🛡️ Ma base tient</div>
+            <div class="f-val font-display">{{ holdPct(forces.hold) }}</div>
+            <div class="f-sub">face à une armée type</div>
           </div>
           <div class="f-vs">vs</div>
           <div class="f-side right">
@@ -401,20 +402,24 @@
              pouvait pas savoir ce qu'on abandonnait en faisant partir quelqu'un.
              ⚠️ Affiché SEULEMENT si l'écart est réel — annoncer « −0 » à un joueur dont
              tout le monde est à la maison serait du bruit. -->
+        <p v-if="holdNote" class="f-hint">{{ holdNote }}</p>
         <p v-if="forcesGap > 0" class="f-gap">
-          🚪 <b>{{ fmtPow(forcesGap) }}</b> de défense sont dehors — au complet, tu vaudrais
-          <b>{{ fmtPow(forcesFull) }}</b
+          🚪 Des tiens sont dehors : <b>−{{ Math.round(forcesGap * 100) }} points</b> de tenue — au
+          complet, tu tiendrais <b>{{ holdPct(forcesFull) }}</b
           >.
         </p>
-        <!-- ⚠️ UNE JAUGE, pas deux nombres à comparer : le seuil d'équilibre est à
-             ×0,88 (mesuré), donc « ma défense < l'armée » ne veut PAS dire « je perds ».
-             Le repère central EST l'équilibre ; à gauche ça cède, à droite on tient. -->
+        <!-- ⚠️ LA JAUGE EST LA TENUE ELLE-MÊME, et c’est tout le changement : plus de
+             rapport de puissances, plus de seuil d’équilibre à connaître. « Tu tiens 7
+             fois sur 10 » se lit sans notice, et ne peut pas diverger de la bataille
+             puisque c’est le moteur qui l’a jouée. -->
         <template v-if="odds">
           <div class="f-gauge" :class="odds">
-            <i class="fg-mid" />
-            <i class="fg-cursor" :style="{ left: gauge * 100 + '%' }" />
+            <i class="fg-cursor" :style="{ left: (raidHold ?? 0) * 100 + '%' }" />
           </div>
-          <div class="f-odds" :class="odds">{{ ODDS_LABEL[odds] }}</div>
+          <div class="f-odds" :class="odds">
+            {{ ODDS_LABEL[odds] }}
+            <b class="fo-pct">{{ holdPct(raidHold ?? 0) }}</b>
+          </div>
         </template>
         <p v-else-if="raid" class="f-hint">
           Sans renseignement, tu ne peux pas jauger cette armée — c’est ce que la
@@ -926,10 +931,10 @@ import {
   assaultEstimate,
   assaultPower,
   defenseBreakdown,
-  defensePotential,
   guardUnits,
   heroDefends,
-  siegeGauge,
+  siegeHoldChance,
+  referenceHold,
   siegeOdds,
   ODDS_LABEL,
   scoutClarity,
@@ -1626,17 +1631,49 @@ const guardNow = computed(() =>
  *  PLAFOND, pas une prévision, et c’est précisément ce qu’on abandonne en envoyant
  *  quelqu’un ailleurs. */
 const guardFull = computed(() => guardUnits(heroLevel.value, char.advList, garrison.value));
+/** ⚠️ LE PANNEAU SE MESURE UNE FOIS PAR MINUTE, pas à chaque seconde. Le Monte-Carlo
+ *  coûte ~66 ms (5 ablations), et `garrison` ne dépend de `now` que par la FATIGUE des
+ *  familiers — une fonction en escalier qui change quelques fois par heure. Le brancher
+ *  sur le tick d’une seconde referait 66 ms de travail identique 60 fois par minute. */
+const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
 const forces = computed(() =>
-  defenseBreakdown(defenses.value, heroLevel.value, heroForDefense.value, guardNow.value),
+  defenseBreakdown(
+    defenses.value,
+    heroLevel.value,
+    heroForDefense.value,
+    guardNow.value,
+    coarseNow.value,
+  ),
 );
-/** Ce que vaudrait la défense si TOUT LE MONDE était là — héros compris. */
+/** En pourcentage, la seule forme lisible : « 72 % » plutôt que « 0,72 ». */
+const holdPct = (h: number) => `${Math.round(h * 100)} %`;
+/** ⚠️ « RIEN NE SUFFIT » ET « TOUT SUFFIT » SE LISENT PAREIL DANS LES CHIFFRES : quand
+ *  la tenue sature, toutes les parts tombent à 0 — soit parce qu’on tient de toute
+ *  façon, soit parce que rien n’y changerait rien. Les deux sont vrais et actionnables,
+ *  mais opposés : il faut le DIRE, sinon un joueur bien équipé et un joueur dépassé`
+ *  voient la même colonne de zéros. */
+const holdNote = computed(() => {
+  const h = forces.value.hold;
+  if (h >= 0.99) return 'Ta base tient face à une armée type — au-delà, tu investis dans la marge.';
+  if (h <= 0.01)
+    return 'Aucune structure seule ne renverserait ça : il faut monter l’enceinte, pas la réarranger.';
+  return null;
+});
+/** Ce que vaudrait la défense si TOUT LE MONDE était là — héros compris. Même repère
+ *  que `forces`, sinon l’écart comparerait deux choses différentes. */
 const forcesFull = computed(() =>
-  defensePotential(defenses.value, heroLevel.value, props.hero ?? null, guardFull.value),
+  referenceHold(
+    defenses.value,
+    heroLevel.value,
+    props.hero ?? null,
+    guardFull.value,
+    coarseNow.value,
+  ),
 );
 /** L’écart : ce que coûte, en puissance de défense, le fait d’avoir des gens dehors.
  *  ⚠️ Affiché seulement s’il est RÉEL — annoncer « −0 » à un joueur dont tout le monde
  *  est à la maison serait du bruit. */
-const forcesGap = computed(() => Math.max(0, forcesFull.value - forces.value.total));
+const forcesGap = computed(() => Math.max(0, forcesFull.value - forces.value.hold));
 const assault = computed(() => (raid.value ? assaultPower(raid.value) : 0));
 /** Ce que l'ESPIONNAGE laisse voir de l'armée : une fourchette qui se resserre à mesure
  *  que la Tour monte, et qui contient TOUJOURS la vérité. */
@@ -1650,9 +1687,21 @@ const assaultSeen = computed(() =>
 /** Le rapport de forces, calculé UNE fois : la jauge et le pronostic le lisent tous
  *  deux. Ils portaient chacun leur garde et leur quotient, et le repli de la jauge était
  *  mort (elle n'est rendue que lorsque le pronostic existe). */
-const ratio = computed(() => (assault.value > 0 ? forces.value.total / assault.value : 0));
-const gauge = computed(() => siegeGauge(ratio.value));
-const odds = computed(() => (assaultSeen.value?.known ? siegeOdds(ratio.value) : null));
+/** LE PRONOSTIC porte sur l’ARMÉE QUI ARRIVE — mesuré sur le vrai moteur, donc il ne
+ *  peut pas diverger de la bataille. ⚠️ Gaté par la clarté : sans renseignement on
+ *  n’annonce RIEN, sinon on offrirait gratuitement ce que la Tour de guet fait payer. */
+const raidHold = computed(() =>
+  raid.value && assaultSeen.value?.known
+    ? siegeHoldChance(
+        defenses.value,
+        heroLevel.value,
+        heroForDefense.value,
+        guardNow.value,
+        raid.value,
+      )
+    : null,
+);
+const odds = computed(() => (raidHold.value === null ? null : siegeOdds(raidHold.value)));
 const scoutHint = computed(() => {
   if (!watchLevel.value) return 'Sans Tour de guet, tu ne sais rien de ce qui arrive.';
   if (clarity.value >= 5)
@@ -2628,6 +2677,18 @@ const doCollect = () =>
 .f-val.range {
   font-size: 19px;
 }
+/* Ce que le chiffre MESURE — sans ça « 72 % » ne dit pas de quoi il parle. */
+.f-sub {
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 1px;
+}
+/* Le pourcentage à côté de la bande : la bande donne le ton, le chiffre la précision. */
+.fo-pct {
+  font-weight: 800;
+  opacity: 0.85;
+  margin-left: 4px;
+}
 .f-val.unknown,
 .f-val.calm {
   color: var(--dim);
@@ -2652,16 +2713,6 @@ const doCollect = () =>
     color-mix(in srgb, var(--d4) 35%, transparent),
     color-mix(in srgb, var(--d1) 35%, transparent)
   );
-}
-.fg-mid {
-  position: absolute;
-  left: 50%;
-  top: -3px;
-  width: 2px;
-  height: 14px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: var(--dim);
 }
 .fg-cursor {
   position: absolute;

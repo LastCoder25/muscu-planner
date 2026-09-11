@@ -405,7 +405,6 @@ import {
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
 import {
-  assaultPower,
   departureRisk,
   heroDefends,
   garrisonBonus,
@@ -629,13 +628,17 @@ const escort = ref<string[]>([]);
  *  passer l'état AVANT et APRÈS. */
 const base = computed(() => char.row?.base ?? null);
 const incoming = computed(() => base.value?.raid ?? null);
-const assaultNow = computed(() => (incoming.value ? assaultPower(incoming.value) : 0));
+/** ⚠️ CETTE PAGE TICKE À LA SECONDE (les convois avancent sur la carte), et le pronostic
+ *  coûte ~13 ms de simulation. À la seconde, c’est 13 ms de travail identique 60 fois par
+ *  minute ; à la minute, c’est gratuit — et une minute de granularité ne change rien à
+ *  « rentre-t-il avant l’assaut ? », qui se joue en heures. */
+const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
 const famBonus = computed(() =>
   garrisonBonus(
     (char.row?.inventory ?? []).filter(
       (it) => it.slot === 'familiar' && (base.value?.garrison ?? []).includes(it.id),
     ),
-    now.value,
+    coarseNow.value,
     defenseLevel(base.value?.defenses ?? [], 'kennel'),
     garrisonSlots(heroLevel.value),
   ),
@@ -652,7 +655,10 @@ const famBonus = computed(() =>
 const raidAt = computed(() => incoming.value?.arrivesAt ?? 0);
 const risk = computed(() => {
   const b = base.value;
-  if (!b || !assaultNow.value) return null;
+  const inc = incoming.value;
+  // ⚠️ C’est l’ARMÉE qu’on passe, plus sa « puissance » : le pronostic est désormais
+  // SIMULÉ sur le vrai moteur, donc il lui faut la composition, pas un résumé.
+  if (!b || !inc) return null;
   const restants = freeAdvs.value.filter((a) => !escort.value.includes(a.id));
   // ⚠️ Un héros DEHORS qui rentre AVANT l’assaut défend quand même — même règle que le
   // panneau de la Base, écrite une seule fois dans `heroDefends`.
@@ -666,10 +672,10 @@ const risk = computed(() => {
   return departureRisk(
     b.defenses,
     heroLevel.value,
-    assaultNow.value,
+    inc,
     { hero: heroNow, guard: guardUnits(heroLevel.value, freeAdvs.value, famBonus.value) },
     { hero: heroNow, guard: guardUnits(heroLevel.value, restants, famBonus.value) },
-    { backAt: now.value + caravanMin.value * 60_000, raidAt: raidAt.value },
+    { backAt: coarseNow.value + caravanMin.value * 60_000, raidAt: raidAt.value },
   );
 });
 
@@ -679,17 +685,18 @@ const risk = computed(() => {
 const riskHero = computed(() => {
   const b = base.value;
   const p = selected.value;
-  if (!b || !assaultNow.value) return null;
+  const inc = incoming.value;
+  if (!b || !inc) return null;
   const heroNow = char.row && char.heroIsHome(char.row) ? fighter.value : null;
   if (!heroNow) return null;
   const g = guardUnits(heroLevel.value, freeAdvs.value, famBonus.value);
   return departureRisk(
     b.defenses,
     heroLevel.value,
-    assaultNow.value,
+    inc,
     { hero: heroNow, guard: g },
     { hero: null, guard: g },
-    p ? { backAt: now.value + roundTripMin(p) * 60_000, raidAt: raidAt.value } : undefined,
+    p ? { backAt: coarseNow.value + roundTripMin(p) * 60_000, raidAt: raidAt.value } : undefined,
   );
 });
 const freeAdvs = computed(() => char.advList.filter((a) => advAvailable(a, now.value)));
