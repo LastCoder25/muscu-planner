@@ -1538,7 +1538,7 @@ export const useCharacterStore = defineStore('character', () => {
   async function baseTick(
     userId: string,
     now: number,
-    ctx: { playerLevel: number; sessions7: number; globalXp: number; hero: Combatant | null },
+    ctx: { playerLevel: number; activeDays7: number; globalXp: number; hero: Combatant | null },
   ): Promise<{ detected: Raid | null; report: RaidReport | null }> {
     const cur = row.value;
     if (!cur) return { detected: null, report: null };

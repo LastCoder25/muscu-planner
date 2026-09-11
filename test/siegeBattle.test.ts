@@ -145,6 +145,46 @@ describe('le goulot', () => {
   });
 });
 
+describe('la place au pied du mur', () => {
+  /** Les dégâts portés au MUR au premier tour — ce que le front laisse réellement passer. */
+  const wallDamageRound1 = (army: SiegeUnit[]) =>
+    simulateSiege(army, [turret({ pv: 1e9, damage: 0.001 })], wall(1e9), 77)
+      .log.filter((e) => e.round === 1 && e.kind === 'wall')
+      .reduce((t, e) => t + (e.amount ?? 0), 0);
+
+  it("⚠️ une HORDE menue porte au mur autant qu'une bande lourde de même masse", () => {
+    // L'invariant des factions depuis la v0.661 : `countMult × unitMult ≈ 1`. Compté en
+    // TÊTES, le front le trahissait — mesuré, les bêtes tenaient 100 % du temps face à
+    // 3-43 % pour les bandits, la même masse rendue inoffensive par sa seule silhouette.
+    const lourds = Array.from({ length: 8 }, () => att('melee', { damage: 30, pv: 500 }));
+    const menus = Array.from({ length: 24 }, () =>
+      att('melee', { damage: 10, pv: 167, bulk: 1 / 3 }),
+    );
+    const a = wallDamageRound1(lourds);
+    const b = wallDamageRound1(menus);
+    expect(a).toBeGreaterThan(0);
+    // ⚠️ Les deux, à 12 % près — et pas « b ≥ a », qui resterait vrai si les 24 entraient
+    // TOUS (le bug inverse : une horde qui submerge le rempart).
+    expect(Math.abs(b - a) / a).toBeLessThan(0.12);
+  });
+
+  it('⚠️ la place n’est pas illimitée : au-delà du front, les corps attendent', () => {
+    const huit = Array.from({ length: 8 }, () => att('melee', { damage: 30, pv: 500 }));
+    const cent = Array.from({ length: 100 }, () => att('melee', { damage: 30, pv: 500 }));
+    // Cent béliers ne cognent pas douze fois plus fort que huit : c'est TOUT le rôle du
+    // goulot, et sans lui la brèche s'ouvrait dans 100 % des sièges (cf. `wallFront`).
+    expect(wallDamageRound1(cent)).toBe(wallDamageRound1(huit));
+  });
+
+  it('une unité sans `bulk` déclaré occupe UNE place — jamais zéro', () => {
+    // ⚠️ Un repli à 0 laisserait passer l'armée entière : le défaut doit être le cas
+    // PRUDENT, celui qui ne peut rien ouvrir d'inattendu.
+    const sans = Array.from({ length: 40 }, () => att('melee', { damage: 25, pv: 500 }));
+    const avec = sans.map((u) => ({ ...u, bulk: 1 }));
+    expect(wallDamageRound1(sans)).toBe(wallDamageRound1(avec));
+  });
+});
+
 describe('le ciblage', () => {
   it('vise la MENACE la plus forte, pas la plus faible', () => {
     const faible = def('ranged', { damage: 1, id: 'faible' });

@@ -54,6 +54,20 @@ export interface SiegeUnit {
   /** Assaillant ayant FRANCHI la brèche. Change ce qu'il peut atteindre, et ce qui peut
    *  l'atteindre. */
   inside?: boolean;
+  /** Place occupée au pied du mur, en corps de RÉFÉRENCE (1 par défaut).
+   *
+   *  ⚠️ SANS ELLE, LE GOULOT TRAHIT LA SILHOUETTE DES FACTIONS. Le projet tient depuis la
+   *  v0.661 un invariant : `countMult × unitMult ≈ 1` — une horde nombreuse et fragile
+   *  pèse autant qu'une bande réduite et aguerrie, seule la FORME change. Un front compté
+   *  en TÊTES le casse : à huit corps quels qu'ils soient, une meute de loups ne porte au
+   *  mur que la force de huit loups. Mesuré sur le nouveau moteur, front en têtes :
+   *  bandits **3 à 35 %** de tenue et 100 % de brèches, bêtes **100 %** de tenue et 12 à
+   *  39 % de brèches — la même armée, rendue inoffensive par sa seule silhouette.
+   *  (Le tireur donné aux bêtes n'y était pour rien : elles ne perçaient déjà pas.)
+   *
+   *  Le front est donc une capacité d'ESPACE, pas un décompte : un loup tient moins de
+   *  place qu'un mercenaire en armure, il en rentre davantage au pied du rempart. */
+  bulk?: number;
 }
 
 export interface SiegeWall {
@@ -78,7 +92,8 @@ export const BATTLE = {
   /** Part du feu des archers assaillants qui passe À TRAVERS la brèche pour frapper les
    *  défenseurs de la cour. Étroite par nature : on tire dans un couloir. */
   rangedThroughBreach: 0.35,
-  /** Combien d'assaillants peuvent frapper le MUR en même temps.
+  /** Combien de corps de RÉFÉRENCE tiennent de front au pied du MUR (cf. `SiegeUnit.bulk` :
+   *  un corps plus menu en occupe moins d'un, il en rentre donc plus).
    *
    *  ⚠️ LE MUR EST UN GOULOT, LUI AUSSI — et l'avoir oublié a été trouvé par la mesure :
    *  la brèche s'ouvrait dans **100 %** des sièges. On ne met pas cinquante béliers côte
@@ -292,7 +307,11 @@ export function simulateSiege(
       const cibles = attackerTargets(a, def, width);
       if (!cibles.length) {
         if (a.kind === 'melee' && !a.inside && front > 0) {
-          front--;
+          // ⚠️ On décompte la PLACE, pas les têtes — et on n'exige pas qu'elle tienne
+          // entièrement : le dernier arrivé se glisse dans ce qui reste. Refuser un corps
+          // trop encombrant pour le reliquat rendrait le front dépendant de l'ORDRE des
+          // unités, qui n'est pas une mécanique de jeu.
+          front -= Math.max(0.05, a.bulk ?? 1);
           const dealt = Math.min(w.pv, Math.max(1, Math.round(a.damage)));
           w.pv -= dealt;
           log.push({ round, kind: 'wall', from: a.id, amount: dealt });

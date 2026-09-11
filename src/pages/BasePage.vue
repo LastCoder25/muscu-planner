@@ -55,6 +55,23 @@
             <stop offset="74%" stop-color="#55432c" />
             <stop offset="100%" stop-color="#55432c" stop-opacity="0" />
           </radialGradient>
+          <!-- LE PAVÉ. Un motif, PAS un filtre : il se rastérise une fois et ne se
+               repeint jamais — l'enceinte, elle, anime des contours (cf. le terrain).
+               La tuile porte son propre mortier, donc UNE seule forme par rue. -->
+          <pattern id="cobble" width="9" height="9" patternUnits="userSpaceOnUse">
+            <rect width="9" height="9" fill="#3b342a" />
+            <rect x="0.6" y="0.7" width="3.5" height="3" rx="1.2" fill="#4d4438" />
+            <rect x="4.9" y="0.9" width="3.4" height="2.8" rx="1.2" fill="#453d32" />
+            <rect x="1.7" y="4.6" width="3.7" height="3" rx="1.2" fill="#494033" />
+            <rect x="6.1" y="5" width="2.5" height="2.9" rx="1.1" fill="#423a30" />
+          </pattern>
+          <!-- ⚠️ Les rues sont tracées en formes SIMPLES (un anneau, un disque, une
+               bande) puis DÉCOUPÉES à l'octogone intérieur : calculer leur intersection
+               à la main donnerait des chemins illisibles qu'il faudrait refaire au
+               moindre changement de rayon. -->
+          <clipPath id="yardClip">
+            <polygon :points="innerPoints" />
+          </clipPath>
         </defs>
 
         <!-- ── LE TERRAIN ──────────────────────────────────────────────────
@@ -270,11 +287,29 @@
 
         <!-- ── LE SOL DE LA COUR ────────────────────────────────────────────
              Sans lui, les tuiles flottaient sur le même fond que l'extérieur : on ne
-             voyait pas qu'on était DEDANS. Le pavage arrête le regard aux murs, et la
-             ruelle relie la porte (sud) au corps de garde (nord) — l'axe que l'enceinte
-             dessine déjà, rendu visible. -->
-        <polygon :points="innerPoints" class="yard-ground" />
-        <circle cx="100" cy="100" r="9" class="yard-plaza" />
+             voyait pas qu'on était DEDANS. La terre arrête le regard aux murs, et les
+             rues PAVÉES portent les bâtiments : un anneau sous les dix ateliers, une
+             place sous les trois services, et l'axe porte (sud) ↔ corps de garde (nord)
+             que l'enceinte dessine déjà.
+             ⚠️ Chaque rue est calée sur le rayon de SON anneau de tuiles (PLOT_R,
+             SVC_R) : posée à un nombre écrit à la main, elle se décrocherait des
+             bâtiments dès qu'on retouche la disposition — et c'est arrivé une fois, à la
+             cour, quand le roster est passé de sept à dix.
+             « v-once » : rien ici n'est réactif (cf. le terrain). -->
+        <g v-once aria-hidden="true">
+          <polygon :points="innerPoints" class="yard-ground" />
+          <g clip-path="url(#yardClip)">
+            <circle cx="100" cy="100" :r="PLOT_R" class="pave" :stroke-width="YARD_HALF * 2 + 6" />
+            <circle cx="100" cy="100" :r="SVC_R + YARD_HALF + 4" class="pave-fill" />
+            <rect
+              :x="100 - GATE_HALF"
+              :y="100 - APOTHEM"
+              :width="GATE_HALF * 2"
+              :height="APOTHEM * 2"
+              class="pave-fill"
+            />
+          </g>
+        </g>
 
         <!-- ── LA COUR ──────────────────────────────────────────────────────
              Deux rangées de bâtiments de production + une rangée de services.
@@ -1272,6 +1307,10 @@ const gateSides = ([-1, 1] as const).map((side) => ({
 }));
 /** La terre battue au pied des murs — et la limite en deçà de laquelle rien ne pousse. */
 const EARTH_R = WALL_R + 15;
+/** Largeur de la CHAUSSÉE, dehors comme dedans : le chemin de terre sort du cadre
+ *  entre x=92 et x=108, et la rue de la cour reprend exactement la même emprise — sinon
+ *  la route se rétrécirait ou s'élargirait en franchissant la porte. */
+const GATE_HALF = 8;
 /** Le chemin de terre qui part de la porte et sort du cadre par le sud, en s'évasant
  *  un peu (perspective). Ses ornières : deux lignes pointillées. */
 const roadPath = computed(() => {
@@ -1394,9 +1433,11 @@ const gateOffset = (n: number) => {
   const step = (2 * Math.PI) / n;
   return (Math.PI * (n + 1)) / n - Math.round((n + 1) / 2) * step;
 };
-const PLOT_POS = RING(BUILD.plotCap, 43, gateOffset(BUILD.plotCap));
+const PLOT_R = 43;
+const PLOT_POS = RING(BUILD.plotCap, PLOT_R, gateOffset(BUILD.plotCap));
 // Services : un vers la porte, deux vers le corps de garde — ils encadrent la place.
-const SVC_POS = RING(3, 16, Math.PI);
+const SVC_R = 16;
+const SVC_POS = RING(3, SVC_R, Math.PI);
 const YARD_HALF = 9; // demi-côté DESSINÉ
 // Cible tactile plus large que le dessin, sans chevauchement (elle vaut exactement l'écart
 // entre deux colonnes) → ~37 px sur un téléphone, contre 33 pour la tuile visible seule.
@@ -1477,7 +1518,7 @@ function perLevel(id: DefenseId): string {
   return defensePerLevelLabel(id, lvlOf(id), {
     playerLevel: heroLevel.value,
     defenses: defenses.value,
-    intervalMs: raidIntervalMs(progress.sessionsInLastDays(7)),
+    intervalMs: raidIntervalMs(progress.activeDaysInLast(7)),
   });
 }
 const defSheetOpen = computed({
@@ -1964,10 +2005,15 @@ const doCollect = () =>
   stroke-width: 1;
   pointer-events: none;
 }
-/* LA PLACE : le cœur laissé libre par les deux anneaux. C'est le vide qui compose —
-   sans lui, dix tuiles réparties ne seraient qu'un semis. */
-.yard-plaza {
-  fill: #2d2619;
+/* LES RUES. Le pavé est plus CLAIR que la terre de la cour : c'est ce contraste seul
+   qui dessine la voirie — pas de bordure, qui se couperait à chaque croisement. */
+.pave {
+  fill: none;
+  stroke: url(#cobble);
+  pointer-events: none;
+}
+.pave-fill {
+  fill: url(#cobble);
   pointer-events: none;
 }
 .yard.svc .yard-pad {

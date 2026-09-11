@@ -31,6 +31,7 @@ import {
 } from './combat';
 import { refFighter } from './proceduralContent';
 import { rollDrop, famLevel, famAtkMult, famDefMult, type Item } from './items';
+import type { UnitKind } from './siegeBattle';
 
 // ── Types ──
 
@@ -46,6 +47,10 @@ export interface RaidGroup {
   count: number;
   level: number;
   champion?: boolean;
+  /** Corps à corps ou tir. ⚠️ PORTÉ par le groupe, jamais déduit du nom de l'espèce :
+   *  un lookup par libellé casserait au premier renommage, en silence. Absent sur les
+   *  raids d'avant la v0.754 → lus comme du corps à corps (cf. `groupKind`). */
+  kind?: UnitKind;
   /** Force UNITAIRE, posée au tirage selon la faction (cf. `FACTION_PROFILE`). Une bête
    *  vaut moins qu'un brigand, mais elles arrivent en nombre. Portée par le groupe pour
    *  que `groupCombatant` reste autonome (la mise en scène lit la même valeur). */
@@ -471,27 +476,47 @@ export function scavengerCount(level: number): number {
 }
 
 // ── Rosters par faction ──
-const ROSTERS: Record<RaidFaction, { emoji: string; name: string }[]> = {
+/**
+ * ⚠️ CHAQUE ESPÈCE PORTE SON TYPE — c'est ce qui donne sa tactique au siège : un homme
+ * d'armes ne peut que cogner le mur, un tireur ne peut que faire taire les tireurs d'en
+ * face (cf. `siegeBattle.ts`).
+ *
+ * ⚠️ L'ORDRE DU ROSTER EST UNE MÉCANIQUE, pas une présentation : `rollRaid` tire les
+ * espèces **dans l'ordre** (`roster[i % length]`), pas au hasard. Une espèce placée en
+ * 4ᵉ position n'apparaît donc que dans les armées les plus fournies. Chaque faction a
+ * son tireur à l'**index 1** pour qu'il soit présent dès deux groupes de troupe —
+ * mesuré : sans lui, les bêtes tenaient 0 % du temps en défense adverse (100 % de
+ * tenue pour le joueur), faute de pouvoir réduire une seule baliste au silence.
+ *
+ * ⚠️ Le CHAMPION est toujours le DERNIER du roster (cf. `rollRaid`) : les quatre
+ * premières places sont donc celles de la troupe.
+ */
+const ROSTERS: Record<RaidFaction, { emoji: string; name: string; kind: UnitKind }[]> = {
   bandits: [
-    { emoji: '🗡️', name: 'Coupe-jarret' },
-    { emoji: '🏹', name: 'Archer déserteur' },
-    { emoji: '🪓', name: 'Brise-porte' },
-    { emoji: '🛡️', name: 'Mercenaire' },
-    { emoji: '👺', name: 'Chef de bande' },
+    { emoji: '🗡️', name: 'Coupe-jarret', kind: 'melee' },
+    { emoji: '🏹', name: 'Archer déserteur', kind: 'ranged' },
+    { emoji: '🪓', name: 'Brise-porte', kind: 'melee' },
+    { emoji: '🛡️', name: 'Mercenaire', kind: 'melee' },
+    { emoji: '👺', name: 'Chef de bande', kind: 'melee' },
   ],
   betes: [
-    { emoji: '🐺', name: 'Loup famélique' },
-    { emoji: '🐗', name: 'Sanglier enragé' },
-    { emoji: '🕷️', name: 'Arachné des bois' },
-    { emoji: '🐻', name: 'Ours des cavernes' },
-    { emoji: '🦂', name: 'Scorpion géant' },
+    { emoji: '🐺', name: 'Loup famélique', kind: 'melee' },
+    // L'arachné CRACHE (toile, venin) : c'est la réponse des bêtes aux balistes, et la
+    // seule espèce du bestiaire pour qui « frapper de loin » va de soi.
+    { emoji: '🕷️', name: 'Arachné des bois', kind: 'ranged' },
+    { emoji: '🐗', name: 'Sanglier enragé', kind: 'melee' },
+    { emoji: '🐻', name: 'Ours des cavernes', kind: 'melee' },
+    { emoji: '🦂', name: 'Scorpion géant', kind: 'melee' },
   ],
   mortsvivants: [
-    { emoji: '🧟', name: 'Revenant' },
-    { emoji: '💀', name: 'Ossuaire ambulant' },
-    { emoji: '👻', name: 'Spectre plaintif' },
-    { emoji: '🧙', name: 'Nécromant' },
-    { emoji: '⚰️', name: 'Porte-linceul' },
+    { emoji: '🧟', name: 'Revenant', kind: 'melee' },
+    // Le spectre draine à distance ; le nécromant reste au fond. Deux tireurs, c'est
+    // l'identité de cette faction — et il faudra vérifier qu'elle n'en devient pas la
+    // plus dure (cf. la mesure par faction).
+    { emoji: '👻', name: 'Spectre plaintif', kind: 'ranged' },
+    { emoji: '💀', name: 'Ossuaire ambulant', kind: 'melee' },
+    { emoji: '🧙', name: 'Nécromant', kind: 'ranged' },
+    { emoji: '⚰️', name: 'Porte-linceul', kind: 'melee' },
   ],
 };
 
@@ -629,6 +654,7 @@ export function rollRaid(
     groups.push({
       species: skin.name,
       emoji: skin.emoji,
+      kind: skin.kind,
       count: share,
       level: levels[i]!,
       unitMult,
@@ -639,6 +665,7 @@ export function rollRaid(
   groups.push({
     species: champSkin.name,
     emoji: champSkin.emoji,
+    kind: champSkin.kind,
     count: 1,
     level: championLevel,
     champion: true,
@@ -663,8 +690,8 @@ export function rollRaid(
 // ── Rythme ──
 
 /** Délai jusqu'au prochain siège, selon l'ACTIVITÉ SPORTIVE (jours actifs sur 7). */
-export function raidIntervalMs(sessions7: number, rng?: () => number): number {
-  const s = Math.max(0, sessions7);
+export function raidIntervalMs(activeDays7: number, rng?: () => number): number {
+  const s = Math.max(0, activeDays7);
   // 0 séance → la garde `raidsEnabled` a déjà coupé les sièges ; on rend l'échéance
   // lointaine par sécurité plutôt que d'improviser une division par zéro.
   const base = s <= 0 ? RAID.intervalIdleMs : WEEK_MS / s;
@@ -767,6 +794,14 @@ function offensePerRound(f: Combatant): number {
 
 /** Un groupe de l'armée, en un combattant. PV = effectif × PV unitaire ; dégâts en
  *  √effectif (cf. `groupDmgExp`). */
+/** Le type d'un groupe, avec repli pour les raids écrits avant la v0.754.
+ *  ⚠️ Corps à corps par défaut : c'est le cas qui ne peut RIEN faire d'inattendu (il
+ *  cogne le mur). Un repli « tireur » aurait fait apparaître des archers là où il n'y
+ *  en avait jamais eu. */
+export function groupKind(g: RaidGroup): UnitKind {
+  return g.kind ?? 'melee';
+}
+
 export function groupCombatant(g: RaidGroup): Combatant {
   const ref = refFighter(Math.max(1, g.level));
   const um = g.unitMult ?? 1; // silhouette de la faction (horde fragile ↔ bande aguerrie)
@@ -1187,7 +1222,10 @@ export function defenseBreakdown(
     // `ROLE_LABEL` et `FACTION_LABEL`.
     {
       id: 'garrison',
-      label: 'Garnison',
+      // ⚠️ « Garnison » se lisait comme « mes soldats » — un joueur dont tous les
+      // aventuriers étaient en convoi voyait donc une ligne fantôme (signalé). Ce sont
+      // les FAMILIERS postés au chenil, et le mot doit le dire.
+      label: 'Familiers',
       emoji: '🐾',
       ...contrib(defenses, hero, {}),
       active: Object.keys(garrison).length > 0,
@@ -1695,8 +1733,8 @@ export function defenseReadiness(defenses: DefenseStructure[], playerLevel: numb
  *  et ils reprennent tout seuls une fois rattrapé. C’est cohérent avec la règle 1 (on ne
  *  punit jamais) — et sans exploit, un siège étant un ROBINET (butin, cadavres, ferraille) :
  *  s’en priver coûte du contenu, ça n’achète pas de la sécurité. */
-export function raidsEnabled(base: BaseState, sessions7: number, playerLevel: number): boolean {
-  return defenseReadiness(base.defenses, playerLevel) >= RAID.enableShare && sessions7 >= 1;
+export function raidsEnabled(base: BaseState, activeDays7: number, playerLevel: number): boolean {
+  return defenseReadiness(base.defenses, playerLevel) >= RAID.enableShare && activeDays7 >= 1;
 }
 
 export interface BaseTickResult {
@@ -1711,7 +1749,7 @@ export interface BaseTickResult {
  *  là et ce que vaut la garnison ; il le signale via `dueRaid`. */
 export function advanceBase(
   base: BaseState,
-  ctx: { playerLevel: number; sessions7: number; globalXp: number },
+  ctx: { playerLevel: number; activeDays7: number; globalXp: number },
   now: number,
 ): BaseTickResult {
   let b: BaseState = { ...base };
@@ -1736,7 +1774,7 @@ export function advanceBase(
     changed = true;
   }
 
-  if (!raidsEnabled(b, ctx.sessions7, ctx.playerLevel)) {
+  if (!raidsEnabled(b, ctx.activeDays7, ctx.playerLevel)) {
     // Enceinte pas prête (ou joueur inactif) : on repousse l'échéance pour ne JAMAIS
     // accumuler un arriéré pendant l'absence.
     if (b.nextRaidAt < now) {
@@ -1751,7 +1789,7 @@ export function advanceBase(
   // debout, on la RAPPROCHE à l'intervalle qui correspond vraiment au joueur — sinon un
   // joueur assidu venait de bâtir son enceinte et lisait « prochaine alerte dans 70 h »,
   // ce qui n'a aucun sens. On ne repousse jamais, on ne fait que rapprocher.
-  const due = now + raidIntervalMs(ctx.sessions7);
+  const due = now + raidIntervalMs(ctx.activeDays7);
   if (!b.raid && b.nextRaidAt > due) {
     b = { ...b, nextRaidAt: due };
     changed = true;
@@ -1778,7 +1816,7 @@ export function applyRaidOutcome(
   base: BaseState,
   raid: Raid,
   report: RaidReport,
-  ctx: { sessions7: number; globalXp: number },
+  ctx: { activeDays7: number; globalXp: number },
   now: number,
 ): { base: BaseState; damage: RaidDamage } {
   const dmg = raidDamage(report);
@@ -1800,10 +1838,13 @@ export function applyRaidOutcome(
           ? {
               until:
                 now +
-                woundMsFor(defenseLevel(base.defenses, 'infirmary'), raidIntervalMs(ctx.sessions7)),
+                woundMsFor(
+                  defenseLevel(base.defenses, 'infirmary'),
+                  raidIntervalMs(ctx.activeDays7),
+                ),
             }
           : (base.wound ?? null),
-      nextRaidAt: now + raidIntervalMs(ctx.sessions7, rng),
+      nextRaidAt: now + raidIntervalMs(ctx.activeDays7, rng),
       field: corpses.length ? { corpses, expiresAt: now + SCAV.fieldMs } : null,
       freeze: dmg.freeze ? { until: now + RAID.freezeMs, atXp: ctx.globalXp } : null,
     },

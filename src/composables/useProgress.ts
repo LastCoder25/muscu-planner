@@ -19,6 +19,7 @@ import {
 import { challengeXpPoints } from '@/lib/challenges';
 import { comboXpPoints } from '@/lib/combo';
 import { computeLevel } from '@/lib/levels';
+import { activeDaysSince } from '@/lib/activityDays';
 import {
   isCardioTrackChallenge,
   isCardioOutingChallenge,
@@ -442,13 +443,22 @@ export function useProgress() {
    *  séance, et une série de pompes glissée dans la journée n'est pas une séance. Les
    *  sorties cardio « miroir » d'un défi sont exclues explicitement : elles dupliquent un
    *  effort déjà compté ailleurs, les recompter gonflerait la fréquence sans effort réel. */
-  function sessionsInLastDays(days = 7): number {
+  /** Les jours DISTINCTS où le joueur a fait du sport — toutes pratiques confondues.
+   *  ⚠️ Ce n'est plus un compte de SÉANCES : celui qui ne s'entraîne qu'au Défi 360 ou en
+   *  défis solo n'en enregistre aucune, et se retrouvait classé inactif (cf.
+   *  `activityDays.ts`). La règle vit dans la lib ; ici on ne fait que RÉUNIR les
+   *  sources — et l'interface exhaustive garantit qu'on n'en oublie aucune. */
+  function activeDaysInLast(days = 7): number {
     const from = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
-    const on = (iso: string | null | undefined) => !!iso && iso.slice(0, 10) >= from;
-    return (
-      logs.all.filter((r) => on(r.performed_at)).length +
-      cardio.logs.filter((r) => !r.payload.challenge_id && on(r.performed_at)).length +
-      tennis.logs.filter((r) => on(r.performed_at)).length
+    return activeDaysSince(
+      {
+        sessions: logs.all,
+        cardio: cardio.logs,
+        tennis: tennis.logs,
+        challenges: challenges.list,
+        combos: combo.list,
+      },
+      from,
     );
   }
 
@@ -456,7 +466,7 @@ export function useProgress() {
     ready,
     sportTiles,
     sportEntries,
-    sessionsInLastDays,
+    activeDaysInLast,
     global: computed(() => computeLevel(globalXp.value)),
     general: computed(() => computeLevel(generalXp.value)),
     specifique: computed(() => computeLevel(tennisXp.value)),

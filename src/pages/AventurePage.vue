@@ -4988,7 +4988,9 @@ const baseAlert = computed(
  *  bouge une fois par jour, et tout son volume supplémentaire ne lui rapportait aucun
  *  contenu. Le siège étant un ROBINET (butin, cadavres, ferraille), « plus actif = plus
  *  attaqué » se lit comme plus de jeu, jamais comme une punition de l'entraînement. */
-const sessions7 = computed(() => progress.sessionsInLastDays(7));
+/** Les jours d'entraînement de la semaine écoulée — ce qui règle le rythme des sièges.
+ *  ⚠️ Des JOURS, pas des séances : cf. `activityDays.ts`. */
+const activeDays7 = computed(() => progress.activeDaysInLast(7));
 
 /** Dépose le coffre des Défis 360 terminés qui n'en ont pas encore.
  *
@@ -5056,7 +5058,7 @@ async function syncPush(force = false) {
       expedition: char.row.expedition ? { returnAt: char.row.expedition.returnAt } : null,
       caravans: char.caravanList,
       watchtowerLevel: defenseLevel(char.row.base?.defenses ?? [], 'watchtower'),
-      activeDays7: sessions7.value,
+      activeDays7: activeDays7.value,
       playerLevel: c.value.level.level,
     })
     .catch((e) => console.error('push sync', e));
@@ -5070,7 +5072,7 @@ async function baseLifecycle() {
   try {
     const r = await char.baseTick(uid, Date.now(), {
       playerLevel: c.value.level.level,
-      sessions7: sessions7.value,
+      activeDays7: activeDays7.value,
       // XP de fond : strictement croissante, donc « a-t-il fait du sport depuis ? » se lit
       // d'une simple comparaison — c'est ce qui dégèle la production.
       globalXp: progress.energyEarned.value,

@@ -53,6 +53,7 @@ import {
   type BaseState,
   type DefenseStructure,
   type RaidFaction,
+  groupKind,
 } from '@/lib/raid';
 
 /** Places de garnison pour les tests courts — ce que le repli implicite rendait
@@ -186,6 +187,34 @@ describe('silhouette de faction', () => {
       const waves = Math.ceil(worst / scavengerCount(L));
       expect(waves * SCAV.dispatchMs).toBeLessThan(SCAV.fieldMs);
     }
+  });
+});
+
+describe('chaque armée sait répondre au feu', () => {
+  it('⚠️ AUCUNE faction ne marche sans un seul tireur', () => {
+    // Un corps à corps ne peut que cogner le mur : une faction 100 % mêlée ne peut
+    // JAMAIS réduire une baliste au silence, quelle que soit sa masse. Mesuré avant
+    // correctif : les bêtes, seule faction sans espèce à distance, tenaient le joueur en
+    // échec 0 % du temps — un tiers du bestiaire rendu décoratif.
+    const vus = new Set<RaidFaction>();
+    for (let i = 0; i < 400; i++) {
+      for (const L of [5, 26, 90]) {
+        const raid = rollRaid(i * 7919 + 3, L, 0, 0);
+        vus.add(raid.faction);
+        expect(raid.groups.some((g) => groupKind(g) === 'ranged')).toBe(true);
+      }
+    }
+    // ⚠️ Le balayage doit avoir VU les trois factions, sinon il n'affirme rien sur
+    // celles qu'il a manquées.
+    expect(vus.size).toBe(Object.keys(FACTION_PROFILE).length);
+  });
+
+  it('un groupe sans type déclaré est lu au CORPS À CORPS', () => {
+    // Les raids écrits avant la v0.754 n'en portent pas. Le repli doit être le cas
+    // PRUDENT : « tireur » ferait apparaître des archers là où il n'y en a jamais eu.
+    const raid = rollRaid(42, 26, 0, 0);
+    const sansType = { ...raid.groups[0]!, kind: undefined };
+    expect(groupKind(sansType)).toBe('melee');
   });
 });
 
@@ -378,7 +407,7 @@ describe('cycle de vie', () => {
   it('sans muraille, AUCUNE attaque — le système est opt-in', () => {
     const b = emptyBase(7, 0);
     expect(raidsEnabled(b, 7, 26)).toBe(false);
-    const r = advanceBase(b, { playerLevel: 26, sessions7: 7, globalXp: 0 }, 10 * 24 * H);
+    const r = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 0 }, 10 * 24 * H);
     expect(r.detected).toBeNull();
     expect(r.dueRaid).toBeNull();
   });
@@ -386,9 +415,9 @@ describe('cycle de vie', () => {
   it('un joueur inactif n’est pas attaqué, et ne trouve PAS d’arriéré au retour', () => {
     // Règle fondatrice : on ne perd jamais pour ne pas avoir ouvert l'app.
     let b = base(0);
-    const ctx = { playerLevel: 26, sessions7: 0, globalXp: 0 };
+    const ctx = { playerLevel: 26, activeDays7: 0, globalXp: 0 };
     for (let d = 1; d <= 21; d++) b = advanceBase(b, ctx, d * 24 * H).base;
-    const back = advanceBase(b, { ...ctx, sessions7: 5 }, 22 * 24 * H);
+    const back = advanceBase(b, { ...ctx, activeDays7: 5 }, 22 * 24 * H);
     expect(back.dueRaid).toBeNull(); // rien n'a pu s'accumuler
   });
 
@@ -396,7 +425,7 @@ describe('cycle de vie', () => {
     const now = 0;
     let b = base(now);
     b.nextRaidAt = now + 10 * H;
-    const ctx = { playerLevel: 26, sessions7: 7, globalXp: 0 };
+    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0 };
     expect(advanceBase(b, ctx, now).detected).toBeNull(); // trop tôt
     const lead = scoutLeadMs(6);
     const det = advanceBase(b, ctx, b.nextRaidAt - lead + 1);
@@ -409,7 +438,7 @@ describe('cycle de vie', () => {
   it('un seul siège en attente à la fois', () => {
     let b = base(0);
     b.nextRaidAt = 0;
-    const ctx = { playerLevel: 26, sessions7: 7, globalXp: 0 };
+    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0 };
     b = advanceBase(b, ctx, 0).base;
     const first = b.raid;
     for (let d = 1; d < 10; d++) b = advanceBase(b, ctx, d * 24 * H).base;
@@ -419,13 +448,13 @@ describe('cycle de vie', () => {
   it('la production gelée se dégèle par une SÉANCE, ou toute seule', () => {
     const b = base(0);
     b.freeze = { until: 10 * H, atXp: 500 };
-    const still = advanceBase(b, { playerLevel: 26, sessions7: 7, globalXp: 500 }, H);
+    const still = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 500 }, H);
     expect(still.base.freeze).not.toBeNull();
     // Une séance de sport (XP en hausse) lève le gel immédiatement…
-    const bySport = advanceBase(b, { playerLevel: 26, sessions7: 7, globalXp: 620 }, H);
+    const bySport = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 620 }, H);
     expect(bySport.base.freeze).toBeNull();
     // …et l'échéance le lève de toute façon : l'app ne réclame jamais d'entraînement.
-    const byTime = advanceBase(b, { playerLevel: 26, sessions7: 7, globalXp: 500 }, 11 * H);
+    const byTime = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 500 }, 11 * H);
     expect(byTime.base.freeze).toBeNull();
   });
 
@@ -434,7 +463,7 @@ describe('cycle de vie', () => {
     const raid = rollRaid(555, 26, 0, 0);
     const rep = resolveRaid(baseCombatant(defs(40, 40), 40, hero(40)), raid, 0, true);
     expect(rep.held).toBe(true);
-    const { base: nb, damage } = applyRaidOutcome(b, raid, rep, { sessions7: 7, globalXp: 0 }, 0);
+    const { base: nb, damage } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, 0);
     expect(damage).toEqual({ stockStolen: false, damaged: [], freeze: false });
     expect(nb.freeze).toBeNull();
     expect(nb.raid).toBeNull();
@@ -448,7 +477,7 @@ describe('cycle de vie', () => {
       corpses: corpsesFrom(rollRaid(1, 26, 0, 0), { defeated: 2 } as never, 1),
       expiresAt: 5 * H,
     };
-    b = advanceBase(b, { playerLevel: 26, sessions7: 7, globalXp: 0 }, 6 * H).base;
+    b = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 0 }, 6 * H).base;
     expect(b.field).toBeNull();
   });
 });
@@ -951,7 +980,7 @@ describe('blessure du héros', () => {
       held: false,
       heroHome: true,
     };
-    const { base: nb } = applyRaidOutcome(b, raid, report, { sessions7: 7, globalXp: 0 }, 0);
+    const { base: nb } = applyRaidOutcome(b, raid, report, { activeDays7: 7, globalXp: 0 }, 0);
     expect(nb.wound).not.toBeNull();
     // Il part à l'INFIRMERIE : plus de donjon, de faille ni d'expédition le temps qu'il
     // se remette. (Un simple malus de dégâts avait été essayé : sans mordant, puisqu'on
@@ -961,7 +990,11 @@ describe('blessure du héros', () => {
     expect(woundRemainingMs(nb, 0)).toBeGreaterThan(0);
     // …et il se remet tout seul.
     expect(heroAvailable(nb, nb.wound!.until + 1)).toBe(true);
-    const healed = advanceBase(nb, { playerLevel: 26, sessions7: 7, globalXp: 0 }, nb.wound!.until);
+    const healed = advanceBase(
+      nb,
+      { playerLevel: 26, activeDays7: 7, globalXp: 0 },
+      nb.wound!.until,
+    );
     expect(healed.base.wound).toBeNull();
   });
 
@@ -971,7 +1004,7 @@ describe('blessure du héros', () => {
     const raid = rollRaid(555, 26, 0, 0);
     const rep = resolveRaid(baseCombatant(defs(40, 40), 40, hero(40)), raid, 0, true);
     expect(rep.held).toBe(true);
-    const { base: nb } = applyRaidOutcome(b, raid, rep, { sessions7: 7, globalXp: 0 }, 0);
+    const { base: nb } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, 0);
     expect(nb.wound).toBeNull();
   });
 
