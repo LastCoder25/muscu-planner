@@ -1861,6 +1861,12 @@ export function bestGearLoadout(
    *  rendait le meilleur build sur cette voie, souvent SANS aucune pièce du set demandé —
    *  un bouton qui ne fait pas ce qu'il annonce. */
   pin?: Partial<Record<ItemSlot, Item>>,
+  /** Passe finale d'amélioration locale. ⚠️ Elle est COÛTEUSE (elle reparcourt tout le
+   *  vivier) : mesuré, 498 ms sur un sac de 767 objets. `computeGearPlan` explore une
+   *  dizaine de voies × 2 passes — la polir à chaque fois coûtait **9 secondes**, et
+   *  l'écran paraissait mort. La garantie n'a besoin de tenir que pour le plan RETENU,
+   *  donc l'exploration passe `false` et seul le gagnant est poli. */
+  polish = true,
 ): Equipped {
   const bySlot: Record<ItemSlot, Item[]> = {
     weapon: [],
@@ -1904,8 +1910,13 @@ export function bestGearLoadout(
   // l'optimiseur ne peut jamais retirer une pièce sans candidat qui fait mieux, donc jamais
   // de PERTE de puissance (bug auto-équip).
   const K = 6;
-  /** Pièces retenues PAR SET et par emplacement (cf. `trim`). */
-  const SET_K = 3;
+  /** Pièces retenues PAR SET et par emplacement (cf. `trim`).
+   *  ⚠️ REVENU À 1 : le balayage a QUATRE boucles imbriquées sur les candidats, donc
+   *  passer de 1 à 3 pièces par set les multipliait par ~16 — mesuré, l’optimisation
+   *  passait à 9 SECONDES sur un sac réel et l’écran paraissait mort. Ce filtre n’est
+   *  plus qu’un ACCÉLÉRATEUR : c’est la passe d’amélioration locale qui porte la
+   *  garantie, et elle reparcourt TOUT le vivier de toute façon. */
+  const SET_K = 1;
   const trim = (arr: Item[], keepCur?: Item): (Item | undefined)[] => {
     const scored = arr.map((it) => ({ it, p: ctxPower(it) })).sort((a, b) => b.p - a.p);
     const keep = new Map<string, Item>();
@@ -1995,6 +2006,7 @@ export function bestGearLoadout(
   // qu'aucun échange simple ne gagne. Elle rend VRAIE la propriété que la pastille
   // annonce, au lieu de l’approcher. Elle ne peut jamais faire perdre de puissance
   // (on ne remplace que sur un gain strict) et converge (le score croît, borné).
+  if (!polish) return best;
   const tous: Item[] = [...inventory];
   for (const s of [...SLOTS, FAMILIAR_SLOT]) if (equipped[s]) tous.push(equipped[s]);
   for (let tour = 0; tour < 4; tour++) {

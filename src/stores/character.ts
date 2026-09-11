@@ -1023,7 +1023,7 @@ export const useCharacterStore = defineStore('character', () => {
       voie: string | null;
       talents: TalentInstance[]; // talents équipés retenus pour ce plan
     };
-    function planFor(vIdx: number): Plan {
+    function planFor(vIdx: number, polish = false): Plan {
       const voie = vIdx >= 0 ? VOIES[vIdx]!.id : null;
       // ⚠️ POOL = TOUT CE QU'ON POSSÈDE, toutes réserves confondues. Avant, seule la réserve
       // de la voie candidate était portable : une meilleure pièce d'un AUTRE set restait
@@ -1074,7 +1074,17 @@ export const useCharacterStore = defineStore('character', () => {
         : undefined;
       let best: Equipped = cur!.equipped;
       for (let pass = 0; pass < 2; pass++) {
-        best = bestGearLoadout(name, stats, cur!.equipped, pool, level, fxOf(talIds), voie, pin);
+        best = bestGearLoadout(
+          name,
+          stats,
+          cur!.equipped,
+          pool,
+          level,
+          fxOf(talIds),
+          voie,
+          pin,
+          polish,
+        );
         talIds = pickBestTalents(cur!.talents, maxTal, (ids) =>
           combatPower(playerWithGear(name, stats, best, fxOf(ids), level, voie)),
         );
@@ -1129,12 +1139,22 @@ export const useCharacterStore = defineStore('character', () => {
       cand.add(-1);
     }
 
+    // ⚠️ EXPLORATION SANS POLISSAGE : la passe d'amélioration locale coûte ~500 ms sur un
+    // gros sac, et on essaie une dizaine de voies × 2 passes — la polir partout prenait
+    // 9 SECONDES et l'écran paraissait mort. On explore vite, puis on POLIT le gagnant :
+    // la garantie « aucun échange simple ne gagne » n'a besoin de tenir que sur le plan
+    // effectivement proposé.
+    let bestIdx: number | null = null;
     let best: Plan | null = null;
     for (const vi of cand) {
       const p = planFor(vi);
-      if (!best || p.score > best.score) best = p;
+      if (!best || p.score > best.score) {
+        best = p;
+        bestIdx = vi;
+      }
     }
-    if (!best) return null;
+    if (!best || bestIdx === null) return null;
+    best = planFor(bestIdx, true);
     // GARDE-FOU ANTI-REGRESSION : on ne remplace le build actuel que par du STRICTEMENT
     // meilleur. Sans ca, un changement de regle (ex. plafond de talents abaisse) pourrait
     // faire PERDRE de la puissance a un clic sur « equipement automatique ».

@@ -742,12 +742,16 @@
         <div class="gear-head">
           <div class="sec-title gh-title">Équipement</div>
           <div class="gear-icons">
+            <!-- ⚠️ Le calcul prend ~3 s sur un gros sac (il essaie toutes les voies).
+                 Sans retour immédiat, le clic paraît sans effet et on reclique. -->
             <button
               class="gi-b"
+              :class="{ working: optimizing }"
+              :disabled="optimizing"
               title="Équipement conseillé — équipe automatiquement la meilleure combinaison de ton stuff (sets inclus)"
               @click="doOptimizeGear()"
             >
-              🪄
+              {{ optimizing ? '⏳' : '🪄' }}
             </button>
             <button class="gi-b" title="Sac — ton butin" @click="openBag()">
               🎒<span v-if="bagCount" class="gi-badge">{{ bagCount }}</span>
@@ -5467,14 +5471,28 @@ function togglePlanRow(key: string) {
 }
 const planAccepted = computed(() => planRows.value.filter((r) => !planOff.value.has(r.key)).length);
 
+const optimizing = ref(false);
 function doOptimizeGear() {
-  const plan = char.previewGearPlan(c.value, c.value.level.level, char.row?.pseudo ?? 'Toi');
-  if (!plan) {
-    $q.notify({ type: 'info', message: 'Ton équipement est déjà optimal. 👍' });
-    return;
-  }
-  planOff.value = new Set();
-  gearPlan.value = { equipped: plan.equipped, talentIds: plan.talentIds, voie: plan.voie };
+  if (optimizing.value) return;
+  optimizing.value = true;
+  // ⚠️ Le calcul est SYNCHRONE et dure ~3 s : sans ce report, Vue ne repeint jamais
+  // l'état « en cours » et l'écran se fige sans rien dire. Deux images suffisent pour
+  // que le ⏳ soit réellement affiché avant que le fil ne se bloque.
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      try {
+        const plan = char.previewGearPlan(c.value, c.value.level.level, char.row?.pseudo ?? 'Toi');
+        if (!plan) {
+          $q.notify({ type: 'info', message: 'Ton équipement est déjà optimal. 👍' });
+          return;
+        }
+        planOff.value = new Set();
+        gearPlan.value = { equipped: plan.equipped, talentIds: plan.talentIds, voie: plan.voie };
+      } finally {
+        optimizing.value = false;
+      }
+    }),
+  );
 }
 function applyPlan() {
   const st = planStateWithout();
@@ -7127,6 +7145,21 @@ button.pt-mini:active {
   border-color: var(--accent);
 }
 /* Compteur d'objets sur l'icône Sac. */
+/* Le ⏳ pulse : on voit que ça travaille, pas que c'est cassé. */
+.gi-b.working {
+  opacity: 1;
+  animation: gi-pulse 1s ease-in-out infinite;
+}
+@keyframes gi-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gi-b.working {
+    animation: none;
+  }
+}
 .gi-badge {
   position: absolute;
   top: -5px;
