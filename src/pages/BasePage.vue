@@ -732,49 +732,32 @@
               pourrissent ({{ rotIn }}).
             </p>
             <template v-else>
+              <!-- ── LA FOUILLE TOURNE SEULE ─────────────────────────────────────
+                 ⚠️ Plus de bouton « envoyer » ni « ramasser » : envoyer des fossoyeurs
+                 n’était pas une DÉCISION — on envoie toujours, il n’y a rien à arbitrer —
+                 donc c’était un péage, et le chantier est juste devant la porte. Demandé
+                 par l’utilisateur, qui avait aussi constaté « en 1 voire 2 vagues max j’ai
+                 tout ramassé ».
+                 Le butin est crédité VAGUE PAR VAGUE (rien ne se perd si le champ pourrit
+                 avant la fin) et un 📜 rapport de pillage part dans la boîte quand il est
+                 vide : ce qu’il reste à montrer ici, c’est l’AVANCEMENT. -->
               <p>
-                {{ scavCap }} fossoyeurs par vague · les corps pourrissent {{ rotIn }}. Tu peux les
-                renvoyer autant de fois qu’il le faut.
+                {{ scavCap }} corps par vague · aller-retour {{ scavTrip }} · les corps pourrissent
+                {{ rotIn }}. Les fossoyeurs font la navette tout seuls.
               </p>
-              <!-- ── LES FOUILLEURS SONT RENTRÉS ─────────────────────────────────
-                 On DÉTAILLE ce qu'ils rapportent AVANT de le ramasser : un bouton qui
-                 crédite en silence et laisse un toast ne donne rien à regarder, alors
-                 que c'est le paiement du siège. ⚠️ L'aperçu et la récupération partagent
-                 la MÊME graine (l'heure de départ) : ce qui est montré est exactement ce
-                 qui sera crédité. -->
-              <div v-if="scavReady && scavLoot" class="scav-back">
+              <div v-if="pillage" class="scav-back">
                 <div class="scav-title">
-                  🎒 Les fossoyeurs sont rentrés — {{ scavLoot.corpses }} corps dépouillés
+                  🎒 {{ pillage.corpses }} corps dépouillés en {{ pillage.waves }} vague{{
+                    pillage.waves > 1 ? 's' : ''
+                  }}
                 </div>
-                <div v-if="scavPills.length" class="scav-pills">
-                  <span v-for="(b, i) in scavPills" :key="i" class="scav-pill">{{ b }}</span>
+                <div v-if="pillagePills.length" class="scav-pills">
+                  <span v-for="(b, i) in pillagePills" :key="i" class="scav-pill">{{ b }}</span>
                 </div>
-                <div v-if="scavLoot.items.length" class="scav-items">
-                  <div v-for="(it, i) in scavLoot.items" :key="i" class="scav-item">
-                    <span class="scav-emo">{{ it.emoji }}</span>
-                    <span class="scav-nm">{{ it.name }}</span>
-                    <span class="scav-rar" :class="'p-' + it.rarity">{{
-                      RARITY_LABEL[it.rarity]
-                    }}</span>
-                    <span class="scav-lvl">Nv {{ it.level }}</span>
-                  </div>
-                </div>
-                <p v-if="!scavPills.length && !scavLoot.items.length" class="dim-note">
-                  Rien de valeur sur ces corps.
-                </p>
-                <button class="cta" @click="doCollect">
-                  🎒 Tout ramasser<span v-if="scavLoot.items.length">
-                    — {{ scavLoot.items.length }} objet{{ scavLoot.items.length > 1 ? 's' : '' }} au
-                    sac</span
-                  >
-                </button>
               </div>
-              <button v-else-if="scavBusy" class="cta ghost" disabled>
-                ⏳ Fossoyeurs sur le terrain — {{ scavIn }}
-              </button>
-              <button v-else-if="remaining > 0" class="cta" @click="doSend">
-                🦴 Envoyer les fossoyeurs ({{ Math.min(scavCap, remaining) }} corps)
-              </button>
+              <p v-if="remaining > 0" class="dim-note">
+                ⛏️ Fouille en cours — prochaine vague {{ scavIn }}
+              </p>
               <p v-else class="done">Le champ est entièrement dépouillé.</p>
             </template>
           </div>
@@ -935,6 +918,8 @@ import {
   isDamaged,
   repairCost,
   scavengerCount,
+  scavengeMs,
+  fmtSpan,
   assaultEstimate,
   assaultPower,
   defenseBreakdown,
@@ -1537,7 +1522,9 @@ const yard = computed<YardCell[]>(() => {
       // (c'est le corps de garde du rempart nord), donc sa condition ne s'évaluait
       // jamais — son alerte vit désormais sur son propre dessin (`.watch-alarm`), et le
       // champ `alert` de la tuile est retiré plutôt que laissé à `false` en dur.
-      todo: id === 'salvage' && (scavReady.value || remaining.value > 0),
+      // ⚠️ La fouille ne demande plus d’action : la pastille dit qu’il se PASSE quelque
+      // chose (des corps sont encore là), pas qu’il y a un bouton à presser.
+      todo: id === 'salvage' && remaining.value > 0,
       onClick: () => openDef(id),
     });
   });
@@ -1757,14 +1744,14 @@ const healIn = computed(() =>
 /** Prix des soins ∝ au repos restant : écourter la fin est une bricole, sauter toute la
  *  convalescence se paie. Attendre reste gratuit — on n'achète que l'immédiateté. */
 const healPrice = computed(() => healCost(woundRemainingMs(base.value, now.value)));
-const scavBusy = computed(
-  () => !!field.value?.dispatchUntil && now.value < field.value.dispatchUntil,
-);
-const scavReady = computed(
-  () => !!field.value?.dispatchUntil && now.value >= field.value.dispatchUntil,
-);
+/** Ce que la fouille a déjà remonté — le rapport de pillage en cours d’écriture. */
+const pillage = computed(() => base.value?.pillage ?? null);
+/** ⚠️ DEUX leviers au Chantier, et il faut les deux : le nombre de bras monte par
+ *  crans de quatre niveaux, la vitesse à chaque cran (« aucun niveau mort du 0 au
+ *  100 », v0.731). Le second ne se voyait nulle part — on l’affiche. */
+const scavTrip = computed(() => fmtSpan(scavengeMs(salvageLevel.value)));
 const scavIn = computed(() =>
-  field.value?.dispatchUntil ? fmtDelay(field.value.dispatchUntil - now.value) : '',
+  field.value?.dispatchUntil ? fmtDelay(field.value.dispatchUntil - now.value) : 'imminente',
 );
 
 // ── Structures ──
@@ -1816,7 +1803,6 @@ const doRepairAll = () =>
     if (cost)
       $q.notify({ type: 'positive', message: '🔩 Enceinte réparée — la production repart.' });
   });
-const doSend = () => guard(() => char.sendScavengers(uid.value, Date.now()));
 const doAutoGarrison = () =>
   guard(() => char.autoAssignGarrison(uid.value, Date.now(), heroLevel.value));
 const doHeal = () =>
@@ -1824,21 +1810,17 @@ const doHeal = () =>
     const cost = await char.healHero(uid.value, Date.now());
     if (cost) $q.notify({ type: 'positive', message: '⛑️ Ton héros est de nouveau sur pied.' });
   });
-/** Ce que les fossoyeurs rapportent, AVANT de le ramasser. Recalculé à chaque tick,
- *  mais déterministe : la graine est celle du départ. */
-const scavLoot = computed(() =>
-  scavReady.value ? char.previewScavengers(now.value, heroLevel.value) : null,
-);
-const scavPills = computed(() => {
-  const l = scavLoot.value;
-  if (!l) return [];
+/** Le cumul de la fouille, en puces. ⚠️ Ce sont des COMPTES déjà crédités : les objets
+ *  sont partis au sac vague par vague, on n’en récapitule que le NOMBRE. */
+const pillagePills = computed(() => {
+  const p = pillage.value;
+  if (!p) return [];
   return [
-    l.gold ? `🪙 +${l.gold}` : '',
-    l.summonStones ? `🔮 +${l.summonStones}` : '',
-    l.keys ? `🗝️ +${l.keys}` : '',
-    // 🔩 l'acier de l'armée repoussée (v0.702) — sans cette ligne, la ferraille était
-    // bien créditée mais invisible dans le récapitulatif de fouille.
-    l.scrap ? `🔩 +${l.scrap}` : '',
+    p.gold ? `🪙 +${p.gold}` : '',
+    p.summonStones ? `🔮 +${p.summonStones}` : '',
+    p.keys ? `🗝️ +${p.keys}` : '',
+    p.scrap ? `🔩 +${p.scrap}` : '',
+    p.items ? `🎒 ${p.items} objet${p.items > 1 ? 's' : ''}` : '',
   ].filter(Boolean);
 });
 /** RÉCOLTE des bâtiments — ce que la barre du haut affiche.
@@ -1894,17 +1876,6 @@ function doHarvest() {
     $q.notify({ type: 'positive', message: '🧺 Récolte encaissée.' });
   });
 }
-const doCollect = () =>
-  guard(async () => {
-    const got = await char.collectScavengers(uid.value, Date.now(), heroLevel.value);
-    if (!got) return;
-    $q.notify({
-      type: 'positive',
-      message: got.items.length
-        ? `🎒 Butin ramassé — ${got.items.length} objet${got.items.length > 1 ? 's' : ''} au sac.`
-        : '🎒 Butin ramassé.',
-    });
-  });
 </script>
 
 <style scoped>
@@ -3124,26 +3095,6 @@ const doCollect = () =>
   border-radius: 999px;
   background: var(--surface);
   border: 1px solid var(--line);
-}
-.scav-items {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 10px;
-}
-.scav-item {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 12.5px;
-}
-.scav-rar {
-  color: var(--rk, var(--dim));
-  font-size: 11px;
-}
-.scav-lvl {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--dim);
 }
 /* Ce qui MANQUE se voit : le reste de la phrase reste lisible. */
 .miss {

@@ -22,6 +22,8 @@ import {
   raidsEnabled,
   defenseReadiness,
   scavengerCount,
+  scavengeMs,
+  advanceScavenging,
   pickScavengeTargets,
   turretCount,
   repairCost,
@@ -36,6 +38,7 @@ import {
   garrisonSlots,
   raidThreatSize,
   type RaidReport,
+  type BattleField,
   defensePerLevelLabel,
   fmtSpan,
   DEFENSE_TYPES,
@@ -918,14 +921,19 @@ describe('masse visible contre menace', () => {
     }
   });
 
-  it('⚠️ la FOUILLE demande le meme nombre de vagues qu avant', () => {
+  it('⚠️ LA FOUILLE DEMANDE DÉSORMAIS PLUSIEURS VAGUES — et c’est VOULU', () => {
+    // ⚠️ RÉÉCRIT. Ce test exigeait « le MÊME nombre de vagues qu’avant la masse ×2,5 »,
+    // au motif que « la foule ne doit pas devenir une corvée ». C’était juste tant que
+    // chaque vague se lançait et se ramassait À LA MAIN — et c’est ce qui a produit le
+    // défaut signalé : « en 1 voire 2 vagues max j’ai tout ramassé ».
+    // Depuis que les allers-retours s’enchaînent SEULS et durent 4 minutes, une vague ne
+    // coûte plus un clic : le motif du test a disparu avec le geste qu’il protégeait.
     for (const L of [12, 26, 60, 90]) {
-      M.massMult = 1;
-      const avant = raidSize(L, 'betes') / scavengerCount(L);
-      M.massMult = REF;
-      const apres = raidSize(L, 'betes') / scavengerCount(L);
-      // Sinon la foule devient une corvee : meme butin, 2,5x plus d allers-retours.
-      expect(apres).toBeCloseTo(avant, 1);
+      const vagues = raidSize(L, 'betes') / scavengerCount(L);
+      // Assez de vagues pour que la fouille DURE et se regarde avancer…
+      expect(vagues).toBeGreaterThan(3);
+      // …sans jamais approcher la péremption du champ (24 h pour `dispatchMs` de 4 min).
+      expect(vagues * SCAV.dispatchMs).toBeLessThan(SCAV.fieldMs / 4);
     }
   });
 });
@@ -971,10 +979,16 @@ describe('ce qu’un niveau de défense apporte', () => {
     // qu’elle bouge quand la fonction bouge.
     // ⚠️ Niveaux choisis pour que les deux valeurs DIFFERENT : a 4 et 5 la capacite
     // est la meme, et le test passait alors meme en recopiant un chiffre au hasard.
-    expect(scavengerCount(9)).not.toBe(scavengerCount(10));
-    const a = defensePerLevelLabel('salvage', 9, ctx(9, 'salvage'));
-    expect(a).toContain(String(scavengerCount(9)));
-    expect(a).toContain(String(scavengerCount(10)));
+    // ⚠️ 9/10 ne suffit plus : depuis que le nombre de bras monte par crans de QUATRE
+    // niveaux, deux niveaux voisins donnent souvent la meme capacite — et le rendu porte
+    // desormais un SECOND levier (la vitesse) precisement pour qu aucun cran ne soit mort.
+    expect(scavengerCount(7)).not.toBe(scavengerCount(8));
+    const a = defensePerLevelLabel('salvage', 7, ctx(7, 'salvage'));
+    expect(a).toContain(String(scavengerCount(7)));
+    expect(a).toContain(String(scavengerCount(8)));
+    // …et un palier SANS bras supplementaire annonce quand meme son gain de vitesse.
+    const muet = defensePerLevelLabel('salvage', 9, ctx(9, 'salvage'));
+    expect(muet).toContain(fmtSpan(scavengeMs(10)));
     const w = defensePerLevelLabel('watchtower', 2, ctx(2, 'watchtower'));
     expect(w).toContain(fmtSpan(scoutLeadMs(3)));
   });
@@ -1697,5 +1711,147 @@ describe('⚔️ CE QU’ON APPREND EN DÉFENDANT', () => {
   it('une armée sans personne ne donne rien', () => {
     expect(siegeXp(adv(20), rep([], 0))).toBe(0);
     expect(siegeXp(adv(20), rep([{ count: 0, level: 20 }], 0))).toBe(0);
+  });
+});
+
+describe('⛏️ LE CHANTIER TRAVAILLE SEUL', () => {
+  // ⚠️ Demandé par l’utilisateur : « que les allées venues soient automatiques et assez
+  // rapides vu que c’est quand même juste devant la base », après avoir constaté « en 1
+  // voire 2 vagues max j’ai tout ramassé ». Envoyer une vague n’était pas une DÉCISION —
+  // on envoie toujours — donc c’était un clic de péage.
+  const NOW = 1_700_000_000_000;
+  const champ = (n: number): BattleField => ({
+    corpses: Array.from({ length: n }, (_, i) => ({
+      id: `c${i}`,
+      emoji: '💀',
+      name: `corps ${i}`,
+      level: 10,
+    })),
+    expiresAt: NOW + SCAV.fieldMs,
+  });
+
+  it('⚠️ SANS CHANTIER, personne ne fouille', () => {
+    expect(advanceScavenging(champ(10), 0, NOW)).toBeNull();
+    expect(scavengerCount(0)).toBe(0);
+  });
+
+  it('une vague part TOUT DE SUITE, et rien n’est ramassé avant son retour', () => {
+    const t = advanceScavenging(champ(10), 3, NOW)!;
+    expect(t.taken).toHaveLength(0);
+    expect(t.waves).toBe(0);
+    expect(t.field.dispatchUntil).toBe(NOW + SCAV.dispatchMs);
+    expect(t.field.dispatchIds).toHaveLength(3);
+    expect(t.done).toBe(false);
+  });
+
+  it('⚠️ UNE ABSENCE RATTRAPE TOUTES LES VAGUES, pas une seule', () => {
+    // Le vrai piège : l’app reste fermée une nuit. Sans enchaîner les vagues DOS À DOS,
+    // on ne rendrait qu’un aller-retour au retour et le champ pourrirait avec le reste
+    // dedans — le joueur perdrait un butin qu’il avait gagné.
+    // ⚠️ On part d’un champ dont la 1re vague est DÉJÀ en route : c’est l’état réel, le
+    // tick de base lançant la fouille dans la foulée du siège. Un champ neuf, lui, ne
+    // peut pas rattraper un passé qu’il n’a pas vécu — il démarre à l’instant de l’appel.
+    const parti = advanceScavenging(champ(12), 3, NOW)!.field;
+    const t = advanceScavenging(parti, 3, NOW + 10 * SCAV.dispatchMs)!;
+    expect(t.taken).toHaveLength(12);
+    expect(t.waves).toBe(4);
+    expect(t.done).toBe(true);
+    expect(t.field.dispatchUntil).toBeUndefined();
+  });
+
+  it('les vagues s’enchaînent DOS À DOS, pas depuis l’instant présent', () => {
+    // Après deux allers-retours, la troisième doit être en route depuis le retour de la
+    // deuxième — pas repartir de zéro à chaque ouverture de l’app.
+    const parti = advanceScavenging(champ(12), 3, NOW)!.field;
+    const t = advanceScavenging(parti, 3, NOW + 2 * SCAV.dispatchMs)!;
+    expect(t.waves).toBe(2);
+    expect(t.taken).toHaveLength(6);
+    expect(t.field.dispatchUntil).toBe(NOW + 3 * SCAV.dispatchMs);
+  });
+
+  it('⚠️ UN CORPS N’EST JAMAIS DÉPOUILLÉ DEUX FOIS', () => {
+    let f = advanceScavenging(champ(9), 3, NOW)!.field;
+    const vus: string[] = [];
+    for (let k = 1; k <= 6; k++) {
+      const t = advanceScavenging(f, 3, NOW + k * SCAV.dispatchMs)!;
+      f = t.field;
+      vus.push(...t.taken.map((x) => x.id));
+    }
+    expect(vus).toHaveLength(9);
+    expect(new Set(vus).size).toBe(9);
+  });
+
+  it('⚠️ LE CHAMP SE VIDE EN PLUSIEURS VAGUES, et c’était tout le sujet', () => {
+    // Mesuré avant : 20 corps par vague au Chantier 14 pour une armée de ~48 — donc
+    // « 1 voire 2 vagues ». Le facteur de masse retiré, la même armée en demande ~6.
+    const cap = scavengerCount(14);
+    expect(cap).toBe(4);
+    expect(Math.ceil(48 / cap)).toBeGreaterThanOrEqual(10);
+  });
+
+  it('⚠️ LE NIVEAU DU CHANTIER RACCOURCIT LE VOYAGE — à CHAQUE cran', () => {
+    // ⚠️ SECOND LEVIER, et il est NÉCESSAIRE : le nombre de bras monte par crans de
+    // quatre niveaux (`scavengerCount`), donc trois niveaux sur quatre ne changeraient
+    // RIEN sans lui — ce que « aucun niveau mort du 0 au 100 » (v0.731) interdit.
+    for (let l = 0; l < 100; l++) {
+      expect(scavengeMs(l + 1)).toBeLessThan(scavengeMs(l));
+    }
+    // ⚠️ ASYMPTOTIQUE, jamais linéaire : un aller-retour ne devient jamais instantané
+    // — on ne dépouille pas un champ de bataille en un clin d’œil.
+    expect(scavengeMs(0)).toBe(SCAV.dispatchMs);
+    expect(scavengeMs(100_000)).toBeGreaterThan(SCAV.dispatchMs * (1 - SCAV.speedMax) - 1);
+    expect(scavengeMs(100_000)).toBeGreaterThan(0);
+  });
+
+  it('⚠️ …et `advanceScavenging` HONORE cette durée', () => {
+    // Le test précédent ne juge que la FORMULE : sans celui-ci, on pourrait la garder
+    // intacte et ignorer son résultat dans la fouille — le levier serait mort en jeu
+    // tout en restant vert. On mesure donc ce qui compte : à temps écoulé ÉGAL, un
+    // Chantier plus haut ramène davantage de corps.
+    const ecoule = 30 * 60_000;
+    const vagues = (lvl: number) => {
+      const parti = advanceScavenging(champ(200), 1, NOW, scavengeMs(lvl))!.field;
+      return advanceScavenging(parti, 1, NOW + ecoule, scavengeMs(lvl))!.waves;
+    };
+    expect(vagues(40)).toBeGreaterThan(vagues(0));
+    // Et le défaut par défaut reste le forfait : un appel sans durée ne change rien.
+    const nu = advanceScavenging(
+      advanceScavenging(champ(200), 1, NOW)!.field,
+      1,
+      NOW + ecoule,
+    )!.waves;
+    expect(nu).toBe(vagues(0));
+  });
+
+  it('⚠️ LE CUMUL PART AVEC LE CHAMP QUI POURRIT — pas d’orphelin', () => {
+    // Un relevé de fouille SANS champ n’a plus de propriétaire : il se retrouverait
+    // dans le rapport de pillage du siège SUIVANT, qui annoncerait un butin déjà
+    // encaissé. En pratique la fouille rattrape tout bien avant la péremption — ce
+    // cas ne reste ouvert que sans Chantier, où justement rien n’a été relevé.
+    const b = emptyBase(7, 0);
+    b.field = champ(5);
+    b.pillage = {
+      corpses: 3,
+      waves: 1,
+      gold: 40,
+      scrap: 2,
+      keys: 0,
+      summonStones: 1,
+      items: 0,
+      startedAt: NOW,
+    };
+    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0 };
+    // Champ encore frais : on ne touche à rien.
+    expect(advanceBase(b, ctx, NOW).base.pillage).not.toBeNull();
+    // Champ pourri : les deux s’en vont ENSEMBLE.
+    const apres = advanceBase(b, ctx, NOW + SCAV.fieldMs + 1).base;
+    expect(apres.field).toBeNull();
+    expect(apres.pillage).toBeNull();
+  });
+
+  it('un aller-retour est COURT — le chantier est devant la porte', () => {
+    expect(SCAV.dispatchMs).toBeLessThanOrEqual(5 * 60_000);
+    // …et le champ reste frais bien plus longtemps qu’il n’en faut pour tout ramasser.
+    expect(SCAV.fieldMs / SCAV.dispatchMs).toBeGreaterThan(50);
   });
 });

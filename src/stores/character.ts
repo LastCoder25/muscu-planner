@@ -89,7 +89,8 @@ import {
   defenseUpgradeCost,
   defenseUpgradeScrap,
   scavengerCount,
-  pickScavengeTargets,
+  scavengeMs,
+  advanceScavenging,
   lootCorpses,
   repairStructure,
   totalRepairCost,
@@ -100,7 +101,6 @@ import {
   fatigueMsFor,
   healCost,
   woundRemainingMs,
-  SCAV,
   type BaseState,
   type DefenseId,
   type DefenseStructure,
@@ -1541,10 +1541,19 @@ export const useCharacterStore = defineStore('character', () => {
     now: number,
     ctx: { playerLevel: number; activeDays7: number; globalXp: number; hero: Combatant | null },
   ): Promise<{ detected: Raid | null; report: RaidReport | null }> {
+    // ⚠️ LA FOUILLE PASSE EN PREMIER, et l’ordre n’est pas cosmétique — DEUX raisons.
+    // (1) Elle ÉCRIT (butin crédité, champ avancé) : calculer `advanceBase` avant elle
+    //     puis persister son `base` écraserait la fouille à chaque tick, en silence.
+    // (2) `advanceBase` SUPPRIME un champ périmé. Passer après, c’est perdre le butin
+    //     d’une absence longue au lieu de le rattraper — or on ne punit jamais l’absence.
+    // Elle avance siège ou pas : elle vit sa vie pendant que le joueur fait autre chose.
+    if (!row.value) return { detected: null, report: null };
+    await tickScavengers(userId, now, ctx.playerLevel);
+    // ⚠️ RELU APRÈS l’await : la fouille vient peut-être de créditer or et objets, et
+    // `cur` sert plus bas à reconstruire l’inventaire.
     const cur = row.value;
     if (!cur) return { detected: null, report: null };
-    const start = baseOf(cur, now);
-    const t = advanceBase(start, ctx, now);
+    const t = advanceBase(baseOf(cur, now), ctx, now);
     if (!t.dueRaid) {
       if (t.changed) await persist(userId, { base: t.base });
       return { detected: t.detected, report: null };
@@ -1761,88 +1770,95 @@ export const useCharacterStore = defineStore('character', () => {
     return cost;
   }
 
-  /** Envoie une vague de fouilleurs sur le champ de bataille. Renouvelable autant de fois
-   *  qu'on veut tant que les corps sont frais : un petit chantier fait plusieurs
-   *  allers-retours, il ne condamne pas le butin. */
-  async function sendScavengers(userId: string, now: number) {
+  /** ⛏️ LE CHANTIER TRAVAILLE SEUL, appelé à chaque tick de base.
+   *
+   *  ⚠️ Remplace `sendScavengers` / `previewScavengers` / `collectScavengers` —
+   *  trois fonctions et deux clics par vague. Envoyer des fossoyeurs n’était pas une
+   *  DÉCISION (on envoie toujours, il n’y a rien à arbitrer) : c’était un péage. Demandé
+   *  par l’utilisateur, qui avait aussi relevé que tout se ramassait « en 1 voire 2
+   *  vagues max ».
+   *
+   *  ⚠️ LE BUTIN EST CRÉDITÉ VAGUE PAR VAGUE, et le rapport ne fait que RÉCAPITULER.
+   *  L’accumuler pour ne le verser qu’à la fin le perdrait si le champ pourrissait
+   *  avant — 24 h suffisent largement, mais « largement » n’est pas « toujours ». */
+  async function tickScavengers(userId: string, now: number, playerLevel: number) {
     const cur = row.value;
     const field = cur?.base?.field;
-    if (!cur?.base || !field) return;
-    if (field.dispatchUntil && now < field.dispatchUntil) return; // vague déjà en route
-    const cap = scavengerCount(defenseLevel(cur.base.defenses, 'salvage'));
-    if (cap <= 0) throw new Error('Construis un Fosse commune pour dépouiller les corps.');
-    const targets = pickScavengeTargets(field, cap);
-    if (!targets.length) return;
-    await persistOptimistic(userId, {
-      base: {
-        ...cur.base,
-        field: {
-          ...field,
-          dispatchUntil: now + SCAV.dispatchMs,
-          dispatchIds: targets.map((c) => c.id),
+    if (!cur?.base || !field) return null;
+    const lvl = defenseLevel(cur.base.defenses, 'salvage');
+    const t = advanceScavenging(field, scavengerCount(lvl), now, scavengeMs(lvl));
+    if (!t) return null;
+    // ⚠️ Rien de neuf → on n’écrit PAS : ce tick bat chaque seconde, et persister à vide
+    // enverrait une requête par seconde pendant toute la fouille.
+    if (!t.taken.length && t.field.dispatchUntil === field.dispatchUntil) return null;
+
+    const patch: Record<string, unknown> = {};
+    let base: BaseState = { ...cur.base, field: t.field };
+
+    if (t.taken.length) {
+      const faction = cur.base.lastReport?.faction ?? 'bandits';
+      const loot = lootCorpses(
+        t.taken,
+        faction,
+        playerLevel,
+        ((t.field.dispatchUntil ?? now) ^ cur.base.seed) >>> 0 || 1,
+        garrisonFor(cur, now, playerLevel).lootPct ?? 0,
+      );
+      const drops = loot.items.map((it) => ({ ...it, id: crypto.randomUUID() }));
+      patch.gold = cur.gold + loot.gold;
+      patch.summon_stones = cur.summon_stones + loot.summonStones;
+      patch.keys = cur.keys + loot.keys;
+      patch.scrap = cur.scrap + loot.scrap;
+      if (drops.length) {
+        patch.inventory = [...cur.inventory, ...drops];
+        patch.set_pieces_seen = mergeSetSeen(cur.set_pieces_seen, drops);
+      }
+      const p = cur.base.pillage;
+      base = {
+        ...base,
+        pillage: {
+          corpses: (p?.corpses ?? 0) + t.taken.length,
+          waves: (p?.waves ?? 0) + t.waves,
+          gold: (p?.gold ?? 0) + loot.gold,
+          scrap: (p?.scrap ?? 0) + loot.scrap,
+          keys: (p?.keys ?? 0) + loot.keys,
+          summonStones: (p?.summonStones ?? 0) + loot.summonStones,
+          items: (p?.items ?? 0) + drops.length,
+          startedAt: p?.startedAt ?? now,
         },
-      },
-    });
-  }
+      };
+    }
 
-  /** Récupère ce que la vague a ramené. La richesse vient du NIVEAU DES CORPS, et la
-   *  rareté des objets reste plafonnée par le niveau du joueur (anti-runaway). */
-  /** Ce que les fouilleurs RAPPORTENT, sans rien créditer — l'aperçu qu'on montre avant
-   *  de ramasser. ⚠️ La graine est celle du DÉPART (`dispatchUntil`), pas `now` : sinon
-   *  l'aperçu et la récupération tireraient deux butins différents, et l'écran mentirait. */
-  function previewScavengers(now: number, playerLevel: number) {
-    const cur = row.value;
-    const field = cur?.base?.field;
-    if (!cur?.base || !field?.dispatchUntil || now < field.dispatchUntil) return null;
-    const ids = new Set(field.dispatchIds ?? []);
-    const taken = field.corpses.filter((c) => ids.has(c.id) && !c.looted);
-    const loot = lootCorpses(
-      taken,
-      cur.base.lastReport?.faction ?? 'bandits',
-      playerLevel,
-      (field.dispatchUntil ^ cur.base.seed) >>> 0 || 1,
-      garrisonFor(cur, now, playerLevel).lootPct ?? 0,
-    );
-    return { ...loot, corpses: taken.length };
-  }
+    // ⚠️ LE RAPPORT PART QUAND LE CHAMP EST VIDE, et il emporte le cumul : sans lui, une
+    // fouille étalée sur des heures ne laisserait aucune trace de ce qu’elle a rapporté.
+    const fini = t.done && base.pillage;
+    if (fini) {
+      const p = base.pillage!;
+      const msg: ExpeditionMessage = {
+        id: crypto.randomUUID(),
+        title: '📜 Rapport de pillage',
+        level: cur.base.lastReport?.level ?? playerLevel,
+        win: true,
+        text:
+          `${p.corpses} corps dépouillés en ${p.waves} vague${p.waves > 1 ? 's' : ''}` +
+          (p.items ? ` · ${p.items} objet${p.items > 1 ? 's' : ''} au sac.` : '.'),
+        gold: p.gold,
+        energy: 0,
+        summonStones: p.summonStones,
+        scrap: p.scrap,
+        key: p.keys,
+        resolvedAt: now,
+        // ⚠️ Déjà crédité vague par vague : ce message se LIT, il ne se réclame pas.
+        read: false,
+      };
+      patch.messages = [msg, ...cur.messages].slice(0, 30);
+      base = { ...base, pillage: null, field: null };
+    }
 
-  async function collectScavengers(userId: string, now: number, playerLevel: number) {
-    const cur = row.value;
-    const field = cur?.base?.field;
-    if (!cur?.base || !field?.dispatchUntil || now < field.dispatchUntil) return null;
-    const ids = new Set(field.dispatchIds ?? []);
-    const taken = field.corpses.filter((c) => ids.has(c.id) && !c.looted);
-    const faction = cur.base.lastReport?.faction ?? 'bandits';
-    const loot = lootCorpses(
-      taken,
-      faction,
-      playerLevel,
-      (field.dispatchUntil ^ cur.base.seed) >>> 0 || 1,
-      garrisonFor(cur, now, playerLevel).lootPct ?? 0,
-    );
-    const drops = loot.items.map((it) => ({ ...it, id: crypto.randomUUID() }));
-    await persistOptimistic(userId, {
-      gold: cur.gold + loot.gold,
-      summon_stones: cur.summon_stones + loot.summonStones,
-      keys: cur.keys + loot.keys,
-      // 🔩 L'acier d'une armée en déroute — c'est lui qui fait suivre la ferraille au
-      // rythme des séances depuis que la fréquence des sièges en dépend (v0.702).
-      scrap: cur.scrap + loot.scrap,
-      inventory: drops.length ? [...cur.inventory, ...drops] : cur.inventory,
-      set_pieces_seen: drops.length
-        ? mergeSetSeen(cur.set_pieces_seen, drops)
-        : cur.set_pieces_seen,
-      base: {
-        ...cur.base,
-        field: {
-          corpses: field.corpses.map((c) => (ids.has(c.id) ? { ...c, looted: true } : c)),
-          expiresAt: field.expiresAt,
-        },
-      },
-    });
-    return { ...loot, items: drops, corpses: taken.length };
+    patch.base = base;
+    await persistOptimistic(userId, patch);
+    return { ...t, fini: !!fini };
   }
-
   async function collectFilons(userId: string, now: number) {
     const cur = row.value;
     if (!cur || !cur.buildings.length) return null;
@@ -2072,9 +2088,6 @@ export const useCharacterStore = defineStore('character', () => {
     upgradeDefense,
     repairDefense,
     repairAll,
-    sendScavengers,
-    previewScavengers,
-    collectScavengers,
     toggleGarrison,
     setGarrison,
     autoAssignGarrison,

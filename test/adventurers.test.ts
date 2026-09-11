@@ -203,9 +203,7 @@ describe('promotion — deux verrous, et le sport ne doit pas être le frein hab
     // Un convoi TERMINÉ ne bloque plus.
     expect(canPromoteNow({ ...pret, busyUntil: NOW - 1 }, ctx)).toBe(true);
     // Une formation déjà en cours : la décision est prise.
-    expect(canPromoteNow({ ...pret, training: { classId: 'x', until: NOW + 1 } }, ctx)).toBe(
-      false,
-    );
+    expect(canPromoteNow({ ...pret, training: { classId: 'x', until: NOW + 1 } }, ctx)).toBe(false);
     // …et les deux verrous de `canPromote` restent, bien sûr.
     expect(canPromoteNow({ ...pret, level: need - 1 }, ctx)).toBe(false);
     expect(canPromoteNow(pret, { ...ctx, guildLevel: need - 1 })).toBe(false);

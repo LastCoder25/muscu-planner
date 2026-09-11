@@ -135,6 +135,22 @@ interface HeroWound {
   until: number;
 }
 
+/** 📜 CE QUE LA FOUILLE A RAPPORTÉ EN TOUT — le rapport de pillage, en cours d’écriture.
+ *
+ *  ⚠️ On cumule des COMPTES, pas des objets : le butin est crédité vague par vague (rien
+ *  ne peut donc se perdre si le champ pourrit avant la fin), et le rapport ne fait que
+ *  RÉCAPITULER. Stocker les objets ici les mettrait en double. */
+interface PillageTally {
+  corpses: number;
+  waves: number;
+  gold: number;
+  scrap: number;
+  keys: number;
+  summonStones: number;
+  items: number;
+  startedAt: number;
+}
+
 export interface BaseState {
   defenses: DefenseStructure[];
   /** Ids des familiers POSTÉS au chenil (max `garrisonSlots(niveau)`). Ils restent dans le sac :
@@ -145,6 +161,8 @@ export interface BaseState {
   nextRaidAt: number;
   field: BattleField | null;
   freeze: ProductionFreeze | null;
+  /** Fouille en cours : ce qui a déjà été remonté du champ (cf. `PillageTally`). */
+  pillage?: PillageTally | null;
   lastReport: RaidReport | null;
   seed: number;
 }
@@ -495,17 +513,43 @@ export const RAID = {
  *  petit chantier fait plusieurs allers-retours, il ne condamne pas le butin. */
 export const SCAV = {
   fieldMs: 24 * 3600_000, // les corps pourrissent au bout de 24 h
-  dispatchMs: 40 * 60_000, // durée d'une vague de fouille
+  /** Durée d’UN aller-retour. ⚠️ 40 min → 4 min : le chantier est **juste devant la
+   *  porte**, et depuis que les vagues s’enchaînent SEULES une longue attente ne crée
+   *  plus aucune décision — elle ne fait que retarder. Signalé par l’utilisateur. */
+  dispatchMs: 4 * 60_000,
+  /** Ce que le niveau du Chantier retire AU PLUS au temps d’un aller-retour, et le
+   *  niveau où il en a retiré la moitié. Asymptotique : chaque cran gratte, aucun ne
+   *  ramène jamais à zéro — on ne dépouille pas un champ instantanément. */
+  speedMax: 0.7,
+  speedHalf: 20,
 } as const;
+
+/** ⏱️ DURÉE D’UN ALLER-RETOUR, raccourcie par le niveau du Chantier.
+ *
+ *  ⚠️ SECOND LEVIER, et il est NÉCESSAIRE : le nombre de bras monte par crans de quatre
+ *  niveaux, donc trois niveaux sur quatre ne changeraient rien — ce que « aucun niveau
+ *  mort du 0 au 100 » (v0.731) interdit. Même réponse qu’au Comptoir : le NOMBRE monte
+ *  lentement, la VITESSE monte en continu.
+ *
+ *  ⚠️ ASYMPTOTIQUE, jamais linéaire : un aller-retour ne peut pas devenir instantané.
+ *  Mesuré : 4 min à neuf, ~2 min 50 au niveau 14, ~1 min 45 au niveau 90. */
+export function scavengeMs(level: number): number {
+  const l = Math.max(0, level);
+  return Math.round(SCAV.dispatchMs * (1 - SCAV.speedMax * (l / (l + SCAV.speedHalf))));
+}
 
 /** Fossoyeurs envoyés PAR VAGUE — le seul effet du niveau du chantier. Il répond à une
  *  question unique et lisible : « combien j'en ramasse d'un coup ». */
 export function scavengerCount(level: number): number {
-  // ⚠️ La capacite suit la MASSE (`RAID.massMult`) : il y a ~2,5x plus de corps, chacun
-  // ~2,5x moins riche, donc il faut pouvoir en ramasser ~2,5x plus dun coup. Sans cela, la
-  // meme valeur de champ de bataille aurait demande 7 allers-retours au lieu de 3 : la
-  // foule serait devenue une corvee, alors quelle ne doit rien changer a leffort.
-  return level <= 0 ? 0 : Math.round((1 + Math.floor(level / 2)) * RAID.massMult);
+  // ⚠️ LE FACTEUR DE MASSE EST RETIRÉ, et son motif s’est INVERSÉ. Il avait été ajouté en
+  // v0.720 pour qu’un champ 2,5× plus peuplé ne demande pas 2,5× plus d’allers-retours —
+  // « la foule ne doit pas devenir une corvée ». C’était juste tant que chaque vague se
+  // lançait et se ramassait À LA MAIN. Depuis qu’elles s’enchaînent seules et durent
+  // 4 minutes, un aller-retour ne COÛTE plus rien — et le joueur a signalé l’effet de
+  // bord : « en 1 voire 2 vagues max j’ai tout ramassé ». Mesuré, la capacité valait 20
+  // corps par vague pour une armée de ~48. Sans le facteur : ~6 vagues, soit une fouille
+  // qui DURE un peu et qu’on regarde avancer.
+  return level <= 0 ? 0 : 1 + Math.floor(level / 4);
 }
 
 // ── Rosters par faction ──
@@ -2132,11 +2176,15 @@ export function defensePerLevelLabel(
     case 'salvage': {
       const a = scavengerCount(l);
       const b = scavengerCount(next);
-      if (b > a) return `Niveau ${next} : ${a} → ${b} corps fouillés par vague (+${b - a})`;
-      const step = nextStepLevel(scavengerCount, l);
-      return step
-        ? `${a} corps par vague. Ce palier-ci ne change rien — le prochain gain est au niveau ${step} (${scavengerCount(step)}).`
-        : `${a} corps par vague — déjà au maximum.`;
+      // ⚠️ DEUX leviers, et il faut les DEUX : le nombre de bras monte par crans de
+      // quatre niveaux, la vitesse à chaque cran. Sans elle, trois niveaux sur quatre
+      // ne changeraient rien — « aucun niveau mort du 0 au 100 » (v0.731).
+      const vite = `aller-retour ${fmtSpan(scavengeMs(l))} → ${fmtSpan(scavengeMs(next))}`;
+      return b > a
+        ? `Niveau ${next} : ${a} → ${b} corps par vague (+${b - a}), ${vite}`
+        : `Niveau ${next} : ${vite} (${a} corps par vague — le bras suivant au niveau ${
+            nextStepLevel(scavengerCount, l) ?? next
+          })`;
     }
     case 'kennel':
       // ⚠️ Le chenil ne donne PAS de places (elles suivent le niveau du personnage) : il
@@ -2382,7 +2430,11 @@ export function advanceBase(
 
   // Le champ de bataille pourrit.
   if (b.field && now >= b.field.expiresAt) {
-    b = { ...b, field: null };
+    // ⚠️ Le CUMUL de la fouille part avec lui : un relevé sans champ est un orphelin,
+    // et il se retrouverait dans le rapport du siège SUIVANT. En pratique la fouille
+    // rattrape tout bien avant (mesuré : moins de 3 h pour vider un champ, contre 24 h
+    // de péremption) — ce cas ne reste ouvert que sans Chantier, où rien n’a été relevé.
+    b = { ...b, field: null, pillage: null };
     changed = true;
   }
 
@@ -2471,6 +2523,78 @@ export function pickScavengeTargets(field: BattleField, capacity: number): Corps
     .filter((c) => !c.looted)
     .sort((a, b) => (b.champion ? 1 : 0) - (a.champion ? 1 : 0) || b.level - a.level)
     .slice(0, Math.max(0, capacity));
+}
+
+/** Ce qu’un tick de fouille a produit. */
+export interface ScavengeTick {
+  field: BattleField;
+  /** Corps dépouillés pendant ce tick, toutes vagues confondues. */
+  taken: Corpse[];
+  /** Allers-retours achevés — de quoi dire « 3 vagues » dans le rapport. */
+  waves: number;
+  /** Plus rien à ramasser : le chantier a fini, le rapport peut partir. */
+  done: boolean;
+}
+
+/** ⛏️ LE CHANTIER TRAVAILLE SEUL — les vagues partent et reviennent sans qu’on clique.
+ *
+ *  ⚠️ Demandé par l’utilisateur : « que les allées venues soient automatiques et assez
+ *  rapides vu que c’est quand même juste devant la base ». Et c’est juste sur le fond :
+ *  envoyer une vague n’était pas une DÉCISION — on envoie toujours, il n’y a rien à
+ *  arbitrer — c’était un clic de péage. Ce qui reste un choix, c’est de monter le
+ *  Chantier pour ramasser plus vite ; le reste est de la logistique.
+ *
+ *  ⚠️ RATTRAPE TOUT LE TEMPS ÉCOULÉ. L’app peut rester fermée une nuit : sans la boucle
+ *  on ne récolterait qu’UNE vague au retour et le champ pourrirait avec le reste dedans.
+ *  Les vagues s’enchaînent DOS À DOS (l’horloge suit le chantier, pas `now`), sinon une
+ *  absence de six heures ne vaudrait qu’un seul aller-retour.
+ *
+ *  ⚠️ PURE, et elle ne connaît ni butin ni joueur : elle dit seulement QUELS CORPS ont
+ *  été dépouillés. `lootCorpses` reste la seule autorité sur leur valeur — deux chemins
+ *  vers le butin finiraient par diverger. */
+export function advanceScavenging(
+  field: BattleField,
+  capacity: number,
+  now: number,
+  /** Durée d’un aller-retour — `scavengeMs(niveau du Chantier)` en jeu. */
+  waveMs: number = SCAV.dispatchMs,
+): ScavengeTick | null {
+  if (capacity <= 0) return null;
+  let f: BattleField = { ...field, corpses: field.corpses.map((x) => ({ ...x })) };
+  const taken: Corpse[] = [];
+  let waves = 0;
+
+  /** Réserve les prochains corps à l’instant où le chantier se libère. */
+  const partir = (a: number): boolean => {
+    const cibles = pickScavengeTargets(f, capacity);
+    if (!cibles.length) return false;
+    f = { ...f, dispatchUntil: a + waveMs, dispatchIds: cibles.map((x) => x.id) };
+    return true;
+  };
+
+  const enRoute = !!f.dispatchUntil;
+  // Rien en route : on lance tout de suite — le chantier ne chôme pas.
+  if (!enRoute) partir(now);
+
+  // Puis on vide toutes les vagues qui ont eu le temps de rentrer, en relançant à la
+  // seconde où chacune revient. La boucle est bornée par les corps : chaque tour en
+  // consomme `capacity`.
+  while (f.dispatchUntil && now >= f.dispatchUntil) {
+    const retour = f.dispatchUntil;
+    const ids = new Set(f.dispatchIds ?? []);
+    for (const x of f.corpses) if (ids.has(x.id) && !x.looted) taken.push(x);
+    f = {
+      ...f,
+      corpses: f.corpses.map((x) => (ids.has(x.id) ? { ...x, looted: true } : x)),
+      dispatchUntil: undefined,
+      dispatchIds: undefined,
+    };
+    waves++;
+    if (!partir(retour)) break;
+  }
+
+  const done = !f.corpses.some((x) => !x.looted);
+  return { field: f, taken, waves, done };
 }
 
 export function remainingCorpses(field: BattleField | null): number {
