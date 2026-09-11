@@ -43,7 +43,7 @@ export const CHEST_MAX_MULT = 1.5;
  *     épave) → on garde l'ancre « épaves », déjà généreuse ;
  *   • la clé est la plus rare de toutes : 0,2 par séance, soit 0,8 par SEMAINE. Une clé
  *     par coffre est déjà, à elle seule, plus qu'une semaine de donjons. */
-export const CHEST = {
+const CHEST = {
   wrecks: 2, // ferraille ≈ 2 épaves (la ferraille ne se farme pas)
   sessionShare: 0.9, // or et pierres ≈ 1 séance de donjons
   energyCap: 120, // ⚡ complément borné, jamais un substitut au sport
@@ -59,7 +59,7 @@ export interface ComboChest {
 }
 
 /** Rendement d'UNE épave, à la formule exacte de la carte. */
-export function wreckYield(level: number): number {
+function wreckYield(level: number): number {
   const L = Math.max(1, level);
   const rtH = (2 * travelOneWayMin(L, 0.5)) / 60;
   return Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * travelFactor(rtH));

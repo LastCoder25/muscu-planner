@@ -17,7 +17,7 @@ import { pickLabyFoe, LABY_ROSTERS } from '@/data/labyrinthFoes';
 
 /** Un corps ennemi sur le terrain. Coordonnées en fraction du terrain ([0,1]²,
  *  le héros démarre au centre) → le rendu reste responsive sans toucher au modèle. */
-export interface StageFoe {
+interface StageFoe {
   name: string;
   emoji: string;
   archetype: string; // identité visuelle (aura + idle), cf. CombatStage
@@ -27,7 +27,7 @@ export interface StageFoe {
 }
 
 /** Un événement du log, rattaché à un corps et à une position dans le temps. */
-export interface StageBeat {
+interface StageBeat {
   who: 'player' | 'monster';
   type: CombatEvent['type'];
   damage: number;

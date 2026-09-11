@@ -20,7 +20,7 @@ export interface ComboSet {
   assisted?: boolean; // exo poids du corps fait assisté (élastique/machine) → XP ×0,6
 }
 // Ancien format (reps cumulées/jour) — lu pour migration des défis existants.
-export interface ComboLegEntry {
+interface ComboLegEntry {
   date: string;
   reps: number;
 }
@@ -143,7 +143,7 @@ export function comboComplete(c: ComboChallenge): boolean {
 }
 
 /** Fraction d'avance d'un Défi 360 terminé : jours gagnés / durée (0..~1). */
-export function comboEarlyFraction(c: ComboChallenge): number {
+function comboEarlyFraction(c: ComboChallenge): number {
   if (!comboComplete(c) || c.duration_days <= 0) return 0;
   const dates = c.legs.flatMap((l) => legSets(l).map((s) => s.date)).filter(Boolean);
   if (!dates.length) return 0;
@@ -157,7 +157,7 @@ export function comboEarlyFraction(c: ComboChallenge): number {
 // re-bonifiée (en plus de son XP de base) → « en faire plus » est valorisé, pas
 // juste compté. Pondéré par la part d'exos dépassés (`balance`) pour récompenser
 // l'effort RÉPARTI sur le full-body plutôt que le bourrage d'un seul exo.
-export const COMBO_SURPASS_MULT = 0.5;
+const COMBO_SURPASS_MULT = 0.5;
 
 /** Détail du dépassement d'un Défi 360 (séries au-delà de l'objectif). */
 export function comboOverachievement(c: ComboChallenge): {
@@ -194,14 +194,14 @@ export function comboOverachievement(c: ComboChallenge): {
 // CUMULÉE de la prime de bouclage de cet exo → le principal en porte l'essentiel (80 %),
 // le secondaire et le maximal motivent (fini le tout-ou-rien ; un exo à la traîne ne
 // bloque plus les autres). Le dépassement est FUSIONNÉ dans le maximal.
-export const COMBO_TIER_SECONDARY = 0.8; // secondaire = 80 % de la cible
-export const COMBO_TIER_MAX = 1.2; // maximal = 120 % de la cible
+const COMBO_TIER_SECONDARY = 0.8; // secondaire = 80 % de la cible
+const COMBO_TIER_MAX = 1.2; // maximal = 120 % de la cible
 // Parts CUMULÉES de la prime d'un exo selon le palier atteint (secondaire 15 %,
 // principal +80 % → 95 %, maximal +5 % → 100 %).
 // Parts CUMULÉES de la prime de bouclage d'un exo par palier. Le principal (la cible)
 // porte l'essentiel ; le maximal dépasse 1 volontairement : franchir 120 % rapporte
 // PLUS qu'un bouclage pile — c'est la prime de dépassement, bornée par le palier.
-export const COMBO_TIER_SHARE = { none: 0, secondary: 0.15, principal: 0.95, max: 1.2 } as const;
+const COMBO_TIER_SHARE = { none: 0, secondary: 0.15, principal: 0.95, max: 1.2 } as const;
 export type ComboTier = keyof typeof COMBO_TIER_SHARE;
 
 /** Palier atteint par un exo d'après son avancement (fait / cible). */
@@ -258,7 +258,7 @@ export function legBarGeometry(l: ComboLeg): {
 /** Effort PLANIFIÉ d'un exo jusqu'à sa cible (base de sa part de prime) = reps réelles
  *  des séries comptées × poids-de-rep, plan figé (COMBO_PLAN_REPS) pour les séries
  *  manquantes. Correctif 135fa252 : symétrique avec les petits défis (prime ∝ effort réel). */
-export function legPlannedEffort(l: ComboLeg): number {
+function legPlannedEffort(l: ComboLeg): number {
   const sets = legSets(l);
   if (legMode(l) !== 'sets') {
     // Mode REPS/DURÉE : effort = reps (ou secondes) réalisées jusqu'à l'objectif.
@@ -462,7 +462,7 @@ export interface ComboSessionExo {
   rep_max: number;
 }
 
-export const COMBO_EXEC_SEC = 40; // durée d'exécution moyenne d'une série
+const COMBO_EXEC_SEC = 40; // durée d'exécution moyenne d'une série
 
 /** Nb de séries qui tiennent dans une séance de `minutes` (exécution + repos). */
 export function comboSessionSetBudget(minutes: number, restSec: number): number {
@@ -611,7 +611,7 @@ const VARIETY_CAP: Record<ComboVariety, number> = { low: 1, med: 2, high: 3 };
 const SETS_PER_EXO = 5;
 
 /** Volume hebdo de base par muscle (séries) selon le niveau (repère hypertrophie). */
-export function comboBaseWeekly(level: Level): number {
+function comboBaseWeekly(level: Level): number {
   return level === 'debutant' ? 9 : level === 'avance' ? 15 : 12;
 }
 /** Séries/sem cible pour un groupe selon niveau + volume (essentiel ×1, accessoire ×0.7). */

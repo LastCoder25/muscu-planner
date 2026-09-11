@@ -32,7 +32,7 @@ export interface SiegeBody {
 }
 
 /** Un temps de l'animation. Chaque événement du log en produit un. */
-export interface SiegeBeat {
+interface SiegeBeat {
   group: number;
   /** `turret` = la base tire ; `foe` = un assaillant frappe le mur. */
   kind: 'turret' | 'foe';

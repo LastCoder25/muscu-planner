@@ -10,7 +10,7 @@
 // (cf. tickets f2fb146c « unité la plus logique » + 56c9f532 « pas de durée sur la corde ».)
 
 /** Exos faisables aussi bien en RÉPÉTITIONS qu'en DURÉE (choix proposé à l'utilisateur). */
-export const DUAL_UNIT_EXERCISE_IDS = new Set<string>([
+const DUAL_UNIT_EXERCISE_IDS = new Set<string>([
   'ex_jump_rope', // corde à sauter
   'ex_jumping_jacks', // jumping jacks
   'ex_high_knees', // montées de genoux

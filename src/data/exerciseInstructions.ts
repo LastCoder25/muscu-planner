@@ -7,7 +7,7 @@ export interface ExerciseGuide {
   tip?: string;
 }
 
-export const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
+const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
   ex_squat_barbell: {
     steps: [
       'Barre sur le haut du dos, pieds largeur d’épaules, pointes légèrement ouvertes.',

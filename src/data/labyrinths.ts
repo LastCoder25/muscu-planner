@@ -21,7 +21,7 @@ export interface Labyrinth {
 }
 
 // Préfixe des ids de palier nettoyés dans characters.cleared_dungeons.
-export const LABY_CLEAR_PREFIX = 'laby:';
+const LABY_CLEAR_PREFIX = 'laby:';
 export const labyClearId = (id: string) => `${LABY_CLEAR_PREFIX}${id}`;
 
 // 10 paliers — UN PAR RANG DE FAMILIER (G → SSS). Le `dropLevel` place le PLAFOND de rang

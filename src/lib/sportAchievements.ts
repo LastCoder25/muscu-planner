@@ -5,7 +5,7 @@
 // (pas de stockage). Aucune dépendance Vue/Supabase.
 
 export type SportCategory = 'muscu' | 'cardio' | 'autre' | 'specifique';
-export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
+type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
 
 // Une séance normalisée (muscu / cardio / autre), source des trophées.
 export interface SportEntry {

@@ -38,7 +38,7 @@ export type BuildResource =
 export type BuildingCategory = 'producer' | 'utility';
 
 // Effet global d'un bâtiment `utility` (par niveau). Extensible (tour, forge…).
-export interface BuildingEffect {
+interface BuildingEffect {
   storageMultPerLvl?: number; // Entrepôt : +X au multiplicateur de stockage / niveau
   expeSpeedPerLvl?: number; // Tour : −X% temps de trajet / niveau (plus tard)
   expeWinPerLvl?: number; // Tour : +X% chance / niveau (plus tard)
@@ -415,12 +415,7 @@ export function labyrinthUnlocked(buildings: Building[]): boolean {
  *  jamais atteindre sa borne : c'est ce qui permet à un effet borné par nature (un temps
  *  de trajet ne peut pas devenir nul) de continuer à récompenser cent niveaux.
  *  `tailHalf` = combien de niveaux au-delà du plafond pour toucher la moitié de la queue. */
-export function beyondCap(
-  level: number,
-  capLevel: number,
-  tailMax: number,
-  tailHalf: number,
-): number {
+function beyondCap(level: number, capLevel: number, tailMax: number, tailHalf: number): number {
   const over = Math.max(0, level - capLevel);
   return over > 0 ? (tailMax * over) / (over + tailHalf) : 0;
 }
@@ -436,7 +431,7 @@ export function labyrinthLuckBonus(buildings: Building[]): number {
 const BOSS_ALTAR_ID = 'boss_altar';
 const BOSS_ROLL_FLOOR_CAP = 0.85; // plancher de qualité de roll max (jamais 100 % garanti)
 /** Niveau de l'Autel des boss posé (0 si aucun). */
-export function bossAltarLevel(buildings: Building[]): number {
+function bossAltarLevel(buildings: Building[]): number {
   return buildings.find((b) => b.typeId === BOSS_ALTAR_ID)?.level ?? 0;
 }
 /** L'Autel des boss est-il construit ? */

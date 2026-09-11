@@ -1,6 +1,6 @@
 // Généré : illustrations d'exercices (free-exercise-db, domaine public / Unlicense).
 // Mappées sur nos exos ; bundlées dans public/exercises/. Voir scripts de génération.
-export const EXERCISE_IMAGES: Record<string, string> = {
+const EXERCISE_IMAGES: Record<string, string> = {
   // Conditionnement / challenge + machines + prépa physique (ajout 2026-08).
   ex_abductors: '/exercises/ex_abductors.jpg',
   ex_adductors: '/exercises/ex_adductors.jpg',

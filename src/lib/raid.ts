@@ -101,7 +101,7 @@ export interface BattleField {
 /** Production gelée après une défaite. Levée par une SÉANCE DE SPORT (le raccourci) ou
  *  toute seule au bout de `RAID.freezeMs` (le garde-fou : l'app ne réclame jamais
  *  d'entraînement — une semaine de repos ne doit pas geler la base). */
-export interface ProductionFreeze {
+interface ProductionFreeze {
   until: number;
   /** XP globale à l'instant du gel : toute XP en plus = une séance faite → dégel. */
   atXp: number;
@@ -118,7 +118,7 @@ export interface ProductionFreeze {
  *  convalescence n'est jamais perdue, seulement différée. Et la durée reste très courte
  *  devant l'intervalle entre deux sièges (cf. `WOUND_MAX_MS` vs `intervalActiveMs`), sans
  *  quoi un héros à l'infirmerie manquerait la défense suivante — la spirale, encore. */
-export interface HeroWound {
+interface HeroWound {
   until: number;
 }
 
@@ -244,7 +244,7 @@ export function defenseType(id: DefenseId): DefenseType | undefined {
  *  ⚠️ Surtout pas 0 : une muraille à 0 rendrait la base sans PV, donc la défaite
  *  suivante certaine, donc de nouveaux dégâts — exactement la spirale que le modèle
  *  « endommagé plutôt que rétrogradé » existe pour éviter. Diminuée, jamais annulée. */
-export const DAMAGED_EFFICIENCY = 0.5;
+const DAMAGED_EFFICIENCY = 0.5;
 
 /** Niveau d'une structure (0 si absente). L'état « endommagé » ne le change PAS : il
  *  pèse sur l'EFFET (cf. `defenseEfficiency`).
@@ -256,7 +256,7 @@ export function defenseLevel(defenses: DefenseStructure[], id: DefenseId): numbe
   return defenses.find((x) => x.typeId === id)?.level ?? 0;
 }
 /** Efficacité (0..1) : 0 si absente, `DAMAGED_EFFICIENCY` si endommagée, sinon 1. */
-export function defenseEfficiency(defenses: DefenseStructure[], id: DefenseId): number {
+function defenseEfficiency(defenses: DefenseStructure[], id: DefenseId): number {
   const d = defenses.find((x) => x.typeId === id);
   if (!d) return 0;
   return d.damaged ? DAMAGED_EFFICIENCY : 1;
@@ -764,7 +764,7 @@ export function groupCombatant(g: RaidGroup): Combatant {
   };
 }
 
-export function raidFoes(raid: Raid): { combatant: Combatant; gold: number }[] {
+function raidFoes(raid: Raid): { combatant: Combatant; gold: number }[] {
   return raid.groups.map((g) => ({ combatant: groupCombatant(g), gold: 0 }));
 }
 
@@ -817,14 +817,14 @@ export const GARRISON_SLOTS = 3;
 /** Une structure ENDOMMAGÉE ne rend que la moitié de son effet ; un familier FATIGUÉ
  *  aussi. Il n'est jamais perdu ni blessé : sinon personne ne posterait ses bons
  *  familiers, et la mécanique mourrait le jour où elle se déclenche. */
-export const FATIGUE_MS = 6 * 3600_000;
+const FATIGUE_MS = 6 * 3600_000;
 
 /** Plafond DUR de la convalescence. Il doit rester très en deçà de l'intervalle entre
  *  deux sièges (24 h au plus serré) : un héros encore alité au siège suivant ne pourrait
  *  pas défendre, la défaite entraînerait la défaite. */
 export const WOUND_MAX_MS = 8 * 3600_000;
 /** Part maximale de l'intervalle entre deux sièges que la convalescence peut occuper. */
-export const WOUND_INTERVAL_SHARE = 0.4;
+const WOUND_INTERVAL_SHARE = 0.4;
 
 /** Part de son effet qu'un familier apporte au MUR.
  *  ⚠️ Pas 100 % : mesuré sur une garnison réelle de trois légendaires (loup +23,4 %,
@@ -832,7 +832,7 @@ export const WOUND_INTERVAL_SHARE = 0.4;
  *  **90 %** dès le dressage 0, et à **100 %** au dressage maximal — le chenil devenait un
  *  bouton « gagner » et annulait tout le travail sur la fenêtre de niveau. La garnison
  *  doit être un levier, pas un verrou. */
-export const GARRISON_K = 0.4;
+const GARRISON_K = 0.4;
 
 /** Plafonds par canal. La RÉGÉNÉRATION est plafonnée le plus bas parce qu'elle est la
  *  seule à COMPOSER : elle s'applique entre chaque groupe, donc quatre ou cinq fois par
@@ -1259,7 +1259,7 @@ export function defensePerLevelLabel(
 // centre, soit juste au-delà des tourelles (rayon 72 + 7,5 de fût). Resserré avec
 // l'enceinte (80 → 72) : laissé à 45-48,5, l'armée mourait dans un no man's land à dix
 // unités du mur qu'elle assiégeait.
-export const CORPSE_RING = { min: 41, max: 44.5 } as const;
+const CORPSE_RING = { min: 41, max: 44.5 } as const;
 
 export function corpsesFrom(raid: Raid, report: RaidReport, seed: number): Corpse[] {
   const rng = mulberry32((seed ^ 0x5bf03635) >>> 0 || 1);

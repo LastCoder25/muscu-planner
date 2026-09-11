@@ -235,7 +235,7 @@ const HAND_DUNGEONS: Dungeon[] = [
 // progression (le coût brut montait 20→96→384 en procédural → ~1 run/séance en
 // end-game). La difficulté vient du CONTENU (monstres), pas du prix d'entrée. Early
 // garde sa rampe douce (20→40) ; tout ce qui dépasse est ramené à 40.
-export const DUNGEON_ENERGY_CAP = 40;
+const DUNGEON_ENERGY_CAP = 40;
 
 // Biais de rareté du butin (`dropLuck`) DÉRIVÉ de la profondeur, montée PROGRESSIVE
 // sur toute la plage (2026‑08‑16) : avant, il atteignait 1,0 dès reco 11 (apocalypse)
@@ -268,7 +268,7 @@ export const DUNGEONS: Dungeon[] = [...HAND_DUNGEONS, ...PROCEDURAL.dungeons].ma
 // ça, le contenu profond devenait trivial (100 % clear). La composante profonde recale la
 // difficulté sur un build ÉQUIPÉ-à-son-niveau. (Le contenu NU reste calibré à part, cf.
 // proceduralContent.test — la rampe est la couche gear-gated live appliquée par dungeonFoes.)
-export function dungeonDifficultyMult(recoLevel: number): number {
+function dungeonDifficultyMult(recoLevel: number): number {
   // EARLY (amorçage) UNIQUEMENT : ×1 au 1er donjon → ×1.5 vers reco 5 (assez pour rendre
   // le gear utile sans bloquer un build équipé). L'ancienne composante « deep » (×8) qui
   // grossissait la difficulté en profondeur est REMPLACÉE par l'attente d'équipement

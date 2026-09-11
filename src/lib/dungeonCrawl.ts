@@ -63,7 +63,7 @@ function farthestRoom(rooms: Room[], from: number): number {
 }
 
 // Proba de base d'une salle secrète par étage (montée légère en profondeur au runtime).
-export const VAULT_CHANCE = 0.12;
+const VAULT_CHANCE = 0.12;
 
 // Type d'une salle « libre » selon la profondeur (0..1) : plus profond = plus de
 // monstres/pièges. Coffres constants (récompense), vide en complément.

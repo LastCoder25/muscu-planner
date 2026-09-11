@@ -92,7 +92,7 @@ export function rollChestGrade(
 }
 
 // ── PIÈGES ─────────────────────────────────────────────────────────────────
-export type TrapKind = 'dmg' | 'gold' | 'dust';
+type TrapKind = 'dmg' | 'gold' | 'dust';
 export interface LabyTrap {
   id: string;
   emoji: string;

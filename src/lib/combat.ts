@@ -37,7 +37,7 @@ export interface Combatant {
 
 // Catégorisation des procs légendaires pour la pondération de `combatPower` (l'implémentation
 // combat vit dans simulateCombat). La méta (nom/emoji/slot) est dans items.ts.
-export const LEG_OFFENSE: ReadonlySet<string> = new Set([
+const LEG_OFFENSE: ReadonlySet<string> = new Set([
   'initiative',
   'executioner',
   'predator_eye',
@@ -46,7 +46,7 @@ export const LEG_OFFENSE: ReadonlySet<string> = new Set([
   'cadence',
   'whetted',
 ]);
-export const LEG_DEFENSE: ReadonlySet<string> = new Set([
+const LEG_DEFENSE: ReadonlySet<string> = new Set([
   'aegis',
   'retort',
   'phoenix',
@@ -189,8 +189,8 @@ export function fmtDelta(cur: number, next: number): string {
   return (d >= 0 ? '+' : '−') + fmtPow(Math.abs(d));
 }
 
-export type CombatActor = 'player' | 'monster';
-export type CombatEventType = 'hit' | 'crit' | 'dodge';
+type CombatActor = 'player' | 'monster';
+type CombatEventType = 'hit' | 'crit' | 'dodge';
 export interface CombatEvent {
   round: number;
   who: CombatActor; // qui attaque

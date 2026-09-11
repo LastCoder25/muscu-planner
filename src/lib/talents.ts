@@ -140,7 +140,7 @@ export interface TalentInstance {
 // que les objets/familiers. Le tier ne bouge plus après le drop. ──
 const MAX_TIER = RANK_ORDER.length * 5 - 1; // 8 raretés × 5 crans − 1
 /** XP pour passer du tier `tier` au suivant — sert à ENCODER le tier de drop. */
-export function talentXpForNextTier(tier: number): number {
+function talentXpForNextTier(tier: number): number {
   return 12 + Math.max(0, tier) * 4;
 }
 /** XP cumulée pour ATTEINDRE un tier (tier 0 = 0) — encode le tier au drop. */
@@ -181,7 +181,7 @@ export function talentRollOf(inst: TalentInstance): number {
 export function talentJetOf(inst: TalentInstance): number {
   return rollJet(talentRollOf(inst));
 }
-export function enchantOf(inst: TalentInstance): number {
+function enchantOf(inst: TalentInstance): number {
   return Math.max(0, inst.enchant ?? 0);
 }
 

@@ -7,7 +7,7 @@
 import { BOSSES } from '@/data/bosses';
 import { rankCeilingForLevel, RANK_ORDER, RARITY_LABEL } from '@/lib/items';
 
-export type AdvUnlockKind = 'boss' | 'talent' | 'effect' | 'rarity';
+type AdvUnlockKind = 'boss' | 'talent' | 'effect' | 'rarity';
 
 export interface AdvUnlock {
   level: number;

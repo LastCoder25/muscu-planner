@@ -41,7 +41,7 @@ export function intensityOf(v: StatBuckets): number {
   return v.power + v.endurance + v.agility;
 }
 /** Direction normalisée (poids ~somme 1) d'un vecteur de bénéfices. */
-export function directionOf(v: StatBuckets): StatWeights {
+function directionOf(v: StatBuckets): StatWeights {
   const s = intensityOf(v);
   if (s <= 0) return { power: 0, endurance: 1, agility: 0 };
   return { power: v.power / s, endurance: v.endurance / s, agility: v.agility / s };
@@ -123,7 +123,7 @@ const SPORT_BENEFIT: Record<string, StatBuckets> = {
   Équitation: { power: 10, endurance: 20, agility: 20 }, // 50
 };
 // Sport inconnu / « Autre » libre : équilibré, intensité moyenne (~65).
-export const DEFAULT_SPORT_BENEFIT: StatBuckets = { power: 20, endurance: 25, agility: 20 };
+const DEFAULT_SPORT_BENEFIT: StatBuckets = { power: 20, endurance: 25, agility: 20 };
 export function sportBenefit(name?: string | null): StatBuckets {
   return (name && SPORT_BENEFIT[name]) || DEFAULT_SPORT_BENEFIT;
 }

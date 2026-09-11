@@ -79,7 +79,7 @@ export function comboSlot(key: string): ComboSlot | undefined {
 // Deux exos d'une même famille = le même mouvement → redondants : on ne les propose
 // jamais ensemble (Défi 360 : exclusifs dans un emplacement ; challenges : un seul
 // défi par mouvement). Chaque groupe = ids d'un même mouvement.
-export const EXERCISE_VARIANT_FAMILIES: string[][] = [
+const EXERCISE_VARIANT_FAMILIES: string[][] = [
   // Pompes : toutes les variations de pompes au sol.
   ['ex_pushup', 'ex_pushup_knees', 'ex_diamond_pushup', 'ex_pike_pushup'],
   ['ex_dips', 'ex_dips_assisted'], // dips / dips assistés (élastique)

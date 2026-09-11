@@ -8,7 +8,7 @@ export const CHALLENGE_TOKEN_BUDGET = 4;
 // Petits muscles d'isolation → défi « accessoire » (mollets, gainage/abdos, bras).
 // Le slot accessoire étant unique par voie, être inclusif ne change que QUEL exo
 // est gratuit, pas le nombre simultané.
-export const ACCESSORY_MUSCLES = ['mollets', 'abdominaux', 'biceps', 'triceps'];
+const ACCESSORY_MUSCLES = ['mollets', 'abdominaux', 'biceps', 'triceps'];
 
 /** Coût en jetons selon la durée : court ≤7 j = 1, moyen 8–21 j = 2, long ≥22 j = 3. */
 export function tokenCost(durationDays: number): 1 | 2 | 3 {

@@ -315,7 +315,7 @@ function buildFromText(cur: TextEx, library: LibEntry[]): PlannedExercise {
   };
 }
 
-export function parseWorkoutText(raw: string, library: LibEntry[] = []): Session {
+function parseWorkoutText(raw: string, library: LibEntry[] = []): Session {
   const lines = raw
     .split(/\r?\n/)
     .map((l) => l.trim())

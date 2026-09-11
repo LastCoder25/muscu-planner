@@ -17,13 +17,7 @@
 // 9 840. Les branches re-convergent naturellement (« Maître épéiste » est atteignable
 // depuis Épéiste comme depuis Bretteur : on ne l'écrit qu'une fois).
 import { RANK_ORDER, type EffectType, type Rarity } from './items';
-import {
-  characterRank,
-  rankProgress,
-  rankStarStr,
-  nextStarLevel,
-  type CharacterRank,
-} from './characterRank';
+import { characterRank, rankProgress, nextStarLevel, type CharacterRank } from './characterRank';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
@@ -63,7 +57,7 @@ export const PROMO_LEVELS: readonly number[] = [1, 2, 3, 5, 8, 12, 17, 23];
 /** Poids de la montée en NIVEAU face au chemin de classes. À 0,15, un aventurier de
  *  niveau 23 vaut ×4,3 son niveau 1 — soit plus que tout l'écart de rareté. C'est
  *  délibéré : l'aventurier qu'on a élevé doit battre celui qu'on vient de recruter. */
-export const ADV_LEVEL_K = 0.15;
+const ADV_LEVEL_K = 0.15;
 
 /** Nombre de propositions à chaque promotion. */
 export const PROMO_CHOICES = 3;
@@ -686,12 +680,6 @@ export function advRankProgress(adv: Adventurer): number {
 /** Niveau auquel l'aventurier gagnera son étoile suivante (info-bulle de la barre). */
 export function advNextStarLevel(adv: Adventurer): number {
   return nextStarLevel(adv.level);
-}
-
-/** « ⚪ Argent ★★★☆☆ » — libellé prêt à afficher. */
-export function advRankLabel(adv: Adventurer): string {
-  const r = advRank(adv);
-  return `${r.emoji} ${r.name} ${rankStarStr(r.star)}`;
 }
 
 /** Nom de métier courant = la classe la plus récente. */

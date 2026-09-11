@@ -14,7 +14,7 @@
 
 import { raidsEnabled, scoutLeadMs, type BaseState } from './raid';
 
-export type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'convoy_home';
+type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'convoy_home';
 
 /** Un message programmé. `dedupe` est la clé d'idempotence : replanifier le même
  *  événement ne doit JAMAIS créer un doublon — l'app replanifie à chaque ouverture. */
@@ -126,6 +126,7 @@ export function livePushKeys(plans: PushPlan[]): Set<string> {
   return new Set(plans.map((p) => p.dedupe));
 }
 
+/** @public — contrat miroir de STALE_MS dans supabase/functions/push-dispatch. */
 export const PUSH = {
   /** Au-delà, un message programmé n'a plus de sens : on le laisse expirer plutôt que
    *  de réveiller quelqu'un pour un événement d'il y a deux jours. */

@@ -467,6 +467,36 @@ Décisions prises en Phase 0, contraintes par le poste. À respecter dans les ph
 
 ## Garde-fous
 
+### 🧹 CODE MORT — `npm run dead` (knip, v0.747)
+
+`knip.json` + script `dead` (`node node_modules/knip/bin/knip.js`, AppLocker-safe). **Doit rendre
+zéro ligne** ; c'est une porte de plus, à passer lors d'un ménage ou avant de retirer une feature.
+
+- **Première passe mesurée** : 34 exports + 23 types exportés sans importeur, 4 vrais cadavres
+  (`LEVEL_MARGIN`, `dropMagnitude`+`MAGNITUDE_PER_LEVEL`, `advRankLabel`, le ré-export
+  `ObjectiveOption`), `vite-plugin-checker` encore listé (retiré de la config depuis la Phase 0).
+  **110 symboles dé-exportés** (ils restent, privés à leur module) : un `export` que rien
+  n'importe ment sur la surface publique du module, et knip ne peut plus rien dire des VRAIS
+  morts derrière ce bruit.
+- ⚠️ **Dé-exporter ≠ supprimer.** Après la dé-exportation, c'est `npm run lint`
+  (`no-unused-vars`) qui désigne les cadavres — 4 sur 110, tous les autres sont utilisés dans
+  leur fichier. Supprimer sur la seule foi de knip aurait cassé le build.
+- **Exceptions VOULUES, déclarées dans `knip.json` (pas ignorées à la main)** : entrées hors
+  graphe Vite (`public/pwa-sw.js`, `scripts/*.mjs`, `supabase/functions/*/index.ts`,
+  `postcss.config.js`) ; `src/data/worldBoss.ts` + `src/stores/worldBoss.ts` **dormants par
+  décision** (boss mondial sans UI, cf. Aventure) ; `@quasar/extras` (référencé par chaîne dans
+  `quasar.config.ts`) ; `npm` = le spécificateur Deno `npm:web-push` de l'edge function. Et par
+  tag JSDoc : `/** @public */` sur `PUSH` (contrat miroir de l'edge function) et `Drill`
+  (type du contrat), `/** @alias */` sur `ITEM_SETS = VOIE_SETS`.
+- **Toujours exportés, appelés nulle part dans l'app mais TESTÉS** : `forgeItem`, `salvageValue`,
+  `craftSetCost` (Atelier retiré v0.556), `comboOverachievement` (fusionné v0.621). knip ne les
+  voit pas (les tests les importent). Les retirer = retirer leurs tests aussi — décision à
+  prendre explicitement, pas un oubli.
+- ⚠️ **Piège d'outillage rencontré** : un script passé par `node -e`/heredoc a vu son `\b`
+  (frontière de mot regex) transformé en **backspace 0x08** → regex qui ne matchait rien, sans
+  erreur. Écrire les scripts dans un fichier (Write) et remplacer `\b` par
+  `(?=[^A-Za-z0-9_$]|$)`.
+
 ### 🧰 QUELLE SKILL POUR QUOI (v0.699)
 
 Installées dans `~/.claude/skills/` (+ les _bundled_). ⚠️ **Toutes ne conviennent PAS à ce

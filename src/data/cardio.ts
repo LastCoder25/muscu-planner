@@ -43,7 +43,7 @@ export function challengeIdsForActivity(a: CardioActivity): string[] {
 }
 
 // Exercices « défi » qui sont du cardio (⇄ discipline Cardio, miroir de sortie).
-export const CARDIO_CHALLENGE_IDS = new Set([
+const CARDIO_CHALLENGE_IDS = new Set([
   'ex_ch_marche',
   'ex_ch_course',
   'ex_ch_marche_course',

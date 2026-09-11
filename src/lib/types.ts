@@ -197,8 +197,8 @@ export type DrillCategory =
   | 'retour_au_calme';
 
 export type DrillShot = 'coup_droit' | 'revers' | 'service' | 'volee' | 'smash' | 'mixte';
-export type DrillPlayers = 'solo' | 'duo' | 'groupe';
-export type DrillFormatMode = 'reps' | 'time' | 'balls'; // time = secondes
+type DrillPlayers = 'solo' | 'duo' | 'groupe';
+type DrillFormatMode = 'reps' | 'time' | 'balls'; // time = secondes
 
 export interface DrillFormat {
   mode: DrillFormatMode;
@@ -207,6 +207,7 @@ export interface DrillFormat {
 }
 
 // Entrée du catalogue global de drills (table `drills`).
+/** @public — type du contrat, lu par la table même si aucun écran ne l'importe. */
 export interface Drill {
   id: string;
   sport: string; // 'tennis' pour l'instant

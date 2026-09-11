@@ -4,7 +4,7 @@
 // et empilable : plusieurs ventes rapprochées = plusieurs éclats.
 import { ref } from 'vue';
 
-export interface GoldFx {
+interface GoldFx {
   id: number;
   amount: number; // or gagné (entier, > 0)
 }

@@ -10,7 +10,7 @@ function findTheme(id: string | null): Theme {
   return THEMES.find((t) => t.id === id) ?? THEMES[0]!;
 }
 
-export function applyTheme(id: string) {
+function applyTheme(id: string) {
   const t = findTheme(id);
   // Bascule le mode Quasar (inputs, menus, dialogs, sheets… suivent).
   Dark.set(t.dark);

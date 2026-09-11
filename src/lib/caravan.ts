@@ -101,9 +101,9 @@ export const CARAVAN = {
   lossKeep: 0.55,
 } as const;
 
-export type CaravanEventKind = 'bandits' | 'cache' | 'detour' | 'calme';
+type CaravanEventKind = 'bandits' | 'cache' | 'detour' | 'calme';
 
-export interface CaravanEvent {
+interface CaravanEvent {
   kind: CaravanEventKind;
   /** `bandits` uniquement : l'escorte a-t-elle tenu ? */
   won?: boolean;
@@ -168,7 +168,7 @@ const countRole = (advs: Adventurer[], role: string): number =>
   advs.reduce((n, a) => n + advRoles(a).filter((r) => r === role).length, 0);
 
 /** Effets apportés par les SIGNATURES de classe de l'escorte (strates hautes). */
-export function escortEffects(advs: Adventurer[]): AggregatedEffects {
+function escortEffects(advs: Adventurer[]): AggregatedEffects {
   const list = advs.flatMap((a) =>
     advSignatures(a).map((t) => effectAsAggregate(t, CARAVAN.signaturePct)),
   );

@@ -124,7 +124,7 @@ export interface Item {
 // à aucun d'eux, il est BORNÉ et il est CONTEXTUEL. Sans ces trois garde-fous, un
 // familier qui grandit en restant assis au chenil serait un robinet gratuit qui
 // contournerait la perte 2:1 de l'infusion de grade.
-export const FAM_TRAIN = {
+const FAM_TRAIN = {
   // XP cumulée pour le niveau L = xpPerLevel × L². ⚠️ **DEUX CONSTANTES, pas une**
   // (v0.689) : les deux carrières ne tiquent PAS au même rythme, donc une constante
   // partagée en rendait forcément une aberrante. Mesuré : l'ATTAQUE gagne ~648 XP par
@@ -196,7 +196,7 @@ export function rollJet(roll: number | undefined): number {
 // donjon ~10-15 niveaux plus profond batte un écart de jet (upgrade réel), assez borné
 // pour un recalibrage modéré. Le niveau d'un drop = `min(niveau perso, niveau donjon)`
 // tiré sur une PYRAMIDE (cf. rollItemLevel) → chance d'un ilvl un peu au-dessus.
-export const LEVEL_MULT_K = 0.006;
+const LEVEL_MULT_K = 0.006;
 export function itemLevelMult(level: number): number {
   return 1 + Math.max(0, level - 1) * LEVEL_MULT_K;
 }
@@ -219,16 +219,6 @@ export function levelToEnchant(level: number): number {
   return Math.max(0, Math.min(ENCHANT_MAX, Math.round(target / ENCHANT_STEP)));
 }
 
-// CHASSE AU LOOT (2026‑08‑15, ticket 355753d2) : la MAGNITUDE DE BASE d'un drop
-// croît avec le niveau du DONJON/palier où il tombe → un objet d'un donjon profond
-// est objectivement meilleur (une fois les deux infusés) qu'un objet peu profond →
-// on veut remplacer son stuff en farmant plus profond. L'infusion (niveau) reste la
-// grinde ; la SOURCE fixe le plafond de qualité. Modeste (~+1,5×/niv de fond) pour
-// ne pas casser l'équilibrage nu.
-const MAGNITUDE_PER_LEVEL = 0.015;
-export function dropMagnitude(dropLevel: number): number {
-  return 1 + Math.max(0, dropLevel - 1) * MAGNITUDE_PER_LEVEL;
-}
 /** Valeur réelle d'un effet au niveau de l'objet. */
 export function effectiveValue(effect: ItemEffect, level: number): number {
   return Math.max(1, Math.round(effect.value * itemLevelMult(level)));
@@ -236,7 +226,7 @@ export function effectiveValue(effect: ItemEffect, level: number): number {
 
 // ── Économie d'objets : Poussière (évolution) & or (vente) ──
 // Index 0..9 du rang → sert aux barèmes croissants (poussière / or / coûts).
-export function rankIndex(r: Rarity): number {
+function rankIndex(r: Rarity): number {
   return Math.max(0, RANK_ORDER.indexOf(r));
 }
 /** Arrondit une magnitude d'effet à 1 décimale (au lieu d'un entier) → la qualité
@@ -602,7 +592,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     echo: ['execute_pct', 'lifesteal_pct'],
   },
 ];
-export const LEGENDARY_BY_ID: Record<string, LegendaryProc> = Object.fromEntries(
+const LEGENDARY_BY_ID: Record<string, LegendaryProc> = Object.fromEntries(
   LEGENDARY_PROCS.map((p) => [p.id, p]),
 );
 // Rang minimal pour porter un proc légendaire (Légendaire = index 5).
@@ -643,7 +633,7 @@ export function rollSetLegendaryProc(
   return use[Math.floor(rng() * use.length)]!.id;
 }
 /** Les 3 stats du thème d’un set (source unique : ses paliers). */
-export function setThemeStats(setId: string | undefined): EffectType[] {
+function setThemeStats(setId: string | undefined): EffectType[] {
   const s = setId ? SET_BY_ID[setId] : undefined;
   return s ? s.tiers.map((t) => t.type) : [];
 }
@@ -697,7 +687,7 @@ const EFFECT_MIN_LEVEL: Partial<Record<EffectType, number>> = {
 // ── TIERS D'AFFIXE (multi-affixe façon Diablo, v0.581) ──────────────────────────
 // Un drop tire 1 stat par TIER selon sa rareté (affixCountForRarity) : #1 = majeur,
 // #2 = secondaire, #3 = mineur. Du plus IMPACTANT (dégâts/PV) au plus LIGHT (or/loot).
-export type AffixTier = 'major' | 'secondary' | 'minor';
+type AffixTier = 'major' | 'secondary' | 'minor';
 const AFFIX_TIERS: Record<AffixTier, EffectType[]> = {
   // Majeur : la grosse stat de combat qui définit l'objet.
   major: ['damage_pct', 'max_pv_pct', 'dmg_reduction_pct', 'crit_pct'],
@@ -798,7 +788,7 @@ const RARITY_ADJ: Record<Rarity, string> = {
 
 /** Formate une valeur d'effet avec 1 décimale au plus (trim .0) → la qualité (+2,5 %/★)
  *  reste visible même sur les petites stats (ex. B★1 vs B★5, ticket df3feade). */
-export function fmtEffectValue(v: number): string {
+function fmtEffectValue(v: number): string {
   return (Math.round(v * 10) / 10).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
 }
 /** Libellé d'un effet à partir de sa VALEUR déjà calculée. */
@@ -886,10 +876,6 @@ function pick<T>(rng: () => number, arr: T[]): T {
 export function rankCeilingForLevel(level: number): number {
   return Math.min(7, Math.max(0, Math.floor(Math.sqrt(Math.max(0, level)) * 0.9)));
 }
-/** MARGE d'avance : on peut farmer/obtenir du rang jusqu'à `niveauJoueur + LEVEL_MARGIN`.
- *  Au-delà, le rang d'un drop est CAPÉ par ton niveau → le sport reste le vrai plafond,
- *  mais un overshoot modéré (récompense du farm) reste possible. Ticket anti-runaway. */
-export const LEVEL_MARGIN = 5;
 /** CRAN de grade MAX DROPPABLE (0..49 = rang×5 + qualité−1) à un niveau donné = rang √-gaté,
  *  qualité 5. (Talents/familiers sont des drops purs — plus d'infusion de grade.) */
 export function maxGradeCran(level: number): number {
@@ -1030,7 +1016,7 @@ export function dropPeakRank(
   ]!;
 }
 /** Rang seul (utilitaires forge/familier qui n'ont pas besoin de la qualité fine). */
-export function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {
+function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {
   return rollTier(rng, level, luck).rank;
 }
 
@@ -1666,7 +1652,7 @@ export const VOIE_SETS: ItemSet[] = VOIE_SET_DEFS.map((d) => ({
     },
   ],
 }));
-export const VOIE_SET_IDS: string[] = VOIE_SETS.map((s) => s.id);
+const VOIE_SET_IDS: string[] = VOIE_SETS.map((s) => s.id);
 /** id du set d'une voie (`voie:<id>`) — source unique du lien voie↔set. */
 export function voieSetId(voie: string | null | undefined): string {
   return `voie:${voie ?? ''}`;
@@ -1679,6 +1665,7 @@ export function randomVoieSetId(rng: () => number): string {
 // ITEM_SETS = les sets DROPPABLES/affichés (les 8 voie-sets). SET_BY_ID résout AUSSI les
 // anciens sets (boss/procéduraux) → les pièces legacy gardent leurs 2/3-pièces (jamais le
 // capstone, faute de voie correspondante) le temps d'être remplacées par des sets de voie.
+/** @alias */
 export const ITEM_SETS: ItemSet[] = VOIE_SETS;
 export const SET_BY_ID: Record<string, ItemSet> = Object.fromEntries(
   [...VOIE_SETS, ...HAND_SETS, ...PROCEDURAL.sets].map((s) => [s.id, s]),
@@ -1688,7 +1675,7 @@ export const SET_BY_ID: Record<string, ItemSet> = Object.fromEntries(
  *  les pièces d'un boss plus profond ont un rang plus haut → bonus de set plus fort → on
  *  veut faire les boss suivants. Ancré au rang MOYEN (Rare) → un set Rare ≈ base d'origine,
  *  les sets plus hauts montent, les plus bas baissent un peu. */
-export function setBonusMult(pieces: Item[]): number {
+function setBonusMult(pieces: Item[]): number {
   if (!pieces.length) return 1;
   const anchor = RARITY_MULT.rare;
   const avg = pieces.reduce((s, i) => s + (RARITY_MULT[i.rarity] ?? anchor), 0) / pieces.length;

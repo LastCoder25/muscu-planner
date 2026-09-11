@@ -83,7 +83,7 @@ export function suggestSetFromHistory(
 
 // Progressif basé sur le MAX (cf. formule) : J1 = start_coef × MAX,
 // puis chaque jour + (inc_pct % de MAX), minimum +1.
-export function progressiveDefaults(level: Level): { start_coef: number; inc_pct: number } {
+function progressiveDefaults(level: Level): { start_coef: number; inc_pct: number } {
   return {
     start_coef: level === 'debutant' ? 1 : level === 'avance' ? 3.5 : 2,
     inc_pct: level === 'debutant' ? 3 : level === 'avance' ? 15 : 8,
@@ -325,7 +325,7 @@ export function suggestConfig(
 // ── Report réserve/dette ────────────────────────────────
 /** Solde de report avant un jour : Σ (réalisé − objectif de base) sur les jours actifs passés.
  *  > 0 = réserve (avance), < 0 = dette (retard). */
-export function carryBalance(ch: Challenge, beforeDay: number): number {
+function carryBalance(ch: Challenge, beforeDay: number): number {
   if (ch.format === 'cumulative' || !ch.config.carry_over) return 0;
   const map = progByDay(ch);
   let bal = 0;
@@ -347,7 +347,7 @@ export function effectiveTarget(ch: Challenge, day: number): number {
 /** Avance (>0) / retard (<0) courant vs le plan, TOUS défis (indépendant du report).
  *  Solde à l'entrée d'aujourd'hui = Σ (réalisé − objectif) sur les jours passés.
  *  Cumulé : réalisé − part attendue au prorata des jours écoulés. Unité = ch.unit. */
-export function challengeBalance(ch: Challenge, todayIso = logicalToday()): number {
+function challengeBalance(ch: Challenge, todayIso = logicalToday()): number {
   const dayIndex = diffDays(ch.start_date, todayIso);
   if (ch.format === 'cumulative') {
     const elapsed = Math.min(Math.max(0, dayIndex), ch.duration_days);
@@ -824,7 +824,7 @@ function plannedEffort(ch: Challenge): number {
  *  rentable que de découper en petits. Plafonné (×5 à 120 j).
  *  Basé sur les JOURS ACTIFS (non repos), pas le calendrier : bourrer de jours de
  *  repos ne gonfle pas le multiplicateur pour un même travail réel (anti-faille). */
-export function durationMultiplier(activeDays: number): number {
+function durationMultiplier(activeDays: number): number {
   return 1 + Math.min(Math.max(0, activeDays), 120) / 30;
 }
 
@@ -894,7 +894,7 @@ export function repWeightFromExercise(
 }
 
 /** Jour (index 0-based) où un défi CUMULÉ atteint son total ; -1 si pas atteint. */
-export function cumulativeCompletionDay(ch: Challenge): number {
+function cumulativeCompletionDay(ch: Challenge): number {
   const total = ch.config.total ?? 0;
   if (total <= 0) return -1;
   const sorted = [...ch.progress].filter((p) => p.day >= 0).sort((a, b) => a.day - b.day);
@@ -907,7 +907,7 @@ export function cumulativeCompletionDay(ch: Challenge): number {
 }
 
 /** Fraction d'avance d'un défi cumulé terminé : jours gagnés / durée (0..~1). */
-export function earlyFinishFraction(ch: Challenge): number {
+function earlyFinishFraction(ch: Challenge): number {
   if (ch.format !== 'cumulative' || ch.duration_days <= 0) return 0;
   const cd = cumulativeCompletionDay(ch);
   if (cd < 0) return 0;
@@ -916,7 +916,7 @@ export function earlyFinishFraction(ch: Challenge): number {
 }
 
 /** Séries réalisées d'un jour (mode 'sets', ou détail optionnel en mode 'reps'). */
-export function daySets(p: DayProgress): ChallengeSet[] {
+function daySets(p: DayProgress): ChallengeSet[] {
   return p.sets ?? [];
 }
 /** Reps totales réalisées (pour l'XP) : Σ reps des séries en mode 'sets' (où `done`
@@ -936,7 +936,7 @@ function assistedReps(c: Challenge): number {
   return challengeTotalReps(c) * assistMult(c.config.assisted);
 }
 /** Tonnage réalisé (Σ reps×poids) — issu des séries (poids saisi). */
-export function challengeTonnage(c: Challenge): number {
+function challengeTonnage(c: Challenge): number {
   return c.progress.reduce(
     (a, p) => a + daySets(p).reduce((b, s) => b + (s.reps || 0) * (s.weight || 0), 0),
     0,

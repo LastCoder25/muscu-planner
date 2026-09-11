@@ -31,7 +31,7 @@ export function isCardioChallengeRow(c: { unit: string; exercise_id: string }): 
   return isCardioTrackChallenge(c);
 }
 
-export class ChallengeLimitError extends Error {
+class ChallengeLimitError extends Error {
   constructor(cardio: boolean, reason: AddDenyReason) {
     const lane = cardio ? 'cardio' : 'muscu';
     super(

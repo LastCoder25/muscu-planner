@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "public/pwa-sw.js",
+    "scripts/*.mjs",
+    "supabase/functions/*/index.ts",
+    "postcss.config.js"
+  ],
+  "ignore": ["src/data/worldBoss.ts", "src/stores/worldBoss.ts"],
+  "ignoreDependencies": ["@quasar/extras", "npm"]
+}

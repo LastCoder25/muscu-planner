@@ -12,7 +12,7 @@ export interface XpRing {
   toLevel: number;
   toPct: number; // 0..100 APRÈS
 }
-export interface XpFxEvent {
+interface XpFxEvent {
   id: number;
   rings: XpRing[];
 }

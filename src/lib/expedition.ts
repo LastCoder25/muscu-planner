@@ -348,7 +348,7 @@ export function goldCost(type: PoiType, level: number): number {
  *  c'est un ARBITRAGE qu'on crée, pas un cadeau.
  *  Le plafond existe toujours (un trajet interminable ne doit pas tout multiplier), mais
  *  il est repoussé — à 6 h il écrasait justement le haut de la courbe qu'on veut valoriser. */
-export const TRAVEL_EXP = 1.4;
+const TRAVEL_EXP = 1.4;
 export const TRAVEL_REF_H = 3;
 export const TRAVEL_CAP_H = 9;
 export function travelFactor(roundTripH: number): number {
@@ -394,7 +394,7 @@ export function poiCombatant(level: number, type: PoiType): Combatant {
 
 /** Adversaire de la vague `wave` d'une arène de niveau `level` — dérivé d'un camp,
  *  démarrage doux puis rampe de PV/dégâts par vague (attrition croissante). */
-export function arenaWaveCombatant(level: number, wave: number): Combatant {
+function arenaWaveCombatant(level: number, wave: number): Combatant {
   const base = poiCombatant(level, 'camp');
   return {
     ...base,
@@ -408,7 +408,7 @@ export function arenaWaveCombatant(level: number, wave: number): Combatant {
  *  (+ petite régén), jusqu'à la MORT (le cap n'est qu'un garde-fou anti-boucle).
  *  Renvoie le nombre de vagues TENUES (vaincues). Seedé/pur. */
 /** Une vague livrée, avec de quoi la REJOUER (log seedé). */
-export interface ArenaFight {
+interface ArenaFight {
   wave: number; // 1-based
   monster: string;
   maxPv: number;
@@ -796,7 +796,7 @@ export function ambushCombatant(hero: Combatant, level: number): Combatant {
 }
 
 export type TravelLeg = 'out' | 'back';
-export type TravelKind = 'ambush' | 'cache' | 'merchant' | 'shortcut' | 'setback';
+type TravelKind = 'ambush' | 'cache' | 'merchant' | 'shortcut' | 'setback';
 export interface TravelEncounter {
   leg: TravelLeg;
   kind: TravelKind;
@@ -1191,8 +1191,8 @@ export function resolveOutcome(
 }
 
 // ── Fond de carte : PARCHEMIN dessiné à l'encre (style « livre d'aventure ») ──
-export type MotifKind = 'mountain' | 'tree' | 'dune';
-export interface Motif {
+type MotifKind = 'mountain' | 'tree' | 'dune';
+interface Motif {
   kind: MotifKind;
   d: string; // path prêt à rendre (encre)
   x: number; // pour l'ordre de rendu (peintre : du fond vers l'avant)
@@ -1269,7 +1269,7 @@ function riverPath(rng: () => number, x: number, y: number, dir: number, len: nu
 /** Réglages du littoral. `min`/`span` = fraction du rayon nominal : le contour va donc de
  *  `min` à `min + span`. Le PLANCHER est ce qui compte — c'est lui qui garantit la terre
  *  ferme sous les POI. */
-export const COAST = { r: 0.44, min: 0.86, span: 0.28, pinch: 0.988 } as const;
+const COAST = { r: 0.44, min: 0.86, span: 0.28, pinch: 0.988 } as const;
 
 /** Rayon de terre ferme GARANTI autour de la ville. La courbe de côte étant tracée en
  *  Bézier par les milieux des points de contrôle, elle passe légèrement en deçà du
@@ -1282,7 +1282,7 @@ export function landRadius(): number {
  *  sauvegardées avant que `distMax` ne soit borné par le littoral (v0.668) : sans ça, un
  *  joueur garderait jusqu'à 48 h des POI dessinés en pleine mer. Petite tolérance pour ne
  *  pas balayer un POI parfaitement légitime posé pile sur la limite. */
-export function withinLand(p: { x: number; y: number }): boolean {
+function withinLand(p: { x: number; y: number }): boolean {
   return Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y) <= EXPE.distMax + 1;
 }
 

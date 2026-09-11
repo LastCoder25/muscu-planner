@@ -12,8 +12,8 @@
 import { challengeStats, type Challenge } from './challenges';
 import { comboProgressPct, type ComboChallenge } from './combo';
 
-export type FeedKind = 'started' | 'progress' | 'done';
-export type FeedSource = 'challenge' | 'combo';
+type FeedKind = 'started' | 'progress' | 'done';
+type FeedSource = 'challenge' | 'combo';
 
 export interface FeedItem {
   id: string; // clé de rendu stable (ligne + nature de l'événement)
@@ -46,7 +46,7 @@ export interface FriendTraining {
 /** Au-delà, l'info n'a plus de valeur d'entraînement — le fil doit donner envie
  *  d'agir aujourd'hui, pas archiver le trimestre. */
 export const FEED_RECENT_DAYS = 14;
-export const FEED_MAX = 40;
+const FEED_MAX = 40;
 
 const EMOJI: Record<FeedKind, string> = { started: '✨', progress: '📈', done: '🏁' };
 

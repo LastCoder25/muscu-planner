@@ -37,7 +37,7 @@ export interface DailyForecast extends Omit<DailyTruth, 'windMax'> {
   windMax: number | null;
 }
 
-export const RAIN_MM = 1; // « il a plu » = ≥ 1 mm dans la journée
+const RAIN_MM = 1; // « il a plu » = ≥ 1 mm dans la journée
 const MIN_N = 5; // en dessous : pas de score
 export const INDICATIVE_N = 20; // en dessous : score « indicatif »
 

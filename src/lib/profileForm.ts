@@ -75,7 +75,7 @@ export function profileToForm(p: Profile): ProfileForm {
 }
 
 // Résumé grossier du matériel (rétro-compat avec le champ `equipment`).
-export function deriveCoarseEquipment(items: EquipmentItem[]): Equipment {
+function deriveCoarseEquipment(items: EquipmentItem[]): Equipment {
   const has = (x: EquipmentItem) => items.includes(x);
   if (has('machine') && has('cable') && has('barbell')) return 'salle_complete';
   if (has('barbell') || has('machine') || has('cable') || has('rack')) return 'home_gym';
@@ -104,7 +104,7 @@ const VALID_EQUIPMENT: EquipmentItem[] = [
   'dip_station',
 ];
 
-export function migrateEquipment(items: readonly string[]): EquipmentItem[] {
+function migrateEquipment(items: readonly string[]): EquipmentItem[] {
   const out = new Set<EquipmentItem>();
   for (const it of items) {
     if ((VALID_EQUIPMENT as string[]).includes(it)) {

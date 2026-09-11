@@ -95,7 +95,7 @@ export const LABY_ARCHETYPES: LabyArchetype[] = [
 
 // Gardien d'étage : archétype signature (frappeur costaud + crit) — le ×PV de boss est
 // déjà appliqué par makeMonster ; ici juste le profil offensif marquant.
-export const GUARDIAN_ARCH: LabyArchetype = {
+const GUARDIAN_ARCH: LabyArchetype = {
   id: 'gardien',
   label: 'gardien',
   arch: 'striker',

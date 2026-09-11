@@ -4,7 +4,7 @@
 import type { Level, EquipmentItem, SportPractice } from '@/lib/types';
 
 // Objectifs guidés : source unique dans objectives.ts, ré-exportée ici.
-export { OBJECTIVES, type ObjectiveOption } from './objectives';
+export { OBJECTIVES } from './objectives';
 
 export const SEXES: { value: 'homme' | 'femme' | 'autre'; label: string }[] = [
   { value: 'homme', label: 'Homme' },

@@ -20,7 +20,7 @@ const FAVS_KEY = 'muscu:weather:favs';
 const cacheKey = (id: string) => `muscu:weather:v4:${id}`; // v4 : WeatherHour.h24
 const CACHE_TTL_MS = 30 * 60 * 1000;
 const FORECAST_DAYS = 10;
-export const GEO_ID = 'geo';
+const GEO_ID = 'geo';
 
 interface WeatherCache {
   fetchedAt: number;

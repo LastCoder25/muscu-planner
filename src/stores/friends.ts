@@ -12,7 +12,7 @@ import type { Challenge, ChallengeConfig, ChallengeFormat } from '@/lib/challeng
 import type { ComboChallenge } from '@/lib/combo';
 import { FEED_RECENT_DAYS, type FriendTraining, type RowStamps } from '@/lib/friendFeed';
 
-export type FriendStatus = 'pending' | 'accepted' | 'declined';
+type FriendStatus = 'pending' | 'accepted' | 'declined';
 
 export interface Friendship {
   requester_id: string;

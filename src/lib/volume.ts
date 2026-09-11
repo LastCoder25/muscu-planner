@@ -16,7 +16,7 @@ export interface MuscleVolume {
 }
 
 // Couleur indicative par groupe (mêmes teintes que le picker libre).
-export const MUSCLE_COLORS: Record<string, string> = {
+const MUSCLE_COLORS: Record<string, string> = {
   pectoraux: '#FF6A45',
   épaules: '#FFB23F',
   triceps: '#C6D24A',
@@ -272,7 +272,7 @@ export function weeklySetsByMuscle(entries: LogEntry[], nowIso: string): Record<
   return setsByMuscleInRange(entries, start, fmtDay(end));
 }
 
-export type VolumeState = 'low' | 'ok' | 'high';
+type VolumeState = 'low' | 'ok' | 'high';
 export interface MuscleTargetStatus {
   muscle: string;
   done: number;

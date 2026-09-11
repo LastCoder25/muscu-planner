@@ -14,7 +14,7 @@ export type MuscleKey =
   | 'mollets'
   | 'abdominaux';
 
-export const ALL_MUSCLES: MuscleKey[] = [
+const ALL_MUSCLES: MuscleKey[] = [
   'pectoraux',
   'dos',
   'épaules',
@@ -31,7 +31,7 @@ const PUSH: MuscleKey[] = ['pectoraux', 'épaules', 'triceps'];
 const PULL: MuscleKey[] = ['dos', 'biceps'];
 const LEGS: MuscleKey[] = ['quadriceps', 'ischio-jambiers', 'mollets', 'abdominaux'];
 
-export interface SplitDay {
+interface SplitDay {
   name: string;
   muscles: MuscleKey[];
 }
@@ -53,7 +53,7 @@ const fullBody = (n: number): SplitOption => ({
 });
 
 // Catalogue par nombre de séances (2 → 6).
-export const SPLIT_CATALOG: Record<number, SplitOption[]> = {
+const SPLIT_CATALOG: Record<number, SplitOption[]> = {
   2: [
     fullBody(2),
     {

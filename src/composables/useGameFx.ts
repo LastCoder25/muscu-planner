@@ -7,7 +7,7 @@
 // l'overlay global (GameFxOverlay, monté dans App.vue) joue les fx une par une.
 import { ref } from 'vue';
 
-export type GameFxKind =
+type GameFxKind =
   | 'drop'
   | 'familiar'
   | 'levelup'

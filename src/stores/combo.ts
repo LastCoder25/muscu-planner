@@ -9,7 +9,7 @@ export interface ComboRow extends ComboChallenge {
   user_id?: string;
 }
 
-export class ComboActiveError extends Error {
+class ComboActiveError extends Error {
   constructor() {
     super('Tu as déjà un Défi 360 en cours (1 max).');
     this.name = 'ComboActiveError';

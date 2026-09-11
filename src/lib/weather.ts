@@ -58,7 +58,7 @@ export function placeLabel(p: WeatherPlace): string {
 }
 
 // ── Prévision structurée ──
-export interface WeatherCurrent {
+interface WeatherCurrent {
   tempC: number;
   feelsLikeC: number;
   code: number;
@@ -78,7 +78,7 @@ export interface WeatherHour {
   code: number;
   emoji: string;
 }
-export interface WeatherDay {
+interface WeatherDay {
   date: string; // YYYY-MM-DD
   maxC: number;
   minC: number;
@@ -245,7 +245,7 @@ export function dayLabel(date: string, todayIso: string): string {
 // ⚠️ On rend un VERDICT + SA RAISON, pas un score. « 62 » ne dit pas quoi faire ; « trop
 // chaud » si. Et on ne fusionne pas les facteurs en une moyenne : un orage ne se compense
 // pas par une jolie température.
-export type OutdoorVerdict = 'good' | 'ok' | 'bad';
+type OutdoorVerdict = 'good' | 'ok' | 'bad';
 export interface OutdoorRating {
   verdict: OutdoorVerdict;
   /** Motif du DÉCLASSEMENT, vide si le créneau est bon. */

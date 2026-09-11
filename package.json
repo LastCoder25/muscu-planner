@@ -1,6 +1,6 @@
 {
   "name": "muscu-planner",
-  "version": "0.746.1",
+  "version": "0.747.0",
   "description": "Appli de suivi de musculation (Quasar + Supabase)",
   "productName": "Muscu Planner",
   "author": "Alban Martinez",
@@ -15,7 +15,8 @@
     "typecheck": "node node_modules/vue-tsc/bin/vue-tsc.js --noEmit",
     "test": "node node_modules/vitest/vitest.mjs run",
     "postinstall": "node node_modules/@quasar/app-vite/bin/quasar.js prepare --silent",
-    "smoke": "node scripts/smoke-ui.mjs"
+    "smoke": "node scripts/smoke-ui.mjs",
+    "dead": "node node_modules/knip/bin/knip.js --no-progress --reporter compact"
   },
   "dependencies": {
     "@quasar/extras": "^2.0.0",
@@ -37,11 +38,11 @@
     "eslint": "^9.39.4",
     "eslint-plugin-vue": "^10.8.0",
     "globals": "^17.4.0",
+    "knip": "^6.35.1",
     "playwright-core": "^1.63.0",
     "prettier": "^3.8.1",
     "sharp": "^0.35.4",
     "typescript": "^6.0.0",
-    "vite-plugin-checker": "^0.12.0",
     "vitest": "^4.1.10",
     "vue-eslint-parser": "^10.4.0",
     "vue-tsc": "^3.3.3"
