@@ -100,7 +100,13 @@
       <div v-if="!trainingLevel" class="g-empty">
         Il te faut un <b>Centre de formation</b> pour qu’il apprenne une nouvelle classe.
       </div>
-      <div v-else class="g-choices">
+      <!-- ⚠️ La durée s'annonce AVANT le choix : elle double à chaque rang et
+           l'aventurier est immobilisé pendant tout ce temps. La découvrir après coup,
+           c'est découvrir le prix après avoir payé. -->
+      <div v-else-if="promoAdv" class="g-cost">
+        🎓 Formation : <b>{{ fmtMs(promoMs) }}</b> — il sera indisponible pendant ce temps.
+      </div>
+      <div v-if="promoAdv" class="g-choices">
         <button
           v-for="c in promoOffers"
           :key="c.id"
@@ -147,6 +153,7 @@ import {
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
 import { RARITY_LABEL } from '@/lib/items';
+import { trainMsFor } from '@/lib/caravan';
 
 defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -242,6 +249,17 @@ async function doRecruit(classId: string) {
 const promoOpen = ref(false);
 const promoAdv = ref<Adventurer | null>(null);
 const promoOffers = computed(() => (promoAdv.value ? classChoices(promoAdv.value) : []));
+/** Ce que coûtera la promotion en cours de choix. ⚠️ Toutes les offres visent la MÊME
+ *  strate, donc une seule durée — on l'affiche une fois, en tête, plutôt que sur chaque
+ *  carte. */
+const promoMs = computed(() =>
+  promoAdv.value ? trainMsFor(trainingLevel.value, promoAdv.value.path.length) : 0,
+);
+const fmtMs = (ms: number) => {
+  const m = Math.round(ms / 60_000);
+  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
+};
+
 function openPromo(a: Adventurer) {
   promoAdv.value = a;
   promoOpen.value = true;
@@ -372,6 +390,15 @@ async function doPromote(classId: string) {
   margin-top: 4px;
 }
 /* Grille fluide : jamais de débordement, les cartes se réorganisent. */
+.g-cost {
+  margin: 2px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12.5px;
+  color: var(--dim);
+}
 .g-choices {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));

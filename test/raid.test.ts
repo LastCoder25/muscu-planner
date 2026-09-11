@@ -59,6 +59,8 @@ import { refFighter, gearExpect } from '@/lib/proceduralContent';
 import {
   rankCeilingForLevel,
   RANK_ORDER,
+  RARITY_MULT,
+  rollFamiliar,
   famLevel,
   famAtkMult,
   famXpForLevel,
@@ -66,6 +68,7 @@ import {
   type Item,
 } from '@/lib/items';
 import type { Combatant } from '@/lib/combat';
+import { FAMILIAR_SPECIES } from '@/data/familiars';
 
 const H = 3600_000;
 
@@ -1344,5 +1347,38 @@ describe('renseignement — du mystère, à tous les niveaux', () => {
     const sans = scoutClarity(20, 24, 20, 0);
     const avec = scoutClarity(20, 24, 20, 1);
     expect(avec).toBeGreaterThanOrEqual(sans);
+  });
+});
+
+describe('⚠️ la RARETÉ d’un familier compte AUSSI au mur', () => {
+  // Vérifié à la demande de l'utilisateur : ça marchait déjà, mais RIEN ne le
+  // garantissait. La rareté n'est appliquée nulle part dans `garrisonBonus` — elle
+  // transite par `effect.value`, bakée au DROP (refonte drops-only v0.556). C'est
+  // élégant, et c'est exactement pour ça que c'est fragile : une refonte qui
+  // recalculerait la valeur autrement casserait la défense sans toucher à `raid.ts`.
+  const loup = FAMILIAR_SPECIES.find((s) => s.id === 'wolf')!;
+  const fam = (rarity: Rarity): Item =>
+    ({ ...rollFamiliar(() => 0.5, loup, { level: 28, rarity }), id: 'f' }) as Item;
+
+  it('un familier plus rare renforce PLUS le mur, rang après rang', () => {
+    let prev = 0;
+    for (const r of RANK_ORDER) {
+      const d = garrisonBonus([fam(r)], 0, 28).damagePct ?? 0;
+      expect(d, `rareté ${r}`).toBeGreaterThan(prev);
+      prev = d;
+    }
+  });
+
+  it('⚠️ l’écart suit l’échelle de rareté DU PROJET, pas une autre', () => {
+    // ⚠️ On compare à `RARITY_MULT`, la CONSTANTE du projet — pas à un nombre écrit ici :
+    // si l’échelle de rareté bouge un jour, ce test suit au lieu de mentir.
+    const bas = garrisonBonus([fam(RANK_ORDER[0]!)], 0, 28).damagePct ?? 0;
+    const dernier = RANK_ORDER[RANK_ORDER.length - 1]!;
+    const haut = garrisonBonus([fam(dernier)], 0, 28).damagePct ?? 0;
+    const attendu = RARITY_MULT[dernier] / RARITY_MULT[RANK_ORDER[0]!];
+    // ⚠️ Tolérance RELATIVE : `effect.value` est stocké à UNE décimale (`round1`), donc
+    // le rapport mesuré (3,93) frôle l’échelle théorique (4,00) sans l’égaler. Ce qui
+    // compte est qu’il la SUIVE — s’il tombait à 1, la rareté ne compterait plus.
+    expect(Math.abs(haut / bas - attendu) / attendu).toBeLessThan(0.05);
   });
 });

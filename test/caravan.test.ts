@@ -7,6 +7,8 @@ import {
   caravanSlots,
   poiOffers,
   caravanSlowFor,
+  stratumTrainMult,
+  trainMsFor,
   caravanWages,
   escortCombatant,
   heroEquivalentFactor,
@@ -405,5 +407,44 @@ describe('⚠️ ce qui est GRISÉ sur la carte', () => {
     for (const t of ['well', 'camp', 'lair', 'mine'] as const) {
       expect(gris(poi({ type: t }), false, 0), t).toBe(false);
     }
+  });
+});
+
+describe('⚠️ le temps de formation suit le RANG visé', () => {
+  // La durée ne dépendait QUE du Centre : devenir Primordial coûtait exactement le même
+  // temps que devenir Inhabituel, alors que la classe vaut 3,3× plus de stats. Un palier
+  // qui ne se paie pas n'est pas un palier.
+  it('DOUBLE à chaque rang', () => {
+    for (let s = 2; s <= 7; s++) {
+      expect(stratumTrainMult(s) / stratumTrainMult(s - 1), `strate ${s}`).toBeCloseTo(2, 6);
+    }
+    expect(stratumTrainMult(1)).toBe(1); // la référence
+  });
+
+  it('⚠️ la 1re promotion reste TRÈS RAPIDE — le début de partie ne doit pas attendre', () => {
+    // C'est là que vit le joueur peu sportif que cette boucle vise : il ne doit pas
+    // patienter une nuit pour la première classe de sa première recrue.
+    expect(trainMsFor(0, 1)).toBeLessThanOrEqual(30 * 60_000);
+    expect(trainMsFor(10, 1)).toBeLessThan(30 * 60_000);
+  });
+
+  it('un rang haut se compte en HEURES, même avec un bon Centre', () => {
+    expect(trainMsFor(28, 7)).toBeGreaterThan(8 * 3_600_000);
+    expect(trainMsFor(100, 7)).toBeGreaterThan(3 * 3_600_000);
+  });
+
+  it('⚠️ le Centre raccourcit TOUJOURS, et une formation garde toujours une durée', () => {
+    for (const s of [1, 4, 7]) {
+      for (let l = 1; l <= 100; l++) {
+        expect(trainMsFor(l, s), `strate ${s} niveau ${l}`).toBeLessThan(trainMsFor(l - 1, s));
+      }
+      expect(trainMsFor(9999, s)).toBeGreaterThan(0);
+    }
+  });
+
+  it('les strates hors bornes ne cassent rien', () => {
+    expect(stratumTrainMult(0)).toBe(1);
+    expect(stratumTrainMult(-5)).toBe(1);
+    expect(Number.isFinite(stratumTrainMult(99))).toBe(true);
   });
 });

@@ -64,7 +64,9 @@ export const CARAVAN = {
   /** Repos d'un aventurier blessé. */
   hurtMs: 6 * 3600_000,
   /** Formation d'une promotion, et ce que le Centre peut en retirer (asymptotiquement). */
-  trainMs: 8 * 3600_000,
+  /** Durée de la 1re promotion (strate 1), Centre non construit. ⚠️ Ce n'est PLUS « la
+   *  durée d'une formation » : les rangs suivants DOUBLENT (cf. `stratumTrainMult`). */
+  trainMs: 30 * 60_000,
   trainMaxGain: 0.8,
   trainHalf: 30,
   /** Paie par aventurier : socle × strate × niveau du POI^0,7. C'est un PUITS D'OR, mais
@@ -398,10 +400,25 @@ export function resolveCaravan(poi: Poi, escort: Adventurer[], seed: number): Ca
  *  niveau retire encore un peu, de moins en moins, et une formation garde TOUJOURS une
  *  durée — un Centre de niveau 100 ne doit pas rendre les promotions instantanées.
  *  L'ancien `1 − 0,04 × niveau` plafonnait à 0,25 dès le niveau 20 : 81 niveaux morts. */
-export function trainMsFor(trainingLevel: number): number {
+export function trainMsFor(trainingLevel: number, stratum = 1): number {
   const l = Math.max(0, trainingLevel);
   const gain = CARAVAN.trainMaxGain * (l / (l + CARAVAN.trainHalf));
-  return Math.round(CARAVAN.trainMs * (1 - gain));
+  return Math.round(CARAVAN.trainMs * (1 - gain) * stratumTrainMult(stratum));
+}
+
+/** Ce que coûte en TEMPS le rang visé, relativement à la 1re promotion.
+ *
+ *  ⚠️ La durée ne dépendait QUE du Centre : devenir Primordial coûtait exactement le
+ *  même temps que devenir Inhabituel. Un palier qui ne se paie pas n'est pas un palier.
+ *
+ *  ⚠️ LE TEMPS DOUBLE À CHAQUE RANG, et c'est un choix plus RAIDE que le pas de rareté
+ *  du projet (1,219, qui régit les stats) : monter d'un rang doit se SENTIR, et une
+ *  échelle géométrique franche se lit sans notice (« le double du précédent »). Ancré
+ *  sur une 1re promotion TRÈS RAPIDE (`CARAVAN.trainMs`), pour que le début de partie
+ *  reste fluide — c'est précisément là que vit le joueur peu sportif que cette boucle
+ *  vise, et il ne doit pas attendre une nuit pour sa première classe. */
+export function stratumTrainMult(stratum: number): number {
+  return 2 ** (Math.max(1, Math.round(stratum)) - 1);
 }
 
 /** Durée de convalescence d'un blessé, raccourcie par les 🩺 de l'escorte ET par

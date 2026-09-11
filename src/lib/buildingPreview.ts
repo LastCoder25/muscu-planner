@@ -59,7 +59,9 @@ function textAt(typeId: string, level: number): string | null {
       return `${guildRoster(level)} aventuriers · rang max ${r.name} ${'★'.repeat(r.star)}`;
     }
     case 'training':
-      return `formation en ${h(trainMsFor(level))}`;
+      // ⚠️ Les DEUX bouts : la durée double à chaque rang, donc un seul chiffre ne
+      // dirait rien — et c’est justement l’écart qui fait décider.
+      return `1re promotion ${h(trainMsFor(level, 1))} · primordiale ${h(trainMsFor(level, 7))}`;
     case 'outpost':
       return `−${pct(1 - travelTimeMult(one(typeId, level)))} de temps de trajet`;
     case 'labyrinth_gate':

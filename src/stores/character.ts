@@ -1853,7 +1853,12 @@ export const useCharacterStore = defineStore('character', () => {
     if (adv.training) return false; // une seule à la fois
     const next: Adventurer = {
       ...adv,
-      training: { classId, until: Date.now() + trainMsFor(trainingLevel.value) },
+      // ⚠️ La strate VISÉE, pas celle qu’il a : `path` porte N classes, la promotion
+      // en vise donc la N-ième. C’est elle qui fixe la durée (×2 par rang).
+      training: {
+        classId,
+        until: Date.now() + trainMsFor(trainingLevel.value, adv.path.length),
+      },
     };
     await persist(userId, {
       adventurers: advList.value.map((a) => (a.id === advId ? next : a)),

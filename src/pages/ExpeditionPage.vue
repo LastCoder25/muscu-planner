@@ -70,10 +70,10 @@
               type="button"
               class="lt-go auto"
               :disabled="keys < 1"
-              title="Le run se joue tout seul, tu regardes"
+              title="Le run se joue tout seul, en accéléré — tu n’as plus rien à regarder"
               @click="startAuto(t.laby)"
             >
-              ⚡ Auto
+              ⚡ Auto ×{{ SPEED_STEPS[SPEED_STEPS.length - 1] }}
             </button>
           </div>
         </div>
@@ -637,14 +637,18 @@ function readSpeed(): number {
     return 1;
   }
 }
-function toggleSpeed() {
-  const i = SPEED_STEPS.indexOf(autoSpeed.value);
-  autoSpeed.value = SPEED_STEPS[(i + 1) % SPEED_STEPS.length] ?? 1;
+/** Source UNIQUE d'écriture de la vitesse — sinon la mémorisation diverge du réglage. */
+function setSpeed(n: number) {
+  autoSpeed.value = SPEED_STEPS.includes(n) ? n : 1;
   try {
     localStorage.setItem('muscu:laby:speed', String(autoSpeed.value));
   } catch {
     /* stockage indispo → on garde la valeur en mémoire seulement */
   }
+}
+function toggleSpeed() {
+  const i = SPEED_STEPS.indexOf(autoSpeed.value);
+  setSpeed(SPEED_STEPS[(i + 1) % SPEED_STEPS.length] ?? 1);
 }
 
 // Perso réel (stats de fond + équipement + talents) → combattant.
@@ -1490,6 +1494,10 @@ function autoTick() {
 }
 // Lance un palier NETTOYÉ en mode auto (mêmes règles/coût qu'un run manuel).
 async function startAuto(tier: Labyrinth) {
+  // ⚠️ Sur un palier DÉJÀ NETTOYÉ, regarder le run n'a plus d'intérêt : c'est du farm.
+  // On propose donc la vitesse MAXIMALE d'emblée — elle existait, mais à six appuis du
+  // départ et annoncée nulle part. Le sélecteur reste là pour ralentir à volonté.
+  if (labyrinthCleared(tier.id, clearedSet.value)) setSpeed(SPEED_STEPS[SPEED_STEPS.length - 1]!);
   await start(tier);
   if (phase.value === 'running') {
     autoMode.value = true;
