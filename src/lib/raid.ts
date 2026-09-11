@@ -24,9 +24,18 @@
 // l'appelant → fonctions pures et testables, résolution déterministe hors-ligne.
 import { combatPower, mulberry32, type Combatant } from './combat';
 import { refFighter } from './proceduralContent';
-import { rollDrop, famLevel, famAtkMult, famDefMult, type Item } from './items';
+import {
+  rollDrop,
+  famLevel,
+  famAtkMult,
+  famDefMult,
+  rankIndex,
+  RANK_ORDER,
+  RARITY_LABEL,
+  type Item,
+} from './items';
 import { garrisonCombatant } from './caravan';
-import { advStats, type Adventurer } from './adventurers';
+import { advStats, PROMO_LEVELS, type Adventurer } from './adventurers';
 import {
   simulateSiege,
   type UnitKind,
@@ -971,8 +980,51 @@ export const ROLE_LABEL: Record<GarrisonRole, string> = {
  *  donc plafonnés (`GARRISON_CAP`), faute de quoi une garnison de dix rendrait la base
  *  imprenable. Seuls le renseignement et la fouille, qui ne sont pas des stats de combat,
  *  s'additionnent librement. */
-export function garrisonSlots(playerLevel: number): number {
-  return 1 + Math.floor(Math.max(1, playerLevel) / 5);
+export function garrisonSlots(kennelLevel: number): number {
+  return kennelLevel <= 0 ? 0 : 1 + Math.floor(kennelLevel / 5);
+}
+
+/** 🎖️ RANG MAXIMAL qu’un familier peut avoir pour tenir le mur — le second levier du
+ *  Chenil, et l’exact pendant de ce que la Guilde fait pour les aventuriers.
+ *
+ *  ⚠️ ON RÉUTILISE `PROMO_LEVELS`, la table qui gate déjà les strates d’aventurier.
+ *  Elle dit « quel niveau de bâtiment pour quel rang » et compte exactement autant
+ *  d’entrées que `RANK_ORDER` — écrire une seconde table, c’est garantir qu’elles
+ *  divergent au premier réglage. Commun dès le niveau 1, primordial au 23.
+ *
+ *  ⚠️ Ça ne concerne QUE le mur. Le familier que le héros PORTE n’est pas au chenil :
+ *  il part au combat avec lui, et aucun bâtiment ne le plafonne. */
+export function garrisonRankCap(kennelLevel: number): number {
+  let cap = -1;
+  // ⚠️ Borné à `RANK_ORDER` : `PROMO_LEVELS` compte aujourd’hui autant d’entrées que de
+  // raretés, mais il appartient aux AVENTURIERS — s’il en gagne une, le cap ne doit pas
+  // désigner un rang qui n’existe pas.
+  const max = Math.min(PROMO_LEVELS.length, RANK_ORDER.length);
+  for (let i = 0; i < max; i++) if (kennelLevel >= PROMO_LEVELS[i]!) cap = i;
+  return cap;
+}
+
+/** Ce familier peut-il être POSTÉ ? ⚠️ Appliqué au CALCUL du combat autant qu’à
+ *  l’écriture : une garnison rangée avant ce changement se soigne toute seule, sans
+ *  migration — même politique que `dedupeGarrisonRoles` et que les POI périmés. */
+/** Le rang maximal du Chenil, en toutes lettres. ⚠️ Une seule lecture : le store en a
+ *  besoin pour refuser, l’écran pour l’annoncer — deux conversions index→libellé
+ *  finiraient par se contredire, et `RANK_ORDER` n’a rien à faire dans un store. */
+export function garrisonRankLabel(kennelLevel: number): string {
+  const i = garrisonRankCap(kennelLevel);
+  return i < 0 ? '—' : RARITY_LABEL[RANK_ORDER[i]!];
+}
+
+/** Le niveau de Chenil qui ouvrira le rang SUIVANT — `null` une fois au sommet.
+ *  ⚠️ La page ne doit pas importer `PROMO_LEVELS` : cette table appartient aux
+ *  AVENTURIERS, et un écran qui la lit directement ne saurait pas qu’elle a bougé. */
+export function garrisonNextRankLevel(kennelLevel: number): number | null {
+  const next = garrisonRankCap(kennelLevel) + 1;
+  return next < Math.min(PROMO_LEVELS.length, RANK_ORDER.length) ? PROMO_LEVELS[next]! : null;
+}
+
+export function canGarrison(fam: Item, kennelLevel: number): boolean {
+  return kennelLevel > 0 && rankIndex(fam.rarity) <= garrisonRankCap(kennelLevel);
 }
 /** ⚠️ IL N'Y A PLUS DE REPLI, ET C'EST VOULU. `garrisonBonus` et `autoGarrison`
  *  prenaient `slots = GARRISON_SLOTS` (3) par défaut : le STORE omettait l'argument —
@@ -1064,17 +1116,19 @@ export function dedupeGarrisonRoles(familiars: Item[]): Item[] {
 /** Bonus de la garnison. Chaque familier apporte SON effet, amplifié par son dressage
  *  DÉFENSIF (jamais offensif : les deux carrières sont contextuelles), et réduit de
  *  moitié s'il est encore fatigué. */
-export function garrisonBonus(
-  familiars: Item[],
-  now: number,
-  kennelLevel: number,
-  slots: number,
-): GarrisonBonus {
+export function garrisonBonus(familiars: Item[], now: number, kennelLevel: number): GarrisonBonus {
   const out: GarrisonBonus = {};
   if (kennelLevel <= 0) return out;
+  // ⚠️ LES PLACES SONT DÉRIVÉES, plus reçues. Elles l’étaient, et le STORE omettait
+  // l’argument pendant que l’ÉCRAN le passait : au niveau 28, 6 familiers postés
+  // affichés, 3 qui se battaient (v0.751). Un paramètre qu’on peut oublier finit par
+  // l’être ; une valeur dérivée du Chenil ne peut pas diverger de lui.
+  // ⚠️ HORS D’ÉCOLE = ÉCARTÉS ICI AUSSI, pas seulement à l’écriture : une garnison
+  // rangée avant ce changement se soigne toute seule, sans migration.
+  const postable = familiars.filter((f) => canGarrison(f, kennelLevel));
   // ⚠️ DÉDOUBLONNÉ AVANT la coupe : la place qu'une copie écartée libère revient à un
   // autre rôle, elle ne se perd pas.
-  for (const f of dedupeGarrisonRoles(familiars).slice(0, Math.max(1, slots))) {
+  for (const f of dedupeGarrisonRoles(postable).slice(0, garrisonSlots(kennelLevel))) {
     const role = GARRISON_ROLE[f.effect.type]!;
     const mult =
       GARRISON_K *
@@ -1102,11 +1156,14 @@ export function garrisonBonus(
 }
 
 /** Choisit automatiquement les meilleurs défenseurs — le geste qu'on veut faire une
- *  fois, pas trois fois par siège. On classe par la valeur RÉELLE apportée au mur. */
-export function autoGarrison(familiars: Item[], slots: number): string[] {
+ *  fois, pas trois fois par siège. On classe par la valeur RÉELLE apportée au mur.
+ *  ⚠️ Il prend le NIVEAU DU CHENIL et pas un nombre de places : c’est lui qui décide
+ *  à la fois combien on en poste et jusqu’à quel rang — une seule source pour les
+ *  deux, donc aucun moyen que le tri propose ce que le combat refuse. */
+export function autoGarrison(familiars: Item[], kennelLevel: number): string[] {
   // Un rôle par place : `dedupeGarrisonRoles` classe déjà par valeur réelle au mur.
-  return dedupeGarrisonRoles(familiars)
-    .slice(0, slots)
+  return dedupeGarrisonRoles(familiars.filter((f) => canGarrison(f, kennelLevel)))
+    .slice(0, garrisonSlots(kennelLevel))
     .map((f) => f.id);
 }
 
@@ -2186,10 +2243,19 @@ export function defensePerLevelLabel(
             nextStepLevel(scavengerCount, l) ?? next
           })`;
     }
-    case 'kennel':
-      // ⚠️ Le chenil ne donne PAS de places (elles suivent le niveau du personnage) : il
-      // plafonne le DRESSAGE défensif. Le dire, sinon on l’améliore en attendant un slot.
-      return `Niveau ${next} : dressage de défense plafonné à ${next} (les places, elles, viennent de ton niveau)`;
+    case 'kennel': {
+      // ⚠️ TROIS leviers, et ils tenaient dans une phrase qui n’en annonçait qu’un.
+      // Le Chenil est à ses familiers ce que la Guilde est aux aventuriers : il dit
+      // COMBIEN on en poste et JUSQU’À QUEL RANG, plus le dressage qu’il sait donner.
+      const pa = garrisonSlots(l);
+      const pb = garrisonSlots(next);
+      const ra = garrisonRankCap(l);
+      const rb = garrisonRankCap(next);
+      const bits = [`dressage de défense plafonné à ${next}`];
+      if (pb > pa) bits.unshift(`${pa} → ${pb} familiers au mur`);
+      if (rb > ra) bits.unshift(`rang max ${garrisonRankLabel(next)}`);
+      return `Niveau ${next} : ${bits.join(', ')}`;
+    }
     case 'infirmary': {
       const wa = woundMsFor(l, ctx.intervalMs);
       const wb = woundMsFor(next, ctx.intervalMs);
@@ -2625,7 +2691,15 @@ export function duplicateFamiliars(
   playerLevel: number,
   opts: { equippedId?: string | null; postedIds?: string[] } = {},
 ): Item[] {
-  const keep = garrisonSlots(playerLevel) + 1;
+  // ⚠️ SUR LE NIVEAU JOUEUR, PAS SUR LE CHENIL, et c’est délibéré. Ce seuil garde une
+  // action DESTRUCTRICE : l’indexer sur le Chenil ferait fondre, le jour où il est en
+  // retard, des familiers qu’on pourra poster dès qu’il montera. Il est volontairement
+  // généreux — il l’est même plus que nécessaire depuis `dedupeGarrisonRoles` (mesuré
+  // v0.756 : le jeu ne peut employer que DEUX exemplaires d’un même effet), et
+  // l’utilisateur a choisi de le laisser ainsi. Il ne passe donc plus par
+  // `garrisonSlots`, qui parle désormais du CHENIL : emprunter une fonction dont le
+  // sens a changé, c’est la recette d’un écart silencieux.
+  const keep = 2 + Math.floor(Math.max(1, playerLevel) / 5);
   const posted = new Set(opts.postedIds ?? []);
   const groups = new Map<string, Item[]>();
   for (const f of familiars) {

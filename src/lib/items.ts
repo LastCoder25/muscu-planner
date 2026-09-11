@@ -226,7 +226,7 @@ export function effectiveValue(effect: ItemEffect, level: number): number {
 
 // ── Économie d'objets : Poussière (évolution) & or (vente) ──
 // Index 0..9 du rang → sert aux barèmes croissants (poussière / or / coûts).
-function rankIndex(r: Rarity): number {
+export function rankIndex(r: Rarity): number {
   return Math.max(0, RANK_ORDER.indexOf(r));
 }
 /** Arrondit une magnitude d'effet à 1 décimale (au lieu d'un entier) → la qualité

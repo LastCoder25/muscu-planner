@@ -97,6 +97,8 @@ import {
   garrisonBonus,
   autoGarrison,
   garrisonSlots,
+  garrisonRankLabel,
+  canGarrison,
   dedupeGarrisonRoles,
   fatigueMsFor,
   healCost,
@@ -1515,15 +1517,15 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /** Bonus que la garnison apporte au mur (rôle par ESPÈCE, cf. GARRISON_ROLE).
-   *  ⚠️ `playerLevel` est OBLIGATOIRE : c'est lui qui donne le nombre de places
-   *  (`garrisonSlots`). Il était omis, et le combat ne comptait donc que 3 familiers
-   *  quand l'écran en annonçait 6 — cf. le commentaire de `GARRISON_SLOTS`. */
-  function garrisonFor(cur: CharacterRow, now: number, playerLevel: number) {
+   *  ⚠️ Le niveau JOUEUR n’entre plus ici : places et rang maximal viennent désormais du
+   *  CHENIL seul (`garrisonSlots` / `garrisonRankCap`), comme l’effectif d’aventuriers
+   *  vient de la Guilde. Un paramètre de moins, c’est un paramètre qu’on ne peut plus
+   *  oublier — et c’est exactement l’oubli qui faisait combattre 3 familiers sur 6. */
+  function garrisonFor(cur: CharacterRow, now: number) {
     return garrisonBonus(
       garrisonedFamiliars(cur),
       now,
       defenseLevel(baseOf(cur, now).defenses, 'kennel'),
-      garrisonSlots(playerLevel),
     );
   }
 
@@ -1565,7 +1567,6 @@ export const useCharacterStore = defineStore('character', () => {
       cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT && posted.has(it.id)),
       now,
       defenseLevel(t.base.defenses, 'kennel'),
-      garrisonSlots(ctx.playerLevel),
     );
     // ⚠️ Le bonus du chenil ne va plus à la MURAILLE mais à la GARNISON : c'est la chaîne
     // familiers → garnison → défenses. Les aventuriers DISPONIBLES défendent (ni en
@@ -1633,16 +1634,25 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /** Poste ou retire un familier du chenil. */
-  async function toggleGarrison(userId: string, famId: string, now: number, playerLevel: number) {
+  async function toggleGarrison(userId: string, famId: string, now: number) {
     const cur = row.value;
     if (!cur) return;
     const base = baseOf(cur, now);
-    if (defenseLevel(base.defenses, 'kennel') <= 0)
-      throw new Error('Construis un Chenil pour poster des familiers.');
+    const kennel = defenseLevel(base.defenses, 'kennel');
+    if (kennel <= 0) throw new Error(`Construis un Chenil pour poster des familiers.`);
     const cur_ = base.garrison ?? [];
+    if (!cur_.includes(famId)) {
+      // ⚠️ LE REFUS VIT ICI, pas seulement à l’écran : une interface peut ne pas
+      // proposer l’impossible, elle ne peut pas le garantir.
+      const fam = cur.inventory.find((it) => it.id === famId);
+      if (fam && !canGarrison(fam, kennel))
+        throw new Error(
+          `Ton Chenil ne sait héberger que jusqu’au rang ${garrisonRankLabel(kennel)}. Améliore-le pour poster celui-ci.`,
+        );
+    }
     const next = cur_.includes(famId)
       ? cur_.filter((x) => x !== famId)
-      : [...cur_, famId].slice(-garrisonSlots(playerLevel));
+      : [...cur_, famId].slice(-garrisonSlots(kennel));
     await persistOptimistic(userId, { base: { ...base, garrison: next } });
   }
 
@@ -1651,12 +1661,12 @@ export const useCharacterStore = defineStore('character', () => {
    *  ferait deux allers-retours réseau pour un seul geste — avec un état intermédiaire
    *  visible où l'emplacement est vide. Le tri conserve l'ordre donné : c'est lui qui
    *  décide de quelle case occupe quel familier à l'écran. */
-  async function setGarrison(userId: string, ids: string[], now: number, playerLevel: number) {
+  async function setGarrison(userId: string, ids: string[], now: number) {
     const cur = row.value;
     if (!cur) return;
     const base = baseOf(cur, now);
-    if (defenseLevel(base.defenses, 'kennel') <= 0)
-      throw new Error('Construis un Chenil pour poster des familiers.');
+    const kennel = defenseLevel(base.defenses, 'kennel');
+    if (kennel <= 0) throw new Error(`Construis un Chenil pour poster des familiers.`);
     const owned = new Set(
       cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT).map((it) => it.id),
     );
@@ -1668,23 +1678,25 @@ export const useCharacterStore = defineStore('character', () => {
     const voulus = [...new Set(ids.filter((id) => owned.has(id)))]
       .map((id) => byId.get(id))
       .filter((it): it is Item => !!it);
-    const next = dedupeGarrisonRoles(voulus)
-      .slice(0, garrisonSlots(playerLevel))
+    // ⚠️ Hors d’école = écartés, comme au combat : l’écran ne doit jamais pouvoir
+    // écrire un état que le mur arbitrerait autrement.
+    const next = dedupeGarrisonRoles(voulus.filter((it) => canGarrison(it, kennel)))
+      .slice(0, garrisonSlots(kennel))
       .map((it) => it.id);
     await persistOptimistic(userId, { base: { ...base, garrison: next } });
   }
 
   /** Poste automatiquement les meilleurs défenseurs — le geste qu'on veut faire une
    *  fois, pas avant chaque siège. */
-  async function autoAssignGarrison(userId: string, now: number, playerLevel: number) {
+  async function autoAssignGarrison(userId: string, now: number) {
     const cur = row.value;
     if (!cur) return;
     const base = baseOf(cur, now);
-    if (defenseLevel(base.defenses, 'kennel') <= 0)
-      throw new Error('Construis un Chenil pour poster des familiers.');
+    const kennel = defenseLevel(base.defenses, 'kennel');
+    if (kennel <= 0) throw new Error(`Construis un Chenil pour poster des familiers.`);
     const pool = cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT);
     await persistOptimistic(userId, {
-      base: { ...base, garrison: autoGarrison(pool, garrisonSlots(playerLevel)) },
+      base: { ...base, garrison: autoGarrison(pool, kennel) },
     });
   }
 
@@ -1802,7 +1814,7 @@ export const useCharacterStore = defineStore('character', () => {
         faction,
         playerLevel,
         ((t.field.dispatchUntil ?? now) ^ cur.base.seed) >>> 0 || 1,
-        garrisonFor(cur, now, playerLevel).lootPct ?? 0,
+        garrisonFor(cur, now).lootPct ?? 0,
       );
       const drops = loot.items.map((it) => ({ ...it, id: crypto.randomUUID() }));
       patch.gold = cur.gold + loot.gold;

@@ -779,6 +779,15 @@
             🐾 Garnison — {{ garrisonIds.length }}/{{ slots }} postés
             <span class="sh-gnext">· +1 place au niveau {{ nextSlotLevel }}</span>
           </div>
+          <!-- ⚠️ LE RANG MAXIMAL EST LE SECOND LEVIER du Chenil, comme la Guilde pour
+               les aventuriers : sans cette ligne, on trouve un familier légendaire, on
+               ne peut pas le poster, et rien ne dit pourquoi. -->
+          <div class="sh-gcap">
+            🎖️ Rang max hébergé : <b>{{ rankCapLabel }}</b>
+            <span v-if="nextRankLevel" class="sh-gnext">
+              · rang suivant au niveau {{ nextRankLevel }}
+            </span>
+          </div>
 
           <!-- ── LES CASES ────────────────────────────────────────────────────
                Une case par place, occupée ou vide. La LISTE de tous les familiers
@@ -858,7 +867,11 @@
           :key="f.id"
           type="button"
           class="fpick"
-          :class="{ here: famPick !== null && garrisonSlotsView[famPick]?.id === f.id }"
+          :class="{
+            here: famPick !== null && garrisonSlotsView[famPick]?.id === f.id,
+            barred: !postable(f),
+          }"
+          :disabled="!postable(f)"
           @click="pickFamiliar(f.id)"
         >
           <span class="fp-emo">{{ f.emoji }}</span>
@@ -871,7 +884,14 @@
             </span>
             <span class="fp-role">{{ roleLabel(f) }}</span>
             <span class="fp-eff">{{ famEffect(f) }}</span>
-            <span v-if="defLvlRaw(f) > defLvl(f)" class="fp-capped">
+            <!-- ⚠️ ON DIT POURQUOI, on ne grise pas en silence : un familier qu’on ne peut
+                 pas poster sans explication se lit comme un bug (leçon du gris de la
+                 carte, v0.738). -->
+            <span v-if="!postable(f)" class="fp-capped">
+              🎖️ Hors de portée de ton Chenil (rang max {{ rankCapLabel }})
+              <template v-if="nextRankLevel">— améliore-le au niveau {{ nextRankLevel }}</template>
+            </span>
+            <span v-else-if="defLvlRaw(f) > defLvl(f)" class="fp-capped">
               dressage bridé par le Chenil (niv. {{ kennelLevel }}) — il vaut {{ defLvlRaw(f) }}
             </span>
           </span>
@@ -943,6 +963,9 @@ import {
   raidIntervalMs,
   garrisonBonus,
   garrisonSlots,
+  garrisonRankLabel,
+  garrisonNextRankLevel,
+  canGarrison,
   GARRISON_CAP,
   isFatigued,
   isWounded,
@@ -1173,20 +1196,25 @@ function pickFamiliar(id: string | null) {
   const next = Array.from({ length: slots.value }, (_, k) => garrisonSlotsView.value[k]?.id ?? '');
   next[i] = id ?? ''; // le sélecteur ne propose que des familiers LIBRES : rien à échanger
   famPick.value = null;
-  void guard(() => char.setGarrison(uid.value, next.filter(Boolean), Date.now(), heroLevel.value));
+  void guard(() => char.setGarrison(uid.value, next.filter(Boolean), Date.now()));
 }
 
 const garrisoned = computed(() => {
   const ids = new Set(base.value?.garrison ?? []);
   return famPool.value.filter((f) => ids.has(f.id));
 });
-/** Places de garnison : elles grandissent avec le personnage (une de plus tous les 5
- *  niveaux). Le chenil suit donc le joueur au lieu de rester figé. */
-const slots = computed(() => garrisonSlots(heroLevel.value));
-const nextSlotLevel = computed(() => (Math.floor(heroLevel.value / 5) + 1) * 5);
-const garrison = computed(() =>
-  garrisonBonus(garrisoned.value, now.value, kennelLevel.value, slots.value),
-);
+/** Places de garnison : elles viennent du CHENIL, comme l’effectif d’aventuriers vient
+ *  de la Guilde (demandé par l’utilisateur). Une de plus tous les 5 niveaux du
+ *  bâtiment — et c’est lui, pas le personnage, qu’on améliore pour en poster plus. */
+const slots = computed(() => garrisonSlots(kennelLevel.value));
+const nextSlotLevel = computed(() => (Math.floor(kennelLevel.value / 5) + 1) * 5);
+/** Le rang le plus haut que le Chenil sait héberger, et le niveau qui ouvre le suivant. */
+const rankCapLabel = computed(() => garrisonRankLabel(kennelLevel.value));
+/** Ce familier tient-il dans l’école ? ⚠️ Même fonction que le combat et que le
+ *  store : l’écran ne peut donc pas proposer ce que le mur refuserait. */
+const postable = (f: Item): boolean => canGarrison(f, kennelLevel.value);
+const nextRankLevel = computed(() => garrisonNextRankLevel(kennelLevel.value));
+const garrison = computed(() => garrisonBonus(garrisoned.value, now.value, kennelLevel.value));
 function isFatiguedNow(f: Item): boolean {
   return isFatigued(f, now.value);
 }
@@ -1213,7 +1241,7 @@ const pct = (v: number) => (Math.round(v * 10) / 10).toString().replace('.', ','
 function famEffect(f: Item): string {
   const role = GARRISON_ROLE[f.effect.type];
   if (!role) return 'Aucun effet au mur — son bonus ne sert qu’au héros.';
-  const b = garrisonBonus([f], now.value, Math.max(1, kennelLevel.value), 1);
+  const b = garrisonBonus([f], now.value, Math.max(1, kennelLevel.value));
   if (role === 'damage') return `+${pct(b.damagePct ?? 0)} % de dégâts des défenseurs`;
   if (role === 'pv') return `+${pct(b.maxPvPct ?? 0)} % de PV à l’enceinte`;
   if (role === 'armor')
@@ -1803,8 +1831,7 @@ const doRepairAll = () =>
     if (cost)
       $q.notify({ type: 'positive', message: '🔩 Enceinte réparée — la production repart.' });
   });
-const doAutoGarrison = () =>
-  guard(() => char.autoAssignGarrison(uid.value, Date.now(), heroLevel.value));
+const doAutoGarrison = () => guard(() => char.autoAssignGarrison(uid.value, Date.now()));
 const doHeal = () =>
   guard(async () => {
     const cost = await char.healHero(uid.value, Date.now());
@@ -2345,6 +2372,17 @@ function doHarvest() {
    Des CASES, pas une liste : l'état se lit d'un coup d'œil et un poste vide
    reste visible. La couleur du liseré est la rareté (mêmes classes .p-* que
    partout ailleurs), le fond dit occupé/libre. */
+/* Familier hors d’école : il reste LISIBLE (on doit pouvoir lire pourquoi), il n’est
+   simplement plus cliquable. */
+.fpick.barred {
+  opacity: 0.55;
+  border-style: dashed;
+}
+.sh-gcap {
+  font-size: 12.5px;
+  color: var(--dim);
+  margin: -2px 0 8px;
+}
 .gslots {
   display: flex;
   flex-wrap: wrap;

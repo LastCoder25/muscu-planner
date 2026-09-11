@@ -36,6 +36,9 @@ import {
   garrisonBonus,
   duplicateFamiliars,
   garrisonSlots,
+  garrisonRankCap,
+  garrisonRankLabel,
+  canGarrison,
   raidThreatSize,
   type RaidReport,
   type BattleField,
@@ -67,7 +70,6 @@ import {
 /** Places de garnison pour les tests courts — ce que le repli implicite rendait
  *  autrefois. ⚠️ La valeur est désormais TOUJOURS explicite : c'est ce repli qui avait
  *  permis au store de ne compter que 3 familiers pendant que l'écran en affichait 6. */
-const SLOTS = 3;
 import { refFighter, gearExpect } from '@/lib/proceduralContent';
 import {
   rankCeilingForLevel,
@@ -81,7 +83,7 @@ import {
   type Item,
 } from '@/lib/items';
 import type { Combatant } from '@/lib/combat';
-import type { Adventurer } from '@/lib/adventurers';
+import { PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
 import { FAMILIAR_SPECIES } from '@/data/familiars';
 
 const H = 3600_000;
@@ -599,25 +601,25 @@ describe('chenil : la garnison', () => {
 
   it('l’ESPÈCE décide du rôle : poster un ours ou un loup ne donne pas la même bataille', () => {
     const k = 5;
-    const loup = garrisonBonus([fam('a', 'damage_pct', 20)], 0, k, SLOTS);
-    const ours = garrisonBonus([fam('b', 'dmg_reduction_pct', 20)], 0, k, SLOTS);
-    const cerf = garrisonBonus([fam('c', 'max_pv_pct', 20)], 0, k, SLOTS);
+    const loup = garrisonBonus([fam('a', 'damage_pct', 20)], 0, k);
+    const ours = garrisonBonus([fam('b', 'dmg_reduction_pct', 20)], 0, k);
+    const cerf = garrisonBonus([fam('c', 'max_pv_pct', 20)], 0, k);
     expect(loup.damagePct).toBeGreaterThan(0);
     expect(loup.maxPvPct).toBeUndefined();
     expect(ours.dmgReduction).toBeGreaterThan(0);
     expect(cerf.maxPvPct).toBeGreaterThan(0);
     // Rôles HORS combat : le faucon renseigne, la marmotte fouille.
-    expect(garrisonBonus([fam('d', 'crit_pct', 20)], 0, k, SLOTS).scoutBonus).toBe(1);
-    expect(garrisonBonus([fam('e', 'gold_pct', 20)], 0, k, SLOTS).lootPct).toBeGreaterThan(0);
+    expect(garrisonBonus([fam('d', 'crit_pct', 20)], 0, k).scoutBonus).toBe(1);
+    expect(garrisonBonus([fam('e', 'gold_pct', 20)], 0, k).lootPct).toBeGreaterThan(0);
   });
 
   it('sans Chenil, la garnison n’apporte rien', () => {
-    expect(garrisonBonus([fam('a', 'damage_pct', 20)], 0, 0, SLOTS)).toEqual({});
+    expect(garrisonBonus([fam('a', 'damage_pct', 20)], 0, 0)).toEqual({});
   });
 
   it('le dressage DÉFENSIF renforce la garnison, et ne dépasse jamais le niveau du joueur', () => {
-    const brut = garrisonBonus([fam('a', 'damage_pct', 20, 0)], 0, 5, SLOTS);
-    const dresse = garrisonBonus([fam('a', 'damage_pct', 20, famXpForLevel(10))], 0, 5, SLOTS);
+    const brut = garrisonBonus([fam('a', 'damage_pct', 20, 0)], 0, 5);
+    const dresse = garrisonBonus([fam('a', 'damage_pct', 20, famXpForLevel(10))], 0, 5);
     expect(dresse.damagePct!).toBeGreaterThan(brut.damagePct!);
     // Le plafond s'applique à l'ATTRIBUTION : on ne peut pas dépasser son niveau.
     const it0 = fam('a', 'damage_pct', 20);
@@ -632,8 +634,8 @@ describe('chenil : la garnison', () => {
     expect(famLevel(guerrier.atkXp)).toBeGreaterThan(0);
     expect(famLevel(guerrier.defXp)).toBe(0);
     // Le dressage d'attaque ne vaut RIEN au mur…
-    expect(garrisonBonus([guerrier], 0, 5, SLOTS).damagePct).toBeCloseTo(
-      garrisonBonus([base], 0, 5, SLOTS).damagePct!,
+    expect(garrisonBonus([guerrier], 0, 5).damagePct).toBeCloseTo(
+      garrisonBonus([base], 0, 5).damagePct!,
       5,
     );
     // …et l'axe d'attaque reste MODESTE : le combat du héros est calibré au serré.
@@ -644,8 +646,8 @@ describe('chenil : la garnison', () => {
     // S'il pouvait être perdu, personne ne posterait ses bons familiers et le chenil
     // resterait vide le jour où la mécanique se déclenche.
     const tired: Item = { ...fam('a', 'damage_pct', 20), fatigueUntil: 10 * H };
-    const rested = garrisonBonus([{ ...tired, fatigueUntil: 0 }], 5 * H, 5, SLOTS);
-    const weary = garrisonBonus([tired], 5 * H, 5, SLOTS);
+    const rested = garrisonBonus([{ ...tired, fatigueUntil: 0 }], 5 * H, 5);
+    const weary = garrisonBonus([tired], 5 * H, 5);
     expect(weary.damagePct!).toBeLessThan(rested.damagePct!);
     expect(weary.damagePct!).toBeGreaterThan(0);
     // L'Infirmerie abrège le repos, sans jamais l'annuler.
@@ -667,7 +669,6 @@ describe('chenil : la garnison', () => {
         g.map((f) => ({ ...f, defXp: famXpForLevel(defLvl) })),
         0,
         10,
-        SLOTS,
       );
       let held = 0;
       for (let i = 0; i < 200; i++) {
@@ -699,7 +700,7 @@ describe('chenil : la garnison', () => {
     // plafond et ne pouvait rien attraper. On épingle donc ce que le dressage CHANGE
     // — la force des défenseurs qu’il produit — ce qui est exact et sans bruit
     // d’échantillonnage.
-    const brut = guardUnits(26, [], garrisonBonus(real, 0, 10, SLOTS));
+    const brut = guardUnits(26, [], garrisonBonus(real, 0, 10));
     const ecole = guardUnits(
       26,
       [],
@@ -707,7 +708,6 @@ describe('chenil : la garnison', () => {
         real.map((f) => ({ ...f, defXp: famXpForLevel(26) })),
         0,
         10,
-        SLOTS,
       ),
     );
     expect(ecole[0]!.damage).toBeGreaterThan(brut[0]!.damage);
@@ -723,32 +723,89 @@ describe('chenil : la garnison', () => {
       [fam('a', 'lifesteal_pct', 40), fam('b', 'lifesteal_pct', 40)],
       0,
       20,
-      SLOTS,
     );
     expect(gros.regen).toBeLessThanOrEqual(GARRISON_CAP.regen);
     const mur = garrisonBonus(
       [fam('a', 'dmg_reduction_pct', 60), fam('b', 'dmg_reduction_pct', 60)],
       0,
       20,
-      SLOTS,
     );
     expect(mur.dmgReduction).toBeLessThanOrEqual(GARRISON_CAP.dmgReduction);
   });
 
   it('l’assignation automatique prend les meilleurs, dans la limite des places', () => {
-    // ⚠️ Réécrit en v0.719 : le pool d'origine était fait de TROIS familiers à dégâts,
-    // dont deux étaient postés côte à côte. C'est précisément ce que la règle « un rôle
-    // par poste » interdit désormais — le test verrouillait le défaut.
+    // ⚠️ RÉÉCRIT : le 2e argument était un NOMBRE DE PLACES, il est devenu le NIVEAU DU
+    // CHENIL — c'est lui qui décide et des places et du rang, comme la Guilde pour les
+    // aventuriers. Le test d'origine passait 3 et vérifiait 3 postés ; il dirait
+    // aujourd'hui « chenil 3 », soit UNE place. L'intention, elle, ne bouge pas.
+    // (Réécrit une 1re fois en v0.719 : trois familiers à dégâts, dont deux postés
+    // côte à côte — ce que « un rôle par poste » interdit.)
     const pool = [
       fam('faible', 'damage_pct', 5),
       fam('fort', 'damage_pct', 40),
       fam('cerf', 'max_pv_pct', 30),
       fam('ours', 'dmg_reduction_pct', 12),
     ];
-    const picked = autoGarrison(pool, SLOTS);
-    expect(picked).toHaveLength(SLOTS);
+    const KENNEL = 12; // 3 places, et un rang max largement au-dessus du « rare » du fixture
+    const picked = autoGarrison(pool, KENNEL);
+    expect(picked).toHaveLength(garrisonSlots(KENNEL));
     expect(picked[0]).toBe('fort');
     expect(picked).not.toContain('faible');
+  });
+
+  it('⚠️ LES PLACES VIENNENT DU CHENIL, plus du niveau du personnage', () => {
+    // Demandé par l’utilisateur : « le level du chenil détermine le nombre de familiers
+    // et le rang max comme d’autres bâtiments (la guilde) ». Avant, un joueur de haut
+    // niveau avait six places avec un chenil de niveau 1 — le bâtiment ne servait qu’à
+    // plafonner le dressage, et on l’améliorait sans rien voir arriver.
+    expect(garrisonSlots(0)).toBe(0);
+    for (let l = 0; l < 100; l++)
+      expect(garrisonSlots(l + 1)).toBeGreaterThanOrEqual(garrisonSlots(l));
+    expect(garrisonSlots(40)).toBeGreaterThan(garrisonSlots(5));
+  });
+
+  it('⚠️ LES PLACES BORNENT VRAIMENT LE BONUS, rôles distincts compris', () => {
+    // ⚠️ Ce test manquait, et une mutation l'a montré : `dedupeGarrisonRoles` ne garde
+    // déjà qu'UN familier par rôle, si bien que supprimer la coupe aux places ne se
+    // voyait nulle part — tous les fixtures tenaient dans le nombre de places. Il faut
+    // donc PLUS DE RÔLES DISTINCTS QUE DE PLACES pour que la borne soit observable.
+    const KENNEL = 5;
+    expect(garrisonSlots(KENNEL)).toBe(2); // le test n’a de sens que s’il y a moins de places que de rôles
+    const pool = [
+      fam('loup', 'damage_pct', 40),
+      fam('cerf', 'max_pv_pct', 30),
+      fam('ours', 'dmg_reduction_pct', 20),
+      fam('salam', 'lifesteal_pct', 10),
+    ];
+    const b = garrisonBonus(pool, 0, KENNEL);
+    const canaux = [b.damagePct, b.maxPvPct, b.dmgReduction, b.regen].filter((v) => (v ?? 0) > 0);
+    expect(canaux).toHaveLength(garrisonSlots(KENNEL));
+    // Et ce sont les MEILLEURS qui tiennent les places, pas les premiers venus.
+    expect(b.damagePct).toBeGreaterThan(0);
+    expect(b.maxPvPct).toBeGreaterThan(0);
+  });
+
+  it('⚠️ LE RANG MAXIMAL SUIT LA MÊME TABLE QUE LA GUILDE', () => {
+    // ⚠️ Adossé à `PROMO_LEVELS`, jamais à des nombres écrits à la main : c'est la table
+    // qui dit déjà « quel niveau de bâtiment pour quel rang », et elle compte exactement
+    // autant d'entrées que `RANK_ORDER`. Deux tables finiraient par diverger.
+    for (let i = 0; i < RANK_ORDER.length; i++) {
+      const need = PROMO_LEVELS[i]!;
+      const it = { ...fam(`f${i}`, 'damage_pct', 20), rarity: RANK_ORDER[i]! };
+      expect(canGarrison(it, need)).toBe(true);
+      if (need > 1) expect(canGarrison(it, need - 1)).toBe(false);
+    }
+  });
+
+  it('⚠️ UN FAMILIER HORS D’ÉCOLE NE COMPTE PAS AU COMBAT, même s’il est posté', () => {
+    // La garde vit dans le CALCUL, pas seulement à l'écriture : une garnison rangée
+    // avant ce changement se soigne toute seule, sans migration — même politique que
+    // `dedupeGarrisonRoles` et que les POI périmés.
+    const prime = { ...fam('p', 'damage_pct', 40), rarity: RANK_ORDER[7]! };
+    expect(garrisonBonus([prime], 0, 5).damagePct).toBeUndefined();
+    expect(garrisonBonus([prime], 0, PROMO_LEVELS[7]!).damagePct).toBeGreaterThan(0);
+    // …et l'assignation automatique ne le propose pas non plus.
+    expect(autoGarrison([prime], 5)).not.toContain('p');
   });
 
   /** ⚠️ UN SEUL FAMILIER PAR RÔLE AU MUR (v0.719, demandé par l'utilisateur : « normalement
@@ -1468,7 +1525,7 @@ describe('⚠️ la RARETÉ d’un familier compte AUSSI au mur', () => {
   it('un familier plus rare renforce PLUS le mur, rang après rang', () => {
     let prev = 0;
     for (const r of RANK_ORDER) {
-      const d = garrisonBonus([fam(r)], 0, 28, SLOTS).damagePct ?? 0;
+      const d = garrisonBonus([fam(r)], 0, 28).damagePct ?? 0;
       expect(d, `rareté ${r}`).toBeGreaterThan(prev);
       prev = d;
     }
@@ -1477,9 +1534,9 @@ describe('⚠️ la RARETÉ d’un familier compte AUSSI au mur', () => {
   it('⚠️ l’écart suit l’échelle de rareté DU PROJET, pas une autre', () => {
     // ⚠️ On compare à `RARITY_MULT`, la CONSTANTE du projet — pas à un nombre écrit ici :
     // si l’échelle de rareté bouge un jour, ce test suit au lieu de mentir.
-    const bas = garrisonBonus([fam(RANK_ORDER[0]!)], 0, 28, SLOTS).damagePct ?? 0;
+    const bas = garrisonBonus([fam(RANK_ORDER[0]!)], 0, 28).damagePct ?? 0;
     const dernier = RANK_ORDER[RANK_ORDER.length - 1]!;
-    const haut = garrisonBonus([fam(dernier)], 0, 28, SLOTS).damagePct ?? 0;
+    const haut = garrisonBonus([fam(dernier)], 0, 28).damagePct ?? 0;
     const attendu = RARITY_MULT[dernier] / RARITY_MULT[RANK_ORDER[0]!];
     // ⚠️ Tolérance RELATIVE : `effect.value` est stocké à UNE décimale (`round1`), donc
     // le rapport mesuré (3,93) frôle l’échelle théorique (4,00) sans l’égaler. Ce qui

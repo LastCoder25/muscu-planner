@@ -408,7 +408,6 @@ import {
   departureRisk,
   heroDefends,
   garrisonBonus,
-  garrisonSlots,
   guardUnits,
   defenseLevel,
   ODDS_LABEL,
@@ -640,7 +639,6 @@ const famBonus = computed(() =>
     ),
     coarseNow.value,
     defenseLevel(base.value?.defenses ?? [], 'kennel'),
-    garrisonSlots(heroLevel.value),
   ),
 );
 /** Qui resterait si l'on partait : l'escorte choisie quitte la base, et le héros aussi
