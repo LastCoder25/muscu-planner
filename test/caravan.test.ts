@@ -15,6 +15,7 @@ import {
   companionsOf,
   companionEffects,
   COMPANION_K,
+  ambushChance,
   advTalentsOf,
   advTalentEffects,
   ADV_TALENT_K,
@@ -690,5 +691,78 @@ describe('🧠 UN TALENT PAR AVENTURIER — des mini-héros bien moins forts', (
 
   it('sans talent, aucun effet', () => {
     expect(advTalentEffects([])).toEqual(advTalentEffects([], 0));
+  });
+});
+
+describe('👁️ L’ÉCLAIREUR ÉVITE LES EMBUSCADES (v0.759)', () => {
+  // ⚠️ Ce rôle existait, était attribué à 5 classes, annonçait « Repère les embuscades »
+  // — et n’était consommé NULLE PART. Mesuré sur le vivier réel : 3 aventuriers sur 10
+  // n’avaient que lui comme compétence.
+  const mk = (id: string, path: string[]): Adventurer => ({
+    id,
+    name: id,
+    seed: 1,
+    path,
+    level: 14,
+    xp: 0,
+  });
+  const poiOf = (perilous: boolean) =>
+    ({
+      id: 'p',
+      type: 'well',
+      level: 12,
+      x: 40,
+      y: 40,
+      perilous,
+      expiresAt: 9e15,
+    }) as unknown as Poi;
+  const sans = () => [mk('a', ['guerrier']), mk('b', ['guerrier'])];
+  const un = () => [mk('a', ['eclaireur']), mk('b', ['guerrier'])];
+  const beaucoup = () => [
+    mk('a', ['eclaireur', 'coursier', 'rodeur']),
+    mk('b', ['eclaireur']),
+    mk('c', ['eclaireur']),
+  ];
+
+  it('⚠️ SANS éclaireur, la probabilité est EXACTEMENT celle d’avant', () => {
+    // Non-régression : le calibrage des embuscades est mesuré et documenté.
+    expect(ambushChance(poiOf(false), sans())).toBeCloseTo(0.24, 6);
+    expect(ambushChance(poiOf(true), sans())).toBeCloseTo(0.42, 6);
+  });
+
+  it('chaque cran en évite davantage, et le plafond tient', () => {
+    const a = ambushChance(poiOf(false), sans());
+    const b = ambushChance(poiOf(false), un());
+    const c = ambushChance(poiOf(false), beaucoup());
+    expect(b).toBeLessThan(a);
+    expect(c).toBeLessThan(b);
+    // Jamais en dessous du plafond d’évitement : une route ne devient pas sûre.
+    expect(c).toBeGreaterThanOrEqual(0.24 * (1 - CARAVAN.scoutMax) - 1e-9);
+  });
+
+  it('⚠️ il RÉDUIT LE RISQUE, il ne FABRIQUE PAS de butin', () => {
+    // La bande libérée doit revenir à la route CALME, jamais à la cache — sinon
+    // l’éclaireur serait une machine à loot et son libellé mentirait.
+    const compte = (team: Adventurer[]) => {
+      let cache = 0;
+      let amb = 0;
+      for (let i = 1; i <= 3000; i++) {
+        const o = resolveCaravan(poiOf(false), team, i * 7919);
+        cache += o.events.filter((e) => e.kind === 'cache').length;
+        amb += o.events.filter((e) => e.kind === 'bandits').length;
+      }
+      return { cache, amb };
+    };
+    const nu = compte(sans());
+    const eclaire = compte(beaucoup());
+    expect(eclaire.amb).toBeLessThan(nu.amb);
+    // Les caches ne DOIVENT PAS augmenter (tolérance de bruit d’échantillonnage).
+    expect(eclaire.cache).toBeLessThanOrEqual(Math.round(nu.cache * 1.05));
+  });
+
+  it('une route dangereuse reste plus risquée, éclaireurs ou pas', () => {
+    expect(ambushChance(poiOf(true), beaucoup())).toBeGreaterThan(
+      ambushChance(poiOf(false), sans()),
+    );
   });
 });

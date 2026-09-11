@@ -77,6 +77,13 @@ export const CARAVAN = {
   haulMax: 0.4,
   /** Un 🩺 raccourcit les convalescences de l'équipe. */
   carePerRole: 0.25,
+  /** 👁️ ÉCLAIREUR : part d'embuscades ÉVITÉES par cran de compétence.
+   *  ⚠️ Ce rôle existait, était attribué à 5 classes, et ne faisait **RIEN** — il n'était
+   *  consommé nulle part (constaté v0.757 ; 3 aventuriers sur 10 du vivier réel n'avaient
+   *  que lui). Même forme que la cargaison (0,12 par cran, plafond 0,40) : les quatre
+   *  rôles restent comparables entre eux. */
+  scoutPerRole: 0.12,
+  scoutMax: 0.4,
   /** Repos d'un aventurier blessé. */
   hurtMs: 6 * 3600_000,
   /** Formation d'une promotion, et ce que le Centre peut en retirer (asymptotiquement). */
@@ -519,6 +526,23 @@ export function canSendCaravan(poi: Poi, escort: Adventurer[]): boolean {
   return HARVEST_TYPES.has(poi.type) && escort.length > 0 && escort.length <= CARAVAN.escortMax;
 }
 
+/** Probabilité de base qu'une jambe de trajet tourne à l'embuscade, AVANT éclaireurs. */
+const AMBUSH_BASE = { calme: 0.24, perilous: 0.42 } as const;
+
+/**
+ * Ce qu'une jambe de trajet risque vraiment, une fois les éclaireurs comptés.
+ *
+ * ⚠️ « Repère les embuscades » veut dire les ÉVITER, pas mieux les gagner : ce
+ * second terrain est déjà celui des signatures de combat, et deux mécaniques sur le même
+ * levier se marchent dessus. Un convoi bien éclairé a donc une alternative à la force
+ * brute — passer inaperçu.
+ */
+export function ambushChance(poi: Poi, escort: Adventurer[]): number {
+  const base = poi.perilous ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
+  const cut = Math.min(CARAVAN.scoutMax, countRole(escort, 'scout') * CARAVAN.scoutPerRole);
+  return base * (1 - cut);
+}
+
 /** Résout le voyage : les rencontres, la cargaison, la paie, les blessés.
  *  Seedé au DÉPART comme tout le reste — déterministe et hors-ligne. */
 export function resolveCaravan(poi: Poi, escort: Adventurer[], seed: number): CaravanOutcome {
@@ -532,9 +556,11 @@ export function resolveCaravan(poi: Poi, escort: Adventurer[], seed: number): Ca
   const guards = escortCombatant(escort);
   // Une rencontre par jambe de trajet — deux fois plus sur une route dangereuse.
   const legs = poi.perilous ? 4 : 2;
+  const base = poi.perilous ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
+  const amb = ambushChance(poi, escort);
   for (let i = 0; i < legs; i++) {
     const roll = rng();
-    if (roll < (poi.perilous ? 0.42 : 0.24)) {
+    if (roll < amb) {
       const r = simulateCombat(guards, { ...foe }, { seed: (seed + i * 7919) >>> 0, goldOnWin: 0 });
       events.push({
         kind: 'bandits',
@@ -547,11 +573,15 @@ export function resolveCaravan(poi: Poi, escort: Adventurer[], seed: number): Ca
         const victim = escort[Math.floor(rng() * escort.length)];
         if (victim && !hurt.includes(victim.id)) hurt.push(victim.id);
       }
-    } else if (roll < 0.34) {
+      // ⚠️ Les bandes SUIVANTES repartent de `base`, pas de `amb` : ce que l'éclaireur
+      // fait éviter doit devenir une ROUTE CALME, jamais une cache. Sinon il ne
+      // réduirait pas le risque, il fabriquerait du butin — et son libellé mentirait.
+      // Sans éclaireur, `amb === base` et les bandes sont EXACTEMENT celles d'avant.
+    } else if (roll >= base && roll < 0.34) {
       events.push({ kind: 'cache', text: 'Une cache oubliée le long de la route.' });
       mult *= 1.1;
       keysBonus += rng() < 0.25 ? 1 : 0;
-    } else if (roll < 0.42) {
+    } else if (roll >= base && roll < 0.42) {
       events.push({ kind: 'detour', text: 'Un pont coupé : le convoi allonge.' });
       mult *= 0.92;
     } else {
