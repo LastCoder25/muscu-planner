@@ -12,6 +12,11 @@ import {
   advRarity,
   advStats,
   advSignatures,
+  advRoles,
+  advRoleLevels,
+  advSignatureLevels,
+  escortRoleLevel,
+  reachableSkills,
   canPromote,
   classChoices,
   classRarity,
@@ -377,5 +382,97 @@ describe('⚠️ une promotion se PAIE en temps de formation', () => {
     const l = [base(), enForm(5000)];
     expect(settleAllTraining(l, 1000)).toEqual({ list: l, changed: false });
     expect(settleAllTraining(l, 5000).changed).toBe(true);
+  });
+});
+
+describe('⚠️ une compétence apprise DEUX FOIS monte d’un NIVEAU', () => {
+  // Demandé par l'utilisateur. Le cumul EXISTAIT déjà (le compteur d'occurrences des
+  // caravanes additionnait les doublons) — mais il n'avait pas de nom, et l'écran
+  // listait la même compétence deux fois, ce qui se lit comme un défaut.
+
+  it('une occurrence = niveau 1, deux = niveau 2', () => {
+    // Vesna, du vivier réel : Éclaireur › Coursier › Rôdeur — éclaireur deux fois.
+    const a = make({ path: ['eclaireur', 'coursier', 'rodeur'] });
+    const lv = advRoleLevels(a);
+    expect(lv.find((s) => s.what === 'scout')?.level).toBe(2);
+    expect(lv.find((s) => s.what === 'speed')?.level).toBe(1);
+    // ⚠️ Une seule entrée par compétence : c'est tout l'objet du changement.
+    expect(lv.filter((s) => s.what === 'scout')).toHaveLength(1);
+  });
+
+  it('⚠️ l’ordre est celui du PARCOURS, pas celui des niveaux', () => {
+    // C'est l'ordre dans lequel il a appris ; trier par niveau raconterait autre chose.
+    const a = make({ path: ['eclaireur', 'coursier', 'rodeur'] });
+    expect(advRoleLevels(a).map((s) => s.what)).toEqual(['scout', 'speed']);
+  });
+
+  it('⚠️ le NIVEAU redonne EXACTEMENT l’ancien décompte d’occurrences', () => {
+    // Non-régression de calibrage : les valeurs de jeu des caravanes (cargaison, trajet,
+    // convalescence) sont mesurées. Passer par le niveau ne doit RIEN changer.
+    const team = [
+      make({ id: 'x', path: ['eclaireur', 'coursier', 'rodeur'] }),
+      make({ id: 'y', path: ['caravanier'] }),
+      make({ id: 'z', path: ['eclaireur'] }),
+    ];
+    const brut = (role: string) =>
+      team.reduce(
+        (n, a) => n + a.path.map((id) => advClass(id)?.role).filter((r) => r === role).length,
+        0,
+      );
+    for (const role of ['heal', 'haul', 'speed', 'scout'] as const) {
+      expect(escortRoleLevel(team, role)).toBe(brut(role));
+    }
+    expect(escortRoleLevel(team, 'scout')).toBe(3);
+  });
+
+  it('une compétence absente vaut le niveau ZÉRO, jamais undefined', () => {
+    expect(escortRoleLevel([make({ path: ['guerrier'] })], 'haul')).toBe(0);
+    expect(advSignatureLevels(make({ path: ['guerrier'] }))).toEqual([]);
+  });
+});
+
+describe('⚠️ « où il va » — l’horizon d’une lignée', () => {
+  it('contient les compétences de la classe de départ', () => {
+    const r = reachableSkills(['caravanier']);
+    expect(r.roles).toContain(advClass('caravanier')!.role);
+  });
+
+  it('⚠️ RESPECTE LA FILIATION : un Guerrier ne peut pas atteindre le soin d’un Clerc', () => {
+    // Le même invariant que le tirage des promotions. Si l'horizon l'ignorait, il
+    // promettrait une voie que le joueur ne pourra jamais prendre — pire que rien.
+    const guerrier = reachableSkills(['guerrier']);
+    const clerc = reachableSkills(['mage', 'clerc']);
+    expect(clerc.roles).toContain('heal');
+    expect(guerrier.roles).not.toContain('heal');
+  });
+
+  it('⚠️ l’horizon RÉTRÉCIT à mesure qu’on avance — les choix se referment', () => {
+    // C'est ce qui donne son poids à une promotion : plus on descend, moins il reste.
+    const tot = (p: string[]) => {
+      const r = reachableSkills(p);
+      return r.roles.length + r.signatures.length;
+    };
+    const debut = tot(['eclaireur']);
+    const apres = tot(['eclaireur', 'coursier']);
+    expect(apres).toBeLessThanOrEqual(debut);
+    expect(debut).toBeGreaterThan(0);
+  });
+
+  it('⚠️ contient TOUJOURS ce que le chemin porte DÉJÀ — balayage exhaustif', () => {
+    // ⚠️ Test renforcé après une mutation passée au VERT : vérifier un seul cas nommé
+    // ne suffisait pas — la compétence de la classe de départ se retrouvait souvent
+    // plus bas sur la même branche, donc l oubli restait invisible. Le balayage de TOUS
+    // les chemins, lui, tombe sur ceux où elle est unique.
+    for (const p of allPaths(2)) {
+      const r = reachableSkills(p);
+      const adv = make({ path: p });
+      for (const role of advRoles(adv)) expect(r.roles).toContain(role);
+      for (const sg of advSignatures(adv)) expect(r.signatures).toContain(sg);
+    }
+  });
+
+  it('se termine, même en partant de chaque racine', () => {
+    // Garde-fou : l'énumération suit des chemins, elle ne doit pas boucler.
+    for (const r of roots) expect(() => reachableSkills([r.id])).not.toThrow();
   });
 });

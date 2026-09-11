@@ -248,7 +248,7 @@
                l'œil (rayon 3,4 autour de WALL_TOP) plutôt que dessus : deux symboles
                superposés ne se lisent ni l'un ni l'autre. Affiché même sans tour bâtie,
                comme le cadre — l'armée arrive de toute façon. -->
-          <text v-if="raid" x="100" :y="WALL_TOP + 12.5" class="watch-warn">⚠️</text>
+          <text v-if="raid" x="100" :y="WALL_TOP" class="watch-warn">⚠️</text>
         </g>
 
         <!-- ── LA PORTE (rempart sud) ───────────────────────────────────────
@@ -2489,8 +2489,12 @@ const doCollect = () =>
 /* ⚠️ MÊME battement (2,4 s) et MÊME keyframes que le cadre : deux signaux qui disent
    la même chose doivent respirer ensemble, sinon ils se lisent comme deux alertes. */
 .watch-warn {
-  font-size: 10px;
+  font-size: 9px;
   text-anchor: middle;
+  /* ⚠️ Centré SUR l'œil (le rond jaune), pas dessous : le pictogramme EST le regard de
+     la tour pendant une alerte. `dominant-baseline: central` cale le glyphe sur son
+     milieu — sans lui, `y` place la LIGNE DE BASE et le symbole retombe sous la cible. */
+  dominant-baseline: central;
   pointer-events: none;
   animation: ring-alert 2.4s ease-in-out infinite;
 }

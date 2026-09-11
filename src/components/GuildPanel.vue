@@ -92,7 +92,19 @@
               >
                 <span class="gc-emo">{{ c.emoji }}</span>
                 <span class="gc-lbl">{{ c.label }}</span>
-                <span class="gc-w">{{ shape(c) }}</span>
+                <!-- ⚠️ Le recrutement se faisait À L'AVEUGLE : il n'annonçait que
+                     « 💪3 ❤️2 ⚡1 », quand la promotion nomme déjà l'orientation, le rôle
+                     de convoi et la signature. On choisissait une LIGNÉE sans savoir ce
+                     qu'elle donne. Même lecture des deux côtés. -->
+                <span class="gc-shape">{{ advShapeLabel(c.w) }} · {{ shape(c) }}</span>
+                <span v-if="c.role" class="gc-perk">{{ ADV_ROLE_LABEL[c.role] }}</span>
+                <span v-if="c.signature && ADV_SIGNATURE_LABEL[c.signature]" class="gc-perk sig">
+                  {{ ADV_SIGNATURE_LABEL[c.signature] }}
+                </span>
+                <!-- « Où il va » : ce que la voie peut encore débloquer plus tard. -->
+                <span v-if="horizonOf(c.id).length" class="gc-horizon">
+                  mène à {{ horizonOf(c.id).join(' · ') }}
+                </span>
               </button>
             </div>
           </template>
@@ -143,6 +155,9 @@
           </span>
           <span v-if="!c.role && !c.signature" class="gc-perk none">
             Aucun rôle ni signature — de la stat brute
+          </span>
+          <span v-if="promoHorizon(c.id).length" class="gc-horizon">
+            mène à {{ promoHorizon(c.id).join(' · ') }}
           </span>
           <span class="gc-rar">{{ RARITY_LABEL[classRarity(c)] }}</span>
         </button>
@@ -207,16 +222,22 @@
         </span>
       </div>
 
+      <!-- ⚠️ Une compétence apprise DEUX FOIS n'est pas listée deux fois : elle monte
+           d'un NIVEAU, et son effet suit. Répétée, elle se lisait comme un bug. -->
       <div v-if="rolesOf(detailAdv).length" class="d-sec">🐫 Sur les convois</div>
       <div v-if="rolesOf(detailAdv).length" class="d-perks">
-        <span v-for="r in rolesOf(detailAdv)" :key="r" class="d-perk">
-          {{ ADV_ROLE_LABEL[r] }}
+        <span v-for="s in rolesOf(detailAdv)" :key="s.what" class="d-perk">
+          {{ ADV_ROLE_LABEL[s.what] }}
+          <b v-if="s.level > 1" class="d-lvl">Nv {{ s.level }}</b>
         </span>
       </div>
 
       <div v-if="sigLabelsOf(detailAdv).length" class="d-sec">⚔️ Au combat</div>
       <div v-if="sigLabelsOf(detailAdv).length" class="d-perks">
-        <span v-for="(l, i) in sigLabelsOf(detailAdv)" :key="i" class="d-perk sig">{{ l }}</span>
+        <span v-for="s in sigLabelsOf(detailAdv)" :key="s.label" class="d-perk sig">
+          {{ s.label }}
+          <b v-if="s.level > 1" class="d-lvl">Nv {{ s.level }}</b>
+        </span>
       </div>
 
       <p v-if="!rolesOf(detailAdv).length && !sigLabelsOf(detailAdv).length" class="g-note">
@@ -254,10 +275,11 @@ import {
   advRank,
   advRankProgress,
   advRarity,
-  advSignatures,
   advTitle,
   advClass,
-  advRoles,
+  advRoleLevels,
+  reachableSkills,
+  advSignatureLevels,
   advStats,
   canPromote,
   classChoices,
@@ -301,7 +323,7 @@ const titleOf = (a: Adventurer) => advTitle(a);
 const rarityOf = (a: Adventurer) => advRarity(a);
 const progressOf = (a: Adventurer) => advRankProgress(a);
 const nextStarOf = (a: Adventurer) => advNextStarLevel(a);
-const signaturesOf = (a: Adventurer) => advSignatures(a);
+const signaturesOf = (a: Adventurer) => advSignatureLevels(a);
 const stars = (s: number) => rankStarStr(s);
 const isFree = (a: Adventurer) => advAvailable(a, now.value);
 const busyOf = (a: Adventurer) => ((a.busyUntil ?? 0) > now.value ? a.busyUntil! : 0);
@@ -326,11 +348,13 @@ const statWeights = (a: Adventurer) => {
  *  plutôt que d'afficher « ? » : une classe retirée du vivier ne doit pas laisser un
  *  trou dans l'histoire d'un aventurier existant. */
 const pathOf = (a: Adventurer) => a.path.map((id) => advClass(id)).filter((c) => !!c);
-const rolesOf = (a: Adventurer) => advRoles(a);
+const rolesOf = (a: Adventurer) => advRoleLevels(a);
+/** Les signatures NOMMÉES, avec leur niveau. On écarte celles sans libellé plutôt que
+ *  d'afficher un code brut : un effet qu'on ne sait pas nommer n'aide personne. */
 const sigLabelsOf = (a: Adventurer) =>
-  advSignatures(a)
-    .map((e) => ADV_SIGNATURE_LABEL[e])
-    .filter((l): l is string => !!l);
+  advSignatureLevels(a)
+    .map((s) => ({ label: ADV_SIGNATURE_LABEL[s.what], level: s.level }))
+    .filter((s): s is { label: string; level: number } => !!s.label);
 /** Depuis la fiche : on ferme celle-ci avant d'ouvrir la promotion — deux feuilles
  *  empilées sur un téléphone, on ne sait plus laquelle on referme. */
 function openPromoFromDetail(a: Adventurer) {
@@ -343,6 +367,32 @@ function leftOf(at: number): string {
 }
 /** « 💪4 ❤️2 ⚡0 » — la FORME de la classe, ce qui permet de composer une équipe. */
 const shape = (c: AdvClass) => `💪${c.w.p} ❤️${c.w.e} ⚡${c.w.a}`;
+
+/** Les compétences qu'une voie peut ENCORE débloquer — celles de la classe choisie
+ *  exclues (elle les annonce déjà juste au-dessus, les répéter serait du bruit).
+ *  ⚠️ Mémoïsé : la liste est rendue pour chaque offre, et l'énumération des chemins
+ *  n'est pas gratuite. Le catalogue étant figé, un cache par clé suffit. */
+const horizonCache = new Map<string, string[]>();
+function horizonFor(path: string[], own: AdvClass | undefined): string[] {
+  const key = path.join('>');
+  const hit = horizonCache.get(key);
+  if (hit) return hit;
+  const reach = reachableSkills(path);
+  const out = [
+    ...reach.roles.filter((r) => r !== own?.role).map((r) => ADV_ROLE_LABEL[r].split(' ')[0] ?? ''),
+    ...reach.signatures
+      .filter((sg) => sg !== own?.signature)
+      .map((sg) => ADV_SIGNATURE_LABEL[sg]?.split(' ')[0] ?? ''),
+  ].filter(Boolean);
+  horizonCache.set(key, out);
+  return out;
+}
+/** Au RECRUTEMENT, le chemin ne contient que la classe choisie. */
+const horizonOf = (id: string) => horizonFor([id], advClass(id));
+/** À la PROMOTION, il faut le chemin DÉJÀ parcouru : l'éligibilité dépend des tags
+ *  accumulés, donc partir de la seule classe visée annoncerait un horizon faux. */
+const promoHorizon = (id: string) =>
+  horizonFor([...(promoAdv.value?.path ?? []), id], advClass(id));
 
 const NAMES = [
   'Aldric',
@@ -490,6 +540,19 @@ async function doPromote(classId: string) {
 }
 .d-perk.sig {
   border-color: var(--accent);
+}
+/* Le NIVEAU d'une compétence : discret mais lisible — c'est un attribut du libellé,
+   pas une seconde information à côté. */
+.d-lvl {
+  margin-left: 4px;
+  color: var(--accent);
+  font-family: Oswald, sans-serif;
+}
+/* L'HORIZON d'une voie : en retrait, parce que c'est un possible, pas une promesse. */
+.gc-horizon {
+  font-size: 10.5px;
+  color: var(--dim);
+  opacity: 0.85;
 }
 .guild-card {
   background: var(--surface);

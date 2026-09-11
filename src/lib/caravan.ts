@@ -30,7 +30,13 @@ import {
   travelOneWayMin,
   type Poi,
 } from './expedition';
-import { advRoles, advSignatures, advStats, PROMO_LEVELS, type Adventurer } from './adventurers';
+import {
+  advSignatureLevels,
+  advStats,
+  escortRoleLevel,
+  PROMO_LEVELS,
+  type Adventurer,
+} from './adventurers';
 
 export const CARAVAN = {
   /** Une caravane va PLUS LENTEMENT qu'un héros — c'est ce qui incarne « du temps au lieu
@@ -164,13 +170,19 @@ function effectivePv(c: Combatant): number {
 function offensePerRound(c: Combatant): number {
   return Math.max(1, c.damage * (c.strikes ?? 1) * (1 + c.crit));
 }
-const countRole = (advs: Adventurer[], role: string): number =>
-  advs.reduce((n, a) => n + advRoles(a).filter((r) => r === role).length, 0);
+/** Le niveau CUMULÉ d'un rôle sur l'escorte. ⚠️ La règle « deux fois la compétence = le
+ *  niveau 2 » vit dans `adventurers.ts` : ici on ne fait que la lire, sinon l'écran et le
+ *  calcul compteraient chacun à leur façon. */
+const countRole = (advs: Adventurer[], role: 'heal' | 'haul' | 'speed' | 'scout'): number =>
+  escortRoleLevel(advs, role);
 
 /** Effets apportés par les SIGNATURES de classe de l'escorte (strates hautes). */
 function escortEffects(advs: Adventurer[]): AggregatedEffects {
+  // ⚠️ L'effet SUIT LE NIVEAU de la signature : la porter deux fois vaut deux crans.
+  // C'était déjà le cas — deux entrées identiques que `mergeEffects` additionnait — mais
+  // c'était un effet de bord du cumul, pas une règle écrite. Valeur inchangée.
   const list = advs.flatMap((a) =>
-    advSignatures(a).map((t) => effectAsAggregate(t, CARAVAN.signaturePct)),
+    advSignatureLevels(a).map((s) => effectAsAggregate(s.what, CARAVAN.signaturePct * s.level)),
   );
   return list.length ? mergeEffects(...list) : emptyEffects();
 }

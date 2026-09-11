@@ -729,9 +729,90 @@ export function advSignatures(adv: Adventurer): EffectType[] {
   return adv.path.map((id) => advClass(id)?.signature).filter((s): s is EffectType => !!s);
 }
 
+/** Une COMPÉTENCE et son NIVEAU. */
+export interface AdvSkill<T> {
+  what: T;
+  level: number;
+}
+
+/**
+ * Compte les répétitions d'une liste et en fait des compétences à NIVEAU.
+ *
+ * ⚠️ Le niveau n'est pas décoratif : il REMPLACE le décompte d'occurrences que les
+ * caravanes faisaient déjà (`countRole` additionnait les doublons). Les deux lectures
+ * existaient donc en parallèle — l'une chiffrée, l'autre listée deux fois à l'écran —
+ * et rien ne garantissait qu'elles restent d'accord. Il n'y en a plus qu'une.
+ *
+ * ⚠️ ORDRE DE PREMIÈRE APPARITION conservé : c'est l'ordre du parcours, donc l'ordre
+ * dans lequel l'aventurier a appris. Un tri par niveau raconterait autre chose.
+ */
+function levelsOf<T>(list: T[]): AdvSkill<T>[] {
+  const out: AdvSkill<T>[] = [];
+  for (const what of list) {
+    const seen = out.find((s) => s.what === what);
+    if (seen) seen.level++;
+    else out.push({ what, level: 1 });
+  }
+  return out;
+}
+
+/** Les rôles de convoi, avec leur NIVEAU (deux fois le même rôle = niveau 2). */
+export function advRoleLevels(adv: Adventurer): AdvSkill<AdvRole>[] {
+  return levelsOf(advRoles(adv));
+}
+
+/** Les signatures de combat, avec leur NIVEAU. */
+export function advSignatureLevels(adv: Adventurer): AdvSkill<EffectType>[] {
+  return levelsOf(advSignatures(adv));
+}
+
+/** Le niveau d'un rôle donné sur TOUTE une escorte : les niveaux de chacun s'ajoutent.
+ *  ⚠️ C'est exactement ce que faisait le décompte d'occurrences — les valeurs de jeu ne
+ *  bougent pas d'un iota, elles passent seulement par une notion qui a un nom. */
+export function escortRoleLevel(advs: Adventurer[], role: AdvRole): number {
+  return advs.reduce((n, a) => n + (advRoleLevels(a).find((s) => s.what === role)?.level ?? 0), 0);
+}
+
 /** Rôles hors combat portés par le chemin (soin, cargaison, vitesse, éclaireur). */
 export function advRoles(adv: Adventurer): AdvRole[] {
   return adv.path.map((id) => advClass(id)?.role).filter((r): r is AdvRole => !!r);
+}
+
+/**
+ * Les compétences ACCESSIBLES en partant de ce chemin — celles de la classe courante
+ * comprises.
+ *
+ * ⚠️ POURQUOI : recruter, c'est choisir une LIGNÉE, pas une classe. Les offres
+ * n'annonçaient que la forme des stats — on s'engageait sans savoir si cette voie mène
+ * un jour à de la cargaison ou à du soin, alors que la filiation est stricte (un
+ * Guerrier ne se verra JAMAIS proposer Clerc). On montre donc l'horizon.
+ *
+ * ⚠️ On énumère les CHEMINS, pas les classes : l'éligibilité dépend des tags ACCUMULÉS
+ * par le parcours (`req`), donc « telle classe est-elle atteignable » n'a de sens que
+ * relativement à un chemin. La profondeur écrite s'arrête à la strate 3, ce qui borne
+ * l'énumération — le test qui parcourt tous les chemins s'appuie sur le même fait.
+ */
+export function reachableSkills(path: string[]): {
+  roles: AdvRole[];
+  signatures: EffectType[];
+} {
+  const roles = new Set<AdvRole>();
+  const signatures = new Set<EffectType>();
+  const seen = new Set<string>();
+  const walk = (p: string[]) => {
+    const key = p.join('>');
+    if (seen.has(key)) return;
+    seen.add(key);
+    for (const id of p) {
+      const k = advClass(id);
+      if (k?.role) roles.add(k.role);
+      if (k?.signature) signatures.add(k.signature);
+    }
+    const next = eligibleClasses(p, p.length);
+    for (const k of next) walk([...p, k.id]);
+  };
+  walk(path);
+  return { roles: [...roles], signatures: [...signatures] };
 }
 
 /** Effectif que la Guilde peut entretenir : 1 de base, +1 tous les 2 niveaux.
