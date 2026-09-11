@@ -78,8 +78,8 @@ import { combatPower, type Combatant } from '@/lib/combat';
 import {
   advanceBase,
   applyRaidOutcome,
-  baseCombatant,
   resolveRaid,
+  guardUnits,
   emptyBase,
   defenseType,
   defenseLevel,
@@ -1551,18 +1551,26 @@ export const useCharacterStore = defineStore('character', () => {
 
     const home = heroIsHome(cur);
     const posted = new Set(t.base.garrison ?? []);
+    const fam = garrisonBonus(
+      cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT && posted.has(it.id)),
+      now,
+      defenseLevel(t.base.defenses, 'kennel'),
+      garrisonSlots(ctx.playerLevel),
+    );
+    // ⚠️ Le bonus du chenil ne va plus à la MURAILLE mais à la GARNISON : c'est la chaîne
+    // familiers → garnison → défenses. Les aventuriers DISPONIBLES défendent (ni en
+    // convoi, ni à l'infirmerie, ni en formation) ; sans eux, les bêtes tiennent seules.
     const report = resolveRaid(
-      baseCombatant(
-        t.base.defenses,
-        ctx.playerLevel,
-        home ? ctx.hero : null,
-        garrisonBonus(
-          cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT && posted.has(it.id)),
-          now,
-          defenseLevel(t.base.defenses, 'kennel'),
-          garrisonSlots(ctx.playerLevel),
+      {
+        defenses: t.base.defenses,
+        playerLevel: ctx.playerLevel,
+        hero: home ? ctx.hero : null,
+        guard: guardUnits(
+          ctx.playerLevel,
+          advList.value.filter((a) => advAvailable(a, now)),
+          fam,
         ),
-      ),
+      },
       t.dueRaid,
       now,
       home,

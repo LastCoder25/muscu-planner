@@ -22,16 +22,18 @@
 //
 // NB `Date.now()` n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures et testables, résolution déterministe hors-ligne.
-import {
-  combatPower,
-  mulberry32,
-  simulateDungeon,
-  type Combatant,
-  type DungeonFight,
-} from './combat';
+import { combatPower, mulberry32, type Combatant } from './combat';
 import { refFighter } from './proceduralContent';
 import { rollDrop, famLevel, famAtkMult, famDefMult, type Item } from './items';
-import type { UnitKind, SiegeUnit, SiegeWall } from './siegeBattle';
+import { garrisonCombatant } from './caravan';
+import { advStats, type Adventurer } from './adventurers';
+import {
+  simulateSiege,
+  type UnitKind,
+  type SiegeUnit,
+  type SiegeWall,
+  type BattleEvent,
+} from './siegeBattle';
 
 // ── Types ──
 
@@ -155,10 +157,16 @@ export interface RaidReport {
   held: boolean; // toute l'armée repoussée
   defeated: number; // groupes repoussés
   total: number;
+  /** PV du MUR à la fin (0 = pulvérisé). */
   finalPv: number;
+  /** PV du mur au départ. */
   maxPv: number;
   heroHome: boolean;
-  fights: DungeonFight[];
+  /** ⚠️ Le log du moteur en DEUX PHASES, pas une suite de combats de donjon. C'est lui
+   *  que le rejeu animé relit — il ne re-simule jamais rien. */
+  log: BattleEvent[];
+  /** La brèche s'est-elle ouverte ? */
+  breached: boolean;
   resolvedAt: number;
 }
 
@@ -387,6 +395,11 @@ export const RAID = {
    *  PV, les archers assaillants n'auraient aucune prise et « faire taire les tireurs »
    *  ne voudrait rien dire. Modeste : une baliste est un ouvrage, pas un soldat. */
   turretPvK: 1,
+  /** La MEUTE du chenil, quand aucun aventurier ne défend : ce que valent les bêtes
+   *  seules, en part de la référence du niveau. ⚠️ Volontairement modeste — c'est un
+   *  filet pour que le chenil ne devienne jamais inutile, pas une garnison de rechange. */
+  packPvK: 1.5,
+  packDmgK: 0.12,
   // Le héros présent prête une part de sa force. Dosé pour transformer un siège serré en
   // victoire probable — pas pour le rendre acquis : mesuré à 0,55/0,35, sa seule présence
   // donnait 100 % de tenue dès le niveau 40, ce qui aurait vidé de son sens tout
@@ -521,7 +534,15 @@ const ROSTERS: Record<RaidFaction, { emoji: string; name: string; kind: UnitKind
     // plus dure (cf. la mesure par faction).
     { emoji: '👻', name: 'Spectre plaintif', kind: 'ranged' },
     { emoji: '💀', name: 'Ossuaire ambulant', kind: 'melee' },
-    { emoji: '🧙', name: 'Nécromant', kind: 'ranged' },
+    // ⚠️ LE NÉCROMANT COMBAT AU CORPS À CORPS, et c'est une contrainte d'ÉQUILIBRE, pas
+    // de thème. Chaque faction doit aligner LE MÊME NOMBRE DE TIREURS dans sa troupe :
+    // ce sont eux qui réduisent les balistes au silence, donc deux tireurs au lieu d'un
+    // changent l'issue. Mesuré avec lui à distance : morts-vivants repoussés 80 % du
+    // temps contre 95 % pour les bêtes, 15 points d'écart là où l'iso-menace en tolère
+    // 12. ⚠️ Le passer CHAMPION a été essayé et rejeté par la mesure : un champion qui
+    // tire (×3 PV, ×2,2 dégâts) fait taire les tourelles si vite que la tenue tombait
+    // à 58 % — bien pire que le mal qu'on soignait.
+    { emoji: '🧙', name: 'Nécromant', kind: 'melee' },
     { emoji: '⚰️', name: 'Porte-linceul', kind: 'melee' },
   ],
 };
@@ -808,13 +829,34 @@ export function groupKind(g: RaidGroup): UnitKind {
   return g.kind ?? 'melee';
 }
 
+/**
+ * Le multiplicateur de DÉGÂTS d'une silhouette de faction.
+ *
+ * ⚠️ MESURÉ : `countMult × unitMult ≈ 1` conserve les **PV** d'une armée, **pas ses
+ * dégâts**. Les PV d'un groupe suivent l'effectif (∝ `um × eff`) mais ses dégâts n'en
+ * suivent que la RACINE (`groupDmgExp`), donc ∝ `um × eff^0,5` ; à effectif ∝ `1/um`,
+ * cela vaut `√um`. Relevé sur les trois factions : dégâts **×1,18** pour les bandits,
+ * **×0,91** pour les morts-vivants, **×0,76** pour les bêtes — 55 % d'écart de puissance
+ * de feu là où la doctrine affirme « la masse est conservée, seule la FORME change ».
+ *
+ * ⚠️ Le défaut PRÉEXISTE au moteur en deux phases ; l'ancien le diluait en affrontant les
+ * groupes l'un après l'autre. En unités, il se voit : 13 points d'écart de tenue entre
+ * bêtes et bandits, mesuré sur 9000 sièges.
+ *
+ * On prend donc `√um` au lieu de `um` sur le terme de dégâts, ce qui l'annule
+ * exactement. C'est une IDENTITÉ dérivée de `groupDmgExp`, pas un coefficient ajusté.
+ */
+function silhouetteDmgMult(unitMult: number): number {
+  return Math.pow(Math.max(1e-6, unitMult), 1 - RAID.groupDmgExp);
+}
+
 export function groupCombatant(g: RaidGroup): Combatant {
   const ref = refFighter(Math.max(1, g.level));
   const um = g.unitMult ?? 1; // silhouette de la faction (horde fragile ↔ bande aguerrie)
   const champPv = g.champion ? RAID.championPvMult : 1;
   const champDmg = g.champion ? RAID.championDmgMult : 1;
   const unitPv = offensePerRound(ref) * RAID.foePvK * champPv * um;
-  const unitDmg = ref.pv * RAID.foeDmgK * champDmg * um;
+  const unitDmg = ref.pv * RAID.foeDmgK * champDmg * silhouetteDmgMult(um);
   // ⚠️ EFFECTIF DE CALIBRATION : la foule visible est ramenée au nombre sur lequel la
   // difficulté a été mesurée. Les PV suivent l’effectif, les dégâts sa RACINE — la
   // dilution doit donc emprunter le MÊME chemin, sans quoi une armée plus nombreuse
@@ -829,10 +871,6 @@ export function groupCombatant(g: RaidGroup): Combatant {
     initiative: g.level,
     strikes: 1,
   };
-}
-
-function raidFoes(raid: Raid): { combatant: Combatant; gold: number }[] {
-  return raid.groups.map((g) => ({ combatant: groupCombatant(g), gold: 0 }));
 }
 
 /** Ce que la garnison apporte au mur. Les quatre premiers champs alimentent le
@@ -1471,9 +1509,18 @@ export function siegeDefenders(
  * une armée nombreuse bien plus fort qu'elle ne le doit — c'est exactement ce que
  * `groupDmgExp` retient depuis la v0.661.
  *
- * ⚠️ `bulk` = `unitMult` : la place qu'un corps prend au pied du mur. Un loup tient moins
- * de place qu'un mercenaire en armure. Sans lui, le goulot comptait des TÊTES et rendait
- * les hordes inoffensives (mesuré v0.755).
+ * ⚠️ `bulk` : la place qu'un corps prend au pied du mur. Un loup tient moins de place
+ * qu'un mercenaire en armure. Sans lui, le goulot comptait des TÊTES et rendait les
+ * hordes inoffensives (mesuré v0.755).
+ *
+ * ⚠️ MAIS `unitMult` SEUL NE SUFFIT PAS, et l'exposant se DÉRIVE. Les dégâts d'un groupe
+ * suivent `√effectif` (`groupDmgExp`), donc le coup d'UN corps vaut
+ * `unitMult × effectif^(g−1)` ; à masse conservée l'effectif vaut `1/unitMult`, d'où
+ * `unitMult^(2−g)`. Une place proportionnelle à `unitMult` laissait donc les hordes
+ * frapper le mur **23 % moins fort** : mesuré au niveau 26, les bêtes étaient repoussées
+ * **97 %** du temps contre **80 %** pour les morts-vivants — 17 points d'écart, là où
+ * l'iso-menace de la v0.661 en tolère 12. Avec l'exposant, les dégâts au mur ne dépendent
+ * plus du tout de la silhouette : c'est une IDENTITÉ, pas un réglage ajusté après coup.
  */
 export function siegeAttackers(raid: Raid): SiegeUnit[] {
   const out: SiegeUnit[] = [];
@@ -1485,7 +1532,8 @@ export function siegeAttackers(raid: Raid): SiegeUnit[] {
     const champDmg = g.champion ? RAID.championDmgMult : 1;
     const unitPv = (offensePerRound(ref) * RAID.foePvK * champPv * um) / mm;
     const eff = g.count / mm;
-    const groupDmg = ref.pv * RAID.foeDmgK * champDmg * um * Math.pow(eff, RAID.groupDmgExp);
+    const groupDmg =
+      ref.pv * RAID.foeDmgK * champDmg * silhouetteDmgMult(um) * Math.pow(eff, RAID.groupDmgExp);
     const perBody = groupDmg / Math.max(1, g.count);
     for (let i = 0; i < g.count; i++) {
       out.push({
@@ -1498,32 +1546,145 @@ export function siegeAttackers(raid: Raid): SiegeUnit[] {
         maxPv: Math.max(1, Math.round(unitPv)),
         damage: Math.max(1, Math.round(perBody)),
         origin: 'attacker',
-        bulk: um,
+        bulk: Math.pow(um, 2 - RAID.groupDmgExp),
       });
     }
   }
   return out;
 }
 
+/** Un défenseur de la garnison, tel que l'appelant le connaît. */
+export interface GuardUnit {
+  id: string;
+  name: string;
+  emoji: string;
+  pv: number;
+  damage: number;
+  ranged: boolean;
+}
+
+/**
+ * LA GARNISON, en unités : les aventuriers PRÉSENTS, épaulés par les familiers postés.
+ *
+ * ⚠️ C'EST LA CHAÎNE FAMILIERS → GARNISON → DÉFENSES. Le bonus du chenil ne multiplie
+ * plus la muraille (un loup ne rend pas la pierre plus solide) : il épaule des HOMMES,
+ * comme celui du héros épaule le héros.
+ *
+ * ⚠️ SANS AUCUN AVENTURIER, IL RESTE LES BÊTES. C'était la condition pour basculer sans
+ * régression : le chenil fonctionnait seul jusqu'ici, et s'il ne servait plus qu'à
+ * multiplier une troupe absente, un joueur sans Guilde perdrait tout son bonus d'un
+ * coup. Les familiers postés forment donc une MEUTE, calée sur le niveau du joueur —
+ * comme toute structure de l'enceinte. Plus faible qu'une garnison d'hommes, jamais nulle.
+ *
+ * ⚠️ Un aventurier est un TIREUR quand l'agilité domine sa forme, un homme d'armes
+ * sinon : la même lecture que sa fiche affiche déjà (`advShapeLabel`).
+ */
+/**
+ * ⚠️ UNE UNITÉ DE SIÈGE N'A QUE DES PV ET DES DÉGÂTS — ni réduction, ni régénération.
+ * Les canaux du chenil qui ne sont pas de la frappe doivent donc être REPLIÉS dessus,
+ * sinon l'ours et la salamandre ne serviraient plus à rien : mesuré, la garnison
+ * n'apportait plus que **+2 points** de tenue contre **+9 à +13** avant la bascule.
+ *
+ * ⚠️ La RÉDUCTION se replie en PV EFFECTIFS (`pv / (1 − r)`) — la conversion que le
+ * projet emploie déjà pour calibrer la morsure des routes. Encaisser 20 % de moins,
+ * c'est durer 25 % de plus : les deux se valent tant qu'on ne regarde que la durée.
+ *
+ * ⚠️ La RÉGÉNÉRATION, elle, n'a PAS d'équivalent : elle rendait des PV entre deux
+ * GROUPES, or le nouveau moteur ne les affronte plus l'un après l'autre. Le canal de la
+ * salamandre perd donc son sens au mur — c'est une conséquence assumée du changement de
+ * moteur, pas un oubli, et elle garde tout son effet sur les convois.
+ */
+function foldBonus(pv: number, dmg: number, fam: GarrisonBonus) {
+  const red = Math.min(0.5, fam.dmgReduction ?? 0);
+  return {
+    pv: Math.max(1, Math.round((pv * (1 + (fam.maxPvPct ?? 0) / 100)) / (1 - red))),
+    damage: Math.max(1, Math.round(dmg * (1 + (fam.damagePct ?? 0) / 100))),
+  };
+}
+
+export function guardUnits(
+  playerLevel: number,
+  advs: Adventurer[],
+  fam: GarrisonBonus = {},
+): GuardUnit[] {
+  const L = Math.max(1, playerLevel);
+  if (!advs.length) {
+    // Aucun bonus de chenil → aucune meute : il n'y a personne à mettre au rempart.
+    const rien = !(fam.damagePct ?? 0) && !(fam.maxPvPct ?? 0) && !(fam.dmgReduction ?? 0);
+    if (rien) return [];
+    const ref = refFighter(L);
+    const f = foldBonus(ref.pv * RAID.packPvK, offensePerRound(ref) * RAID.packDmgK, fam);
+    return [{ id: 'meute', name: 'Meute du chenil', emoji: '🐾', ranged: false, ...f }];
+  }
+  return advs.map((a) => {
+    // ⚠️ On passe un bonus VIDE à `garrisonCombatant` et on replie ensuite : sinon la
+    // réduction resterait sur le `Combatant` et se perdrait au passage en unité.
+    const one = garrisonCombatant([a], {}, a.name);
+    const st = advStats(a);
+    const f = foldBonus(one.pv, one.damage * (one.strikes ?? 1), fam);
+    return {
+      id: a.id,
+      name: a.name,
+      emoji: '⚔️',
+      ranged: st.agilite > st.puissance && st.agilite > st.endurance,
+      ...f,
+    };
+  });
+}
+
+/**
+ * LE SIÈGE, résolu par le moteur en DEUX PHASES.
+ *
+ * ⚠️ Il prend désormais l'ÉTAT, plus un combattant déjà fondu : c'est tout l'objet de la
+ * refonte. Un seul `Combatant` ne pouvait pas porter « les familiers épaulent la
+ * garnison, la garnison tient l'ouvrage » — il n'y avait rien à épauler.
+ *
+ * ⚠️ ÉQUIVALENCE MESURÉE avant la bascule (150 sièges × 16 configurations) : à enceinte
+ * pleine avec héros, la tenue passe de 93/84/76/66 % à 95/86/73/67 % aux niveaux
+ * 12/28/60/90. La difficulté ET sa pente sont conservées.
+ */
 export function resolveRaid(
-  defender: Combatant,
+  input: {
+    defenses: DefenseStructure[];
+    playerLevel: number;
+    hero: Combatant | null;
+    guard?: GuardUnit[];
+  },
   raid: Raid,
   now: number,
   heroHome: boolean,
 ): RaidReport {
-  const r = simulateDungeon(defender, raidFoes(raid), { seed: raid.seed });
+  const wall = siegeWallOf(input.defenses, input.playerLevel);
+  const att = siegeAttackers(raid);
+  const def = siegeDefenders(input.defenses, input.playerLevel, input.hero, input.guard ?? []);
+  const r = simulateSiege(att, def, wall, raid.seed);
+
+  // ⚠️ « Groupes repoussés » se DÉDUIT des corps tombés, il ne se re-simule pas : le
+  // moteur nomme chaque mort, on n'a qu'à les rattacher à leur groupe. L'écran parle
+  // encore en groupes — c'est ainsi que le joueur lit une armée.
+  const down = new Set(r.log.filter((e) => e.kind === 'down').map((e) => e.to));
+  let idx = 0;
+  let defeated = 0;
+  for (const g of raid.groups) {
+    let all = g.count > 0;
+    for (let i = 0; i < g.count; i++) if (!down.has(att[idx + i]?.id)) all = false;
+    if (all) defeated++;
+    idx += g.count;
+  }
+
   return {
     raidId: raid.id,
     faction: raid.faction,
     level: raid.level,
     groups: raid.groups,
-    held: r.cleared,
-    defeated: r.defeated,
-    total: r.total,
-    finalPv: r.finalPv,
-    maxPv: defender.pv,
+    held: r.held,
+    defeated,
+    total: raid.groups.length,
+    finalPv: r.wallPv,
+    maxPv: wall.maxPv,
     heroHome,
-    fights: r.fights,
+    log: r.log,
+    breached: r.breached,
     resolvedAt: now,
   };
 }

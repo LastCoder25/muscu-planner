@@ -30,7 +30,7 @@ const defs = (w: number, t: number): DefenseStructure[] => [
 function siege(seed: number, playerLevel = 26, w = 26, t = 26, home = true) {
   const raid = rollRaid(seed, playerLevel, 0, 0);
   const report = resolveRaid(
-    baseCombatant(defs(w, t), playerLevel, home ? hero(playerLevel) : null),
+    { defenses: defs(w, t), playerLevel, hero: home ? hero(playerLevel) : null },
     raid,
     0,
     home,
@@ -107,21 +107,25 @@ describe('bornes cumulées', () => {
     }
   });
 
-  it('tout groupe REPOUSSÉ voit tous ses corps tomber ; le groupe qui passe, non', () => {
-    // C'est l'invariant qui relie l'image au rapport : si l'écran montre un groupe
-    // anéanti, le rapport doit dire qu'il a été repoussé, et réciproquement.
+  it('le NOMBRE de groupes anéantis à l’écran est celui du rapport', () => {
+    // C'est l'invariant qui relie l'image au rapport : ce que l'écran montre anéanti,
+    // le rapport doit le compter comme repoussé.
+    // ⚠️ Test RÉÉCRIT, pas supprimé : il supposait que les groupes tombent DANS
+    // L'ORDRE (`gi < report.defeated`), ce qui était vrai du combat séquentiel de
+    // `simulateDungeon` — une base y affrontait un groupe après l'autre. Le moteur en
+    // deux phases les affronte TOUS À LA FOIS : le groupe anéanti peut être le
+    // troisième. On compare donc les COMPTES, pas les rangs.
     for (const s of [7, 19, 23, 31, 47]) {
       const { raid, report, stage } = siege(s, 26, 26, 26, false);
       const morts = new Set(stage.beats.flatMap((b) => b.kills));
       let offset = 0;
-      raid.groups.forEach((g, gi) => {
+      let aneantis = 0;
+      raid.groups.forEach((g) => {
         const tous = Array.from({ length: g.count }, (_, i) => offset + i);
-        if (gi < report.defeated) {
-          for (const idx of tous)
-            expect(morts.has(idx), `groupe ${gi} repoussé mais corps ${idx} debout`).toBe(true);
-        }
+        if (tous.every((idx) => morts.has(idx))) aneantis++;
         offset += g.count;
       });
+      expect(aneantis).toBe(report.defeated);
     }
   });
 });

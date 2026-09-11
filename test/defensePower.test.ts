@@ -89,7 +89,7 @@ describe('le rapport prédit la tenue', () => {
           const N = 40;
           for (let s = 0; s < N; s++) {
             const raid = rollRaid(1000 + s * 7919, L, NOW, 0);
-            const d = baseCombatant(defs, L, hero, noGarrison());
+            const d = { defenses: defs, playerLevel: L, hero };
             if (resolveRaid(d, raid, NOW, heroHome).held) held++;
             ratio += defensePower(defs, L, hero, noGarrison()) / assaultPower(raid);
           }

@@ -11,6 +11,7 @@ import {
   baseCombatant,
   groupCombatant,
   resolveRaid,
+  guardUnits,
   raidDamage,
   corpsesFrom,
   lootCorpses,
@@ -99,11 +100,11 @@ function holdRate(playerLevel: number, defLevel: number, heroHome: boolean, n = 
   let held = 0;
   for (let i = 0; i < n; i++) {
     const raid = rollRaid(i * 7919 + 13, playerLevel, 0, 0);
-    const base = baseCombatant(
-      defs(defLevel, defLevel),
+    const base = {
+      defenses: defs(defLevel, defLevel),
       playerLevel,
-      heroHome ? hero(playerLevel) : null,
-    );
+      hero: heroHome ? hero(playerLevel) : null,
+    };
     if (resolveRaid(base, raid, 0, heroHome).held) held++;
   }
   return (held / n) * 100;
@@ -174,7 +175,10 @@ describe('silhouette de faction', () => {
         const raid = rollRaid(i * 7919 + 13, 26, 0, 0);
         if (raid.faction !== f) continue;
         n++;
-        if (resolveRaid(baseCombatant(defs(26, 26), 26, null), raid, 0, false).held) held++;
+        if (
+          resolveRaid({ defenses: defs(26, 26), playerLevel: 26, hero: null }, raid, 0, false).held
+        )
+          held++;
       }
       rates[f] = (held / n) * 100;
     }
@@ -302,7 +306,8 @@ describe('calibration du siège', () => {
     let held = 0;
     for (let i = 0; i < 200; i++) {
       const raid = rollRaid(i * 7919 + 13, 26, 0, 0);
-      if (resolveRaid(baseCombatant(broken, 26, hero(26)), raid, 0, true).held) held++;
+      if (resolveRaid({ defenses: broken, playerLevel: 26, hero: hero(26) }, raid, 0, true).held)
+        held++;
     }
     expect((held / 200) * 100).toBeGreaterThan(25);
     expect(baseCombatant(broken, 26, null).pv).toBeGreaterThan(0);
@@ -464,7 +469,12 @@ describe('cycle de vie', () => {
   it('une victoire ne coûte RIEN et sème quand même un champ de cadavres', () => {
     const b = base(0);
     const raid = rollRaid(555, 26, 0, 0);
-    const rep = resolveRaid(baseCombatant(defs(40, 40), 40, hero(40)), raid, 0, true);
+    const rep = resolveRaid(
+      { defenses: defs(40, 40), playerLevel: 40, hero: hero(40) },
+      raid,
+      0,
+      true,
+    );
     expect(rep.held).toBe(true);
     const { base: nb, damage } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, 0);
     expect(damage).toEqual({ stockStolen: false, damaged: [], freeze: false });
@@ -657,17 +667,48 @@ describe('chenil : la garnison', () => {
       let held = 0;
       for (let i = 0; i < 200; i++) {
         const raid = rollRaid(i * 7919 + 13, 26, 0, 0);
-        if (resolveRaid(baseCombatant(defs(26, 26), 26, null, bonus), raid, 0, false).held) held++;
+        if (
+          resolveRaid(
+            {
+              defenses: defs(26, 26),
+              playerLevel: 26,
+              hero: null,
+              guard: guardUnits(26, [], bonus),
+            },
+            raid,
+            0,
+            false,
+          ).held
+        )
+          held++;
       }
       return (held / 200) * 100;
     }
     const nu = rate([], 0);
     const garni = rate(real, 0);
-    const dresse = rate(real, 26);
     expect(garni).toBeGreaterThan(nu); // elle sert vraiment…
     expect(garni - nu).toBeLessThan(20); // …sans renverser la table
-    expect(dresse).toBeGreaterThan(garni); // le dressage se sent…
-    expect(dresse).toBeLessThan(95); // …et ne rend jamais la base imprenable
+
+    // ⚠️ LE DRESSAGE SE MESURE SUR LA TROUPE, PAS SUR LE TAUX DE TENUE. À enceinte
+    // pleine celui-ci plafonne vers 96 % : le test comparait deux fois le même
+    // plafond et ne pouvait rien attraper. On épingle donc ce que le dressage CHANGE
+    // — la force des défenseurs qu’il produit — ce qui est exact et sans bruit
+    // d’échantillonnage.
+    const brut = guardUnits(26, [], garrisonBonus(real, 0, 10, SLOTS));
+    const ecole = guardUnits(
+      26,
+      [],
+      garrisonBonus(
+        real.map((f) => ({ ...f, defXp: famXpForLevel(26) })),
+        0,
+        10,
+        SLOTS,
+      ),
+    );
+    expect(ecole[0]!.damage).toBeGreaterThan(brut[0]!.damage);
+    expect(ecole[0]!.pv).toBeGreaterThanOrEqual(brut[0]!.pv);
+    // …et jamais au point de rendre la base imprenable : le chenil reste un appoint.
+    expect(rate(real, 26)).toBeLessThan(99);
   });
 
   it('la régénération est plafonnée PLUS BAS que le reste (elle compose)', () => {
@@ -979,7 +1020,7 @@ describe('blessure du héros', () => {
     const raid = rollRaid(77, 26, 0, 0);
     const lost = { ...raid, groups: raid.groups } as never;
     const report = {
-      ...resolveRaid(baseCombatant([], 26, null), lost, 0, true),
+      ...resolveRaid({ defenses: [], playerLevel: 26, hero: null }, lost, 0, true),
       held: false,
       heroHome: true,
     };
@@ -1005,7 +1046,12 @@ describe('blessure du héros', () => {
     const b = emptyBase(1, 0);
     b.defenses = defs(40, 40);
     const raid = rollRaid(555, 26, 0, 0);
-    const rep = resolveRaid(baseCombatant(defs(40, 40), 40, hero(40)), raid, 0, true);
+    const rep = resolveRaid(
+      { defenses: defs(40, 40), playerLevel: 40, hero: hero(40) },
+      raid,
+      0,
+      true,
+    );
     expect(rep.held).toBe(true);
     const { base: nb } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, 0);
     expect(nb.wound).toBeNull();
@@ -1527,13 +1573,16 @@ describe('⚔️🧱 LES UNITÉS DU SIÈGE — dérivées du vrai état, jamais 
 
     it('⚠️ chaque corps porte sa PLACE au pied du mur (bulk)', () => {
       // Sans elle, le goulot comptait des TÊTES et rendait les hordes inoffensives.
-      // ⚠️ « > 0 » passait au vert avec un `bulk` figé à 1 : on épingle donc la VALEUR,
-      // celle de la silhouette de la faction, seule à porter l’encombrement d’un corps.
+      // ⚠️ « > 0 » passait au vert avec un `bulk` figé à 1 : on épingle donc la VALEUR.
+      // ⚠️ Elle n’est PAS proportionnelle à `unitMult` : les dégâts d’un groupe suivent
+      // la RACINE de son effectif, donc la place d’un corps doit valoir
+      // `unitMult^(2−groupDmgExp)` pour que les dégâts portés au mur ne dépendent plus
+      // du tout de la silhouette. C’est une identité dérivée, pas un réglage.
       const att = siegeAttackers(raid);
       expect(att.every((u) => (u.bulk ?? 0) > 0)).toBe(true);
       for (const g of raid.groups) {
         const u = att.find((x) => x.name === g.species);
-        if (u) expect(u.bulk).toBeCloseTo(g.unitMult ?? 1, 6);
+        if (u) expect(u.bulk).toBeCloseTo(Math.pow(g.unitMult ?? 1, 2 - RAID.groupDmgExp), 6);
       }
       // Et la silhouette n’est pas neutre : une horde a des corps plus menus.
       expect(FACTION_PROFILE.betes.unitMult).toBeLessThan(FACTION_PROFILE.bandits.unitMult);

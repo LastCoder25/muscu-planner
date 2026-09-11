@@ -43,8 +43,12 @@ interface SiegeBeat {
   crit: boolean;
   dodge: boolean;
   damage: number;
-  /** PV de la base après ce temps → barre de vie du rempart. */
+  /** PV du MUR après ce temps → barre de vie du rempart. */
   basePv: number;
+  /** Le coup portait-il SUR LE MUR ? ⚠️ Le moteur en deux phases permet désormais à un
+   *  assaillant de tirer sur une TOURELLE : sans ce drapeau, l'écran tremblerait et
+   *  virerait au rouge pour un coup que le rempart n'a jamais reçu. */
+  onWall: boolean;
   /** Dégâts CUMULÉS infligés au groupe courant → d'où l'on déduit les corps à terre. */
   dealt: number;
   /** Corps tombant SUR ce temps (jamais deux fois, cf. bornes cumulées). */
@@ -153,74 +157,114 @@ export function nearestTurret(angle: number, turretCount: number): number {
   return ((k % turretCount) + turretCount) % turretCount;
 }
 
-/** Construit la mise en scène complète d'un rapport de siège. */
+/**
+ * Construit la mise en scène complète d'un rapport de siège.
+ *
+ * ⚠️ RÈGLE FONDATRICE INCHANGÉE : ce module ne décide RIEN du combat. Il relit le log
+ * que `simulateSiege` a produit — l'issue, les corps tombés et les récompenses sont
+ * identiques au bit près.
+ *
+ * ⚠️ IL EST MÊME PLUS FIDÈLE QU'AVANT : l'ancien rejeu devait DEVINER quels corps
+ * tombaient, en reconstituant des bornes cumulées à partir des PV d'un groupe. Le
+ * nouveau moteur NOMME chaque mort (`kind: 'down'`) — on n'a plus qu'à la rattacher au
+ * temps qui vient de la provoquer.
+ */
 export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeStage {
   const bodies = placeBodies(report.groups, report.groups.length * 7919 + report.total);
   const beats: SiegeBeat[] = [];
-  // Index du premier corps de chaque groupe, pour convertir (groupe, membre) → corps.
-  const offset: number[] = [];
-  let acc = 0;
-  for (const g of report.groups) {
-    offset.push(acc);
-    acc += g.count;
-  }
 
-  report.fights.forEach((fight, gi) => {
-    const g = report.groups[gi];
-    if (!g) return;
-    // PV du groupe = ceux du monstre au premier événement du log (avant tout dégât),
-    // reconstitués depuis le log lui-même : on ne re-simule rien.
-    const first = fight.result.log[0];
-    if (!first) return;
-    const groupPv = first.who === 'player' ? first.monsterPv + first.damage : first.monsterPv;
-    const cuts = cutsFor(Math.max(1, groupPv), g.count);
-    let dealt = 0;
-    let alive = 0; // 1er corps encore debout = la cible courante
-    let rotate = 0; // les assaillants frappent le mur à tour de rôle
-
-    for (const e of fight.result.log) {
-      const prev = dealt;
-      if (e.who === 'player') {
-        // La base tire. `dealt` suit les PV du groupe, jamais l'inverse.
-        dealt = Math.max(dealt, groupPv - e.monsterPv);
-        while (alive < g.count && dealt >= cuts[alive]!) alive++;
-        const kills: number[] = [];
-        for (let i = 0; i < g.count; i++) {
-          if (prev < cuts[i]! && dealt >= cuts[i]!) kills.push(offset[gi]! + i);
-        }
-        const target = Math.min(g.count - 1, alive);
-        const body = bodies[offset[gi]! + target];
-        beats.push({
-          group: gi,
-          kind: 'turret',
-          body: offset[gi]! + target,
-          turret: nearestTurret(body?.angle ?? 0, turretCount),
-          crit: e.type === 'crit',
-          dodge: e.type === 'dodge',
-          damage: e.damage,
-          basePv: e.playerPv,
-          dealt,
-          kills,
-        });
-      } else {
-        // Un assaillant frappe le mur : on fait tourner parmi ceux encore debout.
-        const standing = g.count - alive;
-        const idx = standing > 0 ? alive + (rotate++ % standing) : Math.max(0, g.count - 1);
-        beats.push({
-          group: gi,
-          kind: 'foe',
-          body: offset[gi]! + idx,
-          turret: 0,
-          crit: e.type === 'crit',
-          dodge: e.type === 'dodge',
-          damage: e.damage,
-          basePv: e.playerPv,
-          dealt,
-          kills: [],
-        });
-      }
-    }
+  // Index du premier corps de chaque groupe → à quel groupe appartient le corps N.
+  const groupOf: number[] = [];
+  report.groups.forEach((g, gi) => {
+    for (let i = 0; i < g.count; i++) groupOf.push(gi);
   });
+
+  /** `a12` → le corps 12. Les ids viennent de `siegeAttackers`, qui les numérote dans
+   *  l'ORDRE DES GROUPES — le même que `placeBodies`. Les deux ne peuvent donc pas se
+   *  désynchroniser sans que la numérotation elle-même change. */
+  const bodyOf = (id: string | undefined): number => {
+    if (!id || id[0] !== 'a') return -1;
+    const n = Number(id.slice(1));
+    return Number.isFinite(n) && n >= 0 && n < bodies.length ? n : -1;
+  };
+  /** `t3` → la tourelle 3. Le héros et les aventuriers n'en sont pas : leur tir part de
+   *  la tourelle la plus proche de la cible, faute de position propre sur le dessin. */
+  const turretOf = (id: string | undefined): number => {
+    if (!id || id[0] !== 't') return -1;
+    const n = Number(id.slice(1));
+    return Number.isFinite(n) && n >= 0 && n < turretCount ? n : -1;
+  };
+
+  let wallPv = report.maxPv;
+  for (const e of report.log) {
+    if (e.kind === 'down') {
+      // ⚠️ La mort se rattache au DERNIER temps joué : c'est lui qui l'a causée. Un
+      // défenseur tombé (tourelle réduite au silence) n'est pas un corps du champ de
+      // bataille — on ne l'ajoute donc pas aux `kills`, qui comptent les assaillants.
+      const b = bodyOf(e.to);
+      const last = beats[beats.length - 1];
+      if (b >= 0 && last) last.kills.push(b);
+      continue;
+    }
+    if (e.kind === 'breach' || e.kind === 'enter') continue; // rythme, pas un coup
+
+    if (e.kind === 'wall') {
+      wallPv = Math.max(0, wallPv - (e.amount ?? 0));
+      const body = bodyOf(e.from);
+      beats.push({
+        group: body >= 0 ? (groupOf[body] ?? 0) : 0,
+        kind: 'foe',
+        body: Math.max(0, body),
+        turret: 0,
+        crit: false,
+        dodge: false,
+        damage: e.amount ?? 0,
+        basePv: wallPv,
+        onWall: true,
+        dealt: 0,
+        kills: [],
+      });
+      continue;
+    }
+
+    // `kind: 'hit'` — reste à savoir QUI frappe QUI.
+    const cible = bodyOf(e.to);
+    if (cible >= 0) {
+      // Un défenseur abat un assaillant. Le trait part de sa tourelle, ou de la plus
+      // proche quand c'est le héros ou un aventurier.
+      const t = turretOf(e.from);
+      const body = bodies[cible];
+      beats.push({
+        group: groupOf[cible] ?? 0,
+        kind: 'turret',
+        body: cible,
+        turret: t >= 0 ? t : nearestTurret(body?.angle ?? 0, turretCount),
+        crit: false,
+        dodge: false,
+        damage: e.amount ?? 0,
+        basePv: wallPv,
+        onWall: false,
+        dealt: 0,
+        kills: [],
+      });
+    } else {
+      // Un assaillant fait taire un défenseur : le mur n'encaisse rien.
+      const body = bodyOf(e.from);
+      beats.push({
+        group: body >= 0 ? (groupOf[body] ?? 0) : 0,
+        kind: 'foe',
+        body: Math.max(0, body),
+        turret: turretOf(e.to),
+        crit: false,
+        dodge: false,
+        damage: e.amount ?? 0,
+        basePv: wallPv,
+        onWall: false,
+        dealt: 0,
+        kills: [],
+      });
+    }
+  }
 
   return {
     bodies,

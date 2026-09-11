@@ -386,7 +386,10 @@ export interface DungeonFoe {
   combatant: Combatant;
   gold: number;
 }
-export interface DungeonFight {
+/** Un combat d'un donjon, dans le log de `simulateDungeon`.
+ *  ⚠️ Plus EXPORTÉ depuis que les sièges sont passés au moteur en deux phases : c'était
+ *  leur seul consommateur extérieur. Le type reste, privé à son module. */
+interface DungeonFight {
   monster: string;
   win: boolean;
   result: CombatResult;
