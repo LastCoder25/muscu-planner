@@ -5422,11 +5422,13 @@ function doSellDuplicateFamiliars() {
     persistent: false,
   }).onOk(() => {
     withUid(async (uid) => {
-      const g = await char.sellFamiliars(
+      // ⚠️ Pas de notification : `sellFamiliars` déclenche déjà l'éclat d'or avec le
+      // montant (useGoldFx). Deux annonces pour un seul geste, dont une qui recouvrait
+      // le bas de l'écran — l'animation dit la même chose, mieux placée.
+      await char.sellFamiliars(
         uid,
         list.map((f) => f.id),
       );
-      $q.notify({ type: 'positive', message: `🪙 ${list.length} doublon(s) cédé(s) — +${g} or.` });
     }, 'Vente impossible.');
   });
 }
@@ -5696,8 +5698,7 @@ function doSellFamiliar(f: Item) {
     ok: { label: `Céder (+${gain} 🪙)`, color: 'negative' },
   }).onOk(() =>
     withUid(async (uid) => {
-      const g = await char.sellFamiliar(uid, f.id);
-      if (g) $q.notify({ type: 'positive', message: `🪙 +${g} or` });
+      await char.sellFamiliar(uid, f.id); // l'éclat d'or annonce le montant (useGoldFx)
     }, 'Cession impossible.'),
   );
 }

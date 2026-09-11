@@ -1202,6 +1202,10 @@ export interface Terrain {
   coast: string; // contour de la CÔTE (continent) — path fermé
   features: Motif[]; // reliefs dessinés (chaînes de montagnes, forêts, dunes)
   rivers: string[]; // rivières serpentant depuis les reliefs
+  /** Décor de prairie (v0.749) : touffes d'herbe et taches plus sombres, sur la terre
+   *  ferme uniquement. Même langage que le sol de la Base. */
+  tufts: string[];
+  patches: { cx: number; cy: number; rx: number; ry: number }[];
 }
 
 const f1 = (v: number) => v.toFixed(1);
@@ -1239,16 +1243,26 @@ function peakPath(x: number, y: number, s: number): string {
   const py = y - 3.6 * s;
   return `M ${f1(bx)} ${f1(y + 1.6 * s)} L ${f1(x)} ${f1(py)} L ${f1(cx)} ${f1(y + 1.6 * s)} M ${f1(x)} ${f1(py)} L ${f1(x - 1.1 * s)} ${f1(y - 0.3 * s)}`;
 }
-// Un conifère (encre).
-function treePath(x: number, y: number, s: number): string {
+/** Un conifère : triangle + tronc. Partagé avec la Base (mêmes arbres partout). */
+export function treePath(x: number, y: number, s: number): string {
   return `M ${f1(x)} ${f1(y - 3 * s)} L ${f1(x - 1.7 * s)} ${f1(y + 1 * s)} L ${f1(x + 1.7 * s)} ${f1(y + 1 * s)} Z M ${f1(x)} ${f1(y + 1 * s)} L ${f1(x)} ${f1(y + 2.2 * s)}`;
 }
 // Une dune (arc d'encre).
 function dunePath(x: number, y: number, s: number): string {
   return `M ${f1(x - 4 * s)} ${f1(y)} Q ${f1(x)} ${f1(y - 2.2 * s)} ${f1(x + 4 * s)} ${f1(y)}`;
 }
-// Une rivière serpentant depuis (x,y) vers l'extérieur (path lissé).
+/**
+ * Une rivière serpentant depuis (x,y) vers l'extérieur (path lissé).
+ *
+ * ⚠️ ELLE S'ARRÊTE À LA CÔTE. Sans cette borne, le tracé continuait tout droit sur sa
+ * longueur (30 à 60) sans savoir où finit la terre : des rivières coulaient EN PLEINE
+ * MER et sortaient du cadre. Le défaut existait depuis l'origine — l'encre monochrome
+ * le rendait invisible, le sol peint l'a montré du premier coup d'œil. Le fleuve se
+ * jette donc à l'eau : on coupe au premier point hors du rayon de terre ferme.
+ */
 function riverPath(rng: () => number, x: number, y: number, dir: number, len: number): string {
+  const C = EXPE.mapSize / 2;
+  const shore = landRadius() + 2; // un cheveu au-delà : l'embouchure touche la mer
   let px = x;
   let py = y;
   let d = `M ${f1(px)} ${f1(py)}`;
@@ -1259,8 +1273,11 @@ function riverPath(rng: () => number, x: number, y: number, dir: number, len: nu
     const seg = len / steps;
     const mx = px + Math.cos(a) * seg * 0.5;
     const my = py + Math.sin(a) * seg * 0.5;
-    px += Math.cos(a) * seg;
-    py += Math.sin(a) * seg;
+    const nx = px + Math.cos(a) * seg;
+    const ny = py + Math.sin(a) * seg;
+    if (Math.hypot(nx - C, ny - C) > shore) break; // la rivière se jette à la mer
+    px = nx;
+    py = ny;
     d += ` Q ${f1(mx)} ${f1(my)} ${f1(px)} ${f1(py)}`;
   }
   return d;
@@ -1351,7 +1368,30 @@ export function expeditionTerrain(seed: number): Terrain {
   }
   // Ordre peintre : du fond (haut) vers l'avant (bas).
   features.sort((a, b) => a.y - b.y);
-  return { coast, features, rivers };
+  // ⚠️ Décor de prairie tiré d'un rng SÉPARÉ : ajouté après coup, il ne doit pas décaler
+  // les tirages de la côte, des reliefs et des rivières (sorties byte-identiques).
+  const dec = mulberry32((seed ^ 0x5bd1e995) >>> 0 || 7);
+  const inland = landRadius() - 6;
+  const tufts: string[] = [];
+  const patches: Terrain['patches'] = [];
+  for (let i = 0; i < 400 && tufts.length < 70; i++) {
+    const x = dec() * EXPE.mapSize;
+    const y = dec() * EXPE.mapSize;
+    const dc = Math.hypot(x - C, y - C);
+    if (dc > inland || dc < 14) continue; // ni en mer, ni sous la ville
+    const h = 1.6 + dec() * 1.2;
+    tufts.push(
+      `M${f1(x)} ${f1(y)} l-0.9 -${f1(h * 0.8)} M${f1(x)} ${f1(y)} l0 -${f1(h)} M${f1(x)} ${f1(y)} l0.9 -${f1(h * 0.8)}`,
+    );
+  }
+  for (let i = 0; i < 120 && patches.length < 12; i++) {
+    const cx = dec() * EXPE.mapSize;
+    const cy = dec() * EXPE.mapSize;
+    const dc = Math.hypot(cx - C, cy - C);
+    if (dc > inland - 6 || dc < 16) continue;
+    patches.push({ cx: +f1(cx), cy: +f1(cy), rx: +f1(5 + dec() * 8), ry: +f1(2.5 + dec() * 3.5) });
+  }
+  return { coast, features, rivers, tufts, patches };
 }
 
 /** Construit une expédition (au moment de l'envoi). `now` = ms epoch. `travelMult`

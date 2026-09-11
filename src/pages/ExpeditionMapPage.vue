@@ -31,18 +31,8 @@
           class="map"
           :style="{ width: mapPx + 'px', height: mapPx + 'px' }"
         >
-          <!-- Fond PARCHEMIN noir & blanc : mer + côte + rivières + reliefs à l'encre -->
-          <rect :x="-10" :y="-10" :width="MAP + 20" :height="MAP + 20" class="sea" />
-          <path :d="terrain.coast" class="coast-line" />
-          <path :d="terrain.coast" class="land" />
-          <path v-for="(rv, i) in terrain.rivers" :key="'rv' + i" :d="rv" class="river" />
-          <path
-            v-for="(feat, i) in terrain.features"
-            :key="'ft' + i"
-            :d="feat.d"
-            class="feat"
-            :class="'f-' + feat.kind"
-          />
+          <!-- Le SOL : mer, côte, prairie, reliefs — même langage que la Base (v0.749). -->
+          <MapTerrain :terrain="terrain" :size="MAP" />
 
           <!-- Cadre décoratif + boussole (visibles carte dézoomée) -->
           <rect x="1.5" y="1.5" :width="MAP - 3" :height="MAP - 3" rx="2" class="map-frame" />
@@ -147,11 +137,42 @@
             <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
           </g>
 
-          <!-- Ville (centre) -->
+          <!-- Ville (centre) : la MÊME enceinte que l'écran Base, en miniature — terre
+               battue, octogone, tourelles aux sommets, corps de garde au nord, porte au
+               sud et son chemin. On reconnaît sa base depuis la carte. -->
           <g class="town">
-            <circle :cx="TOWN.x" :cy="TOWN.y" r="8" class="town-glow" />
-            <circle :cx="TOWN.x" :cy="TOWN.y" r="5.5" class="town-bg" />
-            <text :x="TOWN.x" :y="TOWN.y + 1.9" class="town-emo">🏰</text>
+            <circle :cx="TOWN.x" :cy="TOWN.y" r="12.5" class="town-earth" />
+            <circle :cx="TOWN.x" :cy="TOWN.y" r="10.5" class="town-glow" />
+            <path :d="townRoad" class="town-road" />
+            <polygon :points="townWall" class="town-wall" />
+            <polygon :points="townYard" class="town-yard" />
+            <circle
+              v-for="(p, i) in townPts"
+              :key="'tt' + i"
+              :cx="p.x"
+              :cy="p.y"
+              r="1.15"
+              class="town-turret"
+            />
+            <!-- Corps de garde au nord, porte au sud : posés SUR le pan de mur (l'octogone
+                 est décalé d'un demi-pas, donc les milieux de pans tombent pile en haut et
+                 en bas) — mêmes repères que l'écran Base, en miniature. -->
+            <rect
+              :x="TOWN.x - 1.7"
+              :y="TOWN.y - TOWN_AP - 2.6"
+              width="3.4"
+              height="4.2"
+              rx="0.5"
+              class="town-keep"
+            />
+            <rect
+              :x="TOWN.x - 1.3"
+              :y="TOWN.y + TOWN_AP - 1.2"
+              width="2.6"
+              height="2.6"
+              rx="0.8"
+              class="town-gate"
+            />
           </g>
         </svg>
       </div>
@@ -177,75 +198,33 @@
       </div>
     </div>
 
-    <!-- Bandeau expédition en cours -->
-    <div v-if="active" class="active-card">
-      <div class="ac-emo">{{ POI_EMO[active.poi.type] }}</div>
-      <div class="ac-main">
-        <div class="ac-title font-display">
-          {{ POI_LABEL[active.poi.type] }} niv {{ active.poi.level }}
-        </div>
-        <!-- Barre de voyage : ville ──●── objectif ──── ville. Le repère fixe marque
-             l'objectif, le point marque où en est le voyageur. ⚠️ Pilotée par
-             `voyageProgress` (durée TOTALE) et non par la fraction de phase, qui
-             repart à zéro au demi-tour et ferait RECULER la barre à mi-chemin. -->
-        <div v-if="hero" class="vg-bar" :class="{ back: hero.phase === 'return' }">
-          <div class="vg-fill" :style="{ width: heroProg.overall * 100 + '%' }"></div>
-          <div class="vg-mid" :style="{ left: heroProg.mid * 100 + '%' }"></div>
-          <div class="vg-dot" :style="{ left: heroProg.overall * 100 + '%' }"></div>
-        </div>
-        <div class="ac-timers" v-if="hero && hero.phase !== 'done'">
-          <span v-if="hero.phase === 'outbound'"
-            >🎯 Arrivée dans {{ fmtMs(hero.remainToObjectiveMs) }}</span
-          >
-          <span v-else>🏰 Retour dans {{ fmtMs(hero.remainTotalMs) }}</span>
-          <span class="ac-total">· total {{ fmtMs(hero.remainTotalMs) }}</span>
-        </div>
-        <div v-else class="ac-back">🎉 Ton héros est rentré ! Butin livré.</div>
-      </div>
-    </div>
-
-    <!-- ⚠️ Un convoi en route n’avait AUCUNE information : un tracé sur la carte, et
-         rien d’autre — ni destination, ni escorte, ni heure de retour. Le héros, lui,
-         a sa carte depuis toujours. Mêmes compteurs, même langage. -->
-    <div v-for="v in vansOnMap" :key="'vc' + v.id" class="active-card van-card">
-      <div class="ac-emo">🐫</div>
-      <div class="ac-main">
-        <div class="ac-title font-display">
-          {{ POI_LABEL[v.poi.type] }} niv {{ v.poi.level }}
-          <span class="vc-esc">· escorte {{ v.escort }}</span>
-        </div>
-        <!-- Barre de voyage : ville ──●── objectif ──── ville. Le repère fixe marque
-             l'objectif, le point marque où en est le voyageur. ⚠️ Pilotée par
-             `voyageProgress` (durée TOTALE) et non par la fraction de phase, qui
-             repart à zéro au demi-tour et ferait RECULER la barre à mi-chemin. -->
-        <div class="vg-bar" :class="{ back: v.at.phase === 'return' }">
-          <div class="vg-fill" :style="{ width: v.prog.overall * 100 + '%' }"></div>
-          <div class="vg-mid" :style="{ left: v.prog.mid * 100 + '%' }"></div>
-          <div class="vg-dot" :style="{ left: v.prog.overall * 100 + '%' }"></div>
-        </div>
-        <div class="ac-timers">
-          <span v-if="v.at.phase === 'outbound'">
-            🎯 Arrivée dans {{ fmtMs(v.at.remainToObjectiveMs) }}
-          </span>
-          <span v-else>🏰 Retour dans {{ fmtMs(v.at.remainTotalMs) }}</span>
-          <span class="ac-total">· total {{ fmtMs(v.at.remainTotalMs) }}</span>
-        </div>
-      </div>
+    <!-- 🧭 LES VOYAGES EN COURS, en UNE rangée de tuiles (demande de l'utilisateur).
+         Trois cartes empilées poussaient la carte hors de l'écran dès deux convois, et
+         répétaient « total » et « escorte » dont on n'a pas besoin en un coup d'œil :
+         il faut QUI voyage, VERS QUOI, et COMBIEN DE TEMPS. Le reste se lit sur la carte
+         ou dans le rapport. La rangée défile quand il y a du monde (jusqu'à 12 convois).
+         ⚠️ Un convoi RENTRÉ reste dans la rangée, en tuile ACTIONNABLE : sa cargaison ne
+         se verse pas toute seule (même règle que les rapports d'expédition). -->
+    <div v-if="trips.length" class="trips" role="list">
+      <component
+        :is="t.claim ? 'button' : 'div'"
+        v-for="t in trips"
+        :key="t.key"
+        role="listitem"
+        class="trip"
+        :class="[t.kind, { back: t.back, ready: t.claim }]"
+        :disabled="t.claim ? busyCaravan : undefined"
+        :title="t.title"
+        @click="t.claim && doClaimCaravan(t.claim)"
+      >
+        <span class="tr-who">{{ t.who }}</span>
+        <span class="tr-poi">{{ POI_EMO[t.poi.type] }}</span>
+        <span class="tr-time">{{ t.time }}</span>
+        <i class="tr-bar" :style="{ width: t.pct + '%' }" />
+      </component>
     </div>
 
     <!-- Panneau POI sélectionné -->
-    <!-- ⚠️ La cargaison ne se verse pas toute seule : on vient la prendre, comme pour
-         les rapports d’expédition. Le convoi, lui, est déjà rentré — on ne bloque jamais
-         les aventuriers en attendant que le joueur clique. -->
-    <div v-if="claimable.length" class="panel vans">
-      <div v-for="c in claimable" :key="c.id" class="van">
-        <span>🐫</span>
-        <span>Convoi rentré de {{ POI_LABEL[c.poi.type] }}</span>
-        <button class="van-go" :disabled="busyCaravan" @click="doClaimCaravan(c.id)">
-          🎁 Récupérer
-        </button>
-      </div>
-    </div>
     <transition name="sheet">
       <div v-if="selected" ref="sheetEl" class="sheet">
         <div class="sh-head">
@@ -389,6 +368,7 @@ import {
   HARVEST_TYPES,
   isClaimable,
 } from '@/lib/expedition';
+import MapTerrain from '@/components/MapTerrain.vue';
 import { advAvailable, advTitle } from '@/lib/adventurers';
 import { CARAVAN, caravanLegMin, caravanSlots, isCaravanClaimable, poiOffers } from '@/lib/caravan';
 
@@ -407,6 +387,25 @@ const progress = useProgress();
 const gameFx = useGameFx();
 
 const TOWN = EXPE.town;
+/** La ville en miniature = l'enceinte de la Base (octogone décalé d'un demi-pas : pans
+ *  au nord et au sud, tourelles aux sommets). Rayon 6,4 : la ville tient sous le
+ *  premier anneau de lieux (`distMin` 18). */
+const TOWN_R = 7.2;
+const townPts = Array.from({ length: 8 }, (_, i) => {
+  const a = (i / 8) * Math.PI * 2 - Math.PI / 2 + Math.PI / 8;
+  return { x: TOWN.x + Math.cos(a) * TOWN_R, y: TOWN.y + Math.sin(a) * TOWN_R };
+});
+const townWall = townPts.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
+const townYard = townPts
+  .map(
+    (p) =>
+      `${(TOWN.x + (p.x - TOWN.x) * 0.72).toFixed(2)},${(TOWN.y + (p.y - TOWN.y) * 0.72).toFixed(2)}`,
+  )
+  .join(' ');
+/** Distance du centre au MILIEU d'un pan (et non au sommet) : c'est elle qui porte le
+ *  corps de garde, la porte et le départ du chemin — exactement comme sur l'écran Base. */
+const TOWN_AP = TOWN_R * Math.cos(Math.PI / 8);
+const townRoad = `M${TOWN.x - 1.2} ${TOWN.y + TOWN_AP} L${TOWN.x - 2.2} ${TOWN.y + 14} L${TOWN.x + 2.2} ${TOWN.y + 14} L${TOWN.x + 1.2} ${TOWN.y + TOWN_AP} Z`;
 const MAP = EXPE.mapSize;
 const POI_EMO: Record<PoiType, string> = {
   mine: '⛏️',
@@ -464,7 +463,7 @@ const pois = computed<Poi[]>(() => char.row?.expedition_map?.pois ?? []);
 const terrain = computed(() =>
   char.row?.expedition_map
     ? expeditionTerrain(char.row.expedition_map.seed)
-    : { coast: '', features: [], rivers: [] },
+    : { coast: '', features: [], rivers: [], tufts: [], patches: [] },
 );
 const hero = computed(() => (active.value ? travelPosition(active.value, now.value) : null));
 const heroProg = computed(() =>
@@ -616,6 +615,66 @@ const vansOnMap = computed(() =>
     })),
 );
 const busyCaravan = ref(false);
+/** Tout ce qui voyage, dans l'ordre où ça rentre : le héros puis les convois, les
+ *  cargaisons à récupérer en TÊTE (c'est la seule ligne sur laquelle on peut agir).
+ *  ⚠️ Une seule liste pour les trois états — en route, rentré, à encaisser — sinon la
+ *  rangée se lirait comme trois rangées collées. */
+const trips = computed(() => {
+  const out: {
+    key: string;
+    kind: 'hero' | 'van';
+    who: string;
+    poi: Poi;
+    time: string;
+    pct: number;
+    back: boolean;
+    claim?: string;
+    title: string;
+  }[] = [];
+  const a = active.value;
+  const h = hero.value;
+  if (a && h) {
+    const back = h.phase === 'return';
+    out.push({
+      key: 'hero',
+      kind: 'hero',
+      who: '🧝',
+      poi: a.poi,
+      time: h.phase === 'done' ? 'rentré' : fmtMs(back ? h.remainTotalMs : h.remainToObjectiveMs),
+      pct: heroProg.value.overall * 100,
+      back,
+      title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}`,
+    });
+  }
+  for (const v of vansOnMap.value) {
+    const back = v.at.phase === 'return';
+    out.push({
+      key: 'v' + v.id,
+      kind: 'van',
+      who: '🐫',
+      poi: v.poi,
+      time: fmtMs(back ? v.at.remainTotalMs : v.at.remainToObjectiveMs),
+      pct: v.prog.overall * 100,
+      back,
+      title: `Convoi — ${POI_LABEL[v.poi.type]} niv ${v.poi.level} · escorte ${v.escort}`,
+    });
+  }
+  for (const c of claimable.value) {
+    out.push({
+      key: 'c' + c.id,
+      kind: 'van',
+      who: '🐫',
+      poi: c.poi,
+      time: '🎁',
+      pct: 100,
+      back: true,
+      claim: c.id,
+      title: `Convoi rentré de ${POI_LABEL[c.poi.type]} — récupérer la cargaison`,
+    });
+  }
+  // Les cargaisons prêtes d'abord : c'est la seule tuile sur laquelle il y a à faire.
+  return out.sort((x, y) => Number(!!y.claim) - Number(!!x.claim));
+});
 const claimable = computed(() => char.caravanList.filter((c) => isCaravanClaimable(c, now.value)));
 async function doClaimCaravan(id: string) {
   const uid = auth.user?.id;
@@ -860,11 +919,6 @@ function fmtMin(min: number): string {
 </script>
 
 <style scoped lang="scss">
-/* ── Caravanes : la seconde offre d’un lieu de récolte ── */
-.vc-esc {
-  font-size: 12px;
-  color: var(--dim);
-}
 .sh-away {
   padding: 10px 12px;
   font-size: 13px;
@@ -919,28 +973,6 @@ function fmtMin(min: number): string {
 }
 .car-send {
   margin-top: 2px;
-}
-/* Convois rentrés : la cargaison se récupère À LA MAIN, comme les expéditions. */
-.vans {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.van {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-}
-.van-go {
-  margin-left: auto;
-  background: var(--accent);
-  color: #15120e;
-  border: none;
-  border-radius: 9px;
-  padding: 7px 11px;
-  font-weight: 700;
-  min-height: 36px;
 }
 /* Route dangereuse : télégraphiée AVANT l'envoi → le choix du POI devient un arbitrage
    risque/gain, au lieu de « le plus proche ». */
@@ -1082,70 +1114,30 @@ function fmtMin(min: number): string {
   place-items: center;
 }
 /* Décor de carte */
-/* Terrain : socle + régions SOLIDES + motifs vectoriels */
-/* Carte PARCHEMIN dessinée à l'encre (style livre d'aventure) */
-/* Parchemin NOIR & BLANC (encre monochrome) */
-.sea {
-  fill: #d7d0bd;
-}
-.coast-line {
-  fill: #2a251c;
-  transform: translate(0.7px, 0.8px); /* double-trait de côte */
-}
-.land {
-  fill: #ece3cd;
-  stroke: #2a251c;
-  stroke-width: 0.5;
-}
-.river {
-  fill: none;
-  stroke: #2a251c;
-  stroke-width: 0.35;
-  stroke-linecap: round;
-  opacity: 0.65;
-}
-.feat {
-  pointer-events: none;
-}
-.f-mountain {
-  fill: none;
-  stroke: #2a251c;
-  stroke-width: 0.42;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-.f-tree {
-  fill: #2f2b22;
-  stroke: none;
-}
-.f-dune {
-  fill: none;
-  stroke: #2a251c;
-  stroke-width: 0.4;
-  stroke-linecap: round;
-  opacity: 0.7;
-}
+/* Terrain : le sol vit dans MapTerrain.vue (mer, côte, prairie, reliefs). Ici ne
+   restent que le cadre, la boussole et la ville. */
 .map-frame {
   fill: none;
-  stroke: #2a251c;
-  stroke-width: 0.55;
+  stroke: #6b5a40;
+  stroke-width: 0.7;
 }
 .map-frame.thin {
-  stroke-width: 0.28;
+  stroke: #3a2f1f;
+  stroke-width: 0.3;
 }
 .compass .comp-bg {
-  fill: #ece3cd;
-  stroke: #2a251c;
+  fill: #3a2f1f;
+  stroke: #c8b378;
   stroke-width: 0.4;
 }
 .compass .comp-n {
   font-size: 3px;
   text-anchor: middle;
-  fill: #2a251c;
+  fill: #f3eee6;
   font-weight: 700;
 }
 .compass .comp-needle {
-  fill: #2a251c;
+  fill: var(--accent, #ffd23f);
 }
 .town-glow {
   fill: color-mix(in srgb, var(--accent) 22%, transparent);
@@ -1283,106 +1275,113 @@ function fmtMin(min: number): string {
   font-size: 3.4px;
   text-anchor: middle;
 }
-.town-bg {
-  fill: color-mix(in srgb, var(--accent) 25%, var(--surface));
-  stroke: var(--accent);
-  stroke-width: 1;
+/* La ville = l'enceinte de la Base en petit : mêmes pierres, mêmes bois.
+   ⚠️ À cette taille (14 unités sur 200), c'est le CONTRASTE qui fait lire la forme, pas
+   le détail : le rempart est donc la surface CLAIRE (pierre) et la cour la surface
+   sombre. L'inverse — mur sombre bordé de clair, comme sur l'écran Base où il fait dix
+   fois cette taille — se lisait ici comme un trou dans la prairie. */
+.town-earth {
+  fill: #5a4730;
+  opacity: 0.9;
 }
-.town-emo {
-  font-size: 5px;
-  text-anchor: middle;
+.town-road {
+  fill: #5c4a32;
+  stroke: #3f3220;
+  stroke-width: 0.3;
 }
-.active-card {
+.town-wall {
+  fill: #9a8768;
+  stroke: #3a2f1f;
+  stroke-width: 0.7;
+  stroke-linejoin: round;
+}
+.town-yard {
+  fill: #4a3c28;
+  stroke: #3a2f1f;
+  stroke-width: 0.3;
+}
+.town-turret {
+  fill: #c2ae88;
+  stroke: #3a2f1f;
+  stroke-width: 0.35;
+}
+.town-keep {
+  fill: #c2ae88;
+  stroke: #3a2f1f;
+  stroke-width: 0.4;
+}
+.town-gate {
+  fill: #241c12;
+  stroke: #3a2f1f;
+  stroke-width: 0.3;
+}
+/* ── Rangée des voyages : une tuile par voyageur, sur UNE ligne ── */
+.trips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+  scrollbar-width: none;
+}
+.trips::-webkit-scrollbar {
+  display: none;
+}
+.trip {
+  position: relative;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border-color: var(--accent);
+  gap: 6px;
+  min-height: 44px; /* cible tactile : la tuile « rentré » est un bouton */
+  padding: 7px 11px 9px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  overflow: hidden;
 }
-.van-card {
+.trip.van {
   border-color: #b57bff;
 }
-.van-card .vg-fill,
-.van-card .vg-dot {
-  background: #b57bff;
+/* Au RETOUR la teinte change : on rentre, on ne va plus. */
+.trip.back {
+  border-color: #7bc86c;
 }
-.van-card .vg-bar.back .vg-fill,
-.van-card .vg-bar.back .vg-dot {
-  background: #7bc86c;
+.tr-who {
+  font-size: 17px;
 }
-.active-card + .active-card {
-  margin-top: 8px;
+.tr-poi {
+  font-size: 15px;
 }
-.ac-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
+.tr-time {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
-/* Barre de voyage : ville → objectif → ville, en une lecture. */
-.vg-bar {
-  position: relative;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--line);
-}
-.vg-fill {
-  height: 100%;
-  border-radius: 999px;
+/* L'avancement du voyage, en sous-lignage : la même information que le temps, sans
+   une ligne de plus. ⚠️ `voyageProgress` (durée TOTALE) et non la fraction de phase,
+   qui repart à zéro au demi-tour et ferait RECULER la barre à mi-chemin. */
+.tr-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
   background: var(--accent);
   transition: width 0.6s linear;
 }
-/* Au RETOUR, la teinte change : on rentre, on ne va plus. */
-.vg-bar.back .vg-fill {
+.trip.van .tr-bar {
+  background: #b57bff;
+}
+.trip.back .tr-bar {
   background: #7bc86c;
 }
-.vg-mid {
-  position: absolute;
-  top: -3px;
-  width: 2px;
-  height: 10px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: var(--dim);
+.trip.ready {
+  cursor: pointer;
+  background: color-mix(in srgb, #7bc86c 16%, var(--surface));
 }
-.vg-dot {
-  position: absolute;
-  top: 50%;
-  width: 9px;
-  height: 9px;
-  margin: -4.5px 0 0 -4.5px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 2px var(--surface);
-  transition: left 0.6s linear;
-}
-.vg-bar.back .vg-dot {
-  background: #7bc86c;
-}
-.ac-emo {
-  font-size: 26px;
-}
-.ac-title {
-  font-size: 15px;
-  font-weight: 800;
-}
-.ac-timers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  font-size: 12.5px;
-  color: var(--text);
-  font-weight: 600;
-}
-.ac-total {
-  color: var(--dim);
-  font-weight: 400;
-}
-.ac-back {
-  font-size: 13px;
-  color: var(--accent);
-  font-weight: 700;
+.trip.ready:disabled {
+  opacity: 0.6;
 }
 .sh-head {
   display: flex;

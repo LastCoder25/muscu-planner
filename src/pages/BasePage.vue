@@ -73,6 +73,7 @@
           <path :d="roadPath" class="road" />
           <path :d="roadRuts" class="road-ruts" />
           <path v-for="(t, i) in tufts" :key="'t' + i" :d="t" class="tuft" />
+          <path v-for="(t, i) in trees" :key="'tr' + i" :d="t" class="tree" />
         </g>
         <g v-if="corpses.length" class="field">
           <text
@@ -141,10 +142,29 @@
           </g>
           <circle v-else :cx="p.x" :cy="p.y" r="7.5" class="tur-empty" />
         </g>
+        <!-- 🧱 Pastille de niveau de la MURAILLE, au milieu du pan ouest (demande de
+             l'utilisateur : on ne savait pas qu'elle était à monter). Un « ↑ » orange
+             quand elle est SOUS le niveau du joueur — la seule structure sans pastille
+             était précisément celle qui active les sièges. -->
+        <g v-if="wallLevel" class="lvl-badge wall-lvl" :class="{ upgrade: wallLevel < heroLevel }">
+          <circle :cx="100 - APOTHEM" cy="100" r="5.4" />
+          <text :x="100 - APOTHEM" y="102">{{ wallLevel }}</text>
+          <text v-if="wallLevel < heroLevel" :x="100 - APOTHEM + 6.4" y="95.6" class="lvl-up">
+            ↑
+          </text>
+        </g>
         <!-- Pastille de niveau des tourelles, sur la 1re tour -->
-        <g v-if="turretsBuilt" class="lvl-badge">
+        <g v-if="turretsBuilt" class="lvl-badge" :class="{ upgrade: turretLevel < heroLevel }">
           <circle :cx="octagon[0]!.x + 7" :cy="octagon[0]!.y - 8" r="5" />
           <text :x="octagon[0]!.x + 7" :y="octagon[0]!.y - 6.2">{{ turretLevel }}</text>
+          <text
+            v-if="turretLevel < heroLevel"
+            :x="octagon[0]!.x + 13.4"
+            :y="octagon[0]!.y - 12.4"
+            class="lvl-up"
+          >
+            ↑
+          </text>
         </g>
 
         <!-- ── LE CORPS DE GARDE (Tour de guet), au milieu du pan nord ──────
@@ -291,7 +311,12 @@
       </svg>
 
       <div class="keep-legend">
-        <span>🧱 Muraille {{ wallLevel || '—' }}</span>
+        <span
+          >🧱 Muraille {{ wallLevel || '—'
+          }}<b v-if="wallLevel && wallLevel < heroLevel" class="up">
+            ↑ {{ heroLevel }} possible</b
+          ></span
+        >
         <span>🏹 {{ turretsBuilt }}/{{ TURRET_SLOTS }} tourelles</span>
         <span>🗼 Guet {{ watchLevel || '—' }}</span>
       </div>
@@ -784,6 +809,7 @@ import {
 } from '@/lib/raid';
 import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
 import { mulberry32 } from '@/lib/combat';
+import { treePath } from '@/lib/expedition';
 
 /** Niveau d'accès à l'enceinte. La défense est un système de mi-partie : elle suppose une
  *  économie derrière elle (or, ferraille) et une base qui vaille la peine d'être défendue.
@@ -1174,13 +1200,14 @@ function scatter<T>(
   want: number,
   pad: number,
   make: (x: number, y: number, rng: () => number) => T,
+  avoid: (x: number, y: number) => boolean = () => false,
 ): T[] {
   const rng = mulberry32(seed);
   const out: T[] = [];
   for (let i = 0; i < want * 8 && out.length < want; i++) {
     const x = pad + rng() * (200 - 2 * pad);
     const y = pad + rng() * (200 - 2 * pad);
-    if (!outsideWalls(x, y) || onRoad(x, y)) continue;
+    if (!outsideWalls(x, y) || onRoad(x, y) || avoid(x, y)) continue;
     out.push(make(x, y, rng));
   }
   return out;
@@ -1197,6 +1224,15 @@ const patches = scatter(1717, 9, 10, (cx, cy, rng) => ({
   rx: r1(7 + rng() * 9),
   ry: r1(3 + rng() * 4),
 }));
+/** Quelques arbres hors les murs (le même conifère que sur la carte) — jamais sur le
+ *  panneau « Expéditions » ni devant le corps de garde. */
+const trees = scatter(
+  9091,
+  8,
+  9,
+  (x, y, rng) => treePath(r1(x), r1(y), r1(1.5 + rng() * 0.8)),
+  (x, y) => (y > WALL_BOTTOM + 4 && x > 104 && x < 156) || (y < WALL_TOP && Math.abs(x - 100) < 16),
+);
 const wallPoints = computed(() => octagon.value.map((p) => `${p.x},${p.y}`).join(' '));
 const innerPoints = computed(() =>
   octagon.value.map((p) => `${100 + (p.x - 100) * 0.86},${100 + (p.y - 100) * 0.86}`).join(' '),
@@ -1850,6 +1886,38 @@ const doCollect = () =>
   fill: var(--accent, #ffd23f);
   font-weight: 700;
 }
+/* « À monter » : la structure est sous le niveau du joueur. Orange (d3), pas rouge —
+   ce n'est pas une alerte, c'est une marge qu'on laisse dormir. */
+.lvl-badge.upgrade circle {
+  stroke: #ffb23f;
+  stroke-dasharray: 3 2;
+}
+.lvl-badge .lvl-up {
+  font-size: 7.5px;
+  fill: #ffb23f;
+  animation: lvl-up-nudge 1.8s ease-in-out infinite;
+}
+@keyframes lvl-up-nudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lvl-badge .lvl-up {
+    animation: none;
+  }
+}
+.wall-lvl {
+  pointer-events: none; /* le clic passe à la bande de la muraille, dessous */
+}
+.keep-legend .up {
+  color: #ffb23f;
+  font-weight: 700;
+}
 /* Emplacement de structure encore vide (corps de garde) */
 /* La porte : une arche sombre percée dans le rempart, avec sa flèche de sortie. */
 /* ── Le terrain ── */
@@ -1862,6 +1930,12 @@ const doCollect = () =>
   stroke: #7d9a45;
   stroke-width: 0.9;
   stroke-linecap: round;
+}
+.tree {
+  fill: #2e4a24;
+  stroke: #1d3016;
+  stroke-width: 0.5;
+  stroke-linejoin: round;
 }
 .road {
   fill: #5c4a32;
