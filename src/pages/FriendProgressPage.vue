@@ -18,6 +18,9 @@
         <div class="fp-card">
           <div class="fp-c-top">
             <span class="fp-pct font-display">{{ comboProgressPct(activeCombo) }} %</span>
+            <span class="fp-c-dates"
+              >📅 {{ dateRangeLabel(activeCombo.start_date, activeCombo.duration_days) }}</span
+            >
             <span class="fp-c-sub"
               >{{ comboLegsDone(activeCombo) }}/{{ activeCombo.legs.length }} exos bouclés</span
             >
@@ -61,6 +64,10 @@
             }}
             <span class="fp-bal" :class="balClass(c)">{{ balLabel(c) }}</span>
           </div>
+          <!-- ⚠️ Les DATES manquaient : « j12/30 » dit où il en est, pas s'il a commencé
+               avant toi ni quand ça se termine — donc la comparaison avec son propre défi
+               était impossible à situer. -->
+          <div class="fp-c-dates">📅 {{ dateRangeLabel(c.start_date, c.duration_days) }}</div>
         </div>
       </section>
 
@@ -86,6 +93,7 @@ import {
   logicalToday,
   type Challenge,
 } from '@/lib/challenges';
+import { dateRangeLabel } from '@/lib/startDate';
 import {
   comboProgressPct,
   legDone,
@@ -243,6 +251,11 @@ async function goBack() {
   font-size: 12px;
   color: var(--dim);
   margin-top: 4px;
+}
+.fp-c-dates {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-top: 3px;
 }
 .fp-bar {
   height: 8px;

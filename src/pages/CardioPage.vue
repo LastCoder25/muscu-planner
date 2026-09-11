@@ -188,6 +188,7 @@ import {
   CARDIO_ACTIVITIES,
   ACTIVITY_LABELS,
   ACTIVITY_ICONS,
+  ACTIVITY_EMOJI,
   activityHasElevation,
   paceLabel,
   speedKmh,
@@ -301,8 +302,22 @@ async function save() {
     return;
   }
   saving.value = true;
-  // Snapshot XP AVANT (cardio + global) pour l'animation de progression.
-  const beforeC = progress.cardio.value;
+  /** Le niveau d'une tuile de sport (celle de l'accueil), par sa clé. Absente = jamais
+   *  pratiquée → niveau 1 à 0 %. */
+  function tileLevel(key: string) {
+    const t = progress.sportTiles.value.find((x) => x.key === key);
+    return t ? t.level : { level: 1, progressPct: 0 };
+  }
+
+  // Snapshot AVANT, pour l'animation de progression.
+  // ⚠️ On prend le niveau de L'ACTIVITÉ (la tuile « Marche », « Course »…), PAS la piste
+  // « Cardio » agrégée : celle-ci n'est plus affichée nulle part depuis que l'accueil
+  // montre une tuile par activité (elle ne survit que dans le classement). L'overlay
+  // promettait donc une jauge qu'on ne retrouvait sur aucun écran — signalé par
+  // l'utilisateur. On anime désormais exactement ce qu'il verra ensuite.
+  // Une constante, pas un computed : on est dans une fonction, l'activité ne bougera plus.
+  const tileKey = `cardio:${activity.value}`;
+  const beforeT = tileLevel(tileKey);
   const beforeG = progress.global.value;
   try {
     const log: CardioLog = {
@@ -366,14 +381,15 @@ async function save() {
     }
     // Animation d'XP gagnée (cercle Cardio + cercle Global, progression avant→après).
     await nextTick();
+    const afterT = tileLevel(tileKey);
     xpFx.show([
       {
-        emoji: '🏃',
-        label: 'Cardio',
-        fromLevel: beforeC.level,
-        fromPct: beforeC.progressPct,
-        toLevel: progress.cardio.value.level,
-        toPct: progress.cardio.value.progressPct,
+        emoji: ACTIVITY_EMOJI[activity.value] ?? '🏃',
+        label: ACTIVITY_LABELS[activity.value] ?? 'Cardio',
+        fromLevel: beforeT.level,
+        fromPct: beforeT.progressPct,
+        toLevel: afterT.level,
+        toPct: afterT.progressPct,
       },
       {
         emoji: '🌍',

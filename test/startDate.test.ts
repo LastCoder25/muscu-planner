@@ -7,6 +7,8 @@ import {
   startOptions,
   startLabel,
   START_MAX_AHEAD_DAYS,
+  dateRangeLabel,
+  dayLabelShort,
 } from '@/lib/startDate';
 
 describe('arithmétique de dates (UTC explicite)', () => {
@@ -81,5 +83,22 @@ describe('startLabel', () => {
     expect(startLabel('2026-09-10', '2026-09-10')).toBe("aujourd'hui");
     expect(startLabel('2026-09-11', '2026-09-10')).toBe('demain');
     expect(startLabel('2026-09-14', '2026-09-10')).toBe('lundi 14 septembre');
+  });
+});
+
+describe('plage de dates', () => {
+  it('les bornes sont INCLUSES : 30 jours du 1er finissent le 30', () => {
+    expect(dateRangeLabel('2026-09-01', 30)).toContain('30');
+    expect(addDaysUtcIso('2026-09-01', 29)).toBe('2026-09-30');
+  });
+  it('aucun décalage de fuseau sur 365 jours consécutifs', () => {
+    for (let i = 0; i < 365; i++) {
+      const iso = addDaysUtcIso('2026-01-01', i);
+      expect(dayLabelShort(iso)).toContain(String(Number(iso.slice(8, 10))).padStart(2, '0'));
+    }
+  });
+  it('un défi d’un jour commence et finit le même jour', () => {
+    const l = dateRangeLabel('2026-09-11', 1);
+    expect(l.split('→')[0]!.trim()).toBe(l.split('→')[1]!.trim());
   });
 });

@@ -613,6 +613,7 @@ import { REP_XP, assistMult } from '@/lib/athlete';
 import { useProgress } from '@/composables/useProgress';
 import { useCharacterStore } from '@/stores/character';
 import { useLibraryStore } from '@/stores/library';
+import { dateRangeLabel } from '@/lib/startDate';
 
 const router = useRouter();
 const route = useRoute();
@@ -699,23 +700,14 @@ const comboLegsDone = (c: (typeof comboStore.list)[number]) =>
   c.legs.filter((l) => legComplete(l)).length;
 const comboPct = computed(() => (activeCombo.value ? comboProgressPct(activeCombo.value) : 0));
 // Semaine du Défi 360 (début → fin) pour l'afficher clairement.
-function fmtDM(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y!, (m ?? 1) - 1, d ?? 1).toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'short',
-  });
-}
-function addDaysLocal(iso: string, n: number): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  const dt = new Date(y!, (m ?? 1) - 1, (d ?? 1) + n);
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-}
-const comboWeek = computed(() => {
-  const c = activeCombo.value;
-  if (!c) return '';
-  return `${fmtDM(c.start_date)} → ${fmtDM(addDaysLocal(c.start_date, c.duration_days - 1))}`;
-});
+// ⚠️ `fmtDM`/`addDaysLocal` (privés à cet écran) sont remplacés par `dateRangeLabel` :
+// la même plage s'affiche désormais aussi sur l'écran d'un AMI, et deux copies d'une
+// règle de date finissent toujours par diverger d'un jour.
+const comboWeek = computed(() =>
+  activeCombo.value
+    ? dateRangeLabel(activeCombo.value.start_date, activeCombo.value.duration_days)
+    : '',
+);
 // Avancement THÉORIQUE « dans les temps » = jours écoulés (aujourd'hui inclus) / durée.
 // Affiché en ROSE derrière le vert (actuel) sur la barre globale → on voit le retard.
 const comboOnTimePct = computed(() => {

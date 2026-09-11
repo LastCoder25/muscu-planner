@@ -5,18 +5,40 @@ export interface ActivityDef {
   id: CardioActivity;
   label: string;
   icon: string;
+  /** ⚠️ L'emoji vit ICI, avec le libellé et l'icône : l'overlay d'XP en a besoin (il
+   *  rend du texte SVG, pas une icône Quasar) et une table séparée aurait divergé au
+   *  premier ajout d'activité. */
+  emoji: string;
   hasElevation: boolean; // D+/D- pertinents (extérieur)
 }
 
 export const CARDIO_ACTIVITIES: ActivityDef[] = [
-  { id: 'marche', label: 'Marche', icon: 'directions_walk', hasElevation: true },
-  { id: 'rando', label: 'Rando', icon: 'hiking', hasElevation: true },
-  { id: 'course', label: 'Course', icon: 'directions_run', hasElevation: true },
-  { id: 'trail', label: 'Trail', icon: 'terrain', hasElevation: true },
-  { id: 'velo', label: 'Vélo', icon: 'directions_bike', hasElevation: true },
-  { id: 'velo_appart', label: "Vélo d'appart", icon: 'pedal_bike', hasElevation: false },
-  { id: 'marche_tapis', label: 'Marche tapis', icon: 'directions_walk', hasElevation: false },
-  { id: 'course_tapis', label: 'Course tapis', icon: 'directions_run', hasElevation: false },
+  { id: 'marche', label: 'Marche', icon: 'directions_walk', emoji: '🚶', hasElevation: true },
+  { id: 'rando', label: 'Rando', icon: 'hiking', emoji: '🥾', hasElevation: true },
+  { id: 'course', label: 'Course', icon: 'directions_run', emoji: '🏃', hasElevation: true },
+  { id: 'trail', label: 'Trail', icon: 'terrain', emoji: '⛰️', hasElevation: true },
+  { id: 'velo', label: 'Vélo', icon: 'directions_bike', emoji: '🚴', hasElevation: true },
+  {
+    id: 'velo_appart',
+    label: "Vélo d'appart",
+    icon: 'pedal_bike',
+    emoji: '🚲',
+    hasElevation: false,
+  },
+  {
+    id: 'marche_tapis',
+    label: 'Marche tapis',
+    icon: 'directions_walk',
+    emoji: '🚶',
+    hasElevation: false,
+  },
+  {
+    id: 'course_tapis',
+    label: 'Course tapis',
+    icon: 'directions_run',
+    emoji: '🏃',
+    hasElevation: false,
+  },
 ];
 
 export const ACTIVITY_LABELS = Object.fromEntries(
@@ -24,6 +46,9 @@ export const ACTIVITY_LABELS = Object.fromEntries(
 ) as Record<CardioActivity, string>;
 export const ACTIVITY_ICONS = Object.fromEntries(
   CARDIO_ACTIVITIES.map((a) => [a.id, a.icon]),
+) as Record<CardioActivity, string>;
+export const ACTIVITY_EMOJI = Object.fromEntries(
+  CARDIO_ACTIVITIES.map((a) => [a.id, a.emoji]),
 ) as Record<CardioActivity, string>;
 
 export function activityHasElevation(a: CardioActivity): boolean {

@@ -95,7 +95,8 @@
       <div class="g-title font-display">⭐ Promotion — {{ promoAdv?.name }}</div>
       <p class="g-note">
         Choisis sa voie. Le choix est <b>définitif</b>, et il décide de ce qui lui sera proposé
-        ensuite.
+        ensuite. Toutes ces classes valent le <b>même rang</b> : ce qui les sépare, c'est leur
+        <b>orientation</b>, leur <b>rôle sur les convois</b> et leur <b>signature de combat</b>.
       </p>
       <div v-if="!trainingLevel" class="g-empty">
         Il te faut un <b>Centre de formation</b> pour qu’il apprenne une nouvelle classe.
@@ -116,7 +117,17 @@
         >
           <span class="gc-emo">{{ c.emoji }}</span>
           <span class="gc-lbl">{{ c.label }}</span>
-          <span class="gc-w">{{ shape(c) }}</span>
+          <!-- ⚠️ « 💪3 ❤️2 ⚡1 » seul ne dit RIEN à qui choisit : on nomme l'orientation,
+               puis les deux différences qui décident vraiment — ce qu'il apporte au
+               convoi, et ce qu'il fait au combat. -->
+          <span class="gc-shape">{{ advShapeLabel(c.w) }} · {{ shape(c) }}</span>
+          <span v-if="c.role" class="gc-perk">{{ ADV_ROLE_LABEL[c.role] }}</span>
+          <span v-if="c.signature && ADV_SIGNATURE_LABEL[c.signature]" class="gc-perk sig">
+            {{ ADV_SIGNATURE_LABEL[c.signature] }}
+          </span>
+          <span v-if="!c.role && !c.signature" class="gc-perk none">
+            Aucun rôle ni signature — de la stat brute
+          </span>
           <span class="gc-rar">{{ RARITY_LABEL[classRarity(c)] }}</span>
         </button>
       </div>
@@ -148,6 +159,9 @@ import {
   canPromote,
   classChoices,
   classRarity,
+  advShapeLabel,
+  ADV_ROLE_LABEL,
+  ADV_SIGNATURE_LABEL,
   type AdvClass,
   type Adventurer,
 } from '@/lib/adventurers';
@@ -428,6 +442,22 @@ async function doPromote(classId: string) {
   text-align: center;
 }
 .gc-w,
+.gc-shape {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.gc-perk {
+  font-size: 11.5px;
+  color: var(--text);
+  line-height: 1.3;
+}
+.gc-perk.sig {
+  color: var(--accent, #ffd23f);
+}
+.gc-perk.none {
+  color: var(--dim);
+  font-style: italic;
+}
 .gc-rar {
   font-size: 11px;
   color: var(--dim);

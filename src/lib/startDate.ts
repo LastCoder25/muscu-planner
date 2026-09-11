@@ -81,6 +81,25 @@ const MONTHS = [
   'décembre',
 ];
 
+/** Jour COURT (« 12 sept. »). ⚠️ Formaté en UTC explicite comme tout le reste de ce
+ *  module : une date de défi est un JOUR, pas un instant, et le projet s'est déjà fait
+ *  décaler d'un jour en France par un aller-retour local↔UTC. */
+export function dayLabelShort(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+}
+
+/** « 12 sept. → 11 oct. » — la plage d'un défi, bornes INCLUSES.
+ *  ⚠️ Le dernier jour est `début + durée − 1` : un défi de 30 jours commencé le 1er finit
+ *  le 30, pas le 31. Écrit ici une seule fois — la formule vivait recopiée dans
+ *  `ChallengesPage` (avec ses propres helpers de date privés), et l'écran des amis
+ *  s'apprêtait à en faire une troisième copie. */
+export function dateRangeLabel(startIso: string, durationDays: number): string {
+  const last = addDaysUtcIso(startIso, Math.max(1, durationDays) - 1);
+  return `${dayLabelShort(startIso)} → ${dayLabelShort(last)}`;
+}
+
 /** « aujourd'hui », « demain », sinon « lundi 15 septembre » — lisible d'un coup d'œil. */
 export function startLabel(dateIso: string, todayIso: string): string {
   const delta = daysBetweenUtcIso(todayIso, dateIso);
