@@ -35,6 +35,7 @@ import {
   type Item,
 } from './items';
 import { garrisonCombatant } from './caravan';
+import { beyondCap } from './buildings';
 import { advStats, PROMO_LEVELS, type Adventurer } from './adventurers';
 import {
   simulateSiege,
@@ -1085,7 +1086,15 @@ export const GARRISON_CAP = {
 
 /** Le repos qu'il reste à un familier sorti d'un siège. L'Infirmerie l'abrège. */
 export function fatigueMsFor(infirmaryLevel: number): number {
-  return Math.round(FATIGUE_MS * Math.max(0.25, 1 - Math.max(0, infirmaryLevel) * 0.05));
+  return Math.round(
+    FATIGUE_MS *
+      infirmaryMult(
+        infirmaryLevel,
+        INFIRMARY.fatiguePerLvl,
+        INFIRMARY.fatigueFloor,
+        INFIRMARY.fatigueTail,
+      ),
+  );
 }
 export function isFatigued(fam: { fatigueUntil?: number }, now: number): boolean {
   return !!fam.fatigueUntil && now < fam.fatigueUntil;
@@ -1746,10 +1755,54 @@ export function woundRemainingMs(base: BaseState | null | undefined, now: number
 /** Convalescence. L'Infirmerie l'abrège — c'est tout son intérêt. ⚠️ Bornée à
  *  `WOUND_MAX_MS` : elle doit rester COURTE devant l'intervalle entre deux sièges, sinon
  *  un héros encore alité manquerait la défense suivante et la défaite s'auto-entretiendrait. */
+/** 🏥 LE MULTIPLICATEUR DE L’INFIRMERIE, avec sa QUEUE.
+ *
+ *  ⚠️ ELLE ÉTAIT LA SEULE STRUCTURE ENTIÈREMENT MORTE (signalé par l’utilisateur :
+ *  « l’infirmerie est déjà au max »). Mesuré : ses DEUX leviers touchaient leur
+ *  plancher dur aux niveaux 14 et 15 — soit 85 niveaux sur 100 qu’on paie au prix
+ *  quadratique pour rien. Les autres structures gardent au moins un levier vivant
+ *  (le Chenil par le dressage, la Tour de guet par la clarté).
+ *
+ *  ⚠️ ON PROLONGE, ON NE REDISTRIBUE PAS (règle v0.731) : `beyondCap` ne rend 0
+ *  qu’en deçà du plafond, donc **toute valeur jusqu’à celui-ci est strictement
+ *  inchangée** — personne ne se réveille avec une infirmerie moins bonne qu’hier.
+ *
+ *  ⚠️ UNE ASYMPTOTE, PAS UNE PENTE, et la queue reste SOUS le plancher : une
+ *  convalescence ne peut jamais devenir gratuite. Sinon un héros blessé serait remis
+ *  sur pied instantanément et le siège perdu cesserait de coûter quoi que ce soit. */
+const INFIRMARY = {
+  woundPerLvl: 0.06,
+  woundFloor: 0.2,
+  /** Ce que la queue retire AU PLUS, au-delà du plancher. **Strictement < au plancher.** */
+  woundTail: 0.1,
+  fatiguePerLvl: 0.05,
+  fatigueFloor: 0.25,
+  fatigueTail: 0.12,
+  /** Niveaux au-delà du plafond où la queue a rendu la moitié de son effet. */
+  tailHalf: 40,
+} as const;
+
+function infirmaryMult(level: number, perLvl: number, floor: number, tail: number): number {
+  const l = Math.max(0, level);
+  // Le plafond est DÉRIVÉ des deux constantes : régler le plancher déplace la queue
+  // avec lui, au lieu de laisser un nombre écrit à la main prendre du retard.
+  return (
+    Math.max(floor, 1 - l * perLvl) - beyondCap(l, (1 - floor) / perLvl, tail, INFIRMARY.tailHalf)
+  );
+}
+
 export function woundMsFor(infirmaryLevel: number, intervalMs?: number): number {
   const base = Math.min(
     WOUND_MAX_MS,
-    Math.round(RAID.woundMs * Math.max(0.2, 1 - Math.max(0, infirmaryLevel) * 0.06)),
+    Math.round(
+      RAID.woundMs *
+        infirmaryMult(
+          infirmaryLevel,
+          INFIRMARY.woundPerLvl,
+          INFIRMARY.woundFloor,
+          INFIRMARY.woundTail,
+        ),
+    ),
   );
   // ⚠️ BORNÉE PAR LE RYTHME RÉEL DES SIÈGES (v0.702). Tant que la fréquence était plafonnée
   // à un siège / 24 h, une convalescence de 6-8 h restait courte devant l'intervalle. Depuis
@@ -2283,18 +2336,15 @@ export function defensePerLevelLabel(
       const fam = `familiers fatigués ${fmtSpan(fa)} → ${fmtSpan(fb)}`;
       if (wb < wa)
         return `Niveau ${next} : convalescence du héros ${fmtSpan(wa)} → ${fmtSpan(wb)}, ${fam}`;
-      // ⚠️ DEUX plafonds distincts, et il ne faut surtout pas les confondre : le
-      // PLANCHER de la structure (−80 %, atteint vers le niveau 14) et le RYTHME des
-      // sièges (`WOUND_INTERVAL_SHARE`, quand on court les séances). Annoncer le mauvais
-      // motif enverrait le joueur réduire son entraînement pour un gain imaginaire.
-      const brutBouge = woundMsFor(next) < woundMsFor(l);
-      const motif = brutBouge
-        ? `bornée par ton rythme de sièges (elle ne dépasse jamais ${Math.round(WOUND_INTERVAL_SHARE * 100)} % de l’intervalle) — la monter n’y changera rien`
-        : `déjà à son plancher — elle ne descendra pas plus bas`;
-      const tete = `La convalescence du héros (${fmtSpan(wa)}) est ${motif}.`;
-      return fb < fa
-        ? `Niveau ${next} : ${fam}. ${tete}`
-        : `${tete} Les familiers (${fmtSpan(fa)}) aussi : cette structure est au maximum.`;
+      // ⚠️ IL NE RESTE QU’UN SEUL MOTIF possible, et c’est un progrès : la structure
+      // n’a PLUS de plancher (queue asymptotique, « aucun niveau mort »), donc la
+      // convalescence raccourcit à CHAQUE niveau. Si elle ne bouge pas, c’est
+      // forcément le RYTHME des sièges qui borde — et il ne faut surtout pas dire
+      // « plancher » à sa place : ça enverrait le joueur réduire son entraînement
+      // pour un gain imaginaire. La branche « déjà à son plancher » est retirée
+      // plutôt que laissée morte : un chemin inatteignable finit par mentir.
+      const tete = `La convalescence du héros (${fmtSpan(wa)}) est bornée par ton rythme de sièges (elle ne dépasse jamais ${Math.round(WOUND_INTERVAL_SHARE * 100)} % de l’intervalle) — la monter n’y changera rien.`;
+      return `Niveau ${next} : ${fam}. ${tete}`;
     }
     default: {
       const jamais: never = id;

@@ -415,7 +415,15 @@ export function labyrinthUnlocked(buildings: Building[]): boolean {
  *  jamais atteindre sa borne : c'est ce qui permet à un effet borné par nature (un temps
  *  de trajet ne peut pas devenir nul) de continuer à récompenser cent niveaux.
  *  `tailHalf` = combien de niveaux au-delà du plafond pour toucher la moitié de la queue. */
-function beyondCap(level: number, capLevel: number, tailMax: number, tailHalf: number): number {
+/** ⚠️ EXPORTÉE pour l’enceinte (`raid.ts`) : la règle « aucun niveau mort du 0 au 100 »
+ *  vaut aussi pour les structures de défense, et une SECONDE implémentation de la même
+ *  queue asymptotique finirait par diverger de celle-ci. */
+export function beyondCap(
+  level: number,
+  capLevel: number,
+  tailMax: number,
+  tailHalf: number,
+): number {
   const over = Math.max(0, level - capLevel);
   return over > 0 ? (tailMax * over) / (over + tailHalf) : 0;
 }

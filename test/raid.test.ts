@@ -1068,12 +1068,16 @@ describe('ce qu’un niveau de défense apporte', () => {
     expect(w).toContain(fmtSpan(scoutLeadMs(3)));
   });
 
-  it('⚠️ elle distingue le PLANCHER de la structure du RYTHME des sièges', () => {
-    // Deux plafonds differents, deux motifs differents. Annoncer le mauvais enverrait le
-    // joueur reduire son entrainement pour un gain qui ne viendrait jamais.
-    const plancher = defensePerLevelLabel('infirmary', 20, ctx(20, 'infirmary'));
-    expect(plancher).toMatch(/plancher/);
-    expect(plancher).not.toMatch(/rythme/);
+  it('⚠️ l’Infirmerie n’annonce plus jamais de « plancher » — elle n’en a plus', () => {
+    // ⚠️ RÉÉCRIT. Ce test exigeait qu'un niveau élevé annonce « déjà à son plancher »,
+    // et c'était juste TANT QUE la structure en avait un. La queue asymptotique l'a
+    // supprimé (« aucun niveau mort du 0 au 100 ») : la convalescence raccourcit
+    // désormais à CHAQUE niveau, donc ce motif ne peut plus être vrai. Ce qu'il
+    // protégeait reste protégé : ne JAMAIS confondre les deux bornes.
+    const haut = defensePerLevelLabel('infirmary', 20, ctx(20, 'infirmary'));
+    expect(haut).not.toMatch(/plancher/);
+    // Un niveau élevé annonce un vrai gain, pas un cul-de-sac.
+    expect(haut).toContain(fmtSpan(woundMsFor(21)));
     const serre = 3 * 3600_000;
     const rythme = defensePerLevelLabel('infirmary', 3, ctx(3, 'infirmary', serre));
     expect(rythme).toMatch(/rythme de sièges/);
@@ -1928,5 +1932,46 @@ describe('⛏️ LE CHANTIER TRAVAILLE SEUL', () => {
     expect(SCAV.dispatchMs).toBeLessThanOrEqual(5 * 60_000);
     // …et le champ reste frais bien plus longtemps qu’il n’en faut pour tout ramasser.
     expect(SCAV.fieldMs / SCAV.dispatchMs).toBeGreaterThan(50);
+  });
+});
+
+describe('🏥 AUCUN NIVEAU MORT — l’Infirmerie jusqu’à 100', () => {
+  // ⚠️ Signalé par l’utilisateur (« l’infirmerie est déjà au max ; il faut que chaque
+  // bâtiment apporte quelque chose à chaque niveau jusqu’au 100 »). Mesuré : ses DEUX
+  // leviers touchaient un plancher DUR aux niveaux 14 et 15 — 85 niveaux sur 100 payés
+  // au prix quadratique pour rien. C’était la seule structure d’enceinte ENTIÈREMENT
+  // morte : le Chenil garde le dressage, la Tour de guet garde la clarté.
+  const leviers: [string, (l: number) => number][] = [
+    ['convalescence du héros', (l) => woundMsFor(l)],
+    ['fatigue des familiers', (l) => fatigueMsFor(l)],
+  ];
+
+  it('⚠️ CHAQUE niveau raccourcit encore, de 1 à 100', () => {
+    for (const [nom, f] of leviers) {
+      for (let l = 1; l <= 100; l++) {
+        // Strictement décroissant : un palier qui ne change rien est le défaut qu'on corrige.
+        expect(f(l), `${nom} au niveau ${l}`).toBeLessThan(f(l - 1));
+      }
+    }
+  });
+
+  it('⚠️ ON PROLONGE, ON NE REDISTRIBUE PAS : rien ne bouge jusqu’au plafond', () => {
+    // La condition non négociable de la v0.731 : personne ne se réveille avec une
+    // infirmerie MOINS bonne qu'hier. On épingle l'ancienne formule sous le plafond.
+    const avantW = (l: number) => Math.round(RAID.woundMs * Math.max(0.2, 1 - l * 0.06));
+    for (let l = 0; l <= 13; l++) expect(woundMsFor(l)).toBe(avantW(l));
+    const f0 = fatigueMsFor(0);
+    for (let l = 0; l <= 15; l++)
+      expect(fatigueMsFor(l)).toBe(Math.round(f0 * Math.max(0.25, 1 - l * 0.05)));
+  });
+
+  it('⚠️ UNE ASYMPTOTE, PAS UNE PENTE : se soigner n’est jamais gratuit', () => {
+    // Sans cette borne, un siège perdu finirait par ne plus rien coûter — et la
+    // convalescence est précisément ce qui donne du poids à la défaite.
+    for (const [nom, f] of leviers) {
+      expect(f(100), nom).toBeGreaterThan(0);
+      // La queue reste SOUS le plancher : elle en retire une part, jamais la totalité.
+      expect(f(100_000), nom).toBeGreaterThan(f(0) * 0.05);
+    }
   });
 });
