@@ -1619,7 +1619,12 @@ describe('⚠️ élagage par DOMINANCE : rapide SANS jamais perdre le gagnant',
   const mk = (id: string, slot: ItemSlot, v: Record<string, number>, setId?: string): Item => {
     const e = Object.entries(v);
     return {
-      id, name: 'x', slot, rarity: 'epique', level: 1, roll: 0,
+      id,
+      name: 'x',
+      slot,
+      rarity: 'epique',
+      level: 1,
+      roll: 0,
       effect: { type: e[0]![0] as EffectType, value: e[0]![1]! },
       ...(e[1] ? { effect2: { type: e[1][0] as EffectType, value: e[1][1] } } : {}),
       ...(setId ? { setId } : {}),

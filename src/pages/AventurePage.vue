@@ -3160,7 +3160,14 @@ const optimumKey = computed(
     }`,
 );
 let optimumFor = '';
-/** Calcule (ou recalcule) la référence. Synchrone et lourd : les appelants affichent un ⏳. */
+/** Calcule (ou recalcule) la référence.
+ *
+ *  ⚠️ NE JAMAIS L'APPELER PENDANT LE RENDU. Elle est SYNCHRONE, dure ~3 s, et surtout
+ *  elle ÉCRIT dans des refs dont les calculs d'affichage dépendent : l'appeler depuis un
+ *  `computed` ou une fonction de template faisait boucler Vue et FIGEAIT l'app (constaté :
+ *  Aventure → Base → plus rien ne répondait). Elle se déclenche donc depuis un `watch`,
+ *  après peinture. Tant qu'elle n'a pas tourné, les écrans n'affichent simplement AUCUN
+ *  verdict — mieux vaut se taire que geler. */
 function ensureOptimum(): void {
   if (optimumFor === optimumKey.value && optimum.value) return;
   const plan = char.bestBuild(c.value, c.value.level.level, char.row?.pseudo ?? 'Toi');
@@ -5094,7 +5101,6 @@ const filteredInventory = computed<Item[]>(() => {
 // classe de défaut que le gris de la carte (v0.738) : le calcul était juste, c'est le
 // LANGAGE qui trompait.
 function betterInBagForSlot(slot: ItemSlot): Item[] {
-  ensureOptimum();
   const veut = optimum.value?.[slot];
   // ⚠️ 0 ou 1, et c'est le POINT : la pastille annonce désormais « la pièce que le
   // meilleur build veut ici n'est pas celle que tu portes », et rien d'autre. L'ancienne
@@ -5538,6 +5544,20 @@ function togglePlanRow(key: string) {
 const planAccepted = computed(() => planRows.value.filter((r) => !planOff.value.has(r.key)).length);
 
 const optimizing = ref(false);
+/** Planifie le calcul de la référence HORS RENDU. Deux images : la première laisse Vue
+ *  peindre, la seconde lance le calcul — sinon l'écran se fige sans avoir rien montré. */
+function scheduleOptimum(): void {
+  if (optimumFor === optimumKey.value && optimum.value) return;
+  requestAnimationFrame(() => requestAnimationFrame(() => ensureOptimum()));
+}
+// On ne calcule que si l'écran s'en sert : l'onglet Équipement, et seulement là.
+watch(
+  [() => tab.value, optimumKey],
+  () => {
+    if (tab.value === 'gear') scheduleOptimum();
+  },
+  { immediate: true },
+);
 function doOptimizeGear() {
   if (optimizing.value) return;
   optimizing.value = true;
@@ -5714,8 +5734,7 @@ const bulkSlot = computed<ItemSlot | undefined>(() =>
 // ce qu'on porte, et les pièces retenues par le build optimal.
 const powerLossItems = computed<Item[]>(() => {
   const r = char.row;
-  if (!r) return [];
-  ensureOptimum();
+  if (!r || !optimum.value) return [];
   return r.inventory.filter((it) => {
     if (it.locked) return false;
     if (isFamiliar(it)) return false;
