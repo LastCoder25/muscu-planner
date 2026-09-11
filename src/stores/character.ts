@@ -94,12 +94,11 @@ import {
   lootCorpses,
   repairStructure,
   totalRepairCost,
-  garrisonBonus,
-  autoGarrison,
-  garrisonSlots,
-  garrisonRankLabel,
-  canGarrison,
-  dedupeGarrisonRoles,
+  companionPairs,
+  companionPerks,
+  type CompanionCtx,
+  companionRankLabel,
+  canCompanion,
   fatigueMsFor,
   healCost,
   woundRemainingMs,
@@ -736,7 +735,13 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur || !itemIds.length) return 0;
     const wanted = new Set(itemIds);
-    const posted = new Set(cur.base?.garrison ?? []);
+    // ⚠️ On ne vend pas un familier CONFIÉ à un aventurier : il partirait avec un
+    // appariement fantôme, et l’homme se battrait sans son compagnon sans qu’on l’ait
+    // décidé. (Le familier PORTÉ par le héros, lui, vit dans `equipped` : hors d’atteinte
+    // par construction.)
+    const posted = new Set(
+      (cur.adventurers ?? []).map((a) => a.familiarId).filter((x): x is string => !!x),
+    );
     const sold = cur.inventory.filter(
       (i) => wanted.has(i.id) && i.slot === FAMILIAR_SLOT && !i.locked && !posted.has(i.id),
     );
@@ -1516,19 +1521,23 @@ export const useCharacterStore = defineStore('character', () => {
     return cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT && ids.has(it.id));
   }
 
-  /** Bonus que la garnison apporte au mur (rôle par ESPÈCE, cf. GARRISON_ROLE).
-   *  ⚠️ Le niveau JOUEUR n’entre plus ici : places et rang maximal viennent désormais du
-   *  CHENIL seul (`garrisonSlots` / `garrisonRankCap`), comme l’effectif d’aventuriers
-   *  vient de la Guilde. Un paramètre de moins, c’est un paramètre qu’on ne peut plus
-   *  oublier — et c’est exactement l’oubli qui faisait combattre 3 familiers sur 6. */
-  function garrisonFor(cur: CharacterRow, now: number) {
-    return garrisonBonus(
-      garrisonedFamiliars(cur),
+  /** 🐾 CE QUE L’ON A APPAREILLÉ, prêt pour le combat et pour les à-côtés.
+   *
+   *  ⚠️ REMPLACE `garrisonFor` : il n’y a plus de garnison de familiers postés au mur.
+   *  Un familier est confié à un AVENTURIER et le suit partout (demandé par
+   *  l’utilisateur) ; le Chenil ne fait que plafonner combien et jusqu’à quel rang. */
+  function companionCtx(cur: CharacterRow, now: number): CompanionCtx {
+    return {
+      familiars: cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT),
+      talents: normalizeTalents(cur.talents),
+      kennelLevel: defenseLevel(baseOf(cur, now).defenses, 'kennel'),
       now,
-      defenseLevel(baseOf(cur, now).defenses, 'kennel'),
-    );
+      heroFamiliarId: cur.equipped[FAMILIAR_SLOT]?.id ?? null,
+      heroTalentIds: normalizeTalents(cur.talents)
+        .filter((t) => t.equipped === true)
+        .map((t) => t.id),
+    };
   }
-
   /** Le héros défend-il ? Il n'est là que s'il n'est pas parti en expédition. C'est le
    *  seul coût de sa présence : rester, c'est renoncer au revenu d'une expédition. */
   function heroIsHome(cur: CharacterRow): boolean {
@@ -1562,15 +1571,12 @@ export const useCharacterStore = defineStore('character', () => {
     }
 
     const home = heroIsHome(cur);
-    const posted = new Set(t.base.garrison ?? []);
-    const fam = garrisonBonus(
-      cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT && posted.has(it.id)),
-      now,
-      defenseLevel(t.base.defenses, 'kennel'),
-    );
-    // ⚠️ Le bonus du chenil ne va plus à la MURAILLE mais à la GARNISON : c'est la chaîne
-    // familiers → garnison → défenses. Les aventuriers DISPONIBLES défendent (ni en
-    // convoi, ni à l'infirmerie, ni en formation) ; sans eux, les bêtes tiennent seules.
+    // ⚠️ CHAQUE AVENTURIER SE BAT AVEC SON COMPAGNON ET SON TALENT — il n’y a plus de
+    // bonus GLOBAL appliqué identiquement à tout le monde. Le Chenil ne fait que
+    // plafonner combien peuvent en porter, et jusqu’à quel rang.
+    const cctx = companionCtx(cur, now);
+    // Les aventuriers DISPONIBLES défendent (ni en convoi, ni à l’infirmerie, ni en
+    // formation). Sans eux, il ne reste que le mur et les tourelles.
     // ⚠️ LES DÉFENSEURS SONT NOMMÉS UNE FOIS : le combat et l’XP doivent parler des MÊMES
     // aventuriers. Les reconstruire deux fois, c’est laisser les deux listes diverger.
     const defenders = advList.value.filter((a) => advAvailable(a, now));
@@ -1579,7 +1585,7 @@ export const useCharacterStore = defineStore('character', () => {
         defenses: t.base.defenses,
         playerLevel: ctx.playerLevel,
         hero: home ? ctx.hero : null,
-        guard: guardUnits(ctx.playerLevel, defenders, fam),
+        guard: guardUnits(ctx.playerLevel, defenders, cctx),
       },
       t.dueRaid,
       now,
@@ -1600,11 +1606,19 @@ export const useCharacterStore = defineStore('character', () => {
     // Les familiers postés SORTENT du siège : ils gagnent de l'XP de DÉFENSE (∝ ce
     // qu'ils ont repoussé) et soufflent un moment. Jamais blessés, jamais perdus —
     // sinon personne ne posterait ses bons familiers et le chenil resterait vide.
-    if (posted.size) {
+    // ⚠️ CE SONT LES COMPAGNONS ENGAGÉS qui sortent du siège — ceux que
+    // `companionPairs` a réellement retenus, pas tous ceux qu’on a appareillés : au-delà
+    // des places du Chenil, un compagnon reste à la niche et ne se fatigue pas.
+    const engages = new Set(
+      [...companionPairs(defenders, cctx).values()]
+        .map((p) => p.familiar?.id)
+        .filter((x): x is string => !!x),
+    );
+    if (engages.size) {
       const gain = report.groups.slice(0, report.defeated).reduce((a, g) => a + g.level * 2, 0);
       const rest = now + fatigueMsFor(defenseLevel(t.base.defenses, 'infirmary'));
       patch.inventory = cur.inventory.map((it) =>
-        posted.has(it.id)
+        engages.has(it.id)
           ? { ...grantFamiliarXp(it, 'def', gain, ctx.playerLevel), fatigueUntil: rest }
           : it,
       );
@@ -1633,75 +1647,57 @@ export const useCharacterStore = defineStore('character', () => {
     return cost;
   }
 
-  /** Poste ou retire un familier du chenil. */
-  async function toggleGarrison(userId: string, famId: string, now: number) {
+  /** 🐾 CONFIER (ou reprendre) un COMPAGNON à un aventurier.
+   *
+   *  ⚠️ REMPLACE `toggleGarrison` / `setGarrison` / `autoAssignGarrison` : il n’y a
+   *  plus de garnison ni d’emplacements au mur. Un familier appartient à un HOMME et le
+   *  suit partout — convoi comme rempart (demandé par l’utilisateur).
+   *
+   *  ⚠️ LE REFUS VIT ICI, pas seulement à l’écran : une interface peut ne pas proposer
+   *  l’impossible, elle ne peut pas le garantir.
+   *
+   *  ⚠️ UN FAMILIER NE SERT QU’UN MAÎTRE : le confier à un second le retire au premier,
+   *  au lieu de laisser deux hommes croire qu’ils l’ont. C’est ce que le combat ferait
+   *  de toute façon (`companionPairs` n’en compte qu’un) — autant que l’écran le dise. */
+  async function setCompanion(userId: string, advId: string, famId: string | null) {
     const cur = row.value;
     if (!cur) return;
-    const base = baseOf(cur, now);
-    const kennel = defenseLevel(base.defenses, 'kennel');
-    if (kennel <= 0) throw new Error(`Construis un Chenil pour poster des familiers.`);
-    const cur_ = base.garrison ?? [];
-    if (!cur_.includes(famId)) {
-      // ⚠️ LE REFUS VIT ICI, pas seulement à l’écran : une interface peut ne pas
-      // proposer l’impossible, elle ne peut pas le garantir.
+    const kennel = defenseLevel(cur.base?.defenses ?? [], 'kennel');
+    if (famId) {
+      if (kennel <= 0) throw new Error(`Construis un Chenil pour confier un familier.`);
       const fam = cur.inventory.find((it) => it.id === famId);
-      if (fam && !canGarrison(fam, kennel))
+      if (!fam || fam.slot !== FAMILIAR_SLOT) throw new Error(`Ce familier est introuvable.`);
+      if (famId === cur.equipped[FAMILIAR_SLOT]?.id)
+        throw new Error(`Ton héros le porte déjà — il se bat ailleurs.`);
+      if (!canCompanion(fam, kennel))
         throw new Error(
-          `Ton Chenil ne sait héberger que jusqu’au rang ${garrisonRankLabel(kennel)}. Améliore-le pour poster celui-ci.`,
+          `Ton Chenil ne sait héberger que jusqu’au rang ${companionRankLabel(kennel)}.`,
         );
     }
-    const next = cur_.includes(famId)
-      ? cur_.filter((x) => x !== famId)
-      : [...cur_, famId].slice(-garrisonSlots(kennel));
-    await persistOptimistic(userId, { base: { ...base, garrison: next } });
-  }
-
-  /** Remplace la garnison EN BLOC. ⚠️ Une seule écriture : l'écran par emplacements
-   *  échange un familier contre un autre (retirer + poster), et enchaîner deux `toggle`
-   *  ferait deux allers-retours réseau pour un seul geste — avec un état intermédiaire
-   *  visible où l'emplacement est vide. Le tri conserve l'ordre donné : c'est lui qui
-   *  décide de quelle case occupe quel familier à l'écran. */
-  async function setGarrison(userId: string, ids: string[], now: number) {
-    const cur = row.value;
-    if (!cur) return;
-    const base = baseOf(cur, now);
-    const kennel = defenseLevel(base.defenses, 'kennel');
-    if (kennel <= 0) throw new Error(`Construis un Chenil pour poster des familiers.`);
-    const owned = new Set(
-      cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT).map((it) => it.id),
-    );
-    // On ne garde que des familiers RÉELLEMENT possédés, un seul par RÔLE, dans la limite
-    // des places. ⚠️ Le dédoublonnage par rôle passe par la lib (`dedupeGarrisonRoles`),
-    // la même que le combat : l'écran ne doit jamais pouvoir écrire un état que le mur
-    // arbitrerait autrement.
-    const byId = new Map(cur.inventory.map((it) => [it.id, it]));
-    const voulus = [...new Set(ids.filter((id) => owned.has(id)))]
-      .map((id) => byId.get(id))
-      .filter((it): it is Item => !!it);
-    // ⚠️ Hors d’école = écartés, comme au combat : l’écran ne doit jamais pouvoir
-    // écrire un état que le mur arbitrerait autrement.
-    const next = dedupeGarrisonRoles(voulus.filter((it) => canGarrison(it, kennel)))
-      .slice(0, garrisonSlots(kennel))
-      .map((it) => it.id);
-    await persistOptimistic(userId, { base: { ...base, garrison: next } });
-  }
-
-  /** Poste automatiquement les meilleurs défenseurs — le geste qu'on veut faire une
-   *  fois, pas avant chaque siège. */
-  async function autoAssignGarrison(userId: string, now: number) {
-    const cur = row.value;
-    if (!cur) return;
-    const base = baseOf(cur, now);
-    const kennel = defenseLevel(base.defenses, 'kennel');
-    if (kennel <= 0) throw new Error(`Construis un Chenil pour poster des familiers.`);
-    const pool = cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT);
-    await persistOptimistic(userId, {
-      base: { ...base, garrison: autoGarrison(pool, kennel) },
+    const adventurers = (cur.adventurers ?? []).map((a) => {
+      if (a.id === advId) return { ...a, familiarId: famId ?? undefined };
+      return famId && a.familiarId === famId ? { ...a, familiarId: undefined } : a;
     });
+    await persistOptimistic(userId, { adventurers });
   }
 
-  /** Construit une structure de l'enceinte (or + ferraille). Hors des 6 emplacements de
-   *  la carte : on ne sacrifie jamais une mine pour un mur. */
+  /** 🧠 CONFIER (ou reprendre) un TALENT à un aventurier. Mêmes règles que le
+   *  compagnon : un seul porteur, et jamais ce que le héros a équipé. */
+  async function setAdvTalent(userId: string, advId: string, talentId: string | null) {
+    const cur = row.value;
+    if (!cur) return;
+    if (talentId) {
+      const t = normalizeTalents(cur.talents).find((x) => x.id === talentId);
+      if (!t) throw new Error(`Ce talent est introuvable.`);
+      if (t.equipped === true)
+        throw new Error(`Ton héros l’a équipé — retire-le d’abord de ta fiche.`);
+    }
+    const adventurers = (cur.adventurers ?? []).map((a) => {
+      if (a.id === advId) return { ...a, talentId: talentId ?? undefined };
+      return talentId && a.talentId === talentId ? { ...a, talentId: undefined } : a;
+    });
+    await persistOptimistic(userId, { adventurers });
+  }
   async function buildDefense(userId: string, typeId: DefenseId, playerLevel: number, now: number) {
     const cur = row.value;
     if (!cur) return;
@@ -1814,7 +1810,7 @@ export const useCharacterStore = defineStore('character', () => {
         faction,
         playerLevel,
         ((t.field.dispatchUntil ?? now) ^ cur.base.seed) >>> 0 || 1,
-        garrisonFor(cur, now).lootPct ?? 0,
+        companionPerks(advList.value, companionCtx(cur, now)).lootPct,
       );
       const drops = loot.items.map((it) => ({ ...it, id: crypto.randomUUID() }));
       patch.gold = cur.gold + loot.gold;
@@ -2100,12 +2096,10 @@ export const useCharacterStore = defineStore('character', () => {
     upgradeDefense,
     repairDefense,
     repairAll,
-    toggleGarrison,
-    setGarrison,
-    autoAssignGarrison,
+    setCompanion,
+    setAdvTalent,
     healHero,
     garrisonedFamiliars,
-    garrisonFor,
     heroIsHome,
     ownedLevel,
     applyRun,

@@ -769,138 +769,31 @@
           🔒 L’enceinte se débloque au niveau {{ defenseUnlockLevel }}.
         </p>
 
-        <!-- ── LA GARNISON, DANS LA FEUILLE DU CHENIL ──────────────────────
-             Elle vivait dans un panneau séparé, plus bas sur la page : on cliquait la
-             niche et il ne s'y passait rien, il fallait deviner qu'il fallait faire
-             défiler. Le bâtiment qui abrite les familiers est l'endroit où on les
-             poste. -->
+        <!-- ── LE CHENIL DIT CE QU’IL PERMET, il ne range plus personne ──────
+             ⚠️ La garnison de familiers postés au mur a disparu : un familier est
+             confié à un AVENTURIER et le suit partout (demandé par l’utilisateur).
+             Le Chenil ne fait plus que plafonner COMBIEN peuvent en porter et
+             JUSQU’À QUEL RANG — comme la Guilde pour les aventuriers. L’appariement
+             se fait donc sur la fiche de chacun, dans la Guilde : un bâtiment, un
+             endroit. -->
         <div v-if="defSel.id === 'kennel' && kennelLevel" class="sh-garrison">
           <div class="sh-gtitle">
-            🐾 Garnison — {{ garrisonIds.length }}/{{ slots }} postés
+            🐾 Compagnons — {{ pairedCount }}/{{ slots }} confiés
             <span v-if="nextSlotLevel" class="sh-gnext">
               · +1 place au niveau {{ nextSlotLevel }}
             </span>
-            <!-- ⚠️ Un rôle par poste : au-delà, une place ne pourrait JAMAIS se remplir.
-                 Le dire, plutôt que laisser chercher le niveau suivant. -->
-            <span v-else class="sh-gnext">· toutes les places sont ouvertes</span>
           </div>
-          <!-- ⚠️ LE RANG MAXIMAL EST LE SECOND LEVIER du Chenil, comme la Guilde pour
-               les aventuriers : sans cette ligne, on trouve un familier légendaire, on
-               ne peut pas le poster, et rien ne dit pourquoi. -->
           <div class="sh-gcap">
             🎖️ Rang max hébergé : <b>{{ rankCapLabel }}</b>
             <span v-if="nextRankLevel" class="sh-gnext">
               · rang suivant au niveau {{ nextRankLevel }}
             </span>
           </div>
-
-          <!-- ── LES CASES ────────────────────────────────────────────────────
-               Une case par place, occupée ou vide. La LISTE de tous les familiers
-               obligeait à la parcourir pour savoir qui était en poste ; ici l'état
-               se lit d'un coup d'œil, et retirer un familier laisse un TROU visible
-               au lieu de faire remonter la liste. -->
-          <div class="gslots">
-            <button
-              v-for="(f, i) in garrisonSlotsView"
-              :key="i"
-              type="button"
-              class="gslot"
-              :class="[f ? 'p-' + f.rarity : 'empty', { tired: f && isFatiguedNow(f) }]"
-              :title="
-                f ? f.name + ' — toucher pour remplacer' : 'Emplacement libre — toucher pour poster'
-              "
-              @click="famPick = i"
-            >
-              <template v-if="f">
-                <span class="gs-emo">{{ f.emoji }}</span>
-                <span class="gs-def">🛡️{{ defLvl(f) }}</span>
-                <span v-if="isFatiguedNow(f)" class="gs-tired" title="au repos">😴</span>
-              </template>
-              <span v-else class="gs-plus">＋</span>
-            </button>
-          </div>
-
-          <!-- ── CE QUE ÇA DONNE ──────────────────────────────────────────────
-               Le total RÉELLEMENT appliqué, plafonds compris : c'est le seul chiffre
-               qui compte au moment de l'assaut, et il ne vivait nulle part. -->
-          <div class="gbonus">
-            <div class="gb-h">Ce que la garnison apporte au mur</div>
-            <div v-if="garrisonSummary.length" class="gb-list">
-              <span v-for="(g, i) in garrisonSummary" :key="i" class="gb-chip">{{ g }}</span>
-            </div>
-            <p v-else class="gb-empty">Aucun familier posté — l’enceinte se défend seule.</p>
-          </div>
-
-          <button v-if="famPoolRaw.length" class="cta ghost" @click="doAutoGarrison">
-            ✨ Poster automatiquement les meilleurs
-          </button>
-          <p v-if="!famPoolRaw.length" class="dim-note">
-            Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
-          </p>
           <p class="sh-gnote">
-            L’<b>espèce</b> décide de ce que le familier apporte au mur. Il reste dans ton sac :
-            poster n’est pas ranger.
+            Un familier se confie à un <b>aventurier</b> et le suit partout — au convoi comme à la
+            brèche. C’est donc sur sa fiche qu’on le lui donne.
           </p>
         </div>
-      </q-card>
-    </q-dialog>
-
-    <!-- ── SÉLECTEUR DE FAMILIER (une case du chenil) ─────────────────────────
-         Ouvert en touchant une case. On montre TOUS les familiers possédés, les plus
-         utiles au mur d'abord ; ceux déjà postés ailleurs sont marqués plutôt que
-         cachés — les masquer donnerait l'impression de les avoir perdus. -->
-    <q-dialog v-model="famPickOpen" position="bottom">
-      <q-card class="sheet">
-        <div class="sh-head">
-          <div class="sh-title font-display">🐾 Poste {{ (famPick ?? 0) + 1 }}</div>
-          <button class="iconbtn" aria-label="Fermer" @click="famPick = null">✕</button>
-        </div>
-        <button
-          v-if="famPick !== null && garrisonSlotsView[famPick]"
-          class="btn unpost full"
-          @click="pickFamiliar(null)"
-        >
-          Laisser ce poste vide
-        </button>
-        <p v-if="!famChoices.length" class="dim-note">{{ famEmptyNote }}</p>
-        <p v-else-if="famRoleHidden" class="dim-note">
-          ⚠️ Un rôle par poste : {{ famRoleHidden }} de tes familiers n'apparaissent pas, leur
-          spécialité est déjà tenue au mur.
-        </p>
-        <button
-          v-for="f in famChoices"
-          :key="f.id"
-          type="button"
-          class="fpick"
-          :class="{
-            here: famPick !== null && garrisonSlotsView[famPick]?.id === f.id,
-            barred: !postable(f),
-          }"
-          :disabled="!postable(f)"
-          @click="pickFamiliar(f.id)"
-        >
-          <span class="fp-emo">{{ f.emoji }}</span>
-          <span class="fp-main">
-            <span class="fp-name">
-              {{ f.name }}
-              <span class="fam-rar" :class="'p-' + f.rarity">{{ RARITY_LABEL[f.rarity] }}</span>
-              <span class="fam-lvl" title="Dressage de défense">🛡️ {{ defLvl(f) }}</span>
-              <span v-if="isFatiguedNow(f)" class="fam-tired">au repos</span>
-            </span>
-            <span class="fp-role">{{ roleLabel(f) }}</span>
-            <span class="fp-eff">{{ famEffect(f) }}</span>
-            <!-- ⚠️ ON DIT POURQUOI, on ne grise pas en silence : un familier qu’on ne peut
-                 pas poster sans explication se lit comme un bug (leçon du gris de la
-                 carte, v0.738). -->
-            <span v-if="!postable(f)" class="fp-capped">
-              🎖️ Hors de portée de ton Chenil (rang max {{ rankCapLabel }})
-              <template v-if="nextRankLevel">— améliore-le au niveau {{ nextRankLevel }}</template>
-            </span>
-            <span v-else-if="defLvlRaw(f) > defLvl(f)" class="fp-capped">
-              dressage bridé par le Chenil (niv. {{ kennelLevel }}) — il vaut {{ defLvlRaw(f) }}
-            </span>
-          </span>
-        </button>
       </q-card>
     </q-dialog>
   </component>
@@ -918,7 +811,8 @@ import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
 import { canPromoteNow, advAvailable, advTitle } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
-import { RARITY_LABEL, famDefMult, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
+import { FAMILIAR_SLOT, type Item } from '@/lib/items';
+import { normalizeTalents } from '@/lib/talents';
 import {
   BUILD,
   buildingAccrued,
@@ -933,7 +827,6 @@ import {
 } from '@/lib/buildings';
 import {
   scoutLeadMs,
-  garrisonLevel,
   DEFENSE_TYPES,
   FACTION_EMOJI,
   FACTION_LABEL,
@@ -966,19 +859,15 @@ import {
   defenseUpgradeScrap,
   defensePerLevelLabel,
   raidIntervalMs,
-  garrisonBonus,
-  garrisonSlots,
-  garrisonRankLabel,
-  garrisonNextRankLevel,
-  garrisonNextSlotLevel,
-  canGarrison,
-  GARRISON_CAP,
-  isFatigued,
+  companionPairs,
+  companionPerks,
+  companionSlots,
+  companionRankLabel,
+  companionNextRankLevel,
+  companionNextSlotLevel,
   isWounded,
   healCost,
   woundRemainingMs,
-  GARRISON_ROLE,
-  ROLE_LABEL,
   type DefenseId,
   type RaidReport,
   type ScoutReport,
@@ -1102,161 +991,37 @@ const merlons = computed(() =>
 );
 const wounded = computed(() => isWounded(base.value, now.value));
 
-/** Tous les familiers en réserve (le familier ÉQUIPÉ n'est pas postable : il ne peut
- *  pas être à deux endroits à la fois — c'est ce qui fait diverger les deux carrières). */
-const famPoolRaw = computed(() =>
-  (char.row?.inventory ?? []).filter((it) => it.slot === FAMILIAR_SLOT),
-);
-/** Ce qu'un familier apporte VRAIMENT au mur — sert au tri, donc à ce que le joueur voit
- *  en premier. Même lecture que le combat : effet × dressage (plafonné par le Chenil). */
-function famWeight(f: Item): number {
-  return (f.effect?.value ?? 0) * famDefMult(garrisonLevel(f, kennelLevel.value));
-}
-/** LES POSTÉS D'ABORD, puis les meilleurs. Une liste dans l'ordre du sac obligeait à
- *  relire dix lignes pour retrouver qui est en poste. */
-const famPool = computed(() => {
-  const ids = new Set(base.value?.garrison ?? []);
-  return [...famPoolRaw.value].sort((a, b) => {
-    const pa = ids.has(a.id) ? 1 : 0;
-    const pb = ids.has(b.id) ? 1 : 0;
-    if (pa !== pb) return pb - pa;
-    return famWeight(b) - famWeight(a);
-  });
-});
-/** Les ids POSTÉS, dans leur ordre de rangement — c'est lui qui décide quelle case
- *  occupe quel familier. `garrisoned` trie pour le calcul du bonus ; ici l'ordre compte. */
-const garrisonIds = computed(() => base.value?.garrison ?? []);
-/** Une entrée par PLACE : le familier posté, ou `undefined` pour une case vide.
- *  ⚠️ Retirer un familier laisse un TROU au lieu de faire remonter la liste — sinon on ne
- *  voit plus combien de places restent à pourvoir. */
-const garrisonSlotsView = computed(() => {
-  const byId = new Map(famPoolRaw.value.map((f) => [f.id, f]));
-  // ⚠️ DÉDOUBLONNÉ à la lecture : un même familier ne peut pas tenir deux postes. Le store
-  // l'interdit déjà à l'écriture, mais une ligne écrite par une version antérieure
-  // afficherait sinon la même bête sur deux cases — un état que le combat ne connaît pas.
-  const vus = new Set<string>();
-  const ids = garrisonIds.value.filter((id) => (vus.has(id) ? false : (vus.add(id), true)));
-  return Array.from({ length: slots.value }, (_, i) => byId.get(ids[i] ?? ''));
-});
-/** Case en cours d'édition (index), ou null. */
-const famPick = ref<number | null>(null);
-// q-dialog veut un booleen ; la SOURCE reste l'index, pour savoir QUELLE case on edite.
-const famPickOpen = computed({
-  get: () => famPick.value !== null,
-  set: (v: boolean) => {
-    if (!v) famPick.value = null;
-  },
-});
-/** Familiers proposés pour une case : les DISPONIBLES seulement, plus celui qui occupe
- *  déjà cette case. Les meilleurs d’abord.
+/** 🐾 CE QUE LE CHENIL PERMET — et rien de plus : il ne range plus personne.
  *
- *  ⚠️ On ne propose PAS ceux postés ailleurs. Les afficher « marqués » invitait à un
- *  échange de postes, alors qu’un même familier ne peut évidemment pas défendre deux
- *  endroits à la fois : mieux vaut que le doublon soit IMPOSSIBLE à l’écran que rattrapé
- *  par le store. */
-const famChoices = computed(() => {
-  const here = famPick.value === null ? undefined : garrisonSlotsView.value[famPick.value]?.id;
-  const pris = new Set(garrisonIds.value.filter((id) => id !== here));
-  // ⚠️ ET on écarte les RÔLES déjà tenus par une autre case : deux loups tombent dans le
-  // même canal, déjà plafonné — le second n'apporterait qu'un reliquat en occupant une
-  // place. La lib arbitre pareil ; l'écran ne fait que ne pas proposer l'impossible.
-  const roles = new Set(
-    famPoolRaw.value
-      .filter((f) => pris.has(f.id))
-      .map((f) => GARRISON_ROLE[f.effect.type])
-      .filter(Boolean),
-  );
-  return famPoolRaw.value
-    .filter((f) => !pris.has(f.id) && !roles.has(GARRISON_ROLE[f.effect.type]))
-    .sort((a, b) => famWeight(b) - famWeight(a));
-});
-/** Combien de familiers le filtre par RÔLE écarte — l'écran doit dire POURQUOI un
- *  familier de la réserve n'est pas proposé, sinon la liste a juste l'air incomplète. */
-const famRoleHidden = computed(() => {
-  const here = famPick.value === null ? undefined : garrisonSlotsView.value[famPick.value]?.id;
-  const pris = new Set(garrisonIds.value.filter((id) => id !== here));
-  const roles = new Set(
-    famPoolRaw.value
-      .filter((f) => pris.has(f.id))
-      .map((f) => GARRISON_ROLE[f.effect.type])
-      .filter(Boolean),
-  );
-  return famPoolRaw.value.filter((f) => !pris.has(f.id) && roles.has(GARRISON_ROLE[f.effect.type]))
-    .length;
-});
-/** Les trois raisons d'une liste vide, distinguées : rien en réserve, tout posté, ou tous
- *  les rôles déjà tenus. « Aucun choix » sans motif se lit comme un bug. */
-const famEmptyNote = computed(() => {
-  if (!famPoolRaw.value.length)
-    return 'Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.';
-  if (famRoleHidden.value)
-    return 'Un rôle par poste : les familiers qui restent ont tous une spécialité déjà tenue au mur. Varie les espèces pour couvrir un rôle de plus.';
-  return 'Tous tes familiers sont déjà postés — libère un poste pour en déplacer un.';
-});
-
-/** Place `id` sur la case en cours (ou la vide si `null`). Une SEULE écriture : échanger
- *  deux familiers via deux bascules laisserait un état intermédiaire vide à l'écran. */
-function pickFamiliar(id: string | null) {
-  const i = famPick.value;
-  if (i === null) return;
-  const next = Array.from({ length: slots.value }, (_, k) => garrisonSlotsView.value[k]?.id ?? '');
-  next[i] = id ?? ''; // le sélecteur ne propose que des familiers LIBRES : rien à échanger
-  famPick.value = null;
-  void guard(() => char.setGarrison(uid.value, next.filter(Boolean), Date.now()));
-}
-
-const garrisoned = computed(() => {
-  const ids = new Set(base.value?.garrison ?? []);
-  return famPool.value.filter((f) => ids.has(f.id));
-});
-/** Places de garnison : elles viennent du CHENIL, comme l’effectif d’aventuriers vient
- *  de la Guilde (demandé par l’utilisateur). Une de plus tous les 5 niveaux du
- *  bâtiment — et c’est lui, pas le personnage, qu’on améliore pour en poster plus. */
-const slots = computed(() => garrisonSlots(kennelLevel.value));
-const nextSlotLevel = computed(() => garrisonNextSlotLevel(kennelLevel.value));
-/** Le rang le plus haut que le Chenil sait héberger, et le niveau qui ouvre le suivant. */
-const rankCapLabel = computed(() => garrisonRankLabel(kennelLevel.value));
-/** Ce familier tient-il dans l’école ? ⚠️ Même fonction que le combat et que le
- *  store : l’écran ne peut donc pas proposer ce que le mur refuserait. */
-const postable = (f: Item): boolean => canGarrison(f, kennelLevel.value);
-const nextRankLevel = computed(() => garrisonNextRankLevel(kennelLevel.value));
-const garrison = computed(() => garrisonBonus(garrisoned.value, now.value, kennelLevel.value));
-function isFatiguedNow(f: Item): boolean {
-  return isFatigued(f, now.value);
-}
-/** Le niveau de dressage RÉELLEMENT appliqué au mur — plafonné par le Chenil, comme
- *  dans le combat. Afficher le niveau brut mentirait dès que le chenil est en retard. */
-function defLvl(f: Item): number {
-  return garrisonLevel(f, kennelLevel.value);
-}
-/** Le niveau brut, pour dire « bridé par le chenil » quand les deux diffèrent. */
-function defLvlRaw(f: Item): number {
-  return famLevel(f.defXp, 'def');
-}
-
-function roleLabel(f: Item): string {
-  const r = GARRISON_ROLE[f.effect.type];
-  return r ? ROLE_LABEL[r] : 'Aucun rôle à la base';
-}
-const pct = (v: number) => (Math.round(v * 10) / 10).toString().replace('.', ',');
-/** Ce que CE familier apporte, en clair et en chiffres. ⚠️ Calculé par `garrisonBonus`
- *  lui-même, appliqué à ce seul familier : l'étiquette ne peut donc pas mentir ni
- *  dériver du combat — c'est la même fonction qui décide de l'un et de l'autre.
- *  « Renseignement » et « Fouille » n'y sont ni bridés ni plafonnés : ce ne sont pas
- *  des stats de combat. */
-function famEffect(f: Item): string {
-  const role = GARRISON_ROLE[f.effect.type];
-  if (!role) return 'Aucun effet au mur — son bonus ne sert qu’au héros.';
-  const b = garrisonBonus([f], now.value, Math.max(1, kennelLevel.value));
-  if (role === 'damage') return `+${pct(b.damagePct ?? 0)} % de dégâts des défenseurs`;
-  if (role === 'pv') return `+${pct(b.maxPvPct ?? 0)} % de PV à l’enceinte`;
-  if (role === 'armor')
-    return `−${pct((b.dmgReduction ?? 0) * 100)} % de dégâts subis (plafond ${GARRISON_CAP.dmgReduction * 100} %)`;
-  if (role === 'regen')
-    return `+${pct((b.regen ?? 0) * 100)} % de PV rendus entre deux vagues (plafond ${GARRISON_CAP.regen * 100} %)`;
-  if (role === 'scout') return '+1 palier de renseignement sur l’armée qui vient';
-  return `+${pct(b.lootPct ?? 0)} % de butin sur les cadavres`;
-}
+ *  ⚠️ LA GARNISON DE FAMILIERS POSTÉS AU MUR N’EXISTE PLUS (demandé par l’utilisateur :
+ *  « on n’a plus les 6 slots en défense pour les familiers, ils sont assignés aux
+ *  aventuriers »). Un familier est confié à un HOMME et le suit partout — convoi comme
+ *  rempart. Le Chenil ne fait donc que plafonner COMBIEN peuvent en porter et JUSQU’À
+ *  QUEL RANG, exactement comme la Guilde pour les aventuriers, **sauf qu’il ne les crée
+ *  pas** : les familiers viennent du Labyrinthe.
+ *
+ *  L’appariement lui-même vit sur la fiche de l’aventurier, dans la Guilde : un
+ *  bâtiment, un endroit. */
+/** ⚠️ SOURCE UNIQUE de « qui porte quoi », partagée par le renseignement (le faucon),
+ *  le panneau de forces et le combat : trois lectures différentes finiraient par se
+ *  contredire. C’est le même objet que le store donne à `resolveRaid`. */
+const compCtx = computed(() => ({
+  familiars: (char.row?.inventory ?? []).filter((it: Item) => it.slot === FAMILIAR_SLOT),
+  talents: normalizeTalents(char.row?.talents ?? []),
+  kennelLevel: kennelLevel.value,
+  now: coarseNow.value,
+  heroFamiliarId: char.row?.equipped?.[FAMILIAR_SLOT]?.id ?? null,
+  heroTalentIds: normalizeTalents(char.row?.talents ?? [])
+    .filter((t) => t.equipped === true)
+    .map((t) => t.id),
+}));
+const slots = computed(() => companionSlots(kennelLevel.value));
+const nextSlotLevel = computed(() => companionNextSlotLevel(kennelLevel.value));
+const rankCapLabel = computed(() => companionRankLabel(kennelLevel.value));
+const nextRankLevel = computed(() => companionNextRankLevel(kennelLevel.value));
+/** Combien d’aventuriers portent RÉELLEMENT un compagnon — ce que le combat retient,
+ *  pas ce qu’on a rangé : au-delà des places du Chenil, un familier reste à la niche. */
+const pairedCount = computed(() => companionPairs(char.advList, compCtx.value).size);
 /** Ce que coûte le retour à la normale : remettre l'enceinte en état relance aussi la
  *  production (le gel est la conséquence de la casse, pas une punition séparée). */
 const repairAllCost = computed(() => (base.value ? totalRepairCost(base.value) : 0));
@@ -1285,17 +1050,6 @@ const defenderEmojis = computed(() =>
 );
 /** Le total effectivement appliqué au siège — plafonds compris. C'est le seul chiffre
  *  qui compte au moment de l'assaut, et il n'était affiché nulle part. */
-const garrisonSummary = computed(() => {
-  const b = garrison.value;
-  const out: string[] = [];
-  if (b.damagePct) out.push(`⚔️ +${pct(b.damagePct)} % dégâts`);
-  if (b.maxPvPct) out.push(`❤️ +${pct(b.maxPvPct)} % PV`);
-  if (b.dmgReduction) out.push(`🛡️ −${pct(b.dmgReduction * 100)} % subis`);
-  if (b.regen) out.push(`🩸 +${pct(b.regen * 100)} % régén`);
-  if (b.scoutBonus) out.push(`🦅 +${b.scoutBonus} renseignement`);
-  if (b.lootPct) out.push(`🦫 +${pct(b.lootPct)} % butin`);
-  return out;
-});
 function replaySiege() {
   if (!lastReport.value) return;
   siegeKey.value++;
@@ -1631,8 +1385,10 @@ const clarity = computed(() =>
         scoutLevel(defenses.value),
         raid.value.level,
         heroLevel.value,
-        // Un faucon posté au chenil voit plus loin : la garnison a des rôles hors combat.
-        garrison.value.scoutBonus ?? 0,
+        // ⚠️ Un faucon CONFIÉ À UN AVENTURIER voit plus loin — il n’y a plus de familiers
+        // postés au mur. Et ils ne s’empilent pas : quinze faucons ne voient pas quinze
+        // fois plus loin (cf. `companionPerks`).
+        companionPerks(guardAdvs.value, compCtx.value).scoutBonus,
         // La graine du raid porte l’aléa du renseignement : même armée = même lecture,
         // mais on ne peut pas la prédire avant qu’elle apparaisse.
         raid.value.seed,
@@ -1664,17 +1420,14 @@ const heroForDefense = computed(() => (heroBack.value ? (props.hero ?? null) : n
  *  ni en formation, épaulés par les familiers postés. ⚠️ Construite par `guardUnits`,
  *  la MÊME fonction que le store donne à `resolveRaid` : le panneau et la bataille ne
  *  peuvent pas se contredire. */
-const guardNow = computed(() =>
-  guardUnits(
-    heroLevel.value,
-    char.advList.filter((a) => advAvailable(a, now.value)),
-    garrison.value,
-  ),
-);
+/** Les aventuriers qui tiendraient la brèche MAINTENANT. Nommés une seule fois : le
+ *  renseignement, le panneau et le combat doivent parler des mêmes. */
+const guardAdvs = computed(() => char.advList.filter((a) => advAvailable(a, coarseNow.value)));
+const guardNow = computed(() => guardUnits(heroLevel.value, guardAdvs.value, compCtx.value));
 /** LA GARNISON AU COMPLET : tout le vivier, blessés compris — ils rentreront. C’est un
  *  PLAFOND, pas une prévision, et c’est précisément ce qu’on abandonne en envoyant
  *  quelqu’un ailleurs. */
-const guardFull = computed(() => guardUnits(heroLevel.value, char.advList, garrison.value));
+const guardFull = computed(() => guardUnits(heroLevel.value, char.advList, compCtx.value));
 /** ⚠️ LE PANNEAU SE MESURE UNE FOIS PAR MINUTE, pas à chaque seconde. Le Monte-Carlo
  *  coûte ~66 ms (5 ablations), et `garrison` ne dépend de `now` que par la FATIGUE des
  *  familiers — une fonction en escalier qui change quelques fois par heure. Le brancher
@@ -1837,7 +1590,6 @@ const doRepairAll = () =>
     if (cost)
       $q.notify({ type: 'positive', message: '🔩 Enceinte réparée — la production repart.' });
   });
-const doAutoGarrison = () => guard(() => char.autoAssignGarrison(uid.value, Date.now()));
 const doHeal = () =>
   guard(async () => {
     const cost = await char.healHero(uid.value, Date.now());

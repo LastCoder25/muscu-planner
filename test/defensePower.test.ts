@@ -23,7 +23,6 @@ import {
   siegeOdds,
   RAID,
   type DefenseStructure,
-  type GarrisonBonus,
 } from '@/lib/raid';
 import { refFighter } from '@/lib/proceduralContent';
 import { TRAVEL } from '@/lib/expedition';
@@ -33,10 +32,6 @@ const defAt = (lvl: number): DefenseStructure[] => [
   { typeId: 'turret', level: lvl },
 ];
 const NOW = 1_700_000_000_000;
-/** ⚠️ Pas d'appel à `garrisonBonus` ici : sans chenil il rend `{}` immédiatement, donc
- *  douze appels pour obtenir un objet vide. On dit ce qu'on veut dire — « aucune
- *  garnison » — et on garde le test lisible. */
-const noGarrison = (): GarrisonBonus => ({});
 
 describe('la puissance de l’ASSAUT (ce que l’espionnage vend)', () => {
   // ⚠️ `defensePower` A DISPARU, et son test avec lui. Elle n’était qu’un PROXY : un
@@ -240,7 +235,7 @@ describe('la répartition par contributeur', () => {
 
   it('la muraille ABRITE : elle apporte de la réduction de dégâts', () => {
     const L = 30;
-    const avec = baseCombatant(defAt(L), L, null, noGarrison());
+    const avec = baseCombatant(defAt(L), L, null);
     const sans = baseCombatant(
       defAt(L).filter((d) => d.typeId !== 'wall'),
       L,
@@ -255,26 +250,33 @@ describe('la répartition par contributeur', () => {
     // aucun appel dans `src/`) : c’est le MOTEUR qui applique l’abri réel, plafonné à
     // 0,9 dans `strike`. On épingle donc ce qui est vrai ici — le plafond.
     expect(avec.dmgReduction ?? 0).toBeCloseTo(Math.min(0.5, RAID.wallArmorK), 6);
-    const demi = baseCombatant(defAt(Math.round(L / 2)), L, null, noGarrison());
+    const demi = baseCombatant(defAt(Math.round(L / 2)), L, null);
     expect(demi.dmgReduction ?? 0).toBeCloseTo(Math.min(0.5, RAID.wallArmorK / 2), 2);
   });
 
-  // ⚠️ Ce test a d'abord vérifié que la réduction restait « sous le plafond de 50 % ».
-  // Il ne pouvait RIEN attraper : mur (0,05) + garnison plafonnée (0,15) = 0,20 au
-  // maximum, le plafond n'est donc jamais approché — la mutation « plafond à 9 »
-  // passait au vert. Une assertion qu'aucune valeur réelle ne peut violer donne la
-  // confiance sans la couvrir. On teste donc ce qui est VRAI : les deux sources
-  // s'additionnent, et le plafond reste une sécurité dormante.
-  it('la réduction du mur S’AJOUTE à celle de la garnison', () => {
-    const L = 30;
-    const gar = { dmgReduction: 0.1 } as GarrisonBonus;
-    // ⚠️ Les deux sources s’additionnent BIEN — mais le plafond de 50 % les écrête
-    // désormais (cf. le test au-dessus). On le vérifie donc SOUS le plafond, sur une
-    // muraille à moitié montée : là, la somme est encore lisible.
-    const demi = defAt(Math.round(L / 2));
-    const seul = baseCombatant(demi, L, null, noGarrison()).dmgReduction ?? 0;
-    const deux = baseCombatant(demi, L, null, gar).dmgReduction ?? 0;
-    expect(deux).toBeCloseTo(Math.min(0.5, seul + 0.1), 6);
+  // ⚠️ RÉÉCRIT (v0.777). Il vérifiait que la réduction du mur S’AJOUTE à celle de la
+  // GARNISON — or la garnison de familiers postés n'existe plus : un familier est
+  // confié à un aventurier et épaule SON homme, pas l'enceinte. Il n'y a donc plus
+  // qu'UNE source de réduction sur la base, et le plafond de 50 % redevient ce qu'il
+  // était avant la v0.769 : une sécurité dormante.
+  // (Il avait DÉJÀ été réécrit une fois : sa version d'origine affirmait « la réduction
+  // reste sous 50 % », ce qu'aucune valeur réelle ne pouvait violer — le test passait
+  // au vert avec un plafond mis à 9.)
+  it('la réduction vient du MUR, et elle suit sa part du niveau', () => {
+    // 40 : divisible par 4, donc pas d'arrondi de niveau qui fausserait le rapport.
+    const L = 40;
+    const plein = baseCombatant(defAt(L), L, null).dmgReduction ?? 0;
+    const demi = baseCombatant(defAt(Math.round(L / 2)), L, null).dmgReduction ?? 0;
+    const quart = baseCombatant(defAt(Math.round(L / 4)), L, null).dmgReduction ?? 0;
+    // ⚠️ LE PLAFOND DE 50 % MORD À MUR PLEIN, et il faut le dire : `wallArmorK` vaut
+    // 0,65 depuis la v0.769, donc une enceinte complète est ÉCRÊTÉE. Ce n'est plus la
+    // « sécurité dormante » d'avant — une première version de ce test l'affirmait, et
+    // la mesure l'a démentie (0,325 à mi-mur, pas 0,25).
+    expect(plein).toBeCloseTo(0.5, 6);
+    // SOUS le plafond, en revanche, elle suit la part du niveau : proportionnelle,
+    // pas une falaise (la leçon de la v0.672).
+    expect(demi).toBeCloseTo(quart * 2, 2);
+    expect(demi).toBeLessThan(0.5);
   });
 });
 
@@ -395,7 +397,7 @@ describe('🚪 CE QUE COÛTE UN DÉPART, face à l’armée qui arrive', () => {
     xp: 0,
   });
   const tous = [adv('a'), adv('b'), adv('c'), adv('d')];
-  const g = (list: Adventurer[]) => guardUnits(L, list, {});
+  const g = (list: Adventurer[]) => guardUnits(L, list);
   const h = refFighter(L);
   /** ⚠️ UNE ARMÉE QUI FAIT VRAIMENT BASCULER, CHOISIE PAR LA MESURE et jamais devinée.
    *  L’ancienne version fabriquait un « assaut » numérique à mi-chemin entre deux
@@ -423,7 +425,7 @@ describe('🚪 CE QUE COÛTE UN DÉPART, face à l’armée qui arrive', () => {
     for (const lvl of [12, 28, 60]) {
       const defs = defAt(lvl);
       const hero = refFighter(lvl);
-      const garde = guardUnits(lvl, tous, {});
+      const garde = guardUnits(lvl, tous);
       for (let i = 0; i < 6; i++) {
         const raid = rollRaid(2000 + i * 7919, lvl, NOW, 0);
         const r = departureRisk(defs, lvl, raid, { hero, guard: garde }, { hero: null, guard: [] });

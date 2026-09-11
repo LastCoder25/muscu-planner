@@ -381,9 +381,9 @@ import GameLoader from '@/components/GameLoader.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
-import { playerWithGear, mergeEffects, RARITY_RANK } from '@/lib/items';
+import { playerWithGear, mergeEffects, RARITY_RANK, type Item } from '@/lib/items';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
-import { talentEffects } from '@/lib/talents';
+import { talentEffects, normalizeTalents } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { simulateCombat, type Combatant } from '@/lib/combat';
 import {
@@ -404,14 +404,7 @@ import {
   isClaimable,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
-import {
-  departureRisk,
-  heroDefends,
-  garrisonBonus,
-  guardUnits,
-  defenseLevel,
-  ODDS_LABEL,
-} from '@/lib/raid';
+import { departureRisk, heroDefends, guardUnits, defenseLevel, ODDS_LABEL } from '@/lib/raid';
 import { advAvailable, advBadges, advRank, advTitle } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
 import { CARAVAN, caravanLegMin, caravanSlots, isCaravanClaimable, poiOffers } from '@/lib/caravan';
@@ -632,15 +625,19 @@ const incoming = computed(() => base.value?.raid ?? null);
  *  minute ; à la minute, c’est gratuit — et une minute de granularité ne change rien à
  *  « rentre-t-il avant l’assaut ? », qui se joue en heures. */
 const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
-const famBonus = computed(() =>
-  garrisonBonus(
-    (char.row?.inventory ?? []).filter(
-      (it) => it.slot === 'familiar' && (base.value?.garrison ?? []).includes(it.id),
-    ),
-    coarseNow.value,
-    defenseLevel(base.value?.defenses ?? [], 'kennel'),
-  ),
-);
+/** 🐾 Ce que chaque aventurier emmène avec lui. ⚠️ Plus un bonus GLOBAL de garnison :
+ *  le compagnon suit son homme, donc faire partir quelqu’un retire AUSSI son familier
+ *  de la défense — c’est précisément l’arbitrage que cet écran doit montrer. */
+const compCtx = computed(() => ({
+  familiars: (char.row?.inventory ?? []).filter((it: Item) => it.slot === 'familiar'),
+  talents: normalizeTalents(char.row?.talents ?? []),
+  kennelLevel: defenseLevel(base.value?.defenses ?? [], 'kennel'),
+  now: coarseNow.value,
+  heroFamiliarId: char.row?.equipped?.familiar?.id ?? null,
+  heroTalentIds: normalizeTalents(char.row?.talents ?? [])
+    .filter((t) => t.equipped === true)
+    .map((t) => t.id),
+}));
 /** Qui resterait si l'on partait : l'escorte choisie quitte la base, et le héros aussi
  *  quand c'est LUI qu'on envoie. */
 /** QUAND l’armée frappe. ⚠️ Un voyage qui se termine AVANT n’enlève personne à la
@@ -671,8 +668,8 @@ const risk = computed(() => {
     b.defenses,
     heroLevel.value,
     inc,
-    { hero: heroNow, guard: guardUnits(heroLevel.value, freeAdvs.value, famBonus.value) },
-    { hero: heroNow, guard: guardUnits(heroLevel.value, restants, famBonus.value) },
+    { hero: heroNow, guard: guardUnits(heroLevel.value, freeAdvs.value, compCtx.value) },
+    { hero: heroNow, guard: guardUnits(heroLevel.value, restants, compCtx.value) },
     { backAt: coarseNow.value + caravanMin.value * 60_000, raidAt: raidAt.value },
   );
 });
@@ -687,7 +684,7 @@ const riskHero = computed(() => {
   if (!b || !inc) return null;
   const heroNow = char.row && char.heroIsHome(char.row) ? fighter.value : null;
   if (!heroNow) return null;
-  const g = guardUnits(heroLevel.value, freeAdvs.value, famBonus.value);
+  const g = guardUnits(heroLevel.value, freeAdvs.value, compCtx.value);
   return departureRisk(
     b.defenses,
     heroLevel.value,

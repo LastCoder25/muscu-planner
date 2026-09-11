@@ -2662,7 +2662,7 @@ import {
   isWounded,
   woundRemainingMs,
   duplicateFamiliars,
-  garrisonSlots,
+  companionSlots,
   type RaidReport,
   defenseLevel,
 } from '@/lib/raid';
@@ -5411,7 +5411,7 @@ function doUnequipFamiliar() {
 /** Les familiers POSTÉS au chenil : ni cédables, ni recyclables tant qu'ils tiennent
  *  un rôle au mur. */
 const postedFamiliarIds = computed(() => new Set(char.row?.base?.garrison ?? []));
-// 🔒 protège. On garde `garrisonSlots(niveau) + 1` exemplaires de chaque effet.
+// 🔒 protège. On garde `companionSlots(niveau) + 1` exemplaires de chaque effet.
 const duplicateFams = computed<Item[]>(() =>
   duplicateFamiliars(bagFamiliars.value, c.value.level.level, {
     equippedId: equippedFamiliar.value?.id ?? null,
@@ -5421,7 +5421,7 @@ const duplicateFams = computed<Item[]>(() =>
 const duplicateGold = computed(() => duplicateFams.value.reduce((sum, f) => sum + sellValue(f), 0));
 const duplicateHint = computed(
   () =>
-    `On garde les ${garrisonSlots(c.value.level.level) + 1} meilleurs de chaque effet, sur ⚔️ attaque, 🛡️ mur et ✦ signature. L'équipé, les postés au chenil et les 🔒 ne partent jamais.`,
+    `On garde les ${companionSlots(c.value.level.level) + 1} meilleurs de chaque effet, sur ⚔️ attaque, 🛡️ mur et ✦ signature. L'équipé, ceux confiés à un aventurier et les 🔒 ne partent jamais.`,
 );
 function doSellDuplicateFamiliars() {
   const list = duplicateFams.value;

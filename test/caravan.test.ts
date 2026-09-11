@@ -11,7 +11,6 @@ import {
   trainMsFor,
   caravanWages,
   escortCombatant,
-  garrisonCombatant,
   companionsOf,
   companionEffects,
   COMPANION_K,
@@ -563,48 +562,18 @@ describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () =
     });
   });
 
-  describe('la GARNISON : les aventuriers, épaulés par leurs familiers', () => {
-    it('⚠️ les POURCENTAGES du chenil sont convertis en FRACTIONS', () => {
-      // Le piège d'unité du projet, et il a mordu ici : `GarrisonBonus` mélange les deux
-      // (dégâts et PV en %, réduction et régén en fractions) alors que
-      // `AggregatedEffects` est en fractions de bout en bout. Sans conversion, le bonus
-      // était multiplié par CENT — un chenil qui gagnait la bataille à lui seul.
-      const team = [adv('a')];
-      const nu = garrisonCombatant(team, {});
-      const aide = garrisonCombatant(team, { damagePct: 50 });
-      // +50 % de dégâts : environ une fois et demie, PAS cinquante fois.
-      expect(aide.damage / nu.damage).toBeGreaterThan(1.2);
-      expect(aide.damage / nu.damage).toBeLessThan(2);
-    });
-
-    it('le bonus des familiers MULTIPLIE la troupe', () => {
-      const team = [adv('a'), adv('b')];
-      const nu = garrisonCombatant(team, {});
-      const aide = garrisonCombatant(team, { damagePct: 30, maxPvPct: 25 });
-      expect(aide.damage).toBeGreaterThan(nu.damage);
-      expect(aide.pv).toBeGreaterThan(nu.pv);
-    });
-
-    it('⚠️ la RÉGÉNÉRATION de la salamandre n’est pas perdue en route', () => {
-      // Ce n'est pas un effet agrégé mais une propriété du combattant : sans traitement
-      // dédié, ce canal du chenil disparaîtrait en silence.
-      const team = [adv('a')];
-      expect(garrisonCombatant(team, { regen: 0.05 }).regen ?? 0).toBeGreaterThan(
-        garrisonCombatant(team, {}).regen ?? 0,
-      );
-    });
-
-    it('la réduction de l’ours abrite la troupe, À SA VALEUR', () => {
-      // ⚠️ Un simple « > 0 » ne suffisait pas : diviser cette valeur par 100 passait au
-      // VERT alors que c’est précisément l’erreur d’unité qu’on vient de corriger deux
-      // lignes plus haut. On épingle donc la MAGNITUDE, pas seulement le signe.
-      const team = [adv('a')];
-      const nu = garrisonCombatant(team, {}).dmgReduction ?? 0;
-      const aide = garrisonCombatant(team, { dmgReduction: 0.1 }).dmgReduction ?? 0;
-      expect(aide - nu).toBeCloseTo(0.1, 3);
-    });
-  });
-
+  // ⚠️ LE BLOC « la GARNISON » EST SUPPRIMÉ, PAS RÉÉCRIT — et c'est la seule fois où
+  // ce projet supprime des tests plutôt que de les réécrire. Ils éprouvaient
+  // `garrisonCombatant(advs, bonusDeChenil)`, une fonction qui N'EXISTE PLUS : la
+  // garnison de familiers postés au mur a disparu (un familier est confié à un
+  // AVENTURIER et le suit partout). Il n'y a plus de « bonus de chenil » à convertir,
+  // donc plus rien à tester — le paramètre était d'ailleurs mort en production, seuls
+  // ces tests l'exerçaient encore.
+  //
+  // ⚠️ CE QU'ILS PROTÉGEAIENT N'EST PAS PERDU : le piège d'unité qu'ils verrouillaient
+  // (POURCENTAGES du chenil contre FRACTIONS d'AggregatedEffects) disparaît avec le
+  // type `GarrisonBonus` lui-même — il n'y a plus qu'UNE convention. Et le renfort
+  // par compagnon est couvert par les tests de `companionEffects` juste au-dessus.
   it('⚠️ SANS renfort, l’escorte est EXACTEMENT celle d’avant', () => {
     // Non-régression du calibrage des embuscades, mesuré et documenté : ajouter un
     // paramètre optionnel ne doit rien changer à ceux qui ne le passent pas.

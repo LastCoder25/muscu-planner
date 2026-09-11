@@ -272,6 +272,26 @@
         Ni rôle de convoi ni signature — de la stat brute.
       </p>
 
+      <!-- ── 🐾🧠 SA PAIRE ────────────────────────────────────────────────────
+           ⚠️ C’est ICI que l’on confie un familier et un talent, pas au Chenil :
+           ils appartiennent à un HOMME et le suivent partout — convoi comme
+           rempart. Le Chenil ne fait que plafonner combien et jusqu’à quel rang. -->
+      <div class="d-sec">🐾 Sa paire</div>
+      <button type="button" class="d-pair" @click="pairFor = detailAdv">
+        <span class="d-pair-emo">{{ famOf(detailAdv)?.emoji ?? '＋' }}</span>
+        <span class="d-pair-main">
+          <span class="d-pair-name">{{ famOf(detailAdv)?.name ?? 'Aucun compagnon' }}</span>
+          <span class="d-pair-sub">{{ famNote(detailAdv) }}</span>
+        </span>
+      </button>
+      <button type="button" class="d-pair" @click="talFor = detailAdv">
+        <span class="d-pair-emo">{{ talOf(detailAdv) ? '🧠' : '＋' }}</span>
+        <span class="d-pair-main">
+          <span class="d-pair-name">{{ talLabel(detailAdv) }}</span>
+          <span class="d-pair-sub">Un talent, bridé — un mini-héros, pas un second héros.</span>
+        </span>
+      </button>
+
       <div class="g-actions">
         <q-btn
           v-if="canPromoteOne(detailAdv)"
@@ -283,6 +303,76 @@
         />
         <q-btn flat no-caps label="Fermer" @click="detailAdv = null" />
       </div>
+    </q-card>
+  </q-dialog>
+
+  <!-- ── SÉLECTEUR DE COMPAGNON ───────────────────────────────────────────
+       ⚠️ On montre TOUT ce qu’on possède, en DISANT pourquoi un familier n’est pas
+       disponible (porté par le héros, hors de portée du Chenil) plutôt qu’en le
+       cachant : masquer donne l’impression de l’avoir perdu. -->
+  <q-dialog :model-value="!!pairFor" position="bottom" @update:model-value="pairFor = null">
+    <q-card class="sheet">
+      <div class="g-head">
+        <div class="g-title font-display">🐾 Son compagnon</div>
+        <button class="iconbtn" aria-label="Fermer" @click="pairFor = null">✕</button>
+      </div>
+      <p class="g-note">
+        Chenil niveau {{ kennelLevel }} — rang max <b>{{ rankCapLabel }}</b> · {{ pairedCount }}/{{
+          slots
+        }}
+        compagnons confiés
+      </p>
+      <button v-if="pairFor && famOf(pairFor)" class="cta ghost" @click="assignFam(null)">
+        Reprendre son compagnon
+      </button>
+      <p v-if="!famPool.length" class="g-note">
+        Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
+      </p>
+      <button
+        v-for="f in famPool"
+        :key="f.id"
+        type="button"
+        class="d-pick"
+        :class="{ barred: !famOk(f), here: pairFor && famOf(pairFor)?.id === f.id }"
+        :disabled="!famOk(f)"
+        @click="assignFam(f.id)"
+      >
+        <span class="d-pair-emo">{{ f.emoji }}</span>
+        <span class="d-pair-main">
+          <span class="d-pair-name">{{ f.name }}</span>
+          <span class="d-pair-sub">{{ famWhy(f) }}</span>
+        </span>
+      </button>
+      <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="pairFor = null" /></div>
+    </q-card>
+  </q-dialog>
+
+  <!-- ── SÉLECTEUR DE TALENT ─────────────────────────────────────────────── -->
+  <q-dialog :model-value="!!talFor" position="bottom" @update:model-value="talFor = null">
+    <q-card class="sheet">
+      <div class="g-head">
+        <div class="g-title font-display">🧠 Son talent</div>
+        <button class="iconbtn" aria-label="Fermer" @click="talFor = null">✕</button>
+      </div>
+      <button v-if="talFor && talOf(talFor)" class="cta ghost" @click="assignTal(null)">
+        Reprendre son talent
+      </button>
+      <p v-if="!talPool.length" class="g-note">Aucun talent libre — les tiens sont équipés.</p>
+      <button
+        v-for="t in talPool"
+        :key="t.id"
+        type="button"
+        class="d-pick"
+        :class="{ here: talFor && talOf(talFor)?.id === t.id }"
+        @click="assignTal(t.id)"
+      >
+        <span class="d-pair-emo">🧠</span>
+        <span class="d-pair-main">
+          <span class="d-pair-name">{{ talName(t) }}</span>
+          <span class="d-pair-sub">{{ talTaken(t) }}</span>
+        </span>
+      </button>
+      <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="talFor = null" /></div>
     </q-card>
   </q-dialog>
 </template>
@@ -319,7 +409,15 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
-import { RARITY_LABEL } from '@/lib/items';
+import { RARITY_LABEL, FAMILIAR_SLOT, type Item } from '@/lib/items';
+import { normalizeTalents, talentByCode, type TalentInstance } from '@/lib/talents';
+import {
+  defenseLevel,
+  companionSlots,
+  companionRankLabel,
+  companionPairs,
+  canCompanion,
+} from '@/lib/raid';
 import { trainMsFor } from '@/lib/caravan';
 
 const props = defineProps<{
@@ -333,6 +431,87 @@ const emit = defineEmits<{ close: [] }>();
 const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
+
+// ── 🐾🧠 LA PAIRE : un compagnon et un talent, confiés à un HOMME ───────────────
+// ⚠️ Ils le suivent PARTOUT (convoi comme rempart) : c’est pour ça que l’appariement
+// vit sur SA fiche et pas au Chenil. Le Chenil ne fait que plafonner combien et
+// jusqu’à quel rang — comme la Guilde pour les aventuriers, sauf qu’il ne les crée pas.
+const pairFor = ref<Adventurer | null>(null);
+const talFor = ref<Adventurer | null>(null);
+const kennelLevel = computed(() => defenseLevel(char.row?.base?.defenses ?? [], 'kennel'));
+const slots = computed(() => companionSlots(kennelLevel.value));
+const rankCapLabel = computed(() => companionRankLabel(kennelLevel.value));
+const heroFamId = computed(() => char.row?.equipped?.[FAMILIAR_SLOT]?.id ?? null);
+const famPool = computed(() =>
+  (char.row?.inventory ?? []).filter((it: Item) => it.slot === FAMILIAR_SLOT),
+);
+/** Les talents LIBRES : ceux que le héros n’a pas équipés. Un talent ne peut pas être
+ *  à deux endroits — c’est la même règle que le compagnon. */
+const talPool = computed(() =>
+  normalizeTalents(char.row?.talents ?? []).filter((t) => t.equipped !== true),
+);
+const pairedCount = computed(
+  () =>
+    companionPairs(char.advList, {
+      familiars: famPool.value,
+      talents: talPool.value,
+      kennelLevel: kennelLevel.value,
+      now: Date.now(),
+      heroFamiliarId: heroFamId.value,
+    }).size,
+);
+const famById = computed(() => new Map(famPool.value.map((f) => [f.id, f])));
+const talById = computed(() => new Map(talPool.value.map((t) => [t.id, t])));
+const famOf = (a: Adventurer) => (a.familiarId ? (famById.value.get(a.familiarId) ?? null) : null);
+const talOf = (a: Adventurer) => (a.talentId ? (talById.value.get(a.talentId) ?? null) : null);
+const famOk = (f: Item) => f.id !== heroFamId.value && canCompanion(f, kennelLevel.value);
+function famWhy(f: Item): string {
+  if (f.id === heroFamId.value) return 'Ton héros le porte — il se bat ailleurs.';
+  if (!canCompanion(f, kennelLevel.value))
+    return `Hors de portée de ton Chenil (rang max ${rankCapLabel.value}).`;
+  const autre = char.advList.find((a) => a.familiarId === f.id && a.id !== pairFor.value?.id);
+  return autre ? `Confié à ${autre.name} — le prendre le lui retirera.` : RARITY_LABEL[f.rarity];
+}
+function famNote(a: Adventurer): string {
+  const f = famOf(a);
+  if (!f) return 'Aucun familier confié.';
+  return `${RARITY_LABEL[f.rarity]} · il le suit partout`;
+}
+const talName = (t: TalentInstance) => talentByCode(t.code)?.name ?? t.code;
+function talTaken(t: TalentInstance): string {
+  const autre = char.advList.find((a) => a.talentId === t.id && a.id !== talFor.value?.id);
+  return autre ? `Confié à ${autre.name} — le prendre le lui retirera.` : 'Libre';
+}
+function talLabel(a: Adventurer): string {
+  const t = talOf(a);
+  return t ? talName(t) : 'Aucun talent confié';
+}
+/** ⚠️ Le store REFUSE ce qui est impossible (héros porteur, rang hors d’école) : on
+ *  affiche son message plutôt que d’en réécrire un second qui pourrait diverger. */
+async function pair(fn: (uid: string) => Promise<unknown>) {
+  const uid = auth.user?.id;
+  if (!uid || busy.value) return;
+  busy.value = true;
+  try {
+    await fn(uid);
+  } catch (e) {
+    $q.notify({ type: 'negative', message: (e as Error).message });
+  } finally {
+    busy.value = false;
+  }
+}
+function assignFam(id: string | null) {
+  const a = pairFor.value;
+  if (!a) return;
+  pairFor.value = null;
+  void pair((uid) => char.setCompanion(uid, a.id, id));
+}
+function assignTal(id: string | null) {
+  const a = talFor.value;
+  if (!a) return;
+  talFor.value = null;
+  void pair((uid) => char.setAdvTalent(uid, a.id, id));
+}
 
 const busy = ref(false);
 const now = ref(Date.now());
@@ -565,6 +744,53 @@ async function doPromote(classId: string) {
   font-size: 12px;
   color: var(--dim);
   margin: 6px 0 4px;
+}
+/* 🐾🧠 LA PAIRE — une ligne par chose confiée, cible tactile pleine largeur.
+   ⚠️ Préfixe `d-` (detail) comme le reste de la fiche : des classes génériques
+   écraseraient celles d’un autre écran (la leçon des `fp-*`, v0.751). */
+.d-pair,
+.d-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+}
+.d-pick.here {
+  border-color: var(--q-primary);
+}
+/* Indisponible : il reste LISIBLE — on doit pouvoir lire POURQUOI — il n’est
+   simplement plus cliquable. Pointillé en plus de l’opacité : la couleur seule ne
+   suffit pas. */
+.d-pick.barred {
+  opacity: 0.55;
+  border-style: dashed;
+  cursor: default;
+}
+.d-pair-emo {
+  font-size: 22px;
+  width: 26px;
+  text-align: center;
+}
+.d-pair-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.d-pair-name {
+  font-size: 13.5px;
+}
+.d-pair-sub {
+  font-size: 11.5px;
+  color: var(--dim);
 }
 .d-sec {
   font-size: 11px;

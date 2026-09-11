@@ -30,7 +30,6 @@ import { simulateCombat, type Combatant } from './combat';
 // ⚠️ Type SEUL : `raid.ts` importera `garrisonCombatant` à l'exécution, donc un import
 // de valeur dans l'autre sens créerait un cycle. Le projet applique déjà cette règle
 // entre `data/familiars` et `items`.
-import type { GarrisonBonus } from './raid';
 import { talentEffects, type TalentInstance } from './talents';
 import {
   HARVEST_TYPES,
@@ -211,9 +210,9 @@ function escortEffects(advs: Adventurer[]): AggregatedEffects {
 export function escortCombatant(
   advs: Adventurer[],
   name = 'Escorte',
-  /** Renfort d'effets EXTÉRIEUR aux aventuriers — aujourd'hui les familiers postés
-   *  (cf. `garrisonCombatant`). Il s'ajoute aux signatures de l'escorte au lieu de les
-   *  remplacer : un convoi garde ses propres talents. */
+  /** Renfort d'effets EXTÉRIEUR aux aventuriers — le compagnon et le talent qu'on leur
+   *  a confiés. Il s'ajoute aux signatures de l'escorte au lieu de les remplacer : un
+   *  convoi garde ses propres talents. */
   extra: Partial<AggregatedEffects> = {},
 ): Combatant {
   const stats = advs.reduce(
@@ -235,50 +234,6 @@ export function escortCombatant(
     mergeEffects(escortEffects(advs), { ...emptyEffects(), ...extra }),
     level,
   );
-}
-
-/**
- * LA GARNISON : les aventuriers présents, épaulés par les familiers postés au chenil.
- *
- * ⚠️ C'EST LA CHAÎNE FAMILIERS → GARNISON → DÉFENSES (conception de l'utilisateur), et
- * elle corrige une incohérence de fond : jusqu'ici le bonus du chenil multipliait
- * DIRECTEMENT les PV de la muraille et les dégâts des tourelles. Un loup qui rend la
- * pierre plus solide ne veut rien dire. Un familier épaule des HOMMES — exactement comme
- * celui du héros épaule le héros, et par le même mécanisme : des `AggregatedEffects`
- * posés sur un combattant.
- *
- * ⚠️ LES QUATRE CANAUX DE COMBAT DU CHENIL GARDENT LEUR SENS, ils changent seulement de
- * cible : dégâts et PV multiplient la troupe, la réduction l'abrite, la régénération la
- * remet sur pied entre deux groupes. Les deux rôles NON combattants (renseignement du
- * faucon, fouille de la marmotte) n'ont rien à faire ici — ils ne concernent pas un
- * combattant, et les faire transiter par lui les perdrait.
- *
- * ⚠️ CE QUI RESTE À TRANCHER AU BRANCHEMENT, et qui ne se décide pas ici : ce que vaut
- * une garnison SANS aucun aventurier. Le chenil fonctionne seul aujourd'hui ; s'il ne
- * servait plus qu'à multiplier une troupe absente, un joueur sans Guilde perdrait tout
- * son bonus d'un coup. La réponse se cale sur le niveau du JOUEUR — comme toute structure
- * de l'enceinte (cf. `baseCombatant`) — donnée que ce module n'a pas. On n'invente donc
- * rien ici.
- */
-export function garrisonCombatant(
-  advs: Adventurer[],
-  fam: GarrisonBonus = {},
-  name = 'Garnison',
-): Combatant {
-  // ⚠️ UNITÉS — LE PIÈGE RÉCURRENT DE CE PROJET, et il a mordu ici (attrapé par un
-  // test, pas par la relecture). `GarrisonBonus` MÉLANGE les deux : `damagePct` et
-  // `maxPvPct` y sont des POURCENTAGES (23,4 pour +23,4 %) tandis que `dmgReduction` et
-  // `regen` sont déjà des FRACTIONS (0,12). `AggregatedEffects`, lui, est en fractions
-  // de bout en bout (cf. `effectAsAggregate`, qui divise par 100). Passer les deux
-  // premiers tels quels les multipliait donc par CENT.
-  const out = escortCombatant(advs, name, {
-    damagePct: (fam.damagePct ?? 0) / 100,
-    maxPvPct: (fam.maxPvPct ?? 0) / 100,
-    dmgReduction: fam.dmgReduction ?? 0,
-  });
-  // ⚠️ La RÉGÉNÉRATION n'est pas un effet agrégé mais une propriété du combattant : elle
-  // se pose après coup, sinon le canal de la salamandre disparaîtrait en silence.
-  return fam.regen ? { ...out, regen: (out.regen ?? 0) + fam.regen } : out;
 }
 
 /** Part de l'effet d'un compagnon qui profite à son aventurier.
@@ -329,13 +284,18 @@ export function companionEffects(
   companions: Item[],
   kind: 'atk' | 'def',
   k = COMPANION_K,
+  /** Plafond de DRESSAGE imposé par le Chenil — le 3ᵉ levier du bâtiment, et celui
+   *  qui le garde vivant jusqu’au niveau 100. C’est lui qui entraîne : un familier ne
+   *  peut pas dépasser l’école qui le forme. ⚠️ Ne vaut QUE pour `'def'` — sur la
+   *  route, personne ne plafonne ce qu’il a appris au combat. */
+  capLevel?: number,
 ): AggregatedEffects {
   const list = companions.flatMap((f) => {
-    const mult =
-      k *
-      (kind === 'atk'
-        ? famAtkMult(famLevel(f.atkXp, 'atk'))
-        : famDefMult(famLevel(f.defXp, 'def')));
+    const def =
+      capLevel === undefined
+        ? famLevel(f.defXp, 'def')
+        : Math.min(famLevel(f.defXp, 'def'), Math.max(0, capLevel));
+    const mult = k * (kind === 'atk' ? famAtkMult(famLevel(f.atkXp, 'atk')) : famDefMult(def));
     const parts = [asAggregate(f.effect.type, f.effect.value * mult)];
     // La SIGNATURE ✦ d'un familier compte aussi : c'est ce qui fait sa valeur au drop.
     if (f.effect2) parts.push(asAggregate(f.effect2.type, f.effect2.value * mult));
