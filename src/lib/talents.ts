@@ -249,7 +249,15 @@ export function normalizeTalents(raw: unknown): TalentInstance[] {
 export function talentEffects(raw: unknown): AggregatedEffects {
   const a = emptyEffects();
   for (const inst of normalizeTalents(raw)) {
-    if (inst.equipped === false) continue; // seuls les équipés comptent
+    // ⚠️ `=== true`, PAS `!== false` — c'était LE défaut, et il gonflait la puissance de
+    // 85 % sur un compte réel (79 talents possédés, 74 comptés, 5 emplacements).
+    // `rollTalentDrop` ne posait AUCUN champ `equipped`, donc chaque talent jamais tombé
+    // comptait à vie, sans limite de place. Tous les autres lecteurs — les gardes de
+    // `equipTalent`, le compteur d'emplacements, l'auto-correction — lisent déjà
+    // `t.equipped` en truthy : ce lecteur-ci était le seul hors de pas, et c'est lui qui
+    // calcule la puissance. Les talents LEGACY (ancien `string[]`) restent équipés :
+    // `normalizeTalents` leur pose `equipped: true` explicitement.
+    if (inst.equipped !== true) continue;
     const def = BY_CODE.get(inst.code);
     if (!def) continue;
     a[def.effectKey] += talentValue(
@@ -298,6 +306,9 @@ export function rollTalentDrop(
     roll, // JET fixé au drop
     enchant: 0,
     level: rollItemLevel(rng, center, opts.luck ?? 0),
+    // ⚠️ EXPLICITE : un talent qui tombe n'est pas équipé. L'omettre laissait le champ
+    // `undefined`, que chaque lecteur interprétait à sa façon — la source du défaut.
+    equipped: false,
   };
 }
 

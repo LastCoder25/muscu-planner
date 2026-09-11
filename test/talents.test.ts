@@ -162,3 +162,48 @@ describe('drop', () => {
     expect(highMax).toBeGreaterThan(0);
   });
 });
+
+describe('⚠️ UN TALENT N’EST ÉQUIPÉ QUE S’IL LE DIT', () => {
+  // ⚠️ Signalé en urgence par l’utilisateur (« le comparatif de puissance au drop et
+  // dans le sac a l’air complètement faux »). Ce n’était pas le comparatif : c’était LA
+  // PUISSANCE. `talentEffects` comptait « tout sauf equipped === false » alors que TOUS
+  // les autres lecteurs — gardes de `equipTalent`, compteur d’emplacements,
+  // auto-correction — lisent `t.equipped` en truthy. Et `rollTalentDrop` ne posait
+  // AUCUN champ : chaque talent jamais tombé comptait donc à vie, sans limite de place.
+  // Mesuré sur le compte réel : 79 possédés, 74 comptés, 5 emplacements → puissance
+  // gonflée de 85 % (1683 au lieu de 911).
+  const drop = (seed: number) => rollTalentDrop(mulberry32(seed), { level: 20 });
+
+  it('un talent qui TOMBE n’est pas équipé', () => {
+    const t = drop(1);
+    // Explicite, jamais `undefined` : un champ absent, chaque lecteur l’interprète à sa façon.
+    expect(t.equipped).toBe(false);
+  });
+
+  it('⚠️ un talent SANS champ `equipped` ne compte PAS', () => {
+    // Le cas des lignes déjà en base : le champ n’existe pas. On ne peut pas deviner
+    // « équipé » — les emplacements, eux, ne le comptent pas.
+    const t = { ...drop(2) } as Record<string, unknown>;
+    delete t.equipped;
+    const sans = talentEffects([t]);
+    const avec = talentEffects([{ ...drop(2), equipped: true }]);
+    expect(sans).toEqual(talentEffects([]));
+    expect(avec).not.toEqual(talentEffects([]));
+  });
+
+  it('⚠️ LES TALENTS LEGACY (ancien string[]) RESTENT équipés', () => {
+    // `normalizeTalents` leur pose `equipped: true` explicitement : ce correctif ne
+    // devait pas les désarmer au passage.
+    const code = TALENTS[0]!.code;
+    expect(normalizeTalents([code])[0]!.equipped).toBe(true);
+    expect(talentEffects([code])).not.toEqual(talentEffects([]));
+  });
+
+  it('⚠️ POSSÉDER N’EST PAS PORTER : 50 talents au sac ne valent pas 50 talents', () => {
+    // Le vrai symptôme : la puissance grandissait à CHAQUE drop, sans plafond.
+    const sac = Array.from({ length: 50 }, (_, i) => drop(i + 10));
+    expect(talentEffects(sac)).toEqual(talentEffects([]));
+    const portes = sac.slice(0, talentsEarned(28)).map((t) => ({ ...t, equipped: true }));
+    expect(talentEffects(portes)).not.toEqual(talentEffects([]));
+  });
+});

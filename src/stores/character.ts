@@ -1064,7 +1064,7 @@ export const useCharacterStore = defineStore('character', () => {
       // équipés, on optimise le gear, on re-choisit les talents POUR ce gear, on refait le
       // gear. Chaque étape ne peut qu'améliorer le score, donc ça converge.
       let talIds = normalizeTalents(cur!.talents)
-        .filter((t) => t.equipped !== false)
+        .filter((t) => t.equipped === true)
         .slice(0, maxTal)
         .map((t) => t.id);
       // Pièces IMPOSÉES : la meilleure possédée pour chaque emplacement du set demandé.
