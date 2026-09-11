@@ -285,6 +285,24 @@
             >
               <span class="ca-emo">{{ advTitle(a)?.emoji ?? '🧑' }}</span>
               <span class="ca-name">{{ a.name }}</span>
+              <!-- ⚠️ LE RANG ET LES COMPÉTENCES, demandés par l’utilisateur : on choisissait
+                   son escorte sur un prénom, alors que ce sont les RÔLES qui décident du
+                   convoi. Le rang porte sa couleur (une seule échelle de prestige dans tout
+                   le jeu) et le NIVEAU reste caché, comme partout. -->
+              <span class="ca-rank" :style="{ color: advRank(a).color }">
+                {{ rankStarStr(advRank(a).star) }}
+              </span>
+              <span v-if="advBadges(a).length" class="ca-skills">
+                <span
+                  v-for="(b, i) in advBadges(a)"
+                  :key="i"
+                  class="ca-skill"
+                  :class="{ sig: !b.role }"
+                  :title="b.what"
+                  >{{ b.emoji }}<b v-if="b.level > 1">{{ b.level }}</b></span
+                >
+              </span>
+              <span v-else class="ca-none">stat brute</span>
             </button>
           </div>
           <!-- ⚠️ L'AVERTISSEMENT EST AU-DESSUS DU BOUTON, pas après : on doit le lire
@@ -396,7 +414,8 @@ import {
   defenseLevel,
   ODDS_LABEL,
 } from '@/lib/raid';
-import { advAvailable, advTitle } from '@/lib/adventurers';
+import { advAvailable, advBadges, advRank, advTitle } from '@/lib/adventurers';
+import { rankStarStr } from '@/lib/characterRank';
 import { CARAVAN, caravanLegMin, caravanSlots, isCaravanClaimable, poiOffers } from '@/lib/caravan';
 
 const props = defineProps<{ embedded?: boolean }>();
@@ -1069,6 +1088,39 @@ function fmtMin(min: number): string {
 .ca-name {
   font-size: 11px;
   color: var(--dim);
+}
+/* Le rang : mêmes étoiles et même couleur que la Guilde — une seule échelle. */
+.ca-rank {
+  font-size: 9px;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+/* Les compétences en icônes : à 344 px, seule l’icône tient. Le libellé complet reste
+   au survol, et la fiche de la Guilde le donne en toutes lettres. */
+.ca-skills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  line-height: 1;
+}
+.ca-skill {
+  font-size: 11px;
+}
+.ca-skill b {
+  font-size: 8px;
+  color: var(--accent);
+  vertical-align: super;
+}
+/* Une signature ne sert qu’en cas d’embuscade : elle compte moins qu’un rôle sur un
+   convoi, et son opacité le dit sans ajouter un mot. */
+.ca-skill.sig {
+  opacity: 0.65;
+}
+.ca-none {
+  font-size: 9px;
+  color: var(--dim);
+  opacity: 0.6;
 }
 .car-send {
   margin-top: 2px;

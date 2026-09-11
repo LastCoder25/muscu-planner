@@ -310,6 +310,11 @@ export function turretCount(level: number): number {
 const WEEK_MS = 7 * 24 * 3600_000;
 
 export const RAID = {
+  // XP de défense des aventuriers (cf. `siegeXp`)
+  xpBase: 8,
+  xpPerLevel: 2,
+  /** Part versée même si RIEN n’a été repoussé : on a tenu la brèche, on a appris. */
+  xpFloorShare: 0.25,
   // Composition
   minGroups: 3,
   maxGroups: 5,
@@ -1176,7 +1181,7 @@ function defenseCombatant(
   };
 }
 
-/** Puissance de DÉFENSE de la base, dans l'unité de tout le jeu. */
+/** Puissance de DÉFENSE de la base, dans l’unité de tout le jeu. */
 export function defensePower(
   defenses: DefenseStructure[],
   playerLevel: number,
@@ -1737,6 +1742,39 @@ function foldBonus(pv: number, dmg: number, fam: GarrisonBonus) {
     pv: Math.max(1, Math.round((pv * (1 + (fam.maxPvPct ?? 0) / 100)) / (1 - red))),
     damage: Math.max(1, Math.round(dmg * (1 + (fam.damagePct ?? 0) / 100))),
   };
+}
+
+/** ⚔️ CE QU’UN AVENTURIER APPREND EN DÉFENDANT LA BASE.
+ *
+ *  ⚠️ Demandé par l’utilisateur, et c’était une vraie asymétrie : les familiers postés
+ *  gagnaient de l’XP de dressage à chaque siège (v0.663), les aventuriers non — alors
+ *  qu’ils tiennent la brèche depuis le branchement du moteur. Rester défendre coûtait
+ *  donc un convoi ET la progression qui va avec : garder son monde à la maison était
+ *  puni deux fois, ce qui est l’inverse de l’arbitrage qu’on veut proposer.
+ *
+ *  ⚠️ MÊME FORME QUE `missionXp`, volontairement : base liée au niveau de l’épreuve, et
+ *  RENDEMENT DÉCROISSANT quand elle est loin sous celui de l’aventurier (`^1.5`) — sans
+ *  quoi un vétéran engrangerait sur des armées qui ne lui apprennent rien.
+ *
+ *  ⚠️ ON GAGNE MÊME EN PERDANT, comme sur les convois : perdre coûte déjà le stock, les
+ *  réparations et la production gelée — n’avoir rien appris en plus punirait deux fois,
+ *  et le joueur qui subit ses premiers sièges est justement celui qui a besoin de
+ *  progresser. La part REPOUSSÉE module le gain, elle ne le conditionne pas.
+ *
+ *  ⚠️ AUCUN RISQUE DE FARM : un siège arrive toutes les 24 à 72 h et ne se provoque pas.
+ *  C’est ce qui autorise une base plus généreuse qu’un convoi. */
+export function siegeXp(adv: Adventurer, report: RaidReport): number {
+  const bodies = report.groups.reduce((n, g) => n + Math.max(0, g.count), 0);
+  if (!bodies) return 0;
+  // Le niveau de l’épreuve = celui de l’armée, PONDÉRÉ PAR LES EFFECTIFS : un champion
+  // seul de haut niveau ne doit pas faire passer une horde de bleus pour une élite.
+  const armyLevel =
+    report.groups.reduce((n, g) => n + Math.max(0, g.count) * Math.max(1, g.level), 0) / bodies;
+  const ratio = Math.min(1, armyLevel / Math.max(1, adv.level));
+  const share = report.total > 0 ? Math.max(0, report.defeated) / report.total : 0;
+  const base = RAID.xpBase + armyLevel * RAID.xpPerLevel;
+  // Plancher à 1 : il s’est battu, il a appris quelque chose.
+  return Math.max(1, Math.round(base * ratio ** 1.5 * (RAID.xpFloorShare + share)));
 }
 
 export function guardUnits(

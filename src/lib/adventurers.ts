@@ -23,30 +23,43 @@ import { characterRank, rankProgress, nextStarLevel, type CharacterRank } from '
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
 export type AdvRole = 'heal' | 'haul' | 'speed' | 'scout';
 
-/** Ce qu'un rôle fait CONCRÈTEMENT sur un convoi. ⚠️ Écrit ici, à côté du type, comme
- *  `ROLE_LABEL` pour la garnison : l'écran de promotion l'affiche, et c'est une des deux
- *  choses qui distinguent vraiment deux classes (l'autre étant la signature). */
-export const ADV_ROLE_LABEL: Record<AdvRole, string> = {
-  heal: '🩺 Convalescences plus courtes',
-  haul: '🐫 Cargaison plus grosse',
-  speed: '🧭 Trajets plus rapides',
-  scout: '👁️ Repère les embuscades',
+/** Ce qu’un rôle fait CONCRÈTEMENT sur un convoi. ⚠️ Écrit ici, à côté du type, comme
+ *  `ROLE_LABEL` pour la garnison : l’écran de promotion l’affiche, et c’est une des deux
+ *  choses qui distinguent vraiment deux classes (l’autre étant la signature).
+ *
+ *  ⚠️ L’EMOJI EST UN CHAMP, pas un préfixe de la phrase : le choix d’escorte est une grille
+ *  de tuiles étroites (344 px sur un Z Fold plié) où seule l’icône tient. L’extraire du
+ *  libellé marcherait aujourd’hui et casserait au premier renommage — et un emoji n’est
+ *  pas toujours un seul caractère.
+ */
+const ADV_ROLE_INFO: Record<AdvRole, { emoji: string; what: string }> = {
+  heal: { emoji: '🩺', what: 'Convalescences plus courtes' },
+  haul: { emoji: '🐫', what: 'Cargaison plus grosse' },
+  speed: { emoji: '🧭', what: 'Trajets plus rapides' },
+  scout: { emoji: '👁️', what: 'Repère les embuscades' },
 };
+/** La phrase complète, DÉRIVÉE — deux tables auraient divergé au premier renommage. */
+export const ADV_ROLE_LABEL: Record<AdvRole, string> = Object.fromEntries(
+  Object.entries(ADV_ROLE_INFO).map(([k, v]) => [k, `${v.emoji} ${v.what}`]),
+) as Record<AdvRole, string>;
 
 /** Ce qu'une SIGNATURE fait en combat, en clair. ⚠️ Les effets sont ceux des procs
  *  légendaires (`EffectType`), déjà appliqués par `simulateCombat` — on ne réinvente
  *  rien, on les NOMME. Sans ça, l'écran de promotion affichait la forme des stats et la
  *  rareté, mais pas ce qui sépare réellement deux classes de même strate. */
-export const ADV_SIGNATURE_LABEL: Partial<Record<EffectType, string>> = {
-  damage_pct: '⚔️ Frappe plus fort',
-  crit_pct: '🎯 Coups critiques plus souvent',
-  execute_pct: '☠️ Achève les ennemis affaiblis',
-  lifesteal_pct: '🩸 Se soigne en frappant',
-  max_pv_pct: '❤️ Plus robuste',
-  momentum_pct: '🌀 Frappe de plus en plus fort',
-  rage_pct: '🔥 Redoutable quand il est mal en point',
-  thorns_pct: '🛡️ Renvoie une part des coups reçus',
+const ADV_SIGNATURE_INFO: Partial<Record<EffectType, { emoji: string; what: string }>> = {
+  damage_pct: { emoji: '⚔️', what: 'Frappe plus fort' },
+  crit_pct: { emoji: '🎯', what: 'Coups critiques plus souvent' },
+  execute_pct: { emoji: '☠️', what: 'Achève les ennemis affaiblis' },
+  lifesteal_pct: { emoji: '🩸', what: 'Se soigne en frappant' },
+  max_pv_pct: { emoji: '❤️', what: 'Plus robuste' },
+  momentum_pct: { emoji: '🌀', what: 'Frappe de plus en plus fort' },
+  rage_pct: { emoji: '🔥', what: 'Redoutable quand il est mal en point' },
+  thorns_pct: { emoji: '🛡️', what: 'Renvoie une part des coups reçus' },
 };
+export const ADV_SIGNATURE_LABEL: Partial<Record<EffectType, string>> = Object.fromEntries(
+  Object.entries(ADV_SIGNATURE_INFO).map(([k, v]) => [k, `${v.emoji} ${v.what}`]),
+);
 
 /** L'ORIENTATION d'une classe, lue sur la répartition de son budget : c'est ce que
  *  « 💪3 ❤️2 ⚡1 » veut dire, en mots. Le pilier dominant l'emporte ; à égalité, c'est un
@@ -789,6 +802,33 @@ function levelsOf<T>(list: T[]): AdvSkill<T>[] {
 /** Les rôles de convoi, avec leur NIVEAU (deux fois le même rôle = niveau 2). */
 export function advRoleLevels(adv: Adventurer): AdvSkill<AdvRole>[] {
   return levelsOf(advRoles(adv));
+}
+
+/** UNE COMPÉTENCE EN UN COUP D’ŒIL : de quoi la reconnaître (emoji), ce qu’elle fait
+ *  (phrase) et son niveau. ⚠️ Demandé par l’utilisateur : on choisissait son escorte sur
+ *  un emoji de classe et un prénom, alors que ce sont les RÔLES qui décident du convoi
+ *  (trajet, cargaison, embuscades) — l’information existait, elle vivait juste dans un
+ *  autre écran.
+ *
+ *  ⚠️ LES RÔLES D’ABORD, les signatures ensuite : sur un convoi, un 🧭 change le voyage à
+ *  tous les coups, une signature de combat ne sert que s’il y a embuscade. */
+export interface AdvBadge {
+  emoji: string;
+  what: string;
+  level: number;
+  role: boolean;
+}
+export function advBadges(adv: Adventurer): AdvBadge[] {
+  const roles = advRoleLevels(adv).map((s) => ({
+    ...ADV_ROLE_INFO[s.what],
+    level: s.level,
+    role: true,
+  }));
+  const sigs = advSignatureLevels(adv).flatMap((s) => {
+    const i = ADV_SIGNATURE_INFO[s.what];
+    return i ? [{ ...i, level: s.level, role: false }] : [];
+  });
+  return [...roles, ...sigs];
 }
 
 /** Les signatures de combat, avec leur NIVEAU. */

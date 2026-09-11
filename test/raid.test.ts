@@ -12,6 +12,7 @@ import {
   groupCombatant,
   resolveRaid,
   guardUnits,
+  siegeXp,
   raidDamage,
   corpsesFrom,
   lootCorpses,
@@ -77,6 +78,7 @@ import {
   type Item,
 } from '@/lib/items';
 import type { Combatant } from '@/lib/combat';
+import type { Adventurer } from '@/lib/adventurers';
 import { FAMILIAR_SPECIES } from '@/data/familiars';
 
 const H = 3600_000;
@@ -1612,5 +1614,69 @@ describe('⚔️🧱 LES UNITÉS DU SIÈGE — dérivées du vrai état, jamais 
       expect(chef.maxPv / troupe.maxPv).toBeCloseTo(RAID.championPvMult, 1);
       expect(chef.damage / troupe.damage).toBeCloseTo(RAID.championDmgMult, 1);
     });
+  });
+});
+
+describe('⚔️ CE QU’ON APPREND EN DÉFENDANT', () => {
+  // ⚠️ Demandé par l’utilisateur. Les familiers postés gagnaient de l’XP à chaque siège
+  // depuis la v0.663, les aventuriers non — alors qu’ils tiennent la brèche. Rester
+  // défendre coûtait donc un convoi ET la progression qui va avec.
+  const adv = (level: number): Adventurer => ({
+    id: 'a',
+    name: 'a',
+    seed: 1,
+    path: ['guerrier', 'epeiste'],
+    level,
+    xp: 0,
+  });
+  /** Un rapport minimal : seuls les champs que `siegeXp` lit comptent ici. */
+  const rep = (groups: { count: number; level: number }[], defeated: number) =>
+    ({ groups, defeated, total: groups.length }) as unknown as RaidReport;
+
+  it('⚠️ ON APPREND MÊME EN PERDANT — perdre punit déjà assez', () => {
+    // Une défaite coûte le stock, les réparations et la production gelée. N’avoir rien
+    // appris en plus punirait deux fois — et c’est le joueur qui subit ses premiers
+    // sièges qui a le plus besoin de progresser. Même règle que les convois.
+    const perdu = siegeXp(adv(20), rep([{ count: 8, level: 20 }], 0));
+    const gagne = siegeXp(adv(20), rep([{ count: 8, level: 20 }], 1));
+    // ⚠️ « > 0 » NE PROUVAIT RIEN : le plancher `Math.max(1, …)` le garantit tout seul, et
+    // la mutation « supprimer la part de consolation » passait au VERT. On affirme donc
+    // la VALEUR — la défaite vaut exactement sa part, adossée à la constante du projet.
+    expect(perdu / gagne).toBeCloseTo(RAID.xpFloorShare / (RAID.xpFloorShare + 1), 2);
+    // …et repousser rapporte NETTEMENT plus : la part repoussée module le gain.
+    expect(gagne).toBeGreaterThan(perdu * 2);
+  });
+
+  it('⚠️ RENDEMENT DÉCROISSANT : une armée de bleus n’apprend rien à un vétéran', () => {
+    // Sans ça, un aventurier de haut niveau engrangerait sur des sièges qui ne lui
+    // demandent rien — c’est le garde-fou de `missionXp`, repris tel quel.
+    const petit = siegeXp(adv(60), rep([{ count: 10, level: 6 }], 1));
+    const taille = siegeXp(adv(60), rep([{ count: 10, level: 60 }], 1));
+    expect(petit * 10).toBeLessThan(taille);
+  });
+
+  it('⚠️ LE NIVEAU DE L’ARMÉE EST PONDÉRÉ PAR LES EFFECTIFS', () => {
+    // Un champion seul de haut niveau ne doit pas faire passer une horde de bleus pour
+    // une élite : c’est la masse qu’on a affrontée qui décide, pas le plus gros nom.
+    const horde = rep(
+      [
+        { count: 40, level: 5 },
+        { count: 1, level: 80 },
+      ],
+      2,
+    );
+    const elite = rep(
+      [
+        { count: 40, level: 80 },
+        { count: 1, level: 80 },
+      ],
+      2,
+    );
+    expect(siegeXp(adv(40), horde) * 3).toBeLessThan(siegeXp(adv(40), elite));
+  });
+
+  it('une armée sans personne ne donne rien', () => {
+    expect(siegeXp(adv(20), rep([], 0))).toBe(0);
+    expect(siegeXp(adv(20), rep([{ count: 0, level: 20 }], 0))).toBe(0);
   });
 });

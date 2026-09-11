@@ -79,6 +79,7 @@ import {
   advanceBase,
   applyRaidOutcome,
   resolveRaid,
+  siegeXp,
   guardUnits,
   emptyBase,
   defenseType,
@@ -1560,16 +1561,15 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚠️ Le bonus du chenil ne va plus à la MURAILLE mais à la GARNISON : c'est la chaîne
     // familiers → garnison → défenses. Les aventuriers DISPONIBLES défendent (ni en
     // convoi, ni à l'infirmerie, ni en formation) ; sans eux, les bêtes tiennent seules.
+    // ⚠️ LES DÉFENSEURS SONT NOMMÉS UNE FOIS : le combat et l’XP doivent parler des MÊMES
+    // aventuriers. Les reconstruire deux fois, c’est laisser les deux listes diverger.
+    const defenders = advList.value.filter((a) => advAvailable(a, now));
     const report = resolveRaid(
       {
         defenses: t.base.defenses,
         playerLevel: ctx.playerLevel,
         hero: home ? ctx.hero : null,
-        guard: guardUnits(
-          ctx.playerLevel,
-          advList.value.filter((a) => advAvailable(a, now)),
-          fam,
-        ),
+        guard: guardUnits(ctx.playerLevel, defenders, fam),
       },
       t.dueRaid,
       now,
@@ -1577,6 +1577,16 @@ export const useCharacterStore = defineStore('character', () => {
     );
     const { base: nb, damage } = applyRaidOutcome(t.base, t.dueRaid, report, ctx, now);
     const patch: Record<string, unknown> = { base: nb };
+    // ⚠️ CEUX QUI ONT DÉFENDU APPRENNENT (demandé par l’utilisateur). Les familiers postés
+    // gagnaient de l’XP depuis la v0.663 ; les aventuriers, qui tiennent pourtant la
+    // brèche, n’en gagnaient aucune — rester défendre coûtait un convoi ET la progression
+    // qui va avec. Le barème vit dans `siegeXp` (lib, testé), jamais ici.
+    if (defenders.length) {
+      const ids = new Set(defenders.map((a) => a.id));
+      patch.adventurers = advList.value.map((a) =>
+        ids.has(a.id) ? grantAdvXp(a, siegeXp(a, report), guildLevel.value) : a,
+      );
+    }
     // Les familiers postés SORTENT du siège : ils gagnent de l'XP de DÉFENSE (∝ ce
     // qu'ils ont repoussé) et soufflent un moment. Jamais blessés, jamais perdus —
     // sinon personne ne posterait ses bons familiers et le chenil resterait vide.
