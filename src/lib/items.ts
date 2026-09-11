@@ -1846,6 +1846,60 @@ export function magicFindLuck(equipped: Equipped, voie?: string | null): number 
  *  (pour permettre la complétion, cap 12 + slot vide = ≤13/slot) → au plus ~13⁴ combos
  *  évalués sur un clic (combatPower est bon marché), pas un chemin chaud.
  *  Retourne la map d'équipement optimale (les 4 slots gear + le familier actuel). */
+/** Écarte les objets DOMINÉS : un objet qu'un autre bat sur TOUS ses axes ne peut jamais
+ *  gagner, donc l'essayer est du temps perdu.
+ *
+ *  ⚠️ ÉLAGAGE SÛR, et c'est toute la différence avec un top-K. Le filtre par score gardait
+ *  « les N meilleurs » et a JETÉ UN GAGNANT (mesuré : une arme qui valait +143) : classer,
+ *  c'est déjà supposer qu'on sait comparer deux objets de natures différentes. La
+ *  dominance, elle, ne compare que le comparable et ne peut rien perdre.
+ *
+ *  ⚠️ On ne compare QU'À SET ÉGAL : une pièce plus faible d'un AUTRE set peut gagner par
+ *  son bonus de set. Et jamais entre porteurs d'effets légendaires différents : un proc
+ *  ne se met pas sur la même échelle qu'un pourcentage. */
+export function elagueDomines(items: Item[]): Item[] {
+  const groupes = new Map<string, Item[]>();
+  for (const it of items) {
+    const k = `${it.slot}|${it.setId ?? ''}|${it.legendary ?? ''}`;
+    (groupes.get(k) ?? groupes.set(k, []).get(k)!).push(it);
+  }
+  const vecteur = (it: Item): Record<string, number> => {
+    const v: Record<string, number> = {};
+    for (const e of [it.effect, it.effect2, it.effect3])
+      if (e) v[e.type] = (v[e.type] ?? 0) + effectiveValue(e, it.level);
+    return v;
+  };
+  const out: Item[] = [];
+  for (const grp of groupes.values()) {
+    const vs = grp.map(vecteur);
+    for (let i = 0; i < grp.length; i++) {
+      let domine = false;
+      for (let j = 0; j < grp.length && !domine; j++) {
+        if (i === j) continue;
+        const a = vs[j]!;
+        const b = vs[i]!;
+        // j domine i s'il est ≥ partout ET strictement meilleur quelque part.
+        let mieux = false;
+        let ok = true;
+        for (const t of new Set([...Object.keys(a), ...Object.keys(b)])) {
+          const va = a[t] ?? 0;
+          const vb = b[t] ?? 0;
+          if (va < vb) {
+            ok = false;
+            break;
+          }
+          if (va > vb) mieux = true;
+        }
+        // ⚠️ À égalité PARFAITE, on n'écarte que le plus grand index : sinon deux clones
+        // se domineraient l'un l'autre et TOUS LES DEUX disparaîtraient.
+        if (ok && (mieux || j < i)) domine = true;
+      }
+      if (!domine) out.push(grp[i]!);
+    }
+  }
+  return out;
+}
+
 export function bestGearLoadout(
   name: string,
   stats: { puissance: number; endurance: number; agilite: number },
@@ -1918,7 +1972,12 @@ export function bestGearLoadout(
    *  garantie, et elle reparcourt TOUT le vivier de toute façon. */
   const SET_K = 1;
   const trim = (arr: Item[], keepCur?: Item): (Item | undefined)[] => {
-    const scored = arr.map((it) => ({ it, p: ctxPower(it) })).sort((a, b) => b.p - a.p);
+    // ⚠️ On élague d’abord les DOMINÉS : c’est gratuit en qualité (un objet battu sur
+    // tous ses axes ne peut jamais gagner) et ça réduit le balayage, qui a QUATRE
+    // boucles imbriquées — donc un gain au cube sur le temps total.
+    const scored = elagueDomines(arr)
+      .map((it) => ({ it, p: ctxPower(it) }))
+      .sort((a, b) => b.p - a.p);
     const keep = new Map<string, Item>();
     if (keepCur) keep.set(keepCur.id, keepCur);
     // ⚠️ SET_K par set et par emplacement, plus une seule pièce : deux pièces du même set
@@ -2007,7 +2066,10 @@ export function bestGearLoadout(
   // annonce, au lieu de l’approcher. Elle ne peut jamais faire perdre de puissance
   // (on ne remplace que sur un gain strict) et converge (le score croît, borné).
   if (!polish) return best;
-  const tous: Item[] = [...inventory];
+  const tous: Item[] = elagueDomines([
+    ...inventory,
+    ...[...SLOTS, FAMILIAR_SLOT].map((s) => equipped[s]).filter((x): x is Item => !!x),
+  ]);
   for (const s of [...SLOTS, FAMILIAR_SLOT]) if (equipped[s]) tous.push(equipped[s]);
   for (let tour = 0; tour < 4; tour++) {
     let gagne = false;

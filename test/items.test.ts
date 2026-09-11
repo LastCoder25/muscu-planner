@@ -47,6 +47,7 @@ import {
   rollJet,
   swapLoadoutGear,
   bestGearLoadout,
+  elagueDomines,
   type Item,
   type Equipped,
   enchantMult,
@@ -1608,5 +1609,56 @@ describe('⚠️ l’équipement conseillé est LOCALEMENT OPTIMAL', () => {
     expect(
       combatPower(playerWithGear('T', stats, best, {}, L, 'berserker')),
     ).toBeGreaterThanOrEqual(combatPower(playerWithGear('T', stats, porte, {}, L, 'berserker')));
+  });
+});
+
+describe('⚠️ élagage par DOMINANCE : rapide SANS jamais perdre le gagnant', () => {
+  // Le premier filtre gardait « les N meilleurs par score » et a JETÉ UN GAGNANT (+143
+  // mesuré) : classer, c'est déjà supposer qu'on sait comparer deux objets de natures
+  // différentes. La dominance ne compare que le comparable.
+  const mk = (id: string, slot: ItemSlot, v: Record<string, number>, setId?: string): Item => {
+    const e = Object.entries(v);
+    return {
+      id, name: 'x', slot, rarity: 'epique', level: 1, roll: 0,
+      effect: { type: e[0]![0] as EffectType, value: e[0]![1]! },
+      ...(e[1] ? { effect2: { type: e[1][0] as EffectType, value: e[1][1] } } : {}),
+      ...(setId ? { setId } : {}),
+    } as Item;
+  };
+
+  it('écarte ce qui est battu sur TOUS les axes', () => {
+    const fort = mk('a', 'weapon', { damage_pct: 30, crit_pct: 10 });
+    const faible = mk('b', 'weapon', { damage_pct: 20, crit_pct: 5 });
+    const ids = elagueDomines([fort, faible]).map((i) => i.id);
+    expect(ids).toContain('a');
+    expect(ids).not.toContain('b');
+  });
+
+  it('⚠️ GARDE tout compromis : meilleur sur un axe, moins bon sur l’autre', () => {
+    // C'est toute la différence avec un tri par score — le compromis est justement ce
+    // qu'un classement écrase, et ce qui gagne une fois le reste du build en place.
+    const a = mk('a', 'weapon', { damage_pct: 30, crit_pct: 5 });
+    const b = mk('b', 'weapon', { damage_pct: 20, crit_pct: 25 });
+    expect(elagueDomines([a, b])).toHaveLength(2);
+  });
+
+  it('⚠️ ne compare JAMAIS entre SETS différents', () => {
+    // Une pièce plus faible d'un autre set peut gagner par son bonus de set.
+    const fort = mk('a', 'weapon', { damage_pct: 30 }, 'voie:berserker');
+    const faible = mk('b', 'weapon', { damage_pct: 20 }, 'voie:gardien');
+    expect(elagueDomines([fort, faible])).toHaveLength(2);
+  });
+
+  it('⚠️ deux objets IDENTIQUES : on en garde UN, jamais zéro', () => {
+    // Ils se dominent mutuellement — sans départage, les deux disparaîtraient.
+    const a = mk('a', 'weapon', { damage_pct: 30 });
+    const b = mk('b', 'weapon', { damage_pct: 30 });
+    expect(elagueDomines([a, b])).toHaveLength(1);
+  });
+
+  it('ne mélange pas les emplacements', () => {
+    const arme = mk('a', 'weapon', { damage_pct: 30 });
+    const armure = mk('b', 'armor', { damage_pct: 20 });
+    expect(elagueDomines([arme, armure])).toHaveLength(2);
   });
 });

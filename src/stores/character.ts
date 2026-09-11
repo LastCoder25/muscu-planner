@@ -1001,6 +1001,8 @@ export const useCharacterStore = defineStore('character', () => {
      *  (constaté : « Porter le set Frénétique » → 2 Gardien + 1 Duelliste + 1 Berserker).
      *  Le chiffre annoncé était juste ; c'est le bouton qui ne tenait pas sa promesse. */
     forceSetId?: string,
+    /** Rendre le build MÊME s'il n'améliore pas l'actuel (cf. `bestBuild`). */
+    always?: boolean,
   ): { equipped: Equipped; talentIds: string[]; voie: string | null; score: number } | null {
     const cur = row.value;
     if (!cur) return null;
@@ -1174,13 +1176,32 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚠️ Le garde-fou protège l'équipement AUTOMATIQUE d'une perte accidentelle. Il ne
     // s'applique PAS à « Porter ce set » : là, le joueur choisit une identité, et il a le
     // droit de payer ce choix — l'aperçu lui annonce l'écart avant qu'il n'appuie.
-    if (!forceSetId && best.score <= curScore) return null;
+    if (!always && !forceSetId && best.score <= curScore) return null;
     return {
       equipped: best.equipped,
       talentIds: best.talents.filter((t) => t.equipped).map((t) => t.id),
       voie: best.voie,
       score: best.score,
     };
+  }
+
+  /** LE MEILLEUR BUILD POSSIBLE, qu'il soit meilleur que l'actuel ou non.
+   *
+   *  ⚠️ RÉFÉRENCE UNIQUE de toutes les comparaisons d'objets. Avant, chaque objet du sac
+   *  était comparé à CE QU'ON PORTE, tandis que l'équipement conseillé cherchait le
+   *  meilleur build POSSIBLE : deux étalons, donc deux verdicts qui pouvaient se
+   *  contredire sur le même objet (mesuré : un talisman à +30 pour la pastille, −15 dans
+   *  le build optimal — les deux justes, et l'écran incompréhensible). Avec un seul
+   *  étalon, la contradiction devient impossible par construction.
+   *
+   *  ⚠️ Distinct de `previewGearPlan`, qui rend `null` quand il n'y a rien à gagner :
+   *  pour comparer, il nous faut le build MÊME quand il est déjà porté. */
+  function bestBuild(
+    stats: { puissance: number; endurance: number; agilite: number },
+    level: number,
+    name: string,
+  ) {
+    return computeGearPlan(stats, level, name, undefined, undefined, true);
   }
 
   /** Le plan proposé, SANS rien appliquer — c'est ce que l'écran de revue affiche. */
@@ -2022,6 +2043,7 @@ export const useCharacterStore = defineStore('character', () => {
     stashSetPiece,
     optimizeGear,
     previewGearPlan,
+    bestBuild,
     applyGearPlan,
     setVoie,
     equipReplacing,

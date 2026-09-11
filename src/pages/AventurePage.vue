@@ -1029,10 +1029,12 @@
                     <span class="ii-cmp2-ic">⚔️</span>
                     <span
                       class="ii-cmp2-chip"
-                      :class="powerIfEquip(it) >= combatPowerVal ? 'up' : 'down'"
+                      :class="powerIfEquip(it) >= refPower ? 'up' : 'down'"
                     >
-                      <b>{{ fmtDelta(combatPowerVal, powerIfEquip(it)) }}</b
-                      ><i>{{ equippedInSlot(it.slot) ? 'vs équipé' : 'emplacement libre' }}</i>
+                      <b>{{ fmtDelta(refPower, powerIfEquip(it)) }}</b
+                      ><i>{{
+                        inOptimum(it) ? 'retenu par ton meilleur build' : 'vs ton meilleur build'
+                      }}</i>
                     </span>
                   </div>
                   <!-- Actions : Équiper · icônes vendre/lock -->
@@ -2175,10 +2177,10 @@
                   }}</span>
                 </div>
                 <div class="pow-cmp">
-                  ⚔️ vs équipé {{ fmtPow(combatPowerVal) }} →
-                  <b :class="powerIfEquip(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                  ⚔️ vs ton meilleur build {{ fmtPow(refPower) }} →
+                  <b :class="powerIfEquip(cand.item) >= refPower ? 'up' : 'down'"
                     >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
-                      fmtDelta(combatPowerVal, powerIfEquip(cand.item))
+                      fmtDelta(refPower, powerIfEquip(cand.item))
                     }})</b
                   >
                 </div>
@@ -2337,11 +2339,8 @@
                 <template v-if="run.kind === 'boss' && d.setId">
                   <div class="ii-cmp2">
                     <span class="ii-cmp2-ic">⚔️</span>
-                    <span
-                      class="ii-cmp2-chip"
-                      :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
-                    >
-                      <b>{{ fmtDelta(combatPowerVal, powerIfEquip(d)) }}</b
+                    <span class="ii-cmp2-chip" :class="powerIfEquip(d) >= refPower ? 'up' : 'down'">
+                      <b>{{ fmtDelta(refPower, powerIfEquip(d)) }}</b
                       ><i>si équipée seule</i>
                     </span>
                   </div>
@@ -2368,12 +2367,11 @@
                   <!-- Puissance si équipé (rang + qualité) vs l'objet équipé du même slot. -->
                   <div class="ii-cmp2">
                     <span class="ii-cmp2-ic">⚔️</span>
-                    <span
-                      class="ii-cmp2-chip"
-                      :class="powerIfEquip(d) >= combatPowerVal ? 'up' : 'down'"
-                    >
-                      <b>{{ fmtDelta(combatPowerVal, powerIfEquip(d)) }}</b
-                      ><i>{{ equippedInSlot(d.slot) ? 'vs équipé' : 'emplacement libre' }}</i>
+                    <span class="ii-cmp2-chip" :class="powerIfEquip(d) >= refPower ? 'up' : 'down'">
+                      <b>{{ fmtDelta(refPower, powerIfEquip(d)) }}</b
+                      ><i>{{
+                        inOptimum(d) ? 'retenu par ton meilleur build' : 'vs ton meilleur build'
+                      }}</i>
                     </span>
                   </div>
                   <div v-if="dropState(d) === 'equipped'" class="drop-done">
@@ -2474,10 +2472,10 @@
                       Équipé : {{ rewardCmpEquipped(cand.item) }}
                     </div>
                     <div class="pow-cmp">
-                      ⚔️ vs équipé {{ fmtPow(combatPowerVal) }} →
-                      <b :class="powerIfEquip(cand.item) >= combatPowerVal ? 'up' : 'down'"
+                      ⚔️ vs ton meilleur build {{ fmtPow(refPower) }} →
+                      <b :class="powerIfEquip(cand.item) >= refPower ? 'up' : 'down'"
                         >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
-                          fmtDelta(combatPowerVal, powerIfEquip(cand.item))
+                          fmtDelta(refPower, powerIfEquip(cand.item))
                         }})</b
                       >
                     </div>
@@ -2607,7 +2605,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import {
+  ref,
+  computed,
+  defineAsyncComponent,
+  onMounted,
+  onUnmounted,
+  watch,
+  nextTick,
+  shallowRef,
+} from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -3131,11 +3138,55 @@ function powerWith(eq: Equipped, fx: Partial<AggregatedEffects> = activeFx.value
     playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, fx, c.value.level.level, char.row?.voie),
   );
 }
-// Puissance si `it` remplaçait la pièce du même slot. La magnitude vient du DROP (rang ×
-// qualité, bakée dans effect.value) — plus d'axe enchant → comparaison directe.
-function powerIfEquip(it: Item): number {
-  return powerWith({ ...(char.row?.equipped ?? {}), [it.slot]: it });
+// ── ⭐ RÉFÉRENCE UNIQUE : LE MEILLEUR BUILD POSSIBLE ────────────────────────────────
+//
+// ⚠️ Toutes les comparaisons d'objets s'y adossent. Avant, chaque objet du sac était
+// comparé à CE QU'ON PORTE, tandis que l'équipement conseillé cherchait le meilleur build
+// POSSIBLE : deux étalons, donc deux verdicts contradictoires sur le même objet (mesuré :
+// un talisman « +30 » pour la pastille, −15 dans le build optimal — les deux justes, et
+// l'écran incompréhensible). Avec UN seul étalon, la contradiction devient impossible.
+//
+// ⚠️ Le calcul coûte ~3 s : on le CACHE, et on l'invalide quand le sac, l'équipement, les
+// talents, la voie ou le niveau changent — c'est-à-dire exactement quand il peut changer.
+const optimum = shallowRef<Equipped | null>(null);
+const optimumIds = shallowRef<Set<string>>(new Set());
+const optimumPower = ref(0);
+const optimumKey = computed(
+  () =>
+    `${char.row?.inventory?.length ?? 0}|${Object.values(char.row?.equipped ?? {})
+      .map((i) => i?.id ?? '')
+      .join(',')}|${char.row?.voie ?? ''}|${c.value.level.level}|${
+      normalizeTalents(char.row?.talents ?? []).filter((t) => t.equipped).length
+    }`,
+);
+let optimumFor = '';
+/** Calcule (ou recalcule) la référence. Synchrone et lourd : les appelants affichent un ⏳. */
+function ensureOptimum(): void {
+  if (optimumFor === optimumKey.value && optimum.value) return;
+  const plan = char.bestBuild(c.value, c.value.level.level, char.row?.pseudo ?? 'Toi');
+  if (!plan) return;
+  optimum.value = plan.equipped;
+  optimumIds.value = new Set(
+    Object.values(plan.equipped)
+      .filter(Boolean)
+      .map((i) => i.id),
+  );
+  optimumPower.value = plan.score;
+  optimumFor = optimumKey.value;
 }
+/** `it` fait-il PARTIE du meilleur build ? ⚠️ C'est LA question, et la seule : un objet
+ *  peut battre ta pièce actuelle sans figurer dans l'optimum, et c'est ce double discours
+ *  qui rendait les écrans incohérents. */
+function inOptimum(it: Item): boolean {
+  return optimumIds.value.has(it.id);
+}
+// Puissance si `it` remplaçait la pièce du même slot — RAPPORTÉE À LA RÉFÉRENCE quand
+// elle est calculée, à l'équipement porté sinon (premier affichage, avant le calcul).
+function powerIfEquip(it: Item): number {
+  return powerWith({ ...(optimum.value ?? char.row?.equipped ?? {}), [it.slot]: it });
+}
+/** La puissance à laquelle on COMPARE — l'étalon affiché à côté de chaque delta. */
+const refPower = computed(() => (optimum.value ? optimumPower.value : combatPowerVal.value));
 
 // Estimation live du % de victoire par donjon/boss selon les stats + le stuff
 // ÉQUIPÉ actuel (Monte-Carlo seedé). Recalculé quand le perso/l'équipement change
@@ -5043,11 +5094,14 @@ const filteredInventory = computed<Item[]>(() => {
 // classe de défaut que le gris de la carte (v0.738) : le calcul était juste, c'est le
 // LANGAGE qui trompait.
 function betterInBagForSlot(slot: ItemSlot): Item[] {
-  if (!equippedInSlot(slot)) return []; // slot vide → rien à comparer, pas de badge
-  const cur = combatPowerVal.value;
-  return (char.row?.inventory ?? []).filter(
-    (i) => !isFamiliar(i) && i.slot === slot && powerIfEquip(i) > cur,
-  );
+  ensureOptimum();
+  const veut = optimum.value?.[slot];
+  // ⚠️ 0 ou 1, et c'est le POINT : la pastille annonce désormais « la pièce que le
+  // meilleur build veut ici n'est pas celle que tu portes », et rien d'autre. L'ancienne
+  // comptait tout ce qui bat la pièce actuelle — souvent plusieurs objets dont AUCUN ne
+  // figurait dans l'optimum, d'où deux écrans qui se contredisaient.
+  if (!veut || veut.id === equippedInSlot(slot)?.id) return [];
+  return (char.row?.inventory ?? []).filter((i) => i.id === veut.id);
 }
 function betterInBagCount(slot: ItemSlot): number {
   return betterInBagForSlot(slot).length;
@@ -5653,16 +5707,20 @@ const bulkSlot = computed<ItemSlot | undefined>(() =>
 // Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés → candidats à la casse/vente
 // en masse. Puissance FIXE (grade + enchant) → comparaison directe « si équipé ». Slot vide
 // → l'objet est utile (à équiper), gardé. 🔒 protège ; familiers = piste à part.
+// ⚠️ CE QUI NE CONTRIBUE PAS AU MEILLEUR BUILD — une seule règle, le même étalon que
+// partout ailleurs. L'ancienne comparait chaque objet à CE QU'ON PORTE : elle ratait donc
+// tout ce qui bat la pièce actuelle sans figurer dans l'optimum, et c'est pour ça qu'elle
+// « ne marchait pas ». Elle épargne : les 🔒, les familiers (on ne démonte pas un animal),
+// ce qu'on porte, et les pièces retenues par le build optimal.
 const powerLossItems = computed<Item[]>(() => {
   const r = char.row;
   if (!r) return [];
-  const cur = combatPowerVal.value;
+  ensureOptimum();
   return r.inventory.filter((it) => {
     if (it.locked) return false;
     if (isFamiliar(it)) return false;
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
-    if (!equippedInSlot(it.slot)) return false; // slot vide → à équiper, on garde
-    return powerIfEquip(it) <= cur; // pas meilleur que l'équipé → candidat
+    return !inOptimum(it);
   });
 });
 const belowCount = computed(() => powerLossItems.value.length);
