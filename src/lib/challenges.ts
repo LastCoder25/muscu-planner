@@ -836,6 +836,43 @@ export function evaluateAchievements(challenges: Challenge[]): string[] {
  *  ⚠️ APPLIQUÉ DES DEUX CÔTÉS — objectif ET réalisé (`isChallengeComplete`) : le ratio
  *  reste identique, donc **aucun défi ne change d’état**. Ne convertir qu’un côté aurait
  *  rendu tous les défis en km instantanément terminés (ou jamais). */
+/** L’EFFORT DE CE DÉFI EST-IL DÉJÀ PAYÉ AILLEURS ?
+ *
+ *  Une sortie marche/course/vélo crédite son XP par le journal Cardio (`cardioSessionXp`),
+ *  et le défi n’en recrédite rien (`effortXpRaw` rend 0) — précisément pour ne pas compter
+ *  deux fois. Un défi de pompes, lui, est le SEUL enregistrement de son effort.
+ *
+ *  ⚠️ Cette asymétrie décide de la PRIME, et c’est tout l’objet de la v0.769. */
+function effortPaidByOutings(ch: Challenge): boolean {
+  return (
+    ch.unit === 'distance' || (ch.unit === 'time' && isCardioChallengeExercise(ch.exercise_id))
+  );
+}
+
+/** ⚖️ CE QUE LA PRIME DE COMPLÉTION AJOUTE, rapporté à l’effort planifié.
+ *
+ *  ⚠️ SIGNALÉ PAR L’UTILISATEUR — « 24k d’XP ??? ». Corriger l’unité (v0.768) rendait aux
+ *  défis en kilomètres une prime arithmétiquement cohérente… et **+24 100 XP d’un coup**
+ *  sur un compte réel, soit **+24 100 d’énergie** — 602 runs de donjon offerts, alors que
+ *  toute la doctrine tient sur « l’énergie lie le jeu au volume d’entraînement ».
+ *
+ *  ⚠️ LA CONVERSION N’ÉTAIT POURTANT PAS TROP GÉNÉREUSE : mesuré, la marche était payée
+ *  **2,8× son effort** contre **3,5×** pour les pompes. Le chiffre était énorme parce que
+ *  158 km, c’est 31 heures d’activité. Le vrai déséquilibre est ailleurs : pour un défi
+ *  de pompes, la prime est la RÉCOMPENSE PRINCIPALE (rien d’autre ne paie ces reps) ;
+ *  pour une sortie, l’effort est DÉJÀ intégralement payé par le journal Cardio, donc la
+ *  prime n’est qu’un BONUS D’ENGAGEMENT — pas une seconde paie.
+ *
+ *  ⚠️ `OUTING_BONUS_PCT` EST EXPRIMÉ COMME ON LE PENSE (« 10 % de l’XP que le défi a fait
+ *  gagner », formulation de l’utilisateur) et CONVERTI en coefficient d’effort planifié par
+ *  `REP_XP` — jamais un second nombre écrit à la main qui pourrait dériver du premier. */
+const COMPLETION_SHARE = 0.25;
+const OUTING_BONUS_PCT = 0.1;
+const COMPLETION_OUTING = OUTING_BONUS_PCT * REP_XP;
+function completionShare(ch: Challenge): number {
+  return effortPaidByOutings(ch) ? COMPLETION_OUTING : COMPLETION_SHARE;
+}
+
 function effortUnit(ch: Challenge): number {
   if (ch.unit === 'distance') return kmEffort(ch.exercise_id);
   if (ch.unit === 'time') {
@@ -1069,7 +1106,7 @@ export function challengeXpPoints(challenges: Challenge[]): number {
     // Base de la prime : en mode SÉRIES l'effort réel est en REPS (pas en nb de
     // séries) → on prime sur les reps réalisées ; sinon sur l'effort planifié.
     const base = c.config.count_mode === 'sets' ? challengeTotalReps(c) : total;
-    return a + Math.round(0.25 * base * weightOf(c) * mult);
+    return a + Math.round(completionShare(c) * base * weightOf(c) * mult);
   }, 0);
   return Math.round((repsXp + completionBonus) * XP_MULT);
 }
@@ -1085,7 +1122,7 @@ export function challengeXpBreakdown(c: Challenge): { reps: number; bonus: numbe
     const mult =
       c.format === 'cumulative' ? 1 + earlyFinishFraction(c) : durationMultiplier(activeDaysOf(c));
     const base = c.config.count_mode === 'sets' ? challengeTotalReps(c) : total;
-    bonusXp = 0.25 * base * weightOf * mult;
+    bonusXp = completionShare(c) * base * weightOf * mult;
   }
   const reps = Math.round(repsXp * XP_MULT);
   const bonus = Math.round(bonusXp * XP_MULT);

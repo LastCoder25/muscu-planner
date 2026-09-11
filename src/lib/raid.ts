@@ -383,7 +383,7 @@ export const RAID = {
    *  le mur SIGNIFIE, pas la difficulté du jeu. Plus de PV et moins de dégâts reçus =
    *  plus de tours tenus = plus de tirs de tourelles : le mur convertit sa solidité en
    *  temps, et les tourelles convertissent ce temps en morts. */
-  wallArmorK: 0.05,
+  wallArmorK: 0.65,
 
   // Coûts propres à la défense (cf. defenseUpgradeCost).
   upBase: 28,
@@ -402,13 +402,13 @@ export const RAID = {
   gearDropOther: 0.12,
   scrapBase: 6,
   scrapExp: 1.45,
-  turretDmgK: 0.105,
+  turretDmgK: 0.175,
   /** PV d'UNE tourelle, en part des PV de la référence.
    *  ⚠️ Le modèle à UN SEUL combattant n'en avait pas besoin — tout était fondu. Le
    *  moteur en deux phases, lui, en fait des unités qu'on peut RÉDUIRE AU SILENCE : sans
    *  PV, les archers assaillants n'auraient aucune prise et « faire taire les tireurs »
    *  ne voudrait rien dire. Modeste : une baliste est un ouvrage, pas un soldat. */
-  turretPvK: 1,
+  turretPvK: 0.42,
   /** La MEUTE du chenil, quand aucun aventurier ne défend : ce que valent les bêtes
    *  seules, en part de la référence du niveau. ⚠️ Volontairement modeste — c'est un
    *  filet pour que le chenil ne devienne jamais inutile, pas une garnison de rechange. */
@@ -1677,6 +1677,12 @@ export function siegeDefenders(
     const dmg =
       (refOff * RAID.turretDmgK * n * share(tl) * defenseEfficiency(defenses, 'turret')) / n;
     const pv = Math.max(1, Math.round(ref.pv * RAID.turretPvK * share(tl)));
+    // ⚠️ L’ABRI NE DÉPEND PAS DU NIVEAU DU MUR — un créneau est un créneau. Mis en
+    // facteur de `share`, il rouvrait la FALAISE que la v0.672 avait supprimée : une
+    // enceinte à moitié montée cumulait demi-abri et demi-PV, et tombait à 3 % de tenue
+    // (mesuré). Le NIVEAU du mur se paie en PV — il tient plus longtemps, donc il abrite
+    // plus longtemps. C’est déjà toute la boucle « il fait gagner du temps ».
+    const cover = defenseLevel(defenses, 'wall') > 0 ? RAID.wallArmorK : 0;
     for (let i = 0; i < n; i++) {
       out.push({
         id: `t${i}`,
@@ -1688,6 +1694,7 @@ export function siegeDefenders(
         maxPv: pv,
         damage: Math.max(1, Math.round(dmg)),
         origin: 'turret',
+        armor: cover,
       });
     }
   }

@@ -583,7 +583,11 @@ describe('⚖️ L’UNITÉ DE LA PRIME : un kilomètre n’est pas une pompe', 
       cardioSessionXp({ activity: 'marche', distance_km: 1, duration_min: 12 } as never) /
       XP_MULT /
       REP_XP;
-    expect(parKm).toBeCloseTo(attendu, 0);
+    // ⚠️ RÉÉCRIT : la prime d’une sortie porte DEUX facteurs depuis la v0.769 — la
+    // conversion (un km vaut ~95 équivalent-reps) ET la part d’engagement (10 % au lieu
+    // de 25 %, parce que le journal Cardio a déjà payé l’effort). Le test épinglait le
+    // premier seul ; il épingle maintenant le PRODUIT, seul observable depuis dehors.
+    expect(parKm).toBeCloseTo(attendu * ((0.1 * REP_XP) / 0.25), 0);
     expect(attendu).toBeGreaterThan(50);
   });
 
@@ -613,8 +617,11 @@ describe('⚖️ L’UNITÉ DE LA PRIME : un kilomètre n’est pas une pompe', 
     // marche un quart de pompe. Deux unités homonymes, deux barèmes.
     const sortie = base({ exercise_id: 'ex_ch_marche_course', unit: 'time' });
     const gainage = base({ exercise_id: 'ex_plank', unit: 'time' });
+    // ⚠️ Le facteur brut est d’environ 32 (une minute de sortie contre une seconde de
+    // gainage), mais la sortie ne touche que 10 % là où le gainage touche 25 % — son
+    // effort, lui, n’est payé nulle part ailleurs. Reste un écart NET, qui est le point.
     expect(challengeXpBreakdown(sortie).bonus).toBeGreaterThan(
-      challengeXpBreakdown(gainage).bonus * 10,
+      challengeXpBreakdown(gainage).bonus * 1.5,
     );
   });
 
@@ -625,5 +632,77 @@ describe('⚖️ L’UNITÉ DE LA PRIME : un kilomètre n’est pas une pompe', 
     const velo = base({ exercise_id: 'ex_ch_velo', unit: 'distance' });
     const marche = base({ exercise_id: 'ex_ch_marche_course', unit: 'distance' });
     expect(challengeXpBreakdown(velo).bonus).toBeLessThan(challengeXpBreakdown(marche).bonus);
+  });
+});
+
+describe('💸 UNE PRIME NE PAIE PAS DEUX FOIS LE MÊME EFFORT', () => {
+  // ⚠️ SIGNALÉ PAR L’UTILISATEUR — « 24k d’XP ??? ». Corriger l’unité (v0.768) rendait aux
+  // défis en kilomètres une prime arithmétiquement cohérente… et **+24 100 XP d’un coup**
+  // sur un compte réel, donc **+24 100 d’énergie** (602 runs de donjon offerts), alors que
+  // toute la doctrine tient sur « l’énergie lie le jeu au volume d’entraînement ».
+  //
+  // ⚠️ LA CONVERSION N’Y ÉTAIT POUR RIEN : mesuré, la marche était payée 2,8× son effort
+  // contre 3,5× pour les pompes. Le déséquilibre est ailleurs — pour un défi de pompes la
+  // prime est la récompense PRINCIPALE (rien d’autre ne paie ces reps) ; pour une sortie,
+  // le journal Cardio a DÉJÀ tout payé, donc la prime n’est qu’un bonus d’engagement.
+  const base = (over: Record<string, unknown>) =>
+    ({
+      id: 'c1',
+      exercise_id: 'ex_pushup',
+      unit: 'reps',
+      format: 'cumulative',
+      status: 'done',
+      start_date: '2026-08-01',
+      duration_days: 30,
+      daily_targets: new Array(30).fill(0),
+      config: { total: 100 },
+      progress: [{ day: 0, done: 100 }],
+      ...over,
+    }) as unknown as Challenge;
+
+  it('⚠️ un défi dont l’effort est DÉJÀ payé par les sorties ne touche qu’un bonus', () => {
+    // À effort planifié ÉGAL, la sortie reçoit une fraction de ce que touche un défi de
+    // reps : `OUTING_BONUS_PCT` (10 %) contre `COMPLETION_SHARE` (25 % de l’effort).
+    const km = base({ exercise_id: 'ex_ch_marche_course', unit: 'distance' });
+    const reps = base({});
+    const b = challengeXpBreakdown(km).bonus;
+    const r = challengeXpBreakdown(reps).bonus;
+    // Un km vaut ~95 équivalent-reps, donc la prime reste plus GROSSE en valeur absolue —
+    // ce qu’on vérifie est le RAPPORT, seul endroit où la règle vit.
+    const parUnite = b / r;
+    expect(parUnite).toBeGreaterThan(0);
+    // Sans la règle, ce rapport vaudrait ~95 (la conversion seule). Avec elle, ~12,5 fois
+    // moins. On borne largement : c’est l’ORDRE DE GRANDEUR qui est la garantie.
+    expect(parUnite).toBeLessThan(20);
+  });
+
+  it('⚠️ UN DÉFI DE REPS NE PERD RIEN — la règle ne touche que les sorties', () => {
+    // Non-régression : la prime des pompes est la récompense principale du défi, et ce
+    // chantier ne devait pas y toucher. Elle vaut exactement 25 % de l’effort planifié.
+    const reps = base({});
+    const km = base({ exercise_id: 'ex_ch_marche_course', unit: 'distance' });
+    // La prime des reps vaut COMPLETION_SHARE / COMPLETION_OUTING fois celle d’une
+    // sortie à effort planifié ÉGAL — autrement dit 12,5 fois plus. On lit le rapport
+    // sur la même paire, ce qui ne dépend d’aucun helper privé.
+    const parEquivalentRep = challengeXpBreakdown(km).bonus / challengeXpBreakdown(reps).bonus;
+    const kmEnReps =
+      cardioSessionXp({ activity: 'marche', distance_km: 1, duration_min: 12 } as never) /
+      XP_MULT /
+      REP_XP;
+    expect(parEquivalentRep).toBeCloseTo(kmEnReps * ((0.1 * REP_XP) / 0.25), 0);
+  });
+
+  it('⚠️ LE GAINAGE AU CHRONO GARDE SA PRIME PLEINE', () => {
+    // Piège d’homonymie : gainage et sortie cardio sont tous deux en `unit: 'time'`. Mais
+    // une planche n’est payée NULLE PART ailleurs — aucun journal ne l’enregistre. La règle
+    // se lit donc sur « qui paie l’effort », pas sur le nom de l’unité.
+    const planche = base({ exercise_id: 'ex_plank', unit: 'time' });
+    const sortie = base({ exercise_id: 'ex_ch_marche_course', unit: 'time' });
+    const parUnite =
+      challengeXpBreakdown(sortie).bonus / Math.max(1, challengeXpBreakdown(planche).bonus);
+    // Une minute de marche pèse ~8-17 équivalent-reps contre 0,25 pour une seconde de
+    // gainage ; sans la règle le rapport dépasserait 30. Avec elle, il reste modeste.
+    expect(parUnite).toBeLessThan(12);
+    expect(challengeXpBreakdown(planche).bonus).toBeGreaterThan(0);
   });
 });

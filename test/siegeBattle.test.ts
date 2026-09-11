@@ -288,3 +288,50 @@ function mulberryish(): () => number {
   let x = 123456789;
   return () => (x = (x * 1664525 + 1013904223) >>> 0) / 4294967296;
 }
+
+describe('🛡️ L’ABRI DU REMPART', () => {
+  // ⚠️ `wallArmorK` existait depuis la v0.753 (« le mur abrite ceux qui tirent ») et ce
+  // moteur ne l’a JAMAIS lu : `SiegeUnit` n’avait pas d’armure. Faute d’abri, il avait fallu
+  // gonfler les balistes, et un joueur l’a vu — « les tourelles ont plus de vie que le
+  // mur ». Une baliste est une MACHINE posée sur le rempart : elle a peu de PV et elle
+  // dure parce qu’elle est couverte.
+
+  it('un tireur ABRITÉ encaisse moins qu’un tireur à découvert', () => {
+    const coup = (armor: number, murPv: number) => {
+      const cible = def('ranged', { id: 'c', pv: 1000, maxPv: 1000, damage: 1, armor });
+      const r = simulateSiege(
+        [att('ranged', { damage: 100, pv: 10_000, maxPv: 10_000 })],
+        [cible],
+        wall(murPv, 1000),
+        7,
+      );
+      return r.log.find((e) => e.kind === 'hit' && e.to === 'c')?.amount ?? 0;
+    };
+    expect(coup(0.5, 1000)).toBeLessThan(coup(0, 1000));
+    // ⚠️ ET L’ABRI S’ÉRODE AVEC LE MUR : à mi-rempart il ne protège plus qu’à moitié.
+    expect(coup(0.5, 500)).toBeGreaterThan(coup(0.5, 1000));
+    // Mur tombé, plus aucun abri — c’est ce qui fait du rempart une structure qui COUVRE.
+    expect(coup(0.5, 0)).toBe(coup(0, 1000));
+  });
+
+  it('⚠️ UN ABRI NE REND JAMAIS INVULNÉRABLE', () => {
+    // Le plafond de `strike` est INATTEIGNABLE avec les valeurs du jeu (l’abri vaut 0,65),
+    // donc une assertion posée sur une partie réelle ne le couvrirait PAS — exactement le
+    // piège du plafond de réduction de la v0.753, qui donnait le vert sans rien vérifier.
+    // On l’éprouve donc DIRECTEMENT, avec une unité sur-blindée : sans plafond, une armure
+    // de 1 rendrait la cible immortelle et la bataille ne finirait jamais.
+    const r = simulateSiege(
+      [att('ranged', { damage: 100, pv: 10_000, maxPv: 10_000 })],
+      [def('ranged', { id: 'c', pv: 1000, maxPv: 1000, damage: 1, armor: 5 })],
+      wall(1000, 1000),
+      7,
+    );
+    const touche = r.log.find((e) => e.kind === 'hit' && e.to === 'c');
+    // ⚠️ « > 0 » NE PROUVE RIEN : le plancher `Math.max(1, …)` garantit déjà qu’un coup
+    // touche, donc retirer le plafond passait au VERT. On épingle la MAGNITUDE : au
+    // plafond (0,9) il reste 10 % des dégâts, soit 10 ; sans plafond il ne resterait que
+    // le plancher, soit 1.
+    expect(touche?.amount ?? 0).toBeGreaterThan(5);
+    expect(touche!.amount!).toBeLessThan(20);
+  });
+});

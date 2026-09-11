@@ -68,6 +68,18 @@ export interface SiegeUnit {
    *  Le front est donc une capacité d'ESPACE, pas un décompte : un loup tient moins de
    *  place qu'un mercenaire en armure, il en rentre davantage au pied du rempart. */
   bulk?: number;
+  /** 🛡️ CE QUE LE REMPART ABSORBE POUR CETTE UNITÉ (0..1), tant qu’il tient.
+   *
+   *  ⚠️ C’EST LE MÉTIER DU MUR, ET IL AVAIT ÉTÉ PERDU. `wallArmorK` existe depuis la
+   *  v0.753 (« le mur encaisse et abrite ceux qui tirent ») mais le moteur en deux phases
+   *  ne l’a JAMAIS lu — `SiegeUnit` n’avait pas d’armure et `strike` appliquait les dégâts
+   *  bruts. Une baliste tire depuis le HAUT du rempart : sans lui, elle se fait faucher.
+   *
+   *  ⚠️ L’ABRI S’ÉRODE AVEC LE MUR (× son intégrité) : un rempart entamé protège moins,
+   *  un rempart tombé ne protège plus. C’est ce qui fait du mur une structure qui COUVRE
+   *  et pas un second réservoir de PV — et c’est ce qui garde l’usure en fin de partie,
+   *  quand les grosses armées ouvrent vite. */
+  armor?: number;
 }
 
 export interface SiegeWall {
@@ -226,8 +238,19 @@ function defenderTargets(u: SiegeUnit, att: SiegeUnit[], breach: number): SiegeU
   return att.filter(alive);
 }
 
-function strike(from: SiegeUnit, to: SiegeUnit, amount: number, round: number, log: BattleEvent[]) {
-  const dealt = Math.min(to.pv, Math.max(1, Math.round(amount)));
+function strike(
+  from: SiegeUnit,
+  to: SiegeUnit,
+  amount: number,
+  round: number,
+  log: BattleEvent[],
+  /** Intégrité du rempart (0..1) : ce qui reste de l’abri. */
+  shelter = 0,
+) {
+  // ⚠️ Le plancher à 1 s’applique APRÈS l’abri : un coup touche toujours, sinon une
+  // armure élevée rendrait une unité invulnérable et la bataille ne finirait jamais.
+  const soften = 1 - Math.min(0.9, Math.max(0, (to.armor ?? 0) * Math.max(0, shelter)));
+  const dealt = Math.min(to.pv, Math.max(1, Math.round(amount * soften)));
   to.pv -= dealt;
   log.push({ round, kind: 'hit', from: from.id, to: to.id, amount: dealt });
   if (to.pv <= 0) log.push({ round, kind: 'down', to: to.id });
@@ -283,13 +306,15 @@ export function simulateSiege(
         ? att.filter((a) => a.inside && alive(a))
         : defenderTargets(d, att, width);
       const cible = pickTarget(cibles, rng);
-      if (cible) strike(d, cible, d.damage, round, log);
+      if (cible)
+        strike(d, cible, d.damage, round, log, w.maxPv > 0 ? Math.max(0, w.pv) / w.maxPv : 0);
     }
 
     // ── 2. La mêlée défensive tient la brèche ──────────────────────────────
     for (const d of def.filter((x) => x.kind === 'melee' && alive(x))) {
       const cible = pickTarget(defenderTargets(d, att, width), rng);
-      if (cible) strike(d, cible, d.damage, round, log);
+      if (cible)
+        strike(d, cible, d.damage, round, log, w.maxPv > 0 ? Math.max(0, w.pv) / w.maxPv : 0);
     }
 
     // ── 3. Les assaillants ─────────────────────────────────────────────────
@@ -324,7 +349,14 @@ export function simulateSiege(
         a.kind === 'ranged' && !a.inside && !def.some((d) => d.kind === 'ranged' && alive(d));
       const cible = pickTarget(cibles, rng);
       if (cible)
-        strike(a, cible, a.damage * (through ? BATTLE.rangedThroughBreach : 1), round, log);
+        strike(
+          a,
+          cible,
+          a.damage * (through ? BATTLE.rangedThroughBreach : 1),
+          round,
+          log,
+          w.maxPv > 0 ? Math.max(0, w.pv) / w.maxPv : 0,
+        );
     }
 
     // ── 4. La brèche s'ouvre, s'élargit, et on la franchit ─────────────────

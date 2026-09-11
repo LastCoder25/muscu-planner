@@ -1519,15 +1519,34 @@ describe('⚔️🧱 LES UNITÉS DU SIÈGE — dérivées du vrai état, jamais 
       expect(siegeDefenders(d(28, 0), 28, null)).toHaveLength(0);
     });
 
-    it('⚠️ les tourelles ont des PV : sans eux, « faire taire les tireurs » n’existe pas', () => {
-      // Le modèle à un seul combattant n'en avait pas besoin — tout y était fondu.
-      // ⚠️ « > 0 » ne prouve RIEN : le plancher `Math.max(1, …)` le garantit déjà, donc
-      // mettre turretPvK à zéro passait au VERT. On épingle une DURÉE DE VIE : une
-      // baliste doit encaisser plusieurs fois ce qu’elle tire, sinon elle est muette
-      // avant d’avoir servi (mesuré : à turretPvK 0,5 elles tombaient en 3 tours).
+    it('⚠️ une baliste tient parce que le REMPART LA COUVRE, pas parce qu’elle est épaisse', () => {
+      // ⚠️ RÉÉCRIT. Le test épinglait `maxPv > damage × 3` sur les PV BRUTS — vrai du
+      // modèle où il fallait gonfler les balistes faute d’abri, faux depuis que le mur
+      // les couvre (`armor`). Un joueur l’avait vu : « les tourelles ont plus de vie que
+      // le mur ». Une baliste est une MACHINE : elle a des PV et une attaque, mais c’est
+      // sa position sur le rempart qui la fait durer.
       const t = siegeDefenders(d(28, 28), 28, null)[0]!;
       expect(t.damage).toBeGreaterThan(0);
-      expect(t.maxPv).toBeGreaterThan(t.damage * 3);
+      // Elle est ABRITÉE tant que le mur tient — sans quoi « faire taire les tireurs »
+      // se réglerait au premier tour.
+      expect(t.armor ?? 0).toBeCloseTo(RAID.wallArmorK, 6);
+      // Et la DURÉE DE VIE, seule garantie qui compte, se lit abri compris.
+      expect(t.maxPv / (1 - (t.armor ?? 0))).toBeGreaterThan(t.damage * 3);
+      // ⚠️ Sans mur, plus d’abri du tout : le rempart est la SEULE source de couverture.
+      expect(siegeDefenders(d(0, 28), 28, null)[0]!.armor ?? 0).toBe(0);
+    });
+
+    it('⚠️ LE MUR PORTE PLUS DE PV QUE TOUTES LES BALISTES RÉUNIES', () => {
+      // Signalé par un joueur, et c’est le repère du modèle : la MURAILLE est la
+      // structure qui protège — elle n’a qu’un chiffre, des PV — et les tourelles sont
+      // des machines posées dessus. Le rapport est arithmétique : `wallPvK` contre
+      // `TURRET_SLOTS × turretPvK`. Au-dessus, le rempart cesse d’être le gros du mur.
+      expect(RAID.wallPvK).toBeGreaterThan(TURRET_SLOTS * RAID.turretPvK);
+      const mur = siegeWallOf(d(28, 28), 28).maxPv;
+      const balistes = siegeDefenders(d(28, 28), 28, null)
+        .filter((u) => u.origin === 'turret')
+        .reduce((n, u) => n + u.maxPv, 0);
+      expect(mur).toBeGreaterThan(balistes);
     });
 
     it('⚠️ le HÉROS tient la brèche au CORPS À CORPS', () => {

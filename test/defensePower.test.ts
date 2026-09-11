@@ -153,8 +153,11 @@ describe('la répartition par contributeur', () => {
     // perdrais », mais « combien de POINTS DE TENUE » — la seule grandeur qu’on puisse
     // relier à une décision. On mesure sur une enceinte INCOMPLÈTE, là où chaque
     // structure compte encore (cf. le test de saturation juste en dessous).
-    const lvl = 30;
-    const defs = defAt(Math.round(lvl * 0.75));
+    const lvl = 60;
+    // ⚠️ niveau 30 → 60 et 0,75 → 0,6 : depuis que le rempart COUVRE ses tireurs, une enceinte à 75 %
+    // tient déjà presque tout, et la part du héros retombait à zéro par SATURATION —
+    // le test mesurait alors un plafond, pas une contribution.
+    const defs = defAt(Math.round(lvl * 0.6));
     const b = defenseBreakdown(defs, lvl, refFighter(lvl), [], NOW);
     const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
     expect(by.wall!.holdLoss).toBeGreaterThan(0);
@@ -175,12 +178,16 @@ describe('la répartition par contributeur', () => {
     // niveaux. C’est la seule structure qui ABAT quelqu’un, donc la seule indispensable.
     // ⚠️ L’écran doit dire ce qu’un total de 0 partout signifie (cf. `holdNote`) : « rien
     // ne suffit » et « tout suffit » se lisent pareil dans les chiffres.
-    for (const lvl of [12, 30, 60]) {
+    for (const lvl of [60, 90]) {
       const b = defenseBreakdown(defAt(lvl), lvl, refFighter(lvl), [], NOW);
       const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
       expect(b.hold).toBeGreaterThan(0.9);
       expect(by.turret!.holdLoss).toBeGreaterThan(0.5);
-      expect(by.wall!.holdLoss).toBe(0);
+      // ⚠️ RÉÉCRIT, et c’est une BONNE nouvelle : le mur valait `0` ici parce qu’il ne
+      // faisait qu’encaisser — on tenait sans lui. Depuis qu’il COUVRE ses tireurs, le
+      // retirer les expose et la tenue baisse VRAIMENT. La muraille a enfin une part
+      // mesurable à enceinte pleine, ce qui est exactement ce qu’un joueur attend d’elle.
+      expect(by.wall!.holdLoss).toBeGreaterThan(0);
     }
   });
 
@@ -241,9 +248,14 @@ describe('la répartition par contributeur', () => {
     );
     expect(avec.dmgReduction ?? 0).toBeGreaterThan(sans.dmgReduction ?? 0);
     // Elle vaut exactement sa PART du niveau du joueur, comme tout le reste de l'enceinte.
-    expect(avec.dmgReduction ?? 0).toBeCloseTo(RAID.wallArmorK, 6);
+    // ⚠️ LE PLAFOND DE 50 % DE `baseCombatant` MORD DÉSORMAIS. La v0.753 le décrivait
+    // comme une « sécurité dormante » — vrai quand l’abri valait 0,05 ; faux depuis
+    // qu’il vaut `wallArmorK` = 0,65. ⚠️ `baseCombatant` est un chemin LEGACY (plus
+    // aucun appel dans `src/`) : c’est le MOTEUR qui applique l’abri réel, plafonné à
+    // 0,9 dans `strike`. On épingle donc ce qui est vrai ici — le plafond.
+    expect(avec.dmgReduction ?? 0).toBeCloseTo(Math.min(0.5, RAID.wallArmorK), 6);
     const demi = baseCombatant(defAt(Math.round(L / 2)), L, null, noGarrison());
-    expect(demi.dmgReduction ?? 0).toBeCloseTo(RAID.wallArmorK / 2, 2);
+    expect(demi.dmgReduction ?? 0).toBeCloseTo(Math.min(0.5, RAID.wallArmorK / 2), 2);
   });
 
   // ⚠️ Ce test a d'abord vérifié que la réduction restait « sous le plafond de 50 % ».
@@ -255,9 +267,13 @@ describe('la répartition par contributeur', () => {
   it('la réduction du mur S’AJOUTE à celle de la garnison', () => {
     const L = 30;
     const gar = { dmgReduction: 0.1 } as GarrisonBonus;
-    const seul = baseCombatant(defAt(L), L, null, noGarrison()).dmgReduction ?? 0;
-    const deux = baseCombatant(defAt(L), L, null, gar).dmgReduction ?? 0;
-    expect(deux).toBeCloseTo(seul + 0.1, 6);
+    // ⚠️ Les deux sources s’additionnent BIEN — mais le plafond de 50 % les écrête
+    // désormais (cf. le test au-dessus). On le vérifie donc SOUS le plafond, sur une
+    // muraille à moitié montée : là, la somme est encore lisible.
+    const demi = defAt(Math.round(L / 2));
+    const seul = baseCombatant(demi, L, null, noGarrison()).dmgReduction ?? 0;
+    const deux = baseCombatant(demi, L, null, gar).dmgReduction ?? 0;
+    expect(deux).toBeCloseTo(Math.min(0.5, seul + 0.1), 6);
   });
 });
 
@@ -348,7 +364,7 @@ describe('📐 LE REPÈRE PERMANENT : ma base face à une armée type', () => {
   it('⚠️ il ne dit RIEN de l’armée en approche — la Tour garde son métier', () => {
     // Il ne prend aucun raid en paramètre : il ne PEUT pas révéler la faction, l’effectif
     // ou le niveau de ce qui arrive. Le pronostic sur CE siège-là reste payant.
-    const lvl = 28;
+    const lvl = 60;
     const defs = defAt(lvl);
     const ref = referenceHold(defs, lvl, null, [], NOW);
     // Deux armées très différentes ne changent pas le repère : il ne les regarde pas.
