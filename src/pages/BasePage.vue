@@ -2041,8 +2041,14 @@ const doCollect = () =>
   stroke: #ff6a45;
   animation: ring-alert 2.4s ease-in-out infinite;
 }
+/* ⚠️ PAS l’accent : le point de récolte des bâtiments de ressources est déjà en accent,
+   et deux signaux de même couleur se lisent comme un seul — on confondait la fosse à
+   fouiller avec une mine à récolter. Vert « gain » (d1), trait plus épais, ET pointillé :
+   deux différences en plus de la couleur, pour que ça tienne sans elle. */
 .yard-ring.todo {
-  stroke: var(--accent);
+  stroke: #7bc86c;
+  stroke-width: 1.8;
+  stroke-dasharray: 2.2 1.4;
   animation: ring-todo 2s ease-in-out infinite;
 }
 @keyframes ring-alert {
@@ -2057,10 +2063,10 @@ const doCollect = () =>
 @keyframes ring-todo {
   0%,
   100% {
-    opacity: 0.35;
+    opacity: 0.55;
   }
   50% {
-    opacity: 0.9;
+    opacity: 1;
   }
 }
 @media (prefers-reduced-motion: reduce) {
