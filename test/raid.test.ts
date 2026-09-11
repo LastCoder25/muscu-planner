@@ -37,6 +37,8 @@ import {
   duplicateFamiliars,
   garrisonSlots,
   garrisonRankCap,
+  garrisonNextSlotLevel,
+  GARRISON_ROLE,
   garrisonRankLabel,
   canGarrison,
   raidThreatSize,
@@ -762,6 +764,22 @@ describe('chenil : la garnison', () => {
     for (let l = 0; l < 100; l++)
       expect(garrisonSlots(l + 1)).toBeGreaterThanOrEqual(garrisonSlots(l));
     expect(garrisonSlots(40)).toBeGreaterThan(garrisonSlots(5));
+  });
+
+  it('⚠️ JAMAIS PLUS DE PLACES QUE DE RÔLES — aucun trou permanent', () => {
+    // ⚠️ Signalé par l'utilisateur (« tu as fait le chenil sur la même base de lvl que la
+    // guilde ? ») : la question a révélé que `garrisonSlots` promettait 9 places au
+    // Chenil 40 et 21 au 100, alors que `dedupeGarrisonRoles` ne garde qu'UN familier
+    // par rôle — 15 places qui ne pouvaient JAMAIS se remplir, et un « 6/21 postés » à
+    // vie. Même défaut que les emplacements de la cour (v0.676), même remède : on DÉRIVE
+    // la borne du roster au lieu de l'écrire.
+    const roles = new Set(Object.values(GARRISON_ROLE)).size;
+    for (let l = 0; l <= 120; l++) expect(garrisonSlots(l)).toBeLessThanOrEqual(roles);
+    // …et on l'atteint VRAIMENT : une borne qu'on ne touche jamais ne borne rien.
+    expect(garrisonSlots(120)).toBe(roles);
+    // Le pas reste annoncé tant qu'il reste une place, et se tait ensuite.
+    expect(garrisonNextSlotLevel(1)).toBeGreaterThan(1);
+    expect(garrisonNextSlotLevel(120)).toBeNull();
   });
 
   it('⚠️ LES PLACES BORNENT VRAIMENT LE BONUS, rôles distincts compris', () => {

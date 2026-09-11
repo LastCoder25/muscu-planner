@@ -980,8 +980,17 @@ export const ROLE_LABEL: Record<GarrisonRole, string> = {
  *  donc plafonnés (`GARRISON_CAP`), faute de quoi une garnison de dix rendrait la base
  *  imprenable. Seuls le renseignement et la fouille, qui ne sont pas des stats de combat,
  *  s'additionnent librement. */
+/** ⚠️ PLAFOND DÉRIVÉ DU NOMBRE DE RÔLES, jamais écrit à la main. `dedupeGarrisonRoles`
+ *  ne garde qu’UN familier par rôle : au-delà, une place ne peut JAMAIS se remplir.
+ *  Sans cette borne, le Chenil 40 annonçait « 6/9 postés » à vie et le 100 « 6/21 » —
+ *  soit 15 trous permanents, exactement le défaut des emplacements de la cour corrigé
+ *  en v0.676 (`plotCap` dérivé de `BUILDING_TYPES.length`). Ajouter un rôle ouvre
+ *  une place tout seul. */
+const GARRISON_ROLE_COUNT = new Set(Object.values(GARRISON_ROLE)).size;
+
 export function garrisonSlots(kennelLevel: number): number {
-  return kennelLevel <= 0 ? 0 : 1 + Math.floor(kennelLevel / 5);
+  if (kennelLevel <= 0) return 0;
+  return Math.min(GARRISON_ROLE_COUNT, 1 + Math.floor(kennelLevel / 5));
 }
 
 /** 🎖️ RANG MAXIMAL qu’un familier peut avoir pour tenir le mur — le second levier du
@@ -1013,6 +1022,16 @@ export function garrisonRankCap(kennelLevel: number): number {
 export function garrisonRankLabel(kennelLevel: number): string {
   const i = garrisonRankCap(kennelLevel);
   return i < 0 ? '—' : RARITY_LABEL[RANK_ORDER[i]!];
+}
+
+/** Le niveau de Chenil qui ouvrira la place SUIVANTE — `null` une fois toutes les
+ *  places ouvertes. ⚠️ La règle du pas (`/5`) ET son plafond vivent ICI : l’écran la
+ *  recalculait, et annonçait donc « +1 place au niveau 30 » alors qu’aucune ne viendra
+ *  plus jamais. Une règle recopiée finit toujours par mentir. */
+export function garrisonNextSlotLevel(kennelLevel: number): number | null {
+  const l = Math.max(0, kennelLevel);
+  const next = (Math.floor(l / 5) + 1) * 5;
+  return garrisonSlots(next) > garrisonSlots(l) ? next : null;
 }
 
 /** Le niveau de Chenil qui ouvrira le rang SUIVANT — `null` une fois au sommet.

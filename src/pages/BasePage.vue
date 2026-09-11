@@ -777,7 +777,12 @@
         <div v-if="defSel.id === 'kennel' && kennelLevel" class="sh-garrison">
           <div class="sh-gtitle">
             🐾 Garnison — {{ garrisonIds.length }}/{{ slots }} postés
-            <span class="sh-gnext">· +1 place au niveau {{ nextSlotLevel }}</span>
+            <span v-if="nextSlotLevel" class="sh-gnext">
+              · +1 place au niveau {{ nextSlotLevel }}
+            </span>
+            <!-- ⚠️ Un rôle par poste : au-delà, une place ne pourrait JAMAIS se remplir.
+                 Le dire, plutôt que laisser chercher le niveau suivant. -->
+            <span v-else class="sh-gnext">· toutes les places sont ouvertes</span>
           </div>
           <!-- ⚠️ LE RANG MAXIMAL EST LE SECOND LEVIER du Chenil, comme la Guilde pour
                les aventuriers : sans cette ligne, on trouve un familier légendaire, on
@@ -965,6 +970,7 @@ import {
   garrisonSlots,
   garrisonRankLabel,
   garrisonNextRankLevel,
+  garrisonNextSlotLevel,
   canGarrison,
   GARRISON_CAP,
   isFatigued,
@@ -1207,7 +1213,7 @@ const garrisoned = computed(() => {
  *  de la Guilde (demandé par l’utilisateur). Une de plus tous les 5 niveaux du
  *  bâtiment — et c’est lui, pas le personnage, qu’on améliore pour en poster plus. */
 const slots = computed(() => garrisonSlots(kennelLevel.value));
-const nextSlotLevel = computed(() => (Math.floor(kennelLevel.value / 5) + 1) * 5);
+const nextSlotLevel = computed(() => garrisonNextSlotLevel(kennelLevel.value));
 /** Le rang le plus haut que le Chenil sait héberger, et le niveau qui ouvre le suivant. */
 const rankCapLabel = computed(() => garrisonRankLabel(kennelLevel.value));
 /** Ce familier tient-il dans l’école ? ⚠️ Même fonction que le combat et que le
