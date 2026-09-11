@@ -11,6 +11,26 @@
       </p>
 
       <template v-else>
+        <!-- ⚠️ LE RECRUTEMENT EN TÊTE, et dans sa propre feuille (signalé). Il vivait
+             tout au FOND du panneau, sous la liste : à dix aventuriers, le choix de la
+             première classe — celui qui engage une LIGNÉE entière — se trouvait hors
+             écran et se lisait mal. Il suit désormais le patron de la promotion : un
+             bouton, puis une feuille qui ne montre QUE ce choix.
+             ⚠️ Déplacé dans le DOM, PAS par `order` : `.guild-card` n'est pas un
+             conteneur flex, donc un `order: -1` n'aurait rien fait — et la rendre flex
+             aurait déplacé la mise en page des quatre feuilles qui partagent la classe. -->
+        <button
+          v-if="roster.length < maxRoster"
+          class="voie-btn g-hire"
+          :disabled="busy || gold < cost"
+          @click="recruitOpen = true"
+        >
+          ➕ Recruter un aventurier — {{ cost }} 🪙
+        </button>
+        <div v-else class="g-note g-full">
+          Guilde pleine ({{ roster.length }}/{{ maxRoster }}). <b>Monte-la d’un niveau</b> pour
+          loger quelqu’un de plus.
+        </div>
         <!-- ── Le vivier ── -->
         <div v-if="!roster.length" class="g-empty">
           Personne encore. Recrute ton premier aventurier — il escortera tes caravanes.
@@ -72,43 +92,6 @@
             ⭐ Promouvoir
           </button>
         </div>
-
-        <!-- ── Recruter ── -->
-        <div class="g-recruit">
-          <div v-if="roster.length >= maxRoster" class="g-note">
-            Guilde pleine. <b>Monte-la d’un niveau</b> pour loger quelqu’un de plus.
-          </div>
-          <template v-else>
-            <div class="g-note">
-              Recruter : <b>{{ cost }} 🪙</b> — le prix monte avec l’effectif.
-            </div>
-            <div class="g-choices">
-              <button
-                v-for="c in offers"
-                :key="c.id"
-                class="g-choice"
-                :disabled="busy || gold < cost"
-                @click="doRecruit(c.id)"
-              >
-                <span class="gc-emo">{{ c.emoji }}</span>
-                <span class="gc-lbl">{{ c.label }}</span>
-                <!-- ⚠️ Le recrutement se faisait À L'AVEUGLE : il n'annonçait que
-                     « 💪3 ❤️2 ⚡1 », quand la promotion nomme déjà l'orientation, le rôle
-                     de convoi et la signature. On choisissait une LIGNÉE sans savoir ce
-                     qu'elle donne. Même lecture des deux côtés. -->
-                <span class="gc-shape">{{ advShapeLabel(c.w) }} · {{ shape(c) }}</span>
-                <span v-if="c.role" class="gc-perk">{{ ADV_ROLE_LABEL[c.role] }}</span>
-                <span v-if="c.signature && ADV_SIGNATURE_LABEL[c.signature]" class="gc-perk sig">
-                  {{ ADV_SIGNATURE_LABEL[c.signature] }}
-                </span>
-                <!-- « Où il va » : ce que la voie peut encore débloquer plus tard. -->
-                <span v-if="horizonOf(c.id).length" class="gc-horizon">
-                  mène à {{ horizonOf(c.id).join(' · ') }}
-                </span>
-              </button>
-            </div>
-          </template>
-        </div>
       </template>
 
       <div class="g-actions">
@@ -167,6 +150,51 @@
       </div>
     </q-card>
   </q-dialog>
+
+  <!-- ── RECRUTER : une feuille qui ne montre QUE ce choix ──────────────────
+       ⚠️ La classe de DÉPART engage toute la lignée (la filiation est stricte), donc
+       elle mérite le même traitement qu'une promotion : un écran à elle. -->
+  <q-dialog v-model="recruitOpen" position="bottom">
+    <q-card class="guild-card">
+      <div class="g-title font-display">⚔️ Une nouvelle recrue</div>
+      <p class="g-note">
+        Choisis sa <b>voie de départ</b>. Elle décide de ce qui lui sera proposé ensuite — un
+        Guerrier ne se verra <b>jamais</b> offrir la voie d’un Clerc.
+      </p>
+      <div class="g-cost">
+        💰 Recrutement : <b>{{ cost }} 🪙</b> — le prix monte avec l’effectif.
+      </div>
+      <div class="g-choices">
+        <button
+          v-for="c in offers"
+          :key="c.id"
+          class="g-choice"
+          :disabled="busy || gold < cost"
+          @click="doRecruit(c.id)"
+        >
+          <span class="gc-emo">{{ c.emoji }}</span>
+          <span class="gc-lbl">{{ c.label }}</span>
+          <!-- ⚠️ Le recrutement se faisait À L'AVEUGLE : il n'annonçait que
+                     « 💪3 ❤️2 ⚡1 », quand la promotion nomme déjà l'orientation, le rôle
+                     de convoi et la signature. On choisissait une LIGNÉE sans savoir ce
+                     qu'elle donne. Même lecture des deux côtés. -->
+          <span class="gc-shape">{{ advShapeLabel(c.w) }} · {{ shape(c) }}</span>
+          <span v-if="c.role" class="gc-perk">{{ ADV_ROLE_LABEL[c.role] }}</span>
+          <span v-if="c.signature && ADV_SIGNATURE_LABEL[c.signature]" class="gc-perk sig">
+            {{ ADV_SIGNATURE_LABEL[c.signature] }}
+          </span>
+          <!-- « Où il va » : ce que la voie peut encore débloquer plus tard. -->
+          <span v-if="horizonOf(c.id).length" class="gc-horizon">
+            mène à {{ horizonOf(c.id).join(' · ') }}
+          </span>
+        </button>
+      </div>
+      <div class="g-actions">
+        <q-btn flat no-caps label="Plus tard" @click="recruitOpen = false" />
+      </div>
+    </q-card>
+  </q-dialog>
+
   <!-- ── FICHE D'UN AVENTURIER ──────────────────────────────────────────────
          Tout ce que le vivier ne peut pas montrer sans devenir illisible.
          ⚠️ Toujours PAS de niveau : c'est la règle posée à la conception (« un aventurier
@@ -264,7 +292,7 @@
 // promotions. ⚠️ On n'affiche JAMAIS le niveau d'un aventurier — seulement son rang et
 // l'avancement vers l'étoile suivante. C'est la règle posée dès la conception (« un
 // aventurier de manga »), et c'est aussi ce qui rend la barre indispensable.
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
@@ -294,7 +322,13 @@ import { rankStarStr } from '@/lib/characterRank';
 import { RARITY_LABEL } from '@/lib/items';
 import { trainMsFor } from '@/lib/caravan';
 
-defineProps<{ open: boolean }>();
+const props = defineProps<{
+  open: boolean;
+  /** `'recruit'` : ouvrir DIRECTEMENT sur le choix de classe. Posé quand un niveau
+   *  de Guilde vient d’ouvrir une place — le seul moment où l’on recrute, et celui où
+   *  le joueur refermait la feuille sans savoir qu’une recrue l’attendait. */
+  mode?: 'recruit' | null;
+}>();
 const emit = defineEmits<{ close: [] }>();
 const $q = useQuasar();
 const auth = useAuthStore();
@@ -336,6 +370,19 @@ const trainNameOf = (a: Adventurer) =>
 const canPromoteOne = (a: Adventurer) => canPromote(a, guildLevel.value);
 
 // ── Fiche d'un aventurier ──
+const recruitOpen = ref(false);
+
+// ⚠️ Un `watch` IMMÉDIAT : le panneau peut être DÉJÀ MONTÉ quand le mode change — on
+// revient de la cour sans jamais le démonter. Un test au montage raterait ce cas, qui
+// est précisément le seul qui se produise.
+watch(
+  () => [props.open, props.mode] as const,
+  ([open, mode]) => {
+    if (open && mode === 'recruit' && roster.value.length < maxRoster.value)
+      recruitOpen.value = true;
+  },
+  { immediate: true },
+);
 const detailAdv = ref<Adventurer | null>(null);
 const statsOf = (a: Adventurer) => advStats(a);
 /** Les stats ramenées à la FORME attendue par `advShapeLabel` (p/e/a) : on nomme
@@ -433,6 +480,9 @@ async function doRecruit(classId: string) {
         ? { type: 'positive', message: `${name} rejoint la Guilde.` }
         : { type: 'negative', message: 'Recrutement impossible (or, place ou offre).' },
     );
+    // ⚠️ On ne referme QUE sur un succès : un refus (or manquant, place prise) doit
+    // laisser la feuille ouverte, sinon le joueur ne voit pas pourquoi rien ne s'est passé.
+    if (ok) recruitOpen.value = false;
   } finally {
     busy.value = false;
   }
@@ -476,6 +526,10 @@ async function doPromote(classId: string) {
 </script>
 
 <style scoped lang="scss">
+.g-hire,
+.g-full {
+  margin-bottom: 10px;
+}
 /* ── Fiche d'un aventurier ── */
 .adv.hit {
   cursor: pointer;
@@ -653,11 +707,6 @@ async function doPromote(classId: string) {
   padding: 5px 9px;
   font-size: 12px;
   min-height: 32px;
-}
-.g-recruit {
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
-  margin-top: 4px;
 }
 /* Grille fluide : jamais de débordement, les cartes se réorganisent. */
 .g-cost {

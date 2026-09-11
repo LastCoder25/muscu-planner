@@ -511,7 +511,7 @@
       </button>
     </div>
 
-    <GuildPanel :open="guildOpen" @close="guildOpen = false" />
+    <GuildPanel :open="guildOpen" :mode="guildMode" @close="guildOpen = false" />
 
     <!-- ⚠️ LA PAGE NE GARDE QUE CE QUI SE LIT D'UN COUP D'ŒIL. Espionnage, dernier
          siège et champ de bataille vivaient en panneaux empilés sous l'enceinte, loin
@@ -524,7 +524,7 @@
       v-model:slot="plotSlot"
       :hero-level="heroLevel"
       :now="now"
-      @open-guild="guildOpen = true"
+      @open-guild="(m) => openGuild(m)"
     />
 
     <!-- Feuille d'une structure de défense, ouverte depuis le dessin. -->
@@ -1511,6 +1511,13 @@ const plotSlot = ref<number | null>(null);
 
 // ── Guilde d’aventuriers ──
 const guildOpen = ref(false);
+/** Ouvrir le panneau de la Guilde, éventuellement DIRECTEMENT sur le recrutement —
+ *  c'est le cas quand un niveau vient d'ouvrir une place. */
+const guildMode = ref<'recruit' | null>(null);
+function openGuild(mode?: 'recruit') {
+  guildMode.value = mode ?? null;
+  guildOpen.value = true;
+}
 const guildLevel = computed(() => char.guildLevel);
 /** Promotions en attente : un jalon qu'on ne doit pas rater, donc une ⭐ sur la Guilde.
  *  ⚠️ Une formation EN COURS n'en est pas une : la décision est déjà prise, et proposer

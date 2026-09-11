@@ -163,6 +163,7 @@ import { computed, ref } from 'vue';
 import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
+import { guildRoster } from '@/lib/adventurers';
 import {
   perLevelLabel,
   BUILD,
@@ -192,7 +193,11 @@ import {
 import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 
 const props = defineProps<{ heroLevel: number; now: number; slot: number | null }>();
-const emit = defineEmits<{ 'update:slot': [number | null]; 'open-guild': [] }>();
+const emit = defineEmits<{
+  'update:slot': [number | null];
+  /** `'recruit'` = ouvrir directement sur le choix de classe (une place vient de s'ouvrir). */
+  'open-guild': [mode?: 'recruit'];
+}>();
 const char = useCharacterStore();
 const auth = useAuthStore();
 const gameFx = useGameFx();
@@ -372,9 +377,33 @@ function doBuild(slot: number, typeId: string) {
     if (t.unlock) unlockInfo.value = { emoji: t.emoji, label: t.label, unlock: t.unlock };
   });
 }
-function doUpgrade(slot: number) {
+/**
+ * Améliorer un bâtiment. ⚠️ MONTER LA GUILDE N'EST PAS UN NIVEAU COMME UN AUTRE : un cran
+ * sur deux OUVRE UNE PLACE, et c'est le seul moment où l'on recrute. Sans signal, le
+ * joueur payait des dizaines de milliers d'or puis refermait la feuille sans savoir
+ * qu'une recrue l'attendait — demandé par l'utilisateur.
+ *
+ * ⚠️ On compare l'effectif AVANT et APRÈS plutôt que de recalculer « est-ce un cran
+ * pair ? » : la règle d'effectif vit dans `guildRoster`, et une seconde lecture
+ * finirait par diverger d'elle.
+ */
+async function doUpgrade(slot: number) {
   const uid = auth.user?.id;
-  if (uid) void char.upgradeFilon(uid, slot, heroLevel.value);
+  if (!uid) return;
+  const b = plots.value[slot]?.building;
+  const avant = b?.typeId === 'guild' ? guildRoster(b.level) : -1;
+  await char.upgradeFilon(uid, slot, heroLevel.value);
+  if (avant < 0) return;
+  const apres = guildRoster(char.guildLevel);
+  if (apres <= avant) return;
+  gameFx.celebrate({
+    kind: 'unlock',
+    emoji: '⚔️',
+    title: 'Une place de plus à la Guilde',
+    subtitle: 'Un aventurier attend son affectation',
+    rarity: 'epic',
+  });
+  emit('open-guild', 'recruit');
 }
 function collectAll() {
   const uid = auth.user?.id;
