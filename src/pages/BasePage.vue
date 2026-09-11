@@ -171,6 +171,24 @@
              Plus haut que les tourelles, coiffé d'une bannière : c'est lui qui
              voit venir. Vide → silhouette en pointillés, cliquable pour bâtir. -->
         <g class="hit" @click="openDef('watchtower')">
+          <!-- 🔴 ARMÉE REPÉRÉE : un cadre rouge qui bat lentement autour de la tour.
+               ⚠️ Il était censé exister depuis la v0.745, et n'a JAMAIS pu s'afficher :
+               l'anneau d'alerte était posé dans la boucle des tuiles de la COUR, avec
+               la condition `id === 'watchtower'` — or la Tour de guet n'est pas une
+               tuile de cour, c'est ce corps de garde dessiné sur le rempart nord.
+               `YARD_SERVICES` ne l'a jamais contenue : la condition était morte.
+               Signalé par l'utilisateur ; c'est lui, pas le dessin, qui l'a vu.
+               ⚠️ Le cadre est dessiné même quand la tour n'est PAS bâtie : une armée
+               arrive quand même, et c'est précisément là qu'il faut le savoir. -->
+          <rect
+            v-if="raid"
+            x="86"
+            :y="WALL_TOP - 21"
+            width="28"
+            height="40"
+            rx="3"
+            class="watch-alarm"
+          />
           <template v-if="watchLevel">
             <rect
               x="91"
@@ -298,14 +316,13 @@
                la déplacer. -->
           <text v-if="y.star" :x="y.x - 6.5" :y="y.y + 9.5" class="yard-star">⭐</text>
           <rect
-            v-if="y.alert || y.todo"
+            v-if="y.todo"
             :x="y.x - YARD_HALF - 2"
             :y="y.y - YARD_HALF - 2"
             :width="YARD_HALF * 2 + 4"
             :height="YARD_HALF * 2 + 4"
             rx="7"
-            class="yard-ring"
-            :class="{ alert: y.alert, todo: y.todo && !y.alert }"
+            class="yard-ring todo"
           />
         </g>
       </svg>
@@ -1264,7 +1281,6 @@ interface YardCell {
   star?: boolean;
   /** 🔴 ALERTE : une armée a été repérée — contour rouge à clignotement LENT. Lent, parce
    *  qu'un siège se prépare sur des heures : un clignotement nerveux crierait au feu. */
-  alert?: boolean;
   /** Quelque chose est À FAIRE ici (des corps à fouiller, des fossoyeurs rentrés). */
   todo?: boolean;
   onClick: () => void;
@@ -1349,7 +1365,10 @@ const yard = computed<YardCell[]>(() => {
       // ⚠️ C'est le DESSIN qui alerte, depuis que les panneaux ont rejoint les feuilles
       // de leurs structures : sans ces signaux, une armée repérée ne se verrait plus
       // qu'en cliquant la bonne tuile.
-      alert: id === 'watchtower' && !!raid.value,
+      // ⚠️ Plus de cas `watchtower` ici : la Tour de guet n'est PAS une tuile de la cour
+      // (c'est le corps de garde du rempart nord), donc sa condition ne s'évaluait
+      // jamais — son alerte vit désormais sur son propre dessin (`.watch-alarm`), et le
+      // champ `alert` de la tuile est retiré plutôt que laissé à `false` en dur.
       todo: id === 'salvage' && (scavReady.value || remaining.value > 0),
       onClick: () => openDef(id),
     });
@@ -2288,9 +2307,23 @@ const doCollect = () =>
   stroke-width: 1.2;
   pointer-events: none;
 }
-.yard-ring.alert {
+/* 🔴 Le cadre « une armée marche sur toi », autour de la Tour de guet.
+   ⚠️ Battement LENT (2,4 s) et halo doux : un siège se prépare sur des heures, un
+   clignotement nerveux crierait au feu. Même rythme que l'anneau d'alerte des tuiles —
+   deux signaux de même nature doivent battre au même tempo. */
+.watch-alarm {
+  fill: rgba(255, 106, 69, 0.08);
   stroke: #ff6a45;
+  stroke-width: 1.4;
+  stroke-dasharray: 5 3;
+  pointer-events: none;
   animation: ring-alert 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .watch-alarm {
+    animation: none;
+    opacity: 0.9;
+  }
 }
 /* ⚠️ PAS l’accent : le point de récolte des bâtiments de ressources est déjà en accent,
    et deux signaux de même couleur se lisent comme un seul — on confondait la fosse à

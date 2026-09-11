@@ -700,14 +700,20 @@
                     Retirer
                   </button>
                   <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
+                  <!-- ⚠️ Un familier POSTÉ au mur n'est pas cédable : il tient un rôle
+                       dans la garnison. Le vendre laissait un id fantôme dans
+                       `base.garrison` — une place occupée par personne. -->
                   <button
-                    v-if="!f.equipped"
+                    v-if="!f.equipped && !postedFamiliarIds.has(f.id)"
                     class="tal-b ghost"
                     title="Céder ce familier contre de l’or"
                     @click="doSellFamiliar(f)"
                   >
                     🪙{{ sellValue(f) }}
                   </button>
+                  <span v-else-if="!f.equipped" class="tal-posted" title="En poste au mur"
+                    >🛡️ au mur</span
+                  >
                 </div>
               </div>
             </div>
@@ -5397,6 +5403,9 @@ function doUnequipFamiliar() {
 // DOUBLONS de familiers : ceux qu'aucune configuration ne peut employer. La règle vit
 // dans `raid.ts` (dominé sur les TROIS axes ⚔️/🛡️/✦, et par effet porté) — ici on ne
 // fait que lui passer l'état réel : l'équipé et les postés au chenil sont hors-jeu, le
+/** Les familiers POSTÉS au chenil : ni cédables, ni recyclables tant qu'ils tiennent
+ *  un rôle au mur. */
+const postedFamiliarIds = computed(() => new Set(char.row?.base?.garrison ?? []));
 // 🔒 protège. On garde `garrisonSlots(niveau) + 1` exemplaires de chaque effet.
 const duplicateFams = computed<Item[]>(() =>
   duplicateFamiliars(bagFamiliars.value, c.value.level.level, {
@@ -7197,6 +7206,11 @@ button.pt-mini:active {
 }
 /* Actions de gestion (grade / recycle) : séparées visuellement de l'action primaire
    (Équiper/Retirer) par un liseré discret → on ne recycle plus par erreur (8bfe2262). */
+.tal-posted {
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+}
 .tal-b.ghost {
   color: var(--dim);
   border-style: dashed;

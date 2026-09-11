@@ -48,7 +48,7 @@
             </div>
           </div>
           <button
-            v-if="canPromoteOne(a) && !trainOf(a)"
+            v-if="canPromoteOne(a) && !trainOf(a) && !busyOf(a)"
             class="adv-promo"
             :disabled="busy"
             @click="openPromo(a)"

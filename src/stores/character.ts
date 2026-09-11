@@ -720,13 +720,22 @@ export const useCharacterStore = defineStore('character', () => {
 
   /** Vente GROUPÉE de familiers (les doublons). Une seule écriture, une seule animation
    *  d'or : vendre huit compagnons ne doit pas déclencher huit allers-retours réseau ni
-   *  huit pièces qui volent. Le 🔒 protège ici comme partout ailleurs. */
+   *  huit pièces qui volent. Le 🔒 protège ici comme partout ailleurs.
+   *
+   *  ⚠️ UN FAMILIER EN POSTE NE SE VEND PAS (signalé par l'utilisateur). Celui qu'on
+   *  PORTE était déjà hors d'atteinte par construction — il vit dans `equipped`, pas
+   *  dans `inventory`. Mais un familier POSTÉ AU MUR, lui, reste dans l'inventaire :
+   *  `base.garrison` n'est qu'une liste d'ids qui pointent dessus. Il était donc
+   *  vendable, et sa vente laissait un id FANTÔME dans la garnison — une place occupée
+   *  par personne, que `garrisonedFamiliars` filtrait en silence. On le refuse ici,
+   *  au STORE : l'écran peut ne pas proposer l'impossible, il ne peut pas le garantir. */
   async function sellFamiliars(userId: string, itemIds: string[]): Promise<number> {
     const cur = row.value;
     if (!cur || !itemIds.length) return 0;
     const wanted = new Set(itemIds);
+    const posted = new Set(cur.base?.garrison ?? []);
     const sold = cur.inventory.filter(
-      (i) => wanted.has(i.id) && i.slot === FAMILIAR_SLOT && !i.locked,
+      (i) => wanted.has(i.id) && i.slot === FAMILIAR_SLOT && !i.locked && !posted.has(i.id),
     );
     if (!sold.length) return 0;
     const gain = sold.reduce((s, i) => s + sellValue(i), 0);
@@ -1900,6 +1909,14 @@ export const useCharacterStore = defineStore('character', () => {
     if (trainingLevel.value <= 0) return false;
     if (!canPromote(adv, guildLevel.value)) return false;
     if (!classChoices(adv).some((c) => c.id === classId)) return false;
+    // ⚠️ PAS pendant un convoi (signalé par l'utilisateur : « j'ai pu promouvoir des
+    // aventuriers en déplacement »). Il est physiquement sur la route, il ne peut pas
+    // être au Centre de formation — et la formation l'immobiliserait une seconde fois,
+    // sur une échéance sans rapport avec celle du convoi.
+    // ⚠️ On ne teste QUE `busyUntil`, pas `advAvailable` : une formation peut courir
+    // pendant une CONVALESCENCE, c'est même le bon moment, et on ne fait pas attendre
+    // un blessé deux fois (décision v0.739, à ne pas défaire par mégarde).
+    if ((adv.busyUntil ?? 0) > Date.now()) return false;
     // ⚠️ On n'applique PAS la classe tout de suite : on engage une FORMATION. C'est le
     // temps passé au Centre qui la paie, et c'est ce que son niveau raccourcit — sinon
     // son `perLevelNote` (« formations plus courtes ») promet ce que rien ne tient.
