@@ -103,6 +103,28 @@ export function isCardioTrackChallenge(c: { unit: string; exercise_id: string })
   );
 }
 // Activité par défaut d'une sortie « miroir » créée depuis un défi cardio.
+/** ALLURE DE RÉFÉRENCE (km/h) — sert à convertir une DISTANCE en effort.
+ *
+ *  ⚠️ Elle est nécessaire parce que l’XP d’une sortie est DOMINÉE PAR LA DURÉE
+ *  (min×3 > km×2, choix pro-endurance) : un kilomètre ne « vaut » donc quelque chose
+ *  qu’une fois qu’on sait en combien de temps il est parcouru. Un défi en km, lui, ne
+ *  connaît que la distance — il faut bien poser une allure.
+ *
+ *  ⚠️ Ces vitesses ne servent QU’À CETTE CONVERSION : elles ne modifient aucune sortie
+ *  réelle, qui porte sa propre durée. Elles sont volontairement MODESTES (allure de
+ *  loisir) : surestimer la vitesse sous-paierait les défis en distance.
+ */
+export const REF_SPEED_KMH: Record<CardioActivity, number> = {
+  marche: 5,
+  rando: 4,
+  course: 10,
+  trail: 8,
+  velo: 20,
+  velo_appart: 20,
+  marche_tapis: 5,
+  course_tapis: 10,
+};
+
 export function defaultActivityForChallenge(exerciseId: string): CardioActivity {
   if (exerciseId === 'ex_ch_velo') return 'velo';
   if (exerciseId === 'ex_ch_course') return 'course';

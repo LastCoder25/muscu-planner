@@ -2,8 +2,13 @@
 // Calcul des objectifs par jour selon le format, suggestion de difficulté,
 // statistiques (streak/complétion) et évaluation des succès.
 import type { Level } from './types';
-import { REP_XP, assistMult, ASSIST_MULT, XP_MULT } from './athlete';
-import { isCardioChallengeExercise } from '@/data/cardio';
+import { REP_XP, assistMult, ASSIST_MULT, XP_MULT, cardioSessionXp } from './athlete';
+import {
+  defaultActivityForChallenge,
+  isCardioChallengeExercise,
+  REF_SPEED_KMH,
+} from '@/data/cardio';
+import type { CardioActivity, CardioLog } from './types';
 
 export type ChallengeFormat =
   | 'fixed'
@@ -635,8 +640,8 @@ export function isChallengeComplete(ch: Challenge): boolean {
   const total = plannedEffort(ch);
   if (total <= 0) return false;
   const done = ch.progress.reduce((a, p) => a + (p.done || 0), 0);
-  const doneEffort = ch.unit === 'time' ? done / 4 : done;
-  return doneEffort >= total;
+  // ⚠️ MÊME facteur que l’objectif : le ratio est inchangé, donc la complétion aussi.
+  return done * effortUnit(ch) >= total;
 }
 
 // Ajoute une contribution externe (ex. une sortie cardio) au jour du défi
@@ -811,12 +816,67 @@ export function evaluateAchievements(challenges: Challenge[]): string[] {
 /** « Effort planifié » d'un défi (unité-neutre) : total des objectifs, le TEMPS
  *  ramené à ~1 point / 4 s pour comparer reps et gainage. Basé sur le PLAN (pas
  *  l'écoulé) → non farmable au chrono, et réduit si on allège le défi. */
+/** ⚖️ CE QUE VAUT **UNE UNITÉ** DE CE DÉFI, en « équivalent-reps » — l’unité dans
+ *  laquelle la prime de complétion est calculée.
+ *
+ *  ⚠️ SIGNALÉ PAR L’UTILISATEUR : un défi « 150 km en un mois », bouclé en deux
+ *  semaines, ne rapportait que **115 XP** de prime. Mesuré, la cause était une UNITÉ :
+ *  la prime valait `0,25 × le nombre de l${Q}objectif`, donc **150** pour des kilomètres
+ *  contre **3000** pour un défi de pompes. Un kilomètre comptait comme une pompe.
+ *
+ *  ⚠️ ET LE TEMPS DE SORTIE AVAIT LE MÊME DÉFAUT, en pire : le `/4` vient du gainage,
+ *  où une unité est une SECONDE (4 s = 1 rep). Appliqué à un défi cardio dont les
+ *  unités sont des MINUTES, il faisait valoir une minute de course un quart de pompe.
+ *
+ *  ⚠️ LES FACTEURS SONT DÉRIVÉS de `cardioSessionXp`, jamais écrits à la main : si les
+ *  intensités d’activité bougent, la conversion suit. Mesuré : ~95 équivalent-reps par
+ *  km de marche, ~100 en course, ~41 à vélo (deux fois plus vite, donc deux fois moins
+ *  de temps en zone pour la même distance).
+ *
+ *  ⚠️ APPLIQUÉ DES DEUX CÔTÉS — objectif ET réalisé (`isChallengeComplete`) : le ratio
+ *  reste identique, donc **aucun défi ne change d’état**. Ne convertir qu’un côté aurait
+ *  rendu tous les défis en km instantanément terminés (ou jamais). */
+function effortUnit(ch: Challenge): number {
+  if (ch.unit === 'distance') return kmEffort(ch.exercise_id);
+  if (ch.unit === 'time') {
+    // Une vraie SORTIE se compte en MINUTES ; le gainage et le conditionnement, en
+    // SECONDES au chrono — deux unités homonymes, deux barèmes.
+    return isCardioChallengeExercise(ch.exercise_id)
+      ? minEffort(ch.exercise_id)
+      : 1 / GAINAGE_SEC_PER_REP;
+  }
+  return 1;
+}
+/** Secondes de gainage qui valent une rep. ⚠️ C’était un `/4` nu ; le nommer évite
+ *  qu’on le reprenne un jour pour des minutes, ce qui est exactement ce qui s’est passé. */
+const GAINAGE_SEC_PER_REP = 4;
+/** Équivalent-reps d’un kilomètre, et d’une minute de sortie. DÉRIVÉS de la formule
+ *  d’XP des sorties : une seule source de vérité pour « ce que vaut un effort ». */
+function kmEffort(exerciseId: string): number {
+  const a = defaultActivityForChallenge(exerciseId);
+  return refOutingXp(a, 1, 60 / REF_SPEED_KMH[a]);
+}
+function minEffort(exerciseId: string): number {
+  const a = defaultActivityForChallenge(exerciseId);
+  return refOutingXp(a, REF_SPEED_KMH[a] / 60, 1);
+}
+/** L’XP d’une sortie de référence, ramenée en équivalent-reps (points bruts ÷ REP_XP). */
+function refOutingXp(activity: CardioActivity, km: number, min: number): number {
+  const xp = cardioSessionXp({
+    schema_version: '1.0',
+    activity,
+    distance_km: km,
+    duration_min: min,
+  } as CardioLog);
+  return xp / XP_MULT / REP_XP;
+}
+
 function plannedEffort(ch: Challenge): number {
   const raw =
     ch.format === 'cumulative'
       ? (ch.config.total ?? 0)
       : ch.daily_targets.reduce((a, t) => a + t, 0);
-  return ch.unit === 'time' ? raw / 4 : raw;
+  return raw * effortUnit(ch);
 }
 
 /** Multiplicateur de durée sur la prime : plus le défi est long, plus la prime

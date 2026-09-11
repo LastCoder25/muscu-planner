@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { cardioSessionXp, REP_XP, XP_MULT } from '@/lib/athlete';
 import {
   computeDailyTargets,
   challengeXpPoints,
+  challengeXpBreakdown,
   challengeStats,
   suggestConfig,
   addContribution,
@@ -540,5 +542,88 @@ describe('challengeStats', () => {
     expect(s.totalDone).toBe(15);
     expect(s.completionPct).toBeGreaterThan(0);
     expect(s.completionPct).toBeLessThanOrEqual(100);
+  });
+});
+
+describe('⚖️ L’UNITÉ DE LA PRIME : un kilomètre n’est pas une pompe', () => {
+  // ⚠️ SIGNALÉ PAR L’UTILISATEUR : « j’ai fait un challenge marche/course 150 km en un
+  // mois que j’ai fini en 2 semaines mais je n’ai pas eu ma prime de complétion ». Il
+  // l’avait eue : elle valait **115 XP** pour un effort réel de ~6 000. La prime se
+  // calculait sur `0,25 × le nombre de l${Q}objectif` — 150 pour des kilomètres, 3000 pour
+  // un défi de pompes. Un kilomètre comptait exactement comme une pompe.
+  //
+  // ⚠️ Mesuré sur le compte réel (23 défis) : le ratio prime/effort des défis en reps va
+  // de 1,20 à 2,16 ; celui des deux défis en distance valait **0,02**. Après conversion
+  // il tombe à 1,81 et 2,14 — dans la bande, sans y avoir été forcé.
+  const base = (over: Record<string, unknown>) =>
+    ({
+      id: 'c1',
+      exercise_id: 'ex_pushup',
+      unit: 'reps',
+      format: 'cumulative',
+      status: 'done',
+      start_date: '2026-08-01',
+      duration_days: 30,
+      daily_targets: new Array(30).fill(0),
+      config: { total: 100 },
+      progress: [{ day: 0, done: 100 }],
+      ...over,
+    }) as unknown as Challenge;
+
+  it('⚠️ un KILOMÈTRE pèse bien plus qu’une rep, et le facteur est DÉRIVÉ', () => {
+    // ⚠️ Pas un nombre écrit à la main : il sort de `cardioSessionXp`, la formule qui
+    // paie déjà les sorties. Si les intensités d’activité bougent, la conversion suit.
+    // Mesuré : ~95 équivalent-reps par km de marche. On vérifie l’ORDRE DE GRANDEUR
+    // contre la formule elle-même, jamais contre une constante recopiée.
+    const km = base({ exercise_id: 'ex_ch_marche_course', unit: 'distance' });
+    const reps = base({});
+    const parKm = challengeXpBreakdown(km).bonus / challengeXpBreakdown(reps).bonus;
+    // Ce que la formule du jeu dit qu’un km de marche vaut, en équivalent-reps.
+    const attendu =
+      cardioSessionXp({ activity: 'marche', distance_km: 1, duration_min: 12 } as never) /
+      XP_MULT /
+      REP_XP;
+    expect(parKm).toBeCloseTo(attendu, 0);
+    expect(attendu).toBeGreaterThan(50);
+  });
+
+  it('⚠️ LA CONVERSION S’APPLIQUE DES DEUX CÔTÉS — aucun défi ne change d’état', () => {
+    // C’est LE risque de ce changement : ne convertir que l’objectif aurait rendu tous
+    // les défis en km instantanément terminés (ou jamais terminables). Le ratio réalisé
+    // ÷ objectif doit rester intact, quelle que soit l’unité.
+    const presque = base({
+      exercise_id: 'ex_ch_marche_course',
+      unit: 'distance',
+      config: { total: 150 },
+      progress: [{ day: 0, done: 149.9 }],
+    });
+    const pile = base({
+      exercise_id: 'ex_ch_marche_course',
+      unit: 'distance',
+      config: { total: 150 },
+      progress: [{ day: 0, done: 150 }],
+    });
+    expect(isChallengeComplete(presque)).toBe(false);
+    expect(isChallengeComplete(pile)).toBe(true);
+  });
+
+  it('⚠️ UNE MINUTE DE SORTIE N’EST PAS UNE SECONDE DE GAINAGE', () => {
+    // Le `/4` vient du gainage, où une unité est une SECONDE (4 s = 1 rep). Appliqué
+    // à un défi cardio dont les unités sont des MINUTES, il faisait valoir une minute de
+    // marche un quart de pompe. Deux unités homonymes, deux barèmes.
+    const sortie = base({ exercise_id: 'ex_ch_marche_course', unit: 'time' });
+    const gainage = base({ exercise_id: 'ex_plank', unit: 'time' });
+    expect(challengeXpBreakdown(sortie).bonus).toBeGreaterThan(
+      challengeXpBreakdown(gainage).bonus * 10,
+    );
+  });
+
+  it('le VÉLO vaut moins du kilomètre que la marche — on y va deux fois plus vite', () => {
+    // ⚠️ Ce n’est pas un jugement sur l’activité : l’XP des sorties est dominée par la
+    // DURÉE (choix pro-endurance), donc à distance égale on passe moitié moins de temps
+    // en zone. La conversion en hérite, et c’est cohérent.
+    const velo = base({ exercise_id: 'ex_ch_velo', unit: 'distance' });
+    const marche = base({ exercise_id: 'ex_ch_marche_course', unit: 'distance' });
+    expect(challengeXpBreakdown(velo).bonus).toBeLessThan(challengeXpBreakdown(marche).bonus);
   });
 });
