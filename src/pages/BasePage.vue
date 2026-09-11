@@ -327,6 +327,66 @@
         </g>
       </svg>
 
+      <!-- ⚖️ LE RAPPORT DE FORCES — la question qu'on vient se poser sur cet écran. -->
+      <div class="panel forces">
+        <div class="f-head">
+          <div class="f-side">
+            <div class="f-lab">🛡️ Ma défense</div>
+            <div class="f-val font-display">{{ forces.total }}</div>
+          </div>
+          <div class="f-vs">vs</div>
+          <div class="f-side right">
+            <div class="f-lab">⚔️ L’armée</div>
+            <div v-if="!raid" class="f-val calm">—</div>
+            <div
+              v-else-if="!assaultSeen?.known"
+              class="f-val unknown"
+              title="Monte la Tour de guet"
+            >
+              ???
+            </div>
+            <div v-else-if="assaultSeen.exact" class="f-val font-display">{{ assault }}</div>
+            <div v-else class="f-val font-display range">
+              {{ assaultSeen.lo }}–{{ assaultSeen.hi }}
+            </div>
+          </div>
+        </div>
+        <!-- ⚠️ UNE JAUGE, pas deux nombres à comparer : le seuil d'équilibre est à
+             ×0,88 (mesuré), donc « ma défense < l'armée » ne veut PAS dire « je perds ».
+             Le repère central EST l'équilibre ; à gauche ça cède, à droite on tient. -->
+        <template v-if="odds">
+          <div class="f-gauge" :class="odds">
+            <i class="fg-mid" />
+            <i class="fg-cursor" :style="{ left: gauge * 100 + '%' }" />
+          </div>
+          <div class="f-odds" :class="odds">{{ ODDS_LABEL[odds] }}</div>
+        </template>
+        <p v-else-if="raid" class="f-hint">
+          Sans renseignement, tu ne peux pas jauger cette armée — c’est ce que la
+          <b>Tour de guet</b> achète.
+        </p>
+        <p v-else class="f-hint">Aucune armée en vue : c’est le moment de partir sur la carte.</p>
+        <!-- ⚠️ Chaque part est mesurée PAR ABLATION (« ce qu'on perdrait sans lui »),
+             jamais par une formule recopiée : l'étiquette ne peut pas diverger du combat.
+             Elles ne s'additionnent donc pas au total — les canaux se multiplient. -->
+        <div class="f-parts-h">Ce que je perdrais sans…</div>
+        <div class="f-parts">
+          <div v-for="p in forces.parts" :key="p.id" class="f-part" :class="{ off: !p.active }">
+            <span class="dp-emo">{{ p.emoji }}</span>
+            <span class="dp-lab">{{ p.label }}</span>
+            <span class="dp-bar"><i :style="{ width: p.share * 100 + '%' }" /></span>
+            <!-- ⚠️ Pas de « + » : ces valeurs ne s'ADDITIONNENT pas au total (les canaux
+                 se multiplient — la garnison amplifie des PV que le mur fournit). Le
+                 signe promettait une somme fausse : 1292+817+170+266 = 2545 pour un
+                 total de 1741. C'est « ce qu'on perdrait sans lui », rien de plus. -->
+            <span class="dp-val">{{ p.active ? p.power : '—' }}</span>
+          </div>
+        </div>
+        <p v-if="!heroHome" class="f-hint warn">
+          🧭 Ton héros est en expédition : il ne défendra pas.
+        </p>
+      </div>
+
       <div class="keep-legend">
         <span
           >🧱 Muraille {{ wallLevel || '—'
@@ -799,6 +859,12 @@ import {
   isDamaged,
   repairCost,
   scavengerCount,
+  assaultEstimate,
+  assaultPower,
+  defenseBreakdown,
+  siegeGauge,
+  siegeOdds,
+  ODDS_LABEL,
   scoutClarity,
   scoutLevel,
   scoutReport,
@@ -825,6 +891,7 @@ import {
   type ScoutReport,
 } from '@/lib/raid';
 import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
+import type { Combatant } from '@/lib/combat';
 import { mulberry32 } from '@/lib/combat';
 import { treePath } from '@/lib/expedition';
 
@@ -833,7 +900,14 @@ import { treePath } from '@/lib/expedition';
  *  Mesuré, un joueur trop tôt ne tenait aucun siège même en bâtissant à son niveau. */
 const defenseUnlockLevel = Math.min(...DEFENSE_TYPES.map((t) => t.unlockLevel));
 
-const props = defineProps<{ embedded?: boolean; inTab?: boolean; siege?: RaidReport | null }>();
+const props = defineProps<{
+  embedded?: boolean;
+  inTab?: boolean;
+  siege?: RaidReport | null;
+  /** Le combattant du héros, tel qu'il défendra vraiment. Fourni par l'Aventure : le
+   *  recalculer ici ferait deux vérités pour un seul chiffre. */
+  hero?: Combatant | null;
+}>();
 const emit = defineEmits<{ 'siege-seen': [] }>();
 const inTab = computed(() => !!props.inTab);
 const router = useRouter();
@@ -1436,6 +1510,38 @@ const clarity = computed(() =>
       )
     : 0,
 );
+// ─── ⚖️ RAPPORT DE FORCES ─────────────────────────────────────────────────────
+// ⚠️ Ce que l'écran ne disait NULLE PART : ce que l'enceinte, les familiers postés et
+// le héros apportent, et à quoi ça se compare. On assignait donc à l'aveugle, et la
+// stratégie sûre était de tout garder à la maison — du temps de carte perdu sans savoir
+// s'il servait. Toute la logique vit dans `raid.ts` (pure, testée, vérifiée par
+// mutation) : l'écran ne fait que la peindre.
+
+/** Le héros défend-il ? ⚠️ On APPELLE `heroIsHome` du store au lieu de recopier sa
+ *  condition : c'est lui qui décide au moment du siège, et le jour où « rentrer » gagne
+ *  une condition (blessure, convoi), le panneau suivrait sans qu'on y pense. Une copie
+ *  aurait été la 3ᵉ du même prédicat — exactement ce que ce chantier corrige ailleurs. */
+const heroHome = computed(() => !!char.row && char.heroIsHome(char.row));
+const heroForDefense = computed(() => (heroHome.value ? (props.hero ?? null) : null));
+const forces = computed(() =>
+  defenseBreakdown(defenses.value, heroLevel.value, heroForDefense.value, garrison.value),
+);
+const assault = computed(() => (raid.value ? assaultPower(raid.value) : 0));
+/** Ce que l'ESPIONNAGE laisse voir de l'armée : une fourchette qui se resserre à mesure
+ *  que la Tour monte, et qui contient TOUJOURS la vérité. */
+const assaultSeen = computed(() =>
+  raid.value ? assaultEstimate(assault.value, clarity.value, raid.value.seed) : null,
+);
+/** Le pronostic — sur la vraie valeur, pas sur la fourchette : c'est l'ISSUE qui est
+ *  annoncée, pas ce qu'on croit savoir. ⚠️ Quand on ne voit rien (clarté 0), on n'affiche
+ *  pas de pronostic du tout : deviner à la place du joueur serait lui vendre gratuitement
+ *  ce que la Tour de guet fait payer. */
+/** Le rapport de forces, calculé UNE fois : la jauge et le pronostic le lisent tous
+ *  deux. Ils portaient chacun leur garde et leur quotient, et le repli de la jauge était
+ *  mort (elle n'est rendue que lorsque le pronostic existe). */
+const ratio = computed(() => (assault.value > 0 ? forces.value.total / assault.value : 0));
+const gauge = computed(() => siegeGauge(ratio.value));
+const odds = computed(() => (assaultSeen.value?.known ? siegeOdds(ratio.value) : null));
 const scoutHint = computed(() => {
   if (!watchLevel.value) return 'Sans Tour de guet, tu ne sais rien de ce qui arrive.';
   if (clarity.value >= 5)
@@ -2364,6 +2470,178 @@ const doCollect = () =>
   font-size: 7px;
   text-anchor: middle;
   pointer-events: none;
+}
+/* ⚖️ Rapport de forces */
+.forces {
+  margin-bottom: 10px;
+}
+.f-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.f-side {
+  flex: 1;
+  min-width: 0;
+}
+.f-side.right {
+  text-align: right;
+}
+.f-lab {
+  font-size: 12px;
+  color: var(--dim);
+}
+.f-val {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.f-val.range {
+  font-size: 19px;
+}
+.f-val.unknown,
+.f-val.calm {
+  color: var(--dim);
+  font-size: 20px;
+}
+.f-vs {
+  flex: none;
+  font-size: 12px;
+  color: var(--dim);
+}
+/* La jauge : le repère central est l'ÉQUILIBRE mesuré (×0,88), pas la parité. */
+/* ⚠️ Les couleurs viennent des TOKENS `--d1..--d4` (app.scss), jamais de hex recopiés :
+   le commentaire disait « dans les couleurs de l'effort » et les réécrivait à la main —
+   un changement de palette aurait laissé la jauge sur l'ancienne. */
+.f-gauge {
+  position: relative;
+  height: 8px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--d4) 35%, transparent),
+    color-mix(in srgb, var(--d1) 35%, transparent)
+  );
+}
+.fg-mid {
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--dim);
+}
+.fg-cursor {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 2px var(--surface);
+  transition: left 0.4s ease;
+}
+.f-gauge.large .fg-cursor,
+.f-gauge.favorable .fg-cursor {
+  background: var(--d1);
+}
+.f-gauge.serre .fg-cursor {
+  background: var(--d3);
+}
+.f-gauge.risque .fg-cursor,
+.f-gauge.perdu .fg-cursor {
+  background: var(--d4);
+}
+.f-parts-h {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* Le pronostic, dans les couleurs de l'effort (d1 → d4) : vert on tient, rouge ça cède. */
+.f-odds {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+.f-odds.large {
+  background: color-mix(in srgb, var(--d1) 16%, transparent);
+  color: var(--d1);
+}
+.f-odds.favorable {
+  background: color-mix(in srgb, var(--d2) 16%, transparent);
+  color: var(--d2);
+}
+.f-odds.serre {
+  background: color-mix(in srgb, var(--d3) 16%, transparent);
+  color: var(--d3);
+}
+.f-odds.risque,
+.f-odds.perdu {
+  background: color-mix(in srgb, var(--d4) 16%, transparent);
+  color: var(--d4);
+}
+.f-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+.f-hint.warn {
+  color: var(--d3);
+}
+.f-parts {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.f-part {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.f-part.off {
+  opacity: 0.45;
+}
+/* ⚠️ Préfixe `dp-` (defense part) et NON `fp-` : ce dernier appartient déjà au
+   sélecteur de familier (`.fp-emo` y vaut 24 px). Même spécificité, déclaré plus bas,
+   il l'aurait écrasé — l'emoji d'un écran non concerné aurait rétréci en silence. */
+.dp-emo {
+  font-size: 14px;
+}
+.dp-lab {
+  flex: none;
+  width: 74px;
+  color: var(--dim);
+}
+.dp-bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.dp-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.dp-val {
+  flex: none;
+  width: 54px;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 .keep-legend {
   display: flex;

@@ -1513,12 +1513,16 @@ export const useCharacterStore = defineStore('character', () => {
     return cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT && ids.has(it.id));
   }
 
-  /** Bonus que la garnison apporte au mur (rôle par ESPÈCE, cf. GARRISON_ROLE). */
-  function garrisonFor(cur: CharacterRow, now: number) {
+  /** Bonus que la garnison apporte au mur (rôle par ESPÈCE, cf. GARRISON_ROLE).
+   *  ⚠️ `playerLevel` est OBLIGATOIRE : c'est lui qui donne le nombre de places
+   *  (`garrisonSlots`). Il était omis, et le combat ne comptait donc que 3 familiers
+   *  quand l'écran en annonçait 6 — cf. le commentaire de `GARRISON_SLOTS`. */
+  function garrisonFor(cur: CharacterRow, now: number, playerLevel: number) {
     return garrisonBonus(
       garrisonedFamiliars(cur),
       now,
       defenseLevel(baseOf(cur, now).defenses, 'kennel'),
+      garrisonSlots(playerLevel),
     );
   }
 
@@ -1556,6 +1560,7 @@ export const useCharacterStore = defineStore('character', () => {
           cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT && posted.has(it.id)),
           now,
           defenseLevel(t.base.defenses, 'kennel'),
+          garrisonSlots(ctx.playerLevel),
         ),
       ),
       t.dueRaid,
@@ -1778,7 +1783,7 @@ export const useCharacterStore = defineStore('character', () => {
       cur.base.lastReport?.faction ?? 'bandits',
       playerLevel,
       (field.dispatchUntil ^ cur.base.seed) >>> 0 || 1,
-      garrisonFor(cur, now).lootPct ?? 0,
+      garrisonFor(cur, now, playerLevel).lootPct ?? 0,
     );
     return { ...loot, corpses: taken.length };
   }
@@ -1795,7 +1800,7 @@ export const useCharacterStore = defineStore('character', () => {
       faction,
       playerLevel,
       (field.dispatchUntil ^ cur.base.seed) >>> 0 || 1,
-      garrisonFor(cur, now).lootPct ?? 0,
+      garrisonFor(cur, now, playerLevel).lootPct ?? 0,
     );
     const drops = loot.items.map((it) => ({ ...it, id: crypto.randomUUID() }));
     await persistOptimistic(userId, {

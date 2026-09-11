@@ -22,7 +22,13 @@
 //
 // NB `Date.now()` n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures et testables, résolution déterministe hors-ligne.
-import { mulberry32, simulateDungeon, type Combatant, type DungeonFight } from './combat';
+import {
+  combatPower,
+  mulberry32,
+  simulateDungeon,
+  type Combatant,
+  type DungeonFight,
+} from './combat';
 import { refFighter } from './proceduralContent';
 import { rollDrop, famLevel, famAtkMult, famDefMult, type Item } from './items';
 
@@ -124,7 +130,7 @@ interface HeroWound {
 
 export interface BaseState {
   defenses: DefenseStructure[];
-  /** Ids des familiers POSTÉS au chenil (max `GARRISON_SLOTS`). Ils restent dans le sac :
+  /** Ids des familiers POSTÉS au chenil (max `garrisonSlots(niveau)`). Ils restent dans le sac :
    *  poster n'est pas ranger, c'est affecter. */
   garrison?: string[];
   wound?: HeroWound | null;
@@ -424,6 +430,11 @@ export const RAID = {
   // une PROBABILITÉ, plus une certitude. À 2 crans la clarté maximale devenait
   // inatteignable (le haut de l’échelle serait du contenu mort).
   scoutNoise: 1,
+  /** Largeur RELATIVE de la fourchette de puissance assaillante, par cran de clarté
+   *  (index = clarté ; la clarté maximale donne le chiffre exact, hors de ce tableau).
+   *  ⚠️ Calibrée pour que chaque cran se SENTE : ±40 % ne permet pas de décider, ±8 %
+   *  si. C'est ce dégradé qui fait vouloir monter la Tour. */
+  estimateWidth: [0, 0.8, 0.45, 0.22, 0.08] as number[],
 } as const;
 
 /** Le fosse commune : capacité PAR VAGUE, renouvelable tant que les corps sont
@@ -811,8 +822,13 @@ export const ROLE_LABEL: Record<GarrisonRole, string> = {
 export function garrisonSlots(playerLevel: number): number {
   return 1 + Math.floor(Math.max(1, playerLevel) / 5);
 }
-/** Repli quand le niveau n'est pas connu (anciens appels). */
-export const GARRISON_SLOTS = 3;
+/** ⚠️ IL N'Y A PLUS DE REPLI, ET C'EST VOULU. `garrisonBonus` et `autoGarrison`
+ *  prenaient `slots = GARRISON_SLOTS` (3) par défaut : le STORE omettait l'argument —
+ *  donc le combat ne comptait que 3 familiers — pendant que l'ÉCRAN passait
+ *  `garrisonSlots(niveau)` et annonçait le bonus de tous. Au niveau 28 : 6 postés
+ *  affichés, 3 qui se battent. L'étiquette mentait, et c'est précisément ce que la
+ *  v0.683 prétendait avoir corrigé (« le total réellement appliqué »).
+ *  Le paramètre est désormais REQUIS : l'oublier ne compile plus. */
 
 /** Une structure ENDOMMAGÉE ne rend que la moitié de son effet ; un familier FATIGUÉ
  *  aussi. Il n'est jamais perdu ni blessé : sinon personne ne posterait ses bons
@@ -900,7 +916,7 @@ export function garrisonBonus(
   familiars: Item[],
   now: number,
   kennelLevel: number,
-  slots = GARRISON_SLOTS,
+  slots: number,
 ): GarrisonBonus {
   const out: GarrisonBonus = {};
   if (kennelLevel <= 0) return out;
@@ -935,7 +951,7 @@ export function garrisonBonus(
 
 /** Choisit automatiquement les meilleurs défenseurs — le geste qu'on veut faire une
  *  fois, pas trois fois par siège. On classe par la valeur RÉELLE apportée au mur. */
-export function autoGarrison(familiars: Item[], slots: number = GARRISON_SLOTS): string[] {
+export function autoGarrison(familiars: Item[], slots: number): string[] {
   // Un rôle par place : `dedupeGarrisonRoles` classe déjà par valeur réelle au mur.
   return dedupeGarrisonRoles(familiars)
     .slice(0, slots)
@@ -1002,6 +1018,210 @@ export function baseCombatant(
     strikes: 1,
     regen: RAID.regenPct + (garrison?.regen ?? 0),
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚖️ LE RAPPORT DE FORCES — ce que vaut ma défense, ce que vaut l'armée
+//
+// ⚠️ POURQUOI : la contribution de l'enceinte, des familiers postés et du héros était
+// INVISIBLE (signalé par l'utilisateur : « extrêmement flou »). On assignait à
+// l'aveugle, donc la stratégie sûre était de tout garder à la maison en permanence —
+// ce qui coûte du temps de carte sans qu'on sache si ça servait à quelque chose.
+//
+// ⚠️ UN SEUL ARBITRE : `combatPower` (= √(offense × survie)), celui qui tranche déjà
+// les objets, les donjons et les familiers. En inventer un second pour la défense
+// recréerait exactement le défaut « deux comparateurs qui disent des trucs différents »
+// réglé sur l'équipement en v0.744.
+//
+// ⚠️ MESURÉ AVANT D'ÊTRE AFFICHÉ (sonde, 40 configurations × 60 graines, niveaux 10 à
+// 90) : le rapport défense/assaut prédit la tenue avec **14 inversions sur 780 paires**
+// (1,8 %), et — c'est ce qui compte — la courbe est LA MÊME à tous les niveaux :
+// ratio 0,40 → 0 % · 0,60 → 20 % · 0,80 → 45 % · 1,00 → 75 % · 1,15 → 95 %.
+// Une jauge unique ne ment donc à aucun niveau. Si la mesure avait montré le contraire,
+// il ne fallait PAS l'afficher.
+
+/** Puissance de DÉFENSE de la base, dans l'unité de tout le jeu. */
+export function defensePower(
+  defenses: DefenseStructure[],
+  playerLevel: number,
+  hero?: Combatant | null,
+  garrison?: GarrisonBonus,
+): number {
+  return combatPower(baseCombatant(defenses, playerLevel, hero, garrison));
+}
+
+/** L'armée ramenée à UN combattant équivalent.
+ *  ⚠️ PV CUMULÉS (elle se bat en séquence, la base les encaisse tous) et dégâts moyens
+ *  PONDÉRÉS PAR LES PV : ceux qui tiennent le plus longtemps frappent le plus de fois.
+ *  Une moyenne simple sous-estimerait le champion, qui est justement celui qui dure. */
+export function armyCombatant(raid: Raid): Combatant {
+  const cs = raid.groups.map(groupCombatant);
+  const pv = cs.reduce((s, c) => s + c.pv, 0);
+  const dmg = cs.reduce((s, c) => s + c.damage * c.pv, 0) / Math.max(1, pv);
+  return {
+    name: 'Armée',
+    pv: Math.max(1, Math.round(pv)),
+    damage: Math.max(1, Math.round(dmg)),
+    crit: 0.05,
+    dodge: 0,
+    initiative: raid.level,
+    strikes: 1,
+  };
+}
+
+/** Puissance d'ASSAUT de l'armée, dans la même unité que la défense. */
+export function assaultPower(raid: Raid): number {
+  return combatPower(armyCombatant(raid));
+}
+
+/** Ce qu'un contributeur apporte, mesuré PAR ABLATION : on recalcule la puissance sans
+ *  lui, et l'écart EST sa contribution.
+ *
+ *  ⚠️ Jamais une formule recopiée — c'est la leçon de `garrisonBonus` appliqué à un seul
+ *  familier (v0.683) : une étiquette qui refait le calcul à sa façon finit par mentir
+ *  (le projet s'est fait avoir deux fois, sur les libellés de POI et le budget de
+ *  ferraille). Ici l'étiquette ne PEUT pas diverger du combat : c'est le même appel.
+ *
+ *  ⚠️ Les parts ne s'additionnent pas exactement au total, et c'est NORMAL : les canaux
+ *  se multiplient (la garnison amplifie des PV que le mur fournit). On affiche donc
+ *  « ce qu'on perdrait en le retirant », qui est la question qu'on se pose vraiment. */
+export interface DefenseShare {
+  id: 'wall' | 'turret' | 'garrison' | 'hero';
+  label: string;
+  emoji: string;
+  /** Puissance perdue si ce contributeur disparaissait (≥ 0). */
+  power: number;
+  /** Part du total, 0..1 — pour une barre, pas pour une addition. */
+  share: number;
+  /** Présent aujourd'hui ? (un héros parti, une garnison vide) */
+  active: boolean;
+}
+
+export function defenseBreakdown(
+  defenses: DefenseStructure[],
+  playerLevel: number,
+  hero: Combatant | null,
+  garrison: GarrisonBonus,
+): { total: number; parts: DefenseShare[] } {
+  const total = defensePower(defenses, playerLevel, hero, garrison);
+  const without = (d: DefenseStructure[], h: Combatant | null, g: GarrisonBonus) =>
+    Math.max(0, total - defensePower(d, playerLevel, h, g));
+  const drop = (id: DefenseId) => defenses.filter((d) => d.typeId !== id);
+  // ⚠️ Le nom et l'emoji d'une STRUCTURE viennent de `DEFENSE_TYPES`, jamais d'une
+  // recopie : ils y sont déjà, dans ce fichier, et renommer une structure laisserait
+  // sinon ce panneau sur l'ancien nom. C'est la règle que le commentaire ci-dessus
+  // invoque pour les CALCULS — elle vaut aussi pour les libellés.
+  const struct = (id: DefenseId) => {
+    const t = defenseType(id);
+    return { label: t?.label ?? id, emoji: t?.emoji ?? '' };
+  };
+  const parts: DefenseShare[] = [
+    {
+      id: 'wall',
+      ...struct('wall'),
+      power: without(drop('wall'), hero, garrison),
+      share: 0,
+      active: defenseLevel(defenses, 'wall') > 0,
+    },
+    {
+      id: 'turret',
+      ...struct('turret'),
+      power: without(drop('turret'), hero, garrison),
+      share: 0,
+      active: defenseLevel(defenses, 'turret') > 0,
+    },
+    // Garnison et héros ne sont PAS des structures : ils n'ont pas d'entrée dans
+    // `DEFENSE_TYPES`, leur libellé vit donc ici — à côté de son type, comme
+    // `ROLE_LABEL` et `FACTION_LABEL`.
+    {
+      id: 'garrison',
+      label: 'Garnison',
+      emoji: '🐾',
+      power: without(defenses, hero, {}),
+      share: 0,
+      active: Object.keys(garrison).length > 0,
+    },
+    {
+      id: 'hero',
+      label: 'Héros',
+      emoji: '🦸',
+      power: hero ? without(defenses, null, garrison) : 0,
+      share: 0,
+      active: !!hero,
+    },
+  ];
+  const sum = parts.reduce((s, p) => s + p.power, 0) || 1;
+  for (const p of parts) p.share = p.power / sum;
+  return { total, parts };
+}
+
+/** Le pronostic, en bandes CALIBRÉES sur la sonde ci-dessus — jamais un pourcentage
+ *  inventé. ⚠️ On ne donne pas un chiffre de victoire : la sonde mesure des moyennes sur
+ *  60 graines, un « 72 % » afficherait une précision qu'on n'a pas. */
+/** ⚠️ LE SEUIL D'ÉQUILIBRE N'EST PAS À PARITÉ, et c'est ce qui rend deux nombres côte
+ *  à côte TROMPEURS : mesuré, on tient une fois sur deux vers un rapport de **0,88**,
+ *  pas 1,00 (les défenseurs tirent en premier et régénèrent entre deux groupes). Un
+ *  joueur qui lit « 1741 contre 1926 » conclut qu'il perd, alors qu'il tient à ~72 %.
+ *  La jauge se REPÈRE donc sur ce seuil au lieu de laisser comparer deux nombres bruts. */
+export const SIEGE_EVEN = 0.88;
+
+/** Position sur la jauge, 0..1, avec l'ÉQUILIBRE pile au milieu — c'est ce qui permet de
+ *  lire « à gauche ça cède, à droite je tiens » sans connaître le seuil. */
+export function siegeGauge(ratio: number): number {
+  const r = Math.max(0, ratio);
+  // En dessous de l'équilibre on occupe la moitié gauche, au-dessus la moitié droite ;
+  // au-delà de deux fois l'équilibre, on est collé à la butée (la jauge sature, elle
+  // ne ment pas : « largement » est largement).
+  return r <= SIEGE_EVEN
+    ? 0.5 * (r / SIEGE_EVEN)
+    : 0.5 + 0.5 * Math.min(1, (r - SIEGE_EVEN) / SIEGE_EVEN);
+}
+
+export type SiegeOdds = 'perdu' | 'risque' | 'serre' | 'favorable' | 'large';
+export function siegeOdds(ratio: number): SiegeOdds {
+  if (ratio < 0.55) return 'perdu';
+  if (ratio < 0.72) return 'risque';
+  if (ratio < 0.88) return 'serre';
+  if (ratio < 1.05) return 'favorable';
+  return 'large';
+}
+export const ODDS_LABEL: Record<SiegeOdds, string> = {
+  perdu: 'L’enceinte cède',
+  risque: 'Très risqué',
+  serre: 'Ça va se jouer',
+  favorable: 'Tu devrais tenir',
+  large: 'Tu tiens largement',
+};
+
+/** Ce que l'ESPIONNAGE laisse voir de la puissance assaillante.
+ *
+ *  ⚠️ C'est ici que la Tour de guet gagne son métier de haut niveau : elle n'achète plus
+ *  seulement du préavis (plafonné à 8 h dès son niveau 21) et des paliers de composition,
+ *  mais de la PRÉCISION sur le seul chiffre qui décide — « est-ce que je tiens ? ».
+ *
+ *  ⚠️ L'intervalle CONTIENT toujours la vérité : le renseignement peut être vague, il ne
+ *  MENT jamais. Sa position dans la fourchette est tirée sur la graine du raid — sinon
+ *  l'encadrement serait centré sur la vraie valeur, et « imprécis » ne voudrait rien dire
+ *  (on lirait le milieu). */
+export function assaultEstimate(
+  power: number,
+  clarity: number,
+  raidSeed = 0,
+): { known: boolean; lo: number; hi: number; exact: boolean } {
+  if (clarity <= 0) return { known: false, lo: 0, hi: 0, exact: false };
+  if (clarity >= RAID.clarityMax) return { known: true, lo: power, hi: power, exact: true };
+  // Largeur relative de la fourchette : large quand on ne voit rien, serrée près du max.
+  const width = RAID.estimateWidth[Math.min(clarity, RAID.estimateWidth.length - 1)]!;
+  const span = power * width;
+  // Où la vérité tombe DANS la fourchette (0..1), tiré sur la graine du raid.
+  // ⚠️ XOR **puis** normalisation, comme partout ailleurs dans le projet
+  // (`(seed ^ K) >>> 0 || 1`) : l'ordre inverse laissait un `|| 1` inutile (un XOR par
+  // une constante non nulle ne rend jamais 0) et une valeur signée. Sans conséquence
+  // ici, mais une forme orpheline est une invitation à diverger.
+  const rng = mulberry32((raidSeed ^ 0x5f3a7c11) >>> 0 || 1);
+  const at = rng();
+  const lo = Math.max(0, Math.round(power - span * at));
+  return { known: true, lo, hi: Math.round(lo + span), exact: false };
 }
 
 export function isWounded(base: BaseState | null | undefined, now: number): boolean {

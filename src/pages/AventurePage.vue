@@ -1447,10 +1447,14 @@
            `in-tab` : elle n'affiche pas son propre en-tête, la barre de navigation
            de l'Aventure suffit. -->
       <template v-else-if="tab === 'base'">
+        <!-- ⚠️ `hero` est PASSÉ, jamais recalculé côté Base : c'est le même combattant
+             que celui qui défend réellement (cf. `ctx.hero` du tick). Deux calculs
+             divergeraient au premier réglage d'équipement. -->
         <BasePage
           in-tab
           :embedded="embedded"
           :siege="siegeReport"
+          :hero="fighter"
           @siege-seen="siegeReport = null"
         />
       </template>
