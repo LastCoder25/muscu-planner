@@ -31,7 +31,7 @@ import {
 } from './combat';
 import { refFighter } from './proceduralContent';
 import { rollDrop, famLevel, famAtkMult, famDefMult, type Item } from './items';
-import type { UnitKind } from './siegeBattle';
+import type { UnitKind, SiegeUnit, SiegeWall } from './siegeBattle';
 
 // ── Types ──
 
@@ -381,6 +381,12 @@ export const RAID = {
   scrapBase: 6,
   scrapExp: 1.45,
   turretDmgK: 0.105,
+  /** PV d'UNE tourelle, en part des PV de la référence.
+   *  ⚠️ Le modèle à UN SEUL combattant n'en avait pas besoin — tout était fondu. Le
+   *  moteur en deux phases, lui, en fait des unités qu'on peut RÉDUIRE AU SILENCE : sans
+   *  PV, les archers assaillants n'auraient aucune prise et « faire taire les tireurs »
+   *  ne voudrait rien dire. Modeste : une baliste est un ouvrage, pas un soldat. */
+  turretPvK: 1,
   // Le héros présent prête une part de sa force. Dosé pour transformer un siège serré en
   // victoire probable — pas pour le rendre acquis : mesuré à 0,55/0,35, sa seule présence
   // donnait 100 % de tenue dès le niveau 40, ce qui aurait vidé de son sens tout
@@ -1354,6 +1360,151 @@ export function healCost(remainingMs: number): number {
 
 /** Le siège. Les groupes arrivent l'un après l'autre et les PV de la base se reportent :
  *  c'est un donjon inversé, et `simulateDungeon` le fait déjà exactement. */
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚔️🧱 LES UNITÉS DU SIÈGE — ce que le moteur en deux phases voit du vrai état.
+//
+// ⚠️ ON DÉRIVE, ON NE RÉINVENTE PAS : chaque terme reprend celui de `baseCombatant`
+// (part du niveau joueur, efficacité d'une structure endommagée, parts du héros). Une
+// seconde formule finirait par diverger du panneau de forces, et les deux mentiraient
+// à tour de rôle — le défaut déjà rencontré trois fois sur ce projet.
+
+/** La muraille, avec ses PV. */
+export function siegeWallOf(defenses: DefenseStructure[], playerLevel: number): SiegeWall {
+  const wl = defenseLevel(defenses, 'wall');
+  const L = Math.max(1, playerLevel);
+  const share = Math.min(1, Math.max(0, wl) / L);
+  const pv =
+    wl > 0
+      ? Math.max(
+          1,
+          Math.round(refFighter(L).pv * RAID.wallPvK * share * defenseEfficiency(defenses, 'wall')),
+        )
+      : 1;
+  return { pv, maxPv: pv };
+}
+
+/**
+ * Les DÉFENSEURS, un par corps.
+ *
+ * ⚠️ QUI TIRE ET QUI COGNE, et pourquoi : les **tourelles** tirent (c'est leur métier) ;
+ * le **héros** tient la brèche au corps à corps (sa présence doit peser là où ça se
+ * décide) ; les **aventuriers** se répartissent selon leur FORME — l'agilité domine, on
+ * en fait un tireur, sinon un homme d'armes. On ne tire pas ça au hasard : c'est la même
+ * lecture que `advShapeLabel` montre déjà sur leur fiche.
+ */
+export function siegeDefenders(
+  defenses: DefenseStructure[],
+  playerLevel: number,
+  hero: Combatant | null,
+  guard: {
+    id: string;
+    name: string;
+    emoji: string;
+    pv: number;
+    damage: number;
+    ranged: boolean;
+  }[] = [],
+): SiegeUnit[] {
+  const L = Math.max(1, playerLevel);
+  const ref = refFighter(L);
+  const refOff = offensePerRound(ref);
+  const tl = defenseLevel(defenses, 'turret');
+  const share = (lvl: number) => Math.min(1, Math.max(0, lvl) / L);
+  const out: SiegeUnit[] = [];
+
+  const n = turretCount(tl);
+  if (n > 0) {
+    const dmg =
+      (refOff * RAID.turretDmgK * n * share(tl) * defenseEfficiency(defenses, 'turret')) / n;
+    const pv = Math.max(1, Math.round(ref.pv * RAID.turretPvK * share(tl)));
+    for (let i = 0; i < n; i++) {
+      out.push({
+        id: `t${i}`,
+        side: 'def',
+        kind: 'ranged',
+        name: 'Baliste',
+        emoji: '🏹',
+        pv,
+        maxPv: pv,
+        damage: Math.max(1, Math.round(dmg)),
+        origin: 'turret',
+      });
+    }
+  }
+
+  for (const a of guard) {
+    out.push({
+      id: a.id,
+      side: 'def',
+      kind: a.ranged ? 'ranged' : 'melee',
+      name: a.name,
+      emoji: a.emoji,
+      pv: Math.max(1, Math.round(a.pv)),
+      maxPv: Math.max(1, Math.round(a.pv)),
+      damage: Math.max(1, Math.round(a.damage)),
+      origin: 'adventurer',
+    });
+  }
+
+  if (hero) {
+    const pv = Math.max(1, Math.round(hero.pv * RAID.heroPvShare));
+    out.push({
+      id: 'hero',
+      side: 'def',
+      kind: 'melee',
+      name: hero.name,
+      emoji: '🦸',
+      pv,
+      maxPv: pv,
+      damage: Math.max(1, Math.round(hero.damage * (hero.strikes ?? 1) * RAID.heroDmgShare)),
+      origin: 'hero',
+    });
+  }
+  return out;
+}
+
+/**
+ * Les ASSAILLANTS, un par corps.
+ *
+ * ⚠️ LA MASSE EST DILUÉE COMME DANS `groupCombatant` : les PV suivent l'effectif, les
+ * dégâts sa RACINE. Éclater un groupe en corps sans reprendre ce chemin ferait frapper
+ * une armée nombreuse bien plus fort qu'elle ne le doit — c'est exactement ce que
+ * `groupDmgExp` retient depuis la v0.661.
+ *
+ * ⚠️ `bulk` = `unitMult` : la place qu'un corps prend au pied du mur. Un loup tient moins
+ * de place qu'un mercenaire en armure. Sans lui, le goulot comptait des TÊTES et rendait
+ * les hordes inoffensives (mesuré v0.755).
+ */
+export function siegeAttackers(raid: Raid): SiegeUnit[] {
+  const out: SiegeUnit[] = [];
+  for (const g of raid.groups) {
+    const ref = refFighter(Math.max(1, g.level));
+    const um = g.unitMult ?? 1;
+    const mm = g.massMult ?? 1;
+    const champPv = g.champion ? RAID.championPvMult : 1;
+    const champDmg = g.champion ? RAID.championDmgMult : 1;
+    const unitPv = (offensePerRound(ref) * RAID.foePvK * champPv * um) / mm;
+    const eff = g.count / mm;
+    const groupDmg = ref.pv * RAID.foeDmgK * champDmg * um * Math.pow(eff, RAID.groupDmgExp);
+    const perBody = groupDmg / Math.max(1, g.count);
+    for (let i = 0; i < g.count; i++) {
+      out.push({
+        id: `a${out.length}`,
+        side: 'att',
+        kind: groupKind(g),
+        name: g.species,
+        emoji: g.emoji,
+        pv: Math.max(1, Math.round(unitPv)),
+        maxPv: Math.max(1, Math.round(unitPv)),
+        damage: Math.max(1, Math.round(perBody)),
+        origin: 'attacker',
+        bulk: um,
+      });
+    }
+  }
+  return out;
+}
+
 export function resolveRaid(
   defender: Combatant,
   raid: Raid,

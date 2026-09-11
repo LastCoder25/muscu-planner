@@ -54,6 +54,9 @@ import {
   type DefenseStructure,
   type RaidFaction,
   groupKind,
+  siegeWallOf,
+  siegeDefenders,
+  siegeAttackers,
 } from '@/lib/raid';
 
 /** Places de garnison pour les tests courts — ce que le repli implicite rendait
@@ -1420,5 +1423,145 @@ describe('⚠️ la RARETÉ d’un familier compte AUSSI au mur', () => {
     // le rapport mesuré (3,93) frôle l’échelle théorique (4,00) sans l’égaler. Ce qui
     // compte est qu’il la SUIVE — s’il tombait à 1, la rareté ne compterait plus.
     expect(Math.abs(haut / bas - attendu) / attendu).toBeLessThan(0.05);
+  });
+});
+
+describe('⚔️🧱 LES UNITÉS DU SIÈGE — dérivées du vrai état, jamais réinventées', () => {
+  // ⚠️ Chaque terme reprend celui de `baseCombatant`. Une seconde formule finirait par
+  // diverger du panneau de forces, et les deux mentiraient à tour de rôle.
+  const d = (wall: number, turret: number) =>
+    [
+      { typeId: 'wall', level: wall },
+      { typeId: 'turret', level: turret },
+    ] as DefenseStructure[];
+
+  describe('la muraille', () => {
+    it('ses PV suivent la PART du niveau joueur, comme partout ailleurs', () => {
+      const moitie = siegeWallOf(d(14, 14), 28).maxPv;
+      const pleine = siegeWallOf(d(28, 28), 28).maxPv;
+      expect(moitie).toBeLessThan(pleine);
+      expect(moitie).toBeGreaterThan(0);
+    });
+
+    it('⚠️ une muraille ENDOMMAGÉE encaisse moins, sans jamais tomber à zéro', () => {
+      // Diminuée, jamais annulée : c'est la règle anti-spirale de la v0.661.
+      const saine = siegeWallOf(d(28, 28), 28).maxPv;
+      const cassee = siegeWallOf(
+        [
+          { typeId: 'wall', level: 28, damaged: true },
+          { typeId: 'turret', level: 28 },
+        ] as DefenseStructure[],
+        28,
+      ).maxPv;
+      expect(cassee).toBeLessThan(saine);
+      expect(cassee).toBeGreaterThan(0);
+    });
+
+    it('sans muraille, il reste un mur SYMBOLIQUE — jamais zéro PV', () => {
+      // Un mur à 0 PV serait percé au tour zéro, avant même que quiconque ait frappé.
+      expect(siegeWallOf(d(0, 28), 28).maxPv).toBeGreaterThan(0);
+    });
+  });
+
+  describe('les défenseurs', () => {
+    it('les tourelles sont TOUTES là ou aucune — et elles TIRENT', () => {
+      const avec = siegeDefenders(d(28, 28), 28, null);
+      expect(avec.filter((u) => u.origin === 'turret')).toHaveLength(TURRET_SLOTS);
+      expect(avec.every((u) => u.kind === 'ranged')).toBe(true);
+      expect(siegeDefenders(d(28, 0), 28, null)).toHaveLength(0);
+    });
+
+    it('⚠️ les tourelles ont des PV : sans eux, « faire taire les tireurs » n’existe pas', () => {
+      // Le modèle à un seul combattant n'en avait pas besoin — tout y était fondu.
+      // ⚠️ « > 0 » ne prouve RIEN : le plancher `Math.max(1, …)` le garantit déjà, donc
+      // mettre turretPvK à zéro passait au VERT. On épingle une DURÉE DE VIE : une
+      // baliste doit encaisser plusieurs fois ce qu’elle tire, sinon elle est muette
+      // avant d’avoir servi (mesuré : à turretPvK 0,5 elles tombaient en 3 tours).
+      const t = siegeDefenders(d(28, 28), 28, null)[0]!;
+      expect(t.damage).toBeGreaterThan(0);
+      expect(t.maxPv).toBeGreaterThan(t.damage * 3);
+    });
+
+    it('⚠️ le HÉROS tient la brèche au CORPS À CORPS', () => {
+      // C'est là que ça se décide ; en faire un tireur le mettrait hors du moment qui compte.
+      const hero = refFighter(28);
+      const avec = siegeDefenders(d(28, 28), 28, hero);
+      const h = avec.find((u) => u.origin === 'hero');
+      expect(h?.kind).toBe('melee');
+      expect(avec).toHaveLength(TURRET_SLOTS + 1);
+    });
+
+    it('la garnison porte SON type — tireur ou homme d’armes', () => {
+      const g = [
+        { id: 'g1', name: 'Archer', emoji: '🏹', pv: 100, damage: 10, ranged: true },
+        { id: 'g2', name: 'Garde', emoji: '🛡️', pv: 200, damage: 20, ranged: false },
+      ];
+      const def = siegeDefenders(d(28, 28), 28, null, g);
+      expect(def.find((u) => u.id === 'g1')?.kind).toBe('ranged');
+      expect(def.find((u) => u.id === 'g2')?.kind).toBe('melee');
+      expect(def.filter((u) => u.origin === 'adventurer')).toHaveLength(2);
+    });
+  });
+
+  describe('les assaillants', () => {
+    const raid = rollRaid(7919, 28, 0, 0);
+
+    it('un corps par assaillant VISIBLE', () => {
+      const total = raid.groups.reduce((n, g) => n + g.count, 0);
+      expect(siegeAttackers(raid)).toHaveLength(total);
+    });
+
+    it('⚠️ la MASSE est diluée comme dans groupCombatant — les dégâts en RACINE', () => {
+      // Éclater un groupe en corps sans reprendre ce chemin ferait frapper une armée
+      // nombreuse bien plus fort qu'elle ne le doit (`groupDmgExp`, v0.661).
+      const att = siegeAttackers(raid);
+      for (const g of raid.groups) {
+        const corps = att.filter((u) => u.name === g.species && !!u.emoji);
+        if (!corps.length) continue;
+        const somme = corps.slice(0, g.count).reduce((s, u) => s + u.damage, 0);
+        const agrege = groupCombatant(g).damage;
+        // À l'arrondi près : la part par corps est arrondie une fois chacune.
+        expect(Math.abs(somme - agrege) / Math.max(1, agrege)).toBeLessThan(0.2);
+      }
+    });
+
+    it('⚠️ chaque corps porte sa PLACE au pied du mur (bulk)', () => {
+      // Sans elle, le goulot comptait des TÊTES et rendait les hordes inoffensives.
+      // ⚠️ « > 0 » passait au vert avec un `bulk` figé à 1 : on épingle donc la VALEUR,
+      // celle de la silhouette de la faction, seule à porter l’encombrement d’un corps.
+      const att = siegeAttackers(raid);
+      expect(att.every((u) => (u.bulk ?? 0) > 0)).toBe(true);
+      for (const g of raid.groups) {
+        const u = att.find((x) => x.name === g.species);
+        if (u) expect(u.bulk).toBeCloseTo(g.unitMult ?? 1, 6);
+      }
+      // Et la silhouette n’est pas neutre : une horde a des corps plus menus.
+      expect(FACTION_PROFILE.betes.unitMult).toBeLessThan(FACTION_PROFILE.bandits.unitMult);
+    });
+
+    it('⚠️ le CHAMPION est plus solide À NIVEAU ÉGAL — sinon on teste son niveau', () => {
+      // Test refait après une mutation passée au VERT : dans une vraie armée le champion
+      // est AUSSI d’un niveau plus élevé, donc il reste le plus solide même sans son
+      // multiplicateur. On construit donc deux groupes RIGOUREUSEMENT identiques, où
+      // seul le drapeau `champion` diffère.
+      const base = {
+        species: 'Troupe',
+        emoji: '🗡️',
+        count: 1,
+        level: 20,
+        unitMult: 1,
+        massMult: 1,
+        kind: 'melee' as const,
+      };
+      const duo = {
+        ...raid,
+        groups: [base, { ...base, species: 'Chef', champion: true }],
+      } as typeof raid;
+      const att = siegeAttackers(duo);
+      const troupe = att.find((u) => u.name === 'Troupe')!;
+      const chef = att.find((u) => u.name === 'Chef')!;
+      expect(chef.maxPv / troupe.maxPv).toBeCloseTo(RAID.championPvMult, 1);
+      expect(chef.damage / troupe.damage).toBeCloseTo(RAID.championDmgMult, 1);
+    });
   });
 });
