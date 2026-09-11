@@ -592,6 +592,36 @@ export interface Adventurer {
    *  Le `classId` n'est PAS encore dans `path` — il n'y entre qu'à l'échéance, sinon
    *  l'aventurier profiterait de ses nouvelles stats pendant sa formation. */
   training?: { classId: string; until: number };
+  /**
+   * Son COMPAGNON — l'id d'un familier de l'inventaire.
+   *
+   * ⚠️ L'appariement vit SUR L'AVENTURIER, pas dans une liste à part, et c'est ce qui
+   * lui donne son sens : le familier SUIT son homme partout (convoi comme rempart).
+   * Rangé ailleurs, il aurait fallu deux règles — « qui est apparié » et « qui part en
+   * mission » — et rien pour les tenir d'accord.
+   *
+   * ⚠️ Un familier ne peut être apparié qu'à UN aventurier, et pas en même temps porté
+   * par le héros : c'est `companionsOf` qui le vérifie, jamais l'écran seul.
+   *
+   * Absent = pas de compagnon. Les aventuriers d'avant n'en ont aucun, donc le
+   * mécanisme est INERTE tant que personne n'en assigne un.
+   */
+  familiarId?: string;
+  /**
+   * Son TALENT — l'id d'un talent de la collection.
+   *
+   * ⚠️ UN aventurier = UN talent, là où le héros en équipe plusieurs. C'est ce qui en
+   * fait un « mini-héros bien moins fort » (conception de l'utilisateur) plutôt qu'un
+   * second héros : même grammaire — stats, compagnon, talent — mais une seule ligne de
+   * chaque, et bridée.
+   *
+   * ⚠️ Effet de bord VOULU : les talents en surplus, qui ne servaient que de carburant
+   * à l'infusion, trouvent enfin un emploi. Un talent porté par le HÉROS n'est pas
+   * disponible — c'est `advTalentsOf` qui l'assure, jamais l'écran seul.
+   *
+   * Absent = aucun talent. Inerte tant que personne n'en assigne un.
+   */
+  talentId?: string;
 }
 
 function mulberry32(seed: number): () => number {

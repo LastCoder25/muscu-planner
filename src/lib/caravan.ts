@@ -19,9 +19,19 @@ import {
   effectAsAggregate,
   playerWithGear,
   emptyEffects,
+  effectAsAggregate as asAggregate,
+  famLevel,
+  famAtkMult,
+  famDefMult,
   type AggregatedEffects,
+  type Item,
 } from './items';
 import { simulateCombat, type Combatant } from './combat';
+// ⚠️ Type SEUL : `raid.ts` importera `garrisonCombatant` à l'exécution, donc un import
+// de valeur dans l'autre sens créerait un cycle. Le projet applique déjà cette règle
+// entre `data/familiars` et `items`.
+import type { GarrisonBonus } from './raid';
+import { talentEffects, type TalentInstance } from './talents';
 import {
   HARVEST_TYPES,
   harvestYield,
@@ -191,7 +201,14 @@ function escortEffects(advs: Adventurer[]): AggregatedEffects {
  *  ⚠️ Aucun bonus de « diversité » à inventer — `simulateCombat` calcule offense × survie,
  *  donc quatre Guerriers tapent fort et meurent quand un Guerrier + un Homme d'armes +
  *  un Archer tiennent. L'incitation à l'équipe équilibrée est déjà dans le moteur. */
-export function escortCombatant(advs: Adventurer[], name = 'Escorte'): Combatant {
+export function escortCombatant(
+  advs: Adventurer[],
+  name = 'Escorte',
+  /** Renfort d'effets EXTÉRIEUR aux aventuriers — aujourd'hui les familiers postés
+   *  (cf. `garrisonCombatant`). Il s'ajoute aux signatures de l'escorte au lieu de les
+   *  remplacer : un convoi garde ses propres talents. */
+  extra: Partial<AggregatedEffects> = {},
+): Combatant {
   const stats = advs.reduce(
     (a, x) => {
       const s = advStats(x);
@@ -204,7 +221,172 @@ export function escortCombatant(advs: Adventurer[], name = 'Escorte'): Combatant
     { puissance: 0, endurance: 0, agilite: 0 },
   );
   const level = advs.reduce((m, a) => Math.max(m, a.level), 1);
-  return playerWithGear(name, stats, {}, escortEffects(advs), level);
+  return playerWithGear(
+    name,
+    stats,
+    {},
+    mergeEffects(escortEffects(advs), { ...emptyEffects(), ...extra }),
+    level,
+  );
+}
+
+/**
+ * LA GARNISON : les aventuriers présents, épaulés par les familiers postés au chenil.
+ *
+ * ⚠️ C'EST LA CHAÎNE FAMILIERS → GARNISON → DÉFENSES (conception de l'utilisateur), et
+ * elle corrige une incohérence de fond : jusqu'ici le bonus du chenil multipliait
+ * DIRECTEMENT les PV de la muraille et les dégâts des tourelles. Un loup qui rend la
+ * pierre plus solide ne veut rien dire. Un familier épaule des HOMMES — exactement comme
+ * celui du héros épaule le héros, et par le même mécanisme : des `AggregatedEffects`
+ * posés sur un combattant.
+ *
+ * ⚠️ LES QUATRE CANAUX DE COMBAT DU CHENIL GARDENT LEUR SENS, ils changent seulement de
+ * cible : dégâts et PV multiplient la troupe, la réduction l'abrite, la régénération la
+ * remet sur pied entre deux groupes. Les deux rôles NON combattants (renseignement du
+ * faucon, fouille de la marmotte) n'ont rien à faire ici — ils ne concernent pas un
+ * combattant, et les faire transiter par lui les perdrait.
+ *
+ * ⚠️ CE QUI RESTE À TRANCHER AU BRANCHEMENT, et qui ne se décide pas ici : ce que vaut
+ * une garnison SANS aucun aventurier. Le chenil fonctionne seul aujourd'hui ; s'il ne
+ * servait plus qu'à multiplier une troupe absente, un joueur sans Guilde perdrait tout
+ * son bonus d'un coup. La réponse se cale sur le niveau du JOUEUR — comme toute structure
+ * de l'enceinte (cf. `baseCombatant`) — donnée que ce module n'a pas. On n'invente donc
+ * rien ici.
+ */
+export function garrisonCombatant(
+  advs: Adventurer[],
+  fam: GarrisonBonus = {},
+  name = 'Garnison',
+): Combatant {
+  // ⚠️ UNITÉS — LE PIÈGE RÉCURRENT DE CE PROJET, et il a mordu ici (attrapé par un
+  // test, pas par la relecture). `GarrisonBonus` MÉLANGE les deux : `damagePct` et
+  // `maxPvPct` y sont des POURCENTAGES (23,4 pour +23,4 %) tandis que `dmgReduction` et
+  // `regen` sont déjà des FRACTIONS (0,12). `AggregatedEffects`, lui, est en fractions
+  // de bout en bout (cf. `effectAsAggregate`, qui divise par 100). Passer les deux
+  // premiers tels quels les multipliait donc par CENT.
+  const out = escortCombatant(advs, name, {
+    damagePct: (fam.damagePct ?? 0) / 100,
+    maxPvPct: (fam.maxPvPct ?? 0) / 100,
+    dmgReduction: fam.dmgReduction ?? 0,
+  });
+  // ⚠️ La RÉGÉNÉRATION n'est pas un effet agrégé mais une propriété du combattant : elle
+  // se pose après coup, sinon le canal de la salamandre disparaîtrait en silence.
+  return fam.regen ? { ...out, regen: (out.regen ?? 0) + fam.regen } : out;
+}
+
+/** Part de l'effet d'un compagnon qui profite à son aventurier.
+ *  ⚠️ BRIDÉE, et pour la même raison que `GARRISON_K` au chenil : un familier de haut
+ *  rang porte des pourcentages calibrés pour le HÉROS, dont la puissance croît en ~L⁴.
+ *  Collés tels quels sur une escorte, ils écraseraient la calibration des embuscades —
+ *  mesurée, et sur laquelle repose le seul vrai choix de la feature (« combien
+ *  j'envoie »). */
+export const COMPANION_K = 0.4;
+
+/**
+ * Les COMPAGNONS d'une escorte : un familier par aventurier, au plus.
+ *
+ * ⚠️ TROIS EXCLUSIONS, et aucune n'est décorative. Un familier déjà PORTÉ par le héros
+ * n'est pas disponible (il se bat ailleurs) ; un familier apparié DEUX FOIS ne compte
+ * qu'une (l'écran ne devrait pas le permettre, mais l'écran ne garantit rien) ; un id
+ * qui ne désigne plus rien est ignoré plutôt que de faire tomber le combat — un familier
+ * vendu laisserait sinon un appariement fantôme.
+ */
+export function companionsOf(
+  advs: Adventurer[],
+  owned: Item[],
+  heroFamiliarId?: string | null,
+): Item[] {
+  const byId = new Map(owned.map((i) => [i.id, i]));
+  const taken = new Set<string>();
+  const out: Item[] = [];
+  for (const a of advs) {
+    const id = a.familiarId;
+    if (!id || id === heroFamiliarId || taken.has(id)) continue;
+    const f = byId.get(id);
+    if (!f) continue;
+    taken.add(id);
+    out.push(f);
+  }
+  return out;
+}
+
+/**
+ * Ce que les compagnons apportent, en effets.
+ *
+ * ⚠️ LE DRESSAGE SUIT LE TERRAIN, et c'est ce qui garde les deux carrières du familier
+ * vivantes : sur la route il se bat (`'atk'`), au rempart il défend (`'def'`). Le même
+ * animal ne vaut donc pas la même chose aux deux endroits — exactement ce que le chenil
+ * faisait déjà, mais rattaché à un homme plutôt qu'à un mur.
+ */
+export function companionEffects(
+  companions: Item[],
+  kind: 'atk' | 'def',
+  k = COMPANION_K,
+): AggregatedEffects {
+  const list = companions.flatMap((f) => {
+    const mult =
+      k *
+      (kind === 'atk'
+        ? famAtkMult(famLevel(f.atkXp, 'atk'))
+        : famDefMult(famLevel(f.defXp, 'def')));
+    const parts = [asAggregate(f.effect.type, f.effect.value * mult)];
+    // La SIGNATURE ✦ d'un familier compte aussi : c'est ce qui fait sa valeur au drop.
+    if (f.effect2) parts.push(asAggregate(f.effect2.type, f.effect2.value * mult));
+    return parts;
+  });
+  return list.length ? mergeEffects(...list) : emptyEffects();
+}
+
+/** Part de l'effet d'un talent qui profite à son aventurier.
+ *  ⚠️ Constante SÉPARÉE de `COMPANION_K` bien qu'elles vaillent pareil aujourd'hui : ce
+ *  sont deux leviers d'équilibrage distincts, et les fusionner interdirait de corriger
+ *  l'un sans déplacer l'autre. */
+export const ADV_TALENT_K = 0.4;
+
+/** Multiplie tous les canaux d'un agrégat. ⚠️ Balayage des CLÉS de `emptyEffects()`, pas
+ *  une liste écrite à la main : ajouter un canal à `AggregatedEffects` sans le brider
+ *  ici passerait sinon inaperçu. */
+function scaleEffects(e: AggregatedEffects, k: number): AggregatedEffects {
+  const out = emptyEffects();
+  for (const key of Object.keys(out) as (keyof AggregatedEffects)[]) out[key] = (e[key] ?? 0) * k;
+  return out;
+}
+
+/**
+ * Les TALENTS des aventuriers d'une escorte — un par tête, au plus.
+ *
+ * ⚠️ Mêmes trois exclusions que les compagnons, et pour les mêmes raisons : un talent
+ * ÉQUIPÉ PAR LE HÉROS n'est pas disponible, un talent assigné deux fois ne compte
+ * qu'une, un id qui ne désigne plus rien est ignoré. Un talent recyclé laisserait sinon
+ * une assignation fantôme.
+ */
+export function advTalentsOf(
+  advs: Adventurer[],
+  owned: TalentInstance[],
+  heroTalentIds: readonly string[] = [],
+): TalentInstance[] {
+  const byId = new Map(owned.map((t) => [t.id, t]));
+  const hero = new Set(heroTalentIds);
+  const taken = new Set<string>();
+  const out: TalentInstance[] = [];
+  for (const a of advs) {
+    const id = a.talentId;
+    if (!id || hero.has(id) || taken.has(id)) continue;
+    const t = byId.get(id);
+    if (!t) continue;
+    taken.add(id);
+    out.push(t);
+  }
+  return out;
+}
+
+/** Ce que ces talents apportent, BRIDÉ.
+ *  ⚠️ On force `equipped: true` : `talentEffects` ignore ce qui ne l'est pas, et un talent
+ *  confié à un aventurier n'est justement PAS équipé sur le héros — sans ça, la fonction
+ *  rendrait zéro en silence. */
+export function advTalentEffects(talents: TalentInstance[], k = ADV_TALENT_K): AggregatedEffects {
+  if (!talents.length) return emptyEffects();
+  return scaleEffects(talentEffects(talents.map((t) => ({ ...t, equipped: true }))), k);
 }
 
 /** Combien de strates un aventurier de ce niveau a pu franchir. */

@@ -11,6 +11,13 @@ import {
   trainMsFor,
   caravanWages,
   escortCombatant,
+  garrisonCombatant,
+  companionsOf,
+  companionEffects,
+  COMPANION_K,
+  advTalentsOf,
+  advTalentEffects,
+  ADV_TALENT_K,
   heroEquivalentFactor,
   isCaravanClaimable,
   missionXp,
@@ -21,6 +28,7 @@ import {
   type Caravan,
 } from '@/lib/caravan';
 import { type Adventurer } from '@/lib/adventurers';
+import { TALENTS } from '@/lib/talents';
 import { simulateCombat } from '@/lib/combat';
 import {
   EXPE,
@@ -446,5 +454,241 @@ describe('⚠️ le temps de formation suit le RANG visé', () => {
     expect(stratumTrainMult(0)).toBe(1);
     expect(stratumTrainMult(-5)).toBe(1);
     expect(Number.isFinite(stratumTrainMult(99))).toBe(true);
+  });
+});
+
+describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () => {
+  // Conception de l'utilisateur : un familier épaule un HOMME, pas un mur. L'appariement
+  // est permanent, donc le compagnon part en convoi ET défend le rempart.
+  const fam = (id: string, o: Partial<Item> = {}): Item =>
+    ({
+      id,
+      slot: 'familiar',
+      name: id,
+      emoji: '🐺',
+      rarity: 'rare',
+      level: 1,
+      baseLevel: 1,
+      effect: { type: 'damage_pct', value: 20 },
+      ...o,
+    }) as Item;
+  const adv = (id: string, o: Partial<Adventurer> = {}): Adventurer => ({
+    id,
+    name: id,
+    seed: 1,
+    path: ['guerrier'],
+    level: 5,
+    xp: 0,
+    ...o,
+  });
+
+  describe('qui compte comme compagnon', () => {
+    it('apparie chaque aventurier à SON familier', () => {
+      const owned = [fam('f1'), fam('f2')];
+      const team = [adv('a', { familiarId: 'f1' }), adv('b', { familiarId: 'f2' })];
+      expect(companionsOf(team, owned).map((f) => f.id)).toEqual(['f1', 'f2']);
+    });
+
+    it('⚠️ le familier PORTÉ PAR LE HÉROS ne se dédouble pas', () => {
+      // Il se bat déjà ailleurs. Sans cette garde, le même animal compterait deux fois.
+      const owned = [fam('f1')];
+      const team = [adv('a', { familiarId: 'f1' })];
+      expect(companionsOf(team, owned, 'f1')).toEqual([]);
+    });
+
+    it('⚠️ un familier apparié DEUX FOIS ne compte qu’une', () => {
+      // L'écran ne devrait pas le permettre — mais l'écran ne garantit rien.
+      const owned = [fam('f1')];
+      const team = [adv('a', { familiarId: 'f1' }), adv('b', { familiarId: 'f1' })];
+      expect(companionsOf(team, owned)).toHaveLength(1);
+    });
+
+    it('⚠️ un appariement FANTÔME est ignoré, il ne fait pas tomber le combat', () => {
+      // Un familier vendu laisse son id derrière lui.
+      const team = [adv('a', { familiarId: 'disparu' }), adv('b')];
+      expect(companionsOf(team, [fam('f1')])).toEqual([]);
+    });
+  });
+
+  describe('ce que le compagnon apporte', () => {
+    it('⚠️ l’effet est BRIDÉ — les pourcentages sont calibrés pour le HÉROS', () => {
+      // Collés tels quels sur une escorte, ils écraseraient la calibration des embuscades.
+      // ⚠️ `AggregatedEffects` est en FRACTIONS (0,08 pour +8 %), pas en pourcentages.
+      const e = companionEffects([fam('f1')], 'atk');
+      expect(e.damagePct).toBeCloseTo((20 * COMPANION_K) / 100, 5);
+      expect(COMPANION_K).toBeLessThan(1);
+    });
+
+    it('⚠️ LE DRESSAGE SUIT LE TERRAIN : ⚔️ sur la route, 🛡️ au rempart', () => {
+      // C'est ce qui garde les DEUX carrières du familier vivantes.
+      const guerrier = fam('f1', { atkXp: 100_000, defXp: 0 });
+      const gardien = fam('f2', { atkXp: 0, defXp: 100_000 });
+      expect(companionEffects([guerrier], 'atk').damagePct).toBeGreaterThan(
+        companionEffects([guerrier], 'def').damagePct,
+      );
+      expect(companionEffects([gardien], 'def').damagePct).toBeGreaterThan(
+        companionEffects([gardien], 'atk').damagePct,
+      );
+    });
+
+    it('⚠️ le BRIDAGE s’applique vraiment — pas seulement en constante', () => {
+      // Vérifier que COMPANION_K < 1 ne prouve rien s’il n’est pas utilisé. On compare
+      // donc à un k explicite : le défaut doit BRIDER, sinon la calibration des
+      // embuscades saute sans qu’aucun test ne bouge.
+      const f = fam('f1');
+      const bride = companionEffects([f], 'atk').damagePct;
+      const plein = companionEffects([f], 'atk', 1).damagePct;
+      expect(bride).toBeLessThan(plein);
+      expect(bride).toBeCloseTo(plein * COMPANION_K, 6);
+    });
+
+    it('⚠️ le DRESSAGE compte vraiment — un familier dressé vaut plus qu’un novice', () => {
+      // Le test voisin compare les deux TERRAINS ; il resterait vert si le dressage était
+      // remplacé par une constante des deux côtés. Ici on compare deux ANIMAUX.
+      const novice = fam('n');
+      const dresse = fam('d', { atkXp: 100_000 });
+      expect(companionEffects([dresse], 'atk').damagePct).toBeGreaterThan(
+        companionEffects([novice], 'atk').damagePct,
+      );
+    });
+
+    it('la SIGNATURE ✦ d’un familier compte aussi', () => {
+      const sig = fam('f1', { effect2: { type: 'execute_pct', value: 10 } });
+      expect(companionEffects([sig], 'atk').executePct).toBeGreaterThan(0);
+    });
+
+    it('sans compagnon, aucun effet — jamais undefined', () => {
+      expect(companionEffects([], 'atk').damagePct).toBe(0);
+    });
+  });
+
+  describe('la GARNISON : les aventuriers, épaulés par leurs familiers', () => {
+    it('⚠️ les POURCENTAGES du chenil sont convertis en FRACTIONS', () => {
+      // Le piège d'unité du projet, et il a mordu ici : `GarrisonBonus` mélange les deux
+      // (dégâts et PV en %, réduction et régén en fractions) alors que
+      // `AggregatedEffects` est en fractions de bout en bout. Sans conversion, le bonus
+      // était multiplié par CENT — un chenil qui gagnait la bataille à lui seul.
+      const team = [adv('a')];
+      const nu = garrisonCombatant(team, {});
+      const aide = garrisonCombatant(team, { damagePct: 50 });
+      // +50 % de dégâts : environ une fois et demie, PAS cinquante fois.
+      expect(aide.damage / nu.damage).toBeGreaterThan(1.2);
+      expect(aide.damage / nu.damage).toBeLessThan(2);
+    });
+
+    it('le bonus des familiers MULTIPLIE la troupe', () => {
+      const team = [adv('a'), adv('b')];
+      const nu = garrisonCombatant(team, {});
+      const aide = garrisonCombatant(team, { damagePct: 30, maxPvPct: 25 });
+      expect(aide.damage).toBeGreaterThan(nu.damage);
+      expect(aide.pv).toBeGreaterThan(nu.pv);
+    });
+
+    it('⚠️ la RÉGÉNÉRATION de la salamandre n’est pas perdue en route', () => {
+      // Ce n'est pas un effet agrégé mais une propriété du combattant : sans traitement
+      // dédié, ce canal du chenil disparaîtrait en silence.
+      const team = [adv('a')];
+      expect(garrisonCombatant(team, { regen: 0.05 }).regen ?? 0).toBeGreaterThan(
+        garrisonCombatant(team, {}).regen ?? 0,
+      );
+    });
+
+    it('la réduction de l’ours abrite la troupe, À SA VALEUR', () => {
+      // ⚠️ Un simple « > 0 » ne suffisait pas : diviser cette valeur par 100 passait au
+      // VERT alors que c’est précisément l’erreur d’unité qu’on vient de corriger deux
+      // lignes plus haut. On épingle donc la MAGNITUDE, pas seulement le signe.
+      const team = [adv('a')];
+      const nu = garrisonCombatant(team, {}).dmgReduction ?? 0;
+      const aide = garrisonCombatant(team, { dmgReduction: 0.1 }).dmgReduction ?? 0;
+      expect(aide - nu).toBeCloseTo(0.1, 3);
+    });
+  });
+
+  it('⚠️ SANS renfort, l’escorte est EXACTEMENT celle d’avant', () => {
+    // Non-régression du calibrage des embuscades, mesuré et documenté : ajouter un
+    // paramètre optionnel ne doit rien changer à ceux qui ne le passent pas.
+    const team = [adv('a'), adv('b', { path: ['archer'] })];
+    const avant = escortCombatant(team);
+    const apres = escortCombatant(team, 'Escorte', {});
+    expect(apres.pv).toBe(avant.pv);
+    expect(apres.damage).toBe(avant.damage);
+    expect(apres.crit).toBe(avant.crit);
+  });
+});
+
+describe('🧠 UN TALENT PAR AVENTURIER — des mini-héros bien moins forts', () => {
+  // Conception de l'utilisateur. Même grammaire que le héros — stats, compagnon, talent
+  // — mais UNE seule ligne de chaque, et bridée. Effet de bord voulu : les talents en
+  // surplus, qui ne servaient que de carburant à l'infusion, trouvent un emploi.
+  const adv2 = (id: string, o: Partial<Adventurer> = {}): Adventurer => ({
+    id,
+    name: id,
+    seed: 1,
+    path: ['guerrier'],
+    level: 5,
+    xp: 0,
+    ...o,
+  });
+  /** Un talent RÉEL du catalogue : inventer un code rendrait `talentEffects` muet.
+   *  ⚠️ `equipped: false` — c’est l’ÉTAT RÉEL d’un talent confié à un aventurier : il
+   *  n’est justement pas équipé sur le héros. Le premier fixture l’omettait, et comme
+   *  `talentEffects` n’écarte que le `false` EXPLICITE, la mutation « on oublie de
+   *  forcer equipped » passait au VERT — alors qu’en vrai elle aurait rendu zéro. */
+  const tal = (id: string, code = TALENTS[0]!.code) => ({
+    id,
+    code,
+    xp: 400,
+    level: 1,
+    equipped: false,
+  });
+
+  it('assigne à chaque aventurier SON talent', () => {
+    const owned = [tal('t1'), tal('t2')];
+    const team = [adv2('a', { talentId: 't1' }), adv2('b', { talentId: 't2' })];
+    expect(advTalentsOf(team, owned).map((t) => t.id)).toEqual(['t1', 't2']);
+  });
+
+  it('⚠️ un talent ÉQUIPÉ PAR LE HÉROS n’est pas disponible', () => {
+    const owned = [tal('t1')];
+    const team = [adv2('a', { talentId: 't1' })];
+    expect(advTalentsOf(team, owned, ['t1'])).toEqual([]);
+  });
+
+  it('⚠️ un talent assigné DEUX FOIS ne compte qu’une, un id fantôme est ignoré', () => {
+    const owned = [tal('t1')];
+    expect(
+      advTalentsOf([adv2('a', { talentId: 't1' }), adv2('b', { talentId: 't1' })], owned),
+    ).toHaveLength(1);
+    expect(advTalentsOf([adv2('a', { talentId: 'parti' })], owned)).toEqual([]);
+  });
+
+  it('⚠️ l’effet est RÉEL — un talent assigné change quelque chose', () => {
+    // `talentEffects` ignore ce qui n'est pas équipé : sans forcer `equipped`, la
+    // fonction rendrait zéro EN SILENCE, et le talent d'un aventurier ne servirait à rien.
+    const e = advTalentEffects([tal('t1')]);
+    const total = Object.values(e).reduce((a, v) => a + Math.abs(v), 0);
+    expect(total).toBeGreaterThan(0);
+  });
+
+  it('⚠️ …et il est BRIDÉ sur TOUS les canaux, pas seulement les dégâts', () => {
+    // ⚠️ Test renforcé après une mutation passée au VERT : avec UN seul talent, tous
+    // les canaux sauf un valent zéro, donc ne brider que les dégâts restait invisible.
+    // On prend donc des talents de canaux DIFFÉRENTS (PV, crit, armure).
+    const varies = [tal('t1', 't_pv'), tal('t2', 't_crit'), tal('t3', 't_armor')];
+    const plein = advTalentEffects(varies, 1);
+    const bride = advTalentEffects(varies);
+    const somme = (e: Record<string, number>) =>
+      Object.values(e).reduce((a, v) => a + Math.abs(v), 0);
+    expect(somme(plein)).toBeGreaterThan(0);
+    expect(somme(bride)).toBeCloseTo(somme(plein) * ADV_TALENT_K, 6);
+    // Chaque canal touché est bridé, pas seulement le total.
+    expect(bride.maxPvPct).toBeCloseTo(plein.maxPvPct * ADV_TALENT_K, 6);
+    expect(bride.critAdd).toBeCloseTo(plein.critAdd * ADV_TALENT_K, 6);
+    expect(bride.dmgReduction).toBeCloseTo(plein.dmgReduction * ADV_TALENT_K, 6);
+    expect(ADV_TALENT_K).toBeLessThan(1);
+  });
+
+  it('sans talent, aucun effet', () => {
+    expect(advTalentEffects([])).toEqual(advTalentEffects([], 0));
   });
 });
