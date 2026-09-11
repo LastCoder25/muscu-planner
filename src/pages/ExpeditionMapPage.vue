@@ -251,6 +251,10 @@
               >🎯 {{ winPct }}%</span
             >
           </div>
+          <p v-if="riskHero && riskHero.worsens" class="sh-risk" :class="{ bad: riskHero.risky }">
+            ⚠️ Une armée arrive : sans le héros, « {{ ODDS_LABEL[riskHero.after] }} » au lieu de «
+            {{ ODDS_LABEL[riskHero.before] }} ».
+          </p>
           <button class="sh-send" :disabled="!canSend" @click="send">
             {{ sendLabel }}
           </button>
@@ -280,6 +284,13 @@
               <span class="ca-name">{{ a.name }}</span>
             </button>
           </div>
+          <!-- ⚠️ L'AVERTISSEMENT EST AU-DESSUS DU BOUTON, pas après : on doit le lire
+               AVANT de partir, pas en revenant. Il ne BLOQUE rien — c'est un arbitrage
+               (une cargaison contre un risque), pas une faute. -->
+          <p v-if="risk && risk.worsens" class="sh-risk" :class="{ bad: risk.risky }">
+            ⚠️ Une armée arrive : sans eux, « {{ ODDS_LABEL[risk.after] }} » au lieu de «
+            {{ ODDS_LABEL[risk.before] }} ».
+          </p>
           <button class="sh-send car-send" :disabled="!canSendCaravanNow" @click="doSendCaravan">
             🐫 Envoyer une caravane ({{ escort.length }})
           </button>
@@ -369,6 +380,15 @@ import {
   isClaimable,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
+import {
+  assaultPower,
+  departureRisk,
+  garrisonBonus,
+  garrisonSlots,
+  guardUnits,
+  defenseLevel,
+  ODDS_LABEL,
+} from '@/lib/raid';
 import { advAvailable, advTitle } from '@/lib/adventurers';
 import { CARAVAN, caravanLegMin, caravanSlots, isCaravanClaimable, poiOffers } from '@/lib/caravan';
 
@@ -574,6 +594,59 @@ const sheetEl = ref<HTMLElement | null>(null);
 // Un convoi part vers un lieu de RÉCOLTE, ne coûte aucune énergie, et immobilise son
 // escorte. Il CONSOMME le lieu comme le ferait le héros : les deux se disputent la carte.
 const escort = ref<string[]>([]);
+
+/** ⚠️ CE QUE LE DÉPART COÛTE, face à l'armée qui arrive (demandé par l'utilisateur :
+ *  « envoyer des convois ou le héros sans se mettre dans le rouge »). Cet écran ne
+ *  savait RIEN du siège en approche : on partait, et on découvrait en rentrant que la
+ *  base était tombée pendant le voyage.
+ *  ⚠️ Toute la règle vit dans `departureRisk` (pure, testée) — ici on ne fait que lui
+ *  passer l'état AVANT et APRÈS. */
+const base = computed(() => char.row?.base ?? null);
+const incoming = computed(() => base.value?.raid ?? null);
+const assaultNow = computed(() => (incoming.value ? assaultPower(incoming.value) : 0));
+const famBonus = computed(() =>
+  garrisonBonus(
+    (char.row?.inventory ?? []).filter(
+      (it) => it.slot === 'familiar' && (base.value?.garrison ?? []).includes(it.id),
+    ),
+    now.value,
+    defenseLevel(base.value?.defenses ?? [], 'kennel'),
+    garrisonSlots(heroLevel.value),
+  ),
+);
+/** Qui resterait si l'on partait : l'escorte choisie quitte la base, et le héros aussi
+ *  quand c'est LUI qu'on envoie. */
+const risk = computed(() => {
+  const b = base.value;
+  if (!b || !assaultNow.value) return null;
+  const restants = freeAdvs.value.filter((a) => !escort.value.includes(a.id));
+  const heroNow = char.row && char.heroIsHome(char.row) ? fighter.value : null;
+  return departureRisk(
+    b.defenses,
+    heroLevel.value,
+    assaultNow.value,
+    { hero: heroNow, guard: guardUnits(heroLevel.value, freeAdvs.value, famBonus.value) },
+    { hero: heroNow, guard: guardUnits(heroLevel.value, restants, famBonus.value) },
+  );
+});
+
+/** Le MÊME calcul, pour le départ du HÉROS. ⚠️ Deux boutons, deux risques : envoyer un
+ *  convoi et envoyer le héros ne retirent pas les mêmes défenseurs, et une seule
+ *  alerte pour les deux dirait faux à l'un des deux coups. */
+const riskHero = computed(() => {
+  const b = base.value;
+  if (!b || !assaultNow.value) return null;
+  const heroNow = char.row && char.heroIsHome(char.row) ? fighter.value : null;
+  if (!heroNow) return null;
+  const g = guardUnits(heroLevel.value, freeAdvs.value, famBonus.value);
+  return departureRisk(
+    b.defenses,
+    heroLevel.value,
+    assaultNow.value,
+    { hero: heroNow, guard: g },
+    { hero: null, guard: g },
+  );
+});
 const freeAdvs = computed(() => char.advList.filter((a) => advAvailable(a, now.value)));
 const vansLeft = computed(
   () =>
@@ -1442,6 +1515,19 @@ function fmtMin(min: number): string {
 .wp-bad {
   color: #ff6a45;
   border-color: #ff6a45;
+}
+/* ⚠️ AVERTISSEMENT, pas interdiction : partir malgré un siège est un ARBITRAGE (une
+   cargaison contre un risque), pas une faute. D3 quand ça se dégrade, D4 quand la base
+   ne tient plus — deux crans, parce que « moins confortable » et « tu vas perdre » ne
+   se disent pas de la même couleur. */
+.sh-risk {
+  font-size: 12px;
+  color: var(--d3);
+  margin: 4px 0 6px;
+}
+.sh-risk.bad {
+  color: var(--d4);
+  font-weight: 600;
 }
 .sh-send {
   width: 100%;

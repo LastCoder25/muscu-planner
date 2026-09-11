@@ -395,6 +395,17 @@
             </div>
           </div>
         </div>
+        <!-- ⚠️ CE QUE COÛTENT LES ABSENTS (demandé par l'utilisateur : « envoyer des
+             convois ou le héros sans se mettre dans le rouge »). Le panneau donnait la
+             défense du MOMENT sans jamais dire ce qu'elle vaudrait au complet : on ne
+             pouvait pas savoir ce qu'on abandonnait en faisant partir quelqu'un.
+             ⚠️ Affiché SEULEMENT si l'écart est réel — annoncer « −0 » à un joueur dont
+             tout le monde est à la maison serait du bruit. -->
+        <p v-if="forcesGap > 0" class="f-gap">
+          🚪 <b>{{ fmtPow(forcesGap) }}</b> de défense sont dehors — au complet, tu vaudrais
+          <b>{{ fmtPow(forcesFull) }}</b
+          >.
+        </p>
         <!-- ⚠️ UNE JAUGE, pas deux nombres à comparer : le seuil d'équilibre est à
              ×0,88 (mesuré), donc « ma défense < l'armée » ne veut PAS dire « je perds ».
              Le repère central EST l'équilibre ; à gauche ça cède, à droite on tient. -->
@@ -882,7 +893,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
-import { canPromote } from '@/lib/adventurers';
+import { canPromote, advAvailable } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
 import { RARITY_LABEL, famDefMult, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import {
@@ -912,6 +923,8 @@ import {
   assaultEstimate,
   assaultPower,
   defenseBreakdown,
+  defensePotential,
+  guardUnits,
   siegeGauge,
   siegeOdds,
   ODDS_LABEL,
@@ -1586,9 +1599,32 @@ const clarity = computed(() =>
  *  aurait été la 3ᵉ du même prédicat — exactement ce que ce chantier corrige ailleurs. */
 const heroHome = computed(() => !!char.row && char.heroIsHome(char.row));
 const heroForDefense = computed(() => (heroHome.value ? (props.hero ?? null) : null));
-const forces = computed(() =>
-  defenseBreakdown(defenses.value, heroLevel.value, heroForDefense.value, garrison.value),
+/** LA GARNISON PRÉSENTE : les aventuriers qui ne sont ni en convoi, ni à l’infirmerie,
+ *  ni en formation, épaulés par les familiers postés. ⚠️ Construite par `guardUnits`,
+ *  la MÊME fonction que le store donne à `resolveRaid` : le panneau et la bataille ne
+ *  peuvent pas se contredire. */
+const guardNow = computed(() =>
+  guardUnits(
+    heroLevel.value,
+    char.advList.filter((a) => advAvailable(a, now.value)),
+    garrison.value,
+  ),
 );
+/** LA GARNISON AU COMPLET : tout le vivier, blessés compris — ils rentreront. C’est un
+ *  PLAFOND, pas une prévision, et c’est précisément ce qu’on abandonne en envoyant
+ *  quelqu’un ailleurs. */
+const guardFull = computed(() => guardUnits(heroLevel.value, char.advList, garrison.value));
+const forces = computed(() =>
+  defenseBreakdown(defenses.value, heroLevel.value, heroForDefense.value, guardNow.value),
+);
+/** Ce que vaudrait la défense si TOUT LE MONDE était là — héros compris. */
+const forcesFull = computed(() =>
+  defensePotential(defenses.value, heroLevel.value, props.hero ?? null, guardFull.value),
+);
+/** L’écart : ce que coûte, en puissance de défense, le fait d’avoir des gens dehors.
+ *  ⚠️ Affiché seulement s’il est RÉEL — annoncer « −0 » à un joueur dont tout le monde
+ *  est à la maison serait du bruit. */
+const forcesGap = computed(() => Math.max(0, forcesFull.value - forces.value.total));
 const assault = computed(() => (raid.value ? assaultPower(raid.value) : 0));
 /** Ce que l'ESPIONNAGE laisse voir de l'armée : une fourchette qui se resserre à mesure
  *  que la Tour monte, et qui contient TOUJOURS la vérité. */
@@ -2636,6 +2672,14 @@ const doCollect = () =>
 .f-gauge.risque .fg-cursor,
 .f-gauge.perdu .fg-cursor {
   background: var(--d4);
+}
+/* ⚠️ Teinte d'AVERTISSEMENT (d3), pas de danger : des gens dehors n'est pas une
+   faute — c'est le prix d'un convoi, et le joueur doit pouvoir le lire sans se
+   croire en train de perdre. */
+.f-gap {
+  font-size: 12px;
+  color: var(--d3);
+  margin: 6px 0 2px;
 }
 .f-parts-h {
   margin-top: 12px;

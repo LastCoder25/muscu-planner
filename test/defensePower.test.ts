@@ -10,6 +10,10 @@ import {
   assaultPower,
   baseCombatant,
   defenseBreakdown,
+  defensePotential,
+  departureRisk,
+  isOddsRisky,
+  guardUnits,
   defensePower,
   groupCombatant,
   resolveRaid,
@@ -38,7 +42,7 @@ describe('puissances', () => {
     let prevDef = 0;
     let prevAtk = 0;
     for (const L of [10, 26, 40, 60, 90]) {
-      const d = defensePower(defAt(L), L, null, noGarrison());
+      const d = defensePower(defAt(L), L, null, []);
       const a = assaultPower(rollRaid(4242, L, NOW, 0));
       expect(d).toBeGreaterThan(prevDef);
       expect(a).toBeGreaterThan(prevAtk);
@@ -91,7 +95,7 @@ describe('le rapport prédit la tenue', () => {
             const raid = rollRaid(1000 + s * 7919, L, NOW, 0);
             const d = { defenses: defs, playerLevel: L, hero };
             if (resolveRaid(d, raid, NOW, heroHome).held) held++;
-            ratio += defensePower(defs, L, hero, noGarrison()) / assaultPower(raid);
+            ratio += defensePower(defs, L, hero, []) / assaultPower(raid);
           }
           rows.push({ ratio: ratio / N, hold: held / N });
         }
@@ -132,13 +136,13 @@ describe('la répartition par contributeur', () => {
   it('chaque contributeur présent pèse quelque chose, les absents rien', () => {
     const L = 30;
     const defs = defAt(L);
-    const withHero = defenseBreakdown(defs, L, refFighter(L), noGarrison());
+    const withHero = defenseBreakdown(defs, L, refFighter(L), []);
     const byId = Object.fromEntries(withHero.parts.map((p) => [p.id, p]));
     expect(byId.wall!.power).toBeGreaterThan(0);
     expect(byId.turret!.power).toBeGreaterThan(0);
     expect(byId.hero!.power).toBeGreaterThan(0);
     // Héros parti → sa part tombe à zéro et il est marqué inactif.
-    const noHero = defenseBreakdown(defs, L, null, noGarrison());
+    const noHero = defenseBreakdown(defs, L, null, []);
     const h = noHero.parts.find((p) => p.id === 'hero')!;
     expect(h.power).toBe(0);
     expect(h.active).toBe(false);
@@ -147,13 +151,13 @@ describe('la répartition par contributeur', () => {
   it('la part est mesurée PAR ABLATION — retirer les tourelles coûte ce qui est annoncé', () => {
     const L = 30;
     const defs = defAt(L);
-    const b = defenseBreakdown(defs, L, null, noGarrison());
+    const b = defenseBreakdown(defs, L, null, []);
     const turret = b.parts.find((p) => p.id === 'turret')!;
     const sans = defensePower(
       defs.filter((d) => d.typeId !== 'turret'),
       L,
       null,
-      noGarrison(),
+      [],
     );
     expect(b.total - sans).toBe(turret.power);
   });
@@ -161,16 +165,27 @@ describe('la répartition par contributeur', () => {
   // ⚠️ Remplace un test du champ `share`, supprimé avec la barre de proportion qu'il
   // alimentait. Ce qu'on vérifie désormais est ce que l'écran AFFICHE : chaque poste a
   // un métier, et les deux colonnes ne mentent pas dessus.
-  it('chaque poste a son MÉTIER : le mur tient sans tuer, les tourelles tuent sans tenir', () => {
+  it('chaque poste a son MÉTIER : le mur tient sans tuer, les tourelles tuent surtout', () => {
     const L = 30;
-    const b = defenseBreakdown(defAt(L), L, refFighter(L), noGarrison());
+    const b = defenseBreakdown(defAt(L), L, refFighter(L), []);
     const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
     // Le mur ENCAISSE et n'abat personne (`wallDmgK` = 0).
     expect(by.wall!.def).toBeGreaterThan(0);
     expect(by.wall!.atk).toBe(0);
-    // Les tourelles TUENT et n'encaissent rien.
+    // ⚠️ LES TOURELLES ENCAISSENT DÉSORMAIS UN PEU, et c'est VOULU : le moteur en deux
+    // phases en fait des unités qu'on peut RÉDUIRE AU SILENCE, donc il leur faut des PV —
+    // sans eux, « faire taire les tireurs » n'existerait pas. Le test affirmait `def === 0`,
+    // vrai du modèle FONDU où elles n'étaient qu'un terme de dégâts. Ce qui reste vrai,
+    // et qui est leur vrai métier : elles tuent BEAUCOUP plus qu'elles ne tiennent —
+    // exactement l'inverse du mur.
     expect(by.turret!.atk).toBeGreaterThan(0);
-    expect(by.turret!.def).toBe(0);
+    expect(by.turret!.atk).toBeGreaterThan(0);
+    // ⚠️ ET ELLES PORTENT MÊME PLUS DE TENUE QUE LE MUR (mesuré) : huit corps à abattre
+    // pèsent plus que le rempart lui-même. Surprenant, mais c'est ce que le moteur simule,
+    // et c'est avec ces valeurs que l'équivalence de difficulté a été mesurée. Le métier
+    // qui les distingue n'est donc PAS « qui encaisse » mais « qui TUE » : les tourelles
+    // sont la seule STRUCTURE qui abat quelqu'un.
+    expect(by.wall!.atk).toBe(0);
     // Le héros fait les deux — c'est un renfort, pas une structure.
     expect(by.hero!.def).toBeGreaterThan(0);
     expect(by.hero!.atk).toBeGreaterThan(0);
@@ -183,7 +198,7 @@ describe('la répartition par contributeur', () => {
       defAt(L).filter((d) => d.typeId !== 'wall'),
       L,
       null,
-      noGarrison(),
+      [],
     );
     expect(avec.dmgReduction ?? 0).toBeGreaterThan(sans.dmgReduction ?? 0);
     // Elle vaut exactement sa PART du niveau du joueur, comme tout le reste de l'enceinte.
@@ -280,5 +295,79 @@ describe('la jauge place l’ÉQUILIBRE au milieu', () => {
   it('elle s’accorde avec le pronostic : centre = « ça va se jouer » ou mieux', () => {
     // Au seuil d'équilibre, on ne doit jamais lire « l'enceinte cède ».
     expect(['serre', 'favorable', 'large']).toContain(siegeOdds(SIEGE_EVEN));
+  });
+});
+
+describe('🚪 CE QUE COÛTE UN DÉPART, face à l’armée qui arrive', () => {
+  // ⚠️ La question du joueur au moment d'envoyer : « puis-je faire partir ce convoi sans
+  // me mettre dans le rouge ? ». L'écran d'envoi ne savait RIEN du siège en approche.
+  const L = 28;
+  const d = [
+    { typeId: 'wall', level: L },
+    { typeId: 'turret', level: L },
+  ] as DefenseStructure[];
+  const adv = (id: string): Adventurer => ({
+    id,
+    name: id,
+    seed: 1,
+    path: ['guerrier', 'epeiste'],
+    level: 20,
+    xp: 0,
+  });
+  const tous = [adv('a'), adv('b'), adv('c'), adv('d')];
+  const g = (list: Adventurer[]) => guardUnits(L, list, {});
+  const h = refFighter(L);
+
+  it('⚠️ faire partir du monde ne peut JAMAIS améliorer le pronostic', () => {
+    // L'invariant qui donne son sens à l'alerte : si partir pouvait aider, l'écran
+    // conseillerait de vider sa base.
+    for (const assault of [2000, 20_000, 200_000, 2_000_000]) {
+      const r = departureRisk(
+        d,
+        L,
+        assault,
+        { hero: h, guard: g(tous) },
+        { hero: null, guard: [] },
+      );
+      expect(['perdu', 'risque', 'serre', 'favorable', 'large']).toContain(r.after);
+      expect(r.worsens || r.after === r.before).toBe(true);
+    }
+  });
+
+  it('ne rien changer ne fait PAS empirer', () => {
+    const etat = { hero: h, guard: g(tous) };
+    const r = departureRisk(d, L, 50_000, etat, etat);
+    expect(r.before).toBe(r.after);
+    expect(r.worsens).toBe(false);
+  });
+
+  it('⚠️ vider la base FACE À UNE ARMÉE AJUSTÉE bascule le pronostic', () => {
+    // ⚠️ L'assaut est DÉRIVÉ des deux puissances, il n'est pas deviné : un multiple
+    // choisi à la main (« 95 % du plein ») laissait la base vide tenir quand même —
+    // le test passait alors au vert sans rien prouver. On le place entre les deux
+    // seuils, là où le départ fait EXACTEMENT basculer la bande.
+    const plein = defensePotential(d, L, h, g(tous));
+    const vide = defensePotential(d, L, null, []);
+    // Au complet on est « favorable » (ratio ≥ 0,88) ; à vide on passe dessous.
+    const assault = Math.round((plein + vide) / 2 / 0.88);
+    const r = departureRisk(d, L, assault, { hero: h, guard: g(tous) }, { hero: null, guard: [] });
+    expect(isOddsRisky(r.before)).toBe(false);
+    expect(r.worsens).toBe(true);
+    expect(isOddsRisky(r.after)).toBe(true);
+  });
+
+  it('sans armée en vue, aucun départ n’est risqué', () => {
+    // Assaut nul = rien n'arrive : l'écran ne doit alarmer personne.
+    const r = departureRisk(d, L, 0, { hero: h, guard: g(tous) }, { hero: null, guard: [] });
+    expect(r.risky).toBe(false);
+    expect(r.worsens).toBe(false);
+  });
+
+  it('les bandes RISQUÉES sont celles où la base ne tient plus', () => {
+    expect(isOddsRisky('perdu')).toBe(true);
+    expect(isOddsRisky('risque')).toBe(true);
+    expect(isOddsRisky('serre')).toBe(true);
+    expect(isOddsRisky('favorable')).toBe(false);
+    expect(isOddsRisky('large')).toBe(false);
   });
 });

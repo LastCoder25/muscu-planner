@@ -1136,16 +1136,55 @@ export function baseCombatant(
 // Une jauge unique ne ment donc à aucun niveau. Si la mesure avait montré le contraire,
 // il ne fallait PAS l'afficher.
 
+/**
+ * CE QUI DÉFEND VRAIMENT, ramené à un combattant — la SEULE base du rapport de forces.
+ *
+ * ⚠️ IL LIT LES MÊMES UNITÉS QUE LA BATAILLE (`siegeWallOf` + `siegeDefenders`). Après le
+ * branchement du moteur en deux phases, le panneau lisait encore `baseCombatant` : il
+ * ignorait donc les AVENTURIERS — qui défendent désormais — et appliquait le bonus du
+ * chenil à la MURAILLE, ce qui n’est plus vrai. Deux comparateurs qui se contredisent,
+ * exactement le défaut réglé sur l’équipement en v0.744. En dérivant des mêmes unités,
+ * ils ne peuvent plus diverger.
+ *
+ * ⚠️ Les PV du MUR comptent dans la survie : c’est ce que l’armée doit abattre avant
+ * d’entrer, donc ça fait partie de ce qui « tient ». Les dégâts, eux, ne viennent que
+ * des défenseurs — un rempart ne tue personne (v0.753).
+ */
+function defenseCombatant(
+  defenses: DefenseStructure[],
+  playerLevel: number,
+  hero: Combatant | null,
+  guard: GuardUnit[] = [],
+): Combatant {
+  const wall = siegeWallOf(defenses, playerLevel);
+  const def = siegeDefenders(defenses, playerLevel, hero, guard);
+  const wl = defenseLevel(defenses, 'wall');
+  const share = Math.min(1, Math.max(0, wl) / Math.max(1, playerLevel));
+  return {
+    name: 'La Base',
+    pv: Math.max(1, wall.pv + def.reduce((n, u) => n + u.pv, 0)),
+    damage: Math.max(
+      1,
+      def.reduce((n, u) => n + u.damage, 0),
+    ),
+    crit: 0,
+    dodge: 0,
+    initiative: 999,
+    dmgReduction: wl > 0 ? RAID.wallArmorK * share * defenseEfficiency(defenses, 'wall') : 0,
+    strikes: 1,
+    regen: RAID.regenPct,
+  };
+}
+
 /** Puissance de DÉFENSE de la base, dans l'unité de tout le jeu. */
 export function defensePower(
   defenses: DefenseStructure[],
   playerLevel: number,
   hero?: Combatant | null,
-  garrison?: GarrisonBonus,
+  guard: GuardUnit[] = [],
 ): number {
-  return combatPower(baseCombatant(defenses, playerLevel, hero, garrison));
+  return combatPower(defenseCombatant(defenses, playerLevel, hero ?? null, guard));
 }
-
 /** L'armée ramenée à UN combattant équivalent.
  *  ⚠️ PV CUMULÉS (elle se bat en séquence, la base les encaisse tous) et dégâts moyens
  *  PONDÉRÉS PAR LES PV : ceux qui tiennent le plus longtemps frappent le plus de fois.
@@ -1221,29 +1260,26 @@ export function defenseBreakdown(
   defenses: DefenseStructure[],
   playerLevel: number,
   hero: Combatant | null,
-  garrison: GarrisonBonus,
+  guard: GuardUnit[] = [],
 ): { total: number; parts: DefenseShare[] } {
-  const base = baseCombatant(defenses, playerLevel, hero, garrison);
+  const base = defenseCombatant(defenses, playerLevel, hero, guard);
   const total = combatPower(base);
   const full = defenseFacets(base);
-  /** Ce qu'un contributeur apporte — puissance, tenue et feu — par UNE SEULE ablation.
+  /** Ce qu’un contributeur apporte — puissance, tenue et feu — par UNE SEULE ablation.
    *  ⚠️ Le combattant amputé est construit une fois et les trois valeurs en dérivent :
-   *  deux ablations séparées (une pour la puissance, une pour les facettes) doublaient le
-   *  travail ET pouvaient diverger. */
-  const contrib = (d: DefenseStructure[], h: Combatant | null, g: GarrisonBonus) => {
-    const c = baseCombatant(d, playerLevel, h, g);
-    const f = defenseFacets(c);
+   *  deux ablations séparées doublaient le travail ET pouvaient diverger. */
+  const contrib = (d: DefenseStructure[], h: Combatant | null, g: GuardUnit[]) => {
+    const cc = defenseCombatant(d, playerLevel, h, g);
+    const f = defenseFacets(cc);
     return {
-      power: Math.max(0, total - combatPower(c)),
+      power: Math.max(0, total - combatPower(cc)),
       def: Math.max(0, full.def - f.def),
       atk: Math.max(0, full.atk - f.atk),
     };
   };
   const drop = (id: DefenseId) => defenses.filter((d) => d.typeId !== id);
-  // ⚠️ Le nom et l'emoji d'une STRUCTURE viennent de `DEFENSE_TYPES`, jamais d'une
-  // recopie : ils y sont déjà, dans ce fichier, et renommer une structure laisserait
-  // sinon ce panneau sur l'ancien nom. C'est la règle que le commentaire ci-dessus
-  // invoque pour les CALCULS — elle vaut aussi pour les libellés.
+  // ⚠️ Le nom et l’emoji d’une STRUCTURE viennent de `DEFENSE_TYPES`, jamais d’une
+  // recopie : renommer une structure laisserait sinon ce panneau sur l’ancien nom.
   const struct = (id: DefenseId) => {
     const t = defenseType(id);
     return { label: t?.label ?? id, emoji: t?.emoji ?? '' };
@@ -1252,46 +1288,55 @@ export function defenseBreakdown(
     {
       id: 'wall',
       ...struct('wall'),
-      ...contrib(drop('wall'), hero, garrison),
+      ...contrib(drop('wall'), hero, guard),
       active: defenseLevel(defenses, 'wall') > 0,
     },
     {
       id: 'turret',
       ...struct('turret'),
-      ...contrib(drop('turret'), hero, garrison),
+      ...contrib(drop('turret'), hero, guard),
       active: defenseLevel(defenses, 'turret') > 0,
     },
-    // Garnison et héros ne sont PAS des structures : ils n'ont pas d'entrée dans
-    // `DEFENSE_TYPES`, leur libellé vit donc ici — à côté de son type, comme
-    // `ROLE_LABEL` et `FACTION_LABEL`.
+    // ⚠️ LA GARNISON EST UNE LIGNE À PART, et c’est nouveau : les aventuriers défendent
+    // depuis le branchement du moteur, et rien ne le disait. C’est aussi la ligne qui
+    // rend lisible « qui est parti » — un convoi en route, c’est autant de moins ici.
     {
       id: 'garrison',
-      // ⚠️ « Garnison » se lisait comme « mes soldats » — un joueur dont tous les
-      // aventuriers étaient en convoi voyait donc une ligne fantôme (signalé). Ce sont
-      // les FAMILIERS postés au chenil, et le mot doit le dire.
-      // ⚠️ Et « BONUS », parce qu'ils ne COMBATTENT pas : leur apport est un
-      // MULTIPLICATEUR posé sur les dégâts des tourelles et les PV de la muraille
-      // (cf. `garrisonBonus`). Sans mur ni tourelles, ils ne multiplient rien — un
-      // libellé qui les présente comme des combattants promet une ligne de défense
-      // qui n'existe pas.
-      label: 'Bonus familiers',
-      emoji: '🐾',
-      ...contrib(defenses, hero, {}),
-      active: Object.keys(garrison).length > 0,
+      label: 'Garnison',
+      emoji: '⚔️',
+      ...contrib(defenses, hero, []),
+      active: guard.length > 0,
     },
     {
       id: 'hero',
       label: 'Héros',
       emoji: '🦸',
-      ...(hero ? contrib(defenses, null, garrison) : { power: 0, def: 0, atk: 0 }),
+      ...(hero ? contrib(defenses, null, guard) : { power: 0, def: 0, atk: 0 }),
       active: !!hero,
     },
   ];
-  // ⚠️ Plus de champ `share` : il n'alimentait qu'une barre de proportion, remplacée par
-  // les deux colonnes 🛡️/⚔️. Un champ que plus personne ne lit est du code mort.
   return { total, parts };
 }
 
+/**
+ * LA DÉFENSE AU COMPLET : ce que la base vaudrait si TOUT LE MONDE était là.
+ *
+ * ⚠️ C’est la question que le joueur se pose en envoyant un convoi, et elle n’avait
+ * aucune réponse à l’écran (demandé par l’utilisateur). Le panneau montrait la défense
+ * du moment sans dire ce qu’elle DEVIENDRAIT — ni ce qu’on est en train d’abandonner en
+ * faisant partir des gens.
+ *
+ * ⚠️ On passe le vivier ENTIER et le héros supposé présent : c’est un PLAFOND, pas une
+ * prévision. Les blessés en font partie — ils rentreront.
+ */
+export function defensePotential(
+  defenses: DefenseStructure[],
+  playerLevel: number,
+  hero: Combatant | null,
+  guardComplet: GuardUnit[],
+): number {
+  return combatPower(defenseCombatant(defenses, playerLevel, hero, guardComplet));
+}
 /** Le pronostic, en bandes CALIBRÉES sur la sonde ci-dessus — jamais un pourcentage
  *  inventé. ⚠️ On ne donne pas un chiffre de victoire : la sonde mesure des moyennes sur
  *  60 graines, un « 72 % » afficherait une précision qu'on n'a pas. */
@@ -1329,6 +1374,47 @@ export const ODDS_LABEL: Record<SiegeOdds, string> = {
   favorable: 'Tu devrais tenir',
   large: 'Tu tiens largement',
 };
+
+/** Les bandes où la base ne tient PLUS. Source unique : un écran qui redresserait la
+ *  liste dériverait le jour où une bande change de nom. */
+const ODDS_BAD: readonly SiegeOdds[] = ['perdu', 'risque', 'serre'];
+export const isOddsRisky = (o: SiegeOdds): boolean => ODDS_BAD.includes(o);
+
+/**
+ * CE QUE COÛTERAIT UN DÉPART, face à l’armée qui arrive.
+ *
+ * ⚠️ LA QUESTION QUE LE JOUEUR SE POSE AU MOMENT D’ENVOYER (demandé par l’utilisateur :
+ * « pouvoir envoyer des convois ou le héros sans se mettre dans le rouge »). L’écran
+ * d’envoi ne savait RIEN du siège en approche : on partait, et on découvrait en
+ * rentrant que la base était tombée pendant le voyage.
+ *
+ * ⚠️ Rend TOUJOURS les deux pronostics, même quand rien ne change : c’est l’écran qui
+ * décide d’alerter ou non, et lui donner un `null` l’obligerait à refaire le calcul
+ * pour afficher l’état courant.
+ */
+export function departureRisk(
+  defenses: DefenseStructure[],
+  playerLevel: number,
+  assault: number,
+  avant: { hero: Combatant | null; guard: GuardUnit[] },
+  apres: { hero: Combatant | null; guard: GuardUnit[] },
+): { before: SiegeOdds; after: SiegeOdds; worsens: boolean; risky: boolean } {
+  const odds = (x: { hero: Combatant | null; guard: GuardUnit[] }) =>
+    siegeOdds(assault > 0 ? defensePower(defenses, playerLevel, x.hero, x.guard) / assault : 99);
+  const before = odds(avant);
+  const after = odds(apres);
+  return {
+    before,
+    after,
+    // « Ça empire » se lit sur l’ORDRE des bandes, pas sur le ratio : c’est ce que le
+    // joueur voit, et deux ratios différents dans la même bande ne changent rien pour lui.
+    worsens: ODDS_ORDER.indexOf(after) < ODDS_ORDER.indexOf(before),
+    risky: isOddsRisky(after),
+  };
+}
+
+/** Les bandes, de la pire à la meilleure — l'ordre EST la comparaison. */
+const ODDS_ORDER: readonly SiegeOdds[] = ['perdu', 'risque', 'serre', 'favorable', 'large'];
 
 /** Ce que l'ESPIONNAGE laisse voir de la puissance assaillante.
  *
@@ -1798,15 +1884,18 @@ export function defensePerLevelLabel(
     case 'wall': {
       // On interroge le combattant RÉEL de la base : la muraille ne vaut qu’une FRACTION
       // de ce que le niveau du joueur justifie, une formule recopiée l’oublierait.
-      const a = baseCombatant(withLevel(l), ctx.playerLevel).pv;
-      const b = baseCombatant(withLevel(next), ctx.playerLevel).pv;
+      // ⚠️ `defenseCombatant`, pas `baseCombatant` : l'aperçu doit annoncer ce que le
+      // niveau change VRAIMENT, donc lire le même modèle que le panneau de forces et que
+      // la bataille. Sur l'ancien, il aurait décrit un mur que plus personne ne simule.
+      const a = defenseCombatant(withLevel(l), ctx.playerLevel, null).pv;
+      const b = defenseCombatant(withLevel(next), ctx.playerLevel, null).pv;
       return b > a
         ? `Niveau ${next} : ${a} → ${b} PV de muraille (+${b - a})`
         : 'Déjà au niveau de ton personnage — c’est le sport qui débloque la suite.';
     }
     case 'turret': {
-      const a = baseCombatant(withLevel(l), ctx.playerLevel).damage;
-      const b = baseCombatant(withLevel(next), ctx.playerLevel).damage;
+      const a = defenseCombatant(withLevel(l), ctx.playerLevel, null).damage;
+      const b = defenseCombatant(withLevel(next), ctx.playerLevel, null).damage;
       return b > a
         ? `Niveau ${next} : ${a} → ${b} dégâts par tour, sur les ${TURRET_SLOTS} tourelles (+${b - a})`
         : 'Déjà au niveau de ton personnage — c’est le sport qui débloque la suite.';
