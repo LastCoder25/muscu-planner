@@ -39,35 +39,35 @@
       />
       <polygon :points="innerPoints" class="s-yard" />
 
-      <!-- Les tourelles : toutes en place, elles tirent à tour de rôle -->
+      <!-- LES BALISTES. ⚠️ MÊME SILHOUETTE QUE L’ÉCRAN « MA BASE » (plateforme, arc, corde,
+           trait engagé, pointe), et c’est la correction : c’étaient deux rectangles plats en
+           #8a7856 posés sur un rempart tracé en #7a6a4f — deux nuances quasi identiques, sur
+           un trait de 8 d’épaisseur. Un joueur l’a dit exactement : « je ne vois plus les
+           tourelles, on voit des murs qui tirent ». La leçon était pourtant DÉJÀ écrite dans
+           le code de la Base (« en clair, pas dans le brun de la pierre ») — elle n’avait
+           simplement jamais traversé jusqu’ici. -->
       <g v-for="(p, i) in octagon" :key="'t' + i">
-        <template v-if="hasTurrets">
-          <rect
-            :x="p.x - 6.5"
-            :y="p.y - 8"
-            width="13"
-            height="16"
-            rx="1.5"
-            class="s-tur"
-            :class="{ fire: firingTurret === i }"
-          />
-          <rect
-            v-for="k in 3"
-            :key="k"
-            :x="p.x - 6.5 + (k - 1) * 4.7"
-            :y="p.y - 11"
-            width="3.6"
-            height="3.6"
-            class="s-tur"
-            :class="{ fire: firingTurret === i }"
-          />
-        </template>
+        <g
+          v-if="hasTurrets"
+          :transform="`translate(${p.x} ${p.y}) rotate(${p.rot})`"
+          :class="{ fire: firingTurret === i }"
+        >
+          <path d="M -7 7 L 7 7 L 5.5 0 L -5.5 0 Z" class="s-tur-base" />
+          <path d="M -7.5 -0.5 Q 0 -5.5 7.5 -0.5" class="s-tur-bow" />
+          <path d="M -6.5 -0.8 L 0 1.6 L 6.5 -0.8" class="s-tur-string" />
+          <path d="M 0 3.5 L 0 -7" class="s-tur-bolt" />
+          <path d="M 0 -9 L -2 -6.2 L 2 -6.2 Z" class="s-tur-head" />
+        </g>
         <circle v-else :cx="p.x" :cy="p.y" r="7.5" class="s-tur-empty" />
       </g>
 
-      <!-- ── LA COUR : ce qu'on défend, et ce qui aide ── -->
-      <!-- Familiers postés, au centre : leur pulsation part vers ce qu'ils renforcent. -->
-      <g v-if="familiars.length" class="s-gar">
+      <!-- ── LA COUR : CEUX QUI TIENNENT LA BRÈCHE ── -->
+      <!-- ⚠️ LES AVENTURIERS, PAS LES FAMILIERS (signalé par un joueur). Séquelle de la
+           refonte : depuis que le moteur en deux phases est branché, ce sont les AVENTURIERS
+           qui se battent — les familiers ne font que les renforcer depuis le chenil. Montrer
+           les seconds laissait croire que c’étaient eux qui combattaient, et c’est
+           exactement le contre-sens que le renommage du panneau avait déjà corrigé. -->
+      <g v-if="defenders.length" class="s-gar">
         <circle
           cx="100"
           cy="100"
@@ -76,16 +76,16 @@
           :style="{ opacity: 0.25 - pulse * 0.18 }"
         />
         <text
-          v-for="(f, i) in familiars"
-          :key="'f' + i"
-          :x="100 + (i - (familiars.length - 1) / 2) * 20"
+          v-for="(f, i) in defenders"
+          :key="'d' + i"
+          :x="100 + (i - (defenders.length - 1) / 2) * 18"
           y="104"
           class="s-fam"
         >
           {{ f }}
         </text>
       </g>
-      <text v-else x="100" y="104" class="s-empty">la ville, sans garnison</text>
+      <text v-else x="100" y="104" class="s-empty">la ville, sans défenseurs</text>
 
       <!-- Le héros sur le rempart, s'il est resté -->
       <g v-if="report.heroHome">
@@ -171,8 +171,9 @@ import {
 const props = defineProps<{
   report: RaidReport;
   turretLevel: number;
-  /** Emojis des familiers postés — ce que le chenil apporte, rendu visible. */
-  familiars: string[];
+  /** Emojis des AVENTURIERS qui tiennent la brèche. ⚠️ Pas les familiers : ils ne
+   *  combattent pas, ils renforcent ceux-ci depuis le chenil. */
+  defenders: string[];
 }>();
 const emit = defineEmits<{ done: [] }>();
 
@@ -186,7 +187,13 @@ const WALL_R = 72;
 const octagon = computed(() =>
   Array.from({ length: TURRET_SLOTS }, (_, i) => {
     const a = (i / TURRET_SLOTS) * Math.PI * 2 - Math.PI / 2 + Math.PI / TURRET_SLOTS;
-    return { x: 100 + Math.cos(a) * WALL_R, y: 100 + Math.sin(a) * WALL_R };
+    // L’art est dessiné « vers le haut » (−Y), d’où le +90° — MÊME formule que l’écran
+    // Ma base : c’est ce qui fait qu’on reconnaît son enceinte au moment du verdict.
+    return {
+      x: 100 + Math.cos(a) * WALL_R,
+      y: 100 + Math.sin(a) * WALL_R,
+      rot: (a * 180) / Math.PI + 90,
+    };
   }),
 );
 const wallPoints = computed(() => octagon.value.map((p) => `${p.x},${p.y}`).join(' '));
@@ -397,14 +404,41 @@ onUnmounted(() => {
   stroke: #453b2c;
   stroke-width: 1.5;
 }
-.s-tur {
-  fill: #8a7856;
-  stroke: #5a4c36;
+/* ⚠️ EN CLAIR, PAS DANS LE BRUN DE LA PIERRE. Les mêmes teintes que l’écran Ma base :
+   posées dans le ton du rempart, les balistes y devenaient invisibles — le défaut
+   signalé (« on voit des murs qui tirer »). */
+.s-tur-base {
+  fill: #9a8768;
+  stroke: #4a3d2b;
   stroke-width: 1;
-  transition: fill 0.08s;
 }
-.s-tur.fire {
+.s-tur-bow {
+  fill: none;
+  stroke: #d8c9a4;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.s-tur-string {
+  fill: none;
+  stroke: #8a7856;
+  stroke-width: 0.9;
+}
+.s-tur-bolt {
+  stroke: #f3eee6;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+/* Pointe en jaune voltage : le seul accent de l’enceinte, et il dit « armé ». */
+.s-tur-head {
+  fill: #ffd23f;
+}
+/* Celle qui TIRE s’embrase : c’est le seul signal qui dit d’où part le trait. */
+.fire .s-tur-base {
   fill: var(--accent, #ffd23f);
+}
+.fire .s-tur-bow,
+.fire .s-tur-bolt {
+  stroke: #fff6d8;
 }
 .s-tur-empty {
   fill: none;

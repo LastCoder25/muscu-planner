@@ -84,7 +84,7 @@
             </div>
           </div>
           <button
-            v-if="canPromoteOne(a) && !trainOf(a) && !busyOf(a)"
+            v-if="canPromoteOne(a)"
             class="adv-promo"
             :disabled="busy"
             @click.stop="openPromo(a)"
@@ -274,7 +274,7 @@
 
       <div class="g-actions">
         <q-btn
-          v-if="canPromoteOne(detailAdv) && !trainOf(detailAdv) && !busyOf(detailAdv)"
+          v-if="canPromoteOne(detailAdv)"
           flat
           no-caps
           label="⭐ Promouvoir"
@@ -309,7 +309,7 @@ import {
   reachableSkills,
   advSignatureLevels,
   advStats,
-  canPromote,
+  canPromoteNow,
   classChoices,
   classRarity,
   advShapeLabel,
@@ -367,7 +367,15 @@ const hurtOf = (a: Adventurer) => ((a.hurtUntil ?? 0) > now.value ? a.hurtUntil!
 const trainOf = (a: Adventurer) => ((a.training?.until ?? 0) > now.value ? a.training!.until : 0);
 const trainNameOf = (a: Adventurer) =>
   a.training ? (ADV_CLASSES.find((c) => c.id === a.training!.classId)?.label ?? '?') : '';
-const canPromoteOne = (a: Adventurer) => canPromote(a, guildLevel.value);
+/** ⚠️ LA RÈGLE COMPLÈTE, une seule fois. Elle vivait ici en TROIS morceaux collés dans
+ *  le template (`canPromote` + pas en formation + pas en convoi) et il en manquait un
+ *  quatrième — l’existence du Centre de formation, que seul le store exigeait. */
+const canPromoteOne = (a: Adventurer) =>
+  canPromoteNow(a, {
+    guildLevel: guildLevel.value,
+    trainingLevel: trainingLevel.value,
+    now: now.value,
+  });
 
 // ── Fiche d'un aventurier ──
 const recruitOpen = ref(false);

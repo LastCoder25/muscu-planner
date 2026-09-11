@@ -485,7 +485,7 @@
         :key="siegeKey"
         :report="siegeShown"
         :turret-level="turretLevel"
-        :familiars="garrisonEmojis"
+        :defenders="defenderEmojis"
         @done="closeSiege"
       />
     </q-dialog>
@@ -908,7 +908,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
-import { canPromote, advAvailable } from '@/lib/adventurers';
+import { canPromoteNow, advAvailable, advTitle } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
 import { RARITY_LABEL, famDefMult, famLevel, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import {
@@ -1254,7 +1254,16 @@ const siegeOpen = computed({
     if (!v) closeSiege();
   },
 });
-const garrisonEmojis = computed(() => garrisoned.value.map((f) => f.emoji));
+/** Ceux qui TIENNENT LA BRÈCHE, pour le rejeu animé. ⚠️ Les aventuriers, pas les
+ *  familiers : depuis le branchement du moteur ce sont eux qui se battent — le chenil
+ *  ne fait que les renforcer. Montrer les familiers laissait croire l’inverse.
+ *  ⚠️ MÊME SOURCE que le panneau de forces (`advAvailable`) : deux listes de
+ *  « qui défend » finiraient par diverger. Le rapport ne mémorise pas qui était là, donc
+ *  un REJEU montre le vivier d’aujourd’hui — approximation assumée, déjà celle du
+ *  niveau de tourelle passé juste à côté. */
+const defenderEmojis = computed(() =>
+  char.advList.filter((a) => advAvailable(a, now.value)).map((a) => advTitle(a)?.emoji ?? '🧑'),
+);
 /** Le total effectivement appliqué au siège — plafonds compris. C'est le seul chiffre
  *  qui compte au moment de l'assaut, et il n'était affiché nulle part. */
 const garrisonSummary = computed(() => {
@@ -1552,7 +1561,14 @@ const guildLevel = computed(() => char.guildLevel);
  *  ⚠️ Une formation EN COURS n'en est pas une : la décision est déjà prise, et proposer
  *  de promouvoir quelqu'un qui est justement en train de l'être n'aurait aucun sens. */
 const promoAvailable = computed(
-  () => char.advList.filter((a) => !a.training && canPromote(a, guildLevel.value)).length,
+  () =>
+    char.advList.filter((a) =>
+      canPromoteNow(a, {
+        guildLevel: guildLevel.value,
+        trainingLevel: char.trainingLevel,
+        now: now.value,
+      }),
+    ).length,
 );
 const defOpen = ref<DefenseId | null>(null);
 const defSel = computed(() => DEFENSE_TYPES.find((d) => d.id === defOpen.value) ?? null);

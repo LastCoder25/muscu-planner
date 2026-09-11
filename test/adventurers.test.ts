@@ -18,6 +18,7 @@ import {
   escortRoleLevel,
   reachableSkills,
   canPromote,
+  canPromoteNow,
   classChoices,
   classRarity,
   eligibleClasses,
@@ -183,6 +184,43 @@ describe('promotion — deux verrous, et le sport ne doit pas être le frein hab
     expect(canPromote({ ...a, level: need }, need - 1)).toBe(false); // Guilde trop basse
     expect(canPromote({ ...a, level: need }, need)).toBe(true);
   });
+  it('⭐ « PROMOUVOIR MAINTENANT » : la règle COMPLÈTE, en un seul endroit', () => {
+    // ⚠️ Signalé par un joueur : « j’ai encore l’étoile sur la guilde alors qu’il n’y a rien
+    // à faire ». La condition vivait en TROIS exemplaires avec trois sous-ensembles
+    // différents — la pastille ignorait le convoi ET le Centre de formation, que seul le
+    // store exigeait. L’étoile s’allumait donc pour des promotions que rien n’acceptait.
+    const NOW = 1_700_000_000_000;
+    const a = make({ path: ['guerrier'], level: 1 });
+    const need = promoLevel(nextStratum(a))!;
+    const pret = { ...a, level: need };
+    const ctx = { guildLevel: need, trainingLevel: 1, now: NOW };
+    expect(canPromoteNow(pret, ctx)).toBe(true);
+
+    // ⚠️ SANS CENTRE DE FORMATION, rien n’est promouvable — pas même annonçable.
+    expect(canPromoteNow(pret, { ...ctx, trainingLevel: 0 })).toBe(false);
+    // ⚠️ PARTI EN CONVOI : il est sur la route, pas au Centre.
+    expect(canPromoteNow({ ...pret, busyUntil: NOW + 3600_000 }, ctx)).toBe(false);
+    // Un convoi TERMINÉ ne bloque plus.
+    expect(canPromoteNow({ ...pret, busyUntil: NOW - 1 }, ctx)).toBe(true);
+    // Une formation déjà en cours : la décision est prise.
+    expect(canPromoteNow({ ...pret, training: { classId: 'x', until: NOW + 1 } }, ctx)).toBe(
+      false,
+    );
+    // …et les deux verrous de `canPromote` restent, bien sûr.
+    expect(canPromoteNow({ ...pret, level: need - 1 }, ctx)).toBe(false);
+    expect(canPromoteNow(pret, { ...ctx, guildLevel: need - 1 })).toBe(false);
+  });
+
+  it('⚠️ UNE CONVALESCENCE NE BLOQUE PAS une formation — c’est même le bon moment', () => {
+    // Décision v0.739, à ne pas défaire par mégarde : on ne fait pas attendre un blessé
+    // deux fois. `hurtUntil` est donc volontairement absent de la règle.
+    const NOW = 1_700_000_000_000;
+    const a = make({ path: ['guerrier'], level: 1 });
+    const need = promoLevel(nextStratum(a))!;
+    const blesse = { ...a, level: need, hurtUntil: NOW + 6 * 3600_000 };
+    expect(canPromoteNow(blesse, { guildLevel: need, trainingLevel: 1, now: NOW })).toBe(true);
+  });
+
   it('les 3 premières promotions tombent tôt — c’est ce qui accroche', () => {
     expect(PROMO_LEVELS[0]).toBe(1);
     expect(PROMO_LEVELS[2]).toBeLessThanOrEqual(3);

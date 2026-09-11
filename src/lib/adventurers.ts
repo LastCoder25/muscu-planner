@@ -694,6 +694,31 @@ export function classChoices(adv: Adventurer, stratum = nextStratum(adv)): AdvCl
 
 /** L'aventurier peut-il être promu MAINTENANT ? Deux verrous : son niveau (le travail)
  *  et celui de la Guilde (le sport). Le second ne doit jamais être le frein habituel. */
+/** ⭐ PEUT-ON LE PROMOUVOIR **MAINTENANT** ? — la règle COMPLÈTE, en un seul endroit.
+ *
+ *  ⚠️ Signalé par un joueur : « j’ai encore l’étoile sur la guilde alors qu’il n’y a rien à
+ *  faire ». La condition vivait en TROIS exemplaires, chacun avec un sous-ensemble
+ *  différent — la pastille ne testait que `canPromote` + « pas en formation », le bouton
+ *  de la Guilde y ajoutait `busyUntil`, et seul le STORE exigeait en plus un Centre de
+ *  formation. Résultat : l’étoile s’allumait pour des promotions que rien ne pouvait
+ *  accepter. Trois copies d’une règle finissent toujours par diverger.
+ *
+ *  ⚠️ `hurtUntil` N’EN FAIT PAS PARTIE, volontairement : une formation peut courir
+ *  PENDANT une convalescence — c’est même le bon moment, et on ne fait pas attendre un
+ *  blessé deux fois (décision v0.739, à ne pas défaire par mégarde). */
+export function canPromoteNow(
+  adv: Adventurer,
+  ctx: { guildLevel: number; trainingLevel: number; now: number },
+): boolean {
+  // Sans Centre de formation, aucune promotion n’est possible — pas même de l’annoncer.
+  if (ctx.trainingLevel <= 0) return false;
+  // Une seule formation à la fois : la décision est déjà prise.
+  if (adv.training) return false;
+  // Parti en convoi : il est physiquement sur la route, pas au Centre.
+  if ((adv.busyUntil ?? 0) > ctx.now) return false;
+  return canPromote(adv, ctx.guildLevel);
+}
+
 export function canPromote(adv: Adventurer, guildLevel: number): boolean {
   const s = nextStratum(adv);
   const need = promoLevel(s);

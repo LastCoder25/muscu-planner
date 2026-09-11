@@ -110,7 +110,7 @@ import {
 import {
   advAvailable,
   settleAllTraining,
-  canPromote,
+  canPromoteNow,
   classChoices,
   grantAdvXp,
   guildRoster,
@@ -1929,8 +1929,17 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     const adv = advList.value.find((a) => a.id === advId);
     if (!cur || !adv) return false;
-    if (trainingLevel.value <= 0) return false;
-    if (!canPromote(adv, guildLevel.value)) return false;
+    // ⚠️ LA MÊME règle que l’étoile et que le bouton : elle vivait en trois exemplaires
+    // avec trois sous-ensembles différents, et l’étoile s’allumait donc pour des
+    // promotions que ce garde refusait. Un seul prédicat, un seul endroit.
+    if (
+      !canPromoteNow(adv, {
+        guildLevel: guildLevel.value,
+        trainingLevel: trainingLevel.value,
+        now: Date.now(),
+      })
+    )
+      return false;
     if (!classChoices(adv).some((c) => c.id === classId)) return false;
     // ⚠️ PAS pendant un convoi (signalé par l'utilisateur : « j'ai pu promouvoir des
     // aventuriers en déplacement »). Il est physiquement sur la route, il ne peut pas
