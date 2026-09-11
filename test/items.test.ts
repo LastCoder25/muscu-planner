@@ -1523,3 +1523,90 @@ describe('roster : le barème est celui du JEU, pas une somme d’affixes (v0.71
     expect(r.armor?.item.id).toBe('b');
   });
 });
+
+describe('⚠️ l’équipement conseillé est LOCALEMENT OPTIMAL', () => {
+  // Deux écrans se contredisaient sur un compte réel : « ton équipement est déjà
+  // optimal » d'un côté, une pastille « +30 » sur le sac de l'autre. C'est l'optimiseur
+  // qui avait tort — il classait ses candidats en SOLO (la pièce portée SEULE), or porté
+  // seul un objet perd tout ce qui le rend bon : les bonus de set de ses compagnons et
+  // les stats qui se multiplient entre elles. Mesuré : une arme écartée valait +143.
+  //
+  // ⚠️ VIVIER ALÉATOIRE, et c'est délibéré : un vivier écrit à la main ne teste que le
+  // piège qu'on a su imaginer. Un premier essai « bien construit » passait AUSSI avec le
+  // code fautif — un test creux. Plusieurs graines variées, elles, l'attrapent.
+  const stats = { puissance: 900, endurance: 900, agilite: 900 };
+  const L = 28;
+  const TYPES: EffectType[] = [
+    'damage_pct',
+    'max_pv_pct',
+    'crit_pct',
+    'dmg_reduction_pct',
+    'lifesteal_pct',
+  ];
+  const SETS = [undefined, 'voie:berserker', 'voie:gardien', 'voie:vampire'];
+
+  function vivier(seed: number): Item[] {
+    const rng = mulberry32(seed);
+    const out: Item[] = [];
+    let n = 0;
+    for (const s of SLOTS) {
+      // ⚠️ Taille RÉALISTE : un compte réel porte 150+ objets par emplacement, et c’est
+      // seulement à cette densité que le filtre top-K mord — avec 22, n’importe quel tri
+      // retenait le gagnant, et les mutations passaient au vert.
+      for (let k = 0; k < 70; k++) {
+        const setId = SETS[Math.floor(rng() * SETS.length)];
+        out.push({
+          id: `i${seed}_${n++}`,
+          name: 'x',
+          slot: s,
+          rarity: 'epique',
+          level: 20 + Math.floor(rng() * 20),
+          roll: rng(),
+          effect: {
+            type: TYPES[Math.floor(rng() * TYPES.length)]!,
+            value: 8 + Math.round(rng() * 50),
+          },
+          ...(setId ? { setId } : {}),
+        } as Item);
+      }
+    }
+    return out;
+  }
+
+  it('⚠️ AUCUN échange d’UN SEUL objet ne gagne depuis le build conseillé', () => {
+    // C'est la propriété que les deux écrans partagent : s'il existait un tel échange,
+    // la pastille du sac l'annoncerait et l'optimiseur se contredirait.
+    for (const seed of [1, 7, 42, 1234, 99991]) {
+      const inv = vivier(seed);
+      // ⚠️ ON PART D’UN BUILD PORTÉ, jamais d’un personnage nu : à vide, « en solo » et
+      // « en contexte » sont IDENTIQUES par construction, et le tri fautif passait donc
+      // inaperçu. C’est aussi le cas réel — on optimise un stuff qu’on a déjà.
+      const porteDepart: Equipped = {};
+      for (const sl of SLOTS) porteDepart[sl] = inv.find((i) => i.slot === sl)!;
+      for (const voie of [null, 'berserker']) {
+        const best = bestGearLoadout('T', stats, porteDepart, inv, L, {}, voie);
+        const base = combatPower(playerWithGear('T', stats, best, {}, L, voie));
+        const porte = new Set(SLOTS.map((s) => best[s]?.id).filter(Boolean));
+        for (const it of inv) {
+          if (porte.has(it.id)) continue;
+          const p = combatPower(
+            playerWithGear('T', stats, { ...best, [it.slot]: it }, {}, L, voie),
+          );
+          expect(
+            p,
+            `graine ${seed} voie ${voie} · ${it.slot} ${it.effect.type}`,
+          ).toBeLessThanOrEqual(base);
+        }
+      }
+    }
+  });
+
+  it('ne fait JAMAIS perdre de puissance : le porté reste toujours candidat', () => {
+    const inv = vivier(3);
+    const porte: Equipped = { weapon: inv.find((i) => i.slot === 'weapon')! };
+    const best = bestGearLoadout('T', stats, porte, [], L, {}, 'berserker');
+    expect(
+      combatPower(playerWithGear('T', stats, best, {}, L, 'berserker')),
+    ).toBeGreaterThanOrEqual(combatPower(playerWithGear('T', stats, porte, {}, L, 'berserker')));
+  });
+});

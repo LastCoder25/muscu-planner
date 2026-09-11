@@ -1881,11 +1881,14 @@ export function bestGearLoadout(
     if (SLOTS.includes(it.slot)) bySlot[it.slot].push(it);
     else if (it.slot === FAMILIAR_SLOT) bySlot[FAMILIAR_SLOT].push(it);
   }
-  const soloPower = (it: Item): number => {
-    const one: Equipped = {};
-    one[it.slot] = it;
-    return combatPower(playerWithGear(name, stats, one, extra, level, voie));
-  };
+  // ⚠️ On classe les candidats EN CONTEXTE (la pièce posée sur le build actuel), pas
+  // SEULE. Porté seul, un objet perd tout ce qui le rend bon : les bonus de set de ses
+  // compagnons, et les stats qui se multiplient entre elles. Mesuré sur un compte réel :
+  // le tri en solo écartait une arme qui valait **+143** une fois en place, et
+  // l'optimiseur annonçait « déjà optimal » pendant que la pastille du sac, elle, la
+  // signalait. Deux écrans se contredisaient, et c'était celui-ci qui avait tort.
+  const ctxPower = (it: Item): number =>
+    combatPower(playerWithGear(name, stats, { ...equipped, [it.slot]: it }, extra, level, voie));
   // Candidats par slot : la MEILLEURE pièce de CHAQUE set + les top-K SANS set + l'objet
   // actuel + le slot vide.
   //
@@ -1901,14 +1904,23 @@ export function bestGearLoadout(
   // l'optimiseur ne peut jamais retirer une pièce sans candidat qui fait mieux, donc jamais
   // de PERTE de puissance (bug auto-équip).
   const K = 6;
+  /** Pièces retenues PAR SET et par emplacement (cf. `trim`). */
+  const SET_K = 3;
   const trim = (arr: Item[], keepCur?: Item): (Item | undefined)[] => {
-    const scored = arr.map((it) => ({ it, p: soloPower(it) })).sort((a, b) => b.p - a.p);
+    const scored = arr.map((it) => ({ it, p: ctxPower(it) })).sort((a, b) => b.p - a.p);
     const keep = new Map<string, Item>();
     if (keepCur) keep.set(keepCur.id, keepCur);
-    const bestOfSet = new Map<string, Item>();
-    for (const { it } of scored)
-      if (it.setId && !bestOfSet.has(it.setId)) bestOfSet.set(it.setId, it);
-    for (const it of bestOfSet.values()) keep.set(it.id, it);
+    // ⚠️ SET_K par set et par emplacement, plus une seule pièce : deux pièces du même set
+    // peuvent viser des rôles opposés (PV contre dégâts), et la meilleure « en contexte
+    // actuel » n'est pas forcément celle qui gagne une fois TOUT le build recomposé.
+    const parSet = new Map<string, number>();
+    for (const { it } of scored) {
+      if (!it.setId) continue;
+      const n = parSet.get(it.setId) ?? 0;
+      if (n >= SET_K) continue;
+      parSet.set(it.setId, n + 1);
+      keep.set(it.id, it);
+    }
     let n = 0;
     for (const { it } of scored)
       if (!it.setId && n < K) {
@@ -1971,6 +1983,38 @@ export function bestGearLoadout(
     }
   }
   if ((bestFam?.id ?? null) !== (curFam?.id ?? null)) sweepGear(bestFam);
+
+  // ⚠️ PASSE FINALE D'AMÉLIORATION LOCALE, et elle n'est pas cosmétique : le balayage
+  // ci-dessus ne voit que les candidats RETENUS (top-K par emplacement). Sur un sac
+  // réel — 735 objets, 167 armes — le filtre écarte forcément des pièces, et il en a
+  // écarté une qui valait +143. L'optimiseur annonçait alors « déjà optimal » pendant
+  // que la pastille du sac signalait la même pièce : deux écrans en contradiction, et
+  // c'était celui-ci qui avait tort.
+  //
+  // Cette passe reparcourt TOUT le vivier, un emplacement à la fois, jusqu’à ce
+  // qu'aucun échange simple ne gagne. Elle rend VRAIE la propriété que la pastille
+  // annonce, au lieu de l’approcher. Elle ne peut jamais faire perdre de puissance
+  // (on ne remplace que sur un gain strict) et converge (le score croît, borné).
+  const tous: Item[] = [...inventory];
+  for (const s of [...SLOTS, FAMILIAR_SLOT]) if (equipped[s]) tous.push(equipped[s]);
+  for (let tour = 0; tour < 4; tour++) {
+    let gagne = false;
+    for (const it of tous) {
+      // ⚠️ On NE TOUCHE PAS aux emplacements IMPOSÉS : « Porter ce set » promet ces
+      // pièces-là. Les remplacer parce qu’elles sont moins fortes ferait mentir le
+      // bouton — c’est très exactement le défaut corrigé en v0.688.
+      if (pin?.[it.slot]) continue;
+      if (best[it.slot]?.id === it.id) continue;
+      const essai: Equipped = { ...best, [it.slot]: it };
+      const p = combatPower(playerWithGear(name, stats, essai, extra, level, voie));
+      if (p > bestP) {
+        bestP = p;
+        best = essai;
+        gagne = true;
+      }
+    }
+    if (!gagne) break; // point fixe atteint : plus aucun échange simple ne paie
+  }
   return best;
 }
 
