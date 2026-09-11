@@ -443,7 +443,10 @@
             <span class="dp-atk">{{ p.active && p.atk ? fmtPow(p.atk) : '—' }}</span>
           </div>
         </div>
-        <p v-if="!heroHome" class="f-hint warn">
+        <p v-if="!heroHome && heroBack" class="f-hint">
+          🧭 Ton héros est en expédition, mais il sera rentré avant l’assaut : il défendra.
+        </p>
+        <p v-else-if="!heroHome" class="f-hint warn">
           🧭 Ton héros est en expédition : il ne défendra pas.
         </p>
       </div>
@@ -925,6 +928,7 @@ import {
   defenseBreakdown,
   defensePotential,
   guardUnits,
+  heroDefends,
   siegeGauge,
   siegeOdds,
   ODDS_LABEL,
@@ -1598,7 +1602,15 @@ const clarity = computed(() =>
  *  une condition (blessure, convoi), le panneau suivrait sans qu'on y pense. Une copie
  *  aurait été la 3ᵉ du même prédicat — exactement ce que ce chantier corrige ailleurs. */
 const heroHome = computed(() => !!char.row && char.heroIsHome(char.row));
-const heroForDefense = computed(() => (heroHome.value ? (props.hero ?? null) : null));
+/** ⚠️ MAIS « dehors » ne veut pas dire « absent au combat » : s’il rentre AVANT que
+ *  l’armée ne frappe, il sera derrière les murs (signalé par l’utilisateur — « il
+ *  arrive dans 1 h et l’attaque dans 2 h »). La règle vit dans `heroDefends`, la même
+ *  que celle de l’écran d’envoi : la défense qui compte est celle du MOMENT OÙ L’ARMÉE
+ *  FRAPPE. La RÉSOLUTION était déjà juste ; seul le panneau était pessimiste. */
+const heroBack = computed(() =>
+  heroDefends(heroHome.value, char.row?.expedition?.returnAt, raid.value?.arrivesAt),
+);
+const heroForDefense = computed(() => (heroBack.value ? (props.hero ?? null) : null));
 /** LA GARNISON PRÉSENTE : les aventuriers qui ne sont ni en convoi, ni à l’infirmerie,
  *  ni en formation, épaulés par les familiers postés. ⚠️ Construite par `guardUnits`,
  *  la MÊME fonction que le store donne à `resolveRaid` : le panneau et la bataille ne

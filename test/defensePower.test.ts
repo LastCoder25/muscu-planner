@@ -12,6 +12,7 @@ import {
   defenseBreakdown,
   defensePotential,
   departureRisk,
+  heroDefends,
   isOddsRisky,
   guardUnits,
   defensePower,
@@ -412,6 +413,29 @@ describe('🚪 CE QUE COÛTE UN DÉPART, face à l’armée qui arrive', () => {
     const t = NOW + 5 * 3600_000;
     const r = departureRisk(d, L, assautBascule(), plein(), vide(), { backAt: t, raidAt: t });
     expect(r.inTime).toBe(true);
+  });
+
+  it('🧭 UN HÉROS DEHORS QUI RENTRE AVANT L’ASSAUT DÉFEND QUAND MÊME', () => {
+    // ⚠️ Signalé par l’utilisateur : « arrête de marquer que le héros ne défendra pas
+    // vu qu’il arrive dans 1 h et l’attaque dans 2 h ». La RÉSOLUTION était déjà juste
+    // (`baseTick` lit `heroIsHome` à l’instant du combat) — seul l’AFFICHAGE était
+    // pessimiste, et il faisait renoncer à des départs qui ne coûtaient rien.
+    const H = 3600_000;
+    expect(heroDefends(false, NOW + 1 * H, NOW + 2 * H)).toBe(true);
+    expect(heroDefends(false, NOW + 3 * H, NOW + 2 * H)).toBe(false);
+    // Rentrer à l’heure PILE, c’est être derrière les murs (borne inclusive, comme le
+    // garde de `departureRisk` — les deux règles doivent dire la même chose).
+    expect(heroDefends(false, NOW + 2 * H, NOW + 2 * H)).toBe(true);
+  });
+
+  it('à la base, il défend — et sans dates connues, il est compté ABSENT', () => {
+    expect(heroDefends(true)).toBe(true);
+    // ⚠️ Ne pas SAVOIR n’autorise pas à supposer : sans armée en vue (pas de `raidAt`)
+    // ou sans date de retour, le compter présent gonflerait la défense affichée sur
+    // une devinette. Il est dehors : on le dit.
+    expect(heroDefends(false, NOW + 3600_000, null)).toBe(false);
+    expect(heroDefends(false, null, NOW + 3600_000)).toBe(false);
+    expect(heroDefends(false)).toBe(false);
   });
 
   it('⚠️ LA DURÉE ANNONCÉE EST UN MAJORANT : la route ne peut que raccourcir le retour', () => {

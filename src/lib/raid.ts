@@ -1392,6 +1392,34 @@ export const isOddsRisky = (o: SiegeOdds): boolean => ODDS_BAD.includes(o);
  * décide d’alerter ou non, et lui donner un `null` l’obligerait à refaire le calcul
  * pour afficher l’état courant.
  */
+/** Le héros sera-t-il DERRIÈRE LES MURS quand l’armée frappera ?
+ *
+ *  ⚠️ Signalé par l’utilisateur : l’écran annonçait « il ne défendra pas » alors qu’il
+ *  rentrait dans une heure et l’assaut tombait dans deux. C’est la MÊME règle que
+ *  `departureRisk` — la défense qui compte est celle du MOMENT OÙ L’ARMÉE FRAPPE — et
+ *  c’est exactement l’écran dont on redoutait qu’il l’oublie. Elle vit donc ici, une
+ *  seule fois, pour les deux.
+ *
+ *  ⚠️ La RÉSOLUTION, elle, était déjà juste : `baseTick` lit `heroIsHome` à l’instant du
+ *  combat, où l’expédition est close. Seul l’AFFICHAGE était pessimiste — il faisait
+ *  renoncer à des départs qui ne coûtaient rien.
+ *
+ *  @param home   il est à la base MAINTENANT
+ *  @param backAt quand il rentre (null : il n’est pas parti, ou on ne sait pas)
+ *  @param raidAt quand l’armée frappe (null : aucune armée en vue) */
+export function heroDefends(
+  home: boolean,
+  backAt?: number | null,
+  raidAt?: number | null,
+): boolean {
+  if (home) return true;
+  // Sans les deux dates on ne SAIT pas : il est dehors, on le compte absent. Supposer
+  // qu’il rentre à temps gonflerait la défense affichée sur une devinette.
+  if (!backAt || !raidAt) return false;
+  // Borne inclusive, comme `departureRisk` : rentrer à l’heure pile, c’est être rentré.
+  return backAt <= raidAt;
+}
+
 export function departureRisk(
   defenses: DefenseStructure[],
   playerLevel: number,

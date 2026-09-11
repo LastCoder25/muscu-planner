@@ -389,6 +389,7 @@ import MapTerrain from '@/components/MapTerrain.vue';
 import {
   assaultPower,
   departureRisk,
+  heroDefends,
   garrisonBonus,
   garrisonSlots,
   guardUnits,
@@ -634,7 +635,15 @@ const risk = computed(() => {
   const b = base.value;
   if (!b || !assaultNow.value) return null;
   const restants = freeAdvs.value.filter((a) => !escort.value.includes(a.id));
-  const heroNow = char.row && char.heroIsHome(char.row) ? fighter.value : null;
+  // ⚠️ Un héros DEHORS qui rentre AVANT l’assaut défend quand même — même règle que le
+  // panneau de la Base, écrite une seule fois dans `heroDefends`.
+  const heroNow = heroDefends(
+    !!char.row && char.heroIsHome(char.row),
+    char.row?.expedition?.returnAt,
+    raidAt.value,
+  )
+    ? fighter.value
+    : null;
   return departureRisk(
     b.defenses,
     heroLevel.value,
