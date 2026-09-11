@@ -222,6 +222,16 @@
                DEPUIS la Guilde) : sans ce report, on perdrait l'information au lieu de
                la déplacer. -->
           <text v-if="y.star" :x="y.x - 6.5" :y="y.y + 9.5" class="yard-star">⭐</text>
+          <rect
+            v-if="y.alert || y.todo"
+            :x="y.x - YARD_HALF - 2"
+            :y="y.y - YARD_HALF - 2"
+            :width="YARD_HALF * 2 + 4"
+            :height="YARD_HALF * 2 + 4"
+            rx="7"
+            class="yard-ring"
+            :class="{ alert: y.alert, todo: y.todo && !y.alert }"
+          />
         </g>
       </svg>
 
@@ -261,18 +271,6 @@
       <div v-if="pushNote" class="p-sub push-note">{{ pushNote }}</div>
     </div>
 
-    <div v-if="lastReport" class="panel">
-      <div class="p-title">
-        {{ lastReport.held ? '🏆 Dernier siège — repoussé' : '💥 Dernier siège — enceinte forcée' }}
-      </div>
-      <p>
-        {{ FACTION_EMOJI[lastReport.faction] }} {{ FACTION_LABEL[lastReport.faction] }} ·
-        {{ lastReport.defeated }}/{{ lastReport.total }} groupes repoussés ·
-        {{ lastReport.heroHome ? 'héros présent' : 'héros absent' }}
-      </p>
-      <button class="cta ghost" @click="replaySiege">▶ Revoir l’assaut</button>
-    </div>
-
     <!-- ── Héros à l'infirmerie ── -->
     <div v-if="wounded" class="panel warn">
       <div class="p-title">🤕 Ton héros est à l’infirmerie</div>
@@ -306,158 +304,13 @@
       </button>
     </div>
 
-    <!-- ── Menace en approche ── -->
-    <div v-if="raid" class="panel threat">
-      <div class="p-title">⚠️ Une armée approche — {{ arriveIn }}</div>
-      <div class="scout">
-        <div class="scout-line">
-          <span class="k">Nature</span>
-          <span class="v">
-            {{
-              scout.faction
-                ? `${FACTION_EMOJI[scout.faction]} ${FACTION_LABEL[scout.faction]}`
-                : '???'
-            }}
-          </span>
-        </div>
-        <div class="scout-line">
-          <span class="k">Butin attendu</span>
-          <span class="v">{{ scout.faction ? FACTION_LOOT[scout.faction] : '???' }}</span>
-        </div>
-        <div class="scout-line">
-          <span class="k">Effectif</span>
-          <span class="v">{{ scout.size ?? '???' }}</span>
-        </div>
-        <div class="scout-line">
-          <span class="k">Niveau moyen</span>
-          <span class="v">{{ scout.avgLevel ?? '???' }}</span>
-        </div>
-        <!-- La COMPOSITION est ce qu’on vient lire ici : elle mérite mieux qu’une ligne
-             de puces de 12 px. Une carte par groupe — icône lisible, effectif, niveau —
-             et le champion se reconnaît sans lire. Visible à partir de la clarté 4. -->
-        <template v-if="scout.groups">
-          <div class="foes-h">Composition</div>
-          <div class="foes">
-            <div v-for="(g, i) in scout.groups" :key="i" class="foe" :class="{ champ: g.champion }">
-              <span v-if="g.champion" class="foe-crown" title="Champion">👑</span>
-              <span class="foe-emo">{{ g.emoji }}</span>
-              <span class="foe-n font-display">×{{ g.count }}</span>
-              <span class="foe-lvl">niv {{ g.level }}</span>
-            </div>
-          </div>
-        </template>
-        <!-- Clarté 2-3 : on connaît l’effectif mais pas la répartition. On le DIT dans le
-             même langage visuel plutôt que de laisser un vide — et sans rien inventer :
-             une seule silhouette, le total, et le niveau moyen s’il est connu. -->
-        <template v-else-if="scout.size">
-          <div class="foes-h">Composition</div>
-          <div class="foes">
-            <div class="foe unknown">
-              <span class="foe-emo">❓</span>
-              <span class="foe-n font-display">×{{ scout.size }}</span>
-              <span class="foe-lvl">{{
-                scout.avgLevel ? `niv ~${scout.avgLevel}` : 'niveau ?'
-              }}</span>
-            </div>
-          </div>
-          <p class="foes-blind">
-            Tes éclaireurs comptent les silhouettes sans distinguer les rangs.
-            <template v-if="watchLevel">Une <b>Tour</b> plus haute y verrait clair.</template>
-            <template v-else>Une <b>Tour de guet</b> y verrait clair.</template>
-          </p>
-        </template>
-      </div>
-      <p class="scout-hint">
-        {{ scoutHint }}
-      </p>
-    </div>
-    <div v-else class="panel calm">
-      <div class="p-title">🕊️ Aucune menace en vue</div>
-      <!-- ⚠️ On dit CE QUI MANQUE, pas seulement qu’il manque quelque chose : le seuil
-           porte sur le mur ET les tourelles, et une enceinte à moitié ne tient rien. -->
-      <p v-if="!raidsReady">
-        Ta ville n’attire personne tant que son enceinte ne vaut pas la peine d’être attaquée. Il te
-        faut <b>muraille</b> et <b>tourelles</b> au niveau <b>{{ readyLevel }}</b> —
-        <span :class="{ miss: wallLevel < readyLevel }">muraille {{ wallLevel }}</span> ·
-        <span :class="{ miss: turretLevel < readyLevel }">tourelles {{ turretLevel }}</span
-        >.
-      </p>
-      <!-- ⚠️ ON N'ANNONCE PLUS QUAND. L'écran affichait le compte à rebours vers
-           `nextRaidAt` avant même toute détection : il divulguait donc l'horaire que la
-           TOUR DE GUET est précisément censée vendre. Une armée qui prévient de son
-           arrivée n'est pas une menace, c'est un rendez-vous. On ne dit ici que ce qu'on
-           peut honnêtement savoir : rien — sauf le PRÉAVIS que la Tour donnera le jour
-           où elle repérera quelque chose. C'est ça qu'on achète en la montant. -->
-      <p v-else>
-        Rien à l’horizon. Une armée finira par se mettre en marche — plus tu t’entraînes, plus ta
-        base prospère et plus elle attire —, mais tu ne sauras pas quand.
-      </p>
-      <p v-if="raidsReady" class="calm-watch">
-        <template v-if="watchLevel">
-          🗼 Ta <b>Tour de guet</b> te préviendra <b>{{ scoutLeadLabel }}</b> avant l’assaut.
-        </template>
-        <template v-else>
-          🗼 Sans <b>Tour de guet</b>, tu les verras arriver au dernier moment. C’est elle qui
-          achète du temps de réaction.
-        </template>
-      </p>
-    </div>
-
-    <!-- ── Champ de bataille ── -->
-    <div v-if="field" class="panel loot">
-      <div class="p-title">🦴 Champ de bataille — {{ remaining }} corps</div>
-      <p v-if="!salvageLevel">
-        Construis un <b>Fosse commune</b> pour dépouiller les corps avant qu’ils ne pourrissent ({{
-          rotIn
-        }}).
-      </p>
-      <template v-else>
-        <p>
-          {{ scavCap }} fossoyeurs par vague · les corps pourrissent {{ rotIn }}. Tu peux les
-          renvoyer autant de fois qu’il le faut.
-        </p>
-        <!-- ── LES FOUILLEURS SONT RENTRÉS ─────────────────────────────────
-             On DÉTAILLE ce qu'ils rapportent AVANT de le ramasser : un bouton qui
-             crédite en silence et laisse un toast ne donne rien à regarder, alors
-             que c'est le paiement du siège. ⚠️ L'aperçu et la récupération partagent
-             la MÊME graine (l'heure de départ) : ce qui est montré est exactement ce
-             qui sera crédité. -->
-        <div v-if="scavReady && scavLoot" class="scav-back">
-          <div class="scav-title">
-            🎒 Les fossoyeurs sont rentrés — {{ scavLoot.corpses }} corps dépouillés
-          </div>
-          <div v-if="scavPills.length" class="scav-pills">
-            <span v-for="(b, i) in scavPills" :key="i" class="scav-pill">{{ b }}</span>
-          </div>
-          <div v-if="scavLoot.items.length" class="scav-items">
-            <div v-for="(it, i) in scavLoot.items" :key="i" class="scav-item">
-              <span class="scav-emo">{{ it.emoji }}</span>
-              <span class="scav-nm">{{ it.name }}</span>
-              <span class="scav-rar" :class="'p-' + it.rarity">{{ RARITY_LABEL[it.rarity] }}</span>
-              <span class="scav-lvl">Nv {{ it.level }}</span>
-            </div>
-          </div>
-          <p v-if="!scavPills.length && !scavLoot.items.length" class="dim-note">
-            Rien de valeur sur ces corps.
-          </p>
-          <button class="cta" @click="doCollect">
-            🎒 Tout ramasser<span v-if="scavLoot.items.length">
-              — {{ scavLoot.items.length }} objet{{ scavLoot.items.length > 1 ? 's' : '' }} au
-              sac</span
-            >
-          </button>
-        </div>
-        <button v-else-if="scavBusy" class="cta ghost" disabled>
-          ⏳ Fossoyeurs sur le terrain — {{ scavIn }}
-        </button>
-        <button v-else-if="remaining > 0" class="cta" @click="doSend">
-          🦴 Envoyer les fossoyeurs ({{ Math.min(scavCap, remaining) }} corps)
-        </button>
-        <p v-else class="done">Le champ est entièrement dépouillé.</p>
-      </template>
-    </div>
-
     <GuildPanel :open="guildOpen" @close="guildOpen = false" />
+
+    <!-- ⚠️ LA PAGE NE GARDE QUE CE QUI SE LIT D'UN COUP D'ŒIL. Espionnage, dernier
+         siège et champ de bataille vivaient en panneaux empilés sous l'enceinte, loin
+         du bâtiment qui les produit : on faisait défiler pour savoir ce que la Tour de
+         guet avait vu. Ils sont désormais DANS la feuille de leur structure, et c'est
+         le dessin qui alerte. Un bâtiment, un endroit — même règle que la Guilde. -->
 
     <!-- Feuille des emplacements de production, ouverte depuis le dessin. -->
     <VillagePlots
@@ -514,6 +367,185 @@
             </button>
           </template>
         </div>
+
+        <!-- 🗼 LA TOUR DE GUET porte ce qu’elle produit : le renseignement, et le
+             compte rendu du dernier assaut. -->
+        <template v-if="defSel.id === 'watchtower'">
+          <!-- ── Menace en approche ── -->
+          <div v-if="raid" class="panel threat">
+            <div class="p-title">⚠️ Une armée approche — {{ arriveIn }}</div>
+            <div class="scout">
+              <div class="scout-line">
+                <span class="k">Nature</span>
+                <span class="v">
+                  {{
+                    scout.faction
+                      ? `${FACTION_EMOJI[scout.faction]} ${FACTION_LABEL[scout.faction]}`
+                      : '???'
+                  }}
+                </span>
+              </div>
+              <div class="scout-line">
+                <span class="k">Butin attendu</span>
+                <span class="v">{{ scout.faction ? FACTION_LOOT[scout.faction] : '???' }}</span>
+              </div>
+              <div class="scout-line">
+                <span class="k">Effectif</span>
+                <span class="v">{{ scout.size ?? '???' }}</span>
+              </div>
+              <div class="scout-line">
+                <span class="k">Niveau moyen</span>
+                <span class="v">{{ scout.avgLevel ?? '???' }}</span>
+              </div>
+              <!-- La COMPOSITION est ce qu’on vient lire ici : elle mérite mieux qu’une ligne
+                 de puces de 12 px. Une carte par groupe — icône lisible, effectif, niveau —
+                 et le champion se reconnaît sans lire. Visible à partir de la clarté 4. -->
+              <template v-if="scout.groups">
+                <div class="foes-h">Composition</div>
+                <div class="foes">
+                  <div
+                    v-for="(g, i) in scout.groups"
+                    :key="i"
+                    class="foe"
+                    :class="{ champ: g.champion }"
+                  >
+                    <span v-if="g.champion" class="foe-crown" title="Champion">👑</span>
+                    <span class="foe-emo">{{ g.emoji }}</span>
+                    <span class="foe-n font-display">×{{ g.count }}</span>
+                    <span class="foe-lvl">niv {{ g.level }}</span>
+                  </div>
+                </div>
+              </template>
+              <!-- Clarté 2-3 : on connaît l’effectif mais pas la répartition. On le DIT dans le
+                 même langage visuel plutôt que de laisser un vide — et sans rien inventer :
+                 une seule silhouette, le total, et le niveau moyen s’il est connu. -->
+              <template v-else-if="scout.size">
+                <div class="foes-h">Composition</div>
+                <div class="foes">
+                  <div class="foe unknown">
+                    <span class="foe-emo">❓</span>
+                    <span class="foe-n font-display">×{{ scout.size }}</span>
+                    <span class="foe-lvl">{{
+                      scout.avgLevel ? `niv ~${scout.avgLevel}` : 'niveau ?'
+                    }}</span>
+                  </div>
+                </div>
+                <p class="foes-blind">
+                  Tes éclaireurs comptent les silhouettes sans distinguer les rangs.
+                  <template v-if="watchLevel">Une <b>Tour</b> plus haute y verrait clair.</template>
+                  <template v-else>Une <b>Tour de guet</b> y verrait clair.</template>
+                </p>
+              </template>
+            </div>
+            <p class="scout-hint">
+              {{ scoutHint }}
+            </p>
+          </div>
+          <div v-else class="panel calm">
+            <div class="p-title">🕊️ Aucune menace en vue</div>
+            <!-- ⚠️ On dit CE QUI MANQUE, pas seulement qu’il manque quelque chose : le seuil
+               porte sur le mur ET les tourelles, et une enceinte à moitié ne tient rien. -->
+            <p v-if="!raidsReady">
+              Ta ville n’attire personne tant que son enceinte ne vaut pas la peine d’être attaquée.
+              Il te faut <b>muraille</b> et <b>tourelles</b> au niveau <b>{{ readyLevel }}</b> —
+              <span :class="{ miss: wallLevel < readyLevel }">muraille {{ wallLevel }}</span> ·
+              <span :class="{ miss: turretLevel < readyLevel }">tourelles {{ turretLevel }}</span
+              >.
+            </p>
+            <!-- ⚠️ ON N'ANNONCE PLUS QUAND. L'écran affichait le compte à rebours vers
+               `nextRaidAt` avant même toute détection : il divulguait donc l'horaire que la
+               TOUR DE GUET est précisément censée vendre. Une armée qui prévient de son
+               arrivée n'est pas une menace, c'est un rendez-vous. On ne dit ici que ce qu'on
+               peut honnêtement savoir : rien — sauf le PRÉAVIS que la Tour donnera le jour
+               où elle repérera quelque chose. C'est ça qu'on achète en la montant. -->
+            <p v-else>
+              Rien à l’horizon. Une armée finira par se mettre en marche — plus tu t’entraînes, plus
+              ta base prospère et plus elle attire —, mais tu ne sauras pas quand.
+            </p>
+            <p v-if="raidsReady" class="calm-watch">
+              <template v-if="watchLevel">
+                🗼 Ta <b>Tour de guet</b> te préviendra <b>{{ scoutLeadLabel }}</b> avant l’assaut.
+              </template>
+              <template v-else>
+                🗼 Sans <b>Tour de guet</b>, tu les verras arriver au dernier moment. C’est elle qui
+                achète du temps de réaction.
+              </template>
+            </p>
+          </div>
+          <div v-if="lastReport" class="panel">
+            <div class="p-title">
+              {{
+                lastReport.held
+                  ? '🏆 Dernier siège — repoussé'
+                  : '💥 Dernier siège — enceinte forcée'
+              }}
+            </div>
+            <p>
+              {{ FACTION_EMOJI[lastReport.faction] }} {{ FACTION_LABEL[lastReport.faction] }} ·
+              {{ lastReport.defeated }}/{{ lastReport.total }} groupes repoussés ·
+              {{ lastReport.heroHome ? 'héros présent' : 'héros absent' }}
+            </p>
+            <button class="cta ghost" @click="replaySiege">▶ Revoir l’assaut</button>
+          </div>
+        </template>
+
+        <!-- 🦴 LE CHANTIER porte le champ de bataille : c’est lui qui envoie fouiller. -->
+        <template v-if="defSel.id === 'salvage'">
+          <!-- ── Champ de bataille ── -->
+          <div v-if="field" class="panel loot">
+            <div class="p-title">🦴 Champ de bataille — {{ remaining }} corps</div>
+            <p v-if="!salvageLevel">
+              Construis un <b>Fosse commune</b> pour dépouiller les corps avant qu’ils ne
+              pourrissent ({{ rotIn }}).
+            </p>
+            <template v-else>
+              <p>
+                {{ scavCap }} fossoyeurs par vague · les corps pourrissent {{ rotIn }}. Tu peux les
+                renvoyer autant de fois qu’il le faut.
+              </p>
+              <!-- ── LES FOUILLEURS SONT RENTRÉS ─────────────────────────────────
+                 On DÉTAILLE ce qu'ils rapportent AVANT de le ramasser : un bouton qui
+                 crédite en silence et laisse un toast ne donne rien à regarder, alors
+                 que c'est le paiement du siège. ⚠️ L'aperçu et la récupération partagent
+                 la MÊME graine (l'heure de départ) : ce qui est montré est exactement ce
+                 qui sera crédité. -->
+              <div v-if="scavReady && scavLoot" class="scav-back">
+                <div class="scav-title">
+                  🎒 Les fossoyeurs sont rentrés — {{ scavLoot.corpses }} corps dépouillés
+                </div>
+                <div v-if="scavPills.length" class="scav-pills">
+                  <span v-for="(b, i) in scavPills" :key="i" class="scav-pill">{{ b }}</span>
+                </div>
+                <div v-if="scavLoot.items.length" class="scav-items">
+                  <div v-for="(it, i) in scavLoot.items" :key="i" class="scav-item">
+                    <span class="scav-emo">{{ it.emoji }}</span>
+                    <span class="scav-nm">{{ it.name }}</span>
+                    <span class="scav-rar" :class="'p-' + it.rarity">{{
+                      RARITY_LABEL[it.rarity]
+                    }}</span>
+                    <span class="scav-lvl">Nv {{ it.level }}</span>
+                  </div>
+                </div>
+                <p v-if="!scavPills.length && !scavLoot.items.length" class="dim-note">
+                  Rien de valeur sur ces corps.
+                </p>
+                <button class="cta" @click="doCollect">
+                  🎒 Tout ramasser<span v-if="scavLoot.items.length">
+                    — {{ scavLoot.items.length }} objet{{ scavLoot.items.length > 1 ? 's' : '' }} au
+                    sac</span
+                  >
+                </button>
+              </div>
+              <button v-else-if="scavBusy" class="cta ghost" disabled>
+                ⏳ Fossoyeurs sur le terrain — {{ scavIn }}
+              </button>
+              <button v-else-if="remaining > 0" class="cta" @click="doSend">
+                🦴 Envoyer les fossoyeurs ({{ Math.min(scavCap, remaining) }} corps)
+              </button>
+              <p v-else class="done">Le champ est entièrement dépouillé.</p>
+            </template>
+          </div>
+        </template>
         <p v-if="lvlOf(defSel.id) >= heroLevel" class="s-cap">
           Plafonné par ton niveau de personnage — le sport reste le plafond.
         </p>
@@ -1071,6 +1103,11 @@ interface YardCell {
   damaged: boolean;
   /** ⭐ Quelque chose attend une décision DANS ce bâtiment (une promotion, aujourd'hui). */
   star?: boolean;
+  /** 🔴 ALERTE : une armée a été repérée — contour rouge à clignotement LENT. Lent, parce
+   *  qu'un siège se prépare sur des heures : un clignotement nerveux crierait au feu. */
+  alert?: boolean;
+  /** Quelque chose est À FAIRE ici (des corps à fouiller, des fossoyeurs rentrés). */
+  todo?: boolean;
   onClick: () => void;
 }
 // ── LA VILLE EN DEUX ANNEAUX ──────────────────────────────────────────────────
@@ -1150,6 +1187,11 @@ const yard = computed<YardCell[]>(() => {
       level: lvlOf(id),
       ready: false,
       damaged: damagedOf(id),
+      // ⚠️ C'est le DESSIN qui alerte, depuis que les panneaux ont rejoint les feuilles
+      // de leurs structures : sans ces signaux, une armée repérée ne se verrait plus
+      // qu'en cliquant la bonne tuile.
+      alert: id === 'watchtower' && !!raid.value,
+      todo: id === 'salvage' && (scavReady.value || remaining.value > 0),
       onClick: () => openDef(id),
     });
   });
@@ -1985,6 +2027,47 @@ const doCollect = () =>
   width: 36px;
   height: 36px;
   cursor: pointer;
+}
+/* Anneau de signal autour d'une tuile. Deux registres, deux rythmes :
+   ALERTE (armée repérée) = rouge, clignotement LENT — un siège se prépare sur des
+   heures, un clignotement nerveux crierait au feu ; À FAIRE (corps à fouiller) = accent,
+   respiration douce. Jamais les deux à la fois : l'alerte prime. */
+.yard-ring {
+  fill: none;
+  stroke-width: 1.2;
+  pointer-events: none;
+}
+.yard-ring.alert {
+  stroke: #ff6a45;
+  animation: ring-alert 2.4s ease-in-out infinite;
+}
+.yard-ring.todo {
+  stroke: var(--accent);
+  animation: ring-todo 2s ease-in-out infinite;
+}
+@keyframes ring-alert {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes ring-todo {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .yard-ring {
+    animation: none;
+    opacity: 0.9;
+  }
 }
 /* ⭐ « il y a une décision à prendre ici » — discret mais repérable au coup d'œil. */
 .yard-star {

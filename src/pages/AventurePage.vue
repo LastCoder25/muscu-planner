@@ -1158,8 +1158,19 @@
           <div v-else class="rb-next">⭐ Dernière région — tu touches au bout du monde.</div>
         </div>
 
-        <div v-if="!regionView" class="sec-title mboss-title">🗺️ Carte des mondes</div>
-        <div v-if="!regionView" class="sec-hint map-hint">
+        <!-- ⚠️ REPLIÉE PAR DÉFAUT (choix de l'utilisateur) : la carte occupait tout l'écran
+             Explorer et poussait le reste sous le pli, alors que le bandeau de région
+             au-dessus dit déjà où l'on en est. Le titre est le pliage ; l'état est mémorisé. -->
+        <button
+          v-if="!regionView"
+          class="sec-title mboss-title map-fold"
+          :aria-expanded="worldOpen"
+          @click="toggleWorld"
+        >
+          <span class="mf-chev" :class="{ open: worldOpen }">▸</span> 🗺️ Carte des mondes
+          <span v-if="!worldOpen" class="mf-hint">{{ REGIONS.length }} régions</span>
+        </button>
+        <div v-if="!regionView && worldOpen" class="sec-hint map-hint">
           Touche une région pour ouvrir ses donjons.
           <button
             v-if="currentRegionIndex > 1"
@@ -1171,7 +1182,7 @@
         </div>
         <!-- Carte-monde serpentine : un nœud par région, fil énergisé, cadenas. -->
         <div
-          v-if="!regionView"
+          v-if="!regionView && worldOpen"
           ref="worldmapEl"
           class="worldmap"
           :style="{ height: mapGeom.viewH + 'px' }"
@@ -3605,6 +3616,24 @@ const currentRegionIndex = computed(() => REGIONS.findIndex((r) => r.id === curR
 // (faite), la courante, et la suivante (verrouillée). `showAllRegions` (ticket 4a4f1c74)
 // déplie TOUTES les zones débloquées + la suivante → on peut retourner farmer une zone
 // précédente (avant, seule la zone cur-1 restait accessible).
+/** Carte des mondes dépliée ? FERMÉE par défaut, et le choix est mémorisé par appareil. */
+const worldOpen = ref<boolean>(
+  (() => {
+    try {
+      return localStorage.getItem('muscu:worldmap:open') === '1';
+    } catch {
+      return false;
+    }
+  })(),
+);
+function toggleWorld() {
+  worldOpen.value = !worldOpen.value;
+  try {
+    localStorage.setItem('muscu:worldmap:open', worldOpen.value ? '1' : '0');
+  } catch {
+    /* stockage indispo : l'état reste en mémoire */
+  }
+}
 const showAllRegions = ref(false);
 const visibleRegions = computed(() => {
   const cur = currentRegionIndex.value;
@@ -10029,6 +10058,33 @@ button.pt-mini:active {
   border-left: 3px solid var(--rc, var(--line));
 }
 
+/* Titre-pliage de la carte des mondes : un bouton qui a l'air d'un titre. */
+.map-fold {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mf-chev {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  color: var(--dim);
+}
+.mf-chev.open {
+  transform: rotate(90deg);
+}
+.mf-hint {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--dim);
+}
 /* ── Carte-monde serpentine ── */
 .worldmap {
   position: relative;
