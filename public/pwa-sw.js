@@ -50,19 +50,23 @@ self.addEventListener('push', (event) => {
 });
 
 /* Taper la notification ouvre l'app SUR LE BON ÉCRAN — et réutilise l'onglet déjà
-   ouvert plutôt que d'en empiler un nouveau à chaque fois. */
+   ouvert plutôt que d'en empiler un nouveau à chaque fois.
+   ⚠️ On ne fait PAS `client.navigate(url)` : c'est un RECHARGEMENT complet (l'écran en
+   cours est perdu), et il est REFUSÉ sur un onglet que ce service worker ne contrôle
+   pas encore — la notification ne faisait alors que ramener l'onglet au premier plan,
+   sur l'écran où on l'avait laissé. On envoie l'URL à l'app (boot/pwa.ts), qui route
+   EN PLACE par le routeur. Sans onglet ouvert, on en ouvre un directement sur l'URL. */
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || '/';
   event.waitUntil(
     (async () => {
       const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      for (const c of all) {
-        if ('focus' in c) {
-          await c.focus();
-          if ('navigate' in c) await c.navigate(url).catch(() => {});
-          return;
-        }
+      const c = all.find((w) => 'focus' in w);
+      if (c) {
+        await c.focus();
+        c.postMessage({ type: 'navigate', url });
+        return;
       }
       await self.clients.openWindow(url);
     })(),

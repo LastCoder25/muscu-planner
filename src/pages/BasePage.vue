@@ -43,14 +43,37 @@
     <div class="keep-wrap">
       <svg viewBox="0 0 200 200" class="keep" role="img" aria-label="Enceinte de la base">
         <defs>
-          <radialGradient id="ground" cx="50%" cy="50%">
-            <stop offset="0%" stop-color="#2b241a" />
-            <stop offset="100%" stop-color="#1a1610" />
+          <!-- Prairie : verte au centre, qui s'assombrit vers les bords du cadre. -->
+          <radialGradient id="meadow" cx="50%" cy="46%" r="72%">
+            <stop offset="0%" stop-color="#55672f" />
+            <stop offset="55%" stop-color="#435527" />
+            <stop offset="100%" stop-color="#2b3a1c" />
+          </radialGradient>
+          <!-- Terre battue au pied des murs : là où l'on marche, l'herbe ne tient pas. -->
+          <radialGradient id="earth" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#5a4730" />
+            <stop offset="74%" stop-color="#55432c" />
+            <stop offset="100%" stop-color="#55432c" stop-opacity="0" />
           </radialGradient>
         </defs>
 
-        <!-- Terrain extérieur + champ de bataille -->
-        <rect x="0" y="0" width="200" height="200" fill="url(#ground)" />
+        <!-- ── LE TERRAIN ──────────────────────────────────────────────────
+             ⚠️ Sur fond noir, l'enceinte flottait dans le vide (retour utilisateur) :
+             une base est posée QUELQUE PART. Prairie + terre battue au pied des murs +
+             chemin de terre qui part de la porte + touffes d'herbe. Tout est du SVG
+             plat et SEEDÉ (aucun filtre : l'enceinte anime des contours, un feTurbulence
+             se repeindrait à chaque image). -->
+        <!-- `v-once` : rien ici n'est réactif, et le template entier se re-rend à
+             chaque tick d'horloge — sans lui, 53 nœuds seraient re-diffés chaque seconde
+             pour rien. -->
+        <g v-once class="terrain" aria-hidden="true">
+          <rect x="0" y="0" width="200" height="200" fill="url(#meadow)" />
+          <ellipse v-for="(p, i) in patches" :key="'p' + i" v-bind="p" class="patch" />
+          <circle cx="100" cy="100" :r="EARTH_R" fill="url(#earth)" />
+          <path :d="roadPath" class="road" />
+          <path :d="roadRuts" class="road-ruts" />
+          <path v-for="(t, i) in tufts" :key="'t' + i" :d="t" class="tuft" />
+        </g>
         <g v-if="corpses.length" class="field">
           <text
             v-for="c in corpses"
@@ -168,11 +191,43 @@
              C'est par là qu'on sort : elle ouvre la carte des expéditions. Placée
              au milieu du pan SUD, à l'opposé du corps de garde — l'enceinte a donc
              un point d'entrée et un point de sortie, ce qui se lit d'un coup d'œil. -->
-        <g class="hit gate" @click="openMap">
+        <g v-once class="hit gate" @click="openMap">
+          <rect x="78" :y="WALL_BOTTOM - 16" width="70" height="42" class="gate-hit" />
+          <!-- Deux piliers coiffés encadrent l'arche : une PORTE, pas un trou dans le mur. -->
+          <template v-for="g in gateSides" :key="g.side">
+            <rect
+              :x="g.pierX"
+              :y="WALL_BOTTOM - 12"
+              width="5.5"
+              height="19"
+              rx="1"
+              class="gate-pier"
+            />
+            <path :d="g.cap" class="gate-cap" />
+          </template>
           <path :d="gatePath" class="gate-arch" />
-          <path :d="gatePath" class="gate-mouth" />
-          <path :d="gateArrow" class="gate-arrow" />
-          <text x="100" :y="gateLabelY" class="gate-label">Expéditions</text>
+          <path :d="gateMouth" class="gate-mouth" />
+          <!-- Les deux vantaux ENTROUVERTS : on voit qu'on peut sortir. -->
+          <path v-for="g in gateSides" :key="'leaf' + g.side" :d="g.leaf" class="gate-leaf" />
+          <!-- Le pont de planches qui enjambe le fossé de terre battue -->
+          <g class="gate-bridge">
+            <rect x="91" :y="WALL_BOTTOM + 6" width="18" height="8" rx="1" />
+            <line x1="91" :y1="WALL_BOTTOM + 8.7" x2="109" :y2="WALL_BOTTOM + 8.7" />
+            <line x1="91" :y1="WALL_BOTTOM + 11.3" x2="109" :y2="WALL_BOTTOM + 11.3" />
+          </g>
+          <!-- Le panneau au bord du chemin : où mène cette route. -->
+          <g class="signpost">
+            <line x1="122" :y1="WALL_BOTTOM + 23" x2="122" :y2="WALL_BOTTOM + 11" />
+            <rect
+              x="111"
+              :y="WALL_BOTTOM + 9"
+              width="36"
+              height="9.5"
+              rx="1.5"
+              class="sign-board"
+            />
+            <text x="130.5" :y="WALL_BOTTOM + 15.7" class="gate-label">Expéditions ›</text>
+          </g>
         </g>
 
         <!-- ── LE SOL DE LA COUR ────────────────────────────────────────────
@@ -728,6 +783,7 @@ import {
   type ScoutReport,
 } from '@/lib/raid';
 import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
+import { mulberry32 } from '@/lib/combat';
 
 /** Niveau d'accès à l'enceinte. La défense est un système de mi-partie : elle suppose une
  *  économie derrière elle (or, ferraille) et une base qui vaille la peine d'être défendue.
@@ -742,7 +798,7 @@ const $q = useQuasar();
 const char = useCharacterStore();
 const auth = useAuthStore();
 const progress = useProgress();
-const { gameBack, goGame, viewForPath } = useGamePanel();
+const { gameBack, openPath } = useGamePanel();
 
 function back() {
   if (props.embedded) gameBack();
@@ -751,9 +807,7 @@ function back() {
 /** Sortir de la base → la carte des expéditions. En cockpit, elle prend le volet droit ;
  *  sinon c'est une route plein écran. */
 function openMap() {
-  const v = props.embedded ? viewForPath('/expedition-map') : null;
-  if (v) return goGame(v);
-  void router.push('/expedition-map');
+  openPath(router, '/expedition-map', props.embedded);
 }
 
 // Horloge : tout l'état de la base est dérivé de timestamps (aucun cron, hors-ligne).
@@ -1067,13 +1121,82 @@ const gatePath = computed(() => {
   const y = WALL_BOTTOM;
   return `M90 ${y + 6} L90 ${y - 2} A10 10 0 0 1 110 ${y - 2} L110 ${y + 6} Z`;
 });
-/** La flèche de sortie vit DANS l'ouverture, le libellé juste en dessous : dérivés eux
- *  aussi, sinon ils flottent hors de la porte au premier changement de rayon. */
-const gateArrow = computed(() => {
-  const y = WALL_BOTTOM + 1.5;
-  return `M100 ${y} L100 ${y + 12} M95 ${y + 7} L100 ${y + 12} L105 ${y + 7}`;
+/** L'ouverture sombre sous l'arche, et ses deux vantaux entrouverts (perspective :
+ *  chaque battant part du montant et rentre vers le fond). Tout dérivé du mur,
+ *  sinon la porte se décroche au premier changement de rayon. */
+const gateMouth = computed(() => {
+  const y = WALL_BOTTOM;
+  return `M93 ${y + 6} L93 ${y - 1} A7 7 0 0 1 107 ${y - 1} L107 ${y + 6} Z`;
 });
-const gateLabelY = computed(() => WALL_BOTTOM + 25.5);
+const gateLeaf = (side: -1 | 1) => {
+  const y = WALL_BOTTOM;
+  const x0 = 100 + side * 7; // sur le montant
+  const x1 = 100 + side * 2.4; // vers le fond, entrouvert
+  return `M${x0} ${y - 1} L${x1} ${y + 1} L${x1} ${y + 6} L${x0} ${y + 6} Z`;
+};
+/** Le petit toit d'un pilier : un triangle centré sur `cx`, posé sur le haut du pilier. */
+const pierCap = (cx: number) => {
+  const y = WALL_BOTTOM - 12;
+  return `M${cx - 4} ${y} L${cx} ${y - 4.5} L${cx + 4} ${y} Z`;
+};
+/** Les deux côtés de la porte, symétriques : calculés UNE fois (le template se re-rend
+ *  à chaque tick, une fonction appelée depuis lui se réexécuterait à chaque image). */
+const gateSides = ([-1, 1] as const).map((side) => ({
+  side,
+  pierX: 100 + side * 13.25 - 2.75,
+  cap: pierCap(100 + side * 13.25),
+  leaf: gateLeaf(side),
+}));
+/** La terre battue au pied des murs — et la limite en deçà de laquelle rien ne pousse. */
+const EARTH_R = WALL_R + 15;
+/** Le chemin de terre qui part de la porte et sort du cadre par le sud, en s'évasant
+ *  un peu (perspective). Ses ornières : deux lignes pointillées. */
+const roadPath = computed(() => {
+  const y = WALL_BOTTOM + 4;
+  return `M92 ${y} C92 ${y + 12} 88 ${y + 22} 86 200 L114 200 C112 ${y + 22} 108 ${y + 12} 108 ${y} Z`;
+});
+const roadRuts = computed(() => {
+  const y = WALL_BOTTOM + 15;
+  return `M96.5 ${y} C96 ${y + 8} 94 ${y + 14} 93 200 M103.5 ${y} C104 ${y + 8} 106 ${y + 14} 107 200`;
+});
+/** Touffes d'herbe et taches de prairie, tirées UNE fois d'un générateur seedé
+ *  (`mulberry32`, le PRNG du projet) : le dessin est le même à chaque ouverture — une
+ *  base qui change d'herbe serait bizarre — et rien n'est posé sur la route ni sous
+ *  l'enceinte. Coordonnées arrondies au dixième : sur un viewBox de 200, au-delà c'est
+ *  du bruit qui alourdit chaque attribut `d`. */
+const outsideWalls = (x: number, y: number) => Math.hypot(x - 100, y - 100) > EARTH_R - 3;
+const onRoad = (x: number, y: number) => y > WALL_BOTTOM && Math.abs(x - 100) < 18;
+const r1 = (n: number) => Math.round(n * 10) / 10;
+/** Sème `want` éléments par tirage-rejet dans le cadre (marge `pad`), hors enceinte et
+ *  hors route. Une seule boucle pour les touffes et les taches. */
+function scatter<T>(
+  seed: number,
+  want: number,
+  pad: number,
+  make: (x: number, y: number, rng: () => number) => T,
+): T[] {
+  const rng = mulberry32(seed);
+  const out: T[] = [];
+  for (let i = 0; i < want * 8 && out.length < want; i++) {
+    const x = pad + rng() * (200 - 2 * pad);
+    const y = pad + rng() * (200 - 2 * pad);
+    if (!outsideWalls(x, y) || onRoad(x, y)) continue;
+    out.push(make(x, y, rng));
+  }
+  return out;
+}
+const tufts = scatter(4242, 44, 4, (x, y, rng) => {
+  const h = r1(2.6 + rng() * 2.2);
+  const X = r1(x);
+  const Y = r1(y);
+  return `M${X} ${Y} l-1.4 -${r1(h * 0.8)} M${X} ${Y} l0 -${h} M${X} ${Y} l1.4 -${r1(h * 0.8)}`;
+});
+const patches = scatter(1717, 9, 10, (cx, cy, rng) => ({
+  cx: r1(cx),
+  cy: r1(cy),
+  rx: r1(7 + rng() * 9),
+  ry: r1(3 + rng() * 4),
+}));
 const wallPoints = computed(() => octagon.value.map((p) => `${p.x},${p.y}`).join(' '));
 const innerPoints = computed(() =>
   octagon.value.map((p) => `${100 + (p.x - 100) * 0.86},${100 + (p.y - 100) * 0.86}`).join(' '),
@@ -1729,31 +1852,85 @@ const doCollect = () =>
 }
 /* Emplacement de structure encore vide (corps de garde) */
 /* La porte : une arche sombre percée dans le rempart, avec sa flèche de sortie. */
+/* ── Le terrain ── */
+.patch {
+  fill: #3a4b22;
+  opacity: 0.8;
+}
+.tuft {
+  fill: none;
+  stroke: #7d9a45;
+  stroke-width: 0.9;
+  stroke-linecap: round;
+}
+.road {
+  fill: #5c4a32;
+  stroke: #3f3220;
+  stroke-width: 0.6;
+}
+.road-ruts {
+  fill: none;
+  stroke: #3f3220;
+  stroke-width: 0.8;
+  stroke-dasharray: 3 3;
+  stroke-linecap: round;
+}
+/* ── La porte ── */
+.gate-hit {
+  fill: transparent; /* transparent SE clique ; `none` non */
+}
+.gate-pier {
+  fill: #8a7856;
+  stroke: #5a4c36;
+  stroke-width: 1;
+}
+.gate-cap {
+  fill: #6b5a40;
+  stroke: #4a3d2b;
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+}
 .gate-arch {
   fill: #8a7856;
   stroke: #5a4c36;
   stroke-width: 1.5;
 }
 .gate-mouth {
-  fill: #14110c;
-  transform: scale(0.72);
-  transform-origin: 100px 166px;
+  fill: #0f0c08;
 }
-.gate-arrow {
-  fill: none;
-  stroke: var(--accent, #ffd23f);
-  stroke-width: 2;
-  stroke-linecap: round;
+.gate-leaf {
+  fill: #6e4a2a;
+  stroke: #3d2814;
+  stroke-width: 0.7;
   stroke-linejoin: round;
 }
+.gate-bridge rect {
+  fill: #7a5a36;
+  stroke: #4a3620;
+  stroke-width: 0.8;
+}
+.gate-bridge line {
+  stroke: #4a3620;
+  stroke-width: 0.6;
+}
+.signpost line {
+  stroke: #5a4c36;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.sign-board {
+  fill: #3a2f1f;
+  stroke: var(--accent, #ffd23f);
+  stroke-width: 1;
+}
 .gate-label {
-  font-size: 8px;
+  font-size: 6.6px;
   text-anchor: middle;
   fill: var(--accent, #ffd23f);
   font-weight: 700;
 }
-.gate:active .gate-arrow {
-  stroke: #fff;
+.gate:active .sign-board {
+  fill: #54432b;
 }
 .slot-empty {
   fill: #241f18;

@@ -247,7 +247,9 @@ const isCockpit = computed(() => $q.screen.width >= WIDE_MIN && $q.screen.height
 
 // Composant du volet jeu (droite) : Aventure, ou un écran jeu profond (carte
 // d'expédition, Labyrinthe) ouvert DANS le volet via useGamePanel (Étape 2 cockpit).
-const { view: gameView } = useGamePanel();
+const { view: gameView, cockpit } = useGamePanel();
+// Le composable ne connaît pas l'écran : on lui publie l'état du cockpit (cf. openPath).
+watch(isCockpit, (v) => (cockpit.value = v), { immediate: true });
 const GAME_PANES = {
   aventure: AventurePage,
   'expedition-map': ExpeditionMapPage,
@@ -275,7 +277,7 @@ const aventureOnLeft = computed(() => isCockpit.value && route.path === '/aventu
 watch(
   aventureOnLeft,
   (hit) => {
-    if (hit) void router.replace('/');
+    if (hit) void router.replace({ path: '/', query: route.query });
   },
   { immediate: true },
 );

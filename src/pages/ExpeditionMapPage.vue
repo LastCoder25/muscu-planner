@@ -355,7 +355,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -387,6 +387,7 @@ import {
   type Poi,
   type PoiType,
   HARVEST_TYPES,
+  isClaimable,
 } from '@/lib/expedition';
 import { advAvailable, advTitle } from '@/lib/adventurers';
 import { CARAVAN, caravanLegMin, caravanSlots, isCaravanClaimable, poiOffers } from '@/lib/caravan';
@@ -664,6 +665,20 @@ const lastOutcomeItems = computed(() => {
 });
 /** Le rapport ouvert attend-il d'être encaissé ? (sinon la modale n'est qu'un compte rendu) */
 const lastPending = computed(() => !!lastOutcome.value && lastOutcome.value.claimed === false);
+/** Le rapport du héros À ENCAISSER, s'il y en a un — UNE définition de « prêt » (`isClaimable`),
+ *  suivie par l'horloge. Elle ouvre la modale dans les deux cas qui comptent : le héros
+ *  rentre pendant qu'on regarde la carte, ou on arrive par la notification « ton héros
+ *  est rentré » — l'action promise ne doit pas se chercher dans la boîte 📬. */
+const dueReport = computed(() => (char.row?.messages ?? []).find((m) => isClaimable(m, now.value)));
+watch(
+  dueReport,
+  (m) => {
+    if (!m || collectOpen.value) return;
+    lastOutcome.value = m;
+    collectOpen.value = true;
+  },
+  { immediate: true },
+);
 
 // ── Filons de production (village autour de la ville) ──
 /** Un lieu est GRISÉ quand plus rien ne peut y être envoyé — jamais parce que le
@@ -774,12 +789,9 @@ async function lifecycle() {
         type: msg.win ? 'positive' : 'warning',
         message: `📬 ${msg.win ? 'Rapport : victoire' : 'Rapport : échec'} — le héros rentre.`,
       });
-    // Le héros rentre : il redevient disponible, mais son chargement reste à ENCAISSER.
-    const settled = await char.expeSettle(uid, Date.now());
-    if (settled) {
-      lastOutcome.value = settled;
-      collectOpen.value = true;
-    }
+    // Le héros rentre : il redevient disponible, mais son chargement reste à ENCAISSER
+    // (c'est `dueReport` qui ouvre la modale, pas ce tick).
+    await char.expeSettle(uid, Date.now());
     await char.expeSyncMap(uid, Date.now(), progressionLevel.value);
   } finally {
     busy = false;

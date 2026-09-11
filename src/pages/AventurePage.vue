@@ -1140,8 +1140,18 @@
           <span class="expe-go">›</span>
         </button>
 
-        <!-- Bandeau de RÉGION : où tu es + ce qui t'attend après (biomes). -->
-        <div class="region-banner" :style="{ '--rc': curRegion.color }">
+        <!-- Bandeau de RÉGION : où tu es + ce qui t'attend après (biomes).
+             ⚠️ C'est LUI qui plie/déplie la carte des mondes (demande de l'utilisateur) :
+             le bloc qui dit « où j'en suis » est aussi celui qu'on touche pour voir le
+             reste du monde — plus de titre « Carte des mondes » séparé qui doublonnait. -->
+        <div
+          class="region-banner"
+          :class="{ foldable: !regionView }"
+          :style="{ '--rc': curRegion.color }"
+          v-bind="foldAttrs"
+          @click="foldToggle"
+          @keydown.enter.space.prevent="foldToggle"
+        >
           <div class="rb-top">
             <span class="rb-emo">{{ curRegion.emoji }}</span>
             <div class="rb-main">
@@ -1160,80 +1170,71 @@
             >
           </div>
           <div v-else class="rb-next">⭐ Dernière région — tu touches au bout du monde.</div>
+          <!-- ⚠️ REPLIÉE PAR DÉFAUT (choix de l'utilisateur) : la carte occupait tout l'écran
+               Explorer et poussait le reste sous le pli, alors que le bandeau dit déjà où
+               l'on en est. L'état est mémorisé par appareil. -->
+          <div v-if="!regionView" class="rb-fold">
+            <span class="mf-chev" :class="{ open: worldOpen }">▸</span> 🗺️ Carte des mondes
+            <span class="mf-hint">{{ worldOpen ? 'replier' : `${REGIONS.length} régions` }}</span>
+          </div>
         </div>
-
-        <!-- ⚠️ REPLIÉE PAR DÉFAUT (choix de l'utilisateur) : la carte occupait tout l'écran
-             Explorer et poussait le reste sous le pli, alors que le bandeau de région
-             au-dessus dit déjà où l'on en est. Le titre est le pliage ; l'état est mémorisé. -->
-        <button
-          v-if="!regionView"
-          class="sec-title mboss-title map-fold"
-          :aria-expanded="worldOpen"
-          @click="toggleWorld"
-        >
-          <span class="mf-chev" :class="{ open: worldOpen }">▸</span> 🗺️ Carte des mondes
-          <span v-if="!worldOpen" class="mf-hint">{{ REGIONS.length }} régions</span>
-        </button>
-        <div v-if="!regionView && worldOpen" class="sec-hint map-hint">
-          Touche une région pour ouvrir ses donjons.
-          <button
-            v-if="currentRegionIndex > 1"
-            class="map-toggle"
-            @click="showAllRegions = !showAllRegions"
-          >
-            {{ showAllRegions ? '➖ Réduire' : '🗺️ Voir toutes les zones' }}
-          </button>
-        </div>
-        <!-- Carte-monde serpentine : un nœud par région, fil énergisé, cadenas. -->
-        <div
-          v-if="!regionView && worldOpen"
-          ref="worldmapEl"
-          class="worldmap"
-          :style="{ height: mapGeom.viewH + 'px' }"
-        >
-          <svg class="wm-svg" :viewBox="`0 0 100 ${mapGeom.viewH}`" preserveAspectRatio="none">
-            <!-- Un segment par paire de zones : BLEU si la zone d'arrivée est
+        <template v-if="!regionView && worldOpen">
+          <div class="sec-hint map-hint">
+            Touche une région pour ouvrir ses donjons.
+            <button
+              v-if="currentRegionIndex > 1"
+              class="map-toggle"
+              @click="showAllRegions = !showAllRegions"
+            >
+              {{ showAllRegions ? '➖ Réduire' : '🗺️ Voir toutes les zones' }}
+            </button>
+          </div>
+          <!-- Carte-monde serpentine : un nœud par région, fil énergisé, cadenas. -->
+          <div ref="worldmapEl" class="worldmap" :style="{ height: mapGeom.viewH + 'px' }">
+            <svg class="wm-svg" :viewBox="`0 0 100 ${mapGeom.viewH}`" preserveAspectRatio="none">
+              <!-- Un segment par paire de zones : BLEU si la zone d'arrivée est
                  accessible (les deux zones ouvertes), NOIR vers une zone verrouillée. -->
-            <path
-              v-for="(seg, i) in mapGeom.segments"
-              :key="i"
-              :d="seg"
-              class="wm-seg"
-              :class="{ open: segmentOpen(i) }"
-              vector-effect="non-scaling-stroke"
-            />
-          </svg>
-          <button
-            v-for="(r, i) in visibleRegions"
-            :key="r.id"
-            class="wm-node"
-            :class="[regionState(r), { sel: selRegion.id === r.id, shatter: shatterId === r.id }]"
-            :style="{ ...nodeStyle(i), '--rc': r.color }"
-            @click="tapRegion(r)"
-          >
-            <span class="wm-disc">
-              <span v-if="regionState(r) === 'locked' && shatterId !== r.id" class="wm-lockemo"
-                >🔒</span
-              >
-              <span v-else class="wm-emo">{{ r.emoji }}</span>
-              <span v-if="regionState(r) === 'done'" class="wm-star">★</span>
-              <!-- Chaînes + cadenas (verrou / explosion) -->
-              <span
-                v-if="regionState(r) === 'locked' || shatterId === r.id"
-                class="wm-chains"
-                aria-hidden="true"
-              >
-                <i class="wm-link l1" />
-                <i class="wm-link l2" />
-                <i class="wm-lock">🔒</i>
+              <path
+                v-for="(seg, i) in mapGeom.segments"
+                :key="i"
+                :d="seg"
+                class="wm-seg"
+                :class="{ open: segmentOpen(i) }"
+                vector-effect="non-scaling-stroke"
+              />
+            </svg>
+            <button
+              v-for="(r, i) in visibleRegions"
+              :key="r.id"
+              class="wm-node"
+              :class="[regionState(r), { sel: selRegion.id === r.id, shatter: shatterId === r.id }]"
+              :style="{ ...nodeStyle(i), '--rc': r.color }"
+              @click="tapRegion(r)"
+            >
+              <span class="wm-disc">
+                <span v-if="regionState(r) === 'locked' && shatterId !== r.id" class="wm-lockemo"
+                  >🔒</span
+                >
+                <span v-else class="wm-emo">{{ r.emoji }}</span>
+                <span v-if="regionState(r) === 'done'" class="wm-star">★</span>
+                <!-- Chaînes + cadenas (verrou / explosion) -->
+                <span
+                  v-if="regionState(r) === 'locked' || shatterId === r.id"
+                  class="wm-chains"
+                  aria-hidden="true"
+                >
+                  <i class="wm-link l1" />
+                  <i class="wm-link l2" />
+                  <i class="wm-lock">🔒</i>
+                </span>
               </span>
-            </span>
-            <span class="wm-cap">{{ regionState(r) === 'locked' ? '???' : r.name }}</span>
-            <span class="wm-pips">
-              <i v-for="n in r.dungeonIds.length" :key="n" :class="{ on: n <= regionDone(r) }" />
-            </span>
-          </button>
-        </div>
+              <span class="wm-cap">{{ regionState(r) === 'locked' ? '???' : r.name }}</span>
+              <span class="wm-pips">
+                <i v-for="n in r.dungeonIds.length" :key="n" :class="{ on: n <= regionDone(r) }" />
+              </span>
+            </button>
+          </div>
+        </template>
 
         <!-- Vue région : arbre des donjons de la région tapée (remplace la carte). -->
         <div
@@ -2636,7 +2637,7 @@ import {
   nextTick,
   shallowRef,
 } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError, WELCOME_ENERGY } from '@/stores/character';
@@ -2803,13 +2804,11 @@ const props = defineProps<{ embedded?: boolean }>();
 
 const $q = useQuasar();
 const router = useRouter();
-const { goGame, viewForPath } = useGamePanel();
+const { openPath } = useGamePanel();
 // Ouvre un écran jeu profond : en cockpit (embedded) → DANS le volet droit (pas de
 // route, sinon on router-ait le volet gauche) ; sinon navigation plein écran normale.
 function openGame(path: string) {
-  const v = props.embedded ? viewForPath(path) : null;
-  if (v) return goGame(v);
-  void router.push(path);
+  openPath(router, path, props.embedded);
 }
 const auth = useAuthStore();
 const char = useCharacterStore();
@@ -2879,7 +2878,25 @@ const pseudoInput = ref('');
 const pseudoError = ref('');
 // Nav « par activité » : 3 onglets — Héros (fiche+stats+talents+familier) /
 // Équipement (équipé+sac) / Explorer (donjons+boss de palier).
-const tab = ref<'hero' | 'gear' | 'explore' | 'base'>('hero');
+const TAB_IDS = ['hero', 'gear', 'explore', 'base'] as const;
+type TabId = (typeof TAB_IDS)[number];
+const tab = ref<TabId>('hero');
+const route = useRoute();
+/** 🔔 `?tab=` = l'écran demandé par une notification push (`planPushes` n'émet que des
+ *  URL). Lu à l'arrivée ET à chaque changement de route : en cockpit l'Aventure est déjà
+ *  montée à droite, la notification n'arrive donc pas par un montage. Une fois appliqué,
+ *  le paramètre est retiré — sinon un retour arrière rejouerait le saut d'onglet. */
+watch(
+  () => route.query.tab,
+  (t) => {
+    if (typeof t !== 'string' || !TAB_IDS.includes(t as TabId)) return;
+    tab.value = t as TabId;
+    const rest = { ...route.query };
+    delete rest.tab;
+    void router.replace({ path: route.path, query: rest });
+  },
+  { immediate: true },
+);
 // Équipement : plus de sous-onglets. Sac / Loadouts ouvrent des modales
 // (les stats de combat « Force » vivent sur la fiche Héros).
 const bagOpen = ref(false);
@@ -3629,6 +3646,14 @@ const worldOpen = ref<boolean>(
     }
   })(),
 );
+/** Le bandeau n'est un bouton que hors tiroir de région : ses attributs et son geste
+ *  suivent ce seul invariant, écrit une fois. */
+const foldAttrs = computed(() =>
+  regionView.value ? {} : { role: 'button', tabindex: 0, 'aria-expanded': worldOpen.value },
+);
+function foldToggle() {
+  if (!regionView.value) toggleWorld();
+}
 function toggleWorld() {
   worldOpen.value = !worldOpen.value;
   try {
@@ -10062,18 +10087,25 @@ button.pt-mini:active {
   border-left: 3px solid var(--rc, var(--line));
 }
 
-/* Titre-pliage de la carte des mondes : un bouton qui a l'air d'un titre. */
-.map-fold {
+/* Le bandeau est le pli de la carte des mondes : une rangée-titre en bas du bloc. */
+.region-banner.foldable {
+  cursor: pointer;
+  user-select: none;
+}
+.region-banner.foldable:focus-visible {
+  outline: 2px solid var(--rc);
+  outline-offset: 2px;
+}
+.rb-fold {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
-  background: none;
-  border: 0;
-  padding: 0;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  border-top-color: color-mix(in srgb, var(--rc) 30%, var(--line));
+  font-size: 13px;
+  font-weight: 700;
 }
 .mf-chev {
   display: inline-block;
