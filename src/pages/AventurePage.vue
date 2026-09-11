@@ -753,7 +753,7 @@
             >
               {{ optimizing ? '⏳' : '🪄' }}
             </button>
-            <button class="gi-b" title="Sac — ton butin" @click="openBagAndRank()">
+            <button class="gi-b" title="Sac — ton butin" @click="openBag()">
               🎒<span v-if="bagCount" class="gi-badge">{{ bagCount }}</span>
             </button>
             <button
@@ -921,12 +921,16 @@
               </div>
               <!-- Filtre par SET (ticket 986a50b6) — visible seulement si le sac contient des pièces de set. -->
               <!-- Casse/vente en masse : objets qui n'améliorent pas ta puissance (pas
-               meilleurs que l'équipé du même emplacement, MÊME montés à ton niveau).
-               Les pépites potentielles et le 🔒 sont protégés. Respecte le filtre type. -->
+               ⚠️ TOUT, sans condition de puissance (décision de l'utilisateur) : décider
+               quoi jeter demandait un calcul de 3 s et ralentissait l'ouverture du Sac. Le
+               tri se fait au 🔒. Épargnés : familiers, porté, et les pièces que le 🪄
+               retient si l'optimum est déjà connu. Respecte le filtre type. -->
               <div v-if="belowCount > 0" class="bulk">
                 <span class="bulk-lbl"
-                  >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} sans intérêt
-                  <span class="bulk-note">(≤ ton équipement ; pépites &amp; 🔒 gardés)</span></span
+                  >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} à fondre
+                  <span class="bulk-note"
+                    >(tout, sauf 🔒 · familiers · porté · retenus par le 🪄)</span
+                  ></span
                 >
                 <!-- ⚠️ Les deux boutons annoncent le GAIN, jamais le compte : le nombre
                      d'objets est déjà dit juste au-dessus, et c'est le montant qui
@@ -2880,17 +2884,6 @@ const tab = ref<'hero' | 'gear' | 'explore' | 'base'>('hero');
 // (les stats de combat « Force » vivent sur la fiche Héros).
 const bagOpen = ref(false);
 const loadoutOpen = ref(false);
-/** Ouvre le Sac ET prépare la référence : c'est là que servent les verdicts. */
-async function openBagAndRank() {
-  openBag();
-  if (optimumFor === optimumKey.value && optimum.value) return;
-  optimizing.value = true;
-  try {
-    await ensureOptimum();
-  } finally {
-    optimizing.value = false;
-  }
-}
 function openBag() {
   betterFilterSlot.value = null; // ouverture directe = pas de filtre « upgrades »
   bagOpen.value = true;
@@ -3198,6 +3191,15 @@ let optimumFor = '';
  *  verdict — mieux vaut se taire que geler. */
 /** Rend la main au navigateur : une image de rendu entre deux voies. */
 const respire = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+/** Le plan COMPLET (équipement, talents, voie) du meilleur build — la même computation
+ *  sert au 🪄 ET aux marques du Sac. ⚠️ Une seule : le 🪄 recalculait de son côté via
+ *  `previewGearPlan` sans jamais remplir la référence, donc « retenu par ton meilleur
+ *  build » et la protection au recyclage ne s'allumaient JAMAIS. */
+const optimumPlan = shallowRef<{
+  equipped: Equipped;
+  talentIds: string[];
+  voie: string | null;
+} | null>(null);
 async function ensureOptimum(): Promise<void> {
   if (optimumFor === optimumKey.value && optimum.value) return;
   const plan = await char.bestBuild(
@@ -3207,6 +3209,7 @@ async function ensureOptimum(): Promise<void> {
     respire,
   );
   if (!plan) return;
+  optimumPlan.value = { equipped: plan.equipped, talentIds: plan.talentIds, voie: plan.voie };
   optimum.value = plan.equipped;
   optimumIds.value = new Set(
     Object.values(plan.equipped)
@@ -5608,13 +5611,12 @@ async function doOptimizeGear() {
   try {
     // ⚠️ Le calcul rend la main entre chaque voie (`respire`) : l'interface reste
     // vivante et le ⏳ s'affiche vraiment, au lieu d'un onglet qui ne répond plus.
-    const plan = await char.previewGearPlan(
-      c.value,
-      c.value.level.level,
-      char.row?.pseudo ?? 'Toi',
-      respire,
-    );
-    if (!plan) {
+    await ensureOptimum();
+    const plan = optimumPlan.value;
+    // GARDE-FOU ANTI-RÉGRESSION : on ne propose que du STRICTEMENT meilleur — même règle
+    // que `previewGearPlan`, mais portée ici pour que la référence soit remplie dans
+    // TOUS les cas, y compris quand il n'y a rien à gagner.
+    if (!plan || optimumPower.value <= combatPowerVal.value) {
       $q.notify({ type: 'info', message: 'Ton équipement est déjà optimal. 👍' });
       return;
     }
@@ -5771,19 +5773,21 @@ const bulkSlot = computed<ItemSlot | undefined>(() =>
 // Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés → candidats à la casse/vente
 // en masse. Puissance FIXE (grade + enchant) → comparaison directe « si équipé ». Slot vide
 // → l'objet est utile (à équiper), gardé. 🔒 protège ; familiers = piste à part.
-// ⚠️ CE QUI NE CONTRIBUE PAS AU MEILLEUR BUILD — une seule règle, le même étalon que
-// partout ailleurs. L'ancienne comparait chaque objet à CE QU'ON PORTE : elle ratait donc
-// tout ce qui bat la pièce actuelle sans figurer dans l'optimum, et c'est pour ça qu'elle
-// « ne marchait pas ». Elle épargne : les 🔒, les familiers (on ne démonte pas un animal),
-// ce qu'on porte, et les pièces retenues par le build optimal.
+// ⚠️ « TOUT RECYCLER » RECYCLE TOUT — sans condition de puissance (décision de
+// l'utilisateur). Les deux règles précédentes (« pas meilleur que l'équipé », puis « ne
+// contribue pas à l'optimum ») avaient le même défaut : elles demandaient un CALCUL —
+// et le second, 3 s — pour décider quoi jeter, donc ouvrir le Sac ramait. Le tri se fait
+// avec le 🔒, qui existe pour ça. On épargne ce qui n'est pas un choix : les familiers (on
+// ne démonte pas un animal) et, SI l'optimum est déjà connu, les pièces qu'il retient —
+// gratuit (un Set), et ça évite de fondre ce que le 🪄 s'apprêtait à équiper.
 const powerLossItems = computed<Item[]>(() => {
   const r = char.row;
-  if (!r || !optimum.value) return [];
+  if (!r) return [];
   return r.inventory.filter((it) => {
     if (it.locked) return false;
     if (isFamiliar(it)) return false;
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
-    return !inOptimum(it);
+    return !(optimum.value && inOptimum(it));
   });
 });
 const belowCount = computed(() => powerLossItems.value.length);
@@ -5802,7 +5806,7 @@ function doRecycleBelow() {
   const gain = powerLossItems.value.filter(canRecycle).reduce((a, i) => a + scrapValue(i), 0);
   $q.dialog({
     title: 'Tout recycler',
-    message: `Fondre les ${ids.length} objet(s) sans intérêt de ${bulkScope.value} en ${gain} 🔩 ? Les objets meilleurs (potentiel) ou verrouillés 🔒 sont conservés.`,
+    message: `Fondre les ${ids.length} objet(s) de ${bulkScope.value} en ${gain} 🔩 ? Tout y passe, sauf les objets verrouillés 🔒, tes familiers, ce que tu portes et les pièces retenues par ton meilleur build.`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: `Tout recycler (+${gain} 🔩)`, color: 'negative' },
   }).onOk(() =>
