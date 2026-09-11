@@ -753,7 +753,7 @@
             >
               {{ optimizing ? '⏳' : '🪄' }}
             </button>
-            <button class="gi-b" title="Sac — ton butin" @click="openBag()">
+            <button class="gi-b" title="Sac — ton butin" @click="openBagAndRank()">
               🎒<span v-if="bagCount" class="gi-badge">{{ bagCount }}</span>
             </button>
             <button
@@ -2863,6 +2863,21 @@ const tab = ref<'hero' | 'gear' | 'explore' | 'base'>('hero');
 // (les stats de combat « Force » vivent sur la fiche Héros).
 const bagOpen = ref(false);
 const loadoutOpen = ref(false);
+/** Ouvre le Sac ET prépare la référence : c'est là que servent les verdicts. */
+function openBagAndRank() {
+  openBag();
+  if (optimumFor === optimumKey.value && optimum.value) return;
+  optimizing.value = true;
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      try {
+        ensureOptimum();
+      } finally {
+        optimizing.value = false;
+      }
+    }),
+  );
+}
 function openBag() {
   betterFilterSlot.value = null; // ouverture directe = pas de filtre « upgrades »
   bagOpen.value = true;
@@ -5544,20 +5559,11 @@ function togglePlanRow(key: string) {
 const planAccepted = computed(() => planRows.value.filter((r) => !planOff.value.has(r.key)).length);
 
 const optimizing = ref(false);
-/** Planifie le calcul de la référence HORS RENDU. Deux images : la première laisse Vue
- *  peindre, la seconde lance le calcul — sinon l'écran se fige sans avoir rien montré. */
-function scheduleOptimum(): void {
-  if (optimumFor === optimumKey.value && optimum.value) return;
-  requestAnimationFrame(() => requestAnimationFrame(() => ensureOptimum()));
-}
-// On ne calcule que si l'écran s'en sert : l'onglet Équipement, et seulement là.
-watch(
-  [() => tab.value, optimumKey],
-  () => {
-    if (tab.value === 'gear') scheduleOptimum();
-  },
-  { immediate: true },
-);
+// ⚠️ AUCUN DÉCLENCHEMENT AUTOMATIQUE. Le calcul est SYNCHRONE et bloque le fil ~3 s :
+// le lancer sur un simple changement d'onglet, c'est figer l'app sans que personne ne
+// l'ait demandé — et c'est très exactement ce qui a été signalé. Il part donc d'un GESTE
+// (ouvrir le Sac, ou le bouton 🪄), où l'on peut montrer un ⏳ et où l'attente se
+// comprend. Tant qu'il n'a pas tourné, les écrans se taisent.
 function doOptimizeGear() {
   if (optimizing.value) return;
   optimizing.value = true;
