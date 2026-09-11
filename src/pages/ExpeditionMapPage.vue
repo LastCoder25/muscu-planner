@@ -255,6 +255,9 @@
             ⚠️ Une armée arrive : sans le héros, « {{ ODDS_LABEL[riskHero.after] }} » au lieu de «
             {{ ODDS_LABEL[riskHero.before] }} ».
           </p>
+          <p v-else-if="riskHero && riskHero.covered" class="sh-ok">
+            ✅ Une armée arrive, mais il sera rentré avant elle.
+          </p>
           <button class="sh-send" :disabled="!canSend" @click="send">
             {{ sendLabel }}
           </button>
@@ -290,6 +293,9 @@
           <p v-if="risk && risk.worsens" class="sh-risk" :class="{ bad: risk.risky }">
             ⚠️ Une armée arrive : sans eux, « {{ ODDS_LABEL[risk.after] }} » au lieu de «
             {{ ODDS_LABEL[risk.before] }} ».
+          </p>
+          <p v-else-if="risk && risk.covered" class="sh-ok">
+            ✅ Une armée arrive, mais ils seront rentrés avant elle.
           </p>
           <button class="sh-send car-send" :disabled="!canSendCaravanNow" @click="doSendCaravan">
             🐫 Envoyer une caravane ({{ escort.length }})
@@ -616,6 +622,14 @@ const famBonus = computed(() =>
 );
 /** Qui resterait si l'on partait : l'escorte choisie quitte la base, et le héros aussi
  *  quand c'est LUI qu'on envoie. */
+/** QUAND l’armée frappe. ⚠️ Un voyage qui se termine AVANT n’enlève personne à la
+ *  bataille : sans cette date, l’alerte se déclenchait aussi pour un convoi de deux
+ *  heures face à un siège dans huit (signalé par l’utilisateur). La règle elle-même vit
+ *  dans `departureRisk` — ici on ne fait que fournir les deux horodatages.
+ *  ⚠️ On compare avec la durée ANNONCÉE, qui est un MAJORANT : les rencontres de route ne
+ *  peuvent que raccourcir le retour (`TRAVEL.shortcutReturnMult`/`setbackReturnMult` ≤ 1,
+ *  verrouillé par un test) — donc taire l’alerte ne peut jamais taire un vrai danger. */
+const raidAt = computed(() => incoming.value?.arrivesAt ?? 0);
 const risk = computed(() => {
   const b = base.value;
   if (!b || !assaultNow.value) return null;
@@ -627,6 +641,7 @@ const risk = computed(() => {
     assaultNow.value,
     { hero: heroNow, guard: guardUnits(heroLevel.value, freeAdvs.value, famBonus.value) },
     { hero: heroNow, guard: guardUnits(heroLevel.value, restants, famBonus.value) },
+    { backAt: now.value + caravanMin.value * 60_000, raidAt: raidAt.value },
   );
 });
 
@@ -635,6 +650,7 @@ const risk = computed(() => {
  *  alerte pour les deux dirait faux à l'un des deux coups. */
 const riskHero = computed(() => {
   const b = base.value;
+  const p = selected.value;
   if (!b || !assaultNow.value) return null;
   const heroNow = char.row && char.heroIsHome(char.row) ? fighter.value : null;
   if (!heroNow) return null;
@@ -645,6 +661,7 @@ const riskHero = computed(() => {
     assaultNow.value,
     { hero: heroNow, guard: g },
     { hero: null, guard: g },
+    p ? { backAt: now.value + roundTripMin(p) * 60_000, raidAt: raidAt.value } : undefined,
   );
 });
 const freeAdvs = computed(() => char.advList.filter((a) => advAvailable(a, now.value)));
@@ -1528,6 +1545,13 @@ function fmtMin(min: number): string {
 .sh-risk.bad {
   color: var(--d4);
   font-weight: 600;
+}
+/* Et quand le voyage se termine AVANT l’assaut, on le DIT : le silence, à la place
+   d’une alerte attendue, ressemble à un oubli. Vert « gain » de la charte. */
+.sh-ok {
+  font-size: 12px;
+  color: var(--d1);
+  margin: 4px 0 6px;
 }
 .sh-send {
   width: 100%;

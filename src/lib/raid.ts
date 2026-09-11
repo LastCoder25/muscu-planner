@@ -1398,18 +1398,41 @@ export function departureRisk(
   assault: number,
   avant: { hero: Combatant | null; guard: GuardUnit[] },
   apres: { hero: Combatant | null; guard: GuardUnit[] },
-): { before: SiegeOdds; after: SiegeOdds; worsens: boolean; risky: boolean } {
+  /** QUAND ils rentrent, et QUAND l’armée frappe. Omis = on ne sait pas, donc on alerte. */
+  timing?: { backAt: number; raidAt: number },
+): {
+  before: SiegeOdds;
+  after: SiegeOdds;
+  worsens: boolean;
+  risky: boolean;
+  /** Ils sont RENTRÉS avant que l’armée ne frappe : le départ ne coûte rien au siège. */
+  inTime: boolean;
+  /** Le départ AURAIT dégradé la bande, mais ils rentrent à temps. C’est la seule
+   *  condition où il vaut la peine de le DIRE : le silence, sinon, ressemble à un oubli. */
+  covered: boolean;
+} {
   const odds = (x: { hero: Combatant | null; guard: GuardUnit[] }) =>
     siegeOdds(assault > 0 ? defensePower(defenses, playerLevel, x.hero, x.guard) / assault : 99);
   const before = odds(avant);
   const after = odds(apres);
+  // ⚠️ UN VOYAGE QUI SE TERMINE AVANT L’ASSAUT NE COÛTE RIEN (signalé par l’utilisateur).
+  // La défense qui compte est celle du MOMENT OÙ L’ARMÉE FRAPPE, jamais celle de l’instant
+  // du départ : un convoi de deux heures face à un siège dans huit n’enlève personne.
+  // Alerter quand même serait un faux positif — et une alerte qu’on prend en défaut cesse
+  // d’être lue, y compris les fois où elle a raison.
+  // ⚠️ La règle vit ICI, pas dans un écran : deux boutons envoient du monde (convoi et
+  // héros), et le second finirait par l’oublier.
+  const inTime = !!timing && timing.backAt <= timing.raidAt;
+  // « Ça empire » se lit sur l’ORDRE des bandes, pas sur le ratio : c’est ce que le
+  // joueur voit, et deux ratios différents dans la même bande ne changent rien pour lui.
+  const degrade = ODDS_ORDER.indexOf(after) < ODDS_ORDER.indexOf(before);
   return {
     before,
     after,
-    // « Ça empire » se lit sur l’ORDRE des bandes, pas sur le ratio : c’est ce que le
-    // joueur voit, et deux ratios différents dans la même bande ne changent rien pour lui.
-    worsens: ODDS_ORDER.indexOf(after) < ODDS_ORDER.indexOf(before),
-    risky: isOddsRisky(after),
+    worsens: !inTime && degrade,
+    risky: !inTime && isOddsRisky(after),
+    inTime,
+    covered: inTime && degrade,
   };
 }
 

@@ -26,6 +26,7 @@ import {
   type GarrisonBonus,
 } from '@/lib/raid';
 import { refFighter } from '@/lib/proceduralContent';
+import { TRAVEL } from '@/lib/expedition';
 
 const defAt = (lvl: number): DefenseStructure[] => [
   { typeId: 'wall', level: lvl },
@@ -354,6 +355,72 @@ describe('🚪 CE QUE COÛTE UN DÉPART, face à l’armée qui arrive', () => {
     expect(isOddsRisky(r.before)).toBe(false);
     expect(r.worsens).toBe(true);
     expect(isOddsRisky(r.after)).toBe(true);
+  });
+
+  // ── ⏱️ LE MOMENT OÙ ILS RENTRENT ──────────────────────────────────────────────
+  // ⚠️ Signalé par l’utilisateur : « l’alerte se met bien si le convoi revient après
+  // l’attaque et pas avant ? » — elle ne le faisait PAS. La défense qui compte est
+  // celle du MOMENT OÙ L’ARMÉE FRAPPE, jamais celle de l’instant du départ.
+  /** L’assaut placé là où vider la base fait EXACTEMENT basculer la bande — dérivé des
+   *  deux puissances, jamais deviné (cf. le test au-dessus). */
+  const assautBascule = () =>
+    Math.round((defensePotential(d, L, h, g(tous)) + defensePotential(d, L, null, [])) / 2 / 0.88);
+  const plein = () => ({ hero: h, guard: g(tous) });
+  const vide = () => ({ hero: null, guard: [] });
+
+  it('⚠️ un convoi RENTRÉ avant l’assaut ne coûte RIEN — plus de faux positif', () => {
+    const a = assautBascule();
+    const r = departureRisk(d, L, a, plein(), vide(), {
+      backAt: NOW + 2 * 3600_000,
+      raidAt: NOW + 8 * 3600_000,
+    });
+    expect(r.inTime).toBe(true);
+    expect(r.worsens).toBe(false);
+    expect(r.risky).toBe(false);
+    // …mais on le DIT : le silence, à la place d’une alerte attendue, ressemble à un oubli.
+    expect(r.covered).toBe(true);
+  });
+
+  it('⚠️ un retour APRÈS l’assaut alerte, lui', () => {
+    const a = assautBascule();
+    const r = departureRisk(d, L, a, plein(), vide(), {
+      backAt: NOW + 9 * 3600_000,
+      raidAt: NOW + 8 * 3600_000,
+    });
+    expect(r.inTime).toBe(false);
+    expect(r.worsens).toBe(true);
+    expect(r.covered).toBe(false);
+  });
+
+  it('sans horodatage, on ALERTE — ne pas savoir n’est pas une raison de se taire', () => {
+    const r = departureRisk(d, L, assautBascule(), plein(), vide());
+    expect(r.inTime).toBe(false);
+    expect(r.worsens).toBe(true);
+  });
+
+  it('rentrer à temps ne fabrique pas une bonne nouvelle quand rien ne change', () => {
+    // `covered` ne s’allume QUE si le départ aurait dégradé la bande : sinon l’écran
+    // annoncerait « ils seront rentrés » pour une escorte vide.
+    const etat = plein();
+    const r = departureRisk(d, L, 50_000, etat, etat, { backAt: NOW, raidAt: NOW + 3600_000 });
+    expect(r.inTime).toBe(true);
+    expect(r.covered).toBe(false);
+  });
+
+  it('⚠️ RENTRER PILE À L’HEURE compte comme rentré', () => {
+    // La borne est inclusive : ils sont derrière les murs quand l’armée arrive.
+    const t = NOW + 5 * 3600_000;
+    const r = departureRisk(d, L, assautBascule(), plein(), vide(), { backAt: t, raidAt: t });
+    expect(r.inTime).toBe(true);
+  });
+
+  it('⚠️ LA DURÉE ANNONCÉE EST UN MAJORANT : la route ne peut que raccourcir le retour', () => {
+    // C’est CE QUI AUTORISE le garde à se taire. L’écran compare l’assaut à la durée
+    // ANNONCÉE ; si une rencontre pouvait RALLONGER le retour, un convoi annoncé rentré
+    // à temps pourrait arriver après la bataille — et l’alerte aurait été tue à tort.
+    // Ajouter un jour un « retard » (`returnMult` > 1) oblige à revoir `departureRisk`.
+    expect(TRAVEL.shortcutReturnMult).toBeLessThanOrEqual(1);
+    expect(TRAVEL.setbackReturnMult).toBeLessThanOrEqual(1);
   });
 
   it('sans armée en vue, aucun départ n’est risqué', () => {
