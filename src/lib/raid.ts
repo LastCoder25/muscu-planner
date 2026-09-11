@@ -336,12 +336,27 @@ export const RAID = {
   // ⚠️ SEUIL DE DÉCLENCHEMENT des sièges — part de l’enceinte réellement bâtie, mur ET
   // tourelles (cf. `defenseReadiness`). Mesuré : une enceinte à MOITIÉ ne tient rien à
   // AUCUN niveau (1-13 %), et une muraille à niveau SANS tourelle tient 0 % partout — le
-  // plancher `wallDmgK` ci-dessous a supprimé le zéro arithmétique, pas le zéro pratique.
+  // mur ne tue plus du tout (`wallDmgK` = 0) : il encaisse et il abrite (`wallArmorK`).
   // Allumer les sièges dès `wall > 0` revenait donc à punir le joueur d’avoir fait le
   // premier pas. À 0,85 on tient 54 à 100 % (héros présent) du niveau 3 au niveau 70, et
   // l’enceinte garde 2 à 7 niveaux de marge avant que les sièges se coupent d’eux-mêmes.
   enableShare: 0.85,
-  wallDmgK: 0.055,
+  /** ⚠️ LE MUR NE TUE PLUS (0) — il ENCAISSE et il FAIT GAGNER DU TEMPS.
+   *  Il infligeait 6,1 % des dégâts de l'enceinte (mesuré, constant à tout niveau), ce
+   *  qui n'a aucun sens : une muraille n'abat personne, elle retarde. Et le motif qui
+   *  justifiait ce plancher a CESSÉ D'ÊTRE VRAI — il protégeait le cas « mur sans
+   *  tourelle » (0 dégât → défaite certaine), or `defenseReadiness` prend depuis la
+   *  v0.723 le MINIMUM des parts mur ET tourelles : sans tourelle, aucun siège ne se
+   *  déclenche. Vérifié : mur seul = 0 % de tenue, et « sièges actifs : NON » à tous
+   *  les niveaux. Le plancher gardait une porte qui ne peut plus s'ouvrir. */
+  wallDmgK: 0,
+  /** Ce que le rempart fait À LA PLACE : il ABRITE ceux qui tirent (réduction de dégâts).
+   *  ⚠️ Calibré pour que la difficulté ne bouge pas — mesuré à 0,05, la tenue redevient
+   *  94/87/75/70 % aux niveaux 10/28/50/80, contre 94/86/75/70 avant. On change ce que
+   *  le mur SIGNIFIE, pas la difficulté du jeu. Plus de PV et moins de dégâts reçus =
+   *  plus de tours tenus = plus de tirs de tourelles : le mur convertit sa solidité en
+   *  temps, et les tourelles convertissent ce temps en morts. */
+  wallArmorK: 0.05,
 
   // Coûts propres à la défense (cf. defenseUpgradeCost).
   upBase: 28,
@@ -985,12 +1000,8 @@ export function baseCombatant(
   const share = (lvl: number) => Math.min(1, Math.max(0, lvl) / L);
 
   let pv = wl > 0 ? ref.pv * RAID.wallPvK * share(wl) * defenseEfficiency(defenses, 'wall') : 0;
-  // ⚠️ DÉGÂTS DE LA MURAILLE — surtout pas zéro quand il n'y a pas de tourelle. Sans
-  // ce plancher, une base sans tourelle inflige LITTÉRALEMENT 0 dégât : elle ne peut
-  // tuer personne, donc elle perd quel que soit son niveau de mur (mesuré : 0 % de tenue
-  // avec une muraille 26, contre 72 % avec les tourelles). Or c'est la MURAILLE qui
-  // active les sièges — le joueur était donc puni d'avoir fait le premier pas. Les
-  // défenseurs sur les remparts tirent : modestement, mais ils tirent.
+  // Le mur ne contribue plus aux dégâts (`wallDmgK` = 0) — terme gardé comme point
+  // d'extension : cf. sa constante pour le pourquoi.
   let damage = wl > 0 ? refOff * RAID.wallDmgK * share(wl) : 0;
   if (tl > 0) {
     damage +=
@@ -1014,7 +1025,13 @@ export function baseCombatant(
     crit: 0,
     dodge: 0,
     initiative: 999, // les défenseurs tirent en premier : ils voient venir
-    dmgReduction: Math.min(0.5, garrison?.dmgReduction ?? 0),
+    // Le rempart ABRITE : sa réduction s'ajoute à celle de la garnison, sous le même
+    // plafond de 50 % (au-delà, plus rien ne peut tomber et le siège n'a plus d'issue).
+    dmgReduction: Math.min(
+      0.5,
+      (wl > 0 ? RAID.wallArmorK * share(wl) * defenseEfficiency(defenses, 'wall') : 0) +
+        (garrison?.dmgReduction ?? 0),
+    ),
     strikes: 1,
     regen: RAID.regenPct + (garrison?.regen ?? 0),
   };
@@ -1091,10 +1108,34 @@ export interface DefenseShare {
   emoji: string;
   /** Puissance perdue si ce contributeur disparaissait (≥ 0). */
   power: number;
-  /** Part du total, 0..1 — pour une barre, pas pour une addition. */
-  share: number;
   /** Présent aujourd'hui ? (un héros parti, une garnison vide) */
   active: boolean;
+  /** ⚠️ CE QU'IL FAIT, séparément : 🛡️ ce qu'il fait TENIR (PV × réduction) et ⚔️ ce
+   *  qu'il fait TUER (dégâts par tour). Un seul nombre mélangeait les deux et laissait
+   *  croire qu'un mur pouvait gagner une bataille — signalé par l'utilisateur. Mesuré
+   *  par ablation comme le reste : la valeur SANS lui, soustraite. */
+  def: number;
+  atk: number;
+}
+
+/** Les deux faces d'un combattant : ce qu'il ENCAISSE (PV corrigés de la réduction) et
+ *  ce qu'il SORT par tour.
+ *
+ *  ⚠️ PRIVÉE, volontairement. L'écran doit passer par `defenseBreakdown` : une valeur
+ *  BRUTE n'est pas une PART (ce qu'on perdrait sans ce contributeur), et exposer les deux
+ *  inviterait à les confondre.
+ *
+ *  ⚠️ Elle redit la décomposition de `combatPower` (offense × survie) sans la partager —
+ *  aujourd'hui sans conséquence, `baseCombatant` forçant crit = 0, dodge = 0 et aucun proc.
+ *  Le jour où le héros transmettrait son crit à la base, `atk` divergerait de la puissance
+ *  affichée juste au-dessus, dans le même panneau. À rapatrier dans `combat.ts`
+ *  (`offenseOf`/`survivalOf`, avec `combatPower` construite par-dessus) le jour où l'un des
+ *  deux bouge. */
+function defenseFacets(c: Combatant): { def: number; atk: number } {
+  return {
+    def: Math.round(c.pv / (1 - (c.dmgReduction ?? 0))),
+    atk: Math.round(offensePerRound(c)),
+  };
 }
 
 export function defenseBreakdown(
@@ -1103,9 +1144,22 @@ export function defenseBreakdown(
   hero: Combatant | null,
   garrison: GarrisonBonus,
 ): { total: number; parts: DefenseShare[] } {
-  const total = defensePower(defenses, playerLevel, hero, garrison);
-  const without = (d: DefenseStructure[], h: Combatant | null, g: GarrisonBonus) =>
-    Math.max(0, total - defensePower(d, playerLevel, h, g));
+  const base = baseCombatant(defenses, playerLevel, hero, garrison);
+  const total = combatPower(base);
+  const full = defenseFacets(base);
+  /** Ce qu'un contributeur apporte — puissance, tenue et feu — par UNE SEULE ablation.
+   *  ⚠️ Le combattant amputé est construit une fois et les trois valeurs en dérivent :
+   *  deux ablations séparées (une pour la puissance, une pour les facettes) doublaient le
+   *  travail ET pouvaient diverger. */
+  const contrib = (d: DefenseStructure[], h: Combatant | null, g: GarrisonBonus) => {
+    const c = baseCombatant(d, playerLevel, h, g);
+    const f = defenseFacets(c);
+    return {
+      power: Math.max(0, total - combatPower(c)),
+      def: Math.max(0, full.def - f.def),
+      atk: Math.max(0, full.atk - f.atk),
+    };
+  };
   const drop = (id: DefenseId) => defenses.filter((d) => d.typeId !== id);
   // ⚠️ Le nom et l'emoji d'une STRUCTURE viennent de `DEFENSE_TYPES`, jamais d'une
   // recopie : ils y sont déjà, dans ce fichier, et renommer une structure laisserait
@@ -1119,15 +1173,13 @@ export function defenseBreakdown(
     {
       id: 'wall',
       ...struct('wall'),
-      power: without(drop('wall'), hero, garrison),
-      share: 0,
+      ...contrib(drop('wall'), hero, garrison),
       active: defenseLevel(defenses, 'wall') > 0,
     },
     {
       id: 'turret',
       ...struct('turret'),
-      power: without(drop('turret'), hero, garrison),
-      share: 0,
+      ...contrib(drop('turret'), hero, garrison),
       active: defenseLevel(defenses, 'turret') > 0,
     },
     // Garnison et héros ne sont PAS des structures : ils n'ont pas d'entrée dans
@@ -1137,21 +1189,19 @@ export function defenseBreakdown(
       id: 'garrison',
       label: 'Garnison',
       emoji: '🐾',
-      power: without(defenses, hero, {}),
-      share: 0,
+      ...contrib(defenses, hero, {}),
       active: Object.keys(garrison).length > 0,
     },
     {
       id: 'hero',
       label: 'Héros',
       emoji: '🦸',
-      power: hero ? without(defenses, null, garrison) : 0,
-      share: 0,
+      ...(hero ? contrib(defenses, null, garrison) : { power: 0, def: 0, atk: 0 }),
       active: !!hero,
     },
   ];
-  const sum = parts.reduce((s, p) => s + p.power, 0) || 1;
-  for (const p of parts) p.share = p.power / sum;
+  // ⚠️ Plus de champ `share` : il n'alimentait qu'une barre de proportion, remplacée par
+  // les deux colonnes 🛡️/⚔️. Un champ que plus personne ne lit est du code mort.
   return { total, parts };
 }
 

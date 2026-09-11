@@ -369,17 +369,23 @@
         <!-- ⚠️ Chaque part est mesurée PAR ABLATION (« ce qu'on perdrait sans lui »),
              jamais par une formule recopiée : l'étiquette ne peut pas diverger du combat.
              Elles ne s'additionnent donc pas au total — les canaux se multiplient. -->
-        <div class="f-parts-h">Ce que je perdrais sans…</div>
+        <!-- ⚠️ ATTAQUE ET DÉFENSE SÉPARÉES (demandé par l'utilisateur). Un seul nombre
+             mélangeait « ce qui tient » et « ce qui tue », et laissait croire qu'un mur
+             pouvait gagner une bataille. Le mur ENCAISSE (🛡️), les tourelles TUENT (⚔️) :
+             c'est visible d'un coup d'œil, et c'est ce que le moteur fait vraiment. -->
+        <div class="f-parts-h">
+          <span>Ce que je perdrais sans…</span>
+          <span class="fh-cols"><i>🛡️ tenir</i><i>⚔️ tuer</i></span>
+        </div>
         <div class="f-parts">
           <div v-for="p in forces.parts" :key="p.id" class="f-part" :class="{ off: !p.active }">
             <span class="dp-emo">{{ p.emoji }}</span>
             <span class="dp-lab">{{ p.label }}</span>
-            <span class="dp-bar"><i :style="{ width: p.share * 100 + '%' }" /></span>
-            <!-- ⚠️ Pas de « + » : ces valeurs ne s'ADDITIONNENT pas au total (les canaux
-                 se multiplient — la garnison amplifie des PV que le mur fournit). Le
-                 signe promettait une somme fausse : 1292+817+170+266 = 2545 pour un
-                 total de 1741. C'est « ce qu'on perdrait sans lui », rien de plus. -->
-            <span class="dp-val">{{ p.active ? p.power : '—' }}</span>
+            <!-- ⚠️ Ces valeurs ne s'ADDITIONNENT pas au total : les canaux se multiplient
+                 (la garnison amplifie des PV que le mur fournit). C'est « ce qu'on
+                 perdrait sans lui », rien de plus. -->
+            <span class="dp-def">{{ p.active && p.def ? fmtPow(p.def) : '—' }}</span>
+            <span class="dp-atk">{{ p.active && p.atk ? fmtPow(p.atk) : '—' }}</span>
           </div>
         </div>
         <p v-if="!heroHome" class="f-hint warn">
@@ -891,7 +897,7 @@ import {
   type ScoutReport,
 } from '@/lib/raid';
 import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
-import type { Combatant } from '@/lib/combat';
+import { fmtPow, type Combatant } from '@/lib/combat';
 import { mulberry32 } from '@/lib/combat';
 import { treePath } from '@/lib/expedition';
 
@@ -2558,10 +2564,24 @@ const doCollect = () =>
 }
 .f-parts-h {
   margin-top: 12px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 11px;
   color: var(--dim);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+.fh-cols {
+  display: flex;
+  flex: none;
+  gap: 8px; /* le même que `.f-part`, sinon l'en-tête ⚔️ est décalé de 8 px */
+}
+.fh-cols > i {
+  width: 58px;
+  text-align: right;
+  font-style: normal;
 }
 /* Le pronostic, dans les couleurs de l'effort (d1 → d4) : vert on tient, rouge ça cède. */
 .f-odds {
@@ -2623,25 +2643,21 @@ const doCollect = () =>
   width: 74px;
   color: var(--dim);
 }
-.dp-bar {
-  flex: 1;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--line);
-  overflow: hidden;
-}
-.dp-bar > i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--accent);
-}
-.dp-val {
+.dp-def,
+.dp-atk {
   flex: none;
-  width: 54px;
+  width: 58px;
   text-align: right;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+/* Deux métiers, deux couleurs : ce qui TIENT et ce qui TUE. */
+.dp-def {
+  color: var(--d1);
+  margin-left: auto;
+}
+.dp-atk {
+  color: var(--d3);
 }
 .keep-legend {
   display: flex;

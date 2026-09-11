@@ -158,11 +158,52 @@ describe('la répartition par contributeur', () => {
     expect(b.total - sans).toBe(turret.power);
   });
 
-  it('les parts somment à 1 (ce sont des parts, pas des puissances additionnables)', () => {
+  // ⚠️ Remplace un test du champ `share`, supprimé avec la barre de proportion qu'il
+  // alimentait. Ce qu'on vérifie désormais est ce que l'écran AFFICHE : chaque poste a
+  // un métier, et les deux colonnes ne mentent pas dessus.
+  it('chaque poste a son MÉTIER : le mur tient sans tuer, les tourelles tuent sans tenir', () => {
     const L = 30;
     const b = defenseBreakdown(defAt(L), L, refFighter(L), noGarrison());
-    const s = b.parts.reduce((x, p) => x + p.share, 0);
-    expect(s).toBeCloseTo(1, 6);
+    const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
+    // Le mur ENCAISSE et n'abat personne (`wallDmgK` = 0).
+    expect(by.wall!.def).toBeGreaterThan(0);
+    expect(by.wall!.atk).toBe(0);
+    // Les tourelles TUENT et n'encaissent rien.
+    expect(by.turret!.atk).toBeGreaterThan(0);
+    expect(by.turret!.def).toBe(0);
+    // Le héros fait les deux — c'est un renfort, pas une structure.
+    expect(by.hero!.def).toBeGreaterThan(0);
+    expect(by.hero!.atk).toBeGreaterThan(0);
+  });
+
+  it('la muraille ABRITE : elle apporte de la réduction de dégâts', () => {
+    const L = 30;
+    const avec = baseCombatant(defAt(L), L, null, noGarrison());
+    const sans = baseCombatant(
+      defAt(L).filter((d) => d.typeId !== 'wall'),
+      L,
+      null,
+      noGarrison(),
+    );
+    expect(avec.dmgReduction ?? 0).toBeGreaterThan(sans.dmgReduction ?? 0);
+    // Elle vaut exactement sa PART du niveau du joueur, comme tout le reste de l'enceinte.
+    expect(avec.dmgReduction ?? 0).toBeCloseTo(RAID.wallArmorK, 6);
+    const demi = baseCombatant(defAt(Math.round(L / 2)), L, null, noGarrison());
+    expect(demi.dmgReduction ?? 0).toBeCloseTo(RAID.wallArmorK / 2, 2);
+  });
+
+  // ⚠️ Ce test a d'abord vérifié que la réduction restait « sous le plafond de 50 % ».
+  // Il ne pouvait RIEN attraper : mur (0,05) + garnison plafonnée (0,15) = 0,20 au
+  // maximum, le plafond n'est donc jamais approché — la mutation « plafond à 9 »
+  // passait au vert. Une assertion qu'aucune valeur réelle ne peut violer donne la
+  // confiance sans la couvrir. On teste donc ce qui est VRAI : les deux sources
+  // s'additionnent, et le plafond reste une sécurité dormante.
+  it('la réduction du mur S’AJOUTE à celle de la garnison', () => {
+    const L = 30;
+    const gar = { dmgReduction: 0.1 } as GarrisonBonus;
+    const seul = baseCombatant(defAt(L), L, null, noGarrison()).dmgReduction ?? 0;
+    const deux = baseCombatant(defAt(L), L, null, gar).dmgReduction ?? 0;
+    expect(deux).toBeCloseTo(seul + 0.1, 6);
   });
 });
 
