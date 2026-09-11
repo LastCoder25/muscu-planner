@@ -125,6 +125,17 @@
             </text>
           </g>
 
+          <!-- ⚠️ Destination d'un CONVOI. Le lieu est retiré de la carte au départ — il
+               est CONSOMMÉ, comme pour le héros, c'est ce qui fait que convois et héros
+               se disputent les mêmes endroits. Mais le héros, lui, garde sa cible
+               DESSINÉE : sans son équivalent ici, le tracé d'un convoi menait à du vide
+               et le puits semblait avoir été effacé. On le montre donc, marqué comme
+               occupé (liseré violet, sans compteur de niveau : il n'est plus à prendre). -->
+          <g v-for="v in vansOnMap" :key="'vt' + v.id" class="poi target van-target">
+            <circle :cx="v.poi.x" :cy="v.poi.y" r="4.8" class="poi-bg" />
+            <text :x="v.poi.x" :y="v.poi.y + 1.4" class="poi-emo">{{ POI_EMO[v.poi.type] }}</text>
+          </g>
+
           <!-- Héros -->
           <g v-for="v in vansOnMap" :key="'vm' + v.id">
             <circle :cx="v.at.x" :cy="v.at.y" r="3" class="van-mark" />
@@ -1167,6 +1178,13 @@ function fmtMin(min: number): string {
 .trail.van.todo {
   stroke: #b57bff;
   filter: drop-shadow(0 0 1px rgba(181, 123, 255, 0.55));
+}
+.van-target .poi-bg {
+  stroke: #b57bff;
+  stroke-width: 0.8;
+}
+.van-target {
+  opacity: 0.75;
 }
 .van-mark {
   fill: var(--surface);

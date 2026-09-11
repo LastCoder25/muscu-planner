@@ -833,7 +833,12 @@
               <button
                 v-if="betterInBagCount(slot) > 0"
                 class="slot-better"
-                :title="betterInBagCount(slot) + ' objet(s) du sac meilleur(s) si équipé(s) — voir'"
+                :title="
+                  betterInBagCount(slot) +
+                  ' objet(s) du sac meilleur(s) que CELUI-CI, sur ton build actuel. ' +
+                  '🪄 L’équipement conseillé compare autre chose : le meilleur build POSSIBLE — ' +
+                  'un objet peut donc battre ta pièce actuelle sans figurer dans le build optimal.'
+                "
                 @click.stop="showBetterForSlot(slot)"
               >
                 <span class="sb-n">{{ betterInBagCount(slot) }}</span>
@@ -5028,8 +5033,15 @@ const filteredInventory = computed<Item[]>(() => {
     (a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || rollJet(b.roll) - rollJet(a.roll),
   );
 });
-// Objets du sac (même slot) MEILLEURS si équipés (puissance fixe grade+enchant) → badge
-// sur l'item équipé + filtre « mieux au sac ». Cohérent avec le verdict affiché.
+// Objets du sac (même slot) MEILLEURS si équipés → badge sur l'item équipé.
+//
+// ⚠️ LA BASE DE COMPARAISON EST « TON BUILD ACTUEL », et il faut le DIRE. Signalé par
+// l'utilisateur : un talisman marqué « +30 » que l'équipement conseillé n'équipait pas.
+// Les deux avaient raison — mesuré, il vaut bien +30 sur le build porté, mais −15 dans
+// le build OPTIMAL, qui change d'autres pièces et de voie. Deux questions différentes,
+// deux réponses justes, et un libellé qui laissait croire à une contradiction. Même
+// classe de défaut que le gris de la carte (v0.738) : le calcul était juste, c'est le
+// LANGAGE qui trompait.
 function betterInBagForSlot(slot: ItemSlot): Item[] {
   if (!equippedInSlot(slot)) return []; // slot vide → rien à comparer, pas de badge
   const cur = combatPowerVal.value;
