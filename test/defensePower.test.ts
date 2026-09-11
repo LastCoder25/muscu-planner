@@ -10,6 +10,7 @@ import {
   assaultPower,
   baseCombatant,
   defenseBreakdown,
+  defensePower,
   referenceHold,
   departureRisk,
   heroDefends,
@@ -547,5 +548,62 @@ describe('🚪 CE QUE COÛTE UN DÉPART, face à l’armée qui arrive', () => {
     expect(isOddsRisky('serre')).toBe(true);
     expect(isOddsRisky('favorable')).toBe(false);
     expect(isOddsRisky('large')).toBe(false);
+  });
+});
+
+describe('⚔️ LA PUISSANCE DE DÉFENSE : une MAGNITUDE, pas un pronostic', () => {
+  // ⚠️ RENDUE À LA DEMANDE DE L’UTILISATEUR (« je voudrais ravoir la puissance de défense
+  // plutôt qu’un % »), et il a raison : le pronostic SATURE. À enceinte pleine il affiche
+  // 100 % et ne bouge plus — il ne montre donc RIEN du progrès quand on améliore une
+  // structure, alors que c’est exactement la question qu’on se pose devant « Améliorer ».
+  //
+  // ⚠️ ELLE NE PRÉDIT RIEN, et c’est l’accord avec la v0.767 : ce chiffre avait été retiré
+  // parce qu’on s’en servait pour PRONOSTIQUER via un rapport de puissances devenu infidèle.
+  // Le pronostic reste SIMULÉ ; la puissance ne répond qu’à « est-ce que je vaux plus
+  // qu’hier ? » — ce à quoi elle répond toujours juste, parce qu’elle est MONOTONE.
+  it('⚠️ elle MONTE À CHAQUE CRAN, là où la tenue est déjà collée à 100 %', () => {
+    const L = 30;
+    let prevPower = 0;
+    let satures = 0;
+    for (const part of [0.7, 0.8, 0.9, 1]) {
+      const b = defenseBreakdown(defAt(Math.round(L * part)), L, refFighter(L), [], NOW);
+      expect(b.power).toBeGreaterThan(prevPower);
+      prevPower = b.power;
+      if (b.hold >= 0.99) satures++;
+    }
+    // …et la démonstration : au moins deux de ces crans sont INDISCERNABLES en tenue.
+    // Sans la puissance, le joueur paierait des dizaines de milliers d’or sans voir
+    // le moindre chiffre bouger.
+    expect(satures).toBeGreaterThanOrEqual(2);
+  });
+
+  it('⚠️ la PART d’un contributeur ne sature pas non plus', () => {
+    // `holdLoss` tombe à 0 dès qu’on tient sans lui (documenté, et c’est une information
+    // en soi) — mais on ne VAUT pas la même chose pour autant. La part en puissance dit
+    // ce que chaque structure APPORTE, même quand la bataille est déjà gagnée d’avance.
+    const L = 30;
+    const b = defenseBreakdown(defAt(L), L, refFighter(L), [], NOW);
+    const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
+    expect(b.hold).toBeGreaterThan(0.9);
+    for (const id of ['wall', 'turret', 'hero']) {
+      expect(by[id]!.power, id).toBeGreaterThan(0);
+    }
+  });
+
+  it('elle vit dans la MÊME UNITÉ que la puissance d’assaut', () => {
+    // ⚠️ Un seul arbitre dans tout le jeu (`combatPower`) : en inventer un second pour la
+    // défense recréerait le défaut « deux comparateurs qui disent des trucs différents ».
+    const L = 30;
+    const d = defensePower(defAt(L), L, refFighter(L), []);
+    const a = assaultPower(rollRaid(4242, L, NOW, 0));
+    expect(d).toBeGreaterThan(0);
+    // ⚠️ Et elle COMPTE VRAIMENT tout le monde : « > 0 » ne prouvait rien — la mutation
+    // « ignore le héros et la garnison » passait au VERT, puisque les murs seuls suffisent
+    // à rendre un nombre positif du bon ordre de grandeur.
+    expect(d).toBeGreaterThan(defensePower(defAt(L), L, null, []));
+    expect(a).toBeGreaterThan(0);
+    // Les deux restent du même ordre de grandeur — sinon les afficher côte à côte
+    // serait trompeur.
+    expect(Math.max(d, a) / Math.min(d, a)).toBeLessThan(12);
   });
 });

@@ -375,9 +375,16 @@
       <div class="panel forces">
         <div class="f-head">
           <div class="f-side">
-            <div class="f-lab">🛡️ Ma base tient</div>
-            <div class="f-val font-display">{{ holdPct(forces.hold) }}</div>
-            <div class="f-sub">face à une armée type</div>
+            <div class="f-lab">🛡️ Ma défense</div>
+            <!-- ⚠️ LA PUISSANCE EN TÊTE (demandé par l’utilisateur) : le pronostic SATURE —
+                 à enceinte pleine il affiche 100 % et ne bouge plus, donc il ne montre rien
+                 du progrès quand on améliore une structure, alors que c’est exactement la
+                 question qu’on se pose devant « Améliorer ». La puissance, elle, est
+                 MONOTONE. ⚠️ Elle ne PRÉDIT rien — la tenue mesurée reste juste dessous, et
+                 c’est elle qui répond à « est-ce que je tiens ? ». Deux questions, deux
+                 nombres, aucun risque qu’ils se contredisent. -->
+            <div class="f-val font-display">{{ fmtPow(forces.power) }}</div>
+            <div class="f-sub">tient {{ holdPct(forces.hold) }} face à une armée type</div>
           </div>
           <div class="f-vs">vs</div>
           <div class="f-side right">
@@ -404,8 +411,8 @@
              tout le monde est à la maison serait du bruit. -->
         <p v-if="holdNote" class="f-hint">{{ holdNote }}</p>
         <p v-if="forcesGap > 0" class="f-gap">
-          🚪 Des tiens sont dehors : <b>−{{ Math.round(forcesGap * 100) }} points</b> de tenue — au
-          complet, tu tiendrais <b>{{ holdPct(forcesFull) }}</b
+          🚪 Des tiens sont dehors : <b>−{{ fmtPow(forcesGap) }}</b> de puissance — au complet, tu
+          vaudrais <b>{{ fmtPow(forcesFull) }}</b
           >.
         </p>
         <!-- ⚠️ LA JAUGE EST LA TENUE ELLE-MÊME, et c’est tout le changement : plus de
@@ -934,7 +941,7 @@ import {
   guardUnits,
   heroDefends,
   siegeHoldChance,
-  referenceHold,
+  defensePower,
   siegeOdds,
   ODDS_LABEL,
   scoutClarity,
@@ -1661,19 +1668,16 @@ const holdNote = computed(() => {
 });
 /** Ce que vaudrait la défense si TOUT LE MONDE était là — héros compris. Même repère
  *  que `forces`, sinon l’écart comparerait deux choses différentes. */
+/** ⚠️ EN PUISSANCE, pas en tenue : l’écart doit rester lisible même quand on tient à
+ *  100 % des deux côtés — sinon « ce qui est dehors » annonce −0 alors qu’il manque du
+ *  monde. Même unité que le chiffre de tête, donc les deux se comparent. */
 const forcesFull = computed(() =>
-  referenceHold(
-    defenses.value,
-    heroLevel.value,
-    props.hero ?? null,
-    guardFull.value,
-    coarseNow.value,
-  ),
+  defensePower(defenses.value, heroLevel.value, props.hero ?? null, guardFull.value),
 );
 /** L’écart : ce que coûte, en puissance de défense, le fait d’avoir des gens dehors.
  *  ⚠️ Affiché seulement s’il est RÉEL — annoncer « −0 » à un joueur dont tout le monde
  *  est à la maison serait du bruit. */
-const forcesGap = computed(() => Math.max(0, forcesFull.value - forces.value.hold));
+const forcesGap = computed(() => Math.max(0, forcesFull.value - forces.value.power));
 const assault = computed(() => (raid.value ? assaultPower(raid.value) : 0));
 /** Ce que l'ESPIONNAGE laisse voir de l'armée : une fourchette qui se resserre à mesure
  *  que la Tour monte, et qui contient TOUJOURS la vérité. */

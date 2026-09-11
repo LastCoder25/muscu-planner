@@ -1262,6 +1262,29 @@ export function armyCombatant(raid: Raid): Combatant {
   };
 }
 
+/** ⚔️🛡️ PUISSANCE DE DÉFENSE — la MAGNITUDE de ce que vaut la base, dans l’unité de
+ *  tout le jeu (`combatPower` = √(offense × survie), l’arbitre des objets et des donjons).
+ *
+ *  ⚠️ RENDUE À LA DEMANDE DE L’UTILISATEUR (« je voudrais ravoir la puissance de défense
+ *  plutôt qu’un % »), et il a raison : le pronostic SATURE. À enceinte pleine il affiche
+ *  100 % et ne bouge plus — donc il ne montre RIEN du progrès quand on améliore une
+ *  structure, alors que c’est précisément la question qu’on se pose devant « Améliorer ».
+ *
+ *  ⚠️ ELLE NE PRÉDIT RIEN, ET C’EST TOUT L’ACCORD AVEC LA v0.767. Ce chiffre a été retiré
+ *  parce qu’on s’en servait pour PRONOSTIQUER via un rapport de puissances — et ce rapport
+ *  avait cessé d’être fidèle. Le pronostic reste donc SIMULÉ (`siegeHoldChance`) ; la
+ *  puissance ne répond qu’à « est-ce que je vaux plus qu’hier ? », à quoi elle répond
+ *  toujours juste parce qu’elle est MONOTONE. Deux questions, deux nombres, aucun
+ *  risque qu’ils se contredisent — ils ne parlent pas de la même chose. */
+export function defensePower(
+  defenses: DefenseStructure[],
+  playerLevel: number,
+  hero?: Combatant | null,
+  guard: GuardUnit[] = [],
+): number {
+  return combatPower(defenseCombatant(defenses, playerLevel, hero ?? null, guard));
+}
+
 /** Puissance d'ASSAUT de l'armée, dans la même unité que la défense. */
 export function assaultPower(raid: Raid): number {
   return combatPower(armyCombatant(raid));
@@ -1282,6 +1305,10 @@ export interface DefenseShare {
   id: 'wall' | 'turret' | 'garrison' | 'hero';
   label: string;
   emoji: string;
+  /** PUISSANCE perdue si ce contributeur disparaissait (≥ 0). ⚠️ Contrairement à
+   *  `holdLoss`, elle ne SATURE pas : à enceinte pleine on tient 100 % avec ou sans le
+   *  mur, mais on ne VAUT pas la même chose. C’est ce qui rend l’investissement lisible. */
+  power: number;
   /** POINTS DE TENUE perdus si ce contributeur disparaissait (0..1, ≥ 0).
    *  ⚠️ C’était une « puissance » — un proxy. C’est désormais ce que le joueur risque
    *  vraiment : « sans les tourelles, tu tombes de 88 % à 12 % ». */
@@ -1328,15 +1355,18 @@ export function defenseBreakdown(
   hero: Combatant | null,
   guard: GuardUnit[],
   now: number,
-): { hold: number; parts: DefenseShare[] } {
+): { power: number; hold: number; parts: DefenseShare[] } {
   const chance = (d: DefenseStructure[], h: Combatant | null, g: GuardUnit[]) =>
     referenceHold(d, playerLevel, h, g, now);
   const hold = chance(defenses, hero, guard);
-  const full = defenseFacets(defenseCombatant(defenses, playerLevel, hero, guard));
+  const porte = defenseCombatant(defenses, playerLevel, hero, guard);
+  const total = combatPower(porte);
+  const full = defenseFacets(porte);
   /** Ce qu’un contributeur apporte — tenue, encaisse et feu — par UNE SEULE ablation. */
   const contrib = (d: DefenseStructure[], h: Combatant | null, g: GuardUnit[]) => {
     const f = defenseFacets(defenseCombatant(d, playerLevel, h, g));
     return {
+      power: Math.max(0, total - combatPower(defenseCombatant(d, playerLevel, h, g))),
       holdLoss: Math.max(0, hold - chance(d, h, g)),
       def: Math.max(0, full.def - f.def),
       atk: Math.max(0, full.atk - f.atk),
@@ -1376,11 +1406,11 @@ export function defenseBreakdown(
       id: 'hero',
       label: 'Héros',
       emoji: '🦸',
-      ...(hero ? contrib(defenses, null, guard) : { holdLoss: 0, def: 0, atk: 0 }),
+      ...(hero ? contrib(defenses, null, guard) : { power: 0, holdLoss: 0, def: 0, atk: 0 }),
       active: !!hero,
     },
   ];
-  return { hold, parts };
+  return { power: total, hold, parts };
 }
 
 /**
