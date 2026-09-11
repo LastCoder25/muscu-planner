@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  compareFamiliars,
   aggregateEffects,
   playerWithGear,
   rollDrop,
@@ -1665,5 +1666,60 @@ describe('⚠️ élagage par DOMINANCE : rapide SANS jamais perdre le gagnant',
     const arme = mk('a', 'weapon', { damage_pct: 30 });
     const armure = mk('b', 'armor', { damage_pct: 20 });
     expect(elagueDomines([arme, armure])).toHaveLength(2);
+  });
+});
+
+describe('⚠️ tri des familiers : la STAT PORTÉE tranche, pas le jet seul', () => {
+  // Le défaut corrigé (signalé) : deux faucons de même rareté, stats différentes, et le
+  // plus fort relégué en bas de liste. `tierIndexOf` classait sur rareté + jet et
+  // IGNORAIT le niveau d'objet — pourtant 3ᵉ axe de magnitude depuis la v0.583.
+  const fam = (id: string, o: Partial<Item> = {}): Item =>
+    ({
+      id,
+      slot: 'familiar',
+      name: o.name ?? 'Faucon',
+      emoji: '🦅',
+      rarity: o.rarity ?? 'legendaire',
+      level: o.level ?? 1,
+      baseLevel: 1,
+      roll: o.roll ?? 0.5,
+      effect: o.effect ?? { type: 'crit_pct', value: 10 },
+      ...o,
+    }) as Item;
+
+  const order = (list: Item[]) => [...list].sort(compareFamiliars).map((f) => f.id);
+
+  it('⚠️ à rareté et jet ÉGAUX, le NIVEAU D’OBJET départage — c’est le bug signalé', () => {
+    // Même rareté, même jet, même valeur de base : seule l'ilvl diffère, donc seule la
+    // stat affichée diffère. Le tri doit suivre la stat, pas l'ordre d'arrivée.
+    const bas = fam('ilvl-bas', { level: 1 });
+    const haut = fam('ilvl-haut', { level: 60 });
+    expect(order([bas, haut])).toEqual(['ilvl-haut', 'ilvl-bas']);
+    expect(order([haut, bas])).toEqual(['ilvl-haut', 'ilvl-bas']);
+  });
+
+  it('⚠️ un JET plus faible mais une STAT plus forte passe devant', () => {
+    // C'est la différence entre classer sur un PROXY (le jet) et sur la vérité (la stat).
+    const jetFort = fam('jet-fort', { roll: 0.99, effect: { type: 'crit_pct', value: 10 } });
+    const statForte = fam('stat-forte', { roll: 0.1, effect: { type: 'crit_pct', value: 14 } });
+    expect(order([jetFort, statForte])).toEqual(['stat-forte', 'jet-fort']);
+  });
+
+  it('la RARETÉ reste devant : ses bandes sont disjointes par construction', () => {
+    const epique = fam('epique', { rarity: 'epique', effect: { type: 'crit_pct', value: 99 } });
+    const leg = fam('legendaire', { effect: { type: 'crit_pct', value: 1 } });
+    expect(order([epique, leg])).toEqual(['legendaire', 'epique']);
+  });
+
+  it('⚠️ à STAT égale, une SIGNATURE ✦ passe devant — elle ne se remplace par rien', () => {
+    const nu = fam('nu');
+    const sig = fam('signature', { effect2: { type: 'execute_pct', value: 7 } });
+    expect(order([nu, sig])).toEqual(['signature', 'nu']);
+  });
+
+  it('à tout égal, le NOM départage — un ordre stable vaut mieux qu’un ordre au hasard', () => {
+    const b = fam('b', { name: 'Bravo' });
+    const a = fam('a', { name: 'Alpha' });
+    expect(order([b, a])).toEqual(['a', 'b']);
   });
 });

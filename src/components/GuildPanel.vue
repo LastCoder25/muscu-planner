@@ -15,7 +15,23 @@
         <div v-if="!roster.length" class="g-empty">
           Personne encore. Recrute ton premier aventurier — il escortera tes caravanes.
         </div>
-        <div v-for="a in roster" :key="a.id" class="adv" :class="{ busy: !isFree(a) }">
+        <!-- ⚠️ La carte OUVRE LA FICHE (demandé par l'utilisateur) : le vivier ne montrait
+             que rang, classe et état — le parcours, les stats, les rôles de convoi et les
+             signatures de combat n'étaient visibles NULLE PART une fois la promotion
+             passée. On choisissait une voie sans jamais pouvoir relire ce qu'elle a donné.
+             `role`/`tabindex`/clavier : c'est un bouton, il doit se comporter comme tel. -->
+        <div
+          v-for="a in roster"
+          :key="a.id"
+          class="adv hit"
+          :class="{ busy: !isFree(a) }"
+          role="button"
+          tabindex="0"
+          :aria-label="`Fiche de ${a.name}`"
+          @click="detailAdv = a"
+          @keydown.enter.prevent="detailAdv = a"
+          @keydown.space.prevent="detailAdv = a"
+        >
           <span class="adv-emo">{{ titleOf(a)?.emoji ?? '🧑' }}</span>
           <div class="adv-main">
             <div class="adv-top">
@@ -51,7 +67,7 @@
             v-if="canPromoteOne(a) && !trainOf(a) && !busyOf(a)"
             class="adv-promo"
             :disabled="busy"
-            @click="openPromo(a)"
+            @click.stop="openPromo(a)"
           >
             ⭐ Promouvoir
           </button>
@@ -136,6 +152,90 @@
       </div>
     </q-card>
   </q-dialog>
+  <!-- ── FICHE D'UN AVENTURIER ──────────────────────────────────────────────
+         Tout ce que le vivier ne peut pas montrer sans devenir illisible.
+         ⚠️ Toujours PAS de niveau : c'est la règle posée à la conception (« un aventurier
+         de manga »). Le rang et la barre disent où il en est ; le nombre, jamais. -->
+  <q-dialog :model-value="!!detailAdv" position="bottom" @update:model-value="detailAdv = null">
+    <q-card v-if="detailAdv" class="guild-card">
+      <div class="g-head">
+        <span class="g-title font-display">
+          {{ titleOf(detailAdv)?.emoji ?? '🧑' }} {{ detailAdv.name }}
+        </span>
+        <span class="adv-rank" :style="{ color: rankOf(detailAdv).color }">
+          {{ rankOf(detailAdv).emoji }} {{ rankOf(detailAdv).name }}
+          {{ stars(rankOf(detailAdv).star) }}
+        </span>
+      </div>
+
+      <div class="d-sub">
+        {{ titleOf(detailAdv)?.label ?? '—' }} · <b>{{ RARITY_LABEL[rarityOf(detailAdv)] }}</b> ·
+        {{ advShapeLabel(statWeights(detailAdv)) }}
+      </div>
+
+      <!-- Les STATS, qui n'étaient lisibles nulle part une fois la promotion faite. -->
+      <div class="d-stats">
+        <span class="d-stat">💪 {{ statsOf(detailAdv).puissance }}</span>
+        <span class="d-stat">❤️ {{ statsOf(detailAdv).endurance }}</span>
+        <span class="d-stat">⚡ {{ statsOf(detailAdv).agilite }}</span>
+      </div>
+
+      <div class="adv-bar" :title="`Étoile suivante au niveau ${nextStarOf(detailAdv)}`">
+        <span class="adv-fill" :style="{ width: Math.round(progressOf(detailAdv) * 100) + '%' }" />
+      </div>
+
+      <div class="d-state">
+        <template v-if="trainOf(detailAdv)">
+          🎓 en formation ({{ trainNameOf(detailAdv) }}) · {{ leftOf(trainOf(detailAdv)) }}
+        </template>
+        <template v-else-if="hurtOf(detailAdv)">
+          🛏️ à l'infirmerie · {{ leftOf(hurtOf(detailAdv)) }}
+        </template>
+        <template v-else-if="busyOf(detailAdv)">
+          🐫 en route · {{ leftOf(busyOf(detailAdv)) }}
+        </template>
+        <template v-else>✅ disponible</template>
+      </div>
+
+      <!-- ⚠️ LE PARCOURS est la vraie raison d'être de cette fiche : chaque promotion est
+             un choix DÉFINITIF, et il n'existait aucun endroit pour relire la suite de
+             choix qui a fait cet aventurier. -->
+      <div class="d-sec">🧭 Parcours</div>
+      <div class="d-path">
+        <span v-for="(c, i) in pathOf(detailAdv)" :key="i" class="d-step">
+          {{ c.emoji }} {{ c.label }}
+        </span>
+      </div>
+
+      <div v-if="rolesOf(detailAdv).length" class="d-sec">🐫 Sur les convois</div>
+      <div v-if="rolesOf(detailAdv).length" class="d-perks">
+        <span v-for="r in rolesOf(detailAdv)" :key="r" class="d-perk">
+          {{ ADV_ROLE_LABEL[r] }}
+        </span>
+      </div>
+
+      <div v-if="sigLabelsOf(detailAdv).length" class="d-sec">⚔️ Au combat</div>
+      <div v-if="sigLabelsOf(detailAdv).length" class="d-perks">
+        <span v-for="(l, i) in sigLabelsOf(detailAdv)" :key="i" class="d-perk sig">{{ l }}</span>
+      </div>
+
+      <p v-if="!rolesOf(detailAdv).length && !sigLabelsOf(detailAdv).length" class="g-note">
+        Ni rôle de convoi ni signature — de la stat brute.
+      </p>
+
+      <div class="g-actions">
+        <q-btn
+          v-if="canPromoteOne(detailAdv) && !trainOf(detailAdv) && !busyOf(detailAdv)"
+          flat
+          no-caps
+          label="⭐ Promouvoir"
+          :disable="busy"
+          @click="openPromoFromDetail(detailAdv)"
+        />
+        <q-btn flat no-caps label="Fermer" @click="detailAdv = null" />
+      </div>
+    </q-card>
+  </q-dialog>
 </template>
 
 <script setup lang="ts">
@@ -156,6 +256,9 @@ import {
   advRarity,
   advSignatures,
   advTitle,
+  advClass,
+  advRoles,
+  advStats,
   canPromote,
   classChoices,
   classRarity,
@@ -209,6 +312,31 @@ const trainOf = (a: Adventurer) => ((a.training?.until ?? 0) > now.value ? a.tra
 const trainNameOf = (a: Adventurer) =>
   a.training ? (ADV_CLASSES.find((c) => c.id === a.training!.classId)?.label ?? '?') : '';
 const canPromoteOne = (a: Adventurer) => canPromote(a, guildLevel.value);
+
+// ── Fiche d'un aventurier ──
+const detailAdv = ref<Adventurer | null>(null);
+const statsOf = (a: Adventurer) => advStats(a);
+/** Les stats ramenées à la FORME attendue par `advShapeLabel` (p/e/a) : on nomme
+ *  l'orientation à partir des stats RÉELLES, pas des poids d'une seule classe. */
+const statWeights = (a: Adventurer) => {
+  const st = advStats(a);
+  return { p: st.puissance, e: st.endurance, a: st.agilite };
+};
+/** Le chemin de classes, dans l'ordre où il a été choisi. ⚠️ On filtre les ids inconnus
+ *  plutôt que d'afficher « ? » : une classe retirée du vivier ne doit pas laisser un
+ *  trou dans l'histoire d'un aventurier existant. */
+const pathOf = (a: Adventurer) => a.path.map((id) => advClass(id)).filter((c) => !!c);
+const rolesOf = (a: Adventurer) => advRoles(a);
+const sigLabelsOf = (a: Adventurer) =>
+  advSignatures(a)
+    .map((e) => ADV_SIGNATURE_LABEL[e])
+    .filter((l): l is string => !!l);
+/** Depuis la fiche : on ferme celle-ci avant d'ouvrir la promotion — deux feuilles
+ *  empilées sur un téléphone, on ne sait plus laquelle on referme. */
+function openPromoFromDetail(a: Adventurer) {
+  detailAdv.value = null;
+  openPromo(a);
+}
 function leftOf(at: number): string {
   const m = Math.max(0, Math.round((at - now.value) / 60_000));
   return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
@@ -298,6 +426,71 @@ async function doPromote(classId: string) {
 </script>
 
 <style scoped lang="scss">
+/* ── Fiche d'un aventurier ── */
+.adv.hit {
+  cursor: pointer;
+}
+.d-sub {
+  font-size: 12.5px;
+  color: var(--dim);
+  margin: 2px 0 8px;
+}
+.d-stats {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.d-stat {
+  flex: 1;
+  text-align: center;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: Oswald, sans-serif;
+  font-size: 15px;
+}
+.d-state {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 6px 0 4px;
+}
+.d-sec {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 10px 0 5px;
+}
+.d-path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* Le parcours se lit comme une SUITE : une flèche entre deux étapes, jamais après la
+   dernière (sinon elle promet une classe qui n'existe pas encore). */
+.d-step {
+  font-size: 12.5px;
+}
+.d-step + .d-step::before {
+  content: '›';
+  color: var(--dim);
+  margin-right: 6px;
+}
+.d-perks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.d-perk {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+}
+.d-perk.sig {
+  border-color: var(--accent);
+}
 .guild-card {
   background: var(--surface);
   color: var(--text);

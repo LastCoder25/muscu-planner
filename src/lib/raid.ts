@@ -1225,7 +1225,12 @@ export function defenseBreakdown(
       // ⚠️ « Garnison » se lisait comme « mes soldats » — un joueur dont tous les
       // aventuriers étaient en convoi voyait donc une ligne fantôme (signalé). Ce sont
       // les FAMILIERS postés au chenil, et le mot doit le dire.
-      label: 'Familiers',
+      // ⚠️ Et « BONUS », parce qu'ils ne COMBATTENT pas : leur apport est un
+      // MULTIPLICATEUR posé sur les dégâts des tourelles et les PV de la muraille
+      // (cf. `garrisonBonus`). Sans mur ni tourelles, ils ne multiplient rien — un
+      // libellé qui les présente comme des combattants promet une ligne de défense
+      // qui n'existe pas.
+      label: 'Bonus familiers',
       emoji: '🐾',
       ...contrib(defenses, hero, {}),
       active: Object.keys(garrison).length > 0,

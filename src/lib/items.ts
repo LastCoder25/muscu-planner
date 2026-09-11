@@ -1294,6 +1294,31 @@ export function tierIndexOf(it: { rarity: Rarity; roll?: number }): number {
   return rankIndex(it.rarity) * 100 + rollJet(it.roll);
 }
 
+/**
+ * Ordre d'affichage d'une réserve de FAMILIERS : la stat RÉELLEMENT PORTÉE tranche.
+ *
+ * ⚠️ `tierIndexOf` (rareté puis jet) ne suffit pas, et c'est un angle mort : il ignore le
+ * NIVEAU D'OBJET, pourtant 3ᵉ axe de magnitude depuis la v0.583. Deux familiers de même
+ * rareté et de même jet mais d'ilvl différents portent des stats différentes — et le plus
+ * fort se retrouvait EN BAS de liste, derrière un homonyme plus faible départagé au nom
+ * (signalé par l'utilisateur : deux faucons, même perte de puissance affichée, stats
+ * différentes). On classe donc sur `effectiveValue`, exactement le nombre que la carte
+ * affiche : le tri ne peut plus contredire ce qu'on lit.
+ *
+ * ⚠️ La RARETÉ reste devant. Ses bandes sont disjointes par construction et le groupement
+ * par rareté est ce qui rend la grille lisible ; la stat départage À L'INTÉRIEUR d'un rang,
+ * là où le jet seul laissait des égalités que l'ordre alphabétique tranchait au hasard.
+ */
+export function compareFamiliars(a: Item, b: Item): number {
+  return (
+    rankIndex(b.rarity) - rankIndex(a.rarity) ||
+    effectiveValue(b.effect, b.level) - effectiveValue(a.effect, a.level) ||
+    // Une SIGNATURE ✦ ne se remplace par rien : à stat égale, elle passe devant.
+    (b.effect2?.value ?? 0) - (a.effect2?.value ?? 0) ||
+    a.name.localeCompare(b.name)
+  );
+}
+
 // ── Atelier de poussière (dust sinks) : forge / reroll / craft de set ──
 // (La SUBLIMATION de rareté a été retirée le 2026‑08‑10 : trop puissante — elle
 // permettait de fabriquer du divin bien avant d'y avoir droit. La rareté ne monte

@@ -202,7 +202,7 @@
          Trois cartes empilées poussaient la carte hors de l'écran dès deux convois, et
          répétaient « total » et « escorte » dont on n'a pas besoin en un coup d'œil :
          il faut QUI voyage, VERS QUOI, et COMBIEN DE TEMPS. Le reste se lit sur la carte
-         ou dans le rapport. La rangée défile quand il y a du monde (jusqu'à 12 convois).
+         ou dans le rapport. Disposée en DEUX COLONNES (jusqu'à 12 convois possibles).
          ⚠️ Un convoi RENTRÉ reste dans la rangée, en tuile ACTIONNABLE : sa cargaison ne
          se verse pas toute seule (même règle que les rapports d'expédition). -->
     <div v-if="trips.length" class="trips" role="list">
@@ -1316,19 +1316,27 @@ function fmtMin(min: number): string {
   stroke-width: 0.3;
 }
 /* ── Rangée des voyages : une tuile par voyageur, sur UNE ligne ── */
+/* ⚠️ DEUX COLONNES, plus une rangée qui défile (demandé par l'utilisateur). Le défilement
+   horizontal cachait les convois au-delà du deuxième : on ne savait pas combien il y en
+   avait sans balayer, et rien ne l'annonçait. Une grille les montre TOUS d'un coup.
+   ⚠️ `minmax(0, 1fr)` et non `1fr` : sans le minimum à zéro, une piste de grille refuse
+   de passer sous la taille de son contenu et la grille déborderait du cadre à 344 px. */
 .trips {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  overflow-x: auto;
   padding: 2px 2px 6px;
-  scrollbar-width: none;
 }
-.trips::-webkit-scrollbar {
-  display: none;
+/* Une tuile ORPHELINE (compte impair) prend les deux colonnes et se centre : laissée
+   dans sa colonne, elle se collait à gauche avec un trou à droite, ce qui se lit comme
+   un élément manquant plutôt que comme le dernier de la liste. */
+.trip:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  justify-self: center;
 }
 .trip {
   position: relative;
-  flex: 0 0 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;

@@ -2718,7 +2718,7 @@ import {
   canRecycle,
   isFamiliar,
   FAMILIAR_SLOT,
-  tierIndexOf,
+  compareFamiliars,
   rollTier,
   RANK_ORDER,
   SLOTS,
@@ -5385,11 +5385,10 @@ function doSellLoadoutConfirmed(i: number) {
 // ── Familier (compagnon) ──
 const equippedFamiliar = computed<Item | null>(() => char.row?.equipped[FAMILIAR_SLOT] ?? null);
 const bagFamiliars = computed<Item[]>(() =>
-  (char.row?.inventory ?? [])
-    .filter((i) => isFamiliar(i))
-    // Par RANG/QUALITÉ décroissant, puis par NOM (tickets b552b16f + tri rang) → les
-    // meilleurs familiers en tête (l'équipé est mis en tête par allFamiliars).
-    .sort((a, b) => tierIndexOf(b) - tierIndexOf(a) || a.name.localeCompare(b.name)),
+  // Rareté, puis la STAT RÉELLEMENT PORTÉE, puis la signature (cf. `compareFamiliars` :
+  // le tri par jet seul ignorait le niveau d'objet et reléguait le plus fort en bas).
+  // L'équipé est mis en tête par `allFamiliars`.
+  (char.row?.inventory ?? []).filter((i) => isFamiliar(i)).sort(compareFamiliars),
 );
 // TOUS les familiers (équipé d'abord, puis le sac) → une seule grille de cartes, comme
 // les talents. `equipped` marque celui porté (au plus 1). Affichage homogène avec Talents.

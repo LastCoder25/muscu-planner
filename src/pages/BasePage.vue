@@ -240,6 +240,15 @@
             </g>
           </template>
           <rect v-else x="91" :y="WALL_TOP - 12" width="18" height="30" rx="2" class="slot-empty" />
+          <!-- ⚠️ LE PICTOGRAMME, EN PLUS DU CADRE (demandé par l'utilisateur). Le cadre
+               rouge borde la tour ; à 28 unités de large sur un dessin qui en compte 200,
+               il se confond vite avec les autres liserés de l'enceinte. Un glyphe posé
+               AU CENTRE dit la même chose sans dépendre d'un contour.
+               ⚠️ Dessiné APRÈS le corps et l'œil, sinon il passerait dessous. Placé sous
+               l'œil (rayon 3,4 autour de WALL_TOP) plutôt que dessus : deux symboles
+               superposés ne se lisent ni l'un ni l'autre. Affiché même sans tour bâtie,
+               comme le cadre — l'armée arrive de toute façon. -->
+          <text v-if="raid" x="100" :y="WALL_TOP + 12.5" class="watch-warn">⚠️</text>
         </g>
 
         <!-- ── LA PORTE (rempart sud) ───────────────────────────────────────
@@ -2477,8 +2486,17 @@ const doCollect = () =>
   pointer-events: none;
   animation: ring-alert 2.4s ease-in-out infinite;
 }
+/* ⚠️ MÊME battement (2,4 s) et MÊME keyframes que le cadre : deux signaux qui disent
+   la même chose doivent respirer ensemble, sinon ils se lisent comme deux alertes. */
+.watch-warn {
+  font-size: 10px;
+  text-anchor: middle;
+  pointer-events: none;
+  animation: ring-alert 2.4s ease-in-out infinite;
+}
 @media (prefers-reduced-motion: reduce) {
-  .watch-alarm {
+  .watch-alarm,
+  .watch-warn {
     animation: none;
     opacity: 0.9;
   }
@@ -2684,9 +2702,14 @@ const doCollect = () =>
 .dp-emo {
   font-size: 14px;
 }
+/* ⚠️ `flex: 1`, PAS une largeur fixe : les colonnes chiffrées sont déjà à largeur
+   fixe, donc le libellé prend ce qui reste et toutes les lignes s'alignent quand même —
+   sans qu'un libellé plus long (« Bonus familiers ») déborde ou force à re-mesurer une
+   valeur en dur à chaque renommage. `min-width: 0` autorise la troncature plutôt que
+   de pousser les chiffres hors du cadre sur un écran de 344 px. */
 .dp-lab {
-  flex: none;
-  width: 74px;
+  flex: 1;
+  min-width: 0;
   color: var(--dim);
 }
 .dp-def,
