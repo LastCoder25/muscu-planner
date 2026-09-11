@@ -990,7 +990,7 @@ export const useCharacterStore = defineStore('character', () => {
    *  seulement donne donc un autre build — c'est pourquoi `applyGearPlan` **recalcule**
    *  au lieu d'appliquer des morceaux, et pourquoi l'écran de revue doit recalculer le
    *  gain de chaque ligne au lieu d'afficher un chiffre figé. */
-  function computeGearPlan(
+  async function computeGearPlan(
     stats: { puissance: number; endurance: number; agilite: number },
     level: number,
     name: string,
@@ -1003,7 +1003,14 @@ export const useCharacterStore = defineStore('character', () => {
     forceSetId?: string,
     /** Rendre le build MÊME s'il n'améliore pas l'actuel (cf. `bestBuild`). */
     always?: boolean,
-  ): { equipped: Equipped; talentIds: string[]; voie: string | null; score: number } | null {
+    /** Appelée entre deux voies pour RENDRE LA MAIN à l'interface (cf. la boucle). */
+    respire?: () => Promise<void>,
+  ): Promise<{
+    equipped: Equipped;
+    talentIds: string[];
+    voie: string | null;
+    score: number;
+  } | null> {
     const cur = row.value;
     if (!cur) return null;
     // Les TALENTS entrent dans l'optimisation : on ne part plus de ceux déjà équipés,
@@ -1154,6 +1161,11 @@ export const useCharacterStore = defineStore('character', () => {
         best = p;
         bestIdx = vi;
       }
+      // ⚠️ ON REND LA MAIN ENTRE CHAQUE VOIE. Le calcul entier dure ~3 s : le laisser
+      // filer d'un trait FIGE l'onglet — l'utilisateur l'a constaté deux fois, et même
+      // un ⏳ annoncé ne rattrape pas une interface qui ne répond plus. Découpé, chaque
+      // tranche ne bloque que ~180 ms : on ne le remarque pas.
+      if (respire) await respire();
     }
     if (!best || bestIdx === null) return null;
     best = planFor(bestIdx, true);
@@ -1200,8 +1212,9 @@ export const useCharacterStore = defineStore('character', () => {
     stats: { puissance: number; endurance: number; agilite: number },
     level: number,
     name: string,
+    respire?: () => Promise<void>,
   ) {
-    return computeGearPlan(stats, level, name, undefined, undefined, true);
+    return computeGearPlan(stats, level, name, undefined, undefined, true, respire);
   }
 
   /** Le plan proposé, SANS rien appliquer — c'est ce que l'écran de revue affiche. */
@@ -1209,8 +1222,9 @@ export const useCharacterStore = defineStore('character', () => {
     stats: { puissance: number; endurance: number; agilite: number },
     level: number,
     name: string,
+    respire?: () => Promise<void>,
   ) {
-    return computeGearPlan(stats, level, name);
+    return computeGearPlan(stats, level, name, undefined, undefined, undefined, respire);
   }
 
   /** Applique un build CHOISI (tout ou partie du plan). ⚠️ On ne « pose » pas des morceaux :
@@ -1282,7 +1296,7 @@ export const useCharacterStore = defineStore('character', () => {
     forceVoie?: string | null,
     forceSetId?: string,
   ): Promise<boolean> {
-    const plan = computeGearPlan(stats, level, name, forceVoie, forceSetId);
+    const plan = await computeGearPlan(stats, level, name, forceVoie, forceSetId);
     if (!plan) return false;
     return applyGearPlan(userId, plan);
   }

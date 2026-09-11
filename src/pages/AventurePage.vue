@@ -888,6 +888,12 @@
               <div class="shop-title font-display">🎒 Sac ({{ bagCount }})</div>
               <button class="shop-x" aria-label="Fermer" @click="bagOpen = false">✕</button>
             </div>
+            <!-- ⚠️ Le classement du sac demande le MEILLEUR BUILD, soit ~3 s. Il rend la
+                 main entre chaque voie, donc l’écran reste vivant — encore faut-il DIRE
+                 qu’il travaille, sinon on croit à un gel (constaté). -->
+            <div v-if="optimizing" class="bag-ranking">
+              ⏳ Classement en cours — je compare ton sac à ton meilleur build possible…
+            </div>
             <template v-if="bagCount">
               <!-- Bannière du filtre « mieux au sac » (posé via le badge d'un item équipé). -->
               <div v-if="betterFilterSlot" class="better-banner">
@@ -2864,19 +2870,15 @@ const tab = ref<'hero' | 'gear' | 'explore' | 'base'>('hero');
 const bagOpen = ref(false);
 const loadoutOpen = ref(false);
 /** Ouvre le Sac ET prépare la référence : c'est là que servent les verdicts. */
-function openBagAndRank() {
+async function openBagAndRank() {
   openBag();
   if (optimumFor === optimumKey.value && optimum.value) return;
   optimizing.value = true;
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      try {
-        ensureOptimum();
-      } finally {
-        optimizing.value = false;
-      }
-    }),
-  );
+  try {
+    await ensureOptimum();
+  } finally {
+    optimizing.value = false;
+  }
 }
 function openBag() {
   betterFilterSlot.value = null; // ouverture directe = pas de filtre « upgrades »
@@ -3183,9 +3185,16 @@ let optimumFor = '';
  *  Aventure → Base → plus rien ne répondait). Elle se déclenche donc depuis un `watch`,
  *  après peinture. Tant qu'elle n'a pas tourné, les écrans n'affichent simplement AUCUN
  *  verdict — mieux vaut se taire que geler. */
-function ensureOptimum(): void {
+/** Rend la main au navigateur : une image de rendu entre deux voies. */
+const respire = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+async function ensureOptimum(): Promise<void> {
   if (optimumFor === optimumKey.value && optimum.value) return;
-  const plan = char.bestBuild(c.value, c.value.level.level, char.row?.pseudo ?? 'Toi');
+  const plan = await char.bestBuild(
+    c.value,
+    c.value.level.level,
+    char.row?.pseudo ?? 'Toi',
+    respire,
+  );
   if (!plan) return;
   optimum.value = plan.equipped;
   optimumIds.value = new Set(
@@ -5564,27 +5573,27 @@ const optimizing = ref(false);
 // l'ait demandé — et c'est très exactement ce qui a été signalé. Il part donc d'un GESTE
 // (ouvrir le Sac, ou le bouton 🪄), où l'on peut montrer un ⏳ et où l'attente se
 // comprend. Tant qu'il n'a pas tourné, les écrans se taisent.
-function doOptimizeGear() {
+async function doOptimizeGear() {
   if (optimizing.value) return;
   optimizing.value = true;
-  // ⚠️ Le calcul est SYNCHRONE et dure ~3 s : sans ce report, Vue ne repeint jamais
-  // l'état « en cours » et l'écran se fige sans rien dire. Deux images suffisent pour
-  // que le ⏳ soit réellement affiché avant que le fil ne se bloque.
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      try {
-        const plan = char.previewGearPlan(c.value, c.value.level.level, char.row?.pseudo ?? 'Toi');
-        if (!plan) {
-          $q.notify({ type: 'info', message: 'Ton équipement est déjà optimal. 👍' });
-          return;
-        }
-        planOff.value = new Set();
-        gearPlan.value = { equipped: plan.equipped, talentIds: plan.talentIds, voie: plan.voie };
-      } finally {
-        optimizing.value = false;
-      }
-    }),
-  );
+  try {
+    // ⚠️ Le calcul rend la main entre chaque voie (`respire`) : l'interface reste
+    // vivante et le ⏳ s'affiche vraiment, au lieu d'un onglet qui ne répond plus.
+    const plan = await char.previewGearPlan(
+      c.value,
+      c.value.level.level,
+      char.row?.pseudo ?? 'Toi',
+      respire,
+    );
+    if (!plan) {
+      $q.notify({ type: 'info', message: 'Ton équipement est déjà optimal. 👍' });
+      return;
+    }
+    planOff.value = new Set();
+    gearPlan.value = { equipped: plan.equipped, talentIds: plan.talentIds, voie: plan.voie };
+  } finally {
+    optimizing.value = false;
+  }
 }
 function applyPlan() {
   const st = planStateWithout();
@@ -7277,6 +7286,15 @@ button.pt-mini:active {
   overflow-y: auto;
 }
 /* Bannière du filtre « upgrades potentielles » (posé via le badge d'un item équipé). */
+.bag-ranking {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12.5px;
+  color: var(--dim);
+}
 .better-banner {
   display: flex;
   align-items: center;
