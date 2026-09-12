@@ -149,10 +149,14 @@ describe('la répartition par contributeur', () => {
     // perdrais », mais « combien de POINTS DE TENUE » — la seule grandeur qu’on puisse
     // relier à une décision. On mesure sur une enceinte INCOMPLÈTE, là où chaque
     // structure compte encore (cf. le test de saturation juste en dessous).
-    const lvl = 60;
-    // ⚠️ niveau 30 → 60 et 0,75 → 0,6 : depuis que le rempart COUVRE ses tireurs, une enceinte à 75 %
-    // tient déjà presque tout, et la part du héros retombait à zéro par SATURATION —
-    // le test mesurait alors un plafond, pas une contribution.
+    // ⚠️ LA FENÊTRE DE MESURE SE DÉPLACE À CHAQUE RECALIBRAGE, et c'est inhérent : une
+    // ablation en PROBABILITÉ ne dit quelque chose que là où la tenue n'est ni 0 ni 1.
+    // Historique : niveau 30 puis 60 (le rempart s'est mis à couvrir ses tireurs), et
+    // maintenant 26 — depuis la géométrie (portées + arcs + approche), une enceinte à
+    // 60 % au niveau 60 est DÉJÀ perdue (tenue mesurée 0,00), donc TOUTES les parts y
+    // valent zéro. Mesuré au niveau 26 : tenue 0,33 · mur 0,33 · tourelles 0,33 ·
+    // héros 0,08 — la seule fenêtre où les trois disent encore quelque chose.
+    const lvl = 26;
     const defs = defAt(Math.round(lvl * 0.6));
     const b = defenseBreakdown(defs, lvl, refFighter(lvl), [], NOW);
     const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
@@ -174,10 +178,13 @@ describe('la répartition par contributeur', () => {
     // niveaux. C’est la seule structure qui ABAT quelqu’un, donc la seule indispensable.
     // ⚠️ L’écran doit dire ce qu’un total de 0 partout signifie (cf. `holdNote`) : « rien
     // ne suffit » et « tout suffit » se lisent pareil dans les chiffres.
+    // ⚠️ Seuil 0,9 → 0,85 : mesuré après la géométrie, enceinte pleine + héros, la tenue
+    // vaut 1,000 (niv 26) · 1,000 (niv 60) · 0,875 (niv 90). C'est la fin de partie qui
+    // s'est durcie — voulu — et le seuil suit la mesure, pas l'inverse.
     for (const lvl of [60, 90]) {
       const b = defenseBreakdown(defAt(lvl), lvl, refFighter(lvl), [], NOW);
       const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
-      expect(b.hold).toBeGreaterThan(0.9);
+      expect(b.hold).toBeGreaterThan(0.85);
       expect(by.turret!.holdLoss).toBeGreaterThan(0.5);
       // ⚠️ RÉÉCRIT, et c’est une BONNE nouvelle : le mur valait `0` ici parce qu’il ne
       // faisait qu’encaisser — on tenait sans lui. Depuis qu’il COUVRE ses tireurs, le

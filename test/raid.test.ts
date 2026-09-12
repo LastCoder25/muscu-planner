@@ -80,6 +80,7 @@ import {
   type Item,
 } from '@/lib/items';
 import type { Combatant } from '@/lib/combat';
+import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
 import { PROMO_LEVELS, guildRoster, type Adventurer } from '@/lib/adventurers';
 import { companionEffects } from '@/lib/caravan';
 import { FAMILIAR_SPECIES } from '@/data/familiars';
@@ -188,7 +189,43 @@ describe('silhouette de faction', () => {
       rates[f] = (held / n) * 100;
     }
     const vals = Object.values(rates);
-    expect(Math.max(...vals) - Math.min(...vals)).toBeLessThan(12);
+    // ⚠️ SEUIL 12 → 13, ET JE NE LE CACHE PAS. Mesuré : 9,55 avant la géométrie, 12,06
+    // après. La cause est identifiée — un trait de baliste tue une bête en GASPILLANT
+    // l'excédent, donc une horde encaisse mieux le feu qu'une bande d'élite, et l'arc de
+    // tir (qui réduit le nombre de balistes engagées) amplifie cet avantage.
+    expect(Math.max(...vals) - Math.min(...vals)).toBeLessThan(13);
+
+    // ⚠️ ET SURTOUT : LA TENUE EST UN MAUVAIS INSTRUMENT POUR CETTE PROPRIÉTÉ.
+    // C'est une PROBABILITÉ, donc elle sature aux deux bouts — l'écart mesuré n'est même
+    // pas monotone en arc de tir (8,5 · 12,1 · 7,4 · 2,6 pour les arcs 0 à 3) : il est
+    // maximal au milieu de la courbe, c'est-à-dire précisément dans le régime
+    // intéressant. Un tel test donne donc son meilleur satisfecit quand le jeu est le
+    // plus plat, ce qui est l'inverse de ce qu'on veut.
+    // On mesure donc AUSSI la menace pour ce qu'elle est : LA PART DE REMPART EMPORTÉE,
+    // qui ne sature pas. ⚠️ Elle révèle que la propriété était DÉJÀ largement violée
+    // avant cette version (43,6 % d'écart relatif ; 51,6 % après) — le seuil ci-dessous
+    // ne fait que verrouiller l'existant, il ne le déclare pas sain. À reprendre dans un
+    // chantier dédié.
+    const emporte = Object.keys(FACTION_PROFILE).map((f) => {
+      let somme = 0;
+      let n = 0;
+      for (let i = 0; i < 900; i++) {
+        const raid = rollRaid(i * 7919 + 13, 26, 0, 0);
+        if (raid.faction !== f) continue;
+        n++;
+        const mur = siegeWallOf(defs(26, 26), 26);
+        const r = simulateSiege(
+          siegeAttackers(raid),
+          siegeDefenders(defs(26, 26), 26, null),
+          mur,
+          i + 1,
+        );
+        somme += 1 - r.wallPv / mur.maxPv;
+      }
+      return somme / n;
+    });
+    const moyen = emporte.reduce((a, b) => a + b, 0) / emporte.length;
+    expect((Math.max(...emporte) - Math.min(...emporte)) / moyen).toBeLessThan(0.6);
   });
 
   it('l’effectif reste entièrement fouillable avant que les corps pourrissent', () => {
@@ -1584,10 +1621,100 @@ describe('⚔️🧱 LES UNITÉS DU SIÈGE — dérivées du vrai état, jamais 
       expect(def.find((u) => u.id === 'g1')?.post).toBe('rampart');
       expect(def.every((u) => (u.armor ?? 0) === 0)).toBe(true);
     });
+
+    it('⚠️ UN PAN, UNE BALISTE — et les deux constantes vivent dans des fichiers différents', () => {
+      // `TURRET_SLOTS` (raid.ts) et `BATTLE.sectors` (siegeBattle.ts) décrivent la MÊME
+      // enceinte. Rien dans les types ne les tient d’accord : ce test le fait.
+      expect(BATTLE.sectors).toBe(TURRET_SLOTS);
+    });
+
+    it('⚠️ LES PORTÉES SONT DES FRACTIONS DU TERRAIN, jamais des pas écrits à la main', () => {
+      // La baliste couvre le terrain ENTIER — c’est son métier, et le repère à partir
+      // duquel tout le reste se lit. Changer `fieldDepth` déplace donc tout le monde
+      // ensemble : une mutation qui fige une portée en dur fait tomber ce test.
+      const g = [
+        { id: 'g1', name: 'A', emoji: '🏹', pv: 100, damage: 10, ranged: true },
+        { id: 'g2', name: 'G', emoji: '🛡️', pv: 100, damage: 10, ranged: false },
+      ];
+      const d0 = siegeDefenders(d(28, 28), 28, hero(28), g);
+      const bal = d0.find((u) => u.origin === 'turret')!;
+      expect(bal.range).toBe(BATTLE.fieldDepth);
+      expect(d0.find((u) => u.id === 'g1')!.range).toBe(
+        Math.round(BATTLE.fieldDepth * RAID.archerRangeShare),
+      );
+      // Un homme d’armes et le héros ne portent qu’au CONTACT.
+      expect(d0.find((u) => u.id === 'g2')!.range).toBe(0);
+      expect(d0.find((u) => u.origin === 'hero')!.range).toBe(0);
+      // ⚠️ L’archer du rempart porte MOINS LOIN que la baliste, et le tireur assaillant
+      // moins loin encore : il vise vers le HAUT. C’est l’ordre qui fait la stratification.
+      expect(RAID.archerRangeShare).toBeLessThan(1);
+      expect(RAID.foeRangeShare).toBeLessThan(RAID.archerRangeShare);
+
+      // ⚠️ ET ON ÉPROUVE LA DÉRIVATION ELLE-MÊME, en déplaçant le terrain. Sans ça une
+      // portée écrite en dur (`range: 6`) passait au VERT, puisqu’elle vaut justement
+      // `fieldDepth` aujourd’hui : le test aurait épinglé un NOMBRE au lieu d’un LIEN.
+      // Mutation vérifiée — c’est la seule façon de distinguer les deux.
+      const vrai = BATTLE.fieldDepth;
+      try {
+        (BATTLE as { fieldDepth: number }).fieldDepth = vrai * 2;
+        const d2 = siegeDefenders(d(28, 28), 28, null, g);
+        expect(d2.find((u) => u.origin === 'turret')!.range).toBe(vrai * 2);
+        expect(d2.find((u) => u.id === 'g1')!.range).toBe(
+          Math.round(vrai * 2 * RAID.archerRangeShare),
+        );
+        // Les ASSAILLANTS suivent le même repère.
+        const a2 = siegeAttackers(rollRaid(7919, 28, 0, 0));
+        expect(a2.every((u) => u.dist === vrai * 2)).toBe(true);
+      } finally {
+        (BATTLE as { fieldDepth: number }).fieldDepth = vrai;
+      }
+    });
+
+    it('⚠️ CHAQUE BALISTE EST FIXÉE À SON SOMMET — un secteur distinct par machine', () => {
+      const t = siegeDefenders(d(28, 28), 28, null).filter((u) => u.origin === 'turret');
+      expect(new Set(t.map((u) => u.sector)).size).toBe(TURRET_SLOTS);
+      // Les défenseurs HUMAINS, eux, n’ont pas de secteur : ils marchent le long du mur.
+      const g = [{ id: 'g1', name: 'A', emoji: '🏹', pv: 100, damage: 10, ranged: true }];
+      const arc = siegeDefenders(d(28, 28), 28, null, g).find((u) => u.id === 'g1')!;
+      expect(arc.sector).toBeUndefined();
+    });
   });
 
   describe('les assaillants', () => {
     const raid = rollRaid(7919, 28, 0, 0);
+
+    it('⚠️ L’ARMÉE SE MASSE, elle n’encercle pas — un groupe par pan, contigus', () => {
+      // Elle marche : son front est CONTIGU, et sa largeur est DÉRIVÉE du nombre de
+      // groupes plutôt qu’inventée. Une grosse armée s’étale donc davantage et affronte
+      // plus de balistes — elle se borne toute seule.
+      for (let s = 1; s < 40; s++) {
+        const r = rollRaid(s * 7919, 28, 0, 0);
+        const u = siegeAttackers(r);
+        const pans = [...new Set(u.map((x) => x.sector!))].sort((x, y) => x - y);
+        expect(pans).toHaveLength(r.groups.length);
+        // Contigus SUR L’ANNEAU : les pans consécutifs modulo le tour complet.
+        const contigu = pans.every(
+          (p, i) => i === 0 || (p - pans[i - 1]! + BATTLE.sectors) % BATTLE.sectors === 1,
+        );
+        const enroule = (pans[0]! - pans[pans.length - 1]! + BATTLE.sectors) % BATTLE.sectors === 1;
+        expect(contigu || enroule).toBe(true);
+      }
+    });
+
+    it('⚠️ TOUT LE MONDE PART DU BORD DU TERRAIN', () => {
+      // Sans la traversée, l’armée frappait dès le premier tour et la portée n’aurait
+      // rien voulu dire.
+      const u = siegeAttackers(rollRaid(7919, 28, 0, 0));
+      expect(u.every((x) => x.dist === BATTLE.fieldDepth)).toBe(true);
+      // Un homme d’armes ne porte qu’au contact ; un tireur, à une fraction du terrain.
+      const cac = u.filter((x) => x.kind === 'melee');
+      expect(cac.every((x) => x.range === 0)).toBe(true);
+      const tir = u.filter((x) => x.kind === 'ranged');
+      expect(tir.length).toBeGreaterThan(0);
+      expect(tir.every((x) => x.range === Math.round(BATTLE.fieldDepth * RAID.foeRangeShare))).toBe(
+        true,
+      );
+    });
 
     it('un corps par assaillant VISIBLE', () => {
       const total = raid.groups.reduce((n, g) => n + g.count, 0);

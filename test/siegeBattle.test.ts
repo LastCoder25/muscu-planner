@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   BATTLE,
+  sectorGap,
   breachWidth,
   pickTarget,
   simulateSiege,
@@ -297,6 +298,108 @@ function mulberryish(): () => number {
   return () => (x = (x * 1664525 + 1013904223) >>> 0) / 4294967296;
 }
 
+describe('🎯 LE TERRAIN : distance, portée, arc de tir', () => {
+  // ⚠️ L’approche n’est pas un décor : c’est LE CHAMP DE TIR, et c’est ce qui justifie
+  // la puissance d’une baliste — elle frappe la première et pendant plus longtemps.
+  // Un défenseur atteint une cible si TROIS termes tombent : dehors · à portée · dans
+  // l’arc. Trois cas particuliers de l’ancien modèle sont devenus un seul prédicat.
+
+  it('l’écart de secteurs se compte SUR UN ANNEAU', () => {
+    // Le pan 0 et le pan 7 sont VOISINS : compter à plat ferait d’eux les plus éloignés,
+    // et une baliste du nord ne couvrirait pas son voisin de gauche.
+    expect(sectorGap(0, 1)).toBe(1);
+    expect(sectorGap(0, BATTLE.sectors - 1)).toBe(1);
+    expect(sectorGap(0, BATTLE.sectors / 2)).toBe(BATTLE.sectors / 2);
+    expect(sectorGap(3, 3)).toBe(0);
+  });
+
+  it('⚠️ UNE BALISTE NE PIVOTE PAS : hors de son arc, elle ne tire pas', () => {
+    const loin = (secteur: number) => {
+      const r = simulateSiege(
+        [att('melee', { id: 'x', pv: 1e6, damage: 1, dist: 0, sector: secteur })],
+        [turret({ id: 't', damage: 100, pv: 1e6, sector: 0, range: BATTLE.fieldDepth })],
+        wall(1e9),
+        31,
+      );
+      return r.log.some((e) => e.kind === 'hit' && e.from === 't');
+    };
+    expect(loin(0)).toBe(true);
+    // À l’opposé de l’enceinte : elle le voit, elle ne peut pas le viser.
+    expect(loin(BATTLE.sectors / 2)).toBe(false);
+  });
+
+  it('⚠️ UN HOMME MARCHE LE LONG DU REMPART — aucun arc ne le borne', () => {
+    // C’est la distinction que porte l’absence de secteur : la machine est fixée à son
+    // sommet, l’archer se déplace. Ne pas donner de secteur à un archer n’est donc pas
+    // un oubli, c’est la règle.
+    const r = simulateSiege(
+      [att('melee', { id: 'x', pv: 1e6, damage: 1, dist: 0, sector: BATTLE.sectors / 2 })],
+      [def('ranged', { id: 'arc', damage: 100, pv: 1e6, range: BATTLE.fieldDepth })],
+      wall(1e9),
+      32,
+    );
+    expect(r.log.some((e) => e.kind === 'hit' && e.from === 'arc')).toBe(true);
+  });
+
+  it('⚠️ HORS DE PORTÉE, ON NE TIRE PAS — et l’engagement se STRATIFIE', () => {
+    // Une baliste couvre le terrain entier, un arc la moitié : l’assaut est donc pris à
+    // partie par les machines d’abord, puis par les hommes. C’est ce qui donne son sens
+    // à la traversée, et ce que l’animation doit montrer.
+    const r = simulateSiege(
+      [att('melee', { id: 'x', pv: 1e6, damage: 1, dist: BATTLE.fieldDepth, sector: 0 })],
+      [
+        turret({ id: 'bal', damage: 10, pv: 1e6, sector: 0, range: BATTLE.fieldDepth }),
+        def('ranged', { id: 'arc', damage: 10, pv: 1e6, range: Math.round(BATTLE.fieldDepth / 2) }),
+      ],
+      wall(1e9),
+      33,
+    );
+    const premierBal = r.log.findIndex((e) => e.kind === 'hit' && e.from === 'bal');
+    const premierArc = r.log.findIndex((e) => e.kind === 'hit' && e.from === 'arc');
+    expect(premierBal).toBeGreaterThanOrEqual(0);
+    expect(premierArc).toBeGreaterThan(premierBal);
+    // ⚠️ On épingle le TOUR, pas seulement l’ordre : l’archer n’entre en jeu qu’une fois
+    // l’assaut à MI-TERRAIN. Un simple « après » passerait au vert avec une portée pleine.
+    expect(r.log[premierBal]!.round).toBe(0);
+    expect(r.log[premierArc]!.round).toBe(BATTLE.fieldDepth - Math.round(BATTLE.fieldDepth / 2));
+  });
+
+  it('⚠️ ON NE COGNE PAS UN MUR QU’ON N’A PAS ATTEINT', () => {
+    // Sans cette borne, toute l’armée frappait dès le premier tour et le terrain
+    // d’approche n’aurait été qu’un décor.
+    const r = simulateSiege(
+      [att('melee', { id: 'x', pv: 1e6, damage: 50, dist: BATTLE.fieldDepth, sector: 0 })],
+      [],
+      wall(1e9),
+      34,
+    );
+    const premier = r.log.find((e) => e.kind === 'wall');
+    expect(premier?.round).toBe(BATTLE.fieldDepth);
+  });
+
+  it('⚠️ UN TIREUR ASSAILLANT DOIT S’APPROCHER pour riposter', () => {
+    // Tant qu’il traverse, il encaisse sans rendre — c’est toute la valeur d’une
+    // muraille, et la seule riposte est d’amener des machines qui portent plus loin.
+    const porte = 2;
+    const r = simulateSiege(
+      [
+        att('ranged', {
+          id: 'a',
+          pv: 1e6,
+          damage: 10,
+          dist: BATTLE.fieldDepth,
+          sector: 0,
+          range: porte,
+        }),
+      ],
+      [turret({ id: 't', damage: 1, pv: 1e6, sector: 0, range: BATTLE.fieldDepth })],
+      wall(1e9),
+      35,
+    );
+    const premier = r.log.find((e) => e.kind === 'hit' && e.from === 'a');
+    expect(premier?.round).toBe(BATTLE.fieldDepth - porte);
+  });
+});
 describe('🪜 LE POSTE, ET LE PRIX DE LA DESCENTE', () => {
   // ⚠️ Avant, la portée d’un défenseur vivait dans son `kind` et son `origin` : l’archer
   // voyait TOUT, dedans comme dehors, gratuitement. « Descendre » n’avait donc aucun sens —

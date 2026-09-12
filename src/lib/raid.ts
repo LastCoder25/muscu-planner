@@ -41,6 +41,7 @@ import { type TalentInstance } from './talents';
 import { beyondCap } from './buildings';
 import { advStats, PROMO_LEVELS, type Adventurer } from './adventurers';
 import {
+  BATTLE,
   simulateSiege,
   type UnitKind,
   type SiegePost,
@@ -441,6 +442,20 @@ export const RAID = {
    *  PV, les archers assaillants n'auraient aucune prise et « faire taire les tireurs »
    *  ne voudrait rien dire. Modeste : une baliste est un ouvrage, pas un soldat. */
   turretPvK: 0.42,
+
+  // ── PORTÉES ────────────────────────────────────────────────────────────────
+  // ⚠️ TOUTES exprimées en fraction de `BATTLE.fieldDepth`, jamais en pas écrits à la
+  // main : **une baliste couvre le terrain ENTIER** (c’est son métier et son unique
+  // justification), et le reste se lit par rapport à elle. Changer la profondeur du
+  // terrain déplace donc tout le monde ensemble, sans rien à re-régler.
+
+  /** L’archer du rempart : la moitié du terrain. Il entre dans la danse quand l’assaut
+   *  est à mi-course — c’est ce qui STRATIFIE l’engagement au lieu d’une seule salve. */
+  archerRangeShare: 0.5,
+  /** Le tireur ASSAILLANT : un tiers. Il tire vers le HAUT, sur un rempart — il doit
+   *  s’approcher davantage que celui qui lui tire dessus. C’est là toute la valeur d’une
+   *  muraille, et la seule riposte est d’amener des machines qui portent plus loin. */
+  foeRangeShare: 1 / 3,
   /** La MEUTE du chenil, quand aucun aventurier ne défend : ce que valent les bêtes
    *  seules, en part de la référence du niveau. ⚠️ Volontairement modeste — c'est un
    *  filet pour que le chenil ne devienne jamais inutile, pas une garnison de rechange. */
@@ -1805,11 +1820,15 @@ export function siegeDefenders(
         maxPv: pv,
         damage: Math.max(1, Math.round(dmg)),
         origin: 'turret',
-        // ⚠️ De la MAÇONNERIE : une baliste ne descend jamais dans la cour. C’est ce qui
-        // laisse `turretInsideShare` — la fraction d’en face — seule façon pour elles de
-        // tirer à l’intérieur.
+        // ⚠️ De la MAÇONNERIE : elle ne descend jamais dans la cour, et **elle ne pivote
+        // pas** — d’où son SECTEUR, qui borne son arc de tir. Un archer, lui, marche le
+        // long du chemin de ronde : il n’en a pas.
         post: 'rampart',
         armor: shelter('rampart'),
+        sector: i,
+        // Elle couvre le terrain ENTIER : c’est ce qui lui donne le premier tir, et donc
+        // sa puissance. Elle ne l’a pas parce qu’on la lui a écrite.
+        range: BATTLE.fieldDepth,
       });
     }
   }
@@ -1831,6 +1850,8 @@ export function siegeDefenders(
       origin: 'adventurer',
       post,
       armor: shelter(post),
+      // Un arc porte moins loin qu’une baliste ; un homme d’armes ne porte pas du tout.
+      range: a.ranged ? Math.round(BATTLE.fieldDepth * RAID.archerRangeShare) : 0,
     });
   }
 
@@ -1849,6 +1870,7 @@ export function siegeDefenders(
       // Il tient la brèche : il est donc DANS la cour, et le rempart ne le couvre pas.
       post: 'yard',
       armor: shelter('yard'),
+      range: 0,
     });
   }
   return out;
@@ -1877,7 +1899,14 @@ export function siegeDefenders(
  */
 export function siegeAttackers(raid: Raid): SiegeUnit[] {
   const out: SiegeUnit[] = [];
-  for (const g of raid.groups) {
+  // ⚠️ L’ARMÉE SE MASSE — elle marche, elle n’encercle pas. Le front est donc
+  // CONTIGU, et sa largeur est DÉRIVÉE : **un groupe par pan**. Rien à inventer, et une
+  // grosse armée (plus de groupes) s’étale donc davantage — elle affronte plus de
+  // balistes, ce qui la borne toute seule.
+  // Le pan d’entrée est tiré sur la graine du raid : deux assauts ne tombent pas au
+  // même endroit, mais un raid donné se rejoue à l’identique.
+  const first = Math.abs(raid.seed) % BATTLE.sectors;
+  for (const [gi, g] of raid.groups.entries()) {
     const ref = refFighter(Math.max(1, g.level));
     const um = g.unitMult ?? 1;
     const mm = g.massMult ?? 1;
@@ -1900,6 +1929,14 @@ export function siegeAttackers(raid: Raid): SiegeUnit[] {
         damage: Math.max(1, Math.round(perBody)),
         origin: 'attacker',
         bulk: Math.pow(um, 2 - RAID.groupDmgExp),
+        sector: (first + gi) % BATTLE.sectors,
+        // ⚠️ TOUT LE MONDE PART DU BORD DU TERRAIN. C’est la traversée qui donne leur
+        // valeur aux balistes — sans elle, l’armée frappait dès le premier tour et la
+        // portée n’aurait rien voulu dire.
+        dist: BATTLE.fieldDepth,
+        // Un homme d’armes ne porte qu’au contact ; un tireur doit entrer dans sa propre
+        // portée, plus courte que celle du rempart (il vise vers le haut).
+        range: groupKind(g) === 'ranged' ? Math.round(BATTLE.fieldDepth * RAID.foeRangeShare) : 0,
       });
     }
   }

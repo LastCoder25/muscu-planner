@@ -85,6 +85,26 @@ export interface SiegeUnit {
    *  l’exprimer. Ce qu’il ne garantit pas, un test le fait : TOUT défenseur produit par
    *  `siegeDefenders` en porte un. */
   post?: SiegePost;
+  /** Jusqu’où l’unité porte, en PAS du terrain d’approche. `0` = au contact.
+   *
+   *  ⚠️ C’est la portée qui JUSTIFIE la puissance d’une baliste : elle n’est pas forte
+   *  parce qu’elle a de gros chiffres, elle est forte parce qu’elle frappe **la première
+   *  et pendant plus longtemps**. Même idée que le mur qui convertit sa solidité en
+   *  temps (v0.753), appliquée au feu. */
+  range?: number;
+  /** ASSAILLANT : à combien de pas du rempart il se trouve. Décroît chaque tour.
+   *  Absent côté défense — un défenseur EST au mur. */
+  dist?: number;
+  /** Où sur l’anneau. Porté par les BALISTES (fixées à leur sommet) et par les
+   *  assaillants (l’armée se masse sur quelques pans).
+   *
+   *  ⚠️ ABSENT sur un défenseur humain, et c’est la distinction qui compte : **une
+   *  baliste ne pivote pas**, un homme marche le long du chemin de ronde. Sans secteur,
+   *  aucun arc ne le borne. */
+  sector?: number;
+  /** Pas parcourus par tour. Défaut 1 — une machine de siège avance moins vite qu’une
+   *  meute, et c’est le levier qui dira combien de temps on reste sous le feu. */
+  speed?: number;
   /** 🛡️ CE QUE LE REMPART ABSORBE POUR CETTE UNITÉ (0..1), tant qu’il tient.
    *
    *  ⚠️ C’EST LE MÉTIER DU MUR, ET IL AVAIT ÉTÉ PERDU. `wallArmorK` existe depuis la
@@ -113,11 +133,20 @@ export const BATTLE = {
    *  ⚠️ C'est LA variable d'équilibrage de la phase 2 : elle décide si une poignée de
    *  défenseurs tient ou se fait submerger. */
   breachMaxWidth: 4,
-  /** Part du feu des tourelles qui peut encore frapper ce qui est ENTRÉ. Ce sont celles
-   *  à l'OPPOSÉ de la brèche : elles seules ont l'angle pour tirer dans la cour sans
-   *  arroser leurs propres défenseurs. ⚠️ Fraction DÉRIVÉE de la géométrie (3 tourelles
-   *  sur 8 se font face à travers l'enceinte), pas un réglage sorti du chapeau. */
-  turretInsideShare: 3 / 8,
+  /** Les pans de l’enceinte. ⚠️ DOIT valoir `TURRET_SLOTS` — une baliste par sommet ;
+   *  un test le verrouille, parce que les deux vivent dans des fichiers différents. */
+  sectors: 8,
+  /** La profondeur du terrain découvert, en PAS. C’est le champ de tir : l’armée le
+   *  traverse avant de pouvoir toucher quoi que ce soit, et **c’est là que les balistes
+   *  gagnent leur valeur**. C’est aussi le repère à partir duquel toutes les portées se
+   *  définissent en fractions — une baliste couvre le terrain ENTIER, c’est son métier. */
+  fieldDepth: 6,
+  /** De combien de pans, de part et d’autre du sien, une baliste couvre le terrain.
+   *
+   *  ⚠️ **C’EST LE DIAL DE LA PUISSANCE DE FEU.** Une armée massée sur quelques pans
+   *  n’affronte que les balistes qui la couvrent : à arc 0 elle n’en affronte qu’une par
+   *  pan occupé, à arc 3 elle les affronte toutes. Il ne se règle qu’à la mesure. */
+  turretArc: 1,
   /** Part du feu des archers assaillants qui passe À TRAVERS la brèche pour frapper les
    *  défenseurs de la cour. Étroite par nature : on tire dans un couloir. */
   rangedThroughBreach: 0.35,
@@ -217,6 +246,28 @@ export function pickTarget(candidates: SiegeUnit[], rng: () => number): SiegeUni
   return best;
 }
 
+/** L’écart angulaire entre deux pans, sur un anneau — donc au plus la moitié du tour. */
+export function sectorGap(a: number, b: number): number {
+  const d = Math.abs(Math.round(a) - Math.round(b)) % BATTLE.sectors;
+  return Math.min(d, BATTLE.sectors - d);
+}
+
+/**
+ * Est-ce dans l’ARC de tir ?
+ *
+ * ⚠️ La borne ne s’applique qu’aux unités QUI ONT UN SECTEUR — c’est-à-dire aux
+ * BALISTES. Une machine est fixée à son sommet et ne pivote pas ; un homme, lui, marche
+ * le long du chemin de ronde. Ne pas donner de secteur à un archer n’est donc pas un
+ * oubli, c’est la règle.
+ */
+function inArc(d: SiegeUnit, a: SiegeUnit): boolean {
+  if (d.sector === undefined || a.sector === undefined) return true;
+  return sectorGap(d.sector, a.sector) <= BATTLE.turretArc;
+}
+
+/** Est-ce à PORTÉE ? Un assaillant sans distance est réputé au contact. */
+const inRange = (d: SiegeUnit, a: SiegeUnit) => (a.dist ?? 0) <= (d.range ?? 0);
+
 /** Qui se tient dans la COUR. Descendus compris — c'est là tout le sujet. */
 const inYard = (d: SiegeUnit) => d.post === 'yard' && alive(d);
 /** Qui tient le REMPART : les balistes, et les tireurs qui n'en sont pas descendus. */
@@ -235,6 +286,10 @@ function attackerTargets(u: SiegeUnit, def: SiegeUnit[], breach: number): SiegeU
     const devant = def.filter(inYard);
     return devant.length ? devant : def.filter(alive);
   }
+  // ⚠️ Un tireur doit d'abord ENTRER DANS SA PROPRE PORTÉE : tant qu'il traverse le
+  // terrain, il encaisse sans rendre. C'est tout l'intérêt d'une muraille — et la seule
+  // riposte possible est d'amener des machines qui portent plus loin qu'elle.
+  if (!u.inside && (u.dist ?? 0) > (u.range ?? 0)) return [];
   // Un tireur vise le REMPART : ce sont ses servants qui le tuent, et les faire taire
   // est la seule façon d'ouvrir la voie aux siens.
   const remparts = def.filter(onRampart);
@@ -259,9 +314,11 @@ function attackerTargets(u: SiegeUnit, def: SiegeUnit[], breach: number): SiegeU
  * fraction DÉRIVÉE de la géométrie de l'octogone, traitée à part dans le tour.)
  */
 function defenderTargets(u: SiegeUnit, att: SiegeUnit[]): SiegeUnit[] {
-  return u.post === 'yard'
-    ? att.filter((a) => a.inside && alive(a))
-    : att.filter((a) => !a.inside && alive(a));
+  if (u.post === 'yard') return att.filter((a) => a.inside && alive(a));
+  // Depuis le rempart : DEHORS, à PORTÉE, et DANS L’ARC. Trois termes, et l’ordre
+  // d’engagement s’en déduit tout seul — les balistes ouvrent le feu de loin, les
+  // archers entrent dans la danse quand l’assaut se rapproche.
+  return att.filter((a) => !a.inside && alive(a) && inRange(u, a) && inArc(u, a));
 }
 
 /**
@@ -354,17 +411,16 @@ export function simulateSiege(
     }
 
     // ── 1. Les tireurs du rempart ──────────────────────────────────────────
-    // ⚠️ Les tourelles d'en face tirent dans la cour : on tire au sort QUI parmi elles,
-    // sur la graine, plutôt que de prendre les trois premières — l'ordre de déclaration
-    // ne doit jamais devenir une mécanique.
-    const tourelles = def.filter((d) => d.origin === 'turret' && alive(d));
-    const versDedans = new Set(
-      tourelles.filter(() => rng() < BATTLE.turretInsideShare).map((t) => t.id),
-    );
+    // ⚠️ UNE BALISTE NE TIRE PLUS DANS SA PROPRE COUR (décision de l’utilisateur, et
+    // c’est la fiction qui a raison : on n’envoie pas un trait de siège au milieu de ses
+    // propres hommes). `turretInsideShare` — la fraction d’en face — disparaît, et avec
+    // elle le dernier cas particulier de cette boucle : `defenderTargets` est désormais
+    // seule autorité pour TOUT LE MONDE.
+    // ⚠️ Mesuré : pris isolément, c’est un BUFF de la défense (+0 à +25 points de tenue),
+    // parce que les traits gaspillés sur 4 corps déjà pris en tenaille repartent sur ceux
+    // qui cassent le rempart. C’est l’ARC qui retire de la puissance de feu, pas ceci.
     for (const d of def.filter((x) => x.kind === 'ranged' && alive(x))) {
-      const dedans = d.origin === 'turret' && versDedans.has(d.id);
-      const cibles = dedans ? att.filter((a) => a.inside && alive(a)) : defenderTargets(d, att);
-      const cible = pickTarget(cibles, rng);
+      const cible = pickTarget(defenderTargets(d, att), rng);
       if (cible)
         strike(d, cible, d.damage, round, log, w.maxPv > 0 ? Math.max(0, w.pv) / w.maxPv : 0);
     }
@@ -390,7 +446,10 @@ export function simulateSiege(
       // cogne le mur ; le tireur, lui, attend son heure.
       const cibles = attackerTargets(a, def, width);
       if (!cibles.length) {
-        if (a.kind === 'melee' && !a.inside && front > 0) {
+        // ⚠️ `dist === 0` : on ne cogne pas un mur qu’on n’a pas encore atteint. Sans
+        // cette borne, toute l’armée frappait dès le premier tour et le terrain
+        // d’approche n’aurait été qu’un décor.
+        if (a.kind === 'melee' && !a.inside && (a.dist ?? 0) === 0 && front > 0) {
           // ⚠️ On décompte la PLACE, pas les têtes — et on n'exige pas qu'elle tienne
           // entièrement : le dernier arrivé se glisse dans ce qui reste. Refuser un corps
           // trop encombrant pour le reliquat rendrait le front dépendant de l'ORDRE des
@@ -429,14 +488,28 @@ export function simulateSiege(
     }
     if (width > 0) {
       // ⚠️ Le GOULOT : on ne complète que jusqu'à la largeur, et seuls les hommes
-      // d'armes entrent. Les tireurs restent dehors — ils tirent à travers.
+      // d'armes ARRIVÉS AU PIED DU MUR entrent. Les tireurs restent dehors — ils tirent
+      // à travers ; ceux qui traversent encore le terrain ne sont nulle part près d'une
+      // brèche.
       const dedans = att.filter((a) => a.inside && alive(a)).length;
-      const dehors = att.filter((a) => !a.inside && a.kind === 'melee' && alive(a));
+      const dehors = att.filter(
+        (a) => !a.inside && a.kind === 'melee' && (a.dist ?? 0) === 0 && alive(a),
+      );
       for (let i = 0; i < Math.min(width - dedans, dehors.length); i++) {
         dehors[i]!.inside = true;
         entered++;
         log.push({ round, kind: 'enter', from: dehors[i]!.id });
       }
+    }
+
+    // ── 5. On avance ───────────────────────────────────────────────────────
+    // ⚠️ EN FIN DE TOUR : l'armée agit d'abord depuis là où elle est, puis progresse.
+    // Sinon elle aurait déjà gagné un pas avant que la première salve ne parte, et le
+    // terrain vaudrait un pas de moins que ce qu'il annonce.
+    for (const a of att) {
+      if (!alive(a) || a.inside) continue;
+      const d = a.dist ?? 0;
+      if (d > 0) a.dist = Math.max(0, d - Math.max(1, a.speed ?? 1));
     }
   }
 
