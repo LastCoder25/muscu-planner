@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+const NUS = { familiars: [], talents: [] };
 import {
   CARAVAN,
   canSendCaravan,
@@ -23,13 +24,15 @@ import {
   missionXp,
   refAdventurer,
   resolveCaravan,
+  roadCompanionEffects,
   roadFoe,
   startCaravan,
   type Caravan,
 } from '@/lib/caravan';
 import { type Adventurer } from '@/lib/adventurers';
-import { TALENTS } from '@/lib/talents';
+import { TALENTS, type TalentInstance } from '@/lib/talents';
 import { simulateCombat } from '@/lib/combat';
+import { famXpForLevel, type AggregatedEffects, type Item } from '@/lib/items';
 import {
   EXPE,
   travelPosition,
@@ -66,7 +69,7 @@ function winPct(escort: Adventurer[], p: Poi, n = 150) {
   return w / n;
 }
 const avgScrap = (p: Poi, esc: Adventurer[], n = 200) =>
-  Array.from({ length: n }, (_, i) => resolveCaravan(p, esc, i * 7919 + 3).scrap).reduce(
+  Array.from({ length: n }, (_, i) => resolveCaravan(p, esc, i * 7919 + 3, NUS).scrap).reduce(
     (a, b) => a + b,
     0,
   ) / n;
@@ -122,7 +125,7 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
   it('aucun ÉQUIPEMENT : ce n’est pas une source de butin', () => {
     // « Le sport est le plafond » : la carte ne doit pas devenir un raccourci vers du
     // stuff hors de sa ligue. Une caravane paie en LOGISTIQUE, point.
-    const o = resolveCaravan(poi(), team(3), 42);
+    const o = resolveCaravan(poi(), team(3), 42, NUS);
     expect(Object.keys(o)).not.toContain('item');
     expect(Object.keys(o)).not.toContain('items');
   });
@@ -148,7 +151,7 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     const cargo = team(4, 90, ['caravanier', 'convoyeur', 'maitre_convoi', 'intendant']);
     let vu = false;
     for (let s = 0; s < 200; s++) {
-      const o = resolveCaravan(p, cargo, s * 977 + 1);
+      const o = resolveCaravan(p, cargo, s * 977 + 1, NUS);
       expect(o.energy).toBeLessThanOrEqual(Math.round(cap) + 1);
       if (o.energy >= Math.round(cap) - 1) vu = true;
     }
@@ -223,12 +226,12 @@ describe('salaires, XP et garde-fous', () => {
 
 describe('le convoi lui-même', () => {
   it('est DÉTERMINISTE : même graine, même voyage', () => {
-    const a = resolveCaravan(poi(), team(3), 1234);
-    const b = resolveCaravan(poi(), team(3), 1234);
+    const a = resolveCaravan(poi(), team(3), 1234, NUS);
+    const b = resolveCaravan(poi(), team(3), 1234, NUS);
     expect(a).toEqual(b);
   });
   it('l’aller et le retour sont symétriques, le rapport lisible à mi-chemin', () => {
-    const c = startCaravan('c1', poi(), team(3), 1000, 7);
+    const c = startCaravan('c1', poi(), team(3), 1000, 7, NUS);
     expect(c.midAt).toBeGreaterThan(c.sentAt);
     expect(c.returnAt - c.midAt).toBe(c.midAt - c.sentAt);
     expect(c.escort).toHaveLength(3);
@@ -236,7 +239,7 @@ describe('le convoi lui-même', () => {
   it('⚠️ `claimed === undefined` = DÉJÀ crédité, jamais « à récupérer »', () => {
     // Même règle que les rapports d'expédition : traiter l'absence de champ comme
     // « non réclamé » offrirait une seconde fois le butin de chaque convoi passé.
-    const base = startCaravan('c1', poi(), team(3), 0, 7);
+    const base = startCaravan('c1', poi(), team(3), 0, 7, NUS);
     const later = base.returnAt + 1;
     expect(isCaravanClaimable(base, later)).toBe(true);
     expect(isCaravanClaimable({ ...base, claimed: true }, later)).toBe(false);
@@ -245,7 +248,7 @@ describe('le convoi lui-même', () => {
     expect(isCaravanClaimable(legacy, later)).toBe(false);
   });
   it('rien ne se récupère avant le RETOUR en ville', () => {
-    const c = startCaravan('c1', poi(), team(3), 0, 7);
+    const c = startCaravan('c1', poi(), team(3), 0, 7, NUS);
     expect(isCaravanClaimable(c, c.midAt)).toBe(false);
     expect(isCaravanClaimable(c, c.returnAt)).toBe(true);
   });
@@ -260,14 +263,19 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
     // niveau 5 rien qu'en ajoutant trois recrues. Le rendement décroissant — le garde-fou
     // qui empêche de farmer le trajet le plus court — se contournait avec des passagers.
     const facile = poi({ level: 5 });
-    const seul = resolveCaravan(facile, [vet('v')], 42);
-    const accompagne = resolveCaravan(facile, [vet('v'), bleu('r1'), bleu('r2'), bleu('r3')], 42);
+    const seul = resolveCaravan(facile, [vet('v')], 42, NUS);
+    const accompagne = resolveCaravan(
+      facile,
+      [vet('v'), bleu('r1'), bleu('r2'), bleu('r3')],
+      42,
+      NUS,
+    );
     expect(accompagne.xp['v']).toBe(seul.xp['v']);
     // …et la recrue touche bien plus que lui sur cette route-là.
     expect(accompagne.xp['r1']!).toBeGreaterThan(accompagne.xp['v']!);
   });
   it('tout le monde en reçoit, personne n’est oublié', () => {
-    const o = resolveCaravan(poi(), [vet('v'), bleu('r')], 7);
+    const o = resolveCaravan(poi(), [vet('v'), bleu('r')], 7, NUS);
     expect(Object.keys(o.xp).sort()).toEqual(['r', 'v']);
     for (const v of Object.values(o.xp)) expect(v).toBeGreaterThan(0);
   });
@@ -277,7 +285,7 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
     let sansCombat = 0;
     let perdu = 0;
     for (let s = 0; s < 200; s++) {
-      const o = resolveCaravan(poi(), [bleu('r')], s * 977 + 1);
+      const o = resolveCaravan(poi(), [bleu('r')], s * 977 + 1, NUS);
       const fights = o.events.filter((e) => e.kind === 'bandits');
       expect(o.xp['r']!).toBeGreaterThan(0);
       if (!fights.length) sansCombat++;
@@ -293,7 +301,7 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
     const a = bleu('r');
     let defaites = 0;
     for (let s = 0; s < 200; s++) {
-      const o = resolveCaravan(p, [a], s * 977 + 1);
+      const o = resolveCaravan(p, [a], s * 977 + 1, NUS);
       const f = o.events.filter((e) => e.kind === 'bandits');
       expect(o.xp['r']).toBe(missionXp(a, p, f.length));
       if (f.some((x) => !x.won)) defaites++;
@@ -329,7 +337,7 @@ describe('⚠️ un convoi VOYAGE comme le héros', () => {
   // Le convoi est situé sur la carte par la MÊME fonction que le héros
   // (`travelPosition`) : deux copies de cette interpolation divergeraient à la
   // première retouche — c'est le piège des libellés de POI, déjà rencontré deux fois.
-  const van = startCaravan('v1', poi({ x: 60, y: 20 }), team(3), 0, 7);
+  const van = startCaravan('v1', poi({ x: 60, y: 20 }), team(3), 0, 7, NUS);
 
   it('part de la ville, atteint son lieu, et en revient', () => {
     expect(travelPosition(van, van.sentAt)).toMatchObject({ ...EXPE.town, phase: 'outbound' });
@@ -480,6 +488,115 @@ describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () =
     level: 5,
     xp: 0,
     ...o,
+  });
+
+  describe('🐾🧠 SUR LA ROUTE AUSSI — la moyenne, jamais la somme', () => {
+    // ⚠️ Le socle existait depuis la v0.758 et n'était appelé NULLE PART :
+    // `companionEffects('atk')` n'avait aucun appelant. « Le compagnon suit son homme
+    // PARTOUT » n'était donc vrai qu'au rempart.
+    const road = (familiars: Item[] = [], talents: TalentInstance[] = []) => ({
+      familiars,
+      talents,
+    });
+
+    it('un compagnon apporte quelque chose à son escorte', () => {
+      const team = [adv('a', { familiarId: 'f1' })];
+      const nu = roadCompanionEffects(team, road());
+      const avec = roadCompanionEffects(team, road([fam('f1')]));
+      expect(nu.damagePct).toBe(0);
+      expect(avec.damagePct).toBeGreaterThan(0);
+    });
+
+    it('⚠️ QUATRE loups sur quatre têtes valent UN loup, pas quatre', () => {
+      // C'est ce qui rend la route équivalente au rempart. Là-bas chaque aventurier est
+      // une unité distincte et son loup ne booste que LUI ; ici l'escorte est FONDUE en
+      // un seul combattant dont les stats s'additionnent, donc cumuler les pourcentages
+      // appliquerait quatre fois le bonus à la totalité des dégâts. C'est aussi ce qui
+      // interdit le retour du « pool global » supprimé en v0.777.
+      const seul = roadCompanionEffects([adv('a', { familiarId: 'f1' })], road([fam('f1')]));
+      const quatre = roadCompanionEffects(
+        ['a', 'b', 'c', 'd'].map((id, i) => adv(id, { familiarId: `f${i}` })),
+        road([fam('f0'), fam('f1'), fam('f2'), fam('f3')]),
+      );
+      expect(quatre.damagePct).toBeCloseTo(seul.damagePct, 6);
+    });
+
+    it('⚠️ … et UN loup sur quatre têtes n’en vaut que le QUART', () => {
+      // La contrepartie : c'est bien une moyenne, pas un plafond déguisé.
+      const seul = roadCompanionEffects([adv('a', { familiarId: 'f1' })], road([fam('f1')]));
+      const dilue = roadCompanionEffects(
+        [adv('a', { familiarId: 'f1' }), adv('b'), adv('c'), adv('d')],
+        road([fam('f1')]),
+      );
+      expect(dilue.damagePct).toBeCloseTo(seul.damagePct / 4, 6);
+    });
+
+    it('⚠️ SUR LA ROUTE C EST LE DRESSAGE D ATTAQUE QUI COMPTE, pas celui du mur', () => {
+      // ⚠️ Test ajouté après une mutation passée au VERT : remplacer `atk` par `def` dans
+      // le calcul de la route ne faisait tomber aucun des 1160 tests. C'est pourtant la
+      // règle qui garde les DEUX carrières du familier vivantes — « le même animal ne vaut
+      // pas la même chose aux deux endroits » (v0.663). Deux familiers identiques, l'un
+      // entraîné au combat, l'autre au rempart : sur la route, seul le premier doit peser.
+      const guerrier = fam('f1', { atkXp: famXpForLevel(20, 'atk'), defXp: 0 });
+      const sentinelle = fam('f1', { atkXp: 0, defXp: famXpForLevel(20, 'def') });
+      const team = [adv('a', { familiarId: 'f1' })];
+      const g = roadCompanionEffects(team, road([guerrier])).damagePct;
+      const se = roadCompanionEffects(team, road([sentinelle])).damagePct;
+      expect(g).toBeGreaterThan(se);
+    });
+    it('⚠️ le familier du HÉROS ne part pas en convoi', () => {
+      const team = [adv('a', { familiarId: 'f1' })];
+      const e = roadCompanionEffects(team, { ...road([fam('f1')]), heroFamiliarId: 'f1' });
+      expect(e.damagePct).toBe(0);
+    });
+
+    it('le TALENT confié compte lui aussi, et il est bridé', () => {
+      const t = { id: 't1', code: 't_dmg', xp: 0, level: 1, equipped: false } as TalentInstance;
+      const team = [adv('a', { talentId: 't1' })];
+      const nu = roadCompanionEffects(team, road());
+      const avec = roadCompanionEffects(team, road([], [t]));
+      const somme = (x: AggregatedEffects) =>
+        (Object.values(x) as number[]).reduce((s2, v) => s2 + v, 0);
+      expect(somme(nu)).toBe(0);
+      expect(somme(avec)).toBeGreaterThan(0);
+      // Bridé : jamais la valeur pleine d'un talent porté par le héros.
+      expect(somme(avec)).toBeLessThan(somme(advTalentEffects([{ ...t }], 1)));
+    });
+
+    it('⚠️ CE QUI EST BRANCHÉ EST BIEN LU PAR LE COMBAT, pas seulement calculé', () => {
+      // Une formule juste qu'on n'appelle pas est un levier mort qui reste vert — c'est
+      // exactement l'état dans lequel ce socle a passé vingt-six versions.
+      // ⚠️ Une LIGNÉE PROMUE, pas des recrues brutes : `roadFoe` se calibre sur
+      // `refAdventurer`, donc trois bleus perdent 100 % des embuscades et le test ne
+      // mesurerait plus rien. Le piège est documenté depuis la v0.759 — j'y suis retombé.
+      const team = ['a', 'b', 'c'].map((id, i) => ({
+        ...refAdventurer(12),
+        id,
+        familiarId: `f${i}`,
+      }));
+      const fams = [0, 1, 2].map((i) =>
+        fam(`f${i}`, { effect: { type: 'damage_pct', value: 60 } }),
+      );
+      const poi = {
+        id: 'p1',
+        type: 'well',
+        level: 12,
+        x: 0.5,
+        y: 0.2,
+        spawnAt: 0,
+        expiresAt: 9e12,
+        perilous: true,
+      } as Poi;
+      let nu = 0;
+      let avec = 0;
+      for (let seed = 1; seed <= 120; seed++) {
+        for (const ev of resolveCaravan(poi, team, seed, road()).events)
+          if (ev.kind === 'bandits' && ev.won) nu++;
+        for (const ev of resolveCaravan(poi, team, seed, road(fams)).events)
+          if (ev.kind === 'bandits' && ev.won) avec++;
+      }
+      expect(avec).toBeGreaterThan(nu);
+    });
   });
 
   describe('qui compte comme compagnon', () => {
@@ -716,7 +833,7 @@ describe('👁️ L’ÉCLAIREUR ÉVITE LES EMBUSCADES (v0.759)', () => {
       let cache = 0;
       let amb = 0;
       for (let i = 1; i <= 3000; i++) {
-        const o = resolveCaravan(poiOf(false), team, i * 7919);
+        const o = resolveCaravan(poiOf(false), team, i * 7919, NUS);
         cache += o.events.filter((e) => e.kind === 'cache').length;
         amb += o.events.filter((e) => e.kind === 'bandits').length;
       }

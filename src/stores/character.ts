@@ -2030,6 +2030,15 @@ export const useCharacterStore = defineStore('character', () => {
       escort,
       now,
       seed,
+      // 🐾🧠 Ce que l'escorte emmène. Le héros garde ce qu'il porte : il se bat ailleurs.
+      {
+        familiars: (cur.inventory ?? []).filter((it: Item) => it.slot === FAMILIAR_SLOT),
+        talents: normalizeTalents(cur.talents),
+        heroFamiliarId: cur.equipped?.[FAMILIAR_SLOT]?.id ?? null,
+        heroTalentIds: normalizeTalents(cur.talents)
+          .filter((t) => t.equipped === true)
+          .map((t) => t.id),
+      },
       comptoirLevel.value,
     );
     const busy = new Set(escortIds);

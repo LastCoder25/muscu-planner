@@ -504,7 +504,60 @@ export function ambushChance(poi: Poi, escort: Adventurer[]): number {
 
 /** Résout le voyage : les rencontres, la cargaison, la paie, les blessés.
  *  Seedé au DÉPART comme tout le reste — déterministe et hors-ligne. */
-export function resolveCaravan(poi: Poi, escort: Adventurer[], seed: number): CaravanOutcome {
+/** Ce que le convoi emmène : la réserve du joueur, moins ce que le HÉROS porte.
+ *  ⚠️ Pas de `kennelLevel` : le Chenil plafonne le dressage de DÉFENSE, et sur la route
+ *  personne ne plafonne ce qu’un familier a appris au combat (cf. `companionEffects`). */
+export interface RoadCompanions {
+  familiars: Item[];
+  talents: TalentInstance[];
+  heroFamiliarId?: string | null;
+  heroTalentIds?: readonly string[];
+}
+
+/**
+ * 🐾🧠 CE QUE LES COMPAGNONS APPORTENT SUR LA ROUTE — enfin branché.
+ *
+ * ⚠️ LE SOCLE EXISTAIT DEPUIS LA v0.758 ET N’ÉTAIT APPELÉ NULLE PART : `companionEffects('atk')`
+ * n’avait aucun appelant, `escortCombatant` portait déjà un paramètre `extra` laissé vide, et
+ * `companionsOf`/`advTalentsOf` n’étaient lus que par leurs tests. « Le compagnon suit son
+ * homme PARTOUT, convoi comme rempart » n’était donc vrai qu’à moitié — il ne comptait qu’au mur.
+ *
+ * ⚠️ ON DIVISE PAR L’EFFECTIF, et c’est ce qui rend la route ÉQUIVALENTE au rempart. Là-bas
+ * chaque aventurier est une unité distincte : son loup ne booste que LUI, donc quatre loups
+ * font quatre combattants +x %, pas un groupe +4x %. Ici l’escorte est FONDUE en un seul
+ * combattant dont les stats s’additionnent — cumuler les pourcentages y appliquerait quatre
+ * fois le bonus à la totalité des dégâts. La moyenne redonne exactement le bon compte : une
+ * escorte entièrement accompagnée vaut UN compagnon de bonus, et un seul loup sur quatre en
+ * vaut le quart. C’est aussi ce qui interdit structurellement le retour du « pool global »
+ * que la v0.777 avait supprimé.
+ *
+ * ⚠️ LA FATIGUE N’EST PAS LUE ICI, délibérément : le sort du convoi est tiré au DÉPART
+ * (`startCaravan`) alors qu’il se joue des heures plus tard — « fatigué au moment du tirage »
+ * ne voudrait rien dire. Elle reste au rempart, où l’instant du combat est celui du calcul.
+ */
+export function roadCompanionEffects(
+  escort: Adventurer[],
+  road: RoadCompanions,
+): AggregatedEffects {
+  if (!escort.length) return emptyEffects();
+  const fams = companionsOf(escort, road.familiars, road.heroFamiliarId);
+  const tals = advTalentsOf(escort, road.talents, road.heroTalentIds);
+  if (!fams.length && !tals.length) return emptyEffects();
+  return scaleEffects(
+    mergeEffects(companionEffects(fams, 'atk'), advTalentEffects(tals)),
+    1 / escort.length,
+  );
+}
+
+export function resolveCaravan(
+  poi: Poi,
+  escort: Adventurer[],
+  seed: number,
+  /** ⚠️ REQUIS, pas optionnel : un paramètre qu’on peut oublier finit par l’être, et c’est
+   *  exactement ce qui a laissé ce socle inerte pendant vingt-six versions. Une escorte
+   *  sans compagnon se déclare avec des listes vides. */
+  road: RoadCompanions,
+): CaravanOutcome {
   const rng = mulberry32(seed >>> 0 || 1);
   const events: CaravanEvent[] = [];
   const hurt: string[] = [];
@@ -512,7 +565,7 @@ export function resolveCaravan(poi: Poi, escort: Adventurer[], seed: number): Ca
   let keysBonus = 0;
 
   const foe = roadFoe(poi);
-  const guards = escortCombatant(escort);
+  const guards = escortCombatant(escort, 'Escorte', roadCompanionEffects(escort, road));
   // Une rencontre par jambe de trajet — deux fois plus sur une route dangereuse.
   const legs = poi.perilous ? 4 : 2;
   const base = poi.perilous ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
@@ -619,6 +672,7 @@ export function startCaravan(
   escort: Adventurer[],
   now: number,
   seed: number,
+  road: RoadCompanions,
   comptoirLevel = 0,
 ): Caravan {
   const leg = caravanLegMin(poi, escort, comptoirLevel) * 60_000;
@@ -629,7 +683,7 @@ export function startCaravan(
     sentAt: now,
     midAt: now + leg,
     returnAt: now + 2 * leg,
-    outcome: resolveCaravan(poi, escort, seed),
+    outcome: resolveCaravan(poi, escort, seed, road),
     claimed: false,
   };
 }
