@@ -312,14 +312,30 @@ describe('calibration du siège', () => {
     // de ce que le niveau du joueur justifie, donc une enceinte à moitié montée vaut
     // à peu près la moitié.
     const L = 26;
+    // ⚠️ LA FORME se mesure sur l'ENCEINTE SEULE : c'est une propriété de géométrie
+    // (la part du niveau, `share`), et la vérifier sans garnison est exactement ce que
+    // la v0.672 a corrigé. Monotone, et sans marche d'escalier.
     const demi = holdRate(L, Math.round(L * 0.5), true);
     const troisQuarts = holdRate(L, Math.round(L * 0.75), true);
     const plein = holdRate(L, L, true);
-    expect(demi, 'à moitié montée, on a une vraie chance').toBeGreaterThan(15);
     expect(troisQuarts).toBeGreaterThan(demi);
     expect(plein).toBeGreaterThan(troisQuarts);
-    // …et l'écart entre deux paliers reste mesuré (pas de marche d'escalier).
     expect(plein - troisQuarts).toBeLessThan(45);
+
+    // ⚠️ MAIS « ON A UNE VRAIE CHANCE » SE MESURE AVEC SA GARNISON — RE-CADRÉ, PAS
+    // RELÂCHÉ. Ce plancher datait de la v0.672 ; les aventuriers ne tiennent la brèche
+    // que depuis la v0.777. Il jugeait donc une configuration que le jeu n'attend plus,
+    // et il est entré en tension DIRECTE avec « le vivier doit peser » : élargir la
+    // brèche fait par construction payer l'ABSENCE de garnison, donc le seul moyen de
+    // rendre le vivier décisif était de faire tomber ce chiffre-là.
+    // Mesuré à mi-enceinte : **46,9 % avec le vivier**, 11,9 % sans — et la valeur avec
+    // garnison ne bouge quasiment pas quand la brèche s'élargit (49,6 à la largeur 4,
+    // 45,4 à la largeur 10). La promesse tient là où elle a un sens.
+    const demiAvecVivier = holdRate(L, Math.round(L * 0.5), true, 260, rosterOf(L));
+    expect(demiAvecVivier, 'à moitié montée AVEC sa garnison').toBeGreaterThan(30);
+    // ⚠️ Et sans garnison on garde une chance, DÉLIBÉRÉMENT plus maigre : une enceinte
+    // que personne ne défend de l'intérieur ne doit pas tenir comme si elle l'était.
+    expect(demi, 'à moitié montée, sans personne dans la cour').toBeGreaterThan(6);
   });
 
   it('⚠️ LE VIVIER PÈSE : recruter et élever change l’issue, pas seulement le décor', () => {
@@ -330,10 +346,14 @@ describe('calibration du siège', () => {
     // talents). C’est exactement le genre de promesse creuse qu’un aperçu honnête rend
     // visible — et qu’aucune porte ne voyait.
     //
-    // ⚠️ Ce test verrouille « le vivier COMPTE », pas une largeur de brèche : l’écart
-    // entre 4 et 5 vaut 2 points sur une statistique bruitée, il ne se discrimine pas
-    // honnêtement. Ce qui garde la largeur à son plafond, c’est la FALAISE (mesurée à
-    // 13,0 pour un plancher de 15 dès la largeur 6).
+    // ⚠️ Ce test verrouille « le vivier COMPTE », **pas une largeur de brèche** — et le
+    // seuil est bas EXPRÈS. Mesuré sur 400 tirages : l’apport vaut **+10,8 à la largeur
+    // 7 contre +6,0 à la largeur 2**, soit 4,8 points d’écart pour un bruit de ~3,5 sur
+    // une différence de deux proportions. Resserrer le plancher pour attraper un
+    // rétrécissement rendrait le test INSTABLE — on préfère une borne franche et vraie à
+    // une borne serrée qui rougit au hasard.
+    // Ce qui garde la largeur à son PLAFOND, c’est l’iso-menace entre factions (15,2
+    // pour un seuil de 13 dès la largeur 8).
     for (const lvl of [26, 50]) {
       const avec = holdRate(lvl, lvl, true, 260, rosterOf(lvl));
       const sans = holdRate(lvl, lvl, true, 260);

@@ -135,21 +135,26 @@ export const BATTLE = {
    * ⚠️ C'est LA variable d'équilibrage de la phase 2 : elle décide si une poignée de
    * défenseurs tient ou se fait submerger.
    *
-   * ⚠️ **4 → 5, et 5 est le MAXIMUM que les invariants autorisent.** À quatre, les
-   * entrants pesaient 7 à 10 % de la mêlée adverse : le goulot ne bornait qu'un camp,
-   * si bien que « une brèche permet à une poignée de tenir contre une armée » (v0.754)
-   * devenait « une armée tient contre une armée », et le vivier ne valait que +5 points
-   * de tenue. Mesuré sur les quantités des TESTS eux-mêmes (largeur → falaise à
-   * mi-enceinte / écart entre factions / apport du vivier) :
+   * ⚠️ **4 → 7, en DEUX temps et pour deux raisons distinctes.** À quatre, les entrants
+   * pesaient 7 à 10 % de la mêlée adverse : le goulot ne bornait qu'un camp, si bien
+   * que « une brèche permet à une poignée de tenir contre une armée » (v0.754) devenait
+   * « une armée tient contre une armée », et le vivier ne valait que **+9 points** de
+   * tenue. On s'est d'abord arrêté à **5**, seule valeur que la FALAISE tolérait ; puis
+   * cet invariant a été re-cadré sur la configuration que le jeu attend (avec garnison,
+   * cf. `raid.test.ts`), et la borne est devenue l'ISO-MENACE.
    *
-   *   4 → 20,0 · 5,2 · +5   |   **5 → 17,0 · 6,5 · +7**   |   6 → **13,0** · 7,5 · +8
-   *   7 → **12,0** · 10,3 · +10   |   8 → **10,0** · **15,2** · +11
+   * ⚠️ **7 est le MAXIMUM que les invariants autorisent**, et c'est une mesure. Balayage
+   * sur les quantités des TESTS eux-mêmes (falaise à mi-enceinte AVEC vivier · écart
+   * entre factions, seuil 13 · apport du vivier au niveau 26) :
    *
-   * ⚠️ **CE QUI BLOQUE EST LA FALAISE, pas l'iso-menace** — et c'est instructif : ce
-   * plancher (« à moitié montée, on a une vraie chance », > 15) se mesure sur une base
-   * SANS AUCUN AVENTURIER. Or élargir la brèche fait précisément payer l'absence de
-   * garnison. Les deux propriétés sont donc en tension directe, et le dial s'arrête
-   * là. Avec le vivier, la mi-enceinte reste saine même à 12 (38-43 %).
+   *   4 → 49,6 · 5,2 · +9   |   5 → 50,0 · 6,5 · +10   |   6 → 49,2 · 7,5 · +10
+   *   **7 → 46,9 · 10,3 · +13**   |   8 → 46,5 · **15,2** · +14   |   10 → 45,4 · **18,4** · +17
+   *
+   * ⚠️ **La falaise n'est plus le verrou, et le renversement est instructif** : avec la
+   * garnison, la mi-enceinte ne bouge quasiment pas (49,6 → 45,4 de la largeur 4 à 10).
+   * Ce qui décroche, c'est l'iso-menace : une horde de bêtes inonde une brèche large là
+   * où une bande de brigands ne le peut pas, et la faction cesse d'être un simple
+   * changement de FORME.
    *
    * ⚠️ Une variante SYMÉTRIQUE a été écrite, mesurée, puis jetée : borner aussi le
    * nombre de défenseurs au contact (physiquement plus juste — on ne met pas quinze
@@ -157,7 +162,7 @@ export const BATTLE = {
    * vivier en fin de partie** (+9 → +5) et effondre la mi-enceinte (20 → 3). Le vivier
    * doit pouvoir submerger ce qui entre, sinon il ne sert plus à rien.
    */
-  breachMaxWidth: 5,
+  breachMaxWidth: 7,
   /** Les pans de l’enceinte. ⚠️ DOIT valoir `TURRET_SLOTS` — une baliste par sommet ;
    *  un test le verrouille, parce que les deux vivent dans des fichiers différents. */
   sectors: 8,
