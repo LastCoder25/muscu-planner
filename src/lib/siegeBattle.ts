@@ -39,6 +39,17 @@ export type UnitKind = 'melee' | 'ranged';
  *  D'où vient l'unité — sert à l'affichage et au butin, jamais au combat. */
 export type UnitOrigin = 'turret' | 'hero' | 'adventurer' | 'attacker';
 
+/** @public — contrat du moteur.
+ *  OÙ un défenseur se tient. C’était jusqu’ici IMPLICITE dans son `kind` — un tireur
+ *  voyait tout, un homme d’armes n’existait qu’une fois la brèche ouverte — donc « être
+ *  sur le mur » et « en descendre » n’avaient aucune existence.
+ *
+ *  ⚠️ C’EST LE POSTE QUI DONNE L’ABRI, pas le type d’unité. Le rempart couvre TOUT ce
+ *  qui s’y tient — l’archer comme la baliste ; la cour ne couvre personne. Avant, seules
+ *  les balistes portaient une `armor` : l’archer debout à côté d’elles n’avait rien,
+ *  ce qui contredisait le modèle (on est mieux protégé sur le mur qu’en bas). */
+export type SiegePost = 'rampart' | 'yard';
+
 export interface SiegeUnit {
   id: string;
   side: 'att' | 'def';
@@ -68,6 +79,12 @@ export interface SiegeUnit {
    *  Le front est donc une capacité d'ESPACE, pas un décompte : un loup tient moins de
    *  place qu'un mercenaire en armure, il en rentre davantage au pied du rempart. */
   bulk?: number;
+  /** Le poste d’un DÉFENSEUR. Absent sur un assaillant, qui a `inside` pour ça.
+   *
+   *  ⚠️ Optionnel parce qu’il n’a de sens que d’un côté, et le type ne sait pas
+   *  l’exprimer. Ce qu’il ne garantit pas, un test le fait : TOUT défenseur produit par
+   *  `siegeDefenders` en porte un. */
+  post?: SiegePost;
   /** 🛡️ CE QUE LE REMPART ABSORBE POUR CETTE UNITÉ (0..1), tant qu’il tient.
    *
    *  ⚠️ C’EST LE MÉTIER DU MUR, ET IL AVAIT ÉTÉ PERDU. `wallArmorK` existe depuis la

@@ -1524,6 +1524,66 @@ describe('⚔️🧱 LES UNITÉS DU SIÈGE — dérivées du vrai état, jamais 
       expect(def.find((u) => u.id === 'g2')?.kind).toBe('melee');
       expect(def.filter((u) => u.origin === 'adventurer')).toHaveLength(2);
     });
+
+    it('⚠️ TOUT défenseur porte un POSTE — ce que le type ne sait pas exiger', () => {
+      // `post` est optionnel sur `SiegeUnit` : il n’a de sens que côté défense, et un
+      // type ne sait pas l’exprimer sans union discriminée. Ce qu’il ne garantit pas,
+      // ce test le fait — sinon un défenseur sans poste passerait pour non abrité en
+      // silence, et personne ne le verrait avant une mesure d’équilibrage.
+      const g = [
+        { id: 'g1', name: 'Archer', emoji: '🏹', pv: 100, damage: 10, ranged: true },
+        { id: 'g2', name: 'Garde', emoji: '🛡️', pv: 200, damage: 20, ranged: false },
+      ];
+      const def = siegeDefenders(d(28, 28), 28, refFighter(28), g);
+      expect(def.length).toBe(TURRET_SLOTS + 3);
+      expect(def.every((u) => u.post === 'rampart' || u.post === 'yard')).toBe(true);
+    });
+
+    it('⚠️ L’ARCHER EST ABRITÉ EXACTEMENT COMME LA BALISTE — même rempart', () => {
+      // Le défaut d’origine : seules les balistes portaient une `armor`. L’archer
+      // debout à côté d’elles tirait à découvert, ce qui contredit le modèle — on est
+      // mieux protégé sur le mur qu’en bas. L’abri vient du POSTE, donc il est le même
+      // pour tout ce qui s’y tient.
+      const g = [
+        { id: 'g1', name: 'Archer', emoji: '🏹', pv: 100, damage: 10, ranged: true },
+        { id: 'g2', name: 'Garde', emoji: '🛡️', pv: 200, damage: 20, ranged: false },
+      ];
+      const def = siegeDefenders(d(28, 28), 28, null, g);
+      const baliste = def.find((u) => u.origin === 'turret')!;
+      const archer = def.find((u) => u.id === 'g1')!;
+      expect(archer.post).toBe('rampart');
+      expect(archer.armor ?? 0).toBeCloseTo(baliste.armor ?? 0, 6);
+      expect(archer.armor ?? 0).toBeCloseTo(RAID.wallArmorK, 6);
+    });
+
+    it('⚠️ LA COUR NE COUVRE PERSONNE — c’est le prix de tenir la brèche', () => {
+      // L’homme d’armes et le héros se battent DANS la base : le rempart ne les abrite
+      // pas. C’est ce qui donnera son coût à la descente (étape suivante) — quitter le
+      // mur, c’est perdre la couverture.
+      const g = [
+        { id: 'g1', name: 'Archer', emoji: '🏹', pv: 100, damage: 10, ranged: true },
+        { id: 'g2', name: 'Garde', emoji: '🛡️', pv: 200, damage: 20, ranged: false },
+      ];
+      const def = siegeDefenders(d(28, 28), 28, refFighter(28), g);
+      const garde = def.find((u) => u.id === 'g2')!;
+      const heros = def.find((u) => u.origin === 'hero')!;
+      expect(garde.post).toBe('yard');
+      expect(heros.post).toBe('yard');
+      expect(garde.armor ?? 0).toBe(0);
+      expect(heros.armor ?? 0).toBe(0);
+    });
+
+    it('⚠️ SANS MURAILLE, le rempart n’abrite plus personne — archer compris', () => {
+      // Le rempart est la SEULE source de couverture : pas de mur, pas d’abri, quel que
+      // soit le poste. Le test existant ne le vérifiait que sur la baliste.
+      const g = [
+        { id: 'g1', name: 'Archer', emoji: '🏹', pv: 100, damage: 10, ranged: true },
+        { id: 'g2', name: 'Garde', emoji: '🛡️', pv: 200, damage: 20, ranged: false },
+      ];
+      const def = siegeDefenders(d(0, 28), 28, null, g);
+      expect(def.find((u) => u.id === 'g1')?.post).toBe('rampart');
+      expect(def.every((u) => (u.armor ?? 0) === 0)).toBe(true);
+    });
   });
 
   describe('les assaillants', () => {

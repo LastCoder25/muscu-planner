@@ -43,6 +43,7 @@ import { advStats, PROMO_LEVELS, type Adventurer } from './adventurers';
 import {
   simulateSiege,
   type UnitKind,
+  type SiegePost,
   type SiegeUnit,
   type SiegeWall,
   type BattleEvent,
@@ -1776,17 +1777,23 @@ export function siegeDefenders(
   const share = (lvl: number) => Math.min(1, Math.max(0, lvl) / L);
   const out: SiegeUnit[] = [];
 
+  // ⚠️ L’ABRI NE DÉPEND PAS DU NIVEAU DU MUR — un créneau est un créneau. Mis en
+  // facteur de `share`, il rouvrait la FALAISE que la v0.672 avait supprimée : une
+  // enceinte à moitié montée cumulait demi-abri et demi-PV, et tombait à 3 % de tenue
+  // (mesuré). Le NIVEAU du mur se paie en PV — il tient plus longtemps, donc il abrite
+  // plus longtemps. C’est déjà toute la boucle « il fait gagner du temps ».
+  const cover = defenseLevel(defenses, 'wall') > 0 ? RAID.wallArmorK : 0;
+  // ⚠️ UNE SEULE EXPRESSION POUR TOUT LE MONDE. `armor` et `post` disent la même
+  // chose de deux façons : les laisser se poser séparément, c’est la divergence assurée
+  // (un poste sans abri, ou l’inverse) — le défaut que ce projet documente partout.
+  // L’abri se DÉDUIT donc du poste, ici et nulle part ailleurs.
+  const shelter = (post: SiegePost) => (post === 'rampart' ? cover : 0);
+
   const n = turretCount(tl);
   if (n > 0) {
     const dmg =
       (refOff * RAID.turretDmgK * n * share(tl) * defenseEfficiency(defenses, 'turret')) / n;
     const pv = Math.max(1, Math.round(ref.pv * RAID.turretPvK * share(tl)));
-    // ⚠️ L’ABRI NE DÉPEND PAS DU NIVEAU DU MUR — un créneau est un créneau. Mis en
-    // facteur de `share`, il rouvrait la FALAISE que la v0.672 avait supprimée : une
-    // enceinte à moitié montée cumulait demi-abri et demi-PV, et tombait à 3 % de tenue
-    // (mesuré). Le NIVEAU du mur se paie en PV — il tient plus longtemps, donc il abrite
-    // plus longtemps. C’est déjà toute la boucle « il fait gagner du temps ».
-    const cover = defenseLevel(defenses, 'wall') > 0 ? RAID.wallArmorK : 0;
     for (let i = 0; i < n; i++) {
       out.push({
         id: `t${i}`,
@@ -1798,12 +1805,20 @@ export function siegeDefenders(
         maxPv: pv,
         damage: Math.max(1, Math.round(dmg)),
         origin: 'turret',
-        armor: cover,
+        // ⚠️ De la MAÇONNERIE : une baliste ne descend jamais dans la cour. C’est ce qui
+        // laisse `turretInsideShare` — la fraction d’en face — seule façon pour elles de
+        // tirer à l’intérieur.
+        post: 'rampart',
+        armor: shelter('rampart'),
       });
     }
   }
 
   for (const a of guard) {
+    // Un tireur monte sur le rempart — c’est de là qu’il sert. Un homme d’armes attend
+    // dans la cour : sur un chemin de ronde il ne ferait rien, et la brèche est son
+    // moment. L’abri suit le poste, donc le tireur est couvert et pas lui.
+    const post: SiegePost = a.ranged ? 'rampart' : 'yard';
     out.push({
       id: a.id,
       side: 'def',
@@ -1814,6 +1829,8 @@ export function siegeDefenders(
       maxPv: Math.max(1, Math.round(a.pv)),
       damage: Math.max(1, Math.round(a.damage)),
       origin: 'adventurer',
+      post,
+      armor: shelter(post),
     });
   }
 
@@ -1829,6 +1846,9 @@ export function siegeDefenders(
       maxPv: pv,
       damage: Math.max(1, Math.round(hero.damage * (hero.strikes ?? 1) * RAID.heroDmgShare)),
       origin: 'hero',
+      // Il tient la brèche : il est donc DANS la cour, et le rempart ne le couvre pas.
+      post: 'yard',
+      armor: shelter('yard'),
     });
   }
   return out;
