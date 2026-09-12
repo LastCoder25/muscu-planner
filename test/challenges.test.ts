@@ -294,6 +294,93 @@ describe('challengeXpPoints', () => {
     expect(challengeXpPoints([c])).toBe(7);
   });
 
+  it('⚠️ MARQUÉ TERMINÉ N’EST PAS FAIT : la prime suit la part accomplie', () => {
+    // ⚠️ `status === 'done'` suffisait à verser la prime calculée sur l’effort PLANIFIÉ,
+    // quelle que soit la part réellement faite. Mesuré sur le compte réel, des défis à
+    // effort quasi nul sortaient à un rapport prime/effort de 15 à 27, quand la bande
+    // normale va de 1,2 à 2,16. La règle visait juste — le moteur adaptatif peut abaisser
+    // les jours restants APRÈS coup, et on ne punit pas ça — mais elle payait un travail
+    // qui n’avait pas eu lieu.
+    const tiers = challenge({
+      status: 'done',
+      progress: [
+        { day: 0, date: '2026-01-05', target: 10, done: 10, elapsed_sec: 0, completed: true },
+      ],
+    });
+    const tout = challenge({
+      status: 'done',
+      progress: [0, 1, 2].map((d) => ({
+        day: d,
+        date: `2026-01-0${5 + d}`,
+        target: 10,
+        done: 10,
+        elapsed_sec: 0,
+        completed: true,
+      })),
+    });
+    const primeT = challengeXpBreakdown(tiers).bonus;
+    const primeC = challengeXpBreakdown(tout).bonus;
+    expect(primeT).toBeGreaterThan(0); // on ne remet pas à zéro : le travail fait compte
+    // Un tiers du travail, un tiers de la prime (à l'arrondi près).
+    expect(primeT / primeC).toBeCloseTo(1 / 3, 1);
+  });
+
+  it('⚠️ … et un défi RÉELLEMENT complété ne perd rien', () => {
+    // Non-régression : `isChallengeComplete` teste exactement `done × unité >= total`,
+    // donc la part accomplie y vaut 1 par construction. Le correctif ne doit mordre QUE
+    // sur l’écart entre « marqué terminé » et « fait » — sinon il nerferait tout le monde.
+    const c1 = challenge({
+      progress: [0, 1, 2].map((d) => ({
+        day: d,
+        date: `2026-01-0${5 + d}`,
+        target: 10,
+        done: 10,
+        elapsed_sec: 0,
+        completed: true,
+      })),
+    });
+    expect(isChallengeComplete(c1)).toBe(true);
+    // La valeur d’avant le correctif de PRIME, au point d’arrondi près (cf. le test
+    // « total ATTEINT » ci-dessus, qui documente le passage de 28 à 29).
+    expect(challengeXpPoints([c1])).toBe(29);
+  });
+
+  it('⚠️ DÉPASSER L’OBJECTIF NE GONFLE PAS LA PRIME', () => {
+    // La contrepartie du correctif : la part faite est plafonnée à 1. Sans ce plafond,
+    // se fixer un tout petit objectif puis le pulvériser paierait une prime
+    // proportionnelle au dépassement — une variante du trou qu’on vient de fermer. Le
+    // travail en plus est DÉJÀ payé, par les reps (`effortXpRaw`) ; la prime, elle, ne
+    // récompense que le fait d’avoir bouclé.
+    const pile = challenge({
+      progress: [
+        { day: 0, date: '2026-01-05', target: 30, done: 30, elapsed_sec: 0, completed: true },
+      ],
+    });
+    const triple = challenge({
+      progress: [
+        { day: 0, date: '2026-01-05', target: 30, done: 90, elapsed_sec: 0, completed: true },
+      ],
+    });
+    expect(challengeXpBreakdown(triple).bonus).toBe(challengeXpBreakdown(pile).bonus);
+    // …mais le travail en plus paie bien, par les reps.
+    expect(challengeXpBreakdown(triple).reps).toBeGreaterThan(challengeXpBreakdown(pile).reps);
+  });
+  it('⚠️ le CUMUL et la DÉCOMPOSITION disent le même chiffre', () => {
+    // Les deux lectures portaient la formule de prime en DEUX exemplaires recopiés. Deux
+    // copies d’une formule d’XP finissent par diverger, et c’est l’écran qui ment en dernier.
+    for (const st of ['active', 'done'] as const) {
+      for (const fait of [3, 10, 22, 30]) {
+        const ch = challenge({
+          status: st,
+          progress: [
+            { day: 0, date: '2026-01-05', target: 10, done: fait, elapsed_sec: 0, completed: true },
+          ],
+        });
+        expect(challengeXpBreakdown(ch).total).toBe(challengeXpPoints([ch]));
+      }
+    }
+  });
+
   it('total ATTEINT : reps×0,2 + prime de complétion', () => {
     const c = challenge({
       progress: [
@@ -302,8 +389,12 @@ describe('challengeXpPoints', () => {
         { day: 2, date: '2026-01-07', target: 10, done: 10, elapsed_sec: 0, completed: true },
       ],
     });
-    // reps 30×0,2=6 ; prime round(0,25×30×1,1=8,25)=8 ; (6+8)×XP_MULT(2)=28
-    expect(challengeXpPoints([c])).toBe(28);
+    // reps 30×0,2=6 → 12 ; prime 0,25×30×1,1=8,25 → round(16,5)=17 ; total 29.
+    // ⚠️ 28 → 29, et c’est un ARRONDI corrigé, pas un buff : la prime était arrondie en
+    // points BRUTS (`round(8,25)=8`) AVANT d’être multipliée par XP_MULT, ce qui perdait un
+    // quart de point à chaque défi et faisait diverger le total de la somme des parts
+    // affichées. On arrondit désormais une seule fois, après l’échelle.
+    expect(challengeXpPoints([c])).toBe(29);
   });
 
   // Mode Séries : done = nb de séries ; les reps/poids viennent de `sets`.

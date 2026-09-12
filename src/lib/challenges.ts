@@ -908,6 +908,45 @@ function refOutingXp(activity: CardioActivity, km: number, min: number): number 
   return xp / XP_MULT / REP_XP;
 }
 
+/**
+ * LA PART RÉELLEMENT FAITE, plafonnée à 1.
+ *
+ * ⚠️ Un défi marqué `'done'` touchait la prime calculée sur l’effort PLANIFIÉ, quelle que
+ * soit la part accomplie — mesuré sur le compte réel, des défis à effort quasi nul
+ * sortaient à un rapport prime/effort de **15 à 27** quand la bande normale va de 1,2 à
+ * 2,16. La règle « un défi `'done'` ajusté sous le total garde sa prime » visait juste (le
+ * moteur adaptatif peut abaisser les jours restants APRÈS coup, et on ne doit pas punir
+ * ça), mais elle ouvrait la porte à une prime pleine pour un travail qui n’a pas eu lieu.
+ *
+ * ⚠️ UN DÉFI RÉELLEMENT COMPLÉTÉ NE PERD RIEN : `isChallengeComplete` teste exactement
+ * `done × effortUnit >= total`, donc ce quotient y vaut 1 par construction. Le correctif
+ * ne mord QUE sur l’écart entre « marqué terminé » et « fait ».
+ */
+function doneShare(ch: Challenge): number {
+  const total = plannedEffort(ch);
+  if (total <= 0) return 0;
+  const done = ch.progress.reduce((a, x) => a + (x.done || 0), 0) * effortUnit(ch);
+  return Math.min(1, Math.max(0, done / total));
+}
+
+/** La prime de complétion d’UN défi, en points bruts (avant `XP_MULT`).
+ *  ⚠️ UNE SEULE implémentation : elle vivait en DEUX exemplaires — le cumul global et la
+ *  décomposition affichée — recopiés à l’identique. Deux copies d’une formule d’XP finissent
+ *  par diverger, et c’est l’écran qui ment en dernier. */
+function completionBonusOf(ch: Challenge): number {
+  const total = plannedEffort(ch);
+  if (total <= 0 || !(isChallengeComplete(ch) || ch.status === 'done')) return 0;
+  // Prime adaptée au format. Le poids de rep pondère la magnitude (pas la complétion).
+  // - CUMULÉ (reps globales) = objectif de VOLUME → prime ∝ reps × (1 + avance).
+  // - X/jour = objectif de RÉGULARITÉ → × multiplicateur des jours réellement tenus.
+  const mult =
+    ch.format === 'cumulative' ? 1 + earlyFinishFraction(ch) : durationMultiplier(activeDaysOf(ch));
+  // Base : en mode SÉRIES l'effort réel est en REPS (pas en nb de séries).
+  const base = ch.config.count_mode === 'sets' ? challengeTotalReps(ch) : total;
+  const weight = (ch.unit === 'reps' ? (ch.rep_weight ?? 1) : 1) * assistMult(ch.config.assisted);
+  return completionShare(ch) * base * weight * mult * doneShare(ch);
+}
+
 function plannedEffort(ch: Challenge): number {
   const raw =
     ch.format === 'cumulative'
@@ -1085,45 +1124,20 @@ export function challengeDayXp(ch: Challenge, p: DayProgress): number {
  *    de repos/rattrapage OK) = 25 % de l'effort planifié × multiplicateur de durée.
  *  Pas de bonus « par jour » (parité avec le sport libre). */
 export function challengeXpPoints(challenges: Challenge[]): number {
-  // Poids de rep (isolation vs composé × charge) — reps uniquement — × facteur
-  // d'assistance (une rep assistée vaut moins).
-  const weightOf = (c: Challenge) =>
-    (c.unit === 'reps' ? (c.rep_weight ?? 1) : 1) * assistMult(c.config.assisted);
   // XP d'effort : reps (Σ reps + tonnage) OU gainage (temps) — cf. effortXpRaw.
-  const repsXp = challenges.reduce((a, c) => a + effortXpRaw(c), 0);
-  const completionBonus = challenges.reduce((a, c) => {
-    const total = plannedEffort(c);
-    // Prime versée si le défi est réellement complété OU marqué terminé (aligné sur
-    // le statut : un défi 'done' ajusté sous le total garde sa prime).
-    if (total <= 0 || !(isChallengeComplete(c) || c.status === 'done')) return a;
-    // Prime adaptée au format. Le poids de rep pondère la magnitude (pas la complétion).
-    // - CUMULÉ (reps globales) = objectif de VOLUME → prime ∝ reps × (1 + avance),
-    //   où avance = jours gagnés / durée (finir tôt récompense, mais tout est
-    //   multiplié par les reps → un petit total reste petit, pas d'abus).
-    // - X/jour = objectif de RÉGULARITÉ → × multiplicateur des jours réellement tenus.
-    const mult =
-      c.format === 'cumulative' ? 1 + earlyFinishFraction(c) : durationMultiplier(activeDaysOf(c));
-    // Base de la prime : en mode SÉRIES l'effort réel est en REPS (pas en nb de
-    // séries) → on prime sur les reps réalisées ; sinon sur l'effort planifié.
-    const base = c.config.count_mode === 'sets' ? challengeTotalReps(c) : total;
-    return a + Math.round(completionShare(c) * base * weightOf(c) * mult);
-  }, 0);
-  return Math.round((repsXp + completionBonus) * XP_MULT);
+  // ⚠️ LE TOTAL EST LA SOMME DE CE QUE CHAQUE DÉFI VAUT À L’ÉCRAN. On arrondissait la
+  // prime en points BRUTS avant de la multiplier par XP_MULT, quand la décomposition
+  // affichée arrondissait après : les deux lectures pouvaient différer d’un point sur le
+  // MÊME défi, donc la somme des parts ne faisait pas le tout. Un seul arrondi, un seul
+  // endroit — et une seule implémentation de la prime (cf. `completionBonusOf`).
+  return challenges.reduce((a, c) => a + challengeXpBreakdown(c).total, 0);
 }
 
 /** Décompose l'XP d'UN défi : part des reps vs prime de complétion (pour l'affichage
  *  sur les défis terminés). Mêmes formules que challengeXpPoints, mais par défi. */
 export function challengeXpBreakdown(c: Challenge): { reps: number; bonus: number; total: number } {
-  const weightOf = (c.unit === 'reps' ? (c.rep_weight ?? 1) : 1) * assistMult(c.config.assisted);
   const repsXp = effortXpRaw(c);
-  let bonusXp = 0;
-  const total = plannedEffort(c);
-  if (total > 0 && (isChallengeComplete(c) || c.status === 'done')) {
-    const mult =
-      c.format === 'cumulative' ? 1 + earlyFinishFraction(c) : durationMultiplier(activeDaysOf(c));
-    const base = c.config.count_mode === 'sets' ? challengeTotalReps(c) : total;
-    bonusXp = completionShare(c) * base * weightOf * mult;
-  }
+  const bonusXp = completionBonusOf(c);
   const reps = Math.round(repsXp * XP_MULT);
   const bonus = Math.round(bonusXp * XP_MULT);
   return { reps, bonus, total: reps + bonus };
