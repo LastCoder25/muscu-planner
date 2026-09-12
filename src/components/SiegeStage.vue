@@ -15,14 +15,43 @@
     <!-- Voile rouge quand le rempart encaisse -->
     <div class="hurt" :style="{ opacity: hurt }" />
 
-    <svg viewBox="0 0 200 200" class="board" role="img" aria-label="Assaut de la base">
+    <!-- ⚠️ LA CAMÉRA RECULE (viewBox dérivé de `SIEGE_STAGE.field`, jamais écrit en dur).
+         Elle cadrait au plus juste sur l’enceinte : il ne restait pas 30 unités de terrain
+         autour, donc l’armée n’avait pas la place d’arriver de loin et paraissait déjà au
+         pied du mur. L’enceinte, elle, garde EXACTEMENT sa taille et ses coordonnées —
+         c’est ce qui fait qu’on reconnaît sa base. -->
+    <svg :viewBox="viewBox" class="board" role="img" aria-label="Assaut de la base">
       <defs>
-        <radialGradient id="siege-ground" cx="50%" cy="50%">
-          <stop offset="0%" stop-color="#2b241a" />
-          <stop offset="100%" stop-color="#141009" />
+        <!-- Les teintes de l’écran « Ma base » : c’est le même lieu, vu de plus loin. -->
+        <radialGradient id="siege-meadow" cx="50%" cy="50%" r="62%">
+          <stop offset="0%" stop-color="#4a5a2a" />
+          <stop offset="55%" stop-color="#3a4a22" />
+          <stop offset="100%" stop-color="#232e18" />
+        </radialGradient>
+        <!-- Terre battue au pied des murs : là où l’on marche, l’herbe ne tient pas. -->
+        <radialGradient id="siege-earth" cx="50%" cy="50%" r="50%">
+          <stop offset="60%" stop-color="#3a3120" />
+          <stop offset="100%" stop-color="#3a3120" stop-opacity="0" />
         </radialGradient>
       </defs>
-      <rect x="0" y="0" width="200" height="200" fill="url(#siege-ground)" />
+      <!-- ── LE TERRAIN ──────────────────────────────────────────────────────
+           `v-once` : rien ici n’est réactif et le template entier se re-rend à chaque
+           temps de l’animation — sans lui, ~120 nœuds décoratifs seraient re-diffés
+           toutes les 60 ms pour rien. Aucun filtre non plus (le plateau anime des
+           contours ; un feTurbulence se repeindrait à chaque image). -->
+      <g v-once class="terrain" aria-hidden="true">
+        <rect
+          :x="100 - FIELD"
+          :y="100 - FIELD"
+          :width="FIELD * 2"
+          :height="FIELD * 2"
+          fill="url(#siege-meadow)"
+        />
+        <ellipse v-for="(p, i) in decor.patches" :key="'p' + i" v-bind="p" class="s-patch" />
+        <circle cx="100" cy="100" :r="EARTH_R" fill="url(#siege-earth)" />
+        <path v-for="(t, i) in decor.tufts" :key="'g' + i" :d="t" class="s-tuft" />
+        <path v-for="(t, i) in decor.trees" :key="'tr' + i" :d="t" class="s-tree" />
+      </g>
 
       <!-- ── L'ENCEINTE (même géométrie que l'écran « Ma base ») ── -->
       <polygon :points="wallPoints" class="s-wall" :class="{ breached }" />
@@ -51,6 +80,8 @@
         class="s-crack"
         :style="{ opacity: crackOpacity(k.at), strokeWidth: crackWidth(k.at) }"
       />
+      <!-- La cour, aux teintes exactes de l’écran « Ma base » : vue de si loin, un aplat
+           trop sombre se lisait comme un trou dans l’enceinte plutôt que comme une ville. -->
       <polygon :points="innerPoints" class="s-yard" />
 
       <!-- LES BALISTES. ⚠️ MÊME SILHOUETTE QUE L’ÉCRAN « MA BASE » (plateforme, arc, corde,
@@ -61,9 +92,13 @@
            le code de la Base (« en clair, pas dans le brun de la pierre ») — elle n’avait
            simplement jamais traversé jusqu’ici. -->
       <g v-for="(p, i) in octagon" :key="'t' + i">
+        <!-- ⚠️ `scale(TURRET_S)` : à 1,7× de recul les balistes redevenaient les traits
+             pâles qu'un joueur avait déjà signalés (« on voit des murs qui tirent »). Elles
+             gardent leur silhouette et leurs teintes — seule leur taille compense la
+             caméra. Le `scale` enveloppe le dessin, il ne le réécrit pas. -->
         <g
           v-if="hasTurrets"
-          :transform="`translate(${p.x} ${p.y}) rotate(${p.rot})`"
+          :transform="`translate(${p.x} ${p.y}) rotate(${p.rot}) scale(${TURRET_S})`"
           :class="{ fire: firingTurret === i }"
         >
           <path d="M -7 7 L 7 7 L 5.5 0 L -5.5 0 Z" class="s-tur-base" />
@@ -72,7 +107,7 @@
           <path d="M 0 3.5 L 0 -7" class="s-tur-bolt" />
           <path d="M 0 -9 L -2 -6.2 L 2 -6.2 Z" class="s-tur-head" />
         </g>
-        <circle v-else :cx="p.x" :cy="p.y" r="7.5" class="s-tur-empty" />
+        <circle v-else :cx="p.x" :cy="p.y" :r="7.5 * TURRET_S" class="s-tur-empty" />
       </g>
 
       <!-- ── LA COUR : CEUX QUI TIENNENT LA BRÈCHE ── -->
@@ -85,15 +120,15 @@
         <circle
           cx="100"
           cy="100"
-          :r="26 + pulse * 5"
+          :r="34 + pulse * 6"
           class="s-gar-ring"
           :style="{ opacity: 0.25 - pulse * 0.18 }"
         />
         <text
           v-for="(f, i) in defenders"
           :key="'d' + i"
-          :x="100 + (i - (defenders.length - 1) / 2) * 18"
-          y="104"
+          :x="100 + (i - (defenders.length - 1) / 2) * 24"
+          y="106"
           class="s-fam"
         >
           {{ f }}
@@ -103,8 +138,8 @@
 
       <!-- Le héros sur le rempart, s'il est resté -->
       <g v-if="report.heroHome">
-        <circle :cx="100" :cy="heroY" r="7" class="s-hero-bg" />
-        <text :x="100" :y="heroY + 3.4" class="s-hero">🦸</text>
+        <circle :cx="100" :cy="heroY" r="8.5" class="s-hero-bg" />
+        <text :x="100" :y="heroY + 3.8" class="s-hero">🦸</text>
       </g>
 
       <!-- ── LES ASSAILLANTS ── -->
@@ -115,8 +150,8 @@
         :class="{ dead: deadAt(i), champ: b.champion, hit: hitBody === i }"
         :transform="`translate(${bodyPos(b, i).x} ${bodyPos(b, i).y})`"
       >
-        <circle r="6.5" class="s-foe-bg" />
-        <text y="3" class="s-foe-emo">{{ deadAt(i) ? '💀' : b.emoji }}</text>
+        <circle r="8" class="s-foe-bg" />
+        <text y="3.7" class="s-foe-emo">{{ deadAt(i) ? '💀' : b.emoji }}</text>
       </g>
 
       <!-- Trait de tir : de la tourelle vers sa cible -->
@@ -173,7 +208,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { assaultRadius, buildSiegeStage, type SiegeBody } from '@/lib/siegeStage';
+import {
+  assaultRadius,
+  battlefieldDecor,
+  beatMs,
+  buildSiegeStage,
+  SIEGE_STAGE,
+  type SiegeBody,
+} from '@/lib/siegeStage';
 import { mulberry32 } from '@/lib/combat';
 import {
   FACTION_EMOJI,
@@ -199,6 +241,16 @@ const hasTurrets = computed(() => props.turretLevel > 0);
 // ⚠️ Ces deux valeurs doivent rester d'accord : si l'enceinte change de taille là-bas,
 // elle change ici, sans quoi on ne reconnaît plus sa propre base au moment du verdict.
 const WALL_R = 72;
+/** La couronne de terre battue au pied des murs — même rayon que l’écran « Ma base ». */
+const EARTH_R = WALL_R + 15;
+const FIELD = SIEGE_STAGE.field;
+/** Échelle des balistes : elles compensent le recul de la caméra pour rester lisibles. */
+const TURRET_S = 1.35;
+/** ⚠️ DÉRIVÉ, jamais écrit en dur : reculer la caméra ne doit demander qu’un seul
+ *  réglage, sinon le cadre et l’anneau d’arrivée finissent par se contredire. */
+const viewBox = `${100 - FIELD} ${100 - FIELD} ${FIELD * 2} ${FIELD * 2}`;
+/** Le sol, semé une fois : ce sont les abords de la base, pas un champ tiré au sort. */
+const decor = battlefieldDecor(EARTH_R);
 const octagon = computed(() =>
   Array.from({ length: TURRET_SLOTS }, (_, i) => {
     const a = (i / TURRET_SLOTS) * Math.PI * 2 - Math.PI / 2 + Math.PI / TURRET_SLOTS;
@@ -338,12 +390,7 @@ function bodyPos(b: SiegeBody, i: number): { x: number; y: number } {
   return { x: 100 + Math.cos(b.angle) * d, y: 100 + Math.sin(b.angle) * d };
 }
 
-/** Cadence : plus l'assaut est long, plus on serre — un siège de 200 temps ne doit pas
- *  durer trois minutes. Mêmes paliers que le plateau de l'arène. */
-const stepMs = computed(() => {
-  const n = stage.value.beats.length;
-  return n > 200 ? 62 : n > 90 ? 85 : n > 40 ? 120 : 180;
-});
+/** Le rythme vit dans la lib — cadence de fond ET plancher de marche d’approche. */
 
 function reduced(): boolean {
   return (
@@ -385,16 +432,19 @@ function play() {
 
   // Un temps qui compte se regarde : on ralentit sur les morts.
   const slow = b.kills.length ? 380 : 0;
-  timer = setTimeout(() => {
-    bolt.value = null;
-    float.value = null;
-    firingTurret.value = -1;
-    hitBody.value = -1;
-    hurt.value = 0;
-    shakeLevel.value = 0;
-    ghostPct.value = pvPct.value;
-    play();
-  }, stepMs.value + slow);
+  timer = setTimeout(
+    () => {
+      bolt.value = null;
+      float.value = null;
+      firingTurret.value = -1;
+      hitBody.value = -1;
+      hurt.value = 0;
+      shakeLevel.value = 0;
+      ghostPct.value = pvPct.value;
+      play();
+    },
+    beatMs(b.round, stage.value.beats.length) + slow,
+  );
 }
 
 function finish() {
@@ -461,6 +511,24 @@ onUnmounted(() => {
   }
 }
 
+/* Terrain — mêmes teintes que l’écran « Ma base » : c’est le même lieu. */
+.s-patch {
+  fill: #33421e;
+  opacity: 0.75;
+}
+.s-tuft {
+  fill: none;
+  stroke: #6d8a3c;
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+.s-tree {
+  fill: #294220;
+  stroke: #1a2b14;
+  stroke-width: 0.5;
+  stroke-linejoin: round;
+}
+
 /* Enceinte */
 /* La pierre qui cède : plus sombre que le rempart, jamais noire — une fissure est une
    ombre, pas un trou. Elle ne capte pas le clic (le mur n'est pas cliquable ici). */
@@ -490,8 +558,8 @@ onUnmounted(() => {
   fill: #ff6a45;
 }
 .s-yard {
-  fill: #332b1e;
-  stroke: #453b2c;
+  fill: #221c14;
+  stroke: #3a3125;
   stroke-width: 1.5;
 }
 /* ⚠️ EN CLAIR, PAS DANS LE BRUN DE LA PIERRE. Les mêmes teintes que l’écran Ma base :
@@ -544,11 +612,11 @@ onUnmounted(() => {
   stroke-width: 2;
 }
 .s-fam {
-  font-size: 14px;
+  font-size: 18px;
   text-anchor: middle;
 }
 .s-empty {
-  font-size: 7px;
+  font-size: 9px;
   fill: var(--dim, #9a8f7e);
   text-anchor: middle;
 }
@@ -558,7 +626,7 @@ onUnmounted(() => {
   stroke-width: 1.5;
 }
 .s-hero {
-  font-size: 8px;
+  font-size: 10px;
   text-anchor: middle;
 }
 
@@ -569,7 +637,7 @@ onUnmounted(() => {
 .s-foe-bg {
   fill: #241f18;
   stroke: #5a4133;
-  stroke-width: 1.2;
+  stroke-width: 1.5;
 }
 .s-foe.champ .s-foe-bg {
   stroke: #ffb23f;
@@ -578,8 +646,11 @@ onUnmounted(() => {
 .s-foe.hit .s-foe-bg {
   stroke: #ff6a45;
 }
+/* ⚠️ 8 → 10 : à 1,7× de recul, un emoji de 8 unités tombait sous 10 px sur un téléphone.
+   Les assaillants sont LE sujet de la mise en scène — ils gardent leur lisibilité pendant
+   que l’enceinte, elle, rapetisse. */
 .s-foe-emo {
-  font-size: 8px;
+  font-size: 10px;
   text-anchor: middle;
 }
 .s-foe.dead {
@@ -591,12 +662,12 @@ onUnmounted(() => {
 }
 .s-bolt {
   stroke: var(--accent, #ffd23f);
-  stroke-width: 1.6;
+  stroke-width: 2;
   stroke-linecap: round;
   opacity: 0.9;
 }
 .s-float {
-  font-size: 9px;
+  font-size: 11px;
   text-anchor: middle;
   fill: #f3eee6;
   font-weight: 700;

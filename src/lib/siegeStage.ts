@@ -16,6 +16,8 @@
 // `dealt` (dégâts infligés au groupe) est monotone, chaque corps a sa borne, donc un corps
 // tombe exactement quand le log dit qu'il tombe et ne se relève jamais.
 import { BATTLE } from './siegeBattle';
+import { mulberry32 } from './combat';
+import { treePath } from './expedition';
 import type { RaidGroup, RaidReport } from './raid';
 
 /** Un assaillant à l'écran. Sa position est posée une fois, en anneau autour de la base. */
@@ -75,11 +77,32 @@ export interface SiegeStage {
 }
 
 export const SIEGE_STAGE = {
-  /** Anneau d'arrivée des assaillants (unités du dessin, centre = 100,100). Calé sur
-   *  l'enceinte (rayon 72, apothème 66,5) : ils surgissent hors champ de tir et marchent
-   *  vers le mur. Si le rayon de l'enceinte bouge, cet anneau le suit. */
-  spawnMin: 84,
-  spawnMax: 96,
+  /**
+   * DEMI-CÔTÉ DE LA CAMÉRA (centre = 100,100) : le plateau montre le carré
+   * [100 ± field].
+   *
+   * ⚠️ Il cadrait jusqu’ici au plus juste sur l’enceinte (100), si bien que le rempart
+   * occupait 72 % de la largeur et qu’il ne restait pas 30 unités de terrain autour :
+   * l’armée n’avait littéralement pas la place d’arriver de loin. On recule donc la
+   * caméra — l’enceinte tombe à 42 % de la largeur, entre la vue « Ma base » (72 %) et
+   * la carte des mondes (~14 %).
+   *
+   * ⚠️ L’ENCEINTE NE CHANGE PAS DE TAILLE (rayon 72, mêmes sommets, mêmes créneaux) :
+   * seule la caméra recule. C’est ce qui fait qu’on reconnaît sa propre base au moment
+   * du verdict — la règle posée quand ce plateau a été écrit.
+   */
+  field: 170,
+  /** Anneau d'arrivée des assaillants (unités du dessin, centre = 100,100).
+   *
+   *  ⚠️ IL VALAIT 84-96, soit 4 à 16 unités au-dessus du pied du mur : la « traversée »
+   *  livrée juste avant couvrait 2 à 8 % du plateau, donc elle ne se VOYAIT pas — les
+   *  assaillants avaient l’air d’être déjà arrivés. Ils surgissent désormais au bord du
+   *  champ et marchent 44 à 78 unités sous le feu.
+   *
+   *  ⚠️ Bornés par `field` : un corps né hors cadre n’entrerait en scène qu’à
+   *  mi-chemin, ce qui supprimerait précisément ce qu’on veut montrer. */
+  spawnMin: 124,
+  spawnMax: 158,
   /** Ouverture de l'arc d'assaut : une armée arrive d'un CÔTÉ, pas de partout — sinon
    *  elle a l'air de pleuvoir plutôt que de marcher sur la ville. */
   arc: Math.PI * 1.35,
@@ -95,6 +118,31 @@ export const SIEGE_STAGE = {
   /** Rayon auquel un assaillant est ARRIVÉ au pied du mur. Juste au-delà des tourelles
    *  (enceinte 72 + tour 7,5) pour qu’on le voie cogner sans le superposer à la pierre. */
   wallStop: 80,
+  /**
+   * Cadence PLANCHER d’un temps d’approche (ms).
+   *
+   * ⚠️ Mesuré : un tour de traversée ne porte que 6 temps (les balistes seules ont la
+   * portée du terrain entier), puis 18 quand les archers entrent — soit ~60 temps pour
+   * toute l’approche. À la cadence d’un long siège (62 ms) elle passait en 3,6 s : un
+   * sursaut, pas une marche. Le pas d’approche est donc PLANCHONNÉ, jamais raccourci —
+   * un rejeu déjà lent (180 ms) garde son rythme.
+   *
+   * ⚠️ Purement RENDU : le nombre de temps, leur ordre et l’issue ne bougent pas d’un
+   * bit — ce module ne décide rien du combat.
+   */
+  approachMs: 150,
+  /**
+   * PART DE LA PROFONDEUR DE FORMATION CONSERVÉE À L’ARRIVÉE.
+   *
+   * ⚠️ Sans elle, les trois rangs convergent tous vers `wallStop` EXACTEMENT : la
+   * formation s’écrase sur un cercle d’un corps d’épaisseur, où les corps se recouvrent
+   * au lieu de s’étaler. C’est précisément la profondeur pour laquelle les rangs
+   * existent (une armée nombreuse aborde un rempart en épaisseur, pas en file).
+   *
+   * ⚠️ Une PART, pas la totalité : une armée qui garderait tout son étalement n’aurait
+   * pas l’air d’être arrivée au contact.
+   */
+  rankKeep: 0.32,
 } as const;
 
 /**
@@ -111,11 +159,104 @@ export function approachAt(round: number): number {
   return Math.max(0, Math.min(1, (d - Math.max(0, round)) / d));
 }
 
+/** Où s’ARRÊTE un corps parti de `spawn` : au pied du mur pour le premier rang, un peu
+ *  en retrait pour ceux de derrière — l’armée garde son épaisseur au contact. */
+export function arrivalRadius(spawn: number): number {
+  const retard = Math.max(0, spawn - SIEGE_STAGE.spawnMin);
+  return SIEGE_STAGE.wallStop + retard * SIEGE_STAGE.rankKeep;
+}
+
 /** Le RAYON auquel dessiner un corps parti de `spawn`, au tour donné. Il marche vers
  *  le rempart et s’y arrête — il ne le traverse pas. */
 export function assaultRadius(spawn: number, round: number): number {
-  const stop = SIEGE_STAGE.wallStop;
+  const stop = arrivalRadius(spawn);
   return stop + Math.max(0, spawn - stop) * approachAt(round);
+}
+
+/** Le sol du champ de bataille : des taches de prairie, des touffes et des conifères. */
+export interface BattlefieldDecor {
+  patches: { cx: number; cy: number; rx: number; ry: number }[];
+  tufts: string[];
+  trees: string[];
+}
+
+/**
+ * LE TERRAIN AUTOUR DE LA VILLE, semé une fois pour toutes.
+ *
+ * ⚠️ Reculer la caméra sans rien mettre autour, c’est agrandir le vide : le rempart
+ * flotterait au milieu d’un dégradé, exactement le défaut que l’écran « Ma base » a
+ * corrigé en se posant sur une prairie. La vue de siège est CE MÊME LIEU vu de plus
+ * loin — elle en reprend donc les teintes, `treePath` (le conifère déjà partagé avec
+ * la carte) et `mulberry32` (le PRNG du projet, pas une n-ième copie).
+ *
+ * ⚠️ GRAINES FIXES, jamais dérivées du rapport : ce sont les abords de TA base, pas un
+ * champ tiré au sort. Deux sièges de suite doivent se dérouler au même endroit.
+ *
+ * ⚠️ Rien sous l’enceinte ni sur la terre battue qui la ceinture (`keepOut`) : là où
+ * l’on marche, l’herbe ne tient pas — et une touffe posée sur le rempart trahirait la
+ * profondeur au lieu de la donner.
+ *
+ * ⚠️ Purement DÉCORATIF, comme les lézardes : ce module ne décide rien du combat.
+ */
+export function battlefieldDecor(keepOut: number): BattlefieldDecor {
+  const f = SIEGE_STAGE.field;
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  /** Tirage-rejet dans le cadre, hors de la couronne battue. Une seule boucle pour les
+   *  trois semis — celle de l’écran « Ma base », à la marge de rejet près. */
+  const scatter = <T>(
+    seed: number,
+    want: number,
+    make: (x: number, y: number, rng: () => number) => T,
+  ): T[] => {
+    const rng = mulberry32(seed);
+    const out: T[] = [];
+    for (let i = 0; i < want * 8 && out.length < want; i++) {
+      const x = 100 - f + rng() * 2 * f;
+      const y = 100 - f + rng() * 2 * f;
+      if (Math.hypot(x - 100, y - 100) <= keepOut) continue;
+      out.push(make(x, y, rng));
+    }
+    return out;
+  };
+  return {
+    patches: scatter(1717, 14, (cx, cy, rng) => ({
+      cx: r1(cx),
+      cy: r1(cy),
+      rx: r1(10 + rng() * 16),
+      ry: r1(5 + rng() * 8),
+    })),
+    tufts: scatter(4242, 90, (x, y, rng) => {
+      const h = r1(3.4 + rng() * 2.8);
+      const X = r1(x);
+      const Y = r1(y);
+      return `M${X} ${Y} l-1.8 -${r1(h * 0.8)} M${X} ${Y} l0 -${h} M${X} ${Y} l1.8 -${r1(h * 0.8)}`;
+    }),
+    // ⚠️ Les arbres sont dessinés AVANT les corps : un assaillant passe devant, jamais
+    // derrière. C’est ce qui autorise à en semer partout plutôt qu’en lisière.
+    trees: scatter(9091, 18, (x, y, rng) => treePath(r1(x), r1(y), r1(2 + rng() * 1.2))),
+  };
+}
+
+/**
+ * COMBIEN DE TEMPS DURE UN TEMPS DE L’ANIMATION.
+ *
+ * Deux régimes. **La cadence de fond** se resserre quand l’assaut est long — un siège
+ * de 200 temps ne doit pas durer trois minutes (mêmes paliers que le plateau de
+ * l’arène). **La marche d’approche**, elle, a un PLANCHER : mesuré, un tour de
+ * traversée ne porte que 6 temps (les balistes seules atteignent le fond du terrain),
+ * donc à 62 ms toute l’approche passait en 3,6 s — un sursaut, pas une marche.
+ *
+ * ⚠️ PLANCHER, jamais raccourcissement : un rejeu court tourne déjà à 180 ms et garde
+ * son rythme. Sinon on ralentirait ce qui est déjà lent.
+ *
+ * ⚠️ Le rythme vit ICI et pas dans le composant, pour la même raison que la traversée
+ * elle-même : un plancher qu’aucune porte ne regarde est un levier mort qui reste
+ * vert. « Est-on encore en approche ? » se lit sur `approachAt`, jamais sur une
+ * comparaison à `fieldDepth` recopiée ailleurs.
+ */
+export function beatMs(round: number, beatCount: number): number {
+  const base = beatCount > 200 ? 62 : beatCount > 90 ? 85 : beatCount > 40 ? 120 : 180;
+  return approachAt(round) > 0 ? Math.max(base, SIEGE_STAGE.approachMs) : base;
 }
 
 /** Générateur déterministe local (même famille que `mulberry32`, sans dépendance). */
