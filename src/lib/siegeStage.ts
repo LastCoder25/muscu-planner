@@ -206,7 +206,9 @@ export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeS
       if (b >= 0 && last) last.kills.push(b);
       continue;
     }
-    if (e.kind === 'breach' || e.kind === 'enter') continue; // rythme, pas un coup
+    // ⚠️ 'descend' est un DÉPLACEMENT, pas un coup : sans ce filtre il tomberait dans la
+    // branche 'hit' plus bas et le rejeu inventerait un tir.
+    if (e.kind === 'breach' || e.kind === 'enter' || e.kind === 'descend') continue;
 
     if (e.kind === 'wall') {
       wallPv = Math.max(0, wallPv - (e.amount ?? 0));

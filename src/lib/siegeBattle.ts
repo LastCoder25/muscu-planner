@@ -143,7 +143,7 @@ export const BATTLE = {
 /** @public — contrat du moteur : la mise en scène rejouera ce log, comme SiegeStage. */
 export interface BattleEvent {
   round: number;
-  kind: 'hit' | 'wall' | 'breach' | 'enter' | 'down';
+  kind: 'hit' | 'wall' | 'breach' | 'enter' | 'down' | 'descend';
   /** Qui frappe (absent pour l'ouverture de la brèche). */
   from?: string;
   /** Qui encaisse (`'wall'` pour la muraille). */
@@ -217,42 +217,69 @@ export function pickTarget(candidates: SiegeUnit[], rng: () => number): SiegeUni
   return best;
 }
 
+/** Qui se tient dans la COUR. Descendus compris — c'est là tout le sujet. */
+const inYard = (d: SiegeUnit) => d.post === 'yard' && alive(d);
+/** Qui tient le REMPART : les balistes, et les tireurs qui n'en sont pas descendus. */
+const onRampart = (d: SiegeUnit) => d.post === 'rampart' && alive(d);
+
 /** Ce qu'un ASSAILLANT peut atteindre. */
 function attackerTargets(u: SiegeUnit, def: SiegeUnit[], breach: number): SiegeUnit[] {
   if (u.kind === 'melee') {
     // ⚠️ Dehors, un homme d'armes ne peut RIEN faire d'autre que cogner le mur : c'est
-    // ce qui rend une armée sans béliers incapable d'entrer. Entré, il frappe ce qui lui
-    // barre le passage — la mêlée d'abord, les tireurs seulement s'il n'y a plus personne
-    // devant (c'est tout l'intérêt d'avoir des défenseurs au corps à corps).
+    // ce qui rend une armée sans béliers incapable d'entrer.
     if (!u.inside) return [];
-    const devant = def.filter((d) => d.kind === 'melee' && alive(d));
+    // Entré, il se heurte à ce qui tient la COUR — et seulement une fois la cour balayée
+    // il monte aux escaliers pour égorger les servants du rempart. Le critère est la
+    // POSITION, plus le type : un tireur DESCENDU est dans la ligne, donc pris à partie
+    // comme les autres. C’est la moitié du prix de la descente.
+    const devant = def.filter(inYard);
     return devant.length ? devant : def.filter(alive);
   }
-  // Un tireur vise les tireurs d'en face : ce sont eux qui le tuent, et les faire taire
+  // Un tireur vise le REMPART : ce sont ses servants qui le tuent, et les faire taire
   // est la seule façon d'ouvrir la voie aux siens.
-  const tireurs = def.filter((d) => d.kind === 'ranged' && alive(d));
-  if (tireurs.length) return tireurs;
-  // Plus de tireurs adverses : on arrose ce qui reste, mais seulement si la brèche
-  // offre une ligne de vue.
+  const remparts = def.filter(onRampart);
+  if (remparts.length) return remparts;
+  // Rempart muet — abattu, OU descendu : on arrose ce qui reste, mais seulement si la
+  // brèche offre une ligne de vue.
   return breach > 0 ? def.filter(alive) : [];
 }
 
-/** Ce qu'un DÉFENSEUR peut atteindre. */
-function defenderTargets(u: SiegeUnit, att: SiegeUnit[], breach: number): SiegeUnit[] {
-  if (u.kind === 'melee') {
-    // La mêlée défensive n'existe que dans la cour : elle attend la brèche. Tant que le
-    // mur tient, elle ne sert à rien — et c'est le prix de l'assurance.
-    return att.filter((a) => a.inside && alive(a));
-  }
-  if (u.origin === 'turret') {
-    // Une tourelle balaie l'extérieur. Ce qui est ENTRÉ n'est atteignable que par celles
-    // d'en face (cf. `turretInsideShare`), traité à part dans le tour.
-    return att.filter((a) => !a.inside && alive(a));
-  }
-  // Les autres tireurs (aventuriers, héros à distance) sont sur le rempart, puis
-  // redescendent : ils voient tout.
-  void breach;
-  return att.filter(alive);
+/**
+ * Ce qu'un DÉFENSEUR peut atteindre — **sa POSITION, et rien d'autre**.
+ *
+ * ⚠️ La règle vivait dans le `kind` ET dans l’`origin` : la mêlée ne voyait que
+ * l'intérieur, la tourelle que l'extérieur, et l'archer **voyait TOUT, gratuitement**.
+ * C'est exactement ce qui rendait « descendre » sans objet — rien à gagner en
+ * descendant, donc rien à perdre en restant. Désormais :
+ *   · sur le REMPART, on ne frappe que ce qui est DEHORS ;
+ *   · dans la COUR, que ce qui est ENTRÉ.
+ * Trois cas particuliers deviennent UNE règle, et l'arbitrage existe.
+ *
+ * (Les balistes d'en face tirent quand même dans la cour — `turretInsideShare`, une
+ * fraction DÉRIVÉE de la géométrie de l'octogone, traitée à part dans le tour.)
+ */
+function defenderTargets(u: SiegeUnit, att: SiegeUnit[]): SiegeUnit[] {
+  return u.post === 'yard'
+    ? att.filter((a) => a.inside && alive(a))
+    : att.filter((a) => !a.inside && alive(a));
+}
+
+/**
+ * LA DESCENTE : les tireurs quittent le rempart pour tenir la cour.
+ *
+ * ⚠️ DÉRIVÉE, jamais une table de priorités — on garde la règle fondatrice du moteur.
+ * Ils descendent quand **la cour est en train de céder** : ce qui est entré frappe plus
+ * fort que ce qui le retient. Un seul rapport, lisible, et qui se tait tout seul tant
+ * qu'aucune brèche n'est ouverte (rien dedans → rien à comparer).
+ *
+ * ⚠️ À SENS UNIQUE sur un siège (l'appelant ne rebascule jamais) : sinon l'unité
+ * oscillerait d'un tour à l'autre — absurde à regarder, et du bruit dans une simulation
+ * qu'on veut stable et rejouable.
+ */
+function yardIsFalling(def: SiegeUnit[], att: SiegeUnit[]): boolean {
+  const menace = att.reduce((n, a) => (a.inside && alive(a) ? n + a.damage : n), 0);
+  if (menace <= 0) return false;
+  return menace > def.reduce((n, d) => (inYard(d) ? n + d.damage : n), 0);
 }
 
 function strike(
@@ -264,9 +291,14 @@ function strike(
   /** Intégrité du rempart (0..1) : ce qui reste de l’abri. */
   shelter = 0,
 ) {
+  // ⚠️ LE POSTE COMMANDE L’ABRI, et c’est ce qui fait que la descente COÛTE sans qu’on
+  // l’écrive deux fois : on ne bascule que `post`, la couverture tombe avec. Poser
+  // aussi `armor` à zéro en descendant rouvrirait la divergence que l’étape 1 venait
+  // de fermer — deux champs qui disent la même chose finissent par se contredire.
+  const cover = to.post === 'yard' ? 0 : (to.armor ?? 0);
   // ⚠️ Le plancher à 1 s’applique APRÈS l’abri : un coup touche toujours, sinon une
   // armure élevée rendrait une unité invulnérable et la bataille ne finirait jamais.
-  const soften = 1 - Math.min(0.9, Math.max(0, (to.armor ?? 0) * Math.max(0, shelter)));
+  const soften = 1 - Math.min(0.9, Math.max(0, cover * Math.max(0, shelter)));
   const dealt = Math.min(to.pv, Math.max(1, Math.round(amount * soften)));
   to.pv -= dealt;
   log.push({ round, kind: 'hit', from: from.id, to: to.id, amount: dealt });
@@ -309,6 +341,18 @@ export function simulateSiege(
   for (; round < BATTLE.maxRounds; round++) {
     if (!att.some(alive) || perdu()) break;
 
+    // ── 0. On descend du rempart quand la cour cède ────────────────────────
+    // ⚠️ TOUS ENSEMBLE, et seulement les non-balistes : une baliste est de la
+    // maçonnerie, elle ne descend pas. Descendre par unité demanderait un critère
+    // individuel qui n’existe pas — la cour tient ou ne tient pas.
+    if (yardIsFalling(def, att)) {
+      for (const d of def) {
+        if (d.origin === 'turret' || !onRampart(d)) continue;
+        d.post = 'yard';
+        log.push({ round, kind: 'descend', to: d.id });
+      }
+    }
+
     // ── 1. Les tireurs du rempart ──────────────────────────────────────────
     // ⚠️ Les tourelles d'en face tirent dans la cour : on tire au sort QUI parmi elles,
     // sur la graine, plutôt que de prendre les trois premières — l'ordre de déclaration
@@ -319,9 +363,7 @@ export function simulateSiege(
     );
     for (const d of def.filter((x) => x.kind === 'ranged' && alive(x))) {
       const dedans = d.origin === 'turret' && versDedans.has(d.id);
-      const cibles = dedans
-        ? att.filter((a) => a.inside && alive(a))
-        : defenderTargets(d, att, width);
+      const cibles = dedans ? att.filter((a) => a.inside && alive(a)) : defenderTargets(d, att);
       const cible = pickTarget(cibles, rng);
       if (cible)
         strike(d, cible, d.damage, round, log, w.maxPv > 0 ? Math.max(0, w.pv) / w.maxPv : 0);
@@ -329,7 +371,7 @@ export function simulateSiege(
 
     // ── 2. La mêlée défensive tient la brèche ──────────────────────────────
     for (const d of def.filter((x) => x.kind === 'melee' && alive(x))) {
-      const cible = pickTarget(defenderTargets(d, att, width), rng);
+      const cible = pickTarget(defenderTargets(d, att), rng);
       if (cible)
         strike(d, cible, d.damage, round, log, w.maxPv > 0 ? Math.max(0, w.pv) / w.maxPv : 0);
     }
@@ -362,8 +404,10 @@ export function simulateSiege(
       }
       // ⚠️ Un archer qui tire À TRAVERS la brèche ne donne qu'une fraction de son feu :
       // on tire dans un couloir, pas sur une ligne.
-      const through =
-        a.kind === 'ranged' && !a.inside && !def.some((d) => d.kind === 'ranged' && alive(d));
+      // ⚠️ « Tirer à travers la brèche » veut dire « le rempart ne répond plus » — donc
+      // `onRampart`, et non « plus aucun tireur adverse » : depuis la descente, un archer
+      // vivant peut très bien avoir quitté le mur.
+      const through = a.kind === 'ranged' && !a.inside && !def.some(onRampart);
       const cible = pickTarget(cibles, rng);
       if (cible)
         strike(

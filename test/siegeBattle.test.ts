@@ -27,8 +27,16 @@ const unit = (p: Partial<SiegeUnit> & Pick<SiegeUnit, 'side' | 'kind'>): SiegeUn
 const wall = (pv: number, maxPv = pv): SiegeWall => ({ pv, maxPv });
 const att = (kind: 'melee' | 'ranged', o: Partial<SiegeUnit> = {}) =>
   unit({ side: 'att', kind, ...o });
+/**
+ * ⚠️ LE POSTE PAR DÉFAUT REPREND LA RÈGLE DE PRODUCTION (`siegeDefenders`) : un tireur
+ * monte sur le rempart, un homme d’armes attend dans la cour. Sans lui, `post` étant
+ * optionnel sur le type, tous ces fixtures produisaient des défenseurs SANS POSTE — que
+ * le moteur traite en repli comme « sur le rempart ». Les tests auraient donc décrit un
+ * modèle que le jeu n’emploie jamais. Un test qui veut un archer DESCENDU passe
+ * `post: 'yard'` explicitement.
+ */
 const def = (kind: 'melee' | 'ranged', o: Partial<SiegeUnit> = {}) =>
-  unit({ side: 'def', kind, ...o });
+  unit({ side: 'def', kind, post: kind === 'ranged' ? 'rampart' : 'yard', ...o });
 const turret = (o: Partial<SiegeUnit> = {}) => def('ranged', { origin: 'turret', ...o });
 
 describe('la brèche', () => {
@@ -289,6 +297,130 @@ function mulberryish(): () => number {
   return () => (x = (x * 1664525 + 1013904223) >>> 0) / 4294967296;
 }
 
+describe('🪜 LE POSTE, ET LE PRIX DE LA DESCENTE', () => {
+  // ⚠️ Avant, la portée d’un défenseur vivait dans son `kind` et son `origin` : l’archer
+  // voyait TOUT, dedans comme dehors, gratuitement. « Descendre » n’avait donc aucun sens —
+  // rien à gagner en descendant, rien à perdre en restant. La portée vient désormais de la
+  // POSITION, et quitter le rempart coûte deux fois : l’abri, et la ligne de mire.
+
+  it('⚠️ SUR LE REMPART, on ne frappe que ce qui est DEHORS', () => {
+    const dehors = att('melee', { id: 'out', damage: 1, pv: 1e6 });
+    const dedans = att('melee', { id: 'in', damage: 1, pv: 1e6, inside: true });
+    // Le garde de la cour tient bon (gros dégâts) : la cour ne cède pas, donc l’archer
+    // reste sur son mur — c’est ce qu’on veut observer.
+    const archer = def('ranged', { id: 'arc', damage: 500, pv: 1e6 });
+    const garde = def('melee', { id: 'gar', damage: 1000, pv: 1e6 });
+    const r = simulateSiege([dehors, dedans], [archer, garde], wall(1e9), 21);
+    const tirs = r.log.filter((e) => e.kind === 'hit' && e.from === 'arc');
+    expect(tirs.length).toBeGreaterThan(0);
+    // Pas UN seul tir sur celui qui est entré : depuis le chemin de ronde, on ne le voit pas.
+    expect(tirs.every((e) => e.to === 'out')).toBe(true);
+  });
+
+  it('⚠️ ON DESCEND QUAND LA COUR CÈDE — et une seule fois', () => {
+    // La règle est DÉRIVÉE : ce qui est entré frappe plus fort que ce qui le retient.
+    const r = simulateSiege(
+      [att('melee', { id: 'in', damage: 1000, pv: 1e6, inside: true })],
+      [def('ranged', { id: 'arc', damage: 1, pv: 1e6 })],
+      wall(1e9),
+      22,
+    );
+    const descentes = r.log.filter((e) => e.kind === 'descend' && e.to === 'arc');
+    // ⚠️ À SENS UNIQUE : sans ça l’unité oscillerait, et le journal le dirait en
+    // rejouant la descente à chaque tour.
+    expect(descentes).toHaveLength(1);
+    // Descendu, il frappe enfin ce qui est entré.
+    expect(r.log.some((e) => e.kind === 'hit' && e.from === 'arc' && e.to === 'in')).toBe(true);
+  });
+
+  it('⚠️ AUCUNE DESCENTE tant que personne n’est entré', () => {
+    // Rien dedans, rien à comparer : la règle se tait toute seule, sans garde ajoutée.
+    const r = simulateSiege(
+      [att('melee', { damage: 10, pv: 1e6 })],
+      [def('ranged', { id: 'arc', damage: 1, pv: 1e6 })],
+      wall(1e9),
+      23,
+    );
+    expect(r.log.some((e) => e.kind === 'descend')).toBe(false);
+  });
+
+  it('⚠️ UNE BALISTE NE DESCEND JAMAIS — c’est de la maçonnerie', () => {
+    // Et c’est ce qui laisse `turretInsideShare` — la fraction d’en face — seule façon
+    // pour elles d’atteindre la cour.
+    const r = simulateSiege(
+      [att('melee', { damage: 1000, pv: 1e6, inside: true })],
+      [turret({ id: 'tour', damage: 1, pv: 1e6 })],
+      wall(1e9),
+      24,
+    );
+    expect(r.log.some((e) => e.kind === 'descend' && e.to === 'tour')).toBe(false);
+  });
+
+  it('⚠️ DESCENDRE MET DANS LA LIGNE, même quand on n’est pas la plus grosse menace', () => {
+    // Premier prix de la descente. Tant qu’il est sur le mur, l’assaillant entré ne peut
+    // pas l’atteindre et va au plus dangereux — la baliste. Une fois descendu, c’est LUI
+    // qui barre le passage, tout faible qu’il soit.
+    const r = simulateSiege(
+      [att('melee', { id: 'in', damage: 1000, pv: 1e6, inside: true })],
+      [
+        def('ranged', { id: 'arc', damage: 1, pv: 1e6 }),
+        turret({ id: 'tour', damage: 500, pv: 1e6 }),
+      ],
+      wall(1e9),
+      25,
+    );
+    const premier = r.log.find((e) => e.kind === 'hit' && e.from === 'in');
+    expect(premier?.to).toBe('arc');
+  });
+
+  it('⚠️ LA COUR NE COUVRE PAS — le poste GATE l’abri, sans second écrit', () => {
+    // C’est le second prix, et la garantie qui permet à la descente de ne basculer QUE
+    // `post` : la couverture tombe d’elle-même. On éprouve donc le GATE, pas le
+    // coefficient — d’où une unité qui PORTE une armure tout en étant dans la cour,
+    // état impossible en partie mais qui isole exactement la règle.
+    // `origin: turret` l’épingle à son poste : une baliste ne descend pas, donc la mesure
+    // n’est pas brouillée par la descente elle-même.
+    const coup = (post: 'rampart' | 'yard') => {
+      const r = simulateSiege(
+        [att('melee', { damage: 100, pv: 1e6, inside: true })],
+        [turret({ id: 'c', damage: 1, pv: 1e5, armor: 0.5, post })],
+        wall(1000, 1000),
+        26,
+      );
+      return r.log.find((e) => e.kind === 'hit' && e.to === 'c')?.amount ?? 0;
+    };
+    // Sur le rempart, le mur intact absorbe la moitié du coup ; dans la cour, rien.
+    expect(coup('rampart')).toBe(50);
+    expect(coup('yard')).toBe(100);
+  });
+
+  it('⚠️ « À TRAVERS LA BRÈCHE » se lit sur le REMPART, pas sur le type', () => {
+    // ⚠️ Ce test manquait, et son absence a failli passer : j’avais changé la condition
+    // sans que rien ne la vérifie — la mutation qui la remettait à l’ancienne forme
+    // passait au VERT sur les 1117 tests.
+    // L’ancienne lisait « plus aucun tireur adverse VIVANT ». Depuis la descente, un
+    // archer bien vivant peut avoir quitté le mur : le rempart est muet alors que le
+    // `kind` dit encore `'ranged'`. L’assaillant tirait donc à PLEINE puissance sur un
+    // homme réfugié dans la cour, alors qu’il vise dans un couloir.
+    const r = simulateSiege(
+      [
+        att('ranged', { id: 'archerEnnemi', damage: 100, pv: 1e6 }),
+        att('melee', { id: 'in', damage: 1000, pv: 1e6, inside: true }),
+      ],
+      [def('ranged', { id: 'arc', damage: 1, pv: 1e6 })],
+      // Mur quasi tombé : la brèche est grande ouverte, et il n’abrite plus personne —
+      // la mesure ne porte donc que sur le passage, pas sur l’armure.
+      wall(1, 1000),
+      27,
+    );
+    // La cour cède (personne pour la tenir) : l’archer descend, le rempart devient muet.
+    expect(r.log.some((e) => e.kind === 'descend' && e.to === 'arc')).toBe(true);
+    const tir = r.log.find((e) => e.kind === 'hit' && e.from === 'archerEnnemi' && e.to === 'arc');
+    // ⚠️ On épingle la MAGNITUDE : 100 × `rangedThroughBreach`. Un `> 0` passerait
+    // au vert avec la pleine puissance, donc ne prouverait rien.
+    expect(tir?.amount).toBe(Math.round(100 * BATTLE.rangedThroughBreach));
+  });
+});
 describe('🛡️ L’ABRI DU REMPART', () => {
   // ⚠️ `wallArmorK` existait depuis la v0.753 (« le mur abrite ceux qui tirent ») et ce
   // moteur ne l’a JAMAIS lu : `SiegeUnit` n’avait pas d’armure. Faute d’abri, il avait fallu
