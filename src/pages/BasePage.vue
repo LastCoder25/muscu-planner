@@ -440,11 +440,16 @@
              mélangeait « ce qui tient » et « ce qui tue », et laissait croire qu'un mur
              pouvait gagner une bataille. Le mur ENCAISSE (🛡️), les tourelles TUENT (⚔️) :
              c'est visible d'un coup d'œil, et c'est ce que le moteur fait vraiment. -->
-        <div class="f-parts-h">
-          <span>Ce que je perdrais sans…</span>
-          <span class="fh-cols"><i>🛡️ tenir</i><i>⚔️ tuer</i></span>
-        </div>
-        <div class="f-parts">
+        <!-- ⚠️ REPLIÉ PAR DÉFAUT (demandé par l’utilisateur : « replie le détail de la
+             défense et garde la puissance par défaut »). Le chiffre du haut répond à la
+             question qu’on vient se poser ; la décomposition sert quand on cherche QUOI
+             améliorer, ce qui est un second geste. État mémorisé par appareil — même
+             traitement que la carte des mondes (v0.745). -->
+        <button type="button" class="f-parts-h" :aria-expanded="partsOpen" @click="togglePartsOpen">
+          <span>{{ partsOpen ? '▾' : '▸' }} Ce que je perdrais sans…</span>
+          <span v-if="partsOpen" class="fh-cols"><i>🛡️ tenir</i><i>⚔️ tuer</i></span>
+        </button>
+        <div v-if="partsOpen" class="f-parts">
           <div v-for="p in forces.parts" :key="p.id" class="f-part" :class="{ off: !p.active }">
             <span class="dp-emo">{{ p.emoji }}</span>
             <span class="dp-lab">{{ p.label }}</span>
@@ -455,12 +460,35 @@
             <span class="dp-atk">{{ p.active && p.atk ? fmtPow(p.atk) : '—' }}</span>
           </div>
         </div>
-        <p v-if="!heroHome && heroBack" class="f-hint">
+        <p v-if="partsOpen && !heroHome && heroBack" class="f-hint">
           🧭 Ton héros est en expédition, mais il sera rentré avant l’assaut : il défendra.
         </p>
-        <p v-else-if="!heroHome" class="f-hint warn">
+        <p v-else-if="partsOpen && !heroHome" class="f-hint warn">
           🧭 Ton héros est en expédition : il ne défendra pas.
         </p>
+
+        <!-- ── 🏗️ CE QUE CHAQUE STRUCTURE APPORTE, ET À QUOI ELLE EST LIÉE ───────
+             ⚠️ Demandé par l’utilisateur. Le lien entre bâtiments n’était écrit NULLE
+             PART : on peut monter un Chenil sans Guilde et ne rien voir arriver, puisque
+             les compagnons se confient à des aventuriers. Ce dépliant répond aux deux
+             questions d’un coup — « ça sert à quoi » et « il me faut quoi d’autre ».
+             ⚠️ Les libellés viennent de `defensePerLevelLabel`, la fonction du JEU : un
+             texte recopié finirait par annoncer autre chose que ce qui se passe. -->
+        <button type="button" class="f-parts-h" :aria-expanded="helpOpen" @click="toggleHelpOpen">
+          <span>{{ helpOpen ? '▾' : '▸' }} À quoi sert chaque structure</span>
+        </button>
+        <div v-if="helpOpen" class="f-help">
+          <div v-for="h in structureHelp" :key="h.id" class="fh-row">
+            <span class="dp-emo">{{ h.emoji }}</span>
+            <span class="fh-main">
+              <span class="fh-name"
+                >{{ h.label }}<b v-if="h.level"> · niv {{ h.level }}</b></span
+              >
+              <span class="fh-what">{{ h.next }}</span>
+              <span v-if="h.link" class="fh-link">🔗 {{ h.link }}</span>
+            </span>
+          </div>
+        </div>
       </div>
 
       <div class="keep-legend">
@@ -1395,6 +1423,58 @@ const clarity = computed(() =>
       )
     : 0,
 );
+/** Deux replis, mémorisés PAR APPAREIL — un réglage d’affichage n’a rien à faire en
+ *  base. Même traitement que la carte des mondes (v0.745). */
+const partsOpen = ref(localStorage.getItem('muscu:base:parts') === '1');
+const helpOpen = ref(localStorage.getItem('muscu:base:help') === '1');
+function togglePartsOpen() {
+  partsOpen.value = !partsOpen.value;
+  try {
+    localStorage.setItem('muscu:base:parts', partsOpen.value ? '1' : '0');
+  } catch {
+    /* privé */
+  }
+}
+function toggleHelpOpen() {
+  helpOpen.value = !helpOpen.value;
+  try {
+    localStorage.setItem('muscu:base:help', helpOpen.value ? '1' : '0');
+  } catch {
+    /* privé */
+  }
+}
+
+/** 🔗 CE QUI DÉPEND DE QUOI. ⚠️ Écrit ici et NULLE PART AILLEURS : c'est la seule
+ *  information de l'écran qu'aucune fonction du jeu ne porte — les dépendances entre
+ *  bâtiments existent dans le CODE (le Chenil ne sert à rien sans Guilde) mais ne se
+ *  déduisent d'aucune donnée. Un `Record` complet : ajouter une structure sans dire
+ *  à quoi elle est liée ne compile plus. */
+const STRUCTURE_LINK: Record<DefenseId, string> = {
+  wall: 'Sans tourelles, aucun siège ne se déclenche : les deux vont ensemble.',
+  turret:
+    'Seule structure qui ABAT quelqu’un. Abritée par la Muraille : plus elle tient, plus elles tirent.',
+  watchtower: 'Le préavis ne sert que si les 🔔 notifications sont actives.',
+  kennel: 'Ne sert à rien sans ⚔️ Guilde : un familier se confie à un AVENTURIER, pas au mur.',
+  infirmary: 'Soigne le héros ET repose les compagnons revenus du siège.',
+  salvage: 'Ne travaille qu’après un assaut repoussé — c’est l’enceinte qui lui donne du travail.',
+};
+/** Ce qu'apporte le PROCHAIN niveau de chaque structure — par `defensePerLevelLabel`,
+ *  la fonction du jeu : un texte recopié finirait par mentir. */
+const structureHelp = computed(() =>
+  DEFENSE_TYPES.map((t) => ({
+    id: t.id,
+    emoji: t.emoji,
+    label: t.label,
+    level: lvlOf(t.id),
+    next: defensePerLevelLabel(t.id, lvlOf(t.id), {
+      playerLevel: heroLevel.value,
+      defenses: defenses.value,
+      intervalMs: raidIntervalMs(progress.activeDaysInLast(7)),
+    }),
+    link: STRUCTURE_LINK[t.id],
+  })),
+);
+
 // ─── ⚖️ RAPPORT DE FORCES ─────────────────────────────────────────────────────
 // ⚠️ Ce que l'écran ne disait NULLE PART : ce que l'enceinte, les familiers postés et
 // le héros apportent, et à quoi ça se compare. On assignait donc à l'aveugle, et la
@@ -2531,12 +2611,50 @@ function doHarvest() {
   color: var(--d3);
   margin: 6px 0 2px;
 }
+/* Le dépliant des structures : une ligne par bâtiment, le lien en dessous. */
+.f-help {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+.fh-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.fh-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.fh-name {
+  font-size: 13px;
+}
+.fh-what {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+/* Le LIEN se distingue de l’effet : ce n’est pas ce que le niveau donne, c’est ce
+   qu’il faut à côté pour que ça serve. */
+.fh-link {
+  font-size: 11.5px;
+  color: var(--d3);
+}
+/* ⚠️ C’est un <button> depuis qu’il replie : il faut donc annuler les styles natifs,
+   et lui donner une cible tactile réelle (44 px) — c’est la règle mobile du projet. */
 .f-parts-h {
   margin-top: 12px;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
   font-size: 11px;
   color: var(--dim);
   text-transform: uppercase;

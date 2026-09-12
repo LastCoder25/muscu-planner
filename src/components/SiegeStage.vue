@@ -37,6 +37,20 @@
         class="s-merlon"
         :class="{ breached }"
       />
+      <!-- ── 🧱 LA MURAILLE SE LÉZARDE SOUS LES COUPS ──────────────────────────
+           ⚠️ Demandé par l’utilisateur. C’est gratuit en information : le rejeu CONNAÎT
+           déjà les PV du mur à chaque instant (la barre s’en sert). Et ça dit ce que le
+           modèle affirme depuis la v0.753 — le mur convertit sa solidité en TEMPS :
+           autant qu’on voie ce temps s’épuiser.
+           ⚠️ Chaque lézarde a son SEUIL : elle apparaît quand l’intégrité passe dessous,
+           puis s’épaissit. Toutes d’un coup, on ne lirait qu’un état binaire de plus. -->
+      <path
+        v-for="(k, i) in cracks"
+        :key="'k' + i"
+        :d="k.d"
+        class="s-crack"
+        :style="{ opacity: crackOpacity(k.at), strokeWidth: crackWidth(k.at) }"
+      />
       <polygon :points="innerPoints" class="s-yard" />
 
       <!-- LES BALISTES. ⚠️ MÊME SILHOUETTE QUE L’ÉCRAN « MA BASE » (plateforme, arc, corde,
@@ -160,6 +174,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { buildSiegeStage, type SiegeBody } from '@/lib/siegeStage';
+import { mulberry32 } from '@/lib/combat';
 import {
   FACTION_EMOJI,
   FACTION_LABEL,
@@ -210,6 +225,54 @@ const merlons = computed(() =>
     };
   }),
 );
+/** 🧱 LES LÉZARDES — une par pan de mur, tracées de l’extérieur vers la cour.
+ *
+ *  ⚠️ SEEDÉES sur le rapport : le même siège se rejoue à l’identique, et deux ouvertures
+ *  de la modale ne redessinent pas des fissures différentes. On réutilise `mulberry32`,
+ *  le PRNG du projet — pas une n-ième copie.
+ *
+ *  ⚠️ Purement DÉCORATIF : `siegeStage` ne décide rien du combat (règle fondatrice
+ *  reprise d’`arenaStage`), et ceci n’en décide pas davantage — on ne fait que peindre
+ *  une intégrité que le log a déjà fixée. */
+const cracks = computed(() => {
+  // ⚠️ MÊME graine que le placement des corps (`placeBodies`), dérivée du rapport :
+  // deux ouvertures de la modale doivent redessiner EXACTEMENT les mêmes fissures.
+  const rng = mulberry32(
+    ((props.report.groups.length * 7919 + props.report.total) ^ 0x7f4a7c15) >>> 0 || 1,
+  );
+  return octagon.value.map((p, i) => {
+    const q = octagon.value[(i + 1) % octagon.value.length]!;
+    // Départ : un point du pan, jamais pile au sommet (une pierre d’angle tient mieux).
+    const t = 0.25 + rng() * 0.5;
+    const x0 = p.x + (q.x - p.x) * t;
+    const y0 = p.y + (q.y - p.y) * t;
+    // …et on descend vers le centre, en zigzag, sur l’épaisseur du rempart.
+    const pts = [`M${x0.toFixed(1)},${y0.toFixed(1)}`];
+    let x = x0;
+    let y = y0;
+    for (let k = 1; k <= 3; k++) {
+      const f = 1 - k * 0.05;
+      const jx = (rng() - 0.5) * 5;
+      const jy = (rng() - 0.5) * 5;
+      x = 100 + (x0 - 100) * f + jx;
+      y = 100 + (y0 - 100) * f + jy;
+      pts.push(`L${x.toFixed(1)},${y.toFixed(1)}`);
+    }
+    // Seuil d’apparition : les huit lézardes s’ouvrent l’une après l’autre, de 92 %
+    // d’intégrité jusqu’à 20 %. Le mur se dégrade donc VISIBLEMENT tout du long.
+    return { d: pts.join(String.fromCharCode(32)), at: 92 - (i * 72) / (octagon.value.length - 1) };
+  });
+});
+/** Une lézarde naît transparente à son seuil et s’affirme à mesure que le mur tombe. */
+function crackOpacity(at: number): number {
+  if (pvPct.value >= at) return 0;
+  return Math.min(0.9, 0.15 + ((at - pvPct.value) / Math.max(1, at)) * 1.1);
+}
+function crackWidth(at: number): number {
+  if (pvPct.value >= at) return 0;
+  return 0.5 + Math.min(1.6, ((at - pvPct.value) / Math.max(1, at)) * 2.2);
+}
+
 const APOTHEM = WALL_R * Math.cos(Math.PI / TURRET_SLOTS);
 const heroY = 100 - APOTHEM + 4;
 
@@ -381,6 +444,15 @@ onUnmounted(() => {
 }
 
 /* Enceinte */
+/* La pierre qui cède : plus sombre que le rempart, jamais noire — une fissure est une
+   ombre, pas un trou. Elle ne capte pas le clic (le mur n'est pas cliquable ici). */
+.s-crack {
+  fill: none;
+  stroke: #1a140c;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
 .s-wall {
   fill: #2a231a;
   stroke: #7a6a4f;
