@@ -381,7 +381,22 @@ export const RAID = {
 
   // Assaillants (relatif au refFighter de LEUR niveau)
   foePvK: 0.9, // PV d'un assaillant = 0,9 × offense/tour d'un joueur de référence
-  foeDmgK: 0.05, // dégâts = 5 % des PV d'un joueur de référence
+  // ⚠️ 0,05 → 0,055 (v0.789, mesuré) : LE PLAFOND D’UNE BASE PLEINEMENT INVESTIE.
+  // Une enceinte à niveau + le héros + le vivier complet tenait **100 / 99 / 92 / 91 / 94 %**
+  // (niveaux 12/28/50/80/100) : passé le milieu de partie on ne perdait littéralement plus
+  // jamais, et c’est le « les bases semblent imprenables » signalé. Après : **100 / 96 / 87 /
+  // 85 / 83** — une défaite tous les six sièges en fin de partie au lieu d’une sur dix-sept.
+  //
+  // ⚠️ CE DIAL AVAIT ÉTÉ ÉCARTÉ EN v0.786 pour une raison qui a CESSÉ D’ÊTRE VRAIE : il
+  // faisait alors exploser l’iso-menace entre factions (13,9 → 21,6 dès ×1,1). Depuis que
+  // les deux fuites de la v0.788 sont bouchées, mesuré à ×1,1 : **3,2**. Le chantier
+  // d’iso-menace a donc bien débloqué un dial — celui-ci, pas le goulot de la brèche.
+  //
+  // ⚠️ LA BORNE QUI LIE TOUT EST `mi > 6` — une demi-enceinte que personne ne défend de
+  // l’intérieur (test de la falaise). Mesuré : 14 à 0,05 · **8 à 0,055** · 6 à 0,0575 · 5 à
+  // 0,06. C’est elle, et non l’iso-menace, qui interdit d’aller plus loin — et elle interdit
+  // aussi de la combiner avec une baisse des tourelles (0,055 + turretDmgK 0,16 → 5).
+  foeDmgK: 0.055,
   championPvMult: 3, // le champion est une élite, pas un soldat de plus
   championDmgMult: 2.2,
   // Les dégâts d'un groupe croissent en √effectif, pas linéairement : seuls quelques

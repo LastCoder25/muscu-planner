@@ -383,6 +383,26 @@ describe('calibration du siège', () => {
     expect(defenseUpgradeCost(20)).toBeGreaterThan(defenseUpgradeCost(5)); // strictement croissant
   });
 
+  it('⚠️ UNE BASE PLEINEMENT INVESTIE N’EST JAMAIS CERTAINE', () => {
+    // ⚠️ RIEN NE BORNAIT LE HAUT, et c'est ce que l'utilisateur a signalé (« les attaques
+    // de bases semblent imprenables »). Tous les invariants voisins bornent par le BAS
+    // (« on tient le plus souvent ») ou mesurent une base NUE ; aucun ne regardait le cas
+    // réel — enceinte à niveau, héros présent, vivier complet — où l'on mesurait
+    // **100/99/92/91/94 %** aux niveaux 12/28/50/80/100. Passé le milieu de partie, on ne
+    // perdait plus jamais.
+    //
+    // ⚠️ LE DÉBUT DE PARTIE EN EST EXEMPT, et délibérément : au niveau 12 le joueur vient
+    // d'ouvrir le système (`unlockLevel` 3, `enableShare` 0,85) et son enceinte à niveau
+    // écrase encore des armées à peine plus fortes que lui. Le borner là forcerait à
+    // durcir une rampe qui sert précisément à apprendre.
+    for (const L of [50, 80, 100]) {
+      const plein = holdRate(L, L, true, 200, rosterOf(L));
+      expect(plein, `niveau ${L}, tout investi`).toBeLessThan(92);
+      // …mais ça reste largement payant : c'est un plafond, pas un nerf du vivier.
+      expect(plein, `niveau ${L}, tout investi`).toBeGreaterThan(70);
+    }
+  });
+
   it('la difficulté ne s’ÉTEINT PAS en fin de partie', () => {
     // Le défaut d'un écart de niveau FIXE : mesuré, la tenue à défenses-à-niveau montait
     // de 57 % (niveau 15) à 96 % (niveau 60) — passé un cap, on ne perdait plus jamais et
@@ -1797,6 +1817,34 @@ describe('⚔️🧱 LES UNITÉS DU SIÈGE — dérivées du vrai état, jamais 
         // À l'arrondi près : la part par corps est arrondie une fois chacune.
         expect(Math.abs(somme - agrege) / Math.max(1, agrege)).toBeLessThan(0.2);
       }
+    });
+
+    it('⚠️ la PUISSANCE DE FEU d’un groupe ne dépend pas non plus de sa silhouette', () => {
+      // ⚠️ Test ajouté après une mutation passée au VERT : retirer `silhouetteDmgMult` du
+      // calcul ne faisait tomber AUCUN des 1168 tests, alors que `raid.ts` la présente comme
+      // « une IDENTITÉ dérivée, pas un coefficient ajusté ». Elle existe parce que les PV
+      // d’un groupe suivent son effectif quand ses dégâts n’en suivent que la RACINE : sans
+      // elle, une horde à masse égale frappait 24 % moins fort qu’une bande d’élite (mesuré
+      // v0.761). L’iso-menace statistique ne l’attrapait pas — elle mesure une PROBABILITÉ,
+      // qui sature ; on épingle donc l’identité elle-même.
+      const feu = (unitMult: number) => {
+        const g = {
+          species: 'T',
+          emoji: '🗡️',
+          count: Math.round(24 / unitMult), // masse conservée : countMult × unitMult ≈ 1
+          level: 20,
+          unitMult,
+          massMult: 1,
+          kind: 'melee' as const,
+        };
+        return siegeAttackers({ ...raid, groups: [g] } as typeof raid).reduce(
+          (t, u) => t + u.damage,
+          0,
+        );
+      };
+      const horde = feu(FACTION_PROFILE.betes.unitMult);
+      const elite = feu(FACTION_PROFILE.bandits.unitMult);
+      expect(Math.abs(horde - elite) / Math.max(horde, elite)).toBeLessThan(0.1);
     });
 
     it('⚠️ la PLACE au pied du mur rend la frappe INDIFFÉRENTE à la silhouette', () => {
