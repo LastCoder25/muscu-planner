@@ -1915,6 +1915,11 @@ export const useCharacterStore = defineStore('character', () => {
   const guildLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'guild'));
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'caravanserail'));
   const trainingLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'training'));
+  /** ⚠️ Le Chenil est une structure de l’ENCEINTE, pas un bâtiment de la cour — d’où
+   *  `defenseLevel` et non `buildingLevel`. Exposé ici parce que DEUX écrans en ont besoin
+   *  (la Guilde pour la coupe du dressage, la fiche des familiers pour l’afficher) : chacun
+   *  le recalculait, et une étiquette qui refait le calcul finit par contredire le combat. */
+  const kennelLevel = computed(() => defenseLevel(row.value?.base?.defenses ?? [], 'kennel'));
 
   /** Les 3 classes de DÉPART proposées à une nouvelle recrue. Tirées sur une graine
    *  figée à l'avance pour que l'écran affiche exactement ce qui sera recruté. */
@@ -2112,6 +2117,7 @@ export const useCharacterStore = defineStore('character', () => {
     guildLevel,
     comptoirLevel,
     trainingLevel,
+    kennelLevel,
     recruitChoices,
     recruitAdventurer,
     promoteAdventurer,

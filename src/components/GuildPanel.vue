@@ -415,7 +415,7 @@
 // promotions. ⚠️ On n'affiche JAMAIS le niveau d'un aventurier — seulement son rang et
 // l'avancement vers l'étoile suivante. C'est la règle posée dès la conception (« un
 // aventurier de manga »), et c'est aussi ce qui rend la barre indispensable.
-import { computed, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
@@ -458,13 +458,7 @@ import {
   talentRankOf,
   type TalentInstance,
 } from '@/lib/talents';
-import {
-  defenseLevel,
-  companionSlots,
-  companionRankLabel,
-  companionPairs,
-  canCompanion,
-} from '@/lib/raid';
+import { companionSlots, companionRankLabel, companionPairs, canCompanion } from '@/lib/raid';
 import { trainMsFor, companionEffects, advTalentEffects, cappedDefLevel } from '@/lib/caravan';
 
 const props = defineProps<{
@@ -485,7 +479,7 @@ const char = useCharacterStore();
 // jusqu’à quel rang — comme la Guilde pour les aventuriers, sauf qu’il ne les crée pas.
 const pairFor = ref<Adventurer | null>(null);
 const talFor = ref<Adventurer | null>(null);
-const kennelLevel = computed(() => defenseLevel(char.row?.base?.defenses ?? [], 'kennel'));
+const kennelLevel = computed(() => char.kennelLevel);
 const slots = computed(() => companionSlots(kennelLevel.value));
 const rankCapLabel = computed(() => companionRankLabel(kennelLevel.value));
 const heroFamId = computed(() => char.row?.equipped?.[FAMILIAR_SLOT]?.id ?? null);
@@ -653,7 +647,11 @@ function assignTal(id: string | null) {
 
 const busy = ref(false);
 const now = ref(Date.now());
-setInterval(() => (now.value = Date.now()), 30_000);
+// ⚠️ NETTOYÉE au démontage. Posée au niveau du setup et jamais arrêtée, elle continuait de
+// battre après la fermeture du panneau en retenant la ref ET le composant — exactement la
+// fuite corrigée sur la carte d’expédition en v0.732, jamais répercutée ici.
+const clock = setInterval(() => (now.value = Date.now()), 30_000);
+onUnmounted(() => clearInterval(clock));
 
 const roster = computed(() => char.advList);
 const guildLevel = computed(() => char.guildLevel);

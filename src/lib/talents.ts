@@ -247,8 +247,21 @@ export function normalizeTalents(raw: unknown): TalentInstance[] {
 
 /** Cumule les effets des talents ÉQUIPÉS (grade + enchant). */
 export function talentEffects(raw: unknown): AggregatedEffects {
+  return effectsOfTalents(normalizeTalents(raw));
+}
+
+/**
+ * Le même cumul, sur des instances DÉJÀ normalisées.
+ *
+ * ⚠️ Il existe parce que `advTalentEffects` re-normalisait un pool qui l’était déjà, une
+ * fois PAR LIGNE de l’écran de la Guilde — ~74 passages de `normalizeTalents` par rendu
+ * pour reproduire à l’identique ce que l’appelant tenait en main. La normalisation reste
+ * obligatoire à la FRONTIÈRE (le JSONB peut porter l’ancien format `string[]`) ; elle n’a
+ * simplement rien à faire une seconde fois à l’intérieur.
+ */
+export function effectsOfTalents(list: TalentInstance[]): AggregatedEffects {
   const a = emptyEffects();
-  for (const inst of normalizeTalents(raw)) {
+  for (const inst of list) {
     // ⚠️ `=== true`, PAS `!== false` — c'était LE défaut, et il gonflait la puissance de
     // 85 % sur un compte réel (79 talents possédés, 74 comptés, 5 emplacements).
     // `rollTalentDrop` ne posait AUCUN champ `equipped`, donc chaque talent jamais tombé

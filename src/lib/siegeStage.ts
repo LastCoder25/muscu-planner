@@ -259,16 +259,11 @@ export function beatMs(round: number, beatCount: number): number {
   return approachAt(round) > 0 ? Math.max(base, SIEGE_STAGE.approachMs) : base;
 }
 
-/** Générateur déterministe local (même famille que `mulberry32`, sans dépendance). */
-function rand(seed: number): () => number {
-  let a = seed >>> 0 || 1;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+/** ⚠️ Ce fichier importait DÉJÀ `mulberry32` vingt lignes plus haut, et en gardait un
+ *  second exemplaire sous un autre nom — le commentaire « sans dépendance » avait cessé
+ *  d’être vrai. La garde `|| 1` (graine 0) est conservée, elle : c’est la seule chose que
+ *  la copie faisait de plus. */
+const rand = (seed: number) => mulberry32(seed >>> 0 || 1);
 
 /** Place les corps d'une armée : un arc autour de la base, un secteur par groupe pour
  *  qu'on distingue les vagues, et une gigue seedée pour éviter l'alignement militaire. */

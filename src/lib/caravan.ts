@@ -26,11 +26,11 @@ import {
   type AggregatedEffects,
   type Item,
 } from './items';
-import { simulateCombat, type Combatant } from './combat';
+import { simulateCombat, mulberry32, type Combatant } from './combat';
 // ⚠️ Type SEUL : `raid.ts` importera `garrisonCombatant` à l'exécution, donc un import
 // de valeur dans l'autre sens créerait un cycle. Le projet applique déjà cette règle
 // entre `data/familiars` et `items`.
-import { talentEffects, type TalentInstance } from './talents';
+import { effectsOfTalents, type TalentInstance } from './talents';
 import {
   HARVEST_TYPES,
   harvestYield,
@@ -168,16 +168,6 @@ export interface Caravan {
   claimed?: boolean;
 }
 
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 /** PV EFFECTIFS : ce qu’il faut vraiment infliger pour tomber, réduction comprise. */
 function effectivePv(c: Combatant): number {
   return c.pv / Math.max(0.35, 1 - (c.dmgReduction ?? 0));
@@ -357,12 +347,12 @@ export function advTalentsOf(
 }
 
 /** Ce que ces talents apportent, BRIDÉ.
- *  ⚠️ On force `equipped: true` : `talentEffects` ignore ce qui ne l'est pas, et un talent
+ *  ⚠️ On force `equipped: true` : le cumul ignore ce qui ne l'est pas, et un talent
  *  confié à un aventurier n'est justement PAS équipé sur le héros — sans ça, la fonction
  *  rendrait zéro en silence. */
 export function advTalentEffects(talents: TalentInstance[], k = ADV_TALENT_K): AggregatedEffects {
   if (!talents.length) return emptyEffects();
-  return scaleEffects(talentEffects(talents.map((t) => ({ ...t, equipped: true }))), k);
+  return scaleEffects(effectsOfTalents(talents.map((t) => ({ ...t, equipped: true }))), k);
 }
 
 /** Combien de strates un aventurier de ce niveau a pu franchir. */

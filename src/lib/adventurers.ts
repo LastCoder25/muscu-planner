@@ -18,6 +18,12 @@
 // depuis Épéiste comme depuis Bretteur : on ne l'écrit qu'une fois).
 import { RANK_ORDER, type EffectType, type Rarity } from './items';
 import { characterRank, rankProgress, nextStarLevel, type CharacterRank } from './characterRank';
+// ⚠️ LE PRNG DU PROJET, pas une n-ième copie. Les trois qui traînaient étaient
+// arithmétiquement IDENTIQUES (seul l'idiome différait) — donc aucun tirage ne bouge —
+// mais quatre exemplaires d'un générateur seedé, c'est quatre occasions qu'une retouche
+// n'en touche qu'un et fasse diverger des mondes censés être reproductibles.
+// `combat.ts` n'importe RIEN : le prendre pour source ne crée aucun cycle.
+import { mulberry32 } from './combat';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
@@ -635,17 +641,6 @@ export interface Adventurer {
    * Absent = aucun talent. Inerte tant que personne n'en assigne un.
    */
   talentId?: string;
-}
-
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 /** Tags accumulés par le chemin — la mémoire de ce que l'aventurier est devenu. */
