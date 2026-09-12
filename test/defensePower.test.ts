@@ -178,14 +178,21 @@ describe('la répartition par contributeur', () => {
     // niveaux. C’est la seule structure qui ABAT quelqu’un, donc la seule indispensable.
     // ⚠️ L’écran doit dire ce qu’un total de 0 partout signifie (cf. `holdNote`) : « rien
     // ne suffit » et « tout suffit » se lisent pareil dans les chiffres.
-    // ⚠️ Seuil 0,9 → 0,85 : mesuré après la géométrie, enceinte pleine + héros, la tenue
-    // vaut 1,000 (niv 26) · 1,000 (niv 60) · 0,875 (niv 90). C'est la fin de partie qui
-    // s'est durcie — voulu — et le seuil suit la mesure, pas l'inverse.
+    // ⚠️ RÉÉCRIT PLUTÔT QUE RELÂCHÉ. Le seuil avait déjà glissé une fois (0,9 → 0,85) ;
+    // le correctif de `perdu()` a retiré une classe de tenues non méritées et la fin de
+    // partie est retombée à 0,833. Relâcher la borne une TROISIÈME fois n'aurait rien
+    // verrouillé — on épingle donc ce que le test veut vraiment dire, et qui est EXACT :
+    // **sans les tourelles on ne tient RIEN**, à tous les niveaux. `holdLoss` = `hold`
+    // signifie littéralement « la tenue sans elles vaut zéro ». C'est plus fort qu'un
+    // seuil, et ça ne peut pas dériver.
+    // Mesuré (enceinte pleine + héros nu) : 1,000 (26) · 1,000 (40) · 1,000 (60) ·
+    // 0,833 (80) · 0,833 (90).
     for (const lvl of [60, 90]) {
       const b = defenseBreakdown(defAt(lvl), lvl, refFighter(lvl), [], NOW);
       const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
-      expect(b.hold).toBeGreaterThan(0.85);
-      expect(by.turret!.holdLoss).toBeGreaterThan(0.5);
+      expect(b.hold).toBeGreaterThan(0.8);
+      // Les tourelles portent la tenue ENTIÈRE : les retirer la ramène à zéro.
+      expect(by.turret!.holdLoss).toBeCloseTo(b.hold, 10);
       // ⚠️ RÉÉCRIT, et c’est une BONNE nouvelle : le mur valait `0` ici parce qu’il ne
       // faisait qu’encaisser — on tenait sans lui. Depuis qu’il COUVRE ses tireurs, le
       // retirer les expose et la tenue baisse VRAIMENT. La muraille a enfin une part

@@ -387,13 +387,37 @@ export function simulateSiege(
   let width = 0;
   let round = 0;
 
-  /** ⚠️ ON NE PERD QUE SI L'ENNEMI EST ENTRÉ. Trouvé par un test : une armée d'ARCHERS
-   *  SEULS faisait taire les tourelles puis « prenait » la ville — alors que le mur était
-   *  INTACT et qu'aucun assaillant n'avait posé le pied dedans. Un siège qui ne perce pas
-   *  est un siège repoussé, même si les remparts sont muets.
-   *  Corollaire : tant que le mur tient, la bataille CONTINUE sans défenseurs vivants —
-   *  les béliers le démolissent sans opposition, et c'est alors qu'on peut tomber. */
-  const perdu = () => w.pv <= 0 && !def.some(alive);
+  /**
+   * ⚠️ ON NE PERD QUE SI L'ENNEMI EST ENTRÉ. Trouvé par un test : une armée d'ARCHERS
+   * SEULS faisait taire les tourelles puis « prenait » la ville — alors que le mur était
+   * INTACT et qu'aucun assaillant n'avait posé le pied dedans. Un siège qui ne perce pas
+   * est un siège repoussé, même si les remparts sont muets.
+   *
+   * ⚠️ MAIS LE CODE NE DISAIT PAS ÇA : il exigeait `w.pv <= 0` — **le mur à ZÉRO**, pas
+   * l'entrée. Or la brèche s'ouvre dès `breachAt` (40 % des PV) : une armée pouvait avoir
+   * balayé TOUTE la garnison et occuper la ville, mur debout à 25 %, et le siège comptait
+   * comme tenu. Pire, il ne pouvait alors plus se conclure du tout — un homme d'armes
+   * ENTRÉ ne vise plus rien quand la défense est à terre, et ne peut pas frapper le mur
+   * (réservé à ceux du dehors). Mesuré : **31 à 51 % des sièges d'une base nue étaient
+   * GELÉS**, terminés par le plafond de tours et attribués d'office à la défense.
+   *
+   * ⚠️ ET LA CONDITION PORTE SUR LA COUR, PAS SUR LE DERNIER CRÉNEAU. Exiger que les
+   * HUIT balistes soient abattues laissait le cas dominant intact : un intrus dans une
+   * cour VIDE est intouchable (une baliste ne tire que vers le dehors) et grignote la
+   * maçonnerie à 200 PV/tour contre 32 000 — 160 tours pour un plafond à 60. La ville
+   * était donc « tenue » par des machines qui ne pouvaient rien contre l'homme qui
+   * marchait dans ses rues.
+   *
+   * ⚠️ C'est aussi ce qui donne enfin leur métier aux AVENTURIERS : depuis la v0.777 ce
+   * sont eux qui tiennent la brèche, et la DESCENTE existe pour qu'un tireur du rempart
+   * vienne les épauler. Sans personne dans la cour, il n'y a rien à disputer — et une
+   * enceinte sans garnison cesse d'être imprenable.
+   *
+   * La garantie des archers seuls est intacte : sans entrée et sans mur abattu, on ne
+   * perd pas.
+   */
+  const dedans = () => att.some((a) => a.inside && alive(a));
+  const perdu = () => !def.some(alive) && (dedans() || w.pv <= 0);
 
   for (; round < BATTLE.maxRounds; round++) {
     if (!att.some(alive) || perdu()) break;

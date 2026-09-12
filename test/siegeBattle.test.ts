@@ -570,3 +570,66 @@ describe('🛡️ L’ABRI DU REMPART', () => {
     expect(touche!.amount!).toBeLessThan(20);
   });
 });
+
+describe('🏚️ QUAND LA VILLE EST-ELLE PRISE ?', () => {
+  // ⚠️ Le commentaire du moteur dit « ON NE PERD QUE SI L’ENNEMI EST ENTRÉ » depuis
+  // toujours — mais le CODE exigeait le mur à ZÉRO. Or la brèche s’ouvre à 40 % : une
+  // armée pouvait tenir la ville, garnison balayée, mur debout à 25 %, et le siège
+  // comptait comme repoussé. Pire, il ne pouvait plus se conclure — mesuré, **31 à
+  // 51 % des sièges d’une base nue étaient GELÉS** jusqu’au plafond de tours.
+
+  it('⚠️ GARNISON BALAYÉE + ENNEMI DANS LES MURS = ville prise, même rempart debout', () => {
+    // Le mur tient largement (au-dessus du seuil de brèche), mais l’unique défenseur
+    // est hors de combat et l’assaillant est DANS la place.
+    const r = simulateSiege(
+      [att('melee', { pv: 100000, damage: 5000, dist: 0 })],
+      [def('melee', { pv: 1, damage: 1 })],
+      wall(1000, 1000),
+      7,
+    );
+    expect(r.held).toBe(false);
+    // ⚠️ Et ça se conclut VITE : c’est tout l’objet du correctif. Un siège qui traîne
+    // jusqu’au plafond est un siège que personne ne pouvait plus gagner.
+    expect(r.rounds).toBeLessThan(BATTLE.maxRounds);
+  });
+
+  it('⚠️ MAIS UNE ARMÉE QUI N’ENTRE PAS NE PREND RIEN — la garantie des archers seuls', () => {
+    // Des tireurs font taire le rempart et n’ouvrent jamais le mur : ils ne peuvent pas
+    // entrer, donc la ville tient. C’est le défaut trouvé par un test en v0.754, et le
+    // correctif ne doit surtout pas le rouvrir.
+    const r = simulateSiege(
+      [att('ranged', { pv: 100000, damage: 5000, dist: 0, range: BATTLE.fieldDepth })],
+      [def('ranged', { pv: 1, damage: 1 })],
+      wall(1000, 1000),
+      7,
+    );
+    expect(r.held).toBe(true);
+    expect(r.wallPv).toBeGreaterThan(0);
+  });
+
+  it('un mur PULVÉRISÉ sans défenseur reste une défaite, SANS que personne soit entré', () => {
+    // ⚠️ L’ancienne condition est CONSERVÉE en seconde branche : le correctif AJOUTE un
+    // chemin, il n’en retire aucun. Pour l’éprouver il faut un cas que la première
+    // branche ne couvre pas — sinon la mutation « on supprime la seconde branche » passe
+    // au vert, comme elle l’a fait au premier jet. D’où un assaillant à DISTANCE : il ne
+    // franchit jamais la brèche, donc `dedans()` reste faux.
+    const r = simulateSiege(
+      [att('ranged', { pv: 100000, damage: 5000, dist: 0, range: BATTLE.fieldDepth })],
+      [def('ranged', { pv: 1, damage: 1 })],
+      wall(0, 1000),
+      7,
+    );
+    expect(r.held).toBe(false);
+  });
+
+  it('⚠️ UN DÉFENSEUR DEBOUT SUFFIT À TENIR : la garnison n’est pas décorative', () => {
+    // Symétrique du premier : l’ennemi est entré, mais quelqu’un lui tient tête.
+    const r = simulateSiege(
+      [att('melee', { pv: 10, damage: 1, dist: 0 })],
+      [def('melee', { pv: 100000, damage: 50 })],
+      wall(1000, 1000),
+      7,
+    );
+    expect(r.held).toBe(true);
+  });
+});
