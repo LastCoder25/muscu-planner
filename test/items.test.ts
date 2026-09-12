@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  aggregateLines,
+  emptyEffects,
+  effectAsAggregate,
   compareFamiliars,
   aggregateEffects,
   playerWithGear,
@@ -1721,5 +1724,55 @@ describe('⚠️ tri des familiers : la STAT PORTÉE tranche, pas le jet seul', 
     const b = fam('b', { name: 'Bravo' });
     const a = fam('a', { name: 'Alpha' });
     expect(order([b, a])).toEqual(['a', 'b']);
+  });
+});
+
+describe('📖 LIRE UN AGRÉGAT D’EFFETS', () => {
+  // Ces lignes sont ce qui départage deux compagnons dans la Guilde : avant, on ne
+  // voyait que l’icône du familier et son rang.
+
+  it('⚠️ FRACTION → POURCENT : le piège qui a déjà coûté un facteur CENT', () => {
+    // `AggregatedEffects` est en FRACTIONS, `effectLabelFor` attend des POURCENTS.
+    const fx = { ...emptyEffects(), damagePct: 0.042 };
+    expect(aggregateLines(fx)).toEqual(['+4,2% dégâts']);
+    // Ni « +0% » (oubli du ×100), ni « +420% » (×100 en trop).
+    const l = aggregateLines(fx)[0]!;
+    expect(l).not.toContain('0,4%');
+    expect(l).not.toContain('420');
+  });
+
+  it('⚠️ EXHAUSTIF : aucun canal ne disparaît en silence', () => {
+    // Un canal muet, c’est un gain qu’on promet sans jamais l’afficher. La table de
+    // lecture couvre `keyof AggregatedEffects` — ajouter un canal sans le nommer casse
+    // la compilation ; ce test garde le versant runtime.
+    const vide = emptyEffects();
+    for (const key of Object.keys(vide) as (keyof typeof vide)[]) {
+      const lignes = aggregateLines({ ...vide, [key]: 0.05 });
+      expect(lignes, `canal ${key} muet`).toHaveLength(1);
+      expect(lignes[0]).toContain('5');
+    }
+  });
+
+  it('⚠️ L’ESQUIVE A SON LIBELLÉ PROPRE — elle n’a pas d’EffectType', () => {
+    // Elle ne vient que des talents et des voies. Sans cas dédié, un talent d’esquive
+    // confié à un aventurier n’afficherait rien du tout.
+    expect(aggregateLines({ ...emptyEffects(), dodgeAdd: 0.035 })).toEqual(['+3,5% esquive']);
+  });
+
+  it('on se tait plutôt que de promettre un gain nul', () => {
+    expect(aggregateLines(emptyEffects())).toEqual([]);
+    // Un résidu qui s’afficherait « +0% » ne dit rien : on l’omet.
+    expect(aggregateLines({ ...emptyEffects(), goldPct: 0.0003 })).toEqual([]);
+  });
+
+  it('plusieurs canaux se lisent ensemble, dans l’ordre du plus lourd', () => {
+    const fx = { ...emptyEffects(), goldPct: 0.1, damagePct: 0.05, maxPvPct: 0.08 };
+    expect(aggregateLines(fx)).toEqual(['+5% dégâts', '+8% PV', '+10% or']);
+  });
+
+  it('⚠️ IL LIT CE QUE LA LIB PRODUIT, pas un objet fabriqué à la main', () => {
+    // Non-régression d’unité de bout en bout : la conversion de `effectAsAggregate`
+    // (÷100) et celle d’`aggregateLines` (×100) doivent se compenser exactement.
+    expect(aggregateLines(effectAsAggregate('crit_pct', 7.5))).toEqual(['+7,5% critique']);
   });
 });

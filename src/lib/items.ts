@@ -823,6 +823,74 @@ export function effectLabelFor(type: EffectType, v: number): string {
       return `renvoie ${s}% des dégâts reçus`;
   }
 }
+/** Comment se LIT chaque canal d’un agrégat.
+ *
+ * ⚠️ EXHAUSTIVE PAR CONSTRUCTION (`Record<keyof AggregatedEffects, …>`) : ajouter un
+ * canal sans dire comment il se lit **casse la compilation** au lieu de le faire
+ * disparaître en silence de tous les écrans.
+ *
+ * ⚠️ L’esquive n’a PAS d’`EffectType` — aucun objet ne la donne, elle ne vient que des
+ * talents et des voies — d’où son cas propre plutôt qu’un canal muet.
+ *
+ * Au niveau MODULE, et pré-« entrée » : la table est constante, la reconstruire à
+ * chaque appel coûtait ~16 allocations jetables pour lire des littéraux.
+ */
+const AGGREGATE_AS: Record<keyof AggregatedEffects, EffectType | 'dodge'> = {
+  // Ordre de LECTURE : ce qui pèse d'abord, les stats de confort en dernier.
+  damagePct: 'damage_pct',
+  maxPvPct: 'max_pv_pct',
+  dmgReduction: 'dmg_reduction_pct',
+  critAdd: 'crit_pct',
+  dodgeAdd: 'dodge',
+  lifesteal: 'lifesteal_pct',
+  thornsPct: 'thorns_pct',
+  executePct: 'execute_pct',
+  ragePct: 'rage_pct',
+  momentumPct: 'momentum_pct',
+  goldPct: 'gold_pct',
+  magicFindPct: 'magic_find_pct',
+  regenPct: 'regen_pct',
+  initiativePct: 'initiative_pct',
+};
+/** Le pictogramme de chaque canal — repris de la fiche Héros, qui les affichait déjà. */
+const AGGREGATE_EMOJI: Record<keyof AggregatedEffects, string> = {
+  damagePct: '⚔️',
+  maxPvPct: '❤️',
+  dmgReduction: '🛡️',
+  critAdd: '🎯',
+  dodgeAdd: '💨',
+  lifesteal: '🩸',
+  thornsPct: '🌵',
+  executePct: '🪓',
+  ragePct: '💢',
+  momentumPct: '🌀',
+  goldPct: '🪙',
+  magicFindPct: '🍀',
+  regenPct: '💧',
+  initiativePct: '⚡',
+};
+const AGGREGATE_KEYS = Object.keys(AGGREGATE_AS) as (keyof AggregatedEffects)[];
+
+/**
+ * UN AGRÉGAT D’EFFETS, PRÊT À LIRE : « +4,2% dégâts », « −1,8% dégâts reçus »…
+ *
+ * ⚠️ `AggregatedEffects` EST EN FRACTIONS (0,042), `effectLabelFor` ATTEND DES
+ * POURCENTS. La conversion vit donc ICI, une fois : c’est exactement le piège qui a
+ * déjà coûté un facteur CENT au projet, et le laisser à chaque écran c’est le rejouer
+ * — la fiche Héros le rejouait d’ailleurs sur quatre canaux.
+ *
+ * Les canaux à zéro — et ceux qui s’afficheraient « +0% » une fois arrondis — sont
+ * tus : mieux vaut ne rien dire que promettre un gain nul.
+ */
+export function aggregateLines(fx: AggregatedEffects, opts?: { emoji?: boolean }): string[] {
+  return AGGREGATE_KEYS.flatMap((key) => {
+    const pct = fx[key] * 100;
+    if (Math.round(pct * 10) === 0) return [];
+    const type = AGGREGATE_AS[key];
+    const txt = type === 'dodge' ? `+${fmtEffectValue(pct)}% esquive` : effectLabelFor(type, pct);
+    return [opts?.emoji ? `${AGGREGATE_EMOJI[key]} ${txt}` : txt];
+  });
+}
 /** Libellé de l'effet à un niveau d'objet donné (valeur réelle) — legacy (familiers). */
 export function effectLabel(e: ItemEffect, level = 1): string {
   const v = effectiveValue(e, level);

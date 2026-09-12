@@ -278,17 +278,29 @@
            rempart. Le Chenil ne fait que plafonner combien et jusqu’à quel rang. -->
       <div class="d-sec">🐾 Sa paire</div>
       <button type="button" class="d-pair" @click="pairFor = detailAdv">
-        <span class="d-pair-emo">{{ famOf(detailAdv)?.emoji ?? '＋' }}</span>
+        <span class="d-pair-emo">{{ detailFam?.emoji ?? '＋' }}</span>
         <span class="d-pair-main">
-          <span class="d-pair-name">{{ famOf(detailAdv)?.name ?? 'Aucun compagnon' }}</span>
+          <span class="d-pair-name">
+            {{ detailFam?.name ?? 'Aucun compagnon' }}
+            <span v-if="detailFam" class="d-rk" :style="{ '--rk': famColor(detailFam) }">{{
+              RARITY_LABEL[detailFam.rarity]
+            }}</span>
+          </span>
+          <span v-for="(g, i) in detailFamGain" :key="i" class="d-gain">{{ g }}</span>
           <span class="d-pair-sub">{{ famNote(detailAdv) }}</span>
         </span>
       </button>
       <button type="button" class="d-pair" @click="talFor = detailAdv">
-        <span class="d-pair-emo">{{ talOf(detailAdv) ? '🧠' : '＋' }}</span>
+        <span class="d-pair-emo">{{ detailTal ? '🧠' : '＋' }}</span>
         <span class="d-pair-main">
-          <span class="d-pair-name">{{ talLabel(detailAdv) }}</span>
-          <span class="d-pair-sub">Un talent, bridé — un mini-héros, pas un second héros.</span>
+          <span class="d-pair-name">
+            {{ talLabel(detailAdv) }}
+            <span v-if="detailTal" class="d-rk" :style="{ '--rk': talColor(detailTal) }">{{
+              RARITY_LABEL[talentRankOf(detailTal)]
+            }}</span>
+          </span>
+          <span v-for="(g, i) in detailTalGain" :key="i" class="d-gain">{{ g }}</span>
+          <span class="d-pair-sub">{{ talNote(detailAdv) }}</span>
         </span>
       </button>
 
@@ -322,6 +334,10 @@
         }}
         compagnons confiés
       </p>
+      <!-- ⚠️ On le dit UNE fois, en tête : le chiffre listé n’est pas celui de la fiche du
+           familier. Sans ça, lire « +4,2% » ici et « +10,5% » sur le même loup dans
+           l’inventaire se lit comme un bug. -->
+      <p class="g-note">{{ GAIN_NOTE }}</p>
       <button v-if="pairFor && famOf(pairFor)" class="cta ghost" @click="assignFam(null)">
         Reprendre son compagnon
       </button>
@@ -329,18 +345,29 @@
         Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
       </p>
       <button
-        v-for="f in famPool"
-        :key="f.id"
+        v-for="r in famRows"
+        :key="r.f.id"
         type="button"
         class="d-pick"
-        :class="{ barred: !famOk(f), here: pairFor && famOf(pairFor)?.id === f.id }"
-        :disabled="!famOk(f)"
-        @click="assignFam(f.id)"
+        :class="{ barred: !r.ok, here: pairFor && famOf(pairFor)?.id === r.f.id }"
+        :disabled="!r.ok"
+        @click="assignFam(r.f.id)"
       >
-        <span class="d-pair-emo">{{ f.emoji }}</span>
+        <span class="d-pair-emo">{{ r.f.emoji }}</span>
         <span class="d-pair-main">
-          <span class="d-pair-name">{{ f.name }}</span>
-          <span class="d-pair-sub">{{ famWhy(f) }}</span>
+          <span class="d-pair-name">
+            {{ r.f.name }}
+            <span class="d-rk" :style="{ '--rk': r.color }">{{ RARITY_LABEL[r.f.rarity] }}</span>
+            <span
+              v-if="r.train"
+              class="d-train"
+              title="Dressage de défense, et ce que ton Chenil en retient"
+              >{{ r.train }}</span
+            >
+          </span>
+          <span v-for="(g, i) in r.gains" :key="i" class="d-gain">{{ g }}</span>
+          <span class="d-pair-sub">{{ r.meta }}</span>
+          <span v-if="r.why" class="d-pair-sub warn">{{ r.why }}</span>
         </span>
       </button>
       <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="pairFor = null" /></div>
@@ -357,19 +384,25 @@
       <button v-if="talFor && talOf(talFor)" class="cta ghost" @click="assignTal(null)">
         Reprendre son talent
       </button>
+      <p class="g-note">{{ GAIN_NOTE }}</p>
       <p v-if="!talPool.length" class="g-note">Aucun talent libre — les tiens sont équipés.</p>
       <button
-        v-for="t in talPool"
-        :key="t.id"
+        v-for="r in talRows"
+        :key="r.t.id"
         type="button"
         class="d-pick"
-        :class="{ here: talFor && talOf(talFor)?.id === t.id }"
-        @click="assignTal(t.id)"
+        :class="{ here: talFor && talOf(talFor)?.id === r.t.id }"
+        @click="assignTal(r.t.id)"
       >
-        <span class="d-pair-emo">🧠</span>
+        <span class="d-pair-emo">{{ r.icon }}</span>
         <span class="d-pair-main">
-          <span class="d-pair-name">{{ talName(t) }}</span>
-          <span class="d-pair-sub">{{ talTaken(t) }}</span>
+          <span class="d-pair-name">
+            {{ r.name }}
+            <span class="d-rk" :style="{ '--rk': r.color }">{{ RARITY_LABEL[r.rank] }}</span>
+          </span>
+          <span v-for="(g, i) in r.gains" :key="i" class="d-gain">{{ g }}</span>
+          <span class="d-pair-sub">{{ r.meta }}</span>
+          <span v-if="r.taken" class="d-pair-sub warn">{{ r.taken }}</span>
         </span>
       </button>
       <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="talFor = null" /></div>
@@ -409,8 +442,22 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
-import { RARITY_LABEL, FAMILIAR_SLOT, type Item } from '@/lib/items';
-import { normalizeTalents, talentByCode, type TalentInstance } from '@/lib/talents';
+import {
+  RARITY_LABEL,
+  RANK_COLOR,
+  FAMILIAR_SLOT,
+  aggregateLines,
+  famLevel,
+  rollJet,
+  type Item,
+} from '@/lib/items';
+import {
+  normalizeTalents,
+  talentByCode,
+  talentJetOf,
+  talentRankOf,
+  type TalentInstance,
+} from '@/lib/talents';
 import {
   defenseLevel,
   companionSlots,
@@ -418,7 +465,7 @@ import {
   companionPairs,
   canCompanion,
 } from '@/lib/raid';
-import { trainMsFor } from '@/lib/caravan';
+import { trainMsFor, companionEffects, advTalentEffects, cappedDefLevel } from '@/lib/caravan';
 
 const props = defineProps<{
   open: boolean;
@@ -465,27 +512,118 @@ const talById = computed(() => new Map(talPool.value.map((t) => [t.id, t])));
 const famOf = (a: Adventurer) => (a.familiarId ? (famById.value.get(a.familiarId) ?? null) : null);
 const talOf = (a: Adventurer) => (a.talentId ? (talById.value.get(a.talentId) ?? null) : null);
 const famOk = (f: Item) => f.id !== heroFamId.value && canCompanion(f, kennelLevel.value);
+/**
+ * CE QUE L’AVENTURIER EN TIRE — calculé par la fonction du COMBAT, jamais réécrite.
+ *
+ * ⚠️ On n’affiche PAS la stat brute du familier : elle est calibrée pour le HÉROS et
+ * arrive ici bridée (`COMPANION_K`) puis plafonnée par le dressage que le Chenil
+ * autorise. Montrer la valeur de la fiche ferait croire à un gain deux fois et demie
+ * trop gros. On appelle donc `companionEffects` sur CE seul familier — le patron du
+ * chenil (v0.683) : une étiquette qui refait le calcul à sa façon finit par diverger.
+ *
+ * ⚠️ Valeur au REPOS : un familier fatigué compte de moitié au rempart, mais la
+ * fatigue passe en quelques heures et l’appariement, lui, dure.
+ */
+const famGain = (f: Item) =>
+  aggregateLines(companionEffects([f], 'def', undefined, kennelLevel.value));
+const talGain = (t: TalentInstance) => aggregateLines(advTalentEffects([t]));
+/** Les trois axes de magnitude du projet : rang, jet, niveau d’objet. */
+// ⚠️ La rareté n'est PAS répétée ici : elle vit dans la pastille colorée, où elle est
+// accentuée (« Épique », pas « EPIQUE » — la pastille affichait la CLÉ de l'énumération).
+const famMeta = (f: Item) =>
+  `jet ${rollJet(f.roll)}% · niv ${f.level}${f.effect2 ? ' · ✦ signature' : ''}`;
+const talMeta = (t: TalentInstance) => `jet ${talentJetOf(t)}% · niv ${t.level ?? 1}`;
+const famColor = (f: Item) => RANK_COLOR[f.rarity];
+const talColor = (t: TalentInstance) => RANK_COLOR[talentRankOf(t)];
+/** Dressage DÉFENSIF, et ce que le Chenil en retient : c’est lui qui multiplie l’effet
+ *  au rempart, donc un familier bien dressé mais hors d’école se lit d’un coup d’œil. */
+// ⚠️ Un familier NEUF est à zéro, et c'est le cas le plus courant : « 🛡️ 0 » se lisait
+// comme une erreur plutôt que comme « pas encore dressé ». On ne dit donc rien tant
+// qu'il n'y a rien à dire, et on montre la coupe dès que le Chenil en retient moins.
+function famTrain(f: Item): string {
+  const brut = famLevel(f.defXp, 'def');
+  if (!brut) return '';
+  // ⚠️ La coupe vient de la LIB (celle que le combat applique), jamais recalculée ici :
+  // c'était la troisième copie de la règle, et une étiquette qui refait le calcul à sa
+  // façon finit par annoncer « 🛡️ 3/5 » quand la bataille en compte 5.
+  const retenu = cappedDefLevel(f, kennelLevel.value);
+  return retenu < brut ? `🛡️ ${retenu}/${brut}` : `🛡️ ${brut}`;
+}
+/** ⚠️ VIDE quand il n'y a rien à signaler : répété sur chaque ligne, « Libre » n'apprend
+ *  rien et noie la seule chose qui compte — le gain. On ne parle que d'un empêchement. */
 function famWhy(f: Item): string {
   if (f.id === heroFamId.value) return 'Ton héros le porte — il se bat ailleurs.';
   if (!canCompanion(f, kennelLevel.value))
     return `Hors de portée de ton Chenil (rang max ${rankCapLabel.value}).`;
   const autre = char.advList.find((a) => a.familiarId === f.id && a.id !== pairFor.value?.id);
-  return autre ? `Confié à ${autre.name} — le prendre le lui retirera.` : RARITY_LABEL[f.rarity];
+  return autre ? `Confié à ${autre.name} — le prendre le lui retirera.` : '';
 }
 function famNote(a: Adventurer): string {
   const f = famOf(a);
   if (!f) return 'Aucun familier confié.';
-  return `${RARITY_LABEL[f.rarity]} · il le suit partout`;
+  return famMeta(f);
 }
 const talName = (t: TalentInstance) => talentByCode(t.code)?.name ?? t.code;
 function talTaken(t: TalentInstance): string {
   const autre = char.advList.find((a) => a.talentId === t.id && a.id !== talFor.value?.id);
-  return autre ? `Confié à ${autre.name} — le prendre le lui retirera.` : 'Libre';
+  return autre ? `Confié à ${autre.name} — le prendre le lui retirera.` : '';
 }
 function talLabel(a: Adventurer): string {
   const t = talOf(a);
   return t ? talName(t) : 'Aucun talent confié';
 }
+function talNote(a: Adventurer): string {
+  const t = talOf(a);
+  return t ? talMeta(t) : 'Un talent, bridé — un mini-héros, pas un second héros.';
+}
+/** L'avertissement des deux sélecteurs. ⚠️ Écrit UNE fois : deux copies mot pour mot se
+ *  reformulent séparément, et l'une des deux finit par mentir. */
+const GAIN_NOTE = 'Les gains listés sont ce que l’aventurier en tire — bridé, et au rempart.';
+
+/**
+ * LES LIGNES DU SÉLECTEUR, pré-calculées.
+ *
+ * ⚠️ Le composant a un tick de 30 s (fatigue, convalescences, formations), donc TOUT ce
+ * que le template appelle est ré-évalué à chaque battement — et chaque helper y était
+ * appelé deux fois par ligne (une fois en `v-if`, une fois en interpolation), `famWhy`
+ * et `talTaken` balayant `advList` à chacun. Mesuré sur un compte réel : ~74 talents en
+ * réserve, soit ~150 balayages et ~2 800 allocations par battement, pour reproduire des
+ * chaînes strictement identiques.
+ *
+ * ⚠️ Aucune dépendance de ces `computed` n'inclut `now` : le tick ne les recalcule donc
+ * plus du tout.
+ */
+const famRows = computed(() =>
+  famPool.value.map((f) => ({
+    f,
+    ok: famOk(f),
+    gains: famGain(f),
+    meta: famMeta(f),
+    train: famTrain(f),
+    why: famWhy(f),
+    color: famColor(f),
+  })),
+);
+const talRows = computed(() =>
+  talPool.value.map((t) => ({
+    t,
+    name: talName(t),
+    icon: talentByCode(t.code)?.icon ?? '🧠',
+    rank: talentRankOf(t),
+    gains: talGain(t),
+    meta: talMeta(t),
+    taken: talTaken(t),
+    color: talColor(t),
+  })),
+);
+/** Le compagnon et le talent de l'aventurier ouvert. ⚠️ Un `computed` plutôt que huit
+ *  appels et cinq `!` non-null dans le template : chaque `!` est une assertion que le
+ *  lecteur doit re-vérifier contre le `v-if` du parent, et le lien casse en silence dès
+ *  qu'on déplace une ligne. */
+const detailFam = computed(() => (detailAdv.value ? famOf(detailAdv.value) : null));
+const detailTal = computed(() => (detailAdv.value ? talOf(detailAdv.value) : null));
+const detailFamGain = computed(() => (detailFam.value ? famGain(detailFam.value) : []));
+const detailTalGain = computed(() => (detailTal.value ? talGain(detailTal.value) : []));
 /** ⚠️ Le store REFUSE ce qui est impossible (héros porteur, rang hors d’école) : on
  *  affiche son message plutôt que d’en réécrire un second qui pourrait diverger. */
 async function pair(fn: (uid: string) => Promise<unknown>) {
@@ -787,10 +925,41 @@ async function doPromote(classId: string) {
 }
 .d-pair-name {
   font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
 }
 .d-pair-sub {
   font-size: 11.5px;
   color: var(--dim);
+}
+/* Le GAIN : c’est la seule chose qui départage deux compagnons, donc la seule ligne en
+   pleine couleur — le reste (rang, jet, niveau) ne fait que l’expliquer. */
+.d-gain {
+  font-size: 12px;
+  color: var(--text);
+}
+/* Le rang prend sa couleur de RANK_COLOR, la source unique — pas une 4ᵉ copie des huit
+   classes .p-*, qui vivent dans trois autres composants et finiraient par diverger. */
+.d-rk {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: var(--rk);
+  border: 1px solid var(--rk);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+/* Un empêchement n’est pas une métadonnée : il se distingue du jet et du niveau. */
+.d-pair-sub.warn {
+  color: var(--d3, #ffb23f);
+}
+.d-train {
+  font-size: 10.5px;
+  color: var(--dim);
+  margin-left: 6px;
+  white-space: nowrap;
 }
 .d-sec {
   font-size: 11px;

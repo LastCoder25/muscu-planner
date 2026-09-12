@@ -2707,6 +2707,7 @@ import {
   voieSetId,
   MAX_LOADOUTS,
   mergeEffects,
+  aggregateLines,
   effectLabelFor,
   setTierLabel,
   rollJet,
@@ -3373,27 +3374,14 @@ const talPickOpen = computed({
   },
 });
 /** Ce que les talents ÉQUIPÉS donnent, en clair. ⚠️ Ce total n'était affiché nulle part :
- *  on voyait bien chaque talent, jamais leur somme — or c'est elle qui entre en combat. */
-const talentSummary = computed(() => {
-  const e = talentFx.value;
-  const out: string[] = [];
-  const p = (n: number) => Math.round(n * 10) / 10;
-  if (e.damagePct) out.push(`⚔️ +${p(e.damagePct)} % dégâts`);
-  if (e.maxPvPct) out.push(`❤️ +${p(e.maxPvPct * 100)} % PV`);
-  if (e.critAdd) out.push(`🎯 +${p(e.critAdd * 100)} % crit`);
-  if (e.dodgeAdd) out.push(`💨 +${p(e.dodgeAdd * 100)} % esquive`);
-  if (e.dmgReduction) out.push(`🛡️ −${p(e.dmgReduction * 100)} % subis`);
-  if (e.lifesteal) out.push(`🩸 +${p(e.lifesteal * 100)} % vol de vie`);
-  if (e.thornsPct) out.push(`🌵 +${p(e.thornsPct * 100)} % épines`);
-  if (e.executePct) out.push(`🪓 +${p(e.executePct)} % exécution`);
-  if (e.ragePct) out.push(`💢 +${p(e.ragePct)} % rage`);
-  if (e.momentumPct) out.push(`🌀 +${p(e.momentumPct)} % élan`);
-  if (e.goldPct) out.push(`🪙 +${p(e.goldPct * 100)} % or`);
-  if (e.magicFindPct) out.push(`🍀 +${p(e.magicFindPct * 100)} % trouvaille`);
-  if (e.regenPct) out.push(`💧 +${p(e.regenPct * 100)} % régén`);
-  if (e.initiativePct) out.push(`⚡ +${p(e.initiativePct * 100)} % initiative`);
-  return out;
-});
+ *  on voyait bien chaque talent, jamais leur somme — or c'est elle qui entre en combat.
+ *
+ *  ⚠️ Il portait sa PROPRE table de libellés, et elle avait dérivé : quatre canaux
+ *  (dégâts, exécution, rage, élan) s'affichaient SANS le ×100, donc un talent à +10 %
+ *  de dégâts se lisait « +0.1 % ». C'est le facteur cent que `aggregateLines` existe
+ *  pour tuer — une seule table, partagée avec le panneau de la Guilde. */
+const talentSummary = computed(() => aggregateLines(talentFx.value, { emoji: true }));
+
 /** Talents proposés pour une case : les DISPONIBLES seulement, plus celui qui occupe déjà
  *  cette case — même règle qu'au chenil. Proposer un talent équipé ailleurs n'aurait mené
  *  qu'à un refus du store : un emplacement ne se remplit qu'avec ce qui est libre. */

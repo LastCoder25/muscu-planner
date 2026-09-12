@@ -36,7 +36,13 @@ import {
   type AggregatedEffects,
   type Item,
 } from './items';
-import { escortCombatant, companionEffects, advTalentEffects, COMPANION_K } from './caravan';
+import {
+  escortCombatant,
+  companionEffects,
+  advTalentEffects,
+  cappedDefLevel,
+  COMPANION_K,
+} from './caravan';
 import { type TalentInstance } from './talents';
 import { beyondCap } from './buildings';
 import { advStats, PROMO_LEVELS, type Adventurer } from './adventurers';
@@ -1102,15 +1108,6 @@ export function fatigueMsFor(infirmaryLevel: number): number {
 }
 function isFatigued(fam: { fatigueUntil?: number }, now: number): boolean {
   return !!fam.fatigueUntil && now < fam.fatigueUntil;
-}
-
-/** Niveau de dressage DÉFENSIF effectif d'un familier posté. ⚠️ **Plafonné par le
- *  CHENIL** : c'est le bâtiment qui entraîne, un familier ne peut pas dépasser l'école
- *  qui le forme. Sans ce plafond, le chenil de niveau 1 vaudrait le chenil de niveau 20
- *  dès que les familiers auraient tourné quelques sièges — le bâtiment n'aurait servi
- *  qu'à ouvrir des places. */
-function cappedDefLevel(fam: Item, kennelLevel: number): number {
-  return Math.min(famLevel(fam.defXp, 'def'), Math.max(0, kennelLevel));
 }
 
 /** La BASE en défenseur : la muraille encaisse, les tourelles tirent, le héros présent

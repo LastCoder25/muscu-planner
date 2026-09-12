@@ -280,6 +280,18 @@ export function companionsOf(
  * animal ne vaut donc pas la même chose aux deux endroits — exactement ce que le chenil
  * faisait déjà, mais rattaché à un homme plutôt qu'à un mur.
  */
+/**
+ * Niveau de dressage DÉFENSIF effectif d'un familier : plafonné par le CHENIL.
+ *
+ * ⚠️ C'est le bâtiment qui entraîne — un familier ne peut pas dépasser l'école qui le
+ * forme. La règle vivait en TROIS exemplaires (ici en ligne, `cappedDefLevel` dans
+ * `raid.ts`, et recopiée dans le panneau de la Guilde) : le jour où le Chenil accorde
+ * une tolérance, l'écran afficherait « 🛡️ 3/5 » pendant que le combat en compterait 5.
+ */
+export function cappedDefLevel(fam: Item, kennelLevel: number): number {
+  return Math.min(famLevel(fam.defXp, 'def'), Math.max(0, kennelLevel));
+}
+
 export function companionEffects(
   companions: Item[],
   kind: 'atk' | 'def',
@@ -291,10 +303,7 @@ export function companionEffects(
   capLevel?: number,
 ): AggregatedEffects {
   const list = companions.flatMap((f) => {
-    const def =
-      capLevel === undefined
-        ? famLevel(f.defXp, 'def')
-        : Math.min(famLevel(f.defXp, 'def'), Math.max(0, capLevel));
+    const def = capLevel === undefined ? famLevel(f.defXp, 'def') : cappedDefLevel(f, capLevel);
     const mult = k * (kind === 'atk' ? famAtkMult(famLevel(f.atkXp, 'atk')) : famDefMult(def));
     const parts = [asAggregate(f.effect.type, f.effect.value * mult)];
     // La SIGNATURE ✦ d'un familier compte aussi : c'est ce qui fait sa valeur au drop.
