@@ -102,7 +102,26 @@ function hero(L: number): Combatant {
   return { ...f, damage: Math.round(f.damage * ge.off), pv: Math.round(f.pv * ge.pv) };
 }
 
-function holdRate(playerLevel: number, defLevel: number, heroHome: boolean, n = 200): number {
+/** Un vivier plausible : la lignée guerrière, aux niveaux qu’un joueur aligne vraiment. */
+function rosterOf(playerLevel: number): Adventurer[] {
+  return Array.from({ length: guildRoster(playerLevel) }, (_, i) => ({
+    id: `a${i}`,
+    name: `A${i}`,
+    seed: i + 1,
+    path: ['guerrier', 'epeiste', 'duelliste'],
+    level: Math.max(1, playerLevel - 10 + (i % 8)),
+    xp: 0,
+  }));
+}
+function holdRate(
+  playerLevel: number,
+  defLevel: number,
+  heroHome: boolean,
+  n = 200,
+  /** ⚠️ VIDE PAR DÉFAUT, et c’est volontaire : la plupart des invariants mesurent
+   *  l’ENCEINTE SEULE. Y glisser une garnison changerait ce qu’ils verrouillent. */
+  advs: Adventurer[] = [],
+): number {
   let held = 0;
   for (let i = 0; i < n; i++) {
     const raid = rollRaid(i * 7919 + 13, playerLevel, 0, 0);
@@ -110,6 +129,12 @@ function holdRate(playerLevel: number, defLevel: number, heroHome: boolean, n = 
       defenses: defs(defLevel, defLevel),
       playerLevel,
       hero: heroHome ? hero(playerLevel) : null,
+      guard: guardUnits(playerLevel, advs, {
+        now: 0,
+        kennelLevel: defLevel,
+        familiars: [],
+        talents: [],
+      }),
     };
     if (resolveRaid(base, raid, 0, heroHome).held) held++;
   }
@@ -295,6 +320,25 @@ describe('calibration du siège', () => {
     expect(plein).toBeGreaterThan(troisQuarts);
     // …et l'écart entre deux paliers reste mesuré (pas de marche d'escalier).
     expect(plein - troisQuarts).toBeLessThan(45);
+  });
+
+  it('⚠️ LE VIVIER PÈSE : recruter et élever change l’issue, pas seulement le décor', () => {
+    // ⚠️ RIEN ne testait cette propriété — et elle était quasi FAUSSE. Le goulot de la
+    // brèche ne bornait qu’un camp : quatre hommes entraient, et tout le vivier leur
+    // tombait dessus. Mesuré, la garnison ne valait que **+5 points** de tenue, pour un
+    // système qu’on nourrit pendant des semaines (recrutement, promotions, compagnons,
+    // talents). C’est exactement le genre de promesse creuse qu’un aperçu honnête rend
+    // visible — et qu’aucune porte ne voyait.
+    //
+    // ⚠️ Ce test verrouille « le vivier COMPTE », pas une largeur de brèche : l’écart
+    // entre 4 et 5 vaut 2 points sur une statistique bruitée, il ne se discrimine pas
+    // honnêtement. Ce qui garde la largeur à son plafond, c’est la FALAISE (mesurée à
+    // 13,0 pour un plancher de 15 dès la largeur 6).
+    for (const lvl of [26, 50]) {
+      const avec = holdRate(lvl, lvl, true, 260, rosterOf(lvl));
+      const sans = holdRate(lvl, lvl, true, 260);
+      expect(avec, `niveau ${lvl}`).toBeGreaterThan(sans + 3);
+    }
   });
 
   it('💰 l’enceinte est PAYABLE : elle n’a pas la courbe des bâtiments de production', () => {
