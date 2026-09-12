@@ -1885,14 +1885,19 @@ export function siegeDefenders(
  * qu'un mercenaire en armure. Sans lui, le goulot comptait des TÊTES et rendait les
  * hordes inoffensives (mesuré v0.755).
  *
- * ⚠️ MAIS `unitMult` SEUL NE SUFFIT PAS, et l'exposant se DÉRIVE. Les dégâts d'un groupe
- * suivent `√effectif` (`groupDmgExp`), donc le coup d'UN corps vaut
- * `unitMult × effectif^(g−1)` ; à masse conservée l'effectif vaut `1/unitMult`, d'où
- * `unitMult^(2−g)`. Une place proportionnelle à `unitMult` laissait donc les hordes
- * frapper le mur **23 % moins fort** : mesuré au niveau 26, les bêtes étaient repoussées
- * **97 %** du temps contre **80 %** pour les morts-vivants — 17 points d'écart, là où
- * l'iso-menace de la v0.661 en tolère 12. Avec l'exposant, les dégâts au mur ne dépendent
- * plus du tout de la silhouette : c'est une IDENTITÉ, pas un réglage ajusté après coup.
+ * ⚠️ ET LA PLACE VAUT EXACTEMENT LA FORCE DU CORPS — `bulk = unitMult`, pas davantage.
+ * Le front délivre `wallFront / bulk` corps à `perBody` chacun, donc l'invariance
+ * demande `bulk ∝ perBody` ; et `perBody ∝ unitMult`, puisque `silhouetteDmgMult`
+ * juste au-dessus annule déjà la dépendance en `√effectif`.
+ *
+ * ⚠️ L'exposant `2−g` qui vivait ici **DOUBLE-COMPTAIT cette annulation** : les deux
+ * corrections ont été écrites dans la MÊME version (v0.761), et la seconde a été dérivée
+ * en oubliant la première. Conséquence, une horde logeait `unitMult^-1,5` corps au mur
+ * pour `unitMult` de dégâts chacun, soit `unitMult^-0,5` de puissance de frappe —
+ * elle cognait **plus fort** à masse égale. Mesuré (v0.788, 400 sièges × 4 niveaux) : les
+ * bêtes emportaient **61 à 72 %** du rempart contre **37 à 51 %** aux bandits, un écart
+ * relatif de **39 à 50 %**. Un balayage confirme le point d'invariance — l'écart tombe à
+ * **8 %** à l'exposant 1 et **remonte des deux côtés** (24 % à 0,85, 48 % à 1,5).
  */
 export function siegeAttackers(raid: Raid): SiegeUnit[] {
   const out: SiegeUnit[] = [];
@@ -1925,7 +1930,7 @@ export function siegeAttackers(raid: Raid): SiegeUnit[] {
         maxPv: Math.max(1, Math.round(unitPv)),
         damage: Math.max(1, Math.round(perBody)),
         origin: 'attacker',
-        bulk: Math.pow(um, 2 - RAID.groupDmgExp),
+        bulk: um,
         sector: (first + gi) % BATTLE.sectors,
         // ⚠️ TOUT LE MONDE PART DU BORD DU TERRAIN. C’est la traversée qui donne leur
         // valeur aux balistes — sans elle, l’armée frappait dès le premier tour et la

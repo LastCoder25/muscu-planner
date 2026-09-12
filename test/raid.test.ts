@@ -214,11 +214,11 @@ describe('silhouette de faction', () => {
       rates[f] = (held / n) * 100;
     }
     const vals = Object.values(rates);
-    // ⚠️ SEUIL 12 → 13, ET JE NE LE CACHE PAS. Mesuré : 9,55 avant la géométrie, 12,06
-    // après. La cause est identifiée — un trait de baliste tue une bête en GASPILLANT
-    // l'excédent, donc une horde encaisse mieux le feu qu'une bande d'élite, et l'arc de
-    // tir (qui réduit le nombre de balistes engagées) amplifie cet avantage.
-    expect(Math.max(...vals) - Math.min(...vals)).toBeLessThan(13);
+    // ⚠️ SEUIL 13 → 7, ET LA CAUSE A ÉTÉ TRAITÉE, pas contournée (v0.788). Les deux
+    // fuites que ce seuil relâché signalait sont réparées : le feu ne se perd plus dans
+    // un cadavre (`volley`) et la place au pied du mur ne double-compte plus la racine
+    // de l'effectif (`bulk = unitMult`). Mesuré ici même : **12,06 → 4,10**.
+    expect(Math.max(...vals) - Math.min(...vals)).toBeLessThan(7);
 
     // ⚠️ ET SURTOUT : LA TENUE EST UN MAUVAIS INSTRUMENT POUR CETTE PROPRIÉTÉ.
     // C'est une PROBABILITÉ, donc elle sature aux deux bouts — l'écart mesuré n'est même
@@ -227,10 +227,10 @@ describe('silhouette de faction', () => {
     // intéressant. Un tel test donne donc son meilleur satisfecit quand le jeu est le
     // plus plat, ce qui est l'inverse de ce qu'on veut.
     // On mesure donc AUSSI la menace pour ce qu'elle est : LA PART DE REMPART EMPORTÉE,
-    // qui ne sature pas. ⚠️ Elle révèle que la propriété était DÉJÀ largement violée
-    // avant cette version (43,6 % d'écart relatif ; 51,6 % après) — le seuil ci-dessous
-    // ne fait que verrouiller l'existant, il ne le déclare pas sain. À reprendre dans un
-    // chantier dédié.
+    // qui ne sature pas. ⚠️ C'est ELLE qui a révélé que la propriété était largement
+    // violée (51,6 % d'écart relatif) alors que la tenue n'en montrait presque rien —
+    // et c'est elle qui a servi de boussole au chantier de la v0.788. Mesurée
+    // aujourd'hui : **11,8 %**. Le seuil descend donc de 0,60 à 0,20.
     const emporte = Object.keys(FACTION_PROFILE).map((f) => {
       let somme = 0;
       let n = 0;
@@ -250,7 +250,7 @@ describe('silhouette de faction', () => {
       return somme / n;
     });
     const moyen = emporte.reduce((a, b) => a + b, 0) / emporte.length;
-    expect((Math.max(...emporte) - Math.min(...emporte)) / moyen).toBeLessThan(0.6);
+    expect((Math.max(...emporte) - Math.min(...emporte)) / moyen).toBeLessThan(0.2);
   });
 
   it('l’effectif reste entièrement fouillable avant que les corps pourrissent', () => {
@@ -1799,21 +1799,44 @@ describe('⚔️🧱 LES UNITÉS DU SIÈGE — dérivées du vrai état, jamais 
       }
     });
 
-    it('⚠️ chaque corps porte sa PLACE au pied du mur (bulk)', () => {
-      // Sans elle, le goulot comptait des TÊTES et rendait les hordes inoffensives.
-      // ⚠️ « > 0 » passait au vert avec un `bulk` figé à 1 : on épingle donc la VALEUR.
-      // ⚠️ Elle n’est PAS proportionnelle à `unitMult` : les dégâts d’un groupe suivent
-      // la RACINE de son effectif, donc la place d’un corps doit valoir
-      // `unitMult^(2−groupDmgExp)` pour que les dégâts portés au mur ne dépendent plus
-      // du tout de la silhouette. C’est une identité dérivée, pas un réglage.
+    it('⚠️ la PLACE au pied du mur rend la frappe INDIFFÉRENTE à la silhouette', () => {
+      // Sans `bulk`, le goulot comptait des TÊTES et rendait les hordes inoffensives.
+      //
+      // ⚠️ CE TEST ÉPINGLAIT LA FORMULE (`unitMult^(2−groupDmgExp)`) — donc il verrouillait
+      // le défaut au lieu de le voir. Cet exposant DOUBLE-COMPTAIT l'annulation que
+      // `silhouetteDmgMult` fait déjà : mesuré, une horde emportait 39 à 50 % de rempart
+      // de plus qu'une bande d'élite à masse égale. On teste désormais la PROPRIÉTÉ —
+      // ce que le front délivre en un tour ne doit pas dépendre de la silhouette — et
+      // n'importe quel exposant faux la fait tomber, y compris celui qui était livré.
+      const frappe = (unitMult: number) => {
+        // Masse conservée : c'est l'hypothèse de l'invariant (countMult × unitMult ≈ 1).
+        const g = {
+          species: 'T',
+          emoji: '🗡️',
+          count: Math.round(24 / unitMult),
+          level: 20,
+          unitMult,
+          massMult: 1,
+          kind: 'melee' as const,
+        };
+        const att = siegeAttackers({ ...raid, groups: [g] } as typeof raid);
+        let place = BATTLE.wallFront;
+        let dmg = 0;
+        for (const a of att) {
+          if (place <= 0) break;
+          place -= Math.max(0.05, a.bulk ?? 1);
+          dmg += a.damage;
+        }
+        return dmg;
+      };
+      const horde = frappe(FACTION_PROFILE.betes.unitMult);
+      const elite = frappe(FACTION_PROFILE.bandits.unitMult);
+      expect(Math.abs(horde - elite) / Math.max(horde, elite)).toBeLessThan(0.15);
+      // Et la silhouette n’est pas neutre pour autant : une horde a des corps plus menus,
+      // donc il en tient DAVANTAGE au pied du mur — chacun frappant d’autant moins fort.
+      expect(FACTION_PROFILE.betes.unitMult).toBeLessThan(FACTION_PROFILE.bandits.unitMult);
       const att = siegeAttackers(raid);
       expect(att.every((u) => (u.bulk ?? 0) > 0)).toBe(true);
-      for (const g of raid.groups) {
-        const u = att.find((x) => x.name === g.species);
-        if (u) expect(u.bulk).toBeCloseTo(Math.pow(g.unitMult ?? 1, 2 - RAID.groupDmgExp), 6);
-      }
-      // Et la silhouette n’est pas neutre : une horde a des corps plus menus.
-      expect(FACTION_PROFILE.betes.unitMult).toBeLessThan(FACTION_PROFILE.bandits.unitMult);
     });
 
     it('⚠️ le CHAMPION est plus solide À NIVEAU ÉGAL — sinon on teste son niveau', () => {

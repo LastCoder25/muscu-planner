@@ -151,13 +151,14 @@ describe('la répartition par contributeur', () => {
     // structure compte encore (cf. le test de saturation juste en dessous).
     // ⚠️ LA FENÊTRE DE MESURE SE DÉPLACE À CHAQUE RECALIBRAGE, et c'est inhérent : une
     // ablation en PROBABILITÉ ne dit quelque chose que là où la tenue n'est ni 0 ni 1.
-    // Historique : niveau 30 puis 60 (le rempart s'est mis à couvrir ses tireurs), et
-    // maintenant 26 — depuis la géométrie (portées + arcs + approche), une enceinte à
-    // 60 % au niveau 60 est DÉJÀ perdue (tenue mesurée 0,00), donc TOUTES les parts y
-    // valent zéro. Mesuré au niveau 26 : tenue 0,33 · mur 0,33 · tourelles 0,33 ·
-    // héros 0,08 — la seule fenêtre où les trois disent encore quelque chose.
+    // Historique : niveau 30, puis 60 (le rempart s'est mis à couvrir ses tireurs),
+    // puis 26 à 60 % d'enceinte, et maintenant 26 à **70 %** — la volée et la place au
+    // pied du mur (v0.788) ont redressé la tenue, et à 60 % la part du héros retombait à
+    // zéro. Balayé sur 6 niveaux × 4 parts d'enceinte : 70 % au niveau 26 donne une
+    // tenue de **0,50** — le milieu exact de la courbe, là où une ablation dit le plus —
+    // avec mur 0,50 · tourelles 0,50 · héros 0,17.
     const lvl = 26;
-    const defs = defAt(Math.round(lvl * 0.6));
+    const defs = defAt(Math.round(lvl * 0.7));
     const b = defenseBreakdown(defs, lvl, refFighter(lvl), [], NOW);
     const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
     expect(by.wall!.holdLoss).toBeGreaterThan(0);

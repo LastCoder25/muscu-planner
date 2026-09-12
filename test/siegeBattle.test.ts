@@ -63,6 +63,64 @@ describe('la brèche', () => {
   });
 });
 
+describe('🏹 LA VOLÉE — le tir se dépense, il ne se perd pas dans un cadavre', () => {
+  // ⚠️ C'est le correctif de l'ISO-MENACE, et il part d'une MESURE : `strike` plafonnait
+  // les dégâts aux PV restants, donc un trait de baliste qui abattait un corps de 300 PV
+  // en portant 1 600 jetait la différence. Sur 400 sièges par niveau, la part de feu
+  // ainsi perdue dépendait de la faction — bêtes 16 % · morts-vivants 10 % · bandits 5 %,
+  // stable du niveau 12 au 100. Une horde absorbait donc ~10 points de tir de plus qu'une
+  // bande d'élite À MASSE ÉGALE : la fuite exacte que `countMult × unitMult ≈ 1` ne peut
+  // pas voir, puisque l'invariant conserve les PV et les dégâts, jamais la façon dont le
+  // feu ADVERSE se dépense contre eux. Après : ~0,7 %, identique pour les trois factions.
+
+  it('un trait qui SUR-TUE continue sur le corps suivant', () => {
+    // Un tireur qui porte 1000 face à dix corps de 100 doit tous les coucher en un tour.
+    const cibles = Array.from({ length: 10 }, () => att('melee', { pv: 100, damage: 1 }));
+    const r = simulateSiege(cibles, [turret({ damage: 1000, pv: 100000 })], wall(1e9), 7);
+    const tombes = r.log.filter((e) => e.kind === 'down' && e.round === 0).length;
+    expect(tombes).toBeGreaterThanOrEqual(9);
+  });
+
+  it("⚠️ et il s'ARRÊTE : jamais plus que ce qu'il porte", () => {
+    // Sans cette borne, la volée serait un multiplicateur de dégâts déguisé.
+    const cibles = Array.from({ length: 10 }, () => att('melee', { pv: 100, damage: 1 }));
+    const r = simulateSiege(cibles, [turret({ damage: 250, pv: 100000 })], wall(1e9), 7);
+    const porte = r.log
+      .filter((e) => e.kind === 'hit' && e.round === 0)
+      .reduce((s, e) => s + (e.amount ?? 0), 0);
+    expect(porte).toBeLessThanOrEqual(250);
+    expect(porte).toBeGreaterThan(200);
+  });
+
+  it('⚠️ DES DEUX CÔTÉS : le tireur de l’assaut s’étale lui aussi', () => {
+    // Test ajouté après une mutation passée au VERT : retirer la volée côté assaillants
+    // ne faisait tomber AUCUN des 215 tests. Une règle qu’on annonce symétrique doit
+    // être vérifiée sur les deux camps, sinon la moitié n’est qu’une intention.
+    const rempart = Array.from({ length: 10 }, () =>
+      turret({ pv: 100, damage: 1, sector: 0, arc: 8 }),
+    );
+    const r = simulateSiege(
+      [att('ranged', { damage: 1000, pv: 100000, dist: 0, range: 99 })],
+      rempart,
+      wall(1e9),
+      7,
+    );
+    const tombes = r.log.filter((e) => e.kind === 'down' && e.round === 0).length;
+    expect(tombes).toBeGreaterThanOrEqual(9);
+  });
+
+  it('⚠️ LA MÊLÉE GARDE SON GASPILLAGE — chez elle il est juste', () => {
+    // C'est la fiction qui tranche : une volée s'étale sur ce qui reste debout, un coup
+    // d'épée ne traverse pas un homme pour en toucher un second. Le défenseur au corps à
+    // corps ne frappe donc qu'une fois, même si son coup sur-tue largement.
+    const dedans = Array.from({ length: 10 }, () =>
+      att('melee', { pv: 100, damage: 1, inside: true }),
+    );
+    const r = simulateSiege(dedans, [def('melee', { damage: 1000, pv: 100000 })], wall(0, 1000), 7);
+    expect(r.log.filter((e) => e.kind === 'down' && e.round === 0)).toHaveLength(1);
+  });
+});
+
 describe('qui peut atteindre quoi', () => {
   it("⚠️ une armée SANS béliers ne peut pas ouvrir le mur : elle s'use dehors", () => {
     const r = simulateSiege(

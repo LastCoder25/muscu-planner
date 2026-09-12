@@ -369,6 +369,7 @@ function yardIsFalling(def: SiegeUnit[], att: SiegeUnit[]): boolean {
   return menace > def.reduce((n, d) => (inYard(d) ? n + d.damage : n), 0);
 }
 
+/** Frappe, et rend l'EXCÉDENT non consommé (0 si la cible a encaissé le tout). */
 function strike(
   from: SiegeUnit,
   to: SiegeUnit,
@@ -377,7 +378,7 @@ function strike(
   log: BattleEvent[],
   /** Intégrité du rempart (0..1) : ce qui reste de l’abri. */
   shelter = 0,
-) {
+): number {
   // ⚠️ LE POSTE COMMANDE L’ABRI, et c’est ce qui fait que la descente COÛTE sans qu’on
   // l’écrive deux fois : on ne bascule que `post`, la couverture tombe avec. Poser
   // aussi `armor` à zéro en descendant rouvrirait la divergence que l’étape 1 venait
@@ -386,10 +387,51 @@ function strike(
   // ⚠️ Le plancher à 1 s’applique APRÈS l’abri : un coup touche toujours, sinon une
   // armure élevée rendrait une unité invulnérable et la bataille ne finirait jamais.
   const soften = 1 - Math.min(0.9, Math.max(0, cover * Math.max(0, shelter)));
-  const dealt = Math.min(to.pv, Math.max(1, Math.round(amount * soften)));
+  const potentiel = Math.max(1, Math.round(amount * soften));
+  const dealt = Math.min(to.pv, potentiel);
   to.pv -= dealt;
   log.push({ round, kind: 'hit', from: from.id, to: to.id, amount: dealt });
   if (to.pv <= 0) log.push({ round, kind: 'down', to: to.id });
+  // ⚠️ L'excédent est rendu en dégâts BRUTS (on annule l'abri de CETTE cible) : le
+  // suivant appliquera le SIEN, qui n'est pas forcément le même.
+  return soften > 0 ? Math.max(0, (potentiel - dealt) / soften) : 0;
+}
+
+/**
+ * UNE VOLÉE : le tir se dépense ENTIÈREMENT, il ne se perd pas dans un cadavre.
+ *
+ * ⚠️ C'est le correctif de l'ISO-MENACE, et il vient d'une mesure. `strike` plafonnait
+ * les dégâts aux PV restants (`Math.min(to.pv, …)`) : abattre un corps de 300 PV avec un
+ * trait qui en porte 1 600 jetait 1 300 points. Mesuré sur 600 sièges par niveau, la part
+ * de feu ainsi PERDUE dépendait de la faction — **bêtes 16 % · morts-vivants 10 % ·
+ * bandits 5 %**, stable du niveau 12 au 100. Une horde de menus corps absorbait donc
+ * ~10 points de tir de plus qu'une bande d'élite **à masse égale** : c'était la vraie
+ * cause de l'écart entre factions, celle que `countMult × unitMult ≈ 1` ne peut pas
+ * voir — l'invariant conserve les PV et les dégâts, jamais la façon dont le feu ADVERSE
+ * se dépense contre eux.
+ *
+ * ⚠️ RÉSERVÉ AU TIR, des DEUX côtés, et c'est la fiction qui tranche : une volée s'étale
+ * sur ce qui reste debout, un coup d'épée ne traverse pas un homme pour en toucher un
+ * second. La mêlée garde donc son gaspillage — chez elle il est juste.
+ *
+ * ⚠️ La boucle est BORNÉE : un tour qui ne tue pas consomme tout le reliquat et s'arrête ;
+ * un tour qui tue en couche un de moins. Jamais plus de passages que de cibles.
+ */
+function volley(
+  from: SiegeUnit,
+  targets: SiegeUnit[],
+  amount: number,
+  round: number,
+  log: BattleEvent[],
+  rng: () => number,
+  shelter = 0,
+) {
+  let reste = amount;
+  for (let i = 0; i < targets.length && reste > 0; i++) {
+    const cible = pickTarget(targets.filter(alive), rng);
+    if (!cible) return;
+    reste = strike(from, cible, reste, round, log, shelter);
+  }
 }
 
 /**
@@ -474,9 +516,7 @@ export function simulateSiege(
     // parce que les traits gaspillés sur 4 corps déjà pris en tenaille repartent sur ceux
     // qui cassent le rempart. C’est l’ARC qui retire de la puissance de feu, pas ceci.
     for (const d of def.filter((x) => x.kind === 'ranged' && alive(x))) {
-      const cible = pickTarget(defenderTargets(d, att), rng);
-      if (cible)
-        strike(d, cible, d.damage, round, log, w.maxPv > 0 ? Math.max(0, w.pv) / w.maxPv : 0);
+      volley(d, defenderTargets(d, att), d.damage, round, log, rng);
     }
 
     // ── 2. La mêlée défensive tient la brèche ──────────────────────────────
@@ -521,16 +561,15 @@ export function simulateSiege(
       // `onRampart`, et non « plus aucun tireur adverse » : depuis la descente, un archer
       // vivant peut très bien avoir quitté le mur.
       const through = a.kind === 'ranged' && !a.inside && !def.some(onRampart);
-      const cible = pickTarget(cibles, rng);
-      if (cible)
-        strike(
-          a,
-          cible,
-          a.damage * (through ? BATTLE.rangedThroughBreach : 1),
-          round,
-          log,
-          w.maxPv > 0 ? Math.max(0, w.pv) / w.maxPv : 0,
-        );
+      const puissance = a.damage * (through ? BATTLE.rangedThroughBreach : 1);
+      const abri = w.maxPv > 0 ? Math.max(0, w.pv) / w.maxPv : 0;
+      // ⚠️ Le tir s'étale sur ce qui reste debout, des deux côtés (cf. `volley`) ; la
+      // mêlée, elle, s'arrête au corps qu'elle a devant elle.
+      if (a.kind === 'ranged') volley(a, cibles, puissance, round, log, rng, abri);
+      else {
+        const cible = pickTarget(cibles, rng);
+        if (cible) strike(a, cible, puissance, round, log, abri);
+      }
     }
 
     // ── 4. La brèche s'ouvre, s'élargit, et on la franchit ─────────────────
