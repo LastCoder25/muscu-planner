@@ -173,7 +173,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { buildSiegeStage, type SiegeBody } from '@/lib/siegeStage';
+import { assaultRadius, buildSiegeStage, type SiegeBody } from '@/lib/siegeStage';
 import { mulberry32 } from '@/lib/combat';
 import {
   FACTION_EMOJI,
@@ -300,23 +300,41 @@ const corpseCount = computed(() => new Set(stage.value.beats.flatMap((b) => b.ki
 
 /** Corps déjà tombés à cet instant — dérivé des morts ANNONCÉES, donc toujours d'accord
  *  avec les barres et avec le rapport. */
+// ⚠️ On retient le TOUR de la mort, plus seulement le fait de mourir : un corps reste
+// où il est TOMBÉ. Sans ça, un mort continuerait d’avancer vers le mur avec les
+// vivants — ou pire, sauterait au rempart d’un coup.
 const dead = computed(() => {
-  const s = new Set<number>();
+  const m = new Map<number, number>();
   for (let i = 0; i <= idx.value; i++) {
-    for (const k of stage.value.beats[i]?.kills ?? []) s.add(k);
+    const b = stage.value.beats[i];
+    for (const k of b?.kills ?? []) if (!m.has(k)) m.set(k, b?.round ?? 0);
   }
-  return s;
+  return m;
 });
 function deadAt(i: number): boolean {
   return dead.value.has(i);
 }
+/** Le tour du moteur au temps joué. Avant le premier temps, l’assaut n’a pas commencé :
+ *  l’armée est encore au bord du terrain. */
+const curRound = computed(() => (idx.value >= 0 ? (stage.value.beats[idx.value]?.round ?? 0) : 0));
 const standing = computed(() => stage.value.bodies.length - dead.value.size);
 
-/** Un corps attend son tour au loin, monte à l'assaut quand SON groupe est engagé, et
- *  reste où il est tombé. */
+/**
+ * Un corps TRAVERSE le terrain découvert sous le feu, puis s’arrête au pied du mur —
+ * et reste où il est tombé.
+ *
+ * ⚠️ Il SAUTAIT jusqu’ici au rempart d’un coup, dès que son groupe était engagé : la
+ * traversée n’existait pas à l’écran alors qu’elle est tout l’intérêt du moteur — c’est
+ * pendant l’approche que les balistes gagnent leur valeur, puis que les archers entrent
+ * en jeu. On voit désormais l’assaut avancer, et le feu se stratifier avec lui.
+ *
+ * ⚠️ Le rayon vient de `assaultRadius`, dans la LIB : le composant ne recalcule rien.
+ * Une seconde copie de « où en est l’assaut » finirait par montrer une armée qui arrive
+ * avant ou après qu’elle ne frappe.
+ */
 function bodyPos(b: SiegeBody, i: number): { x: number; y: number } {
-  const engaged = idx.value >= 0 && curGroup.value >= b.group;
-  const d = engaged || dead.value.has(i) ? APOTHEM + 9 : b.dist;
+  const tour = dead.value.get(i) ?? curRound.value;
+  const d = assaultRadius(b.dist, tour);
   return { x: 100 + Math.cos(b.angle) * d, y: 100 + Math.sin(b.angle) * d };
 }
 

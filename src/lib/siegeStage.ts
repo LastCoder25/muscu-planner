@@ -15,6 +15,7 @@
 // Ce qu'on lui emprunte, en revanche, c'est le mécanisme qui compte : les BORNES CUMULÉES.
 // `dealt` (dégâts infligés au groupe) est monotone, chaque corps a sa borne, donc un corps
 // tombe exactement quand le log dit qu'il tombe et ne se relève jamais.
+import { BATTLE } from './siegeBattle';
 import type { RaidGroup, RaidReport } from './raid';
 
 /** Un assaillant à l'écran. Sa position est posée une fois, en anneau autour de la base. */
@@ -33,6 +34,14 @@ export interface SiegeBody {
 
 /** Un temps de l'animation. Chaque événement du log en produit un. */
 interface SiegeBeat {
+  /** Le TOUR du moteur d’où vient ce temps. ⚠️ Il portait jusqu’ici zéro information de
+   *  position : l’écran ne pouvait donc pas savoir où en était l’assaut, et il faisait
+   *  TÉLÉPORTER les corps au pied du mur dès que leur groupe était engagé. C’est lui qui
+   *  porte la traversée.
+   *
+   *  ⚠️ Recopié du log, jamais recalculé — même règle que tout le reste de ce module :
+   *  il rejoue une bataille déjà tranchée, il n’en décide rien. */
+  round: number;
   group: number;
   /** `turret` = la base tire ; `foe` = un assaillant frappe le mur. */
   kind: 'turret' | 'foe';
@@ -83,7 +92,31 @@ export const SIEGE_STAGE = {
    *  cumulees, ni l issue — ce module ne decide rien du combat. */
   perRank: 20,
   maxRanks: 3,
+  /** Rayon auquel un assaillant est ARRIVÉ au pied du mur. Juste au-delà des tourelles
+   *  (enceinte 72 + tour 7,5) pour qu’on le voie cogner sans le superposer à la pierre. */
+  wallStop: 80,
 } as const;
+
+/**
+ * OÙ EN EST L’ASSAUT à ce tour : 1 au bord du terrain, 0 au pied du mur.
+ *
+ * ⚠️ La règle vit ICI, et pas dans le composant. Deux copies de « où en est la
+ * traversée » divergeraient à la première retouche de `BATTLE.fieldDepth` — et le
+ * rejeu montrerait alors une armée qui arrive avant ou après qu’elle ne frappe, ce qui
+ * est exactement le genre de mensonge qu’une mise en scène ne doit jamais raconter.
+ */
+export function approachAt(round: number): number {
+  const d = BATTLE.fieldDepth;
+  if (d <= 0) return 0;
+  return Math.max(0, Math.min(1, (d - Math.max(0, round)) / d));
+}
+
+/** Le RAYON auquel dessiner un corps parti de `spawn`, au tour donné. Il marche vers
+ *  le rempart et s’y arrête — il ne le traverse pas. */
+export function assaultRadius(spawn: number, round: number): number {
+  const stop = SIEGE_STAGE.wallStop;
+  return stop + Math.max(0, spawn - stop) * approachAt(round);
+}
 
 /** Générateur déterministe local (même famille que `mulberry32`, sans dépendance). */
 function rand(seed: number): () => number {
@@ -214,6 +247,7 @@ export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeS
       wallPv = Math.max(0, wallPv - (e.amount ?? 0));
       const body = bodyOf(e.from);
       beats.push({
+        round: e.round,
         group: body >= 0 ? (groupOf[body] ?? 0) : 0,
         kind: 'foe',
         body: Math.max(0, body),
@@ -237,6 +271,7 @@ export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeS
       const t = turretOf(e.from);
       const body = bodies[cible];
       beats.push({
+        round: e.round,
         group: groupOf[cible] ?? 0,
         kind: 'turret',
         body: cible,
@@ -253,6 +288,7 @@ export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeS
       // Un assaillant fait taire un défenseur : le mur n'encaisse rien.
       const body = bodyOf(e.from);
       beats.push({
+        round: e.round,
         group: body >= 0 ? (groupOf[body] ?? 0) : 0,
         kind: 'foe',
         body: Math.max(0, body),

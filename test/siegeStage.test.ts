@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
+  approachAt,
+  assaultRadius,
   buildSiegeStage,
   placeBodies,
   cutsFor,
   nearestTurret,
   SIEGE_STAGE,
 } from '@/lib/siegeStage';
+import { BATTLE } from '@/lib/siegeBattle';
 import {
   rollRaid,
   baseCombatant,
@@ -193,5 +196,63 @@ describe('cohérence avec le rapport', () => {
 describe('placement seul', () => {
   it('ne plante pas sur une armée vide', () => {
     expect(placeBodies([], 1)).toEqual([]);
+  });
+});
+
+describe('🚶 LA TRAVERSÉE : l’assaut marche sous le feu', () => {
+  // ⚠️ Les corps SAUTAIENT au pied du mur dès que leur groupe était engagé : la
+  // traversée n’existait pas à l’écran, alors qu’elle est tout l’intérêt du moteur —
+  // c’est pendant l’approche que les balistes gagnent leur valeur, puis que les archers
+  // entrent en jeu quand l’assaut passe à leur portée.
+
+  it('l’avancée va de 1 (au bord) à 0 (au pied du mur), sans jamais repartir', () => {
+    expect(approachAt(0)).toBe(1);
+    expect(approachAt(BATTLE.fieldDepth)).toBe(0);
+    // ⚠️ Elle ne redevient pas positive après : un siège dure bien plus longtemps que la
+    // traversée, et l’armée ne doit pas se remettre à reculer au tour suivant.
+    expect(approachAt(BATTLE.fieldDepth * 3)).toBe(0);
+    let prev = Infinity;
+    for (let r = 0; r <= BATTLE.fieldDepth; r++) {
+      const v = approachAt(r);
+      expect(v).toBeLessThan(prev);
+      prev = v;
+    }
+  });
+
+  it('⚠️ UN CORPS MARCHE DE SON POINT D’ARRIVÉE JUSQU’AU MUR, et s’y arrête', () => {
+    const spawn = SIEGE_STAGE.spawnMax;
+    expect(assaultRadius(spawn, 0)).toBe(spawn);
+    expect(assaultRadius(spawn, BATTLE.fieldDepth)).toBe(SIEGE_STAGE.wallStop);
+    // ⚠️ Il ne TRAVERSE pas la pierre : au-delà de la traversée il reste au pied du mur.
+    expect(assaultRadius(spawn, BATTLE.fieldDepth * 4)).toBe(SIEGE_STAGE.wallStop);
+    // …et il s’en approche vraiment, à mi-parcours il a fait la moitié du chemin.
+    const mi = assaultRadius(spawn, BATTLE.fieldDepth / 2);
+    expect(mi).toBeCloseTo((spawn + SIEGE_STAGE.wallStop) / 2, 6);
+  });
+
+  it('⚠️ LE POINT D’ARRIVÉE EST HORS DU MUR — sinon on naîtrait déjà dessus', () => {
+    // La mise en scène n’aurait plus rien à montrer, et le premier tir des balistes
+    // tomberait sur une armée déjà au contact.
+    expect(SIEGE_STAGE.spawnMin).toBeGreaterThan(SIEGE_STAGE.wallStop);
+  });
+
+  it('⚠️ CHAQUE TEMPS PORTE SON TOUR, recopié du log et jamais recalculé', () => {
+    // C’est ce tour qui place les corps. S’il était inventé ici, le rejeu montrerait une
+    // armée qui arrive avant ou après qu’elle ne frappe.
+    const { stage, report } = siege(4242);
+    const attendus = report.log
+      .filter((e) => e.kind === 'hit' || e.kind === 'wall')
+      .map((e) => e.round);
+    expect(stage.beats.map((b) => b.round)).toEqual(attendus);
+  });
+
+  it('⚠️ PERSONNE N’EST AU MUR AVANT D’AVOIR TRAVERSÉ', () => {
+    // La garantie qui relie l’image au moteur : le premier coup porté AU MUR ne peut pas
+    // arriver avant que le terrain ne soit franchi.
+    for (let s = 1; s < 12; s++) {
+      const { report } = siege(s * 977);
+      const premier = report.log.find((e) => e.kind === 'wall');
+      if (premier) expect(premier.round).toBeGreaterThanOrEqual(BATTLE.fieldDepth);
+    }
   });
 });
