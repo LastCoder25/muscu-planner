@@ -34,7 +34,7 @@ import {
   startCaravan,
   type Caravan,
 } from '@/lib/caravan';
-import { advRoles, PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
+import { advRoles, guildRoster, PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
 import { TALENTS, type TalentInstance } from '@/lib/talents';
 import { simulateCombat } from '@/lib/combat';
 import { famXpForLevel, type AggregatedEffects, type Item } from '@/lib/items';
@@ -441,6 +441,53 @@ describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () =
       expect(resolveCaravan(p, team(3, 70), seed, NUS).energy).toBeLessThanOrEqual(
         Math.round(brut),
       );
+  });
+});
+
+describe('💸 LES SALAIRES SONT UN PUITS, PAS UNE RANÇON', () => {
+  // ⚠️ CE GARDE-FOU MANQUAIT, et la calibration a dérivé DEUX FOIS sans que rien ne le
+  // dise — dans les deux sens. Les salaires valent `wageBase × strataFor(niveau) ×
+  // poi.level^0,7`, or `strataFor` lit `PROMO_LEVELS`, dont la cadence a changé en v0.795
+  // PUIS en v0.796. Un salaire indexé sur une table qu’on déplace pour une AUTRE raison
+  // se met à dire autre chose, en silence.
+  const HARVEST: PoiType[] = ['well', 'shrine', 'archive', 'wreck'];
+  const part = (n: number, L: number) => {
+    const esc = team(n, L);
+    let brut = 0;
+    let sal = 0;
+    for (const type of HARVEST)
+      for (let seed = 1; seed <= 40; seed++) {
+        const p = poi({ type, level: L });
+        brut += resolveCaravan(p, esc, seed, NUS).gold;
+        sal += caravanWages(esc, p);
+      }
+    return sal / brut;
+  };
+
+  it('⚠️ un convoi n’est JAMAIS déficitaire en or, même pour un débutant', () => {
+    // Le défaut relevé en v0.795 : les salaires atteignaient **173 % de l’or brut** sous
+    // le niveau 20 — le convoi coûtait plus qu’il ne rapportait, et précisément pour le
+    // joueur peu sportif que cette boucle vise. Il a disparu de lui-même quand la cadence
+    // des promotions s’est étalée (v0.796) : `strataFor` vaut désormais 1 jusqu’au niveau 10
+    // au lieu de 3. **Personne ne l’a corrigé, donc rien ne garantissait qu’il ne revienne.**
+    // ⚠️ SEULEMENT LES ESCORTES ATTEIGNABLES : la Guilde plafonne le vivier au niveau du
+    // joueur (`guildRoster`). Un premier jet balayait « 2 aventuriers au niveau 1 » et
+    // rougissait à 134 % — sur un état que personne ne peut avoir. Tester l’impossible
+    // donne un rouge aussi creux qu’un vert : mesuré sur l’enveloppe réelle, le pire cas
+    // vaut 73 % (niveau 2, deux aventuriers).
+    for (let L = 1; L <= 100; L += L < 20 ? 1 : 10)
+      for (let n = 1; n <= Math.min(guildRoster(L), CARAVAN.escortMax); n++)
+        expect(part(n, L), `niveau ${L}, ${n} aventurier(s)`).toBeLessThan(0.8);
+  });
+
+  it('…mais ils restent un VRAI puits d’or à tout niveau', () => {
+    // L’autre bord, et il a dérivé aussi : la doc annonce « calé à ~60 % de l’or
+    // rapporté » (la valeur MESURÉE quand `wageBase` est passé de 26 à 6), on mesure
+    // aujourd’hui **15 à 29 %** pour l’escorte de référence. Un puits d’or qui se vide de
+    // 3× sans qu’aucune porte ne rougisse est exactement ce que ce test ferme.
+    // La borne basse n’entérine PAS la dérive — elle interdit qu’elle continue.
+    for (const L of [10, 20, 26, 40, 60, 100])
+      expect(part(3, L), `niveau ${L}`).toBeGreaterThan(0.1);
   });
 });
 
