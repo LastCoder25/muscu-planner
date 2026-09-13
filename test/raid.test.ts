@@ -36,6 +36,7 @@ import {
   totalRepairCost,
   companionPairs,
   companionPerks,
+  companionRankLabel,
   companionSlots,
   canCompanion,
   duplicateFamiliars,
@@ -72,6 +73,7 @@ import {
   rankCeilingForLevel,
   RANK_ORDER,
   RARITY_MULT,
+  RARITY_LABEL,
   rollFamiliar,
   famLevel,
   famAtkMult,
@@ -795,18 +797,22 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     for (let l = 1; l <= 100; l++) expect(companionSlots(l)).toBe(guildRoster(l));
   });
 
-  it('⚠️ LE RANG MAXIMAL SUIT LA TABLE DE LA GUILDE', () => {
-    // Adossé à `PROMO_LEVELS`, jamais à des nombres écrits à la main : elle dit déjà
-    // « quel niveau de bâtiment pour quel rang », et compte autant d’entrées que
-    // `RANK_ORDER`. Deux tables finiraient par diverger.
-    for (let k = 0; k < RANK_ORDER.length; k++) {
-      const need = PROMO_LEVELS[k]!;
-      const it = fam(`f${k}`, 'damage_pct', 20, { rarity: RANK_ORDER[k]! });
-      expect(canCompanion(it, need)).toBe(true);
-      if (need > 1) expect(canCompanion(it, need - 1)).toBe(false);
+  it('⚠️ LE RANG MAXIMAL SUIT CE QU’ON PEUT DROPPER, plus la table de la Guilde', () => {
+    // ⚠️ IL EMPRUNTAIT `PROMO_LEVELS` — la table qui dit « à quel niveau on gagne une
+    // CLASSE », ce qui n'a aucun rapport avec « quel familier existe ». L'emprunt était
+    // commode tant que les deux échelles se ressemblaient ; dès que la cadence des
+    // promotions a bougé, le Chenil s'est mis à plafonner des familiers qu'on pouvait
+    // pourtant trouver — un verrou arbitraire sur un système voisin.
+    //
+    // Le cap ÉGALE désormais le gate des drops : il ne bloque jamais un familier
+    // existant, et il cesse de promettre du primordial à qui ne peut pas en dropper.
+    for (const L of [1, 5, 12, 20, 28, 45, 61, 100]) {
+      const attendu = RARITY_LABEL[RANK_ORDER[rankCeilingForLevel(L)]!];
+      expect(companionRankLabel(L), `chenil ${L}`).toBe(attendu);
     }
+    // Sans Chenil, on n'héberge personne.
+    expect(companionRankLabel(0)).toBe('—');
   });
-
   it('⚠️ HORS D’ÉCOLE = ÉCARTÉ AU COMBAT, pas seulement à l’écriture', () => {
     // Un appariement rangé avant que le Chenil ne redescende se soigne tout seul, sans
     // migration — même politique que les POI périmés.

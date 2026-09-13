@@ -56,17 +56,18 @@
           <div class="adv-main">
             <div class="adv-top">
               <span class="adv-name">{{ a.name }}</span>
-              <!-- ⚠️ UNE SEULE ÉCHELLE : le rang EST la rareté de sa classe (8 crans,
-                   mêmes libellés et mêmes couleurs que le butin) et les étoiles disent où
-                   en est son niveau, qui reste caché — la promesse « aventurier de manga ».
-                   Avant, ces deux progressions s’affichaient côte à côte et se
-                   contredisaient. -->
+              <!-- ⚠️ LE MÊME BARÈME QUE LE JOUEUR (🟤 Bronze → 👑 Tout-puissant), et les
+                   étoiles disent où en est son niveau dans le rang — qui reste caché.
+                   ⚠️ La rareté de sa classe se lit juste en dessous : elle ne concurrence
+                   plus le rang, elle avance AVEC lui (une classe par rang gagné). C’est la
+                   CADENCE qui était fausse, pas l’échelle. -->
               <span class="adv-rank" :style="{ color: rankOf(a).color }">
-                {{ rankOf(a).label }} {{ stars(rankOf(a).star) }}
+                {{ rankOf(a).emoji }} {{ rankOf(a).name }} {{ stars(rankOf(a).star) }}
               </span>
             </div>
             <div class="adv-sub">
               {{ titleOf(a)?.label ?? '—' }}
+              <span class="adv-rar" :style="{ color: rarColor(a) }">{{ rarOf(a) }}</span>
               <span v-if="signaturesOf(a).length" class="adv-sig">✦</span>
             </div>
             <!-- La BARRE : sans elle, le niveau étant caché, on peut travailler deux
@@ -208,12 +209,15 @@
           {{ titleOf(detailAdv)?.emoji ?? '🧑' }} {{ detailAdv.name }}
         </span>
         <span class="adv-rank" :style="{ color: rankOf(detailAdv).color }">
-          {{ rankOf(detailAdv).label }} {{ stars(rankOf(detailAdv).star) }}
+          {{ rankOf(detailAdv).emoji }} {{ rankOf(detailAdv).name }}
+          {{ stars(rankOf(detailAdv).star) }}
         </span>
       </div>
 
       <div class="d-sub">
-        {{ titleOf(detailAdv)?.label ?? '—' }} · {{ advShapeLabel(statWeights(detailAdv)) }}
+        {{ titleOf(detailAdv)?.label ?? '—' }} ·
+        <b :style="{ color: rarColor(detailAdv) }">{{ rarOf(detailAdv) }}</b> ·
+        {{ advShapeLabel(statWeights(detailAdv)) }}
       </div>
 
       <!-- Les STATS, qui n'étaient lisibles nulle part une fois la promotion faite. -->
@@ -424,6 +428,7 @@ import {
   advAvailable,
   ADV_STARS,
   advNextPromoLevel,
+  advRarity,
   advRank,
   advRankProgress,
   advTitle,
@@ -674,6 +679,10 @@ const recruitSeed = computed(() => (roster.value.length + 1) * 2654435761 + guil
 const offers = computed(() => char.recruitChoices(recruitSeed.value));
 
 const rankOf = (a: Adventurer) => advRank(a);
+// La RARETÉ de sa classe — distincte du rang, mais elle monte du même pas (une classe
+// par rang gagné), donc les deux ne peuvent plus se contredire.
+const rarOf = (a: Adventurer) => RARITY_LABEL[advRarity(a)];
+const rarColor = (a: Adventurer) => RANK_COLOR[advRarity(a)];
 const titleOf = (a: Adventurer) => advTitle(a);
 const progressOf = (a: Adventurer) => advRankProgress(a);
 // ⚠️ La barre annonce la PROMOTION, plus « l’étoile suivante » : ce niveau-là ne
@@ -1094,6 +1103,13 @@ async function doPromote(classId: string) {
 .adv-rank {
   font-size: 12px;
   white-space: nowrap;
+}
+/* La rareté de la classe, à côté du métier : discrète, elle explique le rang sans
+   lui faire concurrence. */
+.adv-rar {
+  margin-left: 6px;
+  font-size: 11px;
+  text-transform: capitalize;
 }
 .adv-sub {
   font-size: 12px;

@@ -2086,13 +2086,21 @@ export const useCharacterStore = defineStore('character', () => {
       const next = grantAdvXp(a, gain, guildLevel.value);
       return hurt.has(a.id) ? { ...next, hurtUntil } : next;
     });
+    // ⚠️ ON ARRONDIT À L'ENCAISSEMENT, pas seulement à la production. Ces cinq colonnes
+    // sont des ENTIERS : une valeur décimale fait échouer la sauvegarde entière avec
+    // `invalid input syntax for type integer`, et l'écran ne montre RIEN. Corriger la
+    // formule ne suffit pas — les cargaisons DÉJÀ calculées portent la valeur fautive
+    // dans leur `outcome`, et elles resteraient irrécupérables à vie. On soigne donc à
+    // la lecture, comme les POI périmés et les garnisons obsolètes : le code se corrige,
+    // la donnée se répare toute seule au passage.
+    const ent = (n: number) => Math.max(0, Math.round(n || 0));
     await persist(userId, {
       // Les salaires sont déduits ICI, à l'encaissement : l'aventurier est payé au retour.
-      gold: Math.max(0, cur.gold + o.gold - o.wages),
-      login_energy: cur.login_energy + o.energy,
-      summon_stones: cur.summon_stones + o.summonStones,
-      scrap: cur.scrap + o.scrap,
-      keys: cur.keys + o.keys,
+      gold: Math.max(0, cur.gold + ent(o.gold) - ent(o.wages)),
+      login_energy: cur.login_energy + ent(o.energy),
+      summon_stones: cur.summon_stones + ent(o.summonStones),
+      scrap: cur.scrap + ent(o.scrap),
+      keys: cur.keys + ent(o.keys),
       adventurers: advs,
       caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
     });

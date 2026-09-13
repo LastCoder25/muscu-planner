@@ -295,12 +295,12 @@
               <span class="ca-name">{{ a.name }}</span>
               <!-- ⚠️ LE RANG ET LES COMPÉTENCES, demandés par l’utilisateur : on choisissait
                    son escorte sur un prénom, alors que ce sont les RÔLES qui décident du
-                   convoi. Le rang est sa RARETÉ de classe, les étoiles son travail de
-                   terrain, et le NIVEAU reste caché — comme dans la Guilde.
-                   ⚠️ La rareté est ÉCRITE, pas seulement teintée : la couleur seule ne se
-                   lit pas, et c’est elle qui dit ce que vaut l’aventurier. -->
+                   convoi. Le rang est celui du joueur, les étoiles la progression de son
+                   niveau dedans, et le NIVEAU reste caché — comme dans la Guilde.
+                   ⚠️ Le nom du rang est ÉCRIT, pas seulement teinté : la couleur seule ne se
+                   lit pas. -->
               <span class="ca-rar" :style="{ color: advRank(a).color }">
-                {{ advRank(a).label }}
+                {{ advRank(a).emoji }} {{ advRank(a).name }}
               </span>
               <span class="ca-rank" :style="{ color: advRank(a).color }">
                 {{ rankStarStr(advRank(a).star) }}
@@ -402,14 +402,7 @@ import GameLoader from '@/components/GameLoader.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
-import {
-  playerWithGear,
-  mergeEffects,
-  fxRarity,
-  RARITY_LABEL,
-  RARITY_RANK,
-  type Item,
-} from '@/lib/items';
+import { playerWithGear, mergeEffects, fxRarity, RARITY_RANK, type Item } from '@/lib/items';
 import GuildPanel from '@/components/GuildPanel.vue';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects, normalizeTalents } from '@/lib/talents';
@@ -887,13 +880,17 @@ async function doClaimCaravan(id: string) {
     // retour qu'il ait sur des semaines de voyages.
     for (const e of events) {
       if (e.to <= e.from) continue;
+      // ⚠️ UN RANG GAGNÉ N'EST PAS UNE ÉTOILE DE PLUS : c'est le seul moment qui donne
+      // droit à une nouvelle classe, il ne doit pas se lire comme un cran de routine.
       gameFx.celebrate({
         kind: 'levelup',
-        emoji: '⭐',
-        title: `${e.name} — ${rankStarStr(e.to)}`,
+        emoji: e.rankUp ? e.rankEmoji : '⭐',
+        title: e.rankUp ? `${e.name} passe ${e.rankName} !` : `${e.name} — ${rankStarStr(e.star)}`,
         subtitle: e.promoted
-          ? 'Prêt à être promu !'
-          : `${RARITY_LABEL[e.rarity]} · une étoile de plus`,
+          ? 'Une nouvelle classe l’attend'
+          : e.rankUp
+            ? `${rankStarStr(e.star)} · nouveau rang`
+            : 'une étoile de plus',
         rarity: fxRarity(e.rarity),
       });
     }

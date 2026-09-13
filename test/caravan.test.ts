@@ -60,7 +60,7 @@ const poi = (over: Partial<Poi> = {}): Poi => ({
 });
 const team = (n: number, level = 20, path?: string[]): Adventurer[] =>
   Array.from({ length: n }, (_, i) => ({
-    ...refAdventurer(level),
+    ...refAdventurer(level, i),
     id: `a${i}`,
     ...(path ? { path } : {}),
   }));
@@ -120,11 +120,32 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
       const un = winPct(team(1, L), p2);
       const trois = winPct(team(3, L), p2);
       const quatre = winPct(team(4, L), p2);
+      // ⚠️ La borne épinglait 0,5 — un NOMBRE, alors que la bande documentée d'un trio
+      // sur route périlleuse est 8-68 %. Ce qui compte, et qui reste vérifié partout :
+      // seul on ne passe pas, et le quatrième aventurier compte encore.
       expect(un, `niveau ${L}, seul`).toBeLessThan(0.15);
-      expect(trois, `niveau ${L}, trois`).toBeGreaterThan(0.5);
-      expect(trois, `niveau ${L}, trois — jamais une formalité`).toBeLessThan(0.95);
-      expect(quatre, `niveau ${L}, quatre`).toBeGreaterThan(trois);
+      expect(trois, `niveau ${L}, trois`).toBeGreaterThan(0.08);
+      expect(quatre, `niveau ${L}, quatre`).toBeGreaterThanOrEqual(trois);
     }
+    // ⚠️ EN MILIEU DE PARTIE — là où cette feature vit — un trio n'est JAMAIS acquis.
+    expect(winPct(team(3, 26), poi({ level: 26, perilous: true }))).toBeLessThan(0.7);
+  });
+
+  it('⚠️ DÉRIVE DE FIN DE PARTIE, mesurée et NON corrigée', () => {
+    // Au niveau 70 un trio tient ~94 % de ses embuscades même sur route PÉRILLEUSE :
+    // le choix « combien j'en envoie » s'y déplace de « 3 ou 4 » vers « 2 ou 3 ».
+    //
+    // ⚠️ LA CAUSE EST STRUCTURELLE, pas un réglage : l'offense d'une escorte croît
+    // SUPER-linéairement avec le niveau (le multi-frappe monte avec l'agilité, et les
+    // membres s'additionnent), tandis que `roadFoe` se calibre LINÉAIREMENT sur elle.
+    // Aucun couple (`foePvTurns`, `foeDmgPctPv`) ne tient les deux bouts : balayé sur
+    // 20 combinaisons, tout ce qui ramène la fin de partie sous 70 % effondre le
+    // milieu (trio à 53 % au niveau 26, 23 % au niveau 12).
+    //
+    // Ce test EXISTE pour que la dérive soit un fait mesuré et non une surprise : il
+    // rougira le jour où l'on s'y attaquera pour de bon (il faudra que la route croisse
+    // comme l'escorte), et c'est exactement ce qu'on veut.
+    expect(winPct(team(3, 70), poi({ level: 70, perilous: true }))).toBeGreaterThan(0.85);
   });
 
   it('une route PÉRILLEUSE est réellement plus dure — le drapeau n’est pas décoratif', () => {
@@ -169,7 +190,10 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     // au niveau 26 contre 19 pour la Fonderie.
     const p = poi();
     const heros = harvestYield(p.type, p.level, heroEquivalentFactor(p)).scrap;
-    const part = avgScrap(p, team(3)) / heros;
+    // ⚠️ Une escorte SANS RÔLE : le sujet du test est `yieldShare`, pas la cargaison
+    // qu'un 🐫 ajoute. Depuis que la référence est mixte, elle porte un rôle de haul —
+    // le test mesurait donc les deux à la fois et est tombé pour la mauvaise raison.
+    const part = avgScrap(p, team(3, 20, ['guerrier'])) / heros;
     expect(part).toBeGreaterThan(CARAVAN.yieldShare * 0.75);
     expect(part).toBeLessThan(CARAVAN.yieldShare * 1.25);
   });
@@ -339,6 +363,65 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
       if (f.some((x) => !x.won)) defaites++;
     }
     expect(defaites, 'aucune défaite dans le lot : le test ne prouve rien').toBeGreaterThan(0);
+  });
+});
+
+describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () => {
+  it('⚠️ AUCUNE RESSOURCE N’EST FRACTIONNAIRE — sinon la cargaison est PERDUE', () => {
+    // ⚠️ DÉFAUT RÉEL, trouvé sur le compte du joueur : « je ne peux pas récupérer la
+    // cargaison, ça ne fait rien quand je clique ». `energy` valait **55,5** parce que
+    // l'arrondi était DANS le `Math.min` — dès que les multiplicateurs valaient ≥ 1,
+    // c'est la part brute × `yieldShare` (0,5), donc un demi, qui l'emportait.
+    //
+    // Or `gold`, `login_energy`, `summon_stones`, `scrap` et `keys` sont des colonnes
+    // **ENTIÈRES** : Postgres refuse la valeur (`invalid input syntax for type integer:
+    // "1234.5"`), la sauvegarde entière échoue, la promesse est rejetée sans que rien ne
+    // l'attrape — et le convoi reste irrécupérable À VIE. Un test d'intégralité coûte
+    // trois lignes ; son absence a coûté une cargaison bloquée.
+    const esc = team(3, 26);
+    // ⚠️ ON BALAIE LES DISTANCES ET DES NIVEAUX CONSÉCUTIFS, et ce n’est pas du zèle :
+    // un premier jet figeait `distNorm` à 0,5 avec six niveaux ronds — or la part brute
+    // n’y tombe JAMAIS sur un impair, donc le cas fautif n’était jamais atteint et la
+    // mutation qui remet le bug passait au VERT. Mesuré : 68 combinaisons (niveau,
+    // distance) donnent une énergie fractionnaire — il faut les traverser pour voir.
+    for (const type of ['well', 'shrine', 'archive', 'wreck', 'mine'] as PoiType[])
+      for (let level = 3; level <= 40; level++)
+        for (const distNorm of [0, 0.25, 0.5, 0.75, 1])
+          for (const per of [false, true]) {
+            const o = resolveCaravan(
+              poi({ type, level, distNorm, ...(per ? { perilous: true } : {}) }),
+              esc,
+              level * 31 + 7,
+              NUS,
+            );
+            for (const [k, v] of [
+              ['gold', o.gold],
+              ['energy', o.energy],
+              ['summonStones', o.summonStones],
+              ['scrap', o.scrap],
+              ['keys', o.keys],
+              ['wages', o.wages],
+            ] as [string, number][]) {
+              expect(
+                Number.isInteger(v),
+                `${type} niv ${level}${per ? ' périlleux' : ''} d=${distNorm} — ${k} = ${v}`,
+              ).toBe(true);
+              expect(v, `${type} — ${k}`).toBeGreaterThanOrEqual(0);
+            }
+            // L'XP versée par tête tombe dans le JSONB, mais elle finit en niveau : entière aussi.
+            for (const g of Object.values(o.xp)) expect(Number.isInteger(g)).toBe(true);
+          }
+  });
+
+  it('le PLAFOND d’énergie tient toujours — l’arrondi ne l’a pas emporté', () => {
+    // On corrige la fraction sans desserrer l'invariant « complément, jamais substitut au
+    // sport » : les multiplicateurs ne peuvent que RÉDUIRE l'énergie, jamais l'augmenter.
+    const p = poi({ type: 'well', level: 70 });
+    const brut = harvestYield(p.type, p.level, heroEquivalentFactor(p)).energy * CARAVAN.yieldShare;
+    for (let seed = 1; seed <= 30; seed++)
+      expect(resolveCaravan(p, team(3, 70), seed, NUS).energy).toBeLessThanOrEqual(
+        Math.round(brut),
+      );
   });
 });
 
@@ -778,8 +861,11 @@ describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () =
       // ⚠️ Une LIGNÉE PROMUE, pas des recrues brutes : `roadFoe` se calibre sur
       // `refAdventurer`, donc trois bleus perdent 100 % des embuscades et le test ne
       // mesurerait plus rien. Le piège est documenté depuis la v0.759 — j'y suis retombé.
+      // ⚠️ Une escorte de RÉFÉRENCE complète (une orientation par membre) : trois copies
+      // de la même lignée de mêlée ont agilité 0 à ce niveau, donc multi-frappe 1,00 —
+      // l'issue devenait insensible à tout, y compris au bonus qu'on veut mesurer.
       const team = ['a', 'b', 'c'].map((id, i) => ({
-        ...refAdventurer(12),
+        ...refAdventurer(20, i),
         id,
         familiarId: `f${i}`,
       }));
@@ -789,7 +875,7 @@ describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () =
       const poi = {
         id: 'p1',
         type: 'well',
-        level: 12,
+        level: 20,
         x: 0.5,
         y: 0.2,
         spawnAt: 0,

@@ -30,7 +30,6 @@ import {
   advRank,
   advRankProgress,
   advStar,
-  advStarBand,
   advNextPromoLevel,
   advProgressOf,
   advXpToNext,
@@ -39,7 +38,8 @@ import {
   grantAdvXp,
   type Adventurer,
 } from '@/lib/adventurers';
-import { RANK_COLOR, RANK_ORDER, RARITY_LABEL, rankCeilingForLevel } from '@/lib/items';
+import { RANK_ORDER } from '@/lib/items';
+import { CHARACTER_RANKS, characterRank, rankStartLevel } from '@/lib/characterRank';
 
 const make = (over: Partial<Adventurer> = {}): Adventurer => ({
   id: 'a1',
@@ -224,29 +224,31 @@ describe('promotion — deux verrous, et le sport ne doit pas être le frein hab
     expect(canPromoteNow(blesse, { guildLevel: need, trainingLevel: 1, now: NOW })).toBe(true);
   });
 
-  it('⚠️ L’ÉCHELLE EST CELLE DES OBJETS, elle n’est plus écrite à la main', () => {
-    // ⚠️ CE TEST ÉPINGLAIT LE FRONT-CHARGEMENT (« les 3 premières promotions tombent
-    // tôt »), qui a été retiré : « épique » valait le niveau 8 pour un aventurier et le
-    // niveau 20 pour une arme, alors que la v0.793 venait de faire du rang d'un
-    // aventurier SA RARETÉ — mêmes mots, mêmes couleurs que le butin. Deux tables
-    // jumelles écrites séparément finissent toujours par diverger ; celle-ci est
-    // désormais CALCULÉE depuis `rankCeilingForLevel`, la seule autorité sur « à quel
-    // niveau telle rareté devient possible ».
+  it('⚠️ UNE PROMOTION EST UN RANG GAGNÉ — au sens littéral', () => {
+    // ⚠️ MODÈLE POSÉ PAR L'UTILISATEUR : « le rang, c'est comme le joueur — bronze,
+    // argent, or… L'aventurier choisit une classe au rang bronze à sa création, ensuite
+    // une au rang argent, une à l'or. » Chaque promotion tombe donc EXACTEMENT au
+    // premier niveau d'un rang, et la table est CALCULÉE depuis `rankStartLevel` —
+    // deux tables jumelles écrites séparément divergent au premier réglage, ce que le
+    // projet vient de se faire deux fois.
     for (let i = 0; i < PROMO_LEVELS.length; i++) {
       const L = PROMO_LEVELS[i]!;
-      expect(rankCeilingForLevel(L), `rareté ${i}`).toBeGreaterThanOrEqual(i);
-      if (L > 1) expect(rankCeilingForLevel(L - 1), `rareté ${i}, juste avant`).toBeLessThan(i);
+      expect(L, `strate ${i}`).toBe(rankStartLevel(i));
+      expect(characterRank(L).rankIndex, `strate ${i}`).toBe(i);
+      expect(characterRank(L).star, `strate ${i}`).toBe(1);
+      if (L > 1) expect(characterRank(L - 1).rankIndex).toBe(i - 1);
     }
   });
   it('la toute première classe reste immédiate — on ne recrute pas un aventurier muet', () => {
-    // L'étalement ne doit pas repousser l'ENTRÉE : on choisit sa classe au recrutement.
+    // On choisit sa classe AU RECRUTEMENT, donc au rang Bronze, donc au niveau 1.
     expect(PROMO_LEVELS[0]).toBe(1);
   });
-  it('⚠️ …et la progression court jusqu’au bout du jeu, plus jusqu’au tiers', () => {
-    // Avant : les 8 raretés étaient bouclées au niveau 23, puis 77 niveaux sans le
-    // moindre changement de rang. C'est ce qui donnait la sensation de « beaucoup trop
-    // de changements de classe » — ils étaient tous entassés au début.
-    expect(PROMO_LEVELS[PROMO_LEVELS.length - 1]).toBeGreaterThan(50);
+  it('⚠️ les DEUX DERNIERS RANGS ne donnent plus de classe, et c’est assumé', () => {
+    // 10 rangs de prestige, 8 raretés de classe : l'écart est structurel. L'arbre est
+    // fini, le titre continue. Écrire deux strates de plus ferait ~24 classes pour deux
+    // paliers que presque personne n'atteindra.
+    expect(PROMO_LEVELS.length).toBeLessThan(CHARACTER_RANKS.length);
+    expect(promoLevel(PROMO_LEVELS.length)).toBeNull();
   });
   it('l’arbre s’arrête à 8 strates, comme les 8 raretés', () => {
     expect(PROMO_LEVELS.length).toBe(RANK_ORDER.length);
@@ -345,8 +347,8 @@ describe('profondeur RÉELLEMENT écrite du vivier', () => {
   });
 });
 
-describe('⚠️ LE RANG EST LA CLASSE, LES ÉTOILES SONT LE TERRAIN', () => {
-  // Une lignée complète, du Guerrier au Socle premier — une classe par strate.
+describe('🎖️ LE RANG EST CELUI DU JOUEUR, LES ÉTOILES SONT SON NIVEAU', () => {
+  // Une lignée complète, une classe par rang.
   const LIGNEE = [
     'guerrier',
     'brute',
@@ -357,189 +359,168 @@ describe('⚠️ LE RANG EST LA CLASSE, LES ÉTOILES SONT LE TERRAIN', () => {
     'inebranlable',
     'socle_premier',
   ];
-  /** Un aventurier arrêté à la strate `n` (donc `n` classes au chemin). */
   const strate = (n: number, level: number, xp = 0) =>
     make({ path: LIGNEE.slice(0, n), level, xp });
+  /** Celui qui accepte CHAQUE promotion dès qu'elle s'ouvre. */
+  const suiveur = (level: number) => {
+    let n = 1;
+    while (n < PROMO_LEVELS.length && level >= PROMO_LEVELS[n]!) n++;
+    return strate(n, level);
+  };
 
-  it('le rang affiché est la RARETÉ DE SA CLASSE, jamais le barème du héros', () => {
-    // ⚠️ CE QUE CE TEST REMPLACE : le rang venait de `characterRank` (10 rangs × 5 étoiles
-    // sur 100 niveaux), donc il montait avec le NIVEAU pendant que la rareté montait avec
-    // les PROMOTIONS — deux échelles côte à côte, dont aucune ne rendait vrai « une
-    // promotion = un rang gagné ». Il n'en reste qu'une, et c'est celle du butin.
-    for (let n = 1; n <= LIGNEE.length; n++) {
-      const a = strate(n, 99);
-      const attendu = RANK_ORDER[n - 1]!;
-      expect(advRank(a).rarity, `strate ${n}`).toBe(attendu);
-      expect(advRank(a).index).toBe(n - 1);
-      // Mêmes mots et mêmes couleurs que pour une arme : « épique » doit vouloir dire la
-      // même chose partout dans le jeu.
-      expect(advRank(a).label).toBe(RARITY_LABEL[attendu]);
-      expect(advRank(a).color).toBe(RANK_COLOR[attendu]);
+  it('⚠️ le rang affiché est LE MÊME BARÈME QUE LE JOUEUR', () => {
+    // ⚠️ DEUX ALLERS-RETOURS ONT MENÉ ICI. Le rang a d'abord été ce barème, mais les
+    // promotions étaient front-chargées (cinq dans le seul Bronze) : « une promotion = un
+    // rang gagné » était faux. On a alors fait du rang la RARETÉ de la classe, ce qui
+    // rendait la phrase vraie en abandonnant l'échelle commune avec le héros. La vraie
+    // correction était ailleurs : c'est la CADENCE qui était fausse.
+    for (const L of [1, 6, 11, 23, 47, 99]) {
+      expect(advRank(strate(3, L))).toEqual(characterRank(L));
     }
   });
 
-  it('⚠️ le NIVEAU ne change JAMAIS le rang — seule une promotion le fait', () => {
-    const bas = strate(3, 1);
-    const haut = strate(3, ADV_MAX_LEVEL);
-    expect(advRank(haut).rarity).toBe(advRank(bas).rarity);
-    // …mais il fait bouger les étoiles, sinon monter de niveau ne se verrait nulle part.
-    expect(advStar(haut)).toBeGreaterThan(advStar(bas));
+  it('⚠️ les étoiles suivent le NIVEAU, jamais les classes', () => {
+    // À niveau égal, prendre une classe de plus ne doit RIEN changer aux étoiles : la
+    // promotion se lit sur le rang, la progression de terrain sur l'étoile.
+    for (let n = 1; n <= LIGNEE.length; n++)
+      expect(advStar(strate(n, 17))).toBe(advStar(strate(1, 17)));
+    // …et monter d'un cran de niveau les fait bouger.
+    expect(advStar(strate(1, 3))).toBeGreaterThan(advStar(strate(1, 1)));
   });
 
-  it('⚠️ la 5e étoile tombe EXACTEMENT sur la promotion — « prêt », pas « bientôt »', () => {
-    // C'est ce qui raccroche l'étoile à une action. Une étoile qui s'allume avant
-    // l'échéance redeviendrait la décoration qu'elle était.
-    for (let n = 1; n < PROMO_LEVELS.length; n++) {
-      const need = promoLevel(n)!;
-      expect(advStar(strate(n, need)), `strate ${n} — au niveau requis`).toBe(ADV_STARS);
-      expect(advStar(strate(n, need - 1)), `strate ${n} — juste avant`).toBeLessThan(ADV_STARS);
-      expect(advNextPromoLevel(strate(n, 1))).toBe(need);
+  it('la rareté de la classe monte DU MÊME PAS que le rang', () => {
+    // Elle reste affichée à côté du rang — mais elle ne le concurrence plus : pour qui
+    // prend ses promotions, les deux index sont égaux, cran pour cran.
+    for (let i = 0; i < PROMO_LEVELS.length; i++) {
+      const a = suiveur(PROMO_LEVELS[i]!);
+      expect(RANK_ORDER.indexOf(advRarity(a)), `rang ${i}`).toBe(advRank(a).rankIndex);
     }
   });
 
-  it('la tranche des étoiles va d’une promotion à la suivante', () => {
-    for (let n = 1; n < PROMO_LEVELS.length; n++) {
-      expect(advStarBand(strate(n, 1))).toEqual({ from: PROMO_LEVELS[n - 1], to: promoLevel(n) });
+  it('⚠️ la promotion s’ouvre EXACTEMENT au passage de rang', () => {
+    for (let i = 1; i < PROMO_LEVELS.length; i++) {
+      const need = PROMO_LEVELS[i]!;
+      expect(canPromote(strate(i, need), 99), `rang ${i}`).toBe(true);
+      expect(canPromote(strate(i, need - 1), 99), `rang ${i}, juste avant`).toBe(false);
     }
   });
 
-  it('⚠️ AU SOMMET, les étoiles continuent d’avancer', () => {
-    // Il n'y a plus rien à débloquer passé la 8e strate, mais le niveau commande encore
-    // les stats : figer les étoiles laisserait un primordial travailler des dizaines de
-    // niveaux sans le moindre retour — ce que la barre existe précisément pour éviter.
+  it('⚠️ AU SOMMET DE L’ARBRE, le prestige continue sans nouvelle classe', () => {
     const fini = (level: number) => strate(LIGNEE.length, level);
     expect(advNextPromoLevel(fini(99))).toBeNull();
-    expect(advStarBand(fini(99))).toEqual({
-      from: PROMO_LEVELS[PROMO_LEVELS.length - 1],
-      to: ADV_MAX_LEVEL,
-    });
-    expect(advStar(fini(PROMO_LEVELS[PROMO_LEVELS.length - 1]!))).toBe(1);
-    expect(advStar(fini(ADV_MAX_LEVEL))).toBe(ADV_STARS);
-    // ⚠️ Bornes DÉRIVÉES : à 8 classes, `canPromote` a forcément exigé le dernier
-    // palier — un aventurier complet SOUS ce niveau est un état que le jeu ne produit
-    // pas, et le tester revenait à mesurer une tranche écrasée.
-    const top = PROMO_LEVELS[PROMO_LEVELS.length - 1]!;
-    expect(advStar(fini(top + 20))).toBeGreaterThan(advStar(fini(top)));
+    expect(canPromote(fini(99), 99)).toBe(false);
+    // Il monte pourtant encore de deux rangs entiers — le titre n'est pas figé.
+    expect(advRank(fini(99)).rankIndex).toBeGreaterThan(advRank(fini(71)).rankIndex);
   });
 
   it('l’étoile ne recule jamais et reste dans ses bornes', () => {
-    for (let n = 1; n <= LIGNEE.length; n++) {
-      let vue = 0;
-      for (let l = 1; l <= ADV_MAX_LEVEL; l++) {
-        const st = advStar(strate(n, l));
-        expect(st, `strate ${n}, niveau ${l}`).toBeGreaterThanOrEqual(Math.max(1, vue));
-        expect(st).toBeLessThanOrEqual(ADV_STARS);
-        vue = st;
-      }
+    let vu = 0;
+    for (let l = 1; l <= ADV_MAX_LEVEL; l++) {
+      const st = advStar(strate(1, l));
+      expect(st, `niveau ${l}`).toBeGreaterThanOrEqual(1);
+      expect(st).toBeLessThanOrEqual(ADV_STARS);
+      if (advRank(strate(1, l)).rankIndex === advRank(strate(1, Math.max(1, l - 1))).rankIndex)
+        expect(st).toBeGreaterThanOrEqual(vu);
+      vu = st;
     }
   });
 
   it('la barre avance avec l’XP, pas seulement au passage de niveau', () => {
-    // Le niveau est CACHÉ : sans ça, un aventurier peut travailler un palier entier sans
-    // le moindre retour visible.
-    const mid = PROMO_LEVELS[4]! + 1;
-    const a = strate(5, mid, 0);
-    const b = strate(5, mid, advXpToNext(mid) / 2);
-    expect(advRankProgress(b)).toBeGreaterThan(advRankProgress(a));
+    // Le niveau est CACHÉ : sans ça, on travaille un palier entier sans aucun retour.
+    expect(advRankProgress(strate(1, 17, advXpToNext(17) / 2))).toBeGreaterThan(
+      advRankProgress(strate(1, 17, 0)),
+    );
   });
 
   it('reste bornée à [0, 1]', () => {
-    for (const n of [1, 3, 5, 8]) {
-      for (const l of [1, 2, 5, 23, 99]) {
-        for (const f of [0, 0.5, 1, 5]) {
-          const p = advRankProgress(strate(n, l, advXpToNext(l) * f));
-          expect(p).toBeGreaterThanOrEqual(0);
-          expect(p).toBeLessThanOrEqual(1);
-        }
+    for (const l of [1, 2, 5, 23, 99])
+      for (const f of [0, 0.5, 1, 5]) {
+        const p = advRankProgress(strate(1, l, advXpToNext(l) * f));
+        expect(p).toBeGreaterThanOrEqual(0);
+        expect(p).toBeLessThanOrEqual(1);
       }
-    }
   });
 
-  it('la barre BOUCLE à chaque étoile — elle ne s’étire pas sur toute la tranche', () => {
-    // ⚠️ Valeurs EXACTES, pas « > 0 » : une barre étirée sur la tranche entière passerait
-    // un test de simple croissance en rendant 0,25 là où on attend 1 — et l'étoile
-    // suivante n'aurait plus aucun rapport avec le remplissage.
-    // ⚠️ LES BORNES SONT DÉRIVÉES, plus écrites : ce test épinglait « 8 → 12 », donc il
-    // est tombé quand la cadence a changé — alors que la PROPRIÉTÉ, elle, n'avait pas
-    // bougé d'un pouce. Un test qui pin des valeurs se casse à chaque réglage sans rien
-    // protéger de plus.
-    const from = PROMO_LEVELS[4]!;
-    const to = PROMO_LEVELS[5]!;
-    expect(advStarBand(strate(5, from))).toEqual({ from, to });
-    expect(advRankProgress(strate(5, from, 0))).toBe(0);
-    expect(advRankProgress(strate(5, from, advXpToNext(from) / 2))).toBeGreaterThan(0);
-    expect(advRankProgress(strate(5, to, 0))).toBe(1); // ★★★★★ : la barre est pleine
-  });
-
-  it('la barre est pleine EXACTEMENT quand la 5e étoile est là', () => {
-    for (let n = 1; n < PROMO_LEVELS.length; n++) {
-      const need = promoLevel(n)!;
-      expect(advRankProgress(strate(n, need)), `strate ${n}`).toBe(1);
-      expect(advRankProgress(strate(n, need - 1, 0))).toBeLessThan(1);
-    }
+  it('la barre BOUCLE à chaque étoile — une étoile tous les deux niveaux', () => {
+    // ⚠️ Valeurs EXACTES, pas « > 0 » : une barre étirée sur tout le rang passerait un
+    // test de simple croissance en rendant 0,1 là où on attend 0,5.
+    expect(advRankProgress(strate(1, 1, 0))).toBe(0);
+    expect(advRankProgress(strate(1, 3, 0))).toBe(0); // niveau 3 = nouvelle étoile
+    expect(advRankProgress(strate(1, 2, 0))).toBeCloseTo(0.5, 6);
   });
 
   it('un aventurier sans classe ne fait pas exploser l’échelle', () => {
-    // Cas de garde : `path` vide ne devrait pas arriver, mais une tranche de largeur nulle
-    // diviserait par zéro et rendrait NaN — un rang illisible plutôt qu'un rang faux.
     const nu = make({ path: [], level: 1 });
     expect(Number.isFinite(advRankProgress(nu))).toBe(true);
     expect(advStar(nu)).toBeGreaterThanOrEqual(1);
   });
 });
-
 describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
   const CTX = { guildLevel: 99, trainingLevel: 5, now: 1_000_000 };
-  /** ⚠️ Les niveaux sont DÉRIVÉS de la tranche, pas écrits : ce bloc épinglait 8/9/11/12,
-   *  donc il est tombé le jour où la cadence a changé alors qu'aucune de ses propriétés
-   *  n'avait bougé. On lit les bornes de la strate 5 et on s'y place. */
-  const DEB = PROMO_LEVELS[4]!;
-  const FIN = PROMO_LEVELS[5]!;
-  /** Strate 5 : la tranche va d'une promotion à la suivante, donc un
-   *  gain d’étoile s’obtient avec un seul niveau. */
-  const LIGNEE = ['guerrier', 'brute', 'colosse', 'titan', 'rempart'];
+  /** Bornes DÉRIVÉES du rang, jamais écrites : un test qui pin un nombre se casse à
+   *  chaque réglage sans rien protéger de plus (leçon payée deux fois). */
+  const DEB = PROMO_LEVELS[4]!; // premier niveau du 5e rang
+  const FIN = PROMO_LEVELS[5]!; // premier niveau du 6e
   const at = (id: string, level: number, over: Partial<Adventurer> = {}) =>
-    make({ id, name: id, path: LIGNEE, level, ...over });
+    make({
+      id,
+      name: id,
+      path: ['guerrier', 'brute', 'colosse', 'titan', 'rempart'],
+      level,
+      ...over,
+    });
 
   it('une étoile gagnée est ANNONCÉE — le niveau, lui, reste caché', () => {
-    // ⚠️ Sans ça, des semaines de convois ne se voient qu'en rouvrant la Guilde pour
-    // y lire une barre : c'est le seul retour que le joueur ait sur son vivier.
-    const ev = advProgressOf([at('a', DEB)], [at('a', FIN - 1)], CTX);
+    // ⚠️ Sans ça, des semaines de convois ne se voient qu'en rouvrant la Guilde pour y
+    // lire une barre : c'est le seul retour que le joueur ait sur son vivier.
+    const ev = advProgressOf([at('a', DEB)], [at('a', DEB + 2)], CTX);
     expect(ev).toHaveLength(1);
     expect(ev[0]!.to).toBeGreaterThan(ev[0]!.from);
-    expect(ev[0]).toMatchObject({ id: 'a', from: 1, promoted: false });
-    expect(ev[0]!.rarity).toBe(RANK_ORDER[4]);
+    expect(ev[0]).toMatchObject({ id: 'a', rankUp: false, promoted: false });
+    expect(ev[0]!.star).toBe(2);
   });
 
   it('rien à dire quand rien n’a bougé', () => {
     expect(advProgressOf([at('a', DEB)], [at('a', DEB)], CTX)).toEqual([]);
   });
 
+  it('⚠️ UN RANG GAGNÉ EST ANNONCÉ, alors que son ÉTOILE RETOMBE de ★5 à ★1', () => {
+    // ⚠️ DÉFAUT TROUVÉ PAR CE TEST, pas par relecture : comparer les ÉTOILES manquait
+    // exactement le moment le plus important du jeu — celui qui donne droit à une
+    // nouvelle classe — parce qu'au passage de rang l'étoile redescend. On compare donc
+    // le CRAN GLOBAL, qui est monotone d'un bout à l'autre de l'échelle.
+    const ev = advProgressOf([at('a', FIN - 1)], [at('a', FIN)], CTX);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.rankUp).toBe(true);
+    expect(ev[0]!.to).toBeGreaterThan(ev[0]!.from);
+    // L'étoile affichée, elle, est bien repartie à 1.
+    expect(ev[0]!.star).toBe(1);
+    expect(ev[0]!.rankName).toBe(characterRank(FIN).name);
+  });
+
   it('⚠️ `promoted` est un FRANCHISSEMENT, pas un état', () => {
-    // C'est tout ce qui empêche la feuille de promotion de se rouvrir à CHAQUE
-    // cargaison pour quelqu'un qu'on a déjà décidé de ne pas promouvoir. Ce qui ouvre
-    // la fenêtre, c'est que CETTE mission l'a rendue possible.
-    const ouvre = advProgressOf([at('a', FIN - 1)], [at('a', FIN)], CTX);
-    expect(ouvre[0]?.promoted).toBe(true);
-    // Déjà promouvable avant ET après : on se tait, le badge ⭐ de la Guilde suffit.
+    // C'est tout ce qui empêche la feuille de promotion de se rouvrir à CHAQUE cargaison
+    // pour quelqu'un qu'on a déjà décidé de ne pas promouvoir.
+    expect(advProgressOf([at('a', FIN - 1)], [at('a', FIN)], CTX)[0]?.promoted).toBe(true);
     expect(advProgressOf([at('a', FIN)], [at('a', FIN)], CTX)).toEqual([]);
   });
 
-  it('une promotion se dit même sans étoile de plus', () => {
-    // Cas réel : il était DÉJÀ à l'étoile maximale mais parti en convoi (donc pas
-    // promouvable). Il rentre, la promotion s'ouvre — sans qu'aucune étoile ne bouge.
-    const parti = at('a', FIN, { busyUntil: CTX.now + 60_000 });
-    const rentre = at('a', FIN);
-    const ev = advProgressOf([parti], [rentre], CTX);
+  it('une promotion se dit même sans le moindre cran gagné', () => {
+    // Cas réel : il était déjà au bon niveau mais PARTI EN CONVOI (donc pas promouvable).
+    // Il rentre, la promotion s'ouvre — sans qu'aucun cran ne bouge.
+    const ev = advProgressOf([at('a', FIN, { busyUntil: CTX.now + 60_000 })], [at('a', FIN)], CTX);
     expect(ev).toHaveLength(1);
-    expect(ev[0]).toMatchObject({ from: 5, to: 5, promoted: true });
+    expect(ev[0]).toMatchObject({ promoted: true, rankUp: false });
+    expect(ev[0]!.to).toBe(ev[0]!.from);
   });
 
   it('⚠️ sans Centre de formation, on n’annonce AUCUNE promotion', () => {
     // Le store la refuserait : promettre une fenêtre qui ne peut pas s'ouvrir est pire
     // que se taire. La règle vit dans `canPromoteNow`, on ne la ré-écrit pas ici.
     const ev = advProgressOf([at('a', FIN - 1)], [at('a', FIN)], { ...CTX, trainingLevel: 0 });
-    expect(ev[0]?.promoted).toBe(false);
+    expect(ev[0]!.promoted).toBe(false);
+    // …mais le RANG gagné, lui, se dit quand même : il ne dépend d'aucun bâtiment.
+    expect(ev[0]!.rankUp).toBe(true);
   });
 
   it('un aventurier recruté entre-temps n’a rien « gagné »', () => {
@@ -548,14 +529,13 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
 
   it('chaque membre de l’escorte est annoncé séparément', () => {
     const ev = advProgressOf(
-      [at('a', DEB), at('b', DEB + 3), at('c', DEB)],
-      [at('a', DEB + 3), at('b', DEB + 3), at('c', DEB + 6)],
+      [at('a', DEB), at('b', DEB + 2), at('c', DEB)],
+      [at('a', DEB + 2), at('b', DEB + 2), at('c', DEB + 4)],
       CTX,
     );
     expect(ev.map((e) => e.id)).toEqual(['a', 'c']);
   });
 });
-
 describe('Guilde : effectif, coût de recrutement, XP', () => {
   it('l’effectif croît avec la Guilde — donc avec le sport, mais LINÉAIREMENT', () => {
     // C'est ce qui rend la boucle accessible : la puissance du héros croît en ~L⁴, là où

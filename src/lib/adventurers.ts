@@ -16,14 +16,8 @@
 // pas les mêmes offres et n'ont pas le même destin, pour ~35 classes écrites au lieu de
 // 9 840. Les branches re-convergent naturellement (« Maître épéiste » est atteignable
 // depuis Épéiste comme depuis Bretteur : on ne l'écrit qu'une fois).
-import {
-  RANK_COLOR,
-  RANK_ORDER,
-  RARITY_LABEL,
-  rankCeilingForLevel,
-  type EffectType,
-  type Rarity,
-} from './items';
+import { RANK_ORDER, type EffectType, type Rarity } from './items';
+import { characterRank, rankProgress, rankStartLevel, type CharacterRank } from './characterRank';
 // ⚠️ LE PRNG DU PROJET, pas une n-ième copie. Les trois qui traînaient étaient
 // arithmétiquement IDENTIQUES (seul l'idiome différait) — donc aucun tirage ne bouge —
 // mais quatre exemplaires d'un générateur seedé, c'est quatre occasions qu'une retouche
@@ -112,38 +106,29 @@ export interface AdvClass {
 export const STRATUM_BUDGET: number[] = RANK_ORDER.map((_, i) => Math.round(6 * 1.219 ** i));
 
 /**
- * Niveaux d’aventurier ouvrant chaque strate — **DÉRIVÉS de l’échelle des OBJETS**.
+ * Niveaux d’aventurier ouvrant chaque strate — **UN PAR RANG DE PRESTIGE**.
  *
- * ⚠️ ILS ÉTAIENT ÉCRITS À LA MAIN (1/2/3/5/8/12/17/23) et front-chargés pour accrocher.
- * Deux mesures ont eu raison de ce choix. (1) **Le mot ne voulait pas dire la même chose
- * des deux côtés** : « épique » valait le niveau 8 pour un aventurier et le niveau 20
- * pour une arme, alors que la v0.793 venait justement de faire du rang d’un aventurier
- * SA RARETÉ, avec les libellés et les couleurs du butin. (2) **La progression s’éteignait
- * au tiers du jeu** : les 8 raretés étaient bouclées au niveau 23, puis 77 niveaux sans
- * le moindre changement de rang.
+ * ⚠️ MODÈLE POSÉ PAR L’UTILISATEUR : « le rang, c’est comme le joueur — bronze, argent,
+ * or, or noir… L’aventurier choisit une classe au rang bronze à sa création, ensuite
+ * une au rang argent, une à l’or, etc. » Une promotion **EST** un rang gagné, au sens
+ * littéral : la table est `rankStartLevel(i)`, donc **1 · 11 · 21 · 31 · 41 · 51 · 61 · 71**.
  *
- * ⚠️ ELLE EST CALCULÉE, PAS RECOPIÉE : `rankCeilingForLevel` est la seule autorité sur
- * « à quel niveau telle rareté devient possible ». Une table jumelle écrite à la main
- * aurait dérivé au premier réglage du gate — c’est exactement ce qui vient d’arriver.
- * Résultat : **1 · 2 · 5 · 12 · 20 · 31 · 45 · 61**.
+ * ⚠️ ELLE EST CALCULÉE, PAS RECOPIÉE : `characterRank` est la seule autorité sur « où
+ * commence un rang ». Deux tables jumelles écrites séparément divergent au premier
+ * réglage — le projet vient de se le faire deux fois de suite (strates contre gate des
+ * objets, puis étoiles contre promotions).
  *
- * ⚠️ CE QUE ÇA COÛTE, mesuré : le joueur le plus léger (une séance de 30 min par
- * semaine) atteint Rare en un an au lieu de Légendaire, et jusqu’à 16 niveaux séparent
- * deux promotions. C’est tenable **parce que les ÉTOILES portent le retour entre-temps**
- * (v0.793) : elles parcourent la tranche d’une promotion à la suivante, donc un palier
- * long n’est plus un palier muet. Sans elles, cet étalement serait injouable.
+ * ⚠️ IL Y A 10 RANGS ET 8 STRATES, et cet écart est ASSUMÉ : les deux derniers rangs
+ * (Divin céleste, Tout-puissant) montent en prestige **sans nouvelle classe** — l’arbre
+ * est fini, le titre continue. Écrire deux strates de plus ferait ~24 classes
+ * supplémentaires pour deux paliers que presque personne n’atteindra.
  *
- * ⚠️ ET UNE AFFIRMATION DE LA DOC ÉTAIT FAUSSE : « c’est l’XP de mission qui doit brider,
- * jamais le plafond ». Mesuré sur trois profils sportifs, le niveau de l’aventurier
- * **ÉGALE exactement** celui du joueur à chaque relevé — l’XP n’est JAMAIS le frein, la
- * Guilde l’est toujours. Cette table se lit donc comme « à quel niveau de SPORT on
- * débloque telle rareté », ce qui rend l’alignement sur les objets d’autant plus juste.
+ * ⚠️ CE QUE ÇA COÛTE, mesuré : un rang prend **dix niveaux**, donc le joueur le plus
+ * léger (une séance de 30 min par semaine, niveau 13 à un an) ne prend que sa
+ * **deuxième** classe dans l’année. C’est le prix d’une promotion qui veut dire quelque
+ * chose ; les ÉTOILES portent le retour entre-temps (une tous les deux niveaux).
  */
-export const PROMO_LEVELS: readonly number[] = RANK_ORDER.map((_, i) => {
-  let level = 1;
-  while (level < 200 && rankCeilingForLevel(level) < i) level++;
-  return level;
-});
+export const PROMO_LEVELS: readonly number[] = RANK_ORDER.map((_, i) => rankStartLevel(i));
 
 /** Poids de la montée en NIVEAU face au chemin de classes. À 0,15, un aventurier de
  *  niveau 23 vaut ×4,3 son niveau 1 — soit plus que tout l'écart de rareté. C'est
@@ -1272,119 +1257,33 @@ export function advRarity(adv: Adventurer): Rarity {
   return RANK_ORDER[Math.min(RANK_ORDER.length - 1, top)]!;
 }
 
-/** Plafond de l'échelle affichée. ⚠️ Le plafond RÉEL est la Guilde, donc le sport — mais
- *  l'échelle, elle, doit être FIXE : indexée sur le plafond courant, monter la Guilde
- *  ferait reculer des étoiles déjà gagnées, et un rang affiché ne redescend jamais. */
-export const ADV_MAX_LEVEL = 100;
-
-/** Crans de l'étoile. Cinq, comme partout ailleurs dans le jeu. */
-export const ADV_STARS = 5;
-
-/** Le RANG d'un aventurier, tel qu'on le lit. */
-export interface AdvRank {
-  rarity: Rarity;
-  /** 0..7 — la strate atteinte. */
-  index: number;
-  label: string;
-  color: string;
-  /** 1..5 — le travail de terrain (cf. `advStar`). */
-  star: number;
-}
-
-/**
- * Rang affiché — SA RARETÉ DE CLASSE, et les étoiles disent son NIVEAU.
- *
- * ⚠️ IL Y AVAIT DEUX ÉCHELLES CÔTE À CÔTE, et c'est ce qui rendait la fiche illisible :
- * le barème de prestige du HÉROS (`characterRank` : 10 rangs × 5 étoiles étalés sur
- * 100 niveaux) ET la rareté de la classe (8 crans, une par strate). Un aventurier
- * affichait « Argent ★3 · épique » — deux progressions distinctes, aucune des deux ne
- * rendant vrai « une promotion = un rang gagné » : les promotions sont front-chargées
- * (5 dans le premier rang de prestige, 2 dans le deuxième, 1 dans le troisième, plus
- * aucune ensuite), donc les étoiles avançaient sans jamais rien débloquer.
- *
- * Il n'en reste qu'une : le RANG EST LA CLASSE — les 8 raretés du jeu, mêmes libellés et
- * mêmes couleurs que le butin, donc « épique » veut dire la même chose pour un aventurier
- * et pour une arme. Les ÉTOILES ne portent plus de prestige : elles montrent où en est le
- * niveau, qui reste caché.
- */
-export function advRank(adv: Adventurer): AdvRank {
-  const rarity = advRarity(adv);
-  return {
-    rarity,
-    index: RANK_ORDER.indexOf(rarity),
-    label: RARITY_LABEL[rarity],
-    color: RANK_COLOR[rarity],
-    star: advStar(adv),
-  };
-}
-
 /** XP nécessaire pour passer du niveau `level` au suivant. Mesuré avec `missionXp` :
- *  ~8 missions pour le niveau 2, 38 pour le 5, 118 pour le 8, 255 pour le 23 — soit
- *  environ 3 mois à 3 convois par jour pour élever un aventurier à fond.
- *  ⚠️ Vit ICI et non dans `caravan.ts` : c'est la courbe de l'AVENTURIER, pas celle du
- *  convoi. Les caravanes ne sont qu'une des sources d'XP (la formation en est une autre). */
+ *  ~8 missions pour le niveau 2, 38 pour le 5, 118 pour le 8, 255 pour le 23.
+ *  ⚠️ Vit ICI et non dans `caravan.ts` : c’est la courbe de l’AVENTURIER, pas celle du
+ *  convoi. Les caravanes ne sont qu’une de ses sources d’XP (la formation en est une autre). */
 export function advXpToNext(level: number): number {
   return 40 + Math.max(1, level) * 22;
-}
-
-/**
- * La tranche de niveaux que les cinq étoiles parcourent : de la promotion qui a ouvert
- * la strate courante à celle qui ouvrira la suivante.
- *
- * ⚠️ AU SOMMET, elle s'étend jusqu'au plafond du jeu. Il n'y a plus rien à débloquer
- * passé la 8e strate, mais le niveau continue de commander les stats (`ADV_LEVEL_K`
- * domine la rareté) : figer les étoiles à ★★★★★ laisserait un primordial travailler
- * des dizaines de niveaux sans le moindre retour — exactement ce que la barre existe
- * pour éviter.
- */
-export function advStarBand(adv: Adventurer): { from: number; to: number } {
-  const s = nextStratum(adv);
-  const from = PROMO_LEVELS[Math.min(PROMO_LEVELS.length - 1, Math.max(0, s - 1))]!;
-  return { from, to: Math.max(from + 1, promoLevel(s) ?? ADV_MAX_LEVEL) };
-}
-
-/** Où en est le niveau DANS sa tranche (0..1), XP du niveau en cours comprise — sans
- *  elle la valeur ne bougerait qu'au passage de niveau, soit plusieurs jours de convois
- *  sans retour visible. */
-function bandFraction(adv: Adventurer): number {
-  const { from, to } = advStarBand(adv);
-  const frac = Math.min(1, Math.max(0, adv.xp) / advXpToNext(adv.level));
-  return Math.min(1, Math.max(0, (Math.max(1, adv.level) + frac - from) / (to - from)));
-}
-
-/** Étoile courante, 1..5 — le travail de terrain.
- *
- *  ⚠️ La 5e tombe EXACTEMENT sur le niveau de la promotion, pas avant : « ★★★★★ » veut
- *  dire « il est prêt », jamais « il approche ». C'est ce qui raccroche l'étoile à une
- *  action — sans quoi elle redeviendrait la décoration qu'elle était. */
-export function advStar(adv: Adventurer): number {
-  return Math.max(1, Math.min(ADV_STARS, 1 + Math.floor(bandFraction(adv) * (ADV_STARS - 1))));
-}
-
-/** Avancement DANS l'étoile courante (0..1) — la BARRE. */
-export function advRankProgress(adv: Adventurer): number {
-  const f = bandFraction(adv);
-  if (f >= 1) return 1;
-  const step = 1 / (ADV_STARS - 1);
-  return Math.min(1, (f % step) / step);
-}
-
-/** Niveau qui ouvrira la PROCHAINE PROMOTION, ou null au sommet de l'arbre.
- *
- *  ⚠️ Remplace « prochaine étoile au niveau N » : ce N désignait un cran de l'échelle du
- *  héros qui ne déclenchait RIEN. Ici l'info-bulle annonce la seule échéance qui demande
- *  quelque chose au joueur. */
-export function advNextPromoLevel(adv: Adventurer): number | null {
-  return promoLevel(nextStratum(adv));
 }
 
 /** Ce qu’une mission a changé pour un aventurier — la matière de l’annonce. */
 export interface AdvProgress {
   id: string;
   name: string;
-  /** Étoile AVANT et APRÈS. Le gain est `to > from`. */
+  /** Le CRAN GLOBAL (0..49) avant et après.
+   *
+   *  ⚠️ ON NE COMPARE PAS LES ÉTOILES : au passage de rang, l’étoile **retombe de ★5 à
+   *  ★1**. Un gain lu sur elle manquerait donc exactement le moment le plus important —
+   *  celui où l’aventurier change de rang. Le cran, lui, est monotone d’un bout à
+   *  l’autre de l’échelle. (Trouvé par un test, pas par relecture.) */
   from: number;
   to: number;
+  /** L’étoile à AFFICHER (1..5), après coup. */
+  star: number;
+  /** Le RANG a changé : l’annonce n’est plus du même ordre qu’une étoile de plus. */
+  rankUp: boolean;
+  /** Le rang APRÈS, tel qu’on l’écrit (« 🟤 Bronze »). */
+  rankEmoji: string;
+  rankName: string;
   /** Sa rareté de classe — la teinte de la célébration. */
   rarity: Rarity;
   /** Une promotion s’ouvre MAINTENANT, et elle ne s’ouvrait pas avant. */
@@ -1394,9 +1293,8 @@ export interface AdvProgress {
 /**
  * Compare un vivier AVANT et APRÈS un versement d’XP, et rend ce qu’il y a à DIRE.
  *
- * ⚠️ Le niveau d’un aventurier est CACHÉ : sans annonce, une mission qui lui fait
- * gagner une étoile ne se voit qu’en rouvrant la Guilde et en regardant une barre.
- * C’est le seul retour qu’il ait sur des semaines de convois.
+ * ⚠️ Le niveau d’un aventurier est CACHÉ : sans annonce, une mission qui lui fait gagner
+ * une étoile ne se voit qu’en rouvrant la Guilde et en regardant une barre.
  *
  * ⚠️ `promoted` EST UN FRANCHISSEMENT, pas un état — et c’est tout ce qui empêche la
  * feuille de promotion de se rouvrir à CHAQUE cargaison pour quelqu’un qu’on a déjà
@@ -1416,15 +1314,72 @@ export function advProgressOf(
     const b = was.get(a.id);
     // Un aventurier qui n’existait pas avant n’a rien « gagné » : recruté entre-temps.
     if (!b) continue;
-    const from = advStar(b);
-    const to = advStar(a);
+    const av = advRank(b);
+    const ap = advRank(a);
     const promoted = canPromoteNow(a, ctx) && !canPromoteNow(b, ctx);
-    if (to <= from && !promoted) continue;
-    out.push({ id: a.id, name: a.name, from, to, rarity: advRarity(a), promoted });
+    if (ap.tier <= av.tier && !promoted) continue;
+    out.push({
+      id: a.id,
+      name: a.name,
+      from: av.tier,
+      to: ap.tier,
+      star: ap.star,
+      rankUp: ap.rankIndex > av.rankIndex,
+      rankEmoji: ap.emoji,
+      rankName: ap.name,
+      rarity: advRarity(a),
+      promoted,
+    });
   }
   return out;
 }
 
+/** Plafond de l’échelle affichée — celui du jeu, et donc du barème de prestige. */
+export const ADV_MAX_LEVEL = 100;
+
+/** Crans de l’étoile. Cinq, comme pour le héros. */
+export const ADV_STARS = 5;
+
+/**
+ * Rang affiché — **LE MÊME BARÈME QUE LE JOUEUR** (🟤 Bronze → 👑 Tout-puissant), et les
+ * étoiles disent où en est son NIVEAU dans le rang (une tous les deux niveaux).
+ *
+ * ⚠️ DEUX ALLERS-RETOURS ONT MENÉ ICI, et la raison de chacun compte. Le rang a d’abord
+ * été ce barème (v0.725) — mais les promotions étaient **front-chargées** (cinq dans le
+ * seul rang Bronze), donc « une promotion = un rang gagné » était faux et la fiche
+ * montrait deux progressions sans rapport. On a alors fait du rang **la rareté de la
+ * classe** (v0.793), ce qui rendait la phrase vraie… en abandonnant l’échelle commune
+ * avec le héros. La vraie correction n’était ni l’une ni l’autre : c’est **la CADENCE**
+ * qui était fausse. Une classe par rang (`PROMO_LEVELS` = `rankStartLevel`) rend la
+ * phrase littéralement vraie **et** garde une seule échelle de prestige dans tout le jeu.
+ *
+ * La **rareté de la classe** reste lisible à côté (« Maître épéiste · épique ») : elle ne
+ * concurrence plus le rang, elle avance avec lui, cran pour cran.
+ */
+export function advRank(adv: Adventurer): CharacterRank {
+  return characterRank(Math.max(1, adv.level));
+}
+
+/** Étoile courante, 1..5 — la progression du niveau DANS le rang. */
+export function advStar(adv: Adventurer): number {
+  return advRank(adv).star;
+}
+
+/** Avancement DANS l’étoile courante (0..1) — la BARRE. L’XP du niveau en cours compte,
+ *  sinon elle ne bougerait qu’au passage de niveau : plusieurs jours de convois sans
+ *  le moindre retour, alors que le niveau est caché. */
+export function advRankProgress(adv: Adventurer): number {
+  return rankProgress(adv.level, Math.max(0, adv.xp) / advXpToNext(adv.level));
+}
+
+/** Niveau qui ouvrira la PROCHAINE PROMOTION, ou null quand l’arbre est fini.
+ *
+ *  ⚠️ Ce n’est PAS « le prochain rang » : les deux derniers rangs n’apportent plus de
+ *  classe (8 strates pour 10 rangs). Rendre le niveau du rang suivant promettrait une
+ *  promotion qui n’arrivera jamais. */
+export function advNextPromoLevel(adv: Adventurer): number | null {
+  return promoLevel(nextStratum(adv));
+}
 /** Nom de métier courant = la classe la plus récente. */
 export function advTitle(adv: Adventurer): AdvClass | undefined {
   return adv.path.length ? advClass(adv.path[adv.path.length - 1]!) : undefined;

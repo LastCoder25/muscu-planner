@@ -32,6 +32,7 @@ import {
   rankIndex,
   RANK_ORDER,
   RARITY_LABEL,
+  rankCeilingForLevel,
   mergeEffects,
   type AggregatedEffects,
   type Item,
@@ -1040,21 +1041,22 @@ export function companionSlots(kennelLevel: number): number {
 /** 🎖️ RANG MAXIMAL qu’un familier peut avoir pour tenir le mur — le second levier du
  *  Chenil, et l’exact pendant de ce que la Guilde fait pour les aventuriers.
  *
- *  ⚠️ ON RÉUTILISE `PROMO_LEVELS`, la table qui gate déjà les strates d’aventurier.
- *  Elle dit « quel niveau de bâtiment pour quel rang » et compte exactement autant
- *  d’entrées que `RANK_ORDER` — écrire une seconde table, c’est garantir qu’elles
- *  divergent au premier réglage. Commun dès le niveau 1, primordial au 23.
+ *  ⚠️ IL SE CALE SUR `rankCeilingForLevel` — LE RANG QU’ON PEUT DROPPER À CE NIVEAU —
+ *  et non plus sur `PROMO_LEVELS`. Cette table-là appartient aux AVENTURIERS : elle dit
+ *  « à quel niveau on gagne une classe », ce qui n’a aucun rapport avec « quel familier
+ *  existe ». L’emprunt était commode tant que les deux échelles se ressemblaient ; dès
+ *  que la cadence des promotions a bougé, le Chenil s’est mis à plafonner des familiers
+ *  qu’on pouvait pourtant trouver — un verrou arbitraire sur un système voisin.
+ *
+ *  ⚠️ Le cap ÉGALE donc exactement ce qui est obtenable : il ne bloque jamais un
+ *  familier existant, et il cesse de promettre du primordial à qui ne peut pas en
+ *  dropper. « Le sport est le plafond » — pas le bâtiment.
  *
  *  ⚠️ Ça ne concerne QUE le mur. Le familier que le héros PORTE n’est pas au chenil :
  *  il part au combat avec lui, et aucun bâtiment ne le plafonne. */
 function companionRankCap(kennelLevel: number): number {
-  let cap = -1;
-  // ⚠️ Borné à `RANK_ORDER` : `PROMO_LEVELS` compte aujourd’hui autant d’entrées que de
-  // raretés, mais il appartient aux AVENTURIERS — s’il en gagne une, le cap ne doit pas
-  // désigner un rang qui n’existe pas.
-  const max = Math.min(PROMO_LEVELS.length, RANK_ORDER.length);
-  for (let i = 0; i < max; i++) if (kennelLevel >= PROMO_LEVELS[i]!) cap = i;
-  return cap;
+  if (kennelLevel <= 0) return -1;
+  return Math.min(RANK_ORDER.length - 1, rankCeilingForLevel(kennelLevel));
 }
 
 /** Ce familier peut-il être POSTÉ ? ⚠️ Appliqué au CALCUL du combat autant qu’à

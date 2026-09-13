@@ -61,12 +61,12 @@ export const CARAVAN = {
    *  Mesuré à 5 : 3 aventuriers (la référence) tiennent 67-95 % selon le niveau, 4 tiennent
    *  93-100 %, 2 seulement 3-41 %. C'est ce gradient qui fait de « combien j'en envoie »
    *  une décision — à 2,2 tours, 3 aventuriers gagnaient 100 % PARTOUT et le choix était mort. */
-  foePvTurns: 5,
+  foePvTurns: 4,
   /** Ils mordent ~N % des PV EFFECTIFS de la référence (PV ÷ (1 − réduction)) par coup.
    *  ⚠️ EFFECTIFS, et non bruts : la réduction de dégâts croît avec le niveau, donc une
    *  morsure calée sur les PV bruts rendait le début de partie BEAUCOUP plus dur que la
    *  fin (mesuré : 12 % de tenue au niveau 5 contre 98 % au niveau 70, à escorte égale). */
-  foeDmgPctPv: 0.32,
+  foeDmgPctPv: 0.22,
   /** Route dangereuse (`Poi.perilous`, tirée au spawn donc annonçable AVANT le départ). */
   perilousMult: 1.35,
   /** Ce qu'apporte une SIGNATURE de classe (strates ≥ 3), en %. */
@@ -368,12 +368,14 @@ function strataFor(level: number): number {
 }
 /** Aventurier de RÉFÉRENCE : une lignée guerrière promue autant que son niveau l'autorise.
  *  Il ne sert qu'à donner l'échelle de la route — jamais au jeu. */
-export function refAdventurer(level: number): Adventurer {
-  // ⚠️ LA LIGNÉE VA JUSQU’AU BOUT DES 8 STRATES. Elle s’arrêtait à 4 : la route cessait donc
-  // de monter à la strate 3 pendant qu’une escorte réelle, elle, continue — les convois
-  // seraient devenus triviaux dès qu’un aventurier dépasse le niveau 8. Le danger de la
-  // route est ABSOLU (v0.726), il doit suivre l’échelle entière de ce qu’on peut aligner.
-  const lineage = [
+/** Les trois orientations d’une escorte de référence. ⚠️ TROIS, et pas une : une
+ *  lignée 100 % mêlée a **agilité 0** tant qu’elle a peu de classes, donc son
+ *  multi-frappe reste à 1,00 — et toute la calibration de la route, qui repose sur la
+ *  non-linéarité de l’offense, s’effondrait. Mesuré : au niveau 20 un trio de mêlée pure
+ *  gagnait **0 %** de ses embuscades là où un trio mixte en gagne 81 %. Une vraie
+ *  escorte n’est jamais monochrome — la référence ne doit pas l’être non plus. */
+const REF_LINEAGES: readonly (readonly string[])[] = [
+  [
     'guerrier',
     'epeiste',
     'duelliste',
@@ -382,15 +384,53 @@ export function refAdventurer(level: number): Adventurer {
     'heros',
     'demi_dieu',
     'primarque',
-  ];
+  ],
+  [
+    'archer',
+    'franc_tireur',
+    'arbaletrier',
+    'arquebusier',
+    'maitre_arc',
+    'oeil_faucon',
+    'lame_destin',
+    'tranchant_absolu',
+  ],
+  [
+    'caravanier',
+    'muletier',
+    'pisteur',
+    'maitre_convoi',
+    'logisticien',
+    'grand_intendant',
+    'batisseur',
+    'pilier_du_monde',
+  ],
+];
+
+/** L’aventurier de RÉFÉRENCE d’un niveau donné — ce à quoi la route se calibre.
+ *
+ *  ⚠️ LA LIGNÉE VA JUSQU’AU BOUT DES 8 STRATES : elle s’arrêtait à 4, donc la route
+ *  cessait de monter pendant qu’une escorte réelle continuait — les convois devenaient
+ *  triviaux. Le danger de la route est ABSOLU (v0.726), il doit suivre l’échelle
+ *  entière de ce qu’on peut aligner.
+ *
+ *  ⚠️ `slot` choisit l’orientation (mêlée / agile / civile) : un trio de référence en
+ *  prend une de chaque. */
+export function refAdventurer(level: number, slot = 0): Adventurer {
+  const lineage = REF_LINEAGES[Math.abs(Math.floor(slot)) % REF_LINEAGES.length]!;
   return {
-    id: 'ref',
+    id: 'ref' + slot,
     name: 'Référence',
     seed: 1,
     path: lineage.slice(0, Math.min(lineage.length, strataFor(level))),
     level: Math.max(1, level),
     xp: 0,
   };
+}
+
+/** L’ESCORTE de référence : `CARAVAN.refEscort` aventuriers, un par orientation. */
+function refEscortOf(level: number): Adventurer[] {
+  return Array.from({ length: CARAVAN.refEscort }, (_, i) => refAdventurer(level, i));
 }
 
 /** LES BANDITS DE LA ROUTE.
@@ -406,10 +446,7 @@ export function refAdventurer(level: number): Adventurer {
  *  L'échelle est exprimée en unités d'ESCORTE DE RÉFÉRENCE (`CARAVAN.refEscort`
  *  aventuriers au niveau du POI) : absolue, mais lisible et calibrable. */
 export function roadFoe(poi: Poi): Combatant {
-  const ref = escortCombatant(
-    Array.from({ length: CARAVAN.refEscort }, () => refAdventurer(poi.level)),
-    'Référence',
-  );
+  const ref = escortCombatant(refEscortOf(poi.level), 'Référence');
   const m = poi.perilous ? CARAVAN.perilousMult : 1;
   return {
     name: poi.perilous ? 'Pillards de la passe' : 'Bandits de grand chemin',
@@ -756,7 +793,14 @@ export function resolveCaravan(
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
     // substitut au sport » est un invariant, pas une base qu'un bon voyage dépasserait.
     gold: Math.round(goldCost(poi.type, poi.level) * 0.3 * k),
-    energy: Math.min(y.energy, Math.round(y.energy * k)),
+    // ⚠️ L'ARRONDI EN DERNIER, et ce n'est pas cosmétique : `y.energy` vaut la part
+    // brute × `yieldShare` (0,5), donc il tombe sur un DEMI. Avec l'arrondi à
+    // l'intérieur du `min`, dès que les multiplicateurs valaient ≥ 1 c'était la valeur
+    // FRACTIONNAIRE qui gagnait — et `login_energy` est une colonne ENTIÈRE : la
+    // sauvegarde partait en `invalid input syntax for type integer: "1234.5"`, la
+    // promesse était rejetée sans que rien ne l'attrape, et le joueur cliquait
+    // « Récupérer » sans qu'il ne se passe RIEN. Une cargaison était irrécupérable à vie.
+    energy: Math.round(Math.min(y.energy, y.energy * k)),
     summonStones: Math.round(y.summonStones * k),
     scrap: Math.round(y.scrap * k),
     keys: Math.round(y.keys * Math.min(1.2, k)) + keysBonus,
