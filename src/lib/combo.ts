@@ -73,6 +73,51 @@ export function legSets(leg: ComboLeg): ComboSet[] {
 export function legSetsDone(leg: ComboLeg): number {
   return legSets(leg).length;
 }
+/**
+ * 🛑 ARRÊTER UN DÉFI 360 : ce que ça doit faire, et comment le dire.
+ *
+ * ⚠️ DEUX ISSUES, ET LA DIFFÉRENCE COMPTE. Des séries déjà faites ont alimenté l’XP et
+ * l’énergie : on ne peut pas les effacer sans retirer au joueur un effort réel, donc le
+ * défi passe en **abandonné** et son travail reste compté. Un 360 VIERGE, lui, n’a rien
+ * produit — le supprimer ne coûte rien à personne, et le laisser traîner en « abandonné »
+ * salit un historique qu’on relit.
+ *
+ * ⚠️ C’EST EXACTEMENT LE CAS SIGNALÉ : un 360 créé par erreur (pour montrer à quoi ça
+ * ressemble) doit **disparaître**, pas s’installer dans les archives.
+ *
+ * ⚠️ UNE SEULE DÉFINITION, LIBELLÉS COMPRIS. La règle vivait déjà dans l’écran de détail,
+ * et elle y était CONTREDITE par le bouton voisin : le 🗑 supprimait un 360 vierge tandis
+ * que « Abandonner », juste en dessous, l’archivait toujours. Deux contrôles pour une
+ * action, deux résultats — et l’écran où l’on consulte réellement son défi (l’onglet
+ * 🎯 Défi 360) n’en proposait aucun.
+ */
+export interface ComboStopPlan {
+  kind: 'delete' | 'abandon';
+  title: string;
+  message: string;
+  ok: string;
+}
+export function comboStopPlan(c: ComboChallenge): ComboStopPlan {
+  // ⚠️ `legSetsDone` et non `legDone` : il compte les ENTRÉES, donc il voit la progression
+  // dans les deux modes (séries ET reps, `legSets` repliant l’ancien `progress`). Avec
+  // `legDone`, un exo en mode reps dont toutes les entrées valent 0 passerait pour vierge.
+  const fait = (c.legs ?? []).some((l) => legSetsDone(l) > 0);
+  return fait
+    ? {
+        kind: 'abandon',
+        title: 'Abandonner ce Défi 360 ?',
+        message:
+          'Tu as déjà fait des séries : il passe en « abandonné » et ton effort reste compté.',
+        ok: 'Abandonner',
+      }
+    : {
+        kind: 'delete',
+        title: 'Supprimer ce Défi 360 ?',
+        message: 'Aucune série faite : il est supprimé définitivement, sans laisser de trace.',
+        ok: 'Supprimer',
+      };
+}
+
 /** Reps totales réalisées (pour l'XP / la séance générée). */
 export function legReps(leg: ComboLeg): number {
   return legSets(leg).reduce((a, s) => a + (s.reps || 0), 0);

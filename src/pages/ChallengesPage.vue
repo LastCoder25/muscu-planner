@@ -372,6 +372,13 @@
             <div class="c3-top">
               <span class="c3-pct font-display">{{ comboPct }}%</span>
               <span class="c3-week">📅 {{ comboWeek }}</span>
+              <!-- ⚠️ ARRÊTER SON 360 SE FAIT ICI, parce que c'est ici qu'on le regarde.
+                   L'action existait, mais uniquement sur /combo/:id — et cet onglet
+                   n'y menait même pas : on ne pouvait que « Générer une séance » ou
+                   « Exporter » un défi créé par erreur. Le libellé vient de la lib :
+                   « Supprimer » sur un 360 vierge, « Abandonner » dès qu'il y a du
+                   travail dedans (l'XP est déjà comptée). -->
+              <button class="c3-stop" :title="comboStop.ok" @click="confirmStopCombo">🗑</button>
             </div>
             <!-- Dégradé unique : vert (actuel) → rose (théorique si en retard) → piste. -->
             <div class="bar" :style="comboBarStyle">
@@ -594,6 +601,7 @@ import {
   legLastAssisted,
   legSets,
   legRepRange,
+  comboStopPlan,
   type ComboChallenge,
   comboExportText,
   comboBonusXp,
@@ -671,6 +679,28 @@ const mode = ref<'solo' | 'combo'>('solo');
 // Même logique d'états que les défis solo (En cours / Terminés / Abandonnés).
 const comboTab = ref<string>('active');
 const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
+/** Ce qu’arrêter le 360 en cours fera — même source que l’écran de détail, donc les deux
+ *  ne peuvent pas annoncer deux choses différentes pour le même geste. */
+const comboStop = computed(() =>
+  comboStopPlan(activeCombo.value ?? ({ legs: [] } as unknown as ComboChallenge)),
+);
+function confirmStopCombo() {
+  const cur = activeCombo.value;
+  if (!cur) return;
+  const plan = comboStop.value;
+  $q.dialog({
+    title: plan.title,
+    message: plan.message,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: plan.ok, color: 'negative' },
+  }).onOk(() => {
+    // Pas de navigation : on est déjà sur la liste, et le store met à jour `list`
+    // → l'onglet retombe tout seul sur son état vide (« Lancer un Défi 360 »).
+    void (plan.kind === 'abandon'
+      ? comboStore.setStatus(cur.id, 'abandoned')
+      : comboStore.remove(cur.id));
+  });
+}
 // Ordre d'affichage des exos du Défi 360 : les MOINS avancés d'abord (moins de restant),
 // les TERMINÉS relégués en bas → on voit tout de suite ce qu'il reste à faire.
 // Nombre de cases affichées : jusqu'au palier MAXIMAL (et au-delà si déjà dépassé).
@@ -1372,6 +1402,27 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
+  /* La semaine pousse le 🗑 tout à droite : il ne se colle pas au pourcentage. */
+  margin-left: auto;
+}
+/* ⚠️ 44 px de cible tactile (règle mobile du projet), mais un dessin DISCRET : c'est une
+   action destructrice qu'on ne doit pas frôler par accident en consultant son défi. */
+.c3-stop {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  margin: -10px -8px -10px 2px;
+  background: none;
+  border: 0;
+  color: var(--dim);
+  font-size: 15px;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.c3-stop:hover,
+.c3-stop:focus-visible {
+  color: var(--d4);
+  opacity: 1;
 }
 /* Ligne d'actions du Défi 360 : « Générer une séance » (extensible) + « Exporter ». */
 .c3-cta-row {

@@ -3,7 +3,7 @@
     <header class="top">
       <button class="iconbtn" aria-label="Retour" @click="router.back()">‹</button>
       <div class="top-title font-display">Défi 360</div>
-      <button class="iconbtn danger" aria-label="Supprimer" @click="confirmRemove">🗑</button>
+      <button class="iconbtn danger" aria-label="Supprimer" @click="confirmStop">🗑</button>
     </header>
 
     <div v-if="!c" class="row flex-center q-pa-lg"><q-spinner color="primary" /></div>
@@ -181,7 +181,13 @@
         <b>tous</b> les exos = Défi 360 bouclé. Chaque série alimente ta piste Muscu (reps + poids).
       </div>
 
-      <button v-if="c.status !== 'abandoned'" class="abandon" @click="abandon">Abandonner</button>
+      <!-- ⚠️ MÊME ACTION QUE LE 🗑 DE L'EN-TÊTE, et il le DIT. Ce bouton abandonnait
+           TOUJOURS, même un 360 vierge, pendant que le 🗑 le supprimait : deux contrôles,
+           deux résultats, sur le même écran. Un 360 créé par erreur finissait donc archivé
+           à vie selon le bouton qu'on avait sous les yeux. -->
+      <button v-if="c.status !== 'abandoned'" class="abandon" @click="confirmStop">
+        {{ stopPlan.ok }}
+      </button>
     </template>
 
     <!-- Saisie d'une série (reps + poids + assisté), dialogue partagé -->
@@ -213,6 +219,8 @@ import {
   legTierMarks,
   legBarGeometry,
   legSetsDone,
+  comboStopPlan,
+  type ComboChallenge,
   legDone,
   legComplete,
   legMode,
@@ -502,29 +510,22 @@ onBeforeUnmount(() => {
   if (chronoLegKey.value) logChrono(chronoLegKey.value);
   else clearInterval(chronoTick);
 });
-function abandon() {
+/** Ce qu’arrêter ce 360 fera — la règle ET ses mots viennent de la lib, pour que les
+ *  deux contrôles de cette page et l’onglet 🎯 Défi 360 ne puissent pas se contredire. */
+const stopPlan = computed(() =>
+  comboStopPlan(c.value ?? ({ legs: [] } as unknown as ComboChallenge)),
+);
+function confirmStop() {
+  const plan = stopPlan.value;
   $q.dialog({
-    title: 'Abandonner le Défi 360 ?',
-    message: 'Il passera en abandonné. Tu pourras en relancer un.',
+    title: plan.title,
+    message: plan.message,
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Abandonner', color: 'negative' },
+    ok: { label: plan.ok, color: 'negative' },
   }).onOk(() => {
-    void combo.setStatus(id, 'abandoned').then(() => router.back());
-  });
-}
-function confirmRemove() {
-  // Des séries déjà faites comptent pour l'XP/l'énergie → on marque « abandonné »
-  // (conservé) au lieu de supprimer. Suppression sèche réservée aux 360 vierges.
-  const hasDone = (c.value?.legs ?? []).some((l) => legSetsDone(l) > 0);
-  $q.dialog({
-    title: hasDone ? 'Abandonner ce Défi 360 ?' : 'Supprimer ce Défi 360 ?',
-    message: hasDone
-      ? 'Tu as déjà fait des séries : il passe en « abandonné » (ton effort et ton XP restent comptés).'
-      : 'Aucune série faite : suppression définitive.',
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: hasDone ? 'Abandonner' : 'Supprimer', color: 'negative' },
-  }).onOk(() => {
-    void (hasDone ? combo.setStatus(id, 'abandoned') : combo.remove(id)).then(() => router.back());
+    void (plan.kind === 'abandon' ? combo.setStatus(id, 'abandoned') : combo.remove(id)).then(() =>
+      router.back(),
+    );
   });
 }
 

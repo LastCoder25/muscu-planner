@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   legSetsDone,
+  comboStopPlan,
   legReps,
   legRemaining,
   legComplete,
@@ -778,5 +779,80 @@ describe('séance générée — les reps annoncées AVANT la série', () => {
     // (hypertrophie 8–12) : même famille de chiffre, mais dérivé d’une règle.
     const c = combo([leg({ target: 2 })]);
     expect(buildComboSession(c, { sets: 2, restSec: 60 })[0]!.sets).toEqual([12, 12]);
+  });
+});
+
+describe('🛑 ARRÊTER UN DÉFI 360', () => {
+  const leg = (over: Partial<ComboLeg> = {}): ComboLeg =>
+    ({ slot: 'push', exercise_id: 'e', exercise_name: 'E', target: 10, ...over }) as ComboLeg;
+  const ch = (legs: ComboLeg[]): ComboChallenge =>
+    ({
+      id: 'c',
+      user_id: 'u',
+      start_date: '2026-01-05',
+      duration_days: 7,
+      status: 'active',
+      legs,
+    }) as ComboChallenge;
+
+  it('⚠️ un 360 VIERGE est SUPPRIMÉ, pas archivé', () => {
+    // Le cas signalé : on en crée un pour montrer à quoi ça ressemble. Il n'a rien
+    // produit — le laisser en « abandonné » salit un historique qu'on relit.
+    const plan = comboStopPlan(ch([leg(), leg({ exercise_id: 'f' })]));
+    expect(plan.kind).toBe('delete');
+    expect(plan.ok).toBe('Supprimer');
+  });
+
+  it('⚠️ dès qu’UNE série est faite, on ABANDONNE — l’effort reste compté', () => {
+    // Ces séries ont déjà alimenté l'XP et l'énergie : les effacer retirerait au joueur
+    // un travail réel.
+    const plan = comboStopPlan(
+      ch([
+        leg({ sets: [{ date: '2026-01-05', reps: 8, weight: null }] }),
+        leg({ exercise_id: 'f' }),
+      ]),
+    );
+    expect(plan.kind).toBe('abandon');
+    expect(plan.ok).toBe('Abandonner');
+  });
+
+  it('⚠️ la progression en MODE REPS compte aussi', () => {
+    // `legSetsDone` compte les ENTRÉES, donc il voit les deux modes. Avec `legDone`, un exo
+    // en mode reps dont les entrées valent 0 passerait pour vierge et serait supprimé.
+    const plan = comboStopPlan(
+      ch([leg({ count_mode: 'reps', sets: [{ date: '2026-01-05', reps: 0, weight: null }] })]),
+    );
+    expect(plan.kind).toBe('abandon');
+  });
+
+  it('⚠️ l’ancien format `progress` compte aussi', () => {
+    // Les 360 d'avant la refonte des séries portent leur travail dans `progress`.
+    const plan = comboStopPlan(ch([leg({ progress: [{ date: '2026-01-05', reps: 12 }] })]));
+    expect(plan.kind).toBe('abandon');
+  });
+
+  it('⚠️ le travail compte sur N IMPORTE QUEL exo, pas seulement le premier', () => {
+    // Test ajouté après une mutation passée au VERT : tous mes cas mettaient la
+    // progression sur le PREMIER exo, donc ne lire que celui-là passait. Or on fait ses
+    // tractions avant son gainage — un 360 travaillé ailleurs aurait été supprimé, et
+    // son XP effacée.
+    const plan = comboStopPlan(
+      ch([
+        leg(),
+        leg({ exercise_id: 'f' }),
+        leg({ exercise_id: 'g', sets: [{ date: '2026-01-05', reps: 5, weight: null }] }),
+      ]),
+    );
+    expect(plan.kind).toBe('abandon');
+  });
+  it('les deux issues se DISENT, et ne se disent pas pareil', () => {
+    // Les libellés viennent de la lib pour que l'onglet 🎯 Défi 360 et l'écran de détail
+    // ne puissent pas annoncer deux choses différentes pour le même geste — ils le
+    // faisaient : le 🗑 supprimait un 360 vierge, « Abandonner » l'archivait toujours.
+    const vierge = comboStopPlan(ch([leg()]));
+    const entame = comboStopPlan(ch([leg({ sets: [{ date: 'd', reps: 1, weight: null }] })]));
+    expect(vierge.title).not.toBe(entame.title);
+    expect(vierge.message).not.toBe(entame.message);
+    expect(vierge.ok).not.toBe(entame.ok);
   });
 });
