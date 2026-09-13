@@ -2159,6 +2159,65 @@ export function siegeFamiliarXp(report: RaidReport): number {
   return report.groups.slice(0, report.defeated).reduce((a, g) => a + g.level * 8, 0);
 }
 
+/**
+ * CE QU’ON PEUT CONFIER À CET AVENTURIER — les choix VRAIMENT disponibles (v0.808 ;
+ * demandé par l’utilisateur : « n’affiche que ceux disponibles et équipables, selon le
+ * rang max notamment »).
+ *
+ * ⚠️ Renverse la règle d’avant (« on montre TOUT en disant pourquoi »), qui noyait les
+ * vrais choix. On garde en revanche le COMPTE de ce qui est écarté, par raison : un
+ * familier qui disparaît sans explication se lit comme un familier perdu.
+ * Écartés : celui que le HÉROS porte, ceux au-dessus du RANG MAX du Chenil, ceux déjà
+ * confiés à un AUTRE aventurier — et tout, si le Chenil n’a plus de PLACE pour lui.
+ * Le compagnon qu’il porte déjà reste toujours proposé.
+ */
+export function companionOptions(
+  adv: Adventurer,
+  advs: Adventurer[],
+  familiars: Item[],
+  kennelLevel: number,
+  heroFamiliarId?: string | null,
+): { options: Item[]; tooRare: number; taken: number; hero: number; full: boolean } {
+  const owners = new Map(
+    advs.filter((o) => o.id !== adv.id && o.familiarId).map((o) => [o.familiarId!, o]),
+  );
+  const own = new Set(familiars.map((f) => f.id));
+  const occupied = [...owners.keys()].filter((id) => own.has(id)).length;
+  const full = !adv.familiarId && occupied >= companionSlots(kennelLevel);
+  let tooRare = 0;
+  let taken = 0;
+  let hero = 0;
+  const options: Item[] = [];
+  for (const f of familiars) {
+    if (f.id === adv.familiarId) options.push(f);
+    else if (f.id === heroFamiliarId) hero++;
+    else if (!canCompanion(f, kennelLevel)) tooRare++;
+    else if (owners.has(f.id)) taken++;
+    else if (!full) options.push(f);
+  }
+  return { options, tooRare, taken, hero, full };
+}
+
+/** Le pendant pour les TALENTS : `talents` = ceux que le héros n’a pas équipés. Écartés :
+ *  les trop rares pour SA classe (`canAdvTalent`) et ceux confiés à un autre. */
+export function talentOptions(
+  adv: Adventurer,
+  advs: Adventurer[],
+  talents: TalentInstance[],
+): { options: TalentInstance[]; tooRare: number; taken: number } {
+  const taken = new Set(advs.filter((o) => o.id !== adv.id && o.talentId).map((o) => o.talentId!));
+  let rare = 0;
+  let pris = 0;
+  const options: TalentInstance[] = [];
+  for (const t of talents) {
+    if (t.id === adv.talentId) options.push(t);
+    else if (!canAdvTalent(adv, t)) rare++;
+    else if (taken.has(t.id)) pris++;
+    else options.push(t);
+  }
+  return { options, tooRare: rare, taken: pris };
+}
+
 export function companionPerks(
   advs: Adventurer[],
   ctx?: CompanionCtx,

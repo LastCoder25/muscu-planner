@@ -1392,6 +1392,32 @@ export function advRank(adv: Adventurer): CharacterRank {
   return characterRank(Math.max(1, adv.level));
 }
 
+/**
+ * L’ORDRE DU VIVIER (v0.808 ; demandé par l’utilisateur : « par rang, puis par XP, puis par
+ * puissance, dans cet ordre ») — du plus avancé au moins avancé.
+ *
+ * ⚠️ « L’XP » se lit comme l’EXPÉRIENCE ACCUMULÉE : le niveau d’abord, puis l’XP du niveau
+ * en cours. Le champ `xp` seul repart à zéro à chaque niveau — trier dessus mettrait un
+ * aventurier fraîchement monté derrière un autre sur le point de le faire.
+ * La puissance vient de l’APPELANT (`adventurerPowers`, compagnon et talent compris) : ce
+ * module ne connaît ni les familiers ni les talents.
+ */
+export function compareAdventurers(
+  a: Adventurer,
+  b: Adventurer,
+  powerOf: (x: Adventurer) => number,
+): number {
+  // ⚠️ Le rang se DÉDUIT du niveau : la clé suivante le départagerait de toute façon.
+  // Elle reste écrite parce que c'est l'ordre demandé, et qu'un rang un jour découplé du
+  // niveau ne doit pas changer l'ordre en silence.
+  return (
+    advRank(b).rankIndex - advRank(a).rankIndex ||
+    b.level - a.level ||
+    b.xp - a.xp ||
+    powerOf(b) - powerOf(a)
+  );
+}
+
 /** Étoile courante, 1..5 — la progression du niveau DANS le rang. */
 export function advStar(adv: Adventurer): number {
   return advRank(adv).star;

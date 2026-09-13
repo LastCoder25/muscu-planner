@@ -42,7 +42,7 @@
              l'avatar ouvre directement leur sélecteur. -->
         <div v-if="roster.length" class="adv-grid">
           <AdventurerPortrait
-            v-for="a in roster"
+            v-for="a in rosterSorted"
             :key="a.id"
             :adv="a"
             :familiar="famOf(a)"
@@ -295,9 +295,10 @@
   </q-dialog>
 
   <!-- ── SÉLECTEUR DE COMPAGNON ───────────────────────────────────────────
-       ⚠️ On montre TOUT ce qu’on possède, en DISANT pourquoi un familier n’est pas
-       disponible (porté par le héros, hors de portée du Chenil) plutôt qu’en le
-       cachant : masquer donne l’impression de l’avoir perdu. -->
+       ⚠️ Seuls les familiers VRAIMENT disponibles et équipables sont listés (v0.808,
+       demandé par l’utilisateur) — la règle vit dans `companionOptions` (lib). Ce qui est
+       écarté est COMPTÉ, par raison, en une ligne : masquer sans rien dire donnerait
+       l’impression d’avoir perdu un familier. -->
   <q-dialog :model-value="!!pairFor" position="bottom" @update:model-value="pairFor = null">
     <q-card class="sheet">
       <div class="g-head">
@@ -320,13 +321,14 @@
       <p v-if="!famPool.length" class="g-note">
         Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
       </p>
+      <p v-else-if="!famRows.length" class="g-note">Aucun familier disponible pour lui.</p>
+      <p v-if="famHidden" class="g-note dim">{{ famHidden }}</p>
       <button
         v-for="r in famRows"
         :key="r.f.id"
         type="button"
         class="d-pick"
-        :class="{ barred: !r.ok, here: pairFor && famOf(pairFor)?.id === r.f.id }"
-        :disabled="!r.ok"
+        :class="{ here: pairFor && famOf(pairFor)?.id === r.f.id }"
         @click="assignFam(r.f.id)"
       >
         <span class="d-pair-emo">{{ r.f.emoji }}</span>
@@ -343,7 +345,6 @@
           </span>
           <span v-for="(g, i) in r.gains" :key="i" class="d-gain">{{ g }}</span>
           <span class="d-pair-sub">{{ r.meta }}</span>
-          <span v-if="r.why" class="d-pair-sub warn">{{ r.why }}</span>
         </span>
       </button>
       <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="pairFor = null" /></div>
@@ -362,13 +363,14 @@
       </button>
       <p class="g-note">{{ GAIN_NOTE }}</p>
       <p v-if="!talPool.length" class="g-note">Aucun talent libre — les tiens sont équipés.</p>
+      <p v-else-if="!talRows.length" class="g-note">Aucun talent disponible pour lui.</p>
+      <p v-if="talHidden" class="g-note dim">{{ talHidden }}</p>
       <button
         v-for="r in talRows"
         :key="r.t.id"
         type="button"
         class="d-pick"
-        :class="{ barred: !r.ok, here: talFor && talOf(talFor)?.id === r.t.id }"
-        :disabled="!r.ok"
+        :class="{ here: talFor && talOf(talFor)?.id === r.t.id }"
         @click="assignTal(r.t.id)"
       >
         <span class="d-pair-emo">{{ r.icon }}</span>
@@ -379,7 +381,6 @@
           </span>
           <span v-for="(g, i) in r.gains" :key="i" class="d-gain">{{ g }}</span>
           <span class="d-pair-sub">{{ r.meta }}</span>
-          <span v-if="r.taken" class="d-pair-sub warn">{{ r.taken }}</span>
         </span>
       </button>
       <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="talFor = null" /></div>
@@ -410,6 +411,7 @@ import {
   advSignatureLevels,
   advStats,
   canPromoteNow,
+  compareAdventurers,
   classChoices,
   classRarity,
   advShapeLabel,
@@ -440,13 +442,14 @@ import {
   companionSlots,
   companionRankLabel,
   companionPairs,
-  canCompanion,
   adventurerPowers,
+  companionOptions,
+  talentOptions,
   type CompanionCtx,
 } from '@/lib/raid';
 import { fmtPow } from '@/lib/combat';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
-import { trainMsFor, companionEffects, advTalentEffects, canAdvTalent } from '@/lib/caravan';
+import { trainMsFor, companionEffects, advTalentEffects } from '@/lib/caravan';
 
 const props = defineProps<{
   open: boolean;
@@ -505,7 +508,6 @@ const famById = computed(() => new Map(famPool.value.map((f) => [f.id, f])));
 const talById = computed(() => new Map(talPool.value.map((t) => [t.id, t])));
 const famOf = (a: Adventurer) => (a.familiarId ? (famById.value.get(a.familiarId) ?? null) : null);
 const talOf = (a: Adventurer) => (a.talentId ? (talById.value.get(a.talentId) ?? null) : null);
-const famOk = (f: Item) => f.id !== heroFamId.value && canCompanion(f, kennelLevel.value);
 /**
  * CE QUE L’AVENTURIER EN TIRE — calculé par la fonction du COMBAT, jamais réécrite.
  *
@@ -534,29 +536,12 @@ function famTrain(f: Item): string {
   const n = famLevel(famXp(f));
   return n ? `🎓 ${n}` : '';
 }
-/** ⚠️ VIDE quand il n'y a rien à signaler : répété sur chaque ligne, « Libre » n'apprend
- *  rien et noie la seule chose qui compte — le gain. On ne parle que d'un empêchement. */
-function famWhy(f: Item): string {
-  if (f.id === heroFamId.value) return 'Ton héros le porte — il se bat ailleurs.';
-  if (!canCompanion(f, kennelLevel.value))
-    return `Hors de portée de ton Chenil (rang max ${rankCapLabel.value}).`;
-  const autre = char.advList.find((a) => a.familiarId === f.id && a.id !== pairFor.value?.id);
-  return autre ? `Confié à ${autre.name} — le prendre le lui retirera.` : '';
-}
 function famNote(a: Adventurer): string {
   const f = famOf(a);
   if (!f) return 'Aucun familier confié.';
   return famMeta(f);
 }
 const talName = (t: TalentInstance) => talentByCode(t.code)?.name ?? t.code;
-function talTaken(t: TalentInstance): string {
-  const pour = talFor.value;
-  // ⚠️ La règle vient de la LIB (`canAdvTalent`, celle que le combat et le store appliquent).
-  if (pour && !canAdvTalent(pour, t))
-    return `Trop rare : sa classe est ${RARITY_LABEL[advRarity(pour)]} — promeus-le d’abord.`;
-  const autre = char.advList.find((a) => a.talentId === t.id && a.id !== talFor.value?.id);
-  return autre ? `Confié à ${autre.name} — le prendre le lui retirera.` : '';
-}
 function talLabel(a: Adventurer): string {
   const t = talOf(a);
   return t ? talName(t) : 'Aucun talent confié';
@@ -584,30 +569,64 @@ const GAIN_NOTE = 'Les gains listés sont ce que l’aventurier en tire.';
  * ⚠️ Aucune dépendance de ces `computed` n'inclut `now` : le tick ne les recalcule donc
  * plus du tout.
  */
+const famChoice = computed(() =>
+  pairFor.value
+    ? companionOptions(
+        pairFor.value,
+        char.advList,
+        famPool.value,
+        kennelLevel.value,
+        heroFamId.value,
+      )
+    : null,
+);
+const talChoice = computed(() =>
+  talFor.value ? talentOptions(talFor.value, char.advList, talPool.value) : null,
+);
 const famRows = computed(() =>
-  famPool.value.map((f) => ({
+  (famChoice.value?.options ?? []).map((f) => ({
     f,
-    ok: famOk(f),
     gains: famGain(f),
     meta: famMeta(f),
     train: famTrain(f),
-    why: famWhy(f),
     color: famColor(f),
   })),
 );
 const talRows = computed(() =>
-  talPool.value.map((t) => ({
+  (talChoice.value?.options ?? []).map((t) => ({
     t,
     name: talName(t),
     icon: talentByCode(t.code)?.icon ?? '🧠',
     rank: talentRankOf(t),
     gains: talGain(t),
     meta: talMeta(t),
-    ok: !talFor.value || canAdvTalent(talFor.value, t),
-    taken: talTaken(t),
     color: talColor(t),
   })),
 );
+/** Ce qui est ÉCARTÉ, par raison, en une ligne — ou rien. */
+const famHidden = computed(() => {
+  const c = famChoice.value;
+  if (!c) return '';
+  if (c.full)
+    return `Toutes les places du Chenil sont prises (${slots.value}) — améliore-le ou reprends un compagnon à un autre.`;
+  const p: string[] = [];
+  if (c.tooRare) p.push(`${c.tooRare} au-dessus du rang max du Chenil (${rankCapLabel.value})`);
+  if (c.taken) p.push(`${c.taken} confié${c.taken > 1 ? 's' : ''} à d’autres`);
+  if (c.hero) p.push('1 porté par ton héros');
+  return p.length ? `Masqués : ${p.join(' · ')}.` : '';
+});
+const talHidden = computed(() => {
+  const c = talChoice.value;
+  const a = talFor.value;
+  if (!c || !a) return '';
+  const p: string[] = [];
+  if (c.tooRare)
+    p.push(
+      `${c.tooRare} trop rare${c.tooRare > 1 ? 's' : ''} pour sa classe (${RARITY_LABEL[advRarity(a)]})`,
+    );
+  if (c.taken) p.push(`${c.taken} confié${c.taken > 1 ? 's' : ''} à d’autres`);
+  return p.length ? `Masqués : ${p.join(' · ')}.` : '';
+});
 /** Le compagnon et le talent de l'aventurier ouvert. ⚠️ Un `computed` plutôt que huit
  *  appels et cinq `!` non-null dans le template : chaque `!` est une assertion que le
  *  lecteur doit re-vérifier contre le `v-if` du parent, et le lien casse en silence dès
@@ -652,6 +671,12 @@ const clock = setInterval(() => (now.value = Date.now()), 30_000);
 onUnmounted(() => clearInterval(clock));
 
 const roster = computed(() => char.advList);
+/** L’ordre d’AFFICHAGE : rang, puis expérience, puis puissance (`compareAdventurers`).
+ *  ⚠️ Copie triée : `advList` garde l’ordre du vivier, dont dépendent l’attribution des
+ *  places du Chenil et la graine du recrutement. */
+const rosterSorted = computed(() =>
+  [...roster.value].sort((a, b) => compareAdventurers(a, b, powerOf)),
+);
 const guildLevel = computed(() => char.guildLevel);
 const trainingLevel = computed(() => char.trainingLevel);
 const gold = computed(() => char.row?.gold ?? 0);
@@ -1087,6 +1112,11 @@ async function doPromote(classId: string) {
   font-size: 12.5px;
   color: var(--dim);
   margin: 6px 0 10px;
+}
+/* Ce qui est masqué, et pourquoi : présent, mais en retrait. */
+.g-note.dim {
+  font-size: 11.5px;
+  font-style: italic;
 }
 /* Une ligne par aventurier : icône de classe, identité, barre, état. */
 .adv {

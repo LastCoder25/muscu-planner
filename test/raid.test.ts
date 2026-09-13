@@ -13,6 +13,8 @@ import {
   resolveRaid,
   guardUnits,
   adventurerPowers,
+  companionOptions,
+  talentOptions,
   siegeFamiliarXp,
   siegeXp,
   raidDamage,
@@ -880,6 +882,53 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
       ({ ...adv('a'), talentId: tid, path: ['guerrier'] }) as Adventurer;
     expect(companionPairs([bleu('tc')], c(commun)).get('a')?.talent?.id).toBe('tc');
     expect(companionPairs([bleu('tr')], c(rare)).size).toBe(0);
+  });
+
+  describe('🎯 LES SÉLECTEURS NE PROPOSENT QUE L’ÉQUIPABLE (v0.808)', () => {
+    const tal = (id: string, xp = 0) =>
+      ({ id, code: 't_dmg', xp, level: 1, equipped: false }) as TalentInstance;
+    const bleu = (id: string, o: Partial<Adventurer> = {}) =>
+      ({ ...adv(id), path: ['guerrier'], ...o }) as Adventurer;
+
+    it('⚠️ familiers : héros, rang, déjà confié — écartés ET comptés', () => {
+      const libre = fam('libre', 'damage_pct', 10);
+      const heros = fam('heros', 'damage_pct', 10);
+      const rare = fam('rare', 'damage_pct', 10, { rarity: RANK_ORDER[7]! });
+      const pris = fam('pris', 'damage_pct', 10);
+      const advs = [bleu('a'), bleu('b', { familiarId: 'pris' })];
+      const r = companionOptions(advs[0]!, advs, [libre, heros, rare, pris], 20, 'heros');
+      expect(r.options.map((f) => f.id)).toEqual(['libre']);
+      expect([r.hero, r.tooRare, r.taken, r.full]).toEqual([1, 1, 1, false]);
+    });
+
+    it('⚠️ son compagnon ACTUEL reste proposé, même si le Chenil est plein', () => {
+      const f = [fam('f0', 'damage_pct', 10), fam('f1', 'damage_pct', 10)];
+      // Chenil 1 = 1 place, déjà prise par b.
+      const advs = [bleu('a'), bleu('b', { familiarId: 'f1' })];
+      const plein = companionOptions(advs[0]!, advs, f, 1);
+      expect(plein.full).toBe(true);
+      expect(plein.options).toEqual([]);
+      const lui = companionOptions(advs[1]!, advs, f, 1);
+      expect(lui.options.map((x) => x.id)).toEqual(['f0', 'f1']);
+      // …y compris s’il est devenu trop rare pour le Chenil : on voit ce qu’il porte.
+      const prime = fam('p', 'damage_pct', 10, { rarity: RANK_ORDER[7]! });
+      const porteur = bleu('c', { familiarId: 'p' });
+      expect(companionOptions(porteur, [porteur], [prime], 1).options.map((x) => x.id)).toEqual([
+        'p',
+      ]);
+    });
+
+    it('⚠️ talents : trop rares pour SA classe et déjà confiés — écartés ET comptés', () => {
+      const advs = [bleu('a', { talentId: 'mien' }), bleu('b', { talentId: 'pris' })];
+      const r = talentOptions(advs[0]!, advs, [
+        tal('mien'),
+        tal('libre'),
+        tal('pris'),
+        tal('rare', talentTierFloor(15)),
+      ]);
+      expect(r.options.map((t) => t.id)).toEqual(['mien', 'libre']);
+      expect([r.tooRare, r.taken]).toEqual([1, 1]);
+    });
   });
 
   it('⚠️ TROIS EXCLUSIONS, aucune décorative', () => {

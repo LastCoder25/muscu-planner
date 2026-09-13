@@ -38,6 +38,7 @@ import {
   grantAdvXp,
   type Adventurer,
   advAvatar,
+  compareAdventurers,
   advShapeLabel,
 } from '@/lib/adventurers';
 import { RANK_ORDER } from '@/lib/items';
@@ -781,5 +782,31 @@ describe('🖼️ L’APPARENCE D’UN AVENTURIER DANS SON PORTRAIT (v0.807)', (
       ADV_CLASSES.filter((x) => x.stratum === 0).map((c) => advAvatar(mk([c.id])).profile),
     );
     expect(profils.size).toBeGreaterThan(1);
+  });
+});
+
+describe('🗂️ L’ORDRE DU VIVIER : rang, puis expérience, puis puissance (v0.808)', () => {
+  const mk = (id: string, level: number, xp: number) =>
+    ({ id, name: id, seed: 1, path: [], level, xp }) as Parameters<typeof advAvatar>[0];
+  const pw: Record<string, number> = {};
+  const trie = (l: ReturnType<typeof mk>[]) =>
+    [...l].sort((a, b) => compareAdventurers(a, b, (x) => pw[x.id] ?? 0)).map((x) => x.id);
+
+  it('⚠️ le RANG passe avant tout, même devant une puissance écrasante', () => {
+    pw.bronze = 9999;
+    pw.argent = 1;
+    expect(trie([mk('bronze', 10, 50), mk('argent', 11, 0)])).toEqual(['argent', 'bronze']);
+  });
+  it('⚠️ à rang égal, l’EXPÉRIENCE : le niveau, puis l’XP du niveau — pas l’XP seule', () => {
+    pw.a = 5;
+    pw.b = 5;
+    pw.c = 5;
+    // b vient de monter (xp 0) mais a un niveau de plus que a, qui a beaucoup d'xp.
+    expect(trie([mk('a', 4, 900), mk('b', 5, 0), mk('c', 4, 10)])).toEqual(['b', 'a', 'c']);
+  });
+  it('⚠️ à rang et expérience égaux, la PUISSANCE départage', () => {
+    pw.faible = 10;
+    pw.fort = 80;
+    expect(trie([mk('faible', 6, 20), mk('fort', 6, 20)])).toEqual(['fort', 'faible']);
   });
 });
