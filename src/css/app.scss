@@ -42,11 +42,15 @@ body {
   font-family: var(--font-ui);
 }
 
-// Modales : fond nettement assombri (+ léger flou) pour mettre le focus sur la
-// modale ouverte et estomper la page derrière (cf. écran de combat).
+// Modales : fond nettement assombri (+ flou) pour mettre le focus sur la modale ouverte
+// et estomper la page derrière (cf. écran de combat).
+// ⚠️ 0,72 → 0,9 (v0.821, signalé : « les modales du 360 sont en transparence, on voit
+// les séries vertes et le + ») : les cartes étaient opaques (vérifié dans un banc), c'est
+// le VOILE qui laissait lire les cases vives de la page — d'autant plus que le flou n'est
+// pas rendu partout sur mobile. Le voile doit suffire SANS le flou.
 .q-dialog__backdrop {
-  background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(4px);
 }
 
 // Oswald pour chiffres/titres/timer/valeurs : tabular nums.
