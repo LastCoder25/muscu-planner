@@ -22,6 +22,12 @@
   --d3: #ffb23f; // dur
   --d4: #ff6a45; // max
 
+  // Palier SECONDAIRE du Défi 360 (80 %) : argent. Une teinte FIXE, jamais dérivée de
+  // l'accent — au premier essai (accent atténué) elle se confondait avec l'objectif, et
+  // l'accent change de couleur d'un thème à l'autre. Objectif = accent, bonus = --d1.
+  --tier-sec: #b9c3cd;
+  --tier-sec-ink: #14181c;
+
   // Validé (série faite)
   --done: #7bc86c;
 

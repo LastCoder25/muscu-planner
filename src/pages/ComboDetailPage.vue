@@ -86,7 +86,11 @@
           >🤸</span
         >
         <div class="leg-top">
-          <span class="leg-emo">{{ slotEmoji(leg.slot) }}</span>
+          <!-- La vignette d'exécution remplace l'emoji du groupe quand l'exo a une
+               illustration : elle dit le mouvement, et ouvre l'animation en grand. -->
+          <ExerciseDemo :exercise-id="leg.exercise_id" :name="leg.exercise_name" :size="40">
+            <span class="leg-emo">{{ slotEmoji(leg.slot) }}</span>
+          </ExerciseDemo>
           <div class="leg-main">
             <div class="leg-name">
               {{ leg.exercise_name }}
@@ -230,6 +234,7 @@ import {
 import { comboSlot } from '@/data/combo';
 import ComboTierLegend from '@/components/ComboTierLegend.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
+import ExerciseDemo from '@/components/ExerciseDemo.vue';
 import {
   logicalToday,
   addDaysIso,
@@ -829,7 +834,7 @@ onMounted(async () => {
 /* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboTierLegend) :
    la case dit quel palier elle fait avancer. Faite = pleine, à faire = liseré de la même teinte. */
 .seg.z-secondary {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-color: color-mix(in srgb, var(--tier-sec) 55%, var(--line));
 }
 .seg.z-principal {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
@@ -842,9 +847,9 @@ onMounted(async () => {
   color: color-mix(in srgb, var(--d1) 75%, var(--dim));
 }
 .seg.on.z-secondary {
-  background: color-mix(in srgb, var(--accent) 55%, var(--surface));
-  border-color: transparent;
-  color: var(--text);
+  background: var(--tier-sec);
+  border-color: var(--tier-sec);
+  color: var(--tier-sec-ink);
 }
 .seg.on.z-principal {
   background: var(--accent);

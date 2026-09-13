@@ -2,21 +2,7 @@
   <q-page class="cd-page">
     <header class="top">
       <button class="iconbtn" aria-label="Retour" @click="back">‹</button>
-      <button
-        v-if="ch && exoImg"
-        class="exo-thumb"
-        aria-label="Voir l'exécution en grand"
-        @click="exoModal = true"
-      >
-        <ExerciseAnim
-          v-if="exoFrames"
-          :exercise-id="ch.exercise_id"
-          :size="42"
-          :title="ch.exercise_name"
-        />
-        <img v-else :src="exoImg" alt="" />
-        <span class="exo-thumb-zoom" aria-hidden="true">⤢</span>
-      </button>
+      <ExerciseDemo v-if="ch" :exercise-id="ch.exercise_id" :name="ch.exercise_name" />
       <div class="top-mid">
         <div class="top-title font-display">{{ ch?.exercise_name || 'Challenge' }}</div>
         <div class="top-sub" v-if="ch">
@@ -467,35 +453,6 @@
       :initial-assisted="setInitAssisted"
       @save="onSetSave"
     />
-
-    <!-- Fiche d'exécution : image agrandie + animation + conseils -->
-    <q-dialog v-model="exoModal">
-      <q-card class="exo-modal">
-        <div class="exo-modal-title font-display">{{ ch?.exercise_name }}</div>
-        <div class="exo-modal-media">
-          <ExerciseAnim
-            v-if="exoFrames && ch"
-            :exercise-id="ch.exercise_id"
-            :size="300"
-            :title="ch.exercise_name"
-          />
-          <img v-else-if="exoImg" :src="exoImg" :alt="ch?.exercise_name" />
-        </div>
-        <ol v-if="exoSteps?.steps?.length" class="exo-steps">
-          <li v-for="(s, i) in exoSteps.steps" :key="i">{{ s }}</li>
-        </ol>
-        <div v-if="exoSteps?.tip" class="exo-tip">💡 {{ exoSteps.tip }}</div>
-        <q-btn
-          class="exo-modal-close"
-          no-caps
-          unelevated
-          color="primary"
-          text-color="dark"
-          label="Fermer"
-          @click="exoModal = false"
-        />
-      </q-card>
-    </q-dialog>
   </q-page>
 </template>
 
@@ -535,9 +492,7 @@ import { startLabel } from '@/lib/startDate';
 import ChallengeCelebration from '@/components/ChallengeCelebration.vue';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
-import ExerciseAnim from '@/components/ExerciseAnim.vue';
-import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
-import { exerciseInstructions } from '@/data/exerciseInstructions';
+import ExerciseDemo from '@/components/ExerciseDemo.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -555,13 +510,6 @@ const startTxt = computed(() => (ch.value ? startLabel(ch.value.start_date, toda
 const id = String(route.params.id);
 const loading = ref(true);
 const ch = ref<Challenge | null>(null);
-// Fiche d'exécution (image agrandie + animation) au tap de la vignette d'exo.
-const exoModal = ref(false);
-const exoImg = computed(() => (ch.value ? exerciseImage(ch.value.exercise_id) : undefined));
-const exoFrames = computed(() => (ch.value ? exerciseFrames(ch.value.exercise_id) : undefined));
-const exoSteps = computed(() =>
-  ch.value ? exerciseInstructions(ch.value.exercise_id) : undefined,
-);
 const running = ref(false);
 // Chrono gainage : elapsed_sec au DÉBUT du segment courant → à la pause, le segment
 // (elapsed_sec − segStart) est enregistré comme une « série » (durée) affichée dans le
@@ -1592,86 +1540,9 @@ onBeforeUnmount(() => {
   cursor: pointer;
   flex: none;
 }
-.exo-thumb {
-  position: relative;
-  flex: none;
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid var(--accent);
-  padding: 0;
-  cursor: pointer;
-  background: var(--surface);
-}
-/* Badge « agrandir » : signale que la vignette est cliquable → animation en grand. */
-.exo-thumb-zoom {
-  position: absolute;
-  right: 1px;
-  bottom: 1px;
-  width: 15px;
-  height: 15px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 5px;
-  background: var(--accent);
-  color: #15120e;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
-}
-.exo-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
 .top-mid {
   flex: 1;
   min-width: 0;
-}
-.exo-modal {
-  padding: 16px;
-  max-width: 440px;
-  width: 92vw;
-  border-radius: 16px;
-  background: var(--surface);
-}
-.exo-modal-title {
-  font-weight: 700;
-  font-size: 18px;
-  text-transform: uppercase;
-  margin-bottom: 12px;
-}
-.exo-modal-media {
-  border-radius: 12px;
-  overflow: hidden;
-  background: var(--bg);
-  display: grid;
-  place-items: center;
-  padding: 8px;
-}
-.exo-modal-media img {
-  max-width: 100%;
-  border-radius: 8px;
-}
-.exo-steps {
-  margin: 14px 0 0;
-  padding-left: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 14px;
-}
-.exo-tip {
-  margin-top: 10px;
-  font-size: 13px;
-  color: var(--dim);
-}
-.exo-modal-close {
-  margin-top: 16px;
-  width: 100%;
 }
 .top-title {
   font-weight: 600;

@@ -31,7 +31,7 @@
 }
 /* Mêmes teintes que les cases faites (cf. .seg.z-* dans les deux écrans du 360). */
 .ctl-sw.z-secondary {
-  background: color-mix(in srgb, var(--accent) 55%, var(--surface));
+  background: var(--tier-sec);
 }
 .ctl-sw.z-principal {
   background: var(--accent);

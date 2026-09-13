@@ -417,6 +417,7 @@
           <ComboTierLegend v-if="activeComboLegs.some((l) => legMode(l) === 'sets')" />
           <div v-for="leg in activeComboLegs" :key="leg.exercise_id" class="combo-leg">
             <div class="cl-top">
+              <ExerciseDemo :exercise-id="leg.exercise_id" :name="leg.exercise_name" :size="36" />
               <button class="cl-name" @click="openHistory(leg)">
                 {{ leg.exercise_name }}
                 <span
@@ -568,6 +569,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import ComboTierLegend from '@/components/ComboTierLegend.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
+import ExerciseDemo from '@/components/ExerciseDemo.vue';
 import {
   challengeStats,
   challengeXpPoints,
@@ -1524,7 +1526,7 @@ onMounted(async () => {
 /* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboTierLegend) :
    la case dit quel palier elle fait avancer. Faite = pleine, à faire = liseré de la même teinte. */
 .seg.z-secondary {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-color: color-mix(in srgb, var(--tier-sec) 55%, var(--line));
 }
 .seg.z-principal {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
@@ -1537,9 +1539,9 @@ onMounted(async () => {
   color: color-mix(in srgb, var(--d1) 75%, var(--dim));
 }
 .seg.on.z-secondary {
-  background: color-mix(in srgb, var(--accent) 55%, var(--surface));
-  border-color: transparent;
-  color: var(--text);
+  background: var(--tier-sec);
+  border-color: var(--tier-sec);
+  color: var(--tier-sec-ink);
 }
 .seg.on.z-principal {
   background: var(--accent);
@@ -1569,6 +1571,10 @@ onMounted(async () => {
   gap: 8px;
 }
 .cl-name {
+  /* Prend la place entre la vignette d'exécution et le compteur. */
+  flex: 1;
+  min-width: 0;
+  align-self: center;
   display: inline-flex;
   align-items: center;
   gap: 5px;
