@@ -29,7 +29,7 @@ import {
   startCaravan,
   type Caravan,
 } from '@/lib/caravan';
-import { type Adventurer } from '@/lib/adventurers';
+import { PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
 import { TALENTS, type TalentInstance } from '@/lib/talents';
 import { simulateCombat } from '@/lib/combat';
 import { famXpForLevel, type AggregatedEffects, type Item } from '@/lib/items';
@@ -95,6 +95,34 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     expect(trois).toBeGreaterThan(0.4);
     expect(trois).toBeLessThan(1); // ça reste un risque, pas une formalité
   });
+  it('⚠️ LA RÉFÉRENCE DE ROUTE COUVRE LES 8 STRATES', () => {
+    // ⚠️ Sa lignée s’arrêtait à 4 classes : la route cessait donc de monter à la strate 3
+    // pendant qu’une escorte réelle, elle, continue — depuis que le vivier va jusqu’au
+    // primordial, les convois seraient devenus triviaux dès le niveau 8. Le danger de la
+    // route est ABSOLU : il doit suivre l’échelle ENTIÈRE de ce qu’on peut aligner.
+    expect(refAdventurer(99).path).toHaveLength(PROMO_LEVELS.length);
+  });
+
+  it('⚠️ LA DÉCISION D’ESCORTE SURVIT AUX HAUTES STRATES', () => {
+    // Les strates 4-7 rendent un aventurier ~3,2 fois plus fort à niveau égal. Le seul
+    // vrai choix de la feature — « combien j’en envoie » — doit y résister, sinon élever
+    // son vivier le supprime. On le mesure là où il compte : sur une route PÉRILLEUSE,
+    // avec des aventuriers promus autant que leur niveau l’autorise.
+    // ⚠️ Mesuré sur route CALME au niveau 70, un trio promu monte à 99 % : là, le choix
+    // se déplace de « 3 ou 4 » vers « 2 ou 3 ». C’est assumé — c’est le paiement d’un long
+    // investissement — mais il ne doit PAS disparaître aussi sur les routes dangereuses.
+    for (const L of [26, 70]) {
+      const p2 = poi({ level: L, perilous: true });
+      const un = winPct(team(1, L), p2);
+      const trois = winPct(team(3, L), p2);
+      const quatre = winPct(team(4, L), p2);
+      expect(un, `niveau ${L}, seul`).toBeLessThan(0.15);
+      expect(trois, `niveau ${L}, trois`).toBeGreaterThan(0.5);
+      expect(trois, `niveau ${L}, trois — jamais une formalité`).toBeLessThan(0.95);
+      expect(quatre, `niveau ${L}, quatre`).toBeGreaterThan(trois);
+    }
+  });
+
   it('une route PÉRILLEUSE est réellement plus dure — le drapeau n’est pas décoratif', () => {
     const esc = team(3);
     expect(winPct(esc, poi({ perilous: true }))).toBeLessThan(winPct(esc, poi()));

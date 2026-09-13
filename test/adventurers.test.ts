@@ -126,7 +126,7 @@ describe('⚠️ AUCUN CUL-DE-SAC — chaque lignée mène quelque part', () => 
   });
   it('tout chemin garde au moins 2 offres jusqu’à la strate 3', () => {
     // Une lignée qui n'aurait qu'UNE suite ne serait plus un choix, juste un couloir.
-    for (let s = 2; s <= 3; s++) {
+    for (let s = 2; s <= 7; s++) {
       for (const p of allPaths(s - 1)) {
         expect(eligibleClasses(p, s).length, `${p.join('→')} @S${s}`).toBeGreaterThanOrEqual(2);
       }
@@ -266,20 +266,54 @@ describe('stats et rareté', () => {
 });
 
 describe('profondeur RÉELLEMENT écrite du vivier', () => {
-  it('documente jusqu’où l’arbre est authoré — le reste n’est pas un trou silencieux', () => {
-    // ⚠️ `PROMO_LEVELS` prévoit 8 strates (une par rareté) mais le vivier n'en couvre
-    // que les premières. Ce test dit LAQUELLE, pour que l'écart soit une décision et non
-    // un oubli : au-delà, `classChoices` rend une liste vide et `canPromote` refuse —
-    // l'aventurier plafonne proprement, il ne casse pas.
+  it('⚠️ L’ARBRE EST COMPLET : 8 strates écrites, une par rareté', () => {
+    // ⚠️ CE TEST DISAIT « écrit jusqu'à la strate 3 » — les quatre dernières manquaient,
+    // donc un vivier plafonnait à « rare » sur huit rangs. Il ne documente plus un écart,
+    // il verrouille une couverture : ajouter une rareté sans écrire sa strate le fait
+    // tomber, au lieu de laisser un plafond silencieux.
     const written = Math.max(...ADV_CLASSES.map((c) => c.stratum));
-    expect(written).toBe(3); // ← à monter en même temps que le vivier
-    expect(written).toBeLessThan(PROMO_LEVELS.length);
-    const complet = make({ path: ['guerrier', 'brute', 'colosse', 'titan'], level: 99 });
-    expect(classChoices(complet, 4)).toEqual([]);
+    expect(written).toBe(PROMO_LEVELS.length - 1);
+    expect(RANK_ORDER).toHaveLength(PROMO_LEVELS.length);
+  });
+
+  it('⚠️ … et il S’ARRÊTE là : le sommet est un sommet, pas un trou', () => {
+    // Une lignée entière, du Guerrier au Socle premier. Au-delà, `classChoices` rend une
+    // liste vide et `canPromote` refuse : l'aventurier plafonne proprement.
+    const complet = make({
+      path: [
+        'guerrier',
+        'brute',
+        'colosse',
+        'titan',
+        'rempart',
+        'colosse_eternel',
+        'inebranlable',
+        'socle_premier',
+      ],
+      level: 99,
+    });
+    expect(complet.path).toHaveLength(PROMO_LEVELS.length);
+    expect(classChoices(complet, PROMO_LEVELS.length)).toEqual([]);
     expect(canPromote(complet, 99)).toBe(false);
+    // Et il a bien atteint le HAUT de l'échelle — c'est tout l'objet de ces strates.
+    expect(advRarity(complet)).toBe(RANK_ORDER[RANK_ORDER.length - 1]);
+  });
+
+  it('⚠️ chaque strate HAUTE porte de quoi défendre ET de quoi convoyer', () => {
+    // Sans ça, monter en rang retirerait au joueur ses rôles de convoi (soin, cargaison,
+    // vitesse, repérage) au profit de pure stat — et le vivier de fin de partie ne
+    // saurait plus escorter. Les signatures, elles, ne valent que pour le combat.
+    for (let st = 4; st <= 7; st++) {
+      const strate = ADV_CLASSES.filter((c) => c.stratum === st);
+      expect(strate.filter((c) => c.role).length, `strate ${st} — rôles`).toBeGreaterThanOrEqual(3);
+      expect(
+        strate.filter((c) => c.signature).length,
+        `strate ${st} — signatures`,
+      ).toBeGreaterThanOrEqual(3);
+    }
   });
   it('chaque strate écrite a de quoi alimenter toutes les lignées', () => {
-    for (let s = 0; s <= 3; s++) {
+    for (let s = 0; s <= 7; s++) {
       const n = ADV_CLASSES.filter((c) => c.stratum === s).length;
       expect(n, `strate ${s}`).toBeGreaterThanOrEqual(PROMO_CHOICES);
     }

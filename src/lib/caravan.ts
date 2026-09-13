@@ -362,7 +362,20 @@ function strataFor(level: number): number {
 /** Aventurier de RÉFÉRENCE : une lignée guerrière promue autant que son niveau l'autorise.
  *  Il ne sert qu'à donner l'échelle de la route — jamais au jeu. */
 export function refAdventurer(level: number): Adventurer {
-  const lineage = ['guerrier', 'epeiste', 'duelliste', 'maitre_epeiste'];
+  // ⚠️ LA LIGNÉE VA JUSQU’AU BOUT DES 8 STRATES. Elle s’arrêtait à 4 : la route cessait donc
+  // de monter à la strate 3 pendant qu’une escorte réelle, elle, continue — les convois
+  // seraient devenus triviaux dès qu’un aventurier dépasse le niveau 8. Le danger de la
+  // route est ABSOLU (v0.726), il doit suivre l’échelle entière de ce qu’on peut aligner.
+  const lineage = [
+    'guerrier',
+    'epeiste',
+    'duelliste',
+    'maitre_epeiste',
+    'maitre_armes',
+    'heros',
+    'demi_dieu',
+    'primarque',
+  ];
   return {
     id: 'ref',
     name: 'Référence',
