@@ -24,7 +24,11 @@ export type EquipmentItem =
   | 'cable'
   | 'machine'
   | 'pullup_bar'
-  | 'dip_station';
+  | 'dip_station'
+  // Cardio & combat : aucun exercice de la bibliothèque ne les requiert encore, mais ils
+  // voyagent avec le profil jusqu'à l'export IA (coach_request), qui peut s'en servir.
+  | 'rower'
+  | 'punching_bag';
 
 // Sport pratiqué en parallèle (sert à l'équilibrage du volume musculaire).
 export interface SportPractice {

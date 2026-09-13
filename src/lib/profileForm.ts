@@ -91,18 +91,25 @@ const LEGACY_EQUIPMENT: Record<string, EquipmentItem[]> = {
   poulie: ['cable'],
   poids_du_corps: [],
 };
-const VALID_EQUIPMENT: EquipmentItem[] = [
-  'barbell',
-  'rack',
-  'bench',
-  'dumbbells',
-  'kettlebell',
-  'bands',
-  'cable',
-  'machine',
-  'pullup_bar',
-  'dip_station',
-];
+// ⚠️ EXHAUSTIF PAR CONSTRUCTION : `migrateEquipment` JETTE tout atome absent d'ici au
+// rechargement du profil. Une liste écrite à la main aurait laissé cocher un matériel
+// ajouté (rameur, sac de frappe) puis l'aurait perdu en silence ; un `Record` sur le type
+// fait échouer la compilation tant qu'un nouvel atome n'y figure pas.
+const VALID_EQUIPMENT_SET: Record<EquipmentItem, true> = {
+  barbell: true,
+  rack: true,
+  bench: true,
+  dumbbells: true,
+  kettlebell: true,
+  bands: true,
+  cable: true,
+  machine: true,
+  pullup_bar: true,
+  dip_station: true,
+  rower: true,
+  punching_bag: true,
+};
+const VALID_EQUIPMENT = Object.keys(VALID_EQUIPMENT_SET) as EquipmentItem[];
 
 function migrateEquipment(items: readonly string[]): EquipmentItem[] {
   const out = new Set<EquipmentItem>();

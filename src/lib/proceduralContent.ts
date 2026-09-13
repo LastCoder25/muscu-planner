@@ -88,8 +88,11 @@ export function gearExpect(level: number): { off: number; pv: number } {
   };
 }
 
-/** Niveau de donjon où l’attente d’équipement s’applique en entier. */
-const GEAR_EXPECT_FULL_AT = 4;
+/** Niveau de donjon où l’attente d’équipement s’applique en entier — là où `gearExpect`
+ *  commence sa propre pente (`L − 8`). Porté de 4 à 8 en v0.810 : au niveau 4 la Caverne
+ *  attendait déjà l’équipement plein, que le joueur ne peut pas avoir (mesuré : 2 % de
+ *  victoire à son niveau, équipé du butin de la Clairière). */
+const GEAR_EXPECT_FULL_AT = 8;
 
 /** ATTENTE D’ÉQUIPEMENT D’UN DONJON — `gearExpect`, RAMPÉE sur les tout premiers niveaux.
  *
@@ -97,8 +100,7 @@ const GEAR_EXPECT_FULL_AT = 4;
  *  pas y attendre un joueur déjà équipé. Appliquée telle quelle au niveau 1 (×1,35 PV,
  *  ×1,45 dégâts), elle rendait la Clairière ingagnable : mesuré, un joueur de niveau 1 y
  *  gagnait 0 % du temps, nu comme avec du stuff commun. Elle vaut donc ×1 au niveau 1 et
- *  rejoint `gearExpect` au niveau `GEAR_EXPECT_FULL_AT` — la Caverne (niv. 4) et tout ce qui
- *  suit ne bougent pas. Lue par `dungeonFoes` ET par la puissance conseillée : l’écran
+ *  rejoint `gearExpect` au niveau `GEAR_EXPECT_FULL_AT`. Lue par `dungeonFoes` ET par la puissance conseillée : l’écran
  *  doit annoncer ce que le combat applique. */
 export function dungeonGearExpect(level: number): { off: number; pv: number } {
   const ge = gearExpect(level);

@@ -1091,11 +1091,14 @@ onBeforeUnmount(() => {
   background: var(--accent);
   color: var(--accent-ink);
 }
+/* En couleur de texte, pas en gris : sur fond de série courante (`--surface-2`) le `--dim-2`
+   se lisait mal, et c'est précisément la série qu'on est en train de régler. */
 .cell-lbl {
-  font-size: 9.5px;
+  font-size: 10.5px;
+  font-weight: 600;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--dim-2);
+  color: var(--text);
   margin-bottom: 1px;
 }
 .val-line {

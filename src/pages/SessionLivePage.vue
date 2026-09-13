@@ -1063,11 +1063,13 @@ onBeforeUnmount(() => {
   background: var(--surface-2);
   color: var(--d1);
 }
+/* Même libellé que la séance libre : les deux écrans doivent rester identiques. */
 .cell-lbl {
-  font-size: 9.5px;
+  font-size: 10.5px;
+  font-weight: 600;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--dim-2);
+  color: var(--text);
   margin-bottom: 1px;
 }
 .val-line {

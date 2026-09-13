@@ -268,13 +268,20 @@ export const DUNGEONS: Dungeon[] = [...HAND_DUNGEONS, ...PROCEDURAL.dungeons].ma
 // ça, le contenu profond devenait trivial (100 % clear). La composante profonde recale la
 // difficulté sur un build ÉQUIPÉ-à-son-niveau. (Le contenu NU reste calibré à part, cf.
 // proceduralContent.test — la rampe est la couche gear-gated live appliquée par dungeonFoes.)
+/** Niveau de donjon où la rampe d’amorçage atteint son plein (×1,5). */
+const DIFFICULTY_FULL_AT = 12;
+
 function dungeonDifficultyMult(recoLevel: number): number {
-  // EARLY (amorçage) UNIQUEMENT : ×1 au 1er donjon → ×1.5 vers reco 5 (assez pour rendre
-  // le gear utile sans bloquer un build équipé). L'ancienne composante « deep » (×8) qui
-  // grossissait la difficulté en profondeur est REMPLACÉE par l'attente d'équipement
-  // `gearExpect` (v0.600), appliquée aux PV/dégâts dans dungeonFoes → même modèle que le
-  // contenu procédural/boss/labyrinthe (offense pour les PV, survie pour les dégâts).
-  return 1 + Math.min(0.5, Math.max(0, recoLevel - 2) * 0.15);
+  // EARLY (amorçage) UNIQUEMENT : ×1 au 1er donjon → ×1,5 au niveau `DIFFICULTY_FULL_AT`.
+  // L'ancienne composante « deep » (×8) est REMPLACÉE par l'attente d'équipement
+  // `gearExpect` (v0.600), appliquée aux PV/dégâts dans dungeonFoes.
+  // ⚠️ v0.810, MESURÉ : la rampe atteignait ×1,5 dès le niveau 5, alors que le joueur n'a
+  // à ce stade que le butin commun des premiers donjons. Toute la chaîne était décalée
+  // d'un niveau — équipé du butin des donjons précédents, on gagnait 1 à 18 % à SON niveau
+  // (Caverne 2 %, Repaire 1 %). Étalée jusqu'au niveau 12 (avec `dungeonGearExpect` plein au
+  // niveau 8) : Caverne 64 %, Repaire 48 %, Cryptes 45 %, Fournaise 49 %, et toujours
+  // ≤ 21 % sans équipement. Au-delà du niveau 12 la valeur est inchangée (×1,5).
+  return 1 + 0.5 * Math.min(1, Math.max(0, (recoLevel - 2) / (DIFFICULTY_FULL_AT - 2)));
 }
 
 /** Convertit les ids de monstres d'un donjon en adversaires pour le moteur. PV/dégâts mis

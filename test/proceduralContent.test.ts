@@ -8,7 +8,8 @@ import {
   type Combatant,
 } from '@/lib/combat';
 import { DUNGEONS, dungeonFoes } from '@/data/dungeons';
-import { rollDrop, bestGearLoadout, playerWithGear, type Item } from '@/lib/items';
+import { MONSTERS } from '@/data/monsters';
+import { rollDrop, bestGearLoadout, playerWithGear, itemScore, type Item } from '@/lib/items';
 import {
   cumXpForLevel,
   refBalancedStat,
@@ -48,12 +49,14 @@ describe('le 1er donjon est gagnable par un joueur qui débute', () => {
     expect(clearRate(debutant())).toBeGreaterThan(0.9);
   });
 
-  it('l’attente d’équipement vaut ×1 au niveau 1 et rejoint gearExpect dès le niveau 4', () => {
+  it('l’attente d’équipement vaut ×1 au niveau 1 et rejoint gearExpect au niveau 8', () => {
+    // Niveau 8 = là où gearExpect commence sa propre pente (L − 8).
     expect(dungeonGearExpect(1)).toEqual({ off: 1, pv: 1 });
-    for (const L of [4, 5, 10, 40, 90]) expect(dungeonGearExpect(L)).toEqual(gearExpect(L));
+    for (const L of [8, 9, 10, 40, 90]) expect(dungeonGearExpect(L)).toEqual(gearExpect(L));
+    expect(dungeonGearExpect(4).off).toBeLessThan(gearExpect(4).off);
     // Entre les deux : monotone, et jamais au-dessus de l'attente pleine.
     let prev = dungeonGearExpect(1);
-    for (const L of [2, 3, 4]) {
+    for (const L of [2, 3, 4, 5, 6, 7, 8]) {
       const ge = dungeonGearExpect(L);
       expect(ge.off).toBeGreaterThan(prev.off);
       expect(ge.pv).toBeGreaterThan(prev.pv);
@@ -76,6 +79,104 @@ describe('le 1er donjon est gagnable par un joueur qui débute', () => {
     expect(recommendedPower(10)).toBe(
       Math.round(combatPower(refFighter(10)) * Math.sqrt(ge.off * ge.pv)),
     );
+  });
+});
+
+describe('la chaîne des premiers donjons suit le niveau annoncé', () => {
+  // Un joueur au niveau recommandé d'un donjon, équipé du MEILLEUR butin de 20 nettoyages de
+  // chacun des donjons précédents — ce qu'il a réellement pu gagner. Moyenné sur 3 profils
+  // (équilibré, muscu, cardio) et 4 tirages de butin : on mesure le joueur médian.
+  // ⚠️ Limité aux donjons < 9 : au-delà, le vrai joueur a aussi talents, familiers et pièces de
+  // set de boss, que ce harnais ignore — il y sous-estimerait la tenue.
+  const chain = DUNGEONS.filter((d) => d.recoLevel <= 8).sort((a, b) => a.recoLevel - b.recoLevel);
+  const splits = [
+    [1 / 3, 1 / 3, 1 / 3],
+    [0.6, 0.4, 0],
+    [0, 0.4, 0.6],
+  ] as const;
+  const rng32 = (seed: number) => {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+  const lootOf = (prev: typeof chain, seed: number, level: number) => {
+    const rng = rng32(seed);
+    const eq: Record<string, Item> = {};
+    let n = 0;
+    for (const d of prev)
+      for (let r = 0; r < 20; r++) {
+        const it = rollDrop(rng, {
+          cleared: true,
+          defeated: d.monsterIds.length,
+          level: d.dropLevel,
+          luck: d.dropLuck,
+          playerLevel: level,
+        });
+        if (!it) continue;
+        const cur = eq[it.slot];
+        const cand = { ...it, id: `i${n++}` } as Item;
+        if (!cur || itemScore(cand) > itemScore(cur)) eq[it.slot] = cand;
+      }
+    return eq;
+  };
+  const rates = (i: number, L: number) => {
+    const d = chain[i]!;
+    const foes = dungeonFoes(d);
+    const run = (p: Combatant, N: number) => {
+      let w = 0;
+      for (let s = 1; s <= N; s++) if (simulateDungeon(p, foes, { seed: s * 7919 }).cleared) w++;
+      return w / N;
+    };
+    const xp = cumXpForLevel(L) + 50;
+    let nu = 0;
+    let equipped = 0;
+    for (const sp of splits) {
+      const ch = computeCharacter(xp * sp[0], xp * sp[1], xp * sp[2], 0);
+      nu += run(playerCombatant('p', ch, L), 80) / splits.length;
+      for (let s = 1; s <= 4; s++)
+        equipped +=
+          run(playerWithGear('p', ch, lootOf(chain.slice(0, i), s, L), {}, L), 60) /
+          (4 * splits.length);
+    }
+    return { nu, equipped };
+  };
+
+  it('à son niveau, équipé du butin des donjons précédents, on a une vraie chance', () => {
+    // Mesuré v0.810 : Caverne 64 %, Repaire 48 %, Cryptes 45 %, Fournaise 49 % — contre
+    // 2 / 1 / 10 / 18 % avant (la rampe atteignait ×1,5 dès le niveau 5).
+    for (let i = 1; i < chain.length; i++) {
+      expect(rates(i, chain[i]!.recoLevel).equipped, chain[i]!.id).toBeGreaterThan(0.3);
+    }
+  });
+
+  it('le donjon reste gaté par l’équipement : sans lui, on perd le plus souvent', () => {
+    for (let i = 1; i < chain.length; i++) {
+      expect(rates(i, chain[i]!.recoLevel).nu, chain[i]!.id).toBeLessThan(0.35);
+    }
+  });
+
+  it('au-delà du niveau 12, les monstres sont exactement ceux d’avant (×1,5 et attente pleine)', () => {
+    // Les rampes n'adoucissent que le début de partie : le contenu profond, calibré ailleurs,
+    // ne doit pas bouger d'un point de vie.
+    for (const d of DUNGEONS.filter((x) => x.recoLevel >= 12)) {
+      const ge = gearExpect(d.recoLevel);
+      const foes = dungeonFoes(d);
+      d.monsterIds.forEach((id, k) => {
+        const m = MONSTERS.find((x) => x.id === id)!;
+        expect(foes[k]!.combatant.pv, d.id).toBe(Math.round(m.pv * 1.5 * ge.off));
+        expect(foes[k]!.combatant.damage, d.id).toBe(Math.round(m.damage * 1.5 * ge.pv));
+      });
+    }
+  });
+
+  it('un niveau en dessous, même équipé, le mur tient', () => {
+    for (let i = 1; i < chain.length; i++) {
+      expect(rates(i, chain[i]!.recoLevel - 1).equipped, chain[i]!.id).toBeLessThan(0.2);
+    }
   });
 });
 

@@ -72,6 +72,13 @@ export const EQUIPMENT_GROUPS: EquipmentGroup[] = [
       { value: 'dip_station', label: 'Barre à dips / station' },
     ],
   },
+  {
+    group: 'Cardio & combat',
+    items: [
+      { value: 'rower', label: 'Rameur' },
+      { value: 'punching_bag', label: 'Sac de frappe' },
+    ],
+  },
 ];
 
 // Liste plate (toutes options confondues).
