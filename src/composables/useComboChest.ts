@@ -19,11 +19,35 @@ import { useComboStore } from '@/stores/combo';
 import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
-import { comboCountedSets } from '@/lib/combo';
+import { comboCountedSets, type ComboChallenge } from '@/lib/combo';
+import { comboChestPlan } from '@/lib/comboChest';
+
+/** Verse le coffre d'un 360 bouclé ET le conserve sur le défi. Partagé par l'observateur
+ *  ci-dessous et le balayage de l'Aventure : deux chemins, une seule règle.
+ *  Rend `true` seulement si un coffre vient d'être DÉPOSÉ dans la boîte. */
+export async function depositComboChest(
+  uid: string,
+  c: ComboChallenge,
+  playerLevel: number,
+): Promise<boolean> {
+  const combo = useComboStore();
+  const char = useCharacterStore();
+  // Le personnage peut ne pas être chargé (on vient d'un écran sport) : sans sa ligne,
+  // on ne saurait ni où écrire le message ni s'il y est déjà.
+  if (!char.row) await char.fetchMine();
+  if (!char.row) return false;
+  const sets = comboCountedSets(c);
+  const plan = comboChestPlan(c, char.row.messages, sets, playerLevel, Date.now());
+  if (!plan) return false;
+  const pose = plan.grant
+    ? await char.grantComboChest(uid, c.id, c.name || 'Défi 360', sets, plan.record)
+    : false;
+  await combo.setChest(c.id, plan.record);
+  return pose;
+}
 
 export function useComboChest() {
   const combo = useComboStore();
-  const char = useCharacterStore();
   const auth = useAuthStore();
   const progress = useProgress();
   const $q = useQuasar();
@@ -35,17 +59,7 @@ export function useComboChest() {
     const c = combo.list.find((x) => x.id === id);
     if (!uid || !c) return;
     try {
-      // Le personnage peut ne pas être chargé (on vient d'un écran sport) : sans sa ligne,
-      // `grantComboChest` ne saurait pas où écrire le message.
-      if (!char.row) await char.fetchMine();
-      const pose = await char.grantComboChest(
-        uid,
-        c.id,
-        c.name || 'Défi 360',
-        comboCountedSets(c),
-        progress.global.value.level,
-        Date.now(),
-      );
+      const pose = await depositComboChest(uid, c, progress.global.value.level);
       if (pose) {
         $q.notify({
           type: 'positive',

@@ -7,6 +7,9 @@ import {
   CHEST_REF_SETS,
   CHEST_MIN_MULT,
   CHEST_MAX_MULT,
+  comboChestPlan,
+  comboChestMessageId,
+  type ComboChestRecord,
 } from '@/lib/comboChest';
 import { HARVEST, travelOneWayMin, travelFactor } from '@/lib/expedition';
 
@@ -122,5 +125,65 @@ describe('coffre de fin de Défi 360', () => {
         prev = v;
       }
     }
+  });
+});
+
+describe('🎁 LE COFFRE SE CONSERVE SUR LE DÉFI (revoir son contenu)', () => {
+  const msg = (comboId: string, over = {}) => ({
+    id: comboChestMessageId(comboId),
+    gold: 1234,
+    energy: 56,
+    scrap: 78,
+    summonStones: 9,
+    key: 1,
+    level: 27,
+    resolvedAt: 111,
+    ...over,
+  });
+
+  it('un défi qui porte déjà son coffre ne reçoit rien — même si la boîte l’a oublié', () => {
+    const chest: ComboChestRecord = { ...comboChestReward(80, 30), level: 30, at: 5 };
+    // Boîte vide : le message a été chassé par 30 plus récents. Se fier à elle reverserait.
+    expect(comboChestPlan({ id: 'c1', chest }, [], 80, 30, 999)).toBeNull();
+  });
+
+  it('message encore dans la boîte : on RELIT son contenu, sans reverser', () => {
+    const plan = comboChestPlan({ id: 'c1' }, [msg('autre'), msg('c1')], 80, 30, 999);
+    expect(plan).toEqual({
+      grant: false,
+      record: { gold: 1234, energy: 56, scrap: 78, summonStones: 9, keys: 1, level: 27, at: 111 },
+    });
+  });
+
+  it('le message d’un AUTRE défi ne compte pas', () => {
+    const plan = comboChestPlan({ id: 'c1' }, [msg('c2')], 80, 30, 999);
+    expect(plan?.grant).toBe(true);
+  });
+
+  it('aucune trace : on verse le coffre du barème, figé au niveau du bouclage', () => {
+    const plan = comboChestPlan({ id: 'c1', chest: null }, [], 80, 30, 999);
+    expect(plan).toEqual({
+      grant: true,
+      record: { ...comboChestReward(80, 30), level: 30, at: 999 },
+    });
+  });
+
+  it('un message sans devises optionnelles se relit à zéro, jamais en undefined', () => {
+    const plan = comboChestPlan(
+      { id: 'c1' },
+      [{ id: comboChestMessageId('c1'), gold: 10, level: 3, resolvedAt: 1 }],
+      80,
+      30,
+      999,
+    );
+    expect(plan?.record).toEqual({
+      gold: 10,
+      energy: 0,
+      scrap: 0,
+      summonStones: 0,
+      keys: 0,
+      level: 3,
+      at: 1,
+    });
   });
 });

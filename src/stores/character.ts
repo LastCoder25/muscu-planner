@@ -1,5 +1,5 @@
 // Store character — personnage RPG (Phase 1 : pseudo unique). Accès Supabase centralisé.
-import { comboChestReward } from '@/lib/comboChest';
+import { comboChestMessageId, type ComboChestRecord } from '@/lib/comboChest';
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { computed, ref } from 'vue';
 import { supabase } from '@/lib/supabase';
@@ -1418,34 +1418,35 @@ export const useCharacterStore = defineStore('character', () => {
    *
    *  ⚠️ Rien n’est crédité ici : le coffre attend, comme un rapport d’expédition, et
    *  c’est `expeClaim` qui verse tout — une seule voie de crédit, donc pas deux endroits
-   *  où une devise pourrait être oubliée. */
+   *  où une devise pourrait être oubliée.
+   *
+   *  Le CONTENU est décidé en amont (`comboChestPlan`) et conservé sur le défi : ici on ne
+   *  fait que le livrer. */
   async function grantComboChest(
     userId: string,
     comboId: string,
     comboName: string,
     sets: number,
-    playerLevel: number,
-    now: number,
+    chest: ComboChestRecord,
   ): Promise<boolean> {
     const cur = row.value;
     if (!cur) return false;
-    const id = `chest:${comboId}`;
+    const id = comboChestMessageId(comboId);
     if (cur.messages.some((m) => m.id === id)) return false;
-    const r = comboChestReward(sets, playerLevel);
     const msg: ExpeditionMessage = {
       id,
       chest: true,
       title: '🎁 Coffre du Défi 360',
-      level: playerLevel,
+      level: chest.level,
       win: true,
       text: `${comboName} — ${sets} séries. Le village a vu ta semaine.`,
-      gold: r.gold,
-      energy: r.energy,
-      summonStones: r.summonStones,
-      scrap: r.scrap,
-      key: r.keys,
-      resolvedAt: now,
-      claimAt: now, // pas de route à faire : le coffre est déjà là
+      gold: chest.gold,
+      energy: chest.energy,
+      summonStones: chest.summonStones,
+      scrap: chest.scrap,
+      key: chest.keys,
+      resolvedAt: chest.at,
+      claimAt: chest.at, // pas de route à faire : le coffre est déjà là
       claimed: false,
       read: false,
     };

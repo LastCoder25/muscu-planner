@@ -3,6 +3,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { comboComplete, type ComboChallenge, type ComboLeg } from '@/lib/combo';
+import type { ComboChestRecord } from '@/lib/comboChest';
 import { useAuthStore } from '@/stores/auth';
 
 export interface ComboRow extends ComboChallenge {
@@ -16,7 +17,7 @@ class ComboActiveError extends Error {
   }
 }
 
-const COLS = 'id, name, start_date, duration_days, status, legs';
+const COLS = 'id, name, start_date, duration_days, status, legs, chest';
 
 export interface NewCombo {
   name: string;
@@ -162,6 +163,15 @@ export const useComboStore = defineStore('combo', () => {
     if (c) c.status = status;
   }
 
+  /** Conserve le contenu du coffre de fin sur le défi : preuve durable du versement, et
+   *  ce qui permet de le revoir une fois le message chassé de la boîte (30 messages). */
+  async function setChest(id: string, chest: ComboChestRecord) {
+    const { error } = await supabase.from('combo_challenges').update({ chest }).eq('id', id);
+    if (error) throw error;
+    const c = list.value.find((x) => x.id === id);
+    if (c) c.chest = chest;
+  }
+
   async function remove(id: string) {
     const { error } = await supabase.from('combo_challenges').delete().eq('id', id);
     if (error) throw error;
@@ -172,6 +182,7 @@ export const useComboStore = defineStore('combo', () => {
     list,
     loaded,
     justCompleted,
+    setChest,
     fetchMine,
     activeOne,
     create,

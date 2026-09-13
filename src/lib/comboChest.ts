@@ -103,3 +103,59 @@ export function comboChestReward(sets: number, playerLevel: number): ComboChest 
     gold: Math.round(sessionGold(L) * CHEST.sessionShare * m),
   };
 }
+
+/** Ce qu'un coffre CONTENAIT, conservé sur le Défi 360 (colonne `chest`, migr. 0064).
+ *  Le niveau est figé au bouclage : le recalculer plus tard avec le niveau du moment
+ *  afficherait un coffre que le joueur n'a jamais reçu. */
+export interface ComboChestRecord extends ComboChest {
+  level: number;
+  at: number; // horodatage du dépôt (ms)
+}
+
+/** Le strict nécessaire d'un message de boîte pour en relire un coffre. */
+interface ChestMessage {
+  id: string;
+  gold: number;
+  energy?: number;
+  scrap?: number;
+  summonStones?: number;
+  key?: number;
+  level: number;
+  resolvedAt: number;
+}
+
+export const comboChestMessageId = (comboId: string) => `chest:${comboId}`;
+
+/** Que faire du coffre d'un 360 bouclé ?
+ *  • déjà conservé sur le défi → rien (`null`) : c'est la preuve DURABLE du versement.
+ *    ⚠️ La boîte ne l'est pas — elle ne garde que 30 messages ; se fier à elle seule
+ *    ferait verser deux fois un coffre dont le message a été chassé ;
+ *  • message encore dans la boîte, mais pas conservé → on le RELIT, sans reverser
+ *    (versement fait par une version d'avant, ou écriture du défi qui a échoué) ;
+ *  • sinon → on le calcule, on le verse et on le conserve. */
+export function comboChestPlan(
+  combo: { id: string; chest?: ComboChestRecord | null },
+  messages: readonly ChestMessage[],
+  sets: number,
+  playerLevel: number,
+  now: number,
+): { grant: boolean; record: ComboChestRecord } | null {
+  if (combo.chest) return null;
+  const m = messages.find((x) => x.id === comboChestMessageId(combo.id));
+  if (m) {
+    return {
+      grant: false,
+      record: {
+        gold: m.gold,
+        energy: m.energy ?? 0,
+        scrap: m.scrap ?? 0,
+        summonStones: m.summonStones ?? 0,
+        keys: m.key ?? 0,
+        level: m.level,
+        at: m.resolvedAt,
+      },
+    };
+  }
+  const level = Math.max(1, playerLevel);
+  return { grant: true, record: { ...comboChestReward(sets, level), level, at: now } };
+}

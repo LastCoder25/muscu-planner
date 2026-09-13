@@ -344,6 +344,7 @@
                 >+{{ comboXpb(c).surpass }} XP dépassement</span
               >
             </div>
+            <ComboChestView v-if="c.chest" :combo-id="c.id" :chest="c.chest" compact />
           </div>
           <span class="cc-badge" :class="c.status">{{
             c.status === 'done' ? '✓ terminé' : 'abandonné'
@@ -566,6 +567,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import ComboTierLegend from '@/components/ComboTierLegend.vue';
+import ComboChestView from '@/components/ComboChestView.vue';
 import {
   challengeStats,
   challengeXpPoints,

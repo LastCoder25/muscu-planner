@@ -44,6 +44,7 @@
           }}</span>
         </div>
         <div v-if="c.status === 'done'" class="hc-done">🎉 Défi 360 bouclé — bravo !</div>
+        <ComboChestView v-if="c.chest" :combo-id="c.id" :chest="c.chest" />
         <div v-if="legsAtMax > 0" class="hc-over">
           🔥 {{ legsAtMax }} exo{{ legsAtMax > 1 ? 's' : '' }} au <b>maximal</b> !
           <span class="hc-over-sub">prime de dépassement débloquée</span>
@@ -228,6 +229,7 @@ import {
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
 import ComboTierLegend from '@/components/ComboTierLegend.vue';
+import ComboChestView from '@/components/ComboChestView.vue';
 import {
   logicalToday,
   addDaysIso,

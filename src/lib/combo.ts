@@ -9,6 +9,7 @@ import { REP_XP, assistMult, XP_MULT, MUSCU_MIN_XP } from './athlete';
 import { stopPlan, type StopPlan } from './challenges';
 import { daysBetweenIso } from './loginStreak';
 import type { Level, Objective, SportPractice } from './types';
+import type { ComboChestRecord } from './comboChest';
 import {
   repRangeFor,
   repRangeForExercise,
@@ -61,6 +62,8 @@ export interface ComboChallenge {
   duration_days: number;
   status: 'active' | 'done' | 'abandoned';
   legs: ComboLeg[];
+  /** Contenu du coffre de fin, conservé au bouclage (migr. 0064). */
+  chest?: ComboChestRecord | null;
 }
 
 // Reps supposées par série pour l'estimation du volume planifié (prime de bouclage).

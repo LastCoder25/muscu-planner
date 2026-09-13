@@ -2655,7 +2655,7 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError, WELCOME_ENERGY } from '@/stores/character';
 import { useComboStore } from '@/stores/combo';
-import { comboCountedSets } from '@/lib/combo';
+import { depositComboChest } from '@/composables/useComboChest';
 import { useProgress } from '@/composables/useProgress';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
@@ -5009,14 +5009,7 @@ async function grantPendingComboChests() {
       const dates = co.legs.flatMap((l) => (l.sets ?? []).map((x) => x.date)).filter(Boolean);
       const derniere = dates.length ? dates.reduce((m, d) => (d > m ? d : m)) : '';
       if (derniere < limite) continue;
-      await char.grantComboChest(
-        uid,
-        co.id,
-        co.name || 'Défi 360',
-        comboCountedSets(co),
-        c.value.level.level,
-        Date.now(),
-      );
+      await depositComboChest(uid, co, c.value.level.level);
     }
   } catch (e) {
     console.error('coffre 360', e);
