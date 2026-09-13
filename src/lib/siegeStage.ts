@@ -564,6 +564,43 @@ export function panAngle(pan: number): number {
   return sectorAngle(pan) + STEP / 2;
 }
 
+/** Le pan qui fait face à un angle (inverse de `panAngle`). */
+export function panOfAngle(angle: number): number {
+  const n = BATTLE.sectors;
+  const i = Math.round((angle - STEP / 2 - sectorAngle(0)) / STEP);
+  return ((i % n) + n) % n;
+}
+
+/**
+ * 🧱 LES PANS OUVERTS à un instant du rejeu : lequel, et sur quelle part.
+ *
+ * ⚠️ UN MUR PULVÉRISÉ S’OUVRE PARTOUT (demandé par l’utilisateur). Tant qu’il lui reste des
+ * PV, une seule brèche — celle du moteur, qui s’élargit. À 0 PV le rempart n’est plus
+ * qu’un champ de ruines : chaque pan cède, et on ne montre plus une trouée propre au milieu
+ * d’un mur qui n’existe plus.
+ *
+ * ⚠️ PUREMENT VISUEL : le moteur garde son goulot (`breachMaxWidth` corps à la fois) — le
+ * nombre d’entrants vient toujours du log, ce module ne décide rien du combat.
+ */
+export function openPans(
+  breachPanIdx: number,
+  width: number,
+  wallPv: number,
+): { pan: number; gap: number }[] {
+  if (wallPv <= 0 && width > 0) {
+    const gap = breachGap(BATTLE.breachMaxWidth);
+    return Array.from({ length: BATTLE.sectors }, (_, pan) => ({ pan, gap }));
+  }
+  return width > 0 ? [{ pan: breachPanIdx, gap: breachGap(width) }] : [];
+}
+
+/** PAR OÙ ENTRE un assaillant : par la brèche tant que le mur tient, par la trouée de SON
+ *  pan une fois le rempart en ruines — il ne fait pas le tour de la ville pour passer par
+ *  le seul trou d’avant. */
+export function entryAngle(bodyAngle: number, breachAngle: number, ruined: boolean): number {
+  return ruined ? panAngle(panOfAngle(bodyAngle)) : breachAngle;
+}
+
 interface Point {
   x: number;
   y: number;

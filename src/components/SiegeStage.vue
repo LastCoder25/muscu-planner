@@ -65,7 +65,7 @@
       />
       <template v-for="(m, i) in merlons" :key="'m' + i">
         <rect
-          v-if="!(i === stage.breachPan && width > 0)"
+          v-if="!openGap.has(i)"
           :x="m.x - 3.1"
           :y="m.y - 3.1"
           width="6.2"
@@ -88,10 +88,10 @@
            ouvert passait pour intact. La brèche est donc un PASSAGE — une bande de terre
            battue qui traverse l’épaisseur du rempart, du champ jusque dans la cour — et des
            gravats qui disent que le mur est TOMBÉ, pas qu’il manque. -->
-      <g v-if="width > 0">
-        <polygon :points="breachFloor" class="s-breach-floor" />
+      <g v-for="o in breaches" :key="'b' + o.pan">
+        <polygon :points="o.floor" class="s-breach-floor" />
         <g class="s-rubble">
-          <polygon v-for="(r, i) in rubble" :key="'r' + i" :points="r" />
+          <polygon v-for="(r, i) in o.rubble" :key="'r' + i" :points="r" />
         </g>
       </g>
 
@@ -250,7 +250,9 @@ import {
   battlefieldDecor,
   beatTiming,
   breachCamera,
-  breachGap,
+  entryAngle,
+  openPans,
+  panAngle,
   buildSiegeStage,
   defenderSpot,
   SIEGE_STAGE,
@@ -417,8 +419,8 @@ const insideAlive = computed(
 /** Un corps marche sur son pan jusqu'au pied du mur — et le LONGE s'il n'a plus de cible
  *  (un tireur va chercher la baliste suivante) ; entré, il se tient dans la cour. */
 function bodyPos(b: SiegeBody, i: number): { x: number; y: number } {
-  const k = inside.value.get(i);
-  if (k !== undefined) return yardAttackerSpot(stage.value.breachAngle, k);
+  const e = entries.value.get(i);
+  if (e) return yardAttackerSpot(e.angle, e.k);
   const tour = dead.value.get(i) ?? curRound.value;
   const d = assaultRadius(b.dist, tour);
   const a = bodyAngleAt(b, tour);
@@ -443,11 +445,39 @@ function defPos(id: string): { x: number; y: number } {
   return defenderLayout.value.get(id) ?? { x: 100, y: 100 };
 }
 
-/** Les deux chicots du pan qui cède — le reste des pans est intact. */
+/** Pans ouverts à l'instant joué (pan → part effondrée) : un seul tant que le mur tient,
+ *  tous une fois pulvérisé (`openPans`). */
+const openGap = computed(
+  () =>
+    new Map(openPans(stage.value.breachPan, width.value, curPv.value).map((o) => [o.pan, o.gap])),
+);
+/** Par où chaque assaillant entré est passé, et sa place parmi ceux de CETTE trouée. */
+const entries = computed(() => {
+  const out = new Map<number, { angle: number; k: number }>();
+  const perAngle = new Map<number, number>();
+  const beats = stage.value.beats;
+  for (let i = 0; i <= idx.value; i++) {
+    const b = beats[i];
+    if (b?.kind !== 'enter') continue;
+    for (const a of b.attackers) {
+      if (out.has(a)) continue;
+      const body = stage.value.bodies[a];
+      const angle = body
+        ? entryAngle(bodyAngleAt(body, b.round), stage.value.breachAngle, b.basePv <= 0)
+        : stage.value.breachAngle;
+      const key = Math.round(angle * 1000);
+      const k = perAngle.get(key) ?? 0;
+      perAngle.set(key, k + 1);
+      out.set(a, { angle, k });
+    }
+  }
+  return out;
+});
+/** Les chicots des pans ouverts — le reste des pans est intact. */
 const wallSegments = computed(() =>
   octagon.flatMap((p, i) => {
     const q = octagon[(i + 1) % octagon.length]!;
-    const g = i === stage.value.breachPan ? breachGap(width.value) : 0;
+    const g = openGap.value.get(i) ?? 0;
     if (g <= 0) return [{ x1: p.x, y1: p.y, x2: q.x, y2: q.y }];
     const at = (t: number) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
     const a = at(0.5 - g / 2);
@@ -458,49 +488,41 @@ const wallSegments = computed(() =>
     ];
   }),
 );
-/** Le sol de la trouée : les deux bords du trou, poussés vers le dehors et vers la cour. */
-const breachFloor = computed(() => {
-  const pan = stage.value.breachPan;
-  const p = octagon[pan]!;
-  const q = octagon[(pan + 1) % octagon.length]!;
-  const g = breachGap(width.value);
-  const at = (t: number) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
-  const a = at(0.5 - g / 2);
-  const b = at(0.5 + g / 2);
-  const nx = Math.cos(stage.value.breachAngle);
-  const ny = Math.sin(stage.value.breachAngle);
-  const pt = (o: { x: number; y: number }, k: number) =>
-    `${(o.x + nx * k).toFixed(1)},${(o.y + ny * k).toFixed(1)}`;
-  return [pt(a, 9), pt(b, 9), pt(b, -12), pt(a, -12)].join(' ');
-});
-/** Gravats semés dans la brèche — graine fixe par rapport, pour qu'ils ne sautillent pas. */
-const rubble = computed(() => {
-  const pan = stage.value.breachPan;
-  const p = octagon[pan]!;
-  const q = octagon[(pan + 1) % octagon.length]!;
-  const g = breachGap(width.value);
-  const rng = mulberry32(((props.report.total * 131 + pan) ^ 0x2545f491) >>> 0 || 1);
-  const out: string[] = [];
-  const n = 8 + Math.round(g * 16);
-  for (let i = 0; i < n; i++) {
-    const t = 0.5 + (rng() - 0.5) * g * 1.1;
-    const off = (rng() - 0.3) * 9; // vers le dehors surtout : le mur tombe vers l'assaillant
-    const nx = Math.cos(stage.value.breachAngle);
-    const ny = Math.sin(stage.value.breachAngle);
-    const cx = p.x + (q.x - p.x) * t + nx * off;
-    const cy = p.y + (q.y - p.y) * t + ny * off;
-    const r = 1.8 + rng() * 2.6;
-    out.push(
-      [0, 1, 2, 3]
-        .map((k) => {
-          const a = (k / 4) * Math.PI * 2 + rng() * 0.8;
-          return `${(cx + Math.cos(a) * r).toFixed(1)},${(cy + Math.sin(a) * r).toFixed(1)}`;
-        })
-        .join(' '),
-    );
-  }
-  return out;
-});
+/** Chaque trouée : son sol (les deux bords du trou, poussés vers le dehors et vers la
+ *  cour) et ses gravats — graine fixe par rapport ET par pan, pour qu'ils ne sautillent pas. */
+const breaches = computed(() =>
+  [...openGap.value].map(([pan, g]) => {
+    const p = octagon[pan]!;
+    const q = octagon[(pan + 1) % octagon.length]!;
+    const at = (t: number) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
+    const a = at(0.5 - g / 2);
+    const b = at(0.5 + g / 2);
+    const nx = Math.cos(panAngle(pan));
+    const ny = Math.sin(panAngle(pan));
+    const pt = (o: { x: number; y: number }, k: number) =>
+      `${(o.x + nx * k).toFixed(1)},${(o.y + ny * k).toFixed(1)}`;
+    const floor = [pt(a, 9), pt(b, 9), pt(b, -12), pt(a, -12)].join(' ');
+    const rng = mulberry32(((props.report.total * 131 + pan) ^ 0x2545f491) >>> 0 || 1);
+    const rubble: string[] = [];
+    const n = 8 + Math.round(g * 16);
+    for (let i = 0; i < n; i++) {
+      const t = 0.5 + (rng() - 0.5) * g * 1.1;
+      const off = (rng() - 0.3) * 9; // vers le dehors surtout : le mur tombe vers l'assaillant
+      const cx = p.x + (q.x - p.x) * t + nx * off;
+      const cy = p.y + (q.y - p.y) * t + ny * off;
+      const r = 1.8 + rng() * 2.6;
+      rubble.push(
+        [0, 1, 2, 3]
+          .map((k) => {
+            const ang = (k / 4) * Math.PI * 2 + rng() * 0.8;
+            return `${(cx + Math.cos(ang) * r).toFixed(1)},${(cy + Math.sin(ang) * r).toFixed(1)}`;
+          })
+          .join(' '),
+      );
+    }
+    return { pan, floor, rubble };
+  }),
+);
 
 /** 🧱 Les lézardes — seedées sur le rapport, purement décoratives. */
 const cracks = computed(() => {

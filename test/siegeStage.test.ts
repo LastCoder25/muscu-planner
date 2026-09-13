@@ -16,6 +16,9 @@ import {
   panAngle,
   placeBodies,
   cutsFor,
+  entryAngle,
+  openPans,
+  panOfAngle,
   nearestTurret,
   reportSeed,
   sectorAngle,
@@ -750,5 +753,62 @@ describe('❤️ LA VIE DU HÉROS PENDANT LE SIÈGE', () => {
       turretCount(lvl),
     );
     expect(ancien.beats.every((b) => Object.keys(b.defPv).length === 0)).toBe(true);
+  });
+});
+
+describe('🧱 UN MUR PULVÉRISÉ S’OUVRE PARTOUT', () => {
+  it('panOfAngle est l’inverse de panAngle', () => {
+    for (let i = 0; i < BATTLE.sectors; i++) expect(panOfAngle(panAngle(i))).toBe(i);
+    // un angle quelconque tombe sur le pan dont le milieu est le plus proche
+    expect(panOfAngle(panAngle(3) + 0.1)).toBe(3);
+  });
+
+  it('tant que le mur tient : une seule brèche, qui suit la largeur du moteur', () => {
+    expect(openPans(2, 0, 500)).toEqual([]);
+    const one = openPans(2, 3, 500);
+    expect(one).toHaveLength(1);
+    expect(one[0]).toEqual({ pan: 2, gap: breachGap(3) });
+  });
+
+  it('⚠️ à 0 PV, TOUS les pans cèdent, à leur plus large', () => {
+    const all = openPans(2, 3, 0);
+    expect(all.map((o) => o.pan)).toEqual(Array.from({ length: BATTLE.sectors }, (_, i) => i));
+    for (const o of all) expect(o.gap).toBe(breachGap(BATTLE.breachMaxWidth));
+  });
+
+  it('un assaillant entre par la brèche tant que le mur tient, par SON pan une fois en ruines', () => {
+    const breach = panAngle(1);
+    const lui = panAngle(5) + 0.05;
+    expect(entryAngle(lui, breach, false)).toBe(breach);
+    expect(entryAngle(lui, breach, true)).toBe(panAngle(5));
+  });
+
+  it('entré par n’importe quel pan, il se tient DANS la cour', () => {
+    for (let pan = 0; pan < BATTLE.sectors; pan++)
+      for (let k = 0; k < 8; k++) expect(insideYard(yardAttackerSpot(panAngle(pan), k))).toBe(true);
+  });
+
+  it('dans un vrai siège où le mur tombe, on entre après la chute par plusieurs trouées', () => {
+    for (let seed = 1; seed < 300; seed++) {
+      const { stage } = breche(seed, 40);
+      const ruin = stage.beats.findIndex((b) => b.basePv <= 0);
+      if (ruin < 0) continue;
+      const pans = new Set(
+        stage.beats
+          .slice(ruin)
+          .filter((b) => b.kind === 'enter')
+          .flatMap((b) =>
+            b.attackers.map((a) =>
+              panOfAngle(
+                entryAngle(bodyAngleAt(stage.bodies[a]!, b.round), stage.breachAngle, true),
+              ),
+            ),
+          ),
+      );
+      if (pans.size < 2) continue;
+      expect(pans.size).toBeGreaterThan(1);
+      return;
+    }
+    throw new Error('aucun siège où le mur tombe puis laisse entrer par plusieurs pans');
   });
 });
