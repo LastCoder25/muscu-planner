@@ -108,17 +108,52 @@
             </div>
           </div>
         </div>
-        <!-- Mode séries : segments par série ; mode reps : barre de progression simple. -->
-        <div v-if="legMode(leg) === 'sets'" class="seg-bar">
+        <!-- Mode séries : segments par série ; mode reps : barre de progression simple.
+             ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 série » et « ↩ »
+             prenaient une ligne entière par exo. La prochaine case vide porte le « ＋ »,
+             et le retrait vit dans la fenêtre de saisie. -->
+        <div
+          v-if="legMode(leg) === 'sets'"
+          class="seg-bar tap"
+          role="button"
+          tabindex="0"
+          :aria-label="`Ajouter une série : ${leg.exercise_name}`"
+          @click="openSet(leg, 1)"
+          @keydown.enter="openSet(leg, 1)"
+        >
           <span
             v-for="n in segCount(leg)"
             :key="n"
             class="seg"
-            :class="['z-' + legSegZone(leg, n), { on: n <= legDone(leg) }]"
+            :class="[
+              'z-' + legSegZone(leg, n),
+              { on: n <= legDone(leg), next: n === legDone(leg) + 1 },
+            ]"
           >
             <template v-if="n <= legDone(leg)">{{ segSetLabel(legSets(leg)[n - 1]) }}</template>
+            <template v-else-if="n === legDone(leg) + 1">＋</template>
             <template v-else-if="n > leg.target">+</template>
           </span>
+        </div>
+        <div
+          v-else-if="legMode(leg) === 'reps'"
+          class="bar-tap"
+          role="button"
+          tabindex="0"
+          :aria-label="`Ajouter une série : ${leg.exercise_name}`"
+          @click="openSet(leg, 1)"
+          @keydown.enter="openSet(leg, 1)"
+        >
+          <div class="reps-bar">
+            <span class="reps-bonus" :style="{ left: bar(leg).objPct + '%' }" />
+            <span class="reps-fill" :style="{ width: bar(leg).fillPct + '%' }" />
+            <span
+              class="reps-over"
+              :style="{ left: bar(leg).objPct + '%', width: bar(leg).overPct + '%' }"
+            />
+            <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
+          </div>
+          <span class="bar-plus" aria-hidden="true">＋</span>
         </div>
         <div v-else class="reps-bar">
           <!-- Zone BONUS encore possible (de l'objectif au palier maximal) : hachures vertes.
@@ -151,10 +186,6 @@
           <button v-for="s in DUR_QUICK_ADDS" :key="s" class="da-btn" @click="doAddSeconds(leg, s)">
             +{{ fmtDurShort(s) }}
           </button>
-        </div>
-        <div v-else-if="legMode(leg) !== 'time'" class="leg-actions">
-          <button class="add" @click="openSet(leg, 1)">＋ 1 série</button>
-          <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
         </div>
         <!-- Détail des séries faites (secondes en durée / reps en mode reps). En mode
              séries, le détail est DANS les cellules jaunes → on ne le répète pas ici. -->
@@ -193,7 +224,9 @@
       :initial-reps="setInitReps"
       :initial-weight="setInitWeight"
       :initial-assisted="setInitAssisted"
+      :undo-label="undoLabel"
       @save="onSetSave"
+      @undo="setLeg && undoSet(setLeg)"
     />
   </q-page>
 </template>
@@ -346,6 +379,14 @@ function slotEmoji(key: string) {
 }
 // Détail d'une série affiché DANS sa cellule jaune : « 12×15kg » (ou « 12 » au poids
 // du corps, « 12·a » si assisté). Vide si la série n'existe pas (cellule à faire).
+/** Libellé du retrait dans la fenêtre de saisie : dit QUELLE série part (« 12×20kg »),
+ *  absent s'il n'y a rien à retirer. */
+const undoLabel = computed(() => {
+  const sets = setLeg.value ? legSets(setLeg.value) : [];
+  const last = sets[sets.length - 1];
+  return last ? `Retirer la dernière (${segSetLabel(last)})` : undefined;
+});
+
 function segSetLabel(s: ComboSet | undefined): string {
   if (!s) return '';
   const base = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
@@ -761,6 +802,39 @@ onMounted(async () => {
 }
 /* Grille de cellules UNIFORMES (mêmes dimensions pour faites/à faire) qui se
    répartissent proprement sur plusieurs lignes ; chaque colonne accueille « 12×15kg ». */
+.tap,
+.bar-tap {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Mode reps : la barre + un « ＋ » sur la même ligne, toute la hauteur tactile. */
+.bar-tap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+.bar-tap .reps-bar {
+  flex: 1;
+  margin: 0;
+}
+.bar-plus {
+  flex: none;
+  width: 28px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-weight: 800;
+}
+/* La prochaine case à faire porte le « ＋ » : c'est là qu'on touche pour ajouter. */
+.seg.next {
+  color: var(--text);
+  font-weight: 800;
+  font-size: 14px;
+}
 .seg-bar {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));

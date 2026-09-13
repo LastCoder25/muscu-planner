@@ -37,20 +37,23 @@ const frames = computed(() => (props.exerciseId ? exerciseFrames(props.exerciseI
   height: 100%;
   object-fit: contain;
 }
-/* La pose de fin se fond par-dessus la pose de départ, en ping-pong (dwell aux
-   extrémités via alternate + paliers 0/40 % et 60/100 %). */
+/* Bascule NETTE entre la pose de départ et la pose de fin (1,2 s chacune).
+   ⚠️ Pas de fondu : à mi-transition les deux corps se superposent et l'on voit la
+   première pose « en transparence » à travers la seconde — c'est ce qui brouillait
+   l'animation. steps(1, end) tient chaque palier jusqu'au suivant. */
 .fr1 {
   opacity: 0;
 }
 .fr1.play {
-  animation: ex-flip 1.7s ease-in-out infinite alternate;
+  animation: ex-flip 2.4s steps(1, end) infinite;
 }
 @keyframes ex-flip {
-  0%,
-  40% {
+  0% {
     opacity: 0;
   }
-  60%,
+  50% {
+    opacity: 1;
+  }
   100% {
     opacity: 1;
   }

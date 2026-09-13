@@ -78,6 +78,17 @@ const MAP = {
   ex_triceps_kickback: 'Tricep_Dumbbell_Kickback',
   ex_seated_calf: 'Seated_Calf_Raise',
   ex_rear_delt_fly: 'Reverse_Flyes',
+  // Ajouts 2026-09 (exos du Défi 360 et de la prépa sans animation). Choisis sur planche :
+  // star jump = variante proche des jumping jacks, skipping = montées de genoux.
+  // Rien de fidèle dans la base pour burpees, pas chassés, split-step, balancements de
+  // jambe, bird-dog, chaise, échelle d'agilité.
+  ex_jump_rope: 'Rope_Jumping',
+  ex_pp_single_leg_rdl: 'Kettlebell_One-Legged_Deadlift',
+  ex_pp_cone_sprint: 'Single-Cone_Sprint_Drill',
+  ex_ch_marche_course: 'Trail_Running_Walking',
+  ex_ch_velo: 'Bicycling_Stationary',
+  ex_jumping_jacks: 'Star_Jump',
+  ex_high_knees: 'Fast_Skipping',
 };
 mkdirSync('public/exercises', { recursive: true });
 let ok = 0,

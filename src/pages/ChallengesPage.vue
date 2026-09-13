@@ -439,23 +439,42 @@
                 >
               </span>
             </div>
-            <!-- Barre + actions sur la MÊME ligne → lignes d'exo plus compactes (plus
-                 d'exos visibles à l'écran). -->
+            <!-- ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 » et « ↩ » lui
+                 prenaient la largeur, et les cases partaient à la ligne. La prochaine case vide
+                 porte le « ＋ » ; le retrait vit dans la fenêtre de saisie. Seul le chrono du
+                 mode durée garde ses boutons (il n'a pas de fenêtre de saisie). -->
             <div class="cl-bottom">
-              <div v-if="legMode(leg) === 'sets'" class="seg-bar">
+              <div
+                v-if="legMode(leg) === 'sets'"
+                class="seg-bar tap"
+                role="button"
+                tabindex="0"
+                :aria-label="`Ajouter une série : ${leg.exercise_name}`"
+                @click="openSet(leg, 1)"
+                @keydown.enter="openSet(leg, 1)"
+              >
                 <span
                   v-for="n in segCount(leg)"
                   :key="n"
                   class="seg"
-                  :class="['z-' + legSegZone(leg, n), { on: n <= legDone(leg) }]"
+                  :class="[
+                    'z-' + legSegZone(leg, n),
+                    { on: n <= legDone(leg), next: n === legDone(leg) + 1 },
+                  ]"
                 >
                   <template v-if="n <= legDone(leg)">{{
                     segSetLabel(legSets(leg)[n - 1])
                   }}</template>
+                  <template v-else-if="n === legDone(leg) + 1">＋</template>
                   <template v-else-if="n > leg.target">+</template>
                 </span>
               </div>
-              <div v-else class="reps-bar">
+              <div
+                v-else
+                class="reps-bar"
+                :class="{ tap: legMode(leg) === 'reps' }"
+                @click="legMode(leg) === 'reps' && openSet(leg, 1)"
+              >
                 <!-- Zone BONUS encore possible (de l'objectif au palier maximal) : hachures vertes.
                      Équivalent des cases pointillées du mode séries — la marge se voit AVANT d'être
                      prise, alors qu'avant la barre était écrêtée à 100 % et ne montrait rien. -->
@@ -467,19 +486,23 @@
                 />
                 <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
               </div>
-              <div class="cl-actions">
+              <button
+                v-if="legMode(leg) === 'reps'"
+                class="cl-add"
+                :aria-label="`Ajouter une série : ${leg.exercise_name}`"
+                @click="openSet(leg, 1)"
+              >
+                ＋
+              </button>
+              <div v-else-if="legMode(leg) === 'time'" class="cl-actions">
                 <!-- Mode DURÉE : chrono (Démarrer/Pause → série de la durée réelle). -->
                 <button
-                  v-if="legMode(leg) === 'time'"
                   class="cl-chrono"
                   :class="{ running: isChronoOn(leg) }"
                   title="Chrono : Démarrer puis Pause pour enregistrer la durée"
                   @click="toggleChrono(leg)"
                 >
                   {{ isChronoOn(leg) ? '⏸' : '▶' }} {{ chronoDisplay(leg) }}
-                </button>
-                <button v-else class="cl-add" title="Ajouter une série" @click="openSet(leg, 1)">
-                  ＋ 1
                 </button>
                 <button
                   class="cl-corr"
@@ -525,6 +548,14 @@
           <span class="set-hint">élastique / machine → ×0,6</span>
         </div>
         <div class="set-actions">
+          <q-btn
+            v-if="setLeg && legSetsDone(setLeg)"
+            flat
+            no-caps
+            class="set-undo"
+            :label="`↩ Retirer la dernière (${segSetLabel(legSets(setLeg)[legSets(setLeg).length - 1])})`"
+            @click="undoFromDialog"
+          />
           <q-btn flat no-caps label="Annuler" @click="setOpen = false" />
           <q-btn
             unelevated
@@ -863,6 +894,12 @@ async function exportCombo() {
   } catch {
     $q.notify({ type: 'negative', message: 'Copie impossible sur cet appareil.' });
   }
+}
+// Retrait depuis la fenêtre de saisie : on la ferme d'abord, la confirmation prend le relais.
+function undoFromDialog() {
+  const leg = setLeg.value;
+  setOpen.value = false;
+  if (leg) undoSet(leg);
 }
 function undoSet(leg: ComboLeg) {
   if (!activeCombo.value) return;
@@ -1450,6 +1487,20 @@ onMounted(async () => {
 /* Barre segmentée : une case par série (cible + supplémentaires, sur plusieurs lignes) */
 /* Grille de cellules UNIFORMES (mêmes dimensions faites/à faire) réparties
    proprement sur plusieurs lignes ; chaque colonne accueille « 12×15kg ». */
+.tap {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* La prochaine case à faire porte le « ＋ » : c'est là qu'on touche pour ajouter. */
+.seg.next {
+  color: var(--text);
+  font-weight: 800;
+  font-size: 14px;
+}
+.set-undo {
+  margin-right: auto;
+  color: var(--d4);
+}
 .seg-bar {
   flex: 1;
   min-width: 0;
@@ -1745,6 +1796,7 @@ onMounted(async () => {
   color: var(--dim);
 }
 .set-actions {
+  flex-wrap: wrap;
   display: flex;
   justify-content: flex-end;
   gap: 8px;

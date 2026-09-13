@@ -73,6 +73,16 @@ const EXERCISE_IMAGES: Record<string, string> = {
   ex_superman: '/exercises/ex_superman.jpg',
   ex_triceps_kickback: '/exercises/ex_triceps_kickback.jpg',
   ex_triceps_pushdown: '/exercises/ex_triceps_pushdown.jpg',
+  // Ajouts 2026-09 : exos du Défi 360 / prépa qui n'avaient pas d'animation.
+  ex_jump_rope: '/exercises/ex_jump_rope.jpg',
+  ex_pp_single_leg_rdl: '/exercises/ex_pp_single_leg_rdl.jpg',
+  ex_pp_cone_sprint: '/exercises/ex_pp_cone_sprint.jpg',
+  ex_ch_marche_course: '/exercises/ex_ch_marche_course.jpg',
+  ex_ch_velo: '/exercises/ex_ch_velo.jpg',
+  ex_jumping_jacks: '/exercises/ex_jumping_jacks.jpg',
+  ex_high_knees: '/exercises/ex_high_knees.jpg',
+  ex_ch_course: '/exercises/ex_ch_marche_course.jpg', // même piste (photos course/marche en extérieur)
+  ex_ch_marche: '/exercises/ex_ch_marche_course.jpg',
 };
 
 export function exerciseImage(id: string): string | undefined {
