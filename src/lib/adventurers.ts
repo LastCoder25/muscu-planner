@@ -16,7 +16,14 @@
 // pas les mêmes offres et n'ont pas le même destin, pour ~35 classes écrites au lieu de
 // 9 840. Les branches re-convergent naturellement (« Maître épéiste » est atteignable
 // depuis Épéiste comme depuis Bretteur : on ne l'écrit qu'une fois).
-import { RANK_COLOR, RANK_ORDER, RARITY_LABEL, type EffectType, type Rarity } from './items';
+import {
+  RANK_COLOR,
+  RANK_ORDER,
+  RARITY_LABEL,
+  rankCeilingForLevel,
+  type EffectType,
+  type Rarity,
+} from './items';
 // ⚠️ LE PRNG DU PROJET, pas une n-ième copie. Les trois qui traînaient étaient
 // arithmétiquement IDENTIQUES (seul l'idiome différait) — donc aucun tirage ne bouge —
 // mais quatre exemplaires d'un générateur seedé, c'est quatre occasions qu'une retouche
@@ -104,10 +111,39 @@ export interface AdvClass {
  *  écrite à la main aurait divergé au premier réglage de l'une des deux. */
 export const STRATUM_BUDGET: number[] = RANK_ORDER.map((_, i) => Math.round(6 * 1.219 ** i));
 
-/** Niveaux d'aventurier ouvrant chaque strate. Front-chargé : les 3 premières promotions
- *  tombent dans le premier mois même pour le joueur le plus léger — c'est ce qui accroche,
- *  et c'est acquis quel que soit le rythme sportif (mesuré sur 3 profils). */
-export const PROMO_LEVELS: readonly number[] = [1, 2, 3, 5, 8, 12, 17, 23];
+/**
+ * Niveaux d’aventurier ouvrant chaque strate — **DÉRIVÉS de l’échelle des OBJETS**.
+ *
+ * ⚠️ ILS ÉTAIENT ÉCRITS À LA MAIN (1/2/3/5/8/12/17/23) et front-chargés pour accrocher.
+ * Deux mesures ont eu raison de ce choix. (1) **Le mot ne voulait pas dire la même chose
+ * des deux côtés** : « épique » valait le niveau 8 pour un aventurier et le niveau 20
+ * pour une arme, alors que la v0.793 venait justement de faire du rang d’un aventurier
+ * SA RARETÉ, avec les libellés et les couleurs du butin. (2) **La progression s’éteignait
+ * au tiers du jeu** : les 8 raretés étaient bouclées au niveau 23, puis 77 niveaux sans
+ * le moindre changement de rang.
+ *
+ * ⚠️ ELLE EST CALCULÉE, PAS RECOPIÉE : `rankCeilingForLevel` est la seule autorité sur
+ * « à quel niveau telle rareté devient possible ». Une table jumelle écrite à la main
+ * aurait dérivé au premier réglage du gate — c’est exactement ce qui vient d’arriver.
+ * Résultat : **1 · 2 · 5 · 12 · 20 · 31 · 45 · 61**.
+ *
+ * ⚠️ CE QUE ÇA COÛTE, mesuré : le joueur le plus léger (une séance de 30 min par
+ * semaine) atteint Rare en un an au lieu de Légendaire, et jusqu’à 16 niveaux séparent
+ * deux promotions. C’est tenable **parce que les ÉTOILES portent le retour entre-temps**
+ * (v0.793) : elles parcourent la tranche d’une promotion à la suivante, donc un palier
+ * long n’est plus un palier muet. Sans elles, cet étalement serait injouable.
+ *
+ * ⚠️ ET UNE AFFIRMATION DE LA DOC ÉTAIT FAUSSE : « c’est l’XP de mission qui doit brider,
+ * jamais le plafond ». Mesuré sur trois profils sportifs, le niveau de l’aventurier
+ * **ÉGALE exactement** celui du joueur à chaque relevé — l’XP n’est JAMAIS le frein, la
+ * Guilde l’est toujours. Cette table se lit donc comme « à quel niveau de SPORT on
+ * débloque telle rareté », ce qui rend l’alignement sur les objets d’autant plus juste.
+ */
+export const PROMO_LEVELS: readonly number[] = RANK_ORDER.map((_, i) => {
+  let level = 1;
+  while (level < 200 && rankCeilingForLevel(level) < i) level++;
+  return level;
+});
 
 /** Poids de la montée en NIVEAU face au chemin de classes. À 0,15, un aventurier de
  *  niveau 23 vaut ×4,3 son niveau 1 — soit plus que tout l'écart de rareté. C'est

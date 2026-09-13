@@ -39,7 +39,7 @@ import {
   grantAdvXp,
   type Adventurer,
 } from '@/lib/adventurers';
-import { RANK_COLOR, RANK_ORDER, RARITY_LABEL } from '@/lib/items';
+import { RANK_COLOR, RANK_ORDER, RARITY_LABEL, rankCeilingForLevel } from '@/lib/items';
 
 const make = (over: Partial<Adventurer> = {}): Adventurer => ({
   id: 'a1',
@@ -224,9 +224,29 @@ describe('promotion — deux verrous, et le sport ne doit pas être le frein hab
     expect(canPromoteNow(blesse, { guildLevel: need, trainingLevel: 1, now: NOW })).toBe(true);
   });
 
-  it('les 3 premières promotions tombent tôt — c’est ce qui accroche', () => {
+  it('⚠️ L’ÉCHELLE EST CELLE DES OBJETS, elle n’est plus écrite à la main', () => {
+    // ⚠️ CE TEST ÉPINGLAIT LE FRONT-CHARGEMENT (« les 3 premières promotions tombent
+    // tôt »), qui a été retiré : « épique » valait le niveau 8 pour un aventurier et le
+    // niveau 20 pour une arme, alors que la v0.793 venait de faire du rang d'un
+    // aventurier SA RARETÉ — mêmes mots, mêmes couleurs que le butin. Deux tables
+    // jumelles écrites séparément finissent toujours par diverger ; celle-ci est
+    // désormais CALCULÉE depuis `rankCeilingForLevel`, la seule autorité sur « à quel
+    // niveau telle rareté devient possible ».
+    for (let i = 0; i < PROMO_LEVELS.length; i++) {
+      const L = PROMO_LEVELS[i]!;
+      expect(rankCeilingForLevel(L), `rareté ${i}`).toBeGreaterThanOrEqual(i);
+      if (L > 1) expect(rankCeilingForLevel(L - 1), `rareté ${i}, juste avant`).toBeLessThan(i);
+    }
+  });
+  it('la toute première classe reste immédiate — on ne recrute pas un aventurier muet', () => {
+    // L'étalement ne doit pas repousser l'ENTRÉE : on choisit sa classe au recrutement.
     expect(PROMO_LEVELS[0]).toBe(1);
-    expect(PROMO_LEVELS[2]).toBeLessThanOrEqual(3);
+  });
+  it('⚠️ …et la progression court jusqu’au bout du jeu, plus jusqu’au tiers', () => {
+    // Avant : les 8 raretés étaient bouclées au niveau 23, puis 77 niveaux sans le
+    // moindre changement de rang. C'est ce qui donnait la sensation de « beaucoup trop
+    // de changements de classe » — ils étaient tous entassés au début.
+    expect(PROMO_LEVELS[PROMO_LEVELS.length - 1]).toBeGreaterThan(50);
   });
   it('l’arbre s’arrête à 8 strates, comme les 8 raretés', () => {
     expect(PROMO_LEVELS.length).toBe(RANK_ORDER.length);
@@ -395,7 +415,11 @@ describe('⚠️ LE RANG EST LA CLASSE, LES ÉTOILES SONT LE TERRAIN', () => {
     });
     expect(advStar(fini(PROMO_LEVELS[PROMO_LEVELS.length - 1]!))).toBe(1);
     expect(advStar(fini(ADV_MAX_LEVEL))).toBe(ADV_STARS);
-    expect(advStar(fini(60))).toBeGreaterThan(advStar(fini(30)));
+    // ⚠️ Bornes DÉRIVÉES : à 8 classes, `canPromote` a forcément exigé le dernier
+    // palier — un aventurier complet SOUS ce niveau est un état que le jeu ne produit
+    // pas, et le tester revenait à mesurer une tranche écrasée.
+    const top = PROMO_LEVELS[PROMO_LEVELS.length - 1]!;
+    expect(advStar(fini(top + 20))).toBeGreaterThan(advStar(fini(top)));
   });
 
   it('l’étoile ne recule jamais et reste dans ses bornes', () => {
@@ -413,8 +437,9 @@ describe('⚠️ LE RANG EST LA CLASSE, LES ÉTOILES SONT LE TERRAIN', () => {
   it('la barre avance avec l’XP, pas seulement au passage de niveau', () => {
     // Le niveau est CACHÉ : sans ça, un aventurier peut travailler un palier entier sans
     // le moindre retour visible.
-    const a = strate(5, 9, 0);
-    const b = strate(5, 9, advXpToNext(9) / 2);
+    const mid = PROMO_LEVELS[4]! + 1;
+    const a = strate(5, mid, 0);
+    const b = strate(5, mid, advXpToNext(mid) / 2);
     expect(advRankProgress(b)).toBeGreaterThan(advRankProgress(a));
   });
 
@@ -434,12 +459,16 @@ describe('⚠️ LE RANG EST LA CLASSE, LES ÉTOILES SONT LE TERRAIN', () => {
     // ⚠️ Valeurs EXACTES, pas « > 0 » : une barre étirée sur la tranche entière passerait
     // un test de simple croissance en rendant 0,25 là où on attend 1 — et l'étoile
     // suivante n'aurait plus aucun rapport avec le remplissage.
-    // Strate 5 : la tranche va du niveau 8 au 12, soit une étoile par niveau.
-    expect(advStarBand(strate(5, 8))).toEqual({ from: 8, to: 12 });
-    expect(advRankProgress(strate(5, 8, 0))).toBe(0);
-    expect(advRankProgress(strate(5, 9, 0))).toBe(0); // niveau 9 = nouvelle étoile
-    expect(advRankProgress(strate(5, 8, advXpToNext(8) / 2))).toBeCloseTo(0.5, 6);
-    expect(advRankProgress(strate(5, 12, 0))).toBe(1); // ★★★★★ : la barre est pleine
+    // ⚠️ LES BORNES SONT DÉRIVÉES, plus écrites : ce test épinglait « 8 → 12 », donc il
+    // est tombé quand la cadence a changé — alors que la PROPRIÉTÉ, elle, n'avait pas
+    // bougé d'un pouce. Un test qui pin des valeurs se casse à chaque réglage sans rien
+    // protéger de plus.
+    const from = PROMO_LEVELS[4]!;
+    const to = PROMO_LEVELS[5]!;
+    expect(advStarBand(strate(5, from))).toEqual({ from, to });
+    expect(advRankProgress(strate(5, from, 0))).toBe(0);
+    expect(advRankProgress(strate(5, from, advXpToNext(from) / 2))).toBeGreaterThan(0);
+    expect(advRankProgress(strate(5, to, 0))).toBe(1); // ★★★★★ : la barre est pleine
   });
 
   it('la barre est pleine EXACTEMENT quand la 5e étoile est là', () => {
@@ -461,7 +490,12 @@ describe('⚠️ LE RANG EST LA CLASSE, LES ÉTOILES SONT LE TERRAIN', () => {
 
 describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
   const CTX = { guildLevel: 99, trainingLevel: 5, now: 1_000_000 };
-  /** Strate 5 : la tranche va du niveau 8 au 12 — une étoile par niveau, donc un
+  /** ⚠️ Les niveaux sont DÉRIVÉS de la tranche, pas écrits : ce bloc épinglait 8/9/11/12,
+   *  donc il est tombé le jour où la cadence a changé alors qu'aucune de ses propriétés
+   *  n'avait bougé. On lit les bornes de la strate 5 et on s'y place. */
+  const DEB = PROMO_LEVELS[4]!;
+  const FIN = PROMO_LEVELS[5]!;
+  /** Strate 5 : la tranche va d'une promotion à la suivante, donc un
    *  gain d’étoile s’obtient avec un seul niveau. */
   const LIGNEE = ['guerrier', 'brute', 'colosse', 'titan', 'rempart'];
   const at = (id: string, level: number, over: Partial<Adventurer> = {}) =>
@@ -470,31 +504,32 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
   it('une étoile gagnée est ANNONCÉE — le niveau, lui, reste caché', () => {
     // ⚠️ Sans ça, des semaines de convois ne se voient qu'en rouvrant la Guilde pour
     // y lire une barre : c'est le seul retour que le joueur ait sur son vivier.
-    const ev = advProgressOf([at('a', 8)], [at('a', 9)], CTX);
+    const ev = advProgressOf([at('a', DEB)], [at('a', FIN - 1)], CTX);
     expect(ev).toHaveLength(1);
-    expect(ev[0]).toMatchObject({ id: 'a', from: 1, to: 2, promoted: false });
+    expect(ev[0]!.to).toBeGreaterThan(ev[0]!.from);
+    expect(ev[0]).toMatchObject({ id: 'a', from: 1, promoted: false });
     expect(ev[0]!.rarity).toBe(RANK_ORDER[4]);
   });
 
   it('rien à dire quand rien n’a bougé', () => {
-    expect(advProgressOf([at('a', 9)], [at('a', 9)], CTX)).toEqual([]);
+    expect(advProgressOf([at('a', DEB)], [at('a', DEB)], CTX)).toEqual([]);
   });
 
   it('⚠️ `promoted` est un FRANCHISSEMENT, pas un état', () => {
     // C'est tout ce qui empêche la feuille de promotion de se rouvrir à CHAQUE
     // cargaison pour quelqu'un qu'on a déjà décidé de ne pas promouvoir. Ce qui ouvre
     // la fenêtre, c'est que CETTE mission l'a rendue possible.
-    const ouvre = advProgressOf([at('a', 11)], [at('a', 12)], CTX);
+    const ouvre = advProgressOf([at('a', FIN - 1)], [at('a', FIN)], CTX);
     expect(ouvre[0]?.promoted).toBe(true);
     // Déjà promouvable avant ET après : on se tait, le badge ⭐ de la Guilde suffit.
-    expect(advProgressOf([at('a', 12)], [at('a', 12)], CTX)).toEqual([]);
+    expect(advProgressOf([at('a', FIN)], [at('a', FIN)], CTX)).toEqual([]);
   });
 
   it('une promotion se dit même sans étoile de plus', () => {
     // Cas réel : il était DÉJÀ à l'étoile maximale mais parti en convoi (donc pas
     // promouvable). Il rentre, la promotion s'ouvre — sans qu'aucune étoile ne bouge.
-    const parti = at('a', 12, { busyUntil: CTX.now + 60_000 });
-    const rentre = at('a', 12);
+    const parti = at('a', FIN, { busyUntil: CTX.now + 60_000 });
+    const rentre = at('a', FIN);
     const ev = advProgressOf([parti], [rentre], CTX);
     expect(ev).toHaveLength(1);
     expect(ev[0]).toMatchObject({ from: 5, to: 5, promoted: true });
@@ -503,18 +538,18 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
   it('⚠️ sans Centre de formation, on n’annonce AUCUNE promotion', () => {
     // Le store la refuserait : promettre une fenêtre qui ne peut pas s'ouvrir est pire
     // que se taire. La règle vit dans `canPromoteNow`, on ne la ré-écrit pas ici.
-    const ev = advProgressOf([at('a', 11)], [at('a', 12)], { ...CTX, trainingLevel: 0 });
+    const ev = advProgressOf([at('a', FIN - 1)], [at('a', FIN)], { ...CTX, trainingLevel: 0 });
     expect(ev[0]?.promoted).toBe(false);
   });
 
   it('un aventurier recruté entre-temps n’a rien « gagné »', () => {
-    expect(advProgressOf([], [at('a', 12)], CTX)).toEqual([]);
+    expect(advProgressOf([], [at('a', FIN)], CTX)).toEqual([]);
   });
 
   it('chaque membre de l’escorte est annoncé séparément', () => {
     const ev = advProgressOf(
-      [at('a', 8), at('b', 9), at('c', 8)],
-      [at('a', 9), at('b', 9), at('c', 10)],
+      [at('a', DEB), at('b', DEB + 3), at('c', DEB)],
+      [at('a', DEB + 3), at('b', DEB + 3), at('c', DEB + 6)],
       CTX,
     );
     expect(ev.map((e) => e.id)).toEqual(['a', 'c']);
