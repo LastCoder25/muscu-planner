@@ -48,6 +48,7 @@ import {
   type TalentInstance,
 } from '@/lib/talents';
 import { voiePassiveEffects, VOIES } from '@/lib/voies';
+import { keysAfterPaying } from '@/data/labyrinths';
 import {
   isClaimable,
   createMap,
@@ -640,11 +641,11 @@ export const useCharacterStore = defineStore('character', () => {
   // Consomme les clés d’un palier du Labyrinthe (garde-fou : refuse si le compte n’y est pas).
   async function spendKey(userId: string, n = 1): Promise<boolean> {
     const cur = row.value;
-    // ⚠️ Un palier profond coûte PLUSIEURS clés (`labyKeyCost`) : le refus se juge sur le
-    // prix entier, jamais sur « au moins une ». Sinon on entrait avec une clé pour trois.
-    const cost = Math.max(1, Math.floor(n));
-    if (!cur || cur.keys < cost) return false;
-    await persist(userId, { keys: cur.keys - cost });
+    // ⚠️ Le prix ENTIER (règle dans `keysAfterPaying`, testée) : un palier profond coûte
+    // plusieurs clés, et on n’entre pas avec une clé pour trois.
+    const reste = cur ? keysAfterPaying(cur.keys, n) : null;
+    if (reste === null) return false;
+    await persist(userId, { keys: reste });
     return true;
   }
   // Crédite le butin d'une expédition/Labyrinthe (or + poussière + parchemins

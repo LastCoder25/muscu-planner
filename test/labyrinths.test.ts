@@ -7,6 +7,7 @@ import {
   frontierLabyrinth,
   deathKeepFraction,
   labyKeyCost,
+  keysAfterPaying,
 } from '@/data/labyrinths';
 import { buildingProdPerHour, buildingStorageCap } from '@/lib/buildings';
 import { RANK_ORDER, RARITY_RANK, rankCeilingForLevel } from '@/lib/items';
@@ -104,5 +105,34 @@ describe('🗝️ UNE CLÉ EST UNE MONNAIE : le prix suit la profondeur', () => 
       expect(runs, `niveau ${L}`).toBeGreaterThanOrEqual(2);
       expect(runs, `niveau ${L}`).toBeLessThanOrEqual(5);
     }
+  });
+});
+
+describe('🗝️ ON PAIE LE PRIX ENTIER', () => {
+  // ⚠️ Relevé non traité de la v0.799 : la vérification vivait dans le store, hors des tests.
+  it('le compte exact passe, et il ne reste rien', () => {
+    expect(keysAfterPaying(3, 3)).toBe(0);
+    expect(keysAfterPaying(7, 2)).toBe(5);
+  });
+
+  it('⚠️ une clé pour trois ne fait PAS entrer', () => {
+    expect(keysAfterPaying(1, 3)).toBeNull();
+    expect(keysAfterPaying(2, 3)).toBeNull();
+    expect(keysAfterPaying(0, 1)).toBeNull();
+  });
+
+  it('à chaque palier : une clé de moins que le prix est refusée, le prix passe', () => {
+    for (const l of LABYRINTHS) {
+      const prix = labyKeyCost(l.id);
+      expect(keysAfterPaying(prix - 1, prix), l.id).toBeNull();
+      expect(keysAfterPaying(prix, prix), l.id).toBe(0);
+    }
+  });
+
+  it('un coût nul ou fractionnaire coûte au moins une clé', () => {
+    expect(keysAfterPaying(0, 0)).toBeNull();
+    expect(keysAfterPaying(1, 0)).toBe(0);
+    expect(keysAfterPaying(1, 0.5)).toBe(0);
+    expect(keysAfterPaying(5, 2.9)).toBe(3);
   });
 });

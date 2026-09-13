@@ -202,7 +202,7 @@ export const BATTLE = {
 /** @public — contrat du moteur : la mise en scène rejouera ce log, comme SiegeStage. */
 export interface BattleEvent {
   round: number;
-  kind: 'hit' | 'wall' | 'breach' | 'enter' | 'down' | 'descend';
+  kind: 'hit' | 'wall' | 'breach' | 'enter' | 'down' | 'descend' | 'flank';
   /** Qui frappe (absent pour l'ouverture de la brèche). */
   from?: string;
   /** Qui encaisse (`'wall'` pour la muraille). */
@@ -210,6 +210,9 @@ export interface BattleEvent {
   amount?: number;
   /** Largeur de la brèche au moment où elle s'ouvre ou s'élargit. */
   width?: number;
+  /** `flank` : le PAS fait le long de l’enceinte (+1 ou −1 pan). Un pas, et non le pan
+   *  d’arrivée : le rejeu n’a pas à connaître la numérotation des secteurs du moteur. */
+  step?: number;
 }
 
 export interface BattleResult {
@@ -322,11 +325,17 @@ function attackerTargets(u: SiegeUnit, def: SiegeUnit[], breach: number): SiegeU
   if (!u.inside && (u.dist ?? 0) > (u.range ?? 0)) return [];
   // Un tireur vise le REMPART : ce sont ses servants qui le tuent, et les faire taire
   // est la seule façon d'ouvrir la voie aux siens.
-  const remparts = def.filter(onRampart);
+  // ⚠️ IL NE VOIT QUE SON CÔTÉ DE L’ENCEINTE — la même règle d’arc que celle des balistes,
+  // qui ne tirent que devant elles. Sans elle, 63 % des traits ennemis sur une baliste
+  // visaient le côté OPPOSÉ de la ville (mesuré v0.800) : la volée traversait toute la cité.
+  // Les tireurs du rempart n’ont pas de secteur (ils marchent le long du mur) : toujours
+  // visibles. Un tireur n’entrant jamais dans la cour, il n’y a pas de cas « dedans ».
+  const voit = (d: SiegeUnit) => inArc(d, u);
+  const remparts = def.filter((d) => onRampart(d) && voit(d));
   if (remparts.length) return remparts;
-  // Rempart muet — abattu, OU descendu : on arrose ce qui reste, mais seulement si la
-  // brèche offre une ligne de vue.
-  return breach > 0 ? def.filter(alive) : [];
+  // Rempart muet DE CE CÔTÉ — abattu, OU descendu : on arrose ce qui reste à vue, mais
+  // seulement si la brèche offre une ligne de vue.
+  return breach > 0 ? def.filter((d) => alive(d) && voit(d)) : [];
 }
 
 /**
@@ -367,6 +376,38 @@ function yardIsFalling(def: SiegeUnit[], att: SiegeUnit[]): boolean {
   const menace = att.reduce((n, a) => (a.inside && alive(a) ? n + a.damage : n), 0);
   if (menace <= 0) return false;
   return menace > def.reduce((n, d) => (inYard(d) ? n + d.damage : n), 0);
+}
+
+/**
+ * UN TIREUR SANS CIBLE LONGE L’ENCEINTE — un pan par tour, vers la baliste debout la plus
+ * proche.
+ *
+ * ⚠️ C’EST LE PENDANT OBLIGATOIRE DE L’ARC DES ASSAILLANTS (v0.800). Dès qu’un tireur ne
+ * voit plus que son côté, les balistes du côté opposé deviennent hors d’atteinte : une fois
+ * celles du front abattues et les hommes d’armes tombés, les archers restés dehors
+ * n’avaient plus RIEN à faire, et le siège expirait au plafond de tours — compté comme
+ * tenu. Mesuré au niveau 90, enceinte pleine : sièges gelés **20 % → 62 %**, tenue
+ * **63 % → 89 %** — la base devenait imprenable par un effet de bord. Avant, ces archers
+ * finissaient le travail en tirant à travers toute la ville ; désormais ils marchent.
+ *
+ * Seulement à PORTÉE (un tireur qui traverse encore le terrain avance d’abord), et vers ce
+ * qui a un secteur : les tireurs du rempart n’en ont pas, ils sont vus de partout.
+ */
+function flank(a: SiegeUnit, def: SiegeUnit[], round: number, log: BattleEvent[]): void {
+  if (a.sector === undefined || (a.dist ?? 0) > (a.range ?? 0)) return;
+  let best: number | null = null;
+  for (const d of def) {
+    if (!onRampart(d) || d.sector === undefined) continue;
+    const gap = sectorGap(a.sector, d.sector);
+    if (gap <= BATTLE.turretArc) return; // déjà en vue : rien à longer
+    if (best === null || gap < sectorGap(a.sector, best)) best = d.sector;
+  }
+  if (best === null) return;
+  // Le plus court chemin sur l’anneau : on tourne dans le sens qui rapproche.
+  const n = BATTLE.sectors;
+  const step = (best - a.sector + n) % n <= n / 2 ? 1 : -1;
+  a.sector = (a.sector + step + n) % n;
+  log.push({ round, kind: 'flank', from: a.id, step });
 }
 
 /** Frappe, et rend l'EXCÉDENT non consommé (0 si la cible a encaissé le tout). */
@@ -553,6 +594,7 @@ export function simulateSiege(
           w.pv -= dealt;
           log.push({ round, kind: 'wall', from: a.id, amount: dealt });
         }
+        if (a.kind === 'ranged') flank(a, def, round, log);
         continue;
       }
       // ⚠️ Un archer qui tire À TRAVERS la brèche ne donne qu'une fraction de son feu :

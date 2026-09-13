@@ -157,7 +157,10 @@ describe('la répartition par contributeur', () => {
     // zéro. Balayé sur 6 niveaux × 4 parts d'enceinte : 70 % au niveau 26 donne une
     // tenue de **0,50** — le milieu exact de la courbe, là où une ablation dit le plus —
     // avec mur 0,50 · tourelles 0,50 · héros 0,17.
-    const lvl = 26;
+    // ⚠️ Puis niveau **40** à 70 % (v0.800) : les tireurs adverses ne voient plus que leur côté
+    // de l’enceinte, et au niveau 26 la part du héros retombait à zéro. Balayé sur 8 niveaux ×
+    // 6 parts : tenue 0,50 · mur 0,50 · tourelles 0,50 · héros **0,21**, la plus nette.
+    const lvl = 40;
     const defs = defAt(Math.round(lvl * 0.7));
     const b = defenseBreakdown(defs, lvl, refFighter(lvl), [], NOW);
     const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
@@ -578,20 +581,27 @@ describe('⚔️ LA PUISSANCE DE DÉFENSE : une MAGNITUDE, pas un pronostic', ()
   // parce qu’on s’en servait pour PRONOSTIQUER via un rapport de puissances devenu infidèle.
   // Le pronostic reste SIMULÉ ; la puissance ne répond qu’à « est-ce que je vaux plus
   // qu’hier ? » — ce à quoi elle répond toujours juste, parce qu’elle est MONOTONE.
-  it('⚠️ elle MONTE À CHAQUE CRAN, là où la tenue est déjà collée à 100 %', () => {
-    const L = 30;
+  it('⚠️ elle MONTE À CHAQUE CRAN, là où la tenue ne bouge pas', () => {
+    // ⚠️ RÉÉCRIT (v0.800), pas relâché. Il comptait les crans « collés à 100 % » ; depuis que
+    // les tireurs adverses ne gaspillent plus leur feu sur le côté opposé de la ville, plus
+    // aucune enceinte INCOMPLÈTE ne sature (mesuré aux niveaux 6 à 60). La propriété, elle,
+    // tient toujours : la tenue avance par PALIERS (elle se mesure sur six armées), la
+    // puissance à chaque cran. Mesuré au niveau 26 : 60 % et 70 % tiennent tous deux 0,50,
+    // 75 % et 80 % tous deux 0,67 — quatre améliorations dont deux invisibles sans elle.
+    const L = 26;
     let prevPower = 0;
-    let satures = 0;
-    for (const part of [0.7, 0.8, 0.9, 1]) {
+    let prevHold = -1;
+    let muets = 0;
+    for (const part of [0.6, 0.7, 0.75, 0.8, 0.9, 1]) {
       const b = defenseBreakdown(defAt(Math.round(L * part)), L, refFighter(L), [], NOW);
       expect(b.power).toBeGreaterThan(prevPower);
+      if (b.hold === prevHold) muets++;
       prevPower = b.power;
-      if (b.hold >= 0.99) satures++;
+      prevHold = b.hold;
     }
-    // …et la démonstration : au moins deux de ces crans sont INDISCERNABLES en tenue.
-    // Sans la puissance, le joueur paierait des dizaines de milliers d’or sans voir
-    // le moindre chiffre bouger.
-    expect(satures).toBeGreaterThanOrEqual(2);
+    // …et la démonstration : au moins deux crans sont INDISCERNABLES en tenue. Sans la
+    // puissance, le joueur paierait des dizaines de milliers d’or sans voir bouger un chiffre.
+    expect(muets).toBeGreaterThanOrEqual(2);
   });
 
   it('⚠️ la PART d’un contributeur ne sature pas non plus', () => {

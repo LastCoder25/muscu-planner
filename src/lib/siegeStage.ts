@@ -32,6 +32,11 @@ export interface SiegeBody {
   /** Angle d'arrivée (radians) et distance de départ, hors des murs. */
   angle: number;
   dist: number;
+  /** Les pas faits le long de l’enceinte (v0.800) : au tour `round`, le corps se tient
+   *  `offset` pans plus loin que son pan d’arrivée. Cumulé, dans l’ordre du log. Un tireur
+   *  sans cible longe le mur jusqu’à la baliste suivante — sans ça, le rejeu le laisserait
+   *  sur son pan et la baliste qui le vise semblerait tirer au loin. */
+  moves: { round: number; offset: number }[];
 }
 
 /** Ce qu’un temps montre. */
@@ -316,6 +321,16 @@ export function sectorAngle(sector: number): number {
   return -Math.PI / 2 + STEP / 2 + sector * STEP;
 }
 
+/** Angle d’un corps AU TOUR donné, compte tenu de ses pas le long de l’enceinte. */
+export function bodyAngleAt(b: SiegeBody, round: number): number {
+  let offset = 0;
+  for (const m of b.moves) {
+    if (m.round > round) break;
+    offset = m.offset;
+  }
+  return b.angle + offset * STEP;
+}
+
 /**
  * Place les corps d’une armée SUR LE PAN QUE LE MOTEUR LEUR A DONNÉ.
  *
@@ -358,6 +373,7 @@ export function placeBodies(groups: RaidGroup[], seed: number, firstSector = 0):
         // groupes pour qu’on distingue les vagues.
         angle: center + (t - 0.5) * STEP * SIEGE_STAGE.panFill + (rng() - 0.5) * 0.08,
         dist: SIEGE_STAGE.spawnMin + rank * slice + rng() * slice,
+        moves: [],
       });
     }
   });
@@ -733,6 +749,15 @@ export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeS
   };
 
   for (const e of report.log) {
+    if (e.kind === 'flank') {
+      // Pas un temps : un déplacement. Il ne prend pas de place dans le rythme du rejeu, le
+      // corps glisse simplement vers son nouveau pan pendant les temps suivants.
+      const b = bodyOf(e.from);
+      if (b < 0) continue;
+      const moves = bodies[b]!.moves;
+      moves.push({ round: e.round, offset: (moves.at(-1)?.offset ?? 0) + (e.step ?? 0) });
+      continue;
+    }
     if (e.kind === 'down') {
       if (!last) continue;
       const b = bodyOf(e.to);

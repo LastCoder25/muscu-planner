@@ -234,6 +234,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import {
   aimDeg,
   assaultRadius,
+  bodyAngleAt,
   battlefieldDecor,
   beatTiming,
   breachCamera,
@@ -393,13 +394,15 @@ const insideAlive = computed(
   () => [...inside.value.keys()].filter((b) => !dead.value.has(b)).length,
 );
 
-/** Un corps marche sur son pan jusqu'au pied du mur ; entré, il se tient dans la cour. */
+/** Un corps marche sur son pan jusqu'au pied du mur — et le LONGE s'il n'a plus de cible
+ *  (un tireur va chercher la baliste suivante) ; entré, il se tient dans la cour. */
 function bodyPos(b: SiegeBody, i: number): { x: number; y: number } {
   const k = inside.value.get(i);
   if (k !== undefined) return yardAttackerSpot(stage.value.breachAngle, k);
   const tour = dead.value.get(i) ?? curRound.value;
   const d = assaultRadius(b.dist, tour);
-  return { x: 100 + Math.cos(b.angle) * d, y: 100 + Math.sin(b.angle) * d };
+  const a = bodyAngleAt(b, tour);
+  return { x: 100 + Math.cos(a) * d, y: 100 + Math.sin(a) * d };
 }
 
 /** Où se tient un défenseur, compte tenu de ceux qui sont descendus du rempart. */

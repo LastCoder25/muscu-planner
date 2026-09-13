@@ -413,6 +413,18 @@ export const RAID = {
   // 0,06. C’est elle, et non l’iso-menace, qui interdit d’aller plus loin — et elle interdit
   // aussi de la combiner avec une baisse des tourelles (0,055 + turretDmgK 0,16 → 5).
   foeDmgK: 0.055,
+  /** Part de `foeDmgK` que porte un TIREUR assaillant (la mêlée garde 1).
+   *  ⚠️ NÉE D’UNE CORRECTION DE MODÈLE, pas d’un nerf (v0.800). Les tireurs adverses ne
+   *  voient plus que leur côté de l’enceinte : avant, **63 % de leurs traits sur une baliste**
+   *  visaient le côté OPPOSÉ de la ville. Ce feu perdu était un bonus CACHÉ de la défense —
+   *  le retirer faisait tomber la tenue d’une enceinte pleine au niveau 90 de 63 % à 49 %.
+   *  On rend exactement ce que le gaspillage donnait, à l’endroit qui l’a causé.
+   *  ⚠️ Pas `turretPvK` : c’était le premier levier mesuré (0,65 recollait la courbe), mais il
+   *  contredit « le mur porte plus de PV que toutes les balistes réunies » (v0.769, demande de
+   *  l’utilisateur). Mesuré à 0,6, tenue sans personne / avec tout le monde / 70 % sans /
+   *  70 % avec vivier, niveaux 12·28·60·90 : 78/100/21/61 · 82/93/36/63 · 78/89/23/32 ·
+   *  65/90/7/16, contre 87/100/23/71 · 81/97/32/69 · 73/91/18/38 · 63/87/7/23 avant. */
+  foeRangedDmgK: 0.6,
   championPvMult: 3, // le champion est une élite, pas un soldat de plus
   championDmgMult: 2.2,
   // Les dégâts d'un groupe croissent en √effectif, pas linéairement : seuls quelques
@@ -1009,7 +1021,10 @@ export function groupCombatant(g: RaidGroup): Combatant {
   const champPv = g.champion ? RAID.championPvMult : 1;
   const champDmg = g.champion ? RAID.championDmgMult : 1;
   const unitPv = offensePerRound(ref) * RAID.foePvK * champPv * um;
-  const unitDmg = ref.pv * RAID.foeDmgK * champDmg * silhouetteDmgMult(um);
+  // ⚠️ Même part de tir que dans `siegeAttackers` : l’estimation de la Tour de guet et la
+  // bataille doivent parler de la même armée.
+  const tir = groupKind(g) === 'ranged' ? RAID.foeRangedDmgK : 1;
+  const unitDmg = ref.pv * RAID.foeDmgK * tir * champDmg * silhouetteDmgMult(um);
   // ⚠️ EFFECTIF DE CALIBRATION : la foule visible est ramenée au nombre sur lequel la
   // difficulté a été mesurée. Les PV suivent l’effectif, les dégâts sa RACINE — la
   // dilution doit donc emprunter le MÊME chemin, sans quoi une armée plus nombreuse
@@ -1955,8 +1970,14 @@ export function siegeAttackers(raid: Raid): SiegeUnit[] {
     const champDmg = g.champion ? RAID.championDmgMult : 1;
     const unitPv = (offensePerRound(ref) * RAID.foePvK * champPv * um) / mm;
     const eff = g.count / mm;
+    const tir = groupKind(g) === 'ranged' ? RAID.foeRangedDmgK : 1;
     const groupDmg =
-      ref.pv * RAID.foeDmgK * champDmg * silhouetteDmgMult(um) * Math.pow(eff, RAID.groupDmgExp);
+      ref.pv *
+      RAID.foeDmgK *
+      tir *
+      champDmg *
+      silhouetteDmgMult(um) *
+      Math.pow(eff, RAID.groupDmgExp);
     const perBody = groupDmg / Math.max(1, g.count);
     for (let i = 0; i < g.count; i++) {
       out.push({

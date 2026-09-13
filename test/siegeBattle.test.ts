@@ -691,3 +691,105 @@ describe('🏚️ QUAND LA VILLE EST-ELLE PRISE ?', () => {
     expect(r.held).toBe(true);
   });
 });
+
+describe('🎯 UN TIREUR ASSAILLANT NE VOIT QUE SON CÔTÉ DE L’ENCEINTE', () => {
+  // ⚠️ Relevé sur le rejeu : des volées ennemies traversaient toute la ville pour frapper une
+  // baliste du côté opposé. Le rejeu ne faisait que le montrer — c’est le moteur qui le
+  // décidait. Mesuré : 63 % des traits ennemis sur une baliste visaient une baliste HORS de
+  // l’arc de leur pan, à tous les niveaux. Les balistes, elles, ne tiraient déjà que devant.
+  const loin = (s: number) => (s + BATTLE.turretArc + 2) % BATTLE.sectors;
+  const archer = (o: Partial<SiegeUnit> = {}) =>
+    att('ranged', { sector: 0, dist: 0, range: 2, pv: 1e9, damage: 5, ...o });
+  // Une baliste qui ne rend pas les coups : on ne mesure que ce que l’archer vise.
+  const tour = (sector: number, o: Partial<SiegeUnit> = {}) =>
+    turret({ sector, pv: 1e9, damage: 0, range: 0, ...o });
+
+  /** Où se tient chaque assaillant, tour par tour : son pan de départ + ses pas. */
+  const pans = (units: SiegeUnit[], log: ReturnType<typeof simulateSiege>['log']) => {
+    const at = new Map(units.map((u) => [u.id, u.sector ?? 0]));
+    return (e: (typeof log)[number]) => {
+      if (e.kind === 'flank' && e.from) {
+        at.set(e.from, (at.get(e.from)! + (e.step ?? 0) + BATTLE.sectors) % BATTLE.sectors);
+      }
+      return e.from ? at.get(e.from) : undefined;
+    };
+  };
+
+  it('tant qu’une baliste de SON côté est debout, il ne tire jamais sur celle d’en face', () => {
+    const a = archer();
+    const pres = tour(1, { id: 'pres' });
+    const face = tour(loin(0), { id: 'face' });
+    const r = simulateSiege([a], [face, pres], wall(1e9), 3);
+    const hits = r.log.filter((e) => e.kind === 'hit' && e.from === a.id);
+    expect(hits.length).toBeGreaterThan(5);
+    expect(hits.every((e) => e.to === 'pres')).toBe(true);
+  });
+
+  it('⚠️ AUCUN trait ne part vers une baliste hors de l’arc du pan où il SE TIENT', () => {
+    const archers = [0, 0, 3, 5].map((s) => archer({ sector: s, damage: 400 }));
+    const tours = Array.from({ length: BATTLE.sectors }, (_, s) =>
+      tour(s, { id: `t${s}`, pv: 2000, maxPv: 2000 }),
+    );
+    const sector = new Map(tours.map((t) => [t.id, t.sector!]));
+    const r = simulateSiege(archers, tours, wall(1e9), 11);
+    const ou = pans(archers, r.log);
+    let tirs = 0;
+    for (const e of r.log) {
+      const s = ou(e);
+      if (e.kind !== 'hit' || s === undefined || !e.to || !sector.has(e.to)) continue;
+      tirs++;
+      expect(sectorGap(s, sector.get(e.to)!)).toBeLessThanOrEqual(BATTLE.turretArc);
+    }
+    expect(tirs).toBeGreaterThan(8);
+  });
+
+  it('⚠️ SANS CIBLE, IL LONGE L’ENCEINTE — et le siège ne gèle pas', () => {
+    // C’est le pendant obligatoire de l’arc : sans lui, les archers restés dehors une fois
+    // leurs balistes abattues n’avaient plus rien à faire, et le siège expirait au plafond de
+    // tours compté comme tenu (mesuré niveau 90 : sièges gelés 20 % → 62 %).
+    const a = archer({ damage: 500 });
+    const face = tour(4, { id: 'face', pv: 1000, maxPv: 1000 });
+    const r = simulateSiege([a], [face], wall(0, 1000), 5);
+    const pas = r.log.filter((e) => e.kind === 'flank');
+    expect(pas.length).toBeGreaterThan(0);
+    expect(pas.every((e) => Math.abs(e.step ?? 0) === 1)).toBe(true);
+    // Un pan par tour : il ne se téléporte pas.
+    expect(new Set(pas.map((e) => e.round)).size).toBe(pas.length);
+    // ⚠️ Brèche ouverte (mur à zéro) : le repli « on arrose ce qui reste » ne doit pas
+    // rouvrir le tir à travers la ville. Chaque trait part d’un pan d’où la baliste est en vue.
+    // (Ajouté après une mutation passée au VERT : sans cette assertion, le seul fait qu’un
+    // pas existe suffisait, alors que l’archer pouvait tirer d’en face dès le tour suivant.)
+    const ou = pans([a], r.log);
+    let tirs = 0;
+    for (const e of r.log) {
+      const s = ou(e);
+      if (e.kind !== 'hit' || e.to !== 'face' || s === undefined) continue;
+      tirs++;
+      expect(sectorGap(s, 4)).toBeLessThanOrEqual(BATTLE.turretArc);
+    }
+    expect(tirs).toBeGreaterThan(0);
+    // …et il finit par la faire taire : la base sans défenseur et sans mur tombe.
+    expect(r.log.some((e) => e.kind === 'down' && e.to === 'face')).toBe(true);
+    expect(r.held).toBe(false);
+  });
+
+  it('il tourne dans le sens qui RAPPROCHE', () => {
+    for (const [depart, cible, sens] of [
+      [7, 2, 1],
+      [0, 5, -1],
+      [2, 6, 1],
+    ] as const) {
+      const a = archer({ sector: depart });
+      const r = simulateSiege([a], [tour(cible)], wall(1e9), 1);
+      expect(r.log.find((e) => e.kind === 'flank')?.step, `${depart} → ${cible}`).toBe(sens);
+    }
+  });
+
+  it('il ne longe rien tant qu’il traverse encore le terrain', () => {
+    const a = archer({ dist: 5, speed: 1, range: 2 });
+    const r = simulateSiege([a], [tour(4)], wall(1e9), 1);
+    const premier = r.log.find((e) => e.kind === 'flank');
+    // Il faut 3 tours pour entrer dans sa portée (5 → 2) : pas un pas avant.
+    expect(premier?.round).toBeGreaterThanOrEqual(3);
+  });
+});

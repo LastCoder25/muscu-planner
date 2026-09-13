@@ -19,6 +19,7 @@ import {
   nearestTurret,
   reportSeed,
   sectorAngle,
+  bodyAngleAt,
   SHOT,
   SIEGE_STAGE,
   turnToward,
@@ -569,7 +570,9 @@ describe('🏹 LES BALISTES VISENT CE QU’ELLES FRAPPENT', () => {
         if (b.kind !== 'turret') continue;
         tirs++;
         const cible = stage.bodies[b.targets[0]!]!;
-        const ecart = ecartAngle(sectorAngle(b.turret), cible.angle);
+        // ⚠️ Au TOUR du tir : un tireur sans cible longe l’enceinte (v0.800), son pan
+        // d’arrivée ne dit plus où il se tient.
+        const ecart = ecartAngle(sectorAngle(b.turret), bodyAngleAt(cible, b.round));
         expect(ecart).toBeLessThanOrEqual((BATTLE.turretArc + 0.5) * STEP + 1e-9);
       }
     }
@@ -618,10 +621,14 @@ describe('🏹 LES BALISTES VISENT CE QU’ELLES FRAPPENT', () => {
   });
 
   it('la pause dramatique n’arrive qu’à l’OUVERTURE de la brèche, pas à chaque élargissement', () => {
-    const { stage } = breche(17);
-    const n = stage.beats.length;
-    const breches = stage.beats.filter((b) => b.kind === 'breach');
-    expect(breches.length).toBeGreaterThan(1);
+    // ⚠️ Le siège témoin est CHERCHÉ, plus figé sur une graine : un réglage du moteur
+    // change quel siège s’élargit, et une graine fixe cessait de tester quoi que ce soit.
+    const stage = [17, 3, 5, 9, 29, 111, 2024, 41, 77, 88]
+      .map((seed) => breche(seed).stage)
+      .find((st) => st.beats.filter((b) => b.kind === 'breach').length > 1);
+    expect(stage, 'un siège dont la brèche s’élargit').toBeDefined();
+    const n = stage!.beats.length;
+    const breches = stage!.beats.filter((b) => b.kind === 'breach');
     for (const b of breches) {
       const t = beatTiming(b, n).total;
       if (b.opens) expect(t).toBeGreaterThanOrEqual(SHOT.breachMs);

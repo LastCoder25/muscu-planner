@@ -175,6 +175,19 @@ export function labyKeyCost(id: string): number {
   return 1 + Math.floor(i / 3);
 }
 
+/**
+ * Les clés qui restent après avoir payé `cost`, ou `null` si le compte n’y est pas.
+ *
+ * ⚠️ LE PRIX ENTIER, jamais « au moins une » : un palier profond coûte plusieurs clés, et un
+ * garde sur `keys > 0` laissait entrer avec une clé pour trois. Vivait dans le store, donc
+ * hors de portée des tests — c’était le relevé non traité de la v0.799. Un coût est au
+ * moins d’une clé : un paramètre à zéro ou fractionnaire ne fait pas entrer gratuitement.
+ */
+export function keysAfterPaying(keys: number, cost: number): number | null {
+  const prix = Math.max(1, Math.floor(cost));
+  return keys >= prix ? keys - prix : null;
+}
+
 /** Palier nettoyé au moins une fois ? */
 export function labyrinthCleared(id: string, cleared: string[]): boolean {
   return cleared.includes(labyClearId(id));
