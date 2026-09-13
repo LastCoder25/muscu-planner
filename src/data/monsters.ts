@@ -36,8 +36,11 @@ const HAND_MONSTERS: Monster[] = [
     name: 'Gluant',
     emoji: '🟢',
     tier: 1,
-    pv: 74,
-    damage: 26,
+    // Calé sur un joueur de niveau 1 qui n’a encore RIEN fait (XP 0 : 115 PV, 16 dégâts) :
+    // c’est lui que le tutoriel doit laisser passer, et il y trouve son 1er équipement.
+    // Mesuré : 74/26 → 0 % de victoire à XP 0 ; 44/16 → 99 %.
+    pv: 44,
+    damage: 16,
     crit: 0.02,
     dodge: 0.02,
     initiative: 5,

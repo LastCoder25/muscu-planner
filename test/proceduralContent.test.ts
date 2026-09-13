@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { simulateCombat, simulateDungeon, type DungeonFoe, type Combatant } from '@/lib/combat';
+import {
+  simulateCombat,
+  simulateDungeon,
+  playerCombatant,
+  combatPower,
+  type DungeonFoe,
+  type Combatant,
+} from '@/lib/combat';
 import { DUNGEONS, dungeonFoes } from '@/data/dungeons';
 import { rollDrop, bestGearLoadout, playerWithGear, type Item } from '@/lib/items';
 import {
@@ -16,7 +23,61 @@ import {
   buildProceduralContent,
   BOSS_MILESTONES,
   PROC_REGION_COUNT,
+  gearExpect,
+  dungeonGearExpect,
+  recommendedPower,
 } from '@/lib/proceduralContent';
+import { computeCharacter } from '@/lib/character';
+
+describe('le 1er donjon est gagnable par un joueur qui débute', () => {
+  const clairiere = DUNGEONS.find((d) => d.id === 'clairiere')!;
+  const clearRate = (player: Combatant, N = 400) => {
+    const foes = dungeonFoes(clairiere);
+    let won = 0;
+    for (let s = 1; s <= N; s++)
+      if (simulateDungeon(player, foes, { seed: s * 7919 }).cleared) won++;
+    return won / N;
+  };
+  // Le joueur le plus faible possible : niveau 1, AUCUNE XP. C'est lui que le tutoriel doit
+  // laisser passer — l'équipement ne vient que des donjons, il n'en a donc aucun.
+  const debutant = () => playerCombatant('p', computeCharacter(0, 0, 0, 0), 1);
+
+  it('un joueur de niveau 1 sans XP ni équipement nettoie la Clairière presque toujours', () => {
+    // Mesuré : 0 % avant (attente d'équipement ×1,35/×1,45 + Gluants 74/26), 99 % après.
+    expect(clairiere.recoLevel).toBe(1);
+    expect(clearRate(debutant())).toBeGreaterThan(0.9);
+  });
+
+  it('l’attente d’équipement vaut ×1 au niveau 1 et rejoint gearExpect dès le niveau 4', () => {
+    expect(dungeonGearExpect(1)).toEqual({ off: 1, pv: 1 });
+    for (const L of [4, 5, 10, 40, 90]) expect(dungeonGearExpect(L)).toEqual(gearExpect(L));
+    // Entre les deux : monotone, et jamais au-dessus de l'attente pleine.
+    let prev = dungeonGearExpect(1);
+    for (const L of [2, 3, 4]) {
+      const ge = dungeonGearExpect(L);
+      expect(ge.off).toBeGreaterThan(prev.off);
+      expect(ge.pv).toBeGreaterThan(prev.pv);
+      expect(ge.off).toBeLessThanOrEqual(gearExpect(L).off);
+      prev = ge;
+    }
+  });
+
+  it('la Clairière n’est pas vidée de tout enjeu : ses Gluants restent plus coriaces qu’un coup', () => {
+    // Un tutoriel qu'on gagne en un coup n'apprend rien : chaque Gluant encaisse plusieurs coups.
+    const p = debutant();
+    for (const f of dungeonFoes(clairiere)) expect(f.combatant.pv).toBeGreaterThan(2 * p.damage);
+  });
+
+  it('la puissance conseillée de la Clairière suit l’attente réellement appliquée', () => {
+    // L'écran annonce ce que le combat applique : au niveau 1, pas de gear attendu.
+    expect(recommendedPower(1)).toBe(combatPower(refFighter(1)));
+    // Au-delà de la rampe, rien ne bouge.
+    const ge = gearExpect(10);
+    expect(recommendedPower(10)).toBe(
+      Math.round(combatPower(refFighter(10)) * Math.sqrt(ge.off * ge.pv)),
+    );
+  });
+});
 
 describe('procedural — courbe XP', () => {
   it('cumXpForLevel = forme fermée des coûts de niveau', () => {

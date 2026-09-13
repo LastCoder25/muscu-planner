@@ -42,7 +42,7 @@ export function refFighter(L: number): Combatant {
 export function recommendedPower(recoLevel: number, boss = false): number {
   const L = Math.max(1, recoLevel);
   const base = combatPower(refFighter(L));
-  const ge = boss ? bossGearExpect(L) : gearExpect(L);
+  const ge = boss ? bossGearExpect(L) : dungeonGearExpect(L);
   return Math.round(base * Math.sqrt(ge.off * ge.pv));
 }
 
@@ -86,6 +86,24 @@ export function gearExpect(level: number): { off: number; pv: number } {
     off: Math.min(6.0, 1.35 + Math.max(0, L - 8) * 0.035),
     pv: Math.min(5.0, 1.45 + Math.max(0, L - 8) * 0.03),
   };
+}
+
+/** Niveau de donjon où l’attente d’équipement s’applique en entier. */
+const GEAR_EXPECT_FULL_AT = 4;
+
+/** ATTENTE D’ÉQUIPEMENT D’UN DONJON — `gearExpect`, RAMPÉE sur les tout premiers niveaux.
+ *
+ *  ⚠️ Le 1er donjon est l’AMORÇAGE : l’équipement ne vient QUE des donjons, donc on ne peut
+ *  pas y attendre un joueur déjà équipé. Appliquée telle quelle au niveau 1 (×1,35 PV,
+ *  ×1,45 dégâts), elle rendait la Clairière ingagnable : mesuré, un joueur de niveau 1 y
+ *  gagnait 0 % du temps, nu comme avec du stuff commun. Elle vaut donc ×1 au niveau 1 et
+ *  rejoint `gearExpect` au niveau `GEAR_EXPECT_FULL_AT` — la Caverne (niv. 4) et tout ce qui
+ *  suit ne bougent pas. Lue par `dungeonFoes` ET par la puissance conseillée : l’écran
+ *  doit annoncer ce que le combat applique. */
+export function dungeonGearExpect(level: number): { off: number; pv: number } {
+  const ge = gearExpect(level);
+  const t = Math.min(1, Math.max(0, (level - 1) / (GEAR_EXPECT_FULL_AT - 1)));
+  return { off: 1 + (ge.off - 1) * t, pv: 1 + (ge.pv - 1) * t };
 }
 
 export type MonsterRole = 'weak' | 'mid' | 'strong';

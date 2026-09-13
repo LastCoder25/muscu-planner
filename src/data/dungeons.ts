@@ -5,7 +5,7 @@
 // rareté 0..1) → les donjons durs récompensent mieux.
 import type { DungeonFoe } from '@/lib/combat';
 import { MONSTERS } from '@/data/monsters';
-import { PROCEDURAL, gearExpect } from '@/lib/proceduralContent';
+import { PROCEDURAL, dungeonGearExpect } from '@/lib/proceduralContent';
 
 export type StatKey = 'puissance' | 'endurance' | 'agilite';
 
@@ -279,11 +279,11 @@ function dungeonDifficultyMult(recoLevel: number): number {
 
 /** Convertit les ids de monstres d'un donjon en adversaires pour le moteur. PV/dégâts mis
  *  à l'échelle par (1) la rampe d'amorçage `dungeonDifficultyMult` et (2) l'ATTENTE
- *  D'ÉQUIPEMENT `gearExpect` (PV ∝ boost d'offense du joueur équipé, dégâts ∝ boost de
+ *  D'ÉQUIPEMENT `dungeonGearExpect` (PV ∝ boost d'offense du joueur équipé, dégâts ∝ boost de
  *  survie) → un joueur SOUS-niveau est muré (le sport reste le plafond). L'or est inchangé. */
 export function dungeonFoes(d: Dungeon): DungeonFoe[] {
   const early = dungeonDifficultyMult(d.recoLevel);
-  const ge = gearExpect(d.recoLevel);
+  const ge = dungeonGearExpect(d.recoLevel);
   const pvMult = early * ge.off;
   const dmgMult = early * ge.pv;
   return d.monsterIds
