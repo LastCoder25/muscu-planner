@@ -2,7 +2,14 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import { comboComplete, removeSetAt, type ComboChallenge, type ComboLeg } from '@/lib/combo';
+import {
+  comboChestEligible,
+  comboNextStatus,
+  removeSetAt,
+  type ComboChallenge,
+  type ComboLeg,
+} from '@/lib/combo';
+import { logicalToday } from '@/lib/challenges';
 import type { ComboChestRecord } from '@/lib/comboChest';
 import { useAuthStore } from '@/stores/auth';
 
@@ -30,9 +37,22 @@ export const useComboStore = defineStore('combo', () => {
   const list = ref<ComboRow[]>([]);
   const loaded = ref(false);
 
-  /** Id du Défi 360 qui vient de se boucler — remis à null par celui qui l'a traité.
-   *  C'est le déclencheur du coffre de fin de défi. */
-  const justCompleted = ref<string | null>(null);
+  /** Défis 360 qui viennent de se FERMER bouclés — le déclencheur du coffre de fin.
+   *  ⚠️ Une FILE et non un seul id : au chargement, plusieurs 360 dont la date est passée
+   *  peuvent se fermer d'un coup, et un id unique n'en aurait signalé qu'un. Vidée par
+   *  celui qui les traite (`useComboChest`). */
+  const closedChests = ref<string[]>([]);
+
+  /** Recalcule le statut d'un 360 et signale sa fermeture si elle ouvre un coffre.
+   *  Rend `true` si le statut a changé (à persister). */
+  function refreshStatus(c: ComboRow, today = logicalToday()): boolean {
+    const etait = c.status;
+    c.status = comboNextStatus(c, today);
+    if (etait !== 'done' && c.status === 'done' && comboChestEligible(c)) {
+      closedChests.value.push(c.id);
+    }
+    return etait !== c.status;
+  }
 
   async function fetchMine() {
     // ⚠️ FILTRE EXPLICITE OBLIGATOIRE. Cette requête s'appuyait sur la RLS own-only
@@ -55,6 +75,21 @@ export const useComboStore = defineStore('combo', () => {
     if (error) throw error;
     list.value = data ?? [];
     loaded.value = true;
+    // ⚠️ Un 360 dont la date de fin est passée se FERME ici : personne ne l'aurait fait
+    // sinon (aucune série n'arrive), il restait « en cours » pour toujours et son coffre ne
+    // tombait jamais. Et un 360 fermé à l'objectif par une version d'avant, dont la
+    // période court encore, se ROUVRE pour les séries bonus — son coffre, déjà conservé
+    // sur le défi, ne sera pas reversé (`comboChestPlan`).
+    for (const c of list.value) {
+      if (c.status === 'abandoned' || !refreshStatus(c)) continue;
+      void supabase
+        .from('combo_challenges')
+        .update({ status: c.status })
+        .eq('id', c.id)
+        .then(({ error }) => {
+          if (error) console.error('combo fermeture', error);
+        });
+    }
     return list.value;
   }
 
@@ -91,7 +126,7 @@ export const useComboStore = defineStore('combo', () => {
   // Ajoute une SÉRIE (reps + poids) sur un exo, à la date donnée. OPTIMISTE : la
   // liste locale est mise à jour tout de suite (réponse instantanée), la
   // persistance Supabase part en arrière-plan. Mémorise le poids (préremplissage).
-  // Passe à « done » dès que tous les exos atteignent leur cible de séries.
+  // Passe à « done » à la FERMETURE (date de fin, ou maximal partout) — plus à l'objectif.
   function addSet(
     id: string,
     exerciseId: string,
@@ -112,10 +147,7 @@ export const useComboStore = defineStore('combo', () => {
     // ni la boîte à messages. Plutôt que de brancher le versement sur les quatre écrans
     // qui peuvent valider une série (donc quatre endroits où l'oublier), on émet ici et
     // un seul observateur, monté en permanence, s'en charge (`useComboChest`).
-    const etait = c.status;
-    if (comboComplete(c)) c.status = 'done';
-    else if (c.status === 'done') c.status = 'active';
-    if (etait !== 'done' && c.status === 'done') justCompleted.value = c.id;
+    refreshStatus(c);
     void supabase
       .from('combo_challenges')
       .update({ legs: c.legs, status: c.status, updated_at: new Date().toISOString() })
@@ -135,8 +167,7 @@ export const useComboStore = defineStore('combo', () => {
     // Plus aucune série → on efface aussi le poids mémorisé (souvent une saisie
     // erronée qu'on vient de retirer) pour ne pas le repré-remplir.
     if (!leg.sets.length) leg.weight_kg = null;
-    if (comboComplete(c)) c.status = 'done';
-    else if (c.status === 'done') c.status = 'active';
+    c.status = comboNextStatus(c, logicalToday());
     void supabase
       .from('combo_challenges')
       .update({ legs: c.legs, status: c.status, updated_at: new Date().toISOString() })
@@ -181,7 +212,7 @@ export const useComboStore = defineStore('combo', () => {
   return {
     list,
     loaded,
-    justCompleted,
+    closedChests,
     setChest,
     fetchMine,
     activeOne,

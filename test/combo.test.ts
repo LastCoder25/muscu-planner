@@ -45,6 +45,11 @@ import {
   type ComboLeg,
   type ComboSet,
   comboEnded,
+  comboNextStatus,
+  comboClosed,
+  comboChestEligible,
+  comboCompleteInTime,
+  comboEndDate,
 } from '@/lib/combo';
 
 const set = (reps: number, weight?: number, date = '2026-01-05'): ComboSet => ({
@@ -1015,5 +1020,94 @@ describe('🗑️ RETIRER LA SÉRIE TOUCHÉE (pas forcément la dernière)', () 
     for (const i of [-1, 4, 99, 1.5, Number.NaN]) {
       expect(removeSetAt(sets, i).map((x) => x.reps)).toEqual([10, 11, 12, 13]);
     }
+  });
+});
+
+// ── 📅 FERMETURE ET DÉLAI (v0.825) ─────────────────────────────────────────────────────
+describe('📅 le 360 reste ouvert après l’objectif, et paie ce qui est fait dans les temps', () => {
+  // Défi du 05 au 11/01. Deux exos à 4 séries (maximal = 5).
+  const JOUR = '2026-01-07';
+  const APRES = '2026-01-12';
+  const sets = (n: number, date = '2026-01-06') =>
+    Array.from({ length: n }, () => set(10, 0, date));
+  const deux = (a: ComboSet[], b: ComboSet[], over: Partial<ComboChallenge> = {}) =>
+    combo(
+      [
+        leg({ exercise_id: 'a', target: 4, sets: a }),
+        leg({ exercise_id: 'b', target: 4, sets: b }),
+      ],
+      over,
+    );
+
+  it('la date de fin est le dernier jour inclus', () => {
+    expect(comboEndDate(combo([]))).toBe('2026-01-11');
+  });
+
+  it('⚠️ LE DÉFAUT SIGNALÉ : objectif atteint ne FERME plus le défi (séries bonus possibles)', () => {
+    const c = deux(sets(4), sets(4));
+    expect(comboComplete(c)).toBe(true);
+    expect(comboClosed(c, JOUR)).toBe(false);
+    expect(comboNextStatus(c, JOUR)).toBe('active');
+  });
+
+  it('il se ferme quand TOUS les exos sont au maximal — plus rien à gagner', () => {
+    expect(comboNextStatus(deux(sets(5), sets(5)), JOUR)).toBe('done');
+    expect(comboNextStatus(deux(sets(5), sets(4)), JOUR)).toBe('active');
+  });
+
+  it('il se ferme à la date de fin, même inachevé', () => {
+    const c = deux(sets(2), sets(1));
+    expect(comboNextStatus(c, '2026-01-11')).toBe('active');
+    expect(comboNextStatus(c, APRES)).toBe('done');
+  });
+
+  it('un abandon reste un abandon', () => {
+    expect(comboNextStatus(deux(sets(5), sets(5), { status: 'abandoned' }), JOUR)).toBe(
+      'abandoned',
+    );
+  });
+
+  it('⚠️ bouclé EN RETARD n’est pas payé comme à l’heure : seules les séries dans les temps', () => {
+    const aLHeure = deux(sets(4), sets(2));
+    const enRetard = deux(sets(4), [...sets(2), ...sets(2, '2026-01-12')]);
+    expect(comboComplete(enRetard)).toBe(true); // bouclé… mais après la fin
+    expect(comboCompleteInTime(enRetard)).toBe(false);
+    expect(comboTieredBonus(enRetard, undefined, APRES)).toBe(
+      comboTieredBonus(aLHeure, undefined, APRES),
+    );
+  });
+
+  it('les séries bonus faites dans les temps GROSSISSENT la prime', () => {
+    const pile = deux(sets(4), sets(4));
+    const bonus = deux(sets(5), sets(5));
+    expect(comboTieredBonus(bonus, undefined, APRES)).toBeGreaterThan(
+      comboTieredBonus(pile, undefined, APRES),
+    );
+  });
+
+  it('⚠️ une série bonus faite plus tard ne fait pas fondre la prime d’avance', () => {
+    const tot = deux(sets(4, '2026-01-05'), sets(4, '2026-01-05'));
+    const plusTard = deux(
+      [...sets(4, '2026-01-05'), set(10, 0, '2026-01-10')],
+      sets(4, '2026-01-05'),
+    );
+    // Même objectif atteint le 05 : l'avance est la même, la série bonus ajoute du palier.
+    expect(comboTieredBonus(plusTard, undefined, APRES)).toBeGreaterThan(
+      comboTieredBonus(tot, undefined, APRES),
+    );
+  });
+
+  it('⚠️ ABANDONNÉ : aucune prime, même avec des paliers atteints', () => {
+    const c = deux(sets(5), sets(5), { status: 'abandoned' });
+    expect(comboTieredBonus(c, undefined, APRES)).toBe(0);
+    // …mais l'XP des séries reste.
+    expect(comboXpPoints([c])).toBeGreaterThan(0);
+  });
+
+  it('coffre : seulement pour un 360 bouclé dans les temps, jamais abandonné ni partiel', () => {
+    expect(comboChestEligible(deux(sets(4), sets(4)))).toBe(true);
+    expect(comboChestEligible(deux(sets(4), sets(3)))).toBe(false);
+    expect(comboChestEligible(deux(sets(4), [...sets(3), ...sets(1, APRES)]))).toBe(false);
+    expect(comboChestEligible(deux(sets(4), sets(4), { status: 'abandoned' }))).toBe(false);
   });
 });

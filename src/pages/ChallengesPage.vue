@@ -646,6 +646,7 @@ import {
   type ComboChallenge,
   comboExportText,
   comboBonusXp,
+  comboCompleteInTime,
   type ComboLeg,
   type ComboSet,
 } from '@/lib/combo';
@@ -681,8 +682,8 @@ function celebrateCombo(c: ComboChallenge) {
   gameFx.celebrate({
     kind: 'generic',
     emoji: '🎯',
-    title: 'Défi 360 bouclé !',
-    subtitle: `Full-body complété — prime de bouclage +${comboBonusXp(c)} ⚡`,
+    title: 'Objectif du Défi 360 atteint !',
+    subtitle: `Prime +${comboBonusXp(c)} ⚡ — continue jusqu’au maximal, le coffre tombe à la fin`,
     rarity: 'divin',
   });
 }
@@ -824,22 +825,26 @@ function openSet(leg: ComboLeg, count: number) {
 function saveSet() {
   const leg = setLeg.value;
   const reps = Math.max(1, Math.round(setReps.value || 0));
-  if (!activeCombo.value || !leg) return;
+  // ⚠️ On garde l'OBJET : si la série ferme le défi (maximal partout), `activeCombo`
+  // devient null juste après — le relire ici plantait.
+  const co = activeCombo.value;
+  if (!co || !leg) return;
   const w = setWeight.value != null && setWeight.value > 0 ? setWeight.value : null;
   const asst = !!leg.assistable && setAssisted.value;
-  const before = activeCombo.value.status;
+  const before = comboCompleteInTime(co);
   for (let i = 0; i < setCount.value; i++) {
-    comboStore.addSet(activeCombo.value.id, leg.exercise_id, logicalToday(), reps, w, asst);
+    comboStore.addSet(co.id, leg.exercise_id, logicalToday(), reps, w, asst);
   }
   setOpen.value = false;
-  if (before !== 'done' && activeCombo.value.status === 'done') celebrateCombo(activeCombo.value);
+  if (!before && comboCompleteInTime(co)) celebrateCombo(co);
 }
 // Mode DURÉE : ajoute directement N secondes (dans le champ reps, pas de poids).
 function doAddSeconds(leg: ComboLeg, sec: number) {
-  if (!activeCombo.value) return;
-  const before = activeCombo.value.status;
-  comboStore.addSet(activeCombo.value.id, leg.exercise_id, logicalToday(), sec, null, false);
-  if (before !== 'done' && activeCombo.value.status === 'done') celebrateCombo(activeCombo.value);
+  const co = activeCombo.value;
+  if (!co) return;
+  const before = comboCompleteInTime(co);
+  comboStore.addSet(co.id, leg.exercise_id, logicalToday(), sec, null, false);
+  if (!before && comboCompleteInTime(co)) celebrateCombo(co);
 }
 // ── Chrono des exos de DURÉE (comme les challenges) : Démarrer → décompte ; Pause →
 // enregistre une série de la durée RÉELLE écoulée. Un seul chrono actif à la fois. ──

@@ -185,12 +185,56 @@ export function comboComplete(c: ComboChallenge): boolean {
   return c.legs.length > 0 && c.legs.every((l) => legComplete(l));
 }
 
-/** Fraction d'avance d'un Défi 360 terminé : jours gagnés / durée (0..~1). */
+// ── 📅 LE DÉLAI ET LA FERMETURE (v0.825 ; décisions de l'utilisateur) ─────────────────
+// ⚠️ UN 360 NE SE FERME PLUS À L'OBJECTIF. Il passait en « terminé » dès les séries de base,
+// ce qui retirait le défi de l'onglet 🎯 et interdisait les séries bonus (jusqu'à 120 %) —
+// précisément la zone que les paliers récompensent. Il se ferme désormais à la DATE DE FIN,
+// ou plus tôt quand tous les exos ont atteint le maximal (il n'y a alors plus rien à gagner).
+//
+// ⚠️ LA SAISIE RESTE OUVERTE APRÈS LA FIN, mais seules les séries FAITES DANS LES TEMPS
+// comptent pour la prime et le coffre (choix de l'utilisateur, plutôt que figer la saisie).
+// Sans ce filtre, un 360 bouclé en retard était payé comme à l'heure.
+
+/** Dernier jour du défi (inclus), en UTC explicite. */
+export function comboEndDate(c: ComboChallenge): string {
+  return addDaysUtc(c.start_date, Math.max(1, c.duration_days) - 1);
+}
+/** Le défi tel qu'il était à sa date de fin : seules les séries faites dans les temps. */
+export function comboInDeadline(c: ComboChallenge): ComboChallenge {
+  return c.duration_days > 0 ? comboUpTo(c, comboEndDate(c)) : c;
+}
+/** Objectif atteint partout DANS LES TEMPS — le vrai « bouclé ». */
+export function comboCompleteInTime(c: ComboChallenge): boolean {
+  return comboComplete(comboInDeadline(c));
+}
+/** Le défi est-il FERMÉ : date de fin passée, ou tous les exos au maximal dans les temps ? */
+export function comboClosed(c: ComboChallenge, today: string): boolean {
+  if (c.duration_days > 0 && today > comboEndDate(c)) return true;
+  const d = comboInDeadline(c);
+  return d.legs.length > 0 && d.legs.every((l) => legTier(l) === 'max');
+}
+/** Statut qu'un 360 doit porter après une saisie (ou au chargement). Un abandon est définitif. */
+export function comboNextStatus(c: ComboChallenge, today: string): ComboChallenge['status'] {
+  if (c.status === 'abandoned') return 'abandoned';
+  return comboClosed(c, today) ? 'done' : 'active';
+}
+/** Le coffre de fin ne récompense qu'un 360 BOUCLÉ dans les temps (choix de l'utilisateur :
+ *  pas de coffre pour un 360 partiel) et jamais un abandon. */
+export function comboChestEligible(c: ComboChallenge): boolean {
+  return c.status !== 'abandoned' && comboCompleteInTime(c);
+}
+
+/** Fraction d'avance d'un Défi 360 terminé : jours gagnés / durée (0..~1).
+ *  ⚠️ Mesurée au jour où l'objectif a été ATTEINT, pas à la dernière série : depuis que le
+ *  360 reste ouvert pour les séries bonus, une série faite deux jours plus tard aurait
+ *  fait fondre la prime d'avance — on aurait puni celui qui en fait plus. */
 function comboEarlyFraction(c: ComboChallenge): number {
   if (!comboComplete(c) || c.duration_days <= 0) return 0;
-  const dates = c.legs.flatMap((l) => legSets(l).map((s) => s.date)).filter(Boolean);
+  const dates = [...new Set(c.legs.flatMap((l) => legSets(l).map((s) => s.date)))]
+    .filter(Boolean)
+    .sort();
   if (!dates.length) return 0;
-  const last = dates.reduce((m, d) => (d > m ? d : m), dates[0]!);
+  const last = dates.find((d) => comboComplete(comboUpTo(c, d))) ?? dates[dates.length - 1]!;
   const daysUsed = daysBetweenIso(c.start_date, last) + 1;
   const saved = Math.max(0, c.duration_days - daysUsed);
   return saved / c.duration_days;
@@ -402,7 +446,7 @@ export function comboEnded(
   c: ComboChallenge,
   today = new Date().toISOString().slice(0, 10),
 ): boolean {
-  if (comboComplete(c)) return true;
+  if (comboCompleteInTime(c)) return true;
   if (c.duration_days <= 0) return false;
   return today > addDaysUtc(c.start_date, c.duration_days - 1);
 }
@@ -426,10 +470,15 @@ export function comboTieredBonus(
   // exactement ce que la v0.621 avait corrigé (un exo à la traîne faisait perdre tous les
   // autres). Deux tests l'ont refusé, à juste titre. Le bouclage PARTIEL reste donc
   // récompensé : à la fin de la semaine, on touche la prime des paliers atteints.
+  // ⚠️ ABANDONNÉ = PAS DE PRIME (choix de l'utilisateur). L'XP des séries faites reste :
+  // c'est du travail réel, et l'énergie qu'elle a donnée ne se reprend pas.
+  if (c.status === 'abandoned') return 0;
   if (!comboEnded(c, today)) return 0;
-  const early = 1 + comboEarlyFraction(c);
+  // Paliers et avance lus sur les séries faites DANS LES TEMPS.
+  const d = comboInDeadline(c);
+  const early = 1 + comboEarlyFraction(d);
   let sum = 0;
-  for (const l of c.legs) {
+  for (const l of d.legs) {
     sum += 0.25 * legPlannedEffort(l) * shareOf(l);
   }
   return sum * early;

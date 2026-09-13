@@ -19,7 +19,12 @@ import { useComboStore } from '@/stores/combo';
 import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
-import { comboCountedSets, type ComboChallenge } from '@/lib/combo';
+import {
+  comboChestEligible,
+  comboCountedSets,
+  comboInDeadline,
+  type ComboChallenge,
+} from '@/lib/combo';
 import { comboChestPlan } from '@/lib/comboChest';
 
 /** Verse le coffre d'un 360 bouclé ET le conserve sur le défi. Partagé par l'observateur
@@ -36,7 +41,10 @@ export async function depositComboChest(
   // on ne saurait ni où écrire le message ni s'il y est déjà.
   if (!char.row) await char.fetchMine();
   if (!char.row) return false;
-  const sets = comboCountedSets(c);
+  // Pas de coffre pour un 360 partiel ni abandonné ; et seules les séries faites dans les
+  // temps le dimensionnent (la saisie reste ouverte après la fin).
+  if (!comboChestEligible(c)) return false;
+  const sets = comboCountedSets(comboInDeadline(c));
   const plan = comboChestPlan(c, char.row.messages, sets, playerLevel, Date.now());
   if (!plan) return false;
   const pose = plan.grant
@@ -51,8 +59,8 @@ export function useComboChest() {
   const auth = useAuthStore();
   const progress = useProgress();
   const $q = useQuasar();
-  /** Défi bouclé dont le coffre attend de connaître le niveau du joueur. */
-  const enAttente = ref<string | null>(null);
+  /** Défis fermés dont le coffre attend de connaître le niveau du joueur. */
+  const enAttente = ref<string[]>([]);
 
   async function deposer(id: string) {
     const uid = auth.user?.id;
@@ -64,7 +72,7 @@ export function useComboChest() {
         $q.notify({
           type: 'positive',
           timeout: 6000,
-          message: '🎁 Défi 360 bouclé — un coffre t’attend dans ta boîte 📬',
+          message: '🎁 Défi 360 terminé — un coffre t’attend dans ta boîte 📬',
         });
       }
     } catch (e) {
@@ -73,21 +81,19 @@ export function useComboChest() {
   }
 
   watch(
-    () => combo.justCompleted,
-    (id) => {
-      if (!id) return;
-      combo.justCompleted = null; // consommé : on ne retente pas en boucle
-      if (progress.ready.value) void deposer(id);
-      else enAttente.value = id; // le niveau n'est pas encore connu → on patiente
+    () => combo.closedChests.length,
+    (n) => {
+      if (!n) return;
+      const ids = combo.closedChests.splice(0); // consommés : on ne retente pas en boucle
+      if (progress.ready.value) for (const id of ids) void deposer(id);
+      else enAttente.value.push(...ids); // le niveau n'est pas encore connu → on patiente
     },
   );
   watch(
     () => progress.ready.value,
     (ok) => {
-      const id = enAttente.value;
-      if (!ok || !id) return;
-      enAttente.value = null;
-      void deposer(id);
+      if (!ok || !enAttente.value.length) return;
+      for (const id of enAttente.value.splice(0)) void deposer(id);
     },
   );
 }

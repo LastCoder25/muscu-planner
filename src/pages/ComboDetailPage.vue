@@ -43,7 +43,15 @@
             onTimeState === 'ahead' ? '✓ en avance' : `⏳ en retard (tu es à ${pct}%)`
           }}</span>
         </div>
-        <div v-if="c.status === 'done'" class="hc-done">🎉 Défi 360 bouclé — bravo !</div>
+        <div v-if="c.status === 'done'" class="hc-done">
+          {{ completeInTime ? '🎉 Défi 360 bouclé — bravo !' : '⏱ Défi 360 terminé' }}
+        </div>
+        <!-- Objectif atteint mais défi encore ouvert : on DIT pourquoi il ne se ferme pas,
+             sinon « encore en cours à 100 % » se lit comme un oubli. -->
+        <div v-else-if="c.status === 'active' && completeInTime" class="hc-done">
+          🎉 Objectif atteint ! Les séries bonus comptent jusqu’au {{ endLabel }} — le coffre tombe
+          à la fin, ou dès que tout est au maximal.
+        </div>
         <ComboChestView v-if="c.chest" :combo-id="c.id" :chest="c.chest" />
         <div v-if="legsAtMax > 0" class="hc-over">
           🔥 {{ legsAtMax }} exo{{ legsAtMax > 1 ? 's' : '' }} au <b>maximal</b> !
@@ -263,6 +271,8 @@ import {
   legRepRange,
   comboExportText,
   comboBonusXp,
+  comboCompleteInTime,
+  comboEndDate,
   type ComboLeg,
   type ComboSet,
 } from '@/lib/combo';
@@ -326,6 +336,9 @@ function fmtDM(iso: string): string {
   });
 }
 // Semaine concernée (début → fin) du Défi 360.
+/** Bouclé dans les temps — la seule chose qui dit « bravo » et ouvre un coffre. */
+const completeInTime = computed(() => (c.value ? comboCompleteInTime(c.value) : false));
+const endLabel = computed(() => (c.value ? fmtDM(comboEndDate(c.value)) : ''));
 const comboWeek = computed(() => {
   if (!c.value) return '';
   return `${fmtDM(c.value.start_date)} → ${fmtDM(addDaysIso(c.value.start_date, c.value.duration_days - 1))}`;
@@ -424,23 +437,26 @@ function openSet(leg: ComboLeg, count: number) {
   }
   setOpen.value = true;
 }
+/** L'objectif vient d'être atteint dans les temps : on célèbre TOUT DE SUITE, mais le
+ *  défi reste ouvert pour les séries bonus et le coffre tombera à la fermeture. */
+function celebrateObjective(co: ComboChallenge) {
+  gameFx.celebrate({
+    kind: 'generic',
+    emoji: '🎯',
+    title: 'Objectif du Défi 360 atteint !',
+    subtitle: `Prime +${comboBonusXp(co)} ⚡ — continue jusqu’au maximal, le coffre tombe à la fin`,
+    rarity: 'divin',
+  });
+}
 function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }) {
   const leg = setLeg.value;
   if (!auth.user?.id || !c.value || !leg) return;
   rememberWeight(leg.exercise_id, v.weight); // mémorise le poids pour cet exo (ticket efa49f4f)
-  const before = c.value.status;
+  const before = comboCompleteInTime(c.value);
   for (let i = 0; i < setCount.value; i++) {
     combo.addSet(id, leg.exercise_id, logicalToday(), v.reps, v.weight, v.assisted);
   }
-  if (before !== 'done' && c.value.status === 'done') {
-    gameFx.celebrate({
-      kind: 'generic',
-      emoji: '🎯',
-      title: 'Défi 360 bouclé !',
-      subtitle: `Full-body complété — prime de bouclage +${comboBonusXp(c.value)} ⚡`,
-      rarity: 'divin',
-    });
-  }
+  if (!before && comboCompleteInTime(c.value)) celebrateObjective(c.value);
 }
 // Ajouts rapides de durée (gainage) sans chrono (ticket 9ecad885).
 const DUR_QUICK_ADDS = [15, 30, 60] as const;
@@ -451,17 +467,9 @@ function fmtDurShort(sec: number): string {
 // le champ reps ; pas de poids) → pas de dialogue reps+poids inadapté au gainage.
 function doAddSeconds(leg: ComboLeg, sec: number) {
   if (!auth.user?.id || !c.value) return;
-  const before = c.value.status;
+  const before = comboCompleteInTime(c.value);
   combo.addSet(id, leg.exercise_id, logicalToday(), sec, null, false);
-  if (before !== 'done' && c.value.status === 'done') {
-    gameFx.celebrate({
-      kind: 'generic',
-      emoji: '🎯',
-      title: 'Défi 360 bouclé !',
-      subtitle: `Full-body complété — prime de bouclage +${comboBonusXp(c.value)} ⚡`,
-      rarity: 'divin',
-    });
-  }
+  if (!before && comboCompleteInTime(c.value)) celebrateObjective(c.value);
 }
 /** Retire UNE série (par défaut la dernière) — celle dont on a touché la case.
  *  La confirmation dit laquelle (numéro + contenu) : un tap raté ne coûte rien. */
