@@ -2289,6 +2289,29 @@ export interface SetRosterEntry {
  *
  *  ⚠️ Ceci ne change RIEN au combat : le bonus de set ne compte que `equipped`
  *  (cf. `setEffects`). Le drapeau `worn` sert à le dire à l'écran, pas à l'altérer. */
+/**
+ * CE QUE « RECYCLER CE SET » FOND — le lot exact, lu par le store ET par l’écran.
+ *
+ * ⚠️ DÉFAUT CORRIGÉ (v0.806 ; signalé par l’utilisateur : « j’ai recyclé tout le set mais
+ * ça m’a laissé un item dedans »). La carte d’un set montre son ROSTER — portées, réserve
+ * ET sac — mais le bouton ne fondait que la RÉSERVE : les pièces du set restées au sac
+ * survivaient et restaient affichées. Le lot couvre désormais réserve + sac.
+ *
+ * Restent, et l’écran le DIT : ce qu’on PORTE (on ne fond pas ce qu’on a sur soi) et les
+ * pièces 🔒 (le verrou protège de toutes les sorties), qui repartent au sac.
+ */
+export function setRecycleLot(
+  setId: string,
+  stored: Equipped | undefined,
+  inventory: Item[],
+): { melt: Item[]; keep: Item[] } {
+  const pool = [
+    ...SLOTS.map((s) => stored?.[s]).filter((it): it is Item => !!it),
+    ...inventory.filter((it) => it.setId === setId && SLOTS.includes(it.slot)),
+  ];
+  return { melt: pool.filter((it) => canRecycle(it)), keep: pool.filter((it) => !canRecycle(it)) };
+}
+
 export function voieSetRoster(
   setId: string,
   equipped: Equipped,

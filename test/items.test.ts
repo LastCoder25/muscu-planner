@@ -62,6 +62,7 @@ import {
   VOIE_SETS,
   rollSetLegendaryProc,
   voieSetRoster,
+  setRecycleLot,
 } from '@/lib/items';
 import { mulberry32, combatPower } from '@/lib/combat';
 import { pickBestTalents } from '@/lib/talents';
@@ -1238,6 +1239,23 @@ describe('roster d’un set de voie — la COLLECTION, pas ce qu’on ne porte p
       effect: { type: 'damage_pct', value },
       setId,
     }) as Item;
+
+  it('⚠️ RECYCLER UN SET FOND AUSSI SES PIÈCES AU SAC (v0.806)', () => {
+    // Signalé : « j’ai recyclé tout le set mais ça m’a laissé un item ». La carte montre le
+    // roster (réserve + sac), le bouton ne fondait que la réserve.
+    const reserve = { weapon: mk('weapon', 10) };
+    const sac = [
+      mk('armor', 20),
+      mk('relic', 5, 'voie:gardien'),
+      { ...mk('accessory', 7), locked: true },
+    ];
+    const { melt, keep } = setRecycleLot(SET, reserve, sac);
+    expect(melt.map((i) => i.id).sort()).toEqual(['armor20', 'weapon10']);
+    // Le 🔒 ne fond pas ; une pièce d’un AUTRE set n’est pas concernée.
+    expect(keep.map((i) => i.id)).toEqual(['accessory7']);
+    // Ce qu’on PORTE n’est jamais dans le lot : il n’est ni en réserve ni au sac.
+    expect(setRecycleLot(SET, undefined, []).melt).toEqual([]);
+  });
 
   it('⚠️ une pièce PORTÉE figure dans le roster, et elle est marquée', () => {
     const r = voieSetRoster(SET, { weapon: mk('weapon', 20) }, undefined, []);

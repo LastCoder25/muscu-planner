@@ -1803,8 +1803,9 @@
             </button>
             <!-- Gestion des pièces rangées : vider vers le sac (46488974) ou vendre (53a6d487). -->
             <!-- Vider / vendre ne touchent QUE la réserve : masqués si tout est porté. -->
-            <div v-if="lo.storedCount" class="lo-actions">
+            <div v-if="lo.storedCount || lo.lot.melt.length" class="lo-actions">
               <button
+                v-if="lo.storedCount"
                 class="lo-mini"
                 :disabled="busy"
                 title="Remettre ces objets dans le sac"
@@ -1813,6 +1814,7 @@
                 🎒 Vider
               </button>
               <button
+                v-if="lo.lot.melt.length"
                 class="lo-mini sell"
                 :disabled="busy"
                 :title="'Fondre ces objets (' + lo.sellGold + ' 🔩)'"
@@ -2729,6 +2731,7 @@ import {
   SET_BY_ID,
   setCounts,
   voieSetRoster,
+  setRecycleLot,
   type SetRosterEntry,
   type Item,
   type ItemSlot,
@@ -5284,8 +5287,10 @@ const loadoutsView = computed(() => {
     // qu'on possède vraiment de mieux — l'ancienne version ignorait les pièces portées
     // et sous-estimait donc systématiquement le set en cours.
     const power = entries.length ? loadoutPower(loadoutVoie(i)?.id ?? null) : 0;
-    // Vendre / vider ne concernent QUE la réserve : on ne brade pas ce qu’on porte.
+    // Vider ne concerne QUE la réserve ; recycler fond réserve + sac (`setRecycleLot`,
+    // le lot même que le store fond). On ne fond jamais ce qu’on porte.
     const storedItems = SLOTS.map((s) => los[i]?.items?.[s]).filter((it): it is Item => !!it);
+    const lot = setRecycleLot(vid, los[i]?.items, inv);
     return {
       entries,
       count: entries.length,
@@ -5295,7 +5300,8 @@ const loadoutsView = computed(() => {
       upgradable: entries.filter((e) => !e.worn && e.wornItem).length,
       power,
       delta: power - combatPowerVal.value,
-      sellGold: storedItems.reduce((s, it) => s + scrapValue(it), 0),
+      sellGold: lot.melt.reduce((s, it) => s + scrapValue(it), 0),
+      lot,
     };
   });
 });
@@ -5336,15 +5342,21 @@ function doUnpackLoadout(i: number) {
 }
 // Vendre un loadout rangé → or (ticket 53a6d487).
 function doSellLoadout(i: number) {
-  const items = Object.values(char.row?.loadouts?.[i]?.items ?? {}).filter(Boolean) as Item[];
+  const view = loadoutsView.value[i];
+  const items = view?.lot.melt ?? [];
   if (!items.length) return;
   const gain = items.reduce((a, it) => a + scrapValue(it), 0);
+  // ⚠️ On DIT ce qui reste, sinon on croit avoir tout fondu et une pièce semble oubliée —
+  // exactement le défaut signalé.
+  const restent: string[] = [];
+  if (view?.wornCount) restent.push(`${view.wornCount} portée(s)`);
+  if (view?.lot.keep.length) restent.push(`${view.lot.keep.length} verrouillée(s) 🔒`);
   $q.dialog({
     title: 'Fondre tout ce set ?',
     message:
-      `${items.length} pièce(s) partiront à la forge pour ${gain} 🔩 : ` +
+      `${items.length} pièce(s) de la réserve et du sac partiront à la forge pour ${gain} 🔩 : ` +
       items.map((it) => it.name).join(', ') +
-      '. Les pièces 🔒 repartent au sac.',
+      (restent.length ? `. Restent : ${restent.join(' et ')}.` : '.'),
     cancel: { label: 'Annuler', flat: true },
     ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
   }).onOk(() => doSellLoadoutConfirmed(i));

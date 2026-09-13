@@ -36,6 +36,7 @@ import {
   type PendingReward,
   itemScore,
   voieSetRoster,
+  setRecycleLot,
 } from '@/lib/items';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import {
@@ -947,22 +948,25 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, { inventory: [...cur.inventory, ...items], loadouts });
     return items.length;
   }
-  // Vend un loadout rangé : ses objets → or, le slot est vidé. Renvoie l'or gagné (ticket 53a6d487).
+  // Fond un SET de voie : sa réserve ET ses pièces au sac → ferraille. Renvoie le gain.
+  // ⚠️ Le lot vient de `setRecycleLot` (lib), le même que l’écran annonce : la carte
+  // montrait des pièces au sac que le bouton ne touchait pas (v0.806).
   async function recycleLoadout(userId: string, i: number): Promise<number> {
     const cur = row.value;
-    if (!cur || i < 0 || i >= MAX_LOADOUTS) return 0;
+    const voie = VOIES[i];
+    if (!cur || !voie || i < 0 || i >= MAX_LOADOUTS) return 0;
     const lo = cur.loadouts[i];
-    const items = lo ? SLOTS.map((s) => lo.items[s]).filter((it): it is Item => !!it) : [];
-    if (!items.length) return 0;
-    // ⚠️ Les pièces 🔒 ne fondent pas : elles repartent au sac. Le verrou protège de
-    // TOUTES les sorties, pas seulement de celle qu'on avait en tête en l'écrivant.
-    const fondues = items.filter((it) => canRecycle(it));
-    const gardees = items.filter((it) => !canRecycle(it));
-    const gain = fondues.reduce((s, it) => s + scrapValue(it), 0);
+    const { melt, keep } = setRecycleLot(`voie:${voie.id}`, lo?.items, cur.inventory);
+    const stored = new Set(SLOTS.map((s) => lo?.items?.[s]?.id).filter(Boolean));
+    if (!melt.length && !keep.some((it) => stored.has(it.id))) return 0;
+    const fondues = new Set(melt.map((it) => it.id));
+    const gain = melt.reduce((s, it) => s + scrapValue(it), 0);
+    // ⚠️ Les pièces 🔒 de la RÉSERVE repartent au sac ; celles déjà au sac y restent.
+    const gardeesReserve = keep.filter((it) => stored.has(it.id));
     const loadouts = cur.loadouts.map((l, k) => (k === i ? { items: {} } : l));
     await persist(userId, {
       scrap: cur.scrap + gain,
-      inventory: gardees.length ? [...cur.inventory, ...gardees] : cur.inventory,
+      inventory: [...cur.inventory.filter((it) => !fondues.has(it.id)), ...gardeesReserve],
       loadouts,
     });
     return gain;
