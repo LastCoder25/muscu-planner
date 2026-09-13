@@ -7,7 +7,7 @@
       <div class="iconbtn" />
     </header>
 
-    <!-- LOBBY : lancer une expédition (coûte 1 clé) -->
+    <!-- LOBBY : lancer un palier (coûte 1 à 4 clés selon sa profondeur) -->
     <div v-if="phase === 'lobby'" class="lobby">
       <div class="lobby-emo">🗝️</div>
       <div class="lobby-keys">
@@ -60,8 +60,17 @@
             </div>
           </div>
           <div v-if="t.unlocked" class="lt-actions">
-            <button type="button" class="lt-go" :disabled="keys < 1" @click="start(t.laby)">
-              {{ keys > 0 ? 'Lancer −1 🗝️' : 'clé ?' }}
+            <button
+              type="button"
+              class="lt-go"
+              :disabled="keys < labyKeyCost(t.laby.id)"
+              @click="start(t.laby)"
+            >
+              {{
+                keys >= labyKeyCost(t.laby.id)
+                  ? `Lancer −${labyKeyCost(t.laby.id)} 🗝️`
+                  : `${labyKeyCost(t.laby.id)} 🗝️ requises`
+              }}
             </button>
             <!-- Auto : réservé aux paliers DÉJÀ nettoyés (le run se joue tout seul).
                  Admin (mon compte) : disponible dès qu'un palier est débloqué. -->
@@ -69,7 +78,7 @@
               v-if="t.cleared || auth.isAdmin"
               type="button"
               class="lt-go auto"
-              :disabled="keys < 1"
+              :disabled="keys < labyKeyCost(t.laby.id)"
               title="Le run se joue tout seul, en accéléré — tu n’as plus rien à regarder"
               @click="startAuto(t.laby)"
             >
@@ -361,7 +370,7 @@
           <q-btn
             flat
             no-caps
-            :label="keys > 0 ? 'Rejouer (−1 🗝️)' : 'Pas de clé'"
+            :label="canStart ? `Rejouer (−${replayCost} 🗝️)` : `${replayCost} 🗝️ requises`"
             color="primary"
             :disable="!canStart"
             @click="replay"
@@ -502,6 +511,7 @@ import {
   labyrinthUnlockedTier,
   labyrinthCleared,
   labyClearId,
+  labyKeyCost,
   deathKeepFraction,
   type Labyrinth,
 } from '@/data/labyrinths';
@@ -582,7 +592,7 @@ const char = useCharacterStore();
 const gameFx = useGameFx();
 const progress = useProgress();
 
-// Phase : lobby (choix de lancer, coûte 1 clé) → running (exploration).
+// Phase : lobby (choix de lancer, coûte les clés du palier) → running (exploration).
 const phase = ref<'lobby' | 'running'>('lobby');
 const credited = ref(false); // butin crédité une seule fois en fin de run
 const keys = computed(() => char.row?.keys ?? 0);
@@ -593,8 +603,10 @@ const gateLevel = computed(
   () => (char.row?.buildings ?? []).find((b) => b.typeId === 'labyrinth_gate')?.level ?? 0,
 );
 const labyLuck = computed(() => labyrinthLuckBonus(char.row?.buildings ?? []));
+/** Prix du palier qu’on rejouerait depuis la modale de fin. */
+const replayCost = computed(() => labyKeyCost((selectedLaby.value ?? LABYRINTHS[0]!).id));
 const canStart = computed(
-  () => labyUnlocked.value && keys.value > 0 && progress.ready.value && !!char.row,
+  () => labyUnlocked.value && keys.value >= replayCost.value && progress.ready.value && !!char.row,
 );
 
 // ── Ladder de paliers : chaque palier se débloque en nettoyant le précédent. ──
@@ -1319,7 +1331,7 @@ function freshRun() {
   over.value = false;
 }
 
-// Lance un PALIER (consomme 1 clé) : carte fraîche du palier, PV pleins.
+// Lance un PALIER (consomme ses clés) : carte fraîche du palier, PV pleins.
 async function start(tier?: Labyrinth) {
   const uid = auth.user?.id;
   if (!uid) return;
@@ -1330,13 +1342,17 @@ async function start(tier?: Labyrinth) {
     });
     return;
   }
-  if (!canStart.value) return;
+  if (!labyUnlocked.value || !progress.ready.value || !char.row) return;
   // Palier : celui passé (clic sur une carte) ou le courant (rejouer depuis la modale).
   const laby = tier ?? selectedLaby.value ?? LABYRINTHS[0]!;
   if (!labyrinthUnlockedTier(laby.id, clearedSet.value)) return;
-  const ok = await char.spendKey(uid);
+  const cost = labyKeyCost(laby.id);
+  const ok = await char.spendKey(uid, cost);
   if (!ok) {
-    $q.notify({ type: 'warning', message: 'Il te faut une clé 🗝️ (donjons, boss, faille).' });
+    $q.notify({
+      type: 'warning',
+      message: `Ce palier demande ${cost} clé${cost > 1 ? 's' : ''} 🗝️ (Porte du Labyrinthe, archives, boss).`,
+    });
     return;
   }
   selectedLaby.value = laby;
@@ -1553,7 +1569,7 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
   stopAuto(); // fin de run → coupe l'auto (la relance depuis la modale est manuelle)
   over.value = true;
 }
-// Relance directement une nouvelle expédition depuis la modale de fin (−1 clé).
+// Relance directement le même palier depuis la modale de fin (au prix de ses clés).
 function replay() {
   over.value = false;
   void start();

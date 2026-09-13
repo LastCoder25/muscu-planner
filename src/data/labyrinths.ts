@@ -150,6 +150,31 @@ export function labyrinthUnlockedTier(id: string, cleared: string[]): boolean {
   return cleared.includes(labyClearId(LABYRINTHS[i - 1]!.id));
 }
 
+/**
+ * COMBIEN DE CLÉS 🗝️ COÛTE UN PALIER : une de plus tous les trois paliers.
+ *
+ * ⚠️ UNE CLÉ PAR RUN, QUEL QUE SOIT LE PALIER, FAISAIT DE LA PORTE UN ROBINET DE FARM EN
+ * FIN DE PARTIE. Son débit est linéaire en niveau (~0,14 run/jour par niveau, v0.794) :
+ * mesuré au palier de pointe du joueur, **3 runs/jour au niveau 3 mais 17 au niveau
+ * 100**. Le Labyrinthe est la SEULE source de familiers — on finissait par vivre dedans.
+ *
+ * ⚠️ UNE MONNAIE, PAS UN PÉAGE : le coût suit la profondeur, donc on CHOISIT où dépenser —
+ * beaucoup de runs peu profonds (familiers de rang modeste) ou peu de runs au fond.
+ * Mesuré avec cette règle, le palier de pointe reste finançable **3 à 4 fois par jour du
+ * niveau 3 au niveau 100** — la courbe devient plate, ce qui est tout l’objet.
+ *
+ * ⚠️ Les TROIS premiers paliers restent à une clé : le début de partie ne change pas.
+ * Règle comparée à trois autres (par rang de familier, par étages, un de plus tous les
+ * deux paliers) : c’est la seule qui ne descende pas sous 2 runs/jour dès le niveau 6.
+ */
+export function labyKeyCost(id: string): number {
+  const i = Math.max(
+    0,
+    LABYRINTHS.findIndex((l) => l.id === id),
+  );
+  return 1 + Math.floor(i / 3);
+}
+
 /** Palier nettoyé au moins une fois ? */
 export function labyrinthCleared(id: string, cleared: string[]): boolean {
   return cleared.includes(labyClearId(id));

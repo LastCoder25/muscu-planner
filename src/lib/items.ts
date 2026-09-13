@@ -1131,6 +1131,17 @@ function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {
  *  - `spread` : combien de niveaux SOUS `level` le drop peut descendre (0 = pile au niveau) ;
  *  - `luck` : biais de rareté (donjon + fiole de chance), 0..1.
  */
+/**
+ * DE COMBIEN DE RANGS un plancher `rollFloor` plein (1) décale la pyramide de rareté.
+ *
+ * ⚠️ MALGRÉ SON NOM, LE « PLANCHER DE JET » AGIT SUR LA RARETÉ, PAS SUR LE JET : il est
+ * ajouté au `floorBonus` de `rollTier`. Mesuré (v0.799) — l’Autel des boss monté au
+ * niveau du joueur donnait un jet moyen inchangé (~45 %) mais **54 à 56 %** de pièces
+ * DEUX raretés au-dessus de sa ligue. Nommée pour que les écrans puissent afficher ce que
+ * le bonus fait VRAIMENT (des rangs), plutôt qu’un pourcentage de « jet » qui ment.
+ */
+export const ROLL_FLOOR_RANKS = 1.6;
+
 export function rollDrop(
   rng: () => number,
   opts: {
@@ -1157,7 +1168,7 @@ export function rollDrop(
   // traîne basse (fourrage) et pointe haute rare (jackpot d'un rang au-dessus) dopée par la
   // `luck` (profondeur/fiole) et `rollFloor` (Autel). Un bas-niveau en donjon profond reste
   // centré sur SON rang (anti-runaway). La QUALITÉ est un roll continu → farm du meilleur jet.
-  const floorRanks = Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 1.6; // 0..1,6 rang
+  const floorRanks = Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * ROLL_FLOOR_RANKS;
   const { rank: rarity, roll } = rollTier(
     rng,
     opts.level ?? 1,
@@ -1239,7 +1250,7 @@ export function rollSetPiece(
   // à mi-chemin du rang SUPÉRIEUR → ~50 % de Légendaires (donc de PROCS légendaires) dès le
   // niv.20, bien avant que Légendaire soit ton rang naturel (~niv.31). Désormais le boss donne
   // surtout TON rang, Légendaire restant un beau +1 (aligné sur la courbe de rareté).
-  const floorRanks = Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * 1.6 + 0.35;
+  const floorRanks = Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * ROLL_FLOOR_RANKS + 0.35;
   const { rank: rarity, roll } = rollTier(
     rng,
     opts.level,

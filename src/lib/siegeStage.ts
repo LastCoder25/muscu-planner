@@ -18,7 +18,7 @@
 import { BATTLE } from './siegeBattle';
 import { mulberry32 } from './combat';
 import { treePath } from './expedition';
-import type { RaidGroup, RaidReport } from './raid';
+import { raidFirstSector, type RaidGroup, type RaidReport, type SiegeDefenderInfo } from './raid';
 
 /** Un assaillant à l'écran. Sa position est posée une fois, en anneau autour de la base. */
 export interface SiegeBody {
@@ -34,36 +34,62 @@ export interface SiegeBody {
   dist: number;
 }
 
-/** Un temps de l'animation. Chaque événement du log en produit un. */
-interface SiegeBeat {
-  /** Le TOUR du moteur d’où vient ce temps. ⚠️ Il portait jusqu’ici zéro information de
-   *  position : l’écran ne pouvait donc pas savoir où en était l’assaut, et il faisait
-   *  TÉLÉPORTER les corps au pied du mur dès que leur groupe était engagé. C’est lui qui
-   *  porte la traversée.
-   *
-   *  ⚠️ Recopié du log, jamais recalculé — même règle que tout le reste de ce module :
-   *  il rejoue une bataille déjà tranchée, il n’en décide rien. */
+/** Ce qu’un temps montre. */
+type SiegeBeatKind =
+  /** Une BALISTE pivote vers sa cible et lâche son trait. */
+  | 'turret'
+  /** Un défenseur tire depuis le rempart (un aventurier, pas une machine : il ne pivote pas). */
+  | 'archer'
+  /** Le front cogne le mur — tous les coups d’un tour. */
+  | 'wall'
+  /** Une volée ennemie s’abat sur le rempart (balistes, archers) — tous les tirs d’un tour. */
+  | 'salvo'
+  /** On se bat DANS LA COUR. */
+  | 'yard'
+  /** La brèche s’ouvre ou s’élargit. */
+  | 'breach'
+  /** Des assaillants franchissent la brèche. */
+  | 'enter'
+  /** Des défenseurs descendent du rempart pour tenir la cour. */
+  | 'descend';
+
+/** Un temps de l’animation — un GESTE, qui peut regrouper plusieurs lignes du log. */
+export interface SiegeBeat {
+  /** Le TOUR du moteur d’où vient ce temps. ⚠️ Recopié du log, jamais recalculé : c’est
+   *  lui qui porte la traversée (sans lui les corps TÉLÉPORTAIENT au pied du mur). */
   round: number;
+  kind: SiegeBeatKind;
+  /** Groupe du corps principal (bannière de vague). */
   group: number;
-  /** `turret` = la base tire ; `foe` = un assaillant frappe le mur. */
-  kind: 'turret' | 'foe';
-  /** Corps concerné : la cible visée (turret) ou l'assaillant qui frappe (foe). */
+  /** Corps principal concerné, −1 s’il n’y en a pas (brèche, descente). */
   body: number;
-  /** Tourelle d'où part le tir — la plus proche de la cible (turret uniquement). */
+  /** Baliste qui tire (`turret`), −1 sinon. */
   turret: number;
-  crit: boolean;
-  dodge: boolean;
+  /** Défenseur qui agit (`t3`, `hero`, `adv_…`), ou null. */
+  shooter: string | null;
+  /** Corps d’assaillants frappés par des défenseurs. */
+  targets: number[];
+  /** Défenseur à l’origine de chaque coup de `targets` (même index). */
+  strikers: string[];
+  /** Corps d’assaillants qui agissent (mur, volée, cour, entrée). */
+  attackers: number[];
+  /** Défenseurs frappés (volée, cour) ou qui descendent. */
+  victims: string[];
   damage: number;
-  /** PV du MUR après ce temps → barre de vie du rempart. */
+  /** PV du MUR après ce temps → barre du rempart. */
   basePv: number;
-  /** Le coup portait-il SUR LE MUR ? ⚠️ Le moteur en deux phases permet désormais à un
-   *  assaillant de tirer sur une TOURELLE : sans ce drapeau, l'écran tremblerait et
-   *  virerait au rouge pour un coup que le rempart n'a jamais reçu. */
+  /** Le coup portait-il SUR LE MUR ? Seul ce cas fait trembler l’écran. */
   onWall: boolean;
-  /** Dégâts CUMULÉS infligés au groupe courant → d'où l'on déduit les corps à terre. */
+  /** Dégâts CUMULÉS infligés au groupe courant. */
   dealt: number;
-  /** Corps tombant SUR ce temps (jamais deux fois, cf. bornes cumulées). */
+  /** Corps tombant SUR ce temps (jamais deux fois). */
   kills: number[];
+  /** Défenseurs mis hors de combat sur ce temps — BLESSÉS, jamais morts. */
+  wounded: string[];
+  /** Largeur de la brèche à ce temps (0 = le mur tient). */
+  width: number;
+  /** Ce temps OUVRE la brèche (elle était fermée juste avant). */
+  opens: boolean;
 }
 
 export interface SiegeStage {
@@ -74,6 +100,11 @@ export interface SiegeStage {
   defeated: number;
   total: number;
   held: boolean;
+  /** Le pan qui cède, et l’angle de son milieu — là où la brèche s’ouvre. */
+  breachPan: number;
+  breachAngle: number;
+  /** Qui défendait, poste de départ compris. */
+  defenders: SiegeDefender[];
 }
 
 export const SIEGE_STAGE = {
@@ -113,8 +144,14 @@ export const SIEGE_STAGE = {
    *  qui est aussi la facon dont une armee aborde reellement un rempart.
    *  ⚠️ Purement VISUEL : le nombre de rangs ne touche ni les beats, ni les bornes
    *  cumulees, ni l issue — ce module ne decide rien du combat. */
-  perRank: 20,
   maxRanks: 3,
+  /** Corps par rang au sein d’UN groupe : un groupe tient son pan, il s’épaissit donc
+   *  vers l’arrière au lieu de s’étaler sur celui du voisin. */
+  perGroupRow: 7,
+  /** Part d’un pan qu’un groupe occupe — le reste sépare deux vagues à l’œil. */
+  panFill: 0.88,
+  /** Demi-côté de la caméra une fois la brèche ouverte : on plonge vers la cour. */
+  breachField: 112,
   /** Rayon auquel un assaillant est ARRIVÉ au pied du mur. Juste au-delà des tourelles
    *  (enceinte 72 + tour 7,5) pour qu’on le voie cogner sans le superposer à la pierre. */
   wallStop: 80,
@@ -265,30 +302,50 @@ export function beatMs(round: number, beatCount: number): number {
  *  la copie faisait de plus. */
 const rand = (seed: number) => mulberry32(seed >>> 0 || 1);
 
-/** Place les corps d'une armée : un arc autour de la base, un secteur par groupe pour
- *  qu'on distingue les vagues, et une gigue seedée pour éviter l'alignement militaire. */
-export function placeBodies(groups: RaidGroup[], seed: number): SiegeBody[] {
+const STEP = (Math.PI * 2) / BATTLE.sectors;
+
+/**
+ * L’ANGLE D’UN PAN — celui de la baliste qui s’y dresse (sommet de l’octogone).
+ *
+ * ⚠️ MÊME REPÈRE que le dessin de l’enceinte et que `nearestTurret` : un octogone décalé
+ * d’un demi-pas, qui démarre au nord. Le moteur range ses assaillants par PAN et borne
+ * l’arc d’une baliste en pans ; dessiner les corps ailleurs que sur leur pan faisait
+ * tirer une baliste à travers toute la ville, vers une cible posée de l’autre côté.
+ */
+export function sectorAngle(sector: number): number {
+  return -Math.PI / 2 + STEP / 2 + sector * STEP;
+}
+
+/**
+ * Place les corps d’une armée SUR LE PAN QUE LE MOTEUR LEUR A DONNÉ.
+ *
+ * ⚠️ Ils étaient posés sur un arc à orientation TIRÉE AU SORT, sans rapport avec
+ * `siegeAttackers`, qui range pourtant chaque groupe sur un pan précis — celui que les
+ * balistes voisines couvrent. Tant que les tirs étaient des traits instantanés ça
+ * passait inaperçu ; dès qu’une baliste PIVOTE vers sa cible, elle se serait tournée
+ * vers la ville. La géométrie du rejeu doit être celle de la bataille.
+ *
+ * Les angles restent CONTINUS (le groupe `gi` est à `gi` pans du premier, jamais ramené
+ * modulo le tour) : sinon une armée à cheval sur le nord se couperait en deux sur l’écran.
+ */
+export function placeBodies(groups: RaidGroup[], seed: number, firstSector = 0): SiegeBody[] {
   const rng = rand(seed);
   const out: SiegeBody[] = [];
-  const total = groups.reduce((s, g) => s + g.count, 0);
-  if (!total) return out;
-  // L'arc démarre à une orientation seedée : deux sièges ne se ressemblent pas.
-  const start = rng() * Math.PI * 2;
-  // Assez de rangs pour que chacun reste lisible, sans depasser le fond du champ.
-  const ranks = Math.min(SIEGE_STAGE.maxRanks, Math.max(1, Math.ceil(total / SIEGE_STAGE.perRank)));
-  const perRank = Math.ceil(total / ranks);
-  // ⚠️ Les rangs se partagent la bande de spawn EXISTANTE, ils ne la debordent pas :
-  // au-dela de `spawnMax` on sort du dessin, en deca de `spawnMin` on se retrouve
-  // dans les tourelles. La profondeur vient du partage, pas d un eloignement.
-  const slice = (SIEGE_STAGE.spawnMax - SIEGE_STAGE.spawnMin) / ranks;
-  let placed = 0;
   groups.forEach((g, gi) => {
+    if (g.count <= 0) return;
+    const center = sectorAngle(firstSector) + gi * STEP;
+    // Un groupe nombreux marche en PROFONDEUR : plusieurs rangs, qui se partagent la bande
+    // de départ sans la déborder (au-delà on sort du cadre, en deçà on est dans les tours).
+    const ranks = Math.min(
+      SIEGE_STAGE.maxRanks,
+      Math.max(1, Math.ceil(g.count / SIEGE_STAGE.perGroupRow)),
+    );
+    const perRow = Math.ceil(g.count / ranks);
+    const slice = (SIEGE_STAGE.spawnMax - SIEGE_STAGE.spawnMin) / ranks;
     for (let m = 0; m < g.count; m++) {
-      // Position DANS son rang : chaque rang re-etale l arc entier, sinon les rangs
-      // arriere heriteraient du resserrement que l on corrige.
-      const rank = Math.floor(placed / perRank);
-      const rankSize = Math.min(perRank, total - rank * perRank);
-      const t = ((placed % perRank) + 0.5) / rankSize;
+      const rank = Math.floor(m / perRow);
+      const rowSize = Math.min(perRow, g.count - rank * perRow);
+      const t = ((m % perRow) + 0.5) / rowSize;
       out.push({
         id: `b${gi}_${m}`,
         group: gi,
@@ -297,10 +354,11 @@ export function placeBodies(groups: RaidGroup[], seed: number): SiegeBody[] {
         name: g.species,
         level: g.level,
         champion: !!g.champion,
-        angle: start + (t - 0.5) * SIEGE_STAGE.arc + (rng() - 0.5) * 0.12,
+        // ⚠️ Un groupe tient SON pan, pas celui du voisin : on laisse une marge entre deux
+        // groupes pour qu’on distingue les vagues.
+        angle: center + (t - 0.5) * STEP * SIEGE_STAGE.panFill + (rng() - 0.5) * 0.08,
         dist: SIEGE_STAGE.spawnMin + rank * slice + rng() * slice,
       });
-      placed++;
     }
   });
   return out;
@@ -326,6 +384,261 @@ export function nearestTurret(angle: number, turretCount: number): number {
   return ((k % turretCount) + turretCount) % turretCount;
 }
 
+// ── 🏹 LA VISÉE ─────────────────────────────────────────────────────────────────
+
+/** Le cap (degrés) d’un dessin orienté « vers le haut » qui regarde de (x1,y1) vers
+ *  (x2,y2). Même convention que la rotation des balistes de l’écran « Ma base » (+90°). */
+export function aimDeg(x1: number, y1: number, x2: number, y2: number): number {
+  return (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI + 90;
+}
+
+/**
+ * Tourner vers un cap par le PLUS COURT chemin.
+ *
+ * ⚠️ Sans elle, une baliste passant de 170° à −170° ferait un tour presque complet sur
+ * elle-même pour un écart de 20° — l’œil lit une machine qui s’affole. La valeur rendue
+ * n’est volontairement PAS ramenée dans [0, 360[ : c’est l’angle cumulé qui permet à la
+ * transition CSS d’interpoler dans le bon sens.
+ */
+export function turnToward(prevDeg: number, targetDeg: number): number {
+  const d = ((((targetDeg - prevDeg) % 360) + 540) % 360) - 180;
+  return prevDeg + d;
+}
+
+// ── ⏱️ LE RYTHME D’UN TIR ───────────────────────────────────────────────────────
+
+export const SHOT = {
+  /** La baliste pivote vers sa cible… */
+  pivotMs: 100,
+  /** …PUIS lâche son trait, qui vole jusqu’à l’impact. */
+  flightMs: 140,
+  /** Un souffle après l’impact, pour qu’on le voie avant le geste suivant. */
+  padMs: 30,
+  /** Un archer ne pivote pas (un homme se tourne, une machine se règle) : il tire. */
+  arrowMs: 140,
+  /** Une volée ennemie : le temps de voir les flèches monter vers le rempart. */
+  salvoMs: 240,
+  /** Un échange de coups dans la cour. */
+  yardMs: 300,
+  /** Le temps de franchir la brèche. */
+  enterMs: 560,
+  /** Le mur CÈDE : on s’arrête, la caméra plonge vers la cour. ⚠️ Seulement à
+   *  l’OUVERTURE — la brèche s’élargit 4 à 7 fois par siège, et rejouer la pause à
+   *  chaque fois ajoutait jusqu’à 10 s (mesuré). */
+  breachMs: 1500,
+  /** La brèche s’élargit : un geste, pas une pause. */
+  widenMs: 300,
+  /** Une descente du rempart. */
+  descendMs: 420,
+  /** On ralentit sur un temps qui tue quelqu’un — un temps qui compte se regarde. */
+  killMs: 260,
+} as const;
+
+/** Les instants d’un temps, en ms depuis son début. */
+export interface BeatTiming {
+  /** Instant où le projectile PART (0 si rien ne pivote avant). */
+  launch: number;
+  /** Instant de l’impact — dégâts affichés, corps qui tombe. */
+  impact: number;
+  /** Durée totale du temps : le suivant ne commence pas avant. */
+  total: number;
+}
+
+/**
+ * LES INSTANTS D’UN TEMPS : quand le trait part, quand il frappe, quand on passe au suivant.
+ *
+ * ⚠️ LA GARANTIE DEMANDÉE PAR L’UTILISATEUR VIT ICI : **une baliste ne se tourne pas
+ * vers une autre cible tant que son projectile n’est pas parti**. Les temps se jouent
+ * l’un après l’autre et une baliste ne vise qu’en DÉBUT de temps, donc il suffit que le
+ * lâcher tombe avant la fin du temps — ce que `total ≥ impact > launch` assure par
+ * construction, et qu’un test vérifie sur de vrais sièges.
+ *
+ * ⚠️ Des PLANCHERS, jamais des raccourcis : sur un long siège la cadence de fond descend
+ * à 62 ms, où un pivot suivi d’un vol ne se verrait pas. Le temps s’allonge pour que le
+ * geste existe ; il ne se raccourcit jamais sous le rythme de fond.
+ */
+export function beatTiming(beat: SiegeBeat, beatCount: number): BeatTiming {
+  const base = beatMs(beat.round, beatCount);
+  // ⚠️ LE GESTE SE RESSERRE QUAND LE SIÈGE S’ALLONGE, comme la cadence de fond. Mesuré à
+  // gestes fixes : 73 à 90 s de moyenne et jusqu’à 157 s — ~140 tirs de baliste à 280 ms
+  // chacun pesaient à eux seuls 40 s. Il ne descend jamais sous les deux tiers : en deçà,
+  // un pivot suivi d’un vol ne se verrait plus.
+  const k = tempoFor(beatCount);
+  const ms = (x: number) => Math.round(x * k);
+  const slow = beat.kills.length || beat.wounded.length ? ms(SHOT.killMs) : 0;
+  let launch = 0;
+  let impact = 0;
+  let floor = 0;
+  switch (beat.kind) {
+    case 'turret':
+      launch = ms(SHOT.pivotMs);
+      impact = launch + ms(SHOT.flightMs);
+      floor = impact + ms(SHOT.padMs);
+      break;
+    case 'archer':
+      impact = ms(SHOT.arrowMs);
+      floor = impact + ms(SHOT.padMs);
+      break;
+    case 'salvo':
+      impact = ms(SHOT.salvoMs);
+      floor = impact + ms(SHOT.padMs);
+      break;
+    case 'yard':
+      impact = ms(SHOT.yardMs * 0.5);
+      floor = ms(SHOT.yardMs);
+      break;
+    case 'enter':
+      floor = ms(SHOT.enterMs);
+      break;
+    case 'breach':
+      // La pause dramatique n’est PAS resserrée : elle n’arrive qu’une fois.
+      floor = beat.opens ? SHOT.breachMs : ms(SHOT.widenMs);
+      break;
+    case 'descend':
+      floor = ms(SHOT.descendMs);
+      break;
+    case 'wall':
+      impact = Math.round(base * 0.3);
+      break;
+  }
+  return { launch, impact, total: Math.max(base, floor) + slow };
+}
+
+/** Facteur de tempo des gestes : 1 sur un siège court, jusqu’aux deux tiers sur un long. */
+function tempoFor(beatCount: number): number {
+  return beatCount > 200 ? 0.66 : beatCount > 140 ? 0.8 : 1;
+}
+
+// ── 🧱 LA BRÈCHE ET LA COUR ─────────────────────────────────────────────────────
+
+/** Rayon du mur (sommets) — le même que l’écran « Ma base ». */
+export const SIEGE_WALL_R = 72;
+/** Demi-largeur de la cour intérieure : l’apothème de l’octogone intérieur (×0,86). */
+const YARD_APOTHEM = SIEGE_WALL_R * 0.86 * Math.cos(Math.PI / BATTLE.sectors);
+
+/**
+ * LA PART D’UN PAN QUI S’EST EFFONDRÉE, selon la largeur de la brèche.
+ *
+ * ⚠️ Elle SUIT la largeur du moteur au lieu d’un état « ouverte / fermée » : la brèche
+ * s’élargit à mesure que le mur continue de tomber (cf. `breachWidth`), et l’écran le
+ * montre. Jamais le pan entier — il reste des chicots de mur de part et d’autre.
+ */
+export function breachGap(width: number): number {
+  if (width <= 0) return 0;
+  const f = Math.min(1, width / BATTLE.breachMaxWidth);
+  return 0.22 + 0.5 * f;
+}
+
+/** Demi-angle (radians) de la plus grande trouée possible, vue du centre. */
+export const BREACH_HALF_ANGLE = (breachGap(BATTLE.breachMaxWidth) * STEP) / 2;
+/** Où commencent les tireurs du rempart : au-delà de la plus grande trouée, avec une marge. */
+const RAMPART_CLEAR = BREACH_HALF_ANGLE + 0.12;
+
+/** Le pan qui cède : au cœur du front, entre la baliste du groupe central et la suivante. */
+function breachPan(firstSector: number, groupCount: number): number {
+  const c = firstSector + Math.floor(Math.max(0, groupCount - 1) / 2);
+  return ((c % BATTLE.sectors) + BATTLE.sectors) % BATTLE.sectors;
+}
+
+/** L’angle du milieu d’un pan (entre le sommet `pan` et le suivant). */
+export function panAngle(pan: number): number {
+  return sectorAngle(pan) + STEP / 2;
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+/**
+ * OÙ SE TIENT, DANS LA COUR, le k-ième assaillant entré par la brèche.
+ *
+ * ⚠️ Toujours À L’INTÉRIEUR de l’octogone intérieur — un test le balaie. Les places se
+ * RECYCLENT (modulo) : le moteur ne laisse jamais plus de `breachMaxWidth` corps à la
+ * fois dans la cour, et un corps tombé reste où il est tombé.
+ */
+export function yardAttackerSpot(angle: number, k: number): Point {
+  const slot = ((k % 8) + 8) % 8;
+  const row = Math.floor(slot / 4);
+  const col = slot % 4;
+  const r = 40 - row * 11;
+  const lat = (col - 1.5) * 11;
+  return along(angle, r, lat);
+}
+
+/** OÙ SE TIENT un défenseur : sur le chemin de ronde face au front, ou dans la cour, entre
+ *  la brèche et le cœur de la ville. */
+export function defenderSpot(angle: number, j: number, n: number, post: 'rampart' | 'yard'): Point {
+  if (post === 'rampart') {
+    // ⚠️ DE PART ET D’AUTRE DE LA BRÈCHE, jamais dessus : posés en éventail centré sur elle
+    // (premier jet), les tireurs du chemin de ronde RECOUVRAIENT la trouée — vu sur le
+    // banc, le mur avait l’air intact alors qu’il était ouvert. Ils flanquent donc le trou,
+    // en alternant les côtés, au-delà de la plus grande ouverture possible.
+    const side = j % 2 === 0 ? 1 : -1;
+    const a = angle + side * (RAMPART_CLEAR + Math.floor(j / 2) * 0.2);
+    const r = SIEGE_WALL_R * 0.93;
+    return { x: 100 + Math.cos(a) * r, y: 100 + Math.sin(a) * r };
+  }
+  const perRow = 4;
+  const row = Math.floor(j / perRow);
+  const rowSize = Math.min(perRow, n - row * perRow);
+  const lat = ((j % perRow) - (rowSize - 1) / 2) * 12;
+  return along(angle, 20 - row * 11, lat);
+}
+
+function along(angle: number, r: number, lat: number): Point {
+  const px = -Math.sin(angle);
+  const py = Math.cos(angle);
+  return {
+    x: 100 + Math.cos(angle) * r + px * lat,
+    y: 100 + Math.sin(angle) * r + py * lat,
+  };
+}
+
+/** La cour tient-elle ce point ? (utilisé par les tests et par personne d’autre) */
+export function insideYard(p: Point): boolean {
+  const dx = p.x - 100;
+  const dy = p.y - 100;
+  // Octogone : on vérifie la projection sur chaque normale de pan.
+  for (let i = 0; i < BATTLE.sectors; i++) {
+    const a = panAngle(i);
+    if (dx * Math.cos(a) + dy * Math.sin(a) > YARD_APOTHEM) return false;
+  }
+  return true;
+}
+
+/**
+ * LE CADRAGE UNE FOIS LA BRÈCHE OUVERTE : la caméra plonge vers la cour.
+ *
+ * ⚠️ Demandé explicitement : « avec vision sur l’intérieur de la base ». Vue de 170 unités,
+ * une mêlée entre quelques corps dans une cour de 57 unités ne se lit pas. On resserre, et
+ * on décale le centre vers la brèche — c’est là que ça se passe.
+ */
+export function breachCamera(angle: number): { cx: number; cy: number; field: number } {
+  return {
+    cx: 100 + Math.cos(angle) * 18,
+    cy: 100 + Math.sin(angle) * 18,
+    field: SIEGE_STAGE.breachField,
+  };
+}
+
+// ── 🎬 LES TEMPS ────────────────────────────────────────────────────────────────
+
+/** Défenseur du rejeu : son identité, et son poste de DÉPART (il peut descendre). */
+interface SiegeDefender extends SiegeDefenderInfo {
+  post: 'rampart' | 'yard';
+}
+
+/** Graine d’un rapport — relue dans `raidId` pour ceux stockés avant qu’on la garde. */
+export function reportSeed(report: RaidReport): number {
+  if (Number.isFinite(report.seed)) return report.seed!;
+  const m = /^raid_(-?\d+)_/.exec(report.raidId ?? '');
+  return m ? Number(m[1]) : 0;
+}
+
+const ATT = /^a(\d+)$/;
+const TUR = /^t(\d+)$/;
+
 /**
  * Construit la mise en scène complète d'un rapport de siège.
  *
@@ -333,111 +646,196 @@ export function nearestTurret(angle: number, turretCount: number): number {
  * que `simulateSiege` a produit — l'issue, les corps tombés et les récompenses sont
  * identiques au bit près.
  *
- * ⚠️ IL EST MÊME PLUS FIDÈLE QU'AVANT : l'ancien rejeu devait DEVINER quels corps
- * tombaient, en reconstituant des bornes cumulées à partir des PV d'un groupe. Le
- * nouveau moteur NOMME chaque mort (`kind: 'down'`) — on n'a plus qu'à la rattacher au
- * temps qui vient de la provoquer.
+ * ⚠️ LES ÉVÉNEMENTS SONT REGROUPÉS PAR TOUR, et c’est ce qui rend le reste possible.
+ * Mesuré sur 30 sièges : ~160 coups sur le mur en ~19 tours, et **160 à 450 tirs
+ * d’archers ennemis sur le rempart** — chacun devenait un temps, donc le rejeu passait
+ * l’essentiel de sa minute à faire trembler l’écran coup par coup. Un tour de front qui
+ * cogne est UN geste ; une volée qui s’abat sur le rempart en est un autre. Le temps
+ * ainsi rendu paie le pivot et le vol des traits de baliste.
+ *
+ * ⚠️ ET PLUS RIEN N’EST JETÉ : `breach`, `enter` et `descend` étaient ignorés, et les coups
+ * échangés dans la cour étaient affichés comme des tirs de tourelle. La brèche existait
+ * dans la bataille, jamais à l’écran — c’est exactement ce qu’un joueur a signalé.
  */
 export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeStage {
-  const bodies = placeBodies(report.groups, report.groups.length * 7919 + report.total);
-  const beats: SiegeBeat[] = [];
+  const firstSector = raidFirstSector(reportSeed(report));
+  const bodies = placeBodies(
+    report.groups,
+    report.groups.length * 7919 + report.total,
+    firstSector,
+  );
+  const pan = breachPan(firstSector, report.groups.length);
+  const angle = panAngle(pan);
 
-  // Index du premier corps de chaque groupe → à quel groupe appartient le corps N.
   const groupOf: number[] = [];
   report.groups.forEach((g, gi) => {
     for (let i = 0; i < g.count; i++) groupOf.push(gi);
   });
-
-  /** `a12` → le corps 12. Les ids viennent de `siegeAttackers`, qui les numérote dans
-   *  l'ORDRE DES GROUPES — le même que `placeBodies`. Les deux ne peuvent donc pas se
-   *  désynchroniser sans que la numérotation elle-même change. */
   const bodyOf = (id: string | undefined): number => {
-    if (!id || id[0] !== 'a') return -1;
-    const n = Number(id.slice(1));
-    return Number.isFinite(n) && n >= 0 && n < bodies.length ? n : -1;
+    const m = ATT.exec(id ?? '');
+    if (!m) return -1;
+    const n = Number(m[1]);
+    return n < bodies.length ? n : -1;
   };
-  /** `t3` → la tourelle 3. Le héros et les aventuriers n'en sont pas : leur tir part de
-   *  la tourelle la plus proche de la cible, faute de position propre sur le dessin. */
   const turretOf = (id: string | undefined): number => {
-    if (!id || id[0] !== 't') return -1;
-    const n = Number(id.slice(1));
-    return Number.isFinite(n) && n >= 0 && n < turretCount ? n : -1;
+    const m = TUR.exec(id ?? '');
+    if (!m) return -1;
+    const n = Number(m[1]);
+    return n < turretCount ? n : -1;
   };
 
-  let wallPv = report.maxPv;
+  const defenders = defendersOf(report, bodyOf);
+  const defIds = new Set(defenders.map((d) => d.id));
+
+  const beats: SiegeBeat[] = [];
+  const blank = (round: number, kind: SiegeBeatKind): SiegeBeat => ({
+    round,
+    kind,
+    group: 0,
+    body: -1,
+    turret: -1,
+    shooter: null,
+    targets: [],
+    strikers: [],
+    attackers: [],
+    victims: [],
+    damage: 0,
+    basePv: report.maxPv,
+    onWall: kind === 'wall',
+    dealt: 0,
+    kills: [],
+    wounded: [],
+    width: 0,
+    opens: false,
+  });
+
+  let round = -1;
+  let open = new Map<string, SiegeBeat>();
+  const inside = new Set<number>();
+  let width = 0;
+  let last: SiegeBeat | null = null;
+  /** Dégâts portés AUX ASSAILLANTS par temps : une échauffourée de la cour mêle les coups
+   *  des deux camps dans `damage`, or seuls les premiers entament un groupe. */
+  const foeDamage = new Map<SiegeBeat, number>();
+  const beatFor = (key: string, r: number, kind: SiegeBeatKind): SiegeBeat => {
+    if (r !== round) {
+      round = r;
+      open = new Map();
+    }
+    let b = open.get(key);
+    if (!b) {
+      b = blank(r, kind);
+      b.width = width;
+      open.set(key, b);
+      beats.push(b);
+    }
+    return b;
+  };
+
   for (const e of report.log) {
     if (e.kind === 'down') {
-      // ⚠️ La mort se rattache au DERNIER temps joué : c'est lui qui l'a causée. Un
-      // défenseur tombé (tourelle réduite au silence) n'est pas un corps du champ de
-      // bataille — on ne l'ajoute donc pas aux `kills`, qui comptent les assaillants.
+      if (!last) continue;
       const b = bodyOf(e.to);
-      const last = beats[beats.length - 1];
-      if (b >= 0 && last) last.kills.push(b);
+      if (b >= 0) last.kills.push(b);
+      else if (e.to) last.wounded.push(e.to);
       continue;
     }
-    // ⚠️ 'descend' est un DÉPLACEMENT, pas un coup : sans ce filtre il tomberait dans la
-    // branche 'hit' plus bas et le rejeu inventerait un tir.
-    if (e.kind === 'breach' || e.kind === 'enter' || e.kind === 'descend') continue;
-
-    if (e.kind === 'wall') {
-      wallPv = Math.max(0, wallPv - (e.amount ?? 0));
+    if (e.kind === 'breach') {
+      const before = width;
+      width = e.width ?? width;
+      const b = beatFor(`breach${e.width}`, e.round, 'breach');
+      b.width = width;
+      b.opens = before === 0 && width > 0;
+      last = b;
+      continue;
+    }
+    if (e.kind === 'enter') {
       const body = bodyOf(e.from);
-      beats.push({
-        round: e.round,
-        group: body >= 0 ? (groupOf[body] ?? 0) : 0,
-        kind: 'foe',
-        body: Math.max(0, body),
-        turret: 0,
-        crit: false,
-        dodge: false,
-        damage: e.amount ?? 0,
-        basePv: wallPv,
-        onWall: true,
-        dealt: 0,
-        kills: [],
-      });
+      if (body < 0) continue;
+      inside.add(body);
+      const b = beatFor('enter', e.round, 'enter');
+      b.attackers.push(body);
+      if (b.body < 0) {
+        b.body = body;
+        b.group = groupOf[body] ?? 0;
+      }
+      b.width = width;
+      last = b;
+      continue;
+    }
+    if (e.kind === 'descend') {
+      const b = beatFor('descend', e.round, 'descend');
+      if (e.to) b.victims.push(e.to);
+      last = b;
+      continue;
+    }
+    if (e.kind === 'wall') {
+      const body = bodyOf(e.from);
+      const b = beatFor('wall', e.round, 'wall');
+      if (body >= 0) {
+        b.attackers.push(body);
+        if (b.body < 0) {
+          b.body = body;
+          b.group = groupOf[body] ?? 0;
+        }
+      }
+      b.damage += e.amount ?? 0;
+      last = b;
       continue;
     }
 
-    // `kind: 'hit'` — reste à savoir QUI frappe QUI.
+    // `kind: 'hit'`
     const cible = bodyOf(e.to);
     if (cible >= 0) {
-      // Un défenseur abat un assaillant. Le trait part de sa tourelle, ou de la plus
-      // proche quand c'est le héros ou un aventurier.
+      // Un défenseur frappe un assaillant.
+      // ⚠️ UNE BALISTE = UN TEMPS, parce que c’est son PIVOT qu’on veut voir. Les archers du
+      // rempart, eux, tirent en VOLÉE sur un tour, et la mêlée de la cour est UNE
+      // échauffourée : chaque aventurier ayant son temps, la cour pesait à elle seule 19 à
+      // 26 s d’un rejeu de niveau 60-90 (mesuré, 81 à 116 temps).
       const t = turretOf(e.from);
-      const body = bodies[cible];
-      beats.push({
-        round: e.round,
-        group: groupOf[cible] ?? 0,
-        kind: 'turret',
-        body: cible,
-        turret: t >= 0 ? t : nearestTurret(body?.angle ?? 0, turretCount),
-        crit: false,
-        dodge: false,
-        damage: e.amount ?? 0,
-        basePv: wallPv,
-        onWall: false,
-        dealt: 0,
-        kills: [],
-      });
-    } else {
-      // Un assaillant fait taire un défenseur : le mur n'encaisse rien.
-      const body = bodyOf(e.from);
-      beats.push({
-        round: e.round,
-        group: body >= 0 ? (groupOf[body] ?? 0) : 0,
-        kind: 'foe',
-        body: Math.max(0, body),
-        turret: turretOf(e.to),
-        crit: false,
-        dodge: false,
-        damage: e.amount ?? 0,
-        basePv: wallPv,
-        onWall: false,
-        dealt: 0,
-        kills: [],
-      });
+      const kind: SiegeBeatKind = t >= 0 ? 'turret' : inside.has(cible) ? 'yard' : 'archer';
+      const key = t >= 0 ? `d:${e.from}` : kind;
+      const b = beatFor(key, e.round, kind);
+      if (b.shooter === null) b.shooter = e.from ?? null;
+      if (e.from) b.strikers.push(e.from);
+      b.turret = t;
+      b.targets.push(cible);
+      if (b.body < 0) {
+        b.body = cible;
+        b.group = groupOf[cible] ?? 0;
+      }
+      b.damage += e.amount ?? 0;
+      foeDamage.set(b, (foeDamage.get(b) ?? 0) + (e.amount ?? 0));
+      last = b;
+      continue;
     }
+    // Un assaillant frappe un défenseur (baliste, archer du rempart, ou dans la cour).
+    const body = bodyOf(e.from);
+    if (body < 0 || !e.to || !(TUR.test(e.to) || defIds.has(e.to))) continue;
+    const inYard = inside.has(body);
+    const b = beatFor(inYard ? 'yard' : 'salvo', e.round, inYard ? 'yard' : 'salvo');
+    b.attackers.push(body);
+    b.victims.push(e.to);
+    if (b.body < 0) {
+      b.body = body;
+      b.group = groupOf[body] ?? 0;
+    }
+    b.damage += e.amount ?? 0;
+    last = b;
+  }
+
+  // Les PV du rempart et les dégâts cumulés par groupe se DÉRIVENT de l’ordre des temps,
+  // une fois les regroupements faits : calculés au fil de l’eau, un temps créé tôt dans
+  // un tour aurait porté des PV d’avant les coups regroupés plus tard dans ce même tour,
+  // et la barre serait remontée à l’écran.
+  let pv = report.maxPv;
+  const dealt = new Map<number, number>();
+  for (const b of beats) {
+    if (b.kind === 'wall') pv = Math.max(0, pv - b.damage);
+    b.basePv = pv;
+    const f = foeDamage.get(b) ?? 0;
+    if (f) dealt.set(b.group, (dealt.get(b.group) ?? 0) + f);
+    b.dealt = dealt.get(b.group) ?? 0;
   }
 
   return {
@@ -447,5 +845,48 @@ export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeS
     defeated: report.defeated,
     total: report.total,
     held: report.held,
+    breachPan: pan,
+    breachAngle: angle,
+    defenders,
   };
+}
+
+/**
+ * Les défenseurs du rejeu, tels que le rapport les a enregistrés.
+ *
+ * ⚠️ Pour un rapport d’avant (sans `defenders`), on les RETROUVE dans le log plutôt que
+ * de montrer le vivier d’aujourd’hui : un id qui n’est ni une baliste ni un assaillant est
+ * un défenseur, et qui frappe un corps resté DEHORS tirait depuis le rempart.
+ */
+function defendersOf(
+  report: RaidReport,
+  bodyOf: (id: string | undefined) => number,
+): SiegeDefender[] {
+  const posts = (d: SiegeDefenderInfo): SiegeDefender => ({
+    ...d,
+    post: d.kind === 'ranged' ? 'rampart' : 'yard',
+  });
+  if (report.defenders) return report.defenders.map(posts);
+  const seen = new Map<string, SiegeDefenderInfo>();
+  const inside = new Set<number>();
+  for (const e of report.log) {
+    if (e.kind === 'enter') {
+      const b = bodyOf(e.from);
+      if (b >= 0) inside.add(b);
+    }
+    if (e.kind !== 'hit') continue;
+    for (const id of [e.from, e.to]) {
+      if (!id || ATT.test(id) || TUR.test(id) || seen.has(id)) continue;
+      seen.set(id, {
+        id,
+        name: id === 'hero' ? 'Héros' : 'Aventurier',
+        emoji: id === 'hero' ? '🦸' : '⚔️',
+        kind: 'melee',
+      });
+    }
+    const d = e.from ? seen.get(e.from) : undefined;
+    const b = bodyOf(e.to);
+    if (d && b >= 0 && !inside.has(b)) d.kind = 'ranged';
+  }
+  return [...seen.values()].map(posts);
 }

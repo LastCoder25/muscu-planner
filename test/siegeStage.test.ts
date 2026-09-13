@@ -1,24 +1,39 @@
 import { describe, it, expect } from 'vitest';
 import {
+  aimDeg,
   approachAt,
   arrivalRadius,
   assaultRadius,
   battlefieldDecor,
   beatMs,
+  beatTiming,
+  BREACH_HALF_ANGLE,
+  breachCamera,
+  breachGap,
   buildSiegeStage,
+  defenderSpot,
+  insideYard,
+  panAngle,
   placeBodies,
   cutsFor,
   nearestTurret,
+  reportSeed,
+  sectorAngle,
+  SHOT,
   SIEGE_STAGE,
+  turnToward,
+  yardAttackerSpot,
 } from '@/lib/siegeStage';
 import { BATTLE } from '@/lib/siegeBattle';
 import {
   rollRaid,
   baseCombatant,
+  raidFirstSector,
   resolveRaid,
   turretCount,
   TURRET_SLOTS,
   type DefenseStructure,
+  type GuardUnit,
 } from '@/lib/raid';
 import { refFighter, gearExpect } from '@/lib/proceduralContent';
 import type { Combatant } from '@/lib/combat';
@@ -159,19 +174,23 @@ describe('cohérence avec le rapport', () => {
     if (fin) expect(fin.basePv).toBe(report.finalPv);
   });
 
-  it('chaque tir part d’une tourelle EXISTANTE ; les assaillants, eux, frappent le mur', () => {
+  it('chaque temps désigne des acteurs EXISTANTS : une baliste bâtie, des corps de l’armée', () => {
+    // ⚠️ RÉÉCRIT, pas supprimé : il exigeait `body >= 0` sur CHAQUE temps — vrai tant qu’un
+    // temps était un coup. Une brèche qui s’ouvre ou des défenseurs qui descendent ne
+    // désignent aucun corps : la propriété protégée est « rien ne pointe dans le vide ».
     const { stage } = siege(88);
     const n = turretCount(26);
+    const okBody = (k: number) => k >= 0 && k < stage.bodies.length;
     for (const b of stage.beats) {
-      expect(b.body).toBeGreaterThanOrEqual(0);
-      expect(b.body).toBeLessThan(stage.bodies.length);
+      for (const k of [...b.targets, ...b.attackers, ...b.kills]) expect(okBody(k)).toBe(true);
+      if (b.body !== -1) expect(okBody(b.body)).toBe(true);
       if (b.kind === 'turret') {
         expect(b.turret).toBeGreaterThanOrEqual(0);
         expect(b.turret).toBeLessThan(n);
       }
     }
     expect(stage.beats.some((b) => b.kind === 'turret')).toBe(true);
-    expect(stage.beats.some((b) => b.kind === 'foe')).toBe(true);
+    expect(stage.beats.some((b) => b.kind === 'wall')).toBe(true);
   });
 
   it('la tourelle qui tire est la plus proche de sa cible', () => {
@@ -256,14 +275,20 @@ describe('🚶 LA TRAVERSÉE : l’assaut marche sous le feu', () => {
     expect(SIEGE_STAGE.spawnMin).toBeGreaterThan(SIEGE_STAGE.wallStop);
   });
 
-  it('⚠️ CHAQUE TEMPS PORTE SON TOUR, recopié du log et jamais recalculé', () => {
-    // C’est ce tour qui place les corps. S’il était inventé ici, le rejeu montrerait une
-    // armée qui arrive avant ou après qu’elle ne frappe.
-    const { stage, report } = siege(4242);
-    const attendus = report.log
-      .filter((e) => e.kind === 'hit' || e.kind === 'wall')
-      .map((e) => e.round);
-    expect(stage.beats.map((b) => b.round)).toEqual(attendus);
+  it('⚠️ CHAQUE TEMPS PORTE SON TOUR — aucun tour inventé, aucun tour perdu', () => {
+    // C’est ce tour qui place les corps. ⚠️ RÉÉCRIT, pas supprimé : il comparait la suite
+    // des tours ligne à ligne avec le log, vrai tant qu’un événement faisait un temps. Les
+    // coups d’un même tour sont désormais REGROUPÉS (mesuré : ~160 coups sur le mur en ~19
+    // tours) — la propriété à protéger est que les tours de la scène sont EXACTEMENT ceux
+    // du log, dans l’ordre.
+    for (const seed of [4242, 77, 1313]) {
+      const { stage, report } = siege(seed, 26, 16, 16, true);
+      const tours = stage.beats.map((b) => b.round);
+      for (let i = 1; i < tours.length; i++)
+        expect(tours[i]!).toBeGreaterThanOrEqual(tours[i - 1]!);
+      const attendus = new Set(report.log.filter((e) => e.kind !== 'down').map((e) => e.round));
+      expect(new Set(tours)).toEqual(attendus);
+    }
   });
 
   it('⚠️ PERSONNE N’EST AU MUR AVANT D’AVOIR TRAVERSÉ', () => {
@@ -377,5 +402,287 @@ describe('🌿 LE SOL DU CHAMP DE BATAILLE', () => {
     while (Date.now() === t0) tours++;
     expect(tours).toBeGreaterThan(0);
     expect(battlefieldDecor(KEEP)).toEqual(avant);
+  });
+});
+
+/** Un vivier réaliste : des tireurs au rempart, des hommes d’armes dans la cour. */
+function garde(L: number, n = 6): GuardUnit[] {
+  const f = refFighter(L);
+  return Array.from({ length: n }, (_, i) => ({
+    id: `adv_${i}`,
+    name: `Aventurier ${i}`,
+    emoji: i % 2 ? '🏹' : '⚔️',
+    pv: f.pv * 0.4,
+    damage: f.damage * 0.25,
+    ranged: i % 2 === 1,
+  }));
+}
+/** Un siège qui PERCE : enceinte à moitié montée, garnison présente. */
+function breche(seed: number, L = 28) {
+  const lvl = Math.round(L * 0.6);
+  const raid = rollRaid(seed, L, 0, 0);
+  const report = resolveRaid(
+    { defenses: defs(lvl, lvl), playerLevel: L, hero: hero(L), guard: garde(L) },
+    raid,
+    0,
+    true,
+  );
+  return { raid, report, lvl, stage: buildSiegeStage(report, turretCount(lvl)) };
+}
+const STEP = (Math.PI * 2) / TURRET_SLOTS;
+const ecartAngle = (a: number, b: number) => {
+  const d = Math.abs(a - b) % (Math.PI * 2);
+  return Math.min(d, Math.PI * 2 - d);
+};
+const ATT = /^a\d+$/;
+
+describe('🧱 LA BRÈCHE ET LA COUR SE VOIENT', () => {
+  // ⚠️ Signalé par l’utilisateur : « mon mur est descendu bas mais je n’ai pas vu de brèche
+  // ni de combat dans la cour ». Le moteur journalisait bien `breach`, `enter` et les coups
+  // échangés à l’intérieur — le rejeu les JETAIT (`continue`), et affichait les coups de la
+  // cour comme des tirs de tourelle.
+
+  it('⚠️ RIEN N’EST JETÉ : chaque entrée, chaque brèche, chaque mort du log a son temps', () => {
+    for (const seed of [3, 17, 29, 41]) {
+      const { report, stage } = breche(seed);
+      const log = report.log;
+      const entres = stage.beats.filter((b) => b.kind === 'enter').flatMap((b) => b.attackers);
+      expect(entres).toHaveLength(log.filter((e) => e.kind === 'enter').length);
+      expect(stage.beats.filter((b) => b.kind === 'breach')).toHaveLength(
+        log.filter((e) => e.kind === 'breach').length,
+      );
+      const morts = log.filter((e) => e.kind === 'down' && ATT.test(e.to ?? '')).length;
+      expect(stage.beats.flatMap((b) => b.kills)).toHaveLength(morts);
+      const blesses = log.filter((e) => e.kind === 'down' && !ATT.test(e.to ?? '')).length;
+      expect(stage.beats.flatMap((b) => b.wounded)).toHaveLength(blesses);
+    }
+  });
+
+  it('la brèche s’ouvre UNE fois, et seulement si le rapport dit qu’elle s’est ouverte', () => {
+    let vues = 0;
+    for (const seed of [3, 17, 29, 41, 53, 67]) {
+      const { report, stage } = breche(seed);
+      expect(stage.beats.filter((b) => b.opens)).toHaveLength(report.breached ? 1 : 0);
+      if (report.breached) vues++;
+    }
+    expect(vues, 'le harnais doit produire des brèches, sinon il ne prouve rien').toBeGreaterThan(
+      2,
+    );
+  });
+
+  it('⚠️ ON SE BAT DANS LA COUR, et un intrus n’y frappe qu’une fois ENTRÉ', () => {
+    let cour = 0;
+    for (const seed of [3, 17, 29, 41]) {
+      const { stage } = breche(seed);
+      const entres = new Set<number>();
+      for (const b of stage.beats) {
+        if (b.kind === 'enter') b.attackers.forEach((a) => entres.add(a));
+        if (b.kind !== 'yard') continue;
+        cour++;
+        for (const a of b.attackers)
+          expect(entres.has(a), `corps ${a} frappe sans être entré`).toBe(true);
+        for (const t of b.targets)
+          expect(entres.has(t), `corps ${t} frappé sans être entré`).toBe(true);
+      }
+    }
+    expect(cour).toBeGreaterThan(0);
+  });
+
+  it('la brèche ne se referme jamais, et ouvre un pan de plus en plus grand', () => {
+    const { stage } = breche(17);
+    for (let i = 1; i < stage.beats.length; i++) {
+      expect(stage.beats[i]!.width).toBeGreaterThanOrEqual(stage.beats[i - 1]!.width);
+    }
+    expect(breachGap(0)).toBe(0);
+    let prev = 0;
+    for (let w = 1; w <= BATTLE.breachMaxWidth; w++) {
+      const g = breachGap(w);
+      expect(g).toBeGreaterThan(prev);
+      expect(g).toBeLessThan(1); // il reste des chicots de mur
+      prev = g;
+    }
+  });
+
+  it('⚠️ LES POSTES DE LA COUR SONT DANS LA COUR — intrus comme défenseurs', () => {
+    for (let pan = 0; pan < TURRET_SLOTS; pan++) {
+      const a = panAngle(pan);
+      for (let k = 0; k < 16; k++) {
+        expect(insideYard(yardAttackerSpot(a, k)), `intrus ${k}, pan ${pan}`).toBe(true);
+      }
+      for (const n of [1, 4, 9]) {
+        for (let j = 0; j < n; j++) {
+          expect(insideYard(defenderSpot(a, j, n, 'yard')), `défenseur ${j}/${n}`).toBe(true);
+          // Un tireur du rempart se tient SUR le mur, pas dans la cour.
+          expect(insideYard(defenderSpot(a, j, n, 'rampart'))).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('⚠️ LES TIREURS DU REMPART FLANQUENT LA BRÈCHE, ils ne la cachent pas', () => {
+    // Vu sur le banc : posés en éventail centré sur la trouée, ils la RECOUVRAIENT et le mur
+    // avait l’air intact alors qu’il était ouvert.
+    for (let pan = 0; pan < TURRET_SLOTS; pan++) {
+      const a = panAngle(pan);
+      for (const n of [1, 2, 5, 9]) {
+        for (let j = 0; j < n; j++) {
+          const p = defenderSpot(a, j, n, 'rampart');
+          const ang = Math.atan2(p.y - 100, p.x - 100);
+          expect(ecartAngle(ang, a), `tireur ${j}/${n}`).toBeGreaterThan(BREACH_HALF_ANGLE);
+        }
+      }
+    }
+  });
+
+  it('⚠️ LA CAMÉRA DE BRÈCHE CADRE LA BRÈCHE ET LA COUR', () => {
+    for (let pan = 0; pan < TURRET_SLOTS; pan++) {
+      const a = panAngle(pan);
+      const c = breachCamera(a);
+      const cadre = (p: { x: number; y: number }) =>
+        Math.abs(p.x - c.cx) <= c.field && Math.abs(p.y - c.cy) <= c.field;
+      expect(cadre({ x: 100 + Math.cos(a) * 72, y: 100 + Math.sin(a) * 72 })).toBe(true);
+      for (let k = 0; k < 8; k++) expect(cadre(yardAttackerSpot(a, k))).toBe(true);
+      // Elle PLONGE : plus serrée que la vue d’approche.
+      expect(c.field).toBeLessThan(SIEGE_STAGE.field);
+    }
+  });
+});
+
+describe('🏹 LES BALISTES VISENT CE QU’ELLES FRAPPENT', () => {
+  it('⚠️ UN CORPS EST DESSINÉ SUR LE PAN QUE LE MOTEUR LUI A DONNÉ', () => {
+    // Il était posé sur un arc à orientation tirée au sort : une baliste qui PIVOTE vers
+    // sa cible se serait tournée vers la ville.
+    for (const seed of [5, 111, 2024]) {
+      const { raid, stage } = breche(seed);
+      const first = raidFirstSector(raid.seed);
+      for (const b of stage.bodies) {
+        expect(ecartAngle(b.angle, sectorAngle(first + b.group))).toBeLessThanOrEqual(STEP / 2);
+      }
+    }
+  });
+
+  it('⚠️ LA BALISTE QUI TIRE A SA CIBLE DANS SON ARC — elle ne tire pas à travers la ville', () => {
+    let tirs = 0;
+    for (const seed of [5, 111, 2024, 9]) {
+      const { stage } = breche(seed);
+      for (const b of stage.beats) {
+        if (b.kind !== 'turret') continue;
+        tirs++;
+        const cible = stage.bodies[b.targets[0]!]!;
+        const ecart = ecartAngle(sectorAngle(b.turret), cible.angle);
+        expect(ecart).toBeLessThanOrEqual((BATTLE.turretArc + 0.5) * STEP + 1e-9);
+      }
+    }
+    expect(tirs).toBeGreaterThan(50);
+  });
+
+  it('elle tourne par le PLUS COURT chemin, et finit sur le bon cap', () => {
+    for (const [p, t] of [
+      [170, -170],
+      [-170, 170],
+      [10, 350],
+      [720, 5],
+      [0, 180],
+      [45, 45],
+    ] as [number, number][]) {
+      const r = turnToward(p, t);
+      expect(Math.abs(r - p)).toBeLessThanOrEqual(180);
+      expect(((((r - t) % 360) + 360) % 360) % 360).toBeCloseTo(0, 9);
+    }
+    // Le dessin pointe « vers le haut » : cap 0 vers le nord, 90 vers l’est.
+    expect(aimDeg(0, 10, 0, 0)).toBeCloseTo(0, 9);
+    expect(aimDeg(0, 0, 10, 0)).toBeCloseTo(90, 9);
+  });
+
+  it('⚠️ LE TRAIT PART AVANT QUE LA BALISTE NE VISE AILLEURS', () => {
+    // La garantie demandée par l’utilisateur. Les temps se jouent l’un après l’autre et une
+    // baliste ne vise qu’en DÉBUT de temps : il suffit que le lâcher ait lieu avant la fin
+    // du temps. Vérifié sur de vrais sièges, à toutes les cadences.
+    for (const L of [12, 28, 60, 90]) {
+      for (const seed of [3, 17, 29]) {
+        const { stage } = breche(seed, L);
+        const n = stage.beats.length;
+        for (const b of stage.beats) {
+          const t = beatTiming(b, n);
+          expect(t.impact).toBeLessThanOrEqual(t.total);
+          if (b.kind === 'turret') {
+            expect(t.launch, 'la baliste pivote AVANT de tirer').toBeGreaterThan(0);
+            expect(t.launch).toBeLessThan(t.impact);
+            expect(t.launch).toBeLessThan(t.total);
+          } else {
+            expect(t.launch).toBe(0);
+          }
+        }
+      }
+    }
+  });
+
+  it('la pause dramatique n’arrive qu’à l’OUVERTURE de la brèche, pas à chaque élargissement', () => {
+    const { stage } = breche(17);
+    const n = stage.beats.length;
+    const breches = stage.beats.filter((b) => b.kind === 'breach');
+    expect(breches.length).toBeGreaterThan(1);
+    for (const b of breches) {
+      const t = beatTiming(b, n).total;
+      if (b.opens) expect(t).toBeGreaterThanOrEqual(SHOT.breachMs);
+      else expect(t).toBeLessThan(SHOT.breachMs);
+    }
+  });
+
+  it('⚠️ LE REJEU N’EST PAS PLUS LONG QU’AVANT d’y montrer le pivot, les traits et la cour', () => {
+    // Avant ce changement : 44 à 68 s. À gestes fixes, montrer le pivot et la cour le
+    // portait à 73-90 s de moyenne et 157 s au pire. Le regroupement par tour (mur, volées,
+    // échauffourées) et le tempo qui se resserre le ramènent à 55-61 s avec une garnison
+    // complète (mesuré) — on borne à « pas plus long qu’avant », pas à un chiffre flatteur.
+    for (const L of [12, 28, 60, 90]) {
+      let somme = 0;
+      let pire = 0;
+      const N = 12;
+      for (let seed = 1; seed <= N; seed++) {
+        const { stage } = breche(seed * 131, L);
+        const ms = stage.beats.reduce((acc, b) => acc + beatTiming(b, stage.beats.length).total, 0);
+        somme += ms;
+        pire = Math.max(pire, ms);
+      }
+      expect(somme / N / 1000, `niveau ${L}, moyenne`).toBeLessThan(70);
+      expect(pire / 1000, `niveau ${L}, pire cas`).toBeLessThan(120);
+    }
+  });
+});
+
+describe('🗃️ LES RAPPORTS D’AVANT SE REJOUENT AUSSI', () => {
+  it('la graine se relit dans raidId quand le rapport ne la porte pas', () => {
+    const { raid, report } = breche(4242);
+    expect(reportSeed(report)).toBe(raid.seed);
+    expect(reportSeed({ ...report, seed: undefined })).toBe(raid.seed);
+  });
+
+  it('⚠️ le rapport garde QUI DÉFENDAIT — plus le vivier d’aujourd’hui', () => {
+    const { report, stage, lvl } = breche(29);
+    const ids = new Set(
+      report.log
+        .flatMap((e) => [e.from, e.to])
+        .filter((x): x is string => !!x && !/^[at]\d+$/.test(x)),
+    );
+    expect(ids.size).toBeGreaterThan(0);
+    for (const id of ids)
+      expect(
+        stage.defenders.some((d) => d.id === id),
+        id,
+      ).toBe(true);
+    // Sans la liste (rapport d’avant), on les RETROUVE dans le log.
+    const ancien = buildSiegeStage({ ...report, defenders: undefined }, turretCount(lvl));
+    for (const id of ids)
+      expect(
+        ancien.defenders.some((d) => d.id === id),
+        id,
+      ).toBe(true);
+  });
+
+  it('la barre du rempart ne remonte jamais', () => {
+    const { stage } = breche(41);
+    for (let i = 1; i < stage.beats.length; i++) {
+      expect(stage.beats[i]!.basePv).toBeLessThanOrEqual(stage.beats[i - 1]!.basePv);
+    }
   });
 });

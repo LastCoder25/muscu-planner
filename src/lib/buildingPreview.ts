@@ -18,7 +18,6 @@ import {
   BUILDING_TYPES,
   buildingStorageCap,
   bossAltarRollFloor,
-  bossSummonDiscount,
   labyrinthLuckBonus,
   storageMult,
   travelTimeMult,
@@ -26,6 +25,7 @@ import {
 } from './buildings';
 import { caravanSlots, caravanSlowFor, trainMsFor } from './caravan';
 import { guildRoster } from './adventurers';
+import { ROLL_FLOOR_RANKS } from './items';
 import { characterRank } from './characterRank';
 
 export interface LevelPreview {
@@ -67,9 +67,10 @@ function textAt(typeId: string, level: number): string | null {
     case 'labyrinth_gate':
       return `+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`;
     case 'boss_altar':
-      return `plancher de jet ${pct(bossAltarRollFloor(one(typeId, level)))} · −${pct(
-        bossSummonDiscount(one(typeId, level)),
-      )} de pierres`;
+      // ⚠️ En RANGS, pas en « % de jet » : ce plancher décale la rareté (cf. ROLL_FLOOR_RANKS).
+      return `pièces de boss : rareté +${(bossAltarRollFloor(one(typeId, level)) * ROLL_FLOOR_RANKS)
+        .toFixed(2)
+        .replace('.', ',')} rang`;
     case 'warehouse':
       return `stockage ×${storageMult(one(typeId, level)).toFixed(2)}`;
     default: {

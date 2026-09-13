@@ -6,7 +6,7 @@
 //  • UTILITAIRES : Avant-poste (débloque expéditions + vitesse) · Entrepôt (stockage).
 //  • PRODUCTEURS : Mine d'or 🪙 · Dynamo ⚡ (énergie de jeu) · Fonderie ⚙️ (ferraille 🔩).
 //  • HYBRIDES (effet + production) : Porte du Labyrinthe (débloque + luck coffres, PRODUIT
-//    des clés 🗝️) · Autel des boss (jet/coût, PRODUIT des pierres d'invocation 🔮).
+//    des clés 🗝️) · Autel des boss (rareté des pièces de boss, PRODUIT des pierres d'invocation 🔮).
 // La production est passive, à RÉCOLTER (collectable/collectFilons), bornée par le stockage
 // (18 h × bonus Entrepôt) → complément à l'actif, jamais un substitut au sport.
 //
@@ -44,7 +44,6 @@ interface BuildingEffect {
   expeWinPerLvl?: number; // Tour : +X% chance / niveau (plus tard)
   labyLuckPerLvl?: number; // Porte du Labyrinthe : +X à la chance de butin des coffres / niveau
   bossRollFloorPerLvl?: number; // Autel des boss : +X au plancher de qualité de roll / niveau
-  summonCostRedPerLvl?: number; // Autel des boss : −X% du coût en pierres d'invocation / niveau
   caravanSlotPer6Lvl?: boolean; // Comptoir : +1 convoi simultané tous les 6 niveaux (cf. caravanSlots)
   guildRosterPerLvl?: number; // Guilde : +X aventuriers recrutables / niveau
   trainSpeedPerLvl?: number; // Centre de formation : −X% de temps de formation / niveau
@@ -146,22 +145,23 @@ export const BUILDING_TYPES: BuildingType[] = [
     },
     desc: 'Débloque le Labyrinthe (+4 %/niv de butin des coffres) et produit des clés 🗝️.',
   },
-  // HYBRIDE : améliore la récompense de boss (jet + coût en pierres) ET PRODUIT des pierres
-  // d'invocation 🔮 (source passive, en plus des nettoyages de donjon).
+  // HYBRIDE : rend les pièces de boss un peu plus rares ET PRODUIT des pierres d'invocation 🔮
+  // (source passive, en plus des nettoyages de donjon).
+  // ⚠️ PLUS DE REMISE SUR LE COÛT DES BOSS (décision de l’utilisateur, v0.799) : les pierres
+  // sont ce qui LIE le farm de donjon aux boss, et une remise de −50 % coupait ce lien de moitié.
   {
     id: 'boss_altar',
-    perLevelNote:
-      'meilleur jet garanti sur les drops de boss, et −4 % de pierres 🔮 par invocation (jusqu’à −50 %)',
+    perLevelNote: 'pièces de boss un peu plus souvent d’une rareté au-dessus, jusqu’au niveau 100',
     label: 'Autel des boss',
     emoji: '🔮',
     category: 'utility',
-    effect: { bossRollFloorPerLvl: 0.03, summonCostRedPerLvl: 0.04 },
+    effect: { bossRollFloorPerLvl: 0.005 },
     resource: 'summon',
     prodPerHrPerLvl: 0.03, // niv.20 ≈ 0,6/h → ~10 pierres / 18 h (complément)
     buildGold: 700,
     unlockLevel: 4,
     unique: true,
-    desc: 'Boss : +chance d’un bon jet, −coût en pierres 🔮, et produit des pierres d’invocation 🔮.',
+    desc: 'Boss : des pièces un peu plus rares à chaque niveau, et produit des pierres d’invocation 🔮.',
   },
   // PRODUCTEUR : Mine d'or → OR passif (puits d'or restant : construction/expéditions).
   {
@@ -449,7 +449,17 @@ export function labyrinthLuckBonus(buildings: Building[]): number {
 }
 // ── Autel des boss (qualité des récompenses de boss) ──
 const BOSS_ALTAR_ID = 'boss_altar';
-const BOSS_ROLL_FLOOR_CAP = 0.85; // plancher de qualité de roll max (jamais 100 % garanti)
+/** Plancher maximal, atteint PILE au niveau 100 (0,005 × 100).
+ *
+ *  ⚠️ IL VALAIT 0,85, ATTEINT AU NIVEAU 28, et c’était beaucoup trop (signalé par
+ *  l’utilisateur : « les bonus me paraissent un peu haut »). Mesuré sur 20 000 pièces de
+ *  boss, Autel monté au niveau du joueur : **54 à 56 %** tombaient DEUX raretés au-dessus
+ *  de sa ligue aux niveaux 30-40, contre 1 % sans Autel — un bâtiment contournait « le sport
+ *  est le plafond ». À 0,005/niveau : ~48 % à une rareté au-dessus (37 % sans Autel) et
+ *  **4-5 %** à deux. Un vrai bonus, qui ne fait plus sortir de sa ligue.
+ *  ⚠️ Un nerf ASSUMÉ, et une exception explicite à « on prolonge, on ne redistribue pas »
+ *  (v0.731) — accordée par l’utilisateur. */
+const BOSS_ROLL_FLOOR_CAP = 0.5;
 /** Niveau de l'Autel des boss posé (0 si aucun). */
 function bossAltarLevel(buildings: Building[]): number {
   return buildings.find((b) => b.typeId === BOSS_ALTAR_ID)?.level ?? 0;
@@ -458,30 +468,15 @@ function bossAltarLevel(buildings: Building[]): number {
 export function bossAltarBuilt(buildings: Building[]): boolean {
   return bossAltarLevel(buildings) > 0;
 }
-/** Plancher de qualité de roll (0..1) sur les récompenses de boss, selon le NIVEAU
- *  de l'Autel. Monte LENTEMENT (2026‑08‑18 : +3 %/niveau au lieu de +6 % — il montait
- *  trop vite et se plafonnait au niveau ~15) → cap 85 % atteint vers le niveau ~28,
- *  aligné sur la montée du nombre de choix (jusqu'au niveau 30). */
+/** Plancher (0..1) appliqué aux pièces de boss selon le NIVEAU de l’Autel — il décale leur
+ *  RARETÉ de `plancher × ROLL_FLOOR_RANKS` rangs (cf. `items.ts`). Linéaire jusqu’au
+ *  niveau 100 : chaque niveau apporte quelque chose, aucun ne fait sortir de sa ligue. */
 export function bossAltarRollFloor(buildings: Building[]): number {
   const lvl = bossAltarLevel(buildings);
   const per = buildingType(BOSS_ALTAR_ID)?.effect?.bossRollFloorPerLvl ?? 0;
   const capLevel = per > 0 ? BOSS_ROLL_FLOOR_CAP / per : 0;
   // La queue reste SOUS 1 : un roll parfait ne doit jamais être garanti.
   return Math.min(BOSS_ROLL_FLOOR_CAP, lvl * per) + beyondCap(lvl, capLevel, 0.12, 55);
-}
-const SUMMON_COST_RED_CAP = 0.5; // −50 % max sur le coût en pierres d'invocation
-/** Réduction (0..1) du coût en pierres d'invocation 🔮 des boss, selon le NIVEAU
- *  de l'Autel des boss (−4 %/niveau, plafond −50 % au niveau ~12). */
-export function bossSummonDiscount(buildings: Building[]): number {
-  const lvl = bossAltarLevel(buildings);
-  const per = buildingType(BOSS_ALTAR_ID)?.effect?.summonCostRedPerLvl ?? 0;
-  const capLevel = per > 0 ? SUMMON_COST_RED_CAP / per : 0;
-  // Bornée bien avant la gratuité : un boss se paie toujours.
-  return Math.min(SUMMON_COST_RED_CAP, lvl * per) + beyondCap(lvl, capLevel, 0.25, 60);
-}
-/** Coût effectif en pierres d'invocation 🔮 d'un boss (base réduite par l'Autel). */
-export function summonCostWith(baseCost: number, buildings: Building[]): number {
-  return Math.max(1, Math.ceil(baseCost * (1 - bossSummonDiscount(buildings))));
 }
 /** Multiplicateur de TEMPS de trajet (< 1 = plus rapide), selon l'avant-poste. */
 export function travelTimeMult(buildings: Building[]): number {

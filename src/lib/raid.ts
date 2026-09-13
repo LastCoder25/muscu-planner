@@ -46,7 +46,7 @@ import {
 } from './caravan';
 import { type TalentInstance } from './talents';
 import { beyondCap } from './buildings';
-import { advStats, PROMO_LEVELS, type Adventurer } from './adventurers';
+import { advStats, advTitle, PROMO_LEVELS, type Adventurer } from './adventurers';
 import {
   BATTLE,
   simulateSiege,
@@ -208,6 +208,21 @@ export interface RaidReport {
   /** La brèche s'est-elle ouverte ? */
   breached: boolean;
   resolvedAt: number;
+  /** Graine du raid : elle fixe le PAN d’attaque (`raidFirstSector`). ⚠️ Optionnelle —
+   *  les rapports stockés avant ne l’ont pas, le rejeu la relit alors dans `raidId`. */
+  seed?: number;
+  /** Qui défendait, tel que le moteur les a alignés. ⚠️ Le rejeu montrait jusqu’ici le
+   *  vivier d’AUJOURD’HUI : un aventurier recruté après l’assaut apparaissait dans une
+   *  bataille qu’il n’a pas livrée. Optionnel pour la même raison que `seed`. */
+  defenders?: SiegeDefenderInfo[];
+}
+
+/** Un défenseur tel que le rejeu doit le montrer — l’identité, pas les chiffres. */
+export interface SiegeDefenderInfo {
+  id: string;
+  name: string;
+  emoji: string;
+  kind: 'melee' | 'ranged';
 }
 
 /** Ce qu'une défaite coûte. Aucune ligne ne touche à ce que le sport a payé. */
@@ -1916,6 +1931,13 @@ export function siegeDefenders(
  * relatif de **39 à 50 %**. Un balayage confirme le point d'invariance — l'écart tombe à
  * **8 %** à l'exposant 1 et **remonte des deux côtés** (24 % à 0,85, 48 % à 1,5).
  */
+/** Le pan sur lequel l’armée aborde l’enceinte. ⚠️ Source UNIQUE : le moteur y range ses
+ *  groupes, le rejeu y dessine ses corps — deux lectures de la graine auraient montré
+ *  une armée à un endroit pendant que les balistes tiraient vers un autre. */
+export function raidFirstSector(seed: number): number {
+  return Math.abs(Math.trunc(seed)) % BATTLE.sectors;
+}
+
 export function siegeAttackers(raid: Raid): SiegeUnit[] {
   const out: SiegeUnit[] = [];
   // ⚠️ L’ARMÉE SE MASSE — elle marche, elle n’encercle pas. Le front est donc
@@ -1924,7 +1946,7 @@ export function siegeAttackers(raid: Raid): SiegeUnit[] {
   // balistes, ce qui la borne toute seule.
   // Le pan d’entrée est tiré sur la graine du raid : deux assauts ne tombent pas au
   // même endroit, mais un raid donné se rejoue à l’identique.
-  const first = Math.abs(raid.seed) % BATTLE.sectors;
+  const first = raidFirstSector(raid.seed);
   for (const [gi, g] of raid.groups.entries()) {
     const ref = refFighter(Math.max(1, g.level));
     const um = g.unitMult ?? 1;
@@ -2185,7 +2207,8 @@ export function guardUnits(
     return {
       id: a.id,
       name: a.name,
-      emoji: '⚔️',
+      // L’emoji de SA classe : c’est lui qu’on reconnaît au rempart pendant le rejeu.
+      emoji: advTitle(a)?.emoji ?? '⚔️',
       ranged: st.agilite > st.puissance && st.agilite > st.endurance,
       ...f,
     };
@@ -2246,6 +2269,15 @@ export function resolveRaid(
     log: r.log,
     breached: r.breached,
     resolvedAt: now,
+    seed: raid.seed,
+    defenders: def
+      .filter((d) => d.origin !== 'turret')
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        emoji: d.emoji,
+        kind: d.kind === 'ranged' ? 'ranged' : 'melee',
+      })),
   };
 }
 

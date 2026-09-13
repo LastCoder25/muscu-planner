@@ -637,11 +637,14 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   // ── Expéditions (donjons à étages) ──
-  // Consomme 1 clé pour lancer une expédition (garde-fou : refuse si aucune clé).
-  async function spendKey(userId: string): Promise<boolean> {
+  // Consomme les clés d’un palier du Labyrinthe (garde-fou : refuse si le compte n’y est pas).
+  async function spendKey(userId: string, n = 1): Promise<boolean> {
     const cur = row.value;
-    if (!cur || cur.keys <= 0) return false;
-    await persist(userId, { keys: cur.keys - 1 });
+    // ⚠️ Un palier profond coûte PLUSIEURS clés (`labyKeyCost`) : le refus se juge sur le
+    // prix entier, jamais sur « au moins une ». Sinon on entrait avec une clé pour trois.
+    const cost = Math.max(1, Math.floor(n));
+    if (!cur || cur.keys < cost) return false;
+    await persist(userId, { keys: cur.keys - cost });
     return true;
   }
   // Crédite le butin d'une expédition/Labyrinthe (or + poussière + parchemins

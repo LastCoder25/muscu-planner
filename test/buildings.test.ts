@@ -18,15 +18,15 @@ import {
   expeditionsUnlocked,
   travelTimeMult,
   outpostLevel,
-  bossSummonDiscount,
   labyrinthLuckBonus,
   bossAltarRollFloor,
-  summonCostWith,
   BUILDING_TYPES,
   BUILD,
   type Building,
 } from '@/lib/buildings';
 import { bossSummonCost } from '@/data/bosses';
+import { rollSetPiece, rankCeilingForLevel, RARITY_RANK, VOIE_SETS } from '@/lib/items';
+import { mulberry32 } from '@/lib/combat';
 
 const H = 3_600_000;
 const mk = (typeId: string, level: number, collectedAt = 0, slot = 0): Building => ({
@@ -188,21 +188,47 @@ describe('boss — pierres d’invocation 🔮', () => {
     expect(bossSummonCost(25)).toBe(6);
     expect(bossSummonCost(100)).toBe(21);
   });
-  it('bossSummonDiscount : −4 %/niveau d’Autel, plafond −50 %', () => {
-    expect(bossSummonDiscount([])).toBe(0);
-    expect(bossSummonDiscount([mk('boss_altar', 1)])).toBeCloseTo(0.04, 5);
-    expect(bossSummonDiscount([mk('boss_altar', 5)])).toBeCloseTo(0.2, 5);
-    // Le palier du niveau 12 est INCHANGE (on ne nerfe personne), mais au-dela la
-    // remise continue de grandir en s'approchant d'une limite : un boss se paie toujours.
-    expect(bossSummonDiscount([mk('boss_altar', 12)])).toBeCloseTo(0.48, 6);
-    expect(bossSummonDiscount([mk('boss_altar', 30)])).toBeGreaterThan(0.5);
-    expect(bossSummonDiscount([mk('boss_altar', 999)])).toBeLessThan(0.9);
+  it('⚠️ L’AUTEL NE RÉDUIT PLUS LE COÛT D’UN BOSS', () => {
+    // ⚠️ RÉÉCRIT, pas supprimé : il verrouillait la remise de −4 %/niveau (plafond −50 %).
+    // Retirée à la demande de l’utilisateur : les pierres LIENT le farm de donjon aux boss,
+    // et une remise de moitié coupait ce lien de moitié. Le coût d’un boss est désormais
+    // son coût de palier, quel que soit l’Autel.
+    const effet = buildingType('boss_altar')?.effect ?? {};
+    expect(Object.keys(effet)).toEqual(['bossRollFloorPerLvl']);
   });
-  it('summonCostWith applique la remise (arrondi haut, plancher 1)', () => {
-    expect(summonCostWith(6, [])).toBe(6); // sans Autel
-    expect(summonCostWith(6, [mk('boss_altar', 5)])).toBe(5); // 6×0,8 = 4,8 → 5
-    expect(summonCostWith(2, [mk('boss_altar', 30)])).toBe(1); // 2×0,5 = 1
-    expect(summonCostWith(1, [mk('boss_altar', 30)])).toBe(1); // plancher 1
+  it('⚠️ L’AUTEL AIDE, MAIS NE FAIT PLUS SORTIR DE SA LIGUE', () => {
+    // ⚠️ RÉÉCRIT, pas supprimé. Mesuré avant (plancher 0,03/niveau, plafond 0,85 au niveau
+    // 28) : Autel monté au niveau du joueur, **54 à 56 %** des pièces de boss tombaient DEUX
+    // raretés au-dessus de sa ligue, contre 1 % sans Autel. Le « plancher de jet » agissait
+    // sur la RARETÉ, pas sur le jet — un bâtiment contournait « le sport est le plafond ».
+    const part = (L: number, altar: number) => {
+      const rng = mulberry32(12345);
+      const plafond = rankCeilingForLevel(L);
+      const floor = bossAltarRollFloor(altar ? [mk('boss_altar', altar)] : []);
+      let plus1 = 0;
+      let plus2 = 0;
+      const N = 6000;
+      for (let i = 0; i < N; i++) {
+        const p = rollSetPiece(rng, {
+          setId: VOIE_SETS[0]!.id,
+          level: L,
+          luck: 0.6,
+          rollFloor: floor,
+          playerLevel: L,
+        });
+        const d = RARITY_RANK[p.rarity] - plafond;
+        if (d === 1) plus1++;
+        if (d >= 2) plus2++;
+      }
+      return { plus1: plus1 / N, plus2: plus2 / N };
+    };
+    for (const L of [20, 30, 40]) {
+      const sans = part(L, 0);
+      const avec = part(L, L);
+      expect(avec.plus2, `niveau ${L} : deux raretés au-dessus`).toBeLessThan(0.1);
+      // …et il sert toujours à quelque chose : plus de pièces une rareté au-dessus.
+      expect(avec.plus1, `niveau ${L}`).toBeGreaterThan(sans.plus1 + 0.05);
+    }
   });
 });
 
@@ -290,8 +316,7 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     warehouse: (l) => storageMult(one('warehouse', l)),
     outpost: (l) => -travelTimeMult(one('outpost', l)),
     labyrinth_gate: (l) => labyrinthLuckBonus(one('labyrinth_gate', l)),
-    boss_altar: (l) =>
-      bossAltarRollFloor(one('boss_altar', l)) * 1000 + bossSummonDiscount(one('boss_altar', l)),
+    boss_altar: (l) => bossAltarRollFloor(one('boss_altar', l)),
     // Nombre de convois ET vitesse : le nombre reste borné par le vivier, la vitesse continue.
     caravanserail: (l) => caravanSlots(l) * 1000 + (2 - caravanSlowFor(l)) * 100,
     // Effectif ET rang maximal des aventuriers (le rang suit le niveau, donc continu).
@@ -324,7 +349,6 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     expect(travelTimeMult(one('outpost', 100))).toBeGreaterThan(0.15);
     expect(travelTimeMult(one('outpost', 999))).toBeGreaterThan(0.1);
     expect(bossAltarRollFloor(one('boss_altar', 999))).toBeLessThan(1);
-    expect(bossSummonDiscount(one('boss_altar', 999))).toBeLessThan(0.9);
     expect(caravanSlowFor(999)).toBeGreaterThan(1); // jamais plus rapide que le héros
     expect(trainMsFor(999)).toBeGreaterThan(0); // une formation dure toujours
   });
@@ -333,7 +357,9 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     // Personne ne doit se réveiller avec un bâtiment moins bon qu'hier.
     expect(travelTimeMult(one('outpost', 40))).toBeCloseTo(0.4, 6);
     expect(labyrinthLuckBonus(one('labyrinth_gate', 10))).toBeCloseTo(0.4, 6);
-    expect(bossSummonDiscount(one('boss_altar', 12))).toBeCloseTo(0.48, 6);
+    // ⚠️ L’Autel des boss n’y figure PLUS, et c’est une exception EXPLICITE : sa remise est
+    // retirée et son plancher réduit, à la demande de l’utilisateur (v0.799). On ne nerfe
+    // jamais en silence — celui-ci est voulu, mesuré et documenté.
   });
 
   it('⚠️ chaque convoi peut être ESCORTÉ, et par une vraie ÉQUIPE une fois lancé', () => {

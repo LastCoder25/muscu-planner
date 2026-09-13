@@ -164,6 +164,7 @@ import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
 import { guildRoster } from '@/lib/adventurers';
+import { ROLL_FLOOR_RANKS } from '@/lib/items';
 import {
   perLevelLabel,
   BUILD,
@@ -183,7 +184,6 @@ import {
   travelTimeMult,
   labyrinthLuckBonus,
   bossAltarRollFloor,
-  bossSummonDiscount,
   type Building,
   type BuildingCategory,
   type BuildingType,
@@ -283,7 +283,7 @@ function utilityEffectLabel(b: Building): string {
   if (b.typeId === 'labyrinth_gate')
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')
-    return `+${Math.round(bossAltarRollFloor([b]) * 100)}% jet · −${Math.round(bossSummonDiscount([b]) * 100)}% coût 🔮`;
+    return `boss : rareté +${(bossAltarRollFloor([b]) * ROLL_FLOOR_RANKS).toFixed(2).replace('.', ',')} rang`;
   if (b.typeId === 'warehouse') return `+${Math.round((storageMult([b]) - 1) * 100)}% stockage`;
   return '';
 }

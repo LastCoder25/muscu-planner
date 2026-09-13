@@ -6,7 +6,9 @@ import {
   labyrinthCleared,
   frontierLabyrinth,
   deathKeepFraction,
+  labyKeyCost,
 } from '@/data/labyrinths';
+import { buildingProdPerHour, buildingStorageCap } from '@/lib/buildings';
 import { RANK_ORDER, RARITY_RANK, rankCeilingForLevel } from '@/lib/items';
 
 describe('labyrinths — ladder de paliers', () => {
@@ -62,5 +64,45 @@ describe('labyrinths — ladder de paliers', () => {
       );
     }
     expect(deathKeepFraction(LABYRINTHS[LABYRINTHS.length - 1]!.id)).toBeGreaterThanOrEqual(0.4);
+  });
+});
+
+describe('🗝️ UNE CLÉ EST UNE MONNAIE : le prix suit la profondeur', () => {
+  /** Clés gagnées par jour au niveau L : la Porte du Labyrinthe au niveau du joueur (deux
+   *  récoltes), plus ~2,7 venant de tout le reste — mesuré en v0.794 (donjons 2 %, boss 6 %,
+   *  archives, convois). */
+  const clesParJour = (L: number) => {
+    const b = { id: 'g', typeId: 'labyrinth_gate', level: L, collectedAt: 0 };
+    return Math.min(buildingProdPerHour(b) * 12, buildingStorageCap(b)) * 2 + 2.7;
+  };
+  /** Le palier le plus profond dont le niveau conseillé est atteint. */
+  const pointe = (L: number) => {
+    let t = LABYRINTHS[0]!;
+    for (const l of LABYRINTHS) if (l.recoLevel <= L) t = l;
+    return t;
+  };
+
+  it('les trois premiers paliers restent à UNE clé — le début de partie ne bouge pas', () => {
+    for (const l of LABYRINTHS.slice(0, 3)) expect(labyKeyCost(l.id)).toBe(1);
+  });
+
+  it('le prix ne baisse jamais en descendant, et le fond coûte plus cher que la surface', () => {
+    for (let i = 1; i < LABYRINTHS.length; i++) {
+      expect(labyKeyCost(LABYRINTHS[i]!.id)).toBeGreaterThanOrEqual(
+        labyKeyCost(LABYRINTHS[i - 1]!.id),
+      );
+    }
+    expect(labyKeyCost(LABYRINTHS[LABYRINTHS.length - 1]!.id)).toBeGreaterThan(2);
+  });
+
+  it('⚠️ LE PALIER DE POINTE RESTE FINANÇABLE 2 À 5 FOIS PAR JOUR, du niveau 3 au niveau 100', () => {
+    // Mesuré à une clé par run : 3 runs/jour au niveau 3, **17 au niveau 100** — le robinet de
+    // la Porte grandit avec le niveau, et le Labyrinthe (seule source de familiers) devenait
+    // une boucle de farm. La propriété est une courbe PLATE, pas une valeur.
+    for (let L = 3; L <= 100; L++) {
+      const runs = clesParJour(L) / labyKeyCost(pointe(L).id);
+      expect(runs, `niveau ${L}`).toBeGreaterThanOrEqual(2);
+      expect(runs, `niveau ${L}`).toBeLessThanOrEqual(5);
+    }
   });
 });

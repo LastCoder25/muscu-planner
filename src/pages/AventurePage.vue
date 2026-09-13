@@ -2755,12 +2755,7 @@ import {
 } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import { unlocksAtLevel } from '@/lib/advUnlocks';
-import {
-  labyrinthUnlocked,
-  bossAltarBuilt,
-  bossAltarRollFloor,
-  summonCostWith,
-} from '@/lib/buildings';
+import { labyrinthUnlocked, bossAltarBuilt, bossAltarRollFloor } from '@/lib/buildings';
 import {
   REGIONS,
   currentRegion,
@@ -4576,9 +4571,9 @@ function isBossBeaten(b: MilestoneBoss): boolean {
 }
 // L'Autel des boss (bâtiment) est REQUIS pour affronter les boss de palier.
 const hasBossAltar = computed(() => bossAltarBuilt(char.row?.buildings ?? []));
-// Coût effectif d'un boss en pierres d'invocation 🔮 (base ∝ palier, réduite par l'Autel).
+// Coût d’un boss en pierres d’invocation 🔮 (∝ palier). ⚠️ L’Autel ne le réduit plus (v0.799).
 function summonCostFor(b: MilestoneBoss): number {
-  return summonCostWith(bossSummonCost(b.unlockLevel), char.row?.buildings ?? []);
+  return bossSummonCost(b.unlockLevel);
 }
 // Déblocage : Autel des boss construit ET chaîne des BOSS (boss précédent vaincu).
 // Pas de gate de niveau → le 🎯 % de victoire indique si le combat est jouable.
