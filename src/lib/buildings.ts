@@ -184,7 +184,13 @@ export const BUILDING_TYPES: BuildingType[] = [
     emoji: '⚡',
     category: 'producer',
     resource: 'energy',
-    prodPerHrPerLvl: 0.8, // niv.20 ≈ 16/h → ~288 ⚡ / 18 h (quelques runs)
+    // ⚠️ 0,8 → 0,1 (v0.822, mesuré). À 0,8 elle rendait ~550 ⚡/jour au niveau 29 — PLUS
+    // que le Défi 360 de l'utilisateur le même jour : un « complément » devenu la première
+    // source d'énergie. La production est LINÉAIRE en niveau alors qu'une séance rapporte
+    // à peu près la même énergie à tous les niveaux : le débit est donc calé pour qu'au
+    // niveau 100 elle égale au plus le sport d'un joueur régulier (1 h × 4/semaine), et
+    // n'en vaille qu'environ un tiers au niveau 30. Invariant verrouillé dans buildings.test.
+    prodPerHrPerLvl: 0.1,
     buildGold: 800,
     unlockLevel: 3,
     unique: true,

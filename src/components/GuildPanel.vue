@@ -31,6 +31,32 @@
           Guilde pleine ({{ roster.length }}/{{ maxRoster }}). <b>Monte-la d’un niveau</b> pour
           loger quelqu’un de plus.
         </div>
+        <!-- ✨ CONFIER AU MIEUX, EN TÊTE (demandé) : un compagnon et un talent à chacun,
+             selon son profil, dans les règles des sélecteurs. ⚠️ Il ANNONCE ce qu'il va
+             faire avant qu'on touche (gain de puissance, nombre de changements) et se tait
+             quand il n'y a rien à gagner : il remplace les choix faits à la main, on ne
+             doit pas le découvrir après coup. -->
+        <template v-if="roster.length">
+          <button
+            class="voie-btn g-auto"
+            :disabled="busy || !autoPreview.changes"
+            @click="autoPair"
+          >
+            <template v-if="autoPreview.changes">
+              ✨ Confier au mieux familiers et talents
+              <b v-if="autoPreview.gain > 0" class="g-auto-gain"
+                >+{{ fmtPow(autoPreview.gain) }} ⚔️</b
+              >
+            </template>
+            <template v-else>✓ Familiers et talents déjà au mieux</template>
+          </button>
+          <div v-if="autoPreview.changes" class="g-note dim">
+            {{ autoPreview.changes }} aventurier{{ autoPreview.changes > 1 ? 's' : '' }} changé{{
+              autoPreview.changes > 1 ? 's' : ''
+            }}
+            · remplace les choix faits à la main.
+          </div>
+        </template>
         <!-- ── Le vivier ── -->
         <div v-if="!roster.length" class="g-empty">
           Personne encore. Recrute ton premier aventurier — il escortera tes caravanes.
@@ -57,17 +83,6 @@
             @promote="openPromo(a)"
           />
         </div>
-        <!-- ✨ CONFIER AU MIEUX (demandé par l'utilisateur) : un compagnon et un talent à
-             chacun, selon son profil, dans les règles des sélecteurs. Il REMPLACE les choix
-             faits à la main — on le dit avant le geste plutôt que de le découvrir après. -->
-        <template v-if="roster.length">
-          <button class="voie-btn g-auto" :disabled="busy" @click="autoPair">
-            ✨ Confier au mieux familiers et talents
-          </button>
-          <div class="g-note dim">
-            Selon le profil de chacun · remplace les choix faits à la main.
-          </div>
-        </template>
       </template>
 
       <div class="g-actions">
@@ -454,6 +469,7 @@ import {
   companionRankLabel,
   companionPairs,
   adventurerPowers,
+  autoCompanions,
   companionOptions,
   talentOptions,
   type CompanionCtx,
@@ -666,6 +682,26 @@ function assignFam(id: string | null) {
   pairFor.value = null;
   void pair((uid) => char.setCompanion(uid, a.id, id));
 }
+/** Ce que « Confier au mieux » ferait, AVANT de toucher : le même plan que le store
+ *  (`autoCompanions`) sur le même contexte, et le gain de puissance du vivier. Mesuré à
+ *  ~3 ms pour 15 aventuriers : peut suivre l'horloge du panneau sans coût. */
+const autoPreview = computed(() => {
+  const advs = char.advList;
+  const plan = autoCompanions(advs, compCtx.value);
+  let changes = 0;
+  const after = advs.map((a) => {
+    const p = plan.get(a.id) ?? {};
+    if (
+      (p.familiarId ?? null) !== (a.familiarId ?? null) ||
+      (p.talentId ?? null) !== (a.talentId ?? null)
+    )
+      changes++;
+    return { ...a, familiarId: p.familiarId, talentId: p.talentId };
+  });
+  const sum = (m: Map<string, number>) => [...m.values()].reduce((x, v) => x + v, 0);
+  const gain = sum(adventurerPowers(after, compCtx.value)) - sum(powers.value);
+  return { changes, gain };
+});
 /** Puissance totale du vivier — la somme de ce que chaque portrait affiche. */
 const rosterPower = () =>
   [...adventurerPowers(char.advList, compCtx.value).values()].reduce((s, p) => s + p, 0);
@@ -936,7 +972,11 @@ async function doPromote(classId: string) {
   margin-bottom: 10px;
 }
 .g-auto {
-  margin-top: 12px;
+  margin-bottom: 4px;
+}
+.g-auto-gain {
+  margin-left: 6px;
+  color: var(--d1);
 }
 /* ── Fiche d'un aventurier ── */
 .adv.hit {

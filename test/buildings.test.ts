@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { sessionXp } from '@/lib/athlete';
 import { CARAVAN, caravanSlots, caravanSlowFor, trainMsFor } from '@/lib/caravan';
 import { guildRoster } from '@/lib/adventurers';
 import {
@@ -297,6 +298,28 @@ describe('⚠️ la cour suit le roster — la porte reste dégagée', () => {
   });
 });
 
+describe('⚡ LA DYNAMO RESTE UN COMPLÉMENT DU SPORT', () => {
+  // Un joueur RÉGULIER : 4 séances d'une heure par semaine (150 reps à 40 kg), mesurées
+  // avec la VRAIE formule d'XP — l'énergie vaut l'XP de fond (ENERGY_PER_XP = 1).
+  const seance = sessionXp({
+    duration_min: 60,
+    exercises: [{ performed: Array.from({ length: 15 }, () => ({ reps: 10, load_kg: 40 })) }],
+  } as unknown as Parameters<typeof sessionXp>[0]);
+  const sportParJour = (seance * 4) / 7;
+  const dynamoParJour = (l: number) =>
+    buildingProdPerHour({ typeId: 'energy_font', level: l, slot: 0 } as Building) * 24;
+
+  it('au niveau 30, elle vaut au plus ~un tiers du sport d’un joueur régulier', () => {
+    expect(dynamoParJour(30) / sportParJour).toBeLessThan(0.35);
+  });
+  it('même au niveau 100, elle ne dépasse pas ce sport (production linéaire, séance plate)', () => {
+    expect(dynamoParJour(100) / sportParJour).toBeLessThanOrEqual(1);
+  });
+  it('elle rapporte quand même quelque chose de sensible (≥ 1 descente de donjon par jour au niveau 30)', () => {
+    expect(dynamoParJour(30)).toBeGreaterThanOrEqual(40);
+  });
+});
+
 describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
   // Règle de conception : un niveau qu'on paie doit apporter quelque chose. Sinon on vend
   // du vide — et les coûts étant quadratiques, on le vend cher. L'audit initial a trouvé
@@ -311,7 +334,7 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
    *  combine (échelles séparées) : il suffit qu'UN d'entre eux bouge. */
   const EFFECT: Record<string, (l: number) => number> = {
     gold_mine: (l) => 25 * l,
-    energy_font: (l) => 0.8 * l,
+    energy_font: (l) => buildingProdPerHour(one('energy_font', l)[0]!),
     foundry: (l) => 0.12 * l,
     warehouse: (l) => storageMult(one('warehouse', l)),
     outpost: (l) => -travelTimeMult(one('outpost', l)),
