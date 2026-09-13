@@ -218,6 +218,10 @@ export interface SiegeDefenderInfo {
   name: string;
   emoji: string;
   kind: 'melee' | 'ranged';
+  /** PV de départ — ce qui permet au rejeu de montrer la barre de vie (v0.826). ⚠️
+   *  Optionnel : les rapports stockés avant ne l’ont pas, et n’affichent alors aucune barre
+   *  plutôt qu’une barre inventée. */
+  maxPv?: number;
 }
 
 /** Ce qu'une défaite coûte. Aucune ligne ne touche à ce que le sport a payé. */
@@ -2529,6 +2533,7 @@ export function resolveRaid(
         name: d.name,
         emoji: d.emoji,
         kind: d.kind === 'ranged' ? 'ranged' : 'melee',
+        maxPv: d.maxPv,
       })),
   };
 }

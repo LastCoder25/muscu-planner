@@ -693,3 +693,62 @@ describe('🗃️ LES RAPPORTS D’AVANT SE REJOUENT AUSSI', () => {
     }
   });
 });
+
+describe('❤️ LA VIE DU HÉROS PENDANT LE SIÈGE', () => {
+  /** Un siège où le héros encaisse vraiment des coups — cherché, pas supposé. */
+  function heroFrappe() {
+    for (let seed = 1; seed < 400; seed++) {
+      const r = breche(seed);
+      // ⚠️ FRAPPÉ SANS TOMBER : à terre, « PV restants = 0 » resterait vrai même avec des
+      // coups mal comptés — la mesure ne discriminerait rien.
+      const log = r.report.log;
+      if (
+        log.some((e) => e.kind === 'hit' && e.to === 'hero') &&
+        !log.some((e) => e.kind === 'down' && e.to === 'hero')
+      )
+        return r;
+    }
+    throw new Error('aucun siège où le héros est frappé sans tomber');
+  }
+  const heroTrace = (stage: ReturnType<typeof buildSiegeStage>) =>
+    stage.beats.filter((b) => 'hero' in b.defPv).map((b) => b.defPv.hero!);
+
+  it('le rapport garde les PV de départ du héros', () => {
+    const { stage } = heroFrappe();
+    expect(stage.defenders.find((d) => d.id === 'hero')?.maxPv).toBeGreaterThan(0);
+  });
+
+  it('⚠️ la barre finit EXACTEMENT où le moteur l’a laissé (PV − coups encaissés)', () => {
+    const { report, stage } = heroFrappe();
+    const max = stage.defenders.find((d) => d.id === 'hero')!.maxPv!;
+    const recu = report.log
+      .filter((e) => e.kind === 'hit' && e.to === 'hero')
+      .reduce((a, e) => a + (e.amount ?? 0), 0);
+    const trace = heroTrace(stage);
+    expect(trace.length).toBeGreaterThan(0);
+    expect(trace.at(-1)).toBe(Math.max(0, max - recu));
+  });
+
+  it('elle ne remonte jamais (le moteur ne soigne personne)', () => {
+    const trace = heroTrace(heroFrappe().stage);
+    for (let i = 1; i < trace.length; i++) expect(trace[i]!).toBeLessThanOrEqual(trace[i - 1]!);
+  });
+
+  it('un héros mis hors de combat tombe à 0', () => {
+    for (let seed = 1; seed < 400; seed++) {
+      const { report, stage } = breche(seed);
+      if (!report.log.some((e) => e.kind === 'down' && e.to === 'hero')) continue;
+      expect(heroTrace(stage).at(-1)).toBe(0);
+      return;
+    }
+  });
+
+  it('un rapport d’avant (sans PV de départ) n’invente pas de barre', () => {
+    const { report, lvl } = heroFrappe();
+    const ancien = buildSiegeStage(
+      { ...report, defenders: report.defenders!.map(({ maxPv: _m, ...d }) => d) },
+      turretCount(lvl),
+    );
+    expect(ancien.beats.every((b) => Object.keys(b.defPv).length === 0)).toBe(true);
+  });
+});

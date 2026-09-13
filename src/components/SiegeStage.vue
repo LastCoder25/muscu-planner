@@ -135,6 +135,18 @@
       >
         <circle r="6.5" class="s-def-bg" />
         <text y="3" class="s-def-emo">{{ wounded.has(d.id) ? '🤕' : d.emoji }}</text>
+        <!-- ❤️ La vie du HÉROS (demandé) : c'est lui qu'on a gardé à la maison, et c'est
+             sa chute qui l'envoie à l'infirmerie. Pas de barre sans PV de départ connus. -->
+        <g v-if="d.id === 'hero' && d.maxPv" class="s-def-hp" transform="translate(-9, -11.5)">
+          <rect width="18" height="2.6" rx="1.3" class="s-def-hp-bg" />
+          <rect
+            :width="18 * heroPvPct"
+            height="2.6"
+            rx="1.3"
+            class="s-def-hp-fill"
+            :class="{ low: heroPvPct < 0.3 }"
+          />
+        </g>
       </g>
       <text v-if="!stage.defenders.length && inCourtyardView" x="100" y="104" class="s-empty">
         personne pour tenir la cour
@@ -366,6 +378,7 @@ const state = computed(() => {
   const wounded = new Set<string>();
   const silenced = new Set<number>();
   const descended: string[] = [];
+  const defPv = new Map<string, number>();
   const beats = stage.value.beats;
   for (let i = 0; i <= idx.value; i++) {
     const b = beats[i];
@@ -376,13 +389,20 @@ const state = computed(() => {
       for (const v of b.victims) if (!descended.includes(v)) descended.push(v);
     if (i === idx.value && !impacted.value) continue;
     for (const k of b.kills) if (!dead.has(k)) dead.set(k, b.round);
+    for (const [id, pv] of Object.entries(b.defPv)) defPv.set(id, pv);
     for (const w of b.wounded) {
       wounded.add(w);
       const m = /^t(\d+)$/.exec(w);
       if (m) silenced.add(Number(m[1]));
     }
   }
-  return { dead, inside, wounded, silenced, descended };
+  return { dead, inside, wounded, silenced, descended, defPv };
+});
+/** Part de vie restante du héros (0..1) à l'instant joué. */
+const heroPvPct = computed(() => {
+  const h = stage.value.defenders.find((d) => d.id === 'hero');
+  if (!h?.maxPv) return 1;
+  return Math.max(0, Math.min(1, (state.value.defPv.get('hero') ?? h.maxPv) / h.maxPv));
 });
 const dead = computed(() => state.value.dead);
 const inside = computed(() => state.value.inside);
@@ -930,6 +950,16 @@ onUnmounted(clearTimers);
   fill: #2e3a26;
   stroke: #7bc86c;
   stroke-width: 1.3;
+}
+.s-def-hp-bg {
+  fill: rgba(0, 0, 0, 0.55);
+}
+.s-def-hp-fill {
+  fill: var(--d1);
+  transition: width 0.25s ease-out;
+}
+.s-def-hp-fill.low {
+  fill: var(--d4);
 }
 .s-def.hero .s-def-bg {
   fill: #3a2f1c;

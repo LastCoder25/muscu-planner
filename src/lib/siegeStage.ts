@@ -95,6 +95,9 @@ export interface SiegeBeat {
   width: number;
   /** Ce temps OUVRE la brèche (elle était fermée juste avant). */
   opens: boolean;
+  /** PV des défenseurs FRAPPÉS sur ce temps, après les coups (id → PV). Clairsemé : un
+   *  défenseur absent n’a pas bougé. Seuls ceux dont le rapport porte les PV de départ. */
+  defPv: Record<string, number>;
 }
 
 export interface SiegeStage {
@@ -723,6 +726,7 @@ export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeS
     wounded: [],
     width: 0,
     opens: false,
+    defPv: {},
   });
 
   let round = -1;
@@ -733,6 +737,9 @@ export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeS
   /** Dégâts portés AUX ASSAILLANTS par temps : une échauffourée de la cour mêle les coups
    *  des deux camps dans `damage`, or seuls les premiers entament un groupe. */
   const foeDamage = new Map<SiegeBeat, number>();
+  /** Dégâts portés à CHAQUE défenseur par temps — même raison que `foeDamage` : les PV se
+   *  dérivent après coup, dans l’ordre des temps, sinon la barre remonterait. */
+  const defDamage = new Map<SiegeBeat, Map<string, number>>();
   const beatFor = (key: string, r: number, kind: SiegeBeatKind): SiegeBeat => {
     if (r !== round) {
       round = r;
@@ -846,6 +853,11 @@ export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeS
       b.group = groupOf[body] ?? 0;
     }
     b.damage += e.amount ?? 0;
+    if (defIds.has(e.to)) {
+      const m = defDamage.get(b) ?? new Map<string, number>();
+      m.set(e.to, (m.get(e.to) ?? 0) + (e.amount ?? 0));
+      defDamage.set(b, m);
+    }
     last = b;
   }
 
@@ -855,7 +867,19 @@ export function buildSiegeStage(report: RaidReport, turretCount: number): SiegeS
   // et la barre serait remontée à l’écran.
   let pv = report.maxPv;
   const dealt = new Map<number, number>();
+  /** PV courants des défenseurs dont on connaît le départ. ⚠️ Le moteur ne soigne personne
+   *  pendant un siège, et il loggue les dégâts RÉELLEMENT encaissés (plafonnés aux PV
+   *  restants) : la barre ne peut que descendre, et un défenseur à terre y arrive pile à 0. */
+  const defPv = new Map<string, number>();
+  for (const d of defenders) if (d.maxPv && d.maxPv > 0) defPv.set(d.id, d.maxPv);
   for (const b of beats) {
+    for (const [id, amount] of defDamage.get(b) ?? []) {
+      const cur = defPv.get(id);
+      if (cur === undefined) continue;
+      const next = Math.max(0, cur - amount);
+      defPv.set(id, next);
+      b.defPv[id] = next;
+    }
     if (b.kind === 'wall') pv = Math.max(0, pv - b.damage);
     b.basePv = pv;
     const f = foeDamage.get(b) ?? 0;
