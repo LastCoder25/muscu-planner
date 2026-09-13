@@ -439,8 +439,12 @@
         <button v-if="!statusDone && adaptiveOn" class="adjust" @click="disableAdaptive">
           <q-icon name="lock_open" size="16px" /> Désactiver la difficulté auto
         </button>
-        <button v-if="!statusDone" class="abandon" @click="confirmAbandon">
-          Abandonner le challenge
+        <!-- ⚠️ MÊME ACTION QUE LE 🗑 DE L'EN-TÊTE, et il le DIT. Ce bouton abandonnait
+             TOUJOURS, même un défi vierge, pendant que le 🗑 le supprimait : deux
+             contrôles, deux résultats sur le même écran. Un défi créé par erreur
+             restait donc dans les archives selon le bouton qu'on avait sous les yeux. -->
+        <button v-if="!statusDone" class="abandon" @click="confirmDelete">
+          {{ stop.ok }} le challenge
         </button>
       </div>
     </template>
@@ -504,6 +508,7 @@ import {
   challengeStats,
   challengeDayXp,
   isChallengeComplete,
+  challengeStopPlan,
   evaluateAchievements,
   challengeLiveBalance,
   effectiveTarget,
@@ -1248,39 +1253,19 @@ function segState(d: number): string {
   return d < dayIndex.value ? 'miss' : 'up';
 }
 
-function confirmAbandon() {
-  $q.dialog({
-    title: 'Abandonner',
-    message: 'Marquer ce challenge comme abandonné ?',
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Abandonner', color: 'negative' },
-  }).onOk(() => {
-    // Le détail abandonné sort de l'historique → le retour arrière ne retombe pas
-    // dessus. ⚠️ Via `backOrReplace` et non `replace` : si l'on VENAIT de la liste,
-    // remplacer y laisserait deux entrées identiques côte à côte et le bouton retour
-    // paraîtrait mort (il faudrait appuyer deux fois). Cf. `src/lib/nav.ts`.
-    $q.loading.show({ message: 'Abandon…' });
-    store
-      .setStatus(id, 'abandoned')
-      .then(() => backOrReplace(router, '/challenges'))
-      .catch((e) =>
-        $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' }),
-      )
-      .finally(() => $q.loading.hide());
-  });
-}
+/** Ce qu’arrêter ce défi fera — règle ET mots viennent de la lib, partagés avec le
+ *  Défi 360 : « on garde les séries faites s’il a été commencé ». */
+const stop = computed(() =>
+  challengeStopPlan(ch.value ?? ({ progress: [] } as unknown as Challenge)),
+);
 function confirmDelete() {
-  // Si des reps/séries ont déjà été faites, on NE supprime PAS (l'effort compte
-  // pour l'XP/l'énergie) : on marque « abandonné » (conservé en historique).
-  // Suppression sèche réservée aux défis vierges (créés par erreur).
-  const hasDone = (ch.value?.progress ?? []).some((p) => (p.done || 0) > 0);
+  const plan = stop.value;
+  const hasDone = plan.kind === 'abandon';
   $q.dialog({
-    title: hasDone ? 'Abandonner' : 'Supprimer',
-    message: hasDone
-      ? 'Tu as déjà fait des séries : le défi passe en « abandonné » (ton effort et ton XP restent comptés). OK ?'
-      : 'Supprimer définitivement ce challenge (aucune série faite) ?',
+    title: plan.title,
+    message: plan.message,
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: hasDone ? 'Abandonner' : 'Supprimer', color: 'negative' },
+    ok: { label: plan.ok, color: 'negative' },
   }).onOk(() => {
     // Le détail sort de l'historique actif → pas de retour arrière vers un challenge
     // introuvable (et pas de doublon d'entrée si l'on venait de la liste, cf. nav.ts).

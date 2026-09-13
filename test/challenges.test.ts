@@ -10,6 +10,8 @@ import {
   removeContribution,
   challengeLiveBalance,
   isChallengeComplete,
+  challengeStopPlan,
+  stopPlan,
   repWeightFromExercise,
   isAssistedExercise,
   isBodyweightExercise,
@@ -795,5 +797,54 @@ describe('💸 UNE PRIME NE PAIE PAS DEUX FOIS LE MÊME EFFORT', () => {
     // gainage ; sans la règle le rapport dépasserait 30. Avec elle, il reste modeste.
     expect(parUnite).toBeLessThan(12);
     expect(challengeXpBreakdown(planche).bonus).toBeGreaterThan(0);
+  });
+});
+
+describe('🛑 ARRÊTER UN DÉFI SOLO', () => {
+  // ⚠️ MÊME RÈGLE QUE LE DÉFI 360 (demande de l’utilisateur : « on garde les séries
+  // faites s’il a été commencé, comme pour les challenges »). Elle vivait en TROIS
+  // exemplaires, et dans chaque écran le bouton « Abandonner » la contredisait en
+  // archivant TOUJOURS — un défi créé par erreur restait donc dans les archives selon
+  // le bouton qu’on avait sous les yeux.
+
+  it('⚠️ un défi VIERGE est SUPPRIMÉ, pas archivé', () => {
+    const plan = challengeStopPlan(challenge({ progress: [] }));
+    expect(plan.kind).toBe('delete');
+    expect(plan.ok).toBe('Supprimer');
+  });
+
+  it('⚠️ dès qu’une progression existe, on ABANDONNE — l’effort reste compté', () => {
+    const plan = challengeStopPlan(
+      challenge({
+        progress: [
+          { day: 0, date: '2026-01-05', target: 10, done: 3, elapsed_sec: 0, completed: false },
+        ],
+      }),
+    );
+    expect(plan.kind).toBe('abandon');
+    expect(plan.ok).toBe('Abandonner');
+  });
+
+  it('⚠️ une journée CLÔTURÉE À ZÉRO ne compte pas comme commencée', () => {
+    // Les journées sont créées à l’avance et clôturées même vides : sans ce détail, un
+    // défi jamais touché passerait pour entamé et s’installerait dans les archives.
+    const plan = challengeStopPlan(
+      challenge({
+        progress: [
+          { day: 0, date: '2026-01-05', target: 10, done: 0, elapsed_sec: 0, completed: false },
+        ],
+      }),
+    );
+    expect(plan.kind).toBe('delete');
+  });
+
+  it('les deux familles de défis disent la MÊME chose, au nom près', () => {
+    // Une seule règle, un seul jeu de mots : les écrans ne peuvent pas se contredire.
+    const solo = stopPlan(true, 'ce challenge');
+    const combo = stopPlan(true, 'ce Défi 360');
+    expect(solo.kind).toBe(combo.kind);
+    expect(solo.message).toBe(combo.message);
+    expect(solo.ok).toBe(combo.ok);
+    expect(solo.title).not.toBe(combo.title); // …mais chacun se nomme
   });
 });

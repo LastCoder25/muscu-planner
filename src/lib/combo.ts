@@ -3,6 +3,10 @@
 // hypertrophie), chaque série enregistrée porte ses reps + son poids. XP façon
 // séance : Σ reps×REP_XP×poids-de-rep + tonnage/500 + prime de bouclage.
 import { REP_XP, assistMult, XP_MULT, MUSCU_MIN_XP } from './athlete';
+// ⚠️ La règle d'arrêt est COMMUNE aux deux familles de défis : un 360 n'est qu'un défi
+// d'une autre forme, et l'utilisateur attend le même comportement (« on garde les séries
+// faites s'il a été commencé, comme pour les challenges »).
+import { stopPlan, type StopPlan } from './challenges';
 import { daysBetweenIso } from './loginStreak';
 import type { Level, Objective, SportPractice } from './types';
 import {
@@ -91,31 +95,14 @@ export function legSetsDone(leg: ComboLeg): number {
  * action, deux résultats — et l’écran où l’on consulte réellement son défi (l’onglet
  * 🎯 Défi 360) n’en proposait aucun.
  */
-export interface ComboStopPlan {
-  kind: 'delete' | 'abandon';
-  title: string;
-  message: string;
-  ok: string;
-}
-export function comboStopPlan(c: ComboChallenge): ComboStopPlan {
+export function comboStopPlan(c: ComboChallenge): StopPlan {
   // ⚠️ `legSetsDone` et non `legDone` : il compte les ENTRÉES, donc il voit la progression
   // dans les deux modes (séries ET reps, `legSets` repliant l’ancien `progress`). Avec
   // `legDone`, un exo en mode reps dont toutes les entrées valent 0 passerait pour vierge.
-  const fait = (c.legs ?? []).some((l) => legSetsDone(l) > 0);
-  return fait
-    ? {
-        kind: 'abandon',
-        title: 'Abandonner ce Défi 360 ?',
-        message:
-          'Tu as déjà fait des séries : il passe en « abandonné » et ton effort reste compté.',
-        ok: 'Abandonner',
-      }
-    : {
-        kind: 'delete',
-        title: 'Supprimer ce Défi 360 ?',
-        message: 'Aucune série faite : il est supprimé définitivement, sans laisser de trace.',
-        ok: 'Supprimer',
-      };
+  return stopPlan(
+    (c.legs ?? []).some((l) => legSetsDone(l) > 0),
+    'ce Défi 360',
+  );
 }
 
 /** Reps totales réalisées (pour l'XP / la séance générée). */

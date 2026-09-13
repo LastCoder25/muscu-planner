@@ -632,6 +632,55 @@ export function challengeStats(ch: Challenge, todayIso = logicalToday()): Challe
   };
 }
 
+/**
+ * 🛑 ARRÊTER UN DÉFI : ce que ça doit faire, et comment le dire.
+ *
+ * ⚠️ DEUX ISSUES, ET LA DIFFÉRENCE COMPTE. Ce qui a été FAIT a déjà alimenté l’XP et
+ * l’énergie : on ne peut pas l’effacer sans retirer au joueur un effort réel — le défi
+ * passe donc en **abandonné** et son travail reste compté. Un défi **VIERGE**, lui, n’a rien
+ * produit : le supprimer ne coûte rien, et le laisser traîner en « abandonné » salit un
+ * historique qu’on relit. C’est le cas du défi créé par erreur, pour montrer à quoi ça
+ * ressemble.
+ *
+ * ⚠️ UNE SEULE RÈGLE POUR LES DEUX FAMILLES (défi solo et Défi 360), LIBELLÉS COMPRIS.
+ * Elle vivait en TROIS exemplaires — le 🗑 du détail solo, le 🗑 du détail 360, et
+ * `comboStopPlan` — et dans chaque écran elle était CONTREDITE par le bouton voisin :
+ * « Abandonner » archivait TOUJOURS, même un défi vierge. Deux gestes pour une action,
+ * deux résultats, donc le défi créé par erreur restait dans les archives selon le bouton
+ * qu’on avait sous les yeux.
+ */
+export interface StopPlan {
+  kind: 'delete' | 'abandon';
+  title: string;
+  message: string;
+  ok: string;
+}
+export function stopPlan(started: boolean, what: string): StopPlan {
+  return started
+    ? {
+        kind: 'abandon',
+        title: `Abandonner ${what} ?`,
+        message:
+          'Tu as déjà fait des séries : il passe en « abandonné » et ton effort reste compté.',
+        ok: 'Abandonner',
+      }
+    : {
+        kind: 'delete',
+        title: `Supprimer ${what} ?`,
+        message: 'Aucune série faite : il est supprimé définitivement, sans laisser de trace.',
+        ok: 'Supprimer',
+      };
+}
+
+/** Ce qu’arrêter CE défi solo fera. ⚠️ `p.done > 0` : c’est la progression, quelle que soit
+ *  son unité (reps, secondes, km) — la même que lit `isChallengeComplete`. */
+export function challengeStopPlan(ch: Challenge): StopPlan {
+  return stopPlan(
+    (ch.progress ?? []).some((p) => (p.done || 0) > 0),
+    'ce challenge',
+  );
+}
+
 /** Un défi est-il terminé (à marquer 'done') ? */
 // Modèle TOTAL : le défi est « terminé » dès que le TOTAL prévu est atteint
 // (peu importe la répartition par jour → avance/rattrapage/jours de repos OK).
