@@ -35,68 +35,27 @@
         <div v-if="!roster.length" class="g-empty">
           Personne encore. Recrute ton premier aventurier — il escortera tes caravanes.
         </div>
-        <!-- ⚠️ La carte OUVRE LA FICHE (demandé par l'utilisateur) : le vivier ne montrait
-             que rang, classe et état — le parcours, les stats, les rôles de convoi et les
-             signatures de combat n'étaient visibles NULLE PART une fois la promotion
-             passée. On choisissait une voie sans jamais pouvoir relire ce qu'elle a donné.
-             `role`/`tabindex`/clavier : c'est un bouton, il doit se comporter comme tel. -->
-        <div
-          v-for="a in roster"
-          :key="a.id"
-          class="adv hit"
-          :class="{ busy: !isFree(a) }"
-          role="button"
-          tabindex="0"
-          :aria-label="`Fiche de ${a.name}`"
-          @click="detailAdv = a"
-          @keydown.enter.prevent="detailAdv = a"
-          @keydown.space.prevent="detailAdv = a"
-        >
-          <span class="adv-emo">{{ titleOf(a)?.emoji ?? '🧑' }}</span>
-          <div class="adv-main">
-            <div class="adv-top">
-              <span class="adv-name">{{ a.name }}</span>
-              <!-- ⚠️ LE MÊME BARÈME QUE LE JOUEUR (🟤 Bronze → 👑 Tout-puissant), et les
-                   étoiles disent où en est son niveau dans le rang — qui reste caché.
-                   ⚠️ La rareté de sa classe se lit juste en dessous : elle ne concurrence
-                   plus le rang, elle avance AVEC lui (une classe par rang gagné). C’est la
-                   CADENCE qui était fausse, pas l’échelle. -->
-              <span class="adv-rank" :style="{ color: rankOf(a).color }">
-                {{ rankOf(a).emoji }} {{ rankOf(a).name }} {{ stars(rankOf(a).star) }}
-              </span>
-              <!-- ⚔️ SA puissance, sur la MÊME échelle que celle du héros, compagnon et
-                   talent compris : c’est le chiffre qui dit qui envoyer et qui garder. -->
-              <span class="adv-pow" :title="powTitle(a)">⚔️ {{ fmtPow(powerOf(a)) }}</span>
-            </div>
-            <div class="adv-sub">
-              {{ titleOf(a)?.label ?? '—' }}
-              <span class="adv-rar" :style="{ color: rarColor(a) }">{{ rarOf(a) }}</span>
-              <span v-if="signaturesOf(a).length" class="adv-sig">✦</span>
-            </div>
-            <!-- La BARRE : sans elle, le niveau étant caché, on peut travailler deux
-                 niveaux entiers sans le moindre retour visible. -->
-            <div class="adv-bar" :title="barTitle(a)">
-              <span class="adv-fill" :style="{ width: Math.round(progressOf(a) * 100) + '%' }" />
-            </div>
-            <div class="adv-state">
-              <!-- ⚠️ La formation passe AVANT la convalescence : les deux peuvent courir
-                   ensemble, et c'est celle qu'on vient de lancer qu'on cherche des yeux. -->
-              <template v-if="trainOf(a)">
-                🎓 en formation ({{ trainNameOf(a) }}) · {{ leftOf(trainOf(a)) }}
-              </template>
-              <template v-else-if="hurtOf(a)">🛏️ à l’infirmerie · {{ leftOf(hurtOf(a)) }}</template>
-              <template v-else-if="busyOf(a)">🐫 en route · {{ leftOf(busyOf(a)) }}</template>
-              <template v-else>✅ disponible</template>
-            </div>
-          </div>
-          <button
-            v-if="canPromoteOne(a)"
-            class="adv-promo"
+        <!-- 🖼️ LE VIVIER EN PORTRAITS (v0.807 ; demandé par l'utilisateur) : chaque
+             aventurier est présenté comme le héros à l'entrée de l'Aventure — avatar au
+             centre selon sa classe, étoiles de rang sur l'anneau, quatre ronds aux coins.
+             Toucher le portrait ouvre sa FICHE ; toucher le familier ou le talent de
+             l'avatar ouvre directement leur sélecteur. -->
+        <div v-if="roster.length" class="adv-grid">
+          <AdventurerPortrait
+            v-for="a in roster"
+            :key="a.id"
+            :adv="a"
+            :familiar="famOf(a)"
+            :talent-icon="talIconOf(a)"
+            :power="powerOf(a)"
+            :state="stateOf(a)"
+            :promotable="canPromoteOne(a)"
             :disabled="busy"
-            @click.stop="openPromo(a)"
-          >
-            ⭐ Promouvoir
-          </button>
+            @open="detailAdv = a"
+            @familiar="pairFor = a"
+            @talent="talFor = a"
+            @promote="openPromo(a)"
+          />
         </div>
       </template>
 
@@ -439,7 +398,6 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import {
   ADV_CLASSES,
-  advAvailable,
   ADV_STARS,
   advNextPromoLevel,
   advRarity,
@@ -487,6 +445,7 @@ import {
   type CompanionCtx,
 } from '@/lib/raid';
 import { fmtPow } from '@/lib/combat';
+import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import { trainMsFor, companionEffects, advTalentEffects, canAdvTalent } from '@/lib/caravan';
 
 const props = defineProps<{
@@ -542,12 +501,6 @@ const powers = computed(() => adventurerPowers(char.advList, compCtx.value));
 const barePowers = computed(() => adventurerPowers(char.advList));
 const powerOf = (a: Adventurer) => powers.value.get(a.id) ?? 0;
 const pairBonusOf = (a: Adventurer) => powerOf(a) - (barePowers.value.get(a.id) ?? 0);
-function powTitle(a: Adventurer): string {
-  const gain = pairBonusOf(a);
-  return gain > 0
-    ? `Puissance ${fmtPow(powerOf(a))}, dont +${fmtPow(gain)} par son compagnon et son talent`
-    : `Puissance ${fmtPow(powerOf(a))}`;
-}
 const famById = computed(() => new Map(famPool.value.map((f) => [f.id, f])));
 const talById = computed(() => new Map(talPool.value.map((t) => [t.id, t])));
 const famOf = (a: Adventurer) => (a.familiarId ? (famById.value.get(a.familiarId) ?? null) : null);
@@ -728,9 +681,7 @@ const barTitle = (a: Adventurer) => {
     ? 'Au sommet de l’arbre — les étoiles suivent son entraînement'
     : `Promotion suivante à ${stars(ADV_STARS)}`;
 };
-const signaturesOf = (a: Adventurer) => advSignatureLevels(a);
 const stars = (s: number) => rankStarStr(s);
-const isFree = (a: Adventurer) => advAvailable(a, now.value);
 const busyOf = (a: Adventurer) => ((a.busyUntil ?? 0) > now.value ? a.busyUntil! : 0);
 const hurtOf = (a: Adventurer) => ((a.hurtUntil ?? 0) > now.value ? a.hurtUntil! : 0);
 /** Formation en cours (0 si aucune). ⚠️ Elle IMMOBILISE : c'est tout le coût d'une
@@ -741,6 +692,18 @@ const trainNameOf = (a: Adventurer) =>
 /** ⚠️ LA RÈGLE COMPLÈTE, une seule fois. Elle vivait ici en TROIS morceaux collés dans
  *  le template (`canPromote` + pas en formation + pas en convoi) et il en manquait un
  *  quatrième — l’existence du Centre de formation, que seul le store exigeait. */
+/** Ce qu’il fait en ce moment, en une ligne. ⚠️ La formation passe AVANT la convalescence :
+ *  les deux peuvent courir ensemble, et c’est celle qu’on vient de lancer qu’on cherche. */
+function stateOf(a: Adventurer): string {
+  if (trainOf(a)) return `🎓 en formation · ${leftOf(trainOf(a))}`;
+  if (hurtOf(a)) return `🛏️ à l’infirmerie · ${leftOf(hurtOf(a))}`;
+  if (busyOf(a)) return `🐫 en route · ${leftOf(busyOf(a))}`;
+  return '✅ disponible';
+}
+const talIconOf = (a: Adventurer) => {
+  const t = talOf(a);
+  return t ? (talentByCode(t.code)?.icon ?? '🧠') : undefined;
+};
 const canPromoteOne = (a: Adventurer) =>
   canPromoteNow(a, {
     guildLevel: guildLevel.value,
@@ -1135,6 +1098,17 @@ async function doPromote(classId: string) {
 }
 .adv.busy {
   opacity: 0.62;
+}
+.adv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+@media (min-width: 520px) {
+  .adv-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .adv-emo {
   font-size: 26px;

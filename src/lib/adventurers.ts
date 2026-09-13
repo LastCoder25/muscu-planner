@@ -79,6 +79,38 @@ export function advShapeLabel(w: { p: number; e: number; a: number }): string {
   return 'Rapide';
 }
 
+/**
+ * L’APPARENCE d’un aventurier dans son portrait (v0.807 ; demandé par l’utilisateur :
+ * « selon la classe, affiche l’avatar de l’aventurier »).
+ *
+ * ⚠️ DÉRIVÉE, jamais stockée — comme sa rareté (v0.727) : elle ne peut pas mentir.
+ * - La SILHOUETTE vient de sa FORME réelle (`advShapeLabel`, la même lecture que sa fiche) :
+ *   Cogneur → puissant, Rapide → agile, le reste → polyvalent.
+ * - Chaque CLASSE lui met une pièce sur le dos (arme, puis armure, cape, relique), teintée
+ *   de la rareté de cette classe : une promotion se VOIT. Au-delà de quatre classes, ce
+ *   sont les quatre plus récentes qui l’habillent — il continue de monter en éclat.
+ */
+export type AdvAvatarProfile = 'puissant' | 'agile' | 'polyvalent';
+export const ADV_AVATAR_SLOTS = ['weapon', 'armor', 'accessory', 'relic'] as const;
+export function advAvatar(adv: Adventurer): {
+  profile: AdvAvatarProfile;
+  gear: Partial<Record<(typeof ADV_AVATAR_SLOTS)[number], Rarity>>;
+} {
+  const st = advStats(adv);
+  const shape = advShapeLabel({ p: st.puissance, e: st.endurance, a: st.agilite });
+  const profile: AdvAvatarProfile =
+    shape === 'Cogneur' ? 'puissant' : shape === 'Rapide' ? 'agile' : 'polyvalent';
+  const classes = adv.path.map((id) => advClass(id)).filter((c): c is AdvClass => !!c);
+  const gear: Partial<Record<(typeof ADV_AVATAR_SLOTS)[number], Rarity>> = {};
+  const n = Math.min(ADV_AVATAR_SLOTS.length, classes.length);
+  const from = classes.length - n;
+  for (let k = 0; k < n; k++) {
+    const c = classes[from + k]!;
+    gear[ADV_AVATAR_SLOTS[k]!] = RANK_ORDER[Math.min(RANK_ORDER.length - 1, c.stratum)]!;
+  }
+  return { profile, gear };
+}
+
 export interface AdvClass {
   id: string;
   label: string;

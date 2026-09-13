@@ -37,6 +37,8 @@ import {
   recruitCost,
   grantAdvXp,
   type Adventurer,
+  advAvatar,
+  advShapeLabel,
 } from '@/lib/adventurers';
 import { RANK_ORDER } from '@/lib/items';
 import { CHARACTER_RANKS, characterRank, rankStartLevel } from '@/lib/characterRank';
@@ -722,5 +724,62 @@ describe('⚠️ « où il va » — l’horizon d’une lignée', () => {
   it('se termine, même en partant de chaque racine', () => {
     // Garde-fou : l'énumération suit des chemins, elle ne doit pas boucler.
     for (const r of roots) expect(() => reachableSkills([r.id])).not.toThrow();
+  });
+});
+
+describe('🖼️ L’APPARENCE D’UN AVENTURIER DANS SON PORTRAIT (v0.807)', () => {
+  const mk = (path: string[], level = 20) =>
+    ({ id: 'a', name: 'A', seed: 1, path, level, xp: 0 }) as Parameters<typeof advAvatar>[0];
+  const racine = ADV_CLASSES.find((c) => c.stratum === 0)!;
+  /** Une lignée valide de n classes (chaque classe descend de la précédente). */
+  function lignee(n: number): string[] {
+    const out = [racine.id];
+    const tags = new Set(racine.tags);
+    for (let st = 1; out.length < n; st++) {
+      const next = ADV_CLASSES.find(
+        (c) => c.stratum === st && (c.req ?? []).every((t) => tags.has(t)),
+      );
+      if (!next) break;
+      out.push(next.id);
+      next.tags.forEach((t) => tags.add(t));
+    }
+    return out;
+  }
+
+  it('⚠️ chaque CLASSE met une pièce sur le dos — une promotion se VOIT', () => {
+    expect(Object.keys(advAvatar(mk(lignee(1))).gear)).toEqual(['weapon']);
+    expect(Object.keys(advAvatar(mk(lignee(2))).gear)).toEqual(['weapon', 'armor']);
+    expect(Object.keys(advAvatar(mk(lignee(4))).gear)).toEqual([
+      'weapon',
+      'armor',
+      'accessory',
+      'relic',
+    ]);
+    expect(Object.keys(advAvatar(mk([])).gear)).toEqual([]);
+  });
+
+  it('⚠️ la pièce porte la RARETÉ de sa classe, et les 4 plus récentes habillent', () => {
+    const p = lignee(6);
+    expect(p.length).toBe(6);
+    const g = advAvatar(mk(p)).gear;
+    // Six classes : ce sont les strates 2..5 qui habillent, pas les deux premières.
+    expect(g.weapon).toBe(RANK_ORDER[2]);
+    expect(g.relic).toBe(RANK_ORDER[5]);
+  });
+
+  it('⚠️ la SILHOUETTE suit la forme RÉELLE (la même lecture que sa fiche)', () => {
+    for (const c of ADV_CLASSES.filter((x) => x.stratum === 0)) {
+      const a = mk([c.id]);
+      const st = advStats(a);
+      const shape = advShapeLabel({ p: st.puissance, e: st.endurance, a: st.agilite });
+      const attendu =
+        shape === 'Cogneur' ? 'puissant' : shape === 'Rapide' ? 'agile' : 'polyvalent';
+      expect(advAvatar(a).profile, c.id).toBe(attendu);
+    }
+    // Les trois silhouettes existent dans le vivier de départ.
+    const profils = new Set(
+      ADV_CLASSES.filter((x) => x.stratum === 0).map((c) => advAvatar(mk([c.id])).profile),
+    );
+    expect(profils.size).toBeGreaterThan(1);
   });
 });
