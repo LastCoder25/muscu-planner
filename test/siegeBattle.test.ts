@@ -793,3 +793,76 @@ describe('🎯 UN TIREUR ASSAILLANT NE VOIT QUE SON CÔTÉ DE L’ENCEINTE', () 
     expect(premier?.round).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe('🪵 LA BRÈCHE S’OUVRE, ET C’EST LA COUR QUI DÉCIDE (v0.801)', () => {
+  // ⚠️ Le plafond de la défense était MÉCANIQUE : la brèche ne s’ouvrait que dans un tiers
+  // des sièges, et une cour gardée par tout le vivier ne pouvait pas tomber. Quatre règles,
+  // chacune verrouillée ici par ce qu’elle garantit.
+  const breche = () => wall(0, 1000); // un mur déjà au sol : l’intrus entre au tour 0
+  const intrus = (o: Partial<SiegeUnit> = {}) =>
+    att('melee', { dist: 0, pv: 1e9, damage: 1, ...o });
+  const gardien = (o: Partial<SiegeUnit> = {}) => def('melee', { pv: 1e9, damage: 1, ...o });
+
+  it('les ENGINS amplifient chaque coup porté au mur', () => {
+    const a = att('melee', { dist: 0, damage: 10, pv: 1e9 });
+    const r = simulateSiege([a], [], wall(1e9), 1);
+    const coup = r.log.find((e) => e.kind === 'wall');
+    expect(BATTLE.siegeEngineK).toBeGreaterThan(1);
+    expect(coup?.amount).toBe(Math.round(10 * BATTLE.siegeEngineK));
+  });
+
+  it('⚠️ seuls les meilleurs défenseurs de la cour engagent chaque intrus', () => {
+    const gardiens = Array.from({ length: 12 }, (_, i) => gardien({ id: `g${i}`, damage: 1 + i }));
+    const r = simulateSiege([intrus({ id: 'x' })], gardiens, breche(), 3);
+    const auTour1 = r.log.filter((e) => e.kind === 'hit' && e.round === 1 && e.to === 'x');
+    expect(auTour1).toHaveLength(Math.ceil(BATTLE.yardEngage));
+    // …et ce sont les plus forts qui engagent en premier.
+    const forts = new Set(gardiens.slice(-Math.ceil(BATTLE.yardEngage)).map((g) => g.id));
+    expect(auTour1.every((e) => forts.has(e.from!))).toBe(true);
+  });
+
+  it('⚠️ les intrus se comptent en PLACE, pas en têtes (même règle que le front du mur)', () => {
+    const gardiens = Array.from({ length: 12 }, (_, i) => gardien({ id: `g${i}` }));
+    const r = simulateSiege([intrus({ id: 'x', bulk: 0.5 })], gardiens, breche(), 3);
+    const auTour1 = r.log.filter((e) => e.kind === 'hit' && e.round === 1 && e.to === 'x');
+    expect(auTour1).toHaveLength(Math.ceil(BATTLE.yardEngage * 0.5));
+  });
+
+  it('⚠️ une cour qui CÈDE plusieurs tours d’affilée perd la ville, défenseurs debout', () => {
+    const gardiens = Array.from({ length: 6 }, (_, i) => gardien({ id: `g${i}` }));
+    const r = simulateSiege([intrus({ damage: 5000 })], gardiens, breche(), 5);
+    expect(r.held).toBe(false);
+    // Tombée par la cour, pas au chrono, et sans qu’aucun défenseur ne soit à terre.
+    // ⚠️ Épinglé sur le PLAFOND DE TOURS, pas sur `yardFallRounds + 1` : lire la constante
+    // qu’on vérifie laissait passer la mutation « la cour ne fait jamais tomber la ville »
+    // (l’infini + 1 est toujours plus grand que la durée).
+    expect(r.rounds).toBeLessThan(BATTLE.maxRounds);
+    expect(r.log.some((e) => e.kind === 'down' && e.to?.startsWith('g'))).toBe(false);
+  });
+
+  it('⚠️ la cour cède face à ceux qui sont AU CONTACT, pas face au vivier entier', () => {
+    // Douze gardiens à 100 : le vivier entier (1 200) retiendrait un intrus à 500, mais seuls
+    // trois l’engagent (300). C’est tout l’objet du goulot — sans lui, l’EFFECTIF redevient
+    // ce qui tient la ville. Ajouté après une mutation passée au VERT.
+    const gardiens = Array.from({ length: 12 }, (_, i) => gardien({ id: `g${i}`, damage: 100 }));
+    const r = simulateSiege([intrus({ damage: 500 })], gardiens, breche(), 5);
+    expect(r.held).toBe(false);
+    expect(r.rounds).toBeLessThan(BATTLE.maxRounds);
+  });
+
+  it('⚠️ un chrono qui expire sur une ville OCCUPÉE est une défaite', () => {
+    // L’enlisement : les gardiens frappent plus fort que l’intrus (la cour ne cède pas),
+    // mais ne peuvent pas l’abattre. Avant, ce siège comptait comme tenu.
+    const gardiens = Array.from({ length: 4 }, (_, i) => gardien({ id: `g${i}`, damage: 50 }));
+    const r = simulateSiege([intrus()], gardiens, breche(), 7);
+    expect(r.rounds).toBe(BATTLE.maxRounds);
+    expect(r.held).toBe(false);
+  });
+
+  it('…mais un chrono qui expire devant un MUR intact reste tenu', () => {
+    const r = simulateSiege([att('melee', { dist: 0, pv: 1e9, damage: 1 })], [], wall(1e9), 7);
+    expect(r.rounds).toBe(BATTLE.maxRounds);
+    expect(r.entered).toBe(0);
+    expect(r.held).toBe(true);
+  });
+});

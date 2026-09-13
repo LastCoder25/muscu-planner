@@ -197,6 +197,47 @@ export const BATTLE = {
   /** Garde-fou anti-boucle. Un siège qui dure plus longtemps est un siège où plus
    *  personne ne peut tuer personne : on tranche par les PV restants. */
   maxRounds: 60,
+  /** LES ENGINS DE SIÈGE : multiplicateur des coups que le front porte au MUR.
+   *
+   *  ⚠️ LE PLAFOND DE LA DÉFENSE ÉTAIT MÉCANIQUE, PAS NUMÉRIQUE (v0.801, mesuré). Enceinte
+   *  à niveau, la brèche ne s’ouvrait que dans **32 à 46 %** des sièges — et un siège sans
+   *  brèche est tenu d’office. D’où une base pleinement investie à **93-99 %**, et une
+   *  armée qu’aucun réglage de dégâts ne pouvait rendre dangereuse sans écraser d’abord les
+   *  bases incomplètes (mesuré : `foeDmgK` +18 % fait tomber une base à moitié à 9-30 %
+   *  quand la base pleine reste à 88-94). Les engins font céder le mur plus souvent
+   *  (**52-65 %** à ×1,5), et c’est la bataille de la COUR qui décide.
+   *  Variante choisie par l’utilisateur ; ×2 (brèche 65-80 %) rendait une enceinte sans
+   *  défenseurs presque inutile (20-35 % de tenue). */
+  siegeEngineK: 1.5,
+  /** Combien de défenseurs de la cour peuvent engager CHAQUE intrus — les autres attendent.
+   *
+   *  ⚠️ SANS CE GOULOT, LA COUR ÉTAIT IMPRENABLE : 3 à 5 intrus contre un vivier de 15 à
+   *  51 aventuriers. L’EFFECTIF écrasait tout, et la seule façon de perdre était que TOUT
+   *  le vivier tombe. Désormais on n’affronte que ce qui tient au contact : la QUALITÉ des
+   *  meilleurs défenseurs compte, le nombre sert de relève. Les plus forts engagent en
+   *  premier. */
+  yardEngage: 3,
+  /** Tours D’AFFILÉE où la cour cède (ce qui est entré frappe plus fort que ce qui le
+   *  retient au contact) avant que la ville ne tombe.
+   *
+   *  ⚠️ C’EST LA CHUTE GRADUÉE que la v0.785 avait notée comme piste : un tout-ou-rien
+   *  « la cour est vide » cassait quatre invariants. Ici un tour défavorable ne perd rien,
+   *  une cour qui cède durablement perd la ville. Mesuré : 3 ou 6 tours donnent quasiment
+   *  la même tenue — le chiffre compte peu, la règle beaucoup. */
+  yardFallRounds: 3,
+  /** Un siège qui EXPIRE avec des intrus encore debout dans la cour est une ville PERDUE.
+   *
+   *  ⚠️ TROUVÉ PAR L’ABLATION DES TOURELLES, et c’était un défaut de modèle (v0.801,
+   *  mesuré). Au niveau 80 avec héros et vivier, une base SANS tourelles tenait **89 %**
+   *  des sièges — mieux qu’une base à tourelles moitié (65 %) et presque autant qu’une base
+   *  complète (92 %). Tous ces sièges étaient des CHRONOS EXPIRÉS : la brèche s’ouvrait à
+   *  100 %, 27 intrus entraient, et la cour s’enlisait — les meilleurs défenseurs frappaient
+   *  assez fort pour qu’elle ne « cède » pas, pas assez pour abattre des intrus aux PV
+   *  énormes. Au plafond de tours, une ville occupée comptait comme tenue.
+   *  Après : complète **91 %**, tourelles moitié **34 %**, sans tourelles **3 %** —
+   *  monotone, et les tourelles redeviennent la structure qui décide. Un siège expiré sans
+   *  personne dans la cour (le mur a tenu) reste tenu. */
+  occupiedAtTimeoutLoses: true as boolean,
 } as const;
 
 /** @public — contrat du moteur : la mise en scène rejouera ce log, comme SiegeStage. */
@@ -375,7 +416,21 @@ function defenderTargets(u: SiegeUnit, att: SiegeUnit[]): SiegeUnit[] {
 function yardIsFalling(def: SiegeUnit[], att: SiegeUnit[]): boolean {
   const menace = att.reduce((n, a) => (a.inside && alive(a) ? n + a.damage : n), 0);
   if (menace <= 0) return false;
-  return menace > def.reduce((n, d) => (inYard(d) ? n + d.damage : n), 0);
+  return menace > yardEngaged(def, att).reduce((n, d) => n + d.damage, 0);
+}
+
+/** Les défenseurs de la cour qui peuvent réellement engager les intrus.
+ *
+ *  ⚠️ LES INTRUS SE COMPTENT EN PLACE, PAS EN TÊTES (cf. `bulk`) — la fuite exacte que le
+ *  front du mur a eue en v0.755. Comptée en têtes, une horde de corps menus mobilisait
+ *  bien plus de défenseurs qu’une bande de brigands de même masse : trouvé par l’écart de
+ *  tenue entre factions, qui passait de 4 à 9,7 points. */
+function yardEngaged(def: SiegeUnit[], att: SiegeUnit[]): SiegeUnit[] {
+  const yard = def.filter(inYard);
+  if (!Number.isFinite(BATTLE.yardEngage)) return yard;
+  const intrus = att.reduce((n, a) => (a.inside && alive(a) ? n + (a.bulk ?? 1) : n), 0);
+  const place = Math.ceil(BATTLE.yardEngage * intrus);
+  return [...yard].sort((a, b) => b.damage - a.damage).slice(0, place);
 }
 
 /**
@@ -530,7 +585,9 @@ export function simulateSiege(
    * perd pas.
    */
   const dedans = () => att.some((a) => a.inside && alive(a));
-  const perdu = () => !def.some(alive) && (dedans() || w.pv <= 0);
+  let chute = 0;
+  const perdu = () =>
+    (!def.some(alive) && (dedans() || w.pv <= 0)) || chute >= BATTLE.yardFallRounds;
 
   for (; round < BATTLE.maxRounds; round++) {
     if (!att.some(alive) || perdu()) break;
@@ -561,7 +618,9 @@ export function simulateSiege(
     }
 
     // ── 2. La mêlée défensive tient la brèche ──────────────────────────────
+    const auContact = new Set(yardEngaged(def, att));
     for (const d of def.filter((x) => x.kind === 'melee' && alive(x))) {
+      if (inYard(d) && !auContact.has(d)) continue;
       const cible = pickTarget(defenderTargets(d, att), rng);
       if (cible)
         strike(d, cible, d.damage, round, log, w.maxPv > 0 ? Math.max(0, w.pv) / w.maxPv : 0);
@@ -590,7 +649,7 @@ export function simulateSiege(
           // trop encombrant pour le reliquat rendrait le front dépendant de l'ORDRE des
           // unités, qui n'est pas une mécanique de jeu.
           front -= Math.max(0.05, a.bulk ?? 1);
-          const dealt = Math.min(w.pv, Math.max(1, Math.round(a.damage)));
+          const dealt = Math.min(w.pv, Math.max(1, Math.round(a.damage * BATTLE.siegeEngineK)));
           w.pv -= dealt;
           log.push({ round, kind: 'wall', from: a.id, amount: dealt });
         }
@@ -646,10 +705,14 @@ export function simulateSiege(
       const d = a.dist ?? 0;
       if (d > 0) a.dist = Math.max(0, d - Math.max(1, a.speed ?? 1));
     }
+
+    // ── 6. La cour cède-t-elle ? ────────────────────────────────────────────
+    chute = dedans() && yardIsFalling(def, att) ? chute + 1 : 0;
   }
 
   const killed = att.filter((a) => !alive(a)).length;
-  const held = !perdu();
+  const occupee = BATTLE.occupiedAtTimeoutLoses && round >= BATTLE.maxRounds && dedans();
+  const held = !perdu() && !occupee;
   return {
     held,
     rounds: round,

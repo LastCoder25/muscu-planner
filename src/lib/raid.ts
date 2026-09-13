@@ -425,6 +425,15 @@ export const RAID = {
    *  70 % avec vivier, niveaux 12·28·60·90 : 78/100/21/61 · 82/93/36/63 · 78/89/23/32 ·
    *  65/90/7/16, contre 87/100/23/71 · 81/97/32/69 · 73/91/18/38 · 63/87/7/23 avant. */
   foeRangedDmgK: 0.6,
+  /** Ce qu’un aventurier vaut DERRIÈRE SES MURS, face à ce qu’il vaut sur la route.
+   *  ⚠️ NÉ AVEC LA BATAILLE DE LA COUR (v0.801, mesuré). Depuis que la brèche s’ouvre
+   *  souvent et que seuls les meilleurs engagent chaque intrus, c’est la QUALITÉ du vivier
+   *  qui tient la ville — or l’aventurier progresse linéairement quand l’armée suit ~L⁴.
+   *  Mesuré, niveaux 28/50/80/100, base pleine avec héros et vivier : **90/87/93/88 %** à
+   *  ×1,25, contre 89/84/88/75 à ×1 (le vivier ne tenait plus la cour en fin de partie)
+   *  et 95/92/100/96 à ×2 (le plafond revenait). Appliqué au siège seul : la calibration
+   *  MESURÉE des embuscades de convoi n’est pas touchée. */
+  guardSiegeK: 1.25,
   championPvMult: 3, // le champion est une élite, pas un soldat de plus
   championDmgMult: 2.2,
   // Les dégâts d'un groupe croissent en √effectif, pas linéairement : seuls quelques
@@ -2224,7 +2233,11 @@ export function guardUnits(
       ),
       advTalentEffects(p?.talent ? [p.talent] : []),
     );
-    const f = foldBonus(one.pv, one.damage * (one.strikes ?? 1), fx);
+    const f = foldBonus(
+      one.pv * RAID.guardSiegeK,
+      one.damage * (one.strikes ?? 1) * RAID.guardSiegeK,
+      fx,
+    );
     return {
       id: a.id,
       name: a.name,

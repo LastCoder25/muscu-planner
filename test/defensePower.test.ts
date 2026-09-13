@@ -26,12 +26,26 @@ import {
 } from '@/lib/raid';
 import { refFighter } from '@/lib/proceduralContent';
 import { TRAVEL } from '@/lib/expedition';
+import { guildRoster } from '@/lib/adventurers';
+import { refAdventurer } from '@/lib/caravan';
 
 const defAt = (lvl: number): DefenseStructure[] => [
   { typeId: 'wall', level: lvl },
   { typeId: 'turret', level: lvl },
 ];
 const NOW = 1_700_000_000_000;
+/** Une garnison RÉALISTE : l’effectif de la Guilde, lignées de référence promues au rythme
+ *  du jeu. ⚠️ Depuis la v0.801 c’est la configuration ATTENDUE d’une défense — la brèche
+ *  s’ouvre souvent et la cour décide — donc les fenêtres de mesure la supposent. */
+const garde = (lvl: number) =>
+  guardUnits(
+    lvl,
+    Array.from({ length: guildRoster(lvl) }, (_, i) => ({
+      ...refAdventurer(Math.max(1, lvl - (i % 6)), i),
+      id: `g${i}`,
+    })),
+    { now: NOW, kennelLevel: lvl, familiars: [], talents: [] },
+  );
 
 describe('la puissance de l’ASSAUT (ce que l’espionnage vend)', () => {
   // ⚠️ `defensePower` A DISPARU, et son test avec lui. Elle n’était qu’un PROXY : un
@@ -160,15 +174,20 @@ describe('la répartition par contributeur', () => {
     // ⚠️ Puis niveau **40** à 70 % (v0.800) : les tireurs adverses ne voient plus que leur côté
     // de l’enceinte, et au niveau 26 la part du héros retombait à zéro. Balayé sur 8 niveaux ×
     // 6 parts : tenue 0,50 · mur 0,50 · tourelles 0,50 · héros **0,21**, la plus nette.
+    // ⚠️ Puis AVEC SA GARNISON (v0.801) : les engins ouvrent la brèche et la cour décide, donc
+    // sans vivier une enceinte incomplète tombe à zéro et plus aucune ablation ne dit rien.
+    // Balayé sur 6 niveaux × 4 parts : niveau 40 à 70 % donne tenue 0,67 · mur 0,58 ·
+    // tourelles 0,67 · héros 0,17 · garnison **0,50** — les quatre contributeurs y pèsent.
     const lvl = 40;
     const defs = defAt(Math.round(lvl * 0.7));
-    const b = defenseBreakdown(defs, lvl, refFighter(lvl), [], NOW);
+    const b = defenseBreakdown(defs, lvl, refFighter(lvl), garde(lvl), NOW);
     const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
     expect(by.wall!.holdLoss).toBeGreaterThan(0);
     expect(by.turret!.holdLoss).toBeGreaterThan(0);
     expect(by.hero!.holdLoss).toBeGreaterThan(0);
+    expect(by.garrison!.holdLoss).toBeGreaterThan(0);
     // Héros parti → sa part tombe à zéro et il est marqué inactif.
-    const sansHeros = defenseBreakdown(defs, lvl, null, [], NOW);
+    const sansHeros = defenseBreakdown(defs, lvl, null, garde(lvl), NOW);
     const h = sansHeros.parts.find((p) => p.id === 'hero')!;
     expect(h.holdLoss).toBe(0);
     expect(h.active).toBe(false);
@@ -191,8 +210,13 @@ describe('la répartition par contributeur', () => {
     // seuil, et ça ne peut pas dériver.
     // Mesuré (enceinte pleine + héros nu) : 1,000 (26) · 1,000 (40) · 1,000 (60) ·
     // 0,833 (80) · 0,833 (90).
+    // ⚠️ AVEC SA GARNISON depuis la v0.801 (enceinte pleine + héros nu + vivier : 1,00 au
+    // niveau 60, 0,88 au 90). Sans elle une enceinte seule ne tient plus que 0,67 : c’est
+    // la doctrine choisie, pas une régression. Et la propriété que ce test épingle est
+    // RESTAURÉE par la règle d’occupation — avant elle, un vivier fort tenait la cour sans
+    // une seule tourelle, par chronos expirés.
     for (const lvl of [60, 90]) {
-      const b = defenseBreakdown(defAt(lvl), lvl, refFighter(lvl), [], NOW);
+      const b = defenseBreakdown(defAt(lvl), lvl, refFighter(lvl), garde(lvl), NOW);
       const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
       expect(b.hold).toBeGreaterThan(0.8);
       // Les tourelles portent la tenue ENTIÈRE : les retirer la ramène à zéro.
@@ -387,14 +411,17 @@ describe('📐 LE REPÈRE PERMANENT : ma base face à une armée type', () => {
     // ou le niveau de ce qui arrive. Le pronostic sur CE siège-là reste payant.
     const lvl = 60;
     const defs = defAt(lvl);
-    const ref = referenceHold(defs, lvl, null, [], NOW);
+    // ⚠️ AVEC SA GARNISON (v0.801) : sans elle, une enceinte seule au niveau 60 perd les deux
+    // sièges (0 contre 0) et le test ne distinguait plus rien. Mesuré avec : 0,00 contre 1,00.
+    const g = garde(lvl);
+    const ref = referenceHold(defs, lvl, null, g, NOW);
     // Deux armées très différentes ne changent pas le repère : il ne les regarde pas.
     const dur = rollRaid(1, lvl, NOW, 0);
     const autre = rollRaid(999_983, lvl, NOW, 0);
-    expect(siegeHoldChance(defs, lvl, null, [], dur, 60)).not.toBe(
-      siegeHoldChance(defs, lvl, null, [], autre, 60),
+    expect(siegeHoldChance(defs, lvl, null, g, dur, 60)).not.toBe(
+      siegeHoldChance(defs, lvl, null, g, autre, 60),
     );
-    expect(referenceHold(defs, lvl, null, [], NOW)).toBe(ref);
+    expect(referenceHold(defs, lvl, null, g, NOW)).toBe(ref);
   });
 });
 
@@ -608,8 +635,10 @@ describe('⚔️ LA PUISSANCE DE DÉFENSE : une MAGNITUDE, pas un pronostic', ()
     // `holdLoss` tombe à 0 dès qu’on tient sans lui (documenté, et c’est une information
     // en soi) — mais on ne VAUT pas la même chose pour autant. La part en puissance dit
     // ce que chaque structure APPORTE, même quand la bataille est déjà gagnée d’avance.
+    // ⚠️ AVEC SA GARNISON (v0.801) : c’est elle qui mène une enceinte pleine à la tenue
+    // complète (1,00 mesuré au niveau 30, contre 0,67 sans).
     const L = 30;
-    const b = defenseBreakdown(defAt(L), L, refFighter(L), [], NOW);
+    const b = defenseBreakdown(defAt(L), L, refFighter(L), garde(L), NOW);
     const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
     expect(b.hold).toBeGreaterThan(0.9);
     for (const id of ['wall', 'turret', 'hero']) {

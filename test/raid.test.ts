@@ -84,7 +84,7 @@ import {
 import type { Combatant } from '@/lib/combat';
 import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
 import { PROMO_LEVELS, guildRoster, type Adventurer } from '@/lib/adventurers';
-import { companionEffects } from '@/lib/caravan';
+import { companionEffects, refAdventurer, escortCombatant } from '@/lib/caravan';
 import { FAMILIAR_SPECIES } from '@/data/familiars';
 
 const H = 3600_000;
@@ -104,15 +104,19 @@ function hero(L: number): Combatant {
   return { ...f, damage: Math.round(f.damage * ge.off), pv: Math.round(f.pv * ge.pv) };
 }
 
-/** Un vivier plausible : la lignée guerrière, aux niveaux qu’un joueur aligne vraiment. */
+/** Un vivier plausible : les lignées de référence (mêlée, agile, civile), PROMUES au
+ *  rythme du jeu, à des niveaux proches de celui du joueur.
+ *  ⚠️ RÉÉCRIT (v0.801). Il portait une seule lignée guerrière figée à TROIS classes quel
+ *  que soit le niveau : au niveau 100 le vivier du test valait trois strates quand un
+ *  vrai joueur en a huit. Mesuré, base pleine avec héros : 64 % avec l’ancien vivier
+ *  contre 88 % avec un vivier promu — le garde-fou du plafond mesurait un joueur qui
+ *  n’existe pas, et tant que la cour ne décidait rien ça ne se voyait pas. */
 function rosterOf(playerLevel: number): Adventurer[] {
   return Array.from({ length: guildRoster(playerLevel) }, (_, i) => ({
+    ...refAdventurer(Math.max(1, playerLevel - (i % 6)), i),
     id: `a${i}`,
     name: `A${i}`,
     seed: i + 1,
-    path: ['guerrier', 'epeiste', 'duelliste'],
-    level: Math.max(1, playerLevel - 10 + (i % 8)),
-    xp: 0,
   }));
 }
 function holdRate(
@@ -220,7 +224,14 @@ describe('silhouette de faction', () => {
     // fuites que ce seuil relâché signalait sont réparées : le feu ne se perd plus dans
     // un cadavre (`volley`) et la place au pied du mur ne double-compte plus la racine
     // de l'effectif (`bulk = unitMult`). Mesuré ici même : **12,06 → 4,10**.
-    expect(Math.max(...vals) - Math.min(...vals)).toBeLessThan(7);
+    // ⚠️ PUIS 7 → 12 (v0.801), et cette fois ce n'est PAS une fuite — la mesure du rempart
+    // juste en dessous le prouve. Les engins de siège placent l'usure MOYENNE du mur pile
+    // sur le seuil de brèche (`breachAt`), là où un point d'usure en plus devient un
+    // point de brèche en plus : mesuré, brèche 53/62/55 % et tenue 47/38/45 pour une
+    // part de rempart emportée de 57,9/60,4/58,4 %. L'écart RELATIF de menace passe au
+    // contraire de 14 % à **4 %** — les factions n'ont jamais été aussi égales, c'est
+    // l'instrument qui amplifie. Mesuré : **9,7**.
+    expect(Math.max(...vals) - Math.min(...vals)).toBeLessThan(12);
 
     // ⚠️ ET SURTOUT : LA TENUE EST UN MAUVAIS INSTRUMENT POUR CETTE PROPRIÉTÉ.
     // C'est une PROBABILITÉ, donc elle sature aux deux bouts — l'écart mesuré n'est même
@@ -252,7 +263,11 @@ describe('silhouette de faction', () => {
       return somme / n;
     });
     const moyen = emporte.reduce((a, b) => a + b, 0) / emporte.length;
-    expect((Math.max(...emporte) - Math.min(...emporte)) / moyen).toBeLessThan(0.2);
+    // ⚠️ RESSERRÉ 0,20 → 0,10 (v0.801) en même temps que le seuil de tenue se relâchait :
+    // c'est cette mesure-ci qui porte la propriété, elle doit donc serrer d'autant plus
+    // que l'autre desserre. Relâcher la tenue sans resserrer le rempart aurait été
+    // renoncer à la garantie.
+    expect((Math.max(...emporte) - Math.min(...emporte)) / moyen).toBeLessThan(0.1);
   });
 
   it('l’effectif reste entièrement fouillable avant que les corps pourrissent', () => {
@@ -295,9 +310,18 @@ describe('chaque armée sait répondre au feu', () => {
 });
 
 describe('calibration du siège', () => {
-  it('bâtir à son niveau tient le plus souvent ; négliger ses murs se paie', () => {
+  it('bâtir à son niveau et DÉFENDRE tient le plus souvent ; négliger ses murs se paie', () => {
+    // ⚠️ RÉÉCRIT (v0.801), et c'est un CHANGEMENT DE DOCTRINE validé par l'utilisateur, pas
+    // un relâchement. Il affirmait qu'une enceinte SEULE, sans héros ni garnison, tient le
+    // plus souvent. C'était précisément le défaut : la brèche ne s'ouvrait que dans un tiers
+    // des sièges, donc les pierres gagnaient seules et le vivier ne pesait rien. Avec les
+    // engins de siège, une enceinte seule tient **35 à 48 %** (mesuré aux niveaux 12 à 100)
+    // — c'est le HÉROS et la GARNISON qui transforment ça en victoire probable.
     for (const L of [15, 20, 26, 40, 60, 90]) {
-      expect(holdRate(L, L, false), `niveau ${L}, défenses à niveau`).toBeGreaterThan(50);
+      expect(holdRate(L, L, true), `niveau ${L}, défenses à niveau + héros`).toBeGreaterThan(50);
+      expect(holdRate(L, L, true), `niveau ${L}, le héros compte`).toBeGreaterThan(
+        holdRate(L, L, false),
+      );
       expect(holdRate(L, L - 5, false), `niveau ${L}, défenses en retard`).toBeLessThan(
         holdRate(L, L, false),
       );
@@ -335,9 +359,15 @@ describe('calibration du siège', () => {
     // 45,4 à la largeur 10). La promesse tient là où elle a un sens.
     const demiAvecVivier = holdRate(L, Math.round(L * 0.5), true, 260, rosterOf(L));
     expect(demiAvecVivier, 'à moitié montée AVEC sa garnison').toBeGreaterThan(30);
-    // ⚠️ Et sans garnison on garde une chance, DÉLIBÉRÉMENT plus maigre : une enceinte
-    // que personne ne défend de l'intérieur ne doit pas tenir comme si elle l'était.
-    expect(demi, 'à moitié montée, sans personne dans la cour').toBeGreaterThan(6);
+    // ⚠️ ET SANS GARNISON, C'EST LA GARNISON QUI MANQUE — RÉÉCRIT (v0.801). Il exigeait
+    // qu'une enceinte à moitié montée et vide garde une chance (> 6 %). Depuis que la
+    // brèche s'ouvre souvent et qu'une cour vide cède en trois tours, elle n'en a plus
+    // (mesuré 0 à 2 %), et c'est la doctrine choisie : l'écart entre les deux EST ce que
+    // la garnison apporte. On verrouille donc cet écart, qui ne peut pas se lire à zéro.
+    expect(
+      demiAvecVivier - demi,
+      'à moitié montée, la garnison fait la différence',
+    ).toBeGreaterThan(20);
   });
 
   it('⚠️ LE VIVIER PÈSE : recruter et élever change l’issue, pas seulement le décor', () => {
@@ -2164,5 +2194,21 @@ describe('🏥 AUCUN NIVEAU MORT — l’Infirmerie jusqu’à 100', () => {
       // La queue reste SOUS le plancher : elle en retire une part, jamais la totalité.
       expect(f(100_000), nom).toBeGreaterThan(f(0) * 0.05);
     }
+  });
+});
+
+describe('🛡️ UN AVENTURIER VAUT PLUS DERRIÈRE SES MURS (v0.801)', () => {
+  // ⚠️ Né avec la bataille de la cour : c’est la qualité du vivier qui tient la ville, or
+  // l’aventurier progresse linéairement quand l’armée suit ~L⁴. Le renfort vit au SIÈGE
+  // seul — la calibration mesurée des embuscades de convoi n’en voit rien.
+  it('ses PV et ses dégâts de siège valent ceux de la route × guardSiegeK', () => {
+    const adv = refAdventurer(40, 0);
+    const [g] = guardUnits(40, [adv], { now: 0, kennelLevel: 40, familiars: [], talents: [] });
+    const route = escortCombatant([adv], adv.name);
+    expect(RAID.guardSiegeK).toBeGreaterThan(1);
+    expect(g!.pv).toBe(Math.max(1, Math.round(route.pv * RAID.guardSiegeK)));
+    expect(g!.damage).toBe(
+      Math.max(1, Math.round(route.damage * (route.strikes ?? 1) * RAID.guardSiegeK)),
+    );
   });
 });
