@@ -2206,6 +2206,57 @@ export interface CompanionCtx {
  *  avec la garnison : elle existait pour donner un porteur au bonus du bâtiment quand
  *  le vivier était vide. Un compagnon étant maintenant attaché à un homme, un joueur
  *  sans Guilde n’a ni l’un ni l’autre — il lui reste le mur et les tourelles. */
+/** Ce que SA paire (compagnon + talent) apporte à un aventurier au rempart.
+ *  ⚠️ UNE seule définition, lue par la bataille ET par la puissance affichée : deux
+ *  copies finiraient par annoncer une valeur que le combat n’applique pas. */
+function pairEffects(
+  p: { familiar?: Item; talent?: TalentInstance } | undefined,
+  ctx?: CompanionCtx,
+): AggregatedEffects {
+  return mergeEffects(
+    // ⚠️ Le Chenil PLAFONNE le dressage défensif : c’est lui qui entraîne, un
+    // familier ne peut pas dépasser son école. Sans ce plafond, le bâtiment ne
+    // servirait plus qu’à ouvrir des places et mourrait au niveau 25.
+    companionEffects(
+      p?.familiar ? [p.familiar] : [],
+      'def',
+      // ⚠️ FATIGUÉ = DIMINUÉ DE MOITIÉ, jamais perdu ni blessé — sinon personne
+      // n’engagerait le familier qu’il a élevé pendant des semaines (règle v0.663).
+      p?.familiar && ctx && isFatigued(p.familiar, ctx.now)
+        ? COMPANION_K * DAMAGED_EFFICIENCY
+        : undefined,
+      ctx?.kennelLevel,
+    ),
+    advTalentEffects(p?.talent ? [p.talent] : []),
+  );
+}
+
+/**
+ * ⚔️ LA PUISSANCE DE CHAQUE AVENTURIER, calculée COMME CELLE DU HÉROS (v0.804).
+ *
+ * ⚠️ Le même arbitre que tout le jeu — `combatPower` (√ offense × survie) sur le
+ * combattant `playerWithGear` que `escortCombatant` construit déjà — jamais une somme de
+ * stats recopiée : une étiquette qui refait le calcul à sa façon finit par diverger.
+ *
+ * ⚠️ LA PAIRE COMPTÉE EST CELLE QUE LA BATAILLE RETIENT (`companionPairs`) : un familier
+ * que le héros porte, hors d’école ou au-delà des places du Chenil ne gonfle pas le
+ * chiffre. Et ses effets sont ceux du rempart (`pairEffects`, dressage plafonné, fatigue
+ * comprise), exactement ce que `guardUnits` applique.
+ *
+ * ⚠️ SANS le multiplicateur de siège (`RAID.guardSiegeK`) : c’est un avantage de
+ * TERRAIN, comme la part du héros derrière ses murs, pas une propriété de l’homme. Le
+ * chiffre se compare donc à celui du héros, sur la même échelle.
+ */
+export function adventurerPowers(advs: Adventurer[], ctx?: CompanionCtx): Map<string, number> {
+  const pairs = companionPairs(advs, ctx);
+  return new Map(
+    advs.map((a) => [
+      a.id,
+      combatPower(escortCombatant([a], a.name, pairEffects(pairs.get(a.id), ctx))),
+    ]),
+  );
+}
+
 export function guardUnits(
   playerLevel: number,
   advs: Adventurer[],
@@ -2218,23 +2269,7 @@ export function guardUnits(
     // `Combatant` la perdrait au passage en unité (une unité n'a que PV et dégâts).
     const one = escortCombatant([a], a.name);
     const st = advStats(a);
-    const p = pairs.get(a.id);
-    const fx = mergeEffects(
-      // ⚠️ Le Chenil PLAFONNE le dressage défensif : c’est lui qui entraîne, un
-      // familier ne peut pas dépasser son école. Sans ce plafond, le bâtiment ne
-      // servirait plus qu’à ouvrir des places et mourrait au niveau 25.
-      companionEffects(
-        p?.familiar ? [p.familiar] : [],
-        'def',
-        // ⚠️ FATIGUÉ = DIMINUÉ DE MOITIÉ, jamais perdu ni blessé — sinon personne
-        // n’engagerait le familier qu’il a élevé pendant des semaines (règle v0.663).
-        p?.familiar && ctx && isFatigued(p.familiar, ctx.now)
-          ? COMPANION_K * DAMAGED_EFFICIENCY
-          : undefined,
-        ctx?.kennelLevel,
-      ),
-      advTalentEffects(p?.talent ? [p.talent] : []),
-    );
+    const fx = pairEffects(pairs.get(a.id), ctx);
     const f = foldBonus(
       one.pv * RAID.guardSiegeK,
       one.damage * (one.strikes ?? 1) * RAID.guardSiegeK,

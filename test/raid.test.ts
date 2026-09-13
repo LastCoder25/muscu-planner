@@ -12,6 +12,7 @@ import {
   groupCombatant,
   resolveRaid,
   guardUnits,
+  adventurerPowers,
   siegeXp,
   raidDamage,
   corpsesFrom,
@@ -85,7 +86,8 @@ import {
   grantFamiliarXp,
   type Item,
 } from '@/lib/items';
-import type { Combatant } from '@/lib/combat';
+import { combatPower, type Combatant } from '@/lib/combat';
+import type { TalentInstance } from '@/lib/talents';
 import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
 import { PROMO_LEVELS, guildRoster, type Adventurer } from '@/lib/adventurers';
 import { companionEffects, refAdventurer, escortCombatant } from '@/lib/caravan';
@@ -917,6 +919,60 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     // Et la fatigue passe : une fois reposé, il revaut son plein.
     const repose = fam('loup', 'damage_pct', 40, { fatigueUntil: NOW - 1 });
     expect(d(repose)).toBe(d(frais));
+  });
+
+  describe('⚔️ LA PUISSANCE D’UN AVENTURIER, calculée comme celle du héros', () => {
+    const vrai = (familiarId?: string, talentId?: string): Adventurer => ({
+      // ⚠️ Niveau 60 : `combatPower` ARRONDIT à l’entier, et un petit aventurier (58 au niveau
+      // 26) noie un talent de niveau 1 dans l’arrondi — le test mesurerait l’arrondi.
+      ...refAdventurer(60, 0),
+      id: 'a',
+      name: 'Ilyana',
+      familiarId,
+      talentId,
+    });
+    const tal = { id: 't1', code: 't_dmg', xp: 0, level: 1, equipped: false } as TalentInstance;
+    const pw = (a: Adventurer, c?: Parameters<typeof adventurerPowers>[1]) =>
+      adventurerPowers([a], c).get('a')!;
+
+    it('⚠️ LE MÊME ARBITRE QUE LE HÉROS, sans bonus de terrain', () => {
+      // `combatPower` du combattant que `escortCombatant` construit — ni une somme de
+      // stats, ni le multiplicateur de siège (un avantage de murs, pas de l’homme).
+      const a = vrai();
+      expect(pw(a)).toBe(combatPower(escortCombatant([a], a.name)));
+      expect(pw(a)).toBeGreaterThan(0);
+    });
+
+    it('⚠️ LE COMPAGNON ET LE TALENT CONFIÉS COMPTENT', () => {
+      const f = fam('loup', 'damage_pct', 40);
+      const nu = pw(vrai());
+      expect(pw(vrai('loup'), ctx([f], 50))).toBeGreaterThan(nu);
+      const avecTal = { ...ctx([], 50), talents: [tal] };
+      expect(pw(vrai(undefined, 't1'), avecTal)).toBeGreaterThan(nu);
+      // Les deux ensemble valent plus que chacun seul.
+      // Talent de PV, pas de dégâts : les deux axes se MULTIPLIENT dans la puissance, là où
+      // deux bonus de dégâts s’additionnent et se perdent dans l’arrondi d’un petit chiffre.
+      const lesDeux = { ...ctx([f], 50), talents: [{ ...tal, code: 't_pv' }] };
+      expect(pw(vrai('loup', 't1'), lesDeux)).toBeGreaterThan(pw(vrai('loup'), ctx([f], 50)));
+    });
+
+    it('⚠️ SEULE LA PAIRE QUE LA BATAILLE RETIENT gonfle le chiffre', () => {
+      const f = fam('loup', 'damage_pct', 40);
+      const nu = pw(vrai());
+      // Porté par le héros : il se bat ailleurs.
+      expect(pw(vrai('loup'), ctx([f], 50, 'loup'))).toBe(nu);
+      // Hors d’école : le Chenil ne l’héberge pas.
+      const prime = fam('loup', 'damage_pct', 40, { rarity: RANK_ORDER[7]! });
+      expect(pw(vrai('loup'), ctx([prime], 1))).toBe(nu);
+    });
+
+    it('⚠️ LES EFFETS SONT CEUX DU REMPART : dressage plafonné, fatigue comprise', () => {
+      const dresse = fam('loup', 'damage_pct', 40, { defXp: famXpForLevel(10) });
+      expect(pw(vrai('loup'), ctx([dresse], 2))).toBeLessThan(pw(vrai('loup'), ctx([dresse], 50)));
+      const lasse = fam('loup', 'damage_pct', 40, { fatigueUntil: NOW + 3600_000 });
+      const frais = fam('loup', 'damage_pct', 40);
+      expect(pw(vrai('loup'), ctx([lasse], 50))).toBeLessThan(pw(vrai('loup'), ctx([frais], 50)));
+    });
   });
 
   it('⚠️ SANS AVENTURIER, PERSONNE NE TIENT LA BRÈCHE', () => {

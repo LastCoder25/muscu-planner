@@ -64,6 +64,9 @@
               <span class="adv-rank" :style="{ color: rankOf(a).color }">
                 {{ rankOf(a).emoji }} {{ rankOf(a).name }} {{ stars(rankOf(a).star) }}
               </span>
+              <!-- ⚔️ SA puissance, sur la MÊME échelle que celle du héros, compagnon et
+                   talent compris : c’est le chiffre qui dit qui envoyer et qui garder. -->
+              <span class="adv-pow" :title="powTitle(a)">⚔️ {{ fmtPow(powerOf(a)) }}</span>
             </div>
             <div class="adv-sub">
               {{ titleOf(a)?.label ?? '—' }}
@@ -218,6 +221,16 @@
         {{ titleOf(detailAdv)?.label ?? '—' }} ·
         <b :style="{ color: rarColor(detailAdv) }">{{ rarOf(detailAdv) }}</b> ·
         {{ advShapeLabel(statWeights(detailAdv)) }}
+      </div>
+
+      <!-- ⚔️ La puissance, et ce que la PAIRE y ajoute : sans l’écart, on ne sait pas si
+           le compagnon et le talent confiés servent à quelque chose. -->
+      <div class="d-pow">
+        <span class="d-pow-val font-display">⚔️ {{ fmtPow(powerOf(detailAdv)) }}</span>
+        <span v-if="pairBonusOf(detailAdv) > 0" class="d-pow-gain">
+          dont +{{ fmtPow(pairBonusOf(detailAdv)) }} grâce à son compagnon et son talent
+        </span>
+        <span v-else class="d-pow-gain">sans compagnon ni talent qui compte</span>
       </div>
 
       <!-- Les STATS, qui n'étaient lisibles nulle part une fois la promotion faite. -->
@@ -463,7 +476,15 @@ import {
   talentRankOf,
   type TalentInstance,
 } from '@/lib/talents';
-import { companionSlots, companionRankLabel, companionPairs, canCompanion } from '@/lib/raid';
+import {
+  companionSlots,
+  companionRankLabel,
+  companionPairs,
+  canCompanion,
+  adventurerPowers,
+  type CompanionCtx,
+} from '@/lib/raid';
+import { fmtPow } from '@/lib/combat';
 import { trainMsFor, companionEffects, advTalentEffects, cappedDefLevel } from '@/lib/caravan';
 
 const props = defineProps<{
@@ -502,16 +523,29 @@ const famPool = computed(() =>
 const talPool = computed(() =>
   normalizeTalents(char.row?.talents ?? []).filter((t) => t.equipped !== true),
 );
-const pairedCount = computed(
-  () =>
-    companionPairs(char.advList, {
-      familiars: famPool.value,
-      talents: talPool.value,
-      kennelLevel: kennelLevel.value,
-      now: Date.now(),
-      heroFamiliarId: heroFamId.value,
-    }).size,
-);
+/** Le contexte d’appariement. ⚠️ UN seul objet pour le compteur ET la puissance : deux
+ *  copies finiraient par ne pas retenir les mêmes paires. */
+const compCtx = computed<CompanionCtx>(() => ({
+  familiars: famPool.value,
+  talents: talPool.value,
+  kennelLevel: kennelLevel.value,
+  // L’horloge du panneau : la fatigue d’un compagnon compte, et elle passe.
+  now: now.value,
+  heroFamiliarId: heroFamId.value,
+}));
+const pairedCount = computed(() => companionPairs(char.advList, compCtx.value).size);
+/** ⚔️ Puissances calculées par la LIB (`combatPower`, celle du héros) — jamais ici. La
+ *  version NUE sert à dire ce que la paire ajoute. */
+const powers = computed(() => adventurerPowers(char.advList, compCtx.value));
+const barePowers = computed(() => adventurerPowers(char.advList));
+const powerOf = (a: Adventurer) => powers.value.get(a.id) ?? 0;
+const pairBonusOf = (a: Adventurer) => powerOf(a) - (barePowers.value.get(a.id) ?? 0);
+function powTitle(a: Adventurer): string {
+  const gain = pairBonusOf(a);
+  return gain > 0
+    ? `Puissance ${fmtPow(powerOf(a))}, dont +${fmtPow(gain)} par son compagnon et son talent`
+    : `Puissance ${fmtPow(powerOf(a))}`;
+}
 const famById = computed(() => new Map(famPool.value.map((f) => [f.id, f])));
 const talById = computed(() => new Map(talPool.value.map((t) => [t.id, t])));
 const famOf = (a: Adventurer) => (a.familiarId ? (famById.value.get(a.familiarId) ?? null) : null);
@@ -895,6 +929,26 @@ async function doPromote(classId: string) {
   font-size: 12.5px;
   color: var(--dim);
   margin: 2px 0 8px;
+}
+.adv-pow {
+  margin-left: auto;
+  font-family: 'Oswald', sans-serif;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.d-pow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 8px;
+}
+.d-pow-val {
+  font-size: 20px;
+}
+.d-pow-gain {
+  font-size: 12px;
+  color: var(--dim);
 }
 .d-stats {
   display: flex;
