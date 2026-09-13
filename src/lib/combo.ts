@@ -276,6 +276,66 @@ export function legTierMarks(l: ComboLeg): { sec: number; principal: number; max
  *  le crédit-durée sont mode-agnostiques). L'échelle va donc jusqu'au maximal (au-delà si
  *  déjà dépassé) : `fillPct` = la part faite jusqu'à l'objectif, `overPct` = la part faite
  *  au-delà, `objPct` = où se situe l'objectif sur l'échelle. */
+/**
+ * 📅 OÙ L’ON DEVRAIT EN ÊTRE, et ce que la barre doit en montrer.
+ *
+ * ⚠️ UN SEUL DRAPEAU SERVAIT À TROIS CHOSES, et il n’était juste que pour une.
+ * `showOnTime` exigeait `onTimePct < 100` — écrit pour le TRAIT 🎯 (« à 100 %, il se
+ * confond avec le bout de la barre »), puis réutilisé tel quel pour la ZONE ROSE et pour
+ * la ligne « en retard ». Or le DERNIER JOUR l’attendu vaut exactement 100 : le rose
+ * s’éteignait donc précisément le jour où tout ce qui reste EST du retard, et la ligne qui
+ * l’annonce disparaissait avec lui. Signalé par l’utilisateur (« ça affiche bien en rose les
+ * autres jours sauf le dernier »).
+ *
+ * ⚠️ DEUX ÉCRANS PEIGNAIENT LA MÊME BARRE, chacun sa copie (l’onglet 🎯 Défi 360 et
+ * `ComboDetailPage`) — donc le même défaut deux fois. La règle vit ici, les écrans peignent.
+ *
+ * ⚠️ DATES EN UTC EXPLICITE : le projet s’est déjà fait décaler d’un jour en France par un
+ * aller-retour local↔UTC (cf. `startDate.ts`).
+ */
+export interface ComboPace {
+  /** Où l’on devrait en être (0..100). Vaut 100 le dernier jour. */
+  onTimePct: number;
+  /** Part réellement faite (0..100). */
+  donePct: number;
+  /** Le RETARD, à peindre en rose — 0 dès qu’on est dans les temps. */
+  latePct: number;
+  /** Le trait 🎯. ⚠️ Caché à 0 ET à 100 : il s’y confondrait avec un bord de barre. */
+  showMark: boolean;
+  /** La ligne « en avance / en retard ». Elle, doit rester au dernier jour. */
+  showPace: boolean;
+  state: 'ahead' | 'behind';
+}
+/** Rien à dire : pas de défi chargé. ⚠️ Dans la LIB, pas recopié par chaque écran —
+ *  les deux qui peignent cette barre en avaient déjà chacun leur exemplaire. */
+export const NO_PACE: ComboPace = {
+  onTimePct: 0,
+  donePct: 0,
+  latePct: 0,
+  showMark: false,
+  showPace: false,
+  state: 'ahead',
+};
+
+export function comboPace(c: ComboChallenge, today: string): ComboPace {
+  const donePct = Math.max(0, Math.min(100, comboProgressPct(c)));
+  const jours = Math.max(1, c.duration_days);
+  const ms = Date.parse(`${today}T00:00:00Z`) - Date.parse(`${c.start_date}T00:00:00Z`);
+  const ecoules = today < c.start_date ? 0 : Math.round(ms / 86400000) + 1;
+  const onTimePct = Math.round((Math.max(0, Math.min(jours, ecoules)) / jours) * 100);
+  const latePct = Math.max(0, onTimePct - donePct);
+  return {
+    onTimePct,
+    donePct,
+    latePct,
+    showMark: onTimePct > 0 && onTimePct < 100,
+    // ⚠️ Pas de `< 100` ici : c’était le défaut. On se tait quand le défi n’a pas commencé,
+    // et quand il est bouclé — plus rien n’est en retard, la barre est pleine.
+    showPace: c.status === 'active' && onTimePct > 0 && donePct < 100,
+    state: donePct >= onTimePct ? 'ahead' : 'behind',
+  };
+}
+
 export function legBarGeometry(l: ComboLeg): {
   objPct: number;
   fillPct: number;

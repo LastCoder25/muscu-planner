@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   legSetsDone,
   comboStopPlan,
+  comboPace,
   legReps,
   legRemaining,
   legComplete,
@@ -854,5 +855,98 @@ describe('🛑 ARRÊTER UN DÉFI 360', () => {
     expect(vierge.title).not.toBe(entame.title);
     expect(vierge.message).not.toBe(entame.message);
     expect(vierge.ok).not.toBe(entame.ok);
+  });
+});
+
+describe('📅 LA BARRE D’AVANCEMENT DU 360', () => {
+  const mk = (over: Partial<ComboChallenge> = {}): ComboChallenge =>
+    ({
+      id: 'c',
+      user_id: 'u',
+      start_date: '2026-01-05',
+      duration_days: 7,
+      status: 'active',
+      legs: [
+        {
+          slot: 'push',
+          exercise_id: 'e',
+          exercise_name: 'E',
+          target: 10,
+          sets: [{ date: '2026-01-05', reps: 10, weight: null }],
+        } as ComboLeg,
+      ],
+      ...over,
+    }) as ComboChallenge;
+
+  it('⚠️ LE DERNIER JOUR, le retard se voit ENCORE (le defaut signale)', () => {
+    // Signale : « c’est le dernier jour donc tout le reste à faire devrait être en rose ;
+    // ça affiche bien en rose les autres jours sauf le dernier ». L’attendu vaut
+    // exactement 100 % ce jour-là, et le garde  — écrit pour le TRAIT 🎯 — éteignait
+    // aussi la zone rose et la ligne « en retard ».
+    const p1 = comboPace(mk(), '2026-01-11'); // jour 7 sur 7
+    expect(p1.onTimePct).toBe(100);
+    expect(p1.latePct).toBeGreaterThan(0); // il reste du rose à peindre
+    expect(p1.showPace).toBe(true); // …et la ligne qui l’annonce
+    expect(p1.state).toBe('behind');
+  });
+
+  it('⚠️ … mais le TRAIT 🎯, lui, se cache a 100 %', () => {
+    // C’était la seule chose que le garde faisait bien : à 100 % le trait se confondrait
+    // avec le bout de la barre.
+    expect(comboPace(mk(), '2026-01-11').showMark).toBe(false);
+    expect(comboPace(mk(), '2026-01-08').showMark).toBe(true);
+  });
+
+  it('en avance : aucun rose', () => {
+    const fini = mk({
+      legs: [
+        {
+          slot: 'push',
+          exercise_id: 'e',
+          exercise_name: 'E',
+          target: 1,
+          sets: [{ date: '2026-01-05', reps: 10, weight: null }],
+        } as ComboLeg,
+      ],
+    });
+    const p1 = comboPace(fini, '2026-01-06');
+    expect(p1.latePct).toBe(0);
+    expect(p1.state).toBe('ahead');
+  });
+
+  it('⚠️ un 360 BOUCLE ne parle plus de retard', () => {
+    // 100 % fait : la barre est pleine, plus rien n’est en retard — la ligne se tait.
+    const fini = mk({
+      legs: [
+        {
+          slot: 'push',
+          exercise_id: 'e',
+          exercise_name: 'E',
+          target: 1,
+          sets: [{ date: '2026-01-05', reps: 10, weight: null }],
+        } as ComboLeg,
+      ],
+    });
+    expect(comboPace(fini, '2026-01-11').showPace).toBe(false);
+  });
+
+  it('avant le depart : rien du tout', () => {
+    const p1 = comboPace(mk(), '2026-01-01');
+    expect(p1.onTimePct).toBe(0);
+    expect(p1.showPace).toBe(false);
+    expect(p1.showMark).toBe(false);
+  });
+
+  it('⚠️ DATES EN UTC : 365 jours d’affilee, l’attendu ne saute jamais en arriere', () => {
+    // Le projet s’est déjà fait décaler d’un jour en France par un aller-retour local↔UTC.
+    const c2 = mk({ duration_days: 365 });
+    let prev = -1;
+    for (let d = 0; d < 365; d++) {
+      const jour = new Date(Date.UTC(2026, 0, 5 + d)).toISOString().slice(0, 10);
+      const v = comboPace(c2, jour).onTimePct;
+      expect(v).toBeGreaterThanOrEqual(prev);
+      prev = v;
+    }
+    expect(prev).toBe(100);
   });
 });

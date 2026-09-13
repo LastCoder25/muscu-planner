@@ -382,8 +382,11 @@
             </div>
             <!-- Dégradé unique : vert (actuel) → rose (théorique si en retard) → piste. -->
             <div class="bar" :style="comboBarStyle">
+              <!-- ⚠️ Le TRAIT se cache à 100 % (il se confondrait avec le bout de la
+                   barre) ; la ZONE ROSE, elle, reste — le dernier jour, tout ce qui
+                   manque est du retard. -->
               <i
-                v-if="comboShowOnTime"
+                v-if="pace.showMark"
                 class="c3-mark"
                 :style="{ left: comboOnTimePct + '%' }"
                 :title="`Pour être dans les temps : ${comboOnTimePct}%`"
@@ -602,6 +605,8 @@ import {
   legSets,
   legRepRange,
   comboStopPlan,
+  comboPace,
+  NO_PACE,
   type ComboChallenge,
   comboExportText,
   comboBonusXp,
@@ -740,27 +745,19 @@ const comboWeek = computed(() =>
 );
 // Avancement THÉORIQUE « dans les temps » = jours écoulés (aujourd'hui inclus) / durée.
 // Affiché en ROSE derrière le vert (actuel) sur la barre globale → on voit le retard.
-const comboOnTimePct = computed(() => {
-  const c = activeCombo.value;
-  if (!c) return 0;
-  const today = logicalToday();
-  if (today < c.start_date) return 0;
-  const ms = Date.parse(`${today}T00:00:00Z`) - Date.parse(`${c.start_date}T00:00:00Z`);
-  const elapsed = Math.round(ms / 86400000) + 1;
-  const e = Math.max(0, Math.min(c.duration_days, elapsed));
-  return Math.round((e / c.duration_days) * 100);
-});
-const comboShowOnTime = computed(
-  () => comboOnTimePct.value > 0 && comboOnTimePct.value < 100 && comboPct.value < 100,
+/** Même source que l’écran de détail — deux copies de cette barre portaient le même
+ *  défaut : le rose s’éteignait le DERNIER jour, quand l’attendu vaut 100 %. */
+const pace = computed(() =>
+  activeCombo.value ? comboPace(activeCombo.value, logicalToday()) : NO_PACE,
 );
-// Fond de barre = un seul dégradé (pas d'empilement) : vert (actuel) → rose (théorique
-// si en retard) → piste.
+const comboOnTimePct = computed(() => pace.value.onTimePct);
+
 const comboBarStyle = computed(() => {
-  const p = Math.max(0, Math.min(100, comboPct.value));
-  const ot = comboOnTimePct.value;
+  // Un seul dégradé (aucun empilement) : vert (fait) → rose (le RETARD) → piste.
+  const { donePct: p, latePct, onTimePct } = pace.value;
   const stops =
-    comboShowOnTime.value && ot > p
-      ? `var(--accent) 0 ${p}%, #ff6a9c ${p}% ${ot}%, var(--surface-2) ${ot}% 100%`
+    latePct > 0
+      ? `var(--accent) 0 ${p}%, #ff6a9c ${p}% ${onTimePct}%, var(--surface-2) ${onTimePct}% 100%`
       : `var(--accent) 0 ${p}%, var(--surface-2) ${p}% 100%`;
   return { background: `linear-gradient(to right, ${stops})` };
 });

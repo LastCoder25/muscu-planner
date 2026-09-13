@@ -19,8 +19,12 @@
              (avancement THÉORIQUE = où l'on devrait en être) → piste. Le rose n'apparaît
              que si l'on est en retard (théorique > actuel). Trait 🎯 par-dessus. -->
         <div class="hc-bar" :style="barStyle">
+          <!-- ⚠️ Le TRAIT se cache à 100 % (il se confondrait avec le bout de la barre) ;
+               la zone ROSE et la ligne « en retard », elles, doivent RESTER le dernier
+               jour — c'est là que tout ce qui manque devient du retard. Un seul drapeau
+               servait aux trois, et il n'était juste que pour le trait. -->
           <i
-            v-if="showOnTime"
+            v-if="pace.showMark"
             class="hc-ontime"
             :style="{ left: onTimePct + '%' }"
             :title="`Pour être dans les temps : ${onTimePct}%`"
@@ -220,6 +224,8 @@ import {
   legBarGeometry,
   legSetsDone,
   comboStopPlan,
+  comboPace,
+  NO_PACE,
   type ComboChallenge,
   legDone,
   legComplete,
@@ -323,31 +329,19 @@ const daysLeftLabel = computed(() => {
 // Un 360 peut être programmé pour plus tard (départ choisi à la création).
 const notStarted = computed(() => !!c.value && logicalToday() < c.value.start_date);
 const startTxt = computed(() => (c.value ? startLabel(c.value.start_date, logicalToday()) : ''));
-const onTimePct = computed(() => {
-  if (!c.value) return 0;
-  const today = logicalToday();
-  if (today < c.value.start_date) return 0;
-  // Jours écoulés (aujourd'hui inclus). On parse les 2 dates en UTC explicite pour éviter
-  // l'écart local/UTC (addDaysIso passe par toISOString → décalait d'un jour en France).
-  const ms = Date.parse(`${today}T00:00:00Z`) - Date.parse(`${c.value.start_date}T00:00:00Z`);
-  const elapsed = Math.round(ms / 86400000) + 1;
-  const e = Math.max(0, Math.min(c.value.duration_days, elapsed));
-  return Math.round((e / c.value.duration_days) * 100);
-});
-// Marqueur affiché tant que le défi est actif et dans la fenêtre (sinon 100 % = redondant).
-const showOnTime = computed(
-  () => !!c.value && c.value.status === 'active' && onTimePct.value > 0 && onTimePct.value < 100,
-);
-const onTimeState = computed(() => (pct.value >= onTimePct.value ? 'ahead' : 'behind'));
+/** Où l’on devrait en être — règle et bornes dans la lib, partagées avec l’onglet
+ *  🎯 Défi 360 : les deux écrans peignaient la même barre, chacun sa copie. */
+const pace = computed(() => (c.value ? comboPace(c.value, logicalToday()) : NO_PACE));
+const onTimePct = computed(() => pace.value.onTimePct);
+const showOnTime = computed(() => pace.value.showPace);
+const onTimeState = computed(() => pace.value.state);
 
-// Fond de la barre = un seul dégradé (aucun empilement / z-index) : vert (actuel) →
-// rose (théorique, si en retard) → piste. Bulletproof côté rendu.
 const barStyle = computed(() => {
-  const p = Math.max(0, Math.min(100, pct.value));
-  const ot = onTimePct.value;
+  // Un seul dégradé (aucun empilement) : vert (fait) → rose (le RETARD) → piste.
+  const { donePct: p, latePct, onTimePct } = pace.value;
   const stops =
-    showOnTime.value && ot > p
-      ? `var(--accent) 0 ${p}%, #ff6a9c ${p}% ${ot}%, var(--surface-2) ${ot}% 100%`
+    latePct > 0
+      ? `var(--accent) 0 ${p}%, #ff6a9c ${p}% ${onTimePct}%, var(--surface-2) ${onTimePct}% 100%`
       : `var(--accent) 0 ${p}%, var(--surface-2) ${p}% 100%`;
   return { background: `linear-gradient(to right, ${stops})` };
 });
