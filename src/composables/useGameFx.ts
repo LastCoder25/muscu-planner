@@ -27,17 +27,35 @@ export interface GameFx {
   subtitle?: string;
   // Rareté → couleur + intensité de l'effet (divin = explosion). Optionnel.
   rarity?: FxRarity;
+  /** DISCRET : bandeau en haut qui LAISSE PASSER LES TOUCHES, au lieu de l'overlay plein
+   *  écran. Pour ce qui se répète (boss refarmé, drop, set renforcé) : enchaîner plusieurs
+   *  overlays bloquait « Réattaquer » pendant des secondes. */
+  quiet?: boolean;
 }
 
+/** Durée d'affichage d'un bandeau discret. */
+const TOAST_MS = 2800;
+/** Au-delà, on retire les plus anciens : une rafale ne doit pas couvrir l'écran. */
+const TOAST_MAX = 3;
+
 const queue = ref<GameFx[]>([]);
+const toasts = ref<GameFx[]>([]);
 let seq = 0;
 
 export function useGameFx() {
   function celebrate(fx: Omit<GameFx, 'id'>): void {
-    queue.value.push({ ...fx, id: ++seq });
+    const item = { ...fx, id: ++seq };
+    if (!fx.quiet) {
+      queue.value.push(item);
+      return;
+    }
+    toasts.value = [...toasts.value, item].slice(-TOAST_MAX);
+    setTimeout(() => {
+      toasts.value = toasts.value.filter((t) => t.id !== item.id);
+    }, TOAST_MS);
   }
   function dismiss(): void {
     queue.value.shift();
   }
-  return { queue, celebrate, dismiss };
+  return { queue, toasts, celebrate, dismiss };
 }

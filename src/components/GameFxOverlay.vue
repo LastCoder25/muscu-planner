@@ -1,4 +1,22 @@
 <template>
+  <!-- Bandeaux DISCRETS : en haut, sans voile, et pointer-events: none — on continue de
+       jouer (et de toucher « Réattaquer ») pendant qu'ils s'affichent. -->
+  <div class="fx-toasts" aria-live="polite">
+    <transition-group name="fx-toast">
+      <div
+        v-for="t in toasts"
+        :key="t.id"
+        class="fx-toast"
+        :style="{ '--fx-color': t.rarity ? (RARITY_COLOR[t.rarity] ?? '#ffd23f') : '#ffd23f' }"
+      >
+        <span class="fx-toast-emo">{{ t.emoji }}</span>
+        <span class="fx-toast-txt">
+          <b>{{ t.title }}</b>
+          <span v-if="t.subtitle"> · {{ t.subtitle }}</span>
+        </span>
+      </div>
+    </transition-group>
+  </div>
   <transition name="fx-fade">
     <div v-if="cur" :key="cur.id" class="fx-overlay" :class="'tier-' + tier" @click="dismiss">
       <div class="fx-flash" v-if="tier >= 3" />
@@ -36,7 +54,7 @@
 import { computed, watch, onBeforeUnmount } from 'vue';
 import { useGameFx } from '@/composables/useGameFx';
 
-const { queue, dismiss } = useGameFx();
+const { queue, toasts, dismiss } = useGameFx();
 const cur = computed(() => queue.value[0] ?? null);
 
 const RARITY_COLOR: Record<string, string> = {
@@ -76,6 +94,55 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
+.fx-toasts {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 24px));
+  z-index: 8950;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.fx-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface, #211c16) 94%, transparent);
+  border: 1px solid var(--fx-color);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  color: var(--text, #f3eee6);
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+.fx-toast-emo {
+  font-size: 20px;
+  flex: none;
+}
+.fx-toast-txt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fx-toast-txt b {
+  color: var(--fx-color);
+}
+.fx-toast-enter-from,
+.fx-toast-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+.fx-toast-enter-active,
+.fx-toast-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
 .fx-overlay {
   position: fixed;
   inset: 0;

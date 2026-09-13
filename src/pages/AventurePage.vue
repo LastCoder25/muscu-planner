@@ -1801,10 +1801,16 @@
                  Grisé si on ne possède aucune pièce de cette voie. -->
             <button
               class="lo-btn"
-              :disabled="voieOwnedCount(i) === 0 || busy || equippedSet?.idx === i"
+              :disabled="voieOwnedCount(i) === 0 || busy || setFullyWorn(i)"
               @click="doWearVoieSet(i)"
             >
-              {{ equippedSet?.idx === i ? '✓ Set porté' : '⬆️ Porter ce set' }}
+              {{
+                setFullyWorn(i)
+                  ? '✓ Set porté'
+                  : equippedSet?.idx === i
+                    ? '⬆️ Compléter ce set'
+                    : '⬆️ Porter ce set'
+              }}
             </button>
             <!-- Gestion des pièces rangées : vider vers le sac (46488974) ou vendre (53a6d487). -->
             <!-- Vider / vendre ne touchent QUE la réserve : masqués si tout est porté. -->
@@ -2851,9 +2857,10 @@ function itemAffixLines(it: Item): string[] {
   return lines;
 }
 // Célébration centrale pour un DROP marquant (rang S+ = éclat, SSS = explosion).
-function celebrateRareDrop(it: Item) {
+function celebrateRareDrop(it: Item, quiet = false) {
   if (RARITY_RANK[it.rarity] < 7) return; // S / SS / SSS uniquement
   gameFx.celebrate({
+    quiet,
     kind: 'drop',
     emoji: it.emoji,
     title: RARITY_RANK[it.rarity] >= 9 ? 'DROP RANG SSS !' : `Drop rang ${it.rarity} !`,
@@ -2863,12 +2870,13 @@ function celebrateRareDrop(it: Item) {
 }
 // Drop de talent : éclat central si rang élevé (moment notable). Le talent apparaît
 // dans la collection Perso › Talents.
-function celebrateTalentDrop(t: TalentInstance) {
+function celebrateTalentDrop(t: TalentInstance, quiet = false) {
   const def = talentByCode(t.code);
   if (!def) return;
   const rarity = talentRankOf(t);
   if (RARITY_RANK[rarity] >= 4)
     gameFx.celebrate({
+      quiet,
       kind: 'generic',
       emoji: '🎓',
       title: `Talent ${RARITY_LABEL[rarity]} !`,
@@ -4701,7 +4709,9 @@ async function fightBoss(b: MilestoneBoss) {
       });
       const dr: Item = { ...piece, id: crypto.randomUUID() };
       drops.push(dr);
-      queueFx(() => celebrateRareDrop(dr));
+      // Boss = on enchaîne les tentatives : le drop s'annonce en bandeau discret, jamais
+      // en overlay bloquant (plusieurs overlays d'affilée gelaient « Réattaquer »).
+      queueFx(() => celebrateRareDrop(dr, true));
     }
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
     // Drop de TALENT au boss (source plus généreuse que les donjons) : ~25 % à la
@@ -4736,7 +4746,7 @@ async function fightBoss(b: MilestoneBoss) {
     // rien ne bloque « Réattaquer » — c'était le défaut du comparatif en attente.
     const conflict = bossRes?.conflicts?.[0];
     if (conflict) pendingBossStash.value = conflict;
-    if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!));
+    if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!, true));
     run.value = {
       name: b.name,
       kind: 'boss',
@@ -4761,10 +4771,13 @@ async function fightBoss(b: MilestoneBoss) {
       ...(talentDrops.length ? { talentDrops } : {}),
     };
     // Victoire de boss de palier = jalon MAJEUR → célébration centrale (gros éclat),
-    // DIFFÉRÉE à la fin de l'animation de combat.
+    // DIFFÉRÉE à la fin de l'animation de combat. ⚠️ Seulement la PREMIÈRE fois : un
+    // boss refarmé n'est plus un jalon, et l'overlay bloquait l'écran à chaque tentative.
+    const firstWin = lastRunFirstVisit.value;
     if (win)
       queueFx(() =>
         gameFx.celebrate({
+          quiet: !firstWin,
           kind: 'generic',
           emoji: b.emoji,
           title: `${b.name} vaincu !`,
@@ -5201,6 +5214,18 @@ const bagCount = computed(() => (char.row?.inventory ?? []).filter((i) => !isFam
 const loadoutVoie = (i: number): (typeof VOIES)[number] | null => VOIES[i] ?? null;
 // SET DE VOIE ACTUELLEMENT ÉQUIPÉ (≥2 pièces) → marque le loadout correspondant « en cours »
 // + bannière dans la vue Équipement. Dominant parmi les 4 slots gear équipés.
+/** « Set porté » = les 4 pièces portées ET la voie du set active. ⚠️ Pas seulement « un
+ *  set en cours » (2 pièces suffisent) : le bouton se grisait avec 3 pièces sur 4, la
+ *  dernière en réserve, sans plus aucun moyen de compléter le set ni de passer à sa voie. */
+function setFullyWorn(i: number): boolean {
+  const v = VOIES[i];
+  return (
+    !!v &&
+    equippedSet.value?.idx === i &&
+    equippedSet.value.count >= SLOTS.length &&
+    char.row?.voie === v.id
+  );
+}
 const equippedSet = computed<{ idx: number; name: string; emoji: string; count: number } | null>(
   () => {
     const counts = setCounts(char.row?.equipped ?? {});
@@ -5777,7 +5802,7 @@ function promotePendingConflict() {
   const it = pendingBossStash.value;
   if (!it) return;
   pendingBossStash.value = null;
-  doStashSetPiece(it); // se tranche tout seul : la meilleure reste, l'autre fond
+  doStashSetPiece(it, true); // se tranche tout seul : la meilleure reste, l'autre fond
 }
 watch(stageDone, (done) => {
   if (done) promotePendingConflict();
@@ -5797,16 +5822,19 @@ function loadoutTargetFor(it: Item): { idx: number; stored: Item | undefined } {
 // il n'y avait rien à arbitrer, seulement un dialogue à fermer. La meilleure est rangée,
 // l'autre part à la forge (au sac si elle est 🔒 : le verrou protège de tout). Une
 // notification dit ce qui a changé ET ce que ça rapporte, sinon le geste serait invisible.
-function doStashSetPiece(it: Item) {
+function doStashSetPiece(it: Item, quiet = false) {
   const { idx, stored } = loadoutTargetFor(it);
   if (idx < 0) return;
   const setName = VOIES[idx]?.name ?? '';
   if (!stored) {
     withUid(async (uid) => {
       await char.stashSetPiece(uid, it.id);
-      $q.notify({
-        type: 'positive',
-        message: `🧩 Ajoutée à ton set ${setName} — l'emplacement était libre.`,
+      gameFx.celebrate({
+        quiet: true,
+        kind: 'drop',
+        emoji: '🧩',
+        title: `Ajoutée à ton set ${setName}`,
+        subtitle: "l'emplacement était libre",
       });
     }, 'Impossible de ranger cette pièce.');
     return;
@@ -5823,18 +5851,16 @@ function doStashSetPiece(it: Item) {
   }
   withUid(async (uid) => {
     await char.stashSetPiece(uid, it.id, stored.locked ? 'keep' : 'recycle');
+    // Une seule annonce (plus de toast en bas en double) : ce qui a changé ET ce que ça
+    // rapporte, dans le même bandeau.
+    const old = stored.locked ? 'ancienne 🔒 au sac' : `ancienne fondue +${scrapValue(stored)} 🔩`;
     gameFx.celebrate({
+      quiet,
       kind: 'drop',
       emoji: it.emoji,
       title: `Set ${setName} renforcé`,
-      subtitle: `${it.name} · ⚔️ ${fmtDelta(0, gain)} de puissance`,
+      subtitle: `${it.name} · ⚔️ ${fmtDelta(0, gain)} · ${old}`,
       rarity: fxRarity(it.rarity),
-    });
-    $q.notify({
-      type: 'positive',
-      message: stored.locked
-        ? `🧩 Remplacée — l'ancienne 🔒 renvoyée au sac.`
-        : `🧩 Remplacée — ancienne fondue (+${scrapValue(stored)} 🔩).`,
     });
   }, 'Impossible de ranger cette pièce.');
 }
