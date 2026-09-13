@@ -140,6 +140,43 @@ export function playerCombatant(
   };
 }
 
+/**
+ * OFFENSE PAR TOUR d’un combattant, **signatures comprises**.
+ *
+ * ⚠️ EXTRAITE DE `combatPower`, qui se reconstruit désormais dessus — la dette était
+ * notée depuis la v0.753 « pour le jour où l’une des deux bouge ». Ce jour est arrivé :
+ * la copie de `caravan.ts` ignorait les signatures (`execute`/`rage`/`momentum`, vol de
+ * vie, épines) que `simulateCombat` applique pourtant. Comme elle sert à DIMENSIONNER
+ * les bandits, chaque signature gagnée par l’escorte la renforçait **sans renforcer la
+ * route** : mesuré, un trio passait de 76 % de victoires (0 signature) à 100 %
+ * (10 signatures). Une seule formule, donc plus d’écart possible.
+ *
+ * ⚠️ Les conditionnelles sont pondérées par leur valeur MOYENNE attendue, pas leur
+ * valeur au déclenchement : `execute` ne vaut que sous 25 % des PV adverses, `rage`
+ * que sous 30 % des siens (rare dans un combat gagné), `momentum` ne monte qu’à
+ * mi-course sur des combats courts. Recalibré 2026‑08‑23.
+ */
+export function offenseOf(c: Combatant): number {
+  const sig =
+    1 +
+    0.12 * (c.execute ?? 0) +
+    0.1 * (c.rage ?? 0) +
+    (c.momentum ?? 0) * (COMBAT.momentumMaxStacks * 0.25);
+  return (
+    c.damage *
+    (c.strikes ?? 1) *
+    (1 + c.crit) *
+    (1 + (c.lifesteal ?? 0)) *
+    sig *
+    (1 + 0.25 * (c.thorns ?? 0)) // épines = offense conditionnelle (si frappé)
+  );
+}
+
+/** SURVIE d’un combattant — PV corrigés de l’esquive et de la réduction. */
+export function survivalOf(c: Combatant): number {
+  return c.pv / 100 / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0));
+}
+
 /** Indice synthétique de puissance de combat (offense × survie) — pour l'UI. */
 export function combatPower(c: Combatant): number {
   // Effets CONDITIONNELS pondérés par leur valeur MOYENNE réellement attendue sur un
@@ -147,19 +184,8 @@ export function combatPower(c: Combatant): number {
   // → un build tout‑execute/rage/momentum affichait une grosse « puissance » mais mourait
   // en vrai combat). execute ne s'applique qu'à l'ennemi < 25 % PV ; rage qu'à TOI < 30 % PV
   // (rare dans un combat gagné) ; momentum ne ramp qu'à moitié en moyenne (fights courts).
-  const sig =
-    1 +
-    0.12 * (c.execute ?? 0) +
-    0.1 * (c.rage ?? 0) +
-    (c.momentum ?? 0) * (COMBAT.momentumMaxStacks * 0.25);
-  const offense =
-    c.damage *
-    (c.strikes ?? 1) *
-    (1 + c.crit) *
-    (1 + (c.lifesteal ?? 0)) *
-    sig *
-    (1 + 0.25 * (c.thorns ?? 0)); // épines = offense conditionnelle (ne déclenche que si frappé)
-  const survie = c.pv / 100 / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0));
+  const offense = offenseOf(c);
+  const survie = survivalOf(c);
   // Procs LÉGENDAIRES (non-scalants) : petit bonus fixe par proc, réparti offense/survie,
   // pour qu'équiper un objet légendaire améliore la puissance affichée/comparée.
   let procOff = 1;

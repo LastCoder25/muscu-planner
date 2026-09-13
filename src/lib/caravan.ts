@@ -26,7 +26,14 @@ import {
   type AggregatedEffects,
   type Item,
 } from './items';
-import { simulateCombat, mulberry32, combatPower, type Combatant } from './combat';
+import {
+  simulateCombat,
+  mulberry32,
+  combatPower,
+  offenseOf,
+  survivalOf,
+  type Combatant,
+} from './combat';
 // ⚠️ Type SEUL : `raid.ts` importera `garrisonCombatant` à l'exécution, donc un import
 // de valeur dans l'autre sens créerait un cycle. Le projet applique déjà cette règle
 // entre `data/familiars` et `items`.
@@ -58,15 +65,22 @@ export const CARAVAN = {
   /** Taille de l'escorte de RÉFÉRENCE qui sert de mètre-étalon à la route. */
   refEscort: 3,
   /** PV d'un groupe de bandits ≈ N tours d'offense de l'escorte de référence.
-   *  Mesuré à 5 : 3 aventuriers (la référence) tiennent 67-95 % selon le niveau, 4 tiennent
-   *  93-100 %, 2 seulement 3-41 %. C'est ce gradient qui fait de « combien j'en envoie »
-   *  une décision — à 2,2 tours, 3 aventuriers gagnaient 100 % PARTOUT et le choix était mort. */
-  foePvTurns: 4,
-  /** Ils mordent ~N % des PV EFFECTIFS de la référence (PV ÷ (1 − réduction)) par coup.
-   *  ⚠️ EFFECTIFS, et non bruts : la réduction de dégâts croît avec le niveau, donc une
-   *  morsure calée sur les PV bruts rendait le début de partie BEAUCOUP plus dur que la
-   *  fin (mesuré : 12 % de tenue au niveau 5 contre 98 % au niveau 70, à escorte égale). */
-  foeDmgPctPv: 0.22,
+   *  ⚠️ RE-MESURÉ à 3 quand l’offense de référence a cessé d’ignorer les signatures : la
+   *  même valeur ne veut plus dire la même chose, puisque l’unité elle-même a grandi.
+   *  Trio (la référence) 73-94 % selon le niveau, quatuor 97-100 %, duo 8-33 %, solo 0 —
+   *  c'est ce gradient qui fait de « combien j'en envoie » une décision. Ne pas le monter
+   *  sans re-mesurer : à 2,2 tours, 3 aventuriers gagnaient 100 % PARTOUT et le choix
+   *  était mort. */
+  foePvTurns: 3,
+  /** Ils mordent ~N % des PV EFFECTIFS de la référence par coup — `survivalOf`, donc
+   *  esquive ET réduction comprises.
+   *  ⚠️ EFFECTIFS, et non bruts : les deux croissent avec le niveau, donc une morsure
+   *  calée sur les PV bruts rendait le début de partie BEAUCOUP plus dur que la fin
+   *  (mesuré : 12 % de tenue au niveau 5 contre 98 % au niveau 70, à escorte égale).
+   *  ⚠️ L’ESQUIVE manquait à cette correction jusqu’en v0.797 — la copie locale ne voyait
+   *  que la réduction, donc la morsure visait des PV que l’escorte dépassait de plus en
+   *  plus à mesure que son agilité montait. */
+  foeDmgPctPv: 0.26,
   /** Route dangereuse (`Poi.perilous`, tirée au spawn donc annonçable AVANT le départ). */
   perilousMult: 1.35,
   /** Ce qu'apporte une SIGNATURE de classe (strates ≥ 3), en %. */
@@ -159,6 +173,36 @@ export interface CaravanOutcome {
   text: string;
 }
 
+/** Convois ENCAISSÉS qu’on garde en mémoire. Zéro serait tentant — rien ne les lit —
+ *  mais un petit tampon évite qu’un encaissement en cours ne trouve plus sa ligne. */
+export const CARAVAN_KEEP_CLAIMED = 5;
+
+/**
+ * Borne la liste de convois persistée.
+ *
+ * ⚠️ ELLE N’ÉTAIT JAMAIS PURGÉE : mesuré sur le compte réel, **35 convois stockés dont
+ * 30 déjà encaissés**, et ça ne fait que grossir — la ligne `characters` porte déjà le
+ * sac, les talents, les aventuriers et la carte. Rien ne lit un convoi encaissé
+ * (`planPushes` les saute, l’écran n’affiche que les voyages en cours ou à récupérer).
+ *
+ * ⚠️ ON NE JETTE JAMAIS UN CONVOI NON ENCAISSÉ : il porte une cargaison, et elle ne se
+ * périme pas. Seuls les encaissés sont taillés, les plus RÉCENTS d’abord.
+ *
+ * Appliquée au CHARGEMENT : les lignes existantes se soignent toutes seules, sans
+ * migration — même politique que les POI périmés et les garnisons obsolètes.
+ */
+export function pruneCaravans(list: Caravan[], keep = CARAVAN_KEEP_CLAIMED): Caravan[] {
+  const done = list.filter((v) => v.claimed);
+  if (done.length <= keep) return list;
+  const gardes = new Set(
+    [...done]
+      .sort((a, b) => b.returnAt - a.returnAt)
+      .slice(0, Math.max(0, keep))
+      .map((v) => v.id),
+  );
+  return list.filter((v) => !v.claimed || gardes.has(v.id));
+}
+
 export interface Caravan {
   id: string;
   /** Copie du POI, comme `ActiveExpedition` : il est retiré de la carte au DÉPART. */
@@ -175,13 +219,26 @@ export interface Caravan {
   claimed?: boolean;
 }
 
-/** PV EFFECTIFS : ce qu’il faut vraiment infliger pour tomber, réduction comprise. */
+/** SURVIE de référence — l’unité dans laquelle on exprime la morsure des bandits.
+ *
+ * ⚠️ ELLE DÉLÈGUE À `survivalOf` (`combat.ts`), qui compte l’ESQUIVE en plus de la
+ * réduction. La copie locale ne voyait que la réduction — or l’esquive monte avec
+ * l’agilité, donc avec le niveau : la morsure était calibrée sur des PV que l’escorte
+ * dépassait de plus en plus. Même défaut que l’offense, même remède : une seule
+ * formule, celle de l’arbitre du jeu. Le ×100 remet `survivalOf` en unité de PV.
+ */
 function effectivePv(c: Combatant): number {
-  return c.pv / Math.max(0.35, 1 - (c.dmgReduction ?? 0));
+  return survivalOf(c) * 100;
 }
-/** Offense par tour d'un combattant — l'unité dans laquelle on exprime les PV adverses. */
+/** Offense par tour — l’unité dans laquelle on exprime les PV adverses.
+ *
+ * ⚠️ ELLE DÉLÈGUE À `offenseOf` (`combat.ts`), qui compte les SIGNATURES. La copie
+ * locale les ignorait alors que `simulateCombat` les applique : chaque signature
+ * gagnée par l’escorte la renforçait sans renforcer la route, et un trio passait de
+ * 76 % de victoires à 100 % en fin de partie. Le plancher à 1 est conservé — c’est un
+ * garde-fou de division, pas une différence de modèle. */
 function offensePerRound(c: Combatant): number {
-  return Math.max(1, c.damage * (c.strikes ?? 1) * (1 + c.crit));
+  return Math.max(1, offenseOf(c));
 }
 /** Le niveau CUMULÉ d'un rôle sur l'escorte. ⚠️ La règle « deux fois la compétence = le
  *  niveau 2 » vit dans `adventurers.ts` : ici on ne fait que la lire, sinon l'écran et le

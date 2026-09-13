@@ -21,6 +21,8 @@ import {
   ADV_TALENT_K,
   heroEquivalentFactor,
   isCaravanClaimable,
+  pruneCaravans,
+  CARAVAN_KEEP_CLAIMED,
   escortShare,
   missionTravelMult,
   suggestEscort,
@@ -131,21 +133,38 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     expect(winPct(team(3, 26), poi({ level: 26, perilous: true }))).toBeLessThan(0.7);
   });
 
-  it('⚠️ DÉRIVE DE FIN DE PARTIE, mesurée et NON corrigée', () => {
-    // Au niveau 70 un trio tient ~94 % de ses embuscades même sur route PÉRILLEUSE :
-    // le choix « combien j'en envoie » s'y déplace de « 3 ou 4 » vers « 2 ou 3 ».
+  it('⚠️ LA DIFFICULTÉ DE LA ROUTE EST PLATE, du niveau 12 au 85', () => {
+    // ⚠️ ELLE NE L'ÉTAIT PAS, et ce test remplace celui qui documentait la dérive.
+    // Mesuré avant : un trio passait de **76 % à 100 %** de victoires entre les niveaux
+    // 12 et 85 — la route devenait une formalité exactement là où l'on a le plus
+    // d'aventuriers à occuper.
     //
-    // ⚠️ LA CAUSE EST STRUCTURELLE, pas un réglage : l'offense d'une escorte croît
-    // SUPER-linéairement avec le niveau (le multi-frappe monte avec l'agilité, et les
-    // membres s'additionnent), tandis que `roadFoe` se calibre LINÉAIREMENT sur elle.
-    // Aucun couple (`foePvTurns`, `foeDmgPctPv`) ne tient les deux bouts : balayé sur
-    // 20 combinaisons, tout ce qui ramène la fin de partie sous 70 % effondre le
-    // milieu (trio à 53 % au niveau 26, 23 % au niveau 12).
+    // ⚠️ DEUX CAUSES, la même à chaque fois : `roadFoe` se dimensionnait sur des
+    // ESTIMATEURS LOCAUX qui ignoraient la moitié de ce que `simulateCombat` applique.
+    // L'offense oubliait les SIGNATURES (une par strate haute : 0 au niveau 20, 10 au
+    // niveau 85), la survie oubliait l'ESQUIVE (qui monte avec l'agilité). Chaque cran
+    // gagné par l'escorte la renforçait donc **sans renforcer la route**. Les deux
+    // délèguent maintenant à `offenseOf`/`survivalOf`, les formules de `combatPower` —
+    // l'arbitre unique du jeu.
     //
-    // Ce test EXISTE pour que la dérive soit un fait mesuré et non une surprise : il
-    // rougira le jour où l'on s'y attaquera pour de bon (il faudra que la route croisse
-    // comme l'escorte), et c'est exactement ce qu'on veut.
-    expect(winPct(team(3, 70), poi({ level: 70, perilous: true }))).toBeGreaterThan(0.85);
+    // Mesuré après : 80 / 83 / 75 / 88 / 92 / 93 %. C'est l'écart qu'on borne ici, pas
+    // une valeur : une bande large mais PLATE vaut mieux qu'une bande étroite qui dérive.
+    const NIV = [12, 20, 26, 45, 70, 85];
+    const calme = NIV.map((L) => winPct(team(3, L), poi({ level: L }), 200));
+    for (const [i, t] of calme.entries()) {
+      expect(t, `niveau ${NIV[i]}`).toBeGreaterThan(0.6);
+      expect(t, `niveau ${NIV[i]}`).toBeLessThan(0.97);
+    }
+    expect(Math.max(...calme) - Math.min(...calme)).toBeLessThan(0.3);
+
+    // ⚠️ C’EST LA ROUTE PÉRILLEUSE QUI DISCRIMINE, et c’est là que le choix doit survivre.
+    // Sur route calme un trio est censé passer : borner ce cas ne prouve pas grand-chose
+    // (mesuré, le défaut n’y coûtait que 2 points au niveau 85). Sur route DANGEREUSE il
+    // doit rester un pari à tout niveau — mesuré 8 / 16 / 28 / 34 / 34 / 35 %, contre
+    // 8 / 16 / 28 / **45 / 48 / 48** avec l’offense amputée de ses signatures : c’est
+    // exactement là que la fin de partie basculait de « pari » à « formalité ».
+    const peril = NIV.map((L) => winPct(team(3, L), poi({ level: L, perilous: true }), 200));
+    for (const [i, t] of peril.entries()) expect(t, `périlleux niveau ${NIV[i]}`).toBeLessThan(0.4);
   });
 
   it('une route PÉRILLEUSE est réellement plus dure — le drapeau n’est pas décoratif', () => {
@@ -422,6 +441,50 @@ describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () =
       expect(resolveCaravan(p, team(3, 70), seed, NUS).energy).toBeLessThanOrEqual(
         Math.round(brut),
       );
+  });
+});
+
+describe('🧹 LA LISTE DE CONVOIS NE GROSSIT PAS SANS FIN', () => {
+  // ⚠️ Elle n’était JAMAIS purgée : mesuré sur le compte réel, **35 convois stockés dont
+  // 30 déjà encaissés**. La ligne `characters` porte déjà le sac, les talents, les
+  // aventuriers et la carte — un tableau qui ne fait que croître finit par peser.
+  const base = startCaravan('c0', poi({ level: 10 }), team(2, 10), 0, 7, NUS);
+  const lot = (n: number, claimed: boolean, from = 0) =>
+    Array.from({ length: n }, (_, i) => ({
+      ...base,
+      id: `${claimed ? 'done' : 'live'}${from + i}`,
+      claimed,
+      returnAt: from + i,
+    }));
+
+  it('⚠️ UN CONVOI NON ENCAISSÉ N’EST JAMAIS JETÉ — il porte une cargaison', () => {
+    // C’est la garantie qui compte : la cargaison ne se périme pas (même règle que les
+    // rapports d’expédition), donc une purge qui en perdrait un volerait le joueur.
+    const live = lot(40, false);
+    const gardes = pruneCaravans([...live, ...lot(40, true, 100)]);
+    for (const v of live)
+      expect(
+        gardes.some((g) => g.id === v.id),
+        v.id,
+      ).toBe(true);
+  });
+
+  it('la queue des ENCAISSÉS est bornée, et ce sont les plus RÉCENTS qui restent', () => {
+    const done = lot(30, true);
+    const gardes = pruneCaravans(done);
+    expect(gardes).toHaveLength(CARAVAN_KEEP_CLAIMED);
+    // returnAt croît avec l’indice → les derniers de la liste sont les plus récents.
+    expect(gardes.map((v) => v.id).sort()).toEqual(
+      done
+        .slice(-CARAVAN_KEEP_CLAIMED)
+        .map((v) => v.id)
+        .sort(),
+    );
+  });
+
+  it('une liste déjà courte ressort INTACTE — on ne réordonne rien pour rien', () => {
+    const l = [...lot(3, true), ...lot(2, false, 50)];
+    expect(pruneCaravans(l)).toBe(l);
   });
 });
 

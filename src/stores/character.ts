@@ -125,6 +125,7 @@ import {
   caravanSlots,
   trainMsFor,
   isCaravanClaimable,
+  pruneCaravans,
   startCaravan,
   type Caravan,
 } from '@/lib/caravan';
@@ -210,7 +211,10 @@ export const useCharacterStore = defineStore('character', () => {
     r.talents = normalizeTalents(r.talents); // legacy string[] → instances (rétro-compat)
     // Aventuriers/convois : un jsonb malformé ne doit jamais faire planter la page.
     r.adventurers = arr<Adventurer>(r.adventurers);
-    r.caravans = arr<Caravan>(r.caravans);
+    // ⚠️ Les convois ENCAISSÉS sont taillés au chargement : la liste ne se purgeait
+    // jamais (35 convois mesurés sur un compte réel, dont 30 dépensés). Un non-encaissé
+    // n'est JAMAIS jeté — il porte une cargaison.
+    r.caravans = pruneCaravans(arr<Caravan>(r.caravans));
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
     const fixItem = (it: Item): Item => {
       const rarity = normRank(it.rarity);
