@@ -63,10 +63,13 @@ import {
   rollSetLegendaryProc,
   voieSetRoster,
   setRecycleLot,
+  SET_BY_ID,
 } from '@/lib/items';
 import { mulberry32, combatPower } from '@/lib/combat';
 import { pickBestTalents } from '@/lib/talents';
-import { VOIES } from '@/lib/voies';
+import { VOIES, voiePassiveEffects } from '@/lib/voies';
+import { computeCharacter } from '@/lib/character';
+import { cumXpForLevel } from '@/lib/proceduralContent';
 import { HARVEST } from '@/lib/expedition';
 
 describe('rangs G→SSS + intervalle de jet (refonte v0.574)', () => {
@@ -1880,5 +1883,123 @@ describe('🎆 RARETÉ → INTENSITÉ D’ANIMATION', () => {
 
   it('⚠️ elle emploie les CINQ crans, sinon la moitié de l’échelle est morte', () => {
     expect(new Set(RANK_ORDER.map(fxRarity)).size).toBe(5);
+  });
+});
+
+describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 et 3 pièces', () => {
+  // Meilleure de 4 pièces tirées AU NIVEAU du joueur — ce qu'il porte réellement.
+  const piece = (setId: string, slot: Item['slot'], seed: number, level = 40): Item => {
+    const rng = mulberry32(seed);
+    let best: Item | null = null;
+    for (let k = 0; k < 4; k++) {
+      const it = {
+        ...rollSetPiece(rng, { setId, level, luck: 0.5, preferSlot: slot, playerLevel: level }),
+        id: `${setId}-${slot}-${seed}-${k}`,
+      } as Item;
+      if (!best || itemScore(it) > itemScore(best)) best = it;
+    }
+    return best!;
+  };
+  const threeOf = (voie: string, seed = 1, level = 40): Equipped => ({
+    weapon: piece(`voie:${voie}`, 'weapon', seed, level),
+    armor: piece(`voie:${voie}`, 'armor', seed + 1, level),
+    relic: piece(`voie:${voie}`, 'relic', seed + 2, level),
+  });
+
+  it('dans sa voie, les bonus 2 et 3 pièces valent le double (arrondi à 0,1 point près)', () => {
+    const eq = threeOf('epineux');
+    const own = setEffects(eq, 'epineux');
+    const off = setEffects(eq, 'gardien');
+    // Épineux : 2 pièces = dégâts, 3 pièces = PV.
+    expect(off.damagePct).toBeGreaterThan(0);
+    expect(off.maxPvPct).toBeGreaterThan(0);
+    expect(Math.abs(own.damagePct - 2 * off.damagePct)).toBeLessThanOrEqual(0.0011);
+    expect(Math.abs(own.maxPvPct - 2 * off.maxPvPct)).toBeLessThanOrEqual(0.0011);
+  });
+
+  it('hors de sa voie, un set ne perd rien : c’est un bonus, pas une pénalité', () => {
+    const eq = threeOf('epineux');
+    // Sans voie comme dans une autre voie : la valeur de base, identique.
+    expect(setEffects(eq, 'gardien')).toEqual(setEffects(eq, null));
+    expect(setEffects(eq, 'berserker')).toEqual(setEffects(eq, null));
+  });
+
+  it('le capstone 4 pièces n’est PAS doublé', () => {
+    const eq: Equipped = {
+      ...threeOf('epineux'),
+      accessory: piece('voie:epineux', 'accessory', 9),
+    };
+    const tiers = SET_BY_ID['voie:epineux']!.tiers;
+    const t2 = tiers.find((t) => t.pieces === 2)!;
+    const t4 = tiers.find((t) => t.pieces === 4)!;
+    // Le multiplicateur du set se relit sur le 2-pièces HORS voie (valeur de base, non doublée).
+    const mult = (setEffects(eq, null).damagePct * 100) / t2.base;
+    const capstone = setEffects(eq, 'epineux').thornsPct * 100;
+    expect(capstone).toBeGreaterThan(0);
+    expect(Math.abs(capstone - t4.base * mult)).toBeLessThanOrEqual(0.2);
+  });
+
+  it('avec 3 pièces du set d’une voie, CETTE voie donne la meilleure puissance', () => {
+    // Le défaut signalé : 3 pièces Épineux, et l'optimiseur proposait une autre voie.
+    // 288 cas (6 niveaux × 8 voies × 6 tirages, dont des pièces en retard de 15 niveaux).
+    // Mesuré : sans affinité, la voie du set perdait 238 fois (Épineux 36/36) ; avec, 10 fois.
+    // ⚠️ EXCEPTIONS CONNUES, Assassin et Berserker : leurs paliers portent exécution et vol de
+    // vie, que la puissance valorise peu, et le critique est plafonné (cf. v0.803). Les pousser
+    // demanderait une affinité ×3 pour 2 échecs encore — hors de proportion.
+    const voies = VOIES.map((v) => v.id);
+    const known = new Set(['assassin', 'berserker']);
+    let fails = 0;
+    let n = 0;
+    for (const L of [20, 30, 45, 60, 75, 90]) {
+      const s = cumXpForLevel(L) / 3;
+      const stats = computeCharacter(s, s, s, 0);
+      for (const V of voies) {
+        for (let seed = 1; seed <= 6; seed++) {
+          const rng = mulberry32(seed * 977 + L * 13 + V.length);
+          const eq: Equipped = {};
+          for (const slot of ['weapon', 'armor', 'relic'] as Item['slot'][]) {
+            let b: Item | null = null;
+            for (let k = 0; k < 1 + (seed % 4); k++) {
+              const lvl = seed % 3 === 0 ? Math.max(1, L - 15) : L;
+              const it = {
+                ...rollSetPiece(rng, {
+                  setId: `voie:${V}`,
+                  level: lvl,
+                  luck: 0.5,
+                  preferSlot: slot,
+                  playerLevel: L,
+                }),
+                id: `s${k}`,
+              } as Item;
+              if (!b || itemScore(it) > itemScore(b)) b = it;
+            }
+            eq[slot] = b!;
+          }
+          for (let k = 0; k < 300; k++) {
+            const it = rollDrop(rng, {
+              cleared: true,
+              defeated: 3,
+              level: L,
+              luck: 0.5,
+              playerLevel: L,
+            });
+            if (it && it.slot === 'accessory' && !it.setId) {
+              eq.accessory = { ...it, id: 'acc' } as Item;
+              break;
+            }
+          }
+          const power = (v: string | null) =>
+            combatPower(playerWithGear('h', stats, eq, voiePassiveEffects(v as never), L, v));
+          const own = power(V);
+          const best = Math.max(...[...voies.filter((x) => x !== V), null].map(power));
+          n++;
+          if (own < best) {
+            fails++;
+            expect(known.has(V), `${V} niv ${L} graine ${seed}`).toBe(true);
+          }
+        }
+      }
+    }
+    expect(fails / n).toBeLessThan(0.05);
   });
 });

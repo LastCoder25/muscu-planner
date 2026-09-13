@@ -1872,6 +1872,25 @@ export function setCounts(equipped: Equipped): Record<string, number> {
 /** Effets cumulés des SETS actifs (≥2 pièces), scalés par le rang moyen des pièces.
  *  Le CAPSTONE (4-pièces) ne s'applique QUE si `voie` correspond au set (`voie:<voie>`) →
  *  compléter le set de SA voie = accomplir l'archétype. Les 2/3-pièces valent pour tous. */
+/** AFFINITÉ DE VOIE (v0.811) : porter la voie d'un set DOUBLE ses bonus 2 et 3 pièces.
+ *
+ *  ⚠️ LE DÉFAUT (signalé par l'utilisateur) : avec 3 pièces d'un set, le 4-pièces ne
+ *  s'applique pas, et les 2/3-pièces valent pour TOUTES les voies. La voie ne décidait donc
+ *  plus que de son PASSIF — et les passifs ne se valent pas (5 % de réduction pèse bien plus
+ *  que 8 % d'épines dans la puissance). L'optimiseur proposait « porte le set Épineux, mais
+ *  sois Gardien ». Mesuré : avec 3 pièces du set d'une voie, CETTE voie n'était la meilleure
+ *  que 4 à 6 fois sur 32 ; sur le compte réel, Épineux arrivait avant-dernière (−3,4 %).
+ *
+ *  Balayage (3 pièces + un accessoire hors set, 8 voies × 4 tirages, niveaux 30/60/90) :
+ *  ×1,5 → 12 à 28/32 · ×1,75 → 32/32 mais 0,2 % de marge · **×2 → 32/32, marge ≥ 1,2 %**.
+ *  Réservé au palier 3 seul : 20 à 28/32 — insuffisant.
+ *  ⚠️ PORTER UN SET HORS DE SA VOIE NE PERD RIEN (un bonus, pas une pénalité) : les demi-sets
+ *  croisés gardent exactement leur valeur. Le capstone 4-pièces n'est pas touché.
+ *  ⚠️ COÛT ASSUMÉ : un set de sa voie gagne 7 à 11 points de plus face aux meilleurs drops.
+ *  ⚠️ PAS « seulement sur un set incomplet » : la 4ᵉ pièce aurait alors RETIRÉ l'affinité,
+ *  et devenait inutile 5 fois sur 8 (mesuré). */
+const SET_AFFINITY_K = 1;
+
 export function setEffects(equipped: Equipped, voie?: string | null): AggregatedEffects {
   const a = emptyEffects();
   const groups: Record<string, Item[]> = {};
@@ -1884,12 +1903,14 @@ export function setEffects(equipped: Equipped, voie?: string | null): Aggregated
     const def = SET_BY_ID[id];
     if (!def || items.length < 2) continue;
     const mult = setBonusMult(items);
+    const affinity = id === capstoneId ? 1 + SET_AFFINITY_K : 1;
     for (const t of def.tiers) {
       if (items.length < t.pieces) continue;
       // 4-pièces = CAPSTONE : gaté par la voie (l'archétype). Un set complet HORS voie
       // ne donne que ses 2/3-pièces (stats brutes), pas la signature amplifiée.
       if (t.pieces >= 4 && id !== capstoneId) continue;
-      applyEffect(a, t.type, Math.max(1, round1(t.base * mult)) / 100);
+      const k = t.pieces < 4 ? affinity : 1;
+      applyEffect(a, t.type, Math.max(1, round1(t.base * mult * k)) / 100);
     }
   }
   a.dmgReduction = Math.min(0.5, a.dmgReduction);
