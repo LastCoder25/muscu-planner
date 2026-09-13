@@ -428,6 +428,11 @@ interface DungeonFight {
   monster: string;
   win: boolean;
   result: CombatResult;
+  /** PV de l'adversaire TEL QU'IL A COMBATTU — rampe et attente d'équipement comprises.
+   *  ⚠️ C'est le maximum de sa barre de vie. L'écran le relisait sur le monstre BRUT du
+   *  bestiaire, retrouvé par son nom : un monstre de 400 k PV avait une barre calée sur
+   *  ~10 k, qui restait pleine jusque-là puis disparaissait d'un coup (signalé). */
+  maxPv: number;
 }
 export interface DungeonResult {
   cleared: boolean; // tous les monstres vaincus
@@ -459,7 +464,7 @@ export function simulateDungeon(
       goldOnWin: foe.gold,
       startPlayerPv: pv,
     });
-    fights.push({ monster: foe.combatant.name, win: r.win, result: r });
+    fights.push({ monster: foe.combatant.name, win: r.win, result: r, maxPv: foe.combatant.pv });
     pv = r.log.length ? r.log[r.log.length - 1]!.playerPv : pv;
     if (!r.win) break;
     gold += r.gold;

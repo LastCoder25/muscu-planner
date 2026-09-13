@@ -4522,7 +4522,8 @@ async function explore(d: Dungeon) {
           emoji: mon?.emoji ?? '👾',
           win: f.win,
           rounds: f.result.rounds,
-          maxPv: mon?.pv,
+          // ⚠️ Les PV du combattant RÉEL (mis à l'échelle), jamais ceux du bestiaire.
+          maxPv: f.maxPv,
           archetype: mon ? monsterArchetype(mon) : 'normal',
           log: f.result.log,
         };

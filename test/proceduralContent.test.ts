@@ -366,3 +366,27 @@ describe('procedural — boss de palier + sets', () => {
     for (const b of bosses) expect(setIds.has(b.setId)).toBe(true);
   });
 });
+
+describe('🩸 LA BARRE DE VIE D’UN MONSTRE DE DONJON PART DE SES VRAIS PV', () => {
+  // Signalé : « la barre ne bouge quasiment pas de 400 k PV jusqu'à 10 k, où elle disparaît
+  // d'un coup ». L'écran calait le maximum sur le monstre BRUT du bestiaire, retrouvé par son
+  // NOM — deux défauts cumulés : ni la rampe ni l'attente d'équipement, et un homonyme.
+  it('chaque combat porte les PV de l’adversaire tel qu’il a combattu', () => {
+    for (const d of DUNGEONS.filter((x) => [4, 25, 61, 94].includes(x.recoLevel))) {
+      const foes = dungeonFoes(d);
+      const r = simulateDungeon(refFighter(d.recoLevel + 30), foes, { seed: 7 });
+      r.fights.forEach((f, k) => {
+        expect(f.maxPv, d.id).toBe(foes[k]!.combatant.pv);
+        // La barre ne dépasse jamais 100 % : aucun PV loggé au-dessus du maximum.
+        for (const e of f.result.log) expect(e.monsterPv, d.id).toBeLessThanOrEqual(f.maxPv);
+      });
+    }
+  });
+
+  it('⚠️ un nom ne désigne pas un monstre : les procéduraux se réutilisent', () => {
+    // C'est ce qui rendait la recherche par nom fausse, en plus de l'échelle : le premier
+    // homonyme trouvé est le plus faible.
+    const names = MONSTERS.map((m) => m.name);
+    expect(new Set(names).size).toBeLessThan(names.length);
+  });
+});
