@@ -892,7 +892,7 @@ export function evaluateAchievements(challenges: Challenge[]): string[] {
  *  deux fois. Un défi de pompes, lui, est le SEUL enregistrement de son effort.
  *
  *  ⚠️ Cette asymétrie décide de la PRIME, et c’est tout l’objet de la v0.769. */
-function effortPaidByOutings(ch: Challenge): boolean {
+export function effortPaidByOutings(ch: Challenge): boolean {
   return (
     ch.unit === 'distance' || (ch.unit === 'time' && isCardioChallengeExercise(ch.exercise_id))
   );

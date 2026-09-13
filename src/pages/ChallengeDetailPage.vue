@@ -353,7 +353,15 @@
           </div>
         </template>
         <!-- Gains cumulés (XP = énergie, 1:1) + note surplus -->
-        <div v-if="ch.format !== 'cumulative'" class="gains-line">
+        <!-- ⚠️ Un défi de SORTIES (km, minutes de marche/course/vélo) ne recrédite pas l'effort :
+             le journal Cardio l'a déjà payé. Afficher « +0 XP gagnés » se lisait comme un bug. -->
+        <div v-if="paidByOutings" class="gains-line">
+          <span class="gain-note"
+            >🏃 L’XP et l’énergie de ces sorties sont comptées dans ton Cardio · prime de fin +10
+            %</span
+          >
+        </div>
+        <div v-else-if="ch.format !== 'cumulative'" class="gains-line">
           <span class="gain-xp">+{{ earnedXp }} XP</span>
           <span class="gain-en">+{{ earnedXp }} ⚡</span>
           <span class="gain-note">gagnés · le surplus est en vert</span>
@@ -464,6 +472,7 @@ import { useQuasar } from 'quasar';
 import {
   challengeStats,
   challengeDayXp,
+  effortPaidByOutings,
   isChallengeComplete,
   challengeStopPlan,
   evaluateAchievements,
@@ -739,6 +748,8 @@ function dayXpOf(d: number): number {
   const e = entryOf(d);
   return c && e ? challengeDayXp(c, e) : 0;
 }
+/** L'effort de ce défi est-il payé par les sorties Cardio (et donc pas ici) ? */
+const paidByOutings = computed(() => (ch.value ? effortPaidByOutings(ch.value) : false));
 // XP d'effort déjà gagnée (somme des jours faits) → aussi l'énergie gagnée.
 const earnedXp = computed(() => {
   const c = ch.value;

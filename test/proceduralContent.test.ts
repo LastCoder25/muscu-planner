@@ -7,7 +7,7 @@ import {
   type DungeonFoe,
   type Combatant,
 } from '@/lib/combat';
-import { DUNGEONS, dungeonFoes } from '@/data/dungeons';
+import { DUNGEONS, dungeonFoes, dungeonGold } from '@/data/dungeons';
 import { MONSTERS } from '@/data/monsters';
 import { rollDrop, bestGearLoadout, playerWithGear, itemScore, type Item } from '@/lib/items';
 import {
@@ -159,7 +159,7 @@ describe('la chaîne des premiers donjons suit le niveau annoncé', () => {
     }
   });
 
-  it('au-delà du niveau 12, les monstres sont exactement ceux d’avant (×1,5 et attente pleine)', () => {
+  it('au-delà du niveau 12, les monstres sont exactement ceux d’avant (×1,5, attente pleine, correction du donjon)', () => {
     // Les rampes n'adoucissent que le début de partie : le contenu profond, calibré ailleurs,
     // ne doit pas bouger d'un point de vie.
     for (const d of DUNGEONS.filter((x) => x.recoLevel >= 12)) {
@@ -167,9 +167,26 @@ describe('la chaîne des premiers donjons suit le niveau annoncé', () => {
       const foes = dungeonFoes(d);
       d.monsterIds.forEach((id, k) => {
         const m = MONSTERS.find((x) => x.id === id)!;
-        expect(foes[k]!.combatant.pv, d.id).toBe(Math.round(m.pv * 1.5 * ge.off));
-        expect(foes[k]!.combatant.damage, d.id).toBe(Math.round(m.damage * 1.5 * ge.pv));
+        const c = d.foeMult ?? 1;
+        expect(foes[k]!.combatant.pv, d.id).toBe(Math.round(m.pv * 1.5 * ge.off * c));
+        expect(foes[k]!.combatant.damage, d.id).toBe(Math.round(m.damage * 1.5 * ge.pv * c));
       });
+    }
+  });
+
+  it('⚠️ le creux 13-19 est corrigé là et seulement là, sans toucher à l’or', () => {
+    // Mesuré v0.828 avec un harnais de progression réaliste (trop lent pour la suite) :
+    // 14-21 % au niveau recommandé contre 33-40 % pour les voisins. ×0,8 → 29-34 %.
+    const corriges = DUNGEONS.filter((d) => (d.foeMult ?? 1) !== 1).map((d) => d.id);
+    expect(corriges.sort()).toEqual(
+      ['behemoth_caverne', 'chimere_den', 'hydre_marais', 'leviathan_fosse'].sort(),
+    );
+    for (const d of DUNGEONS.filter((x) => x.foeMult)) {
+      expect(d.foeMult).toBeGreaterThanOrEqual(0.7);
+      expect(d.foeMult).toBeLessThan(1);
+      // L'or ne dépend pas de la correction : il reste la somme des monstres.
+      const or = d.monsterIds.reduce((a, id) => a + MONSTERS.find((m) => m.id === id)!.gold, 0);
+      expect(dungeonGold(d), d.id).toBe(or);
     }
   });
 

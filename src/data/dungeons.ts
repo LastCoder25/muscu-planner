@@ -21,6 +21,16 @@ export interface Dungeon {
   hint: string; // conseil « coach »
   dropLevel: number; // niveau des objets lâchés (fixé par le donjon, découplé du joueur)
   dropLuck: number; // biais de rareté du butin (0 = normal … 1 = très généreux)
+  /** Correction de calibration des monstres (PV ET dégâts), 1 par défaut.
+   *
+   *  ⚠️ LE CREUX DES NIVEAUX 13-19 (v0.828, mesuré). Harnais de progression RÉALISTE — butin
+   *  de 20 nettoyages de chaque donjon précédent, pièces de set des boss vaincus, talents
+   *  trouvés, familiers du Labyrinthe, meilleure voie — moyenné sur 3 profils × 3 tirages :
+   *  au niveau recommandé, Abîme/Néant/Apocalypse 36-40 %, puis **Chimère 14 %, Hydre 16 %,
+   *  Béhémoth 16 %, Léviathan 21 %**, puis Kraken/Nécropole/Faille 33-37 %. Un mur au milieu
+   *  de la chaîne écrite à la main — ses monstres fixes grandissaient plus vite que le joueur.
+   *  ×0,8 les ramène à 29-34 % (×0,65 : 41-53 %, trop généreux). L'or n'est pas touché. */
+  foeMult?: number;
 }
 // NB : les SETS ne droppent plus sur les donjons — uniquement sur les BOSS de
 // palier (cf. src/data/bosses.ts). Les donjons ne lâchent que du butin normal.
@@ -148,6 +158,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Ça monte crescendo jusqu’à l’hydre → des PV (Endurance) pour tenir la fin.',
     dropLevel: 11,
     dropLuck: 1,
+    foeMult: 0.8,
   },
   {
     id: 'hydre_marais',
@@ -161,6 +172,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Des murs de PV de plus en plus épais → grosse Puissance (muscu) pour percer.',
     dropLevel: 13,
     dropLuck: 1,
+    foeMult: 0.8,
   },
   {
     id: 'behemoth_caverne',
@@ -174,6 +186,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Colosses increvables, du plus rapide au plus lourd → Puissance pour percer, PV pour durer.',
     dropLevel: 15,
     dropLuck: 1,
+    foeMult: 0.8,
   },
   {
     id: 'leviathan_fosse',
@@ -187,6 +200,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Ils frappent et encaissent, de pire en pire → build complet, beaucoup de PV.',
     dropLevel: 17,
     dropLuck: 1,
+    foeMult: 0.8,
   },
   {
     id: 'kraken_abysses',
@@ -291,8 +305,9 @@ function dungeonDifficultyMult(recoLevel: number): number {
 export function dungeonFoes(d: Dungeon): DungeonFoe[] {
   const early = dungeonDifficultyMult(d.recoLevel);
   const ge = dungeonGearExpect(d.recoLevel);
-  const pvMult = early * ge.off;
-  const dmgMult = early * ge.pv;
+  const k = d.foeMult ?? 1;
+  const pvMult = early * ge.off * k;
+  const dmgMult = early * ge.pv * k;
   return d.monsterIds
     .map((id) => MONSTERS.find((m) => m.id === id))
     .filter((m): m is (typeof MONSTERS)[number] => !!m)

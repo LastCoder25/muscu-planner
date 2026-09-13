@@ -209,7 +209,10 @@
             }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} {{ repUnitOf(c) }}</template>
           </div>
           <div v-if="c.status === 'done'" class="cc-xp">
-            <span v-if="xpb(c).reps > 0" class="xp-pill reps"
+            <span v-if="effortPaidByOutings(c)" class="xp-pill reps"
+              >🏃 effort compté en Cardio</span
+            >
+            <span v-else-if="xpb(c).reps > 0" class="xp-pill reps"
               >+{{ xpb(c).reps }} XP {{ c.unit === 'time' ? 'durée' : 'reps' }}</span
             >
             <span v-if="xpb(c).bonus > 0" class="xp-pill bonus"
@@ -607,6 +610,7 @@ import {
   challengeStats,
   challengeXpPoints,
   challengeXpBreakdown,
+  effortPaidByOutings,
   challengeLiveBalance,
   challengeTotalReps,
   evaluateAchievements,
