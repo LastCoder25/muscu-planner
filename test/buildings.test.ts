@@ -355,3 +355,41 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     expect(guildRoster(100)).toBeGreaterThanOrEqual(caravanSlots(100) * CARAVAN.escortMax);
   });
 });
+
+describe('🗝️ LA PORTE DU LABYRINTHE EST UN COMPLÉMENT, PAS LA SOURCE', () => {
+  /** Runs de Labyrinthe qu’elle finance à elle seule en 24 h — le Labyrinthe est gaté
+   *  à UNE clé, donc une clé produite EST un run. Deux récoltes par jour : le plafond
+   *  de stockage (18 h) ne mord pas, on mesure bien le débit. */
+  const runsPerDay = (level: number) => {
+    const b = { id: 'g', typeId: 'labyrinth_gate', level, collectedAt: 0 };
+    return Math.min(buildingProdPerHour(b) * 12, buildingStorageCap(b)) * 2;
+  };
+
+  it('⚠️ RIEN NE BORNAIT LE HAUT — elle finançait seize runs par jour', () => {
+    // Mesuré avant correctif : 16,8 clés/jour au niveau 28 contre ~2,7 pour TOUT le
+    // reste réuni (donjon 2 %, boss 6 %, archives, convois) — 85 % du flux. Son propre
+    // commentaire disait pourtant « complément, pas la source ». Le Labyrinthe est le
+    // contenu le plus riche du jeu (familier GARANTI au clear, seule source du jeu) :
+    // le financer en continu, c'est le faire passer d'événement à boucle de farm.
+    expect(runsPerDay(28)).toBeLessThan(6);
+    expect(runsPerDay(28)).toBeGreaterThan(2);
+  });
+
+  it('⚠️ …et le débit reste calé sur le niveau, du début à la fin', () => {
+    // ~1 run par jour pour 7 niveaux de Porte. La borne est un RAPPORT, pas une valeur :
+    // elle tient à tous les niveaux et se lit sans connaître le coefficient. La demande
+    // monte avec le joueur (depuis la v0.777 il faut un compagnon PAR aventurier, soit
+    // 15 au niveau 28 et 51 au 100) — d'où un robinet linéaire, jamais plat.
+    for (const L of [10, 20, 28, 40, 60, 100]) {
+      const parNiveau = runsPerDay(L) / L;
+      expect(parNiveau, `niveau ${L}`).toBeGreaterThan(0.12);
+      expect(parNiveau, `niveau ${L}`).toBeLessThan(0.17);
+    }
+  });
+
+  it('chaque niveau de Porte ajoute du débit — aucun palier muet', () => {
+    // `buildingAccrued` arrondit à l'entier, mais le reliquat fractionnaire est REPORTÉ
+    // (v0.660) : un robinet lent n'est pas affamé par des récoltes fréquentes.
+    for (let L = 1; L < 100; L++) expect(runsPerDay(L + 1)).toBeGreaterThan(runsPerDay(L));
+  });
+});

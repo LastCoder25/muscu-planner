@@ -1342,6 +1342,53 @@ export function advNextPromoLevel(adv: Adventurer): number | null {
   return promoLevel(nextStratum(adv));
 }
 
+/** Ce qu’une mission a changé pour un aventurier — la matière de l’annonce. */
+export interface AdvProgress {
+  id: string;
+  name: string;
+  /** Étoile AVANT et APRÈS. Le gain est `to > from`. */
+  from: number;
+  to: number;
+  /** Sa rareté de classe — la teinte de la célébration. */
+  rarity: Rarity;
+  /** Une promotion s’ouvre MAINTENANT, et elle ne s’ouvrait pas avant. */
+  promoted: boolean;
+}
+
+/**
+ * Compare un vivier AVANT et APRÈS un versement d’XP, et rend ce qu’il y a à DIRE.
+ *
+ * ⚠️ Le niveau d’un aventurier est CACHÉ : sans annonce, une mission qui lui fait
+ * gagner une étoile ne se voit qu’en rouvrant la Guilde et en regardant une barre.
+ * C’est le seul retour qu’il ait sur des semaines de convois.
+ *
+ * ⚠️ `promoted` EST UN FRANCHISSEMENT, pas un état — et c’est tout ce qui empêche la
+ * feuille de promotion de se rouvrir à CHAQUE cargaison pour quelqu’un qu’on a déjà
+ * décidé de ne pas promouvoir. Ce qui ouvre la fenêtre, c’est que CETTE mission l’a
+ * rendue possible. Le badge ⭐ de la Guilde reste le rappel permanent, lui.
+ *
+ * Pur : `now` est toujours passé, jamais lu de l’horloge.
+ */
+export function advProgressOf(
+  before: readonly Adventurer[],
+  after: readonly Adventurer[],
+  ctx: { guildLevel: number; trainingLevel: number; now: number },
+): AdvProgress[] {
+  const was = new Map(before.map((a) => [a.id, a]));
+  const out: AdvProgress[] = [];
+  for (const a of after) {
+    const b = was.get(a.id);
+    // Un aventurier qui n’existait pas avant n’a rien « gagné » : recruté entre-temps.
+    if (!b) continue;
+    const from = advStar(b);
+    const to = advStar(a);
+    const promoted = canPromoteNow(a, ctx) && !canPromoteNow(b, ctx);
+    if (to <= from && !promoted) continue;
+    out.push({ id: a.id, name: a.name, from, to, rarity: advRarity(a), promoted });
+  }
+  return out;
+}
+
 /** Nom de métier courant = la classe la plus récente. */
 export function advTitle(adv: Adventurer): AdvClass | undefined {
   return adv.path.length ? advClass(adv.path[adv.path.length - 1]!) : undefined;

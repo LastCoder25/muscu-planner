@@ -21,7 +21,9 @@ import {
   ADV_TALENT_K,
   heroEquivalentFactor,
   isCaravanClaimable,
+  escortShare,
   missionTravelMult,
+  suggestEscort,
   missionXp,
   refAdventurer,
   resolveCaravan,
@@ -30,7 +32,7 @@ import {
   startCaravan,
   type Caravan,
 } from '@/lib/caravan';
-import { PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
+import { advRoles, PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
 import { TALENTS, type TalentInstance } from '@/lib/talents';
 import { simulateCombat } from '@/lib/combat';
 import { famXpForLevel, type AggregatedEffects, type Item } from '@/lib/items';
@@ -337,6 +339,90 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
       if (f.some((x) => !x.won)) defaites++;
     }
     expect(defaites, 'aucune défaite dans le lot : le test ne prouve rien').toBeGreaterThan(0);
+  });
+});
+
+describe('✨ COMPOSER UNE ESCORTE', () => {
+  /** Un aventurier dont on choisit le CHEMIN, donc les rôles. */
+  const who = (id: string, path: string[], level = 20): Adventurer => ({
+    id,
+    name: id,
+    path,
+    level,
+    xp: 0,
+  });
+  /** Les rôles réellement portés — on les LIT, on ne les suppose pas. */
+  const rolesDe = (t: Adventurer[]) => t.flatMap((a) => advRoles(a));
+
+  it('⚠️ ELLE PARTAGE LE VIVIER ENTRE LES CONVOIS QUI RESTENT', () => {
+    // Signalé : « si j'ai 2 convois et 4 aventuriers, que ça ne me propose pas 4 sur un
+    // convoi et 0 sur le second ». Les créneaux se paient en niveaux de Comptoir : les
+    // rendre inutilisables au premier envoi, c'est annuler ce qu'on vient d'acheter.
+    expect(escortShare(4, 2)).toBe(2);
+    expect(escortShare(6, 3)).toBe(2);
+    expect(escortShare(7, 2)).toBe(4);
+    // Un seul convoi à armer : rien à réserver, on va au plafond.
+    expect(escortShare(9, 1)).toBe(CARAVAN.escortMax);
+  });
+
+  it('elle ne dépasse jamais le plafond d’escorte, ni le vivier', () => {
+    // ⚠️ Le plafond n'est pas cosmétique : mesuré, 4 aventuriers tiennent déjà 93-100 %
+    // des embuscades — un cinquième supprimerait la décision au lieu de l'enrichir.
+    for (let n = 0; n <= 20; n++)
+      for (let v = 1; v <= 6; v++) {
+        const k = escortShare(n, v);
+        expect(k, `${n} dispo, ${v} convois`).toBeLessThanOrEqual(CARAVAN.escortMax);
+        expect(k).toBeLessThanOrEqual(n);
+        expect(k).toBeGreaterThanOrEqual(n ? 1 : 0);
+      }
+  });
+
+  it('⚠️ elle couvre des rôles DISTINCTS au lieu d’empiler le même', () => {
+    // Un second 🐫 n'ajoute qu'un cran à une cargaison déjà plafonnée, là où un 🧭
+    // raccourcit le trajet : ce sont des canaux séparés, et c'est ça, « équilibré ».
+    const pool = [
+      who('h1', ['caravanier', 'muletier']),
+      who('h2', ['caravanier', 'muletier']),
+      who('s1', ['eclaireur', 'coursier']),
+    ];
+    const t = suggestEscort(pool, poi(), 1);
+    expect(t).toHaveLength(3);
+    // …et sur deux places seulement, elle prend DEUX rôles, pas deux fois le même.
+    const deux = suggestEscort(pool, poi(), 2);
+    expect(deux).toHaveLength(2);
+    expect(new Set(rolesDe(deux)).size).toBeGreaterThan(1);
+  });
+
+  it('⚠️ sur une route PÉRILLEUSE, l’éclaireur passe devant', () => {
+    // Deux fois plus de rencontres, et c'est le seul rôle qui agit sur le RISQUE
+    // lui-même (`ambushChance`) au lieu de le subir. L'ordre n'est donc pas figé.
+    const pool = [who('h1', ['caravanier', 'muletier']), who('s1', ['archer', 'veneur'])];
+    const calme = suggestEscort(pool, poi(), 2);
+    const risque = suggestEscort(pool, poi({ perilous: true }), 2);
+    expect(calme).toHaveLength(1);
+    expect(rolesDe(calme)).toContain('haul');
+    expect(rolesDe(risque)).toContain('scout');
+  });
+
+  it('à rôles égaux, elle prend le plus FORT', () => {
+    // Départagé par `combatPower(escortCombatant(...))`, l'arbitre de tout le jeu —
+    // jamais par une somme de stats recopiée qui finirait par diverger du combat.
+    const pool = [
+      who('faible', ['caravanier', 'muletier'], 3),
+      who('fort', ['caravanier', 'muletier'], 40),
+    ];
+    expect(suggestEscort(pool, poi(), 2).map((a) => a.id)).toEqual(['fort']);
+  });
+
+  it('elle ne propose jamais deux fois la même personne', () => {
+    const pool = [who('a', ['guerrier']), who('b', ['mage']), who('c', ['archer'])];
+    const t = suggestEscort(pool, poi(), 1);
+    expect(new Set(t.map((a) => a.id)).size).toBe(t.length);
+  });
+
+  it('vivier vide : aucune escorte, et rien ne casse', () => {
+    expect(suggestEscort([], poi(), 2)).toEqual([]);
+    expect(escortShare(0, 3)).toBe(0);
   });
 });
 

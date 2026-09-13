@@ -113,7 +113,12 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       sendAt: c.returnAt,
       title: '🐫 Un convoi est rentré',
       body: 'Sa cargaison attend d’être récupérée.',
-      url: '/expedition-map',
+      // ⚠️ UN DRAPEAU, PAS L'ID DU CONVOI, et c'est délibéré : le service worker
+      // regroupe les notifications par `url` (`tag`), donc un id ferait empiler une
+      // alerte par convoi rentré — trois après une nuit. Le drapeau garde l'URL
+      // IDENTIQUE pour tous, donc une seule notification, et l'écran met la ou les
+      // cargaisons prêtes sous les yeux (elles sont déjà en tête de la rangée).
+      url: '/expedition-map?claim=1',
     });
   }
 

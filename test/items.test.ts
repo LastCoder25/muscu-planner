@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   aggregateLines,
+  fxRarity,
+  type FxRarity,
   emptyEffects,
   effectAsAggregate,
   compareFamiliars,
@@ -1774,5 +1776,31 @@ describe('📖 LIRE UN AGRÉGAT D’EFFETS', () => {
     // Non-régression d’unité de bout en bout : la conversion de `effectAsAggregate`
     // (÷100) et celle d’`aggregateLines` (×100) doivent se compenser exactement.
     expect(aggregateLines(effectAsAggregate('crit_pct', 7.5))).toEqual(['+7,5% critique']);
+  });
+});
+
+describe('🎆 RARETÉ → INTENSITÉ D’ANIMATION', () => {
+  it('⚠️ LE SOMMET DE L’ÉCHELLE EST ATTEIGNABLE — il ne l’était plus', () => {
+    // Les deux copies de cette fonction (AventurePage, ExpeditionPage) portaient des
+    // seuils calés sur les DIX rangs G→SSS de la v0.438 (`i >= 9`). Depuis la refonte
+    // en 8 raretés (v0.576), l'index ne monte plus qu'à 7 : la branche « divin » —
+    // l'explosion — était INATTEIGNABLE et un drop primordial jouait l'animation d'un
+    // légendaire. Un seuil en index absolu pourrit dès que l'échelle change de longueur.
+    expect(fxRarity(RANK_ORDER[RANK_ORDER.length - 1]!)).toBe('divin');
+    expect(fxRarity(RANK_ORDER[0]!)).toBe('common');
+  });
+
+  it('elle ne recule jamais quand la rareté monte', () => {
+    const ordre: FxRarity[] = ['common', 'rare', 'epic', 'legendary', 'divin'];
+    let vu = -1;
+    for (const r of RANK_ORDER) {
+      const i = ordre.indexOf(fxRarity(r));
+      expect(i, `rareté ${r}`).toBeGreaterThanOrEqual(vu);
+      vu = i;
+    }
+  });
+
+  it('⚠️ elle emploie les CINQ crans, sinon la moitié de l’échelle est morte', () => {
+    expect(new Set(RANK_ORDER.map(fxRarity)).size).toBe(5);
   });
 });

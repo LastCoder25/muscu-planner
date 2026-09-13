@@ -6,6 +6,9 @@
 // Singleton (état au niveau module) : n'importe quel écran appelle `celebrate(...)`,
 // l'overlay global (GameFxOverlay, monté dans App.vue) joue les fx une par une.
 import { ref } from 'vue';
+// ⚠️ Type SEUL (zéro runtime) : l'échelle d'intensité se dérive des raretés du jeu,
+// et une seconde déclaration de la même union serait la porte ouverte à la divergence.
+import type { FxRarity } from '@/lib/items';
 
 type GameFxKind =
   | 'drop'
@@ -23,7 +26,7 @@ export interface GameFx {
   title: string;
   subtitle?: string;
   // Rareté → couleur + intensité de l'effet (divin = explosion). Optionnel.
-  rarity?: 'common' | 'rare' | 'epic' | 'legendary' | 'divin';
+  rarity?: FxRarity;
 }
 
 const queue = ref<GameFx[]>([]);

@@ -409,6 +409,37 @@ export const RARITY_RANK: Record<Rarity, number> = Object.fromEntries(
   RANK_ORDER.map((r, i) => [r, i]),
 ) as Record<Rarity, number>;
 
+/** Les 5 crans d’intensité de `useGameFx` — du discret à l’explosion. */
+export type FxRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'divin';
+
+/**
+ * Rareté → intensité de l’animation centrale.
+ *
+ * ⚠️ ELLE VIVAIT EN DEUX EXEMPLAIRES (`AventurePage` et `ExpeditionPage`), et j’allais
+ * en écrire un troisième. Deux copies d’une règle finissent toujours par diverger —
+ * ici elles avaient POURRI ENSEMBLE, ce qui est encore plus discret.
+ *
+ * ⚠️ LE DÉFAUT QU’ELLES PORTAIENT : leurs seuils (`i >= 9`, 7, 5, 3) étaient calés sur les
+ * DIX rangs G→SSS de la v0.438. Depuis la refonte en 8 raretés nommées (v0.576),
+ * `RARITY_RANK` ne monte plus qu’à 7 : la branche « divin » — l’explosion, le sommet de
+ * l’échelle — était devenue **INATTEIGNABLE**, et tout le reste décalé d’un cran vers le
+ * bas. Un drop **primordial**, le graal, jouait l’animation d’un légendaire.
+ *
+ * On raisonne donc en FRACTION de l’échelle, jamais en index absolu : ajouter ou
+ * retirer une rareté ne peut plus décrocher les seuils. ⚠️ Les fractions retenues
+ * REPRODUISENT EXACTEMENT l’intention d’origine sur les 10 rangs (SSS→divin, S/SS→
+ * legendary, A/B→epic, C/D→rare, G/F/E→common) : on répare la dérive, on ne
+ * réinvente pas le barème.
+ */
+export function fxRarity(r: Rarity): FxRarity {
+  const f = (RARITY_RANK[r] ?? 0) / Math.max(1, RANK_ORDER.length - 1);
+  if (f >= 0.95) return 'divin';
+  if (f >= 0.7) return 'legendary';
+  if (f >= 0.5) return 'epic';
+  if (f >= 0.3) return 'rare';
+  return 'common';
+}
+
 // NOMBRE D'AFFIXES (stats) par rareté (Phase 2, v0.577, façon Diablo) : plus la rareté est
 // haute, plus l'objet porte de stats. Commun/Inhabituel 1 · Magique/Rare 2 · Épique+ 3.
 /** Complète une pièce de set LEGACY (tirée avant le correctif multi-affixe) avec les

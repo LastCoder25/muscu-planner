@@ -140,6 +140,41 @@ describe('notifications push — ce qu’on programme', () => {
     expect(convois[0]!.dedupe).toBe('convoy:v2');
   });
 
+  it('⚠️ le message de convoi mène à la CARGAISON, pas seulement à la carte', () => {
+    // Signalé : taper « 🐫 Un convoi est rentré » déposait sur la carte, mais la rangée
+    // des voyages vit SOUS une carte de 62vh — sur un téléphone, la cargaison prête
+    // naissait hors écran. Le drapeau dit à l’écran de la révéler.
+    const c = ctx({ caravans: [{ id: 'v1', returnAt: NOW + 2 * H }] });
+    const p = planPushes(c, NOW).find((x) => x.kind === 'convoy_home');
+    expect(p!.url).toContain('claim=');
+  });
+
+  it('⚠️ tous les convois partagent la MÊME url — sinon les alertes s’empilent', () => {
+    // Le service worker regroupe par `tag`, qui vaut l’url : mettre l’id du convoi dedans
+    // ferait sonner une notification PAR convoi rentré — trois après une nuit. C’est
+    // exactement ce que le regroupement existe pour éviter.
+    const c = ctx({
+      caravans: [
+        { id: 'v1', returnAt: NOW + 2 * H },
+        { id: 'v2', returnAt: NOW + 3 * H },
+        { id: 'v3', returnAt: NOW + 4 * H },
+      ],
+    });
+    const urls = new Set(
+      planPushes(c, NOW)
+        .filter((x) => x.kind === 'convoy_home')
+        .map((x) => x.url),
+    );
+    expect(urls.size).toBe(1);
+    // …et chacun garde SA clé d'idempotence : une seule bulle, trois lignes en base.
+    const keys = new Set(
+      planPushes(c, NOW)
+        .filter((x) => x.kind === 'convoy_home')
+        .map((x) => x.dedupe),
+    );
+    expect(keys.size).toBe(3);
+  });
+
   it('chaque message emmène quelque part', () => {
     const c = ctx({
       expedition: { returnAt: NOW + 3 * H },

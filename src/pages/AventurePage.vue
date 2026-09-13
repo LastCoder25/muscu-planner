@@ -2726,6 +2726,7 @@ import {
   SLOT_EMOJI,
   RARITY_LABEL,
   RARITY_RANK,
+  fxRarity,
   ITEM_SETS,
   SET_BY_ID,
   setCounts,
@@ -2734,7 +2735,6 @@ import {
   type Item,
   type ItemSlot,
   type Equipped,
-  type Rarity,
   type AggregatedEffects,
   type RewardCandidate,
   bestGearLoadout,
@@ -2866,13 +2866,6 @@ function itemAffixLines(it: Item): string[] {
   if (it.effect2) lines.push(affixText(it, it.effect2));
   if (it.effect3) lines.push(affixText(it, it.effect3));
   return lines;
-}
-// Rang d'objet (G..SSS) → intensité d'animation (5 crans de GameFx). Les hauts rangs
-// déclenchent l'explosion « divin ».
-type FxRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'divin';
-function fxRarity(r: Rarity): FxRarity {
-  const i = RARITY_RANK[r];
-  return i >= 9 ? 'divin' : i >= 7 ? 'legendary' : i >= 5 ? 'epic' : i >= 3 ? 'rare' : 'common';
 }
 // Célébration centrale pour un DROP marquant (rang S+ = éclat, SSS = explosion).
 function celebrateRareDrop(it: Item) {

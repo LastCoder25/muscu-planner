@@ -514,6 +514,7 @@ import {
   effectLabel,
   RARITY_LABEL,
   RARITY_RANK,
+  fxRarity,
   RANK_COLOR,
   RANK_ORDER,
   rollJet,
@@ -523,7 +524,6 @@ import {
   mergeEffects,
   SLOT_LABEL,
   type Item,
-  type Rarity,
 } from '@/lib/items';
 import { rollActivityFamiliar } from '@/data/familiars';
 import { pickLabyFoe, type LabyFoe } from '@/data/labyrinthFoes';
@@ -581,12 +581,6 @@ const auth = useAuthStore();
 const char = useCharacterStore();
 const gameFx = useGameFx();
 const progress = useProgress();
-
-// Rang d'objet (G..SSS) → intensité d'animation GameFx (5 crans).
-function fxRarity(r: Rarity): 'common' | 'rare' | 'epic' | 'legendary' | 'divin' {
-  const i = RARITY_RANK[r];
-  return i >= 9 ? 'divin' : i >= 7 ? 'legendary' : i >= 5 ? 'epic' : i >= 3 ? 'rare' : 'common';
-}
 
 // Phase : lobby (choix de lancer, coûte 1 clé) → running (exploration).
 const phase = ref<'lobby' | 'running'>('lobby');

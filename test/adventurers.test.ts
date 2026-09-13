@@ -32,6 +32,7 @@ import {
   advStar,
   advStarBand,
   advNextPromoLevel,
+  advProgressOf,
   advXpToNext,
   guildRoster,
   recruitCost,
@@ -455,6 +456,68 @@ describe('⚠️ LE RANG EST LA CLASSE, LES ÉTOILES SONT LE TERRAIN', () => {
     const nu = make({ path: [], level: 1 });
     expect(Number.isFinite(advRankProgress(nu))).toBe(true);
     expect(advStar(nu)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
+  const CTX = { guildLevel: 99, trainingLevel: 5, now: 1_000_000 };
+  /** Strate 5 : la tranche va du niveau 8 au 12 — une étoile par niveau, donc un
+   *  gain d’étoile s’obtient avec un seul niveau. */
+  const LIGNEE = ['guerrier', 'brute', 'colosse', 'titan', 'rempart'];
+  const at = (id: string, level: number, over: Partial<Adventurer> = {}) =>
+    make({ id, name: id, path: LIGNEE, level, ...over });
+
+  it('une étoile gagnée est ANNONCÉE — le niveau, lui, reste caché', () => {
+    // ⚠️ Sans ça, des semaines de convois ne se voient qu'en rouvrant la Guilde pour
+    // y lire une barre : c'est le seul retour que le joueur ait sur son vivier.
+    const ev = advProgressOf([at('a', 8)], [at('a', 9)], CTX);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ id: 'a', from: 1, to: 2, promoted: false });
+    expect(ev[0]!.rarity).toBe(RANK_ORDER[4]);
+  });
+
+  it('rien à dire quand rien n’a bougé', () => {
+    expect(advProgressOf([at('a', 9)], [at('a', 9)], CTX)).toEqual([]);
+  });
+
+  it('⚠️ `promoted` est un FRANCHISSEMENT, pas un état', () => {
+    // C'est tout ce qui empêche la feuille de promotion de se rouvrir à CHAQUE
+    // cargaison pour quelqu'un qu'on a déjà décidé de ne pas promouvoir. Ce qui ouvre
+    // la fenêtre, c'est que CETTE mission l'a rendue possible.
+    const ouvre = advProgressOf([at('a', 11)], [at('a', 12)], CTX);
+    expect(ouvre[0]?.promoted).toBe(true);
+    // Déjà promouvable avant ET après : on se tait, le badge ⭐ de la Guilde suffit.
+    expect(advProgressOf([at('a', 12)], [at('a', 12)], CTX)).toEqual([]);
+  });
+
+  it('une promotion se dit même sans étoile de plus', () => {
+    // Cas réel : il était DÉJÀ à l'étoile maximale mais parti en convoi (donc pas
+    // promouvable). Il rentre, la promotion s'ouvre — sans qu'aucune étoile ne bouge.
+    const parti = at('a', 12, { busyUntil: CTX.now + 60_000 });
+    const rentre = at('a', 12);
+    const ev = advProgressOf([parti], [rentre], CTX);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ from: 5, to: 5, promoted: true });
+  });
+
+  it('⚠️ sans Centre de formation, on n’annonce AUCUNE promotion', () => {
+    // Le store la refuserait : promettre une fenêtre qui ne peut pas s'ouvrir est pire
+    // que se taire. La règle vit dans `canPromoteNow`, on ne la ré-écrit pas ici.
+    const ev = advProgressOf([at('a', 11)], [at('a', 12)], { ...CTX, trainingLevel: 0 });
+    expect(ev[0]?.promoted).toBe(false);
+  });
+
+  it('un aventurier recruté entre-temps n’a rien « gagné »', () => {
+    expect(advProgressOf([], [at('a', 12)], CTX)).toEqual([]);
+  });
+
+  it('chaque membre de l’escorte est annoncé séparément', () => {
+    const ev = advProgressOf(
+      [at('a', 8), at('b', 9), at('c', 8)],
+      [at('a', 9), at('b', 9), at('c', 10)],
+      CTX,
+    );
+    expect(ev.map((e) => e.id)).toEqual(['a', 'c']);
   });
 });
 

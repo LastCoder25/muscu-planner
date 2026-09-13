@@ -26,7 +26,7 @@ import {
   type AggregatedEffects,
   type Item,
 } from './items';
-import { simulateCombat, mulberry32, type Combatant } from './combat';
+import { simulateCombat, mulberry32, combatPower, type Combatant } from './combat';
 // ⚠️ Type SEUL : `raid.ts` importera `garrisonCombatant` à l'exécution, donc un import
 // de valeur dans l'autre sens créerait un cycle. Le projet applique déjà cette règle
 // entre `data/familiars` et `items`.
@@ -40,11 +40,13 @@ import {
   type Poi,
 } from './expedition';
 import {
+  advRoles,
   advSignatureLevels,
   advStats,
   escortRoleLevel,
   PROMO_LEVELS,
   type Adventurer,
+  type AdvRole,
 } from './adventurers';
 
 export const CARAVAN = {
@@ -417,6 +419,78 @@ export function roadFoe(poi: Poi): Combatant {
     dodge: 0.05,
     initiative: 12,
   };
+}
+
+/**
+ * Taille d’escorte à proposer pour CE convoi — la PART qui lui revient.
+ *
+ * ⚠️ Signalé : « si j’ai 2 convois et 4 aventuriers, que ça ne me propose pas 4 sur un
+ * convoi et 0 sur le second ». Une suggestion qui ne regarde que le convoi courant vide
+ * le vivier au premier envoi — et les créneaux restants, qu’on a payés en niveaux de
+ * Comptoir, ne servent plus à rien.
+ *
+ * On arrondit vers le HAUT : à 7 disponibles pour 2 convois, mieux vaut 4 puis 3 que
+ * 3 puis 3 en laissant quelqu’un à la maison. Bornée par `CARAVAN.escortMax` — au-delà
+ * de 4, mesuré, le convoi tient déjà 93-100 % de ses embuscades et le cinquième ne
+ * ferait que supprimer la décision.
+ */
+export function escortShare(available: number, convoysLeft: number): number {
+  const n = Math.max(0, Math.floor(available));
+  if (!n) return 0;
+  const parts = Math.max(1, Math.floor(convoysLeft));
+  return Math.max(1, Math.min(CARAVAN.escortMax, n, Math.ceil(n / parts)));
+}
+
+/**
+ * Compose une escorte ÉQUILIBRÉE pour ce voyage.
+ *
+ * ⚠️ « Équilibrée » veut dire DEUX choses, et l’une sans l’autre ne sert à rien :
+ * l’effectif est la part qui revient à ce convoi (`escortShare`), et la composition
+ * couvre des RÔLES DISTINCTS plutôt que d’empiler la même compétence. Un second 🐫
+ * n’ajoute qu’un cran à une cargaison déjà plafonnée, là où un 🧭 raccourcit le trajet
+ * et un 👁️ évite des embuscades : ce sont des canaux SÉPARÉS.
+ *
+ * ⚠️ L’ORDRE DES RÔLES DÉPEND DE LA ROUTE, il n’est pas figé : sur une route périlleuse
+ * (deux fois plus de rencontres, annoncées AVANT le départ) l’éclaireur passe devant —
+ * c’est le seul rôle qui agit sur le risque lui-même. Ailleurs, la cargaison prime.
+ *
+ * ⚠️ À rôle égal, on départage par la VRAIE force de l’escorte (`escortCombatant` +
+ * `combatPower`, l’arbitre de tout le jeu) — jamais par une somme de stats recopiée :
+ * une étiquette qui refait le calcul à sa façon finit par diverger du combat.
+ *
+ * Ce n’est PAS un optimiseur : il propose une équipe défendable, le joueur tranche.
+ */
+export function suggestEscort(
+  available: Adventurer[],
+  poi: Poi,
+  convoysLeft: number,
+): Adventurer[] {
+  const size = escortShare(available.length, convoysLeft);
+  if (!size) return [];
+  // Une route dangereuse se prépare : éviter la rencontre vaut mieux que la gagner.
+  const ordre: AdvRole[] = poi.perilous
+    ? ['scout', 'haul', 'heal', 'speed']
+    : ['haul', 'speed', 'scout', 'heal'];
+  const pool = [...available];
+  const team: Adventurer[] = [];
+  while (team.length < size && pool.length) {
+    const couverts = new Set(team.flatMap((a) => advRoles(a)));
+    // Le meilleur rôle NEUF qu'un candidat apporterait — plus il est haut dans l'ordre
+    // de la route, plus il compte. Aucun rôle neuf → on juge sur la force seule.
+    const apport = (a: Adventurer) => {
+      const neufs = advRoles(a).filter((r) => !couverts.has(r));
+      const best = neufs.reduce((m, r) => Math.min(m, ordre.indexOf(r)), ordre.length);
+      return best === ordre.length ? -1 : ordre.length - best;
+    };
+    const force = (a: Adventurer) => combatPower(escortCombatant([...team, a]));
+    let pick = 0;
+    for (let i = 1; i < pool.length; i++) {
+      const d = apport(pool[i]!) - apport(pool[pick]!);
+      if (d > 0 || (d === 0 && force(pool[i]!) > force(pool[pick]!))) pick = i;
+    }
+    team.push(...pool.splice(pick, 1));
+  }
+  return team;
 }
 
 /** Trajet ALLER d'une caravane, en minutes : celui d'un héros, ralenti, puis raccourci

@@ -123,7 +123,19 @@ export const BUILDING_TYPES: BuildingType[] = [
     category: 'utility',
     effect: { labyLuckPerLvl: 0.04 },
     resource: 'keys',
-    prodPerHrPerLvl: 0.025, // niv.20 ≈ 0,5/h → ~9 clés / 18 h (complément, pas la source)
+    // ⚠️ « COMPLÉMENT, PAS LA SOURCE » — le motif était écrit, la valeur ne le tenait pas.
+    // À 0,025 la Porte rendait **16,8 clés par jour au niveau 28** (12,6 à une seule
+    // récolte) contre ~2,7 pour TOUT le reste réuni : elle faisait 85 % du flux. Le
+    // Labyrinthe étant gaté à UNE clé, cela finançait seize runs par jour — l’exact
+    // contraire de « un événement, pas du farm ».
+    // ⚠️ Elle avait été OUBLIÉE par la raréfaction du 2026‑08‑18, qui a pourtant divisé
+    // les autres robinets par trois (donjon 6 % → 2 %, boss 12 % → 6 %) au motif que
+    // « les gros volumes de runs inondaient les clés ». On a resserré les affluents en
+    // laissant le fleuve ouvert.
+    // Calé à **~1 run par jour pour 7 niveaux de Porte** : 1,4/jour au niveau 10,
+    // 4,0 au 28, 14,4 au 100 — la demande monte aussi (depuis la v0.777 il faut un
+    // compagnon PAR aventurier, soit 15 au niveau 28 et 51 au 100).
+    prodPerHrPerLvl: 0.006,
     buildGold: 500,
     unlockLevel: 2,
     unique: true,

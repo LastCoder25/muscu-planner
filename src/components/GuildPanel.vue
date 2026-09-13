@@ -463,6 +463,12 @@ import { trainMsFor, companionEffects, advTalentEffects, cappedDefLevel } from '
 
 const props = defineProps<{
   open: boolean;
+  /** Ouvrir DIRECTEMENT la feuille de promotion de CET aventurier. Posé au retour
+   *  d’un convoi dont la mission vient de rendre la promotion possible : l’information
+   *  arrive au moment où elle est actionnable, au lieu d’attendre qu’on repasse par la
+   *  Guilde. ⚠️ La feuille s’ouvre PAR-DESSUS la carte de Guilde, pas à sa place : on
+   *  promeut, puis on est déjà là où l’on gère son vivier. */
+  promoteId?: string | null;
   /** `'recruit'` : ouvrir DIRECTEMENT sur le choix de classe. Posé quand un niveau
    *  de Guilde vient d’ouvrir une place — le seul moment où l’on recrute, et celui où
    *  le joueur refermait la feuille sans savoir qu’une recrue l’attendait. */
@@ -710,6 +716,18 @@ watch(
   ([open, mode]) => {
     if (open && mode === 'recruit' && roster.value.length < maxRoster.value)
       recruitOpen.value = true;
+  },
+  { immediate: true },
+);
+// ⚠️ Même patron que `mode` ci-dessus, et pour la même raison : `immediate`, parce que le
+// panneau peut être déjà monté quand la prop change. On attend que le vivier soit
+// chargé — sinon l’id ne désigne encore personne et l’ouverture est perdue.
+watch(
+  () => [props.promoteId, roster.value] as const,
+  ([id]) => {
+    if (!id || promoOpen.value) return;
+    const a = roster.value.find((x) => x.id === id);
+    if (a) openPromo(a);
   },
   { immediate: true },
 );

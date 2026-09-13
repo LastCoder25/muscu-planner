@@ -205,7 +205,7 @@
          ou dans le rapport. Disposée en DEUX COLONNES (jusqu'à 12 convois possibles).
          ⚠️ Un convoi RENTRÉ reste dans la rangée, en tuile ACTIONNABLE : sa cargaison ne
          se verse pas toute seule (même règle que les rapports d'expédition). -->
-    <div v-if="trips.length" class="trips" role="list">
+    <div v-if="trips.length" ref="tripsEl" class="trips" role="list">
       <component
         :is="t.claim ? 'button' : 'div'"
         v-for="t in trips"
@@ -275,6 +275,14 @@
             <span class="sh-chip">⚡ 0</span>
             <span class="sh-chip">{{ freeAdvs.length }} dispo · {{ vansLeft }} convoi(s)</span>
           </div>
+          <!-- ⚠️ ON COMPOSE POUR LE VOYAGE, ET POUR LES CONVOIS QUI RESTENT. Le choix se
+               faisait tuile par tuile, sans rien pour dire ce qui allait ensemble — et
+               rien n'empêchait de vider le vivier sur le premier convoi, laissant les
+               créneaux suivants (payés en niveaux de Comptoir) inutilisables. La règle
+               vit dans `caravan.ts`, l'écran ne fait que l'appliquer. -->
+          <button class="car-auto" :disabled="!freeAdvs.length" @click="autoEscort">
+            ✨ Composer une escorte ({{ suggestedSize }})
+          </button>
           <div class="car-pick">
             <button
               v-for="a in freeAdvs"
@@ -366,6 +374,14 @@
       </q-card>
     </q-dialog>
 
+    <!-- ⚠️ LA GUILDE S'OUVRE ICI, au retour d'un convoi dont la mission vient de rendre
+         une promotion possible. Le vivier se gère depuis son bâtiment (règle « un
+         bâtiment, un endroit ») — mais une promotion qu'on vient de MÉRITER doit se
+         proposer là où on l'apprend, sinon elle attend qu'on repasse par la Base. On
+         ouvre bien la GUILDE (avec sa feuille de promotion par-dessus), pas un bout
+         de Guilde détaché : après avoir promu, on est déjà là où l'on gère son monde. -->
+    <GuildPanel :open="!!guildPromote" :promote-id="guildPromote" @close="guildPromote = null" />
+
     <div v-if="!active && !pois.length" class="empty">
       La carte se peuple avec le temps — de nouvelles activités apparaissent régulièrement. Reviens
       bientôt.
@@ -375,7 +391,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
@@ -386,7 +402,15 @@ import GameLoader from '@/components/GameLoader.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
-import { playerWithGear, mergeEffects, RARITY_RANK, type Item } from '@/lib/items';
+import {
+  playerWithGear,
+  mergeEffects,
+  fxRarity,
+  RARITY_LABEL,
+  RARITY_RANK,
+  type Item,
+} from '@/lib/items';
+import GuildPanel from '@/components/GuildPanel.vue';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects, normalizeTalents } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
@@ -412,10 +436,19 @@ import MapTerrain from '@/components/MapTerrain.vue';
 import { departureRisk, heroDefends, guardUnits, defenseLevel, ODDS_LABEL } from '@/lib/raid';
 import { advAvailable, advBadges, advRank, advTitle } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
-import { CARAVAN, caravanLegMin, caravanSlots, isCaravanClaimable, poiOffers } from '@/lib/caravan';
+import {
+  CARAVAN,
+  caravanLegMin,
+  caravanSlots,
+  escortShare,
+  isCaravanClaimable,
+  poiOffers,
+  suggestEscort,
+} from '@/lib/caravan';
 
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
+const route = useRoute();
 const { gameBack } = useGamePanel();
 // Retour : dans le volet jeu (cockpit) → revient à l'Aventure du volet ; sinon route.
 function back() {
@@ -801,16 +834,89 @@ const trips = computed(() => {
   return out.sort((x, y) => Number(!!y.claim) - Number(!!x.claim));
 });
 const claimable = computed(() => char.caravanList.filter((c) => isCaravanClaimable(c, now.value)));
+/** Aventurier dont la feuille de promotion doit s’ouvrir, et celui qui ATTEND que les
+ *  éclats aient fini de jouer. ⚠️ L’overlay de célébration est au-dessus des modales :
+ *  ouvrir la feuille tout de suite la cacherait derrière l’animation. */
+/** ⚠️ LA CARTE OCCUPE 62vh : la rangée des voyages vit SOUS elle, donc sur un téléphone
+ *  une cargaison prête naît HORS ÉCRAN. Taper « 🐫 Un convoi est rentré » déposait bien
+ *  sur la carte — mais pas devant ce qu’on venait y faire, et rien ne disait où c’était.
+ *  Même remède que la feuille d’un lieu (v0.738) : on la RÉVÈLE.
+ *
+ *  ⚠️ On n’encaisse PAS à sa place — « la cargaison ne se verse pas toute seule » (règle
+ *  des rapports d’expédition, v0.680). On amène devant le bouton, on ne l’appuie pas.
+ *  ⚠️ Le paramètre est RETIRÉ après coup, sinon un retour arrière rejoue le saut
+ *  (même patron que le `?tab=` de l’Aventure, v0.748).
+ *  ⚠️ `immediate` : en cockpit l’écran peut être DÉJÀ monté quand la query change. */
+const tripsEl = ref<HTMLElement | null>(null);
+watch(
+  () => [route.query.claim, claimable.value.length] as const,
+  async ([flag, n]) => {
+    if (!flag || !n) return;
+    await nextTick();
+    tripsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const rest = { ...route.query };
+    delete rest.claim;
+    void router.replace({ path: route.path, query: rest });
+  },
+  { immediate: true },
+);
+
+const guildPromote = ref<string | null>(null);
+const pendingPromo = ref<string | null>(null);
+watch(
+  () => gameFx.queue.value.length,
+  (n) => {
+    if (n === 0 && pendingPromo.value) {
+      guildPromote.value = pendingPromo.value;
+      pendingPromo.value = null;
+    }
+  },
+);
+
 async function doClaimCaravan(id: string) {
   const uid = auth.user?.id;
   if (!uid || busyCaravan.value) return;
   busyCaravan.value = true;
   try {
-    const ok = await char.claimCaravan(uid, id);
-    if (ok) $q.notify({ type: 'positive', message: 'Cargaison récupérée.' });
+    // ⚠️ Une liste VIDE vaut « encaissé » (elle est truthy) ; c'est `null` qui dit l'échec.
+    const events = await char.claimCaravan(uid, id);
+    if (!events) return;
+    $q.notify({ type: 'positive', message: 'Cargaison récupérée.' });
+    // ⚠️ LE NIVEAU D'UN AVENTURIER EST CACHÉ : sans cette annonce, une étoile gagnée en
+    // convoi ne se verrait qu'en rouvrant la Guilde pour y lire une barre. C'est le seul
+    // retour qu'il ait sur des semaines de voyages.
+    for (const e of events) {
+      if (e.to <= e.from) continue;
+      gameFx.celebrate({
+        kind: 'levelup',
+        emoji: '⭐',
+        title: `${e.name} — ${rankStarStr(e.to)}`,
+        subtitle: e.promoted
+          ? 'Prêt à être promu !'
+          : `${RARITY_LABEL[e.rarity]} · une étoile de plus`,
+        rarity: fxRarity(e.rarity),
+      });
+    }
+    // ⚠️ UN SEUL à la fois : deux feuilles empilées, on ne sait plus laquelle on ferme.
+    // Les autres gardent le badge ⭐ de la Guilde, qui est le rappel permanent.
+    const promo = events.find((e) => e.promoted);
+    if (promo) {
+      if (gameFx.queue.value.length) pendingPromo.value = promo.id;
+      else guildPromote.value = promo.id;
+    }
   } finally {
     busyCaravan.value = false;
   }
+}
+/** Ce que la suggestion RETIENDRAIT — annoncé sur le bouton, pour qu'on sache combien
+ *  d'aventuriers on s'apprête à engager avant d'appuyer. */
+const suggestedSize = computed(() =>
+  escortShare(freeAdvs.value.length, Math.max(1, vansLeft.value)),
+);
+function autoEscort() {
+  const poi = selected.value;
+  if (!poi) return;
+  escort.value = suggestEscort(freeAdvs.value, poi, Math.max(1, vansLeft.value)).map((a) => a.id);
 }
 function toggleEscort(id: string) {
   escort.value = escort.value.includes(id)
@@ -1067,6 +1173,23 @@ function fmtMin(min: number): string {
   margin-bottom: 8px;
 }
 /* Grille fluide : l’escorte peut compter jusqu’à quatre noms sur un écran plié. */
+/* Suggestion d'escorte : pleine largeur et 44 px (règle mobile), mais en secondaire —
+   elle propose, elle ne décide pas. */
+.car-auto {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.car-auto:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 .car-pick {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));

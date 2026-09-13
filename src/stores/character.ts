@@ -113,6 +113,7 @@ import {
   settleAllTraining,
   canPromoteNow,
   classChoices,
+  advProgressOf,
   grantAdvXp,
   guildRoster,
   recruitCost,
@@ -2057,10 +2058,18 @@ export const useCharacterStore = defineStore('character', () => {
   /** Encaisse la cargaison d'un convoi rentré : devises, XP par aventurier, blessés.
    *  ⚠️ L'XP est versée QUEL QUE SOIT le résultat et même sans combat — sinon un débutant
    *  à un seul aventurier, qui perd toutes ses embuscades, ne progresserait jamais. */
+  /** Encaisse une cargaison et rend **ce que la mission a changé pour l’escorte**
+   *  (`AdvProgress[]`), ou `null` si rien n’a été encaissé.
+   *
+   *  ⚠️ Un booléen ne suffisait plus : le niveau d’un aventurier est CACHÉ, donc une
+   *  étoile gagnée en convoi ne se voyait qu’en rouvrant la Guilde. L’écran a besoin
+   *  du AVANT/APRÈS pour l’annoncer — et c’est la LIB qui compare, pas lui.
+   *  ⚠️ Une liste VIDE reste « encaissé avec succès » (elle est truthy) : c’est `null`
+   *  qui dit l’échec. */
   async function claimCaravan(userId: string, caravanId: string) {
     const cur = row.value;
     const van = caravanList.value.find((c) => c.id === caravanId);
-    if (!cur || !van || !isCaravanClaimable(van, Date.now())) return false;
+    if (!cur || !van || !isCaravanClaimable(van, Date.now())) return null;
     const o = van.outcome;
     const hurtMs = caravanHurtMs(
       van.escort
@@ -2070,7 +2079,8 @@ export const useCharacterStore = defineStore('character', () => {
     );
     const hurtUntil = Date.now() + hurtMs;
     const hurt = new Set(o.hurt);
-    const advs = advList.value.map((a) => {
+    const before = advList.value;
+    const advs = before.map((a) => {
       const gain = o.xp[a.id];
       if (gain === undefined) return a;
       const next = grantAdvXp(a, gain, guildLevel.value);
@@ -2087,7 +2097,11 @@ export const useCharacterStore = defineStore('character', () => {
       caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
     });
     if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);
-    return true;
+    return advProgressOf(before, advs, {
+      guildLevel: guildLevel.value,
+      trainingLevel: trainingLevel.value,
+      now: Date.now(),
+    });
   }
 
   return {
