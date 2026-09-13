@@ -1871,7 +1871,13 @@ describe('seuil de déclenchement des sièges', () => {
     expect(ready(withDefs(0, 12), 12)).toBe(false);
   });
   it('une enceinte à niveau, chez un joueur qui s’entraîne, allume les sièges', () => {
-    for (const L of [3, 12, 40, 100]) expect(ready(withDefs(L, L), L)).toBe(true);
+    for (const L of [RAID.minRaidLevel, 3, 12, 40, 100])
+      expect(ready(withDefs(L, L), L)).toBe(true);
+  });
+  it('au niveau 1, personne ne vient — même enceinte prête : on apprend d’abord à bâtir', () => {
+    expect(RAID.minRaidLevel).toBe(2);
+    expect(ready(withDefs(1, 1), 1)).toBe(false);
+    expect(ready(withDefs(5, 5), 1)).toBe(false);
   });
   it('le seuil laisse une marge : on n’a pas besoin d’être EXACTEMENT à niveau', () => {
     const L = 20;
@@ -1896,13 +1902,24 @@ describe('seuil de déclenchement des sièges', () => {
 });
 
 describe('les défenses sont un système de DÉBUT de partie', () => {
-  it('les 6 structures se débloquent ENSEMBLE, et tôt', () => {
-    // 12 protégeait d'un défaut corrigé depuis (v0.672/674/687) : mesuré, un joueur de
-    // niveau 8 avec une enceinte à niveau tient 88 %, pas les « 0-20 % » d'alors. Et
-    // atteindre 12 demande ~3 mois à un joueur tranquille.
+  it('les 6 structures se débloquent ENSEMBLE, dès le niveau 1', () => {
+    // 12 → 3 (v0.723) puis 3 → 1 (v0.823) : bâtir n'expose à rien, ce sont les SIÈGES
+    // qui attendent `RAID.minRaidLevel`.
     const levels = new Set(DEFENSE_TYPES.map((t) => t.unlockLevel));
     expect(levels.size).toBe(1);
-    expect([...levels][0]).toBe(3);
+    expect([...levels][0]).toBe(1);
+  });
+  it('au premier niveau de siège, bâtir à son niveau AVEC le héros tient le plus souvent', () => {
+    // Mesuré (v0.823) : 27 % au niveau 2 avec un plancher de fenêtre à 3 (une armée de
+    // niveau 5), 93 % à 2. Le premier siège doit s'apprendre, pas se subir.
+    expect(holdRate(RAID.minRaidLevel, RAID.minRaidLevel, true, 300)).toBeGreaterThan(80);
+    // …mais il reste un ENJEU : le héros compte.
+    expect(holdRate(RAID.minRaidLevel, RAID.minRaidLevel, false, 300)).toBeLessThan(60);
+  });
+  it('la fenêtre de niveau a un plancher de 2 : jamais d’armée à plus de +2 en tout début', () => {
+    expect(levelSpanFor(1)).toBe(RAID.spanMin);
+    expect(levelSpanFor(2)).toBe(RAID.spanMin);
+    expect(RAID.spanMin).toBe(2);
   });
 });
 

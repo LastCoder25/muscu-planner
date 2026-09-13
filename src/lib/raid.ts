@@ -254,7 +254,9 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '🧱',
     buildGold: 500,
     buildScrap: 0, // le 1er niveau ne coûte pas de ferraille : c'est le déblocage
-    unlockLevel: 3,
+    // Niveau 1 (v0.823) : on BÂTIT dès le début ; ce sont les SIÈGES qui attendent
+    // `RAID.minRaidLevel`. Construire n'expose à rien tant qu'aucune armée ne vient.
+    unlockLevel: 1,
     desc: 'L’enceinte encaisse les assauts. Tant qu’elle et les tourelles ne suivent pas ton niveau, personne ne vient t’attaquer.',
   },
   {
@@ -263,7 +265,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '🏹',
     buildGold: 700,
     buildScrap: 0,
-    unlockLevel: 3,
+    unlockLevel: 1,
     desc: 'Elles tirent. Chaque niveau ajoute de la puissance de feu, et une tourelle de plus sur le mur (jusqu’à 8).',
   },
   {
@@ -272,7 +274,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '🗼',
     buildGold: 600,
     buildScrap: 0,
-    unlockLevel: 3,
+    unlockLevel: 1,
     desc: 'Elle renseigne : plus elle est haute, plus tu en sais sur l’armée qui vient — et plus tôt tu l’apprends.',
   },
   {
@@ -281,7 +283,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '🦴',
     buildGold: 650,
     buildScrap: 0,
-    unlockLevel: 3,
+    unlockLevel: 1,
     desc: 'Envoie des fossoyeurs dépouiller les corps après la bataille. Chaque niveau = des fossoyeurs en plus par vague.',
   },
   {
@@ -290,7 +292,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '🐾',
     buildGold: 750,
     buildScrap: 0,
-    unlockLevel: 3,
+    unlockLevel: 1,
     desc: 'Poste tes familiers à la défense. Leur ESPÈCE décide de ce qu’ils apportent au mur.',
   },
   {
@@ -299,7 +301,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '⛑️',
     buildGold: 700,
     buildScrap: 0,
-    unlockLevel: 3,
+    unlockLevel: 1,
     desc: 'Soigne le héros blessé et remet les familiers fatigués sur pied plus vite.',
   },
 ];
@@ -381,6 +383,16 @@ export const RAID = {
   // `spanEarly` borne le début de partie, `spanFlat + spanLate × niveau` prend le relais
   // et croît moins vite que le joueur, pour que la difficulté ne s'éteigne pas.
   spanEarly: 0.6,
+  // ⚠️ Plancher de la fenêtre : 3 → 2 (v0.823, mesuré). À 3, une armée de niveau 5 marchait
+  // sur un joueur de niveau 2 — mesuré, enceinte à niveau + héros : 11 % de tenue au
+  // niveau 1, 27 % au 2, 48 % au 3. À 2 : 93 % au niveau 2, 98 % au 3, 100 % au 4, puis
+  // la fenêtre proportionnelle reprend la main (89 % au 5, identique). À 1, les niveaux
+  // 1-2 tenaient 98-100 % : plus aucun enjeu, donc écarté.
+  spanMin: 2,
+  // Premier niveau où une armée peut venir (v0.823). L'enceinte se bâtit dès le niveau 1 ;
+  // au niveau 1 le plancher de fenêtre ferait encore marcher une armée 3× plus forte que
+  // le joueur (30 % de tenue mesurés), et il faut d'abord apprendre à bâtir.
+  minRaidLevel: 2,
   spanFlat: 7,
   spanLate: 0.45,
   // Effectif quasi PLAT sur toute la partie (6 au début → 12 au niveau 100). Il ne suit
@@ -792,7 +804,10 @@ export function raidSize(playerLevel: number, faction?: RaidFaction): number {
  *  d'origine mesurait 40 % de tenue en bâtissant pourtant à son niveau. */
 export function levelSpanFor(playerLevel: number): number {
   const L = Math.max(1, playerLevel);
-  return Math.max(3, Math.round(Math.min(L * RAID.spanEarly, RAID.spanFlat + L * RAID.spanLate)));
+  return Math.max(
+    RAID.spanMin,
+    Math.round(Math.min(L * RAID.spanEarly, RAID.spanFlat + L * RAID.spanLate)),
+  );
 }
 
 /** Tire une armée. Les niveaux se répartissent dans [niveau perso, +15] avec un biais
@@ -2937,8 +2952,9 @@ export function defenseReadiness(defenses: DefenseStructure[], playerLevel: numb
   return Math.min(part('wall'), part('turret'));
 }
 
-/** Les sièges sont-ils actifs ? OPT-IN à deux conditions : une enceinte réellement
- *  PRÊTE (`RAID.enableShare`) et un joueur qui s’entraîne.
+/** Les sièges sont-ils actifs ? OPT-IN à trois conditions : le niveau
+ *  `RAID.minRaidLevel`, une enceinte réellement PRÊTE (`RAID.enableShare`) et un joueur
+ *  qui s’entraîne.
  *
  *  ⚠️ Le déclencheur regardait `wall > 0` — n’importe quelle muraille, fût-elle de
  *  niveau 1 chez un joueur de niveau 12. Or à cette part-là on tient 0 % : construire
@@ -2952,7 +2968,11 @@ export function defenseReadiness(defenses: DefenseStructure[], playerLevel: numb
  *  punit jamais) — et sans exploit, un siège étant un ROBINET (butin, cadavres, ferraille) :
  *  s’en priver coûte du contenu, ça n’achète pas de la sécurité. */
 export function raidsEnabled(base: BaseState, activeDays7: number, playerLevel: number): boolean {
-  return defenseReadiness(base.defenses, playerLevel) >= RAID.enableShare && activeDays7 >= 1;
+  return (
+    playerLevel >= RAID.minRaidLevel &&
+    defenseReadiness(base.defenses, playerLevel) >= RAID.enableShare &&
+    activeDays7 >= 1
+  );
 }
 
 export interface BaseTickResult {

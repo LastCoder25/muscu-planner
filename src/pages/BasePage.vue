@@ -720,7 +720,14 @@
             <div class="p-title">🕊️ Aucune menace en vue</div>
             <!-- ⚠️ On dit CE QUI MANQUE, pas seulement qu’il manque quelque chose : le seuil
                porte sur le mur ET les tourelles, et une enceinte à moitié ne tient rien. -->
-            <p v-if="!raidsReady">
+            <!-- Niveau 1 : on bâtit, personne ne vient encore (`RAID.minRaidLevel`). -->
+            <p v-if="tooEarlyForRaids">
+              🌱 Aucune armée ne marche sur une ville avant le niveau
+              <b>{{ RAID.minRaidLevel }}</b
+              >. Profites-en pour poser <b>muraille</b> et <b>tourelles</b> : il te faudra les deux
+              à ton niveau pour qu’elle attire du monde.
+            </p>
+            <p v-else-if="!raidsReady">
               Ta ville n’attire personne tant que son enceinte ne vaut pas la peine d’être attaquée.
               Il te faut <b>muraille</b> et <b>tourelles</b> au niveau <b>{{ readyLevel }}</b> —
               <span :class="{ miss: wallLevel < readyLevel }">muraille {{ wallLevel }}</span> ·
@@ -737,7 +744,7 @@
               Rien à l’horizon. Une armée finira par se mettre en marche — plus tu t’entraînes, plus
               ta base prospère et plus elle attire —, mais tu ne sauras pas quand.
             </p>
-            <p v-if="raidsReady" class="calm-watch">
+            <p v-if="raidsReady && !tooEarlyForRaids" class="calm-watch">
               <template v-if="watchLevel">
                 🗼 Ta <b>Tour de guet</b> te préviendra <b>{{ scoutLeadLabel }}</b> avant l’assaut.
               </template>
@@ -806,9 +813,6 @@
         </template>
         <p v-if="lvlOf(defSel.id) >= heroLevel" class="s-cap">
           Plafonné par ton niveau de personnage — le sport reste le plafond.
-        </p>
-        <p v-if="heroLevel < defenseUnlockLevel" class="s-cap">
-          🔒 L’enceinte se débloque au niveau {{ defenseUnlockLevel }}.
         </p>
 
         <!-- ── LE CHENIL DIT CE QU’IL PERMET, il ne range plus personne ──────
@@ -923,11 +927,6 @@ import { fmtPow, type Combatant } from '@/lib/combat';
 import { mulberry32 } from '@/lib/combat';
 import { treePath } from '@/lib/expedition';
 
-/** Niveau d'accès à l'enceinte. La défense est un système de mi-partie : elle suppose une
- *  économie derrière elle (or, ferraille) et une base qui vaille la peine d'être défendue.
- *  Mesuré, un joueur trop tôt ne tenait aucun siège même en bâtissant à son niveau. */
-const defenseUnlockLevel = Math.min(...DEFENSE_TYPES.map((t) => t.unlockLevel));
-
 const props = defineProps<{
   embedded?: boolean;
   inTab?: boolean;
@@ -1016,6 +1015,7 @@ const salvageLevel = computed(() => defenseLevel(defenses.value, 'salvage'));
 const raidsReady = computed(
   () => defenseReadiness(defenses.value, heroLevel.value) >= RAID.enableShare,
 );
+const tooEarlyForRaids = computed(() => heroLevel.value < RAID.minRaidLevel);
 const readyLevel = computed(() => Math.max(1, Math.ceil(heroLevel.value * RAID.enableShare)));
 const wallDamaged = computed(() => isDamaged(defenses.value, 'wall'));
 const watchDamaged = computed(() => isDamaged(defenses.value, 'watchtower'));
