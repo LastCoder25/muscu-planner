@@ -50,6 +50,7 @@ import {
   craftSetCost,
   rerolledQuality,
   rankRollMult,
+  itemLevelMult,
   rollJet,
   swapLoadoutGear,
   bestGearLoadout,
@@ -616,13 +617,69 @@ describe('sets d’équipement (voie)', () => {
     const piece = rollSetPiece(() => 0.3, { setId: BERS, level: 10, preferSlot: 'relic' });
     expect(piece.slot).toBe('relic');
   });
-  it('la stat d’une pièce appartient au THÈME du set (pas aléatoire hors-thème)', () => {
-    const bers = ITEM_SETS.find((s) => s.id === BERS)!;
-    const theme = new Set(bers.tiers.map((t) => t.type));
-    for (const slot of ['weapon', 'armor', 'accessory', 'relic'] as const) {
-      const piece = rollSetPiece(() => 0.5, { setId: BERS, level: 20, preferSlot: slot });
-      expect(theme.has(piece.effect.type)).toBe(true);
+  it('la stat PRINCIPALE d’une pièce de set est la majeure non plafonnée de son emplacement', () => {
+    // v0.803 : le thème vit dans les PALIERS, plus dans les pièces. Crit et réduction sont
+    // plafonnés au combat → une pièce qui les imposait gaspillait son emplacement.
+    const attendu = {
+      weapon: 'damage_pct',
+      armor: 'max_pv_pct',
+      accessory: 'damage_pct',
+      relic: 'max_pv_pct',
+    };
+    for (const set of ITEM_SETS)
+      for (const slot of ['weapon', 'armor', 'accessory', 'relic'] as const) {
+        const piece = rollSetPiece(() => 0.5, { setId: set.id, level: 20, preferSlot: slot });
+        expect(piece.effect.type, `${set.id} ${slot}`).toBe(attendu[slot]);
+      }
+  });
+  it('la stat principale d’une pièce vaut ~0,7 × celle d’un drop de même rareté et même jet', () => {
+    // v0.803 : mesuré, à valeur pleine un set complet battait 4 bons drops de +23 à +30 %.
+    const baseOf = (it: { rarity: Item['rarity']; roll?: number; effect: { value: number } }) =>
+      it.effect.value / rankRollMult(it.rarity, it.roll ?? 0);
+    let drop: number | null = null;
+    for (let s = 1; s <= 400 && drop == null; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 30, playerLevel: 30 });
+      if (d && d.slot === 'weapon' && d.effect.type === 'damage_pct' && d.effect.value > 20)
+        drop = baseOf(d);
     }
+    expect(drop).not.toBeNull();
+    for (let s = 1; s <= 10; s++) {
+      const p = rollSetPiece(mulberry32(s), {
+        setId: BERS,
+        level: 30,
+        playerLevel: 30,
+        preferSlot: 'weapon',
+      });
+      if (p.effect.value < 20) continue; // l’arrondi au dixième brouille les petites valeurs
+      expect(baseOf(p) / drop!).toBeGreaterThan(0.65);
+      expect(baseOf(p) / drop!).toBeLessThan(0.75);
+    }
+  });
+  it('les paliers du set suivent aussi le NIVEAU D’OBJET des pièces, pas seulement leur rareté', () => {
+    const at = (level: number): Equipped =>
+      Object.fromEntries(
+        (['weapon', 'armor', 'accessory', 'relic'] as const).map((s) => [
+          s,
+          { ...bersPiece(s), level },
+        ]),
+      ) as Equipped;
+    const bas = setEffects(at(10), 'berserker');
+    const haut = setEffects(at(90), 'berserker');
+    // Arrondi des paliers au dixième : on vérifie le rapport à 0,05 près (sans ilvl il vaut 1, contre 1,46).
+    expect(haut.lifesteal / bas.lifesteal).toBeCloseTo(itemLevelMult(90) / itemLevelMult(10), 1);
+  });
+  it('le 2ᵉ affixe d’une pièce de set est LIBRE, comme un drop (pas réservé au thème)', () => {
+    const theme = new Set(ITEM_SETS.find((s) => s.id === BERS)!.tiers.map((t) => t.type));
+    let hors = 0;
+    let total = 0;
+    for (let s = 1; s <= 200; s++) {
+      const p = rollSetPiece(mulberry32(s), { setId: BERS, level: 40, luck: 0.9, playerLevel: 40 });
+      if (!p.effect2) continue;
+      total++;
+      if (!theme.has(p.effect2.type)) hors++;
+    }
+    expect(total).toBeGreaterThan(20);
+    expect(hors / total).toBeGreaterThan(0.3);
   });
   it('un set de voie existe pour CHAQUE voie (lien voie↔set, ids `voie:<id>`)', () => {
     for (const v of VOIES) expect(ITEM_SETS.some((s) => s.id === `voie:${v.id}`)).toBe(true);
@@ -963,11 +1020,14 @@ describe('pieces de set — multi-affixe (correctif : les sets ne valaient jamai
     }
   });
 
-  it('l affixe PRINCIPAL reste dans le theme du set (identite preservee)', () => {
-    const theme = new Set(ITEM_SETS[0]!.tiers.map((t) => t.type));
+  it('l affixe PRINCIPAL ne depend pas du tirage (identite stable par emplacement)', () => {
+    const vu = new Map<string, string>();
     for (let seed = 1; seed <= 20; seed++) {
       const p = rollSetPiece(mulberry32(seed), { setId, level: 30, playerLevel: 30 });
-      expect(theme.has(p.effect.type)).toBe(true);
+      const prev = vu.get(p.slot);
+      if (prev) expect(p.effect.type).toBe(prev);
+      vu.set(p.slot, p.effect.type);
+      expect(['damage_pct', 'max_pv_pct']).toContain(p.effect.type);
     }
   });
 

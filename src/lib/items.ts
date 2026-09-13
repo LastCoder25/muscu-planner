@@ -729,6 +729,28 @@ const AFFIX_TIERS: Record<AffixTier, EffectType[]> = {
 };
 const TIER_ORDER: AffixTier[] = ['major', 'secondary', 'minor'];
 
+/** Valeur de la stat principale d’une pièce de set, relative à un drop de même rareté.
+ *  ⚠️ < 1 PARCE QU’ELLE PORTE UNE STAT QU’UN DROP N’A PAS À CET EMPLACEMENT (des dégâts sur un
+ *  accessoire) et que les paliers s’y ajoutent. Mesuré, set complet de sa voie contre les 4
+ *  meilleurs drops (40 tirages par emplacement), moyenne des 8 voies aux niveaux 30/60/90 :
+ *  ×1 → +23/+30/+23 % · **×0,7 → +10/+12/+5 %** (cible de l’utilisateur : +5 à +10 %) ·
+ *  ×0,55 → +3/+4/−4 %. */
+const SET_PIECE_MAJOR_K = 0.7;
+
+/** Stat PRINCIPALE d’une pièce de set, par emplacement : dégâts ou PV.
+ *  ⚠️ JAMAIS UNE STAT PLAFONNÉE (critique, réduction). Mesuré : dès le niveau 30 le
+ *  personnage de référence est au plafond du critique (50 % sur 60 avec l’équipement) et
+ *  presque à celui de la réduction (45 % sur 50) — une pièce qui IMPOSE ces stats gaspille
+ *  deux emplacements sur quatre, là où un drop en choisit une autre. Avec critique et
+ *  réduction imposés sur l’accessoire et l’armure, un set complet décrochait de +8 % au
+ *  niveau 30 à −1 % au niveau 90 ; en dégâts/PV l’écart est PLAT avec le niveau. */
+const SET_SLOT_MAJORS: Partial<Record<ItemSlot, EffectType[]>> = {
+  weapon: ['damage_pct'],
+  armor: ['max_pv_pct'],
+  accessory: ['damage_pct'],
+  relic: ['max_pv_pct'],
+};
+
 const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
   weapon: [
     { type: 'damage_pct', base: 8 },
@@ -1258,16 +1280,19 @@ export function rollSetPiece(
     floorRanks,
     opts.playerLevel,
   );
-  // STAT DE LA PIÈCE = tirée dans le THÈME DU SET (types de ses paliers), pas dans le pool
-  // générique du slot → un set a des stats COHÉRENTES avec son identité (ex. Écailles du
-  // Dragon = dégâts/crit/vol de vie sur toutes ses pièces), au lieu de stats aléatoires
-  // hors-thème. Déterministe par slot (chaque emplacement du set = une stat stable du thème).
-  const theme = set ? [...new Set(set.tiers.map((t) => t.type))] : [];
-  const chosenType: EffectType = theme.length
-    ? theme[SLOTS.indexOf(slot) % theme.length]!
-    : pick(rng, SLOT_EFFECTS[slot]).type;
+  // ⚠️ L’AFFIXE #1 EST LA STAT MAJEURE NATURELLE DE L’EMPLACEMENT, comme un drop (v0.803,
+  // mesuré). Il était tiré dans le THÈME du set selon l’emplacement : les voies défensives
+  // tombaient sur des PV et de la réduction, les voies offensives sur de l’exécution, de la
+  // rage, de l’élan ou du vol de vie — des stats conditionnelles en PREMIER affixe. Mesuré,
+  // set complet contre 4 bons drops au niveau 90 : épineux +13 %, assassin **−42 %**.
+  // ⚠️ DEUX VARIANTES MESURÉES PUIS ÉCARTÉES : (1) « la stat majeure DU THÈME » — un thème
+  // qui n’en a qu’une (critique pour l’assassin, dégâts pour le berserker) l’empilait sur
+  // les quatre pièces, et la puissance étant MULTIPLICATIVE l’assassin tombait à −57 % ;
+  // (2) « la majeure du thème si l’emplacement la propose » : assassin encore −45 %.
+  // L’IDENTITÉ DU SET VIT DÉSORMAIS DANS SES PALIERS (2/3/4 pièces), plus dans ses pièces.
+  const chosenType: EffectType = SET_SLOT_MAJORS[slot]?.[0] ?? 'max_pv_pct';
   const base = EFFECT_BASE[chosenType] ?? 8;
-  const value = Math.max(1, round1(base * rankRollMult(rarity, roll)));
+  const value = Math.max(1, round1(base * rankRollMult(rarity, roll) * SET_PIECE_MAJOR_K));
   const noun = pick(rng, NAMES[slot]);
   // NIVEAU D'OBJET (ilvl) de la pièce de set = pyramide centrée sur min(palier, perso).
   const setCenter = opts.playerLevel != null ? Math.min(opts.level, opts.playerLevel) : opts.level;
@@ -1276,14 +1301,16 @@ export function rollSetPiece(
   // de sa rareté (1→3). Sans ça, la refonte multi-affixe (v0.577-0.581) avait laissé les
   // sets à UNE stat pendant que les drops en gagnaient trois → un set complet (4 stats +
   // paliers) perdait systématiquement contre du stuff mixte (12 stats), et les bonus de
-  // set ne rattrapaient pas l'écart. L'affixe #1 reste le THÈME du set (identité), les
-  // suivants viennent des tiers secondaire/mineur comme un drop.
+  // set ne rattrapaient pas l'écart. Les affixes suivants viennent des tiers secondaire/
+  // mineur, comme un drop.
   const affixes: ItemEffect[] = [{ type: chosenType, value }];
   for (let a = 1; a < affixCountForRarity(rarity); a++) {
     const pool = tierPool(TIER_ORDER[a]!, setCenter).filter(
       (t) => !affixes.some((x) => x.type === t),
     );
     if (!pool.length) continue;
+    // ⚠️ LIBRE, comme un drop. Préférer le thème ici a été mesuré puis retiré : les stats
+    // conditionnelles en affixe #2 creusaient l’écart de 6 à 27 points selon la voie.
     const t = pick(rng, pool);
     affixes.push({
       type: t,
@@ -1302,7 +1329,7 @@ export function rollSetPiece(
     rarity,
     level,
     baseLevel: level,
-    effect: affixes[0]!, // stat COHÉRENTE au set (identité) + synergie (bonus 2/3/4 pièces)
+    effect: affixes[0]!, // majeure de l’emplacement ; l’identité du set vit dans ses paliers
     ...(affixes[1] ? { effect2: affixes[1] } : {}),
     ...(affixes[2] ? { effect3: affixes[2] } : {}),
     ...(set ? { setId: opts.setId } : {}),
@@ -1813,7 +1840,15 @@ export const SET_BY_ID: Record<string, ItemSet> = Object.fromEntries(
 function setBonusMult(pieces: Item[]): number {
   if (!pieces.length) return 1;
   const anchor = RARITY_MULT.rare;
-  const avg = pieces.reduce((s, i) => s + (RARITY_MULT[i.rarity] ?? anchor), 0) / pieces.length;
+  // ⚠️ RARETÉ × NIVEAU D’OBJET (v0.803, mesuré). Le bonus ne suivait que la rareté, alors
+  // que les stats des pièces suivent aussi leur niveau d’objet (+53 % au niveau 90) : le
+  // poids relatif des paliers FONDAIT en montant, et un set complet passait de +4 à +8 %
+  // au niveau 30 à −6 % en moyenne au niveau 90.
+  const avg =
+    pieces.reduce(
+      (s, i) => s + (RARITY_MULT[i.rarity] ?? anchor) * itemLevelMult(i.level ?? 1),
+      0,
+    ) / pieces.length;
   return avg / anchor;
 }
 /** Libellé d'un palier de set, scalé par le rang des pièces équipées de ce set. */
@@ -1987,8 +2022,17 @@ export function elagueDomines(items: Item[]): Item[] {
   }
   const vecteur = (it: Item): Record<string, number> => {
     const v: Record<string, number> = {};
+    // ⚠️ LA VALEUR PRÉCISE, celle qu’applique `aggregateEffects` — jamais `effectiveValue`,
+    // qui ARRONDIT : deux pièces à 63,07 et 62,6 y valent toutes deux 63, et la moins forte
+    // pouvait « dominer » la plus forte (v0.803, trouvé par le test d’optimalité locale).
+    const lm = itemLevelMult(it.level);
     for (const e of [it.effect, it.effect2, it.effect3])
-      if (e) v[e.type] = (v[e.type] ?? 0) + effectiveValue(e, it.level);
+      if (e) v[e.type] = (v[e.type] ?? 0) + e.value * lm;
+    // ⚠️ UNE PIÈCE DE SET PORTE UN AXE DE PLUS : ce qu’elle apporte aux PALIERS du set
+    // (`setBonusMult` = rareté × niveau d’objet). Sans lui, une pièce aux stats un peu
+    // plus faibles mais de niveau plus haut était jugée dominée — et elle gagnait pourtant
+    // par le bonus (v0.803, trouvé par le test d’optimalité locale).
+    if (it.setId) v['__set'] = (RARITY_MULT[it.rarity] ?? 1) * itemLevelMult(it.level ?? 1);
     return v;
   };
   const out: Item[] = [];
