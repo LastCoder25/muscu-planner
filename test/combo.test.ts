@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   legSetsDone,
+  removeSetAt,
   comboStopPlan,
   comboPace,
   legReps,
@@ -991,5 +992,28 @@ describe('📅 LA BARRE D’AVANCEMENT DU 360', () => {
       prev = v;
     }
     expect(prev).toBe(100);
+  });
+});
+
+describe('🗑️ RETIRER LA SÉRIE TOUCHÉE (pas forcément la dernière)', () => {
+  const s = (reps: number): ComboSet => ({ date: '2026-09-01', reps, weight: null });
+  const sets = [s(10), s(11), s(12), s(13)];
+
+  it('retire exactement la case touchée, les autres gardent leur ordre', () => {
+    expect(removeSetAt(sets, 1).map((x) => x.reps)).toEqual([10, 12, 13]);
+    expect(removeSetAt(sets, 0).map((x) => x.reps)).toEqual([11, 12, 13]);
+    expect(removeSetAt(sets, 3).map((x) => x.reps)).toEqual([10, 11, 12]);
+  });
+
+  it('ne touche pas la liste reçue (rend une nouvelle liste)', () => {
+    const copy = [...sets];
+    removeSetAt(sets, 2);
+    expect(sets).toEqual(copy);
+  });
+
+  it('un index hors limites ne retire RIEN (double tap sur une case déjà partie)', () => {
+    for (const i of [-1, 4, 99, 1.5, Number.NaN]) {
+      expect(removeSetAt(sets, i).map((x) => x.reps)).toEqual([10, 11, 12, 13]);
+    }
   });
 });

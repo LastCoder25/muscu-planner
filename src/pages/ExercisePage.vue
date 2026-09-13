@@ -13,8 +13,15 @@
       <!-- Média : illustration animée du mouvement (sinon photo fournie, sinon icône) -->
       <div class="media">
         <ExerciseAnim v-if="hasAnim" :exercise-id="ex.id" :size="164" :title="ex.name" />
+        <img v-else-if="staticImg" :src="staticImg" :alt="ex.name" />
         <img v-else-if="ex.payload?.media_url" :src="ex.payload.media_url" :alt="ex.name" />
         <q-icon v-else name="fitness_center" size="48px" color="grey-7" />
+      </div>
+
+      <div v-if="credit" class="exo-credit">
+        Photo :
+        <a :href="credit.source" target="_blank" rel="noopener">{{ credit.author }}</a>
+        · {{ credit.license }} · Wikimedia Commons
       </div>
 
       <div class="badges">
@@ -103,7 +110,7 @@ import { useLogsStore } from '@/stores/logs';
 import { bestE1RM } from '@/lib/estimates';
 import { EQUIPMENT_ITEMS } from '@/data/profileOptions';
 import { exerciseInstructions } from '@/data/exerciseInstructions';
-import { exerciseFrames } from '@/data/exerciseImages';
+import { exerciseFrames, exerciseImage, exerciseImageCredit } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
 
 const route = useRoute();
@@ -119,6 +126,10 @@ const series = ref<number[]>([]); // 1RM estimé chronologique (historique de l'
 const guide = computed(() => (ex.value ? exerciseInstructions(ex.value.id) : undefined));
 // Démonstration animée (bascule des 2 poses) si l'exo a des images.
 const hasAnim = computed(() => (ex.value ? !!exerciseFrames(ex.value.id) : false));
+// Illustration FIXE (une seule photo) quand l'exo n'a pas de seconde pose.
+const staticImg = computed(() => (ex.value ? exerciseImage(ex.value.id) : undefined));
+// Licence Creative Commons : l'auteur est crédité sous l'image.
+const credit = computed(() => (ex.value ? exerciseImageCredit(ex.value.id) : undefined));
 
 const chart = computed(() => {
   const s = series.value;

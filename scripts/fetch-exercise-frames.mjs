@@ -80,8 +80,12 @@ const MAP = {
   ex_rear_delt_fly: 'Reverse_Flyes',
   // Ajouts 2026-09 (exos du Défi 360 et de la prépa sans animation). Choisis sur planche :
   // star jump = variante proche des jumping jacks, skipping = montées de genoux.
-  // Rien de fidèle dans la base pour burpees, pas chassés, split-step, balancements de
-  // jambe, bird-dog, chaise, échelle d'agilité.
+  // Rien de fidèle dans la base pour pas chassés, split-step, balancements de jambe,
+  // chaise, échelle d'agilité. Burpees (2 poses) et bird-dog (photo fixe) viennent de
+  // Wikimedia Commons, HORS de ce script, sous licence CC — crédits obligatoires dans
+  // EXERCISE_IMAGE_CREDITS (src/data/exerciseImages.ts) :
+  //   Burpee_3_Hands_Grounded.jpg + Burpee_5_Thrust.jpg (Taco fleur, CC BY-SA 4.0)
+  //   Bird_dog_exercise.jpg (PTPioneer, CC BY 2.0) — Special:FilePath/<nom>?width=640
   ex_jump_rope: 'Rope_Jumping',
   ex_pp_single_leg_rdl: 'Kettlebell_One-Legged_Deadlift',
   ex_pp_cone_sprint: 'Single-Cone_Sprint_Drill',

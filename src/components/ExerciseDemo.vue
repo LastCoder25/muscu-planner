@@ -24,6 +24,12 @@
         <ExerciseAnim v-if="frames" :exercise-id="exerciseId" :size="300" :title="name" />
         <img v-else-if="img" :src="img" :alt="name" />
       </div>
+      <!-- Licence Creative Commons : l'auteur doit être crédité là où l'image est montrée. -->
+      <div v-if="credit" class="exo-credit">
+        Photo :
+        <a :href="credit.source" target="_blank" rel="noopener">{{ credit.author }}</a>
+        · {{ credit.license }} · Wikimedia Commons
+      </div>
       <ol v-if="steps?.steps?.length" class="exo-steps">
         <li v-for="(s, i) in steps.steps" :key="i">{{ s }}</li>
       </ol>
@@ -44,7 +50,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
-import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
+import { exerciseImage, exerciseFrames, exerciseImageCredit } from '@/data/exerciseImages';
 import { exerciseInstructions } from '@/data/exerciseInstructions';
 
 const props = withDefaults(defineProps<{ exerciseId: string; name: string; size?: number }>(), {
@@ -55,6 +61,7 @@ const open = ref(false);
 const img = computed(() => exerciseImage(props.exerciseId));
 const frames = computed(() => exerciseFrames(props.exerciseId));
 const steps = computed(() => exerciseInstructions(props.exerciseId));
+const credit = computed(() => exerciseImageCredit(props.exerciseId));
 </script>
 
 <style scoped>
@@ -115,6 +122,14 @@ const steps = computed(() => exerciseInstructions(props.exerciseId));
 .exo-modal-media img {
   max-width: 100%;
   border-radius: 8px;
+}
+.exo-credit {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--dim);
+}
+.exo-credit a {
+  color: inherit;
 }
 .exo-steps {
   margin: 14px 0 0;

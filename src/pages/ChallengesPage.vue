@@ -461,6 +461,8 @@
                     'z-' + legSegZone(leg, n),
                     { on: n <= legDone(leg), next: n === legDone(leg) + 1 },
                   ]"
+                  :aria-label="n <= legDone(leg) ? `Retirer la série ${n}` : undefined"
+                  @click.stop="onSeg(leg, n)"
                 >
                   <template v-if="n <= legDone(leg)">{{
                     segSetLabel(legSets(leg)[n - 1])
@@ -901,22 +903,29 @@ function undoFromDialog() {
   setOpen.value = false;
   if (leg) undoSet(leg);
 }
-function undoSet(leg: ComboLeg) {
+/** Case de série touchée : une case FAITE se retire, une case vide ajoute une série. */
+function onSeg(leg: ComboLeg, n: number) {
+  if (n <= legSetsDone(leg)) undoSet(leg, n - 1);
+  else openSet(leg, 1);
+}
+/** Retire UNE série (par défaut la dernière) — celle dont on a touché la case. */
+function undoSet(leg: ComboLeg, index = legSets(leg).length - 1) {
   if (!activeCombo.value) return;
   const sets = legSets(leg);
-  const last = sets[sets.length - 1];
+  const last = sets[index];
+  if (!last) return;
   // Énergie que cette série a rapportée (≈ son XP, ENERGY_PER_XP=1).
   const setEnergy = last
     ? Math.round((last.reps || 0) * REP_XP * (leg.rep_weight ?? 1) * assistMult(last.assisted))
     : 0;
   const wouldDeficit = availableEnergy.value - setEnergy < 0;
-  const doRemove = () => comboStore.removeLastSet(activeCombo.value!.id, leg.exercise_id);
+  const doRemove = () => comboStore.removeSet(activeCombo.value!.id, leg.exercise_id, index);
   // Confirmation SYSTÉMATIQUE (évite les retraits par fausse manipulation).
   $q.dialog({
-    title: 'Retirer la dernière série ?',
+    title: `Retirer la série ${index + 1} ?`,
     message: wouldDeficit
       ? "Tu as déjà dépensé l'énergie gagnée avec cette série. La retirer te mettra en déficit d'énergie : il faudra refaire du sport avant de rejouer à l'aventure."
-      : `Retirer la dernière série de « ${leg.exercise_name} » ?`,
+      : `« ${leg.exercise_name} » — ${segSetLabel(last)}`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Retirer', color: 'negative' },
   }).onOk(doRemove);

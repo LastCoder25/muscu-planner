@@ -2,7 +2,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import { comboComplete, type ComboChallenge, type ComboLeg } from '@/lib/combo';
+import { comboComplete, removeSetAt, type ComboChallenge, type ComboLeg } from '@/lib/combo';
 import type { ComboChestRecord } from '@/lib/comboChest';
 import { useAuthStore } from '@/stores/auth';
 
@@ -125,13 +125,13 @@ export const useComboStore = defineStore('combo', () => {
       });
   }
 
-  // Retire la dernière série d'un exo (correction). OPTIMISTE.
-  function removeLastSet(id: string, exerciseId: string) {
+  // Retire UNE série précise (la case touchée). OPTIMISTE.
+  function removeSet(id: string, exerciseId: string, index: number) {
     const c = list.value.find((x) => x.id === id);
     if (!c) return;
     const leg = c.legs.find((l) => l.exercise_id === exerciseId);
-    if (!leg?.sets?.length) return;
-    leg.sets.pop();
+    if (!leg?.sets?.length || index < 0 || index >= leg.sets.length) return;
+    leg.sets = removeSetAt(leg.sets, index);
     // Plus aucune série → on efface aussi le poids mémorisé (souvent une saisie
     // erronée qu'on vient de retirer) pour ne pas le repré-remplir.
     if (!leg.sets.length) leg.weight_kg = null;
@@ -142,7 +142,7 @@ export const useComboStore = defineStore('combo', () => {
       .update({ legs: c.legs, status: c.status, updated_at: new Date().toISOString() })
       .eq('id', id)
       .then(({ error }) => {
-        if (error) console.error('combo removeLastSet persist', error);
+        if (error) console.error('combo removeSet persist', error);
       });
   }
 
@@ -187,7 +187,7 @@ export const useComboStore = defineStore('combo', () => {
     activeOne,
     create,
     addSet,
-    removeLastSet,
+    removeSet,
     setWeight,
     setStatus,
     remove,

@@ -69,6 +69,14 @@ export interface ComboChallenge {
 // Reps supposées par série pour l'estimation du volume planifié (prime de bouclage).
 export const COMBO_PLAN_REPS = 10;
 
+/** Retire UNE série précise (celle qu'on a touchée), pas forcément la dernière.
+ *  Rend une NOUVELLE liste ; un index hors limites (négatif, trop grand, décimal) ne
+ *  retire rien, par construction du filtre — un double tap sur une case qui vient de
+ *  disparaître ne doit pas emporter la voisine. */
+export function removeSetAt(sets: readonly ComboSet[], index: number): ComboSet[] {
+  return sets.filter((_, i) => i !== index);
+}
+
 /** Séries réalisées (avec repli : convertit l'ancien `progress` en séries). */
 export function legSets(leg: ComboLeg): ComboSet[] {
   if (leg.sets) return leg.sets;

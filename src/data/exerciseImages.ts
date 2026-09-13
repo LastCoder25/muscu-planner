@@ -83,7 +83,41 @@ const EXERCISE_IMAGES: Record<string, string> = {
   ex_high_knees: '/exercises/ex_high_knees.jpg',
   ex_ch_course: '/exercises/ex_ch_marche_course.jpg', // même piste (photos course/marche en extérieur)
   ex_ch_marche: '/exercises/ex_ch_marche_course.jpg',
+  // Wikimedia Commons (licences CC → crédit OBLIGATOIRE, cf. EXERCISE_IMAGE_CREDITS).
+  ex_burpees: '/exercises/ex_burpees.jpg',
+  ex_pp_bird_dog: '/exercises/ex_pp_bird_dog.jpg',
 };
+
+/** Illustrations FIXES : une seule photo, pas de seconde pose — donc pas d'animation.
+ *  ⚠️ Sans cette liste, `exerciseFrames` fabriquerait un « -1.jpg » inexistant et
+ *  l'animation basculerait sur une image cassée. Bird-dog : les deux photos disponibles
+ *  sont prises sous deux angles opposés, la bascule sauterait d'un côté à l'autre. */
+const STATIC_ONLY = new Set(['ex_pp_bird_dog']);
+
+export interface ImageCredit {
+  author: string;
+  license: string;
+  source: string; // page de la ressource
+}
+
+/** Crédits des images sous licence Creative Commons (attribution exigée par la licence).
+ *  Les photos de free-exercise-db sont dans le domaine public et n'en ont pas besoin. */
+const EXERCISE_IMAGE_CREDITS: Record<string, ImageCredit> = {
+  ex_burpees: {
+    author: 'Taco fleur',
+    license: 'CC BY-SA 4.0',
+    source: 'https://commons.wikimedia.org/wiki/File:Burpee_3_Hands_Grounded.jpg',
+  },
+  ex_pp_bird_dog: {
+    author: 'PTPioneer',
+    license: 'CC BY 2.0',
+    source: 'https://commons.wikimedia.org/wiki/File:Bird_dog_exercise.jpg',
+  },
+};
+
+export function exerciseImageCredit(id: string): ImageCredit | undefined {
+  return EXERCISE_IMAGE_CREDITS[id];
+}
 
 export function exerciseImage(id: string): string | undefined {
   return EXERCISE_IMAGES[id];
@@ -93,5 +127,5 @@ export function exerciseImage(id: string): string | undefined {
 // public/exercises/<id>.jpg = pose 0 ; <id>-1.jpg = pose 1 (cf. scripts/fetch-exercise-frames.mjs).
 export function exerciseFrames(id: string): [string, string] | undefined {
   const base = EXERCISE_IMAGES[id];
-  return base ? [base, base.replace(/\.jpg$/, '-1.jpg')] : undefined;
+  return base && !STATIC_ONLY.has(id) ? [base, base.replace(/\.jpg$/, '-1.jpg')] : undefined;
 }

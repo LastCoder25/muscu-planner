@@ -129,6 +129,8 @@
               'z-' + legSegZone(leg, n),
               { on: n <= legDone(leg), next: n === legDone(leg) + 1 },
             ]"
+            :aria-label="n <= legDone(leg) ? `Retirer la série ${n}` : undefined"
+            @click.stop="onSeg(leg, n)"
           >
             <template v-if="n <= legDone(leg)">{{ segSetLabel(legSets(leg)[n - 1]) }}</template>
             <template v-else-if="n === legDone(leg) + 1">＋</template>
@@ -461,14 +463,22 @@ function doAddSeconds(leg: ComboLeg, sec: number) {
     });
   }
 }
-function undoSet(leg: ComboLeg) {
-  // Confirmation avant de retirer (évite les retraits par fausse manipulation).
+/** Retire UNE série (par défaut la dernière) — celle dont on a touché la case.
+ *  La confirmation dit laquelle (numéro + contenu) : un tap raté ne coûte rien. */
+function undoSet(leg: ComboLeg, index = legSets(leg).length - 1) {
+  const s = legSets(leg)[index];
+  if (!s) return;
   $q.dialog({
-    title: 'Retirer la dernière série ?',
-    message: `Retirer la dernière série de « ${leg.exercise_name} » ?`,
+    title: `Retirer la série ${index + 1} ?`,
+    message: `« ${leg.exercise_name} » — ${segSetLabel(s)}`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Retirer', color: 'negative' },
-  }).onOk(() => combo.removeLastSet(id, leg.exercise_id));
+  }).onOk(() => combo.removeSet(id, leg.exercise_id, index));
+}
+/** Case de série touchée : une case FAITE se retire, une case vide ajoute une série. */
+function onSeg(leg: ComboLeg, n: number) {
+  if (n <= legSetsDone(leg)) undoSet(leg, n - 1);
+  else openSet(leg, 1);
 }
 
 // Exporte : partage natif (mobile) si dispo, sinon copie dans le presse-papier.
