@@ -872,7 +872,7 @@ async function doClaimCaravan(id: string) {
   busyCaravan.value = true;
   try {
     // ⚠️ Une liste VIDE vaut « encaissé » (elle est truthy) ; c'est `null` qui dit l'échec.
-    const events = await char.claimCaravan(uid, id);
+    const events = await char.claimCaravan(uid, id, heroLevel.value);
     if (!events) return;
     $q.notify({ type: 'positive', message: 'Cargaison récupérée.' });
     // ⚠️ LE NIVEAU D'UN AVENTURIER EST CACHÉ : sans cette annonce, une étoile gagnée en

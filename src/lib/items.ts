@@ -111,72 +111,75 @@ export interface Item {
   fxp?: number; // familier : progression d'INFUSION vers le prochain pas de tier (rang+qualité)
   enchant?: number; // ENCHANT +N (façon L2) — magnitude par-dessus le grade. Défaut 0. (étape 1)
   legendary?: string; // proc LÉGENDAIRE (id, cf. LEGENDARY_PROCS) — Légendaire+ uniquement, non-scalant
-  // ── DRESSAGE (familiers uniquement, cf. FAM_TRAIN) : DEUX carrières séparées.
-  // Un familier ne pouvant pas être à deux endroits à la fois, les deux XP divergent
-  // toutes seules — aucune règle d’exclusivité n’est nécessaire.
-  atkXp?: number; // gagnée ÉQUIPÉ, en donjon → amplifie son effet au combat
-  defXp?: number; // gagnée POSTÉ au chenil, en siège → renforce la garnison
+  // ── DRESSAGE (familiers uniquement, cf. FAM_TRAIN) : UNE seule expérience (v0.805).
+  xp?: number; // gagnée partout où il se bat : donjon (héros), convoi et défense (aventurier)
+  // ⚠️ LEGACY : les deux carrières d’avant la v0.805. Relues par `famXp`, jamais écrites.
+  atkXp?: number;
+  defXp?: number;
   fatigueUntil?: number; // ms epoch : sorti d’un siège, il souffle (effet réduit, jamais perdu)
 }
 
 // ── DRESSAGE DES FAMILIERS ──
 // Un 4ᵉ axe, VOLONTAIREMENT à part des trois autres (rang, jet, ilvl) : il ne touche
-// à aucun d'eux, il est BORNÉ et il est CONTEXTUEL. Sans ces trois garde-fous, un
-// familier qui grandit en restant assis au chenil serait un robinet gratuit qui
-// contournerait la perte 2:1 de l'infusion de grade.
+// à aucun d'eux et il est BORNÉ (plafonné au niveau du joueur à l’attribution).
+//
+// ⚠️ UNE SEULE EXPÉRIENCE, UN SEUL MULTIPLICATEUR (v0.805 ; demandé par l’utilisateur :
+// « le familier booste l’aventurier comme le héros, que ce soit en défense ou en
+// attaque — une expérience globale, montée par les convois et les défenses »). Il y
+// avait DEUX carrières (attaque en donjon, défense au mur) aux pentes différentes :
+// le même animal valait deux choses selon le terrain, et le dressage gagné par un
+// aventurier au rempart ne servait à rien sur la route.
 const FAM_TRAIN = {
-  // XP cumulée pour le niveau L = xpPerLevel × L². ⚠️ **DEUX CONSTANTES, pas une**
-  // (v0.689) : les deux carrières ne tiquent PAS au même rythme, donc une constante
-  // partagée en rendait forcément une aberrante. Mesuré : l'ATTAQUE gagne ~648 XP par
-  // séance de sport (8 descentes × (2 + reco) × 3 monstres) quand la DÉFENSE gagne
-  // ~216 XP par siège, soit environ un par jour. À 12 partagé, un familier posté
-  // atteignait « défense 5 » en DEUX sièges — la doc promettait « des dizaines », le
-  // chiffre affiché n'avait donc aucun sens et ne récompensait rien.
-  // Recalé : niveau 5 ≈ 10 séances en attaque, ≈ 8 sièges en défense ; niveau 10 ≈ 40
-  // séances / 30 sièges. Une carrière se bâtit, elle ne se ramasse pas.
-  atkXpPerLevel: 260,
-  defXpPerLevel: 65,
-  // ATTAQUE : la même pente que l'ilvl (LEVEL_MULT_K) — « un familier dressé vaut un
-  // familier d'un cran d'ilvl au-dessus ». Avare À DESSEIN : le combat du héros est
-  // calibré au serré (gearExpect/bossGearExpect), un 4ᵉ multiplicateur généreux y
-  // ferait des dégâts.
-  atkK: 0.006,
-  // DÉFENSE : généreux, parce que la base est un système neuf où rien n'est calibré —
-  // c'est ce qui doit donner envie de garnir le chenil.
-  defK: 0.04,
+  // XP cumulée pour le niveau L = xpPerLevel × L². Calée sur l’ancienne carrière
+  // d’ATTAQUE : ~648 XP par séance de sport, donc niveau 5 ≈ 10 séances.
+  xpPerLevel: 260,
+  // La pente de l’ilvl (LEVEL_MULT_K) — « un familier dressé vaut un familier d'un cran
+  // d'ilvl au-dessus ». Avare À DESSEIN : le combat du héros est calibré au serré, et
+  // c’est désormais la MÊME formule pour le héros et pour ses aventuriers.
+  k: 0.006,
+  // Conversion de l’ancienne XP de DÉFENSE (65 par niveau² contre 260) : un familier
+  // dressé au mur garde exactement le niveau qu’il avait gagné.
+  legacyDefToXp: 4,
 } as const;
 
+/** L’expérience d’un familier. ⚠️ Relit les deux carrières d’avant la v0.805 tant qu’il
+ *  n’a rien regagné — sans migration, et sans rien perdre de ce qui avait été dressé. */
+export function famXp(it: Pick<Item, 'xp' | 'atkXp' | 'defXp'>): number {
+  return it.xp ?? (it.atkXp ?? 0) + (it.defXp ?? 0) * FAM_TRAIN.legacyDefToXp;
+}
 /** XP cumulée nécessaire pour atteindre le niveau `level`. */
-export function famXpForLevel(level: number, kind: 'atk' | 'def' = 'def'): number {
-  const k = kind === 'atk' ? FAM_TRAIN.atkXpPerLevel : FAM_TRAIN.defXpPerLevel;
-  return k * Math.max(0, level) ** 2;
+export function famXpForLevel(level: number): number {
+  return FAM_TRAIN.xpPerLevel * Math.max(0, level) ** 2;
 }
 /** Niveau de dressage correspondant à une XP. ⚠️ Le PLAFOND (niveau du joueur) est
- *  appliqué à l'ATTRIBUTION de l'XP (`grantFamiliarXp`), pas ici : ainsi ni
- *  `aggregateEffects` ni la garnison n'ont besoin de connaître le niveau du joueur. */
-export function famLevel(xp: number | undefined, kind: 'atk' | 'def' = 'def'): number {
-  const k = kind === 'atk' ? FAM_TRAIN.atkXpPerLevel : FAM_TRAIN.defXpPerLevel;
-  return Math.floor(Math.sqrt(Math.max(0, xp ?? 0) / k));
+ *  appliqué à l'ATTRIBUTION de l'XP (`grantFamiliarXp`), pas ici. */
+export function famLevel(xp: number | undefined): number {
+  return Math.floor(Math.sqrt(Math.max(0, xp ?? 0) / FAM_TRAIN.xpPerLevel));
 }
-export function famAtkMult(level: number): number {
-  return 1 + Math.max(0, level) * FAM_TRAIN.atkK;
+function famTrainMult(level: number): number {
+  return 1 + Math.max(0, level) * FAM_TRAIN.k;
 }
-export function famDefMult(level: number): number {
-  return 1 + Math.max(0, level) * FAM_TRAIN.defK;
+/**
+ * CE QU’UN FAMILIER VAUT, au héros comme à un aventurier : niveau d’objet × dressage.
+ * ⚠️ SOURCE UNIQUE — `aggregateEffects` (le héros) et `companionEffects` (l’aventurier,
+ * route comme rempart) la lisent tous les deux. C’est ce qui garantit « comme le héros ».
+ */
+export function familiarMult(fam: Item): number {
+  return itemLevelMult(fam.level) * famTrainMult(famLevel(famXp(fam)));
 }
-/** Crédite de l'XP à une carrière, PLAFONNÉE au niveau du joueur — « le sport est le
- *  plafond » vaut aussi pour les compagnons. Rend l'objet inchangé si rien ne bouge. */
-export function grantFamiliarXp(
-  it: Item,
-  kind: 'atk' | 'def',
-  amount: number,
-  playerLevel: number,
-): Item {
+/** Crédite de l'XP, PLAFONNÉE au niveau du joueur — « le sport est le plafond » vaut
+ *  aussi pour les compagnons. Rend l'objet inchangé si rien ne bouge. Écrit `xp` et
+ *  retire les deux champs legacy, déjà comptés par `famXp`. */
+export function grantFamiliarXp(it: Item, amount: number, playerLevel: number): Item {
   if (amount <= 0) return it;
-  const key = kind === 'atk' ? 'atkXp' : 'defXp';
-  const cap = famXpForLevel(Math.max(0, playerLevel) + 1, kind) - 1;
-  const next = Math.min(cap, (it[key] ?? 0) + amount);
-  return next === (it[key] ?? 0) ? it : { ...it, [key]: next };
+  const cur = famXp(it);
+  const cap = famXpForLevel(Math.max(0, playerLevel) + 1) - 1;
+  // Jamais de recul : un familier dressé avant que le plafond ne descende garde son acquis.
+  const out = Math.max(cur, Math.min(cap, cur + amount));
+  if (out === it.xp) return it;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { atkXp, defXp, ...rest } = it;
+  return { ...rest, xp: out };
 }
 
 // JET du roll (0..100 %) — REFONTE v0.574 : fini les qualités ★1-5. Le `roll` (0..1, figé au
@@ -1912,10 +1915,8 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
   // NIVEAU (ilvl, v0.592) → comme les objets, un familier plus haut niveau est plus fort.
   const fam = equipped[FAMILIAR_SLOT];
   if (fam) {
-    // × son DRESSAGE D'ATTAQUE (4ᵉ axe, borné) : un compagnon qui t'a suivi en donjon
-    // frappe un peu plus fort. Son dressage de DÉFENSE ne compte pas ici — il ne vaut
-    // qu'à la base (cf. garrisonBonus) : les deux carrières sont contextuelles.
-    const flm = itemLevelMult(fam.level) * famAtkMult(famLevel(fam.atkXp, 'atk'));
+    // × son DRESSAGE (4ᵉ axe, borné) — la même formule que pour un aventurier.
+    const flm = familiarMult(fam);
     applyEffect(a, fam.effect.type, (fam.effect.value * flm) / 100);
     if (fam.effect2) applyEffect(a, fam.effect2.type, (fam.effect2.value * flm) / 100);
   }

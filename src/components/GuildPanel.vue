@@ -408,7 +408,8 @@
         :key="r.t.id"
         type="button"
         class="d-pick"
-        :class="{ here: talFor && talOf(talFor)?.id === r.t.id }"
+        :class="{ barred: !r.ok, here: talFor && talOf(talFor)?.id === r.t.id }"
+        :disabled="!r.ok"
         @click="assignTal(r.t.id)"
       >
         <span class="d-pair-emo">{{ r.icon }}</span>
@@ -466,6 +467,7 @@ import {
   FAMILIAR_SLOT,
   aggregateLines,
   famLevel,
+  famXp,
   rollJet,
   type Item,
 } from '@/lib/items';
@@ -485,7 +487,7 @@ import {
   type CompanionCtx,
 } from '@/lib/raid';
 import { fmtPow } from '@/lib/combat';
-import { trainMsFor, companionEffects, advTalentEffects, cappedDefLevel } from '@/lib/caravan';
+import { trainMsFor, companionEffects, advTalentEffects, canAdvTalent } from '@/lib/caravan';
 
 const props = defineProps<{
   open: boolean;
@@ -554,17 +556,14 @@ const famOk = (f: Item) => f.id !== heroFamId.value && canCompanion(f, kennelLev
 /**
  * CE QUE L’AVENTURIER EN TIRE — calculé par la fonction du COMBAT, jamais réécrite.
  *
- * ⚠️ On n’affiche PAS la stat brute du familier : elle est calibrée pour le HÉROS et
- * arrive ici bridée (`COMPANION_K`) puis plafonnée par le dressage que le Chenil
- * autorise. Montrer la valeur de la fiche ferait croire à un gain deux fois et demie
- * trop gros. On appelle donc `companionEffects` sur CE seul familier — le patron du
- * chenil (v0.683) : une étiquette qui refait le calcul à sa façon finit par diverger.
+ * ⚠️ Depuis la v0.805 c’est la formule du HÉROS (niveau d’objet × dressage), sans bridage
+ * ni terrain. On appelle quand même `companionEffects` sur CE seul familier plutôt que
+ * de relire la fiche : une étiquette qui refait le calcul à sa façon finit par diverger.
  *
  * ⚠️ Valeur au REPOS : un familier fatigué compte de moitié au rempart, mais la
  * fatigue passe en quelques heures et l’appariement, lui, dure.
  */
-const famGain = (f: Item) =>
-  aggregateLines(companionEffects([f], 'def', undefined, kennelLevel.value));
+const famGain = (f: Item) => aggregateLines(companionEffects([f]));
 const talGain = (t: TalentInstance) => aggregateLines(advTalentEffects([t]));
 /** Les trois axes de magnitude du projet : rang, jet, niveau d’objet. */
 // ⚠️ La rareté n'est PAS répétée ici : elle vit dans la pastille colorée, où elle est
@@ -574,19 +573,13 @@ const famMeta = (f: Item) =>
 const talMeta = (t: TalentInstance) => `jet ${talentJetOf(t)}% · niv ${t.level ?? 1}`;
 const famColor = (f: Item) => RANK_COLOR[f.rarity];
 const talColor = (t: TalentInstance) => RANK_COLOR[talentRankOf(t)];
-/** Dressage DÉFENSIF, et ce que le Chenil en retient : c’est lui qui multiplie l’effet
- *  au rempart, donc un familier bien dressé mais hors d’école se lit d’un coup d’œil. */
-// ⚠️ Un familier NEUF est à zéro, et c'est le cas le plus courant : « 🛡️ 0 » se lisait
-// comme une erreur plutôt que comme « pas encore dressé ». On ne dit donc rien tant
-// qu'il n'y a rien à dire, et on montre la coupe dès que le Chenil en retient moins.
+/** Le DRESSAGE, unique depuis la v0.805 (donjon, convoi, défense).
+ *  ⚠️ Un familier NEUF est à zéro, et c'est le cas le plus courant : « 🎓 0 » se lirait
+ *  comme une erreur plutôt que comme « pas encore dressé ». On ne dit rien tant qu'il
+ *  n'y a rien à dire. */
 function famTrain(f: Item): string {
-  const brut = famLevel(f.defXp, 'def');
-  if (!brut) return '';
-  // ⚠️ La coupe vient de la LIB (celle que le combat applique), jamais recalculée ici :
-  // c'était la troisième copie de la règle, et une étiquette qui refait le calcul à sa
-  // façon finit par annoncer « 🛡️ 3/5 » quand la bataille en compte 5.
-  const retenu = cappedDefLevel(f, kennelLevel.value);
-  return retenu < brut ? `🛡️ ${retenu}/${brut}` : `🛡️ ${brut}`;
+  const n = famLevel(famXp(f));
+  return n ? `🎓 ${n}` : '';
 }
 /** ⚠️ VIDE quand il n'y a rien à signaler : répété sur chaque ligne, « Libre » n'apprend
  *  rien et noie la seule chose qui compte — le gain. On ne parle que d'un empêchement. */
@@ -604,6 +597,10 @@ function famNote(a: Adventurer): string {
 }
 const talName = (t: TalentInstance) => talentByCode(t.code)?.name ?? t.code;
 function talTaken(t: TalentInstance): string {
+  const pour = talFor.value;
+  // ⚠️ La règle vient de la LIB (`canAdvTalent`, celle que le combat et le store appliquent).
+  if (pour && !canAdvTalent(pour, t))
+    return `Trop rare : sa classe est ${RARITY_LABEL[advRarity(pour)]} — promeus-le d’abord.`;
   const autre = char.advList.find((a) => a.talentId === t.id && a.id !== talFor.value?.id);
   return autre ? `Confié à ${autre.name} — le prendre le lui retirera.` : '';
 }
@@ -613,11 +610,13 @@ function talLabel(a: Adventurer): string {
 }
 function talNote(a: Adventurer): string {
   const t = talOf(a);
-  return t ? talMeta(t) : 'Un talent, bridé — un mini-héros, pas un second héros.';
+  return t
+    ? talMeta(t)
+    : `Un talent, bridé et jusqu’à la rareté de sa classe (${RARITY_LABEL[advRarity(a)]}).`;
 }
 /** L'avertissement des deux sélecteurs. ⚠️ Écrit UNE fois : deux copies mot pour mot se
  *  reformulent séparément, et l'une des deux finit par mentir. */
-const GAIN_NOTE = 'Les gains listés sont ce que l’aventurier en tire — bridé, et au rempart.';
+const GAIN_NOTE = 'Les gains listés sont ce que l’aventurier en tire.';
 
 /**
  * LES LIGNES DU SÉLECTEUR, pré-calculées.
@@ -651,6 +650,7 @@ const talRows = computed(() =>
     rank: talentRankOf(t),
     gains: talGain(t),
     meta: talMeta(t),
+    ok: !talFor.value || canAdvTalent(talFor.value, t),
     taken: talTaken(t),
     color: talColor(t),
   })),

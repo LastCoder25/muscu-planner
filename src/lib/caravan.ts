@@ -20,9 +20,11 @@ import {
   playerWithGear,
   emptyEffects,
   effectAsAggregate as asAggregate,
-  famLevel,
-  famAtkMult,
-  famDefMult,
+  familiarMult,
+  RARITY_RANK,
+  RANK_ORDER,
+  rankCeilingForLevel,
+  rankRollMult,
   type AggregatedEffects,
   type Item,
 } from './items';
@@ -37,7 +39,8 @@ import {
 // ⚠️ Type SEUL : `raid.ts` importera `garrisonCombatant` à l'exécution, donc un import
 // de valeur dans l'autre sens créerait un cycle. Le projet applique déjà cette règle
 // entre `data/familiars` et `items`.
-import { effectsOfTalents, type TalentInstance } from './talents';
+import { effectsOfTalents, talentRankOf, type TalentInstance } from './talents';
+import { FAMILIAR_SPECIES } from '../data/familiars';
 import {
   HARVEST_TYPES,
   harvestYield,
@@ -47,6 +50,7 @@ import {
   type Poi,
 } from './expedition';
 import {
+  advRarity,
   advRoles,
   advSignatureLevels,
   advStats,
@@ -290,14 +294,6 @@ export function escortCombatant(
   );
 }
 
-/** Part de l'effet d'un compagnon qui profite à son aventurier.
- *  ⚠️ BRIDÉE, et pour la même raison que `GARRISON_K` au chenil : un familier de haut
- *  rang porte des pourcentages calibrés pour le HÉROS, dont la puissance croît en ~L⁴.
- *  Collés tels quels sur une escorte, ils écraseraient la calibration des embuscades —
- *  mesurée, et sur laquelle repose le seul vrai choix de la feature (« combien
- *  j'envoie »). */
-export const COMPANION_K = 0.4;
-
 /**
  * Les COMPAGNONS d'une escorte : un familier par aventurier, au plus.
  *
@@ -327,41 +323,22 @@ export function companionsOf(
 }
 
 /**
- * Ce que les compagnons apportent, en effets.
+ * Ce que les compagnons apportent, en effets — EXACTEMENT comme au héros (v0.805).
  *
- * ⚠️ LE DRESSAGE SUIT LE TERRAIN, et c'est ce qui garde les deux carrières du familier
- * vivantes : sur la route il se bat (`'atk'`), au rempart il défend (`'def'`). Le même
- * animal ne vaut donc pas la même chose aux deux endroits — exactement ce que le chenil
- * faisait déjà, mais rattaché à un homme plutôt qu'à un mur.
- */
-/**
- * Niveau de dressage DÉFENSIF effectif d'un familier : plafonné par le CHENIL.
+ * ⚠️ PLUS DE BRIDAGE NI DE TERRAIN (demandé par l’utilisateur : « le familier booste
+ * l’aventurier comme le héros, que ce soit en défense ou en attaque »). Il valait 40 %
+ * de sa stat, sans son niveau d’objet, avec un dressage d’attaque sur la route et de
+ * défense au mur plafonné par le Chenil : le même animal annonçait trois valeurs.
+ * `familiarMult` est la formule du héros, lue telle quelle.
  *
- * ⚠️ C'est le bâtiment qui entraîne — un familier ne peut pas dépasser l'école qui le
- * forme. La règle vivait en TROIS exemplaires (ici en ligne, `cappedDefLevel` dans
- * `raid.ts`, et recopiée dans le panneau de la Guilde) : le jour où le Chenil accorde
- * une tolérance, l'écran afficherait « 🛡️ 3/5 » pendant que le combat en compterait 5.
+ * `mult` ne sert qu’à la FATIGUE au rempart (un état, pas une formule).
  */
-export function cappedDefLevel(fam: Item, kennelLevel: number): number {
-  return Math.min(famLevel(fam.defXp, 'def'), Math.max(0, kennelLevel));
-}
-
-export function companionEffects(
-  companions: Item[],
-  kind: 'atk' | 'def',
-  k = COMPANION_K,
-  /** Plafond de DRESSAGE imposé par le Chenil — le 3ᵉ levier du bâtiment, et celui
-   *  qui le garde vivant jusqu’au niveau 100. C’est lui qui entraîne : un familier ne
-   *  peut pas dépasser l’école qui le forme. ⚠️ Ne vaut QUE pour `'def'` — sur la
-   *  route, personne ne plafonne ce qu’il a appris au combat. */
-  capLevel?: number,
-): AggregatedEffects {
+export function companionEffects(companions: Item[], mult = 1): AggregatedEffects {
   const list = companions.flatMap((f) => {
-    const def = capLevel === undefined ? famLevel(f.defXp, 'def') : cappedDefLevel(f, capLevel);
-    const mult = k * (kind === 'atk' ? famAtkMult(famLevel(f.atkXp, 'atk')) : famDefMult(def));
-    const parts = [asAggregate(f.effect.type, f.effect.value * mult)];
+    const m = familiarMult(f) * mult;
+    const parts = [asAggregate(f.effect.type, f.effect.value * m)];
     // La SIGNATURE ✦ d'un familier compte aussi : c'est ce qui fait sa valeur au drop.
-    if (f.effect2) parts.push(asAggregate(f.effect2.type, f.effect2.value * mult));
+    if (f.effect2) parts.push(asAggregate(f.effect2.type, f.effect2.value * m));
     return parts;
   });
   return list.length ? mergeEffects(...list) : emptyEffects();
@@ -390,6 +367,19 @@ function scaleEffects(e: AggregatedEffects, k: number): AggregatedEffects {
  * qu'une, un id qui ne désigne plus rien est ignoré. Un talent recyclé laisserait sinon
  * une assignation fantôme.
  */
+/**
+ * Un aventurier peut-il porter ce talent ? Sa RARETÉ ne dépasse pas celle de sa CLASSE
+ * (v0.805 ; demandé par l’utilisateur, choix « rareté de sa classe »).
+ *
+ * ⚠️ Le pendant du Chenil pour les familiers, mais porté par l’HOMME : chaque promotion
+ * débloque la rareté suivante, donc élever un aventurier ouvre ce qu’on peut lui confier.
+ * ⚠️ Appliqué AU COMBAT autant qu’au store : un talent confié avant cette règle se soigne
+ * tout seul, sans migration — même politique que les compagnons hors d’école.
+ */
+export function canAdvTalent(adv: Adventurer, t: TalentInstance): boolean {
+  return RARITY_RANK[talentRankOf(t)] <= RARITY_RANK[advRarity(adv)];
+}
+
 export function advTalentsOf(
   advs: Adventurer[],
   owned: TalentInstance[],
@@ -403,7 +393,8 @@ export function advTalentsOf(
     const id = a.talentId;
     if (!id || hero.has(id) || taken.has(id)) continue;
     const t = byId.get(id);
-    if (!t) continue;
+    // ⚠️ Au-dessus de la rareté de SA classe : il ne le porte pas (cf. `canAdvTalent`).
+    if (!t || !canAdvTalent(a, t)) continue;
     taken.add(id);
     out.push(t);
   }
@@ -485,9 +476,49 @@ export function refAdventurer(level: number, slot = 0): Adventurer {
   };
 }
 
-/** L’ESCORTE de référence : `CARAVAN.refEscort` aventuriers, un par orientation. */
+/** Les espèces des compagnons de RÉFÉRENCE : une par grand canal de combat. */
+const REF_SPECIES = ['wolf', 'deer', 'bear'] as const;
+/** Jet de référence d’un familier : le jet MOYEN d’un tirage biaisé bas (cf. `rollJetValue`). */
+const REF_FAMILIAR_JET = 0.3;
+
+/**
+ * Les COMPAGNONS de l’escorte de référence : un familier par aventurier, du rang qu’on
+ * peut dropper à ce niveau, jet moyen, niveau d’objet à niveau, sans dressage.
+ *
+ * ⚠️ POURQUOI (v0.805). Depuis que le familier booste l’aventurier comme le héros, il
+ * pèse lourd sur la route : mesuré, un trio accompagné gagnait 92 % de ses embuscades
+ * PÉRILLEUSES au niveau 90, contre 39 % sans. Une référence NUE aurait fait du convoi
+ * une formalité pour quiconque confie ses familiers — et supprimé la seule décision de
+ * la feature (« combien j’en envoie »). C’est la règle des donjons (`gearExpect`) : le
+ * contenu se dimensionne sur un joueur ÉQUIPÉ.
+ * ⚠️ Sans dressage, délibérément : le dressage se mérite, il doit rester un avantage.
+ */
+export function refCompanions(level: number): Item[] {
+  const rarity = RANK_ORDER[rankCeilingForLevel(Math.max(1, level))]!;
+  return REF_SPECIES.map((id, i) => {
+    const sp = FAMILIAR_SPECIES.find((s) => s.id === id)!;
+    return {
+      id: `refFam${i}`,
+      slot: 'familiar',
+      name: sp.name,
+      emoji: sp.emoji,
+      rarity,
+      level: Math.max(1, level),
+      baseLevel: Math.max(1, level),
+      effect: { type: sp.effect, value: sp.base * rankRollMult(rarity, REF_FAMILIAR_JET) },
+      species: sp.id,
+      roll: REF_FAMILIAR_JET,
+    } satisfies Item;
+  });
+}
+
+/** L’ESCORTE de référence : `CARAVAN.refEscort` aventuriers, un par orientation, chacun
+ *  avec le compagnon de référence de son rang. */
 function refEscortOf(level: number): Adventurer[] {
-  return Array.from({ length: CARAVAN.refEscort }, (_, i) => refAdventurer(level, i));
+  return Array.from({ length: CARAVAN.refEscort }, (_, i) => ({
+    ...refAdventurer(level, i),
+    familiarId: `refFam${i % REF_SPECIES.length}`,
+  }));
 }
 
 /** LES BANDITS DE LA ROUTE.
@@ -503,7 +534,12 @@ function refEscortOf(level: number): Adventurer[] {
  *  L'échelle est exprimée en unités d'ESCORTE DE RÉFÉRENCE (`CARAVAN.refEscort`
  *  aventuriers au niveau du POI) : absolue, mais lisible et calibrable. */
 export function roadFoe(poi: Poi): Combatant {
-  const ref = escortCombatant(refEscortOf(poi.level), 'Référence');
+  const escort = refEscortOf(poi.level);
+  const ref = escortCombatant(
+    escort,
+    'Référence',
+    roadCompanionEffects(escort, { familiars: refCompanions(poi.level), talents: [] }),
+  );
   const m = poi.perilous ? CARAVAN.perilousMult : 1;
   return {
     name: poi.perilous ? 'Pillards de la passe' : 'Bandits de grand chemin',
@@ -765,6 +801,15 @@ export interface RoadCompanions {
  * (`startCaravan`) alors qu’il se joue des heures plus tard — « fatigué au moment du tirage »
  * ne voudrait rien dire. Elle reste au rempart, où l’instant du combat est celui du calcul.
  */
+/** XP de DRESSAGE d’un familier qui a escorté un convoi (v0.805 ; « une expérience
+ *  globale, montée par les convois et les défenses »).
+ *  ⚠️ Calée sur le rapport des aventuriers : un siège gagné vaut ~1,6 convoi. Un siège
+ *  de niveau 28 rend ~1 000 XP, un convoi de niveau 28 en rend ~560 — et on en envoie
+ *  plusieurs par jour, là où un siège tombe au plus une fois. */
+export function caravanFamiliarXp(poi: Poi): number {
+  return Math.round(Math.max(1, poi.level) * 20);
+}
+
 export function roadCompanionEffects(
   escort: Adventurer[],
   road: RoadCompanions,
@@ -774,7 +819,7 @@ export function roadCompanionEffects(
   const tals = advTalentsOf(escort, road.talents, road.heroTalentIds);
   if (!fams.length && !tals.length) return emptyEffects();
   return scaleEffects(
-    mergeEffects(companionEffects(fams, 'atk'), advTalentEffects(tals)),
+    mergeEffects(companionEffects(fams), advTalentEffects(tals)),
     1 / escort.length,
   );
 }

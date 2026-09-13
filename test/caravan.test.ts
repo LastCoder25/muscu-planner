@@ -14,7 +14,8 @@ import {
   escortCombatant,
   companionsOf,
   companionEffects,
-  COMPANION_K,
+  refCompanions,
+  canAdvTalent,
   ambushChance,
   advTalentsOf,
   advTalentEffects,
@@ -35,9 +36,17 @@ import {
   type Caravan,
 } from '@/lib/caravan';
 import { advRoles, guildRoster, PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
-import { TALENTS, type TalentInstance } from '@/lib/talents';
+import { TALENTS, talentTierFloor, type TalentInstance } from '@/lib/talents';
 import { simulateCombat } from '@/lib/combat';
-import { famXpForLevel, type AggregatedEffects, type Item } from '@/lib/items';
+import {
+  famXpForLevel,
+  aggregateEffects,
+  FAMILIAR_SLOT,
+  RANK_ORDER,
+  rankCeilingForLevel,
+  type AggregatedEffects,
+  type Item,
+} from '@/lib/items';
 import {
   EXPE,
   travelPosition,
@@ -60,14 +69,24 @@ const poi = (over: Partial<Poi> = {}): Poi => ({
   expiresAt: 9e15,
   ...over,
 });
-const team = (n: number, level = 20, path?: string[]): Adventurer[] =>
+/** ⚠️ Une escorte ACCOMPAGNÉE (v0.805) : chacun porte le compagnon de référence de son
+ *  rang. Depuis que le familier booste l’aventurier comme le héros, c’est la configuration
+ *  que la route attend — mesurer des escortes nues mesurerait un joueur qui n’a pas
+ *  confié ses familiers. `nus` garde la mesure SANS familier. */
+const team = (n: number, level = 20, path?: string[], nus = false): Adventurer[] =>
   Array.from({ length: n }, (_, i) => ({
     ...refAdventurer(level, i),
     id: `a${i}`,
+    ...(nus ? {} : { familiarId: `refFam${i % 3}` }),
     ...(path ? { path } : {}),
   }));
 function winPct(escort: Adventurer[], p: Poi, n = 150) {
-  const g = escortCombatant(escort);
+  const lvl = escort[0]?.level ?? p.level;
+  const g = escortCombatant(
+    escort,
+    'Escorte',
+    roadCompanionEffects(escort, { familiars: refCompanions(lvl), talents: [] }),
+  );
   const f = roadFoe(p);
   let w = 0;
   for (let s = 0; s < n; s++)
@@ -165,6 +184,22 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     // exactement là que la fin de partie basculait de « pari » à « formalité ».
     const peril = NIV.map((L) => winPct(team(3, L), poi({ level: L, perilous: true }), 200));
     for (const [i, t] of peril.entries()) expect(t, `périlleux niveau ${NIV[i]}`).toBeLessThan(0.4);
+  });
+
+  it('⚠️ LA ROUTE ATTEND DES FAMILIERS — la référence est ACCOMPAGNÉE (v0.805)', () => {
+    // Mesuré avant ce recalage : un trio accompagné gagnait 92 % de ses embuscades
+    // PÉRILLEUSES au niveau 90 (39 % sans). Les bandes ci-dessus ne tiennent que parce
+    // que `roadFoe` se dimensionne sur une escorte qui porte ses compagnons.
+    // (1) Les compagnons de référence sont du rang qu’on peut dropper à ce niveau.
+    for (const L of [5, 26, 70]) {
+      for (const f of refCompanions(L)) expect(f.rarity).toBe(RANK_ORDER[rankCeilingForLevel(L)]);
+    }
+    // (2) Sans ses familiers, une escorte est EN RETRAIT — pas interdite, en retrait.
+    const p = poi({ level: 45 });
+    const avec = winPct(team(3, 45), p, 200);
+    const sans = winPct(team(3, 45, undefined, true), p, 200);
+    expect(sans).toBeLessThan(avec);
+    expect(sans).toBeGreaterThan(0.3);
   });
 
   it('une route PÉRILLEUSE est réellement plus dure — le drapeau n’est pas décoratif', () => {
@@ -933,18 +968,20 @@ describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () =
       expect(dilue.damagePct).toBeCloseTo(seul.damagePct / 4, 6);
     });
 
-    it('⚠️ SUR LA ROUTE C EST LE DRESSAGE D ATTAQUE QUI COMPTE, pas celui du mur', () => {
-      // ⚠️ Test ajouté après une mutation passée au VERT : remplacer `atk` par `def` dans
-      // le calcul de la route ne faisait tomber aucun des 1160 tests. C'est pourtant la
-      // règle qui garde les DEUX carrières du familier vivantes — « le même animal ne vaut
-      // pas la même chose aux deux endroits » (v0.663). Deux familiers identiques, l'un
-      // entraîné au combat, l'autre au rempart : sur la route, seul le premier doit peser.
-      const guerrier = fam('f1', { atkXp: famXpForLevel(20, 'atk'), defXp: 0 });
-      const sentinelle = fam('f1', { atkXp: 0, defXp: famXpForLevel(20, 'def') });
+    it('⚠️ UN SEUL DRESSAGE : ce qui a été appris au rempart compte sur la route', () => {
+      // ⚠️ RÉÉCRIT (v0.805). Il verrouillait les DEUX carrières (« sur la route, seul le
+      // dressage d’attaque pèse ») — exactement ce que l’utilisateur a demandé de fondre :
+      // « une expérience globale, montée par les convois et les défenses ». Deux familiers
+      // dressés au même niveau, l’un au combat et l’autre au mur (XP legacy), valent
+      // désormais pareil — et un familier dressé vaut plus qu’un novice.
+      const guerrier = fam('f1', { atkXp: famXpForLevel(20), defXp: 0 });
+      const sentinelle = fam('f1', { atkXp: 0, defXp: famXpForLevel(20) / 4 });
+      const novice = fam('f1');
       const team = [adv('a', { familiarId: 'f1' })];
       const g = roadCompanionEffects(team, road([guerrier])).damagePct;
       const se = roadCompanionEffects(team, road([sentinelle])).damagePct;
-      expect(g).toBeGreaterThan(se);
+      expect(se).toBeCloseTo(g, 6);
+      expect(g).toBeGreaterThan(roadCompanionEffects(team, road([novice])).damagePct);
     });
     it('⚠️ le familier du HÉROS ne part pas en convoi', () => {
       const team = [adv('a', { familiarId: 'f1' })];
@@ -1033,54 +1070,48 @@ describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () =
   });
 
   describe('ce que le compagnon apporte', () => {
-    it('⚠️ l’effet est BRIDÉ — les pourcentages sont calibrés pour le HÉROS', () => {
-      // Collés tels quels sur une escorte, ils écraseraient la calibration des embuscades.
-      // ⚠️ `AggregatedEffects` est en FRACTIONS (0,08 pour +8 %), pas en pourcentages.
-      const e = companionEffects([fam('f1')], 'atk');
-      expect(e.damagePct).toBeCloseTo((20 * COMPANION_K) / 100, 5);
-      expect(COMPANION_K).toBeLessThan(1);
+    // ⚠️ BLOC RÉÉCRIT (v0.805). Il verrouillait le BRIDAGE (40 %) et les DEUX terrains —
+    // l’utilisateur a demandé l’inverse : « le familier booste l’aventurier comme le
+    // héros, que ce soit en défense ou en attaque ». Il épingle désormais cette égalité.
+    it('⚠️ L’EFFET EST CELUI DU HÉROS — valeur pleine, niveau d’objet, dressage', () => {
+      // On compare à `aggregateEffects`, le calcul du HÉROS lui-même : jamais à un nombre
+      // écrit à la main, qui laisserait passer une formule recopiée qui dérive.
+      for (const o of [{}, { level: 60 }, { level: 30, xp: famXpForLevel(12) }]) {
+        const f = fam('f1', o);
+        const heros = aggregateEffects({ [FAMILIAR_SLOT]: f });
+        expect(companionEffects([f]).damagePct).toBeCloseTo(heros.damagePct, 6);
+      }
     });
 
-    it('⚠️ LE DRESSAGE SUIT LE TERRAIN : ⚔️ sur la route, 🛡️ au rempart', () => {
-      // C'est ce qui garde les DEUX carrières du familier vivantes.
-      const guerrier = fam('f1', { atkXp: 100_000, defXp: 0 });
-      const gardien = fam('f2', { atkXp: 0, defXp: 100_000 });
-      expect(companionEffects([guerrier], 'atk').damagePct).toBeGreaterThan(
-        companionEffects([guerrier], 'def').damagePct,
+    it('⚠️ le NIVEAU D’OBJET compte — il était oublié', () => {
+      expect(companionEffects([fam('a', { level: 60 })]).damagePct).toBeGreaterThan(
+        companionEffects([fam('b', { level: 1 })]).damagePct,
       );
-      expect(companionEffects([gardien], 'def').damagePct).toBeGreaterThan(
-        companionEffects([gardien], 'atk').damagePct,
-      );
-    });
-
-    it('⚠️ le BRIDAGE s’applique vraiment — pas seulement en constante', () => {
-      // Vérifier que COMPANION_K < 1 ne prouve rien s’il n’est pas utilisé. On compare
-      // donc à un k explicite : le défaut doit BRIDER, sinon la calibration des
-      // embuscades saute sans qu’aucun test ne bouge.
-      const f = fam('f1');
-      const bride = companionEffects([f], 'atk').damagePct;
-      const plein = companionEffects([f], 'atk', 1).damagePct;
-      expect(bride).toBeLessThan(plein);
-      expect(bride).toBeCloseTo(plein * COMPANION_K, 6);
     });
 
     it('⚠️ le DRESSAGE compte vraiment — un familier dressé vaut plus qu’un novice', () => {
-      // Le test voisin compare les deux TERRAINS ; il resterait vert si le dressage était
-      // remplacé par une constante des deux côtés. Ici on compare deux ANIMAUX.
       const novice = fam('n');
-      const dresse = fam('d', { atkXp: 100_000 });
-      expect(companionEffects([dresse], 'atk').damagePct).toBeGreaterThan(
-        companionEffects([novice], 'atk').damagePct,
+      const dresse = fam('d', { xp: famXpForLevel(15) });
+      expect(companionEffects([dresse]).damagePct).toBeGreaterThan(
+        companionEffects([novice]).damagePct,
+      );
+    });
+
+    it('⚠️ la FATIGUE est un état, pas une formule : le multiplicateur s’applique', () => {
+      const f = fam('f1');
+      expect(companionEffects([f], 0.5).damagePct).toBeCloseTo(
+        companionEffects([f]).damagePct / 2,
+        6,
       );
     });
 
     it('la SIGNATURE ✦ d’un familier compte aussi', () => {
       const sig = fam('f1', { effect2: { type: 'execute_pct', value: 10 } });
-      expect(companionEffects([sig], 'atk').executePct).toBeGreaterThan(0);
+      expect(companionEffects([sig]).executePct).toBeGreaterThan(0);
     });
 
     it('sans compagnon, aucun effet — jamais undefined', () => {
-      expect(companionEffects([], 'atk').damagePct).toBe(0);
+      expect(companionEffects([]).damagePct).toBe(0);
     });
   });
 
@@ -1126,12 +1157,28 @@ describe('🧠 UN TALENT PAR AVENTURIER — des mini-héros bien moins forts', (
    *  n’est justement pas équipé sur le héros. Le premier fixture l’omettait, et comme
    *  `talentEffects` n’écarte que le `false` EXPLICITE, la mutation « on oublie de
    *  forcer equipped » passait au VERT — alors qu’en vrai elle aurait rendu zéro. */
-  const tal = (id: string, code = TALENTS[0]!.code) => ({
+  // ⚠️ xp 0 = talent COMMUN (v0.805) : un aventurier de classe de départ ne porte que
+  // cette rareté, et l’ancien fixture (xp 400) était déjà au-dessus.
+  const tal = (id: string, code = TALENTS[0]!.code, xp = 0) => ({
     id,
     code,
-    xp: 400,
+    xp,
     level: 1,
     equipped: false,
+  });
+
+  it('⚠️ LE TALENT NE DÉPASSE PAS LA RARETÉ DE SA CLASSE (v0.805)', () => {
+    // Demandé par l’utilisateur (« comme les familiers, limiter le talent au rang ») —
+    // choix « rareté de sa classe » : chaque promotion débloque la rareté suivante.
+    const rare = tal('t9', TALENTS[0]!.code, talentTierFloor(15));
+    const bleu = adv2('a', { talentId: 't9' });
+    const promu = { ...refAdventurer(40, 0), id: 'b', talentId: 't9' };
+    expect(canAdvTalent(bleu, tal('t0'))).toBe(true);
+    expect(canAdvTalent(bleu, rare)).toBe(false);
+    expect(canAdvTalent(promu, rare)).toBe(true);
+    // ⚠️ Appliqué AU COMBAT : un talent trop rare confié avant la règle ne compte pas.
+    expect(advTalentsOf([bleu], [rare])).toEqual([]);
+    expect(advTalentsOf([promu], [rare]).map((t) => t.id)).toEqual(['t9']);
   });
 
   it('assigne à chaque aventurier SON talent', () => {

@@ -27,6 +27,7 @@ import {
   FAMILIAR_SLOT,
   MAX_LOADOUTS,
   grantFamiliarXp,
+  RARITY_LABEL,
   type Item,
   type ItemEffect,
   type ItemSlot,
@@ -99,6 +100,7 @@ import {
   totalRepairCost,
   companionPairs,
   companionPerks,
+  siegeFamiliarXp,
   type CompanionCtx,
   companionRankLabel,
   canCompanion,
@@ -117,6 +119,7 @@ import {
   canPromoteNow,
   classChoices,
   advProgressOf,
+  advRarity,
   grantAdvXp,
   guildRoster,
   recruitCost,
@@ -126,6 +129,9 @@ import {
   canSendCaravan,
   caravanHurtMs,
   caravanSlots,
+  caravanFamiliarXp,
+  canAdvTalent,
+  companionsOf,
   trainMsFor,
   isCaravanClaimable,
   pruneCaravans,
@@ -425,7 +431,7 @@ export const useCharacterStore = defineStore('character', () => {
   ) {
     const fam = dist.equipped[FAMILIAR_SLOT];
     if (!fam || !input.famAtkXp) return;
-    const trained = grantFamiliarXp(fam, 'atk', input.famAtkXp, input.playerLevel ?? 1);
+    const trained = grantFamiliarXp(fam, input.famAtkXp, input.playerLevel ?? 1);
     if (trained !== fam) dist.equipped = { ...dist.equipped, [FAMILIAR_SLOT]: trained };
   }
 
@@ -1626,11 +1632,11 @@ export const useCharacterStore = defineStore('character', () => {
         .filter((x): x is string => !!x),
     );
     if (engages.size) {
-      const gain = report.groups.slice(0, report.defeated).reduce((a, g) => a + g.level * 2, 0);
+      const gain = siegeFamiliarXp(report);
       const rest = now + fatigueMsFor(defenseLevel(t.base.defenses, 'infirmary'));
       patch.inventory = cur.inventory.map((it) =>
         engages.has(it.id)
-          ? { ...grantFamiliarXp(it, 'def', gain, ctx.playerLevel), fatigueUntil: rest }
+          ? { ...grantFamiliarXp(it, gain, ctx.playerLevel), fatigueUntil: rest }
           : it,
       );
     }
@@ -1702,6 +1708,12 @@ export const useCharacterStore = defineStore('character', () => {
       if (!t) throw new Error(`Ce talent est introuvable.`);
       if (t.equipped === true)
         throw new Error(`Ton héros l’a équipé — retire-le d’abord de ta fiche.`);
+      const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
+      // ⚠️ Refus AU STORE : l’écran ne propose pas l’impossible, mais il ne le garantit pas.
+      if (adv && !canAdvTalent(adv, t))
+        throw new Error(
+          `Trop rare pour ${adv.name} : sa classe est ${RARITY_LABEL[advRarity(adv)]} — promeus-le d’abord.`,
+        );
     }
     const adventurers = (cur.adventurers ?? []).map((a) => {
       if (a.id === advId) return { ...a, talentId: talentId ?? undefined };
@@ -2095,17 +2107,27 @@ export const useCharacterStore = defineStore('character', () => {
    *  du AVANT/APRÈS pour l’annoncer — et c’est la LIB qui compare, pas lui.
    *  ⚠️ Une liste VIDE reste « encaissé avec succès » (elle est truthy) : c’est `null`
    *  qui dit l’échec. */
-  async function claimCaravan(userId: string, caravanId: string) {
+  async function claimCaravan(userId: string, caravanId: string, playerLevel: number) {
     const cur = row.value;
     const van = caravanList.value.find((c) => c.id === caravanId);
     if (!cur || !van || !isCaravanClaimable(van, Date.now())) return null;
     const o = van.outcome;
-    const hurtMs = caravanHurtMs(
-      van.escort
-        .map((id) => advList.value.find((a) => a.id === id))
-        .filter((a): a is Adventurer => !!a),
-      defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
+    const escortAdvs = van.escort
+      .map((id) => advList.value.find((a) => a.id === id))
+      .filter((a): a is Adventurer => !!a);
+    const hurtMs = caravanHurtMs(escortAdvs, defenseLevel(cur.base?.defenses ?? [], 'infirmary'));
+    // 🐾 Leurs COMPAGNONS ont escorté aussi : ils gagnent du dressage, comme au rempart.
+    // ⚠️ Mêmes exclusions que la route (`companionsOf`) : celui que le héros porte se
+    // battait ailleurs, il n’apprend rien de ce voyage.
+    const trained = new Set(
+      companionsOf(escortAdvs, cur.inventory, cur.equipped?.[FAMILIAR_SLOT]?.id).map((f) => f.id),
     );
+    const famGain = caravanFamiliarXp(van.poi);
+    const inventory = trained.size
+      ? cur.inventory.map((it) =>
+          trained.has(it.id) ? grantFamiliarXp(it, famGain, playerLevel) : it,
+        )
+      : cur.inventory;
     const hurtUntil = Date.now() + hurtMs;
     const hurt = new Set(o.hurt);
     const before = advList.value;
@@ -2131,6 +2153,7 @@ export const useCharacterStore = defineStore('character', () => {
       scrap: cur.scrap + ent(o.scrap),
       keys: cur.keys + ent(o.keys),
       adventurers: advs,
+      ...(trained.size ? { inventory } : {}),
       caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
     });
     if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);

@@ -671,15 +671,13 @@
                     <span class="rk-badge" :class="'p-' + f.rarity">{{ f.rarity }}</span>
                     <span class="lvl-badge">Nv {{ f.level }}</span>
                     <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
-                    <span v-if="f.equipped" class="fam-train" title="Dressage d’attaque"
-                      >⚔️ {{ famLevel(f.atkXp, 'atk') }}</span
+                    <!-- UN seul dressage (v0.805) : il monte en donjon, en convoi et en
+                         défense, et vaut la même chose au héros et à un aventurier. -->
+                    <span
+                      class="fam-train"
+                      title="Dressage — gagné en donjon, en convoi et en défense"
+                      >🎓 {{ famLevel(famXp(f)) }}</span
                     >
-                    <template v-else>
-                      <span class="fam-train" title="Dressage d’attaque"
-                        >⚔️ {{ famLevel(f.atkXp, 'atk') }}</span
-                      >
-                      <span class="fam-train" :title="famDefTitle(f)">{{ famDefLabel(f) }}</span>
-                    </template>
                   </div>
                   <div class="tal-eff">{{ itemEffects(f) }}</div>
                   <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
@@ -2694,10 +2692,10 @@ import { BOSSES, bossSummonCost, type MilestoneBoss } from '@/data/bosses';
 import { recommendedPower } from '@/lib/proceduralContent';
 import { VOIES, VOIE_BY_ID, voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { endlessFoe, endlessEnergy, endlessGold, endlessDropLevel } from '@/data/endless';
-import { cappedDefLevel } from '@/lib/caravan';
 import {
   sellValue,
   famLevel,
+  famXp,
   playerWithGear,
   aggregateEffects,
   rollDrop,
@@ -2816,24 +2814,6 @@ function openGame(path: string) {
   openPath(router, path, props.embedded);
 }
 const auth = useAuthStore();
-/**
- * Le dressage de DÉFENSE, coupé par le Chenil — « 🛡️ 14/22 » quand l’école en retient moins.
- *
- * ⚠️ Cet écran affichait la valeur BRUTE pendant que la Guilde affichait la valeur retenue :
- * le même familier annonçait deux chiffres différents sur deux écrans, et c’est celui du
- * combat que la Guilde disait. La coupe vient de la LIB (`cappedDefLevel`), jamais
- * recalculée ici — une étiquette qui refait le calcul finit toujours par diverger.
- */
-function famDefLabel(f: Item): string {
-  const brut = famLevel(f.defXp, 'def');
-  const retenu = cappedDefLevel(f, char.kennelLevel);
-  return retenu < brut ? `🛡️ ${retenu}/${brut}` : `🛡️ ${brut}`;
-}
-function famDefTitle(f: Item): string {
-  return cappedDefLevel(f, char.kennelLevel) < famLevel(f.defXp, 'def')
-    ? 'Dressage de défense — ton Chenil n’en retient qu’une partie'
-    : 'Dressage de défense (au Chenil)';
-}
 
 const char = useCharacterStore();
 const combo = useComboStore();

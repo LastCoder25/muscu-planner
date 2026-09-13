@@ -13,6 +13,7 @@ import {
   resolveRaid,
   guardUnits,
   adventurerPowers,
+  siegeFamiliarXp,
   siegeXp,
   raidDamage,
   corpsesFrom,
@@ -80,17 +81,18 @@ import {
   RARITY_MULT,
   RARITY_LABEL,
   rollFamiliar,
-  famLevel,
-  famAtkMult,
   famXpForLevel,
+  familiarMult,
+  famXp,
+  famLevel,
   grantFamiliarXp,
   type Item,
 } from '@/lib/items';
 import { combatPower, type Combatant } from '@/lib/combat';
-import type { TalentInstance } from '@/lib/talents';
+import { talentTierFloor, type TalentInstance } from '@/lib/talents';
 import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
 import { PROMO_LEVELS, guildRoster, type Adventurer } from '@/lib/adventurers';
-import { companionEffects, refAdventurer, escortCombatant } from '@/lib/caravan';
+import { companionEffects, refAdventurer, escortCombatant, caravanFamiliarXp } from '@/lib/caravan';
 import { FAMILIAR_SPECIES } from '@/data/familiars';
 
 const H = 3600_000;
@@ -868,6 +870,18 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     expect(companionPairs(advs, ctx([prime], PROMO_LEVELS[7]!)).size).toBe(1);
   });
 
+  it('⚠️ UN TALENT TROP RARE POUR SA CLASSE ne vient pas au rempart (v0.805)', () => {
+    // La règle vit dans `canAdvTalent` ; ce test vérifie qu’elle est bien lue ICI, par
+    // l’appariement du siège, et pas seulement sur la route.
+    const commun = { id: 'tc', code: 't_dmg', xp: 0, level: 1, equipped: false } as TalentInstance;
+    const rare = { ...commun, id: 'tr', xp: talentTierFloor(15) } as TalentInstance;
+    const c = (t: TalentInstance) => ({ ...ctx([], 50), talents: [t] });
+    const bleu = (tid: string) =>
+      ({ ...adv('a'), talentId: tid, path: ['guerrier'] }) as Adventurer;
+    expect(companionPairs([bleu('tc')], c(commun)).get('a')?.talent?.id).toBe('tc');
+    expect(companionPairs([bleu('tr')], c(rare)).size).toBe(0);
+  });
+
   it('⚠️ TROIS EXCLUSIONS, aucune décorative', () => {
     const f = fam('loup', 'damage_pct', 40);
     // (1) Ce que le HÉROS porte se bat ailleurs.
@@ -879,14 +893,16 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     expect(companionPairs([adv('a', 'vendu')], ctx([f], 50)).size).toBe(0);
   });
 
-  it('⚠️ LE DRESSAGE DÉFENSIF compte au mur, et le Chenil le plafonne', () => {
+  it('⚠️ LE DRESSAGE compte au mur — et le Chenil ne le plafonne PLUS (v0.805)', () => {
+    // ⚠️ RÉÉCRIT. Il verrouillait « l’école plafonne l’élève ». L’utilisateur a demandé
+    // que le familier booste l’aventurier COMME LE HÉROS, dont le dressage n’est plafonné
+    // par aucun bâtiment. Le Chenil garde le NOMBRE de compagnons et leur RANG.
     const brut = fam('a', 'damage_pct', 40);
-    const dresse = fam('a', 'damage_pct', 40, { defXp: famXpForLevel(10) });
+    const dresse = fam('a', 'damage_pct', 40, { xp: famXpForLevel(40) });
     const advs = [adv('x', 'a')];
     const u = (f: Item, k: number) => guardUnits(26, advs, ctx([f], k))[0]!.damage;
     expect(u(dresse, 50)).toBeGreaterThan(u(brut, 50));
-    // …mais un chenil en retard bride ce dressage : l’école plafonne l’élève.
-    expect(u(dresse, 2)).toBeLessThan(u(dresse, 50));
+    expect(u(dresse, 2)).toBe(u(dresse, 50));
   });
 
   it('🦅🦫 LE RENSEIGNEMENT ET LE BUTIN NE S’EMPILENT PAS', () => {
@@ -898,8 +914,11 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     expect(companionPerks(advs, ctx(faucons, 50)).scoutBonus).toBe(1);
     const marmottes = [fam('m1', 'gold_pct', 10), fam('m2', 'gold_pct', 30)];
     const ma = [adv('a', 'm1'), adv('b', 'm2')];
-    // On garde LE MEILLEUR, pas la somme.
-    expect(companionPerks(ma, ctx(marmottes, 50)).lootPct).toBeCloseTo(30, 5);
+    // On garde LE MEILLEUR, pas la somme — avec la formule du héros (niveau d’objet, v0.805).
+    expect(companionPerks(ma, ctx(marmottes, 50)).lootPct).toBeCloseTo(
+      30 * familiarMult(marmottes[1]!),
+      5,
+    );
   });
 
   it('⚠️ UN COMPAGNON FATIGUÉ EST DIMINUÉ, jamais perdu ni blessé', () => {
@@ -966,9 +985,11 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
       expect(pw(vrai('loup'), ctx([prime], 1))).toBe(nu);
     });
 
-    it('⚠️ LES EFFETS SONT CEUX DU REMPART : dressage plafonné, fatigue comprise', () => {
-      const dresse = fam('loup', 'damage_pct', 40, { defXp: famXpForLevel(10) });
-      expect(pw(vrai('loup'), ctx([dresse], 2))).toBeLessThan(pw(vrai('loup'), ctx([dresse], 50)));
+    it('⚠️ LE DRESSAGE compte, la FATIGUE aussi', () => {
+      const dresse = fam('loup', 'damage_pct', 40, { xp: famXpForLevel(40) });
+      expect(pw(vrai('loup'), ctx([dresse], 50))).toBeGreaterThan(
+        pw(vrai('loup'), ctx([fam('loup', 'damage_pct', 40)], 50)),
+      );
       const lasse = fam('loup', 'damage_pct', 40, { fatigueUntil: NOW + 3600_000 });
       const frais = fam('loup', 'damage_pct', 40);
       expect(pw(vrai('loup'), ctx([lasse], 50))).toBeLessThan(pw(vrai('loup'), ctx([frais], 50)));
@@ -982,6 +1003,62 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     expect(guardUnits(26, [], ctx([fam('loup', 'damage_pct', 40)], 50))).toEqual([]);
   });
 });
+describe('🎓 UN SEUL DRESSAGE PAR FAMILIER (v0.805)', () => {
+  // Demandé par l’utilisateur : « une expérience globale, montée par les convois et les
+  // défenses ». Il y avait deux carrières (attaque en donjon, défense au mur) aux pentes
+  // différentes ; le même animal valait deux choses selon le terrain.
+  const f = (o: Partial<Item> = {}): Item =>
+    ({
+      id: 'f',
+      slot: 'familiar',
+      name: 'f',
+      emoji: '',
+      rarity: 'rare',
+      level: 10,
+      baseLevel: 10,
+      effect: { type: 'damage_pct', value: 20 },
+      ...o,
+    }) as Item;
+
+  it('⚠️ l’ancien dressage est RELU, sans migration et sans rien perdre', () => {
+    // L’ancienne XP de défense se comptait 4 fois moins cher : un familier dressé au mur
+    // garde exactement le niveau qu’il avait gagné.
+    expect(famXp(f({ atkXp: 100, defXp: 50 }))).toBe(300);
+    expect(famLevel(famXp(f({ defXp: famXpForLevel(6) / 4 })))).toBe(6);
+    // Dès qu’il regagne, c’est la nouvelle XP qui fait foi.
+    expect(famXp(f({ xp: 42, atkXp: 9999 }))).toBe(42);
+  });
+
+  it('⚠️ gagner écrit UNE expérience, et fond les deux anciennes dedans', () => {
+    const g = grantFamiliarXp(f({ atkXp: 100, defXp: 50 }), 20, 50);
+    expect(g.xp).toBe(320);
+    expect(g.atkXp).toBeUndefined();
+    expect(g.defXp).toBeUndefined();
+  });
+
+  it('⚠️ plafonnée au niveau du joueur, jamais en recul', () => {
+    const cap = famXpForLevel(6) - 1;
+    expect(grantFamiliarXp(f(), 1e9, 5).xp).toBe(cap);
+    // Un familier dressé avant que le plafond ne bouge garde son acquis.
+    const haut = f({ xp: famXpForLevel(30) });
+    expect(grantFamiliarXp(haut, 10, 5).xp).toBe(famXpForLevel(30));
+    expect(grantFamiliarXp(haut, 10, 5)).toBe(haut);
+  });
+
+  it('⚠️ les DEUX sources de l’aventurier paient : le siège ET le convoi', () => {
+    const raid = rollRaid(7, 28, 0, 0);
+    const tout = siegeFamiliarXp({ groups: raid.groups, defeated: raid.groups.length } as never);
+    const rien = siegeFamiliarXp({ groups: raid.groups, defeated: 0 } as never);
+    expect(rien).toBe(0);
+    expect(tout).toBeGreaterThan(0);
+    const convoi = caravanFamiliarXp({ level: 28 } as never);
+    expect(convoi).toBeGreaterThan(0);
+    // Un siège gagné vaut plus qu’un convoi — il tombe au plus une fois par jour.
+    expect(tout).toBeGreaterThan(convoi);
+    expect(caravanFamiliarXp({ level: 60 } as never)).toBeGreaterThan(convoi);
+  });
+});
+
 describe('masse visible contre menace', () => {
   const M = RAID as unknown as { massMult: number };
   const REF = M.massMult;
@@ -1699,7 +1776,7 @@ describe('⚠️ la RARETÉ d’un familier compte AUSSI au mur', () => {
   // ⚠️ PAS sur `guardUnits` : il ARRONDIT à l'entier (`foldBonus`), et deux raretés
   // voisines — écartées de 1,219 — tombent alors sur le même nombre. On mesurerait
   // l'arrondi, pas la rareté. L'ancien test mesurait déjà une valeur non arrondie.
-  const porte = (f: Item) => companionEffects([f], 'def').damagePct ?? 0;
+  const porte = (f: Item) => companionEffects([f]).damagePct ?? 0;
   const loup = FAMILIAR_SPECIES.find((s) => s.id === 'wolf')!;
   const fam = (rarity: Rarity): Item =>
     ({ ...rollFamiliar(() => 0.5, loup, { level: 28, rarity }), id: 'f' }) as Item;

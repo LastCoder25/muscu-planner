@@ -26,9 +26,7 @@ import { combatPower, mulberry32, type Combatant } from './combat';
 import { refFighter } from './proceduralContent';
 import {
   rollDrop,
-  famLevel,
-  famAtkMult,
-  famDefMult,
+  familiarMult,
   rankIndex,
   RANK_ORDER,
   RARITY_LABEL,
@@ -37,13 +35,7 @@ import {
   type AggregatedEffects,
   type Item,
 } from './items';
-import {
-  escortCombatant,
-  companionEffects,
-  advTalentEffects,
-  cappedDefLevel,
-  COMPANION_K,
-} from './caravan';
+import { escortCombatant, companionEffects, advTalentEffects, canAdvTalent } from './caravan';
 import { type TalentInstance } from './talents';
 import { beyondCap } from './buildings';
 import { advStats, advTitle, PROMO_LEVELS, type Adventurer } from './adventurers';
@@ -2142,7 +2134,8 @@ export function companionPairs(
     const tid = a.talentId;
     if (tid && !heroTal.has(tid) && !prisT.has(tid)) {
       const t = tals.get(tid);
-      if (t) {
+      // Au-dessus de la rareté de sa classe : il ne le porte pas, et ça se soigne seul.
+      if (t && canAdvTalent(a, t)) {
         prisT.add(tid);
         entry.talent = t;
       }
@@ -2159,6 +2152,13 @@ export function companionPairs(
  *  ceux-là sont PORTÉS par un homme (quinze loups = quinze combattants un peu meilleurs),
  *  ceux-ci valent pour la VILLE ENTIÈRE. Quinze faucons ne voient pas quinze fois plus
  *  loin — on garde le meilleur, un point c’est tout. */
+/** XP de DRESSAGE d’un familier qui a défendu : ∝ ce qui a été repoussé.
+ *  ⚠️ Même rythme qu’avant la v0.805 (≈ 8 sièges pour le niveau 5) : l’ancienne XP de
+ *  défense se comptait 4 fois moins cher, le barème est simplement converti. */
+export function siegeFamiliarXp(report: RaidReport): number {
+  return report.groups.slice(0, report.defeated).reduce((a, g) => a + g.level * 8, 0);
+}
+
 export function companionPerks(
   advs: Adventurer[],
   ctx?: CompanionCtx,
@@ -2168,9 +2168,8 @@ export function companionPerks(
   for (const p of companionPairs(advs, ctx).values()) {
     const f = p.familiar;
     if (!f) continue;
-    const mult = famDefMult(cappedDefLevel(f, ctx?.kennelLevel ?? 0));
     if (f.effect.type === 'crit_pct') scout = Math.max(scout, 1);
-    else if (f.effect.type === 'gold_pct') loot = Math.max(loot, f.effect.value * mult);
+    else if (f.effect.type === 'gold_pct') loot = Math.max(loot, f.effect.value * familiarMult(f));
   }
   return { scoutBonus: scout, lootPct: loot };
 }
@@ -2214,18 +2213,13 @@ function pairEffects(
   ctx?: CompanionCtx,
 ): AggregatedEffects {
   return mergeEffects(
-    // ⚠️ Le Chenil PLAFONNE le dressage défensif : c’est lui qui entraîne, un
-    // familier ne peut pas dépasser son école. Sans ce plafond, le bâtiment ne
-    // servirait plus qu’à ouvrir des places et mourrait au niveau 25.
+    // La formule du HÉROS (v0.805) : le Chenil ne plafonne plus le dressage — il garde
+    // le NOMBRE de compagnons (vivant jusqu’au 100) et leur RANG.
     companionEffects(
       p?.familiar ? [p.familiar] : [],
-      'def',
       // ⚠️ FATIGUÉ = DIMINUÉ DE MOITIÉ, jamais perdu ni blessé — sinon personne
       // n’engagerait le familier qu’il a élevé pendant des semaines (règle v0.663).
-      p?.familiar && ctx && isFatigued(p.familiar, ctx.now)
-        ? COMPANION_K * DAMAGED_EFFICIENCY
-        : undefined,
-      ctx?.kennelLevel,
+      p?.familiar && ctx && isFatigued(p.familiar, ctx.now) ? DAMAGED_EFFICIENCY : 1,
     ),
     advTalentEffects(p?.talent ? [p.talent] : []),
   );
@@ -3052,9 +3046,10 @@ export function duplicateFamiliars(
   }
   // Trois lectures de la même réserve. Un familier survit dès qu’il est dans le haut du
   // panier d’UNE d’elles — l’union protège, elle ne sélectionne pas.
+  // ⚠️ DEUX lectures depuis la v0.805 : le dressage est UNIQUE (plus d’attaque contre
+  // défense), donc un familier vaut la même chose sur les deux fronts.
   const axes: ((f: Item) => number)[] = [
-    (f) => f.effect.value * famAtkMult(famLevel(f.atkXp, 'atk')),
-    (f) => f.effect.value * famDefMult(famLevel(f.defXp, 'def')),
+    (f) => f.effect.value * familiarMult(f),
     (f) => f.effect2?.value ?? 0,
   ];
   const safe = new Set<string>();
