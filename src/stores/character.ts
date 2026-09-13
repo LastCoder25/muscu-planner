@@ -1655,16 +1655,16 @@ export const useCharacterStore = defineStore('character', () => {
     return { detected: t.detected, report };
   }
 
-  /** Soins d'urgence : remet le héros sur pied TOUT DE SUITE, contre de la ferraille
-   *  proportionnelle au repos qu'il reste. Il y a donc toujours une porte de sortie —
+  /** Soins d'urgence : remet le héros sur pied TOUT DE SUITE, contre de l'OR (cher)
+   *  proportionnel au repos qu'il reste. Il y a donc toujours une porte de sortie —
    *  attendre reste gratuit, payer ne fait qu'acheter l'immédiateté. */
-  async function healHero(userId: string, now: number) {
+  async function healHero(userId: string, now: number, playerLevel: number) {
     const cur = row.value;
     if (!cur?.base?.wound) return;
-    const cost = healCost(woundRemainingMs(cur.base, now));
-    if (cur.scrap < cost) throw new Error(`Il te faut ${cost} 🔩 pour des soins d'urgence.`);
+    const cost = healCost(woundRemainingMs(cur.base, now), playerLevel);
+    if (cur.gold < cost) throw new Error(`Il te faut ${cost} 🪙 pour des soins d'urgence.`);
     await persistOptimistic(userId, {
-      scrap: cur.scrap - cost,
+      gold: cur.gold - cost,
       base: { ...cur.base, wound: null },
     });
     return cost;

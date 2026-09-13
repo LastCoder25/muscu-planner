@@ -4,7 +4,7 @@ import { goldCost, resolveOutcome, travelOneWayMin, travelFactor } from '@/lib/e
 import { refFighter } from '@/lib/proceduralContent';
 import { computeLevel } from '@/lib/levels';
 import { DUNGEONS, dungeonGold } from '@/data/dungeons';
-import { DEFENSE_TYPES } from '@/lib/raid';
+import { DEFENSE_TYPES, healCost } from '@/lib/raid';
 
 /** LE PUITS D'OR, mesuré contre le REVENU RÉEL.
  *
@@ -64,6 +64,18 @@ function goldPerDay(L: number): number {
  *  (L'enceinte a sa courbe dédiée, testée dans `raid.test` et `scrapEconomy.test`.) */
 const cranTotal = (L: number) =>
   buildingUpgradeCost(L) * Math.min(plotsForLevel(L), BUILDING_TYPES.length);
+
+describe('⛑️ les soins d’urgence du héros coûtent cher, sans devenir un mur', () => {
+  // Mesuré contre le MÊME revenu journalier que les bâtiments : une convalescence complète
+  // (6 h) doit coûter une vraie part de la journée, au même prix relatif à tout niveau.
+  it('6 h de convalescence ≈ ½ journée de revenu, du niveau 2 au 100', () => {
+    for (const L of [2, ...LEVELS]) {
+      const part = healCost(6 * 3600_000, L) / goldPerDay(L);
+      expect(part, `niveau ${L} : ${part.toFixed(2)} journée`).toBeGreaterThan(0.35);
+      expect(part, `niveau ${L} : ${part.toFixed(2)} journée`).toBeLessThan(0.7);
+    }
+  });
+});
 
 describe("puits d'or : on court toujours après les derniers niveaux", () => {
   it('⚠️ LA RÈGLE : un cran coûte PLUS qu’une journée de revenu, sans devenir un mur', () => {

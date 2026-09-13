@@ -576,6 +576,13 @@ export const RAID = {
   intervalJitter: 0.25,
   freezeMs: 24 * 3600_000, // dégel automatique (le sport est le raccourci, pas la rançon)
   woundMs: 6 * 3600_000, // convalescence de base après une défaite (abrégée par l’Infirmerie)
+  // Soins d’urgence du héros, EN OR (v0.824 ; demandé : « la ferraille n’est pas logique »).
+  // Prix par heure = healGoldK × niveau^healGoldExp. L’exposant suit le REVENU d’or d’une
+  // journée (mesuré ≈ 660 × niveau^1,65 du niveau 2 au 100) : une convalescence complète
+  // de 6 h coûte ~½ journée de revenu À TOUS LES NIVEAUX — cher, mais jamais un mur.
+  // ⚠️ Ne pas prendre l’exposant des bâtiments (1,9) : le prix dériverait vers le mur.
+  healGoldK: 55,
+  healGoldExp: 1.65,
   // Réparations (cf. `repairMsFor`) : 30 min + 3 min par niveau, la Fonderie en retire
   // jusqu’à 60 % (moitié de l’effet à son niveau 30).
   repairBaseMs: 30 * 60_000,
@@ -1791,11 +1798,13 @@ export function woundMsFor(infirmaryLevel: number, intervalMs?: number): number 
   // dépasser une fraction de l'intervalle courant.
   return intervalMs ? Math.min(base, Math.round(intervalMs * WOUND_INTERVAL_SHARE)) : base;
 }
-/** Soins d'urgence : on peut toujours le remettre sur pied tout de suite, en ferraille.
- *  ∝ au repos qu'il reste → écourter la fin coûte une bricole, sauter toute la
- *  convalescence se paie. Il y a donc toujours une porte de sortie. */
-export function healCost(remainingMs: number): number {
-  return Math.max(1, Math.ceil((remainingMs / 3600_000) * 12));
+/** Soins d'urgence : on peut toujours le remettre sur pied tout de suite, EN OR, et cher.
+ *  ∝ au repos qu'il reste → écourter la fin coûte peu, sauter toute la convalescence se
+ *  paie (~½ journée de revenu pour 6 h). Il y a donc toujours une porte de sortie.
+ *  ⚠️ `playerLevel` est REQUIS : un prix fixe serait ruineux au niveau 2 et gratuit au 100. */
+export function healCost(remainingMs: number, playerLevel: number): number {
+  const perHour = RAID.healGoldK * Math.pow(Math.max(1, playerLevel), RAID.healGoldExp);
+  return Math.max(1, Math.ceil((remainingMs / 3600_000) * perHour));
 }
 
 // ── Résolution ──
@@ -2631,11 +2640,11 @@ export function finishRepairNow(base: BaseState, id: DefenseId): BaseState {
   return withRepaired(base, defenses);
 }
 
-/** Ferraille pour finir des travaux maintenant — AU MÊME TARIF que les soins d’urgence du
- *  héros (∝ au temps restant) : deux portes de sortie qui coûtent pareil se comprennent
- *  sans notice. Écourter la fin est une bricole, sauter tout le chantier se paie. */
+/** Ferraille pour finir des travaux maintenant, ∝ au temps restant : écourter la fin est
+ *  une bricole, sauter tout le chantier se paie. ⚠️ Elle ne suit PLUS les soins du héros
+ *  (passés en or, v0.824) : une réparation reste une affaire de métal. */
 export function rushRepairCost(remainingMs: number): number {
-  return healCost(remainingMs);
+  return Math.max(1, Math.ceil((remainingMs / 3600_000) * 12));
 }
 
 /** Ferraille nécessaire pour LANCER toutes les réparations en attente — c'est le chiffre à

@@ -540,8 +540,8 @@
         <b>Ton énergie, elle, ne se périme pas</b> — rien de ce que tu gagnes en attendant n’est
         perdu.
       </p>
-      <button class="cta" :disabled="(char.row?.scrap ?? 0) < healPrice" @click="doHeal">
-        ⛑️ Soins d’urgence · {{ healPrice }} ferraille
+      <button class="cta" :disabled="(char.row?.gold ?? 0) < healPrice" @click="doHeal">
+        ⛑️ Soins d’urgence · {{ fmtPow(healPrice) }} 🪙
       </button>
     </div>
 
@@ -1618,7 +1618,9 @@ const healIn = computed(() =>
 );
 /** Prix des soins ∝ au repos restant : écourter la fin est une bricole, sauter toute la
  *  convalescence se paie. Attendre reste gratuit — on n'achète que l'immédiateté. */
-const healPrice = computed(() => healCost(woundRemainingMs(base.value, now.value)));
+const healPrice = computed(() =>
+  healCost(woundRemainingMs(base.value, now.value), heroLevel.value),
+);
 /** Ce que la fouille a déjà remonté — le rapport de pillage en cours d’écriture. */
 const pillage = computed(() => base.value?.pillage ?? null);
 /** ⚠️ DEUX leviers au Chantier, et il faut les deux : le nombre de bras monte par
@@ -1691,7 +1693,7 @@ function repairLeft(id: DefenseId): number {
 }
 const doHeal = () =>
   guard(async () => {
-    const cost = await char.healHero(uid.value, Date.now());
+    const cost = await char.healHero(uid.value, Date.now(), heroLevel.value);
     if (cost) $q.notify({ type: 'positive', message: '⛑️ Ton héros est de nouveau sur pied.' });
   });
 /** Le cumul de la fouille, en puces. ⚠️ Ce sont des COMPTES déjà crédités : les objets

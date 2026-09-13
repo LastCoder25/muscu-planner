@@ -1553,11 +1553,13 @@ describe('blessure du héros', () => {
     }
   });
 
-  it('il y a TOUJOURS une porte de sortie : des soins d’urgence en ferraille', () => {
+  it('il y a TOUJOURS une porte de sortie : des soins d’urgence en or', () => {
     // Attendre reste gratuit ; payer n'achète que l'immédiateté, à un prix qui suit le
-    // repos restant — écourter la fin est donc une bricole.
-    expect(healCost(6 * H)).toBeGreaterThan(healCost(1 * H));
-    expect(healCost(0)).toBeGreaterThan(0);
+    // repos restant — écourter la fin coûte donc peu.
+    expect(healCost(6 * H, 28)).toBeGreaterThan(healCost(1 * H, 28));
+    expect(healCost(0, 28)).toBeGreaterThan(0);
+    // …et le niveau : l'or d'un joueur de niveau 50 ne vaut pas celui d'un débutant.
+    expect(healCost(6 * H, 50)).toBeGreaterThan(healCost(6 * H, 10));
   });
 });
 
@@ -1639,7 +1641,7 @@ describe('économie de la défense', () => {
     expect(tick.base.defenses[0]!.damaged).toBeFalsy();
   });
 
-  it('on peut TERMINER tout de suite, au tarif des soins d’urgence du héros', () => {
+  it('on peut TERMINER tout de suite, en ferraille, au prorata du temps restant', () => {
     const b = emptyBase(1, 0);
     b.defenses = [{ typeId: 'wall', level: 40, damaged: true }];
     b.freeze = { until: 24 * H, atXp: 100 };
@@ -1648,7 +1650,8 @@ describe('économie de la défense', () => {
     expect(fini.defenses[0]).toEqual({ typeId: 'wall', level: 40 });
     expect(fini.freeze).toBeNull();
     // ∝ au temps restant : écourter la fin est une bricole, sauter tout le chantier se paie.
-    expect(rushRepairCost(3 * H)).toBe(healCost(3 * H));
+    // Une réparation reste une affaire de métal : 12 🔩 par heure restante.
+    expect(rushRepairCost(3 * H)).toBe(36);
     expect(rushRepairCost(3 * H)).toBeGreaterThan(rushRepairCost(10 * 60_000));
   });
 
