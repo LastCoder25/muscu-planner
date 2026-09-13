@@ -550,7 +550,7 @@
       <div class="p-title">❄️ Production gelée</div>
       <p>
         Tes filons sont à l’arrêt tant que l’enceinte est en ruine.
-        <b>Répare-la et la production repart.</b>
+        <b>Répare-la : la production repart à la fin des travaux.</b>
         Sinon, une séance de sport la relance aussi — ou les ouvriers s’y remettent seuls
         {{ freezeIn }}.
       </p>
@@ -614,13 +614,28 @@
             >
           </button>
           <template v-else>
+            <!-- ⚠️ Une réparation PREND DU TEMPS (v0.802) : la durée s'annonce AVANT de payer —
+                 la découvrir après coup, c'est découvrir le prix après avoir payé. -->
+            <template v-if="repairLeft(defSel.id) > 0">
+              <div class="s-repair">
+                🔧 En réparation · encore {{ fmtSpan(repairLeft(defSel.id)) }}
+              </div>
+              <button
+                class="btn fix"
+                :disabled="(char.row?.scrap ?? 0) < rushRepairCost(repairLeft(defSel.id))"
+                @click="doFinishRepair(defSel.id)"
+              >
+                Terminer maintenant · {{ rushRepairCost(repairLeft(defSel.id)) }} 🔩
+              </button>
+            </template>
             <button
-              v-if="damagedOf(defSel.id)"
+              v-else-if="damagedOf(defSel.id)"
               class="btn fix"
               :disabled="!canRepair(defSel.id)"
               @click="doRepair(defSel.id)"
             >
-              Réparer · {{ repairCost(lvlOf(defSel.id)) }} 🔩
+              Réparer · {{ repairCost(lvlOf(defSel.id)) }} 🔩 ·
+              {{ fmtSpan(repairMsFor(lvlOf(defSel.id), foundryLevel)) }}
             </button>
             <button class="btn" :disabled="!canUpgrade(defSel.id)" @click="doUpgrade(defSel.id)">
               Améliorer · {{ upCost(defSel.id).gold }} 🪙 + {{ upCost(defSel.id).scrap }} 🔩
@@ -846,6 +861,7 @@ import {
   buildingProdPerHour,
   buildingStorageCap,
   buildingType,
+  buildingLevel,
   collectable,
   plotsForLevel,
   storageMult,
@@ -861,6 +877,9 @@ import {
   TURRET_SLOTS,
   defenseLevel,
   isDamaged,
+  isRepairing,
+  repairMsFor,
+  rushRepairCost,
   repairCost,
   scavengerCount,
   scavengeMs,
@@ -1634,7 +1653,7 @@ function canUpgrade(id: DefenseId): boolean {
   return c.gold >= k.gold && c.scrap >= k.scrap;
 }
 function canRepair(id: DefenseId): boolean {
-  return (char.row?.scrap ?? 0) >= repairCost(lvlOf(id));
+  return repairLeft(id) <= 0 && (char.row?.scrap ?? 0) >= repairCost(lvlOf(id));
 }
 
 async function guard(fn: () => Promise<unknown>) {
@@ -1652,13 +1671,24 @@ const doBuild = (id: DefenseId) =>
   });
 const doUpgrade = (id: DefenseId) =>
   guard(() => char.upgradeDefense(uid.value, id, heroLevel.value, Date.now()));
-const doRepair = (id: DefenseId) => guard(() => char.repairDefense(uid.value, id));
+const doRepair = (id: DefenseId) => guard(() => char.repairDefense(uid.value, id, Date.now()));
 const doRepairAll = () =>
   guard(async () => {
-    const cost = await char.repairAll(uid.value);
+    const cost = await char.repairAll(uid.value, Date.now());
     if (cost)
-      $q.notify({ type: 'positive', message: '🔩 Enceinte réparée — la production repart.' });
+      $q.notify({
+        type: 'positive',
+        message: '🔧 Travaux lancés — la production repart à la fin.',
+      });
   });
+const doFinishRepair = (id: DefenseId) => guard(() => char.finishRepair(uid.value, id, Date.now()));
+/** La Fonderie raccourcit les travaux (cf. `repairMsFor`). */
+const foundryLevel = computed(() => buildingLevel(char.row?.buildings ?? [], 'foundry'));
+/** Temps de travaux restant sur une structure, 0 si aucun chantier en cours. */
+function repairLeft(id: DefenseId): number {
+  const d = defenses.value.find((x) => x.typeId === id);
+  return isRepairing(d, now.value) ? d!.repairUntil! - now.value : 0;
+}
 const doHeal = () =>
   guard(async () => {
     const cost = await char.healHero(uid.value, Date.now());
@@ -2870,6 +2900,11 @@ function doHarvest() {
   color: #ff6a45;
   font-size: 11px;
   margin-left: 6px;
+}
+.s-repair {
+  width: 100%;
+  font-size: 12px;
+  color: var(--d3);
 }
 .s-actions {
   display: flex;

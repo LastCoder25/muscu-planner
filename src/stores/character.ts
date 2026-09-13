@@ -93,7 +93,9 @@ import {
   scavengeMs,
   advanceScavenging,
   lootCorpses,
-  repairStructure,
+  startRepair,
+  finishRepairNow,
+  rushRepairCost,
   totalRepairCost,
   companionPairs,
   companionPerks,
@@ -1758,32 +1760,51 @@ export const useCharacterStore = defineStore('character', () => {
 
   /** Remet une structure en service. En FERRAILLE uniquement : l'or est déjà tendu par
    *  les bâtiments de production, une réparation ne doit pas leur faire concurrence. */
-  async function repairDefense(userId: string, typeId: DefenseId) {
+  //  ⚠️ Depuis la v0.802 elle PREND DU TEMPS (`repairMsFor`) : la ferraille est payée au
+  //  lancement, la structure reste endommagée jusqu’à la fin des travaux, et c’est leur fin
+  //  (`settleRepairs`, au tick) qui relance la production.
+  async function repairDefense(userId: string, typeId: DefenseId, now: number) {
     const cur = row.value;
     if (!cur?.base) return;
     const d = cur.base.defenses.find((x) => x.typeId === typeId);
-    if (!d?.damaged) return;
+    if (!d?.damaged || d.repairUntil != null) return;
     const cost = repairCost(d.level);
     if (cur.scrap < cost) throw new Error('Pas assez de ferraille 🔩.');
-    // `repairStructure` relance aussi la PRODUCTION quand plus rien n'est endommagé :
-    // le gel est la conséquence d'une base cassée, pas une punition séparée.
     await persistOptimistic(userId, {
       scrap: cur.scrap - cost,
-      base: repairStructure(cur.base, typeId),
+      base: startRepair(cur.base, typeId, now, buildingLevel(cur.buildings ?? [], 'foundry')),
     });
   }
 
-  /** Répare TOUT d'un coup — le geste qu'on veut faire quand la production est gelée. */
-  async function repairAll(userId: string) {
+  /** Lance TOUTES les réparations en attente — le geste qu'on veut faire quand la
+   *  production est gelée. Les travaux déjà lancés ne sont ni repayés ni repoussés. */
+  async function repairAll(userId: string, now: number) {
     const cur = row.value;
     if (!cur?.base) return;
     const cost = totalRepairCost(cur.base);
     if (cost <= 0) return;
     if (cur.scrap < cost) throw new Error(`Il te faut ${cost} 🔩 pour tout remettre en état.`);
+    const foundry = buildingLevel(cur.buildings ?? [], 'foundry');
     let base = cur.base;
-    for (const d of cur.base.defenses.filter((x) => x.damaged))
-      base = repairStructure(base, d.typeId);
+    for (const d of cur.base.defenses.filter((x) => x.damaged && x.repairUntil == null))
+      base = startRepair(base, d.typeId, now, foundry);
     await persistOptimistic(userId, { scrap: cur.scrap - cost, base });
+    return cost;
+  }
+
+  /** Termine des travaux TOUT DE SUITE, contre de la ferraille ∝ au temps restant — au même
+   *  tarif que les soins d’urgence du héros. Attendre reste gratuit. */
+  async function finishRepair(userId: string, typeId: DefenseId, now: number) {
+    const cur = row.value;
+    if (!cur?.base) return;
+    const d = cur.base.defenses.find((x) => x.typeId === typeId);
+    if (d?.repairUntil == null || now >= d.repairUntil) return;
+    const cost = rushRepairCost(d.repairUntil - now);
+    if (cur.scrap < cost) throw new Error(`Il te faut ${cost} 🔩 pour finir les travaux.`);
+    await persistOptimistic(userId, {
+      scrap: cur.scrap - cost,
+      base: finishRepairNow(cur.base, typeId),
+    });
     return cost;
   }
 
@@ -2140,6 +2161,7 @@ export const useCharacterStore = defineStore('character', () => {
     upgradeDefense,
     repairDefense,
     repairAll,
+    finishRepair,
     setCompanion,
     setAdvTalent,
     healHero,

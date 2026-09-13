@@ -27,6 +27,7 @@ import { caravanSlots, caravanSlowFor, trainMsFor } from './caravan';
 import { guildRoster } from './adventurers';
 import { ROLL_FLOOR_RANKS } from './items';
 import { characterRank } from './characterRank';
+import { repairMsFor } from './raid';
 
 export interface LevelPreview {
   level: number;
@@ -73,6 +74,14 @@ function textAt(typeId: string, level: number): string | null {
         .replace('.', ',')} rang`;
     case 'warehouse':
       return `stockage ×${storageMult(one(typeId, level)).toFixed(2)}`;
+    case 'foundry': {
+      // ⚠️ Deux métiers depuis la v0.802 : elle bat la ferraille ET raccourcit les
+      // réparations. La réduction est la même à tout niveau de structure (multiplicative),
+      // on la lit donc sur n'importe lequel — par la VRAIE fonction.
+      const parH = Math.round((t.prodPerHrPerLvl ?? 0) * level * 10) / 10;
+      const cut = 1 - repairMsFor(30, level) / repairMsFor(30, 0);
+      return `${parH}/h · réserve ${Math.round(buildingStorageCap(one(typeId, level)[0]!))} · réparations −${pct(cut)}`;
+    }
     default: {
       // Producteurs : le débit horaire et ce que la réserve peut contenir.
       const parH = (t.prodPerHrPerLvl ?? 0) * level;

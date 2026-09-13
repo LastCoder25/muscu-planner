@@ -105,6 +105,9 @@ export interface DefenseStructure {
   typeId: DefenseId;
   level: number;
   damaged?: boolean;
+  /** Fin des travaux (ms epoch). Tant qu’elle n’est pas atteinte, la structure reste
+   *  ENDOMMAGÉE — la ferraille est payée au lancement, le service reprend à la fin. */
+  repairUntil?: number;
 }
 
 /** Un cadavre sur le champ de bataille. Sa richesse vient de SON niveau (il était
@@ -569,19 +572,31 @@ export const RAID = {
   intervalJitter: 0.25,
   freezeMs: 24 * 3600_000, // dégel automatique (le sport est le raccourci, pas la rançon)
   woundMs: 6 * 3600_000, // convalescence de base après une défaite (abrégée par l’Infirmerie)
+  // Réparations (cf. `repairMsFor`) : 30 min + 3 min par niveau, la Fonderie en retire
+  // jusqu’à 60 % (moitié de l’effet à son niveau 30).
+  repairBaseMs: 30 * 60_000,
+  repairPerLevelMs: 3 * 60_000,
+  repairFoundryCutMax: 0.6,
+  repairFoundryHalf: 30,
 
   // Espionnage
-  /** ⚠️ LE PRÉAVIS EST UNE PART DE L’INTERVALLE, plus une durée absolue (v0.776).
-   *  Une durée fixe ne veut pas dire la même chose selon le rythme : 8 h valent un
-   *  tiers du cycle à 24 h d’intervalle et 5 % à sept jours. Et elle plafonnait au
-   *  niveau 21 → 79 niveaux morts, payés au prix quadratique.
-   *  Part SANS Tour — un filet, pas un service. */
-  scoutLeadShareMin: 0.03,
-  /** Part ASYMPTOTIQUE, jamais atteinte : être prévenu tout le temps tuerait la
-   *  mécanique, la Tour doit toujours laisser une part d’imprévu. */
-  scoutLeadShareMax: 0.85,
-  /** Niveau où la Tour a rendu la MOITIÉ de ce qu’elle peut rendre. */
-  scoutLeadShareHalf: 30,
+  /** ⏱️ PRÉAVIS SANS TOUR — un filet, pas un service : on voit la poussière à l’horizon. */
+  scoutLeadMinMs: 30 * 60_000,
+  /** ⏱️ PRÉAVIS MAXIMAL, atteint PILE au niveau `scoutLeadMaxLevel` (v0.802, demandé par
+   *  l’utilisateur : « calibré sur 100 niveaux, détection max de 10 h au niveau 100 »).
+   *  ⚠️ RETOUR À UNE DURÉE ABSOLUE, et c’est un renversement assumé de la v0.776 (part de
+   *  l’intervalle, qui donnait 15 h 52 au niveau 100 à l’entraînement quotidien). Ce que la
+   *  v0.776 corrigeait reste corrigé : la courbe ne plafonne plus au niveau 21, elle monte
+   *  à CHAQUE niveau jusqu’au 100. */
+  scoutLeadMaxMs: 10 * 3600_000,
+  scoutLeadMaxLevel: 100,
+  /** Forme de la montée : RACINE — on gagne vite au début, un peu à chaque niveau ensuite.
+   *  Linéaire, les premiers niveaux ne rendaient presque rien pour un coût déjà réel. */
+  scoutLeadExp: 0.5,
+  /** Garde-fou : jamais plus que cette part de l’intervalle entre deux sièges. Être prévenu
+   *  tout le temps tuerait la mécanique. ⚠️ DORMANT tant que l’intervalle vaut au moins
+   *  24 h (7 jours actifs sur 7) : 10 h en font 42 %. */
+  scoutLeadIntervalCap: 0.85,
   clarityMax: 5,
   // ⚠️ OPACITÉ RELATIVE À LA FENÊTRE, et non à l’écart brut de niveaux. L’ancien
   // `⌊écart/3⌋` était absolu face à un terme de tour NON BORNÉ (`⌊tour/2⌋` vaut 50 au
@@ -890,35 +905,22 @@ export function scoutLevel(defenses: DefenseStructure[]): number {
   return defenseLevel(defenses, 'watchtower') * defenseEfficiency(defenses, 'watchtower');
 }
 
-/** Part de l’intervalle que la Tour donne d’avance. Croît à CHAQUE niveau, de 1 à 100,
- *  sans jamais atteindre son plafond. */
-export function scoutLeadShare(watchtowerLevel: number): number {
-  const l = Math.max(0, watchtowerLevel);
-  const { scoutLeadShareMin: lo, scoutLeadShareMax: hi, scoutLeadShareHalf: half } = RAID;
-  return lo + (hi - lo) * (l / (l + half));
-}
-
 /** ⏱️ PRÉAVIS OFFERT PAR LA TOUR DE GUET — c’est lui qui rend la préparation possible,
  *  et c’est à la DÉTECTION que part la notification, pas à l’impact : monter la Tour
  *  achète littéralement du temps de réaction.
  *
- *  ⚠️ EXPRIMÉ EN PART DE L’INTERVALLE, plus en durée absolue (demandé par l’utilisateur :
- *  « il faut qu’elle soit de plus en plus performante jusqu’au 100, quitte à baisser sa
- *  performance à bas niveau »). Deux raisons, et la première seule suffisait :
- *  (1) l’ancienne formule PLAFONNAIT au niveau 21 → **79 niveaux morts** ;
- *  (2) une durée fixe ne signifie rien hors de son rythme — 8 h valent un tiers du
- *  cycle quand on s’entraîne tous les jours, et 5 % quand on vient une fois par
- *  semaine. La part, elle, veut dire la même chose partout.
+ *  Une DURÉE, calibrée sur 100 niveaux : 30 min sans Tour, **10 h au niveau 100**, en
+ *  racine (cf. `RAID.scoutLeadExp`). Au-delà du niveau 100 elle ne monte plus.
  *
- *  ⚠️ REDISTRIBUTION ASSUMÉE, et c’est une EXCEPTION explicitement autorisée à la règle
- *  « on prolonge, on ne redistribue pas » (v0.731) : les bas niveaux rendent moins
- *  qu’avant pour que les hauts rendent davantage. Sans cette permission, il n’y avait
- *  pas de courbe possible.
- *
- *  ⚠️ ASYMPTOTIQUE : on n’est JAMAIS prévenu à 100 %. Un préavis qui couvre tout
- *  l’intervalle voudrait dire « toujours au courant » et tuerait la mécanique. */
+ *  ⚠️ HISTORIQUE, pour ne pas refaire le chemin : durée absolue plafonnée à 8 h dès le
+ *  niveau 21 (79 niveaux morts) → part de l’intervalle (v0.776, 15 h 52 au niveau 100 à
+ *  l’entraînement quotidien) → durée calibrée sur 100 niveaux (v0.802, demande de
+ *  l’utilisateur). Le garde-fou de la part survit en plafond (`scoutLeadIntervalCap`). */
 export function scoutLeadMs(watchtowerLevel: number, intervalMs: number): number {
-  return Math.round(Math.max(0, intervalMs) * scoutLeadShare(watchtowerLevel));
+  const t = Math.min(1, Math.max(0, watchtowerLevel) / RAID.scoutLeadMaxLevel);
+  const { scoutLeadMinMs: lo, scoutLeadMaxMs: hi } = RAID;
+  const lead = lo + (hi - lo) * Math.pow(t, RAID.scoutLeadExp);
+  return Math.round(Math.min(lead, Math.max(0, intervalMs) * RAID.scoutLeadIntervalCap));
 }
 
 /** Clarté du renseignement (0..5). Elle dépend de la Tour ET de la force de l'armée : une
@@ -2359,23 +2361,82 @@ export function repairCost(level: number): number {
   return 10 + Math.round(Math.max(1, level) * 2.5);
 }
 
-/** Remet une structure en service — et RELANCE LA PRODUCTION si plus rien n'est
- *  endommagé. Le gel n'est pas une punition à part : c'est la conséquence d'une base
- *  cassée. Réparer l'enceinte suffit donc à la lever, la ferraille étant le levier
- *  commun aux deux. Les deux voies GRATUITES restent ouvertes (une séance de sport, ou
- *  l'échéance des 24 h, cf. `advanceBase`) : la ferraille achète l'immédiateté, elle ne
- *  la rançonne pas. */
-export function repairStructure(base: BaseState, id: DefenseId): BaseState {
-  const defenses = base.defenses.map((d) =>
-    d.typeId === id ? { typeId: d.typeId, level: d.level } : d,
-  );
+/** 🔧 DURÉE D’UNE RÉPARATION (v0.802, demandée par l’utilisateur : « mettre des délais aux
+ *  réparations »).
+ *
+ *  Selon le NIVEAU de la structure — 30 min de base + 3 min par niveau, soit ~2 h au niveau
+ *  29 et 5 h 30 au niveau 100 — et raccourcie par la FONDERIE, qui bat déjà la ferraille
+ *  des réparations : son effet est asymptotique (jusqu’à −60 %), donc chaque niveau gratte
+ *  encore et une réparation n’est JAMAIS instantanée.
+ *  ⚠️ Toujours bien plus courte que l’intervalle entre deux sièges (24 h au minimum) : une
+ *  base encore en travaux au siège suivant serait la spirale que tout ce système évite. */
+export function repairMsFor(level: number, foundryLevel: number): number {
+  const base = RAID.repairBaseMs + RAID.repairPerLevelMs * Math.max(1, level);
+  const f = Math.max(0, foundryLevel);
+  const cut = RAID.repairFoundryCutMax * (f / (f + RAID.repairFoundryHalf));
+  return Math.round(base * (1 - cut));
+}
+
+/** Des travaux sont-ils en cours sur cette structure ? */
+export function isRepairing(d: DefenseStructure | undefined, now: number): boolean {
+  return !!d?.damaged && d.repairUntil != null && now < d.repairUntil;
+}
+
+/** Le gel se lève quand plus rien n’est endommagé. Le gel n'est pas une punition à part :
+ *  c'est la conséquence d'une base cassée. Les deux voies GRATUITES restent ouvertes (une
+ *  séance de sport, ou l'échéance des 24 h, cf. `advanceBase`). */
+function withRepaired(base: BaseState, defenses: DefenseStructure[]): BaseState {
   return { ...base, defenses, freeze: defenses.some((d) => d.damaged) ? base.freeze : null };
 }
 
-/** Ferraille nécessaire pour tout remettre en état — c'est le chiffre à afficher au
- *  joueur quand sa production est gelée : il dit ce que coûte le retour à la normale. */
+/** LANCE les travaux : la ferraille est payée maintenant (côté store), la structure reste
+ *  endommagée jusqu’à `repairUntil`. Sans effet sur une structure intacte ou déjà en
+ *  travaux — relancer ne doit ni repousser l’échéance ni faire payer deux fois. */
+export function startRepair(
+  base: BaseState,
+  id: DefenseId,
+  now: number,
+  foundryLevel: number,
+): BaseState {
+  const defenses = base.defenses.map((d) =>
+    d.typeId === id && d.damaged && d.repairUntil == null
+      ? { ...d, repairUntil: now + repairMsFor(d.level, foundryLevel) }
+      : d,
+  );
+  return { ...base, defenses };
+}
+
+/** CONCLUT les travaux arrivés à échéance — pur et idempotent, appelé à chaque tick.
+ *  ⚠️ Rend le MÊME objet quand rien n’a changé : le tick s’en sert pour ne pas écrire à vide. */
+export function settleRepairs(base: BaseState, now: number): BaseState {
+  if (!base.defenses.some((d) => d.repairUntil != null && now >= d.repairUntil)) return base;
+  const defenses = base.defenses.map((d) =>
+    d.repairUntil != null && now >= d.repairUntil ? { typeId: d.typeId, level: d.level } : d,
+  );
+  return withRepaired(base, defenses);
+}
+
+/** TERMINE tout de suite des travaux en cours (le store fait payer `rushRepairCost`). */
+export function finishRepairNow(base: BaseState, id: DefenseId): BaseState {
+  const defenses = base.defenses.map((d) =>
+    d.typeId === id && d.repairUntil != null ? { typeId: d.typeId, level: d.level } : d,
+  );
+  return withRepaired(base, defenses);
+}
+
+/** Ferraille pour finir des travaux maintenant — AU MÊME TARIF que les soins d’urgence du
+ *  héros (∝ au temps restant) : deux portes de sortie qui coûtent pareil se comprennent
+ *  sans notice. Écourter la fin est une bricole, sauter tout le chantier se paie. */
+export function rushRepairCost(remainingMs: number): number {
+  return healCost(remainingMs);
+}
+
+/** Ferraille nécessaire pour LANCER toutes les réparations en attente — c'est le chiffre à
+ *  afficher au joueur quand sa production est gelée. Les travaux déjà lancés sont payés. */
 export function totalRepairCost(base: BaseState): number {
-  return base.defenses.filter((d) => d.damaged).reduce((s, d) => s + repairCost(d.level), 0);
+  return base.defenses
+    .filter((d) => d.damaged && d.repairUntil == null)
+    .reduce((s, d) => s + repairCost(d.level), 0);
 }
 
 /** Durée courte, lisible : « 6 h », « 5 h 38 », « 42 min ». */
@@ -2457,11 +2518,12 @@ export function defensePerLevelLabel(
       const clarte = (n: number) => scoutClarity(n, ctx.playerLevel, ctx.playerLevel);
       const cl = clarte(l);
       const cn = clarte(next);
-      // ⚠️ Plus de branche « déjà au maximum » : la Tour n’a plus de plafond, chaque
-      // niveau raccourcit encore l’attente. Un chemin inatteignable finit par mentir.
-      const lead = `préavis ${fmtSpan(scoutLeadMs(l, ctx.intervalMs))} → ${fmtSpan(
-        scoutLeadMs(next, ctx.intervalMs),
-      )}`;
+      // ⚠️ Le préavis a de nouveau un MAXIMUM (10 h au niveau 100, v0.802) : passé ce
+      // niveau, on le dit au lieu d’annoncer « 10 h → 10 h ».
+      const la = scoutLeadMs(l, ctx.intervalMs);
+      const lb = scoutLeadMs(next, ctx.intervalMs);
+      const lead =
+        lb > la ? `préavis ${fmtSpan(la)} → ${fmtSpan(lb)}` : `préavis au maximum (${fmtSpan(la)})`;
       if (cn > cl)
         return `Niveau ${next} : ${lead}, et un cran de renseignement en plus (${cl} → ${cn}/${RAID.clarityMax})`;
       if (cl >= RAID.clarityMax)
@@ -2719,6 +2781,14 @@ export function advanceBase(
   let b: BaseState = { ...base };
   let changed = false;
   let detected: Raid | null = null;
+
+  // Les travaux arrivés à échéance se concluent (et relancent la production si plus rien
+  // n’est endommagé).
+  const repaired = settleRepairs(b, now);
+  if (repaired !== b) {
+    b = repaired;
+    changed = true;
+  }
 
   // Dégel : une séance de sport (XP en hausse) ou l'échéance des 24 h.
   if (b.freeze && (now >= b.freeze.until || ctx.globalXp > b.freeze.atXp)) {

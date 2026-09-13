@@ -6,7 +6,6 @@ import {
   levelSpanFor,
   raidIntervalMs,
   scoutLeadMs,
-  scoutLeadShare,
   scoutClarity,
   scoutReport,
   baseCombatant,
@@ -32,7 +31,12 @@ import {
   defenseUpgradeScrap,
   TURRET_SLOTS,
   RAID,
-  repairStructure,
+  startRepair,
+  settleRepairs,
+  finishRepairNow,
+  rushRepairCost,
+  repairMsFor,
+  isRepairing,
   totalRepairCost,
   companionPairs,
   companionPerks,
@@ -536,24 +540,34 @@ describe('espionnage', () => {
       expect(scoutLeadMs(l, iv), `niveau ${l}`).toBeGreaterThan(scoutLeadMs(l - 1, iv));
   });
 
-  it('⚠️ C’EST UNE PART DE L’INTERVALLE, pas une durée', () => {
-    // Une durée fixe ne veut pas dire la même chose selon le rythme : 8 h valent un
-    // tiers du cycle à 24 h d'intervalle, et 5 % à sept jours. La part, elle, veut
-    // dire la même chose partout — c'est ce qui la rend lisible à tous les rythmes.
-    for (const l of [0, 5, 30, 100])
-      // Tolérance de 1 ms : on arrondit une fois à gauche, deux fois à droite.
-      expect(
-        Math.abs(scoutLeadMs(l, 2 * 24 * 3600_000) - 2 * scoutLeadMs(l, 24 * 3600_000)),
-      ).toBeLessThanOrEqual(2);
+  it('⚠️ 10 H PILE AU NIVEAU 100, et rien de plus au-delà', () => {
+    // ⚠️ RÉÉCRIT (v0.802, demande de l’utilisateur : « calibré sur 100 niveaux, détection
+    // max de 10 h au niveau 100 »). Il affirmait que le préavis était une PART de
+    // l’intervalle — c’est précisément ce qu’on remplace par une durée calibrée.
+    const iv = raidIntervalMs(7);
+    expect(scoutLeadMs(100, iv)).toBe(10 * 3600_000);
+    expect(scoutLeadMs(150, iv)).toBe(scoutLeadMs(100, iv));
+    // …et sans Tour il reste un filet, jamais zéro : on voit la poussière à l'horizon.
+    expect(scoutLeadMs(0, iv)).toBe(30 * 60_000);
+    // Une DURÉE : le même niveau donne le même préavis quel que soit le rythme.
+    expect(scoutLeadMs(40, raidIntervalMs(1))).toBe(scoutLeadMs(40, iv));
   });
 
-  it('⚠️ ON N’EST JAMAIS PRÉVENU À 100 % — asymptote, pas pente', () => {
-    // Un préavis qui couvrirait tout l'intervalle voudrait dire « toujours au
-    // courant », et la Tour cesserait d'acheter quoi que ce soit.
-    expect(scoutLeadShare(100_000)).toBeLessThanOrEqual(RAID.scoutLeadShareMax);
-    expect(scoutLeadShare(100)).toBeLessThan(RAID.scoutLeadShareMax);
-    // …et sans Tour il reste un filet, jamais zéro : on voit la poussière à l'horizon.
-    expect(scoutLeadShare(0)).toBeGreaterThan(0);
+  it('⚠️ ON N’EST JAMAIS PRÉVENU TOUT LE TEMPS — plafond sur l’intervalle', () => {
+    // Un préavis qui couvrirait tout l'intervalle voudrait dire « toujours au courant »,
+    // et la Tour cesserait d'acheter quoi que ce soit. Dormant tant que l'intervalle
+    // vaut 24 h ou plus — on le vérifie donc sur un intervalle court.
+    const court = 6 * 3600_000;
+    expect(scoutLeadMs(100, court)).toBe(Math.round(court * RAID.scoutLeadIntervalCap));
+    expect(scoutLeadMs(100, court)).toBeLessThan(court);
+  });
+
+  it('la montée est en RACINE : les premiers niveaux rendent le plus', () => {
+    // Linéaire, les premiers niveaux ne rendaient presque rien pour un coût déjà réel.
+    const iv = raidIntervalMs(7);
+    const debut = scoutLeadMs(10, iv) - scoutLeadMs(0, iv);
+    const fin = scoutLeadMs(100, iv) - scoutLeadMs(90, iv);
+    expect(debut).toBeGreaterThan(3 * fin);
   });
 });
 
@@ -1076,8 +1090,16 @@ describe('ce qu’un niveau de défense apporte', () => {
     // …et un palier SANS bras supplementaire annonce quand meme son gain de vitesse.
     const muet = defensePerLevelLabel('salvage', 9, ctx(9, 'salvage'));
     expect(muet).toContain(fmtSpan(scavengeMs(10)));
-    const w = defensePerLevelLabel('watchtower', 2, ctx(2, 'watchtower'));
-    expect(w).toContain(fmtSpan(scoutLeadMs(3)));
+    // ⚠️ AVEC SON INTERVALLE : sans lui les deux côtés valaient `NaN`, et le test passait
+    // par construction (trouvé en v0.802).
+    const iv = raidIntervalMs(7);
+    const w = defensePerLevelLabel('watchtower', 2, ctx(2, 'watchtower', iv));
+    expect(w).toContain(fmtSpan(scoutLeadMs(3, iv)));
+    expect(w).not.toContain('NaN');
+    // Au-delà du niveau 100, on le dit — pas « 10 h → 10 h ».
+    expect(defensePerLevelLabel('watchtower', 100, ctx(100, 'watchtower', iv))).toContain(
+      'préavis au maximum',
+    );
   });
 
   it('⚠️ l’Infirmerie n’annonce plus jamais de « plancher » — elle n’en a plus', () => {
@@ -1195,10 +1217,11 @@ describe('économie de la défense', () => {
     expect(repairCost(30)).toBeGreaterThan(repairCost(10));
   });
 
-  it('réparer l’enceinte RELANCE la production', () => {
+  it('réparer l’enceinte RELANCE la production — à la FIN des travaux', () => {
     // Le gel n'est pas une punition séparée : c'est la conséquence d'une base cassée.
-    // La ferraille est donc le levier commun aux deux — mais elle achète l'immédiateté,
-    // elle ne la rançonne pas (la séance de sport et les 24 h restent gratuites).
+    // ⚠️ RÉÉCRIT (v0.802) : la réparation prend désormais du temps. La ferraille est payée
+    // au lancement, la structure reste endommagée jusqu'à la fin, et c'est la fin des
+    // derniers travaux qui relance la production.
     const b = emptyBase(1, 0);
     b.defenses = [
       { typeId: 'wall', level: 20, damaged: true },
@@ -1207,15 +1230,76 @@ describe('économie de la défense', () => {
     b.freeze = { until: 24 * H, atXp: 100 };
     expect(totalRepairCost(b)).toBe(repairCost(20) + repairCost(18));
 
-    // Tant qu'il reste une brèche, la production reste à l'arrêt…
-    const half = repairStructure(b, 'wall');
-    expect(half.defenses.find((d) => d.typeId === 'wall')!.damaged).toBeUndefined();
-    expect(half.freeze).not.toBeNull();
-    // …et elle repart dès que tout est en état.
-    const whole = repairStructure(half, 'turret');
-    expect(whole.defenses.some((d) => d.damaged)).toBe(false);
+    const lances = startRepair(startRepair(b, 'wall', 0, 0), 'turret', 0, 0);
+    // Les travaux lancés sont payés : ils sortent du total à lancer…
+    expect(totalRepairCost(lances)).toBe(0);
+    // …mais rien n'est encore en service, et la production reste à l'arrêt.
+    expect(lances.defenses.every((d) => d.damaged)).toBe(true);
+    expect(lances.freeze).not.toBeNull();
+
+    // Le mur finit avant les tourelles : tant qu'il reste une brèche, toujours gelé.
+    const finMur = repairMsFor(20, 0);
+    const finTour = repairMsFor(18, 0);
+    const tot = Math.max(finMur, finTour);
+    const tard = Math.min(finMur, finTour);
+    const moitie = settleRepairs(lances, tard);
+    expect(moitie.defenses.filter((d) => d.damaged)).toHaveLength(1);
+    expect(moitie.freeze).not.toBeNull();
+    // …et elle repart quand tout est en état.
+    const whole = settleRepairs(moitie, tot);
+    expect(whole.defenses.some((d) => d.damaged || d.repairUntil != null)).toBe(false);
     expect(whole.freeze).toBeNull();
-    expect(totalRepairCost(whole)).toBe(0);
+  });
+
+  it('🔧 une réparation dure selon le NIVEAU, la Fonderie la raccourcit, jamais instantanée', () => {
+    expect(repairMsFor(29, 0)).toBeGreaterThan(repairMsFor(10, 0));
+    expect(repairMsFor(100, 0)).toBe(5.5 * H);
+    // ⚠️ Toujours bien plus courte que l'intervalle minimal entre deux sièges (24 h) :
+    // une base encore en travaux au siège suivant serait une spirale.
+    expect(repairMsFor(100, 0)).toBeLessThan(raidIntervalMs(7) / 3);
+    // La Fonderie gratte à CHAQUE niveau…
+    for (let f = 1; f <= 100; f++)
+      expect(repairMsFor(50, f), `fonderie ${f}`).toBeLessThan(repairMsFor(50, f - 1));
+    // …sans jamais rendre les travaux instantanés.
+    expect(repairMsFor(50, 100_000)).toBeGreaterThan(repairMsFor(50, 0) * 0.35);
+  });
+
+  it('⚠️ relancer des travaux en cours ne repousse RIEN et ne fait rien payer', () => {
+    const b = emptyBase(1, 0);
+    b.defenses = [{ typeId: 'wall', level: 30, damaged: true }];
+    const une = startRepair(b, 'wall', 0, 0);
+    const deux = startRepair(une, 'wall', 2 * H, 0);
+    expect(deux.defenses[0]!.repairUntil).toBe(une.defenses[0]!.repairUntil);
+    // Une structure intacte ne se « répare » pas.
+    const intacte = emptyBase(1, 0);
+    intacte.defenses = [{ typeId: 'wall', level: 30 }];
+    expect(startRepair(intacte, 'wall', 0, 0).defenses[0]!.repairUntil).toBeUndefined();
+  });
+
+  it('⚠️ le tick CONCLUT les travaux échus, et n’écrit rien quand il n’y a rien à conclure', () => {
+    const b = emptyBase(1, 0);
+    b.defenses = [{ typeId: 'wall', level: 30, damaged: true }];
+    const lance = startRepair(b, 'wall', 0, 0);
+    const fin = lance.defenses[0]!.repairUntil!;
+    expect(isRepairing(lance.defenses[0], fin - 1)).toBe(true);
+    expect(settleRepairs(lance, fin - 1)).toBe(lance); // même objet : rien à écrire
+    const ctx = { playerLevel: 30, activeDays7: 0, globalXp: 0 };
+    const tick = advanceBase(lance, ctx, fin);
+    expect(tick.changed).toBe(true);
+    expect(tick.base.defenses[0]!.damaged).toBeFalsy();
+  });
+
+  it('on peut TERMINER tout de suite, au tarif des soins d’urgence du héros', () => {
+    const b = emptyBase(1, 0);
+    b.defenses = [{ typeId: 'wall', level: 40, damaged: true }];
+    b.freeze = { until: 24 * H, atXp: 100 };
+    const lance = startRepair(b, 'wall', 0, 0);
+    const fini = finishRepairNow(lance, 'wall');
+    expect(fini.defenses[0]).toEqual({ typeId: 'wall', level: 40 });
+    expect(fini.freeze).toBeNull();
+    // ∝ au temps restant : écourter la fin est une bricole, sauter tout le chantier se paie.
+    expect(rushRepairCost(3 * H)).toBe(healCost(3 * H));
+    expect(rushRepairCost(3 * H)).toBeGreaterThan(rushRepairCost(10 * 60_000));
   });
 
   it('un groupe nombreux est une éponge à PV, pas un pic de dégâts', () => {

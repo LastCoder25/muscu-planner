@@ -199,6 +199,7 @@ export const BUILDING_TYPES: BuildingType[] = [
   // reste jamais bloqué faute de matière pour réparer, sans vider la carte de son intérêt.
   {
     id: 'foundry',
+    perLevelNote: 'réparations de l’enceinte plus rapides, jusqu’à −60 %',
     label: 'Fonderie',
     emoji: '⚙️',
     category: 'producer',
@@ -212,7 +213,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     buildGold: 850,
     unlockLevel: 10,
     unique: true,
-    desc: 'Bat de la ferraille 🔩 en continu (réparation de l’enceinte).',
+    desc: 'Bat de la ferraille 🔩 en continu, et accélère les réparations de l’enceinte.',
   },
   {
     id: 'warehouse',
