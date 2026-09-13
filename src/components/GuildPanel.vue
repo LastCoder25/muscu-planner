@@ -57,6 +57,17 @@
             @promote="openPromo(a)"
           />
         </div>
+        <!-- ✨ CONFIER AU MIEUX (demandé par l'utilisateur) : un compagnon et un talent à
+             chacun, selon son profil, dans les règles des sélecteurs. Il REMPLACE les choix
+             faits à la main — on le dit avant le geste plutôt que de le découvrir après. -->
+        <template v-if="roster.length">
+          <button class="voie-btn g-auto" :disabled="busy" @click="autoPair">
+            ✨ Confier au mieux familiers et talents
+          </button>
+          <div class="g-note dim">
+            Selon le profil de chacun · remplace les choix faits à la main.
+          </div>
+        </template>
       </template>
 
       <div class="g-actions">
@@ -655,6 +666,21 @@ function assignFam(id: string | null) {
   pairFor.value = null;
   void pair((uid) => char.setCompanion(uid, a.id, id));
 }
+/** Puissance totale du vivier — la somme de ce que chaque portrait affiche. */
+const rosterPower = () =>
+  [...adventurerPowers(char.advList, compCtx.value).values()].reduce((s, p) => s + p, 0);
+function autoPair() {
+  void pair(async (uid) => {
+    const before = rosterPower();
+    const r = await char.autoAssignCompanions(uid, Date.now());
+    if (!r) return;
+    const after = rosterPower();
+    $q.notify({
+      type: 'positive',
+      message: `✨ ${r.familiars} compagnon(s) et ${r.talents} talent(s) confiés · puissance du vivier ${fmtPow(before)} → ${fmtPow(after)}`,
+    });
+  });
+}
 function assignTal(id: string | null) {
   const a = talFor.value;
   if (!a) return;
@@ -908,6 +934,9 @@ async function doPromote(classId: string) {
 .g-hire,
 .g-full {
   margin-bottom: 10px;
+}
+.g-auto {
+  margin-top: 12px;
 }
 /* ── Fiche d'un aventurier ── */
 .adv.hit {

@@ -14,6 +14,8 @@ import {
   guardUnits,
   adventurerPowers,
   companionOptions,
+  autoCompanions,
+  type CompanionCtx,
   talentOptions,
   siegeFamiliarXp,
   siegeXp,
@@ -928,6 +930,172 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
       ]);
       expect(r.options.map((t) => t.id)).toEqual(['mien', 'libre']);
       expect([r.tooRare, r.taken]).toEqual([1, 1]);
+    });
+  });
+
+  describe('✨ CONFIER AU MIEUX : un compagnon et un talent selon le profil', () => {
+    // ⚠️ Niveau 60 : au niveau 30 un talent rapporte 0 point de puissance (arrondi), aucun
+    // n'était attribué — et toutes les vérifications sur les talents étaient vides.
+    const tal = (id: string, code = 't_dmg', xp = 0) =>
+      ({ id, code, xp, level: 60, equipped: false }) as TalentInstance;
+    const classe = (id: string, cls: string, level = 60) =>
+      ({ ...adv(id), level, path: [cls] }) as Adventurer;
+    const apply = (advs: Adventurer[], m: ReturnType<typeof autoCompanions>) =>
+      advs.map((a) => ({
+        ...a,
+        familiarId: m.get(a.id)?.familiarId,
+        talentId: m.get(a.id)?.talentId,
+      }));
+    const total = (advs: Adventurer[], c: CompanionCtx) =>
+      [...adventurerPowers(advs, c).values()].reduce((s, p) => s + p, 0);
+
+    it('⚠️ les exclusions des sélecteurs : héros, rang du Chenil, places, talent trop rare, talent du héros', () => {
+      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes'), classe('c', 'archer')];
+      const c: CompanionCtx = {
+        ...ctx(
+          [
+            fam('heros', 'damage_pct', 90),
+            fam('prime', 'damage_pct', 90, { rarity: RANK_ORDER[7]! }),
+            fam('f1', 'damage_pct', 20),
+            fam('f2', 'max_pv_pct', 20),
+            fam('f3', 'damage_pct', 10),
+          ],
+          2,
+          'heros',
+        ),
+        talents: [
+          tal('mien', 't_dmg'),
+          tal('rare', 't_dmg', talentTierFloor(15)),
+          tal('t1'),
+          tal('t2', 't_pv'),
+        ],
+        heroTalentIds: ['mien'],
+      };
+      const m = autoCompanions(advs, c);
+      const f = [...m.values()].map((x) => x.familiarId).filter(Boolean);
+      const t = [...m.values()].map((x) => x.talentId).filter(Boolean);
+      expect(f).not.toContain('heros');
+      expect(f).not.toContain('prime');
+      expect(f.length).toBeLessThanOrEqual(companionSlots(2));
+      expect(new Set(f).size).toBe(f.length);
+      expect(t).not.toContain('mien');
+      expect(t).not.toContain('rare');
+      expect(new Set(t).size).toBe(t.length);
+    });
+
+    it('⚠️ chacun reçoit ce qui augmente le plus SA puissance — le profil décide', () => {
+      // Un seul aventurier et plusieurs familiers : le choix est l'optimum mesuré par l'arbitre.
+      const fams = [
+        fam('dmg', 'damage_pct', 25),
+        fam('pv', 'max_pv_pct', 25),
+        fam('red', 'dmg_reduction_pct', 12),
+      ];
+      for (const cls of ['guerrier', 'homme_armes', 'archer', 'mage']) {
+        const a = [classe('a', cls)];
+        const c = ctx(fams, 50);
+        const got = autoCompanions(a, c).get('a')!.familiarId;
+        const powerWith = (id?: string) => total([{ ...a[0]!, familiarId: id }], c);
+        const best = Math.max(...fams.map((f) => powerWith(f.id)));
+        // La puissance AFFICHÉE est arrondie : deux familiers peuvent y être à égalité. On exige
+        // que le choix atteigne la meilleure, égalités comprises — et qu'il existe.
+        expect(got, cls).toBeDefined();
+        expect(powerWith(got), cls).toBe(best);
+      }
+    });
+
+    it('⚠️ un familier unique va à celui qui en tire LE PLUS, pas au premier du vivier', () => {
+      const f = [fam('loup', 'damage_pct', 30)];
+      const c = ctx(f, 50);
+      const advs = [classe('faible', 'homme_armes', 10), classe('fort', 'guerrier', 60)];
+      const m = autoCompanions(advs, c);
+      const gainOf = (id: string) =>
+        total(
+          advs.map((a) => (a.id === id ? { ...a, familiarId: 'loup' } : a)),
+          c,
+        ) - total(advs, c);
+      const attendu = gainOf('faible') > gainOf('fort') ? 'faible' : 'fort';
+      expect(m.get(attendu)!.familiarId).toBe('loup');
+    });
+
+    it('⚠️ le résultat ne fait jamais PERDRE de puissance, et bat l’absence de compagnons', () => {
+      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes'), classe('c', 'archer')];
+      const c: CompanionCtx = {
+        ...ctx([fam('f1', 'damage_pct', 20), fam('f2', 'max_pv_pct', 20)], 50),
+        talents: [tal('t1'), tal('t2', 't_pv')],
+      };
+      const after = apply(advs, autoCompanions(advs, c));
+      const p0 = adventurerPowers(advs, c);
+      const p1 = adventurerPowers(after, c);
+      for (const a of advs) expect(p1.get(a.id)!).toBeGreaterThanOrEqual(p0.get(a.id)!);
+      expect(total(after, c)).toBeGreaterThan(total(advs, c));
+    });
+
+    it('⚠️ la marmotte est confiée s’il reste une place — son butin vaut pour la ville', () => {
+      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes')];
+      const avecPlace = autoCompanions(
+        advs,
+        ctx([fam('loup', 'damage_pct', 20), fam('marmotte', 'gold_pct', 30)], 50),
+      );
+      expect([...avecPlace.values()].map((x) => x.familiarId)).toContain('marmotte');
+      // Chenil 1 = 1 place : elle revient au familier qui renforce vraiment.
+      const unePlace = autoCompanions(
+        advs,
+        ctx([fam('loup', 'damage_pct', 20), fam('marmotte', 'gold_pct', 30)], 1),
+      );
+      expect([...unePlace.values()].map((x) => x.familiarId).filter(Boolean)).toEqual(['loup']);
+    });
+
+    it('⚠️ les places du Chenil bornent, même quand tout le monde gagnerait', () => {
+      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes'), classe('c', 'archer')];
+      const fams = [
+        fam('f1', 'damage_pct', 30),
+        fam('f2', 'damage_pct', 30),
+        fam('f3', 'damage_pct', 30),
+      ];
+      const f = (k: number) =>
+        [...autoCompanions(advs, ctx(fams, k)).values()].map((x) => x.familiarId).filter(Boolean);
+      expect(f(1)).toHaveLength(companionSlots(1));
+      expect(f(50)).toHaveLength(3);
+    });
+
+    it('⚠️ un talent trop rare va au promu qui peut le porter, jamais au commun', () => {
+      // Un commun À CÔTÉ d'un promu : le talent rare entre dans la réserve, mais seul le
+      // promu peut le recevoir, même si le commun en tirerait davantage.
+      const commun = classe('commun', 'guerrier', 90);
+      const promu = {
+        ...classe('promu', 'guerrier', 20),
+        path: ['guerrier', 'epeiste', 'duelliste', 'maitre_epeiste'],
+      };
+      const rare = tal('rare', 't_dmg', talentTierFloor(10));
+      const m = autoCompanions([commun, promu], { ...ctx([], 50), talents: [rare] });
+      expect(m.get('commun')!.talentId).toBeUndefined();
+      expect(m.get('promu')!.talentId).toBe('rare');
+    });
+
+    it('⚠️ une seconde marmotte n’est pas confiée : ces bonus ne s’empilent pas', () => {
+      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes'), classe('c', 'archer')];
+      const m = autoCompanions(
+        advs,
+        ctx([fam('m1', 'gold_pct', 30), fam('m2', 'gold_pct', 25)], 50),
+      );
+      expect([...m.values()].map((x) => x.familiarId).filter(Boolean)).toEqual(['m1']);
+    });
+
+    it('⚠️ les vérifications sur les talents ne sont pas vides : des talents SONT confiés', () => {
+      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes')];
+      const m = autoCompanions(advs, { ...ctx([], 50), talents: [tal('t1'), tal('t2', 't_pv')] });
+      expect(
+        [...m.values()]
+          .map((x) => x.talentId)
+          .filter(Boolean)
+          .sort(),
+      ).toEqual(['t1', 't2']);
+    });
+
+    it('⚠️ déterministe : deux appels donnent la même attribution', () => {
+      const advs = [classe('a', 'guerrier'), classe('b', 'guerrier')];
+      const c = ctx([fam('x', 'damage_pct', 20), fam('y', 'damage_pct', 20)], 50);
+      expect([...autoCompanions(advs, c)]).toEqual([...autoCompanions(advs, c)]);
     });
   });
 

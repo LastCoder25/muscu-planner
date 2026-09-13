@@ -179,6 +179,15 @@ export function survivalOf(c: Combatant): number {
 
 /** Indice synthétique de puissance de combat (offense × survie) — pour l'UI. */
 export function combatPower(c: Combatant): number {
+  return Math.round(combatPowerRaw(c));
+}
+
+/** La même puissance, NON ARRONDIE — pour COMPARER de petits écarts.
+ *  ⚠️ Un aventurier de niveau 5 vaut ~12 : l'arrondi y efface le gain d'un compagnon ou
+ *  d'un talent, et un choix « au mieux » fondé sur le chiffre arrondi ne confiait rien
+ *  (mesuré sur un vivier réel : 1 familier et 0 talent sur 15 aventuriers). Une seule
+ *  formule : `combatPower` n'en est que l'arrondi. */
+export function combatPowerRaw(c: Combatant): number {
   // Effets CONDITIONNELS pondérés par leur valeur MOYENNE réellement attendue sur un
   // combat (recalibré 2026‑08‑23 : les anciens poids sur‑valuaient l'offense conditionnelle
   // → un build tout‑execute/rage/momentum affichait une grosse « puissance » mais mourait
@@ -198,7 +207,7 @@ export function combatPower(c: Combatant): number {
   // offense×survie croît ≈ niveau⁴ → chiffres énormes (dizaines de milliers dès le
   // début). On prend la RACINE : indice toujours monotone/comparable mais à échelle
   // humaine (~niveau², qq centaines au milieu de jeu au lieu de dizaines de milliers).
-  return Math.round(Math.sqrt(offense * procOff * survie * procSurv));
+  return Math.sqrt(offense * procOff * survie * procSurv);
 }
 
 /** Format compact d'une puissance de combat (≈ niveau⁴ → jusqu'aux millions).

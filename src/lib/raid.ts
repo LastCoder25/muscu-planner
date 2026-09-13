@@ -22,7 +22,7 @@
 //
 // NB `Date.now()` n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures et testables, résolution déterministe hors-ligne.
-import { combatPower, mulberry32, type Combatant } from './combat';
+import { combatPower, combatPowerRaw, mulberry32, type Combatant } from './combat';
 import { refFighter } from './proceduralContent';
 import {
   rollDrop,
@@ -2308,6 +2308,110 @@ export function adventurerPowers(advs: Adventurer[], ctx?: CompanionCtx): Map<st
       combatPower(escortCombatant([a], a.name, pairEffects(pairs.get(a.id), ctx))),
     ]),
   );
+}
+
+/**
+ * ✨ CONFIER AU MIEUX : un compagnon et un talent par aventurier, selon SON profil.
+ *
+ * ⚠️ AUCUNE RÈGLE NOUVELLE — les exclusions sont celles des sélecteurs (`companionOptions` /
+ * `talentOptions`) et du combat (`companionPairs`) : ni ce que le HÉROS porte, ni un familier
+ * au-dessus du rang du Chenil (`canCompanion`), ni au-delà de ses places (`companionSlots`),
+ * ni un talent trop rare pour la classe (`canAdvTalent`), et chaque pièce à UN porteur.
+ *
+ * ⚠️ LE « PROFIL » EST LU PAR L'ARBITRE DU JEU, jamais par une table : pour chaque paire on
+ * mesure le gain de `combatPower` que `adventurerPowers` affiche. Un Cogneur tire donc
+ * davantage d'un bonus de dégâts, un Encaisseur d'un bonus de PV, sans qu'on l'écrive.
+ * Le gain d'une paire ne dépend que de son porteur : on calcule la matrice UNE fois, puis on
+ * attribue par gain décroissant (et non aventurier par aventurier dans l'ordre du vivier,
+ * qui donnerait le meilleur familier au premier recruté plutôt qu'à celui qui en tire le plus).
+ * Les talents sont choisis ENSUITE, avec le compagnon retenu : les deux se multiplient.
+ *
+ * ⚠️ FAUCON ET MARMOTTE : le renseignement et le butin qu'ils apportent valent pour la VILLE
+ * et ne pèsent rien dans la puissance. Sans règle, la marmotte ne serait jamais confiée. On en
+ * place un de chaque (le meilleur), s'il reste une place et un aventurier sans compagnon — un
+ * seul, parce que ces bonus ne s'empilent pas (`companionPerks`).
+ */
+export function autoCompanions(
+  advs: Adventurer[],
+  ctx: CompanionCtx,
+): Map<string, { familiarId?: string; talentId?: string }> {
+  const out = new Map<string, { familiarId?: string; talentId?: string }>(
+    advs.map((a) => [a.id, {}]),
+  );
+  const heroTal = new Set(ctx.heroTalentIds ?? []);
+  const fams = ctx.familiars.filter(
+    (f) => f.id !== ctx.heroFamiliarId && canCompanion(f, ctx.kennelLevel),
+  );
+  const tals = ctx.talents.filter((t) => t.equipped !== true && !heroTal.has(t.id));
+  const power = (a: Adventurer, familiar?: Item, talent?: TalentInstance) =>
+    // ⚠️ NON arrondie : sur un aventurier de bas niveau, l'arrondi efface le gain.
+    combatPowerRaw(escortCombatant([a], a.name, pairEffects({ familiar, talent }, ctx)));
+  const bare = new Map(advs.map((a) => [a.id, power(a)]));
+
+  // Attribution par gain décroissant ; départage stable (ordre du vivier, puis de la réserve).
+  function assign<T extends { id: string }>(
+    pool: T[],
+    gainOf: (a: Adventurer, x: T) => number,
+    places: number,
+    set: (a: Adventurer, x: T) => void,
+  ): void {
+    const cand: { ai: number; xi: number; gain: number }[] = [];
+    advs.forEach((a, ai) =>
+      pool.forEach((x, xi) => {
+        const gain = gainOf(a, x);
+        if (gain > 0) cand.push({ ai, xi, gain });
+      }),
+    );
+    cand.sort((p, q) => q.gain - p.gain || p.ai - q.ai || p.xi - q.xi);
+    const doneA = new Set<number>();
+    const doneX = new Set<number>();
+    for (const c of cand) {
+      if (places <= 0) break;
+      if (doneA.has(c.ai) || doneX.has(c.xi)) continue;
+      doneA.add(c.ai);
+      doneX.add(c.xi);
+      set(advs[c.ai]!, pool[c.xi]!);
+      places--;
+    }
+  }
+
+  let places = companionSlots(ctx.kennelLevel);
+  const famOf = new Map<string, Item>();
+  assign(
+    fams,
+    (a, f) => power(a, f) - bare.get(a.id)!,
+    places,
+    (a, f) => {
+      famOf.set(a.id, f);
+      out.get(a.id)!.familiarId = f.id;
+    },
+  );
+  places -= famOf.size;
+
+  // Les bonus de VILLE : un de chaque, s'il reste de quoi le confier.
+  for (const type of ['crit_pct', 'gold_pct'] as const) {
+    if ([...famOf.values()].some((f) => f.effect.type === type)) continue;
+    const libre = advs.find((a) => !famOf.has(a.id));
+    const given = new Set([...famOf.values()].map((f) => f.id));
+    const best = fams
+      .filter((f) => f.effect.type === type && !given.has(f.id))
+      .sort((p, q) => q.effect.value * familiarMult(q) - p.effect.value * familiarMult(p))[0];
+    if (!libre || !best || places <= 0) continue;
+    famOf.set(libre.id, best);
+    out.get(libre.id)!.familiarId = best.id;
+    places--;
+  }
+
+  const withFam = new Map(advs.map((a) => [a.id, power(a, famOf.get(a.id))]));
+  assign(
+    tals.filter((t) => advs.some((a) => canAdvTalent(a, t))),
+    (a, t) => (canAdvTalent(a, t) ? power(a, famOf.get(a.id), t) - withFam.get(a.id)! : 0),
+    Infinity,
+    (a, t) => {
+      out.get(a.id)!.talentId = t.id;
+    },
+  );
+  return out;
 }
 
 export function guardUnits(

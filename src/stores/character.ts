@@ -101,6 +101,7 @@ import {
   totalRepairCost,
   companionPairs,
   companionPerks,
+  autoCompanions,
   siegeFamiliarXp,
   type CompanionCtx,
   companionRankLabel,
@@ -1702,6 +1703,31 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, { adventurers });
   }
 
+  /** ✨ CONFIER AU MIEUX tous les compagnons et talents du vivier (`autoCompanions`).
+   *  ⚠️ Les règles sont celles de la lib, qui reprend les exclusions de `setCompanion` et
+   *  de `setAdvTalent` : héros, Chenil (rang et places), rareté de classe, un seul porteur.
+   *  Il REMPLACE les choix faits à la main — l'écran le dit avant le geste.
+   *  Rend le nombre de compagnons et de talents confiés, ou `null` sans ligne. */
+  async function autoAssignCompanions(
+    userId: string,
+    now: number,
+  ): Promise<{ familiars: number; talents: number } | null> {
+    const cur = row.value;
+    if (!cur) return null;
+    const advs = cur.adventurers ?? [];
+    const plan = autoCompanions(advs, companionCtx(cur, now));
+    const adventurers = advs.map((a) => ({
+      ...a,
+      familiarId: plan.get(a.id)?.familiarId,
+      talentId: plan.get(a.id)?.talentId,
+    }));
+    await persistOptimistic(userId, { adventurers });
+    return {
+      familiars: adventurers.filter((a) => a.familiarId).length,
+      talents: adventurers.filter((a) => a.talentId).length,
+    };
+  }
+
   /** 🧠 CONFIER (ou reprendre) un TALENT à un aventurier. Mêmes règles que le
    *  compagnon : un seul porteur, et jamais ce que le héros a équipé. */
   async function setAdvTalent(userId: string, advId: string, talentId: string | null) {
@@ -2191,6 +2217,7 @@ export const useCharacterStore = defineStore('character', () => {
     finishRepair,
     setCompanion,
     setAdvTalent,
+    autoAssignCompanions,
     healHero,
     garrisonedFamiliars,
     heroIsHome,
