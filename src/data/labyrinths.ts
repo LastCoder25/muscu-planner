@@ -188,6 +188,28 @@ export function keysAfterPaying(keys: number, cost: number): number | null {
   return keys >= prix ? keys - prix : null;
 }
 
+/**
+ * Ce qu’on dit en fin de run pour décider de rejouer : les clés restantes, et combien de runs
+ * du MÊME palier elles paient (ou combien il en manque pour le prochain).
+ * ⚠️ Même règle de prix que `keysAfterPaying` (au moins une clé, prix entier) : les deux ne
+ * doivent jamais annoncer des choses différentes pour le même palier.
+ */
+export function replayKeysInfo(
+  keys: number,
+  cost: number,
+): { keys: number; runs: number; missing: number; label: string } {
+  const prix = Math.max(1, Math.floor(cost));
+  const k = Math.max(0, Math.floor(keys));
+  const runs = Math.floor(k / prix);
+  const missing = runs > 0 ? 0 : prix - k;
+  const cles = `${k} clé${k > 1 ? 's' : ''}`;
+  const label =
+    runs > 0
+      ? `🗝️ Il te reste ${cles} — de quoi rejouer ce palier ${runs} fois.`
+      : `🗝️ Il te reste ${cles} — il en manque ${missing} pour rejouer ce palier.`;
+  return { keys: k, runs, missing, label };
+}
+
 /** Palier nettoyé au moins une fois ? */
 export function labyrinthCleared(id: string, cleared: string[]): boolean {
   return cleared.includes(labyClearId(id));

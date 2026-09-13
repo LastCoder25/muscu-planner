@@ -767,7 +767,12 @@
               "
               @click="loadoutOpen = true"
             >
-              📦
+              📦<span
+                v-if="setUpgradeCount"
+                class="gi-badge"
+                :aria-label="`${setUpgradeCount} set(s) en stock augmentent ta puissance`"
+                >{{ setUpgradeCount }}</span
+              >
             </button>
           </div>
         </div>
@@ -5311,6 +5316,54 @@ const loadoutsView = computed(() => {
 // compteur (qui comptait partout) et la liste (qui ne montrait que la réserve) qui rendait
 // « Mes sets » illisible — 4/4 annoncé au-dessus de deux objets.
 const voieOwnedCount = (i: number): number => loadoutsView.value[i]?.count ?? 0;
+
+/** Badge de l'icône 📦 : combien de sets EN STOCK augmentent la puissance si on les porte.
+ *  « Augmente » = `loadoutPower` — la MÊME fonction que les cartes de « Mes sets », dans la
+ *  voie du set (passif + capstone) : le badge ne peut pas annoncer un gain que la carte dément.
+ *  « En stock » = au moins une pièce du set qu'on ne porte pas (réserve ou sac).
+ *
+ *  ⚠️ JAMAIS PENDANT LE RENDU, ET UN SET PAR IMAGE. `loadoutPower` lance l'optimiseur
+ *  (~160 ms par set sur un sac de ~770 objets, mesuré v0.741) : huit d'affilée dans un
+ *  `computed` referaient figer l'onglet, le défaut exact de la v0.744. On calcule depuis un
+ *  `watch`, après peinture, en rendant la main entre deux sets, et seulement quand l'onglet
+ *  Équipement est ouvert. Un nouveau déclenchement annule le calcul en cours (`setGainRun`). */
+const setUpgradeCount = ref(0);
+let setGainRun = 0;
+async function refreshSetUpgrades() {
+  const run = ++setGainRun;
+  let n = 0;
+  for (let i = 0; i < MAX_LOADOUTS; i++) {
+    await respire();
+    const row = char.row;
+    const v = loadoutVoie(i);
+    if (run !== setGainRun || !row) return;
+    if (!v) continue;
+    const roster = voieSetRoster(
+      `voie:${v.id}`,
+      row.equipped,
+      row.loadouts?.[i]?.items,
+      row.inventory,
+    );
+    const inStock = SLOTS.some((s) => roster[s] && !roster[s].worn);
+    if (inStock && loadoutPower(v.id) > combatPowerVal.value) n++;
+  }
+  if (run === setGainRun) setUpgradeCount.value = n;
+}
+watch(
+  () => [
+    tab.value,
+    char.row?.inventory,
+    char.row?.equipped,
+    char.row?.loadouts,
+    char.row?.voie,
+    char.row?.talents,
+    c.value.level.level,
+  ],
+  () => {
+    if (tab.value === 'gear') void refreshSetUpgrades();
+  },
+  { immediate: true },
+);
 // Porter le set d'une voie : FORCE cette voie (l'optimiseur ne re-choisit pas) et équipe son
 // set complété au mieux avec le sac (un seul appel, capstone de la voie inclus).
 function doWearVoieSet(i: number) {

@@ -8,6 +8,7 @@ import {
   deathKeepFraction,
   labyKeyCost,
   keysAfterPaying,
+  replayKeysInfo,
 } from '@/data/labyrinths';
 import { buildingProdPerHour, buildingStorageCap } from '@/lib/buildings';
 import { RANK_ORDER, RARITY_RANK, rankCeilingForLevel } from '@/lib/items';
@@ -105,6 +106,28 @@ describe('🗝️ UNE CLÉ EST UNE MONNAIE : le prix suit la profondeur', () => 
       expect(runs, `niveau ${L}`).toBeGreaterThanOrEqual(2);
       expect(runs, `niveau ${L}`).toBeLessThanOrEqual(5);
     }
+  });
+});
+
+describe('🗝️ EN FIN DE RUN, ON SAIT SI L’ON PEUT REJOUER', () => {
+  it('compte les runs du même palier que les clés paient', () => {
+    expect(replayKeysInfo(7, 3)).toMatchObject({ keys: 7, runs: 2, missing: 0 });
+    expect(replayKeysInfo(3, 3)).toMatchObject({ runs: 1, missing: 0 });
+    expect(replayKeysInfo(7, 3).label).toContain('2 fois');
+  });
+
+  it('dit combien il en manque quand on ne peut pas rejouer', () => {
+    expect(replayKeysInfo(1, 3)).toMatchObject({ runs: 0, missing: 2 });
+    expect(replayKeysInfo(0, 2).label).toContain('il en manque 2');
+    expect(replayKeysInfo(1, 3).label).toContain('1 clé ');
+  });
+
+  it('parle comme `keysAfterPaying` : rejouer une fois ⇔ le paiement passe', () => {
+    for (let keys = 0; keys <= 12; keys++)
+      for (const cost of [0, 0.5, 1, 2, 3, 4])
+        expect(replayKeysInfo(keys, cost).runs > 0, `${keys} clés, prix ${cost}`).toBe(
+          keysAfterPaying(keys, cost) !== null,
+        );
   });
 });
 

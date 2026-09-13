@@ -366,6 +366,9 @@
             <span class="ol-chevron">›</span>
           </button>
         </div>
+        <!-- Les clés restantes, là où l'on décide de rejouer : sans ça, il fallait revenir au
+             lobby pour savoir si on pouvait relancer. -->
+        <div class="over-keys" :class="{ short: !replayKeys.runs }">{{ replayKeys.label }}</div>
         <div class="over-row">
           <q-btn
             flat
@@ -512,6 +515,7 @@ import {
   labyrinthCleared,
   labyClearId,
   labyKeyCost,
+  replayKeysInfo,
   deathKeepFraction,
   type Labyrinth,
 } from '@/data/labyrinths';
@@ -605,6 +609,7 @@ const gateLevel = computed(
 const labyLuck = computed(() => labyrinthLuckBonus(char.row?.buildings ?? []));
 /** Prix du palier qu’on rejouerait depuis la modale de fin. */
 const replayCost = computed(() => labyKeyCost((selectedLaby.value ?? LABYRINTHS[0]!).id));
+const replayKeys = computed(() => replayKeysInfo(keys.value, replayCost.value));
 const canStart = computed(
   () => labyUnlocked.value && keys.value >= replayCost.value && progress.ready.value && !!char.row,
 );
@@ -2269,6 +2274,16 @@ function returnToLobby() {
   color: var(--dim);
   line-height: 1.5;
   margin-bottom: 14px;
+}
+.over-keys {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 10px 0 4px;
+}
+/* Pas de quoi rejouer : en orange (une marge qui manque), pas en rouge d'alerte. */
+.over-keys.short {
+  color: var(--d3);
 }
 .over-loot {
   text-align: left;
