@@ -71,6 +71,7 @@
         />
       </div>
 
+      <ComboTierLegend v-if="c.legs.some((l) => legMode(l) === 'sets')" />
       <div
         v-for="leg in orderedLegs"
         :key="leg.exercise_id"
@@ -102,30 +103,13 @@
             </div>
           </div>
         </div>
-        <!-- 3 paliers (secondaire / principal / maximal) : toujours un prochain jalon à viser.
-             Le palier atteint s'allume ; le principal = ta cible (porte l'essentiel du bonus). -->
-        <div class="leg-tiers">
-          <span class="tier-pill" :class="{ on: tierRank(leg) >= 1 }">
-            <span class="tp-lbl">Sec.</span> {{ tierMarks(leg).sec }}
-          </span>
-          <span class="tier-pill principal" :class="{ on: tierRank(leg) >= 2 }">
-            <span class="tp-lbl">Principal</span> {{ leg.target }}
-          </span>
-          <span class="tier-pill max" :class="{ on: tierRank(leg) >= 3 }">
-            <span class="tp-lbl">Max</span> {{ tierMarks(leg).max }}
-          </span>
-        </div>
         <!-- Mode séries : segments par série ; mode reps : barre de progression simple. -->
         <div v-if="legMode(leg) === 'sets'" class="seg-bar">
           <span
             v-for="n in segCount(leg)"
             :key="n"
             class="seg"
-            :class="{
-              on: n <= legDone(leg),
-              extra: n > leg.target,
-              possible: n > leg.target && n > legDone(leg),
-            }"
+            :class="['z-' + legSegZone(leg, n), { on: n <= legDone(leg) }]"
           >
             <template v-if="n <= legDone(leg)">{{ segSetLabel(legSets(leg)[n - 1]) }}</template>
             <template v-else-if="n > leg.target">+</template>
@@ -221,6 +205,7 @@ import {
   comboProgressPct,
   legTier,
   legTierMarks,
+  legSegZone,
   legBarGeometry,
   legSetsDone,
   comboStopPlan,
@@ -242,6 +227,7 @@ import {
   type ComboSet,
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
+import ComboTierLegend from '@/components/ComboTierLegend.vue';
 import {
   logicalToday,
   addDaysIso,
@@ -267,10 +253,6 @@ const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 const pct = computed(() => (c.value ? comboProgressPct(c.value) : 0));
 // Paliers (secondaire / principal / maximal) par exo — repères + motivation.
-const TIER_RANK: Record<string, number> = { none: 0, secondary: 1, principal: 2, max: 3 };
-function tierRank(l: ComboLeg): number {
-  return TIER_RANK[legTier(l)] ?? 0;
-}
 // Nombre de cases affichées : jusqu'au palier MAXIMAL (et au-delà si déjà dépassé).
 // Sans ça, la barre s'arrêtait à l'objectif → rien ne montrait qu'on pouvait aller plus loin.
 // Géométrie de la barre continue (reps/durée) → montre la marge de dépassement.
@@ -279,9 +261,6 @@ function bar(l: ComboLeg): { objPct: number; fillPct: number; overPct: number } 
 }
 function segCount(l: ComboLeg): number {
   return Math.max(legTierMarks(l).max, legDone(l));
-}
-function tierMarks(l: ComboLeg): { sec: number; max: number } {
-  return legTierMarks(l);
 }
 const legsAtMax = computed(() => c.value?.legs.filter((l) => legTier(l) === 'max').length ?? 0);
 // Ordre d'affichage : les plus PROCHES de la complétude en haut, les autres par
@@ -761,43 +740,6 @@ onMounted(async () => {
 .leg-ok {
   color: var(--d1);
 }
-/* 3 paliers (secondaire / principal / maximal) — repères toujours visibles, allumés
-   quand atteints. Le principal est mis en avant (c'est la cible). */
-.leg-tiers {
-  display: flex;
-  gap: 6px;
-  margin: 8px 0 4px;
-}
-.tier-pill {
-  flex: 1;
-  text-align: center;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--dim);
-  background: var(--surface-2);
-  border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  padding: 3px 4px;
-  white-space: nowrap;
-}
-.tier-pill .tp-lbl {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  opacity: 0.8;
-}
-.tier-pill.principal {
-  font-weight: 700;
-}
-.tier-pill.on {
-  color: var(--accent-ink);
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.tier-pill.max.on {
-  background: var(--d3, #ffb23f);
-  border-color: var(--d3, #ffb23f);
-}
 .bar {
   height: 8px;
   background: var(--surface-2);
@@ -882,25 +824,37 @@ onMounted(async () => {
   white-space: nowrap;
   overflow: hidden;
 }
-.seg.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
+/* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboTierLegend) :
+   la case dit quel palier elle fait avancer. Faite = pleine, à faire = liseré de la même teinte. */
+.seg.z-secondary {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
 }
-/* Série faite AU-DELÀ de l'objectif → couleur distincte (vert « en plus »). */
-.seg.extra.on {
-  background: var(--d1);
-  border-color: var(--d1);
-  color: #10231a;
+.seg.z-principal {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
 }
-/* Série BONUS encore POSSIBLE (au-delà de l'objectif, pas encore faite) : contour vert
-   pointillé + « + ». On voit la marge de dépassement AVANT de l'avoir prise — sans ça,
-   rien n'indiquait qu'on pouvait aller plus loin que l'objectif. */
-.seg.possible {
+.seg.z-max,
+.seg.z-beyond {
   background: transparent;
   border-style: dashed;
   border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
   color: color-mix(in srgb, var(--d1) 75%, var(--dim));
+}
+.seg.on.z-secondary {
+  background: color-mix(in srgb, var(--accent) 55%, var(--surface));
+  border-color: transparent;
+  color: var(--text);
+}
+.seg.on.z-principal {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.seg.on.z-max,
+.seg.on.z-beyond {
+  background: var(--d1);
+  border-style: solid;
+  border-color: var(--d1);
+  color: #10231a;
 }
 .leg-extra {
   margin-left: 6px;

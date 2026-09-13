@@ -21,6 +21,7 @@ import {
   comboOverachievement,
   legTier,
   legTierMarks,
+  legSegZone,
   legBarGeometry,
   legTierShare,
   comboTieredBonus,
@@ -625,6 +626,48 @@ describe('legTierMarks', () => {
       const m = legTierMarks(leg(t, 0));
       expect(m.sec).toBeLessThanOrEqual(m.principal);
       expect(m.principal).toBeLessThan(m.max);
+    }
+  });
+});
+
+describe('🎨 LA COULEUR D’UNE CASE DIT LE PALIER (remplace les pastilles)', () => {
+  const leg = (target: number, done: number) =>
+    ({
+      slot: 'push',
+      exercise_id: 'ex',
+      rep_weight: 1,
+      target,
+      count_mode: 'sets',
+      sets: Array.from({ length: done }, () => ({ date: '2026-09-01', reps: 10 })),
+      progress: [],
+    }) as unknown as Parameters<typeof legTier>[0];
+
+  it('faire la DERNIÈRE case d’une couleur débloque exactement ce palier (toutes les cibles)', () => {
+    // Sinon la couleur mentirait : une case « objectif » faite sans objectif atteint.
+    for (let t = 1; t <= 80; t++) {
+      const max = legTierMarks(leg(t, 0)).max;
+      for (let n = 1; n <= max; n++) {
+        const zone = legSegZone(leg(t, 0), n);
+        const lastOfZone = legSegZone(leg(t, 0), n + 1) !== zone;
+        if (lastOfZone) expect(legTier(leg(t, n)), `cible ${t}, case ${n}`).toBe(zone);
+        else expect(legTier(leg(t, n)), `cible ${t}, case ${n}`).not.toBe(zone);
+      }
+    }
+  });
+
+  it('les couleurs se suivent dans l’ordre, et au-delà du maximal plus rien ne compte', () => {
+    const ORDER = ['secondary', 'principal', 'max', 'beyond'];
+    for (let t = 1; t <= 80; t++) {
+      let prev = 0;
+      const max = legTierMarks(leg(t, 0)).max;
+      for (let n = 1; n <= max + 3; n++) {
+        const k = ORDER.indexOf(legSegZone(leg(t, 0), n));
+        expect(k).toBeGreaterThanOrEqual(prev);
+        prev = k;
+      }
+      expect(legSegZone(leg(t, 0), max + 1)).toBe('beyond');
+      // L'objectif (principal) ne commence jamais avant la fin du secondaire.
+      expect(legSegZone(leg(t, 0), t)).not.toBe('max');
     }
   });
 });

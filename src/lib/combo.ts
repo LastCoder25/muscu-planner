@@ -268,6 +268,23 @@ export function legTierMarks(l: ComboLeg): { sec: number; principal: number; max
   };
 }
 
+/** Palier qu'une CASE de la barre de séries fait avancer (la n-ième série, n ≥ 1).
+ *
+ *  ⚠️ REMPLACE LES TROIS PASTILLES « Sec. / Principal / Max » (demandé par l'utilisateur,
+ *  pour gagner de la place) : c'est la COULEUR des cases qui dit le palier. Il faut donc que
+ *  la case colorée « secondaire » soit exactement celle qui débloque le palier secondaire —
+ *  sinon la couleur mentirait comme les repères arrondis de la v0.621. D'où l'appui sur
+ *  `legTierMarks`, la même source que `legTier`. `beyond` = au-delà du maximal (rien de plus). */
+export type SegZone = 'secondary' | 'principal' | 'max' | 'beyond';
+export function legSegZone(l: ComboLeg, n: number): SegZone {
+  const m = legTierMarks(l);
+  if (n > m.max) return 'beyond';
+  if (n > m.principal) return 'max';
+  // Sur un tout petit objectif le repère secondaire EST l'objectif : pas de zone secondaire.
+  if (n > m.sec || m.sec === m.principal) return 'principal';
+  return 'secondary';
+}
+
 /** Géométrie de la barre continue (modes REPS et DURÉE), rapportée au palier MAXIMAL.
  *
  *  Le mode séries montre ses cases bonus en pointillé ; la barre continue, elle, était

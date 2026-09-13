@@ -413,6 +413,7 @@
               @click="exportCombo"
             />
           </div>
+          <ComboTierLegend v-if="activeComboLegs.some((l) => legMode(l) === 'sets')" />
           <div v-for="leg in activeComboLegs" :key="leg.exercise_id" class="combo-leg">
             <div class="cl-top">
               <button class="cl-name" @click="openHistory(leg)">
@@ -444,11 +445,7 @@
                   v-for="n in segCount(leg)"
                   :key="n"
                   class="seg"
-                  :class="{
-                    on: n <= legDone(leg),
-                    extra: n > leg.target,
-                    possible: n > leg.target && n > legDone(leg),
-                  }"
+                  :class="['z-' + legSegZone(leg, n), { on: n <= legDone(leg) }]"
                 >
                   <template v-if="n <= legDone(leg)">{{
                     segSetLabel(legSets(leg)[n - 1])
@@ -568,6 +565,7 @@ defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
+import ComboTierLegend from '@/components/ComboTierLegend.vue';
 import {
   challengeStats,
   challengeXpPoints,
@@ -595,6 +593,7 @@ import {
   legDone,
   legComplete,
   legTierMarks,
+  legSegZone,
   legBarGeometry,
   legRemaining,
   legMode,
@@ -1520,25 +1519,37 @@ onMounted(async () => {
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
   color: var(--dim);
 }
-.seg.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
+/* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboTierLegend) :
+   la case dit quel palier elle fait avancer. Faite = pleine, à faire = liseré de la même teinte. */
+.seg.z-secondary {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
 }
-/* Série faite au-delà de l'objectif → vert « en plus ». */
-.seg.extra.on {
-  background: var(--d1);
-  border-color: var(--d1);
-  color: #10231a;
+.seg.z-principal {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
 }
-/* Série BONUS encore POSSIBLE (au-delà de l'objectif, pas encore faite) : contour vert
-   pointillé + « + ». On voit la marge de dépassement AVANT de l'avoir prise — sans ça,
-   rien n'indiquait qu'on pouvait aller plus loin que l'objectif. */
-.seg.possible {
+.seg.z-max,
+.seg.z-beyond {
   background: transparent;
   border-style: dashed;
   border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
   color: color-mix(in srgb, var(--d1) 75%, var(--dim));
+}
+.seg.on.z-secondary {
+  background: color-mix(in srgb, var(--accent) 55%, var(--surface));
+  border-color: transparent;
+  color: var(--text);
+}
+.seg.on.z-principal {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.seg.on.z-max,
+.seg.on.z-beyond {
+  background: var(--d1);
+  border-style: solid;
+  border-color: var(--d1);
+  color: #10231a;
 }
 .cl-extra {
   margin-left: 6px;
