@@ -21,6 +21,7 @@ import {
   ADV_TALENT_K,
   heroEquivalentFactor,
   isCaravanClaimable,
+  missionTravelMult,
   missionXp,
   refAdventurer,
   resolveCaravan,
@@ -37,6 +38,7 @@ import {
   EXPE,
   travelPosition,
   harvestYield,
+  spawnWindow,
   travelFactor,
   travelOneWayMin,
   type Poi,
@@ -335,6 +337,99 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
       if (f.some((x) => !x.won)) defaites++;
     }
     expect(defaites, 'aucune défaite dans le lot : le test ne prouve rien').toBeGreaterThan(0);
+  });
+});
+
+describe('⚠️ ALLER LOIN FORME DAVANTAGE — l’XP paie la DISTANCE', () => {
+  /** Un POI TEL QUE LA CARTE LE POSE : son niveau DÉCOULE de sa distance (v0.683).
+   *  ⚠️ Le fabriquer à niveau constant ne testerait pas la décision du joueur — sur la
+   *  carte, choisir « plus loin » c'est choisir « plus fort » du même geste. */
+  const mapPoi = (playerLevel: number, distNorm: number): Poi => {
+    const w = spawnWindow(playerLevel);
+    return poi({ level: w.min + Math.round(distNorm * (w.max - w.min)), distNorm });
+  };
+  /** Le rendement qui décide vraiment : un convoi occupe un créneau pendant tout son
+   *  voyage, on compare donc ce qu'il rapporte À L'HEURE, pas par voyage. */
+  const xpParHeure = (playerLevel: number, distNorm: number) => {
+    const p = mapPoi(playerLevel, distNorm);
+    return missionXp(refAdventurer(playerLevel), p) / ((2 * caravanLegMin(p, [])) / 60);
+  };
+  const DIST = [0, 0.25, 0.5, 0.75, 0.9, 1];
+
+  it('⚠️ LA NAVETTE AU PIED DE LA VILLE N’EST PLUS LA MEILLEURE ÉCOLE', () => {
+    // ⚠️ CE QUE AUCUN TEST N'EXISTAIT POUR VOIR — et c'est pour ça que le défaut a vécu :
+    // `poi()` vaut 0,5 partout ailleurs dans ce fichier, donc la distance n'était mesurée
+    // nulle part. Le niveau d'un POI découle bien de son éloignement, donc l'XP montait
+    // un peu en s'éloignant — mais le TRAJET montait vingt fois plus vite. Mesuré au
+    // niveau 28 : 85 XP/h au plus proche contre 5 au plus lointain, un rapport de 17.
+    // Élever son vivier revenait à faire l'aller-retour au pied de la ville.
+    for (const L of [10, 28, 60, 90]) {
+      const proche = xpParHeure(L, 0);
+      const ailleurs = Math.max(...DIST.map((d) => xpParHeure(L, d)));
+      // Marge FRANCHE : sans borne basse, un écart de 1 % passerait sans jamais peser
+      // dans une décision. Mesuré après correctif : +37 à +39 %.
+      expect(ailleurs / proche, `niveau ${L}`).toBeGreaterThan(1.25);
+    }
+  });
+
+  it('⚠️ …et ce n’est jamais le POI le plus proche qui gagne', () => {
+    // Formulé sur l'ARGMAX et pas sur le seul bout de la carte : mesuré, l'optimum se
+    // déplace vers le milieu à haut niveau (d≈1 aux niveaux 10-28, 0,75 au 60, 0,5 au 90)
+    // parce que le plafond de `travelFactor` (9 h aller-retour) est atteint d'autant plus
+    // tôt que le trajet s'allonge avec le niveau. C'est la MÊME limite que pour la
+    // cargaison, donc un arbitrage cohérent — « il y a une bonne distance » — et non un
+    // retour au défaut, qui était « la bonne distance est toujours zéro ».
+    for (const L of [10, 28, 60, 90]) {
+      const rendements = DIST.map((d) => xpParHeure(L, d));
+      const meilleur = DIST[rendements.indexOf(Math.max(...rendements))]!;
+      expect(meilleur, `niveau ${L}`).toBeGreaterThanOrEqual(0.5);
+    }
+  });
+
+  it('⚠️ la DISTANCE MÉDIANE est le point fixe — on redistribue, on ne dope pas', () => {
+    // C'est ce qui préserve la courbe de montée mesurée (~8 missions pour le niveau 2,
+    // 255 pour le 23) : le joueur qui prend ce que la carte lui donne ne voit rien
+    // changer. Le proche paie moins, le lointain davantage.
+    expect(missionTravelMult(poi({ distNorm: CARAVAN.xpRefDist }))).toBeCloseTo(1, 6);
+    expect(missionTravelMult(poi({ distNorm: 0 }))).toBeLessThan(1);
+    expect(missionTravelMult(poi({ distNorm: 1 }))).toBeGreaterThan(1);
+  });
+
+  it('⚠️ elle se paie sur le temps du HÉROS, jamais sur celui de la caravane', () => {
+    // Sinon la lenteur deviendrait une prime : un Comptoir bas niveau — donc des convois
+    // plus lents — rapporterait PLUS d'XP qu'un Comptoir monté à fond, et améliorer son
+    // bâtiment se paierait d'une régression. Même raison que `heroEquivalentFactor`.
+    // ⚠️ VÉRIFIÉ SUR LA VALEUR, pas sur l'intention : un premier jet comparait
+    // `missionTravelMult(p)` à lui-même — vrai, et qu'aucune mutation ne peut faire
+    // tomber. On épingle donc le fait qu'il vaut EXACTEMENT le facteur du héros, celui
+    // que la cargaison utilise : le calculer sur la durée réelle du convoi le change.
+    for (const d of [0, 0.5, 1]) {
+      const p = poi({ distNorm: d });
+      const attendu = heroEquivalentFactor(p) / heroEquivalentFactor(poi({ distNorm: 0.5 }));
+      expect(missionTravelMult(p), `distance ${d}`).toBeCloseTo(attendu, 9);
+    }
+    // …et un convoi ralenti met bien PLUS de temps : c'est ce que la règle refuse de payer.
+    const loin = poi({ distNorm: 1 });
+    expect(caravanLegMin(loin, [], 80)).toBeLessThan(caravanLegMin(loin, [], 0));
+  });
+
+  it('⚠️ la distance ne contourne pas le rendement décroissant', () => {
+    // Les deux termes ne font pas double emploi : l'un regarde le NIVEAU de la route,
+    // l'autre son ÉLOIGNEMENT. Un vétéran envoyé au bout d'une carte de bas niveau doit
+    // rester bridé, sinon le farm de route facile revient par la porte de derrière.
+    const loin = poi({ level: 5, distNorm: 1 });
+    expect(missionXp(refAdventurer(40), loin)).toBeLessThan(missionXp(refAdventurer(5), loin));
+  });
+
+  it('l’XP suit la MÊME courbe que la cargaison', () => {
+    // Une seconde règle de distance aurait divergé au premier réglage de `TRAVEL_EXP`,
+    // et l'une des deux aurait cessé de payer l'éloignement.
+    for (const d of [0, 0.25, 0.5, 0.75, 1]) {
+      const p = poi({ distNorm: d });
+      expect(
+        missionTravelMult(p) * heroEquivalentFactor(poi({ distNorm: CARAVAN.xpRefDist })),
+      ).toBeCloseTo(heroEquivalentFactor(p), 6);
+    }
   });
 });
 

@@ -287,8 +287,13 @@
               <span class="ca-name">{{ a.name }}</span>
               <!-- ⚠️ LE RANG ET LES COMPÉTENCES, demandés par l’utilisateur : on choisissait
                    son escorte sur un prénom, alors que ce sont les RÔLES qui décident du
-                   convoi. Le rang porte sa couleur (une seule échelle de prestige dans tout
-                   le jeu) et le NIVEAU reste caché, comme partout. -->
+                   convoi. Le rang est sa RARETÉ de classe, les étoiles son travail de
+                   terrain, et le NIVEAU reste caché — comme dans la Guilde.
+                   ⚠️ La rareté est ÉCRITE, pas seulement teintée : la couleur seule ne se
+                   lit pas, et c’est elle qui dit ce que vaut l’aventurier. -->
+              <span class="ca-rar" :style="{ color: advRank(a).color }">
+                {{ advRank(a).label }}
+              </span>
               <span class="ca-rank" :style="{ color: advRank(a).color }">
                 {{ rankStarStr(advRank(a).star) }}
               </span>
@@ -1091,7 +1096,17 @@ function fmtMin(min: number): string {
   font-size: 11px;
   color: var(--dim);
 }
-/* Le rang : mêmes étoiles et même couleur que la Guilde — une seule échelle. */
+/* La rareté de classe : mêmes mots et mêmes couleurs que la Guilde et que le butin. */
+.ca-rar {
+  font-size: 9px;
+  line-height: 1.1;
+  text-transform: capitalize;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Les étoiles : le travail de terrain, dans la teinte de son rang. */
 .ca-rank {
   font-size: 9px;
   letter-spacing: -0.5px;

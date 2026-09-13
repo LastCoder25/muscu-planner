@@ -56,20 +56,22 @@
           <div class="adv-main">
             <div class="adv-top">
               <span class="adv-name">{{ a.name }}</span>
-              <!-- ⚠️ On montre le RANG, jamais le niveau : c’est la promesse « aventurier
-                   de manga ». Le niveau ne sert qu’à calculer, il ne s’affiche pas. -->
+              <!-- ⚠️ UNE SEULE ÉCHELLE : le rang EST la rareté de sa classe (8 crans,
+                   mêmes libellés et mêmes couleurs que le butin) et les étoiles disent où
+                   en est son niveau, qui reste caché — la promesse « aventurier de manga ».
+                   Avant, ces deux progressions s’affichaient côte à côte et se
+                   contredisaient. -->
               <span class="adv-rank" :style="{ color: rankOf(a).color }">
-                {{ rankOf(a).emoji }} {{ rankOf(a).name }} {{ stars(rankOf(a).star) }}
+                {{ rankOf(a).label }} {{ stars(rankOf(a).star) }}
               </span>
             </div>
             <div class="adv-sub">
               {{ titleOf(a)?.label ?? '—' }}
-              <span class="adv-rar">{{ RARITY_LABEL[rarityOf(a)] }}</span>
               <span v-if="signaturesOf(a).length" class="adv-sig">✦</span>
             </div>
             <!-- La BARRE : sans elle, le niveau étant caché, on peut travailler deux
                  niveaux entiers sans le moindre retour visible. -->
-            <div class="adv-bar" :title="`Étoile suivante au niveau ${nextStarOf(a)}`">
+            <div class="adv-bar" :title="barTitle(a)">
               <span class="adv-fill" :style="{ width: Math.round(progressOf(a) * 100) + '%' }" />
             </div>
             <div class="adv-state">
@@ -206,14 +208,12 @@
           {{ titleOf(detailAdv)?.emoji ?? '🧑' }} {{ detailAdv.name }}
         </span>
         <span class="adv-rank" :style="{ color: rankOf(detailAdv).color }">
-          {{ rankOf(detailAdv).emoji }} {{ rankOf(detailAdv).name }}
-          {{ stars(rankOf(detailAdv).star) }}
+          {{ rankOf(detailAdv).label }} {{ stars(rankOf(detailAdv).star) }}
         </span>
       </div>
 
       <div class="d-sub">
-        {{ titleOf(detailAdv)?.label ?? '—' }} · <b>{{ RARITY_LABEL[rarityOf(detailAdv)] }}</b> ·
-        {{ advShapeLabel(statWeights(detailAdv)) }}
+        {{ titleOf(detailAdv)?.label ?? '—' }} · {{ advShapeLabel(statWeights(detailAdv)) }}
       </div>
 
       <!-- Les STATS, qui n'étaient lisibles nulle part une fois la promotion faite. -->
@@ -223,7 +223,7 @@
         <span class="d-stat">⚡ {{ statsOf(detailAdv).agilite }}</span>
       </div>
 
-      <div class="adv-bar" :title="`Étoile suivante au niveau ${nextStarOf(detailAdv)}`">
+      <div class="adv-bar" :title="barTitle(detailAdv)">
         <span class="adv-fill" :style="{ width: Math.round(progressOf(detailAdv) * 100) + '%' }" />
       </div>
 
@@ -422,10 +422,10 @@ import { useCharacterStore } from '@/stores/character';
 import {
   ADV_CLASSES,
   advAvailable,
-  advNextStarLevel,
+  ADV_STARS,
+  advNextPromoLevel,
   advRank,
   advRankProgress,
-  advRarity,
   advTitle,
   advClass,
   advRoleLevels,
@@ -669,9 +669,16 @@ const offers = computed(() => char.recruitChoices(recruitSeed.value));
 
 const rankOf = (a: Adventurer) => advRank(a);
 const titleOf = (a: Adventurer) => advTitle(a);
-const rarityOf = (a: Adventurer) => advRarity(a);
 const progressOf = (a: Adventurer) => advRankProgress(a);
-const nextStarOf = (a: Adventurer) => advNextStarLevel(a);
+// ⚠️ La barre annonce la PROMOTION, plus « l’étoile suivante » : ce niveau-là ne
+// déclenchait rien. Au sommet elle dit pourquoi il n’y a plus d’échéance, au lieu de se
+// taire — un titre vide se lit comme un oubli.
+const barTitle = (a: Adventurer) => {
+  const n = advNextPromoLevel(a);
+  return n === null
+    ? 'Au sommet de l’arbre — les étoiles suivent son entraînement'
+    : `Promotion suivante à ${stars(ADV_STARS)}`;
+};
 const signaturesOf = (a: Adventurer) => advSignatureLevels(a);
 const stars = (s: number) => rankStarStr(s);
 const isFree = (a: Adventurer) => advAvailable(a, now.value);
@@ -1073,10 +1080,6 @@ async function doPromote(classId: string) {
 .adv-sub {
   font-size: 12px;
   color: var(--dim);
-}
-.adv-rar {
-  margin-left: 6px;
-  opacity: 0.8;
 }
 .adv-sig {
   margin-left: 4px;

@@ -53,28 +53,6 @@ export function characterRank(level: number): CharacterRank {
   return { rankIndex, name: t.name, emoji: t.emoji, color: t.color, star, tier };
 }
 
-/** Avancement vers l'ÉTOILE suivante, de 0 à 1.
- *
- *  ⚠️ Le niveau reste CACHÉ (on n'affiche que le rang), donc sans cette barre la
- *  progression est invisible entre deux étoiles — soit jusqu'à deux niveaux de travail
- *  sans le moindre retour. `xpInLevel` = part du niveau en cours déjà acquise (0..1) :
- *  la barre bouge alors à CHAQUE mission, pas seulement au passage de niveau.
- *
- *  Vit ici parce que c'est une propriété de l'ÉCHELLE de prestige, pas des aventuriers :
- *  le héros peut l'utiliser telle quelle. */
-export function rankProgress(level: number, xpInLevel = 0): number {
-  const L = Math.max(1, level);
-  const inStar = (L - 1) % LEVELS_PER_STAR;
-  const frac = Math.min(1, Math.max(0, xpInLevel));
-  return Math.min(1, (inStar + frac) / LEVELS_PER_STAR);
-}
-
-/** Niveau auquel l'étoile suivante sera atteinte (utile pour l'info-bulle de la barre). */
-export function nextStarLevel(level: number): number {
-  const L = Math.max(1, level);
-  return L + (LEVELS_PER_STAR - ((L - 1) % LEVELS_PER_STAR));
-}
-
 /** « ★★★★☆ » pour l'étoile courante d'un rang (5 crans). */
 export function rankStarStr(star: number): string {
   const s = Math.max(1, Math.min(STARS_PER_RANK, star));

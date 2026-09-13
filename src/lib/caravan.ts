@@ -119,6 +119,11 @@ export const CARAVAN = {
    *  elle reste naturellement plus formatrice, mais parce qu'il s'y passe quelque chose. */
   xpPerFight: 0.2,
   xpFightMax: 0.6,
+  /** Distance de RÉFÉRENCE de l'XP de mission (0..1) : celle dont le rendement ne bouge
+   *  pas. En deçà on apprend moins, au-delà davantage — voir `missionTravelMult`. La
+   *  médiane, pour que la courbe de montée mesurée (~8 missions pour le niveau 2, 255
+   *  pour le 23) reste vraie du joueur qui prend ce que la carte lui donne. */
+  xpRefDist: 0.5,
   /** Part de la valeur d'un convoi qu'une embuscade perdue emporte. */
   lossKeep: 0.55,
 } as const;
@@ -428,7 +433,42 @@ export function caravanLegMin(poi: Poi, escort: Adventurer[], comptoirLevel = 0)
  *  elle écraserait l'expédition du héros. Le marché doit rester lisible : la caravane
  *  coûte plus de TEMPS (abondant) et zéro ÉNERGIE (rare) ; elle ne rapporte pas plus. */
 export function heroEquivalentFactor(poi: Poi): number {
-  return travelFactor((2 * travelOneWayMin(poi.level, poi.distNorm)) / 60);
+  return tripFactor(poi.level, poi.distNorm);
+}
+
+/** Le facteur de trajet d'un POI, à niveau et distance donnés. Extrait pour que l'XP et
+ *  la cargaison lisent LA MÊME courbe : deux copies auraient divergé au premier réglage
+ *  de `TRAVEL_EXP`, et l'une des deux aurait cessé de payer la distance. */
+function tripFactor(level: number, distNorm: number): number {
+  return travelFactor((2 * travelOneWayMin(level, distNorm)) / 60);
+}
+
+/**
+ * Ce que la DISTANCE vaut à l'XP d'une mission.
+ *
+ * ⚠️ SANS LUI, ALLER LOIN ÉTAIT UNE PERTE SÈCHE POUR LE VIVIER. Le niveau d'un POI
+ * découle bien de sa distance (v0.683), donc l'XP montait un peu en s'éloignant — mais
+ * le TRAJET, lui, montait vingt fois plus vite. Mesuré au niveau 28 : le POI le plus
+ * proche rendait 85 XP/h, le plus lointain 5 — un rapport de 17. Le convoi n'ayant qu'un
+ * nombre borné de créneaux, c'est bien le rendement HORAIRE qui décide : la stratégie
+ * optimale était de faire la navette au pied de la ville, et les trois quarts de la
+ * carte ne servaient plus à rien pour élever ses aventuriers.
+ *
+ * ⚠️ ON RÉUTILISE LA COURBE DE LA CARGAISON (`travelFactor`, super-linéaire), pas une
+ * seconde règle : c'est déjà elle qui fait qu'un long voyage paie plus que
+ * proportionnellement. L'XP suit donc la même pente, et « loin » redevient un arbitrage
+ * cohérent d'un bout à l'autre de l'économie.
+ *
+ * ⚠️ RAPPORTÉ À LA DISTANCE MÉDIANE, et c'est ce qui préserve la calibration : une
+ * mission de mi-carte vaut exactement ce qu'elle valait. On ne dope pas la montée en
+ * niveau, on la REDISTRIBUE — le proche paie moins, le lointain davantage.
+ *
+ * ⚠️ Il se calcule sur la durée qu'un HÉROS aurait mise, jamais sur celle de la
+ * caravane : payer le temps réel ferait de la lenteur une prime (même raison que
+ * `heroEquivalentFactor`), et un Comptoir bas niveau rapporterait plus d'XP qu'un haut.
+ */
+export function missionTravelMult(poi: Poi): number {
+  return tripFactor(poi.level, poi.distNorm) / tripFactor(poi.level, CARAVAN.xpRefDist);
 }
 
 /** Salaires d'une mission — un PUITS D'OR, et la contrepartie de la prestation. */
@@ -440,14 +480,23 @@ export function caravanWages(escort: Adventurer[], poi: Poi): number {
   );
 }
 
-/** XP gagnée par chaque membre. ⚠️ RENDEMENT DÉCROISSANT quand la route est très en
- *  dessous du niveau de l'aventurier : sans ça on farme le trajet le plus court à
- *  l'infini et le choix de destination meurt. */
+/** XP gagnée par chaque membre — trois termes, et chacun répond à un abus précis.
+ *
+ *  `ratio` : RENDEMENT DÉCROISSANT quand la route est très en dessous du niveau de
+ *  l'aventurier — sans lui, un vétéran engrange sur des routes qui ne lui apprennent rien.
+ *  `travel` : la DISTANCE (cf. `missionTravelMult`) — sans lui, la navette au pied de la
+ *  ville rendait 17 fois plus d'XP à l'heure que le bout de la carte.
+ *  `learned` : les embuscades RÉELLEMENT traversées, gagnées ou perdues.
+ *
+ *  ⚠️ Les deux premiers ne font PAS double emploi : le premier regarde le niveau de la
+ *  route, le second son éloignement. Ils se corrèlent (le niveau découle de la distance)
+ *  sans se confondre — un vétéran envoyé loin sur une carte de bas niveau reste bridé. */
 export function missionXp(adv: Adventurer, poi: Poi, fights = 0): number {
   const ratio = Math.max(0.15, Math.min(2, poi.level / Math.max(1, adv.level)));
   const base = 6 + poi.level * 1.6;
+  const travel = missionTravelMult(poi);
   const learned = 1 + Math.min(CARAVAN.xpFightMax, Math.max(0, fights) * CARAVAN.xpPerFight);
-  return Math.max(1, Math.round(base * Math.min(1, ratio) ** 1.5 * learned));
+  return Math.max(1, Math.round(base * Math.min(1, ratio) ** 1.5 * travel * learned));
 }
 
 /** Convois simultanés qu'autorise le Comptoir. ⚠️ SECOND garde-fou de l'inflation :
