@@ -2,13 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   isMuscuLog,
   mondayOf,
-  setsByMuscleInRange,
-  muscleVolumeInRange,
   comboLogEntries,
   challengeLogEntries,
   firstOfMonth,
   dayAfter,
-  weeklySetsByMuscle,
   volumeState,
   VOLUME_LOW,
   VOLUME_HIGH,
@@ -55,28 +52,20 @@ describe('isMuscuLog', () => {
   });
 });
 
-describe('muscleVolumeInRange', () => {
-  it('agrège séries + reps par muscle ET par exo sur la période, exclut prépa/cardio', () => {
-    const entries = [
-      entry(
-        '2026-08-11',
-        mkLog([
-          { muscle: 'pectoraux', sets: 3, reps: 10 },
-          { muscle: 'dos', sets: 4, reps: 12 },
-        ]),
-      ),
-      entry('2026-08-12', mkLog([{ muscle: 'pectoraux', sets: 2, reps: 8 }])),
-      entry('2026-08-13', mkLog([{ muscle: 'pectoraux', sets: 5 }], 'prepa_physique')), // exclu
-      entry('2026-07-30', mkLog([{ muscle: 'pectoraux', sets: 9 }])), // hors période
-    ];
-    const v = muscleVolumeInRange(entries, '2026-08-10', '2026-08-17');
-    expect(v.byMuscle['pectoraux']).toEqual({ sets: 5, reps: 46 }); // 3×10 + 2×8
-    expect(v.byMuscle['dos']).toEqual({ sets: 4, reps: 48 }); // 4×12
-    expect(v.totalSets).toBe(9);
-    // par exo : trié par séries décroissantes
-    expect(v.byExo[0]!.sets).toBeGreaterThanOrEqual(v.byExo[1]!.sets);
-  });
-});
+/** Séries et reps faites sur un muscle dans des séances synthétiques. (Les tests lisaient
+ *  `muscleVolumeInRange`, retirée : l'app compte désormais via `doneVolume`.) */
+function volumeOf(es: LogEntry[], muscle: string): { sets: number; reps: number } {
+  let sets = 0;
+  let reps = 0;
+  for (const e of es)
+    for (const ex of e.log.exercises)
+      if (ex.muscle_primary === muscle)
+        for (const s of ex.performed) {
+          sets++;
+          reps += s.reps;
+        }
+  return { sets, reps };
+}
 
 describe('comboLogEntries', () => {
   it('convertit les séries du Défi 360 en séances muscu (une par jour actif)', () => {
@@ -115,11 +104,11 @@ describe('comboLogEntries', () => {
     };
     const es = comboLogEntries([combo]);
     expect(es).toHaveLength(2); // 11/08 et 12/08
-    // Passé dans muscleVolumeInRange : pecto = 3 séries (12+10+8=30), dos = 1 série (10).
-    const v = muscleVolumeInRange(es, '2026-08-10', '2026-08-17');
-    expect(v.byMuscle['pectoraux']).toEqual({ sets: 3, reps: 30 });
-    expect(v.byMuscle['dos']).toEqual({ sets: 1, reps: 10 });
-    expect(v.totalSets).toBe(4);
+    // pecto = 3 séries (12+10+8=30), dos = 1 série (10), charge conservée.
+    expect(volumeOf(es, 'pectoraux')).toEqual({ sets: 3, reps: 30 });
+    expect(volumeOf(es, 'dos')).toEqual({ sets: 1, reps: 10 });
+    const row = es.flatMap((e) => e.log.exercises).find((x) => x.id === 'ex_row');
+    expect(row?.performed[0]?.load_kg).toBe(40);
   });
 });
 
@@ -169,8 +158,7 @@ describe('challengeLogEntries', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const es = challengeLogEntries([ch as any]);
     expect(es).toHaveLength(2);
-    const v = muscleVolumeInRange(es, '2026-08-10', '2026-08-17');
-    expect(v.byMuscle['épaules']).toEqual({ sets: 3, reps: 30 });
+    expect(volumeOf(es, 'épaules')).toEqual({ sets: 3, reps: 30 });
   });
   it('exclut les challenges cardio (pas de volume muscu)', () => {
     const ch = mkChallenge({
@@ -216,31 +204,6 @@ describe('mondayOf', () => {
     expect(mondayOf('2026-08-10')).toBe('2026-08-10'); // lundi
     expect(mondayOf('2026-08-16')).toBe('2026-08-10'); // dim 16 → lun 10
     expect(mondayOf('2026-08-17')).toBe('2026-08-17'); // lun suivant
-  });
-});
-
-describe('setsByMuscleInRange / weeklySetsByMuscle', () => {
-  const entries = [
-    entry(
-      '2026-08-10T10:00:00Z',
-      mkLog([
-        { muscle: 'pectoraux', sets: 3 },
-        { muscle: 'triceps', sets: 2 },
-      ]),
-    ),
-    entry('2026-08-13T10:00:00Z', mkLog([{ muscle: 'pectoraux', sets: 2 }])),
-    entry('2026-08-03T10:00:00Z', mkLog([{ muscle: 'pectoraux', sets: 4 }])), // semaine précédente
-    entry('2026-08-12T10:00:00Z', mkLog([{ muscle: 'dos', sets: 5 }], 'prepa_physique')), // exclu
-  ];
-  it('somme les séries muscu par muscle dans la semaine en cours', () => {
-    const w = weeklySetsByMuscle(entries, '2026-08-15');
-    expect(w.pectoraux).toBe(5); // 3 + 2 (pas les 4 de la semaine d'avant)
-    expect(w.triceps).toBe(2);
-    expect(w.dos).toBeUndefined(); // prépa physique exclue
-  });
-  it('range explicite = borne haute exclusive', () => {
-    const r = setsByMuscleInRange(entries, '2026-08-01', '2026-08-10');
-    expect(r.pectoraux).toBe(4); // seul le 03/08
   });
 });
 

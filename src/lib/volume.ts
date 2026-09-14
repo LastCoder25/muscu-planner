@@ -95,70 +95,6 @@ export function mondayOf(dateIso: string): string {
   return fmtDay(d);
 }
 
-/** Séries RÉALISÉES par muscle sur les bilans muscu dont la date ∈ [startIso, endIso). */
-export function setsByMuscleInRange(
-  entries: LogEntry[],
-  startIso: string,
-  endIso: string,
-): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const e of entries) {
-    const day = e.performedAt.slice(0, 10);
-    if (day < startIso || day >= endIso) continue;
-    if (!isMuscuLog(e.log)) continue;
-    for (const ex of e.log.exercises ?? []) {
-      const m = (ex.muscle_primary ?? '').toLowerCase();
-      if (!m) continue;
-      out[m] = (out[m] ?? 0) + (ex.performed?.length ?? 0);
-    }
-  }
-  return out;
-}
-
-export interface VolumeCell {
-  sets: number;
-  reps: number;
-}
-export interface ExoVolume {
-  id: string;
-  name: string;
-  muscle: string;
-  sets: number;
-  reps: number;
-}
-/** Volume RÉALISÉ (séries + reps) par muscle ET par exo sur les bilans muscu de la période
- *  [startIso, endIso). Sert à la vue « Volume par semaine/mois » (heatmap + détail). */
-export function muscleVolumeInRange(
-  entries: LogEntry[],
-  startIso: string,
-  endIso: string,
-): { byMuscle: Record<string, VolumeCell>; byExo: ExoVolume[]; totalSets: number } {
-  const byMuscle: Record<string, VolumeCell> = {};
-  const exoMap = new Map<string, ExoVolume>();
-  let totalSets = 0;
-  for (const e of entries) {
-    const day = e.performedAt.slice(0, 10);
-    if (day < startIso || day >= endIso) continue;
-    if (!isMuscuLog(e.log)) continue;
-    for (const ex of e.log.exercises ?? []) {
-      const m = (ex.muscle_primary ?? '').toLowerCase();
-      if (!m) continue;
-      const sets = ex.performed?.length ?? 0;
-      const reps = (ex.performed ?? []).reduce((a, s) => a + (s.reps ?? 0), 0);
-      const mc = (byMuscle[m] ??= { sets: 0, reps: 0 });
-      mc.sets += sets;
-      mc.reps += reps;
-      totalSets += sets;
-      const ec = exoMap.get(ex.id) ?? { id: ex.id, name: ex.name, muscle: m, sets: 0, reps: 0 };
-      ec.sets += sets;
-      ec.reps += reps;
-      exoMap.set(ex.id, ec);
-    }
-  }
-  const byExo = [...exoMap.values()].sort((a, b) => b.sets - a.sets);
-  return { byMuscle, byExo, totalSets };
-}
-
 /** Convertit les séries d'un/des Défi(s) 360 en `LogEntry` synthétiques — une « séance »
  *  par (défi, jour) — pour que le volume travaillé dans le 360 traverse TOUT le pipeline
  *  muscu (heatmap, objectif hebdo, tendance, fréquence) comme une vraie séance. Une série
@@ -262,14 +198,6 @@ export function dayAfter(dateIso: string): string {
   const d = new Date(dateIso.slice(0, 10) + 'T00:00:00');
   d.setDate(d.getDate() + 1);
   return fmtDay(d);
-}
-
-/** Séries muscu réalisées par muscle sur la semaine EN COURS (lundi → aujourd'hui inclus). */
-export function weeklySetsByMuscle(entries: LogEntry[], nowIso: string): Record<string, number> {
-  const start = mondayOf(nowIso);
-  const end = new Date(nowIso.slice(0, 10) + 'T00:00:00');
-  end.setDate(end.getDate() + 1); // borne haute exclusive = demain
-  return setsByMuscleInRange(entries, start, fmtDay(end));
 }
 
 export type VolumeState = 'low' | 'ok' | 'high';
