@@ -1,5 +1,48 @@
-import { describe, it, expect } from 'vitest';
-import { pathOf, samePage, shouldGoBack } from '@/lib/nav';
+import { describe, it, expect, afterEach } from 'vitest';
+import type { Router } from 'vue-router';
+import { pathOf, samePage, shouldGoBack, hasPreviousEntry, backOr } from '@/lib/nav';
+
+describe('retour arrière sans page précédente (backOr)', () => {
+  const g = globalThis as { window?: unknown };
+  afterEach(() => {
+    delete g.window;
+  });
+  function fakeRouter() {
+    const calls: string[] = [];
+    const router = {
+      back: () => calls.push('back'),
+      push: (to: string) => {
+        calls.push(`push:${to}`);
+        return Promise.resolve();
+      },
+    } as unknown as Router;
+    return { router, calls };
+  }
+  function withHistoryBack(back: string | null) {
+    g.window = { history: { state: back === null ? {} : { back } } };
+  }
+
+  it('hasPreviousEntry : seule une URL précédente non vide permet de revenir', () => {
+    expect(hasPreviousEntry('/challenges')).toBe(true);
+    expect(hasPreviousEntry('')).toBe(false);
+    expect(hasPreviousEntry(null)).toBe(false);
+    expect(hasPreviousEntry(undefined)).toBe(false);
+  });
+
+  it('⚠️ LE CAS RÉEL : arrivé par une notification, rien derrière → la page parente, pas un bouton mort', () => {
+    const { router, calls } = fakeRouter();
+    withHistoryBack(null);
+    backOr(router, '/tennis');
+    expect(calls).toEqual(['push:/tennis']);
+  });
+
+  it('avec une page précédente, on revient simplement en arrière', () => {
+    const { router, calls } = fakeRouter();
+    withHistoryBack('/challenges');
+    backOr(router, '/tennis');
+    expect(calls).toEqual(['back']);
+  });
+});
 
 describe('retour arrière sans doublon', () => {
   it('pathOf : la query et le fragment ne font pas la page', () => {

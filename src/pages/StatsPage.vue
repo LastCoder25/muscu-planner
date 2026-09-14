@@ -332,6 +332,7 @@ import {
 import { weekMuscleSeries, type WeekSeriesKey } from '@/lib/bodyBalance';
 import { MUSCLE_REGIONS, regionTotals } from '@/lib/muscles';
 import { useBalanceInput } from '@/composables/useBalanceInput';
+import { logicalToday } from '@/lib/challenges';
 import { DRILL_SHOT_LABELS } from '@/data/tennis';
 import { useProgress } from '@/composables/useProgress';
 import type { DrillShot, Difficulty } from '@/lib/types';
@@ -522,13 +523,10 @@ const entries = computed<LogEntry[]>(() => [
   ...comboLogEntries(combo.list),
   ...challengeLogEntries(challenges.list),
 ]);
-// Date du jour en LOCAL (jamais toISOString → pas de décalage de fuseau).
-const todayIso = (() => {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-})();
+// « Aujourd'hui » = le JOUR D'ENTRAÎNEMENT du projet (bascule à 4 h, local), le même que le
+// radar et le graphe d'équilibre : sinon, le lundi entre 0 h et 4 h, deux blocs « cette
+// semaine » de la même page ne portaient pas sur la même semaine.
+const todayIso = logicalToday();
 // Volume par PÉRIODE (heatmap corps + détail) — semaine en cours ou mois en cours.
 const volPeriod = ref<'week' | 'month'>('week');
 const volPeriodLabel = computed(() =>
