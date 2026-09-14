@@ -55,8 +55,8 @@
           <span class="bb-mark" :style="{ left: MARK + '%' }" />
         </span>
         <span class="bb-val"
-          ><b>{{ fmt(r.value) }}</b
-          >/{{ fmt(r.target) }}</span
+          ><b>{{ fmtSets(r.value) }}</b
+          >/{{ fmtSets(r.target) }}</span
         >
         <span v-if="r.act" class="bb-add" aria-hidden="true">＋</span>
       </component>
@@ -75,15 +75,11 @@
 // sur les groupes en déficit. Toute la règle vit dans `lib/bodyBalance`.
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useLogsStore } from '@/stores/logs';
-import { useLibraryStore } from '@/stores/library';
-import { useComboStore } from '@/stores/combo';
-import { useChallengesStore } from '@/stores/challenges';
 import { useProfileStore } from '@/stores/profile';
+import { useBalanceInput } from '@/composables/useBalanceInput';
 import { bodyBalance, type BalancePeriod } from '@/lib/bodyBalance';
-import { muscleColor, VOLUME_LOW, VOLUME_HIGH } from '@/lib/volume';
+import { muscleColor, fmtSets, VOLUME_LOW, VOLUME_HIGH } from '@/lib/volume';
 import { computeMuscleTargets } from '@/lib/programBuilder';
-import { logicalToday } from '@/lib/challenges';
 
 const PERIODS: { key: BalancePeriod; label: string }[] = [
   { key: 'week', label: 'Semaine' },
@@ -94,11 +90,8 @@ const LOW_PCT = Math.round(VOLUME_LOW * 100);
 const MARK = Math.round(100 / VOLUME_HIGH);
 
 const router = useRouter();
-const logsStore = useLogsStore();
-const library = useLibraryStore();
-const combo = useComboStore();
-const challenges = useChallengesStore();
 const profileStore = useProfileStore();
+const { input, ensureLoaded } = useBalanceInput();
 
 const period = ref<BalancePeriod>('weeks4');
 const loading = ref(true);
@@ -106,27 +99,14 @@ const loading = ref(true);
 const rows = computed(() => {
   const profile = profileStore.profile;
   if (!profile) return [];
-  const map = library.secondaries;
-  return bodyBalance(
-    {
-      sessions: logsStore.all.map((r) => ({ performedAt: r.performed_at, log: r.payload })),
-      combos: combo.list,
-      challenges: challenges.list,
-      targets: computeMuscleTargets(profile),
-      objective: profile.objective,
-      secondaries: (id) => map.get(id),
-      today: logicalToday(),
-    },
-    period.value,
-  ).map((r) => ({ ...r, act: r.state === 'low' }));
+  return bodyBalance({ ...input.value, targets: computeMuscleTargets(profile) }, period.value).map(
+    (r) => ({ ...r, act: r.state === 'low' }),
+  );
 });
 const deficits = computed(() => rows.value.filter((r) => r.act).length);
 
 function w(n: number, target: number): number {
   return Math.max(0, Math.min(100, Math.round((n / (target * VOLUME_HIGH)) * 100)));
-}
-function fmt(n: number): string {
-  return n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
 }
 async function addChallenge(muscle: string) {
   await router.push({ path: '/challenges/new', query: { muscle } });
@@ -134,7 +114,7 @@ async function addChallenge(muscle: string) {
 
 onMounted(async () => {
   try {
-    await Promise.all([library.fetchSecondaries(), logsStore.fetchAll()]);
+    await ensureLoaded();
   } catch {
     // Sans secondaires ni séances, le graphe reste juste sur ce qu'il sait (360 + défis).
   } finally {

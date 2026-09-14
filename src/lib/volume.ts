@@ -280,6 +280,10 @@ export const VOLUME_HIGH = 1.3; // au-dessus : surchargé
 export function volumeState(pct: number): VolumeState {
   return pct < VOLUME_LOW ? 'low' : pct > VOLUME_HIGH ? 'high' : 'ok';
 }
+/** Un nombre de séries à l'écran (fractionnaire possible avec les secondaires) : « 4,5 », « 12 ». */
+export function fmtSets(n: number): string {
+  return n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+}
 
 export interface WeekVolume {
   weekStart: string; // lundi YYYY-MM-DD

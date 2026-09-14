@@ -128,7 +128,7 @@
              demande, ce que les challenges demandent — sur une échelle commune. -->
         <div class="sec-h">Équilibre musculaire · cette semaine</div>
         <div class="grp-card radar-card">
-          <div v-if="radarHasData" class="radar-wrap">
+          <div v-if="radar.max > 0" class="radar-wrap">
             <svg
               class="radar"
               viewBox="0 0 200 200"
@@ -153,7 +153,7 @@
               />
               <!-- les 3 courbes : objectifs en contour dessous, réel plein par-dessus -->
               <polygon
-                v-for="s in radarSeries"
+                v-for="s in radar.series"
                 :key="s.key"
                 class="radar-shape"
                 :class="'rs-' + s.key"
@@ -171,7 +171,8 @@
               </text>
             </svg>
             <div class="radar-legend">
-              <span v-for="s in radarLegend" :key="s.key" class="rl-item">
+              <!-- légende dans l'ordre de LECTURE (réel d'abord) = inverse du dessin -->
+              <span v-for="s in radar.series.slice().reverse()" :key="s.key" class="rl-item">
                 <i class="rl-sw" :class="'rs-' + s.key" />{{ s.label }}
                 <b class="font-display">{{ fmtSets(s.total) }}</b>
               </span>
@@ -314,6 +315,7 @@ import MuscleBody from '@/components/MuscleBody.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
 import {
   muscleColor,
+  fmtSets,
   weeklySetsByMuscle,
   muscleVolumeInRange,
   comboLogEntries,
@@ -327,11 +329,9 @@ import {
   muscuWeekStreak,
   type LogEntry,
 } from '@/lib/volume';
-import { weekMuscleSeries } from '@/lib/bodyBalance';
+import { weekMuscleSeries, type WeekSeriesKey } from '@/lib/bodyBalance';
 import { MUSCLE_REGIONS, regionTotals } from '@/lib/muscles';
-import { logicalToday } from '@/lib/challenges';
-import { useLibraryStore } from '@/stores/library';
-import { useProfileStore } from '@/stores/profile';
+import { useBalanceInput } from '@/composables/useBalanceInput';
 import { DRILL_SHOT_LABELS } from '@/data/tennis';
 import { useProgress } from '@/composables/useProgress';
 import type { DrillShot, Difficulty } from '@/lib/types';
@@ -345,8 +345,6 @@ const tennis = useTennisStore();
 const cardio = useCardioStore();
 const combo = useComboStore();
 const challenges = useChallengesStore();
-const library = useLibraryStore();
-const profileStore = useProfileStore();
 const loading = ref(true);
 // Vue « muscu seule » (ouverte depuis la tuile Muscu, `?scope=muscu`) : on masque
 // tennis / cardio / autres sports et on ne garde que le niveau Muscu.
@@ -466,28 +464,26 @@ const maxMuscle = computed(() => Math.max(1, ...muscleSets.value.map((g) => g.se
 // challenges. On voit d'un coup ce qui est couvert, par quoi, et ce qui manque. Toute la
 // règle (secondaires ½, conversions) vit dans lib/bodyBalance. ──
 const RADAR = { cx: 100, cy: 100, r: 66, n: MUSCLE_REGIONS.length };
-const RADAR_SERIES = [
+// Ordre de DESSIN : les objectifs en contour dessous, le réel plein par-dessus.
+const RADAR_SERIES: readonly { key: WeekSeriesKey; label: string }[] = [
   { key: 'combo', label: 'Objectif 360' },
   { key: 'challenges', label: 'Challenges' },
   { key: 'real', label: 'Réel' },
-] as const;
-const radarValues = computed(() => {
-  const s = weekMuscleSeries({
-    sessions: logsStore.all.map((r) => ({ performedAt: r.performed_at, log: r.payload })),
-    combos: combo.list,
-    challenges: challenges.list,
-    objective: profileStore.profile?.objective,
-    secondaries: (id) => library.secondaries.get(id),
-    today: logicalToday(),
-  });
+];
+const { input: balanceInput, ensureLoaded: ensureBalanceLoaded } = useBalanceInput();
+const radar = computed(() => {
+  const week = weekMuscleSeries(balanceInput.value);
+  const series = RADAR_SERIES.map((s) => ({ ...s, values: regionTotals(week[s.key]) }));
+  const max = Math.max(0, ...series.flatMap((s) => s.values));
   return {
-    real: regionTotals(s.real),
-    combo: regionTotals(s.combo),
-    challenges: regionTotals(s.challenges),
+    max,
+    series: series.map((s) => ({
+      ...s,
+      points: poly((i) => (s.values[i] ?? 0) / Math.max(1, max)),
+      total: s.values.reduce((a, b) => a + b, 0),
+    })),
   };
 });
-const radarMax = computed(() => Math.max(0, ...Object.values(radarValues.value).flat()));
-const radarHasData = computed(() => radarMax.value > 0);
 function radarPoint(i: number, frac: number): { x: number; y: number } {
   const ang = ((-90 + (360 / RADAR.n) * i) * Math.PI) / 180;
   return {
@@ -500,19 +496,6 @@ const poly = (frac: (i: number) => number) =>
     const p = radarPoint(i, frac(i));
     return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
   }).join(' ');
-const radarSeries = computed(() =>
-  RADAR_SERIES.map(({ key }) => ({
-    key,
-    points: poly((i) => (radarValues.value[key][i] ?? 0) / Math.max(1, radarMax.value)),
-  })),
-);
-// Légende dans l'ordre de lecture (réel d'abord), avec le total de chaque courbe.
-const radarLegend = computed(() =>
-  [...RADAR_SERIES].reverse().map((s) => ({
-    ...s,
-    total: radarValues.value[s.key].reduce((a, b) => a + b, 0),
-  })),
-);
 const radarRings = [0.25, 0.5, 0.75, 1].map((f) => poly(() => f));
 const radarAxes = MUSCLE_REGIONS.map((r, i) => {
   const end = radarPoint(i, 1);
@@ -526,9 +509,6 @@ const radarAxes = MUSCLE_REGIONS.map((r, i) => {
     anchor: lbl.x < 46 ? 'end' : lbl.x > 154 ? 'start' : 'middle',
   };
 });
-function fmtSets(n: number): string {
-  return n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
-}
 
 function barPct(n: number) {
   return Math.round((n / maxMuscle.value) * 100);
@@ -623,8 +603,7 @@ onMounted(async () => {
   try {
     cardio.fetchLogs(300).catch(() => undefined);
     // Radar de la semaine : tous les bilans (cache partagé) + muscles secondaires.
-    logsStore.fetchAll().catch(() => undefined);
-    library.fetchSecondaries().catch(() => undefined);
+    ensureBalanceLoaded().catch(() => undefined);
     combo.fetchMine().catch(() => undefined);
     challenges.fetchMine().catch(() => undefined);
     tennis

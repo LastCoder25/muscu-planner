@@ -295,6 +295,33 @@ describe('bodyBalance — 4 semaines', () => {
   });
 });
 
+describe('bodyBalance — 360 déjà dépassé avant lundi', () => {
+  it("un objectif déjà atteint n'ôte rien : le reste négatif ne se soustrait pas", () => {
+    const c: ComboChallenge = {
+      ...combo([
+        leg({
+          exercise_id: 'x',
+          muscle_primary: 'pectoraux',
+          target: 4,
+          sets: Array.from({ length: 6 }, () => ({ date: '2026-09-12', reps: 10 })),
+        }),
+      ]),
+      start_date: '2026-09-11',
+    };
+    const i = input({
+      combos: [c],
+      sessions: [session('2026-09-15', [{ id: 'y', muscle: 'pectoraux', sets: 3 }])],
+    });
+    expect(row(i, 'pectoraux', 'week').value).toBe(3); // max(3 faites, reste −2 → rien)
+    // Avec un autre objectif sur le même muscle, le reste négatif ne doit pas le rogner.
+    const withChallenge = input({
+      combos: [c],
+      challenges: [challenge({ exercise_id: 'z', muscle_primary: 'pectoraux' })],
+    });
+    expect(row(withChallenge, 'pectoraux', 'week').value).toBe(21); // 7 × 30 reps ÷ 10, pas 19
+  });
+});
+
 describe('bodyBalance — lecture', () => {
   it('trie du plus gros déficit au plus petit et ignore les muscles sans cible', () => {
     const i = input({

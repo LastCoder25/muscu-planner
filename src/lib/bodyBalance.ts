@@ -152,48 +152,57 @@ function challengeItems(
   );
 }
 
-/** Objectif du Défi 360 ACTIF, en séries, posé sur `start`.
+/** Objectif du Défi 360 ACTIF, en séries par exo, posé sur `day`, MOINS ce que `already`
+ *  en retire (déjà fait, en séries).
  *  Le 360 est l'engagement de SA semaine : on compte son objectif dès qu'il est en cours,
  *  quel que soit son jour de départ (le proratiser inventerait un déficit pour un 360
- *  lancé mercredi qu'on bouclera mardi prochain). `deductBefore` retire ce qui en a été
- *  fait AVANT `start` — nécessaire dès qu'on additionne des semaines précédentes, sinon
- *  ces séries compteraient deux fois. */
-function comboTargetItems(
+ *  lancé mercredi qu'on bouclera mardi prochain). */
+function comboItems(
   i: Pick<BalanceInput, 'combos' | 'objective'>,
-  start: string,
-  deductBefore: boolean,
+  day: string,
+  already: (leg: ComboLeg) => number,
 ): VolumeItem[] {
-  const out: VolumeItem[] = [];
-  for (const c of i.combos) {
-    if (c.status !== 'active') continue;
-    for (const leg of c.legs) {
-      const unit = legMode(leg) === 'sets' ? 1 : perSet(legRepRange(leg, i.objective));
-      const before = deductBefore
-        ? legItems(leg, i.objective)
-            .filter((it) => it.day < start)
-            .reduce((a, it) => a + it.sets, 0)
-        : 0;
-      const sets = Math.max(0, leg.target / unit - before);
-      out.push({ day: start, exerciseId: leg.exercise_id, primary: leg.muscle_primary, sets });
-    }
-  }
-  return out;
+  return i.combos
+    .filter((c) => c.status === 'active')
+    .flatMap((c) =>
+      c.legs.map((leg) => {
+        const unit = legMode(leg) === 'sets' ? 1 : perSet(legRepRange(leg, i.objective));
+        // Négatif si l'objectif est déjà dépassé : `creditSets` ignore toute valeur ≤ 0.
+        const sets = leg.target / unit - already(leg);
+        return { day, exerciseId: leg.exercise_id, primary: leg.muscle_primary, sets };
+      }),
+    );
 }
 
-/** Objectifs des challenges ACTIFS sur les jours de [start, end), en séries. */
+/** L'objectif COMPLET du 360 : ce qu'il demande pour sa semaine. */
+function comboWeeklyTargetItems(i: Pick<BalanceInput, 'combos' | 'objective'>, day: string) {
+  return comboItems(i, day, () => 0);
+}
+
+/** Ce qu'il RESTE du 360 à partir de `start` : les séries faites avant sont déjà comptées
+ *  ailleurs (semaines précédentes, ou jours d'avant lundi d'un 360 lancé en fin de semaine
+ *  passée) — les recompter via l'objectif les ferait valoir deux fois. */
+function comboRemainingItems(i: Pick<BalanceInput, 'combos' | 'objective'>, start: string) {
+  return comboItems(i, start, (leg) =>
+    legItems(leg, i.objective)
+      .filter((it) => it.day < start)
+      .reduce((a, it) => a + it.sets, 0),
+  );
+}
+
+/** Objectifs des challenges muscu ACTIFS sur les jours de [start, end), en séries. */
 function challengeTargetItems(
-  challenges: readonly Challenge[],
-  objective: Objective | null | undefined,
+  i: Pick<BalanceInput, 'challenges' | 'objective'>,
   start: string,
   end: string,
 ): VolumeItem[] {
-  return challenges
+  return muscuChallenges(i.challenges)
     .filter((c) => c.status === 'active')
     .map((c) => ({
       day: start,
       exerciseId: c.exercise_id,
       primary: c.muscle_primary,
-      sets: challengeSets(c, challengeTargetBetween(c, start, end), objective),
+      sets: challengeSets(c, challengeTargetBetween(c, start, end), i.objective),
     }));
 }
 
@@ -235,18 +244,14 @@ export function bodyBalance(i: BalanceInput, period: BalancePeriod): MuscleBalan
   const nextMonday = addDaysUtcIso(monday, 7);
   const firstMonday = addDaysUtcIso(monday, -7 * (weeks - 1));
 
+  const week = (items: readonly VolumeItem[]) => tally(items, i.secondaries, monday, nextMonday);
   const done = doneItems(i);
-  const cur = tally(done, i.secondaries, monday, nextMonday);
+  const cur = week(done);
   const prev = tally(done, i.secondaries, firstMonday, monday);
-  const planned = tally(
-    [
-      ...comboTargetItems(i, monday, true),
-      ...challengeTargetItems(muscuChallenges(i.challenges), i.objective, monday, nextMonday),
-    ],
-    i.secondaries,
-    monday,
-    nextMonday,
-  );
+  const planned = week([
+    ...comboRemainingItems(i, monday),
+    ...challengeTargetItems(i, monday, nextMonday),
+  ]);
 
   const out: MuscleBalance[] = [];
   for (const [rawMuscle, target] of Object.entries(i.targets)) {
@@ -274,23 +279,15 @@ export function bodyBalance(i: BalanceInput, period: BalancePeriod): MuscleBalan
  *  - `combo` : l'objectif COMPLET du Défi 360 actif (il représente la semaine : rien à
  *    déduire, aucune semaine précédente n'est additionnée ici) ;
  *  - `challenges` : ce que les challenges muscu actifs demandent sur ces 7 jours. */
-export interface WeekMuscleSeries {
-  real: Record<string, number>;
-  combo: Record<string, number>;
-  challenges: Record<string, number>;
-}
+export type WeekSeriesKey = 'real' | 'combo' | 'challenges';
+export type WeekMuscleSeries = Record<WeekSeriesKey, Tally>;
 export function weekMuscleSeries(i: Omit<BalanceInput, 'targets'>): WeekMuscleSeries {
   const monday = mondayOf(i.today);
   const nextMonday = addDaysUtcIso(monday, 7);
-  const muscu = muscuChallenges(i.challenges);
+  const week = (items: readonly VolumeItem[]) => tally(items, i.secondaries, monday, nextMonday);
   return {
-    real: tally(doneItems(i), i.secondaries, monday, nextMonday),
-    combo: tally(comboTargetItems(i, monday, false), i.secondaries, monday, nextMonday),
-    challenges: tally(
-      challengeTargetItems(muscu, i.objective, monday, nextMonday),
-      i.secondaries,
-      monday,
-      nextMonday,
-    ),
+    real: week(doneItems(i)),
+    combo: week(comboWeeklyTargetItems(i, monday)),
+    challenges: week(challengeTargetItems(i, monday, nextMonday)),
   };
 }
