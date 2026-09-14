@@ -152,36 +152,63 @@ function challengeItems(
   );
 }
 
-/** Séries PRÉVUES sur la semaine [start, end) par le Défi 360 et les challenges ACTIFS. */
-function plannedItems(
-  i: BalanceInput,
-  challenges: readonly Challenge[],
+/** Objectif du Défi 360 ACTIF, en séries, posé sur `start`.
+ *  Le 360 est l'engagement de SA semaine : on compte son objectif dès qu'il est en cours,
+ *  quel que soit son jour de départ (le proratiser inventerait un déficit pour un 360
+ *  lancé mercredi qu'on bouclera mardi prochain). `deductBefore` retire ce qui en a été
+ *  fait AVANT `start` — nécessaire dès qu'on additionne des semaines précédentes, sinon
+ *  ces séries compteraient deux fois. */
+function comboTargetItems(
+  i: Pick<BalanceInput, 'combos' | 'objective'>,
   start: string,
-  end: string,
+  deductBefore: boolean,
 ): VolumeItem[] {
   const out: VolumeItem[] = [];
-  // Le 360 est l'engagement de SA semaine : on compte son objectif dès qu'il est en
-  // cours, quel que soit son jour de départ (le proratiser inventerait un déficit pour
-  // un 360 lancé mercredi qu'on bouclera mardi prochain).
-  // ⚠️ MOINS ce qui en a déjà été fait AVANT lundi : ces séries sont comptées dans les
-  // semaines précédentes, les compter encore via l'objectif les ferait valoir deux fois.
   for (const c of i.combos) {
     if (c.status !== 'active') continue;
     for (const leg of c.legs) {
       const unit = legMode(leg) === 'sets' ? 1 : perSet(legRepRange(leg, i.objective));
-      const before = legItems(leg, i.objective)
-        .filter((it) => it.day < start)
-        .reduce((a, it) => a + it.sets, 0);
+      const before = deductBefore
+        ? legItems(leg, i.objective)
+            .filter((it) => it.day < start)
+            .reduce((a, it) => a + it.sets, 0)
+        : 0;
       const sets = Math.max(0, leg.target / unit - before);
       out.push({ day: start, exerciseId: leg.exercise_id, primary: leg.muscle_primary, sets });
     }
   }
-  for (const c of challenges) {
-    if (c.status !== 'active') continue;
-    const sets = challengeSets(c, challengeTargetBetween(c, start, end), i.objective);
-    out.push({ day: start, exerciseId: c.exercise_id, primary: c.muscle_primary, sets });
-  }
   return out;
+}
+
+/** Objectifs des challenges ACTIFS sur les jours de [start, end), en séries. */
+function challengeTargetItems(
+  challenges: readonly Challenge[],
+  objective: Objective | null | undefined,
+  start: string,
+  end: string,
+): VolumeItem[] {
+  return challenges
+    .filter((c) => c.status === 'active')
+    .map((c) => ({
+      day: start,
+      exerciseId: c.exercise_id,
+      primary: c.muscle_primary,
+      sets: challengeSets(c, challengeTargetBetween(c, start, end), objective),
+    }));
+}
+
+/** Challenges qui comptent pour la musculation (sorties et conditionnement exclus). */
+function muscuChallenges(challenges: readonly Challenge[]): Challenge[] {
+  return challenges.filter((c) => !isCardioTrackChallenge(c));
+}
+
+/** Tout le volume RÉELLEMENT fait (séances, 360, challenges muscu), en éléments. */
+function doneItems(i: Omit<BalanceInput, 'targets' | 'today'>): VolumeItem[] {
+  return [
+    ...sessionItems(i.sessions),
+    ...i.combos.flatMap((c) => c.legs.flatMap((leg) => legItems(leg, i.objective))),
+    ...challengeItems(muscuChallenges(i.challenges), i.objective),
+  ];
 }
 
 /** Crédite par muscle les éléments dont le jour tombe dans [start, end). */
@@ -208,16 +235,14 @@ export function bodyBalance(i: BalanceInput, period: BalancePeriod): MuscleBalan
   const nextMonday = addDaysUtcIso(monday, 7);
   const firstMonday = addDaysUtcIso(monday, -7 * (weeks - 1));
 
-  const challenges = i.challenges.filter((c) => !isCardioTrackChallenge(c));
-  const done = [
-    ...sessionItems(i.sessions),
-    ...i.combos.flatMap((c) => c.legs.flatMap((leg) => legItems(leg, i.objective))),
-    ...challengeItems(challenges, i.objective),
-  ];
+  const done = doneItems(i);
   const cur = tally(done, i.secondaries, monday, nextMonday);
   const prev = tally(done, i.secondaries, firstMonday, monday);
   const planned = tally(
-    plannedItems(i, challenges, monday, nextMonday),
+    [
+      ...comboTargetItems(i, monday, true),
+      ...challengeTargetItems(muscuChallenges(i.challenges), i.objective, monday, nextMonday),
+    ],
     i.secondaries,
     monday,
     nextMonday,
@@ -241,4 +266,31 @@ export function bodyBalance(i: BalanceInput, period: BalancePeriod): MuscleBalan
     });
   }
   return out.sort((a, b) => a.pct - b.pct || b.target - a.target);
+}
+
+/** Les 3 courbes du radar de la SEMAINE EN COURS (lundi → dimanche), en séries par
+ *  muscle normalisé — mêmes règles que `bodyBalance` (secondaires ½, conversions) :
+ *  - `real` : ce qui a été fait (séances, 360, challenges) ;
+ *  - `combo` : l'objectif COMPLET du Défi 360 actif (il représente la semaine : rien à
+ *    déduire, aucune semaine précédente n'est additionnée ici) ;
+ *  - `challenges` : ce que les challenges muscu actifs demandent sur ces 7 jours. */
+export interface WeekMuscleSeries {
+  real: Record<string, number>;
+  combo: Record<string, number>;
+  challenges: Record<string, number>;
+}
+export function weekMuscleSeries(i: Omit<BalanceInput, 'targets'>): WeekMuscleSeries {
+  const monday = mondayOf(i.today);
+  const nextMonday = addDaysUtcIso(monday, 7);
+  const muscu = muscuChallenges(i.challenges);
+  return {
+    real: tally(doneItems(i), i.secondaries, monday, nextMonday),
+    combo: tally(comboTargetItems(i, monday, false), i.secondaries, monday, nextMonday),
+    challenges: tally(
+      challengeTargetItems(muscu, i.objective, monday, nextMonday),
+      i.secondaries,
+      monday,
+      nextMonday,
+    ),
+  };
 }

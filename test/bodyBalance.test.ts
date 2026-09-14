@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { bodyBalance, creditSets, type BalanceInput, type BalancePeriod } from '@/lib/bodyBalance';
+import {
+  bodyBalance,
+  creditSets,
+  weekMuscleSeries,
+  type BalanceInput,
+  type BalancePeriod,
+} from '@/lib/bodyBalance';
 import type { LogEntry } from '@/lib/volume';
 import type { SessionLog } from '@/lib/types';
 import type { ComboChallenge, ComboLeg } from '@/lib/combo';
@@ -303,5 +309,73 @@ describe('bodyBalance — lecture', () => {
     const r = bodyBalance(i, 'week');
     expect(r.map((x) => x.muscle)).toEqual(['pectoraux', 'dos']);
     expect(r.map((x) => x.state)).toEqual(['low', 'ok']);
+  });
+});
+
+describe('weekMuscleSeries — les 3 courbes de la semaine', () => {
+  const week = (p: Partial<BalanceInput>) => weekMuscleSeries(input(p));
+
+  it('réel : seulement du lundi au dimanche, secondaires à ½', () => {
+    const s = week({
+      sessions: [
+        session('2026-09-15', [{ id: 'bench', muscle: 'pectoraux', sets: 4 }]),
+        session('2026-09-13', [{ id: 'bench', muscle: 'pectoraux', sets: 9 }]), // dimanche d'avant
+        session('2026-09-21', [{ id: 'bench', muscle: 'pectoraux', sets: 9 }]), // lundi d'après
+      ],
+    });
+    expect(s.real).toEqual({ pectoraux: 4, triceps: 2, épaules: 2 });
+  });
+
+  it('réel : compte aussi les séries du 360 et des challenges de la semaine', () => {
+    const s = week({
+      combos: [
+        combo([
+          leg({
+            exercise_id: 'x',
+            muscle_primary: 'dos',
+            sets: [{ date: '2026-09-15', reps: 10 }],
+          }),
+        ]),
+      ],
+      challenges: [
+        challenge({
+          exercise_id: 'y',
+          muscle_primary: 'quadriceps',
+          progress: [
+            { day: 1, date: '2026-09-15', target: 30, done: 30, elapsed_sec: 0, completed: true },
+          ],
+        }),
+      ],
+    });
+    expect(s.real).toEqual({ dos: 1, quadriceps: 3 });
+  });
+
+  it("objectif 360 : l'objectif COMPLET, sans déduire ce qui a été fait avant lundi", () => {
+    const c: ComboChallenge = {
+      ...combo([
+        leg({
+          exercise_id: 'bench',
+          muscle_primary: 'pectoraux',
+          target: 10,
+          sets: Array.from({ length: 4 }, () => ({ date: '2026-09-12', reps: 10 })),
+        }),
+      ]),
+      start_date: '2026-09-11',
+    };
+    expect(week({ combos: [c] }).combo).toEqual({ pectoraux: 10, triceps: 5, épaules: 5 });
+    expect(week({ combos: [{ ...c, status: 'done' }] }).combo).toEqual({});
+  });
+
+  it('challenges : objectifs des actifs sur les 7 jours, cardio exclu, rien dans les autres courbes', () => {
+    const s = week({
+      challenges: [
+        challenge({ exercise_id: 'row', muscle_primary: 'dos' }), // 7 × 30 reps ÷ 10
+        challenge({ exercise_id: 'z', muscle_primary: 'dos', status: 'abandoned' }),
+        challenge({ exercise_id: 'ex_ch_marche_course', unit: 'distance', muscle_primary: 'dos' }),
+      ],
+    });
+    expect(s.challenges).toEqual({ dos: 21, biceps: 10.5 });
+    expect(s.combo).toEqual({});
+    expect(s.real).toEqual({});
   });
 });

@@ -7,7 +7,28 @@
 const MUSCLE_ALIASES: Record<string, string> = {
   'deltoïde antérieur': 'épaules',
   'deltoide anterieur': 'épaules',
+  avant_bras: 'avant-bras',
 };
+
+/** Les 6 RÉGIONS du radar d'équilibre (façon stats de RPG), muscles normalisés. */
+export const MUSCLE_REGIONS: readonly { key: string; muscles: readonly string[] }[] = [
+  { key: 'Poitrine', muscles: ['pectoraux'] },
+  { key: 'Épaules', muscles: ['épaules'] },
+  { key: 'Bras', muscles: ['biceps', 'triceps', 'avant-bras'] },
+  { key: 'Jambes', muscles: ['quadriceps', 'ischio-jambiers', 'mollets', 'fessiers'] },
+  { key: 'Core', muscles: ['abdominaux'] },
+  { key: 'Dos', muscles: ['dos'] },
+];
+
+/** Séries par région, dans l'ordre de `MUSCLE_REGIONS` (clés du relevé normalisées). */
+export function regionTotals(byMuscle: Readonly<Record<string, number>>): number[] {
+  const norm: Record<string, number> = {};
+  for (const [m, v] of Object.entries(byMuscle)) {
+    const k = normMuscle(m);
+    norm[k] = (norm[k] ?? 0) + v;
+  }
+  return MUSCLE_REGIONS.map((r) => r.muscles.reduce((a, m) => a + (norm[m] ?? 0), 0));
+}
 
 /** Nom de muscle normalisé : minuscules, espaces retirés, variantes rattachées. */
 export function normMuscle(m: string | null | undefined): string {

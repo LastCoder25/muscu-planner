@@ -124,15 +124,16 @@
           </div>
         </div>
 
-        <!-- Radar d'équilibre musculaire (pics = séries par région) -->
-        <div class="sec-h">Équilibre musculaire</div>
+        <!-- Radar d'équilibre de la SEMAINE (lun → dim) : ce qui est fait, ce que le Défi 360
+             demande, ce que les challenges demandent — sur une échelle commune. -->
+        <div class="sec-h">Équilibre musculaire · cette semaine</div>
         <div class="grp-card radar-card">
-          <div v-if="totalSets > 0" class="radar-wrap">
+          <div v-if="radarHasData" class="radar-wrap">
             <svg
               class="radar"
               viewBox="0 0 200 200"
               role="img"
-              aria-label="Radar d’équilibre musculaire"
+              aria-label="Radar d’équilibre musculaire de la semaine : réel, objectif du Défi 360, challenges"
             >
               <!-- toile (anneaux + axes) -->
               <polygon
@@ -150,9 +151,14 @@
                 :x2="a.x2"
                 :y2="a.y2"
               />
-              <!-- forme (séries par région) -->
-              <polygon class="radar-shape" :points="radarShape" />
-              <!-- labels -->
+              <!-- les 3 courbes : objectifs en contour dessous, réel plein par-dessus -->
+              <polygon
+                v-for="s in radarSeries"
+                :key="s.key"
+                class="radar-shape"
+                :class="'rs-' + s.key"
+                :points="s.points"
+              />
               <text
                 v-for="a in radarAxes"
                 :key="'lb' + a.key"
@@ -162,12 +168,20 @@
                 :text-anchor="a.anchor"
               >
                 {{ a.key }}
-                <tspan class="radar-lbl-v">{{ a.sets }}</tspan>
               </text>
             </svg>
+            <div class="radar-legend">
+              <span v-for="s in radarLegend" :key="s.key" class="rl-item">
+                <i class="rl-sw" :class="'rs-' + s.key" />{{ s.label }}
+                <b class="font-display">{{ fmtSets(s.total) }}</b>
+              </span>
+            </div>
+            <p class="radar-note">
+              Séries de la semaine (lun → dim), un muscle secondaire compte ½ série.
+            </p>
           </div>
           <div v-else class="vol-empty">
-            Pas encore de séries — le radar se remplit avec tes séances.
+            Rien cette semaine : ni série faite, ni Défi 360, ni challenge en cours.
           </div>
         </div>
 
@@ -313,6 +327,11 @@ import {
   muscuWeekStreak,
   type LogEntry,
 } from '@/lib/volume';
+import { weekMuscleSeries } from '@/lib/bodyBalance';
+import { MUSCLE_REGIONS, regionTotals } from '@/lib/muscles';
+import { logicalToday } from '@/lib/challenges';
+import { useLibraryStore } from '@/stores/library';
+import { useProfileStore } from '@/stores/profile';
 import { DRILL_SHOT_LABELS } from '@/data/tennis';
 import { useProgress } from '@/composables/useProgress';
 import type { DrillShot, Difficulty } from '@/lib/types';
@@ -326,6 +345,8 @@ const tennis = useTennisStore();
 const cardio = useCardioStore();
 const combo = useComboStore();
 const challenges = useChallengesStore();
+const library = useLibraryStore();
+const profileStore = useProfileStore();
 const loading = ref(true);
 // Vue « muscu seule » (ouverte depuis la tuile Muscu, `?scope=muscu`) : on masque
 // tennis / cardio / autres sports et on ne garde que le niveau Muscu.
@@ -440,27 +461,33 @@ const muscuSessionCount = computed(
 );
 const maxMuscle = computed(() => Math.max(1, ...muscleSets.value.map((g) => g.sets)));
 
-// ── Radar d'ÉQUILIBRE musculaire (façon stats de RPG : force/agilité/…) : 6 régions,
-// pics = nb de séries du groupe sur la période → on voit d'un coup si le perso est
-// équilibré ou déséquilibré (ticket 69db971c). ──
-const RADAR_REGIONS: { key: string; muscles: string[] }[] = [
-  { key: 'Poitrine', muscles: ['pectoraux'] },
-  { key: 'Épaules', muscles: ['épaules'] },
-  { key: 'Bras', muscles: ['biceps', 'triceps', 'avant-bras'] },
-  { key: 'Jambes', muscles: ['quadriceps', 'ischio-jambiers', 'mollets', 'fessiers'] },
-  { key: 'Core', muscles: ['abdominaux'] },
-  { key: 'Dos', muscles: ['dos'] },
-];
-const RADAR = { cx: 100, cy: 100, r: 66, n: RADAR_REGIONS.length };
-const radarData = computed(() => {
-  const bySets = new Map<string, number>();
-  for (const g of muscleSets.value) bySets.set(g.muscle.toLowerCase(), g.sets);
-  return RADAR_REGIONS.map((reg) => ({
-    key: reg.key,
-    sets: reg.muscles.reduce((a, m) => a + (bySets.get(m) ?? 0), 0),
-  }));
+// ── Radar d'ÉQUILIBRE musculaire de la SEMAINE (façon stats de RPG) : 6 régions, 3 courbes
+// sur une échelle commune — le réel (lun → dim), l'objectif du Défi 360, l'ensemble des
+// challenges. On voit d'un coup ce qui est couvert, par quoi, et ce qui manque. Toute la
+// règle (secondaires ½, conversions) vit dans lib/bodyBalance. ──
+const RADAR = { cx: 100, cy: 100, r: 66, n: MUSCLE_REGIONS.length };
+const RADAR_SERIES = [
+  { key: 'combo', label: 'Objectif 360' },
+  { key: 'challenges', label: 'Challenges' },
+  { key: 'real', label: 'Réel' },
+] as const;
+const radarValues = computed(() => {
+  const s = weekMuscleSeries({
+    sessions: logsStore.all.map((r) => ({ performedAt: r.performed_at, log: r.payload })),
+    combos: combo.list,
+    challenges: challenges.list,
+    objective: profileStore.profile?.objective,
+    secondaries: (id) => library.secondaries.get(id),
+    today: logicalToday(),
+  });
+  return {
+    real: regionTotals(s.real),
+    combo: regionTotals(s.combo),
+    challenges: regionTotals(s.challenges),
+  };
 });
-const radarMax = computed(() => Math.max(1, ...radarData.value.map((r) => r.sets)));
+const radarMax = computed(() => Math.max(0, ...Object.values(radarValues.value).flat()));
+const radarHasData = computed(() => radarMax.value > 0);
 function radarPoint(i: number, frac: number): { x: number; y: number } {
   const ang = ((-90 + (360 / RADAR.n) * i) * Math.PI) / 180;
   return {
@@ -469,29 +496,39 @@ function radarPoint(i: number, frac: number): { x: number; y: number } {
   };
 }
 const poly = (frac: (i: number) => number) =>
-  radarData.value
-    .map((_, i) => {
-      const p = radarPoint(i, frac(i));
-      return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
-    })
-    .join(' ');
-const radarShape = computed(() => poly((i) => radarData.value[i]!.sets / radarMax.value));
-const radarRings = computed(() => [0.25, 0.5, 0.75, 1].map((f) => poly(() => f)));
-const radarAxes = computed(() =>
-  radarData.value.map((r, i) => {
-    const end = radarPoint(i, 1);
-    const lbl = radarPoint(i, 1.28);
-    return {
-      key: r.key,
-      sets: r.sets,
-      x2: end.x.toFixed(1),
-      y2: end.y.toFixed(1),
-      lx: lbl.x,
-      ly: lbl.y,
-      anchor: lbl.x < 46 ? 'end' : lbl.x > 154 ? 'start' : 'middle',
-    };
-  }),
+  MUSCLE_REGIONS.map((_, i) => {
+    const p = radarPoint(i, frac(i));
+    return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+  }).join(' ');
+const radarSeries = computed(() =>
+  RADAR_SERIES.map(({ key }) => ({
+    key,
+    points: poly((i) => (radarValues.value[key][i] ?? 0) / Math.max(1, radarMax.value)),
+  })),
 );
+// Légende dans l'ordre de lecture (réel d'abord), avec le total de chaque courbe.
+const radarLegend = computed(() =>
+  [...RADAR_SERIES].reverse().map((s) => ({
+    ...s,
+    total: radarValues.value[s.key].reduce((a, b) => a + b, 0),
+  })),
+);
+const radarRings = [0.25, 0.5, 0.75, 1].map((f) => poly(() => f));
+const radarAxes = MUSCLE_REGIONS.map((r, i) => {
+  const end = radarPoint(i, 1);
+  const lbl = radarPoint(i, 1.22);
+  return {
+    key: r.key,
+    x2: end.x.toFixed(1),
+    y2: end.y.toFixed(1),
+    lx: lbl.x,
+    ly: lbl.y + 3,
+    anchor: lbl.x < 46 ? 'end' : lbl.x > 154 ? 'start' : 'middle',
+  };
+});
+function fmtSets(n: number): string {
+  return n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+}
 
 function barPct(n: number) {
   return Math.round((n / maxMuscle.value) * 100);
@@ -585,6 +622,9 @@ const cardioKpis = computed(() => {
 onMounted(async () => {
   try {
     cardio.fetchLogs(300).catch(() => undefined);
+    // Radar de la semaine : tous les bilans (cache partagé) + muscles secondaires.
+    logsStore.fetchAll().catch(() => undefined);
+    library.fetchSecondaries().catch(() => undefined);
     combo.fetchMine().catch(() => undefined);
     challenges.fetchMine().catch(() => undefined);
     tennis
@@ -753,21 +793,71 @@ onMounted(async () => {
   stroke-width: 0.8;
   opacity: 0.5;
 }
+/* 3 courbes : les OBJECTIFS en contour (vert plein pour le 360, corail pointillé pour les
+   challenges — le trait les distingue sans dépendre de la couleur), le RÉEL plein dessus.
+   Corail et non orange : l'orange se confondait avec le jaune du réel (vu au banc). */
 .radar-shape {
-  fill: color-mix(in srgb, var(--accent) 28%, transparent);
-  stroke: var(--accent);
+  fill: none;
   stroke-width: 2;
   stroke-linejoin: round;
+}
+.radar-shape.rs-real {
+  fill: color-mix(in srgb, var(--accent) 28%, transparent);
+  stroke: var(--accent);
+}
+.radar-shape.rs-combo {
+  stroke: var(--d1);
+}
+.radar-shape.rs-challenges {
+  stroke: var(--d4);
+  stroke-dasharray: 4 3;
 }
 .radar-lbl {
   fill: var(--text);
   font-size: 9px;
   font-weight: 600;
 }
-.radar-lbl-v {
-  fill: var(--accent);
-  font-family: var(--font-display);
-  font-weight: 700;
+.radar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dim);
+}
+.rl-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  b {
+    color: var(--text);
+    font-size: 13px;
+  }
+}
+.rl-sw {
+  width: 16px;
+  height: 0;
+  border-top: 2px solid;
+  &.rs-real {
+    height: 8px;
+    border: 2px solid var(--accent);
+    background: color-mix(in srgb, var(--accent) 28%, transparent);
+    border-radius: 2px;
+  }
+  &.rs-combo {
+    border-color: var(--d1);
+  }
+  &.rs-challenges {
+    border-top-style: dashed;
+    border-color: var(--d4);
+  }
+}
+.radar-note {
+  margin: 4px 0 2px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--dim);
 }
 /* Volume par période : sélecteur + carte du corps + détail par exo. */
 .vol-period {
