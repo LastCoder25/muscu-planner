@@ -11,7 +11,7 @@
     <template v-else>
       <div class="head-card" :class="{ done: c.status === 'done' }">
         <div class="hc-top">
-          <span class="hc-pct font-display">{{ pct }}%</span>
+          <span class="hc-pct font-display">{{ fmtPct(pct) }}%</span>
           <span class="hc-days">{{ daysLeftLabel }}</span>
         </div>
         <div class="hc-week">📅 Semaine du {{ comboWeek }}</div>
@@ -40,7 +40,7 @@
         <div v-if="showOnTime" class="hc-pace" :class="onTimeState">
           🎯 Dans les temps : <b>{{ onTimePct }}%</b>
           <span class="hc-pace-tag">{{
-            onTimeState === 'ahead' ? '✓ en avance' : `⏳ en retard (tu es à ${pct}%)`
+            onTimeState === 'ahead' ? '✓ en avance' : `⏳ en retard (tu es à ${fmtPct(pct)}%)`
           }}</span>
         </div>
         <div v-if="c.status === 'done'" class="hc-done">
@@ -117,7 +117,7 @@
               'tier-' + legSegZone(leg, n),
               { on: n <= legDone(leg), next: n === legDone(leg) + 1 },
             ]"
-            :aria-label="n <= legDone(leg) ? `Retirer la série ${n}` : undefined"
+            :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
             @click.stop="onSeg(leg, n)"
           >
             <template v-if="n <= legDone(leg)">{{ segSetLabel(legSets(leg)[n - 1]) }}</template>
@@ -210,15 +210,20 @@
     <SetLogDialog
       v-model="setOpen"
       :title="setLeg?.exercise_name ?? ''"
-      :desc="`${setCount > 1 ? setCount + ' séries' : '1 série'} · reps & poids`"
+      :desc="
+        editIndex !== null
+          ? `Série ${editIndex + 1} · corriger`
+          : `${setCount > 1 ? setCount + ' séries' : '1 série'} · reps & poids`
+      "
       :assistable="setLeg?.assistable"
       :hint="setLeg ? rangeLabel(setLeg) : undefined"
       :initial-reps="setInitReps"
       :initial-weight="setInitWeight"
       :initial-assisted="setInitAssisted"
       :undo-label="undoLabel"
+      :save-label="editIndex !== null ? 'Enregistrer' : undefined"
       @save="onSetSave"
-      @undo="setLeg && undoSet(setLeg)"
+      @undo="setLeg && undoSet(setLeg, editIndex ?? undefined)"
     />
   </q-page>
 </template>
@@ -234,6 +239,7 @@ import { useComboStore } from '@/stores/combo';
 import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
+  fmtPct,
   legTier,
   legTierMarks,
   legSegZone,
@@ -385,11 +391,12 @@ function slotEmoji(key: string) {
 // Détail d'une série affiché DANS sa cellule jaune : « 12×15kg » (ou « 12 » au poids
 // du corps, « 12·a » si assisté). Vide si la série n'existe pas (cellule à faire).
 /** Libellé du retrait dans la fenêtre de saisie : dit QUELLE série part (« 12×20kg »),
- *  absent s'il n'y a rien à retirer. */
+ *  absent s'il n'y a rien à retirer. En correction, c’est la série ouverte qui part. */
 const undoLabel = computed(() => {
+  if (editIndex.value !== null) return '🗑 Retirer';
   const sets = setLeg.value ? legSets(setLeg.value) : [];
   const last = sets[sets.length - 1];
-  return last ? `Retirer la dernière (${segSetLabel(last)})` : undefined;
+  return last ? `↩ Retirer la dernière (${segSetLabel(last)})` : undefined;
 });
 
 function segSetLabel(s: ComboSet | undefined): string {
@@ -405,9 +412,25 @@ const setCount = ref(1);
 const setInitReps = ref(10);
 const setInitWeight = ref<number | null>(null);
 const setInitAssisted = ref(false);
+/** Série en cours de CORRECTION (index), ou null quand on en ajoute une. */
+const editIndex = ref<number | null>(null);
+/** Case FAITE touchée : la fenêtre s’ouvre sur CETTE série, préremplie, pour la corriger
+ *  ou la retirer (avant, on ne pouvait que la retirer). */
+function openEdit(leg: ComboLeg, index: number) {
+  const s = legSets(leg)[index];
+  if (!s) return;
+  setLeg.value = leg;
+  setCount.value = 1;
+  editIndex.value = index;
+  setInitReps.value = s.reps;
+  setInitWeight.value = s.weight ?? null;
+  setInitAssisted.value = !!s.assisted;
+  setOpen.value = true;
+}
 function openSet(leg: ComboLeg, count: number) {
   setLeg.value = leg;
   setCount.value = count;
+  editIndex.value = null;
   const last = legSets(leg);
   if (last.length) {
     setInitReps.value = legLastReps(leg);
@@ -443,8 +466,12 @@ function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }
   if (!auth.user?.id || !c.value || !leg) return;
   rememberWeight(leg.exercise_id, v.weight); // mémorise le poids pour cet exo (ticket efa49f4f)
   const before = comboCompleteInTime(c.value);
-  for (let i = 0; i < setCount.value; i++) {
-    combo.addSet(id, leg.exercise_id, logicalToday(), v.reps, v.weight, v.assisted);
+  if (editIndex.value !== null) {
+    combo.updateSet(id, leg.exercise_id, editIndex.value, v.reps, v.weight, v.assisted);
+  } else {
+    for (let i = 0; i < setCount.value; i++) {
+      combo.addSet(id, leg.exercise_id, logicalToday(), v.reps, v.weight, v.assisted);
+    }
   }
   if (!before && comboCompleteInTime(c.value)) celebrateObjective(c.value);
 }
@@ -473,9 +500,10 @@ function undoSet(leg: ComboLeg, index = legSets(leg).length - 1) {
     ok: { label: 'Retirer', color: 'negative' },
   }).onOk(() => combo.removeSet(id, leg.exercise_id, index));
 }
-/** Case de série touchée : une case FAITE se retire, une case vide ajoute une série. */
+/** Case de série touchée : une case FAITE s’ouvre pour être corrigée ou retirée, une case
+ *  vide ajoute une série. */
 function onSeg(leg: ComboLeg, n: number) {
-  if (n <= legSetsDone(leg)) undoSet(leg, n - 1);
+  if (n <= legSetsDone(leg)) openEdit(leg, n - 1);
   else openSet(leg, 1);
 }
 

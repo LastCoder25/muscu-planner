@@ -10,7 +10,7 @@
 //
 // Pur et testable : aucune horloge interne, `now` et `todayIso` sont toujours passés.
 import { challengeStats, type Challenge } from './challenges';
-import { comboProgressPct, type ComboChallenge } from './combo';
+import { comboProgressPct, fmtPct, type ComboChallenge } from './combo';
 
 type FeedKind = 'started' | 'progress' | 'done';
 type FeedSource = 'challenge' | 'combo';
@@ -118,7 +118,15 @@ export function buildFriendFeed(
       push(f, 'combo', 'started', c.id, c.created_at, `a lancé un ${c.name}`, null);
       if (dayOf(c.updated_at) > dayOf(c.created_at)) {
         const pct = comboProgressPct(c);
-        push(f, 'combo', 'progress', c.id, c.updated_at, `en est à ${pct} % de son ${c.name}`, pct);
+        push(
+          f,
+          'combo',
+          'progress',
+          c.id,
+          c.updated_at,
+          `en est à ${fmtPct(pct)} % de son ${c.name}`,
+          pct,
+        );
       }
     }
   }

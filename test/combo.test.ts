@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   legSetsDone,
   removeSetAt,
+  updateSetAt,
   comboStopPlan,
   comboPace,
   legReps,
@@ -14,6 +15,7 @@ import {
   legLastWeight,
   comboComplete,
   comboProgressPct,
+  fmtPct,
   comboXpPoints,
   comboXpBreakdown,
   comboCountedSets,
@@ -166,8 +168,27 @@ describe('comboComplete / progression', () => {
     const notDone = leg({ slot: 'pull', exercise_id: 'ex_pullup', target: 3, sets: [set(8)] });
     expect(comboComplete(combo([done]))).toBe(true);
     expect(comboComplete(combo([done, notDone]))).toBe(false);
-    // (3 + 1) / (3 + 3) = 66 %
-    expect(comboProgressPct(combo([done, notDone]))).toBe(67);
+    // (1 + 1/3) / 2 = 66,67 % → au dixième près (demandé : le % exact)
+    expect(comboProgressPct(combo([done, notDone]))).toBe(66.7);
+  });
+  it('le % ne ment jamais aux bornes : incomplet < 100, entamé > 0', () => {
+    // 1999/2000 sur un exo : 99,95 % s’arrondirait à 100 alors que rien n’est bouclé.
+    const presque = leg({ count_mode: 'reps', target: 2000, sets: [set(1999)] });
+    expect(comboComplete(combo([presque]))).toBe(false);
+    expect(comboProgressPct(combo([presque]))).toBe(99.9);
+    // 1/3000 : 0,03 % s’arrondirait à 0 alors qu’on a commencé.
+    const debut = leg({ count_mode: 'reps', target: 3000, sets: [set(1)] });
+    expect(comboProgressPct(combo([debut]))).toBe(0.1);
+    // Les vraies bornes restent exactes.
+    const fini = leg({ target: 2, sets: [set(10), set(10)] });
+    expect(comboProgressPct(combo([fini]))).toBe(100);
+    expect(comboProgressPct(combo([leg({ target: 2, sets: [] })]))).toBe(0);
+  });
+  it('fmtPct : décimale seulement si besoin, virgule française', () => {
+    expect(fmtPct(75)).toBe('75');
+    expect(fmtPct(66.7)).toBe('66,7');
+    expect(fmtPct(12.04)).toBe('12');
+    expect(fmtPct(0.1)).toBe('0,1');
   });
 });
 
@@ -1020,6 +1041,48 @@ describe('🗑️ RETIRER LA SÉRIE TOUCHÉE (pas forcément la dernière)', () 
     for (const i of [-1, 4, 99, 1.5, Number.NaN]) {
       expect(removeSetAt(sets, i).map((x) => x.reps)).toEqual([10, 11, 12, 13]);
     }
+  });
+});
+
+describe('✏️ CORRIGER LA SÉRIE TOUCHÉE', () => {
+  const s = (reps: number, date = '2026-09-01'): ComboSet => ({ date, reps, weight: null });
+  const sets = [s(10), s(11, '2026-09-03'), s(12)];
+
+  it('corrige exactement la case touchée (reps, charge, assistance), les autres ne bougent pas', () => {
+    const out = updateSetAt(sets, 1, { reps: 15, weight: 20, assisted: true });
+    expect(out.map((x) => x.reps)).toEqual([10, 15, 12]);
+    expect(out[1]).toMatchObject({ reps: 15, weight: 20, assisted: true });
+    expect(out[0]).toEqual(sets[0]);
+    expect(out[2]).toEqual(sets[2]);
+  });
+
+  it('garde le JOUR de la série : c’est lui qui dit si elle compte dans les temps', () => {
+    expect(updateSetAt(sets, 1, { reps: 9, weight: null, assisted: false })[1]!.date).toBe(
+      '2026-09-03',
+    );
+  });
+
+  it('retirer la charge la remet au poids du corps (null, pas l’ancienne valeur)', () => {
+    const lourd = [{ date: '2026-09-01', reps: 8, weight: 40 }];
+    expect(updateSetAt(lourd, 0, { reps: 8, weight: null, assisted: false })[0]!.weight).toBeNull();
+  });
+
+  it('ne touche pas la liste reçue, et un index hors limites ne change rien', () => {
+    const copy = sets.map((x) => ({ ...x }));
+    updateSetAt(sets, 0, { reps: 99, weight: 1, assisted: true });
+    expect(sets).toEqual(copy);
+    for (const i of [-1, 3, 99])
+      expect(updateSetAt(sets, i, { reps: 1, weight: null, assisted: false })).toEqual(copy);
+  });
+
+  it('corriger des reps peut boucler l’objectif (en mode reps)', () => {
+    const l = leg({ count_mode: 'reps', target: 30, sets: [set(10), set(10), set(5)] });
+    expect(legComplete(l)).toBe(false);
+    const corrige = {
+      ...l,
+      sets: updateSetAt(l.sets!, 2, { reps: 10, weight: null, assisted: false }),
+    };
+    expect(legComplete(corrige)).toBe(true);
   });
 });
 

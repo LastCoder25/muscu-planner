@@ -1,31 +1,33 @@
 <template>
   <!-- En-tête d'un exo du Défi 360, partagé par l'onglet 🎯 et la fiche du défi.
-       Deux lignes et pas une de plus : le NOM prend toute la largeur (avant, la pastille
-       d'avancement lui volait la moitié de la ligne et il partait sur deux ou trois lignes),
-       et en dessous, collés à droite, la fourchette conseillée puis l'avancement. La vignette
-       couvre les deux lignes. -->
+       UNE ligne quand le nom et l'avancement tiennent côte à côte, DEUX sinon : l'avancement
+       passe alors dessous, collé à droite. Le nom n'est jamais tronqué pour lui faire de la
+       place (avant, la pastille lui volait la moitié de la ligne et il partait sur deux ou
+       trois lignes). -->
   <div class="lh">
     <div class="lh-thumb">
       <ExerciseDemo :exercise-id="leg.exercise_id" :name="leg.exercise_name" :size="size">
         <span class="lh-emo">{{ fallback }}</span>
       </ExerciseDemo>
     </div>
-    <div class="lh-name" :title="leg.exercise_name">
-      {{ leg.exercise_name
-      }}<span v-if="bodyweight" class="lh-bw" title="Poids du corps (aucun matériel)">🤸</span>
+    <div class="lh-body">
+      <div class="lh-name" :title="leg.exercise_name">
+        {{ leg.exercise_name
+        }}<span v-if="bodyweight" class="lh-bw" title="Poids du corps (aucun matériel)">🤸</span>
+      </div>
+      <!-- Toute la ligne ouvre les séries faites : une cible large, pas une pastille de 20 px. -->
+      <button
+        class="lh-meta"
+        :aria-label="`Séries faites : ${leg.exercise_name}`"
+        @click="emit('history')"
+      >
+        <span class="lh-range">🎯 {{ range }}</span>
+        <span class="lh-count" :class="{ ok: legComplete(leg) }">
+          {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
+          <span v-if="extra > 0" class="lh-extra">+{{ extra }}</span>
+        </span>
+      </button>
     </div>
-    <!-- Toute la ligne ouvre les séries faites : une cible large, pas une pastille de 20 px. -->
-    <button
-      class="lh-meta"
-      :aria-label="`Séries faites : ${leg.exercise_name}`"
-      @click="emit('history')"
-    >
-      <span class="lh-range">🎯 {{ range }}</span>
-      <span class="lh-count" :class="{ ok: legComplete(leg) }">
-        {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
-        <span v-if="extra > 0" class="lh-extra">+{{ extra }}</span>
-      </span>
-    </button>
   </div>
 </template>
 
@@ -70,7 +72,6 @@ const extra = computed(() => legDone(props.leg) - props.leg.target);
   align-items: center;
 }
 .lh-thumb {
-  grid-row: span 2;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -78,7 +79,18 @@ const extra = computed(() => legDone(props.leg) - props.leg.target);
 .lh-emo {
   font-size: 22px;
 }
+/* Le nom garde sa largeur naturelle : c'est l'avancement qui passe à la ligne s'il n'y a
+   pas la place, jamais le nom qui se comprime. */
+.lh-body {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
 .lh-name {
+  flex: 0 1 auto;
+  max-width: 100%;
   font-weight: 600;
   font-size: 14.5px;
   line-height: 1.25;
@@ -109,7 +121,8 @@ const extra = computed(() => legDone(props.leg) - props.leg.target);
   justify-content: flex-end;
   align-items: center;
   gap: 4px 8px;
-  margin: -7px 0 -7px;
+  margin: -7px 0 -7px auto;
+  flex: none;
   padding: 7px 0;
   min-width: 0;
   background: none;

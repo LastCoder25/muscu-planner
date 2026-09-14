@@ -8,15 +8,29 @@ import { join, relative, resolve } from 'node:path';
 // fenêtres (z-index 6000) — on les voyait « à travers les modales », et aucun voile, même
 // opaque, n'y pouvait rien (trois correctifs de voile en vain). Ce test interdit qu'une
 // classe de l'app reprenne le nom d'un utilitaire Quasar qui change l'empilement.
+//
+// ⚠️ ET LA MÊME FAMILLE MASQUE (v0.851) : `.sm`, `.md`, `.lg`… sont les classes de VISIBILITÉ
+// par largeur de Quasar (`display: none !important` hors de leur tranche), déclarées sous des
+// `@media` que la première version de ce test ne lisait pas. Sur téléphone, les boutons
+// Accepter / Refuser des Amis (`fr-btn sm`), les repères de départ de l'assistant de défi
+// (`choice sm`) et la légende de l'équilibre du corps (`lg`) étaient INVISIBLES.
 
 const ROOT = resolve(__dirname, '..');
 const quasarCss = readFileSync(join(ROOT, 'node_modules/quasar/dist/quasar.prod.css'), 'utf8');
 
-// Utilitaires Quasar à UNE classe qui posent un z-index.
+// Utilitaires Quasar à UNE classe qui posent un z-index ou MASQUENT l'élément — y compris sous
+// un `@media`, dont la capture contient alors « sélecteurs{déclarations ».
 const Z_UTILS = new Set<string>();
 for (const m of quasarCss.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
-  if (!/z-index/.test(m[2]!)) continue;
-  for (const sel of m[1]!.split(',')) {
+  let sels = m[1]!;
+  let body = m[2]!;
+  if (body.includes('{')) {
+    const i = body.lastIndexOf('{');
+    sels = body.slice(0, i);
+    body = body.slice(i + 1);
+  }
+  if (!/(z-index|display\s*:\s*none)/.test(body)) continue;
+  for (const sel of sels.split(',')) {
     const one = sel.trim().match(/^\.([a-zA-Z0-9_-]+)$/);
     if (one) Z_UTILS.add(one[1]!);
   }
@@ -25,6 +39,8 @@ for (const m of quasarCss.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
 const ALLOWED = new Map<string, string[]>([
   ['fullscreen', ['src/pages/ErrorNotFound.vue']], // page 404 du gabarit Quasar
   ['q-btn__content', ['src/pages/ExpeditionPage.vue']], // style d'un composant Quasar
+  // Salles du Labyrinthe hors de vue : voulues invisibles (leur style les rend transparentes).
+  ['hidden', ['src/pages/ExpeditionPage.vue']],
 ]);
 
 function vueFiles(dir: string): string[] {
@@ -38,6 +54,9 @@ describe('classes de l’app vs utilitaires Quasar', () => {
   it('Quasar expose bien ses utilitaires de z-index (sinon le test ne vérifierait rien)', () => {
     expect(Z_UTILS.has('z-max')).toBe(true);
     expect(Z_UTILS.has('z-top')).toBe(true);
+    // Les classes de visibilité par largeur vivent sous @media : le test doit les voir.
+    expect(Z_UTILS.has('sm')).toBe(true);
+    expect(Z_UTILS.has('lg')).toBe(true);
   });
 
   it('aucune classe de l’app ne porte le nom d’un utilitaire Quasar qui change l’empilement', () => {

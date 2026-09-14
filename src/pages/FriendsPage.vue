@@ -52,8 +52,8 @@
           <div v-for="v in friends.incoming" :key="v.userId" class="fr-row">
             <span class="fr-av">🧑</span>
             <span class="fr-name">{{ v.pseudo }}</span>
-            <button class="fr-btn sm" @click="respond(v.userId, true)">Accepter</button>
-            <button class="fr-btn sm ghost" @click="respond(v.userId, false)">Refuser</button>
+            <button class="fr-btn compact" @click="respond(v.userId, true)">Accepter</button>
+            <button class="fr-btn compact ghost" @click="respond(v.userId, false)">Refuser</button>
           </div>
         </section>
 
@@ -69,10 +69,10 @@
                 >te propose « {{ s.exercise_name }} » · {{ s.duration_days }} jours</span
               >
             </span>
-            <button class="fr-btn sm" :disabled="busyShared" @click="acceptShared(s)">
+            <button class="fr-btn compact" :disabled="busyShared" @click="acceptShared(s)">
               Relever
             </button>
-            <button class="fr-btn sm ghost" :disabled="busyShared" @click="declineShared(s)">
+            <button class="fr-btn compact ghost" :disabled="busyShared" @click="declineShared(s)">
               Refuser
             </button>
           </div>
@@ -91,7 +91,7 @@
               <span class="fd-when">{{ feedWhen(it.at, now) }}</span>
             </span>
             <span v-if="it.pct !== null" class="fd-pct" :class="{ done: it.kind === 'done' }"
-              >{{ it.pct }} %</span
+              >{{ fmtPct(it.pct) }} %</span
             >
           </button>
         </section>
@@ -117,7 +117,7 @@
             <span class="fr-av">🧑</span>
             <span class="fr-name">{{ v.pseudo }}</span>
             <span class="fr-wait">en attente</span>
-            <button class="fr-btn sm ghost" @click="unlink(v.userId, 'Annuler la demande')">
+            <button class="fr-btn compact ghost" @click="unlink(v.userId, 'Annuler la demande')">
               Annuler
             </button>
           </div>
@@ -134,7 +134,7 @@
               <span class="fr-name">{{ v.pseudo }}</span>
               <span class="fr-go">voir l'avancement ›</span>
             </button>
-            <button class="fr-btn sm ghost" @click="unlink(v.userId, 'Retirer cet ami')">
+            <button class="fr-btn compact ghost" @click="unlink(v.userId, 'Retirer cet ami')">
               Retirer
             </button>
           </div>
@@ -152,6 +152,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useFriendsStore, PseudoNotFoundError, AlreadyLinkedError } from '@/stores/friends';
 import { buildFriendFeed, feedWhen, type FeedItem } from '@/lib/friendFeed';
+import { fmtPct } from '@/lib/combo';
 import { logicalToday, computeDailyTargets } from '@/lib/challenges';
 import { useChallengesStore } from '@/stores/challenges';
 import type { SharedChallenge } from '@/stores/friends';
@@ -485,7 +486,7 @@ async function goAventure() {
   cursor: pointer;
   flex: none;
 }
-.fr-btn.sm {
+.fr-btn.compact {
   padding: 6px 10px;
   font-size: 12px;
 }

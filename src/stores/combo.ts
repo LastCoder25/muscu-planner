@@ -6,6 +6,7 @@ import {
   comboChestEligible,
   comboNextStatus,
   removeSetAt,
+  updateSetAt,
   type ComboChallenge,
   type ComboLeg,
 } from '@/lib/combo';
@@ -177,6 +178,33 @@ export const useComboStore = defineStore('combo', () => {
       });
   }
 
+  // Corrige UNE série précise (la case touchée). OPTIMISTE, comme l’ajout et le retrait.
+  // ⚠️ Le statut se recalcule : corriger des reps peut boucler — ou dé-boucler — un exo.
+  function updateSet(
+    id: string,
+    exerciseId: string,
+    index: number,
+    reps: number,
+    weight: number | null,
+    assisted = false,
+  ) {
+    const c = list.value.find((x) => x.id === id);
+    if (!c || reps <= 0) return;
+    const leg = c.legs.find((l) => l.exercise_id === exerciseId);
+    if (!leg?.sets?.length || index < 0 || index >= leg.sets.length) return;
+    leg.sets = updateSetAt(leg.sets, index, { reps, weight, assisted });
+    // La DERNIÈRE série porte le poids qui préremplit la suivante.
+    if (index === leg.sets.length - 1) leg.weight_kg = weight ?? null;
+    refreshStatus(c);
+    void supabase
+      .from('combo_challenges')
+      .update({ legs: c.legs, status: c.status, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .then(({ error }) => {
+        if (error) console.error('combo updateSet persist', error);
+      });
+  }
+
   // Met à jour la charge (kg) d'un exo.
   async function setWeight(id: string, exerciseId: string, weightKg: number | null) {
     const c = list.value.find((x) => x.id === id);
@@ -219,6 +247,7 @@ export const useComboStore = defineStore('combo', () => {
     create,
     addSet,
     removeSet,
+    updateSet,
     setWeight,
     setStatus,
     remove,

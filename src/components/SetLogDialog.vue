@@ -29,18 +29,19 @@
         <span class="sl-hint">élastique → ×0,6</span>
       </div>
       <div class="sl-actions">
-        <!-- Retrait de la dernière série : il vivait en bouton ↩ sur CHAQUE ligne d'exo et
-             leur prenait la place des cases. Il a sa place ici, là où l'on gère les séries. -->
-        <q-btn
-          v-if="undoLabel"
-          flat
-          no-caps
-          class="sl-undo"
-          :label="'↩ ' + undoLabel"
-          @click="undo"
-        />
+        <!-- Retrait d’une série : il vivait en bouton ↩ sur CHAQUE ligne d'exo et leur prenait
+             la place des cases. Il a sa place ici, là où l'on gère les séries. Le libellé vient
+             du parent : « la dernière » à l’ajout, « cette série » quand on en corrige une. -->
+        <q-btn v-if="undoLabel" flat no-caps class="sl-undo" :label="undoLabel" @click="undo" />
         <q-btn flat no-caps label="Annuler" @click="emit('update:modelValue', false)" />
-        <q-btn unelevated color="primary" text-color="dark" no-caps label="Valider" @click="save" />
+        <q-btn
+          unelevated
+          color="primary"
+          text-color="dark"
+          no-caps
+          :label="saveLabel || 'Valider'"
+          @click="save"
+        />
       </div>
     </q-card>
   </q-dialog>
@@ -60,7 +61,8 @@ const props = defineProps<{
   initialReps?: number;
   initialWeight?: number | null;
   initialAssisted?: boolean;
-  undoLabel?: string; // présent = on peut retirer la dernière série (le parent confirme)
+  undoLabel?: string; // présent = on peut retirer une série (le parent confirme)
+  saveLabel?: string; // « Enregistrer » quand on corrige une série existante
 }>();
 const emit = defineEmits<{
   'update:modelValue': [boolean];

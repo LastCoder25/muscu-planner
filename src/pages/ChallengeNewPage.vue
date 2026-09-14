@@ -259,7 +259,7 @@
             <button
               v-for="o in startChoices"
               :key="o.id"
-              class="choice sm"
+              class="choice compact"
               :class="{ active: startDate === o.date }"
               @click="pickStart(o.date)"
             >
@@ -1132,7 +1132,7 @@ onMounted(async () => {
   gap: 6px;
   align-items: center;
 }
-.choice.sm {
+.choice.compact {
   padding: 7px 11px;
   font-size: 13px;
 }

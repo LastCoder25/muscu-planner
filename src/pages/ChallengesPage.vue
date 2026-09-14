@@ -340,7 +340,7 @@
           <div class="cc-main">
             <div class="cc-title font-display">🎯 Défi 360</div>
             <div class="cc-sub">
-              {{ comboLegsDone(c) }}/{{ c.legs.length }} exos · {{ comboProgressPct(c) }} %
+              {{ comboLegsDone(c) }}/{{ c.legs.length }} exos · {{ fmtPct(comboProgressPct(c)) }} %
             </div>
             <div v-if="c.status === 'done'" class="cc-xp">
               <span v-if="comboXpb(c).duration > 0" class="xp-pill dur"
@@ -381,7 +381,7 @@
         <template v-else>
           <div class="combo360-head">
             <div class="c3-top">
-              <span class="c3-pct font-display">{{ comboPct }}%</span>
+              <span class="c3-pct font-display">{{ fmtPct(comboPct) }}%</span>
               <span class="c3-week">📅 {{ comboWeek }}</span>
               <!-- ⚠️ ARRÊTER SON 360 SE FAIT ICI, parce que c'est ici qu'on le regarde.
                    L'action existait, mais uniquement sur /combo/:id — et cet onglet
@@ -457,7 +457,7 @@
                     'tier-' + legSegZone(leg, n),
                     { on: n <= legDone(leg), next: n === legDone(leg) + 1 },
                   ]"
-                  :aria-label="n <= legDone(leg) ? `Retirer la série ${n}` : undefined"
+                  :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
                   @click.stop="onSeg(leg, n)"
                 >
                   <template v-if="n <= legDone(leg)">{{
@@ -521,55 +521,33 @@
       </template>
     </template>
 
-    <!-- Saisie d'une série : reps + poids, préremplis avec la dernière série -->
-    <q-dialog v-model="setOpen">
-      <q-card class="set-card">
-        <div class="set-title font-display">{{ setLeg?.exercise_name }}</div>
-        <div class="set-desc">
-          {{ setCount > 1 ? `${setCount} séries` : '1 série' }} · reps &amp; poids
-        </div>
-        <div class="set-row">
-          <span class="set-lbl">Reps</span>
-          <q-input v-model.number="setReps" type="number" filled dense style="max-width: 110px" />
-        </div>
-        <div class="set-row">
-          <span class="set-lbl">Poids</span>
-          <q-input
-            v-model.number="setWeight"
-            type="number"
-            filled
-            dense
-            suffix="kg"
-            style="max-width: 130px"
-          />
-          <span class="set-hint">vide = poids du corps</span>
-        </div>
-        <div v-if="setLeg?.assistable" class="set-row">
-          <span class="set-lbl">Assisté</span>
-          <q-toggle v-model="setAssisted" />
-          <span class="set-hint">élastique / machine → ×0,6</span>
-        </div>
-        <div class="set-actions">
-          <q-btn
-            v-if="setLeg && legSetsDone(setLeg)"
-            flat
-            no-caps
-            class="set-undo"
-            :label="`↩ Retirer la dernière (${segSetLabel(legSets(setLeg)[legSets(setLeg).length - 1])})`"
-            @click="undoFromDialog"
-          />
-          <q-btn flat no-caps label="Annuler" @click="setOpen = false" />
-          <q-btn
-            unelevated
-            color="primary"
-            text-color="dark"
-            no-caps
-            label="Valider"
-            @click="saveSet"
-          />
-        </div>
-      </q-card>
-    </q-dialog>
+    <!-- Saisie d'une série : la fenêtre PARTAGÉE (fiche du 360, séance générée, défis en
+         séries). L'onglet portait sa propre copie, sans fourchette conseillée ni correction. -->
+    <SetLogDialog
+      v-model="setOpen"
+      :title="setLeg?.exercise_name ?? ''"
+      :desc="
+        editIndex !== null
+          ? `Série ${editIndex + 1} · corriger`
+          : `${setCount > 1 ? setCount + ' séries' : '1 série'} · reps & poids`
+      "
+      :assistable="setLeg?.assistable"
+      :hint="
+        setLeg
+          ? repRangeLabel(
+              legRepRange(setLeg, profileStore.profile?.objective),
+              legMode(setLeg) === 'time',
+            )
+          : undefined
+      "
+      :initial-reps="setReps"
+      :initial-weight="setWeight"
+      :initial-assisted="setAssisted"
+      :undo-label="undoLabel"
+      :save-label="editIndex !== null ? 'Enregistrer' : undefined"
+      @save="saveSet"
+      @undo="setLeg && undoSet(setLeg, editIndex ?? undefined)"
+    />
 
     <!-- Historique des séries d'un exo -->
     <ComboSetHistory v-model="histOpen" :leg="histLeg" />
@@ -586,6 +564,7 @@ import ComboChestView from '@/components/ComboChestView.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
+import SetLogDialog from '@/components/SetLogDialog.vue';
 import {
   challengeStats,
   challengeXpPoints,
@@ -606,9 +585,11 @@ import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { challengeLane, type ChallengeLane } from '@/lib/tennisTraining';
 import { useComboStore } from '@/stores/combo';
 import { useProfileStore } from '@/stores/profile';
+import { repRangeLabel } from '@/lib/repScheme';
 import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
+  fmtPct,
   comboXpBreakdown,
   legSetsDone,
   legDone,
@@ -622,6 +603,7 @@ import {
   legLastWeight,
   legLastAssisted,
   legSets,
+  legRepRange,
   comboStopPlan,
   comboPace,
   NO_PACE,
@@ -793,28 +775,51 @@ const setCount = ref(1); // nb de séries identiques à ajouter (+1..+4)
 const setReps = ref<number>(10);
 const setWeight = ref<number | null>(null);
 const setAssisted = ref(false);
+/** Série en cours de CORRECTION (index), ou null quand on en ajoute une. */
+const editIndex = ref<number | null>(null);
+/** Case FAITE touchée : la fenêtre s’ouvre sur CETTE série, préremplie, pour la corriger
+ *  ou la retirer (avant, on ne pouvait que la retirer). */
+function openEdit(leg: ComboLeg, index: number) {
+  const s = legSets(leg)[index];
+  if (!s) return;
+  setLeg.value = leg;
+  setCount.value = 1;
+  editIndex.value = index;
+  setReps.value = s.reps;
+  setWeight.value = s.weight ?? null;
+  setAssisted.value = !!s.assisted;
+  setOpen.value = true;
+}
+/** Libellé du retrait dans la fenêtre : la série ouverte en correction, sinon la dernière. */
+const undoLabel = computed(() => {
+  if (editIndex.value !== null) return '🗑 Retirer';
+  const sets = setLeg.value ? legSets(setLeg.value) : [];
+  const last = sets[sets.length - 1];
+  return last ? `↩ Retirer la dernière (${segSetLabel(last)})` : undefined;
+});
 function openSet(leg: ComboLeg, count: number) {
   setLeg.value = leg;
   setCount.value = count;
+  editIndex.value = null;
   setReps.value = legLastReps(leg);
   setWeight.value = legLastWeight(leg);
   setAssisted.value = legLastAssisted(leg);
   setOpen.value = true;
 }
-function saveSet() {
+function saveSet(v: { reps: number; weight: number | null; assisted: boolean }) {
   const leg = setLeg.value;
-  const reps = Math.max(1, Math.round(setReps.value || 0));
   // ⚠️ On garde l'OBJET : si la série ferme le défi (maximal partout), `activeCombo`
   // devient null juste après — le relire ici plantait.
   const co = activeCombo.value;
   if (!co || !leg) return;
-  const w = setWeight.value != null && setWeight.value > 0 ? setWeight.value : null;
-  const asst = !!leg.assistable && setAssisted.value;
   const before = comboCompleteInTime(co);
-  for (let i = 0; i < setCount.value; i++) {
-    comboStore.addSet(co.id, leg.exercise_id, logicalToday(), reps, w, asst);
+  if (editIndex.value !== null) {
+    comboStore.updateSet(co.id, leg.exercise_id, editIndex.value, v.reps, v.weight, v.assisted);
+  } else {
+    for (let i = 0; i < setCount.value; i++) {
+      comboStore.addSet(co.id, leg.exercise_id, logicalToday(), v.reps, v.weight, v.assisted);
+    }
   }
-  setOpen.value = false;
   if (!before && comboCompleteInTime(co)) celebrateCombo(co);
 }
 // Mode DURÉE : ajoute directement N secondes (dans le champ reps, pas de poids).
@@ -881,15 +886,10 @@ async function exportCombo() {
     $q.notify({ type: 'negative', message: 'Copie impossible sur cet appareil.' });
   }
 }
-// Retrait depuis la fenêtre de saisie : on la ferme d'abord, la confirmation prend le relais.
-function undoFromDialog() {
-  const leg = setLeg.value;
-  setOpen.value = false;
-  if (leg) undoSet(leg);
-}
-/** Case de série touchée : une case FAITE se retire, une case vide ajoute une série. */
+/** Case de série touchée : une case FAITE s’ouvre pour être corrigée ou retirée, une case
+ *  vide ajoute une série. */
 function onSeg(leg: ComboLeg, n: number) {
-  if (n <= legSetsDone(leg)) undoSet(leg, n - 1);
+  if (n <= legSetsDone(leg)) openEdit(leg, n - 1);
   else openSet(leg, 1);
 }
 /** Retire UNE série (par défaut la dernière) — celle dont on a touché la case. */
@@ -1485,10 +1485,6 @@ onMounted(async () => {
   font-weight: 800;
   font-size: 14px;
 }
-.set-undo {
-  margin-right: auto;
-  color: var(--d4);
-}
 .seg-bar {
   flex: 1;
   min-width: 0;
@@ -1646,45 +1642,6 @@ onMounted(async () => {
 .cl-corr:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-.set-card {
-  background: var(--surface);
-  color: var(--text);
-  padding: 18px 16px;
-  border-radius: 16px;
-  width: 320px;
-  max-width: 92vw;
-}
-.set-title {
-  font-size: 18px;
-  font-weight: 700;
-}
-.set-desc {
-  font-size: 12.5px;
-  color: var(--dim);
-  margin: 4px 0 14px;
-}
-.set-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.set-lbl {
-  font-size: 13px;
-  color: var(--dim);
-  min-width: 46px;
-}
-.set-hint {
-  font-size: 11px;
-  color: var(--dim);
-}
-.set-actions {
-  flex-wrap: wrap;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
 }
 
 /* Tuiles de défis (En cours), groupées par voie */

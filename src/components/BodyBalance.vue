@@ -46,7 +46,10 @@
             >{{ r.muscle }}</span
           >
         </span>
+        <!-- Le FAIT en vert et plus épais que la piste : il se distingue du prévu (hachuré, à
+             la couleur de l’état) sans avoir à lire la légende. -->
         <span class="bb-bar">
+          <span class="bb-track" />
           <span class="bb-done" :style="{ width: w(r.done, r.target) + '%' }" />
           <span
             class="bb-plan"
@@ -62,8 +65,8 @@
       </component>
 
       <p class="bb-legend">
-        <span class="lg lg-done" /> fait · <span class="lg lg-plan" /> prévu ·
-        <span class="lg lg-mark" /> cible — séries/sem. ; un muscle secondaire compte ½ série.
+        <span class="bb-lg lg-done" /> fait · <span class="bb-lg lg-plan" /> prévu ·
+        <span class="bb-lg lg-mark" /> cible — séries/sem. ; un muscle secondaire compte ½ série.
       </p>
     </template>
   </section>
@@ -229,24 +232,34 @@ onMounted(async () => {
   border-radius: 50%;
   margin-right: 6px;
 }
+/* La barre fait la hauteur du FAIT (14 px) ; la piste et le prévu, plus fins (8 px), sont
+   centrés dedans — le fait déborde au-dessus et au-dessous : la « surépaisseur ». */
 .bb-bar {
   position: relative;
   flex: 1;
   min-width: 0;
-  height: 10px;
-  background: var(--surface-3);
-  border-radius: 5px;
-  overflow: hidden;
+  height: 14px;
 }
-.bb-done,
+.bb-track,
 .bb-plan {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+}
+.bb-track {
+  left: 0;
+  right: 0;
+  background: var(--surface-3);
+  border-radius: 4px;
+}
+.bb-done {
   position: absolute;
   top: 0;
   bottom: 0;
-}
-.bb-done {
   left: 0;
-  background: var(--bb-c);
+  z-index: 1;
+  background: var(--d1);
+  border-radius: 4px;
 }
 .bb-plan {
   background: repeating-linear-gradient(
@@ -257,6 +270,7 @@ onMounted(async () => {
 }
 .bb-mark {
   position: absolute;
+  z-index: 2;
   top: -2px;
   bottom: -2px;
   width: 2px;
@@ -290,7 +304,7 @@ onMounted(async () => {
   color: var(--dim);
   line-height: 1.5;
 }
-.lg {
+.bb-lg {
   display: inline-block;
   width: 12px;
   height: 8px;
@@ -298,9 +312,11 @@ onMounted(async () => {
   vertical-align: 0;
 }
 .lg-done {
-  background: var(--accent);
+  height: 10px;
+  background: var(--d1);
 }
 .lg-plan {
+  height: 6px;
   background: repeating-linear-gradient(-45deg, var(--accent) 0 2px, transparent 2px 4px);
 }
 .lg-mark {

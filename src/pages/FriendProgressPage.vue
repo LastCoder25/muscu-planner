@@ -17,7 +17,7 @@
         <div class="fp-sec-t">🎯 Défi 360 en cours</div>
         <div class="fp-card">
           <div class="fp-c-top">
-            <span class="fp-pct font-display">{{ comboProgressPct(activeCombo) }} %</span>
+            <span class="fp-pct font-display">{{ fmtPct(comboProgressPct(activeCombo)) }} %</span>
             <span class="fp-c-dates"
               >📅 {{ dateRangeLabel(activeCombo.start_date, activeCombo.duration_days) }}</span
             >
@@ -96,6 +96,7 @@ import {
 import { dateRangeLabel } from '@/lib/startDate';
 import {
   comboProgressPct,
+  fmtPct,
   legDone,
   legComplete,
   legMode,

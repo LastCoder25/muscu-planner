@@ -76,6 +76,20 @@ export const COMBO_PLAN_REPS = 10;
 export function removeSetAt(sets: readonly ComboSet[], index: number): ComboSet[] {
   return sets.filter((_, i) => i !== index);
 }
+/** Corrige UNE série (la case touchée) : reps, charge et assistance changent, le JOUR reste
+ *  celui où elle a été faite — c’est lui qui décide si elle compte dans les temps. Un index
+ *  hors limites ne change rien. */
+export function updateSetAt(
+  sets: readonly ComboSet[],
+  index: number,
+  patch: { reps: number; weight: number | null; assisted: boolean },
+): ComboSet[] {
+  return sets.map((s, i) =>
+    i === index
+      ? { ...s, reps: patch.reps, weight: patch.weight ?? null, assisted: patch.assisted }
+      : s,
+  );
+}
 
 /** Séries réalisées (avec repli : convertit l'ancien `progress` en séries). */
 export function legSets(leg: ComboLeg): ComboSet[] {
@@ -172,14 +186,24 @@ export function legRepRange(leg: ComboLeg, objective?: Objective | null): RepRan
 }
 
 /** Avancement global = MOYENNE des fractions de complétion par exo (mode-neutre :
- *  chaque exo compte pour 1, quel que soit son unité séries/reps → on peut mélanger). */
+ *  chaque exo compte pour 1, quel que soit son unité séries/reps → on peut mélanger).
+ *  Au DIXIÈME près (demandé : le % exact). ⚠️ L’arrondi ne ment jamais aux bornes : un
+ *  défi incomplet ne s’affiche pas 100 %, un défi entamé ne s’affiche pas 0 %. */
 export function comboProgressPct(c: ComboChallenge): number {
   if (!c.legs.length) return 0;
   const frac = c.legs.reduce((a, l) => {
     if (l.target <= 0) return a;
     return a + Math.min(1, legDone(l) / l.target);
   }, 0);
-  return Math.round((frac / c.legs.length) * 100);
+  const exact = (frac / c.legs.length) * 100;
+  const pct = Math.round(exact * 10) / 10;
+  if (pct >= 100 && exact < 100) return 99.9;
+  if (pct <= 0 && exact > 0) return 0.1;
+  return pct;
+}
+/** Un pourcentage à la française, décimale seulement si besoin : 75 → « 75 », 66,7 → « 66,7 ». */
+export function fmtPct(pct: number): string {
+  return (Math.round(pct * 10) / 10).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
 }
 export function comboComplete(c: ComboChallenge): boolean {
   return c.legs.length > 0 && c.legs.every((l) => legComplete(l));
@@ -964,7 +988,7 @@ export function comboExportText(c: ComboChallenge, today: string): string {
   const L: string[] = [];
   L.push(`🎯 Défi 360 — Semaine du ${fmtDM(c.start_date)} → ${fmtDM(end)}`);
   L.push(
-    `Progression : ${pct}%` +
+    `Progression : ${fmtPct(pct)}%` +
       (showOnTime ? ` (théorique ${onTime}%)` : '') +
       (c.status === 'done' ? ' — bouclé ✅' : ''),
   );
