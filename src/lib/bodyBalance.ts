@@ -17,22 +17,20 @@
 //
 // ⚠️ LA CIBLE est celle du programme (`computeMuscleTargets` : objectif, niveau, sports,
 // priorités) — jamais un ratio neutre, qui signalerait comme défaut une emphase voulue.
+//
+// Forme : chaque source (séances, 360, challenges) se traduit en ÉLÉMENTS de volume
+// {jour, exo, muscle principal, séries} ; une seule boucle les crédite par muscle.
 import type { Objective } from './types';
-import { isMuscuLog, mondayOf, addDaysLocal, volumeState, type LogEntry } from './volume';
-import {
-  legSets,
-  legMode,
-  legRepRange,
-  type ComboChallenge,
-  type ComboLeg,
-  type ComboSet,
-} from './combo';
-import type { Challenge } from './challenges';
+import { isMuscuLog, mondayOf, volumeState, type LogEntry, type VolumeState } from './volume';
+import { legSets, legMode, legRepRange, type ComboChallenge, type ComboLeg } from './combo';
+import { challengeTargetBetween, type Challenge } from './challenges';
 import { repRangeForExercise, type RepRange } from './repScheme';
+import { addDaysUtcIso } from './startDate';
+import { normMuscle } from './muscles';
 import { isCardioTrackChallenge } from '@/data/cardio';
 
 /** Crédit d'une série pour un muscle SECONDAIRE (le principal vaut 1). */
-export const SECONDARY_CREDIT = 0.5;
+const SECONDARY_CREDIT = 0.5;
 
 /** Muscles secondaires d'un exercice (bibliothèque). Un exo inconnu (import IA) → rien. */
 type SecondaryLookup = (exerciseId: string) => readonly string[] | null | undefined;
@@ -62,21 +60,17 @@ export interface MuscleBalance {
   value: number;
   /** value / target */
   pct: number;
-  state: 'low' | 'ok' | 'high';
+  state: VolumeState;
 }
 
 type Tally = Record<string, number>;
 
-// Variantes de nom présentes en base, rattachées au muscle qui porte la cible.
-const MUSCLE_ALIASES: Record<string, string> = {
-  'deltoïde antérieur': 'épaules',
-  'deltoide anterieur': 'épaules',
-};
-/** Nom de muscle normalisé (minuscules, variantes rattachées) — source unique pour le
- *  graphe ET le filtre du wizard de challenge, qui doivent reconnaître les mêmes muscles. */
-export function normMuscle(m: string | null | undefined): string {
-  const k = (m ?? '').trim().toLowerCase();
-  return MUSCLE_ALIASES[k] ?? k;
+/** Du volume attribué à un exo : `sets` séries (fractionnaires possibles) le jour `day`. */
+interface VolumeItem {
+  day: string;
+  exerciseId: string;
+  primary: string | null | undefined;
+  sets: number;
 }
 
 /** Crédite `sets` séries : 1 au muscle principal, ½ à chaque secondaire distinct. */
@@ -98,83 +92,74 @@ export function creditSets(
   }
 }
 
-/** Milieu d'une fourchette : ce que vaut UNE série quand l'objectif est en reps/secondes. */
+/** Ce que vaut UNE série quand l'objectif est en reps/secondes : le milieu de la fourchette. */
 function perSet(r: RepRange): number {
   return Math.max(1, (r.min + r.max) / 2);
 }
 
-function inRange(day: string, start: string, end: string): boolean {
-  return day >= start && day < end;
-}
+// ── Sources → éléments de volume ────────────────────────────────────────────────
 
-// ── Réel ────────────────────────────────────────────────────────────────────────
-
-function sessionsDone(i: BalanceInput, start: string, end: string, tally: Tally): void {
-  for (const e of i.sessions) {
-    if (!inRange(e.performedAt.slice(0, 10), start, end) || !isMuscuLog(e.log)) continue;
+function sessionItems(sessions: readonly LogEntry[]): VolumeItem[] {
+  const out: VolumeItem[] = [];
+  for (const e of sessions) {
+    if (!isMuscuLog(e.log)) continue;
+    const day = e.performedAt.slice(0, 10);
     for (const ex of e.log.exercises ?? [])
-      creditSets(tally, ex.muscle_primary, i.secondaries(ex.id), ex.performed?.length ?? 0);
+      out.push({
+        day,
+        exerciseId: ex.id,
+        primary: ex.muscle_primary,
+        sets: ex.performed?.length ?? 0,
+      });
   }
+  return out;
 }
 
-/** Valeur de séries d'un exo du 360 dans l'UNITÉ de son objectif (séries, reps ou secondes). */
-function legValue(leg: ComboLeg, sets: readonly ComboSet[]): number {
-  return legMode(leg) === 'sets' ? sets.length : sets.reduce((a, s) => a + (s.reps || 0), 0);
-}
-/** Ce que vaut UNE série dans l'unité de l'objectif de l'exo. */
-function legUnit(leg: ComboLeg, objective?: Objective | null): number {
-  return legMode(leg) === 'sets' ? 1 : perSet(legRepRange(leg, objective));
-}
-
-function combosDone(i: BalanceInput, start: string, end: string, tally: Tally): void {
-  for (const c of i.combos)
-    for (const leg of c.legs) {
-      const sets = legSets(leg).filter((s) => inRange(s.date.slice(0, 10), start, end));
-      const n = legValue(leg, sets) / legUnit(leg, i.objective);
-      creditSets(tally, leg.muscle_primary, i.secondaries(leg.exercise_id), n);
-    }
+/** Séries faites d'un exo du 360, en séries (une entrée = 1 série, ou ses reps ÷ fourchette). */
+function legItems(leg: ComboLeg, objective?: Objective | null): VolumeItem[] {
+  const unit = legMode(leg) === 'sets' ? 0 : perSet(legRepRange(leg, objective));
+  return legSets(leg).map((s) => ({
+    day: s.date.slice(0, 10),
+    exerciseId: leg.exercise_id,
+    primary: leg.muscle_primary,
+    sets: unit ? (s.reps || 0) / unit : 1,
+  }));
 }
 
-function challengeRange(c: Challenge, objective?: Objective | null): RepRange {
-  return repRangeForExercise(objective, {
+/** Une valeur d'un challenge (objectif ou réalisé, dans son unité) exprimée en SÉRIES. */
+function challengeSets(c: Challenge, v: number, objective?: Objective | null): number {
+  if (c.config.count_mode === 'sets') return v;
+  const range = repRangeForExercise(objective, {
     time: c.unit === 'time',
     muscle_primary: c.muscle_primary,
   });
-}
-/** Une valeur du défi (objectif ou réalisé) exprimée en SÉRIES. */
-function challengeSets(c: Challenge, v: number, objective?: Objective | null): number {
-  return c.config.count_mode === 'sets' ? v : v / perSet(challengeRange(c, objective));
-}
-function muscuChallenges(i: BalanceInput): Challenge[] {
-  return i.challenges.filter((c) => !isCardioTrackChallenge(c));
+  return v / perSet(range);
 }
 
-function challengesDone(i: BalanceInput, start: string, end: string, tally: Tally): void {
-  for (const c of muscuChallenges(i))
-    for (const p of c.progress) {
-      if (!inRange(p.date.slice(0, 10), start, end) || !(p.done > 0)) continue;
-      creditSets(
-        tally,
-        c.muscle_primary,
-        i.secondaries(c.exercise_id),
-        challengeSets(c, p.done, i.objective),
-      );
-    }
+function challengeItems(
+  challenges: readonly Challenge[],
+  objective?: Objective | null,
+): VolumeItem[] {
+  return challenges.flatMap((c) =>
+    c.progress
+      .filter((p) => p.done > 0)
+      .map((p) => ({
+        day: p.date.slice(0, 10),
+        exerciseId: c.exercise_id,
+        primary: c.muscle_primary,
+        sets: challengeSets(c, p.done, objective),
+      })),
+  );
 }
-
-function doneIn(i: BalanceInput, start: string, end: string): Tally {
-  const t: Tally = {};
-  sessionsDone(i, start, end, t);
-  combosDone(i, start, end, t);
-  challengesDone(i, start, end, t);
-  return t;
-}
-
-// ── Engagé (semaine en cours) ─────────────────────────────────────────────────
 
 /** Séries PRÉVUES sur la semaine [start, end) par le Défi 360 et les challenges ACTIFS. */
-function plannedIn(i: BalanceInput, start: string, end: string): Tally {
-  const t: Tally = {};
+function plannedItems(
+  i: BalanceInput,
+  challenges: readonly Challenge[],
+  start: string,
+  end: string,
+): VolumeItem[] {
+  const out: VolumeItem[] = [];
   // Le 360 est l'engagement de SA semaine : on compte son objectif dès qu'il est en
   // cours, quel que soit son jour de départ (le proratiser inventerait un déficit pour
   // un 360 lancé mercredi qu'on bouclera mardi prochain).
@@ -183,34 +168,34 @@ function plannedIn(i: BalanceInput, start: string, end: string): Tally {
   for (const c of i.combos) {
     if (c.status !== 'active') continue;
     for (const leg of c.legs) {
-      const before = legValue(
-        leg,
-        legSets(leg).filter((s) => s.date.slice(0, 10) < start),
-      );
-      const n = Math.max(0, leg.target - before) / legUnit(leg, i.objective);
-      creditSets(t, leg.muscle_primary, i.secondaries(leg.exercise_id), n);
+      const unit = legMode(leg) === 'sets' ? 1 : perSet(legRepRange(leg, i.objective));
+      const before = legItems(leg, i.objective)
+        .filter((it) => it.day < start)
+        .reduce((a, it) => a + it.sets, 0);
+      const sets = Math.max(0, leg.target / unit - before);
+      out.push({ day: start, exerciseId: leg.exercise_id, primary: leg.muscle_primary, sets });
     }
   }
-  for (const c of muscuChallenges(i)) {
+  for (const c of challenges) {
     if (c.status !== 'active') continue;
-    const v = challengeTargetIn(c, start, end);
-    creditSets(t, c.muscle_primary, i.secondaries(c.exercise_id), challengeSets(c, v, i.objective));
+    const sets = challengeSets(c, challengeTargetBetween(c, start, end), i.objective);
+    out.push({ day: start, exerciseId: c.exercise_id, primary: c.muscle_primary, sets });
   }
-  return t;
+  return out;
 }
 
-/** Objectif du défi sur [start, end), dans son unité. Cumulé : pas de cible par jour
- *  (`daily_targets` à 0) → le total, au prorata des jours tombant dans la période. */
-function challengeTargetIn(c: Challenge, start: string, end: string): number {
-  let v = 0;
-  for (let d = 0; d < c.duration_days; d++) {
-    if (!inRange(addDaysLocal(c.start_date, d), start, end)) continue;
-    v +=
-      c.format === 'cumulative'
-        ? (c.config.total ?? 0) / Math.max(1, c.duration_days)
-        : (c.daily_targets[d] ?? 0);
-  }
-  return v;
+/** Crédite par muscle les éléments dont le jour tombe dans [start, end). */
+function tally(
+  items: readonly VolumeItem[],
+  secondaries: SecondaryLookup,
+  start: string,
+  end: string,
+): Tally {
+  const t: Tally = {};
+  for (const it of items)
+    if (it.day >= start && it.day < end)
+      creditSets(t, it.primary, secondaries(it.exerciseId), it.sets);
+  return t;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -218,24 +203,42 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 /** Équilibre du corps, trié du plus gros déficit au plus petit. Seuls les muscles qui
  *  ont une cible (> 0) apparaissent. */
 export function bodyBalance(i: BalanceInput, period: BalancePeriod): MuscleBalance[] {
-  const monday = mondayOf(i.today);
-  const nextMonday = addDaysLocal(monday, 7);
-  const curDone = doneIn(i, monday, nextMonday);
-  const curPlanned = plannedIn(i, monday, nextMonday);
-  const prevDone: Tally = period === 'weeks4' ? doneIn(i, addDaysLocal(monday, -21), monday) : {};
   const weeks = period === 'weeks4' ? 4 : 1;
+  const monday = mondayOf(i.today);
+  const nextMonday = addDaysUtcIso(monday, 7);
+  const firstMonday = addDaysUtcIso(monday, -7 * (weeks - 1));
+
+  const challenges = i.challenges.filter((c) => !isCardioTrackChallenge(c));
+  const done = [
+    ...sessionItems(i.sessions),
+    ...i.combos.flatMap((c) => c.legs.flatMap((leg) => legItems(leg, i.objective))),
+    ...challengeItems(challenges, i.objective),
+  ];
+  const cur = tally(done, i.secondaries, monday, nextMonday);
+  const prev = tally(done, i.secondaries, firstMonday, monday);
+  const planned = tally(
+    plannedItems(i, challenges, monday, nextMonday),
+    i.secondaries,
+    monday,
+    nextMonday,
+  );
 
   const out: MuscleBalance[] = [];
   for (const [rawMuscle, target] of Object.entries(i.targets)) {
     if (!(target > 0)) continue;
     const m = normMuscle(rawMuscle);
-    const real = curDone[m] ?? 0;
-    const prev = prevDone[m] ?? 0;
-    const retained = Math.max(real, curPlanned[m] ?? 0);
-    const done = round1((prev + real) / weeks);
-    const value = round1((prev + retained) / weeks);
+    const real = cur[m] ?? 0;
+    const before = prev[m] ?? 0;
+    const value = round1((before + Math.max(real, planned[m] ?? 0)) / weeks);
     const pct = value / target;
-    out.push({ muscle: rawMuscle, target, done, value, pct, state: volumeState(pct) });
+    out.push({
+      muscle: rawMuscle,
+      target,
+      done: round1((before + real) / weeks),
+      value,
+      pct,
+      state: volumeState(pct),
+    });
   }
   return out.sort((a, b) => a.pct - b.pct || b.target - a.target);
 }

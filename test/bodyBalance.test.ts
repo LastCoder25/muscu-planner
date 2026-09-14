@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  bodyBalance,
-  creditSets,
-  SECONDARY_CREDIT,
-  type BalanceInput,
-  type BalancePeriod,
-} from '@/lib/bodyBalance';
+import { bodyBalance, creditSets, type BalanceInput, type BalancePeriod } from '@/lib/bodyBalance';
 import type { LogEntry } from '@/lib/volume';
 import type { SessionLog } from '@/lib/types';
 import type { ComboChallenge, ComboLeg } from '@/lib/combo';
@@ -91,7 +85,6 @@ describe('creditSets', () => {
     const t: Record<string, number> = {};
     creditSets(t, 'pectoraux', ['triceps', 'épaules'], 4);
     expect(t).toEqual({ pectoraux: 4, triceps: 2, épaules: 2 });
-    expect(SECONDARY_CREDIT).toBe(0.5);
   });
 
   it('rattache les variantes de nom et ne crédite pas deux fois le même muscle', () => {

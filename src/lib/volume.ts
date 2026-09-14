@@ -257,15 +257,11 @@ export function firstOfMonth(dateIso: string): string {
   const d = new Date(dateIso.slice(0, 10) + 'T00:00:00');
   return fmtDay(new Date(d.getFullYear(), d.getMonth(), 1));
 }
-/** `dateIso` décalé de `n` jours (YYYY-MM-DD), en LOCAL de bout en bout. */
-export function addDaysLocal(dateIso: string, n: number): string {
-  const d = new Date(dateIso.slice(0, 10) + 'T00:00:00');
-  d.setDate(d.getDate() + n);
-  return fmtDay(d);
-}
 /** Lendemain (YYYY-MM-DD) — borne haute exclusive « aujourd'hui inclus ». */
 export function dayAfter(dateIso: string): string {
-  return addDaysLocal(dateIso, 1);
+  const d = new Date(dateIso.slice(0, 10) + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  return fmtDay(d);
 }
 
 /** Séries muscu réalisées par muscle sur la semaine EN COURS (lundi → aujourd'hui inclus). */
@@ -277,34 +273,12 @@ export function weeklySetsByMuscle(entries: LogEntry[], nowIso: string): Record<
 }
 
 export type VolumeState = 'low' | 'ok' | 'high';
-/** État d'un volume rapporté à sa cible : < 60 % = négligé, > 130 % = surchargé.
- *  SOURCE UNIQUE des seuils (volume hebdo et équilibre du corps). */
+/** Seuils d'un volume rapporté à sa cible — SOURCE UNIQUE : l'état, le texte « sous 60 % »
+ *  et l'échelle des barres en dérivent (sinon un réglage ferait mentir l'écran). */
+export const VOLUME_LOW = 0.6; // en dessous : négligé
+export const VOLUME_HIGH = 1.3; // au-dessus : surchargé
 export function volumeState(pct: number): VolumeState {
-  return pct < 0.6 ? 'low' : pct > 1.3 ? 'high' : 'ok';
-}
-export interface MuscleTargetStatus {
-  muscle: string;
-  done: number;
-  target: number;
-  pct: number; // done / target
-  state: VolumeState;
-}
-
-/** Compare le volume réalisé par muscle à la cible hebdo. Seuils : <60 % = bas
- *  (négligé), >130 % = haut (surchargé), sinon ok. N'inclut que les muscles ciblés
- *  (target > 0). Trié : les plus en retard d'abord (guide l'action). */
-export function volumeVsTarget(
-  done: Record<string, number>,
-  targets: Record<string, number>,
-): MuscleTargetStatus[] {
-  const out: MuscleTargetStatus[] = [];
-  for (const [muscle, target] of Object.entries(targets)) {
-    if (target <= 0) continue;
-    const d = done[muscle.toLowerCase()] ?? 0;
-    const pct = d / target;
-    out.push({ muscle, done: d, target, pct, state: volumeState(pct) });
-  }
-  return out.sort((a, b) => a.pct - b.pct || b.target - a.target);
+  return pct < VOLUME_LOW ? 'low' : pct > VOLUME_HIGH ? 'high' : 'ok';
 }
 
 export interface WeekVolume {

@@ -9,7 +9,9 @@ import {
   firstOfMonth,
   dayAfter,
   weeklySetsByMuscle,
-  volumeVsTarget,
+  volumeState,
+  VOLUME_LOW,
+  VOLUME_HIGH,
   weeklyVolumeSeries,
   muscuSessionsInLastDays,
   muscuWeekStreak,
@@ -242,21 +244,16 @@ describe('setsByMuscleInRange / weeklySetsByMuscle', () => {
   });
 });
 
-describe('volumeVsTarget', () => {
-  it('classe bas / ok / haut selon le % de la cible', () => {
-    const done = { pectoraux: 10, dos: 2, biceps: 20 };
-    const targets = { pectoraux: 12, dos: 12, biceps: 12, quadriceps: 12 };
-    const r = volumeVsTarget(done, targets);
-    const by = Object.fromEntries(r.map((x) => [x.muscle, x.state]));
-    expect(by.pectoraux).toBe('ok'); // 10/12 = 83 %
-    expect(by.dos).toBe('low'); // 2/12 = 17 %
-    expect(by.biceps).toBe('high'); // 20/12 = 167 %
-    expect(by.quadriceps).toBe('low'); // 0/12
-    // Les plus en retard d'abord.
-    expect(r[0]!.muscle).toBe('quadriceps');
-  });
-  it('ignore les muscles sans cible', () => {
-    expect(volumeVsTarget({ mollets: 5 }, { mollets: 0 })).toHaveLength(0);
+// (volumeVsTarget, remplacé par lib/bodyBalance, a été retiré ; ses seuils vivent ici.)
+describe('volumeState', () => {
+  it('classe bas / ok / haut selon le % de la cible, bornes incluses dans « ok »', () => {
+    expect(volumeState(10 / 12)).toBe('ok');
+    expect(volumeState(2 / 12)).toBe('low');
+    expect(volumeState(20 / 12)).toBe('high');
+    expect(volumeState(0)).toBe('low');
+    expect(volumeState(VOLUME_LOW)).toBe('ok');
+    expect(volumeState(VOLUME_HIGH)).toBe('ok');
+    expect([VOLUME_LOW, VOLUME_HIGH]).toEqual([0.6, 1.3]);
   });
 });
 

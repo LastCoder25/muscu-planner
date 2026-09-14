@@ -562,7 +562,7 @@ import {
   CHALLENGE_TOKEN_BUDGET,
   type LaneChallenge,
 } from '@/lib/challengeLimits';
-import { normMuscle } from '@/lib/bodyBalance';
+import { muscleRole } from '@/lib/muscles';
 import type { Level } from '@/lib/types';
 
 const router = useRouter();
@@ -782,17 +782,15 @@ const activeExoFamilies = computed(() => {
     for (const leg of combo.legs ?? []) keys.add(variantFamilyKey(leg.exercise_id));
   return keys;
 });
-const exFilter = ref<'all' | 'muscu' | 'cardio'>('all');
 // Muscle ciblé depuis l'équilibre du corps (`?muscle=`) : on ne propose que les exos qui
 // le travaillent (en principal OU en secondaire), ceux où il est le principal en tête.
 const muscleFocus = ref(typeof route.query.muscle === 'string' ? route.query.muscle : '');
-const focusKey = computed(() => normMuscle(muscleFocus.value));
+const exFilter = ref<'all' | 'muscu' | 'cardio'>(muscleFocus.value ? 'muscu' : 'all');
+const FOCUS_RANK = { primary: 2, secondary: 1 } as const;
 function focusRank(e: ExerciseRow): number {
-  if (!focusKey.value) return 0;
-  if (normMuscle(e.muscle_primary) === focusKey.value) return 2;
-  return (e.muscle_secondary ?? []).some((m) => normMuscle(m) === focusKey.value) ? 1 : 0;
+  const role = muscleFocus.value ? muscleRole(e, muscleFocus.value) : null;
+  return role ? FOCUS_RANK[role] : 0;
 }
-if (focusKey.value) exFilter.value = 'muscu';
 const filteredLib = computed(() => {
   const n = search.value.trim().toLowerCase();
   // On retire : les exos masqués, ceux déjà en défi actif, et ceux qui ne
@@ -803,7 +801,7 @@ const filteredLib = computed(() => {
       !HIDDEN_EX_IDS.has(e.id) &&
       !activeExoFamilies.value.has(variantFamilyKey(e.id)) &&
       !exFull(e) &&
-      (!focusKey.value || focusRank(e) > 0) &&
+      (!muscleFocus.value || focusRank(e) > 0) &&
       (exFilter.value === 'all' || exIsCardio(e) === (exFilter.value === 'cardio')),
   );
   // Recherche par NOM ou par MUSCLE (primaire OU secondaire) → taper « triceps »

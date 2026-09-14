@@ -1,5 +1,6 @@
 // Store library — bibliothèque d'exercices (`exercises`, globaux + perso).
 import { defineStore, acceptHMRUpdate } from 'pinia';
+import { shallowRef } from 'vue';
 import { supabase } from '@/lib/supabase';
 
 export interface ExerciseRow {
@@ -93,8 +94,10 @@ export const useLibraryStore = defineStore('library', () => {
 
   // Muscles SECONDAIRES de chaque exo (id → liste), retirés compris : l'historique et les
   // défis référencent encore d'anciens exos, dont les secondaires doivent compter.
-  let secondariesPromise: Promise<Map<string, string[]>> | null = null;
-  function fetchSecondaries(): Promise<Map<string, string[]>> {
+  // Chargés une fois par session ; l'état est réactif, les écrans le lisent directement.
+  const secondaries = shallowRef<ReadonlyMap<string, string[]>>(new Map());
+  let secondariesPromise: Promise<void> | null = null;
+  function fetchSecondaries(): Promise<void> {
     secondariesPromise ??= (async () => {
       const { data, error } = await supabase.from('exercises').select('id, muscle_secondary');
       if (error) {
@@ -102,12 +105,20 @@ export const useLibraryStore = defineStore('library', () => {
         throw error;
       }
       const rows = (data ?? []) as { id: string; muscle_secondary: string[] | null }[];
-      return new Map(rows.map((r) => [r.id, r.muscle_secondary ?? []]));
+      secondaries.value = new Map(rows.map((r) => [r.id, r.muscle_secondary ?? []]));
     })();
     return secondariesPromise;
   }
 
-  return { fetchOne, fetchAll, fetchPrepa, fetchByMuscle, fetchByIds, fetchSecondaries };
+  return {
+    secondaries,
+    fetchOne,
+    fetchAll,
+    fetchPrepa,
+    fetchByMuscle,
+    fetchByIds,
+    fetchSecondaries,
+  };
 });
 
 if (import.meta.hot) {

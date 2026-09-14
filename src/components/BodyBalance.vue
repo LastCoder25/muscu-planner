@@ -30,18 +30,21 @@
         <template v-else>Tous tes groupes sont couverts par ce que tu fais et prévois.</template>
       </p>
 
+      <!-- Un groupe en déficit est un BOUTON (il ouvre un défi) ; les autres se lisent. -->
       <component
-        :is="r.state === 'low' ? 'button' : 'div'"
+        :is="r.act ? 'button' : 'div'"
         v-for="r in rows"
         :key="r.muscle"
         class="bb-row"
-        :class="['s-' + r.state, { act: r.state === 'low' }]"
-        :type="r.state === 'low' ? 'button' : undefined"
-        :aria-label="r.state === 'low' ? `Lancer un défi : ${r.muscle}` : undefined"
-        @click="r.state === 'low' && addChallenge(r.muscle)"
+        :class="['s-' + r.state, { act: r.act }]"
+        v-bind="r.act ? { type: 'button', 'aria-label': `Lancer un défi : ${r.muscle}` } : {}"
+        @click="r.act && addChallenge(r.muscle)"
       >
         <span class="bb-name">
-          <span class="bb-dot" :style="{ background: muscleColor(r.muscle) }" />{{ cap(r.muscle) }}
+          <span class="bb-dot" :style="{ background: muscleColor(r.muscle) }" /><span
+            class="bb-txt"
+            >{{ r.muscle }}</span
+          >
         </span>
         <span class="bb-bar">
           <span class="bb-done" :style="{ width: w(r.done, r.target) + '%' }" />
@@ -55,7 +58,7 @@
           ><b>{{ fmt(r.value) }}</b
           >/{{ fmt(r.target) }}</span
         >
-        <span v-if="r.state === 'low'" class="bb-add" aria-hidden="true">＋</span>
+        <span v-if="r.act" class="bb-add" aria-hidden="true">＋</span>
       </component>
 
       <p class="bb-legend">
@@ -78,7 +81,7 @@ import { useComboStore } from '@/stores/combo';
 import { useChallengesStore } from '@/stores/challenges';
 import { useProfileStore } from '@/stores/profile';
 import { bodyBalance, type BalancePeriod } from '@/lib/bodyBalance';
-import { muscleColor } from '@/lib/volume';
+import { muscleColor, VOLUME_LOW, VOLUME_HIGH } from '@/lib/volume';
 import { computeMuscleTargets } from '@/lib/programBuilder';
 import { logicalToday } from '@/lib/challenges';
 
@@ -86,10 +89,9 @@ const PERIODS: { key: BalancePeriod; label: string }[] = [
   { key: 'week', label: 'Semaine' },
   { key: 'weeks4', label: '4 sem.' },
 ];
-const LOW_PCT = 60;
-// La barre va jusqu'à 130 % de la cible (le seuil « surchargé ») : la cible tombe à 77 %.
-const SCALE = 1.3;
-const MARK = Math.round(100 / SCALE);
+const LOW_PCT = Math.round(VOLUME_LOW * 100);
+// La barre va jusqu'au seuil « surchargé » : le trait de cible tombe à 1 / VOLUME_HIGH.
+const MARK = Math.round(100 / VOLUME_HIGH);
 
 const router = useRouter();
 const logsStore = useLogsStore();
@@ -100,12 +102,11 @@ const profileStore = useProfileStore();
 
 const period = ref<BalancePeriod>('weeks4');
 const loading = ref(true);
-const secondaries = ref<Map<string, string[]>>(new Map());
 
 const rows = computed(() => {
   const profile = profileStore.profile;
   if (!profile) return [];
-  const map = secondaries.value;
+  const map = library.secondaries;
   return bodyBalance(
     {
       sessions: logsStore.all.map((r) => ({ performedAt: r.performed_at, log: r.payload })),
@@ -117,19 +118,15 @@ const rows = computed(() => {
       today: logicalToday(),
     },
     period.value,
-  );
+  ).map((r) => ({ ...r, act: r.state === 'low' }));
 });
-const deficits = computed(() => rows.value.filter((r) => r.state === 'low').length);
+const deficits = computed(() => rows.value.filter((r) => r.act).length);
 
 function w(n: number, target: number): number {
-  return Math.max(0, Math.min(100, Math.round((n / (target * SCALE)) * 100)));
-}
-// Majuscule initiale seulement (`capitalize` en mettrait une après le tiret : « Ischio-Jambiers »).
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  return Math.max(0, Math.min(100, Math.round((n / (target * VOLUME_HIGH)) * 100)));
 }
 function fmt(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+  return n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
 }
 async function addChallenge(muscle: string) {
   await router.push({ path: '/challenges/new', query: { muscle } });
@@ -137,8 +134,7 @@ async function addChallenge(muscle: string) {
 
 onMounted(async () => {
   try {
-    const [map] = await Promise.all([library.fetchSecondaries(), logsStore.fetchAll()]);
-    secondaries.value = map;
+    await Promise.all([library.fetchSecondaries(), logsStore.fetchAll()]);
   } catch {
     // Sans secondaires ni séances, le graphe reste juste sur ce qu'il sait (360 + défis).
   } finally {
@@ -233,17 +229,25 @@ onMounted(async () => {
 .bb-name {
   flex: 0 0 88px;
   min-width: 0;
+  display: flex;
+  align-items: center;
   font-size: 12.5px;
   line-height: 1.15;
   overflow-wrap: anywhere;
 }
+/* Majuscule initiale seulement : `capitalize` en mettrait une après le tiret
+   (« Ischio-Jambiers »). Même technique que la pastille du wizard de challenge. */
+.bb-txt {
+  min-width: 0;
+  &::first-letter {
+    text-transform: uppercase;
+  }
+}
 .bb-dot {
-  display: inline-block;
-  width: 7px;
+  flex: 0 0 7px;
   height: 7px;
   border-radius: 50%;
   margin-right: 6px;
-  vertical-align: 1px;
 }
 .bb-bar {
   position: relative;

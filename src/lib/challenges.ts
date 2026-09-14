@@ -342,6 +342,20 @@ function carryBalance(ch: Challenge, beforeDay: number): number {
   }
   return bal;
 }
+/** Objectif du défi sur les jours de [startIso, endIso), dans son unité (reps, séries,
+ *  secondes…). Cumulé : pas de cible par jour → le total au prorata des jours couverts.
+ *  Objectif de BASE (sans report) : c'est ce que le défi engage, pas un solde. */
+export function challengeTargetBetween(ch: Challenge, startIso: string, endIso: string): number {
+  const from = Math.max(0, diffDays(ch.start_date, startIso));
+  const to = Math.min(ch.duration_days, diffDays(ch.start_date, endIso));
+  if (to <= from) return 0;
+  if (ch.format === 'cumulative')
+    return ((ch.config.total ?? 0) * (to - from)) / Math.max(1, ch.duration_days);
+  let v = 0;
+  for (let d = from; d < to; d++) v += ch.daily_targets[d] ?? 0;
+  return v;
+}
+
 /** Objectif effectif d'un jour quand le report est activé (sinon = objectif de base). */
 export function effectiveTarget(ch: Challenge, day: number): number {
   const base = ch.daily_targets[day] ?? 0;
