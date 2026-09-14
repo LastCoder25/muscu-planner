@@ -110,7 +110,14 @@ export const LINEAGE_GEAR: Record<Lineage, LineageGearDef> = {
 
 /** Réglages. ⚠️ `k` est LE levier d'équilibrage de l'équipement (mesuré en Task 4). */
 export const ADV_GEAR = {
-  k: 1,
+  /** ⚠️ MESURÉ à 0,15 — l'équipement est un BONUS, pas un péage. À 1, un trio sans pièces
+   *  tombait à 22-28 % de ses embuscades calmes dès le niveau 26 face à une route calibrée
+   *  sur une escorte équipée : la plupart des joueurs, équipés partiellement pendant des
+   *  semaines, auraient payé l'absence d'équipement. Même précédent que les familiers
+   *  (un gain modeste). Mesuré sur 2000 graines, niveaux 12/20/26/45/70/85 : trio équipé
+   *  calme 92/89/76/74/85/89 %, périlleux 26/27/35/25/29/34 % ; le même SANS pièces
+   *  90/86/72/63/67/65 % en calme. Ne pas remonter sans re-mesurer les deux. */
+  k: 0.15,
   /** Bonus de rôle d'un accessoire civil commun, jet 0 (rareté et jet le font monter). */
   roleBase: { speed: 0.03, haul: 0.04 },
   /** Revente : un objet d'aventurier vaut la moitié d'un objet du héros de même grade. */

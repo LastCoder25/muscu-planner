@@ -89,13 +89,15 @@ export const CARAVAN = {
    *  c'est ce gradient qui fait de « combien j'en envoie » une décision. Ne pas le monter
    *  sans re-mesurer : à 2,2 tours, 3 aventuriers gagnaient 100 % PARTOUT et le choix
    *  était mort.
-   *  ⚠️ RE-MESURÉ à 2,6 (avec `foeDmgPctPv` 0,26 → 0,27) quand la référence est devenue
-   *  ÉQUIPÉE (`refAdvGear`). Mesuré AVANT, sans équipement d'aucun côté : la bande avait
-   *  déjà dérivé sous son plancher (trio calme 71 % au niveau 26, 69 % au niveau 45), et
-   *  l'équipement n'y changeait presque rien (64 / 68 %). Après, trio équipé sur 2000
-   *  graines : calme 89/90/78/74/86/90 %, périlleux 23/29/34/24/29/33 % aux niveaux
-   *  12/20/26/45/70/85 ; solo 0, duo 12-51, quatuor 96-100. */
-  foePvTurns: 2.6,
+   *  ⚠️ RE-MESURÉ à 2,58 (avec `foeDmgPctPv` 0,26 → 0,275) quand la référence est devenue
+   *  ÉQUIPÉE (`refAdvGear`, `ADV_GEAR.k` 0,15). Mesuré AVANT, sans équipement d'aucun
+   *  côté : la bande avait déjà dérivé sous son plancher (trio calme 71 % au niveau 26,
+   *  69 % au niveau 45). Après, sur 2000 graines aux niveaux 12/20/26/45/70/85 : trio équipé
+   *  calme 92/89/76/74/85/89 %, périlleux 26/27/35/25/29/34 % ; le même SANS pièces
+   *  90/86/72/63/67/65 % en calme ; solo 0, duo 17-54, quatuor 97-100.
+   *  ⚠️ La marge est MINCE et structurelle : le calme du niveau 45 et le périlleux du
+   *  niveau 26 bougent en sens inverse avec ces deux constantes. */
+  foePvTurns: 2.58,
   /** Ils mordent ~N % des PV EFFECTIFS de la référence par coup — `survivalOf`, donc
    *  esquive ET réduction comprises.
    *  ⚠️ EFFECTIFS, et non bruts : les deux croissent avec le niveau, donc une morsure
@@ -104,7 +106,7 @@ export const CARAVAN = {
    *  ⚠️ L’ESQUIVE manquait à cette correction jusqu’en v0.797 — la copie locale ne voyait
    *  que la réduction, donc la morsure visait des PV que l’escorte dépassait de plus en
    *  plus à mesure que son agilité montait. */
-  foeDmgPctPv: 0.27,
+  foeDmgPctPv: 0.275,
   /** Route dangereuse (`Poi.perilous`, tirée au spawn donc annonçable AVANT le départ). */
   perilousMult: 1.35,
   /** Ce qu'apporte une SIGNATURE de classe (strates ≥ 3), en %. */

@@ -209,8 +209,8 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     // l'arbitre unique du jeu.
     //
     // Mesuré après : 80 / 83 / 75 / 88 / 92 / 93 %. ⚠️ Re-mesuré quand la référence est
-    // devenue ÉQUIPÉE (trio équipé, 2000 graines) : 89 / 90 / 78 / 74 / 86 / 90 % en calme,
-    // 23 / 29 / 34 / 24 / 29 / 33 % en périlleux. C'est l'écart qu'on borne ici, pas
+    // devenue ÉQUIPÉE (trio équipé, 2000 graines) : 92 / 89 / 76 / 74 / 85 / 89 % en calme,
+    // 26 / 27 / 35 / 25 / 29 / 34 % en périlleux. C'est l'écart qu'on borne ici, pas
     // une valeur : une bande large mais PLATE vaut mieux qu'une bande étroite qui dérive.
     const NIV = [12, 20, 26, 45, 70, 85];
     const calme = NIV.map((L) => winPct(team(3, L), poi({ level: L }), 200));
@@ -248,15 +248,23 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     expect(sans).toBeGreaterThan(0.3);
   });
 
-  it('⚠️ LA ROUTE ATTEND UN VIVIER ÉQUIPÉ — la référence porte ses pièces', () => {
-    // Même règle que les familiers : le contenu se dimensionne sur un joueur équipé.
-    // Mesuré (2000 graines, route calme) : un trio sans équipement tombe à 22-28 % dès le
-    // niveau 26, là où le trio équipé en gagne 74-90 %.
-    for (const L of [26, 70]) {
+  it('⚠️ L’ÉQUIPEMENT EST UN BONUS, PAS UN PÉAGE — la référence porte ses pièces', () => {
+    // Même précédent que les familiers : un gain modeste. ⚠️ À `ADV_GEAR.k` = 1 un trio
+    // sans pièces tombait à 22-28 % de ses embuscades calmes dès le niveau 26 — la plupart
+    // des joueurs, équipés partiellement pendant des semaines, auraient payé l'absence
+    // d'équipement. Mesuré à 0,15 (2000 graines) : sans pièces 90/86/72/63/67/65 %, équipé
+    // 92/89/76/74/85/89 %.
+    const NIV = [12, 20, 26, 45, 70, 85];
+    for (const L of NIV) {
+      const sans = winPct(team(3, L, undefined, false, true), poi({ level: L }), 200);
+      expect(sans, `sans pièces, niveau ${L}`).toBeGreaterThanOrEqual(0.5);
+    }
+    // …mais un bonus RÉEL : en fin de partie, les pièces se sentent.
+    for (const L of [70, 85]) {
       const p = poi({ level: L });
       const avec = winPct(team(3, L), p, 200);
       const sans = winPct(team(3, L, undefined, false, true), p, 200);
-      expect(sans, `niveau ${L}`).toBeLessThan(avec - 0.2);
+      expect(avec, `niveau ${L}`).toBeGreaterThan(sans + 0.1);
     }
   });
 
