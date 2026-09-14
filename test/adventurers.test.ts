@@ -365,10 +365,10 @@ describe('🎖️ LE RANG EST CELUI DU JOUEUR, LES ÉTOILES SONT SON NIVEAU', ()
   const strate = (n: number, level: number, xp = 0) =>
     make({ path: LIGNEE.slice(0, n), level, xp });
   /** Celui qui accepte CHAQUE promotion dès qu'elle s'ouvre. */
-  const suiveur = (level: number) => {
+  const suiveur = (level: number, xp = 0) => {
     let n = 1;
     while (n < PROMO_LEVELS.length && level >= PROMO_LEVELS[n]!) n++;
-    return strate(n, level);
+    return strate(n, level, xp);
   };
 
   it('⚠️ le rang affiché est LE MÊME BARÈME QUE LE JOUEUR', () => {
@@ -377,18 +377,35 @@ describe('🎖️ LE RANG EST CELUI DU JOUEUR, LES ÉTOILES SONT SON NIVEAU', ()
     // rang gagné » était faux. On a alors fait du rang la RARETÉ de la classe, ce qui
     // rendait la phrase vraie en abandonnant l'échelle commune avec le héros. La vraie
     // correction était ailleurs : c'est la CADENCE qui était fausse.
+    // Pour qui prend ses promotions (v0.834 : sinon le rang reste bloqué, cf. plus bas).
     for (const L of [1, 6, 11, 23, 47, 99]) {
-      expect(advRank(strate(3, L))).toEqual(characterRank(L));
+      expect(advRank(suiveur(L))).toEqual(characterRank(L));
     }
   });
 
   it('⚠️ les étoiles suivent le NIVEAU, jamais les classes', () => {
     // À niveau égal, prendre une classe de plus ne doit RIEN changer aux étoiles : la
     // promotion se lit sur le rang, la progression de terrain sur l'étoile.
-    for (let n = 1; n <= LIGNEE.length; n++)
-      expect(advStar(strate(n, 17))).toBe(advStar(strate(1, 17)));
+    // (tant que la classe autorise ce rang — cf. le test suivant)
+    for (let n = 2; n <= LIGNEE.length; n++)
+      expect(advStar(strate(n, 17))).toBe(advStar(strate(2, 17)));
     // …et monter d'un cran de niveau les fait bouger.
     expect(advStar(strate(1, 3))).toBeGreaterThan(advStar(strate(1, 1)));
+  });
+
+  it('⚠️ PAS PROMU, PAS DE NOUVEAU RANG À L’ÉCRAN (v0.834) — il reste ★★★★★, barre pleine', () => {
+    // Demandé par l'utilisateur. La CLASSE borne ses compagnons : afficher « Argent » à qui
+    // ne peut mener que du Bronze ferait mentir la règle.
+    const argent = PROMO_LEVELS[1]!;
+    const bleu = strate(1, argent + 4);
+    expect(advRank(bleu).name).toBe(characterRank(1).name);
+    expect(advStar(bleu)).toBe(ADV_STARS);
+    expect(advRankProgress(bleu)).toBe(1);
+    // La promotion le fait monter aussitôt, à l'étoile que son niveau lui vaut.
+    expect(advRank(strate(2, argent + 4))).toEqual(characterRank(argent + 4));
+    // Un rang ne se prend jamais d'avance : il reste bloqué au dernier rang de sa classe,
+    // pas au premier (trois classes → Or, pas Bronze).
+    expect(advRank(strate(3, 99)).name).toBe(characterRank(PROMO_LEVELS[2]!).name);
   });
 
   it('la rareté de la classe monte DU MÊME PAS que le rang', () => {
@@ -419,10 +436,10 @@ describe('🎖️ LE RANG EST CELUI DU JOUEUR, LES ÉTOILES SONT SON NIVEAU', ()
   it('l’étoile ne recule jamais et reste dans ses bornes', () => {
     let vu = 0;
     for (let l = 1; l <= ADV_MAX_LEVEL; l++) {
-      const st = advStar(strate(1, l));
+      const st = advStar(suiveur(l));
       expect(st, `niveau ${l}`).toBeGreaterThanOrEqual(1);
       expect(st).toBeLessThanOrEqual(ADV_STARS);
-      if (advRank(strate(1, l)).rankIndex === advRank(strate(1, Math.max(1, l - 1))).rankIndex)
+      if (advRank(suiveur(l)).rankIndex === advRank(suiveur(Math.max(1, l - 1))).rankIndex)
         expect(st).toBeGreaterThanOrEqual(vu);
       vu = st;
     }
@@ -430,15 +447,15 @@ describe('🎖️ LE RANG EST CELUI DU JOUEUR, LES ÉTOILES SONT SON NIVEAU', ()
 
   it('la barre avance avec l’XP, pas seulement au passage de niveau', () => {
     // Le niveau est CACHÉ : sans ça, on travaille un palier entier sans aucun retour.
-    expect(advRankProgress(strate(1, 17, advXpToNext(17) / 2))).toBeGreaterThan(
-      advRankProgress(strate(1, 17, 0)),
+    expect(advRankProgress(suiveur(17, advXpToNext(17) / 2))).toBeGreaterThan(
+      advRankProgress(suiveur(17, 0)),
     );
   });
 
   it('reste bornée à [0, 1]', () => {
     for (const l of [1, 2, 5, 23, 99])
       for (const f of [0, 0.5, 1, 5]) {
-        const p = advRankProgress(strate(1, l, advXpToNext(l) * f));
+        const p = advRankProgress(suiveur(l, advXpToNext(l) * f));
         expect(p).toBeGreaterThanOrEqual(0);
         expect(p).toBeLessThanOrEqual(1);
       }
@@ -489,16 +506,25 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
 
   it('⚠️ UN RANG GAGNÉ EST ANNONCÉ, alors que son ÉTOILE RETOMBE de ★5 à ★1', () => {
     // ⚠️ DÉFAUT TROUVÉ PAR CE TEST, pas par relecture : comparer les ÉTOILES manquait
-    // exactement le moment le plus important du jeu — celui qui donne droit à une
-    // nouvelle classe — parce qu'au passage de rang l'étoile redescend. On compare donc
-    // le CRAN GLOBAL, qui est monotone d'un bout à l'autre de l'échelle.
-    const ev = advProgressOf([at('a', FIN - 1)], [at('a', FIN)], CTX);
+    // exactement le moment le plus important du jeu — parce qu'au passage de rang l'étoile
+    // redescend. On compare donc le CRAN GLOBAL, monotone d'un bout à l'autre.
+    // ⚠️ RÉÉCRIT (v0.834) : un rang ne se gagne plus qu'avec la PROMOTION. Le cas se produit
+    // quand la formation se conclut — sa classe entre dans son parcours.
+    const promu = at('a', FIN, { path: [...at('a', FIN).path, 'colosse_eternel'] });
+    const ev = advProgressOf([at('a', FIN)], [promu], CTX);
     expect(ev).toHaveLength(1);
     expect(ev[0]!.rankUp).toBe(true);
     expect(ev[0]!.to).toBeGreaterThan(ev[0]!.from);
     // L'étoile affichée, elle, est bien repartie à 1.
     expect(ev[0]!.star).toBe(1);
     expect(ev[0]!.rankName).toBe(characterRank(FIN).name);
+  });
+
+  it('⚠️ SANS PROMOTION, franchir le rang suivant n’annonce AUCUN rang (v0.834)', () => {
+    const ev = advProgressOf([at('a', FIN - 1)], [at('a', FIN)], CTX);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ rankUp: false, promoted: true });
+    expect(ev[0]!.rankName).toBe(characterRank(DEB).name);
   });
 
   it('⚠️ `promoted` est un FRANCHISSEMENT, pas un état', () => {
@@ -521,9 +547,9 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
     // Le store la refuserait : promettre une fenêtre qui ne peut pas s'ouvrir est pire
     // que se taire. La règle vit dans `canPromoteNow`, on ne la ré-écrit pas ici.
     const ev = advProgressOf([at('a', FIN - 1)], [at('a', FIN)], { ...CTX, trainingLevel: 0 });
-    expect(ev[0]!.promoted).toBe(false);
-    // …mais le RANG gagné, lui, se dit quand même : il ne dépend d'aucun bâtiment.
-    expect(ev[0]!.rankUp).toBe(true);
+    // ⚠️ RÉÉCRIT (v0.834) : sans promotion possible et sans rang gagné (il reste à ★★★★★ tant
+    // qu'il n'est pas promu), il n'y a plus rien à dire du tout.
+    expect(ev).toEqual([]);
   });
 
   it('un aventurier recruté entre-temps n’a rien « gagné »', () => {

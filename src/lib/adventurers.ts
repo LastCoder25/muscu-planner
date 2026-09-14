@@ -17,7 +17,13 @@
 // 9 840. Les branches re-convergent naturellement (« Maître épéiste » est atteignable
 // depuis Épéiste comme depuis Bretteur : on ne l'écrit qu'une fois).
 import { RANK_ORDER, type EffectType, type Rarity } from './items';
-import { characterRank, rankProgress, rankStartLevel, type CharacterRank } from './characterRank';
+import {
+  CHARACTER_RANKS,
+  characterRank,
+  rankProgress,
+  rankStartLevel,
+  type CharacterRank,
+} from './characterRank';
 // ⚠️ LE PRNG DU PROJET, pas une n-ième copie. Les trois qui traînaient étaient
 // arithmétiquement IDENTIQUES (seul l'idiome différait) — donc aucun tirage ne bouge —
 // mais quatre exemplaires d'un générateur seedé, c'est quatre occasions qu'une retouche
@@ -1389,7 +1395,33 @@ export const ADV_STARS = 5;
  * concurrence plus le rang, elle avance avec lui, cran pour cran.
  */
 export function advRank(adv: Adventurer): CharacterRank {
-  return characterRank(Math.max(1, adv.level));
+  const byLevel = characterRank(Math.max(1, adv.level));
+  const cap = advRankCap(adv);
+  if (byLevel.rankIndex <= cap) return byLevel;
+  // ⚠️ PAS PROMU, PAS DE NOUVEAU RANG À L’ÉCRAN (v0.834 ; demandé par l’utilisateur : « s’il
+  // n’a pas été promu, ne change pas le visuel de son rang »). Son niveau a franchi le
+  // rang suivant, mais sa classe n’a pas suivi — et c’est la CLASSE qui borne ses
+  // compagnons (`canAdvFamiliar` / `canAdvTalent`). Afficher « Argent » à qui ne peut
+  // mener que du Bronze ferait mentir la règle. Il reste donc à son rang, ★★★★★ :
+  // « prêt », jusqu’à ce que la promotion le fasse monter.
+  const t = CHARACTER_RANKS[cap]!;
+  return {
+    rankIndex: cap,
+    name: t.name,
+    emoji: t.emoji,
+    color: t.color,
+    star: ADV_STARS,
+    tier: cap * ADV_STARS + ADV_STARS - 1,
+  };
+}
+
+/** Le rang le plus haut que sa CLASSE autorise à afficher. ⚠️ Au sommet de l’arbre (8
+ *  classes) il n’y a plus de promotion à attendre : les deux derniers rangs se gagnent au
+ *  niveau seul, sinon ils seraient inatteignables. */
+function advRankCap(adv: Adventurer): number {
+  return adv.path.length >= PROMO_LEVELS.length
+    ? CHARACTER_RANKS.length - 1
+    : Math.max(0, adv.path.length - 1);
 }
 
 /**
@@ -1427,6 +1459,8 @@ export function advStar(adv: Adventurer): number {
  *  sinon elle ne bougerait qu’au passage de niveau : plusieurs jours de convois sans
  *  le moindre retour, alors que le niveau est caché. */
 export function advRankProgress(adv: Adventurer): number {
+  // Bloqué à son rang faute de promotion : la barre est pleine, il n’avance plus ici.
+  if (characterRank(Math.max(1, adv.level)).rankIndex > advRankCap(adv)) return 1;
   return rankProgress(adv.level, Math.max(0, adv.xp) / advXpToNext(adv.level));
 }
 
