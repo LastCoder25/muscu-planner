@@ -102,9 +102,14 @@
           <div class="leg-main">
             <div class="leg-name">
               {{ leg.exercise_name }}
-              <span v-if="leg.weight_kg" class="leg-kg">{{ leg.weight_kg }} kg</span>
             </div>
-            <div class="leg-sub">
+            <!-- Toucher l'avancement ouvre les séries faites (même composant que l'onglet
+                 🎯 Défi 360). Le poids a quitté le nom de l'exo. -->
+            <button
+              class="leg-sub"
+              :aria-label="`Séries faites : ${leg.exercise_name}`"
+              @click="openHistory(leg)"
+            >
               {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
               <!-- Fourchette conseillée : la seule consigne d’EXÉCUTION du 360 (le reste
                    compte des séries). Visible en permanence — pas de survol sur mobile. -->
@@ -113,7 +118,7 @@
               <span v-if="legDone(leg) > leg.target" class="leg-extra"
                 >+{{ legDone(leg) - leg.target }} en plus</span
               >
-            </div>
+            </button>
           </div>
         </div>
         <!-- Mode séries : segments par série ; mode reps : barre de progression simple.
@@ -134,7 +139,7 @@
             :key="n"
             class="seg"
             :class="[
-              'z-' + legSegZone(leg, n),
+              'tier-' + legSegZone(leg, n),
               { on: n <= legDone(leg), next: n === legDone(leg) + 1 },
             ]"
             :aria-label="n <= legDone(leg) ? `Retirer la série ${n}` : undefined"
@@ -224,6 +229,8 @@
       </button>
     </template>
 
+    <ComboSetHistory v-model="histOpen" :leg="histLeg" />
+
     <!-- Saisie d'une série (reps + poids + assisté), dialogue partagé -->
     <SetLogDialog
       v-model="setOpen"
@@ -281,6 +288,7 @@ import { comboSlot } from '@/data/combo';
 import ComboTierLegend from '@/components/ComboTierLegend.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import ExerciseDemo from '@/components/ExerciseDemo.vue';
+import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import {
   logicalToday,
   addDaysIso,
@@ -301,6 +309,13 @@ const combo = useComboStore();
 const library = useLibraryStore();
 const profileStore = useProfileStore();
 const gameFx = useGameFx();
+// Séries faites d'un exo (toucher l'avancement « 2/12 séries »).
+const histOpen = ref(false);
+const histLeg = ref<ComboLeg | null>(null);
+function openHistory(leg: ComboLeg) {
+  histLeg.value = leg;
+  histOpen.value = true;
+}
 
 const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
@@ -789,14 +804,17 @@ onMounted(async () => {
   font-size: 14.5px;
   color: var(--text);
 }
-.leg-kg {
-  font-size: 11px;
-  color: var(--dim);
-  margin-left: 4px;
-}
 .leg-sub {
   font-size: 12px;
   color: var(--dim);
+  /* Bouton : apparence native remise à zéro, cible tactile agrandie sans décaler la ligne. */
+  background: none;
+  border: none;
+  padding: 6px 0;
+  margin: -6px 0;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 /* Consigne d’exécution → accent : c’est ce qu’on lit AVANT de faire la série. */
 .leg-range {
@@ -926,31 +944,31 @@ onMounted(async () => {
 }
 /* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboTierLegend) :
    la case dit quel palier elle fait avancer. Faite = pleine, à faire = liseré de la même teinte. */
-.seg.z-secondary {
+.seg.tier-secondary {
   border-color: color-mix(in srgb, var(--tier-sec) 55%, var(--line));
 }
-.seg.z-principal {
+.seg.tier-principal {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
 }
-.seg.z-max,
-.seg.z-beyond {
+.seg.tier-max,
+.seg.tier-beyond {
   background: transparent;
   border-style: dashed;
   border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
   color: color-mix(in srgb, var(--d1) 75%, var(--dim));
 }
-.seg.on.z-secondary {
+.seg.on.tier-secondary {
   background: var(--tier-sec);
   border-color: var(--tier-sec);
   color: var(--tier-sec-ink);
 }
-.seg.on.z-principal {
+.seg.on.tier-principal {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
 }
-.seg.on.z-max,
-.seg.on.z-beyond {
+.seg.on.tier-max,
+.seg.on.tier-beyond {
   background: var(--d1);
   border-style: solid;
   border-color: var(--d1);

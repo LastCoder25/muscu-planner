@@ -2,9 +2,9 @@
   <!-- Légende des paliers du Défi 360 : la COULEUR des cases dit le palier (remplace les
        pastilles Sec./Principal/Max de chaque exercice). Une seule légende par écran. -->
   <div class="ctl" aria-label="Légende des paliers">
-    <span class="ctl-i"><span class="ctl-sw z-secondary" />Secondaire (80 %)</span>
-    <span class="ctl-i"><span class="ctl-sw z-principal" />Objectif</span>
-    <span class="ctl-i"><span class="ctl-sw z-max" />Bonus (jusqu’à 120 %)</span>
+    <span class="ctl-i"><span class="ctl-sw tier-secondary" />Secondaire (80 %)</span>
+    <span class="ctl-i"><span class="ctl-sw tier-principal" />Objectif</span>
+    <span class="ctl-i"><span class="ctl-sw tier-max" />Bonus (jusqu’à 120 %)</span>
   </div>
 </template>
 
@@ -30,13 +30,13 @@
   display: inline-block;
 }
 /* Mêmes teintes que les cases faites (cf. .seg.z-* dans les deux écrans du 360). */
-.ctl-sw.z-secondary {
+.ctl-sw.tier-secondary {
   background: var(--tier-sec);
 }
-.ctl-sw.z-principal {
+.ctl-sw.tier-principal {
   background: var(--accent);
 }
-.ctl-sw.z-max {
+.ctl-sw.tier-max {
   background: var(--d1);
 }
 </style>

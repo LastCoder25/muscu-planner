@@ -428,7 +428,7 @@
           <div v-for="leg in activeComboLegs" :key="leg.exercise_id" class="combo-leg">
             <div class="cl-top">
               <ExerciseDemo :exercise-id="leg.exercise_id" :name="leg.exercise_name" :size="36" />
-              <button class="cl-name" @click="openHistory(leg)">
+              <span class="cl-name">
                 {{ leg.exercise_name }}
                 <span
                   v-if="noEquipIds.has(leg.exercise_id)"
@@ -436,10 +436,15 @@
                   title="Poids du corps (aucun matériel)"
                   >🤸</span
                 >
-                <span v-if="leg.weight_kg" class="cl-kg">{{ leg.weight_kg }} kg</span>
-                <q-icon name="history" size="14px" class="cl-hist-ic" />
-              </button>
-              <span class="cl-sub" :class="{ ok: legComplete(leg) }">
+              </span>
+              <!-- Toucher l'avancement ouvre les séries faites (le poids et l'icône
+                   d'historique ont quitté le nom de l'exo). -->
+              <button
+                class="cl-sub"
+                :class="{ ok: legComplete(leg) }"
+                :aria-label="`Séries faites : ${leg.exercise_name}`"
+                @click="openHistory(leg)"
+              >
                 {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
                 <!-- Même consigne d’exécution que la fiche du 360 : c’est souvent ICI
                      qu’on consulte son défi en cours, pas sur /combo/:id. -->
@@ -447,7 +452,7 @@
                 <span v-if="legDone(leg) > leg.target" class="cl-extra"
                   >+{{ legDone(leg) - leg.target }} en plus</span
                 >
-              </span>
+              </button>
             </div>
             <!-- ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 » et « ↩ » lui
                  prenaient la largeur, et les cases partaient à la ligne. La prochaine case vide
@@ -468,7 +473,7 @@
                   :key="n"
                   class="seg"
                   :class="[
-                    'z-' + legSegZone(leg, n),
+                    'tier-' + legSegZone(leg, n),
                     { on: n <= legDone(leg), next: n === legDone(leg) + 1 },
                   ]"
                   :aria-label="n <= legDone(leg) ? `Retirer la série ${n}` : undefined"
@@ -586,26 +591,7 @@
     </q-dialog>
 
     <!-- Historique des séries d'un exo -->
-    <q-dialog v-model="histOpen">
-      <q-card class="set-card">
-        <div class="set-title font-display">{{ histLeg?.exercise_name }}</div>
-        <div class="set-desc">{{ histSets.length }} série{{ histSets.length > 1 ? 's' : '' }}</div>
-        <div v-if="!histSets.length" class="hist-empty">Aucune série enregistrée.</div>
-        <div v-else class="hist-list">
-          <div v-for="(s, i) in histSets" :key="i" class="hist-row">
-            <span class="hist-n">{{ histSets.length - i }}</span>
-            <span class="hist-main">
-              {{ s.reps }} reps<template v-if="s.weight"> · {{ s.weight }} kg</template>
-              <span v-if="s.assisted" class="hist-asst">assisté</span>
-            </span>
-            <span class="hist-date">{{ fmtDay(s.date) }}</span>
-          </div>
-        </div>
-        <div class="set-actions">
-          <q-btn flat no-caps label="Fermer" @click="histOpen = false" />
-        </div>
-      </q-card>
-    </q-dialog>
+    <ComboSetHistory v-model="histOpen" :leg="histLeg" />
   </component>
 </template>
 
@@ -618,6 +604,7 @@ import ComboTierLegend from '@/components/ComboTierLegend.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
 import ExerciseDemo from '@/components/ExerciseDemo.vue';
+import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import {
   challengeStats,
   challengeXpPoints,
@@ -956,16 +943,9 @@ function undoSet(leg: ComboLeg, index = legSets(leg).length - 1) {
 // Historique des séries d'un exo.
 const histOpen = ref(false);
 const histLeg = ref<ComboLeg | null>(null);
-const histSets = computed(() => (histLeg.value ? [...legSets(histLeg.value)].reverse() : []));
 function openHistory(leg: ComboLeg) {
   histLeg.value = leg;
   histOpen.value = true;
-}
-function fmtDay(iso: string): string {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'short',
-  });
 }
 
 // Barre principale = les 3 ÉTATS d'un challenge (sur une seule ligne).
@@ -1609,31 +1589,31 @@ onMounted(async () => {
 }
 /* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboTierLegend) :
    la case dit quel palier elle fait avancer. Faite = pleine, à faire = liseré de la même teinte. */
-.seg.z-secondary {
+.seg.tier-secondary {
   border-color: color-mix(in srgb, var(--tier-sec) 55%, var(--line));
 }
-.seg.z-principal {
+.seg.tier-principal {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
 }
-.seg.z-max,
-.seg.z-beyond {
+.seg.tier-max,
+.seg.tier-beyond {
   background: transparent;
   border-style: dashed;
   border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
   color: color-mix(in srgb, var(--d1) 75%, var(--dim));
 }
-.seg.on.z-secondary {
+.seg.on.tier-secondary {
   background: var(--tier-sec);
   border-color: var(--tier-sec);
   color: var(--tier-sec-ink);
 }
-.seg.on.z-principal {
+.seg.on.tier-principal {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
 }
-.seg.on.z-max,
-.seg.on.z-beyond {
+.seg.on.tier-max,
+.seg.on.tier-beyond {
   background: var(--d1);
   border-style: solid;
   border-color: var(--d1);
@@ -1671,49 +1651,6 @@ onMounted(async () => {
   cursor: pointer;
   text-align: left;
 }
-.cl-hist-ic {
-  color: var(--dim);
-}
-.hist-empty {
-  color: var(--dim);
-  font-size: 13px;
-  padding: 8px 0;
-}
-.hist-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-.hist-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 9px;
-  border-radius: 8px;
-  background: var(--surface-2);
-}
-.hist-n {
-  min-width: 20px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  color: var(--accent);
-}
-.hist-main {
-  flex: 1;
-  font-size: 13px;
-  color: var(--text);
-}
-.hist-asst {
-  font-size: 10px;
-  color: var(--d3, #ffb23f);
-  margin-left: 6px;
-}
-.hist-date {
-  font-size: 11px;
-  color: var(--dim);
-}
 /* Pastille séries faites/à faire, en haut à droite de la ligne. */
 .cl-range {
   color: var(--accent);
@@ -1722,6 +1659,8 @@ onMounted(async () => {
 }
 .cl-sub {
   flex: none;
+  font-family: inherit;
+  cursor: pointer;
   align-self: flex-start;
   padding: 2px 9px;
   border-radius: 999px;
@@ -1790,11 +1729,6 @@ onMounted(async () => {
 .cl-corr:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-.cl-kg {
-  font-size: 11px;
-  color: var(--dim);
-  margin-left: 4px;
 }
 .set-card {
   background: var(--surface);
