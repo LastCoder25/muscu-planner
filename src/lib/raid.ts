@@ -170,7 +170,6 @@ interface PillageTally {
   corpses: number;
   waves: number;
   gold: number;
-  scrap: number;
   keys: number;
   summonStones: number;
   items: number;
@@ -602,8 +601,6 @@ export const RAID = {
    *  le diluer le rendrait 2,5× plus faible que la calibration. Même raison que son
    *  `unitMult: 1` : une élite ne suit pas la dilution de sa horde. */
   massMult: 2.5,
-  corpseScrapBase: 0,
-  corpseScrapPerLevel: 0.16,
   intervalFloorMs: 3 * 3600_000, // plancher : en deçà, un siège n'est plus un événement
   intervalMaxMs: 7 * 24 * 3600_000, // 1 séance par semaine → 1 siège par semaine
   intervalIdleMs: 72 * 3600_000, // repli quand on ne sait rien de l'activité
@@ -2919,8 +2916,6 @@ export interface CorpseLoot {
   summonStones: number;
   /** 🗝️ clés du Labyrinthe — ce que traînent les BÊTES venues des profondeurs. */
   keys: number;
-  /** 🔩 ferraille — l'ACIER d'une armée en déroute (voir `lootCorpses`). */
-  scrap: number;
   items: Omit<Item, 'id'>[];
 }
 
@@ -2936,7 +2931,7 @@ export function lootCorpses(
   lootPct = 0,
 ): CorpseLoot {
   const rng = mulberry32((seed ^ 0x2545f491) >>> 0 || 1);
-  const loot: CorpseLoot = { gold: 0, summonStones: 0, keys: 0, scrap: 0, items: [] };
+  const loot: CorpseLoot = { gold: 0, summonStones: 0, keys: 0, items: [] };
   // ⚠️ ACCUMULATION EN FLOTTANT, arrondie UNE SEULE fois a la fin. Arrondir la part de
   // CHAQUE corps biaise vers le haut des que cette part passe sous l unite — ce qui
   // arrive precisement depuis la dilution de masse (0,6 pierre ou 1,7 ferraille par
@@ -2944,7 +2939,6 @@ export function lootCorpses(
   // la regle « la ferraille est plus dure a obtenir que l or ».
   let gold = 0;
   let stones = 0;
-  let scrap = 0;
   // ⚠️ DEVISES VIVANTES UNIQUEMENT. Les fossoyeurs payaient en fragments 🧩 et poussière
   // d'encre 🖋️ pour deux factions sur trois — or plus aucune fonction ne les dépense
   // depuis le retrait des infusions de grade. Deux tiers du butin de siège étaient donc
@@ -2965,20 +2959,13 @@ export function lootCorpses(
     else keyOdds += (0.05 + L * 0.004) * mult; // bêtes : la clé est RARE, on cumule les chances
     // Un peu d'or partout : même une bête traîne ce qu'elle a pris au village.
     if (faction !== 'bandits') gold += (5 + L * 1.8) * mult;
-    // 🔩 L'ACIER D'UNE ARMÉE (v0.702). ⚠️ Ceci PRÉCISE, sans la renier, la règle « les
-    // cadavres ne donnent jamais de ferraille » : son motif était qu'on n'en trouve pas
-    // sur un LOUP. Une troupe humaine ou un mort-vivant en armes, si — lames, plaques,
-    // pièces de siège. Les BÊTES n'en laissent donc toujours aucune.
-    //
-    // Sans cette source, le passage à « une séance = un siège » (v0.702) était
-    // INTENABLE, et c'est mesuré : ~93 % de la ferraille vient d'endroits bornés par
-    // l'HORLOGE (les épaves, une expédition à la fois ; la Fonderie, à l'heure) et non
-    // par l'entraînement. À 21 séances par semaine, les réparations dépassaient les
-    // rentrées et le bilan devenait NÉGATIF dès le niveau 40 : on ne pouvait plus
-    // réparer, donc plus rien monter. Le siège devient le maillon qui fait suivre le
-    // métal au rythme du sport. ⚠️ Calibré pour rester SOUS l'épave par événement :
-    // elle demeure la source de pointe, celle qui coûte un geste.
-    if (faction !== 'betes') scrap += (RAID.corpseScrapBase + L * RAID.corpseScrapPerLevel) * mult;
+    // 🔩 ⚠️ AUCUNE FERRAILLE SUR LES ASSAILLANTS (v0.856 ; décision de l'utilisateur).
+    // La v0.702 en faisait tomber des bandits et des morts-vivants, au motif que les
+    // réparations dépassaient les rentrées à 21 séances par semaine. Ce motif a cessé de
+    // tenir : les réparations sont bon marché et prennent du temps (v0.802). Mesuré, les
+    // sièges ne pesaient que 5 à 9 % du débit, et sans eux la règle « la ferraille est
+    // plus dure à obtenir que l'or » tient à tous les niveaux (1,2 à 1,9). La ferraille
+    // vient de ce qu'on va CHERCHER (épaves), de la Fonderie et du recyclage.
 
     const drop = rollDrop(rng, {
       cleared: true,
@@ -3000,7 +2987,6 @@ export function lootCorpses(
   const k = 1 + Math.max(0, lootPct) / 100;
   loot.gold = Math.round(gold * k);
   loot.summonStones = Math.round(stones * k);
-  loot.scrap = Math.round(scrap);
   // Les clés se tirent sur le CUMUL des chances : une vague de bêtes en rend une de
   // temps en temps, jamais une par corps.
   loot.keys = Math.floor(keyOdds * k) + (rng() < (keyOdds * k) % 1 ? 1 : 0);

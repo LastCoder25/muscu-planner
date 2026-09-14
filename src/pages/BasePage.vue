@@ -1711,7 +1711,6 @@ const pillagePills = computed(() => {
     p.gold ? `🪙 +${p.gold}` : '',
     p.summonStones ? `🔮 +${p.summonStones}` : '',
     p.keys ? `🗝️ +${p.keys}` : '',
-    p.scrap ? `🔩 +${p.scrap}` : '',
     p.items ? `🎒 ${p.items} objet${p.items > 1 ? 's' : ''}` : '',
   ].filter(Boolean);
 });

@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { rollRaid, corpsesFrom, lootCorpses, type RaidReport } from '@/lib/raid';
 import { defenseUpgradeScrap, defenseUpgradeCost, repairCost, DEFENSE_TYPES } from '@/lib/raid';
 import { HARVEST, travelOneWayMin } from '@/lib/expedition';
 import { BUILDING_TYPES } from '@/lib/buildings';
@@ -64,38 +63,13 @@ function sessionRecycled(L: number): number {
   }
   return sc / T;
 }
-/** L'acier d'une armée repoussée. ⚠️ AJOUTÉ en v0.702, sans quoi ce fichier mesurait une
- *  économie qui n'existe plus : depuis que la fréquence des sièges suit le NOMBRE DE
- *  SÉANCES, un siège tombe à chaque entraînement et laisse du métal. L'omettre aurait
- *  laissé les deux invariants ci-dessous verts en ne regardant qu'une partie du débit —
- *  précisément le « test troué » qu'on s'interdit. Deux factions sur trois en laissent
- *  (les bêtes, jamais), et on ne fouille pas tous les corps avant péremption. */
-/** ⚠️ On APPELLE `lootCorpses`, on ne recopie pas sa formule.
- *
- *  Ce test refaisait le calcul a la main (`raidSize × valeur par corps`). Les deux
- *  copies ont diverge des que la masse visible des armees a ete multipliee (v0.720) :
- *  le nombre de corps a ete multiplie mais pas la dilution de chacun, donc le test a
- *  cru que les sieges rendaient 2,5x plus de ferraille et a declare l economie cassee
- *  alors qu elle etait intacte. Deux copies d une regle divergent toujours.
- *
- *  Moyenne sur plusieurs graines : la faction est tiree au sort et les BETES ne
- *  laissent aucune ferraille. */
-const siegeScrapPerDay = (L: number) => {
-  const N = 60;
-  let total = 0;
-  for (let s = 0; s < N; s++) {
-    const raid = rollRaid(s * 7919 + 5, L, 0, 0);
-    // Siege REPOUSSE : toute l armee tombe, c est le champ de bataille de reference.
-    const rep = { defeated: raid.groups.length } as RaidReport;
-    total += lootCorpses(corpsesFrom(raid, rep, s), raid.faction, L, s).scrap;
-  }
-  const perSiege = total / N;
-  return SPORT_PER_DAY * (2 / 3) * perSiege * 0.7;
-};
-/** Journée type : le butin recyclé de la séance (au prorata), UNE épave, la Fonderie,
- *  et l'acier du siège que cette séance a attiré. */
+/** Journée type : le butin recyclé de la séance (au prorata), UNE épave, la Fonderie.
+ *  ⚠️ L'acier des sièges (v0.702) n'y est PLUS : les assaillants de la base ne laissent
+ *  aucune ferraille depuis la v0.856 (décision de l'utilisateur). Mesuré avant retrait, ils
+ *  pesaient 5 à 9 % du débit ; sans eux le ratio ferraille/or passe de 1,15-1,74 à
+ *  1,22-1,86, toujours dans la bande. Un test de `raid.test` verrouille leur absence. */
 const scrapPerDay = (L: number) =>
-  sessionRecycled(L) * SPORT_PER_DAY + wreckYield(L) + foundryPerDay(L) + siegeScrapPerDay(L);
+  sessionRecycled(L) * SPORT_PER_DAY + wreckYield(L) + foundryPerDay(L);
 const goldPerDay = (L: number) => dungeonGold(bestDungeon(L)) * 8 * SPORT_PER_DAY;
 /** Monter TOUTES les structures d'un cran : le rythme de croisière. */
 const cranScrap = (L: number) => defenseUpgradeScrap(L) * N_STRUCT;

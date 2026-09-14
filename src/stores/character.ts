@@ -1294,6 +1294,13 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return;
     if (cur.expedition) throw new Error('Une expédition est déjà en cours.');
+    // ⚠️ L'infirmerie n'était vérifiée que par l'écran Aventure (`expeBlocked`) : depuis la
+    // carte, un héros blessé repartait. Le refus vit ici pour qu'aucun écran ne l'oublie.
+    const healIn = woundRemainingMs(cur.base, now);
+    if (healIn > 0)
+      throw new Error(
+        `🤕 Ton héros est à l’infirmerie — de retour dans ${Math.ceil(healIn / 60000)} min.`,
+      );
     if (!expeditionsUnlocked(cur.buildings))
       throw new Error('Construis un Avant-poste d’expédition pour envoyer des héros.');
     const cost = expeGoldCost(poi.type, poi.level);
@@ -1830,7 +1837,6 @@ export const useCharacterStore = defineStore('character', () => {
       patch.gold = cur.gold + loot.gold;
       patch.summon_stones = cur.summon_stones + loot.summonStones;
       patch.keys = cur.keys + loot.keys;
-      patch.scrap = cur.scrap + loot.scrap;
       if (drops.length) {
         patch.inventory = [...cur.inventory, ...drops];
         patch.set_pieces_seen = mergeSetSeen(cur.set_pieces_seen, drops);
@@ -1842,7 +1848,6 @@ export const useCharacterStore = defineStore('character', () => {
           corpses: (p?.corpses ?? 0) + t.taken.length,
           waves: (p?.waves ?? 0) + t.waves,
           gold: (p?.gold ?? 0) + loot.gold,
-          scrap: (p?.scrap ?? 0) + loot.scrap,
           keys: (p?.keys ?? 0) + loot.keys,
           summonStones: (p?.summonStones ?? 0) + loot.summonStones,
           items: (p?.items ?? 0) + drops.length,
@@ -1867,7 +1872,6 @@ export const useCharacterStore = defineStore('character', () => {
         gold: p.gold,
         energy: 0,
         summonStones: p.summonStones,
-        scrap: p.scrap,
         key: p.keys,
         resolvedAt: now,
         // ⚠️ Déjà crédité vague par vague : ce message se LIT, il ne se réclame pas.

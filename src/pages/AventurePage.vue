@@ -3002,7 +3002,7 @@ const hasLabyGate = computed(() => labyrinthUnlocked(char.row?.buildings ?? []))
 // Clic sur la tuile Labyrinthe : bloqué en expédition ; sinon → Labyrinthe si la Porte
 // est construite, sinon on redirige vers la carte pour la construire.
 function openLabyrinth() {
-  if (onExpedition.value) return expeBlocked();
+  if (onExpedition.value || heroWounded.value) return expeBlocked();
   if (!hasLabyGate.value) {
     $q.notify({
       type: 'warning',

@@ -767,6 +767,10 @@ describe('champ de bataille', () => {
     ).toBeGreaterThan(0);
     expect(bandits.summonStones).toBe(0);
     expect(morts.keys).toBe(0);
+    // ⚠️ Le titre annonçait « JAMAIS en ferraille » sans jamais la regarder — c'est ce
+    // trou qui a laissé la v0.702 en faire tomber des cadavres sans qu'il rougisse.
+    for (const l of [bandits, betes, morts])
+      expect((l as unknown as Record<string, unknown>).scrap ?? 0).toBe(0);
   });
 
   it('⚠️ AUCUNE devise MORTE dans le butin d’un siège', () => {
@@ -1425,7 +1429,6 @@ describe('masse visible contre menace', () => {
   it('⚠️ le BUTIN du champ de bataille est conserve : 2,5x plus de corps, chacun moins riche', () => {
     function field(L: number) {
       let gold = 0;
-      let scrap = 0;
       let stones = 0;
       let corps = 0;
       for (let s = 0; s < 40; s++) {
@@ -1435,10 +1438,9 @@ describe('masse visible contre menace', () => {
         const loot = lootCorpses(c, raid.faction, L, s);
         corps += c.length;
         gold += loot.gold;
-        scrap += loot.scrap;
         stones += loot.summonStones;
       }
-      return { gold, scrap, stones, corps };
+      return { gold, stones, corps };
     }
     for (const L of [26, 60]) {
       M.massMult = 1;
@@ -1451,8 +1453,6 @@ describe('masse visible contre menace', () => {
       // pour faire tomber la regle « la ferraille est plus dure a obtenir que l or ».
       expect(b.gold / a.gold).toBeGreaterThan(0.95);
       expect(b.gold / a.gold).toBeLessThan(1.05);
-      expect(b.scrap / a.scrap).toBeGreaterThan(0.95);
-      expect(b.scrap / a.scrap).toBeLessThan(1.05);
       expect(b.stones / a.stones).toBeGreaterThan(0.95);
       expect(b.stones / a.stones).toBeLessThan(1.05);
     }
@@ -1879,7 +1879,7 @@ describe('doublons de familiers : on ne cède que l’inemployable', () => {
   });
 });
 
-describe('🔩 l’acier d’une armée en déroute (v0.702)', () => {
+describe('🔩 AUCUNE FERRAILLE SUR LES ASSAILLANTS (v0.856 ; RÉÉCRIT, il verrouillait l’inverse)', () => {
   const corpse = (level: number, champion = false) => ({
     id: 'c' + level + (champion ? 'x' : ''),
     level,
@@ -1897,41 +1897,19 @@ describe('🔩 l’acier d’une armée en déroute (v0.702)', () => {
       7,
     );
 
-  it('⚠️ les BÊTES n’en laissent aucune — on ne démonte pas un loup', () => {
-    // Ceci PRÉCISE la règle « les cadavres ne donnent jamais de ferraille » au lieu de la
-    // renier : son motif était l'absurdité d'en trouver sur un animal. Une troupe en armes,
-    // elle, laisse ses lames et ses plaques.
-    expect(loot('betes').scrap).toBe(0);
-    expect(loot('bandits').scrap).toBeGreaterThan(0);
-    expect(loot('mortsvivants').scrap).toBeGreaterThan(0);
+  it('⚠️ aucune faction, à aucun niveau, champion compris, ne laisse de ferraille', () => {
+    // La v0.702 en faisait tomber des bandits et des morts-vivants ; ce bloc de tests
+    // l'EXIGEAIT. Décision de l'utilisateur : la ferraille vient de ce qu'on va chercher
+    // (épaves), de la Fonderie et du recyclage — jamais des assaillants de la base.
+    for (const f of ['bandits', 'betes', 'mortsvivants'] as const)
+      for (const L of [5, 26, 60, 100]) {
+        const l = loot(f, 12, L) as unknown as Record<string, unknown>;
+        expect(l.scrap ?? 0, `${f} niveau ${L}`).toBe(0);
+      }
   });
 
-  it('⚠️ l’ÉPAVE reste la source de POINTE — le siège complète, il ne remplace pas', () => {
-    // Une épave coûte un geste (choisir, envoyer, attendre le trajet) ; un siège vient à
-    // toi. Le premier doit donc rester le plus payant par événement, comme la Mine d'or
-    // face aux expéditions.
-    const L = 40;
-    const parSiege = loot('bandits', 12, L).scrap;
-    const parEpave = Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * 1.5);
-    expect(parSiege).toBeLessThan(parEpave * 3);
-    expect(parSiege).toBeGreaterThan(parEpave / 4); // ni dérisoire…
-  });
-
-  it('la récolte suit le NIVEAU du corps, et le champion pèse plus', () => {
-    expect(loot('bandits', 6, 60).scrap).toBeGreaterThan(loot('bandits', 6, 20).scrap);
-    const sansChamp = lootCorpses(
-      Array.from({ length: 4 }, () => corpse(40)) as never,
-      'bandits',
-      40,
-      7,
-    ).scrap;
-    const avecChamp = lootCorpses(
-      [corpse(40), corpse(40), corpse(40), corpse(40, true)] as never,
-      'bandits',
-      40,
-      7,
-    ).scrap;
-    expect(avecChamp).toBeGreaterThan(sansChamp);
+  it('le reste du butin, lui, suit toujours le NIVEAU du corps', () => {
+    expect(loot('bandits', 6, 60).gold).toBeGreaterThan(loot('bandits', 6, 20).gold);
   });
 });
 
@@ -2713,7 +2691,6 @@ describe('⛏️ LE CHANTIER TRAVAILLE SEUL', () => {
       corpses: 3,
       waves: 1,
       gold: 40,
-      scrap: 2,
       keys: 0,
       summonStones: 1,
       items: 0,

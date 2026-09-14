@@ -510,6 +510,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { labyrinthUnlocked, labyrinthLuckBonus } from '@/lib/buildings';
+import { woundRemainingMs } from '@/lib/raid';
 import {
   LABYRINTHS,
   labyrinthUnlockedTier,
@@ -1255,6 +1256,16 @@ async function start(tier?: Labyrinth) {
     return;
   }
   if (!labyUnlocked.value || !progress.ready.value || !char.row) return;
+  // ⚠️ L'infirmerie : cette page permet de rejouer sans repasser par l'Aventure (et son
+  // `expeBlocked`), donc elle vérifie elle-même. AVANT les clés, qu'on ne perde rien.
+  const healIn = woundRemainingMs(char.row.base, Date.now());
+  if (healIn > 0) {
+    $q.notify({
+      type: 'warning',
+      message: `🤕 Ton héros est à l’infirmerie — de retour dans ${Math.ceil(healIn / 60000)} min.`,
+    });
+    return;
+  }
   // Palier : celui passé (clic sur une carte) ou le courant (rejouer depuis la modale).
   const laby = tier ?? selectedLaby.value ?? LABYRINTHS[0]!;
   if (!labyrinthUnlockedTier(laby.id, clearedSet.value)) return;

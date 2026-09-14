@@ -267,6 +267,10 @@
             {{ sendLabel }}
           </button>
         </template>
+        <div v-else-if="heroHealIn > 0" class="sh-away">
+          🤕 Ton héros est à l’infirmerie — de retour dans {{ fmtMs(heroHealIn) }}. Un convoi, lui,
+          peut partir sans lui.
+        </div>
         <div v-else class="sh-away">
           🧭 Ton héros est en expédition — un convoi, lui, peut partir sans lui.
         </div>
@@ -457,7 +461,14 @@ import {
   isClaimable,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
-import { departureRisk, heroDefends, guardUnits, defenseLevel, ODDS_LABEL } from '@/lib/raid';
+import {
+  departureRisk,
+  heroDefends,
+  guardUnits,
+  defenseLevel,
+  ODDS_LABEL,
+  woundRemainingMs,
+} from '@/lib/raid';
 import { advAvailable, advBadges, advRank, advTitle } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
 import {
@@ -756,9 +767,17 @@ const vansLeft = computed(
 /** Ce que ce lieu accepte MAINTENANT — la regle vit dans `caravan.ts`, pas dans un v-if.
  *  Le panneau etait entierement garde par « le heros est disponible », donc un convoi
  *  devenait impossible des que le heros partait : exactement quand on en a besoin. */
+/** Temps de convalescence restant du héros (0 = disponible). ⚠️ Il manquait ici : la carte
+ *  laissait repartir un héros blessé, seul l'écran Aventure le bloquait. */
+const heroHealIn = computed(() => woundRemainingMs(char.row?.base, now.value));
+/** Le héros ne peut pas partir : il est sur la route, OU à l'infirmerie. */
+const heroUnavailable = computed(() => !!active.value || heroHealIn.value > 0);
 const offers = computed(() =>
   selected.value
-    ? poiOffers(selected.value, { heroAway: !!active.value, comptoirLevel: char.comptoirLevel })
+    ? poiOffers(selected.value, {
+        heroAway: heroUnavailable.value,
+        comptoirLevel: char.comptoirLevel,
+      })
     : { hero: false, caravan: false },
 );
 const caravanMin = computed(() =>
@@ -1005,7 +1024,7 @@ watch(
  *  d'endroits disponibles, et l'utilisateur a logiquement cessé d'essayer de cliquer.
  *  Même source que la feuille (`poiOffers`) : les deux ne peuvent pas se contredire. */
 function dimmed(p: Poi): boolean {
-  const o = poiOffers(p, { heroAway: !!active.value, comptoirLevel: char.comptoirLevel });
+  const o = poiOffers(p, { heroAway: heroUnavailable.value, comptoirLevel: char.comptoirLevel });
   return !o.hero && !o.caravan;
 }
 
@@ -1068,7 +1087,7 @@ function poiRewardLabel(p: Poi): string {
 const canSend = computed(
   () =>
     !!selected.value &&
-    !active.value &&
+    !heroUnavailable.value &&
     !!char.row &&
     progress.ready.value &&
     outpostBuilt.value &&
