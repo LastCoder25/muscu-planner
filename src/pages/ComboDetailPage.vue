@@ -87,40 +87,15 @@
         class="leg"
         :class="{ ok: legComplete(leg) }"
       >
-        <span
-          v-if="noEquipIds.has(leg.exercise_id)"
-          class="bw-ic"
-          title="Poids du corps (aucun matériel)"
-          >🤸</span
-        >
-        <div class="leg-top">
-          <!-- La vignette d'exécution remplace l'emoji du groupe quand l'exo a une
-               illustration : elle dit le mouvement, et ouvre l'animation en grand. -->
-          <ExerciseDemo :exercise-id="leg.exercise_id" :name="leg.exercise_name" :size="40">
-            <span class="leg-emo">{{ slotEmoji(leg.slot) }}</span>
-          </ExerciseDemo>
-          <div class="leg-main">
-            <div class="leg-name">
-              {{ leg.exercise_name }}
-            </div>
-            <!-- Toucher l'avancement ouvre les séries faites (même composant que l'onglet
-                 🎯 Défi 360). Le poids a quitté le nom de l'exo. -->
-            <button
-              class="leg-sub"
-              :aria-label="`Séries faites : ${leg.exercise_name}`"
-              @click="openHistory(leg)"
-            >
-              {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
-              <!-- Fourchette conseillée : la seule consigne d’EXÉCUTION du 360 (le reste
-                   compte des séries). Visible en permanence — pas de survol sur mobile. -->
-              <span class="leg-range">🎯 {{ rangeLabel(leg) }}</span>
-              <span v-if="legComplete(leg)" class="leg-ok">✓</span>
-              <span v-if="legDone(leg) > leg.target" class="leg-extra"
-                >+{{ legDone(leg) - leg.target }} en plus</span
-              >
-            </button>
-          </div>
-        </div>
+        <!-- Même en-tête que l'onglet 🎯 Défi 360. La vignette d'exécution remplace l'emoji
+             du groupe quand l'exo a une illustration. -->
+        <ComboLegHead
+          :leg="leg"
+          :objective="profileStore.profile?.objective"
+          :bodyweight="noEquipIds.has(leg.exercise_id)"
+          :fallback="slotEmoji(leg.slot)"
+          @history="openHistory(leg)"
+        />
         <!-- Mode séries : segments par série ; mode reps : barre de progression simple.
              ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 série » et « ↩ »
              prenaient une ligne entière par exo. La prochaine case vide porte le « ＋ »,
@@ -272,7 +247,6 @@ import {
   legComplete,
   legMode,
   legSets,
-  legUnitLabel,
   legLastReps,
   legLastWeight,
   legLastAssisted,
@@ -287,8 +261,8 @@ import {
 import { comboSlot } from '@/data/combo';
 import ComboTierLegend from '@/components/ComboTierLegend.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
-import ExerciseDemo from '@/components/ExerciseDemo.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
+import ComboLegHead from '@/components/ComboLegHead.vue';
 import {
   logicalToday,
   addDaysIso,
@@ -764,66 +738,11 @@ onMounted(async () => {
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: 14px;
-  padding: 12px 14px;
+  padding: 9px 12px;
   margin-bottom: 8px;
 }
 .leg.ok {
   border-color: var(--d1);
-}
-/* Icône « poids du corps » (aucun matériel) — pastille ronde cyan, coin haut-droit. */
-.bw-ic {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  line-height: 1;
-  border-radius: 50%;
-  background: rgba(95, 208, 224, 0.15);
-  border: 1px solid #5fd0e0;
-  z-index: 1;
-}
-.leg-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.leg-emo {
-  font-size: 22px;
-}
-.leg-main {
-  flex: 1;
-  min-width: 0;
-}
-.leg-name {
-  font-weight: 600;
-  font-size: 14.5px;
-  color: var(--text);
-}
-.leg-sub {
-  font-size: 12px;
-  color: var(--dim);
-  /* Bouton : apparence native remise à zéro, cible tactile agrandie sans décaler la ligne. */
-  background: none;
-  border: none;
-  padding: 6px 0;
-  margin: -6px 0;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-/* Consigne d’exécution → accent : c’est ce qu’on lit AVANT de faire la série. */
-.leg-range {
-  color: var(--accent);
-  margin-left: 6px;
-  white-space: nowrap;
-}
-.leg-ok {
-  color: var(--d1);
 }
 .bar {
   height: 8px;
@@ -876,7 +795,7 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
   gap: 4px;
-  margin: 9px 0;
+  margin: 7px 0 0;
 }
 /* Mode reps : barre de progression continue (l'objectif en reps peut être élevé). */
 .reps-bar {
@@ -973,12 +892,6 @@ onMounted(async () => {
   border-style: solid;
   border-color: var(--d1);
   color: #10231a;
-}
-.leg-extra {
-  margin-left: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--d1);
 }
 .leg-actions {
   display: flex;

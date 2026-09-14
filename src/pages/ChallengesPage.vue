@@ -426,34 +426,15 @@
           </div>
           <ComboTierLegend v-if="activeComboLegs.some((l) => legMode(l) === 'sets')" />
           <div v-for="leg in activeComboLegs" :key="leg.exercise_id" class="combo-leg">
-            <div class="cl-top">
-              <ExerciseDemo :exercise-id="leg.exercise_id" :name="leg.exercise_name" :size="36" />
-              <span class="cl-name">
-                {{ leg.exercise_name }}
-                <span
-                  v-if="noEquipIds.has(leg.exercise_id)"
-                  class="bw-ic"
-                  title="Poids du corps (aucun matériel)"
-                  >🤸</span
-                >
-              </span>
-              <!-- Toucher l'avancement ouvre les séries faites (le poids et l'icône
-                   d'historique ont quitté le nom de l'exo). -->
-              <button
-                class="cl-sub"
-                :class="{ ok: legComplete(leg) }"
-                :aria-label="`Séries faites : ${leg.exercise_name}`"
-                @click="openHistory(leg)"
-              >
-                {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
-                <!-- Même consigne d’exécution que la fiche du 360 : c’est souvent ICI
-                     qu’on consulte son défi en cours, pas sur /combo/:id. -->
-                <span class="cl-range">🎯 {{ legRangeLabel(leg) }}</span>
-                <span v-if="legDone(leg) > leg.target" class="cl-extra"
-                  >+{{ legDone(leg) - leg.target }} en plus</span
-                >
-              </button>
-            </div>
+            <!-- Même en-tête que la fiche du 360 : c’est souvent ICI qu’on consulte son
+                 défi en cours, pas sur /combo/:id. -->
+            <ComboLegHead
+              :leg="leg"
+              :objective="profileStore.profile?.objective"
+              :bodyweight="noEquipIds.has(leg.exercise_id)"
+              :size="36"
+              @history="openHistory(leg)"
+            />
             <!-- ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 » et « ↩ » lui
                  prenaient la largeur, et les cases partaient à la ligne. La prochaine case vide
                  porte le « ＋ » ; le retrait vit dans la fenêtre de saisie. Seul le chrono du
@@ -603,8 +584,8 @@ import { useQuasar } from 'quasar';
 import ComboTierLegend from '@/components/ComboTierLegend.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
-import ExerciseDemo from '@/components/ExerciseDemo.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
+import ComboLegHead from '@/components/ComboLegHead.vue';
 import {
   challengeStats,
   challengeXpPoints,
@@ -625,7 +606,6 @@ import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { challengeLane, type ChallengeLane } from '@/lib/tennisTraining';
 import { useComboStore } from '@/stores/combo';
 import { useProfileStore } from '@/stores/profile';
-import { repRangeLabel } from '@/lib/repScheme';
 import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
@@ -638,12 +618,10 @@ import {
   legBarGeometry,
   legRemaining,
   legMode,
-  legUnitLabel,
   legLastReps,
   legLastWeight,
   legLastAssisted,
   legSets,
-  legRepRange,
   comboStopPlan,
   comboPace,
   NO_PACE,
@@ -677,9 +655,6 @@ const comboStore = useComboStore();
 const profileStore = useProfileStore();
 // Fourchette conseillée d’un exo, telle que figée à la création. L’objectif du profil
 // ne sert que de repli pour les 360 créés avant qu’elle existe.
-function legRangeLabel(leg: ComboLeg): string {
-  return repRangeLabel(legRepRange(leg, profileStore.profile?.objective), legMode(leg) === 'time');
-}
 const gameFx = useGameFx();
 // Grosse animation centrale à la complétion d'un Défi 360 (full-body bouclé).
 function celebrateCombo(c: ComboChallenge) {
@@ -1618,64 +1593,6 @@ onMounted(async () => {
   border-style: solid;
   border-color: var(--d1);
   color: #10231a;
-}
-.cl-extra {
-  margin-left: 6px;
-  font-weight: 700;
-  color: var(--d1);
-}
-/* Dans la pastille verte (objectif atteint), le « +N en plus » doit rester lisible. */
-.cl-sub.ok .cl-extra {
-  color: #15120e;
-}
-.cl-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-.cl-name {
-  /* Prend la place entre la vignette d'exécution et le compteur. */
-  flex: 1;
-  min-width: 0;
-  align-self: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: none;
-  border: none;
-  padding: 0;
-  font-weight: 600;
-  font-size: 14.5px;
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-}
-/* Pastille séries faites/à faire, en haut à droite de la ligne. */
-.cl-range {
-  color: var(--accent);
-  margin-left: 6px;
-  white-space: nowrap;
-}
-.cl-sub {
-  flex: none;
-  font-family: inherit;
-  cursor: pointer;
-  align-self: flex-start;
-  padding: 2px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.cl-sub.ok {
-  color: #15120e;
-  background: var(--d1);
-  border-color: var(--d1);
 }
 .cl-actions {
   flex: none;
