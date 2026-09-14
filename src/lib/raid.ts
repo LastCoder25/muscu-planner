@@ -30,7 +30,7 @@ import {
   rankIndex,
   RANK_ORDER,
   rarityRank,
-  rankCeilingForLevel,
+  prestigeRankIndex,
   mergeEffects,
   type AggregatedEffects,
   type Item,
@@ -1143,7 +1143,8 @@ export function companionSlots(kennelLevel: number): number {
 /** 🎖️ RANG MAXIMAL qu’un familier peut avoir pour tenir le mur — le second levier du
  *  Chenil, et l’exact pendant de ce que la Guilde fait pour les aventuriers.
  *
- *  ⚠️ IL SE CALE SUR `rankCeilingForLevel` — LE RANG QU’ON PEUT DROPPER À CE NIVEAU —
+ *  ⚠️ IL SE CALE SUR LE RANG QU’UN FAMILIER TOMBE À CE NIVEAU — le rang du joueur depuis la
+ *  v0.857 (`prestigeRankIndex`, un rang tous les 10 niveaux), plus le plafond √ des objets —
  *  et non plus sur `PROMO_LEVELS`. Cette table-là appartient aux AVENTURIERS : elle dit
  *  « à quel niveau on gagne une classe », ce qui n’a aucun rapport avec « quel familier
  *  existe ». L’emprunt était commode tant que les deux échelles se ressemblaient ; dès
@@ -1158,7 +1159,7 @@ export function companionSlots(kennelLevel: number): number {
  *  il part au combat avec lui, et aucun bâtiment ne le plafonne. */
 function companionRankCap(kennelLevel: number): number {
   if (kennelLevel <= 0) return -1;
-  return Math.min(RANK_ORDER.length - 1, rankCeilingForLevel(kennelLevel));
+  return Math.min(RANK_ORDER.length - 1, prestigeRankIndex(kennelLevel));
 }
 
 /** Ce familier peut-il être POSTÉ ? ⚠️ Appliqué au CALCUL du combat autant qu’à

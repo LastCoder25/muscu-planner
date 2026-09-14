@@ -123,14 +123,20 @@ export function dungeonGearExpect(level: number): { off: number; pv: number } {
 // ⚠️ Pas dans `gearExpect` : il est aussi lu par les donjons 12-22 et le Labyrinthe, que
 // ×1,4 aurait murés. Les donjons portent ce renfort en `foeMult` (point de passage unique
 // `dungeonFoes`), les boss dans `BOSSES`, et la puissance conseillée relit les deux.
+// ⚠️ RÉDUITE EN v0.857 : familiers et talents sont plafonnés au RANG DU JOUEUR (échelle de
+// prestige, un rang tous les 10 niveaux) au lieu du plafond √ (+2 rangs). Mesuré (10 tirages
+// d'équipement × 60 combats, même équipement, seuls les rangs des compagnons changent), le
+// joueur perd l'équivalent de ×1,06 de PV et dégâts quand l'écart entre les deux échelles vaut
+// deux rangs (niveaux 25-49), ×1,04 à un rang (55-70), ×1,00 à zéro (79-94). Chaque point de
+// la table est divisé d'autant : la difficulté visée par la v0.848 est conservée.
 const PROC_DUNGEON_BOOST: [number, number][] = [
-  [25, 1.39],
-  [31, 1.4],
-  [40, 1.53],
-  [55, 1.63],
-  [70, 1.63],
-  [85, 1.61],
-  [94, 1.39],
+  [25, 1.3],
+  [31, 1.32],
+  [40, 1.44],
+  [55, 1.56],
+  [70, 1.56],
+  [85, 1.6],
+  [94, 1.38],
 ];
 /** Lecture d'une table de points mesurés [niveau, valeur] : interpolée entre deux points,
  *  valeur du bout le plus proche au-delà. */
@@ -147,8 +153,10 @@ function proceduralDungeonBoost(reco: number): number {
   return reco < PROC_DUNGEON_BOOST[0]![0] ? 1 : interpolate(PROC_DUNGEON_BOOST, reco);
 }
 /** Renfort (PV et dégâts) des boss procéduraux : moyenne des mesures (×1,27 à ×1,41 selon
- *  le palier, écarts dans le bruit). Les boss écrits à la main sont corrigés dans leurs stats. */
-const PROC_BOSS_BOOST = 1.32;
+ *  le palier, écarts dans le bruit). Les boss écrits à la main sont corrigés dans leurs stats.
+ *  ⚠️ 1,32 → 1,27 en v0.857 (compagnons plafonnés au rang du joueur) : mesuré ×1,00 à ×1,085
+ *  selon le palier, ×1,04 en moyenne. */
+const PROC_BOSS_BOOST = 1.27;
 export function bossContentBoost(level: number): number {
   return level >= 30 ? PROC_BOSS_BOOST : 1;
 }
@@ -163,16 +171,19 @@ export function bossContentBoost(level: number): number {
 // complet à ~70 % au niveau conseillé (~90 % sur les deux paliers d'initiation). La table EST
 // la mesure : un point par palier (les écarts entre voisins suivent le nombre d'étages et le
 // roster, ils ne sont pas lissés).
+// ⚠️ RÉDUITE EN v0.857 (familiers et talents plafonnés au rang du joueur) : chaque palier est
+// divisé par ce que le joueur a perdu À SON NIVEAU CONSEILLÉ — mesuré ×1,07 (Cryptes), ×1,05
+// (Abysse, Gouffre, Astral), ×1,04 (Sans-fond), ×1,07 (Chaos), ×1,02 (Néant), ×1,00 ailleurs.
 const LABY_CONTENT_BOOST: [number, number][] = [
   [2, 0.7],
   [3, 0.79],
-  [6, 1.14],
-  [12, 1.44],
-  [20, 1.37],
-  [28, 1.57],
-  [40, 1.72],
-  [52, 1.81],
-  [66, 1.84],
+  [6, 1.07],
+  [12, 1.37],
+  [20, 1.3],
+  [28, 1.51],
+  [40, 1.61],
+  [52, 1.72],
+  [66, 1.8],
   [85, 1.67],
 ];
 /** PV et dégâts de base d'une créature du Labyrinthe (avant son archétype), pour un palier de

@@ -51,7 +51,10 @@
                 >🎯 {{ labyClearPct[t.laby.id] ?? 0 }}% de réussite</span
               >
               ·
-              <span class="lt-fam">🐾 familier garanti</span>
+              <span class="lt-fam"
+                >🐾 familier
+                <b :style="{ color: rankColorOf(t.laby) }">{{ famRankName(t.laby) }}</b></span
+              >
               · <span class="lt-death">💀 garde {{ t.deathKeep }}%</span>
             </div>
             <div v-if="!t.unlocked" class="lt-lock">
@@ -539,6 +542,8 @@ import {
   tierIndexOf,
   mergeEffects,
   SLOT_LABEL,
+  RANK_ORDER,
+  familiarRankRef,
   type Item,
 } from '@/lib/items';
 import { rollActivityFamiliar } from '@/data/familiars';
@@ -701,6 +706,19 @@ const fighter = computed<Combatant>(() =>
   ),
 );
 const heroLevel = computed(() => character.value.level.level);
+// Rang du familier garanti d'un palier POUR CE JOUEUR (v0.857) : la même référence que le
+// tirage (`familiarRankRef`), donc la carte ne peut pas annoncer un autre rang que le butin.
+function famRankOf(l: Labyrinth) {
+  return RANK_ORDER[
+    familiarRankRef({
+      level: l.dropLevel,
+      playerLevel: heroLevel.value,
+      rankCap: RARITY_RANK[l.rank],
+    })
+  ]!;
+}
+const famRankName = (l: Labyrinth) => rarityRank(famRankOf(l)).name;
+const rankColorOf = (l: Labyrinth) => RANK_COLOR[famRankOf(l)];
 // Magic find (stat mineure) de l'équipement → luck bonus sur les coffres du labyrinthe.
 const mfLuck = computed(() => magicFindLuck(char.row?.equipped ?? {}, char.row?.voie));
 
@@ -1448,13 +1466,14 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
     if (outcome === 'cleared') {
       const t = rollTreasure();
       if (t) loot.value.push(t);
-      // SIGNATURE du Labyrinthe : un FAMILIER garanti au clear, de rang d'autant plus
-      // haut que le PALIER est profond (level+luck du palier → raretés croissantes).
+      // SIGNATURE du Labyrinthe : un FAMILIER garanti au clear, de TON rang (v0.857), borné
+      // par le rang du PALIER — un palier peu profond ne donne plus ton rang une fois dépassé.
       const famRng = mulberry32((seed.value * 131 + 91) >>> 0 || 1);
       const fam = rollActivityFamiliar(famRng, {
         level: runDropLevel(),
         luck: runLuck(),
         playerLevel: heroLevel.value,
+        ...(selectedLaby.value ? { rankCap: RARITY_RANK[selectedLaby.value.rank] } : {}),
       });
       loot.value.push({ ...fam, id: crypto.randomUUID() });
       gameFx.celebrate({

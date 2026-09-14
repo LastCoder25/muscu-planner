@@ -10,7 +10,8 @@ import {
   RANK_ORDER,
   rankRollMult,
   rollJet,
-  rollTier,
+  rollCompanionTier,
+  companionDropRank,
   type AggregatedEffects,
   type Rarity,
 } from './items';
@@ -307,30 +308,24 @@ export function effectsOfTalents(list: TalentInstance[]): AggregatedEffects {
   return a;
 }
 
-// ── Drop : le RANG+QUALITÉ (grade) est GATÉ par la profondeur du contenu (comme les
-// objets/familiers via `rollTier`) — un talent d'un donjon/boss profond tombe à un
-// grade plus haut, biaisé par la `luck`. La magnitude démarre à +0 et monte en
-// l'ENCHANTANT. Non équipé par défaut. ──
+// ── Drop : le RANG est plafonné au RANG DU JOUEUR, borné par le contenu (v0.857, comme les
+// familiers via `rollCompanionTier`) : son rang le plus souvent, un rang au-dessus très
+// rarement. Le JET garde la `luck`. Non équipé par défaut. ──
 export function rollTalentDrop(
   rng: () => number,
   opts: {
     level?: number;
     luck?: number;
-    floorBonus?: number;
     idSeed?: number;
-    playerLevel?: number; // cap anti-runaway : rang plafonné à playerLevel + marge
+    playerLevel?: number; // rang plafonné au rang du joueur (échelle de prestige)
   } = {},
 ): TalentInstance {
   // Tirage UNIFORME (toutes les voies équitablement — la voie n'oriente pas les drops).
   const def = TALENTS[Math.floor(rng() * TALENTS.length)]!;
-  // RANG = pyramide centrée sur min(niveau contenu, niveau joueur) → `playerLevel` cale le
-  // centre et plafonne le rang (anti-runaway) ; le JET (roll) balaie l'intervalle du rang.
-  const { rank, roll } = rollTier(
+  const { rank, roll } = rollCompanionTier(
     rng,
-    opts.level ?? 1,
+    companionDropRank(opts.level ?? 1, opts.playerLevel),
     opts.luck ?? 0,
-    opts.floorBonus ?? 0,
-    opts.playerLevel,
   );
   // NIVEAU d'objet (ilvl) comme les objets/familiers : pyramide centrée sur min(contenu, joueur).
   const center =

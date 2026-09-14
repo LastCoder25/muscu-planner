@@ -3,7 +3,7 @@
 import { playerCombatant, combatPower, mulberry32, type Combatant } from './combat';
 import type { FamiliarSpecies } from '@/data/familiars';
 import { PROCEDURAL } from '@/lib/proceduralContent';
-import { CHARACTER_RANKS, type RankTier } from './characterRank';
+import { CHARACTER_RANKS, characterRank, type RankTier } from './characterRank';
 
 // `familiar` = 5ᵉ emplacement PARALLÈLE (compagnon) : compté par aggregateEffects
 // mais EXCLU de SLOTS (donc des drops normaux / sets / forge). Cf. src/data/familiars.ts.
@@ -1151,6 +1151,70 @@ export function rollTier(
   return { rank: RANK_ORDER[idx]!, roll: rollJetValue(rng, luck) }; // jet biaisé bas
 }
 
+// ── RANG DES COMPAGNONS : familiers et talents plafonnés au RANG DU JOUEUR (v0.857) ──
+// ⚠️ Les OBJETS gardent la pyramide de `rollTier` (plafond √ du niveau, +2 rangs). Un
+// familier ou un talent se lit en RANG (v0.833) — Bronze, Argent, Or… — comme le héros et ses
+// aventuriers. Mesuré avant ce changement, au niveau 30 (rang Or) au Labyrinthe du Sans-fond :
+// 12 % de familiers de son rang, 36 % deux rangs au-dessus, 23 % trois rangs au-dessus. Trois
+// causes cumulées : le plafond √ court devant le rang du joueur (Épique au niveau 30, soit deux
+// rangs d’avance) ; la chance du Labyrinthe vaut toujours 1 (palier 0,9 + Porte) et élargit la
+// pointe haute ; et la borne douce laisse passer deux rangs de plus.
+export const COMPANION_RANK = {
+  /** Chance d’un rang AU-DESSUS : très basse, un peu relevée par la chance du contenu. */
+  upBase: 0.01,
+  upLuck: 0.02,
+  /** Étalement des rangs EN DESSOUS (gaussienne repliée) : la chance le resserre → on farme
+   *  surtout des familiers de SON rang. */
+  loWidth: 0.66,
+  loWidthLuck: 0.18,
+};
+
+/** Rang (index de rareté) d’un niveau sur l’échelle de PRESTIGE — 1 rang tous les 10 niveaux,
+ *  celle du héros et des classes d’aventurier. Bornée aux 8 raretés (les deux derniers rangs de
+ *  prestige n’ont pas de rareté propre). */
+export function prestigeRankIndex(level: number): number {
+  return Math.min(RANK_ORDER.length - 1, characterRank(level).rankIndex);
+}
+
+/** Rang de référence d’un compagnon tombé d’un contenu : celui de min(contenu, joueur). */
+export function companionDropRank(level: number, playerLevel?: number): number {
+  return prestigeRankIndex(playerLevel == null ? level : Math.min(level, playerLevel));
+}
+
+/** Rang de référence d’un familier. Sans `rankCap` : min(contenu, joueur). Avec `rankCap` (le
+ *  rang d’un palier du Labyrinthe), c’est LUI qui borne le contenu, à la place du niveau du
+ *  palier : un palier « Niv 40 » vaut le rang Or noir, et le joueur qui passe Légendaire au
+ *  niveau 41 n’y aurait plus trouvé son rang avant d’affronter un palier de niveau 52 — or son
+ *  rang doit se décaler dès qu’il le gagne. */
+export function familiarRankRef(opts: {
+  level: number;
+  playerLevel?: number;
+  rankCap?: number;
+}): number {
+  if (opts.rankCap == null) return companionDropRank(opts.level, opts.playerLevel);
+  return Math.min(opts.rankCap, prestigeRankIndex(opts.playerLevel ?? opts.level));
+}
+
+/** Tire le { rank, roll } d’un familier ou d’un talent : SON rang le plus souvent, en dessous
+ *  parfois, UN rang au-dessus très rarement, jamais deux. `rankCap` = rang de référence (le
+ *  rang du joueur, déjà borné par le contenu). Le JET garde la chance : c’est lui qu’on farme. */
+export function rollCompanionTier(
+  rng: () => number,
+  rankCap: number,
+  luck = 0,
+): { rank: Rarity; roll: number } {
+  const l = Math.min(1, Math.max(0, luck));
+  const top = RANK_ORDER.length - 1;
+  const c = Math.min(top, Math.max(0, Math.round(rankCap)));
+  const up = rng() < COMPANION_RANK.upBase + COMPANION_RANK.upLuck * l;
+  const width = COMPANION_RANK.loWidth - COMPANION_RANK.loWidthLuck * l;
+  const idx = up ? c + 1 : c - Math.round(Math.abs(gaussian(rng)) * width);
+  return {
+    rank: RANK_ORDER[Math.min(top, Math.max(0, idx))]!,
+    roll: rollJetValue(rng, luck),
+  };
+}
+
 // NIVEAU D'OBJET = pyramide centrée sur `center = min(niveau perso, niveau donjon)` (v0.583).
 // Traîne BASSE (fourrage, objets un peu sous ton niveau), pointe HAUTE chanceuse dopée par la
 // `luck`/magic find (ilvl un peu AU-DESSUS = beau drop), BORNÉE (anti-runaway : jamais loin
@@ -1450,18 +1514,17 @@ function familiarSigChance(rarity: Rarity): number {
 export function rollFamiliar(
   rng: () => number,
   species: FamiliarSpecies,
-  opts: { level: number; luck?: number; rarity?: Rarity; playerLevel?: number },
+  opts: { level: number; luck?: number; rarity?: Rarity; playerLevel?: number; rankCap?: number },
 ): Omit<Item, 'id'> {
-  // RANG + QUALITÉ comme les objets : tous deux via rollTier → la LUCK (élevée dans les
-  // labyrinthes profonds) pousse aussi la QUALITÉ vers le haut (avant : rang biaisé par la
-  // luck mais qualité uniforme 20 %). Rareté forcée (fusion) → qualité uniforme.
+  // RANG plafonné au RANG DU JOUEUR (v0.857, `rollCompanionTier`) ; `rankCap` le borne en plus
+  // (palier du Labyrinthe). Le JET garde la luck : on farme le meilleur familier de son rang.
   let rarity: Rarity;
   let roll: number;
   if (opts.rarity) {
     rarity = opts.rarity;
     roll = rollJetValue(rng, opts.luck ?? 0); // jet biaisé bas (comme les drops)
   } else {
-    const t = rollTier(rng, opts.level, opts.luck ?? 0, 0, opts.playerLevel);
+    const t = rollCompanionTier(rng, familiarRankRef(opts), opts.luck ?? 0);
     rarity = t.rank;
     roll = t.roll;
   }

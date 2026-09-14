@@ -23,7 +23,7 @@ import {
   familiarMult,
   RARITY_RANK,
   RANK_ORDER,
-  rankCeilingForLevel,
+  prestigeRankIndex,
   rankRollMult,
   type AggregatedEffects,
   type Item,
@@ -518,7 +518,7 @@ const REF_FAMILIAR_JET = 0.3;
  * ⚠️ Sans dressage, délibérément : le dressage se mérite, il doit rester un avantage.
  */
 export function refCompanions(level: number): Item[] {
-  const rarity = RANK_ORDER[rankCeilingForLevel(Math.max(1, level))]!;
+  const rarity = RANK_ORDER[prestigeRankIndex(Math.max(1, level))]!;
   return REF_SPECIES.map((id, i) => {
     const sp = FAMILIAR_SPECIES.find((s) => s.id === id)!;
     return {

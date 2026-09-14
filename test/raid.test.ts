@@ -82,6 +82,7 @@ import {
 import { refFighter, gearExpect } from '@/lib/proceduralContent';
 import {
   rankCeilingForLevel,
+  prestigeRankIndex,
   RANK_ORDER,
   RARITY_MULT,
   RARITY_LABEL,
@@ -883,11 +884,14 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     // promotions a bougé, le Chenil s'est mis à plafonner des familiers qu'on pouvait
     // pourtant trouver — un verrou arbitraire sur un système voisin.
     //
-    // Le cap ÉGALE désormais le gate des drops : il ne bloque jamais un familier
-    // existant, et il cesse de promettre du primordial à qui ne peut pas en dropper.
+    // Le cap ÉGALE désormais le rang qu’un familier tombe : il ne bloque jamais un familier
+    // de son rang, et il cesse de promettre du primordial à qui ne peut pas en dropper.
+    // ⚠️ Depuis la v0.857 ce rang est celui du JOUEUR (un rang tous les 10 niveaux), plus le
+    // plafond √ des objets — et `companionNextRankLevel` (PROMO_LEVELS = débuts de rang) dit
+    // enfin la même chose que le plafond.
     for (const L of [1, 5, 12, 20, 28, 45, 61, 100]) {
       // En RANG depuis la v0.833 : la même langue que les familiers qu’il héberge.
-      const attendu = rarityRank(RANK_ORDER[rankCeilingForLevel(L)]!).name;
+      const attendu = rarityRank(RANK_ORDER[prestigeRankIndex(L)]!).name;
       expect(companionRankLabel(L), `chenil ${L}`).toBe(attendu);
     }
     // Sans Chenil, on n'héberge personne.

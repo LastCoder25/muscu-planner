@@ -52,7 +52,7 @@ import {
   aggregateEffects,
   FAMILIAR_SLOT,
   RANK_ORDER,
-  rankCeilingForLevel,
+  prestigeRankIndex,
   type AggregatedEffects,
   type Item,
 } from '@/lib/items';
@@ -199,9 +199,11 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     // Mesuré avant ce recalage : un trio accompagné gagnait 92 % de ses embuscades
     // PÉRILLEUSES au niveau 90 (39 % sans). Les bandes ci-dessus ne tiennent que parce
     // que `roadFoe` se dimensionne sur une escorte qui porte ses compagnons.
-    // (1) Les compagnons de référence sont du rang qu’on peut dropper à ce niveau.
+    // (1) Les compagnons de référence sont du rang qu’un familier tombe le plus souvent à ce
+    // niveau — le RANG DU JOUEUR depuis la v0.857 (plus le plafond √ des objets, qui courait
+    // jusqu’à deux rangs devant : la route aurait attendu des familiers introuvables).
     for (const L of [5, 26, 70]) {
-      for (const f of refCompanions(L)) expect(f.rarity).toBe(RANK_ORDER[rankCeilingForLevel(L)]);
+      for (const f of refCompanions(L)) expect(f.rarity).toBe(RANK_ORDER[prestigeRankIndex(L)]);
     }
     // (2) Sans ses familiers, une escorte est EN RETRAIT — pas interdite, en retrait.
     const p = poi({ level: 45 });
