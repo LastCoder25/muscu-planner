@@ -9,6 +9,7 @@ import {
   advGearEffects,
   advGearOptions,
   advGearRoles,
+  advGearValue,
   canWearAdvGear,
   lineageOf,
   pickLineage,
@@ -89,6 +90,30 @@ describe('tirage', () => {
       const g = rollAdvGear(rng, { lineage: 'guerrier', level: 60, playerLevel: 60 });
       expect(!!g.effect2).toBe(RARITY_RANK[g.rarity] >= RARITY_RANK.magique);
     }
+  });
+  it('⚠️ rareté ET jet se sentent même sur une petite stat (crit, base 4)', () => {
+    // À `ADV_GEAR.k` 0,15 un plancher à 1 écrasait tout : 4 × rareté × 0,15 < 1 en commun
+    // comme en légendaire, et le jet ne changeait rien. Le plancher est à 0,1.
+    expect(advGearValue('crit_pct', 'commun', 0.3)).not.toBe(
+      advGearValue('crit_pct', 'legendaire', 0.3),
+    );
+    expect(advGearValue('crit_pct', 'legendaire', 0.3)).toBeGreaterThan(
+      advGearValue('crit_pct', 'commun', 0.3),
+    );
+    expect(advGearValue('crit_pct', 'commun', 1)).toBeGreaterThan(
+      advGearValue('crit_pct', 'commun', 0),
+    );
+    // …et une pièce tirée porte bien cette valeur (même niveau d'objet, même stat).
+    const a = piece('a', {
+      rarity: 'commun',
+      effect: { type: 'crit_pct', value: advGearValue('crit_pct', 'commun', 0.3) },
+    });
+    const b = piece('b', {
+      rarity: 'legendaire',
+      effect: { type: 'crit_pct', value: advGearValue('crit_pct', 'legendaire', 0.3) },
+    });
+    expect(advGearEffects([a]).critAdd).toBeLessThan(advGearEffects([b]).critAdd);
+    expect(advGearValue('crit_pct', 'commun', 0)).toBeGreaterThanOrEqual(0.1);
   });
   it('le tirage de lignée ne choisit que parmi le vivier (rien si vivier vide)', () => {
     const rng = mulberry32(5);

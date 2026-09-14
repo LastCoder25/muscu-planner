@@ -145,9 +145,11 @@ const round1 = (v: number) => Math.round(v * 10) / 10;
 
 /** Valeur d'une stat d'équipement à ce grade. ⚠️ SOURCE UNIQUE : le tirage ET l'escorte de
  *  référence de la route (`refAdvGear`) la lisent — deux copies divergeraient au premier
- *  réglage de `ADV_GEAR.k`, et la route se calibrerait sur un équipement qui n'existe pas. */
+ *  réglage de `ADV_GEAR.k`, et la route se calibrerait sur un équipement qui n'existe pas.
+ *  ⚠️ PLANCHER à 0,1, pas à 1 : à k 0,15 un plancher à 1 écrasait rareté ET jet sur les
+ *  petites bases (crit base 4 → 0,6 → 1 en commun comme au jet parfait). */
 export function advGearValue(t: EffectType, rank: Rarity, roll: number): number {
-  return Math.max(1, round1(effectBase(t) * rankRollMult(rank, roll) * ADV_GEAR.k));
+  return Math.max(0.1, round1(effectBase(t) * rankRollMult(rank, roll) * ADV_GEAR.k));
 }
 
 /** Bonus de rôle d'un accessoire civil à ce grade (même source unique que `advGearValue`). */

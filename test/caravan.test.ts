@@ -209,25 +209,51 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     // l'arbitre unique du jeu.
     //
     // Mesuré après : 80 / 83 / 75 / 88 / 92 / 93 %. ⚠️ Re-mesuré quand la référence est
-    // devenue ÉQUIPÉE (trio équipé, 2000 graines) : 92 / 89 / 76 / 74 / 85 / 89 % en calme,
-    // 26 / 27 / 35 / 25 / 29 / 34 % en périlleux. C'est l'écart qu'on borne ici, pas
-    // une valeur : une bande large mais PLATE vaut mieux qu'une bande étroite qui dérive.
+    // devenue ÉQUIPÉE (`ADV_GEAR.k` 0,15, foePvTurns 2,58, foeDmgPctPv 0,275) : trio équipé
+    // sur 2000 convois `resolveCaravan`, 92 / 89 / 76 / 74 / 85 / 89 % en calme et
+    // 26 / 27 / 35 / 25 / 29 / 34 % en périlleux.
+    //
+    // ⚠️ LES BANDES DOCUMENTÉES SONT BORNÉES ICI, pas seulement leur écart : calme dans
+    // 73-94 %, périlleux dans 8-40 %. Le plancher calme est posé à 0,70 (et non 0,73) pour
+    // absorber le bruit d'un jeu de graines fixe ; 600 graines pour que les valeurs le
+    // passent d'au moins 2 points. Mesuré sur CES 600 graines :
+    //   calme      88,8 / 83,2 / 73,3 / 75,7 / 86,8 / 87,2 %
+    //   périlleux  21,0 / 23,5 / 32,7 / 25,0 / 31,0 / 28,3 %
     const NIV = [12, 20, 26, 45, 70, 85];
-    const calme = NIV.map((L) => winPct(team(3, L), poi({ level: L }), 200));
+    const calme = NIV.map((L) => winPct(team(3, L), poi({ level: L }), 600));
     for (const [i, t] of calme.entries()) {
-      expect(t, `niveau ${NIV[i]}`).toBeGreaterThan(0.6);
-      expect(t, `niveau ${NIV[i]}`).toBeLessThan(0.97);
+      expect(t, `calme niveau ${NIV[i]}`).toBeGreaterThanOrEqual(0.7);
+      expect(t, `calme niveau ${NIV[i]}`).toBeLessThanOrEqual(0.94);
     }
     expect(Math.max(...calme) - Math.min(...calme)).toBeLessThan(0.3);
 
     // ⚠️ C’EST LA ROUTE PÉRILLEUSE QUI DISCRIMINE, et c’est là que le choix doit survivre.
-    // Sur route calme un trio est censé passer : borner ce cas ne prouve pas grand-chose
-    // (mesuré, le défaut n’y coûtait que 2 points au niveau 85). Sur route DANGEREUSE il
-    // doit rester un pari à tout niveau — mesuré 8 / 16 / 28 / 34 / 34 / 35 %, contre
-    // 8 / 16 / 28 / **45 / 48 / 48** avec l’offense amputée de ses signatures : c’est
-    // exactement là que la fin de partie basculait de « pari » à « formalité ».
-    const peril = NIV.map((L) => winPct(team(3, L), poi({ level: L, perilous: true }), 200));
-    for (const [i, t] of peril.entries()) expect(t, `périlleux niveau ${NIV[i]}`).toBeLessThan(0.4);
+    // Sur route DANGEREUSE un trio doit rester un pari à tout niveau — avant l’équipement,
+    // mesuré 8 / 16 / 28 / 34 / 34 / 35 %, contre 8 / 16 / 28 / **45 / 48 / 48** avec
+    // l’offense amputée de ses signatures : c’est exactement là que la fin de partie
+    // basculait de « pari » à « formalité ».
+    const peril = NIV.map((L) => winPct(team(3, L), poi({ level: L, perilous: true }), 600));
+    for (const [i, t] of peril.entries()) {
+      expect(t, `périlleux niveau ${NIV[i]}`).toBeGreaterThanOrEqual(0.08);
+      expect(t, `périlleux niveau ${NIV[i]}`).toBeLessThanOrEqual(0.4);
+    }
+  });
+
+  it('⚠️ « COMBIEN J’EN ENVOIE » RESTE UNE DÉCISION : seul on ne passe pas, à deux on est loin', () => {
+    // Le duo a quitté sa bande historique (8-33 %) : mesuré 48,8 / 35,5 % aux niveaux 12 / 20
+    // sur ces graines. Accepté comme nouvelle bande — ce qui compte est l'ÉCART au trio, qui
+    // porte la décision. Mesuré (600 graines, calme) : trio − duo = 40 / 48 / 61 / 48 / 65 /
+    // 67 points. Solo : 0 victoire sauf 1 sur 600 au niveau 26 (2 sur 941 embuscades via
+    // `resolveCaravan`) — un coup de chance d'esquive, pas une stratégie.
+    const NIV = [12, 20, 26, 45, 70, 85];
+    for (const L of NIV) {
+      const p = poi({ level: L });
+      const solo = winPct(team(1, L), p, 600);
+      const duo = winPct(team(2, L), p, 600);
+      const trio = winPct(team(3, L), p, 600);
+      expect(solo, `solo niveau ${L}`).toBeLessThan(0.01);
+      expect(duo, `duo niveau ${L}`).toBeLessThanOrEqual(trio - 0.25);
+    }
   });
 
   it('⚠️ LA ROUTE ATTEND DES FAMILIERS — la référence est ACCOMPAGNÉE (v0.805)', () => {
@@ -407,7 +433,7 @@ describe('le convoi lui-même', () => {
     expect(a).toEqual(b);
   });
   it('l’aller et le retour sont symétriques, le rapport lisible à mi-chemin', () => {
-    const c = startCaravan('c1', poi(), team(3), 1000, 7, NUS);
+    const c = startCaravan('c1', poi(), team(3), 1000, 7, NUS, 0);
     expect(c.midAt).toBeGreaterThan(c.sentAt);
     expect(c.returnAt - c.midAt).toBe(c.midAt - c.sentAt);
     expect(c.escort).toHaveLength(3);
@@ -415,7 +441,7 @@ describe('le convoi lui-même', () => {
   it('⚠️ `claimed === undefined` = DÉJÀ crédité, jamais « à récupérer »', () => {
     // Même règle que les rapports d'expédition : traiter l'absence de champ comme
     // « non réclamé » offrirait une seconde fois le butin de chaque convoi passé.
-    const base = startCaravan('c1', poi(), team(3), 0, 7, NUS);
+    const base = startCaravan('c1', poi(), team(3), 0, 7, NUS, 0);
     const later = base.returnAt + 1;
     expect(isCaravanClaimable(base, later)).toBe(true);
     expect(isCaravanClaimable({ ...base, claimed: true }, later)).toBe(false);
@@ -424,7 +450,7 @@ describe('le convoi lui-même', () => {
     expect(isCaravanClaimable(legacy, later)).toBe(false);
   });
   it('rien ne se récupère avant le RETOUR en ville', () => {
-    const c = startCaravan('c1', poi(), team(3), 0, 7, NUS);
+    const c = startCaravan('c1', poi(), team(3), 0, 7, NUS, 0);
     expect(isCaravanClaimable(c, c.midAt)).toBe(false);
     expect(isCaravanClaimable(c, c.returnAt)).toBe(true);
   });
@@ -596,7 +622,7 @@ describe('🧹 LA LISTE DE CONVOIS NE GROSSIT PAS SANS FIN', () => {
   // ⚠️ Elle n’était JAMAIS purgée : mesuré sur le compte réel, **35 convois stockés dont
   // 30 déjà encaissés**. La ligne `characters` porte déjà le sac, les talents, les
   // aventuriers et la carte — un tableau qui ne fait que croître finit par peser.
-  const base = startCaravan('c0', poi({ level: 10 }), team(2, 10), 0, 7, NUS);
+  const base = startCaravan('c0', poi({ level: 10 }), team(2, 10), 0, 7, NUS, 0);
   const lot = (n: number, claimed: boolean, from = 0) =>
     Array.from({ length: n }, (_, i) => ({
       ...base,
@@ -840,7 +866,7 @@ describe('⚠️ un convoi VOYAGE comme le héros', () => {
   // Le convoi est situé sur la carte par la MÊME fonction que le héros
   // (`travelPosition`) : deux copies de cette interpolation divergeraient à la
   // première retouche — c'est le piège des libellés de POI, déjà rencontré deux fois.
-  const van = startCaravan('v1', poi({ x: 60, y: 20 }), team(3), 0, 7, NUS);
+  const van = startCaravan('v1', poi({ x: 60, y: 20 }), team(3), 0, 7, NUS, 0);
 
   it('part de la ville, atteint son lieu, et en revient', () => {
     expect(travelPosition(van, van.sentAt)).toMatchObject({ ...EXPE.town, phase: 'outbound' });
@@ -1384,7 +1410,7 @@ describe('👁️ L’ÉCLAIREUR ÉVITE LES EMBUSCADES (v0.759)', () => {
 describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET COMBIEN DE TEMPS', () => {
   const escort = team(3, 20);
   const van = (over: Partial<Caravan> = {}): Caravan => ({
-    ...startCaravan('c1', poi({ level: 20 }), escort, 0, 11, NUS),
+    ...startCaravan('c1', poi({ level: 20 }), escort, 0, 11, NUS, 0),
     ...over,
   });
 
@@ -1578,8 +1604,8 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
     });
     const e = { ...refAdventurer(20, 1), path: ['eclaireur'], id: 'e' };
     const road = (advGear: AdvGear[]) => ({ familiars: [], talents: [], advGear });
-    const avec = startCaravan('c', p, [{ ...e, gear: { accessory: 'lv' } }], 0, 7, road([lv]));
-    const sans = startCaravan('c', p, [e], 0, 7, road([]));
+    const avec = startCaravan('c', p, [{ ...e, gear: { accessory: 'lv' } }], 0, 7, road([lv]), 0);
+    const sans = startCaravan('c', p, [e], 0, 7, road([]), 0);
     expect(avec.midAt).toBeLessThan(sans.midAt);
   });
 });

@@ -85,7 +85,8 @@ export const CARAVAN = {
   /** PV d'un groupe de bandits ≈ N tours d'offense de l'escorte de référence.
    *  ⚠️ RE-MESURÉ à 3 quand l’offense de référence a cessé d’ignorer les signatures : la
    *  même valeur ne veut plus dire la même chose, puisque l’unité elle-même a grandi.
-   *  Trio (la référence) 73-94 % selon le niveau, quatuor 97-100 %, duo 8-33 %, solo 0 —
+   *  Trio (la référence) 73-94 % selon le niveau, quatuor 97-100 %, duo 17-55 % (bande
+   *  re-mesurée avec l'équipement, cf. plus bas ; l'ancienne était 8-33), solo ~0 —
    *  c'est ce gradient qui fait de « combien j'en envoie » une décision. Ne pas le monter
    *  sans re-mesurer : à 2,2 tours, 3 aventuriers gagnaient 100 % PARTOUT et le choix
    *  était mort.
@@ -94,7 +95,8 @@ export const CARAVAN = {
    *  côté : la bande avait déjà dérivé sous son plancher (trio calme 71 % au niveau 26,
    *  69 % au niveau 45). Après, sur 2000 graines aux niveaux 12/20/26/45/70/85 : trio équipé
    *  calme 92/89/76/74/85/89 %, périlleux 26/27/35/25/29/34 % ; le même SANS pièces
-   *  90/86/72/63/67/65 % en calme ; solo 0, duo 17-54, quatuor 97-100.
+   *  91/86/72/63/67/65 % en calme ; solo 0, duo 55/42/20/27/20/17, quatuor 97-100.
+   *  (Valeurs après le plancher de valeur à 0,1 dans `advGearValue`.)
    *  ⚠️ La marge est MINCE et structurelle : le calme du niveau 45 et le périlleux du
    *  niveau 26 bougent en sens inverse avec ces deux constantes. */
   foePvTurns: 2.58,
@@ -592,6 +594,8 @@ const REF_GEAR_JET = 0.3;
  */
 export function refAdvGear(level: number, n: number = CARAVAN.refEscort): AdvGear[] {
   const L = Math.max(1, level);
+  // Au-delà de 3 membres les orientations bouclent (`refAdventurer` : slot % 3) — le 4ᵉ
+  // est un mêlée, avec les pièces de sa lignée.
   return refEscortBare(L, n).flatMap((a, i) => {
     const lineage = lineageOf(a);
     if (!lineage) return [];
@@ -1105,7 +1109,8 @@ export function startCaravan(
   now: number,
   seed: number,
   road: RoadCompanions,
-  comptoirLevel = 0,
+  /** ⚠️ REQUIS : le trajet du convoi dépend du Comptoir — l'oublier le rallongerait. */
+  comptoirLevel: number,
 ): Caravan {
   const leg =
     caravanLegMin(poi, escort, comptoirLevel, advGearRoles(escort, road.advGear).speed) * 60_000;
