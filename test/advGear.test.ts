@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
 import { RARITY_RANK, RANK_ORDER, itemLevelMult } from '@/lib/items';
 import { advRarity, type Adventurer } from '@/lib/adventurers';
+import { adventurerPowers, type CompanionCtx } from '@/lib/raid';
 import {
   ADV_GEAR_SLOTS,
   LINEAGE_GEAR,
@@ -140,5 +141,25 @@ describe('port', () => {
     const o = advGearOptions(a, [a, b], stock, 'weapon');
     expect(o.options.map((g) => g.id)).toEqual(['ok']);
     expect(o).toMatchObject({ tooRare: 1, otherLineage: 1, taken: 1 });
+  });
+});
+
+describe('au rempart et dans la puissance', () => {
+  const ctx = (advGear: AdvGear[]): CompanionCtx => ({
+    familiars: [],
+    talents: [],
+    kennelLevel: 0,
+    now: 0,
+    advGear,
+  });
+  it('une pièce portée augmente la puissance, une pièce interdite non', () => {
+    const a = { ...adv('a', ['guerrier'], { weapon: 'p' }), level: 60 };
+    const nu = adventurerPowers([a], ctx([])).get('a')!;
+    const arme = piece('p', { level: 60, effect: { type: 'damage_pct', value: 40 } });
+    expect(adventurerPowers([a], ctx([arme])).get('a')!).toBeGreaterThan(nu);
+    // Hors de sa lignée : `canWearAdvGear` la refuse (`wornGear` l'ignore) → la puissance
+    // ne bouge pas, exactement comme si le stock était vide.
+    const interdite = { ...arme, lineage: 'archer' as const };
+    expect(adventurerPowers([a], ctx([interdite])).get('a')!).toBe(nu);
   });
 });

@@ -44,7 +44,7 @@ const garde = (lvl: number) =>
       ...refAdventurer(Math.max(1, lvl - (i % 6)), i),
       id: `g${i}`,
     })),
-    { now: NOW, kennelLevel: lvl, familiars: [], talents: [] },
+    { now: NOW, kennelLevel: lvl, familiars: [], talents: [], advGear: [] },
   );
 
 describe('la puissance de l’ASSAUT (ce que l’espionnage vend)', () => {

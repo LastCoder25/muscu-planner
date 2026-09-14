@@ -241,6 +241,13 @@ export function advGearOptions(
   return res;
 }
 
+/** L'état persisté (jsonb `characters.adv_gear`, colonne à venir) : le stock et une
+ *  forge éventuellement en cours. ⚠️ Séparé du sac du héros (`inventory`). */
+export interface AdvGearState {
+  stock: AdvGear[];
+  forge?: { until: number; advId: string; piece: Omit<AdvGear, 'id'> } | null;
+}
+
 export function advGearSellValue(g: AdvGear): number {
   return Math.max(1, Math.round(sellValueOf(g.rarity, g.roll, g.level) * ADV_GEAR.sellK));
 }

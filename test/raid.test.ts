@@ -161,6 +161,7 @@ function holdRate(
         kennelLevel: defLevel,
         familiars: [],
         talents: [],
+        advGear: [],
       }),
     };
     if (resolveRaid(base, raid, 0, heroHome).held) held++;
@@ -837,6 +838,7 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     talents: [],
     kennelLevel,
     now: NOW,
+    advGear: [],
     heroFamiliarId: heroFamiliarId ?? null,
   });
 
@@ -2763,7 +2765,13 @@ describe('🛡️ UN AVENTURIER VAUT PLUS DERRIÈRE SES MURS (v0.801)', () => {
   // seul — la calibration mesurée des embuscades de convoi n’en voit rien.
   it('ses PV et ses dégâts de siège valent ceux de la route × guardSiegeK', () => {
     const adv = refAdventurer(40, 0);
-    const [g] = guardUnits(40, [adv], { now: 0, kennelLevel: 40, familiars: [], talents: [] });
+    const [g] = guardUnits(40, [adv], {
+      now: 0,
+      kennelLevel: 40,
+      familiars: [],
+      talents: [],
+      advGear: [],
+    });
     const route = escortCombatant([adv], adv.name);
     expect(RAID.guardSiegeK).toBeGreaterThan(1);
     expect(g!.pv).toBe(Math.max(1, Math.round(route.pv * RAID.guardSiegeK)));

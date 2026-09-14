@@ -150,6 +150,7 @@ import {
   startCaravan,
   type Caravan,
 } from '@/lib/caravan';
+import { type AdvGear, type AdvGearState } from '@/lib/advGear';
 import { useGoldFx } from '@/composables/useGoldFx';
 
 export interface CharacterRow {
@@ -191,6 +192,12 @@ export interface CharacterRow {
   scrap: number; // 🔩 ferraille : répare l’enceinte (migr. 0060) // journal d'énergie hors-sport horodaté (migr. 0057)
   adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
   caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
+  // ⚠️ Optionnel (et non `adv_gear: AdvGearState | null` requis comme demandé) : la
+  // colonne n'existe pas encore en base (migration Task 5, 0067) ; `COLS`/`.select()`
+  // ne la nomment pas encore, donc `data` n'a pas ce champ à la lecture — un champ
+  // requis casserait le typecheck de `fetchMine`/`setPseudo`/`persist`. Après
+  // `normalizeRow`, il est toujours renseigné (comme `adventurers`/`caravans`).
+  adv_gear?: AdvGearState | null; // équipement des aventuriers : stock + forge
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -236,6 +243,18 @@ export const useCharacterStore = defineStore('character', () => {
     // jamais (35 convois mesurés sur un compte réel, dont 30 dépensés). Un non-encaissé
     // n'est JAMAIS jeté — il porte une cargaison.
     r.caravans = pruneCaravans(arr<Caravan>(r.caravans));
+    // Équipement des aventuriers (`adv_gear`, colonne à venir) : jsonb malformé/absent →
+    // stock vide. Même politique que `adventurers`/`caravans` ci-dessus (jamais null après
+    // normalisation, malgré le type nullable qui reflète ce que la DB peut renvoyer).
+    r.adv_gear = {
+      stock: arr<AdvGear>(r.adv_gear?.stock),
+      forge:
+        r.adv_gear?.forge &&
+        typeof r.adv_gear.forge === 'object' &&
+        !Array.isArray(r.adv_gear.forge)
+          ? r.adv_gear.forge
+          : null,
+    };
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
     const fixItem = (it: Item): Item => {
       const rarity = normRank(it.rarity);
@@ -1497,6 +1516,7 @@ export const useCharacterStore = defineStore('character', () => {
       talents: normalizeTalents(cur.talents),
       kennelLevel: defenseLevel(baseOf(cur, now).defenses, 'kennel'),
       now,
+      advGear: cur.adv_gear?.stock ?? [],
       heroFamiliarId: cur.equipped[FAMILIAR_SLOT]?.id ?? null,
       heroTalentIds: normalizeTalents(cur.talents)
         .filter((t) => t.equipped === true)

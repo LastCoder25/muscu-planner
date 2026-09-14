@@ -533,6 +533,8 @@ const compCtx = computed<CompanionCtx>(() => ({
   kennelLevel: kennelLevel.value,
   // L’horloge du panneau : la fatigue d’un compagnon compte, et elle passe.
   now: now.value,
+  // 🗡️ Ce qu’ils portent (Task 5 pose la colonne : la lecture réelle marche déjà).
+  advGear: char.row?.adv_gear?.stock ?? [],
   heroFamiliarId: heroFamId.value,
 }));
 const pairedCount = computed(() => companionPairs(char.advList, compCtx.value).size);

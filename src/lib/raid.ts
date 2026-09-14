@@ -43,6 +43,7 @@ import {
   canAdvFamiliar,
 } from './caravan';
 import { type TalentInstance } from './talents';
+import { advGearEffects, wornGear, type AdvGear } from './advGear';
 import { beyondCap } from './buildings';
 import { advStats, advTitle, PROMO_LEVELS, type Adventurer } from './adventurers';
 import {
@@ -2187,17 +2188,21 @@ export function siegeXp(adv: Adventurer, report: RaidReport): number {
 export function companionPairs(
   advs: Adventurer[],
   ctx?: CompanionCtx,
-): Map<string, { familiar?: Item; talent?: TalentInstance }> {
-  const out = new Map<string, { familiar?: Item; talent?: TalentInstance }>();
+): Map<string, { familiar?: Item; talent?: TalentInstance; gear?: AdvGear[] }> {
+  const out = new Map<string, { familiar?: Item; talent?: TalentInstance; gear?: AdvGear[] }>();
   if (!ctx) return out;
   const fams = new Map(ctx.familiars.map((f) => [f.id, f]));
   const tals = new Map(ctx.talents.map((t) => [t.id, t]));
   const heroTal = new Set(ctx.heroTalentIds ?? []);
+  // 🗡️ Ce qu’ils portent, à côté de ce qu’ils confient — même moteur, même homme.
+  const worn = wornGear(advs, ctx.advGear);
   const prisF = new Set<string>();
   const prisT = new Set<string>();
   let places = companionSlots(ctx.kennelLevel);
   for (const a of advs) {
-    const entry: { familiar?: Item; talent?: TalentInstance } = {};
+    const entry: { familiar?: Item; talent?: TalentInstance; gear?: AdvGear[] } = {};
+    const g = worn.get(a.id);
+    if (g) entry.gear = g;
     const fid = a.familiarId;
     if (fid && fid !== ctx.heroFamiliarId && !prisF.has(fid) && places > 0) {
       const f = fams.get(fid);
@@ -2218,7 +2223,7 @@ export function companionPairs(
         entry.talent = t;
       }
     }
-    if (entry.familiar || entry.talent) out.set(a.id, entry);
+    if (entry.familiar || entry.talent || entry.gear) out.set(a.id, entry);
   }
   return out;
 }
@@ -2331,6 +2336,9 @@ export interface CompanionCtx {
    *  apport est réduit de moitié. Sans cette date rien ne la lirait — et le second
    *  levier de l’Infirmerie (`fatigueMsFor`) deviendrait décoratif. */
   now: number;
+  /** 🗡️ Le STOCK d’équipement des aventuriers. ⚠️ REQUIS : sans lui l’équipement porté
+   *  ne compterait nulle part, et l’écran annoncerait une puissance que le combat ignore. */
+  advGear: AdvGear[];
   heroFamiliarId?: string | null;
   heroTalentIds?: readonly string[];
 }
@@ -2356,7 +2364,7 @@ export interface CompanionCtx {
  *  ⚠️ UNE seule définition, lue par la bataille ET par la puissance affichée : deux
  *  copies finiraient par annoncer une valeur que le combat n’applique pas. */
 function pairEffects(
-  p: { familiar?: Item; talent?: TalentInstance } | undefined,
+  p: { familiar?: Item; talent?: TalentInstance; gear?: AdvGear[] } | undefined,
   ctx?: CompanionCtx,
 ): AggregatedEffects {
   return mergeEffects(
@@ -2369,6 +2377,9 @@ function pairEffects(
       p?.familiar && ctx && isFatigued(p.familiar, ctx.now) ? DAMAGED_EFFICIENCY : 1,
     ),
     advTalentEffects(p?.talent ? [p.talent] : []),
+    // 🗡️ Ce que SES pièces d’équipement apportent — même magnitude qu’un objet du héros
+    // (valeur × niveau d’objet), aucune stat nouvelle.
+    advGearEffects(p?.gear ?? []),
   );
 }
 
@@ -2432,9 +2443,15 @@ export function autoCompanions(
     (f) => f.id !== ctx.heroFamiliarId && canCompanion(f, ctx.kennelLevel),
   );
   const tals = ctx.talents.filter((t) => t.equipped !== true && !heroTal.has(t.id));
+  // 🗡️ L’équipement PORTÉ ne se confie pas ici (il vit sur `Adventurer.gear`) : on le
+  // garde tel quel dans chaque puissance comparée, sinon un aventurier bien équipé
+  // paraîtrait sans compagnon ni talent alors qu’il en a déjà un besoin moindre.
+  const worn = wornGear(advs, ctx.advGear);
   const power = (a: Adventurer, familiar?: Item, talent?: TalentInstance) =>
     // ⚠️ NON arrondie : sur un aventurier de bas niveau, l'arrondi efface le gain.
-    combatPowerRaw(escortCombatant([a], a.name, pairEffects({ familiar, talent }, ctx)));
+    combatPowerRaw(
+      escortCombatant([a], a.name, pairEffects({ familiar, talent, gear: worn.get(a.id) }, ctx)),
+    );
   const bare = new Map(advs.map((a) => [a.id, power(a)]));
 
   // Attribution par gain décroissant ; départage stable (ordre du vivier, puis de la réserve).
