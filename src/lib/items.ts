@@ -532,7 +532,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Initiative',
     emoji: '⚡',
     slots: ['weapon'],
-    desc: 'Ton 1er coup du combat est inesquivable et inflige le double.',
+    desc: 'Les coups de ton 1er tour sont inesquivables et infligent le double.',
     echo: ['crit_pct', 'damage_pct'],
   },
   {
@@ -548,7 +548,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Égide',
     emoji: '🛡️',
     slots: ['armor'],
-    desc: 'Annule entièrement la 1re attaque ennemie du combat.',
+    desc: 'La 1re attaque ennemie qui te touche perd 45 % de ses dégâts.',
     echo: ['dmg_reduction_pct'],
   },
   {
@@ -556,7 +556,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Rétorsion',
     emoji: '🔁',
     slots: ['armor'],
-    desc: 'Renvoie intégralement le 1er coup ennemi reçu.',
+    desc: 'Les 3 premiers coups que tu reçois retirent chacun 7 % des PV max de l’ennemi.',
     echo: ['thorns_pct'],
   },
   {
@@ -572,7 +572,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Œil du prédateur',
     emoji: '👁️',
     slots: ['accessory'],
-    desc: 'Ton 1er coup du combat est un critique garanti.',
+    desc: 'Les coups de tes 3 premiers tours sont des critiques garantis.',
     echo: ['crit_pct'],
   },
   {
@@ -580,7 +580,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Phénix',
     emoji: '🔥',
     slots: ['relic'],
-    desc: 'La 1re fois qu’un coup te tuerait, tu survis à 1 PV.',
+    desc: 'La 1re fois qu’un coup te tuerait, il perd la moitié de ses dégâts.',
     echo: ['max_pv_pct'],
   },
   {
@@ -601,7 +601,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Charge',
     emoji: '🐗',
     slots: ['weapon'],
-    desc: 'Tes 3 premiers coups du combat infligent +35 %.',
+    desc: 'Les coups de tes 3 premiers tours infligent +30 %.',
     echo: ['damage_pct'],
   },
   {
@@ -609,7 +609,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Cadence',
     emoji: '🌀',
     slots: ['weapon'],
-    desc: 'À partir de ton 5ᵉ coup porté, tes coups infligent +50 %.',
+    desc: 'À partir de ton 5ᵉ coup porté, tes coups infligent +18 %.',
     echo: ['momentum_pct'],
   },
   {
@@ -617,7 +617,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Soif',
     emoji: '🩸',
     slots: ['armor'],
-    desc: 'La 1re fois que tu passes sous 50 % PV, tu draines 12 % des PV max de l’ennemi.',
+    desc: 'La 1re fois que tu passes sous 50 % PV, tu retires 5 % des PV max de l’ennemi et récupères 15 % des tiens.',
     echo: ['lifesteal_pct'],
   },
   {
@@ -625,7 +625,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Riposte affûtée',
     emoji: '⚔️',
     slots: ['armor'],
-    desc: 'Après la 1re attaque ennemie encaissée, tes 2 coups suivants sont critiques.',
+    desc: 'Après la 1re attaque ennemie encaissée, tes 3 tours suivants sont entièrement critiques.',
     echo: ['crit_pct'],
   },
   {
@@ -633,7 +633,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Endurance',
     emoji: '🪨',
     slots: ['accessory'],
-    desc: 'Sous 50 % PV, tu réduis de 20 % supplémentaires les dégâts subis.',
+    desc: 'Sous 50 % PV, tu réduis de 35 % supplémentaires les dégâts subis.',
     echo: ['max_pv_pct', 'dmg_reduction_pct'],
   },
   {
@@ -641,7 +641,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Curée',
     emoji: '⚖️',
     slots: ['relic'],
-    desc: 'Quand l’ennemi passe sous 30 % PV, tu récupères 15 % de tes PV max (1× par combat).',
+    desc: 'Quand l’ennemi passe sous 30 % PV, tu récupères 22 % de tes PV max (1× par combat).',
     echo: ['execute_pct', 'lifesteal_pct'],
   },
 ];
@@ -1741,19 +1741,19 @@ export const SET_SIGNATURES: Record<string, SetSignature> = {
     id: 'sig_berserker',
     name: 'Carnage',
     emoji: '🪓',
-    desc: 'Plus l’ennemi saigne, plus tu frappes fort : jusqu’à +140 % de dégâts quand il est à terre.',
+    desc: 'Plus l’ennemi saigne, plus tu frappes fort : jusqu’à +300 % de dégâts quand il est à terre.',
   },
   gardien: {
     id: 'sig_gardien',
     name: 'Bastion',
     emoji: '🏰',
-    desc: 'Les 3 premières attaques ennemies qui te touchent sont réduites d’un tiers.',
+    desc: 'Les 3 premières attaques ennemies qui te touchent sont réduites d’un quart.',
   },
   assassin: {
     id: 'sig_assassin',
     name: 'Coup de grâce',
     emoji: '🗡️',
-    desc: 'Tes coups critiques infligent ×2,75 au lieu de ×2.',
+    desc: 'Tes coups critiques infligent ×3,35 au lieu de ×2.',
   },
   vampire: {
     id: 'sig_vampire',
@@ -1771,13 +1771,13 @@ export const SET_SIGNATURES: Record<string, SetSignature> = {
     id: 'sig_duelliste',
     name: 'Botte secrète',
     emoji: '🤺',
-    desc: 'Un coup porté sur 3 est un critique garanti, qui inflige ×2,5.',
+    desc: 'Un coup porté sur 3 est un critique garanti, qui inflige ×2,9.',
   },
   epineux: {
     id: 'sig_epineux',
     name: 'Ronces',
     emoji: '🥀',
-    desc: 'Chaque coup que tu reçois retire à l’ennemi 6 % de ses PV max.',
+    desc: 'Chaque coup que tu reçois retire à l’ennemi 9 % de ses PV max.',
   },
   frenetique: {
     id: 'sig_frenetique',
@@ -1865,6 +1865,12 @@ const VOIE_SET_DEFS: {
   emoji: string;
   theme: string;
   stats: [EffectType, EffectType, EffectType];
+  /** ⚠️ ÉCHELLE DES PALIERS (v0.837, mesuré) : ce qui rend les 8 sets ÉQUIVALENTS. Les mêmes
+   *  valeurs de base ne valent pas pareil en combat selon la stat (un palier de PV et de
+   *  réduction pesait bien plus qu'un palier d'exécution et de vol de vie) : un set complet
+   *  dans sa voie allait de +10 % (Berserker) à +41 % (Gardien) contre les meilleurs drops.
+   *  Calibrée avec la signature et son poids de puissance pour ~+24 % partout. */
+  tierScale: number;
   /** 🎨 v0.832 (demandé : « épines = vert ») — une teinte par set, lisible sur l’avatar,
    *  choisie hors du jaune voltage de l’interface. */
   color: string;
@@ -1875,6 +1881,7 @@ const VOIE_SET_DEFS: {
     emoji: '💥',
     theme: 'Dégâts bruts et exécution — le set qui frappe.',
     stats: ['damage_pct', 'execute_pct', 'lifesteal_pct'],
+    tierScale: 1.6,
     color: '#ff5a3c',
   },
   {
@@ -1883,6 +1890,7 @@ const VOIE_SET_DEFS: {
     emoji: '🛡️',
     theme: 'Le mur qui frappe : encaisse tout et tient.',
     stats: ['dmg_reduction_pct', 'max_pv_pct', 'damage_pct'],
+    tierScale: 0.6,
     color: '#4ea3ff',
   },
   {
@@ -1891,6 +1899,7 @@ const VOIE_SET_DEFS: {
     emoji: '🗡️',
     theme: 'Critiques qui achèvent, un vol de vie pour durer.',
     stats: ['crit_pct', 'execute_pct', 'lifesteal_pct'],
+    tierScale: 1,
     color: '#9b7bff',
   },
   {
@@ -1899,6 +1908,7 @@ const VOIE_SET_DEFS: {
     emoji: '🩸',
     theme: 'Vole la vie et se déchaîne au bord de la mort.',
     stats: ['lifesteal_pct', 'damage_pct', 'rage_pct'],
+    tierScale: 1.6,
     color: '#e0325f',
   },
   {
@@ -1907,6 +1917,7 @@ const VOIE_SET_DEFS: {
     emoji: '🪨',
     theme: 'Réservoir de PV qui cogne dans la durée.',
     stats: ['max_pv_pct', 'dmg_reduction_pct', 'damage_pct'],
+    tierScale: 0.7,
     color: '#b08d5b',
   },
   {
@@ -1915,6 +1926,7 @@ const VOIE_SET_DEFS: {
     emoji: '🎯',
     theme: 'Précision létale adossée à des PV.',
     stats: ['crit_pct', 'damage_pct', 'max_pv_pct'],
+    tierScale: 0.8,
     color: '#3fd0e0',
   },
   {
@@ -1923,6 +1935,7 @@ const VOIE_SET_DEFS: {
     emoji: '🌵',
     theme: 'Encaisse, renvoie les coups, frappe en retour.',
     stats: ['thorns_pct', 'max_pv_pct', 'damage_pct'],
+    tierScale: 0.8,
     color: '#5fcf4f',
   },
   {
@@ -1931,6 +1944,7 @@ const VOIE_SET_DEFS: {
     emoji: '🌀',
     theme: 'Monte en puissance au fil du combat.',
     stats: ['momentum_pct', 'damage_pct', 'lifesteal_pct'],
+    tierScale: 0.9,
     color: '#ff5cd8',
   },
 ];
@@ -1945,18 +1959,18 @@ export const VOIE_SETS: ItemSet[] = VOIE_SET_DEFS.map((d) => ({
     {
       pieces: 2,
       type: d.stats[2],
-      base: Math.max(1, round1((EFFECT_BASE[d.stats[2]] ?? 8) * 0.7)),
+      base: Math.max(1, round1((EFFECT_BASE[d.stats[2]] ?? 8) * 0.7 * d.tierScale)),
     },
     {
       pieces: 3,
       type: d.stats[1],
-      base: Math.max(1, round1((EFFECT_BASE[d.stats[1]] ?? 8) * 1.0)),
+      base: Math.max(1, round1((EFFECT_BASE[d.stats[1]] ?? 8) * 1.0 * d.tierScale)),
     },
     // 4-pièces = CAPSTONE (gaté par la voie) : la stat IDENTITÉ, amplifiée.
     {
       pieces: 4,
       type: d.stats[0],
-      base: Math.max(1, round1((EFFECT_BASE[d.stats[0]] ?? 8) * 1.6)),
+      base: Math.max(1, round1((EFFECT_BASE[d.stats[0]] ?? 8) * 1.6 * d.tierScale)),
     },
   ],
 }));

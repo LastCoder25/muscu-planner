@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   playerCombatant,
   combatPower,
+  combatPowerRaw,
+  COMBAT,
+  PROC_POWER,
   simulateCombat,
   simulateDungeon,
   mulberry32,
@@ -56,10 +59,38 @@ describe('épines (thorns)', () => {
     };
     expect(win(0.5)).toBeGreaterThanOrEqual(win(0));
   });
-  it('combatPower croît avec les épines', () => {
-    expect(combatPower({ ...base, thorns: 0.5 })).toBeGreaterThan(
-      combatPower({ ...base, thorns: 0 }),
+  it('la puissance (non arrondie) croît avec les épines', () => {
+    // ⚠️ Poids mesuré petit (v0.837) : l’arrondi de combatPower l’effaçait sur ce combattant.
+    expect(combatPowerRaw({ ...base, thorns: 0.5 })).toBeGreaterThan(
+      combatPowerRaw({ ...base, thorns: 0 }),
     );
+  });
+});
+
+describe('poids de puissance (v0.837, mesurés en vrai combat)', () => {
+  const h = { name: 'h', pv: 1000, damage: 100, crit: 0.2, dodge: 0.1, initiative: 1, strikes: 2 };
+  it('le vol de vie compte, mais plafonné : au-delà du plafond, rien de plus', () => {
+    const p = (lifesteal: number) => combatPowerRaw({ ...h, lifesteal });
+    expect(p(0.1)).toBeGreaterThan(p(0));
+    expect(p(COMBAT.powerLifestealCap)).toBeGreaterThan(p(0.1));
+    expect(p(0.9)).toBe(p(COMBAT.powerLifestealCap));
+  });
+  it('l’élan pèse son poids mesuré', () => {
+    const r = combatPowerRaw({ ...h, momentum: 0.02 }) / combatPowerRaw(h);
+    expect(r).toBeCloseTo(Math.sqrt(1 + 0.02 * COMBAT.powerMomentumW), 6);
+  });
+  it('chaque proc légendaire a un poids, et ils pèsent tous pareil (rééquilibrés à ~+8 %)', async () => {
+    const { LEGENDARY_PROCS } = await import('@/lib/items');
+    const w = LEGENDARY_PROCS.map((p) => PROC_POWER[p.id]?.weight);
+    expect(w.every((x) => (x ?? 0) > 0)).toBe(true);
+    expect(new Set(w).size).toBe(1);
+    const r = combatPowerRaw({ ...h, procs: new Set(['thirst']) }) / combatPowerRaw(h);
+    expect(r).toBeCloseTo(Math.sqrt(1 + PROC_POWER.thirst!.weight), 6);
+  });
+  it('deux procs du même côté s’additionnent sur leur facteur', () => {
+    const two = combatPowerRaw({ ...h, procs: new Set(['charge', 'cadence']) });
+    const w = PROC_POWER.charge!.weight + PROC_POWER.cadence!.weight;
+    expect(two / combatPowerRaw(h)).toBeCloseTo(Math.sqrt(1 + w), 6);
   });
 });
 
@@ -86,57 +117,66 @@ describe('procs légendaires (Phase 3)', () => {
     ...over,
   });
 
-  it('Égide annule la 1re attaque ennemie (dégât 0)', () => {
+  // ⚠️ Même combat, même graine, avec et sans le proc : aucun proc ne consomme de rng, donc
+  // les deux côtés tirent la même variance et on peut comparer les dégâts au point près.
+  const monHits = (procs: string[], m: ReturnType<typeof mon>, over = {}) =>
+    simulateCombat(pl(procs, over), m, { seed: 5, goldOnWin: 0 }).log.filter(
+      (e) => e.who === 'monster' && e.type !== 'dodge',
+    );
+
+  it('Égide : la 1re attaque ennemie qui touche perd 45 %, pas la 2e', () => {
     const m = mon({ initiative: 99 }); // le monstre frappe en premier
-    const firstMonDmg = (procs: string[]) =>
-      simulateCombat(pl(procs), m, { seed: 5, goldOnWin: 0 }).log.find(
-        (e) => e.who === 'monster' && e.type === 'hit',
-      )!.damage;
-    expect(firstMonDmg(['aegis'])).toBe(0);
-    expect(firstMonDmg([])).toBeGreaterThan(0);
+    const avec = monHits(['aegis'], m);
+    const sans = monHits([], m);
+    expect(avec[0]!.damage).toBe(Math.round(sans[0]!.damage * (1 - COMBAT.aegisBlock)));
+    expect(avec[0]!.damage).toBeGreaterThan(0); // amortie, plus annulée (v0.837)
+    expect(avec[1]!.damage).toBe(sans[1]!.damage);
   });
 
-  it('Rétorsion renvoie le 1er coup ennemi au monstre', () => {
+  it('Rétorsion : les 3 premiers coups reçus retirent chacun 7 % des PV max ennemis, pas le 4e', () => {
     const m = mon({ initiative: 99, pv: 5000 });
-    const monPvAtFirstHit = (procs: string[]) =>
-      simulateCombat(pl(procs, { damage: 1 }), m, { seed: 3, goldOnWin: 0 }).log.find(
-        (e) => e.who === 'monster' && e.type === 'hit',
-      )!.monsterPv;
-    expect(monPvAtFirstHit(['retort'])).toBeLessThan(monPvAtFirstHit([]));
+    const avec = monHits(['retort'], m, { damage: 1 });
+    const sans = monHits([], m, { damage: 1 });
+    const blessure = Math.round(5000 * COMBAT.retortMaxPvPct);
+    for (let k = 0; k < 5; k++)
+      expect(sans[k]!.monsterPv - avec[k]!.monsterPv, `coup ${k + 1}`).toBe(
+        blessure * Math.min(k + 1, COMBAT.retortHits),
+      );
   });
 
-  it('Phénix : survivre à un coup fatal change l’issue', () => {
-    const oneShot = mon({ pv: 30, damage: 1000, initiative: 1 });
-    let withP = 0;
-    let without = 0;
-    for (let s = 0; s < 30; s++) {
-      if (
-        simulateCombat(pl(['phoenix'], { pv: 50 }), oneShot, { seed: s * 7 + 1, goldOnWin: 0 }).win
-      )
-        withP++;
-      if (simulateCombat(pl([], { pv: 50 }), oneShot, { seed: s * 7 + 1, goldOnWin: 0 }).win)
-        without++;
-    }
-    expect(withP).toBeGreaterThan(without);
+  it('Phénix : le coup fatal perd la moitié de ses dégâts — un coup deux fois mortel tue quand même', () => {
+    const m = (damage: number) => mon({ initiative: 99, damage });
+    // ~80 de dégâts sur 50 PV : mortel sans le proc, ~40 une fois amorti.
+    expect(monHits([], m(80), { pv: 50 })[0]!.playerPv).toBe(0);
+    expect(monHits(['phoenix'], m(80), { pv: 50 })[0]!.playerPv).toBeGreaterThan(0);
+    // ⚠️ Plus de survie garantie à 1 PV (v0.837) : amorti, un coup de 1000 reste mortel.
+    expect(monHits(['phoenix'], m(1000), { pv: 50 })[0]!.playerPv).toBe(0);
   });
 
-  it('Initiative : 1er coup inesquivable (ignore une esquive à 100 %)', () => {
-    const dodgy = mon({ dodge: 1, damage: 5 });
-    const first = (procs: string[]) =>
-      simulateCombat(pl(procs), dodgy, { seed: 2, goldOnWin: 0 }).log.find(
-        (e) => e.who === 'player',
-      )!;
-    expect(first(['initiative']).type).not.toBe('dodge');
-    expect(first(['initiative']).damage).toBeGreaterThan(0);
-    expect(first([]).type).toBe('dodge'); // sans le proc, l'esquive garantie bloque
-  });
-
-  it('Œil du prédateur : 1er coup critique garanti', () => {
-    const m = mon({ damage: 0 });
-    const first = simulateCombat(pl(['predator_eye']), m, { seed: 4, goldOnWin: 0 }).log.find(
+  const playerLog = (procs: string[], m: ReturnType<typeof mon>, over = {}) =>
+    simulateCombat(pl(procs, over), m, { seed: 2, goldOnWin: 0 }).log.filter(
       (e) => e.who === 'player',
-    )!;
-    expect(first.type).toBe('crit');
+    );
+
+  it('Initiative : TOUS les coups du 1er tour sont inesquivables, pas ceux du 2e', () => {
+    // ⚠️ Un héros frappe plusieurs fois par tour (~17 au niveau 60) : un proc limité au
+    // 1er COUP ne durait qu’un instant, il vaut désormais pour le 1er TOUR (v0.837).
+    const dodgy = mon({ dodge: 1, damage: 5, pv: 1e6 });
+    const avec = playerLog(['initiative'], dodgy, { strikes: 3 });
+    const first = avec.filter((e) => e.round === avec[0]!.round);
+    expect(first).toHaveLength(3);
+    expect(first.map((e) => e.type)).not.toContain('dodge');
+    expect(avec.find((e) => e.round > avec[0]!.round)!.type).toBe('dodge');
+    expect(playerLog([], dodgy, { strikes: 3 })[0]!.type).toBe('dodge'); // sans le proc
+  });
+
+  it('Œil du prédateur : les coups des 3 premiers tours sont critiques, pas ceux du 4e', () => {
+    const avec = playerLog(['predator_eye'], mon({ damage: 0, pv: 1e6 }), { strikes: 2 });
+    const rounds = [...new Set(avec.map((e) => e.round))];
+    const ofTurn = (i: number) => avec.filter((e) => e.round === rounds[i]).map((e) => e.type);
+    for (let t = 0; t < COMBAT.predatorTurns; t++)
+      expect(ofTurn(t), `tour ${t + 1}`).toEqual(['crit', 'crit']);
+    expect(ofTurn(COMBAT.predatorTurns)).toEqual(['hit', 'hit']);
   });
 
   it('Vampirisme : les crits soignent', () => {
@@ -415,12 +455,17 @@ describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
       (e) => e.who === 'player' && (e.type === 'hit' || e.type === 'crit'),
     );
 
-  it('Charge : les 3 premiers coups frappent plus fort, pas les suivants', () => {
-    const avec = playerHits(['charge']);
-    const sans = playerHits([]);
+  it('Charge : les coups des 3 premiers tours frappent plus fort, pas ceux du 4e', () => {
+    // 2 frappes par tour : les coups 1 à 6 sont chargés, le 7e (4e tour) redevient normal.
+    const hits = (procs: string[]) =>
+      simulateCombat(pl(procs, { strikes: 2 }), mon(), { seed: 11, goldOnWin: 0 }).log.filter(
+        (e) => e.who === 'player' && (e.type === 'hit' || e.type === 'crit'),
+      );
+    const avec = hits(['charge']);
+    const sans = hits([]);
     expect(avec[0]!.damage).toBeGreaterThan(sans[0]!.damage);
-    expect(avec[2]!.damage).toBeGreaterThan(sans[2]!.damage);
-    expect(avec[3]!.damage).toBe(sans[3]!.damage); // le 4e est redevenu normal
+    expect(avec[5]!.damage).toBeGreaterThan(sans[5]!.damage); // 2e coup du 3e tour
+    expect(avec[6]!.damage).toBe(sans[6]!.damage); // 4e tour : redevenu normal
   });
 
   it('Cadence : rien au début, puis le gain s’installe — l’inverse de la Charge', () => {
@@ -430,13 +475,18 @@ describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
     expect(avec[5]!.damage).toBeGreaterThan(sans[5]!.damage); // l'élan, lui, paie
   });
 
-  it('Riposte affûtée : les 2 coups suivant la 1re attaque encaissée sont critiques', () => {
+  it('Riposte affûtée : les 3 tours suivant la 1re attaque encaissée sont entièrement critiques', () => {
     const m = mon({ initiative: 99 }); // le monstre ouvre
-    const avec = playerHits(['whetted'], m);
-    const sans = playerHits([], m);
-    expect(avec.slice(0, 2).every((e) => e.type === 'crit')).toBe(true);
-    expect(avec[2]!.type).toBe('hit'); // et ça s'arrête à 2
-    expect(sans.slice(0, 3).every((e) => e.type === 'hit')).toBe(true);
+    const hits = (procs: string[]) =>
+      simulateCombat(pl(procs, { strikes: 2 }), m, { seed: 11, goldOnWin: 0 }).log.filter(
+        (e) => e.who === 'player' && (e.type === 'hit' || e.type === 'crit'),
+      );
+    const avec = hits(['whetted']);
+    const sans = hits([]);
+    // 2 frappes par tour × 3 tours = 6 critiques, puis le 4e tour redevient normal.
+    expect(avec.slice(0, 6).every((e) => e.type === 'crit')).toBe(true);
+    expect(avec[6]!.type).toBe('hit');
+    expect(sans.slice(0, 7).every((e) => e.type === 'hit')).toBe(true);
   });
 
   it('Endurance : sous 50 % PV, on encaisse moins', () => {

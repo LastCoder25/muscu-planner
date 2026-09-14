@@ -1891,6 +1891,27 @@ describe('🎆 RARETÉ → INTENSITÉ D’ANIMATION', () => {
   });
 });
 
+describe('⚖️ ÉCHELLE DES PALIERS DE SET (v0.837) — ce qui rend les 8 sets équivalents', () => {
+  const tier = (voie: string, pieces: number) =>
+    SET_BY_ID[`voie:${voie}`]!.tiers.find((t) => t.pieces === pieces)!;
+  it('à stat égale, les paliers ne valent pas pareil d’un set à l’autre', () => {
+    // Berserker et Assassin portent tous deux l’exécution au 3-pièces : sans échelle, même
+    // valeur. Mesuré : un palier d’exécution ne pèse presque rien, celui du Berserker est grossi.
+    expect(tier('berserker', 3).type).toBe(tier('assassin', 3).type);
+    expect(tier('berserker', 3).base / tier('assassin', 3).base).toBeCloseTo(1.6, 1);
+    // Gardien et Colosse portent tous deux les dégâts au 2-pièces : le Gardien, dont les PV
+    // et la réduction pèsent lourd en combat, est le plus réduit.
+    expect(tier('gardien', 2).type).toBe(tier('colosse', 2).type);
+    expect(tier('gardien', 2).base).toBeLessThan(tier('colosse', 2).base);
+  });
+  it('l’échelle vaut pour les trois paliers, capstone compris', () => {
+    // Vampire (vol de vie au 4-pièces) grossi, Berserker (vol de vie au 2-pièces) aussi : les
+    // deux restent au-dessus d’Assassin, qui porte la même stat au 2-pièces sans échelle.
+    expect(tier('vampire', 4).type).toBe('lifesteal_pct');
+    expect(tier('berserker', 2).base).toBeGreaterThan(tier('assassin', 2).base);
+  });
+});
+
 describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 et 3 pièces', () => {
   // Meilleure de 4 pièces tirées AU NIVEAU du joueur — ce qu'il porte réellement.
   const piece = (setId: string, slot: Item['slot'], seed: number, level = 40): Item => {
@@ -1948,11 +1969,13 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
     // Le défaut signalé : 3 pièces Épineux, et l'optimiseur proposait une autre voie.
     // 288 cas (6 niveaux × 8 voies × 6 tirages, dont des pièces en retard de 15 niveaux).
     // Mesuré : sans affinité, la voie du set perdait 238 fois (Épineux 36/36) ; avec, 10 fois.
-    // ⚠️ EXCEPTIONS CONNUES, Assassin et Berserker : leurs paliers portent exécution et vol de
-    // vie, que la puissance valorise peu, et le critique est plafonné (cf. v0.803). Les pousser
-    // demanderait une affinité ×3 pour 2 échecs encore — hors de proportion.
+    // ⚠️ EXCEPTIONS CONNUES (v0.837, mesuré : 6 échecs sur 288, pertes ≤ 0,8 %) — Berserker :
+    // son palier doublé porte du vol de vie, que la puissance plafonne ; Colosse : sa voie a le
+    // MÊME passif que l'Épineux (PV) et son palier doublé est de la réduction, déjà près de son
+    // plafond. Assassin, exception jusqu'en v0.835, n'échoue plus depuis que son passif est de
+    // l'exécution (le critique était plafonné).
     const voies = VOIES.map((v) => v.id);
-    const known = new Set(['assassin', 'berserker']);
+    const known = new Set(['berserker', 'colosse']);
     let fails = 0;
     let n = 0;
     for (const L of [20, 30, 45, 60, 75, 90]) {

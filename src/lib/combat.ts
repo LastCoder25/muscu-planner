@@ -35,35 +35,42 @@ export interface Combatant {
   procs?: ReadonlySet<string>;
 }
 
-// Catégorisation des procs légendaires pour la pondération de `combatPower` (l'implémentation
-// combat vit dans simulateCombat). La méta (nom/emoji/slot) est dans items.ts.
-const LEG_OFFENSE: ReadonlySet<string> = new Set([
-  'initiative',
-  'executioner',
-  'predator_eye',
-  'vampiric',
-  'charge',
-  'cadence',
-  'whetted',
-]);
-// Signatures de set (v0.835) : même partage offense/survie, poids propre.
-const SIG_OFFENSE: ReadonlySet<string> = new Set([
-  'sig_berserker',
-  'sig_assassin',
-  'sig_duelliste',
-  'sig_epineux',
-  'sig_frenetique',
-]);
-const SIG_DEFENSE: ReadonlySet<string> = new Set(['sig_gardien', 'sig_colosse', 'sig_vampire']);
-const LEG_DEFENSE: ReadonlySet<string> = new Set([
-  'aegis',
-  'retort',
-  'phoenix',
-  'secondwind',
-  'thirst',
-  'endurance',
-  'quarry',
-]);
+// POIDS DE CHAQUE PROC dans `combatPower` (légendaires d'objets ET signatures de set).
+// ⚠️ MESURÉS EN VRAI COMBAT (v0.837) : proc ajouté seul à un build optimisé, boss de palier +
+// donjon le plus profond aux niveaux 30/60/90, gain en puissance ÉQUIVALENTE g → poids
+// (1 + g)² − 1 (la puissance est une racine). Avant, ils valaient tous 0,06 pour des gains de
+// −1 % (Initiative) à +35 % (Soif). Les 14 procs légendaires ont été RÉÉQUILIBRÉS à ~+8 %
+// chacun (cf. COMBAT) : ils pèsent donc tous 0,16. Le côté (offense/survie) ne sert qu'au
+// cumul de plusieurs procs.
+export const PROC_POWER: Record<string, { side: 'off' | 'surv'; weight: number }> = {
+  initiative: { side: 'off', weight: 0.16 },
+  executioner: { side: 'off', weight: 0.16 },
+  predator_eye: { side: 'off', weight: 0.16 },
+  vampiric: { side: 'off', weight: 0.16 },
+  charge: { side: 'off', weight: 0.16 },
+  cadence: { side: 'off', weight: 0.16 },
+  whetted: { side: 'off', weight: 0.16 },
+  aegis: { side: 'surv', weight: 0.16 },
+  retort: { side: 'surv', weight: 0.16 },
+  phoenix: { side: 'surv', weight: 0.16 },
+  secondwind: { side: 'surv', weight: 0.16 },
+  thirst: { side: 'surv', weight: 0.16 },
+  endurance: { side: 'surv', weight: 0.16 },
+  quarry: { side: 'surv', weight: 0.16 },
+  // ⚠️ SIGNATURES DE SET : leur poids n'est PAS la valeur de la signature seule, mais ce qui
+  // manque pour que la puissance affichée du SET COMPLET égale ce qu'il vaut en vrai combat
+  // (mesuré, v0.837). Les paliers d'un set ne pèsent pas pareil à l'écran et au combat selon
+  // leurs stats : ce poids rattrape l'écart, set par set. Sans lui, l'optimiseur préférerait
+  // un set qui brille à l'écran à un set qui gagne.
+  sig_berserker: { side: 'off', weight: 0.09 },
+  sig_gardien: { side: 'surv', weight: 0.27 },
+  sig_assassin: { side: 'off', weight: 0.55 },
+  sig_vampire: { side: 'surv', weight: 0.06 },
+  sig_colosse: { side: 'surv', weight: 0.23 },
+  sig_duelliste: { side: 'off', weight: 0.18 },
+  sig_epineux: { side: 'off', weight: 0.19 },
+  sig_frenetique: { side: 'off', weight: 0.08 },
+};
 
 // Coefficients d'équilibrage (ajustables en un endroit).
 // MODÈLE (2026‑08‑09) : chaque sport nourrit 1 offense + 1 survie → l'équilibré
@@ -105,42 +112,58 @@ export const COMBAT = {
   rageThreshold: 0.3, // « Rage » active si le joueur est sous 30 % PV
   momentumMaxStacks: 6, // « Déferlante » : cumul plafonné à 6 coups
   // Procs légendaires (non-scalants).
-  initiativeMult: 2, // Initiative : 1er coup ×2 (inesquivable)
+  // ⚠️ RÉÉQUILIBRÉS EN v0.837 (mesuré, choix de l'utilisateur) : chaque proc vaut ~+8 % de
+  // puissance ÉQUIVALENTE en vrai combat (proc seul sur un build optimisé, boss + donjon, niveaux
+  // 30/60/90). Avant : de −1 % (Initiative) à +35 % (Soif). Les procs « premiers coups » comptent
+  // désormais des TOURS : un héros frappe ~17 fois par tour au niveau 60, un compte de coups ne
+  // durait qu'un instant.
+  initiativeMult: 2, // Initiative : les coups du 1er tour ×2, inesquivables
+  initiativeTurns: 1,
+  predatorTurns: 3, // Œil du prédateur : les coups des 3 premiers tours sont critiques
+  aegisBlock: 0.45, // Égide : la 1re attaque ennemie qui touche perd 45 %
+  retortHits: 3, // Rétorsion : les 3 premiers coups ennemis reçus…
+  retortMaxPvPct: 0.07, // …retirent chacun 7 % des PV max de l'ennemi
+  phoenixBlock: 0.5, // Phénix : le coup qui t'aurait tué perd la moitié de ses dégâts
+  thirstHealPct: 0.15, // Soif : …et tu récupères 15 % de TES PV max
   vampiricHealPct: 0.5, // Vampirisme : soin = 50 % des dégâts d'un crit
   executeKillThreshold: 0.15, // Bourreau : exécute un ennemi sous 15 % PV
   secondWindThreshold: 0.3, // Second souffle : déclenche sous 30 % PV
   secondWindHealPct: 0.25, // Second souffle : soigne 25 % des PV max
   // Procs de SET (v0.701) — même famille : non-scalants, et AUCUN ne consomme de rng.
-  chargeHits: 3, // Charge : les 3 premiers coups portés…
-  chargeMult: 1.35, // …infligent +35 %
+  chargeTurns: 3, // Charge : les coups des 3 premiers tours…
+  chargeMult: 1.3, // …infligent +30 %
   cadenceFrom: 5, // Cadence : à partir du 5ᵉ coup porté…
-  cadenceMult: 1.5, // …+50 % de dégâts
-  thirstThreshold: 0.5, // Soif : déclenche en passant sous 50 % PV
-  thirstDrainPct: 0.12, // Soif : draine 12 % des PV max de l'ennemi (dégâts ET soin)
-  whettedHits: 2, // Riposte affûtée : 2 coups critiques garantis après le 1er coup encaissé
+  cadenceMult: 1.18, // …+18 % de dégâts
+  thirstThreshold: 0.5, // Soif : déclenche en passant sous 50 % PV…
+  thirstDrainPct: 0.05, // …retire 5 % des PV max de l'ennemi
+  whettedTurns: 3, // Riposte affûtée : 3 tours entièrement critiques après la 1re attaque encaissée
   enduranceThreshold: 0.5, // Endurance : active sous 50 % PV
-  enduranceReduction: 0.2, // Endurance : −20 % de dégâts subis en plus
+  enduranceReduction: 0.35, // Endurance : −35 % de dégâts subis en plus
   quarryThreshold: 0.3, // Curée : déclenche quand l'ennemi passe sous 30 % PV
-  quarryHealPct: 0.15, // Curée : soigne 15 % des PV max du joueur (1× par combat)
+  quarryHealPct: 0.22, // Curée : soigne 22 % des PV max du joueur (1× par combat)
   // SIGNATURES DE SET (v0.835) — le 4-pièces d'un set porté dans SA voie. Même famille que
   // les procs : non-scalantes, déterministes (aucune ne consomme de rng).
-  // ⚠️ CALIBRÉES PAR LA MESURE, voie par voie : chacune vaut ~+8 à +12 % de puissance
-  // ÉQUIVALENTE en combat de boss (niveaux 30/60/90, boss calé à 50 % de victoire sans
-  // elle). Les premières valeurs allaient de +1 % (Épineux) à +24 % (Colosse).
-  carnageMax: 1.4, // Berserker · Carnage : +dégâts ∝ PV manquants de l'ennemi, jusqu'à +140 %
+  // ⚠️ RECALIBRÉES EN v0.837 AVEC LES PALIERS ET LES POIDS DE PUISSANCE (cf. VOIE_SETS) : un
+  // set complet porté dans sa voie vaut ~+24 % contre les meilleurs drops, pour les 8 voies,
+  // en vrai combat (boss de palier + donjon le plus profond, niveaux 30/60/90).
+  carnageMax: 3, // Berserker · Carnage : +dégâts ∝ PV manquants de l'ennemi, jusqu'à +300 %
   bastionHits: 3, // Gardien · Bastion : les 3 premières attaques ennemies qui touchent…
-  bastionMult: 0.65, // …sont réduites d'un tiers
-  graceCritMult: 2.75, // Assassin · Coup de grâce : un critique inflige ×2,75 au lieu de ×2
+  bastionMult: 0.76, // …sont réduites d'un quart
+  graceCritMult: 3.35, // Assassin · Coup de grâce : un critique inflige ×3,35 au lieu de ×2
   eternalHealCapMult: 3.5, // Vampire · Soif éternelle : plafond de soin par tour ×3,5
   unshakenMaxHitPct: 0.4, // Colosse · Inébranlable : un coup retire au plus 40 % des PV max
   secretThrustEvery: 3, // Duelliste · Botte secrète : un coup porté sur 3 est critique…
-  secretThrustMult: 2.5, // …et ce critique-là inflige ×2,5
-  bramblesMaxPvPct: 0.06, // Épineux · Ronces : chaque coup reçu retire 6 % des PV max ennemis
+  secretThrustMult: 2.9, // …et ce critique-là inflige ×2,9
+  bramblesMaxPvPct: 0.09, // Épineux · Ronces : chaque coup reçu retire 9 % des PV max ennemis
   tranceMaxStacks: 8, // Frénétique · Transe : l'élan se cumule jusqu'à 8 coups au lieu de 6
-  // Ce que vaut une signature dans `combatPower` : ×1,2 sur UN des deux facteurs, soit ~+9,5 %
-  // de puissance — le gain mesuré en combat. Sans ce poids l'optimiseur ne verrait rien.
-  setSignaturePowerWeight: 0.2,
-  legendaryPowerWeight: 0.06, // pondération d'un proc dans combatPower (offense/survie)
+  // ⚠️ POIDS DES STATS DANS `combatPower` (v0.837, mesurés en vrai combat) : la puissance
+  // comptait le vol de vie PLEIN et ignorait son plafond de soin par tour, sur-valorisait
+  // l'élan et les épines. L'optimiseur montait donc des stats qui brillaient à l'écran sans
+  // gagner. Vol de vie : ×0,43 et plafonné à 0,3 (au-delà, le plafond de soin mange tout).
+  powerLifestealW: 0.43,
+  powerLifestealCap: 0.3,
+  powerThornsW: 0.04,
+  powerMomentumW: 4.5,
 };
 
 /** Construit le combattant du joueur à partir de ses 3 stats et de son NIVEAU. */
@@ -185,17 +208,14 @@ export function playerCombatant(
  */
 export function offenseOf(c: Combatant): number {
   const sig =
-    1 +
-    0.12 * (c.execute ?? 0) +
-    0.1 * (c.rage ?? 0) +
-    (c.momentum ?? 0) * (COMBAT.momentumMaxStacks * 0.25);
+    1 + 0.12 * (c.execute ?? 0) + 0.1 * (c.rage ?? 0) + (c.momentum ?? 0) * COMBAT.powerMomentumW;
   return (
     c.damage *
     (c.strikes ?? 1) *
     (1 + c.crit) *
-    (1 + (c.lifesteal ?? 0)) *
+    (1 + COMBAT.powerLifestealW * Math.min(COMBAT.powerLifestealCap, c.lifesteal ?? 0)) *
     sig *
-    (1 + 0.25 * (c.thorns ?? 0)) // épines = offense conditionnelle (si frappé)
+    (1 + COMBAT.powerThornsW * (c.thorns ?? 0)) // épines = offense conditionnelle (si frappé)
   );
 }
 
@@ -228,10 +248,9 @@ export function combatPowerRaw(c: Combatant): number {
   let procSurv = 1;
   if (c.procs)
     for (const p of c.procs) {
-      if (LEG_OFFENSE.has(p)) procOff += COMBAT.legendaryPowerWeight;
-      else if (LEG_DEFENSE.has(p)) procSurv += COMBAT.legendaryPowerWeight;
-      else if (SIG_OFFENSE.has(p)) procOff += COMBAT.setSignaturePowerWeight;
-      else if (SIG_DEFENSE.has(p)) procSurv += COMBAT.setSignaturePowerWeight;
+      const w = PROC_POWER[p];
+      if (w?.side === 'off') procOff += w.weight;
+      else if (w) procSurv += w.weight;
     }
   // offense×survie croît ≈ niveau⁴ → chiffres énormes (dizaines de milliers dès le
   // début). On prend la RACINE : indice toujours monotone/comparable mais à échelle
@@ -288,7 +307,7 @@ export function simulateCombat(
 
   // Procs légendaires du JOUEUR (non-scalants, one-shot par combat).
   const has = (p: string): boolean => player.procs?.has(p) ?? false;
-  let pFirstStrike = true; // tout 1er coup PORTÉ par le joueur (Initiative / Œil)
+  let pTurn = 0; // tours du JOUEUR entamés (Initiative / Œil / Charge / Riposte)
   let mFirstLanded = true; // 1re attaque ennemie qui TOUCHE le joueur (Égide / Rétorsion)
   let phoenixReady = has('phoenix');
   let secondWindReady = has('secondwind');
@@ -297,7 +316,9 @@ export function simulateCombat(
   let thirstReady = has('thirst'); // Soif : draine une fois, au passage sous 50 % PV
   let quarryReady = has('quarry'); // Curée : soigne une fois, quand l'ennemi passe sous 30 %
   let pHits = 0; // coups PORTÉS par le joueur (Charge, Cadence)
-  let whettedLeft = 0; // crits garantis restants (Riposte affûtée)
+  let whettedLeft = 0; // tours entièrement critiques restants (Riposte affûtée)
+  let whettedNow = false;
+  let retortLeft = has('retort') ? COMBAT.retortHits : 0;
   let bastionLeft = has('sig_gardien') ? COMBAT.bastionHits : 0; // Bastion : coups amortis restants
   const momentumCap = has('sig_frenetique') ? COMBAT.tranceMaxStacks : COMBAT.momentumMaxStacks;
   const critMult = has('sig_assassin') ? COMBAT.graceCritMult : 2;
@@ -314,6 +335,12 @@ export function simulateCombat(
     const atk = turn === 'player' ? player : monster;
     const def = turn === 'player' ? monster : player;
     const hits = Math.max(1, strikeCount(atk));
+    if (turn === 'player') {
+      pTurn++;
+      whettedNow = whettedLeft > 0;
+      if (whettedNow) whettedLeft--;
+    }
+    const opening = turn === 'player' && has('initiative') && pTurn <= COMBAT.initiativeTurns;
     // Soin de vol de vie de CE tour, plafonné à une fraction des PV max de l'attaquant
     // (empêche le multi-frappe de rendre le sustain infini — cf. COMBAT.lifestealRoundCap).
     let roundHeal = 0;
@@ -330,28 +357,23 @@ export function simulateCombat(
     for (let h = 0; h < hits && pPv > 0 && mPv > 0; h++) {
       if (turn === 'player') {
         // ── Attaque du JOUEUR ──
-        const first = pFirstStrike;
-        const unavoidable = first && has('initiative'); // Initiative : 1er coup inesquivable
-        if (!unavoidable && rng() < def.dodge) {
+        if (!opening && rng() < def.dodge) {
           log.push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
           continue;
         }
         let crit = rng() < atk.crit;
-        if (first && has('predator_eye')) crit = true; // Œil : 1er coup crit garanti
-        // Riposte affûtée : les coups qui suivent la 1re attaque encaissée sont critiques.
-        if (whettedLeft > 0) {
-          crit = true;
-          whettedLeft--;
-        }
+        if (has('predator_eye') && pTurn <= COMBAT.predatorTurns) crit = true; // Œil
+        // Riposte affûtée : le tour qui suit la 1re attaque encaissée est entièrement critique.
+        if (whettedNow) crit = true;
         // Botte secrète : un coup porté sur N est un critique appuyé, sans jet.
         const thrust = has('sig_duelliste') && (pHits + 1) % COMBAT.secretThrustEvery === 0;
         if (thrust) crit = true;
         const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
         const cm = thrust ? Math.max(critMult, COMBAT.secretThrustMult) : critMult;
         let dmg = Math.max(1, Math.round(atk.damage * (crit ? cm : 1) * variance));
-        if (first && has('initiative')) dmg = Math.round(dmg * COMBAT.initiativeMult);
-        // Charge : ouverture brutale, sur les tout premiers coups.
-        if (has('charge') && pHits < COMBAT.chargeHits) dmg = Math.round(dmg * COMBAT.chargeMult);
+        if (opening) dmg = Math.round(dmg * COMBAT.initiativeMult);
+        // Charge : ouverture brutale, sur le(s) premier(s) tour(s).
+        if (has('charge') && pTurn <= COMBAT.chargeTurns) dmg = Math.round(dmg * COMBAT.chargeMult);
         // Cadence : récompense au contraire la DURÉE — l'élan, pas l'ouverture.
         if (has('cadence') && pHits >= COMBAT.cadenceFrom - 1)
           dmg = Math.round(dmg * COMBAT.cadenceMult);
@@ -380,7 +402,6 @@ export function simulateCombat(
           quarryReady = false;
         }
         pHits++;
-        pFirstStrike = false;
         log.push({
           round,
           who: turn,
@@ -412,23 +433,28 @@ export function simulateCombat(
         if (has('sig_colosse'))
           dmg = Math.min(dmg, Math.max(1, Math.round(maxPPv * COMBAT.unshakenMaxHitPct)));
         const firstEnemy = mFirstLanded;
-        // Rétorsion : renvoie le 1er coup ennemi (avant l'annulation par l'Égide).
-        if (firstEnemy && has('retort') && dmg > 0) mPv = Math.max(0, mPv - dmg);
-        // Égide : annule la 1re attaque ennemie.
-        if (firstEnemy && has('aegis')) dmg = 0;
-        if (firstEnemy && has('whetted')) whettedLeft = COMBAT.whettedHits;
+        // Rétorsion : les premiers coups ennemis reçus blessent l'ennemi d'une part de SES PV max.
+        if (retortLeft > 0 && dmg > 0) {
+          mPv = Math.max(0, mPv - Math.round(monsterMaxPv * COMBAT.retortMaxPvPct));
+          retortLeft--;
+        }
+        // Égide : amortit la 1re attaque ennemie.
+        if (firstEnemy && has('aegis')) dmg = Math.round(dmg * (1 - COMBAT.aegisBlock));
+        if (firstEnemy && has('whetted')) whettedLeft = COMBAT.whettedTurns;
         mFirstLanded = false;
+        const pBefore = pPv;
         pPv = Math.max(0, pPv - dmg);
-        // Soif : au passage sous 50 % PV, on arrache à l'ennemi de quoi tenir.
+        // Soif : au passage sous 50 % PV, on blesse l'ennemi et on se remet d'aplomb.
         if (thirstReady && pPv > 0 && pPv / maxPPv < COMBAT.thirstThreshold) {
           const drain = Math.max(1, Math.round(monsterMaxPv * COMBAT.thirstDrainPct));
           mPv = Math.max(0, mPv - drain);
-          pPv = Math.min(maxPPv, pPv + drain);
+          pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * COMBAT.thirstHealPct));
           thirstReady = false;
         }
-        // Phénix : survivre à 1 PV une fois.
+        // Phénix : amortit le coup fatal, une fois.
         if (pPv <= 0 && phoenixReady) {
-          pPv = 1;
+          // Le coup fatal est amorti : s'il reste mortel, on tombe quand même.
+          pPv = Math.max(0, pBefore - Math.round(dmg * (1 - COMBAT.phoenixBlock)));
           phoenixReady = false;
         } else if (pPv > 0 && secondWindReady && pPv / maxPPv < COMBAT.secondWindThreshold) {
           // Second souffle : sous 30 % PV pour la 1re fois → soin.

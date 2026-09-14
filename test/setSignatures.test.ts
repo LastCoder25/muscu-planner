@@ -16,7 +16,7 @@ import {
   type Equipped,
   type Item,
 } from '@/lib/items';
-import { COMBAT, combatPowerRaw, simulateCombat, type Combatant } from '@/lib/combat';
+import { COMBAT, PROC_POWER, combatPowerRaw, simulateCombat, type Combatant } from '@/lib/combat';
 
 const piece = (slot: string, setId: string): Item =>
   ({
@@ -86,16 +86,18 @@ describe('⭐ quand une signature s’active', () => {
     const procIds = new Set(LEGENDARY_PROCS.map((p) => p.id));
     for (const id of ids) expect(procIds.has(id!)).toBe(false);
   });
-  it('la puissance affichée la compte (sinon l’optimiseur ne la verrait pas)', () => {
-    for (const v of Object.keys(SET_SIGNATURES)) {
+  it('la puissance affichée la compte, avec SON poids (sinon l’optimiseur ne la verrait pas)', () => {
+    for (const [v, sig] of Object.entries(SET_SIGNATURES)) {
+      const w = PROC_POWER[sig.id];
+      expect(w?.weight, v).toBeGreaterThan(0);
       const r = combatPowerRaw(withSig(v, hero())) / combatPowerRaw(hero());
-      expect(r, v).toBeCloseTo(Math.sqrt(1 + COMBAT.setSignaturePowerWeight), 6);
+      expect(r, v).toBeCloseTo(Math.sqrt(1 + w!.weight), 6);
     }
   });
 });
 
 describe('⭐ chaque signature fait ce qu’elle annonce', () => {
-  it('Coup de grâce : un critique inflige ×2,75 au lieu de ×2', () => {
+  it('Coup de grâce : un critique inflige plus que ×2', () => {
     const p = hero({ crit: 1 });
     const a = playerHits(p, foe())[0]!.damage;
     const b = playerHits(withSig('assassin', p), foe())[0]!.damage;
@@ -150,7 +152,7 @@ describe('⭐ chaque signature fait ce qu’elle annonce', () => {
     expect(heal(p)).toBeLessThanOrEqual(base);
     expect(heal(withSig('vampire', p))).toBeGreaterThan(base);
   });
-  it('Ronces : chaque coup reçu retire 6 % des PV max de l’ennemi', () => {
+  it('Ronces : chaque coup reçu retire une part fixe des PV max de l’ennemi', () => {
     const m = foe({ pv: 100_000 });
     const p = hero({ damage: 1 });
     const log = fight(withSig('epineux', p), m).log;
