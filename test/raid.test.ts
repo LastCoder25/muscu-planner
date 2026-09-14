@@ -10,6 +10,7 @@ import {
   scoutReport,
   baseCombatant,
   groupCombatant,
+  earlyThreatMult,
   resolveRaid,
   guardUnits,
   adventurerPowers,
@@ -329,12 +330,24 @@ describe('calibration du siège', () => {
     // des sièges, donc les pierres gagnaient seules et le vivier ne pesait rien. Avec les
     // engins de siège, une enceinte seule tient **35 à 48 %** (mesuré aux niveaux 12 à 100)
     // — c'est le HÉROS et la GARNISON qui transforment ça en victoire probable.
-    for (const L of [15, 20, 26, 40, 60, 90]) {
+    // ⚠️ RE-CADRÉ (v0.829), pas relâché : entre les niveaux 6 et 26 l'armée est RENFORCÉE à
+    // la demande de l'utilisateur (« durcir un peu avant le niveau 16 »). Le héros seul y
+    // tient 30-50 % — c'est voulu, c'est le VIVIER qui doit faire gagner (dernier test).
+    for (const L of [26, 40, 60, 90]) {
       expect(holdRate(L, L, true), `niveau ${L}, défenses à niveau + héros`).toBeGreaterThan(50);
       expect(holdRate(L, L, true), `niveau ${L}, le héros compte`).toBeGreaterThan(
         holdRate(L, L, false),
       );
       expect(holdRate(L, L - 5, false), `niveau ${L}, défenses en retard`).toBeLessThan(
+        holdRate(L, L, false),
+      );
+    }
+    for (const L of [15, 20]) {
+      expect(
+        holdRate(L, L, true, 200, rosterOf(L)),
+        `niveau ${L}, défenses + héros + vivier`,
+      ).toBeGreaterThan(75);
+      expect(holdRate(L, L, true), `niveau ${L}, le héros compte`).toBeGreaterThan(
         holdRate(L, L, false),
       );
       // ⚠️ On ne teste PLUS un scénario « sur-investi » (défenses au-dessus du niveau du
@@ -1850,6 +1863,45 @@ describe('🔩 l’acier d’une armée en déroute (v0.702)', () => {
 });
 
 // ── Le DÉCLENCHEUR : une enceinte doit être PRÊTE, pas seulement exister ──────────
+describe('📈 RENFORT DE L’ARMÉE ENTRE LES NIVEAUX 6 ET 26 (v0.829)', () => {
+  it('rien jusqu’au niveau 5 (apprentissage) ni à partir de 26 (fin de partie calibrée)', () => {
+    for (const L of [1, 2, 3, 4, 5, 26, 30, 60, 100]) expect(earlyThreatMult(L)).toBe(1);
+  });
+  it('monte au niveau 6, plein de 7 à 16, redescend jusqu’à 26', () => {
+    const t = RAID.earlyThreat;
+    expect(earlyThreatMult(6)).toBeGreaterThan(1);
+    expect(earlyThreatMult(6)).toBeLessThan(1 + t.peak);
+    for (let L = 7; L <= 16; L++) expect(earlyThreatMult(L)).toBeCloseTo(1 + t.peak, 10);
+    for (let L = 17; L < 26; L++) {
+      expect(earlyThreatMult(L)).toBeLessThan(earlyThreatMult(L - 1));
+      expect(earlyThreatMult(L)).toBeGreaterThan(1);
+    }
+  });
+  it('figé AU TIRAGE sur chaque groupe, champion compris, et une armée d’avant vaut 1', () => {
+    const raid = rollRaid(77, 12, 0, 0);
+    for (const g of raid.groups) expect(g.threat).toBeCloseTo(earlyThreatMult(12), 10);
+    const g = raid.groups[0]!;
+    const sans = groupCombatant({ ...g, threat: undefined });
+    const avec = groupCombatant(g);
+    expect(avec.pv / sans.pv).toBeCloseTo(earlyThreatMult(12), 1);
+    expect(avec.damage).toBeGreaterThan(sans.damage);
+  });
+  it('⚠️ LE DÉFAUT SIGNALÉ : avec 2 aventuriers, un siège des niveaux 8-16 n’est plus gagné d’avance', () => {
+    // Mesuré avant : 99 / 95 / 91 / 86 % aux niveaux 8 / 10 / 12 / 16 ; après : 60 / 53 / 54 / 57.
+    for (const L of [8, 10, 12, 16]) {
+      expect(holdRate(L, L, true, 200, rosterOf(L).slice(0, 2)), `niveau ${L}`).toBeLessThan(80);
+    }
+  });
+  it('…mais ce n’est pas un mur : le vivier complet y tient encore le plus souvent', () => {
+    for (const L of [8, 10, 12, 16]) {
+      expect(holdRate(L, L, true, 200, rosterOf(L)), `niveau ${L}`).toBeGreaterThan(80);
+    }
+  });
+  it('l’apprentissage tient : au niveau 5, l’enceinte et le héros gagnent presque toujours', () => {
+    expect(holdRate(5, 5, true, 200)).toBeGreaterThan(85);
+  });
+});
+
 describe('seuil de déclenchement des sièges', () => {
   const ready = (b: BaseState, L: number) => raidsEnabled(b, 4, L);
   const withDefs = (wall: number, turret: number): BaseState => {

@@ -75,6 +75,9 @@ export interface RaidGroup {
    *  (cf. `RAID.massMult`). Ses assaillants sont d’autant plus faibles et leurs corps
    *  d’autant moins riches. **1 pour le champion**, qui n’est pas gonflé. */
   massMult?: number;
+  /** Renfort de l’armée (PV et dégâts) figé au tirage — cf. `earlyThreatMult`. Absent sur
+   *  les armées tirées avant la v0.829 → 1. */
+  threat?: number;
 }
 
 export interface Raid {
@@ -445,6 +448,14 @@ export const RAID = {
    *  et 95/92/100/96 à ×2 (le plafond revenait). Appliqué au siège seul : la calibration
    *  MESURÉE des embuscades de convoi n’est pas touchée. */
   guardSiegeK: 1.25,
+  /** 📈 RENFORT DE L’ARMÉE ENTRE LES NIVEAUX 6 ET 26 (v0.829, mesuré ; demandé par
+   *  l’utilisateur : « durcir un peu la défense avant le niveau 16, l’apprentissage jusqu’au
+   *  niveau 5 max »). Multiplie PV ET dégâts de l’armée : 1 jusqu’au niveau `learnUntil`,
+   *  montée jusqu’à `1 + peak` au niveau `fullFrom`, plein jusqu’à `holdUntil`, retour
+   *  linéaire à 1 au niveau `fadeUntil` — la fin de partie, déjà calibrée, n’est pas touchée.
+   *  ⚠️ Pourquoi l’ARMÉE et pas les aventuriers : mesuré, diviser par 2 leur bonus de siège
+   *  laissait un vivier complet à 95-100 % — seule une armée plus forte le fait bouger. */
+  earlyThreat: { learnUntil: 5, fullFrom: 7, holdUntil: 16, fadeUntil: 26, peak: 0.35 },
   championPvMult: 3, // le champion est une élite, pas un soldat de plus
   championDmgMult: 2.2,
   // Les dégâts d'un groupe croissent en √effectif, pas linéairement : seuls quelques
@@ -839,6 +850,9 @@ export function rollRaid(
   const total = raidSize(L, faction);
   const unitMult = FACTION_PROFILE[faction].unitMult;
   const span = levelSpanFor(L);
+  // ⚠️ Figé AU TIRAGE, sur le niveau du JOUEUR (les groupes sont plus hauts que lui) : une
+  // armée en marche garde la force annoncée, et la Tour de guet l’estime telle quelle.
+  const threat = earlyThreatMult(L);
 
   // Niveaux de troupe : biaisés bas, triés croissant.
   const levels: number[] = [];
@@ -872,6 +886,7 @@ export function rollRaid(
       level: levels[i]!,
       unitMult,
       massMult,
+      threat,
     });
   }
   const champSkin = roster[roster.length - 1]!;
@@ -887,6 +902,7 @@ export function rollRaid(
     // ni celle de la MASSE — il est seul, il n'a pas été gonflé.
     unitMult: 1,
     massMult: 1,
+    threat,
   });
 
   return {
@@ -1044,16 +1060,27 @@ function silhouetteDmgMult(unitMult: number): number {
   return Math.pow(Math.max(1e-6, unitMult), 1 - RAID.groupDmgExp);
 }
 
+/** Renfort de l’armée pour un joueur de ce niveau (cf. `RAID.earlyThreat`). Pur. */
+export function earlyThreatMult(playerLevel: number): number {
+  const t = RAID.earlyThreat;
+  const L = playerLevel;
+  if (L <= t.learnUntil || L >= t.fadeUntil) return 1;
+  if (L < t.fullFrom) return 1 + (t.peak * (L - t.learnUntil)) / (t.fullFrom - t.learnUntil);
+  if (L <= t.holdUntil) return 1 + t.peak;
+  return 1 + (t.peak * (t.fadeUntil - L)) / (t.fadeUntil - t.holdUntil);
+}
+
 export function groupCombatant(g: RaidGroup): Combatant {
   const ref = refFighter(Math.max(1, g.level));
   const um = g.unitMult ?? 1; // silhouette de la faction (horde fragile ↔ bande aguerrie)
+  const th = g.threat ?? 1; // renfort figé au tirage (1 pour les armées d’avant)
   const champPv = g.champion ? RAID.championPvMult : 1;
   const champDmg = g.champion ? RAID.championDmgMult : 1;
-  const unitPv = offensePerRound(ref) * RAID.foePvK * champPv * um;
+  const unitPv = offensePerRound(ref) * RAID.foePvK * champPv * um * th;
   // ⚠️ Même part de tir que dans `siegeAttackers` : l’estimation de la Tour de guet et la
   // bataille doivent parler de la même armée.
   const tir = groupKind(g) === 'ranged' ? RAID.foeRangedDmgK : 1;
-  const unitDmg = ref.pv * RAID.foeDmgK * tir * champDmg * silhouetteDmgMult(um);
+  const unitDmg = ref.pv * RAID.foeDmgK * tir * champDmg * silhouetteDmgMult(um) * th;
   // ⚠️ EFFECTIF DE CALIBRATION : la foule visible est ramenée au nombre sur lequel la
   // difficulté a été mesurée. Les PV suivent l’effectif, les dégâts sa RACINE — la
   // dilution doit donc emprunter le MÊME chemin, sans quoi une armée plus nombreuse
@@ -1999,7 +2026,8 @@ export function siegeAttackers(raid: Raid): SiegeUnit[] {
     const mm = g.massMult ?? 1;
     const champPv = g.champion ? RAID.championPvMult : 1;
     const champDmg = g.champion ? RAID.championDmgMult : 1;
-    const unitPv = (offensePerRound(ref) * RAID.foePvK * champPv * um) / mm;
+    const th = g.threat ?? 1;
+    const unitPv = (offensePerRound(ref) * RAID.foePvK * champPv * um * th) / mm;
     const eff = g.count / mm;
     const tir = groupKind(g) === 'ranged' ? RAID.foeRangedDmgK : 1;
     const groupDmg =
@@ -2008,6 +2036,7 @@ export function siegeAttackers(raid: Raid): SiegeUnit[] {
       tir *
       champDmg *
       silhouetteDmgMult(um) *
+      th *
       Math.pow(eff, RAID.groupDmgExp);
     const perBody = groupDmg / Math.max(1, g.count);
     for (let i = 0; i < g.count; i++) {
