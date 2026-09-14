@@ -17,6 +17,10 @@ export function useBalanceInput() {
   const combo = useComboStore();
   const challenges = useChallengesStore();
   const profileStore = useProfileStore();
+  // ⚠️ UN SEUL « aujourd'hui » pour tout l'écran, pris UNE fois : le jour d'entraînement
+  // (bascule à 4 h). Une page qui mêlait ce jour et la date locale (bascule à minuit) avait
+  // entre 0 h et 4 h le lundi deux blocs « cette semaine » sur deux semaines différentes.
+  const today = logicalToday();
 
   const input = computed<Omit<BalanceInput, 'targets'>>(() => {
     const map = library.secondaries;
@@ -26,7 +30,7 @@ export function useBalanceInput() {
       challenges: challenges.list,
       objective: profileStore.profile?.objective,
       secondaries: (id) => map.get(id),
-      today: logicalToday(),
+      today,
     };
   });
 
@@ -35,5 +39,5 @@ export function useBalanceInput() {
     return Promise.all([library.fetchSecondaries(), logsStore.fetchAll()]);
   }
 
-  return { input, ensureLoaded };
+  return { input, ensureLoaded, today };
 }

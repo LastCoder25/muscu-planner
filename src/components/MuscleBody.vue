@@ -48,7 +48,7 @@
           text-anchor="middle"
           dominant-baseline="middle"
         >
-          {{ series[n.m] ?? 0 }}
+          {{ fmtSets(series[n.m] ?? 0) }}
         </text>
       </g>
       <g v-else>
@@ -73,13 +73,13 @@
           text-anchor="middle"
           dominant-baseline="middle"
         >
-          {{ series[n.m] ?? 0 }}
+          {{ fmtSets(series[n.m] ?? 0) }}
         </text>
       </g>
     </svg>
 
     <div v-if="selected" class="mbody-pick" :style="{ color: color(selected) }">
-      {{ label(selected) }} — <b>{{ series[selected] ?? 0 }}</b> série{{
+      {{ label(selected) }} — <b>{{ fmtSets(series[selected] ?? 0) }}</b> série{{
         (series[selected] ?? 0) > 1 ? 's' : ''
       }}
     </div>
@@ -89,7 +89,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { muscleColor } from '@/lib/volume';
+import { fmtSets, muscleColor } from '@/lib/volume';
 
 const props = defineProps<{ series: Record<string, number> }>();
 const view = ref<'front' | 'back'>('front');

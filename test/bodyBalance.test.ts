@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   bodyBalance,
   creditSets,
+  doneSetsByWeek,
+  doneVolume,
   weekMuscleSeries,
   type BalanceInput,
   type BalancePeriod,
@@ -404,5 +406,148 @@ describe('weekMuscleSeries — les 3 courbes de la semaine', () => {
     expect(s.challenges).toEqual({ dos: 21, biceps: 10.5 });
     expect(s.combo).toEqual({});
     expect(s.real).toEqual({});
+  });
+});
+
+describe('doneVolume — une page, un compte de séries', () => {
+  const NEXT_MONDAY = '2026-09-21';
+  const mixed = () =>
+    input({
+      sessions: [session('2026-09-15', [{ id: 'bench', muscle: 'pectoraux', sets: 4 }])],
+      combos: [
+        combo([
+          // 360 en mode reps : deux entrées de 25 reps = 5 séries (fourchette 8-12), PAS 2.
+          leg({
+            exercise_id: 'row',
+            muscle_primary: 'dos',
+            count_mode: 'reps',
+            sets: [
+              { date: '2026-09-15', reps: 25 },
+              { date: '2026-09-16', reps: 25 },
+            ],
+          }),
+          // gainage au temps : des secondes, jamais des « reps »
+          leg({
+            exercise_id: 'plank',
+            muscle_primary: 'abdominaux',
+            count_mode: 'time',
+            sets: [{ date: '2026-09-16', reps: 90 }],
+          }),
+        ]),
+      ],
+      challenges: [
+        challenge({
+          exercise_id: 'ohp',
+          exercise_name: 'Développé militaire',
+          muscle_primary: 'épaules',
+          config: { start: 3, count_mode: 'sets' },
+          progress: [
+            {
+              day: 1,
+              date: '2026-09-15',
+              target: 3,
+              done: 3,
+              elapsed_sec: 0,
+              completed: true,
+              sets: [{ reps: 8 }, { reps: 8 }, { reps: 6 }],
+            },
+          ],
+        }),
+      ],
+    });
+
+  it('⚠️ LE CAS RÉEL : une entrée du 360 en mode reps compte ses reps ÷ fourchette, pas 1 série', () => {
+    const v = doneVolume(mixed(), MONDAY, NEXT_MONDAY);
+    expect(v.byExercise.find((e) => e.id === 'row')?.sets).toBe(5);
+    // 4 (séance) + 5 (360 reps) + 2 (gainage 90 s ÷ 45) + 3 (challenge en séries)
+    expect(v.totalSets).toBe(14);
+  });
+
+  it('la silhouette et le radar lisent le même relevé par muscle', () => {
+    const i = mixed();
+    expect(doneVolume(i, MONDAY, NEXT_MONDAY).byMuscle).toEqual(weekMuscleSeries(i).real);
+  });
+
+  it('le total compte chaque série une fois ; les secondaires ne sont crédités que par muscle', () => {
+    const v = doneVolume(
+      input({ sessions: [session('2026-09-15', [{ id: 'bench', muscle: 'pectoraux', sets: 4 }])] }),
+      MONDAY,
+      NEXT_MONDAY,
+    );
+    expect(v.totalSets).toBe(4);
+    expect(v.byMuscle).toEqual({ pectoraux: 4, triceps: 2, épaules: 2 });
+  });
+
+  it('détail par exercice : nom, muscle normalisé, reps réelles (0 au temps), du plus travaillé au moins', () => {
+    const v = doneVolume(mixed(), MONDAY, NEXT_MONDAY);
+    expect(v.byExercise).toEqual([
+      { id: 'row', name: 'row', muscle: 'dos', sets: 5, reps: 50 },
+      { id: 'bench', name: 'bench', muscle: 'pectoraux', sets: 4, reps: 40 },
+      { id: 'ohp', name: 'Développé militaire', muscle: 'épaules', sets: 3, reps: 22 },
+      { id: 'plank', name: 'plank', muscle: 'abdominaux', sets: 2, reps: 0 },
+    ]);
+  });
+
+  it('le muscle d’un exercice est normalisé : la variante en base rejoint le muscle de la silhouette', () => {
+    const v = doneVolume(
+      input({
+        sessions: [session('2026-09-15', [{ id: 'ohp', muscle: 'Deltoïde antérieur', sets: 2 }])],
+      }),
+      MONDAY,
+      NEXT_MONDAY,
+    );
+    expect(v.byExercise[0]!.muscle).toBe('épaules');
+    // Ses secondaires « deltoïde antérieur » et « épaules » SONT son principal : pas recompté.
+    expect(v.byMuscle.épaules).toBe(2);
+  });
+
+  it('borne haute exclue, borne basse incluse', () => {
+    const i = input({
+      sessions: [
+        session(MONDAY, [{ id: 'bench', muscle: 'pectoraux', sets: 2 }]),
+        session(NEXT_MONDAY, [{ id: 'bench', muscle: 'pectoraux', sets: 9 }]),
+      ],
+    });
+    expect(doneVolume(i, MONDAY, NEXT_MONDAY).totalSets).toBe(2);
+  });
+
+  it('un challenge en reps compte ses reps faites ; un challenge au temps, aucune rep', () => {
+    const day = {
+      day: 1,
+      date: '2026-09-15',
+      target: 30,
+      done: 30,
+      elapsed_sec: 0,
+      completed: true,
+    };
+    const reps = doneVolume(
+      input({ challenges: [challenge({ exercise_id: 'row', progress: [day] })] }),
+      MONDAY,
+      NEXT_MONDAY,
+    );
+    expect(reps.byExercise[0]).toMatchObject({ sets: 3, reps: 30 });
+    const time = doneVolume(
+      input({ challenges: [challenge({ exercise_id: 'plank', unit: 'time', progress: [day] })] }),
+      MONDAY,
+      NEXT_MONDAY,
+    );
+    expect(time.byExercise[0]!.reps).toBe(0);
+  });
+
+  it('la tendance par semaine dit la même chose que le total de chaque semaine', () => {
+    const i = input({
+      ...mixed(),
+      sessions: [
+        ...mixed().sessions,
+        session('2026-09-08', [{ id: 'bench', muscle: 'pectoraux', sets: 6 }]),
+      ],
+    });
+    const weeks = ['2026-09-07', MONDAY, NEXT_MONDAY];
+    expect(doneSetsByWeek(i, weeks)).toEqual([
+      doneVolume(i, '2026-09-07', MONDAY).totalSets,
+      doneVolume(i, MONDAY, NEXT_MONDAY).totalSets,
+      0,
+    ]);
+    expect(doneSetsByWeek(i, weeks)).toEqual([6, 14, 0]);
   });
 });

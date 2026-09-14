@@ -45,7 +45,7 @@
             ><span class="kpi-l">séances</span>
           </div>
           <div class="kpi">
-            <span class="kpi-v font-display">{{ totalSets }}</span
+            <span class="kpi-v font-display">{{ fmtSets(totalSets) }}</span
             ><span class="kpi-l">séries</span>
           </div>
           <div class="kpi">
@@ -58,7 +58,7 @@
         <div class="sec-h">Cette semaine</div>
         <div class="kpis">
           <div class="kpi">
-            <span class="kpi-v font-display">{{ weekSetsTotal }}</span
+            <span class="kpi-v font-display">{{ fmtSets(weekSetsTotal) }}</span
             ><span class="kpi-l">séries</span>
           </div>
           <div class="kpi">
@@ -82,14 +82,14 @@
             v-for="(w, i) in weekSeries"
             :key="w.weekStart"
             class="wk-col"
-            :title="w.weekStart + ' — ' + w.sets + ' séries'"
+            :title="w.weekStart + ' — ' + fmtSets(w.sets) + ' séries'"
           >
             <div
               class="wk-bar"
               :class="{ cur: i === weekSeries.length - 1 }"
               :style="{ height: Math.round((w.sets / maxWeekSets) * 100) + '%' }"
             />
-            <span class="wk-x">{{ w.sets }}</span>
+            <span class="wk-x">{{ fmtSets(w.sets) }}</span>
           </div>
         </div>
 
@@ -106,14 +106,16 @@
         <div class="vol-card">
           <MuscleBody :series="volSets" />
           <div class="vol-total">
-            <b>{{ volData.totalSets }}</b> séries · {{ volPeriodLabel }}
+            <b>{{ fmtSets(volData.totalSets) }}</b> séries · {{ volPeriodLabel }}
           </div>
-          <div v-if="volData.byExo.length" class="vol-exos">
-            <div v-for="e in volData.byExo" :key="e.id" class="vol-exo">
+          <div v-if="volData.byExercise.length" class="vol-exos">
+            <div v-for="e in volData.byExercise" :key="e.id" class="vol-exo">
               <span class="ve-dot" :style="{ background: muscleColor(e.muscle) }" />
               <span class="ve-name">{{ e.name }}</span>
               <span class="ve-num"
-                ><b>{{ e.sets }}</b> séries · {{ e.reps }} reps</span
+                ><b>{{ fmtSets(e.sets) }}</b> séries<template v-if="e.reps">
+                  · {{ e.reps }} reps</template
+                ></span
               >
             </div>
           </div>
@@ -202,7 +204,7 @@
               />
             </div>
             <span class="grp-val"
-              ><b>{{ g.sets }}</b></span
+              ><b>{{ fmtSets(g.sets) }}</b></span
             >
           </div>
         </div>
@@ -215,7 +217,7 @@
             <div class="ex-name">{{ e.name }}</div>
             <div class="ex-sub">
               {{ e.muscle }} · {{ e.sessions }} séance{{ e.sessions > 1 ? 's' : '' }} ·
-              {{ e.sets }} séries
+              {{ fmtSets(e.sets) }} séries
             </div>
           </div>
           <div class="ex-loads">
@@ -306,7 +308,6 @@ defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
-import { useLogsStore, type LogRow } from '@/stores/logs';
 import { useTennisStore, type DrillLogRow } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
 import { useComboStore } from '@/stores/combo';
@@ -316,8 +317,6 @@ import BodyBalance from '@/components/BodyBalance.vue';
 import {
   muscleColor,
   fmtSets,
-  weeklySetsByMuscle,
-  muscleVolumeInRange,
   comboLogEntries,
   challengeLogEntries,
   isMuscuLog,
@@ -329,10 +328,14 @@ import {
   muscuWeekStreak,
   type LogEntry,
 } from '@/lib/volume';
-import { weekMuscleSeries, type WeekSeriesKey } from '@/lib/bodyBalance';
+import {
+  doneSetsByWeek,
+  doneVolume,
+  weekMuscleSeries,
+  type WeekSeriesKey,
+} from '@/lib/bodyBalance';
 import { MUSCLE_REGIONS, regionTotals } from '@/lib/muscles';
 import { useBalanceInput } from '@/composables/useBalanceInput';
-import { logicalToday } from '@/lib/challenges';
 import { DRILL_SHOT_LABELS } from '@/data/tennis';
 import { useProgress } from '@/composables/useProgress';
 import type { DrillShot, Difficulty } from '@/lib/types';
@@ -341,7 +344,6 @@ const router = useRouter();
 const route = useRoute();
 const $q = useQuasar();
 
-const logsStore = useLogsStore();
 const tennis = useTennisStore();
 const cardio = useCardioStore();
 const combo = useComboStore();
@@ -350,9 +352,11 @@ const loading = ref(true);
 // Vue « muscu seule » (ouverte depuis la tuile Muscu, `?scope=muscu`) : on masque
 // tennis / cardio / autres sports et on ne garde que le niveau Muscu.
 const muscuScope = computed(() => route.query.scope === 'muscu');
-const logs = ref<LogRow[]>([]);
 const drillLogs = ref<DrillLogRow[]>([]);
 const progress = useProgress();
+// UNE entrée pour tous les comptes de séries de la page (cf. lib/bodyBalance, « une page,
+// un compte ») et UN « aujourd'hui » (le jour d'entraînement) pour toutes les semaines.
+const { input: balanceInput, ensureLoaded: ensureBalanceLoaded, today } = useBalanceInput();
 // Global + un niveau par SPORT réellement pratiqué (cohérent avec l'accueil) + Défis.
 // En vue muscu seule : seulement le niveau Muscu (tuile `disc:musculation`).
 const levelCards = computed(() => {
@@ -400,7 +404,6 @@ const exos = computed<ExoStat[]>(() => {
       name: string;
       muscle: string;
       sessions: Set<string>;
-      sets: number;
       loads: number[];
     }
   >();
@@ -412,24 +415,21 @@ const exos = computed<ExoStat[]>(() => {
         name: ex.name,
         muscle: ex.muscle_primary ?? '—',
         sessions: new Set(),
-        sets: 0,
         loads: [],
       };
       cur.sessions.add(e.log.id);
-      for (const s of ex.performed) {
-        cur.sets++;
-        if (s.load_kg > 0) cur.loads.push(s.load_kg);
-      }
+      for (const s of ex.performed) if (s.load_kg > 0) cur.loads.push(s.load_kg);
       map.set(ex.id, cur);
     }
   }
+  const setsOf = new Map(allTime.value.byExercise.map((x) => [x.id, x.sets]));
   return [...map.values()]
     .map((e) => ({
       id: e.id,
       name: e.name,
       muscle: e.muscle,
       sessions: e.sessions.size,
-      sets: e.sets,
+      sets: setsOf.get(e.id) ?? 0,
       avg: e.loads.length
         ? Math.round((e.loads.reduce((a, b) => a + b, 0) / e.loads.length) * 10) / 10
         : null,
@@ -439,21 +439,14 @@ const exos = computed<ExoStat[]>(() => {
     .sort((a, b) => b.sessions - a.sessions || b.sets - a.sets);
 });
 
-const muscleSets = computed(() => {
-  const map = new Map<string, number>();
-  for (const e of entries.value) {
-    if (!isMuscuLog(e.log)) continue;
-    for (const ex of e.log.exercises) {
-      const m = ex.muscle_primary ?? '—';
-      map.set(m, (map.get(m) ?? 0) + ex.performed.length);
-    }
-  }
-  return [...map.entries()]
+// Tout l'historique au compte commun (secondaires à ½, reps converties en séries).
+const allTime = computed(() => doneVolume(balanceInput.value, '0000-01-01', '9999-12-31'));
+const muscleSets = computed(() =>
+  Object.entries(allTime.value.byMuscle)
     .map(([muscle, sets]) => ({ muscle, sets }))
-    .sort((a, b) => b.sets - a.sets);
-});
-
-const totalSets = computed(() => muscleSets.value.reduce((a, g) => a + g.sets, 0));
+    .sort((a, b) => b.sets - a.sets),
+);
+const totalSets = computed(() => allTime.value.totalSets);
 // Nb de séances MUSCU (séances loggées + jours de Défi 360) avec ≥1 série.
 const muscuSessionCount = computed(
   () => entries.value.filter((e) => isMuscuLog(e.log) && e.log.exercises.length > 0).length,
@@ -471,7 +464,6 @@ const RADAR_SERIES: readonly { key: WeekSeriesKey; label: string }[] = [
   { key: 'challenges', label: 'Challenges' },
   { key: 'real', label: 'Réel' },
 ];
-const { input: balanceInput, ensureLoaded: ensureBalanceLoaded } = useBalanceInput();
 const radar = computed(() => {
   const week = weekMuscleSeries(balanceInput.value);
   const series = RADAR_SERIES.map((s) => ({ ...s, values: regionTotals(week[s.key]) }));
@@ -519,35 +511,35 @@ function barPct(n: number) {
 // Les séries du Défi 360 sont converties en séances synthétiques → elles comptent
 // dans TOUT le volume muscu (heatmap, objectif, tendance) au même titre qu'une séance.
 const entries = computed<LogEntry[]>(() => [
-  ...logs.value.map((r) => ({ performedAt: r.performed_at, log: r.payload })),
+  ...balanceInput.value.sessions,
   ...comboLogEntries(combo.list),
   ...challengeLogEntries(challenges.list),
 ]);
-// « Aujourd'hui » = le JOUR D'ENTRAÎNEMENT du projet (bascule à 4 h, local), le même que le
-// radar et le graphe d'équilibre : sinon, le lundi entre 0 h et 4 h, deux blocs « cette
-// semaine » de la même page ne portaient pas sur la même semaine.
-const todayIso = logicalToday();
 // Volume par PÉRIODE (heatmap corps + détail) — semaine en cours ou mois en cours.
 const volPeriod = ref<'week' | 'month'>('week');
 const volPeriodLabel = computed(() =>
   volPeriod.value === 'week' ? 'cette semaine' : 'ce mois-ci',
 );
 const volData = computed(() => {
-  const start = volPeriod.value === 'week' ? mondayOf(todayIso) : firstOfMonth(todayIso);
-  return muscleVolumeInRange(entries.value, start, dayAfter(todayIso));
+  const start = volPeriod.value === 'week' ? mondayOf(today) : firstOfMonth(today);
+  return doneVolume(balanceInput.value, start, dayAfter(today));
 });
-const volSets = computed<Record<string, number>>(() => {
-  const out: Record<string, number> = {};
-  const bm = volData.value.byMuscle;
-  for (const m of Object.keys(bm)) out[m] = bm[m]!.sets;
-  return out;
+const volSets = computed(() => volData.value.byMuscle);
+// Tendance : les SÉRIES au compte commun ; tonnage et nb de séances restent lus des bilans.
+const weekSeries = computed(() => {
+  const weeks = weeklyVolumeSeries(entries.value, 8, today);
+  const sets = doneSetsByWeek(
+    balanceInput.value,
+    weeks.map((w) => w.weekStart),
+  );
+  return weeks.map((w, k) => ({ ...w, sets: sets[k] ?? 0 }));
 });
-const weeklyDone = computed(() => weeklySetsByMuscle(entries.value, todayIso));
-const weekSeries = computed(() => weeklyVolumeSeries(entries.value, 8, todayIso));
 const maxWeekSets = computed(() => Math.max(1, ...weekSeries.value.map((w) => w.sets)));
-const muscuFreq30 = computed(() => muscuSessionsInLastDays(entries.value, 30, todayIso));
-const weekStreak = computed(() => muscuWeekStreak(entries.value, todayIso));
-const weekSetsTotal = computed(() => Object.values(weeklyDone.value).reduce((a, b) => a + b, 0));
+const muscuFreq30 = computed(() => muscuSessionsInLastDays(entries.value, 30, today));
+const weekStreak = computed(() => muscuWeekStreak(entries.value, today));
+const weekSetsTotal = computed(
+  () => doneVolume(balanceInput.value, mondayOf(today), dayAfter(today)).totalSets,
+);
 
 async function openExercise(id: string) {
   await router.push(`/exercise/${id}`);
@@ -600,15 +592,14 @@ const cardioKpis = computed(() => {
 onMounted(async () => {
   try {
     cardio.fetchLogs(300).catch(() => undefined);
-    // Radar de la semaine : tous les bilans (cache partagé) + muscles secondaires.
-    ensureBalanceLoaded().catch(() => undefined);
     combo.fetchMine().catch(() => undefined);
     challenges.fetchMine().catch(() => undefined);
     tennis
       .fetchLogs(300)
       .then((l) => (drillLogs.value = l))
       .catch(() => undefined);
-    logs.value = await logsStore.fetchRecent(300);
+    // Tous les bilans (cache partagé avec l'XP et le graphe d'équilibre) + secondaires.
+    await ensureBalanceLoaded();
   } catch (e) {
     $q.notify({
       type: 'negative',

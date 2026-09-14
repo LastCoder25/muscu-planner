@@ -69,8 +69,12 @@ type Tally = Record<string, number>;
 interface VolumeItem {
   day: string;
   exerciseId: string;
+  /** Nom affiché de l'exo (détail par exercice). */
+  name: string;
   primary: string | null | undefined;
   sets: number;
+  /** Répétitions réellement faites (0 pour un exo au temps : ce ne sont pas des reps). */
+  reps: number;
 }
 
 /** Crédite `sets` séries : 1 au muscle principal, ½ à chaque secondaire distinct. */
@@ -108,8 +112,10 @@ function sessionItems(sessions: readonly LogEntry[]): VolumeItem[] {
       out.push({
         day,
         exerciseId: ex.id,
+        name: ex.name,
         primary: ex.muscle_primary,
         sets: ex.performed?.length ?? 0,
+        reps: (ex.performed ?? []).reduce((a, s) => a + (s.reps || 0), 0),
       });
   }
   return out;
@@ -117,12 +123,15 @@ function sessionItems(sessions: readonly LogEntry[]): VolumeItem[] {
 
 /** Séries faites d'un exo du 360, en séries (une entrée = 1 série, ou ses reps ÷ fourchette). */
 function legItems(leg: ComboLeg, objective?: Objective | null): VolumeItem[] {
-  const unit = legMode(leg) === 'sets' ? 0 : perSet(legRepRange(leg, objective));
+  const mode = legMode(leg);
+  const unit = mode === 'sets' ? 0 : perSet(legRepRange(leg, objective));
   return legSets(leg).map((s) => ({
     day: s.date.slice(0, 10),
     exerciseId: leg.exercise_id,
+    name: leg.exercise_name,
     primary: leg.muscle_primary,
     sets: unit ? (s.reps || 0) / unit : 1,
+    reps: mode === 'time' ? 0 : s.reps || 0,
   }));
 }
 
@@ -146,10 +155,20 @@ function challengeItems(
       .map((p) => ({
         day: p.date.slice(0, 10),
         exerciseId: c.exercise_id,
+        name: c.exercise_name,
         primary: c.muscle_primary,
         sets: challengeSets(c, p.done, objective),
+        reps: challengeReps(c, p),
       })),
   );
+}
+
+/** Répétitions faites un jour de challenge : le compteur en mode reps, la somme des séries
+ *  en mode séries, rien pour un exo au temps (ce sont des secondes). */
+function challengeReps(c: Challenge, p: Challenge['progress'][number]): number {
+  if (c.unit !== 'reps') return 0;
+  if (c.config.count_mode === 'sets') return (p.sets ?? []).reduce((a, s) => a + (s.reps || 0), 0);
+  return p.done;
 }
 
 /** Objectif du Défi 360 ACTIF, en séries par exo, posé sur `day`, MOINS ce que `already`
@@ -169,7 +188,14 @@ function comboItems(
         const unit = legMode(leg) === 'sets' ? 1 : perSet(legRepRange(leg, i.objective));
         // Négatif si l'objectif est déjà dépassé : `creditSets` ignore toute valeur ≤ 0.
         const sets = leg.target / unit - already(leg);
-        return { day, exerciseId: leg.exercise_id, primary: leg.muscle_primary, sets };
+        return {
+          day,
+          exerciseId: leg.exercise_id,
+          name: leg.exercise_name,
+          primary: leg.muscle_primary,
+          sets,
+          reps: 0,
+        };
       }),
     );
 }
@@ -201,8 +227,10 @@ function challengeTargetItems(
     .map((c) => ({
       day: start,
       exerciseId: c.exercise_id,
+      name: c.exercise_name,
       primary: c.muscle_primary,
       sets: challengeSets(c, challengeTargetBetween(c, start, end), i.objective),
+      reps: 0,
     }));
 }
 
@@ -290,4 +318,74 @@ export function weekMuscleSeries(i: Omit<BalanceInput, 'targets'>): WeekMuscleSe
     combo: week(comboWeeklyTargetItems(i, monday)),
     challenges: week(challengeTargetItems(i, monday, nextMonday)),
   };
+}
+
+// ── Volume FAIT, pour les autres lectures « séries » d'une page ─────────────────
+// ⚠️ UNE PAGE, UN COMPTE. Stats affichait les séries de la semaine, la silhouette et la
+// tendance via les séances synthétiques de `volume.ts` (principaux seuls, une entrée du
+// 360 en mode reps comptée comme UNE série) pendant que le radar et le graphe d'équilibre,
+// juste à côté, convertissaient et créditaient les secondaires : deux chiffres pour la
+// même semaine. Tout ce qui compte des SÉRIES par muscle passe désormais par ici.
+
+interface ExerciseVolume {
+  id: string;
+  name: string;
+  /** Muscle principal, normalisé. */
+  muscle: string;
+  sets: number;
+  reps: number;
+}
+
+export interface DoneVolume {
+  /** Séries par muscle normalisé — secondaires à ½, comme le radar. */
+  byMuscle: Tally;
+  /** Par exercice, du plus travaillé au moins travaillé. */
+  byExercise: ExerciseVolume[];
+  /** Séries réellement faites (chacune compte UNE fois, secondaires non recomptés). */
+  totalSets: number;
+}
+
+/** Volume réellement fait (séances, 360, challenges muscu) sur [start, end). */
+export function doneVolume(
+  i: Omit<BalanceInput, 'targets' | 'today'>,
+  start: string,
+  end: string,
+): DoneVolume {
+  const items = doneItems(i).filter((it) => it.day >= start && it.day < end);
+  const byExo = new Map<string, ExerciseVolume>();
+  let total = 0;
+  for (const it of items) {
+    total += it.sets;
+    const cur = byExo.get(it.exerciseId) ?? {
+      id: it.exerciseId,
+      name: it.name,
+      muscle: normMuscle(it.primary),
+      sets: 0,
+      reps: 0,
+    };
+    cur.sets += it.sets;
+    cur.reps += it.reps;
+    byExo.set(it.exerciseId, cur);
+  }
+  const byExercise = [...byExo.values()]
+    .map((e) => ({ ...e, sets: round1(e.sets) }))
+    .filter((e) => e.sets > 0)
+    .sort((a, b) => b.sets - a.sets);
+  const byMuscle = tally(items, i.secondaries, start, end);
+  for (const m of Object.keys(byMuscle)) byMuscle[m] = round1(byMuscle[m]!);
+  return { byMuscle, byExercise, totalSets: round1(total) };
+}
+
+/** Séries réellement faites par semaine, pour chaque lundi de `weekStarts` (un seul passage). */
+export function doneSetsByWeek(
+  i: Omit<BalanceInput, 'targets' | 'today'>,
+  weekStarts: readonly string[],
+): number[] {
+  const idx = new Map(weekStarts.map((w, k) => [w, k]));
+  const out = weekStarts.map(() => 0);
+  for (const it of doneItems(i)) {
+    const k = idx.get(mondayOf(it.day));
+    if (k !== undefined) out[k] = out[k]! + it.sets;
+  }
+  return out.map(round1);
 }
