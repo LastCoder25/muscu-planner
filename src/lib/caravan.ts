@@ -44,6 +44,7 @@ import { FAMILIAR_SPECIES } from '../data/familiars';
 import {
   HARVEST_TYPES,
   harvestYield,
+  haulPills,
   goldCost,
   travelFactor,
   travelOneWayMin,
@@ -54,6 +55,7 @@ import {
   advRoles,
   advSignatureLevels,
   advStats,
+  advTitle,
   escortRoleLevel,
   PROMO_LEVELS,
   type Adventurer,
@@ -996,4 +998,80 @@ export function startCaravan(
  *  ⚠️ `claimed === undefined` = déjà crédité, jamais « à récupérer ». */
 export function isCaravanClaimable(c: Caravan, now: number): boolean {
   return c.claimed === false && now >= c.returnAt;
+}
+
+// ── 📜 RAPPORT DE CONVOI (v0.853 ; demandé par l’utilisateur : « les aventuriers concernés et
+// leur gain d’XP, pour voir la différence entre un long convoi et un court, et rappeler le
+// temps de voyage ») ─────────────────────────────────────────────────────────────────────
+
+interface CaravanReportMember {
+  id: string;
+  name: string;
+  emoji: string;
+  xp: number;
+  hurt: boolean;
+  /** Plus dans le vivier (renvoyé depuis) : on garde sa ligne, l’XP a bien été versée. */
+  gone: boolean;
+}
+export interface CaravanReport {
+  /** Durée TOTALE du voyage, aller et retour. */
+  travelMs: number;
+  members: CaravanReportMember[];
+  totalXp: number;
+  /** XP par aventurier et par heure de voyage — le chiffre qui compare un convoi long à
+   *  un court, puisque c’est le temps que l’escorte passe immobilisée. */
+  xpPerHour: number;
+  /** Cargaison BRUTE (les salaires sont une dépense à part, cf. `wages`). */
+  pills: { emoji: string; n: number }[];
+  wages: number;
+  events: CaravanEvent[];
+}
+
+/**
+ * Ce qu’un convoi a rapporté, lisible après coup.
+ *
+ * ⚠️ Tout vient du convoi STOCKÉ (`outcome` tiré au départ), jamais d’un recalcul : le
+ * rapport dit ce qui a été versé, pas ce que la formule du jour verserait. Les montants sont
+ * arrondis comme à l’encaissement (des cargaisons anciennes portent des demis).
+ */
+export function caravanReport(van: Caravan, roster: readonly Adventurer[]): CaravanReport {
+  const o = van.outcome;
+  const hurt = new Set(o.hurt);
+  const members = van.escort.map((id): CaravanReportMember => {
+    const adv = roster.find((a) => a.id === id);
+    return {
+      id,
+      name: adv?.name ?? 'Aventurier parti',
+      emoji: (adv && advTitle(adv)?.emoji) || '⚔️',
+      xp: Math.max(0, Math.round(o.xp[id] ?? 0)),
+      hurt: hurt.has(id),
+      gone: !adv,
+    };
+  });
+  const totalXp = members.reduce((n, m) => n + m.xp, 0);
+  const travelMs = Math.max(0, van.returnAt - van.sentAt);
+  const hours = travelMs / 3_600_000;
+  const ent = (n: number) => Math.max(0, Math.round(n || 0));
+  return {
+    travelMs,
+    members,
+    totalXp,
+    xpPerHour: members.length && hours > 0 ? totalXp / members.length / hours : 0,
+    pills: haulPills({
+      gold: ent(o.gold),
+      energy: ent(o.energy),
+      scrap: ent(o.scrap),
+      summonStones: ent(o.summonStones),
+      key: ent(o.keys),
+    }),
+    wages: ent(o.wages),
+    events: o.events,
+  };
+}
+
+/** Les convois déjà ENCAISSÉS, du plus récent au plus ancien (l’historique des rapports).
+ *  ⚠️ `claimed === undefined` compte aussi : ce sont des convois crédités avant
+ *  l’encaissement manuel, leur rapport existe. */
+export function claimedCaravans(list: readonly Caravan[]): Caravan[] {
+  return list.filter((c) => c.claimed !== false).sort((a, b) => b.returnAt - a.returnAt);
 }

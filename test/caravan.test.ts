@@ -33,6 +33,8 @@ import {
   roadCompanionEffects,
   roadFoe,
   startCaravan,
+  caravanReport,
+  claimedCaravans,
   type Caravan,
 } from '@/lib/caravan';
 import { advRoles, guildRoster, PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
@@ -1318,5 +1320,68 @@ describe('👁️ L’ÉCLAIREUR ÉVITE LES EMBUSCADES (v0.759)', () => {
     expect(ambushChance(poiOf(true), beaucoup())).toBeGreaterThan(
       ambushChance(poiOf(false), sans()),
     );
+  });
+});
+
+describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET COMBIEN DE TEMPS', () => {
+  const escort = team(3, 20);
+  const van = (over: Partial<Caravan> = {}): Caravan => ({
+    ...startCaravan('c1', poi({ level: 20 }), escort, 0, 11, NUS),
+    ...over,
+  });
+
+  it('une ligne par aventurier de l’escorte, avec l’XP VERSÉE (celle du convoi stocké)', () => {
+    const v = van();
+    const r = caravanReport(v, escort);
+    expect(r.members.map((m) => m.id)).toEqual(v.escort);
+    for (const m of r.members) expect(m.xp).toBe(Math.round(v.outcome.xp[m.id] ?? 0));
+    expect(r.totalXp).toBe(r.members.reduce((n, m) => n + m.xp, 0));
+    expect(r.members[0]!.name).toBe(escort[0]!.name);
+  });
+
+  it('rappelle le temps de voyage ALLER ET RETOUR', () => {
+    const v = van();
+    expect(caravanReport(v, escort).travelMs).toBe(v.returnAt - v.sentAt);
+    expect(v.returnAt - v.sentAt).toBeGreaterThan(v.midAt - v.sentAt);
+  });
+
+  it('XP par aventurier et par heure : c’est ce qui compare un long convoi à un court', () => {
+    const v = van();
+    const court = { ...v, returnAt: v.sentAt + 2 * 3_600_000 };
+    const long = { ...v, returnAt: v.sentAt + 8 * 3_600_000 };
+    const rc = caravanReport(court, escort);
+    const rl = caravanReport(long, escort);
+    expect(rc.totalXp).toBe(rl.totalXp); // même XP stockée…
+    expect(rc.xpPerHour).toBeCloseTo(rc.totalXp / escort.length / 2, 6); // … par tête et par heure
+    expect(rl.xpPerHour).toBeCloseTo(rc.xpPerHour / 4, 6);
+  });
+
+  it('les blessés sont signalés, et un aventurier renvoyé depuis garde sa ligne', () => {
+    const v = van();
+    const blesse = { ...v, outcome: { ...v.outcome, hurt: [escort[1]!.id] } };
+    const r = caravanReport(blesse, [escort[0]!, escort[1]!]);
+    expect(r.members.map((m) => m.hurt)).toEqual([false, true, false]);
+    expect(r.members[2]!.gone).toBe(true);
+    expect(r.members[2]!.xp).toBe(Math.round(v.outcome.xp[escort[2]!.id] ?? 0));
+  });
+
+  it('la cargaison est arrondie comme à l’encaissement, les salaires restent à part', () => {
+    const v = van();
+    const demi = { ...v, outcome: { ...v.outcome, energy: 55.5, gold: 100.4, wages: 30.6 } };
+    const r = caravanReport(demi, escort);
+    expect(r.pills.find((p) => p.emoji === '⚡')!.n).toBe(56);
+    expect(r.pills.find((p) => p.emoji === '🪙')!.n).toBe(100);
+    expect(r.wages).toBe(31);
+  });
+
+  it('l’historique ne montre que les convois encaissés, du plus récent au plus ancien', () => {
+    const v = van();
+    const list = [
+      { ...v, id: 'ancien', claimed: true, returnAt: 10 },
+      { ...v, id: 'enCours', claimed: false, returnAt: 99 },
+      { ...v, id: 'recent', claimed: true, returnAt: 50 },
+      { ...v, id: 'legacy', claimed: undefined, returnAt: 30 },
+    ];
+    expect(claimedCaravans(list).map((c) => c.id)).toEqual(['recent', 'legacy', 'ancien']);
   });
 });

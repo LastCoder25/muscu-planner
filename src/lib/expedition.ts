@@ -47,6 +47,19 @@ export const POI_LABEL: Record<PoiType, string> = {
   wreck: 'Épave de convoi',
 };
 
+/** Emoji d'un point d'intérêt — la carte et le rapport de convoi lisent la MÊME table
+ *  (une copie dans le rapport avait déjà divergé sur le repaire et l'épave). */
+export const POI_EMO: Record<PoiType, string> = {
+  mine: '⛏️',
+  camp: '🏕️',
+  lair: '👹',
+  arena: '🏟️',
+  well: '💧',
+  shrine: '🔮',
+  archive: '📖',
+  wreck: '🔩',
+};
+
 /** POI de récolte pure : aucun combat, on ramasse et on rentre (comme la mine). */
 export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
   'mine',

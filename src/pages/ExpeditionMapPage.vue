@@ -223,6 +223,11 @@
         <i class="tr-bar" :style="{ width: t.pct + '%' }" />
       </component>
     </div>
+    <!-- 📜 Les derniers convois encaissés restent consultables : c'est en les mettant côte à
+         côte qu'on voit ce qu'un long voyage apprend de plus qu'un court. -->
+    <button v-if="pastVans.length" class="past-vans" @click="historyOpen = true">
+      📜 Derniers convois <span class="pv-n">{{ pastVans.length }}</span>
+    </button>
 
     <!-- Panneau POI sélectionné -->
     <transition name="sheet">
@@ -382,6 +387,30 @@
          de Guilde détaché : après avoir promu, on est déjà là où l'on gère son monde. -->
     <GuildPanel :open="!!guildPromote" :promote-id="guildPromote" @close="guildPromote = null" />
 
+    <!-- 🐫 Rapport à l'encaissement : il remplace la simple notification « Cargaison
+         récupérée », qui ne disait ni qui avait voyagé, ni ce qu'il avait appris. -->
+    <q-dialog :model-value="!!reportVan" @update:model-value="(v) => !v && (reportId = null)">
+      <q-card v-if="reportVan" class="van-card">
+        <div class="van-kicker">🐫 Convoi rentré · cargaison récupérée</div>
+        <CaravanReportView :van="reportVan" :roster="char.advList" :stars="reportStars" />
+        <div class="van-actions">
+          <q-btn flat no-caps label="Fermer" @click="reportId = null" />
+        </div>
+      </q-card>
+    </q-dialog>
+
+    <q-dialog v-model="historyOpen">
+      <q-card class="van-card">
+        <div class="van-kicker">📜 Derniers convois</div>
+        <div v-for="v in pastVans" :key="v.id" class="van-past">
+          <CaravanReportView :van="v" :roster="char.advList" />
+        </div>
+        <div class="van-actions">
+          <q-btn flat no-caps label="Fermer" @click="historyOpen = false" />
+        </div>
+      </q-card>
+    </q-dialog>
+
     <div v-if="!active && !pois.length" class="empty">
       La carte se peuple avec le temps — de nouvelles activités apparaissent régulièrement. Reviens
       bientôt.
@@ -405,11 +434,13 @@ import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
 import { playerWithGear, mergeEffects, fxRarity, RARITY_RANK, type Item } from '@/lib/items';
 import GuildPanel from '@/components/GuildPanel.vue';
+import CaravanReportView from '@/components/CaravanReportView.vue';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects, normalizeTalents } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { simulateCombat, type Combatant } from '@/lib/combat';
 import {
+  POI_EMO,
   POI_LABEL,
   type ExpeditionMessage,
   haulPills,
@@ -422,7 +453,6 @@ import {
   travelOneWayMin,
   expeditionTerrain,
   type Poi,
-  type PoiType,
   HARVEST_TYPES,
   isClaimable,
 } from '@/lib/expedition';
@@ -434,6 +464,7 @@ import {
   CARAVAN,
   caravanLegMin,
   caravanSlots,
+  claimedCaravans,
   escortShare,
   isCaravanClaimable,
   poiOffers,
@@ -476,16 +507,6 @@ const townYard = townPts
 const TOWN_AP = TOWN_R * Math.cos(Math.PI / 8);
 const townRoad = `M${TOWN.x - 1.2} ${TOWN.y + TOWN_AP} L${TOWN.x - 2.2} ${TOWN.y + 14} L${TOWN.x + 2.2} ${TOWN.y + 14} L${TOWN.x + 1.2} ${TOWN.y + TOWN_AP} Z`;
 const MAP = EXPE.mapSize;
-const POI_EMO: Record<PoiType, string> = {
-  mine: '⛏️',
-  camp: '🏕️',
-  lair: '👹',
-  arena: '🏟️',
-  well: '💧',
-  shrine: '🔮',
-  archive: '📖',
-  wreck: '🔩',
-};
 
 const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -867,6 +888,14 @@ watch(
   },
 );
 
+/** Rapport ouvert après un encaissement (id du convoi) et les aventuriers qui y ont gagné
+ *  une étoile. Le convoi reste dans la liste, marqué encaissé : on le relit là. */
+const reportId = ref<string | null>(null);
+const reportStars = ref<string[]>([]);
+const reportVan = computed(() => char.caravanList.find((c) => c.id === reportId.value) ?? null);
+const historyOpen = ref(false);
+const pastVans = computed(() => claimedCaravans(char.caravanList));
+
 async function doClaimCaravan(id: string) {
   const uid = auth.user?.id;
   if (!uid || busyCaravan.value) return;
@@ -875,7 +904,8 @@ async function doClaimCaravan(id: string) {
     // ⚠️ Une liste VIDE vaut « encaissé » (elle est truthy) ; c'est `null` qui dit l'échec.
     const events = await char.claimCaravan(uid, id, heroLevel.value);
     if (!events) return;
-    $q.notify({ type: 'positive', message: 'Cargaison récupérée.' });
+    reportStars.value = events.filter((e) => e.to > e.from).map((e) => e.id);
+    reportId.value = id;
     // ⚠️ LE NIVEAU D'UN AVENTURIER EST CACHÉ : sans cette annonce, une étoile gagnée en
     // convoi ne se verrait qu'en rouvrant la Guilde pour y lire une barre. C'est le seul
     // retour qu'il ait sur des semaines de voyages.
@@ -1610,6 +1640,49 @@ function fmtMin(min: number): string {
    avait sans balayer, et rien ne l'annonçait. Une grille les montre TOUS d'un coup.
    ⚠️ `minmax(0, 1fr)` et non `1fr` : sans le minimum à zéro, une piste de grille refuse
    de passer sous la taille de son contenu et la grille déborderait du cadre à 344 px. */
+.past-vans {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 2px 8px auto;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: 600 12.5px var(--font-ui);
+  cursor: pointer;
+}
+.pv-n {
+  color: var(--dim);
+}
+.van-card {
+  background: var(--surface);
+  color: var(--text);
+  padding: 16px;
+  border-radius: 16px;
+  width: 360px;
+  max-width: 92vw;
+}
+.van-kicker {
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.van-past + .van-past {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.van-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
 .trips {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
