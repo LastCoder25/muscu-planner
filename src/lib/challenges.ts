@@ -41,6 +41,7 @@ export interface ChallengeConfig {
   count_mode?: 'reps' | 'sets'; // 'reps' (défaut) = objectif en reps ; 'sets' = en SÉRIES
   //   (saisie par série reps+poids+assisté façon Défi 360 ; tous les formats, échelle séries).
   bodyweight?: boolean; // exo au poids du corps → propose le toggle « assisté » à la saisie
+  discipline?: 'tennis'; // exo d'entraînement TENNIS : voie de jetons et XP de la piste Tennis
 }
 
 // Une série réalisée (mode 'sets', ou détail optionnel en mode 'reps') : reps +

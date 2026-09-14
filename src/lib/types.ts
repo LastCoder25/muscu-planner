@@ -28,7 +28,12 @@ export type EquipmentItem =
   // Cardio & combat : aucun exercice de la bibliothèque ne les requiert encore, mais ils
   // voyagent avec le profil jusqu'à l'export IA (coach_request), qui peut s'en servir.
   | 'rower'
-  | 'punching_bag';
+  | 'punching_bag'
+  // Prépa tennis (entraînement solo, Défi 360 Tennis).
+  | 'medicine_ball'
+  | 'cones'
+  | 'agility_ladder'
+  | 'plyo_box';
 
 // Sport pratiqué en parallèle (sert à l'équilibrage du volume musculaire).
 export interface SportPractice {
@@ -67,6 +72,7 @@ export interface Profile {
     tracking_day?: number; // semaine : 0=dim..6=sam ; mois : 1..28
     tracking_time?: string; // « HH:MM » pour le rappel
     court_equipment?: string[]; // matériel de tennis possédé (panier, machine, mur…)
+    tennis_place?: 'maison' | 'court' | 'both'; // lieu d'entraînement du Défi 360 Tennis
     vma?: number; // Vitesse Maximale Aérobie (km/h) — base des allures cardio
     hills?: { length_m: number; grade_pct?: number; elevation_m?: number }[]; // côtes dispo (trail)
   };

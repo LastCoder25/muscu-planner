@@ -18,6 +18,7 @@ import {
 } from '@/lib/athlete';
 import { challengeXpPoints } from '@/lib/challenges';
 import { comboXpPoints } from '@/lib/combo';
+import { challengeLane, comboKind } from '@/lib/tennisTraining';
 import { computeLevel } from '@/lib/levels';
 import { activeDaysSince } from '@/lib/activityDays';
 import {
@@ -103,23 +104,33 @@ export function useProgress() {
   const specifiqueSessionXp = computed(() =>
     logs.all.filter((r) => isSpecifiqueLog(r)).reduce((a, r) => a + sessionXp(r.payload), 0),
   );
-  const tennisXp = computed(
-    () =>
-      specifiqueSessionXp.value + tennis.logs.reduce((a, r) => a + drillSessionXp(r.payload), 0),
-  );
-
-  // Un challenge alimente la DISCIPLINE de son exercice : marche/course/vélo →
-  // cardio ; tout le reste (pompes, gainage…) → muscu.
+  // Un challenge alimente la DISCIPLINE de son exercice (sa VOIE) : marche/course/vélo et
+  // conditionnement → cardio ; exos d'entraînement tennis → tennis ; le reste → muscu.
   const isCardioChallenge = (c: (typeof challenges.list)[number]) => isCardioTrackChallenge(c);
   const muscuChallengeXp = computed(() =>
-    challengeXpPoints(challenges.list.filter((c) => !isCardioChallenge(c))),
+    challengeXpPoints(challenges.list.filter((c) => challengeLane(c) === 'muscu')),
   );
   const cardioChallengeXp = computed(() =>
     challengeXpPoints(challenges.list.filter((c) => isCardioChallenge(c))),
   );
+  const tennisChallengeXp = computed(() =>
+    challengeXpPoints(challenges.list.filter((c) => challengeLane(c) === 'tennis')),
+  );
 
-  // Défi 360 (défi combiné) → piste Muscu (XP façon séance : reps + tonnage + prime).
-  const comboXp = computed(() => comboXpPoints(combo.list));
+  // Défi 360 muscu → piste Muscu (XP façon séance : reps + tonnage + prime) ;
+  // Défi 360 Tennis → piste Tennis.
+  const comboXp = computed(() => comboXpPoints(combo.list.filter((c) => comboKind(c) === 'muscu')));
+  const tennisComboXp = computed(() =>
+    comboXpPoints(combo.list.filter((c) => comboKind(c) === 'tennis')),
+  );
+  // Piste Tennis = court (drills) + prépa physique + challenges et Défi 360 Tennis.
+  const tennisXp = computed(
+    () =>
+      specifiqueSessionXp.value +
+      tennis.logs.reduce((a, r) => a + drillSessionXp(r.payload), 0) +
+      tennisChallengeXp.value +
+      tennisComboXp.value,
+  );
   const muscuTotal = computed(() => muscuXp.value + muscuChallengeXp.value + comboXp.value);
   // Les sorties « miroir » d'un défi (challenge_id) apparaissent dans l'historique
   // mais ne comptent PAS d'XP : l'effort est déjà compté via cardioChallengeXp
@@ -163,8 +174,9 @@ export function useProgress() {
           sportSignature(r.payload.name),
         );
     }
-    // Tennis (drills court) → signature Tennis.
+    // Tennis (drills court, challenges et Défi 360 Tennis) → signature Tennis.
     for (const r of tennis.logs) addXp(acc, drillSessionXp(r.payload), sportSignature('Tennis'));
+    addXp(acc, tennisChallengeXp.value + tennisComboXp.value, sportSignature('Tennis'));
     // Séances « spécifiques » (prépa/crossfit/hyrox/mobilité) → signature du sport le
     // plus proche (fallback = vecteur par défaut). Chacune compte désormais dans le fond.
     const DISC_SIG_NAME: Record<string, string> = {
@@ -340,7 +352,9 @@ export function useProgress() {
       // Tuile d'activité : réservée aux VRAIES sorties cardio (marche/course/vélo).
       // Le conditionnement (cardio track mais sans activité de sortie) reste sur la
       // tuile Muscu pour le raccourci de saisie.
-      if (isCardioOutingChallenge(c)) {
+      if (challengeLane(c) === 'tennis') {
+        bump('tennis', 'Tennis', 'sports_tennis', xp, effortMin(xp), challengeTs(c));
+      } else if (isCardioOutingChallenge(c)) {
         const a = defaultActivityForChallenge(c.exercise_id);
         bump(
           `cardio:${a}`,
@@ -362,6 +376,16 @@ export function useProgress() {
         'fitness_center',
         comboXp.value,
         effortMin(comboXp.value),
+        0,
+      );
+    // Défi 360 Tennis → tuile Tennis.
+    if (tennisComboXp.value > 0)
+      bump(
+        'tennis',
+        'Tennis',
+        'sports_tennis',
+        tennisComboXp.value,
+        effortMin(tennisComboXp.value),
         0,
       );
 

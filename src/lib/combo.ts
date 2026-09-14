@@ -64,6 +64,9 @@ export interface ComboChallenge {
   legs: ComboLeg[];
   /** Contenu du coffre de fin, conservé au bouclage (migr. 0064). */
   chest?: ComboChestRecord | null;
+  /** Sorte du 360 : 'tennis' pour un Défi 360 Tennis, absent = muscu. Stocké dans la
+   *  colonne libre `config` (aucune migration), lu par `comboKind`. */
+  kind?: 'tennis';
 }
 
 // Reps supposées par série pour l'estimation du volume planifié (prime de bouclage).

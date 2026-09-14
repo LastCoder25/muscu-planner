@@ -22,6 +22,7 @@ import {
   type LaneChallenge,
 } from '@/lib/challengeLimits';
 import type { CardioActivity } from '@/lib/types';
+import { challengeLane, type ChallengeLane } from '@/lib/tennisTraining';
 
 // Voie d'un défi (budget séparé) : cardio vs muscu. La voie CARDIO regroupe les
 // vraies sorties (marche/course/vélo, distance) ET les exos de CONDITIONNEMENT
@@ -32,8 +33,7 @@ export function isCardioChallengeRow(c: { unit: string; exercise_id: string }): 
 }
 
 class ChallengeLimitError extends Error {
-  constructor(cardio: boolean, reason: AddDenyReason) {
-    const lane = cardio ? 'cardio' : 'muscu';
+  constructor(lane: ChallengeLane, reason: AddDenyReason) {
     super(
       reason === 'accessory'
         ? `Tu as déjà un défi accessoire ${lane} en cours (1 max).`
@@ -98,10 +98,10 @@ export const useChallengesStore = defineStore('challenges', () => {
   }
 
   async function create(input: NewChallenge): Promise<Challenge> {
-    // Limite « jetons par durée » + slot accessoire, par voie (muscu / cardio).
-    const cardio = isCardioChallengeRow(input);
+    // Limite « jetons par durée » + slot accessoire, par voie (muscu / cardio / tennis).
+    const lane = challengeLane(input);
     const sameLane: LaneChallenge[] = list.value
-      .filter((c) => c.status === 'active' && isCardioChallengeRow(c) === cardio)
+      .filter((c) => c.status === 'active' && challengeLane(c) === lane)
       .map((c) => ({
         accessory: isAccessoryMuscle(c.muscle_primary),
         durationDays: c.duration_days,
@@ -113,7 +113,7 @@ export const useChallengesStore = defineStore('challenges', () => {
       accessory: isAccessoryMuscle(input.muscle_primary),
       durationDays: input.duration_days,
     });
-    if (!res.ok) throw new ChallengeLimitError(cardio, res.reason);
+    if (!res.ok) throw new ChallengeLimitError(lane, res.reason);
     const { data, error } = await supabase
       .from('challenges')
       .insert({ ...input, progress: [], status: 'active' })

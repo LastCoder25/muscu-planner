@@ -45,6 +45,17 @@
               />
             </span>
           </div>
+          <div class="cap-row">
+            <span class="cap-lane">🎾 Tennis</span>
+            <span class="pips">
+              <span
+                v-for="n in CHALLENGE_TOKEN_BUDGET"
+                :key="n"
+                class="pip"
+                :class="{ on: n <= tennisUsed }"
+              />
+            </span>
+          </div>
           <div class="cap-hint">
             Un défi occupe 1 à 3 places selon sa durée. Les petits exos (mollets, abdos, bras) ne
             comptent pas — 1 « accessoire » gratuit en plus.
@@ -59,6 +70,9 @@
           </button>
           <button class="exf" :class="{ on: exFilter === 'cardio' }" @click="exFilter = 'cardio'">
             🏃 Cardio
+          </button>
+          <button class="exf" :class="{ on: exFilter === 'tennis' }" @click="exFilter = 'tennis'">
+            🎾 Tennis
           </button>
         </div>
         <div v-if="muscleFocus" class="focus-chip">
@@ -548,7 +562,8 @@ import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useProfileStore } from '@/stores/profile';
-import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
+import { useChallengesStore } from '@/stores/challenges';
+import { challengeLane, exerciseLane, type ChallengeLane } from '@/lib/tennisTraining';
 import { CONDITIONING_CHALLENGE_IDS } from '@/data/cardio';
 import { isDualUnitExercise } from '@/data/exerciseUnits';
 import { useComboStore } from '@/stores/combo';
@@ -643,29 +658,31 @@ const isCardio = computed(() => !!exercise.value?.tags?.includes('cardio'));
 function exIsCardio(e: ExerciseRow): boolean {
   return !!e.tags?.includes('cardio') || CONDITIONING_CHALLENGE_IDS.has(e.id);
 }
-function laneChallenges(cardio: boolean): LaneChallenge[] {
+// Voie d'un exo : cardio (sorties + conditionnement), tennis (prépa tennis), sinon muscu.
+function exLane(e: ExerciseRow): ChallengeLane {
+  return exerciseLane(e, exIsCardio(e));
+}
+function laneChallenges(lane: ChallengeLane): LaneChallenge[] {
   return challenges.list
-    .filter((c) => c.status === 'active' && isCardioChallengeRow(c) === cardio)
+    .filter((c) => c.status === 'active' && challengeLane(c) === lane)
     .map((c) => ({
       accessory: isAccessoryMuscle(c.muscle_primary),
       durationDays: c.duration_days,
     }));
 }
 // Nom de l'accessoire actif qui occupe le slot d'une voie (pour un message clair).
-function activeAccessoryName(cardio: boolean): string | null {
+function activeAccessoryName(lane: ChallengeLane): string | null {
   return (
     challenges.list.find(
       (c) =>
-        c.status === 'active' &&
-        isCardioChallengeRow(c) === cardio &&
-        isAccessoryMuscle(c.muscle_primary),
+        c.status === 'active' && challengeLane(c) === lane && isAccessoryMuscle(c.muscle_primary),
     )?.exercise_name ?? null
   );
 }
 // Exercice « bloquant » dès la sélection : accessoire dont le slot est pris, ou
 // exo normal dont la voie n'a plus aucun jeton (même un court ne rentrerait pas).
 function exFull(e: ExerciseRow): boolean {
-  const lane = laneChallenges(exIsCardio(e));
+  const lane = laneChallenges(exLane(e));
   if (isAccessoryMuscle(e.muscle_primary)) return accessoryCount(lane) >= 1;
   return remainingTokens(lane) <= 0;
 }
@@ -722,8 +739,8 @@ const fields = computed(() => formatOption(format.value)?.fields ?? ['start']);
 
 // Jetons : voie de l'exo choisi, coût du défi (selon durée), place restante.
 const selAccessory = computed(() => isAccessoryMuscle(exercise.value?.muscle_primary));
-const selIsCardioLane = computed(() => (exercise.value ? exIsCardio(exercise.value) : false));
-const laneActive = computed(() => laneChallenges(selIsCardioLane.value));
+const selLane = computed<ChallengeLane>(() => (exercise.value ? exLane(exercise.value) : 'muscu'));
+const laneActive = computed(() => laneChallenges(selLane.value));
 const laneUsed = computed(() => usedTokens(laneActive.value));
 const laneRemaining = computed(() => remainingTokens(laneActive.value));
 const candidateCost = computed(() => (selAccessory.value ? 0 : tokenCost(durationDays.value)));
@@ -734,16 +751,17 @@ const candidateFits = computed(() =>
     ? accessoryCount(laneActive.value) < 1 && durationDays.value <= ACCESSORY_MAX_DAYS
     : laneUsed.value + candidateCost.value <= CHALLENGE_TOKEN_BUDGET,
 );
-const laneLabel = computed(() => (selIsCardioLane.value ? 'cardio' : 'muscu'));
+const laneLabel = computed(() => selLane.value);
 // Une durée preset rentre-t-elle dans la place restante de la voie ?
 function presetFits(d: number): boolean {
   if (selAccessory.value) return d <= ACCESSORY_MAX_DAYS; // accessoire : 1 sem. max
   return laneUsed.value + tokenCost(d) <= CHALLENGE_TOKEN_BUDGET;
 }
 // Jauge d'espace (bannière) : usage des deux voies.
-const muscuUsed = computed(() => usedTokens(laneChallenges(false)));
-const cardioUsed = computed(() => usedTokens(laneChallenges(true)));
-const muscuAccUsed = computed(() => accessoryCount(laneChallenges(false)) >= 1);
+const muscuUsed = computed(() => usedTokens(laneChallenges('muscu')));
+const cardioUsed = computed(() => usedTokens(laneChallenges('cardio')));
+const tennisUsed = computed(() => usedTokens(laneChallenges('tennis')));
+const muscuAccUsed = computed(() => accessoryCount(laneChallenges('muscu')) >= 1);
 
 const guide = computed(() =>
   exercise.value ? exerciseInstructions(exercise.value.id) : undefined,
@@ -786,7 +804,10 @@ const activeExoFamilies = computed(() => {
 // Muscle ciblé depuis l'équilibre du corps (`?muscle=`) : on ne propose que les exos qui
 // le travaillent (en principal OU en secondaire), ceux où il est le principal en tête.
 const muscleFocus = ref(typeof route.query.muscle === 'string' ? route.query.muscle : '');
-const exFilter = ref<'all' | 'muscu' | 'cardio'>(muscleFocus.value ? 'muscu' : 'all');
+// `?lane=tennis` (depuis le hub Tennis) ouvre directement sur la voie Tennis.
+const exFilter = ref<'all' | ChallengeLane>(
+  muscleFocus.value ? 'muscu' : route.query.lane === 'tennis' ? 'tennis' : 'all',
+);
 const FOCUS_RANK = { primary: 2, secondary: 1 } as const;
 function focusRank(e: ExerciseRow): number {
   const role = muscleFocus.value ? muscleRole(e, muscleFocus.value) : null;
@@ -803,7 +824,7 @@ const filteredLib = computed(() => {
       !activeExoFamilies.value.has(variantFamilyKey(e.id)) &&
       !exFull(e) &&
       (!muscleFocus.value || focusRank(e) > 0) &&
-      (exFilter.value === 'all' || exIsCardio(e) === (exFilter.value === 'cardio')),
+      (exFilter.value === 'all' || exLane(e) === exFilter.value),
   );
   // Recherche par NOM ou par MUSCLE (primaire OU secondaire) → taper « triceps »
   // remonte aussi les exos qui le travaillent en secondaire (ex. développé couché).
@@ -924,16 +945,17 @@ function scaleForSeries(cfg: ChallengeConfig, days: number): ChallengeConfig {
 // restante de la voie, sinon 1 semaine → on ne tombe jamais sur une durée refusée.
 function defaultDurationFor(e: ExerciseRow): number {
   if (isAccessoryMuscle(e.muscle_primary)) return 7; // accessoire = exo d'appoint, 1 sem. max
-  const rem = remainingTokens(laneChallenges(exIsCardio(e)));
+  const rem = remainingTokens(laneChallenges(exLane(e)));
   return tokenCost(30) <= rem ? 30 : 7;
 }
 function pickExercise(e: ExerciseRow) {
   if (exFull(e)) {
-    const lane = exIsCardio(e) ? 'cardio' : 'muscu';
+    const lane = exLane(e);
+    const accName = activeAccessoryName(lane);
     $q.notify({
       type: 'warning',
       message: isAccessoryMuscle(e.muscle_primary)
-        ? `Tu as déjà un accessoire ${lane} en cours${activeAccessoryName(exIsCardio(e)) ? ` (${activeAccessoryName(exIsCardio(e))})` : ''} — termine-le pour en lancer un autre (1 accessoire à la fois).`
+        ? `Tu as déjà un accessoire ${lane} en cours${accName ? ` (${accName})` : ''} — termine-le pour en lancer un autre (1 accessoire à la fois).`
         : `Plus de place pour un défi ${lane}. Termine un défi en cours pour en lancer un autre.`,
     });
     return;
@@ -1034,6 +1056,8 @@ async function createChallenge() {
     if (unit.value === 'reps' && countMode.value === 'sets') cfg.count_mode = 'sets';
     if (isBodyweightExercise(exercise.value.equipment_required, exercise.value.name))
       cfg.bodyweight = true;
+    // Voie Tennis : le challenge vit dans sa voie de jetons et verse son XP au Tennis.
+    if (selLane.value === 'tennis') cfg.discipline = 'tennis';
     const daily = computeDailyTargets(format.value, cfg, durationDays.value, startDate.value);
     if (adaptiveMode.value) {
       cfg.adaptive = true;

@@ -45,6 +45,16 @@
         <span>Cross-training</span>
         <small>Crossfit / Hyrox, à la durée</small>
       </button>
+      <button class="tile" @click="router.push('/challenges?mode=combo&kind=tennis')">
+        <q-icon name="bolt" size="30px" />
+        <span>Défi 360 Tennis</span>
+        <small>7 jours en solo, maison ou court</small>
+      </button>
+      <button class="tile" @click="router.push('/challenges/new?lane=tennis')">
+        <q-icon name="emoji_events" size="30px" />
+        <span>Challenge tennis</span>
+        <small>Un exo, sur plusieurs jours</small>
+      </button>
     </div>
 
     <button v-if="tab === 'act' && action" class="back-b" @click="action = null">

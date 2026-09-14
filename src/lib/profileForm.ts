@@ -108,6 +108,10 @@ const VALID_EQUIPMENT_SET: Record<EquipmentItem, true> = {
   dip_station: true,
   rower: true,
   punching_bag: true,
+  medicine_ball: true,
+  cones: true,
+  agility_ladder: true,
+  plyo_box: true,
 };
 const VALID_EQUIPMENT = Object.keys(VALID_EQUIPMENT_SET) as EquipmentItem[];
 

@@ -79,6 +79,15 @@ export const EQUIPMENT_GROUPS: EquipmentGroup[] = [
       { value: 'punching_bag', label: 'Sac de frappe' },
     ],
   },
+  {
+    group: 'Prépa tennis',
+    items: [
+      { value: 'medicine_ball', label: 'Médecine-ball', desc: '2 à 4 kg' },
+      { value: 'cones', label: 'Plots / cônes' },
+      { value: 'agility_ladder', label: 'Échelle d’agilité' },
+      { value: 'plyo_box', label: 'Box / step solide' },
+    ],
+  },
 ];
 
 // Liste plate (toutes options confondues).

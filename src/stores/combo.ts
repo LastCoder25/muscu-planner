@@ -10,6 +10,7 @@ import {
   type ComboLeg,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
+import { canStartCombo, type ComboKind } from '@/lib/tennisTraining';
 import type { ComboChestRecord } from '@/lib/comboChest';
 import { useAuthStore } from '@/stores/auth';
 
@@ -18,19 +19,31 @@ export interface ComboRow extends ComboChallenge {
 }
 
 class ComboActiveError extends Error {
-  constructor() {
-    super('Tu as déjà un Défi 360 en cours (1 max).');
+  constructor(kind: ComboKind) {
+    super(
+      kind === 'tennis'
+        ? 'Tu as déjà un Défi 360 Tennis en cours (1 max).'
+        : 'Tu as déjà un Défi 360 en cours (1 max).',
+    );
     this.name = 'ComboActiveError';
   }
 }
 
-const COLS = 'id, name, start_date, duration_days, status, legs, chest';
+const COLS = 'id, name, start_date, duration_days, status, legs, chest, config';
+
+/** Ligne brute → 360 : la SORTE vit dans la colonne libre `config` (aucune migration). */
+function fromRow(r: ComboRow & { config?: { kind?: string } | null }): ComboRow {
+  const { config, ...rest } = r;
+  return config?.kind === 'tennis' ? { ...rest, kind: 'tennis' } : rest;
+}
 
 export interface NewCombo {
   name: string;
   start_date: string;
   duration_days: number;
   legs: ComboLeg[];
+  /** 'tennis' pour un Défi 360 Tennis ; absent = 360 muscu. */
+  kind?: 'tennis';
 }
 
 export const useComboStore = defineStore('combo', () => {
@@ -73,7 +86,7 @@ export const useComboStore = defineStore('combo', () => {
       .eq('user_id', uid)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    list.value = data ?? [];
+    list.value = (data ?? []).map(fromRow);
     loaded.value = true;
     // ⚠️ Un 360 dont la date de fin est passée se FERME ici : personne ne l'aurait fait
     // sinon (aucune série n'arrive), il restait « en cours » pour toujours et son coffre ne
@@ -93,22 +106,23 @@ export const useComboStore = defineStore('combo', () => {
     return list.value;
   }
 
-  const activeOne = () => list.value.find((c) => c.status === 'active') ?? null;
-
   async function create(input: NewCombo): Promise<ComboRow> {
-    // TODO(cleanup avant release) : retirer le bypass `!isAdmin` — débridage
-    // TEMPORAIRE pour tester la nouvelle génération avec plusieurs Défis 360 actifs
-    // (compte admin). En prod : 1 Défi 360 actif max. Cf. [[combo360-admin-bypass-temporaire]].
+    // UN 360 ACTIF PAR SORTE : un 360 muscu et un 360 Tennis coexistent.
+    // TODO(cleanup avant release) : retirer le bypass `!isAdmin` (plusieurs 360 de la même
+    // sorte pour tester, compte admin). Cf. [[combo360-admin-bypass-temporaire]].
+    const { kind: askedKind, ...fields } = input;
+    const kind = askedKind === 'tennis' ? 'tennis' : 'muscu';
     const isAdmin = useAuthStore().isAdmin;
-    if (!isAdmin && list.value.some((c) => c.status === 'active')) throw new ComboActiveError();
+    if (!isAdmin && !canStartCombo(list.value, kind)) throw new ComboActiveError(kind);
     const { data, error } = await supabase
       .from('combo_challenges')
-      .insert({ ...input, status: 'active' })
+      .insert({ ...fields, status: 'active', config: kind === 'tennis' ? { kind } : {} })
       .select(COLS)
       .single();
     if (error) throw error;
-    list.value.unshift(data);
-    return data;
+    const row = fromRow(data);
+    list.value.unshift(row);
+    return row;
   }
 
   async function persistLegs(id: string, legs: ComboLeg[], status?: string) {
@@ -215,7 +229,6 @@ export const useComboStore = defineStore('combo', () => {
     closedChests,
     setChest,
     fetchMine,
-    activeOne,
     create,
     addSet,
     removeSet,

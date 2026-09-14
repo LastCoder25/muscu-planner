@@ -336,6 +336,7 @@ import {
 } from '@/lib/bodyBalance';
 import { MUSCLE_REGIONS, regionTotals } from '@/lib/muscles';
 import { useBalanceInput } from '@/composables/useBalanceInput';
+import { challengeLane, comboKind } from '@/lib/tennisTraining';
 import { DRILL_SHOT_LABELS } from '@/data/tennis';
 import { useProgress } from '@/composables/useProgress';
 import type { DrillShot, Difficulty } from '@/lib/types';
@@ -512,8 +513,8 @@ function barPct(n: number) {
 // dans TOUT le volume muscu (heatmap, objectif, tendance) au même titre qu'une séance.
 const entries = computed<LogEntry[]>(() => [
   ...balanceInput.value.sessions,
-  ...comboLogEntries(combo.list),
-  ...challengeLogEntries(challenges.list),
+  ...comboLogEntries(combo.list.filter((c) => comboKind(c) === 'muscu')),
+  ...challengeLogEntries(challenges.list.filter((c) => challengeLane(c) === 'muscu')),
 ]);
 // Volume par PÉRIODE (heatmap corps + détail) — semaine en cours ou mois en cours.
 const volPeriod = ref<'week' | 'month'>('week');

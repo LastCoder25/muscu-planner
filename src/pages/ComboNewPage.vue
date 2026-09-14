@@ -2,7 +2,9 @@
   <q-page class="combo-new">
     <header class="top">
       <button class="iconbtn" aria-label="Retour" @click="onBack">‹</button>
-      <div class="top-title font-display">Nouveau Défi 360</div>
+      <div class="top-title font-display">
+        {{ isTennis ? 'Nouveau Défi 360 Tennis' : 'Nouveau Défi 360' }}
+      </div>
       <div class="top-spacer" />
     </header>
 
@@ -11,7 +13,12 @@
     <template v-else>
       <!-- ÉTAPE 1 — RÉGLAGES : on renforce TOUT le corps ; volume (+ variété) -->
       <template v-if="step === 'setup'">
-        <p class="intro">
+        <p v-if="isTennis" class="intro">
+          Ta <b>prépa tennis en solo</b> sur 7 jours : explosivité, réactivité, rotation, gainage —
+          et si tu veux, jambes et prévention. Tu fais tes séries <b>quand tu veux</b> dans la
+          semaine, à la maison ou sur le court.
+        </p>
+        <p v-else class="intro">
           On renforce <b>tout le corps</b> sur 7 jours : choisis ton <b>volume</b>, on te propose le
           nombre d'exercices et de séries. Tu fais tes séries <b>quand tu veux</b> dans la semaine.
         </p>
@@ -30,45 +37,80 @@
             </button>
           </div>
 
-          <div class="vol-lbl vl-mt">Zone du corps</div>
-          <div class="opt-tiles">
-            <button
-              v-for="o in ZONE_OPTS"
-              :key="o.id"
-              type="button"
-              class="opt-tile"
-              :class="{ on: zone === o.id }"
-              @click="zone = o.id"
-            >
-              <span class="ot-emo">{{ o.emoji }}</span>
-              <span class="ot-lbl">{{ o.label }}</span>
-              <span class="ot-sub">{{ o.sub }}</span>
-            </button>
-          </div>
-          <div class="zone-hint">Blessé ou tu veux zapper une partie ? Choisis haut ou bas.</div>
+          <template v-if="isTennis">
+            <div class="vol-lbl vl-mt">Où t’entraînes-tu ?</div>
+            <div class="opt-tiles">
+              <button
+                v-for="o in PLACE_OPTS"
+                :key="o.id"
+                type="button"
+                class="opt-tile"
+                :class="{ on: place === o.id }"
+                @click="place = o.id"
+              >
+                <span class="ot-emo">{{ o.emoji }}</span>
+                <span class="ot-lbl">{{ o.label }}</span>
+              </button>
+            </div>
+            <div class="vol-lbl vl-mt">Ton matériel</div>
+            <div class="equip-chips">
+              <button
+                v-for="o in TENNIS_EQUIPMENT"
+                :key="o.value"
+                type="button"
+                class="equip-chip"
+                :class="{ on: owned.has(o.value) }"
+                @click="toggleOwned(o.value)"
+              >
+                {{ owned.has(o.value) ? '✓ ' : '' }}{{ o.label }}
+              </button>
+            </div>
+            <div class="zone-hint">
+              Rien n’est obligatoire : sans matériel, on te propose des exos au poids du corps. Ta
+              raquette et des balles sont supposées.
+            </div>
+          </template>
+          <template v-else>
+            <div class="vol-lbl vl-mt">Zone du corps</div>
+            <div class="opt-tiles">
+              <button
+                v-for="o in ZONE_OPTS"
+                :key="o.id"
+                type="button"
+                class="opt-tile"
+                :class="{ on: zone === o.id }"
+                @click="zone = o.id"
+              >
+                <span class="ot-emo">{{ o.emoji }}</span>
+                <span class="ot-lbl">{{ o.label }}</span>
+                <span class="ot-sub">{{ o.sub }}</span>
+              </button>
+            </div>
+            <div class="zone-hint">Blessé ou tu veux zapper une partie ? Choisis haut ou bas.</div>
 
-          <div class="vol-lbl vl-mt">Ton objectif</div>
-          <div class="opt-tiles">
-            <button
-              v-for="o in OBJ_OPTS"
-              :key="o.id"
-              type="button"
-              class="opt-tile"
-              :class="{ on: objective === o.id }"
-              @click="objective = o.id"
-            >
-              <span class="ot-emo">{{ o.emoji }}</span>
-              <span class="ot-lbl">{{ o.label }}</span>
-              <span class="ot-sub">{{ o.sub }}</span>
-            </button>
-          </div>
-          <div class="zone-hint">
-            🎯 Séries visées : <b>{{ repRangeLabel(objRange) }}</b> — repos ~{{ objRange.rest }} s.
-            La fourchette est rappelée sur chaque exo pendant le défi.
-          </div>
-          <div v-if="sportsHint" class="zone-hint">
-            Adapté à tes sports ({{ sportsHint }}) : on allège les groupes déjà sollicités.
-          </div>
+            <div class="vol-lbl vl-mt">Ton objectif</div>
+            <div class="opt-tiles">
+              <button
+                v-for="o in OBJ_OPTS"
+                :key="o.id"
+                type="button"
+                class="opt-tile"
+                :class="{ on: objective === o.id }"
+                @click="objective = o.id"
+              >
+                <span class="ot-emo">{{ o.emoji }}</span>
+                <span class="ot-lbl">{{ o.label }}</span>
+                <span class="ot-sub">{{ o.sub }}</span>
+              </button>
+            </div>
+            <div class="zone-hint">
+              🎯 Séries visées : <b>{{ repRangeLabel(objRange) }}</b> — repos ~{{ objRange.rest }}
+              s. La fourchette est rappelée sur chaque exo pendant le défi.
+            </div>
+            <div v-if="sportsHint" class="zone-hint">
+              Adapté à tes sports ({{ sportsHint }}) : on allège les groupes déjà sollicités.
+            </div>
+          </template>
 
           <div class="vol-lbl vl-mt">Volume d'entraînement</div>
           <div class="opt-tiles">
@@ -134,7 +176,7 @@
           </div>
 
           <div class="vol-summary">
-            🎯 <b>{{ activeCount }}</b> groupes musculaires ·
+            🎯 <b>{{ activeCount }}</b> {{ isTennis ? 'groupes' : 'groupes musculaires' }} ·
             <b>~{{ suggestedTotalExos }}</b> exercices · <b>{{ totalSets }}</b> séries / semaine
           </div>
         </div>
@@ -233,14 +275,16 @@
               <div v-if="variantBlocked(curKey, e.id)" class="dtile-mus variant">
                 ≈ variante déjà choisie
               </div>
-              <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
+              <div v-else class="dtile-mus">{{ tileSub(e) }}</div>
             </button>
           </div>
         </template>
 
         <!-- Autres exos (matériel de salle non possédé) — accessibles si tu vas en salle -->
         <template v-if="otherCandidates(curSlot).length">
-          <div class="grp-label alt">🏋️ En salle (autre matériel)</div>
+          <div class="grp-label alt">
+            {{ isTennis ? '🛒 Avec du matériel que tu n’as pas' : '🏋️ En salle (autre matériel)' }}
+          </div>
           <div class="tile-grid">
             <button
               v-for="e in otherCandidates(curSlot)"
@@ -279,7 +323,7 @@
               <div v-if="variantBlocked(curKey, e.id)" class="dtile-mus variant">
                 ≈ variante déjà choisie
               </div>
-              <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
+              <div v-else class="dtile-mus">{{ tileSub(e) }}</div>
             </button>
           </div>
         </template>
@@ -358,7 +402,7 @@
             <div v-if="pickCount(key) > 1" class="cfg-split">
               ≈ {{ perExo(key) }} {{ picks[key]?.count_mode === 'reps' ? 'reps' : 'séries' }} / exo
             </div>
-            <div class="cfg-row">
+            <div v-if="!isTennis" class="cfg-row">
               <span class="cfg-lbl">Charge départ (kg, option)</span>
               <q-input
                 v-model.number="picks[key]!.weight_kg"
@@ -379,7 +423,7 @@
             no-caps
             size="lg"
             icon="check"
-            label="Créer le Défi 360"
+            :label="isTennis ? 'Créer le Défi 360 Tennis' : 'Créer le Défi 360'"
             :loading="creating"
             :disable="!recapKeys.length"
             @click="createCombo"
@@ -399,15 +443,26 @@ import {
   START_MAX_AHEAD_DAYS,
 } from '@/lib/startDate';
 import { ref, reactive, computed, onMounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useComboStore } from '@/stores/combo';
-import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
-import { COMBO_SLOTS, variantFamilyKey, type ComboSlot } from '@/data/combo';
+import { useChallengesStore } from '@/stores/challenges';
+import { COMBO_SLOTS, variantFamilyKey } from '@/data/combo';
+import { EQUIPMENT_ITEMS } from '@/data/profileOptions';
+import {
+  TENNIS_SLOTS,
+  fitsPlace,
+  isTennisExercise,
+  takenFamilies,
+  tennisRange,
+  tennisSlotOf,
+  type TennisPlaceChoice,
+  type TennisSlotKey,
+} from '@/lib/tennisTraining';
 import {
   suggestFullBodyPlan,
   comboWeeklySets,
@@ -428,7 +483,7 @@ import {
   repRangeLabel,
   DEFAULT_OBJECTIVE,
 } from '@/lib/repScheme';
-import type { Objective } from '@/lib/types';
+import type { EquipmentItem, Objective } from '@/lib/types';
 import {
   repWeightFromExercise,
   isBodyweightExercise,
@@ -440,7 +495,58 @@ import ExerciseAnim from '@/components/ExerciseAnim.vue';
 import type { Level } from '@/lib/types';
 
 const router = useRouter();
+const route = useRoute();
 const $q = useQuasar();
+// Sorte du 360 : `?kind=tennis` ouvre le Défi 360 Tennis (mêmes étapes, autres groupes).
+const isTennis = route.query.kind === 'tennis';
+// Un emplacement du draft : les groupes musculaires du 360 muscu, ou les groupes tennis.
+type SlotSpec = {
+  key: string;
+  label: string;
+  emoji: string;
+  essential: boolean;
+  hint: string;
+  muscles: string[];
+};
+const SLOTS: readonly SlotSpec[] = isTennis ? TENNIS_SLOTS : COMBO_SLOTS;
+
+// Tennis : lieu d'entraînement (mémorisé au profil) et matériel possédé (coché ici,
+// enregistré au profil à la création — c'est le même matériel que dans Profil).
+const PLACE_OPTS: { id: TennisPlaceChoice; emoji: string; label: string }[] = [
+  { id: 'maison', emoji: '🏠', label: 'À la maison' },
+  { id: 'court', emoji: '🎾', label: 'Sur le court' },
+  { id: 'both', emoji: '🔀', label: 'Les deux' },
+];
+const TENNIS_EQUIPMENT_IDS: EquipmentItem[] = [
+  'medicine_ball',
+  'bands',
+  'cones',
+  'agility_ladder',
+  'plyo_box',
+];
+const TENNIS_EQUIPMENT = TENNIS_EQUIPMENT_IDS.map(
+  (v) => EQUIPMENT_ITEMS.find((o) => o.value === v) ?? { value: v, label: v },
+);
+const place = ref<TennisPlaceChoice>('both');
+const owned = ref(new Set<string>());
+function toggleOwned(v: string) {
+  const next = new Set(owned.value);
+  if (next.has(v)) next.delete(v);
+  else next.add(v);
+  owned.value = next;
+}
+// Sous-titre d'une tuile : le muscle en 360 muscu ; en tennis, où se fait l'exo.
+function tileSub(e: ExerciseRow): string {
+  if (!isTennis) return e.muscle_primary ?? '';
+  const tags = e.tags ?? [];
+  const where = [
+    tags.includes('maison') ? '🏠 maison' : '',
+    tags.includes('court') ? '🎾 court' : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return where || (e.muscle_primary ?? '');
+}
 const auth = useAuthStore();
 const profileStore = useProfileStore();
 // Secondes de gainage visées par « série » d'objectif (mode durée du 360).
@@ -557,17 +663,17 @@ const planN = reactive<Record<string, number>>({}); // nb d'exos suggéré par l
 const draftKeys = ref<string[]>([]);
 const draftIndex = ref(0);
 const curKey = computed(() => draftKeys.value[draftIndex.value] ?? '');
-const curSlot = computed(() => COMBO_SLOTS.find((s) => s.key === curKey.value) ?? null);
+const curSlot = computed(() => SLOTS.find((s) => s.key === curKey.value) ?? null);
 const isLastDraft = computed(() => draftIndex.value === draftKeys.value.length - 1);
 function slotOf(key: string) {
-  return COMBO_SLOTS.find((s) => s.key === key) ?? null;
+  return SLOTS.find((s) => s.key === key) ?? null;
 }
 function suggestN(key: string): number {
   return Math.max(1, planN[key] ?? 1);
 }
 
 function startDraft() {
-  draftKeys.value = COMBO_SLOTS.filter((s) => enabled[s.key]).map((s) => s.key);
+  draftKeys.value = SLOTS.filter((s) => enabled[s.key]).map((s) => s.key);
   draftIndex.value = 0;
   step.value = 'draft';
 }
@@ -598,40 +704,40 @@ function onBack() {
 const hasAnim = (id: string) => !!exerciseFrames(id);
 const exImg = (id: string) => exerciseImage(id);
 
-// Familles d'exos déjà prises par un défi MUSCU actif → exclues du 360 (EXCLUSIVITÉ
-// PAR EXERCICE : un exo est soit en challenge, soit en 360, jamais les deux — pour tous).
-const challengeFamilies = computed(() => {
-  const keys = new Set<string>();
-  for (const c of challenges.list)
-    if (c.status === 'active' && !isCardioChallengeRow(c))
-      keys.add(variantFamilyKey(c.exercise_id));
-  return keys;
-});
-// Exos candidats d'un emplacement : reps, muscle_primary du slot, matériel possédé
-// (favoris en tête). Exclut les exos déjà pris par un défi muscu actif.
-function candidates(slot: ComboSlot): ExerciseRow[] {
+// Familles d'exos déjà PRISES (challenges actifs + exos de tous les 360 actifs, muscu ET
+// tennis) → exclues (EXCLUSIVITÉ PAR EXERCICE : un exo n'est que dans UN défi à la fois).
+const challengeFamilies = computed(() => takenFamilies(challenges.list, combo.list));
+// Exos candidats d'un emplacement (favoris en tête), hors exos déjà pris.
+//  - 360 muscu : muscle_primary du slot + zone ; JAMAIS un exo d'entraînement tennis ;
+//  - 360 Tennis : groupe du tag `t360:` + lieu choisi.
+function candidates(slot: SlotSpec): ExerciseRow[] {
   return lib.value
     .filter(
       (e) =>
-        // Les exos au TEMPS (gainage) sont désormais admis (mode DURÉE, secondes) → ils
-        // n'apparaissent que dans l'emplacement Gainage (filtre par muscle ci-dessous).
-        slot.muscles.includes(e.muscle_primary ?? '') &&
-        comboMuscleInZone(e.muscle_primary, zone.value) &&
-        !challengeFamilies.value.has(variantFamilyKey(e.id)),
+        !challengeFamilies.value.has(variantFamilyKey(e.id)) &&
+        (isTennis
+          ? tennisSlotOf(e) === slot.key && fitsPlace(e, place.value)
+          : // Les exos au TEMPS (gainage) sont admis (mode DURÉE, secondes) → ils
+            // n'apparaissent que dans l'emplacement Gainage (filtre par muscle).
+            !isTennisExercise(e) &&
+            slot.muscles.includes(e.muscle_primary ?? '') &&
+            comboMuscleInZone(e.muscle_primary, zone.value)),
     )
     .sort((a, b) => (favSet.value.has(b.id) ? 1 : 0) - (favSet.value.has(a.id) ? 1 : 0));
 }
 // Matériel possédé (atomes) → un exo est « faisable » si TOUS ses atomes requis
 // sont possédés (poids du corps = aucun atome → toujours faisable).
-const ownedSet = computed(() => new Set<string>(profileStore.profile?.available_equipment ?? []));
+const ownedSet = computed(() =>
+  isTennis ? owned.value : new Set<string>(profileStore.profile?.available_equipment ?? []),
+);
 function canDo(e: ExerciseRow): boolean {
   return (e.equipment_required ?? []).every((r) => ownedSet.value.has(r));
 }
 // Deux groupes pour le draft : ce que tu peux faire chez toi vs le reste (salle).
-function mineCandidates(slot: ComboSlot): ExerciseRow[] {
+function mineCandidates(slot: SlotSpec): ExerciseRow[] {
   return candidates(slot).filter(canDo);
 }
-function otherCandidates(slot: ComboSlot): ExerciseRow[] {
+function otherCandidates(slot: SlotSpec): ExerciseRow[] {
   return candidates(slot).filter((e) => !canDo(e));
 }
 function selectedExos(key: string): ExerciseRow[] {
@@ -644,6 +750,7 @@ function selectedExos(key: string): ExerciseRow[] {
 function slotRangeLabel(key: string): string {
   const e = selectedExos(key)[0];
   const time = e?.unit === 'time';
+  if (isTennis) return repRangeLabel(tennisRange(key as TennisSlotKey, time), time);
   const r = repRangeForExercise(objective.value, {
     time,
     muscle_primary: e?.muscle_primary ?? null,
@@ -725,17 +832,17 @@ function toggleMode(key: string) {
       : Math.max(3, Math.round(p.target / COMBO_PLAN_REPS));
   p.count_mode = nextMode;
 }
-const activeCount = computed(() => COMBO_SLOTS.filter((s) => enabled[s.key]).length);
+const activeCount = computed(() => SLOTS.filter((s) => enabled[s.key]).length);
 // Nb d'exos qu'on choisira (somme des suggestions des emplacements actifs).
 const suggestedTotalExos = computed(() =>
-  COMBO_SLOTS.reduce((a, s) => a + (enabled[s.key] ? suggestN(s.key) : 0), 0),
+  SLOTS.reduce((a, s) => a + (enabled[s.key] ? suggestN(s.key) : 0), 0),
 );
 const totalSets = computed(() =>
-  COMBO_SLOTS.reduce((a, s) => a + (enabled[s.key] ? (picks[s.key]?.target ?? 0) : 0), 0),
+  SLOTS.reduce((a, s) => a + (enabled[s.key] ? (picks[s.key]?.target ?? 0) : 0), 0),
 );
 // Récap : emplacements inclus avec au moins un exo.
 const recapKeys = computed(() =>
-  COMBO_SLOTS.filter((s) => enabled[s.key] && pickCount(s.key) > 0).map((s) => s.key),
+  SLOTS.filter((s) => enabled[s.key] && pickCount(s.key) > 0).map((s) => s.key),
 );
 
 // (Re)génère le volume/variété full-body selon niveau + volume + variété.
@@ -744,10 +851,11 @@ function applyPlan() {
     level.value,
     volume.value,
     effVariety.value,
-    COMBO_SLOTS,
-    emphasis.value,
+    [...SLOTS],
+    // Le 360 Tennis n'allège aucun groupe selon les sports : il EST le sport.
+    isTennis ? undefined : emphasis.value,
   );
-  for (const slot of COMBO_SLOTS) {
+  for (const slot of SLOTS) {
     const p = plan.find((x) => x.slot === slot.key);
     // Pré-sélection : d'abord les exos FAISABLES avec ton matériel, puis les autres.
     // Dédup par famille de variantes : jamais pompes ET pompes sur genoux d'office.
@@ -773,7 +881,7 @@ function applyPlan() {
   }
 }
 
-watch([level, zone, volume, variety, objective], applyPlan);
+watch([level, zone, volume, variety, objective, place, owned], applyPlan);
 
 async function createCombo() {
   const uid = auth.user?.id;
@@ -782,7 +890,7 @@ async function createCombo() {
   // actif (le draft les masque déjà ; garde-fou au cas où). Un 360 et des challenges sur
   // d'AUTRES exos coexistent sans souci.
   const selectedFams = new Set<string>();
-  for (const slot of COMBO_SLOTS)
+  for (const slot of SLOTS)
     if (enabled[slot.key])
       for (const id of picks[slot.key]?.exercise_ids ?? []) selectedFams.add(variantFamilyKey(id));
   if ([...selectedFams].some((f) => challengeFamilies.value.has(f))) {
@@ -794,7 +902,7 @@ async function createCombo() {
     return;
   }
   const legs: ComboLeg[] = [];
-  for (const slot of COMBO_SLOTS) {
+  for (const slot of SLOTS) {
     if (!enabled[slot.key]) continue;
     const p = picks[slot.key];
     if (!p?.exercise_ids.length) continue;
@@ -806,17 +914,22 @@ async function createCombo() {
       const isTime = e.unit === 'time';
       // Fourchette FIGÉE ici : l’objectif choisi, corrigé par la nature de l’exo
       // (gainage → secondes, isolation → plancher relevé).
-      const range = repRangeForExercise(objective.value, {
-        time: isTime,
-        muscle_primary: e.muscle_primary,
-      });
+      // 360 Tennis : la fourchette de son GROUPE (explosivité courte, prévention longue).
+      const range = isTennis
+        ? tennisRange(slot.key as TennisSlotKey, isTime)
+        : repRangeForExercise(objective.value, {
+            time: isTime,
+            muscle_primary: e.muscle_primary,
+          });
+      // Secondes visées par « série » d'objectif : le milieu de la fourchette en tennis.
+      const secPerSet = isTennis ? Math.round((range.min + range.max) / 2) : COMBO_GAINAGE_SEC;
       legs.push({
         slot: slot.key,
         exercise_id: e.id,
         exercise_name: e.name,
         muscle_primary: e.muscle_primary,
         rep_weight: repWeightFromExercise(e.muscle_secondary, e.equipment_required, e.name),
-        target: isTime ? perExoTarget * COMBO_GAINAGE_SEC : perExoTarget,
+        target: isTime ? perExoTarget * secPerSet : perExoTarget,
         count_mode: isTime ? 'time' : p.count_mode,
         weight_kg: isTime ? null : p.weight_kg || null,
         assistable: !isTime && isBodyweightExercise(e.equipment_required, e.name),
@@ -830,17 +943,47 @@ async function createCombo() {
   creating.value = true;
   try {
     const c = await combo.create({
-      name: 'Défi 360',
+      name: isTennis ? 'Défi 360 Tennis' : 'Défi 360',
       start_date: startDate.value,
       duration_days: 7,
       legs,
+      ...(isTennis ? { kind: 'tennis' as const } : {}),
     });
-    $q.notify({ type: 'positive', message: 'Défi 360 lancé 💪' });
+    if (isTennis) void persistTennisPrefs();
+    $q.notify({
+      type: 'positive',
+      message: isTennis ? 'Défi 360 Tennis lancé 🎾' : 'Défi 360 lancé 💪',
+    });
     await router.replace(`/combo/${c.id}`);
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
   } finally {
     creating.value = false;
+  }
+}
+
+// Enregistre au profil le matériel coché et le lieu choisi (non bloquant) : le même
+// matériel que dans Profil, pour ne jamais avoir à le recocher.
+async function persistTennisPrefs() {
+  const pr = profileStore.profile;
+  const uid = auth.user?.id;
+  if (!pr || !uid) return;
+  const before = new Set<string>(pr.available_equipment ?? []);
+  const next = new Set(before);
+  for (const v of TENNIS_EQUIPMENT_IDS) {
+    if (owned.value.has(v)) next.add(v);
+    else next.delete(v);
+  }
+  const sameEquip = next.size === before.size && [...next].every((v) => before.has(v));
+  if (sameEquip && pr.preferences?.tennis_place === place.value) return;
+  try {
+    await profileStore.update(uid, {
+      ...pr,
+      available_equipment: [...next] as EquipmentItem[],
+      preferences: { ...pr.preferences, tennis_place: place.value },
+    });
+  } catch {
+    /* non bloquant */
   }
 }
 
@@ -853,6 +996,8 @@ onMounted(async () => {
     lib.value = await library.fetchAll();
     level.value = profileStore.profile?.experience?.level ?? 'intermediaire';
     objective.value = profileStore.profile?.objective ?? DEFAULT_OBJECTIVE;
+    owned.value = new Set<string>(profileStore.profile?.available_equipment ?? []);
+    place.value = profileStore.profile?.preferences?.tennis_place ?? 'both';
     applyPlan();
   } catch (e) {
     $q.notify({
@@ -996,6 +1141,27 @@ onMounted(async () => {
   text-align: center;
 }
 .opt-tile.on .ot-sub {
+  color: var(--accent);
+}
+.equip-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.equip-chip {
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.equip-chip.on {
+  border-color: var(--accent);
   color: var(--accent);
 }
 .vol-summary {
