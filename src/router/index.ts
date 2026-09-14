@@ -7,6 +7,7 @@ import {
 } from 'vue-router';
 
 import routes from './routes';
+import { chunkReloadUrl, isChunkError, mayReloadForChunk } from '@/lib/chunkReload';
 
 /*
  * If not building with SSR mode, you can
@@ -34,46 +35,42 @@ export default defineRouter((/* { store, ssrContext } */) => {
     history: createHistory(import.meta.env.QUASAR_VUE_ROUTER_BASE),
   });
 
-  // Redéploiements fréquents (Vercel) : les chunks lazy-loadés changent de hash à
-  // chaque build. Un onglet resté ouvert garde l'ancien index → un import à la
-  // volée peut 404 (« Failed to fetch dynamically imported module »). On recharge
-  // alors la page vers la destination (récupère le nouvel index + les bons hash),
-  // avec un garde anti-boucle si le module manque vraiment.
+  // Redéploiements fréquents (Vercel) : un onglet resté ouvert garde l'ancien index, dont
+  // les chunks lazy n'existent plus → l'import à la volée échoue. On recharge alors la page
+  // VERS la destination (nouvel index, bons hash). Règles et pièges : src/lib/chunkReload.ts.
   const RELOAD_KEY = 'muscu:chunk-reload';
-  const isChunkError = (msg: string): boolean =>
-    /failed to fetch dynamically imported module/i.test(msg) ||
-    /error loading dynamically imported module/i.test(msg) ||
-    /importing a module script failed/i.test(msg);
 
-  // DESTINATION en cours de navigation : sur un `vite:preloadError` (le chunk de la route
-  // ciblée a 404), l'event ne porte PAS la cible → on la mémorise ici pour recharger VERS
-  // elle (et non recharger la page COURANTE, qui laissait le joueur sur place — « ça recharge
-  // au lieu d'y aller » sur Aventure/Labyrinthe après un redéploiement).
-  let pendingTarget = typeof window !== 'undefined' ? window.location.pathname : '/';
+  // DESTINATION en cours : `vite:preloadError` ne porte pas la cible → on la mémorise ici.
+  // Par défaut, la route du fragment (mode hash), jamais le chemin de la page.
+  let pendingTarget =
+    typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') || '/' : '/';
   Router.beforeEach((to) => {
     pendingTarget = to.fullPath;
     return true;
   });
 
+  /** Recharge vers `target` ; rend false si une tentative vient d'échouer (boucle). */
+  const reloadTo = (target: string): boolean => {
+    if (!mayReloadForChunk(sessionStorage.getItem(RELOAD_KEY), Date.now())) return false;
+    sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+    const url = chunkReloadUrl(window.location.href, Router.resolve(target).href);
+    // Changer seulement le fragment ne recharge pas : on réécrit l'URL SANS événement
+    // (le routeur ne réagit pas), puis on recharge vraiment.
+    window.history.replaceState(window.history.state, '', url);
+    window.location.reload();
+    return true;
+  };
+
   Router.onError((err, to) => {
     const msg = err instanceof Error ? err.message : String(err);
-    if (!isChunkError(msg)) return;
-    if (sessionStorage.getItem(RELOAD_KEY)) return; // déjà retenté → évite la boucle
-    sessionStorage.setItem(RELOAD_KEY, '1');
-    window.location.assign(to?.fullPath ?? pendingTarget);
+    if (isChunkError(msg)) reloadTo(to?.fullPath ?? pendingTarget);
   });
-  // Nettoie le garde après une navigation réussie (chunk chargé) → un futur
-  // redéploiement pourra à nouveau déclencher un rechargement.
+  // Nettoie le garde après une navigation réussie (chunk chargé).
   Router.afterEach(() => sessionStorage.removeItem(RELOAD_KEY));
 
   if (typeof window !== 'undefined') {
     window.addEventListener('vite:preloadError', (e) => {
-      if (sessionStorage.getItem(RELOAD_KEY)) return;
-      sessionStorage.setItem(RELOAD_KEY, '1');
-      e.preventDefault();
-      // Recharge VERS la destination en cours (pas la page courante) → on arrive bien sur
-      // l'écran demandé (Aventure/Labyrinthe) au lieu de rester là où on était.
-      window.location.assign(pendingTarget);
+      if (reloadTo(pendingTarget)) e.preventDefault();
     });
   }
 

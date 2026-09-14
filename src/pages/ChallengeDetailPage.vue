@@ -467,7 +467,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { backOrReplace } from '@/lib/nav';
+import { backOr, backOrReplace } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import {
   challengeStats,
@@ -1339,11 +1339,10 @@ function extendDialog() {
   });
 }
 
-async function back() {
-  // router.back() pour ne pas empiler un doublon /challenges dans l'historique
+function back() {
+  // Un vrai retour pour ne pas empiler un doublon /challenges dans l'historique
   // (sinon il faut appuyer « retour » plusieurs fois pour revenir à l'accueil).
-  if (window.history.state?.back) router.back();
-  else await router.push('/challenges');
+  backOr(router, '/challenges');
 }
 
 /** Charge le contexte « défi partagé » : la liste d'amis (pour pouvoir proposer) et,

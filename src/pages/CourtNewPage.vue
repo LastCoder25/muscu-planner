@@ -176,6 +176,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
@@ -338,7 +339,7 @@ async function save() {
 }
 
 function goBack() {
-  router.back();
+  backOr(router, '/tennis');
 }
 </script>
 

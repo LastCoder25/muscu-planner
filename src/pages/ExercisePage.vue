@@ -104,6 +104,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useLibraryStore, type ExerciseFull, type ExerciseRow } from '@/stores/library';
 import { useLogsStore } from '@/stores/logs';
@@ -198,7 +199,7 @@ async function load(id: string) {
 }
 
 function back() {
-  router.back();
+  backOr(router, '/');
 }
 async function goExercise(id: string) {
   await router.push(`/exercise/${id}`);

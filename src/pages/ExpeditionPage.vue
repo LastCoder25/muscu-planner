@@ -488,6 +488,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { backOr } from '@/lib/nav';
 import {
   generateDungeon,
   startRun,
@@ -565,7 +566,7 @@ const { gameBack } = useGamePanel();
 // Retour/Sortir : dans le volet jeu (cockpit) → revient à l'Aventure ; sinon route.
 function leave() {
   if (props.embedded) return gameBack();
-  router.back();
+  backOr(router, '/aventure');
 }
 // Quitter un run EN COURS = abandon → le butin ramassé (crédité seulement à la fin du
 // palier) est perdu. On avertit (le bouton « 🚪 Sortir en gardant le butin » banque, lui).

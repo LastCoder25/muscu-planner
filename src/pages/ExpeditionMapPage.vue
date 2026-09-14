@@ -392,6 +392,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
@@ -446,7 +447,7 @@ const { gameBack } = useGamePanel();
 // Retour : dans le volet jeu (cockpit) → revient à l'Aventure du volet ; sinon route.
 function back() {
   if (props.embedded) return gameBack();
-  router.back();
+  backOr(router, '/aventure');
 }
 const $q = useQuasar();
 const auth = useAuthStore();

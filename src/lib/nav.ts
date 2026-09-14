@@ -40,6 +40,20 @@ function previousUrl(): string | null {
   return typeof back === 'string' ? back : null;
 }
 
+/** Faut-il un vrai retour arrière ? Non si l'on est entré DIRECTEMENT sur l'écran (lien,
+ *  notification, rechargement, lancement de la PWA) : `router.back()` sortirait de l'app ou
+ *  ne ferait RIEN — le « retour qui ne marche pas ». Vue Router note l'entrée précédente
+ *  dans `history.state.back`. */
+export function hasPreviousEntry(prevUrl: string | null | undefined): boolean {
+  return typeof prevUrl === 'string' && prevUrl.length > 0;
+}
+
+/** Retour arrière, avec un REPLI quand il n'y a pas d'entrée précédente. */
+export function backOr(router: Router, fallback: string): void {
+  if (hasPreviousEntry(previousUrl())) router.back();
+  else void router.push(fallback);
+}
+
 /** Rejoint `target` en retirant l'écran courant de l'historique, SANS jamais y laisser
  *  de doublon. À utiliser partout où l'on écrivait `router.replace(<page d'où l'on vient>)`. */
 export function backOrReplace(router: Router, target: string): void {

@@ -1,7 +1,7 @@
 <template>
   <q-page class="combo-detail">
     <header class="top">
-      <button class="iconbtn" aria-label="Retour" @click="router.back()">‹</button>
+      <button class="iconbtn" aria-label="Retour" @click="backOr(router, '/challenges')">‹</button>
       <div class="top-title font-display">Défi 360</div>
       <button class="iconbtn danger" aria-label="Supprimer" @click="confirmStop">🗑</button>
     </header>
@@ -245,6 +245,7 @@
 import { startLabel } from '@/lib/startDate';
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useComboStore } from '@/stores/combo';
@@ -563,7 +564,7 @@ function confirmStop() {
     ok: { label: plan.ok, color: 'negative' },
   }).onOk(() => {
     void (plan.kind === 'abandon' ? combo.setStatus(id, 'abandoned') : combo.remove(id)).then(() =>
-      router.back(),
+      backOr(router, '/challenges'),
     );
   });
 }

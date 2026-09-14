@@ -853,6 +853,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
@@ -951,7 +952,7 @@ const { gameBack, openPath } = useGamePanel();
 
 function back() {
   if (props.embedded) gameBack();
-  else router.back();
+  else backOr(router, '/aventure');
 }
 /** Sortir de la base → la carte des expéditions. En cockpit, elle prend le volet droit ;
  *  sinon c'est une route plein écran. */

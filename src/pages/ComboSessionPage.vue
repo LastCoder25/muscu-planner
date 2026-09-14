@@ -4,7 +4,7 @@
       <button
         class="iconbtn"
         aria-label="Retour"
-        @click="phase === 'run' ? cancel() : router.back()"
+        @click="phase === 'run' ? cancel() : backOr(router, '/challenges')"
       >
         ‹
       </button>
@@ -199,7 +199,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { backOrReplace } from '@/lib/nav';
+import { backOr, backOrReplace } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useComboStore } from '@/stores/combo';
 import {

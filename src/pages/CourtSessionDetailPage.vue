@@ -59,6 +59,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useTennisStore } from '@/stores/tennis';
 import { useLiveCourtStore } from '@/stores/liveCourt';
@@ -121,7 +122,7 @@ function remove() {
 }
 
 function goBack() {
-  router.back();
+  backOr(router, '/tennis');
 }
 </script>
 

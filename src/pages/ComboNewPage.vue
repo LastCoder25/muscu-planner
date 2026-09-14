@@ -400,6 +400,7 @@ import {
 } from '@/lib/startDate';
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
@@ -591,7 +592,7 @@ function editSlot(key: string) {
 function onBack() {
   if (step.value === 'recap') step.value = 'draft';
   else if (step.value === 'draft') step.value = 'setup';
-  else router.back();
+  else backOr(router, '/challenges');
 }
 
 const hasAnim = (id: string) => !!exerciseFrames(id);

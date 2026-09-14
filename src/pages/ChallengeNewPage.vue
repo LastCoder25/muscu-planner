@@ -524,6 +524,7 @@ import {
 } from '@/lib/startDate';
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import {
   CHALLENGE_FORMATS,
@@ -822,10 +823,9 @@ const filteredLib = computed(() => {
 function next() {
   if (canNext.value && step.value < STEP_TITLES.length) step.value++;
 }
-async function prev() {
+function prev() {
   if (step.value > 1) step.value--;
-  else if (window.history.state?.back) router.back();
-  else await router.push('/challenges');
+  else backOr(router, '/challenges');
 }
 
 function durationLabel(d: number) {
