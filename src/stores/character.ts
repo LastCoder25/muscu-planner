@@ -27,7 +27,7 @@ import {
   FAMILIAR_SLOT,
   MAX_LOADOUTS,
   grantFamiliarXp,
-  RARITY_LABEL,
+  rarityRank,
   type Item,
   type ItemEffect,
   type ItemSlot,
@@ -1701,7 +1701,7 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚠️ Refus AU STORE, comme pour les talents : même règle, même message.
       if (adv && !canAdvFamiliar(adv, fam))
         throw new Error(
-          `Trop rare pour ${adv.name} : sa classe est ${RARITY_LABEL[advRarity(adv)]} — promeus-le d’abord.`,
+          `Trop rare pour ${adv.name} : sa classe est de rang ${rarityRank(advRarity(adv)).name} — promeus-le d’abord.`,
         );
     }
     const adventurers = (cur.adventurers ?? []).map((a) => {
@@ -1750,7 +1750,7 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚠️ Refus AU STORE : l’écran ne propose pas l’impossible, mais il ne le garantit pas.
       if (adv && !canAdvTalent(adv, t))
         throw new Error(
-          `Trop rare pour ${adv.name} : sa classe est ${RARITY_LABEL[advRarity(adv)]} — promeus-le d’abord.`,
+          `Trop rare pour ${adv.name} : sa classe est de rang ${rarityRank(advRarity(adv)).name} — promeus-le d’abord.`,
         );
     }
     const adventurers = (cur.adventurers ?? []).map((a) => {

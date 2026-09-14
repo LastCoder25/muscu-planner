@@ -538,6 +538,7 @@
                 :key="t.id"
                 class="tal-card"
                 :class="['p-' + t.rarity, { eq: t.equipped, reco: recommendedTalentIds.has(t.id) }]"
+                :style="{ '--rk': rarityRank(t.rarity).color }"
               >
                 <div class="tal-icon">
                   <button
@@ -558,9 +559,9 @@
                     <span v-if="t.equipped" class="tal-eqbadge">✓ Équipé</span>
                     <span
                       class="rk-badge"
-                      :class="'p-' + t.rarity"
-                      :title="'Rang ' + RARITY_LABEL[t.rarity]"
-                      >{{ t.rarity }}</span
+                      :style="{ '--rk': rarityRank(t.rarity).color }"
+                      :title="'Rang ' + rarityRank(t.rarity).name"
+                      >{{ rarityRank(t.rarity).name }}</span
                     >
                     <span class="lvl-badge">Nv {{ t.level }}</span>
                     <span
@@ -663,13 +664,16 @@
                 :key="f.id"
                 class="tal-card"
                 :class="['p-' + f.rarity, { eq: f.equipped, reco: recommendedFamiliarId === f.id }]"
+                :style="{ '--rk': rarityRank(f.rarity).color }"
               >
                 <ItemIcon :item="f" :size="40" role="img" :aria-label="f.name" />
                 <div class="tal-body">
                   <div class="tal-name font-display">
                     <span class="tal-nm">{{ f.name }}</span>
                     <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
-                    <span class="rk-badge" :class="'p-' + f.rarity">{{ f.rarity }}</span>
+                    <span class="rk-badge" :style="{ '--rk': rarityRank(f.rarity).color }">{{
+                      rarityRank(f.rarity).name
+                    }}</span>
                     <span class="lvl-badge">Nv {{ f.level }}</span>
                     <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
                     <!-- UN seul dressage (v0.805) : il monte en donjon, en convoi et en
@@ -2086,7 +2090,7 @@
                     <div class="plan-nm">
                       {{ row.fromItem.emoji }} {{ row.fromItem.name }}
                       <span class="ii-rar" :class="'p-' + row.fromItem.rarity">{{
-                        RARITY_LABEL[row.fromItem.rarity]
+                        gradeLabel(row.fromItem)
                       }}</span>
                     </div>
                     <div class="plan-sub">
@@ -2110,7 +2114,7 @@
                     <div class="plan-nm">
                       {{ row.toItem.emoji }} {{ row.toItem.name }}
                       <span class="ii-rar" :class="'p-' + row.toItem.rarity">{{
-                        RARITY_LABEL[row.toItem.rarity]
+                        gradeLabel(row.toItem)
                       }}</span>
                     </div>
                     <div class="plan-sub">
@@ -2459,8 +2463,8 @@
               <div class="inv-main">
                 <div class="inv-name">{{ talentName(t) }}</div>
                 <div class="pills">
-                  <span class="rk-badge" :class="'p-' + talentRankOf(t)">{{
-                    talentRankOf(t)
+                  <span class="rk-badge" :style="{ '--rk': rarityRank(talentRankOf(t)).color }">{{
+                    rarityRank(talentRankOf(t)).name
                   }}</span>
                   <span class="q-badge" :class="jetTier(talentDropQuality(t))"
                     >{{ talentDropQuality(t) }}%</span
@@ -2633,7 +2637,9 @@
             <span class="tp-main">
               <span class="tp-name">
                 {{ t.def.name }}
-                <span class="rk-badge" :class="'p-' + t.rarity">{{ t.rarity }}</span>
+                <span class="rk-badge" :style="{ '--rk': rarityRank(t.rarity).color }">{{
+                  rarityRank(t.rarity).name
+                }}</span>
                 <span class="lvl-badge">Nv {{ t.level }}</span>
               </span>
               <span class="tp-eff">+{{ t.effLabel }} {{ t.def.desc }}</span>
@@ -2737,6 +2743,8 @@ import {
   SLOT_LABEL,
   SLOT_EMOJI,
   RARITY_LABEL,
+  rarityRank,
+  gradeLabel,
   RARITY_RANK,
   fxRarity,
   ITEM_SETS,
@@ -2880,7 +2888,7 @@ function celebrateTalentDrop(t: TalentInstance, quiet = false) {
       quiet,
       kind: 'generic',
       emoji: '🎓',
-      title: `Talent ${RARITY_LABEL[rarity]} !`,
+      title: `Talent ${rarityRank(rarity).name} !`,
       subtitle: def.name,
       rarity: fxRarity(rarity),
     });
@@ -3577,7 +3585,7 @@ function explainTalent(t: (typeof talentsView.value)[number]) {
     html: true,
     message:
       `Améliore : <b>${d.desc}</b> — actuellement <b>+${t.effLabel}</b> ` +
-      `(rang ${RARITY_LABEL[t.rarity]} · jet ${t.jet}%).<br><br>` +
+      `(rang ${rarityRank(t.rarity).name} · jet ${t.jet}%).<br><br>` +
       `Son <b>grade</b> (rang + qualité) est fixé au drop : trouve mieux en explorant plus ` +
       `profond ; vends les surplus pour de l'or.`,
   });
@@ -8671,8 +8679,9 @@ button.pt-mini:active {
   justify-content: center;
   min-width: 18px;
   height: 16px;
-  padding: 0 3px;
+  padding: 0 5px;
   border-radius: 999px;
+  white-space: nowrap;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 10.5px;

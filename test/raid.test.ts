@@ -85,6 +85,7 @@ import {
   RANK_ORDER,
   RARITY_MULT,
   RARITY_LABEL,
+  rarityRank,
   rollFamiliar,
   famXpForLevel,
   familiarMult,
@@ -881,7 +882,8 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     // Le cap ÉGALE désormais le gate des drops : il ne bloque jamais un familier
     // existant, et il cesse de promettre du primordial à qui ne peut pas en dropper.
     for (const L of [1, 5, 12, 20, 28, 45, 61, 100]) {
-      const attendu = RARITY_LABEL[RANK_ORDER[rankCeilingForLevel(L)]!];
+      // En RANG depuis la v0.833 : la même langue que les familiers qu’il héberge.
+      const attendu = rarityRank(RANK_ORDER[rankCeilingForLevel(L)]!).name;
       expect(companionRankLabel(L), `chenil ${L}`).toBe(attendu);
     }
     // Sans Chenil, on n'héberge personne.

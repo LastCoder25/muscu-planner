@@ -29,7 +29,7 @@ import {
   familiarMult,
   rankIndex,
   RANK_ORDER,
-  RARITY_LABEL,
+  rarityRank,
   rankCeilingForLevel,
   mergeEffects,
   type AggregatedEffects,
@@ -1172,7 +1172,8 @@ function companionRankCap(kennelLevel: number): number {
  *  finiraient par se contredire, et `RANK_ORDER` n’a rien à faire dans un store. */
 export function companionRankLabel(kennelLevel: number): string {
   const i = companionRankCap(kennelLevel);
-  return i < 0 ? '—' : RARITY_LABEL[RANK_ORDER[i]!];
+  // En RANG, comme les familiers qu’il héberge (v0.833).
+  return i < 0 ? '—' : rarityRank(RANK_ORDER[i]!).name;
 }
 
 /** Le niveau de Chenil qui ouvrira la place SUIVANTE — `null` une fois toutes les

@@ -145,7 +145,7 @@
           <span v-if="promoHorizon(c.id).length" class="gc-horizon">
             mène à {{ promoHorizon(c.id).join(' · ') }}
           </span>
-          <span class="gc-rar">{{ RARITY_LABEL[classRarity(c)] }}</span>
+          <span class="gc-rar">rang {{ rarityRank(classRarity(c)).name }}</span>
         </button>
       </div>
       <div class="g-actions">
@@ -297,7 +297,7 @@
           <span class="d-pair-name">
             {{ detailFam?.name ?? 'Aucun compagnon' }}
             <span v-if="detailFam" class="d-rk" :style="{ '--rk': famColor(detailFam) }">{{
-              RARITY_LABEL[detailFam.rarity]
+              rarityRank(detailFam.rarity).name
             }}</span>
           </span>
           <span v-for="(g, i) in detailFamGain" :key="i" class="d-gain">{{ g }}</span>
@@ -310,7 +310,7 @@
           <span class="d-pair-name">
             {{ talLabel(detailAdv) }}
             <span v-if="detailTal" class="d-rk" :style="{ '--rk': talColor(detailTal) }">{{
-              RARITY_LABEL[talentRankOf(detailTal)]
+              rarityRank(talentRankOf(detailTal)).name
             }}</span>
           </span>
           <span v-for="(g, i) in detailTalGain" :key="i" class="d-gain">{{ g }}</span>
@@ -373,7 +373,7 @@
         <span class="d-pair-main">
           <span class="d-pair-name">
             {{ r.f.name }}
-            <span class="d-rk" :style="{ '--rk': r.color }">{{ RARITY_LABEL[r.f.rarity] }}</span>
+            <span class="d-rk" :style="{ '--rk': r.color }">{{ rarityRank(r.f.rarity).name }}</span>
             <span
               v-if="r.train"
               class="d-train"
@@ -415,7 +415,7 @@
         <span class="d-pair-main">
           <span class="d-pair-name">
             {{ r.name }}
-            <span class="d-rk" :style="{ '--rk': r.color }">{{ RARITY_LABEL[r.rank] }}</span>
+            <span class="d-rk" :style="{ '--rk': r.color }">{{ rarityRank(r.rank).name }}</span>
           </span>
           <span v-for="(g, i) in r.gains" :key="i" class="d-gain">{{ g }}</span>
           <span class="d-pair-sub">{{ r.meta }}</span>
@@ -460,8 +460,7 @@ import {
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
 import {
-  RARITY_LABEL,
-  RANK_COLOR,
+  rarityRank,
   FAMILIAR_SLOT,
   aggregateLines,
   famLevel,
@@ -565,8 +564,8 @@ const talGain = (t: TalentInstance) => aggregateLines(advTalentEffects([t]));
 const famMeta = (f: Item) =>
   `jet ${rollJet(f.roll)}% · niv ${f.level}${f.effect2 ? ' · ✦ signature' : ''}`;
 const talMeta = (t: TalentInstance) => `jet ${talentJetOf(t)}% · niv ${t.level ?? 1}`;
-const famColor = (f: Item) => RANK_COLOR[f.rarity];
-const talColor = (t: TalentInstance) => RANK_COLOR[talentRankOf(t)];
+const famColor = (f: Item) => rarityRank(f.rarity).color;
+const talColor = (t: TalentInstance) => rarityRank(talentRankOf(t)).color;
 /** Le DRESSAGE, unique depuis la v0.805 (donjon, convoi, défense).
  *  ⚠️ Un familier NEUF est à zéro, et c'est le cas le plus courant : « 🎓 0 » se lirait
  *  comme une erreur plutôt que comme « pas encore dressé ». On ne dit rien tant qu'il
@@ -589,7 +588,7 @@ function talNote(a: Adventurer): string {
   const t = talOf(a);
   return t
     ? talMeta(t)
-    : `Un talent, bridé et jusqu’à la rareté de sa classe (${RARITY_LABEL[advRarity(a)]}).`;
+    : `Un talent, bridé et jusqu’au rang de sa classe (${rarityRank(advRarity(a)).name}).`;
 }
 /** L'avertissement des deux sélecteurs. ⚠️ Écrit UNE fois : deux copies mot pour mot se
  *  reformulent séparément, et l'une des deux finit par mentir. */
@@ -652,7 +651,7 @@ const famHidden = computed(() => {
   if (c.tooRare) p.push(`${c.tooRare} au-dessus du rang max du Chenil (${rankCapLabel.value})`);
   if (c.tooRareClass && pairFor.value)
     p.push(
-      `${c.tooRareClass} trop rare${c.tooRareClass > 1 ? 's' : ''} pour sa classe (${RARITY_LABEL[advRarity(pairFor.value)]})`,
+      `${c.tooRareClass} au-dessus du rang de sa classe (${rarityRank(advRarity(pairFor.value)).name})`,
     );
   if (c.taken) p.push(`${c.taken} confié${c.taken > 1 ? 's' : ''} à d’autres`);
   if (c.hero) p.push('1 porté par ton héros');
@@ -664,9 +663,7 @@ const talHidden = computed(() => {
   if (!c || !a) return '';
   const p: string[] = [];
   if (c.tooRare)
-    p.push(
-      `${c.tooRare} trop rare${c.tooRare > 1 ? 's' : ''} pour sa classe (${RARITY_LABEL[advRarity(a)]})`,
-    );
+    p.push(`${c.tooRare} au-dessus du rang de sa classe (${rarityRank(advRarity(a)).name})`);
   if (c.taken) p.push(`${c.taken} confié${c.taken > 1 ? 's' : ''} à d’autres`);
   return p.length ? `Masqués : ${p.join(' · ')}.` : '';
 });
@@ -771,8 +768,8 @@ const offers = computed(() => char.recruitChoices(recruitSeed.value));
 const rankOf = (a: Adventurer) => advRank(a);
 // La RARETÉ de sa classe — distincte du rang, mais elle monte du même pas (une classe
 // par rang gagné), donc les deux ne peuvent plus se contredire.
-const rarOf = (a: Adventurer) => RARITY_LABEL[advRarity(a)];
-const rarColor = (a: Adventurer) => RANK_COLOR[advRarity(a)];
+const rarOf = (a: Adventurer) => 'classe ' + rarityRank(advRarity(a)).name;
+const rarColor = (a: Adventurer) => rarityRank(advRarity(a)).color;
 const titleOf = (a: Adventurer) => advTitle(a);
 const progressOf = (a: Adventurer) => advRankProgress(a);
 // ⚠️ La barre annonce la PROMOTION, plus « l’étoile suivante » : ce niveau-là ne

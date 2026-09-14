@@ -3,6 +3,7 @@
 import { playerCombatant, combatPower, mulberry32, type Combatant } from './combat';
 import type { FamiliarSpecies } from '@/data/familiars';
 import { PROCEDURAL } from '@/lib/proceduralContent';
+import { CHARACTER_RANKS, type RankTier } from './characterRank';
 
 // `familiar` = 5ᵉ emplacement PARALLÈLE (compagnon) : compté par aggregateEffects
 // mais EXCLU de SLOTS (donc des drops normaux / sets / forge). Cf. src/data/familiars.ts.
@@ -411,6 +412,24 @@ export const RARITY_LABEL: Record<Rarity, string> = {
 export const RARITY_RANK: Record<Rarity, number> = Object.fromEntries(
   RANK_ORDER.map((r, i) => [r, i]),
 ) as Record<Rarity, number>;
+
+/** 🏅 LA RARETÉ D’UN FAMILIER OU D’UN TALENT, LUE COMME UN RANG (v0.833 ; demandé par
+ *  l’utilisateur : « pour les familiers et talents, affiche-les en rang »).
+ *
+ *  ⚠️ LE CRAN i DE RARETÉ EST LE RANG i DE L’ÉCHELLE DE PRESTIGE — et ce n’est pas un
+ *  choix esthétique : une classe d’aventurier se gagne à chaque rang (`PROMO_LEVELS` =
+ *  `rankStartLevel`), et un compagnon ne dépasse pas la rareté de la classe de son maître
+ *  (`canAdvFamiliar` / `canAdvTalent`). Donc un aventurier **Bronze** mène un familier
+ *  **Bronze**, un **Argent** un **Argent** : la règle se lit sans table de conversion.
+ *  ⚠️ Les OBJETS gardent leurs raretés (Commun → Primordial) : seuls les compagnons
+ *  d’un homme parlent la langue de son rang. */
+export function rarityRank(r: Rarity): RankTier {
+  return CHARACTER_RANKS[Math.min(CHARACTER_RANKS.length - 1, RARITY_RANK[r] ?? 0)]!;
+}
+/** Le libellé à afficher pour une pièce : son RANG si c’est un familier, sa RARETÉ sinon. */
+export function gradeLabel(it: { slot: ItemSlot; rarity: Rarity }): string {
+  return it.slot === 'familiar' ? rarityRank(it.rarity).name : RARITY_LABEL[it.rarity];
+}
 
 /** Les 5 crans d’intensité de `useGameFx` — du discret à l’explosion. */
 export type FxRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'divin';

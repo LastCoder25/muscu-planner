@@ -134,7 +134,7 @@ import {
   advTitle,
   type Adventurer,
 } from '@/lib/adventurers';
-import { FAMILIAR_SLOT, RANK_COLOR, RARITY_LABEL, type Equipped, type Item } from '@/lib/items';
+import { FAMILIAR_SLOT, rarityRank, type Equipped, type Item } from '@/lib/items';
 import { fmtPow } from '@/lib/combat';
 
 const props = defineProps<{
@@ -151,8 +151,9 @@ const emit = defineEmits<{ open: []; familiar: []; talent: []; promote: [] }>();
 
 const rank = computed(() => advRank(props.adv));
 const title = computed(() => advTitle(props.adv));
-const rarColor = computed(() => RANK_COLOR[advRarity(props.adv)]);
-const rarLabel = computed(() => RARITY_LABEL[advRarity(props.adv)]);
+// Le rang de la CLASSE (v0.833) : c’est lui qui borne ses compagnons, affichés en rang.
+const rarColor = computed(() => rarityRank(advRarity(props.adv)).color);
+const rarLabel = computed(() => 'classe ' + rarityRank(advRarity(props.adv)).name);
 const pct = computed(() => Math.round(advRankProgress(props.adv) * 100));
 const look = computed(() => advAvatar(props.adv));
 /** L’avatar ne lit que l’emplacement et la RARETÉ de chaque pièce : la règle d’apparence

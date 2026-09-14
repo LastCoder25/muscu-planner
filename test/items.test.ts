@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   aggregateLines,
+  rarityRank,
+  gradeLabel,
+  RARITY_LABEL,
   weaponKind,
   wornSet,
   fxRarity,
@@ -2095,5 +2098,35 @@ describe('🪓 L’AVATAR MONTRE L’ARME ET LE SET PORTÉS (v0.832)', () => {
       relic: piece('relic', 'voie:gardien'),
     };
     expect(wornSet(plus, 'gardien')?.pieces).toBe(3);
+  });
+});
+
+describe('🏅 FAMILIERS ET TALENTS SE LISENT EN RANG (v0.833)', () => {
+  it('⚠️ un aventurier promu à son rang mène des compagnons de CE rang — sans table de conversion', async () => {
+    // La promotion i tombe au début du rang i (PROMO_LEVELS = rankStartLevel), et la classe
+    // gagnée vaut la rareté i : le nom affiché pour la rareté i doit donc être celui du rang
+    // qu'affiche un aventurier fraîchement promu. Sinon « un Bronze mène un Bronze » ment.
+    const { PROMO_LEVELS } = await import('@/lib/adventurers');
+    const { characterRank } = await import('@/lib/characterRank');
+    RANK_ORDER.forEach((r, i) => {
+      expect(rarityRank(r).name, r).toBe(characterRank(PROMO_LEVELS[i]!).name);
+    });
+    expect(rarityRank('commun').name).toBe('Bronze');
+    expect(rarityRank('inhabituel').name).toBe('Argent');
+  });
+  it('chaque rareté a son rang, sans collision', () => {
+    const names = RANK_ORDER.map((r) => rarityRank(r).name);
+    expect(new Set(names).size).toBe(RANK_ORDER.length);
+  });
+  it('un familier se lit en rang, un objet garde sa rareté', () => {
+    expect(gradeLabel({ slot: 'familiar', rarity: 'epique' })).toBe(rarityRank('epique').name);
+    expect(gradeLabel({ slot: 'weapon', rarity: 'epique' })).toBe(RARITY_LABEL.epique);
+  });
+  it('le Chenil annonce son plafond dans la même langue que les familiers', async () => {
+    const { companionRankLabel } = await import('@/lib/raid');
+    expect(companionRankLabel(1)).toBe(rarityRank('commun').name);
+    expect(companionRankLabel(61)).toBe(rarityRank('primordial').name);
+    // Le Magique (Or) et non « Magique » : même langue que les familiers qu'il héberge.
+    expect(companionRankLabel(5)).toBe(rarityRank('magique').name);
   });
 });

@@ -527,6 +527,7 @@ import {
   ITEM_SETS,
   effectLabel,
   RARITY_LABEL,
+  rarityRank,
   RARITY_RANK,
   fxRarity,
   RANK_COLOR,
@@ -1547,7 +1548,7 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
         kind: 'familiar',
         emoji: fam.emoji,
         title: 'Familier trouvé !',
-        subtitle: `${fam.name} · ${RARITY_LABEL[fam.rarity]}`,
+        subtitle: `${fam.name} · rang ${rarityRank(fam.rarity).name}`,
         rarity: fxRarity(fam.rarity),
       });
     }
