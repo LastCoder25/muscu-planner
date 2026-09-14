@@ -354,7 +354,10 @@ describe('calibration du siège', () => {
       // joueur) : il est inatteignable en jeu — `upgradeDefense` refuse de dépasser ton
       // niveau, exactement comme les bâtiments. Bâtir À son niveau EST le maximum.
     }
-  });
+    // ⚠️ ~3 s seul (des milliers de sièges, vivier compris depuis la v0.829) : sous la
+    // charge de la suite complète il dépassait les 5 s par défaut. Un délai explicite,
+    // pas un test allégé — il mesure ce qu’il doit mesurer.
+  }, 30_000);
 
   it('la défense DÉGRADE en pente, pas en falaise', () => {
     // Calculée sur le refFighter de la STRUCTURE, l'enceinte payait l'écart de façon

@@ -24,7 +24,7 @@ import {
   RAID,
   type DefenseStructure,
 } from '@/lib/raid';
-import { refFighter } from '@/lib/proceduralContent';
+import { refFighter, gearExpect } from '@/lib/proceduralContent';
 import { TRAVEL } from '@/lib/expedition';
 import { guildRoster } from '@/lib/adventurers';
 import { refAdventurer } from '@/lib/caravan';
@@ -658,8 +658,77 @@ describe('⚔️ LA PUISSANCE DE DÉFENSE : une MAGNITUDE, pas un pronostic', ()
     // à rendre un nombre positif du bon ordre de grandeur.
     expect(d).toBeGreaterThan(defensePower(defAt(L), L, null, []));
     expect(a).toBeGreaterThan(0);
-    // Les deux restent du même ordre de grandeur — sinon les afficher côte à côte
-    // serait trompeur.
-    expect(Math.max(d, a) / Math.min(d, a)).toBeLessThan(12);
+  });
+});
+
+describe('⚖️ À PUISSANCE ÉGALE, UNE CHANCE SUR DEUX (v0.830)', () => {
+  // ⚠️ RÉÉCRIT À PARTIR D’UN TEST CREUX. Il exigeait seulement que les deux chiffres soient
+  // « du même ordre de grandeur » (rapport < 12) — c’est ce qui a laissé passer le défaut
+  // signalé : « plus de 6000 en défense contre 2000, et j’ai perdu ». Mesuré, on ne tenait
+  // une fois sur deux qu’à un rapport de 2,36. Deux chiffres posés côte à côte sous un
+  // « vs » promettent une comparaison : on vérifie désormais la comparaison elle-même.
+  type Row = { L: number; ratio: number; hold: number };
+  const rows: Row[] = [];
+  const LEVELS = [12, 28, 60, 90];
+  for (const L of LEVELS) {
+    for (const share of [0.6, 0.8, 1]) {
+      const d = Math.max(1, Math.round(L * share));
+      for (const withHero of [true, false]) {
+        for (const guard of [[], garde(L)]) {
+          // Le héros ÉQUIPÉ de son niveau : c’est lui qui défend en jeu, pas le héros nu.
+          const ge = gearExpect(L);
+          const f = refFighter(L);
+          const h = withHero
+            ? { ...f, damage: Math.round(f.damage * ge.off), pv: Math.round(f.pv * ge.pv) }
+            : null;
+          const dp = defensePower(defAt(d), L, h, guard);
+          for (let k = 0; k < 4; k++) {
+            const raid = rollRaid(k * 7919 + 13 + L, L, NOW, 0);
+            rows.push({
+              L,
+              ratio: dp / assaultPower(raid),
+              hold: siegeHoldChance(defAt(d), L, h, guard, raid, 24),
+            });
+          }
+        }
+      }
+    }
+  }
+  /** Le rapport qui sépare le mieux « on tient » de « on tombe », et l’erreur à ce seuil. */
+  const seuil = (r: Row[]) => {
+    let best = 0;
+    let err = Infinity;
+    for (let t = 0.3; t < 4; t += 0.01) {
+      const e = r.filter((x) => x.ratio >= t !== x.hold >= 0.5).length;
+      if (e < err) {
+        err = e;
+        best = t;
+      }
+    }
+    return { best, err: err / r.length };
+  };
+
+  it('l’équilibre tombe à parité, et le chiffre sépare vraiment les issues', () => {
+    const s = seuil(rows);
+    expect(s.best).toBeGreaterThan(0.8);
+    expect(s.best).toBeLessThan(1.25);
+    expect(s.err).toBeLessThan(0.2);
+  });
+
+  it('⚠️ et ce seuil ne DÉRIVE pas avec le niveau (sinon une échelle unique mentirait)', () => {
+    for (const L of LEVELS) {
+      const s = seuil(rows.filter((x) => x.L === L));
+      expect(s.best, `niveau ${L}`).toBeGreaterThan(0.75);
+      expect(s.best, `niveau ${L}`).toBeLessThan(1.3);
+    }
+  });
+
+  it('les deux bouts sont francs : nettement devant on tient, nettement derrière on tombe', () => {
+    const devant = rows.filter((x) => x.ratio >= 1.4);
+    const derriere = rows.filter((x) => x.ratio <= 0.7);
+    expect(devant.length).toBeGreaterThan(10);
+    expect(derriere.length).toBeGreaterThan(10);
+    expect(devant.filter((x) => x.hold >= 0.5).length / devant.length).toBeGreaterThan(0.85);
+    expect(derriere.filter((x) => x.hold < 0.5).length / derriere.length).toBeGreaterThan(0.85);
   });
 });

@@ -373,6 +373,19 @@ export const RAID = {
    *  par siège. En deçà le % sautille d’un rendu à l’autre, au-delà on paie sans rien
    *  gagner en lisibilité — la conduite du combat varie peu à composition fixée. */
   oddsSamples: 24,
+  /** ⚖️ À PUISSANCE ÉGALE, UNE CHANCE SUR DEUX (v0.830, mesuré ; signalé par l’utilisateur :
+   *  « j’avais plus de 6000 en défense, l’attaque 2000, et j’ai perdu »).
+   *  La défense et l’armée sont ramenées au même arbitre (`combatPower`), mais PAS par la
+   *  même construction : la base additionne les coups de TOUS ses tireurs, l’armée est
+   *  résumée en UN combattant (PV cumulés, dégâts moyens). Son chiffre brut sous-estimait
+   *  donc la menace d’un facteur constant. Mesuré sur 1 008 configurations (niveaux 8 à 90,
+   *  enceinte 60-100 %, héros et vivier variables, 24 sièges chacune) : on tenait une fois
+   *  sur deux à un rapport défense/armée de **2,36**, et ce seuil est PLAT selon le niveau
+   *  (2,22 à 2,74) — un siège PERDU pouvait afficher une défense 3 fois supérieure.
+   *  Le chiffre de l’armée est donc exprimé en « défense qu’il faut pour tenir une fois
+   *  sur deux ». ⚠️ Il reste une MAGNITUDE (~11 % de cas mal rangés au seuil) : la
+   *  tenue simulée, affichée dessous, est le seul pronostic. */
+  assaultEvenK: 2.4,
   /** Armées différentes tirées pour le repère « face à une armée type » (cf.
    *  `referenceHold`). ⚠️ Mesuré : à composition FIXE la conduite du combat varie peu,
    *  mais d’une armée à l’autre la tenue va de 8 % à 78 % au même niveau — c’est donc sur
@@ -1431,9 +1444,11 @@ export function defensePower(
   return combatPower(defenseCombatant(defenses, playerLevel, hero ?? null, guard));
 }
 
-/** Puissance d'ASSAUT de l'armée, dans la même unité que la défense. */
+/** Puissance d'ASSAUT de l'armée, dans la même unité que la défense — ET À LA MÊME
+ *  ÉCHELLE : à puissances égales, la base tient environ une fois sur deux
+ *  (cf. `RAID.assaultEvenK`). */
 export function assaultPower(raid: Raid): number {
-  return combatPower(armyCombatant(raid));
+  return Math.max(1, Math.round(combatPowerRaw(armyCombatant(raid)) * RAID.assaultEvenK));
 }
 
 /** Ce qu'un contributeur apporte, mesuré PAR ABLATION : on recalcule la puissance sans

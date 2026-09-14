@@ -401,6 +401,11 @@
             <div v-else class="f-val font-display range">
               {{ assaultSeen.lo }}–{{ assaultSeen.hi }}
             </div>
+            <!-- ⚠️ Deux chiffres sous un « vs » promettent une comparaison : le chiffre de
+                 l’armée est donc à la MÊME ÉCHELLE que la défense (`RAID.assaultEvenK`) — à
+                 égalité, on tient environ une fois sur deux. Le dire évite de lire « 6 000
+                 contre 2 000 » comme une victoire assurée. -->
+            <div v-if="raid && assaultSeen?.known" class="f-sub">à égalité : 1 chance sur 2</div>
           </div>
         </div>
         <!-- ⚠️ CE QUE COÛTENT LES ABSENTS (demandé par l'utilisateur : « envoyer des
