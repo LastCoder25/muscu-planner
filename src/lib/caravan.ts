@@ -347,8 +347,12 @@ export function companionEffects(companions: Item[], mult = 1): AggregatedEffect
 /** Part de l'effet d'un talent qui profite à son aventurier.
  *  ⚠️ Constante SÉPARÉE de `COMPANION_K` bien qu'elles vaillent pareil aujourd'hui : ce
  *  sont deux leviers d'équilibrage distincts, et les fusionner interdirait de corriger
- *  l'un sans déplacer l'autre. */
-export const ADV_TALENT_K = 0.4;
+ *  l'un sans déplacer l'autre.
+ *  ⚠️ 0,4 × 0,5/0,9 (v0.848) : l'échelle des talents est passée de 0,5 à 0,9 pour que le
+ *  talent du HÉROS pèse autant que son familier. Les embuscades de convoi et les sièges ont
+ *  été calibrés avec l'ancienne échelle : on compense ici, pour que le talent confié à un
+ *  aventurier vaille exactement ce qu'il valait. */
+export const ADV_TALENT_K = 0.4 * (0.5 / 0.9);
 
 /** Multiplie tous les canaux d'un agrégat. ⚠️ Balayage des CLÉS de `emptyEffects()`, pas
  *  une liste écrite à la main : ajouter un canal à `AggregatedEffects` sans le brider

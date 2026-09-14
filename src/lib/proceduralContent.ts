@@ -43,7 +43,9 @@ export function recommendedPower(recoLevel: number, boss = false): number {
   const L = Math.max(1, recoLevel);
   const base = combatPower(refFighter(L));
   const ge = boss ? bossGearExpect(L) : dungeonGearExpect(L);
-  return Math.round(base * Math.sqrt(ge.off * ge.pv));
+  // La correction du procédural multiplie PV et dégâts : elle multiplie la puissance attendue.
+  const boost = boss ? bossContentBoost(L) : proceduralDungeonBoost(L);
+  return Math.round(base * Math.sqrt(ge.off * ge.pv) * boost);
 }
 
 // Coefficients de calibration (fittés par simulation, cf. proceduralContent.test) :
@@ -106,6 +108,45 @@ export function dungeonGearExpect(level: number): { off: number; pv: number } {
   const ge = gearExpect(level);
   const t = Math.min(1, Math.max(0, (level - 1) / (GEAR_EXPECT_FULL_AT - 1)));
   return { off: 1 + (ge.off - 1) * t, pv: 1 + (ge.pv - 1) * t };
+}
+
+// ── CORRECTION DE CALIBRATION DU CONTENU PROCÉDURAL (v0.848, mesuré) ──
+// ⚠️ Le procédural (CALIB, BOSS_CALIB) est dérivé d'un joueur de référence qui ne porte QUE
+// des objets. Le vrai joueur porte aussi un talent, un familier, des pièces de set et une
+// voie : au-delà du contenu écrit à la main, les donjons se nettoyaient à 92-100 % à leur
+// niveau et les boss se gagnaient à 73-93 %. Mesuré avec une progression RÉALISTE (butin des
+// donjons et boss des 15 derniers niveaux aux taux réels, meilleur talent, familiers du
+// Labyrinthe dressés à 30 % du niveau, meilleure des 8 voies ; 3 profils × 3 tirages), le
+// renfort qui ramène le joueur à la cible (donjon 70 % à son niveau, boss 55 % au palier)
+// vaut ×1,01 à ×1,09 sur le contenu écrit à la main (dans le bruit, non touché) et bondit à
+// la JOINTURE avec le procédural. La table ci-dessous EST la mesure (points mesurés).
+// ⚠️ Pas dans `gearExpect` : il est aussi lu par les donjons 12-22 et le Labyrinthe, que
+// ×1,4 aurait murés. Les donjons portent ce renfort en `foeMult` (point de passage unique
+// `dungeonFoes`), les boss dans `BOSSES`, et la puissance conseillée relit les deux.
+const PROC_DUNGEON_BOOST: [number, number][] = [
+  [25, 1.39],
+  [31, 1.4],
+  [40, 1.53],
+  [55, 1.63],
+  [70, 1.63],
+  [85, 1.61],
+  [94, 1.39],
+];
+/** Renfort (PV et dégâts) d'un donjon procédural de reco `reco` (1 avant), interpolé. */
+function proceduralDungeonBoost(reco: number): number {
+  const t = PROC_DUNGEON_BOOST;
+  const i = t.findIndex(([l]) => reco <= l);
+  if (i === 0) return reco < t[0]![0] ? 1 : t[0]![1];
+  if (i < 0) return t.at(-1)![1];
+  const [l0, b0] = t[i - 1]!;
+  const [l1, b1] = t[i]!;
+  return b0 + ((b1 - b0) * (reco - l0)) / (l1 - l0);
+}
+/** Renfort (PV et dégâts) des boss procéduraux : moyenne des mesures (×1,27 à ×1,41 selon
+ *  le palier, écarts dans le bruit). Les boss écrits à la main sont corrigés dans leurs stats. */
+const PROC_BOSS_BOOST = 1.32;
+export function bossContentBoost(level: number): number {
+  return level >= 30 ? PROC_BOSS_BOOST : 1;
 }
 
 export type MonsterRole = 'weak' | 'mid' | 'strong';
@@ -235,6 +276,7 @@ export function proceduralDungeon(reco: number, index: number): Dungeon {
     hint: 'Palier profond — trio escaladant. Build complet, tout au max.',
     dropLevel: reco - 1,
     dropLuck: 1,
+    foeMult: proceduralDungeonBoost(reco),
   };
 }
 

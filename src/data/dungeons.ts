@@ -29,7 +29,10 @@ export interface Dungeon {
    *  au niveau recommandé, Abîme/Néant/Apocalypse 36-40 %, puis **Chimère 14 %, Hydre 16 %,
    *  Béhémoth 16 %, Léviathan 21 %**, puis Kraken/Nécropole/Faille 33-37 %. Un mur au milieu
    *  de la chaîne écrite à la main — ses monstres fixes grandissaient plus vite que le joueur.
-   *  ×0,8 les ramène à 29-34 % (×0,65 : 41-53 %, trop généreux). L'or n'est pas touché. */
+   *  ×0,8 les ramène à 29-34 % (×0,65 : 41-53 %, trop généreux). L'or n'est pas touché.
+   *
+   *  Les donjons PROCÉDURAUX (reco ≥ 25) portent ici leur renfort `proceduralDungeonBoost`
+   *  (v0.848) : même point de passage, lu par `dungeonFoes` comme par la puissance conseillée. */
   foeMult?: number;
 }
 // NB : les SETS ne droppent plus sur les donjons — uniquement sur les BOSS de

@@ -99,12 +99,13 @@ describe('magnitude = grade × enchant (uniforme avec les objets)', () => {
     const def = talentByCode('t_dmg')!;
     expect(talentValue(def, 12, 4) / talentValue(def, 12, 0)).toBeCloseTo(enchantMult(4));
   });
-  it('MAX (SSS, jet 100 %, +12) ≈ ancien plafond → équilibrage préservé', () => {
+  it('MAX (SSS, jet 100 %, +12) : ×1,8 l’ancien plafond — le talent pèse autant que le familier (v0.848)', () => {
     const def = talentByCode('t_dmg')!;
-    // (base/2) × rankRollMult(SSS, jet 1) × enchantMult(12) ≈ ×10,5
+    // Ancien plafond ≈ ×10,5 la base (échelle 0,5). Mesuré v0.848 : talent et familier
+    // n'apportent la même puissance qu'à ×1,8 → échelle 0,9, plafond ≈ ×18,9.
     const ratio = talentValue(def, 49, ENCHANT_MAX, 1) / def.base;
-    expect(ratio).toBeGreaterThan(9.5);
-    expect(ratio).toBeLessThan(11);
+    expect(ratio).toBeGreaterThan(17.5);
+    expect(ratio).toBeLessThan(20);
   });
   it('raretés NETTEMENT séparées — Rare > Magique (jet 0 = plancher du rang)', () => {
     const def = talentByCode('t_armor')!; // Cuirasse : base petite → cas du bug

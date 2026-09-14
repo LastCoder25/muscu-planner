@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  mulberry32,
   simulateCombat,
   simulateDungeon,
   playerCombatant,
@@ -9,6 +10,7 @@ import {
 } from '@/lib/combat';
 import { DUNGEONS, dungeonFoes, dungeonGold } from '@/data/dungeons';
 import { MONSTERS } from '@/data/monsters';
+import { BOSSES } from '@/data/bosses';
 import { rollDrop, bestGearLoadout, playerWithGear, itemScore, type Item } from '@/lib/items';
 import {
   cumXpForLevel,
@@ -27,8 +29,11 @@ import {
   gearExpect,
   dungeonGearExpect,
   recommendedPower,
+  bossGearExpect,
 } from '@/lib/proceduralContent';
 import { computeCharacter } from '@/lib/character';
+import { rollTalentDrop, talentEffects, talentsEarned, pickBestTalents } from '@/lib/talents';
+import { rollActivityFamiliar } from '@/data/familiars';
 
 describe('le 1er donjon est gagnable par un joueur qui débute', () => {
   const clairiere = DUNGEONS.find((d) => d.id === 'clairiere')!;
@@ -177,11 +182,14 @@ describe('la chaîne des premiers donjons suit le niveau annoncé', () => {
   it('⚠️ le creux 13-19 est corrigé là et seulement là, sans toucher à l’or', () => {
     // Mesuré v0.828 avec un harnais de progression réaliste (trop lent pour la suite) :
     // 14-21 % au niveau recommandé contre 33-40 % pour les voisins. ×0,8 → 29-34 %.
-    const corriges = DUNGEONS.filter((d) => (d.foeMult ?? 1) !== 1).map((d) => d.id);
+    // Parmi les donjons écrits à la main : les procéduraux portent leur propre correction (v0.848).
+    const corriges = DUNGEONS.filter((d) => d.recoLevel <= 22 && (d.foeMult ?? 1) !== 1).map(
+      (d) => d.id,
+    );
     expect(corriges.sort()).toEqual(
       ['behemoth_caverne', 'chimere_den', 'hydre_marais', 'leviathan_fosse'].sort(),
     );
-    for (const d of DUNGEONS.filter((x) => x.foeMult)) {
+    for (const d of DUNGEONS.filter((x) => x.recoLevel <= 22 && x.foeMult)) {
       expect(d.foeMult).toBeGreaterThanOrEqual(0.7);
       expect(d.foeMult).toBeLessThan(1);
       // L'or ne dépend pas de la correction : il reste la somme des monstres.
@@ -286,58 +294,138 @@ describe('procedural — calibration (clear ~systématique au reco)', () => {
 });
 
 describe('procedural — anti-runaway ÉQUIPÉ (v0.622, « sport = plafond »)', () => {
-  function mulberry32(seed: number) {
-    let a = seed >>> 0;
-    return () => {
-      a |= 0;
-      a = (a + 0x6d2b79f5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-  // Joueur ÉQUIPÉ réaliste : farme ~60 objets à son niveau et garde le meilleur loadout.
+  // Joueur ÉQUIPÉ réaliste : farme ~60 objets à son niveau, 3 familiers et 10 talents, et
+  // garde le meilleur build. ⚠️ Il ne portait QUE des objets jusqu'en v0.845 : c'est ce qui
+  // laissait le test vert pendant qu'un vrai joueur (talent + familier en plus) nettoyait
+  // le contenu procédural à 92-100 % à son niveau. On mesure le joueur qui existe.
+  // Mis en cache : le build est déterministe, et plusieurs tests reprennent les mêmes joueurs.
+  const geared = new Map<string, Combatant>();
   function gearedFighter(L: number, seed = 1): Combatant {
+    const key = `${L}:${seed}`;
+    const hit = geared.get(key);
+    if (hit) return hit;
     const rng = mulberry32(seed * 7919 + L);
     const inv: Item[] = [];
     for (let i = 0; i < 60; i++) {
       const d = rollDrop(rng, { cleared: true, defeated: 1, level: L, luck: 0.4, playerLevel: L });
       if (d) inv.push({ ...d, id: 'i' + i });
     }
+    for (let i = 0; i < 3; i++)
+      inv.push({
+        ...rollActivityFamiliar(rng, { level: L, luck: 0.4, playerLevel: L }),
+        id: 'f' + i,
+      });
+    const talents = Array.from({ length: 10 }, (_, i) => ({
+      ...rollTalentDrop(rng, { level: L, luck: 0.4, playerLevel: L }),
+      id: 't' + i,
+    }));
     const s = refBalancedStat(L);
     const stats = { puissance: s, endurance: s, agilite: s };
-    return playerWithGear('geared', stats, bestGearLoadout('g', stats, {}, inv, L), {}, L);
+    const fx = (ids: string[]) =>
+      talentEffects(talents.map((t) => ({ ...t, equipped: ids.includes(t.id) })));
+    // 1re passe sans polissage (point de départ du choix de talent), comme `computeGearPlan`.
+    const draft = bestGearLoadout('g', stats, {}, inv, L, {}, undefined, undefined, false);
+    const ids = pickBestTalents(talents, talentsEarned(L), (x) =>
+      combatPower(playerWithGear('g', stats, draft, fx(x), L)),
+    );
+    const eff = fx(ids);
+    const p = playerWithGear(
+      'geared',
+      stats,
+      bestGearLoadout('g', stats, draft, inv, L, eff),
+      eff,
+      L,
+    );
+    geared.set(key, p);
+    return p;
   }
-  /** ⚠️ Par `dungeonFoes`, comme ci-dessus : le VRAI chemin, rampe et attente
-   *  d’équipement comprises. */
-  /** ⚠️ MOYENNÉ SUR PLUSIEURS TIRAGES DE GEAR. Avec un seul, ce harnais mesurait une
-   *  ANECDOTE : au même niveau et sur le même donjon, huit tirages donnent de 25 % à
-   *  100 % de clear. Un test calé sur une seule graine bascule donc au moindre
-   *  changement de RNG, et il l’a fait — il a rendu 32 % là où la moyenne vaut 80 %.
-   *  On mesure le JOUEUR MÉDIAN, pas celui qui a eu de la chance. */
-  function gearedClearPct(reco: number, playerLevel: number, seeds = 8, n = 40): number {
-    const d = DUNGEONS.find((x) => x.recoLevel === reco);
-    if (!d) throw new Error(`aucun donjon au reco ${reco}`);
-    const foes: DungeonFoe[] = dungeonFoes(d);
+  /** Taux moyen d'un essai sur plusieurs joueurs. ⚠️ MOYENNÉ SUR PLUSIEURS TIRAGES DE GEAR :
+   *  avec un seul, ce harnais mesurait une ANECDOTE (au même niveau et sur le même donjon,
+   *  huit tirages donnent de 25 % à 100 %). On mesure le JOUEUR MÉDIAN. */
+  function avgWin(
+    playerLevel: number,
+    seeds: number,
+    n: number,
+    trial: (p: Combatant, s: number) => boolean,
+  ): number {
     let tot = 0;
     for (let g = 1; g <= seeds; g++) {
       const p = gearedFighter(playerLevel, g);
-      let c = 0;
-      for (let s = 0; s < n; s++) if (simulateDungeon(p, foes, { seed: s * 211 + 5 }).cleared) c++;
-      tot += c / n;
+      let w = 0;
+      for (let s = 0; s < n; s++) if (trial(p, s)) w++;
+      tot += w / n;
     }
     return tot / seeds;
   }
+  /** ⚠️ Par `dungeonFoes`, le VRAI chemin, rampe, attente d’équipement et correction comprises. */
+  function gearedClearPct(reco: number, playerLevel: number): number {
+    const d = DUNGEONS.find((x) => x.recoLevel === reco);
+    if (!d) throw new Error(`aucun donjon au reco ${reco}`);
+    const foes: DungeonFoe[] = dungeonFoes(d);
+    return avgWin(
+      playerLevel,
+      8,
+      40,
+      (p, s) => simulateDungeon(p, foes, { seed: s * 211 + 5 }).cleared,
+    );
+  }
+  function bossWinPct(palier: number, playerLevel: number): number {
+    const b = BOSSES.find((x) => x.unlockLevel === palier);
+    if (!b) throw new Error(`aucun boss au palier ${palier}`);
+    const foe = b.combatant as Combatant;
+    return avgWin(
+      playerLevel,
+      6,
+      30,
+      (p, s) => simulateCombat(p, foe, { seed: s * 97 + 3, goldOnWin: 0 }).win,
+    );
+  }
+  it('la puissance conseillée annonce la correction que le combat applique (v0.848)', () => {
+    // Relié au COMBAT réel, pas à la formule : le facteur annoncé par l'écran doit être celui
+    // que `dungeonFoes` (via `foeMult`) et `BOSSES` appliquent vraiment.
+    for (const L of [55, 85]) {
+      const base = combatPower(refFighter(L));
+      const dg = dungeonGearExpect(L);
+      const d = DUNGEONS.find((x) => x.recoLevel === L)!;
+      expect(recommendedPower(L) / (base * Math.sqrt(dg.off * dg.pv))).toBeCloseTo(d.foeMult!, 2);
+      const bg = bossGearExpect(L);
+      const b = BOSSES.find((x) => x.unlockLevel === L)!;
+      const brut = proceduralBoss(L, BOSS_MILESTONES.indexOf(L)).combatant.pv * bg.off;
+      expect(recommendedPower(L, true) / (base * Math.sqrt(bg.off * bg.pv))).toBeCloseTo(
+        b.combatant.pv / brut,
+        2,
+      );
+      expect(d.foeMult!).toBeGreaterThan(1.3);
+      expect(b.combatant.pv / brut).toBeGreaterThan(1.2);
+    }
+  });
   it('un joueur ÉQUIPÉ ne roule PLUS sur du contenu +15 (mur restauré)', () => {
     // Les recos procéduraux vont de 3 en 3 : on prend le donjon réel le plus proche de +15.
     const near = (t: number) =>
       proceduralRecos().reduce((a, b) => (Math.abs(b - t) < Math.abs(a - t) ? b : a));
     for (const L of [49, 79]) expect(gearedClearPct(near(L + 15), L)).toBeLessThan(0.4);
-  });
-  it('mais il clear encore SON niveau (le gear reste le levier, pas un plafond dur)', () => {
-    // Mesuré après le retrait de la double application : 51 à 92 % selon la profondeur.
-    for (const L of [49, 79]) expect(gearedClearPct(L, L)).toBeGreaterThan(0.5);
-  });
+  }, 30_000);
+  it('⚠️ talent et familier compris : il nettoie SON niveau sans rouler dessus, et le mur tient 3 niveaux en dessous (v0.848)', () => {
+    // Mesuré : à son niveau 72/63/65/56 % (niv 31/49/64/79), 3 niveaux en dessous
+    // 1/22/31/23 %. SANS la correction du procédural : 100/99/100/100 % et 57/98/97/85 %.
+    for (const L of [49, 79]) {
+      const at = gearedClearPct(L, L);
+      expect(at, `niv ${L}`).toBeGreaterThan(0.5);
+      expect(at, `niv ${L}`).toBeLessThan(0.9);
+      expect(gearedClearPct(L, L - 3), `niv ${L} − 3`).toBeLessThan(0.45);
+    }
+  }, 30_000);
+  it('⚠️ un boss profond reste un défi : jamais gagné d’avance, mur cinq niveaux en dessous (v0.848)', () => {
+    // Mesuré (ce joueur n'a ni sets ni voie, d'où moins que les 55 % visés) : au palier
+    // 39/29/36/47 % (40/55/70/85), cinq niveaux en dessous 5/2/7/21 %. SANS la correction :
+    // 83/69/79/86 % et 27/16/36/63 %.
+    for (const L of [55, 85]) {
+      const at = bossWinPct(L, L);
+      expect(at, `palier ${L}`).toBeLessThan(0.62);
+      expect(at, `palier ${L}`).toBeGreaterThan(0.15);
+      expect(bossWinPct(L, L - 5), `palier ${L} − 5`).toBeLessThan(0.35);
+    }
+  }, 30_000);
 });
 
 describe('procedural — boss de palier + sets', () => {

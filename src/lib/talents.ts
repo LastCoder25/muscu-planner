@@ -188,12 +188,16 @@ function enchantOf(inst: TalentInstance): number {
 // ── Magnitude UNIFORME avec les objets (2026‑08‑20, ticket f7e389e4) : le GRADE suit la
 // MÊME courbe géométrique que les objets — `RARITY_MULT[rang] × starQualityMult(qualité)`
 // (spread ×4,4 de G à SSS) → un rang supérieur est NETTEMENT meilleur (fini l'ancienne
-// courbe de tier plate `1+tier×0,02` où D5 ≈ E3 au centième près). Les `base` du catalogue
-// sont divisées par 2 pour PRÉSERVER le plafond combat : (base/2)×RARITY_MULT[SSS]×q5×
-// enchantMult(12) ≈ base_avant × 9,8 (= l'ancien max). Conséquence assumée : les bas grades
-// sont plus faibles (comme un objet G), ce qui donne du sens à la chasse au grade. ──
-// Facteur qui divise les `base` du catalogue (gardées lisibles) pour préserver le plafond.
-const GRADE_BASE_SCALE = 0.5;
+// courbe de tier plate `1+tier×0,02` où D5 ≈ E3 au centième près). Les bas grades sont
+// plus faibles (comme un objet commun), ce qui donne du sens à la chasse au grade. ──
+// Facteur appliqué aux `base` du catalogue (gardées lisibles).
+// ⚠️ 0,5 → 0,9 (v0.848, mesuré ; demandé : « autant de poids au talent qu'au familier »).
+// Depuis qu'on n'en équipe plus qu'UN (v0.845), le talent apportait moitié moins que le
+// familier. Mesuré sur une progression réaliste (butin des 15 derniers niveaux, meilleure
+// voie, familier dressé à 30 % du niveau), gain de puissance talent / familier à ×1 :
+// +5,6/+11,6 % (niv 20) · +5,1/+8,2 (35) · +5,7/+7,3 (50) · +6,2/+13,1 (70) · +6,5/+11,7 (90).
+// Les deux s'égalisent vers ×2,0 / ×1,7 / ×1,3 / ×2,0 / ×1,8 → ×1,8 retenu.
+const GRADE_BASE_SCALE = 0.9;
 // Magnitude = base × intervalle du RANG selon le JET (rankRollMult) × enchant — UNIFORME
 // avec les objets/familiers (refonte v0.574 : plus de qualité ★, le jet balaie l'intervalle).
 export function talentValue(

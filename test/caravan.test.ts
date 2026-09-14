@@ -36,7 +36,14 @@ import {
   type Caravan,
 } from '@/lib/caravan';
 import { advRoles, guildRoster, PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
-import { TALENTS, talentTierFloor, type TalentInstance } from '@/lib/talents';
+import {
+  TALENTS,
+  talentTierFloor,
+  talentValue,
+  talentByCode,
+  talentRollOf,
+  type TalentInstance,
+} from '@/lib/talents';
 import { simulateCombat } from '@/lib/combat';
 import {
   famXpForLevel,
@@ -1225,6 +1232,15 @@ describe('🧠 UN TALENT PAR AVENTURIER — des mini-héros bien moins forts', (
     expect(bride.critAdd).toBeCloseTo(plein.critAdd * ADV_TALENT_K, 6);
     expect(bride.dmgReduction).toBeCloseTo(plein.dmgReduction * ADV_TALENT_K, 6);
     expect(ADV_TALENT_K).toBeLessThan(1);
+  });
+
+  it('⚠️ le talent confié vaut ce qu’il valait avant que le talent du HÉROS passe à ×1,8 (v0.848)', () => {
+    // L'échelle des talents est passée de 0,5 à 0,9 pour le héros ; embuscades et sièges ont
+    // été calibrés avec 0,5 × 0,4. Le bridage compense : la valeur confiée ne doit pas bouger.
+    const t = { ...tal('t1', 't_dmg'), equipped: true };
+    const aEchelle09 = talentValue(talentByCode('t_dmg')!, 0, 0, talentRollOf(t), 1);
+    const avant = 0.4 * aEchelle09 * (0.5 / 0.9);
+    expect(advTalentEffects([t]).damagePct).toBeCloseTo(avant, 9);
   });
 
   it('sans talent, aucun effet', () => {

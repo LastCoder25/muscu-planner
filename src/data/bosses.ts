@@ -12,7 +12,7 @@
 // dégâts élevés = check de SURVIE (pas un mur de PV qui tuerait le coureur).
 // Distinct du boss communautaire hebdo (world boss).
 import type { Combatant } from '@/lib/combat';
-import { PROCEDURAL, bossGearExpect } from '@/lib/proceduralContent';
+import { PROCEDURAL, bossGearExpect, bossContentBoost } from '@/lib/proceduralContent';
 import { DUNGEONS, dungeonGold } from '@/data/dungeons';
 
 export interface MilestoneBoss {
@@ -119,8 +119,10 @@ const HAND_BOSSES: MilestoneBoss[] = [
     hint: 'End-game absolu. Tout à fond, PV au max, et un peu de chance.',
     combatant: {
       name: 'Archidémon',
-      pv: 45000,
-      damage: 2900,
+      // ×1,45 (45000/2900, v0.848, mesuré) : à progression réelle (talent, familier, sets,
+      // voie), on le battait 91 % du temps à son palier ; la cible est 55 %.
+      pv: 65250,
+      damage: 4205,
       crit: 0.15,
       dodge: 0.08,
       initiative: 26,
@@ -160,12 +162,14 @@ export const BOSSES: MilestoneBoss[] = [...HAND_BOSSES, ...PROCEDURAL.bosses].ma
   // un joueur SOUS-niveau battait des boss très au-dessus de sa ligue (le sport n'était plus
   // le plafond). Baseline early ×1 (boss d'amorçage jouables nu), montée avec le palier.
   const ge = bossGearExpect(b.unlockLevel);
+  // Renfort de contenu (v0.848) : l'attente de TOUT le reste du build (talent, familier, sets, voie).
+  const boost = bossContentBoost(b.unlockLevel);
   return {
     ...b,
     combatant: {
       ...b.combatant,
-      pv: Math.round(b.combatant.pv * ge.off),
-      damage: Math.round(b.combatant.damage * ge.pv),
+      pv: Math.round(b.combatant.pv * ge.off * boost),
+      damage: Math.round(b.combatant.damage * ge.pv * boost),
     },
     gold: bossGoldForLevel(b.unlockLevel),
     energyCost: Math.min(BOSS_ENERGY_CAP, b.energyCost),
