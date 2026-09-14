@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { sessionXp } from '@/lib/athlete';
 import { CARAVAN, caravanSlots, caravanSlowFor, trainMsFor } from '@/lib/caravan';
+import { outfitterMsFor } from '@/lib/advGear';
 import { guildRoster } from '@/lib/adventurers';
 import {
   perLevelLabel,
@@ -50,10 +51,11 @@ describe('buildings — emplacements & coûts', () => {
     // cour. C'est ce que donnaient les 10 emplacements pour 7 bâtiments.
     expect(BUILDING_TYPES.every((t) => t.unique)).toBe(true);
     expect(BUILD.plotCap).toBe(BUILDING_TYPES.length);
-    // 10 types depuis les caravanes (v0.727) : les 7 d’origine + Comptoir, Guilde,
-    // Centre de formation. ⚠️ Le littéral est là pour qu’ajouter un type soit une
-    // DÉCISION (il ouvre un emplacement et approfondit le puits d’or de 1/N), pas un effet de bord.
-    expect(BUILDING_TYPES.length).toBe(10);
+    // 11 types depuis l'Équipementier (Task 7) : les 7 d’origine + Comptoir, Guilde,
+    // Centre de formation, Équipementier. ⚠️ Le littéral est là pour qu’ajouter un type
+    // soit une DÉCISION (il ouvre un emplacement et approfondit le puits d’or de 1/N),
+    // pas un effet de bord.
+    expect(BUILDING_TYPES.length).toBe(11);
   });
   it('le CHOIX vit dans plotsForLevel, pas dans le mou : moins d’emplacements que de types déblocables', () => {
     // À bas niveau on a moins d'emplacements que de bâtiments déjà déblocables → on
@@ -80,7 +82,7 @@ describe('buildings — emplacements & coûts', () => {
 });
 
 describe('buildings — registre (production passive)', () => {
-  it('roster complet : les 7 d’origine + comptoir, guilde, centre de formation', () => {
+  it('roster complet : les 7 d’origine + comptoir, guilde, centre de formation, équipementier', () => {
     expect(BUILDING_TYPES.map((t) => t.id).sort()).toEqual(
       [
         'boss_altar',
@@ -93,6 +95,7 @@ describe('buildings — registre (production passive)', () => {
         'caravanserail',
         'guild',
         'training',
+        'outfitter',
       ].sort(),
     );
   });
@@ -345,6 +348,7 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     // Effectif ET rang maximal des aventuriers (le rang suit le niveau, donc continu).
     guild: (l) => guildRoster(l) * 1000 + l,
     training: (l) => -trainMsFor(l),
+    outfitter: (l) => -outfitterMsFor(l),
   };
 
   it('chaque type de bâtiment déclare ce que son niveau change', () => {

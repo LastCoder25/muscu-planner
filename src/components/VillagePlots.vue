@@ -110,6 +110,40 @@
               <span class="pp-tx">{{ milestone.text }}</span>
             </div>
           </div>
+          <!-- ⚒️ L'ÉQUIPEMENTIER : un objet du sac devient une pièce pour un aventurier,
+               faite pour son métier. Fabrication asymptotique (Task 7). -->
+          <div v-if="selectedPlot.building.typeId === 'outfitter'" class="of">
+            <template v-if="outfitForge">
+              <div class="of-run">
+                ⚒️ En fabrication pour <b>{{ outfitForge.advName }}</b> · encore
+                {{ fmtMs(outfitForge.leftMs) }}
+              </div>
+            </template>
+            <template v-else>
+              <div class="of-row">
+                <select v-model="outfitAdvId" class="of-select" aria-label="Aventurier">
+                  <option value="" disabled>Aventurier…</option>
+                  <option v-for="a in char.advList" :key="a.id" :value="a.id">
+                    {{ a.name }}
+                  </option>
+                </select>
+                <select v-model="outfitItemId" class="of-select" aria-label="Objet du sac">
+                  <option value="" disabled>Objet du sac…</option>
+                  <option v-for="it in outfitCandidates" :key="it.id" :value="it.id">
+                    {{ it.emoji }} {{ it.name }}
+                  </option>
+                </select>
+              </div>
+              <div v-if="outfitTargetLabel" class="of-target">→ {{ outfitTargetLabel }}</div>
+              <button
+                class="pm-btn up"
+                :disabled="outfitBusy || !outfitAdvId || !outfitItemId"
+                @click="doOutfit"
+              >
+                ⚒️ Fabriquer · {{ fmtMs(outfitterMsFor(selectedPlot.building.level)) }}
+              </button>
+            </template>
+          </div>
           <div class="pm-actions">
             <!-- ⚠️ Le vivier se gère DEPUIS SON BÂTIMENT. Il vivait dans une carte en bas
                  de la base, loin de la Guilde qu'on venait de monter : on cherchait ses
@@ -160,11 +194,13 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useQuasar } from 'quasar';
 import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
 import { guildRoster } from '@/lib/adventurers';
-import { ROLL_FLOOR_RANKS } from '@/lib/items';
+import { ROLL_FLOOR_RANKS, FAMILIAR_SLOT, type Item } from '@/lib/items';
+import { LINEAGE_GEAR, lineageOf, outfitSlot, outfitterMsFor } from '@/lib/advGear';
 import {
   perLevelLabel,
   BUILD,
@@ -201,6 +237,7 @@ const emit = defineEmits<{
 const char = useCharacterStore();
 const auth = useAuthStore();
 const gameFx = useGameFx();
+const $q = useQuasar();
 
 const gold = computed(() => char.row?.gold ?? 0);
 const heroLevel = computed(() => props.heroLevel);
@@ -409,6 +446,60 @@ function collectAll() {
   const uid = auth.user?.id;
   if (uid) void char.collectFilons(uid, Date.now());
 }
+
+// ── ⚒️ L'ÉQUIPEMENTIER : un objet du sac devient une pièce pour un aventurier ──
+const outfitAdvId = ref('');
+const outfitItemId = ref('');
+const outfitBusy = ref(false);
+/** Objets du sac qui peuvent partir à la forge : ni 🔒, ni familier, ni porté par le
+ *  héros — les mêmes exclusions que le store applique (`startOutfit`), pour que rien
+ *  d'impossible ne soit proposé. */
+const outfitCandidates = computed<Item[]>(() => {
+  const cur = char.row;
+  if (!cur) return [];
+  return cur.inventory.filter(
+    (it) => it.slot !== FAMILIAR_SLOT && !it.locked && cur.equipped[it.slot]?.id !== it.id,
+  );
+});
+/** La forge en cours, avec le nom de l'aventurier et le temps restant — piloté par
+ *  `props.now` comme le reste des jauges de la feuille (récolte, aperçus). */
+const outfitForge = computed(() => {
+  const f = char.row?.adv_gear?.forge;
+  if (!f) return null;
+  const adv = char.advList.find((a) => a.id === f.advId);
+  return { advName: adv?.name ?? '?', leftMs: Math.max(0, f.until - props.now) };
+});
+/** Ce que la fabrication produira : slot + lignée de la cible, jamais la rareté (qui ne
+ *  se décide qu'au tirage, à la validation). Purement dérivé des données du jeu
+ *  (`outfitSlot`/`lineageOf`/`LINEAGE_GEAR`) : aucune règle recopiée. */
+const outfitTargetLabel = computed(() => {
+  const adv = char.advList.find((a) => a.id === outfitAdvId.value);
+  const item = outfitCandidates.value.find((it) => it.id === outfitItemId.value);
+  if (!adv || !item) return '';
+  const slot = outfitSlot(item.slot);
+  const lineage = lineageOf(adv);
+  if (!slot || !lineage) return '';
+  const piece = LINEAGE_GEAR[lineage].pieces[slot];
+  return `${piece.emoji} ${piece.name} pour ${adv.name}`;
+});
+const fmtMs = (ms: number) => {
+  const m = Math.round(Math.max(0, ms) / 60_000);
+  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
+};
+async function doOutfit() {
+  const uid = auth.user?.id;
+  if (!uid || outfitBusy.value || !outfitAdvId.value || !outfitItemId.value) return;
+  outfitBusy.value = true;
+  try {
+    await char.startOutfit(uid, outfitItemId.value, outfitAdvId.value, Date.now(), heroLevel.value);
+    outfitAdvId.value = '';
+    outfitItemId.value = '';
+  } catch (e) {
+    $q.notify({ type: 'negative', message: (e as Error).message });
+  } finally {
+    outfitBusy.value = false;
+  }
+}
 </script>
 
 <style scoped>
@@ -597,6 +688,36 @@ function collectAll() {
 }
 .pm-cap {
   color: var(--dim);
+}
+.of {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.of-run {
+  font-size: 13px;
+  color: var(--text);
+}
+.of-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.of-select {
+  flex: 1 1 140px;
+  min-height: 44px;
+  min-width: 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #1d1913;
+  color: var(--text);
+  font-size: 13px;
+  padding: 0 8px;
+}
+.of-target {
+  font-size: 12px;
+  color: var(--accent, #ffd23f);
 }
 .pm-actions {
   display: flex;

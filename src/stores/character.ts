@@ -156,6 +156,9 @@ import {
   advGearSellValue,
   canWearAdvGear,
   lineageOf,
+  outfitFromItem,
+  outfitterMsFor,
+  settleOutfit,
   type AdvGear,
   type AdvGearSlot,
   type AdvGearState,
@@ -1820,6 +1823,48 @@ export const useCharacterStore = defineStore('character', () => {
     return { ...(cur.adv_gear ?? { stock: [] }), stock };
   }
 
+  /** ⚒️ Envoie un objet du SAC à l'Équipementier : il en revient une pièce pour
+   *  l'aventurier visé, faite pour son métier — la fabrication prend du temps
+   *  (`outfitterMsFor`, réglé par le tick de base via `settleOutfit`).
+   *
+   *  ⚠️ Refus AU STORE, même politique que le compagnon/talent/équipement : l'écran ne
+   *  propose pas l'impossible, il ne le garantit pas.
+   *
+   *  ⚠️ `playerLevel` est REQUIS bien que le brief d'origine l'omette de la signature :
+   *  c'est le patron de TOUT le reste de ce store (`buildFilon`, `upgradeFilon`,
+   *  `claimCaravan`, `tickScavengers`…) — jamais recalculé ici, toujours reçu de
+   *  l'appelant, qui seul connaît le niveau RÉEL du joueur. */
+  async function startOutfit(
+    userId: string,
+    itemId: string,
+    advId: string,
+    now: number,
+    playerLevel: number,
+  ) {
+    const cur = row.value;
+    if (!cur) return;
+    if (cur.adv_gear?.forge) throw new Error('Une pièce est déjà en fabrication.');
+    const level = buildingLevel(cur.buildings ?? [], 'outfitter');
+    if (level <= 0) throw new Error('Construis un Équipementier.');
+    const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
+    if (!adv) throw new Error('Cet aventurier est introuvable.');
+    const item = cur.inventory.find((i) => i.id === itemId);
+    if (!item) throw new Error('Cet objet est introuvable.');
+    if (item.locked) throw new Error('🔒 Déverrouille-le d’abord.');
+    if (item.slot === FAMILIAR_SLOT) throw new Error('On ne fond pas un familier.');
+    if (cur.equipped[item.slot]?.id === item.id)
+      throw new Error('Ton héros le porte — retire-le d’abord.');
+    const piece = outfitFromItem(Math.random, item, adv, playerLevel);
+    if (!piece) throw new Error(`Cet objet ne convient pas au métier de ${adv.name}.`);
+    await persistOptimistic(userId, {
+      inventory: cur.inventory.filter((i) => i.id !== itemId),
+      adv_gear: {
+        ...(cur.adv_gear ?? { stock: [] }),
+        forge: { until: now + outfitterMsFor(level), advId, piece },
+      },
+    });
+  }
+
   async function buildDefense(userId: string, typeId: DefenseId, playerLevel: number, now: number) {
     const cur = row.value;
     if (!cur) return;
@@ -2146,13 +2191,22 @@ export const useCharacterStore = defineStore('character', () => {
 
   /** Envoie un convoi. ⚠️ Le POI est RETIRÉ de la carte au départ, exactement comme pour
    *  le héros — c'est ce qui fait que caravanes et héros se disputent les mêmes lieux. */
-  /** Applique les formations arrivées à terme. ⚠️ Appelé par le tick de base (qui
-   *  tourne déjà) : sans ça, une promotion ne se conclurait qu'à la prochaine action
-   *  touchant le vivier, donc peut-être jamais. */
+  /** Applique les formations arrivées à terme ET la forge de l'Équipementier. ⚠️ Appelé
+   *  par le tick de base (qui tourne déjà) : sans ça, une promotion — ou une pièce
+   *  attendue — ne se conclurait qu'à la prochaine action touchant le vivier, donc
+   *  peut-être jamais.
+   *
+   *  ⚠️ `settleOutfit` rend le MÊME objet si rien n'est dû : on n'écrit `adv_gear` que
+   *  quand il rend autre chose — même politique que `withAdvGear`/`settleAllTraining`. */
   async function settleAdventurers(userId: string, now = Date.now()) {
+    const cur = row.value;
     const r = settleAllTraining(advList.value, now);
-    if (!r.changed) return false;
-    await persist(userId, { adventurers: r.list });
+    const ag = cur?.adv_gear ? settleOutfit(cur.adv_gear, now) : null;
+    const patch: Record<string, unknown> = {};
+    if (r.changed) patch.adventurers = r.list;
+    if (cur && ag && ag !== cur.adv_gear) patch.adv_gear = ag;
+    if (!Object.keys(patch).length) return false;
+    await persist(userId, patch);
     return true;
   }
 
@@ -2300,6 +2354,7 @@ export const useCharacterStore = defineStore('character', () => {
     recycleAdvGear,
     toggleAdvGearLock,
     withAdvGear,
+    startOutfit,
     autoAssignCompanions,
     healHero,
     garrisonedFamiliars,

@@ -281,6 +281,20 @@ export const BUILDING_TYPES: BuildingType[] = [
     unique: true,
     desc: 'Un aventurier promu y apprend sa nouvelle classe. Sans lui, il plafonne à sa classe de départ.',
   },
+  // UTILITAIRE : l'ÉQUIPEMENTIER transforme un objet du héros en pièce d'aventurier.
+  {
+    id: 'outfitter',
+    label: 'Équipementier',
+    emoji: '⚒️',
+    category: 'utility',
+    effect: {},
+    perLevelNote: 'fabrication plus rapide à chaque niveau (de moins en moins)',
+    buildGold: 800,
+    unlockLevel: 5,
+    unique: true,
+    unlock: { activity: 'L’équipement des aventuriers', where: 'sur ta base' },
+    desc: 'Transforme un objet dont ton héros ne veut plus en pièce pour un aventurier, faite pour son métier.',
+  },
 ];
 
 /** **Ce qu'un niveau de plus apporte**, en une ligne — la question qu'on se pose devant
@@ -500,8 +514,12 @@ export function buildingUpgradeCost(level: number): number {
 }
 
 /** Un bâtiment a-t-il un effet qui SCALE avec le niveau ? (producteur, ou utilitaire
- *  à effet par niveau) → est-il améliorable. */
+ *  à effet par niveau) → est-il améliorable.
+ *  ⚠️ L'ÉQUIPEMENTIER n'a pas de `BuildingEffect` (son levier — `outfitterMsFor` — vit
+ *  dans `advGear.ts`, pas dans ce registre) : sans ce cas explicite, `buildingScales`
+ *  le déclarerait figé pour toujours, alors que chaque niveau raccourcit sa fabrication. */
 export function buildingScales(typeId: string): boolean {
+  if (typeId === 'outfitter') return true;
   const t = buildingType(typeId);
   return !!t && (!!t.resource || Object.keys(t.effect ?? {}).length > 0);
 }

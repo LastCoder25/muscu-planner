@@ -13,14 +13,19 @@ import {
   ADV_GEAR_DROP,
   ADV_GEAR_SLOTS,
   LINEAGE_GEAR,
+  OUTFITTER,
   advGearEffects,
   advGearOptions,
   advGearRoles,
   advGearValue,
   canWearAdvGear,
   lineageOf,
+  outfitFromItem,
+  outfitSlot,
+  outfitterMsFor,
   pickLineage,
   rollAdvGear,
+  settleOutfit,
   wornGear,
   type AdvGear,
 } from '@/lib/advGear';
@@ -274,5 +279,56 @@ describe('sources d’équipement', () => {
     // …et le vivier fait bien sortir une pièce : le test n’est pas trivialement vrai.
     expect(sans.advGear).toHaveLength(0);
     expect(avec.advGear.length).toBeGreaterThan(0);
+  });
+});
+
+describe('⚒️ Équipementier', () => {
+  it('la durée raccourcit à chaque niveau sans jamais devenir instantanée', () => {
+    for (let L = 1; L < 100; L++) expect(outfitterMsFor(L + 1)).toBeLessThan(outfitterMsFor(L));
+    expect(outfitterMsFor(100)).toBeGreaterThan(OUTFITTER.baseMs * (1 - OUTFITTER.speedMax));
+  });
+  it('transforme un objet du héros en pièce de la lignée visée, rang autour de SON niveau', () => {
+    const cible = { ...adv('a', ['archer']), level: 12 };
+    const hero = {
+      id: 'h',
+      slot: 'relic',
+      name: 'Relique',
+      emoji: '💀',
+      rarity: 'primordial',
+      level: 90,
+      baseLevel: 90,
+      effect: { type: 'crit_pct', value: 30 },
+    } as const;
+    const g = outfitFromItem(mulberry32(4), hero as never, cible, 90)!;
+    expect(g.lineage).toBe('archer');
+    expect(g.slot).toBe('accessory');
+    expect(g.level).toBeLessThanOrEqual(12 + 9);
+    expect(outfitSlot('familiar')).toBeNull();
+  });
+  it('règlement idempotent : rien avant l’échéance, la pièce au stock après', () => {
+    const piece0 = rollAdvGear(mulberry32(1), { lineage: 'mage', level: 10, playerLevel: 10 });
+    const s = { stock: [], forge: { until: 100, advId: 'a', piece: piece0 } };
+    expect(settleOutfit(s, 99)).toBe(s);
+    const done = settleOutfit(s, 100);
+    expect(done.stock).toHaveLength(1);
+    expect(done.forge).toBeNull();
+    expect(settleOutfit(done, 200)).toBe(done);
+  });
+  it('sans lignée ou objet 🔒/familier, rien à fabriquer', () => {
+    const cible = { ...adv('a', ['archer']), level: 12 };
+    const orpheline = { ...adv('b', []), level: 12 };
+    const arme = {
+      id: 'w',
+      slot: 'weapon',
+      name: 'Épée',
+      emoji: '🗡️',
+      rarity: 'rare',
+      level: 20,
+      baseLevel: 20,
+      effect: { type: 'damage_pct', value: 10 },
+    } as const;
+    expect(outfitFromItem(mulberry32(2), arme as never, orpheline, 90)).toBeNull();
+    expect(outfitFromItem(mulberry32(2), { ...arme, locked: true } as never, cible, 90)).toBeNull();
+    expect(outfitSlot('familiar')).toBeNull();
   });
 });

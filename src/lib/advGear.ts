@@ -17,7 +17,9 @@ import {
   sellValueOf,
   type AggregatedEffects,
   type EffectType,
+  type Item,
   type ItemEffect,
+  type ItemSlot,
   type Rarity,
 } from './items';
 import { advRarity, type Adventurer } from './adventurers';
@@ -268,6 +270,62 @@ export function advGearOptions(
 export interface AdvGearState {
   stock: AdvGear[];
   forge?: { until: number; advId: string; piece: Omit<AdvGear, 'id'> } | null;
+}
+
+// ── ÉQUIPEMENTIER (Task 7) ──
+// Un bâtiment qui transforme un objet dont le héros ne veut plus en pièce d'AVENTURIER,
+// faite pour le MÉTIER de la cible. ⚠️ L'objet sacrifié ne fixe que le SLOT (arme/armure/
+// accessoire, relique fusionnée dans l'accessoire) — jamais le rang de la pièce produite,
+// et jamais sa lignée : c'est la CIBLE qui décide de tout, sinon un objet primordial du
+// héros fabriquerait une pièce primordiale pour une recrue de niveau 3, ce qui casserait
+// « chaque pièce est faite pour SON porteur » (canWearAdvGear).
+
+/** Durée de fabrication, asymptotique (règle « aucun niveau mort du 0 au 100 ») : chaque
+ *  niveau du bâtiment raccourcit un peu, sans jamais devenir instantanée. */
+export const OUTFITTER = { baseMs: 40 * 60_000, speedMax: 0.6, half: 30 } as const;
+export function outfitterMsFor(level: number): number {
+  const L = Math.max(0, level);
+  return Math.round(OUTFITTER.baseMs * (1 - (OUTFITTER.speedMax * L) / (L + OUTFITTER.half)));
+}
+
+/** Quel emplacement d'AVENTURIER un objet du héros peut nourrir. L'aventurier n'a que
+ *  TROIS emplacements (`ADV_GEAR_SLOTS`) : accessoire ET relique fusionnent dans le sien.
+ *  Le familier n'en fait aucun — on ne fond pas un animal. */
+export function outfitSlot(slot: ItemSlot): AdvGearSlot | null {
+  if (slot === 'weapon' || slot === 'armor') return slot;
+  if (slot === 'accessory' || slot === 'relic') return 'accessory';
+  return null;
+}
+
+/** Transforme un objet du héros en pièce d'aventurier, pour la CIBLE visée.
+ *  ⚠️ Le RANG est tiré autour du niveau de L'AVENTURIER, jamais de celui de l'objet
+ *  sacrifié ni du héros : un objet primordial ne fabrique pas une pièce primordiale pour
+ *  une recrue — seuls le SLOT et la LIGNÉE viennent de l'objet/de la cible. La rareté de
+ *  l'objet ne joue qu'en LUCK (un meilleur objet aide un peu, sans jamais dicter le rang). */
+export function outfitFromItem(
+  rng: () => number,
+  item: Item,
+  target: Adventurer,
+  playerLevel: number,
+): Omit<AdvGear, 'id'> | null {
+  const slot = outfitSlot(item.slot);
+  const lineage = lineageOf(target);
+  if (!slot || !lineage || item.locked) return null;
+  const luck = Math.min(0.5, 0.1 + RARITY_RANK[item.rarity] * 0.05);
+  return rollAdvGear(rng, { lineage, slot, level: target.level, luck, playerLevel });
+}
+
+/** Règlement de la forge : rien avant l'échéance, la pièce rejoint le STOCK une fois
+ *  prête. ⚠️ Pur et idempotent (même patron que `settleTraining`) : appelable à chaque
+ *  tick sans rien dupliquer, et rend le MÊME objet si rien ne change — c'est ce qui dit à
+ *  l'appelant s'il doit persister. */
+export function settleOutfit(state: AdvGearState, now: number): AdvGearState {
+  const f = state.forge;
+  if (!f || f.until > now) return state;
+  return {
+    stock: [...state.stock, { ...f.piece, id: `forge-${f.until}-${f.advId}` }],
+    forge: null,
+  };
 }
 
 export function advGearSellValue(g: AdvGear): number {

@@ -25,6 +25,7 @@ import {
 } from './buildings';
 import { caravanSlots, caravanSlowFor, trainMsFor } from './caravan';
 import { guildRoster } from './adventurers';
+import { outfitterMsFor } from './advGear';
 import { ROLL_FLOOR_RANKS } from './items';
 import { characterRank } from './characterRank';
 import { repairMsFor } from './raid';
@@ -63,6 +64,10 @@ function textAt(typeId: string, level: number): string | null {
       // ⚠️ Les DEUX bouts : la durée double à chaque rang, donc un seul chiffre ne
       // dirait rien — et c’est justement l’écart qui fait décider.
       return `1re promotion ${h(trainMsFor(level, 1))} · primordiale ${h(trainMsFor(level, 7))}`;
+    case 'outfitter':
+      // ⚠️ Un seul chiffre : le temps de fabrication, la même chose qui compte pour un
+      // joueur qui investit dans ce bâtiment.
+      return `fabrication en ${h(outfitterMsFor(level))}`;
     case 'outpost':
       return `−${pct(1 - travelTimeMult(one(typeId, level)))} de temps de trajet`;
     case 'labyrinth_gate':
