@@ -27,7 +27,7 @@ import { challengeTargetBetween, type Challenge } from './challenges';
 import { repRangeForExercise, type RepRange } from './repScheme';
 import { addDaysUtcIso } from './startDate';
 import { normMuscle } from './muscles';
-import { challengeLane, comboKind } from './tennisTraining';
+import { challengeLane } from './tennisTraining';
 
 /** Crédit d'une série pour un muscle SECONDAIRE (le principal vaut 1). */
 const SECONDARY_CREDIT = 0.5;
@@ -181,7 +181,7 @@ function comboItems(
   day: string,
   already: (leg: ComboLeg) => number,
 ): VolumeItem[] {
-  return muscuCombos(i.combos)
+  return i.combos
     .filter((c) => c.status === 'active')
     .flatMap((c) =>
       c.legs.map((leg) => {
@@ -234,22 +234,16 @@ function challengeTargetItems(
     }));
 }
 
-/** Challenges qui comptent pour la musculation (sorties et conditionnement exclus). */
+/** Challenges qui comptent pour la musculation (sorties, conditionnement et tennis exclus). */
 function muscuChallenges(challenges: readonly Challenge[]): Challenge[] {
   return challenges.filter((c) => challengeLane(c) === 'muscu');
-}
-
-/** Défis 360 MUSCU : le Défi 360 Tennis alimente la piste Tennis, pas l'équilibre du corps
- *  (même règle que les séances de prépa physique, exclues du volume muscu). */
-function muscuCombos(combos: readonly ComboChallenge[]): ComboChallenge[] {
-  return combos.filter((c) => comboKind(c) === 'muscu');
 }
 
 /** Tout le volume RÉELLEMENT fait (séances, 360, challenges muscu), en éléments. */
 function doneItems(i: Omit<BalanceInput, 'targets' | 'today'>): VolumeItem[] {
   return [
     ...sessionItems(i.sessions),
-    ...muscuCombos(i.combos).flatMap((c) => c.legs.flatMap((leg) => legItems(leg, i.objective))),
+    ...i.combos.flatMap((c) => c.legs.flatMap((leg) => legItems(leg, i.objective))),
     ...challengeItems(muscuChallenges(i.challenges), i.objective),
   ];
 }

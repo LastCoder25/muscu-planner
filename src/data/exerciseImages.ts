@@ -83,6 +83,21 @@ const EXERCISE_IMAGES: Record<string, string> = {
   ex_high_knees: '/exercises/ex_high_knees.jpg',
   ex_ch_course: '/exercises/ex_ch_marche_course.jpg', // même piste (photos course/marche en extérieur)
   ex_ch_marche: '/exercises/ex_ch_marche_course.jpg',
+  // Exos tennis solo (v0.844, free-exercise-db). Variantes proches documentées dans le script.
+  ex_tn_tuck_jump: '/exercises/ex_tn_tuck_jump.jpg',
+  ex_tn_single_leg_hop: '/exercises/ex_tn_single_leg_hop.jpg',
+  ex_tn_box_jump: '/exercises/ex_tn_box_jump.jpg',
+  ex_tn_line_hops: '/exercises/ex_tn_line_hops.jpg',
+  ex_tn_band_forehand: '/exercises/ex_tn_band_forehand.jpg',
+  ex_tn_dead_bug: '/exercises/ex_tn_dead_bug.jpg',
+  ex_tn_reverse_lunge: '/exercises/ex_tn_reverse_lunge.jpg',
+  ex_tn_band_external_rotation: '/exercises/ex_tn_band_external_rotation.jpg',
+  ex_tn_band_internal_rotation: '/exercises/ex_tn_band_internal_rotation.jpg',
+  ex_tn_ytw: '/exercises/ex_tn_ytw.jpg',
+  ex_tn_wrist_curl: '/exercises/ex_tn_wrist_curl.jpg',
+  ex_pp_leg_swings: '/exercises/ex_pp_leg_swings.jpg',
+  ex_tn_plank: '/exercises/ex_plank.jpg', // même mouvement que la planche muscu
+  ex_tn_single_leg_calf: '/exercises/ex_calf_raise_bw.jpg', // montée sur pointes, mêmes photos
   // Wikimedia Commons (licences CC → crédit OBLIGATOIRE, cf. EXERCISE_IMAGE_CREDITS).
   ex_burpees: '/exercises/ex_burpees.jpg',
   ex_pp_bird_dog: '/exercises/ex_pp_bird_dog.jpg',

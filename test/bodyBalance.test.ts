@@ -185,12 +185,7 @@ describe('bodyBalance — réel', () => {
     expect(row(i, 'pectoraux').value).toBe(0);
   });
 
-  it('le Défi 360 Tennis et les challenges tennis ne comptent pas (piste Tennis)', () => {
-    const sets = [{ date: '2026-09-15', reps: 10 }];
-    const tennis360: ComboChallenge = {
-      ...combo([leg({ exercise_id: 'bench', muscle_primary: 'pectoraux', target: 3, sets })]),
-      kind: 'tennis',
-    };
+  it('les challenges tennis ne comptent pas (piste Tennis)', () => {
     const tennisCh = challenge({
       exercise_id: 'bench',
       config: { start: 30, discipline: 'tennis' },
@@ -198,13 +193,12 @@ describe('bodyBalance — réel', () => {
         { day: 1, date: '2026-09-15', target: 30, done: 40, elapsed_sec: 0, completed: true },
       ],
     });
-    const i = input({ combos: [tennis360], challenges: [tennisCh] });
+    const i = input({ challenges: [tennisCh] });
     expect(row(i, 'pectoraux').value).toBe(0);
     expect(weekMuscleSeries(i).real.pectoraux ?? 0).toBe(0);
-    expect(weekMuscleSeries(i).combo.pectoraux ?? 0).toBe(0);
     expect(weekMuscleSeries(i).challenges.pectoraux ?? 0).toBe(0);
-    // Témoin : le même 360 en muscu, lui, compte.
-    const muscu = input({ combos: [{ ...tennis360, kind: undefined }] });
+    // Témoin : le même challenge en muscu, lui, compte.
+    const muscu = input({ challenges: [{ ...tennisCh, config: { start: 30 } }] });
     expect(row(muscu, 'pectoraux').done).toBeGreaterThan(0);
   });
 });

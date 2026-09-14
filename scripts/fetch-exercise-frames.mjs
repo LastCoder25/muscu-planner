@@ -93,6 +93,25 @@ const MAP = {
   ex_ch_velo: 'Bicycling_Stationary',
   ex_jumping_jacks: 'Star_Jump',
   ex_high_knees: 'Fast_Skipping',
+  // Ajouts 2026-09 (exos tennis solo, v0.844). Choisis sur planche. Variantes proches :
+  // coup droit à l'élastique = rotation contre résistance au câble ; Y-T-W = la position T
+  // allongé ; fente arrière montrée avec haltères ; balancements de jambe = jambe tendue
+  // avant/arrière appuyé sur une chaise. Rien de fidèle pour : balle contre le mur, spider
+  // drill, déplacements à vide, geste à vide raquette, fente latérale, pronation raquette,
+  // pas chassés, split-step, échelle (Wikimedia Commons non plus). Planche et mollets sur
+  // une jambe réutilisent ex_plank / ex_calf_raise_bw (cf. exerciseImages.ts).
+  ex_tn_tuck_jump: 'Knee_Tuck_Jump',
+  ex_tn_single_leg_hop: 'Single-Leg_Hop_Progression',
+  ex_tn_box_jump: 'Front_Box_Jump',
+  ex_tn_line_hops: 'Lateral_Cone_Hops',
+  ex_tn_band_forehand: 'Pallof_Press_With_Rotation',
+  ex_tn_dead_bug: 'Dead_Bug',
+  ex_tn_reverse_lunge: 'Dumbbell_Rear_Lunge',
+  ex_tn_band_external_rotation: 'External_Rotation_with_Band',
+  ex_tn_band_internal_rotation: 'Internal_Rotation_with_Band',
+  ex_tn_ytw: 'Lying_Rear_Delt_Raise',
+  ex_tn_wrist_curl: 'Seated_One-Arm_Dumbbell_Palms-Up_Wrist_Curl',
+  ex_pp_leg_swings: 'Front_Leg_Raises',
 };
 mkdirSync('public/exercises', { recursive: true });
 let ok = 0,

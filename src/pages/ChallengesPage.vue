@@ -34,7 +34,7 @@
           text-color="dark"
           icon="add"
           label="Nouveau"
-          @click="mode === 'combo' ? router.push(newComboPath) : goNew()"
+          @click="mode === 'combo' ? router.push('/combo/new') : goNew()"
         />
       </div>
     </div>
@@ -43,24 +43,6 @@
       <button class="seg2-b" :class="{ on: mode === 'solo' }" @click="mode = 'solo'">Solo</button>
       <button class="seg2-b" :class="{ on: mode === 'combo' }" @click="mode = 'combo'">
         🎯 Défi 360
-      </button>
-    </div>
-
-    <!-- Deux sortes de 360, un actif par sorte : le 360 muscu et le 360 Tennis. -->
-    <div v-if="mode === 'combo'" class="kind-row">
-      <button
-        class="kind-b"
-        :class="{ on: comboKindSel === 'muscu' }"
-        @click="comboKindSel = 'muscu'"
-      >
-        💪 Muscu
-      </button>
-      <button
-        class="kind-b"
-        :class="{ on: comboKindSel === 'tennis' }"
-        @click="comboKindSel = 'tennis'"
-      >
-        🎾 Tennis
       </button>
     </div>
 
@@ -347,9 +329,7 @@
       <!-- Terminés / Abandonnés : liste récap -->
       <template v-if="comboTab !== 'active'">
         <div v-if="!comboList.length" class="empty">
-          {{
-            comboTab === 'done' ? `Aucun ${comboLabel} terminé.` : `Aucun ${comboLabel} abandonné.`
-          }}
+          {{ comboTab === 'done' ? 'Aucun Défi 360 terminé.' : 'Aucun Défi 360 abandonné.' }}
         </div>
         <button
           v-for="c in comboList"
@@ -358,9 +338,7 @@
           @click="router.push(`/combo/${c.id}`)"
         >
           <div class="cc-main">
-            <div class="cc-title font-display">
-              {{ comboKindSel === 'tennis' ? '🎾' : '🎯' }} {{ c.name }}
-            </div>
+            <div class="cc-title font-display">🎯 Défi 360</div>
             <div class="cc-sub">
               {{ comboLegsDone(c) }}/{{ c.legs.length }} exos · {{ comboProgressPct(c) }} %
             </div>
@@ -386,11 +364,7 @@
 
       <template v-else>
         <div v-if="!activeCombo" class="combo-empty">
-          <p v-if="comboKindSel === 'tennis'">
-            Ta <b>prépa tennis en solo sur 7 jours</b> : explosivité, réactivité, rotation, gainage,
-            à la maison ou sur le court.
-          </p>
-          <p v-else>
+          <p>
             Un défi <b>full-body sur 7 jours</b> : un exo par groupe, tes séries réparties dans la
             semaine.
           </p>
@@ -400,8 +374,8 @@
             no-caps
             size="lg"
             icon="add"
-            :label="`Lancer un ${comboLabel}`"
-            @click="router.push(newComboPath)"
+            label="Lancer un Défi 360"
+            @click="router.push('/combo/new')"
           />
         </div>
         <template v-else>
@@ -661,7 +635,7 @@ import { exerciseImage } from '@/data/exerciseImages';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { isCardioChallengeExercise } from '@/data/cardio';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
-import { challengeLane, comboKind, type ChallengeLane, type ComboKind } from '@/lib/tennisTraining';
+import { challengeLane, type ChallengeLane } from '@/lib/tennisTraining';
 import { useComboStore } from '@/stores/combo';
 import { useProfileStore } from '@/stores/profile';
 import { repRangeLabel } from '@/lib/repScheme';
@@ -760,21 +734,10 @@ const availableEnergy = computed(
     (character.row?.energy_spent ?? 0),
 );
 
-const mode = ref<'solo' | 'combo'>(route.query.mode === 'combo' ? 'combo' : 'solo');
-// Sorte de 360 affichée : muscu ou Tennis (un actif par sorte). `?kind=tennis` y mène.
-const comboKindSel = ref<ComboKind>(route.query.kind === 'tennis' ? 'tennis' : 'muscu');
-const comboLabel = computed(() =>
-  comboKindSel.value === 'tennis' ? 'Défi 360 Tennis' : 'Défi 360',
-);
-const newComboPath = computed(() =>
-  comboKindSel.value === 'tennis' ? '/combo/new?kind=tennis' : '/combo/new',
-);
-const combosOfKind = computed(() =>
-  comboStore.list.filter((c) => comboKind(c) === comboKindSel.value),
-);
+const mode = ref<'solo' | 'combo'>('solo');
 // Même logique d'états que les défis solo (En cours / Terminés / Abandonnés).
 const comboTab = ref<string>('active');
-const activeCombo = computed(() => combosOfKind.value.find((c) => c.status === 'active') ?? null);
+const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
 /** Ce qu’arrêter le 360 en cours fera — même source que l’écran de détail, donc les deux
  *  ne peuvent pas annoncer deux choses différentes pour le même geste. */
 const comboStop = computed(() =>
@@ -818,7 +781,7 @@ const activeComboLegs = computed(() => {
   });
 });
 const comboList = computed(() =>
-  combosOfKind.value
+  comboStore.list
     .filter((c) => c.status === comboTab.value)
     .sort((a, b) => (b.start_date > a.start_date ? 1 : -1)),
 );
@@ -1380,27 +1343,6 @@ onMounted(async () => {
   min-width: 30px;
 }
 
-/* Sorte de Défi 360 (muscu / Tennis) */
-.kind-row {
-  display: flex;
-  gap: 6px;
-  margin: 0 0 10px;
-}
-.kind-b {
-  flex: 1;
-  min-height: 40px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--dim);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.kind-b.on {
-  border-color: var(--accent);
-  color: var(--accent);
-}
 /* Segmenté Solo / Défi 360 */
 .seg2 {
   display: flex;
