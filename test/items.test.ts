@@ -1144,9 +1144,9 @@ describe('pickBestTalents', () => {
     expect(got).toContain('b');
   });
 
-  it('laisse des emplacements vides si rien n ameliore', () => {
+  it('remplit les emplacements meme si rien n ameliore (un talent vaut mieux que rien)', () => {
     const talents = [mk('a', 't_dmg'), mk('b', 't_pv')];
-    expect(pickBestTalents(talents, 2, () => 0)).toEqual([]);
+    expect(pickBestTalents(talents, 2, () => 0)).toHaveLength(2);
   });
 
   it('aucun emplacement -> aucun talent', () => {

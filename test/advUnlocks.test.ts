@@ -30,12 +30,18 @@ describe('advUnlocks — calendrier des déblocages', () => {
     expect(at9[0]!.title).toContain('Épines');
   });
 
-  it('niveau 20 : boss (Titan) + talent + rareté Épique', () => {
+  it('niveau 20 : boss (Titan) + rareté Épique — plus d’emplacement de talent', () => {
     const at20 = unlocksAtLevel(20);
     expect(at20.some((u) => u.kind === 'boss' && u.title.includes('Titan'))).toBe(true);
-    expect(at20.some((u) => u.kind === 'talent')).toBe(true);
+    // Un seul talent (v0.845) : l'emplacement ne s'annonce qu'une fois, au niveau 5.
+    expect(at20.some((u) => u.kind === 'talent')).toBe(false);
     const rar = at20.find((u) => u.kind === 'rarity');
     expect(rar?.title.toLowerCase()).toContain('épique');
+  });
+
+  it('UN SEUL déblocage de talent dans tout le calendrier, au niveau 5', () => {
+    const tal = ADV_SCHEDULE.filter((u) => u.kind === 'talent');
+    expect(tal.map((u) => u.level)).toEqual([5]);
   });
 
   it('les signatures sont gatées en profondeur (Exécution 12 / Rage 15 / Déferlante 18)', () => {

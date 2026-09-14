@@ -9,6 +9,8 @@ import {
 } from '@/lib/items';
 import {
   talentsEarned,
+  TALENT_SLOT_LEVEL,
+  pickBestTalents,
   talentEffects,
   TALENTS,
   talentTier,
@@ -25,10 +27,43 @@ import {
 } from '@/lib/talents';
 
 describe('talentsEarned', () => {
-  it('1 emplacement tous les 5 niveaux JOUEUR', () => {
+  it('UN SEUL emplacement, à partir du niveau 5 (v0.845 — c’était 1 tous les 5 niveaux)', () => {
+    expect(talentsEarned(1)).toBe(0);
     expect(talentsEarned(4)).toBe(0);
-    expect(talentsEarned(5)).toBe(1);
-    expect(talentsEarned(20)).toBe(4);
+    expect(talentsEarned(TALENT_SLOT_LEVEL)).toBe(1);
+    expect(TALENT_SLOT_LEVEL).toBe(5);
+    // ⚠️ Le cœur de la décision : il ne grandit plus avec le niveau.
+    for (const L of [10, 20, 50, 100]) expect(talentsEarned(L)).toBe(1);
+  });
+});
+
+describe('pickBestTalents — garder le plus PUISSANT, pas la plus forte magnitude', () => {
+  // Vrais codes (normalizeTalents écarte les codes inconnus) ; la PUISSANCE est injectée
+  // par l'id : « or » ne vaut rien en combat, « degats » beaucoup, « pv » moyennement.
+  const t = (id: string, code: string): TalentInstance => ({ id, code, xp: 0, equipped: true });
+  const worth: Record<string, number> = { or: 0, degats: 50, pv: 30 };
+  const score = (ids: string[]) =>
+    100 + ids.reduce((a, id) => a + (worth[id.split('-')[0]!] ?? 0), 0);
+
+  it('⚠️ LE CAS RÉEL : un compte à plusieurs talents garde celui qui donne le plus de puissance', () => {
+    const eq = [t('or-1', 't_crit'), t('pv-1', 't_pv'), t('degats-1', 't_dmg')];
+    expect(pickBestTalents(eq, 1, score)).toEqual(['degats-1']);
+  });
+
+  it('remplit les emplacements même sans gain : un talent sans puissance reste mieux que rien', () => {
+    const eq = [t('or-1', 't_crit'), t('or-2', 't_dodge')];
+    expect(pickBestTalents(eq, 1, score)).toHaveLength(1);
+  });
+
+  it('un seul exemplaire par code, et rien retiré s’il n’y a pas d’excédent', () => {
+    const eq = [t('degats-1', 't_dmg'), t('degats-2', 't_dmg'), t('pv-1', 't_pv')];
+    expect(pickBestTalents(eq, 2, score).sort()).toEqual(['degats-1', 'pv-1']);
+    expect(pickBestTalents([t('or-1', 't_crit')], 1, score)).toEqual(['or-1']);
+  });
+
+  it('aucun emplacement (avant le niveau 5) → aucun talent gardé', () => {
+    const eq = [t('degats-1', 't_dmg'), t('pv-1', 't_pv')];
+    expect(pickBestTalents(eq, 0, score)).toEqual([]);
   });
 });
 
@@ -110,10 +145,13 @@ describe('normalizeTalents (rétro-compat)', () => {
 });
 
 describe('talentEffects (équipés uniquement)', () => {
-  it('legacy string[] : tous comptent (grade G1 +0)', () => {
+  it('⚠️ UN SEUL talent compte, même si plusieurs sont marqués équipés (v0.845)', () => {
+    // Un compte d'avant la règle porte encore plusieurs talents équipés (ici l'ancien
+    // format string[], tous équipés) : tant que la page ne les a pas rognés, la puissance
+    // ne doit JAMAIS en compter plus d'un.
     const e = talentEffects(['t_dmg', 't_dmg', 't_pv']);
-    expect(e.damagePct).toBeCloseTo(2 * talentValue(talentByCode('t_dmg')!, 0, 0));
-    expect(e.maxPvPct).toBeCloseTo(talentValue(talentByCode('t_pv')!, 0, 0));
+    expect(e.damagePct).toBeCloseTo(talentValue(talentByCode('t_dmg')!, 0, 0));
+    expect(e.maxPvPct).toBe(0);
   });
   it('instances : seuls les ÉQUIPÉS comptent', () => {
     const insts: TalentInstance[] = [

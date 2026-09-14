@@ -1,11 +1,12 @@
 // advUnlocks.ts — CALENDRIER DES DÉBLOCAGES de l'Aventure par niveau (pur/testé).
 // But : rendre VISIBLE ce que monter d'un niveau apporte. Alimente l'écran de level-up
 // (« ce que tu débloques ») et la timeline « À venir » de l'onglet Perso. Dérivé des
-// données/règles ACTUELLES : BOSSES (data), talentsEarned (1 emplacement/5 niv), la rareté
+// données/règles ACTUELLES : BOSSES (data), talentsEarned (un seul emplacement, au niv. 5), la rareté
 // max droppable (rankCeilingForLevel, monte avec le niveau) et EFFECT_MIN_LEVEL (effets/
 // signatures gatés en profondeur). Aucune dépendance Vue/Supabase.
 import { BOSSES } from '@/data/bosses';
 import { rankCeilingForLevel, RANK_ORDER, RARITY_LABEL } from '@/lib/items';
+import { TALENT_SLOT_LEVEL } from '@/lib/talents';
 
 type AdvUnlockKind = 'boss' | 'talent' | 'effect' | 'rarity';
 
@@ -31,17 +32,15 @@ function buildSchedule(): AdvUnlock[] {
     });
   }
 
-  // Emplacement de TALENT tous les 5 niveaux (talents.ts talentsEarned = floor(level/5)).
-  // Les talents se DROPPENT (donjons/boss) ; monter de niveau ouvre un emplacement de plus.
-  for (let lvl = 5; lvl <= 100; lvl += 5) {
-    out.push({
-      level: lvl,
-      kind: 'talent',
-      emoji: '🧠',
-      title: 'Emplacement de talent',
-      detail: 'Tu peux équiper un talent de plus (les talents se droppent en donjon/boss).',
-    });
-  }
+  // L'emplacement de TALENT, UNIQUE (talents.ts TALENT_SLOT_LEVEL / talentsEarned).
+  // Les talents se DROPPENT (donjons/boss) ; on en garde le meilleur équipé.
+  out.push({
+    level: TALENT_SLOT_LEVEL,
+    kind: 'talent',
+    emoji: '🧠',
+    title: 'Emplacement de talent',
+    detail: 'Tu peux équiper un talent (ils se droppent en donjon/boss ; garde le meilleur).',
+  });
 
   // RARETÉ MAX DROPPABLE — le pic de rareté de tes drops monte avec le niveau
   // (items.ts rankCeilingForLevel). Chaque nouveau rang atteignable est un vrai palier.

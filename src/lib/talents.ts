@@ -212,9 +212,19 @@ export function talentValue(
   );
 }
 
-/** Nombre d'emplacements de talents ÉQUIPÉS (1 tous les 5 niveaux JOUEUR). */
+/** Niveau joueur à partir duquel le personnage peut équiper son talent. */
+export const TALENT_SLOT_LEVEL = 5;
+/** Nombre MAXIMAL de talents équipés, à tout niveau. */
+const TALENT_MAX_SLOTS = 1;
+
+/** Nombre d'emplacements de talents ÉQUIPÉS : **UN SEUL**, à partir du niveau 5.
+ *  ⚠️ C'était 1 tous les 5 niveaux (20 au niveau 100). Mesuré le 2026-09-14 : les talents
+ *  étaient le plus gros levier de puissance hors objets (−15 à −19 % si retirés) et
+ *  n'étaient attendus par AUCUN calibrage de difficulté — ils faisaient tomber le mur
+ *  anti-emballement. Décision de l'utilisateur, avant tout rééquilibrage. Toute la règle
+ *  vit ici : store, équipement conseillé, écran et auto-équipement lisent cette fonction. */
 export function talentsEarned(playerLevel: number): number {
-  return Math.floor(playerLevel / 5);
+  return playerLevel >= TALENT_SLOT_LEVEL ? TALENT_MAX_SLOTS : 0;
 }
 
 // (Infusion de grade retirée, ticket 0ec48637 : talents = drops purs, vendus en or.)
@@ -245,9 +255,18 @@ export function normalizeTalents(raw: unknown): TalentInstance[] {
     .filter((t) => BY_CODE.has(t.code));
 }
 
-/** Cumule les effets des talents ÉQUIPÉS (grade + enchant). */
+/** Effets des talents ÉQUIPÉS du héros (grade + enchant), **plafonnés à `TALENT_MAX_SLOTS`**.
+ *  ⚠️ LE PLAFOND VIT ICI, À LA LECTURE, et pas seulement dans un rognage d'écran : un compte
+ *  d'avant la règle « un seul talent » garde plusieurs talents équipés tant que l'Aventure
+ *  ne les a pas rognés, et le Labyrinthe, la carte d'expédition ou l'optimiseur calculaient
+ *  sa puissance avec TOUS — le même héros aurait valu autre chose selon l'écran d'entrée.
+ *  Départage déterministe : les premiers équipés (le rognage, lui, garde le plus puissant). */
 export function talentEffects(raw: unknown): AggregatedEffects {
-  return effectsOfTalents(normalizeTalents(raw));
+  return effectsOfTalents(
+    normalizeTalents(raw)
+      .filter((t) => t.equipped === true)
+      .slice(0, TALENT_MAX_SLOTS),
+  );
 }
 
 /**
@@ -325,37 +344,39 @@ export function rollTalentDrop(
   };
 }
 
-/** Choisit les MEILLEURS talents à équiper (au plus `maxSlots`), en maximisant un score
- *  fourni par l'appelant (la puissance de combat du build). Glouton : à chaque tour on
- *  ajoute le talent qui fait le plus progresser le score, et on s'arrête dès qu'aucun
- *  n'apporte plus rien. Un seul talent par CODE (règle d'équipement : effets distincts).
- *  Pur — le scoring est injecté, donc pas de dépendance vers items/combat. */
+/** Choisit les talents à équiper (au plus `maxSlots`) : les plus PUISSANTS selon un score
+ *  fourni par l'appelant (la puissance de combat du build), un par CODE (effets distincts).
+ *  Glouton : à chaque tour, le talent qui donne le meilleur score.
+ *  ⚠️ SOURCE UNIQUE des trois choix de talents — équipement conseillé 🪄 (store), bouton
+ *  « talents conseillés » et rognage de l'excédent (page). Ils avaient deux algorithmes
+ *  qui se contredisaient sur un talent sans poids en puissance (l'un vidait la case,
+ *  l'autre la remplissait), ce qui les faisait se défaire l'un l'autre.
+ *  ⚠️ ON REMPLIT les emplacements même sans gain : un talent d'or reste mieux qu'une case
+ *  vide (et c'est ce qui garde le rognage sans perte : on ne retire que l'EXCÉDENT).
+ *  Le départage par puissance remplace un tri par « magnitude » : +10 % d'or et +10 % de
+ *  dégâts ne se comparent pas. Pur — le scoring est injecté. */
 export function pickBestTalents(
   talents: TalentInstance[],
   maxSlots: number,
   score: (ids: string[]) => number,
 ): string[] {
-  if (maxSlots <= 0) return [];
   const pool = normalizeTalents(talents);
   const chosen: string[] = [];
   const usedCodes = new Set<string>();
-  let cur = score([]);
   while (chosen.length < maxSlots) {
-    let bestId: string | null = null;
-    let bestScore = cur;
+    let best: TalentInstance | null = null;
+    let bestScore = -Infinity;
     for (const t of pool) {
       if (usedCodes.has(t.code) || chosen.includes(t.id)) continue;
       const p = score([...chosen, t.id]);
       if (p > bestScore) {
         bestScore = p;
-        bestId = t.id;
+        best = t;
       }
     }
-    if (!bestId) break; // plus rien n'améliore → on laisse des emplacements vides
-    const t = pool.find((x) => x.id === bestId)!;
-    chosen.push(bestId);
-    usedCodes.add(t.code);
-    cur = bestScore;
+    if (!best) break; // plus aucun talent (d'un code libre) à poser
+    chosen.push(best.id);
+    usedCodes.add(best.code);
   }
   return chosen;
 }

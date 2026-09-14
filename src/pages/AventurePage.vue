@@ -475,8 +475,9 @@
               Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
             </div>
             <div class="sec-hint">
-              Les talents <b>droppent à un grade</b> (rang + qualité) fixé au drop. Équipe-en
-              {{ talentSlots }} (change quand tu veux) ; vends les surplus pour de l'or.
+              Les talents <b>droppent à un grade</b> (rang + qualité) fixé au drop. Tu en équipes
+              <b>un seul</b>, dès le niveau {{ TALENT_SLOT_LEVEL }} (change quand tu veux) ; vends
+              les surplus pour de l'or.
             </div>
 
             <div v-if="!char.row.talents.length" class="talents-empty">
@@ -2640,7 +2641,7 @@
     <q-dialog v-model="talPickOpen" position="bottom">
       <q-card class="adv-modal">
         <button class="adv-modal-x" aria-label="Fermer" @click="talPick = null">✕</button>
-        <div class="sec-title">Emplacement {{ (talPick ?? 0) + 1 }}</div>
+        <div class="sec-title">Ton talent</div>
         <button
           v-if="talPick !== null && talentSlotsView[talPick]"
           class="voie-btn talent-dup-btn"
@@ -2796,6 +2797,8 @@ import {
 } from '@/lib/items';
 import {
   talentsEarned,
+  pickBestTalents,
+  TALENT_SLOT_LEVEL,
   talentEffects,
   normalizeTalents,
   talentByCode,
@@ -3486,52 +3489,22 @@ function pickTalent(id: string | null) {
 }
 
 const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.value);
-// TALENTS CONSEILLÉS (tickets 9f2c6a42 / 08b10b7f) : la meilleure combinaison de talents
-// à équiper pour MAXIMISER la puissance (build réel = gear équipé + passif de voie).
-// 1 seule instance par code (le meilleur grade), puis choix GREEDY jusqu'au nb de slots
-// (chaque effet de talent est positif → on ajoute à chaque tour celui qui augmente le +).
+// Puissance du build RÉEL (gear équipé + passif de voie) si l'on équipe exactement ces
+// talents. Arbitre UNIQUE des talents conseillés ET du rognage de l'excédent.
+function talentScore(ids: string[]): number {
+  const owned = char.row?.talents ?? [];
+  const combo = owned.filter((t) => ids.includes(t.id)).map((t) => ({ ...t, equipped: true }));
+  return powerWith(
+    char.row?.equipped ?? {},
+    mergeEffects(talentEffects(combo), voiePassiveEffects(char.row?.voie as VoieId)),
+  );
+}
+// TALENTS CONSEILLÉS (tickets 9f2c6a42 / 08b10b7f) : le(s) talent(s) qui MAXIMISENT la
+// puissance, un par code, en remplissant les emplacements (un seul depuis v0.845).
 const recommendedTalentIds = computed<Set<string>>(() => {
   const owned = char.row?.talents ?? [];
   if (!owned.length) return new Set();
-  const byCode = new Map<string, TalentInstance>();
-  for (const t of owned) {
-    const cur = byCode.get(t.code);
-    // Comparaison par MAGNITUDE réelle (inclut le jet), pas juste le tier → on garde vraiment
-    // le meilleur exemplaire d'un code, pas le premier vu à rang égal (ticket auto-équip).
-    if (!cur || talentMag(t) > talentMag(cur)) byCode.set(t.code, t);
-  }
-  const pool = [...byCode.values()];
-  const N = Math.min(talentSlots.value, pool.length);
-  const voieFx = voiePassiveEffects(char.row?.voie as VoieId);
-  const eq = char.row?.equipped ?? {};
-  const name = char.row?.pseudo ?? 'Toi';
-  const lvl = c.value.level.level;
-  const powerOf = (combo: TalentInstance[]) =>
-    combatPower(
-      playerWithGear(
-        name,
-        c.value,
-        eq,
-        mergeEffects(talentEffects(combo.map((t) => ({ ...t, equipped: true }))), voieFx),
-        lvl,
-        char.row?.voie,
-      ),
-    );
-  const chosen: TalentInstance[] = [];
-  while (chosen.length < N && pool.length) {
-    let bestI = -1;
-    let bestP = -1;
-    for (let i = 0; i < pool.length; i++) {
-      const p = powerOf([...chosen, pool[i]!]);
-      if (p > bestP) {
-        bestP = p;
-        bestI = i;
-      }
-    }
-    if (bestI < 0) break;
-    chosen.push(pool.splice(bestI, 1)[0]!);
-  }
-  return new Set(chosen.map((t) => t.id));
+  return new Set(pickBestTalents(owned, talentSlots.value, talentScore));
 });
 function doEquipRecommendedTalents() {
   withUid(
@@ -3543,19 +3516,19 @@ function doEquipRecommendedTalents() {
 // baissé après suppression de séances → `talentSlots` réduit, mais les talents restent
 // équipés), `talentEffects` les comptait TOUS → puissance GONFLÉE, et l'auto-équip (qui
 // n'en garde que N) faisait « chuter » la puissance (tickets 863c4f04 / 6f3c49a6). On retire
-// donc l'excédent (on garde les N meilleurs) → puissance affichée toujours LÉGALE.
+// donc l'excédent → puissance affichée toujours LÉGALE. Cas principal depuis v0.845 : les
+// comptes qui avaient plusieurs talents gardent celui qui donne le PLUS DE PUISSANCE (plus
+// la « magnitude » : +10 % d'or et +10 % de dégâts ne se comparent pas).
 watch(
-  [() => char.row?.talents, talentSlots],
+  [() => char.row?.talents, talentSlots, progress.ready],
   () => {
     const uid = auth.user?.id;
-    if (!uid) return;
+    // ⚠️ `progress.ready` : sans l'XP de fond chargée, le niveau vaut 1 → 0 emplacement, et on
+    // retirerait un talent que le joueur a légitimement le droit de porter.
+    if (!uid || !progress.ready.value) return;
     const eq = (char.row?.talents ?? []).filter((t) => t.equipped);
     if (eq.length <= talentSlots.value) return;
-    const keep = [...eq]
-      .sort((a, b) => talentMag(b) - talentMag(a))
-      .slice(0, talentSlots.value)
-      .map((t) => t.id);
-    void char.setEquippedTalents(uid, keep);
+    void char.setEquippedTalents(uid, pickBestTalents(eq, talentSlots.value, talentScore));
   },
   { immediate: true },
 );
