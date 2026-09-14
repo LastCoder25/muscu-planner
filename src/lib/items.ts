@@ -823,9 +823,41 @@ const SIGNATURE_NAMES: Partial<Record<EffectType, string[]>> = {
   rage_pct: ['Cœur du Berserk', 'Fureur Écarlate', 'Rage du Damné'],
 };
 
+/** 🪓 LA FORME D’UNE ARME, pour l’avatar (v0.832 ; signalé par l’utilisateur : « j’ai une hache
+ *  mais ça affiche une épée »). Aucun champ ne la stockait : elle vivait seulement dans le NOM.
+ *  ⚠️ La table est la SOURCE des noms d’armes (`NAMES.weapon` en dérive) : ajouter un nom sans
+ *  dire sa forme est impossible, et l’avatar ne peut pas retomber en silence sur l’épée. */
+export type WeaponKind = 'lame' | 'hache' | 'masse' | 'dague' | 'fleau' | 'faux';
+const WEAPON_NOUN_KIND = {
+  Lame: 'lame',
+  Hache: 'hache',
+  Masse: 'masse',
+  Dague: 'dague',
+  Fléau: 'fleau',
+} as const satisfies Record<string, WeaponKind>;
+/** Les noms ÉVOCATEURS d’arme (affixes signature) portent aussi leur forme. */
+const SIGNATURE_WEAPON_KIND: Record<string, WeaponKind> = {
+  Guillotine: 'hache',
+  'Couperet du Bourreau': 'hache',
+  'Faux des Âmes': 'faux',
+  Déferlante: 'lame',
+  Crescendo: 'lame',
+  'Élan Implacable': 'lame',
+};
+/** La forme d’une arme, lue sur son nom (« Hache runique », « Hache · Carapace… »,
+ *  « Guillotine »). Sans nom reconnu — un objet d’apparence, un nom d’avant — c’est une lame. */
+export function weaponKind(it: { name?: string } | null | undefined): WeaponKind {
+  const name = it?.name ?? '';
+  for (const [sig, kind] of Object.entries(SIGNATURE_WEAPON_KIND)) {
+    if (name.startsWith(sig)) return kind;
+  }
+  const noun = name.split(/[\s·]/)[0] ?? '';
+  return (WEAPON_NOUN_KIND as Record<string, WeaponKind>)[noun] ?? 'lame';
+}
+
 // Noms d'objets par slot (saveur).
 const NAMES: Record<ItemSlot, string[]> = {
-  weapon: ['Lame', 'Hache', 'Masse', 'Dague', 'Fléau'],
+  weapon: Object.keys(WEAPON_NOUN_KIND),
   armor: ['Plastron', 'Cotte', 'Cuirasse', 'Harnois'],
   accessory: ['Anneau', 'Amulette', 'Talisman', 'Bracelet'],
   relic: ['Éclat', 'Totem', 'Sceau', 'Idole'],
@@ -1655,6 +1687,8 @@ export interface ItemSet {
   emoji: string;
   theme: string; // résumé « coach »
   tiers: SetTier[];
+  /** Couleur du set PORTÉ sur l’avatar (sets de voie seulement). */
+  color?: string;
 }
 
 // Un set PAR boss de palier (cf. src/data/bosses.ts). Chaque set a un pouvoir
@@ -1735,6 +1769,9 @@ const VOIE_SET_DEFS: {
   emoji: string;
   theme: string;
   stats: [EffectType, EffectType, EffectType];
+  /** 🎨 v0.832 (demandé : « épines = vert ») — une teinte par set, lisible sur l’avatar,
+   *  choisie hors du jaune voltage de l’interface. */
+  color: string;
 }[] = [
   {
     voie: 'berserker',
@@ -1742,6 +1779,7 @@ const VOIE_SET_DEFS: {
     emoji: '💥',
     theme: 'Dégâts bruts et exécution — le set qui frappe.',
     stats: ['damage_pct', 'execute_pct', 'lifesteal_pct'],
+    color: '#ff5a3c',
   },
   {
     voie: 'gardien',
@@ -1749,6 +1787,7 @@ const VOIE_SET_DEFS: {
     emoji: '🛡️',
     theme: 'Le mur qui frappe : encaisse tout et tient.',
     stats: ['dmg_reduction_pct', 'max_pv_pct', 'damage_pct'],
+    color: '#4ea3ff',
   },
   {
     voie: 'assassin',
@@ -1756,6 +1795,7 @@ const VOIE_SET_DEFS: {
     emoji: '🗡️',
     theme: 'Critiques qui achèvent, un vol de vie pour durer.',
     stats: ['crit_pct', 'execute_pct', 'lifesteal_pct'],
+    color: '#9b7bff',
   },
   {
     voie: 'vampire',
@@ -1763,6 +1803,7 @@ const VOIE_SET_DEFS: {
     emoji: '🩸',
     theme: 'Vole la vie et se déchaîne au bord de la mort.',
     stats: ['lifesteal_pct', 'damage_pct', 'rage_pct'],
+    color: '#e0325f',
   },
   {
     voie: 'colosse',
@@ -1770,6 +1811,7 @@ const VOIE_SET_DEFS: {
     emoji: '🪨',
     theme: 'Réservoir de PV qui cogne dans la durée.',
     stats: ['max_pv_pct', 'dmg_reduction_pct', 'damage_pct'],
+    color: '#b08d5b',
   },
   {
     voie: 'duelliste',
@@ -1777,6 +1819,7 @@ const VOIE_SET_DEFS: {
     emoji: '🎯',
     theme: 'Précision létale adossée à des PV.',
     stats: ['crit_pct', 'damage_pct', 'max_pv_pct'],
+    color: '#3fd0e0',
   },
   {
     voie: 'epineux',
@@ -1784,6 +1827,7 @@ const VOIE_SET_DEFS: {
     emoji: '🌵',
     theme: 'Encaisse, renvoie les coups, frappe en retour.',
     stats: ['thorns_pct', 'max_pv_pct', 'damage_pct'],
+    color: '#5fcf4f',
   },
   {
     voie: 'frenetique',
@@ -1791,6 +1835,7 @@ const VOIE_SET_DEFS: {
     emoji: '🌀',
     theme: 'Monte en puissance au fil du combat.',
     stats: ['momentum_pct', 'damage_pct', 'lifesteal_pct'],
+    color: '#ff5cd8',
   },
 ];
 export const VOIE_SETS: ItemSet[] = VOIE_SET_DEFS.map((d) => ({
@@ -1798,6 +1843,7 @@ export const VOIE_SETS: ItemSet[] = VOIE_SET_DEFS.map((d) => ({
   name: d.name,
   emoji: d.emoji,
   theme: d.theme,
+  color: d.color,
   tiers: [
     {
       pieces: 2,
@@ -1857,6 +1903,25 @@ function setBonusMult(pieces: Item[]): number {
 /** Libellé d'un palier de set, scalé par le rang des pièces équipées de ce set. */
 export function setTierLabel(type: EffectType, base: number, pieces: Item[]): string {
   return effectLabelFor(type, base * setBonusMult(pieces));
+}
+
+/** 🎨 LE SET QUE L’ON PORTE, pour l’avatar : celui qui a le plus de pièces équipées, à
+ *  partir de 2 (le seuil où il donne quelque chose). À égalité, celui de la voie. Rien sans
+ *  couleur (sets d’avant les voies). */
+export function wornSet(
+  equipped: Equipped,
+  voie?: string | null,
+): { set: ItemSet; pieces: number; color: string } | null {
+  const mine = voieSetId(voie);
+  let best: { set: ItemSet; pieces: number; color: string } | null = null;
+  for (const [id, n] of Object.entries(setCounts(equipped))) {
+    const set = SET_BY_ID[id];
+    if (!set?.color || n < 2) continue;
+    if (!best || n > best.pieces || (n === best.pieces && id === mine)) {
+      best = { set, pieces: n, color: set.color };
+    }
+  }
+  return best;
 }
 
 /** Nombre de pièces équipées par set. */

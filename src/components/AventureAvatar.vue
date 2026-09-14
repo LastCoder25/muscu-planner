@@ -20,8 +20,8 @@
       </linearGradient>
     </defs>
 
-    <!-- Aura de profil (respire) -->
-    <circle class="aura" cx="60" cy="70" r="48" />
+    <!-- Aura de profil (respire) — prend la COULEUR DU SET porté s'il y en a un. -->
+    <circle class="aura" cx="60" cy="70" r="48" :style="set ? { stroke: set.color } : undefined" />
     <!-- Aura de PUISSANCE : de plus en plus visible selon le RANG le plus haut de
          l'équipement, teintée par palier, halo + anneaux + étincelles. -->
     <g
@@ -69,9 +69,25 @@
         <path class="collar" d="M50 49 Q60 55 70 49 L67 44 Q60 47 53 44 Z" />
       </g>
 
+      <!-- 🎨 ÉCHARPE DU SET PORTÉ (v0.832 ; demandé : « épines = vert ») : une bande en
+           travers du torse, dans la couleur du set — elle se lit à distance, sans écraser la
+           teinte de rareté des pièces. -->
+      <g v-if="set" class="set-sash" :style="{ '--sc': set.color }">
+        <path class="sash" d="M46 52 L52 50 L76 86 L70 90 Z" />
+        <circle class="sash-knot" cx="72" cy="86" r="3.2" />
+      </g>
+
       <!-- ceinture -->
       <rect class="belt" x="45" y="86" width="30" height="6" rx="2" />
-      <rect class="buckle" x="57" y="85" width="6" height="8" rx="1.5" />
+      <rect
+        class="buckle"
+        x="57"
+        y="85"
+        width="6"
+        height="8"
+        rx="1.5"
+        :style="set ? { fill: set.color } : undefined"
+      />
 
       <!-- bras avant (droit) + main -->
       <path class="arm" d="M76 52 Q86 62 87 82 Q87 88 82 88 Q79 72 73 60 Z" />
@@ -92,13 +108,64 @@
       <circle class="eye" cx="55" cy="31" r="1.3" />
       <circle class="eye" cx="65" cy="31" r="1.3" />
 
-      <!-- ARME (si équipée) : épée dans la main droite, teintée par la rareté -->
-      <g v-if="gear.weapon" class="weapon" :style="{ '--rk': rankColor(gear.weapon.rarity) }">
-        <rect class="hilt" x="83" y="86" width="4" height="9" rx="1.5" />
-        <rect class="guard" x="79" y="84" width="12" height="3" rx="1.5" />
-        <path class="blade" d="M83.5 84 L83.5 44 Q85 40 86.5 44 L86.5 84 Z" />
-        <path class="blade-edge" d="M85 82 L85 46 Q85.4 45 85.8 46 L85.8 82 Z" />
-        <rect class="glint" x="84" y="46" width="2" height="12" rx="1" />
+      <!-- ARME (si équipée) dans la main droite, teintée par la rareté. 🪓 Sa FORME suit
+           l'arme réellement portée (`weaponKind`, v0.832) : « j'ai une hache, ça affiche
+           une épée ». -->
+      <g
+        v-if="gear.weapon"
+        class="weapon"
+        :class="'w-' + wKind"
+        :style="{ '--rk': rankColor(gear.weapon.rarity) }"
+      >
+        <template v-if="wKind === 'lame'">
+          <rect class="hilt" x="83" y="86" width="4" height="9" rx="1.5" />
+          <rect class="guard" x="79" y="84" width="12" height="3" rx="1.5" />
+          <path class="blade" d="M83.5 84 L83.5 44 Q85 40 86.5 44 L86.5 84 Z" />
+          <path class="blade-edge" d="M85 82 L85 46 Q85.4 45 85.8 46 L85.8 82 Z" />
+          <rect class="glint" x="84" y="46" width="2" height="12" rx="1" />
+        </template>
+        <template v-else-if="wKind === 'dague'">
+          <rect class="hilt" x="83" y="86" width="4" height="8" rx="1.5" />
+          <rect class="guard" x="80" y="84" width="10" height="2.6" rx="1.3" />
+          <path class="blade" d="M83.3 84 L83.3 66 Q85 60 86.7 66 L86.7 84 Z" />
+          <path class="blade-edge" d="M85 82 L85 67 Q85.4 65 85.8 67 L85.8 82 Z" />
+        </template>
+        <template v-else-if="wKind === 'hache'">
+          <rect class="haft" x="83.8" y="46" width="2.6" height="50" rx="1.2" />
+          <path class="head" d="M86 48 Q99 44 101 57 Q100 69 86 66 Q90 57 86 48 Z" />
+          <path class="head-edge" d="M97 49 Q101 57 97 67 Q99 57 97 49 Z" />
+          <path class="head-back" d="M84 51 L78 55 L84 60 Z" />
+        </template>
+        <template v-else-if="wKind === 'masse'">
+          <rect class="haft" x="83.8" y="54" width="2.6" height="42" rx="1.2" />
+          <path
+            class="spikes"
+            d="M85 40 L87 45 L92 43 L90 48 L95 51 L90 53 L92 58 L87 56 L85 61 L83 56 L78 58 L80 53 L75 51 L80 48 L78 43 L83 45 Z"
+          />
+          <circle class="head" cx="85" cy="51" r="6.2" />
+          <circle class="head-hi" cx="83" cy="49" r="1.8" />
+        </template>
+        <template v-else-if="wKind === 'fleau'">
+          <rect class="haft" x="83.8" y="72" width="2.6" height="24" rx="1.2" />
+          <g class="chain">
+            <circle cx="86.5" cy="69" r="1.4" />
+            <circle cx="88.5" cy="65" r="1.4" />
+            <circle cx="90.5" cy="61" r="1.4" />
+            <circle cx="92.5" cy="57" r="1.4" />
+          </g>
+          <path
+            class="spikes"
+            d="M96 44 L97.6 48.5 L102 47 L100.5 51.3 L105 53 L100.5 54.7 L102 59 L97.6 57.5 L96 62 L94.4 57.5 L90 59 L91.5 54.7 L87 53 L91.5 51.3 L90 47 L94.4 48.5 Z"
+          />
+          <circle class="head" cx="96" cy="53" r="5.2" />
+          <circle class="head-hi" cx="94.4" cy="51.4" r="1.5" />
+        </template>
+        <template v-else>
+          <!-- faux : long manche, lame courbe vers l'avant -->
+          <rect class="haft" x="83.8" y="30" width="2.6" height="66" rx="1.2" />
+          <path class="head" d="M86 32 Q70 26 58 40 Q72 34 86 40 Z" />
+          <path class="head-edge" d="M62 37 Q72 30 84 33 Q72 32 62 37 Z" />
+        </template>
       </g>
 
       <!-- RELIQUE (orbe flottante, si équipée), teintée par la rareté -->
@@ -179,6 +246,8 @@ import {
   FAMILIAR_SLOT,
   RANK_COLOR,
   RANK_ORDER,
+  weaponKind,
+  wornSet,
   type Equipped,
   type ItemSlot,
   type Rarity,
@@ -189,6 +258,8 @@ const props = defineProps<{
   profile: 'puissant' | 'agile' | 'polyvalent';
   equipped: Equipped;
   talentIcon?: string; // icône du 1er talent équipé (badge cliquable bas-gauche)
+  /** Voie du porteur : départage le set affiché à égalité de pièces. */
+  voie?: string | null;
 }>();
 const emit = defineEmits<{ 'familiar-click': []; 'talent-click': [] }>();
 
@@ -200,6 +271,9 @@ const gear = computed(() => ({
   accessory: props.equipped.accessory,
   relic: props.equipped.relic,
 }));
+// La forme de l'arme et le set porté : la règle vit dans la lib, l'avatar ne fait que dessiner.
+const wKind = computed(() => weaponKind(props.equipped.weapon));
+const set = computed(() => wornSet(props.equipped, props.voie));
 // RANG le plus haut parmi l'équipement (les 4 slots gear) → pilote l'aura de puissance.
 // (Remplace l'ancien pilotage par l'enchant, retiré : l'aura suit maintenant le grade.)
 const maxRankIdx = computed(() => {
@@ -349,6 +423,45 @@ const label = computed(
 }
 .weapon .guard {
   fill: var(--rk);
+}
+/* Armes à manche : bois sombre, tête en métal cerclée de la rareté. */
+.weapon .haft {
+  fill: #5a4330;
+  stroke: #2c2118;
+  stroke-width: 0.5;
+}
+.weapon .head {
+  fill: url(#av-metal);
+  stroke: var(--rk);
+  stroke-width: 0.8;
+}
+.weapon .head-edge,
+.weapon .head-hi {
+  fill: #fff;
+  opacity: 0.55;
+}
+.weapon .head-back {
+  fill: color-mix(in srgb, var(--rk) 55%, #7e8894);
+}
+.weapon .spikes {
+  fill: color-mix(in srgb, var(--rk) 70%, #7e8894);
+}
+.weapon .chain circle {
+  fill: none;
+  stroke: #b9c1cb;
+  stroke-width: 0.9;
+}
+/* Écharpe du set porté (--sc). */
+.set-sash .sash {
+  fill: color-mix(in srgb, var(--sc) 78%, #1c160f);
+  stroke: var(--sc);
+  stroke-width: 0.7;
+  opacity: 0.95;
+}
+.set-sash .sash-knot {
+  fill: var(--sc);
+  stroke: #1c160f;
+  stroke-width: 0.6;
 }
 .weapon .glint {
   fill: #fff;

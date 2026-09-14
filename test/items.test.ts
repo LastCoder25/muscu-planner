@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   aggregateLines,
+  weaponKind,
+  wornSet,
   fxRarity,
   type FxRarity,
   emptyEffects,
@@ -2001,5 +2003,97 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
       }
     }
     expect(fails / n).toBeLessThan(0.05);
+  });
+});
+
+describe('🪓 L’AVATAR MONTRE L’ARME ET LE SET PORTÉS (v0.832)', () => {
+  // Signalé : « j’ai une hache mais ça affiche une épée ». Aucun champ ne portait la forme :
+  // elle vivait dans le NOM. Le test tire de VRAIS drops plutôt que des noms écrits à la main —
+  // sinon il ne vérifierait que les cas que j’ai su imaginer.
+  it('chaque nom d’arme réellement tiré donne sa forme — jamais l’épée par défaut', () => {
+    const vus = new Set<string>();
+    for (let s = 1; s <= 600; s++) {
+      const d = rollDrop(mulberry32(s * 31 + 7), {
+        cleared: true,
+        defeated: 1,
+        level: 40,
+        luck: 0.5,
+      });
+      if (!d || d.slot !== 'weapon') continue;
+      const noun = d.name.split(' ')[0]!;
+      const k = weaponKind(d);
+      vus.add(k);
+      if (noun === 'Hache' || noun === 'Guillotine' || noun === 'Couperet')
+        expect(k, d.name).toBe('hache');
+      if (noun === 'Masse') expect(k, d.name).toBe('masse');
+      if (noun === 'Dague') expect(k, d.name).toBe('dague');
+      if (noun === 'Fléau') expect(k, d.name).toBe('fleau');
+      if (noun === 'Faux') expect(k, d.name).toBe('faux');
+    }
+    // Les cinq formes de base sortent vraiment des tirages.
+    for (const k of ['lame', 'hache', 'masse', 'dague', 'fleau']) expect(vus.has(k), k).toBe(true);
+  });
+
+  it('une pièce de set garde la forme de son nom (« Hache · Carapace… »)', () => {
+    let vus = 0;
+    for (let s = 1; s <= 200; s++) {
+      const p = rollSetPiece(mulberry32(s * 17 + 3), {
+        setId: 'voie:epineux',
+        level: 30,
+        preferSlot: 'weapon',
+      });
+      if (!p.name.startsWith('Hache')) continue;
+      vus++;
+      expect(weaponKind(p)).toBe('hache');
+    }
+    expect(vus).toBeGreaterThan(0);
+  });
+
+  it('sans nom (objet d’apparence, portrait d’aventurier) : une lame, sans planter', () => {
+    expect(weaponKind(undefined)).toBe('lame');
+    expect(weaponKind({})).toBe('lame');
+    expect(weaponKind({ name: 'Bâton inconnu' })).toBe('lame');
+  });
+
+  it('🎨 chaque set de voie a SA couleur, et l’Épineux est vert', () => {
+    const colors = VOIE_SETS.map((x) => x.color);
+    expect(colors.every(Boolean)).toBe(true);
+    expect(new Set(colors).size).toBe(VOIE_SETS.length);
+    const epine = VOIE_SETS.find((x) => x.id === 'voie:epineux')!.color!;
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(epine.slice(i, i + 2), 16));
+    expect(g).toBeGreaterThan(r!);
+    expect(g).toBeGreaterThan(b!);
+  });
+
+  it('le set porté : à partir de 2 pièces, le plus fourni, la voie départage', () => {
+    const piece = (slot: 'weapon' | 'armor' | 'accessory' | 'relic', setId: string) =>
+      ({
+        id: slot + setId,
+        slot,
+        name: 'x',
+        emoji: '',
+        rarity: 'rare',
+        level: 1,
+        baseLevel: 1,
+        setId,
+        effect: { type: 'damage_pct', value: 1 },
+      }) as never;
+    expect(wornSet({ weapon: piece('weapon', 'voie:epineux') })).toBeNull();
+    const deux = { weapon: piece('weapon', 'voie:epineux'), armor: piece('armor', 'voie:epineux') };
+    expect(wornSet(deux)?.set.id).toBe('voie:epineux');
+    expect(wornSet(deux)?.color).toBe(VOIE_SETS.find((x) => x.id === 'voie:epineux')!.color);
+    const trois = {
+      ...deux,
+      accessory: piece('accessory', 'voie:gardien'),
+      relic: piece('relic', 'voie:gardien'),
+    };
+    expect(wornSet(trois, 'gardien')?.set.id).toBe('voie:gardien');
+    expect(wornSet(trois, 'epineux')?.set.id).toBe('voie:epineux');
+    const plus = {
+      ...deux,
+      accessory: piece('accessory', 'voie:epineux'),
+      relic: piece('relic', 'voie:gardien'),
+    };
+    expect(wornSet(plus, 'gardien')?.pieces).toBe(3);
   });
 });

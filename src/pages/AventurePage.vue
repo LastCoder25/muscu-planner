@@ -232,6 +232,7 @@
                   class="pt-avatar"
                   :profile="c.profile"
                   :equipped="char.row.equipped"
+                  :voie="char.row.voie"
                   :talent-icon="firstTalentIcon"
                   @familiar-click="familiarsOpen = true"
                   @talent-click="talentsOpen = true"
