@@ -2072,6 +2072,8 @@ export const useCharacterStore = defineStore('character', () => {
       {
         familiars: (cur.inventory ?? []).filter((it: Item) => it.slot === FAMILIAR_SLOT),
         talents: normalizeTalents(cur.talents),
+        // 🗡️ Ce que les aventuriers portent : trajet (🧭), cargaison (🐫) et combat.
+        advGear: cur.adv_gear?.stock ?? [],
         heroFamiliarId: cur.equipped?.[FAMILIAR_SLOT]?.id ?? null,
         heroTalentIds: normalizeTalents(cur.talents)
           .filter((t) => t.equipped === true)

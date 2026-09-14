@@ -136,6 +136,19 @@ export function pickLineage(rng: () => number, advs: Adventurer[]): Lineage | nu
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
+/** Valeur d'une stat d'équipement à ce grade. ⚠️ SOURCE UNIQUE : le tirage ET l'escorte de
+ *  référence de la route (`refAdvGear`) la lisent — deux copies divergeraient au premier
+ *  réglage de `ADV_GEAR.k`, et la route se calibrerait sur un équipement qui n'existe pas. */
+export function advGearValue(t: EffectType, rank: Rarity, roll: number): number {
+  return Math.max(1, round1(effectBase(t) * rankRollMult(rank, roll) * ADV_GEAR.k));
+}
+
+/** Bonus de rôle d'un accessoire civil à ce grade (même source unique que `advGearValue`). */
+export function advGearRoleValue(kind: 'speed' | 'haul', rank: Rarity, roll: number): number {
+  const scale = rankRollMult(rank, roll) / rankRollMult('commun', 0);
+  return Math.round(ADV_GEAR.roleBase[kind] * scale * 1000) / 1000;
+}
+
 export function rollAdvGear(
   rng: () => number,
   opts: { lineage: Lineage; slot?: AdvGearSlot; level: number; luck?: number; playerLevel: number },
@@ -148,8 +161,7 @@ export function rollAdvGear(
   const piece = def.pieces[slot];
   const i1 = Math.floor(rng() * piece.pool.length);
   const t1 = piece.pool[i1]!;
-  const value = (t: EffectType) =>
-    Math.max(1, round1(effectBase(t) * rankRollMult(rank, roll) * ADV_GEAR.k));
+  const value = (t: EffectType) => advGearValue(t, rank, roll);
   const out: Omit<AdvGear, 'id'> = {
     lineage: opts.lineage,
     slot,
@@ -166,9 +178,7 @@ export function rollAdvGear(
     out.effect2 = { type: t2, value: value(t2) };
   }
   if (def.role && slot === 'accessory') {
-    const base = ADV_GEAR.roleBase[def.role];
-    const scale = rankRollMult(rank, roll) / rankRollMult('commun', 0);
-    out.role = { kind: def.role, value: Math.round(base * scale * 1000) / 1000 };
+    out.role = { kind: def.role, value: advGearRoleValue(def.role, rank, roll) };
   }
   return out;
 }

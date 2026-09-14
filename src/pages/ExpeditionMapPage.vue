@@ -481,6 +481,7 @@ import {
   poiOffers,
   suggestEscort,
 } from '@/lib/caravan';
+import { advGearRoles } from '@/lib/advGear';
 
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
@@ -782,15 +783,21 @@ const offers = computed(() =>
       })
     : { hero: false, caravan: false },
 );
-const caravanMin = computed(() =>
-  selected.value
-    ? 2 *
-      caravanLegMin(
-        selected.value,
-        freeAdvs.value.filter((a) => escort.value.includes(a.id)),
-      )
-    : 0,
-);
+const caravanMin = computed(() => {
+  if (!selected.value) return 0;
+  const esc = freeAdvs.value.filter((a) => escort.value.includes(a.id));
+  // ⚠️ Le Comptoir ET les pièces 🧭 portées, comme le convoi réel (`startCaravan`) : l'écran
+  // omettait le Comptoir et annonçait un trajet plus long que celui qu'on fait.
+  return (
+    2 *
+    caravanLegMin(
+      selected.value,
+      esc,
+      char.comptoirLevel,
+      advGearRoles(esc, char.row?.adv_gear?.stock ?? []).speed,
+    )
+  );
+});
 const canSendCaravanNow = computed(
   () => escort.value.length > 0 && vansLeft.value > 0 && !busyCaravan.value,
 );

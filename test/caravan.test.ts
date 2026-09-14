@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-const NUS = { familiars: [], talents: [] };
+const NUS = { familiars: [], talents: [], advGear: [] };
 import {
   CARAVAN,
   canSendCaravan,
@@ -35,9 +35,20 @@ import {
   startCaravan,
   caravanReport,
   claimedCaravans,
+  caravanHaulMult,
+  refAdvGear,
   type Caravan,
 } from '@/lib/caravan';
-import { advRoles, guildRoster, PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
+import {
+  advGearEffects,
+  advGearRoles,
+  advGearValue,
+  LINEAGE_GEAR,
+  lineageOf,
+  wornGear,
+  type AdvGear,
+} from '@/lib/advGear';
+import { advRarity, advRoles, guildRoster, PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
 import {
   TALENTS,
   talentTierFloor,
@@ -52,6 +63,7 @@ import {
   aggregateEffects,
   FAMILIAR_SLOT,
   RANK_ORDER,
+  RARITY_RANK,
   prestigeRankIndex,
   type AggregatedEffects,
   type Item,
@@ -82,11 +94,28 @@ const poi = (over: Partial<Poi> = {}): Poi => ({
  *  rang. Depuis que le familier booste l’aventurier comme le héros, c’est la configuration
  *  que la route attend — mesurer des escortes nues mesurerait un joueur qui n’a pas
  *  confié ses familiers. `nus` garde la mesure SANS familier. */
-const team = (n: number, level = 20, path?: string[], nus = false): Adventurer[] =>
+// ⚠️ …ET ÉQUIPÉE (pièces de référence, `refAdvGear`) : la route se calibre sur un vivier
+// équipé. `sansGear` garde la mesure SANS équipement.
+const team = (
+  n: number,
+  level = 20,
+  path?: string[],
+  nus = false,
+  sansGear = false,
+): Adventurer[] =>
   Array.from({ length: n }, (_, i) => ({
     ...refAdventurer(level, i),
     id: `a${i}`,
     ...(nus ? {} : { familiarId: `refFam${i % 3}` }),
+    ...(sansGear
+      ? {}
+      : {
+          gear: {
+            weapon: `refGear${i}weapon`,
+            armor: `refGear${i}armor`,
+            accessory: `refGear${i}accessory`,
+          },
+        }),
     ...(path ? { path } : {}),
   }));
 function winPct(escort: Adventurer[], p: Poi, n = 150) {
@@ -94,7 +123,11 @@ function winPct(escort: Adventurer[], p: Poi, n = 150) {
   const g = escortCombatant(
     escort,
     'Escorte',
-    roadCompanionEffects(escort, { familiars: refCompanions(lvl), talents: [] }),
+    roadCompanionEffects(escort, {
+      familiars: refCompanions(lvl),
+      talents: [],
+      advGear: refAdvGear(lvl, escort.length),
+    }),
   );
   const f = roadFoe(p);
   let w = 0;
@@ -175,7 +208,9 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     // délèguent maintenant à `offenseOf`/`survivalOf`, les formules de `combatPower` —
     // l'arbitre unique du jeu.
     //
-    // Mesuré après : 80 / 83 / 75 / 88 / 92 / 93 %. C'est l'écart qu'on borne ici, pas
+    // Mesuré après : 80 / 83 / 75 / 88 / 92 / 93 %. ⚠️ Re-mesuré quand la référence est
+    // devenue ÉQUIPÉE (trio équipé, 2000 graines) : 89 / 90 / 78 / 74 / 86 / 90 % en calme,
+    // 23 / 29 / 34 / 24 / 29 / 33 % en périlleux. C'est l'écart qu'on borne ici, pas
     // une valeur : une bande large mais PLATE vaut mieux qu'une bande étroite qui dérive.
     const NIV = [12, 20, 26, 45, 70, 85];
     const calme = NIV.map((L) => winPct(team(3, L), poi({ level: L }), 200));
@@ -213,6 +248,18 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     expect(sans).toBeGreaterThan(0.3);
   });
 
+  it('⚠️ LA ROUTE ATTEND UN VIVIER ÉQUIPÉ — la référence porte ses pièces', () => {
+    // Même règle que les familiers : le contenu se dimensionne sur un joueur équipé.
+    // Mesuré (2000 graines, route calme) : un trio sans équipement tombe à 22-28 % dès le
+    // niveau 26, là où le trio équipé en gagne 74-90 %.
+    for (const L of [26, 70]) {
+      const p = poi({ level: L });
+      const avec = winPct(team(3, L), p, 200);
+      const sans = winPct(team(3, L, undefined, false, true), p, 200);
+      expect(sans, `niveau ${L}`).toBeLessThan(avec - 0.2);
+    }
+  });
+
   it('une route PÉRILLEUSE est réellement plus dure — le drapeau n’est pas décoratif', () => {
     const esc = team(3);
     expect(winPct(esc, poi({ perilous: true }))).toBeLessThan(winPct(esc, poi()));
@@ -225,7 +272,7 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
 describe('⚠️ la cargaison se paie sur la durée qu’un HÉROS aurait mise', () => {
   it('la caravane est plus LENTE que le héros', () => {
     const p = poi();
-    expect(caravanLegMin(p, team(3))).toBeGreaterThan(travelOneWayMin(p.level, p.distNorm));
+    expect(caravanLegMin(p, team(3), 0, 0)).toBeGreaterThan(travelOneWayMin(p.level, p.distNorm));
   });
   it('…mais le facteur de paie est celui du héros, pas le sien', () => {
     // `travelFactor` est SUPER-LINÉAIRE : payer sur le temps réel ferait de la lenteur
@@ -234,7 +281,7 @@ describe('⚠️ la cargaison se paie sur la durée qu’un HÉROS aurait mise',
     const p = poi();
     const heroH = (2 * travelOneWayMin(p.level, p.distNorm)) / 60;
     expect(heroEquivalentFactor(p)).toBeCloseTo(travelFactor(heroH), 6);
-    const vanH = (2 * caravanLegMin(p, team(3))) / 60;
+    const vanH = (2 * caravanLegMin(p, team(3), 0, 0)) / 60;
     expect(heroEquivalentFactor(p)).toBeLessThan(travelFactor(vanH));
   });
 });
@@ -295,8 +342,8 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
 describe('les rôles hors combat servent à quelque chose', () => {
   it('un 🧭 raccourcit le trajet', () => {
     const p = poi();
-    const sans = caravanLegMin(p, team(2, 20, ['guerrier']));
-    const avec = caravanLegMin(p, team(2, 20, ['eclaireur', 'passeur']));
+    const sans = caravanLegMin(p, team(2, 20, ['guerrier']), 0, 0);
+    const avec = caravanLegMin(p, team(2, 20, ['eclaireur', 'passeur']), 0, 0);
     expect(avec).toBeLessThan(sans);
   });
   it('un 🐫 grossit la cargaison', () => {
@@ -677,7 +724,7 @@ describe('⚠️ ALLER LOIN FORME DAVANTAGE — l’XP paie la DISTANCE', () => 
    *  voyage, on compare donc ce qu'il rapporte À L'HEURE, pas par voyage. */
   const xpParHeure = (playerLevel: number, distNorm: number) => {
     const p = mapPoi(playerLevel, distNorm);
-    return missionXp(refAdventurer(playerLevel), p) / ((2 * caravanLegMin(p, [])) / 60);
+    return missionXp(refAdventurer(playerLevel), p) / ((2 * caravanLegMin(p, [], 0, 0)) / 60);
   };
   const DIST = [0, 0.25, 0.5, 0.75, 0.9, 1];
 
@@ -735,7 +782,7 @@ describe('⚠️ ALLER LOIN FORME DAVANTAGE — l’XP paie la DISTANCE', () => 
     }
     // …et un convoi ralenti met bien PLUS de temps : c'est ce que la règle refuse de payer.
     const loin = poi({ distNorm: 1 });
-    expect(caravanLegMin(loin, [], 80)).toBeLessThan(caravanLegMin(loin, [], 0));
+    expect(caravanLegMin(loin, [], 80, 0)).toBeLessThan(caravanLegMin(loin, [], 0, 0));
   });
 
   it('⚠️ la distance ne contourne pas le rendement décroissant', () => {
@@ -945,6 +992,7 @@ describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () =
     const road = (familiars: Item[] = [], talents: TalentInstance[] = []) => ({
       familiars,
       talents,
+      advGear: [],
     });
 
     it('un compagnon apporte quelque chose à son escorte', () => {
@@ -1385,5 +1433,145 @@ describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET CO
       { ...v, id: 'legacy', claimed: undefined, returnAt: 30 },
     ];
     expect(claimedCaravans(list).map((c) => c.id)).toEqual(['recent', 'legacy', 'ancien']);
+  });
+});
+
+describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
+  const bat = (value: number, over: Partial<AdvGear> = {}): AdvGear => ({
+    id: 'bat',
+    lineage: 'caravanier',
+    slot: 'accessory',
+    name: 'Bât',
+    emoji: '🎒',
+    rarity: 'commun',
+    roll: 0,
+    level: 40,
+    effect: { type: 'max_pv_pct', value: 5 },
+    role: { kind: 'haul', value },
+    ...over,
+  });
+  const caravanier = (gear = true): Adventurer => ({
+    ...refAdventurer(40, 2),
+    // Une seule classe : rôle 🐫 au cran 1 (0,12), la marge sous le plafond reste large.
+    path: ['caravanier'],
+    id: 'car',
+    ...(gear ? { gear: { accessory: 'bat' } } : {}),
+  });
+
+  it('l’escorte de référence est équipée à son niveau, et chaque membre PORTE ses 3 pièces', () => {
+    // ⚠️ « Porte », pas « possède » : une pièce de la mauvaise lignée ou trop rare pour la
+    // classe serait ignorée par `wornGear` — la route se calibrerait alors sur une escorte
+    // plus faible qu'annoncé, et un vivier réellement équipé y roulerait.
+    for (const L of [12, 40, 85]) {
+      const g = refAdvGear(L);
+      expect(g).toHaveLength(3 * CARAVAN.refEscort);
+      for (const p of g) expect(p.level).toBe(L);
+      const esc = Array.from({ length: CARAVAN.refEscort }, (_, i) => ({
+        ...refAdventurer(L, i),
+        gear: {
+          weapon: `refGear${i}weapon`,
+          armor: `refGear${i}armor`,
+          accessory: `refGear${i}accessory`,
+        },
+      }));
+      const worn = wornGear(esc, g);
+      for (const a of esc) expect(worn.get(a.id), `niveau ${L}, ${a.id}`).toHaveLength(3);
+    }
+  });
+
+  it('⚠️ la référence a la FORME d’un tirage : rareté de la classe, jet 0,3, même formule de valeur', () => {
+    // Même formule que `rollAdvGear` (`advGearValue`) : sinon la référence et les vrais
+    // drops divergeraient au premier réglage de `ADV_GEAR.k`.
+    for (const L of [12, 45, 85]) {
+      const g = refAdvGear(L);
+      for (let i = 0; i < CARAVAN.refEscort; i++) {
+        const a = refAdventurer(L, i);
+        const lineage = lineageOf(a)!;
+        for (const p of g.filter((x) => x.id.startsWith(`refGear${i}`))) {
+          const pool = LINEAGE_GEAR[lineage].pieces[p.slot].pool;
+          expect(p.rarity).toBe(advRarity(a));
+          expect(p.roll).toBe(0.3);
+          expect(p.effect.type).toBe(pool[0]);
+          expect(p.effect.value).toBe(advGearValue(pool[0]!, p.rarity, 0.3));
+          if (RARITY_RANK[p.rarity] >= RARITY_RANK.magique) {
+            expect(p.effect2?.type).toBe(pool[1]);
+            expect(p.effect2?.value).toBe(advGearValue(pool[1]!, p.rarity, 0.3));
+          } else expect(p.effect2).toBeUndefined();
+        }
+      }
+    }
+  });
+
+  it('⚠️ l’équipement compte sur la route, DIVISÉ PAR L’EFFECTIF comme les compagnons', () => {
+    const esc = [caravanier()];
+    const stock = [bat(0)];
+    const nu = roadCompanionEffects(esc, { familiars: [], talents: [], advGear: [] });
+    const seul = roadCompanionEffects(esc, { familiars: [], talents: [], advGear: stock });
+    expect(nu.maxPvPct).toBe(0);
+    expect(seul.maxPvPct).toBeCloseTo(advGearEffects(stock).maxPvPct, 9);
+    const dilue = roadCompanionEffects(
+      [caravanier(), { ...refAdventurer(40, 0), id: 'b' }, { ...refAdventurer(40, 1), id: 'c' }],
+      { familiars: [], talents: [], advGear: stock },
+    );
+    expect(dilue.maxPvPct).toBeCloseTo(seul.maxPvPct / 3, 9);
+  });
+
+  it('⚠️ un Bât porté grossit la cargaison DE SA VALEUR, sous le plafond', () => {
+    const sans = caravanHaulMult([caravanier(false)], []);
+    const avec = caravanHaulMult([caravanier()], [bat(0.05)]);
+    expect(advGearRoles([caravanier()], [bat(0.05)]).haul).toBe(0.05);
+    expect(sans).toBeLessThan(1 + CARAVAN.haulMax - 0.05); // la marge existe
+    expect(avec).toBeCloseTo(sans + 0.05, 9);
+  });
+
+  it('⚠️ …et un bonus ÉNORME s’arrête EXACTEMENT à 1 + haulMax', () => {
+    expect(caravanHaulMult([caravanier()], [bat(5)])).toBe(1 + CARAVAN.haulMax);
+  });
+
+  it('⚠️ c’est bien CE calcul que le convoi lit : la cargaison grossit', () => {
+    // Sur les graines SANS embuscade, rien d'autre ne bouge entre les deux voyages (les
+    // tirages de route ne dépendent pas de l'équipement) : seule la cargaison diffère.
+    const p = poi({ type: 'wreck', level: 40 });
+    let vus = 0;
+    for (let s = 1; s <= 60; s++) {
+      const avec = resolveCaravan(p, [caravanier()], s, {
+        familiars: [],
+        talents: [],
+        advGear: [bat(0.3)],
+      });
+      const sans = resolveCaravan(p, [caravanier(false)], s, {
+        familiars: [],
+        talents: [],
+        advGear: [],
+      });
+      if (avec.events.some((e) => e.kind === 'bandits')) continue;
+      vus++;
+      expect(avec.scrap, `graine ${s}`).toBeGreaterThan(sans.scrap);
+    }
+    expect(vus, 'aucun voyage sans embuscade : le test ne prouve rien').toBeGreaterThan(5);
+  });
+
+  it('⚠️ une Longue-vue portée raccourcit le trajet, sous le plafond de vitesse', () => {
+    const p = poi();
+    const esc = [{ ...refAdventurer(20, 1), id: 'e' }];
+    const base = caravanLegMin(p, esc, 0, 0);
+    expect(caravanLegMin(p, esc, 0, 0.1)).toBeLessThan(base);
+    expect(caravanLegMin(p, esc, 0, 99)).toBe(caravanLegMin(p, esc, 0, CARAVAN.speedMax));
+  });
+
+  it('⚠️ …et c’est bien ce trajet que le convoi réel fait', () => {
+    const p = poi();
+    const lv = bat(0, {
+      id: 'lv',
+      lineage: 'eclaireur',
+      name: 'Longue-vue',
+      effect: { type: 'crit_pct', value: 5 },
+      role: { kind: 'speed', value: 0.2 },
+    });
+    const e = { ...refAdventurer(20, 1), path: ['eclaireur'], id: 'e' };
+    const road = (advGear: AdvGear[]) => ({ familiars: [], talents: [], advGear });
+    const avec = startCaravan('c', p, [{ ...e, gear: { accessory: 'lv' } }], 0, 7, road([lv]));
+    const sans = startCaravan('c', p, [e], 0, 7, road([]));
+    expect(avec.midAt).toBeLessThan(sans.midAt);
   });
 });

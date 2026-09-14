@@ -61,6 +61,18 @@ import {
   type Adventurer,
   type AdvRole,
 } from './adventurers';
+import {
+  ADV_GEAR_SLOTS,
+  advGearEffects,
+  advGearRoles,
+  advGearRoleValue,
+  advGearValue,
+  LINEAGE_GEAR,
+  lineageOf,
+  wornGear,
+  type AdvGear,
+  type AdvGearSlot,
+} from './advGear';
 
 export const CARAVAN = {
   /** Une caravane va PLUS LENTEMENT qu'un héros — c'est ce qui incarne « du temps au lieu
@@ -76,8 +88,14 @@ export const CARAVAN = {
    *  Trio (la référence) 73-94 % selon le niveau, quatuor 97-100 %, duo 8-33 %, solo 0 —
    *  c'est ce gradient qui fait de « combien j'en envoie » une décision. Ne pas le monter
    *  sans re-mesurer : à 2,2 tours, 3 aventuriers gagnaient 100 % PARTOUT et le choix
-   *  était mort. */
-  foePvTurns: 3,
+   *  était mort.
+   *  ⚠️ RE-MESURÉ à 2,6 (avec `foeDmgPctPv` 0,26 → 0,27) quand la référence est devenue
+   *  ÉQUIPÉE (`refAdvGear`). Mesuré AVANT, sans équipement d'aucun côté : la bande avait
+   *  déjà dérivé sous son plancher (trio calme 71 % au niveau 26, 69 % au niveau 45), et
+   *  l'équipement n'y changeait presque rien (64 / 68 %). Après, trio équipé sur 2000
+   *  graines : calme 89/90/78/74/86/90 %, périlleux 23/29/34/24/29/33 % aux niveaux
+   *  12/20/26/45/70/85 ; solo 0, duo 12-51, quatuor 96-100. */
+  foePvTurns: 2.6,
   /** Ils mordent ~N % des PV EFFECTIFS de la référence par coup — `survivalOf`, donc
    *  esquive ET réduction comprises.
    *  ⚠️ EFFECTIFS, et non bruts : les deux croissent avec le niveau, donc une morsure
@@ -86,7 +104,7 @@ export const CARAVAN = {
    *  ⚠️ L’ESQUIVE manquait à cette correction jusqu’en v0.797 — la copie locale ne voyait
    *  que la réduction, donc la morsure visait des PV que l’escorte dépassait de plus en
    *  plus à mesure que son agilité montait. */
-  foeDmgPctPv: 0.26,
+  foeDmgPctPv: 0.27,
   /** Route dangereuse (`Poi.perilous`, tirée au spawn donc annonçable AVANT le départ). */
   perilousMult: 1.35,
   /** Ce qu'apporte une SIGNATURE de classe (strates ≥ 3), en %. */
@@ -536,12 +554,79 @@ export function refCompanions(level: number): Item[] {
   });
 }
 
+/** Les membres NUS de l’escorte de référence, un par orientation. ⚠️ Extrait pour que
+ *  `refAdvGear` lise les lignées sans passer par `refEscortOf`, qui l’appelle. */
+function refEscortBare(level: number, n: number = CARAVAN.refEscort): Adventurer[] {
+  return Array.from({ length: n }, (_, i) => refAdventurer(level, i));
+}
+
+/** Les ids des pièces de référence du membre `i` (cf. `refAdvGear`). */
+function refGearIds(i: number): Record<AdvGearSlot, string> {
+  return {
+    weapon: `refGear${i}weapon`,
+    armor: `refGear${i}armor`,
+    accessory: `refGear${i}accessory`,
+  };
+}
+
+/** Jet de référence d’une pièce : le jet MOYEN d’un tirage biaisé bas (même valeur que
+ *  les familiers de référence). */
+const REF_GEAR_JET = 0.3;
+
+/**
+ * L’ÉQUIPEMENT de l’escorte de référence : chaque membre porte ses 3 pièces, niveau d’objet
+ * à niveau, de la rareté de SA classe, jet moyen — la règle de `gearExpect` : l’attendu, pas
+ * l’exceptionnel.
+ *
+ * ⚠️ POURQUOI. Une escorte équipée additionne 3 pièces par tête, soit plus qu’un compagnon :
+ * sans cette référence, un vivier équipé roulerait sur une route calibrée pour des escortes
+ * nues, et « combien j’en envoie » cesserait d’être une décision (même raison que
+ * `refCompanions`).
+ * ⚠️ LA FORME D’UN TIRAGE : affixe principal = la 1ʳᵉ stat du pool, 2ᵉ affixe (Magique+) =
+ * la suivante, valeur et rôle civil par `advGearValue`/`advGearRoleValue` — les formules
+ * du tirage lui-même, jamais une copie.
+ *
+ * `n` : combien de membres équiper (la référence en compte `CARAVAN.refEscort`).
+ */
+export function refAdvGear(level: number, n: number = CARAVAN.refEscort): AdvGear[] {
+  const L = Math.max(1, level);
+  return refEscortBare(L, n).flatMap((a, i) => {
+    const lineage = lineageOf(a);
+    if (!lineage) return [];
+    const def = LINEAGE_GEAR[lineage];
+    const rarity = advRarity(a);
+    const ids = refGearIds(i);
+    return ADV_GEAR_SLOTS.map((slot): AdvGear => {
+      const piece = def.pieces[slot];
+      const t1 = piece.pool[0]!;
+      const g: AdvGear = {
+        id: ids[slot],
+        lineage,
+        slot,
+        name: piece.name,
+        emoji: piece.emoji,
+        rarity,
+        roll: REF_GEAR_JET,
+        level: L,
+        effect: { type: t1, value: advGearValue(t1, rarity, REF_GEAR_JET) },
+      };
+      const t2 = piece.pool[1];
+      if (t2 && RARITY_RANK[rarity] >= RARITY_RANK.magique)
+        g.effect2 = { type: t2, value: advGearValue(t2, rarity, REF_GEAR_JET) };
+      if (def.role && slot === 'accessory')
+        g.role = { kind: def.role, value: advGearRoleValue(def.role, rarity, REF_GEAR_JET) };
+      return g;
+    });
+  });
+}
+
 /** L’ESCORTE de référence : `CARAVAN.refEscort` aventuriers, un par orientation, chacun
- *  avec le compagnon de référence de son rang. */
+ *  avec le compagnon de référence de son rang ET ses pièces de référence. */
 function refEscortOf(level: number): Adventurer[] {
-  return Array.from({ length: CARAVAN.refEscort }, (_, i) => ({
-    ...refAdventurer(level, i),
+  return refEscortBare(level).map((a, i) => ({
+    ...a,
     familiarId: `refFam${i % REF_SPECIES.length}`,
+    gear: refGearIds(i),
   }));
 }
 
@@ -562,7 +647,12 @@ export function roadFoe(poi: Poi): Combatant {
   const ref = escortCombatant(
     escort,
     'Référence',
-    roadCompanionEffects(escort, { familiars: refCompanions(poi.level), talents: [] }),
+    // ⚠️ La référence est ACCOMPAGNÉE et ÉQUIPÉE : c'est ce que la route attend d'un vivier.
+    roadCompanionEffects(escort, {
+      familiars: refCompanions(poi.level),
+      talents: [],
+      advGear: refAdvGear(poi.level),
+    }),
   );
   const m = poi.perilous ? CARAVAN.perilousMult : 1;
   return {
@@ -648,10 +738,21 @@ export function suggestEscort(
 }
 
 /** Trajet ALLER d'une caravane, en minutes : celui d'un héros, ralenti, puis raccourci
- *  par les rôles 🧭 de l'escorte. */
-export function caravanLegMin(poi: Poi, escort: Adventurer[], comptoirLevel = 0): number {
+ *  par les rôles 🧭 de l'escorte ET par les pièces qui portent ce rôle (`gearSpeed`,
+ *  cf. `advGearRoles`) — les deux sous le MÊME plafond.
+ *  ⚠️ `comptoirLevel` et `gearSpeed` sont REQUIS : l'écran omettait le Comptoir et
+ *  annonçait un trajet plus long que celui que le convoi fait réellement. */
+export function caravanLegMin(
+  poi: Poi,
+  escort: Adventurer[],
+  comptoirLevel: number,
+  gearSpeed: number,
+): number {
   const hero = travelOneWayMin(poi.level, poi.distNorm);
-  const speed = Math.min(CARAVAN.speedMax, countRole(escort, 'speed') * CARAVAN.speedPerRole);
+  const speed = Math.min(
+    CARAVAN.speedMax,
+    countRole(escort, 'speed') * CARAVAN.speedPerRole + Math.max(0, gearSpeed),
+  );
   return Math.max(1, Math.round(hero * caravanSlowFor(comptoirLevel) * (1 - speed)));
 }
 
@@ -800,6 +901,9 @@ export function ambushChance(poi: Poi, escort: Adventurer[]): number {
 export interface RoadCompanions {
   familiars: Item[];
   talents: TalentInstance[];
+  /** 🗡️ Le stock d'équipement des aventuriers. ⚠️ REQUIS, comme `CompanionCtx.advGear` :
+   *  un paramètre qu'on peut oublier finit par l'être. Une escorte nue passe `[]`. */
+  advGear: AdvGear[];
   heroFamiliarId?: string | null;
   heroTalentIds?: readonly string[];
 }
@@ -841,10 +945,30 @@ export function roadCompanionEffects(
   if (!escort.length) return emptyEffects();
   const fams = companionsOf(escort, road.familiars, road.heroFamiliarId);
   const tals = advTalentsOf(escort, road.talents, road.heroTalentIds);
-  if (!fams.length && !tals.length) return emptyEffects();
+  // 🗡️ Ce qu'ils PORTENT — même division par l'effectif que les compagnons, pour la même
+  // raison : l'escorte est fondue en un seul combattant.
+  const worn = wornGear(escort, road.advGear);
+  if (!fams.length && !tals.length && !worn.size) return emptyEffects();
   return scaleEffects(
-    mergeEffects(companionEffects(fams), advTalentEffects(tals)),
+    mergeEffects(
+      companionEffects(fams),
+      advTalentEffects(tals),
+      advGearEffects([...worn.values()].flat()),
+    ),
     1 / escort.length,
+  );
+}
+
+/** Multiplicateur de CARGAISON d'une escorte : rôles 🐫 + pièces qui portent ce rôle,
+ *  sous UN plafond. ⚠️ Extrait pour être éprouvé directement : un plafond qu'on ne peut
+ *  vérifier qu'à travers un voyage entier est un plafond qu'on ne vérifie pas. */
+export function caravanHaulMult(escort: Adventurer[], stock: AdvGear[]): number {
+  return (
+    1 +
+    Math.min(
+      CARAVAN.haulMax,
+      countRole(escort, 'haul') * CARAVAN.haulPerRole + advGearRoles(escort, stock).haul,
+    )
   );
 }
 
@@ -901,7 +1025,7 @@ export function resolveCaravan(
   }
 
   const tfH = heroEquivalentFactor(poi);
-  const haul = 1 + Math.min(CARAVAN.haulMax, countRole(escort, 'haul') * CARAVAN.haulPerRole);
+  const haul = caravanHaulMult(escort, road.advGear);
   const k = mult * haul;
   const raw = harvestYield(poi.type, poi.level, tfH);
   const y = {
@@ -981,7 +1105,8 @@ export function startCaravan(
   road: RoadCompanions,
   comptoirLevel = 0,
 ): Caravan {
-  const leg = caravanLegMin(poi, escort, comptoirLevel) * 60_000;
+  const leg =
+    caravanLegMin(poi, escort, comptoirLevel, advGearRoles(escort, road.advGear).speed) * 60_000;
   return {
     id,
     poi,
