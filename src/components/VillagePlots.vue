@@ -116,7 +116,7 @@
             <template v-if="outfitForge">
               <div class="of-run">
                 ⚒️ En fabrication pour <b>{{ outfitForge.advName }}</b> · encore
-                {{ fmtMs(outfitForge.leftMs) }}
+                {{ fmtSpan(outfitForge.leftMs) }}
               </div>
             </template>
             <template v-else>
@@ -140,7 +140,7 @@
                 :disabled="outfitBusy || !outfitAdvId || !outfitItemId"
                 @click="doOutfit"
               >
-                ⚒️ Fabriquer · {{ fmtMs(outfitterMsFor(selectedPlot.building.level)) }}
+                ⚒️ Fabriquer · {{ fmtSpan(outfitterMsFor(selectedPlot.building.level)) }}
               </button>
             </template>
           </div>
@@ -201,6 +201,7 @@ import { useGameFx } from '@/composables/useGameFx';
 import { guildRoster } from '@/lib/adventurers';
 import { ROLL_FLOOR_RANKS, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import { LINEAGE_GEAR, lineageOf, outfitSlot, outfitterMsFor } from '@/lib/advGear';
+import { fmtSpan } from '@/lib/raid';
 import {
   perLevelLabel,
   BUILD,
@@ -482,10 +483,6 @@ const outfitTargetLabel = computed(() => {
   const piece = LINEAGE_GEAR[lineage].pieces[slot];
   return `${piece.emoji} ${piece.name} pour ${adv.name}`;
 });
-const fmtMs = (ms: number) => {
-  const m = Math.round(Math.max(0, ms) / 60_000);
-  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
-};
 async function doOutfit() {
   const uid = auth.user?.id;
   if (!uid || outfitBusy.value || !outfitAdvId.value || !outfitItemId.value) return;

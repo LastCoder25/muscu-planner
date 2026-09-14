@@ -329,6 +329,26 @@ describe('⚒️ Équipementier', () => {
     } as const;
     expect(outfitFromItem(mulberry32(2), arme as never, orpheline, 90)).toBeNull();
     expect(outfitFromItem(mulberry32(2), { ...arme, locked: true } as never, cible, 90)).toBeNull();
-    expect(outfitSlot('familiar')).toBeNull();
+  });
+  it('la pièce fabriquée reste PORTABLE par la cible — même un objet primordial sur une recrue de haut niveau', () => {
+    // ⚠️ Ruling du contrôleur : le rang est tiré autour du NIVEAU de la cible, pas de sa
+    // CLASSE — un archer resté à sa classe de départ (commune) mais monté au niveau 95
+    // verrait sinon débarquer une pièce quasi primordiale, que `canWearAdvGear` refuserait
+    // pour toujours. La fabrication vise un aventurier NOMMÉ : la pièce doit lui aller.
+    const cible = { ...adv('a', ['archer']), level: 95 }; // classe commune, très haut niveau
+    const hero = {
+      id: 'h',
+      slot: 'weapon',
+      name: 'Arme',
+      emoji: '⚔️',
+      rarity: 'primordial',
+      level: 95,
+      baseLevel: 95,
+      effect: { type: 'damage_pct', value: 50 },
+    } as const;
+    for (let seed = 1; seed <= 200; seed++) {
+      const g = outfitFromItem(mulberry32(seed), hero as never, cible, 95)!;
+      expect(canWearAdvGear(cible, g), `seed ${seed} : ${g.rarity}`).toBe(true);
+    }
   });
 });

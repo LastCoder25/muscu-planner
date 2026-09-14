@@ -297,11 +297,48 @@ export function outfitSlot(slot: ItemSlot): AdvGearSlot | null {
   return null;
 }
 
+/** Plafonne le RANG d'une pièce fraîchement tirée à ce que sa cible peut PORTER — même
+ *  seuil que `canWearAdvGear`, appliqué avant que la pièce ne quitte la forge. Le tirage
+ *  se cale sur le NIVEAU de l'aventurier, pas sur sa CLASSE (`advRarity`) : un archer
+ *  resté à sa classe de départ mais monté haut en niveau roulerait sinon une pièce que
+ *  lui-même ne pourra jamais équiper — la forge vise un aventurier NOMMÉ, la pièce doit
+ *  lui aller.
+ *  ⚠️ Le ROLL et le NIVEAU D'OBJET sont conservés (c'est le rang qui cède, pas le farm de
+ *  jet) ; les VALEURS sont RECALCULÉES avec le MÊME helper que le tirage
+ *  (`advGearValue`/`advGearRoleValue`) — sans ça la pièce garderait des valeurs d'un rang
+ *  qu'elle n'a plus. Le 2ᵉ affixe (réservé à Magique+) disparaît si le nouveau rang ne le
+ *  porte plus, exactement comme un tirage direct à ce rang. */
+function capAdvGearToWearable(piece: Omit<AdvGear, 'id'>, cap: Rarity): Omit<AdvGear, 'id'> {
+  if (RARITY_RANK[piece.rarity] <= RARITY_RANK[cap]) return piece;
+  const out: Omit<AdvGear, 'id'> = {
+    ...piece,
+    rarity: cap,
+    effect: { type: piece.effect.type, value: advGearValue(piece.effect.type, cap, piece.roll) },
+  };
+  if (piece.effect2) {
+    if (RARITY_RANK[cap] >= RARITY_RANK.magique) {
+      out.effect2 = {
+        type: piece.effect2.type,
+        value: advGearValue(piece.effect2.type, cap, piece.roll),
+      };
+    } else {
+      delete out.effect2;
+    }
+  }
+  if (piece.role) {
+    out.role = { kind: piece.role.kind, value: advGearRoleValue(piece.role.kind, cap, piece.roll) };
+  }
+  return out;
+}
+
 /** Transforme un objet du héros en pièce d'aventurier, pour la CIBLE visée.
  *  ⚠️ Le RANG est tiré autour du niveau de L'AVENTURIER, jamais de celui de l'objet
  *  sacrifié ni du héros : un objet primordial ne fabrique pas une pièce primordiale pour
  *  une recrue — seuls le SLOT et la LIGNÉE viennent de l'objet/de la cible. La rareté de
- *  l'objet ne joue qu'en LUCK (un meilleur objet aide un peu, sans jamais dicter le rang). */
+ *  l'objet ne joue qu'en LUCK (un meilleur objet aide un peu, sans jamais dicter le rang).
+ *  ⚠️ Le rang tiré est ensuite PLAFONNÉ à ce que la cible peut porter (`capAdvGearToWearable`) :
+ *  sans ça, une pièce trop rare pour la classe de son propre destinataire pourrait sortir
+ *  de la forge. */
 export function outfitFromItem(
   rng: () => number,
   item: Item,
@@ -312,7 +349,8 @@ export function outfitFromItem(
   const lineage = lineageOf(target);
   if (!slot || !lineage || item.locked) return null;
   const luck = Math.min(0.5, 0.1 + RARITY_RANK[item.rarity] * 0.05);
-  return rollAdvGear(rng, { lineage, slot, level: target.level, luck, playerLevel });
+  const piece = rollAdvGear(rng, { lineage, slot, level: target.level, luck, playerLevel });
+  return capAdvGearToWearable(piece, advRarity(target));
 }
 
 /** Règlement de la forge : rien avant l'échéance, la pièce rejoint le STOCK une fois
