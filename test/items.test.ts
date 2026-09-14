@@ -69,6 +69,8 @@ import {
   voieSetRoster,
   setRecycleLot,
   SET_BY_ID,
+  effectBase,
+  scrapValueOf,
 } from '@/lib/items';
 import { mulberry32, combatPower } from '@/lib/combat';
 import { pickBestTalents } from '@/lib/talents';
@@ -2153,5 +2155,17 @@ describe('🏅 FAMILIERS ET TALENTS SE LISENT EN RANG (v0.833)', () => {
     // Le Magique (Or) et non « Magique » : même langue que les familiers qu'il héberge.
     // (Chenil 21 = début du rang Or, le rang du joueur depuis la v0.857.)
     expect(companionRankLabel(21)).toBe(rarityRank('magique').name);
+  });
+});
+
+describe('bases partagées avec l’équipement des aventuriers', () => {
+  it('effectBase rend la base qu’un drop utilise', () => {
+    expect(effectBase('damage_pct')).toBeGreaterThan(0);
+    expect(effectBase('gold_pct')).toBe(14);
+  });
+  it('scrapValue passe par scrapValueOf (une seule formule)', () => {
+    const it0 = { slot: 'armor', rarity: 'rare', level: 20 } as const;
+    expect(scrapValue(it0 as never)).toBe(scrapValueOf('armor', 'rare', 20));
+    expect(scrapValueOf('familiar', 'rare', 20)).toBe(0);
   });
 });

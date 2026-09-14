@@ -326,13 +326,18 @@ const SCRAP_BASE = 4;
  *  l'enceinte gratuite. */
 const SCRAP_RARITY_STEP = 0.25;
 
+/** Ferraille d'une pièce à partir de son emplacement, sa rareté et son niveau d'objet.
+ *  ⚠️ Source unique : l'équipement des aventuriers la lit aussi (`advGearScrap`). */
+export function scrapValueOf(slot: ItemSlot, rarity: Rarity, level: number): number {
+  const slotMult = SCRAP_BY_SLOT[slot] ?? 0;
+  if (!slotMult) return 0;
+  const rarityMult = 1 + RANK_ORDER.indexOf(rarity) * SCRAP_RARITY_STEP;
+  const v = SCRAP_BASE * slotMult * rarityMult * itemLevelMult(level);
+  return Math.max(1, Math.round(v)); // une pièce recyclable rend toujours quelque chose
+}
 /** Ferraille rendue par le recyclage d'un objet. 0 pour un familier. */
 export function scrapValue(it: Item): number {
-  const slotMult = SCRAP_BY_SLOT[it.slot] ?? 0;
-  if (!slotMult) return 0;
-  const rarityMult = 1 + RANK_ORDER.indexOf(it.rarity) * SCRAP_RARITY_STEP;
-  const v = SCRAP_BASE * slotMult * rarityMult * itemLevelMult(it.level);
-  return Math.max(1, Math.round(v)); // une pièce recyclable rend toujours quelque chose
+  return scrapValueOf(it.slot, it.rarity, it.level);
 }
 /** Un objet peut-il partir à la forge ? (jamais un familier, jamais un objet 🔒.) */
 export function canRecycle(it: Item): boolean {
@@ -835,6 +840,11 @@ const EFFECT_BASE: Record<EffectType, number> = (() => {
     for (const e of SLOT_EFFECTS[slot]) if (m[e.type] === undefined) m[e.type] = e.base;
   return m;
 })();
+
+/** Base d'un effet (avant rareté, jet et niveau d'objet) — celle d'un drop du héros. */
+export function effectBase(t: EffectType): number {
+  return EFFECT_BASE[t];
+}
 
 /** Stats d'un TIER réellement disponibles à ce niveau (gate des signatures). Jamais vide
  *  (chaque tier a des options non gatées) → un affixe de tier trouve toujours une stat. */
