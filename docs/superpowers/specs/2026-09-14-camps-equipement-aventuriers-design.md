@@ -51,11 +51,10 @@ alignées sur la forme de la classe :
 | 🏹 Archer | Arc | Cuir | Carquois | critique, dégâts, élan |
 | 🔮 Mage | Bâton | Robe | Grimoire | dégâts, exécution, vol de vie |
 | 🛡️ Homme d'armes | Masse | Plates | Bouclier | réduction, PV, épines |
-| 🧭 Éclaireur | Dague | Cape | Longue-vue | critique, esquive* + trajet raccourci |
+| 🧭 Éclaireur | Dague | Cape | Longue-vue | critique, dégâts + trajet raccourci |
 | 🐫 Caravanier | Bâton de marche | Manteau | Bât | PV, réduction + cargaison |
 
-\* L'esquive n'a pas d'`EffectType` aujourd'hui : soit on l'ajoute, soit l'Éclaireur prend
-dégâts/critique. À trancher au plan.
+Pas de nouvelle stat : toutes les pièces puisent dans les `EffectType` existants.
 
 - Les deux lignées civiles portent en affixe mineur un **bonus de rôle** (trajet −x %,
   cargaison +x %), borné par les mêmes plafonds que les rôles de classe — c'est ce qui rend
@@ -108,7 +107,13 @@ dégâts/critique. À trancher au plan.
 - **Carte** : `camp` et `lair` deviennent des camps de faction (bandits, bêtes, morts-vivants),
   rosters repris de `raid.ts`. Camp = troupe + chef ; repaire = troupe plus grande + champion.
   Niveau dérivé de la distance (règle v0.683 inchangée).
-- **Envoi** : on choisit le héros (oui/non) et jusqu'à N aventuriers disponibles. Départ comme un
+- **Répartition** : de tout un peu partout — faction et taille (camp / repaire) tirées
+  uniformément, sans biais de région ni de distance (seul le niveau suit la distance).
+- **Taille de camp** : variable ; certains gros camps demandent de nombreux aventuriers. La
+  troupe reste à danger ABSOLU (fixée par le niveau et la taille du camp).
+- **Envoi** : on choisit le héros (oui/non) et **autant d'aventuriers disponibles qu'on veut —
+  aucune taille maximale de groupe** (pour pouvoir affronter les gros camps). Le vivier
+  disponible est la seule limite. Départ comme un
   convoi : trajet en temps réel, zéro énergie ; le héros présent est en expédition jusqu'au retour.
   `poiOffers` s'ouvre aux camps pour les groupes.
 - **Butin** :
@@ -125,8 +130,9 @@ dégâts/critique. À trancher au plan.
 - Siège inversé (camps fortifiés).
 - Plus de trois emplacements par aventurier.
 
-## Points à trancher au plan
+## Tranché après relecture
 
-- Esquive pour l'Éclaireur (nouvel `EffectType` ou autre stat).
-- Nombre maximal de membres d'un groupe (proposition : 4, comme `escortMax`).
-- Proportion de camps / repaires / factions dans le tirage de la carte.
+- Esquive : non, pas de nouvelle stat (Éclaireur = critique, dégâts, trajet).
+- Taille de groupe : aucune limite pour les camps. ⚠️ Les convois gardent `escortMax` (leur
+  calibration mesurée en dépend) ; seuls les camps en sont libérés.
+- Répartition : de tout un peu partout (tirage uniforme faction × taille).
