@@ -380,6 +380,24 @@ export function canAdvTalent(adv: Adventurer, t: TalentInstance): boolean {
   return RARITY_RANK[talentRankOf(t)] <= RARITY_RANK[advRarity(adv)];
 }
 
+/**
+ * Un aventurier peut-il être accompagné de ce familier ? MÊME RÈGLE QUE LES TALENTS (v0.831 ;
+ * signalé par l’utilisateur : « des familiers épiques équipés sur des aventuriers bronze »).
+ *
+ * ⚠️ Le Chenil seul décidait (`canCompanion`) : au Chenil 30 il héberge jusqu’à l’épique,
+ * donc un aventurier qui n’a encore que sa première classe — rang Bronze, classe commune —
+ * repartait avec un loup épique, pendant que la règle des talents lui interdisait tout ce qui
+ * dépasse le commun. Deux compagnons, deux règles : le même homme ne pouvait pas porter un
+ * talent inhabituel mais pouvait mener une bête épique.
+ * ⚠️ Les DEUX s’appliquent désormais : le Chenil dit ce qu’il sait HÉBERGER, la classe dit ce
+ * que l’homme sait MENER. Chaque promotion ouvre la rareté suivante — pour ses deux compagnons.
+ * ⚠️ Appliqué au combat autant qu’au store : un familier confié avant cette règle se soigne
+ * tout seul (il ne vient plus au rempart), sans migration.
+ */
+export function canAdvFamiliar(adv: Adventurer, fam: Item): boolean {
+  return RARITY_RANK[fam.rarity] <= RARITY_RANK[advRarity(adv)];
+}
+
 export function advTalentsOf(
   advs: Adventurer[],
   owned: TalentInstance[],

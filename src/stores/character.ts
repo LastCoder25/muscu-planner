@@ -133,6 +133,7 @@ import {
   caravanSlots,
   caravanFamiliarXp,
   canAdvTalent,
+  canAdvFamiliar,
   companionsOf,
   trainMsFor,
   isCaravanClaimable,
@@ -1695,6 +1696,12 @@ export const useCharacterStore = defineStore('character', () => {
       if (!canCompanion(fam, kennel))
         throw new Error(
           `Ton Chenil ne sait héberger que jusqu’au rang ${companionRankLabel(kennel)}.`,
+        );
+      const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
+      // ⚠️ Refus AU STORE, comme pour les talents : même règle, même message.
+      if (adv && !canAdvFamiliar(adv, fam))
+        throw new Error(
+          `Trop rare pour ${adv.name} : sa classe est ${RARITY_LABEL[advRarity(adv)]} — promeus-le d’abord.`,
         );
     }
     const adventurers = (cur.adventurers ?? []).map((a) => {

@@ -97,7 +97,13 @@ import { combatPower, type Combatant } from '@/lib/combat';
 import { talentTierFloor, type TalentInstance } from '@/lib/talents';
 import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
 import { PROMO_LEVELS, guildRoster, type Adventurer } from '@/lib/adventurers';
-import { companionEffects, refAdventurer, escortCombatant, caravanFamiliarXp } from '@/lib/caravan';
+import {
+  companionEffects,
+  refAdventurer,
+  escortCombatant,
+  caravanFamiliarXp,
+  canAdvFamiliar,
+} from '@/lib/caravan';
 import { FAMILIAR_SPECIES } from '@/data/familiars';
 
 const H = 3600_000;
@@ -885,9 +891,71 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     // Un appariement rangé avant que le Chenil ne redescende se soigne tout seul, sans
     // migration — même politique que les POI périmés.
     const prime = fam('p', 'damage_pct', 40, { rarity: RANK_ORDER[7]! });
-    const advs = [adv('a', 'p')];
+    // ⚠️ Un aventurier PROMU jusqu’au sommet (v0.831) : un bleu ne mène plus un familier
+    // primordial, quel que soit le Chenil — ce test-ci éprouve le seul Chenil.
+    const advs = [{ ...refAdventurer(100, 0), id: 'a', familiarId: 'p' } as Adventurer];
     expect(companionPairs(advs, ctx([prime], 5)).size).toBe(0);
     expect(companionPairs(advs, ctx([prime], PROMO_LEVELS[7]!)).size).toBe(1);
+  });
+
+  describe('🐾 UN FAMILIER TROP RARE POUR SA CLASSE (v0.831 ; « des familiers épiques sur des aventuriers bronze »)', () => {
+    // ⚠️ Le Chenil seul décidait : au Chenil 30 il héberge jusqu’à l’épique, donc un
+    // aventurier qui n’a que sa première classe (rang Bronze, classe commune) repartait avec
+    // une bête épique — pendant que la règle des talents lui refusait tout ce qui dépasse
+    // le commun. Même règle pour les deux compagnons désormais.
+    const epique = RANK_ORDER[4]!;
+    const bleu = (id: string, familiarId?: string) =>
+      ({ ...adv(id, familiarId), path: ['guerrier'] }) as Adventurer;
+    const promu = (id: string, familiarId?: string) =>
+      // 5 promotions (niveaux 1, 11, 21, 31, 41) : une classe ÉPIQUE.
+      ({ ...refAdventurer(45, 0), id, name: id, familiarId }) as Adventurer;
+
+    it('la règle : la rareté du familier ne dépasse pas celle de la classe', () => {
+      const e = fam('e', 'damage_pct', 40, { rarity: epique });
+      expect(canAdvFamiliar(bleu('a'), e)).toBe(false);
+      expect(canAdvFamiliar(bleu('a'), fam('c', 'damage_pct', 40))).toBe(true);
+      // Une classe épique (5 promotions) le mène ; la limite est inclusive.
+      expect(canAdvFamiliar(promu('p'), e)).toBe(true);
+      expect(
+        canAdvFamiliar(promu('p'), fam('m', 'damage_pct', 40, { rarity: RANK_ORDER[5]! })),
+      ).toBe(false);
+    });
+
+    it('⚠️ écarté AU COMBAT : un appariement d’avant la règle se soigne seul', () => {
+      const e = fam('e', 'damage_pct', 40, { rarity: epique });
+      // Chenil 50 : il sait l’héberger, c’est bien la CLASSE qui refuse.
+      expect(canCompanion(e, 50)).toBe(true);
+      expect(companionPairs([bleu('a', 'e')], ctx([e], 50)).size).toBe(0);
+      expect(companionPairs([promu('a', 'e')], ctx([e], 50)).size).toBe(1);
+    });
+
+    it('le sélecteur ne le propose pas, et DIT pourquoi (compté à part du Chenil)', () => {
+      const e = fam('e', 'damage_pct', 40, { rarity: epique });
+      const c = fam('c', 'damage_pct', 40);
+      const a = bleu('a');
+      const r = companionOptions(a, [a], [e, c], 50, null);
+      expect(r.options.map((x) => x.id)).toEqual(['c']);
+      expect([r.tooRare, r.tooRareClass]).toEqual([0, 1]);
+    });
+
+    it('✨ Confier au mieux ne met jamais une bête épique à un bleu — ni pour la ville', () => {
+      const loupE = fam('loupE', 'damage_pct', 60, { rarity: epique });
+      const loupC = fam('loupC', 'damage_pct', 10);
+      // Des MARMOTTES : leur butin ne pèse rien dans la puissance, c’est donc le bloc « ville »
+      // qui les confie (un faucon, lui, passe par le gain de crit et ne l’éprouverait pas).
+      const marmE = fam('marmE', 'gold_pct', 60, { rarity: epique });
+      const marmC = fam('marmC', 'gold_pct', 10);
+      const advs = [bleu('a'), bleu('b'), bleu('c')];
+      const plan = autoCompanions(advs, ctx([loupE, loupC, marmE, marmC], 50));
+      const given = [...plan.values()].map((p) => p.familiarId).filter(Boolean);
+      expect(given).not.toContain('loupE');
+      expect(given).not.toContain('marmE');
+      expect(given).toContain('loupC');
+      expect(given).toContain('marmC');
+      // …et un aventurier qui sait le mener, lui, le reçoit.
+      const plan2 = autoCompanions([promu('p'), bleu('b')], ctx([loupE, loupC], 50));
+      expect(plan2.get('p')?.familiarId).toBe('loupE');
+    });
   });
 
   it('⚠️ UN TALENT TROP RARE POUR SA CLASSE ne vient pas au rempart (v0.805)', () => {

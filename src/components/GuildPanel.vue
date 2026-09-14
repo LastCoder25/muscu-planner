@@ -37,24 +37,36 @@
              quand il n'y a rien à gagner : il remplace les choix faits à la main, on ne
              doit pas le découvrir après coup. -->
         <template v-if="roster.length">
+          <!-- 🎨 UN BOUTON QUI SE LIT EN TROIS TEMPS (demandé : « plus design ») : l’action
+               (pastille ✨ + titre), ce qu’elle touche (sous-titre), ce qu’elle rapporte
+               (le gain, en vert, là où l’œil finit). Au repos il se calme — contour
+               neutre, coche verte — pour ne pas appeler un geste qui ne sert à rien. -->
           <button
-            class="voie-btn g-auto"
+            type="button"
+            class="g-auto"
+            :class="{ idle: !autoPreview.changes }"
             :disabled="busy || !autoPreview.changes"
             @click="autoPair"
           >
-            <template v-if="autoPreview.changes">
-              ✨ Confier au mieux familiers et talents
-              <b v-if="autoPreview.gain > 0" class="g-auto-gain"
-                >+{{ fmtPow(autoPreview.gain) }} ⚔️</b
-              >
-            </template>
-            <template v-else>✓ Familiers et talents déjà au mieux</template>
+            <span class="ga-ico" aria-hidden="true">{{ autoPreview.changes ? '✨' : '✓' }}</span>
+            <span class="ga-txt">
+              <span class="ga-title">{{
+                autoPreview.changes ? 'Confier au mieux' : 'Tout est déjà au mieux'
+              }}</span>
+              <span class="ga-sub">
+                🐾 familiers · 🧠 talents<template v-if="autoPreview.changes">
+                  · {{ autoPreview.changes }} aventurier{{
+                    autoPreview.changes > 1 ? 's' : ''
+                  }}</template
+                >
+              </span>
+            </span>
+            <span v-if="autoPreview.changes && autoPreview.gain > 0" class="ga-gain">
+              +{{ fmtPow(autoPreview.gain) }}<small>⚔️</small>
+            </span>
           </button>
-          <div v-if="autoPreview.changes" class="g-note dim">
-            {{ autoPreview.changes }} aventurier{{ autoPreview.changes > 1 ? 's' : '' }} changé{{
-              autoPreview.changes > 1 ? 's' : ''
-            }}
-            · remplace les choix faits à la main.
+          <div v-if="autoPreview.changes" class="g-note dim ga-note">
+            Remplace les choix faits à la main.
           </div>
         </template>
         <!-- ── Le vivier ── -->
@@ -638,6 +650,10 @@ const famHidden = computed(() => {
     return `Toutes les places du Chenil sont prises (${slots.value}) — améliore-le ou reprends un compagnon à un autre.`;
   const p: string[] = [];
   if (c.tooRare) p.push(`${c.tooRare} au-dessus du rang max du Chenil (${rankCapLabel.value})`);
+  if (c.tooRareClass && pairFor.value)
+    p.push(
+      `${c.tooRareClass} trop rare${c.tooRareClass > 1 ? 's' : ''} pour sa classe (${RARITY_LABEL[advRarity(pairFor.value)]})`,
+    );
   if (c.taken) p.push(`${c.taken} confié${c.taken > 1 ? 's' : ''} à d’autres`);
   if (c.hero) p.push('1 porté par ton héros');
   return p.length ? `Masqués : ${p.join(' · ')}.` : '';
@@ -972,11 +988,136 @@ async function doPromote(classId: string) {
   margin-bottom: 10px;
 }
 .g-auto {
-  margin-bottom: 4px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background:
+    radial-gradient(
+      120% 140% at 0% 0%,
+      color-mix(in srgb, var(--accent) 22%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--surface)), var(--surface));
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.25) inset,
+    0 6px 18px -10px color-mix(in srgb, var(--accent) 70%, transparent);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
 }
-.g-auto-gain {
-  margin-left: 6px;
+/* Un reflet qui passe : l’action a quelque chose à rapporter. */
+.g-auto:not(.idle)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    color-mix(in srgb, var(--accent) 22%, transparent) 50%,
+    transparent 65%
+  );
+  transform: translateX(-100%);
+  animation: ga-sheen 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ga-sheen {
+  0%,
+  55% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+.g-auto:not(:disabled):active {
+  transform: scale(0.985);
+}
+.g-auto:disabled {
+  cursor: default;
+}
+.g-auto:disabled:not(.idle) {
+  opacity: 0.6;
+}
+.ga-ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 19px;
+  background: var(--accent);
+  color: #15120e;
+  box-shadow: 0 0 14px -2px color-mix(in srgb, var(--accent) 75%, transparent);
+}
+.ga-txt {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ga-title {
+  font-family: Oswald, sans-serif;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+.ga-sub {
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.3;
+}
+.ga-gain {
+  flex: none;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-family: Oswald, sans-serif;
+  font-size: 15px;
   color: var(--d1);
+  background: color-mix(in srgb, var(--d1) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--d1) 45%, transparent);
+}
+.ga-gain small {
+  margin-left: 2px;
+  font-size: 11px;
+}
+/* Au repos : rien à faire, donc rien qui attire l’œil. */
+.g-auto.idle {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: none;
+}
+.g-auto.idle .ga-ico {
+  background: color-mix(in srgb, var(--d1) 18%, transparent);
+  color: var(--d1);
+  box-shadow: none;
+  font-size: 17px;
+}
+.g-auto.idle .ga-title {
+  color: var(--dim);
+}
+.ga-note {
+  margin-top: 2px;
+  text-align: right;
+}
+@media (prefers-reduced-motion: reduce) {
+  .g-auto:not(.idle)::after {
+    animation: none;
+    display: none;
+  }
 }
 /* ── Fiche d'un aventurier ── */
 .adv.hit {

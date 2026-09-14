@@ -35,7 +35,13 @@ import {
   type AggregatedEffects,
   type Item,
 } from './items';
-import { escortCombatant, companionEffects, advTalentEffects, canAdvTalent } from './caravan';
+import {
+  escortCombatant,
+  companionEffects,
+  advTalentEffects,
+  canAdvTalent,
+  canAdvFamiliar,
+} from './caravan';
 import { type TalentInstance } from './talents';
 import { beyondCap } from './buildings';
 import { advStats, advTitle, PROMO_LEVELS, type Adventurer } from './adventurers';
@@ -2197,7 +2203,8 @@ export function companionPairs(
     if (fid && fid !== ctx.heroFamiliarId && !prisF.has(fid) && places > 0) {
       const f = fams.get(fid);
       // Hors d’école : le Chenil ne sait pas l’héberger, il ne vient pas au rempart.
-      if (f && canCompanion(f, ctx.kennelLevel)) {
+      // …ni trop rare pour la classe de son maître (`canAdvFamiliar`, v0.831).
+      if (f && canCompanion(f, ctx.kennelLevel) && canAdvFamiliar(a, f)) {
         prisF.add(fid);
         places--;
         entry.familiar = f;
@@ -2249,7 +2256,15 @@ export function companionOptions(
   familiars: Item[],
   kennelLevel: number,
   heroFamiliarId?: string | null,
-): { options: Item[]; tooRare: number; taken: number; hero: number; full: boolean } {
+): {
+  options: Item[];
+  tooRare: number;
+  /** Hébergeables par le Chenil, mais trop rares pour la classe de CET aventurier. */
+  tooRareClass: number;
+  taken: number;
+  hero: number;
+  full: boolean;
+} {
   const owners = new Map(
     advs.filter((o) => o.id !== adv.id && o.familiarId).map((o) => [o.familiarId!, o]),
   );
@@ -2257,6 +2272,7 @@ export function companionOptions(
   const occupied = [...owners.keys()].filter((id) => own.has(id)).length;
   const full = !adv.familiarId && occupied >= companionSlots(kennelLevel);
   let tooRare = 0;
+  let tooRareClass = 0;
   let taken = 0;
   let hero = 0;
   const options: Item[] = [];
@@ -2264,10 +2280,11 @@ export function companionOptions(
     if (f.id === adv.familiarId) options.push(f);
     else if (f.id === heroFamiliarId) hero++;
     else if (!canCompanion(f, kennelLevel)) tooRare++;
+    else if (!canAdvFamiliar(adv, f)) tooRareClass++;
     else if (owners.has(f.id)) taken++;
     else if (!full) options.push(f);
   }
-  return { options, tooRare, taken, hero, full };
+  return { options, tooRare, tooRareClass, taken, hero, full };
 }
 
 /** Le pendant pour les TALENTS : `talents` = ceux que le héros n’a pas équipés. Écartés :
@@ -2388,7 +2405,8 @@ export function adventurerPowers(advs: Adventurer[], ctx?: CompanionCtx): Map<st
  * ⚠️ AUCUNE RÈGLE NOUVELLE — les exclusions sont celles des sélecteurs (`companionOptions` /
  * `talentOptions`) et du combat (`companionPairs`) : ni ce que le HÉROS porte, ni un familier
  * au-dessus du rang du Chenil (`canCompanion`), ni au-delà de ses places (`companionSlots`),
- * ni un talent trop rare pour la classe (`canAdvTalent`), et chaque pièce à UN porteur.
+ * ni un talent ou un familier trop rare pour la classe (`canAdvTalent` / `canAdvFamiliar`),
+ * et chaque pièce à UN porteur.
  *
  * ⚠️ LE « PROFIL » EST LU PAR L'ARBITRE DU JEU, jamais par une table : pour chaque paire on
  * mesure le gain de `combatPower` que `adventurerPowers` affiche. Un Cogneur tire donc
@@ -2451,7 +2469,7 @@ export function autoCompanions(
   const famOf = new Map<string, Item>();
   assign(
     fams,
-    (a, f) => power(a, f) - bare.get(a.id)!,
+    (a, f) => (canAdvFamiliar(a, f) ? power(a, f) - bare.get(a.id)! : 0),
     places,
     (a, f) => {
       famOf.set(a.id, f);
@@ -2463,11 +2481,19 @@ export function autoCompanions(
   // Les bonus de VILLE : un de chaque, s'il reste de quoi le confier.
   for (const type of ['crit_pct', 'gold_pct'] as const) {
     if ([...famOf.values()].some((f) => f.effect.type === type)) continue;
-    const libre = advs.find((a) => !famOf.has(a.id));
     const given = new Set([...famOf.values()].map((f) => f.id));
-    const best = fams
-      .filter((f) => f.effect.type === type && !given.has(f.id))
-      .sort((p, q) => q.effect.value * familiarMult(q) - p.effect.value * familiarMult(p))[0];
+    // Le meilleur de ce type qu’un aventurier encore libre sait MENER (rareté de sa classe).
+    let libre: Adventurer | undefined;
+    let best: Item | undefined;
+    for (const f of fams
+      .filter((x) => x.effect.type === type && !given.has(x.id))
+      .sort((p, q) => q.effect.value * familiarMult(q) - p.effect.value * familiarMult(p))) {
+      libre = advs.find((a) => !famOf.has(a.id) && canAdvFamiliar(a, f));
+      if (libre) {
+        best = f;
+        break;
+      }
+    }
     if (!libre || !best || places <= 0) continue;
     famOf.set(libre.id, best);
     out.get(libre.id)!.familiarId = best.id;
