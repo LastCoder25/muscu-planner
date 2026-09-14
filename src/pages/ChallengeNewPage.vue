@@ -61,6 +61,14 @@
             🏃 Cardio
           </button>
         </div>
+        <div v-if="muscleFocus" class="focus-chip">
+          <span
+            >⚖️ Pour combler : <b>{{ muscleFocus }}</b></span
+          >
+          <button type="button" aria-label="Voir tous les exercices" @click="muscleFocus = ''">
+            ✕
+          </button>
+        </div>
         <q-input
           v-model="search"
           filled
@@ -72,6 +80,10 @@
         <div v-if="loadingLib" class="row flex-center q-pa-md"><q-spinner color="primary" /></div>
         <div v-else-if="!filteredLib.length" class="ex-empty">
           <template v-if="search">Aucun exercice ne correspond à ta recherche.</template>
+          <template v-else-if="muscleFocus"
+            >Aucun exercice disponible pour ce muscle : ils sont déjà dans un défi ou ta voie est
+            pleine.</template
+          >
           <template v-else
             >Plus d'exercice disponible : tes voies sont pleines ou déjà prises. Termine un défi en
             cours pour en lancer un nouveau.</template
@@ -550,6 +562,7 @@ import {
   CHALLENGE_TOKEN_BUDGET,
   type LaneChallenge,
 } from '@/lib/challengeLimits';
+import { normMuscle } from '@/lib/bodyBalance';
 import type { Level } from '@/lib/types';
 
 const router = useRouter();
@@ -770,6 +783,16 @@ const activeExoFamilies = computed(() => {
   return keys;
 });
 const exFilter = ref<'all' | 'muscu' | 'cardio'>('all');
+// Muscle ciblé depuis l'équilibre du corps (`?muscle=`) : on ne propose que les exos qui
+// le travaillent (en principal OU en secondaire), ceux où il est le principal en tête.
+const muscleFocus = ref(typeof route.query.muscle === 'string' ? route.query.muscle : '');
+const focusKey = computed(() => normMuscle(muscleFocus.value));
+function focusRank(e: ExerciseRow): number {
+  if (!focusKey.value) return 0;
+  if (normMuscle(e.muscle_primary) === focusKey.value) return 2;
+  return (e.muscle_secondary ?? []).some((m) => normMuscle(m) === focusKey.value) ? 1 : 0;
+}
+if (focusKey.value) exFilter.value = 'muscu';
 const filteredLib = computed(() => {
   const n = search.value.trim().toLowerCase();
   // On retire : les exos masqués, ceux déjà en défi actif, et ceux qui ne
@@ -780,6 +803,7 @@ const filteredLib = computed(() => {
       !HIDDEN_EX_IDS.has(e.id) &&
       !activeExoFamilies.value.has(variantFamilyKey(e.id)) &&
       !exFull(e) &&
+      (!focusKey.value || focusRank(e) > 0) &&
       (exFilter.value === 'all' || exIsCardio(e) === (exFilter.value === 'cardio')),
   );
   // Recherche par NOM ou par MUSCLE (primaire OU secondaire) → taper « triceps »
@@ -792,7 +816,9 @@ const filteredLib = computed(() => {
           (e.muscle_secondary ?? []).some((m) => m.toLowerCase().includes(n)),
       )
     : visible;
-  return [...base].sort((a, b) => exRank(b.id) - exRank(a.id)).slice(0, 60);
+  return [...base]
+    .sort((a, b) => focusRank(b) - focusRank(a) || exRank(b.id) - exRank(a.id))
+    .slice(0, 60);
 });
 
 function next() {
@@ -1257,6 +1283,33 @@ onMounted(async () => {
   line-height: 1.4;
   color: var(--dim);
   margin-top: 4px;
+}
+/* Muscle ciblé depuis l'équilibre du corps : retirable pour revoir tous les exos. */
+.focus-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-left: 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--d4) 12%, transparent);
+  font-size: 13px;
+  b {
+    display: inline-block; // `::first-letter` exige un bloc (capitalize mettrait « Ischio-Jambiers »)
+    &::first-letter {
+      text-transform: uppercase;
+    }
+  }
+  button {
+    min-width: 44px;
+    min-height: 40px;
+    border: 0;
+    background: transparent;
+    color: var(--dim);
+    font-size: 16px;
+    cursor: pointer;
+  }
 }
 /* Filtre de voie (Tous / Muscu / Cardio) */
 .ex-filter {

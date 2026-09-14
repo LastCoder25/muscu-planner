@@ -521,6 +521,10 @@
             </div>
           </div>
         </template>
+        <!-- Le corps entier, toutes sources confondues : ce qui reste en déficit MÊME en
+             tenant son 360 se comble par un challenge (toucher le muscle). Affiché aussi
+             sans 360 en cours : il aide à composer le prochain. -->
+        <BodyBalance />
       </template>
     </template>
 
@@ -605,6 +609,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import ComboTierLegend from '@/components/ComboTierLegend.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
+import BodyBalance from '@/components/BodyBalance.vue';
 import ExerciseDemo from '@/components/ExerciseDemo.vue';
 import {
   challengeStats,

@@ -257,11 +257,15 @@ export function firstOfMonth(dateIso: string): string {
   const d = new Date(dateIso.slice(0, 10) + 'T00:00:00');
   return fmtDay(new Date(d.getFullYear(), d.getMonth(), 1));
 }
+/** `dateIso` décalé de `n` jours (YYYY-MM-DD), en LOCAL de bout en bout. */
+export function addDaysLocal(dateIso: string, n: number): string {
+  const d = new Date(dateIso.slice(0, 10) + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return fmtDay(d);
+}
 /** Lendemain (YYYY-MM-DD) — borne haute exclusive « aujourd'hui inclus ». */
 export function dayAfter(dateIso: string): string {
-  const d = new Date(dateIso.slice(0, 10) + 'T00:00:00');
-  d.setDate(d.getDate() + 1);
-  return fmtDay(d);
+  return addDaysLocal(dateIso, 1);
 }
 
 /** Séries muscu réalisées par muscle sur la semaine EN COURS (lundi → aujourd'hui inclus). */
@@ -272,7 +276,12 @@ export function weeklySetsByMuscle(entries: LogEntry[], nowIso: string): Record<
   return setsByMuscleInRange(entries, start, fmtDay(end));
 }
 
-type VolumeState = 'low' | 'ok' | 'high';
+export type VolumeState = 'low' | 'ok' | 'high';
+/** État d'un volume rapporté à sa cible : < 60 % = négligé, > 130 % = surchargé.
+ *  SOURCE UNIQUE des seuils (volume hebdo et équilibre du corps). */
+export function volumeState(pct: number): VolumeState {
+  return pct < 0.6 ? 'low' : pct > 1.3 ? 'high' : 'ok';
+}
 export interface MuscleTargetStatus {
   muscle: string;
   done: number;
@@ -293,8 +302,7 @@ export function volumeVsTarget(
     if (target <= 0) continue;
     const d = done[muscle.toLowerCase()] ?? 0;
     const pct = d / target;
-    const state: VolumeState = pct < 0.6 ? 'low' : pct > 1.3 ? 'high' : 'ok';
-    out.push({ muscle, done: d, target, pct, state });
+    out.push({ muscle, done: d, target, pct, state: volumeState(pct) });
   }
   return out.sort((a, b) => a.pct - b.pct || b.target - a.target);
 }

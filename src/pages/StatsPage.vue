@@ -71,34 +71,9 @@
           </div>
         </div>
 
-        <!-- Volume hebdo RÉEL vs CIBLE (ferme la boucle du programme) -->
-        <template v-if="volStatus.length">
-          <div class="sec-h">Volume hebdo vs objectif</div>
-          <div class="grp-card">
-            <div v-for="s in volStatus" :key="s.muscle" class="grp-row">
-              <span class="grp-name"
-                ><span class="grp-dot" :style="{ background: muscleColor(s.muscle) }" />{{
-                  s.muscle
-                }}</span
-              >
-              <div class="grp-bar">
-                <div
-                  class="grp-fill"
-                  :style="{ width: volPct(s) + '%', background: VOL_COLORS[s.state] }"
-                />
-              </div>
-              <span class="grp-val" :class="'vs-' + s.state"
-                ><b>{{ s.done }}</b
-                >/{{ s.target }}</span
-              >
-            </div>
-          </div>
-          <p class="hint hint-legend">
-            <span class="vs-dot low" /> négligé · <span class="vs-dot ok" /> dans la cible ·
-            <span class="vs-dot high" /> au-dessus. Cible hebdo = ton programme (objectif, niveau,
-            sports).
-          </p>
-        </template>
+        <!-- Volume par muscle vs CIBLE : une seule vérité, partagée avec l'onglet Défi 360
+             (secondaires à ½, ce qui est prévu cette semaine compte). -->
+        <BodyBalance />
 
         <!-- Volume par semaine (tendance) -->
         <div class="sec-h">Volume par semaine (8 sem.)</div>
@@ -322,6 +297,7 @@ import { useCardioStore } from '@/stores/cardio';
 import { useComboStore } from '@/stores/combo';
 import { useChallengesStore } from '@/stores/challenges';
 import MuscleBody from '@/components/MuscleBody.vue';
+import BodyBalance from '@/components/BodyBalance.vue';
 import {
   muscleColor,
   weeklySetsByMuscle,
@@ -332,14 +308,11 @@ import {
   mondayOf,
   firstOfMonth,
   dayAfter,
-  volumeVsTarget,
   weeklyVolumeSeries,
   muscuSessionsInLastDays,
   muscuWeekStreak,
   type LogEntry,
 } from '@/lib/volume';
-import { computeMuscleTargets } from '@/lib/programBuilder';
-import { useProfileStore } from '@/stores/profile';
 import { DRILL_SHOT_LABELS } from '@/data/tennis';
 import { useProgress } from '@/composables/useProgress';
 import type { DrillShot, Difficulty } from '@/lib/types';
@@ -349,7 +322,6 @@ const route = useRoute();
 const $q = useQuasar();
 
 const logsStore = useLogsStore();
-const profileStore = useProfileStore();
 const tennis = useTennisStore();
 const cardio = useCardioStore();
 const combo = useComboStore();
@@ -540,9 +512,6 @@ const todayIso = (() => {
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${m}-${day}`;
 })();
-const targets = computed(() =>
-  profileStore.profile ? computeMuscleTargets(profileStore.profile) : {},
-);
 // Volume par PÉRIODE (heatmap corps + détail) — semaine en cours ou mois en cours.
 const volPeriod = ref<'week' | 'month'>('week');
 const volPeriodLabel = computed(() =>
@@ -559,18 +528,11 @@ const volSets = computed<Record<string, number>>(() => {
   return out;
 });
 const weeklyDone = computed(() => weeklySetsByMuscle(entries.value, todayIso));
-const volStatus = computed(() => volumeVsTarget(weeklyDone.value, targets.value));
 const weekSeries = computed(() => weeklyVolumeSeries(entries.value, 8, todayIso));
 const maxWeekSets = computed(() => Math.max(1, ...weekSeries.value.map((w) => w.sets)));
 const muscuFreq30 = computed(() => muscuSessionsInLastDays(entries.value, 30, todayIso));
 const weekStreak = computed(() => muscuWeekStreak(entries.value, todayIso));
 const weekSetsTotal = computed(() => Object.values(weeklyDone.value).reduce((a, b) => a + b, 0));
-// Couleur par état : négligé (rouge) / dans la cible (jaune voltage) / au-dessus (orange).
-const VOL_COLORS: Record<string, string> = { low: '#FF6A45', ok: '#FFD23F', high: '#FFB23F' };
-// Largeur de barre = done/target plafonné à 100 % (le surplus se lit à la couleur).
-function volPct(s: { pct: number }) {
-  return Math.round(Math.min(1, s.pct) * 100);
-}
 
 async function openExercise(id: string) {
   await router.push(`/exercise/${id}`);
@@ -1001,37 +963,6 @@ onMounted(async () => {
   font-size: 12px;
   margin-top: 10px;
   text-align: center;
-}
-
-/* Volume hebdo vs cible : la valeur "done/target" se teinte selon l'état. */
-.grp-val.vs-low b {
-  color: #ff6a45;
-}
-.grp-val.vs-high b {
-  color: #ffb23f;
-}
-.hint-legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-}
-.vs-dot {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  vertical-align: middle;
-}
-.vs-dot.low {
-  background: #ff6a45;
-}
-.vs-dot.ok {
-  background: var(--accent);
-}
-.vs-dot.high {
-  background: #ffb23f;
 }
 
 /* Tendance : volume par semaine (barres). */

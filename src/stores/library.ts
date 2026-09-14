@@ -91,7 +91,23 @@ export const useLibraryStore = defineStore('library', () => {
     return (data as ExerciseRow[]) ?? [];
   }
 
-  return { fetchOne, fetchAll, fetchPrepa, fetchByMuscle, fetchByIds };
+  // Muscles SECONDAIRES de chaque exo (id → liste), retirés compris : l'historique et les
+  // défis référencent encore d'anciens exos, dont les secondaires doivent compter.
+  let secondariesPromise: Promise<Map<string, string[]>> | null = null;
+  function fetchSecondaries(): Promise<Map<string, string[]>> {
+    secondariesPromise ??= (async () => {
+      const { data, error } = await supabase.from('exercises').select('id, muscle_secondary');
+      if (error) {
+        secondariesPromise = null; // pas de cache sur un échec : on retentera
+        throw error;
+      }
+      const rows = (data ?? []) as { id: string; muscle_secondary: string[] | null }[];
+      return new Map(rows.map((r) => [r.id, r.muscle_secondary ?? []]));
+    })();
+    return secondariesPromise;
+  }
+
+  return { fetchOne, fetchAll, fetchPrepa, fetchByMuscle, fetchByIds, fetchSecondaries };
 });
 
 if (import.meta.hot) {
