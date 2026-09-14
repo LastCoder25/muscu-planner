@@ -132,21 +132,67 @@ const PROC_DUNGEON_BOOST: [number, number][] = [
   [85, 1.61],
   [94, 1.39],
 ];
-/** Renfort (PV et dégâts) d'un donjon procédural de reco `reco` (1 avant), interpolé. */
-function proceduralDungeonBoost(reco: number): number {
-  const t = PROC_DUNGEON_BOOST;
-  const i = t.findIndex(([l]) => reco <= l);
-  if (i === 0) return reco < t[0]![0] ? 1 : t[0]![1];
+/** Lecture d'une table de points mesurés [niveau, valeur] : interpolée entre deux points,
+ *  valeur du bout le plus proche au-delà. */
+function interpolate(t: [number, number][], x: number): number {
+  const i = t.findIndex(([l]) => x <= l);
+  if (i === 0) return t[0]![1];
   if (i < 0) return t.at(-1)![1];
   const [l0, b0] = t[i - 1]!;
   const [l1, b1] = t[i]!;
-  return b0 + ((b1 - b0) * (reco - l0)) / (l1 - l0);
+  return b0 + ((b1 - b0) * (x - l0)) / (l1 - l0);
+}
+/** Renfort (PV et dégâts) d'un donjon procédural de reco `reco` (1 avant), interpolé. */
+function proceduralDungeonBoost(reco: number): number {
+  return reco < PROC_DUNGEON_BOOST[0]![0] ? 1 : interpolate(PROC_DUNGEON_BOOST, reco);
 }
 /** Renfort (PV et dégâts) des boss procéduraux : moyenne des mesures (×1,27 à ×1,41 selon
  *  le palier, écarts dans le bruit). Les boss écrits à la main sont corrigés dans leurs stats. */
 const PROC_BOSS_BOOST = 1.32;
 export function bossContentBoost(level: number): number {
   return level >= 30 ? PROC_BOSS_BOOST : 1;
+}
+
+// ── LABYRINTHE : force des créatures (v0.851, mesuré) ──
+// ⚠️ Même défaut que le procédural en v0.848 : les créatures lisaient `gearExpect` seul, calé
+// sur un joueur qui ne porte que des objets. Mesuré sur le VRAI parcours (toutes les salles
+// d'un étage comme l'auto, pièges, repos, gardien ; joueur à 60 drops + 3 familiers + talent,
+// 5 tirages × 40 runs), un build complet nettoyait 98-100 % de ses paliers à leur niveau dès le
+// palier 12 — et les deux premiers à 1 %, faute de la rampe de début de partie des donjons.
+// Correctif : la rampe (`dungeonGearExpect`) et un renfort par palier qui ramène le build
+// complet à ~70 % au niveau conseillé (~90 % sur les deux paliers d'initiation). La table EST
+// la mesure : un point par palier (les écarts entre voisins suivent le nombre d'étages et le
+// roster, ils ne sont pas lissés).
+const LABY_CONTENT_BOOST: [number, number][] = [
+  [2, 0.7],
+  [3, 0.79],
+  [6, 1.14],
+  [12, 1.44],
+  [20, 1.37],
+  [28, 1.57],
+  [40, 1.72],
+  [52, 1.81],
+  [66, 1.84],
+  [85, 1.67],
+];
+/** PV et dégâts de base d'une créature du Labyrinthe (avant son archétype), pour un palier de
+ *  niveau conseillé `level`, à la profondeur `depth` (0 surface → 1 fond). Source UNIQUE : le
+ *  combat (`makeMonster`) et l'estimation du % de réussite (`estimMon`) la lisent tous deux. */
+export function labyrinthFoeBase(
+  level: number,
+  isBoss: boolean,
+  depth: number,
+): { pv: number; damage: number } {
+  const ref = refFighter(level);
+  const d = 0.85 + 0.55 * depth; // 0,85 (surface) → 1,4 (fond)
+  // Coussin bas niveau sur les dégâts : 0,5 à L1 → 1 à L18+ (petits nombres + variance).
+  const lowEase = 0.5 + 0.5 * Math.min(1, level / 18);
+  const ge = dungeonGearExpect(level);
+  const k = interpolate(LABY_CONTENT_BOOST, level);
+  return {
+    pv: refOffensePerRound(ref) * (isBoss ? 5.5 : 2.8) * d * ge.off * k,
+    damage: ref.pv * (isBoss ? 0.07 : 0.05) * d * lowEase * ge.pv * k,
+  };
 }
 
 export type MonsterRole = 'weak' | 'mid' | 'strong';

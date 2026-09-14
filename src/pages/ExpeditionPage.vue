@@ -532,7 +532,6 @@ import {
   RARITY_RANK,
   fxRarity,
   RANK_COLOR,
-  RANK_ORDER,
   rollJet,
   legendaryOf,
   magicFindLuck,
@@ -553,7 +552,15 @@ import {
   type Combatant,
   type CombatEvent,
 } from '@/lib/combat';
-import { refFighter, gearExpect } from '@/lib/proceduralContent';
+import {
+  LABY_RUN,
+  labyDepth,
+  labyrinthFighter,
+  labyrinthFoe,
+  labyrinthTrapDamage,
+  labyTierIndex as tierIndexOfLaby,
+  simulateLabyrinthRun,
+} from '@/lib/labyrinthRun';
 import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
 import ChestIcon from '@/components/ChestIcon.vue';
@@ -719,76 +726,16 @@ const detailPowerDelta = computed<number | null>(() => {
   return Math.round(withIt - combatPower(fighter.value));
 });
 
-// ── % DE RÉUSSITE d'un palier (Monte-Carlo du CRAWL avec ton stuff réel) ──
-// Le labyrinthe est un crawl d'ATTRITION → une « puissance conseillée » (single-fight)
-// mentait (au vert mais 0 % clear). On simule le crawl complet (≈2 combats/étage + boss,
-// PV reportés, lifesteal ×0.3, régén ~9 %) avec le combattant RÉEL → un % honnête. Modèle
-// d'estimation (archétype neutre) aligné sur makeMonster/la calibration.
-function estimMon(refMon: Combatant, isBoss: boolean, depth: number, level: number): Combatant {
-  const pTurn = refMon.damage * (refMon.strikes ?? 1) * (1 + refMon.crit);
-  const P = refMon.pv;
-  const d = 0.85 + 0.55 * depth;
-  const lowEase = 0.5 + 0.5 * Math.min(1, level / 18);
-  const ge = gearExpect(level); // même attente d'équipement que makeMonster (cohérence estimation)
-  return {
-    name: 'm',
-    pv: Math.max(10, Math.round(pTurn * (isBoss ? 5.5 : 2.8) * d * ge.off)),
-    damage: Math.max(1, Math.round(P * (isBoss ? 0.07 : 0.05) * d * lowEase * ge.pv)),
-    crit: 0.05 + 0.03 * depth,
-    dodge: 0.05 + 0.02 * depth,
-    initiative: isBoss ? 14 : 8,
-    strikes: 1,
-  };
-}
+// ── % DE RÉUSSITE d'un palier (Monte-Carlo du VRAI parcours avec ton stuff réel) ──
+// Le labyrinthe est un crawl d'ATTRITION → une « puissance conseillée » (single-fight) mentait.
+// On rejoue le parcours de l'auto (toutes les salles, pièges, repos, gardien) avec les mêmes
+// créatures que le combat : `simulateLabyrinthRun` est la source unique (lib/labyrinthRun).
+const LABY_ESTIMATE_RUNS = 30;
 function estimateLabyClear(laby: Labyrinth): number {
-  const player = fighter.value;
-  const refMon = refFighter(laby.recoLevel);
-  const floors = laby.floors;
-  const N = 50;
   let wins = 0;
-  for (let s = 1; s <= N; s++) {
-    let pv = player.pv;
-    const maxPv = player.pv;
-    let seed = s * 131 + laby.recoLevel * 7 + 1;
-    let dead = false;
-    for (let f = 0; f < floors && !dead; f++) {
-      const depth = floors > 1 ? f / (floors - 1) : 0;
-      for (let r = 0; r < 2 && !dead; r++) {
-        const cf: Combatant = {
-          ...player,
-          pv,
-          lifesteal: (player.lifesteal ?? 0) * LABY_LIFESTEAL,
-        };
-        const res = simulateCombat(cf, estimMon(refMon, false, depth, laby.recoLevel), {
-          seed: seed++,
-          goldOnWin: 0,
-          startPlayerPv: pv,
-        });
-        pv = res.log.length ? res.log[res.log.length - 1]!.playerPv : pv;
-        if (pv <= 0) dead = true;
-        else {
-          pv = Math.max(0, pv - Math.round(maxPv * 0.05)); // ~1 piège/étage
-          pv = Math.min(maxPv, pv + Math.round(maxPv * 0.09)); // salles sûres
-        }
-      }
-      if (!dead && f === floors - 1) {
-        const cf: Combatant = {
-          ...player,
-          pv,
-          lifesteal: (player.lifesteal ?? 0) * LABY_LIFESTEAL,
-        };
-        const res = simulateCombat(cf, estimMon(refMon, true, 1, laby.recoLevel), {
-          seed: seed++,
-          goldOnWin: 0,
-          startPlayerPv: pv,
-        });
-        pv = res.log.length ? res.log[res.log.length - 1]!.playerPv : pv;
-        if (pv <= 0) dead = true;
-      }
-    }
-    if (!dead) wins++;
-  }
-  return Math.round((wins / N) * 100);
+  for (let s = 1; s <= LABY_ESTIMATE_RUNS; s++)
+    if (simulateLabyrinthRun(fighter.value, laby, s * 131 + laby.recoLevel * 7 + 1)) wins++;
+  return Math.round((wins / LABY_ESTIMATE_RUNS) * 100);
 }
 // Mémoïsé : recalculé seulement quand le combattant (stuff/stats) change, pas à chaque rendu.
 const labyClearPct = computed<Record<string, number>>(() => {
@@ -812,14 +759,6 @@ const dungeon = ref<Floor[]>(generateDungeon(seed.value, floorsWanted.value));
 const run = ref<RunState>(
   startRun(floorsWanted.value, dungeon.value[0]!, Math.max(60, fighter.value.pv)),
 );
-// Vol de vie ATTÉNUÉ dans le labyrinthe → l'attrition (PV reportés) reste réelle même
-// pour un build sustain (sinon on finit tous les étages à PV pleins).
-// Atténuation du VOL DE VIE dans le Labyrinthe. Le heal ∝ dégâts infligés (énormes face
-// aux monstres à échelle relative) → à 0,5 il ANNULAIT l'attrition (build 30-50 % vol de
-// vie = run trivial, cf. simulation). Baissé à 0,3 : le vol de vie aide encore nettement
-// mais ne trivialise plus (un build 50 % finit ~usé, pas intact) → l'Endurance/les PV
-// reportés comptent à nouveau. (curseur à ajuster si besoin.)
-const LABY_LIFESTEAL = 0.3;
 const lastEvent = ref<{ kind: string; text: string } | null>(null);
 const over = ref(false);
 // Butin cumulé du run (Phase 3b : affiché ; persistance/récompense = Phase 3c).
@@ -958,9 +897,7 @@ function chestColorOf(id: number): string {
 // pv = k × dégâts/tour du joueur (⇒ le monstre SURVIT et riposte) ; dégâts = part
 // des PV max du joueur (⇒ attrition réelle). Deeper = plus dur (push-your-luck).
 // Index de rang du palier courant (0=G … 9=SSS) → thème du roster de monstres.
-const labyTierIndex = computed(() =>
-  Math.max(0, RANK_ORDER.indexOf(selectedLaby.value?.rank ?? 'commun')),
-);
+const labyTierIndex = computed(() => tierIndexOfLaby(selectedLaby.value ?? LABYRINTHS[0]!));
 // Teinte d'ambiance de l'étage = couleur du RANG du palier (G→SSS) → chaque palier a
 // son atmosphère de fond sur la carte.
 const ambianceColor = computed(() => RANK_COLOR[selectedLaby.value?.rank ?? 'commun']);
@@ -974,44 +911,16 @@ function roomLit(r: Room): boolean {
 // dur, un bas-niveau sur-équipé n'y survit pas (ticket anti-runaway, difficulté absolue).
 const palierLevel = computed(() => selectedLaby.value?.recoLevel ?? heroLevel.value);
 
-// Monstre = baseline ABSOLUE calibrée sur le build de RÉFÉRENCE du palier (refFighter au
-// niveau du palier) + profondeur, MODULÉE par l'archétype de la créature (assassin/brute/
-// colosse/sangsue/vif) → un FEEL différent à chaque combat. Nom/emoji viennent du roster.
-function makeMonster(isBoss: boolean, depth: number, foe: LabyFoe): Combatant {
-  const ref = refFighter(palierLevel.value); // combattant de référence du PALIER (absolu)
-  const pTurn = ref.damage * (ref.strikes ?? 1) * (1 + ref.crit); // dégâts/tour de la référence
-  const P = ref.pv;
-  const d = 0.85 + 0.55 * depth; // 0.85 (surface) → 1.4 (fond)
-  const a = foe.arch;
-  // CALIBRATION (2026, simulée) : baseline allégée (fights un peu plus courts, boss moins
-  // létal) + CUSHION bas-niveau sur les dégâts — à bas palier, les petits nombres + la
-  // variance rendaient l'attrition mortelle (0 % au niveau conseillé). lowEase adoucit les
-  // dégâts jusqu'à ~L18 (0,5 à L1 → 1,0 à L18+). Au-delà, calibration inchangée.
-  const lowEase = 0.5 + 0.5 * Math.min(1, palierLevel.value / 18);
-  // Attente d'équipement (v0.600) : le Labyrinthe est une attrition (série de combats) →
-  // même calibration ÉQUIPÉE que les donjons (gearExpect). Un joueur sous-niveau à un palier
-  // profond (ex. astral au niv.20) est ainsi muré : le sport reste le plafond.
-  const ge = gearExpect(palierLevel.value);
-  const basePv = pTurn * (isBoss ? 5.5 : 2.8) * d * ge.off;
-  const baseDmg = P * (isBoss ? 0.07 : 0.05) * d * lowEase * ge.pv;
-  return {
-    name: foe.name,
-    pv: Math.max(10, Math.round(basePv * a.pvMult)),
-    damage: Math.max(1, Math.round(baseDmg * a.dmgMult)),
-    crit: a.crit + 0.03 * depth,
-    dodge: a.dodge + 0.02 * depth,
-    initiative: isBoss ? 14 : 8,
-    strikes: a.strikes ?? 1,
-    ...(a.lifesteal ? { lifesteal: a.lifesteal } : {}),
-  };
-}
-// Piège = 5 % des PV max du joueur (proportionnel, plus les 14 fixes ridicules).
-const trapDmg = computed(() => Math.max(8, Math.round(fighter.value.pv * 0.05)));
+// Créature d'une salle = base ABSOLUE du palier (attente d'équipement et renfort mesuré
+// compris) modulée par son archétype → un FEEL différent à chaque combat. Source unique
+// `labyrinthFoe`, que l'estimation du % de réussite joue aussi.
+const makeMonster = (isBoss: boolean, depth: number, foe: LabyFoe): Combatant =>
+  labyrinthFoe(palierLevel.value, isBoss, depth, foe);
 // Seed déterministe par salle (rejouable pour une même carte).
 function roomSeed(id: number): number {
   return (seed.value * 131 + run.value.floor * 7919 + id * 17) >>> 0 || 1;
 }
-const depthOf = () => (run.value.floors > 1 ? run.value.floor / (run.value.floors - 1) : 0);
+const depthOf = () => labyDepth(run.value.floor, run.value.floors);
 
 function fightRoom(id: number, isBoss: boolean) {
   // Créature de la salle (roster du palier + archétype), seedée → rejouable.
@@ -1022,11 +931,7 @@ function fightRoom(id: number, isBoss: boolean) {
   // Combattant du labyrinthe : max PLAFONNÉ au pool courant (le vol de vie ne peut
   // pas dépasser les PV reportés → pas de « remontée au max » entre les combats) et
   // vol de vie atténué → l'attrition compte vraiment.
-  const combatFighter: Combatant = {
-    ...fighter.value,
-    pv: run.value.pv,
-    lifesteal: (fighter.value.lifesteal ?? 0) * LABY_LIFESTEAL,
-  };
+  const combatFighter: Combatant = labyrinthFighter(fighter.value, run.value.pv);
   const res = simulateCombat(combatFighter, monster, {
     seed: roomSeed(id),
     goldOnWin: goldWin,
@@ -1115,7 +1020,7 @@ function trapKindOf(id: number): LabyTrap {
 function springTrap(id: number) {
   const trap = trapKindOf(id);
   if (trap.kind === 'dmg') {
-    const dmg = Math.max(1, Math.round(trapDmg.value * trap.mult));
+    const dmg = labyrinthTrapDamage(fighter.value.pv, trap.mult);
     run.value = applyDamage(run.value, dmg); // mort gérée à la fermeture (closeFx)
     lastEvent.value = { kind: 'bad', text: `${trap.emoji} ${trap.label} ! −${dmg} PV` };
     roomFx.value = { kind: 'trap', trap, dmg };
@@ -1243,17 +1148,17 @@ function onRoomClick(id: number) {
       break;
     case 'chest':
       openChest(id);
-      regen(0.09); // le repos d'un coffre soigne un peu
+      regen(LABY_RUN.regen.chest); // le repos d'un coffre soigne un peu
       break;
     case 'vault':
       openVault(id);
-      regen(0.12); // planque sûre → on souffle un peu
+      regen(LABY_RUN.regen.vault); // planque sûre → on souffle un peu
       break;
     case 'stairs':
       lastEvent.value = { kind: 'good', text: '🔽 Escalier — descends à l’étage suivant' };
       break;
     default:
-      regen(0.1); // salle vide = on souffle → petite récupération
+      regen(LABY_RUN.regen.empty); // salle vide = on souffle → petite récupération
       lastEvent.value = { kind: 'neutral', text: '· Salle vide — tu récupères un peu' };
   }
 }
@@ -1404,11 +1309,7 @@ function bossWinnableNow(): boolean {
     true,
   );
   const monster = makeMonster(true, depthOf(), foe);
-  const combatFighter: Combatant = {
-    ...fighter.value,
-    pv: run.value.pv,
-    lifesteal: (fighter.value.lifesteal ?? 0) * LABY_LIFESTEAL,
-  };
+  const combatFighter: Combatant = labyrinthFighter(fighter.value, run.value.pv);
   return simulateCombat(combatFighter, monster, {
     seed: roomSeed(bossRoom.id),
     goldOnWin: 0,

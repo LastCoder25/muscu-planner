@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  mulberry32,
   simulateCombat,
   simulateDungeon,
   playerCombatant,
@@ -11,10 +10,9 @@ import {
 import { DUNGEONS, dungeonFoes, dungeonGold } from '@/data/dungeons';
 import { MONSTERS } from '@/data/monsters';
 import { BOSSES } from '@/data/bosses';
-import { rollDrop, bestGearLoadout, playerWithGear, itemScore, type Item } from '@/lib/items';
+import { rollDrop, playerWithGear, itemScore } from '@/lib/items';
 import {
   cumXpForLevel,
-  refBalancedStat,
   refFighter,
   proceduralMonster,
   proceduralDungeon,
@@ -32,8 +30,7 @@ import {
   bossGearExpect,
 } from '@/lib/proceduralContent';
 import { computeCharacter } from '@/lib/character';
-import { rollTalentDrop, talentEffects, talentsEarned, pickBestTalents } from '@/lib/talents';
-import { rollActivityFamiliar } from '@/data/familiars';
+import { gearedFighter } from './helpers/gearedFighter';
 
 describe('le 1er donjon est gagnable par un joueur qui débute', () => {
   const clairiere = DUNGEONS.find((d) => d.id === 'clairiere')!;
@@ -294,51 +291,7 @@ describe('procedural — calibration (clear ~systématique au reco)', () => {
 });
 
 describe('procedural — anti-runaway ÉQUIPÉ (v0.622, « sport = plafond »)', () => {
-  // Joueur ÉQUIPÉ réaliste : farme ~60 objets à son niveau, 3 familiers et 10 talents, et
-  // garde le meilleur build. ⚠️ Il ne portait QUE des objets jusqu'en v0.845 : c'est ce qui
-  // laissait le test vert pendant qu'un vrai joueur (talent + familier en plus) nettoyait
-  // le contenu procédural à 92-100 % à son niveau. On mesure le joueur qui existe.
-  // Mis en cache : le build est déterministe, et plusieurs tests reprennent les mêmes joueurs.
-  const geared = new Map<string, Combatant>();
-  function gearedFighter(L: number, seed = 1): Combatant {
-    const key = `${L}:${seed}`;
-    const hit = geared.get(key);
-    if (hit) return hit;
-    const rng = mulberry32(seed * 7919 + L);
-    const inv: Item[] = [];
-    for (let i = 0; i < 60; i++) {
-      const d = rollDrop(rng, { cleared: true, defeated: 1, level: L, luck: 0.4, playerLevel: L });
-      if (d) inv.push({ ...d, id: 'i' + i });
-    }
-    for (let i = 0; i < 3; i++)
-      inv.push({
-        ...rollActivityFamiliar(rng, { level: L, luck: 0.4, playerLevel: L }),
-        id: 'f' + i,
-      });
-    const talents = Array.from({ length: 10 }, (_, i) => ({
-      ...rollTalentDrop(rng, { level: L, luck: 0.4, playerLevel: L }),
-      id: 't' + i,
-    }));
-    const s = refBalancedStat(L);
-    const stats = { puissance: s, endurance: s, agilite: s };
-    const fx = (ids: string[]) =>
-      talentEffects(talents.map((t) => ({ ...t, equipped: ids.includes(t.id) })));
-    // 1re passe sans polissage (point de départ du choix de talent), comme `computeGearPlan`.
-    const draft = bestGearLoadout('g', stats, {}, inv, L, {}, undefined, undefined, false);
-    const ids = pickBestTalents(talents, talentsEarned(L), (x) =>
-      combatPower(playerWithGear('g', stats, draft, fx(x), L)),
-    );
-    const eff = fx(ids);
-    const p = playerWithGear(
-      'geared',
-      stats,
-      bestGearLoadout('g', stats, draft, inv, L, eff),
-      eff,
-      L,
-    );
-    geared.set(key, p);
-    return p;
-  }
+  // Joueur ÉQUIPÉ réaliste (objets + familiers + talent) : cf. `helpers/gearedFighter`.
   /** Taux moyen d'un essai sur plusieurs joueurs. ⚠️ MOYENNÉ SUR PLUSIEURS TIRAGES DE GEAR :
    *  avec un seul, ce harnais mesurait une ANECDOTE (au même niveau et sur le même donjon,
    *  huit tirages donnent de 25 % à 100 %). On mesure le JOUEUR MÉDIAN. */
