@@ -333,9 +333,12 @@ export const useCharacterStore = defineStore('character', () => {
     return row.value;
   }
 
-  // Crée ou renomme le personnage. L'unicité est garantie par la base : un pseudo
-  // déjà pris renvoie l'erreur 23505 → on la traduit en PseudoTakenError.
+  // CRÉE le personnage. L'unicité est garantie par la base : un pseudo déjà pris renvoie
+  // l'erreur 23505 → on la traduit en PseudoTakenError.
+  // ⚠️ Le pseudo ne se MODIFIE plus (v0.847) : refus ici, et surtout en base (trigger
+  // `characters_pseudo_immutable`, migr. 0066), qu'aucun onglet périmé ne contourne.
   async function setPseudo(userId: string, rawPseudo: string) {
+    if (row.value) throw new Error('Le pseudo ne peut plus être modifié.');
     const pseudo = normalizePseudo(rawPseudo);
     // Pécule de bienvenue à la 1re création (0 XP de fond → 0 énergie sinon) : de
     // quoi lancer quelques donjons et accrocher le joueur. Pas au renommage.

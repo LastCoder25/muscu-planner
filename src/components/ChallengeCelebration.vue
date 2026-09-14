@@ -130,8 +130,7 @@ watch(
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.78);
-  backdrop-filter: blur(3px);
+  background: var(--veil); // opaque : la page ne se relit pas à travers (app.scss)
 }
 .cc-flash {
   position: absolute;

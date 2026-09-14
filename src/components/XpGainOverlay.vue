@@ -80,8 +80,7 @@ onBeforeUnmount(clearTimers);
   align-items: center;
   justify-content: center;
   gap: 22px;
-  background: rgba(0, 0, 0, 0.82);
-  backdrop-filter: blur(3px);
+  background: var(--veil); // opaque : la page ne se relit pas à travers (app.scss)
   cursor: pointer;
 }
 .xf-title {

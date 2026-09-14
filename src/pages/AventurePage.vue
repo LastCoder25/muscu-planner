@@ -40,10 +40,9 @@
         <div class="tb-left">
           <span class="tb-lvl font-display">Niv. {{ c.level.level }}</span>
           <span class="tb-name font-display">{{ char.row.pseudo }}</span>
-          <button class="edit" aria-label="Renommer" @click="renamePseudo">
-            <q-icon name="edit" size="14px" />
-          </button>
-          <!-- ⚠️ La boîte vit avec les ACTIONS (crayon), pas avec les ressources : elle
+          <!-- ⚠️ Le pseudo ne se modifie plus (v0.847, trigger en base migr. 0066) : plus de
+               crayon de renommage.
+               ⚠️ La boîte vit avec les ACTIONS, pas avec les ressources : elle
                était dans le même groupe que le plateau, donc AJOUTER une devise la
                déplaçait. Ici, aucune puce ne peut plus la bouger. -->
           <button class="inbox-btn" aria-label="Messages" @click="openInbox">
@@ -6002,31 +6001,6 @@ async function savePseudo() {
   }
 }
 
-function renamePseudo() {
-  $q.dialog({
-    title: 'Renommer ton aventurier',
-    prompt: {
-      model: char.row?.pseudo ?? '',
-      type: 'text',
-      isValid: (v: string) => isValidPseudo(v),
-    },
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Renommer', color: 'primary', textColor: 'dark' },
-  }).onOk((v: string) => {
-    const uid = auth.user?.id;
-    if (!uid) return;
-    char
-      .setPseudo(uid, v)
-      .then(() => $q.notify({ type: 'positive', message: 'Pseudo mis à jour.' }))
-      .catch((e: unknown) =>
-        $q.notify({
-          type: 'negative',
-          message: e instanceof PseudoTakenError ? 'Ce pseudo est déjà pris.' : 'Échec.',
-        }),
-      );
-  });
-}
-
 // Bonus de passage de niveau : réclamé dès que les données de fond sont prêtes
 // (niveau réel) et qu'un perso existe. Idempotent (reward_level persisté).
 let claimingLevel = false;
@@ -6195,14 +6169,6 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.edit {
-  background: none;
-  border: none;
-  color: var(--dim);
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
 }
 .tb-right {
   display: flex;

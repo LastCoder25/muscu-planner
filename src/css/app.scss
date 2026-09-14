@@ -4,6 +4,10 @@
 :root {
   // Palette
   --bg: #15120e; // fond graphite chaud
+  // Voile OPAQUE de TOUT ce qui passe au premier plan (modales Quasar, célébrations, anneaux
+  // d'XP) : la teinte du thème assombrie. Un seul jeton, sinon chaque overlay garde sa
+  // transparence et la page se relit à travers (cases vertes du Défi 360, v0.843 → v0.847).
+  --veil: color-mix(in srgb, var(--bg) 55%, #000);
   --surface: #211c16; // cartes
   --surface-2: #2c261e; // cartes actives
   --surface-3: #373026; // éléments surélevés (anneau timer)
@@ -54,8 +58,12 @@ body {
 // Aucune transparence ne peut garantir qu'on ne les voit plus : le voile est plein, dans la
 // teinte du thème assombrie (un noir pur trancherait avec la charte). Le flou disparaît :
 // inutile derrière un aplat, et coûteux sur mobile.
+// ⚠️ v0.847 (re-signalé : « toujours les cases pointillées vertes sous les modales en tout
+// genre ») : le voile des q-dialog était déjà plein, mais les CÉLÉBRATIONS (paliers du 360,
+// anneaux d'XP, fin de défi) gardaient leur propre voile à 78-82 % + flou. Elles lisent
+// désormais le même jeton `--veil`.
 .q-dialog__backdrop {
-  background: color-mix(in srgb, var(--bg) 55%, #000);
+  background: var(--veil);
 }
 
 // Oswald pour chiffres/titres/timer/valeurs : tabular nums.
