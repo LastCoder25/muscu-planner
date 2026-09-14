@@ -46,6 +46,15 @@ const LEG_OFFENSE: ReadonlySet<string> = new Set([
   'cadence',
   'whetted',
 ]);
+// Signatures de set (v0.835) : même partage offense/survie, poids propre.
+const SIG_OFFENSE: ReadonlySet<string> = new Set([
+  'sig_berserker',
+  'sig_assassin',
+  'sig_duelliste',
+  'sig_epineux',
+  'sig_frenetique',
+]);
+const SIG_DEFENSE: ReadonlySet<string> = new Set(['sig_gardien', 'sig_colosse', 'sig_vampire']);
 const LEG_DEFENSE: ReadonlySet<string> = new Set([
   'aegis',
   'retort',
@@ -113,6 +122,24 @@ export const COMBAT = {
   enduranceReduction: 0.2, // Endurance : −20 % de dégâts subis en plus
   quarryThreshold: 0.3, // Curée : déclenche quand l'ennemi passe sous 30 % PV
   quarryHealPct: 0.15, // Curée : soigne 15 % des PV max du joueur (1× par combat)
+  // SIGNATURES DE SET (v0.835) — le 4-pièces d'un set porté dans SA voie. Même famille que
+  // les procs : non-scalantes, déterministes (aucune ne consomme de rng).
+  // ⚠️ CALIBRÉES PAR LA MESURE, voie par voie : chacune vaut ~+8 à +12 % de puissance
+  // ÉQUIVALENTE en combat de boss (niveaux 30/60/90, boss calé à 50 % de victoire sans
+  // elle). Les premières valeurs allaient de +1 % (Épineux) à +24 % (Colosse).
+  carnageMax: 1.4, // Berserker · Carnage : +dégâts ∝ PV manquants de l'ennemi, jusqu'à +140 %
+  bastionHits: 3, // Gardien · Bastion : les 3 premières attaques ennemies qui touchent…
+  bastionMult: 0.65, // …sont réduites d'un tiers
+  graceCritMult: 2.75, // Assassin · Coup de grâce : un critique inflige ×2,75 au lieu de ×2
+  eternalHealCapMult: 3.5, // Vampire · Soif éternelle : plafond de soin par tour ×3,5
+  unshakenMaxHitPct: 0.4, // Colosse · Inébranlable : un coup retire au plus 40 % des PV max
+  secretThrustEvery: 3, // Duelliste · Botte secrète : un coup porté sur 3 est critique…
+  secretThrustMult: 2.5, // …et ce critique-là inflige ×2,5
+  bramblesMaxPvPct: 0.06, // Épineux · Ronces : chaque coup reçu retire 6 % des PV max ennemis
+  tranceMaxStacks: 8, // Frénétique · Transe : l'élan se cumule jusqu'à 8 coups au lieu de 6
+  // Ce que vaut une signature dans `combatPower` : ×1,2 sur UN des deux facteurs, soit ~+9,5 %
+  // de puissance — le gain mesuré en combat. Sans ce poids l'optimiseur ne verrait rien.
+  setSignaturePowerWeight: 0.2,
   legendaryPowerWeight: 0.06, // pondération d'un proc dans combatPower (offense/survie)
 };
 
@@ -203,6 +230,8 @@ export function combatPowerRaw(c: Combatant): number {
     for (const p of c.procs) {
       if (LEG_OFFENSE.has(p)) procOff += COMBAT.legendaryPowerWeight;
       else if (LEG_DEFENSE.has(p)) procSurv += COMBAT.legendaryPowerWeight;
+      else if (SIG_OFFENSE.has(p)) procOff += COMBAT.setSignaturePowerWeight;
+      else if (SIG_DEFENSE.has(p)) procSurv += COMBAT.setSignaturePowerWeight;
     }
   // offense×survie croît ≈ niveau⁴ → chiffres énormes (dizaines de milliers dès le
   // début). On prend la RACINE : indice toujours monotone/comparable mais à échelle
@@ -269,6 +298,9 @@ export function simulateCombat(
   let quarryReady = has('quarry'); // Curée : soigne une fois, quand l'ennemi passe sous 30 %
   let pHits = 0; // coups PORTÉS par le joueur (Charge, Cadence)
   let whettedLeft = 0; // crits garantis restants (Riposte affûtée)
+  let bastionLeft = has('sig_gardien') ? COMBAT.bastionHits : 0; // Bastion : coups amortis restants
+  const momentumCap = has('sig_frenetique') ? COMBAT.tranceMaxStacks : COMBAT.momentumMaxStacks;
+  const critMult = has('sig_assassin') ? COMBAT.graceCritMult : 2;
 
   // Nombre de frappes d'un tour (Vitesse) : partie entière + reste probabiliste.
   const strikeCount = (c: Combatant): number => {
@@ -286,7 +318,9 @@ export function simulateCombat(
     // (empêche le multi-frappe de rendre le sustain infini — cf. COMBAT.lifestealRoundCap).
     let roundHeal = 0;
     const healCap = Math.round(
-      (turn === 'player' ? maxPPv : monsterMaxPv) * COMBAT.lifestealRoundCap,
+      (turn === 'player' ? maxPPv : monsterMaxPv) *
+        COMBAT.lifestealRoundCap *
+        (turn === 'player' && has('sig_vampire') ? COMBAT.eternalHealCapMult : 1),
     );
     const gainHeal = (raw: number): number => {
       const h = Math.max(0, Math.min(raw, healCap - roundHeal));
@@ -309,8 +343,12 @@ export function simulateCombat(
           crit = true;
           whettedLeft--;
         }
+        // Botte secrète : un coup porté sur N est un critique appuyé, sans jet.
+        const thrust = has('sig_duelliste') && (pHits + 1) % COMBAT.secretThrustEvery === 0;
+        if (thrust) crit = true;
         const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
-        let dmg = Math.max(1, Math.round(atk.damage * (crit ? 2 : 1) * variance));
+        const cm = thrust ? Math.max(critMult, COMBAT.secretThrustMult) : critMult;
+        let dmg = Math.max(1, Math.round(atk.damage * (crit ? cm : 1) * variance));
         if (first && has('initiative')) dmg = Math.round(dmg * COMBAT.initiativeMult);
         // Charge : ouverture brutale, sur les tout premiers coups.
         if (has('charge') && pHits < COMBAT.chargeHits) dmg = Math.round(dmg * COMBAT.chargeMult);
@@ -321,7 +359,9 @@ export function simulateCombat(
         let mult = 1;
         if (atk.execute && mPv / monsterMaxPv < COMBAT.executeThreshold) mult += atk.execute;
         if (atk.rage && pPv / maxPPv < COMBAT.rageThreshold) mult += atk.rage;
-        if (atk.momentum) mult += Math.min(COMBAT.momentumMaxStacks, pStacks) * atk.momentum;
+        if (atk.momentum) mult += Math.min(momentumCap, pStacks) * atk.momentum;
+        // Carnage : plus l'ennemi saigne, plus on frappe fort.
+        if (has('sig_berserker')) mult += COMBAT.carnageMax * (1 - mPv / monsterMaxPv);
         if (mult !== 1) dmg = Math.max(1, Math.round(dmg * mult));
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
         mPv = Math.max(0, mPv - dmg);
@@ -363,6 +403,14 @@ export function simulateCombat(
         // ordinaire (elle s'y ajoute au lieu de la remplacer) et reste bornée par elle.
         if (has('endurance') && pPv / maxPPv < COMBAT.enduranceThreshold)
           dmg = Math.max(1, Math.round(dmg * (1 - COMBAT.enduranceReduction)));
+        // Bastion : les premiers coups qui touchent sont amortis.
+        if (bastionLeft > 0 && dmg > 0) {
+          dmg = Math.max(1, Math.round(dmg * COMBAT.bastionMult));
+          bastionLeft--;
+        }
+        // Inébranlable : aucun coup ne retire plus d'une part fixe des PV max.
+        if (has('sig_colosse'))
+          dmg = Math.min(dmg, Math.max(1, Math.round(maxPPv * COMBAT.unshakenMaxHitPct)));
         const firstEnemy = mFirstLanded;
         // Rétorsion : renvoie le 1er coup ennemi (avant l'annulation par l'Égide).
         if (firstEnemy && has('retort') && dmg > 0) mPv = Math.max(0, mPv - dmg);
@@ -392,6 +440,10 @@ export function simulateCombat(
         // Épines : le joueur (défenseur) renvoie une part des dégâts reçus.
         if (def.thorns && dmg > 0)
           mPv = Math.max(0, mPv - Math.max(1, Math.round(dmg * def.thorns)));
+        // Ronces : chaque coup reçu blesse l'ennemi d'une part de SES PV max — les épines
+        // ordinaires suivent les dégâts reçus, donc restent muettes face à un colosse.
+        if (has('sig_epineux') && dmg > 0)
+          mPv = Math.max(0, mPv - Math.max(1, Math.round(monsterMaxPv * COMBAT.bramblesMaxPvPct)));
         log.push({
           round,
           who: turn,

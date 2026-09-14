@@ -694,8 +694,9 @@ function setThemeStats(setId: string | undefined): EffectType[] {
 export function legendaryOf(it: { legendary?: string }): LegendaryProc | undefined {
   return it.legendary ? LEGENDARY_BY_ID[it.legendary] : undefined;
 }
-/** Ensemble des procs légendaires actifs de l'équipement (pour le combattant). */
-export function aggregateLegendaries(equipped: Equipped): Set<string> {
+/** Ensemble des procs légendaires actifs de l'équipement (pour le combattant), plus la
+ *  SIGNATURE du set complet porté dans sa voie. */
+export function aggregateLegendaries(equipped: Equipped, voie?: string | null): Set<string> {
   const s = new Set<string>();
   for (const slot of SLOTS) {
     const it = equipped[slot];
@@ -703,7 +704,18 @@ export function aggregateLegendaries(equipped: Equipped): Set<string> {
   }
   const fam = equipped[FAMILIAR_SLOT];
   if (fam?.legendary) s.add(fam.legendary);
+  const sig = setSignatureOf(equipped, voie);
+  if (sig) s.add(sig.id);
   return s;
+}
+
+/** ⭐ La signature active : les QUATRE pièces du set de ta voie, portées. Même règle que le
+ *  capstone de stat (`setEffects`) — hors de sa voie, un set complet n’en donne pas. */
+export function setSignatureOf(equipped: Equipped, voie?: string | null): SetSignature | undefined {
+  if (!voie) return undefined;
+  const id = voieSetId(voie);
+  const n = SLOTS.filter((sl) => equipped[sl]?.setId === id).length;
+  return n >= 4 ? SET_BY_ID[id]?.signature : undefined;
 }
 
 // PLANCHER de magnitude par RANG. Géométrique (ratio 1,166). REFONTE v0.574 : plus de
@@ -1708,7 +1720,72 @@ export interface ItemSet {
   tiers: SetTier[];
   /** Couleur du set PORTÉ sur l’avatar (sets de voie seulement). */
   color?: string;
+  /** ⭐ L’effet SIGNATURE du set complet porté dans SA voie (sets de voie seulement). */
+  signature?: SetSignature;
 }
+
+/** Un EFFET SIGNATURE de set (v0.835) : un comportement de combat, pas une stat.
+ *  ⚠️ Ses ids (`sig_<voie>`) sont lus par `simulateCombat` au même titre que les procs
+ *  légendaires — mais aucun objet ne les porte : seul le set complet, dans sa voie. */
+export interface SetSignature {
+  id: string;
+  name: string;
+  emoji: string;
+  desc: string;
+}
+/** Les 8 signatures, une par voie. ⚠️ Toutes DISTINCTES des procs d’objets : sinon un set
+ *  complet porté avec l’objet légendaire du même proc n’apporterait rien (les procs se
+ *  dédoublonnent). */
+export const SET_SIGNATURES: Record<string, SetSignature> = {
+  berserker: {
+    id: 'sig_berserker',
+    name: 'Carnage',
+    emoji: '🪓',
+    desc: 'Plus l’ennemi saigne, plus tu frappes fort : jusqu’à +140 % de dégâts quand il est à terre.',
+  },
+  gardien: {
+    id: 'sig_gardien',
+    name: 'Bastion',
+    emoji: '🏰',
+    desc: 'Les 3 premières attaques ennemies qui te touchent sont réduites d’un tiers.',
+  },
+  assassin: {
+    id: 'sig_assassin',
+    name: 'Coup de grâce',
+    emoji: '🗡️',
+    desc: 'Tes coups critiques infligent ×2,75 au lieu de ×2.',
+  },
+  vampire: {
+    id: 'sig_vampire',
+    name: 'Soif éternelle',
+    emoji: '🦇',
+    desc: 'Le soin que tu peux voler en un tour est multiplié par 3,5.',
+  },
+  colosse: {
+    id: 'sig_colosse',
+    name: 'Inébranlable',
+    emoji: '⛰️',
+    desc: 'Aucun coup ne peut te retirer plus de 40 % de tes PV max.',
+  },
+  duelliste: {
+    id: 'sig_duelliste',
+    name: 'Botte secrète',
+    emoji: '🤺',
+    desc: 'Un coup porté sur 3 est un critique garanti, qui inflige ×2,5.',
+  },
+  epineux: {
+    id: 'sig_epineux',
+    name: 'Ronces',
+    emoji: '🥀',
+    desc: 'Chaque coup que tu reçois retire à l’ennemi 6 % de ses PV max.',
+  },
+  frenetique: {
+    id: 'sig_frenetique',
+    name: 'Transe',
+    emoji: '🌪️',
+    desc: 'Ton élan se cumule jusqu’à 8 coups au lieu de 6.',
+  },
+};
 
 // Un set PAR boss de palier (cf. src/data/bosses.ts). Chaque set a un pouvoir
 // spécifique. Les pièces ne droppent QUE sur le boss correspondant.
@@ -1863,6 +1940,7 @@ export const VOIE_SETS: ItemSet[] = VOIE_SET_DEFS.map((d) => ({
   emoji: d.emoji,
   theme: d.theme,
   color: d.color,
+  ...(SET_SIGNATURES[d.voie] ? { signature: SET_SIGNATURES[d.voie] } : {}),
   tiers: [
     {
       pieces: 2,
@@ -2071,7 +2149,7 @@ export function playerWithGear(
   // infini. Borné → build sustain fort mais pas increvable (ticket adab525d).
   const lifesteal = Math.min(0.5, e.lifesteal + (extra.lifesteal ?? 0));
   // Procs LÉGENDAIRES (non-scalants) portés par l'équipement.
-  const procs = aggregateLegendaries(equipped);
+  const procs = aggregateLegendaries(equipped, voie);
   // Stats MINEURES de combat : initiative (multiplicatif, léger) + régén de donjon (borné +30 %).
   const initiativePct = e.initiativePct + (extra.initiativePct ?? 0);
   const regen = Math.min(0.3, e.regenPct + (extra.regenPct ?? 0));

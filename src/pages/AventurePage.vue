@@ -889,6 +889,15 @@
                 {{ t.pieces }} pièces : {{ t.label }}<template v-if="t.capstone"> ⭐</template>
                 <template v-if="t.locked"> 🔒 voie</template>
               </span>
+              <!-- ⭐ SIGNATURE (v0.835) : l'effet de combat unique du set complet dans sa voie. -->
+              <span
+                v-if="s.signature"
+                class="set-tier set-sig"
+                :class="{ on: s.count >= 4 && s.mine, locked: s.count >= 4 && !s.mine }"
+              >
+                ⭐ {{ s.signature.emoji }} <b>{{ s.signature.name }}</b> — {{ s.signature.desc }}
+                <template v-if="s.count >= 4 && !s.mine"> 🔒 voie</template>
+              </span>
             </div>
           </div>
         </template>
@@ -2031,6 +2040,9 @@
               <span v-for="t in s.tiers" :key="t.pieces" class="set-tier on">
                 {{ t.pieces }} pièces : {{ t.label
                 }}<template v-if="t.capstone"> ⭐ capstone (voie {{ s.voieName }})</template>
+              </span>
+              <span v-if="s.signature" class="set-tier set-sig on">
+                ⭐ {{ s.signature.emoji }} <b>{{ s.signature.name }}</b> — {{ s.signature.desc }}
               </span>
             </div>
           </div>
@@ -3842,6 +3854,7 @@ const voieSetsCatalog = computed(() =>
     emoji: s.emoji,
     name: s.name,
     theme: s.theme,
+    signature: s.signature,
     voieName: setVoieName(s.id),
     mine: isMySetId(s.id),
     tiers: s.tiers.map((t) => ({
@@ -4209,6 +4222,7 @@ const activeSets = computed(() => {
       name: s.name,
       emoji: s.emoji,
       theme: s.theme,
+      signature: s.signature,
       count,
       mine,
       // Le bonus de set est scalé par le RANG moyen des pièces (cf. setEffects, #3).
@@ -7642,6 +7656,14 @@ button.pt-mini:active {
   color: var(--accent);
   opacity: 1;
   font-weight: 600;
+}
+/* La signature se lit comme une ligne à part : c'est un effet, pas une stat de plus. */
+.set-tier.set-sig {
+  margin-top: 3px;
+  line-height: 1.3;
+}
+.set-tier.set-sig b {
+  font-weight: 800;
 }
 /* Capstone (4-pièces) atteint en pièces mais bloqué faute de la bonne voie. */
 .set-tier.locked {
