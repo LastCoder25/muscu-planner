@@ -124,6 +124,9 @@ export const ADV_GEAR = {
   sellK: 0.5,
 } as const;
 
+/** Chances de pièce d'aventurier par source. ⚠️ À re-mesurer si l'économie de siège bouge. */
+export const ADV_GEAR_DROP = { corpse: 0.02, champion: 0.5, ambush: 0.25 } as const;
+
 export function lineageOf(adv: Adventurer): Lineage | null {
   const root = adv.path[0];
   return root && (LINEAGES as readonly string[]).includes(root) ? (root as Lineage) : null;

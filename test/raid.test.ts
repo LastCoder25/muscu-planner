@@ -754,9 +754,9 @@ describe('champ de bataille', () => {
     // La ferraille vient des épaves de la carte : en trouver sur un loup n'aurait aucun
     // sens. Le butin d'un siège, lui, dépend de qui attaquait.
     const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
-    const bandits = lootCorpses(corpses, 'bandits', 26, 1);
-    const betes = lootCorpses(corpses, 'betes', 26, 1);
-    const morts = lootCorpses(corpses, 'mortsvivants', 26, 1);
+    const bandits = lootCorpses(corpses, 'bandits', 26, 1, 0, []);
+    const betes = lootCorpses(corpses, 'betes', 26, 1, 0, []);
+    const morts = lootCorpses(corpses, 'mortsvivants', 26, 1, 0, []);
     expect(bandits.gold).toBeGreaterThan(betes.gold);
     // ⚠️ RÉÉCRIT : ce test exigeait des fragments 🧩 et de la poussière d'encre 🖋️ — il
     // verrouillait donc le défaut. Ces deux devises sont MORTES (plus aucune fonction ne
@@ -780,7 +780,7 @@ describe('champ de bataille', () => {
     // doit être élargi — pas contourné.
     const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
     for (const f of ['bandits', 'betes', 'mortsvivants'] as const) {
-      const l = lootCorpses(corpses, f, 26, 1) as unknown as Record<string, number>;
+      const l = lootCorpses(corpses, f, 26, 1, 0, []) as unknown as Record<string, number>;
       expect(l.fragments, f + ' : fragments').toBeUndefined();
       expect(l.inkDust, f + ' : encre').toBeUndefined();
     }
@@ -789,7 +789,7 @@ describe('champ de bataille', () => {
   it('les BÊTES rapportent des clés — rarement, et sur le cumul de la vague', () => {
     // Une clé par corps ferait du Labyrinthe un farm ; on cumule les chances sur la vague.
     const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
-    const betes = lootCorpses(corpses, 'betes', 26, 1);
+    const betes = lootCorpses(corpses, 'betes', 26, 1, 0, []);
     expect(betes.keys).toBeLessThanOrEqual(corpses.length);
     expect(betes.gold, 'même une bête traîne ce qu’elle a pris au village').toBeGreaterThan(0);
   });
@@ -802,7 +802,7 @@ describe('champ de bataille', () => {
     const deep = rollRaid(4242, playerLevel, 0, 0);
     const corpses = corpsesFrom(deep, { defeated: deep.groups.length } as never, 9);
     for (let s = 1; s < 40; s++) {
-      for (const it of lootCorpses(corpses, 'bandits', playerLevel, s).items) {
+      for (const it of lootCorpses(corpses, 'bandits', playerLevel, s, 0, []).items) {
         // Même tolérance que le reste du jeu : la cloche déborde d'au plus 2 rangs.
         expect(RANK_ORDER.indexOf(it.rarity)).toBeLessThanOrEqual(ceil + 2);
       }
@@ -1441,7 +1441,7 @@ describe('masse visible contre menace', () => {
         const raid = rollRaid(s * 7919 + 5, L, 0, 0);
         const rep = { defeated: raid.groups.length } as RaidReport;
         const c = corpsesFrom(raid, rep, s);
-        const loot = lootCorpses(c, raid.faction, L, s);
+        const loot = lootCorpses(c, raid.faction, L, s, 0, []);
         corps += c.length;
         gold += loot.gold;
         stones += loot.summonStones;
@@ -1768,8 +1768,8 @@ describe('ce qu’on trouve sur un corps dépend de QUI attaquait', () => {
     let bandits = 0;
     let betes = 0;
     for (let s = 1; s <= 40; s++) {
-      bandits += lootCorpses(corpses, 'bandits', 26, s * 13 + 1).items.length;
-      betes += lootCorpses(corpses, 'betes', 26, s * 13 + 1).items.length;
+      bandits += lootCorpses(corpses, 'bandits', 26, s * 13 + 1, 0, []).items.length;
+      betes += lootCorpses(corpses, 'betes', 26, s * 13 + 1, 0, []).items.length;
     }
     expect(bandits, `bandits ${bandits} vs bêtes ${betes}`).toBeGreaterThan(betes * 2);
     expect(betes, 'une bête traîne quand même parfois une pièce prise au village').toBeGreaterThan(
@@ -1780,8 +1780,8 @@ describe('ce qu’on trouve sur un corps dépend de QUI attaquait', () => {
   it('l’or reste la marque des bandits, l’équipement ne le remplace pas', () => {
     const raid = rollRaid(31, 26, 0, 0);
     const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
-    expect(lootCorpses(corpses, 'bandits', 26, 5).gold).toBeGreaterThan(
-      lootCorpses(corpses, 'betes', 26, 5).gold,
+    expect(lootCorpses(corpses, 'bandits', 26, 5, 0, []).gold).toBeGreaterThan(
+      lootCorpses(corpses, 'betes', 26, 5, 0, []).gold,
     );
   });
 });
@@ -1901,6 +1901,8 @@ describe('🔩 AUCUNE FERRAILLE SUR LES ASSAILLANTS (v0.856 ; RÉÉCRIT, il verr
       faction,
       L,
       7,
+      0,
+      [],
     );
 
   it('⚠️ aucune faction, à aucun niveau, champion compris, ne laisse de ferraille', () => {

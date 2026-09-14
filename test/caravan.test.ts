@@ -1609,3 +1609,46 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
     expect(avec.midAt).toBeLessThan(sans.midAt);
   });
 });
+
+describe('sources d’équipement : embuscades repoussées', () => {
+  it('une embuscade repoussée peut laisser une pièce de la lignée d’un membre', () => {
+    const escort = [0, 1, 2].map((i) => ({ ...refAdventurer(40, i), familiarId: `refFam${i}` }));
+    let pieces = 0;
+    for (let s = 1; s <= 300; s++) {
+      const o = resolveCaravan(poi({ level: 40, perilous: true }), escort, s, {
+        familiars: refCompanions(40),
+        talents: [],
+        advGear: [],
+      });
+      for (const g of o.advGear) expect(escort.map((a) => a.path[0])).toContain(g.lineage);
+      pieces += o.advGear.length;
+    }
+    expect(pieces).toBeGreaterThan(0);
+  });
+
+  it('⚠️ GÉNÉRATEUR SÉPARÉ pour l’équipement — la graine 8 pin le reste du butin', () => {
+    // Cette graine déclenche le tirage de gear (une embuscade REPOUSSÉE en 2ᵉ jambe, cf.
+    // `advGear` ci-dessous) : si son tirage venait à retomber sur le flux principal `rng`
+    // au lieu de son propre générateur `gearRng`, tout ce qui suit dans la boucle (les
+    // jambes suivantes, donc `gold`/`scrap`/`wages`/`xp`/`hurt`/`events`) serait décalé
+    // et ces valeurs, prises sur le vrai code, ne matcheraient plus.
+    const escort = [0, 1, 2].map((i) => refAdventurer(40, i));
+    const o = resolveCaravan(poi({ level: 40, perilous: true }), escort, 8, {
+      familiars: refCompanions(40),
+      talents: [],
+      advGear: [],
+    });
+    expect(o.gold).toBe(2391);
+    expect(o.energy).toBe(0);
+    expect(o.summonStones).toBe(0);
+    expect(o.scrap).toBe(106);
+    expect(o.keys).toBe(0);
+    expect(o.wages).toBe(951);
+    expect(o.xp).toEqual({ ref0: 98, ref1: 98, ref2: 98 });
+    expect(o.hurt).toEqual(['ref1']);
+    expect(o.events.map((e) => e.kind)).toEqual(['bandits', 'bandits', 'calme', 'calme']);
+    expect(o.events.map((e) => e.won)).toEqual([false, true, undefined, undefined]);
+    // …et une pièce a bien été tirée : le test n’est pas trivialement vrai.
+    expect(o.advGear.length).toBeGreaterThan(0);
+  });
+});

@@ -2,8 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
 import { RARITY_RANK, RANK_ORDER, itemLevelMult } from '@/lib/items';
 import { advRarity, type Adventurer } from '@/lib/adventurers';
-import { adventurerPowers, autoAdvGear, type CompanionCtx } from '@/lib/raid';
 import {
+  adventurerPowers,
+  autoAdvGear,
+  lootCorpses,
+  type CompanionCtx,
+  type Corpse,
+} from '@/lib/raid';
+import {
+  ADV_GEAR_DROP,
   ADV_GEAR_SLOTS,
   LINEAGE_GEAR,
   advGearEffects,
@@ -221,5 +228,51 @@ describe('confier au mieux : l’équipement', () => {
     // 'forte' est déjà prise par 'a' : 'c' hérite de 'faible', jamais deux fois la même
     // pièce.
     expect(plan.get('c')?.weapon).toBe('faible');
+  });
+});
+
+describe('sources d’équipement', () => {
+  const corpse = (i: number, over: Partial<Corpse> = {}): Corpse => ({
+    id: `c${i}`,
+    emoji: '🗡️',
+    name: 'Coupe-jarret',
+    level: 30,
+    x: 0,
+    y: 0,
+    ...over,
+  });
+  it('les corps d’un siège en laissent, seulement des lignées du vivier', () => {
+    const corpses = Array.from({ length: 400 }, (_, i) => corpse(i));
+    const v = [adv('a', ['mage'])];
+    const l = lootCorpses(corpses, 'bandits', 30, 9, 0, v);
+    expect(l.advGear.length).toBeGreaterThan(0);
+    for (const g of l.advGear) expect(g.lineage).toBe('mage');
+    expect(lootCorpses(corpses, 'bandits', 30, 9, 0, []).advGear).toHaveLength(0);
+  });
+  it('taux par corps et par champion', () => {
+    expect(ADV_GEAR_DROP.champion).toBeGreaterThan(ADV_GEAR_DROP.corpse);
+  });
+  it('⚠️ GÉNÉRATEUR SÉPARÉ pour l’équipement — le reste du butin ne dépend pas du vivier', () => {
+    // `pickLineage` ne consomme un tirage QUE si le vivier n’est pas vide : sans vivier,
+    // aucune pièce ne peut jamais sortir (elle rend `null` sans lire `rng`), avec vivier
+    // le tirage de gear consomme des tirages EN PLUS. Si ces tirages venaient à retomber
+    // sur le flux principal (celui de l’or, de la ferraille, des objets) au lieu de son
+    // propre générateur (`gearRng`), le seul fait d’avoir un vivier ou pas déciderait AUSSI
+    // du reste du butin — ce qui n’a aucun sens (un vivier ne change rien à ce qu’un corps
+    // a sur lui) et casserait la même graine que ci-dessus.
+    const corpses = Array.from({ length: 200 }, (_, i) => corpse(i));
+    const sans = lootCorpses(corpses, 'bandits', 30, 9, 0, []);
+    const avec = lootCorpses(corpses, 'bandits', 30, 9, 0, [
+      adv('a', ['mage']),
+      adv('b', ['archer']),
+    ]);
+    expect(avec.gold).toBe(sans.gold);
+    expect(avec.scrap).toBe(sans.scrap);
+    expect(avec.summonStones).toBe(sans.summonStones);
+    expect(avec.keys).toBe(sans.keys);
+    expect(avec.items).toEqual(sans.items);
+    // …et le vivier fait bien sortir une pièce : le test n’est pas trivialement vrai.
+    expect(sans.advGear).toHaveLength(0);
+    expect(avec.advGear.length).toBeGreaterThan(0);
   });
 });

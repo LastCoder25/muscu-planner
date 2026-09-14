@@ -44,9 +44,12 @@ import {
 } from './caravan';
 import { type TalentInstance } from './talents';
 import {
+  ADV_GEAR_DROP,
   ADV_GEAR_SLOTS,
   advGearEffects,
   canWearAdvGear,
+  pickLineage,
+  rollAdvGear,
   wornGear,
   type AdvGear,
   type AdvGearSlot,
@@ -2993,21 +2996,31 @@ export interface CorpseLoot {
   /** 🗝️ clés du Labyrinthe — ce que traînent les BÊTES venues des profondeurs. */
   keys: number;
   items: Omit<Item, 'id'>[];
+  /** 🗡️ Équipement d'aventurier — lignée du vivier, jamais importée (cf. `pickLineage`). */
+  advGear: Omit<AdvGear, 'id'>[];
 }
 
 /** Dépouille des corps. La richesse vient du NIVEAU DU CORPS (il était dangereux), pas
  *  du niveau du chantier — le danger paie, comme partout ailleurs dans le jeu.
  *  ⚠️ La rareté d'un objet reste centrée sur `min(niveau du corps, niveau du joueur)` :
- *  un raid à +15 donne PLUS d'objets, jamais des raretés hors de ta ligue. */
+ *  un raid à +15 donne PLUS d'objets, jamais des raretés hors de ta ligue.
+ *  ⚠️ `advs` (le vivier) est REQUIS : `pickLineage` doit savoir QUELLES lignées existent,
+ *  sinon le stock d'équipement se remplirait de lignées qu'on ne possède même pas. */
 export function lootCorpses(
   corpses: Corpse[],
   faction: RaidFaction,
   playerLevel: number,
   seed: number,
   lootPct = 0,
+  advs: Adventurer[],
 ): CorpseLoot {
   const rng = mulberry32((seed ^ 0x2545f491) >>> 0 || 1);
-  const loot: CorpseLoot = { gold: 0, summonStones: 0, keys: 0, items: [] };
+  // 🗡️ GÉNÉRATEUR SÉPARÉ pour l'équipement d'aventurier : `rng` est déjà seedé et lu par
+  // des tests qui figent une valeur exacte (or/objets) — un tirage de plus sur
+  // CE flux décalerait tous les tirages suivants. Même idiome que le reste du projet
+  // (`(seed ^ constante) >>> 0 || 1`), une constante distincte de celle de `rng`.
+  const gearRng = mulberry32((seed ^ 0x27d4eb2f) >>> 0 || 1);
+  const loot: CorpseLoot = { gold: 0, summonStones: 0, keys: 0, items: [], advGear: [] };
   // ⚠️ ACCUMULATION EN FLOTTANT, arrondie UNE SEULE fois a la fin. Arrondir la part de
   // CHAQUE corps biaise vers le haut des que cette part passe sous l unite — ce qui
   // arrive precisement depuis la dilution de masse (0,6 pierre ou 1,7 ferraille par
@@ -3057,6 +3070,20 @@ export function lootCorpses(
     const chance = faction === 'bandits' ? RAID.gearDropBandits : RAID.gearDropOther;
     // Même dilution sur les OBJETS : ~2,5× plus de tirages, chacun ~2,5× moins probable.
     if (drop && (c.champion || rng() < chance / (c.massMult ?? 1))) loot.items.push(drop);
+    // 🗡️ Un cadavre peut aussi laisser une pièce d'équipement d'aventurier — même dilution
+    // de masse que le reste du champ, mais tirée sur `gearRng` (cf. plus haut). Le
+    // champion, seul et jamais dilué, en laisse beaucoup plus souvent
+    // (`ADV_GEAR_DROP.champion`).
+    const advChance =
+      (c.champion ? ADV_GEAR_DROP.champion : ADV_GEAR_DROP.corpse) / (c.massMult ?? 1);
+    if (gearRng() < advChance) {
+      const lineage = pickLineage(gearRng, advs);
+      if (lineage) {
+        loot.advGear.push(
+          rollAdvGear(gearRng, { lineage, level: L, luck: c.champion ? 0.45 : 0.1, playerLevel }),
+        );
+      }
+    }
   }
   // Bonus de fouille de la garnison (marmotte) : il porte sur les RESSOURCES, jamais
   // sur la rareté des objets — l'anti-runaway ne se contourne pas par le chenil.

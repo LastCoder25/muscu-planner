@@ -1952,6 +1952,7 @@ export const useCharacterStore = defineStore('character', () => {
         playerLevel,
         ((t.field.dispatchUntil ?? now) ^ cur.base.seed) >>> 0 || 1,
         companionPerks(advList.value, companionCtx(cur, now)).lootPct,
+        advList.value,
       );
       const drops = loot.items.map((it) => ({ ...it, id: crypto.randomUUID() }));
       patch.gold = cur.gold + loot.gold;
@@ -1961,6 +1962,10 @@ export const useCharacterStore = defineStore('character', () => {
         patch.inventory = [...cur.inventory, ...drops];
         patch.set_pieces_seen = mergeSetSeen(cur.set_pieces_seen, drops);
       }
+      // 🗡️ Équipement d'aventurier trouvé sur les corps — même `persist` que le reste du
+      // butin de la vague, pas une écriture de plus. Le relevé de pillage n'en parle pas :
+      // il compte des DEVISES, pas du stock.
+      if (loot.advGear.length) patch.adv_gear = withAdvGear(cur, loot.advGear);
       const p = cur.base.pillage;
       base = {
         ...base,
@@ -2254,6 +2259,9 @@ export const useCharacterStore = defineStore('character', () => {
       keys: cur.keys + ent(o.keys),
       adventurers: advs,
       ...(trained.size ? { inventory } : {}),
+      // 🗡️ Une embuscade repoussée peut avoir laissé une pièce. ⚠️ `o.advGear` ABSENT sur
+      // les convois lancés avant cette version : l'optional chaining est voulu.
+      ...(o.advGear?.length ? { adv_gear: withAdvGear(cur, o.advGear) } : {}),
       caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
     });
     if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);

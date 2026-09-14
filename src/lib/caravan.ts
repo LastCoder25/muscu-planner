@@ -62,6 +62,7 @@ import {
   type AdvRole,
 } from './adventurers';
 import {
+  ADV_GEAR_DROP,
   ADV_GEAR_SLOTS,
   advGearEffects,
   advGearRoles,
@@ -69,6 +70,8 @@ import {
   advGearValue,
   LINEAGE_GEAR,
   lineageOf,
+  pickLineage,
+  rollAdvGear,
   wornGear,
   type AdvGear,
   type AdvGearSlot,
@@ -199,6 +202,9 @@ export interface CaravanOutcome {
   hurt: string[];
   events: CaravanEvent[];
   text: string;
+  /** 🗡️ Équipement d'aventurier laissé par une embuscade REPOUSSÉE — lignée de l'escorte,
+   *  jamais importée (cf. `pickLineage`). */
+  advGear: Omit<AdvGear, 'id'>[];
 }
 
 /** Convois ENCAISSÉS qu’on garde en mémoire. Zéro serait tentant — rien ne les lit —
@@ -988,8 +994,16 @@ export function resolveCaravan(
   road: RoadCompanions,
 ): CaravanOutcome {
   const rng = mulberry32(seed >>> 0 || 1);
+  // 🗡️ GÉNÉRATEUR SÉPARÉ pour l'équipement d'aventurier : `rng` est déjà seedé et lu par
+  // des tests qui figent une valeur exacte (bandes d'embuscade, cargaison, temps de
+  // trajet…) — un tirage de plus sur CE flux décalerait tous les tirages suivants. Même
+  // idiome que le reste du projet (`(seed ^ constante) >>> 0 || 1`), même constante que
+  // `lootCorpses` (deux flux distincts, l'un du seed d'un cadavre, l'autre du seed d'un
+  // voyage : aucun risque de collision entre les deux).
+  const gearRng = mulberry32((seed ^ 0x27d4eb2f) >>> 0 || 1);
   const events: CaravanEvent[] = [];
   const hurt: string[] = [];
+  const advGear: Omit<AdvGear, 'id'>[] = [];
   let mult = 1;
   let keysBonus = 0;
 
@@ -1008,8 +1022,25 @@ export function resolveCaravan(
         won: r.win,
         text: r.win ? 'Une embuscade repoussée.' : 'Des bandits emportent une part du convoi.',
       });
-      if (r.win) mult *= 1.12;
-      else {
+      if (r.win) {
+        mult *= 1.12;
+        // 🗡️ Une embuscade REPOUSSÉE peut laisser une pièce d'équipement d'aventurier —
+        // jamais une embuscade subie, on ne fouille pas les bandits qui ont gagné. Tirée
+        // sur `gearRng` (cf. plus haut), jamais `rng`.
+        if (gearRng() < ADV_GEAR_DROP.ambush) {
+          const lineage = pickLineage(gearRng, escort);
+          if (lineage) {
+            advGear.push(
+              rollAdvGear(gearRng, {
+                lineage,
+                level: poi.level,
+                luck: poi.perilous ? 0.3 : 0.1,
+                playerLevel: poi.level,
+              }),
+            );
+          }
+        }
+      } else {
         mult *= CARAVAN.lossKeep;
         const victim = escort[Math.floor(rng() * escort.length)];
         if (victim && !hurt.includes(victim.id)) hurt.push(victim.id);
@@ -1065,6 +1096,7 @@ export function resolveCaravan(
     hurt,
     events,
     text: events.map((e) => e.text).join(' '),
+    advGear,
   };
 }
 
