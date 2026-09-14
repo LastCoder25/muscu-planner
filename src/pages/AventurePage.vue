@@ -1093,14 +1093,6 @@
                     >
                       {{ it.locked ? '🔒' : '🔓' }}
                     </button>
-                    <button
-                      v-if="isVoieSetItem(it)"
-                      class="ii-ic"
-                      :title="'Ranger dans mon set ' + setVoieName(it.setId!)"
-                      @click="doStashSetPiece(it)"
-                    >
-                      📦
-                    </button>
                   </div>
                 </div>
               </div>
@@ -1730,6 +1722,15 @@
       <div class="shop-card">
         <div class="shop-head">
           <div class="shop-title font-display">🧩 Mes sets</div>
+          <button
+            v-if="allSparesGold"
+            class="lo-mini lo-all-spares"
+            :disabled="busy"
+            title="Fondre les doublons de tous les sets — les sets ne bougent pas"
+            @click="doRecycleSpares()"
+          >
+            🗂️ Tous les doublons ({{ allSparesGold }} 🔩)
+          </button>
           <button class="shop-x" aria-label="Fermer" @click="loadoutOpen = false">✕</button>
         </div>
         <div class="sec-hint">
@@ -1826,26 +1827,47 @@
                     : '⬆️ Porter ce set'
               }}
             </button>
-            <!-- Gestion des pièces rangées : vider vers le sac (46488974) ou vendre (53a6d487). -->
-            <!-- Vider / vendre ne touchent QUE la réserve : masqués si tout est porté. -->
-            <div v-if="lo.storedCount || lo.lot.melt.length" class="lo-actions">
+            <!-- 🗂️ DOUBLONS (v0.839) : les pièces de ce set battues à leur emplacement. Elles
+                 restent ici au lieu de partir à la forge ; toucher un doublon le met dans
+                 le set à la place de la pièce en place. -->
+            <div v-if="lo.spares.length" class="lo-spares">
+              <span class="lo-spares-lab"
+                >🗂️ {{ lo.spares.length }} doublon{{ lo.spares.length > 1 ? 's' : '' }}</span
+              >
               <button
-                v-if="lo.storedCount"
+                v-for="sp in lo.spares"
+                :key="sp.id"
+                type="button"
+                class="lo-item spare"
+                :class="'r-' + sp.rarity"
+                :title="
+                  SLOT_LABEL[sp.slot] + ' · ' + sp.name + ' — doublon · toucher pour l’utiliser'
+                "
+                @click="doPromoteSpare(i, sp)"
+              >
+                {{ SLOT_EMOJI[sp.slot] }}<span v-if="sp.locked" class="lo-worn">🔒</span>
+              </button>
+            </div>
+            <div v-if="lo.sparesMelt || lo.lot.melt.length" class="lo-actions">
+              <button
+                v-if="lo.sparesMelt"
                 class="lo-mini"
                 :disabled="busy"
-                title="Remettre ces objets dans le sac"
-                @click="doUnpackLoadout(i)"
+                :title="
+                  'Fondre les doublons de ce set (' + lo.sparesGold + ' 🔩) — le set ne bouge pas'
+                "
+                @click="doRecycleSpares(i)"
               >
-                🎒 Vider
+                🗂️ Doublons ({{ lo.sparesGold }} 🔩)
               </button>
               <button
                 v-if="lo.lot.melt.length"
                 class="lo-mini sell"
                 :disabled="busy"
-                :title="'Fondre ces objets (' + lo.sellGold + ' 🔩)'"
+                :title="'Fondre tout ce set, doublons compris (' + lo.sellGold + ' 🔩)'"
                 @click="doSellLoadout(i)"
               >
-                🔩 Recycler ({{ lo.sellGold }})
+                🔩 Tout le set ({{ lo.sellGold }})
               </button>
             </div>
           </div>
@@ -2787,6 +2809,13 @@ import {
   type TalentInstance,
 } from '@/lib/talents';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
+import {
+  setPieceScorer,
+  voieSetIndex,
+  ownedInLoadouts,
+  sparesLot,
+  type FiledPiece,
+} from '@/lib/setFiling';
 import { unlocksAtLevel } from '@/lib/advUnlocks';
 import { labyrinthUnlocked, bossAltarBuilt, bossAltarRollFloor } from '@/lib/buildings';
 import {
@@ -3004,6 +3033,18 @@ const energyBonusTotal = computed(() => char.row?.login_energy ?? 0);
 const energySpentTotal = computed(() => char.row?.energy_spent ?? 0);
 // Effets cumulés des talents choisis.
 const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
+/** Barème UNIQUE du rangement des pièces de set (cf. `setFiling`) : ce qu'une pièce vaut
+ *  pour SON set, dans la voie du set. Toutes les actions qui rangent le reçoivent. */
+const setScore = computed(() =>
+  setPieceScorer({
+    name: char.row?.pseudo ?? 'Toi',
+    stats: c.value,
+    level: c.value.level.level,
+    fx: talentFx.value,
+    equipped: char.row?.equipped ?? {},
+    loadouts: char.row?.loadouts ?? [],
+  }),
+);
 // Effets « hors équipement » actifs = talents + PASSIF DE VOIE (spécialisation) → comptés
 // partout dans le combat/la puissance (fighter, powerWith, winPct, runExtra).
 const activeFx = computed(() =>
@@ -4041,10 +4082,6 @@ function openReport() {
   if (stageDone.value) {
     flushCelebrations(); // pas d'animation → célébrations tout de suite
     revealDrops();
-    // Pas d'anim (skip/reduced-motion/pas de log) → le watch(stageDone) ne se
-    // déclenche pas (stageDone déjà à true) : on promeut le conflit ici, sinon il
-    // reste bloqué et Réattaquer/Combat suivant restent grisés (ticket 8dba6b98).
-    promotePendingConflict();
   }
 }
 // « Passer l'animation » quand la victoire était quasi acquise (≥ 90 %) — donjon
@@ -4295,14 +4332,15 @@ function rewardFitsVoie(it: Item): boolean {
 // de sa voie → dit ce qui se passera si on la choisit (rangée / remplace / vendue). Même
 // logique que chooseReward (magnitude d'effet). Null si ce n'est pas une pièce de set de voie.
 function rewardLoadoutCmp(it: Item): { text: string; cls: string } | null {
-  if (!it.setId?.startsWith('voie:')) return null;
-  const idx = VOIES.findIndex((v) => v.id === it.setId!.slice('voie:'.length));
+  const idx = voieSetIndex(it);
   if (idx < 0) return null;
   const existing = char.row?.loadouts?.[idx]?.items?.[it.slot];
   if (!existing) return { text: '📦 emplacement libre → rangée', cls: 'good' };
-  return (it.effect?.value ?? 0) > (existing.effect?.value ?? 0)
-    ? { text: '📦 meilleure que ta pièce rangée → remplace', cls: 'good' }
-    : { text: '📦 ≤ ta pièce rangée → sera vendue', cls: 'bad' };
+  // Même barème et même règle que le rangement (`fileSetPieces`) : l'annonce ne peut pas
+  // promettre autre chose que ce qui se passera.
+  return setScore.value(it) > setScore.value(existing)
+    ? { text: '📦 meilleure que ta pièce rangée → la remplace', cls: 'good' }
+    : { text: '📦 ≤ ta pièce rangée → rangée en doublon', cls: 'bad' };
 }
 // Index du candidat conseillé (meilleur score). -1 si pas de récompense en attente.
 const recommendedRewardIndex = computed(() => {
@@ -4752,7 +4790,9 @@ async function fightBoss(b: MilestoneBoss) {
             }),
           ])
         : [];
-    const bossRes = await char.applyBossWin(uid, {
+    // La pièce de set attend au sac que le drop soit RÉVÉLÉ : `autoFileSetPieces` ne range
+    // rien pendant un combat (`busy`) ni pendant son animation (cf. plus bas).
+    await char.applyBossWin(uid, {
       bossId: b.id,
       summonCost,
       gold,
@@ -4763,12 +4803,6 @@ async function fightBoss(b: MilestoneBoss) {
       famAtkXp: (4 + b.unlockLevel) * (win ? 2 : 1),
       playerLevel: c.value.level.level,
     });
-    // Pièce de set → rangée dans le loadout de sa voie. On attend la RÉVÉLATION du drop
-    // pour le faire : l'éclat de remplacement ne doit pas partir pendant qu'on regarde
-    // encore le combat. Le rangement se tranche tout seul (la meilleure reste), donc plus
-    // rien ne bloque « Réattaquer » — c'était le défaut du comparatif en attente.
-    const conflict = bossRes?.conflicts?.[0];
-    if (conflict) pendingBossStash.value = conflict;
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!, true));
     run.value = {
       name: b.name,
@@ -5289,12 +5323,7 @@ function loadoutPower(voieId: string | null): number {
   // ⚠️ TOUTES les réserves, comme l'action : depuis que l'optimiseur peut croiser deux
   // demi-sets venus de deux réserves différentes, un aperçu limité à une seule réserve
   // recommencerait à annoncer autre chose que ce que le bouton fait.
-  const pool = [
-    ...row.inventory,
-    ...(row.loadouts ?? []).flatMap(
-      (lo) => SLOTS.map((s) => lo.items?.[s]).filter(Boolean) as Item[],
-    ),
-  ];
+  const pool = [...row.inventory, ...ownedInLoadouts(row.loadouts ?? [])];
   // ⚠️ Les pièces du SET sont IMPOSÉES, comme le fait le bouton. Sans ce pin, l'aperçu
   // annonçait le meilleur build sur cette VOIE — un chiffre juste, mais qui ne décrivait
   // pas « porter ce set » : on pouvait lire « +558 » et se retrouver équipé de trois
@@ -5334,14 +5363,17 @@ const loadoutsView = computed(() => {
     // qu'on possède vraiment de mieux — l'ancienne version ignorait les pièces portées
     // et sous-estimait donc systématiquement le set en cours.
     const power = entries.length ? loadoutPower(loadoutVoie(i)?.id ?? null) : 0;
-    // Vider ne concerne QUE la réserve ; recycler fond réserve + sac (`setRecycleLot`,
-    // le lot même que le store fond). On ne fond jamais ce qu’on porte.
-    const storedItems = SLOTS.map((s) => los[i]?.items?.[s]).filter((it): it is Item => !!it);
-    const lot = setRecycleLot(vid, los[i]?.items, inv);
+    // Recycler fond réserve + doublons + sac (`setRecycleLot`, le lot même que le store
+    // fond). On ne fond jamais ce qu’on porte.
+    const lot = setRecycleLot(vid, los[i], inv);
+    const spares = los[i]?.spares ?? [];
+    const spareLot = sparesLot(los, i);
     return {
       entries,
       count: entries.length,
-      storedCount: storedItems.length,
+      spares,
+      sparesGold: spareLot.melt.reduce((s, it) => s + scrapValue(it), 0),
+      sparesMelt: spareLot.melt.length,
       wornCount: entries.filter((e) => e.worn).length,
       // Emplacements où l'on porte une pièce de ce set MOINS bonne que celle de la réserve.
       upgradable: entries.filter((e) => !e.worn && e.wornItem).length,
@@ -5357,6 +5389,10 @@ const loadoutsView = computed(() => {
 // ⚠️ DÉRIVÉ du roster affiché, jamais recompté à part : c'est la divergence entre ce
 // compteur (qui comptait partout) et la liste (qui ne montrait que la réserve) qui rendait
 // « Mes sets » illisible — 4/4 annoncé au-dessus de deux objets.
+/** Ferraille des doublons de TOUS les sets (bouton de l’en-tête de « Mes sets »). */
+const allSparesGold = computed(() =>
+  sparesLot(char.row?.loadouts ?? []).melt.reduce((s, it) => s + scrapValue(it), 0),
+);
 const voieOwnedCount = (i: number): number => loadoutsView.value[i]?.count ?? 0;
 
 /** Badge de l'icône 📦 : combien de sets EN STOCK augmentent la puissance si on les porte.
@@ -5428,13 +5464,6 @@ function doWearVoieSet(i: number) {
     });
   }, 'Impossible de porter ce set.');
 }
-// Vider un loadout rangé → ses objets retournent dans le sac (ticket 46488974).
-function doUnpackLoadout(i: number) {
-  withUid(async (uid) => {
-    const n = await char.unpackLoadout(uid, i);
-    if (n) $q.notify({ type: 'positive', message: `🎒 ${n} objet(s) remis dans le sac.` });
-  }, 'Impossible de vider le loadout.');
-}
 // Vendre un loadout rangé → or (ticket 53a6d487).
 function doSellLoadout(i: number) {
   const view = loadoutsView.value[i];
@@ -5458,7 +5487,7 @@ function doSellLoadout(i: number) {
 }
 function doSellLoadoutConfirmed(i: number) {
   withUid(async (uid) => {
-    const g = await char.recycleLoadout(uid, i);
+    const g = await char.recycleLoadout(uid, i, setScore.value);
     if (g) $q.notify({ type: 'positive', message: `🔩 Set fondu (+${g} ferraille).` });
   }, 'Impossible de recycler ce set.');
 }
@@ -5752,7 +5781,7 @@ function applyPlan() {
   const st = planStateWithout();
   gearPlan.value = null;
   withUid(async (uid) => {
-    await char.applyGearPlan(uid, st);
+    await char.applyGearPlan(uid, st, setScore.value);
     $q.notify({ type: 'positive', message: '🪄 Build mis à jour.' });
   }, 'Application impossible.');
 }
@@ -5814,78 +5843,108 @@ function doRecycle(it: Item) {
 function doToggleLock(it: Item) {
   withUid((uid) => char.toggleLock(uid, it.id), 'Action impossible.');
 }
-// Pièce de set (de voie) → bouton 📦 pour la ranger dans le loadout de SA voie (loadout i↔voie i).
-const isVoieSetItem = (it: Item) => !!it.setId && it.setId.startsWith('voie:');
-// Conflit de rangement : le slot visé du loadout est déjà occupé → on compare et on choisit.
-// La pièce de set gagnée sur un boss, en attente d'être rangée. ⚠️ On ne la range pas
-// tout de suite : on attend la RÉVÉLATION du drop (fin d'animation), pour que l'éclat de
-// remplacement ne parte pas pendant qu'on regarde encore le combat.
-const pendingBossStash = ref<Item | null>(null);
-function promotePendingConflict() {
-  const it = pendingBossStash.value;
-  if (!it) return;
-  pendingBossStash.value = null;
-  doStashSetPiece(it, true); // se tranche tout seul : la meilleure reste, l'autre fond
-}
-watch(stageDone, (done) => {
-  if (done) promotePendingConflict();
-});
-// Filet : rapport fermé sans que le drop ait été révélé (animation coupée) → on range
-// quand même, sinon la pièce resterait indéfiniment au sac.
-watch(reportOpen, (open) => {
-  if (!open) promotePendingConflict();
-});
-function loadoutTargetFor(it: Item): { idx: number; stored: Item | undefined } {
-  const idx = VOIES.findIndex((v) => v.id === (it.setId ?? '').slice('voie:'.length));
-  const stored = idx >= 0 ? char.row?.loadouts?.[idx]?.items?.[it.slot] : undefined;
-  return { idx, stored };
-}
-// ⚠️ PLUS DE MODALE DE CHOIX : la comparaison se TRANCHE toute seule. Deux pièces du
-// même set sur le même emplacement, l'une est objectivement plus puissante que l'autre —
-// il n'y avait rien à arbitrer, seulement un dialogue à fermer. La meilleure est rangée,
-// l'autre part à la forge (au sac si elle est 🔒 : le verrou protège de tout). Une
-// notification dit ce qui a changé ET ce que ça rapporte, sinon le geste serait invisible.
-function doStashSetPiece(it: Item, quiet = false) {
-  const { idx, stored } = loadoutTargetFor(it);
-  if (idx < 0) return;
-  const setName = VOIES[idx]?.name ?? '';
-  if (!stored) {
-    withUid(async (uid) => {
-      await char.stashSetPiece(uid, it.id);
-      gameFx.celebrate({
-        quiet: true,
-        kind: 'drop',
-        emoji: '🧩',
-        title: `Ajoutée à ton set ${setName}`,
-        subtitle: "l'emplacement était libre",
-      });
-    }, 'Impossible de ranger cette pièce.');
-    return;
+// 🧩 RANGEMENT AUTOMATIQUE DES PIÈCES DE SET (v0.839 ; conception validée avec l'utilisateur).
+// Toute pièce de set de voie qui arrive au sac — boss, Labyrinthe, expédition, récompense —
+// est rangée dans son set : la meilleure à l'emplacement, l'autre en DOUBLON, visible dans
+// « Mes sets » et recyclable d'un geste. Rien ne part plus à la forge sans que le joueur
+// l'ait décidé ; le sac ne garde que les objets hors set.
+// ⚠️ Jamais pendant un combat (`busy`) ni pendant son animation : l'annonce « set renforcé »
+// ne doit pas recouvrir le combat qu'on regarde. Le drop révélé, le rangement suit.
+let filing = false;
+async function autoFileSetPieces() {
+  const uid = auth.user?.id;
+  const row = char.row;
+  // ⚠️ `progress.ready` : sans l’XP de fond chargée, le barème jugerait les pièces avec
+  // un héros de niveau 1 — et garderait peut-être la moins bonne à l’emplacement.
+  if (!uid || !row || filing || busy.value || !progress.ready.value) return;
+  if (reportOpen.value && !stageDone.value) return;
+  if (!row.inventory.some((it) => voieSetIndex(it) >= 0)) return;
+  filing = true;
+  try {
+    announceFiled(await char.fileBagSetPieces(uid, setScore.value));
+  } catch {
+    // Rien de perdu : les pièces restent au sac, le prochain passage réessaie.
+  } finally {
+    filing = false;
   }
-  const gain = powerIfEquip(it) - powerIfEquip(stored);
-  if (gain <= 0) {
-    // La nouvelle ne vaut pas la rangée : elle part à la forge, EN SILENCE.
-    // ⚠️ Pas de notification ici (v0.696) : annoncer « ta pièce était moins bonne »
-    // à chaque boss transformait une bonne nouvelle — un boss vaincu — en reproche,
-    // et c'est le cas le plus FRÉQUENT une fois le set bien avancé. On ne notifie que
-    // ce qui a changé en mieux ; la ferraille gagnée se lit dans le rapport de run.
-    withUid((uid) => char.recycle(uid, it.id), 'Recyclage impossible.');
-    return;
-  }
-  withUid(async (uid) => {
-    await char.stashSetPiece(uid, it.id, stored.locked ? 'keep' : 'recycle');
-    // Une seule annonce (plus de toast en bas en double) : ce qui a changé ET ce que ça
-    // rapporte, dans le même bandeau.
-    const old = stored.locked ? 'ancienne 🔒 au sac' : `ancienne fondue +${scrapValue(stored)} 🔩`;
+}
+watch(
+  () => [char.row?.inventory, busy.value, reportOpen.value, stageDone.value, progress.ready.value],
+  () => void autoFileSetPieces(),
+  { immediate: true },
+);
+/** Une seule annonce, discrète. ⚠️ Un doublon ne s'annonce PAS seul (v0.696) : annoncer
+ *  « ta pièce était moins bonne » à chaque boss transformait une bonne nouvelle en
+ *  reproche. Il se lit dans « Mes sets ». Plusieurs pièces d'un coup (retour du Labyrinthe,
+ *  premier passage après la mise à jour) → un seul bandeau récapitulatif. */
+function announceFiled(filed: FiledPiece[]) {
+  if (!filed.length) return;
+  const setName = (f: FiledPiece) => VOIES[f.setIndex]?.name ?? '';
+  if (filed.length > 1) {
+    const spares = filed.filter((f) => f.outcome === 'spare').length;
     gameFx.celebrate({
-      quiet,
+      quiet: true,
       kind: 'drop',
-      emoji: it.emoji,
-      title: `Set ${setName} renforcé`,
-      subtitle: `${it.name} · ⚔️ ${fmtDelta(0, gain)} · ${old}`,
-      rarity: fxRarity(it.rarity),
+      emoji: '🧩',
+      title: `${filed.length} pièces rangées dans Mes sets`,
+      subtitle: spares ? `dont ${spares} en doublon` : 'la meilleure à chaque emplacement',
     });
-  }, 'Impossible de ranger cette pièce.');
+    return;
+  }
+  const f = filed[0]!;
+  if (f.outcome === 'added')
+    gameFx.celebrate({
+      quiet: true,
+      kind: 'drop',
+      emoji: '🧩',
+      title: `Ajoutée à ton set ${setName(f)}`,
+      subtitle: "l'emplacement était libre",
+    });
+  else if (f.outcome === 'upgraded' && f.displaced) {
+    const gain = Math.round(setScore.value(f.item) - setScore.value(f.displaced));
+    gameFx.celebrate({
+      quiet: true,
+      kind: 'drop',
+      emoji: f.item.emoji,
+      title: `Set ${setName(f)} renforcé`,
+      subtitle: `${f.item.name} · ⚔️ ${fmtDelta(0, gain)} · l'ancienne passe en doublon`,
+      rarity: fxRarity(f.item.rarity),
+    });
+  }
+}
+// Doublon → dans le set, à la place de la pièce en place (qui devient doublon à son tour).
+function doPromoteSpare(setIndex: number, spare: Item) {
+  const held = char.row?.loadouts?.[setIndex]?.items?.[spare.slot];
+  $q.dialog({
+    title: 'Utiliser ce doublon ?',
+    message: held
+      ? `« ${spare.name} » prendra la place de « ${held.name} », qui passera en doublon.`
+      : `« ${spare.name} » occupera l'emplacement ${SLOT_LABEL[spare.slot]}.`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: '⇄ Échanger', color: 'primary', textColor: 'dark' },
+  }).onOk(() =>
+    withUid((uid) => char.promoteSetSpare(uid, setIndex, spare.id), 'Échange impossible.'),
+  );
+}
+// Recycler les doublons d'un set (ou de tous). Les 🔒 restent — l'écran le dit.
+function doRecycleSpares(setIndex?: number) {
+  const { melt, keep } = sparesLot(char.row?.loadouts ?? [], setIndex);
+  if (!melt.length) return;
+  const gain = melt.reduce((s, it) => s + scrapValue(it), 0);
+  $q.dialog({
+    title: setIndex === undefined ? 'Recycler tous les doublons ?' : 'Recycler ces doublons ?',
+    message:
+      `${melt.length} doublon(s) partiront à la forge pour ${gain} 🔩. Les pièces rangées dans ` +
+      `les sets ne bougent pas.` +
+      (keep.length ? ` ${keep.length} doublon(s) verrouillé(s) 🔒 restent.` : ''),
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
+  }).onOk(() =>
+    withUid(async (uid) => {
+      const g = await char.recycleSpares(uid, setIndex);
+      if (g) $q.notify({ type: 'positive', message: `🔩 Doublons fondus (+${g} ferraille).` });
+    }, 'Recyclage impossible.'),
+  );
 }
 // Nettoyage en masse : objets du sac moins rares que l'équipé du même slot.
 // Slot ciblé par le nettoyage en masse = le filtre du sac actif (sinon tous).
@@ -8057,6 +8116,28 @@ button.pt-mini:active {
 }
 .lo-mini:not(:disabled):active {
   transform: scale(0.98);
+}
+/* Doublons d’un set (v0.839) : en pointillés, ils ne comptent pas au set. */
+.lo-spares {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.lo-spares-lab {
+  font-size: 10.5px;
+  color: var(--dim);
+  margin-right: 2px;
+}
+.lo-item.spare {
+  border-style: dashed;
+  opacity: 0.85;
+}
+.lo-all-spares {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 6px 10px;
 }
 
 /* Sac / inventaire */

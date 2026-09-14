@@ -34,10 +34,19 @@ import {
   type Equipped,
   type Loadout,
   type PendingReward,
-  itemScore,
   voieSetRoster,
   setRecycleLot,
 } from '@/lib/items';
+import {
+  fileSetPieces,
+  ownedInLoadouts,
+  normalizeLoadouts,
+  promoteSpare,
+  sparesLot,
+  setPieceScorer,
+  voieSetIndex,
+  type FiledPiece,
+} from '@/lib/setFiling';
 import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStreak';
 import {
   normalizeTalents,
@@ -513,34 +522,14 @@ export const useCharacterStore = defineStore('character', () => {
     // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~6 % ensuite sur les
     // réaffrontements (raréfié 2026‑08‑18) → pas de flux de clés en spammant un boss.
     const keyGain = firstDefeat ? 1 : input.defeated && Math.random() < 0.06 ? 1 : 0;
-    // Butin de boss. Les pièces de SET DE VOIE sont filées DIRECTEMENT dans le loadout de
-    // leur voie (1 set/loadout) : emplacement LIBRE → rangée ; OCCUPÉ → laissée au SAC et
-    // signalée en CONFLIT → l'UI demande au joueur laquelle garder (l'autre est vendue).
-    // Les autres drops (lots hors-set, rares) suivent le flux donjon (équipe si mieux / sac).
+    // Butin de boss. Les pièces de SET DE VOIE vont au SAC : c'est l'écran qui les RANGE dans
+    // leur set (`fileSetPieces`), une fois le drop révélé — lui seul a de quoi les juger au
+    // barème du set, et une seule règle de rangement vaut pour toutes les sources (v0.839).
+    // Les autres drops suivent le flux donjon (emplacement vide → porté / sac).
     const drops = input.drops ?? [];
-    const loadouts: Loadout[] = Array.from(
-      { length: MAX_LOADOUTS },
-      (_, k) => cur.loadouts[k] ?? { items: {} },
-    );
-    const conflicts: Item[] = [];
-    let inv = cur.inventory;
-    const otherDrops: Item[] = [];
-    for (const d of drops) {
-      const vi = d.setId?.startsWith('voie:')
-        ? VOIES.findIndex((v) => v.id === d.setId!.slice('voie:'.length))
-        : -1;
-      if (vi >= 0 && vi < MAX_LOADOUTS) {
-        const items = { ...loadouts[vi]!.items };
-        if (!items[d.slot]) {
-          items[d.slot] = d; // emplacement libre → rangée dans le loadout de la voie
-          loadouts[vi] = { items };
-        } else {
-          inv = [...inv, d]; // occupé → au sac, en attente du choix du joueur (conflit UI)
-          conflicts.push(d);
-        }
-      } else otherDrops.push(d);
-    }
-    const dist = distributeItems(cur.equipped, inv, otherDrops);
+    const setDrops = drops.filter((d) => voieSetIndex(d) >= 0);
+    const otherDrops = drops.filter((d) => voieSetIndex(d) < 0);
+    const dist = distributeItems(cur.equipped, [...cur.inventory, ...setDrops], otherDrops);
     await persist(userId, {
       gold: cur.gold + input.gold,
       stones: cur.stones + (input.defeated ? (input.stones ?? 0) : 0),
@@ -550,12 +539,10 @@ export const useCharacterStore = defineStore('character', () => {
       defeated_bosses: defeated,
       equipped: dist.equipped,
       inventory: dist.inventory,
-      loadouts,
       set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, drops),
       keys: cur.keys + keyGain,
       ...(input.talentDrops?.length ? { talents: [...cur.talents, ...input.talentDrops] } : {}),
     });
-    return { conflicts };
   }
 
   // Choisit une récompense parmi les candidats en attente → l'applique et purge.
@@ -564,46 +551,13 @@ export const useCharacterStore = defineStore('character', () => {
     const cand = cur?.pending_reward?.candidates[index];
     if (!cur || !cand) return;
     if (cand.kind === 'item') {
-      const item = cand.item;
-      // Pièce de SET DE VOIE → filée AUTOMATIQUEMENT dans le loadout de sa voie (≤ 1 set/loadout) :
-      // emplacement libre → rangée ; loadout meilleur (ou égal) → drop vendu ; drop meilleur →
-      // remplace, ancien vendu (ou au sac si 🔒). Comparaison par magnitude d'effet (même
-      // set + même slot → même type d'effet → value monotone avec la puissance).
-      if (item.setId?.startsWith('voie:')) {
-        const idx = VOIES.findIndex((v) => v.id === item.setId!.slice('voie:'.length));
-        if (idx >= 0 && idx < MAX_LOADOUTS) {
-          const loadouts: Loadout[] = Array.from(
-            { length: MAX_LOADOUTS },
-            (_, k) => cur.loadouts[k] ?? { items: {} },
-          );
-          const items = { ...loadouts[idx]!.items };
-          const existing = items[item.slot];
-          // Plus de marchand : la pièce écartée part à la FORGE (au sac si elle est 🔒).
-          let scrap = cur.scrap;
-          let inventory = cur.inventory;
-          const jeter = (it: Item) => {
-            if (canRecycle(it)) scrap += scrapValue(it);
-            else inventory = [...inventory, it]; // 🔒 → au sac, le verrou protège de tout
-          };
-          if (!existing) {
-            items[item.slot] = item; // emplacement libre → rangé
-          } else if ((existing.effect?.value ?? 0) >= (item.effect?.value ?? 0)) {
-            jeter(item); // la rangée est meilleure (ou égale) → le drop fond
-          } else {
-            items[item.slot] = item; // drop meilleur → remplace
-            jeter(existing);
-          }
-          loadouts[idx] = { items };
-          return persist(userId, {
-            loadouts,
-            scrap,
-            inventory,
-            set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, [item]),
-            pending_reward: null,
-          });
-        }
-      }
-      const dist = distributeItems(cur.equipped, cur.inventory, [cand.item]);
+      // Pièce de SET DE VOIE → au SAC ; l'écran la range dans son set (`fileSetPieces`).
+      // ⚠️ Elle partait à la forge si la pièce rangée « valait plus » — sur la valeur brute
+      // du 1er affixe, un troisième barème qui contredisait les deux autres (v0.839).
+      const dist =
+        voieSetIndex(cand.item) >= 0
+          ? { equipped: cur.equipped, inventory: [...cur.inventory, cand.item] }
+          : distributeItems(cur.equipped, cur.inventory, [cand.item]);
       return persist(userId, {
         equipped: dist.equipped,
         inventory: dist.inventory,
@@ -938,78 +892,85 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { equipped, inventory: [...cur.inventory, item] });
   }
 
-  // Vide un loadout rangé : ses objets retournent au sac, le slot de loadout est vidé.
-  // Renvoie le nombre d'objets remis (ticket 46488974).
-  async function unpackLoadout(userId: string, i: number): Promise<number> {
-    const cur = row.value;
-    if (!cur || i < 0 || i >= MAX_LOADOUTS) return 0;
-    const lo = cur.loadouts[i];
-    const items = lo ? SLOTS.map((s) => lo.items[s]).filter((it): it is Item => !!it) : [];
-    if (!items.length) return 0;
-    const loadouts = cur.loadouts.map((l, k) => (k === i ? { items: {} } : l));
-    await persist(userId, { inventory: [...cur.inventory, ...items], loadouts });
-    return items.length;
-  }
-  // Fond un SET de voie : sa réserve ET ses pièces au sac → ferraille. Renvoie le gain.
-  // ⚠️ Le lot vient de `setRecycleLot` (lib), le même que l’écran annonce : la carte
-  // montrait des pièces au sac que le bouton ne touchait pas (v0.806).
-  async function recycleLoadout(userId: string, i: number): Promise<number> {
+  // Fond un SET de voie : sa réserve, ses doublons ET ses pièces au sac → ferraille.
+  // Renvoie le gain. ⚠️ Le lot vient de `setRecycleLot` (lib), le même que l’écran annonce :
+  // la carte montrait des pièces au sac que le bouton ne touchait pas (v0.806).
+  // ⚠️ Les pièces 🔒 restent RANGÉES dans le set : le verrou protège de toutes les sorties.
+  async function recycleLoadout(
+    userId: string,
+    i: number,
+    score: (it: Item) => number,
+  ): Promise<number> {
     const cur = row.value;
     const voie = VOIES[i];
     if (!cur || !voie || i < 0 || i >= MAX_LOADOUTS) return 0;
     const lo = cur.loadouts[i];
-    const { melt, keep } = setRecycleLot(`voie:${voie.id}`, lo?.items, cur.inventory);
-    const stored = new Set(SLOTS.map((s) => lo?.items?.[s]?.id).filter(Boolean));
-    if (!melt.length && !keep.some((it) => stored.has(it.id))) return 0;
+    const { melt, keep } = setRecycleLot(`voie:${voie.id}`, lo, cur.inventory);
+    if (!melt.length) return 0;
     const fondues = new Set(melt.map((it) => it.id));
     const gain = melt.reduce((s, it) => s + scrapValue(it), 0);
-    // ⚠️ Les pièces 🔒 de la RÉSERVE repartent au sac ; celles déjà au sac y restent.
-    const gardeesReserve = keep.filter((it) => stored.has(it.id));
-    const loadouts = cur.loadouts.map((l, k) => (k === i ? { items: {} } : l));
+    const emptied = normalizeLoadouts(cur.loadouts).map((l, k) =>
+      k === i ? { items: {}, spares: [] } : l,
+    );
+    const inBag = new Set(cur.inventory.map((it) => it.id));
+    const { loadouts } = fileSetPieces(
+      emptied,
+      keep.filter((it) => !inBag.has(it.id)),
+      score,
+    );
     await persist(userId, {
       scrap: cur.scrap + gain,
-      inventory: [...cur.inventory.filter((it) => !fondues.has(it.id)), ...gardeesReserve],
+      inventory: cur.inventory.filter((it) => !fondues.has(it.id)),
       loadouts,
     });
     return gain;
   }
 
-  // Range une PIÈCE DE SET du sac dans le loadout de SA voie (loadout i ↔ VOIES[i]) : l'objet
-  // quitte le sac pour le slot correspondant du bon loadout (≤ 1 pièce/emplacement → au plus
-  // 1 set complet). Si une pièce occupait déjà ce slot du loadout, elle est VENDUE quand
-  // `sellDisplaced` (et non verrouillée) ; sinon elle repart au sac. Renvoie l'index du
-  // loadout, ou -1 si KO.
-  async function stashSetPiece(
+  /** Range dans leur set TOUTES les pièces de set de voie du sac (v0.839) — la meilleure à
+   *  l'emplacement, l'autre en doublon, rien à la forge. `skipIds` : pièces à laisser au sac
+   *  pour l'instant (le drop d'un boss pas encore révélé). Une seule écriture. */
+  async function fileBagSetPieces(
     userId: string,
-    itemId: string,
-    /** Que faire de la pièce DÉPLACÉE : la garder au sac ou la fondre.
-     *  ⚠️ Une pièce 🔒 revient TOUJOURS au sac, quelle que soit la consigne. */
-    displaced: 'keep' | 'recycle' = 'keep',
-  ): Promise<number> {
+    score: (it: Item) => number,
+    skipIds: ReadonlySet<string> = new Set(),
+  ): Promise<FiledPiece[]> {
     const cur = row.value;
-    if (!cur) return -1;
-    const item = cur.inventory.find((it) => it.id === itemId);
-    if (!item?.setId?.startsWith('voie:')) return -1;
-    const idx = VOIES.findIndex((v) => v.id === item.setId!.slice('voie:'.length));
-    if (idx < 0 || idx >= MAX_LOADOUTS) return -1;
-    const loadouts: Loadout[] = Array.from(
-      { length: MAX_LOADOUTS },
-      (_, k) => cur.loadouts[k] ?? { items: {} },
-    );
-    const items = { ...loadouts[idx]!.items };
-    const displacedItem = items[item.slot]; // pièce déjà rangée sur ce slot
-    items[item.slot] = item;
-    loadouts[idx] = { items };
-    let inventory = cur.inventory.filter((it) => it.id !== itemId);
-    const gold = cur.gold;
-    let scrap = cur.scrap;
-    const old = displacedItem;
-    if (old) {
-      if (displaced === 'recycle' && canRecycle(old)) scrap += scrapValue(old);
-      else inventory = [...inventory, old]; // verrouillée ou « garder » → retour au sac
-    }
-    await persist(userId, { inventory, loadouts, gold, scrap });
-    return idx;
+    if (!cur) return [];
+    const pieces = cur.inventory.filter((it) => voieSetIndex(it) >= 0 && !skipIds.has(it.id));
+    if (!pieces.length) return [];
+    const { loadouts, filed } = fileSetPieces(cur.loadouts, pieces, score);
+    const moved = new Set(filed.map((f) => f.item.id));
+    await persist(userId, {
+      inventory: cur.inventory.filter((it) => !moved.has(it.id)),
+      loadouts,
+    });
+    return filed;
+  }
+
+  /** Met un doublon dans son set à la place de la pièce en place (qui devient doublon). */
+  async function promoteSetSpare(userId: string, setIndex: number, spareId: string) {
+    const cur = row.value;
+    if (!cur) return false;
+    const loadouts = promoteSpare(cur.loadouts, setIndex, spareId);
+    if (!loadouts) return false;
+    await persist(userId, { loadouts });
+    return true;
+  }
+
+  /** Fond les doublons d'un set (ou de tous). Les 🔒 restent. Renvoie la ferraille gagnée. */
+  async function recycleSpares(userId: string, setIndex?: number): Promise<number> {
+    const cur = row.value;
+    if (!cur) return 0;
+    const { melt } = sparesLot(cur.loadouts, setIndex);
+    if (!melt.length) return 0;
+    const fondus = new Set(melt.map((it) => it.id));
+    const loadouts = normalizeLoadouts(cur.loadouts).map((l) => ({
+      ...l,
+      spares: (l.spares ?? []).filter((it) => !fondus.has(it.id)),
+    }));
+    const gain = melt.reduce((s, it) => s + scrapValue(it), 0);
+    await persist(userId, { scrap: cur.scrap + gain, loadouts });
+    return gain;
   }
 
   // Choisit/retire la VOIE (spécialisation) — petit passif + capstone du set de la voie. Réversible.
@@ -1066,8 +1027,6 @@ export const useCharacterStore = defineStore('character', () => {
     // Plan complet pour une voie candidate (vIdx = index VOIES, -1 = aucune voie).
     type Plan = {
       equipped: Equipped;
-      sac: Item[];
-      loadouts: Loadout[];
       score: number;
       voie: string | null;
       talents: TalentInstance[]; // talents équipés retenus pour ce plan
@@ -1079,12 +1038,11 @@ export const useCharacterStore = defineStore('character', () => {
       // invisible, et surtout aucun DEMI-SET croisé (2 pièces d'un set + 2 d'un autre) ne
       // pouvait être formé — les deux moitiés vivant dans deux réserves différentes.
       // Mesuré sur un compte réel : +135 de puissance pour ~350 ms de calcul.
-      // ⚠️ Ce n'est PAS destructeur pour les collections : les pièces non retenues sont
-      // re-rangées plus bas dans la réserve de LEUR voie. On redistribue, on ne dissout pas.
-      const pool = [
-        ...cur!.inventory,
-        ...loadouts0.flatMap((lo) => Object.values(lo.items).filter(Boolean)),
-      ];
+      // ⚠️ Ce n'est PAS destructeur pour les collections : `applyGearPlan` re-range les
+      // pièces non retenues dans le set de LEUR voie. On redistribue, on ne dissout pas.
+      // ⚠️ Doublons compris (v0.839) : une pièce battue AU BARÈME DU SET peut encore gagner
+      // dans un autre build — le rangement ne doit jamais la rendre invisible.
+      const pool = [...cur!.inventory, ...ownedInLoadouts(loadouts0)];
       const fxOf = (ids: string[]) =>
         mergeEffects(talentEffects(withEquipped(ids)), voiePassiveEffects(voie));
       // Ascension par coordonnées talents ↔ gear : les meilleurs talents dépendent du gear
@@ -1139,39 +1097,14 @@ export const useCharacterStore = defineStore('character', () => {
         );
       }
       const extra = fxOf(talIds);
-      // FAMILIAR_SLOT inclus : le familier est désormais optimisé lui aussi, donc celui
-      // retenu ne doit pas être considéré comme un « non-retenu » à ranger.
-      const allSlots = [...SLOTS, FAMILIAR_SLOT];
-      const chosen = new Set(allSlots.map((s) => best[s]?.id).filter((x): x is string => !!x));
-      const equippedGear = allSlots.map((s) => cur!.equipped[s]).filter((x): x is Item => !!x);
-      // ⚠️ TOUTES les réserves repartent VIDES : leurs pièces sont désormais dans le pool,
-      // donc elles seront re-rangées ci-dessous. Ne vider que celle de la voie choisie
-      // laisserait une pièce à la fois PORTÉE et en réserve — une duplication.
-      const loadouts: Loadout[] = loadouts0.map(() => ({ items: {} }));
-      const leftovers = [...equippedGear, ...pool].filter((it) => !chosen.has(it.id));
-      const sac: Item[] = [];
-      for (const it of leftovers) {
-        const li = it.setId?.startsWith('voie:')
-          ? VOIES.findIndex((v) => v.id === it.setId!.slice('voie:'.length))
-          : -1;
-        if (li >= 0 && li < MAX_LOADOUTS) {
-          const items = loadouts[li]!.items;
-          const held = items[it.slot];
-          if (!held) items[it.slot] = it;
-          // ⚠️ `itemScore` et non `effect.value` : comparer la valeur brute du 1er affixe
-          // revenait à opposer des grandeurs de natures différentes (12 % de crit contre
-          // 30 % de PV) — le tri pouvait reléguer au sac la meilleure pièce.
-          else if (itemScore(held) >= itemScore(it)) sac.push(it);
-          else {
-            sac.push(held);
-            items[it.slot] = it;
-          }
-        } else sac.push(it);
-      }
+      // FAMILIAR_SLOT inclus : le familier est désormais optimisé lui aussi.
+      // ⚠️ Le RANGEMENT des non-retenus n'est pas calculé ici : il l'était pour chaque voie
+      // essayée puis jeté (seuls équipement, talents et voie sortent du plan). C'est
+      // `applyGearPlan` qui range, avec la règle unique de `setFiling`.
       const equipped: Equipped = { ...cur!.equipped };
-      for (const s of allSlots) equipped[s] = best[s];
+      for (const s of [...SLOTS, FAMILIAR_SLOT]) equipped[s] = best[s];
       const score = combatPower(playerWithGear(name, stats, equipped, extra, level, voie));
-      return { equipped, sac, loadouts, score, voie, talents: withEquipped(talIds) };
+      return { equipped, score, voie, talents: withEquipped(talIds) };
     }
 
     // Voies candidates. `forceVoie` (Porter ce set) → cette voie UNIQUEMENT. Sinon : l'actuelle
@@ -1274,44 +1207,30 @@ export const useCharacterStore = defineStore('character', () => {
   async function applyGearPlan(
     userId: string,
     target: { equipped: Equipped; talentIds: string[]; voie: string | null },
+    /** Barème du rangement des pièces de set (`setPieceScorer`). */
+    score: (it: Item) => number,
   ): Promise<boolean> {
     const cur = row.value;
     if (!cur) return false;
     const allSlots = [...SLOTS, FAMILIAR_SLOT];
-    const loadouts0: Loadout[] = Array.from(
-      { length: MAX_LOADOUTS },
-      (_, k) => cur.loadouts[k] ?? { items: {} },
-    );
-    // Tout ce qu'on possède : porté + sac + toutes les réserves.
+    // Tout ce qu'on possède : porté + sac + toutes les réserves, doublons compris.
     const owned: Item[] = [
       ...allSlots.map((sl) => cur.equipped[sl]).filter((x): x is Item => !!x),
       ...cur.inventory,
-      ...loadouts0.flatMap((lo) => Object.values(lo.items).filter((x): x is Item => !!x)),
+      ...ownedInLoadouts(cur.loadouts),
     ];
     const kept = new Set(
       allSlots.map((sl) => target.equipped[sl]?.id).filter((x): x is string => !!x),
     );
-    // Les réserves repartent vides : on re-range TOUT ce qui n'est pas porté.
-    const loadouts: Loadout[] = Array.from({ length: MAX_LOADOUTS }, () => ({ items: {} }));
-    const sac: Item[] = [];
     const seen = new Set<string>();
-    for (const it of owned) {
-      if (kept.has(it.id) || seen.has(it.id)) continue;
+    const leftovers = owned.filter((it) => {
+      if (kept.has(it.id) || seen.has(it.id)) return false;
       seen.add(it.id);
-      const li = it.setId?.startsWith('voie:')
-        ? VOIES.findIndex((v) => v.id === it.setId!.slice('voie:'.length))
-        : -1;
-      if (li >= 0 && li < MAX_LOADOUTS) {
-        const items = loadouts[li]!.items;
-        const held = items[it.slot];
-        if (!held) items[it.slot] = it;
-        else if ((held.effect?.value ?? 0) >= (it.effect?.value ?? 0)) sac.push(it);
-        else {
-          sac.push(held);
-          items[it.slot] = it;
-        }
-      } else sac.push(it);
-    }
+      return true;
+    });
+    // Les réserves repartent vides : on re-range TOUT ce qui n'est pas porté, avec la règle
+    // unique (`fileSetPieces`) — jamais rien à la forge, les battues en doublon.
+    const { loadouts, rest: sac } = fileSetPieces([], leftovers, score);
     const talents = normalizeTalents(cur.talents).map((t) => ({
       ...t,
       equipped: target.talentIds.includes(t.id),
@@ -1337,8 +1256,20 @@ export const useCharacterStore = defineStore('character', () => {
     forceSetId?: string,
   ): Promise<boolean> {
     const plan = await computeGearPlan(stats, level, name, forceVoie, forceSetId);
-    if (!plan) return false;
-    return applyGearPlan(userId, plan);
+    if (!plan || !row.value) return false;
+    const cur = row.value;
+    return applyGearPlan(
+      userId,
+      plan,
+      setPieceScorer({
+        name,
+        stats,
+        level,
+        fx: talentEffects(cur.talents),
+        equipped: cur.equipped,
+        loadouts: cur.loadouts,
+      }),
+    );
   }
 
   // ── Mode idle « Expédition » (carte + héros temporisé) ──
@@ -2249,9 +2180,10 @@ export const useCharacterStore = defineStore('character', () => {
     claimCaravan,
     applyExpedition,
     equip,
-    unpackLoadout,
     recycleLoadout,
-    stashSetPiece,
+    fileBagSetPieces,
+    promoteSetSpare,
+    recycleSpares,
     optimizeGear,
     previewGearPlan,
     bestBuild,

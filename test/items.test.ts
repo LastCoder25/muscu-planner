@@ -1251,14 +1251,15 @@ describe('roster d’un set de voie — la COLLECTION, pas ce qu’on ne porte p
   it('⚠️ RECYCLER UN SET FOND AUSSI SES PIÈCES AU SAC (v0.806)', () => {
     // Signalé : « j’ai recyclé tout le set mais ça m’a laissé un item ». La carte montre le
     // roster (réserve + sac), le bouton ne fondait que la réserve.
-    const reserve = { weapon: mk('weapon', 10) };
+    // v0.839 : la réserve porte aussi ses DOUBLONS — « tout le set » les fond avec lui.
+    const reserve = { items: { weapon: mk('weapon', 10) }, spares: [mk('weapon', 3)] };
     const sac = [
       mk('armor', 20),
       mk('relic', 5, 'voie:gardien'),
       { ...mk('accessory', 7), locked: true },
     ];
     const { melt, keep } = setRecycleLot(SET, reserve, sac);
-    expect(melt.map((i) => i.id).sort()).toEqual(['armor20', 'weapon10']);
+    expect(melt.map((i) => i.id).sort()).toEqual(['armor20', 'weapon10', 'weapon3']);
     // Le 🔒 ne fond pas ; une pièce d’un AUTRE set n’est pas concernée.
     expect(keep.map((i) => i.id)).toEqual(['accessory7']);
     // Ce qu’on PORTE n’est jamais dans le lot : il n’est ni en réserve ni au sac.

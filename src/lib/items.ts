@@ -351,6 +351,10 @@ export type Equipped = Partial<Record<ItemSlot, Item>>;
 // 1 par VOIE → un endroit pour ranger le set de chaque voie à mesure qu'on le collecte.
 export interface Loadout {
   items: Equipped;
+  /** DOUBLONS du set (v0.839) : les pièces du même set battues à leur emplacement. Elles
+   *  restent rangées ici au lieu de partir à la forge (cf. `setFiling.ts`). JSONB → aucune
+   *  migration ; absent = aucun doublon. */
+  spares?: Item[];
 }
 export const MAX_LOADOUTS = 8;
 
@@ -2499,11 +2503,13 @@ export interface SetRosterEntry {
  */
 export function setRecycleLot(
   setId: string,
-  stored: Equipped | undefined,
+  stored: Loadout | undefined,
   inventory: Item[],
 ): { melt: Item[]; keep: Item[] } {
   const pool = [
-    ...SLOTS.map((s) => stored?.[s]).filter((it): it is Item => !!it),
+    ...SLOTS.map((s) => stored?.items?.[s]).filter((it): it is Item => !!it),
+    // Les DOUBLONS du set sont fondus avec lui (v0.839) : « tout ce set » veut dire tout.
+    ...(stored?.spares ?? []),
     ...inventory.filter((it) => it.setId === setId && SLOTS.includes(it.slot)),
   ];
   return { melt: pool.filter((it) => canRecycle(it)), keep: pool.filter((it) => !canRecycle(it)) };
