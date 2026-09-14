@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
 import { RARITY_RANK, RANK_ORDER, itemLevelMult } from '@/lib/items';
 import { advRarity, type Adventurer } from '@/lib/adventurers';
-import { adventurerPowers, type CompanionCtx } from '@/lib/raid';
+import { adventurerPowers, autoAdvGear, type CompanionCtx } from '@/lib/raid';
 import {
   ADV_GEAR_SLOTS,
   LINEAGE_GEAR,
@@ -186,5 +186,40 @@ describe('au rempart et dans la puissance', () => {
     // ne bouge pas, exactement comme si le stock était vide.
     const interdite = { ...arme, lineage: 'archer' as const };
     expect(adventurerPowers([a], ctx([interdite])).get('a')!).toBe(nu);
+  });
+});
+
+describe('confier au mieux : l’équipement', () => {
+  const ctx = (advGear: AdvGear[]): CompanionCtx => ({
+    familiars: [],
+    talents: [],
+    kennelLevel: 0,
+    now: 0,
+    advGear,
+  });
+  it('donne à chacun la meilleure pièce PERMISE de sa lignée, une pièce par porteur', () => {
+    const a = { ...adv('a', ['guerrier']), level: 50 };
+    const b = { ...adv('b', ['archer']), level: 50 };
+    // ⚠️ 'c' est un second GUERRIER, exactement au niveau de 'a' : il rivalise pour les
+    // MÊMES pièces. Sans lui, « une pièce par porteur » n'est jamais mise à l'épreuve —
+    // avec 'a' et 'b' seuls, aucune pièce n'est éligible pour les deux à la fois, donc
+    // retirer le garde `taken.has(c.g.id)` ne changerait rien à voir.
+    const c = { ...adv('c', ['guerrier']), level: 50 };
+    const stock = [
+      piece('faible', { level: 50, effect: { type: 'damage_pct', value: 5 } }),
+      piece('forte', { level: 50, effect: { type: 'damage_pct', value: 30 } }),
+      piece('arc', { lineage: 'archer', level: 50, effect: { type: 'damage_pct', value: 20 } }),
+      piece('trop_rare', {
+        level: 50,
+        rarity: 'epique',
+        effect: { type: 'damage_pct', value: 99 },
+      }),
+    ];
+    const plan = autoAdvGear([a, b, c], ctx(stock));
+    expect(plan.get('a')?.weapon).toBe('forte');
+    expect(plan.get('b')?.weapon).toBe('arc');
+    // 'forte' est déjà prise par 'a' : 'c' hérite de 'faible', jamais deux fois la même
+    // pièce.
+    expect(plan.get('c')?.weapon).toBe('faible');
   });
 });

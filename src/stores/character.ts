@@ -111,6 +111,7 @@ import {
   companionPairs,
   companionPerks,
   autoCompanions,
+  autoAdvGear,
   siegeFamiliarXp,
   type CompanionCtx,
   companionRankLabel,
@@ -150,7 +151,15 @@ import {
   startCaravan,
   type Caravan,
 } from '@/lib/caravan';
-import { type AdvGear, type AdvGearState } from '@/lib/advGear';
+import {
+  advGearScrap,
+  advGearSellValue,
+  canWearAdvGear,
+  lineageOf,
+  type AdvGear,
+  type AdvGearSlot,
+  type AdvGearState,
+} from '@/lib/advGear';
 import { useGoldFx } from '@/composables/useGoldFx';
 
 export interface CharacterRow {
@@ -192,12 +201,7 @@ export interface CharacterRow {
   scrap: number; // 🔩 ferraille : répare l’enceinte (migr. 0060) // journal d'énergie hors-sport horodaté (migr. 0057)
   adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
   caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
-  // ⚠️ Optionnel (et non `adv_gear: AdvGearState | null` requis comme demandé) : la
-  // colonne n'existe pas encore en base (migration Task 5, 0067) ; `COLS`/`.select()`
-  // ne la nomment pas encore, donc `data` n'a pas ce champ à la lecture — un champ
-  // requis casserait le typecheck de `fetchMine`/`setPseudo`/`persist`. Après
-  // `normalizeRow`, il est toujours renseigné (comme `adventurers`/`caravans`).
-  adv_gear?: AdvGearState | null; // équipement des aventuriers : stock + forge
+  adv_gear: AdvGearState | null; // équipement des aventuriers : stock + forge (migr. 0067)
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -226,7 +230,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, adventurers, caravans';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, adventurers, caravans, adv_gear';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -1672,28 +1676,39 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, { adventurers });
   }
 
-  /** ✨ CONFIER AU MIEUX tous les compagnons et talents du vivier (`autoCompanions`).
-   *  ⚠️ Les règles sont celles de la lib, qui reprend les exclusions de `setCompanion` et
-   *  de `setAdvTalent` : héros, Chenil (rang et places), rareté de classe, un seul porteur.
+  /** ✨ CONFIER AU MIEUX tous les compagnons, talents ET pièces d'équipement du vivier
+   *  (`autoCompanions` + `autoAdvGear`).
+   *  ⚠️ Les règles sont celles de la lib, qui reprend les exclusions de `setCompanion`,
+   *  `setAdvTalent` et `setAdvGear` : héros, Chenil (rang et places), rareté de classe
+   *  (talent ET équipement), lignée (équipement), un seul porteur.
    *  Il REMPLACE les choix faits à la main — l'écran le dit avant le geste.
-   *  Rend le nombre de compagnons et de talents confiés, ou `null` sans ligne. */
+   *  ⚠️ LES DEUX PLANS SONT CALCULÉS SUR LE MÊME ÉTAT DE DÉPART (`advs`/`ctx` non
+   *  modifiés entre les deux appels) : `autoAdvGear` optimise l'équipement à familiers
+   *  et talents CONSTANTS (les siens actuels), exactement comme `autoCompanions`
+   *  optimise familiers et talents à équipement PORTÉ constant — deux calculs qui ne
+   *  se marchent pas dessus, écrits dans le MÊME `persist`.
+   *  Rend le nombre de compagnons, talents et pièces confiés, ou `null` sans ligne. */
   async function autoAssignCompanions(
     userId: string,
     now: number,
-  ): Promise<{ familiars: number; talents: number } | null> {
+  ): Promise<{ familiars: number; talents: number; gear: number } | null> {
     const cur = row.value;
     if (!cur) return null;
     const advs = cur.adventurers ?? [];
-    const plan = autoCompanions(advs, companionCtx(cur, now));
+    const ctx = companionCtx(cur, now);
+    const plan = autoCompanions(advs, ctx);
+    const gearPlan = autoAdvGear(advs, ctx);
     const adventurers = advs.map((a) => ({
       ...a,
       familiarId: plan.get(a.id)?.familiarId,
       talentId: plan.get(a.id)?.talentId,
+      gear: gearPlan.get(a.id),
     }));
     await persistOptimistic(userId, { adventurers });
     return {
       familiars: adventurers.filter((a) => a.familiarId).length,
       talents: adventurers.filter((a) => a.talentId).length,
+      gear: adventurers.reduce((s, a) => s + Object.keys(a.gear ?? {}).length, 0),
     };
   }
 
@@ -1720,6 +1735,91 @@ export const useCharacterStore = defineStore('character', () => {
     });
     await persistOptimistic(userId, { adventurers });
   }
+
+  /** 🗡️ CONFIER (ou retirer) une PIÈCE D'ÉQUIPEMENT à un aventurier, sur UN emplacement.
+   *  Mêmes règles que le compagnon et le talent : un seul porteur, et l'écran ne
+   *  propose pas l'impossible mais ne le garantit pas — le refus vit ICI. */
+  async function setAdvGear(
+    userId: string,
+    advId: string,
+    slot: AdvGearSlot,
+    gearId: string | null,
+  ) {
+    const cur = row.value;
+    if (!cur) return;
+    const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
+    if (!adv) return;
+    if (gearId) {
+      const g = (cur.adv_gear?.stock ?? []).find((x) => x.id === gearId);
+      if (!g) throw new Error('Cette pièce est introuvable.');
+      if (g.slot !== slot) throw new Error('Mauvais emplacement.');
+      // ⚠️ Refus AU STORE : l'écran ne propose pas l'impossible, il ne le garantit pas.
+      if (!canWearAdvGear(adv, g))
+        throw new Error(
+          g.lineage !== lineageOf(adv)
+            ? `Cette pièce est faite pour un autre métier.`
+            : `Trop rare pour ${adv.name} : sa classe est de rang ${rarityRank(advRarity(adv)).name} — promeus-le d’abord.`,
+        );
+    }
+    const adventurers = (cur.adventurers ?? []).map((a) => {
+      const gear = { ...(a.gear ?? {}) };
+      if (a.id === advId) gear[slot] = gearId ?? undefined;
+      // Une pièce ne sert qu'un porteur : la retirer d'un AUTRE aventurier qui la
+      // portait déjà, plutôt que de laisser deux hommes croire qu'ils l'ont.
+      else if (gearId && gear[slot] === gearId) gear[slot] = undefined;
+      return { ...a, gear };
+    });
+    await persistOptimistic(userId, { adventurers });
+  }
+
+  /** Retire des pièces du STOCK et les désassigne. 🔒 et pièces PORTÉES exclues —
+   *  même politique que le sac du héros. Helper partagé par la vente et le recyclage. */
+  function dropAdvGear(cur: CharacterRow, ids: string[]) {
+    const worn = new Set((cur.adventurers ?? []).flatMap((a) => Object.values(a.gear ?? {})));
+    const stock = cur.adv_gear?.stock ?? [];
+    const gone = stock.filter((g) => ids.includes(g.id) && !g.locked && !worn.has(g.id));
+    return { gone, state: { ...cur.adv_gear, stock: stock.filter((g) => !gone.includes(g)) } };
+  }
+  /** 🪙 VEND des pièces du stock — la moitié d'un objet du héros de même grade. */
+  async function sellAdvGear(userId: string, ids: string[]) {
+    const cur = row.value;
+    if (!cur) return;
+    const { gone, state } = dropAdvGear(cur, ids);
+    if (!gone.length) return;
+    const gold = gone.reduce((s, g) => s + advGearSellValue(g), 0);
+    await persist(userId, { gold: cur.gold + gold, adv_gear: state });
+  }
+  /** 🔩 RECYCLE des pièces du stock, en ferraille. */
+  async function recycleAdvGear(userId: string, ids: string[]) {
+    const cur = row.value;
+    if (!cur) return;
+    const { gone, state } = dropAdvGear(cur, ids);
+    if (!gone.length) return;
+    const scrap = gone.reduce((s, g) => s + advGearScrap(g), 0);
+    await persist(userId, { scrap: cur.scrap + scrap, adv_gear: state });
+  }
+  /** 🔒 Verrouille/déverrouille une pièce du stock — protégée de la vente ET du
+   *  recyclage, comme un objet du héros. */
+  async function toggleAdvGearLock(userId: string, id: string) {
+    const cur = row.value;
+    if (!cur) return;
+    const stock = (cur.adv_gear?.stock ?? []).map((g) =>
+      g.id === id ? { ...g, locked: !g.locked } : g,
+    );
+    await persistOptimistic(userId, { adv_gear: { ...cur.adv_gear, stock } });
+  }
+  /** Ajoute des pièces au STOCK (butin d'un siège, d'une fouille…) — PUR, ne persiste
+   *  rien : les sources de drop (Task 6, `tickScavengers`/`claimCaravan`) l'appellent
+   *  pour construire le `patch.adv_gear` qu'elles persistent dans le MÊME `persist` que
+   *  le reste du butin (or, familiers…), plutôt que d'écrire deux fois. */
+  function withAdvGear(cur: CharacterRow, pieces: Omit<AdvGear, 'id'>[]): AdvGearState {
+    const stock = [
+      ...(cur.adv_gear?.stock ?? []),
+      ...pieces.map((p) => ({ ...p, id: crypto.randomUUID() })),
+    ];
+    return { ...(cur.adv_gear ?? { stock: [] }), stock };
+  }
+
   async function buildDefense(userId: string, typeId: DefenseId, playerLevel: number, now: number) {
     const cur = row.value;
     if (!cur) return;
@@ -1950,6 +2050,8 @@ export const useCharacterStore = defineStore('character', () => {
   // domaine ne peut pas savoir — l'or disponible, le niveau des bâtiments, l'horloge.
   const advList = computed<Adventurer[]>(() => row.value?.adventurers ?? []);
   const caravanList = computed<Caravan[]>(() => row.value?.caravans ?? []);
+  /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0067) — séparé du sac du héros. */
+  const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);
   const guildLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'guild'));
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'caravanserail'));
   const trainingLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'training'));
@@ -2185,6 +2287,11 @@ export const useCharacterStore = defineStore('character', () => {
     finishRepair,
     setCompanion,
     setAdvTalent,
+    setAdvGear,
+    sellAdvGear,
+    recycleAdvGear,
+    toggleAdvGearLock,
+    withAdvGear,
     autoAssignCompanions,
     healHero,
     garrisonedFamiliars,
@@ -2197,6 +2304,7 @@ export const useCharacterStore = defineStore('character', () => {
     spendKey,
     advList,
     caravanList,
+    advGearStock,
     guildLevel,
     comptoirLevel,
     trainingLevel,

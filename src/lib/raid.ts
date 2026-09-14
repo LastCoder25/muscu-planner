@@ -43,7 +43,14 @@ import {
   canAdvFamiliar,
 } from './caravan';
 import { type TalentInstance } from './talents';
-import { advGearEffects, wornGear, type AdvGear } from './advGear';
+import {
+  ADV_GEAR_SLOTS,
+  advGearEffects,
+  canWearAdvGear,
+  wornGear,
+  type AdvGear,
+  type AdvGearSlot,
+} from './advGear';
 import { beyondCap } from './buildings';
 import { advStats, advTitle, PROMO_LEVELS, type Adventurer } from './adventurers';
 import {
@@ -2525,6 +2532,57 @@ export function autoCompanions(
       out.get(a.id)!.talentId = t.id;
     },
   );
+  return out;
+}
+
+/**
+ * 🗡️ CONFIER AU MIEUX — l'ÉQUIPEMENT. Mêmes principes que `autoCompanions` : le gain est
+ * lu par l'arbitre du jeu (`combatPowerRaw`), attribution par GAIN DÉCROISSANT sur tout le
+ * vivier (le meilleur porteur pour chaque pièce, pas la première pièce venue pour le
+ * premier aventurier), une pièce par porteur, et rien d'interdit (lignée, rareté de la
+ * classe — `canWearAdvGear`).
+ *
+ * ⚠️ LE COMPAGNON ET LE TALENT DE CHACUN RESTENT CEUX QU'IL A DÉJÀ (`companionPairs`,
+ * appelé avec `advGear: []` pour ne pas mélanger l'équipement en cours de calcul dans son
+ * propre résultat) : ce plan ne rejoue pas `autoCompanions`, il varie SEULEMENT
+ * l'équipement — même politique que `autoCompanions`, qui de son côté garde l'équipement
+ * PORTÉ constant pour varier compagnon et talent.
+ *
+ * ⚠️ ON REPART DE ZÉRO, PAS DE CE QUI EST DÉJÀ PORTÉ : ce plan REMPLACE les choix faits à
+ * la main plutôt que les compléter — comme `autoCompanions`, l'écran le dit avant le
+ * geste. Un emplacement à la fois (`ADV_GEAR_SLOTS`) : pour chaque paire (aventurier
+ * libre, pièce permise de CET emplacement) on mesure le gain marginal par-dessus ce qui
+ * est déjà retenu pour les emplacements PRÉCÉDENTS, puis on prend les paires par gain
+ * décroissant tant qu'aventurier et pièce sont encore libres.
+ */
+export function autoAdvGear(
+  advs: Adventurer[],
+  ctx: CompanionCtx,
+): Map<string, Partial<Record<AdvGearSlot, string>>> {
+  const out = new Map<string, Partial<Record<AdvGearSlot, string>>>(advs.map((a) => [a.id, {}]));
+  const pairs = companionPairs(advs, { ...ctx, advGear: [] });
+  const base = (a: Adventurer, gear: AdvGear[]) =>
+    combatPowerRaw(escortCombatant([a], a.name, pairEffects({ ...pairs.get(a.id), gear }, ctx)));
+  const taken = new Set<string>();
+  const chosen = new Map<string, AdvGear[]>(advs.map((a) => [a.id, []]));
+  for (const slot of ADV_GEAR_SLOTS) {
+    const cands: { a: Adventurer; g: AdvGear; gain: number }[] = [];
+    for (const a of advs) {
+      const cur = base(a, chosen.get(a.id)!);
+      for (const g of ctx.advGear)
+        if (g.slot === slot && canWearAdvGear(a, g))
+          cands.push({ a, g, gain: base(a, [...chosen.get(a.id)!, g]) - cur });
+    }
+    cands.sort((x, y) => y.gain - x.gain);
+    const served = new Set<string>();
+    for (const c of cands) {
+      if (c.gain <= 0 || served.has(c.a.id) || taken.has(c.g.id)) continue;
+      served.add(c.a.id);
+      taken.add(c.g.id);
+      chosen.get(c.a.id)!.push(c.g);
+      out.get(c.a.id)![slot] = c.g.id;
+    }
+  }
   return out;
 }
 

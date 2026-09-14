@@ -54,7 +54,7 @@
                 autoPreview.changes ? 'Confier au mieux' : 'Tout est déjà au mieux'
               }}</span>
               <span class="ga-sub">
-                🐾 familiers · 🧠 talents<template v-if="autoPreview.changes">
+                🐾 familiers · 🧠 talents · 🗡️ équipement<template v-if="autoPreview.changes">
                   · {{ autoPreview.changes }} aventurier{{
                     autoPreview.changes > 1 ? 's' : ''
                   }}</template
@@ -481,6 +481,7 @@ import {
   companionPairs,
   adventurerPowers,
   autoCompanions,
+  autoAdvGear,
   companionOptions,
   talentOptions,
   type CompanionCtx,
@@ -488,6 +489,7 @@ import {
 import { fmtPow } from '@/lib/combat';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import { trainMsFor, companionEffects, advTalentEffects } from '@/lib/caravan';
+import { ADV_GEAR_SLOTS } from '@/lib/advGear';
 
 const props = defineProps<{
   open: boolean;
@@ -697,24 +699,32 @@ function assignFam(id: string | null) {
   pairFor.value = null;
   void pair((uid) => char.setCompanion(uid, a.id, id));
 }
-/** Ce que « Confier au mieux » ferait, AVANT de toucher : le même plan que le store
- *  (`autoCompanions`) sur le même contexte, et le gain de puissance du vivier. Mesuré à
- *  ~3 ms pour 15 aventuriers : peut suivre l'horloge du panneau sans coût. */
+/** Ce que « Confier au mieux » ferait, AVANT de toucher : le MÊME plan que le store —
+ *  `autoCompanions` (compagnon+talent) ET `autoAdvGear` (équipement) sur le même
+ *  contexte — et le gain de puissance du vivier. ⚠️ Deux plans, jamais deux calculs : si
+ *  l'aperçu recalculait à sa façon, il pourrait finir par annoncer autre chose que ce
+ *  que le bouton fait. Mesuré à ~3 ms pour 15 aventuriers : peut suivre l'horloge du
+ *  panneau sans coût. */
 const autoPreview = computed(() => {
   const advs = char.advList;
-  const plan = autoCompanions(advs, compCtx.value);
+  const ctx = compCtx.value;
+  const plan = autoCompanions(advs, ctx);
+  const gearPlan = autoAdvGear(advs, ctx);
   let changes = 0;
   const after = advs.map((a) => {
     const p = plan.get(a.id) ?? {};
+    const g = gearPlan.get(a.id) ?? {};
+    const gearChanged = ADV_GEAR_SLOTS.some((s) => (g[s] ?? null) !== (a.gear?.[s] ?? null));
     if (
       (p.familiarId ?? null) !== (a.familiarId ?? null) ||
-      (p.talentId ?? null) !== (a.talentId ?? null)
+      (p.talentId ?? null) !== (a.talentId ?? null) ||
+      gearChanged
     )
       changes++;
-    return { ...a, familiarId: p.familiarId, talentId: p.talentId };
+    return { ...a, familiarId: p.familiarId, talentId: p.talentId, gear: g };
   });
   const sum = (m: Map<string, number>) => [...m.values()].reduce((x, v) => x + v, 0);
-  const gain = sum(adventurerPowers(after, compCtx.value)) - sum(powers.value);
+  const gain = sum(adventurerPowers(after, ctx)) - sum(powers.value);
   return { changes, gain };
 });
 /** Puissance totale du vivier — la somme de ce que chaque portrait affiche. */
@@ -728,7 +738,7 @@ function autoPair() {
     const after = rosterPower();
     $q.notify({
       type: 'positive',
-      message: `✨ ${r.familiars} compagnon(s) et ${r.talents} talent(s) confiés · puissance du vivier ${fmtPow(before)} → ${fmtPow(after)}`,
+      message: `✨ ${r.familiars} compagnon(s), ${r.talents} talent(s) et ${r.gear} pièce(s) confiés · puissance du vivier ${fmtPow(before)} → ${fmtPow(after)}`,
     });
   });
 }
