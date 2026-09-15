@@ -8,6 +8,7 @@
 // l'appelant → fonctions pures, testables.
 import { mulberry32, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, rollSetPiece, ITEM_SETS, type Item } from './items';
+import type { RaidFaction } from './raid';
 
 // ── Types ──
 // 'arena' = survie par VAGUES : le héros tient le plus longtemps possible contre des
@@ -68,6 +69,48 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
   'archive',
   'wreck',
 ]);
+
+/** 🏕️ Les POI qu'on ATTAQUE en groupe (étape 3 des camps) : camp = troupe + chef,
+ *  repaire = troupe plus grande + champion. */
+export const CAMP_TYPES: ReadonlySet<PoiType> = new Set<PoiType>(['camp', 'lair']);
+export const CAMP_FACTIONS: readonly RaidFaction[] = ['bandits', 'betes', 'mortsvivants'];
+/** Taille d'un camp = sa FORCE, en aventuriers de RÉFÉRENCE (cf. `campFoe`). Un gros
+ *  repaire en demande nettement plus que trois. ⚠️ Recalibré par la mesure (Task 5). */
+export const CAMP_SIZES: { camp: readonly number[]; lair: readonly number[] } = {
+  camp: [2, 3, 4],
+  lair: [5, 7, 10],
+};
+
+export interface CampSpec {
+  faction: RaidFaction;
+  size: number;
+}
+
+/** FNV-1a 32 bits : un id de POI → une graine. */
+function hashId(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/**
+ * Faction et taille d'un camp — DÉRIVÉES de l'id, jamais stockées.
+ *
+ * ⚠️ GÉNÉRATEUR SÉPARÉ, par construction : `spawnOne` ne tire rien de plus, donc la carte
+ * reste identique au bit près. ⚠️ Un camp d'une carte sauvegardée AVANT les camps de faction
+ * en a une aussi, sans migration ni normalisation. ⚠️ Ni la distance ni le niveau n'y
+ * entrent : « de tout un peu partout » (seul le niveau suit la distance, règle v0.683).
+ */
+export function campSpecOf(poi: Pick<Poi, 'id' | 'type'>): CampSpec | null {
+  if (poi.type !== 'camp' && poi.type !== 'lair') return null;
+  const rng = mulberry32((hashId(poi.id) ^ 0x6d2b79f5) >>> 0 || 1);
+  const faction = CAMP_FACTIONS[Math.floor(rng() * CAMP_FACTIONS.length)]!;
+  const sizes = CAMP_SIZES[poi.type];
+  return { faction, size: sizes[Math.floor(rng() * sizes.length)]! };
+}
 
 export interface Poi {
   id: string;

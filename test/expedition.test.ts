@@ -18,6 +18,10 @@ import {
   arenaRewards,
   ARENA_PLAY,
   ARENA,
+  CAMP_FACTIONS,
+  CAMP_SIZES,
+  CAMP_TYPES,
+  campSpecOf,
   type ActiveExpedition,
   type Poi,
 } from '@/lib/expedition';
@@ -426,5 +430,59 @@ describe('⚠️ avancement d’un voyage sur sa durée TOTALE', () => {
   it('reste borné à [0,1]', () => {
     expect(voyageProgress(v, -H).overall).toBe(0);
     expect(voyageProgress(v, 99 * H).overall).toBe(1);
+  });
+});
+
+describe('🏕️ campSpecOf — faction et taille d’un camp', () => {
+  const p = (id: string, type: Poi['type']) => ({ id, type });
+
+  it('seuls les camps et repaires en ont une', () => {
+    expect(campSpecOf(p('x', 'mine'))).toBeNull();
+    expect(campSpecOf(p('x', 'wreck'))).toBeNull();
+    expect(CAMP_TYPES.has('camp') && CAMP_TYPES.has('lair')).toBe(true);
+    expect(campSpecOf(p('x', 'camp'))).not.toBeNull();
+  });
+
+  it('⚠️ ne dépend QUE de l’id et du type : niveau, distance et position n’y sont pour rien', () => {
+    const a = campSpecOf({ id: 'poi_9_4', type: 'lair' });
+    const full: Poi = {
+      id: 'poi_9_4',
+      type: 'lair',
+      level: 80,
+      x: 3,
+      y: 7,
+      distNorm: 0.99,
+      spawnedAt: 0,
+      expiresAt: 1,
+    };
+    expect(campSpecOf(full)).toEqual(a);
+  });
+
+  it('la taille appartient au palier : un camp reste un camp, un repaire un repaire', () => {
+    for (let i = 0; i < 300; i++) {
+      expect(CAMP_SIZES.camp).toContain(campSpecOf(p(`poi_1_${i}`, 'camp'))!.size);
+      expect(CAMP_SIZES.lair).toContain(campSpecOf(p(`poi_1_${i}`, 'lair'))!.size);
+    }
+  });
+
+  it('⚠️ UNIFORME : chaque faction et chaque taille sortent à parts égales', () => {
+    const N = 3000;
+    const fac = new Map<string, number>();
+    const size = new Map<number, number>();
+    for (let i = 0; i < N; i++) {
+      const s = campSpecOf(p(`poi_${(i * 7919) % 100003}_${i}`, 'camp'))!;
+      fac.set(s.faction, (fac.get(s.faction) ?? 0) + 1);
+      size.set(s.size, (size.get(s.size) ?? 0) + 1);
+    }
+    for (const f of CAMP_FACTIONS) expect((fac.get(f) ?? 0) / N).toBeGreaterThan(0.29);
+    for (const f of CAMP_FACTIONS) expect((fac.get(f) ?? 0) / N).toBeLessThan(0.38);
+    for (const s of CAMP_SIZES.camp) expect((size.get(s) ?? 0) / N).toBeGreaterThan(0.29);
+    for (const s of CAMP_SIZES.camp) expect((size.get(s) ?? 0) / N).toBeLessThan(0.38);
+  });
+
+  it('⚠️ la carte ne change pas : createMap ne porte aucun champ de camp', () => {
+    const m = createMap(42, 0, 20);
+    for (const q of m.pois) expect(Object.keys(q)).not.toContain('camp');
+    expect(createMap(42, 0, 20)).toEqual(m);
   });
 });
