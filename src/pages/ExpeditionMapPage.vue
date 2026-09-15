@@ -73,8 +73,10 @@
             />
           </template>
 
-          <!-- Trajets des CONVOIS : même tracé aller/retour que le héros, en violet et
-             en pointillés — la couleur seule ne suffit pas à distinguer deux routes. -->
+          <!-- Trajets des CONVOIS et des GROUPES : même tracé aller/retour que le héros, en
+             violet et en pointillés — la couleur seule ne suffit pas à distinguer deux routes.
+             ⚠️ Un groupe (⚔️) a son PROPRE motif (tiret-point) : même violet qu'un convoi, sans
+             lui les deux routes ne se distinguaient que par un glyphe de 3 unités. -->
           <template v-for="v in travelersOnMap" :key="'vt' + v.id">
             <line
               :x1="v.poi.x"
@@ -82,7 +84,7 @@
               :x2="v.at.x"
               :y2="v.at.y"
               class="trail van"
-              :class="v.at.phase === 'return' ? 'done' : 'todo'"
+              :class="[v.at.phase === 'return' ? 'done' : 'todo', v.kind]"
             />
             <line
               :x1="TOWN.x"
@@ -90,7 +92,7 @@
               :x2="v.at.x"
               :y2="v.at.y"
               class="trail van"
-              :class="v.at.phase === 'return' ? 'todo' : 'done'"
+              :class="[v.at.phase === 'return' ? 'todo' : 'done', v.kind]"
             />
           </template>
 
@@ -121,14 +123,19 @@
                DESSINÉE : sans son équivalent ici, le tracé d'un convoi menait à du vide
                et le puits semblait avoir été effacé. On le montre donc, marqué comme
                occupé (liseré violet, sans compteur de niveau : il n'est plus à prendre). -->
-          <g v-for="v in travelersOnMap" :key="'vg' + v.id" class="poi target van-target">
+          <g
+            v-for="v in travelersOnMap"
+            :key="'vg' + v.id"
+            class="poi target van-target"
+            :class="v.kind"
+          >
             <circle :cx="v.poi.x" :cy="v.poi.y" r="4.8" class="poi-bg" />
             <text :x="v.poi.x" :y="v.poi.y + 1.4" class="poi-emo">{{ POI_EMO[v.poi.type] }}</text>
           </g>
 
           <!-- Héros -->
           <g v-for="v in travelersOnMap" :key="'vm' + v.id">
-            <circle :cx="v.at.x" :cy="v.at.y" r="3" class="van-mark" />
+            <circle :cx="v.at.x" :cy="v.at.y" r="3" class="van-mark" :class="v.kind" />
             <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">{{ v.emo }}</text>
           </g>
 
@@ -784,9 +791,6 @@ const incoming = computed(() => base.value?.raid ?? null);
  *  minute ; à la minute, c’est gratuit — et une minute de granularité ne change rien à
  *  « rentre-t-il avant l’assaut ? », qui se joue en heures. */
 const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
-/** 🐾 Ce que chaque aventurier emmène avec lui. ⚠️ Plus un bonus GLOBAL de garnison :
- *  le compagnon suit son homme, donc faire partir quelqu’un retire AUSSI son familier
- *  de la défense — c’est précisément l’arbitrage que cet écran doit montrer. */
 /** Ce que l'escorte emmène sur la ROUTE — même forme que ce que le store passe au départ
  *  (`sendParty`, `sendCaravan`). ⚠️ Sans horloge : un groupe ne change pas de familier en
  *  une minute, et le pronostic d'un camp n'a pas à se recalculer au rythme du tick. */
@@ -801,13 +805,14 @@ const roadCtx = computed(() => {
     heroTalentIds: talents.filter((t) => t.equipped === true).map((t) => t.id),
   };
 });
+/** 🐾 Ce que chaque aventurier emmène avec lui AU REMPART. ⚠️ Plus un bonus GLOBAL de
+ *  garnison : le compagnon suit son homme, donc faire partir quelqu’un retire AUSSI son
+ *  familier de la défense — c’est précisément l’arbitrage que cet écran doit montrer. */
 const compCtx = computed(() => ({
   ...roadCtx.value,
   kennelLevel: defenseLevel(base.value?.defenses ?? [], 'kennel'),
   now: coarseNow.value,
 }));
-/** Qui resterait si l'on partait : l'escorte choisie quitte la base, et le héros aussi
- *  quand c'est LUI qu'on envoie. */
 /** QUAND l’armée frappe. ⚠️ Un voyage qui se termine AVANT n’enlève personne à la
  *  bataille : sans cette date, l’alerte se déclenchait aussi pour un convoi de deux
  *  heures face à un siège dans huit (signalé par l’utilisateur). La règle elle-même vit
@@ -816,6 +821,16 @@ const compCtx = computed(() => ({
  *  peuvent que raccourcir le retour (`TRAVEL.shortcutReturnMult`/`setbackReturnMult` ≤ 1,
  *  verrouillé par un test) — donc taire l’alerte ne peut jamais taire un vrai danger. */
 const raidAt = computed(() => incoming.value?.arrivesAt ?? 0);
+/** Le héros défendra-t-il au moment de l’assaut ? ⚠️ Un héros DEHORS qui rentre AVANT
+ *  l’assaut défend quand même — même règle que le panneau de la Base, écrite une seule fois
+ *  dans `heroDefends`, et lue une seule fois ici pour le convoi ET le groupe. */
+const heroDefendsNow = computed(() =>
+  heroDefends(!!char.row && char.heroIsHome(char.row), char.row?.expedition?.returnAt, raidAt.value)
+    ? fighter.value
+    : null,
+);
+/** Qui resterait si l'on partait : l'escorte choisie quitte la base, et le héros aussi
+ *  quand c'est LUI qu'on envoie. */
 const risk = computed(() => {
   const b = base.value;
   const inc = incoming.value;
@@ -824,15 +839,7 @@ const risk = computed(() => {
   // ⚠️ Le pronostic coûte ~13 ms par tenue : on ne le calcule que si la feuille le montre.
   if (!b || !inc || !offerCaravan.value) return null;
   const restants = freeStable.value.filter((a) => !escort.value.includes(a.id));
-  // ⚠️ Un héros DEHORS qui rentre AVANT l’assaut défend quand même — même règle que le
-  // panneau de la Base, écrite une seule fois dans `heroDefends`.
-  const heroNow = heroDefends(
-    !!char.row && char.heroIsHome(char.row),
-    char.row?.expedition?.returnAt,
-    raidAt.value,
-  )
-    ? fighter.value
-    : null;
+  const heroNow = heroDefendsNow.value;
   return departureRisk(
     b.defenses,
     heroLevel.value,
@@ -878,14 +885,14 @@ const vansLeft = computed(
     caravanSlots(char.comptoirLevel) -
     char.caravanList.filter((c) => now.value < c.returnAt).length,
 );
-/** Ce que ce lieu accepte MAINTENANT — la regle vit dans `caravan.ts`, pas dans un v-if.
- *  Le panneau etait entierement garde par « le heros est disponible », donc un convoi
- *  devenait impossible des que le heros partait : exactement quand on en a besoin. */
 /** Temps de convalescence restant du héros (0 = disponible). ⚠️ Il manquait ici : la carte
  *  laissait repartir un héros blessé, seul l'écran Aventure le bloquait. */
 const heroHealIn = computed(() => woundRemainingMs(char.row?.base, now.value));
 /** Le héros ne peut pas partir : il est sur la route, OU à l'infirmerie. */
 const heroUnavailable = computed(() => !!active.value || heroHealIn.value > 0);
+/** Ce que ce lieu accepte MAINTENANT — la regle vit dans `caravan.ts`, pas dans un v-if.
+ *  Le panneau etait entierement garde par « le heros est disponible », donc un convoi
+ *  devenait impossible des que le heros partait : exactement quand on en a besoin. */
 const offers = computed(() =>
   selected.value
     ? poiOffers(selected.value, {
@@ -934,13 +941,23 @@ const partyAdvs = computed(() => freeStable.value.filter((a) => partyEscort.valu
 /** Ceux qui ne peuvent PAS partir, avec la raison — même règle que le store
  *  (`advUnavailableReason`, dont `advAvailable` dérive). On les montre grisés plutôt que de
  *  les cacher : un aventurier qui disparaît de la liste se lit comme un aventurier perdu. */
-const partyBlocked = computed(() =>
-  char.advList
-    .map((a) => ({ adv: a, why: advUnavailableReason(a, now.value) }))
-    .filter(
-      (x): x is { adv: (typeof char.advList)[number]; why: NonNullable<typeof x.why> } => !!x.why,
-    ),
+/** ⚠️ Même principe que `freeKey` : une CHAÎNE (id + raison) calculée au tick, mais qui ne
+ *  réveille la liste — donc le rendu des tuiles grisées — que si un aventurier change d'état. */
+const blockedKey = computed(() =>
+  char.advList.map((a) => `${a.id}:${advUnavailableReason(a, now.value) ?? ''}`).join('|'),
 );
+const partyBlocked = computed(() => {
+  const why = new Map(
+    blockedKey.value.split('|').map((kv) => {
+      const cut = kv.lastIndexOf(':');
+      return [kv.slice(0, cut), kv.slice(cut + 1)] as const;
+    }),
+  );
+  return char.advList.flatMap((a) => {
+    const w = why.get(a.id);
+    return w ? [{ adv: a, why: w as NonNullable<ReturnType<typeof advUnavailableReason>> }] : [];
+  });
+});
 /** Pourquoi le héros ne peut pas se joindre au groupe — la MÊME règle que le store. */
 const partyHeroBlock = computed(() =>
   selected.value
@@ -990,13 +1007,7 @@ const partyRisk = computed(() => {
   const b = base.value;
   const inc = incoming.value;
   if (!b || !inc || !selectedCamp.value || !partySize.value) return null;
-  const heroNow = heroDefends(
-    !!char.row && char.heroIsHome(char.row),
-    char.row?.expedition?.returnAt,
-    raidAt.value,
-  )
-    ? fighter.value
-    : null;
+  const heroNow = heroDefendsNow.value;
   const partants = new Set(partyAdvs.value.map((a) => a.id));
   const restants = freeStable.value.filter((a) => !partants.has(a.id));
   return departureRisk(
@@ -1038,18 +1049,19 @@ async function doSendParty() {
   if (!uid || !poi || !canSendPartyNow.value) return;
   busyCaravan.value = true;
   try {
-    const ok = await char.sendParty(uid, poi, {
+    const refused = await char.sendParty(uid, poi, {
       hero: heroForParty.value,
       escortIds: partyAdvs.value.map((a) => a.id),
       // Niveau de SPORT : l'anti-runaway du butin se lit sur le joueur (cf. convois).
       playerLevel: heroLevel.value,
       now: Date.now(),
     });
-    if (ok) selected.value = null;
+    if (!refused) selected.value = null;
+    // ⚠️ La RAISON du refus vient du store : un message générique laissait deviner qui bloquait.
     $q.notify(
-      ok
-        ? { type: 'positive', message: '⚔️ Le groupe marche sur le camp.' }
-        : { type: 'negative', message: 'Départ impossible (groupe, or ou héros indisponible).' },
+      refused
+        ? { type: 'negative', message: `Départ impossible : ${refused}.` }
+        : { type: 'positive', message: '⚔️ Le groupe marche sur le camp.' },
     );
   } finally {
     busyCaravan.value = false;
@@ -1085,8 +1097,8 @@ const partiesOnMap = computed(() =>
 );
 /** Tout ce qui voyage sans le héros, pour la carte : même tracé, l'emoji dit qui. */
 const travelersOnMap = computed(() => [
-  ...vansOnMap.value.map((v) => ({ ...v, emo: '🐫' })),
-  ...partiesOnMap.value.map((g) => ({ ...g, emo: '⚔️' })),
+  ...vansOnMap.value.map((v) => ({ ...v, emo: '🐫', kind: 'caravan' as const })),
+  ...partiesOnMap.value.map((g) => ({ ...g, emo: '⚔️', kind: 'party' as const })),
 ]);
 const busyCaravan = ref(false);
 /** Tout ce qui voyage, dans l'ordre où ça rentre : le héros puis les convois, les
@@ -1824,6 +1836,17 @@ function fmtMin(min: number): string {
 .van-target .poi-bg {
   stroke: #b57bff;
   stroke-width: 0.8;
+}
+/* Groupes ⚔️ : même violet qu'un convoi, mais un motif TIRET-POINT sur la route et un liseré
+   pointillé sur la cible et le marqueur — lisible sans la couleur ni l'emoji. */
+.trail.van.party {
+  stroke-width: 1.2;
+  stroke-dasharray: 4 1.4 0.8 1.4;
+}
+.van-target.party .poi-bg,
+.van-mark.party {
+  stroke-width: 1;
+  stroke-dasharray: 1.2 0.9;
 }
 .van-target {
   opacity: 0.75;

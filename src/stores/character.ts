@@ -187,6 +187,7 @@ import {
 import {
   canSendParty,
   partyHeroBlocker,
+  PARTY_HERO_BLOCK_LABEL,
   normalizeParties,
   partyClaimRoster,
   partyLegMin,
@@ -2522,31 +2523,34 @@ export const useCharacterStore = defineStore('character', () => {
     userId: string,
     poi: Poi,
     opts: { hero: PartyHero | null; escortIds: string[]; playerLevel: number; now: number },
-  ): Promise<boolean> {
+  ): Promise<string | null> {
+    // ⚠️ Rend la RAISON d'un refus (null = parti) : un « départ impossible » générique laissait
+    // deviner lequel des aventuriers, de l'or ou du héros bloquait.
     const cur = row.value;
     const spec = campSpecOf(poi);
-    if (!cur || !spec) return false;
+    if (!cur || !spec) return 'ce lieu n’est pas un camp';
     const { now, hero } = opts;
     // ⚠️ Un id répété ferait partir deux fois le même aventurier.
-    if (new Set(opts.escortIds).size !== opts.escortIds.length) return false;
+    if (new Set(opts.escortIds).size !== opts.escortIds.length)
+      return 'un aventurier est choisi deux fois';
     const escort = opts.escortIds
       .map((id) => advList.value.find((a) => a.id === id))
       .filter((a): a is Adventurer => !!a && advAvailable(a, now));
-    if (escort.length !== opts.escortIds.length) return false;
-    if (!canSendParty(poi, escort.length, !!hero)) return false;
+    if (escort.length !== opts.escortIds.length)
+      return 'un aventurier du groupe n’est plus disponible';
+    if (!canSendParty(poi, escort.length, !!hero)) return 'le groupe est vide';
     // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé
     // (déjà parti, infirmerie, Avant-poste, or) — `partyHeroBlocker`, une seule définition.
-    if (
-      hero &&
-      partyHeroBlocker({
-        onExpedition: !!cur.expedition,
-        healMs: woundRemainingMs(cur.base, now),
-        outpost: expeditionsUnlocked(cur.buildings),
-        gold: cur.gold,
-        cost: expeGoldCost(poi.type, poi.level),
-      })
-    )
-      return false;
+    const heroBlock = hero
+      ? partyHeroBlocker({
+          onExpedition: !!cur.expedition,
+          healMs: woundRemainingMs(cur.base, now),
+          outpost: expeditionsUnlocked(cur.buildings),
+          gold: cur.gold,
+          cost: expeGoldCost(poi.type, poi.level),
+        })
+      : null;
+    if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
     const talents = normalizeTalents(cur.talents);
     const road = {
       familiars: cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT),
@@ -2565,7 +2569,7 @@ export const useCharacterStore = defineStore('character', () => {
       gearSpeed: advGearRoles(escort, road.advGear).speed,
     });
     const trip = startParty(input, now, leg);
-    if (cur.gold < trip.goldCost) return false;
+    if (cur.gold < trip.goldCost) return `héros : ${PARTY_HERO_BLOCK_LABEL.gold}`;
     const busy = new Set(opts.escortIds);
     const map = cur.expedition_map
       ? { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
@@ -2580,7 +2584,7 @@ export const useCharacterStore = defineStore('character', () => {
         ? { expedition: trip }
         : { parties: [...partyList.value, { ...trip, id: `party_${now.toString(36)}` }] }),
     });
-    return true;
+    return null;
   }
 
   /** ⚔️ Cycle de vie des groupes partis SANS le héros : le rapport à l'arrivée sur le camp,
