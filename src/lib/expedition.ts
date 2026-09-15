@@ -9,6 +9,7 @@
 import { mulberry32, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, rollSetPiece, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
+import type { AdvGear } from './advGear';
 
 // ── Types ──
 // 'arena' = survie par VAGUES : le héros tient le plus longtemps possible contre des
@@ -86,6 +87,32 @@ export interface CampSpec {
   size: number;
 }
 
+/** ⚔️ Ce qu'un GROUPE a vécu sur un camp — porté par l'issue, recopié dans le rapport 📬 et
+ *  encaissé par `expeClaim`. ⚠️ Absent des expéditions et rapports d'avant les camps de
+ *  faction : tous les lecteurs le traitent comme optionnel. */
+export interface PartyResult {
+  hero: boolean;
+  faction: RaidFaction;
+  size: number;
+  /** Ids des aventuriers envoyés (le héros n'y figure pas). */
+  escort: string[];
+  win: boolean;
+  foes: number;
+  slain: number;
+  foesDown: string[];
+  /** Abattus PAR aventurier. */
+  kills: Record<string, number>;
+  heroKills: number;
+  /** XP par aventurier : socle de mission + part des abattus (× distance). */
+  xp: Record<string, number>;
+  /** Aventuriers envoyés à l'infirmerie (défaite : tous ceux qui sont tombés). */
+  hurt: string[];
+  advGear: Omit<AdvGear, 'id'>[];
+  /** Salaires de l'escorte, déduits à l'encaissement. */
+  wages: number;
+  journal: string[];
+}
+
 /** FNV-1a 32 bits : un id de POI → une graine. */
 function hashId(s: string): number {
   let h = 0x811c9dc5;
@@ -149,6 +176,7 @@ export interface ExpeditionOutcome {
    *  contretemps ramènent le héros plus tôt — le seul effet qui joue sur le TEMPS. */
   returnMult: number;
   waves?: number; // 'arena' uniquement : nombre de vagues tenues
+  party?: PartyResult; // ⚔️ camp de faction attaqué en groupe
   text: string; // texte du rapport
 }
 

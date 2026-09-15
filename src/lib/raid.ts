@@ -766,6 +766,14 @@ const ROSTERS: Record<RaidFaction, { emoji: string; name: string; kind: UnitKind
   ],
 };
 
+/** Le roster d'une faction, dans son ORDRE (qui est une mécanique, cf. plus haut) — lu
+ *  aussi par les camps de faction de la carte (`camp.ts`). Le chef est le dernier. */
+export function factionRoster(
+  faction: RaidFaction,
+): readonly { emoji: string; name: string; kind: UnitKind }[] {
+  return ROSTERS[faction];
+}
+
 /** SILHOUETTE d'une faction : combien ils sont, et ce que vaut chacun. Le produit
  *  `countMult × unitMult` vaut ~1 partout → la MASSE (donc la menace) est la même, seule
  *  la forme change. C'est ce qui permet à une horde de bêtes d'être visiblement deux fois
