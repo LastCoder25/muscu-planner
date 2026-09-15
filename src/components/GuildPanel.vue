@@ -132,7 +132,7 @@
              base (`canWearAdvGear`) — fabriquées par l'Équipementier, ou tombées des
              cadavres d'un siège et des embuscades repoussées (jamais du butin du héros).
              « Équiper » ouvre la liste des aventuriers qui peuvent la porter.
-             🔒 / 🪙 / 🔩 comme le sac, désactivés si portée. -->
+             🔒 / 🪙 comme le sac, désactivés si portée. -->
         <template v-else>
           <p v-if="!char.advGearStock.length" class="g-empty">
             Aucune pièce en stock. L’<b>Équipementier</b> en fabrique à partir des objets de ton
@@ -178,14 +178,6 @@
                   @click="sellOneGear(g)"
                 >
                   🪙 {{ advGearSellValue(g) }}
-                </button>
-                <button
-                  type="button"
-                  class="gear-btn"
-                  :disabled="!!g.locked || !!ownerOf(g)"
-                  @click="recycleOneGear(g)"
-                >
-                  🔩 {{ advGearScrap(g) }}
                 </button>
               </div>
             </div>
@@ -709,7 +701,6 @@ import {
   advGearCells,
   advGearEffectTexts,
   advGearOptions,
-  advGearScrap,
   advGearSellValue,
   advLooks,
   canWearAdvGear,
@@ -1096,7 +1087,7 @@ function pickGear(id: string | null) {
 // ── 🗂️ ONGLETS ──
 const guildTab = ref<'roster' | 'stock'>('roster');
 
-// ── 🗡️ LE STOCK — équiper / vendre / recycler / verrouiller une pièce d'aventurier ──
+// ── 🗡️ LE STOCK — équiper / vendre / verrouiller une pièce d'aventurier ──
 // ⚠️ Même politique que le sac du héros : 🔒 protège des deux, une pièce PORTÉE
 // (`Adventurer.gear`, BRUT — même lecture que `dropAdvGear` côté store) ne se cède pas.
 /** Le stock, du rang le plus haut au plus bas, puis par emplacement. */
@@ -1178,8 +1169,7 @@ function lineageLabel(l: Lineage): string {
 function toggleGearLock(g: AdvGear) {
   void pair((uid) => char.toggleAdvGearLock(uid, g.id));
 }
-/** ⚠️ CONFIRMATION, comme le sac du héros (`doSellFamiliar`/`doRecycle`) — une pièce
- *  qui part est définitivement perdue, sell OU recycle, jamais sans le dire. */
+/** ⚠️ CONFIRMATION, comme le sac du héros — une pièce vendue est définitivement perdue. */
 function sellOneGear(g: AdvGear) {
   const gain = advGearSellValue(g);
   $q.dialog({
@@ -1188,15 +1178,6 @@ function sellOneGear(g: AdvGear) {
     cancel: { label: 'Annuler', flat: true },
     ok: { label: `Vendre (+${gain} 🪙)`, color: 'negative' },
   }).onOk(() => void pair((uid) => char.sellAdvGear(uid, [g.id])));
-}
-function recycleOneGear(g: AdvGear) {
-  const gain = advGearScrap(g);
-  $q.dialog({
-    title: 'Recycler cette pièce ?',
-    message: `« ${g.name} » sera fondue en ${gain} 🔩.`,
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
-  }).onOk(() => void pair((uid) => char.recycleAdvGear(uid, [g.id])));
 }
 
 const busy = ref(false);

@@ -48,8 +48,7 @@ import {
   effectiveValue,
   salvageValue,
   sellValue,
-  scrapValue,
-  canRecycle,
+  canSell,
   upgradeCost,
   canUpgrade,
   setCounts,
@@ -73,10 +72,9 @@ import {
   VOIE_SETS,
   rollSetLegendaryProc,
   voieSetRoster,
-  setRecycleLot,
+  setSellLot,
   SET_BY_ID,
   effectBase,
-  scrapValueOf,
 } from '@/lib/items';
 import { mulberry32, combatPower } from '@/lib/combat';
 import { pickBestTalents } from '@/lib/talents';
@@ -297,60 +295,20 @@ describe('recyclage / vente', () => {
     expect(sellValue(deep)).toBeGreaterThan(sellValue(lowJet)); // niveau d'objet ↑ → prix ↑
   });
 
-  // ── ♻️ Recyclage en ferraille ──
-  const gear = (slot: 'weapon' | 'armor' | 'accessory' | 'relic', over: object = {}) =>
-    item({ slot, effect: { type: 'damage_pct', value: 10 }, rarity: 'epique', level: 26, ...over });
-
-  it('ferraille : le RATIO suit la masse de métal — une épée rend plus qu’un collier', () => {
-    // C'est la seule lecture qui se comprenne sans notice : des plaques > une lame >
-    // de la pierre et de l'os > une pincée de métal.
-    expect(scrapValue(gear('armor'))).toBeGreaterThan(scrapValue(gear('weapon')));
-    expect(scrapValue(gear('weapon'))).toBeGreaterThan(scrapValue(gear('relic')));
-    expect(scrapValue(gear('relic'))).toBeGreaterThan(scrapValue(gear('accessory')));
-    expect(scrapValue(gear('weapon'))).toBeGreaterThan(scrapValue(gear('accessory')) * 2);
-  });
-
-  it('ferraille : on ne démonte pas un ANIMAL ni un objet 🔒', () => {
+  it('vente : jamais un objet 🔒, jamais un familier (il se cède à part)', () => {
     const fam = item({
       slot: 'familiar',
       effect: { type: 'damage_pct', value: 10 },
       rarity: 'legendaire',
     });
-    expect(scrapValue(fam)).toBe(0);
-    expect(canRecycle(fam)).toBe(false);
-    expect(canRecycle(gear('weapon'))).toBe(true);
-    expect(canRecycle(gear('weapon', { locked: true }))).toBe(false); // même garde que la vente
-  });
-
-  it('ferraille : rareté et niveau comptent, mais DOUCEMENT — bien moins que l’or', () => {
-    const commun = gear('weapon', { rarity: 'commun' });
-    const primo = gear('weapon', { rarity: 'primordial' });
-    expect(scrapValue(primo)).toBeGreaterThan(scrapValue(commun));
-    expect(scrapValue(gear('weapon', { level: 80 }))).toBeGreaterThan(scrapValue(gear('weapon')));
-    // ⚠️ L'INVARIANT qui compte : les puits de ferraille (réparer, monter une structure)
-    // croissent avec le NIVEAU des défenses, pas géométriquement. Un sac de haut rang ne
-    // doit donc pas rendre l'enceinte gratuite — là où l'or, lui, explose (×1,8/rang).
-    const ratioScrap = scrapValue(primo) / scrapValue(commun);
-    const ratioGold = sellValue(primo) / sellValue(commun);
-    expect(ratioScrap).toBeLessThan(4);
-    expect(ratioScrap).toBeLessThan(ratioGold / 5);
-    expect(scrapValue(gear('accessory', { rarity: 'commun', level: 1 }))).toBeGreaterThanOrEqual(1);
-  });
-
-  it('ferraille : l’ÉPAVE reste la source de POINTE, le sac un filet', () => {
-    // Vider un sac de bric-à-brac doit valoir l'ordre de grandeur d'UNE épave, pas de dix
-    // — même relation que la Fonderie avec l'épave, ou la Mine d'or avec les expéditions.
-    const L = 26;
-    const purge = Array.from({ length: 20 }, (_, i) =>
-      scrapValue(
-        gear((['weapon', 'armor', 'accessory', 'relic'] as const)[i % 4]!, {
-          rarity: (['rare', 'epique', 'magique', 'rare'] as const)[i % 4]!,
-        }),
-      ),
-    ).reduce((a, b) => a + b, 0);
-    const epave = (HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * 3; // trajet ~2,5 h
-    expect(purge).toBeLessThan(epave * 2);
-    expect(purge).toBeGreaterThan(epave / 3); // ni dérisoire : la purge doit se sentir
+    const arme = item({
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 10 },
+      rarity: 'rare',
+    });
+    expect(canSell(fam)).toBe(false);
+    expect(canSell(arme)).toBe(true);
+    expect(canSell({ ...arme, locked: true })).toBe(false);
   });
 });
 
@@ -1264,7 +1222,7 @@ describe('roster d’un set de voie — la COLLECTION, pas ce qu’on ne porte p
       setId,
     }) as Item;
 
-  it('⚠️ RECYCLER UN SET FOND AUSSI SES PIÈCES AU SAC (v0.806)', () => {
+  it('⚠️ VENDRE UN SET VEND AUSSI SES PIÈCES AU SAC (v0.806)', () => {
     // Signalé : « j’ai recyclé tout le set mais ça m’a laissé un item ». La carte montre le
     // roster (réserve + sac), le bouton ne fondait que la réserve.
     // v0.839 : la réserve porte aussi ses DOUBLONS — « tout le set » les fond avec lui.
@@ -1274,12 +1232,12 @@ describe('roster d’un set de voie — la COLLECTION, pas ce qu’on ne porte p
       mk('relic', 5, 'voie:gardien'),
       { ...mk('accessory', 7), locked: true },
     ];
-    const { melt, keep } = setRecycleLot(SET, reserve, sac);
-    expect(melt.map((i) => i.id).sort()).toEqual(['armor20', 'weapon10', 'weapon3']);
+    const { sold, keep } = setSellLot(SET, reserve, sac);
+    expect(sold.map((i) => i.id).sort()).toEqual(['armor20', 'weapon10', 'weapon3']);
     // Le 🔒 ne fond pas ; une pièce d’un AUTRE set n’est pas concernée.
     expect(keep.map((i) => i.id)).toEqual(['accessory7']);
     // Ce qu’on PORTE n’est jamais dans le lot : il n’est ni en réserve ni au sac.
-    expect(setRecycleLot(SET, undefined, []).melt).toEqual([]);
+    expect(setSellLot(SET, undefined, []).sold).toEqual([]);
   });
 
   it('⚠️ une pièce PORTÉE figure dans le roster, et elle est marquée', () => {
@@ -2204,11 +2162,6 @@ describe('bases partagées avec l’équipement des aventuriers', () => {
   it('effectBase rend la base qu’un drop utilise', () => {
     expect(effectBase('damage_pct')).toBeGreaterThan(0);
     expect(effectBase('gold_pct')).toBe(14);
-  });
-  it('scrapValue passe par scrapValueOf (une seule formule)', () => {
-    const it0 = { slot: 'armor', rarity: 'rare', level: 20 } as const;
-    expect(scrapValue(it0 as never)).toBe(scrapValueOf('armor', 'rare', 20));
-    expect(scrapValueOf('familiar', 'rare', 20)).toBe(0);
   });
 });
 

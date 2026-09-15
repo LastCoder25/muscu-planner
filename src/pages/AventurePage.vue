@@ -754,7 +754,7 @@
               🎒<span v-if="bagCount" class="gi-badge">{{ bagCount }}</span>
             </button>
             <!-- 🏆 Sac à trophées : à part du butin (ils ne tombent que du boss entre amis,
-                 et « Tout recycler » ne doit jamais les fondre). Visible dès qu'on en a un. -->
+                 et « Tout vendre » ne doit jamais les fondre). Visible dès qu'on en a un. -->
             <button
               v-if="ownsTrophy"
               class="gi-b"
@@ -1002,7 +1002,7 @@
                retient si l'optimum est déjà connu. Respecte le filtre type. -->
               <div v-if="bagMode === 'items' && belowCount > 0" class="bulk">
                 <span class="bulk-lbl"
-                  >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} à fondre
+                  >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} à vendre
                   <span class="bulk-note"
                     >(tout, sauf 🔒 · familiers · porté · retenus par le 🪄)</span
                   ></span
@@ -1012,8 +1012,8 @@
                      TRANCHE (or ou métal ?). Un bouton qui comptait les objets et
                      l'autre la ferraille laissait croire à deux barèmes différents. -->
                 <div class="bulk-btns">
-                  <button v-if="belowScrap > 0" class="bulk-b" @click="doRecycleBelow">
-                    🔩 Tout recycler (+{{ belowScrap }})
+                  <button v-if="belowGold > 0" class="bulk-b" @click="doSellBelow">
+                    🪙 Tout vendre (+{{ fmtPow(belowGold) }})
                   </button>
                 </div>
               </div>
@@ -1125,17 +1125,16 @@
                     <button class="equip-btn" @click="doEquip(it.id)">
                       {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
                     </button>
-                    <!-- ⚠️ PLUS DE VENTE : le jeu n'a pas de marchand, seulement une forge.
-                         Un objet dont on ne veut plus part donc en ferraille — c'est la
-                         seule sortie qui ait un sens dans ce monde. -->
+                    <!-- 🪙 LA VENTE REVIENT (v0.890) : le recyclage en ferraille en donnait
+                         bien trop. -->
                     <button
-                      v-if="scrapValue(it) > 0"
+                      v-if="canSell(it)"
                       class="ii-ic"
                       :disabled="it.locked"
-                      :title="'Recycler → ferraille (' + scrapValue(it) + '🔩)'"
-                      @click="doRecycle(it)"
+                      :title="'Vendre (' + sellValue(it) + ' 🪙)'"
+                      @click="doSell(it)"
                     >
-                      🔩
+                      🪙
                     </button>
                     <button
                       class="ii-ic lock"
@@ -1568,11 +1567,11 @@
               <span class="repl-choice-lbl">Garder</span>
               <small>au sac</small>
             </button>
-            <button class="repl-choice" @click="confirmReplace('recycle')">
-              <span class="repl-choice-emo">🔩</span>
-              <span class="repl-choice-lbl">Recycler</span>
+            <button class="repl-choice" @click="confirmReplace('sell')">
+              <span class="repl-choice-emo">🪙</span>
+              <span class="repl-choice-lbl">Vendre</span>
               <small v-if="equippedInSlot(replaceTarget.slot)"
-                >+{{ scrapValue(equippedInSlot(replaceTarget.slot)!) }} ferraille</small
+                >+{{ fmtPow(sellValue(equippedInSlot(replaceTarget.slot)!)) }} or</small
               >
             </button>
           </div>
@@ -1780,10 +1779,10 @@
             v-if="allSparesGold"
             class="lo-mini lo-all-spares"
             :disabled="busy"
-            title="Fondre les doublons de tous les sets — les sets ne bougent pas"
-            @click="doRecycleSpares()"
+            title="Vendre les doublons de tous les sets — les sets ne bougent pas"
+            @click="doSellSpares()"
           >
-            🗂️ Tous les doublons ({{ allSparesGold }} 🔩)
+            🗂️ Tous les doublons ({{ fmtPow(allSparesGold) }} 🪙)
           </button>
           <button class="shop-x" aria-label="Fermer" @click="loadoutOpen = false">✕</button>
         </div>
@@ -1898,33 +1897,33 @@
                   SLOT_LABEL[sp.slot] +
                   ' · ' +
                   sp.name +
-                  ' — doublon · toucher pour ses stats, l’utiliser ou le recycler'
+                  ' — doublon · toucher pour ses stats, l’utiliser ou le vendre'
                 "
                 @click="inspectItem = sp"
               >
                 {{ SLOT_EMOJI[sp.slot] }}<span v-if="sp.locked" class="lo-worn">🔒</span>
               </button>
             </div>
-            <div v-if="lo.sparesMelt || lo.lot.melt.length" class="lo-actions">
+            <div v-if="lo.sparesSold || lo.lot.sold.length" class="lo-actions">
               <button
-                v-if="lo.sparesMelt"
+                v-if="lo.sparesSold"
                 class="lo-mini"
                 :disabled="busy"
                 :title="
-                  'Fondre les doublons de ce set (' + lo.sparesGold + ' 🔩) — le set ne bouge pas'
+                  'Vendre les doublons de ce set (' + lo.sparesGold + ' 🪙) — le set ne bouge pas'
                 "
-                @click="doRecycleSpares(i)"
+                @click="doSellSpares(i)"
               >
-                🗂️ Doublons ({{ lo.sparesGold }} 🔩)
+                🗂️ Doublons ({{ fmtPow(lo.sparesGold) }} 🪙)
               </button>
               <button
-                v-if="lo.lot.melt.length"
+                v-if="lo.lot.sold.length"
                 class="lo-mini sell"
                 :disabled="busy"
-                :title="'Fondre tout ce set, doublons compris (' + lo.sellGold + ' 🔩)'"
+                :title="'Vendre tout ce set, doublons compris (' + lo.sellGold + ' 🪙)'"
                 @click="doSellLoadout(i)"
               >
-                🔩 Tout le set ({{ lo.sellGold }})
+                🪙 Tout le set ({{ fmtPow(lo.sellGold) }})
               </button>
             </div>
           </div>
@@ -1987,16 +1986,18 @@
               @click="doPromoteSpare(inspectStored.setIndex, inspectItem)"
             />
             <q-btn
-              v-if="scrapValue(inspectItem) > 0"
+              v-if="canSell(inspectItem) || inspectItem.locked"
               flat
               no-caps
               dense
               color="negative"
               :disable="!!inspectItem.locked || busy"
               :label="
-                inspectItem.locked ? '🔒 Verrouillée' : `🔩 Recycler (+${scrapValue(inspectItem)})`
+                inspectItem.locked
+                  ? '🔒 Verrouillée'
+                  : `🪙 Vendre (+${fmtPow(sellValue(inspectItem))})`
               "
-              @click="doRecycleSetPiece(inspectItem)"
+              @click="doSellSetPiece(inspectItem)"
             />
           </template>
           <q-btn flat no-caps dense label="Fermer" @click="inspectItem = null" />
@@ -2567,8 +2568,8 @@
                     >
                       {{ equippedInSlot(d.slot) ? 'Remplacer' : 'Équiper' }}
                     </button>
-                    <button v-if="scrapValue(d) > 0" class="link-btn" @click="doRecycle(d)">
-                      Recycler 🔩{{ scrapValue(d) }}
+                    <button v-if="canSell(d)" class="link-btn" @click="doSell(d)">
+                      Vendre 🪙{{ fmtPow(sellValue(d)) }}
                     </button>
                   </div>
                 </template>
@@ -2881,8 +2882,7 @@ import {
   magicFindLuck,
   itemLevelMult,
   round1,
-  scrapValue,
-  canRecycle,
+  canSell,
   isFamiliar,
   FAMILIAR_SLOT,
   TROPHY_SLOT,
@@ -2902,7 +2902,7 @@ import {
   SET_BY_ID,
   setCounts,
   voieSetRoster,
-  setRecycleLot,
+  setSellLot,
   type SetRosterEntry,
   type Item,
   type ItemSlot,
@@ -5319,7 +5319,7 @@ function fmtExpeMs(ms: number): string {
 const invFilter = ref<ItemSlot | 'all'>('all');
 // 🏆 TROPHÉES : ni dans la grille, ni dans le sac du butin. Ils ne tombent que du boss
 // entre amis — ils ont leur VITRINE (sous la grille) et leur propre sac (bouton 🏆), et
-// « Tout recycler » ne doit jamais les fondre avec le bric-à-brac.
+// « Tout vendre » ne doit jamais les fondre avec le bric-à-brac.
 const isTrophy = (i: Item) => i.slot === TROPHY_SLOT;
 const equippedTrophy = computed<Item | null>(() => char.row?.equipped[TROPHY_SLOT] ?? null);
 const trophyBag = computed<Item[]>(() =>
@@ -5494,23 +5494,23 @@ const loadoutsView = computed(() => {
     // qu'on possède vraiment de mieux — l'ancienne version ignorait les pièces portées
     // et sous-estimait donc systématiquement le set en cours.
     const power = entries.length ? loadoutPower(loadoutVoie(i)?.id ?? null) : 0;
-    // Recycler fond réserve + doublons + sac (`setRecycleLot`, le lot même que le store
-    // fond). On ne fond jamais ce qu’on porte.
-    const lot = setRecycleLot(vid, los[i], inv);
+    // Vendre prend réserve + doublons + sac (`setSellLot`, le lot même que le store
+    // vend). On ne vend jamais ce qu’on porte.
+    const lot = setSellLot(vid, los[i], inv);
     const spares = los[i]?.spares ?? [];
     const spareLot = sparesLot(los, i);
     return {
       entries,
       count: entries.length,
       spares,
-      sparesGold: spareLot.melt.reduce((s, it) => s + scrapValue(it), 0),
-      sparesMelt: spareLot.melt.length,
+      sparesGold: spareLot.sold.reduce((s, it) => s + sellValue(it), 0),
+      sparesSold: spareLot.sold.length,
       wornCount: entries.filter((e) => e.worn).length,
       // Emplacements où l'on porte une pièce de ce set MOINS bonne que celle de la réserve.
       upgradable: entries.filter((e) => !e.worn && e.wornItem).length,
       power,
       delta: power - combatPowerVal.value,
-      sellGold: lot.melt.reduce((s, it) => s + scrapValue(it), 0),
+      sellGold: lot.sold.reduce((s, it) => s + sellValue(it), 0),
       lot,
     };
   });
@@ -5520,9 +5520,9 @@ const loadoutsView = computed(() => {
 // ⚠️ DÉRIVÉ du roster affiché, jamais recompté à part : c'est la divergence entre ce
 // compteur (qui comptait partout) et la liste (qui ne montrait que la réserve) qui rendait
 // « Mes sets » illisible — 4/4 annoncé au-dessus de deux objets.
-/** Ferraille des doublons de TOUS les sets (bouton de l’en-tête de « Mes sets »). */
+/** Or des doublons de TOUS les sets (bouton de l’en-tête de « Mes sets »). */
 const allSparesGold = computed(() =>
-  sparesLot(char.row?.loadouts ?? []).melt.reduce((s, it) => s + scrapValue(it), 0),
+  sparesLot(char.row?.loadouts ?? []).sold.reduce((s, it) => s + sellValue(it), 0),
 );
 const voieOwnedCount = (i: number): number => loadoutsView.value[i]?.count ?? 0;
 
@@ -5598,29 +5598,28 @@ function doWearVoieSet(i: number) {
 // Vendre un loadout rangé → or (ticket 53a6d487).
 function doSellLoadout(i: number) {
   const view = loadoutsView.value[i];
-  const items = view?.lot.melt ?? [];
+  const items = view?.lot.sold ?? [];
   if (!items.length) return;
-  const gain = items.reduce((a, it) => a + scrapValue(it), 0);
+  const gain = items.reduce((a, it) => a + sellValue(it), 0);
   // ⚠️ On DIT ce qui reste, sinon on croit avoir tout fondu et une pièce semble oubliée —
   // exactement le défaut signalé.
   const restent: string[] = [];
   if (view?.wornCount) restent.push(`${view.wornCount} portée(s)`);
   if (view?.lot.keep.length) restent.push(`${view.lot.keep.length} verrouillée(s) 🔒`);
   $q.dialog({
-    title: 'Fondre tout ce set ?',
+    title: 'Vendre tout ce set ?',
     message:
-      `${items.length} pièce(s) de la réserve et du sac partiront à la forge pour ${gain} 🔩 : ` +
+      `${items.length} pièce(s) de la réserve et du sac seront vendues pour ${fmtPow(gain)} 🪙 : ` +
       items.map((it) => it.name).join(', ') +
       (restent.length ? `. Restent : ${restent.join(' et ')}.` : '.'),
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
+    ok: { label: `Vendre (+${fmtPow(gain)} 🪙)`, color: 'negative' },
   }).onOk(() => doSellLoadoutConfirmed(i));
 }
 function doSellLoadoutConfirmed(i: number) {
   withUid(async (uid) => {
-    const g = await char.recycleLoadout(uid, i, setScore.value);
-    if (g) $q.notify({ type: 'positive', message: `🔩 Set fondu (+${g} ferraille).` });
-  }, 'Impossible de recycler ce set.');
+    await char.sellLoadout(uid, i, setScore.value); // l'éclat d'or annonce le montant
+  }, 'Impossible de vendre ce set.');
 }
 
 // ── Familier (compagnon) ──
@@ -5871,12 +5870,12 @@ function applyPlan() {
   }, 'Application impossible.');
 }
 // Remplacement d'un objet équipé : le joueur choisit dans une modale ce qu'il
-// advient de l'ancien (garder au sac / recycler → poussière / vendre → or).
+// advient de l'ancien (garder au sac / vendre → or).
 const replaceTarget = ref<Item | null>(null);
 function openReplace(drop: Item) {
   replaceTarget.value = drop;
 }
-function confirmReplace(disposal: 'recycle' | 'keep') {
+function confirmReplace(disposal: 'sell' | 'keep') {
   const drop = replaceTarget.value;
   if (!drop) return;
   replaceTarget.value = null;
@@ -5894,10 +5893,7 @@ function doUnequip(slot: ItemSlot) {
   withUid((uid) => char.unequip(uid, slot), 'Impossible de déséquiper.');
 }
 
-// ♻️ L'autre porte de sortie du sac : la forge. On vend OU on recycle, jamais les deux —
-// le dialogue le dit, parce que 1 141 or et 16 🔩 ne se comparent pas d'instinct.
-/** ⚠️ Un familier se CÈDE, il ne se fond pas : `scrapValue` rend 0 pour ce slot, donc
- *  le brancher sur le recyclage rendait le bouton inerte. C'est la seule vente du jeu. */
+/** Un familier se CÈDE (ses garde-fous vivent dans `sellFamiliars`). */
 function doSellFamiliar(f: Item) {
   const gain = sellValue(f);
   $q.dialog({
@@ -5911,18 +5907,17 @@ function doSellFamiliar(f: Item) {
     }, 'Cession impossible.'),
   );
 }
-function doRecycle(it: Item) {
-  const gain = scrapValue(it);
+function doSell(it: Item) {
+  const gain = sellValue(it);
   $q.dialog({
-    title: 'Envoyer à la forge ?',
-    message: `« ${it.name} » sera fondu en ${gain} 🔩 — réparations et défenses de la base.`,
+    title: 'Vendre cet objet ?',
+    message: `« ${it.name} » partira définitivement contre ${fmtPow(gain)} 🪙.`,
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
+    ok: { label: `Vendre (+${fmtPow(gain)} 🪙)`, color: 'negative' },
   }).onOk(() =>
     withUid(async (uid) => {
-      const g = await char.recycle(uid, it.id);
-      if (g) $q.notify({ type: 'positive', message: `🔩 +${g} ferraille` });
-    }, 'Recyclage impossible.'),
+      await char.sellItem(uid, it.id); // l'éclat d'or annonce le montant
+    }, 'Vente impossible.'),
   );
 }
 function doToggleLock(it: Item) {
@@ -5930,9 +5925,9 @@ function doToggleLock(it: Item) {
 }
 // 🧩 RANGEMENT AUTOMATIQUE DES PIÈCES DE SET (v0.839 ; conception validée avec l'utilisateur).
 // Toute pièce de set de voie qui arrive au sac — boss, Labyrinthe, expédition, récompense —
-// est rangée dans son set : la meilleure à l'emplacement, l'autre en DOUBLON, visible dans
-// « Mes sets » et recyclable d'un geste. Rien ne part plus à la forge sans que le joueur
-// l'ait décidé ; le sac ne garde que les objets hors set.
+// est rangée dans son set : la meilleure à l'emplacement ; l'autre, un DOUBLON, est VENDUE
+// aussitôt (v0.890, demandé : « au lieu de les accumuler »), sauf si elle est 🔒. Le sac ne
+// garde que les objets hors set.
 // ⚠️ Jamais pendant un combat (`busy`) ni pendant son animation : l'annonce « set renforcé »
 // ne doit pas recouvrir le combat qu'on regarde. Le drop révélé, le rangement suit.
 let filing = false;
@@ -5943,10 +5938,15 @@ async function autoFileSetPieces() {
   // un héros de niveau 1 — et garderait peut-être la moins bonne à l’emplacement.
   if (!uid || !row || filing || busy.value || !progress.ready.value) return;
   if (reportOpen.value && !stageDone.value) return;
-  if (!row.inventory.some((it) => voieSetIndex(it) >= 0)) return;
+  if (
+    !row.inventory.some((it) => voieSetIndex(it) >= 0) &&
+    !sparesLot(row.loadouts ?? []).sold.length
+  )
+    return;
   filing = true;
   try {
-    announceFiled(await char.fileBagSetPieces(uid, setScore.value));
+    const r = await char.fileBagSetPieces(uid, setScore.value);
+    announceFiled(r.filed, r.gold);
   } catch {
     // Rien de perdu : les pièces restent au sac, le prochain passage réessaie.
   } finally {
@@ -5962,8 +5962,9 @@ watch(
  *  « ta pièce était moins bonne » à chaque boss transformait une bonne nouvelle en
  *  reproche. Il se lit dans « Mes sets ». Plusieurs pièces d'un coup (retour du Labyrinthe,
  *  premier passage après la mise à jour) → un seul bandeau récapitulatif. */
-function announceFiled(filed: FiledPiece[]) {
+function announceFiled(filed: FiledPiece[], gold = 0) {
   if (!filed.length) return;
+  const soldNote = gold ? ` · doublon vendu +${fmtPow(gold)} 🪙` : '';
   const setName = (f: FiledPiece) => VOIES[f.setIndex]?.name ?? '';
   if (filed.length > 1) {
     const spares = filed.filter((f) => f.outcome === 'spare').length;
@@ -5972,7 +5973,9 @@ function announceFiled(filed: FiledPiece[]) {
       kind: 'drop',
       emoji: '🧩',
       title: `${filed.length} pièces rangées dans Mes sets`,
-      subtitle: spares ? `dont ${spares} en doublon` : 'la meilleure à chaque emplacement',
+      subtitle:
+        (spares ? `dont ${spares} doublon(s) vendu(s)` : 'la meilleure à chaque emplacement') +
+        (gold ? ` · +${fmtPow(gold)} 🪙` : ''),
     });
     return;
   }
@@ -5983,7 +5986,7 @@ function announceFiled(filed: FiledPiece[]) {
       kind: 'drop',
       emoji: '🧩',
       title: `Ajoutée à ton set ${setName(f)}`,
-      subtitle: "l'emplacement était libre",
+      subtitle: "l'emplacement était libre" + soldNote,
     });
   else if (f.outcome === 'upgraded' && f.displaced) {
     const gain = Math.round(setScore.value(f.item) - setScore.value(f.displaced));
@@ -5992,7 +5995,7 @@ function announceFiled(filed: FiledPiece[]) {
       kind: 'drop',
       emoji: f.item.emoji,
       title: `Set ${setName(f)} renforcé`,
-      subtitle: `${f.item.name} · ⚔️ ${fmtDelta(0, gain)} · l'ancienne passe en doublon`,
+      subtitle: `${f.item.name} · ⚔️ ${fmtDelta(0, gain)} · l'ancienne est vendue`,
       rarity: fxRarity(f.item.rarity),
     });
   }
@@ -6023,8 +6026,8 @@ const inspectStored = computed<{ setIndex: number; spare: boolean } | null>(() =
   }
   return null;
 });
-function doRecycleSetPiece(it: Item) {
-  const gain = scrapValue(it);
+function doSellSetPiece(it: Item) {
+  const gain = sellValue(it);
   const replaced =
     inspectStored.value && !inspectStored.value.spare
       ? (char.row?.loadouts?.[inspectStored.value.setIndex]?.spares ?? []).some(
@@ -6032,40 +6035,36 @@ function doRecycleSetPiece(it: Item) {
         )
       : false;
   $q.dialog({
-    title: 'Recycler cette pièce ?',
+    title: 'Vendre cette pièce ?',
     message:
-      `« ${it.name} » sera fondue en ${gain} 🔩.` +
+      `« ${it.name} » partira contre ${fmtPow(gain)} 🪙.` +
       (replaced ? ' Ton meilleur doublon de cet emplacement prendra sa place dans le set.' : ''),
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
+    ok: { label: `Vendre (+${fmtPow(gain)} 🪙)`, color: 'negative' },
   }).onOk(() =>
     withUid(async (uid) => {
-      const g = await char.recycleSetPiece(uid, it.id, setScore.value);
-      if (g) {
-        inspectItem.value = null;
-        $q.notify({ type: 'positive', message: `🔩 +${g} ferraille` });
-      }
-    }, 'Recyclage impossible.'),
+      const g = await char.sellSetPiece(uid, it.id, setScore.value);
+      if (g) inspectItem.value = null;
+    }, 'Vente impossible.'),
   );
 }
-// Recycler les doublons d'un set (ou de tous). Les 🔒 restent — l'écran le dit.
-function doRecycleSpares(setIndex?: number) {
-  const { melt, keep } = sparesLot(char.row?.loadouts ?? [], setIndex);
-  if (!melt.length) return;
-  const gain = melt.reduce((s, it) => s + scrapValue(it), 0);
+// Vendre les doublons d'un set (ou de tous). Les 🔒 restent — l'écran le dit.
+function doSellSpares(setIndex?: number) {
+  const { sold, keep } = sparesLot(char.row?.loadouts ?? [], setIndex);
+  if (!sold.length) return;
+  const gain = sold.reduce((s, it) => s + sellValue(it), 0);
   $q.dialog({
-    title: setIndex === undefined ? 'Recycler tous les doublons ?' : 'Recycler ces doublons ?',
+    title: setIndex === undefined ? 'Vendre tous les doublons ?' : 'Vendre ces doublons ?',
     message:
-      `${melt.length} doublon(s) partiront à la forge pour ${gain} 🔩. Les pièces rangées dans ` +
+      `${sold.length} doublon(s) seront vendus pour ${fmtPow(gain)} 🪙. Les pièces rangées dans ` +
       `les sets ne bougent pas.` +
       (keep.length ? ` ${keep.length} doublon(s) verrouillé(s) 🔒 restent.` : ''),
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
+    ok: { label: `Vendre (+${fmtPow(gain)} 🪙)`, color: 'negative' },
   }).onOk(() =>
     withUid(async (uid) => {
-      const g = await char.recycleSpares(uid, setIndex);
-      if (g) $q.notify({ type: 'positive', message: `🔩 Doublons fondus (+${g} ferraille).` });
-    }, 'Recyclage impossible.'),
+      await char.sellSpares(uid, setIndex);
+    }, 'Vente impossible.'),
   );
 }
 // Nettoyage en masse : objets du sac moins rares que l'équipé du même slot.
@@ -6076,7 +6075,7 @@ const bulkSlot = computed<ItemSlot | undefined>(() =>
 // Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés → candidats à la casse/vente
 // en masse. Puissance FIXE (grade + enchant) → comparaison directe « si équipé ». Slot vide
 // → l'objet est utile (à équiper), gardé. 🔒 protège ; familiers = piste à part.
-// ⚠️ « TOUT RECYCLER » RECYCLE TOUT — sans condition de puissance (décision de
+// ⚠️ « TOUT VENDRE » VEND TOUT — sans condition de puissance (décision de
 // l'utilisateur). Les deux règles précédentes (« pas meilleur que l'équipé », puis « ne
 // contribue pas à l'optimum ») avaient le même défaut : elles demandaient un CALCUL —
 // et le second, 3 s — pour décider quoi jeter, donc ouvrir le Sac ramait. Le tri se fait
@@ -6094,29 +6093,26 @@ const powerLossItems = computed<Item[]>(() => {
   });
 });
 const belowCount = computed(() => powerLossItems.value.length);
-// Ce que rendrait la purge, en ferraille. La vente n'existe plus : le jeu n'a pas de
-// marchand, seulement une forge.
-// Même liste que belowGold, sans filtre divergent : les deux nombres doivent décrire
-// EXACTEMENT le même lot, sinon les comparer n'a pas de sens. (Un objet non recyclable
-// rendrait 0, cf. scrapValue.)
-const belowScrap = computed(() => powerLossItems.value.reduce((a, i) => a + scrapValue(i), 0));
+// Ce que rendrait la purge, en or (v0.890 : la vente remplace le recyclage).
+const belowGold = computed(() =>
+  powerLossItems.value.filter(canSell).reduce((a, i) => a + sellValue(i), 0),
+);
 // Libellé du périmètre (« du sac » ou « [type] ») pour être explicite.
 const bulkScope = computed(() =>
   bulkSlot.value ? SLOT_LABEL[bulkSlot.value].toLowerCase() : 'ton sac',
 );
-function doRecycleBelow() {
-  const ids = powerLossItems.value.filter(canRecycle).map((i) => i.id);
-  const gain = powerLossItems.value.filter(canRecycle).reduce((a, i) => a + scrapValue(i), 0);
+function doSellBelow() {
+  const ids = powerLossItems.value.filter(canSell).map((i) => i.id);
+  const gain = belowGold.value;
   $q.dialog({
-    title: 'Tout recycler',
-    message: `Fondre les ${ids.length} objet(s) de ${bulkScope.value} en ${gain} 🔩 ? Tout y passe, sauf les objets verrouillés 🔒, tes familiers, ce que tu portes et les pièces retenues par ton meilleur build.`,
+    title: 'Tout vendre',
+    message: `Vendre les ${ids.length} objet(s) de ${bulkScope.value} pour ${fmtPow(gain)} 🪙 ? Tout y passe, sauf les objets verrouillés 🔒, tes familiers, ce que tu portes et les pièces retenues par ton meilleur build.`,
     cancel: { label: 'Annuler', flat: true },
-    ok: { label: `Tout recycler (+${gain} 🔩)`, color: 'negative' },
+    ok: { label: `Tout vendre (+${fmtPow(gain)} 🪙)`, color: 'negative' },
   }).onOk(() =>
     withUid(async (uid) => {
-      const g = await char.recycleMany(uid, ids);
-      if (g) $q.notify({ type: 'positive', message: `🔩 +${g} ferraille` });
-    }, 'Recyclage impossible.'),
+      await char.sellMany(uid, ids); // l'éclat d'or annonce le montant
+    }, 'Vente impossible.'),
   );
 }
 async function savePseudo() {

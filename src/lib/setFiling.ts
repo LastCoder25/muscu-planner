@@ -9,13 +9,13 @@
 //
 // Désormais : la meilleure pièce occupe l'emplacement du set, l'autre devient un DOUBLON
 // rangé à côté (`Loadout.spares`). Rien ne part plus à la forge tout seul ; le joueur
-// recycle ses doublons d'un geste, quand il le décide. Le sac, lui, ne garde que les
+// vend ses doublons (automatiquement depuis la v0.890). Le sac, lui, ne garde que les
 // objets hors set.
 //
 // Module à part (comme `buildingPreview.ts`) : le barème a besoin du passif de voie, que
 // `items.ts` ne peut pas importer sans cycle.
 import type { Equipped, Item, Loadout, AggregatedEffects } from './items';
-import { SLOTS, MAX_LOADOUTS, canRecycle, playerWithGear, mergeEffects } from './items';
+import { SLOTS, MAX_LOADOUTS, canSell, playerWithGear, mergeEffects } from './items';
 import { combatPowerRaw } from './combat';
 import { VOIES, voiePassiveEffects } from './voies';
 
@@ -113,31 +113,31 @@ export function promoteSpare(
 }
 
 /**
- * Fond UNE pièce rangée — un doublon, ou la pièce en place d'un emplacement. Rend `null`
+ * Retire UNE pièce rangée (pour la vendre) — un doublon, ou la pièce en place d'un emplacement. Rend `null`
  * si elle n'est pas dans les réserves (une pièce PORTÉE vit dans `equipped` : hors
  * d'atteinte par construction) ou si elle est 🔒.
  *
- * ⚠️ Fondre la pièce EN PLACE ne laisse pas un trou quand un doublon attend : le meilleur
+ * ⚠️ Vendre la pièce EN PLACE ne laisse pas un trou quand un doublon attend : le meilleur
  * doublon de cet emplacement (au barème du set) prend sa place. Sans ça, le set perdrait
  * une pièce qu'on possède encore, et l'emplacement se lirait vide.
  */
-export function meltSetPiece(
+export function takeSetPiece(
   loadouts: readonly (Loadout | undefined)[],
   itemId: string,
   score: (it: Item) => number,
-): { loadouts: Loadout[]; melted: Item } | null {
+): { loadouts: Loadout[]; taken: Item } | null {
   const out = normalizeLoadouts(loadouts);
   for (const lo of out) {
     const spare = lo.spares?.find((s) => s.id === itemId);
     if (spare) {
-      if (!canRecycle(spare)) return null;
+      if (!canSell(spare)) return null;
       lo.spares = lo.spares!.filter((s) => s.id !== itemId);
-      return { loadouts: out, melted: spare };
+      return { loadouts: out, taken: spare };
     }
     const slot = SLOTS.find((s) => lo.items[s]?.id === itemId);
     if (slot) {
       const held = lo.items[slot]!;
-      if (!canRecycle(held)) return null;
+      if (!canSell(held)) return null;
       delete lo.items[slot];
       const sameSlot = (lo.spares ?? []).filter((s) => s.slot === slot);
       lo.spares = (lo.spares ?? []).filter((s) => s.slot !== slot);
@@ -146,22 +146,22 @@ export function meltSetPiece(
         lo.items[slot] = best;
         lo.spares = [...lo.spares, ...sameSlot.filter((s) => s !== best)];
       }
-      return { loadouts: out, melted: held };
+      return { loadouts: out, taken: held };
     }
   }
   return null;
 }
 
-/** Ce que « Recycler les doublons » fond : les doublons d'un set (ou de tous si `setIndex`
+/** Ce que « Vendre les doublons » vend : les doublons d'un set (ou de tous si `setIndex`
  *  est omis). Les 🔒 restent — le verrou protège de toutes les sorties. */
 export function sparesLot(
   loadouts: readonly (Loadout | undefined)[],
   setIndex?: number,
-): { melt: Item[]; keep: Item[] } {
+): { sold: Item[]; keep: Item[] } {
   const spares = loadouts
     .filter((_, k) => setIndex === undefined || k === setIndex)
     .flatMap((lo) => lo?.spares ?? []);
-  return { melt: spares.filter(canRecycle), keep: spares.filter((it) => !canRecycle(it)) };
+  return { sold: spares.filter(canSell), keep: spares.filter((it) => !canSell(it)) };
 }
 
 /**

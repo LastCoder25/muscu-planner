@@ -303,51 +303,16 @@ export function sellValue(it: Item): number {
   return sellValueOf(it.rarity, it.roll ?? 0, it.level);
 }
 
-// ── ♻️ RECYCLAGE EN FERRAILLE 🔩 ────────────────────────────────────────────────────
-// Un objet dont on ne veut plus peut partir à la FORGE au lieu du marchand : le sac
-// devient une source de ferraille, donc de réparations et de défenses. C'est une vraie
-// ALTERNATIVE à la vente (l'objet est consommé une fois, pas deux) — l'or et le métal ne
-// se remplacent pas, on arbitre.
-//
-// ⚠️ LE RATIO VIENT DE LA MASSE DE MÉTAL de la pièce, pas de sa puissance : c'est la
-// seule lecture qui se comprenne sans notice. Une cuirasse, c'est des plaques ; une
-// épée, une lame et une garde ; une relique, surtout de la pierre et de l'os ; un
-// collier, une pincée. Un FAMILIER ne se recycle pas — on ne démonte pas un animal.
-const SCRAP_BY_SLOT: Record<ItemSlot, number> = {
-  armor: 1, // la plus grosse pièce de métal du stuff
-  weapon: 0.85,
-  relic: 0.45,
-  accessory: 0.3,
-  familiar: 0, // jamais (garde-fou aussi côté store)
-  trophy: 0.45, // une coupe de métal, comme une relique
-};
-/** Ferraille de base d'une pièce moyenne. ⚠️ Calé pour que vider un sac de bric-à-brac
- *  (~20 objets) rende l'ordre de grandeur d'UNE épave, pas de dix : le POI reste la
- *  source de POINTE, le recyclage un filet régulier — même relation que la Fonderie avec
- *  l'épave, ou la Mine d'or avec les expéditions. */
-const SCRAP_BASE = 4;
-/** La rareté monte DOUCEMENT (×1 → ×2,75), très loin de la courbe de l'or (×1,8 par
- *  rang) : les puits de ferraille (réparer, monter une structure) croissent avec le
- *  NIVEAU des défenses, pas de façon géométrique. Un sac de haut rang ne doit pas rendre
- *  l'enceinte gratuite. */
-const SCRAP_RARITY_STEP = 0.25;
-
-/** Ferraille d'une pièce à partir de son emplacement, sa rareté et son niveau d'objet.
- *  ⚠️ Source unique : l'équipement des aventuriers la lit aussi (`advGearScrap`). */
-export function scrapValueOf(slot: ItemSlot, rarity: Rarity, level: number): number {
-  const slotMult = SCRAP_BY_SLOT[slot] ?? 0;
-  if (!slotMult) return 0;
-  const rarityMult = 1 + RANK_ORDER.indexOf(rarity) * SCRAP_RARITY_STEP;
-  const v = SCRAP_BASE * slotMult * rarityMult * itemLevelMult(level);
-  return Math.max(1, Math.round(v)); // une pièce recyclable rend toujours quelque chose
-}
-/** Ferraille rendue par le recyclage d'un objet. 0 pour un familier. */
-export function scrapValue(it: Item): number {
-  return scrapValueOf(it.slot, it.rarity, it.level);
-}
-/** Un objet peut-il partir à la forge ? (jamais un familier, jamais un objet 🔒.) */
-export function canRecycle(it: Item): boolean {
-  return !it.locked && scrapValue(it) > 0;
+// ── 🪙 VENTE — la seule sortie d'un objet du héros (v0.890) ──────────────────────────
+// ⚠️ LE RECYCLAGE EN FERRAILLE EST RETIRÉ (demandé par l’utilisateur : « on a énormément
+// trop de ferraille avec le recyclage »). Mesuré au niveau 30 : un joueur qui enchaîne ~40
+// descentes par jour recyclait ~320 🔩/jour, soit presque les 870 🔩 d’un cran des six
+// structures — le métal tombait tout seul, et la ferraille cessait d’être le second verrou
+// de l’enceinte. Elle ne vient plus que de l’épave (héros et convois) et de la Fonderie.
+/** Un objet peut-il être vendu ? Jamais un objet 🔒 ; un familier se CÈDE par
+ *  `sellFamiliars`, qui garde ses propres garde-fous (confié à un aventurier, etc.). */
+export function canSell(it: Item): boolean {
+  return !it.locked && it.slot !== FAMILIAR_SLOT;
 }
 /** Peut-on améliorer cet objet ? (poussière suffisante + pas au plafond). */
 export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean {
@@ -2684,18 +2649,18 @@ export interface SetRosterEntry {
  * Restent, et l’écran le DIT : ce qu’on PORTE (on ne fond pas ce qu’on a sur soi) et les
  * pièces 🔒 (le verrou protège de toutes les sorties), qui repartent au sac.
  */
-export function setRecycleLot(
+export function setSellLot(
   setId: string,
   stored: Loadout | undefined,
   inventory: Item[],
-): { melt: Item[]; keep: Item[] } {
+): { sold: Item[]; keep: Item[] } {
   const pool = [
     ...SLOTS.map((s) => stored?.items?.[s]).filter((it): it is Item => !!it),
     // Les DOUBLONS du set sont fondus avec lui (v0.839) : « tout ce set » veut dire tout.
     ...(stored?.spares ?? []),
     ...inventory.filter((it) => it.setId === setId && SLOTS.includes(it.slot)),
   ];
-  return { melt: pool.filter((it) => canRecycle(it)), keep: pool.filter((it) => !canRecycle(it)) };
+  return { sold: pool.filter((it) => canSell(it)), keep: pool.filter((it) => !canSell(it)) };
 }
 
 export function voieSetRoster(

@@ -13,8 +13,7 @@ import {
 } from '@/lib/character';
 import {
   sellValue,
-  scrapValue,
-  canRecycle,
+  canSell,
   sellValueOf,
   levelToEnchant,
   enchantMult,
@@ -38,14 +37,14 @@ import {
   type Loadout,
   type PendingReward,
   voieSetRoster,
-  setRecycleLot,
+  setSellLot,
 } from '@/lib/items';
 import {
   fileSetPieces,
   ownedInLoadouts,
   normalizeLoadouts,
   promoteSpare,
-  meltSetPiece,
+  takeSetPiece,
   sparesLot,
   setPieceScorer,
   voieSetIndex,
@@ -170,7 +169,6 @@ import {
   type Caravan,
 } from '@/lib/caravan';
 import {
-  advGearScrap,
   advGearSellValue,
   canWearAdvGear,
   lineageOf,
@@ -710,43 +708,30 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
-  // ♻️ Envoie un objet du sac À LA FORGE → ferraille 🔩 (réparations et défenses).
-  // ⚠️ ALTERNATIVE à la vente, pas un bonus : l'objet est consommé une fois. Un familier
-  // ne se recycle jamais (`canRecycle`), un objet 🔒 non plus — mêmes garde-fous que la
-  // vente, sinon le verrou ne protégerait que d'une des deux portes.
-  async function recycle(userId: string, itemId: string): Promise<number> {
-    const cur = row.value;
-    if (!cur) return 0;
-    const item = cur.inventory.find((i) => i.id === itemId);
-    if (!item || !canRecycle(item)) return 0;
-    const gain = scrapValue(item);
-    await persist(userId, {
-      scrap: cur.scrap + gain,
-      inventory: cur.inventory.filter((i) => i.id !== itemId),
-    });
-    return gain;
+  // 🪙 VEND un objet du sac (v0.890 : le recyclage en ferraille est retiré — il en donnait
+  // bien trop). Un familier se cède par `sellFamiliars`, un objet 🔒 ne part jamais.
+  async function sellItem(userId: string, itemId: string): Promise<number> {
+    return sellMany(userId, [itemId]);
   }
 
-  // Recycle EN MASSE une liste d'objets du sac (par id) → ferraille. Renvoie le total.
-  async function recycleMany(userId: string, ids: string[]): Promise<number> {
+  // Vend EN MASSE une liste d'objets du sac (par id) → or. Une écriture, une animation d'or.
+  async function sellMany(userId: string, ids: string[]): Promise<number> {
     const cur = row.value;
     if (!cur || !ids.length) return 0;
     const set = new Set(ids);
-    const targets = cur.inventory.filter((i) => set.has(i.id) && canRecycle(i));
+    const targets = cur.inventory.filter((i) => set.has(i.id) && canSell(i));
     if (!targets.length) return 0;
-    const rm = new Set(targets.map((t) => t.id)); // ne retire QUE les recyclables
-    const gain = targets.reduce((a, it) => a + scrapValue(it), 0);
+    const rm = new Set(targets.map((t) => t.id)); // ne retire QUE les vendables
+    const gain = targets.reduce((a, it) => a + sellValue(it), 0);
     await persist(userId, {
-      scrap: cur.scrap + gain,
+      gold: cur.gold + gain,
       inventory: cur.inventory.filter((i) => !rm.has(i.id)),
     });
+    goldFx.gain(gain);
     return gain;
   }
 
-  /** Cède un FAMILIER contre de l'or. ⚠️ **La seule vente qui subsiste**, et c'est
-   *  cohérent : on ne fond pas un animal à la forge — `scrapValue` rend d'ailleurs 0 pour
-   *  le slot familier, si bien que le brancher sur le recyclage rendait le bouton inerte.
-   *  Un familier dont on ne veut plus se cède ; un objet se refond. */
+  /** Cède un FAMILIER contre de l'or (ses garde-fous vivent dans `sellFamiliars`). */
   async function sellFamiliar(userId: string, itemId: string): Promise<number> {
     return sellFamiliars(userId, [itemId]);
   }
@@ -911,7 +896,7 @@ export const useCharacterStore = defineStore('character', () => {
 
   // Équipe un objet du sac ET dispose de l'objet remplacé (vend → or / garde → sac) en
   // UNE écriture. Évite l'aller-retour par le sac.
-  async function equipReplacing(userId: string, itemId: string, disposal: 'recycle' | 'keep') {
+  async function equipReplacing(userId: string, itemId: string, disposal: 'sell' | 'keep') {
     const cur = row.value;
     if (!cur) return;
     const item = cur.inventory.find((i) => i.id === itemId);
@@ -922,12 +907,13 @@ export const useCharacterStore = defineStore('character', () => {
     equipped[item.slot] = item;
     const patch: Partial<CharacterRow> = { equipped };
     let sold = 0;
-    if (prev && disposal === 'recycle' && canRecycle(prev)) {
-      sold = scrapValue(prev);
-      patch.scrap = cur.scrap + sold;
+    if (prev && disposal === 'sell' && canSell(prev)) {
+      sold = sellValue(prev);
+      patch.gold = cur.gold + sold;
     } else if (prev) inventory.push(prev); // keep (ou pièce 🔒 : le verrou protège)
     patch.inventory = inventory;
     const res = await persist(userId, patch);
+    if (sold) goldFx.gain(sold);
     return res;
   }
 
@@ -941,11 +927,11 @@ export const useCharacterStore = defineStore('character', () => {
     return persist(userId, { equipped, inventory: [...cur.inventory, item] });
   }
 
-  // Fond un SET de voie : sa réserve, ses doublons ET ses pièces au sac → ferraille.
-  // Renvoie le gain. ⚠️ Le lot vient de `setRecycleLot` (lib), le même que l’écran annonce :
+  // Vend un SET de voie : sa réserve, ses doublons ET ses pièces au sac → or.
+  // Renvoie le gain. ⚠️ Le lot vient de `setSellLot` (lib), le même que l’écran annonce :
   // la carte montrait des pièces au sac que le bouton ne touchait pas (v0.806).
   // ⚠️ Les pièces 🔒 restent RANGÉES dans le set : le verrou protège de toutes les sorties.
-  async function recycleLoadout(
+  async function sellLoadout(
     userId: string,
     i: number,
     score: (it: Item) => number,
@@ -954,10 +940,10 @@ export const useCharacterStore = defineStore('character', () => {
     const voie = VOIES[i];
     if (!cur || !voie || i < 0 || i >= MAX_LOADOUTS) return 0;
     const lo = cur.loadouts[i];
-    const { melt, keep } = setRecycleLot(`voie:${voie.id}`, lo, cur.inventory);
-    if (!melt.length) return 0;
-    const fondues = new Set(melt.map((it) => it.id));
-    const gain = melt.reduce((s, it) => s + scrapValue(it), 0);
+    const { sold, keep } = setSellLot(`voie:${voie.id}`, lo, cur.inventory);
+    if (!sold.length) return 0;
+    const fondues = new Set(sold.map((it) => it.id));
+    const gain = sold.reduce((s, it) => s + sellValue(it), 0);
     const emptied = normalizeLoadouts(cur.loadouts).map((l, k) =>
       k === i ? { items: {}, spares: [] } : l,
     );
@@ -968,32 +954,45 @@ export const useCharacterStore = defineStore('character', () => {
       score,
     );
     await persist(userId, {
-      scrap: cur.scrap + gain,
+      gold: cur.gold + gain,
       inventory: cur.inventory.filter((it) => !fondues.has(it.id)),
       loadouts,
     });
+    goldFx.gain(gain);
     return gain;
   }
 
   /** Range dans leur set TOUTES les pièces de set de voie du sac (v0.839) — la meilleure à
-   *  l'emplacement, l'autre en doublon, rien à la forge. `skipIds` : pièces à laisser au sac
-   *  pour l'instant (le drop d'un boss pas encore révélé). Une seule écriture. */
+   *  l'emplacement. `skipIds` : pièces à laisser au sac pour l'instant (le drop d'un boss
+   *  pas encore révélé). Une seule écriture.
+   *  ⚠️ LES DOUBLONS SONT VENDUS aussitôt (v0.890, demandé par l’utilisateur : « au lieu de
+   *  les accumuler dans le loadout ») — tous ceux des sets, sauf les 🔒. Renvoie aussi l’or. */
   async function fileBagSetPieces(
     userId: string,
     score: (it: Item) => number,
     skipIds: ReadonlySet<string> = new Set(),
-  ): Promise<FiledPiece[]> {
+  ): Promise<{ filed: FiledPiece[]; gold: number }> {
     const cur = row.value;
-    if (!cur) return [];
+    if (!cur) return { filed: [], gold: 0 };
     const pieces = cur.inventory.filter((it) => voieSetIndex(it) >= 0 && !skipIds.has(it.id));
-    if (!pieces.length) return [];
-    const { loadouts, filed } = fileSetPieces(cur.loadouts, pieces, score);
-    const moved = new Set(filed.map((f) => f.item.id));
+    const hasSpares = sparesLot(cur.loadouts).sold.length > 0;
+    if (!pieces.length && !hasSpares) return { filed: [], gold: 0 };
+    const filedRes = fileSetPieces(cur.loadouts, pieces, score);
+    const { sold } = sparesLot(filedRes.loadouts);
+    const gone = new Set(sold.map((it) => it.id));
+    const loadouts = filedRes.loadouts.map((l) => ({
+      ...l,
+      spares: (l.spares ?? []).filter((it) => !gone.has(it.id)),
+    }));
+    const gold = sold.reduce((a, it) => a + sellValue(it), 0);
+    const moved = new Set(filedRes.filed.map((f) => f.item.id));
     await persist(userId, {
       inventory: cur.inventory.filter((it) => !moved.has(it.id)),
       loadouts,
+      ...(gold ? { gold: cur.gold + gold } : {}),
     });
-    return filed;
+    if (gold) goldFx.gain(gold);
+    return { filed: filedRes.filed, gold };
   }
 
   /** Met un doublon dans son set à la place de la pièce en place (qui devient doublon). */
@@ -1006,35 +1005,37 @@ export const useCharacterStore = defineStore('character', () => {
     return true;
   }
 
-  /** Fond les doublons d'un set (ou de tous). Les 🔒 restent. Renvoie la ferraille gagnée. */
-  async function recycleSpares(userId: string, setIndex?: number): Promise<number> {
+  /** Vend les doublons d'un set (ou de tous). Les 🔒 restent. Renvoie l'or gagné. */
+  async function sellSpares(userId: string, setIndex?: number): Promise<number> {
     const cur = row.value;
     if (!cur) return 0;
-    const { melt } = sparesLot(cur.loadouts, setIndex);
-    if (!melt.length) return 0;
-    const fondus = new Set(melt.map((it) => it.id));
+    const { sold } = sparesLot(cur.loadouts, setIndex);
+    if (!sold.length) return 0;
+    const fondus = new Set(sold.map((it) => it.id));
     const loadouts = normalizeLoadouts(cur.loadouts).map((l) => ({
       ...l,
       spares: (l.spares ?? []).filter((it) => !fondus.has(it.id)),
     }));
-    const gain = melt.reduce((s, it) => s + scrapValue(it), 0);
-    await persist(userId, { scrap: cur.scrap + gain, loadouts });
+    const gain = sold.reduce((s, it) => s + sellValue(it), 0);
+    await persist(userId, { gold: cur.gold + gain, loadouts });
+    goldFx.gain(gain);
     return gain;
   }
 
-  /** Fond UNE pièce de set rangée (doublon ou pièce en place — le meilleur doublon de
+  /** Vend UNE pièce de set rangée (doublon ou pièce en place — le meilleur doublon de
    *  l'emplacement la remplace). Refus au store pour une pièce 🔒 ou portée. */
-  async function recycleSetPiece(
+  async function sellSetPiece(
     userId: string,
     itemId: string,
     score: (it: Item) => number,
   ): Promise<number> {
     const cur = row.value;
     if (!cur) return 0;
-    const r = meltSetPiece(cur.loadouts, itemId, score);
+    const r = takeSetPiece(cur.loadouts, itemId, score);
     if (!r) return 0;
-    const gain = scrapValue(r.melted);
-    await persist(userId, { scrap: cur.scrap + gain, loadouts: r.loadouts });
+    const gain = sellValue(r.taken);
+    await persist(userId, { gold: cur.gold + gain, loadouts: r.loadouts });
+    goldFx.gain(gain);
     return gain;
   }
 
@@ -1885,7 +1886,7 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /** Retire des pièces du STOCK et les désassigne. 🔒 et pièces PORTÉES exclues —
-   *  même politique que le sac du héros. Helper partagé par la vente et le recyclage. */
+   *  même politique que le sac du héros. Helper de la vente. */
   function dropAdvGear(cur: CharacterRow, ids: string[]) {
     const worn = new Set((cur.adventurers ?? []).flatMap((a) => Object.values(a.gear ?? {})));
     const stock = cur.adv_gear?.stock ?? [];
@@ -1904,17 +1905,8 @@ export const useCharacterStore = defineStore('character', () => {
     const gold = gone.reduce((s, g) => s + advGearSellValue(g), 0);
     await persist(userId, { gold: cur.gold + gold, adv_gear: state });
   }
-  /** 🔩 RECYCLE des pièces du stock, en ferraille. */
-  async function recycleAdvGear(userId: string, ids: string[]) {
-    const cur = row.value;
-    if (!cur) return;
-    const { gone, state } = dropAdvGear(cur, ids);
-    if (!gone.length) return;
-    const scrap = gone.reduce((s, g) => s + advGearScrap(g), 0);
-    await persist(userId, { scrap: cur.scrap + scrap, adv_gear: state });
-  }
-  /** 🔒 Verrouille/déverrouille une pièce du stock — protégée de la vente ET du
-   *  recyclage, comme un objet du héros. */
+  /** 🔒 Verrouille/déverrouille une pièce du stock — protégée de la vente, comme un objet
+   *  du héros. */
   async function toggleAdvGearLock(userId: string, id: string) {
     const cur = row.value;
     if (!cur) return;
@@ -2473,7 +2465,6 @@ export const useCharacterStore = defineStore('character', () => {
     setAdvTalent,
     setAdvGear,
     sellAdvGear,
-    recycleAdvGear,
     toggleAdvGearLock,
     withAdvGear,
     startOutfit,
@@ -2502,11 +2493,11 @@ export const useCharacterStore = defineStore('character', () => {
     claimCaravan,
     applyExpedition,
     equip,
-    recycleLoadout,
+    sellLoadout,
     fileBagSetPieces,
     promoteSetSpare,
-    recycleSpares,
-    recycleSetPiece,
+    sellSpares,
+    sellSetPiece,
     optimizeGear,
     previewGearPlan,
     bestBuild,
@@ -2520,8 +2511,8 @@ export const useCharacterStore = defineStore('character', () => {
     sellTalent,
     sellFamiliar,
     sellFamiliars,
-    recycle,
-    recycleMany,
+    sellItem,
+    sellMany,
     toggleLock,
     claimDailyLogin,
     claimLevelUps,

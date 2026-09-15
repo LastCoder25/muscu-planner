@@ -2,9 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { defenseUpgradeScrap, defenseUpgradeCost, repairCost, DEFENSE_TYPES } from '@/lib/raid';
 import { HARVEST, travelOneWayMin } from '@/lib/expedition';
 import { BUILDING_TYPES } from '@/lib/buildings';
-import { DUNGEONS, dungeonFoes, dungeonGold } from '@/data/dungeons';
-import { scrapValue, rollDrop, type Item } from '@/lib/items';
-import { mulberry32 } from '@/lib/combat';
+import { DUNGEONS, dungeonGold } from '@/data/dungeons';
+import { CARAVAN } from '@/lib/caravan';
 
 /** L'économie de la FERRAILLE, mesurée de bout en bout, en JOURS RÉELS.
  *
@@ -40,36 +39,20 @@ function foundryPerDay(L: number): number {
   const t = BUILDING_TYPES.find((b) => b.id === 'foundry')!;
   return (t.prodPerHrPerLvl ?? 0) * L * 24;
 }
-/** Ferraille tirée du butin RÉEL d'une séance de 8 descentes, tout recyclé. */
-function sessionRecycled(L: number): number {
-  const d = bestDungeon(L);
-  const foes = dungeonFoes(d).length;
-  let sc = 0;
-  const T = 300;
-  for (let t = 0; t < T; t++) {
-    const rng = mulberry32((t * 7919 + 13) >>> 0);
-    for (let r = 0; r < 8; r++)
-      for (let i = 0; i < foes; i++) {
-        const it = rollDrop(rng, {
-          cleared: true,
-          defeated: 1,
-          level: d.dropLevel,
-          spread: 1,
-          luck: d.dropLuck,
-          playerLevel: L,
-        });
-        if (it) sc += scrapValue({ ...it, id: 'x' } as Item);
-      }
-  }
-  return sc / T;
-}
-/** Journée type : le butin recyclé de la séance (au prorata), UNE épave, la Fonderie.
+/** Journée type : UNE épave pour le héros, UN convoi vers une épave, la Fonderie.
+ *  ⚠️ LE RECYCLAGE N’Y EST PLUS (v0.890, décision de l’utilisateur : « énormément trop de
+ *  ferraille avec le recyclage »). Ce modèle ne comptait que 8 descentes par séance ; le
+ *  compte réel en enchaîne ~40 par jour, soit ~320 🔩/jour de recyclage au niveau 30 contre
+ *  ~870 🔩 pour un cran des six structures — le métal tombait tout seul. Sans recyclage, le
+ *  modèle d’origine donnait 1,54-2,21 ; il comptait une seule épave par jour et ignorait les
+ *  convois (v0.726), qui en ramènent à `CARAVAN.yieldShare` : un convoi par jour les compte.
  *  ⚠️ L'acier des sièges (v0.702) n'y est PLUS : les assaillants de la base ne laissent
  *  aucune ferraille depuis la v0.856 (décision de l'utilisateur). Mesuré avant retrait, ils
  *  pesaient 5 à 9 % du débit ; sans eux le ratio ferraille/or passe de 1,15-1,74 à
  *  1,22-1,86, toujours dans la bande. Un test de `raid.test` verrouille leur absence. */
-const scrapPerDay = (L: number) =>
-  sessionRecycled(L) * SPORT_PER_DAY + wreckYield(L) + foundryPerDay(L);
+/** Ce que la carte rend en ferraille par jour : l’épave du héros et un convoi. */
+const wreckPerDay = (L: number) => wreckYield(L) * (1 + CARAVAN.yieldShare);
+const scrapPerDay = (L: number) => wreckPerDay(L) + foundryPerDay(L);
 const goldPerDay = (L: number) => dungeonGold(bestDungeon(L)) * 8 * SPORT_PER_DAY;
 /** Monter TOUTES les structures d'un cran : le rythme de croisière. */
 const cranScrap = (L: number) => defenseUpgradeScrap(L) * N_STRUCT;
@@ -91,10 +74,10 @@ describe('ferraille : plus dure à obtenir que l’or', () => {
   });
 
   it('la source qu’on va CHERCHER domine le débit — pas les sources passives', () => {
-    // C'est ce qui donne son sens au geste : l'épave doit peser plus que le recyclage du
-    // butin (qui tombe de toute façon) et que la Fonderie (qui tourne seule) réunis.
+    // C'est ce qui donne son sens au geste : l'épave doit peser plus que la Fonderie (qui
+    // tourne seule).
     for (const L of LEVELS) {
-      const part = wreckYield(L) / scrapPerDay(L);
+      const part = wreckPerDay(L) / scrapPerDay(L);
       expect(
         part,
         `niveau ${L} : l’épave ne pèse que ${(part * 100).toFixed(0)} %`,

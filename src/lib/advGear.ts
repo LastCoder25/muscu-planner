@@ -17,7 +17,6 @@ import {
   RARITY_RANK,
   rollCompanionTier,
   rollItemLevel,
-  scrapValueOf,
   sellValueOf,
   type AggregatedEffects,
   type EffectType,
@@ -667,7 +666,4 @@ export function settleOutfit(state: AdvGearState, now: number): AdvGearState {
 
 export function advGearSellValue(g: AdvGear): number {
   return Math.max(1, Math.round(sellValueOf(g.rarity, g.roll, g.level) * ADV_GEAR.sellK));
-}
-export function advGearScrap(g: AdvGear): number {
-  return scrapValueOf(g.slot, g.rarity, g.level);
 }
