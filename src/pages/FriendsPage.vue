@@ -47,7 +47,11 @@
 
       <template v-else>
         <!-- BOSS ENTRE AMIS : une invitation a 24 h de validité, elle passe en tête. -->
-        <button class="fb-entry" :class="{ hot: bossInvites.length }" @click="openBoss">
+        <button
+          class="fb-entry"
+          :class="{ hot: bossInvites.length || chestWaiting }"
+          @click="openBoss"
+        >
           <span class="fb-entry-emo">🐉</span>
           <span class="fb-entry-main">
             <span class="fb-entry-t font-display">Boss entre amis</span>
@@ -168,7 +172,7 @@ import { logicalToday, computeDailyTargets } from '@/lib/challenges';
 import { useChallengesStore } from '@/stores/challenges';
 import type { SharedChallenge } from '@/stores/friends';
 import { useFriendBossStore } from '@/stores/friendBoss';
-import { bossPhase, bossEndsAt, bossStartAt, fmtBossSpan } from '@/lib/friendBoss';
+import { bossPhase, bossEndsAt, bossStartAt, chestState, fmtBossSpan } from '@/lib/friendBoss';
 
 defineProps<{ embedded?: boolean }>();
 
@@ -181,11 +185,20 @@ const challenges = useChallengesStore();
 const boss = useFriendBossStore();
 const bossNow = Date.now();
 const bossInvites = computed(() => boss.invitations(bossNow));
-/** Ce que la carte d'entrée dit du boss : l'invitation d'abord, puis le combat en cours. */
+/** Un coffre de boss attend-il d'être ouvert ? (sans personnage chargé, on ne sait pas.) */
+const chestWaiting = computed(() => {
+  const cleared = char.row?.cleared_dungeons;
+  return (
+    !!cleared && boss.bosses.some((b) => chestState(b, boss.myMembership(b.id), cleared) !== 'none')
+  );
+});
+/** Ce que la carte d'entrée dit du boss : l'invitation d'abord, puis un coffre à ouvrir,
+ *  puis le combat en cours. */
 const bossLine = computed(() => {
   const inv = bossInvites.value[0];
   if (inv)
     return `⚔️ Invité : « ${inv.exerciseName} » — réponds dans ${fmtBossSpan(bossStartAt(inv) - bossNow)}`;
+  if (chestWaiting.value) return '🎁 Ton coffre de boss t’attend — viens l’ouvrir.';
   const cur = boss.current(bossNow);
   if (!cur) return 'Lance un boss et abats-le avec tes amis, rep après rep.';
   const pv = Math.max(0, cur.hpTotal - cur.damage);

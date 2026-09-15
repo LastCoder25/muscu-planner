@@ -22,7 +22,10 @@
 //    et qu'on a apporté sa part minimale.
 import { REP_XP, XP_MULT } from './athlete';
 import { normMuscle } from './muscles';
+import { mulberry32, seedOf } from './combat';
+import { rollTrophy, type EffectType, type Item } from './items';
 import { CONDITIONING_CHALLENGE_IDS, isCardioChallengeExercise } from '@/data/cardio';
+import { bossGoldForLevel, bossSummonCost } from '@/data/bosses';
 
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
@@ -366,4 +369,76 @@ export function earlyKillFraction(
   if (b.defeatedAt == null) return 0;
   const left = bossEndsAt(b) - b.defeatedAt;
   return Math.max(0, Math.min(1, left / FRIEND_BOSS.durationMs));
+}
+
+// ── Coffre ─────────────────────────────────────────────────────────────────────────
+
+/** Affixe PRINCIPAL du trophée selon la famille de l'exo (choisi avec l'utilisateur). */
+export const TROPHY_MAINS: Record<BossFamily, readonly EffectType[]> = {
+  push: ['damage_pct'],
+  legs: ['max_pv_pct'],
+  pull: ['crit_pct'],
+  core: ['dmg_reduction_pct'],
+  conditioning: ['momentum_pct', 'initiative_pct'],
+};
+
+export const FRIEND_BOSS_CHEST = {
+  /** Or et pierres du coffre, en boss de palier du niveau du joueur : un boss entre amis
+   *  demande une semaine d'effort à plusieurs, il paie comme deux boss de palier. */
+  bosses: 2,
+  /** Bonus « tué tôt » : or et pierres × (1 + part du combat restante × ce facteur). */
+  earlyMult: 1,
+  /** Chance du trophée ajoutée par la part du combat restante. */
+  earlyLuck: 0.5,
+} as const;
+
+export interface FriendBossChest {
+  gold: number;
+  stones: number;
+  /** Part du combat restante à la mort (0..1) : ce qu'a rapporté le fait de le tuer tôt. */
+  early: number;
+  trophy: Omit<Item, 'id'>;
+}
+
+/**
+ * Contenu du coffre d'UN joueur. Tiré côté client (le serveur ne connaît pas le jeu), avec
+ * une graine FIXE boss + joueur : rouvrir la page, ou le récupérer après un échec, rend
+ * exactement le même coffre. Le serveur, lui, garantit qu'il est dû et pris une fois.
+ */
+export function friendBossChest(
+  b: Pick<FriendBoss, 'id' | 'family' | 'exerciseName' | 'createdAt' | 'startAt' | 'defeatedAt'>,
+  userId: string,
+  playerLevel: number,
+): FriendBossChest {
+  const level = Math.max(1, Math.floor(playerLevel));
+  const early = earlyKillFraction(b);
+  const mult = FRIEND_BOSS_CHEST.bosses * (1 + early * FRIEND_BOSS_CHEST.earlyMult);
+  const rng = mulberry32(seedOf(`${b.id}:${userId}`));
+  return {
+    gold: Math.round((bossGoldForLevel(level) * mult) / 10) * 10,
+    stones: Math.round(bossSummonCost(level) * mult),
+    early,
+    trophy: rollTrophy(rng, {
+      mains: TROPHY_MAINS[b.family],
+      title: b.exerciseName,
+      level,
+      luck: early * FRIEND_BOSS_CHEST.earlyLuck,
+    }),
+  };
+}
+
+/** Marque posée sur le personnage quand le coffre est versé (dans `cleared_dungeons`,
+ *  comme les paliers du Labyrinthe) : le serveur dit « pris », cette marque dit « crédité ». */
+export const chestMark = (bossId: string) => `fboss:${bossId}`;
+
+/** État du coffre d'un joueur : rien à faire, à ouvrir (appel serveur), ou à récupérer
+ *  (le serveur l'a donné mais le crédit n'a pas eu lieu — réseau coupé entre les deux). */
+export function chestState(
+  b: Pick<FriendBoss, 'id' | 'family' | 'defeatedAt'>,
+  m: Pick<FriendBossMember, 'status' | 'units' | 'claimed'> | null | undefined,
+  credited: readonly string[],
+): 'none' | 'open' | 'recover' {
+  if (b.defeatedAt == null || !m || m.status !== 'accepted') return 'none';
+  if (!metMinShare(b.family, m.units) || credited.includes(chestMark(b.id))) return 'none';
+  return m.claimed ? 'recover' : 'open';
 }

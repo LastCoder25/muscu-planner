@@ -141,7 +141,7 @@ const HAND_BOSSES: MilestoneBoss[] = [
 // → le donjon demeure le farm d'or, le boss « paie honnêtement » son palier. Source
 // unique (dungeonGold) → suit automatiquement tout futur rééquilibrage des donjons.
 const BOSS_GOLD_MULT = 1.1;
-function bossGoldForLevel(unlockLevel: number): number {
+export function bossGoldForLevel(unlockLevel: number): number {
   let ref = 0;
   for (const d of DUNGEONS) if (d.recoLevel <= unlockLevel) ref = Math.max(ref, dungeonGold(d));
   return ref > 0 ? Math.round((ref * BOSS_GOLD_MULT) / 10) * 10 : 200;

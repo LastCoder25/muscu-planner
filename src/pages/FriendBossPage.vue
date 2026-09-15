@@ -198,7 +198,14 @@
               {{ store.myMembership(b.id)?.units ?? 0 }} {{ bossUnitLabel(b.family) }}
             </span>
           </span>
-          <span v-if="chestPending(b)" class="fb-chest" title="Coffre à ouvrir">🎁 bientôt</span>
+          <button
+            v-if="chestOf(b) !== 'none'"
+            class="fb-btn fb-chest"
+            :disabled="busy || !progress.ready.value"
+            @click="doOpenChest(b)"
+          >
+            🎁 {{ chestOf(b) === 'recover' ? 'Récupérer' : 'Ouvrir' }}
+          </button>
         </div>
       </section>
     </template>
@@ -214,6 +221,9 @@ import { useAuthStore } from '@/stores/auth';
 import { useFriendsStore } from '@/stores/friends';
 import { useFriendBossStore, FriendBossError } from '@/stores/friendBoss';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
+import { useCharacterStore } from '@/stores/character';
+import { useProgress } from '@/composables/useProgress';
+import { fxRarity, RARITY_LABEL } from '@/lib/items';
 import { useGameFx } from '@/composables/useGameFx';
 import { repWeightFromExercise } from '@/lib/challenges';
 import {
@@ -226,7 +236,9 @@ import {
   bossPhase,
   bossStartAt,
   bossUnitLabel,
+  chestState,
   fmtBossSpan,
+  friendBossChest,
   isBossExercise,
   lastDayUnits,
   metMinShare,
@@ -244,6 +256,8 @@ const friends = useFriendsStore();
 const store = useFriendBossStore();
 const library = useLibraryStore();
 const gameFx = useGameFx();
+const char = useCharacterStore();
+const progress = useProgress();
 
 const uid = computed(() => auth.user?.id ?? '');
 const now = ref(Date.now());
@@ -257,6 +271,7 @@ onMounted(async () => {
   try {
     await Promise.all([
       store.fetchMine(),
+      char.row ? Promise.resolve() : char.fetchMine(),
       uid.value && !friends.loaded ? friends.fetchMine(uid.value) : Promise.resolve(),
       library.fetchAll().then((rows) => (exos.value = rows)),
     ]);
@@ -452,10 +467,38 @@ const past = computed(() =>
     return (p === 'defeated' || p === 'expired') && store.myMembership(b.id)?.status === 'accepted';
   }),
 );
-/** Coffre dû mais pas encore ouvert — l'ouverture arrive avec le trophée. */
-function chestPending(b: FriendBoss): boolean {
-  const m = store.myMembership(b.id);
-  return !!b.defeatedAt && !!m && !m.claimed && metMinShare(b.family, m.units);
+/** État du coffre : à ouvrir (le serveur n'a rien donné), à récupérer (le serveur l'a donné,
+ *  le crédit n'a pas suivi), ou rien. Sans personnage chargé, on ne sait pas s'il est versé. */
+function chestOf(b: FriendBoss) {
+  if (!char.row) return 'none';
+  return chestState(b, store.myMembership(b.id), char.row.cleared_dungeons);
+}
+/** Ouvre le coffre : le serveur le marque pris, puis il est déposé dans la boîte 📬 et
+ *  encaissé aussitôt. ⚠️ Le niveau doit être connu (`progress.ready`) : un coffre tiré au
+ *  niveau 1 serait définitif. */
+async function doOpenChest(b: FriendBoss) {
+  const me = uid.value;
+  const state = chestOf(b);
+  if (!me || state === 'none' || busy.value || !progress.ready.value) return;
+  busy.value = true;
+  try {
+    if (state === 'open') await store.claim(b.id);
+    const chest = friendBossChest(b, me, progress.global.value.level);
+    const now = Date.now();
+    const msgId = await char.grantFriendBossChest(me, b.id, b.exerciseName, chest, now);
+    if (msgId) await char.expeClaim(me, msgId, now);
+    gameFx.celebrate({
+      kind: 'generic',
+      emoji: '🏆',
+      title: chest.trophy.name,
+      subtitle: `${RARITY_LABEL[chest.trophy.rarity]} · +${chest.gold} 🪙 · +${chest.stones} 🔮`,
+      rarity: fxRarity(chest.trophy.rarity),
+    });
+  } catch (e) {
+    notifyError(e);
+  } finally {
+    busy.value = false;
+  }
 }
 
 function notifyError(e: unknown) {
@@ -770,9 +813,10 @@ function notifyError(e: unknown) {
   display: grid;
   font-size: 13px;
 }
-.fb-chest {
-  font-size: 12px;
-  color: var(--accent);
+.fb-btn.fb-chest {
+  flex: none;
+  padding: 0 12px;
+  font-size: 13px;
   white-space: nowrap;
 }
 </style>

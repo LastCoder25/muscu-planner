@@ -787,7 +787,7 @@
         </div>
         <div class="gear">
           <div
-            v-for="slot in SLOTS"
+            v-for="slot in gearViewSlots"
             :key="slot"
             class="slot"
             :class="[
@@ -928,7 +928,7 @@
                   Tous
                 </button>
                 <button
-                  v-for="slot in SLOTS"
+                  v-for="slot in gearViewSlots"
                   :key="slot"
                   class="if-chip"
                   :class="{ on: invFilter === slot && !betterFilterSlot }"
@@ -2767,6 +2767,8 @@ import {
   canRecycle,
   isFamiliar,
   FAMILIAR_SLOT,
+  TROPHY_SLOT,
+  WORN_SLOTS,
   compareFamiliars,
   groupBestFirst,
   rollTier,
@@ -5165,6 +5167,15 @@ function fmtExpeMs(ms: number): string {
 
 // ── Sac : filtre par type d'objet + tri (meilleurs d'abord) ──
 const invFilter = ref<ItemSlot | 'all'>('all');
+/** Emplacements montrés dans la grille d'équipement et le filtre du sac : le TROPHÉE
+ *  n'apparaît qu'une fois qu'on en possède un (il ne tombe que du boss entre amis — une
+ *  case vide pour tous les autres serait une promesse sans mode d'emploi). */
+const gearViewSlots = computed<ItemSlot[]>(() => {
+  const r = char.row;
+  const owns =
+    !!r && (!!r.equipped[TROPHY_SLOT] || r.inventory.some((i) => i.slot === TROPHY_SLOT));
+  return owns ? [...SLOTS, TROPHY_SLOT] : SLOTS;
+});
 function bagCountForSlot(slot: ItemSlot): number {
   return (char.row?.inventory ?? []).filter((i) => i.slot === slot).length;
 }
@@ -5560,7 +5571,7 @@ const planRows = computed<PlanRow[]>(() => {
   const r = char.row;
   if (!plan || !r) return [];
   const rows: PlanRow[] = [];
-  for (const slot of [...SLOTS, FAMILIAR_SLOT] as ItemSlot[]) {
+  for (const slot of WORN_SLOTS) {
     const from = r.equipped[slot] ?? null;
     const to = plan.equipped[slot] ?? null;
     if ((from?.id ?? null) === (to?.id ?? null)) continue;

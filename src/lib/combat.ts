@@ -14,6 +14,16 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
+/** Graine stable tirée d'une chaîne (FNV-1a) : même texte → même graine, jamais 0. */
+export function seedOf(text: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h || 1;
+}
+
 export interface Combatant {
   name: string;
   pv: number;

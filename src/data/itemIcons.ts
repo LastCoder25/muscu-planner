@@ -11,6 +11,7 @@ const SLOT_ICON: Record<ItemSlot, string> = {
   accessory: 'mdi-ring',
   relic: 'mdi-crystal-ball',
   familiar: 'mdi-paw',
+  trophy: 'mdi-trophy',
 };
 
 // Raffinements slot+effet (icônes MDI VÉRIFIÉES présentes dans mdi-v7).

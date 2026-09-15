@@ -1,5 +1,6 @@
 // Store character — personnage RPG (Phase 1 : pseudo unique). Accès Supabase centralisé.
 import { comboChestMessageId, type ComboChestRecord } from '@/lib/comboChest';
+import { chestMark, type FriendBossChest } from '@/lib/friendBoss';
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { computed, ref } from 'vue';
 import { supabase } from '@/lib/supabase';
@@ -25,6 +26,7 @@ import {
   mergeEffects,
   SLOTS,
   FAMILIAR_SLOT,
+  WORN_SLOTS,
   MAX_LOADOUTS,
   grantFamiliarXp,
   rarityRank,
@@ -1118,7 +1120,7 @@ export const useCharacterStore = defineStore('character', () => {
       // essayée puis jeté (seuls équipement, talents et voie sortent du plan). C'est
       // `applyGearPlan` qui range, avec la règle unique de `setFiling`.
       const equipped: Equipped = { ...cur!.equipped };
-      for (const s of [...SLOTS, FAMILIAR_SLOT]) equipped[s] = best[s];
+      for (const s of WORN_SLOTS) equipped[s] = best[s];
       const score = combatPower(playerWithGear(name, stats, equipped, extra, level, voie));
       return { equipped, score, voie, talents: withEquipped(talIds) };
     }
@@ -1228,7 +1230,7 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<boolean> {
     const cur = row.value;
     if (!cur) return false;
-    const allSlots = [...SLOTS, FAMILIAR_SLOT];
+    const allSlots = WORN_SLOTS;
     // Tout ce qu'on possède : porté + sac + toutes les réserves, doublons compris.
     const owned: Item[] = [
       ...allSlots.map((sl) => cur.equipped[sl]).filter((x): x is Item => !!x),
@@ -1407,6 +1409,50 @@ export const useCharacterStore = defineStore('character', () => {
     };
     await persist(userId, { messages: [msg, ...cur.messages].slice(0, 30) });
     return true;
+  }
+
+  /** Dépose le COFFRE d'un boss entre amis dans la boîte 📬 et rend l'id du message.
+   *  ⚠️ IDEMPOTENT PAR LA MARQUE `chestMark` posée dans `cleared_dungeons`, PAS par l'id du
+   *  message : la boîte ne garde que 30 messages, un coffre chassé serait redéposé.
+   *  ⚠️ Rien n'est crédité ici, comme pour le coffre du Défi 360 : c'est `expeClaim` qui
+   *  verse — une seule voie de crédit. Si l'écran ne va pas jusqu'à l'encaissement (réseau
+   *  coupé), le coffre attend dans la boîte au lieu d'être perdu. */
+  async function grantFriendBossChest(
+    userId: string,
+    bossId: string,
+    bossName: string,
+    chest: FriendBossChest,
+    now: number,
+  ): Promise<string | null> {
+    const cur = row.value;
+    if (!cur) return null;
+    const id = chestMark(bossId);
+    if (cur.cleared_dungeons.includes(id)) return null;
+    const msg: ExpeditionMessage = {
+      id,
+      chest: true,
+      title: '🐉 Coffre du boss entre amis',
+      level: chest.trophy.level,
+      win: true,
+      text:
+        chest.early > 0
+          ? `${bossName} — abattu avec ${Math.round(chest.early * 100)} % du temps restant.`
+          : `${bossName} — abattu.`,
+      gold: chest.gold,
+      energy: 0,
+      summonStones: chest.stones,
+      items: [chest.trophy],
+      key: 0,
+      resolvedAt: now,
+      claimAt: now,
+      claimed: false,
+      read: false,
+    };
+    await persist(userId, {
+      messages: [msg, ...cur.messages].slice(0, 30),
+      cleared_dungeons: [...cur.cleared_dungeons, id],
+    });
+    return id;
   }
 
   async function expeClaim(userId: string, messageId: string, now: number) {
@@ -2321,6 +2367,7 @@ export const useCharacterStore = defineStore('character', () => {
     expeTick,
     expeSettle,
     grantComboChest,
+    grantFriendBossChest,
     expeClaim,
     expeMarkRead,
     buildFilon,

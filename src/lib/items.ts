@@ -1,14 +1,19 @@
 // items.ts — équipement RPG (Phase 2c). RÈGLE : l'équipement ne donne PAS de
 // stats (elles viennent du sport) — il donne des EFFETS de gameplay. Pur/testable.
-import { playerCombatant, combatPower, mulberry32, type Combatant } from './combat';
+import { playerCombatant, combatPower, mulberry32, seedOf, type Combatant } from './combat';
 import type { FamiliarSpecies } from '@/data/familiars';
 import { PROCEDURAL } from '@/lib/proceduralContent';
 import { CHARACTER_RANKS, characterRank, type RankTier } from './characterRank';
 
 // `familiar` = 5ᵉ emplacement PARALLÈLE (compagnon) : compté par aggregateEffects
 // mais EXCLU de SLOTS (donc des drops normaux / sets / forge). Cf. src/data/familiars.ts.
-export type ItemSlot = 'weapon' | 'armor' | 'accessory' | 'relic' | 'familiar';
+// `trophy` = 6ᵉ emplacement PARALLÈLE (v0.864) : le TROPHÉE du boss entre amis, qui ne tombe
+// que de son coffre. Même traitement que le familier — compté, optimisé, jamais tiré ailleurs.
+export type ItemSlot = 'weapon' | 'armor' | 'accessory' | 'relic' | 'familiar' | 'trophy';
 export const FAMILIAR_SLOT: ItemSlot = 'familiar';
+export const TROPHY_SLOT: ItemSlot = 'trophy';
+/** Emplacements parallèles : portés et comptés, mais hors des drops et des sets. */
+const PARALLEL_SLOTS: ItemSlot[] = [FAMILIAR_SLOT, TROPHY_SLOT];
 // RARETÉS NOMMÉES (refonte v0.576) : 8 tiers Commun → Primordial, façon Diablo. Chaque
 // rareté a un INTERVALLE de stat (le « jet » le balaie, cf. rankRollMult) et une couleur.
 // La rareté droppable est gatée par la PROFONDEUR (min(niveau, activité)) via la pyramide
@@ -314,6 +319,7 @@ const SCRAP_BY_SLOT: Record<ItemSlot, number> = {
   relic: 0.45,
   accessory: 0.3,
   familiar: 0, // jamais (garde-fou aussi côté store)
+  trophy: 0.45, // une coupe de métal, comme une relique
 };
 /** Ferraille de base d'une pièce moyenne. ⚠️ Calé pour que vider un sac de bric-à-brac
  *  (~20 objets) rende l'ordre de grandeur d'UNE épave, pas de dix : le POI reste la
@@ -391,12 +397,16 @@ export interface PendingReward {
 }
 
 export const SLOTS: ItemSlot[] = ['weapon', 'armor', 'accessory', 'relic'];
+/** TOUT ce que le héros peut porter : les 4 emplacements de gear + les parallèles.
+ *  ⚠️ Source unique : les copies `[...SLOTS, FAMILIAR_SLOT]` auraient oublié le trophée. */
+export const WORN_SLOTS: ItemSlot[] = [...SLOTS, ...PARALLEL_SLOTS];
 export const SLOT_LABEL: Record<ItemSlot, string> = {
   weapon: 'Arme',
   armor: 'Armure',
   accessory: 'Accessoire',
   relic: 'Relique',
   familiar: 'Familier',
+  trophy: 'Trophée',
 };
 export const SLOT_EMOJI: Record<ItemSlot, string> = {
   weapon: '⚔️',
@@ -404,6 +414,7 @@ export const SLOT_EMOJI: Record<ItemSlot, string> = {
   accessory: '💍',
   relic: '🔮',
   familiar: '🐾',
+  trophy: '🏆',
 };
 // Libellé FR de la rareté (Commun, Épique, Légendaire, Primordial…).
 export const RARITY_LABEL: Record<Rarity, string> = {
@@ -484,12 +495,7 @@ export function fillSetPieceAffixes(it: Item): Item {
   const want = affixCountForRarity(normRank(it.rarity));
   const have = [it.effect, it.effect2, it.effect3].filter(Boolean).length;
   if (have >= want) return it;
-  let h = 2166136261 >>> 0; // FNV-1a sur l'id → graine stable
-  for (let i = 0; i < it.id.length; i++) {
-    h ^= it.id.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  const rng = mulberry32(h || 1);
+  const rng = mulberry32(seedOf(it.id)); // graine stable tirée de l'id
   const rarity = normRank(it.rarity);
   const roll = it.roll ?? 0.5;
   const affixes: ItemEffect[] = [it.effect, it.effect2, it.effect3].filter(
@@ -822,6 +828,9 @@ const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
   // Familier : l'effet vient de la RACE (cf. rollFamiliar), pas de ce pool (jamais
   // tiré par pick(rng, SLOTS)). Entrée requise par le type Record<ItemSlot,…>.
   familiar: [{ type: 'damage_pct', base: 6 }],
+  // Trophée : l'affixe principal vient de la FAMILLE de l'exo (cf. rollTrophy). Entrée
+  // requise par le type ; jamais lue (le trophée n'est pas tiré par pick(rng, SLOTS)).
+  trophy: [{ type: 'damage_pct', base: 8 }],
 };
 
 /** Base canonique par type d'effet (1re occurrence dans SLOT_EFFECTS + bases explicites
@@ -909,6 +918,7 @@ const NAMES: Record<ItemSlot, string[]> = {
   accessory: ['Anneau', 'Amulette', 'Talisman', 'Bracelet'],
   relic: ['Éclat', 'Totem', 'Sceau', 'Idole'],
   familiar: ['Compagnon'], // nom réel = nom de la race (cf. rollFamiliar)
+  trophy: ['Trophée'], // nom réel = l'exo du boss (cf. rollTrophy)
 };
 const RARITY_ADJ: Record<Rarity, string> = {
   commun: 'brut',
@@ -1480,6 +1490,54 @@ export function rollSetPiece(
     ...(affixes[2] ? { effect3: affixes[2] } : {}),
     ...(set ? { setId: opts.setId } : {}),
     ...(legendary ? { legendary } : {}),
+    roll,
+  };
+}
+
+/** Valeur des affixes d'un TROPHÉE, relative à un drop de même rareté et même jet.
+ *  ⚠️ C'est un 6ᵉ emplacement QUI S'AJOUTE à un build complet : à la valeur pleine il
+ *  vaudrait une pièce d'équipement entière, et toute la calibration du contenu
+ *  (`gearExpect`, renforts procéduraux) suppose cinq emplacements. Mesuré (v0.864) — cf.
+ *  `test/trophy.test.ts`. */
+export const TROPHY_K = 0.4;
+
+/**
+ * Tire le TROPHÉE d'un boss entre amis. Sa rareté et son niveau d'objet suivent les drops
+ * habituels (pyramide centrée sur le niveau du joueur) ; son affixe PRINCIPAL est imposé
+ * par la famille de l'exo (`mains`, parfois deux), les suivants sont libres comme ceux
+ * d'un drop. Jamais de proc légendaire : le trophée est une récompense de sport, pas une
+ * pièce de chasse.
+ */
+export function rollTrophy(
+  rng: () => number,
+  opts: { mains: readonly EffectType[]; title: string; level: number; luck?: number },
+): Omit<Item, 'id'> {
+  const luck = opts.luck ?? 0;
+  const { rank: rarity, roll } = rollTier(rng, opts.level, luck, 0, opts.level);
+  const level = rollItemLevel(rng, opts.level, luck);
+  // Plancher à 0,1 et non à 1 : à TROPHY_K < 1, un plancher entier écraserait rareté et jet
+  // des petites stats (même leçon que l'équipement des aventuriers).
+  const value = (t: EffectType) =>
+    Math.max(0.1, round1(EFFECT_BASE[t] * rankRollMult(rarity, roll) * TROPHY_K));
+  const affixes: ItemEffect[] = opts.mains.map((t) => ({ type: t, value: value(t) }));
+  for (let a = affixes.length; a < affixCountForRarity(rarity); a++) {
+    const pool = tierPool(TIER_ORDER[a]!, opts.level).filter(
+      (t) => !affixes.some((x) => x.type === t),
+    );
+    if (!pool.length) continue;
+    const t = pick(rng, pool);
+    affixes.push({ type: t, value: value(t) });
+  }
+  return {
+    slot: TROPHY_SLOT,
+    name: `Trophée · ${opts.title}`,
+    emoji: SLOT_EMOJI.trophy,
+    rarity,
+    level,
+    baseLevel: level,
+    effect: affixes[0]!,
+    ...(affixes[1] ? { effect2: affixes[1] } : {}),
+    ...(affixes[2] ? { effect3: affixes[2] } : {}),
     roll,
   };
 }
@@ -2206,7 +2264,9 @@ export function setEffects(equipped: Equipped, voie?: string | null): Aggregated
 // « bas niveau en gear trop haut qui punch 3 tiers au-dessus », cf. simulation 2026‑08‑12).
 export function aggregateEffects(equipped: Equipped, voie?: string | null): AggregatedEffects {
   const a = emptyEffects();
-  for (const slot of SLOTS) {
+  // Le TROPHÉE se lit comme un objet (valeur × niveau d'objet) : sa retenue est déjà dans
+  // ses valeurs (`TROPHY_K`), pas dans un multiplicateur à part.
+  for (const slot of [...SLOTS, TROPHY_SLOT]) {
     const it = equipped[slot];
     if (!it) continue;
     // OBJETS : magnitude = valeur bakée (rareté × jet) × MULTIPLICATEUR DE NIVEAU (ilvl,
@@ -2400,19 +2460,15 @@ export function bestGearLoadout(
     accessory: [],
     relic: [],
     familiar: [],
+    trophy: [],
   };
-  for (const s of SLOTS) {
+  // Les emplacements PARALLÈLES (familier, trophée) sont alimentés comme les autres, sinon
+  // ils restaient figés sur la pièce portée et n'étaient jamais comparés à celles du sac.
+  for (const s of WORN_SLOTS) {
     const cur = equipped[s];
     if (cur) bySlot[s].push(cur);
   }
-  // Le FAMILIER est un slot parallèle (hors SLOTS) : on l'alimente à part, sinon il
-  // restait figé sur celui porté et n'était jamais comparé à ceux du sac.
-  const curFam = equipped[FAMILIAR_SLOT];
-  if (curFam) bySlot[FAMILIAR_SLOT].push(curFam);
-  for (const it of inventory) {
-    if (SLOTS.includes(it.slot)) bySlot[it.slot].push(it);
-    else if (it.slot === FAMILIAR_SLOT) bySlot[FAMILIAR_SLOT].push(it);
-  }
+  for (const it of inventory) bySlot[it.slot]?.push(it);
   // ⚠️ On classe les candidats EN CONTEXTE (la pièce posée sur le build actuel), pas
   // SEULE. Porté seul, un objet perd tout ce qui le rend bon : les bonus de set de ses
   // compagnons, et les stats qui se multiplient entre elles. Mesuré sur un compte réel :
@@ -2479,30 +2535,34 @@ export function bestGearLoadout(
     accessory: listFor('accessory'),
     relic: listFor('relic'),
   };
-  // Candidats FAMILIER : le porté + les meilleurs du sac (pas de synergie de set sur ce
-  // slot → un top-K solo suffit). `undefined` = aucun familier, si c'est mieux.
-  const famCand = trim(bySlot[FAMILIAR_SLOT], curFam);
+  /** Ce qui est porté sur les emplacements PARALLÈLES d'un équipement. */
+  const parallelOf = (e: Equipped): Equipped => {
+    const o: Equipped = {};
+    for (const s of PARALLEL_SLOTS) if (e[s]) o[s] = e[s];
+    return o;
+  };
+  const parallelKey = (e: Equipped) => PARALLEL_SLOTS.map((s) => e[s]?.id ?? '').join('|');
+  const curPar = parallelOf(equipped);
 
   // Base = le loadout ACTUEL : l'optimiseur ne le remplace que par STRICTEMENT mieux.
   // ⚠️ SAUF si des emplacements sont IMPOSÉS : la base actuelle ne les respecte pas, donc
   // la garder comme référence ferait échouer l'imposition dès qu'elle est plus puissante.
   let best: Equipped = pin ? {} : { ...equipped };
   let bestP = pin ? -Infinity : combatPower(playerWithGear(name, stats, best, extra, level, voie));
-  // Recherche exhaustive sur les 4 slots de gear, à familier FIXÉ ; le familier est
-  // optimisé entre deux passes (ascension par coordonnées). Un produit à 5 dimensions
-  // exploserait (13^5 × 8 voies), alors que 2 passes convergent : le meilleur familier
-  // dépend très peu du gear (ses effets s'additionnent au reste).
-  const sweepGear = (fam: Item | undefined) => {
+  // Recherche exhaustive sur les 4 slots de gear, emplacements parallèles FIXÉS ; ceux-ci
+  // sont optimisés entre deux passes (ascension par coordonnées). Un produit à 6 dimensions
+  // exploserait, alors que 2 passes convergent : un familier ou un trophée dépend très peu
+  // du gear (ses effets s'additionnent au reste).
+  const sweepGear = (par: Equipped) => {
     for (const w of cand.weapon)
       for (const a of cand.armor)
         for (const ac of cand.accessory)
           for (const r of cand.relic) {
-            const combo: Equipped = {};
+            const combo: Equipped = { ...par };
             if (w) combo.weapon = w;
             if (a) combo.armor = a;
             if (ac) combo.accessory = ac;
             if (r) combo.relic = r;
-            if (fam) combo.familiar = fam;
             const p = combatPower(playerWithGear(name, stats, combo, extra, level, voie));
             if (p > bestP) {
               bestP = p;
@@ -2510,21 +2570,23 @@ export function bestGearLoadout(
             }
           }
   };
-  sweepGear(curFam);
-  // Meilleur familier POUR ce gear, puis re-balayage du gear s'il a changé.
-  let bestFam = best[FAMILIAR_SLOT];
-  for (const fam of famCand) {
-    const combo: Equipped = { ...best };
-    if (fam) combo[FAMILIAR_SLOT] = fam;
-    else delete combo[FAMILIAR_SLOT];
-    const p = combatPower(playerWithGear(name, stats, combo, extra, level, voie));
-    if (p > bestP) {
-      bestP = p;
-      best = combo;
-      bestFam = fam;
+  sweepGear(curPar);
+  // Meilleure pièce de chaque emplacement parallèle POUR ce gear (le porté + les meilleurs
+  // du sac ; pas de synergie de set → un top-K solo suffit ; `undefined` = rien, si c'est
+  // mieux), puis re-balayage du gear si l'une a changé.
+  for (const s of PARALLEL_SLOTS) {
+    for (const it of trim(bySlot[s], equipped[s])) {
+      const combo: Equipped = { ...best };
+      if (it) combo[s] = it;
+      else delete combo[s];
+      const p = combatPower(playerWithGear(name, stats, combo, extra, level, voie));
+      if (p > bestP) {
+        bestP = p;
+        best = combo;
+      }
     }
   }
-  if ((bestFam?.id ?? null) !== (curFam?.id ?? null)) sweepGear(bestFam);
+  if (parallelKey(best) !== parallelKey(curPar)) sweepGear(parallelOf(best));
 
   // ⚠️ PASSE FINALE D'AMÉLIORATION LOCALE, et elle n'est pas cosmétique : le balayage
   // ci-dessus ne voit que les candidats RETENUS (top-K par emplacement). Sur un sac
@@ -2540,9 +2602,9 @@ export function bestGearLoadout(
   if (!polish) return best;
   const tous: Item[] = elagueDomines([
     ...inventory,
-    ...[...SLOTS, FAMILIAR_SLOT].map((s) => equipped[s]).filter((x): x is Item => !!x),
+    ...WORN_SLOTS.map((s) => equipped[s]).filter((x): x is Item => !!x),
   ]);
-  for (const s of [...SLOTS, FAMILIAR_SLOT]) if (equipped[s]) tous.push(equipped[s]);
+  for (const s of WORN_SLOTS) if (equipped[s]) tous.push(equipped[s]);
   for (let tour = 0; tour < 4; tour++) {
     let gagne = false;
     for (const it of tous) {

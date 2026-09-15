@@ -145,6 +145,15 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     return { accepted: res.accepted ?? 0, defeated: !!res.defeated };
   }
 
+  /** Réclame son coffre : le serveur vérifie qu'il est dû (boss mort, part minimale) et le
+   *  marque pris. Le contenu est tiré côté client (`friendBossChest`). */
+  async function claim(bossId: string) {
+    const res = await rpc<{ ok: boolean; reason?: string }>('fboss_claim', { p_boss: bossId });
+    if (!res.ok) throw new FriendBossError(res.reason ?? '');
+    const m = myMembership(bossId);
+    if (m) m.claimed = true;
+  }
+
   return {
     bosses,
     members,
@@ -158,6 +167,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     declare,
     respond,
     hit,
+    claim,
   };
 });
 
