@@ -1489,6 +1489,8 @@ export const useCharacterStore = defineStore('character', () => {
       gold: chest.gold,
       energy: 0,
       summonStones: chest.stones,
+      item: chest.trophy,
+      itemName: chest.trophy.name,
       items: [chest.trophy],
       key: 0,
       resolvedAt: now,

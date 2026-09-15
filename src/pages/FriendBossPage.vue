@@ -552,8 +552,8 @@ async function doOpenChest(b: FriendBoss) {
     gameFx.celebrate({
       kind: 'generic',
       emoji: '🏆',
-      title: chest.trophy.name,
-      subtitle: `${gradeLabel(chest.trophy)} · +${chest.gold} 🪙 · +${chest.stones} 🔮`,
+      title: `Trophée : ${chest.trophy.name}`,
+      subtitle: `${gradeLabel(chest.trophy)} · +${chest.gold} 🪙 · +${chest.stones} 🔮 · rangé dans ton sac à trophées 🏆`,
       rarity: fxRarity(chest.trophy.rarity),
     });
   } catch (e) {

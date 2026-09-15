@@ -1671,26 +1671,33 @@
                 {{ fmtExpeMs((m.claimAt ?? m.resolvedAt) - expeNow) }}
               </div>
               <!-- Objet gagné : détail complet (rareté / niveau / effet). -->
-              <div v-if="m.item" class="im-loot" :class="'p-' + m.item.rarity">
-                <ItemIcon :item="m.item" :size="38" />
+              <div
+                v-for="lt in msgLoot(m)"
+                :key="'loot-' + lt.item.name"
+                class="im-loot"
+                :class="'p-' + lt.item.rarity"
+              >
+                <ItemIcon :item="lt.item" :size="38" />
                 <div class="im-loot-main">
                   <div class="im-loot-name">
-                    {{ m.item.name }}<span v-if="m.item.setId" class="im-loot-set"> 🧩</span>
+                    {{ lt.item.name }}<span v-if="lt.item.setId" class="im-loot-set"> 🧩</span>
                   </div>
                   <div class="im-loot-sub">
-                    <span :class="'p-' + m.item.rarity">{{ gradeLabel(m.item) }}</span> ·
-                    {{ SLOT_LABEL[m.item.slot] }}
+                    <span :class="'p-' + lt.item.rarity">{{ gradeLabel(lt.item) }}</span> ·
+                    {{ SLOT_LABEL[lt.item.slot] }}
                   </div>
-                  <div class="im-loot-eff">{{ itemEffects(m.item) }}</div>
-                  <div v-if="m.itemCount && m.itemCount > 1" class="im-loot-more">
-                    🎁 +{{ m.itemCount - 1 }} autre{{ m.itemCount - 1 > 1 ? 's' : '' }} objet{{
-                      m.itemCount - 1 > 1 ? 's' : ''
+                  <div class="im-loot-eff">{{ itemEffects(lt.item) }}</div>
+                  <div v-if="lt.more > 0" class="im-loot-more">
+                    🎁 +{{ lt.more }} autre{{ lt.more > 1 ? 's' : '' }} objet{{
+                      lt.more > 1 ? 's' : ''
                     }}
                     au sac
                   </div>
                 </div>
               </div>
-              <span v-else-if="m.itemName" class="im-item">🎁 {{ m.itemName }}</span>
+              <span v-if="!msgLoot(m).length && m.itemName" class="im-item"
+                >🎁 {{ m.itemName }}</span
+              >
             </div>
           </div>
         </div>
@@ -2978,6 +2985,7 @@ import {
   isClaimable,
   type ExpeditionMessage,
   haulPills,
+  messageLoot,
   travelPosition,
   runArena,
   arenaEnergyCost,
@@ -5319,12 +5327,16 @@ async function doClaimMsg(m: ExpeditionMessage) {
   if (done.chest) {
     // ⚠️ L'animation appartient à l'OUVERTURE, pas à la livraison : le coffre attend dans
     // la boîte, et c'est le geste du joueur qui le déballe. Le butin est dans le
-    // sous-titre — un coffre qui s'ouvre sur rien ne raconte rien.
+    // sous-titre — un coffre qui s'ouvre sur rien ne raconte rien (trophée compris).
+    const loot = messageLoot(done);
     gameFx.celebrate({
       kind: 'chest',
       emoji: '🎁',
-      title: 'Coffre du Défi 360',
-      subtitle: haul || undefined,
+      title: messageTitle(done),
+      subtitle:
+        [loot ? `${SLOT_EMOJI[loot.item.slot]} ${loot.item.name}` : '', haul]
+          .filter(Boolean)
+          .join(' · ') || undefined,
       rarity: 'legendary',
     });
   } else {
@@ -5333,6 +5345,12 @@ async function doClaimMsg(m: ExpeditionMessage) {
   const drops = done.items && done.items.length ? done.items : done.item ? [done.item] : [];
   const top = drops.slice().sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity])[0];
   if (top) celebrateRareDrop({ ...top, id: '' }); // même éclat que les drops de donjon
+}
+
+/** L'objet d'un message sous forme de liste (0 ou 1) — pour le poser dans un `v-for`. */
+function msgLoot(m: ExpeditionMessage) {
+  const l = messageLoot(m);
+  return l ? [l] : [];
 }
 
 function fmtExpeMs(ms: number): string {

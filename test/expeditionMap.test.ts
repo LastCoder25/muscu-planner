@@ -6,6 +6,7 @@ import {
   isClaimable,
   type ExpeditionMessage,
   haulPills,
+  messageLoot,
   spawnWindow,
   createMap,
   advanceWorld,
@@ -505,6 +506,20 @@ describe('butin affiché — source unique des deux écrans', () => {
       { emoji: '🗝️', n: 1 },
     ]);
     expect(haulPills({})).toEqual([]);
+  });
+
+  it('⚠️ un objet porté seulement par `items` (coffre du boss entre amis) s’affiche', () => {
+    // Le défaut réel : le coffre posait son trophée dans `items` et la boîte ne lisait que
+    // `item` — le trophée n'apparaissait pas dans les récompenses.
+    const trophy = { name: 'Trophée « Pompes »' } as never;
+    expect(messageLoot({ items: [trophy] })).toEqual({ item: trophy, more: 0 });
+    const a = { name: 'A' } as never;
+    const b = { name: 'B' } as never;
+    expect(messageLoot({ item: a, items: [a, b], itemCount: 2 })).toEqual({ item: a, more: 1 });
+    expect(messageLoot({ items: [a, b] })).toEqual({ item: a, more: 1 });
+    expect(messageLoot({ item: a })).toEqual({ item: a, more: 0 });
+    expect(messageLoot({})).toBeNull();
+    expect(messageLoot({ items: [] })).toBeNull();
   });
 });
 

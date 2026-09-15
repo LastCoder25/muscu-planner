@@ -15,7 +15,7 @@
 //    Avant le démarrage, on ne frappe pas.
 //  • Il dure 7 jours à partir de son démarrage.
 //  • Un joueur n'a qu'UN boss en cours, lancé ou rejoint. On ne quitte pas un boss.
-//  • Le lanceur relance 7 jours après la fin (mort du boss, ou bout des 7 jours).
+//  • Le lanceur relance 48 h après la fin (mort du boss, ou bout des 7 jours).
 //  • Une rep = 1000 points de dégât, pour tout le monde (égalité). Chaque participant
 //    ajoute sa part de PV.
 //  • Les reps comptent comme du sport ; une prime de complétion s'ajoute si le boss meurt
@@ -39,8 +39,9 @@ export const FRIEND_BOSS = {
   inviteWindowMs: 24 * HOUR,
   /** Durée du combat, à partir du démarrage. */
   durationMs: 7 * DAY,
-  /** Délai avant que le LANCEUR puisse relancer, à partir de la fin du boss. */
-  cooldownMs: 7 * DAY,
+  /** Délai avant que le LANCEUR puisse relancer, à partir de la fin du boss (48 h depuis
+   *  la v0.893, 7 jours avant — migr. 0076). */
+  cooldownMs: 48 * HOUR,
   /** Part de PV d'UN participant, en unités de l'exo (reps, ou secondes pour le gainage).
    *  ⚠️ C'est un volume EN PLUS de la semaine (v0.869, décision de l'utilisateur) : le Défi
    *  360 est l'entraînement global, le boss un bonus RELATIVEMENT FACILE. Une part vaut
@@ -240,7 +241,7 @@ export function friendBossXp(
 export function bossErrorMessage(code: string): string {
   const table: Record<string, string> = {
     busy: 'Tu as déjà un boss en cours — on n’en mène qu’un à la fois.',
-    cooldown: 'Tu pourras lancer un nouveau boss 7 jours après la fin du précédent.',
+    cooldown: 'Tu pourras lancer un nouveau boss 48 h après la fin du précédent.',
     not_friend: 'Tu ne peux inviter que tes amis.',
     too_many_invites: `Au plus ${FRIEND_BOSS.maxInvites} amis par boss.`,
     closed: 'Les invitations sont closes : le combat a commencé.',

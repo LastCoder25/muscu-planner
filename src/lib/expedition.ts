@@ -193,6 +193,20 @@ export function haulPills(o: {
     .map((p) => ({ emoji: p.emoji, n: p.n }));
 }
 
+/** L'objet à montrer dans un message de la boîte, et combien d'autres il porte.
+ *  ⚠️ `item` n'est pas toujours posé : le coffre du boss entre amis ne portait que `items`,
+ *  et son trophée n'apparaissait donc pas dans les récompenses. On lit les deux. */
+export function messageLoot(m: {
+  item?: Omit<Item, 'id'>;
+  items?: Omit<Item, 'id'>[];
+  itemCount?: number;
+}): { item: Omit<Item, 'id'>; more: number } | null {
+  const item = m.item ?? m.items?.[0];
+  if (!item) return null;
+  const count = Math.max(m.itemCount ?? 0, m.items?.length ?? 1);
+  return { item, more: Math.max(0, count - 1) };
+}
+
 /** Construit le message de rapport d'une expédition (déposé à l'arrivée à l'objectif). */
 export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
   const o = exp.outcome;

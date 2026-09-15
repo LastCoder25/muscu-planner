@@ -213,16 +213,16 @@ describe('🐉 BOSS ENTRE AMIS — qui peut en lancer un', () => {
     expect(canDeclareBoss({ owned: [], joined: [boss()] }, T0 + H)).toBe(false);
   });
 
-  it('le lanceur relance 7 jours après la MORT du boss', () => {
+  it('le lanceur relance 48 h après la MORT du boss (v0.893)', () => {
     const dead = boss({ startAt: T0, defeatedAt: T0 + 3 * D });
-    expect(nextDeclareAt([dead])).toBe(T0 + 10 * D);
-    expect(canDeclareBoss({ owned: [dead], joined: [] }, T0 + 10 * D - 1)).toBe(false);
-    expect(canDeclareBoss({ owned: [dead], joined: [] }, T0 + 10 * D)).toBe(true);
+    expect(nextDeclareAt([dead])).toBe(T0 + 5 * D);
+    expect(canDeclareBoss({ owned: [dead], joined: [] }, T0 + 5 * D - 1)).toBe(false);
+    expect(canDeclareBoss({ owned: [dead], joined: [] }, T0 + 5 * D)).toBe(true);
   });
 
-  it('…ou 7 jours après la fin des 7 jours s’il a survécu', () => {
+  it('…ou 48 h après la fin des 7 jours s’il a survécu', () => {
     const exp = boss({ startAt: T0 });
-    expect(nextDeclareAt([exp])).toBe(T0 + 14 * D);
+    expect(nextDeclareAt([exp])).toBe(T0 + 9 * D);
   });
 
   it('avoir seulement AIDÉ ne donne aucun délai', () => {
@@ -324,9 +324,20 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     expect(FRIEND_BOSS.inviteWindowMs).toBe(24 * H);
     expect(sql).toContain("interval '24 hours'");
     expect(FRIEND_BOSS.durationMs).toBe(7 * D);
-    expect(FRIEND_BOSS.cooldownMs).toBe(7 * D);
     expect(sql).toContain("public.fboss_start(b) + interval '7 days'");
-    expect(sql).toContain("public.fboss_ended(b) + interval '7 days' > now()");
+  });
+
+  // ⚠️ `fboss_declare` est REDÉFINIE (0070, 0071, 0076) : le délai se lit sur la DERNIÈRE.
+  it('même délai de relance que la DERNIÈRE définition de fboss_declare (48 h)', () => {
+    const decl = fs
+      .readdirSync('supabase/migrations')
+      .filter((f) => f.endsWith('.sql'))
+      .sort()
+      .map((f) => fs.readFileSync(`supabase/migrations/${f}`, 'utf8'))
+      .filter((s) => s.includes('function public.fboss_declare'))
+      .pop()!;
+    expect(FRIEND_BOSS.cooldownMs).toBe(48 * H);
+    expect(decl).toContain("public.fboss_ended(b) + interval '48 hours' > now()");
   });
 
   // ⚠️ `fboss_hit` est REDÉFINIE (0070, puis 0074) : on compare les plafonds à la DERNIÈRE.
@@ -432,7 +443,7 @@ describe('🐉 BOSS ENTRE AMIS — lectures du store (v0.863)', () => {
 
   it('les refus du serveur sont traduits, un code inconnu reste lisible', () => {
     expect(bossErrorMessage('busy')).toMatch(/déjà un boss/);
-    expect(bossErrorMessage('ERROR: cooldown')).toMatch(/7 jours/);
+    expect(bossErrorMessage('ERROR: cooldown')).toMatch(/48 h/);
     expect(bossErrorMessage('xyz')).toMatch(/impossible/);
   });
 });
