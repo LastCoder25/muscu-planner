@@ -144,6 +144,7 @@ import {
   caravanFamiliarXp,
   canAdvTalent,
   canAdvFamiliar,
+  familiarKeepers,
   companionsOf,
   trainMsFor,
   isCaravanClaimable,
@@ -721,24 +722,16 @@ export const useCharacterStore = defineStore('character', () => {
    *  d'or : vendre huit compagnons ne doit pas déclencher huit allers-retours réseau ni
    *  huit pièces qui volent. Le 🔒 protège ici comme partout ailleurs.
    *
-   *  ⚠️ UN FAMILIER EN POSTE NE SE VEND PAS (signalé par l'utilisateur). Celui qu'on
-   *  PORTE était déjà hors d'atteinte par construction — il vit dans `equipped`, pas
-   *  dans `inventory`. Mais un familier POSTÉ AU MUR, lui, reste dans l'inventaire :
-   *  `base.garrison` n'est qu'une liste d'ids qui pointent dessus. Il était donc
-   *  vendable, et sa vente laissait un id FANTÔME dans la garnison — une place occupée
-   *  par personne, que `garrisonedFamiliars` filtrait en silence. On le refuse ici,
-   *  au STORE : l'écran peut ne pas proposer l'impossible, il ne peut pas le garantir. */
+   *  ⚠️ On ne vend pas un familier CONFIÉ à un aventurier : il partirait avec un
+   *  appariement fantôme, et l’homme se battrait sans son compagnon sans qu’on l’ait
+   *  décidé. Refusé ici, au STORE : l'écran peut ne pas proposer l'impossible, il ne peut
+   *  pas le garantir. (Le familier PORTÉ par le héros vit dans `equipped` : hors d’atteinte
+   *  par construction.) */
   async function sellFamiliars(userId: string, itemIds: string[]): Promise<number> {
     const cur = row.value;
     if (!cur || !itemIds.length) return 0;
     const wanted = new Set(itemIds);
-    // ⚠️ On ne vend pas un familier CONFIÉ à un aventurier : il partirait avec un
-    // appariement fantôme, et l’homme se battrait sans son compagnon sans qu’on l’ait
-    // décidé. (Le familier PORTÉ par le héros, lui, vit dans `equipped` : hors d’atteinte
-    // par construction.)
-    const posted = new Set(
-      (cur.adventurers ?? []).map((a) => a.familiarId).filter((x): x is string => !!x),
-    );
+    const posted = familiarKeepers(cur.adventurers ?? []);
     const sold = cur.inventory.filter(
       (i) => wanted.has(i.id) && i.slot === FAMILIAR_SLOT && !i.locked && !posted.has(i.id),
     );
@@ -1496,14 +1489,6 @@ export const useCharacterStore = defineStore('character', () => {
 
   function baseOf(cur: CharacterRow, now: number): BaseState {
     return cur.base ?? emptyBase(newSeed(now), now);
-  }
-
-  /** Les familiers POSTÉS au chenil. Ils restent dans le sac : poster n'est pas ranger,
-   *  c'est affecter — et un familier posté ne peut évidemment pas être équipé, d'où le
-   *  filtre sur l'inventaire seul. */
-  function garrisonedFamiliars(cur: CharacterRow): Item[] {
-    const ids = new Set(cur.base?.garrison ?? []);
-    return cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT && ids.has(it.id));
   }
 
   /** 🐾 CE QUE L’ON A APPAREILLÉ, prêt pour le combat et pour les à-côtés.
@@ -2354,7 +2339,6 @@ export const useCharacterStore = defineStore('character', () => {
     startOutfit,
     autoAssignCompanions,
     healHero,
-    garrisonedFamiliars,
     heroIsHome,
     ownedLevel,
     applyRun,

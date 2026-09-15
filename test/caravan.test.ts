@@ -15,6 +15,7 @@ import {
   companionsOf,
   companionEffects,
   refCompanions,
+  familiarKeepers,
   canAdvTalent,
   ambushChance,
   advTalentsOf,
@@ -1019,6 +1020,26 @@ describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () =
     level: 5,
     xp: 0,
     ...o,
+  });
+
+  describe('🧭 qui garde quel familier (v0.858)', () => {
+    // ⚠️ La fiche lisait l’ancienne garnison : « 🛡️ au mur » sur des familiers libres, et
+    // « Vendre » sur des familiers confiés — que le store refusait sans rien dire.
+    it('rend l’aventurier de chaque familier confié, et personne pour les autres', () => {
+      const k = familiarKeepers([
+        adv('a', { familiarId: 'f1' }),
+        adv('b'),
+        adv('c', { familiarId: 'f2' }),
+      ]);
+      expect([...k.keys()].sort()).toEqual(['f1', 'f2']);
+      expect(k.get('f1')!.id).toBe('a');
+      expect(k.get('f2')!.id).toBe('c');
+      expect(k.has('b')).toBe(false);
+    });
+    it('deux prétendants au même familier : le premier du vivier le garde', () => {
+      const k = familiarKeepers([adv('a', { familiarId: 'f1' }), adv('b', { familiarId: 'f1' })]);
+      expect(k.get('f1')!.id).toBe('a');
+    });
   });
 
   describe('🐾🧠 SUR LA ROUTE AUSSI — la moyenne, jamais la somme', () => {

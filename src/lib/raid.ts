@@ -188,9 +188,6 @@ interface PillageTally {
 
 export interface BaseState {
   defenses: DefenseStructure[];
-  /** Ids des familiers POSTÉS au chenil (max `companionSlots(niveau)`). Ils restent dans le sac :
-   *  poster n'est pas ranger, c'est affecter. */
-  garrison?: string[];
   wound?: HeroWound | null;
   raid: Raid | null;
   nextRaidAt: number;
@@ -3133,7 +3130,6 @@ export function lootCorpses(
 export function emptyBase(seed: number, now: number): BaseState {
   return {
     defenses: [],
-    garrison: [],
     wound: null,
     raid: null,
     nextRaidAt: now + RAID.intervalIdleMs,

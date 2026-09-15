@@ -701,19 +701,21 @@
                     Retirer
                   </button>
                   <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
-                  <!-- ⚠️ Un familier POSTÉ au mur n'est pas cédable : il tient un rôle
-                       dans la garnison. Le vendre laissait un id fantôme dans
-                       `base.garrison` — une place occupée par personne. -->
+                  <!-- ⚠️ Un familier CONFIÉ à un aventurier n'est pas cédable : il le
+                       suit partout (convoi et défense). Même règle que le store. -->
                   <button
-                    v-if="!f.equipped && !postedFamiliarIds.has(f.id)"
+                    v-if="!f.equipped && !famKeepers.has(f.id)"
                     class="tal-b ghost"
                     title="Céder ce familier contre de l’or"
                     @click="doSellFamiliar(f)"
                   >
                     🪙{{ sellValue(f) }}
                   </button>
-                  <span v-else-if="!f.equipped" class="tal-posted" title="En poste au mur"
-                    >🛡️ au mur</span
+                  <span
+                    v-else-if="!f.equipped"
+                    class="tal-posted"
+                    :title="`Confié à ${famKeepers.get(f.id)!.name}`"
+                    >🧭 {{ famKeepers.get(f.id)!.name }}</span
                   >
                 </div>
               </div>
@@ -2716,6 +2718,7 @@ import {
   type RaidReport,
   defenseLevel,
 } from '@/lib/raid';
+import { familiarKeepers } from '@/lib/caravan';
 import { usePush } from '@/composables/usePush';
 const BasePage = defineAsyncComponent(() => import('@/pages/BasePage.vue'));
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
@@ -5495,14 +5498,14 @@ function doUnequipFamiliar() {
 // DOUBLONS de familiers : ceux qu'aucune configuration ne peut employer. La règle vit
 // dans `raid.ts` (dominé sur les TROIS axes ⚔️/🛡️/✦, et par effet porté) — ici on ne
 // fait que lui passer l'état réel : l'équipé et les postés au chenil sont hors-jeu, le
-/** Les familiers POSTÉS au chenil : ni cédables, ni recyclables tant qu'ils tiennent
- *  un rôle au mur. */
-const postedFamiliarIds = computed(() => new Set(char.row?.base?.garrison ?? []));
+/** Les familiers CONFIÉS à un aventurier (id → aventurier) : pas cédables. Source unique
+ *  avec le store (`familiarKeepers`). */
+const famKeepers = computed(() => familiarKeepers(char.row?.adventurers ?? []));
 // 🔒 protège. On garde `companionSlots(niveau) + 1` exemplaires de chaque effet.
 const duplicateFams = computed<Item[]>(() =>
   duplicateFamiliars(bagFamiliars.value, c.value.level.level, {
     equippedId: equippedFamiliar.value?.id ?? null,
-    postedIds: char.row?.base?.garrison ?? [],
+    postedIds: [...famKeepers.value.keys()],
   }),
 );
 const duplicateGold = computed(() => duplicateFams.value.reduce((sum, f) => sum + sellValue(f), 0));

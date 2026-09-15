@@ -431,6 +431,20 @@ export function canAdvFamiliar(adv: Adventurer, fam: Item): boolean {
   return RARITY_RANK[fam.rarity] <= RARITY_RANK[advRarity(adv)];
 }
 
+/** Qui garde quel familier : id du familier → l’aventurier à qui il est confié.
+ *
+ * ⚠️ SOURCE UNIQUE de « ce familier est pris » pour la vente (store) ET pour l’écran. La
+ * fiche lisait encore `base.garrison`, la garnison retirée en v0.777 : un familier resté
+ * dans cette vieille liste s’affichait « 🛡️ au mur » et n’était plus vendable, pendant qu’un
+ * familier réellement confié proposait « Vendre » — un bouton que le store refusait sans
+ * rien dire. Le premier aventurier listé l’emporte si deux prétendent au même. */
+export function familiarKeepers(advs: readonly Adventurer[]): Map<string, Adventurer> {
+  const keepers = new Map<string, Adventurer>();
+  for (const a of advs)
+    if (a.familiarId && !keepers.has(a.familiarId)) keepers.set(a.familiarId, a);
+  return keepers;
+}
+
 export function advTalentsOf(
   advs: Adventurer[],
   owned: TalentInstance[],
