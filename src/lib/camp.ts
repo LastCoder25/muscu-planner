@@ -122,9 +122,20 @@ export function campFoe(poi: Poi, spec: CampSpec): Combatant {
  * jamais une seconde répartition écrite à la main.
  * ⚠️ Pas de silhouette de nombre (`countMult`) : l'XP des abattus se compte PAR CORPS, une
  * horde de bêtes paierait plus qu'une bande de brigands à force égale.
+ * ⚠️ INVARIANT : les SOMMES exactes priment sur un plancher par corps. C'est le combattant
+ * fondu qui se bat, les corps n'en sont qu'une LECTURE : si le total est plus petit que le
+ * nombre de parts, un corps peut valoir 0 dégât (voire 0 PV — il tombe au premier coup, cf.
+ * `deriveSkirmish`), jamais une valeur négative ni NaN. Un `Math.max(1, …)` par corps
+ * gonflerait la troupe au-delà de ce que le combat applique. Hors d'atteinte avec
+ * `campFoe` aujourd'hui (des milliers de points pour ≤ 14 parts), testé sur un ennemi forcé.
+ * `foe` : l'ennemi fondu déjà calculé par l'appelant (`resolveCamp`) — une seule force, et
+ * pas de second calcul de la référence.
  */
-export function campBodies(poi: Poi, spec: CampSpec): SkirmishUnit[] {
-  const foe = campFoe(poi, spec);
+export function campBodies(
+  poi: Poi,
+  spec: CampSpec,
+  foe: Combatant = campFoe(poi, spec),
+): SkirmishUnit[] {
   const roster = factionRoster(spec.faction);
   const troop = roster.slice(0, -1);
   const lead = roster[roster.length - 1]!;
@@ -268,10 +279,10 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
   const rng = mulberry32(seed >>> 0 || 1);
   const gearRng = mulberry32((seed ^ 0x27d4eb2f) >>> 0 || 1);
   const allies = partyUnits(input);
-  const bodies = campBodies(poi, spec);
-  const group = fuseUnits(allies, 'Groupe');
   const foe = campFoe(poi, spec);
-  const fight = simulateCombat(group, foe, { seed: (seed + 17) >>> 0, goldOnWin: 0 });
+  const bodies = campBodies(poi, spec, foe);
+  const group = fuseUnits(allies, 'Groupe');
+  const fight = simulateCombat(group, foe, { seed: campFightSeed(seed), goldOnWin: 0 });
   const d = deriveSkirmish(
     { log: fight.log, win: fight.win, allyPv: group.pv, foePv: foe.pv },
     allies,
@@ -357,8 +368,27 @@ export function startParty(input: PartyInput, now: number, legMin: number): Acti
   };
 }
 
+/**
+ * 🎲 Graine du VRAI combat d'un camp (`resolveCamp`) — toujours PAIRE.
+ * ⚠️ DISJOINTE PAR CONSTRUCTION des graines du pronostic (`campForecastSeed`, toujours
+ * IMPAIRES) : un % affiché avant l'envoi ne doit jamais rejouer la bataille qui aura lieu,
+ * sinon il en révélerait l'issue (doctrine du pronostic de siège, v0.767). L'ancienne paire
+ * `(seed + 17)` / `s × 131 + 5` se croisait (graine 119 → 136 = 2ᵉ échantillon).
+ * La parité se lit sans connaître la graine du départ : le pronostic est calculé AVANT
+ * qu'elle existe. Coût : `seed` et `seed + 2³¹` livrent le même combat (sans effet de jeu).
+ */
+export function campFightSeed(seed: number): number {
+  return (((seed >>> 0) + 17) * 2) >>> 0;
+}
+
+/** 🎲 Graine du i-ème échantillon du pronostic — toujours IMPAIRE (cf. `campFightSeed`),
+ *  étalée par la constante de Fibonacci pour ne pas rejouer des graines voisines. */
+export function campForecastSeed(i: number): number {
+  return (Math.imul((i >>> 0) + 1, 0x9e3779b1) | 1) >>> 0;
+}
+
 /** 🎯 % de victoire affiché avant l'envoi — le MÊME combat fondu, rejoué sur des graines
- *  dérivées (jamais celle du vrai départ). */
+ *  dérivées, déterministes et JAMAIS égales à celle du vrai combat (parité, cf. plus haut). */
 export function campWinPct(
   poi: Poi,
   spec: CampSpec,
@@ -371,6 +401,6 @@ export function campWinPct(
   const n = Math.max(1, samples);
   let w = 0;
   for (let s = 0; s < n; s++)
-    if (simulateCombat(group, foe, { seed: s * 131 + 5, goldOnWin: 0 }).win) w++;
+    if (simulateCombat(group, foe, { seed: campForecastSeed(s), goldOnWin: 0 }).win) w++;
   return w / n;
 }

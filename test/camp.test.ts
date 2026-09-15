@@ -3,7 +3,9 @@ import {
   CAMP,
   HERO_UNIT_ID,
   campBodies,
+  campFightSeed,
   campFoe,
+  campForecastSeed,
   campGroupHaul,
   campHurt,
   campWinPct,
@@ -33,8 +35,15 @@ import {
   roadUnits,
   type RoadCompanions,
 } from '@/lib/caravan';
-import { fuseUnits, skirmishXpShares } from '@/lib/skirmish';
-import { mulberry32, offenseOf, survivalOf, playerCombatant } from '@/lib/combat';
+import { deriveSkirmish, fuseUnits, skirmishXpShares } from '@/lib/skirmish';
+import {
+  mulberry32,
+  offenseOf,
+  survivalOf,
+  playerCombatant,
+  simulateCombat,
+  type Combatant,
+} from '@/lib/combat';
 import { factionRoster, type RaidFaction } from '@/lib/raid';
 import type { Adventurer } from '@/lib/adventurers';
 
@@ -130,7 +139,10 @@ describe('⚰️ campBodies — les corps sont la force du combat, répartie', (
           const b = campBodies(p, spec);
           expect(b.reduce((s, x) => s + x.combatant.pv, 0)).toBe(foe.pv);
           expect(b.reduce((s, x) => s + x.combatant.damage, 0)).toBe(foe.damage);
-          for (const x of b) expect(x.combatant.pv).toBeGreaterThan(0);
+          for (const x of b) {
+            expect(x.combatant.pv).toBeGreaterThan(0);
+            expect(x.combatant.damage).toBeGreaterThan(0);
+          }
         }
   });
   it('camp = troupe + CHEF, repaire = troupe + CHAMPION ; ids uniques ; niveau du lieu', () => {
@@ -147,6 +159,85 @@ describe('⚰️ campBodies — les corps sont la force du combat, répartie', (
     expect(l[l.length - 1]!.combatant.pv).toBeGreaterThan(c[c.length - 1]!.combatant.pv);
     // Le chef pèse plus qu'un corps de troupe.
     expect(c[c.length - 1]!.combatant.pv).toBeGreaterThan(c[0]!.combatant.pv);
+  });
+});
+
+describe('⚰️ campBodies — un ennemi minuscule garde des sommes EXACTES', () => {
+  it('⚠️ total < nombre de parts : Σ exactes, jamais négatif ni NaN (un corps à 0 est admis)', () => {
+    const tiny = (pv: number, damage: number): Combatant => ({
+      name: 'x',
+      pv,
+      damage,
+      crit: 0.08,
+      dodge: 0.05,
+      initiative: 12,
+    });
+    let zero = 0;
+    for (const type of ['camp', 'lair'] as const)
+      for (const size of [2, 5, 10])
+        for (const [pv, damage] of [
+          [1, 1],
+          [3, 2],
+          [5, 0],
+          [7, 3],
+        ] as const) {
+          const b = campBodies(poi({ type }), { faction: 'betes', size }, tiny(pv, damage));
+          expect(b.reduce((s, x) => s + x.combatant.pv, 0)).toBe(pv);
+          expect(b.reduce((s, x) => s + x.combatant.damage, 0)).toBe(damage);
+          for (const x of b) {
+            for (const v of [x.combatant.pv, x.combatant.damage]) {
+              expect(Number.isInteger(v)).toBe(true);
+              expect(v).toBeGreaterThanOrEqual(0);
+            }
+            if (x.combatant.damage === 0) zero++;
+          }
+        }
+    expect(zero, 'aucun corps à 0 : le cas limite n’est pas exercé').toBeGreaterThan(0);
+  });
+});
+
+describe('🎲 graines — le pronostic ne rejoue JAMAIS le vrai combat', () => {
+  it('⚠️ aucune graine d’échantillon n’égale celle du vrai combat, quelle que soit la graine', () => {
+    const forecast = new Set(Array.from({ length: 500 }, (_, i) => campForecastSeed(i)));
+    expect(forecast.size, 'échantillons répétés').toBe(500);
+    const seeds = [0, 1, 11, 119, 2 ** 31, 2 ** 32 - 1, 2 ** 32 - 17, 2 ** 31 - 17];
+    const r = mulberry32(99);
+    for (let i = 0; i < 3000; i++) seeds.push(Math.floor(r() * 2 ** 32));
+    for (let i = 0; i < 2000; i++) seeds.push(i);
+    for (const s of seeds) expect(forecast.has(campFightSeed(s)), `graine ${s}`).toBe(false);
+    // La PREUVE (et pas seulement l'échantillon) : combat pair, pronostic impair.
+    for (const s of seeds) expect(campFightSeed(s) % 2, `graine ${s}`).toBe(0);
+    for (const f of forecast) expect(f % 2).toBe(1);
+  });
+  it('resolveCamp combat sur campFightSeed ; campWinPct échantillonne campForecastSeed', () => {
+    const inp0 = input({ spec: { faction: 'betes', size: 4 } });
+    const allies = units(inp0.escort, inp0.road);
+    const group = fuseUnits(allies, 'Groupe');
+    const foe = campFoe(inp0.poi, inp0.spec);
+    const bodies = campBodies(inp0.poi, inp0.spec);
+    let differ = 0;
+    for (let s = 1; s <= 40; s++) {
+      const o = resolveCamp({ ...inp0, seed: s });
+      const fight = simulateCombat(group, foe, { seed: campFightSeed(s), goldOnWin: 0 });
+      const d = deriveSkirmish(
+        { log: fight.log, win: fight.win, allyPv: group.pv, foePv: foe.pv },
+        allies,
+        bodies,
+        s,
+      );
+      expect(o.party!.win, `graine ${s}`).toBe(fight.win);
+      expect(o.party!.foesDown).toEqual(d.foesDown);
+      expect(o.party!.hurt).toEqual(d.win ? [] : d.down);
+      if (
+        simulateCombat(group, foe, { seed: s + 17, goldOnWin: 0 }).log.length !== fight.log.length
+      )
+        differ++;
+    }
+    expect(differ, 'graines indiscernables : le test ne prouve rien').toBeGreaterThan(0);
+    let w = 0;
+    for (let i = 0; i < 60; i++)
+      if (simulateCombat(group, foe, { seed: campForecastSeed(i), goldOnWin: 0 }).win) w++;
+    expect(campWinPct(inp0.poi, inp0.spec, allies, 60)).toBe(w / 60);
   });
 });
 
@@ -298,6 +389,28 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     );
     expect(o.party!.journal.length).toBeGreaterThan(0);
     expect(o.party!.journal.length).toBeLessThanOrEqual(CAMP.journalMax + 1);
+  });
+
+  it('⚠️ le JOURNAL est TRONQUÉ au-delà de journalMax, avec le reste compté', () => {
+    const o = resolveCamp(
+      input({
+        escort: team(10, 60),
+        road: road(60, 10),
+        poi: poi({ level: 5, type: 'lair' }),
+        spec: { faction: 'betes', size: CAMP.journalMax + 20 },
+        playerLevel: 60,
+      }),
+    );
+    const r = o.party!;
+    expect(r.win).toBe(true);
+    // Chaque corps abattu a une ligne : il y en a plus que la borne.
+    expect(r.slain).toBeGreaterThan(CAMP.journalMax);
+    expect(r.journal).toHaveLength(CAMP.journalMax + 1);
+    const last = r.journal[CAMP.journalMax]!;
+    expect(last).toMatch(/^… et \d+ de plus\.$/);
+    // Au moins une ligne par corps abattu : le reste compté couvre tout ce qui dépasse.
+    expect(Number(last.match(/\d+/)![0])).toBeGreaterThanOrEqual(r.slain - CAMP.journalMax);
+    for (const line of r.journal.slice(0, CAMP.journalMax)) expect(line).not.toMatch(/^… et/);
   });
 });
 
