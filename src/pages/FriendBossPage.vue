@@ -34,34 +34,30 @@
 
       <!-- ── BOSS EN COURS ─────────────────────────────────────────────────────── -->
       <section v-if="current" class="fb-card boss">
-        <div class="fb-boss-top">
-          <span class="fb-emo">{{ BOSS_FAMILY_LABEL[current.family].emoji }}</span>
-          <div class="fb-boss-main">
-            <div class="fb-boss-n font-display">{{ current.exerciseName }}</div>
-            <div class="fb-boss-s">
-              <template v-if="phase === 'recruiting'">
-                ⏳ Démarre dans {{ fmtBossSpan(bossStartAt(current) - now) }} — {{ answered }}/{{
-                  invitedCount
-                }}
-                réponse{{ invitedCount > 1 ? 's' : '' }}
-              </template>
-              <template v-else>⚔️ Encore {{ fmtBossSpan(bossEndsAt(current) - now) }}</template>
-            </div>
-          </div>
+        <div class="fb-boss-s">
+          <template v-if="phase === 'recruiting'">
+            ⏳ Démarre dans {{ fmtBossSpan(bossStartAt(current) - now) }} — {{ answered }}/{{
+              invitedCount
+            }}
+            réponse{{ invitedCount > 1 ? 's' : '' }}
+          </template>
+          <template v-else>⚔️ Encore {{ fmtBossSpan(bossEndsAt(current) - now) }}</template>
+          <span class="fb-dim">
+            · 1 {{ unitSingular }} = {{ fmtBossPv(FRIEND_BOSS.damagePerUnit) }} dégâts</span
+          >
         </div>
 
-        <div class="fb-hp">
-          <div class="fb-hp-bar">
-            <div class="fb-hp-fill" :style="{ width: hpLeftPct + '%' }" />
-          </div>
-          <div class="fb-hp-l">
-            <span class="font-display">{{ fmtBossPv(hpLeft) }}</span> /
-            {{ fmtBossPv(current.hpTotal) }} PV
-            <span class="fb-dim"
-              >· 1 {{ unitSingular }} = {{ fmtBossPv(FRIEND_BOSS.damagePerUnit) }} dégâts</span
-            >
-          </div>
-        </div>
+        <FriendBossStage
+          ref="stage"
+          :boss-name="current.exerciseName"
+          :boss-emoji="bossEmoji(current.id)"
+          :family-emoji="BOSS_FAMILY_LABEL[current.family].emoji"
+          :family-name="BOSS_FAMILY_LABEL[current.family].name"
+          :hp-total="current.hpTotal"
+          :hp-left="hpLeft"
+          :hold="busy"
+          :allies="allies"
+        />
 
         <!-- Frapper : ce que le serveur acceptera est annoncé AVANT l'envoi. -->
         <div v-if="phase === 'active' && isMember" class="fb-hit">
@@ -228,7 +224,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { backOr } from '@/lib/nav';
@@ -240,6 +236,9 @@ import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { fxRarity, RARITY_LABEL } from '@/lib/items';
 import { bossAltarBuilt } from '@/lib/buildings';
+import { computeCharacter } from '@/lib/character';
+import { heroLook, type HeroLook } from '@/lib/heroLook';
+import FriendBossStage, { type StageAlly } from '@/components/FriendBossStage.vue';
 import { useGameFx } from '@/composables/useGameFx';
 import { repWeightFromExercise } from '@/lib/challenges';
 import {
@@ -247,8 +246,10 @@ import {
   BOSS_FAMILY_LABEL,
   acceptedUnits,
   bossEndsAt,
+  bossEmoji,
   bossFamily,
   bossDamage,
+  strikesToReplay,
   bossHpTotal,
   bossPhase,
   bossStartAt,
@@ -331,8 +332,60 @@ const groupRows = computed(() => {
 const hpLeft = computed(() =>
   current.value ? Math.max(0, current.value.hpTotal - current.value.damage) : 0,
 );
-const hpLeftPct = computed(() =>
-  current.value ? (hpLeft.value / Math.max(1, current.value.hpTotal)) * 100 : 0,
+// ── Scène : le boss, le groupe, et chaque frappe animée ──
+const stage = ref<InstanceType<typeof FriendBossStage> | null>(null);
+const allies = computed<StageAlly[]>(() =>
+  groupRows.value
+    .filter((m) => m.status === 'accepted')
+    .map((m) => ({
+      userId: m.userId,
+      pseudo: m.pseudo,
+      // Mon héros : tel qu'il est maintenant (sans attendre l'aller-retour serveur).
+      look: m.userId === uid.value ? (myLook.value ?? m.look ?? null) : (m.look ?? null),
+      units: m.units,
+      me: m.userId === uid.value,
+    })),
+);
+const myLook = computed<HeroLook | null>(() => {
+  if (!char.row || !progress.ready.value) return null;
+  const c = computeCharacter(
+    progress.powerXp.value,
+    progress.enduranceXp.value,
+    progress.agilityXp.value,
+    0,
+    0,
+  );
+  return heroLook(char.row.equipped, c.profile, char.row.voie);
+});
+/** Dépose mon apparence pour que les amis me voient (silencieux : c'est de la déco). */
+function syncLook() {
+  if (myLook.value) store.setLook(myLook.value, Date.now()).catch(() => undefined);
+}
+watch([loaded, myLook], () => loaded.value && syncLook(), { immediate: true });
+
+/** Rejoue une fois, à l'ouverture, les frappes des amis depuis ma dernière visite. */
+const SEEN_KEY = (id: string) => `muscu:fboss:seen:${id}`;
+let replayedFor: string | null = null;
+watch(
+  [loaded, current],
+  async () => {
+    const b = current.value;
+    if (!loaded.value || !b || replayedFor === b.id) return;
+    replayedFor = b.id;
+    let since = Number.POSITIVE_INFINITY; // 1re visite : rien à rejouer
+    try {
+      const raw = localStorage.getItem(SEEN_KEY(b.id));
+      if (raw) since = Number(raw) || since;
+      localStorage.setItem(SEEN_KEY(b.id), String(Date.now()));
+    } catch {
+      /* stockage indisponible : pas de rejeu */
+    }
+    const { strikes, startHp } = strikesToReplay(b, store.hits, uid.value, since);
+    if (!strikes.length) return;
+    await nextTick();
+    await stage.value?.play(strikes, startHp);
+  },
+  { immediate: true },
 );
 const unitSingular = computed(() => (current.value?.family === 'core' ? 'seconde' : 'rep'));
 const recentHits = computed(() =>
@@ -385,31 +438,33 @@ function step(d: number) {
 async function doHit() {
   const b = current.value;
   if (!b || busy.value) return;
+  const before = hpLeft.value;
   busy.value = true;
+  let res: { accepted: number; defeated: boolean };
   try {
-    const res = await store.hit(b.id, amount.value);
-    if (res.defeated) {
-      gameFx.celebrate({
-        kind: 'generic',
-        emoji: '🏆',
-        title: 'Le boss est tombé !',
-        subtitle: `${b.exerciseName} · ton groupe l’a abattu`,
-        rarity: 'legendary',
-      });
-    } else {
-      gameFx.celebrate({
-        quiet: true,
-        kind: 'generic',
-        emoji: '⚔️',
-        title: `−${fmtBossPv(bossDamage(res.accepted))} PV`,
-        subtitle: b.exerciseName,
-      });
-    }
+    res = await store.hit(b.id, amount.value);
   } catch (e) {
-    notifyError(e);
-  } finally {
     busy.value = false;
+    notifyError(e);
+    return;
   }
+  // La barre attend (hold) : c'est l'animation qui retire les PV, à l'impact.
+  const damage = bossDamage(res.accepted);
+  await stage.value?.play([{ id: `me-${Date.now()}`, userId: uid.value, damage }], before);
+  busy.value = false;
+  try {
+    localStorage.setItem(SEEN_KEY(b.id), String(Date.now()));
+  } catch {
+    /* rien */
+  }
+  if (res.defeated)
+    gameFx.celebrate({
+      kind: 'generic',
+      emoji: '🏆',
+      title: 'Le boss est tombé !',
+      subtitle: `${b.exerciseName} · ton groupe l’a abattu`,
+      rarity: 'legendary',
+    });
 }
 
 // ── Répondre ──
@@ -418,6 +473,7 @@ async function doRespond(b: FriendBoss, accept: boolean) {
   busy.value = true;
   try {
     await store.respond(b.id, accept);
+    if (accept) syncLook();
     $q.notify({
       type: accept ? 'positive' : 'info',
       message: accept ? `Tu rejoins le boss de ${ownerPseudo(b)} !` : 'Invitation refusée.',
@@ -471,6 +527,7 @@ async function doDeclare() {
   busy.value = true;
   try {
     await store.declare(ex, [...invitees.value]);
+    syncLook();
     $q.notify({
       type: 'positive',
       message: invitees.value.size
@@ -621,11 +678,6 @@ function notifyError(e: unknown) {
   opacity: 0.45;
   cursor: default;
 }
-.fb-boss-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 .fb-emo {
   font-size: 34px;
   line-height: 1;
@@ -633,35 +685,9 @@ function notifyError(e: unknown) {
 .fb-emo.fb-emo-past {
   font-size: 20px;
 }
-.fb-boss-main {
-  min-width: 0;
-}
-.fb-boss-n {
-  font-size: 20px;
-  font-weight: 700;
-}
 .fb-boss-s {
   font-size: 12.5px;
   color: var(--dim);
-}
-.fb-hp {
-  margin-top: 12px;
-}
-.fb-hp-bar {
-  height: 14px;
-  border-radius: 8px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  overflow: hidden;
-}
-.fb-hp-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--d4), var(--d3));
-  transition: width 0.4s ease;
-}
-.fb-hp-l {
-  margin-top: 4px;
-  font-size: 13px;
 }
 .fb-dim {
   color: var(--dim);

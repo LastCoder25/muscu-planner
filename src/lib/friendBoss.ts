@@ -26,6 +26,7 @@ import { mulberry32, seedOf } from './combat';
 import { rollTrophy, type EffectType, type Item } from './items';
 import { CONDITIONING_CHALLENGE_IDS, isCardioChallengeExercise } from '@/data/cardio';
 import { bossGoldForLevel, bossSummonCost } from '@/data/bosses';
+import type { HeroLook } from './heroLook';
 
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
@@ -160,6 +161,9 @@ export interface FriendBossMember {
   status: BossMemberStatus;
   units: number;
   claimed: boolean;
+  /** Apparence de son héros (migr. 0072), pour la scène de combat. Absente tant qu'il n'a
+   *  pas ouvert la page du boss. */
+  look?: HeroLook | null;
 }
 
 export interface FriendBossHit {
@@ -317,6 +321,42 @@ export function bossDamage(units: number): number {
 /** Reps qu'il reste à faire pour abattre le boss (arrondi au-dessus, comme `fboss_hit`). */
 export function bossUnitsLeft(b: Pick<FriendBoss, 'hpTotal' | 'damage'>): number {
   return Math.ceil(Math.max(0, b.hpTotal - b.damage) / FRIEND_BOSS.damagePerUnit);
+}
+
+// ── Scène de combat ───────────────────────────────────────────────────────────────
+
+const BOSS_EMOJIS = ['🐉', '👹', '🦖', '🐙', '🦂', '🧌', '🐲', '👾'] as const;
+
+/** Silhouette du boss : tirée de son id, donc la même pour tout le groupe et à chaque visite. */
+export function bossEmoji(bossId: string): string {
+  return BOSS_EMOJIS[seedOf(bossId) % BOSS_EMOJIS.length]!;
+}
+
+export interface BossStrike {
+  id: string;
+  userId: string;
+  damage: number;
+}
+
+/** Frappes des AUTRES depuis ma dernière visite, à rejouer à l'ouverture (les plus récentes,
+ *  au plus `max`, dans l'ordre chronologique), et les PV AVANT ces frappes pour que la barre
+ *  parte de là où je l'avais laissée. Les frappes plus anciennes que la fenêtre sont déjà
+ *  comptées dans la barre de départ. */
+export function strikesToReplay(
+  b: Pick<FriendBoss, 'id' | 'hpTotal' | 'damage'>,
+  hits: readonly FriendBossHit[],
+  me: string,
+  since: number,
+  max = 6,
+): { strikes: BossStrike[]; startHp: number } {
+  const fresh = hits
+    .filter((h) => h.bossId === b.id && h.userId !== me && h.createdAt > since)
+    .sort((x, y) => x.createdAt - y.createdAt)
+    .slice(-max)
+    .map((h) => ({ id: h.id, userId: h.userId, damage: bossDamage(h.units) }));
+  const hpLeft = Math.max(0, b.hpTotal - b.damage);
+  const replayed = fresh.reduce((a, s) => a + s.damage, 0);
+  return { strikes: fresh, startHp: Math.min(b.hpTotal, hpLeft + replayed) };
 }
 
 /** PV lisibles : « 120 000 ». */

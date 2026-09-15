@@ -13,6 +13,8 @@ import {
   bossDamage,
   bossUnitsLeft,
   fmtBossPv,
+  strikesToReplay,
+  bossEmoji,
   canDeclareBoss,
   nextDeclareAt,
   acceptedUnits,
@@ -110,6 +112,35 @@ describe('🐉 BOSS ENTRE AMIS — démarrage et fin', () => {
     expect(bossHpTotal('push', 1)).toBe(FRIEND_BOSS.shareUnits.push * dpu);
     expect(bossHpTotal('pull', 4)).toBe(4 * FRIEND_BOSS.shareUnits.pull * dpu);
     expect(bossHpTotal('legs', 0)).toBe(FRIEND_BOSS.shareUnits.legs * dpu);
+  });
+
+  it('scène : on rejoue les frappes des AUTRES depuis ma visite, et la barre part d’avant elles', () => {
+    const hit = (id: string, userId: string, units: number, at: number) => ({
+      id,
+      bossId: 'b1',
+      userId,
+      units,
+      createdAt: at,
+    });
+    const b = { id: 'b1', hpTotal: 120_000, damage: 50_000 };
+    const hits = [
+      hit('old', 'ami', 10, T0), // avant ma visite : déjà dans la barre
+      hit('moi', 'me', 20, T0 + 2 * H), // la mienne : pas rejouée
+      hit('h1', 'ami', 5, T0 + 3 * H),
+      hit('h2', 'ami2', 15, T0 + 4 * H),
+      { ...hit('x', 'ami', 30, T0 + 5 * H), bossId: 'autre' },
+    ];
+    const r = strikesToReplay(b, hits, 'me', T0 + H);
+    expect(r.strikes.map((s) => s.id)).toEqual(['h1', 'h2']);
+    expect(r.strikes.map((s) => s.damage)).toEqual([5_000, 15_000]);
+    expect(r.startHp).toBe(70_000 + 20_000);
+    // Au plus `max`, les plus récentes, et jamais au-delà des PV totaux.
+    expect(strikesToReplay(b, hits, 'me', T0 + H, 1).strikes.map((s) => s.id)).toEqual(['h2']);
+    expect(strikesToReplay({ ...b, damage: 0 }, hits, 'me', 0).startHp).toBe(120_000);
+    // Première visite (aucune date) : rien à rejouer.
+    expect(strikesToReplay(b, hits, 'me', Number.POSITIVE_INFINITY).strikes).toEqual([]);
+    // La silhouette du boss est la même pour tout le groupe.
+    expect(bossEmoji('b1')).toBe(bossEmoji('b1'));
   });
 
   it('1000 dégâts par rep, et le NOMBRE DE REPS pour abattre le boss ne change pas', () => {

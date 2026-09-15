@@ -14,6 +14,7 @@ import {
   type FriendBossHit,
   type FriendBossMember,
 } from '@/lib/friendBoss';
+import { parseHeroLook, sameLook, type HeroLook } from '@/lib/heroLook';
 
 /** Erreur lisible : le code du serveur traduit en français. */
 export class FriendBossError extends Error {
@@ -72,6 +73,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       status: r.status,
       units: r.units,
       claimed: r.claimed,
+      look: parseHeroLook(r.look),
     }));
     hits.value = (h.data ?? []).map((r) => ({
       id: r.id,
@@ -145,6 +147,23 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     return { accepted: res.accepted ?? 0, defeated: !!res.defeated };
   }
 
+  /** Dépose l'apparence de mon héros sur mes adhésions en cours (migr. 0072), pour que les
+   *  amis me voient dans la scène. N'écrit rien si elle n'a pas changé. */
+  async function setLook(look: HeroLook, now: number) {
+    const me = uid.value;
+    if (!me) return;
+    const mine = members.value.filter((m) => {
+      if (m.userId !== me) return false;
+      const b = bosses.value.find((x) => x.id === m.bossId);
+      if (!b) return false;
+      const p = bossPhase(b, now);
+      return p === 'recruiting' || p === 'active';
+    });
+    if (!mine.length || mine.every((m) => sameLook(m.look, look))) return;
+    await rpc('fboss_set_look', { p_look: look });
+    for (const m of mine) m.look = look;
+  }
+
   /** Réclame son coffre : le serveur vérifie qu'il est dû (boss mort, part minimale) et le
    *  marque pris. Le contenu est tiré côté client (`friendBossChest`). */
   async function claim(bossId: string) {
@@ -168,6 +187,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     respond,
     hit,
     claim,
+    setLook,
   };
 });
 
