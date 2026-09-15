@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { defenseUpgradeScrap, defenseUpgradeCost, repairCost, DEFENSE_TYPES } from '@/lib/raid';
-import { HARVEST, travelOneWayMin } from '@/lib/expedition';
+import { HARVEST, travelOneWayMin, type Poi } from '@/lib/expedition';
+import { campGroupHaul } from '@/lib/camp';
 import { BUILDING_TYPES } from '@/lib/buildings';
 import { DUNGEONS, dungeonGold } from '@/data/dungeons';
 import { CARAVAN } from '@/lib/caravan';
@@ -70,6 +71,33 @@ describe('ferraille : plus dure à obtenir que l’or', () => {
       ).toBeGreaterThan(1.1);
       // …sans virer au mur : au-delà, l'enceinte n'attendrait plus que le métal.
       expect(ratio, `niveau ${L} : ratio ${ratio.toFixed(2)}`).toBeLessThan(2.2);
+    }
+  });
+
+  it('⚠️ E3 : la règle tient avec UN camp de groupe par jour en plus', () => {
+    // Un camp pris sans le héros rend de l'OR, jamais de ferraille (cf. `campGroupHaul`) :
+    // ajouté au seul débit d'or, il accélère l'or — le métal doit rester plus lent, sans
+    // virer au mur, et l'épave garder la tête du débit de ferraille. Bandits : la faction
+    // qui rend le plus d'or, donc le cas le plus défavorable.
+    const campGold = (L: number) => {
+      const p: Poi = {
+        id: 'c',
+        type: 'camp',
+        level: L,
+        x: 60,
+        y: 60,
+        distNorm: 0.5,
+        spawnedAt: 0,
+        expiresAt: 9e15,
+      };
+      return campGroupHaul(p, { faction: 'bandits', size: 3 }, () => 0.99).gold;
+    };
+    for (const L of LEVELS) {
+      const goldDay = goldPerDay(L) + campGold(L);
+      const ratio = cranScrap(L) / scrapPerDay(L) / (cranGold(L) / goldDay);
+      expect(ratio, `niveau ${L} : ratio ${ratio.toFixed(2)}`).toBeGreaterThan(1.1);
+      expect(ratio, `niveau ${L} : ratio ${ratio.toFixed(2)}`).toBeLessThan(2.2);
+      expect(wreckPerDay(L) / scrapPerDay(L), `niveau ${L}`).toBeGreaterThan(0.45);
     }
   });
 

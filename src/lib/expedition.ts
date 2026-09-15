@@ -76,7 +76,8 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
 export const CAMP_TYPES: ReadonlySet<PoiType> = new Set<PoiType>(['camp', 'lair']);
 export const CAMP_FACTIONS: readonly RaidFaction[] = ['bandits', 'betes', 'mortsvivants'];
 /** Taille d'un camp = sa FORCE, en aventuriers de RÉFÉRENCE (cf. `campFoe`). Un gros
- *  repaire en demande nettement plus que trois. ⚠️ Recalibré par la mesure (Task 5). */
+ *  repaire en demande nettement plus que trois. ⚠️ MESURÉ, gardé tel quel : les bandes de
+ *  `campCalibration.test` tiennent avec ces tailles (cf. `CAMP.pvTurns`). */
 export const CAMP_SIZES: { camp: readonly number[]; lair: readonly number[] } = {
   camp: [2, 3, 4],
   lair: [5, 7, 10],

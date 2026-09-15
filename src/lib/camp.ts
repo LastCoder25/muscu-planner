@@ -55,16 +55,30 @@ export const CAMP = {
   /** Taille de la RÉFÉRENCE : un camp de taille 3 est dimensionné sur 3 aventuriers de
    *  référence (`refEscortUnits`), accompagnés et équipés. */
   refGroup: CARAVAN.refEscort,
-  /** PV de l'ennemi fondu ≈ N tours de l'offense du groupe de référence. ⚠️ MESURÉ (Task 5). */
-  pvTurns: 2.6,
-  /** Morsure ≈ part de la SURVIE du groupe de référence. ⚠️ MESURÉ (Task 5). */
-  dmgPctPv: 0.27,
+  /** PV de l'ennemi fondu ≈ N tours de l'offense du groupe de référence.
+   *  ⚠️ MESURÉ avec `dmgPctPv` (grille 1,5→9 × 0,06→0,40, puis 1 000 combats par case, deux
+   *  jeux de graines ; `campCalibration.test`). Groupe de N = taille aventuriers de référence,
+   *  chacun accompagné et équipé, contre un camp de bandits — victoire aux niveaux
+   *  12/26/45/70 : taille 3 → 0,85/0,90/0,81/0,79 ; taille 10 → 0,84/0,89/0,82/0,82 ; sur
+   *  toutes les tailles 0,70 (niv. 70, taille 2) à 0,90 (niv. 26, taille 3). Un de moins :
+   *  taille 10 → 0,31/0,57/0,52/0,57 ; trois contre un repaire (taille ≥ 5) : ≤ 0,02.
+   *  ⚠️ L'ancien réglage (2,6 × 0,27) tombait à 0,46-0,56 sur les gros repaires au niveau 45 :
+   *  des combats de ~6 tours laissaient trop de hasard (trois contre cinq gagnaient 0,14).
+   *  À 8 × 0,09 un combat dure ~17 tours, jamais le plafond (0 sur 300). */
+  pvTurns: 8,
+  /** Morsure ≈ part de la SURVIE du groupe de référence. ⚠️ MESURÉ, cf. `pvTurns`. */
+  dmgPctPv: 0.09,
   /** Poids du chef (camp) et du champion (repaire) face à un corps de troupe.
    *  ⚠️ ENTIERS : `campBodies` les réalise en regroupant des parts égales de `troopOf`. */
   chiefWeight: 2,
   championWeight: 4,
-  /** Butin SANS le héros, en part des sources existantes. ⚠️ MESURÉS (Task 5). */
-  groupGoldShare: 0.6,
+  /** Butin SANS le héros, en part des sources existantes.
+   *  ⚠️ `groupGoldShare` MESURÉ : l'or NET (or − salaires) d'un camp de bandits doit rester
+   *  sous l'or moyen d'une MINE de même niveau et distance (40 graines). À 0,6 le plus gros
+   *  repaire (taille 10) en rendait 2,1 à 2,3 fois plus aux niveaux 20/26/40 ; à 0,25 : cf.
+   *  `campCalibration.test` (E2). ⚠️ `banditGoldMult` et `stoneShare` : non contraints par
+   *  une bande, inchangés. */
+  groupGoldShare: 0.25,
   banditGoldMult: 1.5,
   stoneShare: 0.5,
   campPieces: 1,
