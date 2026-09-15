@@ -14,6 +14,8 @@ import {
   bossUnitsLeft,
   fmtBossPv,
   strikesToReplay,
+  strikeShots,
+  BOSS_SHOT_MS,
   bossEmoji,
   canDeclareBoss,
   nextDeclareAt,
@@ -141,6 +143,21 @@ describe('🐉 BOSS ENTRE AMIS — démarrage et fin', () => {
     expect(strikesToReplay(b, hits, 'me', Number.POSITIVE_INFINITY).strikes).toEqual([]);
     // La silhouette du boss est la même pour tout le groupe.
     expect(bossEmoji('b1')).toBe(bossEmoji('b1'));
+  });
+
+  it('une frappe = un projectile par rep, chacun porte ses dégâts et leur somme vaut la frappe', () => {
+    expect(BOSS_SHOT_MS).toBe(500);
+    expect(strikeShots(bossDamage(12))).toEqual(Array(12).fill(1000));
+    expect(strikeShots(bossDamage(1))).toEqual([1000]);
+    // Dégâts qui ne tombent pas pile : la somme reste exacte, un projectile par rep.
+    const odd = strikeShots(2_500);
+    expect(odd).toHaveLength(3);
+    expect(odd.reduce((a, b) => a + b, 0)).toBe(2_500);
+    for (const d of [0, 999, 30_000, 123_456]) {
+      const shots = strikeShots(d);
+      expect(shots.length).toBeGreaterThanOrEqual(1);
+      expect(shots.reduce((a, b) => a + b, 0)).toBe(d);
+    }
   });
 
   it('1000 dégâts par rep, et le NOMBRE DE REPS pour abattre le boss ne change pas', () => {

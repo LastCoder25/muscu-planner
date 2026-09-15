@@ -46,24 +46,27 @@
     </div>
 
     <span
-      v-if="proj"
-      :key="proj.key"
+      v-for="p in projs"
+      :key="p.key"
       class="fbs-proj"
       aria-hidden="true"
       :style="{
-        left: proj.x + 'px',
-        top: proj.y + 'px',
-        '--dx': proj.dx + 'px',
-        '--dy': proj.dy + 'px',
+        left: p.x + 'px',
+        top: p.y + 'px',
+        '--dx': p.dx + 'px',
+        '--dy': p.dy + 'px',
       }"
     />
+
+    <!-- Une frappe de 30 reps dure 15 s : on peut toujours passer au résultat. -->
+    <button v-if="animating" class="fbs-skip" @click="skip">⏩ Passer</button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch, type ComponentPublicInstance } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch, type ComponentPublicInstance } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
-import { fmtBossPv, type BossStrike } from '@/lib/friendBoss';
+import { BOSS_SHOT_MS, fmtBossPv, strikeShots, type BossStrike } from '@/lib/friendBoss';
 import { lookEquipped, type HeroLook } from '@/lib/heroLook';
 
 export interface StageAlly {
@@ -120,10 +123,14 @@ const ghostPct = computed(() => pct(Math.max(ghostHp.value, shownHp.value)));
 const strikerId = ref<string | null>(null);
 const shake = ref(false);
 const flash = ref(0);
-const proj = ref<{ key: number; x: number; y: number; dx: number; dy: number } | null>(null);
+const projs = ref<{ key: number; x: number; y: number; dx: number; dy: number }[]>([]);
 const pops = ref<{ key: number; text: string }[]>([]);
 let seq = 0;
 let alive = true;
+/** « Passer » : la boucle s'arrête au prochain pas et la barre retombe sur le serveur. */
+let skipped = false;
+/** Numéro du rejeu en cours : un impact d'un rejeu passé ne touche jamais la barre du suivant. */
+let run = 0;
 onUnmounted(() => {
   alive = false;
   if (ghostTimer) clearTimeout(ghostTimer);
@@ -141,28 +148,52 @@ function centerOf(el: HTMLElement | null | undefined): { x: number; y: number } 
   return { x: r.left - box.left + r.width / 2, y: r.top - box.top + r.height / 2 };
 }
 
-async function strike(s: BossStrike) {
-  strikerId.value = s.userId;
-  await wait(260);
-  if (!alive) return;
-  const from = centerOf(allyEls.get(s.userId));
-  const to = centerOf(bossEl.value);
-  if (from && to) {
-    proj.value = { key: ++seq, x: from.x, y: from.y, dx: to.x - from.x, dy: to.y - from.y };
-    await wait(420);
-    if (!alive) return;
-  }
-  proj.value = null;
-  shake.value = true;
+const FLIGHT_MS = 420;
+
+/** Un impact : le projectile retire SES dégâts, le boss tremble, le chiffre s'affiche. */
+function impact(damage: number) {
+  shownHp.value = Math.max(0, shownHp.value - damage);
   flash.value = ++seq;
-  shownHp.value = Math.max(0, shownHp.value - s.damage);
-  const key = ++seq;
-  pops.value.push({ key, text: `−${fmtBossPv(s.damage)}` });
-  setTimeout(() => (pops.value = pops.value.filter((p) => p.key !== key)), 1100);
-  await wait(380);
   shake.value = false;
+  void nextTick(() => {
+    shake.value = true;
+    setTimeout(() => (shake.value = false), 380);
+  });
+  const key = ++seq;
+  pops.value.push({ key, text: `−${fmtBossPv(damage)}` });
+  setTimeout(() => (pops.value = pops.value.filter((p) => p.key !== key)), 1100);
+}
+
+/** Une frappe = un projectile par rep, un toutes les `BOSS_SHOT_MS` ; chacun applique ses
+ *  propres dégâts à l'impact (leur somme vaut la frappe, `strikeShots`). */
+async function strike(s: BossStrike, token: number) {
+  const shots = strikeShots(s.damage);
+  for (const dmg of shots) {
+    if (!alive || skipped) return;
+    strikerId.value = null;
+    await nextTick();
+    strikerId.value = s.userId;
+    const from = centerOf(allyEls.get(s.userId));
+    const to = centerOf(bossEl.value);
+    if (from && to) {
+      const key = ++seq;
+      projs.value.push({ key, x: from.x, y: from.y, dx: to.x - from.x, dy: to.y - from.y });
+      setTimeout(() => {
+        projs.value = projs.value.filter((p) => p.key !== key);
+        if (alive && !skipped && token === run) impact(dmg);
+      }, FLIGHT_MS);
+    } else {
+      impact(dmg);
+    }
+    await wait(BOSS_SHOT_MS);
+  }
+  // Laisse le dernier projectile arriver avant la frappe suivante.
+  await wait(Math.max(0, FLIGHT_MS - BOSS_SHOT_MS) + 380);
   strikerId.value = null;
-  await wait(140);
+}
+
+function skip() {
+  skipped = true;
 }
 
 /** Joue des frappes dans l'ordre. `startHp` = les PV avant la première (rejeu à l'ouverture,
@@ -174,16 +205,22 @@ async function play(strikes: BossStrike[], startHp?: number) {
     return;
   }
   animating.value = true;
+  skipped = false;
+  const token = ++run;
   if (startHp != null) {
     shownHp.value = startHp;
     ghostHp.value = startHp;
   }
   for (const s of strikes) {
-    if (!alive) return;
-    await strike(s);
+    if (!alive || skipped) break;
+    await strike(s, token);
   }
+  if (!alive || token !== run) return;
   animating.value = false;
+  projs.value = [];
+  strikerId.value = null;
   shownHp.value = props.hpLeft;
+  if (skipped) ghostHp.value = props.hpLeft;
 }
 
 defineExpose({ play });
@@ -365,6 +402,19 @@ defineExpose({ play });
 .fbs-ally-u {
   font-size: 10.5px;
   color: var(--dim);
+}
+.fbs-skip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
 }
 .fbs-proj {
   position: absolute;

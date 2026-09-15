@@ -338,6 +338,18 @@ export interface BossStrike {
   damage: number;
 }
 
+/** Écart entre deux projectiles d'une même frappe : une rep = un projectile. */
+export const BOSS_SHOT_MS = 500;
+
+/** Dégâts de chaque projectile d'une frappe : un par rep, et leur somme vaut exactement les
+ *  dégâts de la frappe (la barre retombe pile sur ce que dit le serveur). */
+export function strikeShots(damage: number): number[] {
+  const total = Math.max(0, Math.round(damage));
+  const n = Math.max(1, Math.round(total / FRIEND_BOSS.damagePerUnit));
+  const per = Math.floor(total / n);
+  return Array.from({ length: n }, (_, i) => (i === n - 1 ? total - per * (n - 1) : per));
+}
+
 /** Frappes des AUTRES depuis ma dernière visite, à rejouer à l'ouverture (les plus récentes,
  *  au plus `max`, dans l'ordre chronologique), et les PV AVANT ces frappes pour que la barre
  *  parte de là où je l'avais laissée. Les frappes plus anciennes que la fenêtre sont déjà
