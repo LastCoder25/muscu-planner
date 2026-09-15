@@ -7,6 +7,9 @@ import {
   perLevelLabel,
   plotsForLevel,
   slotUnlockLevel,
+  canBuildOnSlot,
+  emptySlotLocked,
+  repackBuildingSlots,
   buildingUpgradeCost,
   canUpgradeBuilding,
   buildingProdPerHour,
@@ -78,6 +81,64 @@ describe('buildings — emplacements & coûts', () => {
   it('canUpgradeBuilding : plafonné au niveau joueur', () => {
     expect(canUpgradeBuilding(mk('boss_altar', 4), 10)).toBe(true);
     expect(canUpgradeBuilding(mk('boss_altar', 10), 10)).toBe(false);
+  });
+});
+
+describe('canBuildOnSlot : on construit LÀ OÙ ON TOUCHE, pas dans l’ordre (v0.867)', () => {
+  it('un emplacement vide d’index ≥ quota est constructible tant que le quota n’est pas atteint', () => {
+    // Niveau 3 → quota de 3 bâtiments. Rien encore posé : même le TOUT DERNIER
+    // emplacement de la cour est constructible — l’index ne compte pas, seul le compte.
+    expect(canBuildOnSlot(BUILD.plotCap - 1, [], 3)).toBe(true);
+    expect(canBuildOnSlot(0, [], 3)).toBe(true);
+    // 2 bâtiments déjà posés sur des emplacements ÉPARS (5 et 9) : le quota (3) n’est
+    // pas atteint → un 3e emplacement vide, index 2 (< 5 et 9 mais aussi < le quota),
+    // reste constructible : ce n’est ni sa position ni celle des autres qui décide.
+    const deux = [mk('outpost', 1, 0, 5), mk('gold_mine', 1, 0, 9)];
+    expect(canBuildOnSlot(2, deux, 3)).toBe(true);
+  });
+  it('quota atteint → aucun emplacement vide constructible', () => {
+    // 3 bâtiments posés (slots 0, 1, 9) à un niveau qui n’en autorise que 3.
+    const trois = [mk('outpost', 1, 0, 0), mk('gold_mine', 1, 0, 1), mk('warehouse', 1, 0, 9)];
+    expect(canBuildOnSlot(2, trois, 3)).toBe(false);
+    expect(canBuildOnSlot(6, trois, 3)).toBe(false);
+  });
+  it('un emplacement occupé n’est jamais constructible', () => {
+    const b = [mk('outpost', 1, 0, 4)];
+    // Même à un niveau largement suffisant (quota max), l’emplacement occupé reste refusé.
+    expect(canBuildOnSlot(4, b, 100)).toBe(false);
+  });
+  it('index hors limite refusé', () => {
+    expect(canBuildOnSlot(-1, [], 100)).toBe(false);
+    expect(canBuildOnSlot(BUILD.plotCap, [], 100)).toBe(false);
+  });
+  it('emptySlotLocked est le miroir exact de canBuildOnSlot pour un emplacement vide', () => {
+    const deux = [mk('outpost', 1, 0, 0), mk('gold_mine', 1, 0, 1)];
+    for (const slot of [2, 3, 5]) {
+      expect(emptySlotLocked(slot, deux, 2)).toBe(!canBuildOnSlot(slot, deux, 2));
+    }
+    // Un emplacement OCCUPÉ n’est JAMAIS « verrouillé » : il se gère, quel que soit le quota.
+    expect(emptySlotLocked(0, deux, 2)).toBe(false);
+  });
+});
+
+describe('repackBuildingSlots : un filet legacy, jamais un repack inconditionnel', () => {
+  it('des slots valides et distincts, même très espacés, ne bougent PAS', () => {
+    // Exactement ce que « construire là où on touche » exige : un bâtiment posé loin
+    // dans la cour ne doit pas se faire ramener au prochain index libre au premier
+    // aller-retour serveur (normalizeRow tourne à CHAQUE persist).
+    const b = [mk('outpost', 1, 0, 0), mk('gold_mine', 1, 0, BUILD.plotCap - 1)];
+    expect(repackBuildingSlots(b)).toEqual(b);
+  });
+  it('un slot hors bornes est recompacté (legacy : plotCap réduit)', () => {
+    const b = [mk('outpost', 1, 0, 0), mk('gold_mine', 1, 0, BUILD.plotCap + 5)];
+    const out = repackBuildingSlots(b);
+    expect(out.every((x) => x.slot >= 0 && x.slot < BUILD.plotCap)).toBe(true);
+    expect(new Set(out.map((x) => x.slot)).size).toBe(out.length);
+  });
+  it('deux bâtiments sur le même slot sont recompactés (legacy : ligne corrompue)', () => {
+    const b = [mk('outpost', 1, 0, 2), mk('gold_mine', 1, 0, 2)];
+    const out = repackBuildingSlots(b);
+    expect(new Set(out.map((x) => x.slot)).size).toBe(2);
   });
 });
 

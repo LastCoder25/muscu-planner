@@ -382,16 +382,60 @@ export const BUILD = {
   hourMs: 3_600_000,
 } as const;
 
-/** Nombre d'emplacements DÉBLOQUÉS à un niveau donné : **UN par niveau** (le joueur
- *  gère ses priorités — plus de bâtiments débloqués que d'emplacements au début). */
+/** **UN QUOTA, PAS UNE LISTE D'INDEX** : nombre de bâtiments qu'on peut avoir posés à un
+ *  niveau donné (un de plus par niveau). ⚠️ Ne dit PAS QUELS emplacements sont ouverts —
+ *  n'importe quel emplacement vide (0..plotCap-1) est constructible tant que ce quota
+ *  n'est pas atteint (`canBuildOnSlot`) : on construit LÀ OÙ ON TOUCHE, pas dans l'ordre. */
 export function plotsForLevel(level: number): number {
   return Math.min(BUILD.plotCap, Math.max(1, level));
 }
 
-/** Niveau auquel l'emplacement d'index `slot` (0-based) se débloque (inverse de
- *  plotsForLevel). Sert à afficher « débloqué au niv X » sur un emplacement verrouillé. */
+/** Niveau requis pour que le `slot`-ième bâtiment (0-based) soit constructible — inverse
+ *  de `plotsForLevel`. ⚠️ DOUBLE USAGE : appelée avec un INDEX de slot, elle sert
+ *  d'affichage historique ; appelée avec `buildings.length` (le QUOTA courant), elle donne
+ *  le niveau requis pour que le PROCHAIN bâtiment (quel que soit l'emplacement vide choisi)
+ *  devienne constructible — c'est la même formule, `plotsForLevel` grimpant d'un cran par
+ *  niveau. Sert à afficher « débloqué au niv X » sur un emplacement verrouillé. */
 export function slotUnlockLevel(slot: number): number {
   return slot + 1;
+}
+
+/** UN EMPLACEMENT VIDE EST-IL CONSTRUCTIBLE MAINTENANT ? On construit LÀ OÙ ON TOUCHE,
+ *  pas dans l'ordre positionnel : tout emplacement vide (0..plotCap-1) l'est tant que le
+ *  QUOTA (le nombre de bâtiments déjà posés, où qu'ils soient) n'a pas atteint
+ *  `plotsForLevel(level)`. Les bâtiments existants gardent leur `slot`, occupé n'est JAMAIS
+ *  constructible — c'est le store (`buildFilon`), `VillagePlots.vue` et `BasePage.vue` qui
+ *  appellent tous cette même règle, pour qu'aucune copie ne diverge. */
+export function canBuildOnSlot(slot: number, buildings: Building[], level: number): boolean {
+  if (slot < 0 || slot >= BUILD.plotCap) return false;
+  if (buildings.some((b) => b.slot === slot)) return false; // occupé : jamais constructible
+  return buildings.length < plotsForLevel(level);
+}
+
+/** L'emplacement VIDE est-il VERROUILLÉ (quota atteint) ? Un emplacement OCCUPÉ n'est
+ *  JAMAIS verrouillé — il se gère, quel que soit le quota. Dérivée de `canBuildOnSlot`
+ *  (jamais une seconde formule) pour que les deux lectures ne puissent pas se contredire. */
+export function emptySlotLocked(slot: number, buildings: Building[], level: number): boolean {
+  return !canBuildOnSlot(slot, buildings, level) && !buildings.some((b) => b.slot === slot);
+}
+
+/** RECOMPACTE les bâtiments à des emplacements valides (0..plotCap-1, sans doublon),
+ *  UNIQUEMENT si nécessaire — le filet de sécurité legacy pour un type retiré du registre
+ *  (qui réduit `plotCap`) ou une ligne corrompue avec deux bâtiments sur le même slot.
+ *  ⚠️ NE JAMAIS repacker sans raison : depuis qu'on CONSTRUIT LÀ OÙ ON TOUCHE (pas dans
+ *  l'ordre), un emplacement délibérément choisi au-delà du prochain index libre doit
+ *  SURVIVRE à un aller-retour serveur — un repack inconditionnel (comme avant) ramènerait
+ *  silencieusement chaque bâtiment fraîchement posé à l'index suivant le plus bas, dès le
+ *  premier `persist()`. */
+export function repackBuildingSlots(buildings: Building[]): Building[] {
+  const seen = new Set<number>();
+  const ok = buildings.every((b) => {
+    if (b.slot < 0 || b.slot >= BUILD.plotCap || seen.has(b.slot)) return false;
+    seen.add(b.slot);
+    return true;
+  });
+  if (ok) return buildings;
+  return [...buildings].sort((a, b) => a.slot - b.slot).map((b, i) => ({ ...b, slot: i }));
 }
 
 /** Niveau requis pour pouvoir construire ce type (défaut 1). */

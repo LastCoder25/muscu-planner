@@ -80,7 +80,8 @@ import {
   buildingUpgradeCost,
   canUpgradeBuilding,
   canBuildType,
-  plotsForLevel,
+  canBuildOnSlot,
+  repackBuildingSlots,
   collectable,
   nextCollectedAt,
   storageMult,
@@ -308,12 +309,15 @@ export const useCharacterStore = defineStore('character', () => {
     r.energy_log = arr<EnergyLogEntry>(r.energy_log);
     // Bâtiments (migr. 0046). On DROPPE les types disparus du registre (ex. l'ancien
     // 'fragment_vein' ; 'energy_font'/'warehouse' retirés v0.599) → pas d'emplacement
-    // fantôme, puis on RE-PACK les slots à 0..n-1 (triés par slot d'origine) pour que les
-    // bâtiments restants tiennent dans le nombre d'emplacements réduit (plotCap).
-    r.buildings = arr<Building>(r.buildings)
-      .filter((b) => !!buildingType(b.typeId))
-      .sort((a, b) => a.slot - b.slot)
-      .map((b, i) => ({ ...b, slot: i }));
+    // fantôme. ⚠️ On ne RE-PACK les slots QUE si nécessaire (`repackBuildingSlots`) : un
+    // repack INCONDITIONNEL ramenait chaque bâtiment à l'index suivant le plus bas dès le
+    // premier `persist()` — silencieusement contraire à « on construit là où on touche »
+    // (v0.867), qui laisse le joueur choisir un emplacement vide au-delà du prochain index
+    // libre. Le filet reste : un slot hors bornes ou en doublon (type retiré du registre,
+    // ligne corrompue) est toujours recompacté.
+    r.buildings = repackBuildingSlots(
+      arr<Building>(r.buildings).filter((b) => !!buildingType(b.typeId)),
+    );
     r.set_pieces_seen = obj<Record<string, string[]>>(r.set_pieces_seen); // migr. 0047
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
@@ -1509,7 +1513,11 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   // ── Filons de production passive (village autour de la ville) ──
-  // Construit un filon sur un emplacement libre (débloqué par le niveau), payé à l'or.
+  // Construit un filon sur un emplacement libre, payé à l'or. ⚠️ ON CONSTRUIT LÀ OÙ ON
+  // TOUCHE, PAS DANS L'ORDRE (v0.867) : `canBuildOnSlot` juge cet emplacement précis sur
+  // le QUOTA (combien de bâtiments sont déjà posés, où qu'ils soient), jamais sur sa
+  // position — même règle que `VillagePlots.vue`/`BasePage.vue`, pour qu'aucune copie
+  // ne diverge.
   async function buildFilon(
     userId: string,
     typeId: string,
@@ -1520,9 +1528,7 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     const t = buildingType(typeId);
     if (!cur || !t) return;
-    const plots = plotsForLevel(playerLevel);
-    if (slot < 0 || slot >= plots) return; // emplacement non débloqué
-    if (cur.buildings.some((b) => b.slot === slot)) return; // déjà occupé
+    if (!canBuildOnSlot(slot, cur.buildings, playerLevel)) return; // quota atteint / occupé / hors bornes
     if (!canBuildType(typeId, playerLevel, cur.buildings)) return; // niveau/unicité
     if (cur.gold < t.buildGold) return;
     const b: Building = { typeId, level: 1, slot, collectedAt: now };

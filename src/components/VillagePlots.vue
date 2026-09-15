@@ -24,7 +24,7 @@
             </div>
             <div class="sh-sub">
               <template v-if="!selectedPlot.unlocked">
-                🔒 Débloqué au niveau {{ slotUnlockLevel(selectedPlot.slot) }}
+                🔒 Débloqué au niveau {{ nextSlotLevel }}
               </template>
               <template v-else-if="selectedPlot.building">
                 Niv {{ selectedPlot.building.level }} · {{ effectNow(selectedPlot.building) }}
@@ -214,8 +214,8 @@ import {
   buildingUpgradeCost,
   buildingScales,
   canBuildType,
+  canBuildOnSlot,
   canUpgradeBuilding,
-  plotsForLevel,
   slotUnlockLevel,
   storageMult,
   travelTimeMult,
@@ -251,18 +251,26 @@ interface PlotView {
   building: Building | null;
   ready: boolean;
 }
+/** ⚠️ ON CONSTRUIT LÀ OÙ ON TOUCHE, PAS DANS L'ORDRE : un emplacement VIDE n'est plus
+ *  jugé sur sa POSITION (`i < plotsForLevel(niveau)`) mais sur le QUOTA — combien de
+ *  bâtiments sont déjà posés, où qu'ils soient (`canBuildOnSlot`, source unique partagée
+ *  avec le store et `BasePage.vue`). Un emplacement OCCUPÉ reste toujours « débloqué » :
+ *  il se gère, quel que soit le quota atteint depuis. */
 const plots = computed<PlotView[]>(() => {
-  const unlocked = plotsForLevel(heroLevel.value);
   return Array.from({ length: plotCount }, (_, i) => {
     const b = buildings.value.find((x) => x.slot === i) ?? null;
     return {
       slot: i,
-      unlocked: i < unlocked,
+      unlocked: !!b || canBuildOnSlot(i, buildings.value, heroLevel.value),
       building: b,
       ready: b ? buildingAccrued(b, props.now, storageMult(buildings.value)) > 0 : false,
     };
   });
 });
+/** Niveau requis pour que le PROCHAIN bâtiment (le quota, pas une position) devienne
+ *  constructible — la même valeur pour TOUS les emplacements vides verrouillés, quel que
+ *  soit celui qu'on a touché. */
+const nextSlotLevel = computed(() => slotUnlockLevel(buildings.value.length));
 
 /** L'emplacement ouvert est piloté par le PARENT : c'est le dessin de l'enceinte qui
  *  sert de sélecteur (comme l'anneau de la carte le faisait avant). */
@@ -375,19 +383,25 @@ const BUILD_GROUPS: { key: BuildingCategory; label: string; hint: string }[] = [
   { key: 'producer', label: '⛏️ Producteurs', hint: 'Ressource passive à récolter' },
   { key: 'utility', label: '🏛️ Utilitaires', hint: 'Effet global (débloque / accélère)' },
 ];
+/** ⚠️ UN TYPE DÉJÀ CONSTRUIT DISPARAÎT DE LA LISTE, il ne s'affiche plus grisé : TOUS
+ *  les types sont `unique` (1 seul exemplaire), donc « déjà construit » ne redevient
+ *  jamais constructible — l'y laisser n'informait de rien qu'on ne sache déjà en ouvrant
+ *  la fiche du bâtiment lui-même. Un groupe qui n'a plus rien à proposer disparaît aussi. */
 const buildGroups = computed(() =>
   BUILD_GROUPS.map((g) => ({
     ...g,
-    types: BUILDING_TYPES.filter((t) => t.category === g.key),
+    types: BUILDING_TYPES.filter(
+      (t) => t.category === g.key && !buildings.value.some((b) => b.typeId === t.id),
+    ),
   })).filter((g) => g.types.length),
 );
 function typeBuildable(t: BuildingType): boolean {
   return canBuildType(t.id, heroLevel.value, buildings.value);
 }
+/** Les types VERROUILLÉS PAR LE NIVEAU restent visibles (avec leur 🔒) : seuls les
+ *  types déjà construits sont retirés, plus haut, de `buildGroups`. */
 function typeLockReason(t: BuildingType): string {
-  if (heroLevel.value < buildingUnlockLevel(t.id)) return `🔒 niv ${buildingUnlockLevel(t.id)}`;
-  if (t.unique && buildings.value.some((b) => b.typeId === t.id)) return 'déjà construit';
-  return '';
+  return heroLevel.value < buildingUnlockLevel(t.id) ? `🔒 niv ${buildingUnlockLevel(t.id)}` : '';
 }
 
 const unlockInfo = ref<{ emoji: string; label: string; unlock: BuildingUnlock } | null>(null);

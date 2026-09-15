@@ -873,7 +873,7 @@ import {
   buildingType,
   buildingLevel,
   collectable,
-  plotsForLevel,
+  emptySlotLocked,
   storageMult,
   RESOURCE_EMOJI,
   type BuildResource,
@@ -1312,10 +1312,13 @@ const YARD_SERVICES: DefenseId[] = ['kennel', 'infirmary', 'salvage'];
 
 const yard = computed<YardCell[]>(() => {
   const cells: YardCell[] = [];
-  const unlocked = plotsForLevel(heroLevel.value);
   const bs = char.row?.buildings ?? [];
   const mult = storageMult(bs);
   // Rangées 1-2 : les emplacements du village.
+  // ⚠️ ON CONSTRUIT LÀ OÙ ON TOUCHE, PAS DANS L'ORDRE : un emplacement vide n'est plus
+  // « verrouillé » par sa POSITION mais par le QUOTA (combien de bâtiments sont déjà
+  // posés, où qu'ils soient) — `emptySlotLocked` est la même règle que dans
+  // `VillagePlots.vue` et le store, pour qu'aucune copie ne diverge.
   for (let i = 0; i < BUILD.plotCap; i++) {
     const b = bs.find((x) => x.slot === i) ?? null;
     const pos = PLOT_POS[i] ?? PLOT_POS[PLOT_POS.length - 1]!;
@@ -1325,7 +1328,7 @@ const yard = computed<YardCell[]>(() => {
       y: pos.y,
       emoji: b ? (buildingType(b.typeId)?.emoji ?? '🏠') : '',
       built: !!b,
-      locked: i >= unlocked,
+      locked: emptySlotLocked(i, bs, heroLevel.value),
       level: b?.level ?? 0,
       ready: b ? buildingAccrued(b, now.value, mult) > 0 : false,
       damaged: false,
