@@ -576,7 +576,7 @@ export function campWinPct(
   return w / n;
 }
 
-export interface PartyReportMember {
+interface PartyReportMember {
   id: string;
   name: string;
   emoji: string;
