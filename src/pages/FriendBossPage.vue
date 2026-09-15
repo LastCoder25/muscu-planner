@@ -62,7 +62,7 @@
         <!-- Frapper : ce que le serveur acceptera est annoncé AVANT l'envoi. -->
         <div v-if="phase === 'active' && isMember" class="fb-hit">
           <div class="fb-hit-row">
-            <button class="fb-step" aria-label="Moins" @click="step(-5)">−</button>
+            <button class="fb-step" aria-label="Moins" @click="step(-1)">−</button>
             <input
               v-model.number="amount"
               class="fb-input font-display"
@@ -71,7 +71,7 @@
               min="1"
               :aria-label="'Nombre de ' + bossUnitLabel(current.family)"
             />
-            <button class="fb-step" aria-label="Plus" @click="step(5)">＋</button>
+            <button class="fb-step" aria-label="Plus" @click="step(1)">＋</button>
             <button class="fb-btn big" :disabled="busy || accepted <= 0" @click="doHit">
               Frapper
             </button>
