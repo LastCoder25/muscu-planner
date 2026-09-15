@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  balanceBarGeometry,
   bodyBalance,
   creditSets,
   doneSetsByWeek,
@@ -566,5 +567,55 @@ describe('doneVolume — une page, un compte de séries', () => {
       0,
     ]);
     expect(doneSetsByWeek(i, weeks)).toEqual([6, 14, 0]);
+  });
+});
+
+describe('balanceBarGeometry', () => {
+  it('prévu < cible : la cible occupe toute la largeur', () => {
+    const g = balanceBarGeometry(4, 6, 10);
+    expect(g.targetPct).toBe(100);
+    expect(g.donePct).toBe(40);
+    expect(g.plannedPct).toBe(60);
+  });
+
+  it('prévu > cible : le prévu occupe toute la largeur, la cible recule', () => {
+    const g = balanceBarGeometry(5, 15, 10);
+    expect(g.plannedPct).toBe(100);
+    expect(g.targetPct).toBeCloseTo((10 / 15) * 100, 6);
+    expect(g.donePct).toBeCloseTo((5 / 15) * 100, 6);
+  });
+
+  it('jamais aucune valeur au-dessus de 100', () => {
+    for (const [done, planned, target] of [
+      [4, 6, 10],
+      [5, 15, 10],
+      [0, 0, 10],
+      [50, 50, 1],
+      [3, 2, 5], // fait > prévu (ne devrait pas arriver, mais reste sans dépassement)
+      [20, 5, 10], // fait > cible ET > prévu : le fait seul doit rester plafonné
+    ] as const) {
+      const g = balanceBarGeometry(done, planned, target);
+      expect(g.donePct).toBeLessThanOrEqual(100);
+      expect(g.plannedPct).toBeLessThanOrEqual(100);
+      expect(g.targetPct).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it('cible à 0 : pas de division par zéro', () => {
+    const g = balanceBarGeometry(0, 0, 0);
+    expect(g).toEqual({ donePct: 0, plannedPct: 0, targetPct: 0 });
+    // Un prévu positif sans cible reste bornée, sans NaN.
+    const g2 = balanceBarGeometry(2, 4, 0);
+    expect(Number.isFinite(g2.donePct)).toBe(true);
+    expect(Number.isFinite(g2.plannedPct)).toBe(true);
+    expect(Number.isFinite(g2.targetPct)).toBe(true);
+    expect(g2.plannedPct).toBe(100);
+  });
+
+  it('réel > cible sans prévu en plus (value = done)', () => {
+    const g = balanceBarGeometry(12, 12, 10);
+    expect(g.donePct).toBe(100);
+    expect(g.plannedPct).toBe(100);
+    expect(g.targetPct).toBeCloseTo((10 / 12) * 100, 6);
   });
 });

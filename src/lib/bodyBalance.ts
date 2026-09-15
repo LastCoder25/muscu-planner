@@ -63,6 +63,30 @@ export interface MuscleBalance {
   state: VolumeState;
 }
 
+/** Géométrie de la barre « Équilibre du corps » : le FAIT, le bord droit du PRÉVU
+ *  (hachuré) et la CIBLE, tous en % de la largeur de la piste — jamais > 100.
+ *
+ *  ⚠️ LE MAXIMUM DE LA PISTE EST LE PLUS GRAND DES DEUX : `target` tant que le prévu ne
+ *  le dépasse pas (la cible occupe alors 100 % de la largeur — sans quoi les hachures
+ *  d'un muscle en plein dans les clous s'arrêteraient avant le bord, comme si le prévu
+ *  était sous-évalué) ; `planned` dès qu'il excède la cible (le hachuré occupe alors
+ *  100 % et la cible RECULE à `target / planned` — sinon les hachures débordaient de
+ *  l'écran). Pur : ne connaît que les trois nombres qu'on lui donne. */
+export interface BalanceBarGeometry {
+  donePct: number;
+  plannedPct: number;
+  targetPct: number;
+}
+export function balanceBarGeometry(
+  done: number,
+  planned: number,
+  target: number,
+): BalanceBarGeometry {
+  const max = Math.max(target, planned, 0);
+  const pct = (n: number) => (max > 0 ? Math.max(0, Math.min(100, (n / max) * 100)) : 0);
+  return { donePct: pct(done), plannedPct: pct(planned), targetPct: pct(target) };
+}
+
 type Tally = Record<string, number>;
 
 /** Du volume attribué à un exo : `sets` séries (fractionnaires possibles) le jour `day`. */

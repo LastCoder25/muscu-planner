@@ -50,12 +50,15 @@
              la couleur de l’état) sans avoir à lire la légende. -->
         <span class="bb-bar">
           <span class="bb-track" />
-          <span class="bb-done" :style="{ width: w(r.done, r.target) + '%' }" />
+          <span class="bb-done" :style="{ width: r.bar.donePct + '%' }" />
           <span
             class="bb-plan"
-            :style="{ left: w(r.done, r.target) + '%', width: w(r.value - r.done, r.target) + '%' }"
+            :style="{
+              left: r.bar.donePct + '%',
+              width: r.bar.plannedPct - r.bar.donePct + '%',
+            }"
           />
-          <span class="bb-mark" :style="{ left: MARK + '%' }" />
+          <span class="bb-mark" :style="{ left: r.bar.targetPct + '%' }" />
         </span>
         <span class="bb-val"
           ><b>{{ fmtSets(r.value) }}</b
@@ -80,8 +83,8 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useProfileStore } from '@/stores/profile';
 import { useBalanceInput } from '@/composables/useBalanceInput';
-import { bodyBalance, type BalancePeriod } from '@/lib/bodyBalance';
-import { muscleColor, fmtSets, VOLUME_LOW, VOLUME_HIGH } from '@/lib/volume';
+import { bodyBalance, balanceBarGeometry, type BalancePeriod } from '@/lib/bodyBalance';
+import { muscleColor, fmtSets, VOLUME_LOW } from '@/lib/volume';
 import { computeMuscleTargets } from '@/lib/programBuilder';
 
 const PERIODS: { key: BalancePeriod; label: string }[] = [
@@ -89,8 +92,6 @@ const PERIODS: { key: BalancePeriod; label: string }[] = [
   { key: 'weeks4', label: '4 sem.' },
 ];
 const LOW_PCT = Math.round(VOLUME_LOW * 100);
-// La barre va jusqu'au seuil « surchargé » : le trait de cible tombe à 1 / VOLUME_HIGH.
-const MARK = Math.round(100 / VOLUME_HIGH);
 
 const router = useRouter();
 const profileStore = useProfileStore();
@@ -103,14 +104,15 @@ const rows = computed(() => {
   const profile = profileStore.profile;
   if (!profile) return [];
   return bodyBalance({ ...input.value, targets: computeMuscleTargets(profile) }, period.value).map(
-    (r) => ({ ...r, act: r.state === 'low' }),
+    (r) => ({
+      ...r,
+      act: r.state === 'low',
+      bar: balanceBarGeometry(r.done, r.value, r.target),
+    }),
   );
 });
 const deficits = computed(() => rows.value.filter((r) => r.act).length);
 
-function w(n: number, target: number): number {
-  return Math.max(0, Math.min(100, Math.round((n / (target * VOLUME_HIGH)) * 100)));
-}
 async function addChallenge(muscle: string) {
   await router.push({ path: '/challenges/new', query: { muscle } });
 }
