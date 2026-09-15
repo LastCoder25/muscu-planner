@@ -845,6 +845,53 @@
             brèche. C’est donc sur sa fiche qu’on le lui donne.
           </p>
         </div>
+
+        <!-- 🏥 L’INFIRMERIE MONTRE SES BLESSÉS (demandé : « depuis l’infirmerie on voit les
+             blessés et on peut payer en or pour les soigner »). Héros ET aventuriers —
+             blessés en défense ou en convoi —, au même tarif que le héros. -->
+        <div v-if="defSel.id === 'infirmary'" class="sh-garrison">
+          <div class="sh-gtitle">🤕 Blessés — {{ patientCount }}</div>
+          <p v-if="!patientCount" class="sh-gnote">
+            Personne n’est alité. Un siège perdu envoie ici le héros s’il défendait et les
+            aventuriers tombés ; une embuscade perdue, le blessé du convoi.
+          </p>
+          <div v-if="wounded" class="inf-row">
+            <span class="inf-emo">🦸</span>
+            <span class="inf-main">
+              <span class="inf-name">Ton héros</span>
+              <span class="inf-sub">sur pied {{ healIn }}</span>
+            </span>
+            <button class="inf-btn" :disabled="(char.row?.gold ?? 0) < healPrice" @click="doHeal">
+              ⛑️ {{ fmtPow(healPrice) }} 🪙
+            </button>
+          </div>
+          <div v-for="p in patients" :key="p.id" class="inf-row">
+            <span class="inf-emo">{{ p.emoji }}</span>
+            <span class="inf-main">
+              <span class="inf-name">{{ p.name }}</span>
+              <span class="inf-sub">sur pied {{ p.back }}</span>
+            </span>
+            <button
+              class="inf-btn"
+              :disabled="(char.row?.gold ?? 0) < p.cost"
+              @click="doHealAdv([p.id])"
+            >
+              ⛑️ {{ fmtPow(p.cost) }} 🪙
+            </button>
+          </div>
+          <button
+            v-if="patients.length > 1"
+            class="cta inf-all"
+            :disabled="(char.row?.gold ?? 0) < patientsCost"
+            @click="doHealAdv(patients.map((p) => p.id))"
+          >
+            ⛑️ Soigner tous les aventuriers · {{ fmtPow(patientsCost) }} 🪙
+          </button>
+          <p v-if="patientCount" class="sh-gnote">
+            Attendre est gratuit : les soins n’achètent que l’immédiateté, et coûtent d’autant plus
+            qu’il reste de repos.
+          </p>
+        </div>
       </q-card>
     </q-dialog>
   </component>
@@ -861,7 +908,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
-import { canPromoteNow, advAvailable } from '@/lib/adventurers';
+import { canPromoteNow, advAvailable, advTitle } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
 import { FAMILIAR_SLOT, type Item } from '@/lib/items';
 import { normalizeTalents } from '@/lib/talents';
@@ -924,6 +971,8 @@ import {
   isWounded,
   healCost,
   woundRemainingMs,
+  advHealCost,
+  woundedAdventurers,
   type DefenseId,
   type RaidReport,
   type ScoutReport,
@@ -1359,7 +1408,8 @@ const yard = computed<YardCell[]>(() => {
       // champ `alert` de la tuile est retiré plutôt que laissé à `false` en dur.
       // ⚠️ La fouille ne demande plus d’action : la pastille dit qu’il se PASSE quelque
       // chose (des corps sont encore là), pas qu’il y a un bouton à presser.
-      todo: id === 'salvage' && remaining.value > 0,
+      todo:
+        (id === 'salvage' && remaining.value > 0) || (id === 'infirmary' && patientCount.value > 0),
       onClick: () => openDef(id),
     });
   });
@@ -1632,6 +1682,18 @@ const healIn = computed(() =>
 const healPrice = computed(() =>
   healCost(woundRemainingMs(base.value, now.value), heroLevel.value),
 );
+/** Les aventuriers alités, avec leur prix de soins (même tarif que le héros). */
+const patients = computed(() =>
+  woundedAdventurers(char.advList, now.value).map((a) => ({
+    id: a.id,
+    name: a.name,
+    emoji: advTitle(a)?.emoji ?? '🧑',
+    back: fmtDelay((a.hurtUntil ?? 0) - now.value),
+    cost: advHealCost(a, now.value, heroLevel.value),
+  })),
+);
+const patientsCost = computed(() => patients.value.reduce((s, p) => s + p.cost, 0));
+const patientCount = computed(() => patients.value.length + (wounded.value ? 1 : 0));
 /** Ce que la fouille a déjà remonté — le rapport de pillage en cours d’écriture. */
 const pillage = computed(() => base.value?.pillage ?? null);
 /** ⚠️ DEUX leviers au Chantier, et il faut les deux : le nombre de bras monte par
@@ -1706,6 +1768,15 @@ const doHeal = () =>
   guard(async () => {
     const cost = await char.healHero(uid.value, Date.now(), heroLevel.value);
     if (cost) $q.notify({ type: 'positive', message: '⛑️ Ton héros est de nouveau sur pied.' });
+  });
+const doHealAdv = (ids: string[]) =>
+  guard(async () => {
+    const cost = await char.healAdventurers(uid.value, ids, Date.now(), heroLevel.value);
+    if (cost)
+      $q.notify({
+        type: 'positive',
+        message: ids.length > 1 ? '⛑️ Tes aventuriers sont sur pied.' : '⛑️ De nouveau sur pied.',
+      });
   });
 /** Le cumul de la fouille, en puces. ⚠️ Ce sont des COMPTES déjà crédités : les objets
  *  sont partis au sac vague par vague, on n’en récapitule que le NOMBRE. */
@@ -2236,6 +2307,51 @@ function doHarvest() {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
+}
+.inf-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 4px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.inf-emo {
+  font-size: 22px;
+}
+.inf-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.inf-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inf-sub {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.inf-btn {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent, #ffd23f) 12%, transparent);
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.inf-btn:disabled {
+  opacity: 0.45;
+}
+.inf-all {
+  margin-top: 10px;
+  width: 100%;
 }
 /* ── Chenil : cases de garnison ─────────────────────────────────────────
    Des CASES, pas une liste : l'état se lit d'un coup d'œil et un poste vide

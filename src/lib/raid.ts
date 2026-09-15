@@ -224,6 +224,9 @@ export interface RaidReport {
    *  vivier d’AUJOURD’HUI : un aventurier recruté après l’assaut apparaissait dans une
    *  bataille qu’il n’a pas livrée. Optionnel pour la même raison que `seed`. */
   defenders?: SiegeDefenderInfo[];
+  /** Les AVENTURIERS à terre en fin de siège (ni balistes, ni héros). Optionnel : les
+   *  rapports d’avant ne l’ont pas, et n’envoient donc personne à l’infirmerie. */
+  wounded?: string[];
 }
 
 /** Un défenseur tel que le rejeu doit le montrer — l’identité, pas les chiffres. */
@@ -1864,6 +1867,33 @@ export function healCost(remainingMs: number, playerLevel: number): number {
   return Math.max(1, Math.ceil((remainingMs / 3600_000) * perHour));
 }
 
+/** 🤕 QUI PART À L’INFIRMERIE APRÈS UN SIÈGE (demandé : « les aventuriers blessés vont à
+ *  l’infirmerie comme le héros »). Même règle que le héros : seule une DÉFAITE blesse —
+ *  une victoire relève ceux qui étaient tombés, comme après une embuscade gagnée. */
+export function siegeHurtIds(report: RaidReport): string[] {
+  return report.held ? [] : [...(report.wounded ?? [])];
+}
+
+/** Repos qu’il reste à un aventurier (siège perdu OU convoi), 0 s’il est sur pied. */
+export function advHurtMs(adv: Adventurer, now: number): number {
+  return Math.max(0, (adv.hurtUntil ?? 0) - now);
+}
+
+/** Soins d’urgence d’un aventurier : AU MÊME TARIF que le héros (`healCost`, ∝ au repos
+ *  restant et au niveau du joueur). Deux portes de sortie qui coûtent pareil se
+ *  comprennent sans notice. 0 s’il n’y a rien à soigner. */
+export function advHealCost(adv: Adventurer, now: number, playerLevel: number): number {
+  const ms = advHurtMs(adv, now);
+  return ms > 0 ? healCost(ms, playerLevel) : 0;
+}
+
+/** Les aventuriers à l’infirmerie, le plus long repos d’abord. */
+export function woundedAdventurers(advs: readonly Adventurer[], now: number): Adventurer[] {
+  return advs
+    .filter((a) => advHurtMs(a, now) > 0)
+    .sort((a, b) => advHurtMs(b, now) - advHurtMs(a, now));
+}
+
 // ── Résolution ──
 
 /** Le siège. Les groupes arrivent l'un après l'autre et les PV de la base se reportent :
@@ -2661,6 +2691,9 @@ export function resolveRaid(
         kind: d.kind === 'ranged' ? 'ranged' : 'melee',
         maxPv: d.maxPv,
       })),
+    // ⚠️ Seuls les AVENTURIERS : une baliste à terre n’a pas de lit, et le héros a sa
+    // propre convalescence (`base.wound`).
+    wounded: r.wounded.filter((id) => def.find((d) => d.id === id)?.origin === 'adventurer'),
   };
 }
 

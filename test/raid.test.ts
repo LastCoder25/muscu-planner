@@ -73,6 +73,10 @@ import {
   siegeWallOf,
   siegeDefenders,
   siegeAttackers,
+  siegeHurtIds,
+  advHurtMs,
+  advHealCost,
+  woundedAdventurers,
 } from '@/lib/raid';
 
 /** Places de garnison pour les tests courts — ce que le repli implicite rendait
@@ -2680,5 +2684,65 @@ describe('🛡️ UN AVENTURIER VAUT PLUS DERRIÈRE SES MURS (v0.801)', () => {
     expect(g!.damage).toBe(
       Math.max(1, Math.round(route.damage * (route.strikes ?? 1) * RAID.guardSiegeK)),
     );
+  });
+});
+
+describe('🏥 infirmerie des aventuriers', () => {
+  const ctx0 = { now: 0, kennelLevel: 0, familiars: [], talents: [], advGear: [] };
+  it('un siège PERDU envoie à l’infirmerie les AVENTURIERS tombés — jamais une baliste ni le héros', () => {
+    const L = 28;
+    const advs = rosterOf(L);
+    const ids = new Set(advs.map((a) => a.id));
+    let lost = 0;
+    let withHurt = 0;
+    for (let i = 0; i < 80; i++) {
+      const raid = rollRaid(i * 7919 + 13, L, 0, 0);
+      const rep = resolveRaid(
+        { defenses: defs(12, 12), playerLevel: L, hero: hero(L), guard: guardUnits(L, advs, ctx0) },
+        raid,
+        0,
+        true,
+      );
+      const hurt = siegeHurtIds(rep);
+      for (const id of rep.wounded ?? []) expect(ids.has(id), id).toBe(true);
+      if (rep.held) {
+        expect(hurt).toEqual([]);
+      } else {
+        lost++;
+        expect(hurt).toEqual(rep.wounded);
+        if (hurt.length) withHurt++;
+      }
+    }
+    expect(lost).toBeGreaterThan(0);
+    expect(withHurt).toBeGreaterThan(0);
+  });
+
+  it('une victoire relève ceux qui étaient tombés, et un rapport d’avant n’envoie personne', () => {
+    const rep = { held: true, wounded: ['a1'] } as never;
+    expect(siegeHurtIds(rep)).toEqual([]);
+    expect(siegeHurtIds({ held: false, wounded: ['a1', 'a2'] } as never)).toEqual(['a1', 'a2']);
+    expect(siegeHurtIds({ held: false } as never)).toEqual([]);
+  });
+
+  it('les soins d’un aventurier coûtent le tarif du héros, et rien s’il est sur pied', () => {
+    const H = 3600_000;
+    const adv = { ...rosterOf(10)[0]!, hurtUntil: 3 * H };
+    expect(advHurtMs(adv, H)).toBe(2 * H);
+    expect(advHealCost(adv, H, 28)).toBe(healCost(2 * H, 28));
+    expect(advHealCost(adv, 3 * H, 28)).toBe(0);
+    expect(advHealCost({ ...adv, hurtUntil: undefined }, 0, 28)).toBe(0);
+  });
+
+  it('la liste des blessés : seuls les alités, le plus long repos d’abord', () => {
+    const [a, b, c] = rosterOf(10);
+    const list = woundedAdventurers(
+      [
+        { ...a!, hurtUntil: 50 },
+        { ...b!, hurtUntil: 500 },
+        { ...c!, hurtUntil: 5 },
+      ],
+      10,
+    );
+    expect(list.map((x) => x.id)).toEqual([b!.id, a!.id]);
   });
 });

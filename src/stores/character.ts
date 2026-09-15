@@ -103,6 +103,9 @@ import {
   advanceBase,
   applyRaidOutcome,
   resolveRaid,
+  siegeHurtIds,
+  advHurtMs,
+  advHealCost,
   siegeXp,
   guardUnits,
   emptyBase,
@@ -131,6 +134,8 @@ import {
   fatigueMsFor,
   healCost,
   woundRemainingMs,
+  woundMsFor,
+  raidIntervalMs,
   type BaseState,
   type DefenseId,
   type DefenseStructure,
@@ -1658,11 +1663,20 @@ export const useCharacterStore = defineStore('character', () => {
     // gagnaient de l’XP depuis la v0.663 ; les aventuriers, qui tiennent pourtant la
     // brèche, n’en gagnaient aucune — rester défendre coûtait un convoi ET la progression
     // qui va avec. Le barème vit dans `siegeXp` (lib, testé), jamais ici.
+    // 🤕 Siège PERDU : ceux qui sont tombés partent à l’infirmerie, comme le héros, pour
+    // la MÊME durée (l’Infirmerie l’abrège). La règle vit dans `siegeHurtIds` (lib).
+    const hurt = new Set(siegeHurtIds(report));
+    const hurtUntil =
+      now + woundMsFor(defenseLevel(t.base.defenses, 'infirmary'), raidIntervalMs(ctx.activeDays7));
     if (defenders.length) {
       const ids = new Set(defenders.map((a) => a.id));
-      patch.adventurers = advList.value.map((a) =>
-        ids.has(a.id) ? grantAdvXp(a, siegeXp(a, report), guildLevel.value) : a,
-      );
+      patch.adventurers = advList.value.map((a) => {
+        if (!ids.has(a.id)) return a;
+        const next = grantAdvXp(a, siegeXp(a, report), guildLevel.value);
+        return hurt.has(a.id)
+          ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, hurtUntil) }
+          : next;
+      });
     }
     // Les familiers postés SORTENT du siège : ils gagnent de l'XP de DÉFENSE (∝ ce
     // qu'ils ont repoussé) et soufflent un moment. Jamais blessés, jamais perdus —
@@ -1704,6 +1718,32 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, {
       gold: cur.gold - cost,
       base: { ...cur.base, wound: null },
+    });
+    return cost;
+  }
+
+  /** ⛑️ Soins d’urgence d’un AVENTURIER (blessé en convoi ou en défense), au tarif du héros.
+   *  ⚠️ Le refus vit ici : l’écran ne propose pas l’impossible, il ne le garantit pas.
+   *  `advIds` : un ou plusieurs (« Tout soigner »), payés d’une seule écriture. */
+  async function healAdventurers(
+    userId: string,
+    advIds: readonly string[],
+    now: number,
+    playerLevel: number,
+  ) {
+    const cur = row.value;
+    if (!cur) return 0;
+    const want = new Set(advIds);
+    const cost = advList.value
+      .filter((a) => want.has(a.id))
+      .reduce((s, a) => s + advHealCost(a, now, playerLevel), 0);
+    if (cost <= 0) return 0;
+    if (cur.gold < cost) throw new Error(`Il te faut ${cost} 🪙 pour ces soins d'urgence.`);
+    await persistOptimistic(userId, {
+      gold: cur.gold - cost,
+      adventurers: advList.value.map((a) =>
+        want.has(a.id) && advHurtMs(a, now) > 0 ? { ...a, hurtUntil: now } : a,
+      ),
     });
     return cost;
   }
@@ -2454,6 +2494,7 @@ export const useCharacterStore = defineStore('character', () => {
     autoAssignCompanions,
     autoEquipAdventurers,
     healHero,
+    healAdventurers,
     heroIsHome,
     ownedLevel,
     applyRun,
