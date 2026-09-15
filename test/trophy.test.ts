@@ -29,6 +29,8 @@ import {
   type FriendBoss,
 } from '@/lib/friendBoss';
 import { bossGoldForLevel, bossSummonCost } from '@/data/bosses';
+import { rollActivityFamiliar } from '@/data/familiars';
+import { rollTalentDrop, talentEffects, talentsEarned, pickBestTalents } from '@/lib/talents';
 
 const H = 3600_000;
 const D = 24 * H;
@@ -121,6 +123,36 @@ function geared(L: number, seed: number) {
   return { stats, eq, inv };
 }
 
+/** Joueur RÉALISTE : objets + 3 familiers + talents. ⚠️ Sans compagnons le critique et la
+ *  réduction restent loin de leur plafond, et le défaut des trophées « tirage »/« gainage »
+ *  (v0.880) est invisible. */
+function realistic(L: number, seed: number) {
+  const rng = mulberry32(seed * 7919 + L);
+  const inv: Item[] = [];
+  for (let i = 0; i < 60; i++) {
+    const d = rollDrop(rng, { cleared: true, defeated: 1, level: L, luck: 0.4, playerLevel: L });
+    if (d) inv.push({ ...d, id: 'i' + i });
+  }
+  for (let i = 0; i < 3; i++)
+    inv.push({
+      ...rollActivityFamiliar(rng, { level: L, luck: 0.4, playerLevel: L }),
+      id: 'f' + i,
+    });
+  const talents = Array.from({ length: 10 }, (_, i) => ({
+    ...rollTalentDrop(rng, { level: L, luck: 0.4, playerLevel: L }),
+    id: 't' + i,
+  }));
+  const s = refBalancedStat(L);
+  const stats = { puissance: s, endurance: s, agilite: s };
+  const eq = bestGearLoadout('g', stats, {}, inv, L);
+  const fxOf = (ids: string[]) =>
+    talentEffects(talents.map((t) => ({ ...t, equipped: ids.includes(t.id) })));
+  const ids = pickBestTalents(talents, talentsEarned(L), (x) =>
+    combatPower(playerWithGear('g', stats, eq, fxOf(x), L)),
+  );
+  return { stats, eq, fx: fxOf(ids) };
+}
+
 describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
   it('garde le trophée porté et prend un meilleur trophée du sac', () => {
     const L = 40;
@@ -155,6 +187,35 @@ describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
     // Sans rien au sac, l'optimiseur ne le retire jamais.
     const kept = bestGearLoadout('g', stats, worn, inv, L);
     expect(kept[TROPHY_SLOT]?.id).toBe(ranked[0]!.id);
+  });
+
+  it('aucune famille ne donne un trophée nettement plus faible que les autres', () => {
+    // ⚠️ Le critique seul (tirage) et la réduction seule (gainage) valaient 0 à 1,3 % de
+    // puissance avant le niveau 50 : stats plafonnées, un héros équipé en est déjà au bord.
+    for (const L of [30, 50]) {
+      const med: Record<string, number> = {};
+      for (const f of FAMILIES) {
+        const gains: number[] = [];
+        for (let seed = 1; seed <= 3; seed++) {
+          const { stats, eq, fx } = realistic(L, seed);
+          const base = combatPower(playerWithGear('g', stats, eq, fx, L));
+          const rng = mulberry32(seed * 131 + L);
+          for (let i = 0; i < 6; i++) {
+            const t = {
+              ...rollTrophy(rng, { mains: TROPHY_MAINS[f], title: 'x', level: L }),
+              id: 't',
+            };
+            gains.push(
+              combatPower(playerWithGear('g', stats, { ...eq, trophy: t }, fx, L)) / base - 1,
+            );
+          }
+        }
+        gains.sort((a, b) => a - b);
+        med[f] = gains[Math.floor(gains.length / 2)]!;
+      }
+      const ref = (med.push! + med.legs!) / 2;
+      for (const f of FAMILIES) expect(med[f]!, `${f} au niveau ${L}`).toBeGreaterThan(ref * 0.5);
+    }
   });
 
   it('ajoute un bonus mesurable mais modeste à un build complet (+1 à +8 % en médiane)', () => {

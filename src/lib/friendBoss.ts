@@ -450,12 +450,16 @@ export function earlyKillFraction(
 
 // ── Coffre ─────────────────────────────────────────────────────────────────────────
 
-/** Affixe PRINCIPAL du trophée selon la famille de l'exo (choisi avec l'utilisateur). */
+/** Affixe PRINCIPAL du trophée selon la famille de l'exo (choisi avec l'utilisateur).
+ *  ⚠️ Tirage et gainage portent DEUX stats (v0.880, mesuré) : le critique et la réduction
+ *  sont PLAFONNÉS, et un héros équipé en est déjà presque au plafond — seuls, ils valaient
+ *  0 à 1,3 % de puissance avant le niveau 50, contre 1,6 à 3,7 % pour poussée et jambes.
+ *  Dégâts + critique et PV + réduction ramènent ces familles au niveau des autres. */
 export const TROPHY_MAINS: Record<BossFamily, readonly EffectType[]> = {
   push: ['damage_pct'],
   legs: ['max_pv_pct'],
-  pull: ['crit_pct'],
-  core: ['dmg_reduction_pct'],
+  pull: ['damage_pct', 'crit_pct'],
+  core: ['max_pv_pct', 'dmg_reduction_pct'],
   conditioning: ['momentum_pct', 'initiative_pct'],
 };
 
