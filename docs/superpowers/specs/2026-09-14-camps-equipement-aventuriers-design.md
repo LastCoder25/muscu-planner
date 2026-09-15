@@ -81,6 +81,7 @@ Pas de nouvelle stat : toutes les pièces puisent dans les `EffectType` existant
    pour une lignée choisie ; temps de fabrication (asymptotique en niveau, jamais instantané) ;
    rang tiré autour du niveau de l'aventurier visé (pyramide des drops). Aucun niveau mort
    jusqu'à 100 (`beyondCap`).
+   *Amendement (revue finale, étape 1)* : le rang est tiré sur la **courbe des compagnons** (v0.857, `rollCompanionTier`) puis plafonné à la rareté de classe de la cible, et non sur la pyramide des objets du héros.
 
 ### Écrans
 
