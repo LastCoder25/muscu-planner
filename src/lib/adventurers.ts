@@ -1634,14 +1634,29 @@ export function grantAdvXp(adv: Adventurer, xp: number, guildLevel: number): Adv
   return { ...adv, level, xp: pool };
 }
 
-/** Disponible ? Ni en mission, ni en formation, ni à l'infirmerie. */
-export function advAvailable(adv: Adventurer, now: number): boolean {
+/** Pourquoi un aventurier ne peut PAS partir — `null` s'il est disponible.
+ *  ⚠️ SOURCE UNIQUE de la disponibilité : `advAvailable` en DÉRIVE. Un écran qui dit
+ *  POURQUOI quelqu'un est grisé ne peut donc jamais contredire le refus du store.
+ *  Ordre : sur la route, puis à l'infirmerie, puis en formation (le premier qui s'applique). */
+export type AdvUnavailable = 'busy' | 'hurt' | 'training';
+export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailable | null {
+  if ((adv.busyUntil ?? 0) > now) return 'busy';
+  if ((adv.hurtUntil ?? 0) > now) return 'hurt';
   // ⚠️ La formation IMMOBILISE, et c'est tout son coût : promouvoir maintenant, c'est
   // renoncer à cet aventurier pour les prochains convois. Sans ça, une promotion serait
   // gratuite et il n'y aurait aucune décision.
-  return (
-    (adv.busyUntil ?? 0) <= now && (adv.hurtUntil ?? 0) <= now && (adv.training?.until ?? 0) <= now
-  );
+  if ((adv.training?.until ?? 0) > now) return 'training';
+  return null;
+}
+export const ADV_UNAVAILABLE_LABEL: Record<AdvUnavailable, string> = {
+  busy: '🧭 en route',
+  hurt: '🤕 infirmerie',
+  training: '📚 formation',
+};
+
+/** Disponible ? Ni en mission, ni en formation, ni à l'infirmerie. */
+export function advAvailable(adv: Adventurer, now: number): boolean {
+  return advUnavailableReason(adv, now) === null;
 }
 
 /** Une promotion arrivée à terme est APPLIQUÉE ; sinon l'aventurier est rendu tel quel.

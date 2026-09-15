@@ -1648,6 +1648,8 @@
               <div class="im-haul">
                 <span v-for="p in haulPills(m)" :key="p.emoji">{{ p.emoji }} +{{ p.n }}</span>
               </div>
+              <!-- ⚔️ Rapport d'un groupe de camp : faction, abattus, XP de chacun, journal. -->
+              <PartyReportView v-if="m.party" :party="m.party" :roster="char.advList" />
               <!-- Butin à ENCAISSER. Tant qu'on n'a pas cliqué, rien n'est crédité : c'est
                    le geste qui donne au retour d'expédition un moment à lui. Un rapport
                    d'avant la récupération manuelle n'a pas de `claimed` → déjà crédité. -->
@@ -1655,7 +1657,8 @@
                 {{ m.chest ? '🎁 Ouvrir le coffre' : '🎁 Récupérer le butin' }}
               </button>
               <div v-else-if="m.claimed === false" class="im-wait">
-                🧭 Le héros est encore sur la route — retour dans
+                🧭 {{ m.party && !m.party.hero ? 'Le groupe est' : 'Le héros est' }} encore sur la
+                route — retour dans
                 {{ fmtExpeMs((m.claimAt ?? m.resolvedAt) - expeNow) }}
               </div>
               <!-- Objet gagné : détail complet (rareté / niveau / effet). -->
@@ -2828,6 +2831,7 @@ import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
+import PartyReportView from '@/components/PartyReportView.vue';
 import {
   simulateDungeon,
   simulateCombat,
@@ -5199,9 +5203,8 @@ async function syncPush(force = false) {
       base: char.row.base ?? null,
       expedition: char.row.expedition ? { returnAt: char.row.expedition.returnAt } : null,
       caravans: char.caravanList,
-      // ⚠️ PROVISOIRE (camps, Task 6) : aucun groupe sans héros n'existe encore en base.
-      // Remplacé par la liste réelle des groupes quand le store les porte (Task 8).
-      parties: [],
+      // ⚔️ Les groupes partis SANS le héros (un groupe avec le héros est son expédition).
+      parties: char.partyList.map((g) => ({ id: g.id, returnAt: g.returnAt })),
       watchtowerLevel: defenseLevel(char.row.base?.defenses ?? [], 'watchtower'),
       activeDays7: activeDays7.value,
       playerLevel: c.value.level.level,
@@ -5272,6 +5275,17 @@ async function expeLifecycle() {
         type: 'positive',
         message: '🎉 Héros rentré — son butin t’attend dans 📬.',
       });
+    // ⚔️ Les groupes partis sans le héros vivent leur voyage ici aussi : rapport à l'arrivée
+    // sur le camp, retour en ville ; le butin attend dans la boîte 📬 (`expeClaim`).
+    const partyMsgs = await char.partyTick(uid, Date.now());
+    if (partyMsgs.length) {
+      $q.notify({
+        type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
+        message: '📬 Rapport de ton groupe — le butin t’attendra au retour.',
+      });
+      // Un groupe en route a changé : l'échéance de son retour se réaligne.
+      void syncPush(true);
+    }
     await char.expeSyncMap(uid, Date.now(), c.value.level.level);
     await baseLifecycle();
   } finally {

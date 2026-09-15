@@ -39,6 +39,7 @@ import {
   HARVEST,
   buildMessage,
   campHeroOutcome,
+  campSpecOf,
   goldCost,
   harvestYield,
   keepMessages,
@@ -242,6 +243,26 @@ export function partyLegMin(
   return Math.max(1, hero, advs);
 }
 
+/** 🏷️ Ce qu'un camp rapporte, annoncé sur la carte AVANT l'envoi.
+ *  ⚠️ Écrit À CÔTÉ des règles qu'il décrit (`campHeroOutcome`, `campGroupHaul`,
+ *  `CAMP.campPieces`/`lairPieces`), et testé contre elles : la faction décide de la devise
+ *  du butin de groupe (bandits → or, morts-vivants → pierres, bêtes → clés). ⚠️ Jamais de
+ *  ferraille : un camp n'en donne pas. */
+export function campRewardLabel(poi: Poi): string {
+  const spec = campSpecOf(poi);
+  if (!spec) return '';
+  const avec = poi.type === 'lair' ? 'pièce de set 🧩 + pierres 🔮' : 'or 🪙 + un objet 🎁';
+  const devise =
+    spec.faction === 'mortsvivants'
+      ? 'or 🪙 + pierres 🔮'
+      : spec.faction === 'betes'
+        ? 'or 🪙 + clés 🗝️'
+        : 'or 🪙 en quantité';
+  const n = poi.type === 'lair' ? CAMP.lairPieces : CAMP.campPieces;
+  const pieces = `${n} pièce${n > 1 ? 's' : ''} d’aventurier 🗡️`;
+  return `Avec le héros : ${avec} · sans : ${devise} + ${pieces}`;
+}
+
 /** ⚠️ AUCUNE taille maximale : le vivier disponible est la seule limite (les convois gardent
  *  `CARAVAN.escortMax`, leur calibration en dépend). */
 export function canSendParty(poi: Poi, escortCount: number, hero: boolean): boolean {
@@ -249,19 +270,51 @@ export function canSendParty(poi: Poi, escortCount: number, hero: boolean): bool
 }
 
 /** Les unités du groupe : aventuriers (SA paire, SES pièces, règle unique `roadPairs`) puis
- *  le héros, unité de plus avec son combattant RÉEL. */
-function partyUnits(input: PartyInput): SkirmishUnit[] {
-  const units = roadUnits(input.escort, roadPairs(input.escort, input.road));
-  if (input.hero)
+ *  le héros, unité de plus avec son combattant RÉEL.
+ *  ⚠️ EXPORTÉE pour l'écran : le % affiché (`campWinPct`) doit fondre EXACTEMENT le groupe
+ *  que `resolveCamp` fera combattre — une seconde construction (oublier `roadPairs`, poser
+ *  le héros autrement) annoncerait un pronostic sur un autre groupe. */
+export function partyAllies(
+  escort: Adventurer[],
+  road: RoadCompanions,
+  hero: PartyHero | null,
+): SkirmishUnit[] {
+  const units = roadUnits(escort, roadPairs(escort, road));
+  if (hero)
     units.push({
       id: HERO_UNIT_ID,
-      name: input.hero.name,
+      name: hero.name,
       emoji: '🧝',
-      level: input.hero.level,
-      combatant: input.hero.combatant,
+      level: hero.level,
+      combatant: hero.combatant,
     });
   return units;
 }
+
+/** Pourquoi le HÉROS ne peut pas rejoindre le groupe — `null` s'il le peut.
+ *  ⚠️ SOURCE UNIQUE : le store (`sendParty`) refuse avec la MÊME règle, l'écran dit POURQUOI
+ *  le héros est grisé au lieu de le cacher. Ordre : déjà parti, à l'infirmerie, sans
+ *  Avant-poste, sans l'or du départ. */
+export type PartyHeroBlock = 'expedition' | 'infirmary' | 'outpost' | 'gold';
+export function partyHeroBlocker(ctx: {
+  onExpedition: boolean;
+  healMs: number;
+  outpost: boolean;
+  gold: number;
+  cost: number;
+}): PartyHeroBlock | null {
+  if (ctx.onExpedition) return 'expedition';
+  if (ctx.healMs > 0) return 'infirmary';
+  if (!ctx.outpost) return 'outpost';
+  if (ctx.gold < ctx.cost) return 'gold';
+  return null;
+}
+export const PARTY_HERO_BLOCK_LABEL: Record<PartyHeroBlock, string> = {
+  expedition: '🧭 déjà en expédition',
+  infirmary: '🤕 à l’infirmerie',
+  outpost: '🧭 Avant-poste requis',
+  gold: '🪙 pas assez d’or',
+};
 
 /** Le récit : qui abat qui, borné. */
 function campJournal(d: SkirmishResult, allies: SkirmishUnit[], bodies: SkirmishUnit[]): string[] {
@@ -296,7 +349,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
   const { poi, spec, escort, hero, seed, playerLevel } = input;
   const rng = mulberry32(seed >>> 0 || 1);
   const gearRng = mulberry32((seed ^ 0x27d4eb2f) >>> 0 || 1);
-  const allies = partyUnits(input);
+  const allies = partyAllies(escort, input.road, hero);
   const foe = campFoe(poi, spec);
   const bodies = campBodies(poi, spec, foe);
   const group = fuseUnits(allies, 'Groupe');
@@ -535,6 +588,9 @@ export interface PartyReportMember {
 }
 export interface PartyReport {
   hero: boolean;
+  win: boolean;
+  /** Pièces d'aventurier ramenées (groupe sans le héros, victoire) — rangées au stock. */
+  pieces: number;
   factionLabel: string;
   factionEmoji: string;
   slain: number;
@@ -566,6 +622,8 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
   });
   return {
     hero: party.hero,
+    win: party.win,
+    pieces: party.advGear.length,
     factionLabel: FACTION_LABEL[party.faction],
     factionEmoji: FACTION_EMOJI[party.faction],
     slain: party.slain,

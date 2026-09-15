@@ -75,7 +75,7 @@
 
           <!-- Trajets des CONVOIS : même tracé aller/retour que le héros, en violet et
              en pointillés — la couleur seule ne suffit pas à distinguer deux routes. -->
-          <template v-for="v in vansOnMap" :key="'vt' + v.id">
+          <template v-for="v in travelersOnMap" :key="'vt' + v.id">
             <line
               :x1="v.poi.x"
               :y1="v.poi.y"
@@ -121,15 +121,15 @@
                DESSINÉE : sans son équivalent ici, le tracé d'un convoi menait à du vide
                et le puits semblait avoir été effacé. On le montre donc, marqué comme
                occupé (liseré violet, sans compteur de niveau : il n'est plus à prendre). -->
-          <g v-for="v in vansOnMap" :key="'vt' + v.id" class="poi target van-target">
+          <g v-for="v in travelersOnMap" :key="'vg' + v.id" class="poi target van-target">
             <circle :cx="v.poi.x" :cy="v.poi.y" r="4.8" class="poi-bg" />
             <text :x="v.poi.x" :y="v.poi.y + 1.4" class="poi-emo">{{ POI_EMO[v.poi.type] }}</text>
           </g>
 
           <!-- Héros -->
-          <g v-for="v in vansOnMap" :key="'vm' + v.id">
+          <g v-for="v in travelersOnMap" :key="'vm' + v.id">
             <circle :cx="v.at.x" :cy="v.at.y" r="3" class="van-mark" />
-            <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">🐫</text>
+            <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">{{ v.emo }}</text>
           </g>
 
           <g v-if="active && hero">
@@ -242,7 +242,98 @@
           </div>
           <button class="sh-x" @click="selected = null">✕</button>
         </div>
-        <template v-if="offers.hero">
+        <!-- ⚔️ UN CAMP S'ATTAQUE EN GROUPE : le héros (oui/non) et autant d'aventuriers qu'on
+             veut — aucun maximum, c'est ce qui permet d'affronter les gros repaires. Toute la
+             règle vit dans `camp.ts` (combat, pronostic, trajet, qui peut partir) ; l'écran
+             ne fait que la montrer, et dit POURQUOI quelqu'un ne peut pas venir. -->
+        <template v-if="selectedCamp">
+          <div class="sh-row sh-wrap">
+            <span class="sh-chip"
+              >{{ FACTION_EMOJI[selectedCamp.faction] }}
+              {{ FACTION_LABEL[selectedCamp.faction] }}</span
+            >
+            <span class="sh-chip" title="La force du camp, comptée en aventuriers de référence"
+              >💪 ≈ {{ selectedCamp.size }} aventurier{{ selectedCamp.size > 1 ? 's' : '' }}</span
+            >
+            <span v-if="partySize" class="sh-chip">⏱️ {{ fmtMin(partyMin) }}</span>
+            <span class="sh-chip">⚡ 0</span>
+            <span v-if="partyWin !== null" class="sh-chip" :class="winClass(partyWin)"
+              >🎯 {{ partyWin }}%</span
+            >
+          </div>
+          <!-- Le héros : une tuile comme les autres, mais qui décide du BUTIN. Grisée avec la
+               raison (expédition, infirmerie, Avant-poste, or) plutôt que cachée. -->
+          <button
+            type="button"
+            class="party-hero"
+            :class="{ on: partyHeroOn, off: !!partyHeroBlock }"
+            :disabled="!!partyHeroBlock"
+            :aria-pressed="partyHeroOn"
+            @click="partyHero = !partyHero"
+          >
+            <span class="ph-emo">🧝</span>
+            <span class="ph-main">
+              <span class="ph-name">Ton héros</span>
+              <span class="ph-sub">{{
+                partyHeroBlock
+                  ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
+                  : `butin du héros · 🪙 ${costOf(selected)}`
+              }}</span>
+            </span>
+            <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
+          </button>
+          <button
+            v-if="char.advList.length"
+            class="car-auto"
+            :disabled="!freeStable.length"
+            @click="togglePartyAll"
+          >
+            {{
+              partyAllOn
+                ? 'Retirer tous les aventuriers'
+                : `✨ Tout le vivier disponible (${freeStable.length})`
+            }}
+          </button>
+          <div v-if="char.advList.length" class="car-pick">
+            <AdvPickTile
+              v-for="a in freeStable"
+              :key="a.id"
+              :adv="a"
+              :on="partyEscort.includes(a.id)"
+              @toggle="togglePartyAdv(a.id)"
+            />
+            <AdvPickTile
+              v-for="b in partyBlocked"
+              :key="b.adv.id"
+              :adv="b.adv"
+              :on="false"
+              :reason="ADV_UNAVAILABLE_LABEL[b.why]"
+            />
+          </div>
+          <p v-else class="sh-away">
+            ⚔️ Aucun aventurier : recrute-les à la Guilde de ta base pour attaquer sans le héros.
+          </p>
+          <p class="sh-note">
+            Sans le héros : or, pierres ou clés selon la faction, et des pièces d’aventurier. En cas
+            de défaite, les aventuriers tombés partent à l’infirmerie ; le héros, lui, rentre sans
+            butin.
+          </p>
+          <p
+            v-if="partyRisk && partyRisk.worsens"
+            class="sh-risk"
+            :class="{ bad: partyRisk.risky }"
+          >
+            ⚠️ Une armée arrive : sans eux, « {{ ODDS_LABEL[partyRisk.after] }} » au lieu de «
+            {{ ODDS_LABEL[partyRisk.before] }} ».
+          </p>
+          <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
+            ✅ Une armée arrive, mais ils seront rentrés avant elle.
+          </p>
+          <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
+            {{ partySize ? `⚔️ Attaquer le camp (${partySize})` : 'Choisis ton groupe' }}
+          </button>
+        </template>
+        <template v-else-if="offers.hero">
           <div class="sh-row">
             <span class="sh-chip">⏱️ {{ fmtMin(roundTripMin(selected)) }}</span>
             <span class="sh-chip">🪙 {{ costOf(selected) }}</span>
@@ -293,39 +384,13 @@
             ✨ Composer une escorte ({{ suggestedSize }})
           </button>
           <div class="car-pick">
-            <button
+            <AdvPickTile
               v-for="a in freeAdvs"
               :key="a.id"
-              class="car-adv"
-              :class="{ on: escort.includes(a.id) }"
-              @click="toggleEscort(a.id)"
-            >
-              <span class="ca-emo">{{ advTitle(a)?.emoji ?? '🧑' }}</span>
-              <span class="ca-name">{{ a.name }}</span>
-              <!-- ⚠️ LE RANG ET LES COMPÉTENCES, demandés par l’utilisateur : on choisissait
-                   son escorte sur un prénom, alors que ce sont les RÔLES qui décident du
-                   convoi. Le rang est celui du joueur, les étoiles la progression de son
-                   niveau dedans, et le NIVEAU reste caché — comme dans la Guilde.
-                   ⚠️ Le nom du rang est ÉCRIT, pas seulement teinté : la couleur seule ne se
-                   lit pas. -->
-              <span class="ca-rar" :style="{ color: advRank(a).color }">
-                {{ advRank(a).emoji }} {{ advRank(a).name }}
-              </span>
-              <span class="ca-rank" :style="{ color: advRank(a).color }">
-                {{ rankStarStr(advRank(a).star) }}
-              </span>
-              <span v-if="advBadges(a).length" class="ca-skills">
-                <span
-                  v-for="(b, i) in advBadges(a)"
-                  :key="i"
-                  class="ca-skill"
-                  :class="{ sig: !b.role }"
-                  :title="b.what"
-                  >{{ b.emoji }}<b v-if="b.level > 1">{{ b.level }}</b></span
-                >
-              </span>
-              <span v-else class="ca-none">stat brute</span>
-            </button>
+              :adv="a"
+              :on="escort.includes(a.id)"
+              @toggle="toggleEscort(a.id)"
+            />
           </div>
           <!-- ⚠️ L'AVERTISSEMENT EST AU-DESSUS DU BOUTON, pas après : on doit le lire
                AVANT de partir, pas en revenant. Il ne BLOQUE rien — c'est un arbitrage
@@ -341,7 +406,7 @@
             🐫 Envoyer une caravane ({{ escort.length }})
           </button>
         </template>
-        <div v-if="!offers.hero && !offers.caravan" class="sh-away">
+        <div v-if="!selectedCamp && !offers.hero && !offers.caravan" class="sh-away">
           🐫 Les convois ne vont que sur les lieux de récolte — puits, sanctuaire, archives, épave.
         </div>
       </div>
@@ -361,6 +426,9 @@
               lastOutcome.waves > 1 ? 's' : ''
             }}</template
           >
+          <template v-else-if="lastOutcome.party">{{
+            lastOutcome.win ? 'Camp pris !' : 'Groupe repoussé'
+          }}</template>
           <template v-else>{{
             lastOutcome.win ? 'Expédition réussie !' : 'Expédition ratée'
           }}</template>
@@ -371,6 +439,9 @@
           <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item">
             <ItemIcon :item="it" :size="26" :show-stars="false" />{{ it.name }}</span
           >
+        </div>
+        <div v-if="lastOutcome.party" class="coll-party">
+          <PartyReportView :party="lastOutcome.party" :roster="char.advList" />
         </div>
         <q-btn
           color="primary"
@@ -446,6 +517,18 @@ import {
 } from '@/lib/items';
 import GuildPanel from '@/components/GuildPanel.vue';
 import CaravanReportView from '@/components/CaravanReportView.vue';
+import PartyReportView from '@/components/PartyReportView.vue';
+import AdvPickTile from '@/components/AdvPickTile.vue';
+import {
+  PARTY_HERO_BLOCK_LABEL,
+  campRewardLabel,
+  campWinPct,
+  canSendParty,
+  partyAllies,
+  partyHeroBlocker,
+  partyLegMin,
+  type PartyHero,
+} from '@/lib/camp';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects, normalizeTalents } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
@@ -465,6 +548,8 @@ import {
   expeditionTerrain,
   type Poi,
   HARVEST_TYPES,
+  CAMP_TYPES,
+  campSpecOf,
   isClaimable,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
@@ -474,9 +559,11 @@ import {
   guardUnits,
   defenseLevel,
   ODDS_LABEL,
+  FACTION_EMOJI,
+  FACTION_LABEL,
   woundRemainingMs,
 } from '@/lib/raid';
-import { advAvailable, advBadges, advRank, advTitle } from '@/lib/adventurers';
+import { ADV_UNAVAILABLE_LABEL, advAvailable, advUnavailableReason } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
 import {
   CARAVAN,
@@ -700,17 +787,24 @@ const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
 /** 🐾 Ce que chaque aventurier emmène avec lui. ⚠️ Plus un bonus GLOBAL de garnison :
  *  le compagnon suit son homme, donc faire partir quelqu’un retire AUSSI son familier
  *  de la défense — c’est précisément l’arbitrage que cet écran doit montrer. */
+/** Ce que l'escorte emmène sur la ROUTE — même forme que ce que le store passe au départ
+ *  (`sendParty`, `sendCaravan`). ⚠️ Sans horloge : un groupe ne change pas de familier en
+ *  une minute, et le pronostic d'un camp n'a pas à se recalculer au rythme du tick. */
+const roadCtx = computed(() => {
+  const talents = normalizeTalents(char.row?.talents ?? []);
+  return {
+    familiars: (char.row?.inventory ?? []).filter((it: Item) => it.slot === 'familiar'),
+    talents,
+    // 🗡️ Ce qu’ils portent (stock `adv_gear`, migr. 0068).
+    advGear: char.row?.adv_gear?.stock ?? [],
+    heroFamiliarId: char.row?.equipped?.familiar?.id ?? null,
+    heroTalentIds: talents.filter((t) => t.equipped === true).map((t) => t.id),
+  };
+});
 const compCtx = computed(() => ({
-  familiars: (char.row?.inventory ?? []).filter((it: Item) => it.slot === 'familiar'),
-  talents: normalizeTalents(char.row?.talents ?? []),
+  ...roadCtx.value,
   kennelLevel: defenseLevel(base.value?.defenses ?? [], 'kennel'),
   now: coarseNow.value,
-  // 🗡️ Ce qu’ils portent (stock `adv_gear`, migr. 0068).
-  advGear: char.row?.adv_gear?.stock ?? [],
-  heroFamiliarId: char.row?.equipped?.familiar?.id ?? null,
-  heroTalentIds: normalizeTalents(char.row?.talents ?? [])
-    .filter((t) => t.equipped === true)
-    .map((t) => t.id),
 }));
 /** Qui resterait si l'on partait : l'escorte choisie quitte la base, et le héros aussi
  *  quand c'est LUI qu'on envoie. */
@@ -727,8 +821,9 @@ const risk = computed(() => {
   const inc = incoming.value;
   // ⚠️ C’est l’ARMÉE qu’on passe, plus sa « puissance » : le pronostic est désormais
   // SIMULÉ sur le vrai moteur, donc il lui faut la composition, pas un résumé.
-  if (!b || !inc) return null;
-  const restants = freeAdvs.value.filter((a) => !escort.value.includes(a.id));
+  // ⚠️ Le pronostic coûte ~13 ms par tenue : on ne le calcule que si la feuille le montre.
+  if (!b || !inc || !offerCaravan.value) return null;
+  const restants = freeStable.value.filter((a) => !escort.value.includes(a.id));
   // ⚠️ Un héros DEHORS qui rentre AVANT l’assaut défend quand même — même règle que le
   // panneau de la Base, écrite une seule fois dans `heroDefends`.
   const heroNow = heroDefends(
@@ -742,7 +837,7 @@ const risk = computed(() => {
     b.defenses,
     heroLevel.value,
     inc,
-    { hero: heroNow, guard: guardUnits(heroLevel.value, freeAdvs.value, compCtx.value) },
+    { hero: heroNow, guard: guardUnits(heroLevel.value, freeStable.value, compCtx.value) },
     { hero: heroNow, guard: guardUnits(heroLevel.value, restants, compCtx.value) },
     { backAt: coarseNow.value + caravanMin.value * 60_000, raidAt: raidAt.value },
   );
@@ -755,10 +850,10 @@ const riskHero = computed(() => {
   const b = base.value;
   const p = selected.value;
   const inc = incoming.value;
-  if (!b || !inc) return null;
+  if (!b || !inc || !offerHero.value || selectedCamp.value) return null;
   const heroNow = char.row && char.heroIsHome(char.row) ? fighter.value : null;
   if (!heroNow) return null;
-  const g = guardUnits(heroLevel.value, freeAdvs.value, compCtx.value);
+  const g = guardUnits(heroLevel.value, freeStable.value, compCtx.value);
   return departureRisk(
     b.defenses,
     heroLevel.value,
@@ -769,6 +864,15 @@ const riskHero = computed(() => {
   );
 });
 const freeAdvs = computed(() => char.advList.filter((a) => advAvailable(a, now.value)));
+/** ⚠️ Le MÊME vivier disponible, mais STABLE d'une seconde à l'autre : `freeAdvs` rend un
+ *  nouveau tableau à chaque tick, et tout ce qui en dépend (pronostics de siège ~13 ms, % de
+ *  victoire d'un camp) se recalculerait 60 fois par minute pour le même résultat. La clé est
+ *  une CHAÎNE : elle ne déclenche ses dépendants que lorsqu'un aventurier part ou revient. */
+const freeKey = computed(() => freeAdvs.value.map((a) => a.id).join('|'));
+const freeStable = computed(() => {
+  const ids = new Set(freeKey.value.split('|'));
+  return char.advList.filter((a) => ids.has(a.id));
+});
 const vansLeft = computed(
   () =>
     caravanSlots(char.comptoirLevel) -
@@ -791,6 +895,10 @@ const offers = computed(() =>
       })
     : { hero: false, caravan: false, party: false },
 );
+/** Les mêmes offres, en BOOLÉENS : `offers` rend un nouvel objet à chaque tick, un booléen
+ *  ne réveille ses dépendants (les pronostics coûteux) que s'il change vraiment. */
+const offerHero = computed(() => offers.value.hero);
+const offerCaravan = computed(() => offers.value.caravan);
 const caravanMin = computed(() => {
   if (!selected.value) return 0;
   const esc = freeAdvs.value.filter((a) => escort.value.includes(a.id));
@@ -809,6 +917,145 @@ const caravanMin = computed(() => {
 const canSendCaravanNow = computed(
   () => escort.value.length > 0 && vansLeft.value > 0 && !busyCaravan.value,
 );
+// ── ⚔️ CAMPS DE FACTION : un GROUPE (héros oui/non + autant d'aventuriers qu'on veut) ──
+// Toute la règle vit dans `camp.ts` (combat, pronostic, trajet, qui peut partir) ; l'écran
+// ne fait que la montrer. ⚠️ Le héros n'attaque plus un camp par `expeSend` (le store le
+// refuse) : même seul, il y passe par `sendParty`.
+const selectedCamp = computed(() => (selected.value ? campSpecOf(selected.value) : null));
+const partyHero = ref(false);
+const partyEscort = ref<string[]>([]);
+watch(selected, () => {
+  partyHero.value = false;
+  partyEscort.value = [];
+});
+/** Les aventuriers retenus ET toujours disponibles (un aventurier parti en convoi entre-temps
+ *  sort du groupe de lui-même — le store le refuserait de toute façon). */
+const partyAdvs = computed(() => freeStable.value.filter((a) => partyEscort.value.includes(a.id)));
+/** Ceux qui ne peuvent PAS partir, avec la raison — même règle que le store
+ *  (`advUnavailableReason`, dont `advAvailable` dérive). On les montre grisés plutôt que de
+ *  les cacher : un aventurier qui disparaît de la liste se lit comme un aventurier perdu. */
+const partyBlocked = computed(() =>
+  char.advList
+    .map((a) => ({ adv: a, why: advUnavailableReason(a, now.value) }))
+    .filter(
+      (x): x is { adv: (typeof char.advList)[number]; why: NonNullable<typeof x.why> } => !!x.why,
+    ),
+);
+/** Pourquoi le héros ne peut pas se joindre au groupe — la MÊME règle que le store. */
+const partyHeroBlock = computed(() =>
+  selected.value
+    ? partyHeroBlocker({
+        onExpedition: !!active.value,
+        healMs: heroHealIn.value,
+        outpost: outpostBuilt.value,
+        gold: char.row?.gold ?? 0,
+        cost: costOf(selected.value),
+      })
+    : null,
+);
+/** Le héros est-il VRAIMENT du groupe ? Le choix du joueur, tant que rien ne l'en empêche :
+ *  un héros qu'on a coché puis qui part ailleurs ne doit pas fausser le pronostic. */
+const partyHeroOn = computed(() => partyHero.value && !partyHeroBlock.value);
+const heroForParty = computed<PartyHero | null>(() =>
+  partyHeroOn.value
+    ? { name: char.row?.pseudo ?? 'Toi', level: heroLevel.value, combatant: fighter.value }
+    : null,
+);
+const partySize = computed(() => partyAdvs.value.length + (partyHeroOn.value ? 1 : 0));
+/** 🎯 % de victoire — le MÊME groupe (`partyAllies`) et le MÊME combat que la résolution,
+ *  échantillonnés par `campWinPct` sur des graines qui ne rejouent JAMAIS le vrai combat. */
+const partyWin = computed(() => {
+  const p = selected.value;
+  const spec = selectedCamp.value;
+  if (!p || !spec || !partySize.value) return null;
+  const allies = partyAllies(partyAdvs.value, roadCtx.value, heroForParty.value);
+  return Math.round(campWinPct(p, spec, allies, 40) * 100);
+});
+/** Aller-retour : le groupe va au pas de son marcheur le plus lent (`partyLegMin`). */
+const partyMin = computed(() =>
+  selected.value && partySize.value
+    ? 2 *
+      partyLegMin(selected.value, partyAdvs.value, {
+        hero: partyHeroOn.value,
+        travelMult: travelMult.value,
+        comptoirLevel: char.comptoirLevel,
+        gearSpeed: advGearRoles(partyAdvs.value, roadCtx.value.advGear).speed,
+      })
+    : 0,
+);
+/** ⚠️ CE QUE LE DÉPART COÛTE face à l'armée qui arrive — mêmes règles que le convoi et le
+ *  héros (`departureRisk`) : le groupe quitte la base (et le héros avec lui s'il en est),
+ *  et un groupe rentré AVANT l'assaut ne coûte rien. */
+const partyRisk = computed(() => {
+  const b = base.value;
+  const inc = incoming.value;
+  if (!b || !inc || !selectedCamp.value || !partySize.value) return null;
+  const heroNow = heroDefends(
+    !!char.row && char.heroIsHome(char.row),
+    char.row?.expedition?.returnAt,
+    raidAt.value,
+  )
+    ? fighter.value
+    : null;
+  const partants = new Set(partyAdvs.value.map((a) => a.id));
+  const restants = freeStable.value.filter((a) => !partants.has(a.id));
+  return departureRisk(
+    b.defenses,
+    heroLevel.value,
+    inc,
+    { hero: heroNow, guard: guardUnits(heroLevel.value, freeStable.value, compCtx.value) },
+    {
+      hero: partyHeroOn.value ? null : heroNow,
+      guard: guardUnits(heroLevel.value, restants, compCtx.value),
+    },
+    { backAt: coarseNow.value + partyMin.value * 60_000, raidAt: raidAt.value },
+  );
+});
+const canSendPartyNow = computed(
+  () =>
+    !!selected.value &&
+    canSendParty(selected.value, partyAdvs.value.length, partyHeroOn.value) &&
+    (!partyHeroOn.value || progress.ready.value) &&
+    !busyCaravan.value,
+);
+function togglePartyAdv(id: string) {
+  // ⚠️ AUCUN maximum : c'est ce qui permet d'affronter les gros repaires.
+  partyEscort.value = partyEscort.value.includes(id)
+    ? partyEscort.value.filter((x) => x !== id)
+    : [...partyEscort.value, id];
+}
+/** ✨ Tout le vivier disponible d'un geste (et de nouveau pour tout retirer) : un repaire
+ *  de taille 10 demande dix aventuriers, dix toucher de suite serait une corvée. */
+const partyAllOn = computed(
+  () => freeStable.value.length > 0 && partyAdvs.value.length === freeStable.value.length,
+);
+function togglePartyAll() {
+  partyEscort.value = partyAllOn.value ? [] : freeStable.value.map((a) => a.id);
+}
+async function doSendParty() {
+  const uid = auth.user?.id;
+  const poi = selected.value;
+  if (!uid || !poi || !canSendPartyNow.value) return;
+  busyCaravan.value = true;
+  try {
+    const ok = await char.sendParty(uid, poi, {
+      hero: heroForParty.value,
+      escortIds: partyAdvs.value.map((a) => a.id),
+      // Niveau de SPORT : l'anti-runaway du butin se lit sur le joueur (cf. convois).
+      playerLevel: heroLevel.value,
+      now: Date.now(),
+    });
+    if (ok) selected.value = null;
+    $q.notify(
+      ok
+        ? { type: 'positive', message: '⚔️ Le groupe marche sur le camp.' }
+        : { type: 'negative', message: 'Départ impossible (groupe, or ou héros indisponible).' },
+    );
+  } finally {
+    busyCaravan.value = false;
+  }
+}
+
 /** Les convois EN ROUTE, situés par la même interpolation que le héros
  *  (`travelPosition`) : un convoi part, atteint son lieu, et revient — on doit le voir
  *  faire, sinon la seule trace d'une caravane est une carte « 🎁 Récupérer ». */
@@ -823,6 +1070,24 @@ const vansOnMap = computed(() =>
       prog: voyageProgress(c, now.value),
     })),
 );
+/** ⚔️ Les GROUPES partis sans le héros, situés comme les convois. ⚠️ Un groupe AVEC le
+ *  héros vit dans `expedition` : c'est le tracé du héros qui le montre. */
+const partiesOnMap = computed(() =>
+  char.partyList
+    .filter((g) => now.value < g.returnAt)
+    .map((g) => ({
+      id: g.id,
+      poi: g.poi,
+      escort: g.outcome.party?.escort.length ?? 0,
+      at: travelPosition(g, now.value),
+      prog: voyageProgress(g, now.value),
+    })),
+);
+/** Tout ce qui voyage sans le héros, pour la carte : même tracé, l'emoji dit qui. */
+const travelersOnMap = computed(() => [
+  ...vansOnMap.value.map((v) => ({ ...v, emo: '🐫' })),
+  ...partiesOnMap.value.map((g) => ({ ...g, emo: '⚔️' })),
+]);
 const busyCaravan = ref(false);
 /** Tout ce qui voyage, dans l'ordre où ça rentre : le héros puis les convois, les
  *  cargaisons à récupérer en TÊTE (c'est la seule ligne sur laquelle on peut agir).
@@ -852,7 +1117,7 @@ const trips = computed(() => {
       time: h.phase === 'done' ? 'rentré' : fmtMs(back ? h.remainTotalMs : h.remainToObjectiveMs),
       pct: heroProg.value.overall * 100,
       back,
-      title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}`,
+      title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} aventurier(s)` : ''}`,
     });
   }
   for (const v of vansOnMap.value) {
@@ -866,6 +1131,19 @@ const trips = computed(() => {
       pct: v.prog.overall * 100,
       back,
       title: `Convoi — ${POI_LABEL[v.poi.type]} niv ${v.poi.level} · escorte ${v.escort}`,
+    });
+  }
+  for (const g of partiesOnMap.value) {
+    const back = g.at.phase === 'return';
+    out.push({
+      key: 'g' + g.id,
+      kind: 'van',
+      who: '⚔️',
+      poi: g.poi,
+      time: fmtMs(back ? g.at.remainTotalMs : g.at.remainToObjectiveMs),
+      pct: g.prog.overall * 100,
+      back,
+      title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} aventurier${g.escort > 1 ? 's' : ''}`,
     });
   }
   for (const c of claimable.value) {
@@ -1048,10 +1326,9 @@ function dimmed(p: Poi): boolean {
     comptoirLevel: char.comptoirLevel,
     advsAvailable: freeAdvs.value.length,
   });
-  // ⚠️ `o.party` n'est PAS encore lu ici : tant que la feuille ne sait pas envoyer un groupe
-  // (camps, tâche UI à venir), dé-griser un camp annoncerait disponible un lieu où l'on ne
-  // peut rien lancer — exactement le défaut que ce gris a corrigé.
-  return !o.hero && !o.caravan;
+  // ⚔️ Un camp reste ouvert tant qu'un GROUPE peut y aller (héros OU un aventurier libre).
+  // ⚠️ Un camp n'accepte plus le héros seul par `expeSend` : c'est `o.party` qui décide.
+  return CAMP_TYPES.has(p.type) ? !o.party : !o.hero && !o.caravan;
 }
 
 function selectPoi(p: Poi) {
@@ -1105,7 +1382,9 @@ function poiRewardLabel(p: Poi): string {
   // ⚠️ Sans cette ligne, l'épave tombait dans le cas par défaut et s'annonçait comme un
   // REPAIRE (« pièce de set + pierres ») — l'inverse de ce qu'elle donne vraiment.
   if (p.type === 'wreck') return 'Ferraille 🔩 en quantité (récolte, sans combat)';
-  if (p.type === 'camp') return 'Or 🪙 + un objet 🎁';
+  // ⚔️ Camp / repaire : ce que rapporte le groupe AVEC ou SANS le héros, selon la faction
+  // (règle écrite à côté de `campGroupHaul`, testée contre lui). Jamais de ferraille.
+  if (CAMP_TYPES.has(p.type)) return campRewardLabel(p);
   if (p.type === 'arena') return 'Survie par vagues 🌊 — objets + pierres 🔮 ∝ vagues';
   return 'Pièce de set 🧩 + pierres d’invocation 🔮';
 }
@@ -1155,6 +1434,14 @@ async function lifecycle() {
     // Le héros rentre : il redevient disponible, mais son chargement reste à ENCAISSER
     // (c'est `dueReport` qui ouvre la modale, pas ce tick).
     await char.expeSettle(uid, Date.now());
+    // ⚔️ Les groupes partis sans le héros : rapport à l'arrivée, retour au bout du chemin.
+    // Le butin attend dans la boîte (c'est `dueReport` qui ouvre la modale au retour).
+    const partyMsgs = await char.partyTick(uid, Date.now());
+    if (partyMsgs.length)
+      $q.notify({
+        type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
+        message: '📬 Rapport de ton groupe — il rentre en ville.',
+      });
     await char.expeSyncMap(uid, Date.now(), progressionLevel.value);
   } finally {
     busy = false;
@@ -1269,71 +1556,58 @@ function fmtMin(min: number): string {
   gap: 6px;
   margin-bottom: 8px;
 }
-.car-adv {
+/* ⚔️ Le héros dans un groupe de camp : pleine largeur, 44 px, coché comme une tuile. */
+.party-hero {
+  width: 100%;
+  min-height: 44px;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 1px;
-  padding: 7px 4px;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 6px 12px;
   background: #1d1913;
   border: 1px solid var(--line);
   border-radius: 10px;
   color: var(--text);
-  min-height: 44px;
+  text-align: left;
+  cursor: pointer;
 }
-.car-adv.on {
+.party-hero.on {
   border-color: var(--accent);
-  background: linear-gradient(180deg, rgba(255, 210, 63, 0.16), #1d1913 65%);
+  background: linear-gradient(90deg, rgba(255, 210, 63, 0.16), #1d1913 70%);
 }
-.ca-emo {
-  font-size: 20px;
-}
-.ca-name {
-  font-size: 11px;
-  color: var(--dim);
-}
-/* La rareté de classe : mêmes mots et mêmes couleurs que la Guilde et que le butin. */
-.ca-rar {
-  font-size: 9px;
-  line-height: 1.1;
-  text-transform: capitalize;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* Les étoiles : le travail de terrain, dans la teinte de son rang. */
-.ca-rank {
-  font-size: 9px;
-  letter-spacing: -0.5px;
-  line-height: 1;
-}
-/* Les compétences en icônes : à 344 px, seule l’icône tient. Le libellé complet reste
-   au survol, et la fiche de la Guilde le donne en toutes lettres. */
-.ca-skills {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 2px;
-  line-height: 1;
-}
-.ca-skill {
-  font-size: 11px;
-}
-.ca-skill b {
-  font-size: 8px;
-  color: var(--accent);
-  vertical-align: super;
-}
-/* Une signature ne sert qu’en cas d’embuscade : elle compte moins qu’un rôle sur un
-   convoi, et son opacité le dit sans ajouter un mot. */
-.ca-skill.sig {
+.party-hero.off {
+  cursor: default;
+  border-style: dashed;
   opacity: 0.65;
 }
-.ca-none {
-  font-size: 9px;
+.ph-emo {
+  font-size: 22px;
+}
+.ph-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ph-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.ph-sub {
+  font-size: 11.5px;
   color: var(--dim);
-  opacity: 0.6;
+}
+.ph-check {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.sh-note {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.4;
 }
 .car-send {
   margin-top: 2px;
@@ -1830,6 +2104,11 @@ function fmtMin(min: number): string {
   gap: 8px;
   margin: 10px 0;
 }
+/* Cinq pastilles ne tiennent pas sur une ligne à 344 px : elles passent à la ligne. */
+.sh-row.sh-wrap {
+  flex-wrap: wrap;
+  gap: 6px;
+}
 .sh-chip {
   background: var(--bg);
   border: 1px solid var(--line);
@@ -1933,6 +2212,12 @@ function fmtMin(min: number): string {
   justify-content: center;
   font-weight: 700;
   margin-bottom: 16px;
+}
+/* Le rapport du groupe se lit en colonne (noms, XP, journal) : aligné à gauche, et la
+   carte ne s'élargit pas au-delà de l'écran plié. */
+.coll-party {
+  margin: -6px 0 14px;
+  max-width: 340px;
 }
 .coll-item {
   display: inline-flex;

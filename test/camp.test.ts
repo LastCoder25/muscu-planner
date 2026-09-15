@@ -8,10 +8,14 @@ import {
   campForecastSeed,
   campGroupHaul,
   campHurt,
+  campRewardLabel,
   campWinPct,
   canSendParty,
   normalizeParties,
+  PARTY_HERO_BLOCK_LABEL,
+  partyAllies,
   partyClaimRoster,
+  partyHeroBlocker,
   partyLegMin,
   partyReport,
   resolveCamp,
@@ -23,6 +27,7 @@ import {
 import {
   HARVEST,
   buildMessage,
+  campSpecOf,
   goldCost,
   harvestYield,
   travelFactor,
@@ -501,6 +506,86 @@ describe('📜 partyReport — ce qu’on lit dans la boîte', () => {
     const r = partyReport(o.party!, esc);
     for (const m of r.members) expect(m.hurt).toBe(o.party!.hurt.includes(m.id));
     expect(r.members.some((m) => m.hurt)).toBe(true);
+  });
+});
+
+describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution et le store', () => {
+  it('⚠️ partyAllies fond EXACTEMENT le groupe de resolveCamp (pronostic sur le bon groupe)', () => {
+    const inp = input({ hero: fort(20), spec: { faction: 'betes', size: 4 } });
+    const allies = partyAllies(inp.escort, inp.road, inp.hero);
+    expect(allies.map((u) => u.id)).toEqual(['adv_0', 'adv_1', 'adv_2', HERO_UNIT_ID]);
+    // Le héros se bat avec SON combattant réel, les aventuriers avec leur paire.
+    expect(allies[3]!.combatant).toBe(inp.hero!.combatant);
+    expect(allies.slice(0, 3)).toEqual(units(inp.escort, inp.road));
+    // Le combat de résolution rejoué sur ce groupe donne la même issue.
+    const group = fuseUnits(allies, 'Groupe');
+    const foe = campFoe(inp.poi, inp.spec);
+    for (let s = 1; s <= 20; s++) {
+      const fight = simulateCombat(group, foe, { seed: campFightSeed(s), goldOnWin: 0 });
+      expect(resolveCamp({ ...inp, seed: s }).party!.win, `graine ${s}`).toBe(fight.win);
+    }
+    expect(partyAllies(inp.escort, inp.road, null)).toHaveLength(3);
+  });
+
+  it('partyHeroBlocker : expédition, infirmerie, Avant-poste, or — dans cet ordre, sinon libre', () => {
+    const ok = { onExpedition: false, healMs: 0, outpost: true, gold: 100, cost: 100 };
+    expect(partyHeroBlocker(ok)).toBeNull();
+    expect(partyHeroBlocker({ ...ok, gold: 99 })).toBe('gold');
+    expect(partyHeroBlocker({ ...ok, outpost: false, gold: 0 })).toBe('outpost');
+    expect(partyHeroBlocker({ ...ok, healMs: 1, outpost: false })).toBe('infirmary');
+    expect(partyHeroBlocker({ ...ok, onExpedition: true, healMs: 1 })).toBe('expedition');
+    for (const k of ['expedition', 'infirmary', 'outpost', 'gold'] as const)
+      expect(PARTY_HERO_BLOCK_LABEL[k].length).toBeGreaterThan(0);
+  });
+
+  it('⚠️ campRewardLabel annonce la devise que campGroupHaul verse vraiment — jamais de ferraille', () => {
+    const vus = new Set<string>();
+    for (let i = 0; i < 400; i++)
+      for (const type of ['camp', 'lair'] as const) {
+        const p = poi({ id: `lbl_${i}`, type, level: 30 });
+        const spec = campSpecOf(p)!;
+        vus.add(`${type}:${spec.faction}`);
+        const label = campRewardLabel(p);
+        const [avec, sans] = label.split(' · sans : ');
+        expect(sans, label).toBeDefined();
+        const haul = campGroupHaul(p, spec, mulberry32(1));
+        expect(sans!.includes('🔮'), label).toBe(haul.summonStones > 0);
+        expect(sans!.includes('🗝️'), label).toBe(spec.faction === 'betes');
+        expect(label).not.toContain('🔩');
+        expect(avec!.includes('🧩')).toBe(type === 'lair');
+        const n = type === 'lair' ? CAMP.lairPieces : CAMP.campPieces;
+        expect(sans).toContain(`${n} pièce`);
+      }
+    expect(vus.size, 'toutes les factions × types ne sont pas exercées').toBe(6);
+    expect(campRewardLabel(poi({ type: 'wreck' }))).toBe('');
+  });
+
+  it('partyReport dit l’issue et les pièces d’aventurier ramenées', () => {
+    const L = 60;
+    const esc = team(10, L);
+    const o = resolveCamp(
+      input({
+        poi: poi({ level: 5, type: 'lair' }),
+        escort: esc,
+        road: road(L, 10),
+        spec: { faction: 'mortsvivants', size: 5 },
+        playerLevel: L,
+      }),
+    );
+    const r = partyReport(o.party!, esc);
+    expect(r.win).toBe(true);
+    expect(r.pieces).toBe(CAMP.lairPieces);
+    const perdu = resolveCamp(
+      input({
+        escort: team(1, 5),
+        road: road(5, 1),
+        poi: poi({ level: 40 }),
+        spec: { faction: 'bandits', size: 4 },
+      }),
+    );
+    const rp = partyReport(perdu.party!, []);
+    expect(rp.win).toBe(false);
+    expect(rp.pieces).toBe(0);
   });
 });
 

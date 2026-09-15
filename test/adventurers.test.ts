@@ -5,6 +5,8 @@ import {
   PROMO_CHOICES,
   STRATUM_BUDGET,
   advAvailable,
+  advUnavailableReason,
+  ADV_UNAVAILABLE_LABEL,
   advTrainingLeftMs,
   settleTraining,
   settleAllTraining,
@@ -648,6 +650,29 @@ describe('⚠️ une promotion se PAIE en temps de formation', () => {
     expect(advAvailable(enForm(2000), 2000)).toBe(true);
     expect(advTrainingLeftMs(enForm(2000), 1500)).toBe(500);
     expect(advTrainingLeftMs(base(), 1500)).toBe(0);
+  });
+
+  it('⚠️ advUnavailableReason est la SOURCE de advAvailable : jamais de contradiction', () => {
+    const at = 1000;
+    const cas = [
+      base(),
+      { ...base(), busyUntil: 2000 },
+      { ...base(), hurtUntil: 2000 },
+      enForm(2000),
+      { ...base(), busyUntil: 1000 },
+      { ...base(), hurtUntil: 999 },
+      { ...enForm(2000), hurtUntil: 3000, busyUntil: 4000 },
+    ];
+    for (const a of cas) expect(advAvailable(a, at)).toBe(advUnavailableReason(a, at) === null);
+    expect(advUnavailableReason({ ...base(), busyUntil: 2000 }, at)).toBe('busy');
+    expect(advUnavailableReason({ ...base(), hurtUntil: 2000 }, at)).toBe('hurt');
+    expect(advUnavailableReason(enForm(2000), at)).toBe('training');
+    expect(advUnavailableReason({ ...enForm(2000), hurtUntil: 3000, busyUntil: 4000 }, at)).toBe(
+      'busy',
+    );
+    expect(advUnavailableReason({ ...enForm(2000), hurtUntil: 3000 }, at)).toBe('hurt');
+    for (const k of ['busy', 'hurt', 'training'] as const)
+      expect(ADV_UNAVAILABLE_LABEL[k].length).toBeGreaterThan(0);
   });
 
   it('une formation court PENDANT une convalescence — on ne fait pas attendre deux fois', () => {

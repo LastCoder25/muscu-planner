@@ -186,6 +186,7 @@ import {
 } from '@/lib/advGear';
 import {
   canSendParty,
+  partyHeroBlocker,
   normalizeParties,
   partyClaimRoster,
   partyLegMin,
@@ -2533,11 +2534,19 @@ export const useCharacterStore = defineStore('character', () => {
       .filter((a): a is Adventurer => !!a && advAvailable(a, now));
     if (escort.length !== opts.escortIds.length) return false;
     if (!canSendParty(poi, escort.length, !!hero)) return false;
-    if (hero) {
-      if (cur.expedition) return false;
-      if (woundRemainingMs(cur.base, now) > 0) return false; // 🤕 à l'infirmerie
-      if (!expeditionsUnlocked(cur.buildings)) return false;
-    }
+    // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé
+    // (déjà parti, infirmerie, Avant-poste, or) — `partyHeroBlocker`, une seule définition.
+    if (
+      hero &&
+      partyHeroBlocker({
+        onExpedition: !!cur.expedition,
+        healMs: woundRemainingMs(cur.base, now),
+        outpost: expeditionsUnlocked(cur.buildings),
+        gold: cur.gold,
+        cost: expeGoldCost(poi.type, poi.level),
+      })
+    )
+      return false;
     const talents = normalizeTalents(cur.talents);
     const road = {
       familiars: cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT),
