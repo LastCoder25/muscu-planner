@@ -2584,7 +2584,13 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || !partyList.value.length) return [];
     const t = settleParties(partyList.value, cur.messages, now, 30);
     if (!t.changed) return [];
-    await persist(userId, { parties: t.parties, messages: t.messages });
+    // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
+    // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement
+    // enregistré entre-temps et rendre le butin encaissable deux fois.
+    await persist(userId, {
+      parties: t.parties,
+      ...(t.messages !== cur.messages ? { messages: t.messages } : {}),
+    });
     return t.fresh;
   }
 

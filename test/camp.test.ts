@@ -560,7 +560,10 @@ describe('📬 settleParties — un groupe parti sans le héros : rapport à l�
     expect(r.changed).toBe(true);
     expect(r.parties).toEqual([]);
     expect(r.fresh).toEqual([]);
-    expect(r.messages).toEqual(box);
+    // ⚠️ La MÊME boîte (référence) : le store n'écrit `messages` que si elle a changé. Réécrire
+    // une copie au retour pourrait écraser un encaissement tout juste enregistré et rendre le
+    // butin encaissable une seconde fois.
+    expect(r.messages).toBe(box);
   });
 
   it('⚠️ app fermée tout le voyage : rapport déposé PUIS groupe retiré, dans le même appel', () => {
