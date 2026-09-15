@@ -1162,15 +1162,78 @@ export function resolveOutcome(
       ? true
       : simulateCombat(hero, poiCombatant(poi.level, poi.type), { seed: seed + 7, goldOnWin: 0 })
           .win;
+  const base =
+    poi.type === 'mine' ? mineOutcome(rng, poi) : campHeroOutcome(rng, poi, win, playerLevel);
+  if (!base.win) return base;
+  // Rencontres de trajet — MÊME helper que les récoltes (aller ET retour), pour ne pas
+  // maintenir deux fois la même règle.
+  const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
+  const items = [...(base.items ?? []), ...tr.drops];
+  return {
+    ...base,
+    gold: Math.round(base.gold * tr.goldMult),
+    item: items[0] ?? null,
+    items,
+    key: base.key + tr.keys,
+    returnMult: tr.returnMult,
+    text: base.text + tr.text,
+  };
+}
 
-  // HAUL SCALÉ AU TEMPS DE TRAJET (aller-retour) : une expédition de plusieurs
-  // heures doit VALOIR le coup (avant : reward ∝ niveau seul → dérisoire vs un
-  // donjon actif). Facteur temps `(0.5 + rth)` : un trajet court rend un peu, un
-  // long rend beaucoup. On mise sur les ressources RARES (poussière/pierres/gear) —
-  // l'or déborde déjà (filons = le puits) mais reste un bonus net correct.
-  const rth = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60; // heures A/R
-  const tf = 0.5 + rth;
+/** Durée aller-retour en heures, et le facteur de temps historique `0,5 + h`. */
+function tripHours(poi: Poi): { rth: number; tf: number } {
+  const rth = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
+  return { rth, tf: 0.5 + rth };
+}
 
+/** MINE : récolte d'or et d'énergie, sans combat (hors rencontres de trajet).
+ *
+ *  HAUL SCALÉ AU TEMPS DE TRAJET (aller-retour) : une expédition de plusieurs heures
+ *  doit VALOIR le coup (avant : reward ∝ niveau seul → dérisoire vs un donjon actif).
+ *  MINE = INVESTISSEMENT D'OR (+ temps réel) → doit rapporter nettement plus que le coût.
+ *  Rendement = coût × (1,3 + `travelFactor(rth)`) : reine de l'or, et d'autant plus loin. */
+function mineOutcome(rng: () => number, poi: Poi): ExpeditionOutcome {
+  const { rth, tf } = tripHours(poi);
+  const cost = goldCost(poi.type, poi.level);
+  // MINE = reine de l'or, et d'autant plus loin (coût × 1,3 + facteur de voyage).
+  const gold = Math.round(cost * (1.3 + travelFactor(rth)));
+  // ÉNERGIE : un complément borné du sport, jamais un substitut (ticket a0d16472).
+  const energy = Math.min(
+    EXPE.mineEnergyMax,
+    Math.round((4 + poi.level * 1.5) * Math.min(tf, EXPE.mineEnergyTfCap)),
+  );
+  return {
+    win: true,
+    gold,
+    scrap: 0,
+    energy,
+    summonStones: 0,
+    item: null,
+    items: [],
+    key: 0,
+    reconBonus: 0,
+    returnMult: 1,
+    text: pick(rng, WIN_TEXT[poi.type]),
+  };
+}
+
+/**
+ * 🎁 Le butin du HÉROS sur un camp ou un repaire — extrait tel quel de `resolveOutcome`.
+ *
+ * ⚠️ SOURCE UNIQUE : l'expédition héros d'avant ET le groupe de faction avec héros
+ * (`resolveCamp`) le lisent. Il consomme `rng` dans le MÊME ordre qu'avant l'extraction
+ * (vérifié par instantané) ; les rencontres de trajet restent à l'appelant.
+ * - gagné : camp → un objet (+10 % de clé), repaire → pièce de set (+20 % de clé) + pierres
+ *   d'invocation ; or ≥ équilibre du coût (`coût × (1 + A/R h × 0,1)`).
+ * - perdu : l'échec d'expédition actuel (or remboursé en partie, 12 % de clé, reconnaissance).
+ */
+export function campHeroOutcome(
+  rng: () => number,
+  poi: Poi,
+  win: boolean,
+  playerLevel: number | undefined,
+): ExpeditionOutcome {
+  const cost = goldCost(poi.type, poi.level);
   if (!win) {
     const key = rng() < 0.12 ? 1 : 0;
     return {
@@ -1186,24 +1249,10 @@ export function resolveOutcome(
       text: pick(rng, FAIL_TEXT[poi.type]),
     };
   }
-
-  // Décalage de la jambe RETOUR, posé par une rencontre de trajet (passage / contretemps).
-  let returnMult = 1;
-  // Réussite : HAUL (or + poussière + pierres) + PRISE éventuelle.
-  // MINE = INVESTISSEMENT D'OR (+ temps réel) → doit rapporter nettement plus que le coût.
-  // Rendement = coût × (1,8 + heures A/R) : ~2,3× pour un trajet court, ~3,3× pour ~1,5 h,
-  // jusqu'à ~5× pour un long trajet (avant : ~2× seulement → trop léger pour l'attente).
-  // MINE = reine de l'or (coût × 1,8..~5). CAMP/REPAIRE = butin (item/set) ; leur or doit
-  // au moins ÉQUILIBRER le coût (l'item = profit pur) au lieu d'être net négatif sur un
-  // trajet court → on ne se sent plus « volé ». Reste sous la mine en or/coût.
-  const goldHaul =
-    poi.type === 'mine'
-      ? Math.round(cost * (1.3 + travelFactor(rth))) // reine de l'or, et d'autant plus loin
-      : Math.round(cost * (1.0 + rth * 0.1)); // camp/repaire : ≥ équilibre (+3..+65 %), item = le vrai gain, reste SOUS la mine
-  // Parchemins d'enchant : faucet SECONDAIRE (le donjon reste la source principale).
-  // `items` porte TOUT le butin (prise principale + éventuel butin d'embuscade) ;
-  // `item` reste la prise principale, pour l'affichage du rapport.
-  const items: Omit<Item, 'id'>[] = [];
+  const { rth } = tripHours(poi);
+  // Réussite : HAUL (or) + PRISE éventuelle. Camp/repaire : l'or doit au moins ÉQUILIBRER
+  // le coût (l'item = profit pur) au lieu d'être net négatif sur un trajet court → on ne
+  // se sent plus « volé ». Reste sous la mine en or/coût.
   let item: Omit<Item, 'id'> | null = null;
   let key = 0;
   if (poi.type === 'lair' && poi.setId) {
@@ -1220,43 +1269,20 @@ export function resolveOutcome(
     });
     key = rng() < 0.1 ? 1 : 0;
   }
-  if (item) items.push(item);
-  let gold = goldHaul;
-  // ÉNERGIE : les MINES rendent un peu d'énergie de jeu (∝ niveau × temps de trajet)
-  // → un revenu d'énergie passif, complément du sport, qui adoucit le pincement de
-  // fin de partie (le coût des runs monte plus vite que l'énergie/séance). Mines seules.
-  const energy =
-    poi.type === 'mine'
-      ? Math.min(
-          EXPE.mineEnergyMax,
-          Math.round((4 + poi.level * 1.5) * Math.min(tf, EXPE.mineEnergyTfCap)),
-        )
-      : 0;
-  let text = pick(rng, WIN_TEXT[poi.type]);
-  // Rencontres de trajet — MÊME helper que les récoltes (aller ET retour), pour ne pas
-  // maintenir deux fois la même règle.
-  const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
-  gold = Math.round(gold * tr.goldMult);
-  returnMult = tr.returnMult;
-  items.push(...tr.drops);
-  key += tr.keys;
-  text += tr.text;
   return {
     win: true,
-    gold,
+    gold: Math.round(cost * (1.0 + rth * 0.1)),
     scrap: 0,
-    energy,
+    energy: 0,
     // Les devises vivantes viennent surtout des POI DÉDIÉS (well/shrine/archive) : ici
     // un simple filet, pour que ces sorties ne soient pas totalement muettes.
     summonStones: poi.type === 'lair' ? 1 + Math.floor(poi.level / 12) : 0,
-    // ⚠️ La MINE versait des fragments 🧩 : devise MORTE (plus aucune fonction ne la
-    // dépense depuis le retrait des infusions). Elle paie en or et en énergie, point.
-    item: items[0] ?? null,
-    items,
+    item,
+    items: item ? [item] : [],
     key,
     reconBonus: 0,
-    returnMult,
-    text,
+    returnMult: 1,
+    text: pick(rng, WIN_TEXT[poi.type]),
   };
 }
 

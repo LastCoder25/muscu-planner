@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { playerCombatant } from '@/lib/combat';
+import { playerCombatant, mulberry32 } from '@/lib/combat';
 import {
   EXPE,
   spawnWindow,
@@ -10,6 +10,7 @@ import {
   travelPosition,
   voyageProgress,
   resolveOutcome,
+  campHeroOutcome,
   startExpedition,
   expeditionTerrain,
   simulateArena,
@@ -484,5 +485,36 @@ describe('🏕️ campSpecOf — faction et taille d’un camp', () => {
     const m = createMap(42, 0, 20);
     for (const q of m.pois) expect(Object.keys(q)).not.toContain('camp');
     expect(createMap(42, 0, 20)).toEqual(m);
+  });
+});
+
+describe('🎁 campHeroOutcome — le butin du héros sur un camp, extrait tel quel', () => {
+  const camp: Poi = {
+    id: 'c',
+    type: 'camp',
+    level: 20,
+    x: 60,
+    y: 60,
+    distNorm: 0.4,
+    spawnedAt: 0,
+    expiresAt: 9e15,
+  };
+  it('victoire sur un camp : un objet, de l’or, jamais de rencontre de trajet', () => {
+    let objets = 0;
+    for (let s = 1; s <= 30; s++) {
+      const o = campHeroOutcome(mulberry32(s), camp, true, 20);
+      expect(o.win).toBe(true);
+      expect(o.returnMult).toBe(1);
+      expect(o.gold).toBeGreaterThanOrEqual(goldCost('camp', 20));
+      if (o.item) objets++;
+    }
+    expect(objets).toBeGreaterThan(0);
+  });
+  it('échec : l’échec d’expédition actuel (or remboursé en partie, rien d’autre)', () => {
+    const o = campHeroOutcome(mulberry32(5), camp, false, 20);
+    expect(o.win).toBe(false);
+    expect(o.gold).toBe(Math.round(goldCost('camp', 20) * EXPE.failRefund));
+    expect(o.item).toBeNull();
+    expect(o.reconBonus).toBe(0.08);
   });
 });
