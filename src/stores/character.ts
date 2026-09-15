@@ -164,7 +164,7 @@ import {
   lineageOf,
   normalizeAdvGearState,
   outfitFromItem,
-  outfitterMsFor,
+  nextForgeUntil,
   settleOutfit,
   type AdvGear,
   type AdvGearSlot,
@@ -1768,6 +1768,20 @@ export const useCharacterStore = defineStore('character', () => {
     };
   }
 
+  /** 🗡️ ÉQUIPER TOUT LE VIVIER d'un geste (v0.881, demandé) : SEULEMENT l'équipement —
+   *  compagnons et talents restent ceux de chacun. Même plan que la part « équipement » de
+   *  `autoAssignCompanions` (`autoAdvGear`), donc le même choix que le bouton de l'écran
+   *  annonce. Rend le nombre de pièces portées ensuite. */
+  async function autoEquipAdventurers(userId: string, now: number): Promise<number | null> {
+    const cur = row.value;
+    if (!cur) return null;
+    const advs = cur.adventurers ?? [];
+    const gearPlan = autoAdvGear(advs, companionCtx(cur, now));
+    const adventurers = advs.map((a) => ({ ...a, gear: gearPlan.get(a.id) }));
+    await persistOptimistic(userId, { adventurers });
+    return adventurers.reduce((s, a) => s + Object.keys(a.gear ?? {}).length, 0);
+  }
+
   /** 🧠 CONFIER (ou reprendre) un TALENT à un aventurier. Mêmes règles que le
    *  compagnon : un seul porteur, et jamais ce que le héros a équipé. */
   async function setAdvTalent(userId: string, advId: string, talentId: string | null) {
@@ -1834,7 +1848,10 @@ export const useCharacterStore = defineStore('character', () => {
     const worn = new Set((cur.adventurers ?? []).flatMap((a) => Object.values(a.gear ?? {})));
     const stock = cur.adv_gear?.stock ?? [];
     const gone = stock.filter((g) => ids.includes(g.id) && !g.locked && !worn.has(g.id));
-    return { gone, state: { ...cur.adv_gear, stock: stock.filter((g) => !gone.includes(g)) } };
+    return {
+      gone,
+      state: { forges: [], ...cur.adv_gear, stock: stock.filter((g) => !gone.includes(g)) },
+    };
   }
   /** 🪙 VEND des pièces du stock — la moitié d'un objet du héros de même grade. */
   async function sellAdvGear(userId: string, ids: string[]) {
@@ -1862,7 +1879,7 @@ export const useCharacterStore = defineStore('character', () => {
     const stock = (cur.adv_gear?.stock ?? []).map((g) =>
       g.id === id ? { ...g, locked: !g.locked } : g,
     );
-    await persistOptimistic(userId, { adv_gear: { ...cur.adv_gear, stock } });
+    await persistOptimistic(userId, { adv_gear: { forges: [], ...cur.adv_gear, stock } });
   }
   /** Ajoute des pièces au STOCK (butin d'un siège, d'une fouille…) — PUR, ne persiste
    *  rien : les sources de drop (Task 6, `tickScavengers`/`claimCaravan`) l'appellent
@@ -1873,12 +1890,13 @@ export const useCharacterStore = defineStore('character', () => {
       ...(cur.adv_gear?.stock ?? []),
       ...pieces.map((p) => ({ ...p, id: crypto.randomUUID() })),
     ];
-    return { ...(cur.adv_gear ?? { stock: [] }), stock };
+    return { ...(cur.adv_gear ?? { stock: [], forges: [] }), stock };
   }
 
   /** ⚒️ Envoie un objet du SAC à l'Équipementier : il en revient une pièce pour
-   *  l'aventurier visé, faite pour son métier — la fabrication prend du temps
-   *  (`outfitterMsFor`, réglé par le tick de base via `settleOutfit`).
+   *  l'aventurier visé, faite pour son métier et AU RANG DE SA CLASSE, sans dépasser celui
+   *  de l'objet fourni (`outfitRank`). Les fabrications se mettent en FILE (v0.881) : chacune
+   *  prend `outfitterMsFor` après la précédente (réglé par le tick de base, `settleOutfit`).
    *
    *  ⚠️ Refus AU STORE, même politique que le compagnon/talent/équipement : l'écran ne
    *  propose pas l'impossible, il ne le garantit pas.
@@ -1896,7 +1914,6 @@ export const useCharacterStore = defineStore('character', () => {
   ) {
     const cur = row.value;
     if (!cur) return;
-    if (cur.adv_gear?.forge) throw new Error('Une pièce est déjà en fabrication.');
     const level = buildingLevel(cur.buildings ?? [], 'outfitter');
     if (level <= 0) throw new Error('Construis un Équipementier.');
     const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
@@ -1912,8 +1929,11 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, {
       inventory: cur.inventory.filter((i) => i.id !== itemId),
       adv_gear: {
-        ...(cur.adv_gear ?? { stock: [] }),
-        forge: { until: now + outfitterMsFor(level), advId, piece },
+        stock: cur.adv_gear?.stock ?? [],
+        forges: [
+          ...(cur.adv_gear?.forges ?? []),
+          { until: nextForgeUntil(cur.adv_gear?.forges ?? [], now, level), advId, piece },
+        ],
       },
     });
   }
@@ -2416,6 +2436,7 @@ export const useCharacterStore = defineStore('character', () => {
     withAdvGear,
     startOutfit,
     autoAssignCompanions,
+    autoEquipAdventurers,
     healHero,
     heroIsHome,
     ownedLevel,

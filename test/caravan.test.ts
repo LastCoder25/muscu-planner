@@ -1723,13 +1723,13 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
     ...(gear ? { gear: { accessory: 'bat' } } : {}),
   });
 
-  it('l’escorte de référence est équipée à son niveau, et chaque membre PORTE ses 3 pièces', () => {
+  it('l’escorte de référence est équipée à son niveau, et chaque membre PORTE ses 4 pièces', () => {
     // ⚠️ « Porte », pas « possède » : une pièce de la mauvaise lignée ou trop rare pour la
     // classe serait ignorée par `wornGear` — la route se calibrerait alors sur une escorte
     // plus faible qu'annoncé, et un vivier réellement équipé y roulerait.
     for (const L of [12, 40, 85]) {
       const g = refAdvGear(L);
-      expect(g).toHaveLength(3 * CARAVAN.refEscort);
+      expect(g).toHaveLength(4 * CARAVAN.refEscort);
       for (const p of g) expect(p.level).toBe(L);
       const esc = Array.from({ length: CARAVAN.refEscort }, (_, i) => ({
         ...refAdventurer(L, i),
@@ -1737,10 +1737,11 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
           weapon: `refGear${i}weapon`,
           armor: `refGear${i}armor`,
           accessory: `refGear${i}accessory`,
+          relic: `refGear${i}relic`,
         },
       }));
       const worn = wornGear(esc, g);
-      for (const a of esc) expect(worn.get(a.id), `niveau ${L}, ${a.id}`).toHaveLength(3);
+      for (const a of esc) expect(worn.get(a.id), `niveau ${L}, ${a.id}`).toHaveLength(4);
     }
   });
 

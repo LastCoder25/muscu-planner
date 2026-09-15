@@ -107,6 +107,27 @@
       </div>
     </div>
 
+    <!-- 🗡️ SES 4 PIÈCES EN 2×2, comme le héros (v0.881, demandé) : sous l'avatar, au-dessus
+         du prénom. Toucher une case ouvre le choix dans le stock pour CET emplacement. Une
+         case vide montre la pièce de son métier en filigrane. -->
+    <div class="ap-gear">
+      <button
+        v-for="c in gear"
+        :key="c.slot"
+        type="button"
+        class="apg-cell"
+        :class="{ empty: !c.filled }"
+        :style="c.color ? { '--gc': c.color } : {}"
+        :title="c.title"
+        :aria-label="c.title"
+        :disabled="disabled"
+        @click="emit('gear', c.slot)"
+      >
+        <span class="apg-emo">{{ c.emoji }}</span>
+        <span v-if="c.rank" class="apg-rk">{{ c.rank }}</span>
+      </button>
+    </div>
+
     <button class="ap-name font-display" type="button" @click="emit('open')">{{ adv.name }}</button>
     <div class="ap-sub">
       {{ title?.label ?? '—' }} · <b :style="{ color: rarColor }">{{ rarLabel }}</b>
@@ -128,7 +149,7 @@
 import { computed } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import { advRank, advRankProgress, advRarity, advTitle, type Adventurer } from '@/lib/adventurers';
-import type { AdvLook } from '@/lib/advGear';
+import type { AdvGearCell, AdvGearSlot, AdvLook } from '@/lib/advGear';
 import { FAMILIAR_SLOT, rarityRank, type Equipped, type Item } from '@/lib/items';
 import { fmtPow } from '@/lib/combat';
 
@@ -145,8 +166,16 @@ const props = defineProps<{
   state?: string;
   promotable?: boolean;
   disabled?: boolean;
+  /** Les 4 emplacements d'équipement, dans l'ordre de la grille. */
+  gear: AdvGearCell[];
 }>();
-const emit = defineEmits<{ open: []; familiar: []; talent: []; promote: [] }>();
+const emit = defineEmits<{
+  open: [];
+  familiar: [];
+  talent: [];
+  promote: [];
+  gear: [slot: AdvGearSlot];
+}>();
 
 const rank = computed(() => advRank(props.adv));
 const title = computed(() => advTitle(props.adv));
@@ -331,6 +360,51 @@ button.ap-mini {
   font-size: 9px;
   font-weight: 800;
   color: var(--rank-c);
+}
+.ap-gear {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+  max-width: 150px;
+  margin: 4px 0 2px;
+}
+.apg-cell {
+  position: relative;
+  min-height: 40px;
+  padding: 2px;
+  border-radius: 9px;
+  border: 1.5px solid color-mix(in srgb, var(--gc, var(--line)) 80%, transparent);
+  background: color-mix(in srgb, var(--gc, var(--bg)) 14%, var(--bg));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  cursor: pointer;
+  color: var(--text);
+}
+.apg-cell.empty {
+  border-style: dashed;
+  border-color: var(--line);
+  background: transparent;
+}
+.apg-cell.empty .apg-emo {
+  opacity: 0.35;
+}
+.apg-emo {
+  font-size: 17px;
+  line-height: 1.1;
+}
+.apg-rk {
+  max-width: 100%;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--gc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ap-name {
   background: none;

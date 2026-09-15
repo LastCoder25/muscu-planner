@@ -1183,7 +1183,7 @@ export interface Adventurer {
   /** ÉQUIPEMENT — ids de pièces du stock d'aventurier, un par emplacement.
    *  ⚠️ Comme le compagnon, l'appariement vit SUR l'aventurier : la pièce suit son homme.
    *  Absent = rien de porté (tous les aventuriers d'avant). */
-  gear?: Partial<Record<'weapon' | 'armor' | 'accessory', string>>;
+  gear?: Partial<Record<'weapon' | 'armor' | 'accessory' | 'relic', string>>;
 }
 
 /** Tags accumulés par le chemin — la mémoire de ce que l'aventurier est devenu. */

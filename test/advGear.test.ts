@@ -25,6 +25,10 @@ import {
   lineageOf,
   normalizeAdvGearState,
   outfitFromItem,
+  outfitRank,
+  outfitOptions,
+  advGearCells,
+  nextForgeUntil,
   rollAdvGearDrop,
   outfitSlot,
   outfitterMsFor,
@@ -58,10 +62,11 @@ const piece = (id: string, over: Partial<AdvGear> = {}): AdvGear => ({
 });
 
 describe('équipement propre à chaque classe de base', () => {
-  it('chaque lignée a ses trois pièces, nommées et distinctes', () => {
+  it('chaque lignée a ses QUATRE pièces (relique comprise, v0.881), nommées et distinctes', () => {
+    expect(ADV_GEAR_SLOTS).toEqual(['weapon', 'armor', 'accessory', 'relic']);
     for (const def of Object.values(LINEAGE_GEAR)) {
       const names = ADV_GEAR_SLOTS.map((s) => def.pieces[s].name);
-      expect(new Set(names).size).toBe(3);
+      expect(new Set(names).size).toBe(4);
       for (const s of ADV_GEAR_SLOTS) expect(def.pieces[s].pool.length).toBeGreaterThanOrEqual(2);
     }
   });
@@ -229,7 +234,7 @@ describe('butin : pièce tombée (siège, embuscade)', () => {
 });
 
 describe('relecture du jsonb au chargement', () => {
-  it('écarte les entrées de stock malformées et remet une forge incomplète à null', () => {
+  it('écarte les entrées de stock malformées et les fabrications incomplètes', () => {
     const ok = piece('ok');
     const s = normalizeAdvGearState({
       stock: [
@@ -243,12 +248,18 @@ describe('relecture du jsonb au chargement', () => {
       forge: { advId: 'a', until: 10 },
     });
     expect(s.stock).toEqual([ok]);
-    expect(s.forge).toBeNull();
-    expect(normalizeAdvGearState({ stock: [], forge: { piece: {}, advId: 'a' } }).forge).toBeNull();
+    expect(s.forges).toEqual([]);
+    expect(normalizeAdvGearState({ stock: [], forge: { piece: {}, advId: 'a' } }).forges).toEqual(
+      [],
+    );
+    // ⚠️ L'ancienne forge UNIQUE rejoint la file : une fabrication lancée avant la mise à jour
+    // ne se perd pas. La file est triée par échéance.
     const f = { piece: {}, advId: 'a', until: 5 };
-    expect(normalizeAdvGearState({ stock: [], forge: f }).forge).toEqual(f);
-    expect(normalizeAdvGearState(null)).toEqual({ stock: [], forge: null });
-    expect(normalizeAdvGearState({ stock: {} })).toEqual({ stock: [], forge: null });
+    const g = { piece: {}, advId: 'b', until: 3 };
+    expect(normalizeAdvGearState({ stock: [], forge: f }).forges).toEqual([f]);
+    expect(normalizeAdvGearState({ stock: [], forges: [f], forge: g }).forges).toEqual([g, f]);
+    expect(normalizeAdvGearState(null)).toEqual({ stock: [], forges: [] });
+    expect(normalizeAdvGearState({ stock: {} })).toEqual({ stock: [], forges: [] });
   });
 });
 
@@ -535,12 +546,26 @@ describe('sources d’équipement', () => {
   });
 });
 
+describe('🗡️ grille 2×2 du portrait', () => {
+  it('4 cases dans l’ordre des emplacements, pleine si la pièce est portée, sinon la pièce du métier', () => {
+    const a = { ...adv('a', ['archer']), level: 10 };
+    const arc = piece('arc', { lineage: 'archer', slot: 'weapon', rarity: 'commun' });
+    const cells = advGearCells(a, [arc]);
+    expect(cells.map((c) => c.slot)).toEqual(['weapon', 'armor', 'accessory', 'relic']);
+    expect(cells[0]!.filled).toBe(true);
+    expect(cells[0]!.piece?.id).toBe('arc');
+    expect(cells[0]!.rank).toBeTruthy();
+    expect(cells[1]!.filled).toBe(false);
+    expect(cells[3]!.name).toBe(LINEAGE_GEAR.archer.pieces.relic.name);
+  });
+});
+
 describe('⚒️ Équipementier', () => {
   it('la durée raccourcit à chaque niveau sans jamais devenir instantanée', () => {
     for (let L = 1; L < 100; L++) expect(outfitterMsFor(L + 1)).toBeLessThan(outfitterMsFor(L));
     expect(outfitterMsFor(100)).toBeGreaterThan(OUTFITTER.baseMs * (1 - OUTFITTER.speedMax));
   });
-  it('transforme un objet du héros en pièce de la lignée visée, rang autour de SON niveau', () => {
+  it('transforme un objet du héros en pièce de la lignée visée, sur le MÊME emplacement', () => {
     const cible = { ...adv('a', ['archer']), level: 12 };
     const hero = {
       id: 'h',
@@ -554,18 +579,102 @@ describe('⚒️ Équipementier', () => {
     } as const;
     const g = outfitFromItem(mulberry32(4), hero as never, cible, 90)!;
     expect(g.lineage).toBe('archer');
-    expect(g.slot).toBe('accessory');
+    expect(g.slot).toBe('relic');
     expect(g.level).toBeLessThanOrEqual(12 + 9);
     expect(outfitSlot('familiar')).toBeNull();
+    expect(outfitSlot('trophy')).toBeNull();
+    for (const s of ['weapon', 'armor', 'accessory', 'relic'] as const)
+      expect(outfitSlot(s)).toBe(s);
+  });
+  it('rang de la pièce : celui de l’aventurier, jamais au-dessus de l’objet fourni', () => {
+    // Aventurier promu (classe au-dessus du commun) : un objet primordial donne SA classe, un objet commun du commun.
+    const rare = refAdventurer(40, 1);
+    const item = (rarity: string) =>
+      ({
+        id: 'i',
+        slot: 'weapon',
+        name: 'Arme',
+        emoji: '⚔️',
+        rarity,
+        level: 40,
+        baseLevel: 40,
+        effect: { type: 'damage_pct', value: 10 },
+      }) as never;
+    const cls = advRarity(rare);
+    expect(RARITY_RANK[cls]).toBeGreaterThan(0);
+    expect(outfitRank(item('primordial'), rare)).toBe(cls);
+    expect(outfitRank(item(cls), rare)).toBe(cls);
+    expect(outfitRank(item('commun'), rare)).toBe('commun');
+    // Déterministe : chaque tirage sort AU rang annoncé, seul le jet varie.
+    for (let seed = 1; seed <= 60; seed++) {
+      expect(outfitFromItem(mulberry32(seed), item('primordial'), rare, 40)!.rarity).toBe(cls);
+      expect(outfitFromItem(mulberry32(seed), item('commun'), rare, 40)!.rarity).toBe('commun');
+    }
+  });
+  it('ordre conseillé : pièce au rang de l’aventurier d’abord, emplacement vide, objet le moins précieux', () => {
+    const cible = { ...refAdventurer(40, 1), gear: { weapon: 'x' } };
+    const cls = advRarity(cible);
+    const up = RANK_ORDER[Math.min(RANK_ORDER.length - 1, RARITY_RANK[cls] + 2)]!;
+    const it = (id: string, slot: string, rarity: string) =>
+      ({
+        id,
+        slot,
+        name: id,
+        emoji: '⚔️',
+        rarity,
+        level: 40,
+        baseLevel: 40,
+        effect: { type: 'damage_pct', value: 10 },
+      }) as never;
+    const rows = outfitOptions(
+      [
+        it('bas', 'armor', 'commun'),
+        it('precieux', 'armor', up),
+        it('juste', 'armor', cls),
+        it('occupe', 'weapon', cls),
+        it('fam', 'familiar', cls),
+        { ...(it('lock', 'armor', cls) as object), locked: true } as never,
+      ],
+      cible,
+    );
+    expect(rows.map((r) => r.item.id)).toEqual(['juste', 'precieux', 'occupe', 'bas']);
+    expect(rows.find((r) => r.item.id === 'bas')!.capped).toBe(true);
+    expect(rows.find((r) => r.item.id === 'bas')!.rank).toBe('commun');
+    expect(rows.find((r) => r.item.id === 'precieux')!.rank).toBe(cls);
+    expect(rows.find((r) => r.item.id === 'occupe')!.emptySlot).toBe(false);
+  });
+  it('les fabrications se mettent en FILE : chacune après la précédente', () => {
+    const d = outfitterMsFor(10);
+    expect(nextForgeUntil([], 1000, 10)).toBe(1000 + d);
+    const p = rollAdvGear(mulberry32(1), { lineage: 'mage', level: 10, playerLevel: 10 });
+    const q = [{ until: 1000 + d, advId: 'a', piece: p }];
+    expect(nextForgeUntil(q, 1000, 10)).toBe(1000 + 2 * d);
+    // Une file terminée ne retarde rien.
+    expect(nextForgeUntil(q, 1000 + 5 * d, 10)).toBe(1000 + 6 * d);
+  });
+  it('une fabrication est bien plus courte qu’avant (10 min à neuf)', () => {
+    expect(outfitterMsFor(0)).toBe(10 * 60_000);
   });
   it('règlement idempotent : rien avant l’échéance, la pièce au stock après', () => {
     const piece0 = rollAdvGear(mulberry32(1), { lineage: 'mage', level: 10, playerLevel: 10 });
-    const s = { stock: [], forge: { until: 100, advId: 'a', piece: piece0 } };
+    const s = {
+      stock: [],
+      forges: [
+        { until: 100, advId: 'a', piece: piece0 },
+        { until: 150, advId: 'b', piece: piece0 },
+      ],
+    };
     expect(settleOutfit(s, 99)).toBe(s);
-    const done = settleOutfit(s, 100);
-    expect(done.stock).toHaveLength(1);
-    expect(done.forge).toBeNull();
-    expect(settleOutfit(done, 200)).toBe(done);
+    const one = settleOutfit(s, 100);
+    expect(one.stock).toHaveLength(1);
+    expect(one.forges.map((f) => f.advId)).toEqual(['b']);
+    const done = settleOutfit(one, 200);
+    expect(done.stock).toHaveLength(2);
+    expect(done.forges).toEqual([]);
+    expect(settleOutfit(done, 300)).toBe(done);
+    // Deux échues d'un coup (absence) : les deux arrivent, ids distincts.
+    const both = settleOutfit(s, 1000);
+    expect(new Set(both.stock.map((g) => g.id)).size).toBe(2);
   });
   it('sans lignée ou objet 🔒/familier, rien à fabriquer', () => {
     const cible = { ...adv('a', ['archer']), level: 12 };
@@ -584,10 +693,9 @@ describe('⚒️ Équipementier', () => {
     expect(outfitFromItem(mulberry32(2), { ...arme, locked: true } as never, cible, 90)).toBeNull();
   });
   it('la pièce fabriquée reste PORTABLE par la cible — même un objet primordial sur une recrue de haut niveau', () => {
-    // ⚠️ Ruling du contrôleur : le rang est tiré autour du NIVEAU de la cible, pas de sa
-    // CLASSE — un archer resté à sa classe de départ (commune) mais monté au niveau 95
-    // verrait sinon débarquer une pièce quasi primordiale, que `canWearAdvGear` refuserait
-    // pour toujours. La fabrication vise un aventurier NOMMÉ : la pièce doit lui aller.
+    // ⚠️ Le rang est celui de la CLASSE de la cible (v0.881), jamais de son niveau : un
+    // archer resté à sa classe de départ mais monté au niveau 95 recevrait sinon une pièce
+    // que `canWearAdvGear` refuserait pour toujours. La pièce doit aller à son destinataire.
     const cible = { ...adv('a', ['archer']), level: 95 }; // classe commune, très haut niveau
     const hero = {
       id: 'h',

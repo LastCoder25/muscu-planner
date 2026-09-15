@@ -11,7 +11,34 @@
       </p>
 
       <template v-else>
-        <!-- ⚠️ LE RECRUTEMENT EN TÊTE, et dans sa propre feuille (signalé). Il vivait
+        <!-- 🗂️ DEUX ONGLETS (v0.881, demandé) : le vivier, et le STOCK d'équipement où l'on
+             voit ses pièces et les confie. Le stock vivait replié sous le vivier, hors écran
+             dès quelques aventuriers. -->
+        <div v-if="roster.length" class="g-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            class="g-tab"
+            :class="{ on: guildTab === 'roster' }"
+            :aria-selected="guildTab === 'roster'"
+            @click="guildTab = 'roster'"
+          >
+            ⚔️ Aventuriers
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="g-tab"
+            :class="{ on: guildTab === 'stock' }"
+            :aria-selected="guildTab === 'stock'"
+            @click="guildTab = 'stock'"
+          >
+            🗡️ Stock <span class="g-tab-n">{{ char.advGearStock.length }}</span>
+          </button>
+        </div>
+
+        <template v-if="guildTab === 'roster' || !roster.length">
+          <!-- ⚠️ LE RECRUTEMENT EN TÊTE, et dans sa propre feuille (signalé). Il vivait
              tout au FOND du panneau, sous la liste : à dix aventuriers, le choix de la
              première classe — celui qui engage une LIGNÉE entière — se trouvait hors
              écran et se lisait mal. Il suit désormais le patron de la promotion : un
@@ -19,143 +46,179 @@
              ⚠️ Déplacé dans le DOM, PAS par `order` : `.guild-card` n'est pas un
              conteneur flex, donc un `order: -1` n'aurait rien fait — et la rendre flex
              aurait déplacé la mise en page des quatre feuilles qui partagent la classe. -->
-        <button
-          v-if="roster.length < maxRoster"
-          class="voie-btn g-hire"
-          :disabled="busy || gold < cost"
-          @click="recruitOpen = true"
-        >
-          ➕ Recruter un aventurier — {{ cost }} 🪙
-        </button>
-        <div v-else class="g-note g-full">
-          Guilde pleine ({{ roster.length }}/{{ maxRoster }}). <b>Monte-la d’un niveau</b> pour
-          loger quelqu’un de plus.
-        </div>
-        <!-- ✨ CONFIER AU MIEUX, EN TÊTE (demandé) : un compagnon et un talent à chacun,
+          <button
+            v-if="roster.length < maxRoster"
+            class="voie-btn g-hire"
+            :disabled="busy || gold < cost"
+            @click="recruitOpen = true"
+          >
+            ➕ Recruter un aventurier — {{ cost }} 🪙
+          </button>
+          <div v-else class="g-note g-full">
+            Guilde pleine ({{ roster.length }}/{{ maxRoster }}). <b>Monte-la d’un niveau</b> pour
+            loger quelqu’un de plus.
+          </div>
+          <!-- ✨ CONFIER AU MIEUX, EN TÊTE (demandé) : un compagnon et un talent à chacun,
              selon son profil, dans les règles des sélecteurs. ⚠️ Il ANNONCE ce qu'il va
              faire avant qu'on touche (gain de puissance, nombre de changements) et se tait
              quand il n'y a rien à gagner : il remplace les choix faits à la main, on ne
              doit pas le découvrir après coup. -->
-        <template v-if="roster.length">
-          <!-- 🎨 UN BOUTON QUI SE LIT EN TROIS TEMPS (demandé : « plus design ») : l’action
+          <template v-if="roster.length">
+            <!-- 🎨 UN BOUTON QUI SE LIT EN TROIS TEMPS (demandé : « plus design ») : l’action
                (pastille ✨ + titre), ce qu’elle touche (sous-titre), ce qu’elle rapporte
                (le gain, en vert, là où l’œil finit). Au repos il se calme — contour
                neutre, coche verte — pour ne pas appeler un geste qui ne sert à rien. -->
-          <button
-            type="button"
-            class="g-auto"
-            :class="{ idle: !autoPreview.changes }"
-            :disabled="busy || !autoPreview.changes"
-            @click="autoPair"
-          >
-            <span class="ga-ico" aria-hidden="true">{{ autoPreview.changes ? '✨' : '✓' }}</span>
-            <span class="ga-txt">
-              <span class="ga-title">{{
-                autoPreview.changes ? 'Confier au mieux' : 'Tout est déjà au mieux'
-              }}</span>
-              <span class="ga-sub">
-                🐾 familiers · 🧠 talents · 🗡️ équipement<template v-if="autoPreview.changes">
-                  · {{ autoPreview.changes }} aventurier{{
-                    autoPreview.changes > 1 ? 's' : ''
-                  }}</template
-                >
+            <button
+              type="button"
+              class="g-auto"
+              :class="{ idle: !autoPreview.changes }"
+              :disabled="busy || !autoPreview.changes"
+              @click="autoPair"
+            >
+              <span class="ga-ico" aria-hidden="true">{{ autoPreview.changes ? '✨' : '✓' }}</span>
+              <span class="ga-txt">
+                <span class="ga-title">{{
+                  autoPreview.changes ? 'Confier au mieux' : 'Tout est déjà au mieux'
+                }}</span>
+                <span class="ga-sub">
+                  🐾 familiers · 🧠 talents · 🗡️ équipement<template v-if="autoPreview.changes">
+                    · {{ autoPreview.changes }} aventurier{{
+                      autoPreview.changes > 1 ? 's' : ''
+                    }}</template
+                  >
+                </span>
               </span>
-            </span>
-            <span v-if="autoPreview.changes && autoPreview.gain > 0" class="ga-gain">
-              +{{ fmtPow(autoPreview.gain) }}<small>⚔️</small>
-            </span>
-          </button>
-          <div v-if="autoPreview.changes" class="g-note dim ga-note">
-            Remplace les choix faits à la main.
+              <span v-if="autoPreview.changes && autoPreview.gain > 0" class="ga-gain">
+                +{{ fmtPow(autoPreview.gain) }}<small>⚔️</small>
+              </span>
+            </button>
+            <div v-if="autoPreview.changes" class="g-note dim ga-note">
+              Remplace les choix faits à la main.
+            </div>
+            <!-- 🗡️ ÉQUIPER TOUT LE MONDE (v0.881, demandé) : l'équipement SEUL — compagnons et
+               talents ne bougent pas. Même langage que « Confier au mieux ». -->
+            <button
+              type="button"
+              class="g-auto"
+              :class="{ idle: !gearAutoPreview.changes }"
+              :disabled="busy || !gearAutoPreview.changes"
+              @click="autoGear"
+            >
+              <span class="ga-ico" aria-hidden="true">{{
+                gearAutoPreview.changes ? '🗡️' : '✓'
+              }}</span>
+              <span class="ga-txt">
+                <span class="ga-title">{{
+                  gearAutoPreview.changes ? 'Équiper tout le monde' : 'Équipement déjà au mieux'
+                }}</span>
+                <span class="ga-sub">
+                  🗡️ équipement seul<template v-if="gearAutoPreview.changes">
+                    · {{ gearAutoPreview.changes }} aventurier{{
+                      gearAutoPreview.changes > 1 ? 's' : ''
+                    }}</template
+                  >
+                </span>
+              </span>
+              <span v-if="gearAutoPreview.changes && gearAutoPreview.gain > 0" class="ga-gain">
+                +{{ fmtPow(gearAutoPreview.gain) }}<small>⚔️</small>
+              </span>
+            </button>
+          </template>
+          <!-- ── Le vivier ── -->
+          <div v-if="!roster.length" class="g-empty">
+            Personne encore. Recrute ton premier aventurier — il escortera tes caravanes.
           </div>
-        </template>
-        <!-- ── Le vivier ── -->
-        <div v-if="!roster.length" class="g-empty">
-          Personne encore. Recrute ton premier aventurier — il escortera tes caravanes.
-        </div>
-        <!-- 🖼️ LE VIVIER EN PORTRAITS (v0.807 ; demandé par l'utilisateur) : chaque
+          <!-- 🖼️ LE VIVIER EN PORTRAITS (v0.807 ; demandé par l'utilisateur) : chaque
              aventurier est présenté comme le héros à l'entrée de l'Aventure — avatar au
              centre selon sa classe, étoiles de rang sur l'anneau, quatre ronds aux coins.
              Toucher le portrait ouvre sa FICHE ; toucher le familier ou le talent de
              l'avatar ouvre directement leur sélecteur. -->
-        <div v-if="roster.length" class="adv-grid">
-          <AdventurerPortrait
-            v-for="a in rosterSorted"
-            :key="a.id"
-            :adv="a"
-            :look="lookOf(a)"
-            :familiar="famOf(a)"
-            :talent-icon="talIconOf(a)"
-            :power="powerOf(a)"
-            :state="stateOf(a)"
-            :promotable="canPromoteOne(a)"
-            :disabled="busy"
-            @open="detailAdv = a"
-            @familiar="pairFor = a"
-            @talent="talFor = a"
-            @promote="openPromo(a)"
-          />
-        </div>
+          <div v-if="roster.length" class="adv-grid">
+            <AdventurerPortrait
+              v-for="a in rosterSorted"
+              :key="a.id"
+              :adv="a"
+              :look="lookOf(a)"
+              :familiar="famOf(a)"
+              :talent-icon="talIconOf(a)"
+              :power="powerOf(a)"
+              :state="stateOf(a)"
+              :promotable="canPromoteOne(a)"
+              :disabled="busy"
+              :gear="gearCellsOf(a)"
+              @gear="(slot) => (gearPick = { advId: a.id, slot })"
+              @open="detailAdv = a"
+              @familiar="pairFor = a"
+              @talent="talFor = a"
+              @promote="openPromo(a)"
+            />
+          </div>
+        </template>
 
-        <!-- ── 🗡️ LE STOCK D'ÉQUIPEMENT — replié par défaut, sous le vivier ──────────
+        <!-- ── 🗡️ LE STOCK D'ÉQUIPEMENT (onglet) ─────────────────────────────────────
              ⚠️ Ce n'est PAS le sac du héros : ces pièces sont propres à chaque classe de
              base (`canWearAdvGear`) — fabriquées par l'Équipementier, ou tombées des
              cadavres d'un siège et des embuscades repoussées (jamais du butin du héros).
+             « Équiper » ouvre la liste des aventuriers qui peuvent la porter.
              🔒 / 🪙 / 🔩 comme le sac, désactivés si portée. -->
-        <button
-          v-if="char.advGearStock.length"
-          type="button"
-          class="g-fold"
-          :aria-expanded="stockOpen"
-          @click="stockOpen = !stockOpen"
-        >
-          <span>🗡️ Équipement des aventuriers ({{ char.advGearStock.length }})</span>
-          <span class="fold-ico">{{ stockOpen ? '▾' : '▸' }}</span>
-        </button>
-        <div v-if="stockOpen" class="gear-stock">
-          <div v-for="g in char.advGearStock" :key="g.id" class="gear-stock-row">
-            <div class="gear-stock-top">
-              <span class="d-pair-emo">{{ g.emoji }}</span>
-              <span class="d-pair-main">
-                <span class="d-pair-name">
-                  <b :style="{ color: rarityRank(g.rarity).color }">{{ g.name }}</b>
-                  <span class="d-train">niv {{ g.level }}</span>
+        <template v-else>
+          <p v-if="!char.advGearStock.length" class="g-empty">
+            Aucune pièce en stock. L’<b>Équipementier</b> en fabrique à partir des objets de ton
+            sac, et les sièges repoussés comme les embuscades en laissent tomber.
+          </p>
+          <div v-else class="gear-stock">
+            <div v-for="g in stockSorted" :key="g.id" class="gear-stock-row">
+              <div class="gear-stock-top">
+                <span class="d-pair-emo">{{ g.emoji }}</span>
+                <span class="d-pair-main">
+                  <span class="d-pair-name">
+                    <b :style="{ color: rarityRank(g.rarity).color }">{{ g.name }}</b>
+                    <span class="d-train">niv {{ g.level }}</span>
+                  </span>
+                  <span class="d-pair-sub">{{ lineageLabel(g.lineage) }}</span>
+                  <span v-for="(t, i) in gearEffectTexts(g)" :key="i" class="d-gain">{{ t }}</span>
+                  <span v-if="ownerOf(g)" class="d-pair-sub warn"
+                    >portée par {{ ownerOf(g)?.name }}</span
+                  >
                 </span>
-                <span class="d-pair-sub">{{ lineageLabel(g.lineage) }}</span>
-                <span v-for="(t, i) in gearEffectTexts(g)" :key="i" class="d-gain">{{ t }}</span>
-                <span v-if="ownerOf(g)" class="d-pair-sub warn"
-                  >portée par {{ ownerOf(g)?.name }}</span
+              </div>
+              <div class="gear-actions-row">
+                <button
+                  type="button"
+                  class="gear-btn equip"
+                  :disabled="busy"
+                  @click="stockEquip = g"
                 >
-              </span>
-            </div>
-            <div class="gear-actions-row">
-              <button
-                type="button"
-                class="gear-btn"
-                :class="{ active: g.locked }"
-                @click="toggleGearLock(g)"
-              >
-                {{ g.locked ? '🔒' : '🔓' }}
-              </button>
-              <button
-                type="button"
-                class="gear-btn"
-                :disabled="!!g.locked || !!ownerOf(g)"
-                @click="sellOneGear(g)"
-              >
-                🪙 {{ advGearSellValue(g) }}
-              </button>
-              <button
-                type="button"
-                class="gear-btn"
-                :disabled="!!g.locked || !!ownerOf(g)"
-                @click="recycleOneGear(g)"
-              >
-                🔩 {{ advGearScrap(g) }}
-              </button>
+                  🗡️ {{ ownerOf(g) ? 'Changer' : 'Équiper' }}
+                </button>
+                <button
+                  type="button"
+                  class="gear-btn"
+                  :class="{ active: g.locked }"
+                  @click="toggleGearLock(g)"
+                >
+                  {{ g.locked ? '🔒' : '🔓' }}
+                </button>
+                <button
+                  type="button"
+                  class="gear-btn"
+                  :disabled="!!g.locked || !!ownerOf(g)"
+                  @click="sellOneGear(g)"
+                >
+                  🪙 {{ advGearSellValue(g) }}
+                </button>
+                <button
+                  type="button"
+                  class="gear-btn"
+                  :disabled="!!g.locked || !!ownerOf(g)"
+                  @click="recycleOneGear(g)"
+                >
+                  🔩 {{ advGearScrap(g) }}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </template>
       </template>
 
       <div class="g-actions">
@@ -299,7 +362,7 @@
         <span class="d-stat">⚡ {{ statsOf(detailAdv).agilite }}</span>
       </div>
 
-      <!-- 🗡️ SES 3 EMPLACEMENTS D'ÉQUIPEMENT — une pièce par métier, jamais deux fois
+      <!-- 🗡️ SES 4 EMPLACEMENTS D'ÉQUIPEMENT — une pièce par métier, jamais deux fois
            la même stat qu'un objet du héros : le Chenil n'y est pour rien, c'est
            l'Équipementier qui les fabrique et le sélecteur qui filtre par lignée et
            rareté de classe (`canWearAdvGear`). -->
@@ -509,6 +572,59 @@
     </q-card>
   </q-dialog>
 
+  <!-- ── À QUI CONFIER CETTE PIÈCE ? (depuis le stock) ─────────────────────
+       ⚠️ Seuls ceux qui PEUVENT la porter sont proposés (`canWearAdvGear` : son métier,
+       rang de sa classe) — les autres sont comptés, par raison. -->
+  <q-dialog :model-value="!!stockEquip" position="bottom" @update:model-value="stockEquip = null">
+    <q-card v-if="stockEquip && stockEquipRows" class="guild-card">
+      <div class="g-head">
+        <div class="g-title font-display">
+          {{ stockEquip.emoji }}
+          <span :style="{ color: rarityRank(stockEquip.rarity).color }">{{ stockEquip.name }}</span>
+        </div>
+        <button class="iconbtn" aria-label="Fermer" @click="stockEquip = null">✕</button>
+      </div>
+      <p class="g-note">
+        {{ lineageLabel(stockEquip.lineage) }} · rang {{ rarityRank(stockEquip.rarity).name }} ·
+        {{ advGearEffectTexts(stockEquip).join(' · ') }}
+      </p>
+      <p class="g-note">{{ GAIN_NOTE }}</p>
+      <button v-if="ownerOf(stockEquip)" class="cta ghost" :disabled="busy" @click="unequipStock">
+        Retirer à {{ ownerOf(stockEquip)?.name }}
+      </button>
+      <p v-if="!stockEquipRows.rows.length" class="g-note">
+        Personne ne peut la porter pour l’instant.
+      </p>
+      <p v-if="stockEquipRows.hidden" class="g-note dim">{{ stockEquipRows.hidden }}</p>
+      <button
+        v-for="r in stockEquipRows.rows"
+        :key="r.a.id"
+        type="button"
+        class="d-pick"
+        :class="{ here: r.here }"
+        :disabled="busy || r.here"
+        @click="equipStock(r.a)"
+      >
+        <span class="d-pair-emo">{{ titleOf(r.a)?.emoji ?? '🧑' }}</span>
+        <span class="d-pair-main">
+          <span class="d-pair-name">
+            <b>{{ r.a.name }}</b>
+            <span class="d-train" :style="{ color: rankOf(r.a).color }">{{
+              rankOf(r.a).name
+            }}</span>
+          </span>
+          <span class="d-pair-sub">{{
+            r.wearing ? 'porte ' + r.wearing : 'emplacement vide'
+          }}</span>
+          <span class="d-gain" :class="{ neg: r.power < r.cur }">
+            ⚔️ {{ fmtDelta(r.cur, r.power) }}
+          </span>
+        </span>
+      </button>
+      <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="stockEquip = null" /></div>
+    </q-card>
+  </q-dialog>
+
   <!-- ── SÉLECTEUR DE PIÈCE D'ÉQUIPEMENT ───────────────────────────────────
        ⚠️ Seules les pièces permises pour SON métier et SA classe sont listées
        (`advGearOptions` : `canWearAdvGear`) — le reste est compté, par raison. -->
@@ -586,14 +702,12 @@ import {
 import { rankStarStr } from '@/lib/characterRank';
 import {
   rarityRank,
+  RARITY_RANK,
   FAMILIAR_SLOT,
   aggregateLines,
   famLevel,
   famXp,
   rollJet,
-  effectLabelFor,
-  itemLevelMult,
-  round1,
   type Item,
 } from '@/lib/items';
 import {
@@ -620,14 +734,17 @@ import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import { trainMsFor, companionEffects, advTalentEffects } from '@/lib/caravan';
 import {
   ADV_GEAR_SLOTS,
-  LINEAGE_GEAR,
+  advGearCells,
+  advGearEffectTexts,
   advGearOptions,
   advGearScrap,
   advGearSellValue,
   advLooks,
+  canWearAdvGear,
   lineageOf,
   wornGear,
   type AdvGear,
+  type AdvGearCell,
   type AdvGearSlot,
   type AdvLook,
   type Lineage,
@@ -884,6 +1001,32 @@ function autoPair() {
     });
   });
 }
+/** Ce que « Équiper tout le monde » ferait, AVANT de toucher : le MÊME plan que le store
+ *  (`autoAdvGear`), compagnons et talents inchangés. */
+const gearAutoPreview = computed(() => {
+  const advs = char.advList;
+  const ctx = compCtx.value;
+  const plan = autoAdvGear(advs, ctx);
+  let changes = 0;
+  const after = advs.map((a) => {
+    const g = plan.get(a.id) ?? {};
+    if (ADV_GEAR_SLOTS.some((s) => (g[s] ?? null) !== (a.gear?.[s] ?? null))) changes++;
+    return { ...a, gear: g };
+  });
+  const sum = (m: Map<string, number>) => [...m.values()].reduce((x, v) => x + v, 0);
+  return { changes, gain: sum(adventurerPowers(after, ctx)) - sum(powers.value) };
+});
+function autoGear() {
+  void pair(async (uid) => {
+    const before = rosterPower();
+    const n = await char.autoEquipAdventurers(uid, Date.now());
+    if (n == null) return;
+    $q.notify({
+      type: 'positive',
+      message: `🗡️ ${n} pièce(s) portée(s) · puissance du vivier ${fmtPow(before)} → ${fmtPow(rosterPower())}`,
+    });
+  });
+}
 function assignTal(id: string | null) {
   const a = talFor.value;
   if (!a) return;
@@ -891,7 +1034,7 @@ function assignTal(id: string | null) {
   void pair((uid) => char.setAdvTalent(uid, a.id, id));
 }
 
-// ── 🗡️ SON ÉQUIPEMENT : 3 emplacements (arme/armure/accessoire), propres à SON métier ──
+// ── 🗡️ SON ÉQUIPEMENT : 4 emplacements (arme/armure/accessoire/relique), propres à SON métier ──
 // ⚠️ Distinct du compagnon et du talent : ces pièces vivent dans un STOCK séparé
 // (`char.advGearStock`), pas dans le sac du héros, et sont plafonnées par la RARETÉ DE
 // SA CLASSE (`canWearAdvGear`) — même règle que les deux autres, appliquée par le store.
@@ -933,48 +1076,17 @@ function lookOf(a: Adventurer): AdvLook {
   // Le portrait itère sur `rosterSorted`, dérivé de `char.advList` : l'entrée existe toujours.
   return looks.value.get(a.id) ?? { profile: 'polyvalent', gear: {}, weaponKind: 'lame' };
 }
-function wornOf(a: Adventurer): Partial<Record<AdvGearSlot, AdvGear>> {
-  return Object.fromEntries((gearWorn.value.get(a.id) ?? []).map((g) => [g.slot, g]));
+/** Les 4 cases de chaque aventurier (portrait 2×2 ET fiche), calculées par la lib
+ *  (`advGearCells`) sur ce que `wornGear` retient — un seul calcul pour tout le vivier,
+ *  sans dépendance à l'horloge du panneau. */
+const gearCells = computed(
+  () => new Map(char.advList.map((a) => [a.id, advGearCells(a, gearWorn.value.get(a.id) ?? [])])),
+);
+function gearCellsOf(a: Adventurer): AdvGearCell[] {
+  return gearCells.value.get(a.id) ?? advGearCells(a, []);
 }
-/** Les 3 emplacements de la fiche, pré-calculés : ni `!` non-null, ni appel répété. */
-const detailGearSlots = computed(() => {
-  const a = detailAdv.value;
-  if (!a) return [];
-  const worn = wornOf(a);
-  const l = lineageOf(a);
-  const defs = l ? LINEAGE_GEAR[l].pieces : null;
-  return ADV_GEAR_SLOTS.map((slot) => {
-    const piece = worn[slot];
-    if (piece)
-      return {
-        slot,
-        piece,
-        emoji: piece.emoji,
-        name: piece.name,
-        color: rarityRank(piece.rarity).color,
-        rank: rarityRank(piece.rarity).name,
-        stat: gearEffectTexts(piece)[0],
-      };
-    const d = defs?.[slot];
-    return {
-      slot,
-      piece: undefined,
-      emoji: d?.emoji ?? '＋',
-      name: d?.name ?? 'Emplacement',
-      color: undefined as string | undefined,
-      rank: undefined as string | undefined,
-      stat: undefined as string | undefined,
-    };
-  });
-});
-/** L'effet d'une pièce, EXACTEMENT comme le combat le lit — valeur × niveau d'objet,
- *  comme un objet du héros (`advGearEffects`). Deux textes au plus (effet + effet2). */
-function gearEffectTexts(g: AdvGear): string[] {
-  const m = itemLevelMult(g.level);
-  const out = [effectLabelFor(g.effect.type, round1(g.effect.value * m))];
-  if (g.effect2) out.push(effectLabelFor(g.effect2.type, round1(g.effect2.value * m)));
-  return out;
-}
+const detailGearSlots = computed(() => (detailAdv.value ? gearCellsOf(detailAdv.value) : []));
+const gearEffectTexts = advGearEffectTexts;
 /** Ce que l'aventurier vaudrait avec CETTE pièce à CET emplacement — calculé par
  *  `adventurerGearPower` (le MÊME arbitre que `pairBonusOf`, `combatPower` sur les
  *  paires du vivier complet), mais SANS recalculer la puissance de tout le monde à
@@ -1035,10 +1147,73 @@ function pickGear(id: string | null) {
   void pair((uid) => char.setAdvGear(uid, p.advId, p.slot, id));
 }
 
-// ── 🗡️ LE STOCK — vendre / recycler / verrouiller une pièce d'aventurier ──
+// ── 🗂️ ONGLETS ──
+const guildTab = ref<'roster' | 'stock'>('roster');
+
+// ── 🗡️ LE STOCK — équiper / vendre / recycler / verrouiller une pièce d'aventurier ──
 // ⚠️ Même politique que le sac du héros : 🔒 protège des deux, une pièce PORTÉE
 // (`Adventurer.gear`, BRUT — même lecture que `dropAdvGear` côté store) ne se cède pas.
-const stockOpen = ref(false);
+/** Le stock, du rang le plus haut au plus bas, puis par emplacement. */
+const stockSorted = computed(() =>
+  [...char.advGearStock].sort(
+    (a, b) =>
+      RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] ||
+      ADV_GEAR_SLOTS.indexOf(a.slot) - ADV_GEAR_SLOTS.indexOf(b.slot) ||
+      b.level - a.level,
+  ),
+);
+/** La pièce du stock qu'on est en train de confier. */
+const stockEquip = ref<AdvGear | null>(null);
+watch(stockEquip, (g) => {
+  if (g) gearOpenedAt.value = Date.now();
+});
+/** Qui peut la porter, avec ce qu'il y gagnerait (même arbitre que le sélecteur par case,
+ *  même contexte figé à l'ouverture). */
+const stockEquipRows = computed(() => {
+  const g = stockEquip.value;
+  if (!g) return null;
+  let otherLineage = 0;
+  let tooRare = 0;
+  const rows = [];
+  for (const a of char.advList) {
+    if (lineageOf(a) !== g.lineage) {
+      otherLineage++;
+      continue;
+    }
+    if (!canWearAdvGear(a, g)) {
+      tooRare++;
+      continue;
+    }
+    const curId = a.gear?.[g.slot];
+    const wearing = curId ? char.advGearStock.find((x) => x.id === curId)?.name : undefined;
+    rows.push({
+      a,
+      here: curId === g.id,
+      wearing,
+      cur: adventurerGearPower(char.advList, a, g.slot, curId, gearPickCtx.value),
+      power: adventurerGearPower(char.advList, a, g.slot, g.id, gearPickCtx.value),
+    });
+  }
+  rows.sort((x, y) => y.power - y.cur - (x.power - x.cur));
+  const p: string[] = [];
+  if (tooRare)
+    p.push(`${tooRare} de son métier dont la classe est trop basse — promeus-les d’abord`);
+  if (otherLineage) p.push(`${otherLineage} d’un autre métier`);
+  return { rows, hidden: p.length ? `Masqués : ${p.join(' · ')}.` : '' };
+});
+function equipStock(a: Adventurer) {
+  const g = stockEquip.value;
+  if (!g) return;
+  stockEquip.value = null;
+  void pair((uid) => char.setAdvGear(uid, a.id, g.slot, g.id));
+}
+function unequipStock() {
+  const g = stockEquip.value;
+  const owner = g ? ownerOf(g) : undefined;
+  if (!g || !owner) return;
+  stockEquip.value = null;
+  void pair((uid) => char.setAdvGear(uid, owner.id, g.slot, null));
+}
 const gearOwnerOf = computed(() => {
   const m = new Map<string, Adventurer>();
   for (const a of char.advList)
@@ -1940,6 +2115,41 @@ async function doPromote(classId: string) {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+}
+.g-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+.g-tab {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.g-tab.on {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.g-tab-n {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--line);
+  color: var(--text);
+  font-size: 12px;
+}
+.gear-btn.equip {
+  flex: 1.4;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  color: var(--text);
 }
 .gear-btn.active {
   border-color: var(--accent);

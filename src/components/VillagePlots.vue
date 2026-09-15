@@ -110,37 +110,68 @@
               <span class="pp-tx">{{ milestone.text }}</span>
             </div>
           </div>
-          <!-- ⚒️ L'ÉQUIPEMENTIER : un objet du sac devient une pièce pour un aventurier,
-               faite pour son métier. Fabrication asymptotique (Task 7). -->
+          <!-- ⚒️ L'ÉQUIPEMENTIER (v0.881, demandé : « création plus rapide ») : on touche un
+               aventurier, puis l'objet à fondre — la pièce qui en sortira est annoncée sur
+               la ligne (emplacement + rang). Les fabrications se mettent en FILE. La pièce
+               sort au RANG de l'aventurier, jamais au-dessus de l'objet fourni. -->
           <div v-if="selectedPlot.building.typeId === 'outfitter'" class="of">
-            <template v-if="outfitForge">
-              <div class="of-run">
-                ⚒️ En fabrication pour <b>{{ outfitForge.advName }}</b> · encore
-                {{ fmtSpan(outfitForge.leftMs) }}
+            <div v-if="outfitQueue.length" class="of-queue">
+              <div class="of-t">⚒️ En fabrication · {{ outfitQueue.length }}</div>
+              <div v-for="(j, i) in outfitQueue" :key="i" class="of-q">
+                <span>{{ j.emoji }}</span>
+                <span class="of-q-main">
+                  {{ j.name }} <b :style="{ color: j.color }">{{ j.rank }}</b> pour {{ j.advName }}
+                </span>
+                <span class="of-q-left">{{ fmtSpan(j.leftMs) }}</span>
               </div>
-            </template>
-            <template v-else>
-              <div class="of-row">
-                <select v-model="outfitAdvId" class="of-select" aria-label="Aventurier">
-                  <option value="" disabled>Aventurier…</option>
-                  <option v-for="a in char.advList" :key="a.id" :value="a.id">
-                    {{ a.name }}
-                  </option>
-                </select>
-                <select v-model="outfitItemId" class="of-select" aria-label="Objet du sac">
-                  <option value="" disabled>Objet du sac…</option>
-                  <option v-for="it in outfitCandidates" :key="it.id" :value="it.id">
-                    {{ it.emoji }} {{ it.name }} · {{ gradeLabel(it) }}
-                  </option>
-                </select>
-              </div>
-              <div v-if="outfitTargetLabel" class="of-target">→ {{ outfitTargetLabel }}</div>
+            </div>
+            <div class="of-t">Pour qui ?</div>
+            <p v-if="!outfitAdvs.length" class="of-note">
+              Recrute d’abord un aventurier à la Guilde.
+            </p>
+            <div v-else class="of-advs">
               <button
-                class="pm-btn up"
-                :disabled="outfitBusy || !outfitAdvId || !outfitItemId"
-                @click="doOutfit"
+                v-for="a in outfitAdvs"
+                :key="a.id"
+                type="button"
+                class="of-adv"
+                :class="{ on: outfitAdvId === a.id }"
+                @click="outfitAdvId = a.id"
               >
-                ⚒️ Fabriquer · {{ fmtSpan(outfitterMsFor(selectedPlot.building.level)) }}
+                <span>{{ a.emoji }}</span>
+                <span class="of-adv-n">{{ a.name }}</span>
+                <span class="of-adv-r" :style="{ color: a.color }">{{ a.rank }}</span>
+              </button>
+            </div>
+            <template v-if="outfitAdv">
+              <div class="of-t">
+                Quel objet fondre ?
+                <span class="of-sub">
+                  pièce au rang de {{ outfitAdv.name }}, jamais au-dessus de l’objet ·
+                  {{ fmtSpan(outfitterMsFor(selectedPlot.building.level)) }} chacune
+                </span>
+              </div>
+              <p v-if="!outfitRows.length" class="of-note">Aucun objet à fondre dans ton sac.</p>
+              <button
+                v-for="r in outfitRows"
+                :key="r.item.id"
+                type="button"
+                class="of-item"
+                :disabled="outfitBusy"
+                @click="doOutfit(r)"
+              >
+                <span class="of-from">
+                  {{ r.item.emoji }} {{ r.item.name }}
+                  <span :style="{ color: rarityRank(r.item.rarity).color }">{{
+                    gradeLabel(r.item)
+                  }}</span>
+                </span>
+                <span class="of-to">
+                  → {{ r.emoji }} {{ r.name }}
+                  <b :style="{ color: rarityRank(r.rank).color }">{{ rarityRank(r.rank).name }}</b>
+                  <span v-if="r.capped" class="of-warn">↓ objet plus bas</span>
+                  <span v-else-if="r.emptySlot" class="of-ok">emplacement vide</span>
+                </span>
               </button>
             </template>
           </div>
@@ -198,9 +229,16 @@ import { useQuasar } from 'quasar';
 import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
-import { guildRoster } from '@/lib/adventurers';
-import { altarLuckBonus, FAMILIAR_SLOT, gradeLabel, type Item } from '@/lib/items';
-import { LINEAGE_GEAR, lineageOf, outfitSlot, outfitterMsFor } from '@/lib/advGear';
+import { advRarity, advTitle, guildRoster } from '@/lib/adventurers';
+import {
+  altarLuckBonus,
+  FAMILIAR_SLOT,
+  TROPHY_SLOT,
+  gradeLabel,
+  rarityRank,
+  type Item,
+} from '@/lib/items';
+import { lineageOf, outfitOptions, outfitterMsFor, type OutfitOption } from '@/lib/advGear';
 import { fmtSpan } from '@/lib/raid';
 import {
   perLevelLabel,
@@ -464,7 +502,6 @@ function collectAll() {
 
 // ── ⚒️ L'ÉQUIPEMENTIER : un objet du sac devient une pièce pour un aventurier ──
 const outfitAdvId = ref('');
-const outfitItemId = ref('');
 const outfitBusy = ref(false);
 /** Objets du sac qui peuvent partir à la forge : ni 🔒, ni familier, ni porté par le
  *  héros — les mêmes exclusions que le store applique (`startOutfit`), pour que rien
@@ -473,52 +510,68 @@ const outfitCandidates = computed<Item[]>(() => {
   const cur = char.row;
   if (!cur) return [];
   return cur.inventory.filter(
-    (it) => it.slot !== FAMILIAR_SLOT && !it.locked && cur.equipped[it.slot]?.id !== it.id,
+    (it) =>
+      it.slot !== FAMILIAR_SLOT &&
+      it.slot !== TROPHY_SLOT &&
+      !it.locked &&
+      cur.equipped[it.slot]?.id !== it.id,
   );
 });
-/** La forge en cours, avec le nom de l'aventurier et le temps restant — piloté par
- *  `props.now` comme le reste des jauges de la feuille (récolte, aperçus). */
-const outfitForge = computed(() => {
-  const f = char.row?.adv_gear?.forge;
-  if (!f) return null;
-  const adv = char.advList.find((a) => a.id === f.advId);
-  return { advName: adv?.name ?? '?', leftMs: Math.max(0, f.until - props.now) };
-});
-/** Ce que la fabrication produira : slot + lignée de la cible, jamais la rareté (qui ne
- *  se décide qu'au tirage, à la validation). Purement dérivé des données du jeu
- *  (`outfitSlot`/`lineageOf`/`LINEAGE_GEAR`) : aucune règle recopiée. */
-const outfitTargetLabel = computed(() => {
-  const adv = char.advList.find((a) => a.id === outfitAdvId.value);
-  const item = outfitCandidates.value.find((it) => it.id === outfitItemId.value);
-  if (!adv || !item) return '';
-  const slot = outfitSlot(item.slot);
-  const lineage = lineageOf(adv);
-  if (!slot || !lineage) return '';
-  const piece = LINEAGE_GEAR[lineage].pieces[slot];
-  return `${piece.emoji} ${piece.name} pour ${adv.name}`;
-});
+/** Les aventuriers qu'on peut équiper (une lignée connue), avec leur rang de classe — le
+ *  rang des pièces qui sortiront pour eux. */
+const outfitAdvs = computed(() =>
+  char.advList
+    .filter((a) => lineageOf(a))
+    .map((a) => {
+      const rk = rarityRank(advRarity(a));
+      return {
+        id: a.id,
+        name: a.name,
+        emoji: advTitle(a)?.emoji ?? '🧑',
+        rank: rk.name,
+        color: rk.color,
+      };
+    }),
+);
+const outfitAdv = computed(() => char.advList.find((a) => a.id === outfitAdvId.value) ?? null);
+/** Les objets à fondre pour lui, dans l'ordre conseillé (`outfitOptions`, lib). */
+const outfitRows = computed(() =>
+  outfitAdv.value ? outfitOptions(outfitCandidates.value, outfitAdv.value) : [],
+);
+/** La FILE en cours, avec le temps restant de chaque pièce (piloté par `props.now`). */
+const outfitQueue = computed(() =>
+  (char.row?.adv_gear?.forges ?? []).map((f) => {
+    const rk = rarityRank(f.piece.rarity);
+    return {
+      emoji: f.piece.emoji,
+      name: f.piece.name,
+      rank: rk.name,
+      color: rk.color,
+      advName: char.advList.find((a) => a.id === f.advId)?.name ?? '?',
+      leftMs: Math.max(0, f.until - props.now),
+    };
+  }),
+);
 /** ⚠️ CONFIRMATION, comme la vente et le recyclage du sac : l'objet du héros est DÉTRUIT
- *  à la fabrication, sans retour possible. On le nomme, avec sa rareté, et on dit pour
- *  qui et quelle pièce — c'est tout ce qu'on sait avant le tirage. */
-function doOutfit() {
-  const adv = char.advList.find((a) => a.id === outfitAdvId.value);
-  const item = outfitCandidates.value.find((it) => it.id === outfitItemId.value);
-  if (outfitBusy.value || !adv || !item) return;
+ *  à la fabrication, sans retour possible. Le rang de la pièce est connu d'avance
+ *  (`outfitRank`) : on le dit. L'aventurier reste sélectionné pour enchaîner. */
+function doOutfit(r: OutfitOption) {
+  const adv = outfitAdv.value;
+  if (outfitBusy.value || !adv) return;
+  const piece = `${r.emoji} ${r.name} ${rarityRank(r.rank).name}`;
   $q.dialog({
     title: 'Fondre cet objet ?',
-    message: `${item.emoji} « ${item.name} » (${gradeLabel(item)}) sera détruit définitivement pour fabriquer : ${outfitTargetLabel.value}.`,
+    message: `${r.item.emoji} « ${r.item.name} » (${gradeLabel(r.item)}) sera détruit pour fabriquer ${piece} pour ${adv.name}.`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: '⚒️ Fabriquer', color: 'negative' },
-  }).onOk(() => void runOutfit());
+  }).onOk(() => void runOutfit(r.item.id, adv.id));
 }
-async function runOutfit() {
+async function runOutfit(itemId: string, advId: string) {
   const uid = auth.user?.id;
-  if (!uid || outfitBusy.value || !outfitAdvId.value || !outfitItemId.value) return;
+  if (!uid || outfitBusy.value) return;
   outfitBusy.value = true;
   try {
-    await char.startOutfit(uid, outfitItemId.value, outfitAdvId.value, Date.now(), heroLevel.value);
-    outfitAdvId.value = '';
-    outfitItemId.value = '';
+    await char.startOutfit(uid, itemId, advId, Date.now(), heroLevel.value);
   } catch (e) {
     $q.notify({ type: 'negative', message: (e as Error).message });
   } finally {
@@ -720,29 +773,100 @@ async function runOutfit() {
   flex-direction: column;
   gap: 8px;
 }
-.of-run {
-  font-size: 13px;
+.of-t {
+  font-size: 12px;
+  font-weight: 700;
   color: var(--text);
 }
-.of-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.of-sub {
+  display: block;
+  font-weight: 400;
+  color: var(--dim);
+  font-size: 11.5px;
 }
-.of-select {
-  flex: 1 1 140px;
-  min-height: 44px;
+.of-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.of-queue {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.of-q {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12.5px;
+}
+.of-q-main {
+  flex: 1;
   min-width: 0;
+}
+.of-q-left {
+  color: var(--dim);
+  white-space: nowrap;
+}
+.of-advs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.of-adv {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.of-adv.on {
+  border-color: var(--accent, #ffd23f);
+  background: color-mix(in srgb, var(--accent, #ffd23f) 14%, transparent);
+}
+.of-adv-r {
+  font-size: 11px;
+  font-weight: 700;
+}
+.of-item {
+  min-height: 48px;
+  padding: 6px 10px;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: #1d1913;
   color: var(--text);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-size: 13px;
-  padding: 0 8px;
+  cursor: pointer;
 }
-.of-target {
-  font-size: 12px;
-  color: var(--accent, #ffd23f);
+.of-item:disabled {
+  opacity: 0.5;
+}
+.of-to {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.of-warn {
+  color: var(--d3, #ffb23f);
+  font-size: 11px;
+}
+.of-ok {
+  color: var(--d1, #7bc86c);
+  font-size: 11px;
 }
 .pm-actions {
   display: flex;

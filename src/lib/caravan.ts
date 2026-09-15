@@ -619,6 +619,7 @@ function refGearIds(i: number): Record<AdvGearSlot, string> {
     weapon: `refGear${i}weapon`,
     armor: `refGear${i}armor`,
     accessory: `refGear${i}accessory`,
+    relic: `refGear${i}relic`,
   };
 }
 
@@ -627,7 +628,7 @@ function refGearIds(i: number): Record<AdvGearSlot, string> {
 const REF_GEAR_JET = 0.3;
 
 /**
- * L’ÉQUIPEMENT de l’escorte de référence : chaque membre porte ses 3 pièces, niveau d’objet
+ * L’ÉQUIPEMENT de l’escorte de référence : chaque membre porte ses 4 pièces, niveau d’objet
  * à niveau, de la rareté de SA classe, jet moyen — la règle de `gearExpect` : l’attendu, pas
  * l’exceptionnel.
  *
