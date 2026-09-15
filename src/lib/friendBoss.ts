@@ -41,10 +41,12 @@ export const FRIEND_BOSS = {
   /** Délai avant que le LANCEUR puisse relancer, à partir de la fin du boss. */
   cooldownMs: 7 * DAY,
   /** Part de PV d'UN participant, en unités de l'exo (reps, ou secondes pour le gainage).
-   *  ⚠️ C'est un volume de SEMAINE, pour un joueur moyen : tenir sa part demande de s'y
-   *  mettre plusieurs jours, sans en faire une corvée. La traction est plus dure, sa part
-   *  est plus petite ; le gainage se compte en secondes. */
-  shareUnits: { push: 300, legs: 400, pull: 150, core: 1200, conditioning: 300 } as Record<
+   *  ⚠️ C'est un volume EN PLUS de la semaine (v0.869, décision de l'utilisateur) : le Défi
+   *  360 est l'entraînement global, le boss un bonus RELATIVEMENT FACILE. Une part vaut
+   *  environ la MOITIÉ d'un groupe du 360 intermédiaire (12 séries ≈ 120 reps, 540 s de
+   *  gainage) — avant elle en valait 2,5 fois. La traction est plus dure, sa part est plus
+   *  petite ; le gainage se compte en secondes. Doit rester égal à `fboss_share` (migr. 0069). */
+  shareUnits: { push: 60, legs: 80, pull: 30, core: 300, conditioning: 60 } as Record<
     BossFamily,
     number
   >,
@@ -60,7 +62,8 @@ export const FRIEND_BOSS = {
   maxInvites: 9,
   /** Prime de complétion, en part de l'XP gagnée par ses propres reps.
    *  ⚠️ MESURÉE : une part complète vaut peu en XP (300 pompes → 120 XP, soit ~¼ d'une
-   *  séance d'une heure), d'où un pourcentage élevé. Un challenge de même volume sur
+   *  séance d'une heure ; 60 pompes → 24 XP depuis les parts allégées v0.869), d'où un
+   *  pourcentage élevé. Un challenge de même volume sur
    *  7 jours paie ~30 % : le boss paie plus, parce qu'il demande de tenir sa part pour
    *  un groupe. */
   bonusPct: 1,

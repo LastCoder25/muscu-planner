@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
+import { comboWeeklySets, COMBO_PLAN_REPS } from '@/lib/combo';
 import {
   FRIEND_BOSS,
   bossFamily,
@@ -141,7 +142,8 @@ describe('🐉 BOSS ENTRE AMIS — saisies et récompense', () => {
   it('une saisie est plafonnée : par saisie, sur 24 h, et aux PV restants', () => {
     const perHit = Math.floor(share * FRIEND_BOSS.hitMaxShare);
     const perDay = Math.floor(share * FRIEND_BOSS.dayMaxShare);
-    expect(acceptedUnits('push', 40, 0, 9999)).toBe(40);
+    // Sous le plafond, tout passe (valeur dérivée : elle suit la part, pas un nombre écrit).
+    expect(acceptedUnits('push', perHit - 5, 0, 9999)).toBe(perHit - 5);
     expect(acceptedUnits('push', 9999, 0, 9999)).toBe(perHit);
     expect(acceptedUnits('push', 100, perDay - 10, 9999)).toBe(10);
     expect(acceptedUnits('push', 100, perDay + 50, 9999)).toBe(0);
@@ -179,15 +181,51 @@ describe('🐉 BOSS ENTRE AMIS — saisies et récompense', () => {
   });
 });
 
+describe('🐉 BOSS ENTRE AMIS — un volume EN PLUS, pas un second Défi 360 (v0.869)', () => {
+  // Décision de l'utilisateur : le 360 est l'entraînement global de la semaine, le boss un
+  // bonus relativement facile. On compare à un groupe du 360 INTERMÉDIAIRE modéré, lu dans
+  // la lib du 360 elle-même (séries × reps planifiées, gainage à ~45 s la série).
+  const sets = comboWeeklySets('intermediaire', 'moderate');
+  const group = (f: string) => sets * (f === 'core' ? 45 : COMBO_PLAN_REPS);
+
+  it('une part vaut au plus 70 % d’un groupe du 360 — et pas rien pour autant', () => {
+    for (const [f, units] of Object.entries(FRIEND_BOSS.shareUnits)) {
+      expect(units / group(f), f).toBeLessThanOrEqual(0.7);
+      expect(units / group(f), f).toBeGreaterThanOrEqual(0.2);
+    }
+  });
+  it('la demi-part qui ouvre le coffre tient dans une seule séance', () => {
+    // Moins qu’un groupe du 360 DÉBUTANT léger en entier.
+    const easy = comboWeeklySets('debutant', 'light');
+    for (const [f, units] of Object.entries(FRIEND_BOSS.shareUnits))
+      expect(units * FRIEND_BOSS.minShare, f).toBeLessThanOrEqual(
+        easy * (f === 'core' ? 45 : COMBO_PLAN_REPS),
+      );
+  });
+});
+
 describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', () => {
   // ⚠️ Le serveur APPLIQUE les règles, la lib les AFFICHE : deux copies de constantes qui
   // divergeraient feraient annoncer une part, un plafond ou une fenêtre que le serveur
   // refuse. Ce test lit la migration elle-même.
   const sql = fs.readFileSync('supabase/migrations/0067_friend_boss.sql', 'utf8');
+  // ⚠️ `fboss_share` est REDÉFINIE par une migration plus récente (0069) : on compare à la
+  // DERNIÈRE définition, celle que le serveur exécute — pas à celle d'origine.
+  const lastShareSql = () => {
+    const files = fs
+      .readdirSync('supabase/migrations')
+      .filter((f) => f.endsWith('.sql'))
+      .sort();
+    const withShare = files
+      .map((f) => fs.readFileSync(`supabase/migrations/${f}`, 'utf8'))
+      .filter((s) => s.includes('function public.fboss_share'));
+    return withShare[withShare.length - 1]!;
+  };
 
-  it('mêmes parts de PV par famille', () => {
+  it('mêmes parts de PV par famille (dernière définition du serveur)', () => {
+    const share = lastShareSql();
     for (const [family, units] of Object.entries(FRIEND_BOSS.shareUnits))
-      expect(sql).toContain(`when '${family}' then ${units}`);
+      expect(share).toContain(`when '${family}' then ${units}`);
   });
 
   it('mêmes fenêtres de temps', () => {
