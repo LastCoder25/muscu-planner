@@ -63,11 +63,10 @@ export const FRIEND_BOSS = {
    *  ⚠️ 2,5 et 3 parts (v0.889, signalé en urgence : « ça m'a bloqué mes tirs ») : la v0.869 a
    *  divisé les parts par 5 et les plafonds, exprimés en part, ont suivi — 36 pompes par 24 h,
    *  deux joueurs bloqués le premier jour. Ils retrouvent leur valeur absolue d'avant (pompes
-   *  150 par saisie, 180 par 24 h). Doit rester égal à `fboss_hit` (migr. 0074). */
+   *  150 par saisie). ⚠️ Plus de plafond sur 24 h (v0.892, demandé par l'utilisateur) : ce
+   *  plafond de saisie reste un garde-fou contre la faute de frappe, le regard des amis
+   *  (saisies visibles) fait le reste. Doit rester égal à `fboss_hit` (migr. 0075). */
   hitMaxShare: 2.5,
-  /** Plafond sur 24 h glissantes, en parts d'un joueur. ⚠️ Tout est déclaratif :
-   *  ce plafond est le garde-fou, le regard des amis (saisies visibles) fait le reste. */
-  dayMaxShare: 3,
   /** Invités maximum par boss. */
   maxInvites: 9,
   /** Prime de complétion, en part de l'XP gagnée par ses propres reps.
@@ -208,20 +207,6 @@ export function bossFromRow(r: {
     hpTotal: r.hp_total,
     damage: r.damage,
   };
-}
-
-/** Ce que CE joueur a saisi sur ce boss pendant les 24 dernières heures — la même fenêtre
- *  glissante que `fboss_hit` (`created_at > now() - 24 h`, borne exclue). */
-export function lastDayUnits(
-  hits: readonly FriendBossHit[],
-  bossId: string,
-  userId: string,
-  now: number,
-): number {
-  const from = now - DAY;
-  return hits
-    .filter((h) => h.bossId === bossId && h.userId === userId && h.createdAt > from)
-    .reduce((a, h) => a + h.units, 0);
 }
 
 /** Piste d'XP d'un boss : le conditionnement est un effort cardio (comme ses challenges),
@@ -442,19 +427,12 @@ export function canDeclareBoss(
   return next == null || now >= next;
 }
 
-/** Ce qu'une saisie peut encore apporter, plafonds compris, en reps.
- *  `lastDayUnits` = ce que CE joueur a déjà saisi sur ce boss pendant les 24 dernières heures ;
- *  `unitsLeft` = les reps qui restent avant la mort du boss (`bossUnitsLeft`). */
-export function acceptedUnits(
-  family: BossFamily,
-  asked: number,
-  lastDayUnits: number,
-  unitsLeft: number,
-): number {
-  const share = FRIEND_BOSS.shareUnits[family];
-  const perHit = Math.floor(share * FRIEND_BOSS.hitMaxShare);
-  const dayLeft = Math.floor(share * FRIEND_BOSS.dayMaxShare) - Math.max(0, lastDayUnits);
-  return Math.max(0, Math.min(Math.floor(asked), perHit, dayLeft, Math.max(0, unitsLeft)));
+/** Ce qu'une saisie peut encore apporter, plafonds compris, en reps : le plafond d'une
+ *  saisie et `unitsLeft`, les reps qui restent avant la mort du boss (`bossUnitsLeft`).
+ *  ⚠️ Aucun plafond sur 24 h (v0.892). */
+export function acceptedUnits(family: BossFamily, asked: number, unitsLeft: number): number {
+  const perHit = Math.floor(FRIEND_BOSS.shareUnits[family] * FRIEND_BOSS.hitMaxShare);
+  return Math.max(0, Math.min(Math.floor(asked), perHit, Math.max(0, unitsLeft)));
 }
 
 /** A-t-on apporté sa part minimale ? */

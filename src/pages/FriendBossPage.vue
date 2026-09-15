@@ -77,16 +77,13 @@
             </button>
           </div>
           <div class="fb-hint">
-            <template v-if="dayLeft <= 0">
-              Plafond de la journée atteint — tu pourras refrapper dans les prochaines heures.
-            </template>
-            <template v-else-if="accepted < amount">
-              Seulement <b>{{ accepted }}</b> compteront (≤ {{ perHit }} par saisie,
-              {{ dayLeft }} restant sur 24 h).
+            <template v-if="accepted < amount">
+              Seulement <b>{{ accepted }}</b> compteront (≤ {{ perHit }} par saisie, et ce qu’il
+              reste de PV).
             </template>
             <template v-else>
-              ≤ {{ perHit }} {{ bossUnitLabel(current.family) }} par saisie · {{ dayLeft }}
-              restant sur 24 h
+              ≤ {{ perHit }} {{ bossUnitLabel(current.family) }} par saisie · pas de plafond par
+              jour
             </template>
           </div>
         </div>
@@ -260,7 +257,6 @@ import {
   fmtBossSpan,
   friendBossChest,
   isBossExercise,
-  lastDayUnits,
   metMinShare,
   nextDeclareAt,
   type BossFamily,
@@ -409,27 +405,10 @@ const perHit = computed(() =>
     ? Math.floor(FRIEND_BOSS.shareUnits[current.value.family] * FRIEND_BOSS.hitMaxShare)
     : 0,
 );
-const dayUsed = computed(() =>
-  current.value ? lastDayUnits(store.hits, current.value.id, uid.value, now.value) : 0,
-);
-const dayLeft = computed(() =>
-  current.value
-    ? Math.max(
-        0,
-        Math.floor(FRIEND_BOSS.shareUnits[current.value.family] * FRIEND_BOSS.dayMaxShare) -
-          dayUsed.value,
-      )
-    : 0,
-);
 /** Ce que le serveur retiendra : la même règle que `fboss_hit`. */
 const accepted = computed(() =>
   current.value
-    ? acceptedUnits(
-        current.value.family,
-        amount.value || 0,
-        dayUsed.value,
-        bossUnitsLeft(current.value),
-      )
+    ? acceptedUnits(current.value.family, amount.value || 0, bossUnitsLeft(current.value))
     : 0,
 );
 function step(d: number) {

@@ -28,7 +28,6 @@ import {
   bossCompletionXp,
   earlyKillFraction,
   bossFromRow,
-  lastDayUnits,
   bossXpTrack,
   friendBossXp,
   bossErrorMessage,
@@ -235,16 +234,13 @@ describe('🐉 BOSS ENTRE AMIS — qui peut en lancer un', () => {
 describe('🐉 BOSS ENTRE AMIS — saisies et récompense', () => {
   const share = FRIEND_BOSS.shareUnits.push;
 
-  it('une saisie est plafonnée : par saisie, sur 24 h, et aux PV restants', () => {
+  it('une saisie est plafonnée : par saisie et aux PV restants', () => {
     const perHit = Math.floor(share * FRIEND_BOSS.hitMaxShare);
-    const perDay = Math.floor(share * FRIEND_BOSS.dayMaxShare);
     // Sous le plafond, tout passe (valeur dérivée : elle suit la part, pas un nombre écrit).
-    expect(acceptedUnits('push', perHit - 5, 0, 9999)).toBe(perHit - 5);
-    expect(acceptedUnits('push', 9999, 0, 9999)).toBe(perHit);
-    expect(acceptedUnits('push', 100, perDay - 10, 9999)).toBe(10);
-    expect(acceptedUnits('push', 100, perDay + 50, 9999)).toBe(0);
-    expect(acceptedUnits('push', 100, 0, 7)).toBe(7);
-    expect(acceptedUnits('push', -5, 0, 9999)).toBe(0);
+    expect(acceptedUnits('push', perHit - 5, 9999)).toBe(perHit - 5);
+    expect(acceptedUnits('push', 9999, 9999)).toBe(perHit);
+    expect(acceptedUnits('push', 100, 7)).toBe(7);
+    expect(acceptedUnits('push', -5, 9999)).toBe(0);
   });
 
   it('la part minimale est un seuil inclusif', () => {
@@ -343,15 +339,17 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
       .filter((s) => s.includes('function public.fboss_hit'));
     return files[files.length - 1]!;
   };
-  it('⚠️ LE CAS RÉEL : 36 pompes par jour ne bloquent plus (plafonds d’avant les parts allégées)', () => {
+  it('⚠️ 150 pompes par saisie, et saisir encore et encore ne bloque jamais (v0.892)', () => {
     expect(Math.floor(FRIEND_BOSS.shareUnits.push * FRIEND_BOSS.hitMaxShare)).toBe(150);
-    expect(Math.floor(FRIEND_BOSS.shareUnits.push * FRIEND_BOSS.dayMaxShare)).toBe(180);
-    expect(acceptedUnits('push', 20, 36, 9999)).toBe(20);
+    // Aucun historique n'entre dans la règle : la 20ᵉ saisie du jour passe comme la 1ʳᵉ.
+    expect(acceptedUnits).toHaveLength(3);
+    expect(acceptedUnits('push', 150, 9999)).toBe(150);
   });
-  it('mêmes plafonds que la DERNIÈRE définition de fboss_hit', () => {
+  it('mêmes plafonds que la DERNIÈRE définition de fboss_hit — et aucun plafond sur 24 h', () => {
     const hit = lastHitSql();
     expect(hit).toContain(`floor(v_share * ${FRIEND_BOSS.hitMaxShare})`);
-    expect(hit).toContain(`floor(v_share * ${FRIEND_BOSS.dayMaxShare})`);
+    expect(hit).not.toContain("interval '24 hours'");
+    expect(hit).not.toContain('v_day');
   });
 
   it('mêmes dégâts par rep, appliqués aux PV ET aux dégâts du serveur (migr. 0070)', () => {
@@ -394,18 +392,6 @@ describe('🐉 BOSS ENTRE AMIS — lectures du store (v0.863)', () => {
       bossFromRow({ ...({} as never), created_at: '2026-09-14T10:00:00Z', rep_weight: null })
         .repWeight,
     ).toBe(1);
-  });
-
-  it('le plafond de 24 h est GLISSANT et ne compte que ce joueur sur ce boss', () => {
-    const hits = [
-      { id: '1', bossId: 'b', userId: 'u', units: 50, createdAt: T0 },
-      { id: '2', bossId: 'b', userId: 'u', units: 30, createdAt: T0 + 20 * H },
-      { id: '3', bossId: 'b', userId: 'v', units: 99, createdAt: T0 + 20 * H },
-      { id: '4', bossId: 'c', userId: 'u', units: 99, createdAt: T0 + 20 * H },
-    ];
-    expect(lastDayUnits(hits, 'b', 'u', T0 + 21 * H)).toBe(80);
-    // Pile 24 h après : la borne est EXCLUE, comme `created_at > now() - 24 h` en base.
-    expect(lastDayUnits(hits, 'b', 'u', T0 + 24 * H)).toBe(30);
   });
 
   it('le conditionnement nourrit le cardio, le reste la muscu', () => {
