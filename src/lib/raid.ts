@@ -2420,6 +2420,41 @@ export function adventurerPowers(advs: Adventurer[], ctx?: CompanionCtx): Map<st
 }
 
 /**
+ * ⚔️🗡️ LA PUISSANCE D'UN SEUL AVENTURIER, UNE PIÈCE CANDIDATE EN MAIN — pour le
+ * sélecteur d'équipement de la Guilde, qui compare N candidates à un emplacement sans
+ * recalculer la puissance de TOUT le vivier à chaque ligne.
+ *
+ * ⚠️ `adventurerPowers` fait un `.map()` sur `advs` ENTIER : appelée une fois par
+ * candidate dans un sélecteur qui en liste plusieurs dizaines, elle recalcule le combat
+ * de chaque AUTRE aventurier autant de fois qu'il y a de lignes — du travail refait pour
+ * un nombre qu'on jette aussitôt. Ici, seul LE PORTEUR passe par `combatPower`.
+ *
+ * ⚠️ LES PAIRES RESTENT CALCULÉES SUR LE VIVIER COMPLET (`companionPairs(modified,
+ * ctx)`) : c'est elles qui savent si un familier est déjà confié ailleurs ou hors des
+ * places du Chenil — cette exclusivité ne se recopie pas sur un seul homme sans risquer
+ * de compter une place déjà prise. Seul le calcul de COMBAT final se limite à `target`.
+ *
+ * ⚠️ UNE PIÈCE QUE `target` NE PEUT PAS PORTER rend la MÊME puissance qu'avant : `wornGear`
+ * (appelé par `companionPairs`) filtre toute assignation qui échoue `canWearAdvGear`, donc
+ * l'affectation candidate n'atteint jamais le combat — pas besoin de revalider ici.
+ */
+export function adventurerGearPower(
+  advs: Adventurer[],
+  target: Adventurer,
+  slot: AdvGearSlot,
+  gearId: string | undefined,
+  ctx: CompanionCtx,
+): number {
+  const modified = advs.map((a) =>
+    a.id === target.id ? { ...a, gear: { ...(a.gear ?? {}), [slot]: gearId } } : a,
+  );
+  const pairs = companionPairs(modified, ctx);
+  return combatPower(
+    escortCombatant([target], target.name, pairEffects(pairs.get(target.id), ctx)),
+  );
+}
+
+/**
  * ✨ CONFIER AU MIEUX : un compagnon et un talent par aventurier, selon SON profil.
  *
  * ⚠️ AUCUNE RÈGLE NOUVELLE — les exclusions sont celles des sélecteurs (`companionOptions` /

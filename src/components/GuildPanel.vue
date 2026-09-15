@@ -602,6 +602,7 @@ import {
   companionRankLabel,
   companionPairs,
   adventurerPowers,
+  adventurerGearPower,
   autoCompanions,
   autoAdvGear,
   companionOptions,
@@ -890,6 +891,29 @@ const gearPick = ref<{ advId: string; slot: AdvGearSlot } | null>(null);
 const gearPickAdv = computed(() =>
   gearPick.value ? char.advList.find((a) => a.id === gearPick.value!.advId) : undefined,
 );
+/** L'instant du calcul du sélecteur, FIGÉ à l'ouverture — jamais `now.value`, le tick de
+ *  30 s du panneau. ⚠️ Le sélecteur compare la puissance de CHAQUE candidate (`gearRows`,
+ *  jusqu'à des dizaines de lignes) : sans ce découplage, `gearPickCtx` — et donc toutes
+ *  les lignes — se recalculaient à chaque battement du tick pendant que la feuille reste
+ *  ouverte, exactement ce que le fichier évite déjà pour `famRows`/`talRows` (« aucune
+ *  dépendance de ces computed n'inclut `now` »). La fatigue d'un compagnon n'a pas besoin
+ *  d'une précision à la seconde dans un comparatif de pièces. */
+const gearOpenedAt = ref(0);
+watch(gearPick, (p) => {
+  if (p) gearOpenedAt.value = Date.now();
+});
+/** Le contexte du sélecteur — MÊMES sources que `compCtx`, sauf `now` (figé ci-dessus).
+ *  ⚠️ Reconstruit à part plutôt que `{ ...compCtx.value, now: gearOpenedAt.value }` : lire
+ *  `compCtx.value` établirait quand même une dépendance transitive sur `now.value` (`compCtx`
+ *  rend un nouvel objet à chaque tick), ce qui recollerait `gearRows` au tick d'origine. */
+const gearPickCtx = computed<CompanionCtx>(() => ({
+  familiars: famPool.value,
+  talents: talPool.value,
+  kennelLevel: kennelLevel.value,
+  now: gearOpenedAt.value,
+  advGear: char.row?.adv_gear?.stock ?? [],
+  heroFamiliarId: heroFamId.value,
+}));
 /** Qui porte quoi, RÈGLES APPLIQUÉES (`wornGear`, identique à ce que le combat lit) —
  *  pour la fiche, où une pièce devenue invalide (rang dépassé, prise par un autre) doit
  *  se lire comme un emplacement VIDE, pas comme portée. */
@@ -933,13 +957,11 @@ function gearEffectTexts(g: AdvGear): string[] {
   return out;
 }
 /** Ce que l'aventurier vaudrait avec CETTE pièce à CET emplacement — calculé par
- *  `adventurerPowers`, l'arbitre du jeu, jamais une somme de stats recopiée : c'est le
- *  MÊME chemin que `pairBonusOf` utilise pour le compagnon et le talent. */
+ *  `adventurerGearPower` (le MÊME arbitre que `pairBonusOf`, `combatPower` sur les
+ *  paires du vivier complet), mais SANS recalculer la puissance de tout le monde à
+ *  chaque candidate : `gearRows` en appelle une fois PAR LIGNE. */
 function gearPowerFor(a: Adventurer, slot: AdvGearSlot, gearId: string): number {
-  const modified = char.advList.map((x) =>
-    x.id === a.id ? { ...x, gear: { ...(x.gear ?? {}), [slot]: gearId } } : x,
-  );
-  return adventurerPowers(modified, compCtx.value).get(a.id) ?? 0;
+  return adventurerGearPower(char.advList, a, slot, gearId, gearPickCtx.value);
 }
 const gearPool = computed(() => char.advGearStock);
 const gearChoice = computed(() => {
@@ -953,7 +975,12 @@ const gearRows = computed(() => {
   const a = gearPickAdv.value;
   if (!p || !c || !a) return null;
   return {
-    curPower: powerOf(a),
+    // ⚠️ MÊME contexte figé (`gearPickCtx`) que les candidates ci-dessous — jamais
+    // `powerOf(a)` (qui lit `powers.value`, donc `now.value`) : sinon `gearRows` resterait
+    // accroché au tick de 30 s par CE seul champ, et toutes les lignes recalculeraient
+    // leur puissance à chaque battement pendant que la feuille reste ouverte. La pièce déjà
+    // en place (`a.gear?.[p.slot]`) donne la puissance ACTUELLE par le même chemin.
+    curPower: adventurerGearPower(char.advList, a, p.slot, a.gear?.[p.slot], gearPickCtx.value),
     otherLineage: c.otherLineage,
     tooRare: c.tooRare,
     taken: c.taken,

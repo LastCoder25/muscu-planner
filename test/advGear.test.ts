@@ -3,6 +3,7 @@ import { mulberry32 } from '@/lib/combat';
 import { RARITY_RANK, RANK_ORDER, itemLevelMult } from '@/lib/items';
 import { advRarity, type Adventurer } from '@/lib/adventurers';
 import {
+  adventurerGearPower,
   adventurerPowers,
   autoAdvGear,
   lootCorpses,
@@ -198,6 +199,59 @@ describe('au rempart et dans la puissance', () => {
     // ne bouge pas, exactement comme si le stock était vide.
     const interdite = { ...arme, lineage: 'archer' as const };
     expect(adventurerPowers([a], ctx([interdite])).get('a')!).toBe(nu);
+  });
+});
+
+// ⚠️ `adventurerGearPower` existe pour que le SÉLECTEUR de la Guilde (Task 8) compare N
+// candidates sans recalculer la puissance de TOUT le vivier à chaque ligne
+// (`adventurerPowers` fait un `.map()` sur `advs` entier). Elle doit rendre EXACTEMENT ce
+// que rendrait `adventurerPowers` sur le vivier modifié — jamais une formule recopiée — et
+// garder les PAIRES calculées sur le vivier COMPLET (l'exclusivité d'une pièce entre
+// aventuriers dépend de tout le monde), tout en ne calculant le COMBAT que pour la cible.
+describe('la puissance d’UN aventurier, une candidate en main (sélecteur d’équipement)', () => {
+  const ctx = (advGear: AdvGear[]): CompanionCtx => ({
+    familiars: [],
+    talents: [],
+    kennelLevel: 0,
+    now: 0,
+    advGear,
+  });
+  it('une pièce PERMISE rend un gain positif, une pièce INTERDITE un gain nul', () => {
+    const a = { ...adv('a', ['guerrier']), level: 60 };
+    const arme = piece('p', { level: 60, effect: { type: 'damage_pct', value: 40 } });
+    const c = ctx([arme]);
+    const sansRien = adventurerGearPower([a], a, 'weapon', undefined, c);
+    const avecArme = adventurerGearPower([a], a, 'weapon', 'p', c);
+    expect(avecArme).toBeGreaterThan(sansRien);
+    // Hors de sa lignée : `canWearAdvGear` la refuse (`wornGear`, appelé par
+    // `companionPairs`, l'ignore) → l'affectation candidate n'atteint jamais le combat.
+    const interdite = piece('q', { level: 60, lineage: 'archer', effect: arme.effect });
+    const avecInterdite = adventurerGearPower([a], a, 'weapon', 'q', ctx([interdite]));
+    expect(avecInterdite).toBe(sansRien);
+  });
+  it('rend EXACTEMENT ce que rendrait `adventurerPowers` sur le vivier modifié — jamais une formule recopiée', () => {
+    const a = { ...adv('a', ['guerrier']), level: 40 };
+    const b = { ...adv('b', ['archer']), level: 30 };
+    const advs = [a, b];
+    const arme = piece('p', { level: 40, effect: { type: 'damage_pct', value: 25 } });
+    const c = ctx([arme]);
+    const fast = adventurerGearPower(advs, a, 'weapon', 'p', c);
+    const modified = advs.map((x) => (x.id === 'a' ? { ...x, gear: { weapon: 'p' } } : x));
+    const slow = adventurerPowers(modified, c).get('a')!;
+    expect(fast).toBe(slow);
+  });
+  it('les PAIRES viennent du VIVIER COMPLET — une pièce revendiquée PLUS TÔT dans le vivier ne compte pas deux fois pour la cible', () => {
+    // Même id assigné aux deux (dérive de données possible) : `wornGear` l'attribue au
+    // PREMIER de la liste (`a`, avant `b`) — `b` n'y a jamais droit, quel que soit le calcul.
+    const a = { ...adv('a', ['guerrier'], { weapon: 'p' }), level: 40 };
+    const b = { ...adv('b', ['guerrier'], { weapon: 'p' }), level: 40 };
+    const arme = piece('p', { level: 40, effect: { type: 'damage_pct', value: 40 } });
+    const c = ctx([arme]);
+    const sansArme = adventurerGearPower([a, b], b, 'weapon', undefined, c);
+    const avecArme = adventurerGearPower([a, b], b, 'weapon', 'p', c);
+    // Si les paires se calculaient sur `[b]` SEULE (en ignorant `a`), `b` obtiendrait
+    // l'arme et ce test échouerait : c'est exactement ce qu'il verrouille.
+    expect(avecArme).toBe(sansArme);
   });
 });
 
