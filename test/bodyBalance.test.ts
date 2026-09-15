@@ -5,6 +5,7 @@ import {
   creditSets,
   doneSetsByWeek,
   doneVolume,
+  muscleBreakdown,
   weekMuscleSeries,
   type BalanceInput,
   type BalancePeriod,
@@ -617,5 +618,78 @@ describe('balanceBarGeometry', () => {
     expect(g.donePct).toBe(100);
     expect(g.plannedPct).toBe(100);
     expect(g.targetPct).toBeCloseTo((10 / 12) * 100, 6);
+  });
+});
+
+describe('muscleBreakdown — le détail explique la barre', () => {
+  const mixed = input({
+    sessions: [
+      session('2026-09-15', [{ id: 'bench', muscle: 'pectoraux', sets: 4 }]),
+      session('2026-09-02', [{ id: 'row', muscle: 'dos', sets: 6 }]), // semaine −2
+    ],
+    combos: [
+      combo([
+        leg({
+          exercise_id: 'bench',
+          muscle_primary: 'pectoraux',
+          target: 10,
+          sets: [
+            { date: '2026-09-14', reps: 10 },
+            { date: '2026-09-15', reps: 10 },
+          ],
+        }),
+        leg({
+          exercise_id: 'row',
+          muscle_primary: 'dos',
+          target: 8,
+          sets: [{ date: '2026-09-15', reps: 10 }],
+        }),
+      ]),
+    ],
+    challenges: [
+      challenge({
+        exercise_id: 'ohp',
+        muscle_primary: 'épaules',
+        config: { start: 3, count_mode: 'sets' },
+        daily_targets: Array(7).fill(3),
+        progress: [
+          { day: 1, date: '2026-09-15', target: 3, done: 3, elapsed_sec: 0, completed: true },
+        ],
+      }),
+    ],
+  });
+
+  it('pour chaque muscle et chaque période, la somme du détail vaut le « fait » de la ligne', () => {
+    for (const period of ['week', 'weeks4'] as const)
+      for (const r of bodyBalance(mixed, period)) {
+        const sum = muscleBreakdown(mixed, r.muscle, period).reduce((a, c) => a + c.done, 0);
+        expect(Math.round(sum * 10) / 10, `${r.muscle} ${period}`).toBe(r.done);
+      }
+  });
+
+  it('un exo compte 1 pour son principal, ½ pour un secondaire, et garde sa source', () => {
+    const tri = muscleBreakdown(mixed, 'triceps', 'week');
+    const combo360 = tri.find((c) => c.source === 'combo' && c.exerciseId === 'bench')!;
+    expect(combo360.share).toBe(0.5);
+    expect(combo360.done).toBe(1); // 2 séries × ½
+    expect(combo360.planned).toBe(5); // objectif 10 × ½
+    expect(tri.find((c) => c.source === 'session')!.done).toBe(2); // 4 × ½
+    expect(tri.find((c) => c.source === 'challenge')!.done).toBe(1.5); // 3 séries d'ohp × ½
+
+    const pecs = muscleBreakdown(mixed, 'pectoraux', 'week');
+    expect(pecs.map((c) => [c.source, c.share, c.done])).toEqual([
+      ['session', 1, 4],
+      ['combo', 1, 2],
+    ]);
+  });
+
+  it('en vue 4 semaines, le fait est une moyenne par semaine', () => {
+    const dos = muscleBreakdown(mixed, 'dos', 'weeks4');
+    expect(dos.find((c) => c.source === 'session')!.done).toBe(1.5); // 6 ÷ 4
+    expect(dos.find((c) => c.source === 'combo')!.done).toBe(0.25); // 1 ÷ 4
+  });
+
+  it('un muscle que rien ne travaille n’a pas de détail', () => {
+    expect(muscleBreakdown(mixed, 'abdominaux', 'week')).toEqual([]);
   });
 });

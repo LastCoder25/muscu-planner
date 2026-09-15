@@ -89,8 +89,12 @@ export function balanceBarGeometry(
 
 type Tally = Record<string, number>;
 
+/** D'où vient un élément de volume. */
+export type BalanceSource = 'session' | 'combo' | 'challenge';
+
 /** Du volume attribué à un exo : `sets` séries (fractionnaires possibles) le jour `day`. */
 interface VolumeItem {
+  source: BalanceSource;
   day: string;
   exerciseId: string;
   /** Nom affiché de l'exo (détail par exercice). */
@@ -120,6 +124,19 @@ export function creditSets(
   }
 }
 
+/** Ce qu'une série de l'exo vaut pour le muscle `muscle` (normalisé) : 1 s'il en est le
+ *  principal, ½ s'il en est un secondaire, 0 sinon — la règle de `creditSets`, lue pour
+ *  UN muscle (le détail d'une ligne ne peut pas dire autre chose que sa barre). */
+function muscleShare(
+  muscle: string,
+  primary: string | null | undefined,
+  secondary: readonly string[] | null | undefined,
+): number {
+  const p = normMuscle(primary);
+  if (p && p === muscle) return 1;
+  return (secondary ?? []).some((raw) => normMuscle(raw) === muscle) ? SECONDARY_CREDIT : 0;
+}
+
 /** Ce que vaut UNE série quand l'objectif est en reps/secondes : le milieu de la fourchette. */
 function perSet(r: RepRange): number {
   return Math.max(1, (r.min + r.max) / 2);
@@ -134,6 +151,7 @@ function sessionItems(sessions: readonly LogEntry[]): VolumeItem[] {
     const day = e.performedAt.slice(0, 10);
     for (const ex of e.log.exercises ?? [])
       out.push({
+        source: 'session',
         day,
         exerciseId: ex.id,
         name: ex.name,
@@ -150,6 +168,7 @@ function legItems(leg: ComboLeg, objective?: Objective | null): VolumeItem[] {
   const mode = legMode(leg);
   const unit = mode === 'sets' ? 0 : perSet(legRepRange(leg, objective));
   return legSets(leg).map((s) => ({
+    source: 'combo' as const,
     day: s.date.slice(0, 10),
     exerciseId: leg.exercise_id,
     name: leg.exercise_name,
@@ -177,6 +196,7 @@ function challengeItems(
     c.progress
       .filter((p) => p.done > 0)
       .map((p) => ({
+        source: 'challenge' as const,
         day: p.date.slice(0, 10),
         exerciseId: c.exercise_id,
         name: c.exercise_name,
@@ -213,6 +233,7 @@ function comboItems(
         // Négatif si l'objectif est déjà dépassé : `creditSets` ignore toute valeur ≤ 0.
         const sets = leg.target / unit - already(leg);
         return {
+          source: 'combo' as const,
           day,
           exerciseId: leg.exercise_id,
           name: leg.exercise_name,
@@ -249,6 +270,7 @@ function challengeTargetItems(
   return muscuChallenges(i.challenges)
     .filter((c) => c.status === 'active')
     .map((c) => ({
+      source: 'challenge' as const,
       day: start,
       exerciseId: c.exercise_id,
       name: c.exercise_name,
@@ -290,20 +312,32 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** Équilibre du corps, trié du plus gros déficit au plus petit. Seuls les muscles qui
  *  ont une cible (> 0) apparaissent. */
-export function bodyBalance(i: BalanceInput, period: BalancePeriod): MuscleBalance[] {
+/** Bornes d'une période : la semaine en cours [monday, nextMonday), et le début de la
+ *  fenêtre (`firstMonday`, 3 semaines plus tôt en vue 4 semaines). */
+function periodBounds(today: string, period: BalancePeriod) {
   const weeks = period === 'weeks4' ? 4 : 1;
-  const monday = mondayOf(i.today);
-  const nextMonday = addDaysUtcIso(monday, 7);
-  const firstMonday = addDaysUtcIso(monday, -7 * (weeks - 1));
+  const monday = mondayOf(today);
+  return {
+    weeks,
+    monday,
+    nextMonday: addDaysUtcIso(monday, 7),
+    firstMonday: addDaysUtcIso(monday, -7 * (weeks - 1)),
+  };
+}
+
+/** Ce qui est PRÉVU cette semaine : le reste du 360 actif et les objectifs des challenges. */
+function plannedItems(i: BalanceInput, monday: string, nextMonday: string): VolumeItem[] {
+  return [...comboRemainingItems(i, monday), ...challengeTargetItems(i, monday, nextMonday)];
+}
+
+export function bodyBalance(i: BalanceInput, period: BalancePeriod): MuscleBalance[] {
+  const { weeks, monday, nextMonday, firstMonday } = periodBounds(i.today, period);
 
   const week = (items: readonly VolumeItem[]) => tally(items, i.secondaries, monday, nextMonday);
   const done = doneItems(i);
   const cur = week(done);
   const prev = tally(done, i.secondaries, firstMonday, monday);
-  const planned = week([
-    ...comboRemainingItems(i, monday),
-    ...challengeTargetItems(i, monday, nextMonday),
-  ]);
+  const planned = week(plannedItems(i, monday, nextMonday));
 
   const out: MuscleBalance[] = [];
   for (const [rawMuscle, target] of Object.entries(i.targets)) {
@@ -323,6 +357,52 @@ export function bodyBalance(i: BalanceInput, period: BalancePeriod): MuscleBalan
     });
   }
   return out.sort((a, b) => a.pct - b.pct || b.target - a.target);
+}
+
+/** Une ligne du détail d'un muscle : un exercice d'une source. */
+export interface BalanceContribution {
+  exerciseId: string;
+  name: string;
+  source: BalanceSource;
+  /** 1 si le muscle est le principal de l'exo, ½ s'il est un secondaire. */
+  share: number;
+  /** Séries créditées au muscle (moyenne par semaine en vue 4 semaines). */
+  done: number;
+  /** Séries créditées par ce qui est prévu cette semaine (360, challenges). */
+  planned: number;
+}
+
+/** D'où viennent les séries d'un muscle : chaque exo, par source, avec ce qu'il crédite.
+ *  ⚠️ LA SOMME DES `done` EST LE `done` DE LA LIGNE (même fenêtre, même règle de crédit,
+ *  même moyenne) : sans ça, le détail qui doit expliquer la barre la contredirait. Trié du
+ *  plus gros apport au plus petit. */
+export function muscleBreakdown(
+  i: BalanceInput,
+  muscle: string,
+  period: BalancePeriod,
+): BalanceContribution[] {
+  const m = normMuscle(muscle);
+  const { weeks, monday, nextMonday, firstMonday } = periodBounds(i.today, period);
+  const rows = new Map<string, BalanceContribution>();
+  const add = (it: VolumeItem, field: 'done' | 'planned', value: number) => {
+    const share = muscleShare(m, it.primary, i.secondaries(it.exerciseId));
+    if (!share || !(value > 0)) return;
+    const key = it.source + '|' + it.exerciseId;
+    const row = rows.get(key) ?? {
+      exerciseId: it.exerciseId,
+      name: it.name,
+      source: it.source,
+      share,
+      done: 0,
+      planned: 0,
+    };
+    row[field] += value * share;
+    rows.set(key, row);
+  };
+  for (const it of doneItems(i))
+    if (it.day >= firstMonday && it.day < nextMonday) add(it, 'done', it.sets / weeks);
+  for (const it of plannedItems(i, monday, nextMonday)) add(it, 'planned', it.sets);
+  return [...rows.values()].sort((a, b) => b.done - a.done || b.planned - a.planned);
 }
 
 /** Les 3 courbes du radar de la SEMAINE EN COURS (lundi → dimanche), en séries par
