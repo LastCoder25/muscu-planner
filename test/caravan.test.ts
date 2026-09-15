@@ -44,7 +44,7 @@ import {
   refAdvGear,
   type Caravan,
 } from '@/lib/caravan';
-import { troopOf } from '@/lib/skirmish';
+import { trialXpBase, troopOf } from '@/lib/skirmish';
 import {
   advGearEffects,
   advGearRoles,
@@ -471,18 +471,21 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
     // C'était une MOYENNE : mesuré, le vétéran passait de 1 à 11 XP sur une route de
     // niveau 5 rien qu'en ajoutant trois recrues. Le rendement décroissant — le garde-fou
     // qui empêche de farmer le trajet le plus court — se contournait avec des passagers.
+    // Les abattus sont PARTAGÉS : emmener des recrues ne peut que diluer la part du vétéran,
+    // jamais l'augmenter ; et sur une route facile la recrue apprend bien plus que lui.
     const facile = poi({ level: 5 });
-    const seul = resolveCaravan(facile, [vet('v')], 42, NUS, 100);
-    const accompagne = resolveCaravan(
-      facile,
-      [vet('v'), bleu('r1'), bleu('r2'), bleu('r3')],
-      42,
-      NUS,
-      100,
-    );
-    expect(accompagne.xp['v']).toBe(seul.xp['v']);
-    // …et la recrue touche bien plus que lui sur cette route-là.
-    expect(accompagne.xp['r1']!).toBeGreaterThan(accompagne.xp['v']!);
+    for (let s = 1; s <= 40; s++) {
+      const seul = resolveCaravan(facile, [vet('v')], s, NUS, 100);
+      const accompagne = resolveCaravan(
+        facile,
+        [vet('v'), bleu('r1'), bleu('r2'), bleu('r3')],
+        s,
+        NUS,
+        100,
+      );
+      expect(accompagne.xp['v']!, `graine ${s}`).toBeLessThanOrEqual(seul.xp['v']! + 1);
+      expect(accompagne.xp['r1']!).toBeGreaterThan(accompagne.xp['v']!);
+    }
   });
   it('tout le monde en reçoit, personne n’est oublié', () => {
     const o = resolveCaravan(poi(), [vet('v'), bleu('r')], 7, NUS, 100);
@@ -504,19 +507,54 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
     expect(sansCombat, 'aucun voyage sans combat : le test ne prouve rien').toBeGreaterThan(0);
     expect(perdu, 'aucune embuscade perdue : le test ne prouve rien').toBeGreaterThan(0);
   });
-  it('elle ne dépend QUE du nombre d’épreuves, jamais de leur ISSUE', () => {
+  it('⚠️ le socle de mission tombe TOUJOURS ; les abattus s’y AJOUTENT', () => {
     // ⚠️ Assertion DIRECTE : « XP > 0 » laissait passer une version qui ne comptait que
     // les combats GAGNÉS — un débutant qui perd tout aurait alors stagné pour toujours.
     const p = poi();
-    const a = bleu('r');
+    const esc = team(3, 20);
+    let sansCombat = 0;
+    let avecAbattus = 0;
     let defaites = 0;
-    for (let s = 0; s < 200; s++) {
-      const o = resolveCaravan(p, [a], s * 977 + 1, NUS, 100);
+    for (let s = 0; s < 300; s++) {
+      const o = resolveCaravan(p, esc, s * 977 + 1, NUS, 100);
       const f = o.events.filter((e) => e.kind === 'bandits');
-      expect(o.xp['r']).toBe(missionXp(a, p, f.length));
-      if (f.some((x) => !x.won)) defaites++;
+      const abattus = f.reduce((n, e) => n + (e.kills ?? 0), 0);
+      for (const a of esc) {
+        expect(o.xp[a.id]!).toBeGreaterThanOrEqual(missionXp(a, p));
+        if (!f.length) expect(o.xp[a.id]).toBe(missionXp(a, p));
+        if (abattus > 0) expect(o.xp[a.id]!).toBeGreaterThan(missionXp(a, p));
+      }
+      if (!f.length) sansCombat++;
+      if (abattus > 0) avecAbattus++;
+      if (f.some((x) => x.won === false)) defaites++;
+      // Les abattus par tête somment ceux des embuscades.
+      const parTete = Object.values(o.kills ?? {}).reduce((n, k) => n + k, 0);
+      expect(parTete).toBe(abattus);
     }
-    expect(defaites, 'aucune défaite dans le lot : le test ne prouve rien').toBeGreaterThan(0);
+    expect(sansCombat, 'aucun voyage sans combat : le test ne prouve rien').toBeGreaterThan(0);
+    expect(avecAbattus, 'aucun abattu : le test ne prouve rien').toBeGreaterThan(0);
+    expect(defaites, 'aucune défaite : le test ne prouve rien').toBeGreaterThan(0);
+  });
+});
+
+describe('🤕 LES BLESSÉS SONT CEUX QUI SONT TOMBÉS', () => {
+  it('⚠️ une embuscade PERDUE envoie toute l’escorte tombée à l’infirmerie', () => {
+    // L'ancien tirage d'UNE victime au hasard disparaît : le journal dit qui est tombé.
+    const esc = team(3, 26);
+    let pertes = 0;
+    for (let s = 1; s <= 400; s++) {
+      const o = resolveCaravan(poi({ level: 26, perilous: true }), esc, s * 131 + 5, NUS, 100);
+      const f = o.events.filter((e) => e.kind === 'bandits');
+      const tombes = f.reduce((n, e) => n + (e.fallen ?? 0), 0);
+      expect(o.hurt.length > 0, `graine ${s}`).toBe(tombes > 0);
+      expect(o.hurt.length).toBeLessThanOrEqual(tombes);
+      if (f.some((e) => e.won === false)) {
+        pertes++;
+        // Une embuscade n'est perdue que quand TOUTE l'escorte est tombée.
+        expect(o.hurt.length).toBe(esc.length);
+      }
+    }
+    expect(pertes, 'aucune embuscade perdue : le test ne prouve rien').toBeGreaterThan(0);
   });
 });
 
@@ -848,26 +886,17 @@ describe('⚠️ ALLER LOIN FORME DAVANTAGE — l’XP paie la DISTANCE', () => 
   });
 });
 
-describe('⚠️ le bonus d’XP suit les combats RÉELS, pas l’étiquette', () => {
-  it('plus d’embuscades traversées = plus d’XP', () => {
-    const p = poi();
-    const a = refAdventurer(20);
-    expect(missionXp(a, p, 2)).toBeGreaterThan(missionXp(a, p, 0));
-    expect(missionXp(a, p, 3)).toBeGreaterThan(missionXp(a, p, 1));
-  });
-  it('le bonus est BORNÉ — une route infestée ne devient pas une pompe à XP', () => {
-    const p = poi();
-    const a = refAdventurer(20);
-    expect(missionXp(a, p, 99)).toBeLessThanOrEqual(
-      Math.round(missionXp(a, p, 0) * (1 + CARAVAN.xpFightMax) + 1),
-    );
-  });
+describe('⚠️ l’XP de combat suit les ennemis ABATTUS, pas l’étiquette', () => {
   it('une route périlleuse SANS embuscade ne paie plus le simple risque', () => {
     // Mesuré avant : XP identique (49) qu'il y ait eu 1, 2 ou 3 embuscades — on payait
-    // l'étiquette. Elle reste plus formatrice, mais parce qu'il s'y passe quelque chose.
+    // l'étiquette. Elle reste plus formatrice, mais parce qu'il s'y passe quelque chose :
+    // les abattus s'ajoutent au socle (`skirmishXpShares`, dans `resolveCaravan`).
     const a = refAdventurer(20);
-    expect(missionXp(a, poi({ perilous: true }), 0)).toBe(missionXp(a, poi(), 0));
-    expect(missionXp(a, poi({ perilous: true }), 3)).toBeGreaterThan(missionXp(a, poi(), 0));
+    expect(missionXp(a, poi({ perilous: true }))).toBe(missionXp(a, poi()));
+  });
+  it('missionXp lit la base d’épreuve partagée avec le combat de groupe', () => {
+    const p = poi({ level: 33, distNorm: CARAVAN.xpRefDist });
+    expect(missionXp(refAdventurer(33), p)).toBe(Math.round(trialXpBase(33)));
   });
 });
 
@@ -1730,8 +1759,19 @@ describe('sources d’équipement : embuscades repoussées', () => {
     expect(o.scrap).toBe(106);
     expect(o.keys).toBe(0);
     expect(o.wages).toBe(951);
-    expect(o.xp).toEqual({ ref0: 98, ref1: 98, ref2: 98 });
-    expect(o.hurt).toEqual(['ref1']);
+    // ⚠️ Les valeurs de CARGAISON ci-dessus sont celles d'avant le combat de groupe, au
+    // chiffre près : le groupe n'est qu'une lecture du combat fondu, et `deriveSkirmish` ne
+    // lit pas `rng`. Seules l'XP (socle + part des abattus) et les blessés (les TOMBÉS, plus
+    // une victime tirée) ont changé.
+    expect(o.xp).toEqual({ ref0: 84, ref1: 84, ref2: 84 });
+    expect(o.kills).toEqual({ ref0: 0, ref1: 3, ref2: 0 });
+    expect(o.hurt).toEqual(['ref1', 'ref2', 'ref0']);
+    expect(o.events.map((e) => [e.kills, e.fallen])).toEqual([
+      [0, 3],
+      [3, 2],
+      [undefined, undefined],
+      [undefined, undefined],
+    ]);
     expect(o.events.map((e) => e.kind)).toEqual(['bandits', 'bandits', 'calme', 'calme']);
     expect(o.events.map((e) => e.won)).toEqual([false, true, undefined, undefined]);
     // …et une pièce a bien été tirée : le test n’est pas trivialement vrai.
@@ -1860,6 +1900,11 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
     );
     const calme = roadTroop(poi({ level: 30 }))[0]!.combatant;
     const peril = roadTroop(poi({ level: 30, perilous: true }))[0]!.combatant;
-    expect(peril.damage).toBeGreaterThanOrEqual(calme.damage);
+    // ⚠️ STRICT, et sur les DEUX canaux : `perilousMult` multiplie PV et dégâts, donc une
+    // égalité voudrait dire que le drapeau est neutralisé. Un `>=` laissait passer
+    // exactement cette mutation.
+    expect(peril.damage).toBeGreaterThan(calme.damage);
+    expect(peril.pv).toBeGreaterThan(calme.pv);
+    expect(peril.damage / calme.damage).toBeCloseTo(CARAVAN.perilousMult, 1);
   });
 });

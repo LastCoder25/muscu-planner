@@ -1,23 +1,28 @@
 // skirmish.ts — le COMBAT DE GROUPE : des unités distinctes contre une troupe. Pur/testable.
 //
-// ⚠️ UN MOTEUR, PAS UN TROISIÈME JEU DE FORMULES. Chaque affrontement est un DUEL résolu
-// par `simulateCombat` — crit, esquive, réduction, vol de vie, signatures et procs compris —
-// avec les PV REPORTÉS des deux côtés. Le groupe vit dans l'ENCHAÎNEMENT : la troupe avance
-// dans son ordre, l'unité du joueur qui l'affronte est tirée à la graine parmi celles encore
-// debout, et le perdant du duel tombe.
+// ⚠️ LE COMBAT RESTE UN SEUL COMBAT. L'issue se joue par `simulateCombat` entre le groupe
+// FONDU et la troupe FONDUE — crit, esquive, réduction, vol de vie, signatures et procs
+// compris — et c'est ce combat, calibré et mesuré, qui décide gagné/perdu. Le groupe n'est
+// qu'une LECTURE de son journal (`deriveSkirmish`) : qui tombe, qui abat qui. Rien n'est
+// re-simulé, donc l'issue et tout ce qui en découle (cargaison, butin) sont identiques au
+// bit près à ceux du combat fondu.
 //
-// ⚠️ POURQUOI PAS `siegeBattle` : ses unités n'ont que PV et dégâts (crit fondu, ni
-// esquive, ni réduction, ni procs) et presque aucun aléa hors du ciblage. Sur un 3 contre 3
-// l'issue y serait quasi déterministe — or la route vit de PROBABILITÉS (trio calme
-// 70-94 %, périlleux 8-40 %). Et ses règles (mur, brèche, secteurs) n'ont pas d'objet en
-// rase campagne.
+// ⚠️ POURQUOI PAS DES DUELS ENCHAÎNÉS (essayés puis écartés, v0.859) : leur rapport
+// trio/solo est LINÉAIRE (≈ 2 à 3), là où un combat fondu suit offense × survie — les bandes
+// de route (solo ~0 %, trio 70-94 %) n'y tenaient à aucun réglage, et même une embuscade
+// gagnée faisait tomber 1 à 2 membres (voyages avec blessé ×2,6 à ×8).
+//
+// ⚠️ POURQUOI PAS `siegeBattle` : ses unités n'ont que PV et dégâts, et ses règles (mur,
+// brèche, secteurs) n'ont pas d'objet en rase campagne.
 //
 // ⚠️ PERSONNE NE MEURT : un allié « tombé » part à l'infirmerie (`down`), jamais perdu.
-import { mulberry32, offenseOf, simulateCombat, survivalOf, type Combatant } from './combat';
+import { mulberry32, offenseOf, survivalOf, type CombatEvent, type Combatant } from './combat';
 
 export const SKIRMISH = {
   /** Part de la base d'une épreuve (`trialXpBase`) que vaut UN ennemi abattu, pour le groupe
-   *  entier. ⚠️ Recalibrée en Task 4 (XP moyenne d'un convoi à ±15 % de l'ancienne). */
+   *  entier. ⚠️ MESURÉE sur les embuscades de convoi (trio de référence, 400 voyages aux
+   *  niveaux 12/20/26/45/70/85) : XP moyenne par membre, ancien bonus par combat → abattus
+   *  partagés, calme −1,3 % à −0,3 %, périlleux −11,6 % à −6,5 % (bande tolérée ±15 %). */
   xpPerKill: 0.2,
   /** Un abattu ne vaut jamais plus qu'un ennemi de `niveau du membre + N` : un vétéran
    *  n'élève pas une recrue à sa place en l'emmenant sur un lieu hors de sa ligue. */
@@ -33,19 +38,18 @@ export interface SkirmishUnit {
   combatant: Combatant;
 }
 
-/** Une mort du journal : QUI a abattu QUI, et à quel duel. */
-export interface SkirmishKill {
-  duel: number;
+/** Une mort du journal : QUI a abattu QUI, et à quel événement du combat fondu.
+ *  `at` = indice dans `GroupFight.log`, ou `log.length` pour la CLÔTURE (combat tranché au
+ *  chrono : les derniers debout du camp perdant tombent à la fin). */
+interface SkirmishKill {
+  at: number;
   killer: string;
   victim: string;
 }
 
 export interface SkirmishResult {
-  /** Toute la troupe est tombée ET au moins un allié tient encore la route. ⚠️ Un DERNIER
-   *  duel où les deux camps tombent ensemble (épines) est une DÉFAITE : personne ne reste
-   *  debout pour tenir la place, même si le dernier ennemi est mort avec l'allié. */
+  /** C'est l'issue du combat fondu, recopiée — la dérivation ne décide rien. */
   win: boolean;
-  duels: number;
   kills: SkirmishKill[];
   /** Morts par tueur (alliés ET ennemis). */
   killsBy: Record<string, number>;
@@ -53,8 +57,22 @@ export interface SkirmishResult {
   down: string[];
   /** Ennemis abattus. */
   foesDown: string[];
-  /** PV restants des alliés (0 pour un tombé). */
-  pvLeft: Record<string, number>;
+  /** Ordre de front des alliés (tiré à la graine) et leurs bornes cumulées dans cet ordre. */
+  front: string[];
+  allyCuts: number[];
+  /** Bornes cumulées des corps ennemis, dans l'ordre de la troupe. */
+  foeCuts: number[];
+}
+
+/** Le combat FONDU dont on lit le groupe. Générique : route, camp, tout ce qui se résout en
+ *  un `simulateCombat` entre deux combattants agrégés. */
+export interface GroupFight {
+  /** Journal du combat : `playerPv` / `monsterPv` APRÈS chaque événement. */
+  log: readonly CombatEvent[];
+  win: boolean;
+  /** PV max du combattant fondu du groupe (`player.pv`) et de celui de la troupe. */
+  allyPv: number;
+  foePv: number;
 }
 
 export interface TroopSpec {
@@ -79,71 +97,131 @@ export function trialXpBase(level: number): number {
   return 6 + level * 1.6;
 }
 
+/** Bornes CUMULÉES d'un total réparti selon des poids : la part i est entamée jusqu'à
+ *  `cuts[i]`. ⚠️ Le dernier franchissement tombe EXACTEMENT au total — le dernier corps
+ *  tombe quand le combattant fondu est à zéro, jamais avant ni après. À poids égaux, ce
+ *  sont au chiffre près les bornes du rejeu de siège (`siegeStage.cutsFor` délègue ici).
+ *  Des poids tous nuls valent des poids égaux. */
+export function cumulativeCuts(total: number, weights: readonly number[]): number[] {
+  const sum = weights.reduce((s, w) => s + Math.max(0, w), 0);
+  const w = sum > 0 ? weights.map((x) => Math.max(0, x)) : weights.map(() => 1);
+  const denom = sum > 0 ? sum : weights.length;
+  const cuts: number[] = [];
+  let cum = 0;
+  for (let i = 0; i < w.length; i++) {
+    cum += w[i]!;
+    cuts.push(i === w.length - 1 ? Math.round(total) : Math.round((total * cum) / denom));
+  }
+  return cuts;
+}
+
+/** Tirage pondéré (poids tous nuls → uniforme). */
+function pick<T>(rng: () => number, items: readonly T[], weight: (x: T) => number): T {
+  const ws = items.map((x) => Math.max(0, weight(x)));
+  const sum = ws.reduce((s, x) => s + x, 0);
+  if (sum <= 0) return items[Math.floor(rng() * items.length)]!;
+  let r = rng() * sum;
+  for (let i = 0; i < items.length; i++) {
+    r -= ws[i]!;
+    if (r < 0) return items[i]!;
+  }
+  return items[items.length - 1]!;
+}
+
+/** Ceux qui tiennent encore (repli : tout le camp, s'il n'y a plus personne). */
+function standing(list: readonly SkirmishUnit[], fallen: Map<string, number>): SkirmishUnit[] {
+  const up = list.filter((x) => !fallen.has(x.id));
+  return up.length ? up : [...list];
+}
+
 /**
- * La bataille. Déterministe pour une graine.
+ * Le GROUPE, lu dans le journal du combat fondu. Déterministe pour une graine.
  *
- * ⚠️ CIBLAGE SIMPLE, écrit une fois : la troupe se présente DANS SON ORDRE (le chef en
- * dernier si l'appelant l'y range), et c'est la graine qui choisit quel allié vivant lui
- * fait face — sans quoi le premier du vivier encaisserait tout, et partirait toujours seul
- * à l'infirmerie.
- * ⚠️ Chaque duel fait tomber au moins un combattant (le perdant ; les deux si les épines
- * achèvent le vainqueur) : la boucle se termine en au plus `allies + foes` duels.
- * ⚠️ `win` exige les deux : plus aucun ennemi debout ET au moins un allié debout — sinon
- * un dernier duel où l'allié meurt en achevant le dernier ennemi par ses épines (les deux
- * à 0 PV dans le MÊME coup) compterait comme une victoire alors que personne ne tient
- * plus la route.
+ * - Les PV de la troupe fondue sont répartis entre ses corps (poids = PV de chaque corps) :
+ *   un corps tombe quand les dégâts CUMULÉS infligés franchissent sa borne.
+ * - Les PV du groupe fondu sont répartis entre les alliés (poids = `survivalOf` de CHAQUE
+ *   unité), dans un ordre de FRONT tiré à la graine : un allié tombe quand les dégâts
+ *   cumulés encaissés franchissent la sienne.
+ * - Chaque mort est créditée à un membre du camp adverse DEBOUT au début de l'événement :
+ *   côté allié, pondéré par son OFFENSE (`offenseOf`) — qui ne frappe pas n'abat personne ;
+ *   côté ennemi, uniforme.
+ *
+ * ⚠️ PERSONNE NE SE RELÈVE : une chute n'est inscrite qu'UNE fois. Un vol de vie remonte les
+ * PV du combattant fondu, pas ceux d'un corps déjà tombé — et la PREMIÈRE fois qu'une borne
+ * est franchie est la même, qu'on lise les pertes du moment ou leur haut de marée.
+ * ⚠️ CLÔTURE : sur une victoire tous les corps sont tombés, sur une défaite tous les alliés
+ * (combat au chrono compris). Un dernier événement où les deux camps touchent zéro est une
+ * DÉFAITE — c'est `simulateCombat` qui le dit, on ne fait que le recopier.
+ * ⚠️ GÉNÉRATEUR SÉPARÉ, seedé ici : l'appelant ne consomme RIEN de son propre flux, sinon
+ * lire le groupe décalerait tous ses tirages suivants (butin, rencontres).
  */
-export function simulateSkirmish(
+export function deriveSkirmish(
+  fight: GroupFight,
   allies: readonly SkirmishUnit[],
   foes: readonly SkirmishUnit[],
   seed: number,
 ): SkirmishResult {
   const rng = mulberry32((seed ^ 0x3c6ef372) >>> 0 || 1);
-  const pv = new Map<string, number>();
-  for (const x of [...allies, ...foes]) pv.set(x.id, x.combatant.pv);
-  const up = (x: SkirmishUnit) => (pv.get(x.id) ?? 0) > 0;
+  // Ordre de front : Fisher-Yates sur une copie.
+  const front = [...allies];
+  for (let i = front.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [front[i], front[j]] = [front[j]!, front[i]!];
+  }
+  const allyCuts = cumulativeCuts(
+    fight.allyPv,
+    front.map((a) => survivalOf(a.combatant)),
+  );
+  const foeCuts = cumulativeCuts(
+    fight.foePv,
+    foes.map((f) => f.combatant.pv),
+  );
+  const allyAt = new Map<string, number>();
+  const foeAt = new Map<string, number>();
   const kills: SkirmishKill[] = [];
   const killsBy: Record<string, number> = {};
   const down: string[] = [];
   const foesDown: string[] = [];
-  const fall = (killer: SkirmishUnit, victim: SkirmishUnit, duel: number, ally: boolean) => {
-    pv.set(victim.id, 0);
-    kills.push({ duel, killer: killer.id, victim: victim.id });
+  const credit = (at: number, killer: SkirmishUnit, victim: SkirmishUnit, ally: boolean) => {
+    kills.push({ at, killer: killer.id, victim: victim.id });
     killsBy[killer.id] = (killsBy[killer.id] ?? 0) + 1;
     (ally ? down : foesDown).push(victim.id);
+    (ally ? allyAt : foeAt).set(victim.id, at);
+  };
+  const offense = (a: SkirmishUnit) => offenseOf(a.combatant);
+  const even = () => 1;
+  /** Tombe à `at` : chaque victime est créditée à un adversaire debout AVANT l'événement.
+   *  ⚠️ Repli sur le camp entier s'il ne reste personne debout en face : une chute doit
+   *  TOUJOURS être inscrite (la clôture en dépend), même sans tueur plausible. */
+  const fall = (at: number, deadAllies: SkirmishUnit[], deadFoes: SkirmishUnit[]) => {
+    const alliesUp = standing(front, allyAt);
+    const foesUp = standing(foes, foeAt);
+    for (const f of deadFoes) credit(at, pick(rng, alliesUp, offense), f, false);
+    for (const a of deadAllies) credit(at, pick(rng, foesUp, even), a, true);
   };
 
-  let duel = 0;
-  for (;;) {
-    const foe = foes.find(up);
-    const living = allies.filter(up);
-    if (!foe || !living.length) break;
-    const ally = living[Math.floor(rng() * living.length)]!;
-    const r = simulateCombat(ally.combatant, foe.combatant, {
-      seed: (seed + duel * 7919) >>> 0,
-      goldOnWin: 0,
-      startPlayerPv: pv.get(ally.id),
-      startMonsterPv: pv.get(foe.id),
-    });
-    const last = r.log[r.log.length - 1];
-    if (last) {
-      pv.set(ally.id, Math.max(0, last.playerPv));
-      pv.set(foe.id, Math.max(0, last.monsterPv));
-    }
-    // Le perdant tombe — y compris aux PV restants d'un combat tranché au chrono.
-    if (r.win || !up(foe)) fall(ally, foe, duel, false);
-    if (!r.win || !up(ally)) fall(foe, ally, duel, true);
-    duel++;
-  }
+  fight.log.forEach((e, at) => {
+    const dealt = fight.foePv - e.monsterPv;
+    const taken = fight.allyPv - e.playerPv;
+    const deadFoes = foes.filter((f, i) => !foeAt.has(f.id) && dealt >= foeCuts[i]!);
+    const deadAllies = front.filter((a, i) => !allyAt.has(a.id) && taken >= allyCuts[i]!);
+    if (deadFoes.length || deadAllies.length) fall(at, deadAllies, deadFoes);
+  });
+  // Clôture : le camp perdant tombe en entier (chrono compris).
+  const leftFoes = foes.filter((f) => !foeAt.has(f.id));
+  const leftAllies = front.filter((a) => !allyAt.has(a.id));
+  if (fight.win) fall(fight.log.length, [], leftFoes);
+  else fall(fight.log.length, leftAllies, []);
 
   return {
-    win: !foes.some(up) && allies.some(up),
-    duels: duel,
+    win: fight.win,
     kills,
     killsBy,
     down,
     foesDown,
-    pvLeft: Object.fromEntries(allies.map((a) => [a.id, pv.get(a.id) ?? 0])),
+    front: front.map((a) => a.id),
+    allyCuts,
+    foeCuts,
   };
 }
 

@@ -1,13 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import {
   SKIRMISH,
-  simulateSkirmish,
+  cumulativeCuts,
+  deriveSkirmish,
   skirmishXpShares,
   trialXpBase,
   troopOf,
+  type GroupFight,
+  type SkirmishResult,
   type SkirmishUnit,
 } from '@/lib/skirmish';
-import { offenseOf, survivalOf, type Combatant } from '@/lib/combat';
+import { cutsFor } from '@/lib/siegeStage';
+import {
+  offenseOf,
+  simulateCombat,
+  survivalOf,
+  type CombatEvent,
+  type Combatant,
+} from '@/lib/combat';
 
 const c = (o: Partial<Combatant> = {}): Combatant => ({
   name: 'x',
@@ -25,119 +35,299 @@ const u = (id: string, o: Partial<Combatant> = {}, level = 10): SkirmishUnit => 
   level,
   combatant: c({ name: id, ...o }),
 });
+/** Un événement de journal écrit à la main : seuls les PV APRÈS l'événement comptent. */
+const ev = (playerPv: number, monsterPv: number): CombatEvent => ({
+  round: 1,
+  who: 'player',
+  type: 'hit',
+  damage: 0,
+  playerPv,
+  monsterPv,
+});
 
-describe('⚔️ simulateSkirmish — des duels enchaînés, PV reportés des deux côtés', () => {
-  it('est DÉTERMINISTE : même graine, même bataille', () => {
-    const allies = [u('a', { pv: 300, damage: 40 }), u('b', { pv: 200, damage: 60 })];
-    const foes = [u('f0', { pv: 150, damage: 30 }), u('f1', { pv: 150, damage: 30 })];
-    expect(simulateSkirmish(allies, foes, 42)).toEqual(simulateSkirmish(allies, foes, 42));
+/** Un VRAI combat fondu (`simulateCombat`) entre le groupe et la troupe, puis la dérivation. */
+function vrai(
+  allies: SkirmishUnit[],
+  foes: SkirmishUnit[],
+  groupe: Partial<Combatant>,
+  troupe: Partial<Combatant>,
+  seed: number,
+): { fight: GroupFight; r: SkirmishResult } {
+  const g = c({ name: 'Groupe', ...groupe });
+  const t = c({ name: 'Troupe', ...troupe });
+  const res = simulateCombat(g, t, { seed, goldOnWin: 0 });
+  const fight: GroupFight = { log: res.log, win: res.win, allyPv: g.pv, foePv: t.pv };
+  return { fight, r: deriveSkirmish(fight, allies, foes, seed) };
+}
+
+/** Rejoue le journal INDÉPENDAMMENT : indice de l'événement où chaque borne est franchie
+ *  (`Infinity` si jamais), au haut de marée des pertes — un soin ne relève personne. */
+function franchissements(fight: GroupFight, cuts: number[], cote: 'foe' | 'ally'): number[] {
+  const out = cuts.map(() => Infinity);
+  const total = cote === 'foe' ? fight.foePv : fight.allyPv;
+  let haut = 0;
+  fight.log.forEach((e, k) => {
+    const pv = cote === 'foe' ? e.monsterPv : e.playerPv;
+    haut = Math.max(haut, Math.min(total, total - pv));
+    cuts.forEach((cut, i) => {
+      if (out[i] === Infinity && haut >= cut) out[i] = k;
+    });
   });
+  return out;
+}
 
-  it('⚠️ les PV d’un ALLIÉ se reportent d’un duel à l’autre', () => {
-    // L'ennemi frappe le premier (17..23), l'allié abat chaque ennemi d'un coup. Frais à
-    // chaque duel, l'allié gagnerait les trois ; PV reportés, il tombe au troisième.
-    const a = u('a', { pv: 50, damage: 100, initiative: 1 });
-    const foe = (id: string) => u(id, { pv: 20, damage: 20, initiative: 50 });
-    const r = simulateSkirmish([a], [foe('f0'), foe('f1'), foe('f2')], 7);
-    expect(r.win).toBe(false);
-    expect(r.down).toEqual(['a']);
-    expect(r.foesDown).toEqual(['f0', 'f1']);
-    expect(r.killsBy['a']).toBe(2);
-    expect(r.killsBy['f2']).toBe(1);
-    expect(r.pvLeft['a']).toBe(0);
-  });
+const trio = () => [
+  u('a', { pv: 300, damage: 30 }),
+  u('b', { pv: 200, damage: 60 }),
+  u('c', { pv: 100, damage: 10, dodge: 0.2 }),
+];
+const bandits = () => [0, 1, 2, 3].map((i) => u(`f${i}`, { pv: 50, damage: 20 }, 12));
+/** Un combat serré : victoires ET défaites, et du vol de vie (PV du groupe non monotones). */
+const GROUPE = { pv: 500, damage: 30, lifesteal: 0.2 };
+const TROUPE = { pv: 300, damage: 60 };
 
-  it('⚠️ les PV d’un ENNEMI se reportent : il ne se relève pas entre deux adversaires', () => {
-    // a1 entame f0 (51..69) puis tombe ; a2 l'achève d'un coup SANS être touché — ce qui
-    // n'arrive que si f0 garde ses PV entamés.
-    const allies = [
-      u('a1', { pv: 15, damage: 60, initiative: 99 }),
-      u('a2', { pv: 1000, damage: 60, initiative: 99 }),
-    ];
-    const foes = [u('f0', { pv: 100, damage: 20, initiative: 1 })];
-    let vus = 0;
-    for (let s = 1; s <= 60; s++) {
-      const r = simulateSkirmish(allies, foes, s);
-      if (r.kills[0]?.victim !== 'a1') continue;
-      vus++;
-      expect(r.kills[1]).toEqual({ duel: 1, killer: 'a2', victim: 'f0' });
-      expect(r.pvLeft['a2']).toBe(1000);
-      expect(r.win).toBe(true);
+describe('✂️ cumulativeCuts — des bornes cumulées qui somment EXACTEMENT', () => {
+  it('le dernier franchissement tombe pile au total, et les bornes ne redescendent jamais', () => {
+    for (const [total, w] of [
+      [1000, [1]],
+      [1000, [3, 1, 2]],
+      [7, [1, 1, 1, 1, 1]],
+      [12345, [0.37, 1.2, 0.05, 2]],
+    ] as [number, number[]][]) {
+      const cuts = cumulativeCuts(total, w);
+      expect(cuts).toHaveLength(w.length);
+      expect(cuts[cuts.length - 1]).toBe(total);
+      for (let i = 1; i < cuts.length; i++) expect(cuts[i]!).toBeGreaterThanOrEqual(cuts[i - 1]!);
     }
-    expect(vus, 'a1 n’a jamais ouvert : le test ne prouve rien').toBeGreaterThan(0);
+  });
+  it('les parts suivent les POIDS', () => {
+    expect(cumulativeCuts(600, [1, 2, 3])).toEqual([100, 300, 600]);
+  });
+  it('⚠️ à poids égaux, ce sont EXACTEMENT les bornes du rejeu de siège d’avant (source unique)', () => {
+    // `cutsFor` délègue désormais ici : on compare donc à la formule qu'il portait, pour que
+    // l'extraction ne décale aucun corps d'un rejeu de siège.
+    const avant = (pv: number, n: number) =>
+      Array.from({ length: n }, (_, i) => Math.round((pv * (i + 1)) / n));
+    for (const [pv, n] of [
+      [1000, 7],
+      [12345, 6],
+      [7, 5],
+      [9999, 3],
+      [83761, 11],
+    ] as [number, number][]) {
+      expect(cumulativeCuts(pv, Array<number>(n).fill(1))).toEqual(avant(pv, n));
+      expect(cutsFor(pv, n)).toEqual(avant(pv, n));
+    }
+  });
+});
+
+describe('⚔️ deriveSkirmish — le groupe LU dans le journal du combat fondu', () => {
+  it('est DÉTERMINISTE : même journal, même graine, même bataille', () => {
+    const { fight } = vrai(trio(), bandits(), GROUPE, TROUPE, 9);
+    expect(deriveSkirmish(fight, trio(), bandits(), 42)).toEqual(
+      deriveSkirmish(fight, trio(), bandits(), 42),
+    );
   });
 
-  it('le JOURNAL nomme qui a abattu qui, et les comptes le suivent', () => {
-    const allies = [u('a', { pv: 400, damage: 50 }), u('b', { pv: 400, damage: 50 })];
-    const foes = [0, 1, 2, 3].map((i) => u(`f${i}`, { pv: 120, damage: 25 }));
-    for (let s = 1; s <= 30; s++) {
-      const r = simulateSkirmish(allies, foes, s);
+  it('⚠️ l’issue EST celle du combat : la dérivation ne décide rien', () => {
+    let v = 0;
+    for (let s = 1; s <= 80; s++) {
+      const { fight, r } = vrai(trio(), bandits(), GROUPE, TROUPE, s);
+      expect(r.win, `graine ${s}`).toBe(fight.win);
+      if (r.win) v++;
+    }
+    expect(v).toBeGreaterThan(0);
+    expect(v).toBeLessThan(80);
+  });
+
+  it('⚠️ un corps tombe EXACTEMENT quand sa borne est franchie, jamais deux fois ; tous en cas de victoire', () => {
+    let victoires = 0;
+    let defaites = 0;
+    for (let s = 1; s <= 120; s++) {
+      const { fight, r } = vrai(trio(), bandits(), GROUPE, TROUPE, s);
+      expect(r.foeCuts).toEqual(cumulativeCuts(fight.foePv, [50, 50, 50, 50]));
+      const attendu = franchissements(fight, r.foeCuts, 'foe');
       const tues = r.kills.filter((k) => k.victim.startsWith('f'));
-      expect(tues.map((k) => k.victim).sort()).toEqual([...r.foesDown].sort());
-      for (const k of tues) expect(['a', 'b']).toContain(k.killer);
-      expect((r.killsBy['a'] ?? 0) + (r.killsBy['b'] ?? 0)).toBe(r.foesDown.length);
-      expect(r.win).toBe(r.foesDown.length === foes.length);
-      // Chaque duel fait tomber au moins un combattant : la bataille est bornée.
-      expect(r.duels).toBeLessThanOrEqual(allies.length + foes.length);
+      expect(new Set(tues.map((k) => k.victim)).size).toBe(tues.length);
+      bandits().forEach((f, i) => {
+        const k = tues.find((x) => x.victim === f.id);
+        if (attendu[i] !== Infinity) expect(k?.at, `graine ${s} ${f.id}`).toBe(attendu[i]);
+        else if (!fight.win) expect(k, `graine ${s} ${f.id}`).toBeUndefined();
+        else expect(k?.at, `graine ${s} ${f.id}`).toBe(fight.log.length); // achevé au chrono
+      });
+      expect([...r.foesDown].sort()).toEqual(tues.map((k) => k.victim).sort());
+      if (fight.win) {
+        victoires++;
+        expect(r.foesDown).toHaveLength(bandits().length);
+      } else defaites++;
+    }
+    expect(victoires, 'aucune victoire : le test ne prouve rien').toBeGreaterThan(0);
+    expect(defaites, 'aucune défaite : le test ne prouve rien').toBeGreaterThan(0);
+  });
+
+  it('⚠️ les alliés tombés sont EXACTEMENT ceux dont la borne est franchie ; tous en cas de défaite', () => {
+    let defaites = 0;
+    let victoiresAvecTombe = 0;
+    for (let s = 1; s <= 120; s++) {
+      const { fight, r } = vrai(trio(), bandits(), GROUPE, TROUPE, s);
+      const attendu = franchissements(fight, r.allyCuts, 'ally');
+      const chutes = r.kills.filter((k) => !k.victim.startsWith('f'));
+      expect(new Set(chutes.map((k) => k.victim)).size).toBe(chutes.length);
+      r.front.forEach((id, i) => {
+        const k = chutes.find((x) => x.victim === id);
+        if (attendu[i] !== Infinity) expect(k?.at, `graine ${s} ${id}`).toBe(attendu[i]);
+        else if (fight.win) expect(k, `graine ${s} ${id}`).toBeUndefined();
+        else expect(k?.at, `graine ${s} ${id}`).toBe(fight.log.length);
+      });
+      expect([...r.down].sort()).toEqual(chutes.map((k) => k.victim).sort());
+      if (!fight.win) {
+        defaites++;
+        expect([...r.down].sort()).toEqual(['a', 'b', 'c']);
+      } else if (r.down.length) victoiresAvecTombe++;
+    }
+    expect(defaites, 'aucune défaite : le test ne prouve rien').toBeGreaterThan(0);
+    expect(
+      victoiresAvecTombe,
+      'aucun tombé dans une victoire : le test ne prouve rien',
+    ).toBeGreaterThan(0);
+  });
+
+  it('⚠️ le TUEUR est toujours debout au moment du coup (au début de l’événement)', () => {
+    for (let s = 1; s <= 120; s++) {
+      const { r } = vrai(trio(), bandits(), GROUPE, TROUPE, s);
+      const chute = new Map(r.kills.map((k) => [k.victim, k.at]));
+      for (const k of r.kills) {
+        const tombe = chute.get(k.killer);
+        if (tombe !== undefined)
+          expect(tombe, `graine ${s} ${k.killer}`).toBeGreaterThanOrEqual(k.at);
+      }
+      const par: Record<string, number> = {};
+      for (const k of r.kills) par[k.killer] = (par[k.killer] ?? 0) + 1;
+      expect(r.killsBy).toEqual(par);
     }
   });
 
-  it('⚠️ un groupe VAINQUEUR compte le membre tombé en chemin', () => {
-    const allies = [
-      u('faible', { pv: 5, damage: 1, initiative: 1 }),
-      u('fort', { pv: 1000, damage: 200, initiative: 99 }),
-    ];
-    const foes = [u('f0', { pv: 50, damage: 20, initiative: 50 })];
-    let vu = false;
-    for (let s = 1; s <= 60 && !vu; s++) {
-      const r = simulateSkirmish(allies, foes, s);
-      if (r.win && r.down.includes('faible')) vu = true;
+  it('⚠️ un allié tombé plus tôt n’est plus jamais crédité (journal écrit à la main)', () => {
+    // Le 1ᵉʳ du front (100 PV sur 200) tombe à l'événement 0 ; les bandits meurent APRÈS.
+    const allies = [u('a', { pv: 100, damage: 50 }), u('b', { pv: 100, damage: 50 })];
+    const foes = [u('f0', { pv: 50 }), u('f1', { pv: 50 })];
+    const fight: GroupFight = {
+      log: [ev(100, 100), ev(100, 50), ev(100, 0)],
+      win: true,
+      allyPv: 200,
+      foePv: 100,
+    };
+    for (let s = 1; s <= 60; s++) {
+      const r = deriveSkirmish(fight, allies, foes, s);
+      const premier = r.front[0]!;
+      expect(r.down).toEqual([premier]);
+      for (const k of r.kills.filter((x) => x.victim.startsWith('f')))
+        expect(k.killer, `graine ${s}`).not.toBe(premier);
     }
-    expect(vu).toBe(true);
   });
 
-  it('bords : troupe vide = victoire sans duel ; groupe vide = défaite', () => {
-    expect(simulateSkirmish([u('a')], [], 1)).toMatchObject({ win: true, duels: 0 });
-    expect(simulateSkirmish([], [u('f0')], 1)).toMatchObject({ win: false, duels: 0 });
-  });
-
-  it('⚠️ un DERNIER duel où les deux tombent ensemble (épines) est une DÉFAITE : personne ne tient la route', () => {
-    // Pv=1 des deux côtés + épines : le coup qui tue l'allié renvoie systématiquement
-    // (plancher « au moins 1 ») une riposte fatale au monstre — DANS le même événement.
-    const mutual = u('a', { pv: 1, damage: 1, dodge: 0, initiative: 1, thorns: 1 });
-    const foe = u('f0', { pv: 1, damage: 1, initiative: 99 });
-    const r = simulateSkirmish([mutual], [foe], 1);
-    expect(r.win).toBe(false);
-    expect(r.duels).toBe(1);
-    expect(r.kills).toEqual([
-      { duel: 0, killer: 'a', victim: 'f0' },
-      { duel: 0, killer: 'f0', victim: 'a' },
-    ]);
-    expect(r.killsBy).toEqual({ a: 1, f0: 1 });
-    expect(r.down).toEqual(['a']);
-    expect(r.foesDown).toEqual(['f0']);
-    expect(r.pvLeft['a']).toBe(0);
-  });
-
-  it('⚠️ …mais si un AUTRE allié tient encore, la victoire reste acquise', () => {
-    const mutual = u('mutual', { pv: 1, damage: 1, dodge: 0, initiative: 1, thorns: 1 });
-    const bystander = u('bystander', { pv: 1000, damage: 500, initiative: 1 });
-    const foe = u('f0', { pv: 1, damage: 1, initiative: 99 });
-    let vu = false;
-    for (let s = 1; s <= 60 && !vu; s++) {
-      const r = simulateSkirmish([mutual, bystander], [foe], s);
-      if (!(r.down.includes('mutual') && !r.down.includes('bystander'))) continue;
-      vu = true;
-      expect(r.win).toBe(true);
+  it('⚠️ un bandit abattu n’abat plus personne (journal écrit à la main)', () => {
+    // f0 tombe à l'événement 0 ; les deux alliés tombent APRÈS : seul f1 peut les abattre.
+    const allies = [u('a', { pv: 100 }), u('b', { pv: 100 })];
+    const foes = [u('f0', { pv: 50 }), u('f1', { pv: 50 })];
+    const fight: GroupFight = {
+      log: [ev(200, 50), ev(100, 50), ev(0, 50)],
+      win: false,
+      allyPv: 200,
+      foePv: 100,
+    };
+    for (let s = 1; s <= 60; s++) {
+      const r = deriveSkirmish(fight, allies, foes, s);
       expect(r.foesDown).toEqual(['f0']);
-      expect(r.kills).toEqual([
-        { duel: 0, killer: 'mutual', victim: 'f0' },
-        { duel: 0, killer: 'f0', victim: 'mutual' },
-      ]);
-      expect(r.killsBy).toEqual({ mutual: 1, f0: 1 });
-      expect(r.pvLeft['bystander']).toBe(1000);
+      for (const k of r.kills.filter((x) => !x.victim.startsWith('f')))
+        expect(k.killer, `graine ${s}`).toBe('f1');
     }
-    expect(vu, 'mutual n’a jamais été choisi : le test ne prouve rien').toBe(true);
+  });
+
+  it('⚠️ le crédit suit l’OFFENSE de chaque unité : qui ne frappe pas n’abat personne', () => {
+    const allies = [u('fort', { pv: 100, damage: 80 }), u('nul', { pv: 100, damage: 0 })];
+    expect(offenseOf(allies[1]!.combatant)).toBe(0);
+    let fort = 0;
+    for (let s = 1; s <= 60; s++) {
+      const { r } = vrai(allies, bandits(), { pv: 900, damage: 80 }, { pv: 200, damage: 5 }, s);
+      expect(r.killsBy['nul'] ?? 0, `graine ${s}`).toBe(0);
+      fort += r.killsBy['fort'] ?? 0;
+    }
+    expect(fort).toBeGreaterThan(0);
+  });
+
+  it('…et à offense double, deux fois plus d’abattus en moyenne', () => {
+    const allies = [u('x2', { pv: 100, damage: 40 }), u('x1', { pv: 100, damage: 20 })];
+    const foes = [0, 1, 2, 3, 4, 5].map((i) => u(`f${i}`, { pv: 10 }));
+    const fight: GroupFight = {
+      log: [0, 1, 2, 3, 4, 5].map((i) => ev(200, 60 - (i + 1) * 10)),
+      win: true,
+      allyPv: 200,
+      foePv: 60,
+    };
+    let x2 = 0;
+    let x1 = 0;
+    for (let s = 1; s <= 600; s++) {
+      const r = deriveSkirmish(fight, allies, foes, s);
+      x2 += r.killsBy['x2'] ?? 0;
+      x1 += r.killsBy['x1'] ?? 0;
+    }
+    expect(x2 / x1).toBeGreaterThan(1.7);
+    expect(x2 / x1).toBeLessThan(2.3);
+  });
+
+  it('⚠️ les parts des alliés suivent leur SURVIE, dans un ordre de front tiré à la graine', () => {
+    const allies = trio();
+    const fight: GroupFight = { log: [ev(600, 100)], win: true, allyPv: 600, foePv: 100 };
+    const premiers = new Set<string>();
+    for (let s = 1; s <= 40; s++) {
+      const r = deriveSkirmish(fight, allies, bandits(), s);
+      expect([...r.front].sort()).toEqual(['a', 'b', 'c']);
+      premiers.add(r.front[0]!);
+      const poids = r.front.map((id) => survivalOf(allies.find((a) => a.id === id)!.combatant));
+      expect(r.allyCuts).toEqual(cumulativeCuts(600, poids));
+    }
+    expect(premiers.size, 'le front ne change jamais : il n’est pas tiré').toBeGreaterThan(1);
+  });
+
+  it('⚠️ un DERNIER événement où les deux camps tombent est une DÉFAITE : tout le monde tombe', () => {
+    const allies = [u('a', { pv: 100 }), u('b', { pv: 100 })];
+    const foes = [u('f0', { pv: 50 }), u('f1', { pv: 50 })];
+    const fight: GroupFight = {
+      log: [ev(150, 50), ev(-5, -3)],
+      win: false,
+      allyPv: 200,
+      foePv: 100,
+    };
+    const r = deriveSkirmish(fight, allies, foes, 3);
+    expect(r.win).toBe(false);
+    expect([...r.down].sort()).toEqual(['a', 'b']);
+    expect([...r.foesDown].sort()).toEqual(['f0', 'f1']);
+    expect(r.kills.find((k) => k.victim === 'f0')?.at).toBe(0);
+    expect(r.kills.find((k) => k.victim === 'f1')?.at).toBe(1);
+  });
+
+  it('⚠️ au CHRONO : une défaite fait tomber les alliés encore debout, une victoire achève la troupe', () => {
+    const allies = [u('a', { pv: 100, damage: 10 }), u('b', { pv: 100, damage: 10 })];
+    const foes = [u('f0', { pv: 50 }), u('f1', { pv: 50 })];
+    const log = [ev(150, 60)];
+    const perdu = deriveSkirmish({ log, win: false, allyPv: 200, foePv: 100 }, allies, foes, 5);
+    expect([...perdu.down].sort()).toEqual(['a', 'b']);
+    expect(perdu.foesDown).toEqual([]);
+    for (const k of perdu.kills) expect(['f0', 'f1']).toContain(k.killer);
+    const gagne = deriveSkirmish({ log, win: true, allyPv: 200, foePv: 100 }, allies, foes, 5);
+    expect([...gagne.foesDown].sort()).toEqual(['f0', 'f1']);
+    expect(gagne.down).toEqual([]);
+    for (const k of gagne.kills) expect(['a', 'b']).toContain(k.killer);
+  });
+
+  it('bords : troupe vide = victoire sans mort ; groupe vide = défaite', () => {
+    const f: GroupFight = { log: [], win: true, allyPv: 100, foePv: 1 };
+    expect(deriveSkirmish(f, [u('a')], [], 1)).toMatchObject({ win: true, kills: [] });
+    expect(deriveSkirmish({ ...f, win: false }, [], [u('f0')], 1)).toMatchObject({
+      win: false,
+      down: [],
+    });
   });
 });
 

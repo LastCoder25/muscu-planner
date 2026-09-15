@@ -17,6 +17,7 @@
 // tombe exactement quand le log dit qu'il tombe et ne se relève jamais.
 import { BATTLE } from './siegeBattle';
 import { mulberry32 } from './combat';
+import { cumulativeCuts } from './skirmish';
 import { treePath } from './expedition';
 import { raidFirstSector, type RaidGroup, type RaidReport, type SiegeDefenderInfo } from './raid';
 
@@ -387,9 +388,9 @@ export function placeBodies(groups: RaidGroup[], seed: number, firstSector = 0):
  *  franchissent sa borne. Parts ÉGALES qui somment EXACTEMENT aux PV du groupe → le
  *  dernier corps tombe précisément quand le groupe est vaincu, jamais avant ni après. */
 export function cutsFor(groupPv: number, count: number): number[] {
-  const cuts: number[] = [];
-  for (let i = 1; i <= count; i++) cuts.push(Math.round((groupPv * i) / count));
-  return cuts;
+  // ⚠️ SOURCE UNIQUE des bornes cumulées, partagée avec le combat de groupe
+  // (`deriveSkirmish`) : à poids égaux, les mêmes au chiffre près.
+  return cumulativeCuts(groupPv, Array<number>(Math.max(0, count)).fill(1));
 }
 
 /** Tourelle la plus proche d'un angle donné (les tourelles sont réparties régulièrement). */

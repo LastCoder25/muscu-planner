@@ -37,11 +37,17 @@ import {
   type Combatant,
 } from './combat';
 // ⚠️ `trialXpBase` : SOURCE UNIQUE de la base d'XP d'une épreuve (`6 + niveau × 1,6`),
-// partagée avec `simulateSkirmish`/`skirmishXpShares` — un convoi et un combat de groupe
-// évaluent le même « niveau du lieu » de la même façon. `troopOf`/`SkirmishUnit` : le
-// MOTEUR DE GROUPE lui-même, lu par `roadTroop`/`roadUnits` (v0.859). Aucun cycle :
-// `skirmish.ts` n'importe que `combat.ts`.
-import { trialXpBase, troopOf, type SkirmishUnit } from './skirmish';
+// partagée avec `skirmishXpShares` — un convoi et un combat de groupe évaluent le même
+// « niveau du lieu » de la même façon. `deriveSkirmish`/`troopOf`/`SkirmishUnit` : le
+// COMBAT DE GROUPE, lu par `roadTroop`/`roadUnits` et par les embuscades (v0.859). Aucun
+// cycle : `skirmish.ts` n'importe que `combat.ts`.
+import {
+  deriveSkirmish,
+  skirmishXpShares,
+  trialXpBase,
+  troopOf,
+  type SkirmishUnit,
+} from './skirmish';
 // ⚠️ Type SEUL : `raid.ts` importera `garrisonCombatant` à l'exécution, donc un import
 // de valeur dans l'autre sens créerait un cycle. Le projet applique déjà cette règle
 // entre `data/familiars` et `items`.
@@ -120,7 +126,9 @@ export const CARAVAN = {
   /** Route dangereuse (`Poi.perilous`, tirée au spawn donc annonçable AVANT le départ). */
   perilousMult: 1.35,
   /** Taille de la troupe d'une embuscade — calme / périlleuse (moteur de groupe, v0.859).
-   *  ⚠️ Recalibrées en Task 4, mesures à l'appui. */
+   *  ⚠️ Ce n'est PAS le danger : l'issue reste le combat fondu `roadFoe` (bandes intactes).
+   *  C'est le nombre de CORPS entre lesquels ses PV sont répartis — donc combien d'abattus
+   *  le journal inscrit, et l'XP qu'ils rapportent (`SKIRMISH.xpPerKill`). */
   troopCalm: 3,
   troopPerilous: 3,
   /** Ce qu'apporte une SIGNATURE de classe (strates ≥ 3), en %. */
@@ -168,13 +176,6 @@ export const CARAVAN = {
   slotEvery: 9,
   /** Niveaux de Comptoir pour gagner la MOITIÉ de l’accélération possible. */
   speedHalf: 35,
-  /** Ce qu'une embuscade RÉELLEMENT traversée ajoute à l'XP, par combat (gagné OU perdu).
-   *  ⚠️ Remplace un +30 % forfaitaire versé dès que la route était étiquetée « périlleuse » :
-   *  mesuré, l'XP était identique (49) qu'il y ait eu 1, 2 ou 3 embuscades — on payait
-   *  l'étiquette, pas l'épreuve. Une route périlleuse tirant deux fois plus de rencontres,
-   *  elle reste naturellement plus formatrice, mais parce qu'il s'y passe quelque chose. */
-  xpPerFight: 0.2,
-  xpFightMax: 0.6,
   /** Distance de RÉFÉRENCE de l'XP de mission (0..1) : celle dont le rendement ne bouge
    *  pas. En deçà on apprend moins, au-delà davantage — voir `missionTravelMult`. La
    *  médiane, pour que la courbe de montée mesurée (~8 missions pour le niveau 2, 255
@@ -190,6 +191,10 @@ interface CaravanEvent {
   kind: CaravanEventKind;
   /** `bandits` uniquement : l'escorte a-t-elle tenu ? */
   won?: boolean;
+  /** `bandits` : bandits abattus / membres tombés (combat de groupe, v0.859). ⚠️ ABSENTS sur
+   *  les convois lancés avant la bascule (leur `outcome` est figé au départ). */
+  kills?: number;
+  fallen?: number;
   text: string;
 }
 
@@ -207,7 +212,10 @@ export interface CaravanOutcome {
    *  existe précisément pour empêcher de farmer le trajet le plus court, se contournait
    *  en ajoutant des passagers. */
   xp: Record<string, number>;
-  /** Ids des aventuriers blessés (→ infirmerie). */
+  /** 🗡️ Bandits abattus par aventurier, toutes embuscades confondues. ⚠️ ABSENT sur les
+   *  convois lancés avant le combat de groupe (leur `outcome` est figé au départ). */
+  kills?: Record<string, number>;
+  /** Ids des aventuriers blessés (→ infirmerie) : ceux qui sont TOMBÉS en embuscade. */
   hurt: string[];
   events: CaravanEvent[];
   text: string;
@@ -843,23 +851,23 @@ export function caravanWages(escort: Adventurer[], poi: Poi): number {
   );
 }
 
-/** XP gagnée par chaque membre — trois termes, et chacun répond à un abus précis.
+/** XP de MISSION d'un membre — le socle, versé quel que soit le résultat, même sans combat.
  *
  *  `ratio` : RENDEMENT DÉCROISSANT quand la route est très en dessous du niveau de
  *  l'aventurier — sans lui, un vétéran engrange sur des routes qui ne lui apprennent rien.
  *  `travel` : la DISTANCE (cf. `missionTravelMult`) — sans lui, la navette au pied de la
  *  ville rendait 17 fois plus d'XP à l'heure que le bout de la carte.
- *  `learned` : les embuscades RÉELLEMENT traversées, gagnées ou perdues.
  *
- *  ⚠️ Les deux premiers ne font PAS double emploi : le premier regarde le niveau de la
- *  route, le second son éloignement. Ils se corrèlent (le niveau découle de la distance)
- *  sans se confondre — un vétéran envoyé loin sur une carte de bas niveau reste bridé. */
-export function missionXp(adv: Adventurer, poi: Poi, fights = 0): number {
+ *  ⚠️ Les deux ne font PAS double emploi : le premier regarde le niveau de la route, le
+ *  second son éloignement. Ils se corrèlent (le niveau découle de la distance) sans se
+ *  confondre — un vétéran envoyé loin sur une carte de bas niveau reste bridé.
+ *  ⚠️ L'ancien bonus forfaitaire par combat traversé (`xpPerFight`, +20 % par embuscade)
+ *  est REMPLACÉ par la part des bandits ABATTUS (`skirmishXpShares`), ajoutée dans
+ *  `resolveCaravan` : on paie ce qui a été fait, et non plus le simple fait d'avoir croisé du monde. */
+export function missionXp(adv: Adventurer, poi: Poi): number {
   const ratio = Math.max(0.15, Math.min(2, poi.level / Math.max(1, adv.level)));
-  const base = trialXpBase(poi.level);
   const travel = missionTravelMult(poi);
-  const learned = 1 + Math.min(CARAVAN.xpFightMax, Math.max(0, fights) * CARAVAN.xpPerFight);
-  return Math.max(1, Math.round(base * Math.min(1, ratio) ** 1.5 * travel * learned));
+  return Math.max(1, Math.round(trialXpBase(poi.level) * Math.min(1, ratio) ** 1.5 * travel));
 }
 
 /** Convois simultanés qu'autorise le Comptoir. ⚠️ SECOND garde-fou de l'inflation :
@@ -1000,6 +1008,8 @@ export function roadUnits(escort: Adventurer[], road: RoadCompanions): SkirmishU
 /**
  * 🗡️ LES BANDITS DE LA ROUTE — une TROUPE à danger ABSOLU.
  *
+ * ⚠️ Ce sont les CORPS de l'embuscade (identité, niveau, part de PV), lus par
+ * `deriveSkirmish` : l'issue, elle, reste le combat fondu `roadFoe`, calibré sur les bandes.
  * ⚠️ Dimensionnée sur l'escorte de RÉFÉRENCE (`CARAVAN.refEscort` aventuriers au niveau du
  * lieu, accompagnés et équipés), jamais sur l'escorte envoyée : sinon une escorte faible
  * affronterait des bandits faibles et « combien j'en envoie » ne voudrait plus rien dire.
@@ -1115,8 +1125,16 @@ export function resolveCaravan(
   let mult = 1;
   let keysBonus = 0;
 
+  // ⚔️ L'issue d'une embuscade reste le COMBAT FONDU calibré (`guards` contre `foe`) : les
+  // bandes de route en dépendent. Le groupe — qui tombe, qui abat qui — n'est qu'une LECTURE
+  // de son journal (`deriveSkirmish`), jamais un second combat.
   const foe = roadFoe(poi);
   const guards = escortCombatant(escort, 'Escorte', roadCompanionEffects(escort, road));
+  // Unités et troupe calculées à la première embuscade seulement (la troupe dérive d'une
+  // escorte de référence entière : inutile sur une route tranquille).
+  let group: { units: SkirmishUnit[]; troop: SkirmishUnit[] } | null = null;
+  const kills: Record<string, number> = Object.fromEntries(escort.map((a) => [a.id, 0]));
+  const xpShare: Record<string, number> = Object.fromEntries(escort.map((a) => [a.id, 0]));
   // Une rencontre par jambe de trajet — deux fois plus sur une route dangereuse.
   const legs = poi.perilous ? 4 : 2;
   const base = poi.perilous ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
@@ -1124,12 +1142,35 @@ export function resolveCaravan(
   for (let i = 0; i < legs; i++) {
     const roll = rng();
     if (roll < amb) {
-      const r = simulateCombat(guards, { ...foe }, { seed: (seed + i * 7919) >>> 0, goldOnWin: 0 });
+      const legSeed = (seed + i * 7919) >>> 0;
+      const r = simulateCombat(guards, { ...foe }, { seed: legSeed, goldOnWin: 0 });
+      group ??= { units: roadUnits(escort, road), troop: roadTroop(poi) };
+      // ⚠️ `deriveSkirmish` tire sur SON générateur (graine de la jambe) : `rng` n'est pas lu,
+      // donc les rencontres suivantes et la cargaison restent celles du combat fondu.
+      const d = deriveSkirmish(
+        { log: r.log, win: r.win, allyPv: guards.pv, foePv: foe.pv },
+        group.units,
+        group.troop,
+        legSeed,
+      );
+      const abattus = d.foesDown.length;
+      const pl = abattus > 1 ? 's' : '';
       events.push({
         kind: 'bandits',
         won: r.win,
-        text: r.win ? 'Une embuscade repoussée.' : 'Des bandits emportent une part du convoi.',
+        kills: abattus,
+        fallen: d.down.length,
+        text: r.win
+          ? `Une embuscade repoussée (${abattus} bandit${pl} abattu${pl}).`
+          : `Des bandits emportent une part du convoi (${abattus} abattu${pl} sur ${group.troop.length}).`,
       });
+      for (const a of escort) kills[a.id] = (kills[a.id] ?? 0) + (d.killsBy[a.id] ?? 0);
+      const parts = skirmishXpShares(escort, group.troop, d);
+      for (const a of escort) xpShare[a.id] = (xpShare[a.id] ?? 0) + (parts[a.id] ?? 0);
+      // 🤕 Le JOURNAL dit qui est tombé : ceux-là partent à l'infirmerie, gagné ou perdu.
+      // ⚠️ Il remplace le tirage d'UNE victime au hasard : une embuscade PERDUE fait tomber
+      // TOUTE l'escorte (le combattant fondu est à zéro), donc toute l'escorte est blessée.
+      for (const id of d.down) if (!hurt.includes(id)) hurt.push(id);
       if (r.win) {
         mult *= 1.12;
         // 🗡️ Une embuscade REPOUSSÉE peut laisser une pièce d'équipement d'aventurier —
@@ -1146,8 +1187,10 @@ export function resolveCaravan(
         if (piece) advGear.push(piece);
       } else {
         mult *= CARAVAN.lossKeep;
-        const victim = escort[Math.floor(rng() * escort.length)];
-        if (victim && !hurt.includes(victim.id)) hurt.push(victim.id);
+        // ⚠️ TIRAGE CONSERVÉ, résultat ignoré : il désignait l'ancienne victime unique. Le
+        // retirer décalerait `rng` après chaque défaite — rencontres et cargaison des jambes
+        // suivantes changeraient, et la route ne serait plus celle qui a été calibrée.
+        rng();
       }
       // ⚠️ Les bandes SUIVANTES repartent de `base`, pas de `amb` : ce que l'éclaireur
       // fait éviter doit devenir une ROUTE CALME, jamais une cache. Sinon il ne
@@ -1176,9 +1219,9 @@ export function resolveCaravan(
     keys: raw.keys,
   };
   const wages = caravanWages(escort, poi);
-  const fights = events.filter((e) => e.kind === 'bandits').length;
+  // XP = le socle de mission (toujours versé) + la part des bandits abattus (partagée).
   const xp: Record<string, number> = {};
-  for (const a of escort) xp[a.id] = missionXp(a, poi, fights);
+  for (const a of escort) xp[a.id] = missionXp(a, poi) + (xpShare[a.id] ?? 0);
 
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
@@ -1197,6 +1240,7 @@ export function resolveCaravan(
     keys: Math.round(y.keys * Math.min(1.2, k)) + keysBonus,
     wages,
     xp,
+    kills,
     hurt,
     events,
     text: events.map((e) => e.text).join(' '),
