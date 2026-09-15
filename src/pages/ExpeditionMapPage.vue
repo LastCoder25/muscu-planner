@@ -436,7 +436,14 @@ import GameLoader from '@/components/GameLoader.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
-import { playerWithGear, mergeEffects, fxRarity, RARITY_RANK, type Item } from '@/lib/items';
+import {
+  playerWithGear,
+  mergeEffects,
+  fxRarity,
+  RARITY_LABEL,
+  RARITY_RANK,
+  type Item,
+} from '@/lib/items';
 import GuildPanel from '@/components/GuildPanel.vue';
 import CaravanReportView from '@/components/CaravanReportView.vue';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
@@ -1162,12 +1169,12 @@ async function doClaim() {
     gameFx.celebrate({
       kind: 'drop',
       emoji: top.emoji,
-      title: rk(top.rarity) >= 9 ? 'DROP RANG SSS !' : `Butin rang ${top.rarity} !`,
+      title: `Butin ${RARITY_LABEL[top.rarity] ?? top.rarity} !`,
       subtitle:
         drops.length > 1
           ? `${top.name} (+${drops.length - 1} autre${drops.length > 2 ? 's' : ''})`
           : top.name,
-      rarity: rk(top.rarity) >= 9 ? 'divin' : rk(top.rarity) >= 8 ? 'legendary' : 'epic',
+      rarity: fxRarity(top.rarity),
     });
 }
 

@@ -3003,7 +3003,9 @@ function celebrateRareDrop(it: Item, quiet = false) {
     quiet,
     kind: 'drop',
     emoji: it.emoji,
-    title: RARITY_RANK[it.rarity] >= 9 ? 'DROP RANG SSS !' : `Drop rang ${it.rarity} !`,
+    // Libellé, jamais l'identifiant brut (« primordial ») ; gradeLabel donne le rang d'un
+    // familier et la rareté d'un objet.
+    title: `Drop ${gradeLabel(it)} !`,
     subtitle: it.name,
     rarity: fxRarity(it.rarity),
   });

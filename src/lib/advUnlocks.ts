@@ -56,8 +56,8 @@ function buildSchedule(): AdvUnlock[] {
         title: `Rareté : ${RARITY_LABEL[rk]}`,
         detail:
           c >= 5
-            ? `Tes drops peuvent atteindre le rang ${RARITY_LABEL[rk]} (effet légendaire possible).`
-            : `Tes drops peuvent désormais atteindre le rang ${RARITY_LABEL[rk]}.`,
+            ? `Tes objets peuvent atteindre la rareté ${RARITY_LABEL[rk]} (effet légendaire possible).`
+            : `Tes objets peuvent désormais atteindre la rareté ${RARITY_LABEL[rk]}.`,
       });
       prev = c;
     }

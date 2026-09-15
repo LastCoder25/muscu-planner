@@ -288,7 +288,7 @@
             <ItemIcon :item="roomFx.item" :size="56" class="fl-icon" />
             <div class="fl-name">{{ roomFx.item.name }}</div>
             <div class="fl-meta">
-              {{ RARITY_LABEL[roomFx.item.rarity] }} · {{ SLOT_LABEL[roomFx.item.slot] }} · niv
+              {{ gradeLabel(roomFx.item) }} · {{ SLOT_LABEL[roomFx.item.slot] }} · niv
               {{ roomFx.item.level }}
             </div>
             <div class="fl-eff">✦ {{ effectLabel(roomFx.item.effect, roomFx.item.level) }}</div>
@@ -363,7 +363,7 @@
             <div class="ol-main">
               <span class="ol-name">{{ it.name }}</span>
               <span class="ol-meta"
-                >{{ RARITY_LABEL[it.rarity] }} · {{ effectLabel(it.effect, it.level) }}</span
+                >{{ gradeLabel(it) }} · {{ effectLabel(it.effect, it.level) }}</span
               >
             </div>
             <span class="ol-chevron">›</span>
@@ -414,7 +414,7 @@
           <div class="ol-main">
             <span class="ol-name">{{ it.name }}</span>
             <span class="ol-meta"
-              >{{ RARITY_LABEL[it.rarity] }} · {{ effectLabel(it.effect, it.level) }}</span
+              >{{ gradeLabel(it) }} · {{ effectLabel(it.effect, it.level) }}</span
             >
           </div>
           <span class="ol-chevron">›</span>
@@ -437,7 +437,7 @@
         <ItemIcon :item="detailItem" :size="56" class="fl-icon" />
         <div class="fl-name">{{ detailItem.name }}</div>
         <div class="fl-meta">
-          {{ RARITY_LABEL[detailItem.rarity]
+          {{ gradeLabel(detailItem)
           }}<template v-if="detailItem.roll != null">
             · jet {{ rollJet(detailItem.roll) }}%</template
           >
@@ -459,7 +459,7 @@
         <div class="fl-cmp">
           <template v-if="detailEquipped">
             <div class="fl-cmp-eq">
-              Équipé : {{ RARITY_LABEL[detailEquipped.rarity] }} · niv {{ detailEquipped.level }} ·
+              Équipé : {{ gradeLabel(detailEquipped) }} · niv {{ detailEquipped.level }} ·
               {{ effectLabel(detailEquipped.effect, detailEquipped.level) }}
             </div>
           </template>
@@ -531,7 +531,7 @@ import {
   rollSetPiece,
   ITEM_SETS,
   effectLabel,
-  RARITY_LABEL,
+  gradeLabel,
   rarityRank,
   RARITY_RANK,
   fxRarity,
@@ -1093,7 +1093,7 @@ function openVault(id: number) {
     kind: 'drop',
     emoji: '💎',
     title: 'Salle secrète !',
-    subtitle: item ? `${item.name} · ${RARITY_LABEL[item.rarity]}` : 'Coffre au trésor',
+    subtitle: item ? `${item.name} · ${gradeLabel(item)}` : 'Coffre au trésor',
     rarity: item ? fxRarity(item.rarity) : 'legendary',
   });
   roomFx.value = { kind: 'chest', item };
