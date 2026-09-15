@@ -16,8 +16,8 @@
 //  • Il dure 7 jours à partir de son démarrage.
 //  • Un joueur n'a qu'UN boss en cours, lancé ou rejoint. On ne quitte pas un boss.
 //  • Le lanceur relance 7 jours après la fin (mort du boss, ou bout des 7 jours).
-//  • Une rep = un point de dégât, pour tout le monde (égalité). Chaque participant ajoute
-//    sa part de PV.
+//  • Une rep = 1000 points de dégât, pour tout le monde (égalité). Chaque participant
+//    ajoute sa part de PV.
 //  • Les reps comptent comme du sport ; une prime de complétion s'ajoute si le boss meurt
 //    et qu'on a apporté sa part minimale.
 import { REP_XP, XP_MULT } from './athlete';
@@ -50,6 +50,11 @@ export const FRIEND_BOSS = {
     BossFamily,
     number
   >,
+  /** Dégâts d'UNE rep (ou d'une seconde de gainage), v0.872 : de plus gros chiffres, et
+   *  RIEN d'autre. Les PV sont multipliés d'autant, donc le nombre de reps pour abattre un
+   *  boss ne bouge pas. Les plafonds de saisie, la part minimale et l'XP restent en reps.
+   *  Doit rester égal à `fboss_damage_per_unit` (migr. 0070). */
+  damagePerUnit: 1000,
   /** Part minimale à apporter pour toucher le coffre et la prime. Sans elle, un invité
    *  qui ne fait rien profiterait du travail des autres. */
   minShare: 0.5,
@@ -251,6 +256,7 @@ export function bossErrorMessage(code: string): string {
     not_active: 'Le combat n’est pas en cours.',
     capped: 'Plafond atteint : reviens plus tard pour frapper encore.',
     no_character: 'Crée d’abord ton aventurier dans l’Aventure.',
+    no_altar: 'Construis l’Autel des boss dans ta base pour lancer un boss.',
     bad_exercise: 'Cet exercice ne peut pas servir de boss.',
     not_defeated: 'Le boss n’est pas encore tombé.',
     nothing: 'Ton coffre a déjà été ouvert.',
@@ -298,9 +304,24 @@ function bossInProgress(
   return p === 'recruiting' || p === 'active';
 }
 
-/** PV d'un boss : une part par participant (le lanceur compris). */
+/** PV d'un boss : une part par participant (le lanceur compris), en points de dégât. */
 export function bossHpTotal(family: BossFamily, participants: number): number {
-  return FRIEND_BOSS.shareUnits[family] * Math.max(1, Math.floor(participants));
+  return bossDamage(FRIEND_BOSS.shareUnits[family] * Math.max(1, Math.floor(participants)));
+}
+
+/** Dégâts infligés par des reps (ou des secondes de gainage). */
+export function bossDamage(units: number): number {
+  return Math.max(0, Math.floor(units)) * FRIEND_BOSS.damagePerUnit;
+}
+
+/** Reps qu'il reste à faire pour abattre le boss (arrondi au-dessus, comme `fboss_hit`). */
+export function bossUnitsLeft(b: Pick<FriendBoss, 'hpTotal' | 'damage'>): number {
+  return Math.ceil(Math.max(0, b.hpTotal - b.damage) / FRIEND_BOSS.damagePerUnit);
+}
+
+/** PV lisibles : « 120 000 ». */
+export function fmtBossPv(n: number): string {
+  return Math.max(0, Math.round(n)).toLocaleString('fr-FR');
 }
 
 /** Instant où le LANCEUR pourra déclarer à nouveau (null = tout de suite). */
@@ -326,18 +347,19 @@ export function canDeclareBoss(
   return next == null || now >= next;
 }
 
-/** Ce qu'une saisie peut encore apporter, plafonds compris.
- *  `lastDayUnits` = ce que CE joueur a déjà saisi sur ce boss pendant les 24 dernières heures. */
+/** Ce qu'une saisie peut encore apporter, plafonds compris, en reps.
+ *  `lastDayUnits` = ce que CE joueur a déjà saisi sur ce boss pendant les 24 dernières heures ;
+ *  `unitsLeft` = les reps qui restent avant la mort du boss (`bossUnitsLeft`). */
 export function acceptedUnits(
   family: BossFamily,
   asked: number,
   lastDayUnits: number,
-  hpLeft: number,
+  unitsLeft: number,
 ): number {
   const share = FRIEND_BOSS.shareUnits[family];
   const perHit = Math.floor(share * FRIEND_BOSS.hitMaxShare);
   const dayLeft = Math.floor(share * FRIEND_BOSS.dayMaxShare) - Math.max(0, lastDayUnits);
-  return Math.max(0, Math.min(Math.floor(asked), perHit, dayLeft, Math.max(0, hpLeft)));
+  return Math.max(0, Math.min(Math.floor(asked), perHit, dayLeft, Math.max(0, unitsLeft)));
 }
 
 /** A-t-on apporté sa part minimale ? */

@@ -172,7 +172,14 @@ import { logicalToday, computeDailyTargets } from '@/lib/challenges';
 import { useChallengesStore } from '@/stores/challenges';
 import type { SharedChallenge } from '@/stores/friends';
 import { useFriendBossStore } from '@/stores/friendBoss';
-import { bossPhase, bossEndsAt, bossStartAt, chestState, fmtBossSpan } from '@/lib/friendBoss';
+import {
+  bossPhase,
+  bossEndsAt,
+  bossStartAt,
+  chestState,
+  fmtBossPv,
+  fmtBossSpan,
+} from '@/lib/friendBoss';
 
 defineProps<{ embedded?: boolean }>();
 
@@ -204,7 +211,7 @@ const bossLine = computed(() => {
   const pv = Math.max(0, cur.hpTotal - cur.damage);
   return bossPhase(cur, bossNow) === 'recruiting'
     ? `« ${cur.exerciseName} » — démarre dans ${fmtBossSpan(bossStartAt(cur) - bossNow)}`
-    : `« ${cur.exerciseName} » — ${pv} PV, encore ${fmtBossSpan(bossEndsAt(cur) - bossNow)}`;
+    : `« ${cur.exerciseName} » — ${fmtBossPv(pv)} PV, encore ${fmtBossSpan(bossEndsAt(cur) - bossNow)}`;
 });
 async function openBoss() {
   await router.push('/boss-amis');

@@ -55,8 +55,11 @@
             <div class="fb-hp-fill" :style="{ width: hpLeftPct + '%' }" />
           </div>
           <div class="fb-hp-l">
-            <span class="font-display">{{ hpLeft }}</span> / {{ current.hpTotal }} PV
-            <span class="fb-dim">· 1 {{ unitSingular }} = 1 dégât</span>
+            <span class="font-display">{{ fmtBossPv(hpLeft) }}</span> /
+            {{ fmtBossPv(current.hpTotal) }} PV
+            <span class="fb-dim"
+              >· 1 {{ unitSingular }} = {{ fmtBossPv(FRIEND_BOSS.damagePerUnit) }} dégâts</span
+            >
           </div>
         </div>
 
@@ -118,7 +121,8 @@
 
         <div v-if="recentHits.length" class="fb-sec-t">Dernières frappes</div>
         <div v-for="h in recentHits" :key="h.id" class="fb-log">
-          <b>{{ pseudoOf(h.userId) }}</b> +{{ h.units }}
+          <b>{{ pseudoOf(h.userId) }}</b> +{{ h.units }} {{ bossUnitLabel(current.family) }}
+          <span class="fb-dim">(−{{ fmtBossPv(bossDamage(h.units)) }} PV)</span>
           <span class="fb-dim">· il y a {{ fmtBossSpan(now - h.createdAt) }}</span>
         </div>
       </section>
@@ -130,11 +134,22 @@
           Ton dernier boss est fini : tu pourras en lancer un nouveau dans
           {{ fmtBossSpan(nextAt - now) }}. En attendant, tu peux rejoindre celui d’un ami.
         </p>
+        <!-- Lancer exige l'Autel des boss (le serveur le vérifie aussi, migr. 0071) ;
+             rejoindre l'invitation d'un ami, non. -->
+        <template v-else-if="!hasAltar">
+          <p class="fb-hint">
+            🔮 Pour lancer un boss, construis d’abord l’<b>Autel des boss</b> dans ta base. Tu peux
+            déjà rejoindre le boss d’un ami quand il t’invite.
+          </p>
+          <button class="fb-btn big wide" @click="router.push('/aventure?tab=base')">
+            Aller à ma base
+          </button>
+        </template>
         <template v-else>
           <p class="fb-hint">
             Choisis un exercice au poids du corps et invite jusqu’à {{ FRIEND_BOSS.maxInvites }}
-            amis. Chaque participant ajoute sa part de PV ; une rep = un dégât. 7 jours pour
-            l’abattre.
+            amis. Chaque participant ajoute sa part de PV ; une rep =
+            {{ fmtBossPv(FRIEND_BOSS.damagePerUnit) }} dégâts. 7 jours pour l’abattre.
           </p>
           <input
             v-model="exoQuery"
@@ -174,10 +189,10 @@
 
           <button class="fb-btn big wide" :disabled="!pickedExo || busy" @click="doDeclare">
             <template v-if="pickedExo">
-              Lancer · {{ bossHpTotal(pickedExo.family, 1) }} PV
+              Lancer · {{ fmtBossPv(bossHpTotal(pickedExo.family, 1)) }} PV
               {{
                 invitees.size
-                  ? `(+${FRIEND_BOSS.shareUnits[pickedExo.family]} par ami qui rejoint)`
+                  ? `(+${fmtBossPv(bossHpTotal(pickedExo.family, 1))} par ami qui rejoint)`
                   : ''
               }}
             </template>
@@ -224,6 +239,7 @@ import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { fxRarity, RARITY_LABEL } from '@/lib/items';
+import { bossAltarBuilt } from '@/lib/buildings';
 import { useGameFx } from '@/composables/useGameFx';
 import { repWeightFromExercise } from '@/lib/challenges';
 import {
@@ -232,11 +248,14 @@ import {
   acceptedUnits,
   bossEndsAt,
   bossFamily,
+  bossDamage,
   bossHpTotal,
   bossPhase,
   bossStartAt,
   bossUnitLabel,
+  bossUnitsLeft,
   chestState,
+  fmtBossPv,
   fmtBossSpan,
   friendBossChest,
   isBossExercise,
@@ -352,7 +371,12 @@ const dayLeft = computed(() =>
 /** Ce que le serveur retiendra : la même règle que `fboss_hit`. */
 const accepted = computed(() =>
   current.value
-    ? acceptedUnits(current.value.family, amount.value || 0, dayUsed.value, hpLeft.value)
+    ? acceptedUnits(
+        current.value.family,
+        amount.value || 0,
+        dayUsed.value,
+        bossUnitsLeft(current.value),
+      )
     : 0,
 );
 function step(d: number) {
@@ -377,7 +401,7 @@ async function doHit() {
         quiet: true,
         kind: 'generic',
         emoji: '⚔️',
-        title: `−${res.accepted} PV`,
+        title: `−${fmtBossPv(bossDamage(res.accepted))} PV`,
         subtitle: b.exerciseName,
       });
     }
@@ -407,6 +431,8 @@ async function doRespond(b: FriendBoss, accept: boolean) {
 
 // ── Lancer ──
 const owned = computed(() => store.bosses.filter((b) => b.ownerId === uid.value));
+/** Lancer un boss exige l'Autel des boss — même règle que `fboss_declare` (migr. 0071). */
+const hasAltar = computed(() => bossAltarBuilt(char.row?.buildings ?? []));
 const nextAt = computed(() => nextDeclareAt(owned.value));
 const exoQuery = ref('');
 interface BossExo {

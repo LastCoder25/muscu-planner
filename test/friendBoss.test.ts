@@ -10,6 +10,9 @@ import {
   bossEndedAt,
   bossPhase,
   bossHpTotal,
+  bossDamage,
+  bossUnitsLeft,
+  fmtBossPv,
   canDeclareBoss,
   nextDeclareAt,
   acceptedUnits,
@@ -102,10 +105,25 @@ describe('🐉 BOSS ENTRE AMIS — démarrage et fin', () => {
     expect(bossEndedAt(dead)).toBe(T0 + 3 * D);
   });
 
-  it('une part de PV par participant, lanceur compris', () => {
-    expect(bossHpTotal('push', 1)).toBe(FRIEND_BOSS.shareUnits.push);
-    expect(bossHpTotal('pull', 4)).toBe(4 * FRIEND_BOSS.shareUnits.pull);
-    expect(bossHpTotal('legs', 0)).toBe(FRIEND_BOSS.shareUnits.legs);
+  it('une part de PV par participant, lanceur compris, en dégâts', () => {
+    const dpu = FRIEND_BOSS.damagePerUnit;
+    expect(bossHpTotal('push', 1)).toBe(FRIEND_BOSS.shareUnits.push * dpu);
+    expect(bossHpTotal('pull', 4)).toBe(4 * FRIEND_BOSS.shareUnits.pull * dpu);
+    expect(bossHpTotal('legs', 0)).toBe(FRIEND_BOSS.shareUnits.legs * dpu);
+  });
+
+  it('1000 dégâts par rep, et le NOMBRE DE REPS pour abattre le boss ne change pas', () => {
+    expect(FRIEND_BOSS.damagePerUnit).toBe(1000);
+    expect(bossDamage(12)).toBe(12_000);
+    for (const f of Object.keys(FRIEND_BOSS.shareUnits) as (keyof typeof FRIEND_BOSS.shareUnits)[])
+      for (const n of [1, 2, 5])
+        expect(bossUnitsLeft({ hpTotal: bossHpTotal(f, n), damage: 0 })).toBe(
+          FRIEND_BOSS.shareUnits[f] * n,
+        );
+    // Reste partiel : arrondi au-dessus (comme `fboss_hit`), jamais négatif.
+    expect(bossUnitsLeft({ hpTotal: 60_000, damage: 59_500 })).toBe(1);
+    expect(bossUnitsLeft({ hpTotal: 60_000, damage: 61_000 })).toBe(0);
+    expect(fmtBossPv(120_000)).toMatch(/^120\s000$/);
   });
 });
 
@@ -235,6 +253,20 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     expect(FRIEND_BOSS.cooldownMs).toBe(7 * D);
     expect(sql).toContain("public.fboss_start(b) + interval '7 days'");
     expect(sql).toContain("public.fboss_ended(b) + interval '7 days' > now()");
+  });
+
+  it('mêmes dégâts par rep, appliqués aux PV ET aux dégâts du serveur (migr. 0070)', () => {
+    const scale = fs.readFileSync('supabase/migrations/0070_friend_boss_damage_scale.sql', 'utf8');
+    expect(scale).toContain(`select ${FRIEND_BOSS.damagePerUnit};`);
+    expect(scale).toContain('public.fboss_share(p_family) * public.fboss_damage_per_unit()');
+    expect(scale).toContain(
+      'hp_total + public.fboss_share(family) * public.fboss_damage_per_unit()',
+    );
+    expect(scale).toContain('damage = damage + v_acc * v_dpu');
+    expect(scale).toContain('ceil((b.hp_total - b.damage)::numeric / v_dpu)::integer');
+    // Les plafonds restent en reps dans la nouvelle version de `fboss_hit`.
+    expect(scale).toContain(`floor(v_share * ${FRIEND_BOSS.hitMaxShare})`);
+    expect(scale).toContain(`floor(v_share * ${FRIEND_BOSS.dayMaxShare})`);
   });
 
   it('mêmes plafonds, même part minimale, même nombre d’invités', () => {
