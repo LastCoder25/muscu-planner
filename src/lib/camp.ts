@@ -24,6 +24,7 @@ import {
 } from './skirmish';
 import {
   CARAVAN,
+  caravanHurtMs,
   caravanLegMin,
   caravanWages,
   missionTravelMult,
@@ -36,20 +37,23 @@ import {
 import {
   CAMP_TYPES,
   HARVEST,
+  buildMessage,
   campHeroOutcome,
   goldCost,
   harvestYield,
+  keepMessages,
   travelFactor,
   travelOneWayMin,
   type ActiveExpedition,
   type CampSpec,
+  type ExpeditionMessage,
   type ExpeditionOutcome,
   type PartyResult,
   type Poi,
 } from './expedition';
 import { FACTION_EMOJI, FACTION_LABEL, factionRoster } from './raid';
 import { rollAdvGearDrop, type AdvGear } from './advGear';
-import { advTitle, type Adventurer } from './adventurers';
+import { advTitle, grantAdvXp, type Adventurer } from './adventurers';
 
 export const CAMP = {
   /** Taille de la RÉFÉRENCE : un camp de taille 3 est dimensionné sur 3 aventuriers de
@@ -380,6 +384,106 @@ export function startParty(input: PartyInput, now: number, legMin: number): Acti
     seed: input.seed >>> 0 || 1,
     outcome: resolveCamp(input),
   };
+}
+
+/** Un groupe parti SANS le héros (colonne `characters.parties`, migr. 0077). ⚠️ Un groupe
+ *  AVEC le héros vit dans `expedition`, comme toute expédition héros : un seul voyage héros
+ *  à la fois. L'`id` distingue plusieurs groupes en route. */
+export type ActiveParty = ActiveExpedition & { id: string };
+
+/** Relit la colonne `parties` : un jsonb malformé ne doit jamais faire planter la page.
+ *  ⚠️ Une entrée sans POI, sans issue ou sans horodatages est ÉCARTÉE : `buildMessage` la
+ *  lirait et lèverait à chaque tick (même politique que `normalizeAdvGearState`). */
+export function normalizeParties(v: unknown): ActiveParty[] {
+  if (!Array.isArray(v)) return [];
+  return (v as Partial<ActiveParty>[]).filter(
+    (p): p is ActiveParty =>
+      !!p &&
+      typeof p === 'object' &&
+      typeof p.id === 'string' &&
+      !!p.poi &&
+      typeof p.poi === 'object' &&
+      !!p.outcome &&
+      typeof p.outcome === 'object' &&
+      Number.isFinite(p.sentAt) &&
+      Number.isFinite(p.midAt) &&
+      Number.isFinite(p.returnAt),
+  );
+}
+
+/**
+ * ⚔️ Cycle de vie des groupes partis SANS le héros — PUR ; le store ne fait que persister.
+ * - à l'arrivée sur le camp (`midAt`) : le rapport est déposé dans la boîte, UNE fois
+ *   (`reported` + dédoublonnage par id) ;
+ * - au retour (`returnAt`) : le groupe est RETIRÉ de la liste. Ses aventuriers sont libérés
+ *   par leur `busyUntil` ; le BUTIN reste à encaisser dans la boîte (`claimed: false`).
+ * ⚠️ Une app fermée pendant tout le voyage passe les deux conditions dans le même appel :
+ * rapport déposé PUIS groupe retiré — voulu, le butin n'est pas perdu.
+ * ⚠️ La boîte est taillée par `keepMessages` (jamais un butin à récupérer jeté).
+ * ⚠️ `changed` faux ⇒ le store n'écrit rien (le tick bat chaque seconde).
+ */
+export function settleParties(
+  parties: readonly ActiveParty[],
+  messages: ExpeditionMessage[],
+  now: number,
+  cap: number,
+): {
+  parties: ActiveParty[];
+  messages: ExpeditionMessage[];
+  fresh: ExpeditionMessage[];
+  changed: boolean;
+} {
+  let box = messages;
+  const fresh: ExpeditionMessage[] = [];
+  const next: ActiveParty[] = [];
+  let changed = false;
+  for (const p of parties) {
+    let q = p;
+    if (now >= p.midAt && !p.reported) {
+      const msg = buildMessage(p);
+      if (!box.some((m) => m.id === msg.id)) {
+        box = keepMessages([msg, ...box], cap);
+        fresh.push(msg);
+      }
+      q = { ...p, reported: true };
+      changed = true;
+    }
+    if (now >= q.returnAt) {
+      changed = true;
+      continue;
+    }
+    next.push(q);
+  }
+  return { parties: next, messages: box, fresh, changed };
+}
+
+/**
+ * 🎁 Ce que l'ENCAISSEMENT d'un rapport de groupe change au vivier — PUR.
+ * - XP par aventurier (`party.xp`, calculée au départ), plafonnée par la Guilde (`grantAdvXp`) ;
+ * - 🤕 les blessés du camp (`party.hurt`) partent à l'infirmerie pour la durée d'un convoi
+ *   (`caravanHurtMs`, soigneurs de l'escorte et Infirmerie compris). ⚠️ Jamais RACCOURCIE :
+ *   un aventurier déjà alité plus longtemps (siège perdu) garde son échéance ;
+ * - `escort` : les membres encore dans le vivier (un renvoyé n'a plus rien à recevoir) ;
+ * - `wages` : ENTIER (colonne `gold` entière — cf. le bug de la cargaison décimale, v0.796).
+ * ⚠️ Le HÉROS n'y figure jamais : ni XP (elle vient du sport), ni blessure.
+ */
+export function partyClaimRoster(
+  party: PartyResult,
+  roster: readonly Adventurer[],
+  ctx: { guildLevel: number; infirmaryLevel: number; now: number },
+): { adventurers: Adventurer[]; escort: Adventurer[]; wages: number } {
+  const escort = party.escort
+    .map((id) => roster.find((a) => a.id === id))
+    .filter((a): a is Adventurer => !!a);
+  const hurtUntil = ctx.now + caravanHurtMs(escort, ctx.infirmaryLevel);
+  const hurt = new Set(party.hurt);
+  const adventurers = roster.map((a) => {
+    const gain = party.xp[a.id];
+    if (gain === undefined) return a;
+    const up = grantAdvXp(a, gain, ctx.guildLevel);
+    return hurt.has(a.id) ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) } : up;
+  });
+  return { adventurers, escort, wages: Math.max(0, Math.round(party.wages || 0)) };
 }
 
 /**

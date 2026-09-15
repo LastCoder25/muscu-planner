@@ -1167,7 +1167,7 @@ async function doClaim() {
   const uid = auth.user?.id;
   const m = lastOutcome.value;
   if (!uid || !m) return;
-  const done = await char.expeClaim(uid, m.id, Date.now());
+  const done = await char.expeClaim(uid, m.id, Date.now(), heroLevel.value);
   collectOpen.value = false;
   if (!done) return;
   const drops = done.items && done.items.length ? done.items : done.item ? [done.item] : [];

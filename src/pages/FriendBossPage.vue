@@ -548,7 +548,7 @@ async function doOpenChest(b: FriendBoss) {
     const chest = friendBossChest(b, me, progress.global.value.level);
     const now = Date.now();
     const msgId = await char.grantFriendBossChest(me, b.id, b.exerciseName, chest, now);
-    if (msgId) await char.expeClaim(me, msgId, now);
+    if (msgId) await char.expeClaim(me, msgId, now, progress.global.value.level);
     gameFx.celebrate({
       kind: 'generic',
       emoji: '🏆',

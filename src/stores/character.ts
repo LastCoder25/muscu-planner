@@ -71,6 +71,9 @@ import {
   type LabyStats,
 } from '@/data/labyrinths';
 import {
+  CAMP_TYPES,
+  campSpecOf,
+  keepMessages,
   isClaimable,
   createMap,
   advanceWorld,
@@ -169,6 +172,7 @@ import {
   type Caravan,
 } from '@/lib/caravan';
 import {
+  advGearRoles,
   advGearSellValue,
   canWearAdvGear,
   lineageOf,
@@ -180,6 +184,16 @@ import {
   type AdvGearSlot,
   type AdvGearState,
 } from '@/lib/advGear';
+import {
+  canSendParty,
+  normalizeParties,
+  partyClaimRoster,
+  partyLegMin,
+  settleParties,
+  startParty,
+  type ActiveParty,
+  type PartyHero,
+} from '@/lib/camp';
 import { useGoldFx } from '@/composables/useGoldFx';
 
 export interface CharacterRow {
@@ -223,6 +237,7 @@ export interface CharacterRow {
   caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
   adv_gear: AdvGearState | null; // équipement des aventuriers : stock + forge (migr. 0068)
   laby_stats: LabyStats; // Labyrinthe : runs lancés / nettoyés par palier (migr. 0073)
+  parties: ActiveParty[] | null; // ⚔️ groupes de camp partis SANS le héros (migr. 0077)
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -251,7 +266,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, adventurers, caravans, adv_gear, laby_stats';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, adventurers, caravans, adv_gear, laby_stats, parties';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -274,6 +289,9 @@ export const useCharacterStore = defineStore('character', () => {
     // malgré le type nullable qui reflète ce que la DB peut renvoyer).
     r.adv_gear = normalizeAdvGearState(r.adv_gear);
     r.laby_stats = normalizeLabyStats(r.laby_stats);
+    // ⚔️ Groupes de camp (migr. 0077) : absent/malformé → [] ; une entrée incomplète est
+    // écartée (`buildMessage` la lirait à chaque tick).
+    r.parties = normalizeParties(r.parties);
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
     const fixItem = (it: Item): Item => {
       const rarity = normRank(it.rarity);
@@ -1357,6 +1375,10 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return;
     if (cur.expedition) throw new Error('Une expédition est déjà en cours.');
+    // ⚔️ Un camp s'attaque en GROUPE (`sendParty`) : même le héros seul y passe, pour que
+    // l'issue soit le combat de faction et non l'ancien gardien. ⚠️ Une expédition héros
+    // DÉJÀ en route vers un camp (ancien format) reste résolue et encaissée normalement.
+    if (CAMP_TYPES.has(poi.type)) throw new Error('Un camp s’attaque en groupe.');
     // ⚠️ L'infirmerie n'était vérifiée que par l'écran Aventure (`expeBlocked`) : depuis la
     // carte, un héros blessé repartait. Le refus vit ici pour qu'aucun écran ne l'oublie.
     const healIn = woundRemainingMs(cur.base, now);
@@ -1387,7 +1409,7 @@ export const useCharacterStore = defineStore('character', () => {
     const exp = cur?.expedition;
     if (!cur || !exp || now < exp.midAt || exp.reported) return null;
     const msg = buildMessage(exp);
-    const messages = [msg, ...cur.messages].slice(0, 20);
+    const messages = keepMessages([msg, ...cur.messages], 20);
     await persist(userId, { expedition: { ...exp, reported: true }, messages });
     return msg;
   }
@@ -1406,7 +1428,7 @@ export const useCharacterStore = defineStore('character', () => {
     const msg = buildMessage({ ...exp, reported: true });
     const messages = exp.reported
       ? cur.messages.map((m) => (m.id === msg.id ? msg : m))
-      : [msg, ...cur.messages].slice(0, 20);
+      : keepMessages([msg, ...cur.messages], 20);
     await persist(userId, { messages, expedition: null });
     return msg;
   }
@@ -1455,7 +1477,7 @@ export const useCharacterStore = defineStore('character', () => {
       claimed: false,
       read: false,
     };
-    await persist(userId, { messages: [msg, ...cur.messages].slice(0, 30) });
+    await persist(userId, { messages: keepMessages([msg, ...cur.messages], 30) });
     return true;
   }
 
@@ -1499,13 +1521,15 @@ export const useCharacterStore = defineStore('character', () => {
       read: false,
     };
     await persist(userId, {
-      messages: [msg, ...cur.messages].slice(0, 30),
+      messages: keepMessages([msg, ...cur.messages], 30),
       cleared_dungeons: [...cur.cleared_dungeons, id],
     });
     return id;
   }
 
-  async function expeClaim(userId: string, messageId: string, now: number) {
+  /** ⚠️ `playerLevel` REQUIS : le VRAI niveau du joueur, plafond du dressage des compagnons
+   *  d'un groupe de camp (`grantFamiliarXp`) — même règle que `claimCaravan`. */
+  async function expeClaim(userId: string, messageId: string, now: number, playerLevel: number) {
     const cur = row.value;
     if (!cur) return null;
     const m = cur.messages.find((x) => x.id === messageId);
@@ -1515,16 +1539,55 @@ export const useCharacterStore = defineStore('character', () => {
       ...it,
       id: crypto.randomUUID(),
     }));
-    const inventory = drops.length ? [...cur.inventory, ...drops] : cur.inventory;
+    let inventory = drops.length ? [...cur.inventory, ...drops] : cur.inventory;
+    // ⚔️ UN GROUPE DE CAMP : XP par aventurier, infirmerie des camps, pièces d'aventurier,
+    // dressage des compagnons, salaires. ⚠️ `m.party` ABSENT des rapports d'avant : rien à
+    // faire. ⚠️ Crédité UNE fois : `isClaimable` en tête + `claimed: true` dans la MÊME
+    // écriture. ⚠️ Le héros et l'escorte ont été libérés au RETOUR, sans condition ; seul
+    // le butin attendait ce geste.
+    const party = m.party;
+    let partyPatch: Record<string, unknown> = {};
+    let wages = 0;
+    if (party) {
+      const claim = partyClaimRoster(party, advList.value, {
+        guildLevel: guildLevel.value,
+        infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
+        now,
+      });
+      // 🐾 Les compagnons de l'escorte ont combattu : dressage, comme en convoi. ⚠️ Mêmes
+      // exclusions que la route (`companionsOf`) : celui du héros se battait à ses côtés.
+      const trained = new Set(
+        companionsOf(claim.escort, cur.inventory, cur.equipped?.[FAMILIAR_SLOT]?.id).map(
+          (f) => f.id,
+        ),
+      );
+      if (trained.size) {
+        const gain = caravanFamiliarXp({ level: m.level } as Poi); // ne lit que `level`
+        inventory = inventory.map((it) =>
+          trained.has(it.id) ? grantFamiliarXp(it, gain, playerLevel) : it,
+        );
+      }
+      wages = claim.wages;
+      partyPatch = {
+        adventurers: claim.adventurers,
+        ...(party.advGear.length ? { adv_gear: withAdvGear(cur, party.advGear) } : {}),
+      };
+    }
+    // ⚠️ ENTIERS À L'ENCAISSEMENT : ces colonnes sont `integer`, une valeur décimale fait
+    // échouer la sauvegarde ENTIÈRE sans rien afficher (bug de la cargaison, v0.796).
+    const ent = (n: number | undefined) => Math.max(0, Math.round(n || 0));
     await persist(userId, {
-      gold: cur.gold + m.gold,
-      login_energy: cur.login_energy + (m.energy ?? 0), // ⚡ mine/source → énergie de jeu
-      keys: cur.keys + (m.key ?? 0),
+      // Les salaires de l'escorte sont déduits ICI, comme pour un convoi.
+      gold: Math.max(0, cur.gold + ent(m.gold) - wages),
+      login_energy: cur.login_energy + ent(m.energy), // ⚡ mine/source → énergie de jeu
+      keys: cur.keys + ent(m.key),
       // ⚠️ DEVISES VIVANTES UNIQUEMENT. Le commentaire qui tenait ici affirmait qu'on ne
       // créditait plus de monnaie morte — et les deux lignes suivantes créditaient des
       // fragments 🧩 et de l'encre 🖋️. Un commentaire ne vérifie rien ; un test si.
-      summon_stones: cur.summon_stones + (m.summonStones ?? 0),
-      scrap: cur.scrap + (m.scrap ?? 0), // 🔩 épaves → réparation de l’enceinte
+      summon_stones: cur.summon_stones + ent(m.summonStones),
+      // 🔩 épaves → réparation de l’enceinte. ⚠️ JAMAIS depuis un camp (v0.856/v0.890).
+      scrap: cur.scrap + (party ? 0 : ent(m.scrap)),
+      ...partyPatch,
       inventory,
       messages: cur.messages.map((x) =>
         x.id === messageId ? { ...x, claimed: true, read: true } : x,
@@ -2156,7 +2219,7 @@ export const useCharacterStore = defineStore('character', () => {
         // ⚠️ Déjà crédité vague par vague : ce message se LIT, il ne se réclame pas.
         read: false,
       };
-      patch.messages = [msg, ...cur.messages].slice(0, 30);
+      patch.messages = keepMessages([msg, ...cur.messages], 30);
       base = { ...base, pillage: null, field: null };
     }
 
@@ -2209,6 +2272,9 @@ export const useCharacterStore = defineStore('character', () => {
   // domaine ne peut pas savoir — l'or disponible, le niveau des bâtiments, l'horloge.
   const advList = computed<Adventurer[]>(() => row.value?.adventurers ?? []);
   const caravanList = computed<Caravan[]>(() => row.value?.caravans ?? []);
+  /** ⚔️ Groupes de camp partis SANS le héros (migr. 0077). Avec le héros, le voyage vit
+   *  dans `expedition`. */
+  const partyList = computed<ActiveParty[]>(() => row.value?.parties ?? []);
   /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0068) — séparé du sac du héros. */
   const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);
   const guildLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'guild'));
@@ -2441,6 +2507,87 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
+  /** ⚔️ Envoie un GROUPE sur un camp de faction : le héros (oui/non) et autant d'aventuriers
+   *  DISPONIBLES qu'on veut — ⚠️ aucun `escortMax` (spec étape 3 : seuls les convois le gardent).
+   *
+   *  ⚠️ Refus AU STORE (l'écran ne garantit rien, même politique que `expeSend`) : POI de camp,
+   *  groupe non vide, chaque aventurier disponible (`advAvailable` : ni en convoi, ni à
+   *  l'infirmerie, ni en formation), et — avec le héros — pas d'expédition en cours, pas
+   *  d'infirmerie, Avant-poste construit, or suffisant.
+   *  ⚠️ Le POI est RETIRÉ de la carte au départ, comme pour le héros et les convois.
+   *  ⚠️ Avec le héros, le voyage vit dans `expedition` (un seul voyage héros à la fois, et
+   *  `expeTick`/`expeSettle` le font vivre) ; sans lui, dans `parties` (`partyTick`). */
+  async function sendParty(
+    userId: string,
+    poi: Poi,
+    opts: { hero: PartyHero | null; escortIds: string[]; playerLevel: number; now: number },
+  ): Promise<boolean> {
+    const cur = row.value;
+    const spec = campSpecOf(poi);
+    if (!cur || !spec) return false;
+    const { now, hero } = opts;
+    // ⚠️ Un id répété ferait partir deux fois le même aventurier.
+    if (new Set(opts.escortIds).size !== opts.escortIds.length) return false;
+    const escort = opts.escortIds
+      .map((id) => advList.value.find((a) => a.id === id))
+      .filter((a): a is Adventurer => !!a && advAvailable(a, now));
+    if (escort.length !== opts.escortIds.length) return false;
+    if (!canSendParty(poi, escort.length, !!hero)) return false;
+    if (hero) {
+      if (cur.expedition) return false;
+      if (woundRemainingMs(cur.base, now) > 0) return false; // 🤕 à l'infirmerie
+      if (!expeditionsUnlocked(cur.buildings)) return false;
+    }
+    const talents = normalizeTalents(cur.talents);
+    const road = {
+      familiars: cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT),
+      talents,
+      advGear: cur.adv_gear?.stock ?? [],
+      // Le héros garde ce qu'il porte : ni son familier ni ses talents ne passent à l'escorte.
+      heroFamiliarId: cur.equipped?.[FAMILIAR_SLOT]?.id ?? null,
+      heroTalentIds: talents.filter((t) => t.equipped === true).map((t) => t.id),
+    };
+    const seed = (now ^ (poi.level * 2654435761)) >>> 0 || 1;
+    const input = { poi, spec, escort, road, hero, seed, playerLevel: opts.playerLevel };
+    const leg = partyLegMin(poi, escort, {
+      hero: !!hero,
+      travelMult: travelTimeMult(cur.buildings),
+      comptoirLevel: comptoirLevel.value,
+      gearSpeed: advGearRoles(escort, road.advGear).speed,
+    });
+    const trip = startParty(input, now, leg);
+    if (cur.gold < trip.goldCost) return false;
+    const busy = new Set(opts.escortIds);
+    const map = cur.expedition_map
+      ? { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
+      : cur.expedition_map;
+    await persist(userId, {
+      gold: cur.gold - trip.goldCost,
+      expedition_map: map,
+      adventurers: advList.value.map((a) =>
+        busy.has(a.id) ? { ...a, busyUntil: trip.returnAt } : a,
+      ),
+      ...(hero
+        ? { expedition: trip }
+        : { parties: [...partyList.value, { ...trip, id: `party_${now.toString(36)}` }] }),
+    });
+    return true;
+  }
+
+  /** ⚔️ Cycle de vie des groupes partis SANS le héros : le rapport à l'arrivée sur le camp,
+   *  puis le groupe retiré au retour (ses aventuriers sont libérés par `busyUntil`). Le
+   *  BUTIN reste à encaisser dans la boîte 📬 (`expeClaim`), comme toute expédition.
+   *  La règle vit dans `settleParties` (lib, testée). ⚠️ Une seule écriture, et seulement si
+   *  quelque chose change : ce tick bat chaque seconde. Rend les messages nouvellement déposés. */
+  async function partyTick(userId: string, now: number): Promise<ExpeditionMessage[]> {
+    const cur = row.value;
+    if (!cur || !partyList.value.length) return [];
+    const t = settleParties(partyList.value, cur.messages, now, 30);
+    if (!t.changed) return [];
+    await persist(userId, { parties: t.parties, messages: t.messages });
+    return t.fresh;
+  }
+
   return {
     row,
     loaded,
@@ -2493,6 +2640,9 @@ export const useCharacterStore = defineStore('character', () => {
     settleAdventurers,
     sendCaravan,
     claimCaravan,
+    partyList,
+    sendParty,
+    partyTick,
     applyExpedition,
     equip,
     sellLoadout,

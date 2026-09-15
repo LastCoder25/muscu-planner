@@ -10,22 +10,31 @@ import {
   campHurt,
   campWinPct,
   canSendParty,
+  normalizeParties,
+  partyClaimRoster,
   partyLegMin,
   partyReport,
   resolveCamp,
+  settleParties,
   startParty,
+  type ActiveParty,
   type PartyInput,
 } from '@/lib/camp';
 import {
   HARVEST,
+  buildMessage,
   goldCost,
   harvestYield,
   travelFactor,
   travelOneWayMin,
+  type ExpeditionMessage,
+  type PartyResult,
   type Poi,
 } from '@/lib/expedition';
+
 import {
   CARAVAN,
+  caravanHurtMs,
   caravanLegMin,
   missionTravelMult,
   missionXp,
@@ -46,7 +55,7 @@ import {
   type Combatant,
 } from '@/lib/combat';
 import { factionRoster, type RaidFaction } from '@/lib/raid';
-import type { Adventurer } from '@/lib/adventurers';
+import { grantAdvXp, type Adventurer } from '@/lib/adventurers';
 
 const poi = (over: Partial<Poi> = {}): Poi => ({
   id: 'cp',
@@ -492,5 +501,157 @@ describe('📜 partyReport — ce qu’on lit dans la boîte', () => {
     const r = partyReport(o.party!, esc);
     for (const m of r.members) expect(m.hurt).toBe(o.party!.hurt.includes(m.id));
     expect(r.members.some((m) => m.hurt)).toBe(true);
+  });
+});
+
+describe('📬 settleParties — un groupe parti sans le héros : rapport à l’arrivée, retrait au retour', () => {
+  const trip = (id: string, sentAt: number, leg = 30): ActiveParty => ({
+    ...startParty(input({ poi: poi({ id: `cp_${id}` }) }), sentAt, leg),
+    id,
+  });
+  const msg = (id: string, claimed?: boolean): ExpeditionMessage => ({
+    id,
+    level: 1,
+    win: true,
+    text: '',
+    gold: 0,
+    energy: 0,
+    key: 0,
+    resolvedAt: 0,
+    read: true,
+    ...(claimed === undefined ? {} : { claimed }),
+  });
+
+  it('avant l’arrivée : RIEN ne change (le store n’écrit pas à vide)', () => {
+    const p = trip('a', 0);
+    const r = settleParties([p], [], p.midAt - 1, 30);
+    expect(r.changed).toBe(false);
+    expect(r.fresh).toEqual([]);
+    expect(r.parties).toEqual([p]);
+  });
+
+  it('à l’arrivée : le rapport est déposé UNE fois, à encaisser, et le groupe reste en route', () => {
+    const p = trip('a', 0);
+    const r = settleParties([p], [], p.midAt, 30);
+    expect(r.changed).toBe(true);
+    expect(r.fresh).toHaveLength(1);
+    expect(r.messages).toEqual([buildMessage(p)]);
+    expect(r.messages[0]!.claimed).toBe(false);
+    expect(r.messages[0]!.party).toBeDefined();
+    expect(r.parties).toEqual([{ ...p, reported: true }]);
+    // Le tick suivant ne redépose rien et n'écrit pas.
+    const again = settleParties(r.parties, r.messages, p.midAt + 1, 30);
+    expect(again.changed).toBe(false);
+    expect(again.messages).toHaveLength(1);
+  });
+
+  it('⚠️ un rapport déjà présent (même id) n’est jamais dupliqué', () => {
+    const p = trip('a', 0);
+    const r = settleParties([p], [buildMessage(p)], p.midAt, 30);
+    expect(r.fresh).toEqual([]);
+    expect(r.messages).toHaveLength(1);
+    expect(r.parties[0]!.reported).toBe(true);
+  });
+
+  it('au retour : le groupe est RETIRÉ, le rapport reste dans la boîte', () => {
+    const p = { ...trip('a', 0), reported: true };
+    const box = [buildMessage(p)];
+    const r = settleParties([p], box, p.returnAt, 30);
+    expect(r.changed).toBe(true);
+    expect(r.parties).toEqual([]);
+    expect(r.fresh).toEqual([]);
+    expect(r.messages).toEqual(box);
+  });
+
+  it('⚠️ app fermée tout le voyage : rapport déposé PUIS groupe retiré, dans le même appel', () => {
+    const p = trip('a', 0);
+    const r = settleParties([p], [], p.returnAt + 5, 30);
+    expect(r.parties).toEqual([]);
+    expect(r.fresh).toHaveLength(1);
+    expect(r.messages[0]!.claimed).toBe(false);
+  });
+
+  it('plusieurs groupes : chacun à son rythme', () => {
+    const a = trip('a', 0, 10);
+    const b = trip('b', 0, 60);
+    const r = settleParties([a, b], [], a.returnAt, 30);
+    expect(r.parties.map((p) => p.id)).toEqual(['b']);
+    expect(r.parties[0]!.reported).toBeFalsy();
+    expect(r.fresh.map((m) => m.id)).toEqual([buildMessage(a).id]);
+  });
+
+  it('⚠️ la boîte est taillée par keepMessages : un butin non encaissé n’est jamais jeté', () => {
+    const p = trip('a', 0);
+    const old = [msg('lu1', true), msg('lu2', true), msg('attend', false)];
+    const r = settleParties([p], old, p.midAt, 2);
+    expect(r.messages.map((m) => m.id)).toEqual([buildMessage(p).id, 'lu1', 'attend']);
+  });
+});
+
+describe('🎁 partyClaimRoster — ce que l’encaissement change au vivier', () => {
+  const esc = team(3, 20);
+  const bystander: Adventurer = { ...refAdventurer(20, 0), id: 'adv_reste' };
+  const roster = [...esc, bystander];
+  const party = (over: Partial<PartyResult> = {}) => ({
+    ...resolveCamp(input({ escort: esc })).party!,
+    xp: { adv_0: 50, adv_1: 70, adv_2: 90 },
+    hurt: ['adv_1'],
+    wages: 123.6,
+    ...over,
+  });
+  const ctx = { guildLevel: 30, infirmaryLevel: 4, now: 1_000_000 };
+
+  it('XP de chacun = grantAdvXp ; celui qui n’est pas parti est intact', () => {
+    const r = partyClaimRoster(party(), roster, ctx);
+    esc.forEach((a, i) =>
+      expect(r.adventurers[i]).toMatchObject(
+        grantAdvXp(a, [50, 70, 90][i]!, ctx.guildLevel) as object,
+      ),
+    );
+    expect(r.adventurers[3]).toBe(bystander);
+  });
+
+  it('🤕 les blessés du camp partent à l’infirmerie (durée d’un convoi), les autres non', () => {
+    const r = partyClaimRoster(party(), roster, ctx);
+    const until = ctx.now + caravanHurtMs(esc, ctx.infirmaryLevel);
+    expect(r.adventurers[1]!.hurtUntil).toBe(until);
+    expect(r.adventurers[0]!.hurtUntil).toBeUndefined();
+    expect(r.adventurers[2]!.hurtUntil).toBeUndefined();
+  });
+
+  it('⚠️ une convalescence plus longue (siège perdu) n’est jamais raccourcie', () => {
+    const long = ctx.now + 100 * 3600_000;
+    const alite = roster.map((a) => (a.id === 'adv_1' ? { ...a, hurtUntil: long } : a));
+    expect(partyClaimRoster(party(), alite, ctx).adventurers[1]!.hurtUntil).toBe(long);
+  });
+
+  it('un aventurier renvoyé depuis : rien à lui verser, l’escorte ne compte que les présents', () => {
+    const r = partyClaimRoster(party(), [esc[0]!, esc[2]!], ctx);
+    expect(r.escort.map((a) => a.id)).toEqual(['adv_0', 'adv_2']);
+    expect(r.adventurers).toHaveLength(2);
+    // ⚠️ Et jamais celui qui n'est pas parti : son compagnon n'a rien à apprendre du camp.
+    expect(partyClaimRoster(party(), roster, ctx).escort.map((a) => a.id)).toEqual([
+      'adv_0',
+      'adv_1',
+      'adv_2',
+    ]);
+  });
+
+  it('⚠️ salaires ENTIERS (colonne gold entière), jamais négatifs', () => {
+    expect(partyClaimRoster(party(), roster, ctx).wages).toBe(124);
+    expect(partyClaimRoster(party({ wages: -5 }), roster, ctx).wages).toBe(0);
+  });
+});
+
+describe('🧾 normalizeParties — un jsonb malformé ne fait jamais planter', () => {
+  it('non-tableau → [] ; entrée incomplète écartée ; entrée valide gardée', () => {
+    const ok: ActiveParty = { ...startParty(input(), 0, 10), id: 'g1' };
+    expect(normalizeParties(null)).toEqual([]);
+    expect(normalizeParties({})).toEqual([]);
+    const { outcome: _o, ...sansIssue } = ok;
+    void _o;
+    expect(
+      normalizeParties([ok, null, 3, { ...ok, id: 7 }, sansIssue, { ...ok, returnAt: 'x' }]),
+    ).toEqual([ok]);
   });
 });

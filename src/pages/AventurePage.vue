@@ -5283,7 +5283,7 @@ async function expeLifecycle() {
 async function doClaimMsg(m: ExpeditionMessage) {
   const uid = auth.user?.id;
   if (!uid) return;
-  const done = await char.expeClaim(uid, m.id, Date.now());
+  const done = await char.expeClaim(uid, m.id, Date.now(), heroLevel.value);
   if (!done) return;
   const haul = haulPills(done)
     .map((h) => `${h.emoji} +${h.n}`)
